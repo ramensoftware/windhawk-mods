@@ -2,7 +2,7 @@
 // @id              explorer-command-bar
 // @name            Explorer Command Bar
 // @description     Customize the Windows 11 File Explorer command bar with commands, menus, New+, and a shell context-menu button
-// @version         1.2.0
+// @version         1.3.0
 // @author          DanRotaru
 // @github          https://github.com/DanRotaru
 // @donateUrl       https://buymeacoffee.com/widget/page/danrotaru
@@ -25,7 +25,7 @@ buttons, separators and spacing you don't want.
 
 ![Explorer Command Bar demo](https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/explorer-command-bar/screenshots/main.gif)
 
-Designed for Windows 11 24H2 / 25H2 with the WinAppSDK (WinUI 3) File
+Designed for Windows 11 24H2 / 25H2 / 26H2 with the WinAppSDK (WinUI 3) File
 Explorer.
 
 ---
@@ -43,7 +43,7 @@ Explorer.
   (all selected paths quoted and space-separated), and `%sel_each%` (launches
   one process instance per selected file).
 - **Internal commands** - Execute native explorer actions like `internal:TogglePreview`,
-  `internal:ToggleDetails`, and `internal:FolderOptions`.
+  `internal:CopyPath`, `internal:NewFolder` and `internal:Refresh`.
 - **Secondary Command Bar docking** - Optionally dock custom buttons onto the
   right-side command bar to preserve primary toolbar space.
 - **Flexible icons** - light and dark theme pairs (`Light | Dark`), a Segoe Fluent
@@ -52,7 +52,12 @@ Explorer.
 - **Hide built-in elements** - individually hide New, Cut, Copy, Paste, Rename,
   Share, Delete, Sort, View, the group separators, the "See more" (…) overflow
   menu, the contextual commands (Set as background, Rotate left, Rotate right,
-  Extract all) and the Details pane toggle.
+  Extract all) and the Details pane toggle. The labels of New, Sort, View and
+  the Details pane toggle can be hidden too, leaving only their icons.
+- **Reorder built-in buttons** - put New, Cut, Copy, Paste, Rename, Share,
+  Delete, Sort and View in any order, with separators where you want them.
+- **Run as administrator & window style** - start any item elevated, or
+  minimized, maximized or hidden.
 - **Replace New with New+** - turn Explorer's New button into a *New+* button
   which lists the templates of the
   [PowerToys **New+**](https://learn.microsoft.com/en-us/windows/powertoys/newplus)
@@ -77,7 +82,8 @@ button is added to the command bar. It opens a settings window which follows
 the WinUI 3 design of Windows 11. The toolbar items page shows a live preview
 of the File Explorer command bar with your settings: click one of your items
 (or an entry of one of its menus) to edit it below, with pickers for programs
-and icons, the internal commands and the placeholders. The other settings are
+and icons, the internal commands and the placeholders. Drag the items in the
+preview, or the entries in a menu's list, to reorder them. The other settings are
 grouped into pages with toggles and number boxes.
 
 The window edits the same settings as Windhawk, so both always show the same
@@ -108,14 +114,36 @@ You may hide even all options, and use only your custom ones:
 
 The following placeholders can be used in an item's parameters:
 
-* `%path%` - the folder path of the currently active tab.
-* `%sel%` - all selected file or folder paths in the active tab, each quoted and separated by a space (e.g., `"file1.txt" "file2.txt"`). Ideal for editors and batch tools.
-* `%sel_each%` - executes the target command once per selected file. Ideal for single-instance tools like classic Notepad.
+* `%path%` / `%dir%` / `%d%` - the folder path of the currently active tab.
+* `%sel%` / `%f%` - all selected file or folder paths in the active tab, each quoted and separated by a space.
+* `%sel_each%` - executes the target command once per selected file.
+* `%files%` - paths of selected regular files only (quoted and space-separated).
+* `%folders%` - paths of selected directories only (quoted and space-separated).
+* `%base%` / `%basename%` - selected item base names without extension.
+* `%file_name%` - base name of the first selected item.
+* `%n%` / `%name%` - selected file/folder names only (with extension, no path).
+* `%1%` - full path of the first selected item.
+* `%ext%` - file extension of the first selected item.
+* `%c%` / `%count%` - total number of selected items.
+* `%d_name%` - native display name of the active folder.
+* `%d_smart%` - selected folder if one is chosen, otherwise falls back to active folder.
+* `%p%` / `%parent%` - parent folder path of the active tab.
+* `%%` - literal percent sign escape.
 
-Wrap placeholders in quotes if desired (e.g. `-d "%path%"` or `"%sel%"`). If a
-used placeholder has no value (nothing selected, or a non-filesystem location
-like *This PC*), the command is launched without any parameters. Commands run
-with the active tab's folder as their working directory.
+Wrap placeholders in quotes if desired (e.g. `-d "%path%"` or `"%sel%"`).
+If a used placeholder has no value (nothing selected, or a non-filesystem location like *This PC*), the command is launched without any parameters.
+Commands run with the active tab's folder as their working directory.
+
+---
+
+## Dynamic UI Labels & Clamping
+
+Embed live tokens directly into your button and menu labels! The text will automatically update in real-time as you click different files and folders in File Explorer.
+
+* **Supported Label Tokens:** `%base%`, `%name%`, `%ext%`, `%count%` (or `%c%`), `%d_name%`, and `%path%`.
+* **Usage:** Use the **Custom Label Text** field for top-level toolbar buttons, or the **Name** field for dropdown menu entries.
+* **Example:** A button labeled `Extract %name%` will dynamically display `Extract archive.zip` when you highlight a zip file.
+* **Smart Truncation:** To prevent your command bar from overflowing, labels automatically truncate with an ellipsis (`...`) if they exceed 24 characters on the main toolbar (or 48 characters inside menus). The full resolved text is always preserved in the button's hover tooltip.
 
 ---
 
@@ -127,6 +155,58 @@ Instead of an executable, the **Command** field can run built-in File Explorer a
 * `internal:ToggleDetails` - toggles the Details pane.
 * `internal:OpenWith` - opens the native Windows "How do you want to open this file?" application chooser dialog for the selected file.
 * `internal:FolderOptions` - opens the classic Folder Options control panel dialog.
+* `internal:CopyPath` - copies the full paths of the selected items to the
+  clipboard, one per line, or the current folder's path if nothing is
+  selected.
+* `internal:CopyName` - copies the names of the selected items, one per line,
+  or the current folder's name if nothing is selected.
+* `internal:CopyDir` - copies the path of the current folder.
+* `internal:NewFolder` - creates a new folder in the current folder, selected
+  and ready to be renamed.
+* `internal:NewFile` - creates a new empty file the same way.
+* `internal:Refresh` - refreshes the current folder.
+
+For `NewFolder` and `NewFile`, the **Parameters** field sets the name, e.g.
+`Notes $YYYY-$MM-$DD.md` (the [filename variables](#filename-variables) of
+New+ can be used). If it's empty, the name is `New folder` or `file` (without
+an extension), and
+` (2)`, ` (3)`, … is appended if the name is taken. Both can be undone with
+Ctrl+Z.
+
+---
+
+## Launch options
+
+Each button and menu entry which runs a program has two more options:
+
+* **Run as administrator** - starts the command elevated, after a UAC prompt.
+  Holding **Ctrl+Shift** while clicking an item does the same for any item,
+  like in the Start menu and the taskbar.
+* **Window style** - `Normal`, `Minimized`, `Maximized` or `Hidden`. Hidden is
+  meant for console commands and scripts which shouldn't leave a window
+  behind, e.g. `cmd.exe` with `/c npm run build`. Some programs ignore the
+  window style.
+
+---
+
+## Dynamic File Extension Filtering
+
+The **File extension filter** field lets you automatically show or hide toolbar actions based on what is currently selected in File Explorer:
+
+* Multiple comma-separated rules evaluate using **OR** logic (matches if *any* rule succeeds).
+* Use **`+`** within a rule for **AND** logic (e.g., `files + single`).
+* Prefix tokens with **`-`** (e.g., `-zip`, `-exe`, `-folder`) to act as an **absolute veto** — if any highlighted item matches, the button is immediately hidden.
+* Adding `hide` permanently hides the button under all conditions.
+
+**Available Filter Keywords:**
+* Leave blank or `*` to always show the button.
+* `none` (shows only when 0 items are selected).
+* `selected` / `any` (shows when at least 1 item is highlighted).
+* `files` or `folders` (shows if regular files or directories are selected).
+* `mixed` (shows exclusively when both files and folders are highlighted).
+* `single` or `multiple` (evaluates based on total item count).
+* `single_file`, `multi_file`, `single_folder`, `multi_folder` (count + type).
+* `only <ext>` (e.g., `only txt`, `only(txt, cpp)`) — Shows exclusively when **every** highlighted item matches the specified extensions.
 
 ---
 
@@ -170,6 +250,34 @@ The **Icon glyph or icon path** field accepts several forms:
 * **Empty** - the icon is extracted from the command's executable (app
   execution aliases such as `wt.exe` are resolved to their real target).
 * **Hide icon** - enable the toggle to show no icon at all.
+
+---
+
+## Built-in button order
+
+In the settings window, drag File Explorer's own buttons, and the separators
+between them, in the command bar preview to reorder them, the same way as your
+own items. Selecting one of them shows a **Reset order** button.
+
+In Windhawk's settings, the **Built-in button order** setting holds the same
+order as text: the buttons separated by commas, with `|` where a separator
+goes:
+
+```
+sort, view | new | cut, copy, paste, rename, share, delete
+```
+
+The names are `new`, `cut`, `copy`, `paste`, `rename`, `share`, `delete`,
+`sort` and `view`. Buttons which aren't listed come last, in their usual order,
+and an empty setting keeps File Explorer's own order. The New+ button moves
+along with New.
+
+File Explorer has two separators among these buttons, so the first two `|` are
+used. The *Vertical separator after New / Delete* toggles still apply to a
+separator placed right after New or Delete, and any other separator is hidden
+along with the buttons after it once none of them is shown. The contextual
+commands (Rotate, Extract all, …) aren't reordered, since they come and go with
+the selection.
 
 ---
 
@@ -292,7 +400,13 @@ buttons right away. Since there's no public way to get from a window to its XAML
 tree, the mod briefly resizes the window's XAML island by one pixel, which makes
 File Explorer report the island's XAML root to a hooked handler.
 
-Thanks to [ArvindSaini978](https://github.com/ArvindSaini978) for contributing.
+---
+
+### Author & Attribution
+
+* **Created and maintained by DanRotaru ([GitHub](https://github.com/DanRotaru)).**
+* Dynamic extension filtering, live parameter tokens (`%path%`, `%sel_each%`, etc.), dynamic UI labels, and the real-time UI selection polling engine contributed by **ArvindSaini978 ([GitHub](https://github.com/ArvindSaini978))**.
+
 */
 // ==/WindhawkModReadme==
 
@@ -325,7 +439,10 @@ Thanks to [ArvindSaini978](https://github.com/ArvindSaini978) for contributing.
         The executable to run. For dropdown menus it's only used as an icon
         source. Alternatively, an internal command with the internal: or int:
         prefix (case-insensitive): internal:TogglePreview,
-        internal:ToggleDetails, internal:FolderOptions or internal:OpenWith.
+        internal:ToggleDetails, internal:FolderOptions, internal:OpenWith,
+        internal:CopyPath, internal:CopyName, internal:CopyDir,
+        internal:NewFolder, internal:NewFile or internal:Refresh. For
+        NewFolder and NewFile, the parameters set the name.
     - parameters: -d "%path%"
       $name: Parameters
       $description: >-
@@ -341,6 +458,26 @@ Thanks to [ArvindSaini978](https://github.com/ArvindSaini978) for contributing.
         Runs the item, like a click, when the keys are pressed in a File
         Explorer window, e.g. Ctrl+Shift+T, Alt+N or F9. Needs Ctrl, Alt or
         Win unless the key is F1-F24. Not used for dropdown menus.
+    - runAsAdmin: false
+      $name: Run as administrator
+      $description: >-
+        Start the command elevated, after a UAC prompt. Ctrl+Shift+click does
+        the same for any item. Not used by internal commands.
+    - windowStyle: normal
+      $name: Window style
+      $description: >-
+        How the started program's window is shown. Hidden is meant for console
+        commands and scripts; some programs ignore it.
+      $options:
+      - normal: Normal
+      - minimized: Minimized
+      - maximized: Maximized
+      - hidden: Hidden
+    - matchExtensions: ""
+      $name: "File extension filter"
+      $description: >-
+        Comma-separated rules evaluate using OR logic. Use '+' for AND (e.g. files + single).
+        Prefix with '-' to exclude. Use 'files', 'folders', 'single', 'multi', 'only txt', or 'hide'.
     - iconGlyph: ""
       $name: Icon glyph or icon path
       $description: >-
@@ -360,7 +497,7 @@ Thanks to [ArvindSaini978](https://github.com/ArvindSaini978) for contributing.
       $description: Show text label next to the icon.
     - labelText: ""
       $name: Custom Label Text
-      $description: Text displayed next to the icon. If empty, the Name field is used.
+      $description: "Text displayed next to the icon. Supports live tokens: %base%, %name%, %ext%, %count% / %c%, %d_name%, %path%. Use %% for literal %. If empty, the Name field is used."
     - separatorAfter: false
       $name: Vertical separator after
       $description: Show a vertical separator line after this button.
@@ -389,6 +526,17 @@ Thanks to [ArvindSaini978](https://github.com/ArvindSaini978) for contributing.
           $description: >-
             Runs the menu item when the keys are pressed in a File Explorer
             window, e.g. Ctrl+Shift+T. Not used for submenus.
+        - runAsAdmin: false
+          $name: Run as administrator
+          $description: >-
+            Start the command elevated, after a UAC prompt.
+        - windowStyle: normal
+          $name: Window style
+          $options:
+          - normal: Normal
+          - minimized: Minimized
+          - maximized: Maximized
+          - hidden: Hidden
         - iconGlyph: ""
           $name: Icon glyph or icon path
           $description: >-
@@ -420,6 +568,17 @@ Thanks to [ArvindSaini978](https://github.com/ArvindSaini978) for contributing.
               $description: >-
                 Runs the menu item when the keys are pressed in a File
                 Explorer window, e.g. Ctrl+Shift+T.
+            - runAsAdmin: false
+              $name: Run as administrator
+              $description: >-
+                Start the command elevated, after a UAC prompt.
+            - windowStyle: normal
+              $name: Window style
+              $options:
+              - normal: Normal
+              - minimized: Minimized
+              - maximized: Maximized
+              - hidden: Hidden
             - iconGlyph: ""
               $name: Icon glyph or icon path
               $description: >-
@@ -547,6 +706,26 @@ Thanks to [ArvindSaini978](https://github.com/ArvindSaini978) for contributing.
   $description: >-
     Show custom buttons on the right side of File Explorer (next to Details
     and Preview pane toggles) instead of the main left toolbar.
+- disabledInsteadOfHidden: false
+  $name: Disable buttons instead of hiding them
+  $description: Gray out inactive buttons instead of removing them from the toolbar.
+- showMenuChevrons: false
+  $name: Show chevrons on dropdowns
+  $description: >-
+    Show a small chevron next to custom toolbar buttons which open a dropdown
+    menu.
+- hideDefaultButtonLabels:
+  - new: false
+    $name: New
+  - sort: false
+    $name: Sort
+  - view: false
+    $name: View
+  - details: false
+    $name: Details pane toggle
+  $name: Hide built-in button labels
+  $description: >-
+    Show only the icon of these built-in buttons, without their text label.
 - hideDefaultButtons:
   - new: false
     $name: New
@@ -594,6 +773,14 @@ Thanks to [ArvindSaini978](https://github.com/ArvindSaini978) for contributing.
     separator of the contextual commands (Set as background, Rotate left,
     Rotate right, Extract all) is hidden along with them, once none of them is
     left to show.
+- defaultButtonOrder: ""
+  $name: Built-in button order
+  $description: >-
+    The order of the built-in buttons, separated by commas, with | for a
+    separator, e.g. "sort, view | new | cut, copy, paste, rename, share,
+    delete". The names are new, cut, copy, paste, rename, share, delete, sort
+    and view. Buttons which aren't listed come last. Leave empty for File
+    Explorer's own order.
 - newPlus:
   - enabled: false
     $name: Replace New with New+
@@ -757,12 +944,21 @@ struct ActionItem {
     std::wstring command;
     std::wstring parameters;
     std::wstring shortcut;
+    std::wstring matchExtensions;
     std::wstring icon;
     bool hideIcon = false;
     bool showLabel = false;
     bool isMenu = false;
     bool separatorAfter = false;
+    bool runAsAdmin = false;
+    // One of kWindowStyles, e.g. L"normal".
+    std::wstring windowStyle;
     std::vector<ActionItem> subItems;
+
+    // Helper: Returns labelText if specified, otherwise falls back to name
+    std::wstring GetDisplayLabel() const {
+        return labelText.empty() ? name : labelText;
+    }
 };
 
 // A key combination: MOD_* flags and a virtual-key code.
@@ -770,6 +966,29 @@ struct KeyboardShortcut {
     UINT modifiers = 0;
     UINT vk = 0;
 };
+
+struct WindowStyleDef {
+    PCWSTR settingValue;
+    PCWSTR title;
+    int showCommand;
+};
+
+constexpr WindowStyleDef kWindowStyles[] = {
+    {L"normal", L"Normal", SW_SHOWNORMAL},
+    {L"minimized", L"Minimized", SW_SHOWMINNOACTIVE},
+    {L"maximized", L"Maximized", SW_SHOWMAXIMIZED},
+    {L"hidden", L"Hidden", SW_HIDE},
+};
+
+int WindowStyleIndex(std::wstring_view value) {
+    for (int i = 0; i < (int)ARRAYSIZE(kWindowStyles); i++) {
+        if (value.size() == wcslen(kWindowStyles[i].settingValue) &&
+            _wcsnicmp(value.data(), kWindowStyles[i].settingValue,
+                      value.size()) == 0)
+            return i;
+    }
+    return 0;
+}
 
 struct ShortcutBinding {
     KeyboardShortcut shortcut;
@@ -803,6 +1022,95 @@ constexpr int kDeleteButtonIndex = 6;
 constexpr int kSortButtonIndex = 7;
 constexpr int kViewButtonIndex = 8;
 
+// The built-in buttons shown with a text label, which can be hidden.
+constexpr int kLabeledDefaultButtons[] = {kNewButtonIndex, kSortButtonIndex,
+                                          kViewButtonIndex};
+
+// The built-in buttons which can be reordered: New to View, the ones which
+// are always in the command bar. The contextual commands come and go with
+// the selection, so they stay where File Explorer puts them.
+constexpr int kReorderableButtonCount = kViewButtonIndex + 1;
+
+// A token of the built-in button order: a button index, or a separator.
+constexpr int kOrderSeparator = -1;
+
+// File Explorer's own order: New | Cut ... Delete | Sort View.
+std::vector<int> DefaultButtonOrderTokens() {
+    return {kNewButtonIndex, kOrderSeparator, 1, 2, 3, 4, 5,
+            kDeleteButtonIndex, kOrderSeparator, kSortButtonIndex,
+            kViewButtonIndex};
+}
+
+// Parses e.g. "sort, view | new | cut, copy, paste, rename, share, delete".
+// Buttons can be separated by commas or spaces, and | places a separator.
+// Unknown names and repeated buttons are ignored, and buttons which aren't
+// listed are put at the end in their usual order. Returns an empty list,
+// meaning File Explorer's own order, if no button is listed.
+std::vector<int> ParseDefaultButtonOrder(std::wstring_view text) {
+    std::vector<int> tokens;
+    bool listed[kReorderableButtonCount] = {};
+    bool anyListed = false;
+    std::wstring word;
+    auto flushWord = [&]() {
+        if (word.empty())
+            return;
+        for (int i = 0; i < kReorderableButtonCount; i++) {
+            if (_wcsicmp(word.c_str(), kDefaultButtons[i].settingKey) == 0) {
+                if (!listed[i]) {
+                    listed[i] = true;
+                    anyListed = true;
+                    tokens.push_back(i);
+                }
+                break;
+            }
+        }
+        word.clear();
+    };
+
+    for (WCHAR c : text) {
+        if (iswalnum(c)) {
+            word += c;
+            continue;
+        }
+        flushWord();
+        if (c == L'|')
+            tokens.push_back(kOrderSeparator);
+    }
+    flushWord();
+
+    if (!anyListed)
+        return {};
+    for (int i = 0; i < kReorderableButtonCount; i++) {
+        if (!listed[i])
+            tokens.push_back(i);
+    }
+    return tokens;
+}
+
+// The reverse of ParseDefaultButtonOrder, e.g. "new | cut, copy | sort".
+// Returns an empty string for File Explorer's own order.
+std::wstring FormatDefaultButtonOrder(std::vector<int> const& tokens) {
+    if (tokens.empty() || tokens == DefaultButtonOrderTokens())
+        return std::wstring();
+
+    std::wstring text;
+    bool afterButton = false;
+    for (int token : tokens) {
+        if (token == kOrderSeparator) {
+            text += text.empty() ? L"|" : L" |";
+            afterButton = false;
+            continue;
+        }
+        if (token < 0 || token >= kReorderableButtonCount)
+            continue;
+        if (!text.empty())
+            text += afterButton ? L", " : L" ";
+        text += kDefaultButtons[token].settingKey;
+        afterButton = true;
+    }
+    return text;
+}
+
 struct NewPlusSettings {
     bool enabled = false;
     bool showLabel = true;
@@ -825,12 +1133,19 @@ struct ContextMenuItemSettings {
 struct {
     std::mutex mutex;
     bool placeOnSecondaryBar = false;
+    bool disabledInsteadOfHidden = false;
     bool openMenuOnHover = false;
     int menuHoverDelay = 400;
+    bool showMenuChevrons = false;
     bool hideDefaultButtons[kDefaultButtonCount] = {};
+    bool hideDefaultButtonLabels[kDefaultButtonCount] = {};
     bool hideSeparatorAfterButton[kDefaultButtonCount] = {};
     bool hideMoreButton = false;
     bool hideDetailsButton = false;
+    bool hideDetailsButtonLabel = false;
+    std::wstring defaultButtonOrderText;
+    // Parsed defaultButtonOrderText, empty for File Explorer's own order.
+    std::vector<int> defaultButtonOrder;
     int itemSpacing = -1;
     bool showSettingsItem = true;
     int settingsItemOrder = -1;
@@ -847,6 +1162,7 @@ struct {
 #undef GetCurrentTime
 #include <winrt/Microsoft.UI.Content.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
+#include <winrt/Microsoft.UI.Input.h>
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -892,7 +1208,33 @@ struct CommandBarEntry {
     winrt::event_token loadedToken{};
     winrt::event_token vectorChangedToken{};
     winrt::event_token themeChangedToken{};
+
+    // Selection Polling State
+    mux::DispatcherTimer selectionTimer{nullptr};
+    winrt::event_token selectionTickToken{};
+    HWND cachedTabWnd = nullptr;
+    winrt::com_ptr<IShellBrowser> cachedBrowser{nullptr};
+    winrt::com_ptr<IShellView> cachedShellView{nullptr};
+    int lastSelectionCount = -1;
+    int lastFocusedItem = -1;
 };
+
+void StopSelectionTimer(CommandBarEntry& entry) {
+    if (entry.selectionTimer) {
+        try {
+            entry.selectionTimer.Stop();
+            entry.selectionTimer.Tick(entry.selectionTickToken);
+        } catch (...) {
+        }
+        entry.selectionTimer = nullptr;
+        entry.selectionTickToken = {};
+    }
+    entry.cachedBrowser = nullptr;
+    entry.cachedShellView = nullptr;
+    entry.cachedTabWnd = nullptr;
+    entry.lastSelectionCount = -1;
+    entry.lastFocusedItem = -1;
+}
 
 thread_local std::vector<CommandBarEntry> g_entries;
 thread_local bool g_threadScanned;
@@ -942,11 +1284,29 @@ struct ManagedElement {
     bool hasOriginalSpacing = false;
     mux::Thickness originalMargin{};
     double originalMinWidth = 0;
+    bool hasOriginalLabelPosition = false;
+    muxc::CommandBarLabelPosition originalLabelPosition =
+        muxc::CommandBarLabelPosition::Default;
+    bool addedToolTip = false;
+    // Dropdown chevrons of a built-in button, collapsed along with its label.
+    bool wantChevronsHidden = false;
+    bool chevronLoadedHooked = false;
+    struct HiddenChevron {
+        winrt::weak_ref<mux::UIElement> element;
+        mux::Visibility originalVisibility = mux::Visibility::Visible;
+        double originalOpacity = 1;
+        int64_t visibilityToken = 0;
+    } hiddenChevron;
     bool hasOriginalOverflow = false;
     muxc::CommandBarOverflowButtonVisibility originalOverflow =
         muxc::CommandBarOverflowButtonVisibility::Auto;
     bool watched = false;
     int64_t visibilityToken = 0;
+    // For a command bar whose built-in buttons were reordered: their
+    // original order, with the separators between them.
+    std::vector<winrt::weak_ref<mux::UIElement>> originalButtonOrder;
+    // A built-in separator left over by the custom button order, hidden.
+    bool unusedSeparator = false;
 };
 
 thread_local std::vector<ManagedElement> g_managedElements;
@@ -1072,9 +1432,69 @@ class ComApartmentScope {
 struct ExplorerContext {
     std::wstring folderPath;
     std::wstring selectedPath;
+    std::wstring folderDisplayName;
     std::vector<std::wstring> allSelectedPaths;
     winrt::com_ptr<IShellView> shellView;
+    size_t selectionCount = 0;
 };
+
+winrt::com_ptr<IShellBrowser> GetActiveShellBrowser(HWND hExplorerWnd) {
+    winrt::com_ptr<IShellWindows> shellWindows;
+    if (FAILED(CoCreateInstance(kCLSID_ShellWindows, nullptr, CLSCTX_ALL,
+                                IID_PPV_ARGS(shellWindows.put()))) ||
+        !shellWindows)
+        return nullptr;
+
+    long count = 0;
+    shellWindows->get_Count(&count);
+
+    HWND hActiveTabWnd = hExplorerWnd
+                             ? FindWindowExW(hExplorerWnd, nullptr,
+                                             L"ShellTabWindowClass", nullptr)
+                             : nullptr;
+
+    for (long i = 0; i < count; i++) {
+        VARIANT index;
+        VariantInit(&index);
+        index.vt = VT_I4;
+        index.lVal = i;
+
+        winrt::com_ptr<IDispatch> dispatch;
+        if (FAILED(shellWindows->Item(index, dispatch.put())) || !dispatch)
+            continue;
+
+        auto webBrowser = dispatch.try_as<IWebBrowser2>();
+        if (!webBrowser)
+            continue;
+
+        SHANDLE_PTR hWndRaw = 0;
+        if (FAILED(webBrowser->get_HWND(&hWndRaw)) ||
+            (hExplorerWnd && (HWND)hWndRaw != hExplorerWnd))
+            continue;
+
+        auto serviceProvider = dispatch.try_as<IServiceProvider>();
+        if (!serviceProvider)
+            continue;
+
+        winrt::com_ptr<IShellBrowser> shellBrowser;
+        if (FAILED(serviceProvider->QueryService(
+                kSID_STopLevelBrowser, IID_PPV_ARGS(shellBrowser.put()))) ||
+            !shellBrowser)
+            continue;
+
+        HWND hTabWnd = nullptr;
+        if (SUCCEEDED(shellBrowser->GetWindow(&hTabWnd)) && hTabWnd) {
+            if (hActiveTabWnd) {
+                if (hTabWnd != hActiveTabWnd)
+                    continue;
+            } else if (!IsWindowVisible(hTabWnd)) {
+                continue;
+            }
+        }
+        return shellBrowser;
+    }
+    return nullptr;
+}
 
 winrt::com_ptr<IShellView> GetActiveShellView(HWND hExplorerWnd) {
     winrt::com_ptr<IShellWindows> shellWindows;
@@ -1481,6 +1901,19 @@ ExplorerContext GetExplorerContext(HWND hExplorerWnd,
                                       GPFIDL_DEFAULT)) {
                 result.folderPath = path;
             }
+
+            winrt::com_ptr<IShellItem> folderItem;
+            if (SUCCEEDED(SHCreateItemFromIDList(
+                    pidl, IID_PPV_ARGS(folderItem.put()))) &&
+                folderItem) {
+                PWSTR name = nullptr;
+                if (SUCCEEDED(folderItem->GetDisplayName(SIGDN_NORMALDISPLAY,
+                                                         &name)) &&
+                    name) {
+                    result.folderDisplayName = name;
+                    CoTaskMemFree(name);
+                }
+            }
             CoTaskMemFree(pidl);
         }
     }
@@ -1518,12 +1951,10 @@ bool ReplacePlaceholder(std::wstring& parameters,
     size_t pos = parameters.find(placeholder);
     if (pos == std::wstring::npos)
         return true;
-    if (value.empty())
-        return false;
 
     while (pos != std::wstring::npos) {
         std::wstring replacement = value;
-        if (replacement.back() == L'\\' &&
+        if (!replacement.empty() && replacement.back() == L'\\' &&
             pos + placeholder.size() < parameters.size() &&
             parameters[pos + placeholder.size()] == L'"') {
             replacement += L'\\';
@@ -1547,57 +1978,476 @@ std::wstring FormatSelectedItemsQuoted(std::vector<std::wstring> const& paths) {
     return formatted;
 }
 
-std::wstring BuildParameters(std::wstring parameters,
-                             ExplorerContext const& context) {
-    if (parameters.find(L"%sel%") != std::wstring::npos) {
-        if (context.allSelectedPaths.empty())
-            return std::wstring();
-        std::wstring formatted =
-            FormatSelectedItemsQuoted(context.allSelectedPaths);
+std::wstring ExtractBaseName(std::wstring_view itemPath) {
+    if (itemPath.empty())
+        return L"";
+    PCWSTR fileName = PathFindFileNameW(itemPath.data());
+    if (!fileName || !*fileName)
+        return L"";
+    WCHAR buffer[MAX_PATH];
+    wcsncpy_s(buffer, fileName, _TRUNCATE);
+    PathRemoveExtensionW(buffer);
+    return buffer;
+}
 
-        size_t quotedPos = parameters.find(L"\"%sel%\"");
-        if (quotedPos != std::wstring::npos) {
-            parameters.replace(quotedPos, 7, formatted);
-        } else {
-            size_t unquotedPos = parameters.find(L"%sel%");
-            if (unquotedPos != std::wstring::npos) {
-                parameters.replace(unquotedPos, 5, formatted);
+std::wstring QuoteArg(std::wstring value) {
+    if (!value.empty() && value.back() == L'\\')
+        value += L'\\';
+    return L"\"" + value + L"\"";
+}
+
+std::wstring GetEffectiveFolderPath(const std::wstring& folderPath) {
+    if (!folderPath.empty() && PathFileExistsW(folderPath.c_str()))
+        return folderPath;
+    WCHAR userProfile[MAX_PATH];
+    if (GetEnvironmentVariableW(L"USERPROFILE", userProfile,
+                                ARRAYSIZE(userProfile)))
+        return userProfile;
+    WCHAR sysDir[MAX_PATH];
+    if (GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir)))
+        return sysDir;
+    return L"C:\\";
+}
+
+constexpr size_t kMaxToolbarLabelLength = 24;
+constexpr size_t kMaxMenuItemLabelLength = 48;
+
+std::wstring TruncateWithEllipsis(std::wstring text, size_t maxLen) {
+    if (text.length() > maxLen && maxLen > 3) {
+        return text.substr(0, maxLen - 3) + L"...";
+    }
+    return text;
+}
+
+std::wstring ResolveLabelTokens(std::wstring label,
+                                const ExplorerContext& context) {
+    if (label.find(L'%') == std::wstring::npos)
+        return label;
+
+    bool hasEscapedPercent = (label.find(L"%%") != std::wstring::npos);
+    if (hasEscapedPercent)
+        ReplacePlaceholder(label, L"%%", L"\x01");
+
+    size_t countVal = context.selectionCount > 0
+                          ? context.selectionCount
+                          : context.allSelectedPaths.size();
+    std::wstring countStr = std::to_wstring(countVal);
+    ReplacePlaceholder(label, L"%count%", countStr);
+    ReplacePlaceholder(label, L"%count", countStr);
+    ReplacePlaceholder(label, L"%c%", countStr);
+    ReplacePlaceholder(label, L"%c", countStr);
+
+    std::wstring baseName = L"";
+    if (!context.allSelectedPaths.empty()) {
+        baseName = ExtractBaseName(context.allSelectedPaths[0]);
+    } else if (context.shellView) {
+        winrt::com_ptr<IShellItemArray> items;
+        if (SUCCEEDED(context.shellView->GetItemObject(
+                SVGIO_SELECTION, IID_PPV_ARGS(items.put()))) &&
+            items) {
+            winrt::com_ptr<IShellItem> item;
+            if (SUCCEEDED(items->GetItemAt(0, item.put())) && item) {
+                PWSTR name = nullptr;
+                if (SUCCEEDED(
+                        item->GetDisplayName(SIGDN_NORMALDISPLAY, &name)) &&
+                    name) {
+                    baseName = ExtractBaseName(name);
+                    CoTaskMemFree(name);
+                }
+            }
+        }
+    }
+    ReplacePlaceholder(label, L"%basename%", baseName);
+    ReplacePlaceholder(label, L"%basename", baseName);
+    ReplacePlaceholder(label, L"%file_name%", baseName);
+    ReplacePlaceholder(label, L"%file_name", baseName);
+    ReplacePlaceholder(label, L"%base%", baseName);
+    ReplacePlaceholder(label, L"%base", baseName);
+
+    std::wstring fileName = L"";
+    if (!context.allSelectedPaths.empty()) {
+        PCWSTR n = PathFindFileNameW(context.allSelectedPaths[0].c_str());
+        if (n)
+            fileName = n;
+    }
+    ReplacePlaceholder(label, L"%name%", fileName);
+    ReplacePlaceholder(label, L"%name", fileName);
+    ReplacePlaceholder(label, L"%n%", fileName);
+    ReplacePlaceholder(label, L"%n", fileName);
+    ReplacePlaceholder(label, L"%1%", fileName);
+    ReplacePlaceholder(label, L"%1", fileName);
+
+    std::wstring ext = L"";
+    if (!context.allSelectedPaths.empty()) {
+        PCWSTR e = PathFindExtensionW(context.allSelectedPaths[0].c_str());
+        if (e)
+            ext = e;
+    }
+    ReplacePlaceholder(label, L"%ext%", ext);
+    ReplacePlaceholder(label, L"%ext", ext);
+
+    std::wstring dName = context.folderDisplayName;
+    if (dName.empty() && !context.folderPath.empty()) {
+        std::wstring dir = context.folderPath;
+        while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/'))
+            dir.pop_back();
+        PCWSTR dirName = PathFindFileNameW(dir.c_str());
+        if (dirName)
+            dName = dirName;
+    }
+    ReplacePlaceholder(label, L"%d_name%", dName);
+    ReplacePlaceholder(label, L"%d_name", dName);
+
+    ReplacePlaceholder(label, L"%path%", context.folderPath);
+    ReplacePlaceholder(label, L"%path", context.folderPath);
+    ReplacePlaceholder(label, L"%dir%", context.folderPath);
+    ReplacePlaceholder(label, L"%dir", context.folderPath);
+
+    if (hasEscapedPercent)
+        ReplacePlaceholder(label, L"\x01", L"%");
+
+    return label;
+}
+
+ExplorerContext GetContextFromView(IShellView* pView, int selectionCount = -1) {
+    ExplorerContext result;
+    if (!pView)
+        return result;
+
+    result.shellView.copy_from(pView);
+    result.selectionCount = (selectionCount >= 0) ? (size_t)selectionCount : 0;
+
+    winrt::com_ptr<IShellItemArray> items;
+    if (SUCCEEDED(
+            pView->GetItemObject(SVGIO_SELECTION, IID_PPV_ARGS(items.put()))) &&
+        items) {
+        DWORD count = 0;
+        if (SUCCEEDED(items->GetCount(&count)) && count > 0) {
+            winrt::com_ptr<IShellItem> item;
+            if (SUCCEEDED(items->GetItemAt(0, item.put())) && item) {
+                PWSTR path = nullptr;
+                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)) &&
+                    path) {
+                    result.selectedPath = path;
+                    result.allSelectedPaths.push_back(path);
+                    CoTaskMemFree(path);
+                }
             }
         }
     }
 
-    if (!ReplacePlaceholder(parameters, L"%path%", context.folderPath)) {
-        return std::wstring();
+    if (auto folderView = result.shellView.try_as<IFolderView>()) {
+        winrt::com_ptr<IPersistFolder2> persistFolder;
+        if (SUCCEEDED(
+                folderView->GetFolder(IID_PPV_ARGS(persistFolder.put()))) &&
+            persistFolder) {
+            LPITEMIDLIST pidl = nullptr;
+            if (SUCCEEDED(persistFolder->GetCurFolder(&pidl)) && pidl) {
+                WCHAR path[MAX_PATH];
+                if (SHGetPathFromIDListEx(pidl, path, ARRAYSIZE(path),
+                                          GPFIDL_DEFAULT)) {
+                    result.folderPath = path;
+                }
+                winrt::com_ptr<IShellItem> folderItem;
+                if (SUCCEEDED(SHCreateItemFromIDList(
+                        pidl, IID_PPV_ARGS(folderItem.put()))) &&
+                    folderItem) {
+                    PWSTR name = nullptr;
+                    if (SUCCEEDED(folderItem->GetDisplayName(
+                            SIGDN_NORMALDISPLAY, &name)) &&
+                        name) {
+                        result.folderDisplayName = name;
+                        CoTaskMemFree(name);
+                    }
+                }
+                CoTaskMemFree(pidl);
+            }
+        }
+    }
+    return result;
+}
+
+std::wstring BuildParameters(std::wstring parameters,
+                             ExplorerContext const& context) {
+    if (parameters.empty() || parameters.find(L'%') == std::wstring::npos)
+        return parameters;
+
+    std::wstring effectiveDir = GetEffectiveFolderPath(context.folderPath);
+
+    bool hasEscapedPercent = (parameters.find(L"%%") != std::wstring::npos);
+    if (hasEscapedPercent) {
+        ReplacePlaceholder(parameters, L"%%", L"\x01");
+    }
+
+    std::vector<std::wstring> filesOnly;
+    std::vector<std::wstring> foldersOnly;
+    bool needsItemClassification =
+        (parameters.find(L"%files") != std::wstring::npos ||
+         parameters.find(L"%folders") != std::wstring::npos ||
+         parameters.find(L"%d_smart") != std::wstring::npos);
+
+    if (needsItemClassification) {
+        for (const auto& item : context.allSelectedPaths) {
+            DWORD attr = GetFileAttributesW(item.c_str());
+            if (attr != INVALID_FILE_ATTRIBUTES &&
+                (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+                foldersOnly.push_back(item);
+            } else {
+                filesOnly.push_back(item);
+            }
+        }
+    }
+
+    ReplacePlaceholder(parameters, L"\"%sel_each%\"", L"");
+    ReplacePlaceholder(parameters, L"%sel_each%", L"");
+    ReplacePlaceholder(parameters, L"\"%sel_each\"", L"");
+    ReplacePlaceholder(parameters, L"%sel_each", L"");
+
+    std::wstring formattedFiles = FormatSelectedItemsQuoted(filesOnly);
+    ReplacePlaceholder(parameters, L"\"%files%\"", formattedFiles);
+    ReplacePlaceholder(parameters, L"%files%", formattedFiles);
+    ReplacePlaceholder(parameters, L"\"%files\"", formattedFiles);
+    ReplacePlaceholder(parameters, L"%files", formattedFiles);
+
+    std::wstring formattedFolders = FormatSelectedItemsQuoted(foldersOnly);
+    ReplacePlaceholder(parameters, L"\"%folders%\"", formattedFolders);
+    ReplacePlaceholder(parameters, L"%folders%", formattedFolders);
+    ReplacePlaceholder(parameters, L"\"%folders\"", formattedFolders);
+    ReplacePlaceholder(parameters, L"%folders", formattedFolders);
+
+    if (parameters.find(L"%base") != std::wstring::npos ||
+        parameters.find(L"%file_name") != std::wstring::npos) {
+        std::vector<std::wstring> baseNames;
+        for (const auto& p : context.allSelectedPaths) {
+            baseNames.push_back(ExtractBaseName(p));
+        }
+        std::wstring quotedBases = FormatSelectedItemsQuoted(baseNames);
+        std::wstring firstBase =
+            context.allSelectedPaths.empty()
+                ? L""
+                : ExtractBaseName(context.allSelectedPaths[0]);
+
+        ReplacePlaceholder(parameters, L"\"%basename%\"", quotedBases);
+        ReplacePlaceholder(parameters, L"%basename%", quotedBases);
+        ReplacePlaceholder(parameters, L"\"%basename\"", quotedBases);
+        ReplacePlaceholder(parameters, L"%basename", quotedBases);
+
+        ReplacePlaceholder(parameters, L"\"%base%\"", quotedBases);
+        ReplacePlaceholder(parameters, L"%base%", quotedBases);
+        ReplacePlaceholder(parameters, L"\"%base\"", quotedBases);
+        ReplacePlaceholder(parameters, L"%base", quotedBases);
+
+        std::wstring quotedFirstBase =
+            firstBase.empty() ? L"" : (L"\"" + firstBase + L"\"");
+        ReplacePlaceholder(parameters, L"\"%file_name%\"", quotedFirstBase);
+        ReplacePlaceholder(parameters, L"%file_name%", firstBase);
+        ReplacePlaceholder(parameters, L"\"%file_name\"", quotedFirstBase);
+        ReplacePlaceholder(parameters, L"%file_name", firstBase);
+    }
+
+    if (parameters.find(L"%n") != std::wstring::npos ||
+        parameters.find(L"%name") != std::wstring::npos) {
+        std::vector<std::wstring> names;
+        for (const auto& p : context.allSelectedPaths) {
+            PCWSTR name = PathFindFileNameW(p.c_str());
+            names.push_back(name ? name : L"");
+        }
+        std::wstring quotedNames = FormatSelectedItemsQuoted(names);
+        ReplacePlaceholder(parameters, L"\"%name%\"", quotedNames);
+        ReplacePlaceholder(parameters, L"%name%", quotedNames);
+        ReplacePlaceholder(parameters, L"\"%name\"", quotedNames);
+        ReplacePlaceholder(parameters, L"%name", quotedNames);
+        ReplacePlaceholder(parameters, L"\"%n%\"", quotedNames);
+        ReplacePlaceholder(parameters, L"%n%", quotedNames);
+        ReplacePlaceholder(parameters, L"\"%n\"", quotedNames);
+        ReplacePlaceholder(parameters, L"%n", quotedNames);
+    }
+
+    if (parameters.find(L"%1") != std::wstring::npos) {
+        std::wstring firstItem = context.allSelectedPaths.empty()
+                                     ? L""
+                                     : QuoteArg(context.allSelectedPaths[0]);
+        ReplacePlaceholder(parameters, L"\"%1%\"", firstItem);
+        ReplacePlaceholder(parameters, L"%1%", firstItem);
+        ReplacePlaceholder(parameters, L"\"%1\"", firstItem);
+        ReplacePlaceholder(parameters, L"%1", firstItem);
+    }
+
+    if (parameters.find(L"%ext") != std::wstring::npos) {
+        std::wstring ext = L"";
+        if (!context.allSelectedPaths.empty()) {
+            PCWSTR extPtr =
+                PathFindExtensionW(context.allSelectedPaths[0].c_str());
+            if (extPtr)
+                ext = extPtr;
+        }
+        ReplacePlaceholder(parameters, L"%ext%", ext);
+        ReplacePlaceholder(parameters, L"%ext", ext);
+    }
+
+    std::wstring countStr = std::to_wstring(context.allSelectedPaths.size());
+    ReplacePlaceholder(parameters, L"%count%", countStr);
+    ReplacePlaceholder(parameters, L"%count", countStr);
+    ReplacePlaceholder(parameters, L"%c%", countStr);
+    ReplacePlaceholder(parameters, L"%c", countStr);
+
+    if (parameters.find(L"%d_name") != std::wstring::npos) {
+        std::wstring dName = context.folderDisplayName;
+        if (dName.empty()) {
+            std::wstring dir = effectiveDir;
+            while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/'))
+                dir.pop_back();
+            PCWSTR namePtr = PathFindFileNameW(dir.c_str());
+            if (namePtr)
+                dName = namePtr;
+        }
+        ReplacePlaceholder(parameters, L"\"%d_name%\"", L"\"" + dName + L"\"");
+        ReplacePlaceholder(parameters, L"%d_name%", dName);
+        ReplacePlaceholder(parameters, L"\"%d_name\"", L"\"" + dName + L"\"");
+        ReplacePlaceholder(parameters, L"%d_name", dName);
+    }
+
+    if (parameters.find(L"%sel") != std::wstring::npos ||
+        parameters.find(L"%f") != std::wstring::npos) {
+        std::wstring formatted =
+            context.allSelectedPaths.empty()
+                ? L""
+                : FormatSelectedItemsQuoted(context.allSelectedPaths);
+        ReplacePlaceholder(parameters, L"\"%sel%\"", formatted);
+        ReplacePlaceholder(parameters, L"%sel%", formatted);
+        ReplacePlaceholder(parameters, L"\"%sel\"", formatted);
+        ReplacePlaceholder(parameters, L"%sel", formatted);
+        ReplacePlaceholder(parameters, L"\"%f%\"", formatted);
+        ReplacePlaceholder(parameters, L"%f%", formatted);
+        ReplacePlaceholder(parameters, L"\"%f\"", formatted);
+        ReplacePlaceholder(parameters, L"%f", formatted);
+    }
+
+    std::wstring physicalDir = (!context.folderPath.empty() &&
+                                PathFileExistsW(context.folderPath.c_str()))
+                                   ? context.folderPath
+                                   : L"";
+    std::wstring quotedPhysicalPath =
+        physicalDir.empty() ? L"" : QuoteArg(physicalDir);
+
+    if (parameters.find(L"%d_smart") != std::wstring::npos) {
+        std::wstring smartDir =
+            !foldersOnly.empty() ? foldersOnly[0] : physicalDir;
+        std::wstring quotedSmart = smartDir.empty() ? L"" : QuoteArg(smartDir);
+        ReplacePlaceholder(parameters, L"\"%d_smart%\"", quotedSmart);
+        ReplacePlaceholder(parameters, L"%d_smart%", smartDir);
+        ReplacePlaceholder(parameters, L"\"%d_smart\"", quotedSmart);
+        ReplacePlaceholder(parameters, L"%d_smart", smartDir);
+    }
+
+    ReplacePlaceholder(parameters, L"\"%path%\"", quotedPhysicalPath);
+    ReplacePlaceholder(parameters, L"%path%", physicalDir);
+    ReplacePlaceholder(parameters, L"\"%path\"", quotedPhysicalPath);
+    ReplacePlaceholder(parameters, L"%path", physicalDir);
+
+    ReplacePlaceholder(parameters, L"\"%dir%\"", quotedPhysicalPath);
+    ReplacePlaceholder(parameters, L"%dir%", physicalDir);
+    ReplacePlaceholder(parameters, L"\"%dir\"", quotedPhysicalPath);
+    ReplacePlaceholder(parameters, L"%dir", physicalDir);
+
+    ReplacePlaceholder(parameters, L"\"%d%\"", quotedPhysicalPath);
+    ReplacePlaceholder(parameters, L"%d%", physicalDir);
+    ReplacePlaceholder(parameters, L"\"%d\"", quotedPhysicalPath);
+    ReplacePlaceholder(parameters, L"%d", physicalDir);
+
+    if (parameters.find(L"%p") != std::wstring::npos ||
+        parameters.find(L"%parent") != std::wstring::npos) {
+        std::wstring p = L"";
+        if (!physicalDir.empty()) {
+            std::wstring parent = physicalDir;
+            while (!parent.empty() &&
+                   (parent.back() == L'\\' || parent.back() == L'/'))
+                parent.pop_back();
+            if (parent.length() == 2 && parent[1] == L':') {
+                p = parent + L'\\';
+            } else {
+                size_t slash = parent.find_last_of(L"\\/");
+                if (slash != std::wstring::npos) {
+                    p = parent.substr(0, slash);
+                    if (p.length() == 2 && p[1] == L':')
+                        p += L'\\';
+                }
+            }
+        }
+
+        std::wstring quotedParent = p.empty() ? L"" : QuoteArg(p);
+        ReplacePlaceholder(parameters, L"\"%parent%\"", quotedParent);
+        ReplacePlaceholder(parameters, L"%parent%", p);
+        ReplacePlaceholder(parameters, L"\"%parent\"", quotedParent);
+        ReplacePlaceholder(parameters, L"%parent", p);
+
+        ReplacePlaceholder(parameters, L"\"%p%\"", quotedParent);
+        ReplacePlaceholder(parameters, L"%p%", p);
+        ReplacePlaceholder(parameters, L"\"%p\"", quotedParent);
+        ReplacePlaceholder(parameters, L"%p", p);
+    }
+
+    if (hasEscapedPercent) {
+        ReplacePlaceholder(parameters, L"\x01", L"%");
     }
 
     return parameters;
 }
 
+struct LaunchOptions {
+    bool runAsAdmin = false;
+    int showCommand = SW_SHOWNORMAL;
+    // The owner of the UAC prompt, so that it comes up in the foreground.
+    HWND hOwnerWnd = nullptr;
+};
+
 void ExecuteProcess(std::wstring const& command,
                     std::wstring const& parameters,
-                    std::wstring const& workingDir) {
+                    std::wstring const& workingDir,
+                    LaunchOptions const& options) {
     bool isPath = command.find(L'\\') != std::wstring::npos;
     SHELLEXECUTEINFOW execInfo{};
     execInfo.cbSize = sizeof(execInfo);
     execInfo.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_NOASYNC;
+    execInfo.hwnd = options.runAsAdmin ? options.hOwnerWnd : nullptr;
+    execInfo.lpVerb = options.runAsAdmin ? L"runas" : nullptr;
     execInfo.lpFile = command.c_str();
     execInfo.lpParameters = parameters.empty() ? nullptr : parameters.c_str();
     execInfo.lpDirectory =
         (isPath && !workingDir.empty()) ? workingDir.c_str() : nullptr;
-    execInfo.nShow = SW_SHOWNORMAL;
+    execInfo.nShow = options.showCommand;
 
     if (!ShellExecuteExW(&execInfo)) {
+        // ERROR_CANCELLED (1223) means that the UAC prompt was declined.
         Wh_Log(L"ShellExecuteExW failed for %s: %u", command.c_str(),
                GetLastError());
     }
 }
 
 // Runs on a worker thread, so that a slow or unresponsive shell can't block
-// the window.
-void LaunchItemForWindow(HWND hExplorerWnd, ActionItem const& item) {
+// the window. With forceRunAsAdmin, the command runs elevated even if the
+// item isn't set to (Ctrl+Shift+click).
+void LaunchItemForWindow(HWND hExplorerWnd,
+                         ActionItem const& item,
+                         bool forceRunAsAdmin) {
+    LaunchOptions options;
+    options.runAsAdmin = item.runAsAdmin || forceRunAsAdmin;
+    options.showCommand =
+        kWindowStyles[WindowStyleIndex(item.windowStyle)].showCommand;
+    options.hOwnerWnd = hExplorerWnd;
+
     bool allSelected =
         item.parameters.find(L"%sel%") != std::wstring::npos ||
-        item.parameters.find(L"%sel_each%") != std::wstring::npos;
+        item.parameters.find(L"%sel_each") != std::wstring::npos ||
+        item.parameters.find(L"%files") != std::wstring::npos ||
+        item.parameters.find(L"%folders") != std::wstring::npos ||
+        item.parameters.find(L"%base") != std::wstring::npos ||
+        item.parameters.find(L"%name") != std::wstring::npos ||
+        item.parameters.find(L"%n") != std::wstring::npos ||
+        item.parameters.find(L"%1") != std::wstring::npos ||
+        item.parameters.find(L"%ext") != std::wstring::npos ||
+        item.parameters.find(L"%c") != std::wstring::npos;
+
     ExplorerContext capturedContext =
         GetExplorerContext(hExplorerWnd, allSelected);
 
@@ -1605,14 +2455,16 @@ void LaunchItemForWindow(HWND hExplorerWnd, ActionItem const& item) {
     Wh_Log(L"Launching %s for window %08X, path: %s", item.command.c_str(),
            (DWORD)(ULONG_PTR)hExplorerWnd, capturedContext.folderPath.c_str());
 
+    std::wstring workingDir =
+        GetEffectiveFolderPath(capturedContext.folderPath);
+
     // %sel_each%: run an individual process instance per selected item
-    if (item.parameters.find(L"%sel_each%") != std::wstring::npos) {
+    if (item.parameters.find(L"%sel_each%") != std::wstring::npos ||
+        item.parameters.find(L"%sel_each") != std::wstring::npos) {
         if (capturedContext.allSelectedPaths.empty()) {
             std::wstring param = item.parameters;
-            ReplacePlaceholder(param, L"\"%sel_each%\"", L"");
-            ReplacePlaceholder(param, L"%sel_each%", L"");
-            ReplacePlaceholder(param, L"%path%", capturedContext.folderPath);
-            ExecuteProcess(command, param, capturedContext.folderPath);
+            param = BuildParameters(param, capturedContext);
+            ExecuteProcess(command, param, workingDir, options);
             return;
         }
 
@@ -1626,29 +2478,28 @@ void LaunchItemForWindow(HWND hExplorerWnd, ActionItem const& item) {
             const auto& path = capturedContext.allSelectedPaths[i];
             std::wstring param = item.parameters;
             std::wstring safePath = path;
-            if (!safePath.empty() && safePath.back() == L'\\' &&
-                safePath.size() > 3) {
+            if (!safePath.empty() && safePath.back() == L'\\') {
                 safePath += L'\\';
             }
 
-            size_t qPos = param.find(L"\"%sel_each%\"");
-            if (qPos != std::wstring::npos) {
-                param.replace(qPos, 12, L"\"" + safePath + L"\"");
-            } else {
-                size_t uPos = param.find(L"%sel_each%");
-                if (uPos != std::wstring::npos) {
-                    param.replace(uPos, 10, L"\"" + safePath + L"\"");
-                }
-            }
+            std::wstring quotedPath = L"\"" + safePath + L"\"";
+            ReplacePlaceholder(param, L"\"%sel_each%\"", quotedPath);
+            ReplacePlaceholder(param, L"\"%sel_each\"", quotedPath);
+            ReplacePlaceholder(param, L"%sel_each%", quotedPath);
+            ReplacePlaceholder(param, L"%sel_each", quotedPath);
 
-            ReplacePlaceholder(param, L"%path%", capturedContext.folderPath);
-            ExecuteProcess(command, param, capturedContext.folderPath);
+            // Re-evaluate parameter tokens isolated to just this specific file
+            ExplorerContext singleCtx = capturedContext;
+            singleCtx.allSelectedPaths = {path};
+            param = BuildParameters(param, singleCtx);
+
+            ExecuteProcess(command, param, workingDir, options);
         }
         return;
     }
 
     std::wstring parameters = BuildParameters(item.parameters, capturedContext);
-    ExecuteProcess(command, parameters, capturedContext.folderPath);
+    ExecuteProcess(command, parameters, workingDir, options);
 }
 
 std::mutex g_launchThreadsMutex;
@@ -1761,8 +2612,8 @@ void SendKeyCombo(std::initializer_list<WORD> keys) {
         inputs.push_back(input);
     };
 
-    for (WORD vk : {VK_LCONTROL, VK_RCONTROL, VK_LSHIFT, VK_RSHIFT, VK_LWIN,
-                    VK_RWIN}) {
+    for (WORD vk :
+         {VK_LCONTROL, VK_RCONTROL, VK_LSHIFT, VK_RSHIFT, VK_LWIN, VK_RWIN}) {
         if (GetAsyncKeyState(vk) < 0)
             addKey(vk, true);
     }
@@ -1774,13 +2625,124 @@ void SendKeyCombo(std::initializer_list<WORD> keys) {
     SendInput((UINT)inputs.size(), inputs.data(), sizeof(INPUT));
 }
 
+bool SetClipboardText(std::wstring const& text) {
+    // Another program may have the clipboard open for a moment.
+    bool opened = false;
+    for (int attempt = 0; attempt < 10 && !opened; attempt++) {
+        if (attempt > 0)
+            Sleep(20);
+        opened = OpenClipboard(nullptr);
+    }
+    if (!opened) {
+        Wh_Log(L"OpenClipboard failed: %u", GetLastError());
+        return false;
+    }
+
+    bool succeeded = false;
+    size_t size = (text.size() + 1) * sizeof(WCHAR);
+    if (HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, size)) {
+        if (void* data = GlobalLock(hMem)) {
+            memcpy(data, text.c_str(), size);
+            GlobalUnlock(hMem);
+            if (EmptyClipboard() && SetClipboardData(CF_UNICODETEXT, hMem))
+                succeeded = true;
+        }
+        if (!succeeded)
+            GlobalFree(hMem);
+    }
+    CloseClipboard();
+    return succeeded;
+}
+
+enum class CopyKind {
+    Path,
+    Name,
+    Dir,
+};
+
+// Copies the selected items' paths or names, one per line, or the current
+// folder's if nothing is selected.
+void CopyToClipboardForWindow(HWND hExplorerWnd, CopyKind kind) {
+    ExplorerContext context = GetExplorerContext(hExplorerWnd, true);
+
+    auto folderName = [&context]() {
+        std::wstring dir = context.folderPath;
+        while (dir.size() > 3 && (dir.back() == L'\\' || dir.back() == L'/'))
+            dir.pop_back();
+        PCWSTR name = dir.empty() ? nullptr : PathFindFileNameW(dir.c_str());
+        return name && *name ? std::wstring(name) : context.folderDisplayName;
+    };
+
+    std::wstring text;
+    if (kind == CopyKind::Dir || context.allSelectedPaths.empty()) {
+        text = kind == CopyKind::Name ? folderName() : context.folderPath;
+    } else {
+        for (auto const& path : context.allSelectedPaths) {
+            if (!text.empty())
+                text += L"\r\n";
+            if (kind == CopyKind::Name) {
+                PCWSTR name = PathFindFileNameW(path.c_str());
+                text += name && *name ? name : path.c_str();
+            } else {
+                text += path;
+            }
+        }
+    }
+
+    if (text.empty()) {
+        Wh_Log(L"Nothing to copy for window %08X",
+               (DWORD)(ULONG_PTR)hExplorerWnd);
+        return;
+    }
+    SetClipboardText(text);
+}
+
+void RefreshViewForWindow(HWND hExplorerWnd) {
+    if (auto shellView = GetActiveShellView(hExplorerWnd)) {
+        HRESULT hr = shellView->Refresh();
+        if (FAILED(hr))
+            Wh_Log(L"IShellView::Refresh failed: %08X", hr);
+    }
+}
+
+void CreateNewItemForWindow(HWND hExplorerWnd,
+                            bool isDirectory,
+                            std::wstring name);
+
 // Runs an item for the given File Explorer window. Called from the thread of
-// the window, on a click or a keyboard shortcut.
-void InvokeActionItem(HWND hWnd, ActionItem const& item) {
+// the window, on a click or a keyboard shortcut. With forceRunAsAdmin, a
+// command runs elevated even if the item isn't set to.
+void InvokeActionItem(HWND hWnd,
+                      ActionItem const& item,
+                      bool forceRunAsAdmin = false) {
     if (item.command.empty() || g_unloading)
         return;
 
     std::wstring_view cmd = item.command;
+
+    if (IsCommandMatch(cmd, L"CopyPath") || IsCommandMatch(cmd, L"CopyName") ||
+        IsCommandMatch(cmd, L"CopyDir")) {
+        CopyKind kind = IsCommandMatch(cmd, L"CopyPath")   ? CopyKind::Path
+                        : IsCommandMatch(cmd, L"CopyName") ? CopyKind::Name
+                                                           : CopyKind::Dir;
+        RunShellWorkOnWorkerThread(
+            [hWnd, kind]() { CopyToClipboardForWindow(hWnd, kind); });
+        return;
+    }
+
+    if (IsCommandMatch(cmd, L"NewFolder") || IsCommandMatch(cmd, L"NewFile")) {
+        bool isDirectory = IsCommandMatch(cmd, L"NewFolder");
+        RunShellWorkOnWorkerThread(
+            [hWnd, isDirectory, name = TrimQuotesAndSpaces(item.parameters)]() {
+                CreateNewItemForWindow(hWnd, isDirectory, name);
+            });
+        return;
+    }
+
+    if (IsCommandMatch(cmd, L"Refresh")) {
+        RunShellWorkOnWorkerThread([hWnd]() { RefreshViewForWindow(hWnd); });
+        return;
+    }
 
     if (IsCommandMatch(cmd, L"TogglePreview")) {
         SendKeyCombo({VK_MENU, 'P'});
@@ -1814,8 +2776,9 @@ void InvokeActionItem(HWND hWnd, ActionItem const& item) {
         return;
     }
 
-    RunShellWorkOnWorkerThread(
-        [hWnd, item]() { LaunchItemForWindow(hWnd, item); });
+    RunShellWorkOnWorkerThread([hWnd, item, forceRunAsAdmin]() {
+        LaunchItemForWindow(hWnd, item, forceRunAsAdmin);
+    });
 }
 
 void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
@@ -1823,7 +2786,12 @@ void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
     if (item.command.empty() || g_unloading)
         return;
 
-    InvokeActionItem(GetExplorerWindowForElement(elementForWindow), item);
+    // Ctrl+Shift+click runs the command as administrator, like in the Start
+    // menu and the taskbar.
+    bool forceRunAsAdmin =
+        GetKeyState(VK_CONTROL) < 0 && GetKeyState(VK_SHIFT) < 0;
+    InvokeActionItem(GetExplorerWindowForElement(elementForWindow), item,
+                     forceRunAsAdmin);
 }
 
 std::wstring GetPowerToysNewPlusFolder() {
@@ -2227,6 +3195,68 @@ void CreateFromTemplateForWindow(HWND hExplorerWnd,
     if (!succeeded &&
         GetFileAttributesW(targetPath.c_str()) == INVALID_FILE_ATTRIBUTES)
         return;
+    SelectAndRename(context.shellView, targetPath);
+}
+
+// internal:NewFolder and internal:NewFile. The name comes from the item's
+// parameters, with the New+ filename variables ($YYYY, $MM, ...) replaced.
+// Created through IFileOperation, so that Ctrl+Z undoes it.
+void CreateNewItemForWindow(HWND hExplorerWnd,
+                            bool isDirectory,
+                            std::wstring name) {
+    ExplorerContext context = GetExplorerContext(hExplorerWnd);
+    if (context.folderPath.empty()) {
+        Wh_Log(L"No filesystem folder for window %08X",
+               (DWORD)(ULONG_PTR)hExplorerWnd);
+        return;
+    }
+
+    if (name.empty())
+        name = isDirectory ? L"New folder" : L"file";
+    name = ReplaceNameVariables(name, context.folderPath);
+    if (name.find_first_of(L"\\/:*?\"<>|") != std::wstring::npos) {
+        Wh_Log(L"Invalid name: %s", name.c_str());
+        return;
+    }
+
+    std::wstring targetPath =
+        MakeUniquePath(context.folderPath, name, isDirectory);
+    if (targetPath.empty()) {
+        Wh_Log(L"Couldn't find a free name for %s", name.c_str());
+        return;
+    }
+
+    winrt::com_ptr<IFileOperation> operation;
+    HRESULT hr = CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL,
+                                  IID_PPV_ARGS(operation.put()));
+    if (FAILED(hr)) {
+        Wh_Log(L"CoCreateInstance(FileOperation) failed: %08X", hr);
+        return;
+    }
+
+    if (FAILED(operation->SetOperationFlags(FOF_NO_UI | FOF_ALLOWUNDO |
+                                            FOFX_ADDUNDORECORD))) {
+        operation->SetOperationFlags(FOF_NO_UI);
+    }
+
+    winrt::com_ptr<IShellItem> folderItem;
+    hr = SHCreateItemFromParsingName(context.folderPath.c_str(), nullptr,
+                                     IID_PPV_ARGS(folderItem.put()));
+    if (SUCCEEDED(hr)) {
+        hr = operation->NewItem(
+            folderItem.get(),
+            isDirectory ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL,
+            PathFindFileNameW(targetPath.c_str()), nullptr, nullptr);
+    }
+    if (SUCCEEDED(hr))
+        hr = operation->PerformOperations();
+    if (FAILED(hr) ||
+        GetFileAttributesW(targetPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        Wh_Log(L"Creating %s failed: %08X", targetPath.c_str(), hr);
+        return;
+    }
+
+    Wh_Log(L"Created %s", targetPath.c_str());
     SelectAndRename(context.shellView, targetPath);
 }
 
@@ -2660,23 +3690,37 @@ muxc::IconElement CreateIconElement(std::wstring const& iconSetting,
     return CreateGlyphIcon(defaultGlyph);
 }
 
+PCWSTR InternalCommandGlyph(std::wstring_view cmd) {
+    if (IsCommandMatch(cmd, L"OpenWith"))
+        return L"\uE7AC";
+    if (IsCommandMatch(cmd, L"TogglePreview"))
+        return L"\uE8A1";
+    if (IsCommandMatch(cmd, L"ToggleDetails"))
+        return L"\uE9F9";
+    if (IsCommandMatch(cmd, L"FolderOptions"))
+        return L"\uE713";
+    if (IsCommandMatch(cmd, L"CopyPath"))
+        return L"\uE8C8";
+    if (IsCommandMatch(cmd, L"CopyName"))
+        return L"\uE8AC";
+    if (IsCommandMatch(cmd, L"CopyDir"))
+        return L"\uE8B7";
+    if (IsCommandMatch(cmd, L"NewFolder"))
+        return L"\uE8F4";
+    if (IsCommandMatch(cmd, L"NewFile"))
+        return L"\uE8A5";
+    if (IsCommandMatch(cmd, L"Refresh"))
+        return L"\uE72C";
+    return nullptr;
+}
+
 muxc::IconElement MakeCommandButtonIcon(ActionItem const& item) {
     if (item.hideIcon)
         return nullptr;
 
-    PCWSTR defaultGlyph = L"";
-    std::wstring_view cmd = item.command;
-
-    if (IsCommandMatch(cmd, L"OpenWith"))
-        defaultGlyph = L"\uE7AC";
-    else if (IsCommandMatch(cmd, L"TogglePreview"))
-        defaultGlyph = L"\uE8A1";
-    else if (IsCommandMatch(cmd, L"ToggleDetails"))
-        defaultGlyph = L"\uE9F9";
-    else if (IsCommandMatch(cmd, L"FolderOptions"))
-        defaultGlyph = L"\uE713";
-
-    return CreateIconElement(item.icon, item.command, defaultGlyph);
+    PCWSTR defaultGlyph = InternalCommandGlyph(item.command);
+    return CreateIconElement(item.icon, item.command,
+                             defaultGlyph ? defaultGlyph : L"\uE783");
 }
 
 muxc::IconElement MakeNewPlusButtonIcon(std::wstring const& iconSetting,
@@ -2827,6 +3871,7 @@ enum class ManagedKind {
     GroupSeparator,
     DetailsToggle,
     OverflowElement,
+    UnusedSeparator,
 };
 
 struct GroupMember {
@@ -2886,6 +3931,8 @@ bool ShouldHide(ManagedTarget const& target) {
             return g_settings.hideDetailsButton;
         case ManagedKind::OverflowElement:
             return g_settings.hideMoreButton;
+        case ManagedKind::UnusedSeparator:
+            return true;
         case ManagedKind::GroupSeparator:
             break;
     }
@@ -2982,15 +4029,20 @@ void WatchVisibility(mux::UIElement const& element,
                 return;
 
             mux::Visibility visibility = element.Visibility();
+            bool unusedSeparator;
             {
                 auto& entry = GetManagedElement(element);
                 entry.originalVisibility = visibility;
                 entry.hasOriginalVisibility = true;
+                unusedSeparator = entry.unusedSeparator;
             }
 
+            // The role of a separator changes with the button order, so the
+            // recompute below decides for those.
             if (target.kind != ManagedKind::GroupSeparator &&
+                target.kind != ManagedKind::UnusedSeparator &&
                 visibility != mux::Visibility::Collapsed &&
-                ShouldHide(target)) {
+                (unusedSeparator || ShouldHide(target))) {
                 SetVisibilityInternal(element, mux::Visibility::Collapsed);
             }
             QueueVisibilityRecompute(owner);
@@ -3077,6 +4129,168 @@ void ApplyItemSpacing(muxc::AppBarButton const& button,
     button.MinWidth(0);
 }
 
+// The dropdown chevron which File Explorer draws after the label of its New,
+// Sort and View buttons. The overflow menu uses OverflowSubItemChevron.
+mux::FrameworkElement FindSubItemChevron(mux::DependencyObject const& root) {
+    int count = muxm::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < count; i++) {
+        auto child = muxm::VisualTreeHelper::GetChild(root, i);
+        if (auto element = child.try_as<mux::FrameworkElement>();
+            element && element.Name() == L"SubItemChevron") {
+            return element;
+        }
+        if (auto found = FindSubItemChevron(child))
+            return found;
+    }
+    return nullptr;
+}
+
+void RestoreChevron(ManagedElement::HiddenChevron const& hidden) {
+    auto element = hidden.element.get();
+    if (!element)
+        return;
+    try {
+        element.UnregisterPropertyChangedCallback(
+            mux::UIElement::VisibilityProperty(), hidden.visibilityToken);
+        element.Visibility(hidden.originalVisibility);
+        element.Opacity(hidden.originalOpacity);
+    } catch (...) {
+        Wh_Log(L"Error %08X", winrt::to_hresult().value);
+    }
+}
+
+void RestoreChevronsForCurrentThread() {
+    for (auto& entry : g_managedElements) {
+        entry.wantChevronsHidden = false;
+        if (entry.hiddenChevron.element)
+            RestoreChevron(entry.hiddenChevron);
+        entry.hiddenChevron = {};
+    }
+}
+
+// With the label of a built-in dropdown button hidden, its chevron would be
+// drawn next to the icon, so it's hidden as well. The template's visual states
+// can make it visible again, so its visibility is watched while hidden.
+void ApplyChevronHiding(muxc::AppBarButton const& button, bool hide) try {
+    ManagedElement::HiddenChevron hidden;
+    bool hookLoaded = false;
+    {
+        auto* entry = FindManagedElement(button);
+        if (!entry) {
+            if (!hide)
+                return;
+            entry = &GetManagedElement(button);
+        }
+        entry->wantChevronsHidden = hide;
+        hidden = entry->hiddenChevron;
+        if (hide && !entry->chevronLoadedHooked) {
+            entry->chevronLoadedHooked = true;
+            hookLoaded = true;
+        }
+    }
+
+    if (hookLoaded) {
+        // The template may not be applied yet, and is re-applied when the
+        // button is reloaded.
+        TrackRevoker(
+            button,
+            button.Loaded(winrt::auto_revoke, [](wf::IInspectable const& sender,
+                                                 mux::RoutedEventArgs const&) {
+                auto button = sender.try_as<muxc::AppBarButton>();
+                if (!button || g_unloading)
+                    return;
+                auto* entry = FindManagedElement(button);
+                if (entry && entry->wantChevronsHidden)
+                    ApplyChevronHiding(button, true);
+            }));
+    }
+
+    mux::FrameworkElement chevron{nullptr};
+    if (hide)
+        chevron = FindSubItemChevron(button);
+
+    // Restore a chevron which is no longer wanted hidden, or which was
+    // replaced by a re-applied template.
+    if (hidden.element && (!hide || hidden.element.get() != chevron)) {
+        RestoreChevron(hidden);
+        hidden = {};
+    }
+
+    if (chevron && !hidden.element) {
+        hidden.element = winrt::make_weak<mux::UIElement>(chevron);
+        hidden.originalVisibility = chevron.Visibility();
+        hidden.originalOpacity = chevron.Opacity();
+        auto weakButton = winrt::make_weak(button);
+        hidden.visibilityToken = chevron.RegisterPropertyChangedCallback(
+            mux::UIElement::VisibilityProperty(),
+            [weakButton](mux::DependencyObject const& sender,
+                         mux::DependencyProperty const&) {
+                if (g_unloading)
+                    return;
+                auto button = weakButton.get();
+                auto element = sender.try_as<mux::UIElement>();
+                if (!button || !element)
+                    return;
+                auto* entry = FindManagedElement(button);
+                if (entry && entry->wantChevronsHidden &&
+                    element.Visibility() != mux::Visibility::Collapsed) {
+                    element.Visibility(mux::Visibility::Collapsed);
+                }
+            });
+    }
+
+    if (chevron) {
+        if (chevron.Visibility() != mux::Visibility::Collapsed)
+            chevron.Visibility(mux::Visibility::Collapsed);
+        if (chevron.Opacity() != 0)
+            chevron.Opacity(0);
+    }
+
+    if (auto* entry = FindManagedElement(button))
+        entry->hiddenChevron = hidden;
+} catch (...) {
+    Wh_Log(L"Error %08X", winrt::to_hresult().value);
+}
+
+// Collapses the label of a built-in button, leaving only its icon.
+void ApplyLabelHiding(muxc::AppBarButton const& button, bool hide) {
+    muxc::CommandBarLabelPosition original;
+    bool addedToolTip;
+    {
+        auto& entry = GetManagedElement(button);
+        if (!entry.hasOriginalLabelPosition) {
+            if (!hide)
+                return;
+            entry.originalLabelPosition = button.LabelPosition();
+            entry.hasOriginalLabelPosition = true;
+        }
+        original = entry.originalLabelPosition;
+        addedToolTip = entry.addedToolTip;
+    }
+
+    auto position = hide ? muxc::CommandBarLabelPosition::Collapsed : original;
+    if (button.LabelPosition() != position)
+        button.LabelPosition(position);
+    ApplyChevronHiding(button, hide);
+
+    // Without its label, the button gets it as a tooltip, which is removed
+    // again along with the label hiding.
+    bool toolTipChanged = false;
+    if (hide && !addedToolTip && !button.Label().empty() &&
+        !muxc::ToolTipService::GetToolTip(button)) {
+        muxc::ToolTipService::SetToolTip(button,
+                                         winrt::box_value(button.Label()));
+        addedToolTip = true;
+        toolTipChanged = true;
+    } else if (!hide && addedToolTip) {
+        muxc::ToolTipService::SetToolTip(button, nullptr);
+        addedToolTip = false;
+        toolTipChanged = true;
+    }
+    if (toolTipChanged)
+        GetManagedElement(button).addedToolTip = addedToolTip;
+}
+
 mux::FrameworkElement FindDescendantByName(mux::DependencyObject const& root,
                                            std::wstring_view name) {
     int count = muxm::VisualTreeHelper::GetChildrenCount(root);
@@ -3096,10 +4310,15 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
                                   bool forceShow) {
     bool hideMore;
     int itemSpacing;
+    bool hideLabels[kDefaultButtonCount];
+    bool hideDetailsLabel;
     {
         std::lock_guard<std::mutex> lock(g_settings.mutex);
         hideMore = g_settings.hideMoreButton;
         itemSpacing = g_settings.itemSpacing;
+        for (int i = 0; i < kDefaultButtonCount; i++)
+            hideLabels[i] = g_settings.hideDefaultButtonLabels[i];
+        hideDetailsLabel = g_settings.hideDetailsButtonLabel;
     }
 
     bool isPrimary = commandBar.Name() == L"FileExplorerCommandBar";
@@ -3208,6 +4427,13 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
 
         if (entry.isSeparator) {
             auto separator = entry.command.as<muxc::AppBarSeparator>();
+            if (auto* managed = FindManagedElement(separator);
+                managed && managed->unusedSeparator) {
+                setVisibility(separator, {ManagedKind::UnusedSeparator});
+                prevIndex = -1;
+                continue;
+            }
+
             int target = -1;
             if (prevIndex == kNewButtonIndex)
                 target = kNewButtonIndex;
@@ -3229,6 +4455,8 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
         if (entry.isDetailsToggle) {
             setVisibility(entry.command.as<mux::UIElement>(),
                           {ManagedKind::DetailsToggle});
+            if (auto button = entry.command.try_as<muxc::AppBarButton>())
+                ApplyLabelHiding(button, !forceShow && hideDetailsLabel);
             prevIndex = -1;
             continue;
         }
@@ -3238,6 +4466,8 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
             setVisibility(button, {ManagedKind::Button, entry.defaultIndex,
                                    hasNewPlusButton});
             ApplyItemSpacing(button, itemSpacing, forceShow);
+            ApplyLabelHiding(button,
+                             !forceShow && hideLabels[entry.defaultIndex]);
         }
 
         prevIndex = entry.defaultIndex;
@@ -3296,8 +4526,16 @@ muxc::IconElement TryCreateIconElement(std::wstring const& iconSetting,
 muxc::IconElement MakeCommandButtonIcon(ActionItem const& item);
 
 muxc::AppBarButton CreateActionButton(ActionItem const& item, int index) {
+    std::wstring displayLabel = item.GetDisplayLabel();
+    ExplorerContext emptyCtx;
+    std::wstring fullResolved = (displayLabel.find(L'%') != std::wstring::npos)
+                                    ? ResolveLabelTokens(displayLabel, emptyCtx)
+                                    : displayLabel;
+    std::wstring displayResolved =
+        TruncateWithEllipsis(fullResolved, kMaxToolbarLabelLength);
+
     muxc::AppBarButton button =
-        CreateBareButton(index, item.name, item.labelText,
+        CreateBareButton(index, fullResolved, displayResolved,
                          MakeCommandButtonIcon(item), item.showLabel);
 
     TrackRevoker(
@@ -3319,9 +4557,11 @@ void AppendMenuEntries(std::vector<ActionItem> const& items,
 muxc::MenuFlyoutItemBase CreateMenuEntry(
     ActionItem const& item,
     winrt::weak_ref<muxc::AppBarButton> const& weakButton) {
+    std::wstring displayLabel = item.GetDisplayLabel();
+
     if (item.isMenu && !item.subItems.empty()) {
         muxc::MenuFlyoutSubItem subMenu;
-        subMenu.Text(item.name.c_str());
+        subMenu.Text(displayLabel.c_str());
         if (!item.hideIcon) {
             if (auto icon = TryCreateIconElement(item.icon, item.command))
                 subMenu.Icon(icon);
@@ -3331,7 +4571,7 @@ muxc::MenuFlyoutItemBase CreateMenuEntry(
     }
 
     muxc::MenuFlyoutItem menuItem;
-    menuItem.Text(item.name.c_str());
+    menuItem.Text(displayLabel.c_str());
     if (!item.hideIcon) {
         if (auto icon = TryCreateIconElement(item.icon, item.command))
             menuItem.Icon(icon);
@@ -3448,25 +4688,166 @@ std::function<void()> MakeShowFlyoutAction(muxc::AppBarButton const& button) {
     };
 }
 
+constexpr WCHAR kChevronGlyph = L'\uE70D';
+
+// Draws the label of a command bar button followed by a small chevron, like
+// File Explorer's own dropdown buttons. With an empty label, only the chevron
+// is drawn. Returns false if the label element wasn't found.
+bool AddChevronToLabel(mux::FrameworkElement const& button,
+                       std::wstring label) try {
+    auto textLabel =
+        FindDescendantByName(button, L"TextLabel").try_as<muxc::TextBlock>();
+    if (!textLabel)
+        return false;
+
+    std::wstring currentText = textLabel.Text().c_str();
+    auto inlines = textLabel.Inlines();
+    if (inlines.Size() > 1 && !currentText.empty() &&
+        currentText.back() == kChevronGlyph) {
+        return true;
+    }
+
+    while (!label.empty() &&
+           (label.back() == kChevronGlyph || label.back() == L' ')) {
+        label.pop_back();
+    }
+
+    inlines.Clear();
+    if (!label.empty()) {
+        muxd::Run text;
+        text.Text(label + L"  ");
+        inlines.Append(text);
+    }
+
+    muxd::Run chevron;
+    chevron.Text(winrt::hstring(&kChevronGlyph, 1));
+    chevron.FontFamily(muxm::FontFamily(L"Segoe Fluent Icons"));
+    chevron.FontSize(8);
+    inlines.Append(chevron);
+    return true;
+} catch (...) {
+    Wh_Log(L"Error %08X", winrt::to_hresult().value);
+    return false;
+}
+
+void AddNewPlusChevron(muxc::AppBarButton const& button) {
+    if (!AddChevronToLabel(button, button.Label().c_str()))
+        Wh_Log(L"The New+ label wasn't found");
+}
+
+// A custom dropdown button with "Show chevrons on dropdowns" enabled. An
+// icon-only button gets the chevron glyph as its label, so that the label
+// element exists to draw the chevron in.
+void AddMenuButtonChevron(muxc::AppBarButton const& button) {
+    std::wstring label = button.Label().c_str();
+    if (label.size() == 1 && label[0] == kChevronGlyph)
+        label.clear();
+    AddChevronToLabel(button, label);
+}
+
+// The label of a custom dropdown button. With a chevron but no label, it's
+// the chevron glyph, replaced by AddMenuButtonChevron once the button loads.
+std::wstring MenuButtonLabel(std::wstring const& label,
+                             bool hasLabel,
+                             bool showChevron) {
+    if (hasLabel)
+        return label;
+    return showChevron ? std::wstring(1, kChevronGlyph) : label;
+}
+
 muxc::AppBarButton CreateMenuButton(ActionItem const& item,
                                     int index,
                                     bool openOnHover,
-                                    int hoverDelayMs) {
+                                    int hoverDelayMs,
+                                    bool showChevron) {
+    std::wstring displayLabel = item.GetDisplayLabel();
+    ExplorerContext emptyCtx;
+    std::wstring fullResolved = (displayLabel.find(L'%') != std::wstring::npos)
+                                    ? ResolveLabelTokens(displayLabel, emptyCtx)
+                                    : displayLabel;
+    std::wstring truncatedDisplay =
+        TruncateWithEllipsis(fullResolved, kMaxToolbarLabelLength);
+
+    bool hasLabel = item.showLabel && !truncatedDisplay.empty();
+    std::wstring finalLabel = MenuButtonLabel(truncatedDisplay, hasLabel,
+                                              showChevron);
+
     muxc::AppBarButton button =
-        CreateBareButton(index, item.name, item.labelText,
-                         MakeCommandButtonIcon(item), item.showLabel);
+        CreateBareButton(index, fullResolved, finalLabel,
+                         MakeCommandButtonIcon(item), hasLabel || showChevron);
+
+    if (showChevron) {
+        TrackRevoker(
+            button,
+            button.Loaded(winrt::auto_revoke, [](wf::IInspectable const& sender,
+                                                 mux::RoutedEventArgs const&) {
+                if (auto button = sender.try_as<muxc::AppBarButton>())
+                    AddMenuButtonChevron(button);
+            }));
+    }
+
     auto weakButton = winrt::make_weak(button);
 
     muxc::MenuFlyout menu;
     menu.Placement(
         muxc::Primitives::FlyoutPlacementMode::BottomEdgeAlignedLeft);
 
-    auto ensureMenuEntries = [subItems = item.subItems,
-                              weakButton](muxc::MenuFlyout const& menu) {
-        if (!menu || menu.Items().Size() > 0)
+    // Recursively check if ANY deep child has a token
+    bool hasChildTokens = false;
+    std::function<bool(const std::vector<ActionItem>&)> checkTokens =
+        [&](const std::vector<ActionItem>& list) {
+            for (const auto& sub : list) {
+                if (sub.GetDisplayLabel().find(L'%') != std::wstring::npos)
+                    return true;
+                if (checkTokens(sub.subItems))
+                    return true;
+            }
+            return false;
+        };
+    hasChildTokens = checkTokens(item.subItems);
+
+    auto ensureMenuEntries = [subItems = item.subItems, weakButton,
+                              hasChildTokens](muxc::MenuFlyout const& menu) {
+        if (!menu)
             return;
         try {
-            AppendMenuEntries(subItems, menu.Items(), weakButton);
+            if (menu.Items().Size() > 0 && !hasChildTokens)
+                return;
+
+            HWND hWnd = nullptr;
+            if (auto btn = weakButton.get()) {
+                hWnd = GetExplorerWindowForElement(btn);
+            }
+
+            ExplorerContext ctx;
+            if (hasChildTokens) {
+                ctx = GetExplorerContext(hWnd);
+            }
+
+            menu.Items().Clear();
+            std::vector<ActionItem> resolvedList = subItems;
+
+            if (hasChildTokens) {
+                // Recursively resolve tokens at all menu depths
+                std::function<void(std::vector<ActionItem>&)> resolveDeep =
+                    [&](std::vector<ActionItem>& list) {
+                        for (auto& entry : list) {
+                            std::wstring label = entry.GetDisplayLabel();
+                            if (label.find(L'%') != std::wstring::npos) {
+                                std::wstring resolved =
+                                    ResolveLabelTokens(label, ctx);
+                                entry.name = TruncateWithEllipsis(
+                                    resolved, kMaxMenuItemLabelLength);
+                                entry.labelText = entry.name;
+                            }
+                            if (!entry.subItems.empty())
+                                resolveDeep(entry.subItems);
+                        }
+                    };
+                resolveDeep(resolvedList);
+            }
+
+            AppendMenuEntries(resolvedList, menu.Items(), weakButton);
         } catch (...) {
             Wh_Log(L"Error %08X", winrt::to_hresult().value);
         }
@@ -3633,36 +5014,6 @@ void PopulateNewPlusMenu(
     Wh_Log(L"Error %08X", winrt::to_hresult().value);
 }
 
-void AddNewPlusChevron(muxc::AppBarButton const& button) try {
-    auto label =
-        FindDescendantByName(button, L"TextLabel").try_as<muxc::TextBlock>();
-    if (!label) {
-        Wh_Log(L"The New+ label wasn't found");
-        return;
-    }
-
-    std::wstring currentText = label.Text().c_str();
-    if (!currentText.empty() && currentText.back() == L'\uE70D')
-        return;
-
-    auto inlines = label.Inlines();
-    inlines.Clear();
-
-    muxd::Run text;
-    std::wstring labelText = button.Label().c_str();
-    labelText += L"  ";
-    text.Text(labelText);
-    inlines.Append(text);
-
-    muxd::Run chevron;
-    chevron.Text(L"\uE70D");
-    chevron.FontFamily(muxm::FontFamily(L"Segoe Fluent Icons"));
-    chevron.FontSize(8);
-    inlines.Append(chevron);
-} catch (...) {
-    Wh_Log(L"Error %08X", winrt::to_hresult().value);
-}
-
 muxc::AppBarButton CreateNewPlusButton(std::wstring const& originalIconUri,
                                        bool openOnHover,
                                        int hoverDelayMs) {
@@ -3717,6 +5068,467 @@ muxc::AppBarButton CreateNewPlusButton(std::wstring const& originalIconUri,
     return button;
 }
 
+struct SelectionSummary {
+    size_t count = 0;
+    size_t fileCount = 0;
+    size_t folderCount = 0;
+    std::vector<std::wstring> extensions;
+};
+
+SelectionSummary SummarizeSelection(IShellView* psv) {
+    SelectionSummary summary;
+    if (!psv)
+        return summary;
+
+    winrt::com_ptr<IShellItemArray> items;
+    if (FAILED(
+            psv->GetItemObject(SVGIO_SELECTION, IID_PPV_ARGS(items.put()))) ||
+        !items)
+        return summary;
+
+    DWORD count = 0;
+    if (FAILED(items->GetCount(&count)) || count == 0)
+        return summary;
+
+    summary.count = count;
+    summary.extensions.reserve(count);
+
+    for (DWORD i = 0; i < count; i++) {
+        winrt::com_ptr<IShellItem> item;
+        if (FAILED(items->GetItemAt(i, item.put())) || !item)
+            continue;
+
+        SFGAOF attrs = 0;
+        if (SUCCEEDED(
+                item->GetAttributes(SFGAO_FOLDER | SFGAO_STREAM, &attrs))) {
+            bool isFolder = (attrs & SFGAO_FOLDER) && !(attrs & SFGAO_STREAM);
+            if (isFolder) {
+                summary.folderCount++;
+                summary.extensions.push_back(L"folder");
+            } else {
+                summary.fileCount++;
+                PWSTR displayName = nullptr;
+                if (SUCCEEDED(item->GetDisplayName(SIGDN_PARENTRELATIVEPARSING,
+                                                   &displayName)) &&
+                    displayName) {
+                    PCWSTR ext = PathFindExtensionW(displayName);
+                    if (ext && *ext == L'.') {
+                        summary.extensions.push_back(ToLower(ext + 1));
+                    } else {
+                        summary.extensions.push_back(L"file");
+                    }
+                    CoTaskMemFree(displayName);
+                }
+            }
+        }
+    }
+    return summary;
+}
+
+bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
+                                const SelectionSummary& summary) {
+    std::wstring filter = TrimWhitespaceAndQuotes(filterPattern);
+    if (filter.empty() || filter == L"*")
+        return true;
+
+    std::wstring lowerFilter = ToLower(filter);
+    size_t hPos = 0;
+    while ((hPos = lowerFilter.find_first_of(L"hH", hPos)) !=
+           std::wstring::npos) {
+        std::wstring_view sv(lowerFilter.c_str() + hPos);
+        size_t matchLen = 0;
+        if (sv.starts_with(L"hidden"))
+            matchLen = 6;
+        else if (sv.starts_with(L"hide"))
+            matchLen = 4;
+
+        if (matchLen > 0) {
+            bool leftBoundary =
+                (hPos == 0) ||
+                (wcschr(L",;+|/ \t()", lowerFilter[hPos - 1]) != nullptr);
+            bool rightBoundary =
+                (hPos + matchLen == lowerFilter.size()) ||
+                (wcschr(L",;+|/ \t()", lowerFilter[hPos + matchLen]) !=
+                 nullptr);
+            if (leftBoundary && rightBoundary)
+                return false;
+        }
+        hPos++;
+    }
+
+    std::vector<std::wstring> orBranches;
+    std::vector<std::wstring> negativeTokens;
+
+    size_t start = 0;
+    int parenDepth = 0;
+    for (size_t i = 0; i <= filter.size(); i++) {
+        if (i < filter.size()) {
+            if (filter[i] == L'(')
+                parenDepth++;
+            else if (filter[i] == L')' && parenDepth > 0)
+                parenDepth--;
+        }
+
+        if (i == filter.size() ||
+            (parenDepth == 0 && (filter[i] == L',' || filter[i] == L';'))) {
+            std::wstring rawToken =
+                TrimWhitespaceAndQuotes(filter.substr(start, i - start));
+            start = i + 1;
+            if (rawToken.empty())
+                continue;
+
+            std::wstring lower = ToLower(rawToken);
+            if (lower == L"hide" || lower == L"hidden")
+                return false;
+
+            if (rawToken.front() == L'-' || rawToken.front() == L'~') {
+                rawToken.erase(rawToken.begin());
+                rawToken = TrimWhitespaceAndQuotes(rawToken);
+                if (!rawToken.empty() && rawToken.front() == L'.')
+                    rawToken.erase(rawToken.begin());
+                rawToken = ToLower(rawToken);
+                if (rawToken == L"dir" || rawToken == L"directory" ||
+                    rawToken == L"folders")
+                    rawToken = L"folder";
+                if (rawToken == L"files")
+                    rawToken = L"file";
+                negativeTokens.push_back(rawToken);
+            } else {
+                orBranches.push_back(rawToken);
+            }
+        }
+    }
+
+    if (summary.count > 0) {
+        for (const auto& ext : summary.extensions) {
+            bool isDir = (ext == L"folder");
+            for (const auto& neg : negativeTokens) {
+                if (isDir && neg == L"folder")
+                    return false;
+                if (!isDir && (neg == L"file" || ext == neg))
+                    return false;
+            }
+        }
+    }
+
+    if (orBranches.empty())
+        return summary.count > 0;
+
+    auto evalAtomicToken = [&](std::wstring token) -> bool {
+        token = ToLower(TrimWhitespaceAndQuotes(token));
+        if (token == L"hide" || token == L"hidden")
+            return false;
+
+        if (token.starts_with(L"only ") || token.starts_with(L"only:") ||
+            token.starts_with(L"only=") || token.starts_with(L"only(")) {
+            if (summary.count == 0 || summary.folderCount > 0)
+                return false;
+
+            std::wstring content;
+            if (token.starts_with(L"only(")) {
+                size_t closeParen = token.find(L')', 5);
+                if (closeParen == std::wstring::npos)
+                    closeParen = token.size();
+                content = token.substr(5, closeParen - 5);
+            } else {
+                content = token.substr(4);
+                if (!content.empty() &&
+                    (content.front() == L':' || content.front() == L'='))
+                    content = content.substr(1);
+            }
+
+            std::vector<std::wstring> allowedExts;
+            size_t cStart = 0;
+            while (cStart < content.size()) {
+                size_t cEnd = content.find_first_of(L",;|/ \t", cStart);
+                if (cEnd == std::wstring::npos)
+                    cEnd = content.size();
+                std::wstring ext = TrimWhitespaceAndQuotes(
+                    content.substr(cStart, cEnd - cStart));
+                cStart = cEnd + 1;
+                if (!ext.empty() && ext.front() == L'.')
+                    ext.erase(ext.begin());
+                if (!ext.empty())
+                    allowedExts.push_back(ext);
+            }
+            if (allowedExts.empty())
+                return false;
+
+            for (const auto& ext : summary.extensions) {
+                bool matchedAny = false;
+                for (const auto& allowed : allowedExts) {
+                    if (ext == allowed) {
+                        matchedAny = true;
+                        break;
+                    }
+                }
+                if (!matchedAny)
+                    return false;
+            }
+            return true;
+        }
+
+        if (!token.empty() && token.front() == L'.')
+            token.erase(token.begin());
+
+        if (token == L"none" || token == L"empty" || token == L"nothing" ||
+            token == L"unselected")
+            return summary.count == 0;
+        if (summary.count == 0)
+            return false;
+        if (token == L"*" || token == L"any" || token == L"selected")
+            return true;
+
+        if (token == L"files" || token == L"file")
+            return summary.fileCount > 0 && summary.folderCount == 0;
+        if (token == L"folders" || token == L"folder" || token == L"dir" ||
+            token == L"directory")
+            return summary.folderCount > 0 && summary.fileCount == 0;
+        if (token == L"mixed" || token == L"mixed_selection")
+            return summary.fileCount > 0 && summary.folderCount > 0;
+        if (token == L"single")
+            return summary.count == 1;
+        if (token == L"multi" || token == L"multiple")
+            return summary.count >= 2;
+        if (token == L"single_file" || token == L"single_files")
+            return summary.fileCount == 1 && summary.folderCount == 0;
+        if (token == L"multi_file" || token == L"multi_files")
+            return summary.fileCount >= 2 && summary.folderCount == 0;
+        if (token == L"single_folder" || token == L"single_folders")
+            return summary.folderCount == 1 && summary.fileCount == 0;
+        if (token == L"multi_folder" || token == L"multi_folders")
+            return summary.folderCount >= 2 && summary.fileCount == 0;
+
+        for (const auto& ext : summary.extensions) {
+            if (ext != L"folder" && ext == token)
+                return true;
+        }
+        return false;
+    };
+
+    for (const auto& branch : orBranches) {
+        bool branchPassed = true;
+        size_t bStart = 0;
+        while (bStart < branch.size()) {
+            size_t bEnd = branch.find(L'+', bStart);
+            if (bEnd == std::wstring::npos)
+                bEnd = branch.size();
+            std::wstring subToken = branch.substr(bStart, bEnd - bStart);
+            bStart = bEnd + 1;
+
+            subToken = TrimWhitespaceAndQuotes(subToken);
+            if (subToken.empty())
+                continue;
+
+            std::wstring lowerSub = ToLower(subToken);
+            if (lowerSub == L"hide" || lowerSub == L"hidden")
+                return false;
+
+            if (!evalAtomicToken(subToken)) {
+                branchPassed = false;
+                break;
+            }
+        }
+        if (branchPassed)
+            return true;
+    }
+    return false;
+}
+
+void UpdateDynamicButtonStates(muxc::CommandBar const& commandBar,
+                               HWND hExplorerWnd,
+                               const ExplorerContext* optContext = nullptr) {
+    if (g_unloading || !commandBar)
+        return;
+    if (!hExplorerWnd)
+        hExplorerWnd = GetExplorerWindowForElement(commandBar);
+    if (!hExplorerWnd)
+        return;
+
+    ExplorerContext localContext;
+    const ExplorerContext& context =
+        optContext ? *optContext
+                   : (localContext = GetExplorerContext(hExplorerWnd));
+
+    SelectionSummary summary = SummarizeSelection(context.shellView.get());
+
+    auto commands = commandBar.PrimaryCommands();
+    uint32_t count = commands.Size();
+
+    std::vector<ActionItem> itemSnapshots;
+    bool disabledInsteadOfHidden;
+    bool showMenuChevrons;
+    {
+        std::lock_guard<std::mutex> lock(g_settings.mutex);
+        itemSnapshots = g_settings.items;
+        disabledInsteadOfHidden = g_settings.disabledInsteadOfHidden;
+        showMenuChevrons = g_settings.showMenuChevrons;
+    }
+
+    for (uint32_t i = 0; i < count; i++) {
+        auto cmd = commands.GetAt(i);
+        auto element = cmd.try_as<mux::FrameworkElement>();
+        if (!element)
+            continue;
+
+        std::wstring name{element.Name()};
+        if (!name.starts_with(kButtonNamePrefix))
+            continue;
+
+        auto button = cmd.try_as<muxc::AppBarButton>();
+        if (!button)
+            continue;
+
+        size_t underscore = name.rfind(L'_');
+        if (underscore == std::wstring::npos)
+            continue;
+
+        int itemIndex = _wtoi(name.c_str() + underscore + 1);
+        if (itemIndex < 0 || (size_t)itemIndex >= itemSnapshots.size())
+            continue;
+
+        const auto& item = itemSnapshots[(size_t)itemIndex];
+        std::wstring rawLabel = item.GetDisplayLabel();
+        bool isVisible =
+            ItemMatchesExtensionFilter(item.matchExtensions, summary);
+
+        // UI Text Updating
+        if (rawLabel.find(L'%') != std::wstring::npos) {
+            std::wstring fullResolved = ResolveLabelTokens(rawLabel, context);
+            std::wstring displayResolved =
+                TruncateWithEllipsis(fullResolved, kMaxToolbarLabelLength);
+
+            bool isMenuButton = item.isMenu && !item.subItems.empty();
+            if (isMenuButton) {
+                displayResolved = MenuButtonLabel(
+                    displayResolved,
+                    item.showLabel && !displayResolved.empty(),
+                    showMenuChevrons);
+            }
+            button.Label(displayResolved.c_str());
+            // Setting the label replaces the text drawn with the chevron.
+            if (isMenuButton && showMenuChevrons)
+                AddMenuButtonChevron(button);
+            muxc::ToolTipService::SetToolTip(
+                button, winrt::box_value(winrt::hstring{fullResolved}));
+        }
+
+        // Visibility & Separator Logic
+        if (disabledInsteadOfHidden) {
+            button.Visibility(mux::Visibility::Visible);
+            button.IsEnabled(isVisible);
+        } else {
+            auto targetVis = isVisible ? mux::Visibility::Visible
+                                       : mux::Visibility::Collapsed;
+            button.Visibility(targetVis);
+            button.IsEnabled(isVisible);
+
+            // Dan's schema dynamically names separators `WH_Btn_Sep_0` etc.
+            std::wstring sepName = std::wstring(kButtonNamePrefix) + L"_Sep_" +
+                                   std::to_wstring(itemIndex);
+            for (uint32_t j = 0; j < count; j++) {
+                if (auto sepEl =
+                        commands.GetAt(j).try_as<mux::FrameworkElement>()) {
+                    if (sepEl.Name() == sepName)
+                        sepEl.Visibility(targetVis);
+                }
+            }
+        }
+    }
+}
+
+void StartSelectionTimerIfNeeded(CommandBarEntry& entry,
+                                 muxc::CommandBar const& commandBar) {
+    if (entry.selectionTimer || g_unloading)
+        return;
+
+    bool needsTimer = false;
+    {
+        std::lock_guard<std::mutex> lock(g_settings.mutex);
+        for (const auto& itm : g_settings.items) {
+            if (itm.GetDisplayLabel().find(L'%') != std::wstring::npos ||
+                !TrimWhitespaceAndQuotes(itm.matchExtensions).empty()) {
+                needsTimer = true;
+                break;
+            }
+        }
+    }
+
+    if (!needsTimer)
+        return;
+
+    mux::DispatcherTimer selectionTimer;
+    selectionTimer.Interval(std::chrono::milliseconds(250));
+
+    auto weakBar = winrt::make_weak(commandBar);
+    auto timerToken = selectionTimer.Tick(
+        [weakBar](wf::IInspectable const&, wf::IInspectable const&) {
+            if (g_unloading)
+                return;
+            auto cb = weakBar.get();
+            if (!cb)
+                return;
+
+            HWND hWnd = GetExplorerWindowForElement(cb);
+            if (!hWnd || GetForegroundWindow() != hWnd)
+                return;
+
+            CommandBarEntry* currentEntry = nullptr;
+            for (auto& ent : g_entries) {
+                if (ent.commandBar.get() == cb) {
+                    currentEntry = &ent;
+                    break;
+                }
+            }
+            if (!currentEntry)
+                return;
+
+            HWND hActiveTab =
+                FindWindowExW(hWnd, nullptr, L"ShellTabWindowClass", nullptr);
+            if (hActiveTab != currentEntry->cachedTabWnd ||
+                !currentEntry->cachedBrowser) {
+                currentEntry->cachedTabWnd = hActiveTab;
+                currentEntry->cachedBrowser = GetActiveShellBrowser(hWnd);
+                currentEntry->cachedShellView = nullptr;
+            }
+
+            if (!currentEntry->cachedBrowser)
+                return;
+
+            winrt::com_ptr<IShellView> view;
+            if (FAILED(currentEntry->cachedBrowser->QueryActiveShellView(
+                    view.put())) ||
+                !view) {
+                currentEntry->cachedBrowser = nullptr;
+                currentEntry->cachedShellView = nullptr;
+                return;
+            }
+
+            auto fv = view.try_as<IFolderView>();
+            int count = 0, focused = -1;
+            if (!fv || FAILED(fv->ItemCount(SVGIO_SELECTION, &count)))
+                return;
+            fv->GetFocusedItem(&focused);
+
+            if (view == currentEntry->cachedShellView &&
+                count == currentEntry->lastSelectionCount &&
+                focused == currentEntry->lastFocusedItem) {
+                return;
+            }
+
+            currentEntry->cachedShellView = view;
+            currentEntry->lastSelectionCount = count;
+            currentEntry->lastFocusedItem = focused;
+
+            ExplorerContext ctx = GetContextFromView(view.get(), count);
+            UpdateDynamicButtonStates(cb, hWnd, &ctx);
+        });
+
+    selectionTimer.Start();
+    entry.selectionTimer = selectionTimer;
+    entry.selectionTickToken = timerToken;
+}
+
 void EnsureActionButtons(muxc::CommandBar const& commandBar) {
     if (g_unloading)
         return;
@@ -3729,11 +5541,13 @@ void EnsureActionButtons(muxc::CommandBar const& commandBar) {
 
     bool openMenuOnHover;
     int menuHoverDelay;
+    bool showMenuChevrons;
     std::vector<ActionItem> items;
     {
         std::lock_guard<std::mutex> lock(g_settings.mutex);
         openMenuOnHover = g_settings.openMenuOnHover;
         menuHoverDelay = g_settings.menuHoverDelay;
+        showMenuChevrons = g_settings.showMenuChevrons;
         items = g_settings.items;
     }
 
@@ -3751,7 +5565,7 @@ void EnsureActionButtons(muxc::CommandBar const& commandBar) {
                 commands.InsertAt(
                     insertIndex++,
                     CreateMenuButton(item, (int)i, openMenuOnHover,
-                                     menuHoverDelay));
+                                     menuHoverDelay, showMenuChevrons));
             } else {
                 commands.InsertAt(insertIndex++,
                                   CreateActionButton(item, (int)i));
@@ -3773,7 +5587,7 @@ void EnsureActionButtons(muxc::CommandBar const& commandBar) {
         auto const& item = items[i];
         if (item.isMenu && !item.subItems.empty()) {
             commands.Append(CreateMenuButton(item, (int)i, openMenuOnHover,
-                                             menuHoverDelay));
+                                             menuHoverDelay, showMenuChevrons));
         } else {
             commands.Append(CreateActionButton(item, (int)i));
         }
@@ -3820,7 +5634,8 @@ muxc::AppBarButton CreateSettingsButton() {
     button.LabelPosition(muxc::CommandBarLabelPosition::Collapsed);
     button.Icon(CreateGlyphIcon(L""));
     muxc::ToolTipService::SetToolTip(
-        button, winrt::box_value(winrt::hstring{L"Explorer Command Bar settings"}));
+        button,
+        winrt::box_value(winrt::hstring{L"Explorer Command Bar settings"}));
 
     TrackRevoker(
         button,
@@ -3931,6 +5746,219 @@ void EnsureNewPlusButton(muxc::CommandBar const& commandBar) {
         CreateNewPlusButton(originalIconUri, openMenuOnHover, menuHoverDelay));
 }
 
+bool IsSameObject(wf::IInspectable const& a, wf::IInspectable const& b) {
+    if (!a || !b)
+        return !a && !b;
+    return winrt::get_abi(a.as<wf::IUnknown>()) ==
+           winrt::get_abi(b.as<wf::IUnknown>());
+}
+
+// Puts the built-in buttons New to View in the order of the
+// defaultButtonOrder setting, or back in their original order if restore is
+// set or the setting is empty. Only the elements from the first to the last
+// of these buttons are moved: the buttons, File Explorer's separators between
+// them, and the New+ button, which stays in front of New. The order is
+// applied by moving the existing elements, which keep working as before.
+void ApplyDefaultButtonOrder(muxc::CommandBar const& commandBar, bool restore) {
+    if (commandBar.Name() != L"FileExplorerCommandBar")
+        return;
+
+    std::vector<int> order;
+    if (!restore) {
+        std::lock_guard<std::mutex> lock(g_settings.mutex);
+        order = g_settings.defaultButtonOrder;
+    }
+
+    std::vector<winrt::weak_ref<mux::UIElement>> originalOrder;
+    if (auto* barEntry = FindManagedElement(commandBar))
+        originalOrder = barEntry->originalButtonOrder;
+    if (order.empty() && originalOrder.empty())
+        return;
+
+    auto commands = commandBar.PrimaryCommands();
+    uint32_t count = commands.Size();
+
+    std::vector<muxc::ICommandBarElement> buttons(kReorderableButtonCount,
+                                                  nullptr);
+    muxc::ICommandBarElement newPlus{nullptr};
+    uint32_t first = count;
+    uint32_t last = 0;
+    for (uint32_t i = 0; i < count; i++) {
+        auto command = commands.GetAt(i);
+        if (IsOurElement(command)) {
+            if (!IsOurNewPlusButton(command))
+                continue;
+            newPlus = command;
+        } else if (auto button = command.try_as<muxc::AppBarButton>()) {
+            if (GetAutomationId(button) == L"DetailsPaneToggleButton")
+                continue;
+            int index = IdentifyDefaultButton(button);
+            if (index < 0 || index >= kReorderableButtonCount ||
+                buttons[index])
+                continue;
+            buttons[index] = command;
+        } else {
+            continue;
+        }
+        first = std::min(first, i);
+        last = std::max(last, i);
+    }
+    if (first >= count)
+        return;
+
+    auto isButton = [&buttons](muxc::ICommandBarElement const& command) {
+        return std::any_of(buttons.begin(), buttons.end(),
+                           [&command](muxc::ICommandBarElement const& button) {
+                               return button && IsSameObject(button, command);
+                           });
+    };
+    auto contains = [](std::vector<muxc::ICommandBarElement> const& list,
+                       muxc::ICommandBarElement const& command) {
+        return std::any_of(list.begin(), list.end(),
+                           [&command](muxc::ICommandBarElement const& entry) {
+                               return IsSameObject(entry, command);
+                           });
+    };
+
+    // Anything else between the buttons means an unknown layout, which is
+    // left alone.
+    std::vector<muxc::ICommandBarElement> region;
+    for (uint32_t i = first; i <= last; i++) {
+        auto command = commands.GetAt(i);
+        if (!IsSameObject(command, newPlus) && !isButton(command) &&
+            (IsOurElement(command) ||
+             !command.try_as<muxc::AppBarSeparator>())) {
+            Wh_Log(L"Unexpected command %u among the built-in buttons, not "
+                   L"reordering them",
+                   i);
+            return;
+        }
+        region.push_back(command);
+    }
+
+    // The original order, without the New+ button. Recorded on the first
+    // reorder, and again if File Explorer recreated the buttons since.
+    std::vector<muxc::ICommandBarElement> original;
+    for (auto const& weakElement : originalOrder) {
+        auto element = weakElement.get();
+        if (!element)
+            continue;
+        for (auto const& command : region) {
+            if (IsSameObject(command, element)) {
+                original.push_back(command);
+                break;
+            }
+        }
+    }
+    bool recordOriginal = original.empty();
+    if (recordOriginal) {
+        for (auto const& command : region) {
+            if (!IsSameObject(command, newPlus))
+                original.push_back(command);
+        }
+    }
+
+    // The separators, in their original order.
+    std::vector<muxc::ICommandBarElement> separators;
+    for (auto const& command : original) {
+        if (!isButton(command))
+            separators.push_back(command);
+    }
+    for (auto const& command : region) {
+        if (!IsSameObject(command, newPlus) && !isButton(command) &&
+            !contains(separators, command))
+            separators.push_back(command);
+    }
+
+    bool restoring = order.empty();
+    std::vector<muxc::ICommandBarElement> desired;
+    auto append = [&](muxc::ICommandBarElement const& command) {
+        if (newPlus && buttons[kNewButtonIndex] &&
+            IsSameObject(command, buttons[kNewButtonIndex]))
+            desired.push_back(newPlus);
+        desired.push_back(command);
+    };
+
+    size_t usedSeparators = 0;
+    if (restoring) {
+        for (auto const& command : original)
+            append(command);
+        usedSeparators = separators.size();
+    } else {
+        for (int token : order) {
+            if (token == kOrderSeparator) {
+                if (usedSeparators < separators.size())
+                    append(separators[usedSeparators++]);
+            } else if (buttons[token]) {
+                append(buttons[token]);
+            }
+        }
+    }
+
+    // Whatever wasn't placed, e.g. separators left over by an order with
+    // fewer separators, goes at the end.
+    for (auto const& command : region) {
+        if (!contains(desired, command))
+            desired.push_back(command);
+    }
+
+    if (recordOriginal && !restoring) {
+        auto& barEntry = GetManagedElement(commandBar);
+        barEntry.originalButtonOrder.clear();
+        for (auto const& command : original) {
+            barEntry.originalButtonOrder.push_back(
+                winrt::make_weak(command.as<mux::UIElement>()));
+        }
+    }
+
+    for (size_t i = 0; i < separators.size(); i++) {
+        auto element = separators[i].as<mux::UIElement>();
+        if (i >= usedSeparators)
+            GetManagedElement(element).unusedSeparator = true;
+        else if (auto* managed = FindManagedElement(element))
+            managed->unusedSeparator = false;
+    }
+
+    // Move the elements into place, one at a time. Each element keeps its
+    // identity, so File Explorer's handlers and bindings stay intact.
+    int moves = 0;
+    try {
+        for (uint32_t i = 0; i < desired.size(); i++) {
+            uint32_t position = first + i;
+            if (IsSameObject(commands.GetAt(position), desired[i]))
+                continue;
+
+            uint32_t from = 0;
+            for (uint32_t j = position + 1; j <= last; j++) {
+                if (IsSameObject(commands.GetAt(j), desired[i])) {
+                    from = j;
+                    break;
+                }
+            }
+            if (!from) {
+                Wh_Log(L"Couldn't find command %u to reorder", i);
+                break;
+            }
+
+            commands.RemoveAt(from);
+            commands.InsertAt(position, desired[i]);
+            moves++;
+        }
+    } catch (...) {
+        Wh_Log(L"Reordering failed: %08X", winrt::to_hresult().value);
+    }
+
+    if (moves > 0) {
+        Wh_Log(L"%s the built-in buttons (%d moves)",
+               restoring ? L"Restored the order of" : L"Reordered", moves);
+    }
+
+    if (restoring) {
+        if (auto* barEntry = FindManagedElement(commandBar))
+            barEntry->originalButtonOrder.clear();
+    }
+}
+
 void UpdateCommandBar(muxc::CommandBar const& commandBar) {
     if (g_unloading)
         return;
@@ -3943,6 +5971,7 @@ void UpdateCommandBar(muxc::CommandBar const& commandBar) {
 
     if (commandBar.Name() == L"FileExplorerCommandBar") {
         EnsureNewPlusButton(commandBar);
+        ApplyDefaultButtonOrder(commandBar, false);
         if (!placeOnSecondary) {
             EnsureActionButtons(commandBar);
             EnsureSettingsButton(commandBar);
@@ -3958,6 +5987,7 @@ void UpdateCommandBar(muxc::CommandBar const& commandBar) {
     }
 
     ApplyDefaultButtonVisibility(commandBar);
+    UpdateDynamicButtonStates(commandBar, nullptr);
 }
 
 void RemoveOurButtons(muxc::CommandBar const& commandBar) {
@@ -4049,6 +6079,7 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
         });
 
     g_entries.push_back(std::move(entry));
+    StartSelectionTimerIfNeeded(entry, commandBar);
     UpdateCommandBar(commandBar);
     InstallShortcutHookForCurrentThread();
 }
@@ -4067,6 +6098,7 @@ void RemoveButtonsForCurrentThread() {
     taken.swap(g_entries);
 
     for (auto& entry : taken) {
+        StopSelectionTimer(entry);
         auto commandBar = entry.commandBar.get();
         if (!commandBar)
             continue;
@@ -4076,12 +6108,14 @@ void RemoveButtonsForCurrentThread() {
                 entry.vectorChangedToken);
             commandBar.ActualThemeChanged(entry.themeChangedToken);
             RemoveOurButtons(commandBar);
+            ApplyDefaultButtonOrder(commandBar, true);
             ApplyDefaultButtonVisibility(commandBar, true);
         } catch (...) {
             Wh_Log(L"Error %08X", winrt::to_hresult().value);
         }
     }
 
+    RestoreChevronsForCurrentThread();
     ForgetManagedElementsForCurrentThread();
     g_pendingUpdates.clear();
     g_threadScanned = false;
@@ -4231,9 +6265,9 @@ void RestoreNudgedIslandsForCurrentThread() {
     for (auto const& nudge : taken) {
         if (!IsWindow(nudge.hWnd))
             continue;
-        SetWindowPos(nudge.hWnd, nullptr, 0, 0, nudge.width, nudge.height,
-                     SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE |
-                         SWP_NOOWNERZORDER);
+        SetWindowPos(
+            nudge.hWnd, nullptr, 0, 0, nudge.width, nudge.height,
+            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
     }
 }
 
@@ -4265,9 +6299,9 @@ void NudgeXamlIslandsOfWindow(HWND hWnd) {
         Wh_Log(L"Nudging XAML island %08X of window %08X",
                (DWORD)(ULONG_PTR)hIslandWnd, (DWORD)(ULONG_PTR)hWnd);
         g_islandNudges.push_back({hIslandWnd, width, height});
-        SetWindowPos(hIslandWnd, nullptr, 0, 0, width + 1, height,
-                     SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE |
-                         SWP_NOOWNERZORDER);
+        SetWindowPos(
+            hIslandWnd, nullptr, 0, 0, width + 1, height,
+            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
     }
 
     if (g_islandNudges.empty() || g_islandNudgeTimer)
@@ -4436,9 +6470,9 @@ void WINAPI CommandBarControl_Wave1_GotFocusHandler_Hook(void* pThis,
 // into its frame. It's queried rather than assumed, so a different layout only
 // makes the hook a no-op.
 using CommandBarControl_OnDpiChanged_t = void*(WINAPI*)(void* pThis,
-                                                         void* pRet,
-                                                         void* sender,
-                                                         void* args);
+                                                        void* pRet,
+                                                        void* sender,
+                                                        void* args);
 CommandBarControl_OnDpiChanged_t CommandBarControl_OnDpiChanged_Original;
 CommandBarControl_OnDpiChanged_t CommandBarControl_Wave1_OnDpiChanged_Original;
 
@@ -4678,23 +6712,17 @@ struct KeyName {
 };
 
 constexpr KeyName kKeyNames[] = {
-    {VK_SPACE, L"Space"},       {VK_RETURN, L"Enter"},
-    {VK_RETURN, L"Return"},     {VK_TAB, L"Tab"},
-    {VK_ESCAPE, L"Esc"},        {VK_ESCAPE, L"Escape"},
-    {VK_BACK, L"Backspace"},    {VK_DELETE, L"Delete"},
-    {VK_DELETE, L"Del"},        {VK_INSERT, L"Insert"},
-    {VK_INSERT, L"Ins"},        {VK_HOME, L"Home"},
-    {VK_END, L"End"},           {VK_PRIOR, L"PageUp"},
-    {VK_PRIOR, L"PgUp"},        {VK_NEXT, L"PageDown"},
-    {VK_NEXT, L"PgDn"},         {VK_UP, L"Up"},
-    {VK_DOWN, L"Down"},         {VK_LEFT, L"Left"},
-    {VK_RIGHT, L"Right"},       {VK_OEM_PLUS, L"Plus"},
-    {VK_OEM_PLUS, L"="},        {VK_OEM_MINUS, L"-"},
-    {VK_OEM_COMMA, L","},       {VK_OEM_PERIOD, L"."},
-    {VK_OEM_1, L";"},           {VK_OEM_2, L"/"},
-    {VK_OEM_3, L"`"},           {VK_OEM_4, L"["},
-    {VK_OEM_5, L"\\"},          {VK_OEM_6, L"]"},
-    {VK_OEM_7, L"'"},
+    {VK_SPACE, L"Space"},    {VK_RETURN, L"Enter"},  {VK_RETURN, L"Return"},
+    {VK_TAB, L"Tab"},        {VK_ESCAPE, L"Esc"},    {VK_ESCAPE, L"Escape"},
+    {VK_BACK, L"Backspace"}, {VK_DELETE, L"Delete"}, {VK_DELETE, L"Del"},
+    {VK_INSERT, L"Insert"},  {VK_INSERT, L"Ins"},    {VK_HOME, L"Home"},
+    {VK_END, L"End"},        {VK_PRIOR, L"PageUp"},  {VK_PRIOR, L"PgUp"},
+    {VK_NEXT, L"PageDown"},  {VK_NEXT, L"PgDn"},     {VK_UP, L"Up"},
+    {VK_DOWN, L"Down"},      {VK_LEFT, L"Left"},     {VK_RIGHT, L"Right"},
+    {VK_OEM_PLUS, L"Plus"},  {VK_OEM_PLUS, L"="},    {VK_OEM_MINUS, L"-"},
+    {VK_OEM_COMMA, L","},    {VK_OEM_PERIOD, L"."},  {VK_OEM_1, L";"},
+    {VK_OEM_2, L"/"},        {VK_OEM_3, L"`"},       {VK_OEM_4, L"["},
+    {VK_OEM_5, L"\\"},       {VK_OEM_6, L"]"},       {VK_OEM_7, L"'"},
 };
 
 bool IsModifierKey(UINT vk) {
@@ -4884,8 +6912,7 @@ LRESULT CALLBACK ShortcutKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     // Keys of other windows of the thread, such as the settings window, are
     // left alone.
     HWND hFocusWnd = GetFocus();
-    HWND hWnd = GetAncestor(hFocusWnd ? hFocusWnd : GetActiveWindow(),
-                            GA_ROOT);
+    HWND hWnd = GetAncestor(hFocusWnd ? hFocusWnd : GetActiveWindow(), GA_ROOT);
     if (!IsFileExplorerWindow(hWnd))
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
 
@@ -5003,11 +7030,16 @@ ActionItem LoadActionItem(PCWSTR prefix, int depth, bool* isEmpty) {
     item.command = command.get();
     item.parameters = parameters.get();
     item.shortcut = shortcut.get();
+    item.matchExtensions =
+        WindhawkUtils::StringSetting::make(L"%s.matchExtensions", prefix).get();
     item.icon = iconGlyph.get();
     item.hideIcon = Wh_GetIntSetting(L"%s.hideIcon", prefix) != 0;
     item.showLabel = Wh_GetIntSetting(L"%s.showLabel", prefix) != 0;
     item.labelText = Wh_GetStringSetting(L"%s.labelText", prefix);
     item.separatorAfter = Wh_GetIntSetting(L"%s.separatorAfter", prefix) != 0;
+    item.runAsAdmin = Wh_GetIntSetting(L"%s.runAsAdmin", prefix) != 0;
+    item.windowStyle =
+        WindhawkUtils::StringSetting::make(L"%s.windowStyle", prefix).get();
 
     if (depth < kMaxMenuDepth) {
         auto type = WindhawkUtils::StringSetting::make(L"%s.type", prefix);
@@ -5040,6 +7072,8 @@ void LoadSettings() {
 
     g_settings.placeOnSecondaryBar =
         Wh_GetIntSetting(L"placeOnSecondaryBar") != 0;
+    g_settings.disabledInsteadOfHidden =
+        Wh_GetIntSetting(L"disabledInsteadOfHidden") != 0;
     g_settings.openMenuOnHover = Wh_GetIntSetting(L"openMenuOnHover") != 0;
     int menuHoverDelay = Wh_GetIntSetting(L"menuHoverDelay");
     g_settings.menuHoverDelay = menuHoverDelay >= 0 ? menuHoverDelay : 0;
@@ -5055,6 +7089,22 @@ void LoadSettings() {
     g_settings.hideDetailsButton =
         Wh_GetIntSetting(L"hideDefaultButtons.details") != 0;
 
+    g_settings.showMenuChevrons = Wh_GetIntSetting(L"showMenuChevrons") != 0;
+    memset(g_settings.hideDefaultButtonLabels, 0,
+           sizeof(g_settings.hideDefaultButtonLabels));
+    for (int index : kLabeledDefaultButtons) {
+        g_settings.hideDefaultButtonLabels[index] =
+            Wh_GetIntSetting(L"hideDefaultButtonLabels.%s",
+                             kDefaultButtons[index].settingKey) != 0;
+    }
+    g_settings.hideDetailsButtonLabel =
+        Wh_GetIntSetting(L"hideDefaultButtonLabels.details") != 0;
+
+    g_settings.defaultButtonOrderText =
+        WindhawkUtils::StringSetting::make(L"defaultButtonOrder").get();
+    g_settings.defaultButtonOrder =
+        ParseDefaultButtonOrder(g_settings.defaultButtonOrderText);
+
     memset(g_settings.hideSeparatorAfterButton, 0,
            sizeof(g_settings.hideSeparatorAfterButton));
     g_settings.hideSeparatorAfterButton[kNewButtonIndex] =
@@ -5069,7 +7119,8 @@ void LoadSettings() {
 
     g_settings.showSettingsItem = Wh_GetIntSetting(L"showSettingsItem") != 0;
     int settingsItemOrder = Wh_GetIntSetting(L"settingsItemOrder");
-    g_settings.settingsItemOrder = settingsItemOrder < 0 ? -1 : settingsItemOrder;
+    g_settings.settingsItemOrder =
+        settingsItemOrder < 0 ? -1 : settingsItemOrder;
 
     g_settings.newPlus = NewPlusSettings{};
     g_settings.newPlus.enabled = Wh_GetIntSetting(L"newPlus.enabled") != 0;
@@ -5118,6 +7169,7 @@ void LoadSettings() {
 struct EditableSettings {
     std::vector<ActionItem> items;
     bool placeOnSecondaryBar = false;
+    bool disabledInsteadOfHidden = false;
     bool openMenuOnHover = false;
     int menuHoverDelay = 400;
     int itemSpacing = -1;
@@ -5129,6 +7181,10 @@ struct EditableSettings {
     bool hideSeparatorAfterView = false;
     bool hideMoreButton = false;
     bool hideDetailsButton = false;
+    bool showMenuChevrons = false;
+    bool hideDefaultButtonLabels[kDefaultButtonCount] = {};
+    bool hideDetailsButtonLabel = false;
+    std::wstring defaultButtonOrder;
     NewPlusSettings newPlus;
     ContextMenuItemSettings contextMenuItem;
 };
@@ -5138,6 +7194,7 @@ EditableSettings SnapshotSettings() {
     EditableSettings settings;
     settings.items = g_settings.items;
     settings.placeOnSecondaryBar = g_settings.placeOnSecondaryBar;
+    settings.disabledInsteadOfHidden = g_settings.disabledInsteadOfHidden;
     settings.openMenuOnHover = g_settings.openMenuOnHover;
     settings.menuHoverDelay = g_settings.menuHoverDelay;
     settings.itemSpacing = g_settings.itemSpacing;
@@ -5153,6 +7210,13 @@ EditableSettings SnapshotSettings() {
         g_settings.hideSeparatorAfterButton[kViewButtonIndex];
     settings.hideMoreButton = g_settings.hideMoreButton;
     settings.hideDetailsButton = g_settings.hideDetailsButton;
+    settings.showMenuChevrons = g_settings.showMenuChevrons;
+    for (int i = 0; i < kDefaultButtonCount; i++) {
+        settings.hideDefaultButtonLabels[i] =
+            g_settings.hideDefaultButtonLabels[i];
+    }
+    settings.hideDetailsButtonLabel = g_settings.hideDetailsButtonLabel;
+    settings.defaultButtonOrder = g_settings.defaultButtonOrderText;
     settings.newPlus = g_settings.newPlus;
     settings.contextMenuItem = g_settings.contextMenuItem;
     return settings;
@@ -5243,29 +7307,37 @@ SettingField StringField(PCWSTR key,
 }
 
 constexpr PCWSTR kDefaultButtonTitles[kDefaultButtonCount] = {
-    L"New",    L"Cut",  L"Copy",
-    L"Paste",  L"Rename",
-    L"Share",  L"Delete",
-    L"Sort",   L"View",
-    L"Set as background",
-    L"Rotate left",
-    L"Rotate right",
+    L"New",         L"Cut",
+    L"Copy",        L"Paste",
+    L"Rename",      L"Share",
+    L"Delete",      L"Sort",
+    L"View",        L"Set as background",
+    L"Rotate left", L"Rotate right",
     L"Extract all",
 };
 
 constexpr PCWSTR kDefaultButtonGlyphs[kDefaultButtonCount] = {
-    L"\uE710", L"\uE8C6", L"\uE8C8", L"\uE77F", L"\uE8AC",
-    L"\uE72D", L"\uE74D", L"\uE8CB", L"\uE890", L"\uE91B",
-    L"\uE7AD", L"\uE7AD", L"\uE8B7",
+    L"\uE710", L"\uE8C6", L"\uE8C8", L"\uE77F", L"\uE8AC", L"\uE72D", L"\uE74D",
+    L"\uE8CB", L"\uE890", L"\uE91B", L"\uE7AD", L"\uE7AD", L"\uE8B7",
 };
 
 std::vector<SettingsPageDef> DescribeSettingsPages(EditableSettings& s) {
     auto buttonField = [&s](int index, PCWSTR description = L"") {
-        return BoolField(
-            std::wstring(L"hideDefaultButtons.") +
-                kDefaultButtons[index].settingKey,
-            kDefaultButtonTitles[index], description,
-            &s.hideDefaultButtons[index], kDefaultButtonGlyphs[index], true);
+        return BoolField(std::wstring(L"hideDefaultButtons.") +
+                             kDefaultButtons[index].settingKey,
+                         kDefaultButtonTitles[index], description,
+                         &s.hideDefaultButtons[index],
+                         kDefaultButtonGlyphs[index], true);
+    };
+
+    auto labelField = [&s](int index) {
+        std::wstring title = std::wstring(L"Hide the ") +
+                             kDefaultButtonTitles[index] + L" label";
+        return BoolField(std::wstring(L"hideDefaultButtonLabels.") +
+                             kDefaultButtons[index].settingKey,
+                         title.c_str(), L"Show only its icon.",
+                         &s.hideDefaultButtonLabels[index],
+                         kDefaultButtonGlyphs[index]);
     };
 
     std::vector<SettingsPageDef> pages;
@@ -5294,6 +7366,13 @@ std::vector<SettingsPageDef> DescribeSettingsPages(EditableSettings& s) {
                   L"\uE712", true),
         BoolField(L"hideDefaultButtons.details", L"Details pane toggle", L"",
                   &s.hideDetailsButton, L"\uE946", true),
+        HeaderField(L"Labels"),
+        labelField(kNewButtonIndex),
+        labelField(kSortButtonIndex),
+        labelField(kViewButtonIndex),
+        BoolField(L"hideDefaultButtonLabels.details",
+                  L"Hide the Details pane toggle label", L"Show only its icon.",
+                  &s.hideDetailsButtonLabel, L"\uE946"),
         HeaderField(L"Contextual commands"),
         buttonField(9, L"Shown when an image file is selected."),
         buttonField(10, L"Shown when an image file is selected."),
@@ -5413,11 +7492,20 @@ std::vector<SettingsPageDef> DescribeSettingsPages(EditableSettings& s) {
                  L"and so on. -1 places it after the last item.",
                  &s.settingsItemOrder, -1, L"\uE8CB"),
         HeaderField(L"Layout"),
+        BoolField(L"disabledInsteadOfHidden",
+                  L"Disable buttons instead of hiding them",
+                  L"Gray out inactive buttons instead of removing them from "
+                  L"the toolbar.",
+                  &s.disabledInsteadOfHidden, L"\uE7A6"),
         BoolField(L"placeOnSecondaryBar", L"Place buttons on the right side",
                   L"Show custom buttons on the right side of File Explorer "
                   L"(next to the Details and Preview pane toggles) instead of "
                   L"the main toolbar.",
                   &s.placeOnSecondaryBar, L"\uE90D"),
+        BoolField(L"showMenuChevrons", L"Show chevrons on dropdowns",
+                  L"Show a small chevron next to custom toolbar buttons which "
+                  L"open a dropdown menu.",
+                  &s.showMenuChevrons, L"\uE70D"),
         IntField(L"itemSpacing", L"Item spacing (pixels at 100% scaling)",
                  L"Horizontal spacing between the command bar buttons. -1 "
                  L"leaves the default spacing unchanged. Any other value also "
@@ -5491,6 +7579,8 @@ void AppendItemEntries(std::vector<RegEntry>& entries,
     entries.push_back(StringEntry(prefix + L".command", item.command));
     entries.push_back(StringEntry(prefix + L".parameters", item.parameters));
     entries.push_back(StringEntry(prefix + L".shortcut", item.shortcut));
+    entries.push_back(
+        StringEntry(prefix + L".matchExtensions", item.matchExtensions));
     entries.push_back(StringEntry(prefix + L".iconGlyph", item.icon));
     entries.push_back(BoolEntry(prefix + L".hideIcon", item.hideIcon));
     if (depth == 0) {
@@ -5499,6 +7589,10 @@ void AppendItemEntries(std::vector<RegEntry>& entries,
     }
     entries.push_back(
         BoolEntry(prefix + L".separatorAfter", item.separatorAfter));
+    entries.push_back(BoolEntry(prefix + L".runAsAdmin", item.runAsAdmin));
+    entries.push_back(StringEntry(
+        prefix + L".windowStyle",
+        kWindowStyles[WindowStyleIndex(item.windowStyle)].settingValue));
 
     if (depth < kMaxMenuDepth) {
         int index = 0;
@@ -5515,12 +7609,16 @@ void AppendItemEntries(std::vector<RegEntry>& entries,
 
 std::vector<RegEntry> BuildRegEntries(EditableSettings& settings) {
     std::vector<RegEntry> entries;
+    // Edited by dragging the built-in buttons in the preview, so it isn't
+    // one of the fields of the settings pages.
+    entries.push_back(
+        StringEntry(L"defaultButtonOrder", settings.defaultButtonOrder));
     int index = 0;
     for (auto const& item : settings.items) {
         if (IsEmptyActionItem(item))
             continue;
-        AppendItemEntries(entries,
-                          L"items[" + std::to_wstring(index++) + L"]", item, 0);
+        AppendItemEntries(entries, L"items[" + std::to_wstring(index++) + L"]",
+                          item, 0);
     }
 
     for (auto const& page : DescribeSettingsPages(settings)) {
@@ -5573,9 +7671,8 @@ LSTATUS WriteSettingsToRegistry(std::vector<RegEntry> const& entries,
                                 std::vector<std::wstring> const& staleNames,
                                 DWORD changeTime) {
     HKEY modKey;
-    LSTATUS status =
-        RegOpenKeyExW(HKEY_LOCAL_MACHINE, kModRegistryPath, 0,
-                      KEY_SET_VALUE | KEY_CREATE_SUB_KEY, &modKey);
+    LSTATUS status = RegOpenKeyExW(HKEY_LOCAL_MACHINE, kModRegistryPath, 0,
+                                   KEY_SET_VALUE | KEY_CREATE_SUB_KEY, &modKey);
     if (status != ERROR_SUCCESS)
         return status;
 
@@ -5645,14 +7742,15 @@ std::wstring BuildRegFile(std::vector<RegEntry> const& entries,
 
     WCHAR time[32];
     swprintf(time, ARRAYSIZE(time), L"dword:%08x", changeTime);
-    text += L"\r\n[" + modKey + L"]\r\n\"SettingsChangeTime\"=" + time +
-            L"\r\n";
+    text +=
+        L"\r\n[" + modKey + L"]\r\n\"SettingsChangeTime\"=" + time + L"\r\n";
     return text;
 }
 
 bool WriteUtf16File(std::wstring const& path, std::wstring const& text) {
-    HANDLE hFile = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
-                               CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, nullptr);
+    HANDLE hFile =
+        CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                    FILE_ATTRIBUTE_TEMPORARY, nullptr);
     if (hFile == INVALID_HANDLE_VALUE)
         return false;
     WCHAR bom = 0xFEFF;
@@ -5729,11 +7827,10 @@ SaveResult WriteModSettings(std::vector<RegEntry> const& entries,
 
     std::vector<std::wstring> staleNames;
     for (auto const& name : existingNames) {
-        bool used = std::any_of(entries.begin(), entries.end(),
-                                [&name](RegEntry const& entry) {
-                                    return _wcsicmp(entry.name.c_str(),
-                                                    name.c_str()) == 0;
-                                });
+        bool used = std::any_of(
+            entries.begin(), entries.end(), [&name](RegEntry const& entry) {
+                return _wcsicmp(entry.name.c_str(), name.c_str()) == 0;
+            });
         if (!used)
             staleNames.push_back(name);
     }
@@ -5787,18 +7884,6 @@ struct SaveJob {
     EditableSettings settings;
     SaveResult result;
 };
-
-PCWSTR InternalCommandGlyph(std::wstring_view cmd) {
-    if (IsCommandMatch(cmd, L"OpenWith"))
-        return L"\uE7AC";
-    if (IsCommandMatch(cmd, L"TogglePreview"))
-        return L"\uE8A1";
-    if (IsCommandMatch(cmd, L"ToggleDetails"))
-        return L"\uE9F9";
-    if (IsCommandMatch(cmd, L"FolderOptions"))
-        return L"\uE713";
-    return nullptr;
-}
 
 ActionItem MakeNewActionItem(bool isMenu, int depth) {
     ActionItem item;
@@ -5987,8 +8072,8 @@ bool WriteUtf8File(std::wstring const& path, std::wstring const& text) {
     int length = WideCharToMultiByte(CP_UTF8, 0, text.data(), (int)text.size(),
                                      nullptr, 0, nullptr, nullptr);
     std::string bytes((size_t)std::max(length, 0), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, text.data(), (int)text.size(),
-                        bytes.data(), length, nullptr, nullptr);
+    WideCharToMultiByte(CP_UTF8, 0, text.data(), (int)text.size(), bytes.data(),
+                        length, nullptr, nullptr);
 
     HANDLE hFile = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
                                CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -6119,10 +8204,10 @@ std::wstring BuildSettingsYaml(std::vector<RegEntry> const& entries) {
                 start, last ? std::wstring::npos : dot - start);
             size_t bracket = segment.find(L'[');
             if (bracket != std::wstring::npos) {
-                size_t index = wcstoul(segment.c_str() + bracket + 1, nullptr,
-                                       10);
-                YamlNode* list = YamlMapChild(
-                    node, segment.substr(0, bracket), YamlNode::Kind::List);
+                size_t index =
+                    wcstoul(segment.c_str() + bracket + 1, nullptr, 10);
+                YamlNode* list = YamlMapChild(node, segment.substr(0, bracket),
+                                              YamlNode::Kind::List);
                 while (list->values.size() <= index)
                     list->values.push_back(YamlNode{});
                 node = &list->values[index];
@@ -6511,12 +8596,16 @@ ActionItem ImportActionItem(FlatSettings const& root,
     item.command = FlatSettingString(root, prefix + L".command");
     item.parameters = FlatSettingString(root, prefix + L".parameters");
     item.shortcut = FlatSettingString(root, prefix + L".shortcut");
+    item.matchExtensions =
+        FlatSettingString(root, prefix + L".matchExtensions");
     item.icon = FlatSettingString(root, prefix + L".iconGlyph");
     item.hideIcon = FlatSettingInt(root, prefix + L".hideIcon", 0) != 0;
     item.showLabel = FlatSettingInt(root, prefix + L".showLabel", 0) != 0;
     item.labelText = FlatSettingString(root, prefix + L".labelText");
     item.separatorAfter =
         FlatSettingInt(root, prefix + L".separatorAfter", 0) != 0;
+    item.runAsAdmin = FlatSettingInt(root, prefix + L".runAsAdmin", 0) != 0;
+    item.windowStyle = FlatSettingString(root, prefix + L".windowStyle");
 
     if (depth < kMaxMenuDepth) {
         item.isMenu = FlatSettingString(root, prefix + L".type") == L"menu";
@@ -6587,6 +8676,12 @@ bool ImportSettingsText(std::wstring const& text,
         }
     }
 
+    if (root.count(L"defaultButtonOrder")) {
+        recognized++;
+        settings->defaultButtonOrder =
+            FlatSettingString(root, L"defaultButtonOrder");
+    }
+
     std::vector<ActionItem> items;
     for (int i = 0; i < 100; i++) {
         bool isEmpty = false;
@@ -6645,8 +8740,7 @@ class SettingsWindow {
     void ShowPage(std::wstring const& tag);
     void NavigateTo(std::wstring const& tag);
 
-    muxc::TextBlock MakeText(std::wstring const& text,
-                             mux::Style const& style);
+    muxc::TextBlock MakeText(std::wstring const& text, mux::Style const& style);
     muxc::StackPanel MakePageHeader(std::wstring const& title,
                                     std::wstring const& description);
     muxc::Border MakeCard(PCWSTR glyph,
@@ -6691,6 +8785,43 @@ class SettingsWindow {
     std::vector<ActionItem>* ChildrenOf(std::vector<int> const& path);
     ActionItem* ItemAt(std::vector<int> const& path);
     ActionItem* EditedItem(std::vector<int> const& path, int generation);
+
+    // Reordering by dragging, for the toolbar items of the preview and for
+    // the entries of a menu. A group lists the elements which can be dragged
+    // among each other, in their order.
+    enum DragGroup {
+        kDragGroupPreview,
+        kDragGroupEntries,
+        kDragGroupBuiltIns,
+        kDragGroupCount
+    };
+    void SetDragGroup(int group,
+                      mux::UIElement const& reference,
+                      std::vector<mux::UIElement> elements,
+                      std::function<void(int from, int to)> commit);
+    void ClearDragGroup(int group);
+    void EnableDragReorder(mux::UIElement const& element, int group, int slot);
+    void OnDragPointerPressed(mux::UIElement const& element,
+                              mux::Input::PointerRoutedEventArgs const& args,
+                              int group,
+                              int slot);
+    void OnDragPointerMoved(mux::UIElement const& element,
+                            mux::Input::PointerRoutedEventArgs const& args,
+                            int group,
+                            int slot);
+    bool BeginDrag(mux::UIElement const& element,
+                   mux::Input::PointerRoutedEventArgs const& args);
+    void UpdateDrag(double delta);
+    void EndDrag(bool commit);
+    void ResetDragVisuals(int group);
+    bool IsDragClick() const { return m_drag.active || m_suppressDragClick; }
+    void ReorderToolbarItems(std::vector<int> order, int from, int to);
+    void ReorderBuiltInButtons(std::vector<size_t> const& slots,
+                               int from,
+                               int to);
+    void ReorderMenuEntries(std::vector<int> const& parentPath,
+                            int from,
+                            int to);
 
     void AddTopLevelItem(bool isMenu);
     void AddMenuEntry(bool isMenu);
@@ -6759,6 +8890,26 @@ class SettingsWindow {
     muxc::MenuFlyoutItem m_addEntryItem{nullptr};
     muxc::MenuFlyoutItem m_addSubmenuItem{nullptr};
     int m_editorGeneration = 0;
+
+    struct DragGroupState {
+        mux::UIElement reference{nullptr};
+        std::vector<mux::UIElement> elements;
+        std::function<void(int, int)> commit;
+    };
+    struct DragState {
+        bool pressed = false;
+        bool active = false;
+        int group = -1;
+        int slot = -1;
+        int target = -1;
+        uint32_t pointerId = 0;
+        wf::Point pressPoint{};
+        std::vector<double> starts;
+        std::vector<double> sizes;
+    };
+    DragGroupState m_dragGroups[kDragGroupCount];
+    DragState m_drag;
+    bool m_suppressDragClick = false;
 };
 
 std::wstring SettingsWindowClassName() {
@@ -7044,12 +9195,14 @@ void SettingsWindow::LoadStyles() {
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">)";
     if (needsControlsResources) {
-        xaml += LR"(
+        xaml +=
+            LR"(
     <ResourceDictionary.MergedDictionaries>
         <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls"/>
     </ResourceDictionary.MergedDictionaries>)";
     }
-    xaml += LR"(
+    xaml +=
+        LR"(
     <Style x:Key="CardStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
         <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}"/>
@@ -7180,7 +9333,8 @@ void SettingsWindow::ApplyTheme() {
     DwmSetWindowAttribute(m_hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */,
                           &useDarkMode, sizeof(useDarkMode));
     // SolidBackgroundFillColorBase of the dark and light themes.
-    COLORREF captionColor = dark ? RGB(0x20, 0x20, 0x20) : RGB(0xF3, 0xF3, 0xF3);
+    COLORREF captionColor =
+        dark ? RGB(0x20, 0x20, 0x20) : RGB(0xF3, 0xF3, 0xF3);
     DwmSetWindowAttribute(m_hwnd, 35 /* DWMWA_CAPTION_COLOR */, &captionColor,
                           sizeof(captionColor));
     auto theme = dark ? mux::ElementTheme::Dark : mux::ElementTheme::Light;
@@ -7267,10 +9421,10 @@ mux::UIElement SettingsWindow::BuildRoot() {
     donateButton.Margin({16, 8, 16, 0});
     muxc::ToolTipService::SetToolTip(
         donateButton, BoxString(L"Support the development of this mod"));
-    donateButton.Click([](wf::IInspectable const&,
-                          mux::RoutedEventArgs const&) {
-        OpenUrl(kDonateUrl);
-    });
+    donateButton.Click(
+        [](wf::IInspectable const&, mux::RoutedEventArgs const&) {
+            OpenUrl(kDonateUrl);
+        });
 
     muxc::Grid transferButtons;
     transferButtons.ColumnSpacing(8);
@@ -7279,21 +9433,21 @@ mux::UIElement SettingsWindow::BuildRoot() {
     AddGridColumn(transferButtons, StarLength());
     auto importButton = MakeTextButton(L"Import");
     importButton.HorizontalAlignment(mux::HorizontalAlignment::Stretch);
-    muxc::ToolTipService::SetToolTip(
-        importButton, BoxString(L"Import settings from a file"));
-    importButton.Click([this](wf::IInspectable const&,
-                              mux::RoutedEventArgs const&) {
-        ImportSettings();
-    });
+    muxc::ToolTipService::SetToolTip(importButton,
+                                     BoxString(L"Import settings from a file"));
+    importButton.Click(
+        [this](wf::IInspectable const&, mux::RoutedEventArgs const&) {
+            ImportSettings();
+        });
     transferButtons.Children().Append(importButton);
     auto exportButton = MakeTextButton(L"Export");
     exportButton.HorizontalAlignment(mux::HorizontalAlignment::Stretch);
     muxc::ToolTipService::SetToolTip(
         exportButton, BoxString(L"Export all settings to a file"));
-    exportButton.Click([this](wf::IInspectable const&,
-                              mux::RoutedEventArgs const&) {
-        ExportSettings();
-    });
+    exportButton.Click(
+        [this](wf::IInspectable const&, mux::RoutedEventArgs const&) {
+            ExportSettings();
+        });
     muxc::Grid::SetColumn(exportButton, 1);
     transferButtons.Children().Append(exportButton);
 
@@ -7337,11 +9491,11 @@ mux::UIElement SettingsWindow::BuildRoot() {
         navItem.GroupName(L"SettingsNavigation");
         navItem.Content(itemContent);
         mux::Automation::AutomationProperties::SetName(navItem, title);
-        navItem.Checked([this, tag](wf::IInspectable const&,
-                                    mux::RoutedEventArgs const&) {
-            if (tag != m_currentPage)
-                ShowPage(tag);
-        });
+        navItem.Checked(
+            [this, tag](wf::IInspectable const&, mux::RoutedEventArgs const&) {
+                if (tag != m_currentPage)
+                    ShowPage(tag);
+            });
         navItems.Children().Append(navItem);
         m_navButtons.push_back({tag, navItem});
         if (!firstItem)
@@ -7569,13 +9723,13 @@ mux::FrameworkElement SettingsWindow::MakeFieldControl(
             muxc::ToggleSwitch toggle;
             toggle.IsOn(inverted ? !*value : *value);
             toggle.MinWidth(0);
-            toggle.Toggled([this, value, inverted](
-                               wf::IInspectable const& sender,
-                               mux::RoutedEventArgs const&) {
-                bool isOn = sender.as<muxc::ToggleSwitch>().IsOn();
-                *value = inverted ? !isOn : isOn;
-                OnModelChanged();
-            });
+            toggle.Toggled(
+                [this, value, inverted](wf::IInspectable const& sender,
+                                        mux::RoutedEventArgs const&) {
+                    bool isOn = sender.as<muxc::ToggleSwitch>().IsOn();
+                    *value = inverted ? !isOn : isOn;
+                    OnModelChanged();
+                });
             return toggle;
         }
 
@@ -7610,12 +9764,12 @@ mux::FrameworkElement SettingsWindow::MakeFieldControl(
             auto textBox = MakeTextBox(*value, nullptr);
             if (!field.wide)
                 textBox.Width(280);
-            textBox.TextChanged([this, value](
-                                    wf::IInspectable const& sender,
-                                    muxc::TextChangedEventArgs const&) {
-                *value = std::wstring(sender.as<muxc::TextBox>().Text());
-                OnModelChanged();
-            });
+            textBox.TextChanged(
+                [this, value](wf::IInspectable const& sender,
+                              muxc::TextChangedEventArgs const&) {
+                    *value = std::wstring(sender.as<muxc::TextBox>().Text());
+                    OnModelChanged();
+                });
             return textBox;
         }
 
@@ -7679,31 +9833,6 @@ std::wstring BuiltInButtonName(int id) {
                : g_defaultButtonLooks[id].label;
 }
 
-// Like AddNewPlusChevron, for any command bar button with a visible label.
-void AddLabelChevron(mux::FrameworkElement const& button,
-                     std::wstring const& label) try {
-    auto textLabel =
-        FindDescendantByName(button, L"TextLabel").try_as<muxc::TextBlock>();
-    if (!textLabel)
-        return;
-    std::wstring currentText = textLabel.Text().c_str();
-    if (!currentText.empty() && currentText.back() == L'')
-        return;
-
-    auto inlines = textLabel.Inlines();
-    inlines.Clear();
-    muxd::Run text;
-    text.Text(label + L"  ");
-    inlines.Append(text);
-    muxd::Run chevron;
-    chevron.Text(L"");
-    chevron.FontFamily(muxm::FontFamily(L"Segoe Fluent Icons"));
-    chevron.FontSize(8);
-    inlines.Append(chevron);
-} catch (...) {
-    Wh_Log(L"Error %08X", winrt::to_hresult().value);
-}
-
 // The default checked look is a solid accent fill meant for glyphs which turn
 // white, which leaves File Explorer's colored icons hard to see. Selected
 // buttons get the subtle fill WinUI uses for selected list and navigation
@@ -7727,9 +9856,9 @@ void ApplyPreviewSelectionStyle(muxc::AppBarToggleButton const& button) {
     } catch (...) {
     }
     muxm::SolidColorBrush accentBrush(accent);
-    muxm::SolidColorBrush text(dark
-                                   ? ColorHelper::FromArgb(0xFF, 0xFF, 0xFF, 0xFF)
-                                   : ColorHelper::FromArgb(0xE4, 0, 0, 0));
+    muxm::SolidColorBrush text(
+        dark ? ColorHelper::FromArgb(0xFF, 0xFF, 0xFF, 0xFF)
+             : ColorHelper::FromArgb(0xE4, 0, 0, 0));
 
     auto resources = button.Resources();
     auto set = [&resources](PCWSTR key, wf::IInspectable const& value) {
@@ -7778,8 +9907,9 @@ mux::FrameworkElement SettingsWindow::BuildItemsPage() {
     page.Children().Append(MakePageHeader(
         L"Toolbar items",
         L"This is the File Explorer command bar with your settings. Click an "
-        L"item to edit it, or open a menu to pick one of its entries. Hidden "
-        L"built-in buttons can be shown again on the Built-in buttons page."));
+        L"item to edit it, or open a menu to pick one of its entries. Drag "
+        L"your items to reorder them. Hidden built-in buttons can be shown "
+        L"again on the Built-in buttons page."));
 
     m_previewHost = muxc::Border();
     if (m_cardStyle)
@@ -7836,11 +9966,10 @@ muxc::CommandBar SettingsWindow::BuildItemToolbar() {
     };
     addMenuItem(L"Toolbar button", L"",
                 [this]() { AddTopLevelItem(false); });
-    addMenuItem(L"Dropdown menu", L"",
-                [this]() { AddTopLevelItem(true); });
+    addMenuItem(L"Dropdown menu", L"", [this]() { AddTopLevelItem(true); });
     addMenu.Items().Append(muxc::MenuFlyoutSeparator());
-    m_addEntryItem = addMenuItem(L"Menu entry", L"",
-                                 [this]() { AddMenuEntry(false); });
+    m_addEntryItem =
+        addMenuItem(L"Menu entry", L"", [this]() { AddMenuEntry(false); });
     m_addSubmenuItem =
         addMenuItem(L"Submenu", L"", [this]() { AddMenuEntry(true); });
 
@@ -7861,12 +9990,12 @@ muxc::CommandBar SettingsWindow::BuildItemToolbar() {
         bar.PrimaryCommands().Append(button);
         return button;
     };
-    m_moveUpButton = makeButton(L"Move left", L"",
-                                [this]() { MoveSelectedItem(-1); });
-    m_moveDownButton = makeButton(L"Move right", L"",
-                                  [this]() { MoveSelectedItem(1); });
-    m_duplicateButton = makeButton(L"Duplicate", L"",
-                                   [this]() { DuplicateSelectedItem(); });
+    m_moveUpButton =
+        makeButton(L"Move left", L"", [this]() { MoveSelectedItem(-1); });
+    m_moveDownButton =
+        makeButton(L"Move right", L"", [this]() { MoveSelectedItem(1); });
+    m_duplicateButton =
+        makeButton(L"Duplicate", L"", [this]() { DuplicateSelectedItem(); });
     m_deleteButton =
         makeButton(L"Delete", L"", [this]() { DeleteSelectedItem(); });
 
@@ -7933,16 +10062,18 @@ muxc::AppBarButton SettingsWindow::MakePreviewButton(
         MakeCompactPreviewButton(button);
     muxc::ToolTipService::SetToolTip(button, BoxString(label));
     if (showLabel && chevron) {
-        button.Loaded([](wf::IInspectable const& sender,
-                         mux::RoutedEventArgs const&) {
-            if (auto button = sender.try_as<muxc::AppBarButton>())
-                AddNewPlusChevron(button);
-        });
+        button.Loaded(
+            [](wf::IInspectable const& sender, mux::RoutedEventArgs const&) {
+                if (auto button = sender.try_as<muxc::AppBarButton>())
+                    AddNewPlusChevron(button);
+            });
     }
-    button.Click([this, pageTag](wf::IInspectable const&,
-                                 mux::RoutedEventArgs const&) {
-        NavigateTo(pageTag);
-    });
+    button.Click(
+        [this, pageTag](wf::IInspectable const&, mux::RoutedEventArgs const&) {
+            if (IsDragClick())
+                return;
+            NavigateTo(pageTag);
+        });
     return button;
 }
 
@@ -7996,23 +10127,32 @@ void SettingsWindow::AppendPreviewMenuEntries(
     }
 }
 
-muxc::AppBarToggleButton SettingsWindow::MakePreviewItem(
-    ActionItem const& item,
-    int index) {
+muxc::AppBarToggleButton SettingsWindow::MakePreviewItem(ActionItem const& item,
+                                                         int index) {
     muxc::AppBarToggleButton button;
     ApplyPreviewSelectionStyle(button);
-    button.Label(item.labelText.empty() ? item.name : item.labelText);
+    bool isMenu = item.isMenu && !item.subItems.empty();
+    bool chevron = isMenu && m_model.showMenuChevrons;
+    std::wstring label = item.labelText.empty() ? item.name : item.labelText;
+    bool hasLabel = item.showLabel && !label.empty();
+    button.Label(chevron ? MenuButtonLabel(label, hasLabel, true) : label);
     if (auto icon = MakeCommandButtonIcon(item))
         button.Icon(icon);
-    button.LabelPosition(item.showLabel
+    button.LabelPosition(hasLabel || chevron
                              ? muxc::CommandBarLabelPosition::Default
                              : muxc::CommandBarLabelPosition::Collapsed);
-    if (!item.showLabel)
+    if (!item.showLabel && !chevron)
         MakeCompactPreviewButton(button);
     muxc::ToolTipService::SetToolTip(
         button, BoxString(item.name.empty() ? L"Untitled" : item.name));
+    if (chevron) {
+        button.Loaded([hasLabel, label](wf::IInspectable const& sender,
+                                        mux::RoutedEventArgs const&) {
+            if (auto element = sender.try_as<mux::FrameworkElement>())
+                AddChevronToLabel(element, hasLabel ? label : L"");
+        });
+    }
 
-    bool isMenu = item.isMenu && !item.subItems.empty();
     if (isMenu) {
         muxc::MenuFlyout menu;
         menu.Placement(
@@ -8023,6 +10163,8 @@ muxc::AppBarToggleButton SettingsWindow::MakePreviewItem(
 
     button.Click([this, index, isMenu](wf::IInspectable const& sender,
                                        mux::RoutedEventArgs const&) {
+        if (IsDragClick())
+            return;
         SelectItem({index});
         if (isMenu) {
             if (auto element = sender.try_as<mux::FrameworkElement>())
@@ -8061,7 +10203,8 @@ void SettingsWindow::RebuildPreview() {
         return CreateGlyphIcon(glyph);
     };
     auto builtInIcon = [&](int index) {
-        return svgOrGlyphIcon(looks[index].iconUri, kDefaultButtonGlyphs[index]);
+        return svgOrGlyphIcon(looks[index].iconUri,
+                              kDefaultButtonGlyphs[index]);
     };
     auto builtInLabel = [&](int index) {
         return looks[index].label.empty()
@@ -8086,35 +10229,104 @@ void SettingsWindow::RebuildPreview() {
     auto primaryCommands = primary.PrimaryCommands();
     auto secondaryCommands = secondary.PrimaryCommands();
 
-    if (s.newPlus.enabled) {
+    auto appendNewPlus = [&]() -> mux::UIElement {
+        if (!s.newPlus.enabled)
+            return nullptr;
         bool showLabel = s.newPlus.showLabel && !s.newPlus.buttonLabel.empty();
         auto icon = s.newPlus.buttonIcon.empty()
                         ? builtInIcon(kNewButtonIndex)
                         : CreateIconElement(s.newPlus.buttonIcon,
                                             std::wstring(), L"");
-        primaryCommands.Append(MakePreviewButton(
+        auto button = MakePreviewButton(
             icon,
             s.newPlus.buttonLabel.empty() ? L"New+" : s.newPlus.buttonLabel,
-            showLabel, true, L"newPlus"));
-    }
+            showLabel, true, L"newPlus");
+        primaryCommands.Append(button);
+        return button;
+    };
 
     m_previewBuiltIns.clear();
-    auto appendBuiltIn = [&](int id, bool showLabel, bool chevron) {
-        if (*BuiltInHiddenField(id))
-            return;
-        primaryCommands.Append(MakePreviewBuiltIn(
-            id, builtInIcon(id), builtInLabel(id), showLabel, chevron));
+    auto isBuiltInShown = [&](int id) {
+        if (id == kNewButtonIndex && s.newPlus.enabled &&
+            !s.newPlus.keepOriginalNewButton)
+            return false;
+        return !*BuiltInHiddenField(id);
     };
-    if (!s.newPlus.enabled || s.newPlus.keepOriginalNewButton)
-        appendBuiltIn(kNewButtonIndex, true, true);
-    if (!s.hideSeparatorAfterNew)
-        primaryCommands.Append(muxc::AppBarSeparator());
-    for (int i = kNewButtonIndex + 1; i <= kDeleteButtonIndex; i++)
-        appendBuiltIn(i, false, false);
-    if (!s.hideSeparatorAfterDelete)
-        primaryCommands.Append(muxc::AppBarSeparator());
-    appendBuiltIn(kSortButtonIndex, true, true);
-    appendBuiltIn(kViewButtonIndex, true, true);
+    auto appendBuiltIn = [&](int id) -> mux::UIElement {
+        if (!isBuiltInShown(id))
+            return nullptr;
+        bool labeled = id == kNewButtonIndex || id == kSortButtonIndex ||
+                       id == kViewButtonIndex;
+        bool showLabel = labeled && !s.hideDefaultButtonLabels[id];
+        auto button = MakePreviewBuiltIn(id, builtInIcon(id), builtInLabel(id),
+                                         showLabel, labeled);
+        primaryCommands.Append(button);
+        return button;
+    };
+
+    // The built-in buttons in their order, with separators placed the way
+    // ApplyDefaultButtonOrder and ApplyDefaultButtonVisibility do: File
+    // Explorer has two separators among these buttons, a separator after
+    // New or Delete follows its setting, and any other one is shown unless
+    // all buttons up to the next separator are hidden. The shown buttons
+    // and separators can be dragged to reorder them; builtInSlots holds the
+    // position in the order of each of them.
+    std::vector<int> order = ParseDefaultButtonOrder(s.defaultButtonOrder);
+    if (order.empty())
+        order = DefaultButtonOrderTokens();
+    std::vector<mux::UIElement> builtInElements;
+    std::vector<size_t> builtInSlots;
+    int separatorsLeft = 2;
+    int prevButton = -1;
+    for (size_t i = 0; i < order.size(); i++) {
+        int token = order[i];
+        if (token != kOrderSeparator) {
+            // With New+, its button stands for New when dragged.
+            mux::UIElement element{nullptr};
+            if (token == kNewButtonIndex)
+                element = appendNewPlus();
+            mux::UIElement builtIn = appendBuiltIn(token);
+            if (!element)
+                element = builtIn;
+            if (element) {
+                builtInElements.push_back(element);
+                builtInSlots.push_back(i);
+            }
+            prevButton = token;
+            continue;
+        }
+
+        if (separatorsLeft == 0)
+            continue;
+        separatorsLeft--;
+        bool show;
+        if (prevButton == kNewButtonIndex) {
+            show = !s.hideSeparatorAfterNew;
+        } else if (prevButton == kDeleteButtonIndex) {
+            show = !s.hideSeparatorAfterDelete;
+        } else {
+            show = false;
+            for (size_t j = i + 1;
+                 j < order.size() && order[j] != kOrderSeparator; j++) {
+                if (isBuiltInShown(order[j]) ||
+                    (order[j] == kNewButtonIndex && s.newPlus.enabled)) {
+                    show = true;
+                    break;
+                }
+            }
+        }
+        if (show) {
+            muxc::AppBarSeparator separator;
+            primaryCommands.Append(separator);
+            builtInElements.push_back(separator);
+            builtInSlots.push_back(i);
+        }
+        prevButton = -1;
+    }
+    SetDragGroup(kDragGroupBuiltIns, primary, std::move(builtInElements),
+                 [this, builtInSlots](int from, int to) {
+                     ReorderBuiltInButtons(builtInSlots, from, to);
+                 });
     if (!s.hideSeparatorAfterView)
         primaryCommands.Append(muxc::AppBarSeparator());
 
@@ -8122,10 +10334,15 @@ void SettingsWindow::RebuildPreview() {
     auto customCommands =
         s.placeOnSecondaryBar ? secondaryCommands : primaryCommands;
     bool settingsItemAdded = !s.showSettingsItem;
+    std::vector<mux::UIElement> dragElements;
+    std::vector<int> dragOrder;
     auto appendSettingsItem = [&]() {
-        customCommands.Append(MakePreviewBuiltIn(
+        auto button = MakePreviewBuiltIn(
             kPreviewSettingsItemId, CreateGlyphIcon(L""),
-            BuiltInButtonName(kPreviewSettingsItemId), false, false));
+            BuiltInButtonName(kPreviewSettingsItemId), false, false);
+        customCommands.Append(button);
+        dragElements.push_back(button);
+        dragOrder.push_back(-1);
         settingsItemAdded = true;
     };
     m_previewItems.assign(s.items.size(), muxc::AppBarToggleButton{nullptr});
@@ -8138,12 +10355,21 @@ void SettingsWindow::RebuildPreview() {
             appendSettingsItem();
         m_previewItems[i] = MakePreviewItem(item, i);
         customCommands.Append(m_previewItems[i]);
+        dragElements.push_back(m_previewItems[i]);
+        dragOrder.push_back(i);
         if (item.separatorAfter)
             customCommands.Append(muxc::AppBarSeparator());
         itemPosition++;
     }
     if (!settingsItemAdded)
         appendSettingsItem();
+    SetDragGroup(kDragGroupPreview,
+                 s.placeOnSecondaryBar ? mux::UIElement(secondary)
+                                       : mux::UIElement(primary),
+                 std::move(dragElements),
+                 [this, dragOrder](int from, int to) {
+                     ReorderToolbarItems(dragOrder, from, to);
+                 });
 
     if (s.contextMenuItem.enabled) {
         primaryCommands.Append(MakePreviewButton(
@@ -8160,7 +10386,8 @@ void SettingsWindow::RebuildPreview() {
     if (!s.hideDetailsButton) {
         secondaryCommands.Append(MakePreviewBuiltIn(
             kPreviewDetailsId, svgOrGlyphIcon(detailsLook.iconUri, L""),
-            BuiltInButtonName(kPreviewDetailsId), true, false));
+            BuiltInButtonName(kPreviewDetailsId), !s.hideDetailsButtonLabel,
+            false));
     }
 
     StyleCardCommandBar(primary);
@@ -8253,13 +10480,15 @@ muxc::AppBarToggleButton SettingsWindow::MakePreviewBuiltIn(
         button.Loaded([label](wf::IInspectable const& sender,
                               mux::RoutedEventArgs const&) {
             if (auto element = sender.try_as<mux::FrameworkElement>())
-                AddLabelChevron(element, label);
+                AddChevronToLabel(element, label);
         });
     }
-    button.Click([this, id](wf::IInspectable const&,
-                            mux::RoutedEventArgs const&) {
-        SelectBuiltIn(id);
-    });
+    button.Click(
+        [this, id](wf::IInspectable const&, mux::RoutedEventArgs const&) {
+            if (IsDragClick())
+                return;
+            SelectBuiltIn(id);
+        });
 
     m_previewBuiltIns.push_back({id, button});
     return button;
@@ -8292,10 +10521,9 @@ void SettingsWindow::BuildSettingsItemEditor() {
                 continue;
             auto control = MakeFieldControl(field);
             if (auto toggle = control.try_as<muxc::ToggleSwitch>()) {
-                toggle.Toggled([this](wf::IInspectable const&,
-                                      mux::RoutedEventArgs const&) {
-                    RebuildPreview();
-                });
+                toggle.Toggled(
+                    [this](wf::IInspectable const&,
+                           mux::RoutedEventArgs const&) { RebuildPreview(); });
             } else if (auto numberBox = control.try_as<muxc::NumberBox>()) {
                 numberBox.ValueChanged(
                     [this](muxc::NumberBox const&,
@@ -8348,14 +10576,61 @@ void SettingsWindow::BuildBuiltInEditor() {
                              L"shown again on the Built-in buttons page.",
                              toggle, false));
 
+    bool* labelHidden = nullptr;
+    if (id == kPreviewDetailsId) {
+        labelHidden = &m_model.hideDetailsButtonLabel;
+    } else if (std::find(std::begin(kLabeledDefaultButtons),
+                         std::end(kLabeledDefaultButtons),
+                         id) != std::end(kLabeledDefaultButtons)) {
+        labelHidden = &m_model.hideDefaultButtonLabels[id];
+    }
+    if (labelHidden) {
+        muxc::ToggleSwitch labelToggle;
+        labelToggle.IsOn(!*labelHidden);
+        labelToggle.MinWidth(0);
+        labelToggle.Toggled([this, labelHidden, generation](
+                                wf::IInspectable const& sender,
+                                mux::RoutedEventArgs const&) {
+            if (generation != m_editorGeneration)
+                return;
+            *labelHidden = !sender.as<muxc::ToggleSwitch>().IsOn();
+            RebuildPreview();
+            OnModelChanged();
+        });
+        children.Append(MakeCard(L"", L"Show label",
+                                 L"When it's off, only the icon of the button "
+                                 L"is shown, and the label becomes its "
+                                 L"tooltip.",
+                                 labelToggle, false));
+    }
+
+    if (id >= 0 && id < kReorderableButtonCount) {
+        auto resetButton = MakeTextButton(L"Reset order");
+        resetButton.IsEnabled(!m_model.defaultButtonOrder.empty());
+        resetButton.Click([this, generation](wf::IInspectable const&,
+                                             mux::RoutedEventArgs const&) {
+            if (generation != m_editorGeneration)
+                return;
+            m_model.defaultButtonOrder.clear();
+            RefreshItemsPage();
+            OnModelChanged();
+        });
+        children.Append(MakeCard(
+            L"", L"Order",
+            L"Drag the built-in buttons and their separators in the preview "
+            L"above to reorder them. Reset puts them back in File Explorer's "
+            L"own order.",
+            resetButton, false));
+    }
+
     muxc::HyperlinkButton allButtonsLink;
     allButtonsLink.Content(
         BoxString(L"All built-in buttons, separators and contextual commands"));
     allButtonsLink.Margin({0, 8, 0, 0});
-    allButtonsLink.Click([this](wf::IInspectable const&,
-                                mux::RoutedEventArgs const&) {
-        NavigateTo(L"builtIn");
-    });
+    allButtonsLink.Click(
+        [this](wf::IInspectable const&, mux::RoutedEventArgs const&) {
+            NavigateTo(L"builtIn");
+        });
     children.Append(allButtonsLink);
 }
 
@@ -8398,8 +10673,7 @@ void SettingsWindow::UpdateItemToolbar() {
     m_moveUpButton.Label(isToolbarItem ? L"Move left" : L"Move up");
     m_moveUpButton.Icon(CreateGlyphIcon(isToolbarItem ? L"" : L""));
     m_moveDownButton.Label(isToolbarItem ? L"Move right" : L"Move down");
-    m_moveDownButton.Icon(
-        CreateGlyphIcon(isToolbarItem ? L"" : L""));
+    m_moveDownButton.Icon(CreateGlyphIcon(isToolbarItem ? L"" : L""));
     m_moveUpButton.IsEnabled(hasSelection && index > 0);
     m_moveDownButton.IsEnabled(hasSelection && siblings &&
                                index + 1 < (int)siblings->size());
@@ -8441,6 +10715,7 @@ void SettingsWindow::BuildItemEditor() {
         return;
     m_editorGeneration++;
     m_editorIconPreview = nullptr;
+    ClearDragGroup(kDragGroupEntries);
     auto children = m_editorPanel.Children();
     children.Clear();
 
@@ -8462,12 +10737,13 @@ void SettingsWindow::BuildItemEditor() {
         auto icon = MakeGlyph(L"\uE70F", 40);
         icon.Opacity(0.6);
         placeholder.Children().Append(icon);
-        auto text = MakeText(m_model.items.empty()
-                                 ? L"There are no toolbar items yet. Use Add to "
-                                   L"create one."
-                                 : L"Click one of your items in the command "
-                                   L"bar above to edit it.",
-                             m_secondaryTextStyle);
+        auto text =
+            MakeText(m_model.items.empty()
+                         ? L"There are no toolbar items yet. Use Add to "
+                           L"create one."
+                         : L"Click one of your items in the command "
+                           L"bar above to edit it.",
+                     m_secondaryTextStyle);
         text.FontSize(14);
         text.TextAlignment(mux::TextAlignment::Center);
         placeholder.Children().Append(text);
@@ -8543,8 +10819,8 @@ void SettingsWindow::BuildItemEditor() {
             }
         };
     };
-    auto onToggle = [this, path, generation](
-                        std::function<void(ActionItem&, bool)> apply) {
+    auto onToggle = [this, path,
+                     generation](std::function<void(ActionItem&, bool)> apply) {
         return [this, path, generation, apply](wf::IInspectable const& sender,
                                                mux::RoutedEventArgs const&) {
             if (ActionItem* item = EditedItem(path, generation)) {
@@ -8569,18 +10845,18 @@ void SettingsWindow::BuildItemEditor() {
             for (auto const& [value, label] : entries) {
                 muxc::MenuFlyoutItem menuItem;
                 menuItem.Text(label);
-                menuItem.Click([weakTextBox, value, insertAtCaret](
-                                   wf::IInspectable const&,
-                                   mux::RoutedEventArgs const&) {
-                    auto textBox = weakTextBox.get();
-                    if (!textBox)
-                        return;
-                    if (insertAtCaret)
-                        textBox.SelectedText(value);
-                    else
-                        textBox.Text(value);
-                    textBox.Focus(mux::FocusState::Programmatic);
-                });
+                menuItem.Click(
+                    [weakTextBox, value, insertAtCaret](
+                        wf::IInspectable const&, mux::RoutedEventArgs const&) {
+                        auto textBox = weakTextBox.get();
+                        if (!textBox)
+                            return;
+                        if (insertAtCaret)
+                            textBox.SelectedText(value);
+                        else
+                            textBox.Text(value);
+                        textBox.Focus(mux::FocusState::Programmatic);
+                    });
                 menu.Items().Append(menuItem);
             }
             button.Flyout(menu);
@@ -8594,23 +10870,23 @@ void SettingsWindow::BuildItemEditor() {
         typeBox.Items().Append(
             BoxString(depth == 0 ? L"Dropdown menu" : L"Submenu"));
         typeBox.SelectedIndex(item->isMenu ? 1 : 0);
-        typeBox.SelectionChanged([this, path, generation](
-                                     wf::IInspectable const& sender,
+        typeBox.SelectionChanged(
+            [this, path, generation](wf::IInspectable const& sender,
                                      muxc::SelectionChangedEventArgs const&) {
-            ActionItem* item = EditedItem(path, generation);
-            if (!item)
-                return;
-            bool isMenu = sender.as<muxc::ComboBox>().SelectedIndex() == 1;
-            if (item->isMenu == isMenu)
-                return;
-            item->isMenu = isMenu;
-            if (isMenu && item->subItems.empty()) {
-                item->subItems.push_back(
-                    MakeNewActionItem(false, (int)path.size()));
-            }
-            OnModelChanged();
-            DeferItemsPageRefresh();
-        });
+                ActionItem* item = EditedItem(path, generation);
+                if (!item)
+                    return;
+                bool isMenu = sender.as<muxc::ComboBox>().SelectedIndex() == 1;
+                if (item->isMenu == isMenu)
+                    return;
+                item->isMenu = isMenu;
+                if (isMenu && item->subItems.empty()) {
+                    item->subItems.push_back(
+                        MakeNewActionItem(false, (int)path.size()));
+                }
+                OnModelChanged();
+                DeferItemsPageRefresh();
+            });
         children.Append(MakeCard(
             L"\uE8FD", L"Type",
             depth == 0 ? L"A single button runs a command, a dropdown menu "
@@ -8621,16 +10897,16 @@ void SettingsWindow::BuildItemEditor() {
     }
 
     auto nameBox = MakeTextBox(item->name, L"Name");
-    nameBox.TextChanged(onText(
-        [](ActionItem& item, std::wstring text) { item.name = text; }));
-    children.Append(MakeCard(L"\uE8AC", L"Name",
-                             depth == 0 ? L"Shown as the button tooltip."
-                                        : L"The menu item text.",
-                             nameBox, true));
+    nameBox.TextChanged(
+        onText([](ActionItem& item, std::wstring text) { item.name = text; }));
+    children.Append(MakeCard(
+        L"\uE8AC", L"Name",
+        depth == 0 ? L"Shown as the button tooltip." : L"The menu item text.",
+        nameBox, true));
 
     {
-        auto commandBox =
-            MakeTextBox(item->command, L"e.g. wt.exe or internal:TogglePreview");
+        auto commandBox = MakeTextBox(item->command,
+                                      L"e.g. wt.exe or internal:TogglePreview");
         commandBox.TextChanged(onText(
             [](ActionItem& item, std::wstring text) { item.command = text; }));
         auto weakCommandBox = winrt::make_weak(commandBox);
@@ -8657,6 +10933,12 @@ void SettingsWindow::BuildItemEditor() {
                 {L"internal:ToggleDetails", L"Toggle the Details pane"},
                 {L"internal:OpenWith", L"Open with\u2026"},
                 {L"internal:FolderOptions", L"Folder Options"},
+                {L"internal:CopyPath", L"Copy the selected paths"},
+                {L"internal:CopyName", L"Copy the selected names"},
+                {L"internal:CopyDir", L"Copy the current folder path"},
+                {L"internal:NewFolder", L"New folder"},
+                {L"internal:NewFile", L"New file"},
+                {L"internal:Refresh", L"Refresh"},
             },
             false);
 
@@ -8723,6 +11005,37 @@ void SettingsWindow::BuildItemEditor() {
             L"File Explorer window, e.g. Ctrl+Shift+T, Alt+X or F9. Needs "
             L"Ctrl, Alt or Win unless the key is F1-F24.",
             shortcutBox, true));
+
+        auto runAsAdminToggle = makeToggle(item->runAsAdmin);
+        runAsAdminToggle.Toggled(onToggle(
+            [](ActionItem& item, bool isOn) { item.runAsAdmin = isOn; }));
+        children.Append(MakeCard(
+            L"", L"Run as administrator",
+            L"Start the command elevated, after a UAC prompt. Ctrl+Shift+click "
+            L"does the same for any item. Not used by internal commands.",
+            runAsAdminToggle, false));
+
+        muxc::ComboBox windowStyleBox;
+        windowStyleBox.MinWidth(200);
+        for (auto const& style : kWindowStyles)
+            windowStyleBox.Items().Append(BoxString(style.title));
+        windowStyleBox.SelectedIndex(WindowStyleIndex(item->windowStyle));
+        windowStyleBox.SelectionChanged(
+            [this, path, generation](wf::IInspectable const& sender,
+                                     muxc::SelectionChangedEventArgs const&) {
+                ActionItem* item = EditedItem(path, generation);
+                int index = sender.as<muxc::ComboBox>().SelectedIndex();
+                if (!item || index < 0 ||
+                    index >= (int)ARRAYSIZE(kWindowStyles))
+                    return;
+                item->windowStyle = kWindowStyles[index].settingValue;
+                OnItemEdited();
+            });
+        children.Append(MakeCard(
+            L"", L"Window style",
+            L"How the started program's window is shown. Hidden is meant for "
+            L"console commands and scripts; some programs ignore it.",
+            windowStyleBox, false));
     }
 
     {
@@ -8785,13 +11098,26 @@ void SettingsWindow::BuildItemEditor() {
     }
 
     auto hideIconToggle = makeToggle(item->hideIcon);
-    hideIconToggle.Toggled(onToggle(
-        [](ActionItem& item, bool isOn) { item.hideIcon = isOn; }));
+    hideIconToggle.Toggled(
+        onToggle([](ActionItem& item, bool isOn) { item.hideIcon = isOn; }));
     children.Append(MakeCard(L"\uED1A", L"Hide icon",
                              L"Don't show an icon for this item.",
                              hideIconToggle, false));
 
     if (depth == 0) {
+        auto filterBox = MakeTextBox(item->matchExtensions,
+                                     L"e.g. single_file, folders, -zip");
+        filterBox.TextChanged(onText([](ActionItem& item, std::wstring text) {
+            item.matchExtensions = text;
+        }));
+        children.Append(
+            MakeCard(L"", L"File extension filter",
+                     L"Rules evaluate using OR logic. Use '+' for AND (e.g. "
+                     L"files + single). Prefix with '-' to exclude (e.g. "
+                     L"-exe). Use 'files', 'folders', 'single', 'multi', 'only "
+                     L"txt', or 'hide'. Leave blank to always show.",
+                     filterBox, true));
+
         auto showLabelToggle = makeToggle(item->showLabel);
         showLabelToggle.Toggled(onToggle(
             [](ActionItem& item, bool isOn) { item.showLabel = isOn; }));
@@ -8799,10 +11125,12 @@ void SettingsWindow::BuildItemEditor() {
                                  L"Show a text label next to the icon.",
                                  showLabelToggle, false));
 
-        auto labelBox = MakeTextBox(item->labelText, L"Uses the name when empty");
+        auto labelBox =
+            MakeTextBox(item->labelText, L"Uses the name when empty");
         labelBox.Width(280);
-        labelBox.TextChanged(onText(
-            [](ActionItem& item, std::wstring text) { item.labelText = text; }));
+        labelBox.TextChanged(onText([](ActionItem& item, std::wstring text) {
+            item.labelText = text;
+        }));
         children.Append(MakeCard(L"\uE8D2", L"Custom label text",
                                  L"Text displayed next to the icon. If empty, "
                                  L"the name is used.",
@@ -8826,7 +11154,14 @@ void SettingsWindow::BuildItemEditor() {
             header.Margin({1, 28, 0, 8});
         }
         children.Append(header);
+        if (item->subItems.size() > 1) {
+            auto hint = MakeText(L"Drag the entries to reorder them.",
+                                 m_secondaryTextStyle);
+            hint.Margin({1, -4, 0, 8});
+            children.Append(hint);
+        }
 
+        std::vector<mux::UIElement> entryButtons;
         for (int i = 0; i < (int)item->subItems.size(); i++) {
             auto const& entry = item->subItems[i];
             std::vector<int> entryPath = path;
@@ -8847,9 +11182,8 @@ void SettingsWindow::BuildItemEditor() {
             title.Text(entry.name.empty() ? L"Untitled" : entry.name);
             title.TextTrimming(mux::TextTrimming::CharacterEllipsis);
             text.Children().Append(title);
-            auto subtitle =
-                MakeText(DescribeActionItem(entry, depth + 1),
-                         m_secondaryTextStyle);
+            auto subtitle = MakeText(DescribeActionItem(entry, depth + 1),
+                                     m_secondaryTextStyle);
             subtitle.TextWrapping(mux::TextWrapping::NoWrap);
             subtitle.TextTrimming(mux::TextTrimming::CharacterEllipsis);
             text.Children().Append(subtitle);
@@ -8868,13 +11202,20 @@ void SettingsWindow::BuildItemEditor() {
                 mux::HorizontalAlignment::Stretch);
             entryButton.Padding({16, 10, 16, 10});
             entryButton.Margin({0, 0, 0, 4});
-            entryButton.Click([deferSelect, entryPath](
-                                  wf::IInspectable const&,
-                                  mux::RoutedEventArgs const&) {
-                deferSelect(entryPath);
-            });
+            entryButton.Click(
+                [this, deferSelect, entryPath](wf::IInspectable const&,
+                                               mux::RoutedEventArgs const&) {
+                    if (IsDragClick())
+                        return;
+                    deferSelect(entryPath);
+                });
             children.Append(entryButton);
+            entryButtons.push_back(entryButton);
         }
+        SetDragGroup(kDragGroupEntries, m_editorPanel, std::move(entryButtons),
+                     [this, path](int from, int to) {
+                         ReorderMenuEntries(path, from, to);
+                     });
 
         auto addEntryButton = MakeTextButton(L"Add entry");
         addEntryButton.Margin({0, 4, 0, 0});
@@ -8885,6 +11226,373 @@ void SettingsWindow::BuildItemEditor() {
         });
         children.Append(addEntryButton);
     }
+}
+
+// How far the pointer has to move before a press becomes a drag.
+constexpr double kDragThreshold = 6;
+
+void SettingsWindow::SetDragGroup(int group,
+                                  mux::UIElement const& reference,
+                                  std::vector<mux::UIElement> elements,
+                                  std::function<void(int, int)> commit) {
+    ClearDragGroup(group);
+    auto& state = m_dragGroups[group];
+    state.reference = reference;
+    state.elements = std::move(elements);
+    state.commit = std::move(commit);
+    for (int i = 0; i < (int)state.elements.size(); i++)
+        EnableDragReorder(state.elements[i], group, i);
+}
+
+void SettingsWindow::ClearDragGroup(int group) {
+    if (m_drag.group == group)
+        m_drag = DragState{};
+    m_dragGroups[group] = DragGroupState{};
+}
+
+void SettingsWindow::EnableDragReorder(mux::UIElement const& element,
+                                       int group,
+                                       int slot) {
+    using mux::Input::PointerEventHandler;
+    using mux::Input::PointerRoutedEventArgs;
+
+    // Buttons handle the pointer events themselves, so the handlers are
+    // added for handled events too.
+    auto add = [&element](mux::RoutedEvent const& routedEvent,
+                          auto&& callback) {
+        PointerEventHandler handler(callback);
+        element.AddHandler(routedEvent, winrt::box_value(handler), true);
+    };
+    add(mux::UIElement::PointerPressedEvent(),
+        [this, group, slot](wf::IInspectable const& sender,
+                            PointerRoutedEventArgs const& args) {
+            if (auto element = sender.try_as<mux::UIElement>())
+                OnDragPointerPressed(element, args, group, slot);
+        });
+    add(mux::UIElement::PointerMovedEvent(),
+        [this, group, slot](wf::IInspectable const& sender,
+                            PointerRoutedEventArgs const& args) {
+            if (auto element = sender.try_as<mux::UIElement>())
+                OnDragPointerMoved(element, args, group, slot);
+        });
+    add(mux::UIElement::PointerReleasedEvent(),
+        [this](wf::IInspectable const&, PointerRoutedEventArgs const&) {
+            EndDrag(true);
+        });
+    // Buttons release the capture when the button is released, which can
+    // come before the released event.
+    add(mux::UIElement::PointerCaptureLostEvent(),
+        [this](wf::IInspectable const&, PointerRoutedEventArgs const&) {
+            EndDrag(true);
+        });
+    add(mux::UIElement::PointerCanceledEvent(),
+        [this](wf::IInspectable const&, PointerRoutedEventArgs const&) {
+            EndDrag(false);
+        });
+}
+
+void SettingsWindow::OnDragPointerPressed(
+    mux::UIElement const& element,
+    mux::Input::PointerRoutedEventArgs const& args,
+    int group,
+    int slot) {
+    auto const& state = m_dragGroups[group];
+    if (!state.reference || slot >= (int)state.elements.size() ||
+        state.elements[slot] != element) {
+        return;
+    }
+    auto point = args.GetCurrentPoint(state.reference);
+    if (!point.Properties().IsLeftButtonPressed())
+        return;
+
+    if (m_drag.active)
+        EndDrag(false);
+    m_drag = DragState{};
+    m_drag.pressed = true;
+    m_drag.group = group;
+    m_drag.slot = slot;
+    m_drag.target = slot;
+    m_drag.pointerId = args.Pointer().PointerId();
+    m_drag.pressPoint = point.Position();
+}
+
+void SettingsWindow::OnDragPointerMoved(
+    mux::UIElement const& element,
+    mux::Input::PointerRoutedEventArgs const& args,
+    int group,
+    int slot) {
+    if (!m_drag.pressed || m_drag.group != group || m_drag.slot != slot ||
+        m_drag.pointerId != args.Pointer().PointerId()) {
+        return;
+    }
+    auto const& state = m_dragGroups[group];
+    if (!state.reference)
+        return;
+
+    auto point = args.GetCurrentPoint(state.reference);
+    if (!point.Properties().IsLeftButtonPressed()) {
+        EndDrag(true);
+        return;
+    }
+
+    auto position = point.Position();
+    bool vertical = group == kDragGroupEntries;
+    double delta = vertical ? position.Y - m_drag.pressPoint.Y
+                            : position.X - m_drag.pressPoint.X;
+    if (!m_drag.active) {
+        if (std::abs(delta) < kDragThreshold)
+            return;
+        if (!BeginDrag(element, args)) {
+            m_drag = DragState{};
+            return;
+        }
+    }
+    UpdateDrag(delta);
+}
+
+bool SettingsWindow::BeginDrag(mux::UIElement const& element,
+                               mux::Input::PointerRoutedEventArgs const& args) {
+    auto const& state = m_dragGroups[m_drag.group];
+    if (state.elements.size() < 2)
+        return false;
+
+    bool vertical = m_drag.group == kDragGroupEntries;
+    m_drag.starts.clear();
+    m_drag.sizes.clear();
+    try {
+        for (auto const& item : state.elements) {
+            auto frameworkElement = item.try_as<mux::FrameworkElement>();
+            if (!frameworkElement)
+                return false;
+            auto origin = item.TransformToVisual(state.reference)
+                              .TransformPoint(wf::Point{0, 0});
+            m_drag.starts.push_back(vertical ? origin.Y : origin.X);
+            m_drag.sizes.push_back(vertical ? frameworkElement.ActualHeight()
+                                            : frameworkElement.ActualWidth());
+        }
+    } catch (...) {
+        Wh_Log(L"Error %08X", winrt::to_hresult().value);
+        return false;
+    }
+
+    m_drag.active = true;
+    element.CapturePointer(args.Pointer());
+    muxc::Canvas::SetZIndex(element, 1);
+    element.Opacity(0.85);
+    return true;
+}
+
+void SettingsWindow::UpdateDrag(double delta) {
+    auto const& state = m_dragGroups[m_drag.group];
+    auto const& starts = m_drag.starts;
+    auto const& sizes = m_drag.sizes;
+    int count = (int)state.elements.size();
+    int from = m_drag.slot;
+    if (count != (int)starts.size() || from < 0 || from >= count)
+        return;
+    bool vertical = m_drag.group == kDragGroupEntries;
+
+    // The dragged element stays between the first and the last one.
+    double minDelta = starts[0] - starts[from];
+    double maxDelta =
+        starts[count - 1] + sizes[count - 1] - (starts[from] + sizes[from]);
+    delta = std::clamp(delta, std::min(minDelta, 0.0), std::max(maxDelta, 0.0));
+
+    double center = starts[from] + sizes[from] / 2 + delta;
+    int target = 0;
+    for (int i = 0; i < count; i++) {
+        if (i != from && starts[i] + sizes[i] / 2 < center)
+            target++;
+    }
+
+    // The others make room for it, by its size and the gap between items.
+    double gap = 0;
+    if (from + 1 < count)
+        gap = starts[from + 1] - (starts[from] + sizes[from]);
+    else if (from > 0)
+        gap = starts[from] - (starts[from - 1] + sizes[from - 1]);
+    double extent = sizes[from] + std::clamp(gap, 0.0, 8.0);
+
+    for (int i = 0; i < count; i++) {
+        double offset = 0;
+        if (i == from)
+            offset = delta;
+        else if (from < i && i <= target)
+            offset = -extent;
+        else if (target <= i && i < from)
+            offset = extent;
+
+        auto const& element = state.elements[i];
+        auto transform =
+            element.RenderTransform().try_as<muxm::TranslateTransform>();
+        if (!transform) {
+            if (offset == 0)
+                continue;
+            transform = muxm::TranslateTransform();
+            element.RenderTransform(transform);
+        }
+        if (vertical)
+            transform.Y(offset);
+        else
+            transform.X(offset);
+    }
+    m_drag.target = target;
+}
+
+void SettingsWindow::ResetDragVisuals(int group) {
+    for (auto const& element : m_dragGroups[group].elements) {
+        try {
+            element.RenderTransform(nullptr);
+            element.Opacity(1);
+            muxc::Canvas::SetZIndex(element, 0);
+        } catch (...) {
+        }
+    }
+}
+
+void SettingsWindow::EndDrag(bool commit) {
+    if (!m_drag.pressed)
+        return;
+    DragState drag = std::move(m_drag);
+    m_drag = DragState{};
+    if (!drag.active)
+        return;
+
+    ResetDragVisuals(drag.group);
+
+    // The button may still raise its click when released, which is ignored
+    // until the queued work below runs.
+    m_suppressDragClick = true;
+    std::function<void(int, int)> commitFn;
+    if (commit && drag.target != drag.slot)
+        commitFn = m_dragGroups[drag.group].commit;
+
+    auto dispatcherQueue = mud::DispatcherQueue::GetForCurrentThread();
+    if (!dispatcherQueue) {
+        m_suppressDragClick = false;
+        return;
+    }
+    dispatcherQueue.TryEnqueue(
+        [this, commitFn, from = drag.slot, to = drag.target]() {
+            if (g_settingsWindow != this)
+                return;
+            m_suppressDragClick = false;
+            if (commitFn)
+                commitFn(from, to);
+            else
+                UpdatePreviewSelection();
+        });
+}
+
+// The order lists the item index of each dragged element, or -1 for the
+// settings item, whose position is kept in its order setting.
+void SettingsWindow::ReorderToolbarItems(std::vector<int> order,
+                                         int from,
+                                         int to) {
+    int count = (int)order.size();
+    if (from < 0 || from >= count || to < 0 || to >= count)
+        return;
+    int moved = order[from];
+    order.erase(order.begin() + from);
+    order.insert(order.begin() + to, moved);
+
+    auto& items = m_model.items;
+    std::vector<ActionItem> reordered;
+    std::vector<int> newIndexOf(items.size(), -1);
+    int settingsPosition = -1;
+    for (int index : order) {
+        if (index < 0) {
+            settingsPosition = (int)reordered.size();
+            continue;
+        }
+        if (index >= (int)items.size() || newIndexOf[index] >= 0)
+            continue;
+        newIndexOf[index] = (int)reordered.size();
+        reordered.push_back(items[index]);
+    }
+    int toolbarItemCount = (int)reordered.size();
+    // Empty items aren't shown, they stay last.
+    for (int i = 0; i < (int)items.size(); i++) {
+        if (newIndexOf[i] < 0) {
+            newIndexOf[i] = (int)reordered.size();
+            reordered.push_back(items[i]);
+        }
+    }
+    items = std::move(reordered);
+
+    if (settingsPosition >= 0) {
+        m_model.settingsItemOrder =
+            settingsPosition >= toolbarItemCount ? -1 : settingsPosition;
+    }
+
+    if (moved >= 0) {
+        m_selectedBuiltIn = -1;
+        m_selectedPath = {newIndexOf[moved]};
+    } else {
+        m_selectedBuiltIn = kPreviewSettingsItemId;
+        m_selectedPath.clear();
+    }
+    RefreshItemsPage();
+    OnModelChanged();
+}
+
+// The slots list the position in the built-in button order of each dragged
+// element. The buttons and separators which aren't shown, so can't be
+// dragged, keep their positions.
+void SettingsWindow::ReorderBuiltInButtons(std::vector<size_t> const& slots,
+                                           int from,
+                                           int to) {
+    int count = (int)slots.size();
+    if (from < 0 || from >= count || to < 0 || to >= count)
+        return;
+
+    std::vector<int> order = ParseDefaultButtonOrder(m_model.defaultButtonOrder);
+    if (order.empty())
+        order = DefaultButtonOrderTokens();
+
+    std::vector<int> shown;
+    for (size_t slot : slots) {
+        if (slot >= order.size())
+            return;
+        shown.push_back(order[slot]);
+    }
+    int moved = shown[from];
+    shown.erase(shown.begin() + from);
+    shown.insert(shown.begin() + to, moved);
+    for (int i = 0; i < count; i++)
+        order[slots[i]] = shown[i];
+
+    m_model.defaultButtonOrder = FormatDefaultButtonOrder(order);
+
+    bool newReplaced =
+        m_model.newPlus.enabled && !m_model.newPlus.keepOriginalNewButton;
+    if (moved != kOrderSeparator &&
+        !(moved == kNewButtonIndex && newReplaced)) {
+        m_selectedBuiltIn = moved;
+        m_selectedPath.clear();
+    }
+    RefreshItemsPage();
+    OnModelChanged();
+}
+
+void SettingsWindow::ReorderMenuEntries(std::vector<int> const& parentPath,
+                                        int from,
+                                        int to) {
+    ActionItem* parent = ItemAt(parentPath);
+    if (!parent)
+        return;
+    auto& entries = parent->subItems;
+    int count = (int)entries.size();
+    if (from < 0 || from >= count || to < 0 || to >= count || from == to)
+        return;
+    ActionItem moved = std::move(entries[from]);
+    entries.erase(entries.begin() + from);
+    entries.insert(entries.begin() + to, std::move(moved));
+
+    m_selectedBuiltIn = -1;
+    m_selectedPath = parentPath;
+    RefreshItemsPage();
+    OnModelChanged();
 }
 
 void SettingsWindow::AddTopLevelItem(bool isMenu) {
@@ -9065,8 +11773,8 @@ void SettingsWindow::OnSaveCompleted(SaveJob const& job) {
                     L"File Explorer applies them in a moment.");
     } else {
         Wh_Log(L"Saving failed: %s", job.result.error.c_str());
-        ShowMessage(muxc::InfoBarSeverity::Error,
-                    L"Couldn't save the settings", job.result.error);
+        ShowMessage(muxc::InfoBarSeverity::Error, L"Couldn't save the settings",
+                    job.result.error);
     }
     m_closeAfterSave = false;
     UpdateFooter();
@@ -9114,9 +11822,9 @@ void SettingsWindow::ShowUnsavedChangesDialog() {
         m_dialog = dialog;
 
         dialog.ShowAsync().Completed(
-            [this](wf::IAsyncOperation<muxc::ContentDialogResult> const&
-                       operation,
-                   wf::AsyncStatus status) {
+            [this](
+                wf::IAsyncOperation<muxc::ContentDialogResult> const& operation,
+                wf::AsyncStatus status) {
                 if (g_settingsWindow != this)
                     return;
                 m_dialog = nullptr;
@@ -9176,10 +11884,10 @@ constexpr COMDLG_FILTERSPEC kImportFileFilters[] = {
 
 void SettingsWindow::ExportSettings() {
     m_modalDepth++;
-    std::wstring path = BrowseForSaveFile(
-        m_hwnd, L"Export settings", kExportFileFilters,
-        ARRAYSIZE(kExportFileFilters), L"yaml",
-        L"explorer-command-bar-settings.yaml");
+    std::wstring path =
+        BrowseForSaveFile(m_hwnd, L"Export settings", kExportFileFilters,
+                          ARRAYSIZE(kExportFileFilters), L"yaml",
+                          L"explorer-command-bar-settings.yaml");
     m_modalDepth--;
     if (path.empty() || g_unloading)
         return;
@@ -9188,8 +11896,7 @@ void SettingsWindow::ExportSettings() {
     bool isJson = ToLower(PathFindExtensionW(path.c_str())) == L".json";
     if (WriteUtf8File(path, isJson ? BuildSettingsJson(entries)
                                    : BuildSettingsYaml(entries))) {
-        ShowMessage(muxc::InfoBarSeverity::Success, L"Settings exported",
-                    path);
+        ShowMessage(muxc::InfoBarSeverity::Success, L"Settings exported", path);
     } else {
         ShowMessage(muxc::InfoBarSeverity::Error,
                     L"Couldn't export the settings",
@@ -9208,8 +11915,9 @@ void SettingsWindow::ImportSettings() {
     EditableSettings imported = m_model;
     std::wstring error;
     if (text.empty()) {
-        error = L"The file couldn't be read, or it's empty or larger than "
-                L"1 MB.";
+        error =
+            L"The file couldn't be read, or it's empty or larger than "
+            L"1 MB.";
     } else if (ImportSettingsText(text, IsJsonSettingsFile(path, text),
                                   &imported, &error)) {
         // Assigned, not replaced, as the controls point into the model.
