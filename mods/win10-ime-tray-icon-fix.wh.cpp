@@ -161,15 +161,6 @@ void LoadSettings() {
                        std::memory_order_relaxed);
 }
 
-// True only for a window this process owns. Cached handles are re-checked with
-// this before every use: a handle whose window was destroyed can be recycled by
-// another process, and acting on it would touch a foreign window.
-inline bool IsOwnedByCurrentProcess(HWND hWnd) {
-    DWORD pid = 0;
-    return hWnd && GetWindowThreadProcessId(hWnd, &pid) &&
-           pid == GetCurrentProcessId();
-}
-
 // Applies g_hideImeMode to the secondary IME mode glyph, in both directions.
 // ShowWindow is a no-op when the window is already in the requested state, so
 // this is safe to call on every layout as well as from the mod entry points.
@@ -304,45 +295,6 @@ LRESULT CALLBACK MainIconProc(HWND hWnd, UINT msg, WPARAM wParam,
     return DefSubclassProc(hWnd, msg, wParam, lParam);
 }
 
-// Mirrors FindCurrentProcessTaskbarWindows from taskbar-volume-control, minus
-// the secondary taskbars: only the primary one has a notification area, and
-// the secondaries are owned by the same process anyway.
-//
-// explorer.exe also runs as a plain file-browser process when "Launch folder
-// windows in a separate process" is enabled. That process owns no taskbar, and
-// the taskbar of the desktop process cannot be subclassed from here, so the
-// search is restricted to windows owned by the current process.
-BOOL CALLBACK FindTaskbarProc(HWND hWnd, LPARAM lParam) {
-    if (!IsOwnedByCurrentProcess(hWnd)) {
-        return TRUE;
-    }
-
-    wchar_t className[32];
-    if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
-        return TRUE;
-    }
-    if (wcscmp(className, kTrayWndClass)) {
-        return TRUE;
-    }
-
-    *reinterpret_cast<HWND*>(lParam) = hWnd;
-    return FALSE;
-}
-
-inline HWND FindCurrentProcessTaskbarWindow() {
-    HWND hTray = nullptr;
-    EnumWindows(FindTaskbarProc, reinterpret_cast<LPARAM>(&hTray));
-    return hTray;
-}
-
-// The notification area is a direct child of the taskbar, looked up the same way
-// windhawk-mods does it. The parent has already been proven to belong to this
-// process, which bounds the result to this process as well.
-inline HWND FindTrayNotify(HWND hTray) {
-    return hTray ? FindWindowExW(hTray, nullptr, kTrayNotifyClass, nullptr)
-                 : nullptr;
-}
-
 // Installs the subclasses. Every child of the notification area gets ShiftRightProc
 // and decides for itself whether it moves; the indicator and its main glyph get
 // their own procs. Children created later are picked up by the CreateWindowExW
@@ -419,6 +371,53 @@ void Refresh(HWND hNotify) {
     if (hNotify) {
         PostMessageW(hNotify, kMsgRelayout, 0, 0);
     }
+}
+
+// Check once for the tray upon lookup/injection. Any child window always
+// belongs to the same process.
+inline bool IsOwnedByCurrentProcess(HWND hWnd) {
+    DWORD pid = 0;
+    return hWnd && GetWindowThreadProcessId(hWnd, &pid) &&
+           pid == GetCurrentProcessId();
+}
+
+// Mirrors FindCurrentProcessTaskbarWindows from taskbar-volume-control, minus
+// the secondary taskbars: only the primary one has a notification area, and
+// the secondaries are owned by the same process anyway.
+//
+// explorer.exe also runs as a plain file-browser process when "Launch folder
+// windows in a separate process" is enabled. That process owns no taskbar, and
+// the taskbar of the desktop process cannot be subclassed from here, so the
+// search is restricted to windows owned by the current process.
+BOOL CALLBACK FindTaskbarProc(HWND hWnd, LPARAM lParam) {
+    if (!IsOwnedByCurrentProcess(hWnd)) {
+        return TRUE;
+    }
+
+    wchar_t className[32];
+    if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
+        return TRUE;
+    }
+    if (wcscmp(className, kTrayWndClass)) {
+        return TRUE;
+    }
+
+    *reinterpret_cast<HWND*>(lParam) = hWnd;
+    return FALSE;
+}
+
+inline HWND FindCurrentProcessTaskbarWindow() {
+    HWND hTray = nullptr;
+    EnumWindows(FindTaskbarProc, reinterpret_cast<LPARAM>(&hTray));
+    return hTray;
+}
+
+// The notification area is a direct child of the taskbar, looked up the same way
+// windhawk-mods does it. The parent has already been proven to belong to this
+// process, which bounds the result to this process as well.
+inline HWND FindTrayNotify(HWND hTray) {
+    return hTray ? FindWindowExW(hTray, nullptr, kTrayNotifyClass, nullptr)
+                 : nullptr;
 }
 
 // The one place that wires the mod up.
@@ -511,6 +510,11 @@ void Wh_ModSettingsChanged() {
     Refresh(g_tray.hNotify.load(std::memory_order_relaxed));
 }
 
+BOOL CALLBACK RemoveShiftSubclassProc(HWND hWnd, LPARAM) {
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, ShiftRightProc);
+    return TRUE;
+}
+
 void Wh_ModUninit() {
     g_hideImeMode.store(false, std::memory_order_relaxed);
     EnforceImeModeHidden();
@@ -526,11 +530,7 @@ void Wh_ModUninit() {
     // only about having a handle to send it to.
     HWND hNotify = g_tray.hNotify.load(std::memory_order_relaxed);
     if (hNotify) {
-        for (HWND child = GetWindow(hNotify, GW_CHILD); child;
-             child = GetWindow(child, GW_HWNDNEXT)) {
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(child,
-                                                            ShiftRightProc);
-        }
+        EnumChildWindows(hNotify, RemoveShiftSubclassProc, 0);
     }
     HWND hIndicator = g_tray.hIndicator.load(std::memory_order_relaxed);
     if (hIndicator) {
