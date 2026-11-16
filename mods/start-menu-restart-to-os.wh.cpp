@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              start-menu-restart-to-os
 // @name            Start Menu: Restart to another OS
-// @description     Dual boot: adds "Restart to <OS>" entries to the Start menu power menu. Other systems are detected automatically; one admin prompt at setup only
+// @description     Dual boot: adds "Restart to <OS>" entries to the Start menu power menu. Other systems are detected automatically; one admin prompt when the mod is enabled
 // @version         1.0
 // @author          El-Sashok
 // @github          https://github.com/El-Sashok
@@ -37,6 +37,18 @@ boots go back to normal.
 systems are shown: **disable the mod, then enable it again**. The scan and the
 window come back (with the admin prompt).
 
+### Why scheduled tasks?
+
+Setting `BootNext` requires administrator rights. Without the tasks, every
+click would show a UAC prompt. The tasks only run `bcdedit /set {fwbootmgr}
+bootsequence <entry>` followed by a restart, for your user account.
+
+**Nothing is left behind**: when the mod is disabled or uninstalled, it runs a
+cleanup task (created along with the others) that deletes the whole folder.
+Since Windhawk also unloads the mod when it updates it or when Windhawk itself
+is exited or updated, the scan (and its admin prompt) also comes back after
+these events.
+
 ## Customization
 
 In the settings, add a customization with the name of a detected system (as
@@ -54,8 +66,13 @@ else.
 - Boot managers (rEFInd), fallback (`\EFI\BOOT\BOOTX64.EFI`) and network/USB
   entries are skipped.
 - Some firmwares ignore `BootNext`; nothing can be done about it from Windows.
-- To uninstall completely, also delete the Task Scheduler › Windhawk ›
-  RestartToOs folder.
+- If an app blocks the restart and you cancel it, `BootNext` stays set: the
+  next restart, whatever its cause, boots the chosen system.
+- The tasks are shared by all the accounts of the PC: a scan from another
+  account replaces them, and disabling the mod in one account removes them.
+- If Windhawk can't unload the mod normally (e.g. the Start menu process was
+  killed at that moment), the Task Scheduler › Windhawk › RestartToOs folder
+  may stay; it can be deleted by hand.
 
 ## Credits
 
@@ -116,6 +133,8 @@ All logos are trademarks of their respective owners.
 #include <taskschd.h>
 #include <wincrypt.h>
 
+#include <windhawk_utils.h>
+
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -133,6 +152,8 @@ using winrt::Windows::Foundation::Collections::IVector;
 
 static constexpr wchar_t kTag[] = L"wh-restart-to-os";
 static constexpr wchar_t kTaskFolder[] = L"\\Windhawk\\RestartToOs\\";
+static constexpr wchar_t kTaskFolderPath[] = L"\\Windhawk\\RestartToOs";
+static constexpr wchar_t kCleanupTask[] = L"Cleanup";  // removes the folder when the mod is unloaded
 static constexpr wchar_t kGlyphShutDown = 0xE7E8;
 static constexpr wchar_t kGlyphRestart = 0xE777;
 
@@ -699,9 +720,8 @@ struct Settings {
 // One menu item to show.
 struct MenuEntry {
     std::wstring label;
-    std::wstring iconPath;   // empty: use glyph
-    wchar_t glyph = kGlyphRestart;
-    std::wstring taskName;   // empty: "manage" item
+    std::wstring iconPath;  // empty: restart arrow glyph
+    std::wstring taskName;
 };
 
 static std::mutex g_mutex;  // protects g_settings, g_detected and g_hidden
@@ -709,9 +729,11 @@ static Settings g_settings;
 static std::vector<DetectedSystem> g_detected;
 static std::vector<std::wstring> g_hidden;  // lowercase names of hidden systems (mod storage)
 
-static HANDLE g_stopEvent = nullptr;
+static std::atomic<bool> g_hasCleanupTask{false};
+
+static HANDLE g_stopEvent = nullptr;  // set when the mod is unloading
 static HANDLE g_watcherThread = nullptr;
-static HANDLE g_workerThread = nullptr;  // UI thread only
+static HANDLE g_workerThread = nullptr;  // UI thread only, until the UI is uninitialized
 
 // XAML objects: UI thread only, never destroyed statically
 // (C++/WinRT types can't be allocated with "new" directly, hence the holders).
@@ -738,50 +760,42 @@ static std::wstring ToLower(std::wstring s) {
 
 static void LoadSettings() {
     Settings s;
-    for (int i = 0; i < 32; i++) {
-        auto get = [i](PCWSTR field) {
-            std::wstring key = L"customizations[" + std::to_wstring(i) + L"]." + field;
-            PCWSTR v = Wh_GetStringSetting(key.c_str());
-            std::wstring r = v ? v : L"";
-            Wh_FreeStringSetting(v);
-            return r;
-        };
+    for (int i = 0;; i++) {
         Customization c;
-        c.bootEntry = get(L"bootEntry");
-        c.label = get(L"label");
-        c.icon = get(L"icon");
-        // Empty slots (and indexes past the end of the list) have no system name.
-        if (!c.bootEntry.empty()) s.customizations.push_back(c);
+        c.bootEntry = WindhawkUtils::StringSetting::make(L"customizations[%d].bootEntry", i).get();
+        if (c.bootEntry.empty()) break;  // end of the list
+        c.label = WindhawkUtils::StringSetting::make(L"customizations[%d].label", i).get();
+        c.icon = WindhawkUtils::StringSetting::make(L"customizations[%d].icon", i).get();
+        s.customizations.push_back(std::move(c));
     }
     std::lock_guard<std::mutex> lock(g_mutex);
     g_settings = std::move(s);
 }
 
-// Hidden systems are chosen in the "Manage" window and kept in the mod storage,
-// as lowercase names separated by '\n'.
-static std::vector<std::wstring> SplitLines(std::wstring const& text) {
-    std::vector<std::wstring> lines;
-    for (size_t start = 0; start < text.size();) {
-        size_t end = text.find(L'\n', start);
-        if (end == std::wstring::npos) end = text.size();
-        if (end > start) lines.push_back(text.substr(start, end - start));
-        start = end + 1;
-    }
-    return lines;
-}
-
+// Hidden systems are chosen in the window shown after a scan, and kept in the
+// mod storage as lowercase names: hiddenCount, then hidden0, hidden1...
 static void LoadHidden() {
-    WCHAR buffer[4096] = L"";
-    Wh_GetStringValue(L"hiddenSystems", buffer, ARRAYSIZE(buffer));
-    auto hidden = SplitLines(buffer);
+    std::vector<std::wstring> hidden;
+    int count = Wh_GetIntValue(L"hiddenCount", 0);
+    for (int i = 0; i < count; i++) {
+        std::wstring key = L"hidden" + std::to_wstring(i);
+        WCHAR name[512] = L"";
+        Wh_GetStringValue(key.c_str(), name, ARRAYSIZE(name));
+        if (name[0]) hidden.push_back(name);
+    }
     std::lock_guard<std::mutex> lock(g_mutex);
     g_hidden = std::move(hidden);
 }
 
 static void SaveHidden(std::vector<std::wstring> hidden) {
-    std::wstring text;
-    for (auto const& name : hidden) text += name + L"\n";
-    Wh_SetStringValue(L"hiddenSystems", text.c_str());
+    int oldCount = Wh_GetIntValue(L"hiddenCount", 0);
+    for (int i = 0; i < (int)hidden.size(); i++) {
+        Wh_SetStringValue((L"hidden" + std::to_wstring(i)).c_str(), hidden[i].c_str());
+    }
+    for (int i = (int)hidden.size(); i < oldCount; i++) {
+        Wh_DeleteValue((L"hidden" + std::to_wstring(i)).c_str());
+    }
+    Wh_SetIntValue(L"hiddenCount", (int)hidden.size());
     std::lock_guard<std::mutex> lock(g_mutex);
     g_hidden = std::move(hidden);
 }
@@ -915,24 +929,29 @@ static HWND FindCoreWindow() {
 // ---------------------------------------------------------------------------
 // Scheduled tasks (worker threads, COM initialized)
 
-// Reads the tasks created by the detection: one per system, its description
-// holding the UEFI boot entry name.
-static std::vector<DetectedSystem> EnumerateDetectedSystems() {
-    std::vector<DetectedSystem> result;
+static com_ptr<ITaskFolder> OpenTaskFolder() {
     com_ptr<ITaskService> service;
     if (FAILED(CoCreateInstance(kClsidTaskScheduler, nullptr, CLSCTX_INPROC_SERVER, kIidTaskService,
                                 service.put_void()))) {
         Wh_Log(L"Task Scheduler unavailable");
-        return result;
+        return nullptr;
     }
     VARIANT empty{};
-    if (FAILED(service->Connect(empty, empty, empty, empty))) return result;
-
+    if (FAILED(service->Connect(empty, empty, empty, empty))) return nullptr;
     com_ptr<ITaskFolder> folder;
-    BSTR folderPath = SysAllocString(L"\\Windhawk\\RestartToOs");
+    BSTR folderPath = SysAllocString(kTaskFolderPath);
     HRESULT hr = service->GetFolder(folderPath, folder.put());
     SysFreeString(folderPath);
-    if (FAILED(hr)) return result;  // not detected yet
+    return SUCCEEDED(hr) ? folder : nullptr;
+}
+
+// Reads the tasks created by the detection: one per system, its description
+// holding the UEFI boot entry name, plus the cleanup task (no description).
+static std::vector<DetectedSystem> EnumerateDetectedSystems() {
+    std::vector<DetectedSystem> result;
+    g_hasCleanupTask = false;
+    com_ptr<ITaskFolder> folder = OpenTaskFolder();
+    if (!folder) return result;  // not detected yet
 
     com_ptr<IRegisteredTaskCollection> tasks;
     if (FAILED(folder->GetTasks(TASK_ENUM_HIDDEN, tasks.put()))) return result;
@@ -956,7 +975,11 @@ static std::vector<DetectedSystem> EnumerateDetectedSystems() {
                 SysFreeString(desc);
             }
         }
-        if (name && !description.empty()) result.push_back({description, name});
+        if (name && wcscmp(name, kCleanupTask) == 0) {
+            g_hasCleanupTask = true;
+        } else if (name && !description.empty()) {
+            result.push_back({description, name});
+        }
         SysFreeString(name);
     }
     std::sort(result.begin(), result.end(),
@@ -994,39 +1017,73 @@ static std::wstring Base64Utf16(std::wstring const& s) {
     return out;
 }
 
-static DWORD RunHidden(std::wstring cmd) {
+static std::wstring SystemPath(PCWSTR relative) {
+    WCHAR dir[MAX_PATH];
+    UINT len = GetSystemDirectoryW(dir, ARRAYSIZE(dir));
+    if (len == 0 || len >= ARRAYSIZE(dir)) return relative;
+    return std::wstring(dir) + L"\\" + relative;
+}
+
+static constexpr DWORD kCancelled = 0xFFFF0001;
+
+// Waits for a process, or until `abortEvent` (if any) is set. Returns its exit code.
+static DWORD WaitProcess(HANDLE process, DWORD timeout, HANDLE abortEvent) {
+    HANDLE handles[2] = {process, abortEvent};
+    DWORD wait = WaitForMultipleObjects(abortEvent ? 2 : 1, handles, FALSE, timeout);
+    if (wait == WAIT_OBJECT_0 + 1) return kCancelled;
+    DWORD code = 1;
+    if (wait == WAIT_OBJECT_0) GetExitCodeProcess(process, &code);
+    return code;
+}
+
+static DWORD RunHidden(std::wstring const& exe, std::wstring const& args, HANDLE abortEvent) {
+    std::wstring cmd = L"\"" + exe + L"\" " + args;
     STARTUPINFOW si{sizeof(si)};
     PROCESS_INFORMATION pi{};
-    if (!CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr,
+    if (!CreateProcessW(exe.c_str(), cmd.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr,
                         nullptr, &si, &pi)) {
         return GetLastError() | 0x80000000;
     }
-    WaitForSingleObject(pi.hProcess, 30000);
-    DWORD code = 1;
-    GetExitCodeProcess(pi.hProcess, &code);
+    DWORD code = WaitProcess(pi.hProcess, 30000, abortEvent);
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
     return code;
 }
 
-static constexpr DWORD kCancelled = 0xFFFF0001;
+static DWORD RunTask(PCWSTR taskName, HANDLE abortEvent) {
+    return RunHidden(SystemPath(L"schtasks.exe"),
+                     L"/run /tn \"" + std::wstring(kTaskFolder) + taskName + L"\"", abortEvent);
+}
+
+// Script of the cleanup task: deletes all the tasks, the folder, and the
+// parent "Windhawk" folder if nothing else uses it.
+static std::wstring CleanupScript() {
+    return L"$s=New-Object -ComObject Schedule.Service;$s.Connect();"
+           L"$f=$s.GetFolder('" + std::wstring(kTaskFolderPath) + L"');"
+           L"foreach($t in @($f.GetTasks(1))){$f.DeleteTask($t.Name,0)};"
+           L"$w=$s.GetFolder('\\Windhawk');$w.DeleteFolder('RestartToOs',0);"
+           L"if($w.GetFolders(0).Count -eq 0 -and $w.GetTasks(1).Count -eq 0){"
+           L"$s.GetFolder('\\').DeleteFolder('Windhawk',0)}";
+}
 
 // Detection, run elevated (the only admin prompt): lists the UEFI boot entries
 // and (re)creates one task per other system. Each task sets BootNext to its
 // entry and restarts; it runs with highest privileges for the current user, so
-// clicking a menu item doesn't need any prompt.
+// clicking a menu item doesn't need any prompt. A last task removes everything
+// when the mod is unloaded (see CleanupTasks).
 static DWORD RunDetection() {
     std::wstring sid = CurrentUserSid();
     if (sid.empty()) return 3;
 
     std::wstring ps =
         L"$ErrorActionPreference='Stop';"
+        L"$sys=[Environment]::SystemDirectory;"
         L"$tp='" + std::wstring(kTaskFolder) + L"';"
         L"Get-ScheduledTask -TaskPath $tp -ErrorAction SilentlyContinue|Unregister-ScheduledTask -Confirm:$false;"
         L"$p=New-ScheduledTaskPrincipal -UserId '" + sid + L"' -LogonType Interactive -RunLevel Highest;"
         L"$s=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries;"
         L"$i=0;"
-        L"foreach($b in ((bcdedit /enum firmware /v)-join\"`n\")-split\"`n\\s*`n\"){"
+        L"foreach($b in ((& \"$sys\\bcdedit.exe\" /enum firmware /v)-join\"`n\")-split\"`n\\s*`n\"){"
         // first GUID = identifier; skip the running Windows boot manager ({bootmgr})
         L"if($b-notmatch'(?m)^\\S+\\s+(\\{[0-9a-fA-F-]{36}\\})'){continue};$id=$Matches[1];"
         L"if($id-eq'{9dea862c-5cdd-4e70-acc1-f32b344d4795}'){continue};"
@@ -1035,12 +1092,18 @@ static DWORD RunDetection() {
         L"if($Matches[1]-match'(?i)\\\\refind\\\\|\\\\EFI\\\\BOOT\\\\BOOT|shell|\\\\mmx64|\\\\fbx64'){continue};"
         L"if($b-notmatch'(?m)^description\\s+(\\S.*?)\\s*$'){continue};$d=$Matches[1];"
         L"$i++;$n=('{0:D2}-'-f$i)+($d-replace'[^\\w.-]','_');"
-        L"$a=New-ScheduledTaskAction -Execute cmd.exe -Argument "
-        L"\"/c bcdedit /set {fwbootmgr} bootsequence $id && shutdown /r /t 0\";"
+        L"$a=New-ScheduledTaskAction -Execute \"$sys\\cmd.exe\" -Argument "
+        // (no quotes around the paths: cmd /c would strip them, and System32 has no spaces)
+        L"\"/c $sys\\bcdedit.exe /set {fwbootmgr} bootsequence $id && $sys\\shutdown.exe /r /t 0\";"
         L"Register-ScheduledTask -TaskPath $tp -TaskName $n -Description $d -Action $a -Principal $p "
         L"-Settings $s -Force|Out-Null};"
+        L"$a=New-ScheduledTaskAction -Execute \"$sys\\WindowsPowerShell\\v1.0\\powershell.exe\" -Argument "
+        L"'-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand " + Base64Utf16(CleanupScript()) + L"';"
+        L"Register-ScheduledTask -TaskPath $tp -TaskName '" + std::wstring(kCleanupTask) + L"' -Action $a "
+        L"-Principal $p -Settings $s -Force|Out-Null;"
         L"exit 0";
 
+    std::wstring powershell = SystemPath(L"WindowsPowerShell\\v1.0\\powershell.exe");
     std::wstring params =
         L"-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand " +
         Base64Utf16(ps);
@@ -1048,7 +1111,7 @@ static DWORD RunDetection() {
     SHELLEXECUTEINFOW sei{sizeof(sei)};
     sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
     sei.lpVerb = L"runas";
-    sei.lpFile = L"powershell.exe";
+    sei.lpFile = powershell.c_str();
     sei.lpParameters = params.c_str();
     sei.nShow = SW_HIDE;
     if (!ShellExecuteExW(&sei)) {
@@ -1058,14 +1121,40 @@ static DWORD RunDetection() {
     }
     DWORD code = 1;
     if (sei.hProcess) {
-        WaitForSingleObject(sei.hProcess, 120000);
-        GetExitCodeProcess(sei.hProcess, &code);
+        code = WaitProcess(sei.hProcess, 120000, g_stopEvent);
         CloseHandle(sei.hProcess);
     }
     return code;
 }
 
+// Runs the cleanup task and waits (a few seconds at most) for the folder to be
+// gone, so that a quick reload (mod update) finds a clean state and scans again.
+static DWORD WINAPI CleanupThread(LPVOID) {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (OpenTaskFolder()) {
+        DWORD code = RunTask(kCleanupTask, nullptr);
+        Wh_Log(L"Cleanup task -> %u", code);
+        for (int i = 0; code == 0 && i < 50 && OpenTaskFolder(); i++) Sleep(200);
+    }
+    CoUninitialize();
+    return 0;
+}
+
+static void CleanupTasks() {
+    if (HANDLE thread = CreateThread(nullptr, 0, CleanupThread, nullptr, 0, nullptr)) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
+}
+
+static bool IsStopping() {
+    return WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0;
+}
+
+// Message box on a worker thread. Not shown while the mod is unloading; if the
+// mod starts unloading while it's open, Wh_ModUninit closes it.
 static void ShowMessage(std::wstring const& text) {
+    if (IsStopping()) return;
     MessageBoxW(nullptr, text.c_str(), IsFrench() ? L"Redémarrer sur un autre OS" : L"Restart to another OS",
                 MB_OK | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND);
 }
@@ -1107,8 +1196,8 @@ static bool Detect() {
 }
 
 // ---------------------------------------------------------------------------
-// "Manage other systems" window: one checkbox per detected system.
-// Plain Win32 window, run on the worker thread with its own message loop.
+// Window shown after a scan: one checkbox per detected system.
+// Plain Win32 window, run on the watcher thread with its own message loop.
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;
 
@@ -1122,7 +1211,6 @@ struct ManageState {
 };
 
 static constexpr int kIdDetectAgain = 1001;
-static std::atomic<HWND> g_manageWindow{nullptr};
 
 static LRESULT CALLBACK ManageWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     auto* state = (ManageState*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
@@ -1156,34 +1244,12 @@ static LRESULT CALLBACK ManageWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-// Per-monitor DPI functions (Windows 10 1607+), loaded dynamically so the mod
-// compiles whatever Windows version the headers target.
-struct DpiApi {
-    HANDLE(WINAPI* setThreadDpiAwarenessContext)(HANDLE) = nullptr;
-    UINT(WINAPI* getDpiForWindow)(HWND) = nullptr;
-    BOOL(WINAPI* systemParametersInfoForDpi)(UINT, UINT, PVOID, UINT, UINT) = nullptr;
-    BOOL(WINAPI* adjustWindowRectExForDpi)(LPRECT, DWORD, BOOL, DWORD, UINT) = nullptr;
-};
-
-static DpiApi LoadDpiApi() {
-    DpiApi api;
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    api.setThreadDpiAwarenessContext =
-        (decltype(api.setThreadDpiAwarenessContext))GetProcAddress(user32, "SetThreadDpiAwarenessContext");
-    api.getDpiForWindow = (decltype(api.getDpiForWindow))GetProcAddress(user32, "GetDpiForWindow");
-    api.systemParametersInfoForDpi =
-        (decltype(api.systemParametersInfoForDpi))GetProcAddress(user32, "SystemParametersInfoForDpi");
-    api.adjustWindowRectExForDpi =
-        (decltype(api.adjustWindowRectExForDpi))GetProcAddress(user32, "AdjustWindowRectExForDpi");
-    return api;
-}
-
 // Shows the window; on OK, `hidden` receives the unchecked systems.
 static ManageAction ShowManageWindow(std::vector<DetectedSystem> const& systems,
                                      std::vector<std::wstring>& hidden) {
+    if (IsStopping()) return ManageAction::Cancel;
     bool fr = IsFrench();
     HINSTANCE instance = (HINSTANCE)&__ImageBase;
-    DpiApi dpiApi = LoadDpiApi();
 
     // Modern control styles (comctl32 v6), using the manifest embedded in shell32.
     WCHAR shell32[MAX_PATH];
@@ -1196,10 +1262,7 @@ static ManageAction ShowManageWindow(std::vector<DetectedSystem> const& systems,
     HANDLE ctx = CreateActCtxW(&actCtx);
     ULONG_PTR cookie = 0;
     if (ctx != INVALID_HANDLE_VALUE) ActivateActCtx(ctx, &cookie);
-    HANDLE previousDpi = nullptr;
-    if (dpiApi.setThreadDpiAwarenessContext) {
-        previousDpi = dpiApi.setThreadDpiAwarenessContext((HANDLE)-4);  // PER_MONITOR_AWARE_V2
-    }
+    DPI_AWARENESS_CONTEXT previousDpi = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     static constexpr wchar_t kClass[] = L"Windhawk_" WH_MOD_ID L"_Manage";
     WNDCLASSEXW wc{sizeof(wc)};
@@ -1224,16 +1287,11 @@ static ManageAction ShowManageWindow(std::vector<DetectedSystem> const& systems,
     if (hwnd) {
         ManageState state;
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)&state);
-        g_manageWindow = hwnd;
 
-        UINT dpi = dpiApi.getDpiForWindow ? dpiApi.getDpiForWindow(hwnd) : 96;
+        UINT dpi = GetDpiForWindow(hwnd);
         auto S = [dpi](int v) { return MulDiv(v, dpi, 96); };
         NONCLIENTMETRICSW ncm{sizeof(ncm)};
-        if (dpiApi.systemParametersInfoForDpi) {
-            dpiApi.systemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0, dpi);
-        } else {
-            SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
-        }
+        SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0, dpi);
         HFONT font = CreateFontIndirectW(&ncm.lfMessageFont);
 
         auto add = [&](PCWSTR cls, PCWSTR text, DWORD ctlStyle, int x, int y, int w, int h, int id) {
@@ -1272,11 +1330,7 @@ static ManageAction ShowManageWindow(std::vector<DetectedSystem> const& systems,
         y += 28 + margin;
 
         RECT rc{0, 0, S(width), S(y)};
-        if (dpiApi.adjustWindowRectExForDpi) {
-            dpiApi.adjustWindowRectExForDpi(&rc, style, FALSE, exStyle, dpi);
-        } else {
-            AdjustWindowRectEx(&rc, style, FALSE, exStyle);
-        }
+        AdjustWindowRectExForDpi(&rc, style, FALSE, exStyle, dpi);
         int w = rc.right - rc.left, h = rc.bottom - rc.top;
         SetWindowPos(hwnd, HWND_TOPMOST, (mi.rcWork.left + mi.rcWork.right - w) / 2,
                      (mi.rcWork.top + mi.rcWork.bottom - h) / 2, w, h, SWP_SHOWWINDOW);
@@ -1290,7 +1344,6 @@ static ManageAction ShowManageWindow(std::vector<DetectedSystem> const& systems,
                 DispatchMessageW(&msg);
             }
         }
-        g_manageWindow = nullptr;
         DeleteObject(font);
 
         result = state.action;
@@ -1310,7 +1363,7 @@ static ManageAction ShowManageWindow(std::vector<DetectedSystem> const& systems,
     }
 
     UnregisterClassW(kClass, instance);
-    if (dpiApi.setThreadDpiAwarenessContext && previousDpi) dpiApi.setThreadDpiAwarenessContext(previousDpi);
+    if (previousDpi) SetThreadDpiAwarenessContext(previousDpi);
     if (ctx != INVALID_HANDLE_VALUE) {
         DeactivateActCtx(0, cookie);
         ReleaseActCtx(ctx);
@@ -1331,7 +1384,7 @@ static void ScanAndChoose() {
         }
         ManageAction action = ShowManageWindow(GetDetected(), hidden);
         if (action == ManageAction::DetectAgain) {
-            Detect();
+            if (!Detect() && IsStopping()) break;
             continue;
         }
         if (action == ManageAction::Ok) {
@@ -1346,10 +1399,9 @@ static void ScanAndChoose() {
 // Worker: restarts through the task of the clicked system.
 static DWORD WINAPI Worker(LPVOID param) {
     std::unique_ptr<std::wstring> taskName((std::wstring*)param);
-    std::wstring cmd = L"schtasks.exe /run /tn \"" + std::wstring(kTaskFolder) + *taskName + L"\"";
-    DWORD code = RunHidden(cmd);
-    Wh_Log(L"%s -> %u", cmd.c_str(), code);
-    if (code != 0) {
+    DWORD code = RunTask(taskName->c_str(), g_stopEvent);
+    Wh_Log(L"Task %s -> %u", taskName->c_str(), code);
+    if (code != 0 && code != kCancelled) {
         ShowMessage(IsFrench() ? L"Impossible de lancer le redémarrage. Désactivez puis réactivez le mod "
                                  L"pour relancer la détection."
                                : L"Could not start the restart. Disable and re-enable the mod to run the "
@@ -1382,7 +1434,7 @@ static IconElement MakeIcon(MenuEntry const& e) {
         }
     }
     FontIcon icon;
-    icon.Glyph(std::wstring(1, e.glyph));
+    icon.Glyph(std::wstring(1, kGlyphRestart));
     return icon;
 }
 
@@ -1587,14 +1639,26 @@ static void UninitOnUiThread(void*) {
         RemoveItems();
         delete g_removers;
         g_removers = nullptr;
-        if (HWND manage = g_manageWindow) PostMessageW(manage, WM_CLOSE, 0, 0);
-        if (g_workerThread) {
-            WaitForSingleObject(g_workerThread, 5000);
-            CloseHandle(g_workerThread);
-            g_workerThread = nullptr;
-        }
     } catch (...) {
     }
+}
+
+// Waits for a thread to end, closing the windows it shows (message box, scan
+// window) until it does.
+static void StopThread(HANDLE& thread) {
+    if (!thread) return;
+    DWORD threadId = GetThreadId(thread);
+    while (WaitForSingleObject(thread, 100) == WAIT_TIMEOUT) {
+        EnumThreadWindows(
+            threadId,
+            [](HWND hwnd, LPARAM) -> BOOL {
+                PostMessageW(hwnd, WM_CLOSE, 0, 0);
+                return TRUE;
+            },
+            0);
+    }
+    CloseHandle(thread);
+    thread = nullptr;
 }
 
 static DWORD WINAPI WatcherThread(LPVOID) {
@@ -1616,10 +1680,12 @@ static DWORD WINAPI WatcherThread(LPVOID) {
         }
     } while (WaitForSingleObject(g_stopEvent, 500) == WAIT_TIMEOUT);
 
-    // Scan when the mod has just been enabled (first install, or disabled then
-    // re-enabled: Wh_ModUninit requests it), not at every Start menu launch.
-    if (initialized && Wh_GetIntValue(L"scanRequested", 1)) {
-        Wh_SetIntValue(L"scanRequested", 0);
+    // Scan when the tasks don't exist: the mod has just been enabled (first
+    // install, or disabled then re-enabled: Wh_ModUninit removes the tasks).
+    // Only once per enabling, even if the admin prompt was declined, so that it
+    // doesn't come back at every sign-in.
+    if (initialized && !g_hasCleanupTask && !Wh_GetIntValue(L"scanAttempted", 0)) {
+        Wh_SetIntValue(L"scanAttempted", 1);
         ScanAndChoose();
     }
     return 0;
@@ -1628,27 +1694,26 @@ static DWORD WINAPI WatcherThread(LPVOID) {
 BOOL Wh_ModInit() {
     LoadSettings();
     LoadHidden();
+    // Values of earlier versions.
+    Wh_DeleteValue(L"scanRequested");
+    Wh_DeleteValue(L"hiddenSystems");
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_watcherThread = CreateThread(nullptr, 0, WatcherThread, nullptr, 0, nullptr);
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    // Disabling the mod (or updating it) requests a new scan on next enable.
     // Not called when the Start menu process simply exits (logoff, shutdown).
-    Wh_SetIntValue(L"scanRequested", 1);
-    if (HWND manage = g_manageWindow) PostMessageW(manage, WM_CLOSE, 0, 0);
-    if (g_stopEvent) SetEvent(g_stopEvent);
-    if (g_watcherThread) {
-        WaitForSingleObject(g_watcherThread, INFINITE);
-        CloseHandle(g_watcherThread);
-        g_watcherThread = nullptr;
-    }
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
-    }
+    SetEvent(g_stopEvent);
+    // Removes the items first, so that no click can start a new worker.
     if (HWND hwnd = FindCoreWindow()) RunFromWindowThread(hwnd, UninitOnUiThread, nullptr);
+    StopThread(g_watcherThread);
+    StopThread(g_workerThread);
+    // Nothing is left on the system once the mod is disabled or uninstalled.
+    CleanupTasks();
+    Wh_DeleteValue(L"scanAttempted");  // scan again when enabled again
+    CloseHandle(g_stopEvent);
+    g_stopEvent = nullptr;
 }
 
 void Wh_ModSettingsChanged() {
