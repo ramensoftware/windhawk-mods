@@ -5,8 +5,8 @@
 // @description     Replaces the classic Win + R dialog with a floating Liquid Glass / Fluent pill launcher, Compact Mini-Pill mode, instant calculator, multi-language Google Translate, and smart app suggestions.
 // @description:vi-VN Làm mới hộp thoại Run (Win + R) với giao diện viên thuốc nổi Liquid Glass / Fluent hiện đại, chế độ thu nhỏ siêu gọn, tính toán nhanh, dịch đa ngôn ngữ (Google Dịch) và gợi ý ứng dụng.
 // @version         5.0.104
-// @author          caotu2k5
-// @github          https://github.com/caotu2k5
+// @author          caotu2005
+// @github          https://github.com/caotu2005
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lcomctl32 -lversion -limm32 -lcomdlg32 -ld2d1 -ldwrite -ladvapi32 -lole32 -luuid -lwindowscodecs
