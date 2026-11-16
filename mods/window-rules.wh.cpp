@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              window-rules-7004-test
-// @name            Window Rules 7004 Test
+// @id              window-rules
+// @name            Window Rules
 // @description     Apply a rule to an app's windows: force position and size, move to a monitor, set opacity, keep on top. Matches executable, class and title.
 // @version         1.1
 // @author          metanoid18
