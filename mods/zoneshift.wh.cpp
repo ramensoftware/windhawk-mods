@@ -76,43 +76,39 @@ By default, ZoneShift targets Wallpaper Engine, common browsers, and messaging a
 /*
 - targetTimezone: Tokyo Standard Time
   $name: Target Time Zone
-  $description: Select the spoofed time zone. Popular presets are provided. Choose "Custom" to enter any Windows or IANA time zone below.
+  $description: 'Select the spoofed time zone. Popular presets are provided. Choose "Custom" to enter any Windows or IANA time zone below.'
   $options:
-    - Tokyo Standard Time: "Tokyo, Japan (UTC+09:00)"
-    - GMT Standard Time: "London, UK (GMT / BST, UTC+00:00 / UTC+01:00)"
-    - UTC: "UTC (Coordinated Universal Time, UTC+00:00)"
-    - W. Europe Standard Time: "Berlin, Paris, Rome, Madrid (CET / CEST, UTC+01:00 / UTC+02:00)"
-    - Eastern Standard Time: "New York, Toronto (US Eastern, UTC-05:00 / UTC-04:00)"
-    - Central Standard Time: "Chicago, Dallas (US Central, UTC-06:00 / UTC-05:00)"
-    - Mountain Standard Time: "Denver (US Mountain, UTC-07:00 / UTC-06:00)"
-    - Pacific Standard Time: "Los Angeles, Seattle (US Pacific, UTC-08:00 / UTC-07:00)"
-    - Hawaiian Standard Time: "Honolulu, Hawaii (UTC-10:00)"
-    - India Standard Time: "New Delhi, Mumbai, Kolkata (IST, UTC+05:30)"
-    - China Standard Time: "Beijing, Shanghai, Hong Kong (UTC+08:00)"
-    - Singapore Standard Time: "Singapore (UTC+08:00)"
-    - Korea Standard Time: "Seoul, South Korea (UTC+09:00)"
-    - AUS Eastern Standard Time: "Sydney, Melbourne (AEST / AEDT, UTC+10:00 / UTC+11:00)"
-    - New Zealand Standard Time: "Auckland, Wellington (NZST / NZDT, UTC+12:00 / UTC+13:00)"
-    - Arabian Standard Time: "Dubai, Abu Dhabi (UTC+04:00)"
-    - Custom: "Custom (Specified below)"
+    - Tokyo Standard Time: 'Tokyo, Japan (UTC+09:00)'
+    - GMT Standard Time: 'London, UK (GMT / BST, UTC+00:00 / UTC+01:00)'
+    - UTC: 'UTC (Coordinated Universal Time, UTC+00:00)'
+    - W. Europe Standard Time: 'Berlin, Paris, Rome, Madrid (CET / CEST, UTC+01:00 / UTC+02:00)'
+    - Eastern Standard Time: 'New York, Toronto (US Eastern, UTC-05:00 / UTC-04:00)'
+    - Central Standard Time: 'Chicago, Dallas (US Central, UTC-06:00 / UTC-05:00)'
+    - Mountain Standard Time: 'Denver (US Mountain, UTC-07:00 / UTC-06:00)'
+    - Pacific Standard Time: 'Los Angeles, Seattle (US Pacific, UTC-08:00 / UTC-07:00)'
+    - Hawaiian Standard Time: 'Honolulu, Hawaii (UTC-10:00)'
+    - India Standard Time: 'New Delhi, Mumbai, Kolkata (IST, UTC+05:30)'
+    - China Standard Time: 'Beijing, Shanghai, Hong Kong (UTC+08:00)'
+    - Singapore Standard Time: 'Singapore (UTC+08:00)'
+    - Korea Standard Time: 'Seoul, South Korea (UTC+09:00)'
+    - AUS Eastern Standard Time: 'Sydney, Melbourne (AEST / AEDT, UTC+10:00 / UTC+11:00)'
+    - New Zealand Standard Time: 'Auckland, Wellington (NZST / NZDT, UTC+12:00 / UTC+13:00)'
+    - Arabian Standard Time: 'Dubai, Abu Dhabi (UTC+04:00)'
+    - Custom: 'Custom (Specified below)'
 - customTimezoneKey: ""
   $name: Custom Time Zone Key / Name
-  $description: If "Custom" is selected above, enter any Windows Time Zone Key Name (e.g. "Alaskan Standard Time") or an IANA identifier (e.g. "Asia/Tokyo", "Europe/London").
+  $description: 'If "Custom" is selected above, enter any Windows Time Zone Key Name (e.g. Alaskan Standard Time) or an IANA identifier (e.g. Asia/Tokyo, Europe/London).'
 - timeShiftMinutes: 0
   $name: Custom Time Shift (Minutes)
-  $description: Additional time offset in minutes added to local time (positive or negative). 0 = normal time for the selected zone. Example: 120 adds 2 hours.
+  $description: 'Additional time offset in minutes added to local time (positive or negative). Set to 0 for normal time for the selected zone (e.g. 120 adds 2 hours).'
 - spoofUtcTime: false
   $name: Shift UTC Time (GetSystemTime)
-  $description: Applies the custom time shift to GetSystemTime / GetSystemTimeAsFileTime as well. Keep OFF for standard timezone spoofing.
+  $description: 'Applies the custom time shift to GetSystemTime / GetSystemTimeAsFileTime as well. Keep OFF for standard timezone spoofing.'
 - debugLogging: false
   $name: Enable Debug Logging
-  $description: Output verbose hook messages to the Windhawk Mod Manager log console.
+  $description: 'Output verbose hook messages to the Windhawk Mod Manager log console.'
 */
 // ==/WindhawkModSettings==
-
-#ifndef WH_MOD_ID
-#define WH_MOD_ID L"zoneshift"
-#endif
 
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
