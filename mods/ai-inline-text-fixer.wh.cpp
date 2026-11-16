@@ -134,7 +134,6 @@ constexpr ULONG_PTR kInjectMarker = 0x57484149;
 constexpr DWORD kMaxWaitMs = 30000;
 constexpr size_t kMaxResponseBytes = 2 * 1024 * 1024;
 constexpr DWORD kDialogThrottleMs = 30000;
-constexpr wchar_t kSpinnerFrames[] = L"|/-\\";
 
 enum class Provider { Gemini, Groq };
 enum class ErrorKind { None, Network, Auth, Model, Quota, Server, Parse, Other };
@@ -302,6 +301,20 @@ std::wstring TrimWide(const std::wstring& s) {
     size_t end = s.size();
     while (end > start && iswspace(s[end - 1])) --end;
     return s.substr(start, end - start);
+}
+
+std::wstring NormalizeComparisonText(const std::wstring& in) {
+    std::wstring out;
+    out.reserve(in.size());
+    for (wchar_t c : in) {
+        if (c == L'\r') continue;
+        if (c == L'\u00A0') {
+            out.push_back(L' ');
+        } else {
+            out.push_back(c);
+        }
+    }
+    return TrimWide(out);
 }
 
 std::string TrimAscii(const std::string& s) {
@@ -777,7 +790,7 @@ void OpenUrl(PCWSTR url) {
 
 void ShowDialog(const std::wstring& text, UINT icon, Provider provider, bool offerKeyPage) {
     if (g_unloading.load()) return;
-    UINT flags = icon | MB_SETFOREGROUND | MB_TOPMOST | (offerKeyPage ? MB_YESNO : MB_OK);
+    UINT flags = icon | MB_TOPMOST | (offerKeyPage ? (MB_YESNO | MB_SETFOREGROUND) : MB_OK);
     int btn = MessageBoxW(nullptr, text.c_str(), L"AI Text Assistant", flags);
     if (offerKeyPage && btn == IDYES && !g_unloading.load()) OpenUrl(ProviderKeyUrl(provider));
 }
@@ -814,6 +827,26 @@ std::wstring ErrorHint(ErrorKind kind, Provider provider) {
 
 constexpr wchar_t kSpinnerClassName[] = L"Windhawk_AI_SpinnerHUD";
 
+UINT GetWindowDpi(HWND hwnd) {
+    if (hwnd) {
+        using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+        static auto pGetDpiForWindow = reinterpret_cast<GetDpiForWindow_t>(
+            GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
+        if (pGetDpiForWindow) {
+            UINT dpi = pGetDpiForWindow(hwnd);
+            if (dpi) return dpi;
+        }
+    }
+    using GetDpiForSystem_t = UINT(WINAPI*)();
+    static auto pGetDpiForSystem = reinterpret_cast<GetDpiForSystem_t>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForSystem"));
+    if (pGetDpiForSystem) {
+        UINT dpi = pGetDpiForSystem();
+        if (dpi) return dpi;
+    }
+    return 96;
+}
+
 LRESULT CALLBACK SpinnerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_ERASEBKGND:
@@ -823,6 +856,10 @@ LRESULT CALLBACK SpinnerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             HDC hdc = BeginPaint(hwnd, &ps);
             RECT rc;
             GetClientRect(hwnd, &rc);
+
+            UINT dpi = GetWindowDpi(hwnd);
+            int fontHeight = MulDiv(-12, dpi, 96);
+            int roundRadius = MulDiv(12, dpi, 96);
 
             HDC memDC = CreateCompatibleDC(hdc);
             HBITMAP memBmp = CreateCompatibleBitmap(hdc, rc.right, rc.bottom);
@@ -835,7 +872,7 @@ LRESULT CALLBACK SpinnerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(70, 75, 82));
             HGDIOBJ oldPen = SelectObject(memDC, borderPen);
             HGDIOBJ oldBrush = SelectObject(memDC, GetStockObject(HOLLOW_BRUSH));
-            RoundRect(memDC, rc.left, rc.top, rc.right, rc.bottom, 12, 12);
+            RoundRect(memDC, rc.left, rc.top, rc.right, rc.bottom, roundRadius, roundRadius);
             SelectObject(memDC, oldPen);
             SelectObject(memDC, oldBrush);
             DeleteObject(borderPen);
@@ -846,7 +883,7 @@ LRESULT CALLBACK SpinnerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             };
             std::wstring text = std::wstring(L"AI thinking ") + kFrames[frame % 4];
 
-            HFONT font = CreateFontW(-12, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+            HFONT font = CreateFontW(fontHeight, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
                                      DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                      CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
             HGDIOBJ oldFont = SelectObject(memDC, font);
@@ -874,6 +911,16 @@ LRESULT CALLBACK SpinnerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     }
 }
 
+HMODULE GetCurrentModModule() {
+    HMODULE hMod = nullptr;
+    GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        (LPCWSTR)&SpinnerWndProc,
+        &hMod
+    );
+    return hMod;
+}
+
 HWND CreateSpinnerHUD(HWND targetWindow) {
     POINT pt = {};
     bool gotCaret = false;
@@ -891,14 +938,17 @@ HWND CreateSpinnerHUD(HWND targetWindow) {
         pt.y += 18;
     }
 
-    constexpr int kW = 120;
-    constexpr int kH = 26;
+    UINT dpi = GetWindowDpi(targetWindow);
+
+    int kW = MulDiv(120, dpi, 96);
+    int kH = MulDiv(26, dpi, 96);
+    int roundRadius = MulDiv(12, dpi, 96);
 
     HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = {sizeof(mi)};
     if (GetMonitorInfoW(hMon, &mi)) {
         if (pt.x + kW > mi.rcWork.right) pt.x = mi.rcWork.right - kW - 5;
-        if (pt.y + kH > mi.rcWork.bottom) pt.y = pt.y - kH - 35;
+        if (pt.y + kH > mi.rcWork.bottom) pt.y = pt.y - kH - MulDiv(35, dpi, 96);
         if (pt.x < mi.rcWork.left) pt.x = mi.rcWork.left + 5;
         if (pt.y < mi.rcWork.top) pt.y = mi.rcWork.top + 5;
     }
@@ -909,11 +959,11 @@ HWND CreateSpinnerHUD(HWND targetWindow) {
         L"AI Thinking",
         WS_POPUP,
         pt.x, pt.y, kW, kH,
-        nullptr, nullptr, GetModuleHandleW(nullptr), nullptr
+        nullptr, nullptr, GetCurrentModModule(), nullptr
     );
     if (!hwnd) return nullptr;
 
-    HRGN rgn = CreateRoundRectRgn(0, 0, kW + 1, kH + 1, 12, 12);
+    HRGN rgn = CreateRoundRectRgn(0, 0, kW + 1, kH + 1, roundRadius, roundRadius);
     SetWindowRgn(hwnd, rgn, TRUE);
     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
     UpdateWindow(hwnd);
@@ -1501,37 +1551,6 @@ void SendCtrlCombo(char c) {
     Sleep(25);
 }
 
-void SendBackspaces(size_t count) {
-    if (count == 0) return;
-    std::vector<INPUT> in(count * 2);
-    for (size_t i = 0; i < count; ++i) {
-        in[i * 2].type = INPUT_KEYBOARD;
-        in[i * 2].ki.wVk = VK_BACK;
-        in[i * 2].ki.dwExtraInfo = kInjectMarker;
-
-        in[i * 2 + 1].type = INPUT_KEYBOARD;
-        in[i * 2 + 1].ki.wVk = VK_BACK;
-        in[i * 2 + 1].ki.dwFlags = KEYEVENTF_KEYUP;
-        in[i * 2 + 1].ki.dwExtraInfo = kInjectMarker;
-    }
-    SendInput(static_cast<UINT>(in.size()), in.data(), sizeof(INPUT));
-}
-
-void SendUnicodeChar(wchar_t c) {
-    INPUT in[2] = {};
-    in[0].type = INPUT_KEYBOARD;
-    in[0].ki.wScan = c;
-    in[0].ki.dwFlags = KEYEVENTF_UNICODE;
-    in[0].ki.dwExtraInfo = kInjectMarker;
-
-    in[1].type = INPUT_KEYBOARD;
-    in[1].ki.wScan = c;
-    in[1].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
-    in[1].ki.dwExtraInfo = kInjectMarker;
-
-    SendInput(2, in, sizeof(INPUT));
-}
-
 void SendUnicodeText(const std::wstring& text) {
     if (text.empty()) return;
     std::vector<INPUT> in;
@@ -1654,7 +1673,7 @@ bool MatchTriggerInString(const std::wstring& typedLower, const TriggerCache& tc
 
 bool StripTrigger(std::wstring& text, const Settings& s, ActionType expectedAction) {
     std::wstring t = text;
-    size_t end = t.find_last_not_of(L" \t\r\n");
+    size_t end = t.find_last_not_of(L" \t\r\n\u00A0");
     if (end == std::wstring::npos) return false;
     t.resize(end + 1);
     std::wstring lower = ToLowerWide(t);
@@ -1676,7 +1695,7 @@ bool StripTrigger(std::wstring& text, const Settings& s, ActionType expectedActi
     if (!CheckTriggerMatch(lower, *targetTrig, cutLen)) return false;
 
     t.resize(t.size() - cutLen);
-    size_t keep = t.find_last_not_of(L" \t");
+    size_t keep = t.find_last_not_of(L" \t\u00A0");
     if (keep == std::wstring::npos) return false;
     t.resize(keep + 1);
     text = t;
@@ -1905,6 +1924,18 @@ void RunFixWorkflow(TriggerInfo trig) {
         if (GetTickCount64() > deadline) { timedOut = true; break; }
 
         if (hwndSpinner) {
+            HWND currFg = GetForegroundWindow();
+            bool isFg = (currFg == trig.foreground || (trig.foreground && IsChild(trig.foreground, currFg)));
+            if (isFg) {
+                if (!IsWindowVisible(hwndSpinner)) {
+                    ShowWindow(hwndSpinner, SW_SHOWNOACTIVATE);
+                }
+            } else {
+                if (IsWindowVisible(hwndSpinner)) {
+                    ShowWindow(hwndSpinner, SW_HIDE);
+                }
+            }
+
             MSG msg;
             while (PeekMessageW(&msg, hwndSpinner, 0, 0, PM_REMOVE)) {
                 TranslateMessage(&msg);
@@ -1947,8 +1978,8 @@ void RunFixWorkflow(TriggerInfo trig) {
         result.error = "Request timed out.";
     }
 
-    bool delivered = DeliverText(trig, finalText, raw);
-    if (!delivered) {
+    bool delivered = !cancelled && DeliverText(trig, finalText, raw);
+    if (!delivered && success) {
         MessageBeep(MB_ICONHAND);
         // Leave result text on clipboard and save for ?undo so user doesn't lose text
         restore.skip = true;
@@ -1957,14 +1988,14 @@ void RunFixWorkflow(TriggerInfo trig) {
             std::lock_guard<std::mutex> lock(g_undoMutex);
             g_lastAction.window = trig.foreground;
             g_lastAction.originalText = text;
-            g_lastAction.expectedFieldText = raw;
+            g_lastAction.expectedFieldText = finalText;
             g_lastAction.timestamp = GetTickCount64();
         }
         NotifyProblemThrottled(
-            L"Could not deliver text (field or focus changed).\n\n"
-            L"Your result text was copied to your clipboard so it is not lost.",
+            L"Could not deliver text (window focus or field content changed).\n\n"
+            L"Your previous clipboard was replaced with the AI result text so it is not lost.",
             s.provider, false);
-    } else if (success) {
+    } else if (delivered && success) {
         std::lock_guard<std::mutex> lock(g_undoMutex);
         g_lastAction.window = trig.foreground;
         g_lastAction.originalText = text;
@@ -1975,7 +2006,7 @@ void RunFixWorkflow(TriggerInfo trig) {
     if (!success && !cancelled) {
         MessageBeep(MB_ICONHAND);
         Wh_Log(L"AI processing failed: %s", Utf8ToWide(result.error).c_str());
-        std::wstring msg = L"Could not complete request; original text was restored.\n\nError: " + Utf8ToWide(result.error);
+        std::wstring msg = L"Could not complete request; original text was retained.\n\nError: " + Utf8ToWide(result.error);
         std::wstring hint = ErrorHint(result.kind, s.provider);
         if (!hint.empty()) msg += L"\n\n" + hint;
         NotifyProblemThrottled(msg, s.provider, result.kind == ErrorKind::Auth);
@@ -2042,11 +2073,18 @@ void RunUndoWorkflow(TriggerInfo trig) {
 
     // Strip trailing undo trigger
     std::wstring stripped = currentField;
+    size_t end = stripped.find_last_not_of(L" \t\r\n\u00A0");
+    if (end != std::wstring::npos) {
+        stripped.resize(end + 1);
+    } else {
+        stripped.clear();
+    }
+
     size_t cutLen = 0;
     if (CheckTriggerMatch(ToLowerWide(stripped), s.triggerUndo, cutLen)) {
         stripped.resize(stripped.size() - cutLen);
     }
-    size_t lastNonWs = stripped.find_last_not_of(L" \t\r\n");
+    size_t lastNonWs = stripped.find_last_not_of(L" \t\r\n\u00A0");
     if (lastNonWs != std::wstring::npos) {
         stripped.resize(lastNonWs + 1);
     } else {
@@ -2054,7 +2092,8 @@ void RunUndoWorkflow(TriggerInfo trig) {
     }
 
     // Verify that current field content matches what was previously delivered/left
-    if (!expectedFieldText.empty() && TrimWide(stripped) != TrimWide(expectedFieldText)) {
+    // Normalize both sides: drop \r, map U+00A0 to space, and trim whitespace
+    if (!expectedFieldText.empty() && NormalizeComparisonText(stripped) != NormalizeComparisonText(expectedFieldText)) {
         Wh_Log(L"Undo ignored: field content does not match last result.");
         CollapseSelection();
         MessageBeep(MB_ICONWARNING);
@@ -2114,15 +2153,24 @@ bool OnKeyDown(const KBDLLHOOKSTRUCT& k) {
     g_lastInputTick = now;
 
     if (GetTickCount64() < g_swallowUntil.load()) {
-        if (vk == VK_ESCAPE) g_cancel = true;
-        if (IsModifierVk(vk) || IsKeyDown(VK_MENU) || IsKeyDown(VK_LWIN) || IsKeyDown(VK_RWIN)) {
+        HWND target = g_swallowWindow.load();
+        HWND fg = GetForegroundWindow();
+        bool isTargetInFront = (target && (fg == target || IsChild(target, fg)));
+
+        if (!isTargetInFront) {
             return false;
         }
-        HWND target = g_swallowWindow.load();
-        if (!target || GetForegroundWindow() == target) {
+
+        if (vk == VK_ESCAPE) {
+            g_cancel = true;
             return true;
         }
-        return false;
+
+        if (IsKeyDown(VK_MENU) || IsKeyDown(VK_LWIN) || IsKeyDown(VK_RWIN)) {
+            return false;
+        }
+
+        return true;
     }
     if (g_busy.load()) return false;
 
@@ -2215,14 +2263,7 @@ DWORD WINAPI HookThreadProc(LPVOID) {
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
     g_hookThreadId = GetCurrentThreadId();
 
-    HMODULE hMod = NULL;
-    GetModuleHandleExW(
-        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-        (LPCWSTR)&LowLevelKeyboardProc,
-        &hMod
-    );
-
-    g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, hMod, 0);
+    g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetCurrentModModule(), 0);
     SetEvent(g_hookReady);
     if (!g_hook) {
         Wh_Log(L"SetWindowsHookExW failed: %u", GetLastError());
@@ -2254,7 +2295,7 @@ BOOL WhTool_ModInit() {
 
     WNDCLASSEXW wc = {sizeof(wc)};
     wc.lpfnWndProc = SpinnerWndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.hInstance = GetCurrentModModule();
     wc.lpszClassName = kSpinnerClassName;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     RegisterClassExW(&wc);
@@ -2336,7 +2377,7 @@ void WhTool_ModUninit() {
 
     // 3. Close open message boxes and wait indefinitely for all worker threads
     JoinAllWorkers();
-    UnregisterClassW(kSpinnerClassName, GetModuleHandleW(nullptr));
+    UnregisterClassW(kSpinnerClassName, GetCurrentModModule());
     Wh_Log(L"AI Text Assistant tool mod uninitialized cleanly.");
 }
 
