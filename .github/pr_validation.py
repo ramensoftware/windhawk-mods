@@ -325,7 +325,8 @@ def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
 
 @cache
 def get_existing_mod_versions(mod_id: str) -> Optional[list[str]]:
-    """Fetch list of existing versions for a mod, or None if mod doesn't exist."""
+    """Fetch list of existing versions for a mod, oldest first, or None if mod
+    doesn't exist."""
     try:
         url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{urllib.parse.quote(mod_id)}/versions.json'
         data = json.loads(fetch_url(url))
@@ -334,6 +335,15 @@ def get_existing_mod_versions(mod_id: str) -> Optional[list[str]]:
         if e.code == 404:
             return None
         raise
+
+
+def parse_version(version: str) -> tuple[int, ...]:
+    """Parse a version of numbers and dots into a tuple that compares
+    numerically. Trailing zeros are dropped, so that 1.2 and 1.2.0 are equal."""
+    parts = [int(x) for x in version.split('.')]
+    while len(parts) > 1 and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts)
 
 
 def at(key_name: str) -> str:
@@ -622,22 +632,43 @@ class ModMetadataValidator:
             prop.add_error(f'@@ must be between {min_len} and {max_len} characters')
 
     def validate_version(self):
-        """Validate version format."""
+        """Validate version format, and that it's newer than the latest
+        version."""
         prop = self.property('version', warn_if_missing=True)
         if not prop:
             return
 
-        prop.validate_match(
-            r'([0-9]+\.)*[0-9]+',
-            '@@ must contain only numbers and dots',
-        )
+        version_pattern = r'([0-9]+\.)*[0-9]+'
+        if not re.fullmatch(version_pattern, prop.value):
+            prop.add_error('@@ must contain only numbers and dots')
+            return
 
-        # Check if version is already used
-        if self.existing_versions and prop.value in self.existing_versions:
+        if not self.existing_versions:
+            return
+
+        previous_versions = ', '.join(self.existing_versions)
+
+        if prop.value in self.existing_versions:
             prop.add_error(
                 f'@@ "{prop.value}" is already used. Please use a new, unused'
                 ' version.\n'
-                f'Previous versions: {", ".join(self.existing_versions)}'
+                f'Previous versions: {previous_versions}'
+            )
+            return
+
+        # Prerelease versions, such as 1.0-beta, are skipped.
+        release_versions = [
+            v for v in self.existing_versions if re.fullmatch(version_pattern, v)
+        ]
+        if not release_versions:
+            return
+
+        latest_version = release_versions[-1]
+        if parse_version(prop.value) <= parse_version(latest_version):
+            prop.add_error(
+                f'@@ "{prop.value}" must be newer than the latest version'
+                f' "{latest_version}".\n'
+                f'Previous versions: {previous_versions}'
             )
 
     def validate_author(self):
