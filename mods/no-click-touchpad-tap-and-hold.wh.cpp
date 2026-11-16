@@ -20,50 +20,54 @@
 /*
 # No-Click Touchpad: Tap & Hold
 
-For laptops whose touchpad no longer clicks physically (worn hinge, broken switch,
-or a battery pushing the pad up), or for anyone who prefers tapping to pressing.
+Right-click and drag on a touchpad that can't be pressed down, using only taps and
+holds. Useful when the pad no longer clicks (a worn hinge, a failed switch or a swollen
+battery are common causes) or when tapping is simply preferred.
 
-A quick one-finger tap in the bottom right (or bottom left) corner of the touchpad
-becomes a right click. Windows only honors its right-click zone for physical presses,
-so tapping there normally just left clicks.
+## Right-click
+Tap the bottom right corner of the touchpad with one finger to right-click. The bottom
+left corner can be chosen in the settings instead. Windows only right-clicks in that
+corner on a physical press, so without the mod a tap there is a left click.
 
-For dragging, put two fingers down, hold still for a moment, then move them. The left
-button stays held while you move, so you can select text or move windows around.
-Moving two fingers straight away still scrolls like normal. Once the hold is long
-enough, a ring pops up around the pointer and stays there until you lift, so you can
-tell the drag is on before you start moving.
+## Drag
+Place two fingers on the touchpad and hold them still for a moment. A ring appears
+around the pointer to show the left button is now held. Move the fingers to select
+text or drag a window, then lift them to release. Moving two fingers right away still
+scrolls as usual.
 
-Works with any Windows Precision Touchpad (Synaptics, ELAN, Alps, Goodix, Surface and
-so on). Older non-precision touchpads on vendor-only drivers don't send the raw finger
-positions this mod needs.
+![Selecting text with a two-finger drag, ring around the pointer](https://raw.githubusercontent.com/mario0318/windhawk-mods/readme-images/no-click-touchpad-tap-and-hold/drag-ring-select-1.png)
 
-The corner tap builds on Windows' own tap to click, so keep "Tap with a single finger
-to single-click" turned on in Settings > Bluetooth & devices > Touchpad. You'll
-probably want to turn off "Tap with two fingers to right-click" and "Tap twice and
-drag" there though.
+![The ring stays on the pointer until the fingers lift](https://raw.githubusercontent.com/mario0318/windhawk-mods/readme-images/no-click-touchpad-tap-and-hold/drag-ring-select-2.png)
 
-If you also use Touchpad Relaxed Hand Tracking, leave its two-finger option off, since
-both mods would be handling the same two fingers.
+## Requirements
+A Windows Precision Touchpad (Synaptics, ELAN, Alps, Goodix, Surface and others).
+Older touchpads that rely on vendor-only drivers don't provide the raw finger positions
+the mod reads.
+
+The corner tap builds on Windows' tap to click, so "Tap with a single finger to
+single-click" needs to stay on in Settings > Bluetooth & devices > Touchpad. Turning off
+"Tap with two fingers to right-click" and "Tap twice and drag" there is recommended.
+
+If Touchpad Relaxed Hand Tracking is also installed, leave its two-finger option off so
+the two mods don't both act on the same fingers.
 
 ## How it works
-The mod reads raw finger positions from the touchpad (HID Raw Input) and, while you're
-touching the pad and for a second after, watches mouse events with a low-level hook.
-When Windows turns a corner tap into a left click, the
-click is swapped for a right click. A resting palm is ignored, as long as the touchpad
-reports it as one.
+The mod reads raw finger positions from the touchpad through HID Raw Input. While the
+touchpad is being touched, and for a second afterwards, a low-level mouse hook watches
+for the left click Windows produces from a corner tap and replaces it with a right
+click. A resting palm is ignored when the touchpad reports it as a palm.
 
-Two fingers held still start a drag that the mod drives itself, and Windows' scroll
-events are dropped for the duration of the drag. Apps that scroll with the touchpad
-directly instead of with scroll events (browsers, File Explorer and most newer apps)
-can still scroll a little while you drag.
+During a drag the mod moves the pointer itself and drops Windows' scroll events. Apps
+that read the touchpad directly to scroll (browsers, File Explorer and most newer apps)
+may still scroll slightly while dragging.
 
-The ring is a small always-on-top window that clicks pass straight through. It only
-exists on screen while a drag is on, and follows the pointer until you lift.
+The ring is a small always-on-top window that clicks pass through, shown only while a
+drag is active.
 
-It runs as a Windhawk tool mod in its own background process, and doesn't inject into
-or change any other program. On Windhawk 2.0 that process runs with UIAccess, so the
-mod also works over windows of apps running as administrator. On Windhawk 1.x it
-doesn't, so neither the corner tap nor the drag works over those windows.
+It runs as a Windhawk tool mod in its own process and doesn't inject into other
+programs. On Windhawk 2.0 that process runs with UIAccess, so it also works over
+windows of apps running as administrator. On Windhawk 1.x it doesn't, and neither
+feature works over those windows.
 */
 // ==/WindhawkModReadme==
 
