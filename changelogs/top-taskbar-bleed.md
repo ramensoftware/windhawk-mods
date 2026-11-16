@@ -1,3 +1,11 @@
+## 1.3.0 ([Nov 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/985d9975b2fea09fbda6977ee6f3c6c555212c5f/mods/top-taskbar-bleed.wh.cpp))
+
+* New “Separator line” settings: an optional line along the edge of the bleed that meets the window, as a seam between the bleed and the title bar
+* Separator color follows the bleed with a configurable contrast (same hue, lighter on a dark bleed, darker on a light one), or a fixed #RRGGBB color, or “accent” for the Windows accent color; opacity configurable
+* Separator styles: continuous, dashed, dot-dash, dotted, with thickness, dash and gap lengths in physical pixels at any display scaling
+* The separator sits on the correct edge for top, bottom, left and right taskbars, including frames rotated by vertical-taskbar mods, follows the taskbar when it moves, and follows a Taskbar Styler margin on the panel
+* README: separator documented, settings listed, Styler target Line#TaskbarBleedSeparator
+
 ## 1.2.1 ([Nov 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/098da0cadd3d85ce8a87e9a7d8021e0547a3a615/mods/top-taskbar-bleed.wh.cpp))
 
 * A Windows mode or accent change while a bleed is showing no longer leaves the taskbar with a background computed for the previous theme: the taskbar’s background element is kept on the Windows mode’s theme while the mod forces the panel’s theme on the rest of the bar

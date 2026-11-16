@@ -2,7 +2,7 @@
 // @id              top-taskbar-bleed
 // @name            Top Taskbar Bleed
 // @description     Bleeds the color of a maximized window's title bar into a top-docked taskbar behind the task buttons
-// @version         1.2.1
+// @version         1.3.0
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
@@ -58,28 +58,43 @@ How it works:
   taskbar background and below the buttons. The panel mirrors the title bar:
   window changes (switching, maximizing, minimizing) are picked up from window
   events and applied on the next composed frame, and the title bar is
-  re-sampled in
-  between - every **Poll interval** (250 ms by default) while it is static,
-  every 25 ms while it is changing - so a title bar that recolors in place
-  (focus fade, tab switch, app theme change) is followed frame by frame. With
-  Windows animations on, a window being zoomed into place isn't committed
-  until its title bar has actually landed, so the panel never flashes the background
-  behind it; with animations off the first sample is applied as is.
+  re-sampled in between - every **Poll interval** (250 ms by default) while it
+  is static, every 25 ms while it is changing - so a title bar that recolors
+  in place (focus fade, tab switch, app theme change) is followed frame by
+  frame. With Windows animations on, a window being zoomed into place isn't
+  committed until its title bar has actually landed, so the panel never
+  flashes the background behind it; with animations off the first sample is
+  applied as is.
+- An optional **separator line** runs along the edge of the bleed that
+  meets the window - the bottom of a top taskbar, the top of a bottom one,
+  the window-facing side of a vertical one - as a visual seam between the
+  bleed and the title bar. Its color is the bleed's own tone set off by the
+  **Contrast** setting (same hue, lighter on a dark bleed, darker on a light
+  one: black gives mid gray, white light gray), or a fixed `#RRGGBB` color,
+  or `accent` for the Windows accent color; continuous, dashed, dot-dash or
+  dotted, with the thickness, dash and gap lengths and the opacity
+  configurable (pixel values are physical pixels, whatever the display
+  scaling). It shows only while a bleed does.
 
 Supports multiple monitors (each taskbar follows its own monitor).
 
-Settings: **Poll interval** (how often a static title bar is re-checked; window
-changes are event-driven regardless), **Excluded programs** (programs whose
-windows should never trigger the bleed), **Custom colors** (programs whose
-maximized windows bleed a fixed `#RRGGBB` color instead of their sampled title
-bar - for an app whose top rows don't show its real title bar color: a custom
-frame, a hairline, content drawn at the very top), **Transparent taskbar when nothing is
-maximized** (the taskbar's own background and border line are hidden, so the
-wallpaper shows through whenever no bleed is showing - the taskbar is then
-either bled or transparent, never stock; a taskbar the mod leaves idle, such
-as a bottom taskbar without **Any taskbar position**, keeps its background),
-and the experimental **Gradient
-bleed** and **Any taskbar position** toggles described above.
+Settings:
+
+- **Poll interval**: how often a static title bar is re-checked; window
+  changes are event-driven regardless.
+- **Excluded programs**: programs whose windows never trigger the bleed.
+- **Custom colors**: programs whose maximized windows bleed a fixed `#RRGGBB`
+  color instead of their sampled title bar - for an app whose top rows don't
+  show its real title bar color (a custom frame, a hairline, content drawn at
+  the very top).
+- **Separator line**: described above.
+- **Transparent taskbar when nothing is maximized**: the taskbar's own
+  background and border line are hidden, so the wallpaper shows through
+  whenever no bleed is showing - the taskbar is then either bled or
+  transparent, never stock. A taskbar the mod leaves idle (a bottom taskbar
+  with **Any taskbar position** off) keeps its background.
+- Experimental **Gradient bleed** and **Any taskbar position**: described
+  above.
 
 A program is named by its executable (`chrome.exe`). A program that keeps
 another one's executable name - a browser fork like Helium, which runs as
@@ -93,7 +108,9 @@ Target `Border#TaskbarBleedPanel` and set, for example, `Margin=4,4,4,0` or
 `CornerRadius=8,8,0,0` (on a top taskbar the panel's bottom edge meets the
 window, so the rounded corners are normally the top ones; on a bottom taskbar
 it is the other way round). Leave `Background` and `Opacity` alone - the mod
-drives those (the background is a gradient brush).
+drives those (the background is a gradient brush). The separator line is
+`Line#TaskbarBleedSeparator`, right above the panel; the mod drives its
+geometry, stroke, dashes and opacity.
 
 ## Notes
 
@@ -162,6 +179,35 @@ licensed under the GNU GPL v3.0. This mod is published under the same license.
       $description: "Hex color (#RRGGBB) bled for this program's maximized windows instead of the sampled title bar color."
   $name: Custom colors
   $description: Programs whose title bar is not sampled. For an app whose top rows don't show its real title bar color (a custom frame, a hairline, content drawn at the very top), set the color to bleed here.
+- Separator:
+  - Enabled: false
+    $name: Show
+    $description: Draw a line along the edge of the bleed that meets the window, as a visual separator between the bleed and the window's title bar. Shown only while a bleed is.
+  - Style: solid
+    $name: Style
+    $options:
+    - solid: Continuous
+    - dashed: Dashed
+    - dotdash: Dot-dash
+    - dotted: Dotted
+  - Thickness: 1
+    $name: Thickness (px)
+    $description: Physical pixels, whatever the display scaling.
+  - Dash: 6
+    $name: Dash length (px)
+    $description: Length of a dash, for the dashed and dot-dash styles.
+  - Gap: 12
+    $name: Gap length (px)
+    $description: Space between dashes or dots.
+  - Contrast: 35
+    $name: Contrast (%)
+    $description: How far the line's tone is set off from the bleed color. The line keeps the bleed's hue and is made lighter on a dark bleed, darker on a light one. Ignored when a color is set below.
+  - Color: ""
+    $name: Color
+    $description: "A fixed color for the line instead of the tone set off from the bleed: #RRGGBB, or \"accent\" for the Windows accent color. Empty: follow the bleed."
+  - Opacity: 30
+    $name: Opacity (%)
+  $name: Separator line
 - TransparentIdle: false
   $name: Transparent taskbar when nothing is maximized
   $description: Hide the taskbar's own background and border line, so the wallpaper shows through whenever no bleed is showing. The bleed covers the taskbar as usual while a window is maximized.
@@ -186,7 +232,9 @@ licensed under the GNU GPL v3.0. This mod is published under the same license.
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.h>
 
 #include <algorithm>
@@ -210,6 +258,7 @@ namespace wu = winrt::Windows::UI;
 namespace wux = winrt::Windows::UI::Xaml;
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
+namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 // ============================================================================
 // Settings
@@ -233,6 +282,18 @@ struct Settings {
     bool gradient = false;                        // experimental: four-point gradient instead of one color
     bool anyDock = false;                         // experimental: paint bottom/left/right taskbars too
     bool transparentIdle = false;                 // hide the taskbar background (and stroke) while no panel shows
+    struct Separator {
+        bool enabled = false;
+        int style = 0;         // 0 solid, 1 dashed, 2 dot-dash, 3 dotted
+        double thickness = 1;  // px
+        double dash = 6;       // px
+        double gap = 12;       // px
+        int contrast = 35;     // %
+        int colorMode = 0;     // 0 set off from the bleed, 1 fixed color, 2 Windows accent color
+        Rgb color{};           // the fixed color (colorMode 1)
+        int opacity = 30;      // %
+        bool operator==(const Separator&) const = default;
+    } separator;
 };
 
 std::mutex g_settingsMutex;
@@ -269,14 +330,18 @@ bool ProcessMatches(const std::wstring& pattern, const std::wstring& pathLower) 
     return pathLower.find(pattern) != std::wstring::npos;
 }
 
-// "#RRGGBB" / "RRGGBB" (an "#AARRGGBB" alpha is ignored); spaces around it allowed.
-bool ParseHexColor(const wchar_t* text, Rgb& out) {
+std::wstring Trimmed(const wchar_t* text) {
     std::wstring t = text ? text : L"";
     while (!t.empty() && iswspace(t.back())) t.pop_back();
     size_t i = 0;
     while (i < t.size() && iswspace(t[i])) i++;
-    if (i < t.size() && t[i] == L'#') i++;
-    std::wstring hex = t.substr(i);
+    return t.substr(i);
+}
+
+// "#RRGGBB" / "RRGGBB" (an "#AARRGGBB" alpha is ignored); spaces around it allowed.
+bool ParseHexColor(const wchar_t* text, Rgb& out) {
+    std::wstring hex = Trimmed(text);
+    if (!hex.empty() && hex[0] == L'#') hex = hex.substr(1);
     if (hex.size() == 8) hex = hex.substr(2);
     if (hex.size() != 6) return false;
     int v[6];
@@ -313,6 +378,29 @@ void LoadSettings() {
     s.gradient = Wh_GetIntSetting(L"Experimental.Gradient") != 0;
     s.anyDock = Wh_GetIntSetting(L"Experimental.AnyDock") != 0;
     s.transparentIdle = Wh_GetIntSetting(L"TransparentIdle") != 0;
+    s.separator.enabled = Wh_GetIntSetting(L"Separator.Enabled") != 0;
+    {
+        auto style = WindhawkUtils::StringSetting::make(L"Separator.Style");
+        s.separator.style = wcscmp(style.get(), L"dashed") == 0    ? 1
+                            : wcscmp(style.get(), L"dotdash") == 0 ? 2
+                            : wcscmp(style.get(), L"dotted") == 0  ? 3
+                                                                   : 0;
+    }
+    s.separator.thickness = std::clamp(Wh_GetIntSetting(L"Separator.Thickness"), 1, 16);
+    s.separator.dash = std::clamp(Wh_GetIntSetting(L"Separator.Dash"), 1, 200);
+    s.separator.gap = std::clamp(Wh_GetIntSetting(L"Separator.Gap"), 1, 200);
+    s.separator.contrast = std::clamp(Wh_GetIntSetting(L"Separator.Contrast"), 0, 100);
+    {
+        auto color = WindhawkUtils::StringSetting::make(L"Separator.Color");
+        std::wstring text = Trimmed(color.get());
+        if (_wcsicmp(text.c_str(), L"accent") == 0) {
+            s.separator.colorMode = 2;
+        } else if (!text.empty()) {
+            if (ParseHexColor(text.c_str(), s.separator.color)) s.separator.colorMode = 1;
+            else Wh_Log(L"separator color ignored: \"%s\" is not #RRGGBB or \"accent\"", color.get());
+        }
+    }
+    s.separator.opacity = std::clamp(Wh_GetIntSetting(L"Separator.Opacity"), 0, 100);
 
     std::lock_guard lock(g_settingsMutex);
     g_settings = std::move(s);
@@ -585,6 +673,12 @@ struct Island {
     wuxc::Border panel{nullptr};
     wuxm::LinearGradientBrush brush{nullptr};
     std::vector<wuxm::GradientStop> stops;  // kGradientPoints + 2: edge copies of the outer points
+    wuxs::Line separator{nullptr};          // Line#TaskbarBleedSeparator, right above the panel in the tree
+    wuxm::LinearGradientBrush separatorBrush{nullptr};
+    std::vector<wuxm::GradientStop> separatorStops;
+    winrt::event_token separatorSizeToken{};  // panel.SizeChanged: relayout the line
+    Settings::Separator separatorStyle;       // what the line was last styled with
+    int separatorEdge = -1;                   // edge the line was last laid out on (log on change)
     bool shown = false;
     bool strokeHidden = false;  // the mod collapsed the stroke; strokeOriginal is what to put back
     bool fillHidden = false;    // the mod zeroed the fill's opacity; fillOriginal is what to put back
@@ -1061,19 +1155,31 @@ void CheckStalePeek(const std::vector<HWND>& taskbars, ULONGLONG now) {
     }
 }
 
-// A left/right taskbar (vertical-taskbar mods). The panel rotates with the
-// taskbar's frame there, so a horizontal gradient would run along the bar;
-// vertical taskbars always get the flat color.
-bool IsTaskbarVertical(HWND taskbar) {
+// Which screen edge a taskbar sits on: the taskbar rect against its monitor's.
+// A left/right taskbar comes from a vertical-taskbar mod; the panel rotates
+// with the taskbar's frame there, so a horizontal gradient would run along
+// the bar, and vertical taskbars always get the flat color.
+enum class Dock { Top, Bottom, Left, Right };
+
+Dock DockOf(HWND taskbar) {
     RECT tb;
-    return taskbar && GetWindowRect(taskbar, &tb) && (tb.bottom - tb.top) > (tb.right - tb.left);
+    MONITORINFO mi{sizeof(mi)};
+    HMONITOR hmon = taskbar ? MonitorFromWindow(taskbar, MONITOR_DEFAULTTONEAREST) : nullptr;
+    if (!hmon || !GetWindowRect(taskbar, &tb) || !GetMonitorInfoW(hmon, &mi)) return Dock::Bottom;
+    const RECT& m = mi.rcMonitor;
+    if ((tb.right - tb.left) >= (tb.bottom - tb.top)) {
+        return std::abs(tb.top - m.top) < std::abs(tb.bottom - m.bottom) ? Dock::Top : Dock::Bottom;
+    }
+    return std::abs(tb.left - m.left) < std::abs(tb.right - m.right) ? Dock::Left : Dock::Right;
 }
 
-bool IsTaskbarTopDocked(HWND taskbar, const RECT& mon) {
-    RECT tb;
-    if (!taskbar || !GetWindowRect(taskbar, &tb)) return false;
-    bool horizontal = (tb.right - tb.left) >= (tb.bottom - tb.top);
-    return horizontal && std::abs(tb.top - mon.top) < std::abs(tb.bottom - mon.bottom);
+bool IsTaskbarVertical(HWND taskbar) {
+    Dock d = DockOf(taskbar);
+    return d == Dock::Left || d == Dock::Right;
+}
+
+bool IsTaskbarTopDocked(HWND taskbar) {
+    return DockOf(taskbar) == Dock::Top;
 }
 
 // The strip sampled across the window's title bar: its first four visible
@@ -1515,7 +1621,7 @@ void ProcessTaskbar(HWND taskbar, const EnumCtx& ctx, bool& anyTarget) {
         return;
     }
 
-    if (!ctx.settings->anyDock && !IsTaskbarTopDocked(taskbar, mi.rcMonitor)) {
+    if (!ctx.settings->anyDock && !IsTaskbarTopDocked(taskbar)) {
         if (!st.notTopLogged) Wh_Log(L"taskbar %p: not docked at top, idle", taskbar);
         Deactivate(st, taskbar);
         st.notTopLogged = true;
@@ -2056,20 +2162,232 @@ std::shared_ptr<Island> FindIslandByFrameId(void* frameId) {
     return nullptr;
 }
 
-// The panel's background is a horizontal LinearGradientBrush: stops at 20/40/
-// 60/80% carry the sampled points and the stops at 0% and 100% repeat the outer
-// ones, so the gradient continues flat to the edges. Only the stop colors are
-// ever touched. No animations: brush and opacity are plain local values. (A
-// storyboard's held value would override local sets, so none are ever used.)
+// The panel's background (and the separator's stroke) is a horizontal
+// LinearGradientBrush with kGradientPoints + 2 stops: the four points at
+// 20/40/60/80%, and copies of the outer two at 0 and 100% so the gradient
+// runs flat to the edges. Only the stop colors are ever touched, and they
+// are plain local values, no animations (a storyboard's held value would
+// override local sets). The stops are kept for recoloring.
+wuxm::LinearGradientBrush MakeGradientBrush(std::vector<wuxm::GradientStop>& stops) {
+    wuxm::LinearGradientBrush brush;
+    brush.StartPoint(wf::Point{0, 0});
+    brush.EndPoint(wf::Point{1, 0});
+    for (int i = 0; i < kGradientPoints + 2; i++) {
+        wuxm::GradientStop stop;
+        stop.Offset(i == 0 ? 0.0 : i == kGradientPoints + 1 ? 1.0 : (double)i / (kGradientPoints + 1));
+        stop.Color(wu::Color{255, 0, 0, 0});
+        brush.GradientStops().Append(stop);
+        stops.push_back(stop);
+    }
+    return brush;
+}
+
+void WriteGradient(std::vector<wuxm::GradientStop>& stops, const Gradient& g) {
+    if (stops.size() != kGradientPoints + 2) return;
+    stops[0].Color(ToColor(g[0]));
+    for (int i = 0; i < kGradientPoints; i++) stops[i + 1].Color(ToColor(g[i]));
+    stops[kGradientPoints + 1].Color(ToColor(g[kGradientPoints - 1]));
+}
+
 void SetPanelGradient(Island& isl, const Gradient& g) {
-    if (!isl.brush || isl.stops.size() != kGradientPoints + 2) return;
-    isl.stops[0].Color(ToColor(g[0]));
-    for (int i = 0; i < kGradientPoints; i++) isl.stops[i + 1].Color(ToColor(g[i]));
-    isl.stops[kGradientPoints + 1].Color(ToColor(g[kGradientPoints - 1]));
+    if (isl.brush) WriteGradient(isl.stops, g);
 }
 
 void SetPanelVisible(Island& isl, bool visible) {
     if (isl.panel) isl.panel.Opacity(visible ? 1.0 : 0.0);
+}
+
+// ---- Separator line ---------------------------------------------------------
+// An optional line along the edge of the bleed that meets the window (bottom
+// of a top taskbar, top of a bottom one, right of a left one, left of a right
+// one), where the taskbar draws its own BackgroundStroke on the other edge. A
+// Shapes.Line right above the panel in the tree, with the panel's gradient
+// brush shape but each stop set off from the bleed color: same hue, lighter
+// on a dark bleed, darker on a light one, by the Contrast setting (black ->
+// mid gray, white -> light gray, light gray -> dark gray, dark gray -> light
+// gray) - or a fixed color, or the Windows accent color. Dashes are a
+// StrokeDashArray in thickness units. Visible with the panel only, at the
+// set opacity.
+
+int PerceivedBrightness(Rgb c);  // adaptive theme section
+
+// The bleed's tone moved `contrast` percent of the luminance scale toward
+// white (dark bleed) or black (light bleed), hue kept: each channel is blended
+// toward 255 or 0 by the fraction that produces that luminance shift.
+Rgb SeparatorColor(Rgb c, int contrast) {
+    double l = PerceivedBrightness(c) / 255.0;
+    double k = contrast / 100.0;
+    bool lighter = l < 0.5;
+    double target = lighter ? std::min(1.0, l + k) : std::max(0.0, l - k);
+    double room = lighter ? 1.0 - l : l;
+    double t = room > 1e-6 ? std::abs(target - l) / room : 0.0;
+    auto mix = [&](int v) {
+        double to = lighter ? 255.0 : 0.0;
+        return (int)std::lround(v + (to - v) * t);
+    };
+    return Rgb{mix(c.r), mix(c.g), mix(c.b)};
+}
+
+// Pixel settings are physical pixels: XAML units are scaled by the
+// rasterization scale, so a 1px line at 150% would be 1.5 units wide and
+// straddle two pixel rows. One over the scale is one physical pixel.
+double PixelUnit(Island& isl) try {
+    if (auto xr = isl.panel ? isl.panel.XamlRoot() : nullptr) {
+        double scale = xr.RasterizationScale();
+        if (scale > 0) return 1.0 / scale;
+    }
+    return 1.0;
+} catch (...) {
+    return 1.0;
+}
+
+// Places the line along the window-facing edge of the panel's cell. The edge
+// is found in the panel's own coordinates: a vertical taskbar's frame may be
+// rotated (vertical-taskbar mods), so XAML +x/+y are mapped to root space
+// through TransformToVisual and the edge whose outward side points at the
+// window is taken. The stroke width is set here too, from the same scaled
+// thickness as the position, so a display-scale change keeps them in step.
+void LayoutSeparator(Island& isl) try {
+    if (!isl.separator || !isl.panel) return;
+    double w = isl.panel.ActualWidth(), h = isl.panel.ActualHeight();
+    double t = isl.separatorStyle.thickness * PixelUnit(isl);
+    if (w <= 0 || h <= 0) return;
+    isl.separator.StrokeThickness(t);  // a no-op when unchanged
+    // The line shares the panel's cell but not its Margin (a Styler style):
+    // the panel's edges in the line's own coordinates.
+    double ox = 0, oy = 0;
+    try {
+        auto origin = isl.panel.TransformToVisual(isl.separator).TransformPoint(wf::Point{0, 0});
+        ox = origin.X, oy = origin.Y;
+    } catch (...) {
+    }
+
+    Dock dock = DockOf(isl.hwnd);
+    double dx = dock == Dock::Left ? 1 : dock == Dock::Right ? -1 : 0;  // toward the window, in root space
+    double dy = dock == Dock::Top ? 1 : dock == Dock::Bottom ? -1 : 0;
+    double ax = 1, ay = 0, bx = 0, by = 1;  // XAML +x and +y in root space (identity if the mapping fails)
+    try {
+        if (auto xr = isl.panel.XamlRoot()) {
+            auto tr = isl.panel.TransformToVisual(xr.Content());
+            auto o = tr.TransformPoint(wf::Point{0, 0});
+            auto px = tr.TransformPoint(wf::Point{1, 0});
+            auto py = tr.TransformPoint(wf::Point{0, 1});
+            ax = px.X - o.X, ay = px.Y - o.Y;
+            bx = py.X - o.X, by = py.Y - o.Y;
+        }
+    } catch (...) {
+    }
+    double sx = ax * dx + ay * dy;  // how much XAML +x points at the window
+    double sy = bx * dx + by * dy;  // how much XAML +y does
+    bool horizontal = std::abs(sy) >= std::abs(sx);  // the line runs along x when the facing edge is top/bottom
+    int edge = horizontal ? (sy > 0 ? 1 : 0) : (sx > 0 ? 3 : 2);  // 0 top, 1 bottom, 2 left, 3 right (XAML side)
+    if (edge != isl.separatorEdge) {
+        static const PCWSTR kEdges[] = {L"top", L"bottom", L"left", L"right"};
+        Wh_Log(L"taskbar %p: separator on the %s edge (dock %d)", isl.hwnd, kEdges[edge], (int)dock);
+        isl.separatorEdge = edge;
+    }
+    if (horizontal) {
+        double y = oy + (sy > 0 ? h - t / 2 : t / 2);
+        isl.separator.X1(ox);
+        isl.separator.X2(ox + w);
+        isl.separator.Y1(y);
+        isl.separator.Y2(y);
+        isl.separatorBrush.StartPoint(wf::Point{0, 0});
+        isl.separatorBrush.EndPoint(wf::Point{1, 0});
+    } else {
+        double x = ox + (sx > 0 ? w - t / 2 : t / 2);
+        isl.separator.X1(x);
+        isl.separator.X2(x);
+        isl.separator.Y1(oy);
+        isl.separator.Y2(oy + h);
+        isl.separatorBrush.StartPoint(wf::Point{0, 0});
+        isl.separatorBrush.EndPoint(wf::Point{0, 1});
+    }
+} catch (...) {
+}
+
+void StyleSeparator(Island& isl, const Settings::Separator& st) try {
+    if (!isl.separator) return;
+    isl.separatorStyle = st;
+    isl.separator.StrokeDashCap(wuxm::PenLineCap::Flat);
+    isl.separator.StrokeStartLineCap(wuxm::PenLineCap::Flat);
+    isl.separator.StrokeEndLineCap(wuxm::PenLineCap::Flat);
+    wuxm::DoubleCollection dashes;
+    double dash = st.dash / st.thickness, gap = st.gap / st.thickness;  // dash array units are thicknesses (scale cancels)
+    switch (st.style) {
+        case 1:  // dashed
+            dashes.Append(dash);
+            dashes.Append(gap);
+            break;
+        case 2:  // dot-dash
+            dashes.Append(dash);
+            dashes.Append(gap);
+            dashes.Append(1);
+            dashes.Append(gap);
+            break;
+        case 3:  // dotted: a dot is a thickness-sized square
+            dashes.Append(1);
+            dashes.Append(gap);
+            break;
+        default:
+            break;
+    }
+    isl.separator.StrokeDashArray(dashes);
+    LayoutSeparator(isl);
+} catch (...) {
+}
+
+// The Windows accent color (Settings > Personalization > Colors), via
+// UISettings. Read when an accent-colored line is drawn and the cached value
+// is stale; marked stale where the accent can change (the color-change
+// messages, the health check), so nothing is read while no such line is
+// showing. Taskbar thread only.
+Rgb g_accentColor{0, 120, 212};
+bool g_accentKnown = false;
+
+void InvalidateAccentColor() {
+    g_accentKnown = false;
+}
+
+Rgb AccentColor() {
+    if (!g_accentKnown) {
+        try {
+            auto c = winrt::Windows::UI::ViewManagement::UISettings().GetColorValue(
+                winrt::Windows::UI::ViewManagement::UIColorType::Accent);
+            g_accentColor = Rgb{c.R, c.G, c.B};
+            g_accentKnown = true;
+        } catch (...) {
+        }
+    }
+    return g_accentColor;
+}
+
+void SetSeparatorGradient(Island& isl, const Gradient& g, const Settings::Separator& st) {
+    if (!isl.separatorBrush) return;
+    Gradient sep;
+    if (st.colorMode == 1) sep.fill(st.color);
+    else if (st.colorMode == 2) sep.fill(AccentColor());
+    else
+        for (int i = 0; i < kGradientPoints; i++) sep[i] = SeparatorColor(g[i], st.contrast);
+    WriteGradient(isl.separatorStops, sep);
+}
+
+// Brings the line in step with the panel and the settings: shown with the
+// panel when enabled, colored from what the panel shows, restyled when the
+// settings changed, and laid out again on every show - a taskbar moved to
+// another edge keeps its size, so SizeChanged alone would leave the line on
+// the edge of the old position.
+void ApplySeparator(Island& isl) try {
+    if (!isl.separator) return;
+    Settings::Separator st = GetSettings().separator;
+    if (st != isl.separatorStyle) StyleSeparator(isl, st);
+    bool show = st.enabled && isl.shown;
+    if (show) {
+        SetSeparatorGradient(isl, isl.gradient, st);
+        LayoutSeparator(isl);
+    }
+    isl.separator.Opacity(show ? st.opacity / 100.0 : 0.0);
+} catch (...) {
 }
 
 // ---- Adaptive theme ---------------------------------------------------------
@@ -2205,7 +2523,9 @@ void OnRootThemeChanged(HWND hwnd, wux::FrameworkElement const& root) try {
 // mode before the first of them runs: a WH_CALLWNDPROC hook on the taskbar
 // thread sees every sent message before its window procedure does (a
 // message-id compare per sent message, nothing more) and re-pins every forced
-// island's background to the mode the registry holds by then.
+// island's background to the mode the registry holds by then. The same
+// messages carry accent changes, so an accent-colored separator is refreshed
+// here too.
 std::atomic<HHOOK> g_settingChangeHook{nullptr};  // installed on the taskbar thread; removed on any unload path
 
 bool IsColorChangeMessage(const CWPSTRUCT& cwp) {
@@ -2220,21 +2540,23 @@ bool IsColorChangeMessage(const CWPSTRUCT& cwp) {
     }
 }
 
-void RepinBackgrounds() {
+void OnColorChangeMessage() {
     std::vector<std::shared_ptr<Island>> islands;
     {
         std::lock_guard lock(g_islandsMutex);
         if (g_islands) islands.assign(g_islands->begin(), g_islands->end());
     }
+    InvalidateAccentColor();
     for (auto& isl : islands) {
         if (isl->forcedTheme != ThemeNone) PinBackgroundTheme(*isl, true);
+        if (isl->shown) ApplySeparator(*isl);  // an accent-colored line follows the accent
     }
 }
 
 LRESULT CALLBACK SettingChangeHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION && lParam && !g_unloading) {
         const CWPSTRUCT& cwp = *reinterpret_cast<const CWPSTRUCT*>(lParam);
-        if (IsColorChangeMessage(cwp) && IsTaskbarWindowClass(cwp.hwnd)) RepinBackgrounds();
+        if (IsColorChangeMessage(cwp) && IsTaskbarWindowClass(cwp.hwnd)) OnColorChangeMessage();
     }
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
@@ -2364,11 +2686,7 @@ void SetFillHidden(Island& isl, bool hide) {
 void DesiredBackgroundState(Island const& isl, bool& strokeHidden, bool& fillHidden) {
     Settings s = GetSettings();
     bool transparent = s.transparentIdle;
-    if (transparent && !s.anyDock) {
-        MONITORINFO mi{sizeof(mi)};
-        HMONITOR hmon = MonitorFromWindow(isl.hwnd, MONITOR_DEFAULTTONEAREST);
-        transparent = hmon && GetMonitorInfoW(hmon, &mi) && IsTaskbarTopDocked(isl.hwnd, mi.rcMonitor);
-    }
+    if (transparent && !s.anyDock) transparent = IsTaskbarTopDocked(isl.hwnd);
     fillHidden = transparent;
     strokeHidden = isl.shown || transparent;
 }
@@ -2416,6 +2734,7 @@ void WINAPI ApplyIslandUpdateOnTaskbarThread(void* param) try {
             isl->color = upd.color;
             isl->gradient = upd.gradient;
             isl->shown = true;
+            ApplySeparator(*isl);
         }
         if (rest) {
             ApplyBackgroundState(*isl);
@@ -2425,6 +2744,7 @@ void WINAPI ApplyIslandUpdateOnTaskbarThread(void* param) try {
         if (panel && isl->shown) {
             SetPanelVisible(*isl, false);
             isl->shown = false;
+            ApplySeparator(*isl);
         }
         if (rest) {
             ApplyBackgroundState(*isl);
@@ -2452,12 +2772,25 @@ void TeardownIsland(Island& isl) try {
     isl.forcedTheme = ThemeNone;
     SetStrokeHidden(isl, false);
     SetFillHidden(isl, false);
+    if (isl.panel && isl.separatorSizeToken) {
+        isl.panel.SizeChanged(isl.separatorSizeToken);
+        isl.separatorSizeToken = {};
+    }
+    if (isl.separator) {
+        if (auto parent = isl.separator.Parent().try_as<wuxc::Panel>()) {
+            uint32_t idx = 0;
+            if (parent.Children().IndexOf(isl.separator, idx)) parent.Children().RemoveAt(idx);
+        }
+    }
     if (isl.panel) {
         if (auto parent = isl.panel.Parent().try_as<wuxc::Panel>()) {
             uint32_t idx = 0;
             if (parent.Children().IndexOf(isl.panel, idx)) parent.Children().RemoveAt(idx);
         }
     }
+    isl.separator = nullptr;
+    isl.separatorBrush = nullptr;
+    isl.separatorStops.clear();
     isl.panel = nullptr;
     isl.brush = nullptr;
     isl.stops.clear();
@@ -2539,16 +2872,7 @@ bool AttachIsland(wux::FrameworkElement const& rep, HWND taskbarWnd) {
     auto isl = std::make_shared<Island>();
     isl->hwnd = taskbarWnd;
     isl->frameId = frameId;
-    isl->brush = wuxm::LinearGradientBrush();
-    isl->brush.StartPoint(wf::Point{0, 0});
-    isl->brush.EndPoint(wf::Point{1, 0});
-    for (int i = 0; i < kGradientPoints + 2; i++) {
-        wuxm::GradientStop stop;
-        stop.Offset(i == 0 ? 0.0 : i == kGradientPoints + 1 ? 1.0 : (double)i / (kGradientPoints + 1));
-        stop.Color(wu::Color{255, 0, 0, 0});
-        isl->brush.GradientStops().Append(stop);
-        isl->stops.push_back(stop);
-    }
+    isl->brush = MakeGradientBrush(isl->stops);
 
     // A Border stretches to fill its grid cell by default, so the panel spans
     // the whole taskbar. Its name lets Taskbar Styler target it
@@ -2579,9 +2903,27 @@ bool AttachIsland(wux::FrameworkElement const& rep, HWND taskbarWnd) {
         }
     }
 
-    isl->stroke = FindDescendantByName(grid, L"BackgroundStroke", 6);
-    isl->fill = FindDescendantByName(grid, L"BackgroundFill", 6);
-    {
+    // From here on the panel is in the tree: anything that fails below tears
+    // it (and the line) down again, so nothing of the mod's is left behind in
+    // a tree that no island accounts for.
+    try {
+        // The separator line sits right above the panel. Its own gradient
+        // brush takes the set-off colors; its geometry follows the panel's size.
+        isl->separatorBrush = MakeGradientBrush(isl->separatorStops);
+        wuxs::Line separator;
+        separator.Name(L"TaskbarBleedSeparator");
+        separator.IsHitTestVisible(false);
+        separator.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+        separator.VerticalAlignment(wux::VerticalAlignment::Stretch);
+        separator.Stroke(isl->separatorBrush);
+        separator.Opacity(0.0);
+        isl->separator = separator;
+        uint32_t panelIdx = 0;
+        if (children.IndexOf(panel, panelIdx)) children.InsertAt(panelIdx + 1, separator);
+        StyleSeparator(*isl, GetSettings().separator);
+
+        isl->stroke = FindDescendantByName(grid, L"BackgroundStroke", 6);
+        isl->fill = FindDescendantByName(grid, L"BackgroundFill", 6);
         wux::DependencyObject cur = isl->fill.get();
         if (!cur) cur = isl->stroke.get();
         for (int hop = 0; cur && hop < 6; hop++) {
@@ -2591,8 +2933,11 @@ bool AttachIsland(wux::FrameworkElement const& rep, HWND taskbarWnd) {
             }
             cur = wuxm::VisualTreeHelper::GetParent(cur);
         }
+        ApplyBackgroundState(*isl);  // a transparent taskbar starts out transparent, before any window is tracked
+    } catch (...) {
+        TeardownIsland(*isl);
+        throw;
     }
-    ApplyBackgroundState(*isl);  // a transparent taskbar starts out transparent, before any window is tracked
 
     {
         std::lock_guard lock(g_islandsMutex);
@@ -2602,6 +2947,14 @@ bool AttachIsland(wux::FrameworkElement const& rep, HWND taskbarWnd) {
         }
         g_islands->push_back(isl);
     }
+    // Registered only now that the island is in g_islands: every island there
+    // is torn down (and this handler revoked) by PruneDeadIslands or
+    // CleanupIslandsOnTaskbarThread, so the handler can't outlive the module.
+    // SizeChanged is raised by a later layout pass, so nothing is missed.
+    isl->separatorSizeToken =
+        panel.SizeChanged([hwnd = taskbarWnd](wf::IInspectable const&, wux::SizeChangedEventArgs const&) {
+            if (auto island = FindIslandByHwnd(hwnd)) LayoutSeparator(*island);
+        });
 
     Wh_Log(L"taskbar %p: island attached (grid=%s stroke=%d fill=%d background=%d)", taskbarWnd,
            grid.Name().c_str(), isl->stroke.get() ? 1 : 0, isl->fill.get() ? 1 : 0, isl->background.get() ? 1 : 0);
@@ -2681,6 +3034,20 @@ void VerifyIsland(Island& isl) try {
         children.InsertAt(backgroundIdx, isl.panel);  // right above the background again
         Wh_Log(L"taskbar %p: panel was below the taskbar background, moved back above it", isl.hwnd);
     }
+    if (isl.separator) {  // keep the line right above the panel; back in the tree if it was removed
+        uint32_t sepIdx = 0, pIdx = 0;
+        bool present = children.IndexOf(isl.separator, sepIdx);
+        bool inPlace = present && children.IndexOf(isl.panel, pIdx) && sepIdx == pIdx + 1;
+        bool elsewhere = !present && isl.separator.Parent() != nullptr;  // parented somewhere else: not ours to move
+        if (!inPlace && !elsewhere) {
+            if (present) children.RemoveAt(sepIdx);
+            if (children.IndexOf(isl.panel, pIdx)) {
+                children.InsertAt(pIdx + 1, isl.separator);
+                Wh_Log(L"taskbar %p: separator %s above the panel", isl.hwnd, present ? L"moved back" : L"re-inserted");
+            }
+        }
+    }
+    ApplySeparator(isl);  // a settings change lands here (IslandHealthCheck)
 
     if (isl.panel.Visibility() != wux::Visibility::Visible) {
         isl.panel.Visibility(wux::Visibility::Visible);
@@ -2725,6 +3092,7 @@ void VerifyIsland(Island& isl) try {
 // in the tracker section): re-attach what is detached, repair what is left.
 void WINAPI IslandHealthCheck(void* param) {
     if (g_unloading) return;
+    InvalidateAccentColor();
     AttachAllTaskbars(param);
     std::vector<std::shared_ptr<Island>> live;
     {

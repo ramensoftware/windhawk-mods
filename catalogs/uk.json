@@ -146,7 +146,7 @@
         "ratingUsers": 9,
         "reviews": 0,
         "trendingSorting": -0.28488885425284244,
-        "updated": 1782670689000,
+        "updated": 1794859340000,
         "users": 115
       },
       "metadata": {
@@ -155,14 +155,14 @@
         ],
         "author": "Ikkecode",
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion",
-        "description": "Hides the system tray microphone icon if only whitelisted applications have active access.",
+        "description": "Hides the system tray microphone icon if only whitelisted applications have an active capture stream.",
         "github": "https://github.com/ikkecode",
         "include": [
           "explorer.exe"
         ],
         "name": "Adaptive Microphone Icon Visibility",
         "twitter": "https://twitter.com/ikkenand",
-        "version": "1.0"
+        "version": "2.0"
       }
     },
     "adaptive-windows": {
@@ -18720,7 +18720,7 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793653509000,
+        "updated": 1794859347000,
         "users": 44
       },
       "metadata": {
@@ -18729,13 +18729,13 @@
         ],
         "author": "Deen-0x",
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ldwmapi",
-        "description": "Underlines the labels (and optionally the icons) of taskbar buttons whose windows are shown on the desktop, so open and minimized windows can be told apart at a glance",
+        "description": "Underlines the labels and/or icons of taskbar buttons whose windows are shown on the desktop, so open and minimized windows can be told apart at a glance",
         "github": "https://github.com/Deen-0x",
         "include": [
           "explorer.exe"
         ],
         "name": "Taskbar Open Window Underline",
-        "version": "2.1"
+        "version": "2.2"
       }
     },
     "taskbar-per-monitor-alignment": {
@@ -20223,7 +20223,7 @@
         "ratingUsers": 21,
         "reviews": 0,
         "trendingSorting": 0.6348727570018272,
-        "updated": 1794682904000,
+        "updated": 1794859335000,
         "users": 246
       },
       "metadata": {
@@ -20239,7 +20239,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Top Taskbar Bleed",
-        "version": "1.2.1"
+        "version": "1.3.0"
       }
     },
     "tortoisegit-progress-animation-background-fix": {

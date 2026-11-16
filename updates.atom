@@ -2,12 +2,67 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-16T19:05:26.000Z</updated>
+    <updated>2026-11-16T20:02:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Open Window Underline 2.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-open-window-underline#760ce4fac59ca52beb92cb59e5297f386bd6607b</id>
+        <link href="https://windhawk.net/mods/taskbar-open-window-underline"/>
+        <updated>2026-11-16T20:02:27.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Settings are now grouped into <strong>General</strong>, <strong>Label underline</strong> and <strong>Icon underline</strong>. General holds the options that apply to both underlines: what to underline, buttons with several windows, the foreground and cloaked-window options, the refresh delay and hiding the running indicator.</li>
+<li>New <strong>Label underline → Enabled</strong> toggle (on by default). Turn it off to use the icon underline on its own; labels are made plain right away.</li>
+<li>With the label underline off, a title change or a reused button still updates the icon underline.</li>
+<li>With both underlines off, the mod stops listening for window events and no longer evaluates buttons; hiding the running indicator still works on its own.</li>
+<li>README and setting descriptions updated for the new grouping.</li>
+<li>Note: the setting keys moved, so the general options and the label style return to their defaults after updating and need to be set again in the new sections.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Adaptive Microphone Icon Visibility 2.0]]></title>
+        <id>https://windhawk.net/mods/adaptive-microphone-icon-visibility#af95847c8bb8beaf8f6c118ab2d15f53c7099db0</id>
+        <link href="https://windhawk.net/mods/adaptive-microphone-icon-visibility"/>
+        <updated>2026-11-16T20:02:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Detect microphone use via audio sessions, since the registry data is no longer updated.</li>
+<li>Whitelist entries are now executable names (e.g. <code>obs64.exe</code>), including for Store apps.</li>
+<li>Show the icon if monitoring fails to start.</li>
+<li>Fixed loading on builds where the tray lives in <code>ExplorerExtensions.dll</code>.</li>
+<li>Improved unloading and logging.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ikkecode</name>
+            <uri>https://github.com/ikkecode</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Top Taskbar Bleed 1.3.0]]></title>
+        <id>https://windhawk.net/mods/top-taskbar-bleed#985d9975b2fea09fbda6977ee6f3c6c555212c5f</id>
+        <link href="https://windhawk.net/mods/top-taskbar-bleed"/>
+        <updated>2026-11-16T20:02:15.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New “Separator line” settings: an optional line along the edge of the bleed that meets the window, as a seam between the bleed and the title bar</li>
+<li>Separator color follows the bleed with a configurable contrast (same hue, lighter on a dark bleed, darker on a light one), or a fixed #RRGGBB color, or “accent” for the Windows accent color; opacity configurable</li>
+<li>Separator styles: continuous, dashed, dot-dash, dotted, with thickness, dash and gap lengths in physical pixels at any display scaling</li>
+<li>The separator sits on the correct edge for top, bottom, left and right taskbars, including frames rotated by vertical-taskbar mods, follows the taskbar when it moves, and follows a Taskbar Styler margin on the panel</li>
+<li>README: separator documented, settings listed, Styler target Line#TaskbarBleedSeparator</li>
+</ul>
+]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Live HUD 1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-live-hud-radar#fd84d413a1340b4f4f306423e127368d8518757b</id>
@@ -758,53 +813,6 @@ SystemTray.AdaptiveTextBlock#LanguageInnerTextBlock &gt; TextBlock#InnerTextBloc
         <author>
             <name>Deen-0x</name>
             <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[System Tray Folders 1.1.0]]></title>
-        <id>https://windhawk.net/mods/system-tray-folders#2f824cd0da0b2c0a7a297289bd393d4adee3d6d1</id>
-        <link href="https://windhawk.net/mods/system-tray-folders"/>
-        <updated>2026-11-15T19:03:51.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the flyout's icon list not being found on Windows builds where it has no name.</li>
-<li>Added a <strong>List view</strong> option that shows the flyout as one column with each icon's name next to it, plus <strong>List view width</strong>.</li>
-<li>Added an <strong>Add icon...</strong> tile inside each folder that lists the tray icons by app name, shows which folder each one is in, and moves icons in or out with a click. Picks are remembered by the mod and take priority over the patterns.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Ris Peng</name>
-            <uri>https://github.com/RisPNG</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix file dialogs for Classic theme 2.0]]></title>
-        <id>https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg#efdfb5f5c7cc20e512d3c2bfbc50485374121a69</id>
-        <link href="https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg"/>
-        <updated>2026-11-15T18:02:35.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix more dialogs</li>
-</ul>
-]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinTips OSD 1.6.1]]></title>
-        <id>https://windhawk.net/mods/wintips-osd#85ecb1ac17afbd692ef530313a3e17e85385f181</id>
-        <link href="https://windhawk.net/mods/wintips-osd"/>
-        <updated>2026-11-15T18:02:29.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a solo-Shift inference fallback for the input language tip: third-party IMEs that never answer WM_IME_CONTROL now get their Chinese/English mode tracked by the classic solo Shift press-and-release gesture. A 350 ms grace window gives the system read a chance to report the toggle first; odd numbers of solo Shift releases flip the cached mode, even numbers settle silently, and Shift+letter, Alt+Shift and Ctrl+Shift all drop out of the gesture on their own. The inference only applies to Chinese IME layouts.</li>
-<li>Caps Lock now opens the language watch as well, so IMEs that toggle Chinese/English with it (Weasel's default, Sogou's option) report the mode on the language card.</li>
-<li>Copy, paste and cut tips no longer fire when Win is held: Win+Ctrl+V opens the Volume Mixer and Win+Ctrl+C toggles color filters. Ctrl+Shift+V stays a paste.</li>
-<li>Updated the readme.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DoYouNatureQ</name>
-            <uri>https://github.com/DoYouNatureQ</uri>
         </author>
     </entry>
 </feed>
