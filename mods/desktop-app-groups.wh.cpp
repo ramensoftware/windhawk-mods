@@ -2,6 +2,20 @@
 // @id              desktop-app-groups
 // @name            Desktop App Groups
 // @description     Group desktop icons into Start-menu-style folders by dragging one onto another
+// @description:de-DE  Desktopsymbole in Ordner wie im Startmenü gruppieren, indem man eines auf ein anderes zieht
+// @description:es-ES  Agrupa los iconos del escritorio en carpetas como las del menú Inicio arrastrando uno sobre otro
+// @description:fr-FR  Regroupez les icônes du bureau dans des dossiers comme ceux du menu Démarrer en faisant glisser l'une sur l'autre
+// @description:it-IT  Raggruppa le icone del desktop in cartelle come quelle del menu Start trascinandone una sull'altra
+// @description:ja-JP  デスクトップのアイコンを別のアイコンにドラッグして、スタート メニューのようなフォルダーにまとめます
+// @description:ko-KR  바탕 화면 아이콘을 다른 아이콘 위로 끌어 시작 메뉴처럼 폴더로 묶습니다
+// @description:nl-NL  Groepeer bureaubladpictogrammen in mappen zoals in het Startmenu door het ene op het andere te slepen
+// @description:pl-PL  Grupuj ikony pulpitu w foldery jak w menu Start, przeciągając jedną na drugą
+// @description:pt-BR  Agrupe ícones da área de trabalho em pastas como as do menu Iniciar arrastando um sobre o outro
+// @description:ru-RU  Объединяйте значки рабочего стола в папки, как в меню «Пуск», перетаскивая один значок на другой
+// @description:tr-TR  Masaüstü simgelerini birini diğerinin üzerine sürükleyerek Başlat menüsündeki gibi klasörlerde gruplayın
+// @description:uk-UA  Об'єднуйте значки робочого столу в папки, як у меню «Пуск», перетягуючи один значок на інший
+// @description:zh-CN  将一个桌面图标拖到另一个上，即可像“开始”菜单那样把它们归入文件夹
+// @description:zh-TW  將一個桌面圖示拖曳到另一個上，即可像「開始」功能表一樣將它們歸入資料夾
 // @version         1.0
 // @author          Markc719
 // @github          https://github.com/Markc719
@@ -62,9 +76,16 @@ can open in the same popup too.
   colour you pick. Its desktop icon and its popup are tinted to match, so
   groups are easy to tell apart at a glance.
 - **Group settings:** the gear button next to the group's name opens a panel
-  with the view (icons or list), apps per row, icon size, app names, colour,
-  sort order (your arrangement or A to Z), and whether a group is removed
-  when one app is left. Each can be set for that group or for all groups.
+  with the view (icons or list), apps per row, icon size, spacing between
+  icons (compact, normal or roomy), app names, colour, sort order (your
+  arrangement or A to Z), and whether a group is removed when one app is
+  left. Each can be set for that group or for all groups.
+- **In your language:** the popup, its settings panel and this mod's
+  settings are translated into Chinese (Simplified and Traditional), Dutch,
+  English, French, German, Italian, Japanese, Korean, Polish, Portuguese
+  (Brazil), Russian, Spanish, Turkish and Ukrainian. It follows Windows'
+  display language, or you can pick one in the Settings tab. Corrections from
+  native speakers are welcome on the mod's GitHub page.
 - **High contrast themes:** the popup uses the theme's colours and a clear
   outline.
 
@@ -115,6 +136,8 @@ delete the folder, or:
 
 In this Settings tab:
 
+- **Language:** the same as Windows (the default), or any of the languages
+  above.
 - **How to create a group:** hover over an icon for a moment before
   dropping (the default), hold Shift while dropping, or always.
 - **Hover time** for the hover option.
@@ -128,6 +151,10 @@ In this Settings tab:
   Windows' Transparency effects setting is off, or with a high contrast
   theme.
 - **Background colour strength:** how see-through the blurred background is.
+- **Rows before scrolling:** how many rows of icons (5 by default) and of
+  the list view (12) the popup shows before it scrolls.
+- **Animation length:** how long the popup takes to open (200 milliseconds
+  by default; closing takes three quarters of that).
 - **Animate the popup** when it opens and closes.
 - **Keep group data inside the group folders:** off by default. Turn it on
   if your desktop is synced between PCs (for example with OneDrive) and you
@@ -141,39 +168,754 @@ Made for Windows 11.
 
 // ==WindhawkModSettings==
 /*
+- language: auto
+  $name: "Language"
+  $name:de-DE: "Sprache"
+  $name:es-ES: "Idioma"
+  $name:fr-FR: "Langue"
+  $name:it-IT: "Lingua"
+  $name:ja-JP: "言語"
+  $name:ko-KR: "언어"
+  $name:nl-NL: "Taal"
+  $name:pl-PL: "Język"
+  $name:pt-BR: "Idioma"
+  $name:ru-RU: "Язык"
+  $name:tr-TR: "Dil"
+  $name:uk-UA: "Мова"
+  $name:zh-CN: "语言"
+  $name:zh-TW: "語言"
+  $description: "The language of the popup, its settings panel and new group names."
+  $description:de-DE: "Die Sprache des Popups, seines Einstellungsbereichs und neuer Gruppennamen."
+  $description:es-ES: "El idioma de la ventana emergente, su panel de configuración y los nombres de los grupos nuevos."
+  $description:fr-FR: "La langue de la fenêtre, de son panneau de paramètres et des noms des nouveaux groupes."
+  $description:it-IT: "La lingua del popup, del suo pannello impostazioni e dei nomi dei nuovi gruppi."
+  $description:ja-JP: "ポップアップ、設定パネル、新しいグループ名の言語です。"
+  $description:ko-KR: "팝업, 설정 패널, 새 그룹 이름의 언어입니다."
+  $description:nl-NL: "De taal van de pop-up, het instellingenpaneel en de namen van nieuwe groepen."
+  $description:pl-PL: "Język okienka, jego panelu ustawień i nazw nowych grup."
+  $description:pt-BR: "O idioma da janela pop-up, do painel de configurações e dos nomes de novos grupos."
+  $description:ru-RU: "Язык всплывающего окна, панели настроек и названий новых групп."
+  $description:tr-TR: "Açılır pencerenin, ayarlar panelinin ve yeni grup adlarının dili."
+  $description:uk-UA: "Мова спливного вікна, панелі налаштувань і назв нових груп."
+  $description:zh-CN: "弹出窗口、设置面板和新组名称所用的语言。"
+  $description:zh-TW: "快顯視窗、設定面板和新群組名稱所用的語言。"
+  $options:
+  - auto: "Same as Windows"
+  - en: "English"
+  - de: "Deutsch"
+  - es: "Español"
+  - fr: "Français"
+  - it: "Italiano"
+  - ja: "日本語"
+  - ko: "한국어"
+  - nl: "Nederlands"
+  - pl: "Polski"
+  - pt: "Português (Brasil)"
+  - ru: "Русский"
+  - tr: "Türkçe"
+  - uk: "Українська"
+  - zh-CN: "简体中文"
+  - zh-TW: "繁體中文"
+  $options:de-DE:
+  - auto: "Wie Windows"
+  - en: "English"
+  - de: "Deutsch"
+  - es: "Español"
+  - fr: "Français"
+  - it: "Italiano"
+  - ja: "日本語"
+  - ko: "한국어"
+  - nl: "Nederlands"
+  - pl: "Polski"
+  - pt: "Português (Brasil)"
+  - ru: "Русский"
+  - tr: "Türkçe"
+  - uk: "Українська"
+  - zh-CN: "简体中文"
+  - zh-TW: "繁體中文"
+  $options:es-ES:
+  - auto: "Igual que Windows"
+  - en: "English"
+  - de: "Deutsch"
+  - es: "Español"
+  - fr: "Français"
+  - it: "Italiano"
+  - ja: "日本語"
+  - ko: "한국어"
+  - nl: "Nederlands"
+  - pl: "Polski"
+  - pt: "Português (Brasil)"
+  - ru: "Русский"
+  - tr: "Türkçe"
+  - uk: "Українська"
+  - zh-CN: "简体中文"
+  - zh-TW: "繁體中文"
+  $options:fr-FR:
+  - auto: "Comme Windows"
+  - en: "English"
+  - de: "Deutsch"
+  - es: "Español"
+  - fr: "Français"
+  - it: "Italiano"
+  - ja: "日本語"
+  - ko: "한국어"
+  - nl: "Nederlands"
+  - pl: "Polski"
+  - pt: "Português (Brasil)"
+  - ru: "Русский"
+  - tr: "Türkçe"
+  - uk: "Українська"
+  - zh-CN: "简体中文"
+  - zh-TW: "繁體中文"
+  $options:it-IT:
+  - auto: "Come Windows"
+  - en: "English"
+  - de: "Deutsch"
+  - es: "Español"
+  - fr: "Français"
+  - it: "Italiano"
+  - ja: "日本語"
+  - ko: "한국어"
+  - nl: "Nederlands"
+  - pl: "Polski"
+  - pt: "Português (Brasil)"
+  - ru: "Русский"
+  - tr: "Türkçe"
+  - uk: "Українська"
+  - zh-CN: "简体中文"
+  - zh-TW: "繁體中文"
+  $options:ja-JP:
+  - auto: "Windows と同じ"
+  - en: "English"
+  - de: "Deutsch"
+  - es: "Español"
+  - fr: "Français"
+  - it: "Italiano"
+  - ja: "日本語"
+  - ko: "한국어"
+  - nl: "Nederlands"
+  - pl: "Polski"
+  - pt: "Português (Brasil)"
+  - ru: "Русский"
+  - tr: "Türkçe"
+  - uk: "Українська"
+  - zh-CN: "简体中文"
+  - zh-TW: "繁體中文"
+  $options:ko-KR:
+  - auto: "Windows와 같게"
+  - en: "English"
+  - de: "Deutsch"
+  - es: "Español"
+  - fr: "Français"
+  - it: "Italiano"
+  - ja: "日本語"
+  - ko: "한국어"
+  - nl: "Nederlands"
+  - pl: "Polski"
+  - pt: "Português (Brasil)"
+  - ru: "Русский"
+  - tr: "Türkçe"
+  - uk: "Українська"
+  - zh-CN: "简体中文"
+  - zh-TW: "繁體中文"
+  $options:nl-NL:
+  - auto: "Zoals Windows"
+  - en: "English"
+  - de: "Deutsch"
+  - es: "Español"
+  - fr: "Français"
+  - it: "Italiano"
+  - ja: "日本語"
+  - ko: "한국어"
+  - nl: "Nederlands"
+  - pl: "Polski"
+  - pt: "Português (Brasil)"
+  - ru: "Русский"
+  - tr: "Türkçe"
+  - uk: "Українська"
+  - zh-CN: "简体中文"
+  - zh-TW: "繁體中文"
+  $options:pl-PL:
+  - auto: "Taki jak w Windows"
+  - en: "English"
+  - de: "Deutsch"
+  - es: "Español"
+  - fr: "Français"
+  - it: "Italiano"
+  - ja: "日本語"
+  - ko: "한국어"
+  - nl: "Nederlands"
+  - pl: "Polski"
+  - pt: "Português (Brasil)"
+  - ru: "Русский"
+  - tr: "Türkçe"
+  - uk: "Українська"
+  - zh-CN: "简体中文"
+  - zh-TW: "繁體中文"
+  $options:pt-BR:
+  - auto: "Igual ao Windows"
+  - en: "English"
+  - de: "Deutsch"
+  - es: "Español"
+  - fr: "Français"
+  - it: "Italiano"
+  - ja: "日本語"
+  - ko: "한국어"
+  - nl: "Nederlands"
+  - pl: "Polski"
+  - pt: "Português (Brasil)"
+  - ru: "Русский"
+  - tr: "Türkçe"
+  - uk: "Українська"
+  - zh-CN: "简体中文"
+  - zh-TW: "繁體中文"
+  $options:ru-RU:
+  - auto: "Как в Windows"
+  - en: "English"
+  - de: "Deutsch"
+  - es: "Español"
+  - fr: "Français"
+  - it: "Italiano"
+  - ja: "日本語"
+  - ko: "한국어"
+  - nl: "Nederlands"
+  - pl: "Polski"
+  - pt: "Português (Brasil)"
+  - ru: "Русский"
+  - tr: "Türkçe"
+  - uk: "Українська"
+  - zh-CN: "简体中文"
+  - zh-TW: "繁體中文"
+  $options:tr-TR:
+  - auto: "Windows ile aynı"
+  - en: "English"
+  - de: "Deutsch"
+  - es: "Español"
+  - fr: "Français"
+  - it: "Italiano"
+  - ja: "日本語"
+  - ko: "한국어"
+  - nl: "Nederlands"
+  - pl: "Polski"
+  - pt: "Português (Brasil)"
+  - ru: "Русский"
+  - tr: "Türkçe"
+  - uk: "Українська"
+  - zh-CN: "简体中文"
+  - zh-TW: "繁體中文"
+  $options:uk-UA:
+  - auto: "Як у Windows"
+  - en: "English"
+  - de: "Deutsch"
+  - es: "Español"
+  - fr: "Français"
+  - it: "Italiano"
+  - ja: "日本語"
+  - ko: "한국어"
+  - nl: "Nederlands"
+  - pl: "Polski"
+  - pt: "Português (Brasil)"
+  - ru: "Русский"
+  - tr: "Türkçe"
+  - uk: "Українська"
+  - zh-CN: "简体中文"
+  - zh-TW: "繁體中文"
+  $options:zh-CN:
+  - auto: "与 Windows 相同"
+  - en: "English"
+  - de: "Deutsch"
+  - es: "Español"
+  - fr: "Français"
+  - it: "Italiano"
+  - ja: "日本語"
+  - ko: "한국어"
+  - nl: "Nederlands"
+  - pl: "Polski"
+  - pt: "Português (Brasil)"
+  - ru: "Русский"
+  - tr: "Türkçe"
+  - uk: "Українська"
+  - zh-CN: "简体中文"
+  - zh-TW: "繁體中文"
+  $options:zh-TW:
+  - auto: "與 Windows 相同"
+  - en: "English"
+  - de: "Deutsch"
+  - es: "Español"
+  - fr: "Français"
+  - it: "Italiano"
+  - ja: "日本語"
+  - ko: "한국어"
+  - nl: "Nederlands"
+  - pl: "Polski"
+  - pt: "Português (Brasil)"
+  - ru: "Русский"
+  - tr: "Türkçe"
+  - uk: "Українська"
+  - zh-CN: "简体中文"
+  - zh-TW: "繁體中文"
 - groupTrigger: hover
-  $name: How to create a group
+  $name: "How to create a group"
+  $name:de-DE: "Gruppe erstellen durch"
+  $name:es-ES: "Cómo crear un grupo"
+  $name:fr-FR: "Créer un groupe"
+  $name:it-IT: "Come creare un gruppo"
+  $name:ja-JP: "グループの作成方法"
+  $name:ko-KR: "그룹 만드는 방법"
+  $name:nl-NL: "Een groep maken door"
+  $name:pl-PL: "Jak tworzyć grupę"
+  $name:pt-BR: "Como criar um grupo"
+  $name:ru-RU: "Как создать группу"
+  $name:tr-TR: "Grup oluşturma yöntemi"
+  $name:uk-UA: "Як створити групу"
+  $name:zh-CN: "如何创建组"
+  $name:zh-TW: "如何建立群組"
   $options:
-  - hover: Hover over an icon for a moment, then drop
-  - shift: Hold Shift while dropping
-  - always: Always group when dropping onto an icon
+  - hover: "Hover over an icon for a moment, then drop"
+  - shift: "Hold Shift while dropping"
+  - always: "Always group when dropping onto an icon"
+  $options:de-DE:
+  - hover: "Kurz über einem Symbol verweilen, dann ablegen"
+  - shift: "Beim Ablegen Umschalt gedrückt halten"
+  - always: "Immer beim Ablegen auf ein Symbol"
+  $options:es-ES:
+  - hover: "Mantener el puntero un momento sobre un icono y soltar"
+  - shift: "Mantener Mayús al soltar"
+  - always: "Agrupar siempre al soltar sobre un icono"
+  $options:fr-FR:
+  - hover: "Survoler une icône un instant, puis déposer"
+  - shift: "Maintenir Maj en déposant"
+  - always: "Toujours grouper en déposant sur une icône"
+  $options:it-IT:
+  - hover: "Tieni il puntatore su un'icona per un momento, poi rilascia"
+  - shift: "Tieni premuto Maiusc mentre rilasci"
+  - always: "Raggruppa sempre rilasciando su un'icona"
+  $options:ja-JP:
+  - hover: "アイコンの上で少し待ってからドロップ"
+  - shift: "Shift キーを押しながらドロップ"
+  - always: "アイコンにドロップすると常にグループ化"
+  $options:ko-KR:
+  - hover: "아이콘 위에 잠시 머문 뒤 놓기"
+  - shift: "놓을 때 Shift 키 누르기"
+  - always: "아이콘 위에 놓으면 항상 그룹화"
+  $options:nl-NL:
+  - hover: "Even boven een pictogram te blijven en dan los te laten"
+  - shift: "Shift ingedrukt te houden bij het loslaten"
+  - always: "Altijd te groeperen bij loslaten op een pictogram"
+  $options:pl-PL:
+  - hover: "Przytrzymaj chwilę nad ikoną, potem upuść"
+  - shift: "Przytrzymaj Shift podczas upuszczania"
+  - always: "Zawsze grupuj po upuszczeniu na ikonę"
+  $options:pt-BR:
+  - hover: "Parar sobre um ícone por um instante e soltar"
+  - shift: "Segurar Shift ao soltar"
+  - always: "Sempre agrupar ao soltar sobre um ícone"
+  $options:ru-RU:
+  - hover: "Задержать значок над другим, затем отпустить"
+  - shift: "Удерживать Shift при отпускании"
+  - always: "Всегда группировать при отпускании на значок"
+  $options:tr-TR:
+  - hover: "Bir simgenin üzerinde kısa süre bekleyip bırakın"
+  - shift: "Bırakırken Shift tuşunu basılı tutun"
+  - always: "Bir simgenin üzerine bırakınca her zaman gruplayın"
+  $options:uk-UA:
+  - hover: "Затримати значок над іншим, потім відпустити"
+  - shift: "Утримувати Shift під час відпускання"
+  - always: "Завжди групувати під час відпускання на значок"
+  $options:zh-CN:
+  - hover: "在图标上停留片刻后松开"
+  - shift: "松开时按住 Shift"
+  - always: "拖到图标上松开时总是创建组"
+  $options:zh-TW:
+  - hover: "在圖示上停留片刻後放開"
+  - shift: "放開時按住 Shift"
+  - always: "拖曳到圖示上放開時一律建立群組"
 - hoverDelay: 600
-  $name: Hover time (milliseconds)
-  $description: Only used with the "hover" option. 1000 = one second.
+  $name: "Hover time (milliseconds)"
+  $name:de-DE: "Verweildauer (Millisekunden)"
+  $name:es-ES: "Tiempo sobre el icono (milisegundos)"
+  $name:fr-FR: "Durée de survol (millisecondes)"
+  $name:it-IT: "Tempo di attesa (millisecondi)"
+  $name:ja-JP: "待ち時間 (ミリ秒)"
+  $name:ko-KR: "머무는 시간(밀리초)"
+  $name:nl-NL: "Wachttijd (milliseconden)"
+  $name:pl-PL: "Czas przytrzymania (milisekundy)"
+  $name:pt-BR: "Tempo parado (milissegundos)"
+  $name:ru-RU: "Время задержки (миллисекунды)"
+  $name:tr-TR: "Bekleme süresi (milisaniye)"
+  $name:uk-UA: "Час затримки (мілісекунди)"
+  $name:zh-CN: "停留时间（毫秒）"
+  $name:zh-TW: "停留時間（毫秒）"
+  $description: "Only used with the \"hover\" option. 1000 = one second."
+  $description:de-DE: "Nur für die Option „verweilen“. 1000 = eine Sekunde."
+  $description:es-ES: "Solo con la opción de mantener el puntero. 1000 = un segundo."
+  $description:fr-FR: "Uniquement avec l'option « survoler ». 1000 = une seconde."
+  $description:it-IT: "Usato solo con l'opzione del puntatore. 1000 = un secondo."
+  $description:ja-JP: "「少し待つ」オプションでのみ使用します。1000 = 1 秒。"
+  $description:ko-KR: "\"잠시 머물기\" 옵션에서만 사용합니다. 1000 = 1초."
+  $description:nl-NL: "Alleen bij de optie om even te blijven. 1000 = één seconde."
+  $description:pl-PL: "Tylko przy opcji przytrzymania. 1000 = jedna sekunda."
+  $description:pt-BR: "Usado só com a opção de parar sobre o ícone. 1000 = um segundo."
+  $description:ru-RU: "Только для варианта с задержкой. 1000 = одна секунда."
+  $description:tr-TR: "Yalnızca bekleme seçeneğinde kullanılır. 1000 = bir saniye."
+  $description:uk-UA: "Лише для варіанта із затримкою. 1000 = одна секунда."
+  $description:zh-CN: "仅用于“停留片刻”选项。1000 = 1 秒。"
+  $description:zh-TW: "僅用於「停留片刻」選項。1000 = 1 秒。"
 - openWith: single
-  $name: Open groups with
+  $name: "Open groups with"
+  $name:de-DE: "Gruppen öffnen mit"
+  $name:es-ES: "Abrir los grupos con"
+  $name:fr-FR: "Ouvrir les groupes par"
+  $name:it-IT: "Apri i gruppi con"
+  $name:ja-JP: "グループを開く方法"
+  $name:ko-KR: "그룹 여는 방법"
+  $name:nl-NL: "Groepen openen met"
+  $name:pl-PL: "Otwieraj grupy"
+  $name:pt-BR: "Abrir grupos com"
+  $name:ru-RU: "Открывать группы"
+  $name:tr-TR: "Grupları açma yöntemi"
+  $name:uk-UA: "Відкривати групи"
+  $name:zh-CN: "打开组的方式"
+  $name:zh-TW: "開啟群組的方式"
   $options:
-  - single: A single click, like Start menu folders
-  - double: A double-click, like normal folders
-  - hover: Hovering over them (a click opens them too)
+  - single: "A single click, like Start menu folders"
+  - double: "A double-click, like normal folders"
+  - hover: "Hovering over them (a click opens them too)"
+  $options:de-DE:
+  - single: "Einfachklick, wie Ordner im Startmenü"
+  - double: "Doppelklick, wie normale Ordner"
+  - hover: "Darauf zeigen (ein Klick öffnet sie auch)"
+  $options:es-ES:
+  - single: "Un clic, como las carpetas del menú Inicio"
+  - double: "Doble clic, como las carpetas normales"
+  - hover: "Pasando el puntero por encima (un clic también los abre)"
+  $options:fr-FR:
+  - single: "Un clic, comme les dossiers du menu Démarrer"
+  - double: "Un double-clic, comme les dossiers normaux"
+  - hover: "Le survol (un clic les ouvre aussi)"
+  $options:it-IT:
+  - single: "Un clic, come le cartelle del menu Start"
+  - double: "Un doppio clic, come le cartelle normali"
+  - hover: "Passandoci sopra (anche un clic li apre)"
+  $options:ja-JP:
+  - single: "シングルクリック (スタート メニューのフォルダーと同じ)"
+  - double: "ダブルクリック (通常のフォルダーと同じ)"
+  - hover: "マウスを重ねる (クリックでも開きます)"
+  $options:ko-KR:
+  - single: "한 번 클릭(시작 메뉴 폴더처럼)"
+  - double: "두 번 클릭(일반 폴더처럼)"
+  - hover: "마우스 올리기(클릭해도 열림)"
+  $options:nl-NL:
+  - single: "Eén klik, zoals mappen in het Startmenu"
+  - double: "Dubbelklikken, zoals gewone mappen"
+  - hover: "Erboven zweven (een klik opent ze ook)"
+  $options:pl-PL:
+  - single: "Jednym kliknięciem, jak foldery w menu Start"
+  - double: "Dwukrotnym kliknięciem, jak zwykłe foldery"
+  - hover: "Po najechaniu kursorem (kliknięcie też je otwiera)"
+  $options:pt-BR:
+  - single: "Um clique, como as pastas do menu Iniciar"
+  - double: "Clique duplo, como pastas normais"
+  - hover: "Passando o mouse por cima (um clique também abre)"
+  $options:ru-RU:
+  - single: "Одним щелчком, как папки в меню «Пуск»"
+  - double: "Двойным щелчком, как обычные папки"
+  - hover: "При наведении (щелчок тоже открывает)"
+  $options:tr-TR:
+  - single: "Tek tıklama, Başlat menüsü klasörleri gibi"
+  - double: "Çift tıklama, normal klasörler gibi"
+  - hover: "Üzerine gelme (tıklama da açar)"
+  $options:uk-UA:
+  - single: "Одним клацанням, як папки в меню «Пуск»"
+  - double: "Подвійним клацанням, як звичайні папки"
+  - hover: "Під час наведення (клацання теж відкриває)"
+  $options:zh-CN:
+  - single: "单击，像“开始”菜单中的文件夹"
+  - double: "双击，像普通文件夹"
+  - hover: "鼠标悬停（单击也能打开）"
+  $options:zh-TW:
+  - single: "按一下，就像「開始」功能表中的資料夾"
+  - double: "按兩下，就像一般資料夾"
+  - hover: "滑鼠停留（按一下也能開啟）"
 - openHoverDelay: 400
-  $name: Hover time before opening (milliseconds)
-  $description: Only used when opening by hovering. A popup opened this way closes again when the mouse moves away from it, unless you click inside it first.
+  $name: "Hover time before opening (milliseconds)"
+  $name:de-DE: "Verweildauer vor dem Öffnen (Millisekunden)"
+  $name:es-ES: "Tiempo antes de abrir al pasar el puntero (milisegundos)"
+  $name:fr-FR: "Durée de survol avant ouverture (millisecondes)"
+  $name:it-IT: "Tempo prima dell'apertura al passaggio (millisecondi)"
+  $name:ja-JP: "開くまでの待ち時間 (ミリ秒)"
+  $name:ko-KR: "열기 전 머무는 시간(밀리초)"
+  $name:nl-NL: "Wachttijd voor openen bij zweven (milliseconden)"
+  $name:pl-PL: "Czas przed otwarciem po najechaniu (milisekundy)"
+  $name:pt-BR: "Tempo antes de abrir ao passar o mouse (milissegundos)"
+  $name:ru-RU: "Время наведения перед открытием (миллисекунды)"
+  $name:tr-TR: "Üzerine gelince açılmadan önceki süre (milisaniye)"
+  $name:uk-UA: "Час наведення перед відкриттям (мілісекунди)"
+  $name:zh-CN: "悬停多久后打开（毫秒）"
+  $name:zh-TW: "停留多久後開啟（毫秒）"
+  $description: "Only used when opening by hovering. A popup opened this way closes again when the mouse moves away from it, unless you click inside it first."
+  $description:de-DE: "Nur beim Öffnen durch Darauf-zeigen. Ein so geöffnetes Popup schließt sich wieder, wenn die Maus es verlässt, außer man klickt vorher hinein."
+  $description:es-ES: "Solo al abrir pasando el puntero. Una ventana abierta así se cierra al apartar el ratón, salvo que antes hagas clic dentro."
+  $description:fr-FR: "Uniquement pour l'ouverture au survol. Une fenêtre ouverte ainsi se referme quand la souris s'en éloigne, sauf si vous cliquez dedans avant."
+  $description:it-IT: "Usato solo per l'apertura al passaggio del puntatore. Un popup aperto così si richiude quando il mouse si allontana, a meno che tu non ci clicchi dentro prima."
+  $description:ja-JP: "マウスを重ねて開く場合のみ使用します。この方法で開いたポップアップは、先に中をクリックしない限り、マウスが離れると閉じます。"
+  $description:ko-KR: "마우스를 올려 열 때만 사용합니다. 이렇게 연 팝업은 먼저 안을 클릭하지 않으면 마우스가 벗어날 때 닫힙니다."
+  $description:nl-NL: "Alleen bij openen door te zweven. Een pop-up die zo geopend is, sluit weer als de muis weggaat, tenzij je er eerst in klikt."
+  $description:pl-PL: "Tylko przy otwieraniu po najechaniu. Tak otwarte okienko zamyka się, gdy kursor się oddali, chyba że najpierw w nie klikniesz."
+  $description:pt-BR: "Usado só ao abrir passando o mouse. Uma janela aberta assim fecha quando o mouse se afasta, a menos que você clique dentro dela antes."
+  $description:ru-RU: "Только при открытии наведением. Окно, открытое так, закрывается, когда мышь уходит с него, если только вы сначала не щёлкнете внутри."
+  $description:tr-TR: "Yalnızca üzerine gelerek açarken kullanılır. Bu şekilde açılan pencere, önce içine tıklamazsanız fare uzaklaşınca kapanır."
+  $description:uk-UA: "Лише під час відкриття наведенням. Вікно, відкрите так, закривається, коли миша відходить від нього, якщо ви спершу не клацнете всередині."
+  $description:zh-CN: "仅用于悬停打开。以这种方式打开的弹出窗口在鼠标移开时会关闭，除非你先在其中单击。"
+  $description:zh-TW: "僅用於滑鼠停留開啟。以這種方式開啟的快顯視窗會在滑鼠移開時關閉，除非你先在其中按一下。"
 - openAnyFolder: false
-  $name: Open other desktop folders in the popup too
-  $description: Folders of your own, not just groups, open in the same popup, with the same options. Their icons aren't changed.
+  $name: "Open other desktop folders in the popup too"
+  $name:de-DE: "Auch andere Desktopordner im Popup öffnen"
+  $name:es-ES: "Abrir también otras carpetas del escritorio en la ventana emergente"
+  $name:fr-FR: "Ouvrir aussi les autres dossiers du bureau dans la fenêtre"
+  $name:it-IT: "Apri anche le altre cartelle del desktop nel popup"
+  $name:ja-JP: "デスクトップの他のフォルダーもポップアップで開く"
+  $name:ko-KR: "바탕 화면의 다른 폴더도 팝업으로 열기"
+  $name:nl-NL: "Ook andere bureaubladmappen in de pop-up openen"
+  $name:pl-PL: "Otwieraj w okienku także inne foldery z pulpitu"
+  $name:pt-BR: "Abrir também outras pastas da área de trabalho na janela"
+  $name:ru-RU: "Открывать во всплывающем окне и другие папки рабочего стола"
+  $name:tr-TR: "Diğer masaüstü klasörlerini de açılır pencerede aç"
+  $name:uk-UA: "Відкривати у спливному вікні й інші папки робочого столу"
+  $name:zh-CN: "在弹出窗口中也打开其他桌面文件夹"
+  $name:zh-TW: "在快顯視窗中也開啟其他桌面資料夾"
+  $description: "Folders of your own, not just groups, open in the same popup, with the same options. Their icons aren't changed."
+  $description:de-DE: "Eigene Ordner, nicht nur Gruppen, öffnen sich im selben Popup mit denselben Optionen. Ihre Symbole bleiben unverändert."
+  $description:es-ES: "Tus propias carpetas, no solo los grupos, se abren en la misma ventana con las mismas opciones. Sus iconos no cambian."
+  $description:fr-FR: "Vos propres dossiers, pas seulement les groupes, s'ouvrent dans la même fenêtre, avec les mêmes options. Leurs icônes ne changent pas."
+  $description:it-IT: "Le tue cartelle, non solo i gruppi, si aprono nello stesso popup con le stesse opzioni. Le loro icone non cambiano."
+  $description:ja-JP: "グループだけでなく自分のフォルダーも、同じポップアップと同じオプションで開きます。アイコンは変更されません。"
+  $description:ko-KR: "그룹뿐 아니라 내 폴더도 같은 팝업에서 같은 옵션으로 열립니다. 아이콘은 바뀌지 않습니다."
+  $description:nl-NL: "Je eigen mappen, niet alleen groepen, openen in dezelfde pop-up met dezelfde opties. Hun pictogrammen veranderen niet."
+  $description:pl-PL: "Twoje własne foldery, nie tylko grupy, otwierają się w tym samym okienku z tymi samymi opcjami. Ich ikony się nie zmieniają."
+  $description:pt-BR: "Suas próprias pastas, não só os grupos, abrem na mesma janela, com as mesmas opções. Os ícones delas não mudam."
+  $description:ru-RU: "Ваши собственные папки, а не только группы, открываются в том же окне с теми же параметрами. Их значки не меняются."
+  $description:tr-TR: "Yalnızca gruplar değil kendi klasörleriniz de aynı pencerede aynı seçeneklerle açılır. Simgeleri değişmez."
+  $description:uk-UA: "Ваші власні папки, а не лише групи, відкриваються в тому самому вікні з тими самими параметрами. Їхні значки не змінюються."
+  $description:zh-CN: "不只是组，你自己的文件夹也会在同一个弹出窗口中以相同选项打开。它们的图标不会改变。"
+  $description:zh-TW: "不只是群組，你自己的資料夾也會在同一個快顯視窗中以相同選項開啟。它們的圖示不會改變。"
+- maxIconRows: 5
+  $name: "Rows of icons before scrolling"
+  $name:de-DE: "Symbolzeilen vor dem Scrollen"
+  $name:es-ES: "Filas de iconos antes de desplazarse"
+  $name:fr-FR: "Lignes d'icônes avant le défilement"
+  $name:it-IT: "Righe di icone prima dello scorrimento"
+  $name:ja-JP: "スクロールまでのアイコンの行数"
+  $name:ko-KR: "스크롤 전 아이콘 행 수"
+  $name:nl-NL: "Rijen pictogrammen voor het schuiven"
+  $name:pl-PL: "Wiersze ikon przed przewijaniem"
+  $name:pt-BR: "Linhas de ícones antes de rolar"
+  $name:ru-RU: "Строк значков до прокрутки"
+  $name:tr-TR: "Kaydırmadan önceki simge satırı sayısı"
+  $name:uk-UA: "Рядків значків до прокручування"
+  $name:zh-CN: "滚动前的图标行数"
+  $name:zh-TW: "捲動前的圖示列數"
+  $description: "The popup shows up to this many rows of icons, then scrolls. It never grows taller than the screen."
+  $description:de-DE: "Das Popup zeigt bis zu so viele Symbolzeilen und scrollt dann. Es wird nie höher als der Bildschirm."
+  $description:es-ES: "La ventana muestra hasta este número de filas de iconos y luego se desplaza. Nunca es más alta que la pantalla."
+  $description:fr-FR: "La fenêtre affiche jusqu'à ce nombre de lignes d'icônes, puis défile. Elle ne dépasse jamais la hauteur de l'écran."
+  $description:it-IT: "Il popup mostra fino a questo numero di righe di icone, poi scorre. Non diventa mai più alto dello schermo."
+  $description:ja-JP: "ポップアップはこの行数までアイコンを表示し、それ以上はスクロールします。画面より高くなることはありません。"
+  $description:ko-KR: "팝업은 이 행 수까지 아이콘을 보여 주고 그 이상은 스크롤합니다. 화면보다 커지지 않습니다."
+  $description:nl-NL: "De pop-up toont tot zoveel rijen pictogrammen en schuift daarna. Hij wordt nooit hoger dan het scherm."
+  $description:pl-PL: "Okienko pokazuje do tylu wierszy ikon, a potem się przewija. Nigdy nie jest wyższe niż ekran."
+  $description:pt-BR: "A janela mostra até este número de linhas de ícones e depois rola. Nunca fica mais alta que a tela."
+  $description:ru-RU: "Окно показывает до стольких строк значков, а дальше прокручивается. Оно никогда не бывает выше экрана."
+  $description:tr-TR: "Pencere bu kadar simge satırı gösterir, sonra kaydırılır. Hiçbir zaman ekrandan uzun olmaz."
+  $description:uk-UA: "Вікно показує до стількох рядків значків, а далі прокручується. Воно ніколи не буває вищим за екран."
+  $description:zh-CN: "弹出窗口最多显示这么多行图标，超出后滚动。它永远不会比屏幕高。"
+  $description:zh-TW: "快顯視窗最多顯示這麼多列圖示，超過後會捲動。它永遠不會比螢幕高。"
+- maxListRows: 12
+  $name: "Rows in the list view before scrolling"
+  $name:de-DE: "Zeilen in der Listenansicht vor dem Scrollen"
+  $name:es-ES: "Filas en la vista de lista antes de desplazarse"
+  $name:fr-FR: "Lignes en affichage liste avant le défilement"
+  $name:it-IT: "Righe in visualizzazione elenco prima dello scorrimento"
+  $name:ja-JP: "一覧表示でスクロールまでの行数"
+  $name:ko-KR: "목록 보기에서 스크롤 전 행 수"
+  $name:nl-NL: "Rijen in de lijstweergave voor het schuiven"
+  $name:pl-PL: "Wiersze w widoku listy przed przewijaniem"
+  $name:pt-BR: "Linhas na exibição em lista antes de rolar"
+  $name:ru-RU: "Строк в виде списка до прокрутки"
+  $name:tr-TR: "Liste görünümünde kaydırmadan önceki satır sayısı"
+  $name:uk-UA: "Рядків у вигляді списку до прокручування"
+  $name:zh-CN: "列表视图中滚动前的行数"
+  $name:zh-TW: "清單檢視中捲動前的列數"
+  $description: "The same, for the list view."
+  $description:de-DE: "Dasselbe für die Listenansicht."
+  $description:es-ES: "Lo mismo, para la vista de lista."
+  $description:fr-FR: "Même chose, pour l'affichage en liste."
+  $description:it-IT: "Lo stesso, per la visualizzazione elenco."
+  $description:ja-JP: "一覧表示の場合の同じ設定です。"
+  $description:ko-KR: "목록 보기에 대한 같은 설정입니다."
+  $description:nl-NL: "Hetzelfde, voor de lijstweergave."
+  $description:pl-PL: "To samo dla widoku listy."
+  $description:pt-BR: "O mesmo, para a exibição em lista."
+  $description:ru-RU: "То же самое для вида списка."
+  $description:tr-TR: "Liste görünümü için aynısı."
+  $description:uk-UA: "Те саме для вигляду списку."
+  $description:zh-CN: "列表视图的相同设置。"
+  $description:zh-TW: "清單檢視的相同設定。"
 - blurredPopup: true
-  $name: Blurred popup background
-  $description: A see-through, blurred background like the Start menu's. Uses a solid background instead if Windows' Transparency effects setting is off, or with a high contrast theme.
+  $name: "Blurred popup background"
+  $name:de-DE: "Unscharfer Popup-Hintergrund"
+  $name:es-ES: "Fondo desenfocado"
+  $name:fr-FR: "Arrière-plan flou"
+  $name:it-IT: "Sfondo sfocato"
+  $name:ja-JP: "ぼかした背景"
+  $name:ko-KR: "흐린 팝업 배경"
+  $name:nl-NL: "Vervaagde achtergrond"
+  $name:pl-PL: "Rozmyte tło"
+  $name:pt-BR: "Fundo desfocado"
+  $name:ru-RU: "Размытый фон"
+  $name:tr-TR: "Bulanık arka plan"
+  $name:uk-UA: "Розмитий фон"
+  $name:zh-CN: "模糊背景"
+  $name:zh-TW: "模糊背景"
+  $description: "A see-through, blurred background like the Start menu's. Uses a solid background instead if Windows' Transparency effects setting is off, or with a high contrast theme."
+  $description:de-DE: "Ein durchscheinender, unscharfer Hintergrund wie im Startmenü. Ist die Windows-Einstellung „Transparenzeffekte“ aus oder ein Kontrastdesign aktiv, wird ein einfarbiger Hintergrund verwendet."
+  $description:es-ES: "Un fondo translúcido y desenfocado como el del menú Inicio. Usa un fondo sólido si los efectos de transparencia de Windows están desactivados o con un tema de contraste alto."
+  $description:fr-FR: "Un arrière-plan translucide et flou comme celui du menu Démarrer. Un fond uni est utilisé si les effets de transparence de Windows sont désactivés, ou avec un thème à contraste élevé."
+  $description:it-IT: "Uno sfondo trasparente e sfocato come quello del menu Start. Usa uno sfondo pieno se gli effetti di trasparenza di Windows sono disattivati o con un tema a contrasto elevato."
+  $description:ja-JP: "スタート メニューのような半透明のぼかし背景です。Windows の透明効果がオフの場合やハイ コントラスト テーマでは、単色の背景になります。"
+  $description:ko-KR: "시작 메뉴처럼 반투명하고 흐린 배경입니다. Windows 투명 효과가 꺼져 있거나 고대비 테마에서는 단색 배경을 사용합니다."
+  $description:nl-NL: "Een doorschijnende, vervaagde achtergrond zoals die van het Startmenu. Gebruikt een effen achtergrond als de transparantie-effecten van Windows uit staan, of met een thema met hoog contrast."
+  $description:pl-PL: "Przezroczyste, rozmyte tło jak w menu Start. Używa jednolitego tła, gdy efekty przezroczystości Windows są wyłączone lub przy motywie o dużym kontraście."
+  $description:pt-BR: "Um fundo translúcido e desfocado como o do menu Iniciar. Usa um fundo sólido se os efeitos de transparência do Windows estiverem desativados ou com um tema de alto contraste."
+  $description:ru-RU: "Полупрозрачный размытый фон, как у меню «Пуск». Если эффекты прозрачности Windows выключены или включена контрастная тема, используется сплошной фон."
+  $description:tr-TR: "Başlat menüsündeki gibi yarı saydam, bulanık bir arka plan. Windows saydamlık efektleri kapalıysa veya yüksek karşıtlık teması kullanılıyorsa düz bir arka plan kullanılır."
+  $description:uk-UA: "Напівпрозорий розмитий фон, як у меню «Пуск». Якщо ефекти прозорості Windows вимкнено або ввімкнено контрастну тему, використовується суцільний фон."
+  $description:zh-CN: "像“开始”菜单那样的半透明模糊背景。如果 Windows 的透明效果已关闭或使用高对比度主题，则使用纯色背景。"
+  $description:zh-TW: "像「開始」功能表那樣的半透明模糊背景。如果 Windows 的透明效果已關閉或使用高對比佈景主題，則使用純色背景。"
 - popupOpacity: 60
-  $name: Background colour strength (%)
-  $description: How much colour is laid over the blurred background, from 0 (most see-through) to 100 (solid).
+  $name: "Background colour strength (%)"
+  $name:de-DE: "Farbstärke des Hintergrunds (%)"
+  $name:es-ES: "Intensidad del color de fondo (%)"
+  $name:fr-FR: "Intensité de la couleur de fond (%)"
+  $name:it-IT: "Intensità del colore di sfondo (%)"
+  $name:ja-JP: "背景色の濃さ (%)"
+  $name:ko-KR: "배경색 강도(%)"
+  $name:nl-NL: "Sterkte van de achtergrondkleur (%)"
+  $name:pl-PL: "Intensywność koloru tła (%)"
+  $name:pt-BR: "Intensidade da cor de fundo (%)"
+  $name:ru-RU: "Насыщенность цвета фона (%)"
+  $name:tr-TR: "Arka plan rengi yoğunluğu (%)"
+  $name:uk-UA: "Насиченість кольору фону (%)"
+  $name:zh-CN: "背景颜色强度（%）"
+  $name:zh-TW: "背景色彩強度（%）"
+  $description: "How much colour is laid over the blurred background, from 0 (most see-through) to 100 (solid)."
+  $description:de-DE: "Wie viel Farbe über dem unscharfen Hintergrund liegt, von 0 (am durchsichtigsten) bis 100 (deckend)."
+  $description:es-ES: "Cuánto color se pone sobre el fondo desenfocado, de 0 (más transparente) a 100 (sólido)."
+  $description:fr-FR: "La quantité de couleur posée sur l'arrière-plan flou, de 0 (le plus transparent) à 100 (opaque)."
+  $description:it-IT: "Quanto colore viene steso sullo sfondo sfocato, da 0 (più trasparente) a 100 (pieno)."
+  $description:ja-JP: "ぼかした背景に重ねる色の量です。0 (最も透明) から 100 (不透明) まで。"
+  $description:ko-KR: "흐린 배경 위에 얹는 색의 양으로, 0(가장 투명)부터 100(불투명)까지입니다."
+  $description:nl-NL: "Hoeveel kleur over de vervaagde achtergrond ligt, van 0 (het meest doorschijnend) tot 100 (effen)."
+  $description:pl-PL: "Ile koloru nakłada się na rozmyte tło, od 0 (najbardziej przezroczyste) do 100 (jednolite)."
+  $description:pt-BR: "Quanta cor é aplicada sobre o fundo desfocado, de 0 (mais transparente) a 100 (sólido)."
+  $description:ru-RU: "Сколько цвета накладывается на размытый фон: от 0 (самый прозрачный) до 100 (сплошной)."
+  $description:tr-TR: "Bulanık arka planın üzerine ne kadar renk konacağı; 0 (en saydam) ile 100 (düz) arası."
+  $description:uk-UA: "Скільки кольору накладається на розмитий фон: від 0 (найпрозоріший) до 100 (суцільний)."
+  $description:zh-CN: "叠加在模糊背景上的颜色多少，从 0（最透明）到 100（纯色）。"
+  $description:zh-TW: "疊加在模糊背景上的色彩多寡，從 0（最透明）到 100（純色）。"
 - animatePopup: true
-  $name: Animate the popup
-  $description: Grow out of the group's icon when opening, and shrink back into it when closing, like Start menu folders.
+  $name: "Animate the popup"
+  $name:de-DE: "Popup animieren"
+  $name:es-ES: "Animar la ventana emergente"
+  $name:fr-FR: "Animer la fenêtre"
+  $name:it-IT: "Anima il popup"
+  $name:ja-JP: "ポップアップのアニメーション"
+  $name:ko-KR: "팝업 애니메이션"
+  $name:nl-NL: "Pop-up animeren"
+  $name:pl-PL: "Animuj okienko"
+  $name:pt-BR: "Animar a janela"
+  $name:ru-RU: "Анимировать всплывающее окно"
+  $name:tr-TR: "Açılır pencereyi canlandır"
+  $name:uk-UA: "Анімувати спливне вікно"
+  $name:zh-CN: "弹出窗口动画"
+  $name:zh-TW: "快顯視窗動畫"
+  $description: "Grow out of the group's icon when opening, and shrink back into it when closing, like Start menu folders."
+  $description:de-DE: "Beim Öffnen aus dem Gruppensymbol herauswachsen und beim Schließen wieder hineinschrumpfen, wie Ordner im Startmenü."
+  $description:es-ES: "Crece desde el icono del grupo al abrirse y vuelve a él al cerrarse, como las carpetas del menú Inicio."
+  $description:fr-FR: "Elle sort de l'icône du groupe à l'ouverture et y retourne à la fermeture, comme les dossiers du menu Démarrer."
+  $description:it-IT: "Esce dall'icona del gruppo all'apertura e vi rientra alla chiusura, come le cartelle del menu Start."
+  $description:ja-JP: "スタート メニューのフォルダーのように、開くときはグループのアイコンから広がり、閉じるときはアイコンに戻ります。"
+  $description:ko-KR: "시작 메뉴 폴더처럼 열 때는 그룹 아이콘에서 커지고 닫을 때는 다시 줄어듭니다."
+  $description:nl-NL: "Groeit bij openen uit het groepspictogram en krimpt bij sluiten weer terug, zoals mappen in het Startmenu."
+  $description:pl-PL: "Wyrasta z ikony grupy przy otwieraniu i wraca do niej przy zamykaniu, jak foldery w menu Start."
+  $description:pt-BR: "Cresce a partir do ícone do grupo ao abrir e volta para ele ao fechar, como as pastas do menu Iniciar."
+  $description:ru-RU: "При открытии вырастает из значка группы, а при закрытии сжимается обратно, как папки в меню «Пуск»."
+  $description:tr-TR: "Başlat menüsü klasörleri gibi açılırken grup simgesinden büyür, kapanırken ona geri küçülür."
+  $description:uk-UA: "Під час відкриття виростає зі значка групи, а під час закриття стискається назад, як папки в меню «Пуск»."
+  $description:zh-CN: "像“开始”菜单中的文件夹一样，打开时从组图标中展开，关闭时缩回。"
+  $description:zh-TW: "像「開始」功能表中的資料夾一樣，開啟時從群組圖示展開，關閉時縮回。"
+- animationDuration: 200
+  $name: "Animation length (milliseconds)"
+  $name:de-DE: "Animationsdauer (Millisekunden)"
+  $name:es-ES: "Duración de la animación (milisegundos)"
+  $name:fr-FR: "Durée de l'animation (millisecondes)"
+  $name:it-IT: "Durata dell'animazione (millisecondi)"
+  $name:ja-JP: "アニメーションの長さ (ミリ秒)"
+  $name:ko-KR: "애니메이션 길이(밀리초)"
+  $name:nl-NL: "Duur van de animatie (milliseconden)"
+  $name:pl-PL: "Długość animacji (milisekundy)"
+  $name:pt-BR: "Duração da animação (milissegundos)"
+  $name:ru-RU: "Длительность анимации (миллисекунды)"
+  $name:tr-TR: "Animasyon süresi (milisaniye)"
+  $name:uk-UA: "Тривалість анімації (мілісекунди)"
+  $name:zh-CN: "动画时长（毫秒）"
+  $name:zh-TW: "動畫長度（毫秒）"
+  $description: "How long the popup takes to open. Closing takes three quarters of this time."
+  $description:de-DE: "Wie lange das Öffnen des Popups dauert. Das Schließen dauert drei Viertel davon."
+  $description:es-ES: "Cuánto tarda en abrirse la ventana. Al cerrarse tarda tres cuartas partes de ese tiempo."
+  $description:fr-FR: "Le temps que met la fenêtre à s'ouvrir. La fermeture prend les trois quarts de ce temps."
+  $description:it-IT: "Quanto impiega il popup ad aprirsi. La chiusura richiede tre quarti di questo tempo."
+  $description:ja-JP: "ポップアップが開くまでの時間です。閉じるときはその 4 分の 3 の時間です。"
+  $description:ko-KR: "팝업이 열리는 데 걸리는 시간입니다. 닫힐 때는 이 시간의 4분의 3이 걸립니다."
+  $description:nl-NL: "Hoe lang het openen van de pop-up duurt. Sluiten duurt driekwart van die tijd."
+  $description:pl-PL: "Jak długo otwiera się okienko. Zamykanie trwa trzy czwarte tego czasu."
+  $description:pt-BR: "Quanto tempo a janela leva para abrir. Fechar leva três quartos desse tempo."
+  $description:ru-RU: "Сколько времени открывается окно. Закрытие занимает три четверти этого времени."
+  $description:tr-TR: "Pencerenin açılmasının ne kadar sürdüğü. Kapanma bu sürenin dörtte üçü kadar sürer."
+  $description:uk-UA: "Скільки часу відкривається вікно. Закриття триває три чверті цього часу."
+  $description:zh-CN: "弹出窗口打开所需的时间。关闭所需时间为其四分之三。"
+  $description:zh-TW: "快顯視窗開啟所需的時間。關閉所需時間為其四分之三。"
 - groupDataInFolder: false
-  $name: Keep group data inside the group folders (for syncing)
+  $name: "Keep group data inside the group folders (for syncing)"
+  $name:de-DE: "Gruppendaten in den Gruppenordnern speichern (zum Synchronisieren)"
+  $name:es-ES: "Guardar los datos de los grupos en sus carpetas (para sincronizar)"
+  $name:fr-FR: "Garder les données des groupes dans leurs dossiers (pour la synchronisation)"
+  $name:it-IT: "Conserva i dati dei gruppi nelle loro cartelle (per la sincronizzazione)"
+  $name:ja-JP: "グループのデータをグループのフォルダー内に保存する (同期用)"
+  $name:ko-KR: "그룹 데이터를 그룹 폴더 안에 저장(동기화용)"
+  $name:nl-NL: "Groepsgegevens in de groepsmappen bewaren (voor synchronisatie)"
+  $name:pl-PL: "Przechowuj dane grup w ich folderach (do synchronizacji)"
+  $name:pt-BR: "Guardar os dados dos grupos nas pastas deles (para sincronizar)"
+  $name:ru-RU: "Хранить данные групп в их папках (для синхронизации)"
+  $name:tr-TR: "Grup verilerini grup klasörlerinin içinde tut (eşitleme için)"
+  $name:uk-UA: "Зберігати дані груп у їхніх папках (для синхронізації)"
+  $name:zh-CN: "将组数据保存在组文件夹中（用于同步）"
+  $name:zh-TW: "將群組資料保存在群組資料夾中（用於同步）"
   $description: "Off (recommended): each group's app order, its own settings and its group status are kept in Windhawk's storage on this PC. On: they're kept in the hidden desktop.ini file inside each group instead, so they go with the folder when your desktop is synced (for example by OneDrive), copied or backed up, and the folders are still groups on another PC or after reinstalling the mod. Side effects of turning it on: the mod writes to that file every time you rearrange a group or change its settings, so syncing services upload it again each time; and the data stays in the folders if you uninstall the mod. Changing this moves your existing groups' data over."
+  $description:de-DE: "Aus (empfohlen): Reihenfolge, eigene Einstellungen und Gruppenstatus jeder Gruppe werden im Windhawk-Speicher auf diesem PC abgelegt. Ein: Sie werden stattdessen in der versteckten Datei desktop.ini in jeder Gruppe gespeichert. So wandern sie mit dem Ordner, wenn der Desktop synchronisiert (etwa mit OneDrive), kopiert oder gesichert wird, und die Ordner bleiben auch auf einem anderen PC oder nach einer Neuinstallation des Mods Gruppen. Nebenwirkungen: Der Mod schreibt bei jedem Umordnen oder Ändern der Einstellungen in diese Datei, sodass Synchronisierungsdienste sie jedes Mal neu hochladen; und die Daten bleiben nach dem Deinstallieren des Mods in den Ordnern. Beim Umschalten werden die Daten vorhandener Gruppen übertragen."
+  $description:es-ES: "Desactivado (recomendado): el orden, la configuración propia y el estado de grupo de cada grupo se guardan en el almacenamiento de Windhawk en este PC. Activado: se guardan en el archivo oculto desktop.ini de cada grupo, de modo que viajan con la carpeta cuando el escritorio se sincroniza (por ejemplo con OneDrive), se copia o se respalda, y las carpetas siguen siendo grupos en otro PC o tras reinstalar el mod. Efectos al activarlo: el mod escribe en ese archivo cada vez que reorganizas un grupo o cambias su configuración, por lo que los servicios de sincronización lo vuelven a subir cada vez; y los datos permanecen en las carpetas si desinstalas el mod. Al cambiar esta opción se trasladan los datos de los grupos existentes."
+  $description:fr-FR: "Désactivé (recommandé) : l'ordre, les paramètres propres et le statut de groupe de chaque groupe sont conservés dans le stockage de Windhawk sur ce PC. Activé : ils sont conservés dans le fichier caché desktop.ini de chaque groupe, et suivent donc le dossier quand le bureau est synchronisé (par exemple avec OneDrive), copié ou sauvegardé ; les dossiers restent des groupes sur un autre PC ou après réinstallation du mod. Effets secondaires : le mod écrit dans ce fichier chaque fois que vous réorganisez un groupe ou changez ses paramètres, si bien que les services de synchronisation le renvoient à chaque fois ; et les données restent dans les dossiers si vous désinstallez le mod. Changer ce réglage déplace les données des groupes existants."
+  $description:it-IT: "Disattivato (consigliato): l'ordine, le impostazioni proprie e lo stato di gruppo di ogni gruppo sono conservati nell'archivio di Windhawk su questo PC. Attivato: sono conservati nel file nascosto desktop.ini di ogni gruppo, quindi seguono la cartella quando il desktop viene sincronizzato (ad esempio con OneDrive), copiato o salvato, e le cartelle restano gruppi su un altro PC o dopo aver reinstallato la mod. Effetti collaterali: la mod scrive in quel file ogni volta che riordini un gruppo o ne cambi le impostazioni, quindi i servizi di sincronizzazione lo ricaricano ogni volta; e i dati restano nelle cartelle se disinstalli la mod. Cambiando questa opzione i dati dei gruppi esistenti vengono spostati."
+  $description:ja-JP: "オフ (推奨): 各グループの並び順、独自の設定、グループであることは、この PC の Windhawk のストレージに保存されます。オン: 代わりに各グループ内の隠しファイル desktop.ini に保存されるため、デスクトップを同期 (OneDrive など)、コピー、バックアップしたときにフォルダーと一緒に移動し、別の PC や mod の再インストール後もグループのままになります。オンにした場合の影響: グループを並べ替えたり設定を変えたりするたびに mod がこのファイルに書き込むため、同期サービスが毎回アップロードし直します。また、mod をアンインストールしてもデータはフォルダーに残ります。この設定を変えると、既存のグループのデータが移動されます。"
+  $description:ko-KR: "끔(권장): 각 그룹의 앱 순서, 자체 설정, 그룹 여부는 이 PC의 Windhawk 저장소에 보관됩니다. 켬: 대신 각 그룹 안의 숨김 파일 desktop.ini에 보관되므로, 바탕 화면을 동기화(예: OneDrive), 복사, 백업할 때 폴더와 함께 이동하고 다른 PC나 모드를 다시 설치한 뒤에도 그룹으로 남습니다. 켰을 때의 부작용: 그룹을 다시 정렬하거나 설정을 바꿀 때마다 모드가 이 파일에 쓰므로 동기화 서비스가 매번 다시 업로드합니다. 또한 모드를 제거해도 데이터가 폴더에 남습니다. 이 설정을 바꾸면 기존 그룹의 데이터가 옮겨집니다."
+  $description:nl-NL: "Uit (aanbevolen): de volgorde, eigen instellingen en groepsstatus van elke groep worden bewaard in de opslag van Windhawk op deze pc. Aan: ze worden in plaats daarvan bewaard in het verborgen bestand desktop.ini in elke groep, zodat ze met de map meegaan als je bureaublad wordt gesynchroniseerd (bijvoorbeeld met OneDrive), gekopieerd of geback-upt, en de mappen ook op een andere pc of na het opnieuw installeren van de mod groepen blijven. Bijwerkingen: de mod schrijft naar dat bestand telkens als je een groep herschikt of de instellingen wijzigt, dus synchronisatiediensten uploaden het elke keer opnieuw; en de gegevens blijven in de mappen als je de mod verwijdert. Als je dit wijzigt, worden de gegevens van bestaande groepen overgezet."
+  $description:pl-PL: "Wyłączone (zalecane): kolejność, własne ustawienia i status grupy są przechowywane w magazynie Windhawk na tym komputerze. Włączone: są przechowywane w ukrytym pliku desktop.ini w każdej grupie, więc przenoszą się z folderem, gdy pulpit jest synchronizowany (np. przez OneDrive), kopiowany lub archiwizowany, a foldery pozostają grupami na innym komputerze lub po ponownej instalacji moda. Skutki uboczne: mod zapisuje ten plik przy każdej zmianie kolejności lub ustawień grupy, więc usługi synchronizacji za każdym razem wysyłają go ponownie; a dane zostają w folderach po odinstalowaniu moda. Zmiana tej opcji przenosi dane istniejących grup."
+  $description:pt-BR: "Desativado (recomendado): a ordem, as configurações próprias e o status de grupo de cada grupo ficam no armazenamento do Windhawk neste PC. Ativado: ficam no arquivo oculto desktop.ini dentro de cada grupo, então acompanham a pasta quando a área de trabalho é sincronizada (por exemplo pelo OneDrive), copiada ou salva em backup, e as pastas continuam sendo grupos em outro PC ou depois de reinstalar o mod. Efeitos colaterais: o mod grava nesse arquivo toda vez que você reorganiza um grupo ou muda as configurações dele, então os serviços de sincronização o enviam de novo a cada vez; e os dados ficam nas pastas se você desinstalar o mod. Mudar esta opção transfere os dados dos grupos existentes."
+  $description:ru-RU: "Выключено (рекомендуется): порядок, собственные настройки и признак группы хранятся в хранилище Windhawk на этом ПК. Включено: они хранятся в скрытом файле desktop.ini внутри каждой группы, поэтому переносятся вместе с папкой при синхронизации рабочего стола (например, через OneDrive), копировании или резервном копировании, и папки остаются группами на другом ПК или после переустановки мода. Побочные эффекты: мод записывает этот файл при каждом изменении порядка или настроек группы, поэтому службы синхронизации каждый раз загружают его заново; а данные остаются в папках после удаления мода. При изменении этого параметра данные существующих групп переносятся."
+  $description:tr-TR: "Kapalı (önerilir): her grubun uygulama sırası, kendi ayarları ve grup durumu bu bilgisayardaki Windhawk depolamasında tutulur. Açık: bunun yerine her grubun içindeki gizli desktop.ini dosyasında tutulur; böylece masaüstünüz eşitlendiğinde (örneğin OneDrive ile), kopyalandığında veya yedeklendiğinde klasörle birlikte taşınır ve klasörler başka bir bilgisayarda ya da modu yeniden yükledikten sonra da grup olarak kalır. Yan etkileri: bir grubu her yeniden düzenlediğinizde veya ayarlarını değiştirdiğinizde mod bu dosyaya yazar, bu yüzden eşitleme hizmetleri onu her seferinde yeniden yükler; ayrıca modu kaldırsanız da veriler klasörlerde kalır. Bu ayarı değiştirmek mevcut grupların verilerini taşır."
+  $description:uk-UA: "Вимкнено (рекомендовано): порядок, власні налаштування й ознака групи зберігаються в сховищі Windhawk на цьому ПК. Увімкнено: вони зберігаються в прихованому файлі desktop.ini всередині кожної групи, тому переносяться разом із папкою під час синхронізації робочого столу (наприклад, через OneDrive), копіювання чи резервного копіювання, і папки лишаються групами на іншому ПК або після перевстановлення мода. Побічні ефекти: мод записує цей файл щоразу, коли ви змінюєте порядок чи налаштування групи, тож служби синхронізації щоразу завантажують його знову; а дані лишаються в папках після видалення мода. Зміна цього параметра переносить дані наявних груп."
+  $description:zh-CN: "关闭（推荐）：每个组的应用顺序、自身设置和组状态保存在此电脑上的 Windhawk 存储中。开启：改为保存在每个组内的隐藏文件 desktop.ini 中，因此在桌面同步（例如通过 OneDrive）、复制或备份时会随文件夹一起移动，并且在另一台电脑上或重新安装本模组后，这些文件夹仍然是组。开启后的副作用：每次重新排列组或更改其设置时，模组都会写入该文件，因此同步服务每次都会重新上传；卸载模组后数据也会留在文件夹中。更改此设置会迁移现有组的数据。"
+  $description:zh-TW: "關閉（建議）：每個群組的應用程式順序、自身設定和群組狀態保存在這台電腦的 Windhawk 儲存空間中。開啟：改為保存在每個群組內的隱藏檔案 desktop.ini 中，因此在桌面同步（例如透過 OneDrive）、複製或備份時會隨資料夾一起移動，而且在另一台電腦上或重新安裝此模組後，這些資料夾仍然是群組。開啟後的副作用：每次重新排列群組或變更其設定時，模組都會寫入該檔案，因此同步服務每次都會重新上傳；解除安裝模組後資料也會留在資料夾中。變更此設定會移轉現有群組的資料。"
 */
 // ==/WindhawkModSettings==
 
@@ -245,6 +987,704 @@ struct BusyScope {
     ~BusyScope() { g_busyCount--; }  // Runs when the function returns, however it returns.
 };
 
+// ---- Translations ---------------------------------------------------------
+//
+// Everything the mod shows (apart from file names) comes from this table,
+// in the language chosen in the "Language" setting, or Windows' own
+// display language. Tr(Text::Layout), for example, gives "Layout" in
+// English and "Ansicht" in German. The Windhawk settings page is
+// translated separately, in the settings block at the top of the file
+// (the "$name:de-DE" lines and so on).
+//
+// To add a language: add a row to kTranslations (each text in the same
+// order as the Text list), a matching option to the "language" setting,
+// and its translations of the settings.
+
+enum class Text {
+    GroupSettings,
+    FolderSettings,
+    ThisGroup,
+    ThisFolder,
+    AllGroups,
+    All,
+    Layout,
+    View,
+    Icons,
+    List,
+    AppsPerRow,
+    ItemsPerRow,
+    IconSize,
+    Small,
+    Medium,
+    Large,
+    Spacing,
+    Compact,
+    Normal,
+    Roomy,
+    ShowAppNames,
+    ShowNames,
+    Colour,
+    Behaviour,
+    SortApps,
+    SortItems,
+    MyOrder,
+    AToZ,
+    RemoveWhenOneLeft,
+    AppliesToGroups,
+    AppliesToGroupsAndFolders,
+    ResetToAllGroups,
+    ResetToShared,
+    GroupEmpty,
+    FolderEmpty,
+    FolderDetail,
+    NewGroup,
+    Count
+};
+constexpr int kTextCount = (int)Text::Count;
+
+struct Translation {
+    PCWSTR language;  // As in the "language" setting: "de", "zh-TW"...
+    PCWSTR texts[kTextCount];
+};
+
+const Translation kTranslations[] = {
+    {L"en",
+     {
+         L"Group settings",
+         L"Folder settings",
+         L"This group",
+         L"This folder",
+         L"All groups",
+         L"All",
+         L"Layout",
+         L"View",
+         L"Icons",
+         L"List",
+         L"Apps per row",
+         L"Items per row",
+         L"Icon size",
+         L"Small",
+         L"Medium",
+         L"Large",
+         L"Spacing",
+         L"Compact",
+         L"Normal",
+         L"Roomy",
+         L"Show app names",
+         L"Show names",
+         L"Colour",
+         L"Behaviour",
+         L"Sort apps",
+         L"Sort items",
+         L"My order",
+         L"A to Z",
+         L"Remove when one app is left",
+         L"Changes apply to every group.",
+         L"Changes apply to every group and folder.",
+         L"Reset to all-groups settings",
+         L"Reset to shared settings",
+         L"This group is empty",
+         L"This folder is empty",
+         L"Folder",
+         L"New group",
+     }},
+    {L"de",
+     {
+         L"Gruppeneinstellungen",
+         L"Ordnereinstellungen",
+         L"Diese Gruppe",
+         L"Dieser Ordner",
+         L"Alle Gruppen",
+         L"Alle",
+         L"Layout",
+         L"Ansicht",
+         L"Symbole",
+         L"Liste",
+         L"Apps pro Zeile",
+         L"Elemente pro Zeile",
+         L"Symbolgröße",
+         L"Klein",
+         L"Mittel",
+         L"Groß",
+         L"Abstand",
+         L"Kompakt",
+         L"Normal",
+         L"Weit",
+         L"App-Namen anzeigen",
+         L"Namen anzeigen",
+         L"Farbe",
+         L"Verhalten",
+         L"Apps sortieren",
+         L"Elemente sortieren",
+         L"Eigene Reihenfolge",
+         L"A bis Z",
+         L"Entfernen, wenn nur eine App übrig ist",
+         L"Änderungen gelten für alle Gruppen.",
+         L"Änderungen gelten für alle Gruppen und Ordner.",
+         L"Auf Einstellungen aller Gruppen zurücksetzen",
+         L"Auf gemeinsame Einstellungen zurücksetzen",
+         L"Diese Gruppe ist leer",
+         L"Dieser Ordner ist leer",
+         L"Ordner",
+         L"Neue Gruppe",
+     }},
+    {L"es",
+     {
+         L"Configuración del grupo",
+         L"Configuración de la carpeta",
+         L"Este grupo",
+         L"Esta carpeta",
+         L"Todos los grupos",
+         L"Todos",
+         L"Diseño",
+         L"Vista",
+         L"Iconos",
+         L"Lista",
+         L"Apps por fila",
+         L"Elementos por fila",
+         L"Tamaño de icono",
+         L"Pequeño",
+         L"Mediano",
+         L"Grande",
+         L"Espaciado",
+         L"Compacto",
+         L"Normal",
+         L"Amplio",
+         L"Mostrar nombres de apps",
+         L"Mostrar nombres",
+         L"Color",
+         L"Comportamiento",
+         L"Ordenar apps",
+         L"Ordenar elementos",
+         L"Mi orden",
+         L"De la A a la Z",
+         L"Quitar cuando quede una sola app",
+         L"Los cambios se aplican a todos los grupos.",
+         L"Los cambios se aplican a todos los grupos y carpetas.",
+         L"Restablecer a la configuración de todos los grupos",
+         L"Restablecer a la configuración compartida",
+         L"Este grupo está vacío",
+         L"Esta carpeta está vacía",
+         L"Carpeta",
+         L"Nuevo grupo",
+     }},
+    {L"fr",
+     {
+         L"Paramètres du groupe",
+         L"Paramètres du dossier",
+         L"Ce groupe",
+         L"Ce dossier",
+         L"Tous les groupes",
+         L"Tous",
+         L"Disposition",
+         L"Affichage",
+         L"Icônes",
+         L"Liste",
+         L"Applis par ligne",
+         L"Éléments par ligne",
+         L"Taille des icônes",
+         L"Petite",
+         L"Moyenne",
+         L"Grande",
+         L"Espacement",
+         L"Compact",
+         L"Normal",
+         L"Aéré",
+         L"Afficher le nom des applis",
+         L"Afficher les noms",
+         L"Couleur",
+         L"Comportement",
+         L"Trier les applis",
+         L"Trier les éléments",
+         L"Mon ordre",
+         L"De A à Z",
+         L"Supprimer s'il reste une seule appli",
+         L"Les modifications s'appliquent à tous les groupes.",
+         L"Les modifications s'appliquent à tous les groupes et dossiers.",
+         L"Rétablir les paramètres de tous les groupes",
+         L"Rétablir les paramètres communs",
+         L"Ce groupe est vide",
+         L"Ce dossier est vide",
+         L"Dossier",
+         L"Nouveau groupe",
+     }},
+    {L"it",
+     {
+         L"Impostazioni gruppo",
+         L"Impostazioni cartella",
+         L"Questo gruppo",
+         L"Questa cartella",
+         L"Tutti i gruppi",
+         L"Tutti",
+         L"Layout",
+         L"Visualizzazione",
+         L"Icone",
+         L"Elenco",
+         L"App per riga",
+         L"Elementi per riga",
+         L"Dimensione icone",
+         L"Piccole",
+         L"Medie",
+         L"Grandi",
+         L"Spaziatura",
+         L"Compatta",
+         L"Normale",
+         L"Ampia",
+         L"Mostra nomi app",
+         L"Mostra nomi",
+         L"Colore",
+         L"Comportamento",
+         L"Ordina app",
+         L"Ordina elementi",
+         L"Il mio ordine",
+         L"Dalla A alla Z",
+         L"Rimuovi quando resta una sola app",
+         L"Le modifiche si applicano a tutti i gruppi.",
+         L"Le modifiche si applicano a tutti i gruppi e le cartelle.",
+         L"Ripristina impostazioni di tutti i gruppi",
+         L"Ripristina impostazioni condivise",
+         L"Questo gruppo è vuoto",
+         L"Questa cartella è vuota",
+         L"Cartella",
+         L"Nuovo gruppo",
+     }},
+    {L"ja",
+     {
+         L"グループの設定",
+         L"フォルダーの設定",
+         L"このグループ",
+         L"このフォルダー",
+         L"すべてのグループ",
+         L"すべて",
+         L"レイアウト",
+         L"表示",
+         L"アイコン",
+         L"一覧",
+         L"1 行のアプリ数",
+         L"1 行の項目数",
+         L"アイコンのサイズ",
+         L"小",
+         L"中",
+         L"大",
+         L"間隔",
+         L"狭い",
+         L"標準",
+         L"広い",
+         L"アプリ名を表示",
+         L"名前を表示",
+         L"色",
+         L"動作",
+         L"アプリの並び順",
+         L"項目の並び順",
+         L"自分の順序",
+         L"名前順",
+         L"アプリが 1 つになったら削除",
+         L"変更はすべてのグループに適用されます。",
+         L"変更はすべてのグループとフォルダーに適用されます。",
+         L"すべてのグループの設定に戻す",
+         L"共通の設定に戻す",
+         L"このグループは空です",
+         L"このフォルダーは空です",
+         L"フォルダー",
+         L"新しいグループ",
+     }},
+    {L"ko",
+     {
+         L"그룹 설정",
+         L"폴더 설정",
+         L"이 그룹",
+         L"이 폴더",
+         L"모든 그룹",
+         L"모두",
+         L"레이아웃",
+         L"보기",
+         L"아이콘",
+         L"목록",
+         L"행당 앱 수",
+         L"행당 항목 수",
+         L"아이콘 크기",
+         L"작게",
+         L"보통",
+         L"크게",
+         L"간격",
+         L"좁게",
+         L"보통",
+         L"넓게",
+         L"앱 이름 표시",
+         L"이름 표시",
+         L"색",
+         L"동작",
+         L"앱 정렬",
+         L"항목 정렬",
+         L"내 순서",
+         L"이름순",
+         L"앱이 하나 남으면 제거",
+         L"변경 내용은 모든 그룹에 적용됩니다.",
+         L"변경 내용은 모든 그룹과 폴더에 적용됩니다.",
+         L"모든 그룹 설정으로 재설정",
+         L"공유 설정으로 재설정",
+         L"이 그룹은 비어 있습니다",
+         L"이 폴더는 비어 있습니다",
+         L"폴더",
+         L"새 그룹",
+     }},
+    {L"nl",
+     {
+         L"Groepsinstellingen",
+         L"Mapinstellingen",
+         L"Deze groep",
+         L"Deze map",
+         L"Alle groepen",
+         L"Alle",
+         L"Indeling",
+         L"Weergave",
+         L"Pictogrammen",
+         L"Lijst",
+         L"Apps per rij",
+         L"Items per rij",
+         L"Pictogramgrootte",
+         L"Klein",
+         L"Middel",
+         L"Groot",
+         L"Afstand",
+         L"Compact",
+         L"Normaal",
+         L"Ruim",
+         L"App-namen tonen",
+         L"Namen tonen",
+         L"Kleur",
+         L"Gedrag",
+         L"Apps sorteren",
+         L"Items sorteren",
+         L"Mijn volgorde",
+         L"A tot Z",
+         L"Verwijderen als er één app over is",
+         L"Wijzigingen gelden voor alle groepen.",
+         L"Wijzigingen gelden voor alle groepen en mappen.",
+         L"Terugzetten naar instellingen van alle groepen",
+         L"Terugzetten naar gedeelde instellingen",
+         L"Deze groep is leeg",
+         L"Deze map is leeg",
+         L"Map",
+         L"Nieuwe groep",
+     }},
+    {L"pl",
+     {
+         L"Ustawienia grupy",
+         L"Ustawienia folderu",
+         L"Ta grupa",
+         L"Ten folder",
+         L"Wszystkie grupy",
+         L"Wszystkie",
+         L"Układ",
+         L"Widok",
+         L"Ikony",
+         L"Lista",
+         L"Aplikacje w wierszu",
+         L"Elementy w wierszu",
+         L"Rozmiar ikon",
+         L"Małe",
+         L"Średnie",
+         L"Duże",
+         L"Odstępy",
+         L"Wąskie",
+         L"Normalne",
+         L"Szerokie",
+         L"Pokaż nazwy aplikacji",
+         L"Pokaż nazwy",
+         L"Kolor",
+         L"Zachowanie",
+         L"Sortuj aplikacje",
+         L"Sortuj elementy",
+         L"Moja kolejność",
+         L"Od A do Z",
+         L"Usuń, gdy zostanie jedna aplikacja",
+         L"Zmiany dotyczą wszystkich grup.",
+         L"Zmiany dotyczą wszystkich grup i folderów.",
+         L"Przywróć ustawienia wszystkich grup",
+         L"Przywróć wspólne ustawienia",
+         L"Ta grupa jest pusta",
+         L"Ten folder jest pusty",
+         L"Folder",
+         L"Nowa grupa",
+     }},
+    {L"pt",
+     {
+         L"Configurações do grupo",
+         L"Configurações da pasta",
+         L"Este grupo",
+         L"Esta pasta",
+         L"Todos os grupos",
+         L"Todos",
+         L"Layout",
+         L"Exibição",
+         L"Ícones",
+         L"Lista",
+         L"Apps por linha",
+         L"Itens por linha",
+         L"Tamanho dos ícones",
+         L"Pequeno",
+         L"Médio",
+         L"Grande",
+         L"Espaçamento",
+         L"Compacto",
+         L"Normal",
+         L"Amplo",
+         L"Mostrar nomes dos apps",
+         L"Mostrar nomes",
+         L"Cor",
+         L"Comportamento",
+         L"Ordenar apps",
+         L"Ordenar itens",
+         L"Minha ordem",
+         L"De A a Z",
+         L"Remover quando restar um só app",
+         L"As alterações valem para todos os grupos.",
+         L"As alterações valem para todos os grupos e pastas.",
+         L"Redefinir para as configurações de todos os grupos",
+         L"Redefinir para as configurações compartilhadas",
+         L"Este grupo está vazio",
+         L"Esta pasta está vazia",
+         L"Pasta",
+         L"Novo grupo",
+     }},
+    {L"ru",
+     {
+         L"Настройки группы",
+         L"Настройки папки",
+         L"Эта группа",
+         L"Эта папка",
+         L"Все группы",
+         L"Все",
+         L"Макет",
+         L"Вид",
+         L"Значки",
+         L"Список",
+         L"Приложений в строке",
+         L"Элементов в строке",
+         L"Размер значков",
+         L"Мелкие",
+         L"Средние",
+         L"Крупные",
+         L"Интервалы",
+         L"Плотно",
+         L"Обычно",
+         L"Свободно",
+         L"Показывать названия приложений",
+         L"Показывать названия",
+         L"Цвет",
+         L"Поведение",
+         L"Сортировка приложений",
+         L"Сортировка элементов",
+         L"Мой порядок",
+         L"От А до Я",
+         L"Удалять, когда остаётся одно приложение",
+         L"Изменения применяются ко всем группам.",
+         L"Изменения применяются ко всем группам и папкам.",
+         L"Сбросить к настройкам всех групп",
+         L"Сбросить к общим настройкам",
+         L"Эта группа пуста",
+         L"Эта папка пуста",
+         L"Папка",
+         L"Новая группа",
+     }},
+    {L"tr",
+     {
+         L"Grup ayarları",
+         L"Klasör ayarları",
+         L"Bu grup",
+         L"Bu klasör",
+         L"Tüm gruplar",
+         L"Tümü",
+         L"Düzen",
+         L"Görünüm",
+         L"Simgeler",
+         L"Liste",
+         L"Satır başına uygulama",
+         L"Satır başına öğe",
+         L"Simge boyutu",
+         L"Küçük",
+         L"Orta",
+         L"Büyük",
+         L"Aralık",
+         L"Sıkı",
+         L"Normal",
+         L"Geniş",
+         L"Uygulama adlarını göster",
+         L"Adları göster",
+         L"Renk",
+         L"Davranış",
+         L"Uygulamaları sırala",
+         L"Öğeleri sırala",
+         L"Benim sıram",
+         L"A'dan Z'ye",
+         L"Tek uygulama kalınca kaldır",
+         L"Değişiklikler tüm gruplara uygulanır.",
+         L"Değişiklikler tüm gruplara ve klasörlere uygulanır.",
+         L"Tüm grupların ayarlarına sıfırla",
+         L"Ortak ayarlara sıfırla",
+         L"Bu grup boş",
+         L"Bu klasör boş",
+         L"Klasör",
+         L"Yeni grup",
+     }},
+    {L"uk",
+     {
+         L"Налаштування групи",
+         L"Налаштування папки",
+         L"Ця група",
+         L"Ця папка",
+         L"Усі групи",
+         L"Усі",
+         L"Макет",
+         L"Вигляд",
+         L"Значки",
+         L"Список",
+         L"Програм у рядку",
+         L"Елементів у рядку",
+         L"Розмір значків",
+         L"Малі",
+         L"Середні",
+         L"Великі",
+         L"Інтервали",
+         L"Щільно",
+         L"Звичайно",
+         L"Вільно",
+         L"Показувати назви програм",
+         L"Показувати назви",
+         L"Колір",
+         L"Поведінка",
+         L"Сортування програм",
+         L"Сортування елементів",
+         L"Мій порядок",
+         L"Від А до Я",
+         L"Видаляти, коли лишається одна програма",
+         L"Зміни застосовуються до всіх груп.",
+         L"Зміни застосовуються до всіх груп і папок.",
+         L"Скинути до налаштувань усіх груп",
+         L"Скинути до спільних налаштувань",
+         L"Ця група порожня",
+         L"Ця папка порожня",
+         L"Папка",
+         L"Нова група",
+     }},
+    {L"zh-CN",
+     {
+         L"组设置",
+         L"文件夹设置",
+         L"此组",
+         L"此文件夹",
+         L"所有组",
+         L"全部",
+         L"布局",
+         L"视图",
+         L"图标",
+         L"列表",
+         L"每行应用数",
+         L"每行项目数",
+         L"图标大小",
+         L"小",
+         L"中",
+         L"大",
+         L"间距",
+         L"紧凑",
+         L"正常",
+         L"宽松",
+         L"显示应用名称",
+         L"显示名称",
+         L"颜色",
+         L"行为",
+         L"应用排序",
+         L"项目排序",
+         L"我的顺序",
+         L"按名称",
+         L"仅剩一个应用时删除",
+         L"更改将应用于所有组。",
+         L"更改将应用于所有组和文件夹。",
+         L"重置为所有组的设置",
+         L"重置为共享设置",
+         L"此组为空",
+         L"此文件夹为空",
+         L"文件夹",
+         L"新建组",
+     }},
+    {L"zh-TW",
+     {
+         L"群組設定",
+         L"資料夾設定",
+         L"此群組",
+         L"此資料夾",
+         L"所有群組",
+         L"全部",
+         L"版面配置",
+         L"檢視",
+         L"圖示",
+         L"清單",
+         L"每列應用程式數",
+         L"每列項目數",
+         L"圖示大小",
+         L"小",
+         L"中",
+         L"大",
+         L"間距",
+         L"緊密",
+         L"標準",
+         L"寬鬆",
+         L"顯示應用程式名稱",
+         L"顯示名稱",
+         L"色彩",
+         L"行為",
+         L"應用程式排序",
+         L"項目排序",
+         L"我的順序",
+         L"依名稱",
+         L"只剩一個應用程式時移除",
+         L"變更會套用到所有群組。",
+         L"變更會套用到所有群組和資料夾。",
+         L"重設為所有群組的設定",
+         L"重設為共用設定",
+         L"此群組是空的",
+         L"此資料夾是空的",
+         L"資料夾",
+         L"新群組",
+     }},
+};
+
+std::atomic<int> g_languageIndex{0};  // Which row of kTranslations.
+
+PCWSTR Tr(Text text) {
+    return kTranslations[g_languageIndex].texts[(int)text];
+}
+
+// Finds the row for the "language" setting. For "auto", uses Windows' display
+// language: Chinese in Taiwan, Hong Kong and Macao gets Traditional Chinese,
+// other Chinese gets Simplified, and other languages are matched by their
+// first part ("pt-PT" and "pt-BR" both get "pt"). English if nothing matches.
+int FindLanguage(PCWSTR setting) {
+    std::wstring wanted = setting ? setting : L"auto";
+    if (wanted.empty() || wanted == L"auto") {
+        WCHAR name[LOCALE_NAME_MAX_LENGTH] = L"";
+        if (!LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT), name,
+                              LOCALE_NAME_MAX_LENGTH, 0)) {
+            return 0;
+        }
+        wanted = name;
+        if (_wcsnicmp(name, L"zh", 2) == 0) {
+            bool traditional = wcsstr(name, L"Hant") || wcsstr(name, L"TW") ||
+                               wcsstr(name, L"HK") || wcsstr(name, L"MO");
+            wanted = traditional ? L"zh-TW" : L"zh-CN";
+        } else {
+            wanted = wanted.substr(0, wanted.find(L'-'));
+        }
+    }
+    for (int i = 0; i < (int)ARRAYSIZE(kTranslations); i++) {
+        if (_wcsicmp(kTranslations[i].language, wanted.c_str()) == 0) {
+            return i;
+        }
+    }
+    return 0;
+}
+
 // ---- 1. Settings ------------------------------------------------------------
 
 enum class GroupTrigger { Hover, Shift, Always };
@@ -259,6 +1699,10 @@ struct {
     bool blurredPopup;
     int popupOpacity;  // 0 to 100.
     bool animatePopup;
+    int openMilliseconds;   // How long the popup takes to open (closing
+                            // takes three quarters of this).
+    int maxIconRows;        // Rows shown before scrolling, with icons...
+    int maxListRows;        // ...and in the list view.
 } g_settings;
 
 // Whether each group's data is kept in its desktop.ini (true) or in
@@ -294,6 +1738,13 @@ void LoadSettings() {
 
     g_settings.blurredPopup = Wh_GetIntSetting(L"blurredPopup") != 0;
     g_settings.popupOpacity = std::clamp(Wh_GetIntSetting(L"popupOpacity"), 0, 100);
+    g_settings.openMilliseconds = std::clamp(Wh_GetIntSetting(L"animationDuration"), 50, 2000);
+    g_settings.maxIconRows = std::clamp(Wh_GetIntSetting(L"maxIconRows"), 1, 30);
+    g_settings.maxListRows = std::clamp(Wh_GetIntSetting(L"maxListRows"), 1, 60);
+
+    PCWSTR language = Wh_GetStringSetting(L"language");
+    g_languageIndex = FindLanguage(language);
+    Wh_FreeStringSetting(language);
     g_settings.animatePopup = Wh_GetIntSetting(L"animatePopup") != 0;
     g_dataInFolder = Wh_GetIntSetting(L"groupDataInFolder") != 0;
 }
@@ -862,8 +2313,15 @@ std::vector<std::wstring> ReadGroupIniNames(const std::wstring& folderPath) {
 //   IsGroup=1*Order=Notepad.lnk|Paint.lnk*Tint=255*
 // "*" can't appear in a file name, so it can't appear in a value. (Not line
 // breaks: portable Windhawk keeps its storage in an .ini file, which can't
-// hold them.) A list of all the IDs is kept as well, in "Groups", so the mod
-// can tidy up after groups deleted while it wasn't running.
+// hold them.) A list of all the IDs is kept as well, in "GroupList", so the
+// mod can tidy up after groups deleted while it wasn't running.
+//
+// Two things can get long: a folder's saved order (it names every item, and
+// with "Open other desktop folders" a folder can hold thousands), and the
+// list of IDs. Windhawk can't keep a value that long (portable Windhawk only
+// reads back up to 32,767 characters), so those are kept separately, split
+// into pieces (see WriteLongStoredText). That keeps each group's main value,
+// with "IsGroup" and its settings, small.
 //
 // Windhawk's storage for a mod is shared by everyone who uses the PC, but
 // each person has their own desktop and their own groups. So the names of
@@ -879,6 +2337,9 @@ std::vector<std::wstring> ReadGroupIniNames(const std::wstring& folderPath) {
 std::mutex g_storageLock;
 using GroupValues = std::map<std::wstring, std::wstring>;
 std::map<std::wstring, GroupValues> g_groupData;  // Folder ID -> its values.
+// The order last saved (in pieces) for each folder, so it's only written
+// again when it changes.
+std::map<std::wstring, std::wstring> g_savedOrders;
 
 // The start of the names of this account's values (see above). Set once in
 // Wh_ModInit. "" if Windows couldn't tell us the account's ID.
@@ -906,7 +2367,9 @@ std::wstring UserValueName(const std::wstring& name) {
     return g_userPrefix + name;
 }
 
-// Reads a stored text value ("" if there's none). Hold g_storageLock.
+// Reads a stored text value ("" if there's none). Hold g_storageLock. Long
+// text is saved in pieces (see WriteLongStoredText), so values stay well
+// under this size.
 std::wstring ReadStoredText(const std::wstring& name) {
     std::vector<WCHAR> buffer(64 * 1024, L'\0');
     Wh_GetStringValue(name.c_str(), buffer.data(), buffer.size());
@@ -920,6 +2383,88 @@ bool WriteStoredText(const std::wstring& name, const std::wstring& text) {
         return false;
     }
     return true;
+}
+
+// --- Long text, in pieces ---
+//
+// Long text is split into pieces of at most 30,000 characters, saved as
+// "<name>-<generation>-0", "<name>-<generation>-1" and so on. "<name>-Pieces"
+// says which generation is current (0 or 1) and how many pieces it has, as
+// generation x 1,000,000 + count. A save writes the *other* generation's
+// pieces first, then switches "-Pieces" over in a single write, and only
+// then deletes the old pieces. So if Explorer stops halfway through, the old
+// text is still whole. Each piece is wrapped in "*" characters, so portable
+// Windhawk's .ini file can't trim spaces off its ends.
+
+constexpr size_t kPieceLength = 30000;
+constexpr int kGenerationStep = 1000000;
+
+// Reads long text. Sets `found` to whether it was ever saved. Hold
+// g_storageLock.
+std::wstring ReadLongStoredText(const std::wstring& name, bool* found = nullptr) {
+    int pieces = Wh_GetIntValue((name + L"-Pieces").c_str(), -1);
+    if (found) {
+        *found = pieces >= 0;
+    }
+    if (pieces <= 0) {
+        return L"";
+    }
+    int generation = pieces / kGenerationStep, count = pieces % kGenerationStep;
+    std::wstring text;
+    for (int i = 0; i < count; i++) {
+        std::wstring piece = ReadStoredText(name + L"-" + std::to_wstring(generation) + L"-" +
+                                            std::to_wstring(i));
+        if (piece.size() < 2 || piece.front() != L'*' || piece.back() != L'*') {
+            Wh_Log(L"A piece of \"%s\" is missing", name.c_str());
+            return L"";
+        }
+        text += piece.substr(1, piece.size() - 2);
+    }
+    return text;
+}
+
+void DeletePieces(const std::wstring& name, int generation, int count) {
+    for (int i = 0; i < count; i++) {
+        Wh_DeleteValue(
+            (name + L"-" + std::to_wstring(generation) + L"-" + std::to_wstring(i)).c_str());
+    }
+}
+
+// Saves long text (see above). If it fails, the old text is kept. Hold
+// g_storageLock.
+bool WriteLongStoredText(const std::wstring& name, const std::wstring& text) {
+    int old = std::max(0, Wh_GetIntValue((name + L"-Pieces").c_str(), 0));
+    int oldGeneration = old / kGenerationStep, oldCount = old % kGenerationStep;
+    int generation = 1 - oldGeneration;
+    int count = (int)((text.size() + kPieceLength - 1) / kPieceLength);
+
+    for (int i = 0; i < count; i++) {
+        std::wstring piece = L"*" + text.substr(i * kPieceLength, kPieceLength) + L"*";
+        if (!WriteStoredText(name + L"-" + std::to_wstring(generation) + L"-" +
+                                 std::to_wstring(i),
+                             piece)) {
+            DeletePieces(name, generation, i + 1);
+            return false;
+        }
+    }
+    int pieces = generation * kGenerationStep + count;
+    if (!Wh_SetIntValue((name + L"-Pieces").c_str(), pieces) ||
+        Wh_GetIntValue((name + L"-Pieces").c_str(), -1) != pieces) {
+        Wh_Log(L"Couldn't save \"%s\" in Windhawk's storage", name.c_str());
+        DeletePieces(name, generation, count);
+        return false;
+    }
+    DeletePieces(name, oldGeneration, oldCount);
+    return true;
+}
+
+void DeleteLongStoredText(const std::wstring& name) {
+    int old = Wh_GetIntValue((name + L"-Pieces").c_str(), -1);
+    if (old < 0) {
+        return;
+    }
+    DeletePieces(name, old / kGenerationStep, old % kGenerationStep);
+    Wh_DeleteValue((name + L"-Pieces").c_str());
 }
 
 // For single values of this account's (UnfinishedGroup), without holding
@@ -1029,11 +2574,32 @@ bool SaveStoredGroup(const std::wstring& id);
 void LoadStoredGroups() {
     std::lock_guard<std::mutex> lock(g_storageLock);
     g_groupData.clear();
-    for (const std::wstring& id : SplitIdList(ReadStoredText(UserValueName(L"Groups")))) {
+    g_savedOrders.clear();
+
+    // The list of IDs. Earlier versions kept it as one value, "Groups"; it's
+    // saved in pieces from now on.
+    bool listInPieces = false;
+    std::wstring list = ReadLongStoredText(UserValueName(L"GroupList"), &listInPieces);
+    if (!listInPieces) {
+        list = ReadStoredText(UserValueName(L"Groups"));
+    }
+    for (const std::wstring& id : SplitIdList(list)) {
         GroupValues values = ParseStoredGroup(ReadStoredText(UserValueName(L"Group-" + id)));
+        // The order, kept in pieces. (Earlier versions kept it in the main
+        // value, which ParseStoredGroup has already read; it moves to
+        // pieces the next time the group is saved.)
+        bool orderInPieces = false;
+        std::wstring order = ReadLongStoredText(UserValueName(L"Order-" + id), &orderInPieces);
+        if (orderInPieces && !order.empty()) {
+            values[L"Order"] = order;
+            g_savedOrders[id] = order;
+        }
         if (!values.empty()) {
             g_groupData[id] = values;
         }
+    }
+    if (!listInPieces && !g_groupData.empty() && SaveGroupIdList()) {
+        Wh_DeleteValue(UserValueName(L"Groups").c_str());
     }
 
     // Test versions of the mod saved groups without the account's ID in the
@@ -1071,16 +2637,46 @@ bool SaveGroupIdList() {
         }
         list += group.first;
     }
-    return WriteStoredText(UserValueName(L"Groups"), list);
+    return WriteLongStoredText(UserValueName(L"GroupList"), list);
 }
 
-// Saves one group's data from memory. Hold g_storageLock.
+// Saves one group's data from memory: the order in pieces (only if it
+// changed), and everything else in the group's main value. The main value
+// is always saved, even if the order couldn't be, so the group never loses
+// "IsGroup" or its settings. Hold g_storageLock.
 bool SaveStoredGroup(const std::wstring& id) {
-    std::wstring text;
-    for (const auto& value : g_groupData[id]) {
-        text += value.first + L"=" + value.second + L"*";
+    const GroupValues& values = g_groupData[id];
+    auto order = values.find(L"Order");
+    std::wstring orderText = order != values.end() ? order->second : L"";
+    auto saved = g_savedOrders.find(id);
+    bool orderSaved = true;
+    if (saved == g_savedOrders.end() || saved->second != orderText) {
+        std::wstring name = UserValueName(L"Order-" + id);
+        if (orderText.empty()) {
+            DeleteLongStoredText(name);
+            g_savedOrders.erase(id);
+        } else if (WriteLongStoredText(name, orderText)) {
+            g_savedOrders[id] = orderText;
+        } else {
+            orderSaved = false;
+        }
     }
-    return WriteStoredText(UserValueName(L"Group-" + id), text);
+
+    std::wstring text;
+    for (const auto& value : values) {
+        if (value.first != L"Order") {
+            text += value.first + L"=" + value.second + L"*";
+        }
+    }
+    return WriteStoredText(UserValueName(L"Group-" + id), text) && orderSaved;
+}
+
+// Removes a group's stored values (not its data in memory). Hold
+// g_storageLock.
+void DeleteStoredGroup(const std::wstring& id) {
+    Wh_DeleteValue(UserValueName(L"Group-" + id).c_str());
+    DeleteLongStoredText(UserValueName(L"Order-" + id));
+    g_savedOrders.erase(id);
 }
 
 bool GetStoredGroupValue(const std::wstring& id, PCWSTR name, std::wstring* value) {
@@ -1109,7 +2705,7 @@ void SetStoredGroupValue(const std::wstring& id, PCWSTR name, PCWSTR value) {
         g_groupData[id].erase(name);
         if (g_groupData[id].empty()) {
             g_groupData.erase(id);
-            Wh_DeleteValue(UserValueName(L"Group-" + id).c_str());
+            DeleteStoredGroup(id);
             SaveGroupIdList();
             return;
         }
@@ -1128,7 +2724,7 @@ void ForgetStoredGroup(const std::wstring& id) {
     }
     std::lock_guard<std::mutex> lock(g_storageLock);
     if (g_groupData.erase(id)) {
-        Wh_DeleteValue(UserValueName(L"Group-" + id).c_str());
+        DeleteStoredGroup(id);
         SaveGroupIdList();
     }
 }
@@ -1271,6 +2867,7 @@ enum GroupSettingId {
     kSettingRemoveWhenOneLeft,
     kSettingTint,
     kSettingView,
+    kSettingSpacing,
     kGroupSettingCount
 };
 
@@ -1287,6 +2884,7 @@ const GroupSettingInfo kGroupSettings[kGroupSettingCount] = {
     {L"RemoveWhenOneLeft", 1},  // 1 = remove a group that's down to one app.
     {L"Tint", -1},              // The group's colour, or -1 for none.
     {L"View", 0},               // 0 = icons in a grid, 1 = a list.
+    {L"Spacing", 1},            // 0 = compact, 1 = normal, 2 = roomy.
 };
 
 // Group colours. A colour is stored as a COLORREF, a number of the form
@@ -2347,11 +3945,11 @@ bool CreateGroup(const std::vector<DesktopItem>& items, std::wstring* groupPathO
         return false;
     }
 
-    // 1. Create "New group", or "New group (2)" if that name is taken, etc.,
-    //    and hide it while we set it up.
+    // 1. Create "New group" (in the mod's language), or "New group (2)" if
+    //    that name is taken, etc., and hide it while we set it up.
     std::wstring groupPath;
     for (int number = 1; number < 100; number++) {
-        std::wstring candidate = desktopPath + L"\\New group";
+        std::wstring candidate = desktopPath + L"\\" + Tr(Text::NewGroup);
         if (number > 1) {
             candidate += L" (" + std::to_wstring(number) + L")";
         }
@@ -3145,6 +4743,7 @@ struct {
     bool showLabels = true;
     int tint = -1;                // The group's colour (kNoTint for none).
     bool listView = false;
+    int spacing = 1;              // 0 = compact, 1 = normal, 2 = roomy.
     bool gearHovered = false;
     bool gearPressed = false;
     bool openHovered = false;     // The "open in File Explorer" button.
@@ -3168,7 +4767,6 @@ struct {
 namespace Layout {
 constexpr int padding = 16;
 constexpr int titleHeight = 36;
-constexpr int iconTop = 10;
 constexpr int labelGap = 6;
 constexpr int minWidth = 280;
 constexpr int screenMargin = 8;
@@ -3188,15 +4786,31 @@ int ItemIconSize() {
     return g_popup.iconSize;
 }
 
+// The "Spacing" setting changes the room around each icon: the space above
+// it (IconTop), and how much wider and taller than the icon its cell is. The
+// space for the name (two lines) stays the same.
+int IconTop() {
+    static const int kTop[] = {6, 10, 16};
+    return kTop[g_popup.spacing];
+}
+
 int CellWidth() {
-    return g_popup.listView ? 300 : g_popup.iconSize + 44;
+    static const int kExtraWidth[] = {24, 44, 68};
+    return g_popup.listView ? 300 : g_popup.iconSize + kExtraWidth[g_popup.spacing];
 }
 
 int CellHeight() {
     if (g_popup.listView) {
-        return ItemIconSize() + 16;
+        static const int kExtraHeight[] = {8, 16, 24};
+        return ItemIconSize() + kExtraHeight[g_popup.spacing];
     }
-    return g_popup.showLabels ? g_popup.iconSize + 52 : g_popup.iconSize + 20;
+    // Icon, plus the space above it and the same below. With names: above
+    // it, a gap, two lines of name, and a little below.
+    static const int kBottomWithNames[] = {2, 4, 10};
+    if (!g_popup.showLabels) {
+        return g_popup.iconSize + 2 * IconTop();
+    }
+    return g_popup.iconSize + IconTop() + Layout::labelGap + 32 + kBottomWithNames[g_popup.spacing];
 }
 
 int PopupColumns() {
@@ -3213,15 +4827,13 @@ int PopupRows() {
 
 // --- Scrolling ---------------------------------------------------------------
 //
-// The popup shows at most 5 rows of icons (or 12 rows in the list view), and
-// never more than fits on screen. If there are more, they scroll, with the
-// mouse wheel or the thin scroll bar on the right.
+// The popup shows at most 5 rows of icons (or 12 rows in the list view; both
+// are settings), and never more than fits on screen. If there are more, they
+// scroll, with the mouse wheel or the thin scroll bar on the right.
 //
 // The apps keep their positions as if nothing was scrolled ("content"
 // positions), and are drawn `g_popup.scroll` pixels higher. Anything about
 // the mouse (which is in window positions) adds the scroll back on.
-constexpr int kMaxIconRows = 5;
-constexpr int kMaxListRows = 12;
 
 // The top of the area the apps scroll in, below the title.
 int ContentTop() {
@@ -3244,7 +4856,8 @@ RECT ViewportRect(int clientWidth) {
 // Works out the popup's size, including how tall the scrolling area is.
 SIZE PopupSize() {
     int gridWidth = PopupColumns() * Px(CellWidth());
-    int visibleRows = std::min(PopupRows(), g_popup.listView ? kMaxListRows : kMaxIconRows);
+    int visibleRows = std::min(PopupRows(), g_popup.listView ? g_settings.maxListRows
+                                                             : g_settings.maxIconRows);
     int viewport = visibleRows * Px(CellHeight());
 
     // Never taller than the screen (minus the taskbar).
@@ -3497,7 +5110,7 @@ void CreatePopupFonts() {
 // "1.2 MB"). Nothing for shortcuts, whose size means nothing to you.
 std::wstring ItemDetail(const GroupEntry& entry) {
     if (entry.isFolder) {
-        return L"Folder";
+        return Tr(Text::FolderDetail);
     }
     PCWSTR extension = PathFindExtensionW(entry.path.c_str());
     if (_wcsicmp(extension, L".lnk") == 0 || _wcsicmp(extension, L".url") == 0) {
@@ -3667,13 +5280,13 @@ void DrawPopupApp(IconCanvas& canvas, PopupItem& item, const RECT& cell,
     }
 
     canvas.DrawImage(item.icon, cell.left + (Px(CellWidth()) - iconPixels) / 2,
-                     cell.top + Px(Layout::iconTop));
+                     cell.top + Px(IconTop()));
 
     if (!g_popup.showLabels) {
         return;
     }
     RECT label = {cell.left + Px(4),
-                  cell.top + Px(Layout::iconTop) + iconPixels + Px(Layout::labelGap),
+                  cell.top + Px(IconTop()) + iconPixels + Px(Layout::labelGap),
                   cell.right - Px(4), cell.bottom - Px(4)};
     int width = label.right - label.left, height = label.bottom - label.top;
     if (item.labelIsList || item.labelMask.width != width || item.labelMask.height != height) {
@@ -3831,8 +5444,8 @@ void PaintPopup(HWND window, HDC screen) {
     if (g_popup.items.empty()) {
         RECT message = {0, ContentTop(), fullWidth, ContentTop() + g_popup.viewportHeight};
         TextMask text = RenderTextMask(g_popup.labelFont,
-                                       g_popup.isGroup ? L"This group is empty"
-                                                       : L"This folder is empty",
+                                       Tr(g_popup.isGroup ? Text::GroupEmpty
+                                                          : Text::FolderEmpty),
                                        message.right - message.left,
                                        message.bottom - message.top,
                                        DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -4595,8 +6208,11 @@ void ShowContextMenu(HWND window, const std::wstring& path, POINT screenPoint) {
 // animation started, so it takes the same time even if a step runs late.
 
 constexpr UINT_PTR kOpenCloseTimer = 2;
-constexpr int kOpenMilliseconds = 200;
-constexpr int kCloseMilliseconds = 150;
+// How long opening takes is a setting ("Animation length"); closing takes
+// three quarters of that, as closing should feel quicker.
+int OpenCloseMilliseconds(bool opening) {
+    return opening ? g_settings.openMilliseconds : g_settings.openMilliseconds * 3 / 4;
+}
 
 // A point `progress` (0 to 1) of the way from one rectangle to another.
 RECT BlendRects(const RECT& from, const RECT& to, float progress) {
@@ -4607,7 +6223,7 @@ RECT BlendRects(const RECT& from, const RECT& to, float progress) {
 
 void StepOpenClose(HWND window) {
     bool opening = g_popup.animation == 1;
-    int duration = opening ? kOpenMilliseconds : kCloseMilliseconds;
+    int duration = OpenCloseMilliseconds(opening);
     float time = std::min(1.0f, (GetTickCount64() - g_popup.animationStart) / (float)duration);
 
     // "Easing" curves, so the motion doesn't start and stop abruptly:
@@ -5182,6 +6798,7 @@ void ReadPopupLayoutSettings() {
     g_popup.showLabels = GetGroupSetting(g_popup.folderPath, kSettingShowNames) != 0;
     g_popup.tint = GetGroupSetting(g_popup.folderPath, kSettingTint);
     g_popup.listView = GetGroupSetting(g_popup.folderPath, kSettingView) == 1;
+    g_popup.spacing = std::clamp(GetGroupSetting(g_popup.folderPath, kSettingSpacing), 0, 2);
 }
 
 // Where the popup goes: beside the group, with its top level with the top of
@@ -5275,7 +6892,7 @@ constexpr UINT_PTR kPanelTimer = 3;
 constexpr int kPanelOpenMilliseconds = 150;
 
 enum class PanelAction {
-    Scope, View, Columns, IconSize, ShowNames, Tint, Sort, RemoveWhenOneLeft, Reset
+    Scope, View, Columns, IconSize, Spacing, ShowNames, Tint, Sort, RemoveWhenOneLeft, Reset
 };
 
 // Something you can click: one option of a choice, a toggle switch, or the
@@ -5351,6 +6968,8 @@ GroupSettingId SettingForAction(PanelAction action) {
             return kSettingColumns;
         case PanelAction::IconSize:
             return kSettingIconSize;
+        case PanelAction::Spacing:
+            return kSettingSpacing;
         case PanelAction::ShowNames:
             return kSettingShowNames;
         case PanelAction::Sort:
@@ -5382,12 +7001,33 @@ bool GroupHasAnyOwnSettings() {
     return false;
 }
 
-PanelLayout BuildPanelLayout() {
+// How wide `text` is in `font`, in pixels. Measured with DrawText, the same
+// way it's drawn (see RenderTextMask), so characters Windows takes from
+// another font (like Chinese, Japanese and Korean) are measured right too.
+int TextWidth(HFONT font, const std::wstring& text) {
+    HDC dc = CreateCompatibleDC(nullptr);
+    HGDIOBJ oldFont = SelectObject(dc, font);
+    RECT rect = {0, 0, 0, 0};
+    DrawTextW(dc, text.c_str(), (int)text.size(), &rect,
+              DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+    SelectObject(dc, oldFont);
+    DeleteDC(dc);
+    return rect.right - rect.left;
+}
+
+// Lays the panel out at `width`. Sets `neededWidth` to the width everything
+// would need to fit without being cut short: in some languages the words
+// are longer, so BuildPanelLayout widens the panel to match.
+PanelLayout BuildPanelLayoutAt(int width, int* neededWidth) {
     PanelLayout layout;
-    int width = Px(320);
     int padding = Px(16);
     int right = width - padding;
     int y = padding;
+    *neededWidth = 0;
+    auto need = [&](int contentWidth) {
+        *neededWidth = std::max(*neededWidth, contentWidth + 2 * padding);
+    };
+    HFONT font = g_popup.labelFont;
 
     auto addText = [&](const std::wstring& text, RECT rect, PanelTextStyle style,
                        int settingId = -1) {
@@ -5410,11 +7050,22 @@ PanelLayout BuildPanelLayout() {
         }
     };
 
+    // The widest caption among some choices, plus room around it.
+    auto choiceWidth = [&](const std::vector<std::pair<int, std::wstring>>& options,
+                           int minimum) {
+        int widest = Px(minimum);
+        for (const auto& option : options) {
+            widest = std::max(widest, TextWidth(font, option.second) + Px(16));
+        }
+        return widest;
+    };
+
     // A setting's row: its name on the left, its choices on the right.
     auto addChoiceRow = [&](const std::wstring& name, PanelAction action,
                             const std::vector<std::pair<int, std::wstring>>& options,
                             int optionWidth) {
-        int choicesWidth = Px(optionWidth) * (int)options.size();
+        int choicesWidth = choiceWidth(options, optionWidth) * (int)options.size();
+        need(TextWidth(font, name) + Px(12) + choicesWidth);
         addText(name, {padding, y, right - choicesWidth - Px(8), y + Px(40)},
                 PanelTextStyle::Row, SettingForAction(action));
         addChoices(action, options, {right - choicesWidth, y + Px(6), right, y + Px(34)});
@@ -5422,6 +7073,7 @@ PanelLayout BuildPanelLayout() {
     };
 
     auto addToggleRow = [&](const std::wstring& name, PanelAction action) {
+        need(TextWidth(font, name) + Px(56));
         addText(name, {padding, y, right - Px(48), y + Px(40)}, PanelTextStyle::Row,
                 SettingForAction(action));
         PanelControl toggle;
@@ -5435,35 +7087,41 @@ PanelLayout BuildPanelLayout() {
     // Other folders (not groups) share the all-groups settings, so with
     // those turned on, "All" covers them too.
     bool isGroup = g_popup.isGroup;
-    addText(isGroup ? L"Group settings" : L"Folder settings", {padding, y, right, y + Px(28)},
-            PanelTextStyle::Title);
+    std::wstring title = Tr(isGroup ? Text::GroupSettings : Text::FolderSettings);
+    need(TextWidth(g_popup.titleFont, title));
+    addText(title, {padding, y, right, y + Px(28)}, PanelTextStyle::Title);
     y += Px(36);
 
-    addChoices(PanelAction::Scope,
-               {{0, isGroup ? L"This group" : L"This folder"},
-                {1, g_settings.openAnyFolder ? L"All" : L"All groups"}},
-               {padding, y, right, y + Px(32)});
+    std::vector<std::pair<int, std::wstring>> scopes = {
+        {0, Tr(isGroup ? Text::ThisGroup : Text::ThisFolder)},
+        {1, Tr(g_settings.openAnyFolder ? Text::All : Text::AllGroups)}};
+    need(2 * choiceWidth(scopes, 0) + Px(16));
+    addChoices(PanelAction::Scope, scopes, {padding, y, right, y + Px(32)});
     y += Px(48);
 
     // The list view has no rows of icons or names under them, so those
     // settings are only shown for the icon view.
     bool listView = PanelValue(PanelAction::View) == 1;
-    addText(L"Layout", {padding, y, right, y + Px(24)}, PanelTextStyle::Section);
+    addText(Tr(Text::Layout), {padding, y, right, y + Px(24)}, PanelTextStyle::Section);
     y += Px(24);
-    addChoiceRow(L"View", PanelAction::View, {{0, L"Icons"}, {1, L"List"}}, 60);
+    addChoiceRow(Tr(Text::View), PanelAction::View,
+                 {{0, Tr(Text::Icons)}, {1, Tr(Text::List)}}, 60);
     if (!listView) {
-        addChoiceRow(isGroup ? L"Apps per row" : L"Items per row", PanelAction::Columns,
+        addChoiceRow(Tr(isGroup ? Text::AppsPerRow : Text::ItemsPerRow), PanelAction::Columns,
                      {{3, L"3"}, {4, L"4"}, {5, L"5"}, {6, L"6"}}, 36);
     }
-    addChoiceRow(L"Icon size", PanelAction::IconSize,
-                 {{32, L"Small"}, {48, L"Medium"}, {64, L"Large"}}, 60);
+    addChoiceRow(Tr(Text::IconSize), PanelAction::IconSize,
+                 {{32, Tr(Text::Small)}, {48, Tr(Text::Medium)}, {64, Tr(Text::Large)}}, 60);
+    addChoiceRow(Tr(Text::Spacing), PanelAction::Spacing,
+                 {{0, Tr(Text::Compact)}, {1, Tr(Text::Normal)}, {2, Tr(Text::Roomy)}}, 60);
     if (!listView) {
-        addToggleRow(isGroup ? L"Show app names" : L"Show names", PanelAction::ShowNames);
+        addToggleRow(Tr(isGroup ? Text::ShowAppNames : Text::ShowNames), PanelAction::ShowNames);
     }
 
     // A row of colour swatches: None, the presets, and Custom.
     y += Px(8);
-    addText(L"Colour", {padding, y, right, y + Px(24)}, PanelTextStyle::Section, kSettingTint);
+    addText(Tr(Text::Colour), {padding, y, right, y + Px(24)}, PanelTextStyle::Section,
+            kSettingTint);
     y += Px(28);
     {
         std::vector<int> swatches = {kNoTint};
@@ -5488,29 +7146,42 @@ PanelLayout BuildPanelLayout() {
     }
 
     y += Px(8);
-    addText(L"Behaviour", {padding, y, right, y + Px(24)}, PanelTextStyle::Section);
+    addText(Tr(Text::Behaviour), {padding, y, right, y + Px(24)}, PanelTextStyle::Section);
     y += Px(24);
-    addChoiceRow(isGroup ? L"Sort apps" : L"Sort items", PanelAction::Sort,
-                 {{0, L"My order"}, {1, L"A to Z"}}, 72);
+    addChoiceRow(Tr(isGroup ? Text::SortApps : Text::SortItems), PanelAction::Sort,
+                 {{0, Tr(Text::MyOrder)}, {1, Tr(Text::AToZ)}}, 72);
     if (isGroup) {
-        addToggleRow(L"Remove when one app is left", PanelAction::RemoveWhenOneLeft);
+        addToggleRow(Tr(Text::RemoveWhenOneLeft), PanelAction::RemoveWhenOneLeft);
     }
 
     y += Px(12);
     if (g_panel.allGroups) {
-        addText(g_settings.openAnyFolder ? L"Changes apply to every group and folder."
-                                         : L"Changes apply to every group.",
-                {padding, y, right, y + Px(32)}, PanelTextStyle::Note);
+        std::wstring note =
+            Tr(g_settings.openAnyFolder ? Text::AppliesToGroupsAndFolders : Text::AppliesToGroups);
+        need(TextWidth(font, note));
+        addText(note, {padding, y, right, y + Px(32)}, PanelTextStyle::Note);
     } else {
         PanelControl reset;
         reset.action = PanelAction::Reset;
-        reset.caption = isGroup ? L"Reset to all-groups settings" : L"Reset to shared settings";
+        reset.caption = Tr(isGroup ? Text::ResetToAllGroups : Text::ResetToShared);
+        need(TextWidth(font, reset.caption) + Px(32));
         reset.rect = {padding, y, right, y + Px(32)};
         layout.controls.push_back(reset);
     }
     y += Px(32) + padding;
 
     layout.size = {width, y};
+    return layout;
+}
+
+// The panel is 320 wide (at 100% scaling), or wider if its text needs it,
+// up to 520.
+PanelLayout BuildPanelLayout() {
+    int needed = 0;
+    PanelLayout layout = BuildPanelLayoutAt(Px(320), &needed);
+    if (needed > Px(320)) {
+        layout = BuildPanelLayoutAt(std::min(needed, Px(520)), &needed);
+    }
     return layout;
 }
 
