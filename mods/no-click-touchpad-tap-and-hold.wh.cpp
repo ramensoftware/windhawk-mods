@@ -1,14 +1,14 @@
 // ==WindhawkMod==
-// @id              touchpad-corner-tap-and-two-finger-drag
-// @name            Touchpad Corner Tap Right-Click & Two-Finger Drag
-// @description     Tap a touchpad corner to right-click, and hold two fingers to drag. Works on any Precision Touchpad, including ones whose click buttons no longer work.
+// @id              no-click-touchpad-tap-and-hold
+// @name            No-Click Touchpad: Tap & Hold
+// @description     Tap a corner to right-click, hold two fingers to drag, and a ring around the pointer shows when the drag is on. For touchpads that no longer click.
 // @version         1.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
 // @include         windhawk-mod.exe
 // @include         windhawk-mod-uiaccess.exe
-// @compilerOptions -lhid
+// @compilerOptions -lhid -lshcore -lgdi32
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -18,7 +18,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Touchpad Corner Tap Right-Click & Two-Finger Drag
+# No-Click Touchpad: Tap & Hold
 
 For laptops whose touchpad no longer clicks physically (worn hinge, broken switch,
 or a battery pushing the pad up), or for anyone who prefers tapping to pressing.
@@ -29,7 +29,9 @@ so tapping there normally just left clicks.
 
 For dragging, put two fingers down, hold still for a moment, then move them. The left
 button stays held while you move, so you can select text or move windows around.
-Moving two fingers straight away still scrolls like normal.
+Moving two fingers straight away still scrolls like normal. Once the hold is long
+enough, a ring pops up around the pointer and stays there until you lift, so you can
+tell the drag is on before you start moving.
 
 Works with any Windows Precision Touchpad (Synaptics, ELAN, Alps, Goodix, Surface and
 so on). Older non-precision touchpads on vendor-only drivers don't send the raw finger
@@ -90,6 +92,20 @@ doesn't, so neither the corner tap nor the drag works over those windows.
 - dragSpeed: 130
   $name: Drag pointer speed (%)
   $description: At 100, moving across the whole width of the touchpad moves the pointer across the whole width of the screen
+- dragIndicator: ring
+  $name: Drag indicator
+  $description: What shows that a two-finger drag has started
+  $options:
+  - ring: Ring around the pointer
+  - none: Nothing
+- ringColor: blue
+  $name: Ring color
+  $options:
+  - blue: Blue
+  - green: Green
+  - orange: Orange
+  - red: Red
+  - white: White
 */
 // ==/WindhawkModSettings==
 
@@ -97,6 +113,7 @@ doesn't, so neither the corner tap nor the drag works over those windows.
 
 #include <hidusage.h>
 #include <hidpi.h>
+#include <shellscalingapi.h>
 
 #include <windhawk_utils.h>
 
@@ -122,6 +139,7 @@ constexpr UINT_PTR kHoldTimer = 1;   // only while two fingers are held still
 constexpr UINT_PTR kTapTimer = 2;    // only while a click is held back
 constexpr UINT_PTR kStaleTimer = 3;  // only while something touches the pad
 constexpr UINT_PTR kHookTimer = 4;   // removes the mouse hook once the pad is idle
+constexpr UINT_PTR kRingTimer = 5;   // only while the drag ring is showing
 
 constexpr DWORD kClickAfterLiftMs = 800;  // a tap's click comes this soon after the lift
 constexpr DWORD kLiftWaitMs = 60;         // how long a held-back click waits for the lift report
@@ -132,6 +150,14 @@ constexpr DWORD kAfterDragMs = 600;       // Windows' leftover scroll events aft
 constexpr DWORD kHookIdleMs = 1000;       // longer than kClickAfterLiftMs and kAfterDragMs
 constexpr double kMaxTapMove = 0.04;      // fraction of the touchpad width
 constexpr double kHoldMove = 0.015;
+
+// The drag ring, in pixels at 100% scaling.
+constexpr double kRingRadius = 15;
+constexpr double kRingThick = 3;
+constexpr double kRingGlow = 5;
+constexpr double kRingPulseFrom = 1.8;  // starts this much bigger and shrinks into place
+constexpr DWORD kRingPulseMs = 200;
+constexpr DWORD kRingFrameMs = 15;
 
 // ---------------------------------------------------------------------------
 // Settings. Written on the Windhawk thread only before the worker starts, then
@@ -145,6 +171,8 @@ struct Settings {
     bool twoFingerDrag = true;
     DWORD holdMs = 350;
     double dragSpeed = 1.3;
+    bool ring = true;
+    BYTE ringR = 0x3B, ringG = 0x82, ringB = 0xF6;
 };
 Settings g_s;
 
@@ -178,6 +206,24 @@ static void LoadSettings() {
     s.twoFingerDrag = Wh_GetIntSetting(L"twoFingerDrag") != 0;
     s.holdMs = Clamp(Wh_GetIntSetting(L"holdMs"), 100, 2000);
     s.dragSpeed = Clamp(Wh_GetIntSetting(L"dragSpeed"), 20, 500) / 100.0;
+
+    s.ring = wcscmp(WindhawkUtils::StringSetting::make(L"dragIndicator"), L"none") != 0;
+    struct {
+        PCWSTR name;
+        BYTE r, g, b;
+    } const colors[] = {
+        {L"blue", 0x3B, 0x82, 0xF6},   {L"green", 0x22, 0xC5, 0x5E},
+        {L"orange", 0xF9, 0x73, 0x16}, {L"red", 0xEF, 0x44, 0x44},
+        {L"white", 0xFF, 0xFF, 0xFF},
+    };
+    auto color = WindhawkUtils::StringSetting::make(L"ringColor");
+    for (const auto& c : colors) {
+        if (wcscmp(color, c.name) == 0) {
+            s.ringR = c.r;
+            s.ringG = c.g;
+            s.ringB = c.b;
+        }
+    }
     g_s = s;
     Wh_Log(L"Settings: corner %s %.2fx%.2f, cornerTap %d, twoFingerDrag %d, hold %u ms",
            s.bottomLeft ? L"bottomLeft" : L"bottomRight", s.zoneW, s.zoneH, s.cornerTap,
@@ -414,7 +460,131 @@ static double Distance(double dx, double dy) {
     return std::sqrt(dx * dx + dy * dy);
 }
 
+// ---------------------------------------------------------------------------
+// Drag ring. A click-through layered window centered on the pointer, shown
+// while the mod holds the button down. It's drawn in physical pixels, so it
+// runs per-monitor DPI aware whatever the rest of the thread is.
+// ---------------------------------------------------------------------------
+HWND g_ring;
+bool g_ringShown, g_ringSteady;  // steady: the pulse is over and the bitmap is final
+DWORD g_ringStart;
+UINT g_ringDpi = 96;
+int g_ringSize;
+POINT g_ringPt;
+
+struct PerMonitorDpi {
+    DPI_AWARENESS_CONTEXT old;
+    PerMonitorDpi()
+        : old(SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {}
+    ~PerMonitorDpi() {
+        if (old)
+            SetThreadDpiAwarenessContext(old);
+    }
+};
+
+static LRESULT CALLBACK RingProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_NCHITTEST)
+        return HTTRANSPARENT;
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+// t runs from 0 to 1 over the pulse: the ring shrinks into place and fades in.
+static void DrawRing(POINT pt, double t) {
+    double k = g_ringDpi / 96.0;
+    double ease = (1 - t) * (1 - t);
+    double radius = kRingRadius * k * (1 + (kRingPulseFrom - 1) * ease);
+    double half = kRingThick * k / 2, glow = kRingGlow * k;
+    double opacity = 0.35 + 0.65 * t;
+
+    int size = (int)std::ceil(2 * ((kRingRadius * kRingPulseFrom + kRingGlow * 2.5) * k)) + 2;
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+    bi.bmiHeader.biWidth = size;
+    bi.bmiHeader.biHeight = -size;  // top-down
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+
+    HDC screen = GetDC(nullptr);
+    HDC mem = CreateCompatibleDC(screen);
+    void* bits = nullptr;
+    HBITMAP bmp = CreateDIBSection(mem, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (bmp && bits) {
+        HGDIOBJ oldBmp = SelectObject(mem, bmp);
+        DWORD* px = (DWORD*)bits;
+        double c = size / 2.0;
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                double d = std::hypot(x + 0.5 - c, y + 0.5 - c);
+                double e = std::fabs(d - radius) - half;  // distance outside the band
+                double a = std::clamp(0.5 - e, 0.0, 1.0);  // the band, with a 1 px soft edge
+                if (e > 0)
+                    a = std::max(a, 0.5 * std::exp(-(e * e) / (glow * glow)));
+                a *= opacity;
+                BYTE A = (BYTE)std::lround(a * 255);
+                // UpdateLayeredWindow wants premultiplied alpha.
+                px[y * size + x] = ((DWORD)A << 24) | ((DWORD)(g_s.ringR * A / 255) << 16) |
+                                   ((DWORD)(g_s.ringG * A / 255) << 8) |
+                                   (DWORD)(g_s.ringB * A / 255);
+            }
+        }
+        POINT dst = {pt.x - size / 2, pt.y - size / 2}, src = {0, 0};
+        SIZE sz = {size, size};
+        BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+        UpdateLayeredWindow(g_ring, screen, &dst, &sz, mem, &src, 0, &bf, ULW_ALPHA);
+        SelectObject(mem, oldBmp);
+        DeleteObject(bmp);
+        g_ringSize = size;
+    }
+    DeleteDC(mem);
+    ReleaseDC(nullptr, screen);
+}
+
+static void RingTick() {
+    PerMonitorDpi scope;
+    POINT pt;
+    if (!GetCursorPos(&pt))
+        return;
+    UINT dpiX = 96, dpiY = 96;
+    if (FAILED(GetDpiForMonitor(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST),
+                                MDT_EFFECTIVE_DPI, &dpiX, &dpiY)))
+        dpiX = 96;
+
+    DWORD elapsed = GetTickCount() - g_ringStart;
+    bool pulsing = elapsed < kRingPulseMs;
+    if (pulsing || !g_ringSteady || dpiX != g_ringDpi) {
+        g_ringDpi = dpiX;
+        DrawRing(pt, pulsing ? (double)elapsed / kRingPulseMs : 1.0);
+        g_ringSteady = !pulsing;
+    } else if (pt.x != g_ringPt.x || pt.y != g_ringPt.y) {
+        SetWindowPos(g_ring, nullptr, pt.x - g_ringSize / 2, pt.y - g_ringSize / 2, 0, 0,
+                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    g_ringPt = pt;
+}
+
+static void ShowRing() {
+    if (!g_ring || !g_s.ring || g_ringShown)
+        return;
+    g_ringShown = true;
+    g_ringSteady = false;
+    g_ringStart = GetTickCount();
+    RingTick();
+    SetWindowPos(g_ring, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    SetTimer(g_hwnd, kRingTimer, kRingFrameMs, nullptr);
+}
+
+static void HideRing() {
+    if (!g_ringShown)
+        return;
+    g_ringShown = false;
+    KillTimer(g_hwnd, kRingTimer);
+    ShowWindow(g_ring, SW_HIDE);
+}
+
 static void EndDrag() {
+    HideRing();
     if (!g_buttonHeld)
         return;
     g_buttonHeld = false;
@@ -452,6 +622,7 @@ static void TryStartDrag() {
     g_lastCount = 2;
     SendPrimary(true);
     g_buttonHeld = true;
+    ShowRing();
     Wh_Log(L"Two-finger drag start");
 }
 
@@ -762,6 +933,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     SetTimer(hwnd, kHoldTimer, 20, nullptr);
                 else
                     KillTimer(hwnd, kHoldTimer);
+            } else if (wParam == kRingTimer) {
+                if (g_ringShown)
+                    RingTick();
+                else
+                    KillTimer(hwnd, kRingTimer);
             } else if (wParam == kTapTimer) {
                 CheckPending();
             } else if (wParam == kStaleTimer) {
@@ -786,6 +962,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
 static void OnSettingsReloaded() {
     LoadSettings();
+    if (!g_s.ring)
+        HideRing();
+    else if (g_ringShown)
+        g_ringSteady = false;  // redraw in the new color
     if (!g_s.twoFingerDrag && (g_twoMode == 1 || g_twoMode == 2)) {
         EndDrag();
         SetTwoMode(3);
@@ -810,6 +990,22 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         UnregisterClassW(cls, mod);
         return 0;
     }
+
+    const wchar_t* ringCls = L"WH_TouchpadDragRing";
+    WNDCLASSW rc = {};
+    rc.lpfnWndProc = RingProc;
+    rc.hInstance = mod;
+    rc.lpszClassName = ringCls;
+    RegisterClassW(&rc);
+    {
+        PerMonitorDpi scope;  // the window keeps the awareness it was created with
+        g_ring = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST |
+                                     WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                                 ringCls, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, mod,
+                                 nullptr);
+    }
+    if (!g_ring)
+        Wh_Log(L"Ring window failed: %u", GetLastError());
 
     RAWINPUTDEVICE rid = {kPageDigitizer, kUsageTouchPad, RIDEV_INPUTSINK, g_hwnd};
     if (!RegisterRawInputDevices(&rid, 1, sizeof(rid)))
@@ -849,6 +1045,12 @@ static DWORD WINAPI WorkerThread(LPVOID) {
 
     RAWINPUTDEVICE rm = {kPageDigitizer, kUsageTouchPad, RIDEV_REMOVE, nullptr};
     RegisterRawInputDevices(&rm, 1, sizeof(rm));
+
+    KillTimer(g_hwnd, kRingTimer);
+    if (g_ring)
+        DestroyWindow(g_ring);
+    g_ring = nullptr;
+    UnregisterClassW(ringCls, mod);
 
     DestroyWindow(g_hwnd);
     g_hwnd = nullptr;
