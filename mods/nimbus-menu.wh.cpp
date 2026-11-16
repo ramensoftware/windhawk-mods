@@ -4021,7 +4021,7 @@ static BOOL ExplorerInit() {
     void* xamlLauncherState = nullptr;
     void* xamlLauncher = nullptr;
     // twinui.pcshell.dll
-    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{L"public: virtual long __cdecl XamlLauncherState::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum "
           L"IMMERSIVELAUNCHERSHOWFLAGS)"},
          &xamlLauncherState, nullptr, true},
@@ -4029,7 +4029,7 @@ static BOOL ExplorerInit() {
           L"IMMERSIVELAUNCHERSHOWFLAGS)"},
          &xamlLauncher, nullptr, true},
     };
-    WindhawkUtils::HookSymbols(twinui, twinuiPcshellDllHooks, ARRAYSIZE(twinuiPcshellDllHooks));
+    WindhawkUtils::HookSymbols(twinui, hooks, ARRAYSIZE(hooks));
     if (void* target = xamlLauncherState ? xamlLauncherState : xamlLauncher) {
         Wh_SetFunctionHook(target, (void*)ShowStartView_hook, (void**)&ShowStartView_orig);
     } else {
