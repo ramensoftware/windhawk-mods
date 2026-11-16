@@ -1,3 +1,10 @@
+## 1.7.0 ([Nov 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cc308a58f9ddbaf76a9d2425e710abe68ea3b70f/mods/taskbar-independent-per-monitor.wh.cpp))
+
+* Fixed: window buttons of windows parked off-screen could appear on the taskbar of the leftmost monitor.
+* Fixed: clicking a pin could freeze the taskbar while the app's minimized window was busy.
+* Setting titles start with their section (Windows, Pins, Click, Animation).
+* Settings are available in English, German, Russian, French and Spanish.
+
 ## 1.6.0 ([Oct 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b0f5bd82a63baa016bb54b8604848c0d287ed9ae/mods/taskbar-independent-per-monitor.wh.cpp))
 
 * Windows 10 support (tested on build 19044 with 4 monitors).

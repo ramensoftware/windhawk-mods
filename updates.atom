@@ -2,12 +2,64 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-15T22:03:21.000Z</updated>
+    <updated>2026-11-16T01:02:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Independent taskbar per monitor 1.7.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-independent-per-monitor#cc308a58f9ddbaf76a9d2425e710abe68ea3b70f</id>
+        <link href="https://windhawk.net/mods/taskbar-independent-per-monitor"/>
+        <updated>2026-11-16T01:02:46.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed: window buttons of windows parked off-screen could appear on the taskbar of the leftmost monitor.</li>
+<li>Fixed: clicking a pin could freeze the taskbar while the app's minimized window was busy.</li>
+<li>Setting titles start with their section (Windows, Pins, Click, Animation).</li>
+<li>Settings are available in English, German, Russian, French and Spanish.</li>
+</ul>
+]]></content>
+        <author>
+            <name>2ndSky95</name>
+            <uri>https://github.com/2ndSky95</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[OverhauldedWin Alt+Tab 1.3.2]]></title>
+        <id>https://windhawk.net/mods/overhaulded-alt-tab#465432f8048ba7d081947718b405b51f479e98f3</id>
+        <link href="https://windhawk.net/mods/overhaulded-alt-tab"/>
+        <updated>2026-11-16T01:02:41.000Z</updated>
+        <content type="html"><![CDATA[<h2>Added</h2>
+<ul>
+<li>Arrange open windows in an adaptive grid instead of the traditional horizontal carousel.</li>
+<li>Automatically organizes cards into balanced rows, using up to four columns when space allows.</li>
+<li>Grid: Navigate between cards using the arrow keys, with smooth selection animations.</li>
+<li>Smooth scrolling with indicators when additional rows are available.</li>
+<li>Added System, Dark and Light themes. System automatically follows the Windows app theme.</li>
+</ul>
+<h2>Improved</h2>
+<ul>
+<li>Window management:</li>
+<li>Added smooth card repositioning when the window list or layout changes.</li>
+<li>Improved selected-card scaling and visual transitions.</li>
+<li>Refined the shared transparent background surface.</li>
+<li>Improved the restoration of minimized windows when activating them.</li>
+<li>Improved screen-coordinate handling for mouse interactions.</li>
+</ul>
+<h2>Other changes</h2>
+<ul>
+<li>Added additional activation diagnostics.</li>
+<li>Improved timer error handling and logging.</li>
+<li>Updated settings and documentation.</li>
+<li>Added the required Windows system library dependency.</li>
+</ul>
+]]></content>
+        <author>
+            <name>IMiloDev</name>
+            <uri>https://github.com/IMiloDev</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar System Utilities 1.3]]></title>
         <id>https://windhawk.net/mods/taskbar-system-utilities#ab22480f9d59785b176354b0441c4b4da4945d74</id>
@@ -433,51 +485,6 @@ File Explorer's setting.</li>
         <author>
             <name>Tyler</name>
             <uri>https://github.com/snowtyler</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Network Speed Indicator 1.7]]></title>
-        <id>https://windhawk.net/mods/net-speed-taskbar#806a8f3b7d33ca19ccf588fa38ed0281042f1f78</id>
-        <link href="https://windhawk.net/mods/net-speed-taskbar"/>
-        <updated>2026-11-14T19:01:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added custom font family setting (<code>fontFamily</code>) with fallback to Segoe UI.</li>
-<li>Added bold text styling toggle (<code>isBold</code>).</li>
-<li>Added custom HEX color settings (<code>textColor</code> and <code>uploadColor</code>).</li>
-<li>Added dynamic text measurement to expand widget width and prevent font clipping.</li>
-<li>Disabled GDI+ word wrapping to avoid accidental multiline breaks.</li>
-<li>Clamped widget height and vertical offset to ensure the meter never overflows the taskbar.</li>
-<li>Added safe clamps to font size (6–36), vertical nudge, and update interval.</li>
-<li>Updated demo GIF.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Narayan</name>
-            <uri>https://github.com/NarayanChetri</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Notepad++ Dark Dialog Fix 1.0.3]]></title>
-        <id>https://windhawk.net/mods/npp-taskdlg-textcolor#da3467732c84ae737d5d3a156be78075781f0d06</id>
-        <link href="https://windhawk.net/mods/npp-taskdlg-textcolor"/>
-        <updated>2026-11-14T19:01:29.000Z</updated>
-        <content type="html"><![CDATA[<h1>Notepad++ Dark Dialog Fix</h1>
-<p>In dark mode, Notepad++ paints its Save and confirm dialogs dark but leaves the
-text black, so you can barely read it. This mod makes that text light again.</p>
-<p><img src="https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/npp-taskdlg-textcolor.png" alt="Notepad++ Dark Dialog Fix preview"></p>
-<h2>Features</h2>
-<ul>
-<li><strong>Readable dialog text</strong> in Save, Save changes and other confirm dialogs.</li>
-<li><strong>Fixes labels and buttons</strong> drawn with the theme's text color.</li>
-<li><strong>Only in dark mode.</strong> The mod asks Notepad++ whether dark mode is on, so
-light mode dialogs are left alone. Needs Notepad++ 8.4.1 or newer.</li>
-<li><strong>Only touches Notepad++.</strong> No other app is affected, and nothing is changed
-on disk.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DavidHiFi</name>
-            <uri>https://github.com/DavidHiFi</uri>
         </author>
     </entry>
 </feed>

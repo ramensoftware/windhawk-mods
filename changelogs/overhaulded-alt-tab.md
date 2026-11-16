@@ -1,3 +1,29 @@
+## 1.3.2 ([Nov 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/465432f8048ba7d081947718b405b51f479e98f3/mods/overhaulded-alt-tab.wh.cpp))
+
+## Added
+
+* Arrange open windows in an adaptive grid instead of the traditional horizontal carousel.
+* Automatically organizes cards into balanced rows, using up to four columns when space allows.
+* Grid: Navigate between cards using the arrow keys, with smooth selection animations.
+* Smooth scrolling with indicators when additional rows are available.
+* Added System, Dark and Light themes. System automatically follows the Windows app theme.
+
+## Improved
+
+* Window management:
+* Added smooth card repositioning when the window list or layout changes.
+* Improved selected-card scaling and visual transitions.
+* Refined the shared transparent background surface.
+* Improved the restoration of minimized windows when activating them.
+* Improved screen-coordinate handling for mouse interactions.
+
+## Other changes
+
+- Added additional activation diagnostics.
+- Improved timer error handling and logging.
+- Updated settings and documentation.
+- Added the required Windows system library dependency.
+
 ## 1.3.1 ([Nov 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5b1d0cdb276170cb6da30d20e314813571cd9b5a/mods/overhaulded-alt-tab.wh.cpp))
 
 ### Added
