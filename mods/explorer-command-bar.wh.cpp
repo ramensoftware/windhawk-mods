@@ -1209,11 +1209,10 @@ struct CommandBarEntry {
     winrt::event_token vectorChangedToken{};
     winrt::event_token themeChangedToken{};
 
-    // Selection Polling State
+    // Polls the selection for live labels and file extension filters. The
+    // last seen view and selection, to skip ticks where nothing changed.
     mux::DispatcherTimer selectionTimer{nullptr};
     winrt::event_token selectionTickToken{};
-    HWND cachedTabWnd = nullptr;
-    winrt::com_ptr<IShellBrowser> cachedBrowser{nullptr};
     winrt::com_ptr<IShellView> cachedShellView{nullptr};
     int lastSelectionCount = -1;
     int lastFocusedItem = -1;
@@ -1229,9 +1228,7 @@ void StopSelectionTimer(CommandBarEntry& entry) {
         entry.selectionTimer = nullptr;
         entry.selectionTickToken = {};
     }
-    entry.cachedBrowser = nullptr;
     entry.cachedShellView = nullptr;
-    entry.cachedTabWnd = nullptr;
     entry.lastSelectionCount = -1;
     entry.lastFocusedItem = -1;
 }
@@ -1354,16 +1351,36 @@ std::wstring ToLower(std::wstring str) {
     return str;
 }
 
-std::wstring TrimQuotesAndSpaces(std::wstring str) {
-    size_t first = str.find_first_not_of(L" \t");
+std::wstring TrimSpaces(std::wstring const& text) {
+    size_t first = text.find_first_not_of(L" \t");
     if (first == std::wstring::npos)
         return std::wstring();
-    size_t last = str.find_last_not_of(L" \t");
-    str = str.substr(first, last - first + 1);
-    if (str.size() >= 2 && str.front() == L'"' && str.back() == L'"') {
-        str = str.substr(1, str.size() - 2);
-    }
+    size_t last = text.find_last_not_of(L" \t");
+    return text.substr(first, last - first + 1);
+}
+
+// Trims spaces, then a pair of surrounding quotes and the spaces inside them.
+std::wstring TrimQuotesAndSpaces(std::wstring const& text) {
+    std::wstring str = TrimSpaces(text);
+    if (str.size() >= 2 && str.front() == L'"' && str.back() == L'"')
+        str = TrimSpaces(str.substr(1, str.size() - 2));
     return str;
+}
+
+bool ItemHasLabelTokens(ActionItem const& item) {
+    return item.GetDisplayLabel().find(L'%') != std::wstring::npos;
+}
+
+bool ItemHasExtensionFilter(ActionItem const& item) {
+    return !TrimQuotesAndSpaces(item.matchExtensions).empty();
+}
+
+// Whether any toolbar item has a live label or a file extension filter, which
+// need the selection to be read.
+bool HasDynamicItems(std::vector<ActionItem> const& items) {
+    return std::any_of(items.begin(), items.end(), [](ActionItem const& item) {
+        return ItemHasLabelTokens(item) || ItemHasExtensionFilter(item);
+    });
 }
 
 std::wstring JoinPath(std::wstring const& folder, std::wstring const& name) {
@@ -1438,65 +1455,11 @@ struct ExplorerContext {
     size_t selectionCount = 0;
 };
 
+// Finds the browser of a File Explorer window's active tab by walking
+// IShellWindows. That can be slow or live in another process, so it's only
+// called from worker threads. On the window's own thread, use
+// GetActiveShellViewOnWindowThread instead.
 winrt::com_ptr<IShellBrowser> GetActiveShellBrowser(HWND hExplorerWnd) {
-    winrt::com_ptr<IShellWindows> shellWindows;
-    if (FAILED(CoCreateInstance(kCLSID_ShellWindows, nullptr, CLSCTX_ALL,
-                                IID_PPV_ARGS(shellWindows.put()))) ||
-        !shellWindows)
-        return nullptr;
-
-    long count = 0;
-    shellWindows->get_Count(&count);
-
-    HWND hActiveTabWnd = hExplorerWnd
-                             ? FindWindowExW(hExplorerWnd, nullptr,
-                                             L"ShellTabWindowClass", nullptr)
-                             : nullptr;
-
-    for (long i = 0; i < count; i++) {
-        VARIANT index;
-        VariantInit(&index);
-        index.vt = VT_I4;
-        index.lVal = i;
-
-        winrt::com_ptr<IDispatch> dispatch;
-        if (FAILED(shellWindows->Item(index, dispatch.put())) || !dispatch)
-            continue;
-
-        auto webBrowser = dispatch.try_as<IWebBrowser2>();
-        if (!webBrowser)
-            continue;
-
-        SHANDLE_PTR hWndRaw = 0;
-        if (FAILED(webBrowser->get_HWND(&hWndRaw)) ||
-            (hExplorerWnd && (HWND)hWndRaw != hExplorerWnd))
-            continue;
-
-        auto serviceProvider = dispatch.try_as<IServiceProvider>();
-        if (!serviceProvider)
-            continue;
-
-        winrt::com_ptr<IShellBrowser> shellBrowser;
-        if (FAILED(serviceProvider->QueryService(
-                kSID_STopLevelBrowser, IID_PPV_ARGS(shellBrowser.put()))) ||
-            !shellBrowser)
-            continue;
-
-        HWND hTabWnd = nullptr;
-        if (SUCCEEDED(shellBrowser->GetWindow(&hTabWnd)) && hTabWnd) {
-            if (hActiveTabWnd) {
-                if (hTabWnd != hActiveTabWnd)
-                    continue;
-            } else if (!IsWindowVisible(hTabWnd)) {
-                continue;
-            }
-        }
-        return shellBrowser;
-    }
-    return nullptr;
-}
-
-winrt::com_ptr<IShellView> GetActiveShellView(HWND hExplorerWnd) {
     winrt::com_ptr<IShellWindows> shellWindows;
     HRESULT hr = CoCreateInstance(kCLSID_ShellWindows, nullptr, CLSCTX_ALL,
                                   IID_PPV_ARGS(shellWindows.put()));
@@ -1551,15 +1514,20 @@ winrt::com_ptr<IShellView> GetActiveShellView(HWND hExplorerWnd) {
                 continue;
             }
         }
-
-        winrt::com_ptr<IShellView> shellView;
-        if (SUCCEEDED(shellBrowser->QueryActiveShellView(shellView.put())) &&
-            shellView) {
-            return shellView;
-        }
+        return shellBrowser;
     }
-
     return nullptr;
+}
+
+winrt::com_ptr<IShellView> GetActiveShellView(HWND hExplorerWnd) {
+    auto shellBrowser = GetActiveShellBrowser(hExplorerWnd);
+    if (!shellBrowser)
+        return nullptr;
+
+    winrt::com_ptr<IShellView> shellView;
+    if (FAILED(shellBrowser->QueryActiveShellView(shellView.put())))
+        return nullptr;
+    return shellView;
 }
 
 bool ShellViewHasSelection(winrt::com_ptr<IShellView> const& shellView) {
@@ -1878,52 +1846,56 @@ void ShowShellContextMenu(HWND hExplorerWnd, POINT point) {
     DestroyMenu(hMenu);
 }
 
-// Reads the folder and the selection of a File Explorer window. It walks
-// IShellWindows, which can be slow or live in another process, so it's called
-// from a worker thread. All selected paths are only collected when
-// allSelected is set, since a large selection takes a while.
-ExplorerContext GetExplorerContext(HWND hExplorerWnd,
-                                   bool allSelected = false) {
-    ExplorerContext result;
-    result.shellView = GetActiveShellView(hExplorerWnd);
-    if (!result.shellView)
-        return result;
+// Fills in the path and display name of the folder shown by a shell view.
+void FillFolderInfo(IShellView* shellView, ExplorerContext& result) {
+    winrt::com_ptr<IFolderView> folderView;
+    if (!shellView ||
+        FAILED(shellView->QueryInterface(IID_PPV_ARGS(folderView.put()))))
+        return;
 
-    if (auto folderView = result.shellView.try_as<IFolderView>()) {
-        winrt::com_ptr<IPersistFolder2> persistFolder;
-        LPITEMIDLIST pidl = nullptr;
-        if (SUCCEEDED(
-                folderView->GetFolder(IID_PPV_ARGS(persistFolder.put()))) &&
-            persistFolder && SUCCEEDED(persistFolder->GetCurFolder(&pidl)) &&
-            pidl) {
-            WCHAR path[MAX_PATH];
-            if (SHGetPathFromIDListEx(pidl, path, ARRAYSIZE(path),
-                                      GPFIDL_DEFAULT)) {
-                result.folderPath = path;
-            }
+    winrt::com_ptr<IPersistFolder2> persistFolder;
+    LPITEMIDLIST pidl = nullptr;
+    if (FAILED(folderView->GetFolder(IID_PPV_ARGS(persistFolder.put()))) ||
+        !persistFolder || FAILED(persistFolder->GetCurFolder(&pidl)) || !pidl)
+        return;
 
-            winrt::com_ptr<IShellItem> folderItem;
-            if (SUCCEEDED(SHCreateItemFromIDList(
-                    pidl, IID_PPV_ARGS(folderItem.put()))) &&
-                folderItem) {
-                PWSTR name = nullptr;
-                if (SUCCEEDED(folderItem->GetDisplayName(SIGDN_NORMALDISPLAY,
-                                                         &name)) &&
-                    name) {
-                    result.folderDisplayName = name;
-                    CoTaskMemFree(name);
-                }
-            }
-            CoTaskMemFree(pidl);
+    WCHAR path[MAX_PATH];
+    if (SHGetPathFromIDListEx(pidl, path, ARRAYSIZE(path), GPFIDL_DEFAULT))
+        result.folderPath = path;
+
+    winrt::com_ptr<IShellItem> folderItem;
+    if (SUCCEEDED(
+            SHCreateItemFromIDList(pidl, IID_PPV_ARGS(folderItem.put()))) &&
+        folderItem) {
+        PWSTR name = nullptr;
+        if (SUCCEEDED(folderItem->GetDisplayName(SIGDN_NORMALDISPLAY, &name)) &&
+            name) {
+            result.folderDisplayName = name;
+            CoTaskMemFree(name);
         }
     }
+    CoTaskMemFree(pidl);
+}
+
+// Reads the folder and the selection of a shell view. Only the first
+// selected path is collected unless allSelected is set, since a large
+// selection takes a while.
+ExplorerContext GetContextFromView(IShellView* shellView,
+                                   bool allSelected = false) {
+    ExplorerContext result;
+    if (!shellView)
+        return result;
+
+    result.shellView.copy_from(shellView);
+    FillFolderInfo(shellView, result);
 
     winrt::com_ptr<IShellItemArray> selection;
-    if (SUCCEEDED(result.shellView->GetItemObject(
-            SVGIO_SELECTION, IID_PPV_ARGS(selection.put()))) &&
+    if (SUCCEEDED(shellView->GetItemObject(SVGIO_SELECTION,
+                                           IID_PPV_ARGS(selection.put()))) &&
         selection) {
         DWORD count = 0;
         selection->GetCount(&count);
+        result.selectionCount = count;
         for (DWORD i = 0;
              i < count && (allSelected || result.selectedPath.empty()); i++) {
             winrt::com_ptr<IShellItem> shellItem;
@@ -1945,13 +1917,55 @@ ExplorerContext GetExplorerContext(HWND hExplorerWnd,
     return result;
 }
 
-bool ReplacePlaceholder(std::wstring& parameters,
+// Reads the folder and the selection of a File Explorer window. It walks
+// IShellWindows, which can be slow or live in another process, so it's called
+// from a worker thread. On the window's own thread, use
+// GetExplorerContextOnWindowThread instead.
+ExplorerContext GetExplorerContext(HWND hExplorerWnd,
+                                   bool allSelected = false) {
+    auto shellView = GetActiveShellView(hExplorerWnd);
+    return GetContextFromView(shellView.get(), allSelected);
+}
+
+// Shell tab windows answer this with their IShellBrowser, without a
+// reference.
+constexpr UINT kMsgGetShellBrowser = WM_USER + 7;
+
+// The shell view of a File Explorer window's active tab, for code running on
+// the window's own thread, such as the command bar's XAML handlers. The tab
+// window is asked for its browser directly, so there are no calls to other
+// threads or processes. Returns nullptr on any other thread.
+winrt::com_ptr<IShellView> GetActiveShellViewOnWindowThread(
+    HWND hExplorerWnd) {
+    if (!hExplorerWnd)
+        return nullptr;
+
+    HWND hTabWnd =
+        FindWindowExW(hExplorerWnd, nullptr, L"ShellTabWindowClass", nullptr);
+    if (!hTabWnd ||
+        GetWindowThreadProcessId(hTabWnd, nullptr) != GetCurrentThreadId())
+        return nullptr;
+
+    auto shellBrowser = reinterpret_cast<IShellBrowser*>(
+        SendMessageW(hTabWnd, kMsgGetShellBrowser, 0, 0));
+    if (!shellBrowser)
+        return nullptr;
+
+    winrt::com_ptr<IShellView> shellView;
+    if (FAILED(shellBrowser->QueryActiveShellView(shellView.put())))
+        return nullptr;
+    return shellView;
+}
+
+ExplorerContext GetExplorerContextOnWindowThread(HWND hExplorerWnd) {
+    auto shellView = GetActiveShellViewOnWindowThread(hExplorerWnd);
+    return GetContextFromView(shellView.get());
+}
+
+void ReplacePlaceholder(std::wstring& parameters,
                         std::wstring_view placeholder,
                         std::wstring const& value) {
     size_t pos = parameters.find(placeholder);
-    if (pos == std::wstring::npos)
-        return true;
-
     while (pos != std::wstring::npos) {
         std::wstring replacement = value;
         if (!replacement.empty() && replacement.back() == L'\\' &&
@@ -1962,7 +1976,6 @@ bool ReplacePlaceholder(std::wstring& parameters,
         parameters.replace(pos, placeholder.size(), replacement);
         pos = parameters.find(placeholder, pos + replacement.size());
     }
-    return true;
 }
 
 std::wstring FormatSelectedItemsQuoted(std::vector<std::wstring> const& paths) {
@@ -2107,64 +2120,6 @@ std::wstring ResolveLabelTokens(std::wstring label,
         ReplacePlaceholder(label, L"\x01", L"%");
 
     return label;
-}
-
-ExplorerContext GetContextFromView(IShellView* pView, int selectionCount = -1) {
-    ExplorerContext result;
-    if (!pView)
-        return result;
-
-    result.shellView.copy_from(pView);
-    result.selectionCount = (selectionCount >= 0) ? (size_t)selectionCount : 0;
-
-    winrt::com_ptr<IShellItemArray> items;
-    if (SUCCEEDED(
-            pView->GetItemObject(SVGIO_SELECTION, IID_PPV_ARGS(items.put()))) &&
-        items) {
-        DWORD count = 0;
-        if (SUCCEEDED(items->GetCount(&count)) && count > 0) {
-            winrt::com_ptr<IShellItem> item;
-            if (SUCCEEDED(items->GetItemAt(0, item.put())) && item) {
-                PWSTR path = nullptr;
-                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)) &&
-                    path) {
-                    result.selectedPath = path;
-                    result.allSelectedPaths.push_back(path);
-                    CoTaskMemFree(path);
-                }
-            }
-        }
-    }
-
-    if (auto folderView = result.shellView.try_as<IFolderView>()) {
-        winrt::com_ptr<IPersistFolder2> persistFolder;
-        if (SUCCEEDED(
-                folderView->GetFolder(IID_PPV_ARGS(persistFolder.put()))) &&
-            persistFolder) {
-            LPITEMIDLIST pidl = nullptr;
-            if (SUCCEEDED(persistFolder->GetCurFolder(&pidl)) && pidl) {
-                WCHAR path[MAX_PATH];
-                if (SHGetPathFromIDListEx(pidl, path, ARRAYSIZE(path),
-                                          GPFIDL_DEFAULT)) {
-                    result.folderPath = path;
-                }
-                winrt::com_ptr<IShellItem> folderItem;
-                if (SUCCEEDED(SHCreateItemFromIDList(
-                        pidl, IID_PPV_ARGS(folderItem.put()))) &&
-                    folderItem) {
-                    PWSTR name = nullptr;
-                    if (SUCCEEDED(folderItem->GetDisplayName(
-                            SIGDN_NORMALDISPLAY, &name)) &&
-                        name) {
-                        result.folderDisplayName = name;
-                        CoTaskMemFree(name);
-                    }
-                }
-                CoTaskMemFree(pidl);
-            }
-        }
-    }
-    return result;
 }
 
 std::wstring BuildParameters(std::wstring parameters,
@@ -3619,36 +3574,19 @@ bool IsSystemDarkModeActive() {
     return useLightTheme == 0;
 }
 
-std::wstring TrimWhitespaceAndQuotes(std::wstring str) {
-    size_t first = str.find_first_not_of(L" \t");
-    if (first == std::wstring::npos)
-        return L"";
-    size_t last = str.find_last_not_of(L" \t");
-    str = str.substr(first, last - first + 1);
-    if (str.size() >= 2 && str.front() == L'"' && str.back() == L'"') {
-        str = str.substr(1, str.size() - 2);
-        first = str.find_first_not_of(L" \t");
-        if (first == std::wstring::npos)
-            return L"";
-        last = str.find_last_not_of(L" \t");
-        str = str.substr(first, last - first + 1);
-    }
-    return str;
-}
-
 std::wstring ResolveThemedIconString(const std::wstring& rawSetting) {
     size_t pipePos = rawSetting.find(L'|');
 
     // Single icon provided (no pipe): applied to both themes
     if (pipePos == std::wstring::npos) {
-        return TrimWhitespaceAndQuotes(rawSetting);
+        return TrimQuotesAndSpaces(rawSetting);
     }
 
     // Split at the pipe: [Light Theme | Dark Theme]
     std::wstring lightTheme =
-        TrimWhitespaceAndQuotes(rawSetting.substr(0, pipePos));
+        TrimQuotesAndSpaces(rawSetting.substr(0, pipePos));
     std::wstring darkTheme =
-        TrimWhitespaceAndQuotes(rawSetting.substr(pipePos + 1));
+        TrimQuotesAndSpaces(rawSetting.substr(pipePos + 1));
 
     // Fallbacks if one side is left empty
     if (lightTheme.empty())
@@ -4797,7 +4735,7 @@ muxc::AppBarButton CreateMenuButton(ActionItem const& item,
     std::function<bool(const std::vector<ActionItem>&)> checkTokens =
         [&](const std::vector<ActionItem>& list) {
             for (const auto& sub : list) {
-                if (sub.GetDisplayLabel().find(L'%') != std::wstring::npos)
+                if (ItemHasLabelTokens(sub))
                     return true;
                 if (checkTokens(sub.subItems))
                     return true;
@@ -4814,14 +4752,14 @@ muxc::AppBarButton CreateMenuButton(ActionItem const& item,
             if (menu.Items().Size() > 0 && !hasChildTokens)
                 return;
 
-            HWND hWnd = nullptr;
-            if (auto btn = weakButton.get()) {
-                hWnd = GetExplorerWindowForElement(btn);
-            }
-
+            // Read on the window's own thread, without walking
+            // IShellWindows.
             ExplorerContext ctx;
             if (hasChildTokens) {
-                ctx = GetExplorerContext(hWnd);
+                if (auto btn = weakButton.get()) {
+                    ctx = GetExplorerContextOnWindowThread(
+                        GetExplorerWindowForElement(btn));
+                }
             }
 
             menu.Items().Clear();
@@ -5127,7 +5065,7 @@ SelectionSummary SummarizeSelection(IShellView* psv) {
 
 bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
                                 const SelectionSummary& summary) {
-    std::wstring filter = TrimWhitespaceAndQuotes(filterPattern);
+    std::wstring filter = TrimQuotesAndSpaces(filterPattern);
     if (filter.empty() || filter == L"*")
         return true;
 
@@ -5172,7 +5110,7 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
         if (i == filter.size() ||
             (parenDepth == 0 && (filter[i] == L',' || filter[i] == L';'))) {
             std::wstring rawToken =
-                TrimWhitespaceAndQuotes(filter.substr(start, i - start));
+                TrimQuotesAndSpaces(filter.substr(start, i - start));
             start = i + 1;
             if (rawToken.empty())
                 continue;
@@ -5183,7 +5121,7 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
 
             if (rawToken.front() == L'-' || rawToken.front() == L'~') {
                 rawToken.erase(rawToken.begin());
-                rawToken = TrimWhitespaceAndQuotes(rawToken);
+                rawToken = TrimQuotesAndSpaces(rawToken);
                 if (!rawToken.empty() && rawToken.front() == L'.')
                     rawToken.erase(rawToken.begin());
                 rawToken = ToLower(rawToken);
@@ -5215,7 +5153,7 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
         return summary.count > 0;
 
     auto evalAtomicToken = [&](std::wstring token) -> bool {
-        token = ToLower(TrimWhitespaceAndQuotes(token));
+        token = ToLower(TrimQuotesAndSpaces(token));
         if (token == L"hide" || token == L"hidden")
             return false;
 
@@ -5243,7 +5181,7 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
                 size_t cEnd = content.find_first_of(L",;|/ \t", cStart);
                 if (cEnd == std::wstring::npos)
                     cEnd = content.size();
-                std::wstring ext = TrimWhitespaceAndQuotes(
+                std::wstring ext = TrimQuotesAndSpaces(
                     content.substr(cStart, cEnd - cStart));
                 cStart = cEnd + 1;
                 if (!ext.empty() && ext.front() == L'.')
@@ -5316,7 +5254,7 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
             std::wstring subToken = branch.substr(bStart, bEnd - bStart);
             bStart = bEnd + 1;
 
-            subToken = TrimWhitespaceAndQuotes(subToken);
+            subToken = TrimQuotesAndSpaces(subToken);
             if (subToken.empty())
                 continue;
 
@@ -5335,35 +5273,46 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
     return false;
 }
 
+// Updates the live labels and the file extension filters of our buttons.
+// Without a context, the selection is read from the window's active tab, which
+// must belong to the current thread.
 void UpdateDynamicButtonStates(muxc::CommandBar const& commandBar,
                                HWND hExplorerWnd,
                                const ExplorerContext* optContext = nullptr) {
     if (g_unloading || !commandBar)
         return;
-    if (!hExplorerWnd)
-        hExplorerWnd = GetExplorerWindowForElement(commandBar);
-    if (!hExplorerWnd)
-        return;
-
-    ExplorerContext localContext;
-    const ExplorerContext& context =
-        optContext ? *optContext
-                   : (localContext = GetExplorerContext(hExplorerWnd));
-
-    SelectionSummary summary = SummarizeSelection(context.shellView.get());
-
-    auto commands = commandBar.PrimaryCommands();
-    uint32_t count = commands.Size();
 
     std::vector<ActionItem> itemSnapshots;
     bool disabledInsteadOfHidden;
     bool showMenuChevrons;
     {
         std::lock_guard<std::mutex> lock(g_settings.mutex);
+        if (!HasDynamicItems(g_settings.items))
+            return;
         itemSnapshots = g_settings.items;
         disabledInsteadOfHidden = g_settings.disabledInsteadOfHidden;
         showMenuChevrons = g_settings.showMenuChevrons;
     }
+
+    if (!hExplorerWnd)
+        hExplorerWnd = GetExplorerWindowForElement(commandBar);
+    if (!hExplorerWnd)
+        return;
+
+    ExplorerContext localContext;
+    if (!optContext)
+        localContext = GetExplorerContextOnWindowThread(hExplorerWnd);
+    const ExplorerContext& context = optContext ? *optContext : localContext;
+
+    // Reading every selected item takes a while for a large selection, so
+    // it's only done when a filter needs it.
+    SelectionSummary summary;
+    if (std::any_of(itemSnapshots.begin(), itemSnapshots.end(),
+                    ItemHasExtensionFilter))
+        summary = SummarizeSelection(context.shellView.get());
+
+    auto commands = commandBar.PrimaryCommands();
+    uint32_t count = commands.Size();
 
     for (uint32_t i = 0; i < count; i++) {
         auto cmd = commands.GetAt(i);
@@ -5423,7 +5372,7 @@ void UpdateDynamicButtonStates(muxc::CommandBar const& commandBar,
             button.Visibility(targetVis);
             button.IsEnabled(isVisible);
 
-            // Dan's schema dynamically names separators `WH_Btn_Sep_0` etc.
+            // The separator after an item is named <prefix>_Sep_<index>.
             std::wstring sepName = std::wstring(kButtonNamePrefix) + L"_Sep_" +
                                    std::to_wstring(itemIndex);
             for (uint32_t j = 0; j < count; j++) {
@@ -5442,16 +5391,10 @@ void StartSelectionTimerIfNeeded(CommandBarEntry& entry,
     if (entry.selectionTimer || g_unloading)
         return;
 
-    bool needsTimer = false;
+    bool needsTimer;
     {
         std::lock_guard<std::mutex> lock(g_settings.mutex);
-        for (const auto& itm : g_settings.items) {
-            if (itm.GetDisplayLabel().find(L'%') != std::wstring::npos ||
-                !TrimWhitespaceAndQuotes(itm.matchExtensions).empty()) {
-                needsTimer = true;
-                break;
-            }
-        }
+        needsTimer = HasDynamicItems(g_settings.items);
     }
 
     if (!needsTimer)
@@ -5483,26 +5426,12 @@ void StartSelectionTimerIfNeeded(CommandBarEntry& entry,
             if (!currentEntry)
                 return;
 
-            HWND hActiveTab =
-                FindWindowExW(hWnd, nullptr, L"ShellTabWindowClass", nullptr);
-            if (hActiveTab != currentEntry->cachedTabWnd ||
-                !currentEntry->cachedBrowser) {
-                currentEntry->cachedTabWnd = hActiveTab;
-                currentEntry->cachedBrowser = GetActiveShellBrowser(hWnd);
-                currentEntry->cachedShellView = nullptr;
-            }
-
-            if (!currentEntry->cachedBrowser)
+            // Asks the active tab of this thread's window directly, without
+            // walking IShellWindows, so a slow window elsewhere can't block
+            // this one.
+            auto view = GetActiveShellViewOnWindowThread(hWnd);
+            if (!view)
                 return;
-
-            winrt::com_ptr<IShellView> view;
-            if (FAILED(currentEntry->cachedBrowser->QueryActiveShellView(
-                    view.put())) ||
-                !view) {
-                currentEntry->cachedBrowser = nullptr;
-                currentEntry->cachedShellView = nullptr;
-                return;
-            }
 
             auto fv = view.try_as<IFolderView>();
             int count = 0, focused = -1;
@@ -5520,7 +5449,7 @@ void StartSelectionTimerIfNeeded(CommandBarEntry& entry,
             currentEntry->lastSelectionCount = count;
             currentEntry->lastFocusedItem = focused;
 
-            ExplorerContext ctx = GetContextFromView(view.get(), count);
+            ExplorerContext ctx = GetContextFromView(view.get());
             UpdateDynamicButtonStates(cb, hWnd, &ctx);
         });
 
@@ -6014,10 +5943,12 @@ void InstallShortcutHookForCurrentThread();
 
 void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
     for (auto it = g_entries.begin(); it != g_entries.end();) {
-        if (!it->commandBar.get())
+        if (!it->commandBar.get()) {
+            StopSelectionTimer(*it);
             it = g_entries.erase(it);
-        else
+        } else {
             ++it;
+        }
     }
 
     for (auto const& entry : g_entries) {
@@ -6078,8 +6009,10 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
             }
         });
 
-    g_entries.push_back(std::move(entry));
-    StartSelectionTimerIfNeeded(entry, commandBar);
+    // Start the timer on the stored entry, so StopSelectionTimer can stop it.
+    // StartSelectionTimerIfNeeded keeps no reference to the entry.
+    auto& stored = g_entries.emplace_back(std::move(entry));
+    StartSelectionTimerIfNeeded(stored, commandBar);
     UpdateCommandBar(commandBar);
     InstallShortcutHookForCurrentThread();
 }
@@ -6126,9 +6059,15 @@ void RefreshButtonsForCurrentThread() {
     StopHoverTimersForCurrentThread();
     RevokeHandlersForCurrentThread();
 
+    // Start or stop the selection timers for the new settings, since label
+    // tokens or file extension filters may have been added or removed.
     std::vector<winrt::weak_ref<muxc::CommandBar>> commandBars;
-    for (auto const& entry : g_entries)
+    for (auto& entry : g_entries) {
+        StopSelectionTimer(entry);
+        if (auto commandBar = entry.commandBar.get())
+            StartSelectionTimerIfNeeded(entry, commandBar);
         commandBars.push_back(entry.commandBar);
+    }
 
     for (auto const& weakCommandBar : commandBars) {
         auto commandBar = weakCommandBar.get();
@@ -7030,12 +6969,17 @@ ActionItem LoadActionItem(PCWSTR prefix, int depth, bool* isEmpty) {
     item.command = command.get();
     item.parameters = parameters.get();
     item.shortcut = shortcut.get();
-    item.matchExtensions =
-        WindhawkUtils::StringSetting::make(L"%s.matchExtensions", prefix).get();
     item.icon = iconGlyph.get();
     item.hideIcon = Wh_GetIntSetting(L"%s.hideIcon", prefix) != 0;
-    item.showLabel = Wh_GetIntSetting(L"%s.showLabel", prefix) != 0;
-    item.labelText = Wh_GetStringSetting(L"%s.labelText", prefix);
+    // Only toolbar items have these settings.
+    if (depth == 0) {
+        item.matchExtensions =
+            WindhawkUtils::StringSetting::make(L"%s.matchExtensions", prefix)
+                .get();
+        item.showLabel = Wh_GetIntSetting(L"%s.showLabel", prefix) != 0;
+        item.labelText =
+            WindhawkUtils::StringSetting::make(L"%s.labelText", prefix).get();
+    }
     item.separatorAfter = Wh_GetIntSetting(L"%s.separatorAfter", prefix) != 0;
     item.runAsAdmin = Wh_GetIntSetting(L"%s.runAsAdmin", prefix) != 0;
     item.windowStyle =
@@ -7579,11 +7523,11 @@ void AppendItemEntries(std::vector<RegEntry>& entries,
     entries.push_back(StringEntry(prefix + L".command", item.command));
     entries.push_back(StringEntry(prefix + L".parameters", item.parameters));
     entries.push_back(StringEntry(prefix + L".shortcut", item.shortcut));
-    entries.push_back(
-        StringEntry(prefix + L".matchExtensions", item.matchExtensions));
     entries.push_back(StringEntry(prefix + L".iconGlyph", item.icon));
     entries.push_back(BoolEntry(prefix + L".hideIcon", item.hideIcon));
     if (depth == 0) {
+        entries.push_back(
+            StringEntry(prefix + L".matchExtensions", item.matchExtensions));
         entries.push_back(BoolEntry(prefix + L".showLabel", item.showLabel));
         entries.push_back(StringEntry(prefix + L".labelText", item.labelText));
     }
@@ -8240,14 +8184,6 @@ std::wstring BuildSettingsYaml(std::vector<RegEntry> const& entries) {
     return yaml;
 }
 
-std::wstring TrimSpaces(std::wstring const& text) {
-    size_t first = text.find_first_not_of(L" \t");
-    if (first == std::wstring::npos)
-        return std::wstring();
-    size_t last = text.find_last_not_of(L" \t");
-    return text.substr(first, last - first + 1);
-}
-
 // Finds the first `target` character outside of quotes. A '#' only
 // counts at the start or after a space, a ':' only before a space or at the
 // end, as in YAML.
@@ -8596,12 +8532,14 @@ ActionItem ImportActionItem(FlatSettings const& root,
     item.command = FlatSettingString(root, prefix + L".command");
     item.parameters = FlatSettingString(root, prefix + L".parameters");
     item.shortcut = FlatSettingString(root, prefix + L".shortcut");
-    item.matchExtensions =
-        FlatSettingString(root, prefix + L".matchExtensions");
     item.icon = FlatSettingString(root, prefix + L".iconGlyph");
     item.hideIcon = FlatSettingInt(root, prefix + L".hideIcon", 0) != 0;
-    item.showLabel = FlatSettingInt(root, prefix + L".showLabel", 0) != 0;
-    item.labelText = FlatSettingString(root, prefix + L".labelText");
+    if (depth == 0) {
+        item.matchExtensions =
+            FlatSettingString(root, prefix + L".matchExtensions");
+        item.showLabel = FlatSettingInt(root, prefix + L".showLabel", 0) != 0;
+        item.labelText = FlatSettingString(root, prefix + L".labelText");
+    }
     item.separatorAfter =
         FlatSettingInt(root, prefix + L".separatorAfter", 0) != 0;
     item.runAsAdmin = FlatSettingInt(root, prefix + L".runAsAdmin", 0) != 0;
@@ -10976,6 +10914,23 @@ void SettingsWindow::BuildItemEditor() {
                 {L"\"%sel%\"", L"%sel% \u2013 all selected items, quoted"},
                 {L"\"%sel_each%\"",
                  L"%sel_each% \u2013 run once per selected item"},
+                {L"\"%1%\"", L"%1% \u2013 the first selected item"},
+                {L"%files%", L"%files% \u2013 selected files only, quoted"},
+                {L"%folders%",
+                 L"%folders% \u2013 selected folders only, quoted"},
+                {L"%name%",
+                 L"%name% \u2013 names of the selected items, quoted"},
+                {L"%base%",
+                 L"%base% \u2013 names without extension, quoted"},
+                {L"%ext%",
+                 L"%ext% \u2013 extension of the first selected item"},
+                {L"%count%", L"%count% \u2013 number of selected items"},
+                {L"\"%d_name%\"",
+                 L"%d_name% \u2013 display name of the current folder"},
+                {L"\"%d_smart%\"",
+                 L"%d_smart% \u2013 the selected folder, or the current one"},
+                {L"\"%parent%\"",
+                 L"%parent% \u2013 parent of the current folder"},
             },
             true);
 
@@ -11131,10 +11086,12 @@ void SettingsWindow::BuildItemEditor() {
         labelBox.TextChanged(onText([](ActionItem& item, std::wstring text) {
             item.labelText = text;
         }));
-        children.Append(MakeCard(L"\uE8D2", L"Custom label text",
-                                 L"Text displayed next to the icon. If empty, "
-                                 L"the name is used.",
-                                 labelBox, false));
+        children.Append(MakeCard(
+            L"\uE8D2", L"Custom label text",
+            L"Text displayed next to the icon. If empty, the name is used. "
+            L"Live tokens follow the selection: %name%, %base%, %ext%, "
+            L"%count%, %d_name% and %path%, and %% for a literal %.",
+            labelBox, false));
     }
 
     auto separatorToggle = makeToggle(item->separatorAfter);
