@@ -2,13 +2,13 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.10.0
+// @version         1.11.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @architecture    x86-64
 // @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion
-// @donateUrl       https://ko-fi.com/gilnet
+// @donateUrl       https://buymeacoffee.com/gilnett
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -55,6 +55,8 @@ level, updated in real time.
   - Strikethrough and dimmed
   - None (keep text unchanged)
 - **Mute dimmed opacity percentage**: Opacity percentage (10 to 90) used when the dimmed cue is active (default: `50`).
+- **Volume color**: Custom hex color (e.g. `#00FF00` or `#FF55AAFF`) for the volume text and native icon. Leave empty to use the default system theme color.
+- **Mute color**: Custom hex color (e.g. `#FF4444` or `#FFFF4444`) for the volume text and native icon when audio is muted. Leave empty to use the volume color or system theme color.
 - **Icon spacing**: Space between the icon and the text (default: `-1` for automatic, `0` to disable, or any other number for a fixed size in pixels).
 - **Container width**: Width of the volume area (default: `-1` for automatic, `0` to disable, or any other number for a fixed size in pixels).
 - **Volume font size**: Size in pixels for the volume text indicator. Set to `0` to use the default size.
@@ -68,17 +70,17 @@ level, updated in real time.
 
 - Only Windows 11 is supported.
 - Supported Architectures: x64 and ARM64.
-- If the mod is enabled while Explorer is already running, the text appears
-  after the next volume change.
+- Automatically detects and displays the current system volume immediately when enabled.
+- Compatible with [Taskbar Volume Control](https://windhawk.net/mods/taskbar-volume-control) for adjusting the volume with the mouse wheel anywhere on the taskbar.
 - Compatible with [Windows 11 Taskbar Styler](https://windhawk.net/mods/windows-11-taskbar-styler):
   - Spacing is managed via `Grid.ColumnSpacing`, leaving all custom `Margin` rules set by Taskbar Styler intact.
-  - Custom font sizes on `TextBlock#InnerTextBlock` are automatically detected and mirrored.
+  - Custom font sizes and foreground colors on `TextBlock#InnerTextBlock` are automatically detected and mirrored.
   - The volume text block can also be styled directly via `TextBlock#VolumePercentageSubBlock`.
 
 ## Support
 
 If you find this mod useful, you can support its development and maintenance:
-- [Support on Ko-fi](https://ko-fi.com/gilnet)
+- [Support on Buy Me a Coffee](https://buymeacoffee.com/gilnett)
 
 ## Credits
 
@@ -90,6 +92,9 @@ If you find this mod useful, you can support its development and maintenance:
 /*
 - displayStyle: percentage
   $name: Display style
+  $description: >-
+    Format of the volume indicator. "Native icon" styles use the Windows
+    speaker glyph from the system font alongside the number or percentage.
   $options:
   - percentage: Percentage
   - number: Number only
@@ -141,6 +146,17 @@ If you find this mod useful, you can support its development and maintenance:
   $description: >-
     Opacity percentage (10 to 90) used when the dimmed cue is active. Defaults
     to 50%.
+- textColor: ""
+  $name: Volume color
+  $description: >-
+    Custom hex color (e.g. "#00FF00" or "#FF55AAFF") for the volume text and
+    native icon. Leave empty to use the default system theme color.
+- muteTextColor: ""
+  $name: Mute color
+  $description: >-
+    Custom hex color (e.g. "#FF4444" or "#FFFF4444") for the volume text and
+    native icon when audio is muted. Leave empty to use the volume color or
+    system theme color.
 - iconSpacing: -1
   $name: Icon spacing
   $description: >-
@@ -185,12 +201,15 @@ If you find this mod useful, you can support its development and maintenance:
 */
 // ==/WindhawkModSettings==
 
+#include <endpointvolume.h>
+#include <mmdeviceapi.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdint>
 #include <cwctype>
 #include <list>
 #include <mutex>
@@ -201,8 +220,10 @@ If you find this mod useful, you can support its development and maintenance:
 
 #undef GetCurrentTime
 
+#include <winrt/base.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.UI.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Data.h>
@@ -247,21 +268,25 @@ enum class MuteTextCue {
 };
 
 struct {
-    DisplayStyle displayStyle;
-    ElementPosition elementPosition;
+    DisplayStyle displayStyle{};
+    ElementPosition elementPosition{};
     WindhawkUtils::StringSetting customPrefix;
-    MuteStyle muteStyle;
+    MuteStyle muteStyle{};
     WindhawkUtils::StringSetting customMuteText;
-    MuteTextCue muteTextCue;
-    int muteOpacity;
-    int containerWidth;
-    int iconSpacing;
-    double fontSize;
-    double prefixSize;
-    double iconSize;
+    MuteTextCue muteTextCue{};
+    int muteOpacity = 50;
+    int containerWidth = -1;
+    int iconSpacing = -1;
+    double fontSize = 0.0;
+    double prefixSize = 0.0;
+    double iconSize = 0.0;
     WindhawkUtils::StringSetting customFontFamily;
-    int verticalOffset;
-    int iconVerticalOffset;
+    int verticalOffset = 0;
+    int iconVerticalOffset = 0;
+    bool hasTextColor = false;
+    winrt::Windows::UI::Color textColor{};
+    bool hasMuteTextColor = false;
+    winrt::Windows::UI::Color muteTextColor{};
 } g_settings;
 
 std::atomic<bool> g_unloading;
@@ -277,7 +302,7 @@ bool g_isMuted;
 double g_maxObservedWidth = 0.0;
 
 struct VolumeDataModel {
-    void* pThis;
+    void* pThis = nullptr;
     winrt::weak_ref<winrt::Windows::Foundation::IInspectable> weakRef;
 };
 std::vector<VolumeDataModel> g_volumeDataModels;
@@ -309,11 +334,17 @@ struct TrackedVolumeContent {
     winrt::weak_ref<FrameworkElement> underlayElement;
     winrt::weak_ref<Controls::TextBlock> subBlock;
     bool isCustomLayoutConfigured = false;
+    bool isBaseVisuallyHidden = false;
     bool lastDualBoxMode = false;
     bool hasIconOffset = false;
     bool hasTextOffset = false;
+    bool hasCustomForegroundApplied = false;
     winrt::Windows::Foundation::IInspectable origUnderlayVisibility{nullptr};
     winrt::Windows::Foundation::IInspectable origBaseVisibility{nullptr};
+    winrt::Windows::Foundation::IInspectable origBaseOpacity{nullptr};
+    winrt::Windows::Foundation::IInspectable origBaseWidth{nullptr};
+    winrt::Windows::Foundation::IInspectable origBaseMaxWidth{nullptr};
+    winrt::Windows::Foundation::IInspectable origBaseIsHitTestVisible{nullptr};
     winrt::Windows::Foundation::IInspectable origUnderlayAlignment{nullptr};
     winrt::Windows::Foundation::IInspectable origBaseAlignment{nullptr};
     winrt::Windows::Foundation::IInspectable origUnderlayColumn{nullptr};
@@ -331,6 +362,8 @@ struct TrackedVolumeContent {
     winrt::Windows::Foundation::IInspectable origUnderlayMinWidth{nullptr};
     winrt::weak_ref<Controls::TextBlock> observedInnerTextBlock;
     int64_t fontSizeCallbackToken = 0;
+    int64_t foregroundCallbackToken = 0;
+    winrt::event_token actualThemeChangedToken{};
     bool lastNativeGlyph = false;
     int layoutSettingsGeneration = -1;
 };
@@ -477,7 +510,7 @@ std::wstring FormatVolumeText(float volumeLevel, bool isMuted) {
     }
 
     int percentage =
-        std::clamp((int)std::lround(volumeLevel * 100.0f), 0, 100);
+        std::clamp(static_cast<int>(std::lround(volumeLevel * 100.0f)), 0, 100);
     std::wstring number = std::to_wstring(percentage);
 
     if (g_settings.displayStyle == DisplayStyle::number ||
@@ -686,6 +719,57 @@ void ApplyVolumeIconViewsWidth() {
     }
 }
 
+template <typename F>
+void SafeXamlCall(F&& func) {
+    try {
+        func();
+    } catch (...) {
+        Wh_Log(L"Error %08X", winrt::to_hresult());
+    }
+}
+
+void UnregisterTrackedCallbacks(TrackedVolumeContent& tracked) {
+    if (tracked.fontSizeCallbackToken != 0 ||
+        tracked.foregroundCallbackToken != 0) {
+        if (auto observed = tracked.observedInnerTextBlock.get()) {
+            if (tracked.fontSizeCallbackToken != 0) {
+                try {
+                    observed.UnregisterPropertyChangedCallback(
+                        Controls::TextBlock::FontSizeProperty(),
+                        tracked.fontSizeCallbackToken);
+                } catch (winrt::hresult_error const& ex) {
+                    Wh_Log(L"Error unregistering font size callback: %08X",
+                           ex.code());
+                }
+            }
+            if (tracked.foregroundCallbackToken != 0) {
+                try {
+                    observed.UnregisterPropertyChangedCallback(
+                        Controls::TextBlock::ForegroundProperty(),
+                        tracked.foregroundCallbackToken);
+                } catch (winrt::hresult_error const& ex) {
+                    Wh_Log(L"Error unregistering foreground callback: %08X",
+                           ex.code());
+                }
+            }
+        }
+        tracked.fontSizeCallbackToken = 0;
+        tracked.foregroundCallbackToken = 0;
+        tracked.observedInnerTextBlock = nullptr;
+    }
+
+    if (tracked.actualThemeChangedToken.value != 0) {
+        if (auto tic = tracked.textIconContent.get()) {
+            try {
+                tic.ActualThemeChanged(tracked.actualThemeChangedToken);
+            } catch (winrt::hresult_error const& ex) {
+                Wh_Log(L"Error unregistering theme callback: %08X", ex.code());
+            }
+        }
+        tracked.actualThemeChangedToken = {};
+    }
+}
+
 void PruneTrackedVolumeContents() {
     if (!g_trackedVolumeContents) {
         return;
@@ -693,20 +777,7 @@ void PruneTrackedVolumeContents() {
 
     std::erase_if(*g_trackedVolumeContents, [](auto& tracked) {
         if (!tracked.textIconContent.get()) {
-            if (tracked.fontSizeCallbackToken != 0) {
-                if (auto observed = tracked.observedInnerTextBlock.get()) {
-                    try {
-                        observed.UnregisterPropertyChangedCallback(
-                            Controls::TextBlock::FontSizeProperty(),
-                            tracked.fontSizeCallbackToken);
-                    } catch (winrt::hresult_error const& ex) {
-                        Wh_Log(L"Error unregistering font size callback: %08X",
-                               ex.code());
-                    }
-                }
-                tracked.fontSizeCallbackToken = 0;
-                tracked.observedInnerTextBlock = nullptr;
-            }
+            UnregisterTrackedCallbacks(tracked);
             return true;
         }
         return false;
@@ -755,20 +826,7 @@ void ApplyIconFontSize(
 }
 
 void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
-    if (tracked.fontSizeCallbackToken != 0) {
-        if (auto observed = tracked.observedInnerTextBlock.get()) {
-            try {
-                observed.UnregisterPropertyChangedCallback(
-                    Controls::TextBlock::FontSizeProperty(),
-                    tracked.fontSizeCallbackToken);
-            } catch (winrt::hresult_error const& ex) {
-                Wh_Log(L"Error unregistering font size callback: %08X",
-                       ex.code());
-            }
-        }
-        tracked.fontSizeCallbackToken = 0;
-        tracked.observedInnerTextBlock = nullptr;
-    }
+    UnregisterTrackedCallbacks(tracked);
 
     auto containerGrid = tracked.containerGrid.get();
     if (!containerGrid) {
@@ -810,6 +868,17 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
     }
 
     if (auto base = tracked.baseElement.get()) {
+        if (tracked.isBaseVisuallyHidden) {
+            RestoreLocalProperty(base, UIElement::OpacityProperty(),
+                                 tracked.origBaseOpacity);
+            RestoreLocalProperty(base, FrameworkElement::WidthProperty(),
+                                 tracked.origBaseWidth);
+            RestoreLocalProperty(base, FrameworkElement::MaxWidthProperty(),
+                                 tracked.origBaseMaxWidth);
+            RestoreLocalProperty(base, UIElement::IsHitTestVisibleProperty(),
+                                 tracked.origBaseIsHitTestVisible);
+            tracked.isBaseVisuallyHidden = false;
+        }
         RestoreLocalProperty(base, FrameworkElement::MinWidthProperty(),
                              tracked.origBaseMinWidth);
         RestoreLocalProperty(base, UIElement::VisibilityProperty(),
@@ -825,6 +894,9 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
                 tb.ClearValue(FrameworkElement::HorizontalAlignmentProperty());
                 RestoreLocalProperty(tb, Controls::TextBlock::FontSizeProperty(),
                                      tracked.origBaseFontSize);
+                if (tracked.hasCustomForegroundApplied) {
+                    tb.ClearValue(Controls::TextBlock::ForegroundProperty());
+                }
             }
         }
     }
@@ -845,9 +917,13 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
                 tb.ClearValue(FrameworkElement::HorizontalAlignmentProperty());
                 RestoreLocalProperty(tb, Controls::TextBlock::FontSizeProperty(),
                                      tracked.origUnderlayFontSize);
+                if (tracked.hasCustomForegroundApplied) {
+                    tb.ClearValue(Controls::TextBlock::ForegroundProperty());
+                }
             }
         }
     }
+    tracked.hasCustomForegroundApplied = false;
 
     RestoreLocalProperty(containerGrid,
                          FrameworkElement::HorizontalAlignmentProperty(),
@@ -872,20 +948,7 @@ void RestoreAllVolumeLayouts() {
     }
     if (g_trackedVolumeContents) {
         for (auto& tracked : *g_trackedVolumeContents) {
-            if (tracked.fontSizeCallbackToken != 0) {
-                if (auto observed = tracked.observedInnerTextBlock.get()) {
-                    try {
-                        observed.UnregisterPropertyChangedCallback(
-                            Controls::TextBlock::FontSizeProperty(),
-                            tracked.fontSizeCallbackToken);
-                    } catch (winrt::hresult_error const& ex) {
-                        Wh_Log(L"Error unregistering font size callback: %08X",
-                               ex.code());
-                    }
-                }
-                tracked.fontSizeCallbackToken = 0;
-                tracked.observedInnerTextBlock = nullptr;
-            }
+            UnregisterTrackedCallbacks(tracked);
         }
         for (auto& tracked : *g_trackedVolumeContents) {
             RestoreVolumeLayout(tracked);
@@ -938,24 +1001,139 @@ void SyncSubBlockFontSize(Controls::TextBlock const& subBlock,
     subBlock.FontSize(GetSubBlockFontSize(source));
 }
 
+void SyncVolumeColors(TrackedVolumeContent& tracked) {
+    static thread_local bool s_isSyncingColors = false;
+    if (s_isSyncingColors || g_unloading) {
+        return;
+    }
+    struct SyncGuard {
+        bool& flag;
+        explicit SyncGuard(bool& f) : flag(f) { flag = true; }
+        ~SyncGuard() { flag = false; }
+    } guard(s_isSyncingColors);
+
+    auto subBlock = tracked.subBlock.get();
+    auto baseElement = tracked.baseElement.get();
+    auto underlayElement = tracked.underlayElement.get();
+
+    Controls::TextBlock baseTb = nullptr;
+    if (baseElement) {
+        if (FrameworkElement tbEl =
+                FindChildByName(baseElement, L"InnerTextBlock")) {
+            baseTb = tbEl.try_as<Controls::TextBlock>();
+        }
+    }
+
+    Controls::TextBlock underlayTb = nullptr;
+    if (underlayElement) {
+        if (FrameworkElement tbEl =
+                FindChildByName(underlayElement, L"InnerTextBlock")) {
+            underlayTb = tbEl.try_as<Controls::TextBlock>();
+        }
+    }
+
+    bool useCustomModColor = false;
+    winrt::Windows::UI::Color customColor{};
+    if (g_isMuted && g_settings.hasMuteTextColor) {
+        useCustomModColor = true;
+        customColor = g_settings.muteTextColor;
+    } else if (g_settings.hasTextColor) {
+        useCustomModColor = true;
+        customColor = g_settings.textColor;
+    }
+
+    if (useCustomModColor) {
+        tracked.hasCustomForegroundApplied = true;
+
+        Media::SolidColorBrush customBrush(customColor);
+        if (subBlock) {
+            subBlock.Foreground(customBrush);
+        }
+        if (baseTb) {
+            baseTb.Foreground(customBrush);
+        }
+        if (underlayTb) {
+            underlayTb.Foreground(customBrush);
+        }
+        return;
+    }
+
+    if (tracked.hasCustomForegroundApplied) {
+        if (baseTb) {
+            baseTb.ClearValue(Controls::TextBlock::ForegroundProperty());
+        }
+        if (underlayTb) {
+            underlayTb.ClearValue(Controls::TextBlock::ForegroundProperty());
+        }
+        if (subBlock) {
+            subBlock.ClearValue(Controls::TextBlock::ForegroundProperty());
+            if (baseTb) {
+                Data::Binding foregroundBinding;
+                foregroundBinding.Source(baseTb);
+                foregroundBinding.Path(PropertyPath(L"Foreground"));
+                subBlock.SetBinding(Controls::TextBlock::ForegroundProperty(),
+                                    foregroundBinding);
+            }
+        }
+        tracked.hasCustomForegroundApplied = false;
+    }
+}
+
 void BindSubBlockTextStyle(TrackedVolumeContent& tracked,
                            Controls::TextBlock const& subBlock,
                            Controls::TextBlock const& source) {
-    auto bind = [&](DependencyProperty const& dp, PCWSTR path) {
-        Data::Binding binding;
-        binding.Source(source);
-        binding.Path(PropertyPath(path));
-        subBlock.SetBinding(dp, binding);
-    };
-    bind(Controls::TextBlock::ForegroundProperty(), L"Foreground");
-    bind(Controls::TextBlock::FontWeightProperty(), L"FontWeight");
+    if (source &&
+        subBlock.ReadLocalValue(Controls::TextBlock::FontWeightProperty()) ==
+            DependencyProperty::UnsetValue()) {
+        Data::Binding weightBinding;
+        weightBinding.Source(source);
+        weightBinding.Path(PropertyPath(L"FontWeight"));
+        subBlock.SetBinding(Controls::TextBlock::FontWeightProperty(),
+                            weightBinding);
+    }
+
+    if (source && !tracked.hasCustomForegroundApplied &&
+        subBlock.ReadLocalValue(Controls::TextBlock::ForegroundProperty()) ==
+            DependencyProperty::UnsetValue()) {
+        Data::Binding foregroundBinding;
+        foregroundBinding.Source(source);
+        foregroundBinding.Path(PropertyPath(L"Foreground"));
+        subBlock.SetBinding(Controls::TextBlock::ForegroundProperty(),
+                            foregroundBinding);
+    }
 
     SyncSubBlockFontSize(subBlock, source);
 
+    auto tic = tracked.textIconContent.get();
+    if (tic && tracked.actualThemeChangedToken.value == 0) {
+        try {
+            tracked.actualThemeChangedToken = tic.ActualThemeChanged(
+                [ticWeak = winrt::make_weak(tic)](
+                    FrameworkElement const&,
+                    winrt::Windows::Foundation::IInspectable const&) {
+                    SafeXamlCall([ticWeak] {
+                        if (g_unloading) {
+                            return;
+                        }
+                        if (auto el = ticWeak.get()) {
+                            if (TrackedVolumeContent* t =
+                                    FindTrackedVolumeContent(el)) {
+                                SyncVolumeColors(*t);
+                            }
+                        }
+                    });
+                });
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error registering theme callback: %08X", ex.code());
+            tracked.actualThemeChangedToken = {};
+        }
+    }
+
     if (tracked.fontSizeCallbackToken == 0 ||
+        tracked.foregroundCallbackToken == 0 ||
         tracked.observedInnerTextBlock.get() != source) {
-        if (tracked.fontSizeCallbackToken != 0) {
-            if (auto prevSource = tracked.observedInnerTextBlock.get()) {
+        if (auto prevSource = tracked.observedInnerTextBlock.get()) {
+            if (tracked.fontSizeCallbackToken != 0) {
                 try {
                     prevSource.UnregisterPropertyChangedCallback(
                         Controls::TextBlock::FontSizeProperty(),
@@ -964,8 +1142,19 @@ void BindSubBlockTextStyle(TrackedVolumeContent& tracked,
                     Wh_Log(L"Error unregistering font size callback: %08X",
                            ex.code());
                 }
+                tracked.fontSizeCallbackToken = 0;
             }
-            tracked.fontSizeCallbackToken = 0;
+            if (tracked.foregroundCallbackToken != 0) {
+                try {
+                    prevSource.UnregisterPropertyChangedCallback(
+                        Controls::TextBlock::ForegroundProperty(),
+                        tracked.foregroundCallbackToken);
+                } catch (winrt::hresult_error const& ex) {
+                    Wh_Log(L"Error unregistering foreground callback: %08X",
+                           ex.code());
+                }
+                tracked.foregroundCallbackToken = 0;
+            }
         }
 
         tracked.observedInnerTextBlock = source;
@@ -987,10 +1176,38 @@ void BindSubBlockTextStyle(TrackedVolumeContent& tracked,
                 Wh_Log(L"Error registering font size callback: %08X", ex.code());
                 tracked.fontSizeCallbackToken = 0;
             }
+
+            if (tic) {
+                try {
+                    tracked.foregroundCallbackToken =
+                        source.RegisterPropertyChangedCallback(
+                            Controls::TextBlock::ForegroundProperty(),
+                            [ticWeak = winrt::make_weak(tic)](
+                                DependencyObject const&,
+                                DependencyProperty const&) {
+                                SafeXamlCall([ticWeak] {
+                                    if (g_unloading) {
+                                        return;
+                                    }
+                                    if (auto el = ticWeak.get()) {
+                                        if (TrackedVolumeContent* t =
+                                                FindTrackedVolumeContent(el)) {
+                                            SyncVolumeColors(*t);
+                                        }
+                                    }
+                                });
+                            });
+                } catch (winrt::hresult_error const& ex) {
+                    Wh_Log(L"Error registering foreground callback: %08X",
+                           ex.code());
+                    tracked.foregroundCallbackToken = 0;
+                }
+            }
         }
     }
 
     SyncSubBlockFontFamily(subBlock);
+    SyncVolumeColors(tracked);
 }
 
 Controls::TextBlock GetOrCreateSubBlock(TrackedVolumeContent& tracked,
@@ -1257,6 +1474,14 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
                 base.ReadLocalValue(Controls::Grid::ColumnProperty());
             tracked->origBaseMinWidth =
                 base.ReadLocalValue(FrameworkElement::MinWidthProperty());
+            tracked->origBaseOpacity =
+                base.ReadLocalValue(UIElement::OpacityProperty());
+            tracked->origBaseWidth =
+                base.ReadLocalValue(FrameworkElement::WidthProperty());
+            tracked->origBaseMaxWidth =
+                base.ReadLocalValue(FrameworkElement::MaxWidthProperty());
+            tracked->origBaseIsHitTestVisible =
+                base.ReadLocalValue(UIElement::IsHitTestVisibleProperty());
             if (FrameworkElement tbEl = FindChildByName(base, L"InnerTextBlock")) {
                 tracked->origBaseFontSize =
                     tbEl.ReadLocalValue(Controls::TextBlock::FontSizeProperty());
@@ -1351,6 +1576,7 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
                 UpdateSubBlockContent(subBlock, g_isMuted, g_volumeLevel);
             }
         }
+        SyncVolumeColors(*tracked);
         return;
     }
 
@@ -1359,6 +1585,20 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         containerGrid.ColumnSpacing(0.0);
 
         if (useNativeGlyph) {
+            if (tracked->isBaseVisuallyHidden) {
+                RestoreLocalProperty(baseElement, UIElement::OpacityProperty(),
+                                     tracked->origBaseOpacity);
+                RestoreLocalProperty(baseElement, FrameworkElement::WidthProperty(),
+                                     tracked->origBaseWidth);
+                RestoreLocalProperty(baseElement,
+                                     FrameworkElement::MaxWidthProperty(),
+                                     tracked->origBaseMaxWidth);
+                RestoreLocalProperty(baseElement,
+                                     UIElement::IsHitTestVisibleProperty(),
+                                     tracked->origBaseIsHitTestVisible);
+                tracked->isBaseVisuallyHidden = false;
+            }
+
             subBlock.Text(L"");
             subBlock.Visibility(Visibility::Collapsed);
             if (FrameworkElement textBlockEl =
@@ -1379,17 +1619,27 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
                         HorizontalAlignment::Center);
                 }
             }
+
+            applyLayout(baseElement, 0, Visibility::Visible);
+            applyLayout(underlayElement, 0, Visibility::Visible);
         } else {
             UpdateSubBlockContent(subBlock, g_isMuted, g_volumeLevel);
             subBlock.HorizontalAlignment(HorizontalAlignment::Center);
             subBlock.Visibility(Visibility::Visible);
             Controls::Grid::SetColumn(subBlock, 0);
-        }
 
-        Visibility baseVis =
-            useNativeGlyph ? Visibility::Visible : Visibility::Collapsed;
-        applyLayout(baseElement, 0, baseVis);
-        applyLayout(underlayElement, 0, baseVis);
+            // Keep baseElement visible so WinUI theme updates and foreground callbacks
+            // propagate to InnerTextBlock, but visually hide it.
+            tracked->isBaseVisuallyHidden = true;
+            baseElement.Visibility(Visibility::Visible);
+            baseElement.Opacity(0.0);
+            baseElement.Width(0.0);
+            baseElement.MaxWidth(0.0);
+            baseElement.IsHitTestVisible(false);
+            Controls::Grid::SetColumn(baseElement, 0);
+
+            applyLayout(underlayElement, 0, Visibility::Collapsed);
+        }
 
         MeasureMaxContainerWidth(containerGrid, subBlock, useNativeGlyph);
 
@@ -1397,7 +1647,20 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         tracked->lastNativeGlyph = useNativeGlyph;
         tracked->layoutSettingsGeneration = g_settingsGeneration;
         tracked->isCustomLayoutConfigured = true;
+        SyncVolumeColors(*tracked);
         return;
+    }
+
+    if (tracked->isBaseVisuallyHidden) {
+        RestoreLocalProperty(baseElement, UIElement::OpacityProperty(),
+                             tracked->origBaseOpacity);
+        RestoreLocalProperty(baseElement, FrameworkElement::WidthProperty(),
+                             tracked->origBaseWidth);
+        RestoreLocalProperty(baseElement, FrameworkElement::MaxWidthProperty(),
+                             tracked->origBaseMaxWidth);
+        RestoreLocalProperty(baseElement, UIElement::IsHitTestVisibleProperty(),
+                             tracked->origBaseIsHitTestVisible);
+        tracked->isBaseVisuallyHidden = false;
     }
 
     if (containerGrid.ColumnDefinitions().Size() < 2) {
@@ -1438,6 +1701,7 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
     tracked->lastNativeGlyph = false;
     tracked->layoutSettingsGeneration = g_settingsGeneration;
     tracked->isCustomLayoutConfigured = true;
+    SyncVolumeColors(*tracked);
 }
 
 void UpdateAllVolumeLayouts() {
@@ -1486,7 +1750,7 @@ bool IsVolumeTextIconContent(FrameworkElement const& textIconContent) {
     if (!g_volumeText.empty() && text == g_volumeText) {
         return true;
     }
-    if (IsDualBoxStyle() && !text.empty()) {
+    if (!text.empty()) {
         wchar_t ch = text[0];
         return ch == L'\uE74F' || ch == L'\uEA85' || ch == L'\uEBC5' ||
                (ch >= L'\uE992' && ch <= L'\uE995');
@@ -1509,15 +1773,6 @@ TextIconContentViewModel_SetText_t
     TextIconContentViewModel_UnderlayText_Original;
 
 void RefreshVolumeIcons();
-
-template <typename F>
-void SafeXamlCall(F&& func) {
-    try {
-        func();
-    } catch (...) {
-        Wh_Log(L"Error %08X", winrt::to_hresult());
-    }
-}
 
 void LookUpVolumeIconView(FrameworkElement const& textIconContent) {
     if (!IsVolumeTextIconContent(textIconContent)) {
@@ -1875,6 +2130,140 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     return module;
 }
 
+void TriggerCoreAudioNotification() {
+    try {
+        winrt::com_ptr<IMMDeviceEnumerator> enumerator;
+        HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                      CLSCTX_INPROC_SERVER,
+                                      __uuidof(IMMDeviceEnumerator),
+                                      enumerator.put_void());
+        if (FAILED(hr) || !enumerator) {
+            return;
+        }
+
+        winrt::com_ptr<IMMDevice> defaultDevice;
+        hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole,
+                                                 defaultDevice.put());
+        if (FAILED(hr) || !defaultDevice) {
+            return;
+        }
+
+        winrt::com_ptr<IAudioEndpointVolume> endpointVolume;
+        hr = defaultDevice->Activate(__uuidof(IAudioEndpointVolume),
+                                     CLSCTX_INPROC_SERVER, nullptr,
+                                     endpointVolume.put_void());
+        if (FAILED(hr) || !endpointVolume) {
+            return;
+        }
+
+        float currentVolume = 0.0f;
+        hr = endpointVolume->GetMasterVolumeLevelScalar(&currentVolume);
+        if (FAILED(hr)) {
+            return;
+        }
+
+        float nudge = (currentVolume >= 0.5f) ? (currentVolume - 0.0001f)
+                                              : (currentVolume + 0.0001f);
+        nudge = std::clamp(nudge, 0.0f, 1.0f);
+
+        endpointVolume->SetMasterVolumeLevelScalar(nudge, nullptr);
+        endpointVolume->SetMasterVolumeLevelScalar(currentVolume, nullptr);
+        Wh_Log(L"Triggered CoreAudio notification (volume=%.4f)", currentVolume);
+    } catch (...) {
+        Wh_Log(L"TriggerCoreAudioNotification error");
+    }
+}
+
+bool TryParseColor(std::wstring_view str, winrt::Windows::UI::Color& color) {
+    if (str.empty()) {
+        return false;
+    }
+    if (str.front() == L'#') {
+        str.remove_prefix(1);
+    }
+    if (str.length() != 6 && str.length() != 8) {
+        return false;
+    }
+    for (wchar_t c : str) {
+        if (!iswxdigit(c)) {
+            return false;
+        }
+    }
+    uint32_t val = 0;
+    for (wchar_t c : str) {
+        val <<= 4;
+        if (c >= L'0' && c <= L'9') {
+            val |= static_cast<uint32_t>(c - L'0');
+        } else if (c >= L'a' && c <= L'f') {
+            val |= static_cast<uint32_t>(c - L'a' + 10);
+        } else if (c >= L'A' && c <= L'F') {
+            val |= static_cast<uint32_t>(c - L'A' + 10);
+        }
+    }
+    if (str.length() == 6) {
+        color.A = 255;
+        color.R = static_cast<uint8_t>((val >> 16) & 0xFF);
+        color.G = static_cast<uint8_t>((val >> 8) & 0xFF);
+        color.B = static_cast<uint8_t>(val & 0xFF);
+    } else {
+        color.A = static_cast<uint8_t>((val >> 24) & 0xFF);
+        color.R = static_cast<uint8_t>((val >> 16) & 0xFF);
+        color.G = static_cast<uint8_t>((val >> 8) & 0xFF);
+        color.B = static_cast<uint8_t>(val & 0xFF);
+    }
+    return true;
+}
+
+void InitVolumeStateFromCoreAudio() {
+    std::lock_guard<std::mutex> lock(g_volumeStateMutex);
+    if (g_hasVolumeState) {
+        return;
+    }
+
+    winrt::com_ptr<IMMDeviceEnumerator> enumerator;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                  CLSCTX_INPROC_SERVER,
+                                  __uuidof(IMMDeviceEnumerator),
+                                  enumerator.put_void());
+    if (FAILED(hr) || !enumerator) {
+        return;
+    }
+
+    winrt::com_ptr<IMMDevice> defaultDevice;
+    hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole,
+                                             defaultDevice.put());
+    if (FAILED(hr) || !defaultDevice) {
+        return;
+    }
+
+    winrt::com_ptr<IAudioEndpointVolume> endpointVolume;
+    hr = defaultDevice->Activate(__uuidof(IAudioEndpointVolume),
+                                 CLSCTX_INPROC_SERVER, nullptr,
+                                 endpointVolume.put_void());
+    if (FAILED(hr) || !endpointVolume) {
+        return;
+    }
+
+    float masterVolume = 0.0f;
+    hr = endpointVolume->GetMasterVolumeLevelScalar(&masterVolume);
+    if (FAILED(hr)) {
+        return;
+    }
+
+    BOOL isMuted = FALSE;
+    hr = endpointVolume->GetMute(&isMuted);
+    if (FAILED(hr)) {
+        return;
+    }
+
+    g_volumeLevel = masterVolume;
+    g_isMuted = (isMuted != FALSE);
+    g_hasVolumeState = true;
+    g_volumeText = FormatVolumeText(g_volumeLevel, g_isMuted);
+    g_volumeTextChanged = true;
+    Wh_Log(L"CoreAudio initial volume: %.2f muted=%d", g_volumeLevel, g_isMuted);
+}
+
 void LoadSettings() {
     auto displayStyle = WindhawkUtils::StringSetting::make(L"displayStyle");
     std::wstring_view ds = displayStyle.get();
@@ -1964,6 +2353,29 @@ void LoadSettings() {
     g_settings.verticalOffset = Wh_GetIntSetting(L"verticalOffset");
     g_settings.iconVerticalOffset = Wh_GetIntSetting(L"iconVerticalOffset");
 
+    auto textColorSetting = WindhawkUtils::StringSetting::make(L"textColor");
+    std::wstring_view tc = textColorSetting.get();
+    winrt::Windows::UI::Color parsedTextColor{};
+    if (TryParseColor(tc, parsedTextColor)) {
+        g_settings.hasTextColor = true;
+        g_settings.textColor = parsedTextColor;
+    } else {
+        g_settings.hasTextColor = false;
+        g_settings.textColor = {};
+    }
+
+    auto muteTextColorSetting =
+        WindhawkUtils::StringSetting::make(L"muteTextColor");
+    std::wstring_view mtcColor = muteTextColorSetting.get();
+    winrt::Windows::UI::Color parsedMuteTextColor{};
+    if (TryParseColor(mtcColor, parsedMuteTextColor)) {
+        g_settings.hasMuteTextColor = true;
+        g_settings.muteTextColor = parsedMuteTextColor;
+    } else {
+        g_settings.hasMuteTextColor = false;
+        g_settings.muteTextColor = {};
+    }
+
     g_maxObservedWidth = 0.0;
 
     g_settingsGeneration++;
@@ -2016,6 +2428,8 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
+    InitVolumeStateFromCoreAudio();
+
     if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
         g_systemTrayModuleHooked = true;
         if (!HookSystemTraySymbols(systemTrayModule)) {
@@ -2036,6 +2450,12 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
+static DWORD WINAPI CoreAudioNotificationThread(LPVOID) {
+    Sleep(60);
+    TriggerCoreAudioNotification();
+    return 0;
+}
+
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
@@ -2049,6 +2469,24 @@ void Wh_ModAfterInit() {
                 }
             }
         }
+    }
+
+    if (!g_hasVolumeState) {
+        InitVolumeStateFromCoreAudio();
+    }
+
+    RunFromTaskbarThread([](void*) {
+        SafeXamlCall([] {
+            UpdateAllVolumeLayouts();
+            RefreshVolumeIcons();
+            ApplyVolumeIconViewsWidth();
+        });
+    });
+
+    HANDLE hThread =
+        CreateThread(nullptr, 0, CoreAudioNotificationThread, nullptr, 0, nullptr);
+    if (hThread) {
+        CloseHandle(hThread);
     }
 }
 
@@ -2122,4 +2560,6 @@ void Wh_ModSettingsChanged() {
         })) {
         LoadSettings();
     }
+
+    TriggerCoreAudioNotification();
 }
