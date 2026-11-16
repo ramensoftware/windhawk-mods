@@ -2,7 +2,7 @@
 // @id              taskbar-countdown-timer
 // @name            Taskbar Countdown Timer
 // @description     A countdown timer and alarm clock integrated into the Windows 11 taskbar (Windows 11 only)
-// @version         3
+// @version         2
 // @author          K3M
 // @github          https://github.com/yazanhani900-blip
 // @include         explorer.exe
@@ -21,10 +21,8 @@ Adds a compact countdown timer **and alarm clock** directly to the Windows 11 ta
 
 - **Two modes in one flyout: Timer and Alarm**
   - Timer: set a countdown in **hours, minutes and seconds**
-  - Alarm: a Samsung-style **wheel picker** with **hour (1-12), minute and AM / PM**.
-    Roll the **mouse wheel** over a column (or click its arrows) to change it.
-    It rings at the next occurrence of that time (today if it is still ahead,
-    otherwise tomorrow)
+  - Alarm: pick a time of day (hour 0-23 and minute). It rings at the next
+    occurrence of that time (today if it is still ahead, otherwise tomorrow)
 - Add a custom reminder message
 - Live countdown display in the taskbar (compact button, adjustable font size).
   A timer shows a stopwatch icon, an alarm shows an alarm-clock icon.
@@ -46,7 +44,7 @@ Adds a compact countdown timer **and alarm clock** directly to the Windows 11 ta
 
 1. Click the button on the taskbar.
 2. Choose **Timer** or **Alarm** at the top of the flyout.
-3. Enter a reminder and a duration (Timer) or roll the wheels to a time (Alarm).
+3. Enter a reminder and a duration (Timer) or a time of day (Alarm).
 4. Optionally open the gear (settings) page and click **Choose sound…** and/or **Choose background…**
    (images: jpg, png, bmp, gif, tif - videos: mp4, mov, wmv, avi, mkv, webm).
 5. Open the gear (settings) page and use **Preview alert** to see it right away.
@@ -59,7 +57,7 @@ Videos are muted by default (see settings) because the completion sound plays to
 ## Notes
 
 - Only one timer / alarm can run at a time.
-- Alarm wheels: scroll down = next value, scroll up = previous value.
+- Alarm time uses 24-hour format (for example 7:30 PM = hour 19, minute 30).
 - Alert size (large / small) and look are set on the settings page of the flyout; the glass tint is in the mod settings.
 - With a video background in the large alert the card stays solid (a live video
   can't be blurred). The small alert always uses an image or the default gradient.
@@ -69,37 +67,6 @@ Videos are muted by default (see settings) because the completion sound plays to
 
 // ==WindhawkModSettings==
 /*
-- defaultMinutes: 20
-  $name: Default timer duration (minutes)
-  $description: Default duration shown when creating a new timer. It is shown in the hours / minutes fields. The alarm wheels default to the current time plus this many minutes.
-
-- defaultSnoozeMinutes: 5
-  $name: Default snooze duration (minutes)
-  $description: Default duration shown in the snooze fields.
-
-- maximumMinutes: 1440
-  $name: Maximum duration (minutes)
-  $description: Maximum total length accepted for timers and snoozes, up to 10080 minutes (7 days). Alarms are always limited to 24 hours.
-
-- buttonLabel: "⏱"
-  $name: Idle taskbar button label
-  $description: Text shown on the taskbar when no timer is running.
-
-- buttonFontSize: 11
-  $name: Taskbar button font size
-  $description: Smaller number = smaller button on the taskbar (8-20).
-
-- glassTint: 35
-  $name: Frosted glass tint (%)
-  $description: How strong the dark tint over the blurred card is (0 = clear glass, 90 = almost solid).
-
-- completionSound: true
-  $name: Play completion sound
-  $description: Play a sound when the timer finishes. Pick the sound itself from the timer flyout (Choose sound…).
-
-- backgroundDim: 40
-  $name: Image background dimming (%)
-  $description: How much to darken an image background so the text stays readable (0-80).
 
 - videoSound: false
   $name: Play video sound
@@ -153,8 +120,6 @@ Videos are muted by default (see settings) because the completion sound plays to
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.UI.Xaml.Interop.h>
-#include <winrt/Windows.UI.Xaml.Input.h>
-#include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.Media.Core.h>
@@ -225,21 +190,13 @@ static std::atomic<int> g_openAlertTheme{0};
 static std::atomic_bool g_isAlarm{false};
 static std::atomic_bool g_alarmModePref{false};
 
-// Alarm wheel picker value (12-hour clock): hour 1-12, minute 0-59, PM flag.
-static std::atomic<int> g_alarmH12{7};
-static std::atomic<int> g_alarmMin{0};
-static std::atomic<int> g_alarmPM{0};
-
 // Flyout pages and handlers.
 [[clang::no_destroy]] static StackPanel g_mainPage{nullptr};
 [[clang::no_destroy]] static StackPanel g_settingsPage{nullptr};
 [[clang::no_destroy]] static StackPanel g_durationRow{nullptr};
 [[clang::no_destroy]] static StackPanel g_alarmRow{nullptr};
-// Text rows of the three wheel columns (hour, minute, AM/PM): 5 rows each.
-[[clang::no_destroy]] static std::vector<TextBlock> g_pickerRows[3];
-// Mouse-wheel handlers of the wheel columns (revoked on teardown).
-[[clang::no_destroy]] static std::vector<std::pair<UIElement, winrt::event_token>>
-    g_wheelHandlers;
+[[clang::no_destroy]] static TextBox g_alarmHourBox{nullptr};
+[[clang::no_destroy]] static TextBox g_alarmMinuteBox{nullptr};
 [[clang::no_destroy]] static std::vector<Button> g_modeChoices;
 [[clang::no_destroy]] static std::vector<Button> g_themeChoices;
 [[clang::no_destroy]] static std::vector<Button> g_sizeChoices;
@@ -958,8 +915,7 @@ static std::wstring FormatCountdown(int totalSeconds)
 }
 
 
-// Seconds from now until the next time the local clock shows hour:minute:00
-// (hour is 0-23 here; the 12-hour wheel value is converted before calling).
+// Seconds from now until the next time the local clock shows hour:minute:00.
 // If that time already passed today (or is right now) it means tomorrow.
 static long long SecondsUntilNextLocalTime(int hour, int minute)
 {
@@ -1571,14 +1527,6 @@ static void HideAndReleaseFlyouts()
 
     g_flyoutHandlers.clear();
 
-    for (auto& entry : g_wheelHandlers) {
-        if (entry.first) {
-            entry.first.PointerWheelChanged(entry.second);
-        }
-    }
-
-    g_wheelHandlers.clear();
-
     if (g_timerFlyout) {
         g_timerFlyout.Hide();
     }
@@ -1588,10 +1536,6 @@ static void HideAndReleaseFlyouts()
     g_sizeChoices.clear();
     g_glassChoices.clear();
 
-    for (auto& rows : g_pickerRows) {
-        rows.clear();
-    }
-
     g_flyoutFrame = nullptr;
     g_flyoutOverlay = nullptr;
 
@@ -1599,6 +1543,8 @@ static void HideAndReleaseFlyouts()
     g_settingsPage = nullptr;
     g_durationRow = nullptr;
     g_alarmRow = nullptr;
+    g_alarmHourBox = nullptr;
+    g_alarmMinuteBox = nullptr;
     g_timerReminderBox = nullptr;
     g_timerHoursBox = nullptr;
     g_timerMinutesBox = nullptr;
@@ -1983,8 +1929,8 @@ static void RefreshChoiceButtons()
 }
 
 
-// Shows the duration fields (Timer mode) or the wheel picker (Alarm mode)
-// and renames the Start button accordingly.
+// Shows the duration fields (Timer mode) or the hour / minute fields (Alarm
+// mode) and renames the Start button accordingly.
 static void ApplyModeVisibility()
 {
     if (!g_durationRow || !g_alarmRow) {
@@ -2012,200 +1958,6 @@ static void ShowSettingsPage(bool show)
 
     g_mainPage.Visibility(show ? Visibility::Collapsed : Visibility::Visible);
     g_settingsPage.Visibility(show ? Visibility::Visible : Visibility::Collapsed);
-}
-
-
-// ---- Alarm wheel picker (Samsung style) ------------------------------------
-//
-// Three columns: hour (1-12), minute (00-59) and AM / PM. Every column shows
-// five rows (two above and two below the selected value). The selected value is
-// in the middle, big and highlighted. Roll the mouse wheel over a column or use
-// the small arrows to change the value.
-
-// Writes the current picker value into the text rows of all three columns.
-static void RefreshAlarmPicker()
-{
-    const int h12 = std::clamp(g_alarmH12.load(), 1, 12);
-    const int minute = std::clamp(g_alarmMin.load(), 0, 59);
-    const int pm = g_alarmPM.load() ? 1 : 0;
-
-    wchar_t text[16]{};
-
-    // Hour column: 1..12, wraps around.
-    if (g_pickerRows[0].size() == 5) {
-        for (int i = 0; i < 5; i++) {
-            const int value = (((h12 - 1 + (i - 2)) % 12) + 12) % 12 + 1;
-            swprintf_s(text, L"%d", value);
-            g_pickerRows[0][i].Text(text);
-        }
-    }
-
-    // Minute column: 00..59, wraps around.
-    if (g_pickerRows[1].size() == 5) {
-        for (int i = 0; i < 5; i++) {
-            const int value = (((minute + (i - 2)) % 60) + 60) % 60;
-            swprintf_s(text, L"%02d", value);
-            g_pickerRows[1][i].Text(text);
-        }
-    }
-
-    // AM / PM column: only two values, no wrap-around.
-    if (g_pickerRows[2].size() == 5) {
-        static const wchar_t* const kNames[] = {L"AM", L"PM"};
-
-        for (int i = 0; i < 5; i++) {
-            const int idx = pm + (i - 2);
-
-            if (idx < 0 || idx > 1 || i == 0 || i == 4) {
-                g_pickerRows[2][i].Text(L"");
-            }
-            else {
-                g_pickerRows[2][i].Text(kNames[idx]);
-            }
-        }
-    }
-}
-
-
-// Moves one wheel column by delta steps (+1 = next value, -1 = previous).
-static void StepAlarmColumn(int column, int delta)
-{
-    if (column == 0) {
-        int h = g_alarmH12.load();
-        h = (((h - 1 + delta) % 12) + 12) % 12 + 1;
-        g_alarmH12.store(h);
-    }
-    else if (column == 1) {
-        int m = g_alarmMin.load();
-        m = (((m + delta) % 60) + 60) % 60;
-        g_alarmMin.store(m);
-    }
-    else {
-        int p = g_alarmPM.load() ? 1 : 0;
-        p = (((p + delta) % 2) + 2) % 2;
-        g_alarmPM.store(p);
-    }
-
-    RefreshAlarmPicker();
-}
-
-
-// Default alarm time = now + the given number of minutes.
-static void SetDefaultAlarmPicker(int addMinutes)
-{
-    SYSTEMTIME now{};
-    GetLocalTime(&now);
-
-    int total = now.wHour * 60 + now.wMinute + addMinutes;
-    total = ((total % 1440) + 1440) % 1440;
-
-    const int hour24 = total / 60;
-
-    g_alarmPM.store(hour24 >= 12 ? 1 : 0);
-    g_alarmH12.store(hour24 % 12 == 0 ? 12 : hour24 % 12);
-    g_alarmMin.store(total % 60);
-
-    RefreshAlarmPicker();
-}
-
-
-// Builds one wheel column: arrow up, five rows, arrow down. The whole column
-// reacts to the mouse wheel.
-static StackPanel MakePickerColumn(int column)
-{
-    StackPanel panel;
-    panel.Width(84);
-    panel.Background(
-        SolidColorBrush(winrt::Windows::UI::Colors::Transparent())
-    );
-
-    Button up = MakeIconButton(L"\uE70E");
-    up.Width(84);
-    up.Height(28);
-    up.HorizontalAlignment(HorizontalAlignment::Center);
-    panel.Children().Append(up);
-
-    AddFlyoutClick(up, [column]()
-    {
-        StepAlarmColumn(column, -1);
-    });
-
-    static const double kFontSizes[5] = {16, 20, 30, 20, 16};
-    static const double kOpacities[5] = {0.22, 0.5, 1.0, 0.5, 0.22};
-
-    g_pickerRows[column].clear();
-
-    for (int i = 0; i < 5; i++) {
-        Border cell;
-        cell.Width(84);
-        cell.Height(40);
-        cell.CornerRadius(CornerRadius{8, 8, 8, 8});
-
-        if (i == 2) {
-            // Highlight of the selected value.
-            cell.Background(
-                SolidColorBrush(
-                    winrt::Windows::UI::ColorHelper::FromArgb(48, 128, 128, 128)
-                )
-            );
-        }
-
-        TextBlock row;
-        row.FontSize(kFontSizes[i]);
-        row.Opacity(kOpacities[i]);
-        row.HorizontalAlignment(HorizontalAlignment::Center);
-        row.VerticalAlignment(VerticalAlignment::Center);
-        row.TextAlignment(TextAlignment::Center);
-
-        if (i == 2) {
-            row.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-        }
-
-        cell.Child(row);
-        panel.Children().Append(cell);
-
-        g_pickerRows[column].push_back(row);
-    }
-
-    Button down = MakeIconButton(L"\uE70D");
-    down.Width(84);
-    down.Height(28);
-    down.HorizontalAlignment(HorizontalAlignment::Center);
-    panel.Children().Append(down);
-
-    AddFlyoutClick(down, [column]()
-    {
-        StepAlarmColumn(column, 1);
-    });
-
-    // Mouse wheel: scroll down = next value, scroll up = previous value.
-    auto token =
-        panel.PointerWheelChanged(
-            [column](
-                winrt::Windows::Foundation::IInspectable const&,
-                winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const& args)
-            {
-                if (g_unloading.load()) {
-                    return;
-                }
-
-                const int wheel =
-                    args.GetCurrentPoint(UIElement{nullptr})
-                        .Properties()
-                        .MouseWheelDelta();
-
-                if (wheel == 0) {
-                    return;
-                }
-
-                StepAlarmColumn(column, wheel > 0 ? -1 : 1);
-                args.Handled(true);
-            }
-        );
-
-    g_wheelHandlers.emplace_back(panel, token);
-
-    return panel;
 }
 
 
@@ -2381,28 +2133,19 @@ static void BuildTimerFlyout()
 
     mainPage.Children().Append(durationRow);
 
-    // Alarm mode: Samsung-style wheels (hour, minute, AM / PM).
+    // Alarm mode: time of day (24-hour).
     StackPanel alarmRow = MakeButtonRow();
     alarmRow.Visibility(Visibility::Collapsed);
-    alarmRow.HorizontalAlignment(HorizontalAlignment::Center);
 
-    alarmRow.Children().Append(MakePickerColumn(0));
+    TextBox alarmHourBox = MakeDurationBox(L"Hour (0-23)", false);
+    TextBox alarmMinuteBox = MakeDurationBox(L"Minute (0-59)", true);
 
-    TextBlock colon;
-    colon.Text(L":");
-    colon.FontSize(30);
-    colon.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-    colon.VerticalAlignment(VerticalAlignment::Center);
-    colon.Margin(Thickness{4, 0, 4, 0});
-    alarmRow.Children().Append(colon);
+    alarmHourBox.MaxLength(2);
+    alarmMinuteBox.MaxLength(2);
+    alarmMinuteBox.Width(130);
 
-    alarmRow.Children().Append(MakePickerColumn(1));
-
-    Border pickerSpacer;
-    pickerSpacer.Width(14);
-    alarmRow.Children().Append(pickerSpacer);
-
-    alarmRow.Children().Append(MakePickerColumn(2));
+    alarmRow.Children().Append(alarmHourBox);
+    alarmRow.Children().Append(alarmMinuteBox);
 
     mainPage.Children().Append(alarmRow);
 
@@ -2581,16 +2324,32 @@ static void BuildTimerFlyout()
             return;
         }
 
-        // ---- Alarm mode: ring at a time of day (12-hour wheel) --------------
-        if (g_alarmModePref.load()) {
-            const int h12 = std::clamp(g_alarmH12.load(), 1, 12);
-            const int minute = std::clamp(g_alarmMin.load(), 0, 59);
+        // ---- Alarm mode: ring at a time of day ------------------------------
+        if (g_alarmModePref.load() && g_alarmHourBox && g_alarmMinuteBox) {
+            long alarmHour = 0;
+            long alarmMinute = 0;
 
-            // 12 AM = 0, 1-11 AM = 1-11, 12 PM = 12, 1-11 PM = 13-23.
-            const int hour24 = (h12 % 12) + (g_alarmPM.load() ? 12 : 0);
+            if (!ParseDurationField(g_alarmHourBox, alarmHour) ||
+                alarmHour > 23)
+            {
+                g_alarmHourBox.SelectAll();
+                g_alarmHourBox.Focus(FocusState::Programmatic);
+                return;
+            }
+
+            if (!ParseDurationField(g_alarmMinuteBox, alarmMinute) ||
+                alarmMinute > 59)
+            {
+                g_alarmMinuteBox.SelectAll();
+                g_alarmMinuteBox.Focus(FocusState::Programmatic);
+                return;
+            }
 
             const long long untilAlarm =
-                SecondsUntilNextLocalTime(hour24, minute);
+                SecondsUntilNextLocalTime(
+                    static_cast<int>(alarmHour),
+                    static_cast<int>(alarmMinute)
+                );
 
             std::wstring alarmReminder = g_timerReminderBox.Text().c_str();
 
@@ -2765,6 +2524,8 @@ static void BuildTimerFlyout()
     g_settingsPage = settingsPage;
     g_durationRow = durationRow;
     g_alarmRow = alarmRow;
+    g_alarmHourBox = alarmHourBox;
+    g_alarmMinuteBox = alarmMinuteBox;
     g_timerReminderBox = reminderBox;
     g_timerHoursBox = hoursBox;
     g_timerMinutesBox = minutesBox;
@@ -2776,7 +2537,6 @@ static void BuildTimerFlyout()
     g_timerFlyout = flyout;
 
     RefreshChoiceButtons();
-    RefreshAlarmPicker();
     ApplyModeVisibility();
     ApplyFlyoutLook();
 }
@@ -2798,6 +2558,29 @@ static void SetDurationBoxes(int totalSeconds)
 
     swprintf_s(text, L"%d", totalSeconds % 60);
     g_timerSecondsBox.Text(text);
+}
+
+
+// Default alarm time = now + the default timer minutes.
+static void SetDefaultAlarmBoxes(int addMinutes)
+{
+    if (!g_alarmHourBox || !g_alarmMinuteBox) {
+        return;
+    }
+
+    SYSTEMTIME now{};
+    GetLocalTime(&now);
+
+    int total = now.wHour * 60 + now.wMinute + addMinutes;
+    total %= 1440;
+
+    wchar_t text[16]{};
+
+    swprintf_s(text, L"%d", total / 60);
+    g_alarmHourBox.Text(text);
+
+    swprintf_s(text, L"%02d", total % 60);
+    g_alarmMinuteBox.Text(text);
 }
 
 
@@ -2851,6 +2634,14 @@ static void ShowTimerFlyout()
         g_timerMinutesBox.IsEnabled(false);
         g_timerSecondsBox.IsEnabled(false);
 
+        if (g_alarmHourBox) {
+            g_alarmHourBox.IsEnabled(false);
+        }
+
+        if (g_alarmMinuteBox) {
+            g_alarmMinuteBox.IsEnabled(false);
+        }
+
         g_timerStartButton.IsEnabled(false);
         g_timerCancelButton.IsEnabled(true);
     }
@@ -2858,13 +2649,21 @@ static void ShowTimerFlyout()
         if (!keepFields) {
             g_timerReminderBox.Text(L"");
             SetDurationBoxes(settings.defaultMinutes * 60);
-            SetDefaultAlarmPicker(settings.defaultMinutes);
+            SetDefaultAlarmBoxes(settings.defaultMinutes);
         }
 
         g_timerReminderBox.IsEnabled(true);
         g_timerHoursBox.IsEnabled(true);
         g_timerMinutesBox.IsEnabled(true);
         g_timerSecondsBox.IsEnabled(true);
+
+        if (g_alarmHourBox) {
+            g_alarmHourBox.IsEnabled(true);
+        }
+
+        if (g_alarmMinuteBox) {
+            g_alarmMinuteBox.IsEnabled(true);
+        }
 
         g_timerStartButton.IsEnabled(true);
         g_timerCancelButton.IsEnabled(false);
@@ -4094,15 +3893,11 @@ static void SetAlertTexts(const FinishedAlertData* data)
 
         wchar_t text[64]{};
 
-        // 12-hour clock with AM / PM.
-        const int hour12 = now.wHour % 12 == 0 ? 12 : now.wHour % 12;
-        const wchar_t* suffix = now.wHour >= 12 ? L"PM" : L"AM";
-
         if (alarm) {
-            swprintf_s(text, L"Alarm at %d:%02d %s", hour12, now.wMinute, suffix);
+            swprintf_s(text, L"Alarm at %02d:%02d", now.wHour, now.wMinute);
         }
         else {
-            swprintf_s(text, L"Finished at %d:%02d %s", hour12, now.wMinute, suffix);
+            swprintf_s(text, L"Finished at %02d:%02d", now.wHour, now.wMinute);
         }
 
         SetAlertText(IDC_ALERT_SUBTITLE, text);
