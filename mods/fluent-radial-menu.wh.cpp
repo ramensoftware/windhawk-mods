@@ -454,14 +454,6 @@ std::wstring ReadString(PCWSTR path) {
     return value ? value.get() : L"";
 }
 
-const Slot& SnippingToolSlot() {
-    static const Slot slot{L"Snipping Tool", L"Win+Shift+S", L"", L"glyph:E8C8",
-                           Action::Shortcut, ActionCategory::Unspecified, L'\uE8C8'};
-    return slot;
-}
-
-constexpr int kDefaultColorSlot = 5;
-
 Settings DefaultSettings() {
     Settings settings{};
     settings.transparency = settings.blur = 18;
@@ -513,35 +505,6 @@ Settings DefaultSettings() {
         settings.pageNames.push_back(L"Page " + std::to_wstring(settings.pages.size()));
     }
     return settings;
-}
-
-void UpdateDefaultCaptureSlots(Settings& settings) {
-    auto& first = settings.pages.front();
-    auto& oldSnip = first[kDefaultColorSlot];
-    if (oldSnip.action != Action::Shortcut || oldSnip.name != L"Snipping Tool" ||
-        oldSnip.target != SnippingToolSlot().target) return;
-    const auto oldCaptureShortcut = [](const Slot& slot) {
-        return slot.action == Action::Shortcut && slot.name == L"Screen capture" &&
-               slot.target == SnippingToolSlot().target;
-    };
-    if (first[0].action == Action::PickColor || oldCaptureShortcut(first[0])) {
-        Slot picker = first[0].action == Action::PickColor ? std::move(first[0]) : Slot{.action = Action::PickColor};
-        first[0] = std::exchange(oldSnip, std::move(picker));
-        for (auto& page : settings.pages) {
-            for (auto& slot : page) {
-                if (oldCaptureShortcut(slot)) slot = {};
-            }
-        }
-        return;
-    }
-
-    // Move the stock Snipping Tool only when an existing Capture page can hold it.
-    if (settings.pageNames.front() != L"Page 1" || oldSnip != SnippingToolSlot()) return;
-    const auto capture = std::find(settings.pageNames.begin(), settings.pageNames.end(), L"Capture");
-    if (capture == settings.pageNames.end()) return;
-    auto& top = settings.pages[capture - settings.pageNames.begin()][0];
-    if (top != Slot{.action = Action::PickColor}) return;
-    top = std::exchange(oldSnip, Slot{.action = Action::PickColor});
 }
 
 constexpr wchar_t kProfileFile[] = L"\\editor.json";
@@ -1937,7 +1900,7 @@ private:
     static constexpr UINT_PTR kOcrTimer = 1;
     static constexpr UINT_PTR kFeedbackTimer = 1;
     static constexpr int kLensCells = 13;
-    enum ButtonId { Pick = 1, Text, Cancel };
+    enum ButtonId { Pick = 100, Text, Cancel };
 
     struct ChromeTarget {
         ComPtr<ID2D1DCRenderTarget> target;
@@ -5293,7 +5256,6 @@ private:
             auto bytes = ReadProfileBytes(profileRoot_ + kProfileFile, error, true);
             if (error.empty() && bytes != profileBytes_) {
                 if (auto updated = ParseProfileBytes(bytes, error)) {
-                    UpdateDefaultCaptureSlots(*updated);
                     profileBytes_ = std::move(bytes);
                     ApplySettings(std::move(*updated));
                     return;
