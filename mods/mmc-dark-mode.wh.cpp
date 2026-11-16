@@ -86,8 +86,9 @@ altering the system-wide colour table.
   `WM_INITDIALOG` watcher rather than wrapping modal calls, and unhandled
   messages pass straight through the subclass proc so open modals cannot stall
   unloading.
-* Unloading waits safely for active thread walks, skips hung threads cleanly,
-  and restores class brushes, window styles, list palettes and web-view regions.
+* Unloading waits for busy UI threads instead of skipping them, ignores
+  non-UI helper windows, and restores class brushes, window styles, list
+  palettes and web-view regions.
 
 ### 1.1
 
@@ -349,6 +350,12 @@ bool ThemeClassIs(HTHEME theme, PCWSTR expected) {
 // The active flag is read on GUI threads and cleared during unload.
 std::atomic<bool> g_active{false};
 std::atomic<bool> g_unloading{false};
+std::atomic<int> g_activeThreadHooks{0};
+
+struct ActiveThreadHookGuard {
+    ActiveThreadHookGuard() { g_activeThreadHooks.fetch_add(1, std::memory_order_acq_rel); }
+    ~ActiveThreadHookGuard() { g_activeThreadHooks.fetch_sub(1, std::memory_order_acq_rel); }
+};
 
 // Non-zero while a hosted WinForms window is handling a paint or erase message
 // on this thread. It scopes the theme hooks that recolour WinForms pages.
@@ -785,7 +792,7 @@ void ApplyToTopLevel(HWND hWnd) {
     SetDarkTitleBar(hWnd, g_settings.darkTitleBar);
     SetCaptionColours(hWnd, g_settings.darkTitleBar);
 
-    int preference = g_settings.roundCorners ? DWMWCP_ROUND : DWMWCP_DEFAULT;
+    int preference = g_settings.roundCorners ? DWMWCP_ROUND : DWMWCP_DONOTROUND;
     DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &preference,
                           sizeof(preference));
 
@@ -1416,8 +1423,6 @@ void ThemeWizardLabel(HWND label) {
 // any child that is really showing (the browser) alone.
 bool IsInsideMmcView(HWND hWnd);
 constexpr UINT_PTR kWebCurtainTimer = 0x4D43;
-// Sent to our own windows at unload so they stop timers on their owning thread.
-constexpr UINT kCoverTeardown = WM_APP + 0x4D4;
 constexpr UINT kWebCurtainMs = 800;
 std::unordered_set<HWND> g_shellViews;
 std::unordered_set<HWND> g_shellDocCurtains;
@@ -1443,15 +1448,6 @@ void FillExcludingChildren(HWND hWnd, HDC dc, const RECT* area) {
 LRESULT CALLBACK ShellViewSubclass(HWND hWnd, UINT message, WPARAM wParam,
                                    LPARAM lParam, UINT_PTR uIdSubclass,
                                    DWORD_PTR) {
-    if (message == kCoverTeardown) {
-        KillTimer(hWnd, kWebCurtainTimer);
-        {
-            std::lock_guard<std::mutex> lock(g_stateLock);
-            g_shellDocCurtains.erase(hWnd);
-        }
-        ShowWebView(hWnd);
-        return 0;
-    }
     if (message == WM_NCDESTROY) {
         KillTimer(hWnd, kWebCurtainTimer);
         {
@@ -1677,12 +1673,6 @@ void RevealParentShellDocView(HWND ieWindow) {
 LRESULT CALLBACK WebCurtainSubclass(HWND hWnd, UINT message, WPARAM wParam,
                                     LPARAM lParam, UINT_PTR uIdSubclass,
                                     DWORD_PTR) {
-    if (message == kCoverTeardown) {
-        KillTimer(hWnd, kWebCurtainTimer);
-        RevealParentShellDocView(hWnd);
-        ShowWebView(hWnd);
-        return 0;
-    }
     if (message == WM_NCDESTROY) {
         KillTimer(hWnd, kWebCurtainTimer);
         { std::lock_guard<std::mutex> lock(g_stateLock); g_webCurtains.erase(hWnd); }
@@ -1902,19 +1892,76 @@ void RemoveSubclassesOnCurrentThread(const std::vector<HWND>& visitedWindows) {
     }
 }
 
+void RestoreRemovedStyles(HWND hWnd);
+
 void RemoveAllSubclasses() {
-    std::lock_guard<std::mutex> lock(g_stateLock);
-    g_shellViews.clear();
-    g_shellDocCurtains.clear();
-    g_webCurtains.clear();
-    g_wizardDividers.clear();
-    g_wizardLabels.clear();
-    g_wizardColourPages.clear();
-    g_wizardColourAdding.clear();
-    g_subclassed.clear();
-    g_adding.clear();
-    g_styleFixes.clear();
-    g_pendingThreads.clear();
+    std::unordered_set<HWND> shellViews;
+    std::unordered_set<HWND> docCurtains;
+    std::unordered_map<HWND, bool> webCurtains;
+    std::unordered_set<HWND> dividers;
+    std::unordered_set<HWND> labels;
+    std::unordered_set<HWND> colourPages;
+    std::unordered_set<HWND> subclassed;
+    {
+        std::lock_guard<std::mutex> lock(g_stateLock);
+        shellViews.swap(g_shellViews);
+        docCurtains.swap(g_shellDocCurtains);
+        webCurtains.swap(g_webCurtains);
+        dividers.swap(g_wizardDividers);
+        labels.swap(g_wizardLabels);
+        colourPages.swap(g_wizardColourPages);
+        g_wizardColourAdding.clear();
+        subclassed.swap(g_subclassed);
+        g_adding.clear();
+        g_styleFixes.clear();
+        g_pendingThreads.clear();
+    }
+    const DWORD tid = GetCurrentThreadId();
+    for (HWND w : shellViews) {
+        if (!IsWindow(w)) continue;
+        KillTimer(w, kWebCurtainTimer);
+        ShowWebView(w);
+        if (GetWindowThreadProcessId(w, nullptr) == tid) {
+            RemoveWindowSubclass(w, ShellViewSubclass, kAuxSubclassId);
+        }
+        ClearAllTrackedProps(w);
+    }
+    for (HWND w : docCurtains) {
+        if (!IsWindow(w)) continue;
+        KillTimer(w, kWebCurtainTimer);
+        ShowWebView(w);
+    }
+    for (const auto& entry : webCurtains) {
+        HWND w = entry.first;
+        if (!IsWindow(w)) continue;
+        KillTimer(w, kWebCurtainTimer);
+        RevealParentShellDocView(w);
+        ShowWebView(w);
+        if (GetWindowThreadProcessId(w, nullptr) == tid) {
+            RemoveWindowSubclass(w, WebCurtainSubclass, kAuxSubclassId);
+        }
+        ClearAllTrackedProps(w);
+    }
+    const auto cleanupAux = [tid](const std::unordered_set<HWND>& set, SUBCLASSPROC proc) {
+        for (HWND w : set) {
+            if (!IsWindow(w)) continue;
+            if (GetWindowThreadProcessId(w, nullptr) == tid) {
+                RemoveWindowSubclass(w, proc, kAuxSubclassId);
+            }
+            ClearAllTrackedProps(w);
+        }
+    };
+    cleanupAux(dividers, WizardDividerSubclass);
+    cleanupAux(labels, WizardLabelSubclass);
+    cleanupAux(colourPages, WizardColourSubclass);
+    for (HWND w : subclassed) {
+        if (!IsWindow(w)) continue;
+        RestoreRemovedStyles(w);
+        if (GetWindowThreadProcessId(w, nullptr) == tid) {
+            RemoveWindowSubclass(w, ModSubclassProc, kModSubclassId);
+        }
+        ClearAllTrackedProps(w);
+    }
 }
 
 // A modal dialog can be created by a path that bypasses the modeless hooks.
@@ -3129,6 +3176,18 @@ void RefreshFormsSummaryFramesFor(HWND hWnd, bool includeTracked, bool fromPaint
 struct HostClassBrush { HWND window; ULONG_PTR original; };
 std::unordered_map<ATOM, HostClassBrush> g_hostClassBrushes;
 
+bool IsHelperClassWindow(HWND hWnd) {
+    WCHAR cls[64] = {};
+    if (!hWnd || !GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) {
+        return false;
+    }
+    return wcscmp(cls, L"IME") == 0 ||
+           wcscmp(cls, L"MSCTFIME UI") == 0 ||
+           wcscmp(cls, L"OleMainThreadWndClass") == 0 ||
+           wcscmp(cls, L"GDI+ Hook Window Class") == 0 ||
+           wcsncmp(cls, L".NET-BroadcastEventWindow", 25) == 0;
+}
+
 bool IsInsideMmcView(HWND hWnd) {
     HWND p = hWnd;
     for (int depth = 0; p && depth < 10; ++depth, p = GetParent(p)) {
@@ -3232,7 +3291,7 @@ void RestoreHostClassBrushes() {
 }
 
 void ApplyToWindow(HWND hWnd) {
-    if (!hWnd || !IsWindow(hWnd)) {
+    if (!hWnd || !IsWindow(hWnd) || IsHelperClassWindow(hWnd)) {
         return;
     }
 
@@ -4472,18 +4531,6 @@ void ThemeDialog(HWND hWnd) {
 thread_local std::vector<HWND>* t_resetPaintList = nullptr;
 thread_local std::vector<HWND>* t_resetVisitedList = nullptr;
 
-bool IsHelperClassWindow(HWND hWnd) {
-    WCHAR cls[64] = {};
-    if (!hWnd || !GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) {
-        return false;
-    }
-    return wcscmp(cls, L"IME") == 0 ||
-           wcscmp(cls, L"MSCTFIME UI") == 0 ||
-           wcscmp(cls, L"OleMainThreadWndClass") == 0 ||
-           wcscmp(cls, L"GDI+ Hook Window Class") == 0 ||
-           wcsncmp(cls, L".NET-BroadcastEventWindow", 25) == 0;
-}
-
 void ResetWindowState(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd) || IsHelperClassWindow(hWnd)) {
         return;
@@ -4681,25 +4728,15 @@ UINT RemoteCallMessage() {
     return message;
 }
 
-std::atomic<int> g_activeRemoteWalks{0};
-
-struct RemoteWalkGuard {
-    RemoteWalkGuard() { g_activeRemoteWalks.fetch_add(1, std::memory_order_acq_rel); }
-    ~RemoteWalkGuard() { g_activeRemoteWalks.fetch_sub(1, std::memory_order_acq_rel); }
-};
-
 LRESULT CALLBACK RemoteCallHook(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
         const CWPSTRUCT* info = reinterpret_cast<const CWPSTRUCT*>(lParam);
-        if (info && info->message == RemoteCallMessage()) {
-            // The registered message is not private. Never call an address
-            // supplied by another sender.
-            if (info->lParam == reinterpret_cast<LPARAM>(&WalkThisThread)) {
-                RemoteWalkGuard guard;
-                if (!g_unloading.load(std::memory_order_acquire) ||
-                    !g_active.load(std::memory_order_acquire)) {
-                    WalkThisThread();
-                }
+        if (info && info->message == RemoteCallMessage() &&
+            info->lParam == reinterpret_cast<LPARAM>(&WalkThisThread)) {
+            ActiveThreadHookGuard hookGuard;
+            if (!g_unloading.load(std::memory_order_acquire) ||
+                !g_active.load(std::memory_order_acquire)) {
+                WalkThisThread();
             }
         }
     }
@@ -4708,10 +4745,9 @@ LRESULT CALLBACK RemoteCallHook(int nCode, WPARAM wParam, LPARAM lParam) {
 
 // Timed walks may be deferred until a busy thread creates another window.
 constexpr UINT kRemoteCallTimeoutMs = 2000;
-constexpr UINT kUninitRemoteCallTimeoutMs = 2500;
 
-// Both unload and normal walks use bounded timeouts so a hung or non-pumping
-// thread (such as a COM/GDI+ worker thread) can never hang Windhawk unload.
+// Unload uses a blocking send on UI/tracked threads so busy snap-in threads
+// always remove their own subclasses cleanly before the DLL unloads.
 bool RunOnWindowThread(HWND hWnd, RunOnWindowThreadProc proc, bool waitForIt) {
     if (!hWnd || !IsWindow(hWnd)) {
         return false;
@@ -4724,14 +4760,6 @@ bool RunOnWindowThread(HWND hWnd, RunOnWindowThreadProc proc, bool waitForIt) {
         proc();
         return true;
     }
-    if (waitForIt) {
-        DWORD_PTR alive = 0;
-        if (!SendMessageTimeoutW(hWnd, WM_NULL, 0, 0,
-                                 SMTO_ABORTIFHUNG | SMTO_BLOCK, 50, &alive)) {
-            Wh_Log(L"skipping unresponsive thread %u", threadId);
-            return false;
-        }
-    }
     HHOOK hook =
         SetWindowsHookExW(WH_CALLWNDPROC, RemoteCallHook, nullptr, threadId);
     if (!hook) {
@@ -4740,14 +4768,23 @@ bool RunOnWindowThread(HWND hWnd, RunOnWindowThreadProc proc, bool waitForIt) {
     }
 
     bool delivered = true;
-    const UINT timeoutMs = waitForIt ? kUninitRemoteCallTimeoutMs : kRemoteCallTimeoutMs;
-    DWORD_PTR ignored = 0;
-    if (!SendMessageTimeoutW(hWnd, RemoteCallMessage(), 0,
-                             reinterpret_cast<LPARAM>(proc),
-                             SMTO_ABORTIFHUNG | SMTO_BLOCK,
-                             timeoutMs, &ignored)) {
-        delivered = false;
-        Wh_Log(L"thread %u did not answer within %u ms", threadId, timeoutMs);
+    if (waitForIt) {
+        SetLastError(ERROR_SUCCESS);
+        SendMessageW(hWnd, RemoteCallMessage(), 0,
+                     reinterpret_cast<LPARAM>(proc));
+        if (!IsWindow(hWnd) && GetLastError() == ERROR_INVALID_WINDOW_HANDLE) {
+            delivered = false;
+        }
+    } else {
+        DWORD_PTR ignored = 0;
+        if (!SendMessageTimeoutW(hWnd, RemoteCallMessage(), 0,
+                                 reinterpret_cast<LPARAM>(proc),
+                                 SMTO_ABORTIFHUNG | SMTO_BLOCK,
+                                 kRemoteCallTimeoutMs, &ignored)) {
+            delivered = false;
+            Wh_Log(L"thread %u did not answer within %u ms", threadId,
+                   kRemoteCallTimeoutMs);
+        }
     }
 
     // Remove the hook after the send; a late message must not call unloaded code.
@@ -4756,8 +4793,8 @@ bool RunOnWindowThread(HWND hWnd, RunOnWindowThreadProc proc, bool waitForIt) {
 }
 
 struct ThreadEntry {
-    HWND sample;
-    bool hasUiOrTracked;
+    std::vector<HWND> samples;
+    bool hasUiOrTracked = false;
 };
 
 void AddThreadOf(HWND hWnd, std::unordered_map<DWORD, ThreadEntry>* threads, bool forceTracked) {
@@ -4765,11 +4802,12 @@ void AddThreadOf(HWND hWnd, std::unordered_map<DWORD, ThreadEntry>* threads, boo
     const DWORD threadId = GetWindowThreadProcessId(hWnd, &pid);
     if (pid == GetCurrentProcessId() && threadId) {
         const bool meaningful = forceTracked || !IsHelperClassWindow(hWnd);
-        auto it = threads->find(threadId);
-        if (it == threads->end()) {
-            threads->emplace(threadId, ThreadEntry{hWnd, meaningful});
-        } else if (meaningful && !it->second.hasUiOrTracked) {
-            it->second = {hWnd, true};
+        auto& entry = (*threads)[threadId];
+        if (forceTracked || entry.samples.size() < 4) {
+            entry.samples.push_back(hWnd);
+        }
+        if (meaningful) {
+            entry.hasUiOrTracked = true;
         }
     }
 }
@@ -4818,12 +4856,64 @@ void WalkEveryThread(bool waitForIt) {
         if (waitForIt && !entry.second.hasUiOrTracked) {
             continue;
         }
-        if (RunOnWindowThread(entry.second.sample, WalkThisThread, waitForIt)) {
-            continue;
+        bool walked = false;
+        HWND fallbackSample = nullptr;
+        for (HWND sample : entry.second.samples) {
+            if (!IsWindow(sample)) {
+                continue;
+            }
+            if (!fallbackSample) {
+                fallbackSample = sample;
+            }
+            if (RunOnWindowThread(sample, WalkThisThread, waitForIt)) {
+                walked = true;
+                break;
+            }
         }
         // Leave busy threads pending during activation; unload uses a blocking walk.
-        if (!waitForIt) {
-            NoteWalkPendingFor(entry.second.sample);
+        if (!walked && !waitForIt && fallbackSample) {
+            NoteWalkPendingFor(fallbackSample);
+        }
+    }
+    if (waitForIt) {
+        // Retry any remaining live tracked windows in case an earlier sample died mid-send.
+        for (int pass = 0; pass < 3; ++pass) {
+            std::unordered_map<DWORD, ThreadEntry> remaining;
+            {
+                std::lock_guard<std::mutex> lock(g_stateLock);
+                const auto addSet = [&remaining](const std::unordered_set<HWND>& set) {
+                    for (HWND hWnd : set) {
+                        if (IsWindow(hWnd)) {
+                            AddThreadOf(hWnd, &remaining, true);
+                        }
+                    }
+                };
+                addSet(g_subclassed);
+                addSet(g_shellViews);
+                addSet(g_wizardDividers);
+                addSet(g_wizardLabels);
+                addSet(g_wizardColourPages);
+                for (const auto& entry : g_webCurtains) {
+                    if (IsWindow(entry.first)) {
+                        AddThreadOf(entry.first, &remaining, true);
+                    }
+                }
+            }
+            if (remaining.empty()) {
+                break;
+            }
+            bool progressed = false;
+            for (const auto& entry : remaining) {
+                for (HWND sample : entry.second.samples) {
+                    if (IsWindow(sample) && RunOnWindowThread(sample, WalkThisThread, true)) {
+                        progressed = true;
+                        break;
+                    }
+                }
+            }
+            if (!progressed) {
+                break;
+            }
         }
     }
 }
@@ -5574,12 +5664,16 @@ HBRUSH WINAPI GetSysColorBrush_Hook(int nIndex) {
 // dialog's WM_INITDIALOG instead. This hook is not on the stack while a modal
 // dialog runs, so it cannot hold up unloading the mod.
 LRESULT CALLBACK DialogInitHook(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION && g_active && !g_unloading) {
-        const CWPRETSTRUCT* info = reinterpret_cast<const CWPRETSTRUCT*>(lParam);
-        if (info && info->message == WM_INITDIALOG && info->hwnd) {
-            WCHAR cls[16] = {};
-            if (GetClassNameW(info->hwnd, cls, ARRAYSIZE(cls)) && !wcscmp(cls, L"#32770")) {
-                ThemeDialog(info->hwnd);
+    if (nCode == HC_ACTION) {
+        ActiveThreadHookGuard hookGuard;
+        if (g_active.load(std::memory_order_acquire) &&
+            !g_unloading.load(std::memory_order_acquire)) {
+            const CWPRETSTRUCT* info = reinterpret_cast<const CWPRETSTRUCT*>(lParam);
+            if (info && info->message == WM_INITDIALOG && info->hwnd) {
+                WCHAR cls[16] = {};
+                if (GetClassNameW(info->hwnd, cls, ARRAYSIZE(cls)) && !wcscmp(cls, L"#32770")) {
+                    ThemeDialog(info->hwnd);
+                }
             }
         }
     }
@@ -7152,6 +7246,9 @@ void Wh_ModUninit() {
         pFlushMenuThemes();
     }
     RemoveDialogInitHooks();
+    while (g_activeThreadHooks.load(std::memory_order_acquire) > 0) {
+        Sleep(10);
+    }
 
     // Restore class brushes first so on-thread resets and repaints erase cleanly to light.
     RestoreHostClassBrushes();
@@ -7161,13 +7258,8 @@ void Wh_ModUninit() {
         WalkEveryThread(true);
     }
     RemoveAllSubclasses();
-    for (int waitedMs = 0;
-         waitedMs < 2000 && g_activeRemoteWalks.load(std::memory_order_acquire) > 0;
-         waitedMs += 10) {
+    while (g_activeThreadHooks.load(std::memory_order_acquire) > 0) {
         Sleep(10);
-    }
-    if (g_activeRemoteWalks.load(std::memory_order_acquire) > 0) {
-        Wh_Log(L"remote thread walk still active during uninit");
     }
 #if defined(_WIN64)
     if (g_actionsDuiReference) {
