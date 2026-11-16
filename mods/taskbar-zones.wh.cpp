@@ -87,11 +87,14 @@ Keep your apps on the **left or right side** of the Windows 11 taskbar. Each app
 
 If a widget needs its own space, you can add its exact XAML `Name` under **Additional reserved widget names (advanced)**. Separate names with commas or semicolons (up to 12). You can leave this setting empty.
 
+Taskbar System Info is detected automatically, so you do not need to add its name.
+
 A named widget must be visible inside the taskbar's `RootGrid`, outside the app list and system tray. Its width must be between 8 DIP and the smaller of 650 DIP or 60% of the taskbar width. It must fit before the tray. Do not add names of icon decorations or overlays.
 
 ## Notes
 
 - Your Windows pinned apps are not changed.
+- Do not enable **Taskbar Split** together with this mod. Both mods reposition the same taskbar buttons.
 - Other tools that move the same taskbar buttons or reserve their space may conflict with this mod.
 - If the taskbar is too crowded to fit both zones, Windows' normal layout is used until space is available again.
 - Secondary monitors show only the app buttons that Windows puts on each taskbar.
@@ -99,7 +102,7 @@ A named widget must be visible inside the taskbar's `RootGrid`, outside the app 
 
 ## Credits
 
-**Taskbar Zones** is maintained by **Luiz Bizzio** and builds on earlier open-source taskbar work.
+**Taskbar Zones** is maintained by **Luiz Bizzio**. It is a separate, modified version of [Taskbar Split by Arkadiusz (Artllex)](https://github.com/Artllex/taskbar-split), with saved app zones, cross-zone dragging, and multi-monitor support.
 
 Licensed under **GPL-3.0**. Full source attribution and copyright notices are retained in the code.
 */
