@@ -1,33 +1,5 @@
 {
   "mods": {
-    "bluetooth-no-sleep": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794796718242,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794796718242,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Dev-StudioCode",
-        "compilerOptions": "-lole32 -lshell32",
-        "description": "Prevents Bluetooth audio devices from sleeping, disconnecting on idle timeout, or truncating initial playback by streaming inaudible digital silence",
-        "github": "https://github.com/Dev-StudioCode",
-        "include": [
-          "windhawk.exe"
-        ],
-        "name": "Bluetooth No Sleep",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7466",
-      "source": {
-        "sha256": "9d2ef635a650b9451522cf6d18de4a0cfc7277a5af00625c3819d38be91d8903",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/11a970f47dad9320ed50ceb9c856452657328192/mods/bluetooth-no-sleep.wh.cpp"
-      }
-    },
     "desktop-app-groups": {
       "details": {
         "defaultSorting": 0,
@@ -62,35 +34,6 @@
       "source": {
         "sha256": "0bb274e8ae2d40c1e6a9da8d315970b54e7255edee75fa73781c59b332b2c6ff",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/49e136c3e8689d6e5de43d8a0d312a39761ba903/mods/desktop-app-groups.wh.cpp"
-      }
-    },
-    "explorer-core-context-menu-customizer": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794796718242,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794796718242,
-        "users": 0
-      },
-      "metadata": {
-        "author": "akiyorm",
-        "compilerOptions": "-lgdi32 -luser32 -lshell32 -lshlwapi -lole32 -luuid",
-        "description": "Adds customizable icons and dynamic %file% labels to Open, Run as administrator, Delete, Rename, and Properties in the Windows File Explorer context menu without altering row spacing.",
-        "github": "https://github.com/akiyorm",
-        "include": [
-          "explorer.exe"
-        ],
-        "license": "MIT",
-        "name": "Explorer Core Context Menu Customizer",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7419",
-      "source": {
-        "sha256": "d910bfc073a59a9fa1dc3bcf32da50815ab61737c0085c1941c18882a98a6372",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/f51f45f38e2f9e3c8f5b9708b22b059554c16714/mods/explorer-core-context-menu-customizer.wh.cpp"
       }
     },
     "explorer-default-folder": {
@@ -158,36 +101,6 @@
       "source": {
         "sha256": "078d3786e775037ae1000b817164122a5d6926500b24b079d06b98e1e5daf96a",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/293fcb80a08279a7d156bd852c1b1b8204d58d58/mods/file-type-properties-customization.wh.cpp"
-      }
-    },
-    "flip3dcomp": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794796718242,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794796718242,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Tails (milestprower92)",
-        "compilerOptions": "-lcomdlg32 -lwindowscodecs -lole32 -loleaut32 -loleacc -luuid -ladvapi32 -ldxgi -ld3d11 -ldcomp -ldwmapi -lgdi32 -luser32 -lshell32",
-        "description": "a reimplementation of the Windows Aero Flip3D window switcher based on DirectComposition",
-        "github": "https://github.com/milestprower92",
-        "include": [
-          "windhawk.exe",
-          "explorer.exe",
-          "rundll32.exe"
-        ],
-        "name": "Flip3DComp",
-        "version": "2.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7405",
-      "source": {
-        "sha256": "1a306f44c392d7aae51ac34e612f4d1b26ceca606634c329311733c6e2646146",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/87870a9f982244a62787b28719b22ebd76f1401b/mods/flip3dcomp.wh.cpp"
       }
     },
     "fluent-radial-menu": {

@@ -1462,6 +1462,30 @@
         "version": "1.4.0"
       }
     },
+    "bluetooth-no-sleep": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794863082000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794863082000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Dev-StudioCode",
+        "compilerOptions": "-lole32 -lshell32",
+        "description": "Prevents Bluetooth audio devices from sleeping, disconnecting on idle timeout, or truncating initial playback by streaming inaudible digital silence",
+        "github": "https://github.com/Dev-StudioCode",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Bluetooth No Sleep",
+        "version": "1.0.0"
+      }
+    },
     "borderless-fullscreen": {
       "details": {
         "defaultSorting": 5373,
@@ -6533,6 +6557,31 @@
         "version": "1.0"
       }
     },
+    "explorer-core-context-menu-customizer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794863076000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794863076000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "akiyorm",
+        "compilerOptions": "-lgdi32 -luser32 -lshell32 -lshlwapi -lole32 -luuid",
+        "description": "Adds customizable icons and dynamic %file% labels to Open, Run as administrator, Delete, Rename, and Properties in the Windows File Explorer context menu without altering row spacing.",
+        "github": "https://github.com/akiyorm",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer Core Context Menu Customizer",
+        "version": "1.0.0"
+      }
+    },
     "explorer-ctrln-newfile": {
       "details": {
         "defaultSorting": 3744,
@@ -8804,6 +8853,32 @@
         "name": "Flight Simulator window focus helper",
         "twitter": "https://twitter.com/m417z",
         "version": "1.1"
+      }
+    },
+    "flip3dcomp": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794863071000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794863071000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Tails (milestprower92)",
+        "compilerOptions": "-lcomdlg32 -lwindowscodecs -lole32 -loleaut32 -loleacc -luuid -ladvapi32 -ldxgi -ld3d11 -ldcomp -ldwmapi -lgdi32 -luser32 -lshell32",
+        "description": "a reimplementation of the Windows Aero Flip3D window switcher based on DirectComposition",
+        "github": "https://github.com/milestprower92",
+        "include": [
+          "windhawk.exe",
+          "explorer.exe",
+          "rundll32.exe"
+        ],
+        "name": "Flip3DComp",
+        "version": "2.0"
       }
     },
     "floating-taskbar": {
@@ -12342,6 +12417,37 @@
         "license": "MIT",
         "name": "Net-Toggle",
         "version": "2.1.1"
+      }
+    },
+    "network-speedtest-native": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794863087000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794863087000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Alessandro-Vecchio",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lshlwapi -lshell32 -lole32 -ladvapi32 -luser32 -ld2d1 -ld3d11 -ldcomp -ldwrite -ldwmapi -lwinhttp -liphlpapi -lshcore -luuid -loleacc -loleaut32",
+        "description": "Replaces the web speed test in the Windows 11 network menu with a native flyout: ping, jitter, download and upload measured against Cloudflare, live gauge, results chart with copy, keyboard accessible. No browser, no separate app.",
+        "github": "https://github.com/Alessandro-Vecchio",
+        "include": [
+          "ShellHost.exe",
+          "ShellExperienceHost.exe",
+          "SystemSettings.exe",
+          "RuntimeBroker.exe",
+          "explorer.exe"
+        ],
+        "name": "Network Menu Speed Test",
+        "version": "1.0"
       }
     },
     "never-auto-expand-explorer-tree-items": {
