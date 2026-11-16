@@ -4,6 +4,7 @@
 // @description     Live CPU, GPU, RAM, battery, network, weather and more on the Windows 11 taskbar. Click for details, right-click to set up.
 // @version         1.0.0
 // @author          Wcm1D
+// @github          https://github.com/Wcm1D
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
