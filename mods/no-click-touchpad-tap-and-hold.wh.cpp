@@ -8,66 +8,65 @@
 // @include         windhawk.exe
 // @include         windhawk-mod.exe
 // @include         windhawk-mod-uiaccess.exe
-// @compilerOptions -lhid -lshcore -lgdi32
+// @compilerOptions -lhid -lshcore -lgdi32 -lwtsapi32
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
 //
 // For bug reports and feature requests, please open an issue here:
-// https://github.com/ramensoftware/windhawk-mods/issues
+// https://github.com/mario0318/no-click-touchpad-tap-and-hold/issues
 
 // ==WindhawkModReadme==
 /*
 # No-Click Touchpad: Tap & Hold
 
-Right-click and drag on a touchpad that can't be pressed down, using only taps and
-holds. Useful when the pad no longer clicks (a worn hinge, a failed switch or a swollen
-battery are common causes) or when tapping is simply preferred.
+Right-click and drag with taps and holds, for touchpads whose click no longer works.
+It's also handy if you'd rather tap than press.
 
 ## Right-click
-Tap the bottom right corner of the touchpad with one finger to right-click. The bottom
-left corner can be chosen in the settings instead. Windows only right-clicks in that
-corner on a physical press, so without the mod a tap there is a left click.
+Tap the bottom right corner of the touchpad with one finger to right-click. You can
+switch to the bottom left corner in the mod's settings. Without the mod, a tap in
+that corner is a normal left click.
 
 ## Drag
-Place two fingers on the touchpad and hold them still for a moment. A ring appears
-around the pointer to show the left button is now held. Move the fingers to select
-text or drag a window, then lift them to release. Moving two fingers right away still
-scrolls as usual.
+Rest two fingers on the touchpad and keep them still for a moment. A ring appears
+around the pointer to show that a drag has started. Move your fingers to select text
+or move a window, and lift them to let go.
+
+To scroll, move two fingers straight away instead of holding them still first.
+Pinching or rotating two fingers won't start a drag.
+
+On a small touchpad, a long drag can run out of room. Set "Time to reposition fingers"
+in the mod's settings to keep the drag going for a moment after you lift your fingers,
+so you can put them back down and carry on. During that moment, a one-finger tap ends
+the drag right away.
 
 ![Selecting text with a two-finger drag, ring around the pointer](https://raw.githubusercontent.com/mario0318/windhawk-mods/readme-images/no-click-touchpad-tap-and-hold/drag-ring-select-1.png)
 
 ![The ring stays on the pointer until the fingers lift](https://raw.githubusercontent.com/mario0318/windhawk-mods/readme-images/no-click-touchpad-tap-and-hold/drag-ring-select-2.png)
 
 ## Requirements
-A Windows Precision Touchpad (Synaptics, ELAN, Alps, Goodix, Surface and others).
-Older touchpads that rely on vendor-only drivers don't provide the raw finger positions
-the mod reads.
+The touchpad has to be a Precision Touchpad, which most laptops from the last several
+years have. Some older touchpads aren't supported.
 
-The corner tap builds on Windows' tap to click, so "Tap with a single finger to
-single-click" needs to stay on in Settings > Bluetooth & devices > Touchpad. Turning off
-"Tap with two fingers to right-click" and "Tap twice and drag" there is recommended.
+In Settings > Bluetooth & devices > Touchpad, keep "Tap with a single finger to
+single-click" on, since the corner right-click needs it. Turning off "Tap twice and
+drag" there is recommended, because with it on Windows waits a moment after every tap
+to see whether a drag follows. If letting go of a two-finger hold too early opens a
+menu, turn off "Tap with two fingers to right-click" as well.
 
-If Touchpad Relaxed Hand Tracking is also installed, leave its two-finger option off so
-the two mods don't both act on the same fingers.
+If you also use the Touchpad Relaxed Hand Tracking mod, turn off its two-finger option
+so the two mods don't both react to the same gesture.
 
-## How it works
-The mod reads raw finger positions from the touchpad through HID Raw Input. While the
-touchpad is being touched, and for a second afterwards, a low-level mouse hook watches
-for the left click Windows produces from a corner tap and replaces it with a right
-click. A resting palm is ignored when the touchpad reports it as a palm.
+## Limitations
+While you drag, some apps may still scroll a little, and a mouse wheel doesn't scroll.
 
-During a drag the mod moves the pointer itself and drops Windows' scroll events. Apps
-that read the touchpad directly to scroll (browsers, File Explorer and most newer apps)
-may still scroll slightly while dragging.
+On Windhawk 1.x, neither the right-click nor the drag works in apps running as
+administrator. On a regular (not portable) install of Windhawk 2.0, both work there too.
 
-The ring is a small always-on-top window that clicks pass through, shown only while a
-drag is active.
-
-It runs as a Windhawk tool mod in its own process and doesn't inject into other
-programs. On Windhawk 2.0 that process runs with UIAccess, so it also works over
-windows of apps running as administrator. On Windhawk 1.x it doesn't, and neither
-feature works over those windows.
+## Issues
+Bugs and feature requests go on the [issues
+page](https://github.com/mario0318/no-click-touchpad-tap-and-hold/issues).
 */
 // ==/WindhawkModReadme==
 
@@ -99,6 +98,9 @@ feature works over those windows.
 - dragSpeed: 130
   $name: Drag pointer speed (%)
   $description: At 100, moving across the whole width of the touchpad moves the pointer across the whole width of the screen
+- dragLockMs: 0
+  $name: Time to reposition fingers (ms)
+  $description: 0 to 2000. How long a drag keeps going after you lift your fingers, so you can put them back down and carry on. 0 ends the drag as soon as they lift
 - dragIndicator: ring
   $name: Drag indicator
   $description: What shows that a two-finger drag has started
@@ -121,6 +123,7 @@ feature works over those windows.
 #include <hidusage.h>
 #include <hidpi.h>
 #include <shellscalingapi.h>
+#include <wtsapi32.h>
 
 #include <windhawk_utils.h>
 
@@ -146,7 +149,9 @@ constexpr UINT_PTR kHoldTimer = 1;   // only while two fingers are held still
 constexpr UINT_PTR kTapTimer = 2;    // only while a click is held back
 constexpr UINT_PTR kStaleTimer = 3;  // only while something touches the pad
 constexpr UINT_PTR kHookTimer = 4;   // removes the mouse hook once the pad is idle
-constexpr UINT_PTR kRingTimer = 5;   // only while the drag ring is showing
+constexpr UINT_PTR kRingTimer = 5;   // only while the ring pulses or the fingers are lifted
+constexpr UINT_PTR kReleaseTimer = 6;  // only while a button-up still has to be delivered
+constexpr UINT_PTR kGraceTimer = 7;  // only while a drag waits for the fingers to return
 
 constexpr DWORD kClickAfterLiftMs = 800;  // a tap's click comes this soon after the lift
 constexpr DWORD kLiftWaitMs = 60;         // how long a held-back click waits for the lift report
@@ -155,6 +160,7 @@ constexpr DWORD kStaleFrameMs = 500;      // no report for this long means the t
 constexpr DWORD kStaleDragMs = 5000;      // the same during a drag, where fingers may rest still
 constexpr DWORD kAfterDragMs = 600;       // Windows' leftover scroll events after a drag
 constexpr DWORD kHookIdleMs = 1000;       // longer than kClickAfterLiftMs and kAfterDragMs
+constexpr DWORD kReleaseRetryMs = 500;    // how often an undelivered button-up is retried
 constexpr LONG kOtherMouseMovePx = 8;     // pointer travel after a lift that means another mouse
 constexpr double kMaxTapMove = 0.04;      // fraction of the touchpad width
 constexpr double kHoldMove = 0.015;
@@ -179,6 +185,7 @@ struct Settings {
     bool twoFingerDrag = true;
     DWORD holdMs = 350;
     double dragSpeed = 1.3;
+    DWORD dragLockMs = 0;
     bool ring = true;
     BYTE ringR = 0x3B, ringG = 0x82, ringB = 0xF6;
 };
@@ -214,6 +221,7 @@ static void LoadSettings() {
     s.twoFingerDrag = Wh_GetIntSetting(L"twoFingerDrag") != 0;
     s.holdMs = Clamp(Wh_GetIntSetting(L"holdMs"), 100, 5000);
     s.dragSpeed = Clamp(Wh_GetIntSetting(L"dragSpeed"), 20, 500) / 100.0;
+    s.dragLockMs = Clamp(Wh_GetIntSetting(L"dragLockMs"), 0, 2000);
 
     s.ring = wcscmp(WindhawkUtils::StringSetting::make(L"dragIndicator"), L"none") != 0;
     struct {
@@ -234,35 +242,84 @@ static void LoadSettings() {
     }
     g_s = s;
     Wh_Log(L"Settings: corner %s %.2fx%.2f, cornerTap %d, twoFingerDrag %d, hold %u ms, "
-           L"ring %d #%02X%02X%02X",
+           L"lift grace %u ms, ring %d #%02X%02X%02X",
            s.bottomLeft ? L"bottomLeft" : L"bottomRight", s.zoneW, s.zoneH, s.cornerTap,
-           s.twoFingerDrag, s.holdMs, s.ring, s.ringR, s.ringG, s.ringB);
+           s.twoFingerDrag, s.holdMs, s.dragLockMs, s.ring, s.ringR, s.ringG, s.ringB);
 }
 
 // ---------------------------------------------------------------------------
 // Output. SendInput's button flags name the physical buttons, so with the
 // buttons swapped the primary one is the right.
 // ---------------------------------------------------------------------------
-static void SendMouse(DWORD flags, LONG dx = 0, LONG dy = 0) {
+HWND g_hwnd;  // the worker thread's hidden window, which owns all the timers
+
+static bool SendMouse(DWORD flags, LONG dx = 0, LONG dy = 0) {
     INPUT in = {};
     in.type = INPUT_MOUSE;
     in.mi.dx = dx;
     in.mi.dy = dy;
     in.mi.dwFlags = flags;
     in.mi.dwExtraInfo = kMarker;
-    SendInput(1, &in, sizeof(in));
+    return SendInput(1, &in, sizeof(in)) == 1;
 }
 
-static void SendPrimary(bool down) {
-    bool swapped = GetSystemMetrics(SM_SWAPBUTTON);
-    SendMouse(down ? (swapped ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_LEFTDOWN)
-                   : (swapped ? MOUSEEVENTF_RIGHTUP : MOUSEEVENTF_LEFTUP));
+// Physical button flags. The up flag of a button is its down flag shifted by one.
+static DWORD PrimaryDown() {
+    return GetSystemMetrics(SM_SWAPBUTTON) ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_LEFTDOWN;
+}
+static DWORD SecondaryDown() {
+    return GetSystemMetrics(SM_SWAPBUTTON) ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_RIGHTDOWN;
 }
 
-static void SendSecondaryClick() {
-    bool swapped = GetSystemMetrics(SM_SWAPBUTTON);
-    SendMouse(swapped ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_RIGHTDOWN);
-    SendMouse(swapped ? MOUSEEVENTF_LEFTUP : MOUSEEVENTF_RIGHTUP);
+// A button-up that may not have arrived: SendInput failed, or the input went to
+// the lock screen or a UAC prompt. It's sent again once the user's desktop is back,
+// so the button can't stay held down.
+DWORD g_owedUp;
+
+static bool OnInputDesktop() {
+    HDESK desk = OpenInputDesktop(0, FALSE, DESKTOP_READOBJECTS);
+    if (!desk)
+        return false;  // the secure desktop, which this process can't open
+    CloseDesktop(desk);
+    return true;
+}
+
+static void OweUp(DWORD upFlags) {
+    g_owedUp |= upFlags;
+    SetTimer(g_hwnd, kReleaseTimer, kReleaseRetryMs, nullptr);
+}
+
+// force: the session was just unlocked, so send even if the desktop check fails.
+static void RetryOwedUp(bool force) {
+    if (g_owedUp && (force || OnInputDesktop())) {
+        for (DWORD up : {(DWORD)MOUSEEVENTF_LEFTUP, (DWORD)MOUSEEVENTF_RIGHTUP}) {
+            if ((g_owedUp & up) && SendMouse(up)) {
+                g_owedUp &= ~up;
+                Wh_Log(L"Delivered a button-up that was owed");
+            }
+        }
+    }
+    if (!g_owedUp)
+        KillTimer(g_hwnd, kReleaseTimer);
+}
+
+static bool SendDown(DWORD downFlag) {
+    if (!SendMouse(downFlag))
+        return false;
+    g_owedUp &= ~(downFlag << 1);  // a new press makes an older owed release moot
+    return true;
+}
+
+static void SendUp(DWORD upFlag) {
+    if (!SendMouse(upFlag) || !OnInputDesktop()) {
+        Wh_Log(L"Button-up may not have arrived, retrying later");
+        OweUp(upFlag);
+    }
+}
+
+static void SendClick(DWORD downFlag) {
+    if (SendDown(downFlag))
+        SendUp(downFlag << 1);
 }
 
 // An absolute move skips the pointer speed and acceleration settings.
@@ -290,6 +347,7 @@ struct Dev {
     USHORT countCollection = 0;
     double xMin = 0, xRange = 0, yMin = 0, yRange = 0;
     double aspect = 1;  // physical height / width of the pad
+    bool seenConfidence = false;  // until the pad reports Confidence once, nothing counts as a palm
 };
 
 struct Contact {
@@ -385,13 +443,17 @@ static Dev* GetDev(HANDLE hDevice) {
 // Touch state (worker thread only). Rebuilt from every frame, so a lift report
 // that never arrives can't leave a finger "down" for good.
 // ---------------------------------------------------------------------------
-HWND g_hwnd;
 HHOOK g_hook;
 HANDLE g_thread, g_stopEvent;
 
+// Gestures follow one device at a time: the first one touched, until its
+// fingers lift. A second pad's reports are ignored meanwhile, so the two can't
+// mix contacts into one frame or move each other's drag.
+HANDLE g_activeDev;
+DWORD g_activeTick;  // last report from g_activeDev
+
 std::vector<Contact> g_frame;
 ULONG g_frameExpected;
-bool g_seenConfidence;  // until the pad reports Confidence once, nothing counts as a palm
 std::unordered_map<ULONG, std::pair<double, double>> g_fingers;  // this frame, palms left out
 int g_touching;  // everything on the pad this frame, palms included
 double g_aspect = 1;
@@ -405,17 +467,32 @@ ULONG g_primaryId;
 double g_sx, g_sy, g_lx, g_ly;
 int g_maxFingers;
 
+// The session before this one, for a tap whose click comes after the next
+// touch has already started.
+bool g_prevTap;
+DWORD g_prevEnd;
+
 // A primary click held back until it's clear whether it was a corner tap.
 bool g_pending, g_pendingUp;
+bool g_pendingPrev;  // judged by the previous session, which ended as a corner tap
 DWORD g_pendingTick, g_upTick;
 
+// Secondary button presses that passed the hook or were dropped by it, so the
+// matching release gets the same treatment.
+enum { kRNone, kRPassed, kRDropped } g_rState;
+
 // Two-finger drag.
-int g_twoMode;  // 0 idle, 1 holding, 2 dragging, 3 done until all fingers lift
+// 0 idle, 1 holding, 2 dragging, 3 done until all fingers lift,
+// 4 dragging with the fingers lifted, waiting out the lift grace
+int g_twoMode;
 DWORD g_twoStart, g_dragEndTick;
-double g_startCx, g_startCy, g_refX, g_refY;
+std::unordered_map<ULONG, std::pair<double, double>> g_holdStart;  // each finger at the hold's start
+double g_refX, g_refY;
 double g_curX, g_curY, g_scaleX, g_scaleY;  // pointer position and pixels per pad width
 int g_lastCount;
 bool g_buttonHeld;
+DWORD g_heldUp;  // the button-up flag for the press the drag made, fixed at the press
+bool g_graceTapDown;  // a tap's press swallowed during the lift grace
 
 static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam);
 
@@ -433,7 +510,7 @@ static void ArmStaleTimer() {
     DWORD ms = kStaleFrameMs;
     if (g_twoMode == 1)
         ms = std::max<DWORD>(kStaleFrameMs, g_s.holdMs + 250);
-    else if (g_twoMode == 2)
+    else if (g_twoMode == 2 || g_twoMode == 4)
         ms = kStaleDragMs;
     SetTimer(g_hwnd, kStaleTimer, ms, nullptr);
 }
@@ -473,8 +550,8 @@ static double Distance(double dx, double dy) {
 
 // ---------------------------------------------------------------------------
 // Drag ring. A click-through layered window centered on the pointer, shown
-// while the mod holds the button down. It's drawn in physical pixels, so it
-// runs per-monitor DPI aware whatever the rest of the thread is.
+// while the mod holds the button down. The tool-mod process is per-monitor DPI
+// aware through its manifest, so positions and sizes are physical pixels.
 // ---------------------------------------------------------------------------
 HWND g_ring;
 bool g_ringShown, g_ringSteady;  // steady: the pulse is over and the bitmap is final
@@ -482,16 +559,6 @@ DWORD g_ringStart;
 UINT g_ringDpi = 96;
 int g_ringSize;
 POINT g_ringPt;
-
-struct PerMonitorDpi {
-    DPI_AWARENESS_CONTEXT old;
-    PerMonitorDpi()
-        : old(SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {}
-    ~PerMonitorDpi() {
-        if (old)
-            SetThreadDpiAwarenessContext(old);
-    }
-};
 
 static LRESULT CALLBACK RingProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_NCHITTEST)
@@ -551,10 +618,15 @@ static void DrawRing(POINT pt, double t) {
     ReleaseDC(nullptr, screen);
 }
 
-static void RingTick() {
-    PerMonitorDpi scope;
-    POINT pt;
-    if (!GetCursorPos(&pt))
+// The drag moves the ring together with the pointer. The timer is only needed
+// for the pulse, and while the fingers are lifted mid-drag, when a single
+// finger can move the pointer through Windows instead.
+static bool RingNeedsTimer() {
+    return g_ringShown && (!g_ringSteady || g_twoMode == 4);
+}
+
+static void RingUpdate(POINT pt) {
+    if (!g_ringShown)
         return;
     UINT dpiX = 96, dpiY = 96;
     if (FAILED(GetDpiForMonitor(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST),
@@ -574,16 +646,27 @@ static void RingTick() {
     g_ringPt = pt;
 }
 
+static void RingFollowCursor() {
+    POINT pt;
+    if (GetCursorPos(&pt))
+        RingUpdate(pt);
+}
+
+static void StartRingTimer() {
+    if (RingNeedsTimer())
+        SetTimer(g_hwnd, kRingTimer, kRingFrameMs, nullptr);
+}
+
 static void ShowRing() {
     if (!g_ring || !g_s.ring || g_ringShown)
         return;
     g_ringShown = true;
     g_ringSteady = false;
     g_ringStart = GetTickCount();
-    RingTick();
+    RingFollowCursor();
     SetWindowPos(g_ring, HWND_TOPMOST, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    SetTimer(g_hwnd, kRingTimer, kRingFrameMs, nullptr);
+    StartRingTimer();
 }
 
 static void HideRing() {
@@ -600,13 +683,15 @@ static void EndDrag() {
         return;
     g_buttonHeld = false;
     g_dragEndTick = GetTickCount();
-    SendPrimary(false);
+    SendUp(g_heldUp);  // the button that was pressed, even if the swap changed since
     Wh_Log(L"Two-finger drag end");
 }
 
 static void SetTwoMode(int mode) {
     if (g_twoMode == 1 && mode != 1)
         KillTimer(g_hwnd, kHoldTimer);
+    if (g_twoMode == 4 && mode != 4)
+        KillTimer(g_hwnd, kGraceTimer);
     g_twoMode = mode;
 }
 
@@ -615,6 +700,15 @@ static void TryStartDrag() {
         return;
     if (GetTickCount() - g_twoStart < g_s.holdMs)
         return;
+
+    DWORD down = PrimaryDown();
+    if (!SendDown(down)) {
+        Wh_Log(L"Two-finger drag: the button press failed (%u)", GetLastError());
+        SetTwoMode(3);
+        return;
+    }
+    g_heldUp = down << 1;
+    g_buttonHeld = true;
 
     POINT pt;
     GetCursorPos(&pt);
@@ -631,27 +725,57 @@ static void TryStartDrag() {
     ArmStaleTimer();
     Centroid(&g_refX, &g_refY);
     g_lastCount = 2;
-    SendPrimary(true);
-    g_buttonHeld = true;
     ShowRing();
     Wh_Log(L"Two-finger drag start");
 }
 
+// The lift grace ran out, or a one-finger tap asked to drop the item.
+static void DropLiftedDrag() {
+    if (g_twoMode != 4)
+        return;
+    EndDrag();
+    SetTwoMode(g_fingers.empty() ? 0 : 3);
+}
+
 static void UpdateTwoFinger() {
     int count = (int)g_fingers.size();
+    double cx, cy;
+
+    if (g_twoMode == 4) {
+        // One finger moves the pointer through Windows with the button still
+        // held, which is fine. Two fingers back on the pad carry on the drag.
+        if (count < 2)
+            return;
+        SetTwoMode(2);
+        POINT pt;
+        if (GetCursorPos(&pt)) {
+            g_curX = pt.x;
+            g_curY = pt.y;
+        }
+        Centroid(&g_refX, &g_refY);
+        g_lastCount = count;
+        Wh_Log(L"Two-finger drag resumed");
+        return;
+    }
+
+    if (g_twoMode == 2 && count < 2) {
+        if (g_s.dragLockMs) {
+            SetTwoMode(4);
+            SetTimer(g_hwnd, kGraceTimer, g_s.dragLockMs, nullptr);
+            StartRingTimer();
+            return;
+        }
+        EndDrag();
+        SetTwoMode(count ? 3 : 0);
+        return;
+    }
     if (count == 0) {
         EndDrag();
         SetTwoMode(0);
         return;
     }
-    double cx, cy;
 
     if (g_twoMode == 2) {
-        if (count < 2) {
-            EndDrag();
-            SetTwoMode(3);
-            return;
-        }
         Centroid(&cx, &cy);
         if (count != g_lastCount) {  // a finger joined: the centroid jumps, so start over from here
             g_refX = cx;
@@ -671,14 +795,16 @@ static void UpdateTwoFinger() {
             g_curX = std::clamp(g_curX, (double)mi.rcMonitor.left, mi.rcMonitor.right - 1.0);
             g_curY = std::clamp(g_curY, (double)mi.rcMonitor.top, mi.rcMonitor.bottom - 1.0);
         }
-        SendCursorPos((int)std::lround(g_curX), (int)std::lround(g_curY));
+        pt = {(LONG)std::lround(g_curX), (LONG)std::lround(g_curY)};
+        SendCursorPos(pt.x, pt.y);
+        RingUpdate(pt);
         return;
     }
     if (g_twoMode == 0) {
         if (count == 2 && g_s.twoFingerDrag) {
             SetTwoMode(1);
             g_twoStart = GetTickCount();
-            Centroid(&g_startCx, &g_startCy);
+            g_holdStart = g_fingers;
             SetTimer(g_hwnd, kHoldTimer, g_s.holdMs, nullptr);
         } else if (count > 2) {
             SetTwoMode(3);
@@ -690,10 +816,16 @@ static void UpdateTwoFinger() {
             SetTwoMode(3);
             return;
         }
-        Centroid(&cx, &cy);
-        if (Distance(cx - g_startCx, cy - g_startCy) > kHoldMove) {
-            SetTwoMode(3);  // moved before the hold finished, so it's a scroll
-            return;
+        // Each finger has to stay still, not just their midpoint, or a pinch or
+        // a turn (fingers moving in opposite directions) would count as a hold.
+        for (auto& f : g_fingers) {
+            auto start = g_holdStart.find(f.first);
+            if (start == g_holdStart.end() ||
+                Distance(f.second.first - start->second.first,
+                         f.second.second - start->second.second) > kHoldMove) {
+                SetTwoMode(3);  // moved before the hold finished: a scroll or a gesture
+                return;
+            }
         }
         TryStartDrag();
     }
@@ -706,6 +838,9 @@ static void ResetTouch() {
     SetTwoMode(0);
     g_fingers.clear();
     g_touching = 0;
+    g_frame.clear();
+    g_frameExpected = 0;
+    g_activeDev = nullptr;
     if (g_haveSession && !g_sessionEnded) {
         g_sessionEnded = true;
         g_consumed = true;  // a cut-off touch is never a tap
@@ -714,12 +849,15 @@ static void ResetTouch() {
     UpdateHook();
 }
 
-static void ProcessFrame(const Dev& d) {
+static void ResolvePending();
+static bool IsCornerTap();
+
+static void ProcessFrame(Dev& d) {
     DWORD now = GetTickCount();
     g_aspect = d.aspect;
 
     for (const Contact& c : g_frame)
-        g_seenConfidence = g_seenConfidence || c.conf;
+        d.seenConfidence = d.seenConfidence || c.conf;
 
     g_fingers.clear();
     g_touching = 0;
@@ -728,12 +866,18 @@ static void ProcessFrame(const Dev& d) {
             continue;
         g_touching++;
         // Confidence 0 marks a resting palm, which neither taps nor drags.
-        if (c.conf || !g_seenConfidence)
+        if (c.conf || !d.seenConfidence)
             g_fingers[c.id] = {c.x, c.y};
     }
 
     if (!g_fingers.empty()) {
         if (!g_haveSession || g_sessionEnded) {
+            // A click held back for the touch that just ended is judged by that
+            // touch, before the new one replaces it.
+            if (g_pending)
+                ResolvePending();
+            g_prevTap = IsCornerTap();
+            g_prevEnd = g_endTick;
             auto& first = *g_fingers.begin();
             g_haveSession = true;
             g_sessionEnded = false;
@@ -768,7 +912,7 @@ static void ProcessFrame(const Dev& d) {
 
 // In hybrid mode a frame is spread over several reports. Only the first one
 // carries a contact count above zero, the rest carry zero.
-static void ProcessReport(const Dev& d, PCHAR report, ULONG len) {
+static void ProcessReport(Dev& d, PCHAR report, ULONG len) {
     auto pp = (PHIDP_PREPARSED_DATA)d.preparsed.data();
 
     if (d.hasCount) {
@@ -834,12 +978,34 @@ static void OnRawInput(HRAWINPUT hRaw) {
     RAWINPUT* ri = (RAWINPUT*)buf.data();
     if (ri->header.dwType != RIM_TYPEHID)
         return;
-    Dev* d = GetDev(ri->header.hDevice);
+    HANDLE h = ri->header.hDevice;
+    Dev* d = GetDev(h);
     if (!d)
         return;
+
+    DWORD now = GetTickCount();
+    if (h != g_activeDev) {
+        // Another pad is in the middle of a touch. If it went quiet, it's over.
+        if (g_activeDev && now - g_activeTick < kStaleFrameMs)
+            return;
+        if (g_activeDev) {
+            Wh_Log(L"Switching to touchpad %p", h);
+            ResetTouch();
+        }
+        g_frame.clear();
+        g_frameExpected = 0;
+        g_activeDev = h;
+    }
+    g_activeTick = now;
+
     DWORD sz = ri->data.hid.dwSizeHid, cnt = ri->data.hid.dwCount;
     for (DWORD i = 0; i < cnt; i++)
         ProcessReport(*d, (PCHAR)ri->data.hid.bRawData + i * sz, sz);
+
+    // Free once the pad is idle with no frame half read and no drag waiting for
+    // the fingers to come back.
+    if (!g_touching && !g_frameExpected && g_twoMode != 4)
+        g_activeDev = nullptr;
 }
 
 // ---------------------------------------------------------------------------
@@ -869,37 +1035,51 @@ static bool IsCornerTap() {
     return g_sessionEnded && TapShape(g_endTick - g_startTick);
 }
 
+// A click while a new touch is under way that belongs to the tap before it.
+static bool PrevTapClick(DWORD now) {
+    return g_haveSession && !g_sessionEnded && g_prevTap && now - g_prevEnd <= kClickAfterLiftMs;
+}
+
+// Decide the held-back click now, from what is known so far.
+static void ResolvePending() {
+    g_pending = false;
+    KillTimer(g_hwnd, kTapTimer);
+    if (!g_pendingUp) {
+        SendDown(PrimaryDown());  // a press: the real release follows through the hook
+        return;
+    }
+    if (g_pendingPrev || IsCornerTap()) {
+        if (g_pendingPrev)
+            g_prevTap = false;
+        else
+            g_consumed = true;
+        Wh_Log(L"Corner tap -> right click");
+        SendClick(SecondaryDown());
+    } else {
+        SendClick(PrimaryDown());
+    }
+}
+
 static void CheckPending() {
     if (!g_pending) {
         KillTimer(g_hwnd, kTapTimer);
         return;
     }
     DWORD now = GetTickCount();
-    bool lifted = g_haveSession && g_sessionEnded;
+    // A click judged by the previous touch has nothing left to wait for.
+    bool lifted = g_pendingPrev || (g_haveSession && g_sessionEnded);
 
     if (!g_pendingUp) {
-        // Still pressed with the finger down: a press or a drag, so let it through.
-        if ((!lifted && now - g_pendingTick > kLiftWaitMs) ||
-            now - g_pendingTick > kPendingMaxMs) {
-            g_pending = false;
-            KillTimer(g_hwnd, kTapTimer);
-            SendPrimary(true);
-        }
+        // Still pressed: a press or a drag, so let it through. A tap's click
+        // brings its release right behind the press.
+        if (((!lifted || g_pendingPrev) && now - g_pendingTick > kLiftWaitMs) ||
+            now - g_pendingTick > kPendingMaxMs)
+            ResolvePending();
         return;
     }
     if (!lifted && now - g_upTick < kLiftWaitMs)
         return;
-
-    g_pending = false;
-    KillTimer(g_hwnd, kTapTimer);
-    if (IsCornerTap()) {
-        g_consumed = true;
-        Wh_Log(L"Corner tap -> right click");
-        SendSecondaryClick();
-    } else {
-        SendPrimary(true);
-        SendPrimary(false);
-    }
+    ResolvePending();
 }
 
 static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam) {
@@ -924,19 +1104,47 @@ static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam) {
         }
 
         // During (and just after) a two-finger drag Windows still thinks the fingers
-        // are scrolling or two-finger-tapping, so drop those events.
-        bool dragging = g_twoMode == 2 ||
+        // are scrolling or two-finger-tapping, so drop those events. A secondary
+        // press always gets the same treatment as its release, so one that was
+        // already let through before the drag still has its release delivered.
+        bool dragging = g_twoMode == 2 || g_twoMode == 4 ||
                         (g_dragEndTick && now - g_dragEndTick < kAfterDragMs);
-        if (dragging && (wParam == WM_MOUSEWHEEL || wParam == WM_MOUSEHWHEEL ||
-                         wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONUP))
+        if (dragging && (wParam == WM_MOUSEWHEEL || wParam == WM_MOUSEHWHEEL))
             return 1;
+        if (wParam == WM_RBUTTONDOWN) {
+            g_rState = dragging ? kRDropped : kRPassed;
+            if (dragging)
+                return 1;
+        } else if (wParam == WM_RBUTTONUP) {
+            bool drop = g_rState == kRDropped;
+            g_rState = kRNone;
+            if (drop)
+                return 1;
+        }
 
-        if (wParam == WM_LBUTTONDOWN && !g_pending && MaybeCornerTap(now)) {
-            g_pending = true;
-            g_pendingUp = false;
-            g_pendingTick = now;
-            SetTimer(g_hwnd, kTapTimer, 15, nullptr);
+        // With the fingers lifted mid-drag, a one-finger tap drops the item. Its
+        // release is swallowed too, even if the drag carried on in between.
+        if (wParam == WM_LBUTTONDOWN && g_twoMode == 4) {
+            g_graceTapDown = true;
             return 1;
+        }
+        if (wParam == WM_LBUTTONUP && g_graceTapDown) {
+            g_graceTapDown = false;
+            Wh_Log(L"Tap during the lift grace, dropping");
+            DropLiftedDrag();
+            return 1;
+        }
+
+        if (wParam == WM_LBUTTONDOWN && !g_pending) {
+            bool prev = PrevTapClick(now);
+            if (prev || MaybeCornerTap(now)) {
+                g_pending = true;
+                g_pendingUp = false;
+                g_pendingPrev = prev;
+                g_pendingTick = now;
+                SetTimer(g_hwnd, kTapTimer, 15, nullptr);
+                return 1;
+            }
         }
         if (wParam == WM_LBUTTONUP && g_pending && !g_pendingUp) {
             g_pendingUp = true;
@@ -945,6 +1153,15 @@ static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam) {
         }
     }
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+// Locking the PC or going to sleep ends the touch. The release sent now can be
+// lost on the way to the lock screen, so it's sent again once the desktop is back.
+static void ReleaseForAway() {
+    DWORD up = g_buttonHeld ? g_heldUp : 0;
+    ResetTouch();
+    if (up)
+        OweUp(up);
 }
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -961,17 +1178,19 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 else
                     KillTimer(hwnd, kHoldTimer);
             } else if (wParam == kRingTimer) {
-                if (g_ringShown)
-                    RingTick();
-                else
+                RingFollowCursor();
+                if (!RingNeedsTimer())
                     KillTimer(hwnd, kRingTimer);
             } else if (wParam == kTapTimer) {
                 CheckPending();
             } else if (wParam == kStaleTimer) {
                 Wh_Log(L"Touchpad reports stopped mid-touch, resetting");
                 ResetTouch();
-                g_frame.clear();
-                g_frameExpected = 0;
+            } else if (wParam == kReleaseTimer) {
+                RetryOwedUp(false);
+            } else if (wParam == kGraceTimer) {
+                KillTimer(hwnd, kGraceTimer);
+                DropLiftedDrag();
             } else if (wParam == kHookTimer) {
                 // Otherwise the timer fires again and checks once more.
                 if (!g_hook) {
@@ -983,17 +1202,31 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 }
             }
             return 0;
+        case WM_WTSSESSION_CHANGE:
+            if (wParam == WTS_SESSION_LOCK)
+                ReleaseForAway();
+            else if (wParam == WTS_SESSION_UNLOCK)
+                RetryOwedUp(true);
+            break;
+        case WM_POWERBROADCAST:
+            if (wParam == PBT_APMSUSPEND)
+                ReleaseForAway();
+            else if (wParam == PBT_APMRESUMEAUTOMATIC)
+                RetryOwedUp(false);
+            return TRUE;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
 static void OnSettingsReloaded() {
     LoadSettings();
-    if (!g_s.ring)
+    if (!g_s.ring) {
         HideRing();
-    else if (g_ringShown)
+    } else if (g_ringShown) {
         g_ringSteady = false;  // redraw in the new color
-    if (!g_s.twoFingerDrag && (g_twoMode == 1 || g_twoMode == 2)) {
+        StartRingTimer();
+    }
+    if (!g_s.twoFingerDrag && (g_twoMode == 1 || g_twoMode == 2 || g_twoMode == 4)) {
         EndDrag();
         SetTwoMode(3);
     }
@@ -1024,19 +1257,21 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     rc.hInstance = mod;
     rc.lpszClassName = ringCls;
     RegisterClassW(&rc);
-    {
-        PerMonitorDpi scope;  // the window keeps the awareness it was created with
-        g_ring = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST |
-                                     WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                                 ringCls, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, mod,
-                                 nullptr);
-    }
+    g_ring = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST |
+                                 WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                             ringCls, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, mod,
+                             nullptr);
     if (!g_ring)
         Wh_Log(L"Ring window failed: %u", GetLastError());
 
     RAWINPUTDEVICE rid = {kPageDigitizer, kUsageTouchPad, RIDEV_INPUTSINK, g_hwnd};
     if (!RegisterRawInputDevices(&rid, 1, sizeof(rid)))
         Wh_Log(L"RegisterRawInputDevices failed: %u", GetLastError());
+
+    // Lock and unlock, so a drag ends cleanly and its release isn't lost.
+    bool sessionNotify = WTSRegisterSessionNotification(g_hwnd, NOTIFY_FOR_THIS_SESSION);
+    if (!sessionNotify)
+        Wh_Log(L"WTSRegisterSessionNotification failed: %u", GetLastError());
 
     Wh_Log(L"Running");
 
@@ -1058,14 +1293,25 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     EndDrag();  // never leave the button stuck down
     if (g_pending) {
         g_pending = false;
-        SendPrimary(true);
         if (g_pendingUp)
-            SendPrimary(false);
+            SendClick(PrimaryDown());
+        else
+            SendDown(PrimaryDown());
     }
+    // Last chance for a release that hasn't arrived yet.
+    for (DWORD up : {(DWORD)MOUSEEVENTF_LEFTUP, (DWORD)MOUSEEVENTF_RIGHTUP}) {
+        if (g_owedUp & up)
+            SendMouse(up);
+    }
+    g_owedUp = 0;
+    if (sessionNotify)
+        WTSUnRegisterSessionNotification(g_hwnd);
     KillTimer(g_hwnd, kHoldTimer);
     KillTimer(g_hwnd, kTapTimer);
     KillTimer(g_hwnd, kStaleTimer);
     KillTimer(g_hwnd, kHookTimer);
+    KillTimer(g_hwnd, kReleaseTimer);
+    KillTimer(g_hwnd, kGraceTimer);
     if (g_hook)
         UnhookWindowsHookEx(g_hook);
     g_hook = nullptr;
