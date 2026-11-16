@@ -155,6 +155,7 @@ constexpr DWORD kStaleFrameMs = 500;      // no report for this long means the t
 constexpr DWORD kStaleDragMs = 5000;      // the same during a drag, where fingers may rest still
 constexpr DWORD kAfterDragMs = 600;       // Windows' leftover scroll events after a drag
 constexpr DWORD kHookIdleMs = 1000;       // longer than kClickAfterLiftMs and kAfterDragMs
+constexpr LONG kOtherMouseMovePx = 8;     // pointer travel after a lift that means another mouse
 constexpr double kMaxTapMove = 0.04;      // fraction of the touchpad width
 constexpr double kHoldMove = 0.015;
 
@@ -398,6 +399,8 @@ double g_aspect = 1;
 // Corner tap session, from the first finger down to the last one up.
 bool g_haveSession, g_sessionEnded, g_consumed;
 DWORD g_startTick, g_endTick;
+bool g_endPtSet;  // g_endPt holds the pointer position from the first move after the lift
+POINT g_endPt;
 ULONG g_primaryId;
 double g_sx, g_sy, g_lx, g_ly;
 int g_maxFingers;
@@ -751,6 +754,7 @@ static void ProcessFrame(const Dev& d) {
     } else if (g_haveSession && !g_sessionEnded) {
         g_sessionEnded = true;
         g_endTick = now;
+        g_endPtSet = false;
     }
 
     UpdateHook();
@@ -899,10 +903,25 @@ static void CheckPending() {
 }
 
 static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode >= 0 && ((MSLLHOOKSTRUCT*)lParam)->dwExtraInfo != kMarker) {
+    const MSLLHOOKSTRUCT* ms = (const MSLLHOOKSTRUCT*)lParam;
+    if (nCode >= 0 && ms->dwExtraInfo != kMarker) {
         // Low-level hooks see the buttons after the swap, so WM_LBUTTON* is always
         // the primary button here. Only the SendInput side needs to know the swap.
         DWORD now = GetTickCount();
+
+        // A lifted finger can't move the pointer, so movement after the lift means
+        // another mouse is in use, and its next click isn't this tap's. The first
+        // kLiftWaitMs are skipped, since the pad's last moves can trail the lift.
+        if (wParam == WM_MOUSEMOVE && g_haveSession && g_sessionEnded && !g_consumed &&
+            !g_pending && now - g_endTick > kLiftWaitMs) {
+            if (!g_endPtSet) {
+                g_endPt = ms->pt;
+                g_endPtSet = true;
+            } else if (std::abs(ms->pt.x - g_endPt.x) > kOtherMouseMovePx ||
+                       std::abs(ms->pt.y - g_endPt.y) > kOtherMouseMovePx) {
+                g_consumed = true;
+            }
+        }
 
         // During (and just after) a two-finger drag Windows still thinks the fingers
         // are scrolling or two-finger-tapping, so drop those events.
