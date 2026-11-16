@@ -360,10 +360,11 @@ struct TrackedVolumeContent {
     winrt::Windows::Foundation::IInspectable origBaseMinWidth{nullptr};
     winrt::Windows::Foundation::IInspectable origUnderlayFontSize{nullptr};
     winrt::Windows::Foundation::IInspectable origUnderlayMinWidth{nullptr};
+    winrt::Windows::Foundation::IInspectable origBaseForeground{nullptr};
+    winrt::Windows::Foundation::IInspectable origUnderlayForeground{nullptr};
     winrt::weak_ref<Controls::TextBlock> observedInnerTextBlock;
     int64_t fontSizeCallbackToken = 0;
     int64_t foregroundCallbackToken = 0;
-    winrt::event_token actualThemeChangedToken{};
     bool lastNativeGlyph = false;
     int layoutSettingsGeneration = -1;
 };
@@ -480,6 +481,21 @@ FrameworkElement FindChildByName(FrameworkElement const& element, PCWSTR name) {
         if (auto child = Media::VisualTreeHelper::GetChild(element, i)
                              .try_as<FrameworkElement>()) {
             if (child.Name() == name) {
+                return child;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+FrameworkElement FindChildByClassName(FrameworkElement const& element,
+                                      PCWSTR className) {
+    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < childrenCount; i++) {
+        if (auto child = Media::VisualTreeHelper::GetChild(element, i)
+                             .try_as<FrameworkElement>()) {
+            if (winrt::get_class_name(child) == className) {
                 return child;
             }
         }
@@ -757,17 +773,6 @@ void UnregisterTrackedCallbacks(TrackedVolumeContent& tracked) {
         tracked.foregroundCallbackToken = 0;
         tracked.observedInnerTextBlock = nullptr;
     }
-
-    if (tracked.actualThemeChangedToken.value != 0) {
-        if (auto tic = tracked.textIconContent.get()) {
-            try {
-                tic.ActualThemeChanged(tracked.actualThemeChangedToken);
-            } catch (winrt::hresult_error const& ex) {
-                Wh_Log(L"Error unregistering theme callback: %08X", ex.code());
-            }
-        }
-        tracked.actualThemeChangedToken = {};
-    }
 }
 
 void PruneTrackedVolumeContents() {
@@ -895,7 +900,10 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
                 RestoreLocalProperty(tb, Controls::TextBlock::FontSizeProperty(),
                                      tracked.origBaseFontSize);
                 if (tracked.hasCustomForegroundApplied) {
-                    tb.ClearValue(Controls::TextBlock::ForegroundProperty());
+                    RestoreLocalProperty(
+                        tb, Controls::TextBlock::ForegroundProperty(),
+                        tracked.origBaseForeground);
+                    tracked.origBaseForeground = nullptr;
                 }
             }
         }
@@ -918,7 +926,10 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
                 RestoreLocalProperty(tb, Controls::TextBlock::FontSizeProperty(),
                                      tracked.origUnderlayFontSize);
                 if (tracked.hasCustomForegroundApplied) {
-                    tb.ClearValue(Controls::TextBlock::ForegroundProperty());
+                    RestoreLocalProperty(
+                        tb, Controls::TextBlock::ForegroundProperty(),
+                        tracked.origUnderlayForeground);
+                    tracked.origUnderlayForeground = nullptr;
                 }
             }
         }
@@ -1043,27 +1054,49 @@ void SyncVolumeColors(TrackedVolumeContent& tracked) {
     }
 
     if (useCustomModColor) {
-        tracked.hasCustomForegroundApplied = true;
+        if (!tracked.hasCustomForegroundApplied) {
+            if (baseTb) {
+                tracked.origBaseForeground = baseTb.ReadLocalValue(
+                    Controls::TextBlock::ForegroundProperty());
+            }
+            if (underlayTb) {
+                tracked.origUnderlayForeground = underlayTb.ReadLocalValue(
+                    Controls::TextBlock::ForegroundProperty());
+            }
+            tracked.hasCustomForegroundApplied = true;
+        }
 
-        Media::SolidColorBrush customBrush(customColor);
-        if (subBlock) {
-            subBlock.Foreground(customBrush);
-        }
-        if (baseTb) {
-            baseTb.Foreground(customBrush);
-        }
-        if (underlayTb) {
-            underlayTb.Foreground(customBrush);
-        }
+        auto applyBrushIfChanged = [](Controls::TextBlock const& tb,
+                                      winrt::Windows::UI::Color targetColor) {
+            if (!tb) {
+                return;
+            }
+            if (auto brush = tb.Foreground().try_as<Media::SolidColorBrush>()) {
+                if (brush.Color() == targetColor) {
+                    return;
+                }
+            }
+            tb.Foreground(Media::SolidColorBrush(targetColor));
+        };
+
+        applyBrushIfChanged(subBlock, customColor);
+        applyBrushIfChanged(baseTb, customColor);
+        applyBrushIfChanged(underlayTb, customColor);
         return;
     }
 
     if (tracked.hasCustomForegroundApplied) {
         if (baseTb) {
-            baseTb.ClearValue(Controls::TextBlock::ForegroundProperty());
+            RestoreLocalProperty(baseTb,
+                                 Controls::TextBlock::ForegroundProperty(),
+                                 tracked.origBaseForeground);
+            tracked.origBaseForeground = nullptr;
         }
         if (underlayTb) {
-            underlayTb.ClearValue(Controls::TextBlock::ForegroundProperty());
+            RestoreLocalProperty(underlayTb,
+                                 Controls::TextBlock::ForegroundProperty(),
+                                 tracked.origUnderlayForeground);
+            tracked.origUnderlayForeground = nullptr;
         }
         if (subBlock) {
             subBlock.ClearValue(Controls::TextBlock::ForegroundProperty());
@@ -1105,29 +1138,6 @@ void BindSubBlockTextStyle(TrackedVolumeContent& tracked,
     SyncSubBlockFontSize(subBlock, source);
 
     auto tic = tracked.textIconContent.get();
-    if (tic && tracked.actualThemeChangedToken.value == 0) {
-        try {
-            tracked.actualThemeChangedToken = tic.ActualThemeChanged(
-                [ticWeak = winrt::make_weak(tic)](
-                    FrameworkElement const&,
-                    winrt::Windows::Foundation::IInspectable const&) {
-                    SafeXamlCall([ticWeak] {
-                        if (g_unloading) {
-                            return;
-                        }
-                        if (auto el = ticWeak.get()) {
-                            if (TrackedVolumeContent* t =
-                                    FindTrackedVolumeContent(el)) {
-                                SyncVolumeColors(*t);
-                            }
-                        }
-                    });
-                });
-        } catch (winrt::hresult_error const& ex) {
-            Wh_Log(L"Error registering theme callback: %08X", ex.code());
-            tracked.actualThemeChangedToken = {};
-        }
-    }
 
     if (tracked.fontSizeCallbackToken == 0 ||
         tracked.foregroundCallbackToken == 0 ||
@@ -2130,50 +2140,6 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     return module;
 }
 
-void TriggerCoreAudioNotification() {
-    try {
-        winrt::com_ptr<IMMDeviceEnumerator> enumerator;
-        HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
-                                      CLSCTX_INPROC_SERVER,
-                                      __uuidof(IMMDeviceEnumerator),
-                                      enumerator.put_void());
-        if (FAILED(hr) || !enumerator) {
-            return;
-        }
-
-        winrt::com_ptr<IMMDevice> defaultDevice;
-        hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole,
-                                                 defaultDevice.put());
-        if (FAILED(hr) || !defaultDevice) {
-            return;
-        }
-
-        winrt::com_ptr<IAudioEndpointVolume> endpointVolume;
-        hr = defaultDevice->Activate(__uuidof(IAudioEndpointVolume),
-                                     CLSCTX_INPROC_SERVER, nullptr,
-                                     endpointVolume.put_void());
-        if (FAILED(hr) || !endpointVolume) {
-            return;
-        }
-
-        float currentVolume = 0.0f;
-        hr = endpointVolume->GetMasterVolumeLevelScalar(&currentVolume);
-        if (FAILED(hr)) {
-            return;
-        }
-
-        float nudge = (currentVolume >= 0.5f) ? (currentVolume - 0.0001f)
-                                              : (currentVolume + 0.0001f);
-        nudge = std::clamp(nudge, 0.0f, 1.0f);
-
-        endpointVolume->SetMasterVolumeLevelScalar(nudge, nullptr);
-        endpointVolume->SetMasterVolumeLevelScalar(currentVolume, nullptr);
-        Wh_Log(L"Triggered CoreAudio notification (volume=%.4f)", currentVolume);
-    } catch (...) {
-        Wh_Log(L"TriggerCoreAudioNotification error");
-    }
-}
-
 bool TryParseColor(std::wstring_view str, winrt::Windows::UI::Color& color) {
     if (str.empty()) {
         return false;
@@ -2184,11 +2150,6 @@ bool TryParseColor(std::wstring_view str, winrt::Windows::UI::Color& color) {
     if (str.length() != 6 && str.length() != 8) {
         return false;
     }
-    for (wchar_t c : str) {
-        if (!iswxdigit(c)) {
-            return false;
-        }
-    }
     uint32_t val = 0;
     for (wchar_t c : str) {
         val <<= 4;
@@ -2198,6 +2159,8 @@ bool TryParseColor(std::wstring_view str, winrt::Windows::UI::Color& color) {
             val |= static_cast<uint32_t>(c - L'a' + 10);
         } else if (c >= L'A' && c <= L'F') {
             val |= static_cast<uint32_t>(c - L'A' + 10);
+        } else {
+            return false;
         }
     }
     if (str.length() == 6) {
@@ -2215,9 +2178,11 @@ bool TryParseColor(std::wstring_view str, winrt::Windows::UI::Color& color) {
 }
 
 void InitVolumeStateFromCoreAudio() {
-    std::lock_guard<std::mutex> lock(g_volumeStateMutex);
-    if (g_hasVolumeState) {
-        return;
+    {
+        std::lock_guard<std::mutex> lock(g_volumeStateMutex);
+        if (g_hasVolumeState) {
+            return;
+        }
     }
 
     winrt::com_ptr<IMMDeviceEnumerator> enumerator;
@@ -2256,12 +2221,19 @@ void InitVolumeStateFromCoreAudio() {
         return;
     }
 
-    g_volumeLevel = masterVolume;
-    g_isMuted = (isMuted != FALSE);
-    g_hasVolumeState = true;
-    g_volumeText = FormatVolumeText(g_volumeLevel, g_isMuted);
-    g_volumeTextChanged = true;
-    Wh_Log(L"CoreAudio initial volume: %.2f muted=%d", g_volumeLevel, g_isMuted);
+    {
+        std::lock_guard<std::mutex> lock(g_volumeStateMutex);
+        if (g_hasVolumeState) {
+            return;
+        }
+        g_volumeLevel = masterVolume;
+        g_isMuted = (isMuted != FALSE);
+        g_hasVolumeState = true;
+        g_volumeText = FormatVolumeText(g_volumeLevel, g_isMuted);
+        g_volumeTextChanged = true;
+        Wh_Log(L"CoreAudio initial volume: %.2f muted=%d", g_volumeLevel,
+               g_isMuted);
+    }
 }
 
 void LoadSettings() {
@@ -2408,6 +2380,173 @@ bool IsSecondaryExplorerProcess() {
            ContainsCaseInsensitive(cmdView, L"/separate");
 }
 
+void* CTaskBand_ITaskListWndSite_vftable = nullptr;
+
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
+CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
+
+void* TaskbarHost_FrameHeight_Original = nullptr;
+
+using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
+std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original = nullptr;
+
+XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
+    if (!CTaskBand_ITaskListWndSite_vftable ||
+        !CTaskBand_GetTaskbarHost_Original ||
+        !std__Ref_count_base__Decref_Original) {
+        return nullptr;
+    }
+
+    HWND hTaskSwWnd =
+        reinterpret_cast<HWND>(GetProp(hTaskbarWnd, L"TaskbandHWND"));
+    if (!hTaskSwWnd) {
+        return nullptr;
+    }
+
+    void* taskBand =
+        reinterpret_cast<void*>(GetWindowLongPtr(hTaskSwWnd, 0));
+    if (!taskBand) {
+        return nullptr;
+    }
+
+    void* taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *reinterpret_cast<void**>(taskBandForTaskListWndSite) !=
+                    CTaskBand_ITaskListWndSite_vftable;
+         i++) {
+        if (i == 20) {
+            return nullptr;
+        }
+
+        taskBandForTaskListWndSite =
+            reinterpret_cast<void**>(taskBandForTaskListWndSite) + 1;
+    }
+
+    void* taskbarHostSharedPtr[2]{};
+    CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
+                                      taskbarHostSharedPtr);
+    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
+        return nullptr;
+    }
+
+    size_t taskbarElementIUnknownOffset = 0x10;
+
+#if defined(_M_X64)
+    if (TaskbarHost_FrameHeight_Original) {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
+        const auto* b =
+            reinterpret_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
+            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#elif defined(_M_ARM64)
+    if (TaskbarHost_FrameHeight_Original) {
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+        // fd030091 mov     fp, sp
+        // 080c41f8 ldr     x8, [x0, #0x10]!
+        const auto* p =
+            reinterpret_cast<const DWORD*>(TaskbarHost_FrameHeight_Original);
+        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#endif
+
+    auto* taskbarElementIUnknown =
+        *reinterpret_cast<IUnknown**>(reinterpret_cast<BYTE*>(taskbarHostSharedPtr[0]) +
+                                      taskbarElementIUnknownOffset);
+
+    FrameworkElement taskbarElement = nullptr;
+    if (taskbarElementIUnknown) {
+        taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                               winrt::put_abi(taskbarElement));
+    }
+
+    auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
+
+    if (taskbarHostSharedPtr[1]) {
+        std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+    }
+
+    return result;
+}
+
+bool WalkAndSetupVolumeIcon(FrameworkElement const& element) {
+    if (!element) {
+        return false;
+    }
+
+    if (winrt::get_class_name(element) == L"SystemTray.TextIconContent") {
+        if (IsVolumeTextIconContent(element)) {
+            auto iconView = GetParentElementByClassName(element,
+                                                        L"SystemTray.IconView");
+            if (iconView) {
+                RememberVolumeIconView(iconView);
+                SetupVolumeLayout(element);
+                ApplyVolumeIconViewsWidth();
+                if (IsDualBoxStyle()) {
+                    RefreshVolumeIcons();
+                }
+                Wh_Log(L"Discovered and initialized volume icon via XAML tree walk");
+                return true;
+            }
+        }
+    }
+
+    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < childrenCount; i++) {
+        if (auto child = Media::VisualTreeHelper::GetChild(element, i)
+                             .try_as<FrameworkElement>()) {
+            if (WalkAndSetupVolumeIcon(child)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool HookTaskbarDllSymbols() {
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        Wh_Log(L"Failed to load taskbar.dll");
+        return false;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {
+            {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
+            &CTaskBand_ITaskListWndSite_vftable,
+        },
+        {
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+            &CTaskBand_GetTaskbarHost_Original,
+        },
+        {
+            {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+            &TaskbarHost_FrameHeight_Original,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
+            &std__Ref_count_base__Decref_Original,
+        },
+    };
+
+    return WindhawkUtils::HookSymbols(module, taskbarDllHooks,
+                                      ARRAYSIZE(taskbarDllHooks));
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
@@ -2447,13 +2586,9 @@ BOOL Wh_ModInit() {
                                        &LoadLibraryExW_Original);
     }
 
-    return TRUE;
-}
+    HookTaskbarDllSymbols();
 
-static DWORD WINAPI CoreAudioNotificationThread(LPVOID) {
-    Sleep(60);
-    TriggerCoreAudioNotification();
-    return 0;
+    return TRUE;
 }
 
 void Wh_ModAfterInit() {
@@ -2471,23 +2606,27 @@ void Wh_ModAfterInit() {
         }
     }
 
-    if (!g_hasVolumeState) {
-        InitVolumeStateFromCoreAudio();
-    }
-
     RunFromTaskbarThread([](void*) {
         SafeXamlCall([] {
-            UpdateAllVolumeLayouts();
-            RefreshVolumeIcons();
-            ApplyVolumeIconViewsWidth();
+            HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+            if (!hTaskbarWnd) {
+                return;
+            }
+            auto xamlRoot = GetTaskbarXamlRoot(hTaskbarWnd);
+            if (!xamlRoot) {
+                return;
+            }
+            FrameworkElement root = xamlRoot.Content().try_as<FrameworkElement>();
+            if (!root) {
+                return;
+            }
+            FrameworkElement systemTrayFrameGrid = nullptr;
+            if (auto frame = FindChildByClassName(root, L"SystemTray.SystemTrayFrame")) {
+                systemTrayFrameGrid = FindChildByName(frame, L"SystemTrayFrameGrid");
+            }
+            WalkAndSetupVolumeIcon(systemTrayFrameGrid ? systemTrayFrameGrid : root);
         });
     });
-
-    HANDLE hThread =
-        CreateThread(nullptr, 0, CoreAudioNotificationThread, nullptr, 0, nullptr);
-    if (hThread) {
-        CloseHandle(hThread);
-    }
 }
 
 void Wh_ModBeforeUninit() {
@@ -2560,6 +2699,4 @@ void Wh_ModSettingsChanged() {
         })) {
         LoadSettings();
     }
-
-    TriggerCoreAudioNotification();
 }
