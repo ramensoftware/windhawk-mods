@@ -17,6 +17,10 @@
 
 Replaces the Windows taskbar with a light dock, one per monitor, with its own Start menu.
 
+![Dock and Start](https://raw.githubusercontent.com/igoredm/windhawk-mods/b8319aac0d112762c582a7a0b4778d6c1d72790a/start.png)
+
+![Start search](https://raw.githubusercontent.com/igoredm/windhawk-mods/b8319aac0d112762c582a7a0b4778d6c1d72790a/search.png)
+
 * Floating dock or full-width bar; 4 looks (Névoa, Cristal, Grafite, Aurora).
 * macOS-like zoom (or Lift / Focus), live window previews (hover a thumbnail to peek), drag icons to reorder, pin and unpin.
 * Its own Start: pinned apps, all apps, app search, files (with [Everything](https://www.voidtools.com) or Windows Search) and Windows Settings pages. Compact or wide search.
