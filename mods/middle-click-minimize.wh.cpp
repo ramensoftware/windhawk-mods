@@ -20,8 +20,8 @@ inspired by the GNOME desktop.
 Each combination can be configured in the mod settings:
 
 - Middle click (default: minimize)
-- Ctrl + middle click (default: close)
-- Shift + middle click (default: maximize / restore)
+- Ctrl + middle click (default: do nothing)
+- Shift + middle click (default: do nothing)
 
 Available actions: minimize, maximize / restore, close, toggle "always on top",
 or nothing (the app handles the click normally).
@@ -46,7 +46,7 @@ or nothing (the app handles the click normally).
   - close: Close
   - topmost: Toggle always on top
   - none: Do nothing
-- ctrlAction: close
+- ctrlAction: none
   $name: Ctrl + middle click
   $options:
   - minimize: Minimize
@@ -54,7 +54,7 @@ or nothing (the app handles the click normally).
   - close: Close
   - topmost: Toggle always on top
   - none: Do nothing
-- shiftAction: maximize
+- shiftAction: none
   $name: Shift + middle click
   $options:
   - minimize: Minimize
@@ -78,8 +78,8 @@ enum Action {
 };
 
 Action g_middleAction = ACT_MINIMIZE;
-Action g_ctrlAction = ACT_CLOSE;
-Action g_shiftAction = ACT_MAXIMIZE;
+Action g_ctrlAction = ACT_NONE;
+Action g_shiftAction = ACT_NONE;
 
 Action LoadAction(PCWSTR key, Action fallback) {
     PCWSTR value = Wh_GetStringSetting(key);
@@ -98,8 +98,8 @@ Action LoadAction(PCWSTR key, Action fallback) {
 
 void LoadSettings() {
     g_middleAction = LoadAction(L"middleAction", ACT_MINIMIZE);
-    g_ctrlAction = LoadAction(L"ctrlAction", ACT_CLOSE);
-    g_shiftAction = LoadAction(L"shiftAction", ACT_MAXIMIZE);
+    g_ctrlAction = LoadAction(L"ctrlAction", ACT_NONE);
+    g_shiftAction = LoadAction(L"shiftAction", ACT_NONE);
 }
 
 void Wh_ModSettingsChanged() {
