@@ -27,20 +27,27 @@ This mod recreates the Start menu introduced with Windows RT 8.1 Update 3 on
 Windows 10 and Windows 11. It combines an application list with Windows 8-style
 tiles. The menu is a separate window; the mod does not replace system files.
 
-## Dedicated process
+![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/start8.png)
 
-This mod has its own settings and tile storage.
-The menu runs in a dedicated explorer.exe tool process; a small bridge remains
-in the shell Explorer for Start keyboard messages. Disable the regular Start
-menu mod and other Start replacements before enabling this mod.
-The hybrid startup, elevation, Explorer restart and shutdown require testing
-on real Windows; the bridge is not crash-isolated from Explorer.
+## Process and compatibility
 
-## Compatibility
+The menu runs in a second, dedicated `explorer.exe` process, separate from the
+shell's Explorer. It appears as another **Windows Explorer** in Task Manager.
+The shell Explorer hosts a small bridge that hooks the shell's Start path when
+the helper must receive a keyboard activation, and supervises the helper,
+restarting it if the helper exits. The menu UI is isolated in the helper, but
+a bridge failure can still affect shell Explorer.
+
+This mod is for 64-bit (x86-64) Windows 10 and Windows 11. It uses
+`explorer.exe` rather than Windhawk's usual `windhawk.exe` tool host because
+`windhawk.exe` is 32-bit. On Windhawk 1.7.3, other enabled non-tool mods that
+include `explorer.exe` are also loaded into the helper process.
 
 Do not enable this mod at the same time as another Start menu or Start screen
-replacement (including Open-Shell or the Windows 8.1 Start Screen Recreation).
-They compete for the Windows key and can open multiple Start surfaces.
+replacement. Conflicting examples include Open-Shell, the [Windows 10 1507
+Start Menu Recreation](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/win10-1507-start-menu-recreation.wh.cpp),
+and the Windows 8.1 Start Screen Recreation. They can compete for the Windows
+key and open multiple Start surfaces.
 
 ## Features
 
@@ -62,8 +69,9 @@ They compete for the Windows key and can open multiple Start surfaces.
   and power menus use the same Windows 8-style popup presentation.
 - **Appearance**: choose the background and accent, use a profile picture, and
   resize the menu. Privacy mode substitutes a generic account name.
-- **Layout**: tile positions and sizes are kept in Windhawk's mod storage; a
-  serialized layout can also be imported through the settings.
+- **Layout**: tile positions and sizes are saved in Windhawk's mod storage;
+  very large layouts use a per-user file there. A serialized layout can also be
+  imported through the settings.
 
 ## Keyboard shortcuts
 
@@ -107,27 +115,27 @@ Windows is a trademark of Microsoft Corporation. Report problems on GitHub.
 /*
 - accentMode: auto
   $name: Accent color
-  $description: "This setting controls which accent color is used for Start menu highlights, the search selection and the accent-colored tiles. \"System accent\" follows the color configured in Windows personalisation settings, while \"Windows 8.1 Update 3 default\" restores the fixed blue of the Windows 8 tile palette (#0A5BC4, from the reference palette) for a more authentic retro appearance."
+  $description: "Choose whether Start menu highlights, search selection and accent-colored tiles follow the Windows accent or use the fixed Windows 8.1 Update 3 blue."
   $options:
   - auto: System accent
   - classic: Windows 8.1 Update 3 default
   $name:it-IT: Colore di accento
-  $description:it-IT: "Questa impostazione determina il colore di accento usato per evidenziare il menu Start, la selezione della ricerca e i riquadri colorati. «Accento di sistema» segue il colore impostato nelle personalizzazioni di Windows, mentre «Predefinito di Windows 8.1 Update 3» ripristina il blu fisso della tavolozza dei riquadri di Windows 8 (#0A5BC4, della tavolozza di riferimento) per un aspetto d'epoca più autentico."
+  $description:it-IT: "Scegli se evidenziazioni, selezione della ricerca e riquadri colorati seguono il colore di accento di Windows oppure usano il blu fisso di Windows 8.1 Update 3."
   $options:it-IT:
   - auto: Accento di sistema
   - classic: Predefinito di Windows 8.1 Update 3
   $name:es-ES: Color de acento
-  $description:es-ES: "Esta configuración controla el color de acento usado para resaltar el menú Inicio, la selección de la búsqueda y los mosaicos coloreados. «Acento del sistema» sigue el color configurado en la personalización de Windows, mientras que «Predeterminado de Windows 8.1 Update 3» restaura el azul fijo de la paleta de mosaicos de Windows 8 (#0A5BC4, de la paleta de referencia) para un aspecto retro más auténtico."
+  $description:es-ES: "Elige si los resaltados, la selección de búsqueda y los mosaicos de color usan el color de acento de Windows o el azul fijo de Windows 8.1 Update 3."
   $options:es-ES:
   - auto: Acento del sistema
   - classic: Predeterminado de Windows 8.1 Update 3
   $name:fr-FR: Couleur d'accentuation
-  $description:fr-FR: "Ce paramètre contrôle la couleur d'accentuation utilisée pour la mise en surbrillance du menu Démarrer, la sélection de la recherche et les vignettes colorées. « Accentuation du système » suit la couleur configurée dans les paramètres de personnalisation de Windows, tandis que « Par défaut de Windows 8.1 Update 3 » restaure le bleu fixe de la palette de vignettes de Windows 8 (#0A5BC4, de la palette de référence) pour un aspect rétro plus authentique."
+  $description:fr-FR: "Choisissez si les surbrillances, la sélection de recherche et les vignettes colorées utilisent la couleur d’accentuation de Windows ou le bleu fixe de Windows 8.1 Update 3."
   $options:fr-FR:
   - auto: Accentuation du système
   - classic: Par défaut de Windows 8.1 Update 3
   $name:pt-PT: Cor de destaque
-  $description:pt-PT: "Esta definição controla a cor de destaque usada para realçar o menu Iniciar, a seleção da pesquisa e os blocos coloridos. « Destaque do sistema » segue a cor configurada nas personalizações do Windows, enquanto « Predefinição do Windows 8.1 Update 3 » restaura o azul fixo da paleta de blocos do Windows 8 (#0A5BC4, da paleta de referência) para um aspeto retró mais autêntico."
+  $description:pt-PT: "Escolha se os destaques, a seleção da pesquisa e os blocos coloridos usam a cor de destaque do Windows ou o azul fixo do Windows 8.1 Update 3."
   $options:pt-PT:
   - auto: Destaque do sistema
   - classic: Predefinição do Windows 8.1 Update 3
@@ -217,37 +225,37 @@ Windows is a trademark of Microsoft Corporation. Report problems on GitHub.
   $description:pt-PT: "Esta definição ativa o sombreado nos fundos dos blocos; desative-a para usar cores uniformes."
 - liveTileAnimation: false
   $name: Calendar tile flip animation
-  $description: "This setting enables the periodic flip animation on the Calendar tile only, which then alternates between its icon and today's weekday and date, computed locally. It is disabled by default. Microsoft documents tile notifications as a write-only API for an app's own tile (TileUpdateManager.CreateTileUpdaterForApplication), so there is no supported way for a third-party Start menu to read the live content of Mail, Photos, Weather or other apps; those tiles therefore stay static instead of showing made-up content."
+  $description: "When enabled, the Calendar tile periodically flips between its icon and today's weekday and date. This animation affects only the Calendar tile."
   $name:it-IT: Animazione del riquadro Calendario
-  $description:it-IT: "Questa impostazione attiva l'animazione periodica solo sul riquadro Calendario, che alterna la propria icona al giorno della settimana e alla data di oggi, calcolati in locale. È disattivato per impostazione predefinita. Microsoft documenta le notifiche dei riquadri come un'API scrivibile solo per il riquadro della propria app (TileUpdateManager.CreateTileUpdaterForApplication), quindi non esiste un modo supportato per un menu Start di terze parti di leggere il contenuto live di Posta, Foto, Meteo o altre app; quei riquadri restano quindi statici invece di mostrare contenuti inventati."
+  $description:it-IT: "Se attiva, il riquadro Calendario alterna periodicamente tra la propria icona e il giorno della settimana con la data di oggi. L’animazione riguarda solo questo riquadro."
   $name:es-ES: Animación del mosaico Calendario
-  $description:es-ES: "Esta configuración activa la animación periódica solo en el mosaico Calendario, que alterna entre su icono y el día de la semana y la fecha de hoy, calculados localmente. Está desactivado por defecto. Microsoft documenta las notificaciones de mosaicos como una API de solo escritura para el mosaico de la propia aplicación (TileUpdateManager.CreateTileUpdaterForApplication), por lo que no hay una forma admitida de que un menú Inicio de terceros lea el contenido en vivo de Correo, Fotos, El tiempo u otras apps; esos mosaicos permanecen estáticos en lugar de mostrar contenido inventado."
+  $description:es-ES: "Si se activa, el mosaico Calendario alterna periódicamente entre su icono y el día de la semana con la fecha de hoy. La animación solo afecta a ese mosaico."
   $name:fr-FR: Animation de la vignette Calendrier
-  $description:fr-FR: "Ce paramètre active l'animation périodique uniquement sur la vignette Calendrier, qui alterne alors entre son icône et le jour de la semaine et la date du jour, calculés localement. Il est désactivé par défaut. Microsoft documente les notifications de vignettes comme une API en écriture seule pour la vignette de sa propre application (TileUpdateManager.CreateTileUpdaterForApplication), il n'existe donc pas de moyen pris en charge pour qu'un menu Démarrer tiers lise le contenu en direct de Courrier, Photos, Météo ou d'autres apps ; ces vignettes restent donc statiques au lieu d'afficher du contenu inventé."
+  $description:fr-FR: "Lorsqu’elle est activée, la vignette Calendrier alterne périodiquement entre son icône et le jour de la semaine avec la date du jour. Cette animation ne concerne que cette vignette."
   $name:pt-PT: Animação do bloco Calendário
-  $description:pt-PT: "Esta definição ativa a animação periódica apenas no bloco Calendário, que então alterna entre o seu ícone e o dia da semana e a data de hoje, calculados localmente. Está desativada por predefinição. A Microsoft documenta as notificações de blocos como uma API só de escrita para o bloco da própria aplicação (TileUpdateManager.CreateTileUpdaterForApplication), por isso não existe uma forma suportada de um menu Iniciar de terceiros ler o conteúdo em tempo real do Correio, Fotos, Meteorologia ou outras apps; esses blocos ficam portanto estáticos em vez de mostrarem conteúdo inventado."
+  $description:pt-PT: "Quando ativada, o bloco Calendário alterna periodicamente entre o ícone e o dia da semana com a data de hoje. A animação afeta apenas esse bloco."
 - liveTileIntervalMs: 4000
   $name: Live tile flip interval (ms)
-  $description: "This setting defines how many milliseconds elapse between each Calendar tile flip when the flip animation is enabled. Lower values make the tiles cycle more rapidly and feel busier, while higher values produce a calmer, more subdued effect. The default of 4000 ms matches the pacing used by the original live tiles."
+  $description: "Sets how often the Calendar tile flips while its animation is enabled. Lower values make it flip more often; higher values make it flip less often."
   $name:it-IT: Intervallo dell'animazione dei riquadri live (ms)
-  $description:it-IT: "Questa impostazione definisce quanti millisecondi passano tra un flip del riquadro Calendario e l'altro quando l'animazione è attiva. Valori più bassi fanno ciclare i riquadri più rapidamente e danno un effetto più movimentato, valori più alti un effetto più calmo. Il valore predefinito di 4000 ms corrisponde al ritmo dei riquadri live originali."
+  $description:it-IT: "Imposta la frequenza con cui si capovolge il riquadro Calendario quando l’animazione è attiva. I valori bassi aumentano la frequenza; quelli alti la riducono."
   $name:es-ES: Intervalo de animación de mosaicos en vivo (ms)
-  $description:es-ES: "Esta configuración define cuántos milisegundos transcurren entre cada giro del mosaico Calendario cuando la animación está activa. Los valores más bajos hacen que los mosaicos ciclen más rápido y dan un efecto más animado, mientras que los valores más altos producen un efecto más calmado. El valor predeterminado de 4000 ms coincide con el ritmo de los mosaicos en vivo originales."
+  $description:es-ES: "Define la frecuencia con la que gira el mosaico Calendario cuando la animación está activada. Los valores bajos aumentan la frecuencia y los altos la reducen."
   $name:fr-FR: Intervalle d'animation des vignettes dynamiques (ms)
-  $description:fr-FR: "Ce paramètre définit le nombre de millisecondes entre chaque retournement de la vignette Calendrier lorsque l'animation est activée. Les valeurs plus faibles font défiler les vignettes plus rapidement et donnent un effet plus animé, tandis que les valeurs plus élevées produisent un effet plus calme. La valeur par défaut de 4000 ms correspond au rythme des vignettes dynamiques d'origine."
+  $description:fr-FR: "Définit la fréquence de rotation de la vignette Calendrier lorsque l’animation est activée. Une valeur basse augmente la fréquence ; une valeur élevée la réduit."
   $name:pt-PT: Intervalo da animação dos blocos dinâmicos (ms)
-  $description:pt-PT: "Esta definição define quantos milissegundos decorrem entre cada inversão do bloco Calendário quando a animação está ativa. Valores mais baixos fazem os blocos ciclar mais rapidamente e dão um efeito mais movimentado, enquanto valores mais altos produzem um efeito mais calmo. A predefinição de 4000 ms corresponde ao ritmo dos blocos dinâmicos originais."
+  $description:pt-PT: "Define a frequência com que o bloco Calendário vira quando a animação está ativada. Valores baixos aumentam a frequência; valores altos reduzem-na."
 - menuWidthOverride: 0
   $name: Menu width override in px (0 = default)
-  $description: "This setting overrides the width of the Start menu in pixels (measured at 100% scaling). A value of 0 keeps the default width, or the width the menu was last resized to. Any positive value forces the menu to that width, even if the menu was resized by dragging its edge. The default 533 px holds the 267 px left column plus the 266 px tile pane (two medium tile columns of small 56 px cells), as on the RT Update 3 menu."
+  $description: "Sets a fixed Start menu width in pixels at 100% display scaling. Use 0 to keep the default width or the width chosen by resizing the menu."
   $name:it-IT: Forza la larghezza del menu in px (0 = predefinita)
-  $description:it-IT: "Questa impostazione forza la larghezza del menu Start in pixel (misurata al 100% di scala). Il valore 0 mantiene la larghezza predefinita oppure quella a cui il menu è stato ridimensionato l'ultima volta. Qualsiasi valore positivo forza il menu a quella larghezza, anche se il menu è stato ridimensionato trascinando il bordo. Il valore predefinito di 533 px contiene la colonna sinistra di 267 px più il pannello dei riquadri di 266 px (due colonne di riquadri medi di celle piccole da 56 px), come nel menu di RT Update 3."
+  $description:it-IT: "Imposta una larghezza fissa del menu Start in pixel al 100% di scala. Usa 0 per mantenere la larghezza predefinita o quella scelta ridimensionando il menu."
   $name:es-ES: Ancho del menú forzado en px (0 = predeterminado)
-  $description:es-ES: "Esta configuración fuerza el ancho del menú Inicio en píxeles (medido al 100% de escala). Un valor de 0 mantiene el ancho predeterminado o el al que el menú se redimensionó por última vez. Cualquier valor positivo fuerza el menú a ese ancho, aunque el menú se haya redimensionado arrastrando su borde. Los 533 px predeterminados contienen la columna izquierda de 267 px más el panel de mosaicos de 266 px (dos columnas de mosaicos medianos de celdas pequeñas de 56 px), como en el menú de RT Update 3."
+  $description:es-ES: "Fija el ancho del menú Inicio en píxeles al 100 % de escala. Usa 0 para mantener el ancho predeterminado o el elegido al cambiar el tamaño del menú."
   $name:fr-FR: Forcer la largeur du menu en px (0 = par défaut)
-  $description:fr-FR: "Ce paramètre force la largeur du menu Démarrer en pixels (mesurée à 100 % de mise à l'échelle). Une valeur de 0 conserve la largeur par défaut, ou celle à laquelle le menu a été redimensionné la dernière fois. Toute valeur positive force le menu à cette largeur, même si le menu a été redimensionné en faisant glisser son bord. Les 533 px par défaut contiennent la colonne de gauche de 267 px plus le panneau de vignettes de 266 px (deux colonnes de vignettes moyennes de petites cellules de 56 px), comme dans le menu de RT Update 3."
+  $description:fr-FR: "Définit une largeur fixe du menu Démarrer en pixels à 100 % de mise à l’échelle. Utilisez 0 pour conserver la largeur par défaut ou celle choisie en redimensionnant le menu."
   $name:pt-PT: Impor a largura do menu em px (0 = predefinição)
-  $description:pt-PT: "Esta definição impõe a largura do menu Iniciar em píxeis (medida a 100% de escala). Um valor de 0 mantém a largura predefinida ou aquela em que o menu foi redimensionado pela última vez. Qualquer valor positivo impõe o menu a essa largura, mesmo que o menu tenha sido redimensionado arrastando o seu contorno. Os 533 px predefinidos contêm a coluna esquerda de 267 px mais o painel de blocos de 266 px (duas colunas de blocos médios de células pequenas de 56 px), como no menu do RT Update 3."
+  $description:pt-PT: "Define uma largura fixa do menu Iniciar em píxeis a 100% de escala. Use 0 para manter a largura predefinida ou a escolhida ao redimensionar o menu."
 - profilePicturePath: ""
   $name: Profile picture file path (empty = use Windows account picture, then bundled avatar fallback)
   $description: "This setting specifies a custom file path to an image that will be used as the profile picture shown in the Start menu. When left empty, the mod falls back to the Windows account picture, and if that is unavailable it uses the bundled fallback avatar shipped with the mod, ensuring a picture is always displayed."
@@ -1275,9 +1283,127 @@ public:
 };
 
 
+// File-backed mod storage. The mod storage directory is shared between users
+// in a regular Windhawk install, so every filename includes the current SID.
+namespace ModStorageFiles {
+static std::wstring CurrentUserSid() {
+    HANDLE rawToken = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &rawToken)) return {};
+    UniqueHandle token(rawToken);
+    DWORD bytes = 0;
+    GetTokenInformation(token.get(), TokenUser, nullptr, 0, &bytes);
+    if (!bytes || bytes > 65536) return {};
+    std::vector<BYTE> data(bytes);
+    if (!GetTokenInformation(token.get(), TokenUser, data.data(), bytes, &bytes)) return {};
+    LPWSTR sidText = nullptr;
+    if (!ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(data.data())->User.Sid, &sidText)) return {};
+    std::wstring sid(sidText);
+    LocalFree(sidText);
+    return sid;
+}
+
+static std::wstring Path(const wchar_t* stem) {
+    if (!stem || !*stem) return {};
+    const std::wstring sid = CurrentUserSid();
+    if (sid.empty()) return {};
+    wchar_t storage[MAX_PATH * 4]{};
+    const size_t length = Wh_GetModStoragePath(storage, ARRAYSIZE(storage));
+    if (length == 0 || length >= ARRAYSIZE(storage)) {
+        Wh_Log(L"[Storage] getting the mod storage path failed");
+        return {};
+    }
+    const int result = SHCreateDirectoryExW(nullptr, storage, nullptr);
+    if (result != ERROR_SUCCESS && result != ERROR_ALREADY_EXISTS && result != ERROR_FILE_EXISTS) {
+        Wh_Log(L"[Storage] creating the mod storage directory failed: %d", result);
+        return {};
+    }
+    return std::wstring(storage) + L"\\" + stem + L"." + sid + L".dat";
+}
+
+static bool ReadBytes(const std::wstring& path, std::vector<BYTE>& out, size_t maxBytes) {
+    out.clear();
+    if (path.empty()) return false;
+    HANDLE rawFile = CreateFileW(path.c_str(), GENERIC_READ,
+                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                 nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (rawFile == INVALID_HANDLE_VALUE) return false;
+    UniqueHandle file(rawFile);
+    LARGE_INTEGER size{};
+    if (!GetFileSizeEx(file.get(), &size) || size.QuadPart <= 0 ||
+        static_cast<ULONGLONG>(size.QuadPart) > maxBytes ||
+        static_cast<ULONGLONG>(size.QuadPart) > MAXDWORD) return false;
+    out.resize(static_cast<size_t>(size.QuadPart));
+    size_t offset = 0;
+    while (offset < out.size()) {
+        const DWORD request = static_cast<DWORD>(std::min<size_t>(out.size() - offset, 1024 * 1024));
+        DWORD read = 0;
+        if (!ReadFile(file.get(), out.data() + offset, request, &read, nullptr) || read == 0) {
+            out.clear();
+            return false;
+        }
+        offset += read;
+    }
+    return true;
+}
+
+static bool WriteAtomic(const std::wstring& path, const BYTE* data, size_t size, size_t maxBytes) {
+    if (path.empty() || !data || size == 0 || size > maxBytes || size > MAXDWORD) return false;
+    const std::wstring tempPath = path + L".tmp." + std::to_wstring(GetCurrentProcessId()) +
+        L"." + std::to_wstring(GetCurrentThreadId()) + L"." + std::to_wstring(GetTickCount64());
+    HANDLE rawFile = CreateFileW(tempPath.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                                 FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, nullptr);
+    if (rawFile == INVALID_HANDLE_VALUE) return false;
+    UniqueHandle file(rawFile);
+
+    bool ok = true;
+    const BYTE* cursor = data;
+    size_t remaining = size;
+    while (remaining) {
+        const DWORD request = static_cast<DWORD>(std::min<size_t>(remaining, 1024 * 1024));
+        DWORD written = 0;
+        if (!WriteFile(file.get(), cursor, request, &written, nullptr) || written != request) {
+            ok = false;
+            break;
+        }
+        cursor += written;
+        remaining -= written;
+    }
+    if (ok && !FlushFileBuffers(file.get())) ok = false;
+    file.reset();
+    if (ok && MoveFileExW(tempPath.c_str(), path.c_str(),
+                          MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) return true;
+    DeleteFileW(tempPath.c_str());
+    return false;
+}
+
+static bool ReadText(const wchar_t* stem, std::wstring& out, size_t maxChars) {
+    static_assert(sizeof(wchar_t) == 2, "Windhawk runs with Windows UTF-16 wchar_t");
+    out.clear();
+    if (maxChars > SIZE_MAX / sizeof(wchar_t)) return false;
+    std::vector<BYTE> bytes;
+    if (!ReadBytes(Path(stem), bytes, maxChars * sizeof(wchar_t)) ||
+        bytes.size() % sizeof(wchar_t) != 0) return false;
+    out.resize(bytes.size() / sizeof(wchar_t));
+    if (!bytes.empty()) memcpy(out.data(), bytes.data(), bytes.size());
+    if (out.find(L'\0') != std::wstring::npos) {
+        out.clear();
+        return false;
+    }
+    return true;
+}
+
+static bool WriteTextAtomic(const wchar_t* stem, const std::wstring& text, size_t maxChars) {
+    static_assert(sizeof(wchar_t) == 2, "Windhawk runs with Windows UTF-16 wchar_t");
+    if (text.empty() || text.size() > maxChars || text.size() > SIZE_MAX / sizeof(wchar_t)) return false;
+    const std::wstring path = Path(stem);
+    return WriteAtomic(path, reinterpret_cast<const BYTE*>(text.data()),
+                       text.size() * sizeof(wchar_t), maxChars * sizeof(wchar_t));
+}
+} // namespace ModStorageFiles
+
 // ===================== SETTINGS =====================
-// Windhawk string values are limited only by the backing store; the layout of
-// a very large tile grid stays well below this buffer.
+// This buffer accommodates ordinary Windhawk string values. Large tile layouts
+// are moved to a per-user file instead of relying on backend-specific value limits.
 constexpr size_t kStorageStringMaxChars = 256 * 1024;
 
 static std::wstring ReadStorageString(const wchar_t* name) {
@@ -1285,6 +1411,57 @@ static std::wstring ReadStorageString(const wchar_t* name) {
     const size_t chars = Wh_GetStringValue(name, buffer.data(), buffer.size());
     if (chars == 0 || chars >= buffer.size()) return {};
     return std::wstring(buffer.data(), chars);
+}
+
+
+// Ordinary string storage is kept for small layouts. Larger ones are stored
+// atomically as UTF-16 under Wh_GetModStoragePath and referenced by this marker.
+constexpr size_t kPortableLayoutStringMaxChars = 30 * 1024;
+constexpr size_t kMaxTileLayoutFileChars = 16 * 1024 * 1024;
+static constexpr wchar_t kTileLayoutFileMarker[] = L"WHSM_LAYOUT_FILE_V1";
+
+static std::wstring ReadStoredTileLayout() {
+    const std::wstring stored = ReadStorageString(L"startMenuLayout");
+    if (stored != kTileLayoutFileMarker) return stored;
+    std::wstring layout;
+    if (ModStorageFiles::ReadText(L"StartMenuLayout.v1", layout, kMaxTileLayoutFileChars) &&
+        !layout.empty()) return layout;
+    Wh_Log(L"[TileLayout] the saved layout file could not be read");
+    return {};
+}
+
+static bool WriteStoredTileLayout(const std::wstring& layout) {
+    if (layout.empty() || layout.size() > kMaxTileLayoutFileChars) return false;
+    if (layout.size() <= kPortableLayoutStringMaxChars)
+        return Wh_SetStringValue(L"startMenuLayout", layout.c_str()) != FALSE;
+
+    if (!ModStorageFiles::WriteTextAtomic(L"StartMenuLayout.v1", layout, kMaxTileLayoutFileChars))
+        return false;
+    // Publish the small pointer only after the complete temporary file has
+    // been flushed and atomically renamed into place.
+    return Wh_SetStringValue(L"startMenuLayout", kTileLayoutFileMarker) != FALSE;
+}
+
+static std::wstring TileLayoutImportFingerprint(const std::wstring& layout) {
+    uint64_t hash = 14695981039346656037ull;
+    for (wchar_t ch : layout) {
+        const uint16_t unit = static_cast<uint16_t>(ch);
+        hash = (hash ^ (unit & 0xffu)) * 1099511628211ull;
+        hash = (hash ^ (unit >> 8)) * 1099511628211ull;
+    }
+    return L"WHSMI1#" + std::to_wstring(layout.size()) + L"#" + std::to_wstring(hash);
+}
+
+static bool TileLayoutImportWasApplied(const std::wstring& layout) {
+    const std::wstring stored = ReadStorageString(L"tileLayoutImported");
+    // The raw string is accepted to preserve state written by earlier builds.
+    return stored == layout || stored == TileLayoutImportFingerprint(layout);
+}
+
+static void RememberImportedTileLayout(const std::wstring& layout) {
+    const std::wstring fingerprint = TileLayoutImportFingerprint(layout);
+    if (!Wh_SetStringValue(L"tileLayoutImported", fingerprint.c_str()))
+        Wh_Log(L"[TileLayout] failed to record the imported layout fingerprint");
 }
 
 struct Settings {
@@ -1345,11 +1522,11 @@ struct Settings {
         // unrelated option never discards the user's own tile edits.
         const std::wstring importLayout = StringSetting::make(L"tileLayout").get();
         tileLayoutImportPending = false;
-        if (!importLayout.empty() && importLayout != ReadStorageString(L"tileLayoutImported")) {
+        if (!importLayout.empty() && !TileLayoutImportWasApplied(importLayout)) {
             tileLayout = importLayout;
             tileLayoutImportPending = true;
         } else {
-            tileLayout = ReadStorageString(L"startMenuLayout");
+            tileLayout = ReadStoredTileLayout();
         }
 
         Wh_Log(L"[Settings] Loaded: classicAccent=%d, liveTiles=%d, tileGradients=%d, bgMode=%d, tileColors=%d, privacyMode=%d, interval=%d ms, widthOverride=%d, layoutImport=%d",
@@ -1794,56 +1971,45 @@ static bool GetKnownFolderPathString(REFKNOWNFOLDERID folderId, std::wstring& re
     return !result.empty();
 }
 
-// Per-user snapshot in Windhawk mod storage, not separate image files.
-// Two banks prevent an interrupted write from replacing a good snapshot.
+// Per-user app catalog snapshot under Windhawk's mod storage. A temporary file
+// and same-directory rename keep an interrupted write from replacing a good cache.
 namespace AppSnapshot {
-constexpr uint32_t kMagic=0x31534d41, kMaxBytes=16*1024*1024, kChunk=65536;
-struct Manifest { uint32_t magic, bank, bytes, chunks, hash; };
-static std::wstring Key() {
-    HANDLE raw=nullptr;
-    if (!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&raw)) return {};
-    UniqueHandle token(raw); DWORD bytes=0;
-    GetTokenInformation(token.get(),TokenUser,nullptr,0,&bytes);
-    if (!bytes || bytes>65536) return {};
-    std::vector<BYTE> data(bytes);
-    if (!GetTokenInformation(token.get(),TokenUser,data.data(),bytes,&bytes)) return {};
-    LPWSTR sid=nullptr;
-    if (!ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(data.data())->User.Sid,&sid)) return {};
-    std::wstring name=L"AppSnapshot.v1."; name+=sid; LocalFree(sid); return name;
-}
-static uint32_t Hash(const std::vector<BYTE>& data) {
-    uint32_t h=2166136261u;
-    for (BYTE b:data) h=(h^b)*16777619u;
-    return h;
+constexpr uint32_t kMagic = 0x31534d41;
+constexpr uint32_t kMaxBytes = 16 * 1024 * 1024;
+struct FileHeader { uint32_t magic, bytes, hash; };
+static_assert(sizeof(FileHeader) == 12, "snapshot header format must stay fixed");
+
+static uint32_t Hash(const BYTE* data, size_t size) {
+    uint32_t hash = 2166136261u;
+    for (size_t i = 0; i < size; ++i) hash = (hash ^ data[i]) * 16777619u;
+    return hash;
 }
 static bool Read(std::vector<BYTE>& out) {
-    std::wstring key=Key(); if (key.empty()) return false;
-    Manifest m{};
-    if (Wh_GetBinaryValue((key+L".manifest").c_str(),&m,sizeof(m))!=sizeof(m) ||
-        m.magic!=kMagic || m.bank>1 || !m.bytes || m.bytes>kMaxBytes ||
-        m.chunks!=(m.bytes+kChunk-1)/kChunk) return false;
-    out.resize(m.bytes);
-    for (uint32_t i=0;i<m.chunks;++i) {
-        uint32_t offset=i*kChunk, n=std::min(kChunk,m.bytes-offset);
-        std::wstring part=key+L"."+std::to_wstring(m.bank)+L"."+std::to_wstring(i);
-        if (Wh_GetBinaryValue(part.c_str(),out.data()+offset,n)!=n) { out.clear(); return false; }
+    out.clear();
+    std::vector<BYTE> file;
+    const std::wstring path = ModStorageFiles::Path(L"AppSnapshot.v1");
+    if (!ModStorageFiles::ReadBytes(path, file, kMaxBytes + sizeof(FileHeader)) ||
+        file.size() < sizeof(FileHeader)) return false;
+    FileHeader header{};
+    memcpy(&header, file.data(), sizeof(header));
+    if (header.magic != kMagic || !header.bytes || header.bytes > kMaxBytes ||
+        header.bytes != file.size() - sizeof(FileHeader)) return false;
+    out.assign(file.begin() + sizeof(FileHeader), file.end());
+    if (Hash(out.data(), out.size()) != header.hash) {
+        out.clear();
+        return false;
     }
-    if (Hash(out)!=m.hash) { out.clear(); return false; }
     return true;
 }
 static bool Write(const std::vector<BYTE>& bytes) {
-    if (bytes.empty() || bytes.size()>kMaxBytes) return false;
-    std::wstring key=Key(); if (key.empty()) return false;
-    Manifest old{};
-    bool valid=Wh_GetBinaryValue((key+L".manifest").c_str(),&old,sizeof(old))==sizeof(old) && old.magic==kMagic && old.bank<=1;
-    Manifest m{kMagic,valid ? 1u-old.bank : 0u,static_cast<uint32_t>(bytes.size()),
-               static_cast<uint32_t>((bytes.size()+kChunk-1)/kChunk),Hash(bytes)};
-    for (uint32_t i=0;i<m.chunks;++i) {
-        uint32_t offset=i*kChunk, n=std::min(kChunk,m.bytes-offset);
-        std::wstring part=key+L"."+std::to_wstring(m.bank)+L"."+std::to_wstring(i);
-        if (!Wh_SetBinaryValue(part.c_str(),bytes.data()+offset,n)) return false;
-    }
-    return Wh_SetBinaryValue((key+L".manifest").c_str(),&m,sizeof(m))!=FALSE;
+    if (bytes.empty() || bytes.size() > kMaxBytes) return false;
+    const std::wstring path = ModStorageFiles::Path(L"AppSnapshot.v1");
+    if (path.empty()) return false;
+    const FileHeader header{kMagic, static_cast<uint32_t>(bytes.size()), Hash(bytes.data(), bytes.size())};
+    std::vector<BYTE> file(sizeof(header) + bytes.size());
+    memcpy(file.data(), &header, sizeof(header));
+    memcpy(file.data() + sizeof(header), bytes.data(), bytes.size());
+    return ModStorageFiles::WriteAtomic(path, file.data(), file.size(), kMaxBytes + sizeof(header));
 }
 static void Put32(std::vector<BYTE>& out,uint32_t v) {
     for (int i=0;i<4;++i) out.push_back(static_cast<BYTE>(v>>(i*8)));
@@ -2064,8 +2230,9 @@ private:
         return key;
     }
 
-    // Storage format: "<key>=<count>\n" per entry; keys never contain '\n'
-    // and the '=' separator is searched from the end because paths may contain it.
+    // Storage format: "<key>=<count>\t" per entry. A tab cannot occur in a
+    // Windows path or AUMID and survives portable INI storage without newline normalization.
+    // Accept old newline-delimited values for compatibility with existing installs.
     void LoadLaunchCounts() {
         if (launchCountsLoaded_) return;
         launchCountsLoaded_ = true;
@@ -2073,10 +2240,10 @@ private:
         const std::wstring stored = ReadStorageString(L"startMenuLaunchCounts");
         size_t pos = 0;
         while (pos < stored.size()) {
-            size_t lineEnd = stored.find(L'\n', pos);
+            size_t lineEnd = stored.find_first_of(L"\t\n", pos);
             if (lineEnd == std::wstring::npos) lineEnd = stored.size();
             const std::wstring line = stored.substr(pos, lineEnd - pos);
-            pos = lineEnd + 1;
+            pos = lineEnd == stored.size() ? stored.size() : lineEnd + 1;
             const size_t sep = line.rfind(L'=');
             if (sep == std::wstring::npos || sep == 0) continue;
             const int count = _wtoi(line.c_str() + sep + 1);
@@ -2095,7 +2262,7 @@ private:
             out += key;
             out += L'=';
             out += std::to_wstring(count);
-            out += L'\n';
+            out += L'\t';
         }
         if (!Wh_SetStringValue(L"startMenuLaunchCounts", out.c_str()))
             Wh_Log(L"[Catalog] failed to persist launch counts");
@@ -4187,55 +4354,43 @@ static bool BitmapToPixels(HBITMAP hbm, BYTE** outPx, int* outW, int* outH) {
 }
 
 static bool IconPixelsFromHICON(HICON ico, BYTE** outPx, int* outW, int* outH) {
-    *outPx = NULL; *outW = *outH = 0;
-    ICONINFO ii = {};
-    if (!ico || !GetIconInfo(ico, &ii)) return false;
-    bool ok = false;
-    BITMAP bm = {};
-    if (ii.hbmColor && GetObjectW(ii.hbmColor, sizeof(bm), &bm) &&
-        bm.bmWidth > 0 && bm.bmHeight > 0 && bm.bmWidth <= 512 && bm.bmHeight <= 512) {
-        const int w = bm.bmWidth, h = bm.bmHeight;
-        BYTE* px = new (std::nothrow) BYTE[(size_t)w * (size_t)h * 4];
-        HDC dc = GetDC(NULL);
-        if (px && dc) {
-            BITMAPINFO bi = {};
-            bi.bmiHeader.biSize = sizeof(bi.bmiHeader); bi.bmiHeader.biWidth = w;
-            bi.bmiHeader.biHeight = -h; bi.bmiHeader.biPlanes = 1;
-            bi.bmiHeader.biBitCount = 32; bi.bmiHeader.biCompression = BI_RGB;
-            if (GetDIBits(dc, ii.hbmColor, 0, (UINT)h, px, &bi, DIB_RGB_COLORS)) {
-                bool anyAlpha = false;
-                for (size_t n = 3; n < (size_t)w * (size_t)h * 4; n += 4)
-                    if (px[n]) { anyAlpha = true; break; }
-                if (!anyAlpha && ii.hbmMask) {
-                    const int stride = ((w + 15) / 16) * 2;
-                    std::vector<BYTE> mk((size_t)stride * (size_t)h, 0);
-                    BITMAPINFO mi = {};
-                    mi.bmiHeader.biSize = sizeof(mi.bmiHeader); mi.bmiHeader.biWidth = w;
-                    mi.bmiHeader.biHeight = -h; mi.bmiHeader.biPlanes = 1;
-                    mi.bmiHeader.biBitCount = 1; mi.bmiHeader.biCompression = BI_RGB;
-                    if (GetDIBits(dc, ii.hbmMask, 0, (UINT)h, mk.data(), &mi, DIB_RGB_COLORS))
-                        for (int y = 0; y < h; ++y)
-                            for (int x = 0; x < w; ++x) {
-                                const bool transparent = (mk[(size_t)y * stride + (x >> 3)] >> (7 - (x & 7))) & 1;
-                                px[((size_t)y * w + x) * 4 + 3] = transparent ? 0 : 255;
-                            }
-                } else if (!anyAlpha) {
-                    for (size_t n = 3; n < (size_t)w * (size_t)h * 4; n += 4) px[n] = 255;
-                }
-                for (size_t n = 0; n < (size_t)w * (size_t)h; ++n) {
-                    BYTE* p = px + n * 4;
-                    if (p[3] != 255) { p[0] = (BYTE)(p[0] * p[3] / 255); p[1] = (BYTE)(p[1] * p[3] / 255); p[2] = (BYTE)(p[2] * p[3] / 255); }
-                }
-                *outPx = px; *outW = w; *outH = h; ok = true;
-                px = NULL;
-            }
-        }
-        if (dc) ReleaseDC(NULL, dc);
-        delete[] px;
+    *outPx = nullptr;
+    *outW = *outH = 0;
+    auto bitmap = CreateGdiplusBitmapFromIcon(ico);
+    if (!bitmap || bitmap->GetLastStatus() != Gdiplus::Ok) return false;
+
+    const int w = static_cast<int>(bitmap->GetWidth());
+    const int h = static_cast<int>(bitmap->GetHeight());
+    if (w <= 0 || h <= 0 || w > 512 || h > 512) return false;
+    const size_t rowBytes = static_cast<size_t>(w) * 4;
+    BYTE* pixels = new (std::nothrow) BYTE[rowBytes * static_cast<size_t>(h)];
+    if (!pixels) return false;
+
+    Gdiplus::Rect bounds(0, 0, w, h);
+    Gdiplus::BitmapData data{};
+    if (bitmap->LockBits(&bounds, Gdiplus::ImageLockModeRead,
+                         PixelFormat32bppARGB, &data) != Gdiplus::Ok) {
+        delete[] pixels;
+        return false;
     }
-    if (ii.hbmColor) DeleteObject(ii.hbmColor);
-    if (ii.hbmMask) DeleteObject(ii.hbmMask);
-    return ok;
+    // SearchIconPixels is consumed as PixelFormat32bppPARGB, so copy from the
+    // safe shared icon converter and premultiply each channel for that format.
+    for (int y = 0; y < h; ++y) {
+        const BYTE* src = static_cast<const BYTE*>(data.Scan0) + static_cast<ptrdiff_t>(y) * data.Stride;
+        BYTE* dst = pixels + static_cast<size_t>(y) * rowBytes;
+        for (int x = 0; x < w; ++x) {
+            const BYTE alpha = src[x * 4 + 3];
+            dst[x * 4 + 0] = static_cast<BYTE>(src[x * 4 + 0] * alpha / 255);
+            dst[x * 4 + 1] = static_cast<BYTE>(src[x * 4 + 1] * alpha / 255);
+            dst[x * 4 + 2] = static_cast<BYTE>(src[x * 4 + 2] * alpha / 255);
+            dst[x * 4 + 3] = alpha;
+        }
+    }
+    bitmap->UnlockBits(&data);
+    *outPx = pixels;
+    *outW = w;
+    *outH = h;
+    return true;
 }
 
 static SearchIconPixels LoadSearchIcon(const AppEntry& a) {
@@ -4605,13 +4760,24 @@ public:
         // new layout was pasted into the tileLayout setting. Other settings
         // changes leave the user's current tile arrangement untouched.
         if (!settings_.tileLayout.empty() && (!layoutApplied_ || settings_.tileLayoutImportPending)) {
-            if (layout_.Deserialize(settings_.tileLayout, catalog_)) {
-                if (settings_.tileLayoutImportPending) {
-                    Wh_Log(L"[TileLayout] imported layout from the tileLayout setting");
-                    Wh_SetStringValue(L"tileLayoutImported", settings_.tileLayout.c_str());
+            const bool importPending = settings_.tileLayoutImportPending;
+            bool applied = layout_.Deserialize(settings_.tileLayout, catalog_);
+            if (applied && importPending) {
+                Wh_Log(L"[TileLayout] imported layout from the tileLayout setting");
+                RememberImportedTileLayout(settings_.tileLayout);
+            } else if (!applied && importPending && !layoutApplied_) {
+                // A bad first-time paste must not replace the user's saved tiles
+                // with the default layout. Restore the stored layout instead.
+                const std::wstring stored = ReadStoredTileLayout();
+                if (!stored.empty()) applied = layout_.Deserialize(stored, catalog_);
+                if (applied) {
+                    Wh_Log(L"[TileLayout] import was invalid; restored the saved layout");
                 }
-            } else {
+                settings_.tileLayoutImportPending = false;
+            }
+            if (!applied) {
                 Wh_Log(L"[TileLayout] stored/imported layout could not be parsed; keeping current layout");
+                settings_.tileLayoutImportPending = false;
             }
         }
         layoutApplied_ = true;
@@ -4724,7 +4890,11 @@ public:
     void PersistTileLayout() {
         if (!catalogReady_) return;
         const std::wstring serialized = layout_.Serialize();
-        if (!Wh_SetStringValue(L"startMenuLayout", serialized.c_str()))
+        if (serialized.empty() || serialized.size() > kMaxTileLayoutFileChars) {
+            Wh_Log(L"[TileLayout] serialized layout exceeds the supported storage size; keeping the previous saved layout");
+            return;
+        }
+        if (!WriteStoredTileLayout(serialized))
             Wh_Log(L"[TileLayout] failed to save layout to Windhawk mod storage");
     }
 
