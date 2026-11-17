@@ -35,14 +35,15 @@ internal Explorer data.
   it belongs to is gone as well.
 * A light 30 s check catches owners the mod couldn't open or wait on: it only looks at
   its own list, not at the tray.
-* When the mod is enabled while Explorer is already running, it sends the documented
-  `TaskbarCreated` notification once, so running programs re-register their icons and
-  the mod learns about them. (Explorer itself sends it on every start; programs are
-  required to handle it.) Icons of programs that ignore it are learned the next time the
-  program updates them (tooltip, image or state). This step can be turned off in the
-  settings.
+* When the mod is loaded together with Explorer (the usual case), it sees every icon
+  from the start. When it is enabled while Explorer is already running, it learns the
+  existing icons the next time their program updates them (tooltip, image or state).
+  Optionally, it can send the documented `TaskbarCreated` notification once so that
+  running programs re-register their icons right away. Every program receives it as if
+  Explorer had restarted, so it's off by default.
 * Every removed ghost is logged — program path, PID and tooltip — to the Windhawk log
-  and, optionally, to a text file, so you can find out which program keeps leaving them.
+  and, optionally, to `ghosts.log` in the mod's storage folder (its full path is written
+  to the Windhawk log), so you can find out which program keeps leaving them.
 
 ## Compared to other approaches
 
@@ -51,9 +52,9 @@ internal Explorer data.
 | Runs as | part of Explorer, no extra process | separate background program | one-off program | manual |
 | Trigger | the owner process exiting | timer or on demand | when you run it | when you do it |
 | Method | `NIM_DELETE` with the icon's own identity | simulated mouse moves over the tray, or reading Explorer's toolbar memory from another process | resets the tray settings in the registry | full restart |
-| Icons registered by GUID | removed | depends on the tool | — | removed |
+| Icons registered by GUID | removed (if the mod was enabled while Explorer was running: once their program has updated them) | depends on the tool | — | removed |
 | Tells you who left the icon | yes, program and PID | no | no | no |
-| Side effects | none, apart from the optional one-time `TaskbarCreated` when the mod is enabled | depends on the tool; may lag behind | clears your icon visibility settings | taskbar flickers, open Explorer windows close |
+| Side effects | none by default; the optional `TaskbarCreated` on load reaches every program, as if Explorer had restarted | depends on the tool; may lag behind | clears your icon visibility settings | taskbar flickers, open Explorer windows close |
 
 ## Compatibility
 
@@ -65,18 +66,19 @@ but this has not been tested.
 
 // ==WindhawkModSettings==
 /*
-- logFile: ""
-  $name: Log file
+- logToFile: false
+  $name: Log removed icons to a file
   $description: >-
-    Optional full path of a text file to append removed icons to (UTF-8). Environment
-    variables such as %USERPROFILE% are expanded. Leave empty to log only to the
-    Windhawk log.
-- refreshOnLoad: true
+    Also append removed icons to ghosts.log (UTF-8) in the mod's storage folder. The
+    file's full path is written to the Windhawk log.
+- refreshOnLoad: false
   $name: Learn existing icons on load
   $description: >-
     When the mod is enabled while Explorer is already running, send TaskbarCreated
-    once so that running programs re-register their icons. Without it, icons that
-    existed before the mod was loaded are learned only when their program updates them.
+    once so that running programs re-register their icons. Every program receives it
+    as if Explorer had restarted, and a few re-initialize or misbehave. Without it,
+    icons that existed before the mod was loaded are learned only when their program
+    updates them.
 */
 // ==/WindhawkModSettings==
 
@@ -160,11 +162,12 @@ std::vector<Owner> g_retired;             // replaced owners; the worker closes 
 std::vector<DWORD> g_exited;              // pids reported by the wait callbacks
 std::vector<DWORD> g_newPids;             // pids that still need a wait
 std::wstring g_logFile;
-bool g_refreshOnLoad = true;
+bool g_refreshOnLoad = false;
 
 HANDLE g_stop = nullptr;
 HANDLE g_wake = nullptr;
-HANDLE g_thread = nullptr;
+std::atomic<HANDLE> g_thread{nullptr};    // started with the first taskbar
+std::atomic<bool> g_workerStarted{false};
 std::atomic<HWND> g_tray{nullptr};        // subclassed taskbar of this process
 
 HWND FromHandle32(DWORD h) {
@@ -217,14 +220,12 @@ void Report(const std::wstring& line) {
 }
 
 void LoadSettings() {
-    PCWSTR s = Wh_GetStringSetting(L"logFile");
-    std::wstring path = s ? s : L"";
-    Wh_FreeStringSetting(s);
-    if (!path.empty()) {
-        WCHAR expanded[MAX_PATH * 2];
-        DWORD n = ExpandEnvironmentStringsW(path.c_str(), expanded, ARRAYSIZE(expanded));
-        if (n && n <= ARRAYSIZE(expanded))
-            path = expanded;
+    // The log file lives in the mod's storage folder, which is removed with the mod.
+    std::wstring path;
+    WCHAR dir[MAX_PATH];
+    if (Wh_GetIntSetting(L"logToFile") && Wh_GetModStoragePath(dir, ARRAYSIZE(dir))) {
+        path = std::wstring(dir) + L"\\ghosts.log";
+        Wh_Log(L"Logging removed icons to %s", path.c_str());
     }
     bool refresh = Wh_GetIntSetting(L"refreshOnLoad") != 0;
     AcquireSRWLockExclusive(&g_lock);
@@ -511,12 +512,24 @@ DWORD WINAPI Worker(LPVOID) {
     return 0;
 }
 
+// Other explorer.exe processes (separate folder windows) never create a taskbar, so the
+// worker is only started once this process has one.
+void StartWorker() {
+    if (g_workerStarted.exchange(true))
+        return;
+    HANDLE thread = CreateThread(nullptr, 0, Worker, nullptr, 0, nullptr);
+    if (!thread)
+        Wh_Log(L"Failed to start the worker thread: %u", GetLastError());
+    g_thread = thread;
+}
+
 bool AttachToTray(HWND tray) {
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(tray, TraySubclass, 0)) {
         Wh_Log(L"Failed to subclass the taskbar");
         return false;
     }
     g_tray = tray;
+    StartWorker();
     return true;
 }
 
@@ -545,9 +558,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     g_stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_wake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (g_stop && g_wake)
-        g_thread = CreateThread(nullptr, 0, Worker, nullptr, 0, nullptr);
-    if (!g_thread) {
+    if (!g_stop || !g_wake) {
         if (g_wake)
             CloseHandle(g_wake);
         if (g_stop)
@@ -588,8 +599,10 @@ void Wh_ModUninit() {
     if (tray)
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(tray, TraySubclass);
     SetEvent(g_stop);
-    WaitForSingleObject(g_thread, INFINITE);
-    CloseHandle(g_thread);
+    if (HANDLE thread = g_thread) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
 
     // Cancel the process waits and wait for any running callback to finish.
     for (auto& o : g_owners)
