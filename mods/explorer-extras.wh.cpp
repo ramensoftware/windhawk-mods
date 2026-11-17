@@ -2,7 +2,7 @@
 // @id              explorer-extras
 // @name            Explorer Extras
 // @description     Beta. Additions for File Explorer, one switch per area: a Columns layout (Miller columns) and a details and preview pane for PDF, text, Markdown, images, video and sound.
-// @version         0.66.2
+// @version         0.68.2
 // @author          AristideBH
 // @github          https://github.com/AristideBH
 // @donateUrl       https://ko-fi.com/aristidebh
@@ -37,7 +37,7 @@ A **Columns** entry in File Explorer's View menu: Miller columns, one column per
 One pane in place of Explorer's Details and Preview panes, in Columns and in every view.
 
 - Previews of PDF, text and code, Markdown, images (zoom, pan, animated GIF), video and sound.
-- The details of what is selected, by type. A folder's size and contents are counted in the background.
+- The details of what is selected, by type. A folder's size and contents are counted when you press **Calculate**, or by themselves if you turn that on in the settings.
 - A fanned stack of thumbnails when several items are selected.
 - Alt+P, the View menu and the toolbar button show and hide it.
 - Each kind of preview can be switched off, and has a size limit, in the settings (Limits).
@@ -134,6 +134,9 @@ If you like it, you can support the work on Ko-fi: https://ko-fi.com/aristidebh
     - autoPreview: true
       $name: Open previews by themselves
       $description: When off, a button on the preview opens it, and switches back to the thumbnail.
+    - autoFolderSize: false
+      $name: Count folder sizes by itself
+      $description: A folder’s size, contents and types are counted when it is selected, which can use some CPU on a slow computer. Off, a button counts them when you ask.
     $name: Pane
   - previews:
     - livePreview: true
@@ -189,6 +192,7 @@ If you like it, you can support the work on Ko-fi: https://ko-fi.com/aristidebh
 #include <set>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include <windhawk_utils.h>
@@ -346,6 +350,7 @@ struct ModalScope {
 };
 
 std::atomic<bool> g_follow{true};
+std::atomic<bool> g_autoFolderSize{false};  // A folder's size is counted when it is selected; off, a button counts it.
 std::atomic<bool> g_detailsPane{true};     // The merged details pane.
 std::atomic<bool> g_previewRedirect{true};  // The Preview pane shows the merged pane.
 std::atomic<bool> g_panePreview{true};      // Documents and code get their real preview in the pane.
@@ -612,6 +617,7 @@ constexpr SettingInfo kSettings[] = {
     {L"previewRedirect", L"details.pane.previewRedirect", SettingKind::Bool, 1, L"", 0, 0, false},
     {L"paneAnimation", L"details.pane.paneAnimation", SettingKind::Bool, 1, L"", 0, 0, false},
     {L"autoPreview", L"details.pane.autoPreview", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"autoFolderSize", L"details.pane.autoFolderSize", SettingKind::Bool, 0, L"", 0, 0, false},
     {L"livePreview", L"details.previews.livePreview", SettingKind::Bool, 1, L"", 0, 0, false},
     {L"previewImages", L"details.previews.previewImages", SettingKind::Bool, 1, L"", 0, 0, false},
     {L"previewMedia", L"details.previews.previewMedia", SettingKind::Bool, 1, L"", 0, 0, false},
@@ -644,6 +650,8 @@ constexpr StringInfo kStrings[] = {
     {L"pane.filesfolders", L"%llu files, %llu folders"},
     {L"pane.showpreview", L"Show the preview"},
     {L"pane.showthumb", L"Show the thumbnail"},
+    {L"pane.getsize", L"Calculate"},
+    {L"pane.sizecontent", L"Size and content"},
 };
 
 constexpr StringInfo kStringsFr[] = {
@@ -670,6 +678,8 @@ constexpr StringInfo kStringsFr[] = {
     {L"pane.filesfolders", L"%llu fichiers, %llu dossiers"},
     {L"pane.showpreview", L"Afficher l\u2019aper\u00E7u"},
     {L"pane.showthumb", L"Afficher la miniature"},
+    {L"pane.getsize", L"Calculer"},
+    {L"pane.sizecontent", L"Taille et contenu"},
 };
 constexpr size_t kSettingCount = sizeof(kSettings) / sizeof(kSettings[0]);
 constexpr size_t kStringCount = sizeof(kStrings) / sizeof(kStrings[0]);
@@ -949,24 +959,22 @@ bool IsBrowsableArchive(IShellFolder* folder, PCUITEMID_CHILD child, const std::
         !(attributes & SFGAO_FOLDER) || !(attributes & SFGAO_STREAM)) {
         return false;
     }
-    size_t dot = name.rfind(L'.');
-    if (dot == std::wstring::npos) {
-        return false;
-    }
-    static const wchar_t* kinds[] = {L".zip", L".7z", L".rar", L".tar", L".tgz",
-                                     L".gz", L".bz2", L".tbz", L".xz", L".zst"};
-    bool known = false;
-    for (auto kind : kinds) {
-        known = known || _wcsicmp(name.c_str() + dot, kind) == 0;
-    }
-    if (!known) {
-        return false;
-    }
+    // The real name decides: with "hide extensions" on (Windows' default), "backup.zip" is shown as "backup".
     STRRET text = {};
     wchar_t path[MAX_PATH] = L"";
     if (FAILED(folder->GetDisplayNameOf(child, SHGDN_FORPARSING, &text)) ||
         FAILED(StrRetToBufW(&text, child, path, MAX_PATH)) || !path[0] || path[1] != L':') {
         return false;  // Not a plain local path.
+    }
+    static const wchar_t* kinds[] = {L".zip", L".7z", L".rar", L".tar", L".tgz",
+                                     L".gz", L".bz2", L".tbz", L".xz", L".zst"};
+    const wchar_t* extension = PathFindExtensionW(path);
+    bool known = false;
+    for (auto kind : kinds) {
+        known = known || _wcsicmp(extension, kind) == 0;
+    }
+    if (!known) {
+        return false;
     }
     wchar_t root[4] = {path[0], L':', L'\\', 0};
     if (GetDriveTypeW(root) != DRIVE_FIXED) {
@@ -2520,8 +2528,6 @@ struct WindowState {
     // View menu entry.
     ItemsVector menuItems{nullptr};
     muxc::RadioMenuFlyoutItem menuItem{nullptr};
-    muxc::CommandBar overflowBar{nullptr};     // The toolbar that holds it.
-    winrt::event_token settingsClickToken{};
     // The View button of the toolbar: while Columns shows, its icon is ours.
     muxc::Button viewButton{nullptr};
     mux::UIElement viewIconOriginal{nullptr};
@@ -2750,6 +2756,7 @@ struct Loaded {
 };
 
 struct Job {
+    LONG iconSide = 0;  // The size of the icons to ask for: the scale of the window's monitor. 0: the system's.
     unsigned generation = 0;
     Pidl folder;
     SortSpec spec;
@@ -2774,6 +2781,9 @@ struct Worker {
     std::atomic<bool> stop{false};
     std::atomic<bool> finished{false};
 };
+
+// The icon size of the job the worker is on.
+thread_local LONG t_iconSide = 0;
 
 std::mutex g_workersMutex;
 [[clang::no_destroy]] std::vector<std::unique_ptr<Worker>> g_workers;
@@ -2885,7 +2895,7 @@ void LoadIcons(PCIDLIST_ABSOLUTE folderPidl, std::vector<Pidl>& children,
         if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(&factory))) && factory) {
             HBITMAP bitmap = nullptr;
             // A row's icon is 20 DIP: the picture is asked for at that size on this screen, 32 px at least.
-            LONG side = MulDiv(20, (int)GetDpiForSystem(), 96);
+            LONG side = t_iconSide ? t_iconSide : MulDiv(20, (int)GetDpiForSystem(), 96);
             side = side < 32 ? 32 : side;
             HRESULT got = factory->GetImage(SIZE{side, side}, cachedOnly ? SIIGBF_INCACHEONLY : 0, &bitmap);
             if (SUCCEEDED(got) && bitmap) {
@@ -2952,6 +2962,7 @@ DWORD WINAPI WorkerProc(LPVOID param) {
             if (job->cancel && *job->cancel) {
                 continue;
             }
+            t_iconSide = job->iconSide;
             if (job->iconsOnly) {
                 try {
                     LoadIcons(job->folder.get(), job->iconChildren, job->iconIndices,
@@ -2999,6 +3010,17 @@ DWORD WINAPI WorkerProc(LPVOID param) {
     }
     CoUninitialize();
     worker->finished = true;
+    return 0;
+}
+
+// The size of a row's icon on the monitor this window is on (20 DIP at its scale), or 0 when unknown.
+LONG IconSideOf(WindowState* state) {
+    try {
+        if (state->xamlRoot) {
+            return (LONG)std::lround(20.0 * state->xamlRoot.RasterizationScale());
+        }
+    } catch (...) {
+    }
     return 0;
 }
 
@@ -3097,6 +3119,7 @@ void RequestLoad(WindowState* state, Column* column) {
     job->folder.reset(ILClone(column->folder.get()));
     job->spec = column->hasSpec ? column->spec : state->spec;
     job->hidden = ShowHiddenFiles();
+    job->iconSide = IconSideOf(state);
     job->maxItems = g_maxItems;
     job->queue = state->queue;
     job->cancel = column->cancel;
@@ -3112,6 +3135,7 @@ void RequestIcons(WindowState* state, Column* column) {
     }
     auto job = std::make_unique<Job>();
     job->iconsOnly = true;
+    job->iconSide = IconSideOf(state);
     job->generation = column->generation;
     job->folder.reset(ILClone(column->folder.get()));
     job->queue = state->queue;
@@ -6212,6 +6236,27 @@ void CancelRename(WindowState* state) {
 
 // ---- Undo for deletes and renames ----
 
+// The extension a row's name SHOWS: the real one when the name ends with it, nothing when Windows hides it
+// ("hide extensions for known file types"), in which case the shell puts it back when a name is set.
+// A name is never cut at its last dot: "v1.2 notes" is a name, not "v1" and ".2 notes".
+std::wstring FilePathOf(PCIDLIST_ABSOLUTE folder, PCUITEMID_CHILD child);
+std::wstring ShownExtensionOf(Column* column, size_t entry) {
+    if (entry >= column->entries.size() || column->entries[entry].folder) {
+        return std::wstring();
+    }
+    std::wstring path = FilePathOf(column->folder.get(), column->entries[entry].child.get());
+    if (path.empty()) {
+        return std::wstring();
+    }
+    const wchar_t* real = PathFindExtensionW(path.c_str());
+    size_t length = wcslen(real);
+    std::wstring const& shown = column->entries[entry].name;
+    if (length > 1 && shown.size() >= length && _wcsicmp(shown.c_str() + shown.size() - length, real) == 0) {
+        return real;
+    }
+    return std::wstring();
+}
+
 std::wstring FilePathOf(PCIDLIST_ABSOLUTE folder, PCUITEMID_CHILD child) {
     Pidl absolute(ILCombine(folder, child));
     wchar_t path[MAX_PATH] = L"";
@@ -6505,14 +6550,7 @@ void CommitRename(WindowState* state) {
     // Several items: the typed name, then a number, and each keeps its own
     // extension, as Explorer names them: "Name (1).txt", "Name (2).jpg".
     if (together.size() > 1 && !newName.empty()) {
-        auto extensionOf = [](std::wstring const& name) {
-            size_t dot = name.rfind(L'.');
-            return dot != std::wstring::npos && dot > 0 ? name.substr(dot) : std::wstring();
-        };
-        std::wstring firstExtension =
-            entryIndex < column->entries.size() && !column->entries[entryIndex].folder
-                ? extensionOf(column->entries[entryIndex].name)
-                : std::wstring();
+        std::wstring firstExtension = ShownExtensionOf(column, entryIndex);
         std::wstring base = newName;
         if (!firstExtension.empty() && base.size() > firstExtension.size() &&
             _wcsicmp(base.c_str() + base.size() - firstExtension.size(), firstExtension.c_str()) == 0) {
@@ -6534,11 +6572,10 @@ void CommitRename(WindowState* state) {
             }
             number++;
             std::wstring name = base + L" (" + std::to_wstring(number) + L")" +
-                                (column->entries[entry].folder
-                                     ? std::wstring()
-                                     : extensionOf(column->entries[entry].name));
+                                ShownExtensionOf(column, entry);
             std::wstring oldPath = FilePathOf(column->folder.get(), column->entries[entry].child.get());
             PITEMID_CHILD renamed = nullptr;
+            ModalScope modal;
             HRESULT hr = parent->SetNameOf(state->topLevel, column->entries[entry].child.get(),
                                            name.c_str(), SHGDN_INFOLDER, &renamed);
             Wh_Log(L"rename %d of %d, \"%s\" to \"%s\": hr=0x%08lX", number, (int)together.size(),
@@ -6575,6 +6612,7 @@ void CommitRename(WindowState* state) {
     PITEMID_CHILD renamed = nullptr;
     std::wstring oldPath = FilePathOf(column->folder.get(),
                                       column->entries[entryIndex].child.get());
+    ModalScope modal;
     hr = parent->SetNameOf(state->topLevel, column->entries[entryIndex].child.get(),
                            newName.c_str(), SHGDN_INFOLDER, &renamed);
     Wh_Log(L"rename \"%s\" to \"%s\": hr=0x%08lX",
@@ -6695,11 +6733,9 @@ void BeginRename(WindowState* state, Column* column, size_t entryIndex) {
     state->rename = std::move(rename);
     g_renaming = true;
     box.Focus(mux::FocusState::Programmatic);
-    size_t dot = name.rfind(L'.');
-    bool keepExtension = !column->entries[entryIndex].folder &&
-                         dot != std::wstring::npos && dot > 0;
+    size_t extensionLength = ShownExtensionOf(column, entryIndex).size();
     box.SelectionStart(0);
-    box.SelectionLength((uint32_t)(keepExtension ? dot : name.size()));
+    box.SelectionLength((uint32_t)(name.size() - (extensionLength < name.size() ? extensionLength : 0)));
     Wh_Log(L"rename started for \"%s\"", name.c_str());
 }
 
@@ -9079,6 +9115,7 @@ HRESULT PasteIntoFolder(WindowState* state, PCIDLIST_ABSOLUTE folder) {
     DWORD allowed = effect;
     hr = drop->DragEnter(data, MK_LBUTTON, where, &allowed);
     if (SUCCEEDED(hr) && allowed != DROPEFFECT_NONE) {
+        ModalScope modal;
         hr = drop->Drop(data, 0, where, &allowed);
         if (SUCCEEDED(hr) && effect == DROPEFFECT_MOVE) {
             OleSetClipboard(nullptr);
@@ -11050,10 +11087,25 @@ void SyncSelectionFromExplorer(WindowState* state) {
             wanted.push_back(i);
         }
     } else if (!selection.empty()) {
-        if (selection.size() * column->entries.size() > 4000000) {
-            return;  // Too much to match here.
+        // By the bytes of the item id first (one pass over each list), so an inverted selection in a big
+        // folder does not make the window wait; an item whose id differs in bytes is looked for the slow way.
+        auto bytesOf = [](PCUITEMID_CHILD id) { return std::string((const char*)id, ILGetSize(id)); };
+        std::unordered_map<std::string, size_t> byBytes;
+        byBytes.reserve(column->entries.size());
+        for (size_t i = 0; i < column->entries.size(); i++) {
+            byBytes.emplace(bytesOf(column->entries[i].child.get()), i);
         }
+        size_t slowWork = 0;
         for (auto& child : selection) {
+            auto found = byBytes.find(bytesOf(child.get()));
+            if (found != byBytes.end()) {
+                wanted.push_back(found->second);
+                continue;
+            }
+            slowWork += column->entries.size();
+            if (slowWork > 4000000) {
+                return;  // Too much to match here.
+            }
             for (size_t i = 0; i < column->entries.size(); i++) {
                 if (ILIsEqual(column->entries[i].child.get(), child.get())) {
                     wanted.push_back(i);
@@ -11065,7 +11117,9 @@ void SyncSelectionFromExplorer(WindowState* state) {
     }
     auto shown = SelectedEntries(column, column->list);
     std::sort(shown.begin(), shown.end());
-    if (shown == wanted) {
+    // A group header can be selected too, and it is no entry: the same entries with a header selected is
+    // not the same selection (Invert selection, or Select none, must clear it).
+    if (shown == wanted && column->list.SelectedItems().Size() == shown.size()) {
         return;
     }
     try {
@@ -13128,6 +13182,7 @@ void DropItems(WindowState* state, Pidl sourceFolder, std::vector<Pidl> children
         DWORD offered = DROPEFFECT_COPY | DROPEFFECT_MOVE | DROPEFFECT_LINK;
         drop->DragOver(keyState, where, &offered);
         DWORD result = offered;
+        ModalScope modal;
         hr = drop->Drop(data, keyState, where, &result);
         Wh_Log(L"dropped %d item(s) on \"%s\": effect %lu, hr=0x%08lX", (int)children.size(),
             PathOf(targetFolder.get()).c_str(), (unsigned long)result, hr);
@@ -14083,6 +14138,7 @@ struct PanelDropTarget : IDropTarget {
             DWORD buttons = lastButtons;
             DWORD dropKeys = (keys & ~(DWORD)(MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)) | (buttons ? buttons : MK_LBUTTON);
             DWORD result = wanted;
+            ModalScope modal;
             HRESULT hr = folder->Drop(data, dropKeys, pt, &result);
             Wh_Log(L"drop coming in on \"%s\": effect %lu, hr=0x%08lX", PathOf(folderPidl.get()).c_str(),
                 (unsigned long)result, hr);
@@ -14541,10 +14597,7 @@ void OnCommandBarPointer(Inspectable const& sender, bool force = false) {
                 // outside the tree that was walked. Its button is still one of the command bar's
                 // own commands.
                 int found = 0;
-                auto bar = state->overflowBar;
-                if (!bar) {
-                    bar = FindCommandBar(root, 0, found);
-                }
+                auto bar = FindCommandBar(root, 0, found);
                 if (bar) {
                     for (auto const& command : bar.PrimaryCommands()) {
                         if (auto button = command.try_as<muxc::Button>()) {
@@ -15025,6 +15078,7 @@ struct DetailsPane {
     std::vector<uint64_t> stackKeys;  // The thumbnails the stack shows now.
     int previewSeen = 0;
     std::shared_ptr<PaneData> deferred;                       // A big picture that waits for the corner button.
+    std::shared_ptr<PaneData> shownData;                       // The data of the page on show (the size button needs it).
     std::shared_ptr<std::atomic<bool>> sizeCancel;            // Stops the size of folders being worked out.
     std::vector<muxc::TextBlock> sizeBlocks;                  // Where the size, the contents and the types go.
     winrt::Windows::Media::Playback::MediaPlayer mediaPlayer{nullptr};  // The player of the video or sound on show.
@@ -15048,9 +15102,6 @@ struct DetailsPane {
     mux::FrameworkElement toolNative{nullptr};     // Explorer's own Details toggle (hidden).
     muxc::CommandBar toolBar{nullptr};
     muxc::IconElement toolIcon{nullptr};           // Its icon, moved to ours.
-    muxc::IconElement toolMono{nullptr};  // The same icon in black, for when the button is ticked (dark theme).
-    muxc::IconElement toolMonoLight{nullptr};  // In white (light theme).
-    bool toolIconTicked = false;
     ULONGLONG toggleHoldUntil = 0;
     muxc::MenuFlyoutItemBase navSeparator{nullptr};  // The line that followed it in the Show submenu (hidden).
     muxc::IconElement movedIcon{nullptr};  // The icon Explorer gave its Details entry, now on ours.
@@ -15768,6 +15819,23 @@ muxc::Grid PaneStack(PaneData const& data, std::vector<uint64_t> const& before, 
     return stack;
 }
 
+void PaneStartSizeJob(WindowState* state, DetailsPane* pane, std::wstring const& key, std::shared_ptr<PaneData> const& data);
+
+// The rows where the size, the contents and the types of folders go, filled in when the count has run.
+void PaneShowSizeRows(DetailsPane* pane, muxc::StackPanel const& host) {
+    host.Children().Clear();
+    pane->sizeBlocks.clear();
+    auto sizeList = PaneRows({{Str(L"pane.totalsize"), L"\u2026"}, {Str(L"pane.insides"), L"\u2026"}, {Str(L"pane.types"), L"\u2026"}});
+    for (auto child : sizeList.Children()) {
+        if (auto grid = child.try_as<muxc::Grid>()) {
+            if (auto block = grid.Children().GetAt(1).try_as<muxc::TextBlock>()) {
+                pane->sizeBlocks.push_back(block);
+            }
+        }
+    }
+    host.Children().Append(sizeList);
+}
+
 mux::UIElement PaneBuild(PaneData const& data, DetailsPane* pane) {
     muxc::StackPanel page;  // The part that stays on top: preview, name, actions.
     page.Spacing(12);
@@ -16052,16 +16120,43 @@ mux::UIElement PaneBuild(PaneData const& data, DetailsPane* pane) {
     // The details, then the rest of them behind a toggle.
     details.Children().Append(PaneRows(data.rows));
     if (!data.sizeRoots.empty()) {
-        // What the folders hold, filled in when the background count has run.
-        auto sizeList = PaneRows({{Str(L"pane.totalsize"), L"\u2026"}, {Str(L"pane.insides"), L"\u2026"}, {Str(L"pane.types"), L"\u2026"}});
-        for (auto child : sizeList.Children()) {
-            if (auto grid = child.try_as<muxc::Grid>()) {
-                if (auto block = grid.Children().GetAt(1).try_as<muxc::TextBlock>()) {
-                    pane->sizeBlocks.push_back(block);
+        muxc::StackPanel sizeHost;
+        if (g_autoFolderSize) {
+            PaneShowSizeRows(pane, sizeHost);
+        } else {
+            // A row like the others, with a compact button where the value goes: the count is made when it is
+            // asked for (it can be heavy on a slow computer).
+            muxc::Grid entry;
+            muxc::ColumnDefinition nameColumn, valueColumn;
+            nameColumn.Width(mux::GridLength{1, mux::GridUnitType::Auto});
+            nameColumn.MaxWidth(150);
+            valueColumn.Width(mux::GridLength{1, mux::GridUnitType::Star});
+            entry.ColumnDefinitions().Append(nameColumn);
+            entry.ColumnDefinitions().Append(valueColumn);
+            entry.ColumnSpacing(16);
+            auto label = MakeText(Str(L"pane.sizecontent"), 12, false, true);
+            label.VerticalAlignment(mux::VerticalAlignment::Center);
+            muxc::Grid::SetColumn(label, 0);
+            entry.Children().Append(label);
+            auto button = LoadXaml(std::wstring(L"<Button ") + kXamlNs +
+                                   L" Padding='12,4' MinHeight='0' FontSize='13' HorizontalAlignment='Right'/>").as<muxc::Button>();
+            button.Content(winrt::box_value(winrt::hstring{Str(L"pane.getsize")}));
+            muxc::Grid::SetColumn(button, 1);
+            entry.Children().Append(button);
+            auto weakHost = winrt::make_weak(sizeHost);
+            const PaneData* built = &data;
+            Keep(button, button.Click(winrt::auto_revoke, [weakHost, built](Inspectable const&, mux::RoutedEventArgs const&) {
+                WindowState* now = StateForThisThread(false);
+                auto host = weakHost.get();
+                if (g_unloading || !now || !now->details || !host || now->details->shownData.get() != built) {
+                    return;
                 }
-            }
+                PaneShowSizeRows(now->details, host);
+                PaneStartSizeJob(now, now->details, now->details->shownKey, now->details->shownData);
+            }));
+            sizeHost.Children().Append(entry);
         }
-        details.Children().Append(sizeList);
+        details.Children().Append(sizeHost);
     }
     if (!data.more.empty()) {
         auto more = PaneRows(data.more);
@@ -16160,51 +16255,6 @@ void PaneStopMedia(DetailsPane* pane) {
     }
 }
 
-// The wheel over the preview is sent to the window under the mouse by the pane itself: the
-// handler's window is in another process, and the wheel did not scroll it by itself.
-// A low-level hook runs on the thread that installed it, so each window thread has its own.
-static thread_local HHOOK g_wheelHook = nullptr;
-static thread_local HWND g_wheelHost = nullptr;
-
-LRESULT CALLBACK PaneWheelProc(int code, WPARAM wParam, LPARAM lParam) {
-    if (code == HC_ACTION && wParam == WM_MOUSEWHEEL && g_wheelHost && IsWindowVisible(g_wheelHost)) {
-        auto* info = (MSLLHOOKSTRUCT*)lParam;
-        HWND target = WindowFromPoint(info->pt);
-        if (target && (target == g_wheelHost || IsChild(g_wheelHost, target))) {
-            WORD keys = 0;
-            if (GetKeyState(VK_CONTROL) & 0x8000) {
-                keys |= MK_CONTROL;
-            }
-            if (GetKeyState(VK_SHIFT) & 0x8000) {
-                keys |= MK_SHIFT;
-            }
-            PostMessageW(target, WM_MOUSEWHEEL, MAKEWPARAM(keys, (WORD)HIWORD(info->mouseData)),
-                         MAKELPARAM((WORD)(short)info->pt.x, (WORD)(short)info->pt.y));
-            return 1;
-        }
-    }
-    return CallNextHookEx(nullptr, code, wParam, lParam);
-}
-
-// On while the pointer is over the preview: every mouse event of the system goes through this
-// thread's message loop while it is on.
-void PaneWheelOn(HWND host) {
-    g_wheelHost = host;
-    if (!g_wheelHook) {
-        g_wheelHook = SetWindowsHookExW(WH_MOUSE_LL, PaneWheelProc, ModHandle(), 0);
-    }
-}
-
-void PaneWheelOff(HWND host) {
-    if (g_wheelHost == host) {
-        g_wheelHost = nullptr;
-        if (g_wheelHook) {
-            UnhookWindowsHookEx(g_wheelHook);
-            g_wheelHook = nullptr;
-        }
-    }
-}
-
 void PaneClosePreview(DetailsPane* pane) {
     pane->deferred = nullptr;
     if (pane->sizeCancel) {
@@ -16212,7 +16262,6 @@ void PaneClosePreview(DetailsPane* pane) {
         pane->sizeCancel = nullptr;
     }
     PaneStopMedia(pane);
-    PaneWheelOff(pane->host);
     if (pane->handler) {
         IPreviewHandler* handler = pane->handler;
         pane->handler = nullptr;
@@ -17769,93 +17818,6 @@ void PaneSetButtonIcon(mux::FrameworkElement const& button, muxc::IconElement co
     }
 }
 
-// The icon of a button is an SVG file of Explorer's own, in two colours. A copy of it is made
-// with every fill and stroke set to one colour, written to the temp folder and loaded from there.
-std::string PaneRecolorSvg(std::string const& in, std::string const& color) {
-    std::string out;
-    size_t i = 0;
-    while (i < in.size()) {
-        bool isFill = in.compare(i, 4, "fill") == 0;
-        bool isStroke = in.compare(i, 6, "stroke") == 0;
-        size_t keyLength = isFill ? 4 : isStroke ? 6 : 0;
-        bool word = i == 0 || !(isalnum((unsigned char)in[i - 1]) || in[i - 1] == '-' || in[i - 1] == '_');
-        if (keyLength && word && i + keyLength < in.size() && (in[i + keyLength] == '=' || in[i + keyLength] == ':')) {
-            bool attribute = in[i + keyLength] == '=';
-            size_t start = i + keyLength + 1;
-            char quote = 0;
-            if (attribute && start < in.size() && (in[start] == '"' || in[start] == '\'')) {
-                quote = in[start];
-                start++;
-            }
-            size_t end = start;
-            while (end < in.size() && (quote ? in[end] != quote : (in[end] != ';' && in[end] != '"' && in[end] != '\'' && in[end] != '}' && in[end] != ' ' && in[end] != '>'))) {
-                end++;
-            }
-            std::string value = in.substr(start, end - start);
-            out.append(in, i, start - i);
-            bool keep = value == "none" || value.rfind("url(", 0) == 0;
-            out += keep ? value : color;
-            i = end;
-            continue;
-        }
-        out += in[i++];
-    }
-    // Shapes with no fill of their own are black: the root gets the colour to hand down.
-    size_t root = out.find("<svg");
-    if (root != std::string::npos) {
-        size_t close = out.find('>', root);
-        if (close != std::string::npos && out.substr(root, close - root).find("fill=") == std::string::npos) {
-            out.insert(root + 4, " fill=\"" + color + "\"");
-        }
-    }
-    return out;
-}
-
-muxc::IconElement PaneMonoIcon(muxc::ImageIcon const& original, std::wstring const& uri, const char* color, const wchar_t* name) {
-    if (uri.rfind(L"file:///", 0) != 0) {
-        return nullptr;
-    }
-    std::wstring path = uri.substr(8);
-    std::wstring decoded;
-    for (size_t i = 0; i < path.size(); i++) {
-        if (path[i] == L'%' && i + 2 < path.size() && iswxdigit(path[i + 1]) && iswxdigit(path[i + 2])) {
-            decoded += (wchar_t)wcstol(path.substr(i + 1, 2).c_str(), nullptr, 16);
-            i += 2;
-        } else {
-            decoded += path[i] == L'/' ? L'\\' : path[i];
-        }
-    }
-    HANDLE file = CreateFileW(decoded.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
-                              FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
-        Wh_Log(L"details pane: the icon file could not be read, gle=%lu", GetLastError());
-        return nullptr;
-    }
-    std::string svg(200 * 1024, '\0');
-    DWORD got = 0;
-    ReadFile(file, svg.data(), (DWORD)svg.size(), &got, nullptr);
-    CloseHandle(file);
-    svg.resize(got);
-    std::string mono = PaneRecolorSvg(svg, color);
-    // The recoloured picture stays in memory: the mod writes no file for it.
-    winrt::Windows::Storage::Streams::InMemoryRandomAccessStream stream;
-    {
-        winrt::Windows::Storage::Streams::DataWriter writer{stream};
-        writer.WriteBytes(winrt::array_view<const uint8_t>((const uint8_t*)mono.data(), (uint32_t)mono.size()));
-        writer.StoreAsync().get();
-        writer.DetachStream();
-    }
-    stream.Seek(0);
-    mux::Media::Imaging::SvgImageSource source;
-    source.SetSourceAsync(stream);
-    muxc::ImageIcon icon;
-    icon.Source(source);
-    icon.Width(original.Width());
-    icon.Height(original.Height());
-    Wh_Log(L"details pane: a one-colour icon (%S, %s) was made", color, name);
-    return icon;
-}
-
 // Explorer's Details toggle at the far right of the toolbar ("PaneToggle") is replaced by a toggle
 // of ours: the same icon and label, in the same place, ticked while the pane shows. Choosing it
 // sends the shortcut that shows or hides the pane.
@@ -17877,8 +17839,6 @@ void PaneToolbarSetup(WindowState* state, mux::DependencyObject const& node) {
             pane->toolBar = nullptr;
             pane->toolNative = nullptr;
             pane->toolIcon = nullptr;
-        pane->toolMono = nullptr;
-        pane->toolMonoLight = nullptr;
         }
         mux::DependencyObject top = node;
         for (int i = 0; i < 60; i++) {
@@ -17922,32 +17882,12 @@ void PaneToolbarSetup(WindowState* state, mux::DependencyObject const& node) {
             PaneSetButtonIcon(native, nullptr);  // Explorer's icon moves to ours.
             button.Icon(icon);
             pane->toolIcon = icon;
-            // The same image, asked for in one colour: the runtime may know ImageIcon's
-            // ShowAsMonochrome even though the headers here do not, so it is made from markup.
-            try {
-                if (auto image = icon.try_as<muxc::ImageIcon>()) {
-                    auto source = image.Source();
-                    std::wstring tag, uri;
-                    if (auto svg = source.try_as<mux::Media::Imaging::SvgImageSource>()) {
-                        tag = L"SvgImageSource";
-                        uri = svg.UriSource() ? svg.UriSource().AbsoluteUri().c_str() : L"";
-                    } else if (auto bitmap = source.try_as<mux::Media::Imaging::BitmapImage>()) {
-                        tag = L"BitmapImage";
-                        uri = bitmap.UriSource() ? bitmap.UriSource().AbsoluteUri().c_str() : L"";
-                    }
-                    Wh_Log(L"details pane: the toolbar icon is an ImageIcon with a %s, uri %s", tag.empty() ? L"source of another kind" : tag.c_str(),
-                        uri.c_str());
-                    if (!tag.empty() && !uri.empty()) {
-                        pane->toolMono = PaneMonoIcon(image, uri, "#000000", L"dark");
-                        pane->toolMonoLight = PaneMonoIcon(image, uri, "#FFFFFF", L"light");
-                    }
-                }
-            } catch (...) {
-                LogHresult(L"the one-colour toolbar icon");
-            }
         }
-        button.IsChecked(pane->visible && !pane->leaving);
-        pane->toolClickToken = button.Click([](Inspectable const&, mux::RoutedEventArgs const&) {
+        button.IsChecked(false);  // Never shown as ticked: no accent colour, and the icon stays as Explorer draws it.
+        pane->toolClickToken = button.Click([](Inspectable const& sender, mux::RoutedEventArgs const&) {
+            if (auto toggle = sender.try_as<muxc::AppBarToggleButton>()) {
+                toggle.IsChecked(false);
+            }
             WindowState* now = StateForThisThread(false);
             if (now && now->details && !g_unloading) {
                 now->details->shortcutAt = GetTickCount64() + 60;
@@ -18010,8 +17950,6 @@ void PaneMenuRestore(DetailsPane* pane) {
         pane->toolBar = nullptr;
         pane->toolNative = nullptr;
         pane->toolIcon = nullptr;
-        pane->toolMono = nullptr;
-        pane->toolMonoLight = nullptr;
 
         if (pane->menuItems && pane->navEntry) {
             uint32_t at = 0;
@@ -18104,6 +18042,7 @@ void PaneShow(WindowState* state, DetailsPane* pane, std::wstring const& key, st
     }
     try {
         auto inner = pane->inner;
+        pane->shownData = data;
         auto page = PaneBuild(*data, pane);
         auto layer = LoadXaml(std::wstring(L"<Grid ") + kXamlNs + L" Background='{ThemeResource SolidBackgroundFillColorBaseBrush}'/>").as<muxc::Grid>();
         layer.Children().Append(page);
@@ -18113,7 +18052,7 @@ void PaneShow(WindowState* state, DetailsPane* pane, std::wstring const& key, st
         }
         inner.Children().Append(layer);
         PaneAnimateIn(state, pane, dx, dy, layer);
-        if (!data->sizeRoots.empty()) {
+        if (!data->sizeRoots.empty() && g_autoFolderSize) {
             PaneStartSizeJob(state, pane, key, data);
         }
         if (g_panePreview && (data->previewKind == 2 || data->previewKind == 3) && pane->preview) {
@@ -18416,36 +18355,8 @@ void PaneStep(WindowState* state, DetailsPane* pane) {
             LogHresult(L"the navigation pane entry");
         }
     }
-    if (pane->toolToggle) {
-        // The button flips itself when it is clicked. Until the pane has followed (or a moment has
-        // passed) the tick does not set it back, which made it flicker.
-        bool want = pane->visible && !pane->leaving;
-        bool have = pane->toolToggle.IsChecked().Value();
-        if (have != want && pane->toggleHoldUntil && GetTickCount64() < pane->toggleHoldUntil) {
-            // Waiting for the pane.
-        } else {
-            if (have != want) {
-                pane->toolToggle.IsChecked(want);
-                have = want;
-            }
-        }
-        // Ticked, the button is on the accent colour: the duotone icon would lose its blue part
-        // there, so a one-colour glyph is shown instead while it is ticked.
-        if (pane->toolIcon && have != pane->toolIconTicked) {
-            pane->toolIconTicked = have;
-            if (have && pane->toolMono && pane->toolMonoLight) {
-                // The accent colour is light in the dark theme: a dark icon; and the other way.
-                bool darkTheme = pane->toolToggle.ActualTheme() == mux::ElementTheme::Dark;
-                pane->toolToggle.Icon(darkTheme ? pane->toolMono : pane->toolMonoLight);
-            } else if (have) {
-                muxc::FontIcon glyph;
-                glyph.FontFamily(mux::Media::FontFamily(L"Segoe Fluent Icons"));
-                glyph.Glyph(L"");
-                pane->toolToggle.Icon(glyph);
-            } else {
-                pane->toolToggle.Icon(pane->toolIcon);
-            }
-        }
+    if (pane->toolToggle && pane->toolToggle.IsChecked().Value()) {
+        pane->toolToggle.IsChecked(false);  // A click flips it; it is set back, so it never shows as ticked.
     }
     if (pane->navEntry && pane->navOriginal && pane->navEntry.IsChecked() != pane->navOriginal.IsChecked()) {
         pane->navEntry.IsChecked(pane->navOriginal.IsChecked());
@@ -18537,7 +18448,6 @@ void PaneStep(WindowState* state, DetailsPane* pane) {
         GetWindowRect(pane->host, &hostRect);
         bool over = IsWindowVisible(pane->host) && PtInRect(&hostRect, cursor);
         if (over) {
-            PaneWheelOn(pane->host);
             pane->overTicks++;
             if (!pane->previewFocused && pane->overTicks >= 3 && !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
                 // The handler is asked to take the focus itself: its window may be in another process,
@@ -18547,7 +18457,6 @@ void PaneStep(WindowState* state, DetailsPane* pane) {
                 pane->previewFocused = true;
             }
         } else {
-            PaneWheelOff(pane->host);
             pane->overTicks = 0;
             if (pane->previewFocused) {
                 pane->previewFocused = false;
@@ -18671,7 +18580,6 @@ void AbandonDetails(WindowState* state) {
         PaneStopMedia(pane);  // A song or video must not go on playing with no window to stop it.
     } catch (...) {
     }
-    PaneWheelOff(pane->host);
     pane->handler = nullptr;  // Let go: the window it lived in is gone.
     pane->host = nullptr;
     PaneStopTimers(pane);
@@ -18695,8 +18603,6 @@ void AbandonDetails(WindowState* state) {
     (void)winrt::detach_abi(pane->toolNative);
     (void)winrt::detach_abi(pane->toolBar);
     (void)winrt::detach_abi(pane->toolIcon);
-    (void)winrt::detach_abi(pane->toolMono);
-    (void)winrt::detach_abi(pane->toolMonoLight);
     (void)winrt::detach_abi(pane->mediaPlayer);
     (void)winrt::detach_abi(pane->pendingImage);
     (void)winrt::detach_abi(pane->mediaElement);
@@ -19286,9 +19192,12 @@ void WaitForCoroutines() {
 
 // Work for a window's thread that must not run inside a message loop of the mod's own (see ModalScope):
 // it waits, by a one-shot timer, until none is on the stack.
+// The timers that wait: held here, since a timer nobody holds is dropped and never ticks.
+[[clang::no_destroy]] thread_local std::vector<mud::DispatcherQueueTimer> t_waitTimers;
+
 void RunOutsideModal(mud::DispatcherQueue const& queue, std::shared_ptr<std::function<void()>> const& work) {
     if (t_modalDepth == 0) {
-        (*work)();
+        (*work)();  // The timers stay in the list: this may be a tick of one of them.
         return;
     }
     static int logged = 0;
@@ -19301,6 +19210,7 @@ void RunOutsideModal(mud::DispatcherQueue const& queue, std::shared_ptr<std::fun
         sender.Stop();
         RunOutsideModal(queue, work);
     }));
+    t_waitTimers.push_back(timer);
     timer.Start();
 }
 
@@ -19435,6 +19345,9 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
     return module;
 }
 
+// What the settings that need a rebuild added up to when they were last read.
+unsigned long long g_rebuildSignature = 0;
+
 void LoadSettings() {
     g_enabled = SettingBool(L"enabled");
     g_restore = SettingBool(L"restoreOnOpen");
@@ -19453,6 +19366,7 @@ void LoadSettings() {
     g_paneMuted = Wh_GetIntValue(L"ui.paneMuted", 0) != 0;
     g_staleAccent = SettingBool(L"staleAccent");
     g_autoPreview = SettingBool(L"autoPreview");
+    g_autoFolderSize = SettingBool(L"autoFolderSize");
     g_rememberSort = SettingBool(L"rememberSort");
     g_rememberWidth = SettingBool(L"rememberWidth");
     g_rememberLayout = SettingBool(L"rememberLayout");
@@ -19483,6 +19397,7 @@ void LoadSettings() {
 BOOL Wh_ModInit() {
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     LoadSettings();
+    g_rebuildSignature = RebuildSignature();
 #if defined(_M_ARM64) || defined(__aarch64__)
     const wchar_t* arch = L"arm64";
 #elif defined(_M_X64) || defined(__x86_64__)
@@ -19490,7 +19405,7 @@ BOOL Wh_ModInit() {
 #else
     const wchar_t* arch = L"x86";
 #endif
-    Wh_Log(L"explorer-extras v0.66.2 start, compiled as %s, pid=%lu, columns=%d width=%d..%d follow=%d",
+    Wh_Log(L"explorer-extras v0.68.2 start, compiled as %s, pid=%lu, columns=%d width=%d..%d follow=%d",
         arch, GetCurrentProcessId(), g_enabled ? 1 : 0, g_minWidth.load(),
         g_maxWidth.load(), g_follow ? 1 : 0);
 
@@ -19517,7 +19432,6 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    static unsigned long long rebuildSignature = RebuildSignature();
     LoadSettings();
     Wh_Log(L"settings changed: columns=%d details=%d width=%d..%d maxItems=%d",
         g_enabled ? 1 : 0, g_detailsPane ? 1 : 0, g_minWidth.load(), g_maxWidth.load(), g_maxItems.load());
@@ -19528,10 +19442,10 @@ void Wh_ModSettingsChanged() {
         } else {
             CloseEverything();
         }
-    } else if (unsigned long long now = RebuildSignature(); now != rebuildSignature) {
+    } else if (RebuildSignature() != g_rebuildSignature) {
         RebuildEverywhere();  // Widths, shading, names or limits changed: the columns are fitted and read again.
     }
-    rebuildSignature = RebuildSignature();
+    g_rebuildSignature = RebuildSignature();
 }
 
 void Wh_ModBeforeUninit() {
