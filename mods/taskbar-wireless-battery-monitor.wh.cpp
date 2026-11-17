@@ -7,8 +7,6 @@
 // @github          https://github.com/yaoiyiXu
 // @homepage        https://github.com/yaoiyiXu/taskbar-wireless-battery-monitor
 // @include         windhawk.exe
-// @architecture    x86
-// @architecture    x86-64
 // @license         GPL-3.0-or-later
 // @compilerOptions -lhid -lsetupapi -lcfgmgr32 -lole32 -lcomctl32 -lgdi32 -lruntimeobject -lshell32 -ladvapi32
 // ==/WindhawkMod==
@@ -4063,7 +4061,15 @@ std::wstring DumpHidCollections() {
 std::vector<DeviceStatus> PollAllDevices() { return wb_poll::PollAllDevices(); }
 std::wstring DumpHidCollections() { return wb_poll::DumpHidCollections(); }
 
-namespace wb_render { namespace widget { bool Create(HINSTANCE,HWND,UINT,bool); void Destroy(); bool Alive(); void SetItems(const std::vector<WidgetItem>&,const std::wstring&); void SetLightTheme(bool); bool Reposition(); }
+namespace wb_render {
+namespace widget {
+bool Create(HINSTANCE, HWND, UINT, bool);
+void Destroy();
+bool Alive();
+void SetItems(const std::vector<WidgetItem>&, const std::wstring&);
+void SetLightTheme(bool);
+bool Reposition();
+}
 namespace {
 
 HWND g_wnd, g_taskbar, g_tip, g_notify, g_rebar;
