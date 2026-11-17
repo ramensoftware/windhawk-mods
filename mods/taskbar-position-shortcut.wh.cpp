@@ -2,7 +2,7 @@
 // @id              taskbar-position-shortcut
 // @name            Taskbar Position Shortcut
 // @description     Adds quick taskbar position controls and optional saved positions for individual apps.
-// @version         0.0.6
+// @version         0.1.0
 // @author          Oji
 // @github          https://github.com/eliogos
 // @include         explorer.exe
@@ -13,10 +13,9 @@
 // ==WindhawkModReadme==
 /*
 # Taskbar Position Shortcut
-
 Adds a **Taskbar position** submenu when you right-click the Windows 11 taskbar. Move it to any edge without saving anything, or set a position for a specific app.
-
 Finally, Windows brought back a feature they thought was not being used. I prefer my taskbar on the left when working in Photoshop, and on top when scrolling through layers in After Effects.
+![Taskbar position context menu](https://github.com/user-attachments/assets/075a6225-9a6d-47d9-895e-a700c31698cd)
 
 ## Features
 
@@ -33,6 +32,8 @@ App rules are saved locally in Windhawk and won't appear in its Settings tab.
 Requires Windows 11 with native taskbar positioning. I've tried it on builds **26220.9836** and **26300.9818**. Older builds haven't been tested. I've only tested it with one monitor.
 
 The mod doesn't change the saved Windows taskbar position. It may conflict with other mods that move the taskbar.
+
+Credits: Taskbar menu injection based on `taskbar-restart-explorer`; runtime position hooking based on `taskbar-on-top`.
 */
 // ==/WindhawkModReadme==
 
@@ -109,6 +110,7 @@ static constexpr EdgeOption kEdges[] = {
 
 
 std::atomic<bool> g_taskbarViewModuleHooked{false};
+std::atomic<bool> g_menuHookAttempted{false};
 std::atomic<bool> g_unloading{false};
 std::atomic<bool> g_supported{false};
 std::atomic<DWORD> g_windowsDefaultEdge{ABE_BOTTOM};
@@ -217,9 +219,12 @@ void LoadAppRules() {
 using RegGetValueW_t = decltype(&RegGetValueW);
 RegGetValueW_t RegGetValueW_Original = nullptr;
 thread_local bool g_inTaskbarSettingsLoad = false;
+void StartMonitorWhenReady();
+void ActivateTaskbarHost();
 using TrayUI_GetSaveStateAndInitRects_t = void(__cdecl*)(void*);
 TrayUI_GetSaveStateAndInitRects_t TrayUI_GetSaveStateAndInitRects_Original = nullptr;
 void __cdecl TrayUI_GetSaveStateAndInitRects_Hook(void* pThis) {
+    ActivateTaskbarHost();
     bool old = g_inTaskbarSettingsLoad;
     g_inTaskbarSettingsLoad = true;
     TrayUI_GetSaveStateAndInitRects_Original(pThis);
@@ -233,6 +238,17 @@ HRESULT __cdecl CSecondaryTray_LoadSettings_Hook(void* pThis) {
     HRESULT result = CSecondaryTray_LoadSettings_Original(pThis);
     g_inTaskbarSettingsLoad = old;
     return result;
+}
+using TrayUI_WndProc_t = LRESULT(WINAPI*)(void*, HWND, UINT, WPARAM, LPARAM, bool*);
+TrayUI_WndProc_t TrayUI_WndProc_Original = nullptr;
+LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis, HWND window, UINT message,
+                                    WPARAM wParam, LPARAM lParam, bool* flag) {
+    if (message == kTaskbarLocationMessage && wParam == 6 &&
+        !g_unloading.load() && g_hostProcess.load()) {
+        int effective = g_effectiveEdge.load();
+        if (IsValidEdge(effective)) lParam = static_cast<LPARAM>(effective);
+    }
+    return TrayUI_WndProc_Original(pThis, window, message, wParam, lParam, flag);
 }
 using TaskbarSettings_Location_t = int(__cdecl*)(void* pThis);
 TaskbarSettings_Location_t TaskbarSettings_Location_Original = nullptr;
@@ -275,13 +291,14 @@ int __cdecl TaskbarSettings_Location_Hook(void* pThis) {
 
 LONG WINAPI RegGetValueW_Hook(HKEY hkey, LPCWSTR subkey, LPCWSTR value,
                               DWORD flags, LPDWORD type, PVOID data, LPDWORD size) {
+    DWORD bufferSize = size ? *size : 0;
     LONG result = RegGetValueW_Original(hkey, subkey, value, flags, type, data, size);
     if (g_unloading.load() || !g_hostProcess.load() ||
         (!g_inTaskbarSettingsLoad &&
          GetCurrentThreadId() != g_taskbarThreadId.load()) ||
         hkey != HKEY_CURRENT_USER || !subkey || !value || !data || !size ||
         _wcsicmp(subkey, kRegistryPath) || _wcsicmp(value, kLocationValue) ||
-        !(flags & RRF_RT_REG_DWORD) || *size < sizeof(DWORD)) return result;
+        !(flags & RRF_RT_REG_DWORD) || bufferSize < sizeof(DWORD)) return result;
     int edge = g_effectiveEdge.load();
     if (!IsValidEdge(edge)) return result;
     *static_cast<DWORD*>(data) = static_cast<DWORD>(edge);
@@ -502,11 +519,12 @@ int FindAppPosition(std::wstring const& executable) {
     return kRuleUnlisted;
 }
 
-void CALLBACK WindowStateChanged(HWINEVENTHOOK, DWORD event, HWND, LONG object,
-                                 LONG child, DWORD, DWORD) {
-    if (g_unloading.load() || !g_maximizedOnly.load()) return;
-    if (event != EVENT_OBJECT_DESTROY && event != EVENT_OBJECT_HIDE &&
-        (object != OBJID_WINDOW || child != CHILDID_SELF)) return;
+void CALLBACK WindowStateChanged(HWINEVENTHOOK, DWORD event, HWND window,
+                                 LONG object, LONG child, DWORD, DWORD) {
+    if (g_unloading.load() || !g_maximizedOnly.load() ||
+        object != OBJID_WINDOW || child != CHILDID_SELF || !window) return;
+    if (event == EVENT_OBJECT_LOCATIONCHANGE &&
+        GetAncestor(window, GA_ROOT) != window) return;
     if (g_wakeEvent) SetEvent(g_wakeEvent);
 }
 
@@ -516,18 +534,36 @@ DWORD WINAPI MonitorThreadProc(void*) {
     HWINEVENTHOOK foregroundHook = SetWinEventHook(
         EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
         ForegroundChanged, 0, 0, WINEVENT_OUTOFCONTEXT);
-    HWINEVENTHOOK stateHook = SetWinEventHook(
-        EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, nullptr,
-        WindowStateChanged, 0, 0, WINEVENT_OUTOFCONTEXT);
-    HWINEVENTHOOK locationHook = SetWinEventHook(
-        EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
-        WindowStateChanged, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-    HWINEVENTHOOK destroyHook = SetWinEventHook(
-        EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, nullptr,
-        WindowStateChanged, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-    HWINEVENTHOOK cloakHook = SetWinEventHook(
-        EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED, nullptr,
-        WindowStateChanged, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    HWINEVENTHOOK stateHook = nullptr;
+    HWINEVENTHOOK locationHook = nullptr;
+    HWINEVENTHOOK destroyHook = nullptr;
+    HWINEVENTHOOK cloakHook = nullptr;
+    bool stateHooksEnabled = false;
+    auto updateStateHooks = [&]() {
+        bool enabled = g_maximizedOnly.load();
+        if (enabled == stateHooksEnabled) return;
+        stateHooksEnabled = enabled;
+        if (enabled) {
+            stateHook = SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART,
+                EVENT_SYSTEM_MINIMIZEEND, nullptr, WindowStateChanged,
+                0, 0, WINEVENT_OUTOFCONTEXT);
+            locationHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE,
+                EVENT_OBJECT_LOCATIONCHANGE, nullptr, WindowStateChanged,
+                0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+            destroyHook = SetWinEventHook(EVENT_OBJECT_DESTROY,
+                EVENT_OBJECT_HIDE, nullptr, WindowStateChanged,
+                0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+            cloakHook = SetWinEventHook(EVENT_OBJECT_CLOAKED,
+                EVENT_OBJECT_UNCLOAKED, nullptr, WindowStateChanged,
+                0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+        } else {
+            if (stateHook) UnhookWinEvent(stateHook);
+            if (locationHook) UnhookWinEvent(locationHook);
+            if (destroyHook) UnhookWinEvent(destroyHook);
+            if (cloakHook) UnhookWinEvent(cloakHook);
+            stateHook = locationHook = destroyHook = cloakHook = nullptr;
+        }
+    };
     UpdateForegroundApp(GetForegroundWindow());
     HKEY registryKey = nullptr;
     HANDLE registryEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -546,49 +582,54 @@ DWORD WINAPI MonitorThreadProc(void*) {
     constexpr ULONGLONG minimumInterval = 350;
     DWORD lastRealEdge = ABE_BOTTOM;
     TryReadTaskbarEdge(&lastRealEdge);
+    bool evaluate = true;
     while (!g_unloading.load()) {
         if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) break;
-        DWORD realEdge = ABE_BOTTOM;
-        if (TryReadTaskbarEdge(&realEdge)) {
-            if (g_windowsDefaultEdge.exchange(realEdge) != realEdge) {
-                Wh_Log(L"Windows setting changed to %lu", realEdge);
-            }
-            int desired = static_cast<int>(realEdge);
-            int manual = g_quickPosition.load();
-            bool quickMode = manual != kNoPendingChange;
-            if (quickMode) {
-                // kUseWindowsDefault deliberately selects the real Windows edge.
-                if (IsValidEdge(manual)) desired = manual;
-            } else {
-                std::wstring app = g_maximizedOnly.load()
-                    ? TopMaximizedAppOnForegroundMonitor() : LastForegroundApp();
-                int position = FindAppPosition(app);
-                if (position == kRuleExcluded) {
-                    desired = g_effectiveEdge.load();
-                    if (!IsValidEdge(desired)) desired = static_cast<int>(realEdge);
-                } else if (IsValidEdge(position)) {
-                    desired = position;
+        updateStateHooks();
+        if (evaluate) {
+            DWORD realEdge = ABE_BOTTOM;
+            if (TryReadTaskbarEdge(&realEdge)) {
+                if (g_windowsDefaultEdge.exchange(realEdge) != realEdge) {
+                    Wh_Log(L"Windows setting changed to %lu", realEdge);
+                    // Preserve the current app-specific override, if any.
+                    // TrayUI_WndProc_Hook keeps the frame and content aligned.
                 }
-            }
-            ULONGLONG now = GetTickCount64();
-            if (candidate != desired) {
-                candidate = desired;
-                candidateSince = now;
-            }
-            int applied = g_effectiveEdge.load();
-            if (!IsValidEdge(applied)) applied = static_cast<int>(realEdge);
-            if (desired != applied && now - candidateSince >=
-                    static_cast<ULONGLONG>(quickMode ? 0 : g_switchDelayMs.load()) &&
-                (!lastChangeAt || now - lastChangeAt >= minimumInterval) &&
-                now >= nextRetryAt) {
-                if (ApplyTaskbarEdge(static_cast<DWORD>(desired))) {
-                    lastChangeAt = GetTickCount64();
-                    nextRetryAt = 0;
+                int desired = static_cast<int>(realEdge);
+                int manual = g_quickPosition.load();
+                bool quickMode = manual != kNoPendingChange;
+                if (quickMode) {
+                    if (IsValidEdge(manual)) desired = manual;
                 } else {
-                    nextRetryAt = GetTickCount64() + 1000;
+                    std::wstring app = g_maximizedOnly.load()
+                        ? TopMaximizedAppOnForegroundMonitor() : LastForegroundApp();
+                    int position = FindAppPosition(app);
+                    if (position == kRuleExcluded) {
+                        desired = g_effectiveEdge.load();
+                        if (!IsValidEdge(desired)) desired = static_cast<int>(realEdge);
+                    } else if (IsValidEdge(position)) {
+                        desired = position;
+                    }
                 }
+                ULONGLONG now = GetTickCount64();
+                if (candidate != desired) {
+                    candidate = desired;
+                    candidateSince = now;
+                }
+                int applied = g_effectiveEdge.load();
+                if (!IsValidEdge(applied)) applied = static_cast<int>(realEdge);
+                if (desired != applied && now - candidateSince >=
+                        static_cast<ULONGLONG>(quickMode ? 0 : g_switchDelayMs.load()) &&
+                    (!lastChangeAt || now - lastChangeAt >= minimumInterval) &&
+                    now >= nextRetryAt) {
+                    if (ApplyTaskbarEdge(static_cast<DWORD>(desired))) {
+                        lastChangeAt = GetTickCount64();
+                        nextRetryAt = 0;
+                    } else {
+                        nextRetryAt = GetTickCount64() + 1000;
+                    }
+                }
+                lastRealEdge = realEdge;
             }
-            lastRealEdge = realEdge;
         }
         ULONGLONG now = GetTickCount64();
         DWORD timeout = INFINITE;
@@ -606,6 +647,7 @@ DWORD WINAPI MonitorThreadProc(void*) {
         DWORD count = registryEvent && registryKey ? 3 : 2;
         DWORD result = MsgWaitForMultipleObjects(count, handles, FALSE, timeout, QS_ALLINPUT);
         if (result == WAIT_OBJECT_0) break;
+        evaluate = result != WAIT_OBJECT_0 + count;
         if (count == 3 && result == WAIT_OBJECT_0 + 2) armNotification();
         if (result == WAIT_OBJECT_0 + count) {
             MSG msg;
@@ -615,7 +657,6 @@ DWORD WINAPI MonitorThreadProc(void*) {
                 DispatchMessageW(&msg);
             }
         }
-        // Foreground reads occur on events, or on the slower fallback when the hook fails.
         if (!foregroundHook) UpdateForegroundApp(GetForegroundWindow());
     }
     if (foregroundHook) UnhookWinEvent(foregroundHook);
@@ -924,14 +965,13 @@ void LogModuleInfo(HMODULE module, const wchar_t* reason) {
 
 HMODULE GetTaskbarViewModuleHandle() {
     HMODULE module = GetModuleHandleW(L"Taskbar.View.dll");
-    if (!module) module = GetModuleHandleW(L"ExplorerExtensions.dll");
     return module;
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     LogModuleInfo(module, L"Resolving taskbar symbols");
 
-    // Taskbar.View.dll, ExplorerExtensions.dll
+    // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {
@@ -1005,10 +1045,14 @@ std::atomic<bool> g_menuHookInstalling{false};
 void StartMonitorWhenReady() {
     if (!g_afterInit.load() || !g_supported.load() || !g_hostProcess.load() ||
         !g_runtimeHookReady.load() || !g_taskbarViewModuleHooked.load() ||
-        g_unloading.load() || g_monitorThread) {
+        g_unloading.load()) {
         return;
     }
     if (g_monitorStarting.exchange(true)) return;
+    if (g_monitorThread || g_unloading.load()) {
+        g_monitorStarting = false;
+        return;
+    }
 
     if (!g_stopEvent) g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_wakeEvent) g_wakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -1023,8 +1067,12 @@ void StartMonitorWhenReady() {
 }
 
 void TryInstallMenuHooks(HMODULE module, bool applyHooks) {
-    if (!module || !g_hostProcess.load() || g_unloading.load() ||
-        g_taskbarViewModuleHooked.load() || g_menuHookInstalling.exchange(true)) {
+    if (!module || g_unloading.load() ||
+        g_menuHookAttempted.load() || g_menuHookInstalling.exchange(true)) {
+        return;
+    }
+    if (g_menuHookAttempted.exchange(true)) {
+        g_menuHookInstalling = false;
         return;
     }
     if (HookTaskbarViewDllSymbols(module)) {
@@ -1035,6 +1083,14 @@ void TryInstallMenuHooks(HMODULE module, bool applyHooks) {
         Wh_Log(L"Taskbar menu symbols unavailable for this loaded module");
     }
     g_menuHookInstalling = false;
+    StartMonitorWhenReady();
+}
+
+void ActivateTaskbarHost() {
+    if (g_unloading.load()) return;
+    g_taskbarThreadId = GetCurrentThreadId();
+    bool wasHost = g_hostProcess.exchange(true);
+    if (!wasHost) Wh_Log(L"Taskbar host discovered on thread %lu", GetCurrentThreadId());
     StartMonitorWhenReady();
 }
 
@@ -1065,12 +1121,12 @@ BOOL Wh_ModInit() {
 
     // Do not assume Shell_TrayWnd already exists at injection time.
     HWND taskbar = FindCurrentProcessTaskbarWnd();
-    if (!taskbar) {
-        Wh_Log(L"This Explorer process is not currently hosting the taskbar");
-        return TRUE;
+    if (taskbar) {
+        g_hostProcess = true;
+        g_taskbarThreadId = GetWindowThreadProcessId(taskbar, nullptr);
     }
-    g_hostProcess = true;
-    g_taskbarThreadId = GetWindowThreadProcessId(taskbar, nullptr);
+    // No early return: the taskbar window is normally created AFTER ModInit.
+    // TrayUI initialization discovers the hosting Explorer process later.
 
     HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
     auto regGetValue = kernelBase ? reinterpret_cast<RegGetValueW_t>(
@@ -1087,6 +1143,10 @@ BOOL Wh_ModInit() {
                                          LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (taskbarDll) {
         WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+            {
+                {LR"(public: virtual __int64 __cdecl TrayUI::WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,bool *))"},
+                &TrayUI_WndProc_Original, TrayUI_WndProc_Hook,
+            },
             {
                 {LR"(public: enum winrt::WindowsUdk::UI::Shell::TaskbarLocation __cdecl winrt::WindowsUdk::UI::Shell::implementation::TaskbarSettings::Location(void))"},
                 &TaskbarSettings_Location_Original, TaskbarSettings_Location_Hook,
@@ -1105,10 +1165,10 @@ BOOL Wh_ModInit() {
         bool symbolsResolved = HookSymbols(taskbarDll, taskbarDllHooks,
             ARRAYSIZE(taskbarDllHooks));
         g_runtimeHookReady = symbolsResolved && !!RegGetValueW_Original &&
-            !!TaskbarSettings_Location_Original;
-        Wh_Log(L"Runtime hook details: symbols=%d, registry=%d, location=%d",
+            !!TaskbarSettings_Location_Original && !!TrayUI_WndProc_Original;
+        Wh_Log(L"Runtime hook details: symbols=%d, registry=%d, location=%d, wndproc=%d",
                symbolsResolved, !!RegGetValueW_Original,
-               !!TaskbarSettings_Location_Original);
+               !!TaskbarSettings_Location_Original, !!TrayUI_WndProc_Original);
     } else {
         Wh_Log(L"taskbar.dll failed to load: %lu", GetLastError());
     }
@@ -1131,9 +1191,16 @@ void Wh_ModAfterInit() {
     g_afterInit = true;
     // Handle a module loaded between Wh_ModInit and Wh_ModAfterInit.
     TryInstallMenuHooks(GetTaskbarViewModuleHandle(), true);
+    if (!g_hostProcess.load()) {
+        HWND taskbar = FindCurrentProcessTaskbarWnd();
+        if (taskbar) {
+            g_hostProcess = true;
+            g_taskbarThreadId = GetWindowThreadProcessId(taskbar, nullptr);
+        }
+    }
     StartMonitorWhenReady();
-    if (!g_taskbarViewModuleHooked.load()) {
-        Wh_Log(L"Waiting for Taskbar.View.dll / ExplorerExtensions.dll to load");
+    if (!g_menuHookAttempted.load()) {
+        Wh_Log(L"Waiting for Taskbar.View.dll to load");
     }
 }
 
