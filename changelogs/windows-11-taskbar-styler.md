@@ -1,3 +1,8 @@
+## 1.11.2 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6f3d126440ecd46f08e48bec2cd9c1e91d3e2919/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Updated most themes to be compatible with newer Windows 11 versions, where the system tray is part of the taskbar frame.
+* Updated the click-through taskbar to be compatible with these newer Windows 11 versions.
+
 ## 1.11.1 ([Nov 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2cd9c600bfe13afb4fba68ec907a4b8084acc0a3/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Fixed a possible hang or crash in some cases (a v1.11 regression). One example is clicking on the language tray icon.

@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-17T09:02:16.000Z</updated>
+    <updated>2026-11-17T10:03:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.11.2]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#6f3d126440ecd46f08e48bec2cd9c1e91d3e2919</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2026-11-17T10:03:55.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated most themes to be compatible with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
+<li>Updated the click-through taskbar to be compatible with these newer Windows 11 versions.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.12]]></title>
         <id>https://windhawk.net/mods/taskbar-wheel-cycle#444cb2ac1db312f9faf342207181010c2d1f2f31</id>
@@ -351,98 +366,6 @@ what this mod works with.</p>
         <author>
             <name>wygodad</name>
             <uri>https://github.com/wygodad</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Network Menu Speed Test 1.0]]></title>
-        <id>https://windhawk.net/mods/network-speedtest-native#f0b37fa17e1cff8b3f56cbfd991322815a91b76a</id>
-        <link href="https://windhawk.net/mods/network-speedtest-native"/>
-        <updated>2026-11-16T21:04:47.000Z</updated>
-        <content type="html"><![CDATA[<h1>Network Menu Speed Test</h1>
-<p>Windows 11's network menu (&quot;Run internet speed test&quot;) opens</p>
-<pre><code>https://go.microsoft.com/fwlink/?linkid=2324916
-</code></pre>
-<p>in the default browser, which redirects to a Bing search page.</p>
-<p>This mod intercepts that URL in the shell processes and replaces it with a
-native flyout. The window, the gauge, the result cards and the speed
-measurement all live inside the mod: no external application or protocol
-handler is involved. The test talks to the public Cloudflare speed test
-endpoints (<code>speed.cloudflare.com</code>), the same stateless endpoints used by the
-website.</p>
-<h3>Screenshots</h3>
-<table>
-<thead>
-<tr>
-<th>Light theme</th>
-<th>Dark theme</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/Alessandro-Vecchio/windhawk-mods/assets/light.png" alt="Light theme"></td>
-<td><img src="https://raw.githubusercontent.com/Alessandro-Vecchio/windhawk-mods/assets/dark.png" alt="Dark theme"></td>
-</tr>
-</tbody>
-</table>
-<table>
-<thead>
-<tr>
-<th>Desktop Acrylic</th>
-<th>Results card</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/Alessandro-Vecchio/windhawk-mods/assets/acrylic.png" alt="Desktop Acrylic"></td>
-<td><img src="https://raw.githubusercontent.com/Alessandro-Vecchio/windhawk-mods/assets/results.png" alt="Results card"></td>
-</tr>
-</tbody>
-</table>
-<h3>Data usage</h3>
-<p>The test transfers real data with a per-direction budget of <strong>512 MB</strong>. Lines
-at or below ~340 Mbps complete the full 12 s window per direction without
-reaching the budget; faster lines end the phase once the budget is spent
-(minimum 4 s window, and the result divides bytes by the time the transfer
-was actually moving data). Total usage stays under ~1 GB regardless of line
-speed, and the results card shows the bytes used (&quot;Data used: 762 MB&quot;, also
-included in the clipboard text).</p>
-<p>The <strong>Start the test automatically</strong> setting defaults to <code>auto</code>: the test
-starts when the flyout opens, except when Windows reports the connection as
-metered - then the flyout opens idle and waits for a click on Start.</p>
-<p><strong>Coexistence</strong>: the mod <a href="https://windhawk.net/mods/perform-speedtest-redirect">perform-speedtest-redirect</a>
-intercepts the same URL launches. If both are enabled, whichever mod hooks
-the launch first wins - disable the other one to keep this mod's flyout.</p>
-<p>The flyout opens above the taskbar, on the monitor under the mouse. It closes
-when you click outside, but never while a measurement is running.</p>
-<p>It is keyboard accessible (Tab / Enter / Esc with a WinUI-style focus ring),
-exposed to screen readers through MSAA (<code>WM_GETOBJECT</code>), and honours the
-&quot;Animation effects&quot; system setting: with animations off every transition is
-instant. The error view shrinks the window to fit its content.</p>
-<h2>Settings</h2>
-<ul>
-<li><strong>Extra URL patterns</strong>: additional substrings separated by <code>|</code>.</li>
-<li><strong>Fall back to the web page</strong>: if the flyout cannot start, run the original
-URL instead of doing nothing.</li>
-<li><strong>Also intercept browser process launches</strong>: catch the network menu launching
-the browser directly through <code>CreateProcessW</code>. The launch returns
-<code>ERROR_CANCELLED</code> because no browser process is created; turning it off makes
-the menu open the browser normally when the shell skips the shell-execute
-path.</li>
-<li><strong>Start the test automatically</strong>: <code>auto</code> starts the test when the flyout
-opens, but waits for a click when Windows reports the connection as metered;
-<code>always</code> starts unconditionally; <code>never</code> always waits for a click.</li>
-<li><strong>Language</strong>: <code>auto</code> (follows the Windows display language), <code>it</code> or <code>en</code>.</li>
-</ul>
-<p>Diagnostics go to the Windhawk mod log: enable logging for this mod from its
-Details page in Windhawk when you need them.</p>
-<p>Note: when the network menu launches the browser directly through
-<code>CreateProcessW</code>, the flyout is shown but process creation returns
-<code>ERROR_CANCELLED</code>: the hook never reports success without creating the
-requested browser process.</p>
-]]></content>
-        <author>
-            <name>Alessandro-Vecchio</name>
-            <uri>https://github.com/Alessandro-Vecchio</uri>
         </author>
     </entry>
 </feed>

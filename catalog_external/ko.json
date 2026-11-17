@@ -8,7 +8,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1794859570244,
+        "updated": 1794910106518,
         "users": 0
       },
       "metadata": {
@@ -16,7 +16,7 @@
           "x86-64"
         ],
         "author": "Markc719",
-        "compilerOptions": "-luuid -lole32 -lshell32 -lshlwapi -lcomctl32 -lgdi32 -lmsimg32 -ldwmapi -lshcore -ladvapi32 -luser32 -lcomdlg32",
+        "compilerOptions": "-luuid -lole32 -lshell32 -lshlwapi -lcomctl32 -lgdi32 -lmsimg32 -ldwmapi -lshcore -ladvapi32 -luser32 -lcomdlg32 -ld2d1 -ldwrite",
         "description": "바탕 화면 아이콘을 다른 아이콘 위로 끌어 시작 메뉴처럼 폴더로 묶습니다",
         "github": "https://github.com/Markc719",
         "homepage": "https://github.com/Markc719/desktop-app-groups",
@@ -32,8 +32,8 @@
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7173",
       "source": {
-        "sha256": "0bb274e8ae2d40c1e6a9da8d315970b54e7255edee75fa73781c59b332b2c6ff",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/49e136c3e8689d6e5de43d8a0d312a39761ba903/mods/desktop-app-groups.wh.cpp"
+        "sha256": "613216c9975de48546a79ef46909bf453378d8830c566222d1bb1c8af65ff7ff",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/db8842f6699931bdde1c9190c16b0b94d5670362/mods/desktop-app-groups.wh.cpp"
       }
     },
     "explorer-default-folder": {
