@@ -145,17 +145,34 @@ speeds without HWiNFO; other laptops need it, or `fan` shows `-- RPM`.
 
 ## Internet use
 
-The mod goes online only for these, and only while they are shown:
+The mod does not go online by default. It goes online only for the items
+below, and only while they are shown or in use:
 
-- `ping`: ICMP packets to the address you set (1.1.1.1 by default).
+- `ping`: ICMP packets to the address you set (1.1.1.1 by default). Opening
+  the Network details panel also pings that address while the panel is open.
 - `currency`: api.frankfurter.dev, about once an hour.
-- `weather`: api.open-meteo.com (or OpenWeatherMap with your key), every
-  30 minutes. Finding your place may use Windows location, or, if that is
-  off, an approximate place from ipinfo.io. Typed cities use Open-Meteo
-  geocoding and OpenStreetMap Nominatim.
+- `weather`: api.open-meteo.com (or api.openweathermap.org with your key),
+  every 30 minutes, using your coordinates rounded to about 1 km. Finding
+  your place may use Windows location. If that is off, an approximate place
+  comes from ipinfo.io. With no city typed, the rounded coordinates are
+  sent to nominatim.openstreetmap.org to get a place name. Typed cities use
+  geocoding-api.open-meteo.com and nominatim.openstreetmap.org.
+- **Speed test** (only when you start one): speed.cloudflare.com, using
+  6 parallel streams for about 10 s down and 8 s up. This can use hundreds
+  of MB, so avoid it on a metered connection. Each test also asks
+  ipinfo.io for your ISP name.
 
-Nothing else is sent. Every request uses HTTPS, the mod asks for no
-administrator rights and opens no port.
+Nothing else is sent. Every request uses HTTPS (ping uses ICMP), the mod
+asks for no administrator rights and opens no port. Settings are kept only
+in Windhawk's mod storage; nothing is written to `%APPDATA%`.
+
+## Privacy Mode
+
+Privacy Mode masks network and weather values with `******`. Turn it on in
+the settings window. Optionally (off by default) it can switch on by itself
+while a screen recorder, streaming or meeting app (OBS, Zoom, Teams and
+similar, plus names you add) is running. To detect them, the mod checks the
+process list every few seconds while that option is on.
 
 ## Troubleshooting
 
@@ -546,7 +563,7 @@ std::wstring Utf8ToWide(const std::string& text) {
     return result;
 }
 
-constexpr wchar_t kWidgetName[] = L"WindhawkTaskbarSystemInfo";
+constexpr wchar_t kWidgetName[] = L"WindhawkTaskbarSystemMonitor";
 constexpr double kWidgetHeight = 38.0;
 constexpr double kWidgetSidePadding = 6.0;
 constexpr double kTaskbarClearance = 3.0;
@@ -863,7 +880,7 @@ struct ModSettings {
     bool hoverDetails = true;
     int hoverAnimation = 5;  // 0 off, 1 subtle, 2 standard, 3 expressive,
                              // 4 unfold, 5 windows.
-    std::wstring currencyBase = L"USD", currencyQuote = L"IDR";
+    std::wstring currencyBase = L"USD", currencyQuote = L"EUR";
     int currencyColors = 1;  // 0 off, 1 up green, 2 up red.
     bool currencyPairLabel = true;  // "USD/IDR", else "USD".
     std::wstring weatherProvider = L"openMeteo";
@@ -1170,6 +1187,34 @@ double g_reservedMargin = 0.0;
 std::deque<std::chrono::steady_clock::time_point> g_marginWrites;
 std::optional<double> g_lastAppliedRepeaterMarginLeft;
 [[clang::no_destroy]] DispatcherTimer g_timer{nullptr};
+// Short-lived timers (retries, "Copied" labels, watchers). Teardown stops
+// them all on the UI thread so none can fire after the mod is unloaded.
+[[clang::no_destroy]] std::vector<DispatcherTimer> g_trackedTimers;
+// Queued lambdas that have not run yet; unload waits briefly for them.
+std::atomic<int> g_pendingQueued{0};
+void TrackTimer(DispatcherTimer const& timer) {
+    g_trackedTimers.erase(
+        std::remove_if(g_trackedTimers.begin(), g_trackedTimers.end(),
+                       [](DispatcherTimer const& t) {
+                           try {
+                               return !t.IsEnabled();
+                           } catch (...) {
+                               return true;
+                           }
+                       }),
+        g_trackedTimers.end());
+    g_trackedTimers.push_back(timer);
+}
+void StopTrackedTimers() {
+    auto timers = std::move(g_trackedTimers);
+    g_trackedTimers.clear();
+    for (auto& t : timers) {
+        try {
+            t.Stop();
+        } catch (...) {
+        }
+    }
+}
 event_token g_timerToken{};
 event_token g_actualThemeChangedToken{};
 HWND g_lastFailedPlacementTarget = nullptr;
@@ -1501,15 +1546,15 @@ constexpr KeptSetting kKeptSettings[] = {
     {L"battery.colorText", true, L"0"},
     {L"battery.pulse", true, L"1"},
     {L"battery.timeFormat", false, L"compact"},
-    {L"battery.timeCustom", false, L"{h} jam {m} menit|{m} menit"},
+    {L"battery.timeCustom", false, L"{h} h {m} min|{m} min"},
     {L"battery.chargeLimit", true, L"100"},
     {L"battery.healthFormat", false, L"percent"},
     {L"privacyModeMaster", true, L"0"},
     {L"privacyHideNetwork", true, L"1"},
     {L"privacyHideWeather", true, L"1"},
     {L"privacyHideSystem", true, L"1"},
-    {L"privacyAutoDetect", true, L"1"},
-    {L"privacyAutoNotify", true, L"1"},
+    {L"privacyAutoDetect", true, L"0"},
+    {L"privacyAutoNotify", true, L"0"},
     {L"privacyCustomApps", false, L""},
     {L"privacyTrayIconMode", false, L"active_only"},
     {L"privacyTrayClick", false, L"view_only"},
@@ -1556,7 +1601,7 @@ constexpr KeptSetting kKeptSettings[] = {
     {L"weather.provider", false, L"openMeteo"},
     {L"weather.apiKey", false, L""},
     {L"currency.base", false, L"USD"},
-    {L"currency.quote", false, L"IDR"},
+    {L"currency.quote", false, L"EUR"},
     {L"currency.label", false, L"pair"},
     {L"currency.colors", false, L"upGreen"},
     {L"dataUsage.exportMode", false, L"ask"},
@@ -1600,9 +1645,6 @@ constexpr KeptSetting kKeptSettings[] = {
 // Kept only when the backup is restored (see RestoreSettingsIfFresh).
 constexpr KeptSetting kPageSettings[] = {{L"readingsSource", false, L"menu"},
                                          {L"items", false, L""}};
-// Storage the mod writes itself: taskbar menu set-up and dragged positions.
-constexpr PCWSTR kKeptStorage[] = {L"menu.items", L"menu.layout",
-                                   L"menu.presetApplied", L"placement.v1"};
 
 const KeptSetting* FindKept(PCWSTR name) {
     for (const auto& s : kKeptSettings) {
@@ -1619,7 +1661,7 @@ const KeptSetting* FindKept(PCWSTR name) {
 // for the few settings still on the page (kPageSettings); the rest live in
 // the mod's storage only (kKeptSettings). A copy of everything goes to a
 // file outside Windhawk (BackupSettings) so a reinstall brings it back.
-std::wstring ReadStored(const std::wstring& key, size_t capacity = 4096) {
+std::wstring ReadStored(const std::wstring& key, size_t capacity = 32768) {
     std::vector<wchar_t> buffer(capacity);
     Wh_GetStringValue(key.c_str(), buffer.data(), buffer.size());
     return buffer.data();
@@ -1680,11 +1722,6 @@ void SetUiOverride(PCWSTR name, const std::wstring& value, bool isInt) {
 void ClearUiOverride(PCWSTR name) {
     Wh_SetStringValue((std::wstring(L"ui.") + name).c_str(), L"");
     Wh_SetStringValue((std::wstring(L"ui.base.") + name).c_str(), L"");
-}
-
-std::wstring WindhawkValue(const KeptSetting& s) {
-    return s.isInt ? std::to_wstring(Wh_GetIntSetting(s.key))
-                   : WindhawkStringSetting(s.key);
 }
 
 // Undoes the settings window: every setting back to its default, and
@@ -1772,112 +1809,14 @@ std::wstring UnescapeBackup(const std::wstring& text) {
     return out;
 }
 
-[[clang::no_destroy]] std::mutex g_backupMutex;
 
-void BackupSettings() {
-    std::lock_guard lock(g_backupMutex);
-    std::wstring folder = BackupFolder();
-    if (folder.empty()) return;
-    std::wstring text = L"Taskbar System Monitor settings, v1\n";
-    auto add = [&](PCWSTR kind, PCWSTR key, const std::wstring& value) {
-        text += std::wstring(kind) + L"\t" + key + L"\t" +
-                EscapeBackup(value) + L"\n";
-    };
-    for (const auto& s : kKeptSettings) {
-        add(L"set", s.key,
-            s.isInt ? std::to_wstring(GetIntSetting(s.key))
-                    : GetStringSetting(s.key));
-    }
-    for (const auto& s : kPageSettings) {
-        add(L"set", s.key, GetStringSetting(s.key));
-    }
-    for (PCWSTR key : kKeptStorage) {
-        std::wstring value = ReadStoredLong(key);
-        if (!value.empty()) add(L"raw", key, value);
-    }
-    std::string utf8 = ToUtf8(text);
-    CreateDirectoryW(folder.c_str(), nullptr);
-    std::wstring path = folder + L"\\settings.txt";
-    std::wstring temp = path + L".new";
-    HANDLE file = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr,
-                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
-        ModLog(L"Settings backup: cannot write %s", temp.c_str());
-        return;
-    }
-    DWORD written = 0;
-    BOOL ok = WriteFile(file, utf8.data(), static_cast<DWORD>(utf8.size()),
-                        &written, nullptr);
-    CloseHandle(file);
-    if (!ok || written != utf8.size() ||
-        !MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
-        DeleteFileW(temp.c_str());
-        ModLog(L"Settings backup failed");
-    }
-}
+// Settings live only in Windhawk mod storage; nothing is written outside it.
+void BackupSettings() {}
 
 // After a fresh install (empty storage) the backup file, if any, brings
 // the earlier choices back.
 void RestoreSettingsIfFresh() {
-    if (!ReadStored(L"storage.v1").empty()) return;
-    Wh_SetStringValue(L"storage.v1", L"1");
-    for (const auto& s : kKeptSettings) {
-        if (!ReadStored(std::wstring(L"ui.") + s.key).empty()) return;
-    }
-    for (PCWSTR key : kKeptStorage) {
-        if (!ReadStoredLong(key).empty()) return;
-    }
-    std::wstring folder = BackupFolder();
-    if (folder.empty()) return;
-    HANDLE file = CreateFileW((folder + L"\\settings.txt").c_str(),
-                              GENERIC_READ, FILE_SHARE_READ, nullptr,
-                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return;
-    std::string utf8;
-    char chunk[4096];
-    DWORD read = 0;
-    while (ReadFile(file, chunk, sizeof(chunk), &read, nullptr) && read > 0) {
-        utf8.append(chunk, read);
-        if (utf8.size() > 1024 * 1024) break;
-    }
-    CloseHandle(file);
-    std::wstring text = Utf8ToWide(utf8);
-    if (text.empty()) return;
-    auto findKept = [](const std::wstring& key) -> const KeptSetting* {
-        for (const auto& s : kKeptSettings) {
-            if (key == s.key) return &s;
-        }
-        for (const auto& s : kPageSettings) {
-            if (key == s.key) return &s;
-        }
-        return nullptr;
-    };
-    int restored = 0;
-    for (std::wstring& line : SplitText(text, L'\n')) {
-        size_t tab1 = line.find(L'\t');
-        size_t tab2 = tab1 == std::wstring::npos ? tab1
-                                                  : line.find(L'\t', tab1 + 1);
-        if (tab2 == std::wstring::npos) continue;
-        std::wstring kind = line.substr(0, tab1);
-        std::wstring key = line.substr(tab1 + 1, tab2 - tab1 - 1);
-        std::wstring value = UnescapeBackup(line.substr(tab2 + 1));
-        if (kind == L"set") {
-            if (const KeptSetting* s = findKept(key)) {
-                if (FindKept(s->key) || WindhawkValue(*s) != value) {
-                    SetUiOverride(s->key, value, s->isInt);
-                }
-                ++restored;
-            }
-        } else if (kind == L"raw") {
-            for (PCWSTR allowed : kKeptStorage) {
-                if (key == allowed) {
-                    Wh_SetStringValue(allowed, value.c_str());
-                    ++restored;
-                }
-            }
-        }
-    }
-    ModLog(L"Restored %d settings from %s", restored, folder.c_str());
+    if (ReadStored(L"storage.v1").empty()) Wh_SetStringValue(L"storage.v1", L"1");
 }
 
 // Runs before settings load: the backup after a reinstall, then the
@@ -2725,12 +2664,12 @@ constexpr ItemsPreset kPresets[] = {
      L"center: weather[](condition icon24):row, net[]:row",
      L"twoRows"},
     {L"balanced", L"Balanced",
-     L"center: cpu, ram | down, up; tray: weather(condition)",
+     L"center: cpu, ram | down, up",
      L"twoRows"},
     {L"heavy", L"Heavy Monitoring",
      L"center: cpu!+cputemp?+cpupower?, gpu?!+gputemp?+gpupower?, | "
      L"ram(used)!, vram(used)?! | fan(*):stack | disk:stack | down, up | ping?; "
-     L"tray: weather(condition), down[]+up[]:stack, batterypower(hidezero)?+batterytime?:stack",
+     L"tray: down[]+up[]:stack, batterypower(hidezero)?+batterytime?:stack",
      L"twoRows"},
 };
 // The set used until the readings are set up (Balanced).
@@ -2890,7 +2829,7 @@ void LoadSettings() {
     // the Balanced preset.
     std::wstring itemsText;
     std::wstring menuLayout;
-    if (std::wstring stored = ReadStored(L"menu.items", 16384); !stored.empty()) {
+    if (std::wstring stored = ReadStored(L"menu.items", 32768); !stored.empty()) {
         itemsText = stored;
     }
     menuLayout = ReadStored(L"menu.layout", 32);
@@ -3055,7 +2994,7 @@ void LoadSettings() {
         settings.currencyBase =
             code(GetStringSetting(L"currency.base"), L"USD");
         settings.currencyQuote =
-            code(GetStringSetting(L"currency.quote"), L"IDR");
+            code(GetStringSetting(L"currency.quote"), L"EUR");
         settings.weatherProvider = GetStringSetting(L"weather.provider");
         if (settings.weatherProvider != L"openWeatherMap") {
             settings.weatherProvider = L"openMeteo";
@@ -3237,12 +3176,6 @@ bool PrivacyHideNetwork() {
 bool PrivacyHideWeather() {
     auto s = CurrentSettings();
     return s && s->HidesWeather();
-}
-// Host name and Windows user name: the mod shows neither today. Any future
-// text that does must go through this.
-bool PrivacyHideSystem() {
-    auto s = CurrentSettings();
-    return s && s->HidesSystem();
 }
 
 // Auto-detect: processes that mean the screen may be recorded, streamed or
@@ -7113,13 +7046,16 @@ struct ConnectionReaderState {
     std::wstring lastLog;
 };
 ConnectionReaderState g_connectionReader;
+std::recursive_mutex g_connectionReaderMutex;  // Several threads read it.
 
 void CloseConnectionReader() {
+    std::lock_guard readerLock(g_connectionReaderMutex);
     if (g_connectionReader.wlan) WlanCloseHandle(g_connectionReader.wlan, nullptr);
     g_connectionReader = {};
 }
 
 void ConnectionLog(const std::wstring& message) {
+    std::lock_guard readerLock(g_connectionReaderMutex);
     if (g_connectionReader.lastLog != message) {
         ModLog(L"Connection: %s", message.c_str());
         g_connectionReader.lastLog = message;
@@ -7129,6 +7065,7 @@ void ConnectionLog(const std::wstring& message) {
 // Wi-Fi details from the WLAN service. Since Windows 11 24H2 these need
 // location access for desktop apps; without it only "Wi-Fi" is known.
 void ReadWifiDetails(const GUID& interfaceGuid, MetricsSnapshot& s) {
+    std::lock_guard readerLock(g_connectionReaderMutex);
     auto& state = g_connectionReader;
     if (!state.wlan && !state.wlanFailed) {
         DWORD version = 0;
@@ -7217,6 +7154,8 @@ void ReadWifiDetails(const GUID& interfaceGuid, MetricsSnapshot& s) {
 }
 
 void ReadConnection(MetricsSnapshot& s) {
+    std::lock_guard readerLock(g_connectionReaderMutex);
+    if (g_unloading) return;
     s.connectionType.clear();
     s.connectionName.clear();
     s.connectionBssid.clear();
@@ -8290,6 +8229,7 @@ void PrivacyAutoDetectTick() {
     if (HWND window = g_settingsWindowForPost.load()) {
         PostMessageW(window, kSettingsPrivacyMessage, 0, 0);
     }
+    if (g_stopMetricsWorker || g_unloading) return;
     ReloadAllSettings();  // The widget redraws with or without the mask.
 }
 
@@ -8463,7 +8403,8 @@ void MetricsWorkerProc() {
                 PostMessageW(window, kSettingsDevicesMessage, 0, 0);
             }
         }
-        if (devicesChanged && !g_stopMetricsWorker) ReloadAllSettings();
+        if (devicesChanged && !g_stopMetricsWorker && !g_unloading)
+            ReloadAllSettings();
         auto after = std::chrono::steady_clock::now();
         for (int item = 0; item < kItemCount; ++item) {
             if (due[item]) {
@@ -8519,17 +8460,22 @@ void WakeMetricsWorker() {
 }
 
 void StopMetricsWorker() {
-    std::lock_guard lock(g_metricsWorkerMutex);
-    g_stopMetricsWorker = true;
-    if (g_metricsWorkerWakeEvent) {
-        SetEvent(g_metricsWorkerWakeEvent);
-    }
-    if (g_metricsWorker) {
-        if (g_metricsWorker->joinable()) {
-            g_metricsWorker->join();
+    // The worker can call WakeMetricsWorker (which locks the mutex) while it
+    // winds down, so the join must happen after the lock is released.
+    std::optional<std::thread> worker;
+    {
+        std::lock_guard lock(g_metricsWorkerMutex);
+        g_stopMetricsWorker = true;
+        if (g_metricsWorkerWakeEvent) {
+            SetEvent(g_metricsWorkerWakeEvent);
         }
+        worker = std::move(g_metricsWorker);
         g_metricsWorker.reset();
     }
+    if (worker && worker->joinable()) {
+        worker->join();
+    }
+    std::lock_guard lock(g_metricsWorkerMutex);
     if (g_metricsWorkerWakeEvent) {
         CloseHandle(g_metricsWorkerWakeEvent);
         g_metricsWorkerWakeEvent = nullptr;
@@ -9723,6 +9669,8 @@ std::atomic<bool> g_speedTestBusy{false};
 [[clang::no_destroy]] SpeedTestResult g_speedTestLastResult;
 
 void StopSpeedTestThread() {
+    // On unload, tell the running test to stop instead of waiting it out.
+    if (g_unloading) g_stopWebWorker = true;
     if (g_speedTestThread && g_speedTestThread->joinable()) {
         g_speedTestThread->join();
     }
@@ -9734,6 +9682,7 @@ void StopSpeedTestThread() {
 // finished result, success or not.
 void StartSpeedTest(std::function<void(const SpeedTestResult&)> onDone) {
     DiagLog(kDiagData, L"speed test started");
+    if (g_unloading) return;
     if (g_speedTestBusy.exchange(true)) return;
     StopSpeedTestThread();
     auto queue = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
@@ -9761,15 +9710,19 @@ void StartSpeedTest(std::function<void(const SpeedTestResult&)> onDone) {
         }
         g_speedTestBusy = false;
         g_speedTestPhase = SpeedTestPhase::Idle;
-        if (queue) {
-            queue.TryEnqueue(winrt::Windows::System::DispatcherQueuePriority::
-                                 Normal,
-                             [onDone, result] {
-                                 try {
-                                     onDone(result);
-                                 } catch (...) {
-                                 }
-                             });
+        if (queue && !g_unloading) {
+            ++g_pendingQueued;
+            if (!queue.TryEnqueue(
+                    winrt::Windows::System::DispatcherQueuePriority::Normal,
+                    [onDone, result] {
+                        try {
+                            if (!g_unloading) onDone(result);
+                        } catch (...) {
+                        }
+                        --g_pendingQueued;
+                    })) {
+                --g_pendingQueued;
+            }
         }
     });
 }
@@ -10395,7 +10348,7 @@ std::wstring UrlEncode(const std::wstring& text) {
 
 std::wstring CoordinateText(double value) {
     wchar_t buffer[32];
-    swprintf(buffer, std::size(buffer), L"%.4f", value);
+    swprintf(buffer, std::size(buffer), L"%.2f", value);
     return buffer;
 }
 
@@ -10624,7 +10577,7 @@ std::optional<WeatherPlace> InternetLocation() {
 // (asked at most once per place lookup, with the mod's own User-Agent, as
 // its usage policy asks). Empty if it cannot tell.
 // A place's name from its coordinates. detail 0: the city; 1: the district
-// and city ("Sungai Pinang, Samarinda"); 2: the neighborhood and city.
+// and city ("Shibuya, Tokyo"); 2: the neighborhood and city.
 std::wstring PlaceName(double lat, double lon, int detail = 0) {
     auto body = HttpsGet(L"nominatim.openstreetmap.org",
                          std::wstring(L"/reverse?format=jsonv2&accept-language=en") +
@@ -10655,7 +10608,7 @@ std::wstring PlaceName(double lat, double lon, int detail = 0) {
 }
 
 // A typed place that the city search does not know, such as a district
-// ("Sungai Pinang, Samarinda"): OpenStreetMap's search.
+// ("Shibuya, Tokyo"): OpenStreetMap's search.
 std::optional<WeatherPlace> SearchPlace(const std::wstring& text) {
     auto body = HttpsGet(L"nominatim.openstreetmap.org",
                          L"/search?format=jsonv2&limit=1&accept-language=en&q=" +
@@ -11115,8 +11068,8 @@ void WakeWebWorker() {
 }
 
 void StopWebWorker() {
+    g_stopWebWorker = true;  // Also stops a speed test still running.
     if (!g_webWorker) return;
-    g_stopWebWorker = true;
     WakeWebWorker();
     if (g_webWorker->joinable()) g_webWorker->join();
     g_webWorker.reset();
@@ -12706,7 +12659,7 @@ bool UpdateCapacityBudgets(const MetricsSnapshot& snapshot) {
         };
         std::wstring condition =
             w.valid ? shorten(WeatherShortText(w.code)) : L"";
-        // "Sidodadi, Samarinda" (or "Sidodadi,Samarinda"): the first part.
+        // "Shibuya, Tokyo" (or "Shibuya,Tokyo"): the first part.
         std::wstring place = w.place.substr(0, w.place.find(L','));
         while (!place.empty() && std::iswspace(place.back())) place.pop_back();
         place = shorten(place);
@@ -15419,7 +15372,8 @@ struct ChildReservation {
     std::optional<double> appliedLeft;
     MarginRunawayGuard guard;  // Kept when the element changes.
 };
-ChildReservation g_sysLeftReservation, g_sysRightReservation;
+[[clang::no_destroy]] ChildReservation g_sysLeftReservation,
+    g_sysRightReservation;
 
 FrameworkElement FindTrayChild(const FrameworkElement& parent,
                                std::wstring_view name,
@@ -15431,7 +15385,7 @@ FrameworkElement FindTrayChild(const FrameworkElement& parent,
         auto child =
             VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
         if (!child) continue;
-        std::wstring_view childName = child.Name();
+        winrt::hstring childName = child.Name();
         winrt::hstring className = winrt::get_class_name(child);
         if (childName == name ||
             std::wstring_view(className).find(classPart) !=
@@ -15497,6 +15451,7 @@ void ReleaseChildReservation(ChildReservation& r) {
         }
     } catch (...) {
     }
+    r.element = nullptr;
     r.margin = 0;
     r.appliedLeft.reset();
 }
@@ -15935,6 +15890,7 @@ void PlaceZones(const ModSettings& settings,
                     QueueTaskbarPlacement();
                 });
                 again.Start();
+                TrackTimer(again);
             } catch (...) {
             }
         }
@@ -17986,7 +17942,10 @@ bool RunFromWindowThread(HWND window,
                         }
                     }
                     if (callbackContext) {
-                        callbackContext->callback(callbackContext->context);
+                        try {
+                            callbackContext->callback(callbackContext->context);
+                        } catch (...) {
+                        }
                         callbackContext->invoked.store(true,
                                                        std::memory_order_release);
                     }
@@ -24057,45 +24016,10 @@ std::atomic<bool> g_reportBusy{false};
 
 bool OpenUsageReportNow();
 
-// A quiet Windows notification for the report: building it can take seconds,
-// and without a sign the report looks stuck and gets clicked again. One toast
-// at a time (the same tag replaces the previous one). Never throws.
-constexpr wchar_t kReportToastTag[] = L"usage-report";
-constexpr wchar_t kReportToastGroup[] = L"TaskbarSystemMonitor";
-// Windows only shows toasts from an app it knows; PowerShell's id is
-// registered on every Windows 11, so it works from explorer.exe.
-constexpr wchar_t kReportToastAppId[] =
-    L"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\"
-    L"powershell.exe";
+// Toasts were removed: they appeared under PowerShell's identity.
+void ShowReportToast(const wchar_t*, const wchar_t*) {}
 
-void ShowReportToast(const wchar_t* title, const wchar_t* body) {
-    if (g_unloading) return;
-    try {
-        namespace Notify = winrt::Windows::UI::Notifications;
-        winrt::Windows::Data::Xml::Dom::XmlDocument xml;
-        xml.LoadXml(
-            winrt::hstring(L"<toast><visual><binding template=\"ToastGeneric\">"
-                           L"<text>") +
-            title + L"</text><text>" + body +
-            L"</text></binding></visual><audio silent=\"true\"/></toast>");
-        Notify::ToastNotification toast(xml);
-        toast.Tag(kReportToastTag);
-        toast.Group(kReportToastGroup);
-        toast.ExpirationTime(winrt::clock::now() + std::chrono::minutes(2));
-        Notify::ToastNotificationManager::CreateToastNotifier(kReportToastAppId)
-            .Show(toast);
-    } catch (...) {
-    }
-}
-
-void ClearReportToast() {
-    try {
-        namespace Notify = winrt::Windows::UI::Notifications;
-        Notify::ToastNotificationManager::History().Remove(
-            kReportToastTag, kReportToastGroup, kReportToastAppId);
-    } catch (...) {
-    }
-}
+void ClearReportToast() {}
 
 void StopUsageReportThread() {
     if (g_reportThread && g_reportThread->joinable()) g_reportThread->join();
@@ -24103,6 +24027,7 @@ void StopUsageReportThread() {
 }
 
 void OpenUsageReport() {
+    if (g_unloading) return;
     if (g_reportBusy.exchange(true)) {
         // Already being built: say so, instead of looking like nothing
         // happened.
@@ -24371,6 +24296,7 @@ void FinishUsageCsvExport(std::wstring csv, bool ask,
 }
 
 void ExportUsageCsv() {
+    if (g_unloading) return;
     if (g_csvBusy.exchange(true)) {
         ShowReportToast(L"The data usage CSV is still being prepared",
                         L"It is ready in a moment. No need to click again.");
@@ -24739,9 +24665,6 @@ void SampleProcesses(bool withGpu) {
     // app's GPU use is its busiest engine type.
     if (!g_processes.query) {
         if (PdhOpenQueryW(nullptr, 0, &g_processes.query) == ERROR_SUCCESS) {
-            PdhAddEnglishCounterW(g_processes.query,
-                                  L"\\GPU Engine(*)\\Utilization Percentage", 0,
-                                  &g_processes.gpuCounter);
             PdhAddEnglishCounterW(
                 g_processes.query,
                 L"\\Processor Information(_Total)\\% Processor Performance", 0,
@@ -24749,6 +24672,13 @@ void SampleProcesses(bool withGpu) {
         } else {
             g_processes.query = nullptr;
         }
+    }
+    // The wildcard GPU counter is costly to collect: add it only when the
+    // GPU column is shown.
+    if (g_processes.query && withGpu && !g_processes.gpuCounter) {
+        PdhAddEnglishCounterW(g_processes.query,
+                              L"\\GPU Engine(*)\\Utilization Percentage", 0,
+                              &g_processes.gpuCounter);
     }
     if (!g_processes.query ||
         PdhCollectQueryData(g_processes.query) != ERROR_SUCCESS) {
@@ -26548,6 +26478,7 @@ StackPanel BuildHoverContent(const ModSettings& settings,
                         value.Text(now);
                     });
                     back.Start();
+                    TrackTimer(back);
                 } catch (...) {
                 }
             });
@@ -28339,6 +28270,7 @@ StackPanel BuildHoverContent(const ModSettings& settings,
                     // not always come again.
                     try {
                         sniff.Start();
+                        TrackTimer(sniff);
                     } catch (...) {
                     }
                     strip.Loaded([weakStrip](IInspectable const&,
@@ -31199,6 +31131,13 @@ void ResetHoverThread() {
         }
     } catch (...) {
     }
+    try {
+        StopHoverSizeGlide();  // Revokes its Rendering handler.
+        if (g_hover.refresh) g_hover.refresh.Stop();
+        if (g_hover.litWatch) g_hover.litWatch.Stop();
+    } catch (...) {
+    }
+    StopTrackedTimers();
     StopProcessSampling();
     g_detailsOpen = false;
     g_pingForDetails = false;
@@ -32080,8 +32019,8 @@ const std::vector<UiPage>& UiPages() {
         {L"Weather", 0xE753,
          {{L"Weather",
            {{L"weather.location", K::Text, L"Location",
-             L"A city, or a district with its city (Sungai Pinang, "
-             L"Samarinda); empty finds it for you."},
+             L"A city, or a district with its city (Shibuya, Tokyo); "
+             L"empty finds it for you."},
             {L"weather.placeDetail", K::Choice, L"Place name",
              L"How exact the automatic place's name is. The forecast itself "
              L"covers a few kilometres either way.",
@@ -32121,9 +32060,9 @@ const std::vector<UiPage>& UiPages() {
         {L"Exchange rate", 0xE8C7,
          {{L"Exchange rate",
            {{L"currency.base", K::Text, L"From", L"USD, EUR, SGD..."},
-            {L"currency.quote", K::Text, L"To", L"IDR, JPY, MYR..."},
+            {L"currency.quote", K::Text, L"To", L"EUR, GBP, JPY..."},
             {L"currency.label", K::Choice, L"Label", L"",
-             {{L"pair", L"Pair (USD/IDR)"}, {L"base", L"From only (USD)"}}},
+             {{L"pair", L"Pair (USD/EUR)"}, {L"base", L"From only (USD)"}}},
             {L"currency.colors", K::Choice, L"Colors", L"",
              {{L"upGreen", L"Rise in green"},
              {L"upRed", L"Rise in red"},
@@ -33437,7 +33376,6 @@ bool UiNarrow() {
 
 // The last press inside the options panel (a popup of its own), for the
 // Settings log and for keeping the panel open (see UiShowOptions).
-ULONGLONG g_uiInsidePressAt = 0;
 
 void UiRebuildSoonAt(int line) {
     DiagLog(kDiagSettings, L"redraw asked for (page %d, by line %d)",
@@ -37351,7 +37289,7 @@ void BuildPickedOptions(const ModSettings& settings, StackPanel target) {
         labelNames.push_back(labelItem == kItemWeather
                                  ? L"As in Weather (conditions, place)"
                              : labelItem == kItemCurrency
-                                 ? L"As in Exchange rate (USD/IDR)"
+                                 ? L"As in Exchange rate (USD/EUR)"
                                  : std::wstring(L"Short name (") + UiShortName(labelItem) +
                                        L")");
         labelKinds.push_back(0);
@@ -37903,7 +37841,6 @@ void UiHideOptionsForRedraw();
 // row of the zone's own card, drawn with the page (BuildReadingsPreview).
 // What stays here is the flag handling: the page being drawn again with
 // them open draws them again, so UiShowOptions has nothing left to do.
-ULONGLONG g_uiOptionsRefreshedAt = 0;
 ULONGLONG g_uiLastPressAt = 0;
 bool UiInsideOptions(DependencyObject) { return false; }
 void UiShowOptions(const ModSettings&) {
@@ -40429,7 +40366,14 @@ void ApplyPresetValues(const std::wstring& title,
         SetUiOverride(kept->key, value, kept->isInt);
     }
     if (auto it = values.find(L"items"); it != values.end()) {
-        Wh_SetStringValue(L"menu.items", it->second.c_str());
+        {
+            std::wstring items = it->second;
+            items.erase(std::remove_if(items.begin(), items.end(),
+                                       [](wchar_t c) { return c == L'\r' || c == L'\n'; }),
+                        items.end());
+            if (items.size() > 32000) items.resize(32000);
+            Wh_SetStringValue(L"menu.items", items.c_str());
+        }
     }
     if (auto it = values.find(L"layout"); it != values.end()) {
         Wh_SetStringValue(L"menu.layout", it->second.c_str());
@@ -44543,6 +44487,7 @@ void SettingsThreadProc() {
             nullptr, nullptr, instance, nullptr);
         if (!window) throw std::runtime_error("window");
         g_settingsWindow = window;
+        if (g_unloading) PostMessageW(window, WM_CLOSE, 0, 0);
         g_settingsOpen = true;
         g_settingsWindowForPost = window;
         g_settingsMenuOpen = false;
@@ -44660,6 +44605,8 @@ void SettingsThreadProc() {
         UiPillZoomReset();
         UiDragAnimStop();
         g_ui = UiWindowState{};
+        g_uiOptionsPanel = nullptr;
+        g_uiOptionsContent = nullptr;
         g_settingsSource = nullptr;
         native->Release();
         source.Close();
@@ -44668,6 +44615,8 @@ void SettingsThreadProc() {
         ModLog(L"Settings window failed: %08X",
                static_cast<unsigned>(winrt::to_hresult()));
         g_ui = UiWindowState{};
+        g_uiOptionsPanel = nullptr;
+        g_uiOptionsContent = nullptr;
         g_settingsSource = nullptr;
         if (window && IsWindow(window)) DestroyWindow(window);
     }
@@ -44836,10 +44785,14 @@ void AddMonitorMenu(XamlRoot root, std::optional<int> entry, int attempt) {
     // work on this thread.
     auto queue = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
     if (!queue) return;
-    queue.TryEnqueue(winrt::Windows::System::DispatcherQueuePriority::Low,
-                     [root, entry, attempt] {
-                         AddMonitorMenu(root, entry, attempt + 1);
-                     });
+    ++g_pendingQueued;
+    if (!queue.TryEnqueue(winrt::Windows::System::DispatcherQueuePriority::Low,
+                          [root, entry, attempt] {
+                              AddMonitorMenu(root, entry, attempt + 1);
+                              --g_pendingQueued;
+                          })) {
+        --g_pendingQueued;
+    }
 }
 
 using ShowTaskbarSettingsContextMenu_t =
@@ -45078,6 +45031,8 @@ BOOL Wh_ModInit() {
     if (HMODULE module = GetTaskbarViewModule()) {
         if (!HandleLoadedModuleIfTaskbarView(module, nullptr, false)) {
             ModLog(L"Taskbar.View symbols unavailable");
+            StopPingProbe();
+            StopPingTray();
             return FALSE;
         }
     } else {
@@ -45093,6 +45048,8 @@ BOOL Wh_ModInit() {
         if (!loadLibraryEx ||
             !WindhawkUtils::SetFunctionHook(loadLibraryEx, LoadLibraryExW_Hook,
                                             &LoadLibraryExW_Original)) {
+            StopPingProbe();
+            StopPingTray();
             return FALSE;
         }
     }
@@ -45135,6 +45092,9 @@ void Wh_ModBeforeUninit() {
     StopWebWorker();
     StopPingProbe();
     CloseSettingsWindow();
+    // Let already queued lambdas finish (bounded, in case this is the UI
+    // thread itself and they cannot run).
+    for (int i = 0; i < 30 && g_pendingQueued.load() > 0; ++i) Sleep(10);
 
     bool primaryRemoved = TearDownTaskbarUi();
     bool copiesRemoved = RemoveAllWidgetCopies();
