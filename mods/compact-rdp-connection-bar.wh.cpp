@@ -2,7 +2,7 @@
 // @id              compact-rdp-connection-bar
 // @name            Compact RDP connection bar
 // @description     Shrinks the top connection bar, optionally hides pin/quality/lock buttons, keeps drag working
-// @version         3.0.0
+// @version         3.3.2
 // @author          hsb5
 // @github          https://github.com/hsb5
 // @include         mstsc.exe
@@ -28,9 +28,9 @@ Each can be hidden separately; hide all three and the bar shrinks to the
 hostname alone. A single remaining toolbar keeps the side it originally sat on,
 so hiding the window buttons does not move the pin group to the right.
 
-The quality indicator is a lock icon that mstsc only shows in some sessions.
-Ticking the setting when it is absent changes nothing, and the bar is laid out
-exactly as it would be without the setting.
+The toolbar contents can change during a session. The mod reapplies the configured
+hiding rules whenever buttons are inserted or updated, while preserving buttons
+that mstsc itself keeps hidden.
 
 ## Screenshots
 
@@ -47,6 +47,10 @@ exactly as it would be without the setting.
 - **Hide lock button** - hides the lock icon mstsc shows next to the quality
   indicator. The button is only present in some sessions; when it is absent,
   nothing changes.
+- **Hide device-selection button** - hides the optional toolbar button with
+  command id 7 and bitmap index 8 (observed in some sessions, e.g. tablet RDP).
+- **Hide app commands button** - hides the optional triangle/menu button, observed
+  as command id 3 and bitmap index 0 in the left toolbar.
 - **Hide minimize / restore / close** - hide the window buttons on the
   right. Hiding the close button removes the only visible way to disconnect;
   the session can still be closed from the taskbar icon, or Ctrl+Alt+Break
@@ -68,6 +72,12 @@ exactly as it would be without the setting.
 - hideLockButton: false
   $name: Hide lock button
   $description: Hides the lock icon next to the quality indicator, when mstsc shows it
+- hideDeviceSelectionButton: false
+  $name: Hide device-selection button
+  $description: Hides the optional toolbar button with command id 7 and bitmap index 8
+- hideAppCommandsButton: false
+  $name: Hide app commands button
+  $description: Hides the optional triangle/menu button (command id 3, bitmap index 0)
 - hideMinimizeButton: false
   $name: Hide minimize button
   $description: Hides the minimize button on the right
@@ -90,6 +100,10 @@ exactly as it would be without the setting.
 #define PIN_ID      4   // command id of the pin button in mstsc
 #define LOCK_ID     5   // command id of the lock icon, when the session has one
 #define QUALITY_ID  6   // command id of the quality indicator in mstsc
+#define DEVICE_SELECTION_ID 7  // optional button, observed with bitmap index 8
+#define DEVICE_SELECTION_BMP 8
+#define APP_COMMANDS_ID 3      // optional triangle/menu button in left toolbar
+#define APP_COMMANDS_BMP 0
 
 // ---------------------------------------------------------------- state
 
@@ -112,6 +126,8 @@ static int  g_gapWidth    = 100;
 static bool g_hidePin     = false;
 static bool g_hideQuality = false;
 static bool g_hideLock    = false;
+static bool g_hideDeviceSelection = false;
+static bool g_hideAppCommands = false;
 static bool g_hideMin     = false;
 static bool g_hideRestore = false;
 static bool g_hideClose   = false;
@@ -136,6 +152,7 @@ static bool g_stale      = false;
 static thread_local bool t_painting = false;
 static bool g_computing = false;  // re-entrancy guard
 static bool g_dumped    = false;  // one-shot structure dump
+static bool g_inHide    = false;  // guards re-entrancy from toolbar mutations
 static UINT g_applyMsg  = 0;      // posted to the bar to apply new settings
 
 // Buttons this mod hid, remembered by command id so they can be restored.
@@ -154,7 +171,8 @@ static DrawTextExW_t     DrawTextExW_Original;
 static CreateWindowExW_t CreateWindowExW_Original;
 
 static LRESULT CALLBACK BarProc(HWND, UINT, WPARAM, LPARAM, DWORD_PTR);
-static LRESULT CALLBACK TbProc(HWND, UINT, WPARAM, LPARAM, DWORD_PTR);
+static LRESULT CALLBACK TbProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR);
+static void HideMatching(HWND tb);
 
 // ---------------------------------------------------------------- bar enumeration
 
@@ -424,6 +442,10 @@ static int NeededWidth(HWND tb) {
 
         // A button we asked to hide, and the toolbar really hid, needs no room.
         if ((ShouldHideId(b.idCommand) ||
+             (g_hideDeviceSelection && b.idCommand == DEVICE_SELECTION_ID &&
+              b.iBitmap == DEVICE_SELECTION_BMP) ||
+             (g_hideAppCommands && b.idCommand == APP_COMMANDS_ID &&
+              b.iBitmap == APP_COMMANDS_BMP) ||
              ShouldHideWindowButton(b.idCommand, b.iBitmap)) &&
             IsButtonHidden(tb, b.idCommand)) continue;
 
@@ -440,7 +462,8 @@ static int NeededWidth(HWND tb) {
 // TB_HIDEBUTTON takes the button's command id, not its index. Passing the
 // index silently matches nothing, which is why hiding used to do nothing.
 static void HideMatching(HWND tb) {
-    if (!tb || !IsWindow(tb)) return;
+    if (!tb || !IsWindow(tb) || g_inHide) return;
+    g_inHide = true;
 
     int count = (int)SendMessageW(tb, TB_BUTTONCOUNT, 0, 0);
     bool changed = false;
@@ -450,6 +473,10 @@ static void HideMatching(HWND tb) {
         ZeroMemory(&b, sizeof(b));
         if (!SendMessageW(tb, TB_GETBUTTON, i, (LPARAM)&b)) continue;
         if (!ShouldHideId(b.idCommand) &&
+            !(g_hideDeviceSelection && b.idCommand == DEVICE_SELECTION_ID &&
+              b.iBitmap == DEVICE_SELECTION_BMP) &&
+            !(g_hideAppCommands && b.idCommand == APP_COMMANDS_ID &&
+              b.iBitmap == APP_COMMANDS_BMP) &&
             !ShouldHideWindowButton(b.idCommand, b.iBitmap)) continue;
 
         // Only buttons this mod actually hid are recorded for restore.
@@ -471,6 +498,7 @@ static void HideMatching(HWND tb) {
     }
 
     if (changed) SendMessageW(tb, TB_AUTOSIZE, 0, 0);
+    g_inHide = false;
 }
 
 static void RestoreButtons() {
@@ -481,6 +509,7 @@ static void RestoreButtons() {
         SendMessageW(tb, TB_AUTOSIZE, 0, 0);
     }
     g_hiddenCount = 0;
+    g_inHide = false;
 }
 
 // ---------------------------------------------------------------- layout
@@ -769,6 +798,8 @@ static LRESULT CALLBACK BarProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD
         break;
 
     case WM_DESTROY:
+        Wh_Log(L"DIAG BBar WM_DESTROY hwnd=%p current=%p tbCount=%d hidden=%d",
+               hwnd, g_bbar, g_tbCount, g_hiddenCount);
         if (hwnd == g_bbar) {
             // haveOrig must not survive into the next bar, or a recreated bar
             // would be restored to the previous bar's toolbar positions.
@@ -809,7 +840,39 @@ static LRESULT CALLBACK TbProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_
         break;
     }
     }
-    return DefSubclassProc(hwnd, msg, wp, lp);
+
+    LRESULT result = DefSubclassProc(hwnd, msg, wp, lp);
+
+    // mstsc can rebuild/update toolbar buttons when the connection mode changes
+    // (e.g. tablet/device redirection). Reapply settings after the mutation,
+    // otherwise newly visible buttons can escape the initial hide pass.
+    if (msg == WM_NCDESTROY) {
+        Wh_Log(L"DIAG toolbar WM_NCDESTROY hwnd=%p bbar=%p", hwnd, g_bbar);
+        bool removed = false;
+        for (int i = 0; i < g_tbCount; i++) {
+            if (g_tb[i].hwnd == hwnd) {
+                g_tb[i].hwnd = NULL;
+                g_tb[i].haveOrig = false;
+                g_tb[i].x = 0;
+                g_tb[i].w = 0;
+                removed = true;
+            }
+        }
+        if (removed) {
+            g_stale = true;
+            if (g_bbar && IsWindow(g_bbar)) InvalidateRect(g_bbar, NULL, FALSE);
+        }
+    }
+    if (msg == TB_ADDBUTTONS || msg == TB_INSERTBUTTONW ||
+        msg == TB_INSERTBUTTONA || msg == TB_SETBUTTONINFO ||
+        msg == TB_SETBUTTONINFOW || msg == TB_SETBUTTONINFOA ||
+        msg == TB_CHANGEBITMAP) {
+        HideMatching(hwnd);
+        g_stale = true;
+        if (g_bbar && IsWindow(g_bbar)) InvalidateRect(g_bbar, NULL, FALSE);
+    }
+
+    return result;
 }
 
 // ---------------------------------------------------------------- text painting
@@ -914,6 +977,8 @@ static void LoadSettings() {
     g_hidePin     = Wh_GetIntSetting(L"hidePinButton") != 0;
     g_hideQuality = Wh_GetIntSetting(L"hideQualityButton") != 0;
     g_hideLock    = Wh_GetIntSetting(L"hideLockButton") != 0;
+    g_hideDeviceSelection = Wh_GetIntSetting(L"hideDeviceSelectionButton") != 0;
+    g_hideAppCommands = Wh_GetIntSetting(L"hideAppCommandsButton") != 0;
     g_hideMin     = Wh_GetIntSetting(L"hideMinimizeButton") != 0;
     g_hideRestore = Wh_GetIntSetting(L"hideRestoreButton") != 0;
     g_hideClose   = Wh_GetIntSetting(L"hideCloseButton") != 0;
@@ -930,8 +995,9 @@ BOOL Wh_ModInit() {
     WindhawkUtils::SetFunctionHook(DrawTextExW, DrawTextExW_Hook, &DrawTextExW_Original);
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original);
 
-    Wh_Log(L"init " WH_MOD_VERSION L": gap=%d pin=%d quality=%d lock=%d min=%d restore=%d close=%d",
+    Wh_Log(L"init " WH_MOD_VERSION L": gap=%d pin=%d quality=%d lock=%d devices=%d appcmd=%d min=%d restore=%d close=%d",
            g_gapWidth, (int)g_hidePin, (int)g_hideQuality, (int)g_hideLock,
+           (int)g_hideDeviceSelection, (int)g_hideAppCommands,
            (int)g_hideMin, (int)g_hideRestore, (int)g_hideClose);
     return TRUE;
 }
