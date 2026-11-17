@@ -93,7 +93,6 @@ If you find a mistake and for additional details, please click [here](https://gi
 
 // ==WindhawkModSettings==
 /*
-# NOTE: Predefined option names are localized for the languages listed in the readme (other languages show English). For menu items in any other language, use Custom Items at the bottom.
 
 - bloatwareItems:
   - removeOneDrive: true
@@ -851,12 +850,16 @@ If you find a mistake and for additional details, please click [here](https://gi
 #include <unordered_map>
 #include <mutex>
 #include <optional>
-#include <cwctype>
 #include <cwchar>
 #include <windhawk_utils.h>
 
 // Thread-local storage for file paths
 thread_local std::vector<std::wstring> tl_filePaths;
+
+// RemoveMenu() detaches a filtered submenu without destroying it, passing
+// ownership to us. We stash the handle here and destroy it in
+// ExitMenuTracking(), after the session's tracking call has returned.
+thread_local std::vector<HMENU> tl_detachedSubmenus;
 
 // Result of a single ancestor-chain classification of a popup menu's owner
 // window: whether to filter the menu at all, and (for ShellDefView) enough
@@ -917,38 +920,36 @@ IShellBrowser* GetShellBrowser(HWND hwnd) {
     // SHELLDLL_DefView isn't included: it never answers this message and
     // has its own private WM_USER-range messages, risking a misread reply.
     // Progman/WorkerW route to GetDesktopShellBrowser() before this is called.
-    static const wchar_t* kAllowedClasses[] = {
-        L"ShellTabWindowClass",
-        L"CabinetWClass",
-        L"ExploreWClass",
+    struct ShellWindowClass {
+        const wchar_t* name;
+        bool isFrame;  // true if this class also bounds the ancestor walk
     };
-    static const wchar_t* kShellFrameClasses[] = {
-        L"CabinetWClass",
-        L"ExploreWClass",
+    static const ShellWindowClass kShellWindowClasses[] = {
+        {L"ShellTabWindowClass", false},
+        {L"CabinetWClass", true},
+        {L"ExploreWClass", true},
     };
-    
+
     IShellBrowser* pShellBrowser = nullptr;
     for (HWND h = hwnd; h; h = GetAncestor(h, GA_PARENT)) {
         wchar_t className[256] = {0};
         GetClassNameW(h, className, ARRAYSIZE(className));
-        
-        bool isAllowed = false;
-        for (const wchar_t* cls : kAllowedClasses) {
-            if (wcscmp(className, cls) == 0) { isAllowed = true; break; }
-        }
-        
-        if (isAllowed) {
-            LRESULT result = SendMessageTimeoutW(h, WM_USER + 7 /* CWM_GETISHELLBROWSER */, 0, 0,
-                                                  SMTO_ABORTIFHUNG, 1000, (PDWORD_PTR)&pShellBrowser);
-            if (result && pShellBrowser) {
+
+        for (const ShellWindowClass& cls : kShellWindowClasses) {
+            if (wcscmp(className, cls.name) != 0) {
+                continue;
+            }
+
+            LRESULT result = SendMessageW(h, WM_USER + 7 /* CWM_GETISHELLBROWSER */, 0, 0);
+            pShellBrowser = (IShellBrowser*)result;
+            if (pShellBrowser) {
                 return pShellBrowser;
             }
-        }
-        
-        for (const wchar_t* frameClass : kShellFrameClasses) {
-            if (wcscmp(className, frameClass) == 0) {
+
+            if (cls.isFrame) {
                 return nullptr;
             }
+            break;
         }
     }
     return nullptr;
@@ -959,19 +960,10 @@ IShellBrowser* GetShellBrowser(HWND hwnd) {
 // fails closed (hides) on the former -- an error shouldn't hide a match.
 thread_local bool tl_selectionLookupFailed = false;
 
-// Forward declaration of the thread-local desktop IShellBrowser session
-// cache (fully defined further below). Owned by, and released in,
-// ExitMenuTracking() when the current tracking session ends.
-extern thread_local IShellBrowser* tl_sessionDesktopShellBrowser;
-
 // The desktop doesn't expose an IShellBrowser via CWM_GETISHELLBROWSER --
 // use IShellWindows::FindWindowSW(SWC_DESKTOP) then IServiceProvider ->
-// SID_STopLevelBrowser. Cached per-session: a COM pointer can't release cross-thread, and the desktop's view can be reparented.
+// SID_STopLevelBrowser. Returns a new reference; the caller must Release() it.
 IShellBrowser* GetDesktopShellBrowser() {
-    if (tl_sessionDesktopShellBrowser) {
-        return tl_sessionDesktopShellBrowser;
-    }
-    
     IShellWindows* pShellWindows = nullptr;
     if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
                                  IID_IShellWindows, (void**)&pShellWindows)) || !pShellWindows) {
@@ -993,13 +985,6 @@ IShellBrowser* GetDesktopShellBrowser() {
     }
     
     pShellWindows->Release();
-    
-    // Only a successful lookup is cached; a nullptr result (lookup failed)
-    // isn't stored, so a later call within the same session simply retries
-    // rather than being stuck with a cached failure.
-    if (pShellBrowser) {
-        tl_sessionDesktopShellBrowser = pShellBrowser;
-    }
     return pShellBrowser;
 }
 
@@ -1073,8 +1058,10 @@ std::vector<std::wstring> GetSelectedFilesFromExplorer(HWND hwnd, ShellViewKind 
             return files;
         }
         files = GetSelectedFilesFromShellBrowser(pShellBrowser);
-        // Do NOT release here -- ownership belongs to the session-scoped
-        // cache, released exactly once in ExitMenuTracking() when the session ends.
+        // Released here, on the creating thread and still inside the COM
+        // apartment -- no session-scoped caching needed since this is the
+        // only call site per session.
+        pShellBrowser->Release();
         return files;
 
     }
@@ -1094,11 +1081,12 @@ std::vector<std::wstring> GetSelectedFilesFromExplorer(HWND hwnd, ShellViewKind 
         return files;
     }
     
+    // CWM_GETISHELLBROWSER returns this pointer without an added reference
+    // (it's owned by the frame window), so take a temporary one for the
+    // duration of use -- cheap insurance against it being released elsewhere mid-call.
+    pShellBrowser->AddRef();
     files = GetSelectedFilesFromShellBrowser(pShellBrowser);
-    
-    // NOTE: Do not call pShellBrowser->Release() here -- WM_USER+7 returns
-    // it without an added reference (a borrowed pointer owned by the frame
-    // window), so releasing it drops a refcount we don't own.
+    pShellBrowser->Release();
     
     return files;
 }
@@ -1196,16 +1184,22 @@ struct {
 std::wstring RemoveAmpersands(const std::wstring& str);
 std::wstring NormalizeString(const std::wstring& str);
 
-// Forward declaration of the thread-local WM_INITMENUPOPUP hook handle
-// (fully defined further below). ProcessMenu() needs to check whether it's
-// installed, to decide whether an eager recursive pass is worth doing.
-extern thread_local HHOOK tl_hMenuHook;
+// Forward declaration of the thread-local "should ProcessMenu() recurse
+// into submenus itself" flag (fully defined further below, alongside
+// tl_hMenuHook) -- see its own comment for why this isn't just !tl_hMenuHook.
+extern thread_local bool tl_recurseSubmenus;
+
+// Forward declarations of the per-session filter-toggle snapshots (fully
+// defined further below, alongside tl_sessionNeedFiles) -- see their own
+// comment for why ShouldRemoveMenuItem() uses these instead of a live read.
+extern thread_local bool tl_sessionExtensionFilterOn;
+extern thread_local bool tl_sessionWinRARFilterOn;
 
 struct MenuItem {
     std::wstring text;
     bool* enabled;
-    bool requiresExtensionCheck;
-    std::vector<std::wstring>* allowedExtensions;
+    std::vector<std::wstring>* allowedExtensions;  // nullptr = no extension check
+    const bool* filterEnabled;                     // toggle gating the check above
     bool greyedOnly; // If true, only remove when the item is greyed out (disabled)
 };
 
@@ -1221,17 +1215,22 @@ std::unordered_map<std::wstring, size_t> g_menuItemsByText;
 // (Explorer UI threads).
 std::mutex g_settingsMutex;
 
+// Forward declaration; full definition (and the reason it exists instead
+// of raw ::towlower) is further below, near the other string-matching helpers.
+std::wstring ToLower(const std::wstring& str);
+
 // Function to get file extension from path
 std::wstring GetFileExtension(const std::wstring& path) {
-    // PathFindExtensionW ignores dots earlier in the path (e.g. a folder
-    // named "v1.0"), unlike a naive find_last_of('.').
-    PCWSTR pExt = PathFindExtensionW(path.c_str());
-    if (!pExt || !*pExt || wcscmp(pExt, L".") == 0) {
+    // Only look at the last path component, so a folder named "v1.0"
+    // doesn't get mistaken for an extension. No MAX_PATH limit, unlike
+    // PathFindExtensionW, and no Windows 8+ dependency, unlike PathCchFindExtension.
+    size_t nameStart = path.find_last_of(L"\\/");
+    nameStart = (nameStart == std::wstring::npos) ? 0 : nameStart + 1;
+    size_t dot = path.find_last_of(L'.');
+    if (dot == std::wstring::npos || dot < nameStart || dot + 1 == path.size()) {
         return L"";
     }
-    std::wstring ext(pExt);
-    // Convert to lowercase for comparison
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+    std::wstring ext = ToLower(path.substr(dot));
     return ext;
 }
 
@@ -1264,81 +1263,81 @@ void InitializeMenuItems() {
     // its own g_menuItems entry below, so lookups work exactly as before.
     struct MenuItemGroup {
         bool* enabled;
-        bool requiresExtensionCheck;
         std::vector<std::wstring>* allowedExtensions;
+        const bool* filterEnabled;
         bool greyedOnly;
         std::vector<std::wstring> texts;
     };
     const std::vector<MenuItemGroup> menuItemGroups = {
         // Bloatware Items
-        {&g_settings.bloatwareItems.removeOneDrive, false, nullptr, false, {L"Move to OneDrive", L"OneDrive に移動", L"Mover para o OneDrive", L"Mover a OneDrive", L"Přesunout na OneDrive", L"Auf OneDrive verschieben", L"OneDrive'a taşı", L"Przenieś do usługi OneDrive", L"Déplacer vers OneDrive"}},
-        {&g_settings.appSpecificItems.removeAlwaysKeepOnThisDevice, false, nullptr, false, {L"Always keep on this device", L"このデバイス上に常に保持する", L"Sempre manter neste dispositivo", L"Manter sempre neste dispositivo", L"Mantener siempre en este dispositivo", L"Vždy ponechat na tomto zařízení", L"Immer auf diesem Gerät behalten", L"Her zaman bu cihazda tut", L"Zawsze przechowuj na tym urządzeniu", L"Toujours conserver sur cet appareil"}},
-        {&g_settings.appSpecificItems.removeFreeUpSpace, false, nullptr, false, {L"Free up space", L"空き領域を増やす", L"Liberar espaço", L"Libertar espaço", L"Liberar espacio", L"Uvolnit místo", L"Bereinigen", L"Alan boşalt", L"Zwolnij miejsce", L"Libérer de l'espace"}},
-        {&g_settings.bloatwareItems.removeCopilot, false, nullptr, false, {L"Ask Copilot", L"Copilot とチャットする", L"Perguntar ao Copilot", L"Preguntar a Copilot", L"Zeptat se Copilota", L"Copilot fragen", L"Copilot'a sor", L"Zapytaj aplikację Copilot", L"Demander à Copilot"}},
-        {&g_settings.bloatwareItems.removeDefender, false, nullptr, false, {L"Scan with Microsoft Defender...", L"Microsoft Defenderでスキャンする...", L"Verificar com o Microsoft Defender...", L"Analisar com o Microsoft Defender...", L"Analizar con Microsoft Defender...", L"Prohledat pomocí programu Microsoft Defender...", L"Mit Microsoft Defender überprüfen...", L"Microsoft Defender ile tara...", L"Skanuj za pomocą programu Microsoft Defender...", L"Analyser avec Microsoft Defender...", L"Проверка с использованием Microsoft Defender..."}},
-        {&g_settings.bloatwareItems.removeDesigner, false, nullptr, false, {L"Create with Designer", L"Designerで作成", L"Criar com o Designer", L"Crear con Designer", L"Vytvořit pomocí Designeru", L"Mit Designer erstellen", L"Designer ile oluştur", L"Utwórz za pomocą aplikacji Designer", L"Créer avec Designer"}},
-        {&g_settings.bloatwareItems.removeClipchamp, false, nullptr, false, {L"Edit with Clipchamp", L"Clipchampで編集", L"Editar com o Clipchamp", L"Editar con Clipchamp", L"Upravit pomocí Clipchampu", L"Mit Clipchamp bearbeiten", L"Clipchamp ile düzenle", L"Edytuj za pomocą aplikacji Clipchamp", L"Modifier avec Clipchamp", L"Редактировать в Clipchamp"}},
-        {&g_settings.bloatwareItems.removeMicrosoft365Copilot, false, nullptr, false, {L"Ask Microsoft 365 Copilot", L"Perguntar ao Microsoft 365 Copilot", L"Preguntar a Microsoft 365 Copilot", L"Zeptat se Microsoft 365 Copilota", L"Microsoft 365 Copilot fragen", L"Microsoft 365 Copilot'a sor", L"Zapytaj aplikację Microsoft 365 Copilot", L"Demander à Microsoft 365 Copilot"}},
+        {&g_settings.bloatwareItems.removeOneDrive, nullptr, nullptr, false, {L"Move to OneDrive", L"OneDrive に移動", L"Mover para o OneDrive", L"Mover a OneDrive", L"Přesunout na OneDrive", L"Auf OneDrive verschieben", L"OneDrive'a taşı", L"Przenieś do usługi OneDrive", L"Déplacer vers OneDrive"}},
+        {&g_settings.appSpecificItems.removeAlwaysKeepOnThisDevice, nullptr, nullptr, false, {L"Always keep on this device", L"このデバイス上に常に保持する", L"Sempre manter neste dispositivo", L"Manter sempre neste dispositivo", L"Mantener siempre en este dispositivo", L"Vždy ponechat na tomto zařízení", L"Immer auf diesem Gerät behalten", L"Her zaman bu cihazda tut", L"Zawsze przechowuj na tym urządzeniu", L"Toujours conserver sur cet appareil"}},
+        {&g_settings.appSpecificItems.removeFreeUpSpace, nullptr, nullptr, false, {L"Free up space", L"空き領域を増やす", L"Liberar espaço", L"Libertar espaço", L"Liberar espacio", L"Uvolnit místo", L"Bereinigen", L"Alan boşalt", L"Zwolnij miejsce", L"Libérer de l'espace"}},
+        {&g_settings.bloatwareItems.removeCopilot, nullptr, nullptr, false, {L"Ask Copilot", L"Copilot とチャットする", L"Perguntar ao Copilot", L"Preguntar a Copilot", L"Zeptat se Copilota", L"Copilot fragen", L"Copilot'a sor", L"Zapytaj aplikację Copilot", L"Demander à Copilot"}},
+        {&g_settings.bloatwareItems.removeDefender, nullptr, nullptr, false, {L"Scan with Microsoft Defender...", L"Microsoft Defenderでスキャンする...", L"Verificar com o Microsoft Defender...", L"Analisar com o Microsoft Defender...", L"Analizar con Microsoft Defender...", L"Prohledat pomocí programu Microsoft Defender...", L"Mit Microsoft Defender überprüfen...", L"Microsoft Defender ile tara...", L"Skanuj za pomocą programu Microsoft Defender...", L"Analyser avec Microsoft Defender...", L"Проверка с использованием Microsoft Defender..."}},
+        {&g_settings.bloatwareItems.removeDesigner, nullptr, nullptr, false, {L"Create with Designer", L"Designerで作成", L"Criar com o Designer", L"Crear con Designer", L"Vytvořit pomocí Designeru", L"Mit Designer erstellen", L"Designer ile oluştur", L"Utwórz za pomocą aplikacji Designer", L"Créer avec Designer"}},
+        {&g_settings.bloatwareItems.removeClipchamp, nullptr, nullptr, false, {L"Edit with Clipchamp", L"Clipchampで編集", L"Editar com o Clipchamp", L"Editar con Clipchamp", L"Upravit pomocí Clipchampu", L"Mit Clipchamp bearbeiten", L"Clipchamp ile düzenle", L"Edytuj za pomocą aplikacji Clipchamp", L"Modifier avec Clipchamp", L"Редактировать в Clipchamp"}},
+        {&g_settings.bloatwareItems.removeMicrosoft365Copilot, nullptr, nullptr, false, {L"Ask Microsoft 365 Copilot", L"Perguntar ao Microsoft 365 Copilot", L"Preguntar a Microsoft 365 Copilot", L"Zeptat se Microsoft 365 Copilota", L"Microsoft 365 Copilot fragen", L"Microsoft 365 Copilot'a sor", L"Zapytaj aplikację Microsoft 365 Copilot", L"Demander à Microsoft 365 Copilot"}},
         
         // Basic Items
-        {&g_settings.basicItems.removeOpen, false, nullptr, false, {L"Open", L"開く", L"Abrir", L"Otevřít", L"Öffnen", L"Aç", L"Otwórz", L"Ouvrir", L"Открыть"}},
-        {&g_settings.basicItems.removeOpenWith, false, nullptr, false, {L"Open with", L"プログラムから開く", L"Abrir com", L"Abrir con", L"Otevřít v aplikaci", L"Öffnen mit", L"Birlikte aç", L"Otwórz za pomocą", L"Ouvrir avec", L"Открыть с помощью"}},
-        {&g_settings.basicItems.removeCut, false, nullptr, false, {L"Cut", L"切り取り", L"Recortar", L"Cortar", L"Vyjmout", L"Ausschneiden", L"Kes", L"Wytnij", L"Couper", L"Вырезать"}},
-        {&g_settings.basicItems.removeCopy, false, nullptr, false, {L"Copy", L"コピー", L"Copiar", L"Kopírovat", L"Kopieren", L"Kopyala", L"Kopiuj", L"Copier", L"Копировать"}},
-        {&g_settings.basicItems.removeCreateShortcut, false, nullptr, false, {L"Create shortcut", L"ショートカットの作成", L"Criar atalho", L"Crear acceso directo", L"Vytvořit zástupce", L"Verknüpfung erstellen", L"Kısayol oluştur", L"Utwórz skrót", L"Créer un raccourci", L"Создать ярлык"}},
-        {&g_settings.basicItems.removeDelete, false, nullptr, false, {L"Delete", L"削除", L"Excluir", L"Eliminar", L"Odstranit", L"Löschen", L"Sil", L"Usuń", L"Supprimer", L"Удалить"}},
-        {&g_settings.basicItems.removeRename, false, nullptr, false, {L"Rename", L"名前の変更", L"Renomear", L"Mudar o nome", L"Cambiar nombre", L"Přejmenovat", L"Umbenennen", L"Yeniden adlandır", L"Zmień nazwę", L"Renommer", L"Переименовать"}},
-        {&g_settings.basicItems.removeSendTo, false, nullptr, false, {L"Send to", L"送る", L"Enviar para", L"Enviar a", L"Odeslat do", L"Senden an", L"Gönder", L"Wyślij do", L"Envoyer vers", L"Отправить"}},
-        {&g_settings.basicItems.removeOpenInNewTab, false, nullptr, false, {L"Open in new tab", L"新しいタブで開く", L"Abrir em uma nova guia", L"Abrir num novo separador", L"Abrir en nueva pestaña", L"Otevřít na nové kartě", L"In neuer Registerkarte öffnen", L"Yeni sekmede aç", L"Otwórz w nowej karcie", L"Ouvrir dans un nouvel onglet", L"Открыть в новой вкладке"}},
-        {&g_settings.basicItems.removeOpenInNewWindow, false, nullptr, false, {L"Open in new window", L"新しいウィンドウで開く", L"Abrir em uma nova janela", L"Abrir numa nova janela", L"Abrir en nueva ventana", L"Otevřít v novém okně", L"In neuem Fenster öffnen", L"Yeni pencerede aç", L"Otwórz w nowym oknie", L"Ouvrir dans une nouvelle fenêtre", L"Открыть в новом окне"}},
-        {&g_settings.basicItems.removeEdit, false, nullptr, false, {L"Edit", L"編集", L"Editar", L"Upravit", L"Bearbeiten", L"Düzenle", L"Edytuj", L"Modifier", L"Изменить"}},
-        {&g_settings.basicItems.removePlay, false, nullptr, false, {L"Play", L"再生", L"Reproduzir", L"Reproducir", L"Přehrát", L"Wiedergabe", L"Oynat", L"Odtwarzaj", L"Lire", L"Воспроизвести"}},
-        {&g_settings.basicItems.removePreview, false, nullptr, false, {L"Preview", L"プレビュー", L"Visualizar", L"Pré-visualizar", L"Vista previa", L"Náhled", L"Vorschau", L"Önizleme", L"Podgląd", L"Aperçu"}},
-        {&g_settings.basicItems.removePrint, false, nullptr, false, {L"Print", L"印刷", L"Imprimir", L"Tisk", L"Drucken", L"Yazdır", L"Drukuj", L"Imprimer", L"Печать"}},
-        {&g_settings.basicItems.removeShare, false, nullptr, false, {L"Share", L"共有", L"Compartilhar", L"Partilhar", L"Compartir", L"Sdílet", L"Freigabe", L"Paylaş", L"Udostępnij", L"Partager", L"Поделиться"}},
-        {&g_settings.appSpecificItems.removeSendWithQuickShare, false, nullptr, false, {L"Send with Quick Share", L"Enviar com o Compartilhamento Rápido", L"Enviar com Partilha Rápida", L"Enviar con Quick Share", L"Odeslat pomocí Rychlého sdílení", L"Mit Quick Share senden", L"Quick Share ile gönder", L"Wyślij za pomocą funkcji Quick Share", L"Envoyer avec Quick Share"}},
-        {&g_settings.basicItems.removeRefresh, false, nullptr, false, {L"Refresh", L"最新の情報に更新", L"Atualizar", L"Actualizar", L"Aktualizovat", L"Aktualisieren", L"Yenile", L"Odśwież", L"Actualiser", L"Обновить"}},
-        {&g_settings.basicItems.removeCopyAsPath, false, nullptr, false, {L"Copy as path", L"パスのコピー", L"Copiar como caminho", L"Copiar como ruta de acceso", L"Kopírovat jako cestu", L"Als Pfad kopieren", L"Yolu kopyala", L"Kopiuj jako ścieżkę", L"Copier comme chemin", L"Копировать как путь"}},
-        {&g_settings.basicItems.removeCustomizeFolder, false, nullptr, false, {L"Customize this folder...", L"このフォルダーのカスタマイズ...", L"Customise this folder...", L"Personalizar esta pasta...", L"Personalizar esta carpeta...", L"Přizpůsobit tuto složku...", L"Ordner anpassen...", L"Bu klasörü özelleştir...", L"Dostosuj ten folder...", L"Personnaliser ce dossier...", L"Настроить папку..."}},
-        {&g_settings.basicItems.removeFavorites, false, nullptr, false, {L"Add to Favorites", L"お気に入りに追加", L"Add to Favourites", L"Adicionar aos Favoritos", L"Agregar a favoritos", L"Přidat k oblíbeným položkám", L"Zu Favoriten hinzufügen", L"Sık kullanılanlara ekle", L"Dodaj do ulubionych", L"Ajouter aux favoris", L"Добавить в избранное"}},
-        {&g_settings.basicItems.removePinToQuickAccess, false, nullptr, false, {L"Pin to Quick access", L"クイック アクセスにピン留めする", L"Fixar no Acesso Rápido", L"Afixar no Acesso rápido", L"Anclar a Acceso rápido", L"Připnout na Rychlý přístup", L"An Schnellzugriff anheften", L"Hızlı erişime sabitle", L"Przypnij do obszaru Szybki dostęp", L"Épingler à Accès rapide", L"Закрепить на панели быстрого доступа"}},
-        {&g_settings.basicItems.removePinToStart, false, nullptr, false, {L"Pin to Start", L"スタートにピン留めする", L"Fixar em Iniciar", L"Afixar no Iniciar", L"Anclar a Inicio", L"Připnout na Start", L"An \"Start\" anheften", L"Başlat'a sabitle", L"Przypnij do menu Start", L"Épingler au menu Démarrer", L"Закрепить в меню \"Пуск\""}},
-        {&g_settings.basicItems.removeCast, false, nullptr, false, {L"Cast to Device", L"デバイス キャスト", L"Transmitir para Dispositivo", L"Transmitir para o Dispositivo", L"Transmitir en dispositivo", L"Přetypovat do zařízení", L"Wiedergabe auf Gerät", L"Cihaza yayınla", L"Przesyłanie na urządzenie", L"Diffuser vers un appareil", L"Передать на устройство"}},
-        {&g_settings.basicItems.removeGiveAccess, false, nullptr, false, {L"Give access to", L"アクセスを許可する", L"Conceder acesso a", L"Dar acceso a", L"Poskytnout přístup k", L"Freigeben für", L"Erişim ver", L"Udziel dostępu do", L"Donner l'accès à", L"Предоставить доступ к"}},
-        {&g_settings.basicItems.removeRestoreVersions, false, nullptr, false, {L"Restore previous versions", L"以前のバージョンの復元", L"Restaurar versões anteriores", L"Restaurar versiones anteriores", L"Obnovit předchozí verze", L"Vorgängerversionen wiederhestellen", L"Önceki sürümleri geri yükle", L"Przywróć poprzednie wersje", L"Restaurer les versions précédentes", L"Восстановить прежнюю версию"}},
-        {&g_settings.basicItems.removeIncludeInLibrary, false, nullptr, false, {L"Include in library", L"ライブラリに追加", L"Incluir na biblioteca", L"Incluir en biblioteca", L"Zahrnout do knihovny", L"In Bibliothek aufnehmen", L"Kitaplığa ekle", L"Dołącz do biblioteki", L"Inclure dans la bibliothèque", L"Добавить в библиотеку"}},
-        {&g_settings.basicItems.removeRotate, false, nullptr, false, {L"Rotate right", L"右に回転", L"Girar para a direita", L"Rodar para a direita", L"Girar a la derecha", L"Otočit doprava", L"Nach rechts drehen", L"Sağa döndür", L"Obróć w prawo", L"Faire pivoter vers la droite", L"Повернуть вправо"}},
-        {&g_settings.basicItems.removeRotate, false, nullptr, false, {L"Rotate left", L"左に回転", L"Girar para a esquerda", L"Rodar para a esquerda", L"Girar a la izquierda", L"Otočit doleva", L"Nach links drehen", L"Sola döndür", L"Obróć w lewo", L"Faire pivoter vers la gauche", L"Повернуть влево"}},
-        {&g_settings.basicItems.removeDisplaySettings, false, nullptr, false, {L"Display settings", L"ディスプレイ設定", L"Configurações de vídeo", L"Definições do ecrã", L"Configuración de pantalla", L"Nastavení zobrazení", L"Anzeigeeinstellungen", L"Görüntü ayarları", L"Ustawienia ekranu", L"Paramètres d'affichage", L"Параметры экрана"}},
-        {&g_settings.basicItems.removePersonalize, false, nullptr, false, {L"Personalize", L"個人用設定", L"Personalise", L"Personalizar", L"Přizpůsobit", L"Anpassen", L"Kişiselleştir", L"Personalizuj", L"Personnaliser", L"Персонализация"}},
-        {&g_settings.basicItems.removeSetAsDesktopBackground, false, nullptr, false, {L"Set as desktop background", L"デスクトップの背景として設定", L"Definir como plano de fundo da área de trabalho", L"Definir como fundo do ambiente de trabalho", L"Establecer como fondo de escritorio", L"Nastavit jako pozadí plochy", L"Als Desktophintergrund festlegen", L"Masaüstü arka planı olarak ayarla", L"Ustaw jako tło pulpitu", L"Définir comme arrière-plan du Bureau", L"Сделать фоном рабочего стола"}},
-        {&g_settings.basicItems.removeView, false, nullptr, false, {L"View", L"表示", L"Exibir", L"Ver", L"Zobrazení", L"Ansicht", L"Görünüm", L"Widok", L"Affichage", L"Вид"}},
-        {&g_settings.basicItems.removeSortBy, false, nullptr, false, {L"Sort by", L"並べ替え", L"Classificar por", L"Ordenar por", L"Seřadit podle", L"Sortieren nach", L"Sıralama ölçütü", L"Sortuj według", L"Trier par", L"Сортировка"}},
-        {&g_settings.basicItems.removeGroupBy, false, nullptr, false, {L"Group by", L"グループで表示", L"Agrupar por", L"Seskupit podle", L"Gruppieren nach", L"Gruplama ölçütü", L"Grupuj według", L"Regrouper par", L"Группировка"}},
-        {&g_settings.basicItems.removeNew, false, nullptr, false, {L"New", L"新規作成", L"Novo", L"Nuevo", L"Nový", L"Neu", L"Yeni", L"Nowy", L"Nouveau", L"Создать"}},
-        {&g_settings.basicItems.removeProperties, false, nullptr, false, {L"Properties", L"プロパティ", L"Propriedades", L"Propiedades", L"Vlastnosti", L"Eigenschaften", L"Özellikler", L"Właściwości", L"Propriétés", L"Свойства"}},
-        {&g_settings.basicItems.removePaste, false, nullptr, true, {L"Paste", L"貼り付け", L"Colar", L"Pegar", L"Vložit", L"Einfügen", L"Yapıştır", L"Wklej", L"Coller", L"Вставить"}},
-        {&g_settings.basicItems.removeExtractAll, false, nullptr, false, {L"Extract All...", L"すべて展開...", L"Extrair Tudo...", L"Extrair Todos...", L"Extraer todo...", L"Extrahovat vše...", L"Alle extrahieren...", L"Tümünü ayıkla...", L"Wyodrębnij wszystkie...", L"Extraire tout...", L"Извлечь все..."}},
+        {&g_settings.basicItems.removeOpen, nullptr, nullptr, false, {L"Open", L"開く", L"Abrir", L"Otevřít", L"Öffnen", L"Aç", L"Otwórz", L"Ouvrir", L"Открыть"}},
+        {&g_settings.basicItems.removeOpenWith, nullptr, nullptr, false, {L"Open with", L"プログラムから開く", L"Abrir com", L"Abrir con", L"Otevřít v aplikaci", L"Öffnen mit", L"Birlikte aç", L"Otwórz za pomocą", L"Ouvrir avec", L"Открыть с помощью"}},
+        {&g_settings.basicItems.removeCut, nullptr, nullptr, false, {L"Cut", L"切り取り", L"Recortar", L"Cortar", L"Vyjmout", L"Ausschneiden", L"Kes", L"Wytnij", L"Couper", L"Вырезать"}},
+        {&g_settings.basicItems.removeCopy, nullptr, nullptr, false, {L"Copy", L"コピー", L"Copiar", L"Kopírovat", L"Kopieren", L"Kopyala", L"Kopiuj", L"Copier", L"Копировать"}},
+        {&g_settings.basicItems.removeCreateShortcut, nullptr, nullptr, false, {L"Create shortcut", L"ショートカットの作成", L"Criar atalho", L"Crear acceso directo", L"Vytvořit zástupce", L"Verknüpfung erstellen", L"Kısayol oluştur", L"Utwórz skrót", L"Créer un raccourci", L"Создать ярлык"}},
+        {&g_settings.basicItems.removeDelete, nullptr, nullptr, false, {L"Delete", L"削除", L"Excluir", L"Eliminar", L"Odstranit", L"Löschen", L"Sil", L"Usuń", L"Supprimer", L"Удалить"}},
+        {&g_settings.basicItems.removeRename, nullptr, nullptr, false, {L"Rename", L"名前の変更", L"Renomear", L"Mudar o nome", L"Cambiar nombre", L"Přejmenovat", L"Umbenennen", L"Yeniden adlandır", L"Zmień nazwę", L"Renommer", L"Переименовать"}},
+        {&g_settings.basicItems.removeSendTo, nullptr, nullptr, false, {L"Send to", L"送る", L"Enviar para", L"Enviar a", L"Odeslat do", L"Senden an", L"Gönder", L"Wyślij do", L"Envoyer vers", L"Отправить"}},
+        {&g_settings.basicItems.removeOpenInNewTab, nullptr, nullptr, false, {L"Open in new tab", L"新しいタブで開く", L"Abrir em uma nova guia", L"Abrir num novo separador", L"Abrir en nueva pestaña", L"Otevřít na nové kartě", L"In neuer Registerkarte öffnen", L"Yeni sekmede aç", L"Otwórz w nowej karcie", L"Ouvrir dans un nouvel onglet", L"Открыть в новой вкладке"}},
+        {&g_settings.basicItems.removeOpenInNewWindow, nullptr, nullptr, false, {L"Open in new window", L"新しいウィンドウで開く", L"Abrir em uma nova janela", L"Abrir numa nova janela", L"Abrir en nueva ventana", L"Otevřít v novém okně", L"In neuem Fenster öffnen", L"Yeni pencerede aç", L"Otwórz w nowym oknie", L"Ouvrir dans une nouvelle fenêtre", L"Открыть в новом окне"}},
+        {&g_settings.basicItems.removeEdit, nullptr, nullptr, false, {L"Edit", L"編集", L"Editar", L"Upravit", L"Bearbeiten", L"Düzenle", L"Edytuj", L"Modifier", L"Изменить"}},
+        {&g_settings.basicItems.removePlay, nullptr, nullptr, false, {L"Play", L"再生", L"Reproduzir", L"Reproducir", L"Přehrát", L"Wiedergabe", L"Oynat", L"Odtwarzaj", L"Lire", L"Воспроизвести"}},
+        {&g_settings.basicItems.removePreview, nullptr, nullptr, false, {L"Preview", L"プレビュー", L"Visualizar", L"Pré-visualizar", L"Vista previa", L"Náhled", L"Vorschau", L"Önizleme", L"Podgląd", L"Aperçu"}},
+        {&g_settings.basicItems.removePrint, nullptr, nullptr, false, {L"Print", L"印刷", L"Imprimir", L"Tisk", L"Drucken", L"Yazdır", L"Drukuj", L"Imprimer", L"Печать"}},
+        {&g_settings.basicItems.removeShare, nullptr, nullptr, false, {L"Share", L"共有", L"Compartilhar", L"Partilhar", L"Compartir", L"Sdílet", L"Freigabe", L"Paylaş", L"Udostępnij", L"Partager", L"Поделиться"}},
+        {&g_settings.appSpecificItems.removeSendWithQuickShare, nullptr, nullptr, false, {L"Send with Quick Share", L"Enviar com o Compartilhamento Rápido", L"Enviar com Partilha Rápida", L"Enviar con Quick Share", L"Odeslat pomocí Rychlého sdílení", L"Mit Quick Share senden", L"Quick Share ile gönder", L"Wyślij za pomocą funkcji Quick Share", L"Envoyer avec Quick Share"}},
+        {&g_settings.basicItems.removeRefresh, nullptr, nullptr, false, {L"Refresh", L"最新の情報に更新", L"Atualizar", L"Actualizar", L"Aktualizovat", L"Aktualisieren", L"Yenile", L"Odśwież", L"Actualiser", L"Обновить"}},
+        {&g_settings.basicItems.removeCopyAsPath, nullptr, nullptr, false, {L"Copy as path", L"パスのコピー", L"Copiar como caminho", L"Copiar como ruta de acceso", L"Kopírovat jako cestu", L"Als Pfad kopieren", L"Yolu kopyala", L"Kopiuj jako ścieżkę", L"Copier comme chemin", L"Копировать как путь"}},
+        {&g_settings.basicItems.removeCustomizeFolder, nullptr, nullptr, false, {L"Customize this folder...", L"このフォルダーのカスタマイズ...", L"Customise this folder...", L"Personalizar esta pasta...", L"Personalizar esta carpeta...", L"Přizpůsobit tuto složku...", L"Ordner anpassen...", L"Bu klasörü özelleştir...", L"Dostosuj ten folder...", L"Personnaliser ce dossier...", L"Настроить папку..."}},
+        {&g_settings.basicItems.removeFavorites, nullptr, nullptr, false, {L"Add to Favorites", L"お気に入りに追加", L"Add to Favourites", L"Adicionar aos Favoritos", L"Agregar a favoritos", L"Přidat k oblíbeným položkám", L"Zu Favoriten hinzufügen", L"Sık kullanılanlara ekle", L"Dodaj do ulubionych", L"Ajouter aux favoris", L"Добавить в избранное"}},
+        {&g_settings.basicItems.removePinToQuickAccess, nullptr, nullptr, false, {L"Pin to Quick access", L"クイック アクセスにピン留めする", L"Fixar no Acesso Rápido", L"Afixar no Acesso rápido", L"Anclar a Acceso rápido", L"Připnout na Rychlý přístup", L"An Schnellzugriff anheften", L"Hızlı erişime sabitle", L"Przypnij do obszaru Szybki dostęp", L"Épingler à Accès rapide", L"Закрепить на панели быстрого доступа"}},
+        {&g_settings.basicItems.removePinToStart, nullptr, nullptr, false, {L"Pin to Start", L"スタートにピン留めする", L"Fixar em Iniciar", L"Afixar no Iniciar", L"Anclar a Inicio", L"Připnout na Start", L"An \"Start\" anheften", L"Başlat'a sabitle", L"Przypnij do menu Start", L"Épingler au menu Démarrer", L"Закрепить в меню \"Пуск\""}},
+        {&g_settings.basicItems.removeCast, nullptr, nullptr, false, {L"Cast to Device", L"デバイス キャスト", L"Transmitir para Dispositivo", L"Transmitir para o Dispositivo", L"Transmitir en dispositivo", L"Přetypovat do zařízení", L"Wiedergabe auf Gerät", L"Cihaza yayınla", L"Przesyłanie na urządzenie", L"Diffuser vers un appareil", L"Передать на устройство"}},
+        {&g_settings.basicItems.removeGiveAccess, nullptr, nullptr, false, {L"Give access to", L"アクセスを許可する", L"Conceder acesso a", L"Dar acceso a", L"Poskytnout přístup k", L"Freigeben für", L"Erişim ver", L"Udziel dostępu do", L"Donner l'accès à", L"Предоставить доступ к"}},
+        {&g_settings.basicItems.removeRestoreVersions, nullptr, nullptr, false, {L"Restore previous versions", L"以前のバージョンの復元", L"Restaurar versões anteriores", L"Restaurar versiones anteriores", L"Obnovit předchozí verze", L"Vorgängerversionen wiederhestellen", L"Önceki sürümleri geri yükle", L"Przywróć poprzednie wersje", L"Restaurer les versions précédentes", L"Восстановить прежнюю версию"}},
+        {&g_settings.basicItems.removeIncludeInLibrary, nullptr, nullptr, false, {L"Include in library", L"ライブラリに追加", L"Incluir na biblioteca", L"Incluir en biblioteca", L"Zahrnout do knihovny", L"In Bibliothek aufnehmen", L"Kitaplığa ekle", L"Dołącz do biblioteki", L"Inclure dans la bibliothèque", L"Добавить в библиотеку"}},
+        {&g_settings.basicItems.removeRotate, nullptr, nullptr, false, {L"Rotate right", L"右に回転", L"Girar para a direita", L"Rodar para a direita", L"Girar a la derecha", L"Otočit doprava", L"Nach rechts drehen", L"Sağa döndür", L"Obróć w prawo", L"Faire pivoter vers la droite", L"Повернуть вправо"}},
+        {&g_settings.basicItems.removeRotate, nullptr, nullptr, false, {L"Rotate left", L"左に回転", L"Girar para a esquerda", L"Rodar para a esquerda", L"Girar a la izquierda", L"Otočit doleva", L"Nach links drehen", L"Sola döndür", L"Obróć w lewo", L"Faire pivoter vers la gauche", L"Повернуть влево"}},
+        {&g_settings.basicItems.removeDisplaySettings, nullptr, nullptr, false, {L"Display settings", L"ディスプレイ設定", L"Configurações de vídeo", L"Definições do ecrã", L"Configuración de pantalla", L"Nastavení zobrazení", L"Anzeigeeinstellungen", L"Görüntü ayarları", L"Ustawienia ekranu", L"Paramètres d'affichage", L"Параметры экрана"}},
+        {&g_settings.basicItems.removePersonalize, nullptr, nullptr, false, {L"Personalize", L"個人用設定", L"Personalise", L"Personalizar", L"Přizpůsobit", L"Anpassen", L"Kişiselleştir", L"Personalizuj", L"Personnaliser", L"Персонализация"}},
+        {&g_settings.basicItems.removeSetAsDesktopBackground, nullptr, nullptr, false, {L"Set as desktop background", L"デスクトップの背景として設定", L"Definir como plano de fundo da área de trabalho", L"Definir como fundo do ambiente de trabalho", L"Establecer como fondo de escritorio", L"Nastavit jako pozadí plochy", L"Als Desktophintergrund festlegen", L"Masaüstü arka planı olarak ayarla", L"Ustaw jako tło pulpitu", L"Définir comme arrière-plan du Bureau", L"Сделать фоном рабочего стола"}},
+        {&g_settings.basicItems.removeView, nullptr, nullptr, false, {L"View", L"表示", L"Exibir", L"Ver", L"Zobrazení", L"Ansicht", L"Görünüm", L"Widok", L"Affichage", L"Вид"}},
+        {&g_settings.basicItems.removeSortBy, nullptr, nullptr, false, {L"Sort by", L"並べ替え", L"Classificar por", L"Ordenar por", L"Seřadit podle", L"Sortieren nach", L"Sıralama ölçütü", L"Sortuj według", L"Trier par", L"Сортировка"}},
+        {&g_settings.basicItems.removeGroupBy, nullptr, nullptr, false, {L"Group by", L"グループで表示", L"Agrupar por", L"Seskupit podle", L"Gruppieren nach", L"Gruplama ölçütü", L"Grupuj według", L"Regrouper par", L"Группировка"}},
+        {&g_settings.basicItems.removeNew, nullptr, nullptr, false, {L"New", L"新規作成", L"Novo", L"Nuevo", L"Nový", L"Neu", L"Yeni", L"Nowy", L"Nouveau", L"Создать"}},
+        {&g_settings.basicItems.removeProperties, nullptr, nullptr, false, {L"Properties", L"プロパティ", L"Propriedades", L"Propiedades", L"Vlastnosti", L"Eigenschaften", L"Özellikler", L"Właściwości", L"Propriétés", L"Свойства"}},
+        {&g_settings.basicItems.removePaste, nullptr, nullptr, true, {L"Paste", L"貼り付け", L"Colar", L"Pegar", L"Vložit", L"Einfügen", L"Yapıştır", L"Wklej", L"Coller", L"Вставить"}},
+        {&g_settings.basicItems.removeExtractAll, nullptr, nullptr, false, {L"Extract All...", L"すべて展開...", L"Extrair Tudo...", L"Extrair Todos...", L"Extraer todo...", L"Extrahovat vše...", L"Alle extrahieren...", L"Tümünü ayıkla...", L"Wyodrębnij wszystkie...", L"Extraire tout...", L"Извлечь все..."}},
         
         // App-specific Items
-        {&g_settings.appSpecificItems.removeVLCPlaylist, false, nullptr, false, {L"Add to VLC media player's Playlist", L"VLCメディアプレイヤーのプレイリストに追加", L"Adicionar à lista de reprodução do VLC media player", L"Agregar a la lista de reproducción de VLC media player", L"Přidat do seznamu stop přehrávače médií VLC", L"Zur VLC media player Wiedergabeliste hinzufügen", L"VLC media player oynatma listesine ekle", L"Dodaj do listy odtwarzania programu VLC media player", L"Ajouter à la liste de lecture de VLC", L"Добавить в плейлист VLC"}},
-        {&g_settings.appSpecificItems.removeVLCPlay, false, nullptr, false, {L"Play with VLC media player", L"VLCメディアプレイヤーで再生", L"Reproduzir com o VLC media player", L"Reproducir con VLC media player", L"Přehrát přehrávačem médií VLC", L"Mit VLC media player wiedergeben", L"VLC media player ile oynat", L"Odtwórz w programie VLC media player", L"Lire avec VLC", L"Воспроизвести в VLC"}},
-        {&g_settings.appSpecificItems.removeAddToMediaPlayerQueue, false, nullptr, false, {L"Add to Media Player play queue", L"メディアプレイヤーの再生キューに追加", L"Adicionar à fila de reprodução do Media Player", L"Agregar a la cola de reproducción del Reproductor multimedia", L"Přidat do fronty přehrávání přehrávače médií", L"Zur Windows Media Player-Wiedergabeliste hinzufügen", L"Media Player oynatma kuyruğuna ekle", L"Dodaj do kolejki odtwarzania programu Media Player", L"Ajouter à la file d'attente de Media Player"}},
-        {&g_settings.appSpecificItems.removePlayWithMediaPlayer, false, nullptr, false, {L"Play with Media Player", L"メディアプレイヤーで再生", L"Reproduzir com o Media Player", L"Reproducir con el Reproductor de Windows Media", L"Přehrát přehrávačem médií", L"Mit Windows Media Player wiedergeben", L"Media Player ile oynat", L"Odtwórz w programie Media Player", L"Lire avec Media Player"}},
-        {&g_settings.appSpecificItems.removeEditInNotepad, true, &g_settings.extensionFiltering.notepadExtensions, false, {L"Edit in Notepad", L"メモ帳で編集", L"Editar no Bloco de Notas", L"Editar en el Bloc de notas", L"Upravit v Poznámkovém bloku", L"Im Editor bearbeiten", L"Not Defteri'nde düzenle", L"Edytuj w Notatniku", L"Modifier dans le Bloc-notes", L"Изменить в Блокноте"}},
-        {&g_settings.appSpecificItems.removeEditInNotepadPlusPlus, true, &g_settings.extensionFiltering.notepadExtensions, false, {L"Edit with Notepad++", L"Editar no Notepad++", L"Editar con Notepad++", L"Upravit v aplikaci Notepad++", L"Mit Notepad++ bearbeiten", L"Notepad++ ile düzenle", L"Edytuj w Notepad++", L"Modifier avec Notepad++", L"Редактировать в Notepad++"}},
-        {&g_settings.appSpecificItems.removeEditWithPhotos, false, nullptr, false, {L"Edit with Photos", L"フォトで編集", L"Editar com Fotos", L"Editar com Fotografias", L"Editar con Fotos", L"Upravit pomocí Fotky", L"Mit Fotos bearbeiten", L"Fotoğraflar ile düzenle", L"Edytuj w Zdjęcia", L"Modifier avec Photos", L"Изменить с помощью приложения \"Фотографии\""}},
-        {&g_settings.appSpecificItems.removeEditWithPaint, false, nullptr, false, {L"Edit with Paint", L"ペイントで編集する", L"Editar com o Paint", L"Editar con Paint", L"Upravit pomocí Malování", L"Mit Paint bearbeiten", L"Paint ile düzenle", L"Edytuj w Paint", L"Modifier avec Paint", L"Редактирование с помощью приложения Paint"}},
-        {&g_settings.appSpecificItems.removeNvidiaApp, false, nullptr, false, {L"NVIDIA App", L"NVIDIA コントロールパネル", L"Painel de Controle NVIDIA", L"Painel de Controlo da NVIDIA", L"Panel de control de NVIDIA", L"Ovládací panely NVIDIA", L"NVIDIA Systemsteuerung", L"NVIDIA Denetim Masası", L"Panel sterowania NVIDIA", L"Panneau de configuration NVIDIA", L"Панель управления NVIDIA"}},
-        {&g_settings.appSpecificItems.removeOpenInTerminal, false, nullptr, false, {L"Open in Terminal", L"Abrir no Terminal", L"Abrir en Terminal", L"Otevřít v terminálu", L"In Terminal öffnen", L"Terminal'de aç", L"Otwórz w Terminalu", L"Ouvrir dans le Terminal", L"Открыть в Терминале"}},
-        {&g_settings.appSpecificItems.removeWinRAR, true, &g_settings.extensionFiltering.winrarExtensions, false, {L"WinRAR"}}
+        {&g_settings.appSpecificItems.removeVLCPlaylist, nullptr, nullptr, false, {L"Add to VLC media player's Playlist", L"VLCメディアプレイヤーのプレイリストに追加", L"Adicionar à lista de reprodução do VLC media player", L"Agregar a la lista de reproducción de VLC media player", L"Přidat do seznamu stop přehrávače médií VLC", L"Zur VLC media player Wiedergabeliste hinzufügen", L"VLC media player oynatma listesine ekle", L"Dodaj do listy odtwarzania programu VLC media player", L"Ajouter à la liste de lecture de VLC", L"Добавить в плейлист VLC"}},
+        {&g_settings.appSpecificItems.removeVLCPlay, nullptr, nullptr, false, {L"Play with VLC media player", L"VLCメディアプレイヤーで再生", L"Reproduzir com o VLC media player", L"Reproducir con VLC media player", L"Přehrát přehrávačem médií VLC", L"Mit VLC media player wiedergeben", L"VLC media player ile oynat", L"Odtwórz w programie VLC media player", L"Lire avec VLC", L"Воспроизвести в VLC"}},
+        {&g_settings.appSpecificItems.removeAddToMediaPlayerQueue, nullptr, nullptr, false, {L"Add to Media Player play queue", L"メディアプレイヤーの再生キューに追加", L"Adicionar à fila de reprodução do Media Player", L"Agregar a la cola de reproducción del Reproductor multimedia", L"Přidat do fronty přehrávání přehrávače médií", L"Zur Windows Media Player-Wiedergabeliste hinzufügen", L"Media Player oynatma kuyruğuna ekle", L"Dodaj do kolejki odtwarzania programu Media Player", L"Ajouter à la file d'attente de Media Player"}},
+        {&g_settings.appSpecificItems.removePlayWithMediaPlayer, nullptr, nullptr, false, {L"Play with Media Player", L"メディアプレイヤーで再生", L"Reproduzir com o Media Player", L"Reproducir con el Reproductor de Windows Media", L"Přehrát přehrávačem médií", L"Mit Windows Media Player wiedergeben", L"Media Player ile oynat", L"Odtwórz w programie Media Player", L"Lire avec Media Player"}},
+        {&g_settings.appSpecificItems.removeEditInNotepad, &g_settings.extensionFiltering.notepadExtensions, &g_settings.extensionFiltering.enableExtensionFiltering, false, {L"Edit in Notepad", L"メモ帳で編集", L"Editar no Bloco de Notas", L"Editar en el Bloc de notas", L"Upravit v Poznámkovém bloku", L"Im Editor bearbeiten", L"Not Defteri'nde düzenle", L"Edytuj w Notatniku", L"Modifier dans le Bloc-notes", L"Изменить в Блокноте"}},
+        {&g_settings.appSpecificItems.removeEditInNotepadPlusPlus, &g_settings.extensionFiltering.notepadExtensions, &g_settings.extensionFiltering.enableExtensionFiltering, false, {L"Edit with Notepad++", L"Editar no Notepad++", L"Editar con Notepad++", L"Upravit v aplikaci Notepad++", L"Mit Notepad++ bearbeiten", L"Notepad++ ile düzenle", L"Edytuj w Notepad++", L"Modifier avec Notepad++", L"Редактировать в Notepad++"}},
+        {&g_settings.appSpecificItems.removeEditWithPhotos, nullptr, nullptr, false, {L"Edit with Photos", L"フォトで編集", L"Editar com Fotos", L"Editar com Fotografias", L"Editar con Fotos", L"Upravit pomocí Fotky", L"Mit Fotos bearbeiten", L"Fotoğraflar ile düzenle", L"Edytuj w Zdjęcia", L"Modifier avec Photos", L"Изменить с помощью приложения \"Фотографии\""}},
+        {&g_settings.appSpecificItems.removeEditWithPaint, nullptr, nullptr, false, {L"Edit with Paint", L"ペイントで編集する", L"Editar com o Paint", L"Editar con Paint", L"Upravit pomocí Malování", L"Mit Paint bearbeiten", L"Paint ile düzenle", L"Edytuj w Paint", L"Modifier avec Paint", L"Редактирование с помощью приложения Paint"}},
+        {&g_settings.appSpecificItems.removeNvidiaApp, nullptr, nullptr, false, {L"NVIDIA App", L"NVIDIA コントロールパネル", L"Painel de Controle NVIDIA", L"Painel de Controlo da NVIDIA", L"Panel de control de NVIDIA", L"Ovládací panely NVIDIA", L"NVIDIA Systemsteuerung", L"NVIDIA Denetim Masası", L"Panel sterowania NVIDIA", L"Panneau de configuration NVIDIA", L"Панель управления NVIDIA"}},
+        {&g_settings.appSpecificItems.removeOpenInTerminal, nullptr, nullptr, false, {L"Open in Terminal", L"Abrir no Terminal", L"Abrir en Terminal", L"Otevřít v terminálu", L"In Terminal öffnen", L"Terminal'de aç", L"Otwórz w Terminalu", L"Ouvrir dans le Terminal", L"Открыть в Терминале"}},
+        {&g_settings.appSpecificItems.removeWinRAR, &g_settings.extensionFiltering.winrarExtensions, &g_settings.extensionFiltering.enableWinRARFiltering, false, {L"WinRAR"}}
     };
 
     g_menuItems.clear();
     for (const auto& group : menuItemGroups) {
         for (const auto& text : group.texts) {
-            g_menuItems.push_back({text, group.enabled, group.requiresExtensionCheck,
-                                   group.allowedExtensions, group.greyedOnly});
+            g_menuItems.push_back({text, group.enabled, group.allowedExtensions,
+                                   group.filterEnabled, group.greyedOnly});
         }
     }
     
@@ -1384,8 +1383,13 @@ std::wstring RemoveAmpersands(const std::wstring& str) {
 
 // Utility function to convert string to lowercase
 std::wstring ToLower(const std::wstring& str) {
+    // CharLowerBuffW covers the full Unicode range, unlike ::towlower in
+    // the CRT's default "C" locale, which only maps ASCII A-Z -- needed
+    // so non-Latin Custom Items (Cyrillic, Greek, Turkish, etc.) can match.
     std::wstring result = str;
-    std::transform(result.begin(), result.end(), result.begin(), ::towlower);
+    if (!result.empty()) {
+        CharLowerBuffW(result.data(), (DWORD)result.size());
+    }
     return result;
 }
 
@@ -1432,7 +1436,7 @@ bool MatchesCustomItem(const std::wstring& text, const std::wstring& pattern) {
 
 // Checks if a menu item should be removed based on extension filtering.
 // Called only when the caller has already confirmed the relevant filter
-// toggle is on and item.requiresExtensionCheck is set.
+// toggle is on and item.allowedExtensions is set.
 bool ShouldRemoveByExtension(const MenuItem& item) {
     if (tl_filePaths.empty()) {
         if (tl_selectionLookupFailed) {
@@ -1480,12 +1484,14 @@ bool ShouldRemoveMenuItem(const std::wstring& text, bool isGreyed) {
         }
         
         // Special handling for extension-filtered items (Notepad and WinRAR)
-        if (item.requiresExtensionCheck) {
+        if (item.allowedExtensions) {
             if (isEnabled) {
-                // Check if the relevant filter toggle is on for this item
-                bool filterOn = (item.allowedExtensions == &g_settings.extensionFiltering.winrarExtensions)
-                    ? g_settings.extensionFiltering.enableWinRARFiltering
-                    : g_settings.extensionFiltering.enableExtensionFiltering;
+                // filterEnabled is set explicitly per entry (not inferred
+                // from allowedExtensions), and the two session snapshots
+                // avoid a live re-read that could disagree mid-session.
+                bool filterOn = (item.filterEnabled == &g_settings.extensionFiltering.enableWinRARFiltering)
+                    ? tl_sessionWinRARFilterOn
+                    : tl_sessionExtensionFilterOn;
                 
                 if (filterOn) {
                     // Filter is on: only remove if extension is not in whitelist
@@ -1558,15 +1564,10 @@ void ProcessMenu(HMENU hMenu) {
                     haveText = true;
                 }
             } else {
-                // mii.cch == 0 here typically means an owner-drawn
-                // (MFT_OWNERDRAW) item, which doesn't populate MIIM_STRING.
-                // GetMenuStringW is a best-effort fallback, not guaranteed.
-                wchar_t buf[512];
-                int len = GetMenuStringW(hMenu, i, buf, ARRAYSIZE(buf), MF_BYPOSITION);
-                if (len > 0) {
-                    text.assign(buf, len);
-                    haveText = true;
-                }
+                // mii.cch == 0 means a separator or an owner-drawn
+                // (MFT_OWNERDRAW) item; GetMenuStringW returns nothing
+                // useful for either, so there's no text to fall back to.
+                haveText = false;
             }
             
             if (haveText) {
@@ -1574,19 +1575,23 @@ void ProcessMenu(HMENU hMenu) {
                 
                 // Check if this item should be removed
                 if (ShouldRemoveMenuItem(text, isGreyed)) {
-                    // DeleteMenu also destroys an attached submenu, which
-                    // is correct: the parent menu is normally a submenu's
-                    // only real owner, destroyed recursively by Explorer.
-                    DeleteMenu(hMenu, i, MF_BYPOSITION);
+                    // RemoveMenu detaches (doesn't destroy) the submenu so a
+                    // third-party owner can still manage it; we now own the
+                    // handle otherwise, so stash it for ExitMenuTracking().
+                    HMENU hDetached = mii.hSubMenu;
+                    RemoveMenu(hMenu, i, MF_BYPOSITION);
+                    if (hDetached) {
+                        tl_detachedSubmenus.push_back(hDetached);
+                    }
                     deleted = true;
                     anyRemoved = true;
                 }
             }
             
             // Recursively process submenus, but only if we didn't just
-            // delete this item, and only when the WM_INITMENUPOPUP hook
-            // isn't installed -- the hook re-filters each submenu itself.
-            if (!deleted && mii.hSubMenu && !tl_hMenuHook) {
+            // delete this item, and only when nothing else will re-filter
+            // this submenu itself (see tl_recurseSubmenus).
+            if (!deleted && mii.hSubMenu && tl_recurseSubmenus) {
                 ProcessMenu(mii.hSubMenu);
             }
         }
@@ -1668,14 +1673,14 @@ bool g_uninitInProgress = false;
 // WH_CALLWNDPROCRET hook is how to intercept it (same as other merged mods).
 thread_local HHOOK tl_hMenuHook = nullptr;
 thread_local int tl_menuDepth = 0;
+// Whether ProcessMenu() should recurse into submenus itself, rather than
+// leaving them to MenuCallWndProcRetHook via WM_INITMENUPOPUP. True when
+// no hook is installed, or when TPM_NONOTIFY means that message won't come.
+thread_local bool tl_recurseSubmenus = true;
 // Decided once per tracking session in EnterMenuTracking(), so the
 // top-level menu and every submenu agree on whether the bypass is active,
 // even if the Alt key state changes while the menu is still open.
 thread_local bool tl_menuBypassed = false;
-// Session-scoped desktop IShellBrowser cache -- see GetDesktopShellBrowser()
-// for why it's scoped to a session, not the whole thread. Populated
-// lazily, released in ExitMenuTracking() on the same thread it was created.
-thread_local IShellBrowser* tl_sessionDesktopShellBrowser = nullptr;
 // True if this session successfully called CoInitializeEx (see
 // EnterMenuTracking) and owns a matching CoUninitialize call in ExitMenuTracking.
 thread_local bool tl_sessionComInitialized = false;
@@ -1683,6 +1688,11 @@ thread_local bool tl_sessionComInitialized = false;
 // once per session in EnterMenuTracking() and reused by ProcessPopupMenu()
 // instead of a second read that could disagree if settings change mid-session.
 thread_local bool tl_sessionNeedFiles = false;
+// Snapshots of the two filter toggles, taken alongside tl_sessionNeedFiles
+// so a settings change mid-session can't disagree with the file lookup
+// that already ran (or didn't) based on the toggles' state at menu-open time.
+thread_local bool tl_sessionExtensionFilterOn = false;
+thread_local bool tl_sessionWinRARFilterOn = false;
 
 LRESULT CALLBACK MenuCallWndProcRetHook(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
@@ -1691,8 +1701,8 @@ LRESULT CALLBACK MenuCallWndProcRetHook(int nCode, WPARAM wParam, LPARAM lParam)
             HMENU hSubMenu = (HMENU)cwp->wParam;
             if (hSubMenu) {
                 // tl_filePaths was populated before tracking started and
-                // stays valid for the whole session. Don't add back removal
-                // of a submenu's parent item when filtering empties it -- the parent is already displayed, so mutating it risks a handle/layout bug.
+                // stays valid for the whole session. Don't remove the
+                // parent item when filtering empties a submenu -- it's already displayed, so mutating it risks a handle/layout bug.
                 std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
                 ProcessMenu(hSubMenu);
             }
@@ -1702,8 +1712,8 @@ LRESULT CALLBACK MenuCallWndProcRetHook(int nCode, WPARAM wParam, LPARAM lParam)
 }
 
 // Installs the thread-local hook on the outermost TrackPopupMenu(Ex) call
-// (nested calls bump the depth counter). SetWindowsHookEx runs under
-// g_activeMenuHooksMutex; COM inits once per session outside that lock.
+// (nested calls bump the depth counter). SetWindowsHookEx runs outside
+// g_activeMenuHooksMutex; COM inits once per session outside that lock too.
 void EnterMenuTracking() {
     if (tl_menuDepth == 0) {
         tl_selectionLookupFailed = false;
@@ -1711,23 +1721,37 @@ void EnterMenuTracking() {
         {
             std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
             tl_menuBypassed = IsModifierKeyBypassActive();
-            needFiles = g_settings.extensionFiltering.enableExtensionFiltering ||
-                        g_settings.extensionFiltering.enableWinRARFiltering;
+            tl_sessionExtensionFilterOn = g_settings.extensionFiltering.enableExtensionFiltering;
+            tl_sessionWinRARFilterOn = g_settings.extensionFiltering.enableWinRARFiltering;
+            needFiles = tl_sessionExtensionFilterOn || tl_sessionWinRARFilterOn;
         }
         tl_sessionNeedFiles = needFiles;
+        tl_recurseSubmenus = true;
         if (!tl_menuBypassed) {
-            {
-                std::lock_guard<std::mutex> lock(g_activeMenuHooksMutex);
-                if (!g_uninitInProgress) {
-                    tl_hMenuHook = SetWindowsHookEx(WH_CALLWNDPROCRET, MenuCallWndProcRetHook,
-                                                     nullptr, GetCurrentThreadId());
-                    if (tl_hMenuHook) {
-                        g_activeMenuHooks.push_back(tl_hMenuHook);
-                    } else {
-                        Wh_Log(L"SetWindowsHookEx failed (err %lu); submenus won't be filtered",
-                               GetLastError());
+            HHOOK hHook = SetWindowsHookEx(WH_CALLWNDPROCRET, MenuCallWndProcRetHook,
+                                            nullptr, GetCurrentThreadId());
+            if (hHook) {
+                bool uninitRacing = false;
+                {
+                    std::lock_guard<std::mutex> lock(g_activeMenuHooksMutex);
+                    uninitRacing = g_uninitInProgress;
+                    if (!uninitRacing) {
+                        tl_hMenuHook = hHook;
+                        g_activeMenuHooks.push_back(hHook);
+                        // The hook will re-filter submenus via
+                        // WM_INITMENUPOPUP; ProcessPopupMenu() flips this
+                        // back if TPM_NONOTIFY means that won't happen.
+                        tl_recurseSubmenus = false;
                     }
                 }
+                // Wh_ModUninit's sweep can't have seen this handle -- it
+                // wasn't in the registry yet -- so unhook it ourselves.
+                if (uninitRacing) {
+                    UnhookWindowsHookEx(hHook);
+                }
+            } else {
+                Wh_Log(L"SetWindowsHookEx failed (err %lu); submenus won't be filtered",
+                       GetLastError());
             }
             if (needFiles) {
                 HRESULT hrCom = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -1745,36 +1769,27 @@ void ExitMenuTracking() {
     if (tl_menuDepth <= 0) {
         tl_menuDepth = 0;
         if (tl_hMenuHook) {
-            // Removing from the registry under the lock *before* unhooking
-            // closes the window where a concurrent Wh_ModUninit sweep could
-            // see this handle and unhook a since-reissued, unrelated hook.
             HHOOK hook = tl_hMenuHook;
             tl_hMenuHook = nullptr;
-            bool stillRegistered = false;
-            {
-                std::lock_guard<std::mutex> lock(g_activeMenuHooksMutex);
-                auto& hooks = g_activeMenuHooks;
-                auto it = std::remove(hooks.begin(), hooks.end(), hook);
-                stillRegistered = (it != hooks.end());
-                hooks.erase(it, hooks.end());
-            }
-            // If it wasn't in the registry, Wh_ModUninit already swept and
-            // unhooked it -- unhooking again risks hitting a recycled HHOOK.
-            if (stillRegistered) {
+            // Unhook while still holding the lock, so the handle is always
+            // either registered-and-hooked or removed-and-unhooked, never
+            // caught in between -- see EnterMenuTracking() for the other half.
+            std::lock_guard<std::mutex> lock(g_activeMenuHooksMutex);
+            if (std::erase(g_activeMenuHooks, hook) > 0) {
                 UnhookWindowsHookEx(hook);
             }
-        }
-        if (tl_sessionDesktopShellBrowser) {
-            // Released on the same thread that created it, and *before*
-            // CoUninitialize() below so the apartment is still valid --
-            // this is what makes the session-scoped cache safe.
-            tl_sessionDesktopShellBrowser->Release();
-            tl_sessionDesktopShellBrowser = nullptr;
         }
         if (tl_sessionComInitialized) {
             CoUninitialize();
             tl_sessionComInitialized = false;
         }
+        // Runs after TrackPopupMenu(Ex)_Original has returned, so a handle
+        // here is already unreachable from the shell's own destroyed tree.
+        // RemoveMenu's contract makes us the sole owner of each handle.
+        for (HMENU h : tl_detachedSubmenus) {
+            DestroyMenu(h);
+        }
+        tl_detachedSubmenus.clear();
         tl_filePaths.clear();
     }
 }
@@ -1789,10 +1804,16 @@ struct MenuTrackingGuard {
 // Shared logic for both TrackPopupMenu(Ex) hooks: file lookup and, as a
 // fallback, menu filtering for the top-level menu. kind is the caller's
 // already-computed ClassifyShellView() result, reused to avoid a re-walk.
-void ProcessPopupMenu(HMENU hMenu, HWND hWnd, ShellViewKind kind, const wchar_t* logPrefix) {
+void ProcessPopupMenu(HMENU hMenu, HWND hWnd, UINT uFlags, ShellViewKind kind, const wchar_t* logPrefix) {
     if (tl_menuBypassed) {
         Wh_Log(L"%s: Modifier key bypass active, skipping menu processing", logPrefix);
         return;
+    }
+    
+    // TPM_NONOTIFY suppresses WM_INITMENUPOPUP, so MenuCallWndProcRetHook
+    // will never see this menu's submenus -- fall back to recursing here.
+    if (uFlags & TPM_NONOTIFY) {
+        tl_recurseSubmenus = true;
     }
     
     // Only do the (COM-based) selected-file lookup on the outermost call
@@ -1813,10 +1834,10 @@ void ProcessPopupMenu(HMENU hMenu, HWND hWnd, ShellViewKind kind, const wchar_t*
         }
     }
     
-    // MenuCallWndProcRetHook processes this same top-level menu too (via
-    // WM_INITMENUPOPUP) after Explorer finishes populating it -- better
-    // positioned than here. Only fall back if the hook wasn't installed.
-    if (!tl_hMenuHook) {
+    // MenuCallWndProcRetHook re-processes this menu via WM_INITMENUPOPUP,
+    // but TPM_NONOTIFY can suppress that message, so run this pass
+    // unconditionally too -- cheap, since an already-filtered menu removes nothing.
+    {
         std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
         ProcessMenu(hMenu);
     }
@@ -1848,7 +1869,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(
             // what an outer call already collected before a nested one skips repopulating it.
             tl_filePaths.clear();
         }
-        ProcessPopupMenu(hMenu, hWnd, kind, L"TrackPopupMenuEx");
+        ProcessPopupMenu(hMenu, hWnd, uFlags, kind, L"TrackPopupMenuEx");
     }
     
     BOOL bRes = TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
@@ -1873,7 +1894,7 @@ BOOL WINAPI TrackPopupMenu_Hook(
         if (tl_menuDepth == 1) {
             tl_filePaths.clear();
         }
-        ProcessPopupMenu(hMenu, hWnd, kind, L"TrackPopupMenu");
+        ProcessPopupMenu(hMenu, hWnd, uFlags, kind, L"TrackPopupMenu");
     }
     
     BOOL bRes = TrackPopupMenu_Original(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
@@ -1970,9 +1991,8 @@ void LoadSettings() {
     g_settings.extensionFiltering.notepadExtensions.clear();
     for (int i = 0; i < kMaxSettingArrayItems; i++) {
         auto ext = WindhawkUtils::StringSetting::make(L"extensionFiltering.notepadExtensions[%d]", i);
-        if (!*ext) break;
-        std::wstring lowerExt = ext.get();
-        std::transform(lowerExt.begin(), lowerExt.end(), lowerExt.begin(), ::towlower);
+        if (!*ext) continue;
+        std::wstring lowerExt = ToLower(ext.get());
         g_settings.extensionFiltering.notepadExtensions.push_back(lowerExt);
     }
     WarnIfSettingArrayOverflows(L"extensionFiltering.notepadExtensions[%d]", L"Notepad extensions");
@@ -1982,7 +2002,7 @@ void LoadSettings() {
     g_settings.customItems.clear();
     for (int i = 0; i < kMaxSettingArrayItems; i++) {
         auto customItem = WindhawkUtils::StringSetting::make(L"customItems[%d]", i);
-        if (!*customItem) break;
+        if (!*customItem) continue;
         
         // RemoveAmpersands is deliberately NOT applied here: it models
         // Windows' menu-text escaping, which applies to menu text, not to
@@ -1997,6 +2017,15 @@ void LoadSettings() {
             continue;
         }
         
+        // Only a trailing '*' is treated as a wildcard (see
+        // MatchesCustomItem); a '*' anywhere else is matched literally
+        // and will never match real menu text, so flag it for the user.
+        size_t starPos = cleanItem.find(L'*');
+        if (starPos != std::wstring::npos && starPos != cleanItem.length() - 1) {
+            Wh_Log(L"WARNING: Custom item %d ('%s') has '*' before the end; only a trailing '*' is a wildcard, so this will be matched literally",
+                   i, customItem.get());
+        }
+        
         g_settings.customItems.push_back(cleanItem);
         Wh_Log(L"Loaded custom item %d: %s", i, customItem.get());
     }
@@ -2008,9 +2037,8 @@ void LoadSettings() {
     g_settings.extensionFiltering.winrarExtensions.clear();
     for (int i = 0; i < kMaxSettingArrayItems; i++) {
         auto ext = WindhawkUtils::StringSetting::make(L"extensionFiltering.winrarExtensions[%d]", i);
-        if (!*ext) break;
-        std::wstring lowerExt = ext.get();
-        std::transform(lowerExt.begin(), lowerExt.end(), lowerExt.begin(), ::towlower);
+        if (!*ext) continue;
+        std::wstring lowerExt = ToLower(ext.get());
         g_settings.extensionFiltering.winrarExtensions.push_back(lowerExt);
     }
     WarnIfSettingArrayOverflows(L"extensionFiltering.winrarExtensions[%d]", L"WinRAR extensions");
@@ -2052,7 +2080,6 @@ bool AnyRemovalConfigured() {
 // Windhawk mod initialization
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing context menu cleaner mod");
-    Wh_Log(L"NOTE: Predefined option names are localized for the supported languages. For other languages, use Custom Items in settings.");
     
     LoadSettings();
     
@@ -2091,11 +2118,10 @@ BOOL Wh_ModInit() {
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L"Settings changed, reloading...");
     LoadSettings();
-    // If nothing is left to remove, request a reload so Wh_ModInit's
-    // early-out (AnyRemovalConfigured() check) unhooks this instance,
+    *bReload = FALSE;
+    // If nothing is left to remove, unload until settings change again
     // instead of an already-loaded mod keeping both hooks forever.
-    *bReload = !AnyRemovalConfigured();
-    return TRUE;
+    return AnyRemovalConfigured();
 }
 
 // Windhawk mod cleanup
@@ -2105,17 +2131,10 @@ void Wh_ModUninit() {
     // Force-unhook any thread-local menu hooks still installed -- a HHOOK
     // callback pointing into an unloaded mod image is a crash.
     // g_uninitInProgress ensures no new hook can slip past this sweep.
-    std::vector<HHOOK> hooksToUnhook;
-    {
-        std::lock_guard<std::mutex> lock(g_activeMenuHooksMutex);
-        g_uninitInProgress = true;
-        hooksToUnhook.swap(g_activeMenuHooks);
-    }
-    
-    // Unhook outside the lock -- UnhookWindowsHookEx calls into user32, and
-    // the "never call into user32 with a mod lock held" rule is worth
-    // keeping even though nothing else currently blocks on this mutex.
-    for (HHOOK hook : hooksToUnhook) {
+    std::lock_guard<std::mutex> lock(g_activeMenuHooksMutex);
+    g_uninitInProgress = true;
+    for (HHOOK hook : g_activeMenuHooks) {
         UnhookWindowsHookEx(hook);
     }
+    g_activeMenuHooks.clear();
 }
