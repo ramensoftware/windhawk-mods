@@ -388,11 +388,10 @@ window on purpose, put a `*` in one of the match fields.
 // * Two SetLayeredWindowAttributes and two SetWindowLongPtrW, both for opacity:
 //   one pair sets the level on a window the app has not layered itself, the other
 //   takes it back. A window the app layered itself is never touched.
-// * No timer except the settle poll, which is armed only while a move is
-//   settling and killed when the last one is. The mod is idle otherwise.
-// * No polling, no sleeping, no PeekMessage loop, no persistence. Rules are
-//   user-authored settings and live in the settings block; the mod never writes
-//   settings back.
+// * Timers run only while a move is settling or a hosted-frame retry is pending.
+//   The arrival timer expires pending frames and removes the extra event hooks.
+// * No sleeping or PeekMessage loop. Rules are user-authored settings and live
+//   in the settings block; the mod never writes settings back.
 // * A rules engine that re-applied on every event would fight the user and the
 //   application. So: apply once on appearance, one retry if the app moves the
 //   window, then stop. A hand move releases the window for the session. The
@@ -1456,19 +1455,6 @@ static bool IsFullscreenCandidate(const RuleRect& window,
     return RectsCoverMonitor(window, monitor, tolerance);
 }
 
-// Which monitor a rectangle covers, or -1. Monitors do not overlap, so the first
-// match is the only one.
-[[maybe_unused]] static int FindCoveredMonitor(const RuleRect& window,
-                              const std::vector<RuleMonitor>& monitors,
-                              long tolerance) {
-    for (size_t i = 0; i < monitors.size(); i++) {
-        if (RectsCoverMonitor(window, monitors[i].pixelRect, tolerance)) {
-            return (int)i;
-        }
-    }
-    return -1;
-}
-
 // What to do about one claimed window, given what is covering which monitor.
 enum class YieldDecision {
     Nothing,
@@ -1702,7 +1688,7 @@ static int g_folderAttempts = 0;
 // way to waste an hour.
 //
 // Identifies the build that wrote the journal.
-static constexpr PCWSTR kJournalBuild = L"1.1";
+static constexpr PCWSTR kJournalBuild = WH_MOD_VERSION;
 
 static void RefreshDiagnosticsSetting() {
     const bool was = g_diagnosticsLog;
@@ -3386,10 +3372,54 @@ static std::unordered_set<HWND> g_evaluatedWindows;
 // Briefly revisit unresolved hosted frames when their child or caption arrives.
 // A user move, a match, a settings reload or destruction cancels the retry.
 static std::unordered_map<HWND, ULONGLONG> g_pendingAppFrames;
+// Keep expired handles until destruction or a user move so a long drag that
+// outlasts the retry interval is still respected.
+static std::unordered_set<HWND> g_expiredAppFrames;
 struct CloakedFrame { ULONGLONG started; DWORD pid; DWORD tid; };
 static std::unordered_map<HWND, CloakedFrame> g_cloakedAppFrames;
 static std::unordered_set<HWND> g_suppressedArrivalFrames;
 static constexpr ULONGLONG kHostedFrameArrivalMs = 5000;
+static constexpr UINT_PTR kArrivalTimerId = 2;
+static constexpr UINT kArrivalTickMs = 500;
+static UINT_PTR g_arrivalTimer = 0;
+static HWINEVENTHOOK g_hookName = nullptr;
+static HWINEVENTHOOK g_hookUncloaked = nullptr;
+static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD);
+
+// Hooks are held only while a recently observed frame may need them.
+// A periodic timer bounds their lifetime and retries failed hook installations.
+static bool StartArrivalHooks() {
+    bool installed = false;
+    if (!g_hookName) {
+        g_hookName = SetWinEventHook(EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_NAMECHANGE,
+                                     nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+        installed |= g_hookName != nullptr;
+    }
+    if (!g_hookUncloaked) {
+        g_hookUncloaked = SetWinEventHook(EVENT_OBJECT_UNCLOAKED, EVENT_OBJECT_UNCLOAKED,
+                                          nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+        installed |= g_hookUncloaked != nullptr;
+    }
+    if (!g_arrivalTimer) {
+        HWND hwnd = g_messageWindow.load();
+        if (hwnd) g_arrivalTimer = SetTimer(hwnd, kArrivalTimerId, kArrivalTickMs, nullptr);
+        if (!g_arrivalTimer) Wh_Log(L"arrival retry timer failed (last error %lu)", GetLastError());
+    }
+    if (!g_hookName || !g_hookUncloaked) {
+        Wh_Log(L"arrival event hook failed (last error %lu)", GetLastError());
+    }
+    return installed;
+}
+
+static void StopArrivalHooks() {
+    if (g_hookName) { UnhookWinEvent(g_hookName); g_hookName = nullptr; }
+    if (g_hookUncloaked) { UnhookWinEvent(g_hookUncloaked); g_hookUncloaked = nullptr; }
+    if (g_arrivalTimer) {
+        HWND hwnd = g_messageWindow.load();
+        if (hwnd) KillTimer(hwnd, kArrivalTimerId);
+        g_arrivalTimer = 0;
+    }
+}
 
 static bool IsApplicationFrame(const WindowFacts& facts) {
     return _wcsicmp(facts.exeName.c_str(), L"ApplicationFrameHost.exe") == 0 &&
@@ -3450,6 +3480,7 @@ static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
                 for (auto it = g_cloakedAppFrames.begin();
                      it != g_cloakedAppFrames.end();) {
                     if (now - it->second.started > kHostedFrameArrivalMs) {
+                        g_expiredAppFrames.insert(it->first);
                         it = g_cloakedAppFrames.erase(it);
                     } else {
                         ++it;
@@ -3458,7 +3489,15 @@ static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
                 DWORD pid = 0;
                 DWORD tid = GetWindowThreadProcessId(hwnd, &pid);
                 if (pid && tid && g_cloakedAppFrames.size() < 128) {
-                    g_cloakedAppFrames.emplace(hwnd, CloakedFrame{now, pid, tid});
+                    g_expiredAppFrames.erase(hwnd);
+                    auto inserted = g_cloakedAppFrames.emplace(hwnd, CloakedFrame{now, pid, tid});
+                    const bool installed = StartArrivalHooks();
+                    // The frame may have uncloaked before the hook was installed.
+                    if ((inserted.second || installed) &&
+                        PassesWindowFilters(hwnd, &ignored, g_allowOwnedRules) &&
+                        CloakedFrameStillMatches(hwnd, inserted.first->second)) {
+                        EvaluateWindow(hwnd, /*forced=*/false, L"hosted-uncloaked");
+                    }
                 }
             }
         }
@@ -3476,9 +3515,11 @@ static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
     }
 
     if ((wcscmp(source, L"hosted-uncloaked") == 0 ||
-         wcscmp(source, L"hosted-child-shown") == 0) &&
+         wcscmp(source, L"hosted-child-shown") == 0 ||
+         wcscmp(source, L"hosted-arrival") == 0) &&
         !IsApplicationFrame(facts)) {
         g_cloakedAppFrames.erase(hwnd);
+        g_pendingAppFrames.erase(hwnd);
         return;
     }
     g_cloakedAppFrames.erase(hwnd);
@@ -3496,6 +3537,7 @@ static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
 
     if (outcome.matched) {
         g_pendingAppFrames.erase(hwnd);
+        g_expiredAppFrames.erase(hwnd);
         JournalRuleHit(outcome.ruleIndex, outcome, facts.exeName, hostedName);
         g_governedWindows.insert(hwnd);
         if (IsIconic(hwnd)) {
@@ -3508,9 +3550,14 @@ static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
         return;
     }
 
+    bool recheckArrival = false;
     if (IsApplicationFrame(facts) && NeedsFrameArrivalRetry() &&
         (!forced || wcscmp(source, L"reapply") == 0)) {
+        const bool inserted = !g_pendingAppFrames.count(hwnd);
+        g_expiredAppFrames.erase(hwnd);
         g_pendingAppFrames[hwnd] = GetTickCount64();
+        const bool installed = StartArrivalHooks();
+        recheckArrival = inserted || installed;
     }
     JournalNoMatch(facts.exeName, facts.title);
 
@@ -3531,6 +3578,59 @@ static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
     // its only chance.
     if (!facts.title.empty()) {
         g_evaluatedWindows.insert(hwnd);
+    }
+    // Check once after installing: a name/child event may have preceded the hook.
+    if (recheckArrival && g_pendingAppFrames.count(hwnd)) {
+        EvaluateWindow(hwnd, /*forced=*/true, L"hosted-arrival");
+    }
+}
+
+// Only the event thread calls this. Copy handles before evaluation, which can
+// remove entries while handling the recheck.
+static void ProcessArrivalTick() {
+    const ULONGLONG now = GetTickCount64();
+    for (auto it = g_pendingAppFrames.begin(); it != g_pendingAppFrames.end();) {
+        if (now - it->second > kHostedFrameArrivalMs) {
+            g_expiredAppFrames.insert(it->first);
+            it = g_pendingAppFrames.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = g_cloakedAppFrames.begin(); it != g_cloakedAppFrames.end();) {
+        if (now - it->second.started > kHostedFrameArrivalMs) {
+            g_expiredAppFrames.insert(it->first);
+            it = g_cloakedAppFrames.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (g_pendingAppFrames.empty() && g_cloakedAppFrames.empty()) {
+        StopArrivalHooks();
+        return;
+    }
+    // If a hook failed earlier, retry it and close the new installation gap.
+    if (StartArrivalHooks()) {
+        std::vector<HWND> pending;
+        for (const auto& entry : g_pendingAppFrames) pending.push_back(entry.first);
+        for (HWND hwnd : pending) {
+            if (g_pendingAppFrames.count(hwnd) && !g_overriddenWindows.count(hwnd) &&
+                !g_governedWindows.count(hwnd)) {
+                EvaluateWindow(hwnd, /*forced=*/true, L"hosted-arrival");
+            }
+        }
+        std::vector<HWND> cloaked;
+        for (const auto& entry : g_cloakedAppFrames) cloaked.push_back(entry.first);
+        for (HWND hwnd : cloaked) {
+            auto it = g_cloakedAppFrames.find(hwnd);
+            if (it != g_cloakedAppFrames.end() && !g_overriddenWindows.count(hwnd) &&
+                !g_governedWindows.count(hwnd) && CloakedFrameStillMatches(hwnd, it->second)) {
+                const wchar_t* reason = L"unknown";
+                if (PassesWindowFilters(hwnd, &reason, g_allowOwnedRules)) {
+                    EvaluateWindow(hwnd, /*forced=*/false, L"hosted-uncloaked");
+                }
+            }
+        }
     }
 }
 
@@ -3624,6 +3724,13 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
                                   HWND hwnd, LONG idObject, LONG idChild,
                                   DWORD /*eventThread*/,
                                   DWORD /*eventTime*/) {
+    // If creating the timer failed, retry on the next event. Until then the
+    // hooks stay installed rather than losing a pending frame.
+    if (event != EVENT_OBJECT_DESTROY && event != EVENT_SYSTEM_MOVESIZEEND &&
+        !g_arrivalTimer &&
+        (!g_pendingAppFrames.empty() || !g_cloakedAppFrames.empty())) {
+        ProcessArrivalTick();
+    }
     // Foreground changes first, and before the window-object filter below: the
     // event arrives for the new foreground window, but the window this path
     // cares about is read from GetForegroundWindow, so nothing here depends on
@@ -3642,6 +3749,7 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
     if (event == EVENT_OBJECT_DESTROY) {
         g_pendingAppFrames.erase(hwnd);
         g_cloakedAppFrames.erase(hwnd);
+        g_expiredAppFrames.erase(hwnd);
         g_suppressedArrivalFrames.erase(hwnd);
         g_evaluatedWindows.erase(hwnd);
         g_pendingApplies.erase(hwnd);
@@ -3671,7 +3779,8 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
         // An unresolved frame is also left where the user put it.
         const bool wasPending = g_pendingAppFrames.erase(hwnd) != 0;
         const bool wasCloaked = g_cloakedAppFrames.erase(hwnd) != 0;
-        if (wasPending || wasCloaked) {
+        const bool wasExpired = g_expiredAppFrames.erase(hwnd) != 0;
+        if (wasPending || wasCloaked || wasExpired) {
             g_suppressedArrivalFrames.insert(hwnd);
         }
         // The user has just placed this window by hand. Their intent outranks the
@@ -3731,14 +3840,9 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
                 g_overriddenWindows.count(frame)) {
                 g_pendingAppFrames.erase(pending);
             } else {
-                WindowFacts frameFacts;
-                const wchar_t* reason = L"unknown";
-                if (ResolveWindowFacts(frame, frameFacts, &reason) &&
-                    IsApplicationFrame(frameFacts)) {
-                    EvaluateWindow(frame, /*forced=*/true, L"hosted-arrival");
-                } else {
-                    g_pendingAppFrames.erase(pending);
-                }
+                // EvaluateWindow checks frame identity using the facts it
+                // resolves, instead of opening the same process twice.
+                EvaluateWindow(frame, /*forced=*/true, L"hosted-arrival");
             }
         }
         if (event == EVENT_OBJECT_SHOW && frame != hwnd &&
@@ -3766,23 +3870,12 @@ static HWINEVENTHOOK g_hookWindows = nullptr;
 static HWINEVENTHOOK g_hookMoveSizeEnd = nullptr;
 static HWINEVENTHOOK g_hookMinimizeEnd = nullptr;
 static HWINEVENTHOOK g_hookForeground = nullptr;
-static HWINEVENTHOOK g_hookName = nullptr;
-static HWINEVENTHOOK g_hookUncloaked = nullptr;
 static std::atomic<DWORD> g_eventThreadId{0};
 static HANDLE g_eventThread = nullptr;
 
 static void InstallHooks() {
-    const bool needName = NeedsFrameArrivalRetry();
-    if (!needName && g_hookName) {
-        UnhookWinEvent(g_hookName);
-        g_hookName = nullptr;
-    }
-    if (!needName && g_hookUncloaked) {
-        UnhookWinEvent(g_hookUncloaked);
-        g_hookUncloaked = nullptr;
-    }
     if (g_hookWindows && g_hookMoveSizeEnd && g_hookMinimizeEnd &&
-        g_hookForeground && (!needName || (g_hookName && g_hookUncloaked))) {
+        g_hookForeground) {
         return;
     }
 
@@ -3828,17 +3921,8 @@ static void InstallHooks() {
                             WINEVENT_OUTOFCONTEXT);
     }
 
-    if (needName && !g_hookName) {
-        g_hookName = SetWinEventHook(EVENT_OBJECT_NAMECHANGE,
-                                     EVENT_OBJECT_NAMECHANGE, nullptr,
-                                     WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-    }
-    if (needName && !g_hookUncloaked) {
-        g_hookUncloaked = SetWinEventHook(EVENT_OBJECT_UNCLOAKED, EVENT_OBJECT_UNCLOAKED, nullptr, WinEventProc,
-                                         0, 0, WINEVENT_OUTOFCONTEXT);
-    }
     if (!g_hookWindows || !g_hookMoveSizeEnd || !g_hookMinimizeEnd ||
-        !g_hookForeground || (needName && (!g_hookName || !g_hookUncloaked))) {
+        !g_hookForeground) {
         Wh_Log(L"SetWinEventHook failed (last error %lu)", GetLastError());
     } else {
         Wh_Log(L"window event hooks installed");
@@ -3862,14 +3946,7 @@ static void UninstallHooks() {
         UnhookWinEvent(g_hookForeground);
         g_hookForeground = nullptr;
     }
-    if (g_hookName) {
-        UnhookWinEvent(g_hookName);
-        g_hookName = nullptr;
-    }
-    if (g_hookUncloaked) {
-        UnhookWinEvent(g_hookUncloaked);
-        g_hookUncloaked = nullptr;
-    }
+    StopArrivalHooks();
 }
 
 // Event-thread only. Re-reads everything the mod needs from the settings.
@@ -3896,7 +3973,9 @@ static void ApplySettingsOnEventThread(bool initial) {
     g_pendingApplies.clear();
     g_pendingAppFrames.clear();
     g_cloakedAppFrames.clear();
+    g_expiredAppFrames.clear();
     g_suppressedArrivalFrames.clear();
+    StopArrivalHooks();
 
     LoadRules();
     JournalRulesLoaded();
@@ -3945,6 +4024,10 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
                 ProcessSettleTick();
                 return 0;
             }
+            if (wParam == kArrivalTimerId) {
+                ProcessArrivalTick();
+                return 0;
+            }
             break;
 
         case WM_DISPLAYCHANGE:
@@ -3960,7 +4043,9 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
             g_pendingApplies.clear();
             g_pendingAppFrames.clear();
             g_cloakedAppFrames.clear();
+            g_expiredAppFrames.clear();
             g_suppressedArrivalFrames.clear();
+            StopArrivalHooks();
             AppendDiagnosticsJournal(
                 L"DISPLAYCHANGE monitors=" + std::to_wstring(g_monitors.size()));
             return 0;
@@ -3979,6 +4064,7 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
             g_evaluatedWindows.clear();
             g_pendingAppFrames.clear();
             g_cloakedAppFrames.clear();
+            g_expiredAppFrames.clear();
             g_suppressedArrivalFrames.clear();
             g_pendingApplies.clear();
             g_overriddenWindows.clear();
