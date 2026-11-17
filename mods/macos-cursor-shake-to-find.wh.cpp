@@ -2,7 +2,7 @@
 // @id              macos-cursor-shake-to-find
 // @name            macOS Cursor & Shake to Find (4K HD)
 // @description     Complete built-in 4K macOS cursor suite (no external files needed) with smooth "Shake to Find" magnification.
-// @version         4.0.4
+// @version         4.4.0
 // @author          brcarvp
 // @github          https://github.com/brcarvp
 // @include         explorer.exe
@@ -21,10 +21,10 @@ Transform all your Windows mouse pointers into the authentic **macOS cursor suit
 ## Features
 
 - **Authentic Built-In 4K macOS Cursors:** Procedurally renders all 13 system pointers directly in memory based on the latest macOS cursor design language.
-- **Hardware Accelerated `.ani` Compilation:** Dynamically builds native Windows animated files for the Wait (Rainbow Beachball) and AppStarting (Arrow + Quadrant Blue Orb) cursors on launch for zero-flicker, 60fps buttery smooth system animations.
+- **Custom Cursor Size & Colors:** Change the fill color, border color, and globally scale the cursor size directly from the settings.
+- **Hardware Accelerated `.ani` Compilation:** Dynamically builds native Windows animated files for the Wait and AppStarting cursors on launch for zero-flicker, 60fps animations.
 - **Shake to Find:** Rapidly shaking the mouse triggers a smooth, 60 FPS bicubic-interpolated magnification overlay.
 - **Native Windows Cursors in Word:** Automatically restores 100% native Windows cursors when Microsoft Word or custom excluded apps are focused. **Shake to Find still works perfectly inside Word.**
-- **Keep Cursor Visible While Typing:** Prevents Windows and browsers from hiding the cursor while you type.
 */
 // ==/WindhawkModReadme==
 
@@ -33,6 +33,44 @@ Transform all your Windows mouse pointers into the authentic **macOS cursor suit
 - applyMacCursors: true
   $name: "Apply Built-in macOS Cursor Theme"
   $description: "Replaces default Windows pointers with built-in high-DPI macOS cursors"
+- cursorSizeScale: 100
+  $name: "Cursor Size Scale (%)"
+  $description: "Increase or decrease the normal cursor size (100 = Default, 150 = 50% larger, 200 = Double size)"
+- useDefaultMacOSColors: true
+  $name: "Use Default macOS Colors"
+  $description: "Activate to use authentic macOS colors (Dark Gray Fill, White Border). If ON, the custom color boxes below are ignored."
+- cursorFillColor: "Black"
+  $name: "Cursor Fill Color (Internal)"
+  $description: "Select the main internal color of the cursor (Requires 'Use Default macOS Colors' to be OFF)"
+  $options:
+    - Black: "Black"
+    - White: "White"
+    - Red: "Red"
+    - Green: "Green"
+    - Blue: "Blue"
+    - Yellow: "Yellow"
+    - Cyan: "Cyan"
+    - Magenta: "Magenta"
+    - Orange: "Orange"
+    - Purple: "Purple"
+    - Pink: "Pink"
+    - Gray: "Gray"
+- cursorBorderColor: "White"
+  $name: "Cursor Border Color (Outline)"
+  $description: "Select the outline color of the cursor (Requires 'Use Default macOS Colors' to be OFF)"
+  $options:
+    - Black: "Black"
+    - White: "White"
+    - Red: "Red"
+    - Green: "Green"
+    - Blue: "Blue"
+    - Yellow: "Yellow"
+    - Cyan: "Cyan"
+    - Magenta: "Magenta"
+    - Orange: "Orange"
+    - Purple: "Purple"
+    - Pink: "Pink"
+    - Gray: "Gray"
 - enableShakeToFind: true
   $name: "Enable Shake to Find"
   $description: "Temporarily enlarges the macOS cursor when shaking the mouse rapidly"
@@ -64,6 +102,7 @@ Transform all your Windows mouse pointers into the authentic **macOS cursor suit
 #include <cmath>
 #include <atomic>
 #include <cwctype>
+#include <cstdlib>
 
 #ifndef OCR_NORMAL
 #define OCR_NORMAL      32512
@@ -84,6 +123,10 @@ Transform all your Windows mouse pointers into the authentic **macOS cursor suit
 
 struct ModSettings {
     bool applyMacCursors;
+    int cursorSizeScale;
+    bool useDefaultMacOSColors;
+    Gdiplus::Color cursorFillColor;
+    Gdiplus::Color cursorBorderColor;
     bool enableShakeToFind;
     float maxScale;
     int shakeSensitivity;
@@ -150,7 +193,7 @@ void WriteFourCC(std::vector<BYTE>& buf, const char* fcc) {
 std::vector<BYTE> BuildAniFile(const std::vector<std::vector<BYTE>>& frames, DWORD jifRate) {
     std::vector<BYTE> buf;
     WriteFourCC(buf, "RIFF");
-    WriteDWORD(buf, 0); // Tamanho placeholder
+    WriteDWORD(buf, 0); 
     WriteFourCC(buf, "ACON");
     
     WriteFourCC(buf, "anih");
@@ -164,11 +207,11 @@ std::vector<BYTE> BuildAniFile(const std::vector<std::vector<BYTE>>& frames, DWO
     WriteDWORD(buf, 0); 
     WriteDWORD(buf, 0); 
     WriteDWORD(buf, 0); 
-    WriteDWORD(buf, jifRate); // JifRate (velocidade do frame)
-    WriteDWORD(buf, 1);       // Flags (AF_ICON)
+    WriteDWORD(buf, jifRate); 
+    WriteDWORD(buf, 1);       
     
     WriteFourCC(buf, "LIST");
-    DWORD listSize = 4; // "fram"
+    DWORD listSize = 4; 
     for (const auto& f : frames) {
         listSize += 8 + f.size();
         if (f.size() % 2 != 0) listSize += 1;
@@ -180,7 +223,7 @@ std::vector<BYTE> BuildAniFile(const std::vector<std::vector<BYTE>>& frames, DWO
         WriteFourCC(buf, "icon");
         WriteDWORD(buf, f.size());
         buf.insert(buf.end(), f.begin(), f.end());
-        if (f.size() % 2 != 0) buf.push_back(0); // Pad alignment
+        if (f.size() % 2 != 0) buf.push_back(0); 
     }
     
     DWORD fileSize = buf.size() - 8;
@@ -272,7 +315,7 @@ HCURSOR WINAPI SetCursor_Hook(HCURSOR hCursor) {
 }
 
 // ============================================================================
-// DESENHOS VETORIAIS (GOLDEN GATE & MAC AUTHENTIC)
+// DESENHOS VETORIAIS COM CORES DINÂMICAS E PADRÃO MACOS
 // ============================================================================
 
 void SetupHighQualityGraphics(Gdiplus::Graphics& g) {
@@ -309,13 +352,13 @@ Gdiplus::Bitmap* RenderMacOSArrow(int size, float scaleFactor = MAC_TRUE_SCALE, 
     g.DrawPolygon(&shadowPen, pts, 7);
     g.ResetTransform();
 
-    Gdiplus::Pen whiteBorder(Gdiplus::Color(255, 255, 255, 255), 2.85f * s);
-    whiteBorder.SetLineJoin(Gdiplus::LineJoinMiter);
-    whiteBorder.SetMiterLimit(10.0f);
-    g.DrawPolygon(&whiteBorder, pts, 7);
+    Gdiplus::Pen borderPen(g_settings.cursorBorderColor, 2.85f * s);
+    borderPen.SetLineJoin(Gdiplus::LineJoinMiter);
+    borderPen.SetMiterLimit(10.0f);
+    g.DrawPolygon(&borderPen, pts, 7);
 
-    Gdiplus::SolidBrush blackFill(Gdiplus::Color(255, 16, 18, 22));
-    g.FillPolygon(&blackFill, pts, 7);
+    Gdiplus::SolidBrush fillBrush(g_settings.cursorFillColor);
+    g.FillPolygon(&fillBrush, pts, 7);
 
     return bmp;
 }
@@ -346,12 +389,12 @@ Gdiplus::Bitmap* RenderMacOSAlternate(int size) {
     g.DrawPolygon(&shadowPen, pts, 7);
     g.ResetTransform();
 
-    Gdiplus::Pen whiteBorder(Gdiplus::Color(255, 255, 255, 255), 2.8f * s);
-    whiteBorder.SetLineJoin(Gdiplus::LineJoinMiter);
-    Gdiplus::SolidBrush blackFill(Gdiplus::Color(255, 16, 18, 22));
+    Gdiplus::Pen borderPen(g_settings.cursorBorderColor, 2.8f * s);
+    borderPen.SetLineJoin(Gdiplus::LineJoinMiter);
+    Gdiplus::SolidBrush fillBrush(g_settings.cursorFillColor);
     
-    g.DrawPolygon(&whiteBorder, pts, 7);
-    g.FillPolygon(&blackFill, pts, 7);
+    g.DrawPolygon(&borderPen, pts, 7);
+    g.FillPolygon(&fillBrush, pts, 7);
 
     return bmp;
 }
@@ -381,13 +424,13 @@ Gdiplus::Bitmap* RenderMacOSAppStarting(int size, float angleOffset) {
     g.FillPie(&qLight, orbRect, angleOffset + 180.0f, 90.5f);
     g.FillPie(&qDark,  orbRect, angleOffset + 270.0f, 90.5f);
 
-    Gdiplus::Pen rimPen(Gdiplus::Color(90, 255, 255, 255), 0.75f * s);
+    Gdiplus::Pen rimPen(Gdiplus::Color(90, g_settings.cursorBorderColor.GetR(), g_settings.cursorBorderColor.GetG(), g_settings.cursorBorderColor.GetB()), 0.75f * s);
     g.DrawEllipse(&rimPen, orbRect);
 
     return bmp;
 }
 
-// Beachball - Animada Nativamente (Rainbow Swirl Colors)
+// Beachball - Animada Nativamente
 Gdiplus::Bitmap* RenderMacOSBeachball(int size, float angleOffset) {
     Gdiplus::Bitmap* bmp = new Gdiplus::Bitmap(size, size, PixelFormat32bppARGB);
     Gdiplus::Graphics g(bmp);
@@ -403,12 +446,12 @@ Gdiplus::Bitmap* RenderMacOSBeachball(int size, float angleOffset) {
     g.FillEllipse(&shadowBrush, cx - r + 0.4f * s, cy - r + 0.9f * s, r * 2.0f, r * 2.0f);
 
     Gdiplus::Color colors[6] = {
-        Gdiplus::Color(255, 235, 75, 80),   // Red
-        Gdiplus::Color(255, 250, 150, 45),  // Orange
-        Gdiplus::Color(255, 245, 215, 50),  // Yellow
-        Gdiplus::Color(255, 100, 200, 80),  // Green
-        Gdiplus::Color(255, 60, 160, 255),  // Blue
-        Gdiplus::Color(255, 165, 100, 230)  // Purple
+        Gdiplus::Color(255, 235, 75, 80),   
+        Gdiplus::Color(255, 250, 150, 45),  
+        Gdiplus::Color(255, 245, 215, 50),  
+        Gdiplus::Color(255, 100, 200, 80),  
+        Gdiplus::Color(255, 60, 160, 255),  
+        Gdiplus::Color(255, 165, 100, 230)  
     };
 
     for (int i = 0; i < 6; ++i) {
@@ -426,7 +469,7 @@ Gdiplus::Bitmap* RenderMacOSBeachball(int size, float angleOffset) {
     glossBrush.SetSurroundColors(surroundColor, &count);
     g.FillEllipse(&glossBrush, rect);
 
-    Gdiplus::Pen borderPen(Gdiplus::Color(110, 255, 255, 255), 0.8f * s);
+    Gdiplus::Pen borderPen(Gdiplus::Color(110, g_settings.cursorBorderColor.GetR(), g_settings.cursorBorderColor.GetG(), g_settings.cursorBorderColor.GetB()), 0.8f * s);
     g.DrawEllipse(&borderPen, rect);
 
     return bmp;
@@ -451,12 +494,16 @@ Gdiplus::Bitmap* RenderMacOSHand(int size) {
     handPath.AddLine(7.8f * s, 15.4f * s, 10.6f * s, 18.0f * s);
     handPath.AddLine(10.6f * s, 18.0f * s, 9.2f * s, 4.8f * s);
     handPath.CloseFigure();
+    
     Gdiplus::Matrix shadowMat; shadowMat.Translate(0.6f * s, 1.3f * s); g.SetTransform(&shadowMat);
     Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(65, 0, 0, 0)); g.FillPath(&shadowBrush, &handPath); g.ResetTransform();
-    Gdiplus::SolidBrush whiteFill(Gdiplus::Color(255, 255, 255, 255));
-    Gdiplus::Pen blackOutline(Gdiplus::Color(255, 22, 23, 26), 2.15f * s); blackOutline.SetLineJoin(Gdiplus::LineJoinRound);
-    g.FillPath(&whiteFill, &handPath); g.DrawPath(&blackOutline, &handPath);
-    Gdiplus::Pen backLinePen(Gdiplus::Color(255, 22, 23, 26), 1.45f * s);
+    
+    Gdiplus::SolidBrush invertedFill(g_settings.cursorBorderColor);
+    Gdiplus::Pen invertedOutline(g_settings.cursorFillColor, 2.15f * s); invertedOutline.SetLineJoin(Gdiplus::LineJoinRound);
+    
+    g.FillPath(&invertedFill, &handPath); g.DrawPath(&invertedOutline, &handPath);
+    
+    Gdiplus::Pen backLinePen(g_settings.cursorFillColor, 1.45f * s);
     backLinePen.SetStartCap(Gdiplus::LineCapRound); backLinePen.SetEndCap(Gdiplus::LineCapRound);
     g.DrawLine(&backLinePen, 14.2f * s, 17.5f * s, 14.2f * s, 22.3f * s);
     g.DrawLine(&backLinePen, 16.9f * s, 17.5f * s, 16.9f * s, 22.3f * s);
@@ -464,7 +511,7 @@ Gdiplus::Bitmap* RenderMacOSHand(int size) {
     return bmp;
 }
 
-// Texto (I-Beam) - Atualizado Golden Gate (Sem barra central e curvas suaves)
+// Texto (I-Beam)
 Gdiplus::Bitmap* RenderMacOSIBeam(int size) {
     Gdiplus::Bitmap* bmp = new Gdiplus::Bitmap(size, size, PixelFormat32bppARGB);
     Gdiplus::Graphics g(bmp); 
@@ -485,14 +532,14 @@ Gdiplus::Bitmap* RenderMacOSIBeam(int size) {
     botArc.AddBezier(cx - 4.0f * s, cy + 9.5f * s, cx - 1.5f * s, cy + 9.5f * s, cx, cy + 8.5f * s, cx, cy + 7.5f * s);
     botArc.AddBezier(cx, cy + 7.5f * s, cx, cy + 8.5f * s, cx + 1.5f * s, cy + 9.5f * s, cx + 4.0f * s, cy + 9.5f * s);
     
-    Gdiplus::Pen whitePen(Gdiplus::Color(255, 255, 255, 255), 3.4f * s);
-    whitePen.SetStartCap(Gdiplus::LineCapRound); whitePen.SetEndCap(Gdiplus::LineCapRound); whitePen.SetLineJoin(Gdiplus::LineJoinRound);
+    Gdiplus::Pen borderPen(g_settings.cursorBorderColor, 3.4f * s);
+    borderPen.SetStartCap(Gdiplus::LineCapRound); borderPen.SetEndCap(Gdiplus::LineCapRound); borderPen.SetLineJoin(Gdiplus::LineJoinRound);
     
-    Gdiplus::Pen blackPen(Gdiplus::Color(255, 16, 18, 22), 1.5f * s);
-    blackPen.SetStartCap(Gdiplus::LineCapRound); blackPen.SetEndCap(Gdiplus::LineCapRound); blackPen.SetLineJoin(Gdiplus::LineJoinRound);
+    Gdiplus::Pen fillPen(g_settings.cursorFillColor, 1.5f * s);
+    fillPen.SetStartCap(Gdiplus::LineCapRound); fillPen.SetEndCap(Gdiplus::LineCapRound); fillPen.SetLineJoin(Gdiplus::LineJoinRound);
     
-    g.DrawPath(&whitePen, &path); g.DrawPath(&whitePen, &topArc); g.DrawPath(&whitePen, &botArc);
-    g.DrawPath(&blackPen, &path); g.DrawPath(&blackPen, &topArc); g.DrawPath(&blackPen, &botArc);
+    g.DrawPath(&borderPen, &path); g.DrawPath(&borderPen, &topArc); g.DrawPath(&borderPen, &botArc);
+    g.DrawPath(&fillPen, &path); g.DrawPath(&fillPen, &topArc); g.DrawPath(&fillPen, &botArc);
     
     return bmp;
 }
@@ -501,10 +548,10 @@ Gdiplus::Bitmap* RenderMacOSCross(int size) {
     Gdiplus::Bitmap* bmp = new Gdiplus::Bitmap(size, size, PixelFormat32bppARGB);
     Gdiplus::Graphics g(bmp); SetupHighQualityGraphics(g);
     float s = static_cast<float>(size) / 32.0f; float cx = 16.0f * s; float cy = 16.0f * s; float arm = 8.4f * s;
-    Gdiplus::Pen whitePen(Gdiplus::Color(255, 255, 255, 255), 3.6f * s);
-    Gdiplus::Pen blackPen(Gdiplus::Color(255, 16, 18, 22), 1.45f * s);
-    g.DrawLine(&whitePen, cx - arm, cy, cx + arm, cy); g.DrawLine(&whitePen, cx, cy - arm, cx, cy + arm);
-    g.DrawLine(&blackPen, cx - arm, cy, cx + arm, cy); g.DrawLine(&blackPen, cx, cy - arm, cx, cy + arm);
+    Gdiplus::Pen borderPen(g_settings.cursorBorderColor, 3.6f * s);
+    Gdiplus::Pen fillPen(g_settings.cursorFillColor, 1.45f * s);
+    g.DrawLine(&borderPen, cx - arm, cy, cx + arm, cy); g.DrawLine(&borderPen, cx, cy - arm, cx, cy + arm);
+    g.DrawLine(&fillPen, cx - arm, cy, cx + arm, cy); g.DrawLine(&fillPen, cx, cy - arm, cx, cy + arm);
     return bmp;
 }
 
@@ -513,19 +560,19 @@ Gdiplus::Bitmap* RenderMacOSMove(int size) {
     Gdiplus::Graphics g(bmp); SetupHighQualityGraphics(g);
     float s = static_cast<float>(size) / 32.0f; float cx = 16.0f * s; float cy = 16.0f * s; float d = 9.5f * s;
     Gdiplus::PointF diamond[4] = { { cx, cy - d }, { cx + d, cy }, { cx, cy + d }, { cx - d, cy } };
-    Gdiplus::Pen whiteBorder(Gdiplus::Color(255, 255, 255, 255), 2.3f * s); whiteBorder.SetLineJoin(Gdiplus::LineJoinMiter);
-    Gdiplus::SolidBrush blackFill(Gdiplus::Color(255, 16, 18, 22));
-    g.DrawPolygon(&whiteBorder, diamond, 4); g.FillPolygon(&blackFill, diamond, 4);
-    Gdiplus::Pen innerWhite(Gdiplus::Color(255, 255, 255, 255), 1.4f * s);
-    innerWhite.SetStartCap(Gdiplus::LineCapRound); innerWhite.SetEndCap(Gdiplus::LineCapRound);
-    float l = 4.5f * s; g.DrawLine(&innerWhite, cx - l, cy, cx + l, cy); g.DrawLine(&innerWhite, cx, cy - l, cx, cy + l);
-    Gdiplus::SolidBrush whiteBrush(Gdiplus::Color(255, 255, 255, 255));
+    Gdiplus::Pen borderPen(g_settings.cursorBorderColor, 2.3f * s); borderPen.SetLineJoin(Gdiplus::LineJoinMiter);
+    Gdiplus::SolidBrush fillBrush(g_settings.cursorFillColor);
+    g.DrawPolygon(&borderPen, diamond, 4); g.FillPolygon(&fillBrush, diamond, 4);
+    Gdiplus::Pen innerPen(g_settings.cursorBorderColor, 1.4f * s);
+    innerPen.SetStartCap(Gdiplus::LineCapRound); innerPen.SetEndCap(Gdiplus::LineCapRound);
+    float l = 4.5f * s; g.DrawLine(&innerPen, cx - l, cy, cx + l, cy); g.DrawLine(&innerPen, cx, cy - l, cx, cy + l);
+    Gdiplus::SolidBrush innerBrush(g_settings.cursorBorderColor);
     Gdiplus::PointF topTip[3]   = { {cx, cy - 6.5f * s}, {cx - 2.0f * s, cy - 3.5f * s}, {cx + 2.0f * s, cy - 3.5f * s} };
     Gdiplus::PointF botTip[3]   = { {cx, cy + 6.5f * s}, {cx - 2.0f * s, cy + 3.5f * s}, {cx + 2.0f * s, cy + 3.5f * s} };
     Gdiplus::PointF leftTip[3]  = { {cx - 6.5f * s, cy}, {cx - 3.5f * s, cy - 2.0f * s}, {cx - 3.5f * s, cy + 2.0f * s} };
     Gdiplus::PointF rightTip[3] = { {cx + 6.5f * s, cy}, {cx + 3.5f * s, cy - 2.0f * s}, {cx + 3.5f * s, cy + 2.0f * s} };
-    g.FillPolygon(&whiteBrush, topTip, 3); g.FillPolygon(&whiteBrush, botTip, 3);
-    g.FillPolygon(&whiteBrush, leftTip, 3); g.FillPolygon(&whiteBrush, rightTip, 3);
+    g.FillPolygon(&innerBrush, topTip, 3); g.FillPolygon(&innerBrush, botTip, 3);
+    g.FillPolygon(&innerBrush, leftTip, 3); g.FillPolygon(&innerBrush, rightTip, 3);
     return bmp;
 }
 
@@ -536,10 +583,10 @@ Gdiplus::Bitmap* RenderMacOSGoldenGateResize(int size, float angleDegrees) {
     g.TranslateTransform(cx, cy); g.RotateTransform(angleDegrees); g.TranslateTransform(-cx, -cy);
     Gdiplus::PointF topTriangle[3] = { {cx, cy - 9.0f * s}, {cx - 5.5f * s, cy - 2.0f * s}, {cx + 5.5f * s, cy - 2.0f * s} };
     Gdiplus::PointF botTriangle[3] = { {cx, cy + 9.0f * s}, {cx - 5.5f * s, cy + 2.0f * s}, {cx + 5.5f * s, cy + 2.0f * s} };
-    Gdiplus::Pen whiteBorder(Gdiplus::Color(255, 255, 255, 255), 2.5f * s); whiteBorder.SetLineJoin(Gdiplus::LineJoinMiter);
-    Gdiplus::SolidBrush blackFill(Gdiplus::Color(255, 16, 18, 22));
-    g.DrawPolygon(&whiteBorder, topTriangle, 3); g.FillPolygon(&blackFill, topTriangle, 3);
-    g.DrawPolygon(&whiteBorder, botTriangle, 3); g.FillPolygon(&blackFill, botTriangle, 3);
+    Gdiplus::Pen borderPen(g_settings.cursorBorderColor, 2.5f * s); borderPen.SetLineJoin(Gdiplus::LineJoinMiter);
+    Gdiplus::SolidBrush fillBrush(g_settings.cursorFillColor);
+    g.DrawPolygon(&borderPen, topTriangle, 3); g.FillPolygon(&fillBrush, topTriangle, 3);
+    g.DrawPolygon(&borderPen, botTriangle, 3); g.FillPolygon(&fillBrush, botTriangle, 3);
     return bmp;
 }
 
@@ -547,15 +594,40 @@ Gdiplus::Bitmap* RenderMacOSHelp(int size) {
     Gdiplus::Bitmap* bmp = new Gdiplus::Bitmap(size, size, PixelFormat32bppARGB);
     Gdiplus::Graphics g(bmp); SetupHighQualityGraphics(g);
     float s = static_cast<float>(size) / 32.0f; float cx = 16.0f * s; float cy = 16.0f * s;
+
     Gdiplus::GraphicsPath qPath;
-    qPath.AddArc(cx - 4.5f * s, cy - 9.0f * s, 9.0f * s, 9.0f * s, 170.0f, 220.0f);
-    qPath.AddBezier(cx + 4.5f * s, cy - 4.5f * s, cx + 4.5f * s, cy - 1.0f * s, cx, cy - 1.0f * s, cx, cy + 2.5f * s);
-    Gdiplus::Pen whitePen(Gdiplus::Color(255, 255, 255, 255), 4.8f * s); whitePen.SetStartCap(Gdiplus::LineCapRound); whitePen.SetEndCap(Gdiplus::LineCapRound);
-    Gdiplus::Pen blackPen(Gdiplus::Color(255, 16, 18, 22), 2.2f * s); blackPen.SetStartCap(Gdiplus::LineCapRound); blackPen.SetEndCap(Gdiplus::LineCapRound);
-    g.DrawPath(&whitePen, &qPath); g.DrawPath(&blackPen, &qPath);
-    Gdiplus::SolidBrush whiteBrush(Gdiplus::Color(255, 255, 255, 255)); Gdiplus::SolidBrush blackBrush(Gdiplus::Color(255, 16, 18, 22));
-    g.FillEllipse(&whiteBrush, cx - 2.5f * s, cy + 5.5f * s, 5.0f * s, 5.0f * s);
-    g.FillEllipse(&blackBrush, cx - 1.2f * s, cy + 6.8f * s, 2.4f * s, 2.4f * s);
+    qPath.AddArc(cx - 5.5f * s, cy - 10.0f * s, 11.0f * s, 11.0f * s, 160.0f, 230.0f); 
+    qPath.AddLine(cx + 5.5f * s, cy - 4.5f * s, cx + 2.0f * s, cy - 1.0f * s); 
+    qPath.AddLine(cx + 2.0f * s, cy - 1.0f * s, cx + 2.0f * s, cy + 2.5f * s); 
+    qPath.AddLine(cx + 2.0f * s, cy + 2.5f * s, cx - 2.0f * s, cy + 2.5f * s); 
+    qPath.AddLine(cx - 2.0f * s, cy + 2.5f * s, cx - 2.0f * s, cy - 2.5f * s); 
+    qPath.AddLine(cx - 2.0f * s, cy - 2.5f * s, cx + 1.5f * s, cy - 5.5f * s); 
+    qPath.AddArc(cx - 2.5f * s, cy - 7.5f * s, 5.0f * s, 5.0f * s, 10.0f, -220.0f); 
+
+    Gdiplus::GraphicsPath dotPath;
+    dotPath.AddRectangle(Gdiplus::RectF(cx - 2.0f * s, cy + 4.5f * s, 4.0f * s, 4.0f * s));
+
+    Gdiplus::GraphicsPath fullPath;
+    fullPath.AddPath(&qPath, false);
+    fullPath.AddPath(&dotPath, false);
+
+    Gdiplus::Matrix shadowMat;
+    shadowMat.Translate(0.0f, 1.5f * s);
+    g.SetTransform(&shadowMat);
+    Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(60, 0, 0, 0));
+    Gdiplus::Pen shadowPen(Gdiplus::Color(60, 0, 0, 0), 2.5f * s);
+    shadowPen.SetLineJoin(Gdiplus::LineJoinRound);
+    g.FillPath(&shadowBrush, &fullPath);
+    g.DrawPath(&shadowPen, &fullPath);
+    g.ResetTransform();
+
+    Gdiplus::Pen borderPen(g_settings.cursorBorderColor, 3.2f * s); 
+    borderPen.SetLineJoin(Gdiplus::LineJoinRound);
+    Gdiplus::SolidBrush fillBrush(g_settings.cursorFillColor);
+
+    g.DrawPath(&borderPen, &fullPath);
+    g.FillPath(&fillBrush, &fullPath);
+
     return bmp;
 }
 
@@ -563,10 +635,11 @@ Gdiplus::Bitmap* RenderMacOSNo(int size) {
     Gdiplus::Bitmap* bmp = RenderMacOSArrow(size, 0.64f, -0.8f * (size / 32.0f), -1.2f * (size / 32.0f));
     Gdiplus::Graphics g(bmp); g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality); g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
     float s = static_cast<float>(size) / 32.0f; float cx = 17.5f * s; float cy = 18.0f * s; float r = 6.0f * s;
-    Gdiplus::Pen darkBorder(Gdiplus::Color(200, 16, 18, 22), 3.8f * s);
+    
+    Gdiplus::Pen darkBorder(Gdiplus::Color(200, g_settings.cursorFillColor.GetR(), g_settings.cursorFillColor.GetG(), g_settings.cursorFillColor.GetB()), 3.8f * s);
     g.DrawEllipse(&darkBorder, cx - r, cy - r, r * 2.0f, r * 2.0f); float offset = r * 0.707f; g.DrawLine(&darkBorder, cx - offset, cy - offset, cx + offset, cy + offset);
-    Gdiplus::Pen whiteSign(Gdiplus::Color(255, 245, 245, 245), 1.9f * s);
-    g.DrawEllipse(&whiteSign, cx - r, cy - r, r * 2.0f, r * 2.0f); g.DrawLine(&whiteSign, cx - offset, cy - offset, cx + offset, cy + offset);
+    Gdiplus::Pen borderSign(g_settings.cursorBorderColor, 1.9f * s);
+    g.DrawEllipse(&borderSign, cx - r, cy - r, r * 2.0f, r * 2.0f); g.DrawLine(&borderSign, cx - offset, cy - offset, cx + offset, cy + offset);
     return bmp;
 }
 
@@ -582,7 +655,7 @@ HCURSOR BitmapToHCURSOR(Gdiplus::Bitmap* bmp, int hotspotX, int hotspotY) {
 
     int w = bmp->GetWidth();
     int h = bmp->GetHeight();
-    HBITMAP hbmMask = CreateBitmap(bmp->GetWidth(), bmp->GetHeight(), 1, 1, NULL);
+    HBITMAP hbmMask = CreateBitmap(w, h, 1, 1, NULL);
 
     ICONINFO ii = { 0 };
     ii.fIcon = FALSE;
@@ -604,7 +677,6 @@ void SetRenderedCursor(DWORD ocrId, Gdiplus::Bitmap* bmp, int hotX, int hotY) {
     if (hCur) SetSystemCursor(hCur, ocrId);
 }
 
-// Compila dinamicamente os arquivos .ani e os salva no diretório %TEMP%
 void CompileAnimatedCursors(int sz) {
     std::vector<std::vector<BYTE>> appStartFrames;
     std::vector<std::vector<BYTE>> waitFrames;
@@ -629,8 +701,8 @@ void CompileAnimatedCursors(int sz) {
 
         std::vector<BYTE> icoData;
         icoData.push_back(0); icoData.push_back(0);
-        icoData.push_back(2); icoData.push_back(0); // CURSOR
-        icoData.push_back(1); icoData.push_back(0); // 1 Image
+        icoData.push_back(2); icoData.push_back(0); 
+        icoData.push_back(1); icoData.push_back(0); 
         
         int w = bmp->GetWidth(); int h = bmp->GetHeight();
         icoData.push_back(w >= 256 ? 0 : w);
@@ -643,7 +715,7 @@ void CompileAnimatedCursors(int sz) {
         icoData.push_back(pngSize & 0xFF); icoData.push_back((pngSize >> 8) & 0xFF);
         icoData.push_back((pngSize >> 16) & 0xFF); icoData.push_back((pngSize >> 24) & 0xFF);
         
-        int offset = 22; // Header size
+        int offset = 22; 
         icoData.push_back(offset & 0xFF); icoData.push_back((offset >> 8) & 0xFF);
         icoData.push_back((offset >> 16) & 0xFF); icoData.push_back((offset >> 24) & 0xFF);
         
@@ -683,8 +755,10 @@ void RestoreNativeWindowsCursors() {
 void ApplyBuiltInMacOSCursors() {
     if (!g_isExplorer || !g_settings.applyMacCursors) return;
 
-    int sz = GetSystemMetrics(SM_CXCURSOR);
-    if (sz <= 0) sz = 32;
+    int baseSz = GetSystemMetrics(SM_CXCURSOR);
+    if (baseSz <= 0) baseSz = 32;
+    int sz = (baseSz * g_settings.cursorSizeScale) / 100;
+    
     float r = (static_cast<float>(sz) / 32.0f) * MAC_TRUE_SCALE;
     int center = sz / 2;
 
@@ -693,10 +767,7 @@ void ApplyBuiltInMacOSCursors() {
     SetRenderedCursor(OCR_NORMAL,      RenderMacOSArrow(sz),                    static_cast<int>(6.2f * r), static_cast<int>(3.5f * r));
     SetRenderedCursor(OCR_UP,          RenderMacOSAlternate(sz),                static_cast<int>(16.0f * (sz / 32.0f)), static_cast<int>(3.0f * r));
     SetRenderedCursor(OCR_HAND,        RenderMacOSHand(sz),                     static_cast<int>(10.0f * r), static_cast<int>(3.0f * r));
-    
-    // Atualização: Cursor de Texto I-Beam minimalista
     SetRenderedCursor(OCR_IBEAM,       RenderMacOSIBeam(sz),                    center,                   center);
-    
     SetRenderedCursor(OCR_CROSS,       RenderMacOSCross(sz),                    center,                   center);
     SetRenderedCursor(OCR_SIZEALL,     RenderMacOSMove(sz),                     center,                   center);
     SetRenderedCursor(OCR_SIZENS,      RenderMacOSGoldenGateResize(sz, 0.0f),   center,                   center);
@@ -877,8 +948,24 @@ DWORD WINAPI ShakeMonitorThread(LPVOID) {
 }
 
 // ============================================================================
-// INICIALIZAÇÃO
+// INICIALIZAÇÃO E CARREGAMENTO DAS CORES
 // ============================================================================
+
+Gdiplus::Color GetColorFromName(const std::wstring& name, Gdiplus::Color fallback) {
+    if (name == L"Black") return Gdiplus::Color(255, 0, 0, 0);
+    if (name == L"White") return Gdiplus::Color(255, 255, 255, 255);
+    if (name == L"Red") return Gdiplus::Color(255, 255, 0, 0);
+    if (name == L"Green") return Gdiplus::Color(255, 0, 200, 0);
+    if (name == L"Blue") return Gdiplus::Color(255, 0, 122, 255);
+    if (name == L"Yellow") return Gdiplus::Color(255, 255, 204, 0);
+    if (name == L"Cyan") return Gdiplus::Color(255, 0, 255, 255);
+    if (name == L"Magenta") return Gdiplus::Color(255, 255, 0, 255);
+    if (name == L"Orange") return Gdiplus::Color(255, 255, 149, 0);
+    if (name == L"Purple") return Gdiplus::Color(255, 175, 82, 222);
+    if (name == L"Pink") return Gdiplus::Color(255, 255, 105, 180);
+    if (name == L"Gray") return Gdiplus::Color(255, 128, 128, 128);
+    return fallback;
+}
 
 void ParseCustomExcludedApps(const WCHAR* rawStr) {
     g_settings.customExcludedList.clear();
@@ -900,12 +987,33 @@ void ParseCustomExcludedApps(const WCHAR* rawStr) {
 
 void LoadSettings() {
     g_settings.applyMacCursors = Wh_GetIntSetting(L"applyMacCursors") != 0;
+    
+    int scale = Wh_GetIntSetting(L"cursorSizeScale");
+    g_settings.cursorSizeScale = (scale >= 50 && scale <= 500) ? scale : 100;
+    
+    g_settings.useDefaultMacOSColors = Wh_GetIntSetting(L"useDefaultMacOSColors") != 0;
+    
+    PCWSTR fillStr = Wh_GetStringSetting(L"cursorFillColor");
+    PCWSTR borderStr = Wh_GetStringSetting(L"cursorBorderColor");
+
+    if (g_settings.useDefaultMacOSColors) {
+        g_settings.cursorFillColor = Gdiplus::Color(255, 16, 18, 22);
+        g_settings.cursorBorderColor = Gdiplus::Color(255, 255, 255, 255);
+    } else {
+        g_settings.cursorFillColor = GetColorFromName(fillStr ? fillStr : L"Black", Gdiplus::Color(255, 16, 18, 22));
+        g_settings.cursorBorderColor = GetColorFromName(borderStr ? borderStr : L"White", Gdiplus::Color(255, 255, 255, 255));
+    }
+    
+    Wh_FreeStringSetting(fillStr);
+    Wh_FreeStringSetting(borderStr);
+
     g_settings.enableShakeToFind = Wh_GetIntSetting(L"enableShakeToFind") != 0;
     int pct = Wh_GetIntSetting(L"maxScalePercent"); g_settings.maxScale = (pct >= 150 && pct <= 800) ? (pct / 100.0f) : 3.5f;
     int sens = Wh_GetIntSetting(L"shakeSensitivity"); g_settings.shakeSensitivity = (sens >= 2 && sens <= 10) ? sens : 3;
     int delay = Wh_GetIntSetting(L"restoreDelayMs"); g_settings.restoreDelayMs = (delay >= 200) ? delay : 700;
     g_settings.keepCursorVisibleWhileTyping = Wh_GetIntSetting(L"keepCursorVisibleWhileTyping") != 0;
     g_settings.excludeOfficeAndExternalApps = Wh_GetIntSetting(L"excludeOfficeAndExternalApps") != 0;
+    
     PCWSTR customApps = Wh_GetStringSetting(L"customExcludedApps");
     ParseCustomExcludedApps(customApps);
     Wh_FreeStringSetting(customApps);
@@ -945,8 +1053,11 @@ BOOL Wh_ModInit() {
 
     UpdateMouseVanishSetting();
     
-    int sz = GetSystemMetrics(SM_CXCURSOR);
-    CompileAnimatedCursors(sz > 0 ? sz : 32);
+    int baseSz = GetSystemMetrics(SM_CXCURSOR);
+    if (baseSz <= 0) baseSz = 32;
+    int sz = (baseSz * g_settings.cursorSizeScale) / 100;
+    
+    CompileAnimatedCursors(sz);
 
     if (!IsForegroundAppExcluded() && g_settings.applyMacCursors) ApplyBuiltInMacOSCursors();
     else RestoreNativeWindowsCursors();
@@ -970,6 +1081,15 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
     if (!g_isExplorer) return;
     UpdateMouseVanishSetting();
+    
+    int baseSz = GetSystemMetrics(SM_CXCURSOR);
+    if (baseSz <= 0) baseSz = 32;
+    int sz = (baseSz * g_settings.cursorSizeScale) / 100;
+    
+    CompileAnimatedCursors(sz);
+    
+    if (g_pHighResArrowBmp) { delete g_pHighResArrowBmp; g_pHighResArrowBmp = nullptr; }
+    
     if (g_settings.applyMacCursors && !IsForegroundAppExcluded()) ApplyBuiltInMacOSCursors();
     else RestoreNativeWindowsCursors();
 }
