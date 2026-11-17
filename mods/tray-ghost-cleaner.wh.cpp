@@ -3,7 +3,7 @@
 // @name            Tray Ghost Icon Cleaner
 // @description     Removes leftover tray icons of programs that crashed or were killed, the moment they exit, without hovering the mouse over the tray
 // @version         1.0
-// @author          Solomag
+// @author          Solo_mag
 // @github          https://github.com/Solomag
 // @include         explorer.exe
 // @compilerOptions -luser32 -lshell32 -lkernel32 -lcomctl32
@@ -16,6 +16,8 @@
 When a program crashes or is terminated, it never removes its notification area (tray)
 icon. Explorer only notices that the owner is gone when the mouse passes over the icon,
 so "ghost" icons and duplicates pile up until you hover over the tray.
+
+![Demo](https://raw.githubusercontent.com/Solomag/windhawk-assets/main/tray-ghost-cleaner/demo.gif)
 
 ## How it works
 
