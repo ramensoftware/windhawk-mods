@@ -2,12 +2,74 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-17T06:02:26.000Z</updated>
+    <updated>2026-11-17T07:04:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start button always on the left 1.3.4]]></title>
+        <id>https://windhawk.net/mods/taskbar-start-button-position#8854f71d0182663987a14d5670f3d309a2a88484</id>
+        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
+        <updated>2026-11-17T07:04:00.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
+<li>The Start button right-click menu is now always aligned to the left, not only when &quot;Start menu on the left&quot; is enabled.</li>
+<li>Fixed the search menu being moved incorrectly in some cases.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Primary taskbar on secondary monitor 1.2.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-primary-on-secondary-monitor#0ed9d7db3b472574052ac798102fef0d72249d4c</id>
+        <link href="https://windhawk.net/mods/taskbar-primary-on-secondary-monitor"/>
+        <updated>2026-11-17T07:03:54.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame: clicking on the system tray no longer switches the primary taskbar.</li>
+<li>Improved compatibility with other mods which hook the same functions.</li>
+<li>Fixed the &quot;Customize the old taskbar on Windows 11&quot; option on Windows 11 24H2 builds before 26100.1301, which still include the old taskbar.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.3.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-on-top#c3b3a8a718814a4663abe7f6a39cea97b3d2beb0</id>
+        <link href="https://windhawk.net/mods/taskbar-on-top"/>
+        <updated>2026-11-17T07:03:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with the &quot;Primary taskbar on secondary monitor&quot; mod: the &quot;Taskbar location&quot; option applies to the primary taskbar on whichever monitor it's on, and the &quot;Taskbar location on secondary monitors&quot; option applies to the other taskbars.</li>
+<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar tray icon spacing and grid 1.5]]></title>
+        <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#77e9da00e98f7487b677d695dd56e6070c7a2188</id>
+        <link href="https://windhawk.net/mods/taskbar-notification-icon-spacing"/>
+        <updated>2026-11-17T07:03:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Vertical taskbar: The number of columns can now be set when the taskbar isn't wide enough for the wide tray layout. Previously it was always a single column.</li>
+<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start button colorizer 1.1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-colorizer#5770ffea8377185d81e5232455b148aa58803d0a</id>
@@ -481,131 +543,6 @@ Ported from my repository <a href="https://github.com/milestprower92/Flip3DComp"
         <author>
             <name>Deen-0x</name>
             <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Live HUD 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-live-hud-radar#fd84d413a1340b4f4f306423e127368d8518757b</id>
-        <link href="https://windhawk.net/mods/taskbar-live-hud-radar"/>
-        <updated>2026-11-16T19:05:26.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added GPU utilization (%) via Windows PDH (<code>\GPU Engine(*)\Utilization Percentage</code>).</li>
-<li>Added GPU temperature (NVIDIA NVAPI, AMD ADL, and LibreHardwareMonitor/OpenHardwareMonitor WMI fallback).</li>
-<li>Added CPU temperature (LibreHardwareMonitor/OpenHardwareMonitor WMI and Windows ACPI/ThermalZone WMI fallback).</li>
-<li>Added temperature unit option (<code>°C</code> / <code>°F</code>).</li>
-<li>Added physical disk Read, Write, and Total speed modes via Windows PDH.</li>
-<li>Added GPU % line to the mini-graph popup when GPU monitoring is enabled.</li>
-<li>Added RGBA and <code>#RRGGBBAA</code> opacity support for background, border, and metric colors.</li>
-<li>Added custom border color and per-metric custom colors.</li>
-<li>Added configurable font size, taskbar widget min/max width &amp; height, and mini-graph popup dimensions.</li>
-<li>Added customizable mouse click actions (Left, Ctrl+Left, Right, Ctrl+Right), drag modifier, and mouse-hover activation with configurable delay.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Lemon</name>
-            <uri>https://github.com/lemon-web-stack</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Glass Widget Bar 0.3.0]]></title>
-        <id>https://windhawk.net/mods/glass-widget-bar#e15fbd5849181300898fa85c39f855e0e977562c</id>
-        <link href="https://windhawk.net/mods/glass-widget-bar"/>
-        <updated>2026-11-16T19:05:21.000Z</updated>
-        <content type="html"><![CDATA[<h1>Glass Widget Bar</h1>
-<p>A desktop widget bar that sits in a frosted-glass frame: the blurred wallpaper
-shows through a soft, dark-tinted rounded panel with thin light edges. The
-widgets have no glass of their own; they are drawn straight onto the frame and
-separated by thin dividers.</p>
-<p><img src="https://raw.githubusercontent.com/TheRealAlperN/glass-widget-bar/main/screenshots/glass-widget-bar.gif" alt="Glass Widget Bar in English, Turkish, German and Japanese"></p>
-<table>
-<thead>
-<tr>
-<th>Widget</th>
-<th>What it does</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Clock</strong></td>
-<td>Analog clock with an orange second hand</td>
-</tr>
-<tr>
-<td><strong>Calendar</strong></td>
-<td>Weekday, large day number, month grid; today is highlighted in red</td>
-</tr>
-<tr>
-<td><strong>Music</strong></td>
-<td>The track that is playing right now (Spotify, browser, Media Player...), cover art, progress and ⏮ ⏯ ⏭ buttons</td>
-</tr>
-</tbody>
-</table>
-<h2>Languages</h2>
-<p>Labels, day names and month names follow your <strong>Windows display language</strong>
-automatically. You can also pick a language in the settings.</p>
-<p>English, Türkçe, Deutsch, Français, Español, Italiano, Português (Brasil),
-Nederlands, Polski, Русский, Українська, Čeština, Svenska, Dansk, Norsk bokmål,
-Suomi, Ελληνικά, Magyar, Română, Български, Bahasa Indonesia, Tiếng Việt, ไทย,
-हिन्दी, 日本語, 한국어, 简体中文, 繁體中文.</p>
-<p>Other display languages fall back to English. The first day of the week in
-the calendar follows your Windows regional format (or the chosen language).
-Right-to-left languages are not supported yet. The translations are
-machine-assisted, corrections are welcome.</p>
-<h2>Notes</h2>
-<ul>
-<li>The default layer is the <strong>desktop</strong>: windows cover the bar. Press the
-hotkey (default <strong>Ctrl+Alt+W</strong>) to bring it to the front (press again to
-send it back), or set &quot;Always on top&quot; in the settings.</li>
-<li>The hotkey, its modifier keys and its key can be changed or turned off in
-the settings. Windows reports AltGr as Ctrl+Alt, so if your keyboard layout
-types characters with AltGr, pick a combination without Alt. If another app
-already owns the combination it cannot be registered; the Windhawk log then
-says so.</li>
-<li>Works on the primary monitor only. A picture wallpaper is expected.</li>
-<li>The defaults of the frame (opacity 15, blur 10) match the dock mod this
-frame comes from. If your wallpaper is very bright, raise the opacity.</li>
-<li>The music widget reads the Windows media session, so every app that
-publishes one is shown.</li>
-<li>Developed on Windows 11 (64-bit).</li>
-</ul>
-<h2>Credits and license</h2>
-<p>The frame (rounded &quot;squircle&quot; corners, edge glow and edge lines) is ported
-from <strong>MacOS Style Dock</strong> by Zach Vaughn (GPL-3.0). This mod is therefore
-released under <strong>GPL-3.0</strong> as well.</p>
-]]></content>
-        <author>
-            <name>TheRealAlperN</name>
-            <uri>https://github.com/TheRealAlperN</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Bluetooth Auto Toggle 1.4.0]]></title>
-        <id>https://windhawk.net/mods/bluetooth-auto-toggle#1d512f6e35e6a0d48b334dd1dfee5856f149d9f3</id>
-        <link href="https://windhawk.net/mods/bluetooth-auto-toggle"/>
-        <updated>2026-11-16T19:05:15.000Z</updated>
-        <content type="html"><![CDATA[<p>1, Mod Metadata &amp; Settings
-2. Device Name Matching Engine
-3. Filter-Aware Startup &amp; Event Watcher</p>
-]]></content>
-        <author>
-            <name>Dev-StudioCode</name>
-            <uri>https://github.com/Dev-StudioCode</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Smart Process Priority & RAM Optimizer 1.1.0]]></title>
-        <id>https://windhawk.net/mods/smart-process-priority-ram-optimizer#87f4f812edb83933de2b471578fe6f03ab1dd669</id>
-        <link href="https://windhawk.net/mods/smart-process-priority-ram-optimizer"/>
-        <updated>2026-11-16T19:05:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Support custom power plan GUID and Ultimate Performance with strict AC check</li>
-<li>Add live settings transition logging for key configuration toggles</li>
-<li>Add minimize delay guard with cancellation on restore via WinEvent hooks</li>
-<li>Complete and update documentation and schema for all 27 configuration settings</li>
-</ul>
-]]></content>
-        <author>
-            <name>gilnett</name>
-            <uri>https://github.com/gilnett</uri>
         </author>
     </entry>
 </feed>

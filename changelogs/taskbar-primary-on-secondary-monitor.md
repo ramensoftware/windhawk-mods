@@ -1,3 +1,9 @@
+## 1.2.2 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0ed9d7db3b472574052ac798102fef0d72249d4c/mods/taskbar-primary-on-secondary-monitor.wh.cpp))
+
+* Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame: clicking on the system tray no longer switches the primary taskbar.
+* Improved compatibility with other mods which hook the same functions.
+* Fixed the "Customize the old taskbar on Windows 11" option on Windows 11 24H2 builds before 26100.1301, which still include the old taskbar.
+
 ## 1.2.1 ([Aug 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9455e7ee79a80d6d65829456b0c7e0738dcfe720/mods/taskbar-primary-on-secondary-monitor.wh.cpp))
 
 * Fixed taskbar alignment not affecting the Start menu in some cases when the taskbar is only shown on the primary monitor.

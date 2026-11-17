@@ -1,3 +1,8 @@
+## 1.5 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/77e9da00e98f7487b677d695dd56e6070c7a2188/mods/taskbar-notification-icon-spacing.wh.cpp))
+
+* Vertical taskbar: The number of columns can now be set when the taskbar isn't wide enough for the wide tray layout. Previously it was always a single column.
+* Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.
+
 ## 1.4 ([Sep 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/acaf719bf04c2d02a48e3be37b2fcd23411231de/mods/taskbar-notification-icon-spacing.wh.cpp))
 
 * Added support for the native vertical taskbar.

@@ -1,3 +1,9 @@
+## 1.3.4 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8854f71d0182663987a14d5670f3d309a2a88484/mods/taskbar-start-button-position.wh.cpp))
+
+* Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.
+* The Start button right-click menu is now always aligned to the left, not only when "Start menu on the left" is enabled.
+* Fixed the search menu being moved incorrectly in some cases.
+
 ## 1.3.3 ([Oct 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/525894960b8e1cdb3633ad6aa72afee4907dfa99/mods/taskbar-start-button-position.wh.cpp))
 
 * Added support for the vertical taskbar.

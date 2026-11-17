@@ -1,3 +1,8 @@
+## 1.3.1 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c3b3a8a718814a4663abe7f6a39cea97b3d2beb0/mods/taskbar-on-top.wh.cpp))
+
+* Fixed compatibility with the "Primary taskbar on secondary monitor" mod: the "Taskbar location" option applies to the primary taskbar on whichever monitor it's on, and the "Taskbar location on secondary monitors" option applies to the other taskbars.
+* Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.
+
 ## 1.3 ([Oct 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/642dd8ae0b826225f3425948adfc9dce78640f01/mods/taskbar-on-top.wh.cpp))
 
 * Improved taskbar auto-hide support, and added auto-hide support when the native option to show the taskbar on top is used.
