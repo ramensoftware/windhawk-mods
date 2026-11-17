@@ -1,3 +1,7 @@
+## 1.4.2 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/dc122909f36cf8cb99e69f17dbc3721219e869c3/mods/taskbar-content-presenter-injector.wh.cpp))
+
+* Added support for `Grid#IconPanel` control, which replaces `Taskbar.TaskListLabeledButtonPanel`, in newer W11 builds.
+
 ## 1.4.1 ([Jun 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cdca30ff8a2baff54b2e2685c996d73b0e82471b/mods/taskbar-content-presenter-injector.wh.cpp))
 
 * Fixed multi-monitor support. Previously, having this mod enabled with more than 1 monitor connected would cause `explorer.exe` to loop crash.

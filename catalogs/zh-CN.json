@@ -6481,7 +6481,7 @@
         "ratingUsers": 54,
         "reviews": 0,
         "trendingSorting": 0.4399267569725328,
-        "updated": 1793296954000,
+        "updated": 1794956700000,
         "users": 1225
       },
       "metadata": {
@@ -6499,7 +6499,7 @@
         ],
         "license": "MIT",
         "name": "Explorer Command Bar",
-        "version": "1.2.0"
+        "version": "1.3.0"
       }
     },
     "explorer-context-menu-classic": {
@@ -8512,7 +8512,7 @@
         "ratingUsers": 3,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794765755000,
+        "updated": 1794956690000,
         "users": 89
       },
       "metadata": {
@@ -8524,7 +8524,7 @@
           "*"
         ],
         "name": "Fix file dialogs for Classic theme",
-        "version": "2.0"
+        "version": "2.1"
       }
     },
     "fix-darkmode-listviews": {
@@ -17129,7 +17129,7 @@
         "ratingUsers": 10,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793746883000,
+        "updated": 1794956684000,
         "users": 84
       },
       "metadata": {
@@ -17137,7 +17137,7 @@
           "x86-64"
         ],
         "author": "Sof2245",
-        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -ladvapi32 -lws2_32 -liphlpapi -lcrypt32 -lbcrypt -lcomctl32 -lcomdlg32 -lxmllite -ld2d1 -ldwrite -ld3d11 -ldxgi -lwindowscodecs",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -ladvapi32 -lws2_32 -liphlpapi -lcrypt32 -lbcrypt -lcomctl32 -lcomdlg32 -lxmllite -ld2d1 -ldwrite -ld3d11 -ldxgi -lwindowscodecs -ldwmapi -luxtheme",
         "description": "在 Windows 11 任务栏上以圆环磁贴显示 Claude、Codex、Antigravity 和 GitHub Copilot 的用量上限，并通过 Fluent 浮出面板查看详情",
         "github": "https://github.com/Sof2245",
         "homepage": "https://github.com/Sof2245/taskbar-ai-usage",
@@ -17146,7 +17146,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar AI Usage",
-        "version": "1.0.1"
+        "version": "1.0.2"
       },
       "metadataEnglish": {
         "description": "Shows your Claude, Codex, Antigravity and GitHub Copilot usage limits as ring tiles on the Windows 11 taskbar, with a Fluent flyout for the details"
@@ -17872,7 +17872,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": -0.408804919383188,
-        "updated": 1780649688000,
+        "updated": 1794956695000,
         "users": 158
       },
       "metadata": {
@@ -17881,13 +17881,13 @@
         ],
         "author": "Lockframe",
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
-        "description": "Injects a ContentPresenter into Taskbar.TaskListLabeledButtonPanel and Taskbar.TaskListButtonPanel",
+        "description": "Injects a ContentPresenter into Taskbar.TaskListLabeledButtonPanel, Grid#IconPanel, and Taskbar.TaskListButtonPanel",
         "github": "https://github.com/Lockframe",
         "include": [
           "explorer.exe"
         ],
         "name": "Taskbar ContentPresenter Injector",
-        "version": "1.4.1"
+        "version": "1.4.2"
       }
     },
     "taskbar-count-badges": {

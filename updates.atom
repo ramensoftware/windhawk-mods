@@ -2,12 +2,140 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-17T10:03:55.000Z</updated>
+    <updated>2026-11-17T23:05:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Command Bar 1.3.0]]></title>
+        <id>https://windhawk.net/mods/explorer-command-bar#96f8ea0ad98a9612d5e0e5aa24f7ed7e8ca757df</id>
+        <link href="https://windhawk.net/mods/explorer-command-bar"/>
+        <updated>2026-11-17T23:05:00.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>
+<p>New</p>
+</li>
+<li>
+<p>Drag and drop to reorder items in the settings window preview: your own buttons and menus, and File Explorer's built-in buttons (New, Cut, Copy, Paste, Rename, Share, Delete, Sort, View) with their separators</p>
+</li>
+<li>
+<p>Drag and drop to reorder the entries of a menu</p>
+</li>
+<li>
+<p>Reset order button that brings back File Explorer's own order of the built-in buttons</p>
+</li>
+<li>
+<p>Built-in button order setting, e.g. <code>sort, view | new | cut, copy, paste, rename, share, delete</code></p>
+</li>
+<li>
+<p>New placeholders: <code>%dir%</code>, <code>%files%</code>, <code>%folders%</code>, <code>%name%</code>, <code>%base%</code>, <code>%file_name%</code>, <code>%1%</code>, <code>%ext%</code>, <code>%count%</code>, <code>%d_name%</code>, <code>%d_smart%</code>, <code>%parent%</code> and more</p>
+</li>
+<li>
+<p>Live labels: button and menu entry labels can use <code>%name%</code>, <code>%base%</code>, <code>%ext%</code>, <code>%count%</code>, <code>%d_name%</code> and <code>%path%</code>, and update as the selection changes</p>
+</li>
+<li>
+<p>File extension filter setting to show a button only for chosen selections, e.g. <code>only txt</code>, <code>files + single</code> or <code>-zip</code></p>
+</li>
+<li>
+<p>Setting to gray out buttons that don't match the filter instead of hiding them</p>
+</li>
+<li>
+<p>Run as administrator and Window style (normal, minimized, maximized, hidden) options for buttons and menu entries</p>
+</li>
+<li>
+<p>Ctrl+Shift+click runs any item as administrator</p>
+</li>
+<li>
+<p>Internal commands: <code>internal:CopyPath</code>, <code>internal:CopyName</code>, <code>internal:CopyDir</code>, <code>internal:NewFolder</code>, <code>internal:NewFile</code> and <code>internal:Refresh</code></p>
+</li>
+<li>
+<p>Hide built-in button labels settings for New, Sort, View and the Details pane button</p>
+</li>
+<li>
+<p>Show chevrons on dropdowns setting for custom menu buttons</p>
+</li>
+<li>
+<p>Changed</p>
+</li>
+<li>
+<p><code>%sel_each%</code> fills in the placeholders again for each selected item</p>
+</li>
+<li>
+<p>Long labels are shortened, with the full text in the tooltip</p>
+</li>
+<li>
+<p>Dropdown chevrons use the Fluent chevron instead of the ▾ arrow</p>
+</li>
+<li>
+<p>Buttons with no icon get a fallback icon, and the new internal commands have default icons</p>
+</li>
+<li>
+<p>Readme and setting descriptions updated with the new features</p>
+</li>
+<li>
+<p>Fixed</p>
+</li>
+<li>
+<p>A placeholder with no value no longer drops all parameters</p>
+</li>
+<li>
+<p>Commands started in locations that aren't folders on disk, such as This PC, now get a valid working directory</p>
+</li>
+</ul>
+]]></content>
+        <author>
+            <name>DanRotaru</name>
+            <uri>https://github.com/DanRotaru</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar ContentPresenter Injector 1.4.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-content-presenter-injector#dc122909f36cf8cb99e69f17dbc3721219e869c3</id>
+        <link href="https://windhawk.net/mods/taskbar-content-presenter-injector"/>
+        <updated>2026-11-17T23:04:55.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for <code>Grid#IconPanel</code> control, which replaces <code>Taskbar.TaskListLabeledButtonPanel</code>, in newer W11 builds.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Fix file dialogs for Classic theme 2.1]]></title>
+        <id>https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg#53a12aa0ae3fc61698348133404e3bd514a97f9c</id>
+        <link href="https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg"/>
+        <updated>2026-11-17T23:04:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Update README</li>
+</ul>
+]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar AI Usage 1.0.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-ai-usage#8f087f9652d831e96376083d1f795e987f0c2662</id>
+        <link href="https://windhawk.net/mods/taskbar-ai-usage"/>
+        <updated>2026-11-17T23:04:44.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Claude rate limits (HTTP 429): the first two without a usable <code>Retry-After</code> retry at the selected interval, then the wait grows in five-minute steps up to 15 minutes. Waits sent by the server are honored, the streak survives reloads, and a successful reading resets it.</li>
+<li>Default flyout material in dark mode: the wallpaper color is now blended over a dark base, so the card keeps a steady dark tone as the wallpaper changes. Light mode is unchanged.</li>
+<li>The &quot;+&quot; setup tile has an accessible name (&quot;Add an AI account&quot;).</li>
+<li>Removed dead code, unused strings and legacy paths.</li>
+<li>Fixed a Spanish string.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Sof2245</name>
+            <uri>https://github.com/Sof2245</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.11.2]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#6f3d126440ecd46f08e48bec2cd9c1e91d3e2919</id>
@@ -254,118 +382,6 @@
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Phone panel for NectarLink 1.0.0]]></title>
-        <id>https://windhawk.net/mods/phone-panel-for-nectarlink#ec1f48a5f12d90c174d772b80a560e07bdbbdab4</id>
-        <link href="https://windhawk.net/mods/phone-panel-for-nectarlink"/>
-        <updated>2026-11-17T00:04:32.000Z</updated>
-        <content type="html"><![CDATA[<h1>Phone panel for NectarLink</h1>
-<p><strong>Unofficial.</strong> This mod is not made by, affiliated with or endorsed by the
-NectarLink project. It works with <a href="https://github.com/thtbee/nectarlink">NectarLink</a>,
-the free, open-source app that links an Android phone with a Windows PC.</p>
-<p><img src="https://raw.githubusercontent.com/vampirakos/phone-panel-for-nectarlink/main/screenshot.png" alt="The NectarLink panel in the Start menu"></p>
-<p>It puts your phone in the Start menu's phone panel (the one Phone Link uses):</p>
-<ul>
-<li>your phone's name, connection and battery</li>
-<li>quick actions: Find phone, Clipboard, Take photo, Scan doc, Play on phone, Send files</li>
-<li><strong>Recent</strong>: the last items from NectarLink's Timeline (click to open)</li>
-<li><strong>Clipboard</strong>: the last clipboard items (click to copy again)</li>
-<li>Open NectarLink and NectarLink settings</li>
-</ul>
-<h2>Requirements</h2>
-<ul>
-<li>Windows 11 (x64) and the NectarLink app for Windows, paired with your phone.</li>
-<li>In NectarLink, turn on <strong>Settings → Local automation API</strong>. Without it,
-Find phone / Clipboard / Take photo / Send files and the footer buttons still
-work; status, Recent, Clipboard, Scan doc and Play on phone need it.</li>
-<li>Keep <strong>Show mobile device in Start</strong> turned on in
-Windows Settings → Personalization → Start.</li>
-</ul>
-<h2>How it works</h2>
-<p>The panel shows NectarLink instead of Phone Link. By default it only does so
-while NectarLink is installed and has a paired phone; otherwise Phone Link's
-panel is left alone (the &quot;Replace Phone Link's panel&quot; setting can force it).
-The phone button next to the search box shows and hides it.</p>
-<h2>Privacy and safety</h2>
-<ul>
-<li>The mod only talks to NectarLink on this PC (<code>127.0.0.1</code>), using the token
-NectarLink writes to <code>%LOCALAPPDATA%\Nectarlink\api-token.json</code>. Nothing is
-sent anywhere else.</li>
-<li>Clicking a Recent file opens it only if it's a common photo, video, audio or
-document type. Anything else (programs, scripts, shortcuts...) is shown in
-File Explorer instead of being opened. Links open only if they're http(s).</li>
-<li>Turning the mod off restores the Start menu and Phone Link's panel.</li>
-</ul>
-<h2>If the panel doesn't appear</h2>
-<p>Open Windhawk's log for this mod (Details → Log). If it can't find where to
-attach, it prints the named elements of the Start menu.</p>
-<p>NectarLink is a trademark of its project; the name is used here only to say
-what this mod works with.</p>
-]]></content>
-        <author>
-            <name>vampirakos</name>
-            <uri>https://github.com/vampirakos</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Snowfall 1.1]]></title>
-        <id>https://windhawk.net/mods/desktop-snowfall#a44144776438bb944427d5cb39f50f57eafe74ce</id>
-        <link href="https://windhawk.net/mods/desktop-snowfall"/>
-        <updated>2026-11-17T00:04:27.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New &quot;Where the snow falls&quot; setting: over all windows, or behind them on the desktop. Behind windows, the falling snow shows only where the desktop is uncovered, and the snow still settles on top of the windows and the taskbar.</li>
-<li>Much lower power use. Calm snowfall is drawn at about 30 fps, and the full frame rate is used only while something moves. Snow that lies still isn't redrawn. The frame rate is capped on battery and lowered in energy saver mode. The snow pauses while the screen is locked or off.</li>
-<li>Each monitor gets its own snow, sized for its display scale. A fullscreen app hides the snow only on its own monitor.</li>
-<li>Shake a window to throw its snow off. Closing or minimizing a window drops its snow in lumps that burst into powder.</li>
-<li>Snow piles up along the bottom of the screen where the taskbar doesn't cover it (new setting, on by default).</li>
-<li>New &quot;Snow slowly melts&quot; setting.</li>
-<li>New &quot;Hide from screenshots and screen sharing&quot; setting.</li>
-<li>Menus, tooltips and the shell's flyouts now stay in front of the snow, and popup windows hide the snow lying behind them.</li>
-</ul>
-]]></content>
-        <author>
-            <name>mikybuilds</name>
-            <uri>https://github.com/mikybuilds</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dynamic Island Media Player 1.6.1]]></title>
-        <id>https://windhawk.net/mods/dynamic-island-media-player#479c5a5aaa4179b90455640c2e9597457b72b6aa</id>
-        <link href="https://windhawk.net/mods/dynamic-island-media-player"/>
-        <updated>2026-11-17T00:04:22.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved rendering performance by limiting automatic rendering to 60 FPS and caching foreground application and monitor DPI information.</li>
-<li>Optimized overlay window positioning by avoiding redundant window-position updates during animations and hover effects.</li>
-<li>Improved album artwork loading by retrying more frequently when artwork is unavailable or delayed.</li>
-<li>Avoided redundant album artwork decoding when the thumbnail image has not changed.</li>
-<li>Improved global media hotkey compatibility in games and other applications by combining <code>RegisterHotKey</code> with a Raw Input fallback.</li>
-<li>Added duplicate-dispatch protection to prevent a single key combination from triggering the same action through both input mechanisms.</li>
-<li>Improved keyboard input lifecycle management, including Raw Input registration cleanup and synchronization with hotkey settings.</li>
-<li>Moved low-level keyboard-hook installation and removal for hotkey capture to a dedicated thread.</li>
-</ul>
-]]></content>
-        <author>
-            <name>BOG090909</name>
-            <uri>https://github.com/BOG090909</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tray hover expand 1.7.2]]></title>
-        <id>https://windhawk.net/mods/tray-hover-expand#d7725cab6896a41e77216f6235e34e014a4800cd</id>
-        <link href="https://windhawk.net/mods/tray-hover-expand"/>
-        <updated>2026-11-17T00:04:17.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Recognise the chevron by the tooltip text Windows provides, so an outdated keyword list saved in the settings no longer stops it being found</li>
-<li>Never take the input indicator, the emoji panel or the touch keyboard for the chevron while the chevron is not shown</li>
-<li>Correct the French chevron name in the keyword list</li>
-<li>Correct the descriptions that claimed only the chevron has its class name and AutomationId pair</li>
-</ul>
-]]></content>
-        <author>
-            <name>wygodad</name>
-            <uri>https://github.com/wygodad</uri>
         </author>
     </entry>
 </feed>

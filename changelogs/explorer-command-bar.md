@@ -1,3 +1,31 @@
+## 1.3.0 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/96f8ea0ad98a9612d5e0e5aa24f7ed7e8ca757df/mods/explorer-command-bar.wh.cpp))
+
+- New
+- Drag and drop to reorder items in the settings window preview: your own buttons and menus, and File Explorer's built-in buttons (New, Cut, Copy, Paste, Rename, Share, Delete, Sort, View) with their separators
+- Drag and drop to reorder the entries of a menu
+- Reset order button that brings back File Explorer's own order of the built-in buttons
+- Built-in button order setting, e.g. `sort, view | new | cut, copy, paste, rename, share, delete`
+- New placeholders: `%dir%`, `%files%`, `%folders%`, `%name%`, `%base%`, `%file_name%`, `%1%`, `%ext%`, `%count%`, `%d_name%`, `%d_smart%`, `%parent%` and more
+- Live labels: button and menu entry labels can use `%name%`, `%base%`, `%ext%`, `%count%`, `%d_name%` and `%path%`, and update as the selection changes
+- File extension filter setting to show a button only for chosen selections, e.g. `only txt`, `files + single` or `-zip`
+- Setting to gray out buttons that don't match the filter instead of hiding them
+- Run as administrator and Window style (normal, minimized, maximized, hidden) options for buttons and menu entries
+- Ctrl+Shift+click runs any item as administrator
+- Internal commands: `internal:CopyPath`, `internal:CopyName`, `internal:CopyDir`, `internal:NewFolder`, `internal:NewFile` and `internal:Refresh`
+- Hide built-in button labels settings for New, Sort, View and the Details pane button
+- Show chevrons on dropdowns setting for custom menu buttons
+
+- Changed
+- `%sel_each%` fills in the placeholders again for each selected item
+- Long labels are shortened, with the full text in the tooltip
+- Dropdown chevrons use the Fluent chevron instead of the ▾ arrow
+- Buttons with no icon get a fallback icon, and the new internal commands have default icons
+- Readme and setting descriptions updated with the new features
+
+- Fixed
+- A placeholder with no value no longer drops all parameters
+- Commands started in locations that aren't folders on disk, such as This PC, now get a valid working directory
+
 ## 1.2.0 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8b1dc4b804cb693384afa25f56c06c120cf78492/mods/explorer-command-bar.wh.cpp))
 
 ### New
