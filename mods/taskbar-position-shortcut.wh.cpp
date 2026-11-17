@@ -13,14 +13,16 @@
 // ==WindhawkModReadme==
 /*
 # Taskbar Position Shortcut
-Adds a **Taskbar position** submenu when you right-click the Windows 11 taskbar. Move it to any edge without saving anything, or set a position for a specific app.
+
+Adds a **Taskbar position** submenu when you right-click the Windows 11 taskbar. Choose a global position for this Explorer session, or set a position for a specific app.
+
 Finally, Windows brought back a feature they thought was not being used. I prefer my taskbar on the left when working in Photoshop, and on top when scrolling through layers in After Effects.
 ![Taskbar position context menu](https://i.imgur.com/FlhqlgP.png)
 
 ## Features
 
-- **Quick shortcut:** Choose Follow Windows setting, Top, Left, Right, or Bottom. No app rule is saved.
-- **Per-app positions:** Open the app's submenu to save a position. Choose Default to remove its rule.
+- **Global position:** Choose Follow Windows setting, Top, Left, Right, or Bottom. This lasts for the current Explorer session and does not save an app rule.
+- **Per-app positions:** Open the app's submenu to save a position that overrides the global choice. Choose Default to use the global position.
 - **Maximized-only mode:** Only apply app rules when a maximized window is found.
 - **Switch delay:** Adjust how long the mod waits before moving the taskbar.
 - **Blacklist:** Ignore apps you don't want triggering position changes.
@@ -41,7 +43,7 @@ Credits: Taskbar menu injection based on `taskbar-restart-explorer`; runtime pos
 /*
 - maximizedOnly: false
   $name: Only apply app-specific positions when maximized
-  $description: Use the topmost maximized window on the foreground monitor, including when a smaller window is in front. Fullscreen windows count only if Windows also reports them as maximized. The Windows taskbar position applies if no maximized window is found.
+  $description: Use the topmost maximized window on the foreground monitor, including when a smaller window is in front. Fullscreen windows count only if Windows also reports them as maximized. The global taskbar position applies if no maximized window is found.
 - switchDelayMs: 400
   $name: Position switch delay (milliseconds)
   $description: The target position must remain unchanged for this duration before switching. 0 skips the configured delay. A brief cooldown protects Explorer from overlapping moves.
@@ -433,8 +435,6 @@ void UpdateForegroundApp(HWND window) {
         }
     }
     if (changed) {
-        // A manual shortcut lasts only until the active app changes.
-        g_quickPosition.store(kNoPendingChange);
         if (g_wakeEvent) SetEvent(g_wakeEvent);
     }
 }
@@ -583,6 +583,7 @@ DWORD WINAPI MonitorThreadProc(void*) {
     DWORD lastRealEdge = ABE_BOTTOM;
     TryReadTaskbarEdge(&lastRealEdge);
     bool evaluate = true;
+    bool useQuickDelay = false;
     while (!g_unloading.load()) {
         if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) break;
         updateStateHooks();
@@ -594,22 +595,20 @@ DWORD WINAPI MonitorThreadProc(void*) {
                     // Preserve the current app-specific override, if any.
                     // TrayUI_WndProc_Hook keeps the frame and content aligned.
                 }
-                int desired = static_cast<int>(realEdge);
                 int manual = g_quickPosition.load();
-                bool quickMode = manual != kNoPendingChange;
-                if (quickMode) {
-                    if (IsValidEdge(manual)) desired = manual;
-                } else {
-                    std::wstring app = g_maximizedOnly.load()
-                        ? TopMaximizedAppOnForegroundMonitor() : LastForegroundApp();
-                    int position = FindAppPosition(app);
-                    if (position == kRuleExcluded) {
-                        desired = g_effectiveEdge.load();
-                        if (!IsValidEdge(desired)) desired = static_cast<int>(realEdge);
-                    } else if (IsValidEdge(position)) {
-                        desired = position;
-                    }
+                int desired = IsValidEdge(manual) ? manual : static_cast<int>(realEdge);
+                std::wstring app = g_maximizedOnly.load()
+                    ? TopMaximizedAppOnForegroundMonitor() : LastForegroundApp();
+                int position = FindAppPosition(app);
+                bool quickMode = manual != kNoPendingChange && !IsValidEdge(position);
+                if (position == kRuleExcluded) {
+                    desired = g_effectiveEdge.load();
+                    if (!IsValidEdge(desired)) desired = static_cast<int>(realEdge);
+                    quickMode = false;
+                } else if (IsValidEdge(position)) {
+                    desired = position;
                 }
+                useQuickDelay = quickMode;
                 ULONGLONG now = GetTickCount64();
                 if (candidate != desired) {
                     candidate = desired;
@@ -637,7 +636,7 @@ DWORD WINAPI MonitorThreadProc(void*) {
         if (!IsValidEdge(effective)) effective = static_cast<int>(lastRealEdge);
         if (candidate != effective && IsValidEdge(candidate)) {
             ULONGLONG ready = candidateSince + static_cast<ULONGLONG>(
-                g_quickPosition.load() == kNoPendingChange ? g_switchDelayMs.load() : 0);
+                useQuickDelay ? 0 : g_switchDelayMs.load());
             if (lastChangeAt) ready = std::max(ready, lastChangeAt + minimumInterval);
             ready = std::max(ready, nextRetryAt);
             timeout = ready > now ? static_cast<DWORD>(std::min<ULONGLONG>(ready - now, 10000)) : 0;
@@ -702,13 +701,10 @@ void QueueQuickPositionChange(int edge) {
 
 void AppendQuickPositionOptions(wuxc::MenuFlyoutSubItem const& submenu) {
     int selected = g_quickPosition.load();
-    if (selected == kNoPendingChange) selected = g_effectiveEdge.load();
 
     wuxc::MenuFlyoutItem restore;
     restore.Text(L"Follow Windows setting");
-    if (selected == kUseWindowsDefault ||
-        (g_quickPosition.load() == kNoPendingChange &&
-         selected == static_cast<int>(g_windowsDefaultEdge.load()))) {
+    if (selected == kUseWindowsDefault || selected == kNoPendingChange) {
         restore.Icon(MakeIcon(L"\xE73E"));
     }
     AddClick(restore, [](wf::IInspectable const&, wux::RoutedEventArgs const&) {
@@ -721,9 +717,7 @@ void AppendQuickPositionOptions(wuxc::MenuFlyoutSubItem const& submenu) {
         wuxc::MenuFlyoutItem item;
         item.Text(option.label);
         int edge = static_cast<int>(option.edge);
-        if (edge == selected &&
-            !(g_quickPosition.load() == kNoPendingChange &&
-              edge == static_cast<int>(g_windowsDefaultEdge.load()))) {
+        if (edge == selected) {
             item.Icon(MakeIcon(L"\xE73E"));
         }
         AddClick(item, [edge](wf::IInspectable const&, wux::RoutedEventArgs const&) {
@@ -750,8 +744,6 @@ void QueueAppPositionChange(std::wstring const& executable, int position) {
         return;
     }
     Wh_Log(L"Saved position %d for %s", position, executable.c_str());
-    // App menu selections supersede a temporary manual shortcut.
-    g_quickPosition.store(kNoPendingChange);
     if (g_wakeEvent) {
         SetEvent(g_wakeEvent);
     }
@@ -764,7 +756,7 @@ void AppendAppOptions(wuxc::MenuFlyoutSubItem const& submenu,
     bool settingsExcluded = FindStaticAppPosition(app) == kRuleExcluded;
 
     wuxc::MenuFlyoutItem defaultItem;
-    defaultItem.Text(L"Default (follow Windows setting)");
+    defaultItem.Text(L"Default (use global position)");
     if (stored == kRuleUnlisted || stored == kRuleWindowsDefault ||
         stored == kNoStoredOverride) {
         defaultItem.Icon(MakeIcon(L"\xE73E"));
