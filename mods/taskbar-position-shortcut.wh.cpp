@@ -932,7 +932,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
     LogModuleInfo(module, L"Resolving taskbar symbols");
 
     // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {
                 LR"(void __cdecl winrt::Taskbar::implementation::ContextMenus::ShowTaskbarSettingsContextMenu(struct winrt::Windows::UI::Xaml::FrameworkElement const &,struct winrt::WindowsUdk::UI::Shell::TaskbarSettings const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &,unsigned __int64))",
@@ -949,7 +949,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
     };
 
-    if (!HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks))) {
+    if (!HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
         Wh_Log(L"Skipping injection: missing symbols");
         return false;
     }
