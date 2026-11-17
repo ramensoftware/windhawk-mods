@@ -84,15 +84,15 @@ SOFTWARE.
 Live readings on the Windows 11 taskbar: CPU, GPU, RAM, disk, network, battery, temperatures and more. Click a reading for details.
 
 ### Preset Switching
-![Preset switching on the taskbar](https://raw.githubusercontent.com/Wcm1D/taskbar-system-monitor/main/3-preset-preview.gif)
+![Preset switching on the taskbar](https://raw.githubusercontent.com/Wcm1D/taskbar-system-monitor/main/assets/taskbar-preset-preview.gif)
 
 | Taskbar & Details Panel | Settings Window |
 | :---: | :---: |
-| ![Taskbar widget and details panel demo](https://raw.githubusercontent.com/Wcm1D/taskbar-system-monitor/main/1-hero.gif) | ![Settings window preview](https://raw.githubusercontent.com/Wcm1D/taskbar-system-monitor/main/2-settings.gif) |
+| ![Taskbar widget and details panel demo](https://raw.githubusercontent.com/Wcm1D/taskbar-system-monitor/main/assets/taskbar-popup-panel.gif) | ![Settings window preview](https://raw.githubusercontent.com/Wcm1D/taskbar-system-monitor/main/assets/settings-preview-all.gif) |
 
 | Zone Drag-and-Drop Editor | Widgets Overview |
 | :---: | :---: |
-| ![Editing panel](https://raw.githubusercontent.com/Wcm1D/taskbar-system-monitor/main/4-editing-panel.gif) | ![Widgets overview](https://raw.githubusercontent.com/Wcm1D/taskbar-system-monitor/main/5-widgets.gif) |
+| ![Editing panel](https://raw.githubusercontent.com/Wcm1D/taskbar-system-monitor/main/assets/settings-editing-panel.gif) | ![Widgets overview](https://raw.githubusercontent.com/Wcm1D/taskbar-system-monitor/main/assets/settings-widgets.gif) |
 
 ## Readings
 
