@@ -1,18 +1,17 @@
 // ==WindhawkMod==
 // @id              explorer-list-status-indent-fix
-// @name            File Explorer spacing fixes: List view indent, navigation pane, etc
-// @description     Removes the empty space before every item in the List, Small icons and Content views of File Explorer, evens out the gaps around items, icons and names, and tidies up the navigation pane: even padding, thin divider, longer separators, no pin icons
+// @name            File Explorer List view indent fix and files area spacing
+// @description     Removes the empty space before every item in the List, Small icons and Content views of File Explorer, and evens out the gaps around the items, icons and names of the files area
 // @version         1.0
 // @author          NDruce
 // @github          https://github.com/NDruce
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lgdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# File Explorer spacing fixes: List view indent, navigation pane
+# File Explorer List view indent fix and files area spacing
 
 Starting with Windows 11 version 22H2, File Explorer reserves a 28 pixels wide
 area to the left of **every** item in the **List**, **Small icons** and
@@ -23,11 +22,14 @@ which have nothing to do with the cloud. The result is an odd indent between
 the edge of an item and its icon.
 
 The mod removes that area where there's nothing to show. It also fixes a
-number of smaller spacing inconsistencies in the files area and in the
-navigation pane. Every adjustment has a setting, and can be changed or turned
-off.
+number of smaller spacing inconsistencies in the files area. Every adjustment
+has a setting, and can be changed or turned off.
 
-## The files area
+The mod only deals with the files area: the part of a folder window which
+shows the files and the folders. It doesn't touch the navigation pane, the
+command bar or the address bar.
+
+## What it does
 
 * **No empty status area.** The reserved area is removed where there's nothing
   to show. Items which have a status icon, and all the items inside of a cloud
@@ -53,49 +55,25 @@ off.
   four sides, in all views. The horizontal and the vertical margins are
   configurable separately.
 
-## The navigation pane
-
-* **Thin divider.** The strip between the navigation pane and the files area
-  is replaced with a line of 1 pixel. By default, the line has the color of
-  the line below the command bar, for the light and for the dark theme. The
-  color is configurable. The navigation pane can still be resized by dragging
-  the divider.
-* **Even padding.** The gap to the left of the items of the navigation pane is
-  made the same as the gap to the right of them. The size is configurable. A
-  space above and below the contents of the navigation pane can be added too.
-* **Pin icons.** The pin icons to the right of the pinned folders can be
-  hidden or made less visible.
-* **Separators.** The lines which separate the groups of the navigation pane
-  can be made longer or shorter. They can go from edge to edge.
-* **Expand arrows.** The arrows can be moved vertically.
-
 ## Defaults
 
-Most of the adjustments are turned on by default. To get the stock look of a
-part back, use these values:
+Only the removal of the empty status area is a fix in the strict sense. The
+other adjustments are a matter of taste, and they're turned on by default too.
+To get the stock look of a part back, use these values:
 
 * Even item spacing: off. That also turns off the gaps and the offsets of the
-  icons and the names.
+  icons and the names, and the adjustments of the Details and Content rows.
 * Horizontal and vertical margins of the files area: 0.
-* Thin divider: off.
-* Padding of the navigation pane: -1.
-* Vertical padding of the navigation pane: 0.
-* Vertical offset of the expand arrows: 0.
-* Hide the pin icons: off.
 
-The adjustment of the separators of the navigation pane is turned off by
-default.
+## Scaling
 
-## Scaling and themes
+The gaps, the paddings and the margins follow the display scaling. The
+vertical offsets and the correction of the right gap are small corrections of
+a pixel or two, and are applied in physical pixels regardless of the scaling.
 
-All the sizes follow the display scaling. Items which are already displayed
-when the display scaling changes keep the old spacing until the folder is
-reopened or refreshed. With fractional scaling such as 125%, the gaps can
-differ by a pixel because of rounding.
-
-The automatic color of the thin divider is chosen when a folder window is
-opened. Windows which are already open when the theme changes keep the old
-color until they're reopened.
+Items which are already displayed when the display scaling changes keep the
+old spacing until the folder is reopened or refreshed. With fractional scaling
+such as 125%, the gaps can differ by a pixel because of rounding.
 
 The mod works with the compact view of File Explorer turned on or off, and
 with the item check boxes.
@@ -116,9 +94,7 @@ so adding only the programs you need is the lighter option.
 
 Only 64-bit programs are supported. In a program other than File Explorer, the
 mod does nothing until the program loads the items view (`explorerframe.dll`),
-which usually happens when a file dialog is opened for the first time. From
-then on, the vertical offset of the expand arrows applies to all tree views of
-that program.
+which usually happens when a file dialog is opened for the first time.
 
 ## How it works
 
@@ -128,28 +104,19 @@ and Content views regardless of the actual content. The mod makes it report the
 actual state.
 
 Everything else is done by changing properties of DirectUI elements: of the
-items, of the items area, and of the frame of a folder window which holds the
-navigation pane and its divider. The elements are adjusted when they're
-created, and the windows which are already open are adjusted when the mod is
-loaded. The functions which are exported by `dui70.dll` are used for that.
+items and of the items area. The elements are adjusted when they're created,
+and the windows which are already open are adjusted when the mod is loaded.
+The functions which are exported by `dui70.dll` are used for that.
 
-No code or resources are patched. The adjustments are only made to elements
-which have the expected stock values, so that the mod stays out of the way of
-other customizations. When the mod is turned off, the stock values are
-restored.
-
-The pin icons of the navigation pane are the state images of its tree. The
-mod gives the tree a copy of its state image list with faded images, and
-leaves the list of File Explorer itself untouched. The separators of the
-navigation pane are adjusted while File Explorer draws them, which relies on
-the debug symbols of `explorerframe.dll`. If that part can't be set up on a
-Windows build, the rest of the mod still works.
+No files are modified. The adjustments are only made to elements which have
+the expected stock values, so that the mod stays out of the way of other
+customizations. When the mod is turned off, the stock values are restored.
 
 The code of the status area fix was verified to have the expected shape in
 Windows 11 builds 22621.317 - 22621.6274 (22H2, 23H2), 26100.1 - 26100.9974
 (24H2, 25H2), 28000.1761 - 28000.3086 (26H1) and 26300 (26H2 preview). The
-adjustments of the Details view rows and of the navigation pane were tested on
-build 26300 at 125% scaling.
+adjustments of the Details view rows were tested on build 26300 at 125%
+scaling.
 */
 // ==/WindhawkModReadme==
 
@@ -191,76 +158,31 @@ build 26300 at 125% scaling.
 - statusIconOffset: 1
   $name: Vertical offset of the status icons
   $description: >-
-    In pixels, in the List and Small icons views, used with the even item
-    spacing. A positive value moves the status icons down, a negative value
-    moves them up.
+    In pixels, from -4 to 4, in the List and Small icons views, used with the
+    even item spacing. A positive value moves the status icons down, a
+    negative value moves them up.
 - nameOffset: -1
   $name: Vertical offset of the item names
   $description: >-
-    In pixels, in the List and Details views, used with the even item spacing.
-    A positive value moves the names down, a negative value moves them up. In
-    the Details view, a negative value is taken from the height of the rows,
-    so that the gaps above and below a name stay equal.
+    In pixels, from -4 to 4, in the List and Details views, used with the even
+    item spacing. A positive value moves the names down, a negative value
+    moves them up. In the Details view, a negative value is taken from the
+    height of the rows, so that the gaps above and below a name stay equal.
 - nameOffsetSmallIcons: 0
   $name: Vertical offset of the item names in the Small icons view
   $description: >-
-    In pixels, used with the even item spacing. A positive value moves the
-    names down, a negative value moves them up.
+    In pixels, from -4 to 4, used with the even item spacing. A positive value
+    moves the names down, a negative value moves them up.
 - iconTextGap: 1
   $name: Extra gap between the item icon and the name
   $description: >-
     In the List, Small icons and Details views, used with the even item
     spacing.
-- navArrowOffset: -1
-  $name: Vertical offset of the expand arrows in the navigation pane
-  $description: >-
-    In pixels. A negative value moves the arrows up. Applies to all tree views
-    of the process, and takes effect when the tree is redrawn.
 - contentBottomPadding: 2
   $name: Bottom padding of a row in the Content view
   $description: >-
     The padding below the text of a row. The stock value is 5, the same as
     the padding above the text. Used with the even item spacing.
-- navPaneDivider: true
-  $name: Thin divider between the navigation pane and the files
-  $description: >-
-    Replaces the strip between the navigation pane and the files area with a
-    line of 1 pixel, of the same color as the line below the command bar. The
-    navigation pane can still be resized by dragging the divider.
-- navPaneDividerColor: ""
-  $name: Color of the thin divider
-  $description: >-
-    In the #RRGGBB format, for example #3A3A3A. Leave empty to use a color
-    which matches the light or the dark theme. Used if the thin divider is
-    turned on.
-- navPanePadding: 1
-  $name: Padding of the navigation pane
-  $description: >-
-    The gap to the left and to the right of the items of the navigation pane,
-    the same on both sides. The stock gaps are 2 on the left and 1 on the
-    right. Set to -1 to keep the stock gaps.
-- navPanePaddingVertical: 6
-  $name: Vertical padding of the navigation pane
-  $description: >-
-    The space above and below the contents of the navigation pane. Set to 0 to
-    keep the stock look.
-- navPinIconsHide: true
-  $name: Hide the pin icons in the navigation pane
-  $description: >-
-    Hides the pin icons which are shown to the right of the pinned folders.
-- navPinIconOpacity: 0
-  $name: Opacity of the pin icons in the navigation pane
-  $description: >-
-    In percent, from 1 to 99. Used if the pin icons aren't hidden. Set to 0 to
-    keep the stock look of the pin icons.
-- navSeparatorInset: 0
-  $name: Side gaps of the separators in the navigation pane
-  $description: >-
-    Added to the gaps on the left and on the right of the horizontal lines
-    which separate the groups of the navigation pane. The stock gap is 8. A
-    negative value makes the lines longer: with -8, they go from edge to edge
-    of the navigation pane. A positive value makes them shorter. Set to 0 to
-    keep the stock gaps.
 - viewMarginSize: 8
   $name: Horizontal margins of the files area
   $description: >-
@@ -278,13 +200,8 @@ build 26300 at 125% scaling.
 
 #include <windhawk_utils.h>
 
-#include <windows.h>
-
-#include <commctrl.h>
-
 #include <atomic>
 #include <map>
-#include <vector>
 #include <set>
 #include <string>
 #include <utility>
@@ -338,16 +255,6 @@ constexpr int kViewTopMargin = 6;
 static struct {
     bool hidden;
     bool equalSpacing;
-    bool navPaneDivider;
-    // Zero for the color of the theme.
-    ULONG navPaneDividerColor;
-    int navPanePaddingVertical;
-    // Negative to keep the stock padding.
-    int navPanePadding;
-    bool navPinIconsHide;
-    int navPinIconOpacity;
-    // Added to the stock side gaps of the separators, zero to keep them.
-    int navSeparatorInset;
     // The horizontal margin.
     int viewMarginSize;
     int viewMarginVertical;
@@ -359,7 +266,6 @@ static struct {
     int nameOffset;
     int nameOffsetSmallIcons;
     int iconTextGap;
-    int navArrowOffset;
 } g_settings;
 
 // The element which the top level element is hidden for on the current
@@ -367,7 +273,6 @@ static struct {
 static thread_local void* t_hideTopLevelFor;
 static HMODULE g_dui70Module;
 static HMODULE g_explorerFrameModule;
-static HMODULE g_shell32Module;
 static UINT g_runFromWindowThreadMsg;
 
 // Set once all the functions below are resolved and the hooks are set. Until
@@ -434,12 +339,6 @@ static void*(WINAPI* Element_GetValue)(void* pThis, PropertyProc_t prop, int ind
 static HRESULT(WINAPI* Element_SetValue)(void* pThis, PropertyProc_t prop, int index, void* value);
 static HRESULT(WINAPI* Element_RemoveLocalValue)(void* pThis, PropertyProc_t prop);
 static PropertyProc_t Element_PaddingProp;
-static HRESULT(WINAPI* Element_SetBorderThickness)(void* pThis, int l, int t, int r, int b);
-static HRESULT(WINAPI* Element_SetBorderColor)(void* pThis, ULONG color);
-static HRESULT(WINAPI* Element_SetBackgroundColor)(void* pThis, ULONG color);
-static PropertyProc_t Element_BorderThicknessProp;
-static PropertyProc_t Element_BorderColorProp;
-static PropertyProc_t Element_BackgroundProp;
 static void*(WINAPI* Value_CreateSize)(int cx, int cy, int dynamicScale);
 static const SIZE*(WINAPI* Value_GetSize)(void* pThis);
 static void(WINAPI* Value_Release)(void* pThis);
@@ -451,12 +350,13 @@ static BOOL(WINAPI* UIProperty_HasVisibleContent_Original)(void* pThis);
 static PropertyProc_t UIBase_VisibleMinSizeProp;
 
 // Returns true if the compact view of File Explorer is turned on. It's off
-// by default.
+// by default. Called from the threads of all the folder windows.
 static bool IsCompactView() {
-    static ULONGLONG lastTime;
-    static bool lastResult;
+    static std::atomic<ULONGLONG> lastTime;
+    static std::atomic<bool> lastResult;
     ULONGLONG time = GetTickCount64();
-    if (!lastTime || time - lastTime > 500) {
+    ULONGLONG last = lastTime;
+    if (!last || time - last > 500) {
         DWORD value = 0;
         DWORD size = sizeof(value);
         RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
@@ -1179,9 +1079,6 @@ static void ApplyItemSpacing(void* item, ItemKind kind, const std::wstring& key,
         Element_SetPadding(stateIcons, stateIconsPaddingLeft, stateIconsPaddingTop, stateIconsPaddingRight, stateIconsPaddingBottom);
     }
 
-    // Change and restore a property of the status area to make it measured
-    // again, as the answer to whether it has something to show might have
-    // changed.
     if (kind == ItemKind::Content) {
         // The text block is the last element of the item. Only touch its
         // bottom padding if the top padding has the stock value, and the
@@ -1220,6 +1117,9 @@ static void ApplyItemSpacing(void* item, ItemKind kind, const std::wstring& key,
         }
     }
 
+    // Change and restore a property of the status area to make it measured
+    // again, as the answer to whether it has something to show might have
+    // changed.
     RECT containerPadding = GetElementPadding(container);
     ScaleIfNew(containerPadding, dpi, hosted);
     Element_SetPadding(container, containerPadding.left, containerPadding.top, containerPadding.right + 1, containerPadding.bottom);
@@ -1234,482 +1134,6 @@ static void ApplyItemSpacing(void* item, ItemKind kind, const std::wstring& key,
         (visibleMinSize.cx != visibleMinWidth || visibleMinSize.cy != visibleMinHeight)) {
         SetElementVisibleMinSize(container, visibleMinWidth, visibleMinHeight);
     }
-}
-// The colors of the line below the command bar, in the DirectUI format.
-constexpr ULONG kDividerColorDark = 0xFF3A3A3A;
-constexpr ULONG kDividerColorLight = 0xFFE5E5E5;
-
-static bool IsDarkMode() {
-    DWORD value = 1;
-    DWORD size = sizeof(value);
-    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                 L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size);
-    return value == 0;
-}
-
-static bool IsHighContrast() {
-    HIGHCONTRASTW highContrast{.cbSize = sizeof(highContrast)};
-    return SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(highContrast), &highContrast, 0) &&
-           (highContrast.dwFlags & HCF_HIGHCONTRASTON);
-}
-
-static ATOM GetNavPaneSizerAtom() {
-    return FindAtomW(L"PageSpaceControlSizer");
-}
-
-// The strip between the navigation pane and the files area consists of the
-// sizer of the navigation pane, which is drawn with a theme part, and of a
-// pixel of the background of the navigation pane host next to it. Makes both
-// transparent and draws a line of 1 pixel as the left border of the sizer, or
-// restores the stock look. The size of the sizer isn't changed, so that it
-// stays as easy to drag as before.
-static void ApplyNavPaneDivider(void* sizer, bool apply) {
-    ATOM hostAtom = FindAtomW(L"ProperTreeHost");
-    void* parent = Element_GetParent(sizer);
-    void* host = parent && hostAtom ? Element_FindDescendent(parent, hostAtom) : nullptr;
-    if (apply) {
-        if (IsHighContrast()) {
-            return;
-        }
-
-        Element_SetBorderThickness(sizer, 1, 0, 0, 0);
-        ULONG color = g_settings.navPaneDividerColor;
-        if (!color) {
-            color = IsDarkMode() ? kDividerColorDark : kDividerColorLight;
-        }
-
-        Element_SetBorderColor(sizer, color);
-        Element_SetBackgroundColor(sizer, 0);
-        if (host) {
-            Element_SetBackgroundColor(host, 0);
-        }
-    } else {
-        // The stock values come from the style sheet.
-        Element_RemoveLocalValue(sizer, Element_BorderThicknessProp);
-        Element_RemoveLocalValue(sizer, Element_BorderColorProp);
-        Element_RemoveLocalValue(sizer, Element_BackgroundProp);
-        if (host) {
-            Element_RemoveLocalValue(host, Element_BackgroundProp);
-        }
-    }
-}
-
-// The stock padding of the navigation pane host and the stock width of its
-// sizer, which covers a part of the right padding.
-constexpr int kNavPanePaddingLeft = 2;
-constexpr int kNavPanePaddingRight = 4;
-constexpr int kNavPaneSizerWidth = 3;
-
-// Sets the configured gap on both sides of the items of the navigation pane
-// and the configured space above and below its contents, or restores the
-// stock padding. On the right, the sizer covers a part of the padding, so the
-// padding is larger by the width of the sizer. Only touches the padding if it
-// has the stock values or the adjusted values. A new element which isn't in a
-// window yet holds the values for 100% scaling.
-static void ApplyNavPanePadding(void* sizer, int dpi, bool apply, bool refresh) {
-    ATOM hostAtom = FindAtomW(L"ProperTreeHost");
-    void* parent = Element_GetParent(sizer);
-    void* host = parent && hostAtom ? Element_FindDescendent(parent, hostAtom) : nullptr;
-    if (!host) {
-        return;
-    }
-
-    RECT rawStock{kNavPanePaddingLeft, 0, kNavPanePaddingRight, 0};
-    RECT stock{MulDiv(kNavPanePaddingLeft, dpi, 96), 0, MulDiv(kNavPanePaddingRight, dpi, 96), 0};
-    RECT adjusted = stock;
-    if (g_settings.navPanePadding >= 0) {
-        int gap = MulDiv(g_settings.navPanePadding, dpi, 96);
-        adjusted.left = gap;
-        adjusted.right = gap + MulDiv(kNavPaneSizerWidth, dpi, 96);
-    }
-
-    adjusted.top = adjusted.bottom = MulDiv(g_settings.navPanePaddingVertical, dpi, 96);
-    if (EqualRect(&adjusted, &stock)) {
-        return;
-    }
-
-    RECT padding = GetElementPadding(host);
-    if (apply && (EqualRect(&padding, &stock) || EqualRect(&padding, &rawStock))) {
-        Element_SetPadding(host, adjusted.left, adjusted.top, adjusted.right, adjusted.bottom);
-        if (adjusted.top > 0) {
-            // The background of the host is darker than the navigation pane.
-            Element_SetBackgroundColor(host, 0);
-        }
-    } else if (!apply && EqualRect(&padding, &adjusted)) {
-        Element_SetPadding(host, stock.left, stock.top, stock.right, stock.bottom);
-        if (adjusted.top > 0 && !g_settings.navPaneDivider) {
-            Element_RemoveLocalValue(host, Element_BackgroundProp);
-        }
-    } else {
-        return;
-    }
-
-    // The window of the navigation pane is only moved when the size of the
-    // host changes. Change and restore the width of the pane.
-    if (refresh) {
-        int width = Element_GetWidth(parent);
-        if (width > 0) {
-            Element_SetWidth(parent, width + 1);
-            Element_SetWidth(parent, width);
-        }
-    }
-}
-
-// The separators between the groups of the navigation pane.
-//
-// A separator isn't an item. The first item of a group is two rows tall, and
-// CNscTree::DrawDivider draws a line in its upper row with Polyline. The ends
-// of the line are moved on the way, without relying on the layout of
-// CNscTree. The height of a separator can't be changed that way: the height
-// of a tree item is a whole number of rows.
-static void(WINAPI* CNscTree_DrawDivider_Original)(void* pThis, HDC hdc, HTREEITEM item);
-static LRESULT(WINAPI* SendMessageW_Original)(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-static BOOL(WINAPI* Polyline_Original)(HDC hdc, const POINT* points, int count);
-
-// Set while a separator is being drawn by the current thread.
-static thread_local bool t_drawingNavSeparator;
-
-// The pin icons of the navigation pane.
-//
-// A pin icon is the state image of a tree item, which the tree draws on the
-// right. The state image list of the tree is replaced with a copy in which
-// the images are faded or fully transparent. The list of File Explorer itself
-// isn't touched: it stays the owner of its list, and gets its own list back
-// when it asks for it.
-struct NavStateImages {
-    HIMAGELIST original;
-    HIMAGELIST adjusted;
-};
-
-static SRWLOCK g_navStateImagesLock = SRWLOCK_INIT;
-static std::map<HWND, NavStateImages> g_navStateImages;
-
-// The opacity of the pin icons in percent, or a negative value to keep them
-// as they are.
-static int GetNavPinIconOpacity() {
-    if (g_settings.navPinIconsHide) {
-        return 0;
-    }
-
-    return g_settings.navPinIconOpacity > 0 ? g_settings.navPinIconOpacity : -1;
-}
-
-static bool IsNavPaneTree(HWND hWnd) {
-    WCHAR className[32];
-    return GetClassNameW(hWnd, className, ARRAYSIZE(className)) && wcscmp(className, L"SysTreeView32") == 0 &&
-           GetClassNameW(GetParent(hWnd), className, ARRAYSIZE(className)) &&
-           wcscmp(className, L"NamespaceTreeControl") == 0;
-}
-
-// Sends a message without the adjustments of the hook below.
-static LRESULT SendMessageRaw(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    return SendMessageW_Original ? SendMessageW_Original(hWnd, msg, wParam, lParam)
-                                 : SendMessageW(hWnd, msg, wParam, lParam);
-}
-
-// Creates a copy of an icon with the given opacity.
-static HICON CreateFadedIcon(HICON icon, int opacity) {
-    ICONINFO info{};
-    if (!GetIconInfo(icon, &info)) {
-        return nullptr;
-    }
-
-    HICON result = nullptr;
-    BITMAP bm{};
-    if (info.hbmColor && GetObjectW(info.hbmColor, sizeof(bm), &bm) && bm.bmWidth > 0 && bm.bmHeight > 0 &&
-        bm.bmWidth <= 256 && bm.bmHeight <= 256) {
-        int width = bm.bmWidth;
-        int height = bm.bmHeight;
-        BITMAPINFO bi{};
-        bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
-        bi.bmiHeader.biWidth = width;
-        bi.bmiHeader.biHeight = -height;
-        bi.bmiHeader.biPlanes = 1;
-        bi.bmiHeader.biBitCount = 32;
-        bi.bmiHeader.biCompression = BI_RGB;
-
-        std::vector<DWORD> color(width * height);
-        std::vector<DWORD> mask(width * height);
-        HDC dc = GetDC(nullptr);
-        BITMAPINFO biColor = bi;
-        BITMAPINFO biMask = bi;
-        bool hasColor = GetDIBits(dc, info.hbmColor, 0, height, color.data(), &biColor, DIB_RGB_COLORS) == height;
-        bool hasMask = info.hbmMask &&
-                       GetDIBits(dc, info.hbmMask, 0, height, mask.data(), &biMask, DIB_RGB_COLORS) == height;
-
-        void* bits = nullptr;
-        HBITMAP newColor = hasColor ? CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0) : nullptr;
-        ReleaseDC(nullptr, dc);
-
-        if (newColor && bits) {
-            bool hasAlpha = false;
-            for (DWORD pixel : color) {
-                if (pixel >> 24) {
-                    hasAlpha = true;
-                    break;
-                }
-            }
-
-            // The pixels which end up fully transparent are marked in the
-            // mask, as an icon without any alpha is drawn by its mask.
-            int maskStride = ((width + 15) / 16) * 2;
-            std::vector<BYTE> newMaskBits(maskStride * height, 0);
-            DWORD* out = (DWORD*)bits;
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    DWORD pixel = color[y * width + x];
-                    int alpha = hasAlpha ? (int)(pixel >> 24) : (hasMask && (mask[y * width + x] & 0xFFFFFF) ? 0 : 255);
-                    alpha = alpha * opacity / 100;
-                    if (alpha <= 0) {
-                        out[y * width + x] = 0;
-                        newMaskBits[y * maskStride + x / 8] |= (BYTE)(0x80 >> (x % 8));
-                    } else {
-                        out[y * width + x] = ((DWORD)alpha << 24) | (pixel & 0xFFFFFF);
-                    }
-                }
-            }
-
-            HBITMAP newMask = CreateBitmap(width, height, 1, 1, newMaskBits.data());
-            if (newMask) {
-                ICONINFO newInfo{};
-                newInfo.fIcon = TRUE;
-                newInfo.hbmMask = newMask;
-                newInfo.hbmColor = newColor;
-                result = CreateIconIndirect(&newInfo);
-                DeleteObject(newMask);
-            }
-        }
-
-        if (newColor) {
-            DeleteObject(newColor);
-        }
-    }
-
-    if (info.hbmColor) {
-        DeleteObject(info.hbmColor);
-    }
-
-    if (info.hbmMask) {
-        DeleteObject(info.hbmMask);
-    }
-
-    return result;
-}
-
-// Creates a copy of an image list in which all the images have the given
-// opacity.
-static HIMAGELIST CreateFadedImageList(HIMAGELIST source, int opacity) {
-    HIMAGELIST copy = ImageList_Duplicate(source);
-    if (!copy) {
-        return nullptr;
-    }
-
-    int count = ImageList_GetImageCount(copy);
-    for (int i = 0; i < count; i++) {
-        HICON icon = ImageList_GetIcon(source, i, ILD_TRANSPARENT);
-        if (!icon) {
-            continue;
-        }
-
-        if (HICON faded = CreateFadedIcon(icon, opacity)) {
-            ImageList_ReplaceIcon(copy, i, faded);
-            DestroyIcon(faded);
-        }
-
-        DestroyIcon(icon);
-    }
-
-    return copy;
-}
-
-// Replaces the state image list of a navigation pane tree with an adjusted
-// copy, or restores the list of File Explorer. Called from the thread of the
-// tree.
-static void ApplyNavPinIcons(HWND tree, bool apply) {
-    NavStateImages previous{};
-    AcquireSRWLockExclusive(&g_navStateImagesLock);
-    if (auto it = g_navStateImages.find(tree); it != g_navStateImages.end()) {
-        previous = it->second;
-        g_navStateImages.erase(it);
-    }
-    ReleaseSRWLockExclusive(&g_navStateImagesLock);
-
-    HIMAGELIST current = (HIMAGELIST)SendMessageRaw(tree, TVM_GETIMAGELIST, TVSIL_STATE, 0);
-    bool changed = false;
-    if (previous.adjusted) {
-        if (current == previous.adjusted) {
-            SendMessageRaw(tree, TVM_SETIMAGELIST, TVSIL_STATE, (LPARAM)previous.original);
-            current = previous.original;
-            changed = true;
-        }
-
-        ImageList_Destroy(previous.adjusted);
-    }
-
-    int opacity = apply ? GetNavPinIconOpacity() : -1;
-    if (opacity >= 0 && current) {
-        if (HIMAGELIST adjusted = CreateFadedImageList(current, opacity)) {
-            SendMessageRaw(tree, TVM_SETIMAGELIST, TVSIL_STATE, (LPARAM)adjusted);
-            AcquireSRWLockExclusive(&g_navStateImagesLock);
-            g_navStateImages[tree] = NavStateImages{current, adjusted};
-            ReleaseSRWLockExclusive(&g_navStateImagesLock);
-            changed = true;
-        }
-    }
-
-    if (changed) {
-        InvalidateRect(tree, nullptr, TRUE);
-    }
-}
-
-// File Explorer sets or retrieves the state image list of a navigation pane
-// tree.
-static LRESULT NavStateImageListMessage(HWND hWnd, UINT msg, LPARAM lParam) {
-    if (msg == TVM_GETIMAGELIST) {
-        LRESULT result = SendMessageW_Original(hWnd, msg, TVSIL_STATE, lParam);
-        AcquireSRWLockExclusive(&g_navStateImagesLock);
-        if (auto it = g_navStateImages.find(hWnd); it != g_navStateImages.end() && (HIMAGELIST)result == it->second.adjusted) {
-            result = (LRESULT)it->second.original;
-        }
-        ReleaseSRWLockExclusive(&g_navStateImagesLock);
-        return result;
-    }
-
-    HIMAGELIST newList = (HIMAGELIST)lParam;
-    int opacity = g_unloading ? -1 : GetNavPinIconOpacity();
-    HIMAGELIST adjusted = newList && opacity >= 0 ? CreateFadedImageList(newList, opacity) : nullptr;
-    LRESULT result = SendMessageW_Original(hWnd, msg, TVSIL_STATE, (LPARAM)(adjusted ? adjusted : newList));
-
-    NavStateImages previous{};
-    AcquireSRWLockExclusive(&g_navStateImagesLock);
-    if (auto it = g_navStateImages.find(hWnd); it != g_navStateImages.end()) {
-        previous = it->second;
-        g_navStateImages.erase(it);
-    }
-
-    if (adjusted) {
-        g_navStateImages[hWnd] = NavStateImages{newList, adjusted};
-    }
-    ReleaseSRWLockExclusive(&g_navStateImagesLock);
-
-    if (previous.adjusted) {
-        // The previous list is returned to the caller, which might destroy it.
-        if ((HIMAGELIST)result == previous.adjusted) {
-            result = (LRESULT)previous.original;
-        }
-
-        ImageList_Destroy(previous.adjusted);
-    }
-
-    return result;
-}
-
-// Destroys the copies which are left, for the trees which are gone.
-static void FreeNavStateImages() {
-    AcquireSRWLockExclusive(&g_navStateImagesLock);
-    for (const auto& [tree, images] : g_navStateImages) {
-        if (!IsWindow(tree) ||
-            (HIMAGELIST)SendMessageRaw(tree, TVM_GETIMAGELIST, TVSIL_STATE, 0) != images.adjusted) {
-            ImageList_Destroy(images.adjusted);
-        }
-    }
-
-    g_navStateImages.clear();
-    ReleaseSRWLockExclusive(&g_navStateImagesLock);
-}
-
-static void WINAPI CNscTree_DrawDivider_Hook(void* pThis, HDC hdc, HTREEITEM item) {
-    t_drawingNavSeparator = true;
-    CNscTree_DrawDivider_Original(pThis, hdc, item);
-    t_drawingNavSeparator = false;
-}
-
-static LRESULT WINAPI SendMessageW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if ((msg == TVM_SETIMAGELIST || msg == TVM_GETIMAGELIST) && wParam == TVSIL_STATE && IsNavPaneTree(hWnd)) {
-        return NavStateImageListMessage(hWnd, msg, lParam);
-    }
-
-    return SendMessageW_Original(hWnd, msg, wParam, lParam);
-}
-
-static BOOL WINAPI Polyline_Hook(HDC hdc, const POINT* points, int count) {
-    if (!t_drawingNavSeparator || !g_settings.navSeparatorInset || count != 2 || !points ||
-        points[0].y != points[1].y) {
-        return Polyline_Original(hdc, points, count);
-    }
-
-    // The line is drawn in the pixels of the device.
-    int inset = MulDiv(g_settings.navSeparatorInset, GetDeviceCaps(hdc, LOGPIXELSX), 96);
-    POINT adjusted[2] = {points[0], points[1]};
-    adjusted[0].x += inset;
-    adjusted[1].x -= inset;
-    if (adjusted[0].x >= adjusted[1].x) {
-        return TRUE;
-    }
-
-    return Polyline_Original(hdc, adjusted, 2);
-}
-
-// uxtheme.dll
-constexpr int kTVP_TREEITEM = 1;
-constexpr int kTVP_GLYPH = 2;
-constexpr int kTVP_HOTGLYPH = 4;
-static BOOL(WINAPI* Uxtheme_IsThemePartDefined)(HANDLE hTheme, int partId, int stateId);
-// Exported by ordinal only.
-using GetThemeClass_t = HRESULT(WINAPI*)(HANDLE hTheme, LPWSTR buffer, int size);
-static GetThemeClass_t Uxtheme_GetThemeClass;
-static HRESULT(WINAPI* DrawThemeBackground_Original)(HANDLE hTheme, HDC hdc, int partId, int stateId, const RECT* rect, const RECT* clipRect);
-static HRESULT(WINAPI* DrawThemeBackgroundEx_Original)(HANDLE hTheme, HDC hdc, int partId, int stateId, const RECT* rect, const void* options);
-
-// Returns true for the expand arrow of a tree view, such as the navigation
-// pane.
-static bool IsTreeViewGlyph(HANDLE hTheme, int partId, const RECT* rect) {
-    if (!g_settings.navArrowOffset || (partId != kTVP_GLYPH && partId != kTVP_HOTGLYPH) || !rect) {
-        return false;
-    }
-
-    // The theme class is identified by its name, such as "Explorer::TreeView"
-    // or "DarkMode_Explorer::TreeView". Other classes use the same part
-    // numbers for other things, for example for the buttons of up-down and
-    // pager controls.
-    if (Uxtheme_GetThemeClass) {
-        WCHAR themeClass[64] = {};
-        if (SUCCEEDED(Uxtheme_GetThemeClass(hTheme, themeClass, ARRAYSIZE(themeClass)))) {
-            themeClass[ARRAYSIZE(themeClass) - 1] = L'\0';
-            constexpr size_t kSuffixLength = 8;
-            size_t length = wcslen(themeClass);
-            if (length > 0 &&
-                (length < kSuffixLength || _wcsicmp(themeClass + length - kSuffixLength, L"TreeView") != 0)) {
-                return false;
-            }
-        }
-    }
-
-    // Also check the parts: a tree view theme has parts up to 4. If the name
-    // of the class can't be retrieved, that's the only check.
-    return Uxtheme_IsThemePartDefined(hTheme, kTVP_TREEITEM, 0) &&
-           Uxtheme_IsThemePartDefined(hTheme, kTVP_HOTGLYPH, 0) &&
-           !Uxtheme_IsThemePartDefined(hTheme, kTVP_HOTGLYPH + 1, 0);
-}
-
-static HRESULT WINAPI DrawThemeBackground_Hook(HANDLE hTheme, HDC hdc, int partId, int stateId, const RECT* rect, const RECT* clipRect) {
-    if (IsTreeViewGlyph(hTheme, partId, rect)) {
-        RECT rc = *rect;
-        OffsetRect(&rc, 0, g_settings.navArrowOffset);
-        return DrawThemeBackground_Original(hTheme, hdc, partId, stateId, &rc, clipRect);
-    }
-
-    return DrawThemeBackground_Original(hTheme, hdc, partId, stateId, rect, clipRect);
-}
-
-static HRESULT WINAPI DrawThemeBackgroundEx_Hook(HANDLE hTheme, HDC hdc, int partId, int stateId, const RECT* rect, const void* options) {
-    if (IsTreeViewGlyph(hTheme, partId, rect)) {
-        RECT rc = *rect;
-        OffsetRect(&rc, 0, g_settings.navArrowOffset);
-        return DrawThemeBackgroundEx_Original(hTheme, hdc, partId, stateId, &rc, options);
-    }
-
-    return DrawThemeBackgroundEx_Original(hTheme, hdc, partId, stateId, rect, options);
 }
 
 static void* WINAPI Element_GetTopLevel_Hook(void* pThis) {
@@ -1788,37 +1212,13 @@ static HRESULT WINAPI DUIXmlParser_CreateElement_Hook(void* pThis, PCWSTR resid,
         }
     }
 
-    // The frame of a folder window.
-    if (g_settings.navPaneDivider && kind == ItemKind::None && !IsTargetCollectionClass(resid) &&
-        !StartsWith(resid, L"property.")) {
-        if (ATOM atom = GetNavPaneSizerAtom()) {
-            void* sizer = Element_GetID(*element) == atom ? *element : Element_FindDescendent(*element, atom);
-            if (sizer) {
-                ApplyNavPaneDivider(sizer, true);
-            }
-        }
-    }
-
-    if ((g_settings.navPanePadding >= 0 || g_settings.navPanePaddingVertical > 0) && kind == ItemKind::None && !IsTargetCollectionClass(resid) &&
-        !StartsWith(resid, L"property.")) {
-        if (ATOM atom = GetNavPaneSizerAtom()) {
-            void* sizer = Element_GetID(*element) == atom ? *element : Element_FindDescendent(*element, atom);
-            int dpi = sizer ? DUIXmlParser_ScaleRelativePixels(pThis, 96) : 0;
-            if (dpi > 0) {
-                ApplyNavPanePadding(sizer, dpi, true, false);
-            }
-        }
-    }
     return hr;
 }
 
 // Applies or restores the spacing of the existing items.
 struct ApplyParam {
-    bool active;
     bool spacing;
     bool viewMargin;
-    bool divider;
-    bool navPadding;
 };
 
 static void ApplyRecursive(void* element, int dpi, const ApplyParam& param, int depth = 0) {
@@ -1885,7 +1285,7 @@ static void* GetItemsViewElement(HWND hWnd) {
     HMODULE module;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                             *(PCWSTR*)element, &module) ||
-        (module != g_explorerFrameModule && module != g_dui70Module && module != g_shell32Module)) {
+        (module != g_explorerFrameModule && module != g_dui70Module)) {
         return nullptr;
     }
 
@@ -1940,30 +1340,6 @@ static void WINAPI ApplyToItemsViewWindow(HWND hWnd, void* param) {
     }
 }
 
-static void WINAPI ApplyToNavTreeWindow(HWND hWnd, void* param) {
-    ApplyNavPinIcons(hWnd, ((const ApplyParam*)param)->active);
-}
-
-// The frame of a folder window: the navigation pane, the files area and the
-// divider between them.
-static void WINAPI ApplyToFrameWindow(HWND hWnd, void* param) {
-    const ApplyParam& applyParam = *(const ApplyParam*)param;
-    ATOM atom = GetNavPaneSizerAtom();
-    void* element = (applyParam.divider || applyParam.navPadding) && atom ? GetItemsViewElement(hWnd) : nullptr;
-    void* sizer = element ? Element_FindDescendent(element, atom) : nullptr;
-    if (!sizer) {
-        return;
-    }
-
-    if (applyParam.divider) {
-        ApplyNavPaneDivider(sizer, applyParam.active);
-    }
-
-    if (applyParam.navPadding) {
-        ApplyNavPanePadding(sizer, GetDpiForWindow(hWnd), applyParam.active, true);
-    }
-}
-
 // Applies the adjustments to the existing items, or restores the stock values
 // if not active.
 static void ApplyToExistingWindows(bool active) {
@@ -1972,27 +1348,16 @@ static void ApplyToExistingWindows(bool active) {
     }
 
     ApplyParam enumParam{
-        .active = active,
         .spacing = active && g_settings.equalSpacing,
         .viewMargin = active && (g_settings.viewMarginSize > 0 || g_settings.viewMarginVertical > 0),
-        .divider = g_settings.navPaneDivider,
-        .navPadding = g_settings.navPanePadding >= 0 || g_settings.navPanePaddingVertical > 0,
     };
 
     auto enumChildProc = [](HWND hWnd, LPARAM lParam) -> BOOL {
-        if (IsNavPaneTree(hWnd)) {
-            RunFromWindowThread(hWnd, ApplyToNavTreeWindow, (void*)lParam);
-            return TRUE;
-        }
-
         WCHAR className[32];
         if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) && wcscmp(className, L"DirectUIHWND") == 0 &&
-            GetClassNameW(GetParent(hWnd), className, ARRAYSIZE(className))) {
-            if (wcscmp(className, L"SHELLDLL_DefView") == 0) {
-                RunFromWindowThread(hWnd, ApplyToItemsViewWindow, (void*)lParam);
-            } else if (wcscmp(className, L"DUIViewWndClassName") == 0) {
-                RunFromWindowThread(hWnd, ApplyToFrameWindow, (void*)lParam);
-            }
+            GetClassNameW(GetParent(hWnd), className, ARRAYSIZE(className)) &&
+            wcscmp(className, L"SHELLDLL_DefView") == 0) {
+            RunFromWindowThread(hWnd, ApplyToItemsViewWindow, (void*)lParam);
         }
 
         return TRUE;
@@ -2067,45 +1432,7 @@ static void LoadSettings() {
     g_settings.hidden = wcscmp(WindhawkUtils::StringSetting::make(L"statusIcons"), L"hidden") == 0;
 
     g_settings.equalSpacing = Wh_GetIntSetting(L"equalSpacing");
-    g_settings.navPaneDivider = Wh_GetIntSetting(L"navPaneDivider");
-    g_settings.navPanePaddingVertical = Wh_GetIntSetting(L"navPanePaddingVertical");
-    if (g_settings.navPanePaddingVertical < 0 || g_settings.navPanePaddingVertical > 64) {
-        g_settings.navPanePaddingVertical = 6;
-    }
 
-    g_settings.navPanePadding = Wh_GetIntSetting(L"navPanePadding");
-    if (g_settings.navPanePadding < -1 || g_settings.navPanePadding > 32) {
-        g_settings.navPanePadding = 1;
-    }
-
-    g_settings.navPinIconsHide = Wh_GetIntSetting(L"navPinIconsHide");
-    g_settings.navPinIconOpacity = Wh_GetIntSetting(L"navPinIconOpacity");
-    if (g_settings.navPinIconOpacity < 0 || g_settings.navPinIconOpacity > 99) {
-        g_settings.navPinIconOpacity = 0;
-    }
-
-    g_settings.navSeparatorInset = Wh_GetIntSetting(L"navSeparatorInset");
-    if (g_settings.navSeparatorInset < -64 || g_settings.navSeparatorInset > 64) {
-        g_settings.navSeparatorInset = 0;
-    }
-
-    // #RRGGBB, converted to the DirectUI format: opaque, red in the low byte.
-    g_settings.navPaneDividerColor = 0;
-    auto dividerColor = WindhawkUtils::StringSetting::make(L"navPaneDividerColor");
-    PCWSTR hex = dividerColor;
-    while (*hex == L' ' || *hex == L'#') {
-        hex++;
-    }
-
-    PWSTR hexEnd = nullptr;
-    ULONG rgb = wcstoul(hex, &hexEnd, 16);
-    while (*hexEnd == L' ') {
-        hexEnd++;
-    }
-
-    if (hexEnd - hex >= 6 && wcsspn(hex, L"0123456789abcdefABCDEF") == 6 && !*hexEnd) {
-        g_settings.navPaneDividerColor = 0xFF000000 | ((rgb & 0xFF) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 0xFF);
-    }
     g_settings.viewMarginSize = Wh_GetIntSetting(L"viewMarginSize");
     if (g_settings.viewMarginSize < 0 || g_settings.viewMarginSize > 64) {
         g_settings.viewMarginSize = kViewMarginHorizontalDefault;
@@ -2134,11 +1461,6 @@ static void LoadSettings() {
     g_settings.iconTextGap = Wh_GetIntSetting(L"iconTextGap");
     if (g_settings.iconTextGap < 0 || g_settings.iconTextGap > 32) {
         g_settings.iconTextGap = 1;
-    }
-
-    g_settings.navArrowOffset = Wh_GetIntSetting(L"navArrowOffset");
-    if (g_settings.navArrowOffset < -8 || g_settings.navArrowOffset > 8) {
-        g_settings.navArrowOffset = -1;
     }
 
     g_settings.statusIconGap = Wh_GetIntSetting(L"statusIconGap");
@@ -2175,7 +1497,7 @@ static bool GetProc(HMODULE module, PCSTR name, T* proc) {
 
 // The modules which were loaded by the mod, to release the references when
 // the mod is unloaded or when setting it up fails.
-static HMODULE g_loadedModules[4];
+static HMODULE g_loadedModules[3];
 
 static HMODULE LoadSystemModule(PCWSTR name) {
     HMODULE module = LoadLibraryExW(name, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -2210,9 +1532,6 @@ static BOOL SetupHooksImpl() {
         return FALSE;
     }
 
-    // The frame of a folder window belongs to shell32.dll.
-    g_shell32Module = GetModuleHandleW(L"shell32.dll");
-
     HMODULE dui70 = g_dui70Module;
     void*(WINAPI* getTopLevel)(void*);
     HRESULT(WINAPI* createElement)(void*, PCWSTR, void*, void*, DWORD*, void**);
@@ -2234,12 +1553,6 @@ static BOOL SetupHooksImpl() {
         !GetProc(dui70, "?SetValue@Element@DirectUI@@QEAAJP6APEBUPropertyInfo@2@XZHPEAVValue@2@@Z", &Element_SetValue) ||
         !GetProc(dui70, "?RemoveLocalValue@Element@DirectUI@@QEAAJP6APEBUPropertyInfo@2@XZ@Z", &Element_RemoveLocalValue) ||
         !GetProc(dui70, "?PaddingProp@Element@DirectUI@@SAPEBUPropertyInfo@2@XZ", &Element_PaddingProp) ||
-        !GetProc(dui70, "?SetBorderThickness@Element@DirectUI@@QEAAJHHHH@Z", &Element_SetBorderThickness) ||
-        !GetProc(dui70, "?SetBorderColor@Element@DirectUI@@QEAAJK@Z", &Element_SetBorderColor) ||
-        !GetProc(dui70, "?SetBackgroundColor@Element@DirectUI@@QEAAJK@Z", &Element_SetBackgroundColor) ||
-        !GetProc(dui70, "?BorderThicknessProp@Element@DirectUI@@SAPEBUPropertyInfo@2@XZ", &Element_BorderThicknessProp) ||
-        !GetProc(dui70, "?BorderColorProp@Element@DirectUI@@SAPEBUPropertyInfo@2@XZ", &Element_BorderColorProp) ||
-        !GetProc(dui70, "?BackgroundProp@Element@DirectUI@@SAPEBUPropertyInfo@2@XZ", &Element_BackgroundProp) ||
         !GetProc(dui70, "?CreateSize@Value@DirectUI@@SAPEAV12@HHW4DynamicScaleValue@@@Z", &Value_CreateSize) ||
         !GetProc(dui70, "?GetSize@Value@DirectUI@@QEAAPEBUtagSIZE@@XZ", &Value_GetSize) ||
         !GetProc(dui70, "?Release@Value@DirectUI@@QEAAXXZ", &Value_Release) ||
@@ -2261,13 +1574,6 @@ static BOOL SetupHooksImpl() {
             nullptr,
             true,
         },
-        // The separators of the navigation pane, optional.
-        {
-            {LR"(private: void __cdecl CNscTree::DrawDivider(struct HDC__ *,struct _TREEITEM *))"},
-            &CNscTree_DrawDivider_Original,
-            CNscTree_DrawDivider_Hook,
-            true,
-        },
     };
 
     if (!WindhawkUtils::HookSymbols(g_explorerFrameModule, explorerFrameHooks, ARRAYSIZE(explorerFrameHooks))) {
@@ -2281,31 +1587,8 @@ static BOOL SetupHooksImpl() {
     g_applyWork = work;
     ReleaseSRWLockExclusive(&g_originalsLock);
 
-    // The expand arrows of tree views.
-    if (HMODULE uxtheme = LoadSystemModule(L"uxtheme.dll")) {
-        Uxtheme_IsThemePartDefined = (decltype(Uxtheme_IsThemePartDefined))GetProcAddress(uxtheme, "IsThemePartDefined");
-        // Optional, GetThemeClass is exported by ordinal 74.
-        Uxtheme_GetThemeClass = (GetThemeClass_t)GetProcAddress(uxtheme, MAKEINTRESOURCEA(74));
-        auto drawThemeBackground = (decltype(DrawThemeBackground_Original))GetProcAddress(uxtheme, "DrawThemeBackground");
-        auto drawThemeBackgroundEx = (decltype(DrawThemeBackgroundEx_Original))GetProcAddress(uxtheme, "DrawThemeBackgroundEx");
-        if (Uxtheme_IsThemePartDefined && drawThemeBackground && drawThemeBackgroundEx) {
-            WindhawkUtils::SetFunctionHook(drawThemeBackground, DrawThemeBackground_Hook, &DrawThemeBackground_Original);
-            WindhawkUtils::SetFunctionHook(drawThemeBackgroundEx, DrawThemeBackgroundEx_Hook, &DrawThemeBackgroundEx_Original);
-        }
-    }
-
     WindhawkUtils::SetFunctionHook(getTopLevel, Element_GetTopLevel_Hook, &Element_GetTopLevel_Original);
     WindhawkUtils::SetFunctionHook(createElement, DUIXmlParser_CreateElement_Hook, &DUIXmlParser_CreateElement_Original);
-
-    // The separators and the pin icons of the navigation pane.
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    HMODULE gdi32 = GetModuleHandleW(L"gdi32.dll");
-    auto sendMessageW = user32 ? (decltype(SendMessageW_Original))GetProcAddress(user32, "SendMessageW") : nullptr;
-    auto polyline = gdi32 ? (decltype(Polyline_Original))GetProcAddress(gdi32, "Polyline") : nullptr;
-    if (sendMessageW && polyline) {
-        WindhawkUtils::SetFunctionHook(sendMessageW, SendMessageW_Hook, &SendMessageW_Original);
-        WindhawkUtils::SetFunctionHook(polyline, Polyline_Hook, &Polyline_Original);
-    }
 
     return TRUE;
 }
@@ -2429,7 +1712,6 @@ void Wh_ModBeforeUninit() {
     }
 
     ApplyToExistingWindows(false);
-    FreeNavStateImages();
 }
 
 void Wh_ModUninit() {
