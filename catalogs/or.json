@@ -15820,7 +15820,7 @@
         "ratingUsers": 156,
         "reviews": 0,
         "trendingSorting": -0.5069807819934716,
-        "updated": 1782568483000,
+        "updated": 1794888281000,
         "users": 12034
       },
       "metadata": {
@@ -15840,7 +15840,7 @@
         ],
         "name": "Shell Flyout Positions",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.3"
+        "version": "1.3.1"
       }
     },
     "shrink-address-bar-height": {
@@ -17182,7 +17182,7 @@
         "ratingUsers": 87,
         "reviews": 0,
         "trendingSorting": -0.1405712268037101,
-        "updated": 1776376335000,
+        "updated": 1794888285000,
         "users": 2869
       },
       "metadata": {
@@ -17199,7 +17199,7 @@
         ],
         "name": "Taskbar auto-hide fine tuning",
         "twitter": "https://twitter.com/m417z",
-        "version": "2.3"
+        "version": "2.3.1"
       }
     },
     "taskbar-auto-hide-per-monitor": {

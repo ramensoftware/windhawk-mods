@@ -1,0 +1,381 @@
+{
+  "mods": {
+    "desktop-app-groups": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794859570244,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794859570244,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Markc719",
+        "compilerOptions": "-luuid -lole32 -lshell32 -lshlwapi -lcomctl32 -lgdi32 -lmsimg32 -ldwmapi -lshcore -ladvapi32 -luser32 -lcomdlg32",
+        "description": "Group desktop icons into Start-menu-style folders by dragging one onto another",
+        "github": "https://github.com/Markc719",
+        "homepage": "https://github.com/Markc719/desktop-app-groups",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Desktop App Groups",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7173",
+      "source": {
+        "sha256": "0bb274e8ae2d40c1e6a9da8d315970b54e7255edee75fa73781c59b332b2c6ff",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/49e136c3e8689d6e5de43d8a0d312a39761ba903/mods/desktop-app-groups.wh.cpp"
+      }
+    },
+    "explorer-default-folder": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794796718242,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794840456805,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "DanRotaru",
+        "compilerOptions": "-lole32 -loleaut32 -lshell32 -luuid",
+        "description": "Open new File Explorer windows and tabs in a folder of your choice instead of This PC or Home",
+        "donateUrl": "https://buymeacoffee.com/widget/page/danrotaru",
+        "github": "https://github.com/DanRotaru",
+        "homepage": "https://dan13.me/",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer Default Folder",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7339",
+      "source": {
+        "sha256": "6c7a224521ad24cf68e5727ba14d065ff19b358ad77ef18d89def18a845fe664",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6b19ead230c08403dab28d1d30bcfd28e2abb0e2/mods/explorer-default-folder.wh.cpp"
+      }
+    },
+    "explorer-no-help": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794888502675,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794888502675,
+        "users": 0
+      },
+      "metadata": {
+        "author": "vt-idiot",
+        "description": "Removes the ribbon Help (?) button from File Explorer and blocks F1 in Explorer only",
+        "github": "https://github.com/vt-idiot",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer: No Help",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7555",
+      "source": {
+        "sha256": "5f6c6d42d3fe6a0c3a04afe1ab5c859e4c71af62d2e7dc3a839b6882db3aad8a",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/aadfc986be6ee1dcddcb6ca2b8d08b2c907b8f6b/mods/explorer-no-help.wh.cpp"
+      }
+    },
+    "file-type-properties-customization": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794840456805,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794840456805,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86",
+          "x86-64"
+        ],
+        "author": "Momo",
+        "compilerOptions": "-lshell32 -lshlwapi -lole32 -loleaut32 -lpropsys -luuid",
+        "description": "Customize file icons and type descriptions by extension while preserving system thumbnails",
+        "github": "https://github.com/FreshP-0325",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "File Type Properties Customization",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7505",
+      "source": {
+        "sha256": "078d3786e775037ae1000b817164122a5d6926500b24b079d06b98e1e5daf96a",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/293fcb80a08279a7d156bd852c1b1b8204d58d58/mods/file-type-properties-customization.wh.cpp"
+      }
+    },
+    "fluent-radial-menu": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794840456805,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794840456805,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Fenryr",
+        "compilerOptions": "-ld2d1 -ldwrite -ldwmapi -lgdi32 -lole32 -loleaut32 -lshell32 -ladvapi32 -lwindowscodecs -luuid -lruntimeobject -lmsimg32 -lcomctl32 -lcomdlg32",
+        "description": "Launch apps, files, folders, links, and shortcuts from a customizable radial menu on Windows 11.",
+        "github": "https://github.com/soldier93HUN",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Fluent Radial Menu",
+        "version": "0.9.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7432",
+      "source": {
+        "sha256": "a2b608376697d5dae20a91b76cad2f2bacd5cec98d96ef73f8341cd7f90a42fd",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/e3ef8a050dc7f8823ee212576df0a8056dd4ca4b/mods/fluent-radial-menu.wh.cpp"
+      }
+    },
+    "lockscreen-background": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794796718242,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794796718242,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "sunnyturtle01",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshcore -lshell32 -ladvapi32 -luuid -luserenv -lmfplat -lmfreadwrite -lmfuuid -lgdiplus",
+        "description": "Use local videos, GIFs, and images as the Windows 11 lock screen and optional sign-in wallpaper.",
+        "github": "https://github.com/quyle231003",
+        "include": [
+          "LockApp.exe",
+          "explorer.exe",
+          "LogonUI.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Animated Wallpaper for the Windows Lock Screen",
+        "version": "0.2.16"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7220",
+      "source": {
+        "sha256": "bb4c6638764e7f2b49bc822e1b4ed547667ed746e26c4e416e584b02c4fd8d42",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/760b91ecf9f50687cd4b2ed315b32d32ad8372ea/mods/lockscreen-background.wh.cpp"
+      }
+    },
+    "nimbus-menu": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794796718242,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794796718242,
+        "users": 0
+      },
+      "metadata": {
+        "author": "igoredm",
+        "compilerOptions": "-lole32 -loleaut32 -luuid -lgdi32 -ld2d1 -ldwrite -lwindowscodecs -ldwmapi -lshell32 -lshlwapi -lshcore -lpropsys -ladvapi32",
+        "description": "Replaces the Windows taskbar with a light dock and its own Start menu (also on the Windows key): smoked glass, macOS-like zoom, live window previews, one bar per monitor, file search with Everything",
+        "github": "https://github.com/igoredm",
+        "include": [
+          "windhawk.exe",
+          "explorer.exe"
+        ],
+        "name": "Nimbus Menu",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7489",
+      "source": {
+        "sha256": "321821e0a2aa7fac641a74568496ae1a52a0d7d3c9a5895cb42be166e4a23b2c",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4cb99f2b4c27e618215f22784d8c4bc35e761c65/mods/nimbus-menu.wh.cpp"
+      }
+    },
+    "no-click-touchpad-tap-and-hold": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794840456805,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794840456805,
+        "users": 0
+      },
+      "metadata": {
+        "author": "mario0318",
+        "compilerOptions": "-lhid -lshcore -lgdi32 -lwtsapi32",
+        "description": "Tap a corner to right-click and hold two fingers to drag, with a ring around the pointer while the drag is on. For touchpads that no longer click.",
+        "github": "https://github.com/mario0318",
+        "include": [
+          "windhawk.exe",
+          "windhawk-mod.exe",
+          "windhawk-mod-uiaccess.exe"
+        ],
+        "name": "No-Click Touchpad: Tap & Hold",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7443",
+      "source": {
+        "sha256": "62723f9879a6058c51eb54be1ea997a3d2ec3d14a555e9380fb5301cc00b0797",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/7bcddad73b5441e93d24ec279e9d0b0f70972dd4/mods/no-click-touchpad-tap-and-hold.wh.cpp"
+      }
+    },
+    "titlebar-opacity-button": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794796718242,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794796718242,
+        "users": 0
+      },
+      "metadata": {
+        "author": "JeremyWayne93",
+        "compilerOptions": "-ldwmapi -lgdi32 -luser32 -lshell32 -ladvapi32",
+        "description": "Adds a small opacity button next to the minimize button of the active window, plus modifier+scroll to fade any window",
+        "github": "https://github.com/JeremyWayne93",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Titlebar Opacity Button",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7462",
+      "source": {
+        "sha256": "3a1e0f10e7ab714ec4af3fa6483030de22d2e1f6b1e1e511e9eadda818e44445",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3b284d718598ae924d4af8f3af3959f4e5c46d47/mods/titlebar-opacity-button.wh.cpp"
+      }
+    },
+    "win10-ime-tray-icon-fix": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794812695613,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794812695613,
+        "users": 0
+      },
+      "metadata": {
+        "author": "yumeyao",
+        "compilerOptions": "-lcomctl32",
+        "description": "Moves the input indicator to the left of the notification area so its width change cannot shift the tray icons. Alternative modes provided.",
+        "github": "https://github.com/yumeyao",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Windows 10 IME Tray Icon Fix",
+        "version": "1.1"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7447",
+      "source": {
+        "sha256": "90bea635c35324ff5f60874238e851695eddfadc9c2b0957cebe459388615876",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/5534e0993449597f18415c36c16e24b6ee0f73c1/mods/win10-ime-tray-icon-fix.wh.cpp"
+      }
+    },
+    "windows-11-lock-screen-styler": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794796718242,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794796718242,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "ZACHARIAgs",
+        "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject",
+        "description": "Customize the Windows 11 lock screen clock, date, and XAML styles",
+        "github": "https://github.com/ZACHARIAgs",
+        "include": [
+          "LockApp.exe"
+        ],
+        "name": "Windows 11 Lock Screen Styler",
+        "version": "1.5"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/6413",
+      "source": {
+        "sha256": "012569f93597643a5f639085f478b85fc0406b1863fa32aa2b8833ff857b3b2a",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c2226cdb15a3684219163cfcf0dbeeb4c02ab62a/mods/windows-11-lock-screen-styler.wh.cpp"
+      }
+    },
+    "windows-border-switch": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794796718242,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794796718242,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "CTravkin",
+        "compilerOptions": "-ldwmapi -lole32 -loleaut32 -lruntimeobject -luuid -ladvapi32",
+        "description": "Hide borders around windows, the Start menu, the taskbar, and other system elements",
+        "github": "https://github.com/CTravkin",
+        "homepage": "https://ctravkin.ru",
+        "include": [
+          "explorer.exe",
+          "StartMenuExperienceHost.exe",
+          "SearchHost.exe",
+          "SearchApp.exe",
+          "ShellExperienceHost.exe",
+          "ShellHost.exe",
+          "WidgetBoard.exe"
+        ],
+        "license": "MIT",
+        "name": "Windows Border Switch",
+        "version": "1.2.1"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7408",
+      "source": {
+        "sha256": "4c6a8617d16b98dd9dd86dd89d113bb210288bdf9ff10b2a2fa002aa486c52af",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/fd54ec5cb1949b06bffa49c38ceda0573133299f/mods/windows-border-switch.wh.cpp"
+      }
+    }
+  }
+}

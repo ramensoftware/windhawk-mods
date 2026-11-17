@@ -67,6 +67,34 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6b19ead230c08403dab28d1d30bcfd28e2abb0e2/mods/explorer-default-folder.wh.cpp"
       }
     },
+    "explorer-no-help": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794888502675,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794888502675,
+        "users": 0
+      },
+      "metadata": {
+        "author": "vt-idiot",
+        "description": "Removes the ribbon Help (?) button from File Explorer and blocks F1 in Explorer only",
+        "github": "https://github.com/vt-idiot",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer: No Help",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7555",
+      "source": {
+        "sha256": "5f6c6d42d3fe6a0c3a04afe1ab5c859e4c71af62d2e7dc3a839b6882db3aad8a",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/aadfc986be6ee1dcddcb6ca2b8d08b2c907b8f6b/mods/explorer-no-help.wh.cpp"
+      }
+    },
     "file-type-properties-customization": {
       "details": {
         "defaultSorting": 0,

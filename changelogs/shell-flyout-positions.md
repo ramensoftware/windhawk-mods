@@ -1,3 +1,8 @@
+## 1.3.1 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b7ae0bc02245592cf21b356fd48826df054a6685/mods/shell-flyout-positions.wh.cpp))
+
+* Fixed the "Aligned to tray area" option on newer Windows 11 versions, where the system tray is part of the taskbar frame.
+* Fixed incorrect placement of the search menu opened with Win+S or the taskbar search box in some cases.
+
 ## 1.3 ([Jun 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a9ed1f6989d728bc1fad2d5ad23f5d30117b64cf/mods/shell-flyout-positions.wh.cpp))
 
 * Added options to align the Start menu to the left, center, or right of the Start button.

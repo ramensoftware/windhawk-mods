@@ -1,3 +1,8 @@
+## 2.3.1 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a9a85ba3f0a81211514de7ad3d7a09d870d97edf/mods/taskbar-auto-hide-keyboard-only.wh.cpp))
+
+* Fixed the always-show toggle mouse event (middle click or double click) being triggered by clicks on the system tray on newer Windows 11 versions, where the system tray is part of the taskbar frame.
+* Fixed the "Customize the old taskbar on Windows 11" option on Windows 11 24H2 builds older than 26100.1301.
+
 ## 2.3 ([Apr 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9f6a018d93adf561e55dc5318babf4428073c11c/mods/taskbar-auto-hide-keyboard-only.wh.cpp))
 
 * Fixed a crash on system startup when the "Never" auto-hide mode is used.
