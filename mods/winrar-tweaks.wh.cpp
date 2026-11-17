@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              winrar-tweaks
 // @name            WinRAR Tweaks
-// @description     Auto-dismiss the trial reminder popup, convert file sizes into readable units (KB, MB, GB), add a VS Code-style Ctrl+F quick filter bar, and close WinRAR with Esc.
+// @description     Convert file sizes into readable units (KB, MB, GB), add a VS Code-style Ctrl+F quick filter bar, close WinRAR with Esc, and optionally auto-dismiss the trial reminder popup.
 // @version         1.1.0
 // @author          ArvindSaini978
 // @github          https://github.com/ArvindSaini978
@@ -24,10 +24,10 @@ Simple quality-of-life improvements that make **WinRAR** cleaner, easier to read
 ## ✨ Features
 
 * 🔍 **VS Code-Style Quick Filter Bar (`Ctrl+F`):** Press `Ctrl+F` (or just start typing with *Type to Search* enabled) to open a native bottom filter bar with `↑` / `↓` / `✕` buttons, a live match counter (`1 of 12`), `Enter` / `Shift+Enter` navigation, and optional `Alt+Enter` to select all matches at once. Automatically adapts to both Light and Dark themes.
-* 🚫 **Auto-Dismiss Trial Popup:** Automatically blocks the *"Please purchase WinRAR license"* and *"Trial Expired"* popups on startup before they even appear on screen.
 * 📊 **Readable File Sizes (All Languages):** Converts long, hard-to-read byte numbers (like `121,815,400`) in the **Size** and **Packed** columns into clean units (`B`, `KB`, `MB`, `GB`, `TB`). Works automatically in all WinRAR display languages.
 * 🏷️ **Optional `KiB` / `MiB` Labels:** Prefer technical binary units? Flip a single switch in Settings to display `KiB`, `MiB`, `GiB`, and `TiB` instead of `KB`, `MB`, `GB`, and `TB`.
 * ⌨️ **Smart Close on `Esc`:** Press `Escape` to quickly close WinRAR just like modern apps. Smart enough to close the quick search bar, open popups, menus, dropdowns, or file-rename boxes first before closing the main window.
+* 🚫 **Auto-Dismiss Trial Popup (Opt-In):** Optionally blocks the *"Please purchase WinRAR license"* and *"Trial Expired"* reminder popups on startup before they appear on screen (can be enabled in Settings).
 * ⚙️ **Customizable Settings:** Enable or disable any feature independently at any time in the Settings tab.
 
 ---
@@ -55,9 +55,9 @@ Simple quality-of-life improvements that make **WinRAR** cleaner, easier to read
 ## 🛠️ How It Works
 
 * **Safe Quick Filtering:** Instead of deleting rows from WinRAR's list (which would break extraction indices), the quick filter bar highlights matching files in place, scrolls the active match into view, and lets you cycle through matches with `Enter` / `Shift+Enter` or `Up` / `Down`. Clicking the empty bar area returns focus to the file list while keeping your match highlighted.
-* **Instant Popup Blocking:** Detects WinRAR's startup trial reminder in the background and dismisses it before the window is drawn, so you never see a flicker. All other WinRAR dialogs (Extract, Add, Password, Info, etc.) work normally.
 * **Smart Size Formatting:** Formats raw byte numbers on the fly as you browse folders inside an archive, supporting every language automatically.
 * **Safe `Esc` Handling:** Checks what you are doing before closing—so pressing `Esc` while using the search bar, renaming a file, dragging items, or browsing a right-click menu won't accidentally close your window.
+* **Instant Popup Blocking:** When enabled in Settings, detects WinRAR's startup trial reminder in the background and dismisses it before the window is drawn, so you never see a flicker. All other WinRAR dialogs (Extract, Add, Password, Info, Help, etc.) work normally.
 
 ---
 
@@ -103,7 +103,7 @@ Simple quality-of-life improvements that make **WinRAR** cleaner, easier to read
 - use_iec_terms: false
   $name: "Use IEC terms"
   $description: "Use the International Electrotechnical Commission terms, such as KiB instead of KB."
-- auto_dismiss_eval_dialog: true
+- auto_dismiss_eval_dialog: false
   $name: "Auto-Dismiss Trial Popup"
   $description: "Automatically blocks the 'Please purchase WinRAR license' and 'Trial Expired' popups on startup before they appear on screen."
 */
@@ -133,7 +133,7 @@ struct ModSettings {
     std::atomic<bool> close_on_esc{true};
     std::atomic<bool> readable_file_sizes{true};
     std::atomic<bool> use_iec_terms{false};
-    std::atomic<bool> auto_dismiss_eval_dialog{true};
+    std::atomic<bool> auto_dismiss_eval_dialog{false};
 };
 
 static ModSettings g_settings;
@@ -190,16 +190,20 @@ struct QuickSearchState {
     HWND hCloseBtn = nullptr;
     HWND hTooltip = nullptr;
     HFONT hFont = nullptr;
+    UINT fontDpi = 0;
     HBRUSH hEditBgBrush = nullptr;
     HBRUSH hBarBgBrush = nullptr;
     COLORREF cachedEditBgColor = CLR_INVALID;
     COLORREF cachedBarBgColor = CLR_INVALID;
+    SearchBarPalette palette = {};
+    bool paletteInitialized = false;
     RECT rcEditFrame = {};
     bool isDark = false;
     bool isVisible = false;
     bool isAdjustingLayout = false;
     bool suppressTextChange = false;
     bool multiSelected = false;
+    bool addedShowSelAlways = false;
     std::vector<int> matchedIndices;
     int currentMatchPos = -1;
 };
@@ -242,21 +246,75 @@ static bool ContainsCaseInsensitive(const WCHAR* haystack,
     return false;
 }
 
+// Queries the DPI for a given window using a cached function pointer
+static UINT GetWindowDpiSafe(HWND hWnd) {
+    using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+    static GetDpiForWindow_t pfnGetDpiForWindow = []() -> GetDpiForWindow_t {
+        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+        return hUser32 ? reinterpret_cast<GetDpiForWindow_t>(
+                             GetProcAddress(hUser32, "GetDpiForWindow"))
+                       : nullptr;
+    }();
+
+    if (pfnGetDpiForWindow && hWnd) {
+        UINT wndDpi = pfnGetDpiForWindow(hWnd);
+        if (wndDpi > 0)
+            return wndDpi;
+    }
+    return 96;
+}
+
 // Helper to scale pixel dimensions according to the window's current DPI
 static int ScaleForDpi(HWND hWnd, int px) {
-    UINT dpi = 96;
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    if (hUser32) {
-        using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
-        auto pfnGetDpiForWindow = reinterpret_cast<GetDpiForWindow_t>(
-            GetProcAddress(hUser32, "GetDpiForWindow"));
-        if (pfnGetDpiForWindow && hWnd) {
-            UINT wndDpi = pfnGetDpiForWindow(hWnd);
-            if (wndDpi > 0)
-                dpi = wndDpi;
-        }
+    return MulDiv(px, static_cast<int>(GetWindowDpiSafe(hWnd)), 96);
+}
+
+// Creates a DPI-scaled message font for the search bar
+static HFONT CreateSearchBarFontForDpi(UINT dpi) {
+    NONCLIENTMETRICSW ncm = {};
+    ncm.cbSize = sizeof(ncm);
+    if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0)) {
+        ncm.lfMessageFont.lfHeight = -MulDiv(12, static_cast<int>(dpi), 96);
+        HFONT hFont = CreateFontIndirectW(&ncm.lfMessageFont);
+        if (hFont)
+            return hFont;
     }
-    return MulDiv(px, static_cast<int>(dpi), 96);
+    return static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+}
+
+// Ensures the search bar font matches the current monitor DPI
+static void EnsureSearchBarFontDpi(QuickSearchState* state) {
+    if (!state || !IsWindow(state->hBarContainer))
+        return;
+
+    UINT currentDpi = GetWindowDpiSafe(state->hBarContainer);
+    if (state->hFont && state->fontDpi == currentDpi)
+        return;
+
+    HFONT hNewFont = CreateSearchBarFontForDpi(currentDpi);
+    HFONT hOldFont = state->hFont;
+    state->hFont = hNewFont;
+    state->fontDpi = currentDpi;
+
+    if (IsWindow(state->hEdit))
+        SendMessageW(state->hEdit, WM_SETFONT,
+                     reinterpret_cast<WPARAM>(hNewFont), FALSE);
+    if (IsWindow(state->hCountLabel))
+        SendMessageW(state->hCountLabel, WM_SETFONT,
+                     reinterpret_cast<WPARAM>(hNewFont), FALSE);
+    if (IsWindow(state->hPrevBtn))
+        SendMessageW(state->hPrevBtn, WM_SETFONT,
+                     reinterpret_cast<WPARAM>(hNewFont), FALSE);
+    if (IsWindow(state->hNextBtn))
+        SendMessageW(state->hNextBtn, WM_SETFONT,
+                     reinterpret_cast<WPARAM>(hNewFont), FALSE);
+    if (IsWindow(state->hCloseBtn))
+        SendMessageW(state->hCloseBtn, WM_SETFONT,
+                     reinterpret_cast<WPARAM>(hNewFont), FALSE);
+
+    if (hOldFont && hOldFont != GetStockObject(DEFAULT_GUI_FONT)) {
+        DeleteObject(hOldFont);
+    }
 }
 
 // Checks whether a ListView is the primary archive file list inside
@@ -276,7 +334,7 @@ static bool IsMainWinRarListView(HWND hListView) {
     return (_wcsicmp(parentCls, L"WinRarWindow") == 0);
 }
 
-// Reliably detects whether WinRAR / Windows is using Dark Mode
+// Reliably detects whether WinRAR's ListView is using a Dark or Light theme
 static bool IsWinRarDarkTheme(HWND hListView) {
     if (hListView && IsWindow(hListView)) {
         COLORREF bk = ListView_GetBkColor(hListView);
@@ -284,28 +342,28 @@ static bool IsWinRarDarkTheme(HWND hListView) {
             int lum = (GetRValue(bk) * 299 + GetGValue(bk) * 587 +
                        GetBValue(bk) * 114) /
                       1000;
-            if (lum < 128)
-                return true;
+            return (lum < 128);
         }
         COLORREF txt = ListView_GetTextColor(hListView);
         if (txt != CLR_NONE && txt != CLR_DEFAULT) {
             int txtLum = (GetRValue(txt) * 299 + GetGValue(txt) * 587 +
                           GetBValue(txt) * 114) /
                          1000;
-            if (txtLum > 160)
-                return true;
+            return (txtLum > 160);
         }
     }
 
-    HMODULE hUxTheme = GetModuleHandleW(L"uxtheme.dll");
-    if (hUxTheme) {
-        using ShouldAppsUseDarkMode_t = bool(WINAPI*)();
-        auto pfnShouldAppsUseDarkMode =
-            reinterpret_cast<ShouldAppsUseDarkMode_t>(
-                GetProcAddress(hUxTheme, MAKEINTRESOURCEA(132)));
-        if (pfnShouldAppsUseDarkMode && pfnShouldAppsUseDarkMode()) {
-            return true;
-        }
+    using ShouldAppsUseDarkMode_t = bool(WINAPI*)();
+    static ShouldAppsUseDarkMode_t pfnShouldAppsUseDarkMode =
+        []() -> ShouldAppsUseDarkMode_t {
+        HMODULE hUxTheme = GetModuleHandleW(L"uxtheme.dll");
+        return hUxTheme ? reinterpret_cast<ShouldAppsUseDarkMode_t>(
+                              GetProcAddress(hUxTheme, MAKEINTRESOURCEA(132)))
+                        : nullptr;
+    }();
+
+    if (pfnShouldAppsUseDarkMode && pfnShouldAppsUseDarkMode()) {
+        return true;
     }
 
     DWORD appsUseLight = 1;
@@ -347,8 +405,8 @@ static COLORREF GetFocusBorderColor(bool isDark) {
     return isDark ? RGB(218, 128, 44) : RGB(210, 110, 25);
 }
 
-// Returns the unified design palette for either Dark or Light mode
-static SearchBarPalette GetThemePalette(bool isDark) {
+// Computes the unified design palette for either Dark or Light mode
+static SearchBarPalette ComputeThemePalette(bool isDark) {
     COLORREF focusClr = GetFocusBorderColor(isDark);
     if (isDark) {
         return {
@@ -391,17 +449,18 @@ static SearchBarPalette GetThemePalette(bool isDark) {
     }
 }
 
-// Updates cached GDI brushes, tooltip theme, and redraws if dark/light mode
-// changed
-static void RefreshSearchBarTheme(QuickSearchState* state, bool forceRedraw) {
-    if (!state || !IsWindow(state->hListView))
+// Updates cached GDI brushes when focus or palette changes (no registry reads)
+static void UpdateSearchBarBrushes(QuickSearchState* state) {
+    if (!state)
         return;
 
-    bool darkNow = IsWinRarDarkTheme(state->hListView);
-    bool changed = (darkNow != state->isDark);
-    state->isDark = darkNow;
+    if (!state->paletteInitialized) {
+        state->isDark = IsWinRarDarkTheme(state->hListView);
+        state->palette = ComputeThemePalette(state->isDark);
+        state->paletteInitialized = true;
+    }
 
-    SearchBarPalette pal = GetThemePalette(state->isDark);
+    const SearchBarPalette& pal = state->palette;
     bool hasFocus = (state->hEdit && GetFocus() == state->hEdit);
     COLORREF targetEditBg = hasFocus ? pal.editFocusBg : pal.editBg;
 
@@ -418,14 +477,32 @@ static void RefreshSearchBarTheme(QuickSearchState* state, bool forceRedraw) {
         state->hBarBgBrush = CreateSolidBrush(pal.barBg);
         state->cachedBarBgColor = pal.barBg;
     }
+}
 
-    if ((changed || forceRedraw) && state->hTooltip &&
-        IsWindow(state->hTooltip)) {
+// Re-evaluates Dark/Light theme and accent color (called on theme changes or
+// creation)
+static void RefreshSearchBarTheme(QuickSearchState* state, bool forceRedraw) {
+    if (!state || !IsWindow(state->hListView))
+        return;
+
+    bool darkNow = IsWinRarDarkTheme(state->hListView);
+    bool changed =
+        !state->paletteInitialized || (darkNow != state->isDark) || forceRedraw;
+
+    state->isDark = darkNow;
+    if (changed) {
+        state->palette = ComputeThemePalette(state->isDark);
+        state->paletteInitialized = true;
+    }
+
+    UpdateSearchBarBrushes(state);
+
+    if (changed && state->hTooltip && IsWindow(state->hTooltip)) {
         SetWindowTheme(state->hTooltip,
                        state->isDark ? L"DarkMode_Explorer" : nullptr, nullptr);
     }
 
-    if ((changed || forceRedraw) && IsWindow(state->hBarContainer)) {
+    if (changed && IsWindow(state->hBarContainer)) {
         RedrawWindow(
             state->hBarContainer, nullptr, nullptr,
             RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
@@ -770,6 +847,8 @@ static void LayoutSearchBarChildren(QuickSearchState* state,
     if (!state || !IsWindow(state->hBarContainer))
         return;
 
+    EnsureSearchBarFontDpi(state);
+
     int innerTop = 1;
     int innerHeight = (barHeight > 2) ? (barHeight - 2) : barHeight;
 
@@ -874,7 +953,9 @@ static void TriggerMainLayoutRefresh(QuickSearchState* state) {
 
     RECT rc = {};
     if (GetClientRect(state->hMainWnd, &rc)) {
-        SendMessageW(state->hMainWnd, WM_SIZE, SIZE_RESTORED,
+        WPARAM sizeType =
+            IsZoomed(state->hMainWnd) ? SIZE_MAXIMIZED : SIZE_RESTORED;
+        SendMessageW(state->hMainWnd, WM_SIZE, sizeType,
                      MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
         RedrawWindow(state->hMainWnd, nullptr, nullptr,
                      RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
@@ -1057,8 +1138,13 @@ static LRESULT CALLBACK SearchButtonSubclassProc(HWND hWnd,
 
     if (uMsg == WM_PAINT) {
         QuickSearchState* state = GetSearchStateForListView(hListView);
-        bool isDark = state ? state->isDark : IsWinRarDarkTheme(hListView);
-        SearchBarPalette pal = GetThemePalette(isDark);
+        if (state && !state->paletteInitialized) {
+            UpdateSearchBarBrushes(state);
+        }
+        SearchBarPalette pal =
+            (state && state->paletteInitialized)
+                ? state->palette
+                : ComputeThemePalette(IsWinRarDarkTheme(hListView));
 
         PAINTSTRUCT ps = {};
         HDC hdc = BeginPaint(hWnd, &ps);
@@ -1137,7 +1223,7 @@ static LRESULT CALLBACK SearchEditSubclassProc(HWND hWnd,
         LRESULT res = DefSubclassProc(hWnd, uMsg, wParam, lParam);
         QuickSearchState* state = GetSearchStateForListView(hListView);
         if (state) {
-            RefreshSearchBarTheme(state, false);
+            UpdateSearchBarBrushes(state);
         }
         InvalidateRect(hWnd, nullptr, FALSE);
         HWND hParent = GetParent(hWnd);
@@ -1201,8 +1287,13 @@ static LRESULT CALLBACK SearchEditSubclassProc(HWND hWnd,
         LRESULT res = DefSubclassProc(hWnd, uMsg, wParam, lParam);
         if (GetWindowTextLengthW(hWnd) == 0 && GetFocus() != hWnd) {
             QuickSearchState* state = GetSearchStateForListView(hListView);
-            bool isDark = state ? state->isDark : IsWinRarDarkTheme(hListView);
-            SearchBarPalette pal = GetThemePalette(isDark);
+            if (state && !state->paletteInitialized) {
+                UpdateSearchBarBrushes(state);
+            }
+            SearchBarPalette pal =
+                (state && state->paletteInitialized)
+                    ? state->palette
+                    : ComputeThemePalette(IsWinRarDarkTheme(hListView));
 
             HDC hdc = GetDC(hWnd);
             if (hdc) {
@@ -1293,11 +1384,13 @@ static LRESULT CALLBACK SearchBarContainerSubclassProc(HWND hWnd,
 
     if (uMsg == WM_PAINT) {
         QuickSearchState* state = GetSearchStateForListView(hListView);
-        if (state) {
-            RefreshSearchBarTheme(state, false);
+        if (state && !state->paletteInitialized) {
+            UpdateSearchBarBrushes(state);
         }
-        bool isDark = state ? state->isDark : IsWinRarDarkTheme(hListView);
-        SearchBarPalette pal = GetThemePalette(isDark);
+        SearchBarPalette pal =
+            (state && state->paletteInitialized)
+                ? state->palette
+                : ComputeThemePalette(IsWinRarDarkTheme(hListView));
 
         PAINTSTRUCT ps = {};
         HDC hdcPaint = BeginPaint(hWnd, &ps);
@@ -1365,8 +1458,8 @@ static LRESULT CALLBACK SearchBarContainerSubclassProc(HWND hWnd,
     if (uMsg == WM_CTLCOLOREDIT) {
         QuickSearchState* state = GetSearchStateForListView(hListView);
         if (state) {
-            RefreshSearchBarTheme(state, false);
-            SearchBarPalette pal = GetThemePalette(state->isDark);
+            UpdateSearchBarBrushes(state);
+            const SearchBarPalette& pal = state->palette;
             bool hasFocus = (GetFocus() == state->hEdit);
             COLORREF targetEditBg = hasFocus ? pal.editFocusBg : pal.editBg;
             HDC hdc = reinterpret_cast<HDC>(wParam);
@@ -1380,8 +1473,8 @@ static LRESULT CALLBACK SearchBarContainerSubclassProc(HWND hWnd,
     if (uMsg == WM_CTLCOLORSTATIC) {
         QuickSearchState* state = GetSearchStateForListView(hListView);
         if (state) {
-            RefreshSearchBarTheme(state, false);
-            SearchBarPalette pal = GetThemePalette(state->isDark);
+            UpdateSearchBarBrushes(state);
+            const SearchBarPalette& pal = state->palette;
             HDC hdc = reinterpret_cast<HDC>(wParam);
             SetBkMode(hdc, OPAQUE);
             SetBkColor(hdc, pal.barBg);
@@ -1403,17 +1496,19 @@ static void EnsureQuickSearchBarCreated(HWND hListView) {
     if (!hMainWnd)
         return;
 
-    LONG_PTR lvStyle = GetWindowLongPtrW(hListView, GWL_STYLE);
-    if ((lvStyle & LVS_SHOWSELALWAYS) == 0) {
-        SetWindowLongPtrW(hListView, GWL_STYLE, lvStyle | LVS_SHOWSELALWAYS);
-    }
-
     {
         std::lock_guard<std::mutex> lock(g_listViewMutex);
         auto it = g_searchStates.find(hListView);
         if (it != g_searchStates.end() && IsWindow(it->second.hBarContainer)) {
             return;
         }
+    }
+
+    bool addedShowSelAlways = false;
+    LONG_PTR lvStyle = GetWindowLongPtrW(hListView, GWL_STYLE);
+    if ((lvStyle & LVS_SHOWSELALWAYS) == 0) {
+        SetWindowLongPtrW(hListView, GWL_STYLE, lvStyle | LVS_SHOWSELALWAYS);
+        addedShowSelAlways = true;
     }
 
     HINSTANCE hInst = GetModuleHandleW(nullptr);
@@ -1466,16 +1561,8 @@ static void EnsureQuickSearchBarCreated(HWND hListView) {
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SEARCH_CLOSE)), hInst,
         nullptr);
 
-    NONCLIENTMETRICSW ncm = {};
-    ncm.cbSize = sizeof(ncm);
-    HFONT hFont = nullptr;
-    if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0)) {
-        ncm.lfMessageFont.lfHeight = -ScaleForDpi(hMainWnd, 12);
-        hFont = CreateFontIndirectW(&ncm.lfMessageFont);
-    }
-    if (!hFont) {
-        hFont = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
-    }
+    UINT currentDpi = GetWindowDpiSafe(hMainWnd);
+    HFONT hFont = CreateSearchBarFontForDpi(currentDpi);
 
     if (hEdit) {
         SendMessageW(hEdit, WM_SETFONT, reinterpret_cast<WPARAM>(hFont), TRUE);
@@ -1543,7 +1630,9 @@ static void EnsureQuickSearchBarCreated(HWND hListView) {
     state.hCloseBtn = hClose;
     state.hTooltip = hTooltip;
     state.hFont = hFont;
+    state.fontDpi = currentDpi;
     state.isVisible = startVisible;
+    state.addedShowSelAlways = addedShowSelAlways;
 
     RefreshSearchBarTheme(&state, true);
 
@@ -1576,6 +1665,11 @@ static void DestroyQuickSearchBar(HWND hListView, bool refreshLayout) {
 
     if (!found)
         return;
+
+    if (stateCopy.addedShowSelAlways && IsWindow(hListView)) {
+        LONG_PTR lvStyle = GetWindowLongPtrW(hListView, GWL_STYLE);
+        SetWindowLongPtrW(hListView, GWL_STYLE, lvStyle & ~LVS_SHOWSELALWAYS);
+    }
 
     if (IsWindow(stateCopy.hTooltip)) {
         DestroyWindow(stateCopy.hTooltip);
@@ -1615,7 +1709,9 @@ static void DestroyQuickSearchBar(HWND hListView, bool refreshLayout) {
     if (refreshLayout && IsWindow(stateCopy.hMainWnd)) {
         RECT rc = {};
         if (GetClientRect(stateCopy.hMainWnd, &rc)) {
-            SendMessageW(stateCopy.hMainWnd, WM_SIZE, SIZE_RESTORED,
+            WPARAM sizeType =
+                IsZoomed(stateCopy.hMainWnd) ? SIZE_MAXIMIZED : SIZE_RESTORED;
+            SendMessageW(stateCopy.hMainWnd, WM_SIZE, sizeType,
                          MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
         }
     }
@@ -1827,7 +1923,7 @@ static bool ParseNumericBytes(const WCHAR* str, ULONGLONG* outBytes) {
 // Formats raw byte cells or updates unit labels in an already-open ListView on
 // the UI thread
 static void FormatExistingListViewItems(HWND hListView) {
-    if (!g_settings.readable_file_sizes || !IsWindow(hListView))
+    if (!g_settings.readable_file_sizes || !IsMainWinRarListView(hListView))
         return;
 
     if (GetWindowLongPtrW(hListView, GWL_STYLE) & LVS_OWNERDATA)
@@ -1908,12 +2004,34 @@ static LRESULT CALLBACK ListViewSubclassProc(HWND hWnd,
             QuickSearchState* state = GetSearchStateForListView(hWnd);
             if (state && state->isVisible && !state->isAdjustingLayout &&
                 IsWindow(state->hBarContainer)) {
+                RECT rcCurrent = {};
+                if (((wp->flags & SWP_NOMOVE) != 0 ||
+                     (wp->flags & SWP_NOSIZE) != 0) &&
+                    GetWindowRect(hWnd, &rcCurrent)) {
+                    MapWindowPoints(HWND_DESKTOP, GetParent(hWnd),
+                                    reinterpret_cast<LPPOINT>(&rcCurrent), 2);
+                }
+
+                int targetX =
+                    ((wp->flags & SWP_NOMOVE) == 0) ? wp->x : rcCurrent.left;
+                int targetY =
+                    ((wp->flags & SWP_NOMOVE) == 0) ? wp->y : rcCurrent.top;
+                int targetCx = ((wp->flags & SWP_NOSIZE) == 0)
+                                   ? wp->cx
+                                   : (rcCurrent.right - rcCurrent.left);
+                int targetCy = ((wp->flags & SWP_NOSIZE) == 0)
+                                   ? wp->cy
+                                   : (rcCurrent.bottom - rcCurrent.top);
+
                 int barHeight = ScaleForDpi(hWnd, kSearchBarBaseHeight);
-                if (wp->cy > barHeight * 2) {
+                if (targetCy > barHeight * 2) {
                     state->isAdjustingLayout = true;
-                    wp->cy -= barHeight;
-                    SetWindowPos(state->hBarContainer, HWND_TOP, wp->x,
-                                 wp->y + wp->cy, wp->cx, barHeight,
+                    if ((wp->flags & SWP_NOSIZE) == 0) {
+                        wp->cy -= barHeight;
+                        targetCy = wp->cy;
+                    }
+                    SetWindowPos(state->hBarContainer, HWND_TOP, targetX,
+                                 targetY + targetCy, targetCx, barHeight,
                                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
                     state->isAdjustingLayout = false;
                 }
@@ -1993,7 +2111,7 @@ static LRESULT CALLBACK ListViewSubclassProc(HWND hWnd,
         }
     }
 
-    // 6. Format raw byte counts inline into KB/MB/GB/TB
+    // 6. Format raw byte counts inline into KB/MB/GB/TB on the main file list
     if (g_settings.readable_file_sizes && lParam != 0) {
         if (uMsg == LVM_SETITEMTEXTW || uMsg == LVM_SETITEMW ||
             uMsg == LVM_INSERTITEMW) {
@@ -2002,7 +2120,8 @@ static LRESULT CALLBACK ListViewSubclassProc(HWND hWnd,
                 (uMsg == LVM_SETITEMTEXTW) || ((pItem->mask & LVIF_TEXT) != 0);
 
             if (hasText && pItem->iSubItem > 0 && pItem->pszText &&
-                pItem->pszText != LPSTR_TEXTCALLBACKW) {
+                pItem->pszText != LPSTR_TEXTCALLBACKW &&
+                IsMainWinRarListView(hWnd)) {
                 ULONGLONG byteCount = 0;
                 if (ParseNumericBytes(pItem->pszText, &byteCount) &&
                     IsTargetSizeColumn(hWnd, pItem->iSubItem)) {
@@ -2103,7 +2222,7 @@ static bool IsEvaluationWindowTitle(const WCHAR* title) {
     return false;
 }
 
-// Verifies the trial dialog by checking its child controls or embedded browser
+// Verifies the trial dialog by checking its reminder-specific child controls
 static bool HasEvaluationDialogSignature(HWND hDlg) {
     if (!hDlg || !IsWindow(hDlg))
         return false;
@@ -2114,15 +2233,6 @@ static bool HasEvaluationDialogSignature(HWND hDlg) {
 
     for (HWND hChild = GetWindow(hDlg, GW_CHILD); hChild != nullptr;
          hChild = GetWindow(hChild, GW_HWNDNEXT)) {
-        WCHAR cls[64] = {};
-        if (GetClassNameW(hChild, cls, ARRAYSIZE(cls))) {
-            if (_wcsicmp(cls, L"Shell Embedding") == 0 ||
-                _wcsicmp(cls, L"Internet Explorer_Server") == 0 ||
-                ContainsCaseInsensitive(cls, L"WebView")) {
-                return true;
-            }
-        }
-
         WCHAR text[256] = {};
         if (GetWindowTextW(hChild, text, ARRAYSIZE(text)) <= 0)
             continue;
@@ -2172,42 +2282,29 @@ static bool IsEvaluationPopupWindow(HWND hWnd) {
     return false;
 }
 
-// Checks whether a window creation call is creating the web reminder host
-static bool IsWebReminderCreation(LPCWSTR lpClassName,
-                                  LPCWSTR lpWindowName,
-                                  DWORD dwStyle,
-                                  HWND hWndParent) {
-    if ((dwStyle & WS_CHILD) != 0)
+// Checks whether a window creation call is creating an explicit reminder class
+static bool IsReminderWindowClass(LPCWSTR lpClassName, DWORD dwStyle) {
+    if ((dwStyle & WS_CHILD) != 0 || !lpClassName)
         return false;
 
     WCHAR clsName[128] = {};
-    if (lpClassName) {
-        if (IS_INTRESOURCE(lpClassName)) {
-            GlobalGetAtomNameW(LOWORD(reinterpret_cast<ULONG_PTR>(lpClassName)),
-                               clsName, ARRAYSIZE(clsName));
-        } else {
-            wcsncpy_s(clsName, lpClassName, _TRUNCATE);
-        }
+    if (IS_INTRESOURCE(lpClassName)) {
+        GlobalGetAtomNameW(LOWORD(reinterpret_cast<ULONG_PTR>(lpClassName)),
+                           clsName, ARRAYSIZE(clsName));
+    } else {
+        wcsncpy_s(clsName, lpClassName, _TRUNCATE);
     }
 
-    if (_wcsicmp(clsName, L"RarReminder") == 0 ||
-        _wcsicmp(clsName, L"RarWebReminder") == 0) {
-        return true;
-    }
-
-    if (hWndParent != nullptr && lpWindowName != nullptr &&
-        _wcsicmp(clsName, L"#32770") == 0 &&
-        _wcsicmp(lpWindowName, L"WinRAR") == 0) {
-        return true;
-    }
-
-    return false;
+    return (_wcsicmp(clsName, L"RarReminder") == 0 ||
+            _wcsicmp(clsName, L"RarWebReminder") == 0);
 }
 
 // Thread-local pointer to pass the original DLGPROC into our wrapper
 static thread_local DLGPROC g_tlsOriginalDlgProc = nullptr;
 
-// Intercepts WM_INITDIALOG before Windows makes the modal dialog visible
+// Intercepts WM_INITDIALOG before Windows makes the modal dialog visible,
+// then restores WinRAR's original dialog procedure so no mod code stays
+// attached
 static INT_PTR CALLBACK ModalDialogInterceptorProc(HWND hDlg,
                                                    UINT uMsg,
                                                    WPARAM wParam,
@@ -2221,12 +2318,20 @@ static INT_PTR CALLBACK ModalDialogInterceptorProc(HWND hDlg,
 
     INT_PTR res = origProc ? origProc(hDlg, uMsg, wParam, lParam) : FALSE;
 
-    if (uMsg == WM_INITDIALOG && g_settings.auto_dismiss_eval_dialog) {
-        if (IsEvaluationPopupWindow(hDlg)) {
+    if (uMsg == WM_INITDIALOG) {
+        if (g_settings.auto_dismiss_eval_dialog &&
+            IsEvaluationPopupWindow(hDlg)) {
             Wh_Log(L"Aborted evaluation dialog inside WM_INITDIALOG");
             EndDialog(hDlg, IDCANCEL);
             return TRUE;
         }
+        // Not the reminder: restore WinRAR's own dialog procedure so unloading
+        // the mod while this modal dialog is open cannot crash WinRAR.
+        if (origProc) {
+            SetWindowLongPtrW(hDlg, DWLP_DLGPROC,
+                              reinterpret_cast<LONG_PTR>(origProc));
+        }
+        RemovePropW(hDlg, L"WhOrigDlgProc");
     } else if (uMsg == WM_NCDESTROY) {
         RemovePropW(hDlg, L"WhOrigDlgProc");
     }
@@ -2305,8 +2410,9 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
         (GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_CHILD) == 0 &&
         IsEvaluationWindowTitle(lpString)) {
         Wh_Log(L"Dismissing evaluation popup on title set: %s", lpString);
+        ShowWindow(hWnd, SW_HIDE);
         if (!EndDialog(hWnd, IDCANCEL)) {
-            DestroyWindow(hWnd);
+            PostMessageW(hWnd, WM_CLOSE, 0, 0);
         }
     }
 
@@ -2349,8 +2455,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
                                  LPVOID lpParam) {
     if (g_settings.auto_dismiss_eval_dialog && !(dwStyle & WS_CHILD)) {
         if ((lpWindowName && IsEvaluationWindowTitle(lpWindowName)) ||
-            IsWebReminderCreation(lpClassName, lpWindowName, dwStyle,
-                                  hWndParent)) {
+            IsReminderWindowClass(lpClassName, dwStyle)) {
             Wh_Log(L"Blocked evaluation window creation in CreateWindowExW");
             return nullptr;
         }
@@ -2361,23 +2466,6 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
         hWndParent, hMenu, hInstance, lpParam);
 
     if (hWnd) {
-        if (g_settings.auto_dismiss_eval_dialog && (dwStyle & WS_CHILD) &&
-            hWndParent) {
-            WCHAR cls[64] = {};
-            if (GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
-                (_wcsicmp(cls, L"Shell Embedding") == 0 ||
-                 ContainsCaseInsensitive(cls, L"WebView"))) {
-                HWND hRoot = GetAncestor(hWndParent, GA_ROOT);
-                if (hRoot && GetMenu(hRoot) == nullptr) {
-                    Wh_Log(L"Aborted web reminder host on browser creation");
-                    ShowWindow(hRoot, SW_HIDE);
-                    if (!EndDialog(hRoot, IDCANCEL)) {
-                        PostMessageW(hRoot, WM_CLOSE, 0, 0);
-                    }
-                }
-            }
-        }
-
         AttachListViewSubclass(hWnd, false);
     }
 
@@ -2463,10 +2551,7 @@ void Wh_ModUninit() {
     for (HWND hWnd : listViews) {
         if (IsWindow(hWnd)) {
             if (g_msgCleanupSearchBar != 0) {
-                DWORD_PTR dwRes = 0;
-                SendMessageTimeoutW(hWnd, g_msgCleanupSearchBar, 0, 0,
-                                    SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000,
-                                    &dwRes);
+                SendMessageW(hWnd, g_msgCleanupSearchBar, 0, 0);
             }
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                 hWnd, ListViewSubclassProc);
