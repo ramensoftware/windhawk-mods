@@ -72,8 +72,8 @@ its text. Use the per-mod exclusion list to skip apps.
 
 ## Compatibility
 
-Run one font replacement mod at a time. Disable Zen Maru Gothic UI Font or
-Explorer Font Changer before enabling Change More Fonts.
+Run one font replacement mod at a time. If you use Explorer Font Changer,
+disable it before enabling Change More Fonts.
 
 Taskbar, Start menu, and notification center stylers can assign fonts to
 individual controls. If a theme's font should stay, add its family to
@@ -147,6 +147,7 @@ Optional apps added through the inclusion list also need to be 64-bit.
 #include <dwrite.h>
 #include <dwrite_2.h>
 #include <dwrite_3.h>
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <wrl/client.h>
 
@@ -331,9 +332,8 @@ void PublishRuntime(std::shared_ptr<const Runtime> runtime) noexcept {
 // ---------------------------------------------------------------------------
 
 std::wstring ReadStringSetting(PCWSTR name) {
-    std::unique_ptr<const wchar_t, decltype(&Wh_FreeStringSetting)> value(
-        Wh_GetStringSetting(name), Wh_FreeStringSetting);
-    return value ? value.get() : L"";
+    auto value = WindhawkUtils::StringSetting::make(name);
+    return value.get() ? value.get() : L"";
 }
 
 std::wstring Trim(std::wstring value) {
@@ -1873,9 +1873,7 @@ bool InstallFunctionHook(HMODULE module,
         Wh_Log(L"GetProcAddress failed for %S", name);
         return false;
     }
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(target),
-                            reinterpret_cast<void*>(hook),
-                            reinterpret_cast<void**>(original))) {
+    if (!WindhawkUtils::SetFunctionHook(target, hook, original)) {
         Wh_Log(L"SetFunctionHook failed for %S", name);
         return false;
     }
@@ -1887,13 +1885,12 @@ bool InstallVtableHook(void** vtable, size_t index, T hook, T* original) {
     if (!vtable || !hook || !original) {
         return false;
     }
-    auto target = vtable[index];
+    auto target = reinterpret_cast<T>(vtable[index]);
     if (!target) {
         Wh_Log(L"Vtable entry %zu is null", index);
         return false;
     }
-    if (!Wh_SetFunctionHook(target, reinterpret_cast<void*>(hook),
-                            reinterpret_cast<void**>(original))) {
+    if (!WindhawkUtils::SetFunctionHook(target, hook, original)) {
         Wh_Log(L"SetFunctionHook failed for vtable entry %zu", index);
         return false;
     }
