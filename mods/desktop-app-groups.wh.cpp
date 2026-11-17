@@ -22,7 +22,7 @@
 // @homepage        https://github.com/Markc719/desktop-app-groups
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -luuid -lole32 -lshell32 -lshlwapi -lcomctl32 -lgdi32 -lmsimg32 -ldwmapi -lshcore -ladvapi32 -luser32 -lcomdlg32
+// @compilerOptions -luuid -lole32 -lshell32 -lshlwapi -lcomctl32 -lgdi32 -lmsimg32 -ldwmapi -lshcore -ladvapi32 -luser32 -lcomdlg32 -ld2d1 -ldwrite
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -35,11 +35,13 @@ Drag one app onto another to make a group, then click the group (or just
 hover over it) to open it in a popup beside it. Your other desktop folders
 can open in the same popup too.
 
-![A group open on the desktop](https://raw.githubusercontent.com/Markc719/desktop-app-groups/main/Screenshot%202026-11-09%20103044.png)
+![A group open on the desktop](https://raw.githubusercontent.com/Markc719/desktop-app-groups/main/screenshot-popup.png)
 
-![The group settings panel](https://raw.githubusercontent.com/Markc719/desktop-app-groups/main/Screenshot%202026-11-09%20103051.png)
+![The group settings panel](https://raw.githubusercontent.com/Markc719/desktop-app-groups/main/screenshot-settings.png)
 
-![A group's icon on the desktop](https://raw.githubusercontent.com/Markc719/desktop-app-groups/main/Screenshot%202026-11-09%20103033.png)
+![A folder in the list view](https://raw.githubusercontent.com/Markc719/desktop-app-groups/main/screenshot-list.png)
+
+![Groups' icons on the desktop](https://raw.githubusercontent.com/Markc719/desktop-app-groups/main/screenshot-desktop.png)
 
 ## Features
 
@@ -948,6 +950,8 @@ Made for Windows 11.
 #include <shellscalingapi.h> // GetDpiForMonitor
 #include <sddl.h>            // ConvertSidToStringSidW: your user account's ID as text
 #include <commdlg.h>         // ChooseColorW: Windows' colour picker
+#include <d2d1.h>            // Direct2D and DirectWrite: drawing text the way
+#include <dwrite.h>          // the Start menu does (see RenderTextMask)
 #include <wincodec.h>        // WIC: saving pictures as PNG
 #include <wrl/client.h>      // ComPtr: releases COM objects for us automatically
 
@@ -5177,23 +5181,104 @@ void FreePopupResources() {
 
 // --- Drawing text on a see-through background --------------------------------
 //
-// GDI can't draw see-through text: on the blurred background its letters
-// would come out broken. So we let GDI draw the text white-on-black into a
-// scratch picture first. How bright each pixel came out says how much the
-// text covers it (its "coverage"), and IconCanvas::BlendMask then paints the
-// real colour in by that much. The fonts use grayscale smoothing rather than
-// ClearType, whose coloured edges would muddle "brightness" and "coverage".
+// The popup's background is see-through, so its text has to be drawn as a
+// see-through layer too: each pixel of a letter says how much of the pixel
+// the letter covers (its "coverage"), and IconCanvas::BlendMask paints the
+// text's colour in by that much.
 //
-// Drawing text this way takes a little work, so each label's coverage is
-// worked out once and remembered (PopupItem::labelMask), which keeps the
-// sliding animations smooth.
-TextMask RenderTextMask(HFONT font, const std::wstring& text, int width, int height,
-                        UINT format) {
-    TextMask mask;
-    if (width <= 0 || height <= 0) {
-        return mask;
-    }
+// The coverage comes from DirectWrite (with Direct2D), the text engine the
+// Start menu and the rest of Windows 11 use. Drawing onto a fully
+// transparent picture, it works out each pixel's coverage directly, with the
+// same smoothing Windows uses for text on see-through backgrounds, so the
+// letters come out as crisp and even as the Start menu's. (If DirectWrite
+// isn't available, for some reason, GDI's DrawText is used instead.)
+//
+// Working out coverage takes a little time, so each label's is worked out
+// once and remembered (PopupItem::labelMask), which keeps the sliding
+// animations smooth.
 
+// The Direct2D and DirectWrite "factories", which make everything else.
+// Created on first use, and released when the mod unloads.
+ComPtr<ID2D1Factory> g_d2dFactory;
+ComPtr<IDWriteFactory> g_writeFactory;
+std::mutex g_textLock;  // In case two threads draw text at once.
+
+bool EnsureTextFactories() {
+    if (g_d2dFactory && g_writeFactory) {
+        return true;
+    }
+    if (!g_d2dFactory &&
+        FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED, g_d2dFactory.GetAddressOf()))) {
+        return false;
+    }
+    if (!g_writeFactory &&
+        FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+                                   (IUnknown**)g_writeFactory.GetAddressOf()))) {
+        return false;
+    }
+    return true;
+}
+
+void ReleaseTextFactories() {
+    std::lock_guard<std::mutex> lock(g_textLock);
+    g_writeFactory.Reset();
+    g_d2dFactory.Reset();
+}
+
+// Lays out `text` in a `width` x `height` box, matching the DrawText flags
+// the mod uses: DT_LEFT/DT_CENTER/DT_RIGHT, DT_VCENTER, DT_SINGLELINE or
+// DT_WORDBREAK, and DT_END_ELLIPSIS (text that doesn't fit ends with "...").
+// The font is the same one as the GDI font `font` (its name, size and
+// weight). Hold g_textLock.
+ComPtr<IDWriteTextLayout> CreateTextLayout(HFONT font, const std::wstring& text, float width,
+                                           float height, UINT format) {
+    LOGFONTW logFont = {};
+    if (!GetObjectW(font, sizeof(logFont), &logFont)) {
+        return nullptr;
+    }
+    // A negative height is the letters' size in pixels, which is what
+    // DirectWrite wants (we draw at 96 DPI, where its units are pixels).
+    float size = logFont.lfHeight < 0 ? (float)-logFont.lfHeight
+                                      : std::max(1.0f, logFont.lfHeight * 0.8f);
+    ComPtr<IDWriteTextFormat> textFormat;
+    if (FAILED(g_writeFactory->CreateTextFormat(
+            logFont.lfFaceName, nullptr,
+            (DWRITE_FONT_WEIGHT)(logFont.lfWeight ? logFont.lfWeight : FW_NORMAL),
+            logFont.lfItalic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_FONT_STRETCH_NORMAL, size, L"", &textFormat))) {
+        return nullptr;
+    }
+    textFormat->SetTextAlignment((format & DT_CENTER)  ? DWRITE_TEXT_ALIGNMENT_CENTER
+                                 : (format & DT_RIGHT) ? DWRITE_TEXT_ALIGNMENT_TRAILING
+                                                       : DWRITE_TEXT_ALIGNMENT_LEADING);
+    textFormat->SetParagraphAlignment((format & DT_VCENTER) ? DWRITE_PARAGRAPH_ALIGNMENT_CENTER
+                                                            : DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+    // Long words that don't fit on a line are broken, like DT_EDITCONTROL.
+    textFormat->SetWordWrapping((format & DT_SINGLELINE) ? DWRITE_WORD_WRAPPING_NO_WRAP
+                                                         : DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);
+
+    ComPtr<IDWriteTextLayout> layout;
+    if (FAILED(g_writeFactory->CreateTextLayout(text.c_str(), (UINT32)text.size(),
+                                                textFormat.Get(), width, height, &layout))) {
+        return nullptr;
+    }
+    if (format & DT_END_ELLIPSIS) {
+        // "..." at the end of the last line that fits.
+        ComPtr<IDWriteInlineObject> ellipsis;
+        if (SUCCEEDED(g_writeFactory->CreateEllipsisTrimmingSign(textFormat.Get(), &ellipsis))) {
+            DWRITE_TRIMMING trimming = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
+            layout->SetTrimming(&trimming, ellipsis.Get());
+        }
+    }
+    return layout;
+}
+
+// The older way, with GDI: draw the text white on black, and read how
+// bright each pixel came out as its coverage. Only used if DirectWrite
+// can't be.
+TextMask RenderTextMaskWithGdi(HFONT font, const std::wstring& text, int width, int height,
+                               UINT format) {
+    TextMask mask;
     BITMAPINFO info = {};
     info.bmiHeader.biSize = sizeof(info.bmiHeader);
     info.bmiHeader.biWidth = width;
@@ -5230,6 +5315,76 @@ TextMask RenderTextMask(HFONT font, const std::wstring& text, int width, int hei
     DeleteDC(dc);
     DeleteObject(bitmap);
     return mask;
+}
+
+// Works out the coverage of `text` drawn in a `width` x `height` box. `font`
+// and `format` are as for GDI's DrawText (see CreateTextLayout).
+TextMask RenderTextMask(HFONT font, const std::wstring& text, int width, int height,
+                        UINT format) {
+    TextMask mask;
+    if (width <= 0 || height <= 0) {
+        return mask;
+    }
+
+    // A transparent picture for Direct2D to draw into.
+    BITMAPINFO info = {};
+    info.bmiHeader.biSize = sizeof(info.bmiHeader);
+    info.bmiHeader.biWidth = width;
+    info.bmiHeader.biHeight = -height;  // Negative = top row first.
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP bitmap = CreateDIBSection(nullptr, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!bitmap || !bits) {
+        return mask;
+    }
+    memset(bits, 0, (size_t)width * height * 4);
+    HDC dc = CreateCompatibleDC(nullptr);
+    HGDIOBJ previousBitmap = SelectObject(dc, bitmap);
+
+    bool drawn = false;
+    {
+        std::lock_guard<std::mutex> lock(g_textLock);
+        ComPtr<ID2D1DCRenderTarget> target;
+        ComPtr<ID2D1SolidColorBrush> white;
+        ComPtr<IDWriteTextLayout> layout;
+        // Drawn by the processor ("software"), not the graphics card: for small
+        // pictures that's quicker than sending them to the card and back.
+        D2D1_RENDER_TARGET_PROPERTIES properties = D2D1::RenderTargetProperties(
+            D2D1_RENDER_TARGET_TYPE_SOFTWARE,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), 96.0f,
+            96.0f);
+        RECT area = {0, 0, width, height};
+        if (EnsureTextFactories() &&
+            SUCCEEDED(g_d2dFactory->CreateDCRenderTarget(&properties, &target)) &&
+            SUCCEEDED(target->BindDC(dc, &area)) &&
+            SUCCEEDED(target->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), &white)) &&
+            (layout = CreateTextLayout(font, text, (float)width, (float)height, format))) {
+            target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+            target->BeginDraw();
+            target->Clear(D2D1::ColorF(0, 0, 0, 0));
+            target->DrawTextLayout(D2D1::Point2F(0, 0), layout.Get(), white.Get(),
+                                   D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            drawn = SUCCEEDED(target->EndDraw());
+        }
+    }
+
+    if (drawn) {
+        GdiFlush();
+        mask.width = width;
+        mask.height = height;
+        mask.coverage.resize((size_t)width * height);
+        const Pixel* pixels = (const Pixel*)bits;
+        for (size_t i = 0; i < mask.coverage.size(); i++) {
+            mask.coverage[i] = pixels[i].a;  // White, so the opacity is the coverage.
+        }
+    }
+    SelectObject(dc, previousBitmap);
+    DeleteDC(dc);
+    DeleteObject(bitmap);
+
+    return drawn ? mask : RenderTextMaskWithGdi(font, text, width, height, format);
 }
 
 // Draws one app: an optional rounded background, the icon, and the name
@@ -7001,10 +7156,21 @@ bool GroupHasAnyOwnSettings() {
     return false;
 }
 
-// How wide `text` is in `font`, in pixels. Measured with DrawText, the same
-// way it's drawn (see RenderTextMask), so characters Windows takes from
+// How wide `text` is in `font`, in pixels. Measured with DirectWrite, the
+// same way it's drawn (see RenderTextMask), so characters Windows takes from
 // another font (like Chinese, Japanese and Korean) are measured right too.
 int TextWidth(HFONT font, const std::wstring& text) {
+    {
+        std::lock_guard<std::mutex> lock(g_textLock);
+        ComPtr<IDWriteTextLayout> layout;
+        DWRITE_TEXT_METRICS metrics = {};
+        if (EnsureTextFactories() &&
+            (layout = CreateTextLayout(font, text, 100000.0f, 1000.0f,
+                                       DT_LEFT | DT_SINGLELINE)) &&
+            SUCCEEDED(layout->GetMetrics(&metrics))) {
+            return (int)std::ceil(metrics.widthIncludingTrailingWhitespace);
+        }
+    }
     HDC dc = CreateCompatibleDC(nullptr);
     HGDIOBJ oldFont = SelectObject(dc, font);
     RECT rect = {0, 0, 0, 0};
@@ -8305,6 +8471,9 @@ void Wh_ModUninit() {
 
     // Stop the watcher last, since the popup can send it requests.
     StopGroupWatcher();
+
+    // Nothing's drawing text any more.
+    ReleaseTextFactories();
 
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
