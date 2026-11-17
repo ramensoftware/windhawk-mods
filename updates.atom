@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-17T04:04:45.000Z</updated>
+    <updated>2026-11-17T05:00:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-multirow#03995a0b0478cb8dfd10300f2d47a4b65476826a</id>
+        <link href="https://windhawk.net/mods/taskbar-multirow"/>
+        <updated>2026-11-17T05:00:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar auto-hide fine tuning 2.3.1]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#a9a85ba3f0a81211514de7ad3d7a09d870d97edf</id>
@@ -753,24 +767,6 @@ A single overlay is capped at 8000 live particles.</li>
         <author>
             <name>JudeCJz</name>
             <uri>https://github.com/JudeCJz</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Musician's Toolkit 1.1.0]]></title>
-        <id>https://windhawk.net/mods/musicians-toolkit#8fa7b422e503fe02d38ccedc8ea46ba85d020f95</id>
-        <link href="https://windhawk.net/mods/musicians-toolkit"/>
-        <updated>2026-11-16T07:01:03.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a tray icon: a click opens or closes the panel, a right-click names every tool so one can be opened in a step. It can be switched off under Settings &gt; Placement, and it follows the accent colour.</li>
-<li>The icon comes back by itself if Explorer restarts.</li>
-<li><strong>Shift+Tab</strong> switches instrument in every tool that has more than one, stepping back each time.</li>
-<li><strong>Tab</strong> steps the instruments forward in the Tuner as well, so the two keys work as a pair. On <em>Chords</em> it still plays the chord, and on <em>Strumming</em> it still walks the pattern list.</li>
-<li><strong>Space</strong> and <strong>Enter</strong> play the chord on <em>Chords</em>.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DpakB</name>
-            <uri>https://github.com/DeepakBalaraman</uri>
         </author>
     </entry>
 </feed>

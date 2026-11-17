@@ -1,3 +1,7 @@
+## 1.2.1 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/03995a0b0478cb8dfd10300f2d47a4b65476826a/mods/taskbar-multirow.wh.cpp))
+
+* Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.
+
 ## 1.2 ([Nov 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6f0737091288bb212c5ea3c6c18ee4cded0c39aa/mods/taskbar-multirow.wh.cpp))
 
 * Added support for the vertical taskbar, where items span across multiple columns instead or multiple rows.
