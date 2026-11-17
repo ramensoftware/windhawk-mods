@@ -31,13 +31,14 @@ After:
   taskbar). Ctrl/Shift/Alt+F1 still go through, so Ctrl+F1 still collapses
   the ribbon. F1 in every other app is left alone.
 
-Restart Explorer after enabling the mod or changing its settings.
+Restart Explorer after enabling the mod or toggling the Help button setting.
+The F1 setting takes effect immediately.
 
 If anything about the ribbon binary doesn't look exactly as expected, the
 patch bails out and logs why, and Explorer gets the original ribbon.
 
-Special thanks to d0gkiller87, whose F1 Blocker the F1 part copies, and to
-DarkShadow44’s reverse-engineering notes on UIRibbon.
+Special thanks to d0gkiller87, whose [F1 Blocker](https://windhawk.net/mods/f1-blocker)
+the F1 part copies, and to DarkShadow44’s reverse-engineering notes on UIRibbon.
 */
 // ==/WindhawkModReadme==
 
@@ -57,6 +58,8 @@ DarkShadow44’s reverse-engineering notes on UIRibbon.
 #include <cstring>
 #include <unordered_map>
 #include <vector>
+
+#include <windhawk_utils.h>
 
 // ---------------------------------------------------------------------------
 // Compiled ribbon (.bml / UIFILE) patcher. Pure function, no Windows APIs.
@@ -269,7 +272,9 @@ inline bool RemoveHelpButton(const uint8_t* b, size_t n,
     const uint16_t idxSize = r.U2(idx);
     if (!r.ok || idx + idxSize != n || idxSize < 4 || (idxSize - 4) % 10)
         BAIL(L"index doesn't end at EOF");
-    if (rootEnd + r.U4(rootEnd) != idx) BAIL(L"data section length mismatch");
+    const uint32_t sectionLen = r.U4(rootEnd);
+    if (sectionLen < 4 || rootEnd + sectionLen != idx)
+        BAIL(L"data section length mismatch");
 
     const size_t entries = (idxSize - 4) / 10;
     size_t hit = kBad, hits = 0;
@@ -345,7 +350,7 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd, HACCEL hAccTable, LPMSG lpMsg) 
 SRWLOCK g_cacheLock = SRWLOCK_INIT;
 // original resource data -> patched copy (nullptr = checked, leave alone).
 // Copies are never freed: live ribbons keep pointers into them.
-std::unordered_map<const void*, void*>* g_cache;
+std::unordered_map<const void*, void*> g_cache;
 
 using LoadResource_t = decltype(&LoadResource);
 LoadResource_t LoadResource_Original;
@@ -359,8 +364,8 @@ HGLOBAL WINAPI LoadResource_Hook(HMODULE hModule, HRSRC hResInfo) {
     if (size < 32 || memcmp(data + 9, "SCBin", 5) != 0) return res;
 
     AcquireSRWLockShared(&g_cacheLock);
-    auto it = g_cache->find(res);
-    bool known = it != g_cache->end();
+    auto it = g_cache.find(res);
+    bool known = it != g_cache.end();
     void* cached = known ? it->second : nullptr;
     ReleaseSRWLockShared(&g_cacheLock);
     if (known) return cached ? cached : res;
@@ -375,7 +380,7 @@ HGLOBAL WINAPI LoadResource_Hook(HMODULE hModule, HRSRC hResInfo) {
     }
 
     AcquireSRWLockExclusive(&g_cacheLock);
-    auto ins = g_cache->emplace(res, copy);
+    auto ins = g_cache.emplace(res, copy);
     if (!ins.second) {  // another thread got there first
         if (copy) HeapFree(GetProcessHeap(), 0, copy);
         copy = ins.first->second;
@@ -398,22 +403,17 @@ HGLOBAL WINAPI LoadResource_Hook(HMODULE hModule, HRSRC hResInfo) {
 
 BOOL Wh_ModInit() {
     LoadSettings();
-    g_cache = new std::unordered_map<const void*, void*>();
 
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (!user32) user32 = LoadLibraryW(L"user32.dll");
-    void* tav = user32 ? (void*)GetProcAddress(user32, "TranslateAcceleratorW") : nullptr;
-    if (tav) {
-        Wh_SetFunctionHook(tav, (void*)TranslateAcceleratorW_Hook,
-                           (void**)&TranslateAcceleratorW_Original);
-    } else {
-        Wh_Log(L"TranslateAcceleratorW not found, F1 blocking disabled");
-    }
+    WindhawkUtils::SetFunctionHook(TranslateAcceleratorW, TranslateAcceleratorW_Hook,
+                                   &TranslateAcceleratorW_Original);
 
     HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
-    void* lr = kernelBase ? (void*)GetProcAddress(kernelBase, "LoadResource") : nullptr;
-    if (lr) {
-        Wh_SetFunctionHook(lr, (void*)LoadResource_Hook, (void**)&LoadResource_Original);
+    auto pLoadResource =
+        kernelBase ? (LoadResource_t)(void*)GetProcAddress(kernelBase, "LoadResource")
+                   : nullptr;
+    if (pLoadResource) {
+        WindhawkUtils::SetFunctionHook(pLoadResource, LoadResource_Hook,
+                                       &LoadResource_Original);
     } else {
         Wh_Log(L"kernelbase!LoadResource not found, help button stays");
     }
