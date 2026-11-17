@@ -9,7 +9,6 @@
 // @github          https://github.com/ghostzpy
 // @license         MIT
 // @include         windhawk.exe
-// @architecture    x86-64
 // @compilerOptions -luser32 -lgdi32 -lshlwapi -lshell32 -ladvapi32
 // ==/WindhawkMod==
 
