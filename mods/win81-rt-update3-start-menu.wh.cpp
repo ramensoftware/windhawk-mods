@@ -9460,16 +9460,33 @@ static bool BridgeSendToggle() {
     return posted;
 }
 static HRESULT WINAPI ShowStartViewHook(void* self, int method, int flags) {
-    if (method==1 && !g_stopRequested.load()) {
+    if (!g_stopRequested.load()) {
         DWORD shellPid=0; HWND shell=GetShellWindow();
         if (shell) GetWindowThreadProcessId(shell,&shellPid);
-        DWORD fgPid=0; HWND fg=GetForegroundWindow();
-        if (fg) GetWindowThreadProcessId(fg,&fgPid);
-        const int elevation=ForegroundElevationState();
-        if (shellPid==GetCurrentProcessId() &&
-            (elevation==1 || (fgPid && fgPid==g_hybridChildPid.load())) && BridgeSendToggle()) {
-            Wh_Log(L"[HybridBridge] native keyboard Start relayed, elevation=%d",elevation);
-            return S_OK;
+        if (shellPid==GetCurrentProcessId()) {
+            DWORD fgPid=0; HWND fg=GetForegroundWindow();
+            if (fg) GetWindowThreadProcessId(fg,&fgPid);
+            const int elevation=ForegroundElevationState();
+            // The low-level keyboard/mouse hooks live in the (medium integrity)
+            // helper. While an elevated window (Task Manager, ...) is in the
+            // foreground, UIPI stops Windows from delivering input to those
+            // hooks, so neither the Win key nor a click on the Start button is
+            // intercepted and the native Start reaches this function instead.
+            // - method 1 (keyboard): relay when the foreground is elevated or
+            //   is our own helper (previous behaviour).
+            // - any other method (taskbar click, ...): relay unconditionally.
+            //   The foreground cannot be used here: the click has already
+            //   activated the taskbar, so the elevated window is no longer
+            //   in the foreground by the time we are called. If the low-level
+            //   hook had handled the click, the native Start would not have
+            //   been invoked at all, and the helper debounces (250 ms) any
+            //   duplicate toggle.
+            const bool relay = (method!=1) || elevation==1 || (fgPid && fgPid==g_hybridChildPid.load());
+            if (relay && BridgeSendToggle()) {
+                Wh_Log(L"[HybridBridge] native Start relayed, method=%d elevation=%d",method,elevation);
+                return S_OK;
+            }
+            Wh_Log(L"[HybridBridge] native Start not relayed, method=%d elevation=%d",method,elevation);
         }
     }
     return g_originalShowStartView(self,method,flags);
@@ -9614,6 +9631,7 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
                     RequestToggle(L"Start click", taskbar);
                     return 1; // keeps the native menu from opening
                 }
+                Wh_Log(L"[Mouse] click inside Start rect but top-level under cursor is not the taskbar (root=%p)", root);
             }
             HWND menu = g_menuHwnd.load();
             if (menu && IsWindowVisible(menu)) {
@@ -9636,7 +9654,14 @@ static LRESULT CALLBACK ShellThreadGetMsgProc(int code, WPARAM wParam, LPARAM lP
     if (code == HC_ACTION && wParam == PM_REMOVE) {
         MSG* msg = reinterpret_cast<MSG*>(lParam);
         if (msg->message == WM_SYSCOMMAND && (msg->wParam & 0xFFF0) == SC_TASKLIST) {
-            if (BridgeSendToggle()) msg->message = WM_NULL;
+            const bool relayed = BridgeSendToggle();
+            {
+                wchar_t fgCls[64]{}; HWND fg = GetForegroundWindow();
+                if (fg) GetClassNameW(fg, fgCls, ARRAYSIZE(fgCls));
+                Wh_Log(L"[HybridBridge] SC_TASKLIST on shell thread: relayed=%d fg=%p class=%s elevation=%d",
+                       relayed ? 1 : 0, fg, fgCls, ForegroundElevationState());
+            }
+            if (relayed) msg->message = WM_NULL;
             // No child/window: leave native activation untouched.
         }
     }
