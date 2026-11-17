@@ -181,13 +181,6 @@ details** puts it on the clipboard for a bug report.
 - Works with other Windhawk taskbar mods in most cases; the combinations
   noted in the full reference are untested.
 
-## Full reference
-
-Every setting, the Items text syntax, layouts and zones, level colors,
-battery, data usage and speed test, ping, disk and fans, exchange rate,
-weather and the details panel are described in **DOCS.md**, shipped with
-the mod's source.
-
 ## Credits and license
 
 Based on
@@ -890,6 +883,10 @@ struct ModSettings {
     bool privacyAutoDetect = true;
     bool privacyAutoNotify = true;  // Toast when auto-detect switches on.
     std::wstring privacyCustomApps;
+    int privacyTrayMode = 1;  // Tray icon: 0 off, 1 only when active, 2 always.
+    bool privacyTrayInteractive = false;  // Click toggles; else view only.
+    std::wstring privacyTrayActiveColor;  // Empty: Windows accent; or #RRGGBB.
+    std::wstring privacyTrayIdleColor;    // Empty: white/black by theme.
     // The manual switch, or an auto-detected app running.
     bool PrivacyOn() const { return privacyMaster || PrivacyAutoActive(); }
     bool HidesNetwork() const { return PrivacyOn() && privacyNetwork; }
@@ -1161,6 +1158,7 @@ uint64_t g_reservationRevision = 0;
 bool g_reservationAwaitingLayout = false;
 void QueueTaskbarPlacement();
 void EnsurePlacementControl(const ModSettings& settings);
+void UpdatePrivacyTray(HWND window, const ModSettings& settings);
 void RemovePlacementControl();
 void CancelMoveEditor();
 void InvalidateMonitorKeys();
@@ -1211,7 +1209,7 @@ void OpenSettingsWindow(std::optional<int> entry = std::nullopt,
 // Places the settings window can open at (indices into kUiTopics).
 constexpr int kUiTopicNetwork = 0, kUiTopicWeather = 1, kUiTopicCurrency = 2,
               kUiTopicBattery = 3, kUiTopicSensors = 4, kUiTopicPing = 5,
-              kUiTopicBatteryTime = 6;
+              kUiTopicBatteryTime = 6, kUiTopicPrivacy = 7;
 struct MetricsSnapshot;
 void RefreshHoverPopup(const MetricsSnapshot& snapshot);
 void RecordTrend(const MetricsSnapshot& snapshot);
@@ -1484,7 +1482,7 @@ constexpr KeptSetting kKeptSettings[] = {
     {L"colors.textColor", false, L""},
     {L"colors.warningColor", false, L"#FFFFB900"},
     {L"colors.criticalColor", false, L"#FFFF6B6B"},
-    {L"colors.alertStyle", false, L"gradual"},
+    {L"colors.alertStyle", false, L"steps"},
     {L"colors.usageColors", true, L"0"},
     {L"motion.animate", true, L"1"},
     {L"colors.textOpacity", true, L"96"},
@@ -1513,6 +1511,10 @@ constexpr KeptSetting kKeptSettings[] = {
     {L"privacyAutoDetect", true, L"1"},
     {L"privacyAutoNotify", true, L"1"},
     {L"privacyCustomApps", false, L""},
+    {L"privacyTrayIconMode", false, L"active_only"},
+    {L"privacyTrayClick", false, L"view_only"},
+    {L"privacyTrayActiveColor", false, L""},
+    {L"privacyTrayIdleColor", false, L""},
     {L"details.enabled", true, L"1"},
     {L"details.openHotkey", false, L""},
     {L"details.trigger", false, L"click"},
@@ -2713,52 +2715,26 @@ struct ItemsPreset {
     PCWSTR items;
     PCWSTR layout;
 };
-// Built-in sets, each showing a different side of the mod: zones, styles,
-// formats, picks and the online readings. ? hides what a PC lacks (a GPU,
-// a battery, a sensor, a fan), so every set suits desktops and laptops.
-// Two readings in a row between dividers stack as a pair in the Stacked
-// pairs default style.
+// Built-in sets, one per level of what the mod can do: Minimalist (a little),
+// Balanced (the everyday set, the default) and Heavy Monitoring (everything,
+// across three zones). ? hides what a PC lacks (a GPU, a battery, a sensor,
+// a fan), so every set suits desktops and laptops. Two readings in a row
+// between dividers stack as a pair in the Stacked pairs default style.
 constexpr ItemsPreset kPresets[] = {
-    {L"default", L"Default",
-     L"center: cpu, gpu? | ram, vram? | down, up | battery(bar)?",
-     L"twoRows"},
-    {L"everyday", L"Everyday",
-     L"left: weather(condition); center: cpu, ram | down, up | "
-     L"battery(bar)?; tray: currency",
+    {L"minimalist", L"Minimalist",
+     L"center: weather[](condition icon24):row, net[]:row",
      L"twoRows"},
     {L"balanced", L"Balanced",
-     L"center: cpu+cputemp?, gpu?+gputemp? | ram, vram? | down, up; "
-     L"tray: battery(bar)?, batterypower?",
+     L"center: cpu, ram | down, up; tray: weather(condition)",
      L"twoRows"},
-    {L"gaming", L"Gaming",
-     L"center: cpu+cputemp?+cpupower?, gpu?+gputemp?+gpupower? | "
-     L"ram(used), vram(used)? | fan(*) | ping?",
-     L"twoRows"},
-    {L"laptop", L"On battery",
-     L"center: cpu+cputemp?, ram; tray: battery(pill inside)?+batterytime(short)?, "
-     L"batterypower?+batteryhealth?",
-     L"twoRows"},
-    {L"workstation", L"Workstation",
-     L"center: cpu+cputemp?, gpu? | ram(usedtotal), vram(used)? | disk, "
-     L"disk(rw) | down, up",
-     L"twoRows"},
-    {L"network", L"Network",
-     L"tray: down(compact), up(compact) | usage, usagemonth | "
-     L"connection(name band)? | ping?",
-     L"twoRows"},
-    {L"cards", L"Cards",
-     L"center: cpu, gpu?, ram, battery(bar)?",
-     L"cards"},
-    {L"simple", L"Simple",
-     L"center: cpu, ram, net, battery(bar)?",
-     L"oneRow"},
-    {L"full", L"Full",
-     L"left: weather(condition); center: cpu+cputemp?+cpupower?, "
-     L"gpu?+gputemp?+gpupower? | ram(used), vram(used)? | disk, fan(*) | "
-     L"down, up | usage, usagemonth; tray: currency, "
-     L"battery(bar)?+batterypower?, batterytime?",
+    {L"heavy", L"Heavy Monitoring",
+     L"center: cpu!+cputemp?+cpupower?, gpu?!+gputemp?+gpupower?, | "
+     L"ram(used)!, vram(used)?! | fan(*):stack | disk:stack | down, up | ping?; "
+     L"tray: weather(condition), down[]+up[]:stack, batterypower(hidezero)?+batterytime?:stack",
      L"twoRows"},
 };
+// The set used until the readings are set up (Balanced).
+constexpr size_t kDefaultPreset = 1;
 
 // "30:red, 60:yellow, 100:green, charging:#00B4FF". Any number of stops in
 // any order; colors are names or #RRGGBB / #AARRGGBB.
@@ -2911,7 +2887,7 @@ void LoadSettings() {
         GetStringSetting(L"sensors.windowsThermalZoneAggregation"));
     // The readings are the mod's own set-up, arranged in the settings
     // window (a mod cannot write its Windhawk settings). Without one yet,
-    // the Default preset.
+    // the Balanced preset.
     std::wstring itemsText;
     std::wstring menuLayout;
     if (std::wstring stored = ReadStored(L"menu.items", 16384); !stored.empty()) {
@@ -2919,8 +2895,8 @@ void LoadSettings() {
     }
     menuLayout = ReadStored(L"menu.layout", 32);
     if (itemsText.empty()) {
-        itemsText = kPresets[0].items;
-        if (menuLayout.empty()) menuLayout = kPresets[0].layout;
+        itemsText = kPresets[kDefaultPreset].items;
+        if (menuLayout.empty()) menuLayout = kPresets[kDefaultPreset].layout;
     }
     settings.itemsText = itemsText;
     ParseItems(itemsText, settings);
@@ -3043,6 +3019,17 @@ void LoadSettings() {
     settings.privacyAutoDetect = GetIntSetting(L"privacyAutoDetect") != 0;
     settings.privacyAutoNotify = GetIntSetting(L"privacyAutoNotify") != 0;
     settings.privacyCustomApps = GetStringSetting(L"privacyCustomApps");
+    {
+        std::wstring trayMode = GetStringSetting(L"privacyTrayIconMode");
+        settings.privacyTrayMode = trayMode == L"off"      ? 0
+                                   : trayMode == L"always" ? 2
+                                                           : 1;
+    }
+    settings.privacyTrayInteractive =
+        GetStringSetting(L"privacyTrayClick") == L"toggle";
+    settings.privacyTrayActiveColor =
+        GetStringSetting(L"privacyTrayActiveColor");
+    settings.privacyTrayIdleColor = GetStringSetting(L"privacyTrayIdleColor");
     g_privacyForceCheck = true;  // Auto-detect or its list may have changed.
     settings.openDetailsHotkey = GetStringSetting(L"details.openHotkey");
     settings.hoverSwitchMs =
@@ -16308,6 +16295,7 @@ void ApplyWidgetSettings() {
     auto settingsSnapshot = CurrentSettings();
     const ModSettings& settings = *settingsSnapshot;
     EnsurePlacementControl(settings);
+    UpdatePrivacyTray(g_placementControlWindow, settings);
     RefreshThemeBrushes(settings);
     g_widget.Margin(Thickness{});
     g_widget.HorizontalAlignment(HorizontalAlignment::Left);
@@ -16704,7 +16692,9 @@ void ApplyValueColor(const TextBlock& text, std::optional<Color> want,
             } catch (...) {
             }
         }
-        if (tag) text.Tag(nullptr);
+        // Mark the value as settled in the normal color (a bool Tag), so a
+        // later change to a level color knows it may fade from normal.
+        text.Tag(winrt::box_value(true));
         if (normal) {
             if (text.Foreground() != normal) text.Foreground(normal);
         } else {
@@ -16714,7 +16704,12 @@ void ApplyValueColor(const TextBlock& text, std::optional<Color> want,
     }
     uint32_t key = ColorKey(*want);
     if (own && heading && heading.Value() == key) return;
-    if (animate) {
+    // Fade only from a color this value really showed: its own brush, or the
+    // settled-normal marker. A fresh or rebuilt element (new TextBlock, or a
+    // restyle that put the normal brush back) has neither, so it takes the
+    // color at once instead of fading in from white.
+    bool settledNormal = tag && tag.try_as<IReference<bool>>();
+    if (animate && (own || settledNormal)) {
         try {
             SolidColorBrush brush = own;
             if (!brush) {
@@ -21309,6 +21304,256 @@ bool g_hotkeyRegistered = false;
 std::wstring g_registeredDetailsHotkey;
 bool g_detailsHotkeyRegistered = false;
 std::atomic<bool> g_hotkeyRefreshPending{false};
+// ---- Privacy tray icon ---------------------------------------------------
+// Lives on the placement control window (same thread, no thread of its own).
+// The 5 s timer re-adds the icon after an Explorer restart, because a
+// message-only window gets no TaskbarCreated broadcast.
+constexpr UINT kPrivacyTrayCallback = WM_APP + 53;
+constexpr UINT_PTR kPrivacyTrayTimerId = 0x7A11;
+constexpr UINT kPrivacyTrayCmdToggle = 1, kPrivacyTrayCmdSettings = 2;
+
+struct PrivacyTrayState {
+    NOTIFYICONDATAW data{};
+    HICON icon = nullptr;
+    int iconOn = -1, iconSize = 0;
+    uint32_t iconRgb = 0;
+    bool added = false;
+    bool timer = false;
+};
+PrivacyTrayState g_privacyTray;
+
+bool PrivacyTrayLightTheme() {
+    DWORD value = 0, size = sizeof(value);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\"
+                     L"Personalize",
+                     L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr,
+                     &value, &size) != ERROR_SUCCESS) {
+        return false;
+    }
+    return value != 0;
+}
+
+// Segoe MDL2 Assets glyph drawn white on black at the system's small-icon
+// size, then turned into premultiplied alpha, so it stays sharp at any DPI.
+HICON MakePrivacyTrayIcon(bool on, int size, uint32_t red, uint32_t green,
+                          uint32_t blue) {
+    BITMAPINFO info{};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = size;
+    info.bmiHeader.biHeight = -size;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    HDC screen = GetDC(nullptr);
+    HDC dc = CreateCompatibleDC(screen);
+    void* bits = nullptr;
+    HBITMAP dib =
+        CreateDIBSection(screen, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
+    ReleaseDC(nullptr, screen);
+    if (!dc || !dib || !bits) {
+        if (dib) DeleteObject(dib);
+        if (dc) DeleteDC(dc);
+        return nullptr;
+    }
+    memset(bits, 0, static_cast<size_t>(size) * size * 4);
+    HGDIOBJ oldBitmap = SelectObject(dc, dib);
+    LOGFONTW font{};
+    font.lfHeight = -std::max(8, size * 7 / 8);
+    font.lfWeight = FW_NORMAL;
+    font.lfCharSet = DEFAULT_CHARSET;
+    font.lfQuality = ANTIALIASED_QUALITY;
+    wcscpy_s(font.lfFaceName, L"Segoe MDL2 Assets");
+    HFONT hfont = CreateFontIndirectW(&font);
+    HGDIOBJ oldFont = SelectObject(dc, hfont);
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, RGB(255, 255, 255));
+    wchar_t glyph = on ? 0xED1A : 0xE7B3;  // Hide / View.
+    RECT box{0, 0, size, size};
+    DrawTextW(dc, &glyph, 1, &box,
+              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    GdiFlush();
+    auto* pixels = static_cast<uint32_t*>(bits);
+    for (int i = 0; i < size * size; i++) {
+        uint32_t cover = (pixels[i] >> 8) & 0xFF;  // Green channel.
+        uint32_t alpha = cover;
+        pixels[i] = (alpha << 24) | ((red * alpha / 255) << 16) |
+                    ((green * alpha / 255) << 8) | (blue * alpha / 255);
+    }
+    SelectObject(dc, oldFont);
+    DeleteObject(hfont);
+    SelectObject(dc, oldBitmap);
+    HBITMAP mask = CreateBitmap(size, size, 1, 1, nullptr);
+    ICONINFO iconInfo{};
+    iconInfo.fIcon = TRUE;
+    iconInfo.hbmColor = dib;
+    iconInfo.hbmMask = mask;
+    HICON icon = mask ? CreateIconIndirect(&iconInfo) : nullptr;
+    if (mask) DeleteObject(mask);
+    DeleteObject(dib);
+    DeleteDC(dc);
+    return icon;
+}
+
+// Windows' accent color, in the shade Windows itself uses for accent text:
+// lighter on a dark theme, darker on a light one.
+uint32_t PrivacyTrayAccentRgb(bool light) {
+    BYTE palette[32]{};
+    DWORD size = sizeof(palette);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\"
+                     L"Explorer\\Accent",
+                     L"AccentPalette", RRF_RT_REG_BINARY, nullptr, palette,
+                     &size) == ERROR_SUCCESS &&
+        size >= sizeof(palette)) {
+        const BYTE* c = palette + (light ? 4 : 1) * 4;  // Dark 1 / Light 2.
+        return (static_cast<uint32_t>(c[0]) << 16) |
+               (static_cast<uint32_t>(c[1]) << 8) | c[2];
+    }
+    DWORD packed = 0xFFD47800;  // 0xAABBGGRR; Windows' default blue.
+    DWORD valueSize = sizeof(packed);
+    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\DWM",
+                 L"AccentColor", RRF_RT_REG_DWORD, nullptr, &packed,
+                 &valueSize);
+    return ((packed & 0xFF) << 16) | (packed & 0xFF00) |
+           ((packed >> 16) & 0xFF);
+}
+
+// 0xRRGGBB for the icon: the user's own color when valid, else the default
+// (accent when on; white on a dark theme and black on a light one when off).
+uint32_t PrivacyTrayRgb(bool on, bool light, const ModSettings& settings) {
+    const std::wstring& custom =
+        on ? settings.privacyTrayActiveColor : settings.privacyTrayIdleColor;
+    if (!custom.empty() && custom != L"accent" && custom != L"auto") {
+        if (auto color = ParseColor(custom)) {
+            return (static_cast<uint32_t>(color->R) << 16) |
+                   (static_cast<uint32_t>(color->G) << 8) | color->B;
+        }
+    }
+    if (on) return PrivacyTrayAccentRgb(light);
+    return light ? 0x000000u : 0xFFFFFFu;
+}
+
+std::wstring PrivacyTrayTip(const ModSettings& settings) {
+    const bool hint = settings.privacyTrayInteractive;
+    if (PrivacyAutoActive()) {
+        return L"TSM Privacy: On (Auto: " + PrivacyAutoApp() + L")";
+    }
+    if (settings.PrivacyOn()) {
+        return hint ? L"TSM Privacy: On (Click to turn off)"
+                    : L"TSM Privacy: On";
+    }
+    return hint ? L"TSM Privacy: Off (Click to turn on)"
+                : L"TSM Privacy: Off";
+}
+
+void RemovePrivacyTrayIcon() {
+    auto& tray = g_privacyTray;
+    if (tray.added) {
+        Shell_NotifyIconW(NIM_DELETE, &tray.data);
+        tray.added = false;
+    }
+    if (tray.icon) {
+        DestroyIcon(tray.icon);
+        tray.icon = nullptr;
+        tray.iconOn = -1;
+    }
+}
+
+void FreePrivacyTray(HWND window) {
+    RemovePrivacyTrayIcon();
+    if (g_privacyTray.timer && window) {
+        KillTimer(window, kPrivacyTrayTimerId);
+    }
+    g_privacyTray.timer = false;
+}
+
+// Last resort from any thread when the window could not be torn down.
+void PrivacyTrayEmergencyCleanup() {
+    auto& tray = g_privacyTray;
+    if (tray.added) {
+        Shell_NotifyIconW(NIM_DELETE, &tray.data);
+        tray.added = false;
+    }
+}
+
+void UpdatePrivacyTray(HWND window, const ModSettings& settings) {
+    auto& tray = g_privacyTray;
+    if (!window || g_unloading) return;
+    bool on = settings.PrivacyOn();
+    bool show = settings.privacyTrayMode == 2 ||
+                (settings.privacyTrayMode == 1 && on);
+    if (!show) {
+        FreePrivacyTray(window);
+        return;
+    }
+    if (!tray.timer) {
+        tray.timer = SetTimer(window, kPrivacyTrayTimerId, 5000, nullptr) != 0;
+    }
+    int size = std::max(16, GetSystemMetrics(SM_CXSMICON));  // DPI-scaled.
+    bool light = PrivacyTrayLightTheme();
+    uint32_t rgb = PrivacyTrayRgb(on, light, settings);
+    HICON oldIcon = nullptr;
+    if (!tray.icon || tray.iconOn != (on ? 1 : 0) || tray.iconSize != size ||
+        tray.iconRgb != rgb) {
+        if (HICON icon = MakePrivacyTrayIcon(on, size, (rgb >> 16) & 0xFF,
+                                             (rgb >> 8) & 0xFF, rgb & 0xFF)) {
+            oldIcon = tray.icon;
+            tray.icon = icon;
+            tray.iconOn = on ? 1 : 0;
+            tray.iconSize = size;
+            tray.iconRgb = rgb;
+        }
+    }
+    if (!tray.icon) return;
+    tray.data.cbSize = sizeof(NOTIFYICONDATAW);
+    tray.data.hWnd = window;
+    tray.data.uID = 1;
+    tray.data.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE;
+    tray.data.uCallbackMessage = kPrivacyTrayCallback;
+    tray.data.hIcon = tray.icon;
+    std::wstring tip = PrivacyTrayTip(settings);
+    wcsncpy_s(tray.data.szTip, tip.c_str(), _TRUNCATE);
+    if (!tray.added) {
+        tray.added = Shell_NotifyIconW(NIM_ADD, &tray.data) != FALSE;
+    } else if (!Shell_NotifyIconW(NIM_MODIFY, &tray.data)) {
+        tray.added = Shell_NotifyIconW(NIM_ADD, &tray.data) != FALSE;
+    }
+    if (oldIcon) DestroyIcon(oldIcon);
+}
+
+void PrivacyTrayToggle(HWND window) {
+    bool next = GetIntSetting(L"privacyModeMaster") == 0;
+    SetUiOverride(L"privacyModeMaster", next ? L"1" : L"0", true);
+    ReloadAllSettings();
+    UpdatePrivacyTray(window, *CurrentSettings());
+    if (HWND settingsWindow = g_settingsWindowForPost.load()) {
+        PostMessageW(settingsWindow, kSettingsPrivacyMessage, 1, 0);
+    }
+}
+
+void PrivacyTrayMenu(HWND window) {
+    HMENU menu = CreatePopupMenu();
+    if (!menu) return;
+    AppendMenuW(menu, MF_STRING, kPrivacyTrayCmdToggle,
+                L"Toggle Privacy Mode");
+    AppendMenuW(menu, MF_STRING, kPrivacyTrayCmdSettings,
+                L"Privacy Settings...");
+    POINT point{};
+    GetCursorPos(&point);
+    SetForegroundWindow(window);  // Lets the menu close when clicking away.
+    int command = TrackPopupMenu(
+        menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, point.x,
+        point.y, 0, window, nullptr);
+    PostMessageW(window, WM_NULL, 0, 0);
+    DestroyMenu(menu);
+    if (command == static_cast<int>(kPrivacyTrayCmdToggle)) {
+        PrivacyTrayToggle(window);
+    } else if (command == static_cast<int>(kPrivacyTrayCmdSettings)) {
+        OpenSettingsWindow(std::nullopt, kUiTopicPrivacy);
+    }
+}
+
 LRESULT CALLBACK PlacementControlProc(HWND window,
                                       UINT message,
                                       WPARAM wParam,
@@ -21320,6 +21565,27 @@ LRESULT CALLBACK PlacementControlProc(HWND window,
                 RefreshTaskbarPlacement();
             }
             return 0;
+        }
+        if (message == kPrivacyTrayCallback) {
+            if (!g_unloading && window == g_placementControlWindow &&
+                CurrentSettings()->privacyTrayInteractive) {
+                UINT event = LOWORD(lParam);
+                if (event == WM_LBUTTONUP) {
+                    PrivacyTrayToggle(window);
+                } else if (event == WM_RBUTTONUP) {
+                    PrivacyTrayMenu(window);
+                }
+            }
+            return 0;
+        }
+        if (message == WM_TIMER && wParam == kPrivacyTrayTimerId) {
+            if (!g_unloading && window == g_placementControlWindow) {
+                UpdatePrivacyTray(window, *CurrentSettings());
+            }
+            return 0;
+        }
+        if (message == WM_DESTROY) {
+            FreePrivacyTray(window);
         }
         if (message == WM_HOTKEY && wParam == kMoveHotkeyId && !g_unloading) {
             BeginMoveEditor();
@@ -21431,6 +21697,7 @@ void RemovePlacementControl() {
         if (g_detailsHotkeyRegistered) {
             UnregisterHotKey(g_placementControlWindow, kOpenDetailsHotkeyId);
         }
+        FreePrivacyTray(g_placementControlWindow);
         DestroyWindow(g_placementControlWindow);
         g_placementControlWindow = nullptr;
     }
@@ -31161,7 +31428,7 @@ std::wstring SerializeItems(const ModSettings& m) {
 
 void SaveMenuItems(const ModSettings& m) {
     // No readings at all is kept as a space: an empty value means "never
-    // set up" and brings the Default preset back.
+    // set up" and brings the Balanced preset back.
     std::wstring text = SerializeItems(m);
     Wh_SetStringValue(L"menu.items", text.empty() ? L" " : text.c_str());
     ReloadAllSettings();
@@ -31287,8 +31554,9 @@ constexpr UiTopicPlace kUiTopics[] = {
     {L"Sensor settings", L"Sensors", nullptr},
     {L"Ping settings", L"Network", L"Ping"},
     {L"Battery settings", L"Battery", L"Time and health"},
+    {L"Privacy settings", L"Privacy", nullptr},
 };
-static_assert(std::size(kUiTopics) == kUiTopicBatteryTime + 1,
+static_assert(std::size(kUiTopics) == kUiTopicPrivacy + 1,
               "kUiTopics and its kUiTopic... indices must match");
 
 UiTopic TopicOfItem(int item) {
@@ -31406,6 +31674,7 @@ struct UiSetting {
     PCWSTR unit = L"";
     // Shown dimmed unless this other setting has this value.
     PCWSTR needsKey = nullptr, needsValue = nullptr, needsLabel = nullptr;
+    PCWSTR placeholder = nullptr;  // Text: faint hint while the box is empty.
 };
 struct UiSection {
     PCWSTR title;
@@ -32070,6 +32339,27 @@ const std::vector<UiPage>& UiPages() {
             // "Hide device and user name" (privacyHideSystem) is hidden
             // until it is wired up.
            }},
+          {L"Tray icon",
+           {{L"privacyTrayIconMode", K::Choice, L"Tray icon",
+             L"An eye icon in the system tray shows the privacy state. Click "
+             L"it to turn privacy mode on or off; right-click for a menu.",
+             {{L"active_only", L"Only when active"},
+              {L"always", L"Always show"},
+              {L"off", L"Off"}}},
+            {L"privacyTrayClick", K::Choice, L"Click action",
+             L"View only just shows the state. Toggle on click turns privacy "
+             L"mode on or off with a left click, and a right click opens a "
+             L"small menu.",
+             {{L"view_only", L"View only"},
+              {L"toggle", L"Toggle on click"}}},
+            {L"privacyTrayActiveColor", K::Text, L"Color when on",
+             L"Empty follows your Windows accent color. Or a color such as "
+             L"#FF8800.",
+             {}, 0, 1, 1, L"", nullptr, nullptr, nullptr, L"accent"},
+            {L"privacyTrayIdleColor", K::Text, L"Color when off",
+             L"Empty is white in dark mode and black in light mode. Or a "
+             L"color such as #888888.",
+             {}, 0, 1, 1, L"", nullptr, nullptr, nullptr, L"auto"}}},
           {L"Auto-detect streaming & meeting apps",
            {{L"privacyAutoDetect", K::Toggle, L"Turn on automatically",
              L"Privacy mode switches on while a screen recorder, streaming "
@@ -32732,6 +33022,12 @@ UIElement UiControl(const UiSetting& s) {
             TextBox box;
             box.Width(260);
             box.Text(value);
+            if (setting->placeholder) {
+                box.PlaceholderText(setting->placeholder);
+                box.PlaceholderForeground(g_ui.light ? UiBrush(0x72, 0, 0, 0)
+                                                     : UiBrush(0x8B, 255, 255,
+                                                               255));
+            }
             auto commit = [setting](IInspectable const& sender) {
                 std::wstring text = sender.as<TextBox>().Text().c_str();
                 if (text != UiValue(*setting)) UiCommit(*setting, text);
@@ -39697,7 +39993,7 @@ void BuildReadingsText(const ModSettings& settings) {
                 }
             }
             // Nothing left is kept as nothing (a space), not as "never set
-            // up", which would bring the Default preset back.
+            // up", which would bring the Balanced preset back.
             Wh_SetStringValue(L"menu.items",
                               trimmed.empty() || kept.empty() ? L" "
                                                               : kept.c_str());
@@ -39945,34 +40241,15 @@ void BuildReadingsText(const ModSettings& settings) {
 // formats) when saved with it.
 
 PCWSTR PresetBlurb(const std::wstring& key) {
-    if (key == L"default") return L"CPU, GPU, memory, speeds and battery";
-    if (key == L"everyday") {
-        return L"Weather at the left, the exchange rate by the tray, CPU, RAM, "
-               L"speeds and battery in the middle (goes online)";
+    if (key == L"minimalist") {
+        return L"The most compact look for every day, without crowding the "
+               L"taskbar";
     }
     if (key == L"balanced") {
-        return L"Usage with temperatures, memory and speeds; battery and its "
-               L"power by the tray";
+        return L"A balance of the main system readings and a tidy look";
     }
-    if (key == L"gaming") {
-        return L"CPU and GPU with temperature and power, memory used, and the "
-               L"CPU and GPU fans";
-    }
-    if (key == L"laptop") {
-        return L"A battery pill with the time left, its power and health, by "
-               L"the tray";
-    }
-    if (key == L"workstation") {
-        return L"Memory used of total, disk activity and speed, network";
-    }
-    if (key == L"network") {
-        return L"Compact speeds, data used today and this month, Wi-Fi name "
-               L"and band, by the tray";
-    }
-    if (key == L"cards") return L"CPU, GPU, RAM and battery as cards";
-    if (key == L"simple") return L"CPU, RAM, network and battery on one line";
-    if (key == L"full") {
-        return L"Nearly everything, across three zones (goes online)";
+    if (key == L"heavy") {
+        return L"Full monitoring for heavy workloads and gaming";
     }
     return L"";
 }
@@ -44016,7 +44293,9 @@ LRESULT CALLBACK SettingsWindowProc(HWND window, UINT message, WPARAM wParam,
                 const auto& pages = UiPages();
                 if (g_ui.content && g_ui.search.empty() && g_ui.page > 0 &&
                     g_ui.page < static_cast<int>(pages.size()) &&
-                    wcscmp(pages[g_ui.page].name, L"Network") == 0) {
+                    (wcscmp(pages[g_ui.page].name, L"Network") == 0 ||
+                     (wParam == 1 &&
+                      wcscmp(pages[g_ui.page].name, L"Privacy") == 0))) {
                     UiRebuildSoon();
                 }
             } catch (...) {
@@ -44860,6 +45139,7 @@ void Wh_ModBeforeUninit() {
     bool primaryRemoved = TearDownTaskbarUi();
     bool copiesRemoved = RemoveAllWidgetCopies();
     g_uiTornDown = primaryRemoved && copiesRemoved;
+    PrivacyTrayEmergencyCleanup();  // No ghost tray icon if teardown failed.
     if (g_uiTornDown) StopFontGraphics();
     if (!g_uiTornDown) {
         ModLog(L"Initial taskbar UI teardown failed; will retry");
