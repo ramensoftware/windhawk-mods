@@ -18,7 +18,7 @@ fall over the screen and settle on top of your windows and the taskbar. Snow
 slowly builds up drifts of different heights. (Until version 1.2 this mod was
 called Desktop Snowfall.)
 
-![Desktop Weather demo](https://raw.githubusercontent.com/mikybuilds/desktop-snowfall/main/demo.gif)
+![Desktop Weather demo](https://raw.githubusercontent.com/mikybuilds/desktop-snowfall/main/demo-weather.gif)
 
 ## Snow
 
@@ -49,7 +49,8 @@ called Desktop Snowfall.)
 * It can fall over all windows, or behind them, on the desktop: then what falls
   shows only where the desktop is uncovered, and it still settles on top of the
   windows and the taskbar.
-* Choose the color and opacity of the snow and rain.
+* Choose the color of the snow and rain, and the opacity of everything that
+  falls.
 * Works with the default taskbar, an auto-hidden taskbar (the snow rides along
   when it slides in and out) and custom taskbar styles (for example, floating
   "dock" themes of the Windows 11 Taskbar Styler mod): the snow lies on the
@@ -85,7 +86,8 @@ in energy saver mode. It pauses while the screen is locked or turned off.
   $name: What falls
   $description: >-
     Snow piles up on the windows, rain splashes on them, and leaves and petals
-    lie on top of them for a while. The "Snow only" settings below are for snow
+    lie on top of them for a while. The settings marked "snow only" below are
+    for snow
   $options:
   - snow: Snow
   - rain: Rain
@@ -159,30 +161,27 @@ in energy saver mode. It pauses while the screen is locked or turned off.
   - whole: Whole taskbar
   - parts: Visible parts only (buttons and tray)
   - off: Nothing on the taskbar
-- snowOnly:
-  - capHeight: 8
-    $name: Snow cap height (pixels)
-    $description: >-
-      Maximum height of the snow that settles on windows and the taskbar, at
-      100% display scale. 0 disables the caps (0-40)
-  - melt: false
-    $name: Snow slowly melts
-    $description: >-
-      The lying snow slowly melts away, so the drifts come and go, and they
-      disappear when the snowfall stops
-  - shakeOff: true
-    $name: Shake windows to throw the snow off
-    $description: >-
-      Quickly moving a window from side to side throws its snow off. Has no
-      effect while "Snow slides off moved windows" is on
-  - slideOff: false
-    $name: Snow slides off moved windows
-    $description: >-
-      When a window is moved sideways, the snow stays where it is and the
-      window slides out from under it: the part that ends up past the window
-      edge falls down. When off, the snow moves along with the window.
-  $name: Snow only
-  $description: These settings have an effect only when snow falls
+- capHeight: 8
+  $name: Snow cap height (pixels, snow only)
+  $description: >-
+    Maximum height of the snow that settles on windows and the taskbar, at
+    100% display scale. 0 disables the caps (0-40)
+- melt: false
+  $name: Snow slowly melts (snow only)
+  $description: >-
+    The lying snow slowly melts away, so the drifts come and go, and they
+    disappear when the snowfall stops
+- shakeOff: true
+  $name: Shake windows to throw the snow off (snow only)
+  $description: >-
+    Quickly moving a window from side to side throws its snow off. Has no
+    effect while "Snow slides off moved windows" is on
+- slideOff: false
+  $name: Snow slides off moved windows (snow only)
+  $description: >-
+    When a window is moved sideways, the snow stays where it is and the window
+    slides out from under it: the part that ends up past the window edge falls
+    down. When off, the snow moves along with the window.
 - maxFps: 60
   $name: Frame rate limit
   $description: >-
@@ -434,6 +433,7 @@ std::atomic<bool> g_locked{false};
 std::atomic<bool> g_displayOff{false};
 std::atomic<bool> g_snowOff{false};  // turned off with the hotkey
 std::atomic<bool> g_offSchedule{false};  // outside the dates or hours
+std::atomic<bool> g_hotkeyPressed{false};  // wakes the snow thread
 
 // Settings for a single monitor. -1 is "as for all monitors".
 struct MonitorOverride {
@@ -555,19 +555,19 @@ static uint32_t ParseColor(const wchar_t* text) {
 
 void LoadSettings() {
     g_settings.intensity = std::clamp(Wh_GetIntSetting(L"intensity"), 0, 600);
-    g_settings.slideOff = Wh_GetIntSetting(L"snowOnly.slideOff") != 0;
+    g_settings.slideOff = Wh_GetIntSetting(L"slideOff") != 0;
     g_settings.speed = std::clamp(Wh_GetIntSetting(L"speed"), 10, 500);
     g_settings.wind = std::clamp(Wh_GetIntSetting(L"wind"), -100, 100);
     g_settings.size = std::clamp(Wh_GetIntSetting(L"size"), 20, 400);
     g_settings.capHeight =
-        std::clamp(Wh_GetIntSetting(L"snowOnly.capHeight"), 0, 40);
+        std::clamp(Wh_GetIntSetting(L"capHeight"), 0, 40);
     g_settings.sweepWithCursor = Wh_GetIntSetting(L"sweepWithCursor") != 0;
     g_settings.maxFps = std::clamp(Wh_GetIntSetting(L"maxFps"), 15, 240);
     g_settings.allMonitors = Wh_GetIntSetting(L"allMonitors") != 0;
     g_settings.pauseInFullscreen = Wh_GetIntSetting(L"pauseInFullscreen") != 0;
     g_settings.hideOverMaximized = Wh_GetIntSetting(L"hideOverMaximized") != 0;
-    g_settings.melt = Wh_GetIntSetting(L"snowOnly.melt") != 0;
-    g_settings.shakeOff = Wh_GetIntSetting(L"snowOnly.shakeOff") != 0;
+    g_settings.melt = Wh_GetIntSetting(L"melt") != 0;
+    g_settings.shakeOff = Wh_GetIntSetting(L"shakeOff") != 0;
     g_settings.hideFromCapture = Wh_GetIntSetting(L"hideFromCapture") != 0;
     g_settings.groundSnow = Wh_GetIntSetting(L"groundSnow") != 0;
 
@@ -3090,9 +3090,12 @@ void Overlay::UpdateLeaves(float dt) {
             falling++;
         }
     }
+    // Only the first ones are spread over the screen; the ones that replace
+    // landed leaves come in from the top.
+    const bool firstFill = m_leaves.empty();
     for (; falling < target; falling++) {
         Leaf l;
-        SpawnLeaf(l, true);
+        SpawnLeaf(l, firstFill);
         m_leaves.push_back(l);
     }
 
@@ -3482,6 +3485,7 @@ RunResult Overlay::Run() {
     double nextRestack = 0;
     double nextLayerSearch = lastStep + 5.0;
     double nextFullscreenCheck = 0;
+    double lastFullscreenCheck = -1;
     bool fullscreenApp = false;
     bool waitingForFrame = false;
     int fastFps = g_settings.maxFps;
@@ -3587,7 +3591,14 @@ RunResult Overlay::Run() {
         bool paused = g_locked || g_displayOff || g_snowOff || g_offSchedule;
         // Checked when windows change, and four times a second in case a
         // change went unreported.
-        if (!paused && (g_wake.windows || now >= nextFullscreenCheck)) {
+        // While a window is dragged, the changes come every frame: they're
+        // checked at most ten times a second.
+        if (!paused && g_wake.windows) {
+            nextFullscreenCheck =
+                std::min(nextFullscreenCheck, lastFullscreenCheck + 0.1);
+        }
+        if (!paused && now >= nextFullscreenCheck) {
+            lastFullscreenCheck = now;
             nextFullscreenCheck = now + 0.25;
             fullscreenApp =
                 IsFullscreenAppActive() ||
@@ -3752,6 +3763,7 @@ LRESULT CALLBACK ListenerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
 
         case WM_HOTKEY:
             g_snowOff = !g_snowOff;
+            g_hotkeyPressed = true;
             Wh_Log(L"Snow turned %s with the hotkey", g_snowOff ? L"off" : L"on");
             return 0;
     }
@@ -3759,7 +3771,8 @@ LRESULT CALLBACK ListenerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
 }
 
 // Waits while handling messages. Returns true if `stop` was set.
-static bool WaitForStop(HANDLE stop, DWORD ms) {
+// With `wake`, it also returns early once a handled message makes it true.
+static bool WaitForStop(HANDLE stop, DWORD ms, bool (*wake)() = nullptr) {
     DWORD start = GetTickCount();
     for (;;) {
         DWORD elapsed = GetTickCount() - start;
@@ -3775,6 +3788,9 @@ static bool WaitForStop(HANDLE stop, DWORD ms) {
         while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
+        }
+        if (wake && wake()) {
+            return WaitForSingleObject(stop, 0) == WAIT_OBJECT_0;
         }
     }
 }
@@ -3979,9 +3995,12 @@ DWORD WINAPI SnowThread(LPVOID) {
         bool all = g_settings.allMonitors;
         uint32_t mask = g_settings.monitorMask;
         std::vector<MonitorSnow> monitors = ListMonitors(all, mask);
+        // While it's turned off (the hotkey or the schedule, which can be
+        // months), the overlays are closed to free their GPU memory.
+        bool off = g_snowOff || g_offSchedule;
         HANDLE stop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
         std::vector<HANDLE> threads;
-        if (stop) {
+        if (stop && !off) {
             for (MonitorSnow& m : monitors) {
                 m.stop = stop;
                 if (HANDLE thread = CreateThread(nullptr, 0, OverlayThread, &m,
@@ -3990,14 +4009,19 @@ DWORD WINAPI SnowThread(LPVOID) {
                 }
             }
         }
-        Wh_Log(L"Snow on %d monitor(s)", static_cast<int>(threads.size()));
+        Wh_Log(L"Snow on %d monitor(s)%s", static_cast<int>(threads.size()),
+               off ? L" (turned off)" : L"");
 
         for (;;) {
-            if (WaitForStop(g_stopEvent, 1000)) {
+            if (WaitForStop(g_stopEvent, 1000,
+                            [] { return g_hotkeyPressed.exchange(false); })) {
                 stopping = true;
                 break;
             }
             updateHotkey();
+            if ((g_snowOff || g_offSchedule) != off) {
+                break;
+            }
             if (g_settings.allMonitors != all ||
                 g_settings.monitorMask != mask ||
                 !SameMonitors(ListMonitors(all, mask), monitors)) {
