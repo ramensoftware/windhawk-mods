@@ -2,7 +2,7 @@
 // @id              gpu-accelerated-explorer-view
 // @name            GPU-accelerated explorer.exe list and grid views
 // @description     GPU-accelerated list and grid views replacement for explorer.exe. Includes smooth scrolling and interactive animations
-// @version         1.1.0
+// @version         1.1.1
 // @author          DarkionAvey
 // @include         explorer.exe
 // @architecture    x86-64
@@ -1422,14 +1422,6 @@ ReleaseDC_t g_releaseDcOriginal = nullptr;
 bool g_renameSinkAvailable = false; // Both hooks installed.
 thread_local HWND t_renameSinkWindow = nullptr;
 thread_local HDC t_renameSink = nullptr;
-HDC WINAPI GetDcHook(HWND hwnd) {
-    if (hwnd && hwnd == t_renameSinkWindow && t_renameSink && SaveDC(t_renameSink)) return t_renameSink;
-    return g_getDcOriginal(hwnd);
-}
-int WINAPI ReleaseDcHook(HWND hwnd, HDC dc) {
-    if (dc && dc == t_renameSink) return RestoreDC(dc, -1) ? 1 : 0;
-    return g_releaseDcOriginal(hwnd, dc);
-}
 void SetRenameTextSink(HWND editor, bool enabled) {
     if (enabled && (!editor || !g_renameSinkAvailable || (t_renameSinkWindow == editor && t_renameSink))) return;
     if (!enabled && t_renameSinkWindow != editor) return;
@@ -3019,9 +3011,12 @@ struct TouchRecognizer {
 // API hooks can remain inside Explorer/USER after every overlay has gone.
 // Drain these only AFTER Windhawk removes detours, in Wh_ModUninit. Waiting
 // before removal would admit new calls indefinitely (including modal loops).
-enum class ApiHook { Dispatch, Accelerator, Show, ShowAsync, Position, DeferredPosition, StructureEvent, Count };
+enum class ApiHook { Dispatch, Accelerator, Show, ShowAsync, Position, DeferredPosition, StructureEvent,
+    GetDC, ReleaseDC, NewMenuInvoke, Count };
 constexpr const wchar_t* kApiHookNames[]{L"DispatchMessageW",L"TranslateAcceleratorW",
-    L"ShowWindow",L"ShowWindowAsync",L"SetWindowPos",L"DeferWindowPos",L"UiaRaiseStructureChangedEvent"};
+    L"ShowWindow",L"ShowWindowAsync",L"SetWindowPos",L"DeferWindowPos",L"UiaRaiseStructureChangedEvent",
+    L"GetDC",L"ReleaseDC",L"CNewMenu::InvokeCommand"};
+static_assert(std::size(kApiHookNames)==static_cast<size_t>(ApiHook::Count),"every API hook has a drain name");
 std::array<std::atomic<unsigned>,static_cast<size_t>(ApiHook::Count)> g_apiCallbacks{};
 struct ApiCallbackGuard {
     std::atomic<unsigned>& count;
@@ -3033,6 +3028,19 @@ struct ApiCallbackGuard {
     ApiCallbackGuard(const ApiCallbackGuard&) = delete;
     ApiCallbackGuard& operator=(const ApiCallbackGuard&) = delete;
 };
+
+// Rename-field text sink (see SetRenameTextSink). Like every hook, each call
+// is counted so unload drains it before the image goes away.
+HDC WINAPI GetDcHook(HWND hwnd) {
+    ApiCallbackGuard callback(ApiHook::GetDC);
+    if (hwnd && hwnd == t_renameSinkWindow && t_renameSink && SaveDC(t_renameSink)) return t_renameSink;
+    return g_getDcOriginal(hwnd);
+}
+int WINAPI ReleaseDcHook(HWND hwnd, HDC dc) {
+    ApiCallbackGuard callback(ApiHook::ReleaseDC);
+    if (dc && dc == t_renameSink) return RestoreDC(dc, -1) ? 1 : 0;
+    return g_releaseDcOriginal(hwnd, dc);
+}
 
 void DrainApiCallbacks() {
     const ULONGLONG started=GetTickCount64();
@@ -4136,6 +4144,7 @@ struct ViewState {
     ULONGLONG lastColumnsProbe = 0;
     float columnContentWidth = 0.f, horizontalScroll = 0.f;
     bool horizontalScrollbarAdmitted = false; // Optional chrome waits for settled column geometry.
+    unsigned long long horizontalScrollbarDeferrals = 0; // Overflow held back while columns settled.
     bool horizontalScrollbarPublished = false; // A presented frame has shown the admitted bar.
     // First model sequence of the current admission run. A receipt reaching
     // it proves the lane drew the bar; capture alone does not (newer models
@@ -20349,6 +20358,11 @@ bool UpdateHorizontalScrollbarVisibility(ViewState& state) {
     // first published frame is always a settled one.
     else if (!state.horizontalScrollbarPublished)
         state.horizontalScrollbarAdmitted = false;
+    // Provisional overflow held back while columns settle (diagnostics and
+    // regression witness; counted where the decision is made).
+    if (settling && !needed && !state.horizontalScrollbarAdmitted && ColumnsPresented(state) &&
+        state.columnContentWidth > ListViewportWidth(state) + 1.f)
+        ++state.horizontalScrollbarDeferrals;
     if (!state.horizontalScrollbarAdmitted) {
         state.horizontalScrollbarPublished = false;
         state.horizontalScrollbarAdmittedSequence = 0;
@@ -28850,7 +28864,35 @@ std::wstring ShellString(UINT id) {
     const int length = shell ? LoadStringW(shell, id, reinterpret_cast<LPWSTR>(&text), 0) : 0;
     return length > 0 && text ? std::wstring(text, static_cast<size_t>(length)) : std::wstring{};
 }
-// The localized notice text; empty when Windows supplies no resource.
+// Fills the shell32 rename-failure template ("Cannot rename %2!ls!: %1!ls!"
+// on current Windows) without FormatMessageW: its resource ID is not
+// documented, so its inserts are not trusted. Only %1 (cause) and %2 (name),
+// each with an optional string type (!s!, !ls!, !ws!), and %% are accepted, and
+// both inserts must appear. Anything else (%3, a numeric type, %n, a different
+// string at this ID) yields empty: the failure is then logged only.
+std::wstring SubstituteRenameNotice(std::wstring_view format, const std::wstring& cause, const std::wstring& name) {
+    std::wstring text;
+    bool sawCause = false, sawName = false;
+    for (size_t i = 0; i < format.size(); ++i) {
+        if (format[i] != L'%') { text += format[i]; continue; }
+        if (++i >= format.size()) return {};
+        if (format[i] == L'%') { text += L'%'; continue; }
+        if (format[i] != L'1' && format[i] != L'2') return {};
+        const bool isCause = format[i] == L'1';
+        if (i + 1 < format.size() && format[i + 1] >= L'0' && format[i + 1] <= L'9') return {}; // %10..%19
+        if (i + 1 < format.size() && format[i + 1] == L'!') {
+            const size_t close = format.find(L'!', i + 2);
+            if (close == std::wstring_view::npos) return {};
+            const auto type = format.substr(i + 2, close - i - 2);
+            if (type != L"s" && type != L"ls" && type != L"ws") return {};
+            i = close;
+        }
+        text += isCause ? cause : name;
+        (isCause ? sawCause : sawName) = true;
+    }
+    return sawCause && sawName ? text : std::wstring{};
+}
+// The localized notice text; empty when Windows supplies no usable resource.
 std::wstring FormatRenameFailureNotice(const std::wstring& name, HRESULT hr) {
     const std::wstring format = ShellString(kShellRenameFailedStringId);
     if (format.empty() || name.empty()) return {};
@@ -28860,15 +28902,7 @@ std::wstring FormatRenameFailureNotice(const std::wstring& name, HRESULT hr) {
     std::wstring cause = reason ? reason : L"";
     LocalFree(reason);
     while (!cause.empty() && iswspace(cause.back())) cause.pop_back();
-    const DWORD_PTR inserts[] = {reinterpret_cast<DWORD_PTR>(cause.c_str()), reinterpret_cast<DWORD_PTR>(name.c_str())};
-    PWSTR message = nullptr;
-    std::wstring text;
-    if (FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_STRING | FORMAT_MESSAGE_ARGUMENT_ARRAY,
-            format.c_str(), 0, 0, reinterpret_cast<LPWSTR>(&message), 0,
-            reinterpret_cast<va_list*>(const_cast<DWORD_PTR*>(inserts))) && message)
-        text = message;
-    LocalFree(message);
-    return text;
+    return SubstituteRenameNotice(format, cause, name);
 }
 void ShowRenameFailureNotice(HWND owner, const std::wstring& name, HRESULT hr) {
     const std::wstring text = FormatRenameFailureNotice(name, hr);
@@ -41062,6 +41096,9 @@ void ObserveNewItemCommand(IContextMenu* menu, LPCMINVOKECOMMANDINFO info) {
 }
 
 HRESULT STDMETHODCALLTYPE NewMenuInvokeHook(IContextMenu* menu, LPCMINVOKECOMMANDINFO info) {
+    // The original can show a modal prompt (elevation for a protected
+    // folder). Counted, so unload waits for this frame to return.
+    ApiCallbackGuard callback(ApiHook::NewMenuInvoke);
     ObserveNewItemCommand(menu, info);
     return g_newMenuInvokeOriginal(menu, info);
 }
