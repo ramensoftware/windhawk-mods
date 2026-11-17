@@ -120,6 +120,7 @@ as System32 paths so the same profile works in the 64-bit host.
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -167,7 +168,6 @@ constexpr UINT kOpenEditor = WM_APP + 11;
 constexpr UINT kAppsReady = WM_APP + 12;
 constexpr UINT kEditorChoice = WM_APP + 13;
 constexpr UINT kMouseShortcut = WM_APP + 14;
-constexpr UINT kMouseShortcutReleased = WM_APP + 15;
 
 std::wstring Trim(std::wstring_view value) {
     const auto first = value.find_first_not_of(L" \t\r\n");
@@ -4955,6 +4955,141 @@ private:
     Test test_;
 };
 
+// Only this thread owns the activation hook and its pressed-button state. The
+// menu thread publishes a chord and a blocked flag; no UI state is read here.
+class MouseShortcutHook {
+public:
+    ~MouseShortcutHook() { Stop(); }
+
+    void Block(bool blocked) { blocked_.store(blocked); }
+
+    DWORD Configure(HWND window, const std::optional<Chord>& shortcut) {
+        if (!thread_ && !shortcut) return ERROR_SUCCESS;
+        const UINT chord = shortcut ? (shortcut->modifiers << 16) | shortcut->key : 0;
+        const UINT previous = chord_.exchange(chord);
+        if (!thread_) {
+            window_ = window;
+            if (!(stop_ = CreateEventW(nullptr, TRUE, FALSE, nullptr)) ||
+                !(changed_ = CreateEventW(nullptr, FALSE, FALSE, nullptr)) ||
+                !(applied_ = CreateEventW(nullptr, FALSE, FALSE, nullptr)) ||
+                !(thread_ = CreateThread(nullptr, 0, ThreadProc, this, 0, nullptr))) {
+                const DWORD error = GetLastError();
+                Stop();
+                return error;
+            }
+        } else {
+            SetEvent(changed_);
+        }
+        const HANDLE completion[] = {applied_, thread_};
+        if (WaitForMultipleObjects(ARRAYSIZE(completion), completion, FALSE, INFINITE) != WAIT_OBJECT_0) {
+            Stop();
+            return ERROR_INVALID_STATE;
+        }
+        const DWORD error = error_.load();
+        if (error) chord_.store(previous);
+        return error;
+    }
+
+    void Stop() {
+        if (thread_) {
+            SetEvent(stop_);
+            WaitForSingleObject(thread_, INFINITE);
+            CloseHandle(std::exchange(thread_, nullptr));
+        }
+        if (stop_) CloseHandle(std::exchange(stop_, nullptr));
+        if (changed_) CloseHandle(std::exchange(changed_, nullptr));
+        if (applied_) CloseHandle(std::exchange(applied_, nullptr));
+        chord_.store(0);
+    }
+
+private:
+    static DWORD WINAPI ThreadProc(void* context) {
+        static_cast<MouseShortcutHook*>(context)->Run();
+        return 0;
+    }
+
+    void UpdateHook() {
+        DWORD error = ERROR_SUCCESS;
+        if (chord_.load() && !hook_) {
+            HMODULE module = nullptr;
+            if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                    reinterpret_cast<PCWSTR>(&HookProc), &module)) {
+                error = GetLastError();
+            } else if (!(hook_ = SetWindowsHookExW(WH_MOUSE_LL, HookProc, module, 0))) {
+                error = GetLastError();
+            }
+        } else if (!chord_.load() && !pressed_ && hook_) {
+            UnhookWindowsHookEx(std::exchange(hook_, nullptr));
+        }
+        error_.store(error);
+    }
+
+    void Run() {
+        current_ = this;
+        MSG message;
+        PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
+        UpdateHook();
+        SetEvent(applied_);
+        const HANDLE events[] = {stop_, changed_};
+        for (;;) {
+            const DWORD result = MsgWaitForMultipleObjectsEx(
+                ARRAYSIZE(events), events, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            if (result == WAIT_OBJECT_0) break;
+            if (result == WAIT_OBJECT_0 + 1) {
+                UpdateHook();
+                SetEvent(applied_);
+            } else if (result == WAIT_OBJECT_0 + ARRAYSIZE(events)) {
+                while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+                    TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
+                // Keep a consumed down paired with its up, even after rebinding.
+                if (!chord_.load() && !pressed_ && hook_)
+                    UnhookWindowsHookEx(std::exchange(hook_, nullptr));
+            } else {
+                break;
+            }
+        }
+        if (hook_) UnhookWindowsHookEx(std::exchange(hook_, nullptr));
+        pressed_ = 0;
+        current_ = nullptr;
+    }
+
+    bool OnMouse(UINT message, const MSLLHOOKSTRUCT& mouse) {
+        if (mouse.flags & LLMHF_INJECTED) return false;
+        const UINT button = ShortcutMouseButton(message, HIWORD(mouse.mouseData));
+        if (!button) return false;
+        if (!IsShortcutMouseDown(message)) {
+            if (button != pressed_) return false;
+            pressed_ = 0;
+            return true;
+        }
+        if (button == pressed_) return true;
+        const UINT chord = chord_.load();
+        if (pressed_ || button != LOWORD(chord) || ActiveModifiers() != HIWORD(chord) ||
+            blocked_.load() || ForegroundIsFullscreen()) return false;
+        if (!PostMessageW(window_, kMouseShortcut, button, HIWORD(chord))) return false;
+        pressed_ = button;
+        return true;
+    }
+
+    static LRESULT CALLBACK HookProc(int code, WPARAM message, LPARAM payload) {
+        if (code == HC_ACTION && current_ &&
+            current_->OnMouse(message, *reinterpret_cast<const MSLLHOOKSTRUCT*>(payload))) return 1;
+        return CallNextHookEx(nullptr, code, message, payload);
+    }
+
+    inline static thread_local MouseShortcutHook* current_ = nullptr;
+    std::atomic<UINT> chord_{0};
+    std::atomic<bool> blocked_{true};
+    std::atomic<DWORD> error_{ERROR_SUCCESS};
+    HWND window_ = nullptr;
+    HANDLE thread_ = nullptr, stop_ = nullptr, changed_ = nullptr, applied_ = nullptr;
+    HHOOK hook_ = nullptr;
+    UINT pressed_ = 0;
+};
+
 class Menu {
 public:
     Menu() = default;
@@ -5014,18 +5149,26 @@ public:
                         }
                         if (HWND editor = editor_.Window();
                             editor && (message.hwnd == editor || IsChild(editor, message.hwnd))) {
-                            if (IsDialogMessageW(editor, &message)) continue;
+                            if (IsDialogMessageW(editor, &message)) {
+                                PublishMouseShortcutState();
+                                continue;
+                            }
                         }
                         if (HWND capture = capture_.Window();
                             capture && (message.hwnd == capture || IsChild(capture, message.hwnd))) {
                             if (message.message == WM_KEYDOWN && message.wParam == VK_ESCAPE) {
                                 capture_.Close();
+                                PublishMouseShortcutState();
                                 continue;
                             }
-                            if (IsDialogMessageW(capture, &message)) continue;
+                            if (IsDialogMessageW(capture, &message)) {
+                                PublishMouseShortcutState();
+                                continue;
+                            }
                         }
                         TranslateMessage(&message);
                         DispatchMessageW(&message);
+                        PublishMouseShortcutState();
                         if (WaitForSingleObject(stop, 0) == WAIT_OBJECT_0) {
                             quit = true;
                             break;
@@ -5037,9 +5180,9 @@ public:
                 Wh_Log(L"Could not initialize radial menu (error %lu)", GetLastError());
             }
             if (window_) {
+                mouseActivation_.Stop();
                 capture_.Uninit();
                 mouseShortcut_.reset();
-                mouseShortcutPress_ = 0;
                 Hide();
                 editor_.Close();
                 if (hotkey_) UnregisterHotKey(window_, hotkeyId_);
@@ -5220,9 +5363,6 @@ private:
                     else Open(now);
                 }
                 return 0;
-            case kMouseShortcutReleased:
-                ReleaseIdleMouseHook();
-                return 0;
             case WM_MOUSEACTIVATE:
                 return MA_NOACTIVATE;
             case kPointer:
@@ -5351,6 +5491,7 @@ private:
 
     void OpenEditor() {
         Hide();
+        mouseActivation_.Block(true);
         if (!editor_.Show(instance_, stop_, settings_, profileRoot_,
                           [this](Settings draft, std::wstring& status) {
                               return SaveEditor(std::move(draft), status);
@@ -5358,6 +5499,7 @@ private:
                           [this] { Open(Clock::now(), true); })) {
             Wh_Log(L"Could not open the built-in radial menu editor");
         }
+        PublishMouseShortcutState();
     }
 
     bool SaveEditor(Settings draft, std::wstring& status) {
@@ -5398,9 +5540,10 @@ private:
 
     std::wstring RegisterShortcut(const Chord& shortcut, const std::wstring& text) {
         if (shortcut.key <= VK_XBUTTON2) {
-            if (!EnsureMouseHook()) {
+            PublishMouseShortcutState();
+            if (const DWORD error = mouseActivation_.Configure(window_, shortcut)) {
                 return L"Could not listen for " + text + L" (Windows error " +
-                       std::to_wstring(GetLastError()) + L").";
+                       std::to_wstring(error) + L").";
             }
             if (hotkey_) UnregisterHotKey(window_, hotkeyId_);
             hotkey_.reset();
@@ -5420,7 +5563,7 @@ private:
             hotkey_ = shortcut;
         }
         mouseShortcut_.reset();
-        ReleaseIdleMouseHook();
+        mouseActivation_.Configure(window_, std::nullopt);
         registeredShortcut_ = text;
         return {};
     }
@@ -5494,6 +5637,7 @@ private:
         holdActive_ = settings_.holdToSelect && !preview && hotkey_.has_value();
         if (holdActive_ && !restrictedInput && !ActivationHeld()) return false;
         desktopPreview_ = preview;
+        mouseActivation_.Block(preview || holdActive_ || editor_.Window());
         RefreshMotion();
         const Palette palette = ReadPalette(settings_);
         backdrop_ = CaptureBackdrop(geometry_, palette.highContrast ? 0 : settings_.blur);
@@ -5529,6 +5673,7 @@ private:
         // handles input directly when the hooks cannot observe the foreground app.
         InstallHooks();
         if ((restrictedInput || !keyboard_) && !FocusPointerWindow() && restrictedInput) holdActive_ = false;
+        PublishMouseShortcutState();
         if (holdActive_ && !ActivationHeld()) {
             Hide();
             return false;
@@ -5542,6 +5687,7 @@ private:
 
     void Close(Time now) {
         inputActive_ = false;
+        PublishMouseShortcutState();
         KillTimer(window_, kFullscreenTimer);
         RemoveHooks();
         HidePointerWindow();
@@ -5554,6 +5700,7 @@ private:
     void Hide() {
         desktopPreview_ = false;
         inputActive_ = false;
+        PublishMouseShortcutState();
         KillTimer(window_, kFullscreenTimer);
         visible_ = false;
         RemoveHooks();
@@ -5657,9 +5804,11 @@ private:
         const bool preview = desktopPreview_;
         if (!preview && IsCaptureAction(slot.action)) {
             Hide();
+            mouseActivation_.Block(true);
             DwmFlush();
             if (!capture_.Show(instance_, window_, slot.action, settings_.theme, animate_))
                 Wh_Log(L"Could not open the screen capture tools.");
+            PublishMouseShortcutState();
             return;
         }
         if (holdActive_ || settings_.closeAfterSelection) Close(now);
@@ -5756,13 +5905,8 @@ private:
         if (!mouseAvailable || !keyboard_) Wh_Log(L"Some global radial menu input hooks are unavailable.");
     }
 
-    void ReleaseIdleMouseHook() {
-        if (mouse_ && !inputActive_ && !mouseShortcut_ && !mouseShortcutPress_)
-            UnhookWindowsHookEx(std::exchange(mouse_, nullptr));
-    }
-
     void RemoveHooks() {
-        ReleaseIdleMouseHook();
+        if (mouse_) UnhookWindowsHookEx(std::exchange(mouse_, nullptr));
         if (keyboard_) UnhookWindowsHookEx(std::exchange(keyboard_, nullptr));
         pointerPosted_ = false;
         leftPressedInside_ = false;
@@ -5777,35 +5921,30 @@ private:
         return true;
     }
 
-    bool MouseShortcutAvailable() const {
-        return !desktopPreview_ && !(inputActive_ && holdActive_) && !editor_.Window() && !capture_.Window() &&
-               !ForegroundIsFullscreen();
+    bool MouseShortcutBlocked() const {
+        return desktopPreview_ || (inputActive_ && holdActive_) || editor_.Window() || capture_.Window();
     }
 
-    bool OnMouseShortcut(UINT message, const MSLLHOOKSTRUCT& mouse) {
-        if (mouse.flags & LLMHF_INJECTED) return false;
-        const UINT button = ShortcutMouseButton(message, HIWORD(mouse.mouseData));
-        if (!button) return false;
-        if (!IsShortcutMouseDown(message)) {
-            if (button != mouseShortcutPress_) return false;
-            mouseShortcutPress_ = 0;
-            if (!mouseShortcut_ && !inputActive_) PostMessageW(window_, kMouseShortcutReleased, 0, 0);
-            return true;
-        }
-        if (button == mouseShortcutPress_) return true;
-        if (mouseShortcutPress_ || !mouseShortcut_ || button != mouseShortcut_->key ||
-            ActiveModifiers() != mouseShortcut_->modifiers || !MouseShortcutAvailable()) return false;
-        if (!PostMessageW(window_, kMouseShortcut, button, mouseShortcut_->modifiers)) return false;
-        mouseShortcutPress_ = button;
-        return true;
+    void PublishMouseShortcutState() {
+        mouseActivation_.Block(MouseShortcutBlocked());
+    }
+
+    bool MouseShortcutAvailable() const {
+        return !MouseShortcutBlocked() && !ForegroundIsFullscreen();
     }
 
     static LRESULT CALLBACK MouseProc(int code, WPARAM message, LPARAM payload) {
         if (code == HC_ACTION && current_) {
             const auto& mouse = *reinterpret_cast<const MSLLHOOKSTRUCT*>(payload);
-            if (current_->OnMouseShortcut(message, mouse) ||
-                (current_->inputActive_ &&
-                 current_->OnMouse(message, mouse.pt, static_cast<short>(HIWORD(mouse.mouseData))))) return 1;
+            // Let the activation thread handle its button first. This temporary
+            // hook only serves the open wheel and must not also dismiss it.
+            const UINT button = ShortcutMouseButton(message, HIWORD(mouse.mouseData));
+            const bool activation = !(mouse.flags & LLMHF_INJECTED) && button &&
+                current_->mouseShortcut_ && button == current_->mouseShortcut_->key &&
+                ActiveModifiers() == current_->mouseShortcut_->modifiers &&
+                !current_->MouseShortcutBlocked();
+            if (!activation && current_->inputActive_ &&
+                current_->OnMouse(message, mouse.pt, static_cast<short>(HIWORD(mouse.mouseData)))) return 1;
         }
         return CallNextHookEx(nullptr, code, message, payload);
     }
@@ -5884,7 +6023,7 @@ private:
     bool leftPressedInside_ = false;
     bool rightPressedInside_ = false, desktopPreview_ = false, holdActive_ = false;
     int hotkeyId_ = kHotkey;
-    UINT mouseShortcutPress_ = 0;
+    MouseShortcutHook mouseActivation_;
     HANDLE watcher_ = INVALID_HANDLE_VALUE, stop_ = nullptr;
     FileHandle profileDirectory_{nullptr, CloseHandle};
     std::wstring profileRoot_, hotkeyError_, registeredShortcut_, windhawkShortcut_;
