@@ -2,12 +2,124 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-16T21:04:47.000Z</updated>
+    <updated>2026-11-17T00:04:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Phone panel for NectarLink 1.0.0]]></title>
+        <id>https://windhawk.net/mods/phone-panel-for-nectarlink#ec1f48a5f12d90c174d772b80a560e07bdbbdab4</id>
+        <link href="https://windhawk.net/mods/phone-panel-for-nectarlink"/>
+        <updated>2026-11-17T00:04:32.000Z</updated>
+        <content type="html"><![CDATA[<h1>Phone panel for NectarLink</h1>
+<p><strong>Unofficial.</strong> This mod is not made by, affiliated with or endorsed by the
+NectarLink project. It works with <a href="https://github.com/thtbee/nectarlink">NectarLink</a>,
+the free, open-source app that links an Android phone with a Windows PC.</p>
+<p><img src="https://raw.githubusercontent.com/vampirakos/phone-panel-for-nectarlink/main/screenshot.png" alt="The NectarLink panel in the Start menu"></p>
+<p>It puts your phone in the Start menu's phone panel (the one Phone Link uses):</p>
+<ul>
+<li>your phone's name, connection and battery</li>
+<li>quick actions: Find phone, Clipboard, Take photo, Scan doc, Play on phone, Send files</li>
+<li><strong>Recent</strong>: the last items from NectarLink's Timeline (click to open)</li>
+<li><strong>Clipboard</strong>: the last clipboard items (click to copy again)</li>
+<li>Open NectarLink and NectarLink settings</li>
+</ul>
+<h2>Requirements</h2>
+<ul>
+<li>Windows 11 (x64) and the NectarLink app for Windows, paired with your phone.</li>
+<li>In NectarLink, turn on <strong>Settings → Local automation API</strong>. Without it,
+Find phone / Clipboard / Take photo / Send files and the footer buttons still
+work; status, Recent, Clipboard, Scan doc and Play on phone need it.</li>
+<li>Keep <strong>Show mobile device in Start</strong> turned on in
+Windows Settings → Personalization → Start.</li>
+</ul>
+<h2>How it works</h2>
+<p>The panel shows NectarLink instead of Phone Link. By default it only does so
+while NectarLink is installed and has a paired phone; otherwise Phone Link's
+panel is left alone (the &quot;Replace Phone Link's panel&quot; setting can force it).
+The phone button next to the search box shows and hides it.</p>
+<h2>Privacy and safety</h2>
+<ul>
+<li>The mod only talks to NectarLink on this PC (<code>127.0.0.1</code>), using the token
+NectarLink writes to <code>%LOCALAPPDATA%\Nectarlink\api-token.json</code>. Nothing is
+sent anywhere else.</li>
+<li>Clicking a Recent file opens it only if it's a common photo, video, audio or
+document type. Anything else (programs, scripts, shortcuts...) is shown in
+File Explorer instead of being opened. Links open only if they're http(s).</li>
+<li>Turning the mod off restores the Start menu and Phone Link's panel.</li>
+</ul>
+<h2>If the panel doesn't appear</h2>
+<p>Open Windhawk's log for this mod (Details → Log). If it can't find where to
+attach, it prints the named elements of the Start menu.</p>
+<p>NectarLink is a trademark of its project; the name is used here only to say
+what this mod works with.</p>
+]]></content>
+        <author>
+            <name>vampirakos</name>
+            <uri>https://github.com/vampirakos</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Desktop Snowfall 1.1]]></title>
+        <id>https://windhawk.net/mods/desktop-snowfall#a44144776438bb944427d5cb39f50f57eafe74ce</id>
+        <link href="https://windhawk.net/mods/desktop-snowfall"/>
+        <updated>2026-11-17T00:04:27.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New &quot;Where the snow falls&quot; setting: over all windows, or behind them on the desktop. Behind windows, the falling snow shows only where the desktop is uncovered, and the snow still settles on top of the windows and the taskbar.</li>
+<li>Much lower power use. Calm snowfall is drawn at about 30 fps, and the full frame rate is used only while something moves. Snow that lies still isn't redrawn. The frame rate is capped on battery and lowered in energy saver mode. The snow pauses while the screen is locked or off.</li>
+<li>Each monitor gets its own snow, sized for its display scale. A fullscreen app hides the snow only on its own monitor.</li>
+<li>Shake a window to throw its snow off. Closing or minimizing a window drops its snow in lumps that burst into powder.</li>
+<li>Snow piles up along the bottom of the screen where the taskbar doesn't cover it (new setting, on by default).</li>
+<li>New &quot;Snow slowly melts&quot; setting.</li>
+<li>New &quot;Hide from screenshots and screen sharing&quot; setting.</li>
+<li>Menus, tooltips and the shell's flyouts now stay in front of the snow, and popup windows hide the snow lying behind them.</li>
+</ul>
+]]></content>
+        <author>
+            <name>mikybuilds</name>
+            <uri>https://github.com/mikybuilds</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Dynamic Island Media Player 1.6.1]]></title>
+        <id>https://windhawk.net/mods/dynamic-island-media-player#479c5a5aaa4179b90455640c2e9597457b72b6aa</id>
+        <link href="https://windhawk.net/mods/dynamic-island-media-player"/>
+        <updated>2026-11-17T00:04:22.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved rendering performance by limiting automatic rendering to 60 FPS and caching foreground application and monitor DPI information.</li>
+<li>Optimized overlay window positioning by avoiding redundant window-position updates during animations and hover effects.</li>
+<li>Improved album artwork loading by retrying more frequently when artwork is unavailable or delayed.</li>
+<li>Avoided redundant album artwork decoding when the thumbnail image has not changed.</li>
+<li>Improved global media hotkey compatibility in games and other applications by combining <code>RegisterHotKey</code> with a Raw Input fallback.</li>
+<li>Added duplicate-dispatch protection to prevent a single key combination from triggering the same action through both input mechanisms.</li>
+<li>Improved keyboard input lifecycle management, including Raw Input registration cleanup and synchronization with hotkey settings.</li>
+<li>Moved low-level keyboard-hook installation and removal for hotkey capture to a dedicated thread.</li>
+</ul>
+]]></content>
+        <author>
+            <name>BOG090909</name>
+            <uri>https://github.com/BOG090909</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Tray hover expand 1.7.2]]></title>
+        <id>https://windhawk.net/mods/tray-hover-expand#d7725cab6896a41e77216f6235e34e014a4800cd</id>
+        <link href="https://windhawk.net/mods/tray-hover-expand"/>
+        <updated>2026-11-17T00:04:17.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Recognise the chevron by the tooltip text Windows provides, so an outdated keyword list saved in the settings no longer stops it being found</li>
+<li>Never take the input indicator, the emoji panel or the touch keyboard for the chevron while the chevron is not shown</li>
+<li>Correct the French chevron name in the keyword list</li>
+<li>Correct the descriptions that claimed only the chevron has its class name and AutomationId pair</li>
+</ul>
+]]></content>
+        <author>
+            <name>wygodad</name>
+            <uri>https://github.com/wygodad</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Network Menu Speed Test 1.0]]></title>
         <id>https://windhawk.net/mods/network-speedtest-native#f0b37fa17e1cff8b3f56cbfd991322815a91b76a</id>
@@ -759,156 +871,6 @@ Windhawk and check the log output: the start-up steps are logged there.</li>
         <author>
             <name>Thiago Silva</name>
             <uri>https://github.com/brideinflame-rgb</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Touchpad Relaxed Hand Tracking 1.1.0]]></title>
-        <id>https://windhawk.net/mods/touchpad-relaxed-hand-tracking#ce1a605b853f4a015dffaef8ea6c6447bf6fcbfc</id>
-        <link href="https://windhawk.net/mods/touchpad-relaxed-hand-tracking"/>
-        <updated>2026-11-16T03:00:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Improved movement precision:</strong> slow movements no longer lose distance, resting fingers drop out of the movement, and a single finger moving on its own leads, for precise positioning.</li>
-<li><strong>Speed reset:</strong> the multipliers are back to 1.5 for 5-3 fingers and 1.0 for 2-1. If you changed them, check your values.</li>
-<li><strong>Fewer accidental clicks:</strong> touches at the pad's edge, a finger flickering back where it just left, and the thumb no longer click.</li>
-<li><strong>Steadier near the pad's edge:</strong> a finger at the edge, which the touchpad reads poorly, rests while fingers further in steer.</li>
-<li><strong>Thumb recognition:</strong> with the new Hand setting (right or left), the thumb is the touch farthest inside the hand on the lower part of the pad, or, with the whole hand down, anywhere. The pinky is never taken for it, and recognition holds when the index crosses over the thumb, a finger slips off the pad and comes back, or the pad reports a flat thumb as two touches.</li>
-<li><strong>The thumb is left out of the more-fingers glide for better movement precision:</strong> it only rests, helps start the glide and counts as a finger for the speed multiplier. It never moves the pointer or clicks while other fingers touch the pad, even when the pad reports it as two touches.</li>
-<li><strong>Diagnostics overlay:</strong> a configurable hotkey shows how the mod reads each finger: which ones steer, rest, may tap, scroll or hold, and which one is the thumb. It can be dragged and closed, and records nothing while hidden.</li>
-<li><strong>Mouse wheel is now the default scroll output.</strong> More precise vertical and horizontal scrolling. Touch scrolling is still available in the settings.</li>
-<li><strong>Tap and hold feedback (optional):</strong> a small dot shows beside the pointer on each tap, and stays while a hold drags or a scroll runs, Windows' own taps and scroll included. The pointer itself doesn't change.</li>
-</ul>
-]]></content>
-        <author>
-            <name>3DDinosaur</name>
-            <uri>https://github.com/3DDinosaur</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mac Island & Dock 3.2.0]]></title>
-        <id>https://windhawk.net/mods/mac-island-dock#873e5103302d05e0e0292d0cf57ffeb710c7b535</id>
-        <link href="https://windhawk.net/mods/mac-island-dock"/>
-        <updated>2026-11-16T02:04:18.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>New</strong></p>
-<ul>
-<li>Your commands can run by themselves: give a command a time and days in its editor (&quot;Run by itself, at a time&quot;) and it runs while the island is on, as a click would. A notice says if it ran or couldn't, with Try again and, for a command line, Open in terminal. The schedules are looked at once a minute on the island's thread (<code>CheckScheduledCommands</code>): <code>CommandMinutesDue</code> runs the minute it is in (the first one too, and after a sleep) and, at a summer-time change, the minutes the clock skipped (UTC one minute on, the zone in daylight time, the jump its bias), never one twice, also across a restart in the same minute; nothing missed is made up. A failed command line's output is kept for its notice's Open in terminal, which shows it (<code>type</code>) instead of running the line again.</li>
-<li>The graphics card's use and temperature can go on the pill, next to CPU, RAM and VRAM; a click opens the GPU tab of the usage panel (Apps and tools tab).</li>
-<li>The charging battery's color can be green as before, like the other icons, Windows' accent or one you pick (System tab, #6816).</li>
-<li>A Mobile data tile in the control center, only on a PC with a mobile broadband modem; add it with Edit (#6888).</li>
-<li>A short notice with the cover, title and artist when the song changes; a click opens What's playing (What's playing tab, off by default, #6822).</li>
-<li>The wheel on what's playing can go the other way round: up is the next song (What's playing tab, off by default, #6822).</li>
-<li>A banner can close when you click anywhere outside it and the island; calls, alarms and reminders stay until you answer them (Banners tab, off by default, #6822).</li>
-<li>The Bar can hide to its line too (#7131): with &quot;Hide as its line&quot; and the new &quot;Bar: hide as its line too&quot; on, the Bar shrinks to a thin line on the screen's edge when the mouse is away, and comes back as the mouse reaches the line. Windows then use the strip it kept, and the Bar shows over them.</li>
-<li>In the Bar, the items can go to the screen's corners without the clock in the middle, like the macOS menu bar: put a separator line in the order (+ Line) and, with &quot;Bar: items at the screen's corners&quot; on and the clock not in the middle, the items before the first line stay at the left corner and the rest, the clock too, at the right one.</li>
-<li>Help translate: a button in the language section (General tab) saves every text of the island in a file to translate into your language, or to review the one you use, and send in a new issue. A language with a reviewer says who. The file is written by the backup thread (<code>BackupThreadProc</code>), as the settings backup is.</li>
-<li>A Share button on the shelf (and on each file under the mouse) opens Windows' own share window: Nearby sharing, Phone Link, Quick Share and the other targets (#7133). It's Windows' share UI for the island's window (<code>IDataTransferManagerInterop::ShowShareUIForWindow</code>), with the files as <code>StorageFile</code>s.</li>
-<li>GlazeWM's workspaces can go on the pill, a dot each (the one shown lit, the ones with windows faint; a click switches), like komorebi's; &quot;Hide the workspaces without windows&quot; leaves out the empty ones (Control center tab, #7116). GlazeWM's own IPC, a WebSocket on 127.0.0.1:6123 (WinHTTP), only while the item is on.</li>
-<li>Faísca, a little light that lives on the pill (#7045): an item of its own in every style, and on the minimized line too. Her eyes follow the mouse and change shape with how she feels (happy, angry, sad, startled, sleepy...), she blinks, does little things by herself, dances with the music of the apps you check and reacts to the PC (working hard, a low battery, Do not disturb, notifications, files copied, downloads, screenshots, the volume, USB, the charger, Wi-Fi, the song, Pomodoro, reminders), each reaction with its own switch. Her size can be chosen, her glow can leave the island (also over a maximized app) and the pill glows with her. All her options are in her own tab. There also: her color (eight, Windows' accent or your own, optionally changing with her mood), her personality (calm, normal or lively) and the processor use from which she counts the PC as working hard. She's drawn with Direct2D like the rest of the island, and her frames come from her own timer, only while she moves (about 30 a second, none when she's still).</li>
-<li>Live activities like the iPhone's Dynamic Island (#7134). In Banners, turn on Live activities: the system alerts (charger, low battery, Bluetooth with the headset's battery, Do not disturb, desktop) show as a wide compact pill with the icon in a colored circle and the value at the right end, and optionally the apps' notifications in the same compact layout. And, with Expanded card, the mouse resting on what's live (the music, a timer or the stopwatch, a download or a copy) grows the pill in place into its card: the cover with the title, a bar and the buttons, the big time with pause and cancel, or the percent.</li>
-<li>Five small games with Faísca (fruit rain, on the beat, cloud jump, island memory, reflex), with your best results kept on this PC.</li>
-<li>Faísca's panel: click her to see her big, pet her with the mouse, tap her (not too often: she gets cross), read what she has to say, and open her games. Optional care: energy, food, water and love go down slowly while you use the PC, and you feed her, give her water and cuddle her there (she never goes away and never asks in full screen or Do not disturb). How fast they go down is a setting (calm, normal or attentive).</li>
-<li>Sounds for Faísca, off until you turn them on: 25 sounds she makes (eating, a tap, a finished download, a plugged-in charger...), each with its own switch and its own source: the island's own, a pack downloaded when you choose it, or a file of yours. They stay silent over full-screen apps and with Do not disturb on. Her volume has its own slider. The island's own sounds are made by the mod and played with <code>waveOut</code>; a file of yours is decoded with Media Foundation, loaded only then. The pack comes from jsDelivr pinned to a commit (cesarkali/faisca-sounds@cec274c, CC BY 4.0), each file kept only if its SHA-256 is the one in the mod (<code>BCryptHash</code>), downloaded only when chosen. Never in full screen or Do not disturb.</li>
-<li>What's playing: shuffle and repeat buttons (repeat all, then repeat one with a small 1, then off) in every look of the panel, shown only when the playing app supports them, like Spotify (thanks Jawad). From the media session's <code>PlaybackInfo</code> (<code>IsShuffleActive</code>, <code>AutoRepeatMode</code>), changed with <code>TryChangeShuffleActiveAsync</code> and <code>TryChangeAutoRepeatModeAsync</code>, shown only when <code>Controls.IsShuffleEnabled</code>/<code>IsRepeatEnabled</code>.</li>
-<li>Faísca's panel says why she is as she is (&quot;Dancing · Spotify is playing&quot;, &quot;Hot · the processor at 92%&quot;, &quot;Asleep · no mouse or keyboard for 6 min&quot;) and what she reacted to lately, with the time and her sound then: its name, or why it was silent.</li>
-<li>A bubble saying when Num Lock turns on or off, like the Caps Lock one (Banners tab, off by default, #7178).</li>
-<li>The processor's temperature can go on the pill, next to CPU use, only when Windows itself reports it (many desktops don't; Apps and tools tab, off by default). Read with PDH (<code>\Thermal Zone Information(*)\Temperature</code>, <code>PdhAddEnglishCounter</code>); without a thermal zone the item hides. No driver and no extra DLL.</li>
-<li>What's playing's panel: two new options leave out the volume sliders with the mixer, and the two pill switches at its end, for a panel with only the player (thanks Jawad).</li>
-<li>The timer and Pomodoro can fill the pill with color as the time runs out: orange, green on a break, fainter when paused, a soft pulse at the end, in every style and on the minimized line. Hide the numbers keeps only the icon on the pill, so the fill is all you see.</li>
-<li>The Bar can have three parts: put two separator lines in the order (+ Line) with &quot;Bar: items at the screen's corners&quot; on, and the items before the first line stay at the left corner, the ones between the lines in the middle of the screen (the clock joins them when it is in the middle) and the rest at the right corner.</li>
-<li>Tasks can have a date (#7195): turn on &quot;Dates on tasks&quot; and pick a day in the task's editor (Today, Tomorrow or any day). The day shows under the task, red when it passed, and the dated tasks come first. With &quot;Tasks with a date in the calendar&quot; on, the calendar marks those days with a small dash and lists the tasks in the day's list, where a click on the circle completes them.</li>
-<li>Copy verification codes: a notification with a one-time code (like a sign-in or a bank code) gets a Copy code button on its banner and in the list. The code goes to the clipboard and stays out of its history (Notifications tab, off by default, #6997).</li>
-<li>Faísca has fun too: with her care and her games on, a fifth vial that goes down while nobody plays with her. Bored and later sad, she now and then asks to play with two little hops and a pleading look on the pill (at most every 30 minutes, never in full screen, in Do not disturb or over a notification; it has its own switch). A round of a game cheers her up a lot, petting or a tap a little, dancing to music a tiny bit.</li>
-<li>The island speaks French (Français), Turkish (Türkçe) and Korean (한국어), Windhawk's settings page too: choose one in the General tab, or it follows Windows. The first French texts are by 11ethann11 (#7063, #7186, #7228). The texts stay in the source, in the same packed tables as the other languages.</li>
-</ul>
-<p><strong>Improvements</strong></p>
-<ul>
-<li>The volume's percentage sits as close to its icon as the battery's (#6199).</li>
-<li>The Bluetooth &quot;Connected&quot; notice shows the headset's battery when Windows knows it, like &quot;Galaxy Buds2&quot; with &quot;Connected · 80%&quot; under it (#6158).</li>
-<li>Windows 11 only, 64-bit (x64 and ARM64): Windows 10, whose support Microsoft ended in October 2025, and 32-bit Windows are no longer supported.</li>
-<li>Faísca costs much less while she moves: only the small area around her is drawn again and sent to the screen, not the whole island (in the Bar, the whole strip), on every monitor. Her area (<code>m_petArea</code>) is the only part cleared, drawn (an aliased axis-aligned clip, the rest of the bitmap kept) and presented (<code>UpdateLayeredWindowIndirect</code> with <code>prcDirty</code>) on her own frames.</li>
-<li>If the island crashes and can't be started again by itself (on Windhawk 2.0, or after three crashes in ten minutes), a window says so and how to start it again: turn the mod off and on in Windhawk. It waits until a full-screen game or presentation is over. A <code>TaskDialogIndirect</code> on its own thread in Explorer, closed when the mod unloads. It only tells (nothing is started from it), and only for an island process whose image is Windhawk's.</li>
-<li>With &quot;Glow and hops can leave the island&quot; on (or her size over 100%), each of her frames draws only her own window, no longer the whole island again behind her. The island remembers that her window was drawn alone (<code>m_petWindowLast</code>) and takes the full path again whenever anything else changes.</li>
-</ul>
-<p><strong>Fixes</strong></p>
-<ul>
-<li>Windows builds without the parts the dock uses (some Insider builds): the taskbar stays as Windows draws it and the island's taskbar parts (apps asking for attention, the screen-edge watch, the tray icons) now start right away, instead of waiting two minutes and giving up (#7241). <code>ApplyToTaskbar</code> counts a missing <code>TaskbarFrame</code> (<code>g_dockUnavailable</code>) as ready, so <code>StartTaskbarParts</code> runs (#7241).</li>
-<li>Win+A and Win+N with Windows' own quick settings or notification center open now let Windows close them, instead of opening the island's control center or notifications over them (#7226). With an app run as administrator in front (Task Manager), Windows doesn't send the keys to the island at all: they work there only when Windhawk runs as administrator too. <code>WindowsPanelInFront</code> looks for Windows' own flyout before the island opens its panel.</li>
-<li>The input method's bubble no longer shows up by itself when an app opens or is busy: when the app doesn't answer in time, the island keeps what it showed instead of taking it for English letters (#7260). The input method's state is asked with a time limit; with no answer the last known one stays.</li>
-<li>A banner's title too long for its place keeps its &quot;...&quot; under the mouse until it starts scrolling, instead of being cut in the middle of a word.</li>
-<li>Night light on a PC where it was never set up in Windows: the tile says Set up instead of Unavailable, and a click (also on the pill's button) opens Windows' Night light page with a short notice, since Windows only applies it after that first time.</li>
-<li>Scrolling the settings window uses much less of the graphics card (#7282): dimmed switches and cards no longer draw a layer as big as the whole window on every frame, and the window draws at most about 60 frames a second. The dimmed parts' layers are bound to the visible area and the window's frames are capped.</li>
-<li>The Wi-Fi panel, the control center's network tile and the pill's Wi-Fi icon show the connected network and its signal without location access too: only the list of nearby networks needs it (#7155). The connected network comes from <code>WlanQueryInterface</code> (<code>wlan_intf_opcode_current_connection</code>); where Windows refuses it without location access, the connection's profile stands in (<code>NetworkInformation</code>, <code>GetConnectedSsid</code> and <code>GetSignalBars</code>, read on a thread of its own). Only the nearby networks (<code>WlanGetAvailableNetworkList</code>) still need the location.</li>
-<li>Tray icons of apps that run as administrator (many antivirus apps) now open with a click on the island even when Windhawk itself runs as administrator, and when an app still doesn't get a click, the log says which one.</li>
-<li>The audio visualizer's bars now leave the pill when the player closes, instead of staying there until something else plays.</li>
-<li>&quot;Hide the Windows banners&quot; is no longer greyed out while &quot;The island handles notifications and their sounds&quot; is on: it still hides the Windows banners that come through Do not disturb (calls, alarms, priority apps), so it can be turned off there too.</li>
-<li>The What's playing panel opened from the visualizer once the player is closed shows &quot;Nothing playing&quot; on its own, without the last song's cover and artist (#7301).</li>
-<li>The island no longer freezes for a moment when Windows is slow to say whether an app is in full screen: it asks on a separate thread and uses the last answer. <code>SHQueryUserNotificationState</code> sends a message to Explorer and waited up to ~400 ms in <code>Island::Tick</code> -&gt; <code>IsFullscreenAppOn</code> up to 15 times a minute (all the islands share one thread), found by sampling the thread. Now the island asks on a thread-pool thread at most every 250 ms (<code>TrySubmitThreadpoolCallback</code>) and the callers use the last answer; the explorer part still asks directly.</li>
-<li>The Bar no longer stays one strip below the top of the screen after a game changes the resolution (like 4:3) and back: the strip it keeps is set again for the screen's new size. The monitor rect the AppBar was set for is kept at <code>ABM_SETPOS</code>; <code>Island::Render</code> compares it with the monitor's now and sets the position again (<code>SetAppBarPosition</code>, <code>Layout</code>) when it changed.</li>
-<li>With &quot;The island handles notifications and their sounds&quot; on, a reminder, call or alarm that Windows lets through Do not disturb (like a web app's notification that stays until closed) no longer shows Windows' own banner next to the island's while the pill is minimized or auto-hidden with &quot;Banners even with the pill minimized&quot; on: the island takes it over there too, with Windows' buttons. Chromium sends a notification that stays until closed as <code>scenario=&quot;reminder&quot;</code>, and Do not disturb's priority profile lets reminders through. The takeover decision (<code>TakesOverBanner</code>, used by <code>CanTakeOverAhead</code> and <code>WantsTakeover</code>) now also allows a minimized or auto-hidden pill when &quot;Banners even with the pill minimized&quot; is on, and minimizing or hiding ends a takeover that no longer applies.</li>
-<li>The settings window's minimize, maximize and close buttons work again while the window is maximized (#7358): a click on them is now taken where Windows draws them, at the top right, and the middle one puts the window back. <code>DwmDefWindowProc</code> doesn't find the caption buttons of a maximized window with a custom frame. While <code>IsZoomed</code>, the panel answers <code>WM_NCHITTEST</code> and the <code>WM_NCLBUTTON*</code> messages itself for the 46 DIP buttons at the client's right edge (<code>SC_MINIMIZE</code>, <code>SC_RESTORE</code>, <code>SC_CLOSE</code>).</li>
-<li>The dock no longer closes the Start button's right-click menu (Win+X) when the mouse moves fast from the dock to its options. It stays up and keeps the focus while a taskbar menu is open (#7360). <code>GetGUIThreadInfo</code> on the taskbar's thread (<code>GUI_INMENUMODE</code>, <code>GUI_POPUPMENUMODE</code>) for Win32 menus, and on newer builds a shown <code>Xaml_WindowedPopupClass</code> window on that thread while it's in front (the Win+X menu is a XAML menu there): while a menu is open the hide timer tries again every 300 ms. Only with auto-hide on.</li>
-<li>&quot;What's playing on the minimized line&quot; now follows &quot;Apps that bring the visualizer&quot;: with apps chosen there, the line's cover and bars show only while one of them is heard, not for any sound (#7343). <code>MusicLineWanted</code> asks the same chosen-apps list as the visualizer (<code>MusicLinePlays</code>).</li>
-<li>&quot;Apps that bring the visualizer&quot; no longer lists one app twice when the media controls and Windows' audio know it under different names (Yandex Music had two cards): the card with the app's own icon stays, with your choice (#7301). Each audio session also keeps its packaged app ID and its Start menu name (read once per process), and a heard session joins the card of the same app.</li>
-<li>On the left and right notches (Corners and Three), the minimized line stays near its corner instead of moving away when the notch grows, like while music plays (#7359). <code>Island::LineMiddle</code> keeps the line's middle at most 24 px (scaled) plus half the hovered line from the corner, as long as it fits in the notch; the small pill on the line follows it.</li>
-<li>Explorer no longer crashes at sign-in on some PCs when the mod reaches the taskbar before Windows has finished making it (#7310). The 3.1.1 x64 fault offset (0x6b90) is <code>XamlRootFromTaskbarHostSharedPtr</code> reading a TaskbarHost that wasn't there yet; the chain (the TaskbarHost, its <code>IUnknown</code>, the TaskBand) is now checked for null, so the taskbar is left alone until it's ready.</li>
-<li>The virtual desktops item no longer lists desktops closed long ago: on some PCs it showed extra ones that Windows still remembered, and renaming could pick the wrong desktop. In the island's elevated process the registry's <code>VirtualDesktopIDs</code> kept two desktops closed days before, while Explorer and other programs read one. With more than one ID read, each is checked with the desktops service's <code>FindDesktop</code> (already used for renaming, builds 26100+) on the watch thread: unknown ones are left out, the current one always stays, and all stay when the service knows none. Renaming takes the row's ID from the list shown.</li>
-<li>With &quot;Your own colors&quot;, the icons of the control center's switches that are on stay readable: a light highlight now gets a dark icon, instead of a white icon on white (#7431). The icon on a switch that is on is drawn in <code>AccentInk</code> (dark on a light highlight), as the other highlights' texts already were, not in the text color.</li>
-</ul>
-]]></content>
-        <author>
-            <name>caliberda</name>
-            <uri>https://github.com/cesarkali</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Independent taskbar per monitor 1.7.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-independent-per-monitor#cc308a58f9ddbaf76a9d2425e710abe68ea3b70f</id>
-        <link href="https://windhawk.net/mods/taskbar-independent-per-monitor"/>
-        <updated>2026-11-16T01:02:46.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed: window buttons of windows parked off-screen could appear on the taskbar of the leftmost monitor.</li>
-<li>Fixed: clicking a pin could freeze the taskbar while the app's minimized window was busy.</li>
-<li>Setting titles start with their section (Windows, Pins, Click, Animation).</li>
-<li>Settings are available in English, German, Russian, French and Spanish.</li>
-</ul>
-]]></content>
-        <author>
-            <name>2ndSky95</name>
-            <uri>https://github.com/2ndSky95</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[OverhauldedWin Alt+Tab 1.3.2]]></title>
-        <id>https://windhawk.net/mods/overhaulded-alt-tab#465432f8048ba7d081947718b405b51f479e98f3</id>
-        <link href="https://windhawk.net/mods/overhaulded-alt-tab"/>
-        <updated>2026-11-16T01:02:41.000Z</updated>
-        <content type="html"><![CDATA[<h2>Added</h2>
-<ul>
-<li>Arrange open windows in an adaptive grid instead of the traditional horizontal carousel.</li>
-<li>Automatically organizes cards into balanced rows, using up to four columns when space allows.</li>
-<li>Grid: Navigate between cards using the arrow keys, with smooth selection animations.</li>
-<li>Smooth scrolling with indicators when additional rows are available.</li>
-<li>Added System, Dark and Light themes. System automatically follows the Windows app theme.</li>
-</ul>
-<h2>Improved</h2>
-<ul>
-<li>Window management:</li>
-<li>Added smooth card repositioning when the window list or layout changes.</li>
-<li>Improved selected-card scaling and visual transitions.</li>
-<li>Refined the shared transparent background surface.</li>
-<li>Improved the restoration of minimized windows when activating them.</li>
-<li>Improved screen-coordinate handling for mouse interactions.</li>
-</ul>
-<h2>Other changes</h2>
-<ul>
-<li>Added additional activation diagnostics.</li>
-<li>Improved timer error handling and logging.</li>
-<li>Updated settings and documentation.</li>
-<li>Added the required Windows system library dependency.</li>
-</ul>
-]]></content>
-        <author>
-            <name>IMiloDev</name>
-            <uri>https://github.com/IMiloDev</uri>
         </author>
     </entry>
 </feed>

@@ -1,3 +1,10 @@
+## 1.7.2 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d7725cab6896a41e77216f6235e34e014a4800cd/mods/tray-hover-expand.wh.cpp))
+
+* Recognise the chevron by the tooltip text Windows provides, so an outdated keyword list saved in the settings no longer stops it being found
+* Never take the input indicator, the emoji panel or the touch keyboard for the chevron while the chevron is not shown
+* Correct the French chevron name in the keyword list
+* Correct the descriptions that claimed only the chevron has its class name and AutomationId pair
+
 ## 1.7.1 ([Oct 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/25974f385d970a26b236378ed19cb5df42b62122/mods/tray-hover-expand.wh.cpp))
 
 * Do not suppress hover when the taskbar itself is visible under the cursor, so an auto-hiding taskbar works as soon as it is revealed, and a maximized window is no longer mistaken for a fullscreen app

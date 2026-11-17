@@ -224,39 +224,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/7bcddad73b5441e93d24ec279e9d0b0f70972dd4/mods/no-click-touchpad-tap-and-hold.wh.cpp"
       }
     },
-    "phone-panel-for-nectarlink": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794796718242,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794796718242,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "vampirakos",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lwinhttp -lshell32 -ladvapi32 -luser32",
-        "description": "Unofficial. Shows your NectarLink-paired Android phone in the Windows 11 Start menu, like Phone Link",
-        "github": "https://github.com/vampirakos",
-        "homepage": "https://github.com/vampirakos/phone-panel-for-nectarlink",
-        "include": [
-          "StartMenuExperienceHost.exe"
-        ],
-        "license": "MIT",
-        "name": "Phone panel for NectarLink",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7490",
-      "source": {
-        "sha256": "95bf8c305b1addd1d067de4a6b3a0c2e9f078c4d266f6dbb4af0ecf6623d85df",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/1ecae2fdaeb07a133796baab9a1a58d0b00b3b6c/mods/phone-panel-for-nectarlink.wh.cpp"
-      }
-    },
     "titlebar-opacity-button": {
       "details": {
         "defaultSorting": 0,
