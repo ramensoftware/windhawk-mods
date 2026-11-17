@@ -1,8 +1,10 @@
 // ==WindhawkMod==
 // @id              taskbar-wireless-battery-monitor
-// @name            任务栏无线设备电量监控
-// @description     显示多品牌无线外设与 AirPods 附近广播电量，在独立宿主运行。
-// @version         0.1.1
+// @name            Taskbar Wireless Battery Monitor
+// @name:zh-CN      任务栏无线设备电量监控
+// @description     Show wireless peripheral battery levels on the taskbar or in the system tray.
+// @description:zh-CN 显示多品牌无线外设电量，支持任务栏和托盘显示，以及可选的 AirPods 附近广播接收。
+// @version         0.1.2
 // @author          yaoiyiXu
 // @github          https://github.com/yaoiyiXu
 // @homepage        https://github.com/yaoiyiXu/taskbar-wireless-battery-monitor
@@ -13,58 +15,121 @@
 
 // ==WindhawkModReadme==
 /*
-# 任务栏无线设备电量监控 · 本地测试版
+# Taskbar Wireless Battery Monitor
 
-基于 Wireless Battery 和本项目中文版，同一套原生厂商驱动与 AirPods BLE 解析。
-工具型模组运行在独立 Windhawk 宿主中，不向 explorer.exe 注入。
+Display battery levels for supported wireless mice, keyboards, headsets and
+controllers on the primary taskbar, or as one system tray icon per device.
+Click the battery area to refresh or show/hide individual devices. Hover for details.
+Configure the display mode, refresh interval, low-battery threshold, font size and
+device spacing in Windhawk. Windhawk manages startup and enabling/disabling the mod.
+The interface uses Chinese on Chinese Windows installations and English otherwise.
 
-**启用前请先退出独立版 WirelessBattery.exe，避免同时占用任务栏。**
+This tool runs in a dedicated Windhawk process, without injecting into Explorer.
+Exit the standalone WirelessBattery.exe before enabling it. If the display does
+not start, exit that app and disable/re-enable the mod.
 
-默认在任务栏右侧显示图标和电量。点击可隐藏设备或立即刷新；悬停可看详情。
-显示模式、刷新周期、低电量阈值、字号及 AirPods 接收在 Windhawk 设置页调整。
-开机启动和启停由 Windhawk 管理。
+## Device support and limitations
 
-AirPods 电量约 10% 一档。充电盒读数可能需要在电脑旁开盖。
-广播归属无法验证，明确显示“附近广播”；同型号附近有多组时可能读到其他设备。
-30 秒以上未更新的数据在下一次刷新时标成历史，约两分钟无广播后移除。
+- Includes the native protocol drivers from [Wireless Battery](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor)
+  and its Chinese adaptation. Brand support does not mean every model is supported.
+  External HeadsetControl integration is not included.
+- Vendor-specific battery queries send HID output/feature reports, or serial
+  commands for supported ATK headsets, to peripherals and read their replies.
+  These community-derived protocols have not been verified on every supported
+  model. Some matches use vendor IDs and report sizes rather than exact model IDs.
+  Queries can conflict with vendor utilities that access a device exclusively.
+- Standard Bluetooth battery readings depend on what Windows exposes.
+- Only the primary, horizontal taskbar is supported. On Windows 11 a crowded or
+  left-aligned taskbar can overlap the widget; Windows 10 taskbar resizing can
+  flicker. Switch to tray mode if the taskbar layout is unsuitable.
+- In taskbar mode low battery is indicated by red text; notification balloons
+  are available in tray mode. Sleep/last-known readings are dimmed.
+- Disabling the mod waits for the active driver query to finish. Remaining
+  drivers are skipped when stopping; an individual device timeout can still
+  take several seconds.
 
-此测试版包含所有现有原生协议驱动；暂不调用外部 HeadsetControl 扩展。
-包含 x86 和 x64 宿主支持；多显示器、任务栏布局与其他模组的组合需要验证。
+## Optional AirPods reception
 
-来源与许可证：GNU GPL v3.0 or later。
-上游：https://github.com/krisgfx9/Wireless-Device-Battery-Monitor
-中文及 G87：https://github.com/krisgfx9/Wireless-Device-Battery-Monitor/pull/43
-AirPods 协议参考：SpriteOvO/AirPodsDesktop (GPL-3.0-or-later)。
-工具宿主适配参考 Windhawk 官方 “Mods as tools” 文档。
-完整源代码及声明：https://github.com/yaoiyiXu/taskbar-wireless-battery-monitor
+AirPods BLE reception is **off by default**. Enable it in settings if needed.
+It passively receives nearby Apple proximity broadcasts while enabled, without
+changing pairing or audio settings. Battery levels are approximate, in steps
+of about 10%; open the charging case near the computer to obtain case readings.
+
+Broadcast ownership cannot be verified. Entries are labelled "nearby broadcast"
+and may belong to someone else, especially when several pairs of the same model
+are nearby. Readings older than 30 seconds are marked as historical at the next
+refresh, and entries expire after about two minutes without a broadcast.
+Raw Bluetooth addresses and encrypted payloads are not written to disk.
+
+## Credits and license
+
+GNU GPL v3.0 or later. Based on [Wireless Battery](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor)
+and the [Chinese / G87 adaptation](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor/pull/43).
+AirPods protocol reference: [SpriteOvO/AirPodsDesktop](https://github.com/SpriteOvO/AirPodsDesktop)
+(GPL-3.0-or-later). The dedicated host follows the official Windhawk "Mods as tools" example.
+[Source and full notices](https://github.com/yaoiyiXu/taskbar-wireless-battery-monitor).
+
+## 中文说明
+
+在主显示器任务栏或系统托盘显示受支持无线外设的电量。点击电量区域可刷新、
+显示或隐藏设备，悬停可查看详情；显示模式、刷新周期等在 Windhawk 设置页调整。
+中文 Windows 显示中文界面，其他语言系统默认显示英文。启用前请退出独立版
+WirelessBattery.exe；启动和启停由 Windhawk 管理。
+
+AirPods 广播接收默认关闭，可在设置中手动开启。电量约 10% 一档，充电盒读数
+可能需要在电脑旁开盖。广播归属无法验证，可能显示附近其他人的耳机。
+超过 30 秒未更新的数据在下一次刷新时标成历史，约两分钟无广播后移除。
+
+厂商协议会向设备发送 HID 查询报文，部分 ATK 耳机使用串口命令。协议来自社区，
+并未逐型号验证，部分驱动根据厂商 ID 和报文长度匹配设备；可能与独占设备的
+厂商软件冲突。支持某品牌不代表支持其全部型号，不包含外部 HeadsetControl 扩展。
+
+仅支持主显示器的横向任务栏；Windows 11 拥挤或左对齐时可能重叠，Windows 10
+调整任务按钮区域时可能闪烁，可切换托盘模式。任务栏模式通过红字提示低电量，
+托盘模式另有气泡通知。关闭时仍需等待当前设备查询结束，可能耗时数秒。
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - displayMode: taskbar
-  $name: 显示模式
+  $name: Display mode
+  $name:zh-CN: 显示模式
   $options:
+  - taskbar: Taskbar icons and battery levels
+  - tray: One tray icon per device
+  $options:zh-CN:
   - taskbar: 任务栏图标与电量
   - tray: 每个设备一个托盘图标
 - pollSeconds: 60
-  $name: 常规设备刷新周期（秒，10～600）
+  $name: Device refresh interval (seconds, 10–600)
+  $name:zh-CN: 常规设备刷新周期（秒，10～600）
 - warningPercent: 15
-  $name: 低电量阈值（0～50）
+  $name: Low-battery threshold (0–50)
+  $name:zh-CN: 低电量阈值（0～50）
 - fontSize: 13
-  $name: 电量字号（10～24）
+  $name: Battery font size (10–24)
+  $name:zh-CN: 电量字号（10～24）
 - deviceGap: 14
-  $name: 设备间距（4～40）
+  $name: Device spacing (4–40)
+  $name:zh-CN: 设备间距（4～40）
 - hideSleeping: false
-  $name: 隐藏休眠或仅有历史电量的设备
-- enableAirPods: true
-  $name: 接收附近 AirPods 电量广播
+  $name: Hide sleeping devices and last-known readings
+  $name:zh-CN: 隐藏休眠或仅有历史电量的设备
+- enableAirPods: false
+  $name: Receive nearby AirPods battery broadcasts
+  $name:zh-CN: 接收附近 AirPods 电量广播
+  $description: Approximate readings; ownership is unverified and nearby people's AirPods may appear.
+  $description:zh-CN: 电量为近似值，广播归属未验证，可能显示附近其他人的耳机。
 */
 // ==/WindhawkModSettings==
 
-// Generated by scripts/build-windhawk.py. Edit the source modules, not this file.
+// Source modules and reproducible bundler: https://github.com/yaoiyiXu/taskbar-wireless-battery-monitor
+
+// Driver namespaces isolate file-local helpers from the original translation units.
 
 #include <windows.h>
+#include <windhawk_utils.h>
 #include <initguid.h>
 #include <hidsdi.h>
 #include <hidpi.h>
@@ -86,7 +151,6 @@ AirPods 协议参考：SpriteOvO/AirPodsDesktop (GPL-3.0-or-later)。
 #include <map>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <roapi.h>
 #include <set>
 #include <setupapi.h>
@@ -182,6 +246,17 @@ __CRT_UUID_DECL(WindhawkAirPodsAbi::Received, 0x90eb4eca, 0xd465, 0x5ea0, 0xa6, 
 __CRT_UUID_DECL(WindhawkAirPodsAbi::IBluetoothLEAdvertisementWatcher, 0xa6ac336f, 0xf3d3, 0x4297, 0x8d, 0x6c, 0xc8, 0x1e, 0xa6, 0x62, 0x3f, 0x40)
 #endif
 
+// English is the fallback. Device protocol strings and keys are never translated.
+namespace ui {
+inline bool IsChinese() {
+    return PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_CHINESE;
+}
+
+inline const wchar_t* Text(const wchar_t* english, const wchar_t* chinese) {
+    return IsChinese() ? chinese : english;
+}
+}  // namespace ui
+
 enum class DeviceKind { Other, Mouse, Headset, Keyboard, Gamepad };
 
 // One battery-powered device, as seen during a single poll.
@@ -201,10 +276,7 @@ struct DeviceStatus {
 };
 
 // Queries every supported device. Blocking (can take a second or two); call from a worker thread.
-std::vector<DeviceStatus> PollAllDevices();
-
-// Prints every HID collection (for adding support for new devices).
-std::wstring DumpHidCollections();
+std::vector<DeviceStatus> PollAllDevices(HANDLE stopEvent = nullptr);
 
 // Thin Win32 HID layer shared by all drivers.
 //
@@ -324,7 +396,6 @@ void PollCoolerMaster(PollContext& ctx);
 void PollPlayStation(PollContext& ctx);
 void PollGameSir(PollContext& ctx);    // Nova Lite / Nova 2 / Nova 2 Lite
 // Fallbacks.
-void PollHeadsetControl(PollContext& ctx);  // only if headsetcontrol.exe is installed
 void PollGenericHid(PollContext& ctx);
 void PollBluetooth(PollContext& ctx);
 void PollAirPods(PollContext& ctx);
@@ -357,6 +428,7 @@ bool Reposition();
 // Translate at presentation boundaries; preserve protocol values and device keys.
 namespace zh {
 inline std::wstring Text(const std::wstring& value) {
+    if (!ui::IsChinese()) return value;
     struct Entry { const wchar_t* source; const wchar_t* translated; };
     static const Entry entries[] = {
         { L"Empty", L"耗尽" },
@@ -410,7 +482,6 @@ inline std::wstring Text(const std::wstring& value) {
 void StartAirPods();
 void StopAirPods();
 void SetAirPodsRefreshEvent(void* event);
-std::wstring DiagnoseAirPods(unsigned seconds);
 void RefreshAirPods(std::vector<DeviceStatus>& devices);
 
 // Independent decoder of Apple proximity advertisements. Layout reference:
@@ -516,10 +587,9 @@ inline bool DecodeBattery(const std::uint8_t* data, std::size_t size, Battery& o
 
 }  // namespace Rapoo
 
-
 namespace ModConfig {
 inline std::atomic<int> pollMs{60000}, warning{15}, fontSize{13}, gap{14};
-inline std::atomic<bool> taskbar{true}, hideSleeping{false}, airpodsEnabled{true};
+inline std::atomic<bool> taskbar{true}, hideSleeping{false}, airpodsEnabled{false};
 inline void* bleEvent = nullptr;
 inline void Load() {
     pollMs = std::clamp(Wh_GetIntSetting(L"pollSeconds"), 10, 600) * 1000;
@@ -528,9 +598,8 @@ inline void Load() {
     gap = std::clamp(Wh_GetIntSetting(L"deviceGap"), 4, 40);
     hideSleeping = !!Wh_GetIntSetting(L"hideSleeping");
     airpodsEnabled = !!Wh_GetIntSetting(L"enableAirPods");
-    PCWSTR mode = Wh_GetStringSetting(L"displayMode");
-    taskbar = mode && wcscmp(mode, L"tray") != 0;
-    Wh_FreeStringSetting(mode);
+    auto mode = WindhawkUtils::StringSetting::make(L"displayMode");
+    taskbar = wcscmp(mode, L"tray") != 0;
 }
 }
 namespace ModHost { extern std::atomic<bool> stopRequested; extern std::atomic<HWND> window; }
@@ -718,7 +787,6 @@ DeviceKind KindFromCollections(const std::vector<HidColl>& all, USHORT vid, USHO
     return DeviceKind::Other;
 }
 
-
 namespace wb_driver_airpods {
 namespace {
 using namespace WindhawkAirPodsAbi;
@@ -853,8 +921,8 @@ struct Receiver {
 Receiver& GetReceiver() { static auto* r = new Receiver; return *r; }
 
 std::wstring Level(int pct, bool charging) {
-    if (pct < 0) return L"未知";
-    return L"约" + std::to_wstring(pct) + L"%" + (charging ? L"（充电中）" : L"");
+    if (pct < 0) return ui::Text(L"Unknown", L"未知");
+    return ui::Text(L"~", L"约") + std::to_wstring(pct) + L"%" + (charging ? ui::Text(L" (charging)", L"（充电中）") : L"");
 }
 } // namespace
 
@@ -887,48 +955,24 @@ void PollAirPods(PollContext& ctx) {
         const auto& b = seen.battery;
         DeviceStatus status;
         status.key = L"airpods-nearby:" + Hex4(model);
-        status.name = std::wstring(airpods::ModelName(model)) + L"（附近广播）";
+        status.name = std::wstring(airpods::ModelName(model)) + ui::Text(L" (nearby broadcast)", L"（附近广播）");
         status.kind = DeviceKind::Headset;
         status.via = L"Apple BLE";
         status.percent = airpods::EarPercent(b);
         const bool onlyBox = status.percent < 0;
         if (onlyBox) status.percent = b.box;
-        status.levelText = (onlyBox ? L"盒约" : L"约") + std::to_wstring(status.percent) + L"%";
+        status.levelText = (onlyBox ? ui::Text(L"Case ~", L"盒约") : ui::Text(L"~", L"约")) + std::to_wstring(status.percent) + L"%";
         status.charging = onlyBox ? b.boxCharging :
             (((b.left >= 0 && b.leftCharging) && (b.right < 0 || b.rightCharging)) ||
              (b.left < 0 && b.right >= 0 && b.rightCharging));
-        status.detailText = L"左耳" + Level(b.left, b.leftCharging) + L"；右耳" + Level(b.right, b.rightCharging) +
-            L"；充电盒" + Level(b.box, b.boxCharging) + L"；附近广播，归属未验证";
+        status.detailText = ui::Text(L"Left: ", L"左耳") + Level(b.left, b.leftCharging) + ui::Text(L"; right: ", L"；右耳") + Level(b.right, b.rightCharging) +
+            ui::Text(L"; case: ", L"；充电盒") + Level(b.box, b.boxCharging) + ui::Text(L"; nearby broadcast, ownership unverified", L"；附近广播，归属未验证");
         if (now - seen.when > 30000) {
             status.asleep = true; status.percent = -1;
-            status.levelText.clear(); status.detailText += L"；历史读数";
+            status.levelText.clear(); status.detailText += ui::Text(L"; last known", L"；历史读数");
         }
         ctx.out.push_back(status);
     }
-}
-
-std::wstring DiagnoseAirPods(unsigned seconds) {
-    StartAirPods();
-    Sleep(std::min(seconds, 30u) * 1000);
-    auto& r = GetReceiver();
-    BluetoothLEAdvertisementWatcherStatus status = BluetoothLEAdvertisementWatcherStatus_Aborted;
-    if (r.watcher) r.watcher->get_Status(&status);
-    std::wstring output;
-    {
-        std::lock_guard<std::mutex> lock(r.state->mutex);
-        wchar_t line[200];
-        swprintf(line, 200, L"BLE status=%d, HRESULT=0x%08lX, events=%u, apple=%u, airpods=%u\n",
-                 (int)status, (unsigned long)r.error, r.state->events, r.state->apple, r.state->decoded);
-        output = line;
-        for (const auto& [address, seen] : r.state->seen) {
-            const auto& b = seen.battery;
-            output += std::wstring(airpods::ModelName(b.model)) + L": 左耳" + Level(b.left, b.leftCharging) +
-                L"，右耳" + Level(b.right, b.rightCharging) + L"，充电盒" + Level(b.box, b.boxCharging) +
-                L"，信号 " + std::to_wstring(seen.rssi) + L" dBm\n";
-        }
-    }
-    StopAirPods();
-    return output;
 }
 
 void RefreshAirPods(std::vector<DeviceStatus>& devices) {
@@ -936,14 +980,13 @@ void RefreshAirPods(std::vector<DeviceStatus>& devices) {
         return s.key.compare(0, 15, L"airpods-nearby:") == 0;
     }), devices.end());
     PollContext ctx;
-    ::PollAirPods(ctx);
+    wb_driver_airpods::PollAirPods(ctx);
     devices.insert(devices.end(), ctx.out.begin(), ctx.out.end());
 }
 
 }
 
 void PollAirPods(PollContext& ctx) { if (ModConfig::airpodsEnabled) wb_driver_airpods::PollAirPods(ctx); }
-
 
 void StartAirPods() {
     if (ModConfig::airpodsEnabled) {
@@ -952,7 +995,6 @@ void StartAirPods() {
 }
 void StopAirPods() { wb_driver_airpods::StopAirPods(); }
 void SetAirPodsRefreshEvent(void* e) { ModConfig::bleEvent = e; wb_driver_airpods::SetAirPodsRefreshEvent(e); }
-std::wstring DiagnoseAirPods(unsigned s) { return wb_driver_airpods::DiagnoseAirPods(s); }
 void RefreshAirPods(std::vector<DeviceStatus>& v) {
     if (ModConfig::airpodsEnabled) wb_driver_airpods::RefreshAirPods(v);
     else {
@@ -960,7 +1002,6 @@ void RefreshAirPods(std::vector<DeviceStatus>& v) {
         v.erase(std::remove_if(v.begin(), v.end(), [](const DeviceStatus& d) { return d.key.rfind(L"airpods-nearby:", 0) == 0; }), v.end());
     }
 }
-
 
 namespace wb_driver_atk_serial {
 // ATK N9 Pro headset (VID 373B: dongle 11CB, wired 11CA). Unlike other headsets it is not
@@ -1083,7 +1124,6 @@ void PollAtkSerial(PollContext& ctx) {
 
 void PollAtkSerial(PollContext& ctx) { wb_driver_atk_serial::PollAtkSerial(ctx); }
 
-
 namespace wb_driver_aula {
 // AULA F75 / F87 Pro / F99 wireless keyboards on the Compx 2.4 GHz receiver (VID 3554, PID FA09).
 // The receiver exposes a 20-byte vendor collection on usage page FF02 / usage 02. Battery is a
@@ -1153,7 +1193,6 @@ void PollAula(PollContext& ctx) {
 }
 
 void PollAula(PollContext& ctx) { wb_driver_aula::PollAula(ctx); }
-
 
 namespace wb_driver_coolermaster {
 // Cooler Master wireless mice (VID 2516): MM712 (cable 0169) and MM731 (cable 0167). Both pair with
@@ -1225,7 +1264,6 @@ void PollCoolerMaster(PollContext& ctx) {
 }
 
 void PollCoolerMaster(PollContext& ctx) { wb_driver_coolermaster::PollCoolerMaster(ctx); }
-
 
 namespace wb_driver_corsair {
 // Corsair wireless headsets, mice and keyboards (VID 1B1C).
@@ -1345,7 +1383,6 @@ void PollCorsair(PollContext& ctx) {
 
 void PollCorsair(PollContext& ctx) { wb_driver_corsair::PollCorsair(ctx); }
 
-
 namespace wb_driver_gamesir {
 // GameSir Nova Lite / Nova 2 / Nova 2 Lite on the 2.4 GHz receiver (3537:1098) or a USB cable.
 // XInput reports these as a wired pad, so the battery is read from the vendor collection
@@ -1400,7 +1437,6 @@ void PollGameSir(PollContext& ctx) {
 }
 
 void PollGameSir(PollContext& ctx) { wb_driver_gamesir::PollGameSir(ctx); }
-
 
 namespace wb_driver_generic {
 // Fallbacks that work for any vendor:
@@ -1580,7 +1616,6 @@ void PollBluetooth(PollContext& ctx) { wb_driver_generic::PollBluetooth(ctx); }
 
 void PollGenericHid(PollContext& ctx) { wb_driver_generic::PollGenericHid(ctx); }
 
-
 namespace wb_driver_glorious {
 // Glorious (VID 258A), Hitscan (VID 3770) and G-Wolves (VID 33E4) wireless mice using the same
 // supplier protocol (G-Wolves calls it "XVI"; its other models use the Kysona protocol instead):
@@ -1735,7 +1770,6 @@ void PollGlorious(PollContext& ctx) { wb_driver_glorious::PollGlorious(ctx); }
 
 const wchar_t* GWolvesModelName(USHORT p) { return wb_driver_glorious::GWolvesModelName(p); }
 bool GWolvesIsCable(USHORT p) { return wb_driver_glorious::GWolvesIsCable(p); }
-
 
 namespace wb_driver_hyperx {
 // HyperX wireless headsets (HP VID 03F0, older Kingston VID 0951).
@@ -1932,7 +1966,6 @@ void PollHyperX(PollContext& ctx) {
 
 void PollHyperX(PollContext& ctx) { wb_driver_hyperx::PollHyperX(ctx); }
 
-
 namespace wb_driver_keychron {
 // Keychron wireless mice (VID 3434, e.g. M4), from Keychron's own web Launcher (launcher.keychron.com).
 // 64-byte output report without report id: [01][00][81][01][0...][checksum], checksum (byte 63)
@@ -2020,7 +2053,6 @@ void PollKeychron(PollContext& ctx) {
 }
 
 void PollKeychron(PollContext& ctx) { wb_driver_keychron::PollKeychron(ctx); }
-
 
 namespace wb_driver_kysona {
 // Kysona, Pulsar and ATK / VXE wireless mice (VID 3554, ATK dongles 373B), G-Wolves models on this protocol
@@ -2132,7 +2164,6 @@ void PollKysona(PollContext& ctx) {
 
 void PollKysona(PollContext& ctx) { wb_driver_kysona::PollKysona(ctx); }
 
-
 namespace wb_driver_lamzu {
 // LAMZU wireless mice on their own vendor ids 373E and 37B0 (Maya X, Maya, Tachi, Inca, Paro, Thorn,
 // Atlantis Mini/OG Champion, Orcus ...). The Atlantis on Compx 3554 uses the Kysona driver instead.
@@ -2229,7 +2260,6 @@ void PollLamzu(PollContext& ctx) {
 }
 
 void PollLamzu(PollContext& ctx) { wb_driver_lamzu::PollLamzu(ctx); }
-
 
 namespace wb_driver_logitech {
 // Logitech HID++ (VID 046D): Unifying / Bolt / Lightspeed / Nano receivers, wired or Bluetooth
@@ -2484,7 +2514,6 @@ void PollLogitech(PollContext& ctx) {
 
 void PollLogitech(PollContext& ctx) { wb_driver_logitech::PollLogitech(ctx); }
 
-
 namespace wb_driver_mchose {
 // MCHOSE G87 2.4 GHz battery query. Protocol documentation:
 // https://github.com/marsuyone/mchose-battery-tray (7206b460), README G87 section.
@@ -2532,7 +2561,6 @@ void PollMchose(PollContext& ctx) {
 }
 
 void PollMchose(PollContext& ctx) { wb_driver_mchose::PollMchose(ctx); }
-
 
 namespace wb_driver_misc_mice {
 // Smaller mouse brands, each with a community-documented battery protocol:
@@ -2751,7 +2779,6 @@ void PollMiscMice(PollContext& ctx) {
 
 void PollMiscMice(PollContext& ctx) { wb_driver_misc_mice::PollMiscMice(ctx); }
 
-
 namespace wb_driver_playstation {
 // Sony DualShock 4 / DualSense / DualSense Edge (VID 054C), USB or Bluetooth.
 // The battery is part of the regular input report:
@@ -2821,7 +2848,6 @@ void PollPlayStation(PollContext& ctx) {
 }
 
 void PollPlayStation(PollContext& ctx) { wb_driver_playstation::PollPlayStation(ctx); }
-
 
 namespace wb_driver_rapoo {
 // Rapoo VT gaming mice. Battery is pushed periodically; no commands or handshake are needed.
@@ -2935,7 +2961,6 @@ void PollRapoo(PollContext& ctx) {
 }
 
 void PollRapoo(PollContext& ctx) { wb_driver_rapoo::PollRapoo(ctx); }
-
 
 namespace wb_driver_razer {
 // Razer wireless mice, keyboards and dongles (VID 1532).
@@ -3082,7 +3107,6 @@ void PollRazer(PollContext& ctx) {
 
 void PollRazer(PollContext& ctx) { wb_driver_razer::PollRazer(ctx); }
 
-
 namespace wb_driver_razer_headset {
 // Razer BlackShark V3 / V3 Pro headsets (1532:0576/0577 V3 Pro, 0579/057A V3), interface 5.
 // 64-byte output report 02: [02][00][60][00 00][00][size][00 00][dir][class][sub][argc][args]..
@@ -3160,7 +3184,6 @@ void PollRazerHeadsets(PollContext& ctx) {
 }
 
 void PollRazerHeadsets(PollContext& ctx) { wb_driver_razer_headset::PollRazerHeadsets(ctx); }
-
 
 namespace wb_driver_rog {
 // ASUS ROG wireless keyboards and mice (VID 0B05), including the ROG Omni Receiver (0B05:1ACE).
@@ -3362,7 +3385,6 @@ void PollRog(PollContext& ctx) {
 
 void PollRog(PollContext& ctx) { wb_driver_rog::PollRog(ctx); }
 
-
 namespace wb_driver_rongyuan {
 // Rongyuan 2.4 GHz receivers, used by Attack Shark, Ajazz and many other mice and keyboards (and
 // some MSI devices). One feature report returns both the keyboard and the mouse slot:
@@ -3445,7 +3467,6 @@ void PollRongyuan(PollContext& ctx) {
 }
 
 void PollRongyuan(PollContext& ctx) { wb_driver_rongyuan::PollRongyuan(ctx); }
-
 
 namespace wb_driver_sony_inzone {
 // Sony INZONE H9 II (054C:0FA8) and H5 (054C:0EBF) headsets: a Sony command layer tunnelled through
@@ -3542,7 +3563,6 @@ void PollSonyInzone(PollContext& ctx) {
 }
 
 void PollSonyInzone(PollContext& ctx) { wb_driver_sony_inzone::PollSonyInzone(ctx); }
-
 
 namespace wb_driver_steelseries {
 // SteelSeries wireless headsets and mice (VID 1038).
@@ -3757,7 +3777,6 @@ void PollSteelSeries(PollContext& ctx) {
 
 void PollSteelSeries(PollContext& ctx) { wb_driver_steelseries::PollSteelSeries(ctx); }
 
-
 namespace wb_driver_xinput {
 namespace {
 
@@ -3909,7 +3928,6 @@ void PollXInput(PollContext& ctx) {
 
 void PollXInput(PollContext& ctx) { wb_driver_xinput::PollXInput(ctx); }
 
-
 namespace wb_driver_zowie {
 // BenQ ZOWIE wireless mice (VID 04A5). Zowie ships no software; these vendor commands were
 // reverse-engineered by the community. Only the read-only battery commands below are ever sent
@@ -4006,60 +4024,72 @@ void PollZowie(PollContext& ctx) {
 
 void PollZowie(PollContext& ctx) { wb_driver_zowie::PollZowie(ctx); }
 
-void PollHeadsetControl(PollContext&) {} // External helper intentionally excluded from local native test mod.
-
 namespace wb_poll {
 // Runs every driver in order. Vendor drivers go first and claim the devices they handle; the
 // generic fallbacks then only look at what is left.
-std::vector<DeviceStatus> PollAllDevices() {
+std::vector<DeviceStatus> PollAllDevices(HANDLE stopEvent) {
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return {};
     StartAirPods();
     PollContext ctx;
     ctx.colls = EnumHid();
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollGlorious(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollAula(ctx);       // before Kysona, which shares the 3554 vendor id and would probe it first
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollMchose(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollAtkSerial(ctx);  // before Kysona, which shares the ATK vendor id
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollKysona(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollKeychron(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollLamzu(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollRongyuan(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollSonyInzone(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollRog(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollZowie(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollRapoo(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollMiscMice(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollRazerHeadsets(ctx);  // before the generic Razer driver, which shares the vendor id
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollHyperX(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollLogitech(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollRazer(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollSteelSeries(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollCorsair(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollCoolerMaster(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollPlayStation(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollGameSir(ctx);
-    PollHeadsetControl(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollGenericHid(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollBluetooth(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollAirPods(ctx);
+    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollXInput(ctx);
     return ctx.out;
 }
 
-std::wstring DumpHidCollections() {
-    std::wstring out = L"VID:PID    接口  用途页:用途  输入 输出 特征  产品\n";
-    for (const auto& c : EnumHid()) {
-        wchar_t line[160];
-        swprintf(line, 160, L"%04X:%04X  %2d  %04X:%04X    %3u %3u %3u   ", c.vid, c.pid, c.iface, c.page(), c.usage(), c.inLen(), c.outLen(),
-                 c.featLen());
-        out += line + HidProduct(c) + L"\n";
-    }
-    return out;
 }
 
-}
-
-std::vector<DeviceStatus> PollAllDevices() { return wb_poll::PollAllDevices(); }
-std::wstring DumpHidCollections() { return wb_poll::DumpHidCollections(); }
+std::vector<DeviceStatus> PollAllDevices(HANDLE stopEvent) { return wb_poll::PollAllDevices(stopEvent); }
 
 namespace wb_render {
 namespace widget {
@@ -4333,7 +4363,7 @@ bool Create(HINSTANCE inst, HWND notifyWnd, UINT clickMsg, bool lightTheme) {
         ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
         ti.hwnd = notifyWnd;
         ti.uId = (UINT_PTR)g_wnd;
-        ti.lpszText = const_cast<wchar_t*>(L"任务栏无线设备电量监控");
+        ti.lpszText = const_cast<wchar_t*>(ui::Text(L"Taskbar Wireless Battery Monitor", L"任务栏无线设备电量监控"));
         SendMessageW(g_tip, TTM_ADDTOOLW, 0, (LPARAM)&ti);
         SendMessageW(g_tip, TTM_SETMAXTIPWIDTH, 0, 600);
     }
@@ -4435,16 +4465,11 @@ constexpr UINT WM_WIDGET_CLICK = WM_APP + 3;
 constexpr UINT_PTR TIMER_DEBOUNCE = 1;
 constexpr UINT_PTR TIMER_WIDGET = 2;
 
-
 constexpr UINT PLACEHOLDER_ID = 1;
 
-enum MenuId : UINT { ID_REFRESH = 100, ID_AUTOSTART, ID_HIDE_LAST_KNOWN, ID_EXIT, ID_MODE_WIDGET, ID_MODE_TRAY, ID_DEVICE_FIRST = 1000 };
+enum MenuId : UINT { ID_REFRESH = 100, ID_DEVICE_FIRST = 1000 };
 
-const wchar_t* kAppName = L"任务栏无线设备电量监控";
-const wchar_t* kRunKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-const wchar_t* kRunValue = L"TaskbarWirelessBattery";
-
-const wchar_t* kSettingsKey = L"Software\\TaskbarWirelessBattery";
+const wchar_t* kAppName = ui::Text(L"Taskbar Wireless Battery Monitor", L"任务栏无线设备电量监控");
 
 HINSTANCE g_inst;
 HWND g_hwnd;
@@ -4485,22 +4510,19 @@ bool ReadLightTaskbar() {
     return false;
 }
 
-std::wstring ExePath() {
-    wchar_t p[MAX_PATH];
-    GetModuleFileNameW(nullptr, p, MAX_PATH);
-    return p;
-}
-
-// Devices the user chose to hide (by key), stored as a REG_MULTI_SZ.
+// Device keys the user chose to hide, stored in Windhawk mod storage.
 std::set<std::wstring> g_hidden;
 
 void LoadHidden() {
+    g_hidden.clear();
     std::vector<wchar_t> data(65536, 0);
     Wh_GetStringValue(L"HiddenDevices", data.data(), data.size());
     std::wstring text(data.data());
     for (size_t start = 0; start < text.size();) {
-        size_t end = text.find(L'\n', start);
-        g_hidden.insert(text.substr(start, end == std::wstring::npos ? end : end-start));
+        // Accept the old newline format and the spaces written by portable 1.7.3.
+        // Keys contain fixed prefixes, hex IDs, numbers and GUIDs, never these separators.
+        size_t end = text.find_first_of(L"| \r\n", start);
+        if (end != start) g_hidden.insert(text.substr(start, end == std::wstring::npos ? end : end-start));
         if (end == std::wstring::npos) break;
         start = end+1;
     }
@@ -4508,7 +4530,11 @@ void LoadHidden() {
 
 void SaveHidden() {
     std::wstring text;
-    for (const auto& key : g_hidden) { if (!text.empty()) text += L'\n'; text += key; }
+    // A single-line separator also works with Windhawk's portable INI storage.
+    for (const auto& key : g_hidden) {
+        if (!text.empty()) text += L'|';
+        text += key;
+    }
     Wh_SetStringValue(L"HiddenDevices", text.c_str());
 }
 
@@ -4518,18 +4544,9 @@ bool IsEntryHidden(const TrayEntry& e) {
     return IsHidden(e.st.key) || (g_hideLastKnown && (e.st.asleep || (e.st.percent < 0 && e.lastPct >= 0)));
 }
 
-bool LoadBoolSetting(const wchar_t* n, bool d) { return Wh_GetIntValue(n, d) != 0; }
-
-void SaveBoolSetting(const wchar_t* n, bool b) { Wh_SetIntValue(n, b); }
-
 bool LoadWidgetMode() { return ModConfig::taskbar.load(); }
-void SaveWidgetMode(bool on) { SaveBoolSetting(L"TaskbarWidget", on); }
+
 bool LoadHideLastKnown() { return ModConfig::hideSleeping.load(); }
-void SaveHideLastKnown(bool on) { SaveBoolSetting(L"HideLastKnownDevices", on); }
-
-bool AutostartEnabled() { return false; }
-
-void SetAutostart(bool) {}
 
 // ---- icon rendering ---------------------------------------------------------------------------
 // Draws the percentage as large digits with a small level bar underneath. GDI text is rendered
@@ -4651,14 +4668,14 @@ void CopyTip(wchar_t* dst, size_t cap, const std::wstring& s) {
 
 std::wstring StatusText(const TrayEntry& e, bool details = true) {
     const auto& s = e.st;
-    if (!s.connected) return L"已关闭 / 未连接";
+    if (!s.connected) return ui::Text(L"Off / disconnected", L"已关闭 / 未连接");
     std::wstring t;
     if (!s.levelText.empty() && s.percent >= 0) t = zh::Text(s.levelText);
     else if (s.percent >= 0) t = std::to_wstring(s.percent) + L"%";
-    else if (e.lastPct >= 0) t = std::to_wstring(e.lastPct) + L"%（上次记录）";
-    else t = L"未知";
-    if (s.charging) t += L"，充电中";
-    if (s.asleep) t += L"，休眠中";
+    else if (e.lastPct >= 0) t = std::to_wstring(e.lastPct) + ui::Text(L"% (last known)", L"%（上次记录）");
+    else t = ui::Text(L"Unknown", L"未知");
+    if (s.charging) t += ui::Text(L", charging", L"，充电中");
+    if (s.asleep) t += ui::Text(L", asleep", L"，休眠中");
     if (details && !s.detailText.empty()) t += L"\n" + s.detailText;
     return t;
 }
@@ -4701,7 +4718,7 @@ void UpdatePlaceholder() {
     for (auto& [k, e] : g_entries) any |= e.added;
     if (!any && !g_placeholder) {
         if (!g_placeholderIcon) g_placeholderIcon = RenderIcon(L"-", -1, Foreground(), Foreground(), true);
-        TrayCall(NIM_ADD, PLACEHOLDER_ID, g_placeholderIcon, L"任务栏无线设备电量监控\n未找到可读取电量的设备");
+        TrayCall(NIM_ADD, PLACEHOLDER_ID, g_placeholderIcon, ui::Text(L"Taskbar Wireless Battery Monitor\nNo readable battery devices found", L"任务栏无线设备电量监控\n未找到可读取电量的设备"));
         g_placeholder = true;
     } else if (any && g_placeholder) {
         TrayDelete(PLACEHOLDER_ID);
@@ -4731,8 +4748,8 @@ void ApplyEntry(TrayEntry& e) {
     if (s.charging || shown > ModConfig::warning.load() + 10) e.lowWarned = false;
     if (!s.charging && s.percent >= 0 && s.percent <= ModConfig::warning.load() && !e.lowWarned) {
         e.lowWarned = true;
-        infoTitle = L"电量不足";
-        info = zh::Text(s.name) + L" 的剩余电量为 " +
+        infoTitle = ui::Text(L"Low battery", L"电量不足");
+        info = zh::Text(s.name) + ui::Text(L" battery remaining: ", L" 的剩余电量为 ") +
             (s.levelText.empty() ? std::to_wstring(s.percent) + L"%" : zh::Text(s.levelText));
     }
     TrayCall(e.added ? NIM_MODIFY : NIM_ADD, e.uid, e.icon, tip, infoTitle, info);
@@ -4773,7 +4790,7 @@ void UpdateWidget() {
         if (!tip.empty()) tip += L"\n";
         tip += zh::Text(e->st.name) + L": " + StatusText(*e);
     }
-    if (tip.empty()) tip = L"任务栏无线设备电量监控：未找到可读取电量的设备";
+    if (tip.empty()) tip = ui::Text(L"Taskbar Wireless Battery Monitor: no readable battery devices found", L"任务栏无线设备电量监控：未找到可读取电量的设备");
     widget::SetItems(items, tip);
 }
 
@@ -4827,20 +4844,6 @@ void Reconcile() {
     }
 }
 
-void SetMode(bool useWidget) {
-    g_wantWidget = useWidget;
-    SaveWidgetMode(useWidget);
-    Reconcile();
-}
-
-void SetHideLastKnown(bool on) {
-    g_hideLastKnown = on;
-    SaveHideLastKnown(on);
-    for (auto& [k, e] : g_entries) ApplyEntry(e);
-    UpdatePlaceholder();
-    UpdateWidget();
-}
-
 void ReAddAll() {
     g_placeholder = false;
     for (auto& [k, e] : g_entries) { e.added = false; ApplyEntry(e); }
@@ -4860,18 +4863,17 @@ void RedrawAll() {
 void ShowMenu() {
     HMENU m = CreatePopupMenu();
     std::vector<std::wstring> keys;  // menu id ID_DEVICE_FIRST + i -> device key
-    if (g_entries.empty()) AppendMenuW(m, MF_STRING | MF_GRAYED, 0, L"未找到可读取电量的设备");
-    else AppendMenuW(m, MF_STRING | MF_GRAYED, 0, L"点击设备可显示或隐藏");
+    if (g_entries.empty()) AppendMenuW(m, MF_STRING | MF_GRAYED, 0, ui::Text(L"No readable battery devices found", L"未找到可读取电量的设备"));
+    else AppendMenuW(m, MF_STRING | MF_GRAYED, 0, ui::Text(L"Click a device to show or hide it", L"点击设备可显示或隐藏"));
     for (auto& [k, e] : g_entries) {
         std::wstring line = zh::Text(e.st.name) + L":  " + StatusText(e, false) + L"   [" + zh::Text(e.st.via) + L"]";
         AppendMenuW(m, MF_STRING | (IsHidden(k) ? 0 : MF_CHECKED), ID_DEVICE_FIRST + (UINT)keys.size(), line.c_str());
         keys.push_back(k);
     }
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, MF_STRING, ID_REFRESH, ui::Text(L"Refresh now", L"立即刷新"));
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(m, MF_STRING, ID_REFRESH, L"立即刷新");
-    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(m, MF_STRING | MF_GRAYED, 0, L"显示设置和启停请在 Windhawk 中调整");
+    AppendMenuW(m, MF_STRING | MF_GRAYED, 0, ui::Text(L"Configure display and enable/disable in Windhawk", L"显示设置和启停请在 Windhawk 中调整"));
     POINT pt;
     GetCursorPos(&pt);
     SetForegroundWindow(g_hwnd);
@@ -4880,11 +4882,6 @@ void ShowMenu() {
     DestroyMenu(m);
     switch (cmd) {
         case ID_REFRESH: SetEvent(g_refreshEvt); break;
-        case ID_AUTOSTART: SetAutostart(!AutostartEnabled()); break;
-        case ID_HIDE_LAST_KNOWN: SetHideLastKnown(!g_hideLastKnown); break;
-        case ID_MODE_WIDGET: SetMode(true); break;
-        case ID_MODE_TRAY: SetMode(false); break;
-        case ID_EXIT: DestroyWindow(g_hwnd); break;
         default:
             if (cmd >= ID_DEVICE_FIRST && cmd < ID_DEVICE_FIRST + keys.size()) {
                 const std::wstring& key = keys[cmd - ID_DEVICE_FIRST];
@@ -4901,7 +4898,7 @@ void ShowMenu() {
 // ---- worker thread ----------------------------------------------------------------------------
 
 DWORD WINAPI Worker(LPVOID) {
-    auto devices = PollAllDevices();
+    auto devices = PollAllDevices(g_stopEvt);
     ULONGLONG nextPoll = GetTickCount64() + (DWORD)ModConfig::pollMs.load();
     for (;;) {
         auto* v = new std::vector<DeviceStatus>(devices);
@@ -4913,7 +4910,7 @@ DWORD WINAPI Worker(LPVOID) {
         if (reason == WAIT_OBJECT_0 + 2) {
             RefreshAirPods(devices); // BLE reception must not increase polling of other vendors
         } else {
-            devices = PollAllDevices();
+            devices = PollAllDevices(g_stopEvt);
             nextPoll = GetTickCount64() + (DWORD)ModConfig::pollMs.load();
         }
     }
@@ -4987,66 +4984,15 @@ LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(h, msg, wp, lp);
 }
 
-// `WirelessBattery.exe --list` prints what it finds, `--dump` every HID collection.
-int ListToConsole(bool dump, bool diagnoseAirPods = false) {
-    HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (!out || out == INVALID_HANDLE_VALUE) {
-        if (AttachConsole(ATTACH_PARENT_PROCESS)) out = CreateFileW(L"CONOUT$", GENERIC_WRITE, FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
-    }
-    auto write = [&](const std::wstring& s) {
-        DWORD mode, written;
-        if (GetConsoleMode(out, &mode)) {
-            WriteConsoleW(out, s.data(), (DWORD)s.size(), &written, nullptr);
-            return;
-        }
-        int n = WideCharToMultiByte(CP_UTF8, 0, s.c_str(), (int)s.size(), nullptr, 0, nullptr, nullptr);
-        std::string u(n, 0);
-        WideCharToMultiByte(CP_UTF8, 0, s.c_str(), (int)s.size(), u.data(), n, nullptr, nullptr);
-        DWORD w;
-        WriteFile(out, u.data(), (DWORD)u.size(), &w, nullptr);
-    };
-    if (diagnoseAirPods) { write(DiagnoseAirPods(12)); return 0; }
-    if (dump) {
-        write(DumpHidCollections());
-        return 0;
-    }
-    StartAirPods();
-    Sleep(3000);  // give asynchronous BLE advertisements a bounded initial observation window
-    auto list = PollAllDevices();
-    if (list.empty()) write(L"未找到可读取电量的设备。\n");
-    for (auto& s : list) {
-        std::wstring line = zh::Text(s.name) + L"  [" + zh::Text(s.via) + L"]  ";
-        if (!s.connected) line += L"已关闭 / 未连接";
-        else if (s.asleep) line += L"休眠中";
-        else if (!s.levelText.empty()) line += zh::Text(s.levelText);
-        else if (s.percent >= 0) line += std::to_wstring(s.percent) + L"%";
-        else line += L"未知";
-        if (s.charging) line += L"，充电中";
-        if (s.millivolts) line += L", " + std::to_wstring(s.millivolts) + L" mV";
-        if (!s.detailText.empty()) line += L" | " + s.detailText;
-        write(line + L"   (" + s.key + L")\n");
-    }
-    StopAirPods();
-    return 0;
-}
-
 }  // namespace
 
-int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
-    if (cmdLine && wcsstr(cmdLine, L"--airpods")) return ListToConsole(false, true);
-    if (cmdLine && wcsstr(cmdLine, L"--list")) return ListToConsole(false);
-    if (cmdLine && wcsstr(cmdLine, L"--dump")) return ListToConsole(true);
-    if (cmdLine && wcsstr(cmdLine, L"--quit")) {  // used by the installer before upgrading/uninstalling
-        if (HWND w = FindWindowW(L"TaskbarWirelessBatteryWnd", nullptr)) {
-            PostMessageW(w, WM_CLOSE, 0, 0);
-            for (int i = 0; i < 50 && FindWindowW(L"TaskbarWirelessBatteryWnd", nullptr); i++) Sleep(100);
-        }
-        return 0;
-    }
+int Run(HINSTANCE inst) {
     g_inst = inst;
 
+    // Shared with WirelessBattery.exe so the standalone app and mod cannot overlap.
     HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Local\\TaskbarWirelessBatteryTray");
-    if (GetLastError() == ERROR_ALREADY_EXISTS) return 0;
+    if (!mutex) return 1;
+    if (GetLastError() == ERROR_ALREADY_EXISTS) { CloseHandle(mutex); return 0; }
 
     g_lightTaskbar = ReadLightTaskbar();
     g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
@@ -5058,7 +5004,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
     RegisterClassExW(&wc);
     // A hidden top-level window (not message-only) so it receives the TaskbarCreated broadcast.
     g_hwnd = CreateWindowExW(WS_EX_TOOLWINDOW, wc.lpszClassName, kAppName, WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, inst, nullptr);
-    if (!g_hwnd) return 1;
+    if (!g_hwnd) { ReleaseMutex(mutex); CloseHandle(mutex); return 1; }
     ModHost::window = g_hwnd;
     if (ModHost::stopRequested) PostMessageW(g_hwnd, WM_CLOSE, 0, 0);
 
@@ -5088,8 +5034,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
     while (PeekMessageW(&m, nullptr, WM_RESULTS, WM_RESULTS, PM_REMOVE)) delete reinterpret_cast<std::vector<DeviceStatus>*>(m.lParam);
     if (notify) UnregisterDeviceNotification(notify);
     if (g_worker) CloseHandle(g_worker);
-    ReleaseMutex(mutex); CloseHandle(mutex);
-    CloseHandle(g_refreshEvt); CloseHandle(g_stopEvt); CloseHandle(g_airpodsEvt);
+    ReleaseMutex(mutex);
+    CloseHandle(mutex);
+    CloseHandle(g_refreshEvt);
+    CloseHandle(g_stopEvt);
+    CloseHandle(g_airpodsEvt);
     return 0;
 }
 
@@ -5106,11 +5055,11 @@ HMODULE module = nullptr;
 DWORD WINAPI Run(LPVOID) {
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
-    int result = wb_app::wWinMain(module, nullptr, const_cast<PWSTR>(L""), 0);
+    int result = wb_app::Run(module);
     window = nullptr;
     UnregisterClassW(L"TaskbarWirelessBatteryWidget", module);
     UnregisterClassW(L"TaskbarWirelessBatteryWnd", module);
-    Wh_Log(L"电量界面线程结束，结果=%d", result);
+    Wh_Log(L"Battery UI thread exited, result=%d", result);
     return 0;
 }
 }
@@ -5119,7 +5068,7 @@ BOOL WhTool_ModInit() {
     HANDLE existing = OpenMutexW(SYNCHRONIZE, FALSE, L"Local\\TaskbarWirelessBatteryTray");
     if (existing) {
         CloseHandle(existing);
-        Wh_Log(L"请先退出独立版 WirelessBattery.exe，再启用此模组。");
+        Wh_Log(L"Exit the standalone WirelessBattery.exe before enabling this mod.");
         return FALSE;
     }
     ModConfig::Load();
@@ -5128,7 +5077,7 @@ BOOL WhTool_ModInit() {
     ModHost::stopRequested = false;
     ModHost::uiThread = CreateThread(nullptr, 0, ModHost::Run, nullptr, 0, &ModHost::uiThreadId);
     if (!ModHost::uiThread) return FALSE;
-    Wh_Log(L"任务栏无线设备电量监控已启动，宿主 PID=%lu", GetCurrentProcessId());
+    Wh_Log(L"Taskbar Wireless Battery Monitor started, host PID=%lu", GetCurrentProcessId());
     return TRUE;
 }
 
