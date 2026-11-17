@@ -34,7 +34,7 @@ For a full list of available Shell property names, see: https://learn.microsoft.
 
 **Note:**
 - Any property name not recognised by Windows will be skipped. Duplicate property entries will only take the first occurrence.
-- To allow a column to be freely resized, turn off "Force Width". To auto-size the column to its content, set Width to -1  (optional).
+- To allow a column to be freely resized, turn off "Force Width". To auto-size a column to its content instead, set its Width to -1. Like Explorer's own "Size column to fit", only the items currently shown in the window are measured, so longer values further down the list can still be cut off.
 - If "Sort By" is set, manual sorting changes stay temporary, e.g. manual width changes of forced-width columns.
 - By default, virtual folders that have their own specialized columns (such as the Recycle Bin with _Original Location_ and _Date Deleted_) are not affected. Turn off "Exclude virtual folders" to force the columns there as well.
 
@@ -55,7 +55,7 @@ For a full list of available Shell property names, see: https://learn.microsoft.
       $description: If enabled, the column width will always use the value below, regardless of manual changes, which will stay temporary and be reverted after re-opening the folder.
     - width: 270
       $name: Width
-      $description: Width in logical pixels at 100% DPI scaling, or -1 to auto-size to content. Only takes effect if Force Width is turned on.
+      $description: Width in logical pixels at 100% DPI scaling, or -1 to auto-size to the items shown in the window. Only takes effect if Force Width is turned on.
   - - property: System.Size
     - force_width: false
     - width: 30
@@ -128,6 +128,13 @@ static std::atomic<int>         g_minColumnWidth;  // logical px at 96 DPI; 0 = 
 static std::mutex               g_subclassedMutex;
 static std::unordered_set<HWND> g_subclassed;
 
+// Auto-sizing measures the displayed rows, so views wait for their items to be painted first
+static bool                     g_deferAutoSize;
+static UINT                     g_autoSizeMessage;
+static std::mutex               g_pendingAutoSizeMutex;
+static std::unordered_set<HWND> g_pendingAutoSize;
+static std::atomic<bool>        g_anyPendingAutoSize;
+
 static void LoadSettings() {
     g_columns.clear();
 
@@ -171,18 +178,42 @@ static void LoadSettings() {
 // Column enforcement
 // ---------------------------------------------------------------------------
 
-static bool ApplyForcedColumns(IUnknown* view, bool subclassForDpi);
+static bool ApplyForcedColumns(IUnknown* view,
+                               bool subclassForDpi,
+                               bool autoSizeNow);
 
-// Re-applies widths when the view moves to a monitor with a different DPI
+static void SetAutoSizePending(HWND hwnd, bool pending) {
+    std::lock_guard<std::mutex> lock(g_pendingAutoSizeMutex);
+    if (pending)
+        g_pendingAutoSize.insert(hwnd);
+    else
+        g_pendingAutoSize.erase(hwnd);
+    g_anyPendingAutoSize = !g_pendingAutoSize.empty();
+}
+
+// Re-applies widths when the view moves to a monitor with a different DPI, and auto-sizes once the items are painted
 static LRESULT CALLBACK ViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                                          LPARAM lParam, DWORD_PTR dwRefData) {
-    if (uMsg == WM_DPICHANGED_AFTERPARENT) {
-        ApplyForcedColumns((IUnknown*)dwRefData, false);
-    } else if (uMsg == WM_NCDESTROY) {
-        std::lock_guard<std::mutex> lock(g_subclassedMutex);
-        g_subclassed.erase(hWnd);
+    if (g_autoSizeMessage && uMsg == g_autoSizeMessage) {
+        ApplyForcedColumns((IUnknown*)dwRefData, false, true);
+        return 0;
     }
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
+    if (uMsg == WM_NCDESTROY) {
+        {
+            std::lock_guard<std::mutex> lock(g_subclassedMutex);
+            g_subclassed.erase(hWnd);
+        }
+        SetAutoSizePending(hWnd, false);
+    }
+
+    LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
+    // After the view has handled the DPI change itself
+    if (uMsg == WM_DPICHANGED_AFTERPARENT)
+        ApplyForcedColumns((IUnknown*)dwRefData, false, !g_deferAutoSize);
+
+    return result;
 }
 
 // Virtual folders (Recycle Bin, This PC, search results, etc.) aren't part of the file system + with specialized columns
@@ -201,8 +232,10 @@ static bool IsVirtualFolder(IFolderView2* folderView) {
     return SUCCEEDED(hr) && !(attributes & SFGAO_FILESYSTEM);
 }
 
-// Returns true if anything actually changed. subclassForDpi is set only when view can be retained
-static bool ApplyForcedColumns(IUnknown* view, bool subclassForDpi) {
+// Returns true if anything actually changed. subclassForDpi is set only when view can be retained. Without autoSizeNow, auto-sized columns are sized once the items are displayed
+static bool ApplyForcedColumns(IUnknown* view,
+                               bool subclassForDpi,
+                               bool autoSizeNow) {
     if (g_columns.empty())
         return false;
 
@@ -267,10 +300,16 @@ static bool ApplyForcedColumns(IUnknown* view, bool subclassForDpi) {
     HWND hwnd = nullptr;
     shellView->GetWindow(&hwnd);
     UINT dpi = hwnd ? GetDpiForWindow(hwnd) : GetDpiForSystem();
+    bool autoSizeLater = false;
 
     for (const auto& col : g_columns) {
         if (!col.width)
             continue;
+
+        if (col.width < 0 && !autoSizeNow) {
+            autoSizeLater = true;
+            continue;
+        }
 
         CM_COLUMNINFO ci = {sizeof(ci), CM_MASK_WIDTH};
         if (FAILED(columnManager->GetColumnInfo(col.key, &ci)))
@@ -304,6 +343,9 @@ static bool ApplyForcedColumns(IUnknown* view, bool subclassForDpi) {
         }
     }
 
+    if (autoSizeLater && hwnd)
+        SetAutoSizePending(hwnd, true);
+
     if (subclassForDpi && hwnd) {
         std::lock_guard<std::mutex> lock(g_subclassedMutex);
         if (g_subclassed.insert(hwnd).second)
@@ -312,6 +354,33 @@ static bool ApplyForcedColumns(IUnknown* view, bool subclassForDpi) {
     }
 
     return changed;
+}
+
+// Called after the view is painted, auto-sizes it if it's waiting and its items are displayed by now
+// Posted to the view, since changing the columns while the items view is still painting leaves the rows without text
+static void AutoSizeIfPending(IUnknown* view) {
+    ComPtr<IShellView> shellView;
+    ComPtr<IFolderView> folderView;
+    HWND hwnd = nullptr;
+    if (FAILED(view->QueryInterface(IID_PPV_ARGS(&shellView))) ||
+        FAILED(shellView->GetWindow(&hwnd)) || !hwnd)
+        return;
+
+    {
+        std::lock_guard<std::mutex> lock(g_pendingAutoSizeMutex);
+        if (!g_pendingAutoSize.contains(hwnd))
+            return;
+    }
+
+    // The count of the items view itself, so the counted items are displayed once it's painted
+    int itemCount = 0;
+    if (FAILED(view->QueryInterface(IID_PPV_ARGS(&folderView))) ||
+        FAILED(folderView->ItemCount(SVGIO_ALLVIEW, &itemCount)) ||
+        itemCount <= 0)
+        return;
+
+    SetAutoSizePending(hwnd, false);
+    PostMessageW(hwnd, g_autoSizeMessage, 0, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -386,8 +455,8 @@ static void ApplyToAllOpenWindows(bool minWidthChanged) {
                 FAILED(shellBrowser->QueryActiveShellView(&shellView)))
                 continue;
 
-            // shellView may be a proxy, don't retain it for the subclass
-            if (ApplyForcedColumns(shellView.Get(), false))
+            // shellView may be a proxy, don't retain it for the subclass. The items are already displayed
+            if (ApplyForcedColumns(shellView.Get(), false, true))
                 shellView->Refresh();
             if (minWidthChanged)
                 RefreshMinimumWidths(shellView.Get());
@@ -408,7 +477,7 @@ HRESULT __thiscall CDefView_UIActivate_hook(void* pThis, UINT uState) {
     HRESULT hr = CDefView_UIActivate_orig(pThis, uState);
     if (SUCCEEDED(hr) &&
         (uState == SVUIA_ACTIVATE_FOCUS || uState == SVUIA_ACTIVATE_NOFOCUS))
-        ApplyForcedColumns((IUnknown*)pThis, true);
+        ApplyForcedColumns((IUnknown*)pThis, true, !g_deferAutoSize);
     return hr;
 }
 
@@ -420,8 +489,28 @@ HRESULT __thiscall CDefView_SetCurrentViewMode_hook(void* pThis,
                                                     UINT viewMode) {
     HRESULT hr = CDefView_SetCurrentViewMode_orig(pThis, viewMode);
     if (SUCCEEDED(hr) && viewMode == FVM_DETAILS)
-        ApplyForcedColumns((IUnknown*)pThis, true);
+        ApplyForcedColumns((IUnknown*)pThis, true, !g_deferAutoSize);
     return hr;
+}
+
+using CDefView__OnEnumDoneMessage_t = void(__thiscall*)(void*);
+CDefView__OnEnumDoneMessage_t CDefView__OnEnumDoneMessage_orig;
+
+// The folder finished loading, e.g. after a refresh, auto-size again once the items are displayed
+void __thiscall CDefView__OnEnumDoneMessage_hook(void* pThis) {
+    CDefView__OnEnumDoneMessage_orig(pThis);
+    ApplyForcedColumns((IUnknown*)pThis, true, !g_deferAutoSize);
+}
+
+using CDefView_PaintComplete_t = void(__thiscall*)(void*, BOOL);
+CDefView_PaintComplete_t CDefView_PaintComplete_orig;
+
+// Called after each paint of the items view. pThis is an interface of the view, not the view itself
+void __thiscall CDefView_PaintComplete_hook(void* pThis,
+                                            BOOL viewModeChanged) {
+    CDefView_PaintComplete_orig(pThis, viewModeChanged);
+    if (g_anyPendingAutoSize)
+        AutoSizeIfPending((IUnknown*)pThis);
 }
 
 // ---------------------------------------------------------------------------
@@ -475,6 +564,28 @@ BOOL Wh_ModInit() {
             &CDefView_SetCurrentViewMode_orig,
             CDefView_SetCurrentViewMode_hook,
         },
+        {
+            {
+                L"private: void __cdecl CDefView::_OnEnumDoneMessage(void)",
+                L"void __cdecl CDefView::_OnEnumDoneMessage(void)",
+                L"private: void __thiscall CDefView::_OnEnumDoneMessage(void)",
+                L"void __thiscall CDefView::_OnEnumDoneMessage(void)",
+            },
+            &CDefView__OnEnumDoneMessage_orig,
+            CDefView__OnEnumDoneMessage_hook,
+            true,
+        },
+        {
+            {
+                L"public: virtual void __cdecl CDefView::PaintComplete(int)",
+                L"void __cdecl CDefView::PaintComplete(int)",
+                L"public: virtual void __thiscall CDefView::PaintComplete(int)",
+                L"void __thiscall CDefView::PaintComplete(int)",
+            },
+            &CDefView_PaintComplete_orig,
+            CDefView_PaintComplete_hook,
+            true,
+        },
     };
 
     if (!WindhawkUtils::HookSymbols(shell32, shell32DllHooks,
@@ -482,6 +593,13 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Failed to hook CDefView symbols");
         return FALSE;
     }
+
+    // Without it, auto-sizing happens right away, possibly before the items are displayed
+    g_autoSizeMessage = RegisterWindowMessageW(
+        L"Windhawk_explorer-force-details-columns_AutoSize");
+    g_deferAutoSize = CDefView_PaintComplete_orig && g_autoSizeMessage;
+    if (!g_deferAutoSize)
+        Wh_Log(L"CDefView::PaintComplete not found, auto-sizing right away");
 
     // windows.storage.dll
     const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
@@ -524,6 +642,10 @@ void Wh_ModUninit() {
     for (HWND hwnd : subclassed)
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd,
                                                          ViewSubclassProc);
+
+    std::lock_guard<std::mutex> lock(g_pendingAutoSizeMutex);
+    g_pendingAutoSize.clear();
+    g_anyPendingAutoSize = false;
 }
 
 void Wh_ModSettingsChanged() {
