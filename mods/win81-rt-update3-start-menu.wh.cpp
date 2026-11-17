@@ -3589,7 +3589,7 @@ static const wchar_t* Ui(UiText text) {
         {L"Ricerca: ",L"Search: ",L"Buscar: ",L"Rechercher : ",L"\u062C\u0633\u062A\u062C\u0648: ",L"\u0628\u062D\u062B: ",L"Pesquisar: ",L"\u641C\u7D22: ",L"\u691C\u7D22: ",L"Szukaj: ",L"\u041F\u043E\u0438\u0441\u043A: "},
         {L"Cerca ovunque",L"Search everywhere",L"Buscar en todas partes",L"Rechercher partout",L"جستجو در همه جا",L"البحث في كل مكان",L"Pesquisar em todo o lado",L"搜索所有位置",L"すべての場所を検索",L"Wyszukaj wszędzie",L"Поиск везде"},
         {L"Nessuna app corrisponde alla ricerca.",L"No apps match your search.",L"Ninguna aplicaci\u00F3n coincide con la b\u00FAsqueda.",L"Aucune application ne correspond \u00E0 votre recherche.",L"\u0647\u06CC\u062C \u0628\u0631\u0646\u0627\u0645\u0647\u200C\u0627\u06CC \u0645\u0637\u0627\u0628\u0642 \u062C\u0633\u062A\u062C\u0648 \u0646\u062F\u0627\u0631\u062F.",L"\u0644\u0627 \u064A\u0648\u062C\u062F \u062A\u0637\u0628\u064A\u0642\u0627\u062A \u062A\u0637\u0627\u0628\u0642 \u0627\u0644\u0628\u062D\u062B.",L"Nenhuma aplica\u00E7\u00E3o corresponde \u00E0 pesquisa.",L"\u6CA1\u6709\u5E94\u7528\u5339\u914D\u60A8\u7684\u641C\u7D22\u3002",L"\u4E00\u81F4\u3059\u308B\u30A2\u30D7\u30EA\u306F\u3042\u308A\u307E\u305B\u3093\u3002",L"\u017Badna aplikacja nie pasuje do wyszukiwania.",L"\u041D\u0438 \u043E\u0434\u043D\u043E \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u043D\u0435 \u0441\u043E\u043E\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u043F\u043E\u0438\u0441\u043A\u0443."},
-        {L"Caricamento app…",L"Loading apps…",L"Cargando aplicaciones…",L"Chargement des applications…",L"در حال بارگیری برنامه‌ها…",L"جارٍ تحميل التطبيقات…",L"A carregar aplicações…",L"正在加载应用…",L"アプリを読み込んでいます…",L"Ładowanie aplikacji…",L"Загрузка приложений…"},
+        {L"Caricamento app…",L"Loading apps…",L"Cargando aplicaciones…",L"Chargement des applications…",L"در حال بارگیری برنامه\u200Cها…",L"جارٍ تحميل التطبيقات…",L"A carregar aplicações…",L"正在加载应用…",L"アプリを読み込んでいます…",L"Ładowanie aplikacji…",L"Загрузка приложений…"},
         {L"Utente",L"User",L"Usuario",L"Utilisateur",L"\u06A9\u0627\u0631\u0628\u0631",L"\u0645\u0633\u062A\u062E\u062F\u0645",L"Usu\u00E1rio",L"\u7528\u6237",L"\u30E6\u30FC\u30B6\u30FC",L"U\u017Cytkownik",L"\u041F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044C"},
         {L"Applicazioni",L"Apps",L"Aplicaciones",L"Applications",L"\u0628\u0631\u0646\u0627\u0645\u0647\u200C\u0647\u0627",L"\u0627\u0644\u062A\u0637\u0628\u064A\u0642\u0627\u062A",L"Aplica\u00E7\u00F5es",L"\u5E94\u7528",L"\u30A2\u30D7\u30EA",L"Aplikacje",L"\u041F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F"},
         {L"Tempo libero",L"Play and explore",L"Jugar y explorar",L"Divertissement",L"\u0633\u0631\u06AF\u0631\u0645\u06CC \u0648 \u06A9\u0634\u0641",L"\u0627\u0644\u0644\u0639\u0628 \u0648\u0627\u0644\u0627\u0633\u062A\u0643\u0634\u0627\u0641",L"Divers\u00E3o e descoberta",L"\u5A31\u4E50\u4E0E\u63A2\u7D22",L"\u904A\u3073\u3068\u63A2\u7D22",L"Rozrywka i odkrywanie",L"\u0418\u0433\u0440\u044B \u0438 \u043E\u0442\u043A\u0440\u044B\u0442\u0438\u044F"},
@@ -9214,7 +9214,12 @@ static void RestartProfilePhotoWorker() {
     }
     g_profilePhoto.reset();
     g_profilePhotoStream.Reset();
-    { std::lock_guard<std::mutex> lock(g_profilePhotoMutex); g_profilePhotoPending.clear(); g_accountNamePending.clear(); g_accountNamePendingValid = false; }
+    {
+        std::lock_guard<std::mutex> lock(g_profilePhotoMutex);
+        g_profilePhotoPending.clear();
+        g_accountNamePending.clear();
+        g_accountNamePendingValid = false;
+    }
     g_profilePhotoStop = false;
     g_profilePhotoThread.reset(CreateThread(nullptr, 0, ProfilePhotoWorker, nullptr, 0, nullptr));
     HWND hwnd = g_menuHwnd.load();
@@ -9302,11 +9307,13 @@ static HRESULT WINAPI ShowStartViewHook(void* self, int method, int flags) {
 static void InstallNativeKeyboardStartHook() {
     HMODULE module = LoadLibraryExW(L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) { Wh_Log(L"[NativeWin] twinui.pcshell.dll unavailable"); return; }
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // twinui.pcshell.dll
+    WindhawkUtils::SYMBOL_HOOK twinuiPcshellHooks[] = {
         {{LR"(public: virtual long __cdecl XamlLauncher::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum IMMERSIVELAUNCHERSHOWFLAGS))"},
          &g_originalShowStartView, ShowStartViewHook},
     };
-    const bool ok = WindhawkUtils::HookSymbols(module, hooks, std::size(hooks));
+    const bool ok = WindhawkUtils::HookSymbols(module, twinuiPcshellHooks,
+                                               std::size(twinuiPcshellHooks));
     Wh_Log(L"[NativeWin] optional Explorer symbol hook installed=%d", ok ? 1 : 0);
     if (!ok) FreeLibrary(module); // retained until mod unload when installed
 }
@@ -9710,7 +9717,12 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     Wh_Log(L"[UI] teardown: releasing default avatar");
     g_defaultProfileAvatar.reset();
     g_defaultProfileAvatarStream.Reset();
-    { std::lock_guard<std::mutex> lock(g_profilePhotoMutex); g_profilePhotoPending.clear(); g_accountNamePending.clear(); g_accountNamePendingValid = false; }
+    {
+        std::lock_guard<std::mutex> lock(g_profilePhotoMutex);
+        g_profilePhotoPending.clear();
+        g_accountNamePending.clear();
+        g_accountNamePendingValid = false;
+    }
     Wh_Log(L"[UI] teardown: GdiplusShutdown");
     if (g_gdiplusToken) { GdiplusShutdown(g_gdiplusToken); g_gdiplusToken=0; }
     Wh_Log(L"[UI] teardown: GDI+ shut down");
@@ -9927,7 +9939,11 @@ void Wh_ModBeforeUninit() {
         return;
     }
     g_stopRequested=true;
-    if (g_hybridLauncherThread) { WaitForSingleObject(g_hybridLauncherThread,INFINITE); CloseHandle(g_hybridLauncherThread); g_hybridLauncherThread=nullptr; }
+    if (g_hybridLauncherThread) {
+        WaitForSingleObject(g_hybridLauncherThread, INFINITE);
+        CloseHandle(g_hybridLauncherThread);
+        g_hybridLauncherThread = nullptr;
+    }
     if (g_hybridStopEvent) SetEvent(g_hybridStopEvent);
     RemoveShellMessageHooks();
     AcquireSRWLockExclusive(&g_hybridChildLock);
