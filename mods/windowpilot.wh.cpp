@@ -4,14 +4,13 @@
 // @description     Configurable window shortcuts with game protection and optional double-press confirmation
 // @description:pt-BR Atalhos de janela com proteção para jogos e confirmação opcional por duas pressões
 // @description:es-ES Atajos de ventana con protección para juegos y confirmación opcional de doble pulsación
-// @version         1.1.0
+// @version         1.2.0
 // @author          ghostzpy
 // @github          https://github.com/ghostzpy
 // @license         MIT
-// @include         explorer.exe
-// @include         ctfmon.exe
+// @include         windhawk.exe
 // @architecture    x86-64
-// @compilerOptions -luser32 -lgdi32 -ldwmapi -lshlwapi -lshell32 -ladvapi32
+// @compilerOptions -luser32 -lgdi32 -lshlwapi -lshell32 -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -51,28 +50,25 @@ Windows or be selected explicitly. **Always on top** is configurable and
 enabled by default. The hint never steals keyboard focus or intercepts clicks.
 Settings labels follow the language selected in the Windhawk interface.
 
-**Elevated windows:** the mod runs a standard-user fallback in Explorer and an
-additional keyboard worker in the user's `ctfmon.exe` text-input host, which
-normally has UIAccess. This covers elevated applications such as Windhawk's
-editor. Keep both executable names in the mod's inclusion list. It does not
-restart either process, create a scheduled task, inject into games or change
-Windows security settings. Secure-desktop prompts are outside its scope.
-If your Windhawk configuration excludes `ctfmon.exe`, normal windows continue
-to work, but elevated-window coverage may be unavailable.
+**Compatibility:** Windows 11 x64 and Windhawk 1.7.3 or later. WindowPilot
+runs in a dedicated Windhawk tool process for standard desktop windows.
+Elevated apps and secure-desktop prompts are outside the supported scope.
 
 **Games:** detection uses editable executable/path patterns, Unity/Unreal
 window classes and optional fullscreen geometry. It is conservative: browser
 F11 fullscreen can be protected too; ordinary maximized windows are excluded
 from the fullscreen heuristic. Add unrecognized windowed games to the list.
-Protected shortcuts do nothing, including their original Windows action.
+When game protection applies, the original Windows shortcut receives the key.
+The same applies on the desktop, taskbar, menus and windows that cannot perform
+the requested action. On eligible windows, the defaults take over Windows
+Search (Win+Q), Snap layouts (Win+Z) and Notification Center (Win+N).
+Use Win+S for Search, Win+Shift+N for notifications, or change the assignments
+to use the original combinations.
 
 Notifications use the original Win+N after the alternate shortcut's modifiers
 are released. Tagged synthetic input prevents recursive maximization. If an
 existing Windows policy disables Notification Center, the hint explains the
-restriction; the mod does not change that policy. Desktop, taskbar, menus and
-windows that do not support an action are preserved. No forced process termination.
-
-Windows 11 x64; Windhawk 1.7 or later.
+restriction. Closing a window sends a normal close request to the application.
 
 ## Português
 
@@ -90,11 +86,17 @@ tema automático/escuro/claro e **Sempre no topo**. O modo automático acompanha
 o idioma de exibição e o tema do Windows; o aviso não captura foco nem cliques.
 Os rótulos das configurações seguem o idioma da interface do Windhawk.
 
-Explorer e `ctfmon.exe` atendem às janelas comuns e elevadas. Mantenha os dois
-na lista de inclusão do mod. A detecção de jogos usa heurísticas e listas
-editáveis; acrescente jogos em janela não reconhecidos. O mod não é injetado
-nos jogos, não encerra processos à força e não altera políticas do Windows.
-Se a central de notificações estiver bloqueada por política, um aviso informa.
+Compatível com Windows 11 x64 e Windhawk 1.7.3 ou posterior. O mod roda em um
+processo dedicado do Windhawk para janelas comuns. Aplicativos elevados e a
+área de trabalho segura ficam fora da cobertura. Use o botão do Windhawk para
+desativar o mod inteiro.
+
+Para jogos protegidos, área de trabalho, barra de tarefas, menus ou janelas que
+não aceitam a ação, vale o atalho original do Windows. Em janelas compatíveis,
+os padrões substituem Pesquisa (Win+Q), layouts de encaixe (Win+Z) e Central
+de Notificações (Win+N). Use Win+S para pesquisar, Win+Shift+N para notificações
+ou mude as combinações para recuperar os atalhos originais. Se uma política do
+Windows bloquear a Central de Notificações, o aviso indica a restrição.
 
 ## Español
 
@@ -113,23 +115,23 @@ tema automático/oscuro/claro y **Siempre visible**. El modo automático sigue e
 idioma de visualización y el tema de Windows. El aviso no roba foco ni clics.
 Los ajustes siguen el idioma elegido en la interfaz de Windhawk.
 
-Explorer y `ctfmon.exe` cubren ventanas normales y elevadas. Conserva ambos en
-la lista de inclusión. La detección de juegos usa heurísticas y listas editables;
-añade los juegos en ventana que no se reconozcan. El mod no se inyecta en juegos,
-no fuerza el cierre de procesos y no cambia las directivas de Windows.
-Si una directiva bloquea las notificaciones, un aviso explica la restricción.
+Compatible con Windows 11 x64 y Windhawk 1.7.3 o posterior. El mod se ejecuta
+en un proceso dedicado de Windhawk para ventanas normales. Las aplicaciones
+elevadas y el escritorio seguro quedan fuera del alcance. Usa el interruptor
+de Windhawk para desactivar todo el mod.
+
+En juegos protegidos, el escritorio, la barra de tareas, los menús o ventanas
+que no admiten la acción, se conserva el atajo original de Windows. En ventanas
+compatibles, los valores predeterminados sustituyen Búsqueda (Win+Q), diseños
+de acoplamiento (Win+Z) y Centro de notificaciones (Win+N). Usa Win+S para
+buscar, Win+Shift+N para las notificaciones o cambia las combinaciones para
+recuperar los atajos originales. Un aviso indica si una directiva de Windows
+bloquea el Centro de notificaciones.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- enabled: true
-  $name: Enable WindowPilot
-  $description: Turn off to restore the original Windows behavior for every shortcut.
-  $name:pt-BR: Ativar WindowPilot
-  $name:es-ES: Activar WindowPilot
-  $description:pt-BR: Desative para devolver todos os atalhos ao comportamento original do Windows.
-  $description:es-ES: Desactiva para restaurar el comportamiento original de todos los atajos de Windows.
 - appearance:
   - language: auto
     $name: Hint language
@@ -212,11 +214,11 @@ Si una directiva bloquea las notificaciones, un aviso explica la restricción.
     $description:es-ES: Pulsa de nuevo antes de este plazo. Predeterminado 3000; rango permitido 500–10000.
   - hintMs: 1500
     $name: Hint duration (ms)
-    $description: The hint may disappear before the confirmation deadline. Default 1500.
     $name:pt-BR: Duração do aviso (ms)
     $name:es-ES: Duración del aviso (ms)
-    $description:pt-BR: O aviso pode sumir antes de terminar o prazo de confirmação. Padrão 1500.
-    $description:es-ES: El aviso puede desaparecer antes de vencer el plazo de confirmación. Predeterminado 1500.
+    $description: Default 1500. Allowed range 500–5000.
+    $description:pt-BR: Padrão 1500. Intervalo permitido de 500 a 5000.
+    $description:es-ES: Predeterminado 1500. Rango permitido de 500 a 5000.
   $name: Close window
   $name:pt-BR: Fechar janela
   $name:es-ES: Cerrar ventana
@@ -245,6 +247,9 @@ Si una directiva bloquea las notificaciones, un aviso explica la restricción.
     $name: Hint duration (ms)
     $name:pt-BR: Duração do aviso (ms)
     $name:es-ES: Duración del aviso (ms)
+    $description: Default 1500. Allowed range 500–5000.
+    $description:pt-BR: Padrão 1500. Intervalo permitido de 500 a 5000.
+    $description:es-ES: Predeterminado 1500. Rango permitido de 500 a 5000.
   $name: Minimize window
   $name:pt-BR: Minimizar janela
   $name:es-ES: Minimizar ventana
@@ -273,6 +278,9 @@ Si una directiva bloquea las notificaciones, un aviso explica la restricción.
     $name: Hint duration (ms)
     $name:pt-BR: Duração do aviso (ms)
     $name:es-ES: Duración del aviso (ms)
+    $description: Default 1500. Allowed range 500–5000.
+    $description:pt-BR: Padrão 1500. Intervalo permitido de 500 a 5000.
+    $description:es-ES: Predeterminado 1500. Rango permitido de 500 a 5000.
   - restoreIfMaximized: true
     $name: Restore when pressed again on a maximized window
     $name:pt-BR: Restaurar ao pressionar novamente em uma janela maximizada
@@ -341,9 +349,9 @@ Si una directiva bloquea las notificaciones, un aviso explica la restricción.
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <dwmapi.h>
 #include <shellapi.h>
 #include <shlwapi.h>
+#include <windhawk_utils.h>
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -398,7 +406,6 @@ struct ActionSettings {
     UINT hintMs = 1500;
 };
 struct Config {
-    bool enabled = true;
     bool restoreIfMaximized = true;
     bool protectFullscreen = true;
     Language language = ResolveLanguage(L"auto", GetUserDefaultUILanguage());
@@ -514,7 +521,6 @@ void ValidateConfig(Config& config) {
     }
 }
 int FindAction(const Config& config, UINT key, UINT modifiers) {
-    if (!config.enabled) return -1;
     for (size_t i = 0; i < ActionCount; i++) {
         const auto& a = config.actions[i];
         if (a.enabled && a.hotkey.valid && a.hotkey.key == key && a.hotkey.modifiers == modifiers)
@@ -574,17 +580,10 @@ bool IsGame(HWND window, const Config& config) {
     return IsFullscreenRect(rect, monitor.rcMonitor, IsZoomed(window));
 }
 
-std::wstring ReadString(const wchar_t* key) {
-    auto value = Wh_GetStringSetting(key);
-    std::wstring result = value ? value : L"";
-    if (value) Wh_FreeStringSetting(value);
-    return result;
-}
 Config LoadConfig() {
     Config config;
-    config.enabled = Wh_GetIntSetting(L"enabled") != 0;
-    config.language = ResolveLanguage(ReadString(L"appearance.language"), GetUserDefaultUILanguage());
-    config.theme = ReadString(L"appearance.theme");
+    config.language = ResolveLanguage(WindhawkUtils::StringSetting::make(L"appearance.language").get(), GetUserDefaultUILanguage());
+    config.theme = WindhawkUtils::StringSetting::make(L"appearance.theme").get();
     if (config.theme != L"dark" && config.theme != L"light") config.theme = L"auto";
     config.alwaysOnTop = Wh_GetIntSetting(L"appearance.alwaysOnTop") != 0;
     const wchar_t* groups[] = {L"close", L"minimize", L"maximize", L"notifications"};
@@ -592,7 +591,7 @@ Config LoadConfig() {
         auto prefix = std::wstring(groups[i]) + L".";
         auto& action = config.actions[i];
         action.enabled = Wh_GetIntSetting((prefix + L"enabled").c_str()) != 0;
-        action.shortcut = ReadString((prefix + L"hotkey").c_str());
+        action.shortcut = WindhawkUtils::StringSetting::make(L"%s%s", prefix.c_str(), L"hotkey").get();
         if (i == Notifications) continue;
         action.ignoreGames = Wh_GetIntSetting((prefix + L"ignoreGames").c_str()) != 0;
         action.doublePress = Wh_GetIntSetting((prefix + L"doublePress").c_str()) != 0;
@@ -606,9 +605,7 @@ Config LoadConfig() {
     for (auto pair : {std::pair{L"games.processes", &config.gameProcesses},
                       std::pair{L"games.paths", &config.gamePaths}}) {
         for (int i = 0; i < 256; i++) {
-            auto value = Wh_GetStringSetting(L"%s[%d]", pair.first, i);
-            std::wstring item = value ? value : L"";
-            if (value) Wh_FreeStringSetting(value);
+            std::wstring item = WindhawkUtils::StringSetting::make(L"%s[%d]", pair.first, i).get();
             if (item.empty()) break;
             pair.second->push_back(std::move(item));
         }
@@ -617,22 +614,18 @@ Config LoadConfig() {
     return config;
 }
 
-[[clang::no_destroy]] std::mutex g_configMutex;
-[[clang::no_destroy]] Config g_config;
+std::mutex g_configMutex;
+Config g_config;
 HANDLE g_stopEvent{}, g_readyEvent{}, g_workerThread{};
-DWORD g_workerThreadId{};
 std::atomic<bool> g_startupOk{false};
 std::atomic<HWND> g_messageWindow{nullptr};
-#ifdef WINDOWPILOT_TEST
-std::atomic<HWND> g_testOnlyWindow{nullptr};
-#endif
 
 struct State {
     Config config;
     HINSTANCE module{};
     HWND host{}, toast{};
     HHOOK keyboard{};
-    HWINEVENTHOOK foreground{};
+    HWINEVENTHOOK foreground{}, desktopSwitch{};
     std::array<bool, 256> down{}, suppressed{};
     ConfirmationGate confirmation;
     bool pendingNotification{};
@@ -710,34 +703,45 @@ void ShowToast(State& state, HWND target, std::wstring primary, std::wstring sec
                wchar_t icon, UINT duration, bool error = false) {
     if (!state.toast) return;
     MONITORINFO monitor{sizeof(monitor)};
-    GetMonitorInfoW(MonitorFromWindow(target, MONITOR_DEFAULTTONEAREST), &monitor);
+    auto display = MonitorFromWindow(target, target ? MONITOR_DEFAULTTONEAREST : MONITOR_DEFAULTTOPRIMARY);
+    if (!GetMonitorInfoW(display, &monitor)) return;
     RECT targetRect = monitor.rcWork;
     if (target) GetWindowRect(target, &targetRect);
-    UpdateFonts(state, target ? GetDpiForWindow(target) : 96);
+    // Move the per-monitor-aware hint itself before measuring its DPI.
+    if (MonitorFromWindow(state.toast, MONITOR_DEFAULTTONEAREST) != display) {
+        SetWindowPos(state.toast, nullptr, monitor.rcWork.left, monitor.rcWork.top,
+                     1, 1, SWP_NOACTIVATE | SWP_NOZORDER);
+    }
+    UpdateFonts(state, GetDpiForWindow(state.toast));
     DWORD light = 0, size = sizeof(light);
     RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
                  L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
     state.light = ResolveLightTheme(state.config.theme, light != 0);
     state.primaryText = std::move(primary); state.secondaryText = std::move(secondary);
     state.icon = icon; state.errorHint = error;
-    int available = monitor.rcWork.right - monitor.rcWork.left - Scaled(state,24);
-    int width = std::min(Scaled(state,620), std::max(1, available));
-    int height = Scaled(state,78);
-    int x = targetRect.left + (targetRect.right-targetRect.left-width)/2;
-    int y = targetRect.top + Scaled(state,16);
-    x = std::clamp(x, static_cast<int>(monitor.rcWork.left+Scaled(state,12)),
-                     static_cast<int>(monitor.rcWork.right-width-Scaled(state,12)));
-    y = std::clamp(y, static_cast<int>(monitor.rcWork.top+Scaled(state,12)),
-                     static_cast<int>(monitor.rcWork.bottom-height-Scaled(state,12)));
+    int margin = Scaled(state, 12);
+    int workWidth = monitor.rcWork.right - monitor.rcWork.left;
+    int workHeight = monitor.rcWork.bottom - monitor.rcWork.top;
+    int width = std::min(Scaled(state, 620), std::max(1, workWidth - 2 * margin));
+    int height = std::min(Scaled(state, 78), std::max(1, workHeight - 2 * margin));
+    int x = targetRect.left + (targetRect.right - targetRect.left - width) / 2;
+    int y = targetRect.top + Scaled(state, 16);
+    int minX = monitor.rcWork.left + margin;
+    int minY = monitor.rcWork.top + margin;
+    x = std::clamp(x, minX, std::max(minX, static_cast<int>(monitor.rcWork.right) - width - margin));
+    y = std::clamp(y, minY, std::max(minY, static_cast<int>(monitor.rcWork.bottom) - height - margin));
     SetWindowTextW(state.toast, (L"WindowPilot: " + state.primaryText + L". " + state.secondaryText).c_str());
     // Layered + transparent + no-activate: the hint never steals clicks or keyboard focus.
     SetLayeredWindowAttributes(state.toast, 0, 255, LWA_ALPHA);
     HRGN region = CreateRoundRectRgn(0, 0, width+1, height+1, Scaled(state,16), Scaled(state,16));
     if (region && !SetWindowRgn(state.toast, region, FALSE)) DeleteObject(region);
-    if (!state.config.alwaysOnTop)
-        SetWindowPos(state.toast, HWND_NOTOPMOST, 0,0,0,0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    SetWindowPos(state.toast, state.config.alwaysOnTop ? HWND_TOPMOST : HWND_TOP,
-                 x, y, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    SetWindowPos(state.toast, nullptr, x, y, width, height,
+                 SWP_NOACTIVATE | SWP_NOZORDER | SWP_SHOWWINDOW);
+    constexpr UINT zOrderFlags = SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE;
+    if (state.config.alwaysOnTop && !(GetWindowLongPtrW(state.toast, GWL_EXSTYLE) & WS_EX_TOPMOST))
+        SetWindowPos(state.toast, HWND_NOTOPMOST, 0, 0, 0, 0, zOrderFlags);
+    SetWindowPos(state.toast, state.config.alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
+                 0, 0, 0, 0, zOrderFlags);
     InvalidateRect(state.toast, nullptr, FALSE);
     UpdateWindow(state.toast);
     SetTimer(state.host, kHideHint, duration, nullptr);
@@ -758,31 +762,24 @@ bool IsActionWindow(HWND window) {
     auto ex = GetWindowLongPtrW(window, GWL_EXSTYLE);
     return !(ex & WS_EX_NOACTIVATE) && !(GetWindowLongPtrW(window, GWL_STYLE) & WS_CHILD);
 }
-void ExecuteAction(State& state, Action action, HWND window) {
-    if (!IsActionWindow(window) || GetAncestor(GetForegroundWindow(), GA_ROOT) != window) return;
+WPARAM WindowCommand(Action action, HWND window, const Config& config) {
+    if (!IsActionWindow(window)) return 0;
+    GUITHREADINFO gui{sizeof(gui)};
+    DWORD threadId = GetWindowThreadProcessId(window, nullptr);
+    constexpr DWORD menuFlags = GUI_INMENUMODE | GUI_SYSTEMMENUMODE | GUI_POPUPMENUMODE;
+    if (threadId && GetGUIThreadInfo(threadId, &gui) && (gui.flags & menuFlags)) return 0;
     auto style = GetWindowLongPtrW(window, GWL_STYLE);
-    WPARAM command = SC_CLOSE;
-    if (action == Minimize) {
-        if (!(style & WS_MINIMIZEBOX)) { ShowError(state, window, Text(state.config.language,
-            L"This window cannot be minimized.", L"Esta janela não permite minimizar.", L"Esta ventana no se puede minimizar.")); return; }
-        command = SC_MINIMIZE;
-    } else if (action == Maximize) {
-        if (IsZoomed(window)) {
-            if (!state.config.restoreIfMaximized) return;
-            command = SC_RESTORE;
-        } else {
-            if (!(style & WS_MAXIMIZEBOX)) { ShowError(state, window, Text(state.config.language,
-                L"This window cannot be maximized.", L"Esta janela não permite maximizar.", L"Esta ventana no se puede maximizar.")); return; }
-            command = SC_MAXIMIZE;
-        }
-    } else {
-        HMENU menu = GetSystemMenu(window, FALSE);
-        if (menu && (GetMenuState(menu, SC_CLOSE, MF_BYCOMMAND) & (MF_DISABLED | MF_GRAYED))) {
-            ShowError(state, window, Text(state.config.language,
-                L"The application disabled closing this window.", L"O aplicativo desativou o fechamento desta janela.",
-                L"La aplicación desactivó el cierre de esta ventana.")); return;
-        }
+    if (action == Minimize) return (style & WS_MINIMIZEBOX) ? SC_MINIMIZE : 0;
+    if (action == Maximize) {
+        if (IsZoomed(window)) return config.restoreIfMaximized ? SC_RESTORE : 0;
+        return (style & WS_MAXIMIZEBOX) ? SC_MAXIMIZE : 0;
     }
+    HMENU menu = GetSystemMenu(window, FALSE);
+    return !menu || !(GetMenuState(menu, SC_CLOSE, MF_BYCOMMAND) & (MF_DISABLED | MF_GRAYED))
+        ? SC_CLOSE : 0;
+}
+void ExecuteAction(State& state, Action action, HWND window, WPARAM command) {
+    if (GetAncestor(GetForegroundWindow(), GA_ROOT) != window) return;
     // Normal window request, never TerminateProcess, taskkill, or a forced close.
     if (!PostMessageW(window, WM_SYSCOMMAND, command, 0)) {
         DWORD error = GetLastError();
@@ -795,7 +792,7 @@ void ExecuteAction(State& state, Action action, HWND window) {
     }
 }
 void HandleAction(State& state, Action action, HWND window) {
-    if (!state.config.enabled || action >= ActionCount || !state.config.actions[action].enabled ||
+    if (action >= ActionCount || !state.config.actions[action].enabled ||
         !state.config.actions[action].hotkey.valid) return;
     if (GetAncestor(GetForegroundWindow(), GA_ROOT) != window) { CancelPending(state); return; }
     if (action == Notifications) {
@@ -805,7 +802,8 @@ void HandleAction(State& state, Action action, HWND window) {
         return;
     }
     state.pendingNotification = false; KillTimer(state.host, kNotifyTimer);
-    if (!IsActionWindow(window)) { CancelPending(state); return; }
+    auto command = WindowCommand(action, window, state.config);
+    if (!command) { CancelPending(state); return; }
     const auto& options = state.config.actions[action];
     if (options.ignoreGames && IsGame(window, state.config)) { CancelPending(state); return; }
     DWORD pid{}; DWORD tid = GetWindowThreadProcessId(window, &pid);
@@ -814,7 +812,7 @@ void HandleAction(State& state, Action action, HWND window) {
         auto lang = state.config.language;
         const wchar_t* verb = action == Close ? Text(lang, L"close", L"fechar", L"cerrar") :
             action == Minimize ? Text(lang, L"minimize", L"minimizar", L"minimizar") :
-            IsZoomed(window) && state.config.restoreIfMaximized ? Text(lang, L"restore", L"restaurar", L"restaurar") :
+            command == SC_RESTORE ? Text(lang, L"restore", L"restaurar", L"restaurar") :
             Text(lang, L"maximize", L"maximizar", L"maximizar");
         auto text = std::wstring(Text(lang, L"Press ", L"Pressione ", L"Pulsa ")) + DisplayHotkey(options.shortcut) +
             Text(lang, L" once more to ", L" mais uma vez para ", L" otra vez para ") + verb;
@@ -826,15 +824,16 @@ void HandleAction(State& state, Action action, HWND window) {
         return;
     }
     CancelPending(state);
-    ExecuteAction(state, action, window);
+    ExecuteAction(state, action, window, command);
 }
 
-UINT CurrentModifiers(const State& state) {
-    const auto& d = state.down;
-    return ((d[VK_LWIN] || d[VK_RWIN]) ? MOD_WIN : 0) |
-           ((d[VK_LCONTROL] || d[VK_RCONTROL] || d[VK_CONTROL]) ? MOD_CONTROL : 0) |
-           ((d[VK_LMENU] || d[VK_RMENU] || d[VK_MENU]) ? MOD_ALT : 0) |
-           ((d[VK_LSHIFT] || d[VK_RSHIFT] || d[VK_SHIFT]) ? MOD_SHIFT : 0);
+UINT CurrentModifiers() {
+    // A modifier may have been released while another desktop had the input.
+    auto down = [](int key) { return (GetAsyncKeyState(key) & 0x8000) != 0; };
+    return ((down(VK_LWIN) || down(VK_RWIN)) ? MOD_WIN : 0) |
+           (down(VK_CONTROL) ? MOD_CONTROL : 0) |
+           (down(VK_MENU) ? MOD_ALT : 0) |
+           (down(VK_SHIFT) ? MOD_SHIFT : 0);
 }
 INPUT KeyInput(WORD key, bool up) {
     INPUT input{}; input.type = INPUT_KEYBOARD;
@@ -863,15 +862,17 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM parameter) {
     }
     if (up || wasDown) return CallNextHookEx(nullptr, code, message, parameter);
     if (key == VK_ESCAPE) PostMessageW(state.host, kCancelMessage, 0, 0);
-    auto modifiers = CurrentModifiers(state);
+    auto modifiers = CurrentModifiers();
     int action = FindAction(state.config, key, modifiers);
     if (action < 0) return CallNextHookEx(nullptr, code, message, parameter);
     HWND target = GetAncestor(GetForegroundWindow(), GA_ROOT);
-#ifdef WINDOWPILOT_TEST
-    // Standalone tests must never control a user's application.
-    if (target != g_testOnlyWindow.load()) return CallNextHookEx(nullptr, code, message, parameter);
-#endif
-    if (!target || !PostMessageW(state.host, kActionMessage, action, reinterpret_cast<LPARAM>(target)))
+    if (action != Notifications &&
+        (!WindowCommand(static_cast<Action>(action), target, state.config) ||
+         (state.config.actions[action].ignoreGames && IsGame(target, state.config)))) {
+        PostMessageW(state.host, kCancelMessage, 0, 0);
+        return CallNextHookEx(nullptr, code, message, parameter);
+    }
+    if (!PostMessageW(state.host, kActionMessage, action, reinterpret_cast<LPARAM>(target)))
         return CallNextHookEx(nullptr, code, message, parameter);
     state.suppressed[key] = true;
     if (modifiers & (MOD_WIN | MOD_ALT)) MaskModifierMenu();
@@ -881,10 +882,11 @@ void CALLBACK ForegroundChanged(HWINEVENTHOOK, DWORD, HWND window, LONG, LONG, D
     if (t_state && t_state->confirmation.armed && window != t_state->confirmation.window)
         CancelPending(*t_state);
 }
-bool AnyModifierDown() {
-    for (auto key : {VK_LWIN, VK_RWIN, VK_CONTROL, VK_MENU, VK_SHIFT})
-        if (GetAsyncKeyState(key) & 0x8000) return true;
-    return false;
+void CALLBACK DesktopSwitched(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) {
+    if (!t_state) return;
+    t_state->down.fill(false);
+    t_state->suppressed.fill(false);
+    CancelPending(*t_state);
 }
 bool NotificationCenterDisabled() {
     for (HKEY hive : {HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE}) {
@@ -900,7 +902,7 @@ void SendNativeNotifications(State& state) {
     if (GetTickCount64() - state.notificationAt > 5000) {
         CancelPending(state); return;
     }
-    if (AnyModifierDown()) return;
+    if (CurrentModifiers()) return;
     state.pendingNotification = false; KillTimer(state.host, kNotifyTimer);
     if (NotificationCenterDisabled()) {
         ShowError(state, GetForegroundWindow(), Text(state.config.language,
@@ -918,7 +920,7 @@ void SendNativeNotifications(State& state) {
 }
 void ReportConfigErrors(State& state) {
     for (const auto& error : state.config.errors) Wh_Log(L"Configuration: %s", error.c_str());
-    if (state.config.enabled && !state.config.errors.empty())
+    if (!state.config.errors.empty())
         ShowToast(state, GetForegroundWindow(), Text(state.config.language,
             L"Review your WindowPilot shortcuts", L"Revise os atalhos do WindowPilot", L"Revisa los atajos de WindowPilot"),
             state.config.errors.front() + Text(state.config.language,
@@ -971,6 +973,7 @@ void Cleanup(State& state) {
     g_messageWindow = nullptr;
     if (state.keyboard) UnhookWindowsHookEx(state.keyboard);
     if (state.foreground) UnhookWinEvent(state.foreground);
+    if (state.desktopSwitch) UnhookWinEvent(state.desktopSwitch);
     if (state.host) CancelPending(state);
     if (state.toast) DestroyWindow(state.toast);
     if (state.host) DestroyWindow(state.host);
@@ -979,42 +982,9 @@ void Cleanup(State& state) {
     if (state.hostClassRegistered) UnregisterClassW(kHostClass, state.module);
     t_state = nullptr;
 }
-bool HasElevatedInputAccess() {
-    HANDLE token{};
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return false;
-    DWORD uiAccess{}, bytes{};
-    TOKEN_ELEVATION elevation{};
-    bool access = GetTokenInformation(token, TokenUIAccess, &uiAccess, sizeof(uiAccess), &bytes) && uiAccess;
-    access |= GetTokenInformation(token, TokenElevation, &elevation, sizeof(elevation), &bytes) && elevation.TokenIsElevated;
-    CloseHandle(token);
-    return access;
-}
 DWORD WINAPI WorkerMain(void*) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     MSG message{}; PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
-    DWORD session{}; ProcessIdToSessionId(GetCurrentProcessId(), &session);
-    auto mutexName = L"Local\\WindowPilot.Keyboard." + std::to_wstring(session);
-    // The standard-user hook cannot observe input over elevated windows. Keep
-    // one fallback in Explorer and one UIAccess/elevated hook in the user's
-    // text-input host. Consuming a key stops the hook chain, preventing duplicates.
-    mutexName += HasElevatedInputAccess() ? L".Accessible" : L".Standard";
-#ifdef WINDOWPILOT_TEST
-    mutexName += L".Tests";
-#endif
-    HANDLE owner = CreateMutexW(nullptr, FALSE, mutexName.c_str());
-    if (!owner) { SetEvent(g_readyEvent); return 1; }
-    // Only one Explorer process owns the global hook; a standby takes over if
-    // that process exits. The stop event also wakes standby threads on unload.
-    HANDLE waits[] = {g_stopEvent, owner};
-    DWORD acquired = WaitForMultipleObjects(2, waits, FALSE, 0);
-    bool announced = false;
-    if (acquired == WAIT_TIMEOUT) {
-        g_startupOk = true; SetEvent(g_readyEvent); announced = true;
-        acquired = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
-    }
-    if (acquired != WAIT_OBJECT_0+1 && acquired != WAIT_ABANDONED_0+1) {
-        CloseHandle(owner); if (!announced) SetEvent(g_readyEvent); return 0;
-    }
     State state; t_state = &state; state.config = SnapshotConfig();
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                       reinterpret_cast<LPCWSTR>(&WorkerMain), &state.module);
@@ -1023,18 +993,19 @@ DWORD WINAPI WorkerMain(void*) {
     if (success) {
         state.host = CreateWindowExW(0, kHostClass, L"WindowPilot", 0, 0,0,0,0, HWND_MESSAGE,
                                      nullptr, state.module, &state);
-        state.toast = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
-                                      WS_EX_LAYERED | WS_EX_TRANSPARENT,
+        DWORD toastStyle = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT;
+        if (state.config.alwaysOnTop) toastStyle |= WS_EX_TOPMOST;
+        state.toast = CreateWindowExW(toastStyle,
             kToastClass, L"WindowPilot", WS_POPUP, 0,0,0,0, nullptr, nullptr, state.module, &state);
         success = state.host && state.toast;
     }
     if (success) {
-        for (auto key : {VK_LWIN, VK_RWIN, VK_LCONTROL, VK_RCONTROL, VK_LSHIFT, VK_RSHIFT, VK_LMENU, VK_RMENU})
-            state.down[key] = (GetAsyncKeyState(key) & 0x8000) != 0;
         state.foreground = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
                                           nullptr, ForegroundChanged, 0, 0, WINEVENT_OUTOFCONTEXT);
+        state.desktopSwitch = SetWinEventHook(EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_DESKTOPSWITCH,
+                                             nullptr, DesktopSwitched, 0, 0, WINEVENT_OUTOFCONTEXT);
         state.keyboard = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardProc, state.module, 0);
-        success = state.keyboard && state.foreground;
+        success = state.keyboard && state.foreground && state.desktopSwitch;
     }
     if (success) {
         g_messageWindow = state.host;
@@ -1042,7 +1013,7 @@ DWORD WINAPI WorkerMain(void*) {
         Wh_Log(L"WindowPilot keyboard worker active");
     } else Wh_Log(L"WindowPilot initialization failed: %lu", GetLastError());
     g_startupOk = success;
-    if (!announced) SetEvent(g_readyEvent);
+    SetEvent(g_readyEvent);
     if (success) {
         bool run = true;
         while (run && WaitForSingleObject(g_stopEvent, 0) != WAIT_OBJECT_0) {
@@ -1055,7 +1026,7 @@ DWORD WINAPI WorkerMain(void*) {
             }
         }
     }
-    Cleanup(state); ReleaseMutex(owner); CloseHandle(owner);
+    Cleanup(state);
     return success ? 0 : 1;
 }
 void StopWorker() {
@@ -1069,22 +1040,201 @@ void StopWorker() {
 }
 }  // namespace windowpilot
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     using namespace windowpilot;
     { std::lock_guard lock(g_configMutex); g_config = LoadConfig(); }
     g_startupOk = false;
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent || !g_readyEvent) { StopWorker(); return FALSE; }
-    g_workerThread = CreateThread(nullptr, 0, WorkerMain, nullptr, 0, &g_workerThreadId);
+    g_workerThread = CreateThread(nullptr, 0, WorkerMain, nullptr, 0, nullptr);
     if (!g_workerThread || WaitForSingleObject(g_readyEvent, 5000) != WAIT_OBJECT_0 || !g_startupOk) {
         StopWorker(); return FALSE;
     }
     return TRUE;
 }
-void Wh_ModUninit() { windowpilot::StopWorker(); }
-void Wh_ModSettingsChanged() {
+void WhTool_ModUninit() { windowpilot::StopWorker(); }
+void WhTool_ModSettingsChanged() {
     using namespace windowpilot;
     { std::lock_guard lock(g_configMutex); g_config = LoadConfig(); }
     if (auto window = g_messageWindow.load()) PostMessageW(window, kReloadMessage, 0, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
