@@ -1,14 +1,14 @@
 // ==WindhawkMod==
 // @id              explorer-extras
 // @name            Explorer Extras
-// @description     Beta. Additions for File Explorer, one switch per area: a Columns layout (Miller columns) and a details and preview pane for PDF, text, Markdown, images, video and sound.
-// @version         0.68.2
+// @description     Beta. Additions for File Explorer, one switch per area: Columns (Miller columns), a details and preview pane (PDF, text, Markdown, images, video, sound), colour labels (tags), and a toolbar with tighter gaps, a resizable search box and round corners.
+// @version         0.77.21
 // @author          AristideBH
 // @github          https://github.com/AristideBH
 // @donateUrl       https://ko-fi.com/aristidebh
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -ladvapi32 -lgdi32 -lcomctl32 -lpropsys
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -ladvapi32 -lgdi32 -lcomctl32 -lpropsys -lmsimg32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -44,6 +44,27 @@ One pane in place of Explorer's Details and Preview panes, in Columns and in eve
 
 Works with QuickLook.
 
+## Labels
+
+Colour labels, like the tags of macOS, on files and folders. A label is a coloured dot with an optional name, from a palette of seven colours and a neutral gray, and an item can have up to 16.
+
+- **Where they show.** As a dot after the name, stacked when there are several, in every view of Explorer's own list (Details, List, Tiles, Content and the icon sizes) and in Columns. They follow the light and dark theme.
+- **How you set them.** In the **Tags** section of the details pane (badges that wrap, and an **Add a tag** link), and in the right-click menu, both in Explorer's own list and in Columns: a **Tags** entry with the colours, **Add tag** and **Clear tags**.
+- **Where they live.** In a named stream of the file itself, so they follow it when it is copied or moved on an NTFS drive. They need NTFS: the menu entry and the pane say so when a drive cannot keep them. The file's dates are not changed.
+- **Your own meanings.** Each colour has a name you can edit on Windhawk's page (Labels, Colour names), such as "Red = Urgent".
+- Switch them off with **Show labels**.
+
+## Toolbar
+
+The top of the window, with a setting for each part (group **Toolbar**, switch **Change the toolbar**):
+
+- **Navigation buttons.** Back, Forward, Up and Refresh sit closer together (gap 4 pixels, 0 to 16; Explorer's is 16), and so does the address bar after them (4 pixels, 0 to 16; Explorer's is 8). The address bar takes the room that frees.
+- **Command bar.** The gap between New, Cut, Copy, Paste and the rest (4 pixels, 0 to 8; Explorer's is 8).
+- **Search box.** Drag the edge between the address bar and the search box, with the mouse, a finger or a pen; a double click or double tap goes back to the width in the settings. A width you drag is kept until you change the setting.
+- **Corners.** The corner radius of the address bar and of the search box (0 to 16; 16 makes the ends round).
+
+Switch the area off and Explorer's own spacing and corners come back.
+
 A short video tour: https://github.com/user-attachments/assets/14dddb22-8866-4082-aede-a6f5ed995bea
 
 Tested daily on Windows 11 24H2 on ARM64, in French and English; x86-64 was tested up to 0.55. Needs Windhawk to download the symbols of FileExplorerExtensions.dll.
@@ -70,7 +91,7 @@ If you like it, you can support the work on Ko-fi: https://ko-fi.com/aristidebh
     - headerKeyboard: false
       $name: Keyboard on group headers
       $description: Arrow keys reach group headers. Left, Right and Enter collapse and expand them.
-    - doubleClickUp: false
+    - doubleClickUp: true
       $name: Double-click empty space to go up
       $description: Goes up one folder. In the first column, the parent folder is added in front.
     $name: Behaviour
@@ -78,7 +99,7 @@ If you like it, you can support the work on Ko-fi: https://ko-fi.com/aristidebh
     - foldersFirst: true
       $name: Folders first
       $description: Folders are listed before files in each column, whatever the sort.
-    - desktopRealOnly: false
+    - desktopRealOnly: true
       $name: Desktop column shows real items only
       $description: Hides virtual items (This PC, Recycle Bin, Control Panel…) from the Desktop column.
     $name: Content
@@ -92,19 +113,19 @@ If you like it, you can support the work on Ko-fi: https://ko-fi.com/aristidebh
     - harmonizeWidths: true
       $name: Shift + double-click to even widths
       $description: Shift + double-click a column border gives all columns the same width. They stay so until a border is double-clicked alone.
-    - focusRect: true
+    - focusRect: false
       $name: Show the focus outline
       $description: Draws an outline around the item under the keyboard cursor. The selection highlight always shows.
-    - background: explorer
+    - background: theme
       $name: Panel background
       $description: Explorer uses its own file list colour. Theme uses the standard dark or light colour.
       $options:
       - explorer: Explorer colour
       - theme: Theme colour
-    - staleAccent: true
+    - staleAccent: false
       $name: Accent badge on the path chevron
       $description: The chevron of the folder you came from sits in a round accent badge, instead of a muted one.
-    - oddRows: false
+    - oddRows: true
       $name: Alternate row shading
       $description: Every other row is a shade apart, to follow a line across a wide column.
     $name: Layout
@@ -150,6 +171,63 @@ If you like it, you can support the work on Ko-fi: https://ko-fi.com/aristidebh
       $description: Plays video and sound files in the pane.
     $name: Previews
   $name: Details pane
+- labels:
+  - labelsOn: true
+    $name: Show labels
+    $description: Labels are coloured dots on files and folders, drawn in File Explorer and in Columns. They are kept in the file itself and need an NTFS drive.
+  - names:
+    - colourName0: Gray
+      $name: Name of the neutral gray
+      $description: What this colour means to you. It is shown for tags that have no name of their own, and it stays on this PC.
+    - colourName1: Red
+      $name: Name of colour 2
+      $description: What this colour means to you. It is shown for tags that have no name of their own, and it stays on this PC.
+    - colourName2: Orange
+      $name: Name of colour 3
+      $description: What this colour means to you. It is shown for tags that have no name of their own, and it stays on this PC.
+    - colourName3: Yellow
+      $name: Name of colour 4
+      $description: What this colour means to you. It is shown for tags that have no name of their own, and it stays on this PC.
+    - colourName4: Green
+      $name: Name of colour 5
+      $description: What this colour means to you. It is shown for tags that have no name of their own, and it stays on this PC.
+    - colourName5: Teal
+      $name: Name of colour 6
+      $description: What this colour means to you. It is shown for tags that have no name of their own, and it stays on this PC.
+    - colourName6: Blue
+      $name: Name of colour 7
+      $description: What this colour means to you. It is shown for tags that have no name of their own, and it stays on this PC.
+    - colourName7: Purple
+      $name: Name of colour 8
+      $description: What this colour means to you. It is shown for tags that have no name of their own, and it stays on this PC.
+    $name: Colour names
+  $name: Labels
+- toolbar:
+  - toolbarOn: true
+    $name: Change the toolbar
+    $description: Turns on the toolbar settings below. Off leaves Explorer’s own spacing, search box and corners.
+  - navGap: 4
+    $name: Gap between the navigation buttons
+    $description: In pixels, between the four buttons and before the first. Explorer’s own gap is 16.
+  - addressGap: 4
+    $name: Gap between the navigation buttons and the address bar
+    $description: In pixels, between Refresh and the address bar. Explorer’s own is 8.
+  - commandGap: 4
+    $name: Gap between the command bar buttons
+    $description: In pixels, between New, Cut, Copy, Paste and the rest. Explorer’s own gap is 8.
+  - searchResize: true
+    $name: Resize the search box by dragging
+    $description: Drag the edge between the address bar and the search box, with the mouse, a finger or a pen. A double click on it goes back to the width below.
+  - searchWidth: 0
+    $name: Search box width
+    $description: In pixels. 0 keeps Explorer’s own proportion. A width you dragged is kept until you change this value.
+  - addressRadius: 4
+    $name: Corner radius of the address bar
+    $description: In pixels. Explorer’s own is 4, 16 makes the ends fully round.
+  - searchRadius: 4
+    $name: Corner radius of the search box
+    $description: In pixels. Explorer’s own is 4, 16 makes the ends fully round.
+  $name: Toolbar
 - limits:
   - maxItems: 5000
     $name: Maximum items per column
@@ -193,6 +271,7 @@ If you like it, you can support the work on Ko-fi: https://ko-fi.com/aristidebh
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <windhawk_utils.h>
@@ -600,16 +679,16 @@ constexpr SettingInfo kSettings[] = {
     {L"restoreOnOpen", L"columns.behaviour.restoreOnOpen", SettingKind::Bool, 1, L"", 0, 0, false},
     {L"keepStale", L"columns.behaviour.keepStale", SettingKind::Bool, 1, L"", 0, 0, false},
     {L"headerKeyboard", L"columns.behaviour.headerKeyboard", SettingKind::Bool, 0, L"", 0, 0, false},
-    {L"doubleClickUp", L"columns.behaviour.doubleClickUp", SettingKind::Bool, 0, L"", 0, 0, false},
+    {L"doubleClickUp", L"columns.behaviour.doubleClickUp", SettingKind::Bool, 1, L"", 0, 0, false},
     {L"foldersFirst", L"columns.content.foldersFirst", SettingKind::Bool, 1, L"", 0, 0, true},
-    {L"desktopRealOnly", L"columns.content.desktopRealOnly", SettingKind::Bool, 0, L"", 0, 0, true},
+    {L"desktopRealOnly", L"columns.content.desktopRealOnly", SettingKind::Bool, 1, L"", 0, 0, true},
     {L"minWidth", L"columns.layout.minWidth", SettingKind::Int, 160, L"", 80, 800, true},
     {L"maxWidth", L"columns.layout.maxWidth", SettingKind::Int, 420, L"", 80, 1200, true},
     {L"harmonizeWidths", L"columns.layout.harmonizeWidths", SettingKind::Bool, 1, L"", 0, 0, true},
-    {L"focusRect", L"columns.layout.focusRect", SettingKind::Bool, 1, L"", 0, 0, true},
-    {L"background", L"columns.layout.background", SettingKind::Enum, 0, L"explorer", 0, 0, true},
-    {L"staleAccent", L"columns.layout.staleAccent", SettingKind::Bool, 1, L"", 0, 0, true},
-    {L"oddRows", L"columns.layout.oddRows", SettingKind::Bool, 0, L"", 0, 0, true},
+    {L"focusRect", L"columns.layout.focusRect", SettingKind::Bool, 0, L"", 0, 0, true},
+    {L"background", L"columns.layout.background", SettingKind::Enum, 0, L"theme", 0, 0, true},
+    {L"staleAccent", L"columns.layout.staleAccent", SettingKind::Bool, 0, L"", 0, 0, true},
+    {L"oddRows", L"columns.layout.oddRows", SettingKind::Bool, 1, L"", 0, 0, true},
     {L"rememberSort", L"columns.memory.rememberSort", SettingKind::Bool, 1, L"", 0, 0, false},
     {L"rememberWidth", L"columns.memory.rememberWidth", SettingKind::Bool, 1, L"", 0, 0, false},
     {L"rememberLayout", L"columns.memory.rememberLayout", SettingKind::Bool, 1, L"", 0, 0, false},
@@ -621,6 +700,23 @@ constexpr SettingInfo kSettings[] = {
     {L"livePreview", L"details.previews.livePreview", SettingKind::Bool, 1, L"", 0, 0, false},
     {L"previewImages", L"details.previews.previewImages", SettingKind::Bool, 1, L"", 0, 0, false},
     {L"previewMedia", L"details.previews.previewMedia", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"labelsOn", L"labels.labelsOn", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"colourName0", L"labels.names.colourName0", SettingKind::String, 0, L"Gray", 0, 0, false},
+    {L"colourName1", L"labels.names.colourName1", SettingKind::String, 0, L"Red", 0, 0, false},
+    {L"colourName2", L"labels.names.colourName2", SettingKind::String, 0, L"Orange", 0, 0, false},
+    {L"colourName3", L"labels.names.colourName3", SettingKind::String, 0, L"Yellow", 0, 0, false},
+    {L"colourName4", L"labels.names.colourName4", SettingKind::String, 0, L"Green", 0, 0, false},
+    {L"colourName5", L"labels.names.colourName5", SettingKind::String, 0, L"Teal", 0, 0, false},
+    {L"colourName6", L"labels.names.colourName6", SettingKind::String, 0, L"Blue", 0, 0, false},
+    {L"colourName7", L"labels.names.colourName7", SettingKind::String, 0, L"Purple", 0, 0, false},
+    {L"toolbarOn", L"toolbar.toolbarOn", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"navGap", L"toolbar.navGap", SettingKind::Int, 4, L"", 0, 16, false},
+    {L"addressGap", L"toolbar.addressGap", SettingKind::Int, 4, L"", 0, 16, false},
+    {L"commandGap", L"toolbar.commandGap", SettingKind::Int, 4, L"", 0, 8, false},
+    {L"searchResize", L"toolbar.searchResize", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"searchWidth", L"toolbar.searchWidth", SettingKind::Int, 0, L"", 0, 800, false},
+    {L"addressRadius", L"toolbar.addressRadius", SettingKind::Int, 4, L"", 0, 16, false},
+    {L"searchRadius", L"toolbar.searchRadius", SettingKind::Int, 4, L"", 0, 16, false},
     {L"maxItems", L"limits.maxItems", SettingKind::Int, 5000, L"", 50, 20000, true},
     {L"previewMaxMb", L"limits.previewMaxMb", SettingKind::Int, 60, L"", 1, 1024, false},
     {L"previewMaxMp", L"limits.previewMaxMp", SettingKind::Int, 40, L"", 4, 400, false},
@@ -652,6 +748,24 @@ constexpr StringInfo kStrings[] = {
     {L"pane.showthumb", L"Show the thumbnail"},
     {L"pane.getsize", L"Calculate"},
     {L"pane.sizecontent", L"Size and content"},
+    {L"labels.tags", L"Tags"},
+    {L"labels.add", L"Add a tag"},
+    {L"labels.name", L"Name (optional)"},
+    {L"labels.ntfs", L"Tags need an NTFS drive"},
+    {L"labels.remove", L"Remove"},
+    {L"labels.some", L"On some of the selected items"},
+    {L"labels.fail.readonly", L"Could not tag %s, it is read-only"},
+    {L"labels.fail.locked", L"Could not tag %s, it is in use"},
+    {L"labels.fail.ntfs", L"Could not tag %s, its drive needs to be NTFS"},
+    {L"labels.fail.failed", L"Could not tag %s"},
+    {L"labels.fail.full", L"%s already has 16 tags"},
+    {L"labels.fail.corrupt", L"%s has tags this version cannot read"},
+    {L"labels.apply", L"Add to all selected"},
+    {L"labels.menu", L"Tags"},
+    {L"labels.addtag", L"Add tag\u2026"},
+    {L"labels.clear", L"Clear tags"},
+    {L"labels.ambiguous", L"Another item here has the same displayed name, so no dot is shown for it. Show file name extensions to tell them apart."},
+    {L"labels.menu.ntfs", L"Tags (needs an NTFS drive)"},
 };
 
 constexpr StringInfo kStringsFr[] = {
@@ -680,6 +794,24 @@ constexpr StringInfo kStringsFr[] = {
     {L"pane.showthumb", L"Afficher la miniature"},
     {L"pane.getsize", L"Calculer"},
     {L"pane.sizecontent", L"Taille et contenu"},
+    {L"labels.tags", L"\u00C9tiquettes"},
+    {L"labels.add", L"Ajouter une \u00E9tiquette"},
+    {L"labels.name", L"Nom (facultatif)"},
+    {L"labels.ntfs", L"Les \u00E9tiquettes demandent un disque NTFS"},
+    {L"labels.remove", L"Retirer"},
+    {L"labels.some", L"Sur une partie des \u00E9l\u00E9ments s\u00E9lectionn\u00E9s"},
+    {L"labels.fail.readonly", L"Impossible d\u2019\u00E9tiqueter %s, il est en lecture seule"},
+    {L"labels.fail.locked", L"Impossible d\u2019\u00E9tiqueter %s, il est utilis\u00E9"},
+    {L"labels.fail.ntfs", L"Impossible d\u2019\u00E9tiqueter %s, son disque doit \u00EAtre NTFS"},
+    {L"labels.fail.failed", L"Impossible d\u2019\u00E9tiqueter %s"},
+    {L"labels.fail.full", L"%s a d\u00E9j\u00E0 16 \u00E9tiquettes"},
+    {L"labels.fail.corrupt", L"%s a des \u00E9tiquettes que cette version ne sait pas lire"},
+    {L"labels.apply", L"Ajouter \u00E0 tous les \u00E9l\u00E9ments"},
+    {L"labels.menu", L"\u00C9tiquettes"},
+    {L"labels.addtag", L"Ajouter une \u00E9tiquette\u2026"},
+    {L"labels.clear", L"Effacer les \u00E9tiquettes"},
+    {L"labels.ambiguous", L"Un autre \u00E9l\u00E9ment porte le m\u00EAme nom affich\u00E9, donc aucun point n\u2019est montr\u00E9. Affichez les extensions de nom de fichier pour les distinguer."},
+    {L"labels.menu.ntfs", L"\u00C9tiquettes (disque NTFS requis)"},
 };
 constexpr size_t kSettingCount = sizeof(kSettings) / sizeof(kSettings[0]);
 constexpr size_t kStringCount = sizeof(kStrings) / sizeof(kStrings[0]);
@@ -1815,6 +1947,437 @@ std::wstring MiddleEllipsis(const std::wstring& name, size_t maxChars) {
            name.substr(name.size() - tail);
 }
 
+// Labels: the tags of one item (a file or a folder), kept in one named NTFS stream on the item itself, so they
+// travel with it on NTFS. This part knows nothing about windows or painting.
+//
+// The text of the stream is UTF-8: a first line "v1", then one line per tag, a colour digit (0 is the neutral
+// gray, 1 to 7 the palette), a tab, and the name. A backslash, a tab, a line feed and a carriage return in a
+// name are written as \\, \t, \n and \r.
+
+struct LabelTag {
+    uint8_t colour = 0;
+    std::wstring name;
+};
+
+constexpr size_t kLabelsMaxTags = 16;
+constexpr size_t kLabelsMaxName = 40;
+constexpr wchar_t kLabelsStream[] = L":ExplorerExtras.Labels";
+
+enum class LabelsWrite { Ok, Unsupported, ReadOnly, Locked, Failed };
+
+// Why a read gave nothing: a stream that is corrupt or from a newer version, a file in use, no access to it, or
+// anything else (the file is gone, a network error).
+enum class LabelsReadResult { Ok, Corrupt, Locked, NoAccess, Failed };
+
+std::atomic<bool> g_labels{true};     // Labels on or off.
+
+namespace {
+
+std::mutex g_labelNamesMutex;
+std::wstring g_labelNames[8];  // What each colour means to the user, from the settings.
+
+// The name cut to its limit, without splitting a surrogate pair.
+std::wstring LabelsClip(std::wstring const& name) {
+    if (name.size() <= kLabelsMaxName) {
+        return name;
+    }
+    size_t length = kLabelsMaxName;
+    if (name[length - 1] >= 0xD800 && name[length - 1] <= 0xDBFF) {
+        length--;
+    }
+    return name.substr(0, length);
+}
+
+std::wstring LabelsEscape(std::wstring const& name) {
+    std::wstring result;
+    for (wchar_t c : name) {
+        switch (c) {
+            case L'\\': result += L"\\\\"; break;
+            case L'\t': result += L"\\t"; break;
+            case L'\n': result += L"\\n"; break;
+            case L'\r': result += L"\\r"; break;
+            default: result += c;
+        }
+    }
+    return result;
+}
+
+bool LabelsUnescape(std::wstring_view text, std::wstring* out) {
+    out->clear();
+    for (size_t i = 0; i < text.size(); i++) {
+        if (text[i] != L'\\') {
+            *out += text[i];
+            continue;
+        }
+        if (++i >= text.size()) {
+            return false;
+        }
+        switch (text[i]) {
+            case L'\\': *out += L'\\'; break;
+            case L't': *out += L'\t'; break;
+            case L'n': *out += L'\n'; break;
+            case L'r': *out += L'\r'; break;
+            default: return false;
+        }
+    }
+    return true;
+}
+
+LabelsWrite LabelsMapError(DWORD error) {
+    switch (error) {
+        case ERROR_ACCESS_DENIED:
+        case ERROR_WRITE_PROTECT:
+            return LabelsWrite::ReadOnly;
+        case ERROR_SHARING_VIOLATION:
+        case ERROR_LOCK_VIOLATION:
+            return LabelsWrite::Locked;
+        case ERROR_INVALID_NAME:
+        case ERROR_NOT_SUPPORTED:
+        case ERROR_INVALID_FUNCTION:
+            return LabelsWrite::Unsupported;
+        default:
+            return LabelsWrite::Failed;
+    }
+}
+
+// Tells a handle not to change the file's times when it writes or deletes (the stream's own write would
+// otherwise reset the last-write time of the file or folder).
+void LabelsKeepTimes(HANDLE file) {
+    FILETIME keep = {0xFFFFFFFF, 0xFFFFFFFF};
+    SetFileTime(file, nullptr, nullptr, &keep);
+}
+
+}  // namespace
+
+std::wstring LabelsSerialize(std::vector<LabelTag> const& tags) {
+    std::wstring text = L"v1\n";
+    size_t count = 0;
+    for (auto const& tag : tags) {
+        if (count++ >= kLabelsMaxTags) {
+            break;
+        }
+        text += static_cast<wchar_t>(L'0' + std::min<int>(tag.colour, 7));
+        text += L'\t';
+        text += LabelsEscape(LabelsClip(tag.name));
+        text += L'\n';
+    }
+    return text;
+}
+
+bool LabelsParse(std::wstring_view text, std::vector<LabelTag>* out) {
+    out->clear();
+    size_t lineEnd = text.find(L'\n');
+    if (lineEnd == std::wstring_view::npos || text.substr(0, lineEnd) != L"v1") {
+        return false;
+    }
+    size_t at = lineEnd + 1;
+    while (at < text.size()) {
+        lineEnd = text.find(L'\n', at);
+        std::wstring_view line = text.substr(at, lineEnd == std::wstring_view::npos ? text.size() - at : lineEnd - at);
+        at = lineEnd == std::wstring_view::npos ? text.size() : lineEnd + 1;
+        if (line.size() < 2 || line[0] < L'0' || line[0] > L'7' || line[1] != L'\t') {
+            out->clear();
+            return false;
+        }
+        LabelTag tag;
+        tag.colour = static_cast<uint8_t>(line[0] - L'0');
+        if (!LabelsUnescape(line.substr(2), &tag.name)) {
+            out->clear();
+            return false;
+        }
+        tag.name = LabelsClip(tag.name);
+        if (out->size() < kLabelsMaxTags) {
+            out->push_back(std::move(tag));
+        }
+    }
+    return true;
+}
+
+bool LabelsVolumeSupportsStreams(std::wstring const& path) {
+    wchar_t root[MAX_PATH];
+    if (!GetVolumePathNameW(path.c_str(), root, MAX_PATH)) {
+        return false;
+    }
+    DWORD flags = 0;
+    if (!GetVolumeInformationW(root, nullptr, 0, nullptr, nullptr, &flags, nullptr, 0)) {
+        return false;
+    }
+    return (flags & FILE_NAMED_STREAMS) != 0;
+}
+
+// Ok with an empty list when the item has no stream. Otherwise why the tags could not be read: the caller must then
+// not overwrite them.
+LabelsReadResult LabelsReadFileEx(std::wstring const& path, std::vector<LabelTag>* out) {
+    out->clear();
+    HANDLE file = CreateFileW((path + kLabelsStream).c_str(), GENERIC_READ,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                              FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        DWORD error = GetLastError();
+        if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) {
+            return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES ? LabelsReadResult::Ok : LabelsReadResult::Failed;
+        }
+        if (error == ERROR_SHARING_VIOLATION || error == ERROR_LOCK_VIOLATION) {
+            return LabelsReadResult::Locked;
+        }
+        return error == ERROR_ACCESS_DENIED ? LabelsReadResult::NoAccess : LabelsReadResult::Failed;
+    }
+    char buffer[8192];
+    DWORD read = 0;
+    BOOL ok = ReadFile(file, buffer, sizeof(buffer), &read, nullptr);
+    DWORD size = GetFileSize(file, nullptr);
+    CloseHandle(file);
+    if (!ok) {
+        return LabelsReadResult::Failed;
+    }
+    if (size > sizeof(buffer)) {
+        return LabelsReadResult::Corrupt;
+    }
+    int wide = read ? MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, buffer, (int)read, nullptr, 0) : 0;
+    if (read && wide <= 0) {
+        return LabelsReadResult::Corrupt;
+    }
+    std::wstring text(wide, L'\0');
+    if (wide) {
+        MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, buffer, (int)read, text.data(), wide);
+    }
+    return text.empty() || LabelsParse(text, out) ? LabelsReadResult::Ok : LabelsReadResult::Corrupt;
+}
+
+// True with an empty list when the item has no stream. False when the item cannot be read, or its stream is
+// corrupt or from a newer version (the caller must then not overwrite it).
+bool LabelsReadFile(std::wstring const& path, std::vector<LabelTag>* out) {
+    return LabelsReadFileEx(path, out) == LabelsReadResult::Ok;
+}
+
+// An empty list removes the stream. The item's times are never changed.
+LabelsWrite LabelsWriteFile(std::wstring const& path, std::vector<LabelTag> const& tags) {
+    if (!LabelsVolumeSupportsStreams(path)) {
+        return LabelsWrite::Unsupported;
+    }
+    std::wstring stream = path + kLabelsStream;
+    if (tags.empty()) {
+        HANDLE file = CreateFileW(stream.c_str(), DELETE | FILE_WRITE_ATTRIBUTES,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                                  FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        if (file == INVALID_HANDLE_VALUE) {
+            DWORD error = GetLastError();
+            return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND ? LabelsWrite::Ok
+                                                                                  : LabelsMapError(error);
+        }
+        LabelsKeepTimes(file);
+        FILE_DISPOSITION_INFO remove = {TRUE};
+        BOOL removed = SetFileInformationByHandle(file, FileDispositionInfo, &remove, sizeof(remove));
+        DWORD error = GetLastError();
+        CloseHandle(file);
+        return removed ? LabelsWrite::Ok : LabelsMapError(error);
+    }
+    std::wstring text = LabelsSerialize(tags);
+    int bytes = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(), nullptr, 0, nullptr, nullptr);
+    std::string utf8(bytes, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(), utf8.data(), bytes, nullptr, nullptr);
+    HANDLE file = CreateFileW(stream.c_str(), GENERIC_WRITE | FILE_WRITE_ATTRIBUTES,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_ALWAYS,
+                              FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return LabelsMapError(GetLastError());
+    }
+    LabelsKeepTimes(file);
+    // Not CREATE_ALWAYS: that truncates before the write (a write that fails would leave an empty stream, and a hidden or
+    // system item refuses it). The new text is written over the old one, and the end is cut after.
+    DWORD written = 0;
+    BOOL ok = WriteFile(file, utf8.data(), (DWORD)utf8.size(), &written, nullptr);
+    DWORD error = GetLastError();
+    if (ok && written == utf8.size()) {
+        ok = SetEndOfFile(file);
+        error = GetLastError();
+    }
+    CloseHandle(file);
+    return ok && written == utf8.size() ? LabelsWrite::Ok : LabelsMapError(error);
+}
+
+// The name the user gave a colour in the settings ("Red = Urgent"). Safe from any thread.
+std::wstring LabelsColourName(int colour) {
+    std::lock_guard<std::mutex> lock(g_labelNamesMutex);
+    return g_labelNames[std::clamp(colour, 0, 7)];
+}
+
+void LabelsLoadSettings() {
+    g_labels = SettingBool(L"labelsOn");
+    std::lock_guard<std::mutex> lock(g_labelNamesMutex);
+    for (int i = 0; i < 8; i++) {
+        g_labelNames[i] = LabelsClip(SettingText((std::wstring(L"colourName") + std::to_wstring(i)).c_str()));
+    }
+}
+// Labels: the self-test of the tag stream. It only exists in the debug build (EXTRAS_VERBOSE), runs once
+// when the mod loads and writes one line to the log: "LABELS SELFTEST pass", or "LABELS SELFTEST FAIL <what>".
+// tools/smoke-test-explorer-extras.ps1 reads that line.
+#ifdef EXTRAS_VERBOSE
+
+namespace {
+
+std::wstring g_labelsFailure;
+
+void LabelsExpect(bool ok, const wchar_t* what) {
+    if (!ok && g_labelsFailure.empty()) {
+        g_labelsFailure = what;
+    }
+}
+
+bool LabelsSameTags(std::vector<LabelTag> const& a, std::vector<LabelTag> const& b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); i++) {
+        if (a[i].colour != b[i].colour || a[i].name != b[i].name) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool LabelsWriteTime(std::wstring const& path, FILETIME* time) {
+    HANDLE file = CreateFileW(path.c_str(), FILE_WRITE_ATTRIBUTES | FILE_READ_ATTRIBUTES,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                              FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    bool ok = GetFileTime(file, nullptr, nullptr, time) != 0;
+    CloseHandle(file);
+    return ok;
+}
+
+bool LabelsSetWriteTime(std::wstring const& path, FILETIME time) {
+    HANDLE file = CreateFileW(path.c_str(), FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                              nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    bool ok = SetFileTime(file, nullptr, nullptr, &time) != 0;
+    CloseHandle(file);
+    return ok;
+}
+
+}  // namespace
+
+void LabelsSelfTest() {
+    // The text format.
+    std::vector<LabelTag> tags = {{1, L"a:b"},
+                                  {2, L"x\ty"},
+                                  {3, L"line\nbreak"},
+                                  {4, L"p|q"},
+                                  {5, std::wstring(40, L'n')},
+                                  {6, L"\U0001F600 smile"},
+                                  {7, L""},
+                                  {0, L"back\\slash\r"}};
+    std::vector<LabelTag> back;
+    LabelsExpect(LabelsParse(LabelsSerialize(tags), &back), L"round trip parses");
+    LabelsExpect(LabelsSameTags(tags, back), L"round trip keeps every tag");
+
+    std::vector<LabelTag> many(17, LabelTag{1, L"t"});
+    LabelsExpect(LabelsParse(LabelsSerialize(many), &back) && back.size() == 16, L"17 tags are cut to 16");
+    std::vector<LabelTag> longName = {LabelTag{1, std::wstring(41, L'x')}};
+    LabelsExpect(LabelsParse(LabelsSerialize(longName), &back) && back.size() == 1 && back[0].name.size() == 40,
+                 L"a 41 character name is cut to 40");
+    LabelsExpect(!LabelsParse(L"v9\n1\tX", &back), L"a newer version is refused");
+    LabelsExpect(!LabelsParse(L"1\tX", &back), L"no version line is refused");
+    LabelsExpect(!LabelsParse(L"v1\nx\tY", &back), L"a colour that is not a digit is refused");
+    LabelsExpect(!LabelsParse(L"v1\n9\tY", &back), L"a colour out of range is refused");
+    LabelsExpect(LabelsParse(L"v1\n", &back) && back.empty(), L"a version line alone is an empty list");
+
+    // A file and a folder, on the temp drive.
+    wchar_t temp[MAX_PATH];
+    GetTempPathW(MAX_PATH, temp);
+    std::wstring dir = std::wstring(temp) + L"ee-labels-test-" + std::to_wstring(GetCurrentProcessId());
+    CreateDirectoryW(dir.c_str(), nullptr);
+    std::wstring file = dir + L"\\a.txt";
+    std::wstring folder = dir + L"\\sub";
+    CreateDirectoryW(folder.c_str(), nullptr);
+    HANDLE created = CreateFileW(file.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (created != INVALID_HANDLE_VALUE) {
+        DWORD written = 0;
+        WriteFile(created, "hello", 5, &written, nullptr);
+        CloseHandle(created);
+    }
+    FILETIME old = {};
+    SYSTEMTIME oldSystem = {2020, 1, 4, 2, 3, 4, 5, 0};
+    SystemTimeToFileTime(&oldSystem, &old);
+    LabelsExpect(LabelsSetWriteTime(file, old) && LabelsSetWriteTime(folder, old), L"set the old write times");
+    LabelsExpect(LabelsVolumeSupportsStreams(file), L"the temp drive supports named streams");
+
+    std::vector<LabelTag> mine = {{1, L"Urgent"}, {5, L""}};
+    LabelsExpect(LabelsWriteFile(file, mine) == LabelsWrite::Ok, L"write to a file");
+    LabelsExpect(LabelsReadFile(file, &back) && LabelsSameTags(mine, back), L"read back from a file");
+    FILETIME after = {};
+    LabelsExpect(LabelsWriteTime(file, &after) && CompareFileTime(&old, &after) == 0, L"a file's write time is unchanged");
+    LabelsExpect(LabelsWriteFile(folder, mine) == LabelsWrite::Ok, L"write to a folder");
+    LabelsExpect(LabelsReadFile(folder, &back) && LabelsSameTags(mine, back), L"read back from a folder");
+    LabelsExpect(LabelsWriteTime(folder, &after) && CompareFileTime(&old, &after) == 0, L"a folder's write time is unchanged");
+    LabelsExpect(LabelsReadFile(dir + L"\\missing.txt", &back) == false, L"a missing file cannot be read");
+
+    LabelsExpect(LabelsWriteFile(file, {}) == LabelsWrite::Ok, L"writing an empty list");
+    LabelsExpect(LabelsReadFile(file, &back) && back.empty(), L"an empty list leaves no tags");
+    WIN32_FIND_STREAM_DATA stream = {};
+    HANDLE find = FindFirstStreamW(file.c_str(), FindStreamInfoStandard, &stream, 0);
+    int streams = 0;
+    if (find != INVALID_HANDLE_VALUE) {
+        do {
+            streams++;
+        } while (FindNextStreamW(find, &stream));
+        FindClose(find);
+    }
+    LabelsExpect(streams == 1, L"an empty list removes the stream");
+
+    SetFileAttributesW(file.c_str(), FILE_ATTRIBUTE_READONLY);
+    LabelsExpect(LabelsWriteFile(file, mine) == LabelsWrite::ReadOnly, L"a read-only file is refused");
+    SetFileAttributesW(file.c_str(), FILE_ATTRIBUTE_NORMAL);
+
+    // A shorter list replaces a longer one, and a hidden file can be written again.
+    std::vector<LabelTag> longer = {{1, L"aaaaaaaaaaaaaaaaaaaa"}, {2, L"bbbbbbbbbbbbbbbbbbbb"}, {3, L"cccccccccccccccccccc"}};
+    LabelsExpect(LabelsWriteFile(file, longer) == LabelsWrite::Ok && LabelsWriteFile(file, {LabelTag{4, L"x"}}) == LabelsWrite::Ok &&
+                     LabelsReadFile(file, &back) && back.size() == 1 && back[0].colour == 4,
+                 L"a shorter list replaces a longer one");
+    SetFileAttributesW(file.c_str(), FILE_ATTRIBUTE_HIDDEN);
+    LabelsExpect(LabelsWriteFile(file, mine) == LabelsWrite::Ok && LabelsWriteFile(file, longer) == LabelsWrite::Ok,
+                 L"a hidden file can be written twice");
+    SetFileAttributesW(file.c_str(), FILE_ATTRIBUTE_NORMAL);
+
+    // Reading says why it cannot.
+    {
+        std::wstring stream = file + kLabelsStream;
+        HANDLE raw = CreateFileW(stream.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        if (raw != INVALID_HANDLE_VALUE) {
+            DWORD written = 0;
+            WriteFile(raw, "v9\n1\tX", 6, &written, nullptr);
+            CloseHandle(raw);
+        }
+        LabelsExpect(LabelsReadFileEx(file, &back) == LabelsReadResult::Corrupt, L"a newer version reads as corrupt");
+        HANDLE hold = CreateFileW(stream.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        LabelsExpect(hold != INVALID_HANDLE_VALUE && LabelsReadFileEx(file, &back) == LabelsReadResult::Locked,
+                     L"a stream held open by another program reads as locked");
+        if (hold != INVALID_HANDLE_VALUE) {
+            CloseHandle(hold);
+        }
+        LabelsExpect(LabelsReadFileEx(dir + L"\\missing.txt", &back) == LabelsReadResult::Failed, L"a missing file fails");
+        LabelsExpect(LabelsReadFileEx(file, &back) == LabelsReadResult::Corrupt && !LabelsReadFile(file, &back),
+                     L"the plain read is false for what the long read calls corrupt");
+        LabelsWriteFile(file, {});
+        LabelsExpect(LabelsReadFileEx(file, &back) == LabelsReadResult::Ok, L"no stream reads as ok");
+    }
+
+    DeleteFileW(file.c_str());
+    RemoveDirectoryW(folder.c_str());
+    RemoveDirectoryW(dir.c_str());
+
+    if (g_labelsFailure.empty()) {
+        Wh_Log(L"LABELS SELFTEST pass");
+    } else {
+        Wh_Log(L"LABELS SELFTEST FAIL %s", g_labelsFailure.c_str());
+    }
+}
+
+#endif  // EXTRAS_VERBOSE
 // ---- Change notifications: a hidden window per Explorer window receives
 // the shell's "this folder changed" messages for every open column. ----
 
@@ -2202,6 +2765,529 @@ void RememberFolderColumns(std::wstring const& path, int columns) {
 int RememberedColumns(std::wstring const& path) {
     return GetFolderMemory(path).columns;
 }
+// Labels: the tags of the items of a folder, read once by a thread of the mod and kept in a cache that the
+// paint hook only reads (it never touches the disk). The key of an item is its displayed name, the same text
+// that the file list gives back as the accessible name of a row. Two items that show the same name (hidden
+// extensions) cannot be told apart in the list, so a name like that is "ambiguous" and gets no dot.
+
+struct LabelsFolder {
+    std::unordered_map<std::wstring, std::vector<LabelTag>> byName;
+    std::unordered_set<std::wstring> ambiguous;  // Names shown by more than one item, at least one of them tagged.
+    std::unordered_map<std::wstring, std::wstring> typeNames;  // The type text ("Text file") of each tagged item.
+    std::unordered_map<std::wstring, int> counts;  // How many items show each name, tagged or not.
+    std::unordered_set<std::wstring> folders;    // The items that are folders (a Tiles or Content row has no detail line then).
+    bool streamsSupported = true;                // The volume can carry the stream.
+    bool complete = false;                       // The folder was read to its end.
+};
+
+// What one item of a folder gave: its displayed name, and its tags (empty when it has none).
+struct LabelsItem {
+    std::wstring name;
+    std::vector<LabelTag> tags;
+    bool folder = false;
+    std::wstring typeName;  // What Explorer calls the type of the item, for tagged items only.
+};
+
+// Builds the cache entry of a folder from what its items gave. Pure.
+LabelsFolder LabelsCollect(std::vector<LabelsItem> const& items) {
+    LabelsFolder folder;
+    std::unordered_map<std::wstring, int> seen;
+    std::unordered_set<std::wstring> tagged;
+    for (auto const& item : items) {
+        seen[item.name]++;
+        if (item.folder) {
+            folder.folders.insert(item.name);
+        }
+        if (!item.tags.empty()) {
+            tagged.insert(item.name);
+            folder.byName[item.name] = item.tags;
+            folder.typeNames[item.name] = item.typeName;
+        }
+    }
+    for (auto const& name : tagged) {
+        if (seen[name] > 1) {
+            folder.ambiguous.insert(name);
+            folder.byName.erase(name);
+            folder.typeNames.erase(name);
+        }
+    }
+    folder.counts = std::move(seen);
+    folder.complete = true;
+    return folder;
+}
+
+// The entry of a folder after one item's tags changed. An item that shares its displayed name with another one
+// (hidden extensions) cannot be told from it in the list: its name is ambiguous, whichever one was tagged. Pure.
+LabelsFolder LabelsFolderWithTags(LabelsFolder base, std::wstring const& name, std::vector<LabelTag> const& tags,
+                                  std::wstring const& typeName) {
+    auto counted = base.counts.find(name);
+    if (counted != base.counts.end() && counted->second > 1) {
+        if (!tags.empty()) {
+            base.ambiguous.insert(name);
+        }
+        base.byName.erase(name);
+        base.typeNames.erase(name);
+        return base;
+    }
+    if (tags.empty()) {
+        base.byName.erase(name);
+        base.typeNames.erase(name);
+    } else {
+        base.byName[name] = tags;
+        base.typeNames[name] = typeName;
+    }
+    return base;
+}
+
+// A folder that was read is read again after this long, when it is on show (a tag set by another program, a rename).
+bool LabelsShouldRefresh(ULONGLONG readAt, ULONGLONG now) {
+    return now - readAt >= 20000;
+}
+
+// The tag a window filters its list by. A colour-only filter (no name) matches any tag of that colour, a named
+// one matches the name, whatever the case and the colour.
+struct LabelsFilter {
+    bool on = false;
+    uint8_t colour = 0;
+    std::wstring name;
+    std::wstring folder;  // The folder it was set in: showing another folder ends it.
+};
+
+bool LabelsMatches(LabelsFilter const& filter, std::vector<LabelTag> const& tags) {
+    if (!filter.on) {
+        return true;
+    }
+    for (auto const& tag : tags) {
+        if (filter.name.empty() ? tag.colour == filter.colour : _wcsicmp(tag.name.c_str(), filter.name.c_str()) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+namespace {
+
+struct LabelsSlot {
+    std::shared_ptr<const LabelsFolder> data = std::make_shared<LabelsFolder>();
+    std::shared_ptr<std::atomic<bool>> cancel;  // Of the read that is running, null when none is.
+    ULONGLONG used = 0;
+    ULONGLONG readAt = 0;  // When the data was published.
+};
+
+std::mutex g_labelsCacheMutex;
+[[clang::no_destroy]] std::map<std::wstring, LabelsSlot> g_labelsCache;
+std::atomic<int> g_labelsReadsRunning{0};
+std::atomic<void (*)(std::wstring const& folderPath)> g_labelsLoaded{nullptr};
+constexpr size_t kLabelsCachedFolders = 16;
+
+// Reads one folder on a thread of the mod. Gives up as soon as `cancel` is set or the mod unloads.
+void LabelsRead(std::wstring path, std::shared_ptr<std::atomic<bool>> cancel) {
+    g_labelsReadsRunning++;
+    HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    std::vector<LabelsItem> items;
+    bool finished = false;
+    bool supported = LabelsVolumeSupportsStreams(path);
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    IShellFolder* folder = nullptr;
+    if (!supported) {
+        finished = true;
+    } else if (SUCCEEDED(SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, nullptr)) && pidl &&
+               SUCCEEDED(SHBindToObject(nullptr, pidl, nullptr, IID_PPV_ARGS(&folder))) && folder) {
+        IEnumIDList* list = nullptr;
+        // Hidden items are read when Explorer shows them: one that is not shown must not make a visible name ambiguous.
+        SHCONTF flags = SHCONTF_FOLDERS | SHCONTF_NONFOLDERS;
+        if (ShowHiddenFiles()) {
+            flags |= SHCONTF_INCLUDEHIDDEN;
+        }
+        if (folder->EnumObjects(nullptr, flags, &list) == S_OK && list) {
+            finished = true;
+            PITEMID_CHILD child = nullptr;
+            int count = 0;
+            while (list->Next(1, &child, nullptr) == S_OK && child) {
+                if (*cancel || g_unloading) {
+                    CoTaskMemFree(child);
+                    finished = false;
+                    break;
+                }
+                LabelsItem item;
+                item.name = DisplayName(folder, child);
+                SFGAOF attributes = SFGAO_FOLDER | SFGAO_STREAM;
+                item.folder = SUCCEEDED(folder->GetAttributesOf(1, (PCUITEMID_CHILD_ARRAY)&child, &attributes)) &&
+                              (attributes & SFGAO_FOLDER) && !(attributes & SFGAO_STREAM);
+                std::wstring file = ParsingName(folder, child);
+                std::vector<LabelTag> tags;
+                if (!file.empty() && LabelsReadFile(file, &tags)) {
+                    item.tags = std::move(tags);
+                }
+                if (!item.tags.empty()) {
+                    SHFILEINFOW info = {};
+                    if (SHGetFileInfoW(file.c_str(), 0, &info, sizeof(info), SHGFI_TYPENAME)) {
+                        item.typeName = info.szTypeName;
+                    }
+                }
+                items.push_back(std::move(item));
+                CoTaskMemFree(child);
+                child = nullptr;
+                if (++count >= kReadCap) {
+                    break;
+                }
+            }
+            list->Release();
+        }
+        folder->Release();
+    }
+    if (pidl) {
+        ILFree(pidl);
+    }
+    if (SUCCEEDED(init)) {
+        CoUninitialize();
+    }
+    bool publish = false;
+    if (finished && !*cancel) {
+        auto data = std::make_shared<LabelsFolder>(supported ? LabelsCollect(items) : LabelsFolder());
+        data->streamsSupported = supported;
+        data->complete = true;
+        std::lock_guard<std::mutex> lock(g_labelsCacheMutex);
+        auto found = g_labelsCache.find(path);
+        if (found != g_labelsCache.end() && found->second.cancel == cancel) {
+            found->second.data = data;
+            found->second.readAt = GetTickCount64();
+            found->second.cancel.reset();
+            publish = true;
+        }
+    } else {
+        std::lock_guard<std::mutex> lock(g_labelsCacheMutex);
+        auto found = g_labelsCache.find(path);
+        if (found != g_labelsCache.end() && found->second.cancel == cancel) {
+            found->second.cancel.reset();  // Cancelled: the old data stays, and a new read can start.
+        }
+    }
+    g_labelsReadsRunning--;
+    auto loaded = g_labelsLoaded.load();
+    if (publish && loaded && !g_unloading) {
+        loaded(path);
+    }
+}
+
+// Starts a read for the slot (the cache lock is held by the caller).
+void LabelsStartRead(std::wstring const& path, LabelsSlot& slot) {
+    auto cancel = std::make_shared<std::atomic<bool>>(false);
+    slot.cancel = cancel;
+    if (!StartModThread([path, cancel]() { LabelsRead(path, cancel); })) {
+        slot.cancel.reset();
+    }
+}
+
+}  // namespace
+
+// Tells the cache what to call, on a thread of the mod, when a folder has been read.
+void LabelsSetLoadedCallback(void (*callback)(std::wstring const& folderPath)) {
+    g_labelsLoaded = callback;
+}
+
+// The tags of a folder's items. Never blocks: the first call returns an empty, not complete entry and starts
+// the read; the entry is replaced when the read ends.
+std::shared_ptr<const LabelsFolder> LabelsFolderFor(std::wstring const& folderPath) {
+    std::lock_guard<std::mutex> lock(g_labelsCacheMutex);
+    auto found = g_labelsCache.find(folderPath);
+    if (found == g_labelsCache.end()) {
+        if (g_labelsCache.size() >= kLabelsCachedFolders) {
+            auto oldest = g_labelsCache.end();
+            for (auto at = g_labelsCache.begin(); at != g_labelsCache.end(); ++at) {
+                if (!at->second.cancel && (oldest == g_labelsCache.end() || at->second.used < oldest->second.used)) {
+                    oldest = at;
+                }
+            }
+            if (oldest != g_labelsCache.end()) {
+                g_labelsCache.erase(oldest);
+            }
+        }
+        found = g_labelsCache.emplace(folderPath, LabelsSlot()).first;
+    }
+    LabelsSlot& slot = found->second;
+    slot.used = GetTickCount64();
+    if (!slot.data->complete && !slot.cancel) {
+        LabelsStartRead(folderPath, slot);
+    }
+    return slot.data;
+}
+
+// Read again (navigation, the window got focus). The old data stays in use until the new read ends.
+void LabelsInvalidate(std::wstring const& folderPath) {
+    std::lock_guard<std::mutex> lock(g_labelsCacheMutex);
+    auto found = g_labelsCache.find(folderPath);
+    if (found == g_labelsCache.end()) {
+        return;
+    }
+    if (found->second.cancel) {
+        *found->second.cancel = true;
+    }
+    LabelsStartRead(folderPath, found->second);
+}
+
+// The displayed name of an item, from its path.
+std::wstring LabelsDisplayNameOf(std::wstring const& itemPath) {
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    std::wstring name;
+    if (SUCCEEDED(SHParseDisplayName(itemPath.c_str(), nullptr, &pidl, 0, nullptr)) && pidl) {
+        IShellFolder* parent = nullptr;
+        PCUITEMID_CHILD child = nullptr;
+        if (SUCCEEDED(SHBindToParent(pidl, IID_PPV_ARGS(&parent), &child)) && parent) {
+            name = DisplayName(parent, child);
+            parent->Release();
+        }
+        ILFree(pidl);
+    }
+    return name;
+}
+
+// The cache entry of the item's folder gets the item's new tags at once (after a successful write).
+void LabelsSetTags(std::wstring const& itemPath, std::vector<LabelTag> const& tags) {
+    std::wstring folderPath = itemPath;
+    PathRemoveFileSpecW(folderPath.data());
+    folderPath.resize(wcslen(folderPath.c_str()));
+    std::wstring name = LabelsDisplayNameOf(itemPath);
+    if (name.empty()) {
+        return;
+    }
+    std::wstring typeName;
+    if (!tags.empty()) {
+        SHFILEINFOW info = {};
+        if (SHGetFileInfoW(itemPath.c_str(), 0, &info, sizeof(info), SHGFI_TYPENAME)) {
+            typeName = info.szTypeName;
+        }
+    }
+    std::lock_guard<std::mutex> lock(g_labelsCacheMutex);
+    auto found = g_labelsCache.find(folderPath);
+    if (found == g_labelsCache.end() || !found->second.data->complete) {
+        return;
+    }
+    found->second.data = std::make_shared<LabelsFolder>(LabelsFolderWithTags(*found->second.data, name, tags, typeName));
+}
+
+// A folder is not on show any more: its read, if it is still running, gives up.
+void LabelsCancelFolder(std::wstring const& folderPath) {
+    std::lock_guard<std::mutex> lock(g_labelsCacheMutex);
+    auto found = g_labelsCache.find(folderPath);
+    if (found != g_labelsCache.end() && found->second.cancel) {
+        *found->second.cancel = true;
+    }
+}
+
+// A folder on show that was read a while ago is read again, on a thread, and the old data is used meanwhile.
+void LabelsRefreshIfStale(std::wstring const& folderPath) {
+    std::lock_guard<std::mutex> lock(g_labelsCacheMutex);
+    auto found = g_labelsCache.find(folderPath);
+    if (found != g_labelsCache.end() && found->second.data->complete && !found->second.cancel &&
+        LabelsShouldRefresh(found->second.readAt, GetTickCount64())) {
+        LabelsStartRead(folderPath, found->second);
+    }
+}
+
+// Every read that is running gives up. Called first when the mod unloads, before its threads are joined.
+void LabelsCancelAll() {
+    std::lock_guard<std::mutex> lock(g_labelsCacheMutex);
+    for (auto& entry : g_labelsCache) {
+        if (entry.second.cancel) {
+            *entry.second.cancel = true;
+        }
+    }
+}
+
+int LabelsReadsRunning() {
+    return g_labelsReadsRunning;
+}
+
+// Empties the cache. Called when the mod unloads, after its threads are joined.
+void LabelsClearCache() {
+    std::lock_guard<std::mutex> lock(g_labelsCacheMutex);
+    g_labelsCache.clear();
+}
+// Labels: the self-test of the folder cache (debug build only). It runs on a thread of the mod, since it
+// waits for reads. One log line: "LABELS CACHE SELFTEST pass" or "LABELS CACHE SELFTEST FAIL <what>".
+#ifdef EXTRAS_VERBOSE
+
+namespace {
+
+std::wstring g_cacheFailure;
+
+void CacheExpect(bool ok, const wchar_t* what) {
+    if (!ok && g_cacheFailure.empty()) {
+        g_cacheFailure = what;
+    }
+}
+
+bool CacheTouch(std::wstring const& path) {
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    CloseHandle(file);
+    return true;
+}
+
+void CacheWaitComplete(std::wstring const& dir, std::shared_ptr<const LabelsFolder>* data) {
+    for (int i = 0; i < 100; i++) {
+        *data = LabelsFolderFor(dir);
+        if ((*data)->complete) {
+            return;
+        }
+        Sleep(20);
+    }
+}
+
+void CacheSelfTestRun() {
+    // The pure part: names shown by two items, one of them tagged.
+    std::vector<LabelsItem> items = {{L"report", {LabelTag{1, L"x"}}}, {L"report", {}}, {L"solo", {LabelTag{2, L""}}}, {L"plain", {}},
+                                     {L"dir", {LabelTag{3, L""}}, true}, {L"typed", {LabelTag{4, L""}}, false, L"Text file"}};
+    LabelsFolder collected = LabelsCollect(items);
+    CacheExpect(collected.complete, L"a collected folder is complete");
+    CacheExpect(collected.ambiguous.count(L"report") == 1, L"two items named report are ambiguous");
+    CacheExpect(!collected.byName.count(L"report"), L"an ambiguous name gets no tags");
+    CacheExpect(collected.byName.count(L"solo") == 1 && !collected.byName.count(L"plain"), L"a unique tagged name keeps its tags");
+    CacheExpect(collected.folders.count(L"dir") == 1 && !collected.folders.count(L"solo"), L"folders are known by name");
+    CacheExpect(collected.typeNames.count(L"typed") == 1 && collected.typeNames[L"typed"] == L"Text file", L"the type text of a tagged item is kept");
+    std::vector<LabelsItem> untaggedPair = {{L"same", {}}, {L"same", {}}};
+    CacheExpect(LabelsCollect(untaggedPair).ambiguous.empty(), L"two untagged items of one name are not ambiguous");
+
+    // A tag set on one of two items that show one name: the name becomes ambiguous (the review's finding).
+    LabelsFolder twins = LabelsCollect({{L"photo", {}}, {L"photo", {}}, {L"solo", {}}});
+    CacheExpect(twins.counts[L"photo"] == 2 && twins.counts[L"solo"] == 1, L"every name is counted, tagged or not");
+    LabelsFolder tagged1 = LabelsFolderWithTags(twins, L"photo", {LabelTag{1, L""}}, L"JPEG file");
+    CacheExpect(tagged1.ambiguous.count(L"photo") == 1 && !tagged1.byName.count(L"photo"),
+                L"tagging one of two same-named items makes the name ambiguous");
+    LabelsFolder tagged2 = LabelsFolderWithTags(twins, L"solo", {LabelTag{2, L""}}, L"Text file");
+    CacheExpect(tagged2.byName.count(L"solo") == 1 && tagged2.typeNames[L"solo"] == L"Text file",
+                L"a newly tagged item keeps its tags and its type text");
+    CacheExpect(LabelsFolderWithTags(tagged2, L"solo", {}, L"").byName.empty(), L"clearing the tags of an item");
+    CacheExpect(LabelsShouldRefresh(1000, 21000) && !LabelsShouldRefresh(1000, 20999), L"a folder is read again after 20 seconds");
+
+    // The tag filter.
+    LabelsFilter off;
+    CacheExpect(LabelsMatches(off, {}) && LabelsMatches(off, {LabelTag{1, L"x"}}), L"a filter that is off matches everything");
+    LabelsFilter byColour{true, 1, L"", L""};
+    CacheExpect(LabelsMatches(byColour, {LabelTag{1, L"anything"}}) && !LabelsMatches(byColour, {LabelTag{2, L""}}) &&
+                    !LabelsMatches(byColour, {}),
+                L"a colour filter matches the items that have a tag of that colour");
+    LabelsFilter byName{true, 0, L"Urgent", L""};
+    CacheExpect(LabelsMatches(byName, {LabelTag{5, L"urgent"}}) && !LabelsMatches(byName, {LabelTag{5, L"Other"}}) &&
+                    !LabelsMatches(byName, {}),
+                L"a name filter matches by name, whatever the case and the colour");
+
+    // A real folder.
+    wchar_t temp[MAX_PATH];
+    GetTempPathW(MAX_PATH, temp);
+    std::wstring dir = std::wstring(temp) + L"ee-labels-cache-" + std::to_wstring(GetCurrentProcessId());
+    CreateDirectoryW(dir.c_str(), nullptr);
+    std::wstring tagged = dir + L"\\b.txt";
+    std::wstring folder = dir + L"\\sub";
+    CacheTouch(dir + L"\\a.txt");
+    CacheTouch(tagged);
+    CreateDirectoryW(folder.c_str(), nullptr);
+    LabelsExpect(LabelsWriteFile(tagged, {LabelTag{1, L"Urgent"}}) == LabelsWrite::Ok, L"tag the file");
+    LabelsExpect(LabelsWriteFile(folder, {LabelTag{5, L""}}) == LabelsWrite::Ok, L"tag the folder");
+    std::wstring hidden = dir + L"\\hid.txt";
+    CacheTouch(hidden);
+    LabelsWriteFile(hidden, {LabelTag{2, L""}});
+    SetFileAttributesW(hidden.c_str(), FILE_ATTRIBUTE_HIDDEN);
+
+    auto first = LabelsFolderFor(dir);
+    CacheExpect(!first->complete, L"the first call returns an entry that is not complete yet");
+    std::shared_ptr<const LabelsFolder> data;
+    CacheWaitComplete(dir, &data);
+    CacheExpect(data && data->complete, L"the read completes within 2 seconds");
+    if (data) {
+        bool file = data->byName.count(L"b.txt") || data->byName.count(L"b");
+        CacheExpect(file && data->byName.count(L"sub") == 1, L"both tagged items are in the cache");
+        CacheExpect(!data->byName.count(L"a.txt") && !data->byName.count(L"a"), L"the untagged item is not");
+        CacheExpect(data->folders.count(L"sub") == 1, L"a read folder lists its subfolders");
+        bool hiddenSeen = data->byName.count(L"hid.txt") || data->byName.count(L"hid");
+        CacheExpect(hiddenSeen == ShowHiddenFiles(), L"a hidden item is read only when Explorer shows hidden items");
+        bool typed = (data->typeNames.count(L"b.txt") && !data->typeNames.at(L"b.txt").empty()) ||
+                     (data->typeNames.count(L"b") && !data->typeNames.at(L"b").empty());
+        CacheExpect(typed, L"a tagged file has its type text");
+    }
+    std::wstring late = dir + L"\\late.txt";
+    CacheTouch(late);
+    LabelsWriteFile(late, {LabelTag{3, L"Late"}});  // Behind the cache's back: another program tagged it.
+    LabelsInvalidate(dir);
+    CacheExpect(LabelsFolderFor(dir)->complete, L"the old data stays in use while a folder is read again");
+    bool seen = false;
+    for (int i = 0; i < 100 && !seen; i++) {
+        auto fresh = LabelsFolderFor(dir);
+        seen = fresh->byName.count(L"late.txt") || fresh->byName.count(L"late");
+        if (!seen) {
+            Sleep(20);
+        }
+    }
+    CacheExpect(seen, L"a folder read again shows what was tagged behind the cache's back");
+    DeleteFileW((late + kLabelsStream).c_str());
+    DeleteFileW(late.c_str());
+    LabelsSetTags(tagged, {});
+    data = LabelsFolderFor(dir);
+    CacheExpect(!data->byName.count(L"b.txt") && !data->byName.count(L"b"), L"clearing an item's tags updates the cache at once");
+
+    // A read that is cancelled in the middle keeps the old data and ends quickly.
+    std::wstring big = dir + L"\\big";
+    CreateDirectoryW(big.c_str(), nullptr);
+    for (int i = 0; i < 1500; i++) {
+        CacheTouch(big + L"\\f" + std::to_wstring(i) + L".txt");
+    }
+    auto before = LabelsFolderFor(big);
+    CacheExpect(!before->complete, L"the big folder starts not complete");
+    Sleep(5);
+    LabelsCancelAll();
+    ULONGLONG waited = GetTickCount64();
+    while (LabelsReadsRunning() > 0 && GetTickCount64() - waited < 1000) {
+        Sleep(5);
+    }
+    CacheExpect(LabelsReadsRunning() == 0 && GetTickCount64() - waited < 200, L"a cancelled read ends in under 200 ms");
+    LabelsFolderFor(big);  // Starts a new read; it is cancelled again at once.
+    LabelsCancelAll();
+    waited = GetTickCount64();
+    while (LabelsReadsRunning() > 0 && GetTickCount64() - waited < 1000) {
+        Sleep(5);
+    }
+    LabelsFolderFor(big);
+    Sleep(5);
+    LabelsCancelFolder(big);  // Leaving a folder cancels its read.
+    waited = GetTickCount64();
+    while (LabelsReadsRunning() > 0 && GetTickCount64() - waited < 1000) {
+        Sleep(5);
+    }
+    CacheExpect(LabelsReadsRunning() == 0 && GetTickCount64() - waited < 200, L"leaving a folder cancels its read in under 200 ms");
+    waited = GetTickCount64();
+    while (LabelsReadsRunning() > 0 && GetTickCount64() - waited < 1000) {
+        Sleep(5);
+    }
+
+    for (int i = 0; i < 1500; i++) {
+        DeleteFileW((big + L"\\f" + std::to_wstring(i) + L".txt").c_str());
+    }
+    RemoveDirectoryW(big.c_str());
+    SetFileAttributesW(hidden.c_str(), FILE_ATTRIBUTE_NORMAL);
+    DeleteFileW((hidden + kLabelsStream).c_str());
+    DeleteFileW(hidden.c_str());
+    DeleteFileW((tagged + kLabelsStream).c_str());
+    DeleteFileW(tagged.c_str());
+    DeleteFileW((dir + L"\\a.txt").c_str());
+    RemoveDirectoryW(folder.c_str());
+    RemoveDirectoryW(dir.c_str());
+
+    if (g_cacheFailure.empty()) {
+        Wh_Log(L"LABELS CACHE SELFTEST pass");
+    } else {
+        Wh_Log(L"LABELS CACHE SELFTEST FAIL %s", g_cacheFailure.c_str());
+    }
+}
+
+}  // namespace
+
+void LabelsCacheSelfTest() {
+    StartModThread([]() { CacheSelfTestRun(); });
+}
+
+#endif  // EXTRAS_VERBOSE
 
 // ---------------------------------------------------------------------------
 // The panel and the menu entry. One WindowState per Explorer window, used only
@@ -2221,8 +3307,38 @@ struct KeptHandler {
 [[clang::no_destroy]] thread_local std::vector<KeptHandler> t_handlers;
 thread_local unsigned t_handlersSince = 0;
 
+// The UI threads that gave the mod a handler, with their queues. A window that was open before the mod loaded has no
+// WindowState, so nothing else would revoke what the menu hook gave to its elements: at unload each thread is asked.
+struct KeepThread {
+    DWORD id = 0;
+    mud::DispatcherQueue queue{nullptr};
+};
+std::mutex g_keepThreadsMutex;
+[[clang::no_destroy]] std::vector<KeepThread> g_keepThreads;
+thread_local bool t_keepRegistered = false;
+
+// Records this thread and its queue, once: at unload it is asked to release what it holds.
+void RegisterKeepThread() {
+    if (t_keepRegistered) {
+        return;
+    }
+    t_keepRegistered = true;
+    try {
+        auto queue = mud::DispatcherQueue::GetForCurrentThread();
+        if (queue) {
+            std::lock_guard<std::mutex> lock(g_keepThreadsMutex);
+            KeepThread entry;
+            entry.id = GetCurrentThreadId();
+            entry.queue = queue;
+            g_keepThreads.push_back(std::move(entry));
+        }
+    } catch (...) {
+    }
+}
+
 template <typename Element, typename Revoker>
 void Keep(Element const& element, Revoker&& revoker) {
+    RegisterKeepThread();
     // The handlers of elements that are gone are dropped now and then, so the list stays short.
     if (++t_handlersSince >= 256) {
         t_handlersSince = 0;
@@ -2266,6 +3382,48 @@ void RevokeAllHandlers() {
         }
     }
 }
+// Every UI thread that kept a handler takes its handlers off, on its own thread: the ones with a window state were done
+// by their window's cleanup, the others (a window open before the mod loaded) are done here. Called at unload.
+void LabelsReleaseThreadObjects();  // 10g2: the fonts and flyouts of labels that a thread holds
+void ToolbarRestoreThread();        // 10i: Explorer's margins of the navigation buttons
+
+void RevokeKeptThreads() {
+    std::vector<KeepThread> threads;
+    {
+        std::lock_guard<std::mutex> lock(g_keepThreadsMutex);
+        threads.swap(g_keepThreads);
+    }
+    DWORD self = GetCurrentThreadId();
+    for (auto& thread : threads) {
+        if (thread.id == self) {
+            RevokeAllHandlers();
+            LabelsReleaseThreadObjects();
+            ToolbarRestoreThread();
+            continue;
+        }
+        HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!done) {
+            continue;
+        }
+        bool queued = false;
+        try {
+            queued = thread.queue.TryEnqueue([done]() {
+                RevokeAllHandlers();
+                LabelsReleaseThreadObjects();
+                ToolbarRestoreThread();
+                SetEvent(done);
+            });
+        } catch (...) {
+        }
+        if (queued && WaitForSingleObject(done, 1500) == WAIT_OBJECT_0) {
+            CloseHandle(done);  // After a time out the handle is left: the thread may still use it.
+        } else if (!queued) {
+            CloseHandle(done);
+        }
+    }
+    threads.clear();
+}
+
 using ItemsVector =
     winrt::Windows::Foundation::Collections::IVector<muxc::MenuFlyoutItemBase>;
 
@@ -2283,6 +3441,9 @@ struct Column {
     std::vector<muxc::TextBlock> texts;  // Name text per entry.
     std::vector<muxc::Grid> iconHosts;   // Icon cell per entry.
     std::vector<muxc::FontIcon> chevrons;  // Chevron per entry, folders only.
+    std::vector<muxc::Grid> labelHosts;    // Where the label dots of each entry go (labels).
+    std::wstring labelPath;                // The folder's path, for the label cache.
+    bool labelPathKnown = false;
     int hintEntry = -1;  // The entry whose chevron wears the badge.
     muxc::Border hintBadge{nullptr};  // The small rounded background behind that chevron.
     muxc::Border goneBadge{nullptr};  // One that has faded out and is taken off at the next change.
@@ -2592,6 +3753,8 @@ struct WindowState {
     } band;
     muxc::Border bandBox{nullptr};
     mud::DispatcherQueueTimer fadeTimer{nullptr};
+    LabelsFilter labelsFilter;  // The tag this window's list is filtered by (labels).
+    bool toolbarDone = false;   // The toolbar's buttons were found and handled.
     struct DetailsPane* details = nullptr;  // The merged details pane of this window, 10d.  // The pause between a fade out and the removal of rows.
     // The pill that marks the active column, on a layer over the strip.
     muxc::Canvas overlay{nullptr};
@@ -3652,18 +4815,22 @@ muxc::ListViewItem MakeRowShell(double rowHeight, bool stripe = false) {
 
 void ApplyIconBits(Column* column, IconBits const& icon);
 
+void LabelsFillRowDots(Column* column, size_t entry);  // 10g2
+
 // Builds the content of one row.
 void BuildRowContent(Column* column, size_t entryIndex, muxc::ListViewItem const& row) {
     const Entry& entry = column->entries[entryIndex];
     size_t capacity = NameCapacity(column);
     muxc::Grid grid;
-    muxc::ColumnDefinition iconColumn, nameColumn, markColumn, chevronColumn;
+    muxc::ColumnDefinition iconColumn, nameColumn, dotsColumn, markColumn, chevronColumn;
     iconColumn.Width(mux::GridLength{24, mux::GridUnitType::Pixel});
     nameColumn.Width(mux::GridLength{1, mux::GridUnitType::Star});
     chevronColumn.Width(mux::GridLength{16, mux::GridUnitType::Pixel});
     grid.ColumnDefinitions().Append(iconColumn);
     markColumn.Width(mux::GridLength{0, mux::GridUnitType::Auto});
     grid.ColumnDefinitions().Append(nameColumn);
+    dotsColumn.Width(mux::GridLength{0, mux::GridUnitType::Auto});
+    grid.ColumnDefinitions().Append(dotsColumn);
     grid.ColumnDefinitions().Append(markColumn);
     grid.ColumnDefinitions().Append(chevronColumn);
 
@@ -3689,6 +4856,19 @@ void BuildRowContent(Column* column, size_t entryIndex, muxc::ListViewItem const
     grid.Children().Append(name);
     column->texts[entryIndex] = name;
 
+    if (g_labels) {
+        // The label dots, after the name: filled from the cache, and again when the folder has been read.
+        muxc::Grid dots;
+        dots.VerticalAlignment(mux::VerticalAlignment::Center);
+        dots.Margin(mux::Thickness{8, 0, 0, 0});
+        muxc::Grid::SetColumn(dots, 2);
+        grid.Children().Append(dots);
+        if (entryIndex < column->labelHosts.size()) {
+            column->labelHosts[entryIndex] = dots;
+            LabelsFillRowDots(column, entryIndex);
+        }
+    }
+
     if (entry.remote) {
         muxc::FontIcon mark;
         mark.FontFamily(mux::Media::FontFamily(L"Segoe Fluent Icons"));
@@ -3711,7 +4891,7 @@ void BuildRowContent(Column* column, size_t entryIndex, muxc::ListViewItem const
         mark.Opacity(0.6);
         mark.Margin(mux::Thickness{6, 0, 4, 0});
         mark.VerticalAlignment(mux::VerticalAlignment::Center);
-        muxc::Grid::SetColumn(mark, 2);
+        muxc::Grid::SetColumn(mark, 3);
         grid.Children().Append(mark);
     }
     if (entry.folder) {
@@ -3722,7 +4902,7 @@ void BuildRowContent(Column* column, size_t entryIndex, muxc::ListViewItem const
         chevron.Opacity(0.6);
         chevron.HorizontalAlignment(mux::HorizontalAlignment::Right);
         chevron.VerticalAlignment(mux::VerticalAlignment::Center);
-        muxc::Grid::SetColumn(chevron, 3);
+        muxc::Grid::SetColumn(chevron, 4);
         grid.Children().Append(chevron);
         column->chevrons[entryIndex] = chevron;
     }
@@ -4087,6 +5267,9 @@ void FillColumn(WindowState* state, Column* column, FolderResult&& data) {
     column->pendingIcons.clear();
     column->chevrons.clear();
     column->chevrons.resize(column->entries.size(), muxc::FontIcon{nullptr});
+    column->labelHosts.clear();
+    column->labelHosts.resize(column->entries.size(), muxc::Grid{nullptr});
+    column->labelPathKnown = false;
     column->hintEntry = -1;
     column->focusHeader = -1;
     column->tipBuilt.assign(column->entries.size(), 0);
@@ -4556,6 +5739,7 @@ bool PatchColumn(WindowState* state, Column* column, std::shared_ptr<Loaded> con
     follow(column->texts, muxc::TextBlock{nullptr});
     follow(column->iconHosts, muxc::Grid{nullptr});
     follow(column->chevrons, muxc::FontIcon{nullptr});
+    follow(column->labelHosts, muxc::Grid{nullptr});
     follow(column->built, (char)0);
     follow(column->iconAsked, (char)0);
     follow(column->tipBuilt, (char)0);
@@ -8471,6 +9655,8 @@ struct MenuBuilder {
     }
 };
 
+muxc::MenuFlyout LabelsTagsSubmenu(std::vector<std::wstring> const& paths, std::function<mux::FrameworkElement()> anchor);  // 10g2
+
 // The shell's context menu for one item, shown the way Explorer's own is: a row
 // of quick actions with icons on top, the usual commands below, and the rest
 // of the shell's entries behind "Show more options". The shell's entries are
@@ -8734,6 +9920,24 @@ void ShowItemFlyout(WindowState* state, Column* column, muxc::ListView const& li
                 addRow(L"New folder from selection", L"\uE8F4", L"", true, [column, picked]() {
                     NewFolderWithSelection(StateForThisThread(false), column, picked);
                 }, muxc::MenuFlyout{nullptr}, L"newfolder");
+            }
+            if (onDisk && g_labels) {
+                // Labels: every picked item needs a path on a drive that keeps named streams.
+                std::vector<std::wstring> labelPaths;
+                for (size_t index : picked) {
+                    std::wstring path = FilePathOf(column->folder.get(), column->entries[index].child.get());
+                    if (!path.empty()) {
+                        labelPaths.push_back(path);
+                    }
+                }
+                if (labelPaths.size() == picked.size()) {
+                    // A drive that cannot keep the stream gets the entry greyed, with the reason in its name.
+                    bool keeps = LabelsVolumeSupportsStreams(labelPaths[0]);
+                    addRow(Str(keeps ? L"labels.menu" : L"labels.menu.ntfs"), L"\uE8EC", L"", keeps, nullptr,
+                           keeps ? LabelsTagsSubmenu(labelPaths, [list]() -> mux::FrameworkElement { return list; })
+                                 : muxc::MenuFlyout{nullptr},
+                           L"");
+                }
             }
             if (MenuRow* row = findRow(L"copyaspath")) {
                 addShellRow(row, nullptr);
@@ -15836,6 +17040,8 @@ void PaneShowSizeRows(DetailsPane* pane, muxc::StackPanel const& host) {
     host.Children().Append(sizeList);
 }
 
+muxc::StackPanel LabelsPaneSection(DetailsPane* pane);  // 10g
+
 mux::UIElement PaneBuild(PaneData const& data, DetailsPane* pane) {
     muxc::StackPanel page;  // The part that stays on top: preview, name, actions.
     page.Spacing(12);
@@ -16118,6 +17324,7 @@ mux::UIElement PaneBuild(PaneData const& data, DetailsPane* pane) {
     }
 
     // The details, then the rest of them behind a toggle.
+    details.Children().Append(LabelsPaneSection(pane));
     details.Children().Append(PaneRows(data.rows));
     if (!data.sizeRoots.empty()) {
         muxc::StackPanel sizeHost;
@@ -18632,6 +19839,3209 @@ void AbandonDetails(WindowState* state) {
     // The pane itself is not deleted: it still holds what the XAML objects held.
 }
 
+// Labels: the palette, the theme and the dot images. A dot is rendered once per colour, theme and size into a
+// premultiplied 32-bit image (4x4 supersampling, so its edge is soft), kept in a cache, and blended onto a
+// device context with AlphaBlend. There is no outline: the rim of a dot is its fill, a little lighter in the
+// dark theme and a little darker in the light one. GDI+ is not used on purpose (its start-up and shutdown are
+// the kind of global teardown that hangs Explorer at sign-out).
+
+namespace {
+
+struct LabelsPaletteEntry {
+    COLORREF light;
+    COLORREF dark;
+};
+
+// 0 is the neutral gray, then red, orange, yellow, green, teal, blue, purple. From the Fluent colours; the dark
+// variants are the lighter tints that keep their contrast on a dark list.
+constexpr LabelsPaletteEntry kLabelsPalette[8] = {
+    {RGB(138, 136, 134), RGB(161, 159, 157)},  // gray
+    {RGB(209, 52, 56), RGB(241, 112, 123)},    // red
+    {RGB(247, 99, 12), RGB(255, 140, 58)},     // orange
+    {RGB(255, 185, 0), RGB(252, 225, 0)},      // yellow
+    {RGB(16, 124, 16), RGB(108, 203, 95)},     // green
+    {RGB(0, 153, 188), RGB(76, 194, 207)},     // teal
+    {RGB(0, 120, 212), RGB(96, 205, 255)},     // blue
+    {RGB(135, 100, 184), RGB(180, 160, 255)},  // purple
+};
+
+std::atomic<ULONGLONG> g_labelsThemeChecked{0};
+std::atomic<bool> g_labelsDark{false};
+std::mutex g_labelDotMutex;
+[[clang::no_destroy]] std::map<unsigned long long, HBITMAP> g_labelDiscs;  // colour and side to the image.
+[[clang::no_destroy]] std::map<unsigned, HBITMAP> g_labelDots;  // colour, theme and side to the image.
+
+BITMAPINFO LabelsDotInfo(int side) {
+    BITMAPINFO info = {};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = side;
+    info.bmiHeader.biHeight = -side;  // Top down.
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    return info;
+}
+
+}  // namespace
+
+COLORREF LabelsColourRgb(int colour, bool dark) {
+    const LabelsPaletteEntry& entry = kLabelsPalette[std::clamp(colour, 0, 7)];
+    return dark ? entry.dark : entry.light;
+}
+
+// The colour of a dot. Dark theme: the palette colour. Light theme: the palette colour softened toward white, about
+// the colour a badge in the details pane has, so the list and the pane agree.
+COLORREF LabelsDotRgb(int colour, bool dark) {
+    COLORREF base = LabelsColourRgb(colour, dark);
+    if (dark) {
+        return base;
+    }
+    auto soften = [](int channel) { return channel + (255 - channel) * 45 / 100; };
+    return RGB(soften(GetRValue(base)), soften(GetGValue(base)), soften(GetBValue(base)));
+}
+
+// The apps' theme, read again at most once a second. Safe from any thread.
+bool LabelsDarkTheme() {
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG checked = g_labelsThemeChecked;
+    if (checked == 0 || now - checked >= 1000) {
+        DWORD light = 1, size = sizeof(light);
+        RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                     L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
+        g_labelsDark = light == 0;
+        g_labelsThemeChecked = now ? now : 1;
+    }
+    return g_labelsDark;
+}
+
+// 8 px at 96 DPI, scaled with the DPI, at most 60 percent of the row and at least 6 px.
+int LabelsDotSide(int rowHeightPx, UINT dpi) {
+    int side = MulDiv(8, (int)dpi, 96);
+    side = std::min(side, rowHeightPx * 6 / 10);
+    return std::max(side, 6);
+}
+
+// The image of a dot: side x side premultiplied BGRA pixels, top down.
+bool LabelsRenderDot(int colour, bool dark, int side, std::vector<uint32_t>* out) {
+    if (side < 2 || side > 256) {
+        return false;
+    }
+    COLORREF fill = LabelsDotRgb(colour, dark);
+    // The rim is the fill a little darker in the dark theme (it separates stacked dots without a light outline)
+    // and a little lighter in the light theme.
+    auto toward = [dark](int channel) { return dark ? channel - channel * 18 / 100 : channel + (255 - channel) * 35 / 100; };
+    COLORREF rim = RGB(toward(GetRValue(fill)), toward(GetGValue(fill)), toward(GetBValue(fill)));
+    const double radius = side / 2.0;
+    const double rimWidth = std::max(1.0, side / 10.0);
+    const int n = 4;
+    out->assign((size_t)side * side, 0);
+    for (int y = 0; y < side; y++) {
+        for (int x = 0; x < side; x++) {
+            int covered = 0, red = 0, green = 0, blue = 0;
+            for (int sy = 0; sy < n; sy++) {
+                for (int sx = 0; sx < n; sx++) {
+                    double dx = x + (sx + 0.5) / n - radius;
+                    double dy = y + (sy + 0.5) / n - radius;
+                    double distance = std::sqrt(dx * dx + dy * dy);
+                    if (distance > radius) {
+                        continue;
+                    }
+                    COLORREF colourHere = distance >= radius - rimWidth ? rim : fill;
+                    covered++;
+                    red += GetRValue(colourHere);
+                    green += GetGValue(colourHere);
+                    blue += GetBValue(colourHere);
+                }
+            }
+            if (!covered) {
+                continue;
+            }
+            uint32_t alpha = (uint32_t)(covered * 255 / (n * n));
+            (*out)[(size_t)y * side + x] = (alpha << 24) | ((uint32_t)(red / (n * n)) << 16) |
+                                           ((uint32_t)(green / (n * n)) << 8) | (uint32_t)(blue / (n * n));
+        }
+    }
+    return true;
+}
+
+// A plain disc of one colour, anti-aliased, premultiplied, top down. It cuts one stacked dot free of the next.
+bool LabelsRenderDisc(COLORREF colour, int side, std::vector<uint32_t>* out) {
+    if (side < 2 || side > 256) {
+        return false;
+    }
+    const double radius = side / 2.0;
+    const int n = 4;
+    out->assign((size_t)side * side, 0);
+    for (int y = 0; y < side; y++) {
+        for (int x = 0; x < side; x++) {
+            int covered = 0;
+            for (int sy = 0; sy < n; sy++) {
+                for (int sx = 0; sx < n; sx++) {
+                    double dx = x + (sx + 0.5) / n - radius;
+                    double dy = y + (sy + 0.5) / n - radius;
+                    covered += std::sqrt(dx * dx + dy * dy) <= radius ? 1 : 0;
+                }
+            }
+            if (!covered) {
+                continue;
+            }
+            uint32_t alpha = (uint32_t)(covered * 255 / (n * n));
+            (*out)[(size_t)y * side + x] = (alpha << 24) | ((uint32_t)(GetRValue(colour) * covered / (n * n)) << 16) |
+                                           ((uint32_t)(GetGValue(colour) * covered / (n * n)) << 8) |
+                                           (uint32_t)(GetBValue(colour) * covered / (n * n));
+        }
+    }
+    return true;
+}
+
+// Blends a dot onto the device context: x is its left edge, centreY the middle of the row.
+void LabelsDrawDot(HDC dc, int x, int centreY, int colour, int sidePx) {
+    if (sidePx < 2 || sidePx > 256) {
+        return;
+    }
+    bool dark = LabelsDarkTheme();
+    unsigned key = (unsigned)(std::clamp(colour, 0, 7) | (dark ? 8 : 0) | (sidePx << 4));
+    std::lock_guard<std::mutex> lock(g_labelDotMutex);
+    HBITMAP bitmap = nullptr;
+    auto found = g_labelDots.find(key);
+    if (found != g_labelDots.end()) {
+        bitmap = found->second;
+    } else {
+        std::vector<uint32_t> pixels;
+        if (!LabelsRenderDot(colour, dark, sidePx, &pixels)) {
+            return;
+        }
+        BITMAPINFO info = LabelsDotInfo(sidePx);
+        void* bits = nullptr;
+        bitmap = CreateDIBSection(nullptr, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
+        if (!bitmap || !bits) {
+            if (bitmap) {
+                DeleteObject(bitmap);
+            }
+            return;
+        }
+        memcpy(bits, pixels.data(), pixels.size() * sizeof(uint32_t));
+        g_labelDots[key] = bitmap;
+    }
+    // The image is selected into a device context only while the lock is held: one bitmap cannot be in two.
+    HDC memory = CreateCompatibleDC(dc);
+    if (!memory) {
+        return;
+    }
+    HGDIOBJ old = SelectObject(memory, bitmap);
+    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    AlphaBlend(dc, x, centreY - sidePx / 2, sidePx, sidePx, memory, 0, 0, sidePx, sidePx, blend);
+    SelectObject(memory, old);
+    DeleteDC(memory);
+}
+
+// Blends a disc of the given colour: x is its left edge, centreY the middle.
+void LabelsDrawDisc(HDC dc, int x, int centreY, COLORREF colour, int sidePx) {
+    if (sidePx < 2 || sidePx > 256) {
+        return;
+    }
+    unsigned long long key = ((unsigned long long)(colour & 0xFFFFFF) << 16) | (unsigned)sidePx;
+    std::lock_guard<std::mutex> lock(g_labelDotMutex);
+    HBITMAP bitmap = nullptr;
+    auto found = g_labelDiscs.find(key);
+    if (found != g_labelDiscs.end()) {
+        bitmap = found->second;
+    } else {
+        std::vector<uint32_t> pixels;
+        if (!LabelsRenderDisc(colour, sidePx, &pixels)) {
+            return;
+        }
+        BITMAPINFO info = LabelsDotInfo(sidePx);
+        void* bits = nullptr;
+        bitmap = CreateDIBSection(nullptr, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
+        if (!bitmap || !bits) {
+            if (bitmap) {
+                DeleteObject(bitmap);
+            }
+            return;
+        }
+        memcpy(bits, pixels.data(), pixels.size() * sizeof(uint32_t));
+        if (g_labelDiscs.size() > 64) {
+            for (auto& entry : g_labelDiscs) {
+                DeleteObject(entry.second);
+            }
+            g_labelDiscs.clear();
+        }
+        g_labelDiscs[key] = bitmap;
+    }
+    HDC memory = CreateCompatibleDC(dc);
+    if (!memory) {
+        return;
+    }
+    HGDIOBJ old = SelectObject(memory, bitmap);
+    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    AlphaBlend(dc, x, centreY - sidePx / 2, sidePx, sidePx, memory, 0, 0, sidePx, sidePx, blend);
+    SelectObject(memory, old);
+    DeleteDC(memory);
+}
+
+// The "plus" that says there are more tags: small, so it does not crowd the name. 5/8 of a side, at least 5 px.
+int LabelsMoreWidth(int side) {
+    return std::max(5, side * 5 / 8);
+}
+
+void LabelsDrawMore(HDC dc, int x, int centreY, int sidePx) {
+    int width = LabelsMoreWidth(sidePx);
+    int arm = width / 2;
+    HPEN pen = CreatePen(PS_SOLID, 1, LabelsDarkTheme() ? RGB(215, 215, 215) : RGB(70, 70, 70));
+    if (!pen) {
+        return;
+    }
+    HGDIOBJ old = SelectObject(dc, pen);
+    MoveToEx(dc, x, centreY, nullptr);
+    LineTo(dc, x + 2 * arm + 1, centreY);
+    MoveToEx(dc, x + arm, centreY - arm, nullptr);
+    LineTo(dc, x + arm, centreY + arm + 1);
+    SelectObject(dc, old);
+    DeleteObject(pen);
+}
+
+// Frees every cached image. Called when the mod unloads.
+void LabelsReleaseDots() {
+    std::lock_guard<std::mutex> lock(g_labelDotMutex);
+    for (auto& entry : g_labelDots) {
+        DeleteObject(entry.second);
+    }
+    g_labelDots.clear();
+    for (auto& entry : g_labelDiscs) {
+        DeleteObject(entry.second);
+    }
+    g_labelDiscs.clear();
+}
+// Labels: the self-test of the palette and the dot images (debug build only). One log line:
+// "LABELS DOTS SELFTEST pass" or "LABELS DOTS SELFTEST FAIL <what>".
+#ifdef EXTRAS_VERBOSE
+
+namespace {
+
+std::wstring g_dotsFailure;
+
+void DotsExpect(bool ok, const wchar_t* what) {
+    if (!ok && g_dotsFailure.empty()) {
+        g_dotsFailure = what;
+    }
+}
+
+uint32_t DotsPixelOf(COLORREF rgb) {
+    return (255u << 24) | (GetRValue(rgb) << 16) | (GetGValue(rgb) << 8) | GetBValue(rgb);
+}
+
+}  // namespace
+
+void LabelsDotsSelfTest() {
+    DotsExpect(LabelsDotSide(22, 96) == 8, L"8 px at 96 DPI");
+    DotsExpect(LabelsDotSide(44, 192) == 16, L"16 px at 192 DPI");
+    DotsExpect(LabelsDotSide(10, 96) == 6, L"never above 60 percent of a short row");
+    DotsExpect(LabelsDotSide(100, 48) >= 6, L"never below 6 px");
+
+    for (int dark = 0; dark < 2; dark++) {
+        for (int colour = 0; colour < 8; colour++) {
+            for (int side : {8, 12, 24}) {
+                std::vector<uint32_t> pixels;
+                bool rendered = LabelsRenderDot(colour, dark != 0, side, &pixels);
+                DotsExpect(rendered && (int)pixels.size() == side * side, L"a dot image has side x side pixels");
+                if (!rendered || (int)pixels.size() != side * side) {
+                    continue;
+                }
+                uint32_t centre = pixels[(side / 2) * side + side / 2];
+                DotsExpect(centre == DotsPixelOf(LabelsDotRgb(colour, dark != 0)), L"the centre is the opaque fill colour");
+                DotsExpect((pixels[0] >> 24) == 0, L"a corner is transparent");
+                bool partial = false;
+                for (uint32_t pixel : pixels) {
+                    uint32_t alpha = pixel >> 24;
+                    partial = partial || (alpha > 0 && alpha < 255);
+                }
+                DotsExpect(partial, L"the edge is anti-aliased");
+            }
+        }
+    }
+    for (int dark = 0; dark < 2; dark++) {
+        for (int colour = 1; colour < 8; colour++) {
+            std::vector<uint32_t> big;
+            if (LabelsRenderDot(colour, dark != 0, 24, &big) && big.size() == 24 * 24) {
+                uint32_t rim = big[12 * 24 + 1];
+                COLORREF fill = LabelsDotRgb(colour, dark != 0);
+                int rimSum = (int)((rim >> 16) & 255) + (int)((rim >> 8) & 255) + (int)(rim & 255);
+                int fillSum = GetRValue(fill) + GetGValue(fill) + GetBValue(fill);
+                DotsExpect((rim >> 24) == 255 && (dark ? rimSum < fillSum : rimSum > fillSum),
+                           L"the rim is darker than the fill in the dark theme and lighter in the light theme");
+            }
+        }
+    }
+    std::vector<uint32_t> disc;
+    DotsExpect(LabelsRenderDisc(RGB(10, 20, 30), 12, &disc) && disc.size() == 144 && disc[6 * 12 + 6] == DotsPixelOf(RGB(10, 20, 30)) &&
+                   (disc[0] >> 24) == 0,
+               L"a disc is opaque in the middle and transparent in the corner");
+    DotsExpect(LabelsColourRgb(1, false) != LabelsColourRgb(1, true), L"light and dark variants differ");
+    DotsExpect(LabelsDotRgb(1, true) == LabelsColourRgb(1, true), L"in the dark theme a dot is the palette colour");
+    COLORREF lightDot = LabelsDotRgb(1, false), lightBase = LabelsColourRgb(1, false);
+    DotsExpect(GetRValue(lightDot) > GetRValue(lightBase) && GetGValue(lightDot) > GetGValue(lightBase) &&
+                   GetBValue(lightDot) > GetBValue(lightBase) && GetGValue(lightDot) < 255,
+               L"in the light theme a dot is the palette colour softened toward white, like a badge");
+    DotsExpect(LabelsColourRgb(0, false) != LabelsColourRgb(1, false), L"gray differs from red");
+
+    // Drawing onto a DC with a white background.
+    const int size = 40;
+    BITMAPINFO info = {};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = size;
+    info.bmiHeader.biHeight = -size;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    uint32_t* bits = nullptr;
+    HDC dc = CreateCompatibleDC(nullptr);
+    HBITMAP bitmap = CreateDIBSection(dc, &info, DIB_RGB_COLORS, (void**)&bits, nullptr, 0);
+    if (!bitmap || !bits) {
+        DotsExpect(false, L"could not make a test bitmap");
+    } else {
+        HGDIOBJ old = SelectObject(dc, bitmap);
+        for (int i = 0; i < size * size; i++) {
+            bits[i] = 0x00FFFFFF;
+        }
+        LabelsDrawDot(dc, 14, 20, 1, 12);
+        COLORREF fill = LabelsDotRgb(1, LabelsDarkTheme());
+        DotsExpect((bits[20 * size + 20] & 0xFFFFFF) == (DotsPixelOf(fill) & 0xFFFFFF), L"a drawn dot has its colour at the centre");
+        DotsExpect((bits[0] & 0xFFFFFF) == 0xFFFFFF, L"a drawn dot leaves the corner untouched");
+        bool blended = false;
+        for (int y = 12; y < 28; y++) {
+            for (int x = 12; x < 28; x++) {
+                uint32_t pixel = bits[y * size + x] & 0xFFFFFF;
+                blended = blended || (pixel != 0xFFFFFF && pixel != (DotsPixelOf(fill) & 0xFFFFFF));
+            }
+        }
+        DotsExpect(blended, L"a drawn dot has soft edge pixels");
+        SelectObject(dc, old);
+        DeleteObject(bitmap);
+    }
+    DeleteDC(dc);
+    LabelsReleaseDots();
+
+    if (g_dotsFailure.empty()) {
+        Wh_Log(L"LABELS DOTS SELFTEST pass");
+    } else {
+        Wh_Log(L"LABELS DOTS SELFTEST FAIL %s", g_dotsFailure.c_str());
+    }
+}
+
+#endif  // EXTRAS_VERBOSE
+// Labels on Explorer's own file list. Explorer draws the list with DirectUI. A hook on the exported
+// Element::PaintContent of dui70.dll sees every element as it is painted: after a row (a "UIItem") has been
+// painted, the dot of its tags is drawn next to its name. The tags come from the folder cache (04b), looked up by
+// the row's accessible name, so painting never touches the disk. Where a dot goes depends on the view mode, see the
+// surfaces skill and docs/superpowers/specs/2026-11-17-labels-design.md.
+
+enum class LabelsView { None, Details, List, Tiles, Content, Icons };
+
+struct LabelsPlaceInput {
+    LabelsView view = LabelsView::None;
+    RECT row = {};          // The row (UIItem).
+    RECT cell = {};         // The cell the dot is placed against, in the same coordinates.
+    int textLeft = 0;       // The text in that cell. textRight < textLeft when the cell has no text.
+    int textRight = -1;
+    int lineHeight = 16;
+    int iconLeft = 0;       // The icon, for the corner of it.
+    int iconBottom = 0;
+    int blockWidth = 8;     // All the dots and the plus, side by side.
+    int side = 8;
+    int columnPad = 18;     // The padding after a Details cell, up to the next column.
+};
+
+struct LabelsPlace {
+    int x = 0;  // Left edge of the block of dots.
+    int centreY = 0;
+    bool corner = false;  // There is no room by the name: the block goes on the icon's bottom-left corner.
+};
+
+// The gap between two dots.
+static int LabelsDotGap(int side) {
+    return std::max(2, side / 4);
+}
+
+// How far each dot is after the one before: the dots are stacked, each one partly under the one on its left.
+int LabelsDotStep(int side) {
+    return side * 3 / 4;
+}
+
+// The width of `count` stacked dots, plus a gap and a "plus" when there are more.
+int LabelsBlockWidth(int count, bool more, int side) {
+    if (count <= 0) {
+        return 0;
+    }
+    return side + (count - 1) * LabelsDotStep(side) + (more ? std::max(4, side / 2) + LabelsMoreWidth(side) : 0);
+}
+
+// The colours to draw: each colour once, in the order of the tags, at most four, and whether more were left out.
+std::vector<int> LabelsDotColours(std::vector<LabelTag> const& tags, bool* more) {
+    std::vector<int> colours;
+    *more = false;
+    for (auto const& tag : tags) {
+        if (std::find(colours.begin(), colours.end(), (int)tag.colour) != colours.end()) {
+            continue;
+        }
+        if (colours.size() >= 4) {
+            *more = true;
+            break;
+        }
+        colours.push_back(tag.colour);
+    }
+    return colours;
+}
+
+// How many lines of text a block holds, and whether a property that ends at `bottom` is on the last of them.
+int LabelsLines(int blockHeight, int lineHeight) {
+    return lineHeight > 0 ? std::max(1, (blockHeight + lineHeight / 2) / lineHeight) : 1;
+}
+
+bool LabelsIsLastLine(int bottom, int blockBottom, int lineHeight) {
+    return bottom >= blockBottom - lineHeight / 2;
+}
+
+// Where the dots go, from the geometry of the row. Pure, so it is tested without Explorer.
+LabelsPlace LabelsPlaceFor(LabelsPlaceInput const& in) {
+    LabelsPlace place;
+    const int gap = 6;
+    const int margin = std::max(4, in.side * 3 / 4);
+    switch (in.view) {
+        case LabelsView::List: {
+            int height = in.row.bottom - in.row.top;
+            place.x = in.row.left + (height - in.side) / 2;
+            place.centreY = in.row.top + height / 2;
+            return place;
+        }
+        case LabelsView::Details:
+            // Right-aligned in the name cell, the same place on every row.
+            place.x = in.cell.right - in.blockWidth - margin;
+            place.centreY = (in.cell.top + in.cell.bottom) / 2;
+            break;
+        case LabelsView::Tiles:
+            place.x = in.textRight >= in.textLeft ? in.textRight + gap : in.cell.left;
+            place.centreY = (in.cell.top + in.cell.bottom) / 2 + in.lineHeight / 8;  // A little below the middle: the text sits low.
+            place.corner = place.x + in.blockWidth > in.cell.right;
+            break;
+        case LabelsView::Content:
+            if (in.textRight >= in.textLeft) {
+                // The cell is the type line: after its text.
+                place.x = in.textRight + gap;
+                place.centreY = (in.cell.top + in.cell.bottom) / 2 + in.lineHeight / 8;
+            } else {
+                // The cell is the name line: at the start of the line below it.
+                place.x = in.cell.left;
+                place.centreY = in.cell.top + in.lineHeight * 3 / 2;
+            }
+            break;
+        case LabelsView::Icons: {
+            // The cell is the last line of the name: after its text, or on a new line below when it has no room.
+            int width = in.cell.right - in.cell.left;
+            place.x = in.textRight + gap;
+            place.centreY = (in.cell.top + in.cell.bottom) / 2;
+            if (place.x + in.blockWidth > in.cell.right) {
+                place.x = in.cell.left + (width - in.blockWidth) / 2;
+                place.centreY = in.cell.bottom + in.lineHeight / 2;
+            }
+            break;
+        }
+        default:
+            break;
+    }
+    if (place.corner) {
+        place.x = in.iconLeft + 2;
+        place.centreY = in.iconBottom - in.side / 2 - 2;
+    }
+    return place;
+}
+
+void LabelsRefreshColumns();  // 10g2
+
+namespace {
+
+bool g_labelsPaintOk = false;
+int g_labelsClassSlot = -1;
+int g_labelsNameSlot = -1;
+
+using LabelsGetAccName_t = const wchar_t* (*)(void* self, void** out);
+using LabelsValueRelease_t = void (*)(void* value);
+using LabelsGetChildren_t = void* (*)(void* self, void** out);
+using LabelsGetLocation_t = const POINT* (*)(void* self, void** out);
+using LabelsGetExtent_t = const SIZE* (*)(void* self, void** out);
+using LabelsGetParent_t = void* (*)(void* self);
+LabelsGetAccName_t LabelsGetAccName = nullptr;
+LabelsValueRelease_t LabelsValueRelease = nullptr;
+LabelsGetChildren_t LabelsGetChildren = nullptr;
+LabelsGetLocation_t LabelsGetLocation = nullptr;
+LabelsGetExtent_t LabelsGetExtent = nullptr;
+LabelsGetParent_t LabelsGetParent = nullptr;
+
+void* LabelsExport(HMODULE module, const char* prefix) {
+    auto base = (BYTE*)module;
+    auto dos = (IMAGE_DOS_HEADER*)base;
+    auto nt = (IMAGE_NT_HEADERS*)(base + dos->e_lfanew);
+    auto& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    if (!dir.VirtualAddress) {
+        return nullptr;
+    }
+    auto exports = (IMAGE_EXPORT_DIRECTORY*)(base + dir.VirtualAddress);
+    auto names = (DWORD*)(base + exports->AddressOfNames);
+    size_t length = strlen(prefix);
+    for (DWORD i = 0; i < exports->NumberOfNames; i++) {
+        const char* name = (const char*)(base + names[i]);
+        if (strncmp(name, prefix, length) == 0) {
+            return (void*)GetProcAddress(module, name);
+        }
+    }
+    return nullptr;
+}
+
+int LabelsFindSlot(void* vtable, void* function) {
+    if (!vtable || !function) {
+        return -1;
+    }
+    void** slots = (void**)vtable;
+    for (int i = 0; i < 120; i++) {
+        if (IsBadReadPtr(&slots[i], sizeof(void*))) {
+            break;
+        }
+        if (slots[i] == function) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+enum LabelsKind { kOther, kItem, kProperty, kTilesCollection, kSmartCollection, kElement, kImage, kCheckbox,
+                  kDetailsCollection, kBase, kSmartProperty };
+
+LabelsKind LabelsKindOf(void* element) {
+    [[clang::no_destroy]] thread_local std::unordered_map<void*, LabelsKind> kinds;
+    void* vtable = *(void**)element;
+    auto found = kinds.find(vtable);
+    if (found != kinds.end()) {
+        return found->second;
+    }
+    LabelsKind kind = kOther;
+    void** table = (void**)vtable;
+    using GetClassInfo_t = void* (*)(void*);
+    void* classInfo = ((GetClassInfo_t)table[g_labelsClassSlot])(element);
+    if (classInfo && !IsBadReadPtr(classInfo, sizeof(void*))) {
+        void** infoTable = *(void***)classInfo;
+        using GetName_t = const wchar_t* (*)(void*);
+        const wchar_t* name = ((GetName_t)infoTable[g_labelsNameSlot])(classInfo);
+        if (name && !IsBadStringPtrW(name, 200)) {
+            struct Row { const wchar_t* name; LabelsKind kind; };
+            static const Row rows[] = {{L"UIItem", kItem}, {L"UIProperty", kProperty},
+                                       {L"UITilesPropertyCollection", kTilesCollection},
+                                       {L"UISmartPropertyCollection", kSmartCollection}, {L"Element", kElement},
+                                       {L"UIImage", kImage}, {L"UICheckbox", kCheckbox},
+                                       {L"UIDetailsPropertyCollection", kDetailsCollection}, {L"UIBase", kBase},
+                                       {L"UISmartProperty", kSmartProperty}};
+            for (auto const& row : rows) {
+                if (wcscmp(name, row.name) == 0) {
+                    kind = row.kind;
+                }
+            }
+        }
+    }
+    if (kinds.size() < 400) {
+        kinds[vtable] = kind;
+    }
+    return kind;
+}
+
+std::wstring LabelsAccName(void* element) {
+    void* value = nullptr;
+    const wchar_t* text = LabelsGetAccName(element, &value);
+    std::wstring result;
+    if (text && !IsBadStringPtrW(text, 600)) {
+        result = text;
+    }
+    if (value) {
+        LabelsValueRelease(value);
+    }
+    return result;
+}
+
+bool LabelsReadable(const void* p, size_t n) {
+    return p && !IsBadReadPtr(p, n);
+}
+
+// The elements of a DynamicArray<Element*>: a data pointer and a count are searched for among its first words.
+bool LabelsReadArray(void* array, std::vector<void*>* out) {
+    if (!LabelsReadable(array, 24)) {
+        return false;
+    }
+    unsigned long long q[3];
+    memcpy(q, array, 24);
+    for (int d = 0; d < 3; d++) {
+        for (int s = 0; s < 3; s++) {
+            for (int half = 0; half < 2; half++) {
+                if (s == d) {
+                    continue;
+                }
+                unsigned long long count = half ? (q[s] >> 32) : (q[s] & 0xffffffffull);
+                void** data = (void**)q[d];
+                if (count == 0 || count > 60 || !LabelsReadable(data, count * sizeof(void*))) {
+                    continue;
+                }
+                bool ok = true;
+                for (unsigned long long i = 0; i < count && ok; i++) {
+                    ok = LabelsReadable(data[i], 8) && LabelsReadable(*(void**)data[i], 8);
+                }
+                if (ok) {
+                    out->assign(data, data + count);
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+struct LabelsChild {
+    void* element = nullptr;
+    LabelsKind kind = kOther;
+    POINT at = {};
+    SIZE size = {};
+};
+
+std::vector<LabelsChild> LabelsChildrenOf(void* element) {
+    std::vector<LabelsChild> result;
+    void* value = nullptr;
+    void* array = LabelsGetChildren(element, &value);
+    std::vector<void*> children;
+    bool ok = LabelsReadArray(array, &children);
+    if (value) {
+        LabelsValueRelease(value);
+    }
+    if (!ok) {
+        return result;
+    }
+    for (void* child : children) {
+        LabelsChild entry;
+        entry.element = child;
+        entry.kind = LabelsKindOf(child);
+        void* v1 = nullptr;
+        void* v2 = nullptr;
+        const POINT* at = LabelsGetLocation(child, &v1);
+        const SIZE* size = LabelsGetExtent(child, &v2);
+        if (at && LabelsReadable(at, sizeof(POINT))) {
+            entry.at = *at;
+        }
+        if (size && LabelsReadable(size, sizeof(SIZE))) {
+            entry.size = *size;
+        }
+        if (v1) LabelsValueRelease(v1);
+        if (v2) LabelsValueRelease(v2);
+        result.push_back(entry);
+    }
+    return result;
+}
+
+// The DPI of the Explorer window of this thread, looked up at most twice a second.
+UINT LabelsThreadDpi() {
+    thread_local UINT dpi = 0;
+    thread_local ULONGLONG at = 0;
+    ULONGLONG now = GetTickCount64();
+    if (dpi && now - at < 500) {
+        return dpi;
+    }
+    struct Find {
+        UINT dpi = 0;
+    } find;
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND window, LPARAM param) -> BOOL {
+        wchar_t name[40];
+        if (GetClassNameW(window, name, 40) && wcscmp(name, L"CabinetWClass") == 0) {
+            ((Find*)param)->dpi = GetDpiForWindow(window);
+            return FALSE;
+        }
+        return TRUE;
+    }, (LPARAM)&find);
+    dpi = find.dpi ? find.dpi : GetDpiForSystem();
+    at = now;
+    return dpi;
+}
+
+// The Explorer window of this thread. A window the mod has not seen being created (one that was open before the
+// mod loaded) has no state of its own, so its top-level window is looked up by class.
+HWND LabelsThreadTopLevel() {
+    WindowState* state = StateForThisThread(false);
+    if (state && state->topLevel) {
+        return state->topLevel;
+    }
+    struct Find {
+        HWND window = nullptr;
+    } find;
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND window, LPARAM param) -> BOOL {
+        wchar_t name[40];
+        if (GetClassNameW(window, name, 40) && wcscmp(name, L"CabinetWClass") == 0) {
+            ((Find*)param)->window = window;
+            return FALSE;
+        }
+        return TRUE;
+    }, (LPARAM)&find);
+    return find.window;
+}
+
+// The folder this thread's Explorer window shows, as a path, looked up at most four times a second.
+std::wstring LabelsThreadFolder() {
+    [[clang::no_destroy]] thread_local std::wstring path;
+    thread_local ULONGLONG at = 0;
+    ULONGLONG now = GetTickCount64();
+    if (at && now - at < 250) {
+        return path;
+    }
+    at = now;
+    std::wstring before = path;
+    try {
+        HWND topLevel = LabelsThreadTopLevel();
+        if (topLevel) {
+            IShellBrowser* browser = BrowserOf(topLevel);
+            if (browser) {
+                Pidl folder = CurrentFolder(browser);
+                path = folder ? PathOf(folder.get()) : std::wstring();
+            }
+        }
+    } catch (...) {
+    }
+    if (path != before) {
+        // Another folder is shown: the one that was shown stops being read, and the new one is read again when it was
+        // cached, so what changed since (a rename, a tag from another program) shows. The old data is used meanwhile.
+        if (!before.empty()) {
+            LabelsCancelFolder(before);
+        }
+        if (!path.empty()) {
+            LabelsInvalidate(path);
+        }
+    } else if (!path.empty()) {
+        LabelsRefreshIfStale(path);
+    }
+    return path;
+}
+
+// The width of a text in the list's font (Segoe UI, about 13 px at 96 DPI; the Content view's secondary lines are
+// about 11), measured on `dc`.
+[[clang::no_destroy]] thread_local std::map<std::pair<UINT, int>, HFONT> t_labelsFonts;
+
+int LabelsFontCount() {
+    return (int)t_labelsFonts.size();
+}
+
+// Frees the fonts of this thread. At unload each thread does it for itself (RevokeKeptThreads).
+void LabelsReleaseFonts() {
+    for (auto& entry : t_labelsFonts) {
+        if (entry.second) {
+            DeleteObject(entry.second);
+        }
+    }
+    t_labelsFonts.clear();
+}
+
+int LabelsTextWidth(HDC dc, std::wstring const& text, UINT dpi, int fontPx = 13) {
+    HFONT& font = t_labelsFonts[{dpi, fontPx}];
+    if (!font) {
+        RegisterKeepThread();  // This thread will be asked to free its fonts at unload.
+        font = CreateFontW(-MulDiv(fontPx, (int)dpi, 96), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0,
+                           CLEARTYPE_QUALITY, 0, L"Segoe UI");
+    }
+    if (!font) {
+        return 0;
+    }
+    HGDIOBJ old = SelectObject(dc, font);
+    SIZE size = {};
+    GetTextExtentPoint32W(dc, text.c_str(), (int)text.size(), &size);
+    SelectObject(dc, old);
+    return size.cx;
+}
+
+// The right edge of the text drawn inside `band`: the last column with a pixel that differs from the corner's.
+bool LabelsScanText(HDC dc, RECT const& band, int* left, int* right) {
+    int width = band.right - band.left;
+    int height = band.bottom - band.top;
+    if (width <= 0 || height <= 0 || width > 1200 || height > 120) {
+        return false;
+    }
+    BITMAPINFO info = {};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = width;
+    info.bmiHeader.biHeight = -height;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    uint32_t* bits = nullptr;
+    HDC memory = CreateCompatibleDC(dc);
+    HBITMAP bitmap = memory ? CreateDIBSection(memory, &info, DIB_RGB_COLORS, (void**)&bits, nullptr, 0) : nullptr;
+    bool found = false;
+    if (bitmap && bits) {
+        HGDIOBJ old = SelectObject(memory, bitmap);
+        BitBlt(memory, 0, 0, width, height, dc, band.left, band.top, SRCCOPY);
+        uint32_t background = bits[width - 1] & 0xFFFFFF;
+        *left = width;
+        *right = -1;
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                if ((bits[y * width + x] & 0xFFFFFF) != background) {
+                    *left = std::min(*left, x);
+                    *right = std::max(*right, x);
+                    break;
+                }
+            }
+        }
+        found = *right >= 0;
+        *left += band.left;
+        *right += band.left;
+        SelectObject(memory, old);
+    }
+    if (bitmap) DeleteObject(bitmap);
+    if (memory) DeleteDC(memory);
+    return found;
+}
+
+// What the row that was just painted needs from the elements that paint after it.
+struct LabelsRowContext {
+    void* item = nullptr;
+    LabelsView view = LabelsView::None;
+    RECT row = {};
+    RECT block = {};  // The text block of Tiles and Icons rows, in the device context's coordinates.
+    RECT name = {};   // The name line of a Content row, once it has been painted.
+    int nameTextLeft = 0;  // Where its text starts.
+    bool haveName = false;
+    bool folder = false;
+    std::wstring typeName;  // The text of the type line of a Content row, from the cache.
+    UINT dpi = 96;
+    int iconLeft = 0;
+    int iconBottom = 0;
+    std::vector<int> colours;
+    bool more = false;
+    int side = 8;
+    int lineHeight = 16;
+    int columnPad = 18;
+    bool drawn = false;
+};
+thread_local LabelsRowContext t_labelsRow;
+thread_local int t_contentTextOffset = -1;  // Where a Content row's text starts, learned from a row that has a Type line.
+
+void LabelsDrawBlock(HDC dc, LabelsRowContext const& row, LabelsPlace const& place) {
+    int step = LabelsDotStep(row.side);
+    int count = (int)row.colours.size();
+    // What is behind the dots, so that each dot can be cut free of the one it overlaps in the colour of the row.
+    COLORREF background = GetPixel(dc, place.x - 2, place.centreY - row.side / 2 - 1);
+    if (background == CLR_INVALID) {
+        background = LabelsDarkTheme() ? RGB(25, 25, 25) : RGB(255, 255, 255);
+    }
+    // The last dot first: each one is drawn over the one on its right, the first on top.
+    for (int i = count - 1; i >= 0; i--) {
+        int x = place.x + i * step;
+        if (i < count - 1) {
+            LabelsDrawDisc(dc, x - 1, place.centreY, background, row.side + 2);
+        }
+        LabelsDrawDot(dc, x, place.centreY, row.colours[i], row.side);
+    }
+    if (row.more && count > 0) {
+        LabelsDrawMore(dc, place.x + (count - 1) * step + row.side + std::max(4, row.side / 2), place.centreY, row.side);
+    }
+}
+
+// Fewer dots, and a plus, when the room is narrow: the colours that do not fit are left out.
+void LabelsFitDots(LabelsRowContext* row, int available) {
+    while (row->colours.size() > 1 && LabelsBlockWidth((int)row->colours.size(), row->more, row->side) > available) {
+        row->colours.pop_back();
+        row->more = true;
+    }
+}
+
+// The filter of this thread's window, or null when it has none. A debug build also reads
+// %LOCALAPPDATA%\\ExplorerExtras\\labels-filter.txt ("colour=3" or "name=Urgent", empty or missing for none), about
+// twice a second, so the dimming can be tried before the pane that sets the filter exists.
+LabelsFilter* LabelsFilterOfThread() {
+    WindowState* state = StateForThisThread(false);
+    if (!state) {
+        return nullptr;
+    }
+#ifdef EXTRAS_VERBOSE
+    thread_local ULONGLONG polled = 0;
+    ULONGLONG now = GetTickCount64();
+    if (now - polled > 500) {
+        polled = now;
+        wchar_t local[MAX_PATH];
+        std::wstring text;
+        if (GetEnvironmentVariableW(L"LOCALAPPDATA", local, MAX_PATH)) {
+            HANDLE file = CreateFileW((std::wstring(local) + L"\\ExplorerExtras\\labels-filter.txt").c_str(), GENERIC_READ,
+                                      FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (file != INVALID_HANDLE_VALUE) {
+                char buffer[200] = "";
+                DWORD read = 0;
+                ReadFile(file, buffer, sizeof(buffer) - 1, &read, nullptr);
+                CloseHandle(file);
+                buffer[read] = 0;
+                wchar_t wide[200] = L"";
+                MultiByteToWideChar(CP_UTF8, 0, buffer, -1, wide, 200);
+                text = wide;
+            }
+        }
+        LabelsFilter filter;
+        if (text.rfind(L"colour=", 0) == 0) {
+            filter.on = true;
+            filter.colour = (uint8_t)std::clamp(_wtoi(text.c_str() + 7), 0, 7);
+        } else if (text.rfind(L"name=", 0) == 0) {
+            filter.on = true;
+            filter.name = text.substr(5);
+            while (!filter.name.empty() && (filter.name.back() == L'\r' || filter.name.back() == L'\n')) {
+                filter.name.pop_back();
+            }
+        }
+        filter.folder = LabelsThreadFolder();
+        if (filter.on != state->labelsFilter.on || filter.colour != state->labelsFilter.colour ||
+            filter.name != state->labelsFilter.name) {
+            state->labelsFilter = filter;
+        }
+    }
+#endif
+    LabelsFilter& filter = state->labelsFilter;
+    if (filter.on && !filter.folder.empty() && _wcsicmp(filter.folder.c_str(), LabelsThreadFolder().c_str()) != 0) {
+        filter.on = false;  // Another folder is shown: the filter ends.
+    }
+    return filter.on ? &filter : nullptr;
+}
+
+// True when the row is to be dimmed: a filter is on, the row's name is not ambiguous, and its tags do not match.
+bool LabelsRowDims(void* item, LabelsFilter const& filter) {
+    std::wstring folder = LabelsThreadFolder();
+    if (folder.empty()) {
+        return false;
+    }
+    auto data = LabelsFolderFor(folder);
+    if (!data->complete || !data->streamsSupported) {
+        return false;
+    }
+    std::wstring name = LabelsAccName(item);
+    if (data->ambiguous.count(name)) {
+        return false;  // Cannot be told from the other item of that name.
+    }
+    auto found = data->byName.find(name);
+    static const std::vector<LabelTag> none;
+    return !LabelsMatches(filter, found == data->byName.end() ? none : found->second);
+}
+
+// Fades what a child painted toward the colour behind it (a hover or a selection colour included), about 60 percent.
+void LabelsDimRect(HDC dc, const RECT* r, COLORREF colour) {
+    int w = r->right - r->left, h = r->bottom - r->top;
+    if (w <= 0 || h <= 0 || w > 2000 || h > 2000) {
+        return;
+    }
+    HDC memory = CreateCompatibleDC(dc);
+    BITMAPINFO info = {};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = 1;
+    info.bmiHeader.biHeight = -1;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP bitmap = memory ? CreateDIBSection(memory, &info, DIB_RGB_COLORS, &bits, nullptr, 0) : nullptr;
+    if (bitmap && bits) {
+        *(DWORD*)bits = ((colour & 0xFF) << 16) | (colour & 0xFF00) | ((colour >> 16) & 0xFF);  // COLORREF to 0x00RRGGBB.
+        HGDIOBJ old = SelectObject(memory, bitmap);
+        BLENDFUNCTION blend = {AC_SRC_OVER, 0, 150, 0};
+        AlphaBlend(dc, r->left, r->top, w, h, memory, 0, 0, 1, 1, blend);
+        SelectObject(memory, old);
+    }
+    if (bitmap) DeleteObject(bitmap);
+    if (memory) DeleteDC(memory);
+}
+
+using LabelsPaintContent_t = void (WINAPI*)(void* self, HDC dc, const RECT* rect);
+LabelsPaintContent_t LabelsPaintContent_Original;
+
+// A row was painted: classify its view, and draw the dot now where the view allows it (List). The other views
+// draw from the element that paints the name, after it.
+void LabelsOnItem(void* item, HDC dc, const RECT* rect) {
+    t_labelsRow.item = nullptr;
+    std::wstring folder = LabelsThreadFolder();
+    if (folder.empty()) {
+        return;
+    }
+    auto data = LabelsFolderFor(folder);
+    if (!data->complete || !data->streamsSupported || data->byName.empty()) {
+        return;
+    }
+    std::wstring name = LabelsAccName(item);
+    auto found = data->byName.find(name);
+    if (found == data->byName.end()) {
+        return;
+    }
+    LabelsRowContext row;
+    row.colours = LabelsDotColours(found->second, &row.more);
+    if (row.colours.empty()) {
+        return;
+    }
+    row.folder = data->folders.count(name) != 0;
+    auto typed = data->typeNames.find(name);
+    if (typed != data->typeNames.end()) {
+        row.typeName = typed->second;
+    }
+    UINT dpi = LabelsThreadDpi();
+    row.dpi = dpi;
+    row.row = *rect;
+    row.side = LabelsDotSide(rect->bottom - rect->top, dpi);
+    row.lineHeight = MulDiv(16, (int)dpi, 96);
+    row.columnPad = MulDiv(18, (int)dpi, 96);
+    auto children = LabelsChildrenOf(item);
+    int elements = 0;
+    bool checkbox = false, image = false, property = false, details = false, smart = false;
+    const LabelsChild* icon = nullptr;
+    const LabelsChild* label = nullptr;
+    for (auto const& child : children) {
+        checkbox = checkbox || child.kind == kCheckbox;
+        image = image || child.kind == kImage;
+        property = property || child.kind == kProperty;
+        details = details || child.kind == kDetailsCollection;
+        smart = smart || child.kind == kSmartCollection;
+        if (child.kind == kImage && !icon) {
+            icon = &child;
+        }
+        if (child.kind == kElement) {
+            if (++elements == 1 && !icon) {
+                icon = &child;
+            } else if (elements == 2) {
+                label = &child;
+            }
+        }
+    }
+    if (details) {
+        row.view = LabelsView::Details;
+    } else if (smart) {
+        row.view = LabelsView::Content;
+    } else if (property && image) {
+        row.view = LabelsView::List;
+    } else if (elements >= 2 && checkbox) {
+        row.view = LabelsView::Tiles;
+    } else if (elements >= 2) {
+        row.view = LabelsView::Icons;
+    } else {
+        return;
+    }
+    if (icon) {
+        row.iconLeft = rect->left + icon->at.x;
+        row.iconBottom = rect->top + icon->at.y + icon->size.cy;
+    }
+    if (label) {
+        row.block = {rect->left + label->at.x, rect->top + label->at.y, rect->left + label->at.x + label->size.cx,
+                     rect->top + label->at.y + label->size.cy};
+    }
+    if (row.view == LabelsView::List) {
+        // The gap in front of the icon (where the check box shows) is the room: fewer dots when it is narrow.
+        if (icon) {
+            int start = (rect->bottom - rect->top - row.side) / 2;
+            LabelsFitDots(&row, std::max<int>(row.side, (int)icon->at.x - start - 2));
+        }
+        LabelsPlaceInput in;
+        in.view = row.view;
+        in.row = *rect;
+        in.side = row.side;
+        in.blockWidth = LabelsBlockWidth((int)row.colours.size(), row.more, row.side);
+        LabelsDrawBlock(dc, row, LabelsPlaceFor(in));
+        return;
+    }
+    row.item = item;
+    t_labelsRow = row;
+}
+
+// A name or detail text of the row was painted: Details, Tiles, Content and Icons draw from here, next to it.
+void LabelsOnChild(void* self, LabelsKind kind, HDC dc, const RECT* rect) {
+    LabelsRowContext& row = t_labelsRow;
+    if (!row.item || row.drawn || (kind != kProperty && kind != kSmartProperty)) {
+        return;
+    }
+    void* up = LabelsGetParent(self);
+    for (int level = 0; up && level < 3 && up != row.item; level++) {
+        up = LabelsGetParent(up);
+    }
+    if (up != row.item) {
+        return;
+    }
+    int textLeft = rect->left, textRight = rect->right - 1;
+    int scanLeft = 0, scanRight = -1;
+    RECT band = *rect;
+    if (row.view == LabelsView::Icons) {
+        band.top = std::max(rect->top, rect->bottom - row.lineHeight);  // The last line of the name.
+    }
+    bool scanned = LabelsScanText(dc, band, &scanLeft, &scanRight);
+    if (scanned) {
+        textLeft = scanLeft;
+        textRight = scanRight;
+    }
+    COLORREF detailsPad = CLR_INVALID;
+    LabelsPlaceInput in;
+    in.view = row.view;
+    in.row = row.row;
+    in.lineHeight = row.lineHeight;
+    in.iconLeft = row.iconLeft;
+    in.iconBottom = row.iconBottom;
+    in.side = row.side;
+    in.columnPad = row.columnPad;
+#ifdef EXTRAS_VERBOSE
+    {
+        static std::atomic<int> logged{0};
+        if (logged++ < 250) {
+            Wh_Log(L"LABELS PROP view=%d kind=%d rect=(%ld,%ld,%ld,%ld) text=%d..%d scanned=%d acc='%.30s' row=(%ld,%ld,%ld,%ld) block=(%ld,%ld,%ld,%ld) folder=%d",
+                   (int)row.view, (int)kind, rect->left, rect->top, rect->right, rect->bottom, textLeft, textRight,
+                   scanned ? 1 : 0, LabelsAccName(self).c_str(), row.row.left, row.row.top, row.row.right,
+                   row.row.bottom, row.block.left, row.block.top, row.block.right, row.block.bottom, row.folder ? 1 : 0);
+        }
+    }
+#endif
+    if (row.view == LabelsView::Details) {
+        in.cell = *rect;
+        in.textLeft = textLeft;
+        in.textRight = textRight;
+        detailsPad = GetPixel(dc, rect->right + 2, rect->top + 2);
+    } else if (row.view == LabelsView::Icons) {
+        // The name, centred under the icon: the dot goes after its last line.
+        in.cell = {row.block.left, band.top, row.block.right, band.bottom};
+        in.textLeft = textLeft;
+        in.textRight = textRight;
+        if (!scanned) {
+            return;
+        }
+    } else if (row.view == LabelsView::Tiles) {
+        int lines = LabelsLines(row.block.bottom - row.block.top, row.lineHeight);
+        bool nameLine = rect->top < row.block.top + row.lineHeight / 2;
+        if (row.folder) {
+            // A folder has no detail lines: the dot goes at the start of the empty line below its name.
+            if (!nameLine) {
+                return;
+            }
+            int nameLeft = scanned ? textLeft : rect->left + 4;  // The name's text edge, not its element's.
+            in.cell = {nameLeft, rect->top + row.lineHeight, row.block.right, rect->top + 2 * row.lineHeight};
+            in.textLeft = nameLeft;
+            in.textRight = nameLeft - 1;
+        } else if (LabelsIsLastLine(rect->bottom, row.block.bottom, row.lineHeight) && (lines <= 1 || !nameLine)) {
+            // The last detail line: after its text.
+            in.cell = {rect->left, rect->top, row.block.right, rect->bottom};
+            in.textLeft = textLeft;
+            in.textRight = scanned ? textRight : rect->left - 1;
+        } else {
+            return;  // The name, or a detail line that is not the last one: the next ones are painted after it.
+        }
+    } else if (row.view == LabelsView::Content) {
+        // The left block (name, then the type when there is one) is painted before the columns on the right.
+        bool leftBlock = rect->left < row.row.left + (row.row.right - row.row.left) * 45 / 100;
+        bool secondLine = rect->top - row.row.top > (row.row.bottom - row.row.top) * 35 / 100;
+        if (leftBlock && secondLine) {
+            t_contentTextOffset = rect->left + 4 - row.row.left;
+            in.cell = *rect;
+            in.textLeft = textLeft;
+            in.textRight = scanned ? textRight : rect->left - 1;
+            if (!scanned && !row.typeName.empty()) {
+                // The type line paints its text in children, after this element: its width is measured instead.
+                in.textLeft = rect->left + 4;
+                in.textRight = in.textLeft + LabelsTextWidth(dc, LabelsAccName(self) + L" : " + row.typeName, row.dpi, 11);
+            }
+        } else if (leftBlock) {
+            row.name = *rect;
+            row.nameTextLeft = scanned ? textLeft : rect->left + 4;
+            row.haveName = true;
+            return;
+        } else {
+            // The first column on the right: the row has no type line, the dot goes at the start of the line below the name.
+            int left = row.haveName ? row.nameTextLeft : (t_contentTextOffset >= 0 ? row.row.left + t_contentTextOffset : -1);
+            if (left < 0) {
+                return;
+            }
+            in.cell = {left, row.row.top, rect->left, row.row.bottom};
+            in.cell.top = row.row.top + row.lineHeight * 35 / 16 - row.lineHeight * 3 / 2;
+            in.textLeft = left;
+            in.textRight = left - 1;
+        }
+    } else {
+        return;
+    }
+    in.blockWidth = LabelsBlockWidth((int)row.colours.size(), row.more, row.side);
+    row.drawn = true;
+    LabelsPlace place = LabelsPlaceFor(in);
+#ifdef EXTRAS_VERBOSE
+    {
+        static std::atomic<int> placed{0};
+        if (placed++ < 150) {
+            Wh_Log(L"LABELS DRAW view=%d x=%d centreY=%d corner=%d dots=%d", (int)row.view, place.x, place.centreY,
+                   place.corner ? 1 : 0, (int)row.colours.size());
+        }
+    }
+#endif
+    if (row.view == LabelsView::Details && detailsPad != CLR_INVALID && textRight > place.x - 4) {
+        // A long name runs under the dots: the end of it is cleared in the colour of the row, so the dots read.
+        HBRUSH brush = CreateSolidBrush(detailsPad);
+        if (brush) {
+            RECT clear = {place.x - 3, rect->top, place.x + in.blockWidth + 3, rect->bottom};
+            FillRect(dc, &clear, brush);
+            DeleteObject(brush);
+        }
+    }
+    LabelsDrawBlock(dc, row, place);
+}
+
+void WINAPI LabelsPaintContent_Hook(void* self, HDC dc, const RECT* rect) {
+    bool usable = g_labels && !g_unloading && g_labelsPaintOk && self && rect && !IsBadReadPtr(rect, sizeof(RECT));
+    // Before the child paints: is it part of a row that the filter dims, and what colour is behind it?
+    bool dim = false;
+    COLORREF behind = 0;
+    if (usable) {
+        try {
+            LabelsKind own = LabelsKindOf(self);
+            if (own == kImage || own == kProperty || own == kSmartProperty || own == kElement || own == kTilesCollection ||
+                own == kSmartCollection || own == kDetailsCollection || own == kBase) {
+                LabelsFilter* filter = LabelsFilterOfThread();
+                if (filter) {
+                    void* item = LabelsGetParent(self);
+                    for (int up = 0; item && up < 4 && LabelsKindOf(item) != kItem; up++) {
+                        item = LabelsGetParent(item);
+                    }
+                    if (item && LabelsKindOf(item) == kItem && LabelsRowDims(item, *filter)) {
+                        dim = true;
+                        behind = GetPixel(dc, std::max<LONG>(rect->left, rect->right - 3), rect->top + 2);
+                        if (behind == CLR_INVALID) {
+                            behind = LabelsDarkTheme() ? RGB(25, 25, 25) : RGB(255, 255, 255);
+                        }
+                    }
+                }
+            }
+        } catch (...) {
+        }
+    }
+    LabelsPaintContent_Original(self, dc, rect);
+    if (dim) {
+        LabelsDimRect(dc, rect, behind);
+    }
+    if (!usable) {
+        return;
+    }
+    try {
+        LabelsKind kind = LabelsKindOf(self);
+        if (kind == kItem) {
+            LabelsOnItem(self, dc, rect);
+        } else if (kind == kProperty || kind == kSmartProperty) {
+            LabelsOnChild(self, kind, dc, rect);
+        }
+    } catch (...) {
+    }
+}
+
+// A folder was read: the windows are painted again so the dots show.
+void LabelsRepaintWindows(std::wstring const&) {
+    EnumWindows([](HWND window, LPARAM) -> BOOL {
+        DWORD pid = 0;
+        wchar_t name[40];
+        GetWindowThreadProcessId(window, &pid);
+        if (pid == GetCurrentProcessId() && GetClassNameW(window, name, 40) && wcscmp(name, L"CabinetWClass") == 0 &&
+            IsWindowVisible(window)) {
+            RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
+        }
+        return TRUE;
+    }, 0);
+    // The Columns view of each window is not painted by the list, its rows are XAML: its thread fills the dots again.
+    std::lock_guard<std::mutex> lock(g_statesMutex);
+    for (auto& state : g_states) {
+        if (state->queue) {
+            state->queue.TryEnqueue([]() { LabelsRefreshColumns(); });
+        }
+    }
+}
+
+}  // namespace
+
+// Installs the hook. False, with one log line, when a needed export or slot is missing: labels are then off and
+// everything else works.
+bool LabelsInstallPaintHooks() {
+    HMODULE dui = GetModuleHandleW(L"dui70.dll");
+    if (!dui) {
+        Wh_Log(L"labels: dui70.dll is not loaded, labels are off");
+        return false;
+    }
+    void* elementVtable = (void*)GetProcAddress(dui, "??_7Element@DirectUI@@6B@");
+    void* infoVtable = (void*)GetProcAddress(dui, "??_7ClassInfoBase@DirectUI@@6B@");
+    g_labelsClassSlot = LabelsFindSlot(elementVtable, LabelsExport(dui, "?GetClassInfoW@Element@DirectUI@@"));
+    g_labelsNameSlot = LabelsFindSlot(infoVtable, LabelsExport(dui, "?GetName@ClassInfoBase@DirectUI@@"));
+    LabelsGetAccName = (LabelsGetAccName_t)LabelsExport(dui, "?GetAccName@Element@DirectUI@@");
+    LabelsValueRelease = (LabelsValueRelease_t)LabelsExport(dui, "?Release@Value@DirectUI@@");
+    LabelsGetChildren = (LabelsGetChildren_t)LabelsExport(dui, "?GetChildren@Element@DirectUI@@");
+    LabelsGetLocation = (LabelsGetLocation_t)LabelsExport(dui, "?GetLocation@Element@DirectUI@@");
+    LabelsGetExtent = (LabelsGetExtent_t)LabelsExport(dui, "?GetExtent@Element@DirectUI@@");
+    LabelsGetParent = (LabelsGetParent_t)LabelsExport(dui, "?GetParent@Element@DirectUI@@");
+    void* paintContent = LabelsExport(dui, "?PaintContent@Element@DirectUI@@");
+    if (g_labelsClassSlot < 0 || g_labelsNameSlot < 0 || !LabelsGetAccName || !LabelsValueRelease || !LabelsGetChildren ||
+        !LabelsGetLocation || !LabelsGetExtent || !LabelsGetParent || !paintContent) {
+        Wh_Log(L"labels: a dui70.dll export or vtable slot is missing (slots %d %d), labels are off",
+               g_labelsClassSlot, g_labelsNameSlot);
+        return false;
+    }
+    if (!Wh_SetFunctionHook(paintContent, (void*)LabelsPaintContent_Hook, (void**)&LabelsPaintContent_Original)) {
+        Wh_Log(L"labels: the PaintContent hook could not be set, labels are off");
+        return false;
+    }
+    LabelsSetLoadedCallback(LabelsRepaintWindows);
+    g_labelsPaintOk = true;
+    Wh_Log(L"labels: paint hook installed (slots %d %d)", g_labelsClassSlot, g_labelsNameSlot);
+    return true;
+}
+
+void LabelsRemovePaintHooks() {
+    g_labelsPaintOk = false;
+    LabelsSetLoadedCallback(nullptr);
+}
+// Labels: the self-test of where a dot goes (debug build only). One log line: "LABELS PLACE SELFTEST pass" or
+// "LABELS PLACE SELFTEST FAIL <what>". The geometry is the one recorded from the real list in the surfaces skill.
+#ifdef EXTRAS_VERBOSE
+
+namespace {
+
+std::wstring g_placeFailure;
+
+void PlaceExpect(bool ok, const wchar_t* what) {
+    if (!ok && g_placeFailure.empty()) {
+        g_placeFailure = what;
+    }
+}
+
+}  // namespace
+
+void LabelsPlaceSelfTest() {
+    // The fonts of a thread are made on use and released explicitly (they are thread-local).
+    {
+        HDC screen = GetDC(nullptr);
+        int width = LabelsTextWidth(screen, L"abc", 96);
+        ReleaseDC(nullptr, screen);
+        PlaceExpect(width > 0 && LabelsFontCount() >= 1, L"measuring a text makes a font");
+        LabelsReleaseFonts();
+        PlaceExpect(LabelsFontCount() == 0, L"the fonts of a thread are released");
+    }
+    PlaceExpect(LabelsBlockWidth(1, false, 8) == 8, L"one dot is one side wide");
+    PlaceExpect(LabelsBlockWidth(3, false, 8) == 20, L"three stacked dots, each 6 px after the one before");
+    PlaceExpect(LabelsBlockWidth(4, true, 8) == 35, L"four stacked dots, then a 4 px gap and a 5 px plus");
+    PlaceExpect(LabelsDotStep(8) == 6 && LabelsDotStep(16) == 12, L"the step is 3/4 of a side");
+    PlaceExpect(LabelsMoreWidth(8) == 5 && LabelsMoreWidth(16) == 10, L"the plus is small: 5/8 of a side, at least 5 px");
+
+    LabelTag red{1, L""}, green{4, L"x"}, blue{6, L""};
+    bool more = true;
+    auto colours = LabelsDotColours({red, red, green}, &more);
+    PlaceExpect(colours == std::vector<int>({1, 4}) && !more, L"equal colours make one dot");
+    std::vector<LabelTag> many;
+    for (uint8_t c = 0; c < 6; c++) {
+        many.push_back(LabelTag{c, L""});
+    }
+    colours = LabelsDotColours(many, &more);
+    PlaceExpect(colours.size() == 4 && more, L"more than four colours show four dots and a plus");
+    PlaceExpect(LabelsDotColours({blue}, &more) == std::vector<int>({6}), L"a single colour");
+
+    LabelsPlaceInput in = {};
+    in.side = 8;
+    in.blockWidth = 8;
+    in.lineHeight = 16;
+
+    // List: the 28 px gap in front of the icon, centred on the row.
+    in.view = LabelsView::List;
+    in.row = {0, 0, 165, 22};
+    LabelsPlace place = LabelsPlaceFor(in);
+    PlaceExpect(place.x == 7 && place.centreY == 11 && !place.corner, L"List: centred in the gap before the icon");
+
+    // Details: right end of the name cell, unless the name nearly fills it.
+    in.view = LabelsView::Details;
+    in.row = {0, 0, 594, 19};
+    in.cell = {22, 0, 252, 19};
+    in.textLeft = 36;
+    in.textRight = 80;
+    place = LabelsPlaceFor(in);
+    PlaceExpect(place.x == 238 && place.centreY == 9 && !place.corner, L"Details: right-aligned in the name cell");
+    in.textRight = 240;
+    place = LabelsPlaceFor(in);
+    PlaceExpect(place.x == 238 && !place.corner, L"Details: a long name does not move the dot");
+
+    // Tiles: after the last detail line, or at its start when it is empty.
+    in.view = LabelsView::Tiles;
+    in.cell = {55, 16, 246, 32};
+    in.textLeft = 55;
+    in.textRight = 100;
+    place = LabelsPlaceFor(in);
+    PlaceExpect(place.x == 106 && place.centreY == 26 && !place.corner, L"Tiles: after the detail text, a little below the middle of the line");
+    in.textRight = in.textLeft - 1;
+    PlaceExpect(LabelsPlaceFor(in).x == 55, L"Tiles: at the start of an empty line");
+
+    // Content: the start of the second line of the text block.
+    in.view = LabelsView::Content;
+    in.cell = {66, 0, 911, 49};
+    place = LabelsPlaceFor(in);
+    PlaceExpect(place.x == 66 && place.centreY == 24, L"Content: start of the line below the name");
+    in.cell = {121, 27, 258, 43};
+    in.textLeft = 123;
+    in.textRight = 255;
+    place = LabelsPlaceFor(in);
+    PlaceExpect(place.x == 261 && place.centreY == 37, L"Content: after the type text when there is one");
+    in.textLeft = 0;
+    in.textRight = -1;
+
+    // The lines of a Tiles text block.
+    PlaceExpect(LabelsLines(64, 32) == 2 && LabelsLines(96, 32) == 3 && LabelsLines(32, 32) == 1, L"lines in a text block");
+    PlaceExpect(LabelsIsLastLine(420, 424, 32) && !LabelsIsLastLine(388, 424, 32) && !LabelsIsLastLine(356, 424, 32),
+                L"only the bottom line is the last");
+
+    // Icons: after the last line of the name, on a new line below when that line has no room.
+    in.view = LabelsView::Icons;
+    in.cell = {0, 98, 97, 114};  // The last line of the label.
+    in.textLeft = 28;
+    in.textRight = 69;
+    in.iconLeft = 4;
+    in.iconBottom = 98;
+    place = LabelsPlaceFor(in);
+    PlaceExpect(place.x == 75 && place.centreY == 106 && !place.corner, L"Icons: after the text of the last line");
+    in.textLeft = 2;
+    in.textRight = 95;
+    place = LabelsPlaceFor(in);
+    PlaceExpect(place.x == 44 && place.centreY == 122 && !place.corner, L"Icons: a full last line wraps the dot onto a new line, centred");
+
+    if (g_placeFailure.empty()) {
+        Wh_Log(L"LABELS PLACE SELFTEST pass");
+    } else {
+        Wh_Log(L"LABELS PLACE SELFTEST FAIL %s", g_placeFailure.c_str());
+    }
+}
+
+#endif  // EXTRAS_VERBOSE
+// Labels in the details pane: a "Tags" section with one row per tag of the selection, a [+] button that opens a
+// small flyout (the colours, and a name that is optional), and an inline line when a tag cannot be written.
+// What it does with the tags is plain code at the top, tested by the self-test; the XAML is below.
+
+struct LabelsMerged {
+    std::vector<std::pair<LabelTag, bool>> tags;  // Each tag once; true when every selected item has it.
+};
+
+static bool LabelsSameTag(LabelTag const& a, LabelTag const& b) {
+    return a.colour == b.colour && _wcsicmp(a.name.c_str(), b.name.c_str()) == 0;
+}
+
+// The tags of several items as one list.
+LabelsMerged LabelsMerge(std::vector<std::vector<LabelTag>> const& perItem) {
+    LabelsMerged merged;
+    for (auto const& item : perItem) {
+        for (auto const& tag : item) {
+            bool known = false;
+            for (auto const& entry : merged.tags) {
+                known = known || LabelsSameTag(entry.first, tag);
+            }
+            if (!known) {
+                merged.tags.push_back({tag, true});
+            }
+        }
+    }
+    for (auto& entry : merged.tags) {
+        for (auto const& item : perItem) {
+            bool has = false;
+            for (auto const& tag : item) {
+                has = has || LabelsSameTag(entry.first, tag);
+            }
+            if (!has) {
+                entry.second = false;
+                break;
+            }
+        }
+    }
+    return merged;
+}
+
+// False when the list is full (16) and the tag is not in it yet.
+bool LabelsAddTag(std::vector<LabelTag>* tags, LabelTag const& tag) {
+    for (auto const& existing : *tags) {
+        if (LabelsSameTag(existing, tag)) {
+            return true;
+        }
+    }
+    if (tags->size() >= kLabelsMaxTags) {
+        return false;
+    }
+    tags->push_back(tag);
+    return true;
+}
+
+void LabelsRemoveTag(std::vector<LabelTag>* tags, LabelTag const& tag) {
+    tags->erase(std::remove_if(tags->begin(), tags->end(), [&](LabelTag const& t) { return LabelsSameTag(t, tag); }), tags->end());
+}
+
+struct LabelsApplyResult {
+    int done = 0;                          // Items that were written.
+    LabelsWrite worst = LabelsWrite::Ok;   // The last write that failed.
+    std::wstring failedName;               // The item that failed, a full one or an unreadable one.
+    bool full = false;                     // An item already has 16 tags.
+    bool unreadable = false;               // An item's stream is corrupt or from a newer version: left alone.
+};
+
+// What a failed read means for the report: a stream that cannot be understood, a file in use, no access to it.
+void LabelsNoteReadFailure(LabelsApplyResult* result, LabelsReadResult read, std::wstring const& fileName) {
+    result->failedName = fileName;
+    if (read == LabelsReadResult::Locked) {
+        result->worst = LabelsWrite::Locked;
+    } else if (read == LabelsReadResult::NoAccess) {
+        result->worst = LabelsWrite::ReadOnly;
+    } else if (read == LabelsReadResult::Failed) {
+        result->worst = LabelsWrite::Failed;
+    } else {
+        result->unreadable = true;  // Corrupt, or from a newer version: left alone.
+    }
+}
+
+// Adds or removes one tag on every item. Items whose tags would not change are not written. The cache and the
+// list are told.
+LabelsApplyResult LabelsApplyToSelection(std::vector<std::wstring> const& paths, LabelTag const& tag, bool add) {
+    LabelsApplyResult result;
+    for (auto const& path : paths) {
+        std::vector<LabelTag> tags;
+        std::wstring fileName = PathFindFileNameW(path.c_str());
+        LabelsReadResult read = LabelsReadFileEx(path, &tags);
+        if (read != LabelsReadResult::Ok) {
+            LabelsNoteReadFailure(&result, read, fileName);
+            continue;
+        }
+        std::wstring before = LabelsSerialize(tags);
+        if (add) {
+            if (!LabelsAddTag(&tags, tag)) {
+                result.full = true;
+                result.failedName = fileName;
+                continue;
+            }
+        } else {
+            LabelsRemoveTag(&tags, tag);
+        }
+        if (LabelsSerialize(tags) == before) {
+            continue;
+        }
+        LabelsWrite written = LabelsWriteFile(path, tags);
+        if (written == LabelsWrite::Ok) {
+            result.done++;
+            LabelsSetTags(path, tags);
+        } else {
+            result.worst = written;
+            result.failedName = fileName;
+        }
+    }
+    if (result.done > 0) {
+        LabelsRepaintWindows(std::wstring());
+    }
+    return result;
+}
+
+// Removes every tag from every item. Items without tags are not written.
+LabelsApplyResult LabelsClearSelection(std::vector<std::wstring> const& paths) {
+    LabelsApplyResult result;
+    for (auto const& path : paths) {
+        std::vector<LabelTag> tags;
+        std::wstring fileName = PathFindFileNameW(path.c_str());
+        LabelsReadResult read = LabelsReadFileEx(path, &tags);
+        if (read != LabelsReadResult::Ok) {
+            LabelsNoteReadFailure(&result, read, fileName);
+            continue;
+        }
+        if (tags.empty()) {
+            continue;
+        }
+        LabelsWrite written = LabelsWriteFile(path, {});
+        if (written == LabelsWrite::Ok) {
+            result.done++;
+            LabelsSetTags(path, {});
+        } else {
+            result.worst = written;
+            result.failedName = fileName;
+        }
+    }
+    if (result.done > 0) {
+        LabelsRepaintWindows(std::wstring());
+    }
+    return result;
+}
+
+// Runs `work` on a mod thread and hands its result to `done`, on that thread. False when the mod is unloading.
+bool LabelsRunAsync(std::function<LabelsApplyResult()> work, std::function<void(LabelsApplyResult const&)> done) {
+    return StartModThread([work, done]() {
+        HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        LabelsApplyResult result = work();
+        if (SUCCEEDED(init)) {
+            CoUninitialize();
+        }
+        if (!g_unloading) {
+            done(result);
+        }
+    });
+}
+
+namespace {
+
+std::wstring LabelsFailText(LabelsApplyResult const& result) {
+    const wchar_t* key = L"labels.fail.failed";
+    if (result.worst == LabelsWrite::ReadOnly) {
+        key = L"labels.fail.readonly";
+    } else if (result.worst == LabelsWrite::Locked) {
+        key = L"labels.fail.locked";
+    } else if (result.worst == LabelsWrite::Unsupported) {
+        key = L"labels.fail.ntfs";
+    } else if (result.worst == LabelsWrite::Ok) {
+        key = result.full ? L"labels.fail.full" : L"labels.fail.corrupt";
+    }
+    wchar_t text[400];
+    swprintf_s(text, Str(key), result.failedName.c_str());
+    return text;
+}
+
+std::wstring LabelsTrim(std::wstring text) {
+    while (!text.empty() && iswspace(text.back())) {
+        text.pop_back();
+    }
+    size_t start = 0;
+    while (start < text.size() && iswspace(text[start])) {
+        start++;
+    }
+    return text.substr(start);
+}
+
+using LabelsPaths = std::shared_ptr<std::vector<std::wstring>>;
+
+// The fill of a tag's badge: the colour of the theme, at about a third of full strength, so the text keeps its
+// own colour and reads in both themes.
+std::wstring LabelsPillFill(int colour, bool dark) {
+    COLORREF fill = LabelsColourRgb(colour, dark);
+    wchar_t text[16];
+    swprintf_s(text, L"#59%02X%02X%02X", GetRValue(fill), GetGValue(fill), GetBValue(fill));
+    return text;
+}
+
+std::wstring LabelsXmlEscape(std::wstring const& text) {
+    std::wstring result;
+    for (wchar_t c : text) {
+        switch (c) {
+            case L'&': result += L"&amp;"; break;
+            case L'<': result += L"&lt;"; break;
+            case L'>': result += L"&gt;"; break;
+            case L'"': result += L"&quot;"; break;
+            case L'\'': result += L"&apos;"; break;
+            default: result += c;
+        }
+    }
+    return result;
+}
+
+// A coloured dot as XAML: the fill, and a rim a little darker.
+mux::FrameworkElement LabelsDotElement(int colour, int size) {
+    bool dark = LabelsDarkTheme();
+    COLORREF fill = LabelsDotRgb(colour, dark);
+    auto toward = [dark](int channel) { return dark ? channel * 82 / 100 : channel + (255 - channel) * 35 / 100; };
+    COLORREF rim = RGB(toward(GetRValue(fill)), toward(GetGValue(fill)), toward(GetBValue(fill)));
+    wchar_t markup[400];
+    swprintf_s(markup,
+               L"<Ellipse xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Width='%d' Height='%d' "
+               L"Fill='#FF%02X%02X%02X' Stroke='#FF%02X%02X%02X' StrokeThickness='1' VerticalAlignment='Center'/>",
+               size, size, GetRValue(fill), GetGValue(fill), GetBValue(fill), GetRValue(rim), GetGValue(rim), GetBValue(rim));
+    return LoadXaml(markup).as<mux::FrameworkElement>();
+}
+
+void LabelsFillSection(muxc::StackPanel const& host, LabelsPaths const& paths, std::wstring const& message);
+
+struct LabelsSectionRef {
+    winrt::weak_ref<muxc::StackPanel> host;
+    LabelsPaths paths;
+};
+[[clang::no_destroy]] thread_local LabelsSectionRef t_labelsSection;  // The Tags section of this window's pane.
+[[clang::no_destroy]] thread_local muxc::Flyout t_labelsNotice{nullptr};  // A notice when there is no pane to show it in.
+
+// After a change: what went wrong, if anything, is shown in the pane's Tags section, which is filled again a moment
+// later (not from inside the click that asked). Without a pane the notice is a small flyout at `anchor`.
+void LabelsAfterChange(winrt::weak_ref<muxc::StackPanel> const& weakHost, LabelsPaths const& paths,
+                       LabelsApplyResult const& result, std::function<mux::FrameworkElement()> const& anchor) {
+    if (g_unloading) {
+        return;
+    }
+    std::wstring message;
+    if (result.worst != LabelsWrite::Ok || result.full || result.unreadable) {
+        message = LabelsFailText(result);
+    }
+    WindowState* state = StateForThisThread(false);
+    auto host = weakHost.get();
+    if (host && state && state->details) {
+        PaneAfter(state, state->details, 30, [weakHost, paths, message]() {
+            if (auto shown = weakHost.get()) {
+                LabelsFillSection(shown, paths, message);
+            }
+        });
+        if (!message.empty()) {
+            PaneAfter(state, state->details, 6000, [weakHost, paths]() {
+                if (auto shown = weakHost.get()) {
+                    LabelsFillSection(shown, paths, std::wstring());  // The line fades.
+                }
+            });
+        }
+        return;
+    }
+    if (!message.empty() && anchor) {
+        mux::FrameworkElement target = anchor();
+        if (target) {
+            t_labelsNotice = muxc::Flyout();
+            t_labelsNotice.Content(MakeText(message, 13, false, false));
+            Keep(t_labelsNotice, t_labelsNotice.Closed(winrt::auto_revoke, [](Inspectable const&, Inspectable const&) {
+                t_labelsNotice = nullptr;
+            }));
+            t_labelsNotice.ShowAt(target);
+        }
+    }
+}
+
+// Applies one change. A few items are written here; many are written on a mod thread, so the window does not wait
+// for the disk.
+void LabelsDo(winrt::weak_ref<muxc::StackPanel> const& weakHost, LabelsPaths const& paths, LabelTag const& tag, bool add) {
+    if (g_unloading) {
+        return;
+    }
+    if (paths->size() > 16) {
+        auto queue = mud::DispatcherQueue::GetForCurrentThread();
+        bool started = LabelsRunAsync([paths, tag, add]() { return LabelsApplyToSelection(*paths, tag, add); },
+                                      [queue, weakHost, paths](LabelsApplyResult const& result) {
+                                          queue.TryEnqueue([weakHost, paths, result]() {
+                                              LabelsAfterChange(weakHost, paths, result, nullptr);
+                                          });
+                                      });
+        if (started) {
+            return;
+        }
+    }
+    LabelsAfterChange(weakHost, paths, LabelsApplyToSelection(*paths, tag, add), nullptr);
+}
+
+// The flyout of the [+] button: the colours, and a name that is optional. A colour makes the tag at once, with the
+// name typed so far; Enter in the box makes a named tag in the neutral gray.
+muxc::Flyout LabelsMakeFlyout(winrt::weak_ref<muxc::StackPanel> const& weakHost, LabelsPaths const& paths) {
+    muxc::Flyout flyout;
+    muxc::StackPanel content;
+    content.Spacing(10);
+    muxc::StackPanel colours;
+    colours.Orientation(muxc::Orientation::Horizontal);
+    colours.Spacing(4);
+    auto box = LoadXaml(std::wstring(L"<TextBox ") + kXamlNs + L" MaxLength='40' MinWidth='200'/>").as<muxc::TextBox>();
+    box.PlaceholderText(Str(L"labels.name"));
+    auto weakFlyout = winrt::make_weak(flyout);
+    for (int colour = 0; colour < 8; colour++) {
+        auto button = LoadXaml(std::wstring(L"<Button ") + kXamlNs +
+                               L" Padding='5' MinHeight='0' MinWidth='0' Background='Transparent' BorderThickness='0'/>").as<muxc::Button>();
+        button.Content(LabelsDotElement(colour, 18));
+        std::wstring colourName = LabelsColourName(colour);
+        if (!colourName.empty()) {
+            muxc::ToolTipService::SetToolTip(button, winrt::box_value(winrt::hstring{colourName}));
+        }
+        Keep(button, button.Click(winrt::auto_revoke, [weakHost, paths, weakFlyout, box, colour](Inspectable const&, mux::RoutedEventArgs const&) {
+            std::wstring name = LabelsTrim(std::wstring(box.Text()));
+            if (auto shown = weakFlyout.get()) {
+                shown.Hide();
+            }
+            LabelsDo(weakHost, paths, LabelTag{(uint8_t)colour, name}, true);
+        }));
+        colours.Children().Append(button);
+    }
+    Keep(box, box.KeyDown(winrt::auto_revoke, [weakHost, paths, weakFlyout](Inspectable const& sender, mux::Input::KeyRoutedEventArgs const& args) {
+        using winrt::Windows::System::VirtualKey;
+        if (args.Key() != VirtualKey::Enter) {
+            return;
+        }
+        auto text = sender.try_as<muxc::TextBox>();
+        std::wstring name = text ? LabelsTrim(std::wstring(text.Text())) : std::wstring();
+        if (name.empty()) {
+            return;
+        }
+        args.Handled(true);
+        if (auto shown = weakFlyout.get()) {
+            shown.Hide();
+        }
+        LabelsDo(weakHost, paths, LabelTag{0, name}, true);
+    }));
+    content.Children().Append(colours);
+    content.Children().Append(box);
+    flyout.Content(content);
+    return flyout;
+}
+
+// Builds the section: the title, the tags as badges that wrap like text, with the "Add a tag" link after the last
+// one, and the line of a failed write. A click on a badge opens a small menu (remove, or add to all).
+void LabelsFillSection(muxc::StackPanel const& host, LabelsPaths const& paths, std::wstring const& message) {
+    host.Children().Clear();
+    auto weakHost = winrt::make_weak(host);
+    bool supported = !paths->empty() && LabelsVolumeSupportsStreams((*paths)[0]);
+    std::vector<std::vector<LabelTag>> perItem;
+    bool unreadable = false;
+    LabelsApplyResult unreadableWhy;  // The first item that could not be read, and why.
+    bool ambiguous = false;
+    if (supported) {
+        // The first 100 items give the badges (a bigger selection is not read item by item on every change).
+        std::shared_ptr<const LabelsFolder> data;
+        for (size_t i = 0; i < paths->size() && i < 100; i++) {
+            std::vector<LabelTag> tags;
+            LabelsReadResult read = LabelsReadFileEx((*paths)[i], &tags);
+            if (read != LabelsReadResult::Ok) {
+                if (!unreadable) {
+                    LabelsNoteReadFailure(&unreadableWhy, read, PathFindFileNameW((*paths)[i].c_str()));
+                }
+                unreadable = true;
+                tags.clear();
+            }
+            perItem.push_back(std::move(tags));
+            if (i < 20 && !ambiguous) {
+                // An item that shares its displayed name with another one has no dot: the pane says so.
+                if (!data) {
+                    std::wstring folder = (*paths)[i];
+                    PathRemoveFileSpecW(folder.data());
+                    folder.resize(wcslen(folder.c_str()));
+                    data = LabelsFolderFor(folder);
+                }
+                ambiguous = data->complete && data->ambiguous.count(LabelsDisplayNameOf((*paths)[i])) != 0;
+            }
+        }
+    }
+    LabelsMerged merged = LabelsMerge(perItem);
+    host.Children().Append(MakeText(Str(L"labels.tags"), 13, true, false));
+    if (!supported) {
+        host.Children().Append(MakeText(Str(L"labels.ntfs"), 12, false, true));
+        return;
+    }
+
+    bool dark = LabelsDarkTheme();
+    std::wstring markup = std::wstring(L"<RichTextBlock ") + kXamlNs +
+                          L" xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TextWrapping='Wrap' "
+                          L"IsTextSelectionEnabled='False'><Paragraph>";
+    for (size_t i = 0; i < merged.tags.size(); i++) {
+        LabelTag const& tag = merged.tags[i].first;
+        std::wstring shown = tag.name.empty() ? LabelsColourName(tag.colour) : tag.name;
+        markup += L"<InlineUIContainer><Border x:Name='pill" + std::to_wstring(i) + L"' Background='" +
+                  LabelsPillFill(tag.colour, dark) + L"' CornerRadius='4' Padding='8,2,8,3' Margin='0,0,6,4'><TextBlock x:Name='text" +
+                  std::to_wstring(i) + L"' FontSize='13'/></Border></InlineUIContainer>";
+    }
+    markup += L"<InlineUIContainer><HyperlinkButton x:Name='addLink' Padding='4,2' MinHeight='0' MinWidth='0' FontSize='13' "
+              L"Margin='0,0,0,2'>" + LabelsXmlEscape(Str(L"labels.add")) + L"</HyperlinkButton></InlineUIContainer></Paragraph></RichTextBlock>";
+    auto text = LoadXaml(markup).as<muxc::RichTextBlock>();
+    for (size_t i = 0; i < merged.tags.size(); i++) {
+        auto pill = text.FindName(L"pill" + winrt::hstring{std::to_wstring(i)}).try_as<muxc::Border>();
+        if (!pill) {
+            continue;
+        }
+        LabelTag tag = merged.tags[i].first;
+        bool everywhere = merged.tags[i].second;
+        if (auto label = text.FindName(L"text" + winrt::hstring{std::to_wstring(i)}).try_as<muxc::TextBlock>()) {
+            label.Text(tag.name.empty() ? LabelsColourName(tag.colour) : tag.name);
+        }
+        if (!everywhere) {
+            pill.Opacity(0.55);  // On some of the selected items only.
+            muxc::ToolTipService::SetToolTip(pill, winrt::box_value(winrt::hstring{Str(L"labels.some")}));
+        }
+        Keep(pill, pill.Tapped(winrt::auto_revoke, [weakHost, paths, tag, everywhere](Inspectable const& sender, mux::Input::TappedRoutedEventArgs const&) {
+            auto element = sender.try_as<mux::FrameworkElement>();
+            if (!element) {
+                return;
+            }
+            muxc::MenuFlyout menu;
+            if (!everywhere) {
+                muxc::MenuFlyoutItem all;
+                all.Text(Str(L"labels.apply"));
+                Keep(all, all.Click(winrt::auto_revoke, [weakHost, paths, tag](Inspectable const&, mux::RoutedEventArgs const&) {
+                    LabelsDo(weakHost, paths, tag, true);
+                }));
+                menu.Items().Append(all);
+            }
+            muxc::MenuFlyoutItem remove;
+            remove.Text(Str(L"labels.remove"));
+            Keep(remove, remove.Click(winrt::auto_revoke, [weakHost, paths, tag](Inspectable const&, mux::RoutedEventArgs const&) {
+                LabelsDo(weakHost, paths, tag, false);
+            }));
+            menu.Items().Append(remove);
+            menu.ShowAt(element);
+        }));
+    }
+    auto link = text.FindName(L"addLink").try_as<muxc::HyperlinkButton>();
+    if (link) {
+        link.IsEnabled(!unreadable);
+        auto flyout = LabelsMakeFlyout(weakHost, paths);
+        Keep(link, link.Click(winrt::auto_revoke, [flyout](Inspectable const& sender, mux::RoutedEventArgs const&) {
+            if (auto element = sender.try_as<mux::FrameworkElement>()) {
+                flyout.ShowAt(element);
+            }
+        }));
+    }
+    host.Children().Append(text);
+
+    std::wstring line = message;
+    if (line.empty() && unreadable) {
+        line = LabelsFailText(unreadableWhy);
+    }
+    if (!line.empty()) {
+        host.Children().Append(MakeText(line, 12, false, true));
+    }
+    if (ambiguous) {
+        host.Children().Append(MakeText(Str(L"labels.ambiguous"), 12, false, true));
+    }
+}
+
+}  // namespace
+
+// The Tags section for the page of the details pane. Empty (collapsed) when labels are off or the selection has
+// no file system path.
+muxc::StackPanel LabelsPaneSection(DetailsPane* pane) {
+    muxc::StackPanel host;
+    host.Spacing(6);
+    auto paths = std::make_shared<std::vector<std::wstring>>();
+    if (g_labels) {
+        for (auto const& pidl : pane->shownItems) {
+            std::wstring path = pidl ? PathOf(pidl.get()) : std::wstring();
+            if (!path.empty()) {
+                paths->push_back(path);
+            }
+        }
+    }
+    if (paths->empty()) {
+        host.Visibility(mux::Visibility::Collapsed);
+        return host;
+    }
+    t_labelsSection.host = winrt::make_weak(host);
+    t_labelsSection.paths = paths;
+    LabelsFillSection(host, paths, std::wstring());
+    return host;
+}
+
+// A change made from a menu: the pane's Tags section is filled again (and shows what went wrong), or a notice
+// opens at the anchor when there is no pane.
+void LabelsAfterMenuChange(LabelsApplyResult const& result, std::function<mux::FrameworkElement()> const& anchor) {
+    LabelsAfterChange(t_labelsSection.host, t_labelsSection.paths, result, anchor);
+}
+
+// A change from a menu, with the same rule as the pane's: many items are written on a mod thread.
+void LabelsFromMenu(LabelsPaths const& paths, LabelTag const& tag, bool add, bool clear,
+                    std::function<mux::FrameworkElement()> const& anchor) {
+    if (g_unloading) {
+        return;
+    }
+    auto work = [paths, tag, add, clear]() { return clear ? LabelsClearSelection(*paths) : LabelsApplyToSelection(*paths, tag, add); };
+    if (paths->size() > 16) {
+        auto queue = mud::DispatcherQueue::GetForCurrentThread();
+        bool started = LabelsRunAsync(work, [queue, anchor](LabelsApplyResult const& result) {
+            queue.TryEnqueue([result, anchor]() { LabelsAfterMenuChange(result, anchor); });
+        });
+        if (started) {
+            return;
+        }
+    }
+    LabelsAfterMenuChange(work(), anchor);
+}
+// Labels: the self-test of what the pane does with the tags of a selection (debug build only). One log line:
+// "LABELS PANE SELFTEST pass" or "LABELS PANE SELFTEST FAIL <what>".
+#ifdef EXTRAS_VERBOSE
+
+namespace {
+
+std::wstring g_paneLabelsFailure;
+
+void PaneLabelsExpect(bool ok, const wchar_t* what) {
+    if (!ok && g_paneLabelsFailure.empty()) {
+        g_paneLabelsFailure = what;
+    }
+}
+
+}  // namespace
+
+void LabelsPaneSelfTest() {
+    LabelTag red{1, L""}, urgent{2, L"Urgent"}, urgentLower{2, L"urgent"};
+
+    // Merging the tags of several items: a tag is solid when every item has it.
+    auto merged = LabelsMerge({{red, urgent}, {red}, {red, urgentLower}});
+    PaneLabelsExpect(merged.tags.size() == 2, L"merging gives each tag once, names matched without case");
+    if (merged.tags.size() == 2) {
+        PaneLabelsExpect(merged.tags[0].first.colour == 1 && merged.tags[0].second, L"a tag on every item is solid");
+        PaneLabelsExpect(merged.tags[1].first.colour == 2 && !merged.tags[1].second, L"a tag on some of the items is mixed");
+    }
+    PaneLabelsExpect(LabelsMerge({}).tags.empty(), L"nothing selected, nothing merged");
+    PaneLabelsExpect(LabelsMerge({{urgent}}).tags.size() == 1 && LabelsMerge({{urgent}}).tags[0].second, L"one item: its tags are solid");
+
+    // The look of a tag as a badge.
+    PaneLabelsExpect(LabelsPillFill(1, false) == L"#59D13438", L"a badge is the colour at about a third of full strength");
+    PaneLabelsExpect(LabelsPillFill(0, true) == L"#59A19F9D", L"the dark variant is used in the dark theme");
+    PaneLabelsExpect(LabelsXmlEscape(L"A&B<\"'>") == L"A&amp;B&lt;&quot;&apos;&gt;", L"names are escaped for the markup");
+
+    // Adding and removing in one list.
+    std::vector<LabelTag> tags = {red};
+    PaneLabelsExpect(LabelsAddTag(&tags, red) && tags.size() == 1, L"adding a tag that is there changes nothing");
+    PaneLabelsExpect(LabelsAddTag(&tags, urgent) && tags.size() == 2, L"adding a new tag");
+    LabelsRemoveTag(&tags, urgentLower);
+    PaneLabelsExpect(tags.size() == 1 && tags[0].colour == 1, L"removing matches the name without case");
+    std::vector<LabelTag> full;
+    for (int i = 0; i < 16; i++) {
+        full.push_back(LabelTag{(uint8_t)(i % 8), std::to_wstring(i)});
+    }
+    PaneLabelsExpect(!LabelsAddTag(&full, LabelTag{1, L"one more"}) && full.size() == 16, L"a 17th tag is refused");
+
+    // Applying to files.
+    wchar_t temp[MAX_PATH];
+    GetTempPathW(MAX_PATH, temp);
+    std::wstring dir = std::wstring(temp) + L"ee-labels-pane-" + std::to_wstring(GetCurrentProcessId());
+    CreateDirectoryW(dir.c_str(), nullptr);
+    std::vector<std::wstring> files;
+    for (int i = 0; i < 3; i++) {
+        std::wstring path = dir + L"\\f" + std::to_wstring(i) + L".txt";
+        HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (file != INVALID_HANDLE_VALUE) {
+            CloseHandle(file);
+        }
+        files.push_back(path);
+    }
+    auto result = LabelsApplyToSelection(files, red, true);
+    PaneLabelsExpect(result.done == 3 && result.worst == LabelsWrite::Ok, L"a tag added to three files");
+    std::vector<LabelTag> read;
+    PaneLabelsExpect(LabelsReadFile(files[1], &read) && read.size() == 1 && read[0].colour == 1, L"the tag is on the file");
+    result = LabelsApplyToSelection(files, red, true);
+    PaneLabelsExpect(result.done == 0 && result.worst == LabelsWrite::Ok, L"adding it again writes nothing");
+    SetFileAttributesW(files[2].c_str(), FILE_ATTRIBUTE_READONLY);
+    result = LabelsApplyToSelection(files, urgent, true);
+    PaneLabelsExpect(result.done == 2 && result.worst == LabelsWrite::ReadOnly && result.failedName == L"f2.txt",
+                     L"a read-only file is reported by name and the others are tagged");
+    SetFileAttributesW(files[2].c_str(), FILE_ATTRIBUTE_NORMAL);
+    result = LabelsApplyToSelection(files, red, false);
+    PaneLabelsExpect(result.done == 3 && LabelsReadFile(files[0], &read) && read.size() == 1 && read[0].colour == 2,
+                     L"removing a tag keeps the others");
+    LabelsApplyToSelection(files, red, true);
+    result = LabelsClearSelection(files);
+    PaneLabelsExpect(result.done == 3 && LabelsReadFile(files[0], &read) && read.empty() && LabelsReadFile(files[2], &read) && read.empty(),
+                     L"clearing the tags of a selection");
+    result = LabelsClearSelection(files);
+    PaneLabelsExpect(result.done == 0, L"clearing again writes nothing");
+    // More than a few files are written on a mod thread.
+    std::vector<std::wstring> crowd;
+    for (int i = 0; i < 40; i++) {
+        std::wstring path = dir + L"\\c" + std::to_wstring(i) + L".txt";
+        HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (file != INVALID_HANDLE_VALUE) {
+            CloseHandle(file);
+        }
+        crowd.push_back(path);
+    }
+    std::atomic<bool> finished{false};
+    LabelsApplyResult asyncResult;
+    bool started = LabelsRunAsync([crowd, red]() { return LabelsApplyToSelection(crowd, red, true); },
+                                  [&](LabelsApplyResult const& done) {
+                                      asyncResult = done;
+                                      finished = true;
+                                  });
+    for (int i = 0; i < 250 && started && !finished; i++) {
+        Sleep(20);
+    }
+    PaneLabelsExpect(started && finished && asyncResult.done == 40, L"forty files tagged on a mod thread");
+    for (auto const& path : crowd) {
+        DeleteFileW((path + kLabelsStream).c_str());
+        DeleteFileW(path.c_str());
+    }
+    std::vector<LabelTag> sixteen;
+    for (int i = 0; i < 16; i++) {
+        sixteen.push_back(LabelTag{(uint8_t)(i % 8), std::to_wstring(i)});
+    }
+    LabelsWriteFile(files[0], sixteen);
+    result = LabelsApplyToSelection({files[0]}, LabelTag{1, L"extra"}, true);
+    PaneLabelsExpect(result.full && result.done == 0, L"a file with 16 tags is reported as full");
+    for (auto const& path : files) {
+        SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_NORMAL);
+        DeleteFileW((path + kLabelsStream).c_str());
+        DeleteFileW(path.c_str());
+    }
+    RemoveDirectoryW(dir.c_str());
+
+    if (g_paneLabelsFailure.empty()) {
+        Wh_Log(L"LABELS PANE SELFTEST pass");
+    } else {
+        Wh_Log(L"LABELS PANE SELFTEST FAIL %s", g_paneLabelsFailure.c_str());
+    }
+}
+
+#endif  // EXTRAS_VERBOSE
+// Labels in the Columns view: the dots at the end of a row, and the "Tags" submenu of the Columns context menu.
+// The tags come from the same folder cache as Explorer's own list (04b), looked up by the row's displayed name.
+
+namespace {
+
+// The dot of a Columns row as XAML: the colour, and a thin ring in the page colour, so that stacked dots are cut free
+// of each other.
+mux::FrameworkElement LabelsRowDot(int colour, int side, int left, bool dark) {
+    COLORREF fill = LabelsDotRgb(colour, dark);
+    wchar_t markup[500];
+    swprintf_s(markup,
+               L"<Ellipse xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Width='%d' Height='%d' "
+               L"Fill='#FF%02X%02X%02X' Stroke='%s' StrokeThickness='1.5' HorizontalAlignment='Left' "
+               L"VerticalAlignment='Center' Margin='%d,0,0,0'/>",
+               side, side, GetRValue(fill), GetGValue(fill), GetBValue(fill), dark ? L"#FF191919" : L"#FFFFFFFF", left);
+    return LoadXaml(markup).as<mux::FrameworkElement>();
+}
+
+std::wstring LabelsColumnPath(Column* column) {
+    if (!column->labelPathKnown) {
+        column->labelPath = column->folder ? PathOf(column->folder.get()) : std::wstring();
+        column->labelPathKnown = true;
+    }
+    return column->labelPath;
+}
+
+}  // namespace
+
+// Fills the dots of one row from the cache. Nothing is shown until the folder has been read.
+void LabelsFillRowDots(Column* column, size_t entry) {
+    if (entry >= column->labelHosts.size() || entry >= column->entries.size()) {
+        return;
+    }
+    auto host = column->labelHosts[entry];
+    if (!host) {
+        return;
+    }
+    host.Children().Clear();
+    host.Width(std::numeric_limits<double>::quiet_NaN());
+    if (!g_labels) {
+        return;  // Switched off: the dots go.
+    }
+    std::wstring path = LabelsColumnPath(column);
+    if (path.empty()) {
+        return;
+    }
+    auto data = LabelsFolderFor(path);
+    if (!data->complete || !data->streamsSupported) {
+        return;
+    }
+    std::wstring const& name = column->entries[entry].name;
+    if (data->ambiguous.count(name)) {
+        return;
+    }
+    auto found = data->byName.find(name);
+    if (found == data->byName.end()) {
+        return;
+    }
+    bool more = false;
+    std::vector<int> colours = LabelsDotColours(found->second, &more);
+    if (colours.empty()) {
+        return;
+    }
+    const int side = 9;
+    int step = LabelsDotStep(side);
+    bool dark = LabelsDarkTheme();
+    int count = (int)colours.size();
+    for (int i = count - 1; i >= 0; i--) {
+        host.Children().Append(LabelsRowDot(colours[i], side, i * step, dark));
+    }
+    int width = side + (count - 1) * step;
+    if (more) {
+        auto plus = MakeText(L"+", 11, false, true);
+        plus.HorizontalAlignment(mux::HorizontalAlignment::Left);
+        plus.VerticalAlignment(mux::VerticalAlignment::Center);
+        plus.Margin(mux::Thickness{(double)width + 4, 0, 0, 0});
+        host.Children().Append(plus);
+        width += 4 + 8;
+    }
+    host.Width(width);
+}
+
+// Every built row of this window's columns gets its dots again (a folder was read, or tags changed).
+void LabelsRefreshColumns() {
+    if (g_unloading) {
+        return;
+    }
+    WindowState* state = StateForThisThread(false);
+    if (!state) {
+        return;
+    }
+    try {
+        int rows = 0, dots = 0;
+        for (auto& column : state->columns) {
+            if (!column->list) {
+                continue;
+            }
+            for (size_t i = 0; i < column->entries.size() && i < column->built.size(); i++) {
+                if (column->built[i]) {
+                    LabelsFillRowDots(column.get(), i);
+                    rows++;
+                    dots += (i < column->labelHosts.size() && column->labelHosts[i] && column->labelHosts[i].Children().Size() > 0) ? 1 : 0;
+                }
+            }
+        }
+        LogVerbose(L"LABELS COLUMNS refreshed rows=%d withDots=%d", rows, dots);
+    } catch (...) {
+    }
+}
+
+namespace {
+
+[[clang::no_destroy]] thread_local muxc::Flyout t_labelsMenuFlyout{nullptr};  // The "Add tag" flyout opened from the menu.
+
+}  // namespace
+
+// The "Tags" submenu of the Columns context menu: the colours as checkable items, "Add tag...", "Clear tags".
+muxc::MenuFlyout LabelsTagsSubmenu(std::vector<std::wstring> const& pathList, std::function<mux::FrameworkElement()> anchor) {
+    muxc::MenuFlyout menu;
+    auto paths = std::make_shared<std::vector<std::wstring>>(pathList);
+    std::vector<std::vector<LabelTag>> perItem;
+    bool unreadable = false;
+    // The first 30 items tell which colours are on all of them: a big selection is not read when the menu is built.
+    for (size_t i = 0; i < paths->size() && i < 30; i++) {
+        std::vector<LabelTag> tags;
+        if (!LabelsReadFile((*paths)[i], &tags)) {
+            unreadable = true;
+            tags.clear();
+        }
+        perItem.push_back(std::move(tags));
+    }
+    bool dark = LabelsDarkTheme();
+    for (int colour = 0; colour < 8; colour++) {
+        LabelTag tag{(uint8_t)colour, L""};
+        bool everywhere = !perItem.empty();
+        for (auto const& item : perItem) {
+            bool has = false;
+            for (auto const& existing : item) {
+                has = has || (existing.colour == colour && existing.name.empty());
+            }
+            everywhere = everywhere && has;
+        }
+        muxc::ToggleMenuFlyoutItem item;
+        std::wstring name = LabelsColourName(colour);
+        item.Text(name.empty() ? std::wstring(L"…") : name);
+        item.IsChecked(everywhere);
+        item.IsEnabled(!unreadable);
+        muxc::FontIcon dot;
+        dot.FontFamily(mux::Media::FontFamily(L"Segoe UI"));
+        dot.Glyph(L"●");
+        COLORREF fill = LabelsDotRgb(colour, dark);
+        dot.Foreground(mux::Media::SolidColorBrush(
+            winrt::Windows::UI::ColorHelper::FromArgb(255, GetRValue(fill), GetGValue(fill), GetBValue(fill))));
+        item.Icon(dot);
+        Keep(item, item.Click(winrt::auto_revoke, [paths, tag, everywhere, anchor](Inspectable const&, mux::RoutedEventArgs const&) {
+            LabelsFromMenu(paths, tag, !everywhere, false, anchor);
+        }));
+        menu.Items().Append(item);
+    }
+    menu.Items().Append(muxc::MenuFlyoutSeparator());
+    muxc::MenuFlyoutItem add;
+    add.Text(Str(L"labels.addtag"));
+    add.IsEnabled(!unreadable);
+    Keep(add, add.Click(winrt::auto_revoke, [paths, anchor](Inspectable const&, mux::RoutedEventArgs const&) {
+        mux::FrameworkElement target = g_unloading ? mux::FrameworkElement{nullptr} : anchor();
+        if (!target) {
+            return;
+        }
+        winrt::weak_ref<muxc::StackPanel> none;
+        t_labelsMenuFlyout = LabelsMakeFlyout(none, paths);
+        Keep(t_labelsMenuFlyout, t_labelsMenuFlyout.Closed(winrt::auto_revoke, [](Inspectable const&, Inspectable const&) {
+            t_labelsMenuFlyout = nullptr;
+        }));
+        t_labelsMenuFlyout.ShowAt(target);
+    }));
+    menu.Items().Append(add);
+    muxc::MenuFlyoutItem clear;
+    clear.Text(Str(L"labels.clear"));
+    clear.IsEnabled(!unreadable);
+    Keep(clear, clear.Click(winrt::auto_revoke, [paths, anchor](Inspectable const&, mux::RoutedEventArgs const&) {
+        LabelsFromMenu(paths, LabelTag{}, false, true, anchor);
+    }));
+    menu.Items().Append(clear);
+    return menu;
+}
+
+// Called on each UI thread that holds label objects, at unload: its flyouts, its notice and its fonts.
+void LabelsReleaseThreadObjects() {
+    t_labelsMenuFlyout = nullptr;
+    t_labelsNotice = nullptr;
+    t_labelsSection = LabelsSectionRef();
+    LabelsReleaseFonts();
+}
+// Labels in File Explorer's own right-click menu. The menu is a CommandBarFlyout that FileExplorerExtensions.dll fills
+// one command at a time through MenuFlyoutControl::AppendMenuItem. The first time a flyout is seen there, a handler
+// is put on its Opening event; when the menu opens, a "Tags" entry with a submenu is added to its secondary commands
+// (before "Show more options" when that is there), for the items selected in the window. The menu of an empty space
+// has no selection, so it gets no entry.
+
+// The paths of the items selected in this thread's Explorer window.
+std::vector<std::wstring> LabelsSelectedPaths() {
+    std::vector<std::wstring> paths;
+    HWND topLevel = LabelsThreadTopLevel();
+    if (!topLevel) {
+        LogVerbose(L"LABELS MENU selection: no Explorer window on this thread");
+        return paths;
+    }
+    IShellBrowser* browser = BrowserOf(topLevel);
+    if (!browser) {
+        LogVerbose(L"LABELS MENU selection: no shell browser for window %p", (void*)topLevel);
+        return paths;
+    }
+    Pidl folder = CurrentFolder(browser);
+    if (!folder) {
+        LogVerbose(L"LABELS MENU selection: no current folder");
+        return paths;
+    }
+    std::vector<Pidl> selected = ExplorerSelection(browser);
+    LogVerbose(L"LABELS MENU selection: folder \"%s\", %d selected", PathOf(folder.get()).c_str(), (int)selected.size());
+    for (auto const& child : selected) {
+        std::wstring path = FilePathOf(folder.get(), child.get());
+        if (path.empty()) {
+            return std::vector<std::wstring>();  // One item without a path (a library, This PC): no entry.
+        }
+        paths.push_back(std::move(path));
+    }
+    return paths;
+}
+
+// True when the window is, or is inside, the navigation pane's tree.
+static bool LabelsInNavTree(HWND window) {
+    for (HWND at = window; at; at = GetParent(at)) {
+        wchar_t name[64];
+        if (GetClassNameW(at, name, 64) && (wcscmp(name, L"NamespaceTreeControl") == 0 || wcscmp(name, L"SysTreeView32") == 0)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The menu of a folder in the navigation pane comes through the same hook, but the selection read here is the file
+// list's, not the folder that was clicked: such a menu gets no entry. The focus and the pointer tell where it was asked.
+bool LabelsMenuIsForNavPane() {
+    if (LabelsInNavTree(GetFocus())) {
+        return true;
+    }
+    POINT where = {};
+    return GetCursorPos(&where) && LabelsInNavTree(WindowFromPoint(where));
+}
+
+namespace {
+
+struct LabelsHookedFlyout {
+    void* key = nullptr;
+    winrt::weak_ref<muxc::CommandBarFlyout> flyout;
+};
+[[clang::no_destroy]] thread_local std::vector<LabelsHookedFlyout> t_labelsFlyouts;
+
+bool LabelsIsOurs(muxc::AppBarButton const& button) {
+    return winrt::unbox_value_or<winrt::hstring>(button.Tag(), L"") == L"ee-labels";
+}
+
+// The menu is about to show: its "Tags" entry is put in, for the items that are selected now.
+void LabelsOnMenuOpening(Inspectable const& sender) {
+    if (g_unloading) {
+        return;
+    }
+    auto bar = sender.try_as<muxc::CommandBarFlyout>();
+    if (!bar) {
+        return;
+    }
+    auto secondary = bar.SecondaryCommands();
+    for (uint32_t i = secondary.Size(); i-- > 0;) {
+        // The flyout is reused: an entry of the last opening is taken out first, also when labels were switched off.
+        auto old = secondary.GetAt(i).try_as<muxc::AppBarButton>();
+        if (old && LabelsIsOurs(old)) {
+            secondary.RemoveAt(i);
+        }
+    }
+    if (!g_labels) {
+        return;
+    }
+    if (LabelsMenuIsForNavPane()) {
+        LogVerbose(L"LABELS MENU no entry, the menu is the navigation pane's");
+        return;
+    }
+#ifdef EXTRAS_VERBOSE
+    try {
+        auto target = bar.Target();
+        LogVerbose(L"LABELS MENU target=%s", target ? std::wstring(winrt::get_class_name(target)).c_str() : L"(none)");
+    } catch (...) {
+    }
+#endif
+    std::vector<std::wstring> paths = LabelsSelectedPaths();
+    if (paths.empty()) {
+        LogVerbose(L"LABELS MENU no entry, selection=%d", (int)paths.size());
+        return;
+    }
+    bool keeps = LabelsVolumeSupportsStreams(paths[0]);
+    muxc::AppBarButton button;
+    button.Label(Str(keeps ? L"labels.menu" : L"labels.menu.ntfs"));  // A drive that cannot keep the stream: greyed.
+    button.IsEnabled(keeps);
+    button.Tag(winrt::box_value(winrt::hstring{L"ee-labels"}));
+    muxc::FontIcon icon;
+    icon.FontFamily(mux::Media::FontFamily(L"Segoe Fluent Icons"));
+    icon.Glyph(L"");
+    button.Icon(icon);
+    auto weakBar = winrt::make_weak(bar);
+    if (keeps) {
+        button.Flyout(LabelsTagsSubmenu(paths, [weakBar]() -> mux::FrameworkElement {
+            auto shown = weakBar.get();
+            return shown ? shown.Target() : mux::FrameworkElement{nullptr};
+        }));
+    }
+    // Before "Show more options" (the command with Shift+F10) when it is there, else at the end.
+    uint32_t at = secondary.Size();
+    for (uint32_t i = 0; i < secondary.Size(); i++) {
+        auto other = secondary.GetAt(i).try_as<muxc::AppBarButton>();
+        if (!other) {
+            continue;
+        }
+        for (auto accelerator : other.KeyboardAccelerators()) {
+            if (accelerator.Key() == winrt::Windows::System::VirtualKey::F10) {
+                at = i;
+            }
+        }
+    }
+    secondary.InsertAt(at, button);
+    LogVerbose(L"LABELS MENU appended entries=%u selection=%d at=%u", secondary.Size(), (int)paths.size(), at);
+}
+
+}  // namespace
+
+using LabelsAppendMenuItem_t = void(WINAPI*)(void* self, void* flyout, void* menuItem);
+LabelsAppendMenuItem_t LabelsAppendMenuItem_Original;
+
+// Called for every command that Explorer puts in a menu: the first one of a flyout puts the handler on it.
+void WINAPI LabelsAppendMenuItem_Hook(void* self, void* flyout, void* menuItem) {
+    LabelsAppendMenuItem_Original(self, flyout, menuItem);
+#ifdef EXTRAS_VERBOSE
+    {
+        static std::atomic<int> seen{0};
+        if (seen++ < 40) {
+            Wh_Log(L"LABELS MENU append seen, flyout=%p thread=%lu", flyout, GetCurrentThreadId());
+        }
+    }
+#endif
+    if (!g_labels || g_unloading || !flyout) {
+        return;
+    }
+    try {
+        auto& bar = *(muxc::CommandBarFlyout*)flyout;
+        void* key = *(void**)flyout;
+        auto& all = t_labelsFlyouts;
+        all.erase(std::remove_if(all.begin(), all.end(), [](LabelsHookedFlyout const& hooked) { return !hooked.flyout.get(); }),
+                  all.end());
+        for (auto const& hooked : all) {
+            if (hooked.key == key) {
+                return;
+            }
+        }
+        Keep(bar, bar.Opening(winrt::auto_revoke, [](Inspectable const& sender, Inspectable const&) {
+            try {
+                LabelsOnMenuOpening(sender);
+            } catch (...) {
+            }
+        }));
+        LabelsHookedFlyout hooked;
+        hooked.key = key;
+        hooked.flyout = winrt::make_weak(bar);
+        all.push_back(std::move(hooked));
+        LogVerbose(L"LABELS MENU flyout seen, handler attached");
+    } catch (...) {
+    }
+}
+
+// Show labels, or a colour name, changed: the lists draw again, and a pane that is on show builds its page again
+// (its Tags section appears or goes).
+void LabelsSettingsChanged() {
+    LabelsRepaintWindows(std::wstring());
+    std::lock_guard<std::mutex> lock(g_statesMutex);
+    for (auto& state : g_states) {
+        if (state->queue) {
+            state->queue.TryEnqueue([]() {
+                if (g_unloading) {
+                    return;
+                }
+                WindowState* now = StateForThisThread(false);
+                if (now && now->details && now->details->visible) {
+                    now->details->shownKey.clear();
+                }
+            });
+        }
+    }
+}
+// The toolbar of File Explorer: the row with Back, Forward, Up and Refresh before the address bar. Explorer puts the four
+// AppBarButtons (x:Name backButton, forwardButton, upButton, refreshButton) in the "NavigationCommands" CommandBar, each
+// with the margin 8,8,8,0, so two of them are 16 apart. The gap is set through the margin of each button: between two
+// buttons it is the gap, and at the two ends it is the gap too (never more than Explorer's own 8), so the address bar,
+// which takes what is left, grows. The margins Explorer gave are
+// kept and put back when the setting goes off and when the mod unloads.
+
+std::atomic<bool> g_toolbar{true};  // Change the navigation buttons.
+std::atomic<int> g_navGap{0};       // The gap between them, in pixels (DIP).
+std::atomic<int> g_addressGap{4};  // The gap between the last navigation button and the address bar.
+std::atomic<bool> g_searchResize{true};  // The edge of the search box can be dragged.
+std::atomic<int> g_searchWidth{0};       // The search box's width in pixels, 0 for Explorer's own proportion.
+std::atomic<int> g_addressRadius{4};  // The corner radius of the address bar (Explorer's own is 4).
+std::atomic<int> g_searchRadius{4};   // The same for the search box.
+std::atomic<int> g_cmdGap{8};       // The gap between the command bar's buttons (Explorer's own is 8 for the icons).
+
+// The margin of button `index` of `count`, for a gap, from the margin Explorer gave it. Pure.
+mux::Thickness ToolbarMarginFor(mux::Thickness original, size_t index, size_t count, double gap, double addressGap) {
+    mux::Thickness margin = original;
+    margin.Left = index == 0 ? std::min(original.Left, gap) : 0;
+    margin.Right = index + 1 == count ? addressGap : gap;
+    return margin;
+}
+
+// The margin of a command bar button for a gap between two neighbours: half on each side, never more than Explorer's own.
+mux::Thickness ToolbarCommandMargin(mux::Thickness original, double gap) {
+    mux::Thickness margin = original;
+    margin.Left = std::min(original.Left, gap / 2);
+    margin.Right = std::min(original.Right, gap / 2);
+    return margin;
+}
+
+// The width the search box gets for a wanted one: at least 160, at most what leaves 240 for the address bar. Pure.
+double ToolbarSearchWidth(double wanted, double gridWidth, double leftWidth) {
+    double most = std::max(160.0, gridWidth - leftWidth - 240);
+    return std::min(std::max(wanted, 160.0), most);
+}
+
+// The corner radius for a box: the setting, between 0 and 16, or Explorer's own when the area is off. Pure.
+double ToolbarRadius(double original, double wanted, bool on) {
+    return on ? std::min(16.0, std::max(0.0, wanted)) : original;
+}
+
+namespace {
+
+std::wstring ToolbarClassOf(Inspectable const& object) {
+    try {
+        return std::wstring(winrt::get_class_name(object));
+    } catch (...) {
+        return L"?";
+    }
+}
+
+mux::FrameworkElement ToolbarFindById(mux::DependencyObject const& node, const wchar_t* id, int depth) {
+    if (depth > 30) {
+        return nullptr;
+    }
+    if (auto element = node.try_as<mux::FrameworkElement>()) {
+        // The automation id of these buttons is their x:Name.
+        if (element.Name() == id) {
+            return element;
+        }
+    }
+    int count = mux::Media::VisualTreeHelper::GetChildrenCount(node);
+    for (int i = 0; i < count; i++) {
+        if (auto found = ToolbarFindById(mux::Media::VisualTreeHelper::GetChild(node, i), id, depth + 1)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+#ifdef EXTRAS_VERBOSE
+// What a button sits in, level by level, for the log: class, name, margin, size, spacing, grid columns.
+void ToolbarDump(const wchar_t* id, mux::FrameworkElement const& button) {
+    mux::DependencyObject at = button;
+    for (int level = 0; level < 9 && at; level++) {
+        auto element = at.try_as<mux::FrameworkElement>();
+        if (element) {
+            auto margin = element.Margin();
+            std::wstring extra;
+            if (auto stack = element.try_as<muxc::StackPanel>()) {
+                wchar_t text[120];
+                swprintf_s(text, L" spacing=%.1f orientation=%d", stack.Spacing(), (int)stack.Orientation());
+                extra += text;
+            }
+            if (auto grid = element.try_as<muxc::Grid>()) {
+                wchar_t text[120];
+                swprintf_s(text, L" columns=%u rows=%u colSpacing=%.1f", grid.ColumnDefinitions().Size(), grid.RowDefinitions().Size(),
+                           grid.ColumnSpacing());
+                extra += text;
+                for (auto const& column : grid.ColumnDefinitions()) {
+                    swprintf_s(text, L" [col w=%.1f unit=%d actual=%.1f]", column.Width().Value, (int)column.Width().GridUnitType,
+                               column.ActualWidth());
+                    extra += text;
+                }
+            }
+            if (auto control = element.try_as<muxc::Control>()) {
+                auto padding = control.Padding();
+                wchar_t text[120];
+                swprintf_s(text, L" padding=%.1f,%.1f,%.1f,%.1f", padding.Left, padding.Top, padding.Right, padding.Bottom);
+                extra += text;
+            }
+            LogVerbose(L"TOOLBAR %s L%d %s name='%s' margin=%.1f,%.1f,%.1f,%.1f w=%.1f actual=%.1fx%.1f col=%d minw=%.1f halign=%d%s", id,
+                       level, ToolbarClassOf(element).c_str(), std::wstring(element.Name()).c_str(), margin.Left, margin.Top,
+                       margin.Right, margin.Bottom, element.Width(), element.ActualWidth(), element.ActualHeight(),
+                       (int)muxc::Grid::GetColumn(element), element.MinWidth(), (int)element.HorizontalAlignment(), extra.c_str());
+        }
+        at = mux::Media::VisualTreeHelper::GetParent(at);
+    }
+}
+#endif
+
+#ifdef EXTRAS_VERBOSE
+// The whole top of the island, for the log: every element down to a depth, with class, name, margin, size and padding.
+void ToolbarTreeDump(mux::DependencyObject const& node, int depth, int& budget) {
+    if (depth > 16 || budget <= 0) {
+        return;
+    }
+    if (auto element = node.try_as<mux::FrameworkElement>()) {
+        budget--;
+        auto margin = element.Margin();
+        wchar_t extra[200] = L"";
+        if (auto control = element.try_as<muxc::Control>()) {
+            auto padding = control.Padding();
+            swprintf_s(extra, L" padding=%.1f,%.1f,%.1f,%.1f", padding.Left, padding.Top, padding.Right, padding.Bottom);
+        } else if (auto stack = element.try_as<muxc::StackPanel>()) {
+            swprintf_s(extra, L" spacing=%.1f", stack.Spacing());
+        }
+        wchar_t look[120] = L"";
+        if (auto border = element.try_as<muxc::Border>()) {
+            swprintf_s(look, L" radius=%.1f bg=%d borderBrush=%d", border.CornerRadius().TopLeft, border.Background() ? 1 : 0,
+                       border.BorderBrush() ? 1 : 0);
+        } else if (auto grid = element.try_as<muxc::Grid>()) {
+            swprintf_s(look, L" radius=%.1f bg=%d", grid.CornerRadius().TopLeft, grid.Background() ? 1 : 0);
+        } else if (auto control = element.try_as<muxc::Control>()) {
+            swprintf_s(look, L" radius=%.1f bg=%d borderBrush=%d", control.CornerRadius().TopLeft, control.Background() ? 1 : 0,
+                       control.BorderBrush() ? 1 : 0);
+        }
+        LogVerbose(L"TREE %*s%s '%s' m=%.1f,%.1f,%.1f,%.1f size=%.1fx%.1f h=%.1f minh=%.1f%s%s", depth * 2, L"",
+                   ToolbarClassOf(element).c_str(), std::wstring(element.Name()).c_str(), margin.Left, margin.Top, margin.Right,
+                   margin.Bottom, element.ActualWidth(), element.ActualHeight(), element.Height(), element.MinHeight(), extra, look);
+    }
+    int count = mux::Media::VisualTreeHelper::GetChildrenCount(node);
+    for (int i = 0; i < count; i++) {
+        ToolbarTreeDump(mux::Media::VisualTreeHelper::GetChild(node, i), depth + 1, budget);
+    }
+}
+#endif
+
+const wchar_t* const kToolbarIds[] = {L"backButton", L"forwardButton", L"upButton", L"refreshButton"};
+
+struct ToolbarCommandButton {
+    winrt::weak_ref<mux::FrameworkElement> button;
+    void* key = nullptr;
+    mux::Thickness original = {};  // The margin Explorer gave.
+    mux::Thickness applied = {};   // The one this part set last.
+};
+
+struct ToolbarButtons {
+    winrt::weak_ref<muxc::Panel> commandStack;  // The StackPanel of the command bar's buttons.
+    std::vector<ToolbarCommandButton> command;
+    winrt::weak_ref<mux::FrameworkElement> button[4];
+    mux::Thickness original[4] = {};
+    winrt::weak_ref<muxc::Grid> contentRoot;  // The grid of the command bar: its second column is a spare of 6 DIP.
+    mux::GridLength spare = {0, mux::GridUnitType::Auto};
+    double spareMin = 0;  // The column also has a minimum width of its own.
+    winrt::weak_ref<muxc::Grid> navGrid;  // NavigationBarControlGrid: [buttons][address bar][search box].
+    winrt::weak_ref<muxc::Border> searchHandle;
+    mux::GridLength searchOriginal = {3, mux::GridUnitType::Star};
+    winrt::weak_ref<muxc::Control> address, search;  // The two boxes (AutoSuggestBox) and the corner radius Explorer gave.
+    mux::CornerRadius addressOriginal = {}, searchOriginal2 = {};
+    winrt::weak_ref<muxc::Control> addressText;      // The address bar's own TextBox and its border draw the outline.
+    winrt::weak_ref<muxc::Border> addressBorder;
+    mux::CornerRadius addressTextOriginal = {}, addressBorderOriginal = {};
+    // The grids around the box: PART_LayoutRoot paints the background that shows the outline (a radius of 4 of its own).
+    winrt::weak_ref<muxc::Grid> addressGrid[2];
+    mux::CornerRadius addressGridOriginal[2] = {};
+    bool known = false;
+};
+[[clang::no_destroy]] thread_local ToolbarButtons t_toolbar;  // Weak: the buttons belong to the window.
+
+// The command bar's buttons: margins from the gap, each one's own original kept. Runs again on every layout of the
+// stack, because Explorer builds and shows buttons as the selection changes.
+void ToolbarApplyCommandBar() {
+    auto stack = t_toolbar.commandStack.get();
+    if (!stack || !t_toolbar.known) {
+        LogVerbose(L"TOOLBAR command bar not applied: stack=%d known=%d", stack ? 1 : 0, t_toolbar.known ? 1 : 0);
+        return;
+    }
+    int changed = 0, seen = 0;
+    try {
+        for (auto const& child : stack.Children()) {
+            auto element = child.try_as<muxc::AppBarButton>();
+            if (!element) {
+                continue;
+            }
+            mux::FrameworkElement frame = element;
+            void* key = winrt::get_abi(frame);
+            ToolbarCommandButton* entry = nullptr;
+            for (auto& known : t_toolbar.command) {
+                if (known.key == key && winrt::get_abi(known.button.get()) == key) {
+                    entry = &known;
+                    break;
+                }
+            }
+            auto now = element.Margin();
+            if (!entry) {
+                ToolbarCommandButton added;
+                added.button = winrt::make_weak(frame);
+                added.key = key;
+                added.original = now;
+                added.applied = now;
+                t_toolbar.command.push_back(added);
+                entry = &t_toolbar.command.back();
+            } else if (now.Left != entry->applied.Left || now.Right != entry->applied.Right) {
+                entry->original = now;  // Explorer set it again: this is the new margin to work from.
+            }
+            auto wanted = g_toolbar ? ToolbarCommandMargin(entry->original, (double)g_cmdGap) : entry->original;
+            seen++;
+            if (wanted.Left != now.Left || wanted.Right != now.Right) {
+                element.Margin(wanted);
+                changed++;
+            }
+            entry->applied = wanted;
+        }
+    } catch (...) {
+        LogVerbose(L"TOOLBAR command bar apply threw");
+    }
+    LogVerbose(L"TOOLBAR command bar: gap %d, %d of %d buttons changed", g_cmdGap.load(), changed, seen);
+}
+
+// The wanted width of the search box: the dragged one (kept while the setting it was made against is unchanged), else the setting.
+double ToolbarWantedSearch() {
+    int stored = Wh_GetIntValue(L"ui.searchWidth", 0);
+    if (stored > 0 && Wh_GetIntValue(L"ui.searchBase", -1) == g_searchWidth) {
+        return stored;
+    }
+    return g_searchWidth;
+}
+
+// The search box's column and its handle, for the current settings.
+void ToolbarApplySearch(double forced = 0) {
+    auto grid = t_toolbar.navGrid.get();
+    if (!grid || !t_toolbar.known) {
+        return;
+    }
+    try {
+        auto columns = grid.ColumnDefinitions();
+        if (columns.Size() < 3) {
+            return;
+        }
+        auto column = columns.GetAt(2);
+        double want = forced > 0 ? forced : (g_searchResize ? ToolbarWantedSearch() : (double)g_searchWidth);
+        if (!g_toolbar || want <= 0 || grid.ActualWidth() <= 0) {
+            column.Width(t_toolbar.searchOriginal);
+        } else {
+            column.Width(mux::GridLength{ToolbarSearchWidth(want, grid.ActualWidth(), columns.GetAt(0).ActualWidth()),
+                                         mux::GridUnitType::Pixel});
+        }
+        if (auto handle = t_toolbar.searchHandle.get()) {
+            handle.Visibility(g_toolbar && g_searchResize ? mux::Visibility::Visible : mux::Visibility::Collapsed);
+        }
+    } catch (...) {
+    }
+}
+
+// A handle on the edge between the address bar and the search box: drag it (mouse, touch or pen) to resize, double click or
+// double tap to go back to the setting.
+void ToolbarMakeHandle(muxc::Grid const& grid) {
+    muxc::Border handle;
+    handle.Width(16);
+    handle.Height(36);
+    handle.HorizontalAlignment(mux::HorizontalAlignment::Left);
+    handle.VerticalAlignment(mux::VerticalAlignment::Center);
+    handle.Margin(mux::Thickness{-8, 0, 0, 0});
+    handle.Background(Brush(0, 0, 0, 0));
+    muxc::Grid::SetColumn(handle, 2);
+    try {
+        handle.as<mux::IUIElementProtected>().ProtectedCursor(winrt::Microsoft::UI::Input::InputSystemCursor::Create(
+            winrt::Microsoft::UI::Input::InputSystemCursorShape::SizeWestEast));
+    } catch (...) {
+        LogHresult(L"setting the resize cursor of the search box");
+    }
+    auto drag = std::make_shared<std::pair<bool, double>>(false, 0.0);  // dragging, offset of the pointer from the edge
+    auto weakGrid = winrt::make_weak(grid);
+    auto edgeOf = [weakGrid](double pointerX) {
+        auto g = weakGrid.get();
+        return g ? g.ActualWidth() - g.ColumnDefinitions().GetAt(2).ActualWidth() : 0.0;
+    };
+    Keep(handle, handle.PointerPressed(winrt::auto_revoke, [drag, weakGrid, edgeOf](Inspectable const& sender, mux::Input::PointerRoutedEventArgs const& args) {
+        if (auto g = weakGrid.get()) {
+            drag->first = true;
+            drag->second = args.GetCurrentPoint(g).Position().X - edgeOf(0);
+            sender.as<mux::UIElement>().CapturePointer(args.Pointer());
+            args.Handled(true);
+        }
+    }));
+    Keep(handle, handle.PointerMoved(winrt::auto_revoke, [drag, weakGrid](Inspectable const&, mux::Input::PointerRoutedEventArgs const& args) {
+        if (drag->first) {
+            if (auto g = weakGrid.get()) {
+                double edge = args.GetCurrentPoint(g).Position().X - drag->second;
+                ToolbarApplySearch(g.ActualWidth() - edge);
+            }
+        }
+    }));
+    auto finish = [drag, weakGrid](bool keep) {
+        if (!drag->first) {
+            return;
+        }
+        drag->first = false;
+        if (auto g = weakGrid.get(); g && keep) {
+            double width = g.ColumnDefinitions().GetAt(2).Width().Value;
+            if (g.ColumnDefinitions().GetAt(2).Width().GridUnitType == mux::GridUnitType::Pixel && width > 0) {
+                Wh_SetIntValue(L"ui.searchWidth", (int)std::lround(width));
+                Wh_SetIntValue(L"ui.searchBase", g_searchWidth);
+            }
+        }
+    };
+    Keep(handle, handle.PointerReleased(winrt::auto_revoke, [finish](Inspectable const& sender, mux::Input::PointerRoutedEventArgs const& args) {
+        sender.as<mux::UIElement>().ReleasePointerCapture(args.Pointer());
+        finish(true);
+    }));
+    Keep(handle, handle.PointerCanceled(winrt::auto_revoke, [finish](Inspectable const&, mux::Input::PointerRoutedEventArgs const&) {
+        finish(true);
+    }));
+    Keep(handle, handle.DoubleTapped(winrt::auto_revoke, [](Inspectable const&, mux::Input::DoubleTappedRoutedEventArgs const& args) {
+        Wh_SetIntValue(L"ui.searchWidth", 0);
+        ToolbarApplySearch();
+        args.Handled(true);
+    }));
+    // A narrower window keeps the address bar's room.
+    Keep(grid, grid.SizeChanged(winrt::auto_revoke, [](Inspectable const&, mux::SizeChangedEventArgs const&) {
+        if (!g_unloading) {
+            ToolbarApplySearch();
+        }
+    }));
+    grid.Children().Append(handle);
+    t_toolbar.searchHandle = winrt::make_weak(handle);
+}
+
+void ToolbarApplyRadius() {
+    if (!t_toolbar.known) {
+        return;
+    }
+    try {
+        if (auto box = t_toolbar.address.get()) {
+            double r = ToolbarRadius(t_toolbar.addressOriginal.TopLeft, g_addressRadius, g_toolbar);
+            box.CornerRadius(mux::CornerRadius{r, r, r, r});
+        }
+        {
+            double r = ToolbarRadius(t_toolbar.addressTextOriginal.TopLeft, g_addressRadius, g_toolbar);
+            if (auto text = t_toolbar.addressText.get()) {
+                text.CornerRadius(mux::CornerRadius{r, r, r, r});
+            }
+            double rb = ToolbarRadius(t_toolbar.addressBorderOriginal.TopLeft, g_addressRadius, g_toolbar);
+            if (auto border = t_toolbar.addressBorder.get()) {
+                border.CornerRadius(mux::CornerRadius{rb, rb, rb, rb});
+            }
+            for (int i = 0; i < 2; i++) {
+                if (auto grid = t_toolbar.addressGrid[i].get()) {
+                    double rg = ToolbarRadius(t_toolbar.addressGridOriginal[i].TopLeft, g_addressRadius, g_toolbar);
+                    grid.CornerRadius(mux::CornerRadius{rg, rg, rg, rg});
+                }
+            }
+        }
+        if (auto box = t_toolbar.search.get()) {
+            double r = ToolbarRadius(t_toolbar.searchOriginal2.TopLeft, g_searchRadius, g_toolbar);
+            box.CornerRadius(mux::CornerRadius{r, r, r, r});
+        }
+    } catch (...) {
+    }
+}
+
+// Puts the margins for the current setting (or Explorer's own when the area is off).
+void ToolbarApplyNow() {
+    ToolbarApplyRadius();
+    ToolbarApplySearch();
+    if (t_toolbar.known) {
+        ToolbarApplyCommandBar();
+    }
+    if (t_toolbar.known) {
+        if (auto grid = t_toolbar.contentRoot.get()) {
+            try {
+                if (grid.ColumnDefinitions().Size() >= 2) {
+                    // The spare column after the buttons (6 DIP, for the overflow button) is taken away with the setting on:
+                    // what is left between Refresh and the address bar is the end margin.
+                    auto column = grid.ColumnDefinitions().GetAt(1);
+                    column.Width(g_toolbar ? mux::GridLength{0, mux::GridUnitType::Pixel} : t_toolbar.spare);
+                    column.MinWidth(g_toolbar ? 0 : t_toolbar.spareMin);
+                }
+            } catch (...) {
+            }
+        }
+    }
+    for (int i = 0; i < 4 && t_toolbar.known; i++) {
+        if (auto element = t_toolbar.button[i].get()) {
+            try {
+                element.Margin(g_toolbar ? ToolbarMarginFor(t_toolbar.original[i], i, 4, (double)g_navGap, (double)g_addressGap) : t_toolbar.original[i]);
+            } catch (...) {
+            }
+        }
+    }
+}
+
+}  // namespace
+
+// Settings changed: every window's buttons take the new gap (or go back to Explorer's), each on its own thread.
+void ToolbarSettingsChanged() {
+    std::lock_guard<std::mutex> lock(g_statesMutex);
+    LogVerbose(L"TOOLBAR settings changed: on=%d navGap=%d commandGap=%d, %d windows", g_toolbar.load() ? 1 : 0, g_navGap.load(),
+               g_cmdGap.load(), (int)g_states.size());
+    for (auto& state : g_states) {
+        if (state->queue) {
+            state->queue.TryEnqueue([]() {
+                if (!g_unloading) {
+                    ToolbarApplyNow();
+                }
+            });
+        }
+    }
+}
+
+// At unload, on each thread that holds buttons: Explorer's margins are put back.
+void ToolbarRestoreThread() {
+    try {
+        if (t_toolbar.known) {
+            if (auto box = t_toolbar.address.get()) {
+                box.CornerRadius(t_toolbar.addressOriginal);
+            }
+            if (auto text = t_toolbar.addressText.get()) {
+                text.CornerRadius(t_toolbar.addressTextOriginal);
+            }
+            if (auto border = t_toolbar.addressBorder.get()) {
+                border.CornerRadius(t_toolbar.addressBorderOriginal);
+            }
+            for (int i = 0; i < 2; i++) {
+                if (auto grid = t_toolbar.addressGrid[i].get()) {
+                    grid.CornerRadius(t_toolbar.addressGridOriginal[i]);
+                }
+            }
+            if (auto box = t_toolbar.search.get()) {
+                box.CornerRadius(t_toolbar.searchOriginal2);
+            }
+        }
+    } catch (...) {
+    }
+    try {
+        if (auto grid = t_toolbar.navGrid.get(); grid && t_toolbar.known) {
+            if (grid.ColumnDefinitions().Size() >= 3) {
+                grid.ColumnDefinitions().GetAt(2).Width(t_toolbar.searchOriginal);
+            }
+            if (auto handle = t_toolbar.searchHandle.get()) {
+                uint32_t at = 0;
+                if (grid.Children().IndexOf(handle, at)) {
+                    grid.Children().RemoveAt(at);
+                }
+            }
+        }
+    } catch (...) {
+    }
+    try {
+        for (auto& entry : t_toolbar.command) {
+            if (auto element = entry.button.get()) {
+                element.Margin(entry.original);
+            }
+        }
+    } catch (...) {
+    }
+    if (auto grid = t_toolbar.contentRoot.get()) {
+        try {
+            if (t_toolbar.known && grid.ColumnDefinitions().Size() >= 2) {
+                grid.ColumnDefinitions().GetAt(1).Width(t_toolbar.spare);
+                grid.ColumnDefinitions().GetAt(1).MinWidth(t_toolbar.spareMin);
+            }
+        } catch (...) {
+        }
+    }
+    for (int i = 0; i < 4 && t_toolbar.known; i++) {
+        if (auto element = t_toolbar.button[i].get()) {
+            try {
+                element.Margin(t_toolbar.original[i]);
+            } catch (...) {
+            }
+        }
+    }
+    t_toolbar = ToolbarButtons();
+}
+
+// Called on every tick of a new window until it returns true (the buttons were found and handled).
+bool ToolbarTick(WindowState* state) {
+    auto content = state->xamlRoot ? state->xamlRoot.Content() : nullptr;
+    auto root = content ? content.try_as<mux::DependencyObject>() : nullptr;
+    if (!root) {
+        return false;
+    }
+    std::vector<mux::FrameworkElement> buttons;
+    for (auto id : kToolbarIds) {
+        auto found = ToolbarFindById(root, id, 0);
+        if (!found) {
+            LogVerbose(L"TOOLBAR not found yet: %s", id);
+            return false;
+        }
+        buttons.push_back(found);
+    }
+#ifdef EXTRAS_VERBOSE
+    for (size_t i = 0; i < buttons.size(); i++) {
+        ToolbarDump(kToolbarIds[i], buttons[i]);
+    }
+#endif
+    RegisterKeepThread();  // This thread restores Explorer's margins at unload.
+    ToolbarButtons found;
+    for (int i = 0; i < 4; i++) {
+        found.button[i] = winrt::make_weak(buttons[i]);
+        found.original[i] = buttons[i].Margin();
+    }
+    // The grid named ContentRoot above the buttons.
+    mux::DependencyObject up = buttons[3];
+    for (int level = 0; level < 10 && up; level++) {
+        if (auto grid = up.try_as<muxc::Grid>(); grid && grid.Name() == L"ContentRoot" && grid.ColumnDefinitions().Size() >= 2) {
+            found.contentRoot = winrt::make_weak(grid);
+            found.spare = grid.ColumnDefinitions().GetAt(1).Width();
+            found.spareMin = grid.ColumnDefinitions().GetAt(1).MinWidth();
+            break;
+        }
+        up = mux::Media::VisualTreeHelper::GetParent(up);
+    }
+    // The command bar's buttons.
+    auto commandBar = ToolbarFindById(root, L"FileExplorerCommandBar", 0);
+    if (!commandBar) {
+        LogVerbose(L"TOOLBAR the command bar is not there yet");
+        return false;
+    }
+    auto items = ToolbarFindById(commandBar, L"PrimaryItemsControl", 0);
+    muxc::Panel stack{nullptr};
+    if (items) {
+        std::function<muxc::Panel(mux::DependencyObject const&, int)> firstPanel = [&](mux::DependencyObject const& node, int depth) -> muxc::Panel {
+            if (depth > 6) {
+                return nullptr;
+            }
+            if (auto panel = node.try_as<muxc::StackPanel>()) {
+                return panel;
+            }
+            int count = mux::Media::VisualTreeHelper::GetChildrenCount(node);
+            for (int i = 0; i < count; i++) {
+                if (auto found = firstPanel(mux::Media::VisualTreeHelper::GetChild(node, i), depth + 1)) {
+                    return found;
+                }
+            }
+            return nullptr;
+        };
+        stack = firstPanel(items, 0);
+    }
+    if (!stack) {
+        LogVerbose(L"TOOLBAR the command bar's stack is not there yet");
+        return false;
+    }
+    found.commandStack = winrt::make_weak(stack);
+    Keep(stack, stack.LayoutUpdated(winrt::auto_revoke, [](Inspectable const&, Inspectable const&) {
+             if (!g_unloading) {
+                 ToolbarApplyCommandBar();
+             }
+         }));
+    for (mux::DependencyObject at = buttons[0]; at; at = mux::Media::VisualTreeHelper::GetParent(at)) {
+        if (auto grid = at.try_as<muxc::Grid>(); grid && grid.Name() == L"NavigationBarControlGrid" && grid.ColumnDefinitions().Size() >= 3) {
+            found.navGrid = winrt::make_weak(grid);
+            found.searchOriginal = grid.ColumnDefinitions().GetAt(2).Width();
+            break;
+        }
+    }
+    if (auto box = ToolbarFindById(root, L"PART_AutoSuggestBox", 0).try_as<muxc::Control>()) {
+        found.address = winrt::make_weak(box);
+        found.addressOriginal = box.CornerRadius();
+        if (auto text = ToolbarFindById(box, L"TextBox", 0).try_as<muxc::Control>()) {
+            found.addressText = winrt::make_weak(text);
+            found.addressTextOriginal = text.CornerRadius();
+        }
+        if (auto border = ToolbarFindById(box, L"BorderElement", 0).try_as<muxc::Border>()) {
+            found.addressBorder = winrt::make_weak(border);
+            found.addressBorderOriginal = border.CornerRadius();
+        }
+        // PART_LayoutRoot (the parent of the box) and NormalModeGrid (the breadcrumbs, its sibling).
+        mux::DependencyObject parent = mux::Media::VisualTreeHelper::GetParent(box);
+        if (auto layoutRoot = parent.try_as<muxc::Grid>()) {
+            found.addressGrid[0] = winrt::make_weak(layoutRoot);
+            found.addressGridOriginal[0] = layoutRoot.CornerRadius();
+        }
+        if (auto normal = ToolbarFindById(parent, L"NormalModeGrid", 0).try_as<muxc::Grid>()) {
+            found.addressGrid[1] = winrt::make_weak(normal);
+            found.addressGridOriginal[1] = normal.CornerRadius();
+        }
+        LogVerbose(L"TOOLBAR address radius: box %.1f text %.1f border %.1f", found.addressOriginal.TopLeft,
+                   found.addressTextOriginal.TopLeft, found.addressBorderOriginal.TopLeft);
+    }
+    if (auto box = ToolbarFindById(root, L"FileExplorerSearchBox", 0).try_as<muxc::Control>()) {
+        found.search = winrt::make_weak(box);
+        found.searchOriginal2 = box.CornerRadius();
+    }
+    found.known = true;
+    t_toolbar = found;
+    if (auto grid = t_toolbar.navGrid.get()) {
+        ToolbarMakeHandle(grid);
+    }
+    ToolbarApplyNow();
+    LogVerbose(L"TOOLBAR gap %d applied to the four buttons, window=%p, contentRoot found=%d", g_navGap.load(),
+               (void*)state->topLevel, t_toolbar.contentRoot.get() ? 1 : 0);
+#ifdef EXTRAS_VERBOSE
+    {
+        static bool dumped = false;
+        if (!dumped) {
+            dumped = true;
+            int budget = 700;
+            ToolbarTreeDump(root, 0, budget);
+        }
+    }
+    // The sizes after the change, once the layout has run: the grids above the buttons.
+    {
+        mux::DependencyObject up = buttons[3];
+        for (int level = 0; level < 10 && up; level++) {
+            if (auto element = up.try_as<mux::FrameworkElement>()) {
+                element.UpdateLayout();
+                wchar_t extra[200] = L"";
+                if (auto grid = up.try_as<muxc::Grid>()) {
+                    int at = 0;
+                    for (auto const& column : grid.ColumnDefinitions()) {
+                        at += swprintf_s(extra + at, 200 - at, L" [col w=%.1f actual=%.1f]", column.Width().Value, column.ActualWidth());
+                    }
+                }
+                LogVerbose(L"TOOLBAR after L%d %s name='%s' actual=%.1fx%.1f margin=%.1f,%.1f,%.1f,%.1f%s", level,
+                           ToolbarClassOf(element).c_str(), std::wstring(element.Name()).c_str(), element.ActualWidth(),
+                           element.ActualHeight(), element.Margin().Left, element.Margin().Top, element.Margin().Right,
+                           element.Margin().Bottom, extra);
+            }
+            up = mux::Media::VisualTreeHelper::GetParent(up);
+        }
+    }
+#endif
+    return true;
+}
+// The self-test of the toolbar's margins (debug build only): "TOOLBAR SELFTEST pass" or "TOOLBAR SELFTEST FAIL <what>".
+#ifdef EXTRAS_VERBOSE
+
+void ToolbarSelfTest() {
+    std::wstring failure;
+    auto expect = [&](bool ok, const wchar_t* what) {
+        if (!ok && failure.empty()) {
+            failure = what;
+        }
+    };
+    // Explorer gives each of the four buttons the margin 8,8,8,0: a gap of 16 between two of them, and 8 at each end.
+    // The ends take the gap too (never more than Explorer's own), so the address bar gets the room.
+    const mux::Thickness original{8, 8, 8, 0};
+    auto first = ToolbarMarginFor(original, 0, 4, 0, 0);
+    auto second = ToolbarMarginFor(original, 1, 4, 0, 0);
+    auto last = ToolbarMarginFor(original, 3, 4, 0, 0);
+    expect(first.Left == 0 && first.Right == 0 && first.Top == 8 && first.Bottom == 0, L"gap 0: the first button has no margin");
+    expect(second.Left == 0 && second.Right == 0, L"gap 0: a middle button has no margin");
+    expect(last.Left == 0 && last.Right == 0, L"gap 0: the last button has no margin");
+    auto spaced = ToolbarMarginFor(original, 1, 4, 2, 2);
+    expect(spaced.Left == 0 && spaced.Right == 2, L"the gap is the right margin of every button but the last");
+    expect(ToolbarMarginFor(original, 0, 4, 2, 5).Left == 2, L"the first button's left margin is the gap");
+    expect(ToolbarMarginFor(original, 3, 4, 2, 5).Right == 5, L"the last button's right margin is the gap to the address bar");
+    expect(ToolbarMarginFor(original, 0, 4, 16, 16).Left == 8, L"the left end never grows past Explorer's own margin");
+    expect(ToolbarMarginFor(original, 3, 4, 2, 12).Right == 12, L"the gap to the address bar can be wider than Explorer's");
+    auto single = ToolbarMarginFor(original, 0, 1, 7, 3);
+    expect(single.Left == 7 && single.Right == 3, L"a lone button has the gap on the left and the address bar gap on the right");
+    // The command bar: Explorer's AppBarButtons have 4 or 2 on each side; the gap is shared by the two sides of a neighbour pair.
+    auto cmd = ToolbarCommandMargin(mux::Thickness{4, 0, 4, 0}, 2);
+    expect(cmd.Left == 1 && cmd.Right == 1 && cmd.Top == 0 && cmd.Bottom == 0, L"command bar: a gap of 2 is 1 on each side");
+    expect(ToolbarCommandMargin(mux::Thickness{2, 0, 2, 0}, 16).Left == 2, L"command bar: never more than Explorer's own margin");
+    expect(ToolbarCommandMargin(mux::Thickness{4, 0, 4, 0}, 0).Right == 0, L"command bar: a gap of 0 touches");
+    // The search box's width: wanted, kept between 160 and what leaves the address bar 240 beside the navigation buttons.
+    expect(ToolbarSearchWidth(300, 1100, 148) == 300, L"search width: a width inside the limits is kept");
+    expect(ToolbarSearchWidth(50, 1100, 148) == 160, L"search width: not narrower than 160");
+    expect(ToolbarSearchWidth(5000, 1100, 148) == 712, L"search width: not wider than the grid minus buttons minus 240");
+    expect(ToolbarSearchWidth(300, 300, 148) == 160, L"search width: a tiny window gets the minimum, never a negative width");
+    // The corner radius of the address bar and the search box: the setting when the area is on, Explorer's own when it is off.
+    expect(ToolbarRadius(4, 12, true) == 12, L"radius: the setting is used when the area is on");
+    expect(ToolbarRadius(4, 12, false) == 4, L"radius: Explorer's own comes back when the area is off");
+    expect(ToolbarRadius(4, 99, true) == 16 && ToolbarRadius(4, -3, true) == 0, L"radius: kept between 0 and 16");
+    if (failure.empty()) {
+        Wh_Log(L"TOOLBAR SELFTEST pass");
+    } else {
+        Wh_Log(L"TOOLBAR SELFTEST FAIL %s", failure.c_str());
+    }
+}
+
+#endif  // EXTRAS_VERBOSE
 // ---- Window creation ----
 //
 // CommandBarControl_Wave1::OnApplyTemplate runs when a window is built, and
@@ -18733,6 +23143,8 @@ void ReleaseEntry(WindowState* state) {
 // Every 50 ms after the window is built: put the Columns entry into the View
 // menu, then, if Columns was the last layout chosen, turn it on once the file
 // list is visible.
+bool ToolbarTick(WindowState* state);  // 10i
+
 void EntryTick() {
     if (g_unloading) {
         return;
@@ -18746,6 +23158,9 @@ void EntryTick() {
         if (!state->topLevel || !IsWindow(state->topLevel)) {
             StopEntry(state);
             return;
+        }
+        if (!state->toolbarDone) {
+            state->toolbarDone = ToolbarTick(state);
         }
         if (!state->menuItem) {
             int visited = 0;
@@ -18934,7 +23349,7 @@ void WatchWindowClose(HWND top) {
 }
 
 void OnWindowCreated(Inspectable const& rootObject) {
-    if (g_unloading || (!g_enabled && !g_detailsPane)) {
+    if (g_unloading || (!g_enabled && !g_detailsPane && !g_toolbar)) {
         return;
     }
     auto xamlRoot = rootObject.try_as<mux::XamlRoot>();
@@ -19117,6 +23532,10 @@ void HookExtensions(HMODULE module) {
          &InvokeMenuItem_Original,
          InvokeMenuItem_Hook,
          true},
+        {{LR"(private: void __cdecl winrt::FileExplorerExtensions::implementation::MenuFlyoutControl::AppendMenuItem(struct winrt::Microsoft::UI::Xaml::Controls::CommandBarFlyout &,struct winrt::WindowsUdk::UI::MenuItem const &))"},
+         &LabelsAppendMenuItem_Original,
+         LabelsAppendMenuItem_Hook,
+         true},
     };
     if (!WindhawkUtils::SetFunctionHook(TranslateAcceleratorW, TranslateAcceleratorW_Hook,
                                         &TranslateAcceleratorW_Original)) {
@@ -19129,7 +23548,7 @@ void HookExtensions(HMODULE module) {
     Wh_Log(L"HookSymbols returned %d, PointerPressedHandler=%p, Wave1=%p, InvokeMenuItem=%p",
         ok ? 1 : 0, (void*)PointerPressed_Original,
         (void*)PointerPressedWave1_Original, (void*)InvokeMenuItem_Original);
-    Wh_Log(L"OnDpiChanged=%p", (void*)DpiChanged_Original);
+    Wh_Log(L"OnDpiChanged=%p, labels menu hook=%p", (void*)DpiChanged_Original, (void*)LabelsAppendMenuItem_Original);
     g_hooked = PointerPressed_Original || PointerPressedWave1_Original ||
                DpiChanged_Original;
 }
@@ -19367,6 +23786,15 @@ void LoadSettings() {
     g_staleAccent = SettingBool(L"staleAccent");
     g_autoPreview = SettingBool(L"autoPreview");
     g_autoFolderSize = SettingBool(L"autoFolderSize");
+    LabelsLoadSettings();
+    g_toolbar = SettingBool(L"toolbarOn");
+    g_navGap = SettingInt(L"navGap");
+    g_addressGap = SettingInt(L"addressGap");
+    g_cmdGap = SettingInt(L"commandGap");
+    g_addressRadius = SettingInt(L"addressRadius");
+    g_searchRadius = SettingInt(L"searchRadius");
+    g_searchResize = SettingBool(L"searchResize");
+    g_searchWidth = SettingInt(L"searchWidth");
     g_rememberSort = SettingBool(L"rememberSort");
     g_rememberWidth = SettingBool(L"rememberWidth");
     g_rememberLayout = SettingBool(L"rememberLayout");
@@ -19405,9 +23833,20 @@ BOOL Wh_ModInit() {
 #else
     const wchar_t* arch = L"x86";
 #endif
-    Wh_Log(L"explorer-extras v0.68.2 start, compiled as %s, pid=%lu, columns=%d width=%d..%d follow=%d",
+    Wh_Log(L"explorer-extras v0.77.7 start, compiled as %s, pid=%lu, columns=%d width=%d..%d follow=%d",
         arch, GetCurrentProcessId(), g_enabled ? 1 : 0, g_minWidth.load(),
         g_maxWidth.load(), g_follow ? 1 : 0);
+
+#ifdef EXTRAS_VERBOSE
+    LabelsSelfTest();
+    LabelsDotsSelfTest();
+    LabelsCacheSelfTest();
+    LabelsPlaceSelfTest();
+    LabelsPaneSelfTest();
+    ToolbarSelfTest();
+#endif
+
+    LabelsInstallPaintHooks();
 
     HMODULE module = GetModuleHandleW(L"FileExplorerExtensions.dll");
     if (!module) {
@@ -19433,6 +23872,8 @@ BOOL Wh_ModInit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
+    LabelsSettingsChanged();  // Show labels on or off, or a colour name changed.
+    ToolbarSettingsChanged();
     Wh_Log(L"settings changed: columns=%d details=%d width=%d..%d maxItems=%d",
         g_enabled ? 1 : 0, g_detailsPane ? 1 : 0, g_minWidth.load(), g_maxWidth.load(), g_maxItems.load());
     if (!g_enabled) {
@@ -19451,9 +23892,14 @@ void Wh_ModSettingsChanged() {
 void Wh_ModBeforeUninit() {
     g_unloading = true;
     // Every thread of the mod ends first, so no result is queued after the windows are cleaned.
+    LabelsRemovePaintHooks();
+    LabelsCancelAll();
     JoinModThreads();
     StopWorker();
     CloseEverything();
+    RevokeKeptThreads();
+    LabelsReleaseDots();
+    LabelsClearCache();
 }
 
 void Wh_ModUninit() {
