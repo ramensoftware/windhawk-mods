@@ -12,51 +12,27 @@
 
 // ==WindhawkModReadme==
 /*
-> Finally, Windows brought back a feature they thought was not being used. I prefer my taskbar on the left when working in Photoshop, and on top when scrolling through layers in After Effects.
+# Taskbar Position Shortcut
 
-Adds a **Taskbar position** submenu when you right-click the Windows 11 taskbar.
-Move it to any edge without saving anything, or set a position for a specific app.
+Adds a **Taskbar position** submenu when you right-click the Windows 11 taskbar. Move it to any edge without saving anything, or set a position for a specific app.
+
+Finally, Windows brought back a feature they thought was not being used. I prefer my taskbar on the left when working in Photoshop, and on top when scrolling through layers in After Effects.
 
 ## Features
 
-- **Quick shortcut:** Follow Windows setting, Top, Left, Right, or Bottom.
+- **Quick shortcut:** Choose Follow Windows setting, Top, Left, Right, or Bottom. No app rule is saved.
 - **Per-app positions:** Open the app's submenu to save a position. Choose Default to remove its rule.
 - **Maximized-only mode:** Only apply app rules when a maximized window is found.
 - **Switch delay:** Adjust how long the mod waits before moving the taskbar.
 - **Blacklist:** Ignore apps you don't want triggering position changes.
 
+App rules are saved locally in Windhawk and won't appear in its Settings tab.
+
 ## Compatibility
+
 Requires Windows 11 with native taskbar positioning. I've tried it on builds **26220.9836** and **26300.9818**. Older builds haven't been tested. I've only tested it with one monitor.
+
 The mod doesn't change the saved Windows taskbar position. It may conflict with other mods that move the taskbar.
-
-## Features
-- **Manual shortcut (default):** Choose Follow Windows setting, Top, Left, Right, or Bottom directly from the menu. This does not save a per-app rule
-  or modify the Windows taskbar position setting.
-- **Per-app rules (optional):** Open the submenu named after your app to save Default, Top, Left, Right, or Bottom. These rules persist between restarts and activate when you switch to that app.
-- **Temporary manual override:** A manual menu selection takes priority until you switch to another application. Then saved app rules apply as usual.
-- **Exclusions:** Ignore an app from the menu or list it in the Settings blacklist. Excluded apps leave the taskbar at its current position.
-- **Maximized-only:** Use the topmost maximized app on the same monitor. Small floating windows (such as File Explorer over Photoshop) won't replace its position rule.
-- **Switch delay:** Wait before applying a new position. 0 skips the configured delay; switching is driven by window events.
-
-## Rule precedence
-1. Temporary manual position selection (until the next app switch)
-2. Blacklist -> Leave the taskbar position unchanged
-3. Menu-saved app rule
-4. Unlisted apps -> Windows position by default
-
-**Default** removes any saved rule for the app and follows the Windows setting. The manual **Follow Windows setting** shortcut is temporary and does not save anything.
-
-**Drag to reposition?:** I haven't tried implementing this yet, but according to [this article](https://www.windowscentral.com/microsoft/windows-11/its-a-deliberate-design-decision-not-a-missing-capability-microsoft-confirms-windows-11-wont-ever-let-you-move-the-taskbar-by-dragging-it-like-on-windows-10),
-Microsoft doesn't plan to add native drag-to-move support. This mod does not implement a drag gesture.
-
-## Technical notes
-Only Windows 11 (build 22000 or later) is considered. More importantly, the mod requires the native `TaskbarLocation` value and relevant Explorer symbols. Unsupported installations are skipped instead of attempting to force support.
-
-The mod overrides the taskbar position at runtime and does not write the Windows `TaskbarLocation` registry setting.
-Explorer hooks might change across builds. On unload it asks Explorer to restore the saved Windows position.
-
-Avoid running alongside other mods that also control taskbar placement.
-On multiple monitors, changing position can affect all taskbars.
 */
 // ==/WindhawkModReadme==
 
@@ -64,10 +40,10 @@ On multiple monitors, changing position can affect all taskbars.
 /*
 - maximizedOnly: false
   $name: Only apply app-specific positions when maximized
-  $description: Use the topmost maximized window on the foreground monitor, including when a smaller window is in front. The Windows taskbar position applies if no maximized window is found.
+  $description: Use the topmost maximized window on the foreground monitor, including when a smaller window is in front. Fullscreen windows count only if Windows also reports them as maximized. The Windows taskbar position applies if no maximized window is found.
 - switchDelayMs: 400
-  $name: Position switch delay (in milliseconds)
-  $description: How long it takes before the taskbar switches positions across apps.
+  $name: Position switch delay (milliseconds)
+  $description: The target position must remain unchanged for this duration before switching. 0 skips the configured delay. A brief cooldown protects Explorer from overlapping moves.
 - excludedApps: [""]
   $name: Blacklist
   $description: Exclude these executables from automatic position changes. Example - explorer.exe. Blacklisted apps leave the taskbar in its current position. Add apps here or ignore them using the taskbar menu.
@@ -955,8 +931,8 @@ HMODULE GetTaskbarViewModuleHandle() {
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     LogModuleInfo(module, L"Resolving taskbar symbols");
 
-    // Native Windows 11 taskbar menu symbols.
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {
             {
                 LR"(void __cdecl winrt::Taskbar::implementation::ContextMenus::ShowTaskbarSettingsContextMenu(struct winrt::Windows::UI::Xaml::FrameworkElement const &,struct winrt::WindowsUdk::UI::Shell::TaskbarSettings const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &,unsigned __int64))",
@@ -973,7 +949,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
     };
 
-    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+    if (!HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks))) {
         Wh_Log(L"Skipping injection: missing symbols");
         return false;
     }
@@ -1110,7 +1086,7 @@ BOOL Wh_ModInit() {
     HMODULE taskbarDll = LoadLibraryExW(L"taskbar.dll", nullptr,
                                          LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (taskbarDll) {
-        WindhawkUtils::SYMBOL_HOOK locationHooks[] = {
+        WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
             {
                 {LR"(public: enum winrt::WindowsUdk::UI::Shell::TaskbarLocation __cdecl winrt::WindowsUdk::UI::Shell::implementation::TaskbarSettings::Location(void))"},
                 &TaskbarSettings_Location_Original, TaskbarSettings_Location_Hook,
@@ -1126,8 +1102,8 @@ BOOL Wh_ModInit() {
                 CSecondaryTray_LoadSettings_Hook, true,
             },
         };
-        bool symbolsResolved = HookSymbols(taskbarDll, locationHooks,
-            ARRAYSIZE(locationHooks));
+        bool symbolsResolved = HookSymbols(taskbarDll, taskbarDllHooks,
+            ARRAYSIZE(taskbarDllHooks));
         g_runtimeHookReady = symbolsResolved && !!RegGetValueW_Original &&
             !!TaskbarSettings_Location_Original;
         Wh_Log(L"Runtime hook details: symbols=%d, registry=%d, location=%d",
