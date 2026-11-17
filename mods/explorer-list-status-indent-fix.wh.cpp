@@ -37,23 +37,23 @@ the mod and its default settings.
 
 **List**
 
-![List view, before and after](https://github.com/user-attachments/assets/1143aa20-8af7-4aa9-be04-f053695cc9f8)
+![List view, before and after](https://i.imgur.com/wiG8znW.png)
 
 **Small icons**
 
-![Small icons view, before and after](https://github.com/user-attachments/assets/deaaaa7d-f49f-4ea3-83b4-57be2d7c1568)
+![Small icons view, before and after](https://i.imgur.com/zTgetJS.png)
 
 **Content**
 
-![Content view, before and after](https://github.com/user-attachments/assets/f072361c-ef87-4cef-b558-cfa33a141a75)
+![Content view, before and after](https://i.imgur.com/hpi1nNR.png)
 
 **Details**
 
-![Details view, before and after](https://github.com/user-attachments/assets/1dcc1786-efba-4a3c-bc7e-ddfaeadf3d8c)
+![Details view, before and after](https://i.imgur.com/fYZUSwC.png)
 
 **Tiles**
 
-![Tiles view, before and after](https://github.com/user-attachments/assets/90cc3d19-9bb6-41c0-aab9-d1db12f2c234)
+![Tiles view, before and after](https://i.imgur.com/aKs5Nfm.png)
 
 ## What it does
 
