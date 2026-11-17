@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              tray-ghost-cleaner
 // @name            Tray Ghost Icon Cleaner
-// @description     Removes leftover tray icons of programs that crashed or were killed, the moment they exit, without hovering the mouse over the tray
+// @description     Removes leftover tray icons of programs that crashed or were killed, the moment they exit. For Windows 10 and older Windows 11 versions; newer Windows 11 already does this itself
 // @version         1.0
 // @author          Solo_mag
 // @github          https://github.com/Solomag
@@ -12,6 +12,10 @@
 // ==WindhawkModReadme==
 /*
 # Tray Ghost Icon Cleaner
+
+**For Windows 10 and older Windows 11 versions.** Newer Windows 11 versions with the
+new (XAML) notification area already track the owner processes and remove these icons
+themselves, so the mod isn't needed there. See [Compatibility](#compatibility).
 
 When a program crashes or is terminated, it never removes its notification area (tray)
 icon. Explorer only notices that the owner is gone when the mouse passes over the icon,
@@ -58,9 +62,11 @@ internal Explorer data.
 
 ## Compatibility
 
-Windows 10 taskbar, and Windows 11 with the classic (Windows 10) taskbar. The new
-Windows 11 taskbar also receives icons through `WM_COPYDATA`, so tracking works there,
-but this has not been tested.
+* Windows 10 — tested on 22H2.
+* Older Windows 11 versions whose notification area still behaves like Windows 10's,
+  and Windows 11 with the Windows 10 taskbar restored.
+* Not needed on newer Windows 11 versions with the XAML notification area: Explorer
+  there tracks the processes that own tray icons and removes the icons itself.
 */
 // ==/WindhawkModReadme==
 
