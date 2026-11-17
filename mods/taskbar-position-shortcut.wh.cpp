@@ -15,7 +15,7 @@
 # Taskbar Position Shortcut
 Adds a **Taskbar position** submenu when you right-click the Windows 11 taskbar. Move it to any edge without saving anything, or set a position for a specific app.
 Finally, Windows brought back a feature they thought was not being used. I prefer my taskbar on the left when working in Photoshop, and on top when scrolling through layers in After Effects.
-![Taskbar position context menu](https://imgur.com/a/BU9e2Wt)
+![Taskbar position context menu](https://i.imgur.com/FlhqlgP.png)
 
 ## Features
 
