@@ -13,8 +13,8 @@
 // @include         ShellHost.exe
 // @include         TextInputHost.exe
 // @include         SystemSettings.exe
-// @architecture    amd64
-// @compilerOptions -lgdi32 -luser32 -ldwrite -lole32 -luuid
+// @architecture    x86-64
+// @compilerOptions -lgdi32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -44,6 +44,20 @@ and text rendered as images are outside the supported paths. The mod skips icon
 fonts, emoji, and some fonts used for specific scripts. With classic controls,
 pick a font that has the characters you need, since GDI fallback is limited.
 
+## Screenshots
+
+### Windows Settings
+
+| Mod off | Zen Maru Gothic |
+| --- | --- |
+| ![Windows Settings with the mod off](https://raw.githubusercontent.com/xh1le/windhawk-mods/b44a0888305a411b432af67fb948b54ea8408cc8/screenshots/change-more-fonts/settings-before.png) | ![Windows Settings with Zen Maru Gothic](https://raw.githubusercontent.com/xh1le/windhawk-mods/b44a0888305a411b432af67fb948b54ea8408cc8/screenshots/change-more-fonts/settings-after.png) |
+
+### Explorer details view
+
+| Mod off | Tahoma |
+| --- | --- |
+| ![Explorer details with the mod off](https://raw.githubusercontent.com/xh1le/windhawk-mods/b44a0888305a411b432af67fb948b54ea8408cc8/screenshots/change-more-fonts/explorer-before.png) | ![Explorer details with Tahoma](https://raw.githubusercontent.com/xh1le/windhawk-mods/b44a0888305a411b432af67fb948b54ea8408cc8/screenshots/change-more-fonts/explorer-after.png) |
+
 ## Changing more fonts
 
 The default list covers the usual Windows UI families. Add specific families
@@ -56,11 +70,33 @@ To try a different app, add its executable under this mod's **Advanced >
 Process inclusion list**. The app needs to use GDI or system DirectWrite for
 its text. Use the per-mod exclusion list to skip apps.
 
-Restart the affected app if it still shows the old font. Signing out and back
-in refreshes Start and other shell processes. Turning the mod off and
-restarting the affected app restores its usual font.
+## Compatibility
 
-The mod runs on Windows 11 x64 and changes fonts in memory.
+Run one font replacement mod at a time. Disable Zen Maru Gothic UI Font or
+Explorer Font Changer before enabling Change More Fonts.
+
+Taskbar, Start menu, and notification center stylers can assign fonts to
+individual controls. If a theme's font should stay, add its family to
+**Keep these fonts**. To use your chosen family on that control, update the
+theme's font rule or add its family to **Also replace these fonts**.
+
+Explorer Translucent Menus and Translucent Windows also hook classic text
+drawing. If menu text looks wrong with either mod enabled, try **Rendering >
+Keep cached GDI fonts**. Font creation and DirectWrite changes
+still work with that option on.
+
+Windows font substitutions you set separately can still affect GDI text
+with Change More Fonts paused.
+
+## Refresh the text
+
+Restart the affected app if it still shows the old font. Signing out and back
+in refreshes Start and other shell processes. Restarting also helps if text
+is clipped because the app measured it with a cached font. Turning the mod
+off and restarting the affected app restores its usual font.
+
+The mod runs in 64-bit processes on Windows 11 and changes fonts in memory.
+Optional apps added through the inclusion list also need to be 64-bit.
 */
 // ==/WindhawkModReadme==
 
@@ -84,12 +120,12 @@ The mod runs on Windows 11 x64 and changes fonts in memory.
   - DisableGdi: false
     $name: Disable GDI replacement
     $description: Use the app's original fonts in classic Windows controls.
+  - DisableGdiDrawing: false
+    $name: Keep cached GDI fonts
+    $description: Keep the font already selected when classic text is drawn. Try this if another mod changes menu text drawing.
   - DisableDirectWrite: false
     $name: Disable DirectWrite replacement
     $description: Use the app's original fonts for DirectWrite text, including most XAML controls.
-  - DisableSystemMetrics: false
-    $name: Keep the original system font metrics
-    $description: Leaves the menu, message, caption, status, and icon fonts returned by Windows metrics APIs alone.
   $name: Rendering
 - Exclusions:
   - ReplaceAllFonts: false
@@ -100,32 +136,19 @@ The mod runs on Windows 11 x64 and changes fonts in memory.
     $description: Applies to monospace families on your list or when you replace all eligible fonts.
   - AdditionalFonts: ""
     $name: Also replace these fonts
-    $description: Enter family names separated by commas or line breaks.
+    $description: Enter family names separated by commas.
   - ExcludedFonts: ""
     $name: Keep these fonts
-    $description: Enter family names separated by commas or line breaks. This list takes priority over the replacement lists.
+    $description: Enter family names separated by commas. This list takes priority over the replacement lists.
   $name: Fonts to replace
-- Diagnostics:
-  - DisableSkippedFontLogging: false
-    $name: Hide skipped font messages
-    $description: Skipped families and their reasons appear in Windhawk's log when logging is on.
-  $name: Diagnostics
 */
 // ==/WindhawkModSettings==
 
-#include <combaseapi.h>
 #include <dwrite.h>
 #include <dwrite_2.h>
 #include <dwrite_3.h>
 #include <windows.h>
 #include <wrl/client.h>
-
-#include <windhawk_api.h>
-
-#ifndef WH_MOD_ID
-#define WH_MOD_ID L"change-more-fonts"
-#endif
-#include <windhawk_utils.h>
 
 #include <algorithm>
 #include <atomic>
@@ -135,10 +158,8 @@ The mod runs on Windows 11 x64 and changes fonts in memory.
 #include <cwchar>
 #include <cwctype>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <string_view>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -147,7 +168,6 @@ namespace {
 using Microsoft::WRL::ComPtr;
 
 constexpr wchar_t kDefaultFamily[] = L"Tahoma";
-constexpr size_t kMaxLoggedFonts = 200;
 
 constexpr const wchar_t* kDefaultReplaceFamilies[] = {
     // Windows 11 / Windows 10 shell families.
@@ -257,9 +277,8 @@ struct Settings {
     bool forceBaseWeight = false;
     bool disableMod = false;
     bool disableGdi = false;
+    bool disableGdiDrawing = false;
     bool disableDirectWrite = false;
-    bool disableSystemMetrics = false;
-    bool disableSkippedFontLogging = false;
     bool replaceAllFonts = false;
     bool replaceMonospace = false;
     std::vector<std::wstring> additionalFamilies;
@@ -311,8 +330,10 @@ void PublishRuntime(std::shared_ptr<const Runtime> runtime) noexcept {
 // String helpers
 // ---------------------------------------------------------------------------
 
-PCWSTR AsText(PCWSTR value) {
-    return value ? value : L"";
+std::wstring ReadStringSetting(PCWSTR name) {
+    std::unique_ptr<const wchar_t, decltype(&Wh_FreeStringSetting)> value(
+        Wh_GetStringSetting(name), Wh_FreeStringSetting);
+    return value ? value.get() : L"";
 }
 
 std::wstring Trim(std::wstring value) {
@@ -550,40 +571,14 @@ bool IsExcludedFamily(const std::wstring& lowerName, const Runtime& rt) {
     return false;
 }
 
-const wchar_t* GetProtectedReason(const std::wstring& lowerName,
-                                  BYTE charset,
-                                  bool fixedPitch,
-                                  const Runtime& rt) {
-    if (lowerName.empty()) {
-        return L"empty face name";
-    }
-    if (lowerName[0] == L'@') {
-        return L"vertical face";
-    }
-    if (charset == SYMBOL_CHARSET) {
-        return L"symbol charset";
-    }
-    if (!rt.settings.replaceMonospace &&
-        (fixedPitch || IsMonospaceName(lowerName))) {
-        return L"monospace/fixed-pitch";
-    }
-    if (IsSymbolName(lowerName)) {
-        return L"symbol/icon/emoji font";
-    }
-    if (IsProtectedScriptName(lowerName)) {
-        return L"protected script font";
-    }
-    if (IsExcludedFamily(lowerName, rt)) {
-        return L"excluded by settings";
-    }
-    if (charset != DEFAULT_CHARSET && charset != ANSI_CHARSET &&
-        charset != SHIFTJIS_CHARSET && charset != GREEK_CHARSET &&
-        charset != TURKISH_CHARSET && charset != BALTIC_CHARSET &&
-        charset != EASTEUROPE_CHARSET && charset != RUSSIAN_CHARSET &&
-        IsUnsupportedCharset(charset)) {
-        return L"unsupported charset";
-    }
-    return nullptr;
+bool IsProtectedFamily(const std::wstring& lowerName, BYTE charset,
+                       bool fixedPitch, const Runtime& rt) {
+    return lowerName.empty() || lowerName[0] == L'@' ||
+           IsUnsupportedCharset(charset) ||
+           (!rt.settings.replaceMonospace &&
+            (fixedPitch || IsMonospaceName(lowerName))) ||
+           IsSymbolName(lowerName) || IsProtectedScriptName(lowerName) ||
+           IsExcludedFamily(lowerName, rt);
 }
 
 bool IsTargetFamily(std::wstring_view name, const Runtime& rt) {
@@ -618,31 +613,6 @@ DWRITE_FONT_WEIGHT ChooseDWriteWeight(DWRITE_FONT_WEIGHT originalWeight,
 // ---------------------------------------------------------------------------
 // Logging
 // ---------------------------------------------------------------------------
-
-void LogSkipped(const std::wstring& face, const wchar_t* reason) {
-    try {
-        auto rt = GetRuntimeSnapshot();
-        if (!rt || rt->settings.disableSkippedFontLogging) {
-            return;
-        }
-
-        static std::mutex logMutex;
-        static std::unordered_set<std::wstring> logged;
-
-        std::wstring key = ToLower(face) + L"|" + (reason ? reason : L"");
-        {
-            std::lock_guard<std::mutex> lock(logMutex);
-            if (logged.size() >= kMaxLoggedFonts || !logged.insert(key).second) {
-                return;
-            }
-        }
-
-        Wh_Log(L"Skipped font '%s': %s", face.c_str(),
-               reason ? reason : L"unknown");
-    } catch (...) {
-        // Logging must never affect the hooked text path.
-    }
-}
 
 void LogInitInfo(const Runtime& rt, const std::wstring& processName) {
     Wh_Log(L"Change More Fonts in %s", processName.c_str());
@@ -848,7 +818,6 @@ void ResolveGdiFaces(Runtime& rt) {
 
 IDWriteFactory* g_dwFactory = nullptr;
 HMODULE g_dwModule = nullptr;
-CO_MTA_USAGE_COOKIE g_mtaCookie = nullptr;
 bool g_gdiHooksInstalled = false;
 bool g_dwHooksInstalled = false;
 
@@ -1033,9 +1002,7 @@ Settings LoadSettings() {
     Settings settings;
 
     {
-        WindhawkUtils::StringSetting value =
-            WindhawkUtils::StringSetting::make(L"General.FontFamily");
-        auto family = Trim(AsText(value.get()));
+        auto family = Trim(ReadStringSetting(L"General.FontFamily"));
         // The mod expects one family. If a fallback list was pasted, use its
         // first entry rather than failing to resolve the whole string.
         auto parts = SplitList(family);
@@ -1054,32 +1021,20 @@ Settings LoadSettings() {
     settings.disableMod = Wh_GetIntSetting(L"General.DisableMod") != 0;
 
     settings.disableGdi = Wh_GetIntSetting(L"Rendering.DisableGdi") != 0;
+    settings.disableGdiDrawing =
+        Wh_GetIntSetting(L"Rendering.DisableGdiDrawing") != 0;
     settings.disableDirectWrite =
         Wh_GetIntSetting(L"Rendering.DisableDirectWrite") != 0;
-    settings.disableSystemMetrics =
-        Wh_GetIntSetting(L"Rendering.DisableSystemMetrics") != 0;
 
     settings.replaceAllFonts =
         Wh_GetIntSetting(L"Exclusions.ReplaceAllFonts") != 0;
     settings.replaceMonospace =
         Wh_GetIntSetting(L"Exclusions.ReplaceMonospace") != 0;
-    settings.disableSkippedFontLogging =
-        Wh_GetIntSetting(L"Diagnostics.DisableSkippedFontLogging") != 0;
 
-    {
-        WindhawkUtils::StringSetting value =
-            WindhawkUtils::StringSetting::make(L"Exclusions.AdditionalFonts");
-        for (auto& item : SplitList(AsText(value.get()))) {
-            settings.additionalFamilies.push_back(std::move(item));
-        }
-    }
-    {
-        WindhawkUtils::StringSetting value =
-            WindhawkUtils::StringSetting::make(L"Exclusions.ExcludedFonts");
-        for (auto& item : SplitList(AsText(value.get()))) {
-            settings.extraExcludedFamilies.push_back(std::move(item));
-        }
-    }
+    settings.additionalFamilies =
+        SplitList(ReadStringSetting(L"Exclusions.AdditionalFonts"));
+    settings.extraExcludedFamilies =
+        SplitList(ReadStringSetting(L"Exclusions.ExcludedFonts"));
 
     return settings;
 }
@@ -1116,8 +1071,6 @@ using CreateFontW_t = decltype(&CreateFontW);
 using CreateFontA_t = decltype(&CreateFontA);
 using DrawTextW_t = decltype(&DrawTextW);
 using DrawTextExW_t = decltype(&DrawTextExW);
-using SystemParametersInfoW_t = decltype(&SystemParametersInfoW);
-using SystemParametersInfoA_t = decltype(&SystemParametersInfoA);
 
 CreateFontIndirectA_t g_origCreateFontIndirectA = nullptr;
 CreateFontIndirectExW_t g_origCreateFontIndirectExW = nullptr;
@@ -1126,8 +1079,6 @@ CreateFontW_t g_origCreateFontW = nullptr;
 CreateFontA_t g_origCreateFontA = nullptr;
 DrawTextW_t g_origDrawTextW = nullptr;
 DrawTextExW_t g_origDrawTextExW = nullptr;
-SystemParametersInfoW_t g_origSystemParametersInfoW = nullptr;
-SystemParametersInfoA_t g_origSystemParametersInfoA = nullptr;
 
 void ApplyGdiFaceDecision(const Runtime& rt,
                           const std::wstring& face,
@@ -1138,16 +1089,12 @@ void ApplyGdiFaceDecision(const Runtime& rt,
                           bool& changed) {
     changed = false;
     std::wstring lower = ToLower(Trim(face));
-    const wchar_t* protectedReason =
-        GetProtectedReason(lower, charset, fixedPitch, rt);
-    if (protectedReason) {
-        LogSkipped(face, protectedReason);
+    if (IsProtectedFamily(lower, charset, fixedPitch, rt)) {
         return;
     }
 
     if (!IsTargetFamily(lower, rt) && !rt.settings.replaceAllFonts &&
         !IsReplaceListed(lower, rt)) {
-        LogSkipped(face, L"not in the Windows UI font list");
         return;
     }
 
@@ -1187,12 +1134,22 @@ bool ApplyToLogFontW(const Runtime& rt, LOGFONTW* logFont) {
 
 // Explorer can paint with an HFONT cached before the mod was loaded or
 // created inside a system component that bypassed the public creation APIs.
+std::shared_ptr<const Runtime> GetGdiDrawRuntime() {
+    if (t_internal) {
+        return nullptr;
+    }
+    auto rt = GetRuntimeSnapshot();
+    if (!rt || rt->settings.disableMod || rt->settings.disableGdi ||
+        rt->settings.disableGdiDrawing || !rt->gdiValid) {
+        return nullptr;
+    }
+    return rt;
+}
+
 class ScopedDrawFont {
    public:
-    explicit ScopedDrawFont(HDC dc) : dc_(dc) {
-        auto rt = GetRuntimeSnapshot();
-        if (!rt || rt->settings.disableMod || rt->settings.disableGdi ||
-            !rt->gdiValid || GetDeviceCaps(dc, TECHNOLOGY) != DT_RASDISPLAY) {
+    ScopedDrawFont(HDC dc, const Runtime& rt) : dc_(dc) {
+        if (GetDeviceCaps(dc, TECHNOLOGY) != DT_RASDISPLAY) {
             return;
         }
 
@@ -1202,7 +1159,7 @@ class ScopedDrawFont {
             return;
         }
         try {
-            if (!ApplyToLogFontW(*rt, &logFont)) {
+            if (!ApplyToLogFontW(rt, &logFont)) {
                 return;
             }
         } catch (...) {
@@ -1234,21 +1191,23 @@ class ScopedDrawFont {
 
 int WINAPI DrawTextW_Hook(HDC dc, LPCWSTR text, int count, LPRECT rect,
                          UINT format) {
-    if (t_internal) {
+    auto rt = GetGdiDrawRuntime();
+    if (!rt) {
         return g_origDrawTextW(dc, text, count, rect, format);
     }
     InternalScope scope;
-    ScopedDrawFont drawFont(dc);
+    ScopedDrawFont drawFont(dc, *rt);
     return g_origDrawTextW(dc, text, count, rect, format);
 }
 
 int WINAPI DrawTextExW_Hook(HDC dc, LPWSTR text, int count, LPRECT rect,
                            UINT format, LPDRAWTEXTPARAMS params) {
-    if (t_internal) {
+    auto rt = GetGdiDrawRuntime();
+    if (!rt) {
         return g_origDrawTextExW(dc, text, count, rect, format, params);
     }
     InternalScope scope;
-    ScopedDrawFont drawFont(dc);
+    ScopedDrawFont drawFont(dc, *rt);
     return g_origDrawTextExW(dc, text, count, rect, format, params);
 }
 
@@ -1298,9 +1257,8 @@ void ApplyToLogFontA(const Runtime& rt, LOGFONTA* logFont) {
 }
 
 HFONT WINAPI CreateFontIndirectW_Hook(const LOGFONTW* logFont) {
-    if (t_internal || !g_origCreateFontIndirectW) {
-        return g_origCreateFontIndirectW ? g_origCreateFontIndirectW(logFont)
-                                         : CreateFontIndirectW(logFont);
+    if (t_internal) {
+        return g_origCreateFontIndirectW(logFont);
     }
     try {
         auto rt = GetRuntimeSnapshot();
@@ -1317,9 +1275,8 @@ HFONT WINAPI CreateFontIndirectW_Hook(const LOGFONTW* logFont) {
 }
 
 HFONT WINAPI CreateFontIndirectA_Hook(const LOGFONTA* logFont) {
-    if (t_internal || !g_origCreateFontIndirectA) {
-        return g_origCreateFontIndirectA ? g_origCreateFontIndirectA(logFont)
-                                         : CreateFontIndirectA(logFont);
+    if (t_internal) {
+        return g_origCreateFontIndirectA(logFont);
     }
     try {
         auto rt = GetRuntimeSnapshot();
@@ -1335,11 +1292,21 @@ HFONT WINAPI CreateFontIndirectA_Hook(const LOGFONTA* logFont) {
     }
 }
 
+template <typename T>
+bool CopyExtendedLogFont(const T& original, T& copy) {
+    const DWORD axes = original.elfDesignVector.dvNumAxes;
+    if (axes > MM_MAX_NUMAXES) {
+        return false;
+    }
+    const size_t size = offsetof(T, elfDesignVector) +
+                        offsetof(DESIGNVECTOR, dvValues) + axes * sizeof(LONG);
+    memcpy(&copy, &original, size);
+    return true;
+}
+
 HFONT WINAPI CreateFontIndirectExW_Hook(const ENUMLOGFONTEXDVW* logFont) {
-    if (t_internal || !g_origCreateFontIndirectExW) {
-        return g_origCreateFontIndirectExW
-                   ? g_origCreateFontIndirectExW(logFont)
-                   : CreateFontIndirectExW(logFont);
+    if (t_internal) {
+        return g_origCreateFontIndirectExW(logFont);
     }
     try {
         auto rt = GetRuntimeSnapshot();
@@ -1347,7 +1314,10 @@ HFONT WINAPI CreateFontIndirectExW_Hook(const ENUMLOGFONTEXDVW* logFont) {
             !rt->gdiValid || !logFont) {
             return g_origCreateFontIndirectExW(logFont);
         }
-        ENUMLOGFONTEXDVW copy = *logFont;
+        ENUMLOGFONTEXDVW copy = {};
+        if (!CopyExtendedLogFont(*logFont, copy)) {
+            return g_origCreateFontIndirectExW(logFont);
+        }
         ApplyToLogFontW(*rt, &copy.elfEnumLogfontEx.elfLogFont);
         return g_origCreateFontIndirectExW(&copy);
     } catch (...) {
@@ -1356,10 +1326,8 @@ HFONT WINAPI CreateFontIndirectExW_Hook(const ENUMLOGFONTEXDVW* logFont) {
 }
 
 HFONT WINAPI CreateFontIndirectExA_Hook(const ENUMLOGFONTEXDVA* logFont) {
-    if (t_internal || !g_origCreateFontIndirectExA) {
-        return g_origCreateFontIndirectExA
-                   ? g_origCreateFontIndirectExA(logFont)
-                   : CreateFontIndirectExA(logFont);
+    if (t_internal) {
+        return g_origCreateFontIndirectExA(logFont);
     }
     try {
         auto rt = GetRuntimeSnapshot();
@@ -1367,7 +1335,10 @@ HFONT WINAPI CreateFontIndirectExA_Hook(const ENUMLOGFONTEXDVA* logFont) {
             !rt->gdiValid || !logFont) {
             return g_origCreateFontIndirectExA(logFont);
         }
-        ENUMLOGFONTEXDVA copy = *logFont;
+        ENUMLOGFONTEXDVA copy = {};
+        if (!CopyExtendedLogFont(*logFont, copy)) {
+            return g_origCreateFontIndirectExA(logFont);
+        }
         ApplyToLogFontA(*rt, &copy.elfEnumLogfontEx.elfLogFont);
         return g_origCreateFontIndirectExA(&copy);
     } catch (...) {
@@ -1389,13 +1360,8 @@ HFONT WINAPI CreateFontW_Hook(int height,
                               DWORD quality,
                               DWORD pitchAndFamily,
                               LPCWSTR faceName) {
-    if (t_internal || !g_origCreateFontW) {
-        return g_origCreateFontW
-                   ? g_origCreateFontW(height, width, escapement, orientation,
-                                       weight, italic, underline, strikeOut,
-                                       charset, outPrecision, clipPrecision,
-                                       quality, pitchAndFamily, faceName)
-                   : CreateFontW(height, width, escapement, orientation, weight,
+    if (t_internal) {
+        return g_origCreateFontW(height, width, escapement, orientation, weight,
                                  italic, underline, strikeOut, charset,
                                  outPrecision, clipPrecision, quality,
                                  pitchAndFamily, faceName);
@@ -1449,13 +1415,8 @@ HFONT WINAPI CreateFontA_Hook(int height,
                               DWORD quality,
                               DWORD pitchAndFamily,
                               LPCSTR faceName) {
-    if (t_internal || !g_origCreateFontA) {
-        return g_origCreateFontA
-                   ? g_origCreateFontA(height, width, escapement, orientation,
-                                       weight, italic, underline, strikeOut,
-                                       charset, outPrecision, clipPrecision,
-                                       quality, pitchAndFamily, faceName)
-                   : CreateFontA(height, width, escapement, orientation, weight,
+    if (t_internal) {
+        return g_origCreateFontA(height, width, escapement, orientation, weight,
                                  italic, underline, strikeOut, charset,
                                  outPrecision, clipPrecision, quality,
                                  pitchAndFamily, faceName);
@@ -1511,130 +1472,6 @@ HFONT WINAPI CreateFontA_Hook(int height,
 }
 
 // ---------------------------------------------------------------------------
-// SystemParametersInfo hooks
-// ---------------------------------------------------------------------------
-
-bool RangeAllows(UINT uiParam, size_t offset, size_t size) {
-    return static_cast<size_t>(uiParam) >= offset + size;
-}
-
-BOOL WINAPI SystemParametersInfoW_Hook(UINT action,
-                                       UINT uiParam,
-                                       PVOID param,
-                                       UINT winIni) {
-    if (t_internal || !g_origSystemParametersInfoW) {
-        return g_origSystemParametersInfoW
-                   ? g_origSystemParametersInfoW(action, uiParam, param, winIni)
-                   : SystemParametersInfoW(action, uiParam, param, winIni);
-    }
-    BOOL result = g_origSystemParametersInfoW(action, uiParam, param, winIni);
-    if (!result || !param) {
-        return result;
-    }
-    try {
-        auto rt = GetRuntimeSnapshot();
-        if (!rt || rt->settings.disableMod || rt->settings.disableGdi ||
-            rt->settings.disableSystemMetrics || !rt->gdiValid) {
-            return result;
-        }
-
-        if (action == SPI_GETNONCLIENTMETRICS) {
-            auto* metrics = static_cast<NONCLIENTMETRICSW*>(param);
-            if (RangeAllows(uiParam, offsetof(NONCLIENTMETRICSW, lfCaptionFont),
-                            sizeof(LOGFONTW))) {
-                ApplyToLogFontW(*rt, &metrics->lfCaptionFont);
-            }
-            if (RangeAllows(uiParam,
-                            offsetof(NONCLIENTMETRICSW, lfSmCaptionFont),
-                            sizeof(LOGFONTW))) {
-                ApplyToLogFontW(*rt, &metrics->lfSmCaptionFont);
-            }
-            if (RangeAllows(uiParam, offsetof(NONCLIENTMETRICSW, lfMenuFont),
-                            sizeof(LOGFONTW))) {
-                ApplyToLogFontW(*rt, &metrics->lfMenuFont);
-            }
-            if (RangeAllows(uiParam, offsetof(NONCLIENTMETRICSW, lfStatusFont),
-                            sizeof(LOGFONTW))) {
-                ApplyToLogFontW(*rt, &metrics->lfStatusFont);
-            }
-            if (RangeAllows(uiParam, offsetof(NONCLIENTMETRICSW, lfMessageFont),
-                            sizeof(LOGFONTW))) {
-                ApplyToLogFontW(*rt, &metrics->lfMessageFont);
-            }
-        } else if (action == SPI_GETICONMETRICS &&
-                   RangeAllows(uiParam, offsetof(ICONMETRICSW, lfFont),
-                               sizeof(LOGFONTW))) {
-            auto* metrics = static_cast<ICONMETRICSW*>(param);
-            ApplyToLogFontW(*rt, &metrics->lfFont);
-        } else if (action == SPI_GETICONTITLELOGFONT &&
-                   uiParam >= sizeof(LOGFONTW)) {
-            ApplyToLogFontW(*rt, static_cast<LOGFONTW*>(param));
-        }
-        return result;
-    } catch (...) {
-        return result;
-    }
-}
-
-BOOL WINAPI SystemParametersInfoA_Hook(UINT action,
-                                       UINT uiParam,
-                                       PVOID param,
-                                       UINT winIni) {
-    if (t_internal || !g_origSystemParametersInfoA) {
-        return g_origSystemParametersInfoA
-                   ? g_origSystemParametersInfoA(action, uiParam, param, winIni)
-                   : SystemParametersInfoA(action, uiParam, param, winIni);
-    }
-    BOOL result = g_origSystemParametersInfoA(action, uiParam, param, winIni);
-    if (!result || !param) {
-        return result;
-    }
-    try {
-        auto rt = GetRuntimeSnapshot();
-        if (!rt || rt->settings.disableMod || rt->settings.disableGdi ||
-            rt->settings.disableSystemMetrics || !rt->gdiValid) {
-            return result;
-        }
-
-        if (action == SPI_GETNONCLIENTMETRICS) {
-            auto* metrics = static_cast<NONCLIENTMETRICSA*>(param);
-            if (RangeAllows(uiParam, offsetof(NONCLIENTMETRICSA, lfCaptionFont),
-                            sizeof(LOGFONTA))) {
-                ApplyToLogFontA(*rt, &metrics->lfCaptionFont);
-            }
-            if (RangeAllows(uiParam,
-                            offsetof(NONCLIENTMETRICSA, lfSmCaptionFont),
-                            sizeof(LOGFONTA))) {
-                ApplyToLogFontA(*rt, &metrics->lfSmCaptionFont);
-            }
-            if (RangeAllows(uiParam, offsetof(NONCLIENTMETRICSA, lfMenuFont),
-                            sizeof(LOGFONTA))) {
-                ApplyToLogFontA(*rt, &metrics->lfMenuFont);
-            }
-            if (RangeAllows(uiParam, offsetof(NONCLIENTMETRICSA, lfStatusFont),
-                            sizeof(LOGFONTA))) {
-                ApplyToLogFontA(*rt, &metrics->lfStatusFont);
-            }
-            if (RangeAllows(uiParam, offsetof(NONCLIENTMETRICSA, lfMessageFont),
-                            sizeof(LOGFONTA))) {
-                ApplyToLogFontA(*rt, &metrics->lfMessageFont);
-            }
-        } else if (action == SPI_GETICONMETRICS &&
-                   RangeAllows(uiParam, offsetof(ICONMETRICSA, lfFont),
-                               sizeof(LOGFONTA))) {
-            auto* metrics = static_cast<ICONMETRICSA*>(param);
-            ApplyToLogFontA(*rt, &metrics->lfFont);
-        } else if (action == SPI_GETICONTITLELOGFONT &&
-                   uiParam >= sizeof(LOGFONTA)) {
-            ApplyToLogFontA(*rt, static_cast<LOGFONTA*>(param));
-        }
-        return result;
-    } catch (...) {
-        return result;
-    }
-}
-
-// ---------------------------------------------------------------------------
 // DirectWrite hooks
 // ---------------------------------------------------------------------------
 
@@ -1682,10 +1519,7 @@ bool IsSymbolSegment(const std::wstring& segment) {
     return IsSymbolName(lower) || IsProtectedScriptName(lower);
 }
 
-bool ShouldReplaceDWriteFamily(const std::wstring& family,
-                               const Runtime& rt,
-                               const wchar_t** reason) {
-    *reason = nullptr;
+bool ShouldReplaceDWriteFamily(const std::wstring& family, const Runtime& rt) {
     auto segments = SplitList(family);
     if (segments.empty()) {
         return false;
@@ -1694,34 +1528,17 @@ bool ShouldReplaceDWriteFamily(const std::wstring& family,
     // the whole list. DWrite will use its normal fallback chain.
     for (size_t i = 1; i < segments.size(); i++) {
         if (IsSymbolSegment(segments[i])) {
-            *reason = L"fallback list contains a symbol/emoji font";
             return false;
         }
     }
 
-    auto& first = segments[0];
-    auto lower = ToLower(Trim(first));
-    if (lower.empty()) {
-        return false;
-    }
-    const wchar_t* protectedReason =
-        GetProtectedReason(lower, DEFAULT_CHARSET, false, rt);
-    if (protectedReason) {
-        *reason = protectedReason;
+    auto lower = ToLower(segments.front());
+    if (IsProtectedFamily(lower, DEFAULT_CHARSET, false, rt)) {
         return false;
     }
 
-    if (IsTargetFamily(lower, rt)) {
-        return true;
-    }
-    if (rt.settings.replaceAllFonts) {
-        return true;
-    }
-    if (IsReplaceListed(lower, rt)) {
-        return true;
-    }
-    *reason = L"not in the Windows UI font list";
-    return false;
+    return IsTargetFamily(lower, rt) || rt.settings.replaceAllFonts ||
+           IsReplaceListed(lower, rt);
 }
 
 std::atomic<bool> g_loggedDwSuccess{false};
@@ -1775,7 +1592,7 @@ CreateTextFormat_Hook(IDWriteFactory* self,
                       FLOAT size,
                       const WCHAR* locale,
                       IDWriteTextFormat** textFormat) {
-    if (t_internal || !g_origCreateTextFormat || !familyName) {
+    if (t_internal || !familyName) {
         return g_origCreateTextFormat(self, familyName, collection, weight,
                                       style, stretch, size, locale, textFormat);
     }
@@ -1790,11 +1607,7 @@ CreateTextFormat_Hook(IDWriteFactory* self,
 
         std::wstring family = familyName;
 
-        const wchar_t* reason = nullptr;
-        if (!ShouldReplaceDWriteFamily(family, *rt, &reason)) {
-            if (reason) {
-                LogSkipped(family, reason);
-            }
+        if (!ShouldReplaceDWriteFamily(family, *rt)) {
             return g_origCreateTextFormat(self, familyName, collection, weight,
                                           style, stretch, size, locale,
                                           textFormat);
@@ -1855,11 +1668,7 @@ CreateTextFormat6_Hook(IDWriteFactory6* self,
         }
 
         std::wstring family = familyName;
-        const wchar_t* reason = nullptr;
-        if (!ShouldReplaceDWriteFamily(family, *rt, &reason)) {
-            if (reason) {
-                LogSkipped(family, reason);
-            }
+        if (!ShouldReplaceDWriteFamily(family, *rt)) {
             return g_origCreateTextFormat6(self, familyName, collection,
                                            axisValues, axisCount, size, locale,
                                            textFormat);
@@ -1898,9 +1707,8 @@ std::shared_ptr<const Runtime> GetMappingRuntime(PCWSTR family) {
         return nullptr;
     }
     auto rt = GetRuntimeSnapshot();
-    const wchar_t* reason = nullptr;
     if (!rt || rt->settings.disableMod || rt->settings.disableDirectWrite ||
-        !rt->dwValid || !ShouldReplaceDWriteFamily(family, *rt, &reason)) {
+        !rt->dwValid || !ShouldReplaceDWriteFamily(family, *rt)) {
         return nullptr;
     }
     return rt;
@@ -2065,7 +1873,9 @@ bool InstallFunctionHook(HMODULE module,
         Wh_Log(L"GetProcAddress failed for %S", name);
         return false;
     }
-    if (!WindhawkUtils::SetFunctionHook(target, hook, original)) {
+    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(target),
+                            reinterpret_cast<void*>(hook),
+                            reinterpret_cast<void**>(original))) {
         Wh_Log(L"SetFunctionHook failed for %S", name);
         return false;
     }
@@ -2077,12 +1887,13 @@ bool InstallVtableHook(void** vtable, size_t index, T hook, T* original) {
     if (!vtable || !hook || !original) {
         return false;
     }
-    auto target = reinterpret_cast<T>(vtable[index]);
+    auto target = vtable[index];
     if (!target) {
         Wh_Log(L"Vtable entry %zu is null", index);
         return false;
     }
-    if (!WindhawkUtils::SetFunctionHook(target, hook, original)) {
+    if (!Wh_SetFunctionHook(target, reinterpret_cast<void*>(hook),
+                            reinterpret_cast<void**>(original))) {
         Wh_Log(L"SetFunctionHook failed for vtable entry %zu", index);
         return false;
     }
@@ -2099,15 +1910,7 @@ void InstallGdiHooks(const Runtime& rt) {
     }
 
     HMODULE gdi32 = GetModuleHandleW(L"gdi32.dll");
-    if (!gdi32) {
-        gdi32 =
-            LoadLibraryExW(L"gdi32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    }
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (!user32) {
-        user32 = LoadLibraryExW(L"user32.dll", nullptr,
-                                LOAD_LIBRARY_SEARCH_SYSTEM32);
-    }
 
     InstallFunctionHook(gdi32, "CreateFontIndirectW", CreateFontIndirectW_Hook,
                         &g_origCreateFontIndirectW);
@@ -2126,15 +1929,6 @@ void InstallGdiHooks(const Runtime& rt) {
     InstallFunctionHook(user32, "DrawTextW", DrawTextW_Hook, &g_origDrawTextW);
     InstallFunctionHook(user32, "DrawTextExW", DrawTextExW_Hook,
                         &g_origDrawTextExW);
-
-    // Installed even when the setting is off; the hook checks the runtime
-    // snapshot, so toggling the setting takes effect without rehooking.
-    InstallFunctionHook(user32, "SystemParametersInfoW",
-                        SystemParametersInfoW_Hook,
-                        &g_origSystemParametersInfoW);
-    InstallFunctionHook(user32, "SystemParametersInfoA",
-                        SystemParametersInfoA_Hook,
-                        &g_origSystemParametersInfoA);
 
     g_gdiHooksInstalled = true;
 }
@@ -2227,23 +2021,10 @@ bool CreateDWriteFactory() {
     HRESULT hr =
         createFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
                       reinterpret_cast<IUnknown**>(&g_dwFactory));
-    bool createdMtaCookie = false;
-    if (hr == CO_E_NOTINITIALIZED && !g_mtaCookie) {
-        if (SUCCEEDED(CoIncrementMTAUsage(&g_mtaCookie))) {
-            createdMtaCookie = true;
-            hr = createFactory(DWRITE_FACTORY_TYPE_SHARED,
-                               __uuidof(IDWriteFactory),
-                               reinterpret_cast<IUnknown**>(&g_dwFactory));
-        }
-    }
     if (FAILED(hr) || !g_dwFactory) {
         if (g_dwFactory) {
             g_dwFactory->Release();
             g_dwFactory = nullptr;
-        }
-        if (createdMtaCookie && g_mtaCookie) {
-            CoDecrementMTAUsage(g_mtaCookie);
-            g_mtaCookie = nullptr;
         }
         Wh_Log(L"DWriteCreateFactory failed (hr=0x%08X)",
                static_cast<unsigned>(hr));
@@ -2323,28 +2104,9 @@ void Wh_ModUninit() {
     PublishRuntime(nullptr);
     g_gdiHooksInstalled = false;
     g_dwHooksInstalled = false;
-    g_origCreateFontIndirectW = nullptr;
-    g_origCreateFontIndirectA = nullptr;
-    g_origCreateFontIndirectExW = nullptr;
-    g_origCreateFontIndirectExA = nullptr;
-    g_origCreateFontW = nullptr;
-    g_origCreateFontA = nullptr;
-    g_origDrawTextW = nullptr;
-    g_origDrawTextExW = nullptr;
-    g_origSystemParametersInfoW = nullptr;
-    g_origSystemParametersInfoA = nullptr;
-    g_origCreateTextFormat = nullptr;
-    g_origCreateTextFormat6 = nullptr;
-    g_origMapCharacters = nullptr;
-    g_origMapCharacters1 = nullptr;
-    g_origSetFontFamilyName = nullptr;
     if (g_dwFactory) {
         g_dwFactory->Release();
         g_dwFactory = nullptr;
-    }
-    if (g_mtaCookie) {
-        CoDecrementMTAUsage(g_mtaCookie);
-        g_mtaCookie = nullptr;
     }
     if (g_dwModule) {
         FreeLibrary(g_dwModule);
