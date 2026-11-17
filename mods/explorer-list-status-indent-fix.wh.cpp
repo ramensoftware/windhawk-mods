@@ -29,6 +29,32 @@ The mod only deals with the files area: the part of a folder window which
 shows the files and the folders. It doesn't touch the navigation pane, the
 command bar or the address bar.
 
+## Before and after
+
+All the files are selected in the screenshots, to show the gaps around the
+items. The top half of each image is without the mod, the bottom half is with
+the mod and its default settings.
+
+**List**
+
+![List view, before and after](https://github.com/user-attachments/assets/1143aa20-8af7-4aa9-be04-f053695cc9f8)
+
+**Small icons**
+
+![Small icons view, before and after](https://github.com/user-attachments/assets/deaaaa7d-f49f-4ea3-83b4-57be2d7c1568)
+
+**Content**
+
+![Content view, before and after](https://github.com/user-attachments/assets/f072361c-ef87-4cef-b558-cfa33a141a75)
+
+**Details**
+
+![Details view, before and after](https://github.com/user-attachments/assets/1dcc1786-efba-4a3c-bc7e-ddfaeadf3d8c)
+
+**Tiles**
+
+![Tiles view, before and after](https://github.com/user-attachments/assets/90cc3d19-9bb6-41c0-aab9-d1db12f2c234)
+
 ## What it does
 
 * **No empty status area.** The reserved area is removed where there's nothing
@@ -140,9 +166,9 @@ scaling.
 - itemGap: 4
   $name: Gap on the left and on the right of an item
   $description: >-
-    The visible gap between the item border and its content, on both sides.
-    Used with the even item spacing. The stock gaps are 3 on the left and 5
-    on the right.
+    The visible gap between the item border and its content, on both sides,
+    from 1 to 32. Used with the even item spacing. The stock gaps are 3 on
+    the left and 5 on the right.
 - listRightGapOffset: -1
   $name: Correction of the right gap in the List view
   $description: >-
@@ -153,8 +179,8 @@ scaling.
 - statusIconGap: 0
   $name: Gap between a status icon and the item icon
   $description: >-
-    Used with the even item spacing. Set to 0 to use the same gap as on the
-    left and on the right of an item.
+    From 0 to 32, used with the even item spacing. Set to 0 to use the same
+    gap as on the left and on the right of an item.
 - statusIconOffset: 1
   $name: Vertical offset of the status icons
   $description: >-
@@ -176,25 +202,27 @@ scaling.
 - iconTextGap: 1
   $name: Extra gap between the item icon and the name
   $description: >-
-    In the List, Small icons and Details views, used with the even item
-    spacing.
-- contentBottomPadding: 2
+    From 0 to 32, in the List, Small icons and Details views, used with the
+    even item spacing.
+- contentBottomPadding: 1
   $name: Bottom padding of a row in the Content view
   $description: >-
-    The padding below the text of a row. The stock value is 5, the same as
-    the padding above the text. Used with the even item spacing.
+    The padding below the text of a row, from 0 to 64. The stock value is 5,
+    the same as the padding above the text. Used with the even item spacing.
 - viewMarginSize: 8
   $name: Horizontal margins of the files area
   $description: >-
-    The margin on the left and on the right of the files area, in all views.
-    The stock margins are 14 on the left and none on the right. Set both the
-    horizontal and the vertical margins to 0 to keep the stock margins.
+    The margin on the left and on the right of the files area, in all views,
+    from 0 to 64. The stock margins are 14 on the left and none on the right.
+    Set both the horizontal and the vertical margins to 0 to keep the stock
+    margins.
 - viewMarginVertical: 9
   $name: Vertical margins of the files area
   $description: >-
-    The margin at the top and at the bottom of the files area, in all views.
-    The stock margins are 6 at the top and none at the bottom. Set both the
-    horizontal and the vertical margins to 0 to keep the stock margins.
+    The margin at the top and at the bottom of the files area, in all views,
+    from 0 to 64. The stock margins are 6 at the top and none at the bottom.
+    Set both the horizontal and the vertical margins to 0 to keep the stock
+    margins.
 */
 // ==/WindhawkModSettings==
 
@@ -942,20 +970,30 @@ static void ApplyDetailsRow(void* item, int dpi, bool apply) {
 // pixel, the result is a visible gap of 5 pixels on the left. The status area
 // takes no space if there's nothing to show.
 static void ApplyItemSpacing(void* item, ItemKind kind, const std::wstring& key, int dpi, bool apply, bool hosted) {
+    // The status area of the item. There's none in the Details view, in which
+    // the status is a column.
+    ATOM atom = kind != ItemKind::Details ? GetStateIconsAtom() : 0;
+    void* stateIcons = atom ? Element_FindDescendent(item, atom) : nullptr;
+    void* container = stateIcons ? Element_GetParent(stateIcons) : nullptr;
+    void* containerParent = container ? Element_GetParent(container) : nullptr;
+    bool hasStatusArea = containerParent && (containerParent == item || Element_GetParent(containerParent) == item);
+
+    // The items of the Tiles and the Content views are identified by the
+    // items area which they're in, and not by a name. Don't touch an element
+    // which doesn't look like an item.
+    if (!hasStatusArea && (kind == ItemKind::Tiles || kind == ItemKind::Content)) {
+        return;
+    }
+
     ApplyItemPadding(item, kind, key, dpi, apply, GetElementPadding(item));
     ApplyNamePadding(item, kind, key, dpi, apply, hosted);
 
     if (kind == ItemKind::Details) {
-        // The status is a column.
         ApplyDetailsRow(item, dpi, apply);
         return;
     }
 
-    ATOM atom = GetStateIconsAtom();
-    void* stateIcons = atom ? Element_FindDescendent(item, atom) : nullptr;
-    void* container = stateIcons ? Element_GetParent(stateIcons) : nullptr;
-    void* containerParent = container ? Element_GetParent(container) : nullptr;
-    if (!containerParent || (containerParent != item && Element_GetParent(containerParent) != item)) {
+    if (!hasStatusArea) {
         return;
     }
 
@@ -1470,7 +1508,7 @@ static void LoadSettings() {
 
     g_settings.contentBottomPadding = Wh_GetIntSetting(L"contentBottomPadding");
     if (g_settings.contentBottomPadding < 0 || g_settings.contentBottomPadding > 64) {
-        g_settings.contentBottomPadding = 2;
+        g_settings.contentBottomPadding = 1;
     }
 
     g_settings.listRightGapOffset = Wh_GetIntSetting(L"listRightGapOffset");
