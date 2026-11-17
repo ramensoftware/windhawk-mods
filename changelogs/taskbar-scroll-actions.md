@@ -1,3 +1,8 @@
+## 1.3 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/560ad8d3d1bafdb9c5b78fd9b27289ca801e3c91/mods/taskbar-scroll-actions.wh.cpp))
+
+* The brightness is now changed with the native Windows brightness API, and a native Windows indicator is shown. If the native method isn't available, or if disabled in the mod settings, the brightness is changed directly, as before.
+* Brightness changes are now done in the background, so the taskbar no longer freezes while the brightness is being changed.
+
 ## 1.2 ([Feb 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a004a92ed65a9e3174df2df8e2131fa1fbb009ff/mods/taskbar-scroll-actions.wh.cpp))
 
 * Added an option for custom regions along the taskbar. For example, "100-200" (pixels) or "20%-50%" (percentage of taskbar length).

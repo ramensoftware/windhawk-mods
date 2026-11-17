@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-17T05:00:56.000Z</updated>
+    <updated>2026-11-17T06:02:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start button colorizer 1.1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-start-button-colorizer#5770ffea8377185d81e5232455b148aa58803d0a</id>
+        <link href="https://windhawk.net/mods/taskbar-start-button-colorizer"/>
+        <updated>2026-11-17T06:02:26.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Scroll Actions 1.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-scroll-actions#560ad8d3d1bafdb9c5b78fd9b27289ca801e3c91</id>
+        <link href="https://windhawk.net/mods/taskbar-scroll-actions"/>
+        <updated>2026-11-17T06:02:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The brightness is now changed with the native Windows brightness API, and a native Windows indicator is shown. If the native method isn't available, or if disabled in the mod settings, the brightness is changed directly, as before.</li>
+<li>Brightness changes are now done in the background, so the taskbar no longer freezes while the brightness is being changed.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-multirow#03995a0b0478cb8dfd10300f2d47a4b65476826a</id>
@@ -577,196 +606,6 @@ released under <strong>GPL-3.0</strong> as well.</p>
         <author>
             <name>gilnett</name>
             <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Color Picker / Eyedropper Tool 1.0.2]]></title>
-        <id>https://windhawk.net/mods/color-picker-eyedropper#be471af902a3370c41251653153ce4d94c170b81</id>
-        <link href="https://windhawk.net/mods/color-picker-eyedropper"/>
-        <updated>2026-11-16T07:01:14.000Z</updated>
-        <content type="html"><![CDATA[<h1>Color Picker / Eyedropper Tool for Windows 11</h1>
-<p>A lightweight, system-wide color picker overlay mod for <a href="https://windhawk.net/">Windhawk</a>, inspired by <a href="https://github.com/microsoft/powertoys">Microsoft PowerToys</a> Color Picker. Activated by the default keyboard shortcut <code>Win + Alt + C</code>, it allows you to select any pixel on your screen via a customizable global hotkey, view a magnified pixel grid loupe, and automatically obtain the color value in <strong>HEX</strong>, <strong>RGB</strong>, <strong>HSL</strong>, and <strong>CMYK</strong> formats with one-click clipboard copying.</p>
-<p><img src="https://raw.githubusercontent.com/nathanaeru/color-picker-eyedropper/refs/heads/main/demo.gif" alt="Color Picker mod in action"></p>
-<h2>Features</h2>
-<ul>
-<li><strong>System-Wide Screen Freeze &amp; Overlay</strong>: Freezes the screen upon activation to prevent accidental click-throughs onto underlying windows.</li>
-<li><strong>Magnified Loupe Cursor</strong>: Displays a magnified preview grid with a centered crosshair and a live color preview badge that follows your cursor.</li>
-<li><strong>Multi-Format Support</strong>: Automatically converts and displays captured colors in:
-<ul>
-<li><strong>HEX</strong> (e.g., <code>#FF5733</code> or <code>ff5733</code>)</li>
-<li><strong>RGB</strong> (e.g., <code>rgb(255, 87, 51)</code>)</li>
-<li><strong>HSL</strong> (e.g., <code>hsl(11, 100%, 60%)</code>)</li>
-<li><strong>CMYK</strong> (e.g., <code>cmyk(0%, 66%, 80%, 0%)</code>)</li>
-</ul>
-</li>
-<li><strong>Native Windows 11 Dark Mode Support</strong>: The result pop-up window automatically adapts to your system theme (Light or Dark mode).</li>
-<li><strong>Modern UI Styling</strong>: Clean, dialog-style UI using Segoe UI font, smooth rounded corners, drop-shadow effects, and single-click copy buttons.</li>
-<li><strong>Customizable Mod Settings</strong>: Directly configure hotkeys and color formatting preferences within the Windhawk UI.</li>
-</ul>
-<h2>Hotkey &amp; Controls</h2>
-<ul>
-<li><strong>Activate Eyedropper</strong>: Default hotkey is <code>Win + Alt + C</code> (customizable in Windhawk settings).</li>
-<li><strong>Pick Color</strong>: <strong>Left-Click</strong> anywhere on the screen to capture the pixel color and open the copy window.</li>
-<li><strong>Cancel Eyedropper</strong>: Press <strong>Escape</strong> or <strong>Right-Click</strong> to exit picking mode without selecting a color.</li>
-</ul>
-<h2>Configuration Settings</h2>
-<p>You can customize the mod settings directly from the Windhawk Mod Manager UI:</p>
-<table>
-<thead>
-<tr>
-<th style="text-align:left">Setting</th>
-<th style="text-align:left">Type</th>
-<th style="text-align:left">Default</th>
-<th style="text-align:left">Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left"><strong>Hotkey Key</strong></td>
-<td style="text-align:left">String</td>
-<td style="text-align:left"><code>C</code></td>
-<td style="text-align:left">Single alphabet character used with <code>Win + Alt</code> (selectable via a dropdown menu).</td>
-</tr>
-<tr>
-<td style="text-align:left"><strong>Include '#' Prefix in HEX</strong></td>
-<td style="text-align:left">Boolean</td>
-<td style="text-align:left"><code>true</code></td>
-<td style="text-align:left">Choose whether HEX values include the <code>#</code> symbol (<code>#CDCDCD</code> vs <code>CDCDCD</code>).</td>
-</tr>
-<tr>
-<td style="text-align:left"><strong>Uppercase HEX Characters</strong></td>
-<td style="text-align:left">Boolean</td>
-<td style="text-align:left"><code>true</code></td>
-<td style="text-align:left">Toggle uppercase vs. lowercase HEX characters (<code>#ABCDEF</code> vs <code>#abcdef</code>).</td>
-</tr>
-</tbody>
-</table>
-<h2>Dependencies &amp; Technical Details</h2>
-<ul>
-<li><strong>Target Process</strong>: <code>windhawk.exe</code> (runs as a Windhawk tool mod)</li>
-<li><strong>Libraries Linked</strong>: <code>-lgdi32</code>, <code>-lmsimg32</code>, <code>-ldwmapi</code>, <code>-luxtheme</code>, <code>-lshcore</code></li>
-<li><strong>Architecture</strong>: Pure Win32 GDI &amp; User32 APIs (no heavy external GUI dependencies).</li>
-</ul>
-]]></content>
-        <author>
-            <name>Naeru</name>
-            <uri>https://github.com/nathanaeru</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Confetti Spawner 1.4.0]]></title>
-        <id>https://windhawk.net/mods/confetti-spawner#99eea7d26e9ab1286b1dddfed37740eed9bcfaeb</id>
-        <link href="https://windhawk.net/mods/confetti-spawner"/>
-        <updated>2026-11-16T07:01:09.000Z</updated>
-        <content type="html"><![CDATA[<h1>Confetti Spawner</h1>
-<p>Press a hotkey and a burst of confetti (or color emoji) flies across the monitor
-under your mouse pointer. Hold the hotkey to keep it going. The effect is drawn on a click-through overlay that
-never takes focus, so you can keep typing and clicking while it plays.</p>
-<p><img src="https://raw.githubusercontent.com/JudeCJz/confetti-spawner/main/assets/windhawk-demo.gif" alt="Confetti Spawner demo"></p>
-<p>The overlay only exists while particles are on screen. When the last particle is
-gone the window is destroyed and the frame timer stops, so the mod uses no CPU
-while idle.</p>
-<p>The mod runs in its own small Windhawk process and does not inject into any
-other program.</p>
-<h2>Hotkeys</h2>
-<table>
-<thead>
-<tr>
-<th>Default</th>
-<th>Action</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>Ctrl+Alt+F10</code></td>
-<td>Fire a burst. Hold the keys to keep firing</td>
-</tr>
-<tr>
-<td>none</td>
-<td>Cycle the origin (sides, top, bottom, cursor, random) and fire</td>
-</tr>
-<tr>
-<td>none</td>
-<td>Cycle the mode (confetti, emoji, mixed) and fire</td>
-</tr>
-</tbody>
-</table>
-<p>The cycle hotkeys are off by default. Set them in the settings to use them.</p>
-<p>While the mod is enabled, its hotkey combinations are reserved system-wide, so
-other apps stop receiving them. Pick combinations you don't use elsewhere (for
-example <code>Ctrl+Shift+C</code> is copy in Windows Terminal). On keyboard layouts with
-AltGr, AltGr is sent as <code>Ctrl+Alt</code>, so a <code>Ctrl+Alt+&lt;letter&gt;</code> hotkey can block a
-character you type with AltGr. Function keys are a safe choice.</p>
-<p>Hotkeys are written as modifiers plus a key, for example <code>Ctrl+Alt+F10</code>,
-<code>Alt+F9</code>, <code>Ctrl+Shift+F9</code> or <code>Ctrl+Alt+Space</code>. Modifiers are <code>Ctrl</code>, <code>Shift</code>, <code>Alt</code> and
-<code>Win</code>. Keys can be a letter, a digit, <code>F1</code> to <code>F24</code>, <code>Space</code>, <code>Enter</code>, <code>Tab</code>,
-<code>Esc</code>, <code>Insert</code>, <code>Delete</code>, <code>Home</code>, <code>End</code>, <code>PageUp</code>, <code>PageDown</code>, the arrow keys
-(<code>Up</code>, <code>Down</code>, <code>Left</code>, <code>Right</code>), <code>Num0</code> to <code>Num9</code>, <code>Pause</code> or <code>PrintScreen</code>.
-Type <code>none</code> (or leave the field empty) to turn a hotkey off. If another program
-already owns a combination, it can't be registered; the mod log says so.</p>
-<p><strong>Hold to fire</strong>: while the fire hotkey (its main key and modifiers) stays held,
-the mod keeps emitting at the normal rate (particle count per emission time) and
-stops when you let go. A quick tap still plays one full burst.</p>
-<p>Cycling the origin or the mode only lasts until the settings are saved again or
-the mod restarts. The saved settings are not changed.</p>
-<h2>Modes</h2>
-<ul>
-<li><strong>Confetti</strong>: paper pieces in the shapes and colors you pick. With <code>Flip</code>
-enabled they tumble in 3D as they fall.</li>
-<li><strong>Emoji</strong>: the emoji from the <code>Emoji</code> list, drawn in full color.</li>
-<li><strong>Mixed</strong>: both at once. <code>Emoji share</code> sets how many of the particles are emoji.</li>
-</ul>
-<h2>Origins</h2>
-<ul>
-<li><strong>Sides</strong>: two cannons in the bottom corners shooting up and inward (the
-classic look). <code>Side cannon angle</code> sets how steeply they fire: 70 is classic,
-90 shoots straight up, lower values shoot flatter toward the middle.</li>
-<li><strong>Top</strong>: confetti rain from the top edge.</li>
-<li><strong>Bottom</strong>: a fountain from the bottom center.</li>
-<li><strong>Cursor</strong>: an explosion from the mouse pointer. Every particle spawns at the
-pointer position at the moment it is emitted, so moving the mouse while holding
-the hotkey drags the stream along, even onto another monitor.</li>
-<li><strong>Random</strong>: one of the above, picked per burst.</li>
-</ul>
-<h2>Settings</h2>
-<p>The defaults reproduce the original classic confetti: sides origin, 600
-rectangular pieces in six colors, no 3D flip, long lifetime.</p>
-<p>Windhawk number settings are whole numbers, so decimal values are stored scaled.
-Each setting's description says how: for example <code>Gravity</code> is in hundredths, so
-<code>50</code> means 0.50, and <code>Drag</code> is in thousandths, so <code>990</code> means 0.990.</p>
-<ul>
-<li><strong>Particle count, Emission time, Speed, Gravity, Spread, Source width</strong>: shape
-of the burst. Emission time is how long a burst keeps spawning particles.</li>
-<li><strong>Wobble, Size, Spin, Drag</strong>: how particles move and look while falling. Drag
-is the share of velocity kept per 60 Hz tick.</li>
-<li><strong>Lifetime, Fade, Opacity</strong>: how long particles live, whether they fade out
-over the last quarter of their life, and the overall overlay opacity.</li>
-<li><strong>Frame rate</strong>: animation frame rate. Physics is time based, so the motion
-looks the same at any frame rate; higher is only smoother.</li>
-<li><strong>Emoji, Emoji size, Emoji spin</strong>: the emoji list is separated by spaces.
-Joined emoji sequences (such as family or flag emoji) are kept intact.</li>
-<li><strong>Shapes, Colors</strong>: confetti shapes (<code>rect</code>, <code>square</code>, <code>circle</code>, <code>triangle</code>,
-<code>star</code>, <code>heart</code>) and colors (<code>#RRGGBB</code>). Each list item can also
-hold several values separated by commas.</li>
-<li><strong>Preview on save</strong>: fire one burst whenever you save the settings, handy
-while tuning.</li>
-</ul>
-<h2>Tips</h2>
-<ul>
-<li>Bursts land on the monitor under the pointer and on the virtual desktop you
-are on.</li>
-<li>Firing again while a burst is still playing on the same monitor adds to it.</li>
-<li>Old overlays keep animating until empty after the pointer moves to another
-monitor.</li>
-<li>For a snow look, use origin <code>Top</code>, shape <code>circle</code>, color <code>#FFFFFF</code>, gravity
-<code>5</code> and wobble <code>20</code>.</li>
-<li>Very high particle counts on 4K monitors cost more GPU and CPU time per frame.
-A single overlay is capped at 8000 live particles.</li>
-</ul>
-]]></content>
-        <author>
-            <name>JudeCJz</name>
-            <uri>https://github.com/JudeCJz</uri>
         </author>
     </entry>
 </feed>
