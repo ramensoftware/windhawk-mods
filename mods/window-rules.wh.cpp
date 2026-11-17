@@ -65,8 +65,9 @@ What it deliberately does not do is fight for the top:
   says `app-cleared`, rather than pinning it again on the next activation.
 * **Dragging the window stops the mod touching it**, the z-order included, for the
   rest of the session.
-* **Turning the rule off takes the window back down.** The mod only ever lowers a
-  bit it set itself, so an app that pins its own windows is never affected.
+* **Turning the rule off takes the window back down.** The mod only directly
+  lowers a window it pinned. Windows may also change the topmost state of that
+  window's owners or owned windows when it is lowered.
 * **The same goes for opacity.** The mod records the windows it made translucent,
   so changing the level takes effect on windows that are already open, and
   clearing the level, deleting the rule or turning the mod off puts them back to
@@ -165,9 +166,8 @@ relevant events and does not guarantee a match for a slowly starting app.
 * **Always on top and fullscreen is detected geometrically.** A window counts as
   fullscreen when it covers a monitor and is not maximized. A window that nearly
   covers a monitor is not detected, so a pinned window can stay above it.
-* **Stepping aside for a fullscreen app is tested, not observed, across
-  monitors.** It was built and tried on a single-monitor machine, so "a game on
-  the other monitor leaves this window pinned" has not been watched happening.
+* **Multiple monitors.** Fullscreen detection across monitors has not been
+  confirmed on a multi-monitor setup.
 
 ## Not the same as other mods
 
@@ -329,7 +329,8 @@ window on purpose, put a `*` in one of the match fields.
         while a fullscreen app covers the same monitor, and raised again after it
         closes; another always-on-top window may still sit above it. "No change"
         takes back a pin this mod set, so a window it pinned earlier comes back
-        down; it never touches the z-order of a window the mod did not pin.
+        down. Windows can also change the topmost state of its owner or owned
+        windows when a topmost window is made non-topmost.
       $options:
       - leave: No change
       - "on": Always on top
@@ -360,7 +361,7 @@ window on purpose, put a `*` in one of the match fields.
 #include <unordered_set>
 #include <vector>
 
-// Design overview, for the reviewer.
+// Design overview.
 //
 // What this is: a tool mod. It runs in windhawk.exe, hooks window events, and
 // changes the z-order and geometry of other applications' windows when a rule
@@ -397,13 +398,6 @@ window on purpose, put a `*` in one of the match fields.
 //   window, then stop. A hand move releases the window for the session. The
 //   journal records which of those happened, because "nothing happened" is the
 //   answer that needs evidence most.
-// * The journal is the validation surface: one line appended at the instant of
-//   each decision, nothing debounced or overwritten, so a script can assert
-//   against it without racing the mod.
-// * `tools/check_rules_boundaries.sh` in the mod's repository asserts the
-//   structure above mechanically, including that a claim on the z-order is
-//   released before any early return in the apply path. That last one was a
-//   real defect found in the field, and it is silent when it recurs.
 
 // --- Constants --------------------------------------------------------------
 
@@ -1158,7 +1152,7 @@ static TargetPlan ComputeTargetPlan(const RuleRect& current,
         // Moving a window must not resize it. With no size in the rule, the far
         // edges travel with the near ones -- the first version left them where
         // they were, which silently resized every window a position-only rule
-        // touched. The unit tests caught it before it reached a desktop.
+        // touched.
         if (!plan.setSize) {
             plan.target.right = plan.target.left + currentWidth;
             plan.target.bottom = plan.target.top + currentHeight;
@@ -1464,7 +1458,7 @@ static bool IsFullscreenCandidate(const RuleRect& window,
 
 // Which monitor a rectangle covers, or -1. Monitors do not overlap, so the first
 // match is the only one.
-static int FindCoveredMonitor(const RuleRect& window,
+[[maybe_unused]] static int FindCoveredMonitor(const RuleRect& window,
                               const std::vector<RuleMonitor>& monitors,
                               long tolerance) {
     for (size_t i = 0; i < monitors.size(); i++) {
@@ -1588,6 +1582,23 @@ static std::wstring BaseNameOf(const std::wstring& path) {
 static std::vector<RuleSpec> g_rules;
 static std::vector<CompiledRule> g_compiledRules;
 static std::vector<RuleActions> g_ruleActions;
+static bool g_allowOwnedRules = false;
+static bool g_needFrameArrivalRetry = false;
+
+// The host's actual path is not known while loading settings. Keep retrying for
+// path patterns rather than rejecting a potentially valid host path.
+static bool RuleMayNeedFrameRetry(const RuleSpec& rule, const CompiledRule& compiled) {
+    if (!rule.enabled || !compiled.usable ||
+        !PatternMatchesValue(compiled.windowClass, L"ApplicationFrameWindow", false)) {
+        return false;
+    }
+    if (rule.matchHostedApp && !rule.executable.empty()) return true;
+    if (rule.title.empty()) return false;
+    const CompiledPattern& exe = compiled.executable;
+    if (exe.kind != PatternKind::Regex && LooksLikePath(exe.literal)) return true;
+    return PatternMatchesExecutable(exe, L"", L"ApplicationFrameHost.exe");
+}
+
 
 // Reads one setting, leaving the value untouched when the key is absent. Every
 // key is read this way: a rule entry whose "name" key is missing -- which is what
@@ -1602,9 +1613,7 @@ static bool ReadStringSetting(PCWSTR key, std::wstring& out) {
     // then did nothing at all. Emptiness is the only signal there is, and it is
     // also what a blank field means, so the two agree.
     //
-    // The null test stays. It costs nothing, and this is the one reader where
-    // getting the contract wrong has already cost a debugging session; the
-    // geometry-memory mod guards here the same way.
+    // Also guard against a null setting value.
     if (!value || !*value) {
         Wh_FreeStringSetting(value);
         return false;
@@ -1620,6 +1629,8 @@ static void LoadRules() {
     g_rules.clear();
     g_compiledRules.clear();
     g_ruleActions.clear();
+    g_allowOwnedRules = false;
+    g_needFrameArrivalRetry = false;
 
     for (int index = 0;; index++) {
         RuleSpec rule;
@@ -1670,15 +1681,16 @@ static void LoadRules() {
         g_rules.push_back(rule);
         g_compiledRules.push_back(CompileRule(rule));
         g_ruleActions.push_back(actions);
+        const CompiledRule& compiled = g_compiledRules.back();
+        g_allowOwnedRules |= rule.enabled && compiled.usable && rule.includeOwned;
+        g_needFrameArrivalRetry |= RuleMayNeedFrameRetry(rule, compiled);
     }
 
 }
 
 // --- Diagnostics journal ----------------------------------------------------
 //
-// One line appended at the instant of each decision, nothing debounced, nothing
-// overwritten, so a test script can assert against the journal without racing the
-// mod.
+// Append one line per decision when diagnostics are enabled.
 static bool g_diagnosticsLog = false;
 
 // How many times the private folder has been tried this session. Owned here rather
@@ -1689,10 +1701,8 @@ static int g_folderAttempts = 0;
 // looks complete but was written by the previous copy of the mod is the easiest
 // way to waste an hour.
 //
-// Hand-maintained rather than WH_MOD_VERSION, because @version has to stay
-// numeric for the submission validator ("1.0"), and "1.0" cannot tell one build
-// of 1.0 from the next. This tag is what the test scripts compare.
-static constexpr PCWSTR kJournalBuild = L"issue7004-prototype";
+// Identifies the build that wrote the journal.
+static constexpr PCWSTR kJournalBuild = L"1.1";
 
 static void RefreshDiagnosticsSetting() {
     const bool was = g_diagnosticsLog;
@@ -2184,10 +2194,7 @@ static void JournalNoMatch(const std::wstring& exeName,
 // is actually about to be written. The budget above means that happens at most
 // ten times per rejection reason, so the cost is bounded by the setting that
 // benefits from it.
-//
-// It is resolved at all because "(unknown)" in a journal is not an answer: the
-// first run on a real desktop printed twenty rejection lines that named no process, which
-// made it impossible to tell the app being tested from the shell's own windows.
+
 static std::wstring ExeNameForLog(HWND hwnd) {
     DWORD processId = 0;
     GetWindowThreadProcessId(hwnd, &processId);
@@ -3406,15 +3413,7 @@ static bool CloakedFrameStillMatches(HWND hwnd, const CloakedFrame& seen) {
 }
 
 static bool NeedsFrameArrivalRetry() {
-    for (size_t i = 0; i < g_rules.size() && i < g_compiledRules.size(); i++) {
-        const RuleSpec& rule = g_rules[i];
-        if (rule.enabled && g_compiledRules[i].usable &&
-            (!rule.title.empty() ||
-             (rule.matchHostedApp && !rule.executable.empty()))) {
-            return true;
-        }
-    }
-    return false;
+    return g_needFrameArrivalRetry;
 }
 
 static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
@@ -3435,22 +3434,17 @@ static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
     // as decided. Almost every window is created hidden, at zero size, or before
     // it is laid out, and passes these same filters a moment later when it is
     // shown.
-    bool allowOwned = false;
-    for (size_t i = 0; i < g_rules.size() && i < g_compiledRules.size(); i++) {
-        if (g_rules[i].enabled && g_compiledRules[i].usable &&
-            g_rules[i].includeOwned) {
-            allowOwned = true;
-            break;
-        }
-    }
-    if (!PassesWindowFilters(hwnd, &reason, allowOwned)) {
+    if (!PassesWindowFilters(hwnd, &reason, g_allowOwnedRules)) {
         if (!forced && wcscmp(reason, L"cloaked (not shown to the user)") == 0 &&
             NeedsFrameArrivalRetry() && !g_evaluatedWindows.count(hwnd) &&
             !g_governedWindows.count(hwnd) && !g_overriddenWindows.count(hwnd) &&
             !g_suppressedArrivalFrames.count(hwnd)) {
             WindowFacts frameFacts;
             const wchar_t* ignored = L"unknown";
-            if (ResolveWindowFacts(hwnd, frameFacts, &ignored) &&
+            WCHAR className[128]{};
+            if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"ApplicationFrameWindow") == 0 &&
+                ResolveWindowFacts(hwnd, frameFacts, &ignored) &&
                 IsApplicationFrame(frameFacts)) {
                 const ULONGLONG now = GetTickCount64();
                 for (auto it = g_cloakedAppFrames.begin();
@@ -3701,7 +3695,7 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
 
     // A frame can be shown and named while still cloaked. Only revisit a
     // recently observed rejected host, not every window on a desktop switch.
-    if (event == 0x8018 /* EVENT_OBJECT_UNCLOAKED */) {
+    if (event == EVENT_OBJECT_UNCLOAKED) {
         auto seen = g_cloakedAppFrames.find(hwnd);
         if (seen != g_cloakedAppFrames.end()) {
             if (GetTickCount64() - seen->second.started > kHostedFrameArrivalMs ||
@@ -3711,17 +3705,17 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
             } else {
                 EvaluateWindow(hwnd, /*forced=*/false, L"hosted-uncloaked");
             }
+            return;
         }
-        return;
     }
 
-    // A hosted app can attach its CoreWindow after the frame was evaluated.
-    // Revisit only a recently unresolved frame, never a window already governed
-    // by another rule or deliberately moved by the user.
+    // A hosted app can attach its CoreWindow after the frame was evaluated, or
+    // reveal an already-shown child by uncloaking it. Only retry unresolved frames.
     HWND frame = nullptr;
     if (event == EVENT_OBJECT_NAMECHANGE) {
         frame = hwnd;
-    } else if (event == EVENT_OBJECT_SHOW) {
+    } else if (event == EVENT_OBJECT_SHOW ||
+               (event == EVENT_OBJECT_UNCLOAKED && !g_pendingAppFrames.empty())) {
         WCHAR cls[128]{};
         if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) &&
             _wcsicmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
@@ -3761,7 +3755,7 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
         if (event == EVENT_OBJECT_NAMECHANGE || frame != hwnd) return;
     }
 
-    if (event != EVENT_OBJECT_NAMECHANGE) {
+    if (event != EVENT_OBJECT_NAMECHANGE && event != EVENT_OBJECT_UNCLOAKED) {
         EvaluateWindow(hwnd, /*forced=*/false, L"window-event");
     }
 }
@@ -3840,7 +3834,7 @@ static void InstallHooks() {
                                      WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     }
     if (needName && !g_hookUncloaked) {
-        g_hookUncloaked = SetWinEventHook(0x8018, 0x8018, nullptr, WinEventProc,
+        g_hookUncloaked = SetWinEventHook(EVENT_OBJECT_UNCLOAKED, EVENT_OBJECT_UNCLOAKED, nullptr, WinEventProc,
                                          0, 0, WINEVENT_OUTOFCONTEXT);
     }
     if (!g_hookWindows || !g_hookMoveSizeEnd || !g_hookMinimizeEnd ||
