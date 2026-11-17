@@ -19779,7 +19779,7 @@
         "ratingUsers": 786,
         "reviews": 0,
         "trendingSorting": -5.903269898400429,
-        "updated": 1792398920000,
+        "updated": 1794906132000,
         "users": 17709
       },
       "featured": true,
@@ -19800,7 +19800,7 @@
         ],
         "name": "Vertical Taskbar for Windows 11",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.5"
+        "version": "1.5.1"
       }
     },
     "taskbar-volume-control": {
@@ -19899,7 +19899,7 @@
         "ratingUsers": 107,
         "reviews": 0,
         "trendingSorting": -1.333064436791835,
-        "updated": 1777670420000,
+        "updated": 1794906136000,
         "users": 5484
       },
       "metadata": {
@@ -19916,7 +19916,7 @@
         ],
         "name": "Cycle taskbar buttons with mouse wheel",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.1.11"
+        "version": "1.1.12"
       }
     },
     "taskbar-z-order-override": {

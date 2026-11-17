@@ -2,12 +2,45 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-17T08:00:34.000Z</updated>
+    <updated>2026-11-17T09:02:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.12]]></title>
+        <id>https://windhawk.net/mods/taskbar-wheel-cycle#444cb2ac1db312f9faf342207181010c2d1f2f31</id>
+        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
+        <updated>2026-11-17T09:02:16.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Keyboard shortcuts can use human-friendly key names, such as <code>Alt+[</code>, <code>Ctrl+F1</code> or <code>Win+Left</code>. The <code>VK_</code> key names are still supported.</li>
+<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame: scrolling over the system tray no longer cycles between taskbar buttons.</li>
+<li>Fixed the &quot;Customize the old taskbar on Windows 11&quot; option on Windows 11 24H2 builds before 26100.1301, which still include the old taskbar.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.5.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-vertical#553760a3d14275c881c2971761db35355d07509b</id>
+        <link href="https://windhawk.net/mods/taskbar-vertical"/>
+        <updated>2026-11-17T09:02:12.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved taskbar button badges placement.</li>
+<li>Improved compatibility with the &quot;Primary taskbar on secondary monitor&quot; mod.</li>
+<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
+<li>Fixed jump list of the primary taskbar animating in the wrong direction in some cases.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Volume Control Per-App 1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-volume-control-per-app#afd824bf1fddd9a2e59d85a559390e9ba3e77188</id>
@@ -410,107 +443,6 @@ requested browser process.</p>
         <author>
             <name>Alessandro-Vecchio</name>
             <uri>https://github.com/Alessandro-Vecchio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Bluetooth No Sleep 1.0.0]]></title>
-        <id>https://windhawk.net/mods/bluetooth-no-sleep#a65505e2ac99347a28412b14eaa6e53bdd53266a</id>
-        <link href="https://windhawk.net/mods/bluetooth-no-sleep"/>
-        <updated>2026-11-16T21:04:42.000Z</updated>
-        <content type="html"><![CDATA[<h1>Bluetooth No Sleep (Bluetooth Audio Keep-Alive)</h1>
-<p>A lightweight Windows background utility and Windhawk tool mod that prevents
-Bluetooth audio devices (headphones, wireless earbuds, soundbars, DACs, and
-speakers) from falling asleep, dropping initial playback, or disconnecting
-during silence.</p>
-<h3>Why this mod?</h3>
-<p>Modern Bluetooth audio peripherals employ aggressive power-saving timers:</p>
-<ol>
-<li><strong>Initial Audio Truncation:</strong> When no audio plays for a few seconds, the
-device enters a low-power state and shuts off its internal DAC/amplifier.
-When audio resumes, waking up takes 1-2 seconds, dropping the beginning of
-system notifications, speech, or media playback.</li>
-<li><strong>Pops and Static Bursts:</strong> Rapid DAC wakeups often create audible transients,
-clicks, or static bursts (&quot;pink noise&quot;).</li>
-<li><strong>Unsolicited Idle Disconnections:</strong> Many wireless devices shut down
-completely after 5 to 10 minutes of silence, forcing manual power cycling.</li>
-</ol>
-<h3>How it works</h3>
-<p>This mod uses Windows Audio Session API (WASAPI) Shared Mode to continuously
-stream an inaudible digital silence buffer (<code>0x00</code> PCM or sub-audible dither)
-to the active audio endpoint:</p>
-<ul>
-<li><strong>Non-Intrusive Shared Mode:</strong> Runs alongside your normal applications
-without monopolizing or locking audio devices.</li>
-<li><strong>Event-Driven Endpoint Tracking:</strong> Uses <code>IMMNotificationClient</code> to monitor
-device transitions. When your default audio device switches or a Bluetooth
-headset reconnects, it rebinds automatically without crashes.</li>
-<li><strong>Near-Zero CPU Overhead:</strong> Uses buffer-synchronized wait events and sleep
-cycles to keep CPU usage below 0.1%.</li>
-<li><strong>Optional Inactivity Gate:</strong> Can automatically pause the keep-alive stream
-after prolonged user inactivity to allow intentional battery conservation
-and permit normal Windows system sleep (<code>powercfg /requests</code>).</li>
-<li><strong>Dedicated Tool Mod:</strong> Runs inside <code>windhawk.exe</code> as a dedicated background
-tool without injecting into or hooking any system processes.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Dev-StudioCode</name>
-            <uri>https://github.com/Dev-StudioCode</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Core Context Menu Customizer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-core-context-menu-customizer#8ba4a9500fc8e8f1f8152b0ba4c424de2072c417</id>
-        <link href="https://windhawk.net/mods/explorer-core-context-menu-customizer"/>
-        <updated>2026-11-16T21:04:36.000Z</updated>
-        <content type="html"><![CDATA[<h1>Explorer Core Context Menu Customizer</h1>
-<p>Windows does not provide any registry entries or built-in options to customize the icons or labels of core File Explorer context menu commands. This mod was created to fill that gap cleanly and safely.</p>
-<blockquote>
-<p><strong>Windows 11 Note:</strong> This mod customizes the classic File Explorer context menu (accessible via <strong>Show more options</strong> or <code>Shift+F10</code>, or when the classic context menu is enabled).</p>
-</blockquote>
-<h3>Screenshots:</h3>
-<table>
-<thead>
-<tr>
-<th style="text-align:center">Disabled (Default)</th>
-<th style="text-align:center">Enabled (Customized)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:center"><img src="https://i.imgur.com/aoglE8P.png" alt="Disabled"></td>
-<td style="text-align:center"><img src="https://i.imgur.com/norFuuE.png" alt="Enabled"></td>
-</tr>
-</tbody>
-</table>
-<h3>Highlights:</h3>
-<ul>
-<li><strong>Canonical Verb Matching:</strong> Identifies core shell commands via <code>IContextMenu::GetCommandString</code> (<code>GCS_VERBW</code>), working across every Windows display language without touching third-party shell extension items.</li>
-<li><strong>Zero Layout Distortion:</strong> Attaches icons cleanly during <code>IContextMenu::QueryContextMenu</code> so native row height, padding, and bold text remain completely untouched.</li>
-<li><strong>Clear-to-Reset Behavior:</strong> Clearing an icon path removes the icon for Open, Delete, Rename, or Properties, while Run as administrator reverts to the native Windows UAC shield.</li>
-<li><strong>Custom Icon Support:</strong> Easily add your own <code>.ico</code> files or use any built-in Windows icon with <code>dll,index</code> syntax.</li>
-<li><strong>Per-Monitor DPI &amp; Leak-Free Caching:</strong> Caches 32-bpp ARGB bitmaps per monitor DPI in memory with zero GDI handle leaks.</li>
-</ul>
-<h3>Dynamic <code>%file%</code> Placeholder:</h3>
-<p>Include <code>%file%</code> (or <code>%name%</code>) in any custom label field to dynamically display the right-clicked file, folder, or shortcut target name. Names longer than 30 characters are automatically shortened to the first 30 characters followed by <code>...</code>:</p>
-<ul>
-<li><code>Rename: '%file%'</code> -&gt; <strong>Rename: 'Spotify.exe'</strong></li>
-<li><code>Open: %file%</code> -&gt; <strong>Open: New folder (2)</strong></li>
-<li><code>Delete %file%</code> -&gt; <strong>Delete Very_Long_File_Name_Over_Thirt...</strong></li>
-<li><code>%file% Properties</code> -&gt; <strong>report.pdf Properties</strong></li>
-</ul>
-<h3>Supported Context Menu Items:</h3>
-<ol>
-<li><strong>Open</strong> (<code>open</code>) - Top bold default action (default icon: <code>imageres.dll,-185</code>)</li>
-<li><strong>Run as administrator</strong> (<code>runas</code>) - UAC elevation action (keeps native UAC shield and default label unless customized)</li>
-<li><strong>Delete</strong> (<code>delete</code>) - File and folder deletion action (default icon: Full Recycle Bin <code>imageres.dll,-54</code>)</li>
-<li><strong>Rename</strong> (<code>rename</code>) - Inline rename action (default icon: Clipboard <code>shell32.dll,-16763</code>, default label: <code>Rename: '%file%'</code>)</li>
-<li><strong>Properties</strong> (<code>properties</code>) - Bottom item details action (default icon: <code>imageres.dll,-114</code>)</li>
-</ol>
-]]></content>
-        <author>
-            <name>akiyorm</name>
-            <uri>https://github.com/akiyorm</uri>
         </author>
     </entry>
 </feed>

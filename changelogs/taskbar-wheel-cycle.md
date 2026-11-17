@@ -1,3 +1,9 @@
+## 1.1.12 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/444cb2ac1db312f9faf342207181010c2d1f2f31/mods/taskbar-wheel-cycle.wh.cpp))
+
+* Keyboard shortcuts can use human-friendly key names, such as `Alt+[`, `Ctrl+F1` or `Win+Left`. The `VK_` key names are still supported.
+* Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame: scrolling over the system tray no longer cycles between taskbar buttons.
+* Fixed the "Customize the old taskbar on Windows 11" option on Windows 11 24H2 builds before 26100.1301, which still include the old taskbar.
+
 ## 1.1.11 ([May 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b16d7ec62e9c985480bf5d9800afd4754738fb51/mods/taskbar-wheel-cycle.wh.cpp))
 
 * Added an option for customizing scroll regions, can be useful for using this mod with other taskbar scrolling mods such as Taskbar Volume Control or Taskbar Scroll Actions.

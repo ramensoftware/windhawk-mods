@@ -1,3 +1,10 @@
+## 1.5.1 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/553760a3d14275c881c2971761db35355d07509b/mods/taskbar-vertical.wh.cpp))
+
+* Improved taskbar button badges placement.
+* Improved compatibility with the "Primary taskbar on secondary monitor" mod.
+* Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.
+* Fixed jump list of the primary taskbar animating in the wrong direction in some cases.
+
 ## 1.5 ([Oct 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d43a770c5ff162d49f1322d239426dc69af877e3/mods/taskbar-vertical.wh.cpp))
 
 * Improved taskbar auto-hide support, and added auto-hide support when the native option to show the vertical taskbar is used.

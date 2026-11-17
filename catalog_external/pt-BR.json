@@ -255,6 +255,37 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/7bcddad73b5441e93d24ec279e9d0b0f70972dd4/mods/no-click-touchpad-tap-and-hold.wh.cpp"
       }
     },
+    "taskbar-position-shortcut": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794906315053,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794906315053,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Oji",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion -ladvapi32 -ldwmapi",
+        "description": "Adds quick taskbar position controls and optional saved positions for individual apps.",
+        "github": "https://github.com/eliogos",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Taskbar Position Shortcut",
+        "version": "0.1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7510",
+      "source": {
+        "sha256": "6513f361588e7dd7dc578b8ccf4a098e7b7e2eba871d5c6bdc0dbc9a3320b77b",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/9005105b74f1623858c3571f8d3ab110ccf074a8/mods/taskbar-position-shortcut.wh.cpp"
+      }
+    },
     "titlebar-opacity-button": {
       "details": {
         "defaultSorting": 0,
