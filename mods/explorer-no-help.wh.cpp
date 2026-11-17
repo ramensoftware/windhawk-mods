@@ -15,6 +15,12 @@
 
 For Windows 10 File Explorer (the ribbon one).
 
+Before:
+![Before](https://raw.githubusercontent.com/vt-idiot/windhawk-mods/refs/heads/reeeeeeeee/before.png)
+
+After:
+![After](https://raw.githubusercontent.com/vt-idiot/windhawk-mods/refs/heads/reeeeeeeee/before.png)
+
 - **Hide Help button**: Explorer's ribbon ships pre-compiled inside
   `SystemResources\ExplorerFrame.dll.mun` (resource `UIFILE/EXPLORER_RIBBON`).
   When the ribbon framework loads it, this mod hands back a patched copy with
