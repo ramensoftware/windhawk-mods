@@ -7,7 +7,7 @@
 // @description:de-DE Ersetzt anwendungseigene Mauszeiger durch die Zeiger des ausgewählten Windows-Schemas
 // @description:pt-BR Substitui os ponteiros dos aplicativos pelos do esquema selecionado no Windows
 // @description:zh-CN 将应用内置的鼠标指针替换为所选 Windows 方案中的指针
-// @version         1.0.1
+// @version         1.0.2
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
@@ -17,7 +17,7 @@
 // @architecture    x86-64
 // @compilerOptions -lgdi32 -ladvapi32 -lshell32
 // ==/WindhawkMod==
-// Build: 24
+// Build: 25
 
 // ==WindhawkModReadme==
 /*
@@ -56,8 +56,12 @@ The interface is available in English, Russian, Spanish, German, Brazilian Portu
 - Replacement applies to recognized pointers displayed through Windows cursor APIs. The application controls whether autoscroll is available, its speed, and its direction.
 - Excel and Firefox draw their stationary autoscroll markers separately. These markers keep their original appearance.
 - Monochrome pointers that invert the background retain their original pixel rendering without smoothing.
-- The cache holds up to 128 replacement instances, including those still in use from stopped sessions. When full, further requests use the original pointer.
-- Disabling the mod restores application pointers. Unresponsive UI threads finish restoring when they resume. Cursor handles and callback code can remain allocated until the owning thread exits. If Windows cannot identify input owners or destroy a helper window, affected resources remain until the process exits.
+- Each mod load creates at most 128 replacement instances per process. When full, further requests use the application's original pointer.
+- After disabling, the application restores its pointer at its next cursor update, usually the next mouse move. Replacement cursor handles remain allocated until the process exits so that pointers still used by Windows stay valid.
+
+### Compatibility
+
+This mod extends the active Windows scheme across application families, including autoscroll and transformed selection arrows. Some replacements overlap with [Chromium Cursor Remap](https://windhawk.net/mods/chromium-cursor-remap) and [Cursor Override](https://windhawk.net/mods/cursor-override). Avoid enabling overlapping replacements in the same applications; separate their targets with Windhawk's process exclusion lists.
 
 ## Platforms
 
@@ -342,7 +346,6 @@ Under **Application exclusions**, below the family switches, add one executable 
 
 #include <windows.h>
 #include <shellapi.h>
-#include <tlhelp32.h>
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -591,38 +594,6 @@ struct CursorInstance {
     uint64_t generation;
 };
 
-struct ThreadSelection {
-    DWORD id;
-    HANDLE lifetime;
-    HWND window = nullptr;
-    HCURSOR cursor = nullptr;
-    HCURSOR original = nullptr;
-    HWND restoreWindow = nullptr;
-    HHOOK callHook = nullptr;
-    HHOOK messageHook = nullptr;
-    bool restored = false;
-    bool deferredCode = false;
-};
-
-struct RestoreSession {
-    uint64_t id;
-    HMODULE module = nullptr;
-    HANDLE changed = nullptr;
-    std::atomic<bool> hooksRemoved{false};
-    bool discoveryComplete = true;
-    std::vector<CursorInstance> instances;
-    std::vector<ThreadSelection> owners;
-
-    ~RestoreSession() {
-        for (const auto& owner : owners) {
-            CloseHandle(owner.lifetime);
-        }
-        if (changed) {
-            CloseHandle(changed);
-        }
-    }
-};
-
 struct CursorShape {
     int width = 0;
     int height = 0;
@@ -736,12 +707,9 @@ std::array<std::optional<CursorSource>, kRoleCount> g_sources;
 std::array<bool, kRoleCount> g_needsRefresh;
 std::vector<HCURSOR> g_retired;
 std::vector<CursorInstance> g_instances;
-std::vector<ThreadSelection> g_selections;
-std::vector<std::shared_ptr<RestoreSession>> g_restoreSessions;
-std::shared_ptr<RestoreSession> g_unloading;
 std::mutex g_mutex;
 std::once_flag g_referenceShapesInit;
-std::atomic<bool> g_needsCleanup;
+std::atomic<bool> g_hasInstances;
 std::atomic<uint32_t> g_enabledTargets;
 std::atomic<uint32_t> g_enabledTypes;
 std::atomic<bool> g_isOffice;
@@ -759,88 +727,6 @@ HANDLE g_changeEvent;
 thread_local Role g_previousRole = Role::Count;
 decltype(&SetCursor) g_setCursorOriginal;
 decltype(&GetCursor) g_getCursorOriginal;
-thread_local bool g_readNativeCursor;
-thread_local bool g_restoreOnly;
-
-HCURSOR NativeCursor() {
-    const bool previous = std::exchange(g_readNativeCursor, true);
-    const HCURSOR cursor = GetCursor();
-    g_readNativeCursor = previous;
-    return cursor;
-}
-
-void RestoreCurrentQueue();
-LRESULT CALLBACK RestoreWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
-
-constexpr UINT kRestoreMessage = WM_APP + 0x495;
-constexpr PCWSTR kRestoreClass = L"CursorSchemeExtension.Restore";
-
-HMODULE ThisModule() {
-    HMODULE module = nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                          GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                      reinterpret_cast<PCWSTR>(RestoreWindowProc), &module);
-    return module;
-}
-
-HWND EnsureRestoreWindow() {
-    thread_local HWND window;
-    thread_local uint64_t session;
-    thread_local bool unavailable;
-    if (unavailable) {
-        return nullptr;
-    }
-    const auto currentSession = g_sessionId.load();
-    if (session != currentSession || !IsWindow(window)) {
-        const auto module = ThisModule();
-        WNDCLASSW windowClass{};
-        windowClass.lpfnWndProc = RestoreWindowProc;
-        windowClass.hInstance = module;
-        windowClass.lpszClassName = kRestoreClass;
-        if (!RegisterClassW(&windowClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-            return nullptr;
-        }
-        // A private window lets the mod restore the queue without invoking app code.
-        window = CreateWindowExW(0, kRestoreClass, L"", 0, 0, 0, 0, 0,
-                                 HWND_MESSAGE, nullptr, module, nullptr);
-        if (!window) {
-            return nullptr;
-        }
-        HANDLE lifetime = nullptr;
-        bool tracked = false;
-        if (DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(),
-                            &lifetime, SYNCHRONIZE, FALSE, 0)) {
-            try {
-                std::lock_guard lock(g_mutex);
-                if (!g_stopping) {
-                    g_selections.push_back({GetCurrentThreadId(), lifetime, nullptr,
-                                            nullptr, nullptr, window});
-                    tracked = true;
-                    session = currentSession;
-                }
-            } catch (...) {
-                // The window must never outlive its owning mod without being tracked.
-            }
-        }
-        if (!tracked) {
-            if (lifetime) {
-                CloseHandle(lifetime);
-            }
-            if (!DestroyWindow(window)) {
-                // A CBT hook can veto destruction. This untracked orphan still
-                // calls our WndProc, so prevent both unloading and further orphans.
-                HMODULE pin = nullptr;
-                GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                      GET_MODULE_HANDLE_EX_FLAG_PIN,
-                                  reinterpret_cast<PCWSTR>(RestoreWindowProc), &pin);
-                unavailable = true;
-            }
-            window = nullptr;
-        }
-    }
-    return window;
-}
-
 template <size_t N>
 size_t ResourceSlot(WORD id, const std::array<ResourceMapping, N>& resources) {
     for (const auto& resource : resources) {
@@ -1714,16 +1600,6 @@ bool RefreshSource(Role role) {
     return true;
 }
 
-ThreadSelection* FindCurrentSelection() {
-    const DWORD id = GetCurrentThreadId();
-    for (auto& selection : g_selections) {
-        if (selection.id == id) {
-            return &selection;
-        }
-    }
-    return nullptr;
-}
-
 BOOL CALLBACK FindThreadWindow(HWND window, LPARAM data) {
     *reinterpret_cast<HWND*>(data) = window;
     return FALSE;
@@ -1753,7 +1629,7 @@ HWND CursorWindowAtPointer() {
     return GetCursorPos(&point) ? WindowFromPoint(point) : nullptr;
 }
 
-HWND FindCursorWindow(DWORD threadId, HWND atPointer = nullptr, HWND previous = nullptr) {
+HWND FindCursorWindow(DWORD threadId, HWND atPointer, HWND previous, bool enumerate) {
     // A window can set its cursor under the mouse without gaining focus.
     GUITHREADINFO info{sizeof(info)};
     GetGUIThreadInfo(threadId, &info);
@@ -1761,6 +1637,9 @@ HWND FindCursorWindow(DWORD threadId, HWND atPointer = nullptr, HWND previous = 
         if (window && GetWindowThreadProcessId(window, nullptr) == threadId) {
             return window;
         }
+    }
+    if (!enumerate) {
+        return nullptr;
     }
     HWND window = nullptr;
     EnumThreadWindows(threadId, FindThreadWindow, reinterpret_cast<LPARAM>(&window));
@@ -1771,16 +1650,6 @@ HWND FindCursorWindow(DWORD threadId, HWND atPointer = nullptr, HWND previous = 
     ChildWindowSearch search{threadId};
     EnumWindows(FindChildInHost, reinterpret_cast<LPARAM>(&search));
     return search.window;
-}
-
-void ForgetInactiveThreads() {
-    std::erase_if(g_selections, [](const ThreadSelection& selection) {
-        if (WaitForSingleObject(selection.lifetime, 0) == WAIT_OBJECT_0) {
-            CloseHandle(selection.lifetime);
-            return true;
-        }
-        return false;
-    });
 }
 
 void FreeRetired() {
@@ -1893,13 +1762,6 @@ HCURSOR LogicalCursor(HCURSOR cursor) {
             return instance.original;
         }
     }
-    for (const auto& session : g_restoreSessions) {
-        for (const auto& instance : session->instances) {
-            if (instance.cursor == cursor) {
-                return instance.original;
-            }
-        }
-    }
     return cursor;
 }
 
@@ -1912,11 +1774,7 @@ HCURSOR InstanceFor(Replacement& image, HCURSOR original,
     }
     // Keep a pathological application from accumulating unlimited native handles.
     constexpr size_t maxInstances = 128;
-    size_t published = g_instances.size();
-    for (const auto& session : g_restoreSessions) {
-        published += session->instances.size();
-    }
-    if (published >= maxInstances) {
+    if (g_instances.size() >= maxInstances) {
         return nullptr;
     }
     // CopyImage flattens ANI, so animations must be instantiated from their frames.
@@ -1945,22 +1803,19 @@ public:
         std::lock_guard lock(g_mutex);
         --g_activeCalls;
         FreeRetired();
-        g_needsCleanup.store(!g_instances.empty() || !g_restoreSessions.empty());
+        g_hasInstances.store(!g_instances.empty());
     }
 };
 
 HCURSOR WINAPI GetCursorHook() {
-    if (g_readNativeCursor || !g_needsCleanup.load()) {
+    if (!g_hasInstances.load()) {
         return g_getCursorOriginal();
     }
     std::lock_guard lock(g_mutex);
     return LogicalCursor(g_getCursorOriginal());
 }
 
-HCURSOR WINAPI SetCursorHook(HCURSOR cursor) {
-    if (g_restoreOnly) {
-        return g_setCursorOriginal(cursor);
-    }
+HCURSOR SetCursorForMatch(HCURSOR cursor, CursorMatch match) {
     try {
         thread_local uint64_t roleSession;
         const auto session = g_sessionId.load();
@@ -1968,91 +1823,72 @@ HCURSOR WINAPI SetCursorHook(HCURSOR cursor) {
             roleSession = session;
             g_previousRole = Role::Count;
         }
-        // This also accepts handles obtained through a visual snapshot API.
-        if (g_needsCleanup.load()) {
-            std::lock_guard lock(g_mutex);
-            cursor = LogicalCursor(cursor);
-        }
-        const auto match = g_processExcluded.load(std::memory_order_acquire)
-            ? CursorMatch{} : IdentifyCursor(cursor);
         const bool enabled = ReplacementEnabled(match);
-        if (!enabled && !g_needsCleanup.load()) {
+        if (!enabled && !g_hasInstances.load()) {
             g_previousRole = Role::Count;
             return g_setCursorOriginal(cursor);
         }
 
-        // User32 can synchronously call app code from these window queries.
-        HWND atPointer = nullptr;
-        HWND restoreWindow = nullptr;
+        // Only embedded Chromium exclusions need a host window. Keep User32
+        // queries outside the shared-state lock: they can synchronously reenter.
+        HWND hostWindow = nullptr;
+        bool hostReady = true;
+        thread_local HWND previousWindow;
+        thread_local bool findingHostWindow;
         thread_local ULONGLONG nextWindowProbe;
-        thread_local bool findingPointerWindow;
         const bool checkHost = enabled && match.target == Target::Chromium && g_hasExclusions.load();
-        const auto now = enabled ? GetTickCount64() : 0;
-        if (enabled && !findingPointerWindow) {
-            findingPointerWindow = true;
-            restoreWindow = EnsureRestoreWindow();
-            if (checkHost || (g_previousRole == Role::Count && now >= nextWindowProbe)) {
-                atPointer = GetCapture();
-                if (!atPointer) {
-                    atPointer = CursorWindowAtPointer();
-                }
+        if (checkHost && findingHostWindow) {
+            // A nested callback must not bypass an exclusion being resolved by
+            // the outer query. Still translate its returned previous handle.
+            hostReady = false;
+        } else if (checkHost) {
+            findingHostWindow = true;
+            HWND atPointer = GetCapture();
+            if (!atPointer) {
+                atPointer = CursorWindowAtPointer();
             }
-            findingPointerWindow = false;
+            const auto now = GetTickCount64();
+            const bool enumerate = now >= nextWindowProbe;
+            hostWindow = FindCursorWindow(GetCurrentThreadId(), atPointer, previousWindow, enumerate);
+            if (!hostWindow && enumerate) {
+                nextWindowProbe = now + 250;
+            }
+            previousWindow = hostWindow;
+            findingHostWindow = false;
         }
 
         std::unique_lock lock(g_mutex);
-        ForgetInactiveThreads();
-        auto* selection = FindCurrentSelection();
         HCURSOR display = cursor;
-        HWND window = nullptr;
-        if (!g_stopping && ReplacementEnabled(match) && restoreWindow) {
-            const DWORD threadId = GetCurrentThreadId();
-            if (atPointer && GetWindowThreadProcessId(atPointer, nullptr) == threadId) {
-                window = atPointer;
-            } else if (selection &&
-                       GetWindowThreadProcessId(selection->window, nullptr) == threadId) {
-                window = selection->window;
-            } else if (now >= nextWindowProbe) {
-                window = FindCursorWindow(threadId, atPointer);
-                if (!window) {
-                    nextWindowProbe = now + 250;
-                }
-            }
-            const bool excludedHost = window && match.target == Target::Chromium &&
-                !g_excludedApplications.empty() && IsExcludedHostWindow(window);
+        if (!g_stopping && ReplacementEnabled(match) && hostReady) {
+            const bool excludedHost = hostWindow && match.target == Target::Chromium &&
+                !g_excludedApplications.empty() && IsExcludedHostWindow(hostWindow);
             if (!excludedHost) {
-                if (selection) {
-                    selection->window = window;
-                    selection->restoreWindow = restoreWindow;
-                }
-                if (selection) {
-                    const auto& mapping = kMappings[match.slot];
-                    const size_t role = static_cast<size_t>(mapping.role);
-                    CheckCursorSettings();
-                    if ((g_previousRole == mapping.role && !g_needsRefresh[role]) ||
-                        RefreshSource(mapping.role)) {
-                        const auto& source = *g_sources[role];
-                        const bool smooth = (g_smoothingTypes & TypeBit(mapping.type)) != 0;
-                        auto& image = g_replacements[match.slot];
-                        if (image && image->smooth != smooth) {
-                            if (image->cursor) {
-                                g_retired.push_back(image->cursor);
-                            }
-                            image.reset();
-                        }
-                        if (!image) {
-                            image = Replacement{MakeReplacement(source, mapping, smooth),
-                                                smooth, ++g_nextGeneration};
-                        }
+                const auto& mapping = kMappings[match.slot];
+                const size_t role = static_cast<size_t>(mapping.role);
+                CheckCursorSettings();
+                if ((g_previousRole == mapping.role && !g_needsRefresh[role]) ||
+                    RefreshSource(mapping.role)) {
+                    const auto& source = *g_sources[role];
+                    const bool smooth = (g_smoothingTypes & TypeBit(mapping.type)) != 0;
+                    auto& image = g_replacements[match.slot];
+                    if (image && image->smooth != smooth) {
                         if (image->cursor) {
-                            if (HCURSOR instance = InstanceFor(*image, cursor, source, mapping)) {
-                                display = instance;
-                                g_needsCleanup.store(true);
-                            }
+                            g_retired.push_back(image->cursor);
+                        }
+                        image.reset();
+                    }
+                    if (!image) {
+                        image = Replacement{MakeReplacement(source, mapping, smooth),
+                                            smooth, ++g_nextGeneration};
+                    }
+                    if (image->cursor) {
+                        if (HCURSOR instance = InstanceFor(*image, cursor, source, mapping)) {
+                            display = instance;
+                            g_hasInstances.store(true);
                         }
                     }
-                    g_previousRole = mapping.role;
                 }
+                g_previousRole = mapping.role;
             } else {
                 g_previousRole = Role::Count;
             }
@@ -2064,15 +1900,7 @@ HCURSOR WINAPI SetCursorHook(HCURSOR cursor) {
         lock.unlock();
         // SetCursor emits synchronous WinEvents. No shared-state lock may span it.
         const HCURSOR previous = g_setCursorOriginal(display);
-        const HCURSOR current = NativeCursor();
         lock.lock();
-        // A nested call may have moved the vector or changed the cursor again.
-        selection = FindCurrentSelection();
-        if (selection) {
-            const HCURSOR logical = LogicalCursor(current);
-            selection->cursor = current != logical ? current : nullptr;
-            selection->original = logical;
-        }
         const HCURSOR logicalPrevious = LogicalCursor(previous);
         lock.unlock();
         return logicalPrevious;
@@ -2082,252 +1910,20 @@ HCURSOR WINAPI SetCursorHook(HCURSOR cursor) {
     }
 }
 
-
-
-void RestoreCurrentQueue() {
-    const HCURSOR current = NativeCursor();
-    std::unique_lock lock(g_mutex);
-    HCURSOR original = current;
-    for (const auto& session : g_restoreSessions) {
-        for (const auto& instance : session->instances) {
-            if (instance.cursor == current) {
-                original = instance.original;
-            }
-        }
-    }
-    ActiveCursorCall active;
-    lock.unlock();
-    if (current != original) {
-        const bool previous = std::exchange(g_restoreOnly, true);
-        SetCursor(original);
-        g_restoreOnly = previous;
-    }
-    const HCURSOR restored = NativeCursor();
-    lock.lock();
-    const DWORD thread = GetCurrentThreadId();
-    for (const auto& session : g_restoreSessions) {
-        const bool stillAssigned = std::any_of(
-            session->instances.begin(), session->instances.end(),
-            [restored](const CursorInstance& instance) { return instance.cursor == restored; });
-        for (auto& owner : session->owners) {
-            if (owner.id == thread) {
-                owner.restored = !stillAssigned;
-            }
-        }
-        if (session->changed) {
-            SetEvent(session->changed);
-        }
-    }
-    lock.unlock();
-}
-
-
-void RestoreStoppedThread() {
-    thread_local bool restoring;
-    if (restoring) {
-        return;
-    }
-    restoring = true;
-    struct ResetRestoring {
-        bool& value;
-        ~ResetRestoring() { value = false; }
-    } reset{restoring};
+HCURSOR WINAPI SetCursorHook(HCURSOR cursor) {
     try {
-        RestoreCurrentQueue();
-        for (;;) {
-            HWND window = nullptr;
-            HHOOK hook = nullptr;
-            {
-                std::lock_guard lock(g_mutex);
-                for (const auto& session : g_restoreSessions) {
-                    for (auto& owner : session->owners) {
-                        if (owner.id != GetCurrentThreadId() || !owner.restored) {
-                            continue;
-                        }
-                        if (owner.restoreWindow) {
-                            window = owner.restoreWindow;
-                        } else if (owner.callHook) {
-                            hook = std::exchange(owner.callHook, nullptr);
-                        } else if (owner.messageHook) {
-                            hook = std::exchange(owner.messageHook, nullptr);
-                        }
-                        if (window || hook) {
-                            break;
-                        }
-                    }
-                    if (window || hook) {
-                        break;
-                    }
-                }
-            }
-            if (window) {
-                if (!DestroyWindow(window)) {
-                    std::lock_guard lock(g_mutex);
-                    for (const auto& session : g_restoreSessions) {
-                        for (auto& owner : session->owners) {
-                            if (owner.restoreWindow == window) {
-                                owner.deferredCode = true;
-                            }
-                        }
-                    }
-                    break;
-                }
-            } else if (hook) {
-                UnhookWindowsHookEx(hook);
-            } else {
-                break;
-            }
-        }
-    } catch (...) {
-        // A failed restoration keeps its session and module reference alive.
-    }
-}
-
-LRESULT CALLBACK RestoreCallHook(int code, WPARAM wParam, LPARAM lParam) {
-    if (code >= 0) {
-        RestoreStoppedThread();
-    }
-    return CallNextHookEx(nullptr, code, wParam, lParam);
-}
-
-LRESULT CALLBACK RestoreMessageHook(int code, WPARAM wParam, LPARAM lParam) {
-    if (code >= 0) {
-        RestoreStoppedThread();
-    }
-    return CallNextHookEx(nullptr, code, wParam, lParam);
-}
-
-LRESULT CALLBACK RestoreWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
-    if (message == kRestoreMessage) {
-        RestoreStoppedThread();
-        return 0;
-    }
-    if (message == WM_NCDESTROY) {
-        std::lock_guard lock(g_mutex);
-        for (auto& owner : g_selections) {
-            if (owner.restoreWindow == window) {
-                owner.restoreWindow = nullptr;
-            }
-        }
-        for (const auto& session : g_restoreSessions) {
-            for (auto& owner : session->owners) {
-                if (owner.restoreWindow == window) {
-                    owner.restoreWindow = nullptr;
-                }
-            }
-        }
-    }
-    return DefWindowProcW(window, message, wParam, lParam);
-}
-
-bool ReleaseSession(const std::shared_ptr<RestoreSession>& session) {
-    std::lock_guard lock(g_mutex);
-    if (g_activeCalls || !session->hooksRemoved.load(std::memory_order_acquire)) {
-        return false;
-    }
-    for (const auto& owner : session->owners) {
-        if ((!owner.restored || owner.restoreWindow) &&
-            WaitForSingleObject(owner.lifetime, 0) != WAIT_OBJECT_0) {
-            return false;
-        }
-    }
-    std::erase_if(session->instances, [](const CursorInstance& instance) {
-        return DestroyCursor(instance.cursor) != FALSE;
-    });
-    if (!session->instances.empty()) {
-        return false;
-    }
-    for (const auto& owner : session->owners) {
-        if (owner.callHook) {
-            UnhookWindowsHookEx(owner.callHook);
-        }
-        if (owner.messageHook) {
-            UnhookWindowsHookEx(owner.messageHook);
-        }
-    }
-    std::erase(g_restoreSessions, session);
-    if (g_selections.empty() && g_restoreSessions.empty()) {
-        UnregisterClassW(kRestoreClass, session->module);
-    }
-    g_needsCleanup.store(!g_instances.empty() || !g_restoreSessions.empty());
-    return true;
-}
-
-DWORD WINAPI DeferredRestoreCleanup(void* parameter) {
-    auto* state = static_cast<std::shared_ptr<RestoreSession>*>(parameter);
-    auto session = std::move(*state);
-    delete state;
-    while (!ReleaseSession(session)) {
-        if (session->changed) {
-            WaitForSingleObject(session->changed, 250);
-        } else {
-            Sleep(250);
-        }
-    }
-    // Resources are reclaimed as soon as all queues resume. Callback code stays
-    // resident until pending owner threads exit, including across a later enable.
-    for (const auto& owner : session->owners) {
-        if (owner.deferredCode) {
-            WaitForSingleObject(owner.lifetime, INFINITE);
-        }
-    }
-    const HMODULE module = session->module;
-    session.reset();
-    {
-        std::lock_guard lock(g_mutex);
-        if (g_selections.empty() && g_restoreSessions.empty()) {
-            UnregisterClassW(kRestoreClass, module);
-        }
-    }
-    FreeLibraryAndExitThread(module, 0);
-}
-
-bool DiscoverInputOwners(const std::shared_ptr<RestoreSession>& session) {
-    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-    if (snapshot == INVALID_HANDLE_VALUE) {
-        return false;
-    }
-    bool complete = true;
-    THREADENTRY32 entry{sizeof(entry)};
-    BOOL found = Thread32First(snapshot, &entry);
-    if (!found) {
-        complete = GetLastError() == ERROR_NO_MORE_FILES;
-    }
-    for (; found; found = Thread32Next(snapshot, &entry)) {
-        if (entry.th32OwnerProcessID != GetCurrentProcessId()) {
-            continue;
-        }
-        GUITHREADINFO gui{sizeof(gui)};
-        if (!GetGUIThreadInfo(entry.th32ThreadID, &gui)) {
-            continue;
-        }
-        HANDLE lifetime = OpenThread(SYNCHRONIZE, FALSE, entry.th32ThreadID);
-        if (!lifetime) {
-            complete &= GetLastError() == ERROR_INVALID_PARAMETER;
-            continue;
-        }
-        const HWND window = FindCursorWindow(entry.th32ThreadID);
-        bool added = false;
-        try {
+        // Also accept handles obtained through a visual snapshot API.
+        if (g_hasInstances.load()) {
             std::lock_guard lock(g_mutex);
-            const bool known = std::any_of(session->owners.begin(), session->owners.end(),
-                [&](const ThreadSelection& owner) { return owner.id == entry.th32ThreadID; });
-            if (!known) {
-                session->owners.push_back({entry.th32ThreadID, lifetime, window});
-                added = true;
-            }
-        } catch (...) {
-            CloseHandle(lifetime);
-            CloseHandle(snapshot);
-            throw;
+            cursor = LogicalCursor(cursor);
         }
-        if (!added) {
-            CloseHandle(lifetime);
-        }
+        const auto match = g_processExcluded.load(std::memory_order_acquire)
+            ? CursorMatch{} : IdentifyCursor(cursor);
+        return SetCursorForMatch(cursor, match);
+    } catch (...) {
+        g_previousRole = Role::Count;
+        return g_setCursorOriginal(cursor);
     }
-    complete &= GetLastError() == ERROR_NO_MORE_FILES;
-    CloseHandle(snapshot);
-    return complete;
 }
 
 void UpdateSettings() {
@@ -2401,7 +1997,7 @@ void BeginCursorSession() {
         ++g_sessionId;
         g_watchStarted = false;
         g_needsRefresh.fill(true);
-        g_needsCleanup.store(!g_restoreSessions.empty());
+        g_hasInstances.store(!g_instances.empty());
     }
 }
 
@@ -2428,159 +2024,31 @@ void Wh_ModSettingsChanged() {
 
 
 void Wh_ModBeforeUninit() {
-    HMODULE pin = nullptr;
-    try {
-        if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                               reinterpret_cast<PCWSTR>(RestoreWindowProc), &pin)) {
-            return;
-        }
-        auto session = std::make_shared<RestoreSession>();
-        session->changed = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-        {
-            std::lock_guard lock(g_mutex);
-            g_stopping = true;
-            ForgetInactiveThreads();
-            session->id = g_sessionId.load();
-            session->module = pin;
-            session->instances = std::move(g_instances);
-            session->owners = std::move(g_selections);
-            g_restoreSessions.push_back(session);
-            g_unloading = session;
-        }
-        // Input can be inherited by a queue which never called either cursor hook.
-        if (!session->instances.empty()) {
-            session->discoveryComplete = false;
-            session->discoveryComplete = DiscoverInputOwners(session);
-        }
-        std::vector<DWORD> threads;
-        {
-            std::lock_guard lock(g_mutex);
-            for (const auto& owner : session->owners) {
-                threads.push_back(owner.id);
-            }
-        }
-
-        for (DWORD thread : threads) {
-            if (thread == GetCurrentThreadId()) {
-                RestoreStoppedThread();
-                continue;
-            }
-            HWND window = nullptr;
-            bool privateWindow = false;
-            {
-                std::lock_guard lock(g_mutex);
-                for (auto& owner : session->owners) {
-                    if (owner.id == thread) {
-                        privateWindow = owner.restoreWindow != nullptr;
-                        window = privateWindow ? owner.restoreWindow : owner.window;
-                        // This is set before either hook can start on another thread.
-                        // UnhookWindowsHookEx does not wait for in-flight callbacks.
-                        owner.deferredCode = !privateWindow;
-                        break;
-                    }
-                }
-            }
-            if (!privateWindow) {
-                const HHOOK call = SetWindowsHookExW(WH_CALLWNDPROC, RestoreCallHook, pin, thread);
-                const HHOOK message = SetWindowsHookExW(WH_GETMESSAGE, RestoreMessageHook, pin, thread);
-                bool alreadyRestored = false;
-                {
-                    std::lock_guard lock(g_mutex);
-                    for (auto& owner : session->owners) {
-                        if (owner.id == thread) {
-                            alreadyRestored = owner.restored;
-                            if (!alreadyRestored) {
-                                owner.callHook = call;
-                                owner.messageHook = message;
-                            }
-                            break;
-                        }
-                    }
-                }
-                if (alreadyRestored) {
-                    if (call) {
-                        UnhookWindowsHookEx(call);
-                    }
-                    if (message) {
-                        UnhookWindowsHookEx(message);
-                    }
-                    continue;
-                }
-            }
-            const UINT flags = SMTO_ABORTIFHUNG | SMTO_BLOCK |
-                (privateWindow ? 0u : SMTO_ERRORONEXIT);
-            const bool delivered = window &&
-                SendMessageTimeoutW(window, privateWindow ? kRestoreMessage : WM_NULL, 0, 0,
-                                    flags, 100, nullptr);
-            if (privateWindow) {
-                {
-                    std::lock_guard lock(g_mutex);
-                    for (auto& owner : session->owners) {
-                        if (owner.id == thread) {
-                            owner.deferredCode |= !delivered;
-                        }
-                    }
-                }
-                if (!delivered) {
-                    PostMessageW(window, kRestoreMessage, 0, 0);
-                }
-            } else {
-                // Only the owner's exit proves that a removed hook has returned.
-                // The module pin is retained even after a synchronous acknowledgement.
-                PostThreadMessageW(thread, WM_NULL, 0, 0);
-            }
-        }
-    } catch (...) {
-        // A successful module pin must survive any unserviced restore callback.
-    }
+    std::lock_guard lock(g_mutex);
+    g_stopping = true;
 }
 
 void Wh_ModUninit() {
-    std::shared_ptr<RestoreSession> session;
-    {
-        std::lock_guard lock(g_mutex);
-        session = std::exchange(g_unloading, {});
-        CloseSettingsWatch();
-        for (auto& image : g_replacements) {
-            if (image && image->cursor) {
-                DestroyCursor(image->cursor);
-            }
-            image.reset();
+    std::lock_guard lock(g_mutex);
+    CloseSettingsWatch();
+    // Templates were never handed to Win32.
+    for (auto& image : g_replacements) {
+        if (image && image->cursor) {
+            DestroyCursor(image->cursor);
         }
-        for (HCURSOR cursor : g_retired) {
-            DestroyCursor(cursor);
-        }
-        g_retired.clear();
-        for (auto& source : g_sources) {
-            source.reset();
-        }
+        image.reset();
     }
-    if (!session) {
-        return;
+    for (HCURSOR cursor : g_retired) {
+        DestroyCursor(cursor);
     }
-    session->hooksRemoved.store(true, std::memory_order_release);
-    if (!session->discoveryComplete) {
-        // Unknown input owners can still hold an alias. Keep its identity and
-        // native handle until process exit rather than invalidate a live queue.
-        return;
+    g_retired.clear();
+    for (auto& source : g_sources) {
+        source.reset();
     }
-    const bool pendingCode = std::any_of(session->owners.begin(), session->owners.end(),
-        [](const ThreadSelection& owner) { return owner.deferredCode; });
-    if (!pendingCode && ReleaseSession(session)) {
-        const HMODULE module = session->module;
-        session.reset();
-        FreeLibrary(module);
-        return;
-    }
-    auto* deferred = new (std::nothrow) std::shared_ptr<RestoreSession>(std::move(session));
-    if (!deferred) {
-        return;
-    }
-    HANDLE worker = CreateThread(nullptr, 0, DeferredRestoreCleanup, deferred, 0, nullptr);
-    if (worker) {
-        CloseHandle(worker);
-    } else {
-        delete deferred;
-        // The stopped session and its module pin remain safe for late callbacks.
-    }
+    // Published native handles can belong to any attached or inherited input
+    // queue. They contain no mod callbacks and remain valid until process exit.
+    // Windhawk can unload this DLL normally; the next native SetCursor restores
+    // the application's pointer without running code from an unloaded image.
+    g_instances.clear();
+    g_hasInstances.store(false);
 }
