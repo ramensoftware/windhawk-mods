@@ -1,3 +1,9 @@
+## 1.3.2 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/78d6aca1308703ee2fd2182f7106d1cd7343036c/mods/taskbar-tray-system-icon-tweaks.wh.cpp))
+
+* Bell settings are now applied on secondary taskbars.
+* Improved support for the native vertical taskbar.
+* Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.
+
 ## 1.3.1 ([Oct 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0effe7425314f8f1970b4173b8350732520a4575/mods/taskbar-tray-system-icon-tweaks.wh.cpp))
 
 * Fixed "Show desktop" button tweaking compatibility with latest Windows 11 versions.

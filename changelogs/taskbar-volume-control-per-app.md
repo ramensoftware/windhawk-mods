@@ -1,3 +1,11 @@
+## 1.2 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/afd824bf1fddd9a2e59d85a559390e9ba3e77188/mods/taskbar-volume-control-per-app.wh.cpp))
+
+* Middle-clicking a taskbar button toggles mute for that app. It can be turned off in the mod settings. The implementation was contributed by [flxcraft](https://github.com/flxcraft).
+* Added an option for the tooltip color.
+* Added the "Touchpad scrolling" option, which changes the volume with two-finger scrolling on precision touchpads whose scrolling doesn't work over the taskbar.
+* Fixed the tooltip being cut off with a vertical taskbar, set in the Windows settings or by the "Vertical Taskbar for Windows 11" mod. The tooltip is shown at the screen edge, above thumbnail previews.
+* Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.
+
 ## 1.1.4 ([Jan 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7a831cf22a819dd2549b70aa3de1fd62394d7097/mods/taskbar-volume-control-per-app.wh.cpp))
 
 * Added support for some Chromium-based programs.

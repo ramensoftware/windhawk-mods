@@ -18477,7 +18477,7 @@
         "ratingUsers": 689,
         "reviews": 0,
         "trendingSorting": -2.091529298609342,
-        "updated": 1790547107000,
+        "updated": 1794902419000,
         "users": 37901
       },
       "featured": true,
@@ -18495,7 +18495,7 @@
         ],
         "name": "Taskbar Labels for Windows 11",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.5.1"
+        "version": "1.6"
       }
     },
     "taskbar-language-indicator-layout-control": {
@@ -19635,7 +19635,7 @@
         "ratingUsers": 105,
         "reviews": 0,
         "trendingSorting": 0.2491440094340985,
-        "updated": 1771028440000,
+        "updated": 1794902424000,
         "users": 6387
       },
       "metadata": {
@@ -19652,7 +19652,7 @@
         ],
         "name": "Taskbar tray auto-hide (show on hover)",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.0"
+        "version": "1.0.1"
       }
     },
     "taskbar-tray-system-icon-tweaks": {
@@ -19664,7 +19664,7 @@
         "ratingUsers": 1067,
         "reviews": 0,
         "trendingSorting": -1.924027733379191,
-        "updated": 1791547818000,
+        "updated": 1794902429000,
         "users": 87029
       },
       "metadata": {
@@ -19681,7 +19681,7 @@
         ],
         "name": "Taskbar tray system icon tweaks",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.3.1"
+        "version": "1.3.2"
       }
     },
     "taskbar-user-tile": {
@@ -19809,7 +19809,7 @@
         "ratingUsers": 580,
         "reviews": 0,
         "trendingSorting": -0.7907170521235451,
-        "updated": 1769026807000,
+        "updated": 1794902434000,
         "users": 50132
       },
       "metadata": {
@@ -19817,7 +19817,7 @@
           "x86-64"
         ],
         "author": "m417z",
-        "compilerOptions": "-lcomctl32 -lntdll -lole32 -loleaut32 -lruntimeobject",
+        "compilerOptions": "-lcomctl32 -lhid -lntdll -lole32 -loleaut32 -lruntimeobject",
         "description": "Control the per-app volume by scrolling over taskbar buttons",
         "github": "https://github.com/m417z",
         "homepage": "https://m417z.com/",
@@ -19826,7 +19826,7 @@
         ],
         "name": "Taskbar Volume Control Per-App",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.1.4"
+        "version": "1.2"
       }
     },
     "taskbar-volume-percentage": {

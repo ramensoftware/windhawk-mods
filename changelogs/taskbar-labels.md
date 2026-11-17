@@ -1,3 +1,9 @@
+## 1.6 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5e44fbdb4dd4433ef2ddd99c5ff59214cbf74fde/mods/taskbar-labels.wh.cpp))
+
+* When taskbar buttons are combined, a button with a single window now shows the window title instead of the program name, same as when taskbar buttons aren't combined.
+* Added support for the native vertical taskbar in newer Windows 11 versions for the "Show labels, combine taskbar buttons" and "Hide labels, don't combine taskbar buttons" modes.
+* Fixed the running and progress indicator styles on the native vertical taskbar.
+
 ## 1.5.1 ([Sep 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/55660e096dc79a0629ae8e31394904ad201d3a73/mods/taskbar-labels.wh.cpp))
 
 * Fixed a missing running indicators regression introduced in the last update.

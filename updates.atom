@@ -2,12 +2,77 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-17T07:04:00.000Z</updated>
+    <updated>2026-11-17T08:00:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Volume Control Per-App 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-volume-control-per-app#afd824bf1fddd9a2e59d85a559390e9ba3e77188</id>
+        <link href="https://windhawk.net/mods/taskbar-volume-control-per-app"/>
+        <updated>2026-11-17T08:00:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Middle-clicking a taskbar button toggles mute for that app. It can be turned off in the mod settings. The implementation was contributed by <a href="https://github.com/flxcraft">flxcraft</a>.</li>
+<li>Added an option for the tooltip color.</li>
+<li>Added the &quot;Touchpad scrolling&quot; option, which changes the volume with two-finger scrolling on precision touchpads whose scrolling doesn't work over the taskbar.</li>
+<li>Fixed the tooltip being cut off with a vertical taskbar, set in the Windows settings or by the &quot;Vertical Taskbar for Windows 11&quot; mod. The tooltip is shown at the screen edge, above thumbnail previews.</li>
+<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.3.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#78d6aca1308703ee2fd2182f7106d1cd7343036c</id>
+        <link href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks"/>
+        <updated>2026-11-17T08:00:29.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Bell settings are now applied on secondary taskbars.</li>
+<li>Improved support for the native vertical taskbar.</li>
+<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar tray auto-hide (show on hover) 1.0.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-tray-show-on-hover#62344c8ec7898437efad72b3f89132d0e7389028</id>
+        <link href="https://windhawk.net/mods/taskbar-tray-show-on-hover"/>
+        <updated>2026-11-17T08:00:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
+<li>Improved ARM64 compatibility.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.6]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#5e44fbdb4dd4433ef2ddd99c5ff59214cbf74fde</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2026-11-17T08:00:19.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>When taskbar buttons are combined, a button with a single window now shows the window title instead of the program name, same as when taskbar buttons aren't combined.</li>
+<li>Added support for the native vertical taskbar in newer Windows 11 versions for the &quot;Show labels, combine taskbar buttons&quot; and &quot;Hide labels, don't combine taskbar buttons&quot; modes.</li>
+<li>Fixed the running and progress indicator styles on the native vertical taskbar.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start button always on the left 1.3.4]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-position#8854f71d0182663987a14d5670f3d309a2a88484</id>
@@ -446,103 +511,6 @@ tool without injecting into or hooking any system processes.</li>
         <author>
             <name>akiyorm</name>
             <uri>https://github.com/akiyorm</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Flip3DComp 2.0]]></title>
-        <id>https://windhawk.net/mods/flip3dcomp#0fcdd567747da7208f500f59c732043c6b20b3dd</id>
-        <link href="https://windhawk.net/mods/flip3dcomp"/>
-        <updated>2026-11-16T21:04:31.000Z</updated>
-        <content type="html"><![CDATA[<h1>Flip3DComp</h1>
-<p>Original version by: <a href="https://github.com/ALTaleX531">ALTaleX531</a></p>
-<p>A DirectComposition reimplementation of the Flip3D Window switcher introduced on Windows Vista, for newer versions of Windows.
-Ported from my repository <a href="https://github.com/milestprower92/Flip3DComp">Flip3DComp</a></p>
-<h2>Demo</h2>
-<p><img src="https://raw.githubusercontent.com/milestprower92/Flip3DComp/refs/heads/main/media/Flip3DComp_demo.gif" alt="Demo"></p>
-<p>Live window previews follow the original Flip3D carousel layout and timing.</p>
-<h2>Requirements</h2>
-<ul>
-<li>Windows 10 versions 1703 and higher</li>
-<li>Windhawk 1.7.3 or higher</li>
-</ul>
-<h2>⚠️ Notes</h2>
-<ul>
-<li>The optional Task View override currently uses the Windows 11 Task View activation path on AMD64. It is unavailable on x86, ARM64 &amp; Windows 10.</li>
-<li><strong>Do not enable more than one Win+Tab replacement. Disable Any mods that override Win+Tab, or leave Win+Tab disabled in Alt+Tab Flip 3D, while using Flip3DComp.</strong></li>
-</ul>
-<h2>Controls</h2>
-<ul>
-<li><code>Win+Tab</code>: Open Flip3D</li>
-<li><code>Ctrl + Win + Tab</code>: Open Flip3D in Sticky Mode</li>
-<li><code>Tab</code> / <code>Shift + Tab</code>, arrow keys, mouse wheel: scroll the carousel</li>
-<li><code>Enter</code> or left click a card: activate the selected window</li>
-<li><code>Home</code>: return to the original front window</li>
-<li><code>Esc</code>: exit</li>
-<li><code>F5</code>: replay the enter animation</li>
-</ul>
-<h2>Mod disclosure</h2>
-<ul>
-<li>Unlike the existing Flip 3D mods in the Windhawk catalog, this mod is a reimplementation of the original Windows Vista Flip 3D, built on DirectComposition.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Tails (milestprower92)</name>
-            <uri>https://github.com/milestprower92</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Open Window Underline 2.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-open-window-underline#760ce4fac59ca52beb92cb59e5297f386bd6607b</id>
-        <link href="https://windhawk.net/mods/taskbar-open-window-underline"/>
-        <updated>2026-11-16T20:02:27.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Settings are now grouped into <strong>General</strong>, <strong>Label underline</strong> and <strong>Icon underline</strong>. General holds the options that apply to both underlines: what to underline, buttons with several windows, the foreground and cloaked-window options, the refresh delay and hiding the running indicator.</li>
-<li>New <strong>Label underline → Enabled</strong> toggle (on by default). Turn it off to use the icon underline on its own; labels are made plain right away.</li>
-<li>With the label underline off, a title change or a reused button still updates the icon underline.</li>
-<li>With both underlines off, the mod stops listening for window events and no longer evaluates buttons; hiding the running indicator still works on its own.</li>
-<li>README and setting descriptions updated for the new grouping.</li>
-<li>Note: the setting keys moved, so the general options and the label style return to their defaults after updating and need to be set again in the new sections.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Adaptive Microphone Icon Visibility 2.0]]></title>
-        <id>https://windhawk.net/mods/adaptive-microphone-icon-visibility#af95847c8bb8beaf8f6c118ab2d15f53c7099db0</id>
-        <link href="https://windhawk.net/mods/adaptive-microphone-icon-visibility"/>
-        <updated>2026-11-16T20:02:20.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Detect microphone use via audio sessions, since the registry data is no longer updated.</li>
-<li>Whitelist entries are now executable names (e.g. <code>obs64.exe</code>), including for Store apps.</li>
-<li>Show the icon if monitoring fails to start.</li>
-<li>Fixed loading on builds where the tray lives in <code>ExplorerExtensions.dll</code>.</li>
-<li>Improved unloading and logging.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Ikkecode</name>
-            <uri>https://github.com/ikkecode</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Top Taskbar Bleed 1.3.0]]></title>
-        <id>https://windhawk.net/mods/top-taskbar-bleed#985d9975b2fea09fbda6977ee6f3c6c555212c5f</id>
-        <link href="https://windhawk.net/mods/top-taskbar-bleed"/>
-        <updated>2026-11-16T20:02:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New “Separator line” settings: an optional line along the edge of the bleed that meets the window, as a seam between the bleed and the title bar</li>
-<li>Separator color follows the bleed with a configurable contrast (same hue, lighter on a dark bleed, darker on a light one), or a fixed #RRGGBB color, or “accent” for the Windows accent color; opacity configurable</li>
-<li>Separator styles: continuous, dashed, dot-dash, dotted, with thickness, dash and gap lengths in physical pixels at any display scaling</li>
-<li>The separator sits on the correct edge for top, bottom, left and right taskbars, including frames rotated by vertical-taskbar mods, follows the taskbar when it moves, and follows a Taskbar Styler margin on the panel</li>
-<li>README: separator documented, settings listed, Styler target Line#TaskbarBleedSeparator</li>
-</ul>
-]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
         </author>
     </entry>
 </feed>
