@@ -107,10 +107,10 @@ Turning the mod off puts the taskbar back to normal.
   your accent color and an app that needs attention turns orange; Windows 11
   Style, Windows' own; or None. Progress bars, like a download's, show under
   the icon either way.
-- **Dividers.** A thin line after File Explorer (and Start or Task View, if
-  they're in the dock), and another before the Recycle Bin. Either can be
-  turned off. "Custom Index Dividers" adds up to 5 more: a divider at 3 goes
-  after the third icon from the left.
+- **Dividers.** A thin line before the Recycle Bin, and, if you turn it on,
+  another after File Explorer (and Start or Task View, if they're in the
+  dock). "Custom Index Dividers" adds up to 5 more: a divider at 3 goes after
+  the third icon from the left.
 - **A brightness limit** (off by default). Turn on "Cap Dock Per-Pixel
   Brightness" to hold whatever shows through the dock under "Dock Brightness
   Limit", pixel by pixel, as the tray does (see below): a white window behind
@@ -484,9 +484,9 @@ Apple's curve.
   - previews: false
     $name: See Window Previews
     $description: Shows window previews on hover. (Default = Disabled)
-  - dividerAfterExplorer: true
+  - dividerAfterExplorer: false
     $name: Divider After the File Explorer
-    $description: (Default = Enabled)
+    $description: (Default = Disabled)
   - dividerBeforeTrash: true
     $name: Divider Before the Recycle Bin
     $description: (Default = Enabled)
@@ -4327,7 +4327,6 @@ bool g_taskViewOpen = false;
 void ScheduleOverWindows(bool autoHide);
 bool IsFlyout(HWND hwnd, bool popups);
 int StripHeight(UINT dpi);
-void LogTaskbarState(PCWSTR why);
 
 bool DockHides() {
     return g_settings.autoHide == AutoHide::On || g_taskViewOpen ||
@@ -4499,7 +4498,6 @@ void SetWindowMaximized(bool maximized) {
     g_windowMaximized = maximized;
     g_dockRevealed = maximized && g_pointerOver;
     g_dockAwayTicks = 0;
-    LogTaskbarState(maximized ? L"A window was maximized" : L"No window is maximized now");
     ScheduleOverWindows(false);  // the clip
     StartFrames();
 }
@@ -4677,147 +4675,6 @@ void WatchTaskView(bool watch) {
                                              GetCurrentProcessId(), 0, WINEVENT_OUTOFCONTEXT);
         if (hook) g_taskViewHooks.push_back(hook);
     }
-}
-
-// ---- DEBUG: Start's position (temporary, remove once fixed) ----
-// Start sometimes opens behind the dock after a window's been maximized and
-// unmaximized. This logs what Start could be placing itself by: the taskbar
-// window as Windows sees it, when Start opens or moves, when the dock hides or
-// shows for a maximized window, and when Windows tries to hide the taskbar.
-// Lines start with [start]. Off with kLogStartPosition = false.
-
-constexpr bool kLogStartPosition = true;
-std::vector<HWINEVENTHOOK> g_startMenuHooks;
-
-std::wstring RectText(RECT const& r) {
-    return L"(" + std::to_wstring(r.left) + L"," + std::to_wstring(r.top) + L")-(" +
-           std::to_wstring(r.right) + L"," + std::to_wstring(r.bottom) + L") " +
-           std::to_wstring(r.right - r.left) + L"x" + std::to_wstring(r.bottom - r.top);
-}
-
-void LogTaskbarState(PCWSTR why) {
-    if (!kLogStartPosition) return;
-    HWND tb = FindTaskbar();
-    if (!tb) {
-        Wh_Log(L"[start] %s: no taskbar", why);
-        return;
-    }
-    HMONITOR monitor = MonitorFromWindow(tb, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi{sizeof(mi)};
-    GetMonitorInfo(monitor, &mi);
-    UINT dpiX = 96, dpiY = 96;
-    GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
-
-    RECT window{}, region{};
-    GetWindowRect(tb, &window);
-    HRGN rgn = CreateRectRgn(0, 0, 0, 0);
-    int regionType = GetWindowRgn(tb, rgn);
-    if (regionType != ERROR) GetRgnBox(rgn, &region);
-    DeleteObject(rgn);
-    BOOL cloaked = FALSE;
-    DwmGetWindowAttribute(tb, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
-
-    // What Windows tells other programs about the taskbar.
-    APPBARDATA state{sizeof(state)};
-    state.hWnd = tb;
-    UINT appBarState = (UINT)SHAppBarMessage(ABM_GETSTATE, &state);
-    APPBARDATA pos{sizeof(pos)};
-    pos.hWnd = tb;
-    SHAppBarMessage(ABM_GETTASKBARPOS, &pos);
-    APPBARDATA bar{sizeof(bar)};
-    bar.uEdge = ABE_BOTTOM;
-    bar.rc = mi.rcMonitor;
-    HWND autoHideBar = (HWND)SHAppBarMessage(ABM_GETAUTOHIDEBAREX, &bar);
-
-    Wh_Log(L"[start] %s", why);
-    Wh_Log(L"[start]   taskbar window %s, region %s, topmost %d, visible %d, cloaked %d",
-           RectText(window).c_str(), regionType == ERROR ? L"none" : RectText(region).c_str(),
-           (GetWindowLongPtr(tb, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0, IsWindowVisible(tb),
-           cloaked);
-    Wh_Log(L"[start]   app bar: auto-hide %d, always on top %d, taskbar pos %s, "
-           L"auto-hide bar at bottom %s",
-           (appBarState & ABS_AUTOHIDE) != 0, (appBarState & ABS_ALWAYSONTOP) != 0,
-           RectText(pos.rc).c_str(), !autoHideBar ? L"none" : autoHideBar == tb ? L"taskbar" : L"other");
-    Wh_Log(L"[start]   monitor %s, work area %s, dpi %u, dock strip %d px",
-           RectText(mi.rcMonitor).c_str(), RectText(mi.rcWork).c_str(), dpiY, StripHeight(dpiY));
-    Wh_Log(L"[start]   dock: maximized window %d, hides %d, revealed %d, shown %.2f, "
-           L"task view %d, auto-hide setting %d",
-           g_windowMaximized, DockHides(), g_dockRevealed, g_dockShown, g_taskViewOpen,
-           (int)g_settings.autoHide);
-}
-
-// Start's window, in StartMenuExperienceHost.exe.
-bool IsStartMenuWindow(HWND w) {
-    static DWORD startPid = 0;
-    WCHAR cls[64];
-    DWORD pid = 0;
-    if (!GetClassName(w, cls, ARRAYSIZE(cls)) || wcscmp(cls, L"Windows.UI.Core.CoreWindow") ||
-        !GetWindowThreadProcessId(w, &pid)) {
-        return false;
-    }
-    if (pid == startPid) return true;
-    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!process) return false;
-    WCHAR path[MAX_PATH];
-    DWORD size = ARRAYSIZE(path);
-    bool start = false;
-    if (QueryFullProcessImageNameW(process, 0, path, &size)) {
-        PCWSTR file = wcsrchr(path, L'\\');
-        start = !_wcsicmp(file ? file + 1 : path, L"StartMenuExperienceHost.exe");
-    }
-    CloseHandle(process);
-    if (start) startPid = pid;
-    return start;
-}
-
-void CALLBACK OnStartMenuEvent(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
-                               LONG idChild, DWORD, DWORD) {
-    if (g_unloading || !hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF ||
-        !IsStartMenuWindow(hwnd)) {
-        return;
-    }
-    BOOL cloaked = FALSE;
-    DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
-    bool shown = IsWindowVisible(hwnd) && !cloaked;
-    if (event == EVENT_OBJECT_LOCATIONCHANGE && !shown) return;
-    PCWSTR what = event == EVENT_OBJECT_SHOW       ? L"shown"
-                  : event == EVENT_OBJECT_HIDE     ? L"hidden"
-                  : event == EVENT_OBJECT_CLOAKED  ? L"closed (cloaked)"
-                  : event == EVENT_OBJECT_UNCLOAKED ? L"opened (uncloaked)"
-                                                   : L"moved";
-    RECT frame{};
-    if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &frame, sizeof(frame)))) {
-        GetWindowRect(hwnd, &frame);
-    }
-    MONITORINFO mi{sizeof(mi)};
-    GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi);
-    WCHAR title[64] = L"";
-    GetWindowTextW(hwnd, title, ARRAYSIZE(title));
-    Wh_Log(L"[start] ==== Start window \"%s\" %s: %s, bottom %ld px above the screen's bottom",
-           title, what, RectText(frame).c_str(), mi.rcMonitor.bottom - frame.bottom);
-    if (shown) LogTaskbarState(L"  the taskbar at that moment:");
-}
-
-// On the taskbar's thread, like WatchTaskView. Other processes' windows only.
-void WatchStartMenu(bool watch) {
-    watch = watch && kLogStartPosition;
-    if (watch == !g_startMenuHooks.empty()) return;
-    if (!watch) {
-        for (HWINEVENTHOOK hook : g_startMenuHooks) UnhookWinEvent(hook);
-        g_startMenuHooks.clear();
-        return;
-    }
-    constexpr std::pair<DWORD, DWORD> kEvents[] = {
-        {EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE},
-        {EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE},
-        {EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED},
-    };
-    for (auto [first, last] : kEvents) {
-        HWINEVENTHOOK hook = SetWinEventHook(first, last, nullptr, OnStartMenuEvent, 0, 0,
-                                             WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-        if (hook) g_startMenuHooks.push_back(hook);
-    }
-    LogTaskbarState(L"Logging Start's position");
 }
 
 // ---- Polling ----
@@ -5555,7 +5412,6 @@ void UpdatePolling() {
     if (hybrid) ScheduleMaximizedCheck();  // as things are now, at the new dock size
     WatchWindowDrops(hybrid);
     WatchTaskView(!g_unloading);
-    WatchStartMenu(!g_unloading);
 }
 
 // Windows drops keypresses we send while an administrator window is in front.
@@ -6186,7 +6042,6 @@ void ResetAll() {
     WatchWindows(false);
     WatchWindowDrops(false);
     WatchTaskView(false);
-    WatchStartMenu(false);
     Try(DestroyLabel);
     Try(RemovePlates);
     g_d2d = nullptr;
@@ -7556,18 +7411,16 @@ void ApplyAutoHide() {
     }
     Wh_SetIntValue(UserValueName(L"managingAutoHide").c_str(), g_managingAutoHide);
     Wh_SetIntValue(UserValueName(L"autoHideBefore").c_str(), g_autoHideBefore);
-    if (!g_unloading) LogTaskbarState(L"Auto-hide applied");
 }
 
 void WINAPI TrayUI__Hide_Hook(void* pThis) {
     if (!KeepTaskbarShown()) return TrayUI__Hide_Original(pThis);
-    LogTaskbarState(L"Windows tried to hide the taskbar (blocked)");
     if (HWND tb = FindTaskbar()) KillTimer(tb, kTrayHideTimer);
 }
 
 void WINAPI CSecondaryTray__AutoHide_Hook(void* pThis, bool param1) {
     if (!KeepTaskbarShown()) return CSecondaryTray__AutoHide_Original(pThis, param1);
-    LogTaskbarState(L"Windows tried to hide a secondary taskbar (blocked)");
+    // Otherwise kept shown: Windows' hide is skipped.
 }
 
 // The strip kept free: the dock and the gap under it, at least as tall as the
