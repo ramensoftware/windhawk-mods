@@ -6,7 +6,7 @@
 // @author          Solo_mag
 // @github          https://github.com/Solomag
 // @include         explorer.exe
-// @compilerOptions -luser32 -lshell32 -lkernel32 -lcomctl32
+// @compilerOptions -luser32 -lshell32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -23,34 +23,37 @@ so "ghost" icons and duplicates pile up until you hover over the tray.
 
 Programs add and remove tray icons with `Shell_NotifyIcon`, which delivers each request
 to the taskbar window as a `WM_COPYDATA` message. The mod watches those messages inside
-Explorer, so it knows exactly which icon belongs to which process — including icons
-identified by GUID — without reading any internal Explorer data.
+Explorer, together with Explorer's answer to each of them, so it knows exactly which icon
+belongs to which process — including icons identified by GUID — without reading any
+internal Explorer data.
 
 * For every process that owns an icon, the mod registers a wait on the process handle
   (no polling).
-* When the process exits, the mod waits 1.5 s (time for a well-behaved program to clean
-  up after itself) and removes the icons that are still there with a regular
-  `Shell_NotifyIcon(NIM_DELETE)`, using the same identity (window + ID, or GUID) the
-  program registered them with.
-* A light 30 s check catches owners the mod can't wait on (for example elevated
-  processes): it only looks at its own list, not at the tray.
+* When the process exits, the mod waits 1.5 s and then removes the icons that are still
+  there with a regular `Shell_NotifyIcon(NIM_DELETE)`, using the same identity (window +
+  ID, or GUID) the program registered them with. An icon is only removed when the window
+  it belongs to is gone as well.
+* A light 30 s check catches owners the mod couldn't open or wait on: it only looks at
+  its own list, not at the tray.
 * When the mod is enabled while Explorer is already running, it sends the documented
   `TaskbarCreated` notification once, so running programs re-register their icons and
   the mod learns about them. (Explorer itself sends it on every start; programs are
-  required to handle it.)
+  required to handle it.) Icons of programs that ignore it are learned the next time the
+  program updates them (tooltip, image or state). This step can be turned off in the
+  settings.
 * Every removed ghost is logged — program path, PID and tooltip — to the Windhawk log
   and, optionally, to a text file, so you can find out which program keeps leaving them.
 
-## Compared to other tools
+## Compared to other approaches
 
-| | This mod | System Tray Refresh, NoVirusThanks SysTray Refresh, LP TrayIconBuster | Notification Area Cleaner | Restarting Explorer |
+| | This mod | Tray refresh utilities | Tray reset tools | Restarting Explorer |
 |---|---|---|---|---|
 | Runs as | part of Explorer, no extra process | separate background program | one-off program | manual |
-| Trigger | the owner process exiting | timer: every N seconds or on demand | when you run it | when you do it |
-| Method | `NIM_DELETE` with the icon's own identity | simulated mouse moves over the tray, or reading Explorer's toolbar memory from outside | resets the tray settings in the registry | full restart |
-| Icons registered by GUID | removed | depends on the hover check | — | removed |
+| Trigger | the owner process exiting | timer or on demand | when you run it | when you do it |
+| Method | `NIM_DELETE` with the icon's own identity | simulated mouse moves over the tray, or reading Explorer's toolbar memory from another process | resets the tray settings in the registry | full restart |
+| Icons registered by GUID | removed | depends on the tool | — | removed |
 | Tells you who left the icon | yes, program and PID | no | no | no |
-| Side effects | none | brief cursor-free hover messages; may lag behind | clears your icon visibility settings | taskbar flickers, open Explorer windows close |
+| Side effects | none, apart from the optional one-time `TaskbarCreated` when the mod is enabled | depends on the tool; may lag behind | clears your icon visibility settings | taskbar flickers, open Explorer windows close |
 
 ## Compatibility
 
@@ -65,14 +68,15 @@ but this has not been tested.
 - logFile: ""
   $name: Log file
   $description: >-
-    Optional path of a text file to append removed icons to (UTF-8).
-    Leave empty to log only to the Windhawk log.
+    Optional full path of a text file to append removed icons to (UTF-8). Environment
+    variables such as %USERPROFILE% are expanded. Leave empty to log only to the
+    Windhawk log.
 - refreshOnLoad: true
   $name: Learn existing icons on load
   $description: >-
     When the mod is enabled while Explorer is already running, send TaskbarCreated
-    once so that running programs re-register their icons. Without it, only icons
-    added after the mod was loaded are tracked.
+    once so that running programs re-register their icons. Without it, icons that
+    existed before the mod was loaded are learned only when their program updates them.
 */
 // ==/WindhawkModSettings==
 
@@ -81,7 +85,9 @@ but this has not been tested.
 #include <shellapi.h>
 #include <windhawk_utils.h>
 
+#include <atomic>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -117,7 +123,17 @@ struct TrayNotifyData {
 };
 #pragma pack(pop)
 
+// cbSize is the size the program declared, which may refer to its own (64-bit or older)
+// structure, so it is only used as an extra upper bound next to cbData. Programs that
+// use a structure without guidItem never set NIF_GUID.
 constexpr DWORD kGuidEnd = offsetof(NotifyIconData32, guidItem) + sizeof(GUID);
+
+constexpr DWORD kPeriodicMs = 30000;
+constexpr DWORD kGraceMs = 1500;
+
+// Program path of an owner, shared by its icons so that a ghost is always reported with
+// the program that added it, even if its pid has been reused since.
+using ExePtr = std::shared_ptr<std::wstring>;
 
 struct TrackedIcon {
     HWND hwnd;
@@ -125,18 +141,22 @@ struct TrackedIcon {
     bool byGuid;
     GUID guid;
     DWORD pid;
+    ExePtr exe;
     std::wstring tip;
 };
 
 struct Owner {
     HANDLE process = nullptr;
     HANDLE wait = nullptr;
-    std::wstring exe;
+    bool pending = true;  // the worker hasn't opened the process yet
+    FILETIME seen = {};   // when its first icon was seen (detects pid reuse)
+    ExePtr exe = std::make_shared<std::wstring>(L"?");
 };
 
 SRWLOCK g_lock = SRWLOCK_INIT;            // guards everything below
 std::vector<TrackedIcon> g_icons;
 std::map<DWORD, Owner> g_owners;          // pid -> wait on its process
+std::vector<Owner> g_retired;             // replaced owners; the worker closes them
 std::vector<DWORD> g_exited;              // pids reported by the wait callbacks
 std::vector<DWORD> g_newPids;             // pids that still need a wait
 std::wstring g_logFile;
@@ -145,7 +165,7 @@ bool g_refreshOnLoad = true;
 HANDLE g_stop = nullptr;
 HANDLE g_wake = nullptr;
 HANDLE g_thread = nullptr;
-HWND g_tray = nullptr;
+std::atomic<HWND> g_tray{nullptr};        // subclassed taskbar of this process
 
 HWND FromHandle32(DWORD h) {
     return (HWND)(LONG_PTR)(LONG)h;  // sign-extended, as WOW64 does
@@ -155,6 +175,13 @@ bool SameIdentity(const TrackedIcon& a, bool byGuid, const GUID& guid, HWND hwnd
     if (byGuid || a.byGuid)
         return byGuid && a.byGuid && IsEqualGUID(a.guid, guid);
     return a.hwnd == hwnd && a.id == id;
+}
+
+void ReleaseOwner(const Owner& owner) {
+    if (owner.wait)
+        UnregisterWaitEx(owner.wait, INVALID_HANDLE_VALUE);  // waits for the callback
+    if (owner.process)
+        CloseHandle(owner.process);
 }
 
 void Report(const std::wstring& line) {
@@ -191,16 +218,42 @@ void Report(const std::wstring& line) {
 
 void LoadSettings() {
     PCWSTR s = Wh_GetStringSetting(L"logFile");
+    std::wstring path = s ? s : L"";
+    Wh_FreeStringSetting(s);
+    if (!path.empty()) {
+        WCHAR expanded[MAX_PATH * 2];
+        DWORD n = ExpandEnvironmentStringsW(path.c_str(), expanded, ARRAYSIZE(expanded));
+        if (n && n <= ARRAYSIZE(expanded))
+            path = expanded;
+    }
     bool refresh = Wh_GetIntSetting(L"refreshOnLoad") != 0;
     AcquireSRWLockExclusive(&g_lock);
-    g_logFile = s ? s : L"";
+    g_logFile = path;
     g_refreshOnLoad = refresh;
     ReleaseSRWLockExclusive(&g_lock);
-    Wh_FreeStringSetting(s);
 }
 
-// ---- Runs on Explorer's taskbar thread: must stay short. ----
-void OnNotifyIcon(const COPYDATASTRUCT* cds) {
+// The owner entry of a pid, created (and queued for a wait) if needed. Lock held.
+Owner& OwnerFor(DWORD pid) {
+    auto it = g_owners.find(pid);
+    if (it != g_owners.end()) {
+        // An owner whose process already exited means the pid now belongs to a new
+        // process: retire the old entry (its icons keep their program path).
+        HANDLE process = it->second.process;
+        if (!process || WaitForSingleObject(process, 0) != WAIT_OBJECT_0)
+            return it->second;
+        g_retired.push_back(it->second);
+        g_owners.erase(it);
+    }
+    Owner& owner = g_owners[pid];
+    GetSystemTimePreciseAsFileTime(&owner.seen);
+    g_newPids.push_back(pid);
+    SetEvent(g_wake);
+    return owner;
+}
+
+// ---- Runs on Explorer's taskbar thread, after Explorer handled the request. ----
+void OnNotifyIcon(const COPYDATASTRUCT* cds, bool accepted) {
     if (cds->cbData < offsetof(TrayNotifyData, nid) + offsetof(NotifyIconData32, szTip))
         return;
     const auto* data = (const TrayNotifyData*)cds->lpData;
@@ -212,6 +265,10 @@ void OnNotifyIcon(const COPYDATASTRUCT* cds) {
         size = nid.cbSize;
 
     bool byGuid = (nid.uFlags & NIF_GUID) && size >= kGuidEnd;
+    // A rejected request with a GUID may come from another program (a second
+    // instance, or a copy at another path): it says nothing about the icon's owner.
+    if (byGuid && !accepted)
+        return;
     GUID guid = byGuid ? nid.guidItem : GUID{};
     HWND hwnd = FromHandle32(nid.hWnd);
 
@@ -224,18 +281,25 @@ void OnNotifyIcon(const COPYDATASTRUCT* cds) {
     switch (data->dwMessage) {
         case NIM_ADD:
         case NIM_MODIFY: {
-            if (it == g_icons.end() && data->dwMessage == NIM_MODIFY)
-                break;  // an icon we never saw being added; nothing to learn
+            // An accepted request proves the icon exists, even if it was added before
+            // the mod was loaded. A rejected NIM_ADD by window + ID usually means the
+            // icon already exists (a program re-adding it after TaskbarCreated); if it
+            // doesn't, the later NIM_DELETE simply fails.
+            if (!accepted && data->dwMessage == NIM_MODIFY)
+                break;
             DWORD pid = 0;
             GetWindowThreadProcessId(hwnd, &pid);
             if (!pid)
                 break;
+            Owner& owner = OwnerFor(pid);
             if (it == g_icons.end()) {
-                g_icons.push_back(TrackedIcon{hwnd, nid.uID, byGuid, guid, pid, L""});
+                g_icons.push_back(TrackedIcon{hwnd, nid.uID, byGuid, guid, pid, owner.exe, L""});
                 it = g_icons.end() - 1;
+            } else if (it->pid != pid || it->exe != owner.exe) {
+                it->pid = pid;
+                it->exe = owner.exe;
             }
             it->hwnd = hwnd;
-            it->pid = pid;
             if ((nid.uFlags & NIF_TIP) && size >= offsetof(NotifyIconData32, dwState)) {
                 WCHAR tip[128];
                 lstrcpynW(tip, nid.szTip, 128);
@@ -244,14 +308,10 @@ void OnNotifyIcon(const COPYDATASTRUCT* cds) {
                         *c = L' ';
                 it->tip = tip;
             }
-            if (!g_owners.count(pid)) {
-                g_owners[pid] = Owner{};
-                g_newPids.push_back(pid);
-                SetEvent(g_wake);
-            }
             break;
         }
         case NIM_DELETE:
+            // A rejected delete by window + ID means the icon isn't there either.
             if (it != g_icons.end())
                 g_icons.erase(it);
             break;
@@ -261,12 +321,14 @@ void OnNotifyIcon(const COPYDATASTRUCT* cds) {
 
 LRESULT CALLBACK TraySubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                               DWORD_PTR) {
+    LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
     if (uMsg == WM_COPYDATA) {
+        // The result is what Shell_NotifyIcon returns to the program.
         const auto* cds = (const COPYDATASTRUCT*)lParam;
         if (cds && cds->dwData == kCopyDataNotifyIcon && cds->lpData)
-            OnNotifyIcon(cds);
+            OnNotifyIcon(cds, result != 0);
     }
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    return result;
 }
 
 // ---- Thread pool: a tracked process exited. ----
@@ -282,35 +344,64 @@ void StartWaits() {
     AcquireSRWLockExclusive(&g_lock);
     std::vector<DWORD> pids;
     pids.swap(g_newPids);
+    std::vector<Owner> retired;
+    retired.swap(g_retired);
     ReleaseSRWLockExclusive(&g_lock);
 
+    for (const Owner& owner : retired)
+        ReleaseOwner(owner);
+
     for (DWORD pid : pids) {
-        Owner owner;
-        owner.process = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-        if (!owner.process)
-            owner.process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-        owner.exe = L"?";
-        if (owner.process) {
-            wchar_t path[MAX_PATH];
-            DWORD n = MAX_PATH;
-            if (QueryFullProcessImageNameW(owner.process, 0, path, &n))
-                owner.exe = path;
-            if (!RegisterWaitForSingleObject(&owner.wait, owner.process, OnProcessExit,
-                                             (PVOID)(ULONG_PTR)pid, INFINITE,
-                                             WT_EXECUTEONLYONCE))
-                owner.wait = nullptr;  // the periodic check covers it
-        }
-        AcquireSRWLockExclusive(&g_lock);
+        AcquireSRWLockShared(&g_lock);
         auto it = g_owners.find(pid);
-        if (it != g_owners.end() && !it->second.process) {
-            it->second = owner;
-            owner = Owner{};
+        bool pending = it != g_owners.end() && it->second.pending;
+        ExePtr entry = pending ? it->second.exe : nullptr;  // identifies this entry
+        FILETIME seen = pending ? it->second.seen : FILETIME{};
+        ReleaseSRWLockShared(&g_lock);
+        if (!pending)
+            continue;
+
+        HANDLE process = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        HANDLE info = process ? process : OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        std::wstring exe = L"?";
+        if (info) {
+            // A process created after the icon was seen reuses the pid of the owner,
+            // which has already exited.
+            FILETIME created, exited, kernel, user;
+            if (GetProcessTimes(info, &created, &exited, &kernel, &user) &&
+                CompareFileTime(&created, &seen) > 0) {
+                CloseHandle(info);
+                process = info = nullptr;
+            } else {
+                wchar_t path[MAX_PATH];
+                DWORD n = MAX_PATH;
+                if (QueryFullProcessImageNameW(info, 0, path, &n))
+                    exe = path;
+            }
+        }
+        if (info && info != process)
+            CloseHandle(info);  // can't be waited on; the periodic check covers it
+        HANDLE wait = nullptr;
+        if (process &&
+            !RegisterWaitForSingleObject(&wait, process, OnProcessExit,
+                                         (PVOID)(ULONG_PTR)pid, INFINITE,
+                                         WT_EXECUTEONLYONCE)) {
+            wait = nullptr;
+            CloseHandle(process);
+            process = nullptr;
+        }
+
+        AcquireSRWLockExclusive(&g_lock);
+        it = g_owners.find(pid);
+        if (it != g_owners.end() && it->second.exe == entry && it->second.pending) {
+            it->second.process = process;
+            it->second.wait = wait;
+            it->second.pending = false;
+            *it->second.exe = exe;
+            process = wait = nullptr;
         }
         ReleaseSRWLockExclusive(&g_lock);
-        if (owner.wait)
-            UnregisterWaitEx(owner.wait, INVALID_HANDLE_VALUE);
-        if (owner.process)
-            CloseHandle(owner.process);
+        ReleaseOwner(Owner{process, wait});
     }
 }
 
@@ -323,8 +414,8 @@ bool OwnerGone(const TrackedIcon& icon) {
 
 // Removes ghost icons of the given pids (or of any pid whose owner is gone, if `all`).
 void Clean(const std::vector<DWORD>& pids, bool all, const wchar_t* reason) {
-    std::vector<TrackedIcon> ghosts;
-    std::vector<std::pair<DWORD, Owner>> finished;
+    std::vector<std::pair<TrackedIcon, std::wstring>> ghosts;
+    std::vector<Owner> finished;
 
     AcquireSRWLockExclusive(&g_lock);
     for (auto it = g_icons.begin(); it != g_icons.end();) {
@@ -333,16 +424,13 @@ void Clean(const std::vector<DWORD>& pids, bool all, const wchar_t* reason) {
             if (pid == it->pid)
                 listed = true;
         if ((listed || all) && OwnerGone(*it)) {
-            ghosts.push_back(*it);
+            ghosts.emplace_back(*it, *it->exe);
             it = g_icons.erase(it);
         } else {
             ++it;
         }
     }
-    std::map<DWORD, std::wstring> exes;
-    for (auto& g : ghosts)
-        exes[g.pid] = g_owners.count(g.pid) ? g_owners[g.pid].exe : L"?";
-    // Forget owners that have no icons left and whose process is gone.
+    // Forget owners that have no icons left and whose process is gone (or unknown).
     for (auto it = g_owners.begin(); it != g_owners.end();) {
         bool hasIcons = false;
         for (auto& icon : g_icons)
@@ -351,7 +439,7 @@ void Clean(const std::vector<DWORD>& pids, bool all, const wchar_t* reason) {
         bool exited = it->second.process &&
                       WaitForSingleObject(it->second.process, 0) == WAIT_OBJECT_0;
         if (!hasIcons && (exited || !it->second.process)) {
-            finished.push_back(*it);
+            finished.push_back(it->second);
             it = g_owners.erase(it);
         } else {
             ++it;
@@ -359,14 +447,10 @@ void Clean(const std::vector<DWORD>& pids, bool all, const wchar_t* reason) {
     }
     ReleaseSRWLockExclusive(&g_lock);
 
-    for (auto& f : finished) {
-        if (f.second.wait)
-            UnregisterWaitEx(f.second.wait, INVALID_HANDLE_VALUE);
-        if (f.second.process)
-            CloseHandle(f.second.process);
-    }
+    for (const Owner& owner : finished)
+        ReleaseOwner(owner);
 
-    for (const TrackedIcon& g : ghosts) {
+    for (const auto& [g, exe] : ghosts) {
         NOTIFYICONDATAW nid = {};
         nid.cbSize = sizeof(nid);
         nid.hWnd = g.hwnd;
@@ -377,7 +461,7 @@ void Clean(const std::vector<DWORD>& pids, bool all, const wchar_t* reason) {
         }
         // Succeeds only if the icon really was still in the tray, i.e. a ghost.
         if (Shell_NotifyIconW(NIM_DELETE, &nid)) {
-            Report(L"ghost | " + exes[g.pid] + L" | pid " + std::to_wstring(g.pid) +
+            Report(L"ghost | " + exe + L" | pid " + std::to_wstring(g.pid) +
                    L" | \"" + g.tip + L"\" | " + (g.byGuid ? L"by GUID" : L"by window") +
                    L" | " + reason);
         }
@@ -393,74 +477,72 @@ void BroadcastTaskbarCreated() {
 }
 
 DWORD WINAPI Worker(LPVOID) {
-    // The taskbar may not exist yet if Explorer is just starting.
-    bool explorerWasRunning = true;
+    HANDLE handles[] = {g_stop, g_wake};
+    ULONGLONG nextCheck = GetTickCount64() + kPeriodicMs;
     for (;;) {
-        g_tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-        if (g_tray)
-            break;
-        explorerWasRunning = false;
-        if (WaitForSingleObject(g_stop, 500) == WAIT_OBJECT_0)
-            return 0;
-    }
-    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(g_tray, TraySubclass, 0)) {
-        Wh_Log(L"Failed to subclass the taskbar");
-        g_tray = nullptr;
-        return 0;
-    }
-
-    AcquireSRWLockShared(&g_lock);
-    bool refresh = g_refreshOnLoad;
-    ReleaseSRWLockShared(&g_lock);
-    if (explorerWasRunning && refresh)
-        BroadcastTaskbarCreated();
-
-    for (;;) {
-        HANDLE handles[] = {g_stop, g_wake};
-        DWORD r = WaitForMultipleObjects(2, handles, FALSE, 30000);
-        if (r == WAIT_OBJECT_0)
+        // The periodic check runs on a fixed schedule, however often the event fires.
+        ULONGLONG now = GetTickCount64();
+        DWORD timeout = now >= nextCheck ? 0 : (DWORD)(nextCheck - now);
+        if (WaitForMultipleObjects(2, handles, FALSE, timeout) == WAIT_OBJECT_0)
             break;
 
         StartWaits();
 
-        if (r == WAIT_TIMEOUT) {
-            // The taskbar window can be re-created without restarting Explorer;
-            // follow it, or the mod would silently stop seeing new icons.
-            HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-            if (tray && tray != g_tray &&
-                WindhawkUtils::SetWindowSubclassFromAnyThread(tray, TraySubclass, 0)) {
-                if (IsWindow(g_tray))
-                    WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_tray, TraySubclass);
-                g_tray = tray;
-                Wh_Log(L"Taskbar window re-created, following it");
-                BroadcastTaskbarCreated();
-            }
-            Clean({}, true, L"periodic check");
-            continue;
-        }
-
         AcquireSRWLockShared(&g_lock);
         bool anyExited = !g_exited.empty();
         ReleaseSRWLockShared(&g_lock);
-        if (!anyExited)
-            continue;
+        if (anyExited) {
+            // Short grace period, in case the program is restarted and takes its
+            // icon back.
+            if (WaitForSingleObject(g_stop, kGraceMs) == WAIT_OBJECT_0)
+                break;
+            AcquireSRWLockExclusive(&g_lock);
+            std::vector<DWORD> exited;
+            exited.swap(g_exited);
+            ReleaseSRWLockExclusive(&g_lock);
+            Clean(exited, false, L"owner exited");
+        }
 
-        // Give a well-behaved program time to remove its own icon.
-        if (WaitForSingleObject(g_stop, 1500) == WAIT_OBJECT_0)
-            break;
-        AcquireSRWLockExclusive(&g_lock);
-        std::vector<DWORD> exited;
-        exited.swap(g_exited);
-        ReleaseSRWLockExclusive(&g_lock);
-        Clean(exited, false, L"owner exited");
+        if (GetTickCount64() >= nextCheck) {
+            Clean({}, true, L"periodic check");
+            nextCheck = GetTickCount64() + kPeriodicMs;
+        }
     }
     return 0;
+}
+
+bool AttachToTray(HWND tray) {
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(tray, TraySubclass, 0)) {
+        Wh_Log(L"Failed to subclass the taskbar");
+        return false;
+    }
+    g_tray = tray;
+    return true;
+}
+
+// Explorer creating (or re-creating) its taskbar: subclass it right away, before
+// programs get the chance to register their icons with it.
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Original;
+HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR className, LPCWSTR windowName,
+                                 DWORD style, int x, int y, int width, int height,
+                                 HWND parent, HMENU menu, HINSTANCE instance, LPVOID param) {
+    HWND hwnd = CreateWindowExW_Original(exStyle, className, windowName, style, x, y,
+                                         width, height, parent, menu, instance, param);
+    if (hwnd && !IS_INTRESOURCE(className) && lstrcmpiW(className, L"Shell_TrayWnd") == 0) {
+        Wh_Log(L"Taskbar created");
+        AttachToTray(hwnd);
+    }
+    return hwnd;
 }
 
 }  // namespace
 
 BOOL Wh_ModInit() {
     LoadSettings();
+    if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                        &CreateWindowExW_Original))
+        return FALSE;
     g_stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_wake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (g_stop && g_wake)
@@ -475,27 +557,47 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
+// Hooks are active now: a taskbar created from here on is caught by the hook.
+void Wh_ModAfterInit() {
+    // The taskbar must belong to this process: other explorer.exe processes (separate
+    // folder windows) only see the main process's taskbar.
+    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    DWORD pid = 0;
+    if (!tray || !GetWindowThreadProcessId(tray, &pid) || pid != GetCurrentProcessId())
+        return;
+    if (g_tray == tray || !AttachToTray(tray))
+        return;
+
+    // Explorer was already running: ask programs to register their icons again.
+    AcquireSRWLockShared(&g_lock);
+    bool refresh = g_refreshOnLoad;
+    ReleaseSRWLockShared(&g_lock);
+    if (refresh)
+        BroadcastTaskbarCreated();
+}
+
 void Wh_ModSettingsChanged() {
     LoadSettings();
 }
 
 void Wh_ModUninit() {
-    // Stop the worker first (it is the one that installs the subclass), then remove
-    // the subclass. Every wait in the worker is interruptible, so this is quick.
+    // Remove the subclass first: it runs on the taskbar thread, so no tray message is
+    // being handled once it returns. Then stop the worker; every wait in it is
+    // interruptible, so this is quick.
+    HWND tray = g_tray;
+    if (tray)
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(tray, TraySubclass);
     SetEvent(g_stop);
     WaitForSingleObject(g_thread, INFINITE);
     CloseHandle(g_thread);
-    if (g_tray)
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_tray, TraySubclass);
 
     // Cancel the process waits and wait for any running callback to finish.
-    for (auto& o : g_owners) {
-        if (o.second.wait)
-            UnregisterWaitEx(o.second.wait, INVALID_HANDLE_VALUE);
-        if (o.second.process)
-            CloseHandle(o.second.process);
-    }
+    for (auto& o : g_owners)
+        ReleaseOwner(o.second);
     g_owners.clear();
+    for (auto& o : g_retired)
+        ReleaseOwner(o);
+    g_retired.clear();
     CloseHandle(g_wake);
     CloseHandle(g_stop);
 }
