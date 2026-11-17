@@ -81,20 +81,18 @@ SOFTWARE.
 /*
 # Taskbar System Monitor
 
-Live readings on the Windows 11 taskbar: CPU, GPU, RAM, disk, network,
-battery, temperatures and more. Click a reading for details.
+Live readings on the Windows 11 taskbar: CPU, GPU, RAM, disk, network, battery, temperatures and more. Click a reading for details.
 
-## Quick start
+### Preset Switching
+![Preset switching on the taskbar](https://raw.githubusercontent.com/Wcm1D/taskbar-system-monitor/main/3-preset-preview.gif)
 
-1. Install the mod. The defaults already work.
-2. Right-click the taskbar, then **System Monitor settings**.
-3. On the **Readings** page, drag readings to move them, click one for its
-   options, and use a zone's **+** to add more. Changes show at once.
+| Taskbar & Details Panel | Settings Window |
+| :---: | :---: |
+| ![Taskbar widget and details panel demo](https://raw.githubusercontent.com/Wcm1D/taskbar-system-monitor/main/1-hero.gif) | ![Settings window preview](https://raw.githubusercontent.com/Wcm1D/taskbar-system-monitor/main/2-settings.gif) |
 
-Want a ready-made look? **Presets** sets everything up in one click, and
-Undo takes it back. Prefer typing? Switch the page to **Text** and write
-names separated by commas, such as `cpu, ram, battery`. Small typos
-(`cpuu`) and everyday words (`memory`) are understood.
+| Zone Drag-and-Drop Editor | Widgets Overview |
+| :---: | :---: |
+| ![Editing panel](https://raw.githubusercontent.com/Wcm1D/taskbar-system-monitor/main/4-editing-panel.gif) | ![Widgets overview](https://raw.githubusercontent.com/Wcm1D/taskbar-system-monitor/main/5-widgets.gif) |
 
 ## Readings
 
@@ -128,9 +126,6 @@ adapter with the most dedicated memory that is currently on.
 - **Move the widget**: set a hotkey under **Position**, press it, drag the
   widget (also onto another monitor), then **Enter** to save or **Esc** to
   cancel.
-- **Settings are backed up** in `%APPDATA%\Taskbar System Monitor\settings.txt`
-  so they survive a reinstall. That file is plain text and includes the
-  weather API key if you set one.
 - **Settings page in Windhawk**: only two switches, to open the settings
   window if the taskbar menu entry is missing, and to reset the window's
   choices if the widget became hard to see.
@@ -159,7 +154,8 @@ below, and only while they are shown or in use:
   geocoding-api.open-meteo.com and nominatim.openstreetmap.org.
 - **Speed test** (only when you start one): speed.cloudflare.com, using
   6 parallel streams for about 10 s down and 8 s up. This can use hundreds
-  of MB, so avoid it on a metered connection. Each test also asks
+  of MB. On a metered connection the first click only warns; click again
+  within 15 s to run it anyway. Each test also asks
   ipinfo.io for your ISP name.
 
 Nothing else is sent. Every request uses HTTPS (ping uses ICMP), the mod
@@ -188,7 +184,8 @@ process list every few seconds while that option is on.
 | Weather for the wrong city | Type your city under **Weather ▸ Location**. |
 
 The **About** page in the settings window has a log, and **Copy with PC
-details** puts it on the clipboard for a bug report.
+details** puts it on the clipboard for a bug report. For more detail turn
+on **Advanced logs** there (off by default).
 
 ## Compatibility
 
@@ -312,7 +309,6 @@ the original.
 #include <winrt/Windows.Devices.Geolocation.h>
 #include <winrt/Windows.Data.Json.h>
 #include <winrt/Windows.Data.Xml.Dom.h>
-#include <winrt/Windows.UI.Notifications.h>
 #include <winrt/Windows.System.Power.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Input.h>
@@ -333,7 +329,7 @@ the original.
 // settings window's About page so it can be read and copied without
 // Windhawk's log window.
 std::mutex g_logMutex;
-[[clang::no_destroy]] std::deque<std::wstring> g_logLines;
+std::deque<std::wstring> g_logLines;
 // How many recent lines the About page keeps (about 150 KB at most).
 constexpr size_t kLogHistoryLines = 1000;
 
@@ -357,7 +353,7 @@ void ModLog(const wchar_t* format, ...) {
 }
 
 // ---- Diagnostic logs ---------------------------------------------------
-// About ▸ Troubleshooting: "Advanced logs" is the master switch (on by
+// About ▸ Troubleshooting: "Advanced logs" is the master switch (off by
 // default); under it, one switch per area (all on by default). While on, an
 // area writes what happens in it to the Windhawk log (and the About page's
 // list), event by event, never once per frame, at most 600 lines per area
@@ -385,7 +381,7 @@ constexpr PCWSTR kDiagNames[kDiagCount] = {L"Readings", L"Details",
                                            L"Settings", L"System",
                                            L"Lifecycle"};
 std::atomic<bool> g_diagOn[kDiagCount];
-std::atomic<bool> g_diagMaster{true};  // Advanced logs: the master switch.
+std::atomic<bool> g_diagMaster{false};  // Advanced logs: the master switch (off by default).
 // Troubleshooting ▸ "Panel: fixed top while resizing" (on by default): see
 // ApplyHoverPlace. Off: the window's top moves with the card, as before.
 std::atomic<bool> g_panelFixedTop{true};
@@ -706,7 +702,7 @@ struct SizeStyle {
 std::atomic<bool> g_privacyAutoActive{false};
 std::atomic<bool> g_privacyForceCheck{false};  // Check again at once.
 std::mutex g_privacyAutoMutex;
-[[clang::no_destroy]] std::wstring g_privacyAutoApp;  // Guarded.
+std::wstring g_privacyAutoApp;  // Guarded.
 bool PrivacyAutoActive();
 
 struct ModSettings {
@@ -898,7 +894,6 @@ struct ModSettings {
     // Auto-detect: apps that record, stream or hold meetings; a comma list
     // of extra .exe names of the user's own.
     bool privacyAutoDetect = true;
-    bool privacyAutoNotify = true;  // Toast when auto-detect switches on.
     std::wstring privacyCustomApps;
     int privacyTrayMode = 1;  // Tray icon: 0 off, 1 only when active, 2 always.
     bool privacyTrayInteractive = false;  // Click toggles; else view only.
@@ -1189,12 +1184,22 @@ std::optional<double> g_lastAppliedRepeaterMarginLeft;
 [[clang::no_destroy]] DispatcherTimer g_timer{nullptr};
 // Short-lived timers (retries, "Copied" labels, watchers). Teardown stops
 // them all on the UI thread so none can fire after the mod is unloaded.
-[[clang::no_destroy]] std::vector<DispatcherTimer> g_trackedTimers;
+std::optional<std::vector<DispatcherTimer>> g_trackedTimers{std::in_place};
 // Queued lambdas that have not run yet; unload waits briefly for them.
 std::atomic<int> g_pendingQueued{0};
+// Counts one lambda queued to the taskbar thread. The count drops when the
+// lambda has run or when the queue destroys it unrun, so unload can wait for
+// it without ever waiting for something that cannot come.
+struct PendingGuard {
+    PendingGuard() { ++g_pendingQueued; }
+    ~PendingGuard() { --g_pendingQueued; }
+    PendingGuard(const PendingGuard&) = delete;
+    PendingGuard& operator=(const PendingGuard&) = delete;
+};
 void TrackTimer(DispatcherTimer const& timer) {
-    g_trackedTimers.erase(
-        std::remove_if(g_trackedTimers.begin(), g_trackedTimers.end(),
+    if (!g_trackedTimers) g_trackedTimers.emplace();
+    g_trackedTimers->erase(
+        std::remove_if(g_trackedTimers->begin(), g_trackedTimers->end(),
                        [](DispatcherTimer const& t) {
                            try {
                                return !t.IsEnabled();
@@ -1202,12 +1207,13 @@ void TrackTimer(DispatcherTimer const& timer) {
                                return true;
                            }
                        }),
-        g_trackedTimers.end());
-    g_trackedTimers.push_back(timer);
+        g_trackedTimers->end());
+    g_trackedTimers->push_back(timer);
 }
 void StopTrackedTimers() {
-    auto timers = std::move(g_trackedTimers);
-    g_trackedTimers.clear();
+    if (!g_trackedTimers) return;
+    auto timers = std::move(*g_trackedTimers);
+    g_trackedTimers->clear();
     for (auto& t : timers) {
         try {
             t.Stop();
@@ -1227,7 +1233,13 @@ bool g_placementLocationUnknown = false;
 std::optional<std::list<FrameworkElement::Loaded_revoker>> g_loadedRevokers{
     std::in_place};
 
-[[clang::no_destroy]] WidgetElements g_view;
+// Optional so Wh_ModUninit can release it explicitly (see the end of the
+// file); MainView() always returns a usable object.
+std::optional<WidgetElements> g_view{std::in_place};
+WidgetElements& MainView() {
+    if (!g_view) g_view.emplace();
+    return *g_view;
+}
 // Details popup (defined near the end); primary UI thread only.
 void AttachHoverHandlers(Grid root);
 void DetachHoverHandlers();
@@ -1472,7 +1484,7 @@ int PingBand(double ms) {
 
 std::mutex g_metricsMutex;
 // The latest snapshot the widget drew, for the details popup.
-[[clang::no_destroy]] MetricsSnapshot g_hoverSnapshot;
+MetricsSnapshot g_hoverSnapshot;
 struct PublishedMetricsSnapshot {
     uint64_t sequence = 0;
     MetricsSnapshot snapshot;
@@ -1554,7 +1566,6 @@ constexpr KeptSetting kKeptSettings[] = {
     {L"privacyHideWeather", true, L"1"},
     {L"privacyHideSystem", true, L"1"},
     {L"privacyAutoDetect", true, L"0"},
-    {L"privacyAutoNotify", true, L"0"},
     {L"privacyCustomApps", false, L""},
     {L"privacyTrayIconMode", false, L"active_only"},
     {L"privacyTrayClick", false, L"view_only"},
@@ -1659,11 +1670,17 @@ const KeptSetting* FindKept(PCWSTR name) {
 // page still holds that same value the override applies; once the page
 // changes the setting, the page's value becomes the kept value. This is
 // for the few settings still on the page (kPageSettings); the rest live in
-// the mod's storage only (kKeptSettings). A copy of everything goes to a
-// file outside Windhawk (BackupSettings) so a reinstall brings it back.
+// the mod's storage only (kKeptSettings).
+// One buffer reused for every read (it was a new 64 KB allocation per call,
+// about 270 per settings reload). Reads are short, so the lock is cheap.
 std::wstring ReadStored(const std::wstring& key, size_t capacity = 32768) {
-    std::vector<wchar_t> buffer(capacity);
-    Wh_GetStringValue(key.c_str(), buffer.data(), buffer.size());
+    static std::mutex mutex;
+    static std::vector<wchar_t> buffer;
+    std::lock_guard lock(mutex);
+    if (buffer.size() < capacity) buffer.resize(capacity);
+    buffer[0] = L'\0';
+    Wh_GetStringValue(key.c_str(), buffer.data(), static_cast<int>(capacity));
+    buffer[capacity - 1] = L'\0';
     return buffer.data();
 }
 
@@ -1705,7 +1722,17 @@ int GetIntSetting(PCWSTR name) {
     return _wtoi(value.c_str());
 }
 
-void SetUiOverride(PCWSTR name, const std::wstring& value, bool isInt) {
+// Stored values never hold a line break: portable Windhawk turns it into a
+// space (1.7.3 and newer refuse to store it), so the mod does it itself.
+std::wstring StripLineBreaks(std::wstring text) {
+    for (wchar_t& ch : text) {
+        if (ch == L'\r' || ch == L'\n') ch = L' ';
+    }
+    return text;
+}
+
+void SetUiOverride(PCWSTR name, const std::wstring& rawValue, bool isInt) {
+    const std::wstring value = StripLineBreaks(rawValue);
     if (FindKept(name)) {
         Wh_SetStringValue((std::wstring(L"ui.") + name).c_str(),
                           (L"=" + value).c_str());
@@ -1742,7 +1769,9 @@ bool SwitchFlipped(PCWSTR setting, PCWSTR seenKey) {
 }
 
 void HandleResetSwitch() {
-    if (SwitchFlipped(L"resetSettings", L"reset.seen2")) {
+    // Only when the switch is turned on, not when it is turned back off.
+    if (SwitchFlipped(L"resetSettings", L"reset.seen2") &&
+        Wh_GetIntSetting(L"resetSettings")) {
         ResetUiChanges();
         ModLog(L"Settings window changes reset");
     }
@@ -1763,24 +1792,6 @@ std::wstring ReadStoredLong(PCWSTR key) {
     size_t length = Wh_GetStringValue(key, buffer.data(), buffer.size());
     if (length == 0 || length >= buffer.size()) return {};
     return buffer.data();
-}
-
-// %APPDATA%\Taskbar System Monitor: outside Windhawk, so removing and
-// reinstalling the mod keeps it.
-std::wstring BackupFolder() {
-    // FOLDERID_RoamingAppData.
-    static constexpr GUID kRoamingAppData = {
-        0x3EB685DB, 0x65F9, 0x4CF6,
-        {0xA0, 0x3A, 0xE3, 0xEF, 0x65, 0x72, 0x9F, 0x3D}};
-    PWSTR known = nullptr;
-    std::wstring folder;
-    if (SUCCEEDED(SHGetKnownFolderPath(kRoamingAppData, 0, nullptr,
-                                       &known)) &&
-        known) {
-        folder = std::wstring(known) + L"\\Taskbar System Monitor";
-    }
-    CoTaskMemFree(known);
-    return folder;
 }
 
 std::wstring EscapeBackup(const std::wstring& text) {
@@ -1810,17 +1821,14 @@ std::wstring UnescapeBackup(const std::wstring& text) {
 }
 
 
-// Settings live only in Windhawk mod storage; nothing is written outside it.
-void BackupSettings() {}
-
-// After a fresh install (empty storage) the backup file, if any, brings
-// the earlier choices back.
+// Marks fresh storage. Settings live only in Windhawk mod storage; nothing is
+// written outside it.
 void RestoreSettingsIfFresh() {
     if (ReadStored(L"storage.v1").empty()) Wh_SetStringValue(L"storage.v1", L"1");
 }
 
-// Runs before settings load: the backup after a reinstall, then the
-// Windhawk page's reset switch.
+// Runs before settings load: marks fresh storage, then handles the Windhawk
+// page's reset switch.
 void PrepareSettingsStorage() {
     RestoreSettingsIfFresh();
     MigrateReadingsSource();
@@ -2745,7 +2753,7 @@ void ApplyPingSettings(const ModSettings& settings);
 
 // The Troubleshooting switches, read with the settings.
 void LoadDiagFlags() {
-    g_diagMaster = ReadStored(L"ui.log.master") != L"off";
+    g_diagMaster = ReadStored(L"ui.log.master") == L"on";
     for (int i = 0; i < kDiagCount; ++i) {
         // On unless it was switched off.
         g_diagOn[i] = ReadStored(kDiagKeys[i]) != L"off";
@@ -2956,7 +2964,6 @@ void LoadSettings() {
     settings.privacyWeather = GetIntSetting(L"privacyHideWeather") != 0;
     settings.privacySystem = GetIntSetting(L"privacyHideSystem") != 0;
     settings.privacyAutoDetect = GetIntSetting(L"privacyAutoDetect") != 0;
-    settings.privacyAutoNotify = GetIntSetting(L"privacyAutoNotify") != 0;
     settings.privacyCustomApps = GetStringSetting(L"privacyCustomApps");
     {
         std::wstring trayMode = GetStringSetting(L"privacyTrayIconMode");
@@ -8188,7 +8195,35 @@ std::wstring FindWatchedPrivacyApp(const std::set<std::wstring>& watched) {
     return found;
 }
 
-void ShowReportToast(const wchar_t* title, const wchar_t* body);  // Below.
+// One short line of progress or error for the usage report, the CSV export
+// and the speed-test history. The details panel shows it for a few seconds
+// (see BuildHoverContent); it is also logged. Windows notifications were
+// removed: they appeared under PowerShell's identity.
+std::mutex g_reportStatusMutex;
+std::wstring g_reportStatus;
+ULONGLONG g_reportStatusAt = 0;
+
+void SetReportStatus(const wchar_t* title, const wchar_t* body) {
+    std::wstring text = title;
+    if (body && *body) text += L". " + std::wstring(body);
+    ModLog(L"%s", text.c_str());
+    std::lock_guard lock(g_reportStatusMutex);
+    g_reportStatus = std::move(text);
+    g_reportStatusAt = GetTickCount64();
+}
+
+void ClearReportStatus() {
+    std::lock_guard lock(g_reportStatusMutex);
+    g_reportStatus.clear();
+}
+
+// The line to show now: empty after 12 s or when cleared.
+std::wstring CurrentReportStatus() {
+    std::lock_guard lock(g_reportStatusMutex);
+    if (g_reportStatus.empty() || GetTickCount64() - g_reportStatusAt > 12000)
+        return L"";
+    return g_reportStatus;
+}
 
 // Privacy auto-detect, run by the metrics worker's own loop (no thread of
 // its own): at most every 2.5 s, or at once after a settings change.
@@ -8217,15 +8252,6 @@ void PrivacyAutoDetectTick() {
     // The manual privacyModeMaster is never touched: with every watched app
     // closed, the widget goes back to whatever it says.
     g_privacyAutoActive = !found.empty();
-    // Toast only on the edge off -> detected, and not when the manual
-    // privacy mode was already on.
-    if (!was && !found.empty() && settings->privacyAutoNotify &&
-        !settings->privacyMaster) {
-        ShowReportToast(L"Taskbar System Monitor \u2014 Privacy Mode",
-                        (L"Privacy mode enabled automatically (Detected: " +
-                         found + L")")
-                            .c_str());
-    }
     if (HWND window = g_settingsWindowForPost.load()) {
         PostMessageW(window, kSettingsPrivacyMessage, 0, 0);
     }
@@ -8233,7 +8259,26 @@ void PrivacyAutoDetectTick() {
     ReloadAllSettings();  // The widget redraws with or without the mask.
 }
 
+// Initializes WinRT for the thread that holds it and undoes it only if the
+// initialization worked.
+struct WinrtApartment {
+    bool ok = false;
+    WinrtApartment() {
+        try {
+            winrt::init_apartment(winrt::apartment_type::multi_threaded);
+            ok = true;
+        } catch (...) {
+        }
+    }
+    ~WinrtApartment() {
+        if (ok) winrt::uninit_apartment();
+    }
+    WinrtApartment(const WinrtApartment&) = delete;
+    WinrtApartment& operator=(const WinrtApartment&) = delete;
+};
+
 void MetricsWorkerProc() {
+    WinrtApartment apartment;  // The connection and usage reads use WinRT.
     ReadCpuUsage();
     EnsureCpuPdhQuery(*CurrentSettings());
     EnsurePdhQuery();
@@ -8605,6 +8650,49 @@ void SaveFxCache(const std::wstring& pair,
     Wh_SetStringValue((L"fx." + pair).c_str(), text.c_str());
 }
 
+// Every WinHTTP handle the mod opens is tracked, so unloading can close them
+// all at once. That makes a request that is waiting on the network fail at
+// once instead of holding up the unload for its whole timeout.
+[[clang::no_destroy]] std::set<HINTERNET> g_httpHandles;
+std::mutex g_httpHandlesMutex;
+
+HINTERNET HttpTrack(HINTERNET handle) {
+    if (!handle) return handle;
+    std::lock_guard lock(g_httpHandlesMutex);
+    if (g_unloading) {
+        (WinHttpCloseHandle)(handle);
+        return nullptr;
+    }
+    g_httpHandles.insert(handle);
+    return handle;
+}
+
+// Closes the handle only if it is still tracked (cancelling already closed
+// the others).
+BOOL HttpUntrackClose(HINTERNET handle) {
+    if (!handle) return FALSE;
+    {
+        std::lock_guard lock(g_httpHandlesMutex);
+        if (g_httpHandles.erase(handle) == 0) return FALSE;
+    }
+    return (WinHttpCloseHandle)(handle);
+}
+
+void CancelAllHttp() {
+    std::set<HINTERNET> handles;
+    {
+        std::lock_guard lock(g_httpHandlesMutex);
+        handles = std::move(g_httpHandles);
+        g_httpHandles.clear();
+    }
+    for (HINTERNET handle : handles) (WinHttpCloseHandle)(handle);
+}
+
+#define WinHttpOpen(...) HttpTrack((WinHttpOpen)(__VA_ARGS__))
+#define WinHttpConnect(...) HttpTrack((WinHttpConnect)(__VA_ARGS__))
+#define WinHttpOpenRequest(...) HttpTrack((WinHttpOpenRequest)(__VA_ARGS__))
+#define WinHttpCloseHandle(handle) HttpUntrackClose(handle)
+
 std::optional<std::string> HttpsGetInner(PCWSTR host, const std::wstring& path,
                                          DWORD& statusOut);
 // Logged (Internet requests): the site, the path without its query (which
@@ -8626,6 +8714,8 @@ std::optional<std::string> HttpsGet(PCWSTR host, const std::wstring& path) {
 
 std::optional<std::string> HttpsGetInner(PCWSTR host, const std::wstring& path,
                                          DWORD& statusOut) {
+    // Once unloading or stopping has started, no new request is made.
+    if (g_unloading || g_stopWebWorker) return std::nullopt;
     HINTERNET session = WinHttpOpen(L"TaskbarSystemMonitor/1.0 (Windhawk mod)",
                                     WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                     WINHTTP_NO_PROXY_NAME,
@@ -9680,6 +9770,36 @@ void StopSpeedTestThread() {
 // Starts the test on its own thread; `onDone` is called back on the
 // calling thread's dispatcher queue (so it is safe to touch UI) with the
 // finished result, success or not.
+// A speed test sends hundreds of MB (over 1 GB on a fast line). On a metered
+// connection the first click only warns; a second click within 15 s runs it.
+// Returns true when the test may start; otherwise `message` says why.
+std::atomic<ULONGLONG> g_speedTestWarnedAt{0};
+bool SpeedTestMayStart(std::wstring& message) {
+    bool metered = false;
+    try {
+        using namespace winrt::Windows::Networking::Connectivity;
+        if (auto profile = NetworkInformation::GetInternetConnectionProfile()) {
+            auto cost = profile.GetConnectionCost();
+            metered = cost.NetworkCostType() == NetworkCostType::Fixed ||
+                      cost.NetworkCostType() == NetworkCostType::Variable ||
+                      cost.OverDataLimit();
+        }
+    } catch (...) {
+    }
+    if (!metered) {
+        g_speedTestWarnedAt = 0;
+        return true;
+    }
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG warned = g_speedTestWarnedAt.exchange(0);
+    if (warned != 0 && now - warned < 15000) return true;
+    g_speedTestWarnedAt = now;
+    message =
+        L"This is a metered connection and a speed test can use several "
+        L"hundred MB. Click again within 15 seconds to run it anyway.";
+    return false;
+}
+
 void StartSpeedTest(std::function<void(const SpeedTestResult&)> onDone) {
     DiagLog(kDiagData, L"speed test started");
     if (g_unloading) return;
@@ -9711,18 +9831,15 @@ void StartSpeedTest(std::function<void(const SpeedTestResult&)> onDone) {
         g_speedTestBusy = false;
         g_speedTestPhase = SpeedTestPhase::Idle;
         if (queue && !g_unloading) {
-            ++g_pendingQueued;
-            if (!queue.TryEnqueue(
-                    winrt::Windows::System::DispatcherQueuePriority::Normal,
-                    [onDone, result] {
-                        try {
-                            if (!g_unloading) onDone(result);
-                        } catch (...) {
-                        }
-                        --g_pendingQueued;
-                    })) {
-                --g_pendingQueued;
-            }
+            auto guard = std::make_shared<PendingGuard>();
+            queue.TryEnqueue(
+                winrt::Windows::System::DispatcherQueuePriority::Normal,
+                [onDone, result, guard] {
+                    try {
+                        if (!g_unloading) onDone(result);
+                    } catch (...) {
+                    }
+                });
         }
     });
 }
@@ -10524,6 +10641,22 @@ struct WeatherPlace {
     std::wstring name;
 };
 
+// Waits up to `limit` for an async operation, in short steps so that
+// unloading (g_stopWebWorker) ends the wait at once. True when it completed.
+template <typename Operation>
+bool WaitUnlessStopped(const Operation& operation,
+                       std::chrono::seconds limit) {
+    auto deadline = std::chrono::steady_clock::now() + limit;
+    while (!g_stopWebWorker && std::chrono::steady_clock::now() < deadline) {
+        if (operation.wait_for(std::chrono::milliseconds(100)) !=
+            winrt::Windows::Foundation::AsyncStatus::Started) {
+            break;
+        }
+    }
+    return operation.Status() ==
+           winrt::Windows::Foundation::AsyncStatus::Completed;
+}
+
 // Windows location, only when desktop apps may use it. Windows shows its
 // location-in-use icon briefly while this runs.
 std::optional<WeatherPlace> WindowsLocation() {
@@ -10532,8 +10665,7 @@ std::optional<WeatherPlace> WindowsLocation() {
         // Bounded waits: an answer that never comes (location service
         // stuck, a sleeping PC) must not hold the weather up for good.
         auto access = Geolocator::RequestAccessAsync();
-        if (access.wait_for(std::chrono::seconds(5)) !=
-                winrt::Windows::Foundation::AsyncStatus::Completed ||
+        if (!WaitUnlessStopped(access, std::chrono::seconds(5)) ||
             access.GetResults() != GeolocationAccessStatus::Allowed) {
             if (access.Status() == winrt::Windows::Foundation::AsyncStatus::Started) {
                 access.Cancel();
@@ -10543,8 +10675,7 @@ std::optional<WeatherPlace> WindowsLocation() {
         Geolocator locator;
         auto request = locator.GetGeopositionAsync(std::chrono::hours(1),
                                                    std::chrono::seconds(10));
-        if (request.wait_for(std::chrono::seconds(15)) !=
-            winrt::Windows::Foundation::AsyncStatus::Completed) {
+        if (!WaitUnlessStopped(request, std::chrono::seconds(15))) {
             if (request.Status() == winrt::Windows::Foundation::AsyncStatus::Started) {
                 request.Cancel();
             }
@@ -10973,9 +11104,11 @@ void WeatherTick(const ModSettings& settings) {
         return;
     }
     if (asked) ModLog(L"Weather: updating now");
+    if (g_stopWebWorker || g_unloading) return;
     auto place = ResolveWeatherPlace(settings.weatherLocation,
                                      settings.placeDetail, moved || asked);
     std::optional<WeatherData> data;
+    if (g_stopWebWorker || g_unloading) return;  // Between the steps.
     if (place) {
         data = settings.weatherProvider == L"openWeatherMap"
                    ? FetchOpenWeatherMap(*place, settings.weatherFahrenheit,
@@ -11008,10 +11141,7 @@ std::wstring FormatWeatherTemp(double value, bool fahrenheit) {
 
 void WebWorkerProc() {
     // Windows location and JSON parsing are WinRT.
-    try {
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
-    } catch (...) {
-    }
+    WinrtApartment apartment;
     while (!g_stopWebWorker) {
         auto settings = CurrentSettings();
         auto now = std::chrono::steady_clock::now();
@@ -11050,7 +11180,6 @@ void WebWorkerProc() {
         }
         WaitForSingleObject(g_webWorkerWake, 60000);
     }
-    winrt::uninit_apartment();
 }
 
 // Started when a currency entry is shown; stopped on unload.
@@ -11096,6 +11225,8 @@ std::atomic<bool> g_stopPing{false};
 HANDLE g_pingWake = nullptr;
 [[clang::no_destroy]] std::optional<std::thread> g_pingThread;
 std::atomic<HWND> g_pingTrayWindow{nullptr};
+std::atomic<bool> g_pingTrayStop{false};  // Stop asked, even before the window exists.
+std::mutex g_pingTrayMutex;  // Guards g_pingTrayThread (start and stop).
 [[clang::no_destroy]] std::optional<std::thread> g_pingTrayThread;
 constexpr UINT kPingTrayUpdate = WM_APP + 51;
 constexpr UINT kPingTrayCallback = WM_APP + 52;
@@ -11325,7 +11456,9 @@ void PingTrayProc() {
     wc.lpfnWndProc = PingTrayWindowProc;
     wc.hInstance = module;
     wc.lpszClassName = kClass;
-    RegisterClassW(&wc);
+    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        return;
+    }
     // A real (hidden) window, not message-only: only those get the
     // TaskbarCreated broadcast.
     HWND window = CreateWindowExW(0, kClass, L"Taskbar System Monitor ping",
@@ -11341,7 +11474,13 @@ void PingTrayProc() {
     g_pingTray.data.hWnd = window;
     g_pingTray.data.uID = 1;
     g_pingTrayWindow = window;
-    UpdatePingTray();
+    // StopPingTray sets the flag before it looks for the window, so one of
+    // the two sides always sees the other: no lost stop request.
+    if (g_pingTrayStop.load()) {
+        DestroyWindow(window);  // WM_DESTROY posts the quit message.
+    } else {
+        UpdatePingTray();
+    }
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
@@ -11356,12 +11495,15 @@ void PingTrayProc() {
 }
 
 void StopPingTray() {
+    std::lock_guard lock(g_pingTrayMutex);
     if (!g_pingTrayThread) return;
+    g_pingTrayStop = true;
     if (HWND window = g_pingTrayWindow.load()) {
         PostMessageW(window, WM_CLOSE, 0, 0);
     }
     if (g_pingTrayThread->joinable()) g_pingTrayThread->join();
     g_pingTrayThread.reset();
+    g_pingTrayStop = false;
 }
 
 void StopPingProbe() {
@@ -11400,13 +11542,22 @@ void ApplyPingSettings(const ModSettings& settings) {
         EnsurePingProbe();
         if (g_pingWake) SetEvent(g_pingWake);  // Measure with the new target.
     }
-    if (settings.pingTray && !g_pingTrayThread) {
-        g_pingTrayThread.emplace(PingTrayProc);
-    } else if (settings.pingTray && oldShape != settings.pingTrayShape) {
+    bool trayRunning;
+    {
+        std::lock_guard lock(g_pingTrayMutex);
+        trayRunning = g_pingTrayThread.has_value();
+        if (settings.pingTray && !trayRunning && !g_unloading) {
+            g_pingTrayStop = false;
+            g_pingTrayThread.emplace(PingTrayProc);
+            trayRunning = true;
+            oldShape = settings.pingTrayShape;  // Fresh icon, nothing to redraw.
+        }
+    }
+    if (settings.pingTray && oldShape != settings.pingTrayShape) {
         if (HWND window = g_pingTrayWindow.load()) {
             PostMessageW(window, kPingTrayUpdate, 0, 0);  // Redraw the icon.
         }
-    } else if (!settings.pingTray && g_pingTrayThread) {
+    } else if (!settings.pingTray && trayRunning) {
         StopPingTray();
     }
 }
@@ -11832,9 +11983,9 @@ void RefreshThemeBrushes(const ModSettings& settings) {
                                       g_cachedHighContrast);
     g_warningBrush = alerts[0];
     g_criticalBrush = alerts[1];
-    ApplyThemeOpacities(g_view, settings,
+    ApplyThemeOpacities(MainView(), settings,
                         settings.adaptiveColors && g_cachedHighContrast);
-    StyleSeparators(g_view, g_textBrush, theme == ElementTheme::Light,
+    StyleSeparators(MainView(), g_textBrush, theme == ElementTheme::Light,
                     settings.adaptiveColors && g_cachedHighContrast);
     RestyleZones(settings);
 }
@@ -12160,8 +12311,8 @@ wchar_t ItemGlyph(int item) {
 // second "CPU" label.
 // The weather entry's label: the place's name, shortened. Set on the UI
 // thread when the place changes, which measures the widget again.
-[[clang::no_destroy]] std::wstring g_weatherLabel = L"Weather";
-[[clang::no_destroy]] std::wstring g_weatherPlace;  // The place alone.
+std::wstring g_weatherLabel = L"Weather";
+std::wstring g_weatherPlace;  // The place alone.
 std::mutex g_weatherLabelMutex;  // Copies read it on their own threads.
 
 std::wstring ItemLabel(const ModSettings& settings,
@@ -13974,7 +14125,7 @@ bool SameWidgetLayout(const WidgetLayout& a, const WidgetLayout& b) {
 }
 
 WidgetElements PrimaryElements() {
-    WidgetElements view = g_view;
+    WidgetElements view = MainView();
     view.widget = g_widget;
     view.host = g_widgetHost;
     return view;
@@ -15623,7 +15774,7 @@ struct ZoneActual {
     uint64_t revision = 0;
 };
 std::mutex g_zoneActualMutex;
-[[clang::no_destroy]] std::array<std::shared_ptr<const ZoneActual>, 9>
+std::array<std::shared_ptr<const ZoneActual>, 9>
     g_zoneActual;
 
 struct ZoneFit {
@@ -19974,7 +20125,6 @@ bool SavePlacementProfiles(const PlacementProfiles& profiles) {
         ModLog(L"Saving widget position to local storage failed");
         return false;
     }
-    BackupSettings();
     return true;
 }
 void LoadPlacementProfiles() {
@@ -20343,7 +20493,7 @@ void CaptureWidgetPreview(void* value) {
     // from the live elements so alerts and readings match.
     for (int item = 0; item < kMaxEntries; ++item) {
         auto& out = frame.items[item];
-        if (auto value = g_view.values[item]) {
+        if (auto value = MainView().values[item]) {
             auto text = value.Text();
             out.value.assign(text.begin(), text.end());
             out.valueColor =
@@ -20352,12 +20502,12 @@ void CaptureWidgetPreview(void* value) {
         out.labelColor = fallback;
         out.labelColor.A = static_cast<uint8_t>(
             std::lround(fallback.A * std::clamp(opacities.label, 0.0, 1.0)));
-        if (auto label = g_view.labels[item]) {
+        if (auto label = MainView().labels[item]) {
             out.labelColor =
                 PreviewBrushColor(label.Foreground(), label.Opacity(), fallback);
         }
         out.iconColor = out.labelColor;
-        if (auto icon = g_view.icons[item]) {
+        if (auto icon = MainView().icons[item]) {
             auto text = icon.Text();
             out.icon.assign(text.begin(), text.end());
         }
@@ -22211,7 +22361,7 @@ std::vector<HoverView> HoverViews() {
     DWORD thread = GetCurrentThreadId();
     if (thread == g_taskbarThreadId.load()) {
         HWND main = g_taskbarWindow.load();
-        if (g_widgetLayout) views.push_back({&g_view, &*g_widgetLayout, main});
+        if (g_widgetLayout) views.push_back({&MainView(), &*g_widgetLayout, main});
         for (const auto& zone : g_zones) {
             if (zone.layout) views.push_back({&zone.view, &*zone.layout, main});
         }
@@ -23278,6 +23428,7 @@ std::wstring HtmlEscape(const std::wstring& text) {
         else if (c == L'>') result += L"&gt;";
         else if (c == L'&') result += L"&amp;";
         else if (c == L'"') result += L"&quot;";
+        else if (c == L'\'') result += L"&#39;";
         else result += c;
     }
     return result;
@@ -24016,11 +24167,6 @@ std::atomic<bool> g_reportBusy{false};
 
 bool OpenUsageReportNow();
 
-// Toasts were removed: they appeared under PowerShell's identity.
-void ShowReportToast(const wchar_t*, const wchar_t*) {}
-
-void ClearReportToast() {}
-
 void StopUsageReportThread() {
     if (g_reportThread && g_reportThread->joinable()) g_reportThread->join();
     g_reportThread.reset();
@@ -24031,13 +24177,13 @@ void OpenUsageReport() {
     if (g_reportBusy.exchange(true)) {
         // Already being built: say so, instead of looking like nothing
         // happened.
-        ShowReportToast(L"Usage report is still being prepared",
+        SetReportStatus(L"Usage report is still being prepared",
                         L"It opens by itself in a moment. No need to click "
                         L"again.");
         return;
     }
     if (g_reportThread && g_reportThread->joinable()) g_reportThread->join();
-    ShowReportToast(L"Preparing the usage report",
+    SetReportStatus(L"Preparing the usage report",
                     L"Reading the data usage from Windows can take a few "
                     L"seconds. The report opens by itself when it is ready.");
     g_reportThread.emplace([] {
@@ -24049,9 +24195,9 @@ void OpenUsageReport() {
         }
         bool opened = OpenUsageReportNow();
         if (opened) {
-            ClearReportToast();
+            ClearReportStatus();
         } else {
-            ShowReportToast(L"The usage report could not be made",
+            SetReportStatus(L"The usage report could not be made",
                             L"Try again in a moment.");
         }
         if (apartment) winrt::uninit_apartment();
@@ -24193,12 +24339,15 @@ std::atomic<DWORD> g_exportThreadId{0};
 void StopExportDialog() {
     if (!g_exportThread) return;
     DWORD thread = g_exportThreadId.load();
-    for (int attempt = 0; attempt < 50 && g_exportDialogOpen; ++attempt) {
+    // Keep asking the dialog to close until it has; the join below then
+    // returns at once.
+    while (g_exportDialogOpen) {
         if (thread) {
             EnumThreadWindows(
                 thread,
                 [](HWND window, LPARAM) -> BOOL {
                     PostMessageW(window, WM_COMMAND, IDCANCEL, 0);
+                    PostMessageW(window, WM_CLOSE, 0, 0);
                     return TRUE;
                 },
                 0);
@@ -24235,16 +24384,16 @@ void FinishUsageCsvExport(std::wstring csv, bool ask,
         if (!WriteUtf8File(path, csv, true)) {
             ModLog(L"Exporting data usage to %s failed: %u", path.c_str(),
                    GetLastError());
-            ShowReportToast(L"The data usage CSV could not be saved",
+            SetReportStatus(L"The data usage CSV could not be saved",
                             L"Try again in a moment.");
             return;
         }
         ModLog(L"Data usage exported to %s", path.c_str());
-        ClearReportToast();
+        ClearReportStatus();
         ShowInExplorer(path);
         return;
     }
-    ClearReportToast();
+    ClearReportStatus();
     if (g_exportDialogOpen.exchange(true)) {
         // Already open: bring it forward.
         DWORD thread = g_exportThreadId.load();
@@ -24298,7 +24447,7 @@ void FinishUsageCsvExport(std::wstring csv, bool ask,
 void ExportUsageCsv() {
     if (g_unloading) return;
     if (g_csvBusy.exchange(true)) {
-        ShowReportToast(L"The data usage CSV is still being prepared",
+        SetReportStatus(L"The data usage CSV is still being prepared",
                         L"It is ready in a moment. No need to click again.");
         return;
     }
@@ -24306,7 +24455,7 @@ void ExportUsageCsv() {
     auto settings = CurrentSettings();
     bool ask = settings->exportAsk;
     std::wstring folder = settings->exportFolder;
-    ShowReportToast(L"Preparing the data usage CSV",
+    SetReportStatus(L"Preparing the data usage CSV",
                     ask ? L"Reading the data usage from Windows can take a few "
                           L"seconds. A Save As window opens when it is ready."
                         : L"Reading the data usage from Windows can take a few "
@@ -24322,7 +24471,7 @@ void ExportUsageCsv() {
             std::wstring csv = BuildUsageCsv();
             if (!g_unloading) FinishUsageCsvExport(std::move(csv), ask, folder);
         } catch (...) {
-            ShowReportToast(L"The data usage CSV could not be made",
+            SetReportStatus(L"The data usage CSV could not be made",
                             L"Try again in a moment.");
         }
         if (apartment) winrt::uninit_apartment();
@@ -24343,19 +24492,51 @@ void OpenWindowsPlace(PCWSTR file, PCWSTR parameters = nullptr) {
 // Windows' battery report (powercfg /batteryreport), made in the Temp
 // folder and opened in the browser. It runs in its own hidden command
 // window, so Explorer does not wait for it.
+std::mutex g_batteryReportMutex;
+std::optional<std::thread> g_batteryReportThread;
+
+void StopBatteryReportThread() {
+    std::lock_guard lock(g_batteryReportMutex);
+    if (g_batteryReportThread && g_batteryReportThread->joinable()) {
+        g_batteryReportThread->join();
+    }
+    g_batteryReportThread.reset();
+}
+
 void OpenBatteryReport() {
     wchar_t temp[MAX_PATH] = {};
     if (!GetTempPathW(MAX_PATH, temp)) return;
     std::wstring path = std::wstring(temp) + L"battery-report.html";
-    std::wstring command = L"cmd.exe /d /c powercfg /batteryreport /output \"" +
-                           path + L"\" >nul && start \"\" \"" + path + L"\"";
+    wchar_t system[MAX_PATH] = {};
+    if (!GetSystemDirectoryW(system, MAX_PATH)) return;
+    std::wstring exe = std::wstring(system) + L"\\powercfg.exe";
+    std::wstring command =
+        L"\"" + exe + L"\" /batteryreport /output \"" + path + L"\"";
     STARTUPINFOW startup{sizeof(startup)};
     PROCESS_INFORMATION process{};
-    if (CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE,
+    if (CreateProcessW(exe.c_str(), command.data(), nullptr, nullptr, FALSE,
                        CREATE_NO_WINDOW, nullptr, nullptr, &startup,
                        &process)) {
+        // Open the report once powercfg has written it, without blocking
+        // the taskbar: a helper thread waits for the process in short
+        // slices, and unload joins it (StopBatteryReportThread).
+        HANDLE handle = process.hProcess;
         CloseHandle(process.hThread);
-        CloseHandle(process.hProcess);
+        std::lock_guard lock(g_batteryReportMutex);
+        if (g_batteryReportThread && g_batteryReportThread->joinable()) {
+            g_batteryReportThread->join();
+        }
+        g_batteryReportThread.emplace([handle, path] {
+            bool done = false;
+            for (int i = 0; i < 300 && !g_unloading && !done; ++i) {
+                done = WaitForSingleObject(handle, 100) == WAIT_OBJECT_0;
+            }
+            CloseHandle(handle);
+            if (done && !g_unloading) {
+                ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr,
+                              SW_SHOWNORMAL);
+            }
+        });
     }
 }
 
@@ -24433,7 +24614,7 @@ struct TrendBuffers {
     std::array<int, 7> count{};
     std::array<SampleTime, 7> since{};
 };
-[[clang::no_destroy]] TrendBuffers g_trends;
+TrendBuffers g_trends;
 std::mutex g_trendsMutex;  // Written on the main taskbar thread only.
 // Time spans of the hover graph, in seconds, picked with the buttons under
 // a graph or the mouse wheel over it (up: shorter, down: longer). Shared by
@@ -24509,8 +24690,22 @@ struct ProcessSampler {
     double clockPercent = 0;
     ULONGLONG rateTick = 0, memoryTick = 0;  // ms of the last sampling.
 };
-// Per thread: each taskbar thread samples for its own popup.
-[[clang::no_destroy]] thread_local ProcessSampler g_processes;
+// Sampled on its own thread (StartProcessSampling), never on the taskbar
+// thread. Only the results (cpu, memory, gpu, disk, clockPercent) are read
+// from other threads, under g_processResultsMutex; everything else belongs
+// to the sampler thread.
+ProcessSampler g_processes;
+std::mutex g_processResultsMutex;
+
+struct ProcessResults {
+    std::vector<AppUsage> cpu, memory, gpu, disk;
+    double clockPercent = 0;
+};
+ProcessResults ReadProcessResults() {
+    std::lock_guard lock(g_processResultsMutex);
+    return {g_processes.cpu, g_processes.memory, g_processes.gpu,
+            g_processes.disk, g_processes.clockPercent};
+}
 
 // Local declarations of ntdll's process list (SystemProcessInformation).
 struct LocalUnicodeString {
@@ -24654,11 +24849,18 @@ void SampleProcesses(bool withGpu) {
         g_processes.previous = std::move(current);
         g_processes.previousAt = now;
         if (elapsed > 0) {
-            g_processes.cpu = TopApps(cpu, 3);
-            g_processes.disk = TopApps(disk, 3);
+            auto topCpu = TopApps(cpu, 3);
+            auto topDisk = TopApps(disk, 3);
+            std::lock_guard lock(g_processResultsMutex);
+            g_processes.cpu = std::move(topCpu);
+            g_processes.disk = std::move(topDisk);
         }
     }
-    if (doMemory) g_processes.memory = TopApps(memory, 3);
+    if (doMemory) {
+        auto topMemory = TopApps(memory, 3);
+        std::lock_guard lock(g_processResultsMutex);
+        g_processes.memory = std::move(topMemory);
+    }
     if (!doRates) return;
 
     // GPU engines: "pid_1234_luid_..._engtype_3D". Like Task Manager, an
@@ -24690,6 +24892,7 @@ void SampleProcesses(bool withGpu) {
                                         PDH_FMT_DOUBLE | PDH_FMT_NOCAP100,
                                         nullptr, &value) == ERROR_SUCCESS &&
             value.CStatus == ERROR_SUCCESS) {
+            std::lock_guard lock(g_processResultsMutex);
             g_processes.clockPercent = value.doubleValue;
         }
     }
@@ -24728,12 +24931,80 @@ void SampleProcesses(bool withGpu) {
             gpu[name->second] = std::max(gpu[name->second], busiest);
         }
     }
-    g_processes.gpu = TopApps(gpu, 3);
+    auto topGpu = TopApps(gpu, 3);
+    std::lock_guard lock(g_processResultsMutex);
+    g_processes.gpu = std::move(topGpu);
 }
 
-void StopProcessSampling() {
+// The sampler thread: one NtQuerySystemInformation pass and PDH collection
+// every 250 ms at most (SampleProcesses paces itself further), so a slow
+// pass never stalls the taskbar. It sleeps when no panel needs it and is
+// joined on unload.
+std::atomic<int> g_processSamplingMode{0};  // 0 off, 1 apps, 2 apps + GPU.
+std::atomic<bool> g_stopProcessSampler{false};
+std::mutex g_processThreadMutex;
+HANDLE g_processWake = nullptr;
+std::optional<std::thread> g_processThread;
+
+void ResetProcessSamplerState() {
     if (g_processes.query) PdhCloseQuery(g_processes.query);
+    std::lock_guard lock(g_processResultsMutex);
     g_processes = ProcessSampler{};
+}
+
+void ProcessSamplerProc() {
+    bool wasActive = false;
+    while (!g_stopProcessSampler) {
+        int mode = g_processSamplingMode.load();
+        if (mode != 0) {
+            wasActive = true;
+            try {
+                SampleProcesses(mode == 2);
+            } catch (...) {
+            }
+            WaitForSingleObject(g_processWake, 250);
+        } else {
+            if (wasActive) {
+                wasActive = false;
+                ResetProcessSamplerState();  // No PDH query while idle.
+            }
+            WaitForSingleObject(g_processWake, INFINITE);
+        }
+    }
+    ResetProcessSamplerState();
+}
+
+void StartProcessSampling(bool withGpu) {
+    if (g_unloading) return;
+    std::lock_guard lock(g_processThreadMutex);
+    g_processSamplingMode = withGpu ? 2 : 1;
+    if (!g_processWake) g_processWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_processWake) return;
+    if (!g_processThread) {
+        g_stopProcessSampler = false;
+        g_processThread.emplace(ProcessSamplerProc);
+    }
+    SetEvent(g_processWake);
+}
+
+// The panel closed: the thread goes back to sleep (it frees its own state).
+void StopProcessSampling() {
+    g_processSamplingMode = 0;
+    if (g_processWake) SetEvent(g_processWake);
+}
+
+// Unload: ends and joins the thread.
+void ShutdownProcessSampling() {
+    std::lock_guard lock(g_processThreadMutex);
+    g_processSamplingMode = 0;
+    g_stopProcessSampler = true;
+    if (g_processWake) SetEvent(g_processWake);
+    if (g_processThread && g_processThread->joinable()) g_processThread->join();
+    g_processThread.reset();
+    if (g_processWake) {
+        CloseHandle(g_processWake);
+        g_processWake = nullptr;
+    }
 }
 
 // The processor's base speed, from the registry, in MHz.
@@ -25888,7 +26159,7 @@ std::wstring BuildSpeedTestReportHtml() {
         std::wstring foot = HtmlEscape(tier[3]);
         if (privacy < 2 && !latest.isp.empty()) {
             if (!foot.empty()) foot += L" &middot; ";
-            foot += L"via " + HtmlEscape(latest.isp);
+            foot += L"via " + HtmlEscape(ApplyPrivacyMask(latest.isp, PrivacyHideNetwork()));
         }
         if (!foot.empty()) html += L"<div class='foot'>" + foot + L"</div>";
         // How well the line suits streaming, gaming and video calls, then
@@ -26246,7 +26517,7 @@ void OpenSpeedTestReport() {
         std::wstring(folder) + L"TaskbarSystemMonitor-speedtests.html";
     if (!WriteUtf8File(path, BuildSpeedTestReportHtml(), false)) {
         ModLog(L"Writing the speed test report failed: %u", GetLastError());
-        ShowReportToast(L"The speed test history could not be made",
+        SetReportStatus(L"The speed test history could not be made",
                         L"Try again in a moment.");
         return;
     }
@@ -26352,6 +26623,27 @@ StackPanel BuildHoverContent(const ModSettings& settings,
     StackPanel panel;
     panel.Spacing(tiles ? 8 : 12);
     panel.MinWidth(260);
+    {
+        // Progress and errors of the reports and exports (no toasts).
+        TextBlock status;
+        status.FontSize(12);
+        status.Opacity(0.85);
+        status.TextWrapping(TextWrapping::Wrap);
+        status.MaxWidth(320);
+        auto showStatus = [status](const MetricsSnapshot&) {
+            std::wstring line = CurrentReportStatus();
+            if (line.empty()) {
+                if (status.Visibility() != Visibility::Collapsed)
+                    status.Visibility(Visibility::Collapsed);
+            } else {
+                if (status.Text() != line) status.Text(line);
+                status.Visibility(Visibility::Visible);
+            }
+        };
+        showStatus(snapshot);
+        updaters.push_back(showStatus);
+        panel.Children().Append(status);
+    }
     auto tiled = [&](FrameworkElement const& content) -> FrameworkElement {
         if (!tiles) return content;
         Border tile;
@@ -26707,10 +26999,9 @@ StackPanel BuildHoverContent(const ModSettings& settings,
         panel.Children().Append(columns);
     }
     if (systemTopic && !sections.empty()) {
-        // Busiest apps: sampled now, then with every refresh while open.
-        SampleProcesses(anyGpu);
-        updaters.push_back(
-            [anyGpu](const MetricsSnapshot&) { SampleProcesses(anyGpu); });
+        // Busiest apps: sampled on the sampler thread while the panel is
+        // open; the readers below only pick up its latest results.
+        StartProcessSampling(anyGpu);
     }
 
     // The last minute as a line, 0-100%. With Chart grid: lines at 0, 50 and
@@ -27123,10 +27414,11 @@ StackPanel BuildHoverContent(const ModSettings& settings,
             lines.emplace_back(name, value);
         }
         auto fill = [lines, which](const MetricsSnapshot&) {
-            const auto& list = which == 0   ? g_processes.cpu
-                               : which == 1 ? g_processes.memory
-                               : which == 3 ? g_processes.disk
-                                            : g_processes.gpu;
+            const ProcessResults results = ReadProcessResults();
+            const auto& list = which == 0   ? results.cpu
+                               : which == 1 ? results.memory
+                               : which == 3 ? results.disk
+                                            : results.gpu;
             for (size_t i = 0; i < lines.size(); ++i) {
                 if (i < list.size()) {
                     lines[i].first.Text(list[i].name);
@@ -27176,7 +27468,7 @@ StackPanel BuildHoverContent(const ModSettings& settings,
                     row(
                         s, L"Speed",
                         [](const MetricsSnapshot&) {
-                            double percent = g_processes.clockPercent;
+                            double percent = ReadProcessResults().clockPercent;
                             if (percent <= 0) return std::wstring();
                             return FormatFixed(
                                        CpuBaseMhz() * percent / 100.0 / 1000.0,
@@ -27823,7 +28115,10 @@ StackPanel BuildHoverContent(const ModSettings& settings,
                         if (!namedNetwork(net.name)) continue;
                         ++shownRows;
                         std::wstring key = net.name;
-                        row(s, L"Today on " + key + (net.metered ? L" (M)" : L""),
+                        row(s,
+                            L"Today on " +
+                                ApplyPrivacyMask(key, PrivacyHideNetwork()) +
+                                (net.metered ? L" (M)" : L""),
                             [key](const MetricsSnapshot& m) {
                                 for (const auto& n : m.usageByNetwork) {
                                     if (n.name == key) {
@@ -28298,6 +28593,12 @@ StackPanel BuildHoverContent(const ModSettings& settings,
                                         TappedRoutedEventArgs const&) {
                         try {
                             if (g_speedTestBusy) return;
+                            std::wstring warning;
+                            if (!SpeedTestMayStart(warning)) {
+                                SetReportStatus(L"Speed test not started",
+                                                warning.c_str());
+                                return;
+                            }
                             link.Opacity(0.45);
                             link.IsHitTestVisible(false);
                             // A second test from the same open popup
@@ -29283,7 +29584,7 @@ struct HoverGlideStats {
     double workMs = 0, workLongest = 0;
     int workFrames = 0;
 };
-[[clang::no_destroy]] HoverGlideStats g_hoverGlideStats;
+HoverGlideStats g_hoverGlideStats;
 
 int HoverMonitorHz() {
     try {
@@ -31369,7 +31670,7 @@ void SaveMenuItems(const ModSettings& m) {
     // No readings at all is kept as a space: an empty value means "never
     // set up" and brings the Balanced preset back.
     std::wstring text = SerializeItems(m);
-    Wh_SetStringValue(L"menu.items", text.empty() ? L" " : text.c_str());
+    Wh_SetStringValue(L"menu.items", text.empty() ? L" " : StripLineBreaks(text).c_str());
     ReloadAllSettings();
 }
 
@@ -32303,11 +32604,7 @@ const std::vector<UiPage>& UiPages() {
            {{L"privacyAutoDetect", K::Toggle, L"Turn on automatically",
              L"Privacy mode switches on while a screen recorder, streaming "
              L"or meeting app is running, and goes back to your own setting "
-             L"when they are all closed."},
-            {L"privacyAutoNotify", K::Toggle, L"Show a notification",
-             L"A Windows notification when privacy mode switches on by itself.",
-             {}, 0, 1, 1, L"", L"privacyAutoDetect", L"1",
-             L"Turn on automatically"}}},
+             L"when they are all closed."}}},
           {L"Extra apps to watch",
            {{L"privacyCustomApps", K::Text, L"Extra process names",
              L"More .exe names to watch, separated by commas, for example "
@@ -33146,8 +33443,13 @@ Border BuildSpeedTestCard() {
         history.Children().Append(UiText(L"Measuring now", 11, 600, 0.55));
         history.Children().Append(BuildSpeedTestGauge(std::move(watch)));
     };
-    button.Click([showLive, finished](auto const&, auto const&) {
+    button.Click([showLive, finished, status](auto const&, auto const&) {
         try {
+            std::wstring warning;
+            if (!SpeedTestMayStart(warning)) {
+                status.Text(warning);
+                return;
+            }
             showLive(nullptr);
             StartSpeedTest(finished);
         } catch (...) {
@@ -33517,7 +33819,7 @@ struct UiHistory {
     bool started = false;
     std::wstring nextLabel;  // Names the next step (a preset, a reset).
 };
-[[clang::no_destroy]] UiHistory g_history;
+UiHistory g_history;
 constexpr size_t kHistorySteps = 100;
 
 UiStoredState UiReadStoredState() {
@@ -36376,7 +36678,7 @@ void UiAfterDrop(const UiDrag& drag) {
 // lands on a block or a divider while a reading is drawn under the pointer
 // (larger, or moved by the swell, past its own laid-out place) is that
 // reading's, not the block's: g_uiPressRedirect.
-[[clang::no_destroy]] std::map<int, std::function<void()>> g_uiTokenPick;
+std::map<int, std::function<void()>> g_uiTokenPick;
 int g_uiPressRedirect = -1;
 // The content of the options row now open inside a zone's card, and that
 // zone: a click on another reading of the same zone fills it again in place
@@ -39209,6 +39511,11 @@ std::wstring ItemsOneLine(const std::wstring& text) {
     for (wchar_t ch : text) {
         if (ch == L'[' || ch == L'(') depth++;
         if ((ch == L']' || ch == L')') && depth > 0) depth--;
+        if (depth > 0 && (ch == L'\r' || ch == L'\n')) {
+            // Inside ( ) or [ ]: a space, never a stored line break.
+            if (!out.empty() && out.back() != L' ') out += L' ';
+            continue;
+        }
         if (depth == 0 && (ch == L'\r' || ch == L'\n')) {
             pending = true;
             continue;
@@ -40372,11 +40679,11 @@ void ApplyPresetValues(const std::wstring& title,
                                        [](wchar_t c) { return c == L'\r' || c == L'\n'; }),
                         items.end());
             if (items.size() > 32000) items.resize(32000);
-            Wh_SetStringValue(L"menu.items", items.c_str());
+            Wh_SetStringValue(L"menu.items", StripLineBreaks(items).c_str());
         }
     }
     if (auto it = values.find(L"layout"); it != values.end()) {
-        Wh_SetStringValue(L"menu.layout", it->second.c_str());
+        Wh_SetStringValue(L"menu.layout", StripLineBreaks(it->second).c_str());
     }
     UiFlushHistory();  // A change still waiting stays its own step.
     g_history.nextLabel = L"Preset " + title;
@@ -41748,7 +42055,7 @@ void UiBuildAboutPage() {
         });
         g_ui.content.Children().Append(UiCard(
             L"Advanced logs",
-            L"On (default): the mod writes a detailed log of what it does "
+            L"Off (default). When on, the mod writes a detailed log of what it does "
             L"(readings, details panel, taskbar placement, internet "
             L"requests, settings window, its own health and its start and "
             L"stop) to the Windhawk log, for finding and reporting problems. "
@@ -41854,33 +42161,6 @@ void UiBuildAboutPage() {
             nullptr));
     }
     UiHeading(L"Keeping and resetting");
-    {
-        // The folder, one click away, and its path for pasting elsewhere.
-        StackPanel buttons = HorizontalStack(8);
-        auto copy = UiButton(L"Copy path", [] {});
-        copy.Click([copy](auto const&, auto const&) {
-            try {
-                bool ok = CopyTextToClipboard(BackupFolder());
-                copy.Content(winrt::box_value(
-                    winrt::hstring(ok ? L"Copied" : L"Could not copy")));
-            } catch (...) {
-            }
-        });
-        buttons.Children().Append(copy);
-        buttons.Children().Append(UiButton(L"Open folder", [] {
-            std::wstring folder = BackupFolder();
-            if (folder.empty()) return;
-            CreateDirectoryW(folder.c_str(), nullptr);
-            ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr,
-                          SW_SHOWNORMAL);
-        }));
-        g_ui.content.Children().Append(UiCard(
-            L"Backup",
-            L"Everything set in this window is also copied to "
-            L"%APPDATA%\\Taskbar System Monitor, so removing and "
-            L"reinstalling the mod brings it back.",
-            buttons));
-    }
     {
         // Positions exist only after the Move hotkey was used, so the card
         // says how many there are, and has nothing to reset with none.
@@ -44479,7 +44759,12 @@ void SettingsThreadProc() {
             wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
             wc.hbrBackground = CreateSolidBrush(RGB(32, 32, 32));
             wc.lpszClassName = kSettingsClass;
-            g_settingsClassRegistered = RegisterClassExW(&wc) != 0;
+            g_settingsClassRegistered =
+                RegisterClassExW(&wc) != 0 ||
+                GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+            if (!g_settingsClassRegistered) {
+                throw std::runtime_error("window class");
+            }
         }
         window = CreateWindowExW(
             0, kSettingsClass, L"Taskbar System Monitor settings",
@@ -44785,14 +45070,11 @@ void AddMonitorMenu(XamlRoot root, std::optional<int> entry, int attempt) {
     // work on this thread.
     auto queue = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
     if (!queue) return;
-    ++g_pendingQueued;
-    if (!queue.TryEnqueue(winrt::Windows::System::DispatcherQueuePriority::Low,
-                          [root, entry, attempt] {
-                              AddMonitorMenu(root, entry, attempt + 1);
-                              --g_pendingQueued;
-                          })) {
-        --g_pendingQueued;
-    }
+    auto guard = std::make_shared<PendingGuard>();
+    queue.TryEnqueue(winrt::Windows::System::DispatcherQueuePriority::Low,
+                     [root, entry, attempt, guard] {
+                         if (!g_unloading) AddMonitorMenu(root, entry, attempt + 1);
+                     });
 }
 
 using ShowTaskbarSettingsContextMenu_t =
@@ -44982,7 +45264,6 @@ void ReloadAllSettings() {
     if (!ApplyOnTaskbarThread(nullptr, true)) {
         StartPlacementRetryWorker();
     }
-    BackupSettings();
     // A change made in the settings window becomes a history step.
     if (g_settingsThread &&
         g_settingsThread->get_id() == std::this_thread::get_id()) {
@@ -44998,6 +45279,8 @@ BOOL Wh_ModInit() {
     g_taskbarUiResourcesRegistered = false;
     g_uiTornDown = false;
     g_loadedRevokers.emplace();
+    g_view.emplace();
+    g_trackedTimers.emplace();
     {
         std::lock_guard lock(g_windowThreadCallbackRegistryMutex);
         g_windowThreadCallbackRegistry.emplace();
@@ -45021,7 +45304,6 @@ BOOL Wh_ModInit() {
             static_cast<unsigned long>(GetCurrentThreadId()));
     LoadPlacementProfiles();
     ReconcilePlacementSettings();
-    BackupSettings();
 
     if (!HookTaskbarDllSymbols()) {
         // Not fatal: see HookTaskbarDllSymbols and g_liveTaskbarFrames.
@@ -45031,8 +45313,7 @@ BOOL Wh_ModInit() {
     if (HMODULE module = GetTaskbarViewModule()) {
         if (!HandleLoadedModuleIfTaskbarView(module, nullptr, false)) {
             ModLog(L"Taskbar.View symbols unavailable");
-            StopPingProbe();
-            StopPingTray();
+            StopPingProbe();  // Also stops the ping tray.
             return FALSE;
         }
     } else {
@@ -45048,8 +45329,7 @@ BOOL Wh_ModInit() {
         if (!loadLibraryEx ||
             !WindhawkUtils::SetFunctionHook(loadLibraryEx, LoadLibraryExW_Hook,
                                             &LoadLibraryExW_Original)) {
-            StopPingProbe();
-            StopPingTray();
+            StopPingProbe();  // Also stops the ping tray.
             return FALSE;
         }
     }
@@ -45082,8 +45362,11 @@ void Wh_ModBeforeUninit() {
     ModLog(L">");
     DiagLog(kDiagLifecycle, L"mod shutting down");
     g_unloading = true;
+    CancelAllHttp();  // Requests waiting on the network fail at once.
     CancelMoveEditor();
     StopPlacementRetryWorker();
+    ShutdownProcessSampling();
+    StopBatteryReportThread();
     StopMetricsWorker();
     StopUsageCsvThread();
     StopExportDialog();
@@ -45092,9 +45375,10 @@ void Wh_ModBeforeUninit() {
     StopWebWorker();
     StopPingProbe();
     CloseSettingsWindow();
-    // Let already queued lambdas finish (bounded, in case this is the UI
-    // thread itself and they cannot run).
-    for (int i = 0; i < 30 && g_pendingQueued.load() > 0; ++i) Sleep(10);
+    // Let already queued lambdas run or be dropped before the code goes
+    // away. This runs on the engine thread, never the taskbar thread, so the
+    // queued lambdas can run meanwhile; the guard keeps the count honest.
+    while (g_pendingQueued.load() > 0) Sleep(10);
 
     bool primaryRemoved = TearDownTaskbarUi();
     bool copiesRemoved = RemoveAllWidgetCopies();
@@ -45117,7 +45401,12 @@ void Wh_ModUninit() {
             ModLog(L"Taskbar UI teardown retry failed");
         }
     }
-    if (g_uiTornDown) StopFontGraphics();
+    if (g_uiTornDown) {
+        StopFontGraphics();
+        // Torn down, so these only hold empty references: release them now.
+        g_view.reset();
+        g_trackedTimers.reset();
+    }
     // Both workers were joined in BeforeUninit; the metrics worker owns and
     // closes all provider handles before returning.
     ForgetLiveTaskbarFrames();
