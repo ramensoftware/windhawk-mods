@@ -67,8 +67,12 @@ folders, and custom icon files by path, so those may need to be updated on
 another PC. The built-in icons travel with the profile.
 
 A shortcut set in Windhawk takes priority over the profile shortcut. Clear
-the Windhawk field to use the profile shortcut again. Check the Windhawk mod
-log if Windows cannot register a new shortcut.
+the Windhawk field to use the profile shortcut again. In **Motion & activation**,
+focus **Profile shortcut** and press the middle button or either side button
+to record it. Hold any modifiers you want to include, then click **Apply**.
+A mouse shortcut toggles the wheel. **Hold keyboard shortcut to select** applies
+to keyboard activation. Check the Windhawk mod log if Windows cannot register
+a new shortcut.
 
 On 64-bit Windows, the menu opens native system apps from either Windhawk
 host. In the 32-bit file picker, enter **%WINDIR%\Sysnative** in the address
@@ -82,7 +86,8 @@ as System32 paths so the same profile works in the 64-bit host.
 - ActivationShortcut: ""
   $name: Activation shortcut
   $description: >-
-    Enter a shortcut such as Ctrl+Alt+Space or Ctrl+Shift+M.
+    Enter a keyboard shortcut, or use Middle, Mouse4, or Mouse5 with optional
+    modifiers, such as Shift+Middle.
     Leave blank to use the profile shortcut (Ctrl+Alt+Space by default).
 */
 // ==/WindhawkModSettings==
@@ -161,6 +166,8 @@ constexpr UINT kEditMenu = WM_APP + 10;
 constexpr UINT kOpenEditor = WM_APP + 11;
 constexpr UINT kAppsReady = WM_APP + 12;
 constexpr UINT kEditorChoice = WM_APP + 13;
+constexpr UINT kMouseShortcut = WM_APP + 14;
+constexpr UINT kMouseShortcutReleased = WM_APP + 15;
 
 std::wstring Trim(std::wstring_view value) {
     const auto first = value.find_first_not_of(L" \t\r\n");
@@ -289,11 +296,29 @@ struct Modifier {
     UINT flag;
     WORD key;
     WORD alternate;
+    PCWSTR name;
 };
 constexpr Modifier kModifiers[] = {
-    {MOD_CONTROL, VK_CONTROL, 0}, {MOD_SHIFT, VK_SHIFT, 0},
-    {MOD_ALT, VK_MENU, 0}, {MOD_WIN, VK_LWIN, VK_RWIN},
+    {MOD_CONTROL, VK_CONTROL, 0, L"Ctrl"}, {MOD_SHIFT, VK_SHIFT, 0, L"Shift"},
+    {MOD_ALT, VK_MENU, 0, L"Alt"}, {MOD_WIN, VK_LWIN, VK_RWIN, L"Win"},
 };
+
+constexpr std::pair<UINT, PCWSTR> kMouseButtons[] = {
+    {VK_MBUTTON, L"Middle"}, {VK_XBUTTON1, L"Mouse4"}, {VK_XBUTTON2, L"Mouse5"},
+};
+
+UINT ShortcutMouseButton(UINT message, WORD sideButton) {
+    if (message == WM_MBUTTONDOWN || message == WM_MBUTTONUP) return VK_MBUTTON;
+    if (message == WM_XBUTTONDOWN || message == WM_XBUTTONUP) {
+        if (sideButton == XBUTTON1) return VK_XBUTTON1;
+        if (sideButton == XBUTTON2) return VK_XBUTTON2;
+    }
+    return 0;
+}
+
+bool IsShortcutMouseDown(UINT message) {
+    return message == WM_MBUTTONDOWN || message == WM_XBUTTONDOWN;
+}
 
 bool KeyDown(UINT key) {
     return key && (GetAsyncKeyState(key) & 0x8000);
@@ -303,13 +328,43 @@ bool ModifierDown(const Modifier& modifier) {
     return KeyDown(modifier.key) || KeyDown(modifier.alternate);
 }
 
-std::optional<Chord> ParseChord(std::wstring_view text) {
+UINT ActiveModifiers() {
+    UINT modifiers = 0;
+    for (const auto& modifier : kModifiers) {
+        if (ModifierDown(modifier)) modifiers |= modifier.flag;
+    }
+    return modifiers;
+}
+
+std::wstring MouseShortcutText(UINT key, UINT modifiers) {
+    std::wstring text;
+    for (const auto& modifier : kModifiers) {
+        if (modifiers & modifier.flag) {
+            text += modifier.name;
+            text += L'+';
+        }
+    }
+    for (const auto& [button, name] : kMouseButtons) {
+        if (button == key) {
+            text += name;
+            break;
+        }
+    }
+    return text;
+}
+
+std::optional<Chord> ParseChord(std::wstring_view text, bool allowMouse = false) {
     Chord chord;
     while (!text.empty()) {
         size_t separator = text.find(L'+');
         std::wstring token = Trim(text.substr(0, separator));
         for (wchar_t& character : token) character = towupper(character);
         if (separator == text.npos) {
+            if (allowMouse) {
+                for (const auto& [button, name] : kMouseButtons) {
+                    if (_wcsicmp(token.c_str(), name) == 0) return Chord{chord.modifiers, button};
+                }
+            }
             if (token.size() == 1 && ((token[0] >= L'A' && token[0] <= L'Z') ||
                                       (token[0] >= L'0' && token[0] <= L'9'))) {
                 chord.key = token[0];
@@ -467,7 +522,7 @@ Settings DefaultSettings() {
     settings.iconScale = settings.wheelSensitivity = 120;
     settings.selectionMs = 210;
     settings.shortcutText = L"Ctrl+Alt+Space";
-    settings.shortcut = ParseChord(settings.shortcutText);
+    settings.shortcut = ParseChord(settings.shortcutText, true);
     settings.closeAfterSelection = true;
     settings.name = L"Default";
     settings.revision = L"00000000000000000000000000000000";
@@ -851,7 +906,7 @@ std::optional<Settings> ParseProfile(const std::wstring& text, std::wstring& err
     else if (options.transition != L"crossfade") reader.Invalid(L"pageTransition");
     if (options.position == L"monitor") settings.centerOnMonitor = true;
     else if (options.position != L"pointer") reader.Invalid(L"position");
-    settings.shortcut = ParseChord(settings.shortcutText);
+    settings.shortcut = ParseChord(settings.shortcutText, true);
     if (!settings.shortcut) reader.Invalid(L"shortcut");
     if (!error.empty()) return {};
 
@@ -943,7 +998,7 @@ std::string ReadProfileBytes(const std::wstring& path, std::wstring& error, bool
     return contents;
 }
 
-bool SaveProfileBytes(const std::wstring& path, const std::string& contents, bool replaceExisting = true) {
+bool SaveProfileBytes(const std::wstring& path, const std::string& contents) {
     GUID id;
     wchar_t unique[40];
     if (contents.empty() || contents.size() > kMaxProfileBytes || FAILED(CoCreateGuid(&id)) ||
@@ -957,7 +1012,7 @@ bool SaveProfileBytes(const std::wstring& path, const std::string& contents, boo
                  written == contents.size() && FlushFileBuffers(file);
     CloseHandle(file);
     if (saved) saved = MoveFileExW(temporary.c_str(), path.c_str(),
-                                   MOVEFILE_WRITE_THROUGH | (replaceExisting ? MOVEFILE_REPLACE_EXISTING : 0));
+                                   MOVEFILE_WRITE_THROUGH | MOVEFILE_REPLACE_EXISTING);
     if (!saved) DeleteFileW(temporary.c_str());
     return saved;
 }
@@ -979,27 +1034,6 @@ std::optional<Settings> ParseProfileBytes(const std::string& bytes, std::wstring
         return {};
     }
     return ParseProfile(text, error);
-}
-
-void MigrateEditorProfile(const std::wstring& path) {
-    if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES ||
-        GetLastError() != ERROR_FILE_NOT_FOUND) return;
-
-    PWSTR folder = nullptr;
-    if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &folder))) return;
-    std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> owner(folder, CoTaskMemFree);
-    const auto oldPath = std::wstring(folder) + L"\\FluentRadialMenu" + kProfileFile;
-    std::wstring error;
-    const auto bytes = ReadProfileBytes(oldPath, error);
-    if (error == L"No active profile.") return;
-    if (!error.empty() || !ParseProfileBytes(bytes, error)) {
-        Wh_Log(L"Could not import the prerelease radial menu layout: %s", error.c_str());
-        return;
-    }
-    if (!SaveProfileBytes(path, bytes, false) &&
-        GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
-        Wh_Log(L"Could not copy the prerelease radial menu layout to Windhawk storage.");
-    }
 }
 
 float EaseOut(float progress) {
@@ -3604,6 +3638,16 @@ private:
     static LRESULT CALLBACK ControlProc(HWND window, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR data) {
         auto& self=*reinterpret_cast<MenuEditor*>(data);
         if (msg==WM_NCDESTROY) { RemoveWindowSubclass(window,ControlProc,1); return DefSubclassProc(window,msg,wp,lp); }
+        if (GetDlgCtrlID(window) == Shortcut && GetFocus() == window) {
+            if (const UINT button = ShortcutMouseButton(msg, HIWORD(wp))) {
+                if (IsShortcutMouseDown(msg)) {
+                    const auto text = MouseShortcutText(button, ActiveModifiers());
+                    SetWindowTextW(window, text.c_str());
+                    SendMessageW(window, EM_SETSEL, 0, -1);
+                }
+                return msg == WM_XBUTTONDOWN || msg == WM_XBUTTONUP;
+            }
+        }
         if (GetDlgCtrlID(window) == RenameEdit && (wp == VK_RETURN || wp == VK_ESCAPE)) {
             if (msg == WM_GETDLGCODE && lp) return DLGC_WANTMESSAGE;
             if (msg == WM_KEYDOWN) {
@@ -4129,7 +4173,7 @@ private:
         } else {
             Edit(L"Profile shortcut", Shortcut, draft_.shortcutText, 100);
             Choice(L"Placement", Position, {L"At pointer", L"Center of monitor"}, draft_.centerOnMonitor);
-            Flag(L"Hold to select", Hold, draft_.holdToSelect);
+            Flag(L"Hold keyboard shortcut to select", Hold, draft_.holdToSelect);
             Flag(L"Close after selection", CloseAfter, draft_.closeAfterSelection);
             Number(L"Scroll sensitivity", WheelSensitivity, draft_.wheelSensitivity);
             Flag(L"Animate the menu", Animations, draft_.animations);
@@ -4233,8 +4277,8 @@ private:
             draft_.idleLabel = Text(Idle);
         } else {
             draft_.shortcutText = Trim(Text(Shortcut));
-            draft_.shortcut = ParseChord(draft_.shortcutText);
-            if (!draft_.shortcut) error_ = L"Enter a valid shortcut, such as Ctrl+Alt+Space.";
+            draft_.shortcut = ParseChord(draft_.shortcutText, true);
+            if (!draft_.shortcut) error_ = L"Enter a valid shortcut, such as Ctrl+Alt+Space or Shift+Middle.";
             draft_.centerOnMonitor = Selected(Position) == 1;
             draft_.holdToSelect = Checked(Hold);
             draft_.closeAfterSelection = Checked(CloseAfter);
@@ -4931,10 +4975,10 @@ public:
                                       WS_EX_TOPMOST | WS_EX_TRANSPARENT,
                                       kWindowClass, L"Fluent Radial Menu",
                                       WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, instance_, this);
+            current_ = this;
             if (window_ && CreatePointerWindow() && renderer_.Init() && StartShell()) {
                 profileRoot_ = ProfileRoot(profileDirectory_);
                 if (!profileRoot_.empty()) {
-                    MigrateEditorProfile(profileRoot_ + kProfileFile);
                     watcher_ = FindFirstChangeNotificationW(profileRoot_.c_str(), FALSE,
                         FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_SIZE);
                 } else {
@@ -4994,12 +5038,15 @@ public:
             }
             if (window_) {
                 capture_.Uninit();
+                mouseShortcut_.reset();
+                mouseShortcutPress_ = 0;
                 Hide();
                 editor_.Close();
                 if (hotkey_) UnregisterHotKey(window_, hotkeyId_);
                 if (shell_) shell_->Stop();
                 DestroyWindow(window_);
             }
+            current_ = nullptr;
             if (pointerWindow_) DestroyWindow(pointerWindow_);
             UnregisterClassW(kPointerClass, instance_);
             UnregisterClassW(kWindowClass, instance_);
@@ -5165,6 +5212,16 @@ private:
                         Open(now);
                     }
                 }
+                return 0;
+            case kMouseShortcut:
+                if (mouseShortcut_ && wParam == mouseShortcut_->key &&
+                    lParam == mouseShortcut_->modifiers && MouseShortcutAvailable()) {
+                    if (inputActive_) Close(now);
+                    else Open(now);
+                }
+                return 0;
+            case kMouseShortcutReleased:
+                ReleaseIdleMouseHook();
                 return 0;
             case WM_MOUSEACTIVATE:
                 return MA_NOACTIVATE;
@@ -5340,6 +5397,17 @@ private:
     }
 
     std::wstring RegisterShortcut(const Chord& shortcut, const std::wstring& text) {
+        if (shortcut.key <= VK_XBUTTON2) {
+            if (!EnsureMouseHook()) {
+                return L"Could not listen for " + text + L" (Windows error " +
+                       std::to_wstring(GetLastError()) + L").";
+            }
+            if (hotkey_) UnregisterHotKey(window_, hotkeyId_);
+            hotkey_.reset();
+            mouseShortcut_ = shortcut;
+            registeredShortcut_ = text;
+            return {};
+        }
         if (shortcut != hotkey_) {
             const int nextId = hotkeyId_ == kHotkey ? kHotkey + 1 : kHotkey;
             if (!RegisterHotKey(window_, nextId, shortcut.modifiers | MOD_NOREPEAT, shortcut.key)) {
@@ -5351,6 +5419,8 @@ private:
             hotkeyId_ = nextId;
             hotkey_ = shortcut;
         }
+        mouseShortcut_.reset();
+        ReleaseIdleMouseHook();
         registeredShortcut_ = text;
         return {};
     }
@@ -5358,12 +5428,12 @@ private:
     void UpdateHotkey(const Settings& settings) {
         hotkeyError_.clear();
         if (!windhawkShortcut_.empty()) {
-            const auto shortcut = ParseChord(windhawkShortcut_);
+            const auto shortcut = ParseChord(windhawkShortcut_, true);
             hotkeyError_ = shortcut ? RegisterShortcut(*shortcut, windhawkShortcut_)
                                     : L"Invalid activation shortcut in Windhawk settings.";
             if (hotkeyError_.empty()) return;
         }
-        if ((windhawkShortcut_.empty() || !hotkey_) && settings.shortcut) {
+        if ((windhawkShortcut_.empty() || (!hotkey_ && !mouseShortcut_)) && settings.shortcut) {
             const auto error = RegisterShortcut(*settings.shortcut, settings.shortcutText);
             if (!error.empty()) {
                 if (!hotkeyError_.empty()) hotkeyError_ += L" ";
@@ -5371,7 +5441,7 @@ private:
             }
         }
         if (!hotkeyError_.empty()) {
-            if (hotkey_) hotkeyError_ += L" Active shortcut: " + registeredShortcut_ + L".";
+            if (hotkey_ || mouseShortcut_) hotkeyError_ += L" Active shortcut: " + registeredShortcut_ + L".";
             Wh_Log(L"%s", hotkeyError_.c_str());
         }
     }
@@ -5421,7 +5491,7 @@ private:
         POINT pointer;
         if (!GetCursorPos(&pointer) || !Locate(pointer)) return false;
         const bool restrictedInput = !preview && ForegroundInputRestricted();
-        holdActive_ = settings_.holdToSelect && !preview;
+        holdActive_ = settings_.holdToSelect && !preview && hotkey_.has_value();
         if (holdActive_ && !restrictedInput && !ActivationHeld()) return false;
         desktopPreview_ = preview;
         RefreshMotion();
@@ -5455,8 +5525,8 @@ private:
         }
         SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-        // Install the global listeners after rendering. The pointer window also handles
-        // input directly when the listeners cannot observe the foreground application.
+        // Start listening for wheel input after rendering. The pointer window also
+        // handles input directly when the hooks cannot observe the foreground app.
         InstallHooks();
         if ((restrictedInput || !keyboard_) && !FocusPointerWindow() && restrictedInput) holdActive_ = false;
         if (holdActive_ && !ActivationHeld()) {
@@ -5667,21 +5737,33 @@ private:
         }
     }
 
-    void InstallHooks() {
-        current_ = this;
+    HMODULE InputHookModule() {
         HMODULE module = nullptr;
         GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                            reinterpret_cast<PCWSTR>(&MouseProc), &module);
-        mouse_ = SetWindowsHookExW(WH_MOUSE_LL, MouseProc, module, 0);
-        keyboard_ = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardProc, module, 0);
-        if (!mouse_ || !keyboard_) Wh_Log(L"Some global radial menu input hooks are unavailable.");
+        return module;
+    }
+
+    bool EnsureMouseHook() {
+        if (!mouse_) mouse_ = SetWindowsHookExW(WH_MOUSE_LL, MouseProc, InputHookModule(), 0);
+        return mouse_ != nullptr;
+    }
+
+    void InstallHooks() {
+        const bool mouseAvailable = EnsureMouseHook();
+        keyboard_ = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardProc, InputHookModule(), 0);
+        if (!mouseAvailable || !keyboard_) Wh_Log(L"Some global radial menu input hooks are unavailable.");
+    }
+
+    void ReleaseIdleMouseHook() {
+        if (mouse_ && !inputActive_ && !mouseShortcut_ && !mouseShortcutPress_)
+            UnhookWindowsHookEx(std::exchange(mouse_, nullptr));
     }
 
     void RemoveHooks() {
-        if (mouse_) UnhookWindowsHookEx(std::exchange(mouse_, nullptr));
+        ReleaseIdleMouseHook();
         if (keyboard_) UnhookWindowsHookEx(std::exchange(keyboard_, nullptr));
-        current_ = nullptr;
         pointerPosted_ = false;
         leftPressedInside_ = false;
         rightPressedInside_ = false;
@@ -5695,10 +5777,35 @@ private:
         return true;
     }
 
+    bool MouseShortcutAvailable() const {
+        return !desktopPreview_ && !(inputActive_ && holdActive_) && !editor_.Window() && !capture_.Window() &&
+               !ForegroundIsFullscreen();
+    }
+
+    bool OnMouseShortcut(UINT message, const MSLLHOOKSTRUCT& mouse) {
+        if (mouse.flags & LLMHF_INJECTED) return false;
+        const UINT button = ShortcutMouseButton(message, HIWORD(mouse.mouseData));
+        if (!button) return false;
+        if (!IsShortcutMouseDown(message)) {
+            if (button != mouseShortcutPress_) return false;
+            mouseShortcutPress_ = 0;
+            if (!mouseShortcut_ && !inputActive_) PostMessageW(window_, kMouseShortcutReleased, 0, 0);
+            return true;
+        }
+        if (button == mouseShortcutPress_) return true;
+        if (mouseShortcutPress_ || !mouseShortcut_ || button != mouseShortcut_->key ||
+            ActiveModifiers() != mouseShortcut_->modifiers || !MouseShortcutAvailable()) return false;
+        if (!PostMessageW(window_, kMouseShortcut, button, mouseShortcut_->modifiers)) return false;
+        mouseShortcutPress_ = button;
+        return true;
+    }
+
     static LRESULT CALLBACK MouseProc(int code, WPARAM message, LPARAM payload) {
-        if (code == HC_ACTION && current_ && current_->inputActive_) {
-            const auto& mouse = *reinterpret_cast<MSLLHOOKSTRUCT*>(payload);
-            if (current_->OnMouse(message, mouse.pt, static_cast<short>(HIWORD(mouse.mouseData)))) return 1;
+        if (code == HC_ACTION && current_) {
+            const auto& mouse = *reinterpret_cast<const MSLLHOOKSTRUCT*>(payload);
+            if (current_->OnMouseShortcut(message, mouse) ||
+                (current_->inputActive_ &&
+                 current_->OnMouse(message, mouse.pt, static_cast<short>(HIWORD(mouse.mouseData))))) return 1;
         }
         return CallNextHookEx(nullptr, code, message, payload);
     }
@@ -5777,11 +5884,12 @@ private:
     bool leftPressedInside_ = false;
     bool rightPressedInside_ = false, desktopPreview_ = false, holdActive_ = false;
     int hotkeyId_ = kHotkey;
+    UINT mouseShortcutPress_ = 0;
     HANDLE watcher_ = INVALID_HANDLE_VALUE, stop_ = nullptr;
     FileHandle profileDirectory_{nullptr, CloseHandle};
     std::wstring profileRoot_, hotkeyError_, registeredShortcut_, windhawkShortcut_;
     std::string profileBytes_;
-    std::optional<Chord> hotkey_, pendingKeys_;
+    std::optional<Chord> hotkey_, mouseShortcut_, pendingKeys_;
     Time keyDeadline_{};
     Settings settings_{};
     Geometry geometry_;
