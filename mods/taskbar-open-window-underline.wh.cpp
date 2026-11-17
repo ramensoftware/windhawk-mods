@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-open-window-underline
 // @name            Taskbar Open Window Underline
-// @description     Underlines the labels (and optionally the icons) of taskbar buttons whose windows are shown on the desktop, so open and minimized windows can be told apart at a glance
-// @version         2.1
+// @description     Underlines the labels and/or icons of taskbar buttons whose windows are shown on the desktop, so open and minimized windows can be told apart at a glance
+// @version         2.2
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
@@ -17,7 +17,12 @@
 Underlines the label of every Windows 11 taskbar button that has a window
 currently shown on the desktop. Buttons whose windows are all minimized keep a
 plain label, so you can tell at a glance which apps actually have something
-open in front of you.
+open in front of you. An experimental icon underline draws the same cue under
+the icon; the label and icon underlines can be turned on independently.
+
+Settings are grouped into **General** (which buttons count as open, and the
+options that apply to both underlines), **Label underline** and **Icon
+underline**.
 
 ![Labels underlined](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/taskbar-open-window-underline/demo.png)
 *Whole label*
@@ -39,8 +44,9 @@ Requirements:
   of its windows is shown.
 
 Icon underline (experimental): the "Icon underline" section adds a line under
-the button's icon with the same rule, for taskbars that hide their labels or
-as a stronger cue next to the label. Thickness, width, distance from the icon,
+the button's icon with the same rule, for taskbars that hide their labels, as
+a stronger cue next to the label, or instead of it (turn the label underline
+off). Thickness, width, distance from the icon,
 corner radius, color and opacity are configurable. The color can differ
 between the light and dark theme, can be a horizontal gradient, and defaults
 to the system accent color (in the shade Windows uses for accent fills on
@@ -54,11 +60,11 @@ view-model symbols described below: on builds where they can't be resolved,
 the title fallback has no label text to work with, and those buttons stay
 plain.
 
-Hide the running indicator: hides the taskbar's own indicator under running
-buttons, so that the underline is the only cue. The same element also marks
-the active window (the wider accent-colored line) and, on some builds,
-attention requests, so those markers go with it. Independent of the icon
-underline.
+Hide the running indicator (General): hides the taskbar's own indicator under
+running buttons, so that the underline is the only cue. The same element also
+marks the active window (the wider accent-colored line) and, on some builds,
+attention requests, so those markers go with it. Independent of both
+underlines.
 
 How it works:
 
@@ -91,52 +97,64 @@ How it works:
 
 // ==WindhawkModSettings==
 /*
-- mode: open
-  $name: What to underline
-  $options:
-  - open: Buttons with a window shown on the desktop
-  - minimized: Buttons whose windows are all minimized
-- underlineStyle: full
-  $name: Underline style
-  $options:
-  - full: The whole label
-  - firstLetter: The first letter only
-- groupRule: any
-  $name: Buttons with several windows
-  $description: >-
-    Applies to "Buttons with a window shown on the desktop".
-  $options:
-  - any: Shown if any of the windows is shown
-  - all: Shown only if every window is shown
-- includeActive: true
-  $name: Count the foreground window as shown
-  $description: >-
-    Applies to "Buttons with a window shown on the desktop". When disabled, a
-    button whose only shown window is the foreground one is not underlined,
-    since it already has the active indicator.
-- cloakedIsHidden: true
-  $name: Treat cloaked windows as not shown
-  $description: >-
-    Cloaked windows include windows on other virtual desktops and suspended
-    Store apps.
-- refreshDelayMs: 60
-  $name: Refresh delay (ms)
-  $description: >-
-    Window-state events are coalesced for this long before the buttons are
-    re-evaluated. Win+M and Win+D fire dozens of events at once.
-- hideRunningIndicator: false
-  $name: Hide the running indicator
-  $description: >-
-    Hides the taskbar's own indicator under running buttons, so the underline
-    is the only cue. The same element marks the active window (the wider
-    accent-colored line) and, on some builds, attention requests, so those
-    markers disappear with it. Works with or without the icon underline.
+- general:
+  - mode: open
+    $name: What to underline
+    $description: >-
+      Applies to both the label and the icon underline.
+    $options:
+    - open: Buttons with a window shown on the desktop
+    - minimized: Buttons whose windows are all minimized
+  - groupRule: any
+    $name: Buttons with several windows
+    $description: >-
+      Applies to "Buttons with a window shown on the desktop".
+    $options:
+    - any: Shown if any of the windows is shown
+    - all: Shown only if every window is shown
+  - includeActive: true
+    $name: Count the foreground window as shown
+    $description: >-
+      Applies to "Buttons with a window shown on the desktop". When disabled,
+      a button whose only shown window is the foreground one is not
+      underlined, since it already has the active indicator.
+  - cloakedIsHidden: true
+    $name: Treat cloaked windows as not shown
+    $description: >-
+      Cloaked windows include windows on other virtual desktops and suspended
+      Store apps.
+  - refreshDelayMs: 60
+    $name: Refresh delay (ms)
+    $description: >-
+      Window-state events are coalesced for this long before the buttons are
+      re-evaluated. Win+M and Win+D fire dozens of events at once.
+  - hideRunningIndicator: false
+    $name: Hide the running indicator
+    $description: >-
+      Hides the taskbar's own indicator under running buttons, so the
+      underline is the only cue. The same element marks the active window
+      (the wider accent-colored line) and, on some builds, attention
+      requests, so those markers disappear with it. Works with either
+      underline, or with neither.
+  $name: General
+- labelUnderline:
+  - enabled: true
+    $name: Enabled
+    $description: >-
+      Underlines the button's label. Turn off to use the icon underline on
+      its own.
+  - style: full
+    $name: Style
+    $options:
+    - full: The whole label
+    - firstLetter: The first letter only
+  $name: Label underline
 - iconUnderline:
   - enabled: false
     $name: Enabled
     $description: >-
-      Draws a line under the button's icon with the same rule as the label
-      underline. Works when labels are hidden, too.
+      Draws a line under the button's icon with the rule set in General.
+      Works when labels are hidden and with the label underline turned off.
   - thickness: 2
     $name: Thickness (px)
   - widthPercent: 100
@@ -251,6 +269,7 @@ struct IconUnderlineSettings {
 // hook is applied, in Wh_ModInit.
 struct {
     Mode mode;
+    bool labelUnderlineEnabled;
     UnderlineStyle underlineStyle;
     GroupRule groupRule;
     bool includeActive;
@@ -362,27 +381,35 @@ int ClampInt(int value, int min, int max) {
 }
 
 void LoadSettings() {
-    auto mode = WindhawkUtils::StringSetting::make(L"mode");
+    // General: which buttons count, and what applies to both underlines.
+    auto mode = WindhawkUtils::StringSetting::make(L"general.mode");
     g_settings.mode =
         wcscmp(mode.get(), L"minimized") == 0 ? Mode::kMinimized : Mode::kOpen;
 
-    auto underlineStyle = WindhawkUtils::StringSetting::make(L"underlineStyle");
+    auto groupRule = WindhawkUtils::StringSetting::make(L"general.groupRule");
+    g_settings.groupRule =
+        wcscmp(groupRule.get(), L"all") == 0 ? GroupRule::kAll : GroupRule::kAny;
+
+    g_settings.includeActive = Wh_GetIntSetting(L"general.includeActive") != 0;
+    g_settings.cloakedIsHidden =
+        Wh_GetIntSetting(L"general.cloakedIsHidden") != 0;
+
+    g_settings.refreshDelayMs =
+        ClampInt(Wh_GetIntSetting(L"general.refreshDelayMs"), 10, 2000);
+    g_settings.hideRunningIndicator =
+        Wh_GetIntSetting(L"general.hideRunningIndicator") != 0;
+
+    // Label underline.
+    g_settings.labelUnderlineEnabled =
+        Wh_GetIntSetting(L"labelUnderline.enabled") != 0;
+    auto underlineStyle =
+        WindhawkUtils::StringSetting::make(L"labelUnderline.style");
     g_settings.underlineStyle =
         wcscmp(underlineStyle.get(), L"firstLetter") == 0
             ? UnderlineStyle::kFirstLetter
             : UnderlineStyle::kFull;
 
-    auto groupRule = WindhawkUtils::StringSetting::make(L"groupRule");
-    g_settings.groupRule =
-        wcscmp(groupRule.get(), L"all") == 0 ? GroupRule::kAll : GroupRule::kAny;
-
-    g_settings.includeActive = Wh_GetIntSetting(L"includeActive") != 0;
-    g_settings.cloakedIsHidden = Wh_GetIntSetting(L"cloakedIsHidden") != 0;
-
-    g_settings.refreshDelayMs =
-        ClampInt(Wh_GetIntSetting(L"refreshDelayMs"), 10, 2000);
-    g_settings.hideRunningIndicator =
-        Wh_GetIntSetting(L"hideRunningIndicator") != 0;
+    // Icon underline.
 
     IconUnderlineSettings& icon = g_settings.iconUnderline;
     icon.enabled = Wh_GetIntSetting(L"iconUnderline.enabled") != 0;
@@ -675,8 +702,9 @@ bool IsWindowShown(HWND hwnd) {
 // Decision logic
 // ============================================================================
 
-// Given the windows behind one button, decides whether its label should be
-// underlined under the current settings.
+// Given the windows behind one button, decides whether it should be
+// underlined under the current settings (its label, its icon, or both,
+// depending on which underlines are enabled).
 bool ShouldUnderline(const std::vector<HWND>& windows) {
     if (windows.empty()) {
         return false;
@@ -1269,7 +1297,8 @@ bool g_rebuildingLabel = false;
 
 // Subscribes to the label's Text property once, so a title change
 // re-evaluates the button even when the taskbar doesn't refresh its visual
-// states. Returns true if the label was not tracked before.
+// states (for the label underline, and for the icon underline when the label
+// stays plain). Returns true if the label was not tracked before.
 bool EnsureLabelTracked(const Xaml::Controls::TextBlock& label) {
     void* key = winrt::get_abi(label);
 
@@ -1511,6 +1540,21 @@ void ApplyUnderline(const Xaml::Controls::TextBlock& label, bool underline) {
     // once when it is meant to be plain.
     bool firstSeen = EnsureLabelTracked(label);
     SetLabelUnderline(label, underline, /*forceRebuild=*/firstSeen);
+}
+
+// Makes every tracked label plain (label underline turned off). The Text
+// subscriptions are kept: they still re-evaluate the button for the icon
+// underline when a title changes, and they are removed on unload.
+void ClearAllLabelUnderlines() {
+    for (auto& [key, entry] : g_labels) {
+        try {
+            if (auto label = entry.label.get()) {
+                SetLabelUnderline(label, false, /*forceRebuild=*/true);
+            }
+        } catch (...) {
+            Wh_Log(L"Label clear error");
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -1928,14 +1972,19 @@ void ApplyToButton(const Xaml::FrameworkElement& button,
         HideRunningIndicator(button);
     }
 
+    bool wantLabel = g_settings.labelUnderlineEnabled;
+    bool wantIcon = g_settings.iconUnderline.enabled;
+    if (!wantLabel && !wantIcon) {
+        return;
+    }
+
     // The template may not be applied yet (fresh button) or the label may
     // have been collapsed/recreated (combine setting toggled); re-finding it
     // every time keeps us honest. With labels hidden there is no label at
-    // all, and only the icon underline applies.
+    // all, and only the icon underline applies. The label is looked up even
+    // when the label underline is off: the title fallback reads its text.
     auto label = FindLabelControl(button);
-    bool wantIcon = g_settings.iconUnderline.enabled;
-
-    if (!label && !wantIcon) {
+    if (!wantIcon && !label) {
         return;
     }
 
@@ -1972,7 +2021,14 @@ void ApplyToButton(const Xaml::FrameworkElement& button,
     }
 
     if (label) {
-        ApplyUnderline(label, underline);
+        if (wantLabel) {
+            ApplyUnderline(label, underline);
+        } else {
+            // Icon underline only: the label stays plain, but its Text
+            // subscription is kept so a title change (and a recycled button
+            // being reused) still re-evaluates the icon.
+            EnsureLabelTracked(label);
+        }
     }
     if (wantIcon) {
         ApplyIconUnderline(button, underline);
@@ -2373,11 +2429,12 @@ void UnhookWinEvents() {
     g_winEventHooks.clear();
 }
 
-// Registers the WinEvent ranges the current settings need. Minimize,
-// restore, show, hide and cloaking always; foreground changes only when the
-// foreground window is treated specially; title changes only when the title
-// fallback is in use (they are frequent, and with the view model a title
-// change doesn't change which windows a button has).
+// Registers the WinEvent ranges the current settings need. None at all with
+// both underlines off; otherwise minimize, restore, show, hide and cloaking
+// always; foreground changes only when the foreground window is treated
+// specially; title changes only when the title fallback is in use (they are
+// frequent, and with the view model a title change doesn't change which
+// windows a button has).
 void HookWinEvents() {
     UnhookWinEvents();
 
@@ -2385,6 +2442,16 @@ void HookWinEvents() {
     // explorer.exe has no taskbar at all (e.g. "Launch folder windows in a
     // separate process"). RegisterRoot asks for a re-run once a tree exists.
     if (!g_treeKnown) {
+        return;
+    }
+
+    // Nothing depends on window state with both underlines off. Hiding the
+    // running indicator doesn't need these events: the UpdateVisualStates
+    // hook re-hides it on every button the taskbar updates, and turning the
+    // option on runs a pass. Wh_ModSettingsChanged re-runs this function, so
+    // the hooks come back as soon as either underline is turned on again.
+    if (!g_settings.labelUnderlineEnabled &&
+        !g_settings.iconUnderline.enabled) {
         return;
     }
 
@@ -2823,6 +2890,9 @@ void Wh_ModUninit() {
 
 void WINAPI ReloadSettingsProc(void*) {
     LoadSettings();
+    if (!g_settings.labelUnderlineEnabled) {
+        ClearAllLabelUnderlines();
+    }
     ResetIconColors();
     if (!g_settings.iconUnderline.enabled) {
         RemoveAllIconVisuals();

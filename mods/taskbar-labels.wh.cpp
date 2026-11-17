@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Customize text labels and combining for running programs on the taskbar (Windows 11 only)
-// @version         1.5.1
+// @version         1.6
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -87,6 +87,8 @@ Labels can also be shown or hidden per-program in the settings.
   $description: >-
     The width to use when labels are shown, set to 0 to use the Windows adaptive
     width
+
+    Not used on a vertical taskbar, where the items are as wide as the taskbar
 - runningIndicatorStyle: centerFixed
   $name: Running indicator style
   $options:
@@ -238,6 +240,8 @@ struct {
 } g_settings;
 
 std::atomic<bool> g_taskbarViewDllLoaded;
+std::atomic<bool> g_searchUxUiDllLoaded;
+std::atomic<bool> g_systemTrayDllLoaded;
 std::atomic<bool> g_applyingSettings;
 std::atomic<bool> g_overrideGroupingMode;
 std::atomic<bool> g_unloading;
@@ -247,7 +251,7 @@ bool g_hasNativeLabelsImplementation;
 double g_initialTaskbarItemWidth;
 
 UINT_PTR g_invalidateTaskListButtonTimer;
-std::unordered_set<FrameworkElement> g_taskListButtonsWithLabelMissing;
+std::unordered_set<void*> g_taskListButtonsWithLabelMissing;
 
 WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hwnd);
 
@@ -904,6 +908,116 @@ void HideLabelSpacer(Controls::Grid iconPanelElement) {
     }
 }
 
+// The native vertical taskbar switches the buttons to a vertical layout with a
+// visual state. A taskbar which is rotated as a whole keeps the horizontal
+// layout.
+bool IsVerticalTaskListButton(FrameworkElement iconPanelElement) {
+    for (const auto& group :
+         VisualStateManager::GetVisualStateGroups(iconPanelElement)) {
+        if (group.Name() == L"OrientationStates") {
+            auto currentState = group.CurrentState();
+            return currentState &&
+                   currentState.Name() == L"VerticalOrientation";
+        }
+    }
+
+    return false;
+}
+
+void UpdateProgressIndicatorTrack(FrameworkElement progressIndicatorElement,
+                                  double minWidth,
+                                  double height) {
+    auto element = progressIndicatorElement;
+    if ((element = FindChildByName(element, L"LayoutRoot")) &&
+        (element = FindChildByName(element, L"ProgressBarRoot")) &&
+        (element = FindChildByClassName(element,
+                                        L"Windows.UI.Xaml.Controls.Border")) &&
+        (element =
+             FindChildByClassName(element, L"Windows.UI.Xaml.Controls.Grid"))) {
+        auto progressBarTrack = FindChildByName(element, L"ProgressBarTrack");
+        if (progressBarTrack) {
+            element.Height(height);
+            progressBarTrack.MinWidth(minWidth);
+        }
+    }
+}
+
+// On a vertical taskbar, the indicators are vertical bars on the left of the
+// button. The button height doesn't change with the label, so only the full
+// width style, which spans the height, differs from the native size. The
+// progress indicator is laid out horizontally at the bottom, and its visual is
+// rotated by 270 degrees around its top left corner, so its width is the
+// length, and its top is the bottom end.
+void UpdateVerticalIndicatorStyle(Controls::Grid iconPanelElement,
+                                  FrameworkElement indicatorElement,
+                                  bool isProgressIndicator,
+                                  IndicatorStyle indicatorStyle,
+                                  double firstColumnWidthPixels) {
+    // Undo the horizontal style. It replaces the left and right margins, which
+    // are natively the same as the top one.
+    indicatorElement.ClearValue(FrameworkElement::MaxWidthProperty());
+
+    auto indicatorMargin = indicatorElement.Margin();
+    indicatorMargin.Left = indicatorMargin.Top;
+    indicatorMargin.Right = indicatorMargin.Top;
+
+    double fullLength = 0;
+    if (!g_unloading && indicatorStyle == IndicatorStyle::fullWidth) {
+        auto iconPanelPadding = iconPanelElement.Padding();
+        fullLength =
+            std::fmax(iconPanelElement.ActualHeight() - iconPanelPadding.Top -
+                          iconPanelPadding.Bottom - indicatorMargin.Top -
+                          indicatorMargin.Bottom,
+                      0.0);
+    }
+
+    double thickness = g_unloading || !g_settings.runningIndicatorHeight
+                           ? 3
+                           : std::max(g_settings.runningIndicatorHeight, 0);
+
+    // Positive offsets move the indicator away from the icon, like they move
+    // the horizontal indicator down.
+    float offsetX =
+        g_unloading
+            ? 0.0f
+            : -static_cast<float>(g_settings.runningIndicatorVerticalOffset);
+    float offsetY = 0;
+
+    if (isProgressIndicator) {
+        indicatorElement.MinWidth(fullLength);
+        indicatorElement.Height(thickness);
+        UpdateProgressIndicatorTrack(indicatorElement, fullLength, thickness);
+
+        // A layout wider than the icon column gets clipped to it unless its
+        // arrange slot is widened with a negative margin.
+        double columnOverflow =
+            indicatorMargin.Left + fullLength - firstColumnWidthPixels;
+        if (columnOverflow > 0) {
+            indicatorMargin.Right = -columnOverflow;
+        }
+
+        // Move the bottom end of a full length indicator to the bottom of the
+        // layout.
+        if (fullLength > 0) {
+            offsetY = static_cast<float>(
+                std::fmax(thickness, indicatorElement.MinHeight()));
+        }
+    } else {
+        indicatorElement.ClearValue(FrameworkElement::MinWidthProperty());
+        indicatorElement.MinHeight(fullLength);
+        indicatorElement.Width(thickness);
+    }
+
+    indicatorElement.Margin(indicatorMargin);
+
+    auto translation = indicatorElement.Translation();
+    if (translation.x != offsetX || translation.y != offsetY) {
+        translation.x = offsetX;
+        translation.y = offsetY;
+        indicatorElement.Translation(translation);
+    }
+}
+
 void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
                                         Controls::Grid iconPanelElement) {
     auto iconElement = FindChildByName(iconPanelElement, L"Icon");
@@ -933,8 +1047,21 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
 
     auto iconPanelPadding = iconPanelElement.Padding();
 
-    double secondColumnWidthPixels =
-        g_unloading ? 0 : g_settings.taskbarItemWidth;
+    bool vertical = IsVerticalTaskListButton(iconPanelElement);
+
+    // A vertical taskbar arranges all buttons as wide as the taskbar, so the
+    // label fits the button instead of the item width setting. The layout
+    // slot, unlike the actual width, doesn't depend on the label.
+    double itemWidth = g_settings.taskbarItemWidth;
+    if (vertical) {
+        auto taskListButtonMargin = taskListButtonElement.Margin();
+        itemWidth = Controls::Primitives::LayoutInformation::GetLayoutSlot(
+                        taskListButtonElement)
+                        .Width -
+                    taskListButtonMargin.Left - taskListButtonMargin.Right;
+    }
+
+    double secondColumnWidthPixels = g_unloading ? 0 : itemWidth;
     if (secondColumnWidthPixels > 0) {
         secondColumnWidthPixels -= firstColumnWidthPixels +
                                    iconPanelPadding.Left +
@@ -948,8 +1075,11 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
         FindChildByName(iconPanelElement, L"LabelControl")
             .as<Controls::TextBlock>();
 
-    // In labelsWithCombining mode, pinned items have labels too. Hide them.
-    if (g_settings.mode == Mode::labelsWithCombining && labelControlElement &&
+    // In labelsWithCombining mode, pinned items have labels too. Hide them,
+    // except on a vertical taskbar, which natively shows labels for pinned
+    // items.
+    if (g_settings.mode == Mode::labelsWithCombining && !vertical &&
+        labelControlElement &&
         !TaskListButton_IsRunning(taskListButtonElement)) {
         secondColumnWidthPixels = 0;
         labelControlElement.Visibility(Visibility::Collapsed);
@@ -976,10 +1106,13 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
         labelControlElement.Margin(labelControlMargin);
 
         double columnWidth;
-        if (g_unloading || g_settings.taskbarItemWidth == 0) {
+        if (g_unloading || (!vertical && g_settings.taskbarItemWidth == 0)) {
             columnWidth = std::fmax(
                 0.0, (g_unloading ? 176 : g_settings.maximumTaskbarItemWidth) -
                          firstColumnWidthPixels);
+            HideLabelSpacer(iconPanelElement);
+        } else if (vertical) {
+            columnWidth = secondColumnWidthPixels;
             HideLabelSpacer(iconPanelElement);
         } else {
             columnWidth = secondColumnWidthPixels;
@@ -1061,6 +1194,12 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
         }
     }
 
+    // Within the button padding and the native indicator margins.
+    double maxIndicatorWidth =
+        std::fmax(taskListButtonWidth - iconPanelPadding.Left -
+                      iconPanelPadding.Right - 2,
+                  0.0);
+
     PCWSTR indicatorClassNames[] = {
         L"RunningIndicator",
         L"ProgressIndicator",
@@ -1081,6 +1220,18 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
                 : (isProgressIndicator ? g_settings.progressIndicatorStyle
                                        : g_settings.runningIndicatorStyle);
 
+        if (vertical) {
+            UpdateVerticalIndicatorStyle(iconPanelElement, indicatorElement,
+                                         isProgressIndicator, indicatorStyle,
+                                         firstColumnWidthPixels);
+            continue;
+        }
+
+        if (!isProgressIndicator) {
+            // Undo the vertical style.
+            indicatorElement.ClearValue(FrameworkElement::MinHeightProperty());
+        }
+
         // Keep the indicator in the icon column, which has a fixed pixel
         // width. The sizes below derive from the button's actual width, and
         // spanning into the auto-sized label column would feed them back into
@@ -1089,7 +1240,7 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
         indicatorElement.SetValue(Controls::Grid::ColumnSpanProperty(),
                                   winrt::box_value(1));
 
-        double maxWidth = std::fmax(taskListButtonWidth - 6, 0.0);
+        double maxWidth = maxIndicatorWidth;
         indicatorElement.MaxWidth(maxWidth);
 
         double minWidth = 0;
@@ -1105,10 +1256,7 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
                                firstColumnWidthPixels;
                 }
             } else if (indicatorStyle == IndicatorStyle::fullWidth) {
-                minWidth = taskListButtonWidth - 6;
-                if (minWidth < 0) {
-                    minWidth = 0;
-                }
+                minWidth = maxWidth;
             }
 
             if (minWidth > maxWidth) {
@@ -1130,7 +1278,8 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
                                        g_settings.leftAndRightPaddingSize * 2 -
                                        firstColumnWidthPixels;
             } else {
-                indicatorMargin.Left = (taskListButtonWidth - minWidth) / 2 - 2;
+                indicatorMargin.Left = (taskListButtonWidth - minWidth) / 2 -
+                                       iconPanelPadding.Left;
                 indicatorHorizontalAlignment = HorizontalAlignment::Left;
             }
         }
@@ -1167,26 +1316,14 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
                 ? 0.0f
                 : static_cast<float>(g_settings.runningIndicatorVerticalOffset);
         auto translation = indicatorElement.Translation();
-        if (translation.y != verticalOffset) {
+        if (translation.x != 0 || translation.y != verticalOffset) {
+            translation.x = 0;
             translation.y = verticalOffset;
             indicatorElement.Translation(translation);
         }
 
         if (isProgressIndicator) {
-            auto element = indicatorElement;
-            if ((element = FindChildByName(element, L"LayoutRoot")) &&
-                (element = FindChildByName(element, L"ProgressBarRoot")) &&
-                (element = FindChildByClassName(
-                     element, L"Windows.UI.Xaml.Controls.Border")) &&
-                (element = FindChildByClassName(
-                     element, L"Windows.UI.Xaml.Controls.Grid"))) {
-                auto progressBarTrack =
-                    FindChildByName(element, L"ProgressBarTrack");
-                if (progressBarTrack) {
-                    element.Height(height);
-                    progressBarTrack.MinWidth(minWidth);
-                }
-            }
+            UpdateProgressIndicatorTrack(indicatorElement, minWidth, height);
         }
     }
 }
@@ -1312,7 +1449,8 @@ void UpdateTaskListButtonCustomizations(
     }
 
     if (textLabelMissing && !g_unloading) {
-        g_taskListButtonsWithLabelMissing.insert(windhawkTextControl);
+        g_taskListButtonsWithLabelMissing.insert(
+            winrt::get_abi(windhawkTextControl));
 
         g_invalidateTaskListButtonTimer =
             SetTimer(nullptr, g_invalidateTaskListButtonTimer, 200,
@@ -1330,7 +1468,8 @@ void UpdateTaskListButtonCustomizations(
                          }
                      });
     } else if (!textLabelMissing && g_invalidateTaskListButtonTimer) {
-        g_taskListButtonsWithLabelMissing.erase(windhawkTextControl);
+        g_taskListButtonsWithLabelMissing.erase(
+            winrt::get_abi(windhawkTextControl));
     }
 }
 
@@ -1580,6 +1719,149 @@ HRESULT WINAPI TaskbarCollapsibleLayout_ArrangeOverride_Hook(
     return ret;
 }
 
+// The width that Windows uses for a vertical taskbar with labels.
+constexpr double kVerticalTaskbarWithLabelsWidth = 160;
+
+// TaskbarController::UpdateFrameHeight reports the frame size before it sets
+// the frame width.
+thread_local double g_updateFrameHeightFrameSize;
+
+using TaskbarTelemetry_FrameSizeChanged_t =
+    void(WINAPI*)(const double* frameSize);
+TaskbarTelemetry_FrameSizeChanged_t TaskbarTelemetry_FrameSizeChanged_Original;
+void WINAPI TaskbarTelemetry_FrameSizeChanged_Hook(const double* frameSize) {
+    Wh_Log(L">");
+
+    g_updateFrameHeightFrameSize = *frameSize;
+
+    TaskbarTelemetry_FrameSizeChanged_Original(frameSize);
+}
+
+// Returns the taskbar frame, and creates it if it doesn't exist yet.
+using TaskbarController_View_t = void*(WINAPI*)(void* pThis, void** result);
+TaskbarController_View_t TaskbarController_View_Original;
+
+// Sets the frame width to NaN for a horizontal taskbar. A vertical taskbar is
+// as wide as the frame size if items are always combined, and wide enough for
+// labels otherwise, which only fits the modes that tie labels to combining.
+using TaskbarController_UpdateFrameHeight_t = void(WINAPI*)(void* pThis);
+TaskbarController_UpdateFrameHeight_t
+    TaskbarController_UpdateFrameHeight_Original;
+void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    Mode mode = g_settings.mode;
+    if (g_unloading || !TaskbarController_View_Original ||
+        (mode != Mode::labelsWithCombining &&
+         mode != Mode::noLabelsWithoutCombining)) {
+        TaskbarController_UpdateFrameHeight_Original(pThis);
+        return;
+    }
+
+    g_updateFrameHeightFrameSize = 0;
+
+    TaskbarController_UpdateFrameHeight_Original(pThis);
+
+    double frameSize = g_updateFrameHeightFrameSize;
+    if (frameSize <= 0) {
+        return;
+    }
+
+    double width = mode == Mode::labelsWithCombining
+                       ? kVerticalTaskbarWithLabelsWidth
+                       : frameSize;
+
+    // The frame is created before anything calls UpdateFrameHeight.
+    FrameworkElement taskbarFrame = nullptr;
+    TaskbarController_View_Original(pThis, winrt::put_abi(taskbarFrame));
+    if (!taskbarFrame) {
+        return;
+    }
+
+    // Another mod hooking this function may have replaced the width that
+    // Windows set, which is one of these. The NaN width of a horizontal taskbar
+    // is neither.
+    double currentWidth = taskbarFrame.Width();
+    if ((currentWidth == frameSize ||
+         currentWidth == kVerticalTaskbarWithLabelsWidth) &&
+        currentWidth != width) {
+        Wh_Log(L"Vertical taskbar width: %f->%f", currentWidth, width);
+        taskbarFrame.Width(width);
+    }
+}
+
+// Experience buttons, such as Start, Search and Widgets, get the grouping mode,
+// which only affects them on a vertical taskbar. They show labels there unless
+// items are always combined.
+int GetExperienceButtonGroupingMode(int groupingMode) {
+    // Same values as TaskbarGlomLevel: 0 - always combine, 2 - never combine.
+    if (!g_unloading) {
+        if (g_settings.mode == Mode::labelsWithCombining) {
+            return 2;
+        } else if (g_settings.mode == Mode::noLabelsWithoutCombining) {
+            return 0;
+        }
+    }
+
+    return groupingMode;
+}
+
+using ExperienceToggleButton_TaskbarItemGroupingMode_t =
+    void(WINAPI*)(void* pThis, int groupingMode);
+ExperienceToggleButton_TaskbarItemGroupingMode_t
+    ExperienceToggleButton_TaskbarItemGroupingMode_Original;
+void WINAPI ExperienceToggleButton_TaskbarItemGroupingMode_Hook(
+    void* pThis,
+    int groupingMode) {
+    Wh_Log(L">");
+
+    ExperienceToggleButton_TaskbarItemGroupingMode_Original(
+        pThis, GetExperienceButtonGroupingMode(groupingMode));
+}
+
+// The view model of the widgets button collapses it to an icon on a vertical
+// taskbar if items are always combined.
+using AugmentedEntryPointViewModel_put_TaskbarItemGroupingMode_t =
+    HRESULT(WINAPI*)(void* pThis, int groupingMode);
+AugmentedEntryPointViewModel_put_TaskbarItemGroupingMode_t
+    AugmentedEntryPointViewModel_put_TaskbarItemGroupingMode_Original;
+HRESULT WINAPI AugmentedEntryPointViewModel_put_TaskbarItemGroupingMode_Hook(
+    void* pThis,
+    int groupingMode) {
+    Wh_Log(L">");
+
+    return AugmentedEntryPointViewModel_put_TaskbarItemGroupingMode_Original(
+        pThis, GetExperienceButtonGroupingMode(groupingMode));
+}
+
+// The search button of SearchUx.UI.dll is bound to its view model for the
+// grouping mode, which the view model reads from the taskbar settings.
+using SearchButtonBase_put_TaskbarItemGroupingMode_t =
+    HRESULT(WINAPI*)(void* pThis, int groupingMode);
+SearchButtonBase_put_TaskbarItemGroupingMode_t
+    SearchButtonBase_put_TaskbarItemGroupingMode_Original;
+HRESULT WINAPI SearchButtonBase_put_TaskbarItemGroupingMode_Hook(
+    void* pThis,
+    int groupingMode) {
+    Wh_Log(L">");
+
+    return SearchButtonBase_put_TaskbarItemGroupingMode_Original(
+        pThis, GetExperienceButtonGroupingMode(groupingMode));
+}
+
+// On a vertical taskbar, the tray uses the compact layout, a single column of
+// icons in a narrow frame, if items are always combined, and the detailed
+// layout, grids of icons in a frame as wide as a taskbar with labels,
+// otherwise. Like the experience buttons, it follows the labels.
+using TaskbarSettings_GroupingMode_t = int(WINAPI*)(void* pThis);
+TaskbarSettings_GroupingMode_t TaskbarSettings_GroupingMode_Original;
+int WINAPI TaskbarSettings_GroupingMode_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    return GetExperienceButtonGroupingMode(
+        TaskbarSettings_GroupingMode_Original(pThis));
+}
+
 bool IsAppIdExcluded(PCWSTR appId) {
     std::wstring appIdUpper = appId;
     LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE, appIdUpper.data(),
@@ -1658,6 +1940,7 @@ struct ITaskItem : public IInspectable {
     virtual HRESULT STDMETHODCALLTYPE get_AppId(void** value) = 0;
     virtual HRESULT STDMETHODCALLTYPE get_UniqueId() = 0;
     virtual HRESULT STDMETHODCALLTYPE get_WindowId(HWND* value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_DisplayName(void** value) = 0;
 };
 
 // {a152e779-93df-5be2-af2c-d342452b0ce0}
@@ -1684,6 +1967,22 @@ struct ITaskGroup : public IInspectable {
     virtual HRESULT STDMETHODCALLTYPE put_Bounds() = 0;
     virtual HRESULT STDMETHODCALLTYPE get_Items(void** value) = 0;
 };
+
+// {1f56dcc7-b47b-5d55-9a34-871b82505851}
+constexpr winrt::guid IID_ITaskItemPropertyChangedEventArgs{
+    0x1f56dcc7,
+    0xb47b,
+    0x5d55,
+    {0x9a, 0x34, 0x87, 0x1b, 0x82, 0x50, 0x58, 0x51}};
+
+struct ITaskItemPropertyChangedEventArgs : public IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_Group(void** value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_Item(void** value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_Property(int* value) = 0;
+};
+
+// WindowsUdk.UI.Shell.TaskItemProperty.DisplayName
+constexpr int kTaskItemPropertyDisplayName = 2;
 
 HWND GetTaskItemWindow(IUnknown* taskItemUnknown) {
     winrt::com_ptr<ITaskItem> taskItem;
@@ -1720,6 +2019,20 @@ bool IsTaskItemExcluded(IUnknown* taskItemUnknown) {
     return SUCCEEDED(hr) && hWnd && IsWindowProcessExcluded(hWnd);
 }
 
+// Finds another interface of a C++/WinRT object by its vtable. The interface
+// pointers are adjacent in the object, so only a few of them are searched, in
+// the given direction (1 or -1).
+void* FindAdjacentInterface(void* pInterface, void* vtable, int direction) {
+    for (int i = 1; i <= 16; i++) {
+        void** p = (void**)pInterface + i * direction;
+        if (*p == vtable) {
+            return p;
+        }
+    }
+
+    return nullptr;
+}
+
 void* ITaskListWindowViewModel_vftable;
 
 using ITaskListWindowViewModel_get_TaskItem_t =
@@ -1751,17 +2064,18 @@ TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook(
     if (!g_settings.excludedPrograms.empty() &&
         ITaskListWindowViewModel_vftable &&
         ITaskListWindowViewModel_get_TaskItem) {
-        PVOID pITaskListWindowViewModel = pThis;
-        while (*(PVOID*)pITaskListWindowViewModel !=
-               ITaskListWindowViewModel_vftable) {
-            pITaskListWindowViewModel = (PVOID*)pITaskListWindowViewModel - 1;
-        }
-
-        winrt::com_ptr<IUnknown> taskItem;
-        HRESULT hr = ITaskListWindowViewModel_get_TaskItem(
-            pITaskListWindowViewModel, taskItem.put_void());
-        if (SUCCEEDED(hr) && taskItem && IsTaskItemExcluded(taskItem.get())) {
-            hideLabels = !hideLabels;
+        void* pITaskListWindowViewModel =
+            FindAdjacentInterface(pThis, ITaskListWindowViewModel_vftable, -1);
+        if (pITaskListWindowViewModel) {
+            winrt::com_ptr<IUnknown> taskItem;
+            HRESULT hr = ITaskListWindowViewModel_get_TaskItem(
+                pITaskListWindowViewModel, taskItem.put_void());
+            if (SUCCEEDED(hr) && taskItem &&
+                IsTaskItemExcluded(taskItem.get())) {
+                hideLabels = !hideLabels;
+            }
+        } else {
+            Wh_Log(L"ITaskListWindowViewModel not found");
         }
     }
 
@@ -1948,6 +2262,136 @@ using TaskListGroupViewModel_OnPropertyChanged_t =
 TaskListGroupViewModel_OnPropertyChanged_t
     TaskListGroupViewModel_OnPropertyChanged;
 
+// In the combining modes, an item with a single window is labeled with the
+// window title, as in the modes without combining.
+bool UseSingleWindowTitles() {
+    return !g_unloading && (g_settings.mode == Mode::labelsWithCombining ||
+                            g_settings.mode == Mode::noLabelsWithCombining);
+}
+
+// Returns an empty string unless the group has exactly one window.
+winrt::hstring GetTaskGroupSingleWindowTitle(void* pITaskbarAppItemViewModel) {
+    winrt::com_ptr<IUnknown> taskGroupUnknown;
+    HRESULT hr = TaskListGroupViewModel_ITaskbarAppItemViewModel_get_TaskGroup(
+        pITaskbarAppItemViewModel, taskGroupUnknown.put_void());
+    if (FAILED(hr) || !taskGroupUnknown) {
+        return {};
+    }
+
+    winrt::com_ptr<ITaskGroup> taskGroup;
+    hr = taskGroupUnknown->QueryInterface(IID_ITaskGroup, taskGroup.put_void());
+    if (FAILED(hr)) {
+        return {};
+    }
+
+    // An IVectorView<TaskItem>, which has the same ABI.
+    winrt::Windows::Foundation::Collections::IVectorView<
+        winrt::Windows::Foundation::IInspectable>
+        items;
+    hr = taskGroup->get_Items(winrt::put_abi(items));
+    if (FAILED(hr) || !items || items.Size() != 1) {
+        return {};
+    }
+
+    auto item = items.GetAt(0);
+    winrt::com_ptr<ITaskItem> taskItem;
+    hr = static_cast<IUnknown*>(winrt::get_abi(item))
+             ->QueryInterface(IID_ITaskItem, taskItem.put_void());
+    if (FAILED(hr)) {
+        return {};
+    }
+
+    winrt::hstring title;
+    taskItem->get_DisplayName(winrt::put_abi(title));
+    return title;
+}
+
+// The ABI getter is hooked to change the label while keeping the accessible
+// name, which uses the implementation getter.
+using TaskListGroupViewModel_ITaskbarItemViewModel_get_DisplayName_t =
+    HRESULT(WINAPI*)(void* pThis, void** value);
+TaskListGroupViewModel_ITaskbarItemViewModel_get_DisplayName_t
+    TaskListGroupViewModel_ITaskbarItemViewModel_get_DisplayName_Original;
+HRESULT WINAPI
+TaskListGroupViewModel_ITaskbarItemViewModel_get_DisplayName_Hook(
+    void* pThis,
+    void** value) {
+    Wh_Log(L">");
+
+    HRESULT ret =
+        TaskListGroupViewModel_ITaskbarItemViewModel_get_DisplayName_Original(
+            pThis, value);
+    if (FAILED(ret) || !UseSingleWindowTitles() ||
+        !TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable ||
+        !TaskListGroupViewModel_ITaskbarAppItemViewModel_get_TaskGroup) {
+        return ret;
+    }
+
+    // ITaskbarAppItemViewModel follows ITaskbarItemViewModel in the object.
+    void* pITaskbarAppItemViewModel = FindAdjacentInterface(
+        pThis, TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable, 1);
+    if (!pITaskbarAppItemViewModel) {
+        Wh_Log(L"ITaskbarAppItemViewModel not found");
+        return ret;
+    }
+
+    winrt::hstring title =
+        GetTaskGroupSingleWindowTitle(pITaskbarAppItemViewModel);
+    if (!title.empty()) {
+        // Releases the original string.
+        winrt::hstring displayName;
+        winrt::attach_abi(displayName, *value);
+
+        *value = winrt::detach_abi(title);
+    }
+
+    return ret;
+}
+
+using TaskListGroupViewModel_OnTaskItemPropertyChanged_t =
+    void(WINAPI*)(void* pThis, void* args);
+TaskListGroupViewModel_OnTaskItemPropertyChanged_t
+    TaskListGroupViewModel_OnTaskItemPropertyChanged_Original;
+void WINAPI TaskListGroupViewModel_OnTaskItemPropertyChanged_Hook(void* pThis,
+                                                                  void* args) {
+    Wh_Log(L">");
+
+    TaskListGroupViewModel_OnTaskItemPropertyChanged_Original(pThis, args);
+
+    // A group doesn't notify about a change of its windows' titles.
+    if (!UseSingleWindowTitles() || !TaskListGroupViewModel_OnPropertyChanged) {
+        return;
+    }
+
+    winrt::com_ptr<ITaskItemPropertyChangedEventArgs> eventArgs;
+    HRESULT hr = (*(IUnknown**)args)
+                     ->QueryInterface(IID_ITaskItemPropertyChangedEventArgs,
+                                      eventArgs.put_void());
+    if (FAILED(hr)) {
+        return;
+    }
+
+    int property;
+    if (SUCCEEDED(eventArgs->get_Property(&property)) &&
+        property == kTaskItemPropertyDisplayName) {
+        TaskListGroupViewModel_OnPropertyChanged(pThis, L"DisplayName");
+    }
+}
+
+void OnTaskGroupWindowsChanged(void* pThis) {
+    // Excluded programs are matched by the group's windows, but a change of
+    // the windows isn't followed by a native HasLabel notification.
+    if (!g_unloading && !g_settings.excludedPrograms.empty() &&
+        TaskListGroupViewModel_OnPropertyChanged) {
+        TaskListGroupViewModel_OnPropertyChanged(pThis, L"HasLabel");
+    }
+
+    // The label depends on the number of windows.
+    if (UseSingleWindowTitles() && TaskListGroupViewModel_OnPropertyChanged) {
+        TaskListGroupViewModel_OnPropertyChanged(pThis, L"DisplayName");
+    }
+}
+
 using TaskListGroupViewModel_OnTaskItemsCollectionChanged_t =
     void(WINAPI*)(void* pThis, void* args);
 TaskListGroupViewModel_OnTaskItemsCollectionChanged_t
@@ -1959,12 +2403,36 @@ TaskListGroupViewModel_OnTaskItemsCollectionChanged_Hook(void* pThis,
 
     TaskListGroupViewModel_OnTaskItemsCollectionChanged_Original(pThis, args);
 
-    // Excluded programs are matched by the group's windows, but a change of
-    // the windows isn't followed by a native HasLabel notification.
-    if (!g_unloading && !g_settings.excludedPrograms.empty() &&
-        TaskListGroupViewModel_OnPropertyChanged) {
-        TaskListGroupViewModel_OnPropertyChanged(pThis, L"HasLabel");
-    }
+    OnTaskGroupWindowsChanged(pThis);
+}
+
+// Hooked instead of OnTaskItemsCollectionChanged on builds where it's inlined
+// into the event handler of the taskbar controller, which then calls these
+// itself.
+using TaskListGroupViewModel_OnWindowAdded_t =
+    void(WINAPI*)(void* pThis, unsigned int index);
+TaskListGroupViewModel_OnWindowAdded_t
+    TaskListGroupViewModel_OnWindowAdded_Original;
+void WINAPI TaskListGroupViewModel_OnWindowAdded_Hook(void* pThis,
+                                                      unsigned int index) {
+    Wh_Log(L">");
+
+    TaskListGroupViewModel_OnWindowAdded_Original(pThis, index);
+
+    OnTaskGroupWindowsChanged(pThis);
+}
+
+using TaskListGroupViewModel_OnWindowRemoved_t =
+    void(WINAPI*)(void* pThis, unsigned int index);
+TaskListGroupViewModel_OnWindowRemoved_t
+    TaskListGroupViewModel_OnWindowRemoved_Original;
+void WINAPI TaskListGroupViewModel_OnWindowRemoved_Hook(void* pThis,
+                                                        unsigned int index) {
+    Wh_Log(L">");
+
+    TaskListGroupViewModel_OnWindowRemoved_Original(pThis, index);
+
+    OnTaskGroupWindowsChanged(pThis);
 }
 
 using RegGetValueW_t = decltype(&RegGetValueW);
@@ -2217,6 +2685,36 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 true,  // From 10.0.22621.2361.
             },
             {
+                {LR"(public: static void __cdecl TaskbarTelemetry::FrameSizeChanged<double const &>(double const &))"},
+                &TaskbarTelemetry_FrameSizeChanged_Original,
+                TaskbarTelemetry_FrameSizeChanged_Hook,
+                true,  // Only needed for the vertical taskbar.
+            },
+            {
+                {LR"(public: struct winrt::Windows::UI::Xaml::FrameworkElement __cdecl winrt::Taskbar::implementation::TaskbarController::View(void))"},
+                &TaskbarController_View_Original,
+                nullptr,
+                true,  // Only needed for the vertical taskbar.
+            },
+            {
+                {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarController::UpdateFrameHeight(void))"},
+                &TaskbarController_UpdateFrameHeight_Original,
+                TaskbarController_UpdateFrameHeight_Hook,
+                true,  // Only needed for the vertical taskbar.
+            },
+            {
+                {LR"(public: virtual void __cdecl winrt::Taskbar::implementation::ExperienceToggleButton::TaskbarItemGroupingMode(enum winrt::WindowsUdk::UI::Shell::TaskbarItemGroupingMode))"},
+                &ExperienceToggleButton_TaskbarItemGroupingMode_Original,
+                ExperienceToggleButton_TaskbarItemGroupingMode_Hook,
+                true,  // Only needed for the vertical taskbar.
+            },
+            {
+                {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::AugmentedEntryPointViewModel,struct winrt::Taskbar::IAugmentedEntryPointViewModel>::put_TaskbarItemGroupingMode(int))"},
+                &AugmentedEntryPointViewModel_put_TaskbarItemGroupingMode_Original,
+                AugmentedEntryPointViewModel_put_TaskbarItemGroupingMode_Hook,
+                true,  // Only needed for the vertical taskbar.
+            },
+            {
                 {LR"(const winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListWindowViewModel,struct winrt::Taskbar::ITaskListWindowViewModel>::`vftable')"},
                 &ITaskListWindowViewModel_vftable,
                 nullptr,
@@ -2268,6 +2766,30 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskListGroupViewModel::OnTaskItemsCollectionChanged(struct winrt::WindowsUdk::UI::Shell::TaskItemCollectionChangedEventArgs const &))"},
                 &TaskListGroupViewModel_OnTaskItemsCollectionChanged_Original,
                 TaskListGroupViewModel_OnTaskItemsCollectionChanged_Hook,
+                true,  // From 10.0.22621.2361, inlined in newer builds.
+            },
+            {
+                {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskListGroupViewModel::OnWindowAdded(unsigned int))"},
+                &TaskListGroupViewModel_OnWindowAdded_Original,
+                nullptr,  // Hooked below if needed.
+                true,
+            },
+            {
+                {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskListGroupViewModel::OnWindowRemoved(unsigned int))"},
+                &TaskListGroupViewModel_OnWindowRemoved_Original,
+                nullptr,  // Hooked below if needed.
+                true,
+            },
+            {
+                {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListGroupViewModel,struct winrt::Taskbar::ITaskbarItemViewModel>::get_DisplayName(void * *))"},
+                &TaskListGroupViewModel_ITaskbarItemViewModel_get_DisplayName_Original,
+                TaskListGroupViewModel_ITaskbarItemViewModel_get_DisplayName_Hook,
+                true,  // From 10.0.22621.2361.
+            },
+            {
+                {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskListGroupViewModel::OnTaskItemPropertyChanged(struct winrt::WindowsUdk::UI::Shell::TaskItemPropertyChangedEventArgs const &))"},
+                &TaskListGroupViewModel_OnTaskItemPropertyChanged_Original,
+                TaskListGroupViewModel_OnTaskItemPropertyChanged_Hook,
                 true,  // From 10.0.22621.2361.
             },
             {
@@ -2299,6 +2821,62 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         return false;
     }
 
+    // Where OnTaskItemsCollectionChanged isn't inlined, it calls these, and
+    // some builds inline one of them into it instead.
+    if (!TaskListGroupViewModel_OnTaskItemsCollectionChanged_Original) {
+        if (TaskListGroupViewModel_OnWindowAdded_Original) {
+            WindhawkUtils::SetFunctionHook(
+                TaskListGroupViewModel_OnWindowAdded_Original,
+                TaskListGroupViewModel_OnWindowAdded_Hook,
+                &TaskListGroupViewModel_OnWindowAdded_Original);
+        }
+
+        if (TaskListGroupViewModel_OnWindowRemoved_Original) {
+            WindhawkUtils::SetFunctionHook(
+                TaskListGroupViewModel_OnWindowRemoved_Original,
+                TaskListGroupViewModel_OnWindowRemoved_Hook,
+                &TaskListGroupViewModel_OnWindowRemoved_Original);
+        }
+    }
+
+    return true;
+}
+
+bool HookSearchUxUiDllSymbols(HMODULE module) {
+    // SearchUx.UI.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SearchUx::SearchUI::implementation::SearchButtonBase,struct winrt::SearchUx::SearchUI::ISearchButtonBase>::put_TaskbarItemGroupingMode(int))"},
+            &SearchButtonBase_put_TaskbarItemGroupingMode_Original,
+            SearchButtonBase_put_TaskbarItemGroupingMode_Hook,
+            true,  // Only needed for the vertical taskbar.
+        },
+    };
+
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
+}
+
+bool HookSystemTrayDllSymbols(HMODULE module) {
+    // SystemTray.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarSettings5<struct winrt::WindowsUdk::UI::Shell::TaskbarSettings>::GroupingMode(void)const )"},
+            &TaskbarSettings_GroupingMode_Original,
+            TaskbarSettings_GroupingMode_Hook,
+            true,  // Only needed for the vertical taskbar.
+        },
+    };
+
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
     return true;
 }
 
@@ -2309,6 +2887,16 @@ HMODULE GetTaskbarViewModuleHandle() {
     }
 
     return module;
+}
+
+HMODULE GetSearchUxUiModuleHandle() {
+    return GetModuleHandle(L"SearchUx.UI.dll");
+}
+
+// Older builds have the tray in Taskbar.View.dll, where the taskbar reads its
+// own grouping mode with the same function, so it's not hooked there.
+HMODULE GetSystemTrayModuleHandle() {
+    return GetModuleHandle(L"SystemTray.dll");
 }
 
 BOOL ModInitWithTaskbarView(HMODULE taskbarViewModule);
@@ -2324,6 +2912,28 @@ void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
     }
 }
 
+void HandleLoadedModuleIfSearchUxUi(HMODULE module, LPCWSTR lpLibFileName) {
+    if (!g_searchUxUiDllLoaded && GetSearchUxUiModuleHandle() == module &&
+        !g_searchUxUiDllLoaded.exchange(true)) {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+
+        if (HookSearchUxUiDllSymbols(module)) {
+            Wh_ApplyHookOperations();
+        }
+    }
+}
+
+void HandleLoadedModuleIfSystemTray(HMODULE module, LPCWSTR lpLibFileName) {
+    if (!g_systemTrayDllLoaded && GetSystemTrayModuleHandle() == module &&
+        !g_systemTrayDllLoaded.exchange(true)) {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+
+        if (HookSystemTrayDllSymbols(module)) {
+            Wh_ApplyHookOperations();
+        }
+    }
+}
+
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_Original;
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
@@ -2332,6 +2942,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (module) {
         HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
+        HandleLoadedModuleIfSearchUxUi(module, lpLibFileName);
+        HandleLoadedModuleIfSystemTray(module, lpLibFileName);
     }
 
     return module;
@@ -2464,6 +3076,8 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
+    bool delayLoadingNeeded = false;
+
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
         if (!ModInitWithTaskbarView(taskbarViewModule)) {
@@ -2471,7 +3085,26 @@ BOOL Wh_ModInit() {
         }
     } else {
         Wh_Log(L"Taskbar view module not loaded yet");
+        delayLoadingNeeded = true;
+    }
 
+    if (HMODULE searchUxUiModule = GetSearchUxUiModuleHandle()) {
+        g_searchUxUiDllLoaded = true;
+        HookSearchUxUiDllSymbols(searchUxUiModule);
+    } else {
+        Wh_Log(L"Search UX UI module not loaded yet");
+        delayLoadingNeeded = true;
+    }
+
+    if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+        g_systemTrayDllLoaded = true;
+        HookSystemTrayDllSymbols(systemTrayModule);
+    } else {
+        Wh_Log(L"System tray module not loaded yet");
+        delayLoadingNeeded = true;
+    }
+
+    if (delayLoadingNeeded) {
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
         auto pKernelBaseLoadLibraryExW =
             (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
@@ -2493,6 +3126,30 @@ void Wh_ModAfterInit() {
                 Wh_Log(L"Got Taskbar.View.dll");
 
                 if (ModInitWithTaskbarView(taskbarViewModule)) {
+                    Wh_ApplyHookOperations();
+                }
+            }
+        }
+    }
+
+    if (!g_searchUxUiDllLoaded) {
+        if (HMODULE searchUxUiModule = GetSearchUxUiModuleHandle()) {
+            if (!g_searchUxUiDllLoaded.exchange(true)) {
+                Wh_Log(L"Got SearchUx.UI.dll");
+
+                if (HookSearchUxUiDllSymbols(searchUxUiModule)) {
+                    Wh_ApplyHookOperations();
+                }
+            }
+        }
+    }
+
+    if (!g_systemTrayDllLoaded) {
+        if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+            if (!g_systemTrayDllLoaded.exchange(true)) {
+                Wh_Log(L"Got SystemTray.dll");
+
+                if (HookSystemTrayDllSymbols(systemTrayModule)) {
                     Wh_ApplyHookOperations();
                 }
             }
