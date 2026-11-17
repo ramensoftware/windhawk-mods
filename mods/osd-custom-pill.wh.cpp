@@ -12,7 +12,7 @@
 // @description:ja-JP Windows の音量、明るさ、仮想デスクトップの表示を、ばねのように動くアニメーション付きピル型表示に置き換えます
 // @description:ko-KR Windows 볼륨, 밝기, 가상 데스크톱 표시를 스프링 애니메이션이 적용된 막대로 바꿉니다
 // @description:zh-CN 将 Windows 音量、亮度和虚拟桌面提示替换为带有弹性动画的胶囊形提示条
-// @version         4.9.11
+// @version         4.9.19
 // @author          yelloxygene
 // @github          https://github.com/yelloxygene
 // @include         explorer.exe
@@ -46,6 +46,8 @@ After several changes in a row, the indicator can become smaller to take up less
 
 Adjust the pill's width, height and distance from the bottom of the screen. Opening and closing delays can also be changed.
 
+The progress bar can use either its original blue color or the Windows accent color, selected in the mod settings.
+
 ## Virtual desktops
 
 Displays the current virtual desktop name or number when switching desktops. This indicator has its own size, position, animation and duration settings.
@@ -70,6 +72,18 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
 
 // ==WindhawkModSettings==
 /*
+- useWindowsAccent: false
+  $name: "Use Windows accent color for the progress bar"
+  $name:fr-FR: "Utiliser la couleur d'accentuation Windows pour la barre"
+  $name:de-DE: "Windows-Akzentfarbe für die Fortschrittsleiste verwenden"
+  $name:es-ES: "Usar el color de énfasis de Windows para la barra de progreso"
+  $name:it-IT: "Usa il colore principale di Windows per la barra di avanzamento"
+  $name:pt-BR: "Usar a cor de destaque do Windows na barra de progresso"
+  $name:pl-PL: "Użyj koloru akcentu Windows dla paska postępu"
+  $name:ru-RU: "Использовать цвет акцента Windows для полосы прогресса"
+  $name:ja-JP: "進行状況バーに Windows のアクセント カラーを使用する"
+  $name:ko-KR: "진행 표시줄에 Windows 강조 색 사용"
+  $name:zh-CN: "进度条使用 Windows 强调色"
 - startDelayMs: 90
   $name: "Delay before the pill appears (ms)"
   $name:fr-FR: "Délai avant affichage de la pilule (ms)"
@@ -429,12 +443,14 @@ Timing values are in milliseconds. Size values are based on 100% display scaling
 struct {
     int startDelayMs, decideMs, holdMs, closeHoldMs, responseMs, dampingPct, widthPx, heightPx, bottomOffset,
         shakePx, shakeMs, shakeDampPct, valueShakePct, shakeWidthPct, returnPowerPct, compactReleaseMs,
-        compactEnabled, compactTriggerCount, compactReturnToNormal;
+        compactEnabled, compactTriggerCount, compactReturnToNormal, useWindowsAccent;
 } g;
 struct {
     int widthPx, heightPx, bottomOffset, holdMs, closeHoldMs, responseMs, dampingPct, durationMs;
 } dk;
 static wchar_t g_deskLabel[32] = L"Desktop";
+// Accent cached on the UI thread. Never read the registry in Render's pixel loop.
+static BYTE g_accentR = 96, g_accentG = 205, g_accentB = 255;
 
 #define MSG_SHOW   (WM_APP + 1)
 #define MSG_HIDE   (WM_APP + 2)
@@ -613,7 +629,7 @@ static void Step(Spring& s, float dt, float k, float c) {
 static void ComputeSprings(int responseMs, int dampingPct) {
     float zeta = Clamp(dampingPct / 100.0f, 0.2f, 1.2f);
     MakeSpringParams(responseMs / 1000.0f, zeta, &g_k, &g_c);
-    MakeSpringParams(0.22f, 0.75f, &g_kv, &g_cv);
+    MakeSpringParams(0.32f, 0.52f, &g_kv, &g_cv);
     // Ressort du mode compact : amortissement plus faible pour un rebond visible.
     // La période un peu plus longue rend le mouvement souple, sans être trop lent.
     MakeSpringParams(0.36f, 0.48f, &g_kc, &g_cc);
@@ -622,6 +638,59 @@ static void ComputeSprings(int responseMs, int dampingPct) {
 // ---------------------------------------------------------------- nom du bureau virtuel
 static bool RegBin(const wchar_t* path, const wchar_t* val, BYTE* buf, DWORD* sz) {
     return RegGetValueW(HKEY_CURRENT_USER, path, val, RRF_RT_REG_BINARY, nullptr, buf, sz) == ERROR_SUCCESS;
+}
+
+// Windows 11 stores its user accent in HKCU\Software\Microsoft\Windows\DWM\AccentColor.
+// This DWORD uses AABBGGRR, unlike the AARRGGBB returned by DwmGetColorizationColor.
+// Reading the DWM DWORD first avoids using a pale or stale shade of AccentPalette.
+static void RefreshAccentColor() {
+    g_accentR = 96; g_accentG = 205; g_accentB = 255;
+    if (!g.useWindowsAccent) {
+        Wh_Log(L"Accent: system accent disabled (default blue)");
+        return;
+    }
+
+    DWORD accent = 0;
+    DWORD bytes = sizeof(accent);
+    LONG result = RegGetValueW(HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\DWM", L"AccentColor",
+        RRF_RT_REG_DWORD, nullptr, &accent, &bytes);
+    if (result == ERROR_SUCCESS) {
+        // Registry ABGR: least-significant byte is red.
+        g_accentR = static_cast<BYTE>(accent & 0xFF);
+        g_accentG = static_cast<BYTE>((accent >> 8) & 0xFF);
+        g_accentB = static_cast<BYTE>((accent >> 16) & 0xFF);
+        Wh_Log(L"Accent: DWM AccentColor = RGB(%u,%u,%u)",
+               (unsigned)g_accentR, (unsigned)g_accentG, (unsigned)g_accentB);
+        return;
+    }
+
+    // Alternative for systems with no DWM AccentColor value.
+    // The central accent in AccentPalette is entry 3 (offset 12), RGBA.
+    BYTE palette[32]{};
+    DWORD size = sizeof(palette);
+    if (RegBin(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent",
+               L"AccentPalette", palette, &size) && size >= 16) {
+        g_accentR = palette[12];
+        g_accentG = palette[13];
+        g_accentB = palette[14];
+        Wh_Log(L"Accent: palette = RGB(%u,%u,%u)",
+               (unsigned)g_accentR, (unsigned)g_accentG, (unsigned)g_accentB);
+        return;
+    }
+
+    // Last fallback: DWM returns AARRGGBB, not registry ABGR.
+    DWORD argb = 0;
+    BOOL opaque = FALSE;
+    if (SUCCEEDED(DwmGetColorizationColor(&argb, &opaque))) {
+        g_accentR = static_cast<BYTE>((argb >> 16) & 0xFF);
+        g_accentG = static_cast<BYTE>((argb >> 8) & 0xFF);
+        g_accentB = static_cast<BYTE>(argb & 0xFF);
+        Wh_Log(L"Accent: DWM colorization = RGB(%u,%u,%u)",
+               (unsigned)g_accentR, (unsigned)g_accentG, (unsigned)g_accentB);
+    } else {
+        Wh_Log(L"Accent: unable to read Windows accent, using default blue");
+    }
 }
 
 static void ReadDesktopName(wchar_t* out, int n) {
@@ -911,6 +980,11 @@ static DWORD g_lastConfirmedTick = 0;
 static GUID g_observedDesktopId{};
 static bool g_observedDesktopValid = false;
 static bool g_pendingDesktopChange = false;
+// Recent confirmed desktop switches have priority over older value events.
+static DWORD g_desktopPriorityUntil = 0;
+// The registry watcher may post MSG_DESKTOP after MSG_SHOW has already
+// observed the new GUID. Consume each watcher notification exactly once.
+static DWORD g_lastHandledDesktopTick = 0;
 static bool g_pendingHide = false;
 static DWORD g_nativeHideDeadline = 0; // avoids losing a short native OSD cycle
 static DWORD g_brightnessHideDeadline = 0; // merge fast repeat presses into one continuous brightness OSD
@@ -935,13 +1009,71 @@ static Spring sp_p, sp_y, sp_v;
 static float g_curV = 0, g_p = 0, g_ga = 0, g_yOff = 0, g_startOff = 0;
 
 static float g_s = 1.0f, g_W = 220, g_H = 44;
+// Smooth in-place transition from the current volume/brightness pill to desktop.
+static bool g_profileMorph = false;
+static Spring sp_profileMorph;
+static float g_morphFromW = 0, g_morphFromH = 0;
+static float g_morphFromY = 0, g_morphToY = 0;
+static float g_profileMorphK = 0, g_profileMorphC = 0;
+// Keep the previous content while the same surface morphs between profiles.
+static int g_morphOldKind = 0;
+static float g_morphOldValue = 0;
+// Content transitions are EXCLUSIVELY for category changes (0/1/2).
+// They are independent of the geometry spring. Ordinary value changes use
+// sp_v and the existing squash/stretch; they never restart the icon roll.
+static Spring sp_content;
+static float g_contentK = 190.0f, g_contentC = 13.0f;
+static bool g_contentAnimating = false;
+static int g_contentDirection = 1;
+static bool g_morphOldMuted = false;
+static wchar_t g_morphOldDeskName[64] = L"";
+// Independent rolling transition for the desktop number/name.
+static wchar_t g_previousDeskName[64] = L"";
+static DWORD g_deskLabelAnimStart = 0;
+// When desktop numbers change during an audio->desktop morph, queue the
+// number roll so it is visible AFTER the category crossfade.
+static bool g_deferredDeskLabel = false;
+static Spring sp_deskLabel;
+static float g_deskLabelK = 185.0f, g_deskLabelC = 12.0f;
+static float Smooth01(float v) {
+    v = Clamp(v, 0.0f, 1.0f);
+    return v * v * (3.0f - 2.0f * v);
+}
+static void UpdateDesktopLabel(const wchar_t* label, DWORD now, bool animate) {
+    if (!label || wcscmp(label, g_deskName) == 0) return;
+    if (animate && g_kind == 2 && st == S_OPEN && g_deskName[0]) {
+        wcsncpy(g_previousDeskName, g_deskName, 63);
+        g_previousDeskName[63] = 0;
+        if (g_contentAnimating) {
+            g_deferredDeskLabel = true;
+            g_deskLabelAnimStart = 0;
+        } else {
+            g_deferredDeskLabel = false;
+            g_deskLabelAnimStart = now;
+            sp_deskLabel.x = 0.0f;
+            sp_deskLabel.v = 1.2f;
+            sp_deskLabel.t = 1.0f;
+        }
+    } else {
+        g_deferredDeskLabel = false;
+        g_deskLabelAnimStart = 0;
+        sp_deskLabel.x = sp_deskLabel.t = 1.0f;
+        sp_deskLabel.v = 0;
+        g_previousDeskName[0] = 0;
+    }
+    wcsncpy(g_deskName, label, 63);
+    g_deskName[63] = 0;
+}
 static int g_pad = 16, g_padY = 16, g_cw = 0, g_ch = 0;
 static POINT g_dst{0, 0};
 static LONG g_baseY = 0;
 
-static HDC g_scrDC = nullptr, g_dc = nullptr, g_maskDC = nullptr;
-static HBITMAP g_bmp = nullptr, g_maskBmp = nullptr, g_oldBmp = nullptr, g_oldMask = nullptr;
-static DWORD* g_bits = nullptr; static BYTE* g_maskBits = nullptr;
+static HDC g_scrDC = nullptr, g_dc = nullptr, g_maskDC = nullptr, g_oldContentDC = nullptr;
+static HBITMAP g_bmp = nullptr, g_maskBmp = nullptr, g_oldContentBmp = nullptr;
+static HBITMAP g_oldBmp = nullptr, g_oldMask = nullptr, g_oldContentSelected = nullptr;
+static DWORD* g_bits = nullptr;
+static BYTE* g_maskBits = nullptr;
+static BYTE* g_oldContentBits = nullptr;
 static HFONT g_fIcon = nullptr, g_fText = nullptr;
 
 // valeurs actives (volume/luminosité ou bureau)
@@ -978,10 +1110,14 @@ static HBITMAP MakeDib(HDC dc, int w, int h, void** bits) {
 static void FreeCanvas() {
     if (g_dc && g_oldBmp) SelectObject(g_dc, g_oldBmp);
     if (g_maskDC && g_oldMask) SelectObject(g_maskDC, g_oldMask);
+    if (g_oldContentDC && g_oldContentSelected)
+        SelectObject(g_oldContentDC, g_oldContentSelected);
     if (g_bmp) DeleteObject(g_bmp);
     if (g_maskBmp) DeleteObject(g_maskBmp);
-    g_bmp = g_maskBmp = nullptr; g_bits = nullptr; g_maskBits = nullptr;
-    g_oldBmp = g_oldMask = nullptr;
+    if (g_oldContentBmp) DeleteObject(g_oldContentBmp);
+    g_bmp = g_maskBmp = g_oldContentBmp = nullptr;
+    g_bits = nullptr; g_maskBits = g_oldContentBits = nullptr;
+    g_oldBmp = g_oldMask = g_oldContentSelected = nullptr;
 }
 
 static void EnsureCanvas() {
@@ -990,24 +1126,29 @@ static void EnsureCanvas() {
     // La pilule peut devenir beaucoup plus large qu'au repos. Le bitmap doit
     // pouvoir contenir l'etirement maximal ET le depassement du ressort
     // d'ouverture (g_p jusqu'a 1.12), sinon son contour est coupe aux bords.
-    const float stretchMax = (g_kind == 2) ? 0.0f :
+    const float stretchMax = (g_kind == 2 && !g_profileMorph) ? 0.0f :
         1.65f * Clamp(g.shakeWidthPct / 100.0f, 0.0f, 1.0f);
-    const float maxBodyW = g_W * (1.0f + stretchMax) * 1.12f;
-    const int neededPad = (int)ceilf((maxBodyW - g_W) * 0.5f + 20.0f * g_s);
+    const float bodyBaseW = g_profileMorph ? fmaxf(g_W, g_morphFromW) : g_W;
+    const float bodyBaseH = g_profileMorph ? fmaxf(g_H, g_morphFromH) : g_H;
+    const float maxBodyW = bodyBaseW * (1.0f + stretchMax) * 1.12f;
+    const int neededPad = (int)ceilf((maxBodyW - bodyBaseW) * 0.5f + 20.0f * g_s);
     g_pad = (int)ceilf(Clamp((float)neededPad, 24.0f * g_s, 1000.0f * g_s));
 
     // Une marge verticale independante evite de dessiner inutilement un bitmap
     // gigantesque lorsque seul l'etirement horizontal augmente.
-    g_padY = (int)ceilf(fmaxf(20.0f * g_s, g_H * 0.25f));
-    int cw = (int)ceilf(g_W) + 2 * g_pad;
-    int ch = (int)ceilf(g_H) + 2 * g_padY;
+    g_padY = (int)ceilf(fmaxf(20.0f * g_s, bodyBaseH * 0.25f));
+    int cw = (int)ceilf(bodyBaseW) + 2 * g_pad;
+    int ch = (int)ceilf(bodyBaseH) + 2 * g_padY;
     if (g_bmp && cw == g_cw && ch == g_ch) return;
     FreeCanvas();
     g_cw = cw; g_ch = ch;
     g_bmp = MakeDib(g_scrDC, cw, ch, (void**)&g_bits);
     g_maskBmp = MakeDib(g_scrDC, cw, ch, (void**)&g_maskBits);
+    g_oldContentBmp = MakeDib(g_scrDC, cw, ch, (void**)&g_oldContentBits);
+    if (!g_bmp || !g_maskBmp || !g_oldContentBmp) return;
     g_oldBmp = (HBITMAP)SelectObject(g_dc, g_bmp);
     g_oldMask = (HBITMAP)SelectObject(g_maskDC, g_maskBmp);
+    g_oldContentSelected = (HBITMAP)SelectObject(g_oldContentDC, g_oldContentBmp);
 }
 
 static float CapDist(float px, float py, float xa, float xb, float cy, float r) {
@@ -1028,13 +1169,14 @@ static wchar_t IconGlyph() {
 }
 
 static void Render() {
-    if (!g_bits || !g_maskBits || !g_ui) return;
+    if (!g_bits || !g_maskBits || !g_oldContentBits || !g_ui) return;
     const int CW = g_cw, CH = g_ch;
     const bool desk = (g_kind == 2);
 
     // Progression du ressort compact. On conserve un peu de dépassement
     // au-dessus et en dessous de la cible pour rendre le rebond visible.
-    const float cm = desk ? 0.0f : Clamp(sp_c.x, -0.18f, 1.22f);
+    const float morph = g_profileMorph ? Clamp(sp_profileMorph.x, -0.04f, 1.10f) : 1.0f;
+    const float cm = g_profileMorph ? 0.0f : (desk ? 0.0f : Clamp(sp_c.x, -0.18f, 1.22f));
 
     // Le contour rétrécit progressivement de 5 % en mode compact.
     // L'impulsion comprime aussi brièvement la pilule sur son axe vertical.
@@ -1043,8 +1185,10 @@ static void Render() {
     // Chaque impulsion comprime la hauteur et élargit légèrement la pilule.
     // L'intensité suit la vitesse du ressort : les impulsions rapprochées
     // s'additionnent et produisent un déplacement/une déformation plus marqués.
-    const float Hf = g_H * compactScale * (1.0f - g_squash);
-    const float Wf = g_W * compactScale * (1.0f + g_stretch);
+    const float Hf = g_profileMorph ? Lerp(g_morphFromH, g_H, morph)
+                                    : g_H * compactScale * (1.0f - g_squash);
+    const float Wf = g_profileMorph ? Lerp(g_morphFromW, g_W, morph)
+                                    : g_W * compactScale * (1.0f + g_stretch);
     const float vShown = Clamp(g_curV, 0, 100);
     float cx = CW * 0.5f, cy = CH * 0.5f, r = Hf * 0.5f;
     float curW = Hf + (Wf - Hf) * g_p;
@@ -1068,32 +1212,114 @@ static void Render() {
     tr  = Lerp(tr, trC, cm);
     const float fadeC = 1.0f - Clamp(cm * 2.2f, 0, 1);   // icône et valeur disparaissent
 
+    // Render the outgoing and incoming content in separate DIBs. In earlier
+    // versions both were written into the same RGB mask, so GDI overwrote
+    // overlapping pixels and icons vanished or flickered on transitions.
     memset(g_maskBits, 0, (size_t)CW * CH * 4);
+    memset(g_oldContentBits, 0, (size_t)CW * CH * 4);
     SetBkMode(g_maskDC, TRANSPARENT);
-    wchar_t glyph[2] = { IconGlyph(), 0 };
+    SetBkMode(g_oldContentDC, TRANSPARENT);
+
+    const bool changingCategory = g_contentAnimating;
+    const float contentPosition = changingCategory ?
+        Clamp(sp_content.x, -0.10f, 1.10f) : 1.0f;
+    const float contentProgress = Smooth01(Clamp(contentPosition, 0.0f, 1.0f));
+    const float newWeight = changingCategory ?
+        Smooth01((contentProgress - 0.09f) / 0.76f) : 1.0f;
+    const float oldWeight = changingCategory ?
+        1.0f - Smooth01((contentProgress - 0.05f) / 0.78f) : 0.0f;
+    const float offset = 17.0f * s;
+    const float newSlide = changingCategory ?
+        (1.0f - contentPosition) * offset * g_contentDirection : 0.0f;
+    const float oldSlide = changingCategory ?
+        -contentPosition * offset * g_contentDirection : 0.0f;
+    const bool labelMoving = desk && !changingCategory &&
+        g_deskLabelAnimStart && g_previousDeskName[0];
+    const float labelT = labelMoving ?
+        Smooth01(Clamp(sp_deskLabel.x, 0.0f, 1.0f)) : 1.0f;
+    const float labelSlide = 14.0f * s;
+
+    // New icon (red) and text (green) live in the current-content mask.
     SelectObject(g_maskDC, g_fIcon);
     SetTextColor(g_maskDC, RGB(255, 0, 0));
-    RECT ir = { (LONG)(iconCx - r), (LONG)(cy - r), (LONG)(iconCx + r), (LONG)(cy + r) };
-    DrawTextW(g_maskDC, glyph, 1, &ir, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+    const wchar_t newGlyph[2] = { IconGlyph(), 0 };
+    RECT ir = { (LONG)(iconCx - r), (LONG)(cy - r),
+                (LONG)(iconCx + r), (LONG)(cy + r) };
+    RECT newIconRect = ir;
+    newIconRect.top += (LONG)lroundf(newSlide);
+    newIconRect.bottom += (LONG)lroundf(newSlide);
+    DrawTextW(g_maskDC, newGlyph, 1, &newIconRect,
+              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+
+    if (changingCategory && oldWeight > 0.001f) {
+        wchar_t previousGlyph = 0xE7F4;
+        if (g_morphOldKind == 1) previousGlyph = 0xE706;
+        else if (g_morphOldKind == 0) {
+            const int oldValue = (int)(g_morphOldValue + 0.5f);
+            previousGlyph = g_morphOldMuted ? 0xE74F :
+                (oldValue <= 0 ? 0xE992 :
+                 (oldValue < 34 ? 0xE993 :
+                  (oldValue < 67 ? 0xE994 : 0xE995)));
+        }
+        SelectObject(g_oldContentDC, g_fIcon);
+        SetTextColor(g_oldContentDC, RGB(0, 0, 255));
+        const wchar_t oldGlyph[2] = { previousGlyph, 0 };
+        RECT oldIconRect = ir;
+        oldIconRect.top += (LONG)lroundf(oldSlide);
+        oldIconRect.bottom += (LONG)lroundf(oldSlide);
+        DrawTextW(g_oldContentDC, oldGlyph, 1, &oldIconRect,
+                  DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+    }
+
     if (ca > 0.01f) {
         SelectObject(g_maskDC, g_fText);
         SetTextColor(g_maskDC, RGB(0, 255, 0));
         if (desk) {
-            RECT tr2 = { (LONG)(x0 + Hf - 2 * s), (LONG)(cy - r), (LONG)textR, (LONG)(cy + r) };
-            DrawTextW(g_maskDC, g_deskName, -1, &tr2,
+            const float labelOffset = changingCategory ? newSlide :
+                (labelMoving ? (1.0f - labelT) * labelSlide : 0.0f);
+            RECT textRect = { (LONG)(x0 + Hf - 2 * s), (LONG)(cy - r + labelOffset),
+                              (LONG)textR, (LONG)(cy + r + labelOffset) };
+            DrawTextW(g_maskDC, g_deskName, -1, &textRect,
                       DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         } else {
             wchar_t num[8];
             _snwprintf(num, 8, L"%d", (int)(vShown + 0.5f));
-            RECT tr2 = { (LONG)textL, (LONG)(cy - r), (LONG)textR, (LONG)(cy + r) };
-            DrawTextW(g_maskDC, num, -1, &tr2, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+            RECT textRect = { (LONG)textL, (LONG)(cy - r + newSlide),
+                              (LONG)textR, (LONG)(cy + r + newSlide) };
+            DrawTextW(g_maskDC, num, -1, &textRect,
+                      DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+        }
+
+        if ((changingCategory && oldWeight > 0.001f) || labelMoving) {
+            SelectObject(g_oldContentDC, g_fText);
+            SetTextColor(g_oldContentDC, RGB(0, 255, 0));
+            if (labelMoving || g_morphOldKind == 2) {
+                const wchar_t* oldName = labelMoving ?
+                    g_previousDeskName : g_morphOldDeskName;
+                const float slide = labelMoving ? -labelT * labelSlide : oldSlide;
+                RECT textRect = { (LONG)(x0 + Hf - 2 * s), (LONG)(cy - r + slide),
+                                  (LONG)textR, (LONG)(cy + r + slide) };
+                DrawTextW(g_oldContentDC, oldName, -1, &textRect,
+                          DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+            } else {
+                wchar_t oldNum[8];
+                _snwprintf(oldNum, 8, L"%d", (int)(g_morphOldValue + 0.5f));
+                RECT textRect = { (LONG)textL, (LONG)(cy - r + oldSlide),
+                                  (LONG)textR, (LONG)(cy + r + oldSlide) };
+                DrawTextW(g_oldContentDC, oldNum, -1, &textRect,
+                          DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+            }
         }
     }
     GdiFlush();
 
-    float accR = g_muted ? 150 : 96, accG = g_muted ? 150 : 205, accB = g_muted ? 150 : 255;
+    float accR = g_muted ? 150 : g_accentR, accG = g_muted ? 150 : g_accentG, accB = g_muted ? 150 : g_accentB;
     float fillW = (bx1 - bx0) * vShown / 100.0f;
     float fa = bx0 + tr, fb = bx0 + (fillW > 2 * tr ? fillW : 2 * tr) - tr;
+    // The outgoing audio/brightness bar fades with the old icon, while the
+    // incoming bar follows the value spring. Neither bar jumps to its target.
+    const float oldFillW = (bx1 - bx0) * Clamp(g_morphOldValue, 0.0f, 100.0f) / 100.0f;
+    const float oldFb = bx0 + fmaxf(oldFillW, 2.0f * tr) - tr;
 
     for (int y = 0; y < CH; y++) {
         for (int x = 0; x < CW; x++) {
@@ -1106,20 +1332,39 @@ static void Render() {
             float bf = Clamp((d + 1.5f) / 1.5f, 0, 1) * 0.8f;
             R = Lerp(R, 95, bf); G = Lerp(G, 95, bf); B = Lerp(B, 95, bf);
 
-            if (!desk && ca > 0.001f) {
-                float td = CapDist(px, py, bx0 + tr, bx1 - tr, cy, tr);
-                float tc = Clamp(0.5f - td, 0, 1) * ca * 0.28f;
+            const float barWeight = desk ? 0.0f : newWeight;
+            const float previousBarWeight = changingCategory && g_morphOldKind != 2 ?
+                oldWeight : 0.0f;
+            if ((barWeight > 0.001f || previousBarWeight > 0.001f) && ca > 0.001f) {
+                const float td = CapDist(px, py, bx0 + tr, bx1 - tr, cy, tr);
+                const float tc = Clamp(0.5f - td, 0, 1) * ca *
+                    fmaxf(barWeight, previousBarWeight) * 0.28f;
                 R = Lerp(R, 255, tc); G = Lerp(G, 255, tc); B = Lerp(B, 255, tc);
-                if (vShown > 0.2f) {
-                    float fd = CapDist(px, py, fa, fb, cy, tr);
-                    float fc = Clamp(0.5f - fd, 0, 1) * ca;
+                if (previousBarWeight > 0.001f && g_morphOldValue > 0.2f) {
+                    const float oldFd = CapDist(px, py, fa, oldFb, cy, tr);
+                    const float oldFc = Clamp(0.5f - oldFd, 0, 1) * ca * previousBarWeight;
+                    R = Lerp(R, accR, oldFc); G = Lerp(G, accG, oldFc); B = Lerp(B, accB, oldFc);
+                }
+                if (barWeight > 0.001f && vShown > 0.2f) {
+                    const float fd = CapDist(px, py, fa, fb, cy, tr);
+                    const float fc = Clamp(0.5f - fd, 0, 1) * ca * barWeight;
                     R = Lerp(R, accR, fc); G = Lerp(G, accG, fc); B = Lerp(B, accB, fc);
                 }
             }
-            BYTE* m = (BYTE*)&g_maskBits[(y * CW + x) * 4];     // B G R A
-            float ic = m[2] / 255.0f * fadeC, tx = m[1] / 255.0f * ca * fadeC;
-            R = Lerp(R, 255, ic); G = Lerp(G, 255, ic); B = Lerp(B, 255, ic);
-            R = Lerp(R, 255, tx); G = Lerp(G, 255, tx); B = Lerp(B, 255, tx);
+            const BYTE* m = &g_maskBits[(y * CW + x) * 4];
+            const BYTE* oldM = &g_oldContentBits[(y * CW + x) * 4];
+            const float newIconCover = m[2] / 255.0f * fadeC * newWeight;
+            const float newTextCover = m[1] / 255.0f * ca * fadeC *
+                (labelMoving ? labelT : newWeight);
+            const float oldIconCover = oldM[0] / 255.0f * fadeC * oldWeight;
+            const float oldTextCover = oldM[1] / 255.0f * ca * fadeC *
+                (labelMoving ? 1.0f - labelT : oldWeight);
+            const float textCoverage = Clamp(1.0f -
+                (1.0f - newIconCover) * (1.0f - newTextCover) *
+                (1.0f - oldIconCover) * (1.0f - oldTextCover), 0.0f, 1.0f);
+            R = Lerp(R, 255, textCoverage);
+            G = Lerp(G, 255, textCoverage);
+            B = Lerp(B, 255, textCoverage);
 
             float A = 0.94f * cov * g_ga;
             DWORD a = (DWORD)(A * 255.0f + 0.5f);
@@ -1143,6 +1388,7 @@ static void Render() {
 static void MakeFonts(int h) {
     if (g_fIcon && g_fText && h == g_fontH && fabsf(g_fontScale - g_s) < 0.001f) return;
     if (g_maskDC) SelectObject(g_maskDC, GetStockObject(SYSTEM_FONT));   // libère les anciennes polices
+    if (g_oldContentDC) SelectObject(g_oldContentDC, GetStockObject(SYSTEM_FONT));
     if (g_fIcon) DeleteObject(g_fIcon);
     if (g_fText) DeleteObject(g_fText);
     g_fIcon = CreateFontW(-(int)(h * 0.33f * g_s), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET,
@@ -1233,6 +1479,14 @@ static void LoadValues() {
 }
 
 static void BeginShow() {
+    g_profileMorph = false;
+    g_contentAnimating = false;
+    sp_content.x = sp_content.t = 1.0f; sp_content.v = 0;
+    g_deskLabelAnimStart = 0;
+    g_deferredDeskLabel = false;
+    sp_deskLabel.x = sp_deskLabel.t = 1.0f; sp_deskLabel.v = 0;
+    g_previousDeskName[0] = 0;
+    RefreshAccentColor();
     g_brightnessHideDeadline = 0;
     HMONITOR primary = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
     UINT dpiX = 96, dpiY = 96;
@@ -1280,12 +1534,146 @@ static void BeginShow() {
     SetWindowPos(g_ui, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
 
+// Transform a visible pill between desktop and volume/brightness without
+// replaying the opening.  The old content stays visible during the morph.
+static void MorphToKind(int targetKind, DWORD now, int value = -1, bool muted = false) {
+    if (st != S_OPEN && st != S_CLOSING) return;
+    if (targetKind == g_kind) {
+        if (targetKind == 2) {
+            wchar_t nn[64]{};
+            ReadDesktopName(nn, 64);
+            UpdateDesktopLabel(nn, now, true);
+            g_deskT0 = now;
+            g_hidePending = false;
+        } else {
+            if (value >= 0) sp_v.t = (float)value;
+            g_muted = muted;
+        }
+        if (st == S_CLOSING) {
+            st = S_OPEN; sp_y.t = 0; sp_p.t = 1;
+            stStart = now - (DWORD)a_hold;
+        }
+        g_nativeHideDeadline = 0;
+        return;
+    }
+
+    // Start with the actual current outline, including an interrupted morph.
+    const float oldProgress = g_profileMorph ? Clamp(sp_profileMorph.x, 0.0f, 1.0f) : 1.0f;
+    const float compact = Clamp(sp_c.x, -0.18f, 1.22f);
+    const float activeScale = Lerp(1.0f, 0.95f, compact);
+    const float fromW = g_profileMorph ? Lerp(g_morphFromW, g_W, oldProgress)
+        : g_W * activeScale * (1.0f + g_stretch);
+    const float fromH = g_profileMorph ? Lerp(g_morphFromH, g_H, oldProgress)
+        : g_H * activeScale * (1.0f - g_squash);
+    const float screenTop = (float)g_baseY + g_yOff + g_ch * 0.5f;
+    const int oldCanvasHeight = g_ch;
+
+    // A rapid third switch begins from the currently dominant visible kind,
+    // not from an obsolete transition's source. This avoids a one-frame flash.
+    const bool previousStillDominant = g_contentAnimating && sp_content.x < 0.46f;
+    const int visualOldKind = previousStillDominant ? g_morphOldKind : g_kind;
+    const float visualOldValue = previousStillDominant ? g_morphOldValue : g_curV;
+    const bool visualOldMuted = previousStillDominant ? g_morphOldMuted : g_muted;
+    wchar_t visualOldName[64]{};
+    wcsncpy(visualOldName,
+        previousStillDominant ? g_morphOldDeskName : g_deskName, 63);
+    g_morphOldKind = visualOldKind;
+    g_morphOldValue = visualOldValue;
+    g_morphOldMuted = visualOldMuted;
+    wcsncpy(g_morphOldDeskName, visualOldName, 63);
+    g_morphOldDeskName[63] = 0;
+    g_morphFromW = fromW;
+    g_morphFromH = fromH;
+
+    g_kind = targetKind;
+    g_pendKind = targetKind == 2 ? 2 : (targetKind == 0 ? 1 : 0);
+    g_pendingDesktopChange = false;
+    g_pendingHide = false;
+    g_hidePending = false;
+    g_brightnessHideDeadline = 0;
+    g_nativeHideDeadline = 0;
+    g_deskLabelAnimStart = 0;
+    g_deferredDeskLabel = false;
+    g_previousDeskName[0] = 0;
+    if (targetKind == 2) {
+        wchar_t nn[64]{};
+        ReadDesktopName(nn, 64);
+        UpdateDesktopLabel(nn, now, false);
+        lastDeskRead = now;
+        g_desktopPriorityUntil = now + 600;
+        g_deskT0 = now;
+    } else {
+        g_muted = muted;
+        if (value >= 0) {
+            // Preserve the outgoing bar's visible position; the value spring
+            // brings the incoming bar to its target without a sudden jump.
+            if (g_morphOldKind == 2) {
+                sp_v.x = 0.0f;
+                sp_v.v = 0.0f;
+            }
+            sp_v.t = (float)value;
+            g_curV = sp_v.x;
+        }
+    }
+
+    // Enable morph before reallocating: the canvas must fit BOTH profiles,
+    // including the previous pill if it was stretched wider than the target.
+    g_profileMorph = true;
+    UseProfile(targetKind == 2);
+    EnsureCanvas();
+    // Keep the screen-space center of the pill stable when DIB size changes.
+    g_morphFromY = screenTop - g_ch * 0.5f - g_yOff;
+    g_baseY = (LONG)lroundf(g_morphFromY);
+    HMONITOR primary = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO mi{}; mi.cbSize = sizeof(mi);
+    if (GetMonitorInfoW(primary, &mi)) {
+        g_dst.x = (mi.rcMonitor.left + mi.rcMonitor.right) / 2 - g_cw / 2;
+        g_morphToY = (float)(mi.rcMonitor.bottom -
+            (LONG)(a_bottom * g_s) - (LONG)g_H - g_padY);
+        g_startOff = (float)(mi.rcMonitor.bottom - g_morphToY) + 4;
+    } else {
+        g_morphToY = g_morphFromY;
+    }
+    sp_profileMorph.x = 0; sp_profileMorph.v = 1.15f; sp_profileMorph.t = 1;
+    // The outline and the content use separate springs. This also animates
+    // volume <-> brightness even though both use the SAME pill dimensions.
+    g_contentDirection = (targetKind == 1 ||
+        (g_morphOldKind == 2 && targetKind == 0)) ? 1 : -1;
+    sp_content.x = 0.0f; sp_content.v = 1.10f; sp_content.t = 1.0f;
+    g_contentAnimating = true;
+    MakeSpringParams(0.48f, 0.53f, &g_contentK, &g_contentC);
+    // Soft, pronounced outline spring for profile changes.
+    MakeSpringParams(0.64f, 0.51f, &g_profileMorphK, &g_profileMorphC);
+    st = S_OPEN;
+    stStart = now - (DWORD)a_hold;
+    g_unfolded = true;
+    g_phase2 = false;
+    sp_p.x = fmaxf(sp_p.x, 1.0f); sp_p.t = 1;
+    g_p = sp_p.x;
+    sp_y.t = 0;
+    sp_c.t = 0;
+    sp_shape.t = 0;
+    sp_sh.t = 0;
+    g_ga = 1;
+    lastTick = now;
+    Render();
+}
+
+static void MorphToDesktop(DWORD now) { MorphToKind(2, now); }
+
 // Only use events associated with this OSD appearance. Older poll results
 // must not classify a volume-at-limit press as brightness or desktop.
 static bool EventNearShow(DWORD tick, DWORD now, DWORD earlyMs) {
     return tick != 0 &&
         (LONG)(tick - (g_showTick - earlyMs)) >= 0 &&
         (LONG)(now - tick) >= 0;
+}
+
+// MSG_SHOW while the pill is already visible must consider only fresh
+// callbacks. g_showTick belongs to the very first opening and can be minutes
+// old; using it here made stale volume events override desktop switches.
+static bool RecentValueEvent(DWORD tick, DWORD now, DWORD maxAgeMs = 210) {
+    return tick && (LONG)(now - tick) >= 0 && (DWORD)(now - tick) <= maxAgeMs;
 }
 
 static void Tick() {
@@ -1310,19 +1698,26 @@ static void Tick() {
             DesktopIdChanged())
             g_pendingDesktopChange = true;
 
+        // A genuine desktop switch must not be mislabeled because an older
+        // volume/brightness notification is still within EventNearShow's window.
+        // A NEWER real value notification still takes priority.
+        const bool desktopIsNewest = g_pendingDesktopChange &&
+            (!volumeEvent || (LONG)(g_deskTick - g_volTick) >= 0) &&
+            (!brightnessEvent || (LONG)(g_deskTick - g_briTick) >= 0);
+
         int decidedKind = -1;
         // Physical volume keys and actual value notifications outrank cached
         // desktop information, including while a desktop pill is still visible.
-        if (g_pendKind == 1 || volumeKeyHeld) {
+        if (desktopIsNewest) {
+            decidedKind = 2;
+        } else if (volumeKeyHeld || (g_pendKind == 1 && !g_pendingDesktopChange)) {
             decidedKind = 0;
-        } else if (g_pendingDesktopChange && !volumeEvent && !brightnessEvent) {
-            decidedKind = 2;
-        } else if (desktopIntent && !volumeEvent && !brightnessEvent) {
-            decidedKind = 2;
         } else if (volumeEvent || brightnessEvent) {
             if (volumeEvent && brightnessEvent)
                 decidedKind = (LONG)(g_briTick - g_volTick) > 0 ? 1 : 0;
             else decidedKind = brightnessEvent ? 1 : 0;
+        } else if (g_pendingDesktopChange || desktopIntent) {
+            decidedKind = 2;
         } else if ((int)el >= g.decideMs) {
             // On many laptops the brightness keys don't produce a standard
             // virtual-key event. At 100% (or 0%), pressing the brightness key
@@ -1385,8 +1780,12 @@ static void Tick() {
         if (g_nativeHideDeadline &&
             (LONG)(now - g_nativeHideDeadline) >= 0 &&
             !((GetAsyncKeyState(VK_VOLUME_UP) | GetAsyncKeyState(VK_VOLUME_DOWN)) & 0x8000)) {
-            g_nativeHideDeadline = 0;
-            StartClose();
+            if (g_profileMorph || g_contentAnimating)
+                g_nativeHideDeadline = now + 180;
+            else {
+                g_nativeHideDeadline = 0;
+                StartClose();
+            }
         }
         // Native OSD sometimes disappears without passing through ShowWindow.
         // Ensure the custom window cannot stay visible indefinitely.
@@ -1417,14 +1816,18 @@ static void Tick() {
                 wchar_t nn[64];
                 ReadDesktopName(nn, 64);
                 if (wcscmp(nn, g_deskName) != 0) {        // nouveau changement de bureau
-                    wcscpy(g_deskName, nn);
+                    UpdateDesktopLabel(nn, now, true);
                     g_deskT0 = now; g_hidePending = false;
                 }
                 lastDeskRead = now;
             }
+            // Let an in-place profile morph complete before responding to the
+            // native hide event, otherwise the desktop pill blinks mid-morph.
             bool closeNow = dk.durationMs > 0 ? (int)(now - g_deskT0) >= dk.durationMs
-                                              : g_hidePending || (int)(now - g_deskT0) >= 3000;
-            if (closeNow) StartClose();
+                                              : ((g_hidePending && now - g_deskT0 >= 750) ||
+                                                 (int)(now - g_deskT0) >= 3000);
+            if (closeNow && !g_profileMorph && !g_contentAnimating)
+                StartClose();
         }
     } else if (st == S_CLOSING) {
         g_ga = 1;
@@ -1439,6 +1842,27 @@ static void Tick() {
     Step(sp_p, dt, g_k, g_c);
     Step(sp_y, dt, g_k, g_c);
     Step(sp_v, dt, g_kv, g_cv);
+    if (g_deskLabelAnimStart) {
+        Step(sp_deskLabel, dt, g_deskLabelK, g_deskLabelC);
+        if (fabsf(sp_deskLabel.x - 1.0f) < 0.015f &&
+            fabsf(sp_deskLabel.v) < 0.08f) {
+            g_deskLabelAnimStart = 0;
+            g_previousDeskName[0] = 0;
+        }
+    }
+    if (g_contentAnimating) {
+        Step(sp_content, dt, g_contentK, g_contentC);
+        if (fabsf(sp_content.x - 1.0f) < 0.012f && fabsf(sp_content.v) < 0.07f) {
+            g_contentAnimating = false;
+            if (g_deferredDeskLabel && g_kind == 2 && g_previousDeskName[0]) {
+                g_deskLabelAnimStart = now;
+                sp_deskLabel.x = 0.0f;
+                sp_deskLabel.v = 1.2f;
+                sp_deskLabel.t = 1.0f;
+            }
+            g_deferredDeskLabel = false;
+        }
+    }
     // Les événements audio Windows n'arrivent pas nécessairement à intervalles
     // réguliers. Ne JAMAIS relâcher le ressort entre deux événements tant que
     // la touche volume est physiquement maintenue.
@@ -1472,6 +1896,19 @@ static void Tick() {
          g_shapeReturning ? g_shapeReleaseC : g_shapeC);
     Step(sp_c, dt, g_kc, g_cc);
 
+    if (g_profileMorph) {
+        Step(sp_profileMorph, dt, g_profileMorphK, g_profileMorphC);
+        const float f = Clamp(sp_profileMorph.x, 0.0f, 1.0f);
+        g_baseY = (LONG)lroundf(Lerp(g_morphFromY, g_morphToY, f));
+        if (fabsf(sp_profileMorph.x - 1.0f) < 0.005f &&
+            fabsf(sp_profileMorph.v) < 0.035f) {
+            g_profileMorph = false;
+            g_baseY = (LONG)lroundf(g_morphToY);
+            // Do not wipe an ongoing value bump or compact-mode animation.
+            // Fresh inputs during a morph may have updated these springs.
+            if (g_kind == 2) sp_c.x = sp_c.v = sp_c.t = 0;
+        }
+    }
     g_p = Clamp(sp_p.x, 0, 1.12f);
     g_yOff = sp_y.x;
     g_curV = sp_v.x;
@@ -1501,18 +1938,81 @@ static LRESULT CALLBACK UiProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
         const bool volumeKeyHeld = keyHint == 1 ||
             (((GetAsyncKeyState(VK_VOLUME_UP) | GetAsyncKeyState(VK_VOLUME_DOWN) |
                GetAsyncKeyState(VK_VOLUME_MUTE)) & 0x8000) != 0);
-        const bool recentVolume = EventNearShow(g_volTick, now, 110);
-        const bool recentBrightness = EventNearShow(g_briTick, now, 110);
-        // Do not interpret an old registry tick as another desktop switch.
-        // Keep the current desktop ID untouched if the volume key is held.
-        const bool desktopSwitch = !volumeKeyHeld && !recentVolume &&
-            !recentBrightness && DesktopIdChanged();
+        const bool recentVolume = RecentValueEvent(g_volTick, now);
+        const bool recentBrightness = RecentValueEvent(g_briTick, now);
+        // Observe the current GUID even if a recent (possibly older) audio
+        // event is still in the classification window. The registry signal
+        // may arrive after this ShowWindow notification.
+        const bool observedDesktopSwitch = DesktopIdChanged();
+        // A real change of desktop GUID is authoritative, even immediately
+        // after a volume press or while its key is still being released.
+        // A subsequent REAL volume callback can still replace the desktop.
+        const bool desktopSwitch = observedDesktopSwitch;
+        if (desktopSwitch) g_deskTick = now;
         const bool carryDesktop = st == S_PENDING && g_pendingDesktopChange &&
             (now - g_showTick) < 400 && !volumeKeyHeld &&
             !recentVolume && !recentBrightness;
 
+        if (desktopSwitch && (st == S_OPEN || st == S_CLOSING)) {
+            MorphToDesktop(now);
+            return 0;
+        }
+        // Ignore a repeated native ShowWindow from the same desktop switch;
+        // it must not reclassify the active desktop pill as volume/brightness.
+        if (st == S_OPEN && g_kind == 2 &&
+            (LONG)(g_desktopPriorityUntil - now) > 0 &&
+            !volumeKeyHeld &&
+            !(recentBrightness && (LONG)(g_briTick - g_deskTick) > 0) &&
+            !(recentVolume && (LONG)(g_volTick - g_deskTick) > 0)) {
+            g_deskT0 = now;
+            return 0;
+        }
+
+        // Volume keys provide an immediate, unambiguous transition from the
+        // desktop pill even before the asynchronous audio callback arrives.
+        if ((st == S_OPEN || st == S_CLOSING) && g_kind == 2 &&
+            volumeKeyHeld && !desktopSwitch) {
+            MorphToKind(0, now, g_vol, g_mute != 0);
+            return 0;
+        }
+
+        // A confirmed new value while the desktop pill is visible transforms
+        // directly; a cached event from before the switch is not sufficient.
+        if ((st == S_OPEN || st == S_CLOSING) && g_kind == 2 &&
+            !desktopSwitch && !volumeKeyHeld) {
+            const bool newVol = recentVolume &&
+                (LONG)(g_volTick - g_deskTick) > 0;
+            const bool newBri = recentBrightness &&
+                (LONG)(g_briTick - g_deskTick) > 0;
+            if (newVol || newBri) {
+                const int target = newBri && (!newVol || (LONG)(g_briTick - g_volTick) > 0) ? 1 : 0;
+                MorphToKind(target, now, target == 0 ? g_vol : g_bri, g_mute != 0);
+                return 0;
+            }
+        }
+
+        // A fresh value event can replace ANY visible kind immediately,
+        // including after several consecutive desktop switches. Older
+        // callbacks cannot override the latest desktop change.
+        if ((st == S_OPEN || st == S_CLOSING) && !desktopSwitch) {
+            const bool newVol = recentVolume &&
+                (g_kind != 2 || (LONG)(g_volTick - g_deskTick) > 0);
+            const bool newBri = recentBrightness &&
+                (g_kind != 2 || (LONG)(g_briTick - g_deskTick) > 0);
+            if (volumeKeyHeld || newVol || newBri) {
+                const int target = volumeKeyHeld ? 0 :
+                    (newBri && (!newVol || (LONG)(g_briTick - g_volTick) > 0) ? 1 : 0);
+                if (target != g_kind) {
+                    MorphToKind(target, now, target == 0 ? g_vol : g_bri, g_mute != 0);
+                    return 0;
+                }
+            }
+        }
+
         // If ShowWindow is signaled repeatedly for the same native cycle,
         // do not postpone classification indefinitely.
+        if (st == S_PENDING && g_pendingDesktopChange && !volumeKeyHeld)
+            return 0;
         if (st == S_PENDING && now - g_showTick < 65 &&
             (g_pendKind == keyHint || (carryDesktop && keyHint == 0)))
             return 0;
@@ -1526,12 +2026,14 @@ static LRESULT CALLBACK UiProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
             return 0;
         }
         if (st == S_OPEN && g_kind == 2 && (keyHint == 2 || desktopSwitch) &&
-            !volumeKeyHeld && !recentVolume && !recentBrightness) {
-            BeginShow(); // next virtual desktop, same visual profile
+            !volumeKeyHeld) {
+            MorphToDesktop(now); // update the label without replaying the opening
             return 0;
         }
-        if (st == S_OPEN && g_kind == 2 && keyHint == 0 &&
-            !volumeKeyHeld && !recentVolume && !recentBrightness && !desktopSwitch) {
+        if ((st == S_OPEN || st == S_CLOSING) && g_kind == 2 && keyHint == 0 &&
+            !volumeKeyHeld && !desktopSwitch &&
+            !(recentVolume && (LONG)(g_volTick - g_deskTick) > 0) &&
+            !(recentBrightness && (LONG)(g_briTick - g_deskTick) > 0)) {
             // Repeated ShowWindow for an unchanged desktop must not suddenly
             // replace the desktop pill by an unrelated volume pill.
             g_deskT0 = now;
@@ -1563,8 +2065,26 @@ static LRESULT CALLBACK UiProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
             return 0;
         }
 
-        // This also handles a new volume/brightness OSD while the virtual
-        // desktop pill is open or an older pill is closing.
+        // Never demote an already-visible pill to S_PENDING. A native
+        // ShowWindow often arrives BEFORE its corresponding brightness/value
+        // callback. MSG_VALUES/MSG_DESKTOP will morph once the kind is known;
+        // meanwhile preserve the exact current outline and both springs.
+        if (st == S_OPEN || st == S_CLOSING) {
+            g_nativeHideDeadline = 0;
+            if (g_kind == 1) g_brightnessHideDeadline = 0;
+            if (st == S_CLOSING) {
+                st = S_OPEN;
+                stStart = now - (DWORD)a_hold;
+                g_unfolded = true;
+                g_phase2 = false;
+                sp_p.t = 1;
+                sp_y.t = 0;
+            }
+            return 0;
+        }
+
+        // For an initially hidden pill only, wait for enough evidence to
+        // classify the native OSD before performing BeginShow.
         g_brightnessHideDeadline = 0;
         g_pendingDesktopChange = desktopSwitch || carryDesktop;
         g_pendKind = carryDesktop && keyHint == 0 ? 2 : keyHint;
@@ -1583,7 +2103,11 @@ static LRESULT CALLBACK UiProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
             g_pendingHide = true;
         } else if (st == S_OPEN) {
             if (g_kind == 2) g_hidePending = true;
-            else if (g_kind == 1) {
+            else if (g_profileMorph || g_contentAnimating) {
+                // Windows may hide the OLD native host mid-transition. The
+                // visible custom pill must finish morphing instead of blinking.
+                g_nativeHideDeadline = GetTickCount() + 900;
+            } else if (g_kind == 1) {
                 // A short grace period avoids a close/open flicker between
                 // consecutive brightness-key repeats at the hardware limit.
                 // A new MSG_SHOW clears the deadline without restarting.
@@ -1591,25 +2115,28 @@ static LRESULT CALLBACK UiProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
             } else StartClose();
         }
         return 0;
-    case MSG_DESKTOP:
-        // A desktop event is valid only if the GUID has really changed.
-        // This may arrive before or after the native XAML ShowWindow event.
-        if (DesktopIdChanged()) {
+    case MSG_DESKTOP: {
+        // The registry watcher only posts for a changed GUID, but MSG_SHOW
+        // may have observed that same GUID first. Do not discard the real
+        // watcher event just because the UI has already cached the new GUID.
+        const DWORD signalTick = g_deskTick;
+        const bool freshSignal = signalTick != 0 &&
+            signalTick != g_lastHandledDesktopTick;
+        const bool changedHere = DesktopIdChanged();
+        if (freshSignal) g_lastHandledDesktopTick = signalTick;
+        if (changedHere || freshSignal) {
             DWORD now = GetTickCount();
-            const bool volumeHeld =
-                ((GetAsyncKeyState(VK_VOLUME_UP) | GetAsyncKeyState(VK_VOLUME_DOWN) |
-                  GetAsyncKeyState(VK_VOLUME_MUTE)) & 0x8000) != 0;
-            // If another control was just used, its live notification wins.
-            if (volumeHeld || EventNearShow(g_volTick, now, 180) ||
-                EventNearShow(g_briTick, now, 180))
-                return 0;
+            // The changed desktop GUID is stronger evidence than a previous
+            // audio press. Never drop a real desktop notification just because
+            // a volume key was still held as the switch was performed.
             g_pendingDesktopChange = true;
             g_pendKind = 2;
             g_showTick = now;
             g_pendingHide = false;
             g_nativeHideDeadline = 0;
-            if (st == S_OPEN && g_kind == 2) {
-                BeginShow();
+            g_desktopPriorityUntil = now + 600;
+            if (st == S_OPEN || st == S_CLOSING) {
+                MorphToDesktop(now);
             } else {
                 st = S_PENDING;
                 stStart = now;
@@ -1617,12 +2144,19 @@ static LRESULT CALLBACK UiProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
             }
         }
         return 0;
+    }
     case MSG_VALUES: {
         const int kind = (int)w;
         if (kind != 0 && kind != 1) return 0;
         const int v = (int)(l & 0xFF);
         const bool mute = (l & 0x100) != 0;
         const DWORD now = GetTickCount();
+        const DWORD valueEventTick = kind == 0 ? g_volTick : g_briTick;
+        // A callback queued before the latest confirmed desktop change can
+        // arrive afterwards. It must not replace the desktop indicator.
+        if (g_deskTick && (LONG)(g_desktopPriorityUntil - now) > 0 &&
+            valueEventTick && (LONG)(valueEventTick - g_deskTick) <= 0)
+            return 0;
         // Brightness polling can report the new value after the native host
         // appeared. Allow that genuine notification to teach the signature.
         // Do not learn from a desktop-only notification or an old HWND.
@@ -1646,12 +2180,9 @@ static LRESULT CALLBACK UiProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
         if (st == S_OPEN || st == S_CLOSING) {
             g_nativeHideDeadline = 0;
             if (kind != g_kind) {
-                // A change of indicator type replaces the old pill. Keep
-                // this behavior for volume/brightness/desktop transitions.
-                g_kind = kind;
-                g_pendingDesktopChange = false;
-                g_pendKind = kind == 0 ? 1 : 0;
-                BeginShow();
+                // All kinds share the same continuous morph. Never replay the
+                // opening when volume and brightness replace one another.
+                MorphToKind(kind, now, v, mute);
             } else {
                 // Same kind while closing: reverse the closing spring in
                 // place, rather than resetting the opening animation.
@@ -1666,6 +2197,11 @@ static LRESULT CALLBACK UiProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
                 if (kind == 1) g_brightnessHideDeadline = 0;
             }
             if ((float)v != sp_v.t && g_unfolded) {
+                // Same-category adjustments must NOT trigger the icon/number
+                // replacement transition. The existing value spring (sp_v)
+                // continues to move the colored bar toward the new level.
+                // Cross-category changes are handled exclusively by
+                // MorphToKind(), preserving the fluid spring morph.
                 Bump(v > sp_v.t ? 1 : -1, g.valueShakePct / 100.0f);
                 if (g.compactEnabled) {
                     bool sameSequence = g.compactReleaseMs <= 0 ||
@@ -1684,8 +2220,15 @@ static LRESULT CALLBACK UiProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
         }
         return 0;
     }
+    case WM_SETTINGCHANGE:
+    case WM_THEMECHANGED:
+    case WM_DWMCOLORIZATIONCOLORCHANGED:
+        RefreshAccentColor();
+        if (st != S_HIDDEN) Render();
+        break;
     case MSG_RELOAD:
         LoadSettings();
+        RefreshAccentColor();
         UseProfile(g_kind == 2);
         EnsureCanvas();
         if (g_pollWakeEvent) SetEvent(g_pollWakeEvent);
@@ -1715,6 +2258,7 @@ static DWORD WINAPI UiThread(LPVOID) {
     g_scrDC = GetDC(nullptr);
     g_dc = CreateCompatibleDC(g_scrDC);
     g_maskDC = CreateCompatibleDC(g_scrDC);
+    g_oldContentDC = CreateCompatibleDC(g_scrDC);
     g_s = 1.0f;  // refreshed from the primary monitor in BeginShow
     UseProfile(false);
     EnsureCanvas();
@@ -1731,6 +2275,7 @@ static DWORD WINAPI UiThread(LPVOID) {
         FreeCanvas();
         if (g_dc) DeleteDC(g_dc);
         if (g_maskDC) DeleteDC(g_maskDC);
+        if (g_oldContentDC) DeleteDC(g_oldContentDC);
         if (g_scrDC) ReleaseDC(nullptr, g_scrDC);
         UnregisterClassW(wc.lpszClassName, hi);
         return 1;
@@ -1758,11 +2303,13 @@ static DWORD WINAPI UiThread(LPVOID) {
     if (hwnd) DestroyWindow(hwnd);
     FreeCanvas();
     if (g_maskDC) SelectObject(g_maskDC, GetStockObject(SYSTEM_FONT));
+    if (g_oldContentDC) SelectObject(g_oldContentDC, GetStockObject(SYSTEM_FONT));
     if (g_fIcon) DeleteObject(g_fIcon);
     if (g_fText) DeleteObject(g_fText);
     g_fIcon = g_fText = nullptr;
     if (g_dc) DeleteDC(g_dc);
     if (g_maskDC) DeleteDC(g_maskDC);
+    if (g_oldContentDC) DeleteDC(g_oldContentDC);
     if (g_scrDC) ReleaseDC(nullptr, g_scrDC);
     UnregisterClassW(wc.lpszClassName, hi);
     return 0;
@@ -1878,6 +2425,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hwnd, int cmd) {
 
 // ---------------------------------------------------------------- init
 static void LoadSettings() {
+    g.useWindowsAccent = Wh_GetIntSetting(L"useWindowsAccent");
     g.startDelayMs  = Wh_GetIntSetting(L"startDelayMs");
     g.decideMs      = Wh_GetIntSetting(L"decideMs");
     g.holdMs        = Wh_GetIntSetting(L"holdMs");
@@ -1952,6 +2500,7 @@ static void LoadSettings() {
 
 BOOL Wh_ModInit() {
     LoadSettings();
+    RefreshAccentColor();
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_pollWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_stopEvent || !g_pollWakeEvent) {
