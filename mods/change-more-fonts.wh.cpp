@@ -332,8 +332,7 @@ void PublishRuntime(std::shared_ptr<const Runtime> runtime) noexcept {
 // ---------------------------------------------------------------------------
 
 std::wstring ReadStringSetting(PCWSTR name) {
-    auto value = WindhawkUtils::StringSetting::make(name);
-    return value.get() ? value.get() : L"";
+    return WindhawkUtils::StringSetting::make(name).get();
 }
 
 std::wstring Trim(std::wstring value) {
