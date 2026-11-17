@@ -19,7 +19,7 @@ Before:
 ![Before](https://raw.githubusercontent.com/vt-idiot/windhawk-mods/refs/heads/reeeeeeeee/before.png)
 
 After:
-![After](https://raw.githubusercontent.com/vt-idiot/windhawk-mods/refs/heads/reeeeeeeee/before.png)
+![After](https://raw.githubusercontent.com/vt-idiot/windhawk-mods/refs/heads/reeeeeeeee/after.png)
 
 - **Hide Help button**: Explorer's ribbon ships pre-compiled inside
   `SystemResources\ExplorerFrame.dll.mun` (resource `UIFILE/EXPLORER_RIBBON`).
