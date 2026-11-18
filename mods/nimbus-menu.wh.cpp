@@ -6,6 +6,7 @@
 // @version         1.1.0
 // @author          igoredm
 // @github          https://github.com/igoredm
+// @homepage        https://github.com/igoredm/nimbus-menu
 // @include         windhawk.exe
 // @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32 -luuid -lgdi32 -ld2d1 -ldwrite -lwindowscodecs -ldwmapi -lshell32 -lshlwapi -lshcore -lpropsys -ladvapi32
@@ -30,6 +31,8 @@ Replaces the Windows taskbar with a light dock, one per monitor, with its own St
 * The dock runs in its own Windhawk process and hides when a game or video is in full screen. Explorer only gets one small hook, for the Windows key.
 * The text is in English, or in Portuguese when Windows is in Portuguese.
 
+**Help and suggestions:** [github.com/igoredm/nimbus-menu](https://github.com/igoredm/nimbus-menu) (ask for help, report a bug or suggest an idea).
+
 **What it changes in Windows.** With "Hide the Windows taskbar" on (the default), the whole Windows taskbar is hidden, so its tray, clock and quick settings are gone too: use another mod or app for those if you need them. To stop the hidden taskbar from reserving screen space, the mod turns on the taskbar's own "Automatically hide the taskbar" option, which Windows saves in your profile. The mod remembers your original choice and puts it back when it's turned off, also after a crash or a shutdown with the mod on. If the Windows taskbar ever stays hidden, turn the mod off or restart Explorer.
 
 ---
@@ -46,6 +49,8 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
 * Ajustes por monitor: formato, esconder sozinha, o que aparece, só as janelas daquele monitor.
 * A dock roda num processo próprio do Windhawk e some quando um jogo ou vídeo está em tela cheia. No Explorador entra só um gancho pequeno, o da tecla Windows.
 * Os textos ficam em inglês, ou em português quando o Windows está em português.
+
+**Ajuda e sugestões:** [github.com/igoredm/nimbus-menu](https://github.com/igoredm/nimbus-menu) (peça ajuda, avise de um bug ou mande uma ideia).
 
 **O que muda no Windows.** Com "Esconder a barra do Windows" ligado (o padrão), a barra do Windows some inteira, então a bandeja, o relógio e as configurações rápidas somem junto: use outro mod ou app pra isso se precisar. Pra barra escondida não reservar espaço na tela, o mod liga a opção "Ocultar automaticamente a barra de tarefas" do próprio Windows, que fica salva no seu perfil. O mod guarda a sua escolha original e devolve quando é desligado, até depois de um travamento ou de desligar o PC com o mod ligado. Se a barra do Windows ficar escondida, desligue o mod ou reinicie o Explorador.
 */
