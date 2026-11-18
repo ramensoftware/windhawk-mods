@@ -478,7 +478,7 @@
         "ratingUsers": 100,
         "reviews": 1,
         "trendingSorting": 4.236343517943275,
-        "updated": 1789501993000,
+        "updated": 1794984579000,
         "users": 2992
       },
       "metadata": {
@@ -492,7 +492,7 @@
         ],
         "name": "AltDrag",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.1"
+        "version": "1.2"
       }
     },
     "alt-tab-delayer": {
@@ -9273,7 +9273,7 @@
         "rating": 10,
         "ratingBreakdown": [2, 0, 4, 12, 114],
         "ratingUsers": 132,
-        "reviews": 3,
+        "reviews": 4,
         "trendingSorting": 12.197303050972405,
         "updated": 1793937623000,
         "users": 2179

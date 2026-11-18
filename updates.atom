@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-18T05:14:34.000Z</updated>
+    <updated>2026-11-18T06:49:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[AltDrag 1.2]]></title>
+        <id>https://windhawk.net/mods/alt-drag#624914d4ab53e3effc884f667821807179a8c8f5</id>
+        <link href="https://windhawk.net/mods/alt-drag"/>
+        <updated>2026-11-18T06:49:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Resizing the window from its center now sizes it in all directions at once, keeping its center in place. This new functionality is optional and can be disabled in the mod settings.</li>
+<li>Fixed the cursor not updating or updating incorrectly after the drag in some cases.</li>
+<li>Fixed compatibility with some programs. One notable example is Notepad.</li>
+<li>Other minor fixes and improvements.</li>
+</ul>
+<p>The first two items and some of the fixes were contributed by <a href="https://github.com/Louis047">Lone</a>.</p>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.6.1]]></title>
         <id>https://windhawk.net/mods/taskbar-labels#f16bd5f3b6a39f11e72878aa0efdbc804c0ffb23</id>
@@ -640,22 +658,6 @@ page</a>.</p>
         <content type="html"><![CDATA[<ul>
 <li>Updated most themes to be compatible with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
 <li>Updated the click-through taskbar to be compatible with these newer Windows 11 versions.</li>
-</ul>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.12]]></title>
-        <id>https://windhawk.net/mods/taskbar-wheel-cycle#444cb2ac1db312f9faf342207181010c2d1f2f31</id>
-        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
-        <updated>2026-11-17T09:02:16.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Keyboard shortcuts can use human-friendly key names, such as <code>Alt+[</code>, <code>Ctrl+F1</code> or <code>Win+Left</code>. The <code>VK_</code> key names are still supported.</li>
-<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame: scrolling over the system tray no longer cycles between taskbar buttons.</li>
-<li>Fixed the &quot;Customize the old taskbar on Windows 11&quot; option on Windows 11 24H2 builds before 26100.1301, which still include the old taskbar.</li>
 </ul>
 ]]></content>
         <author>
