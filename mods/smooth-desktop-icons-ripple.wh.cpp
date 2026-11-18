@@ -104,11 +104,11 @@ current label opacity, so hidden labels don't leave dark text behind.
 #include <math.h>
 #include <windhawk_utils.h>
 
-static constexpr UINT_PTR kTimerAutoHide = 0x53444901;
-static constexpr UINT_PTR kTimerAnimation = 0x53444902;
+static constexpr UINT_PTR kTimerAutoHide = 0x53445201;
+static constexpr UINT_PTR kTimerAnimation = 0x53445202;
 // Runs only while a desktop context menu is open, to notice the menu closing
 // when WM_EXITMENULOOP doesn't reach the desktop view.
-static constexpr UINT_PTR kTimerMenuCheck = 0x53444903;
+static constexpr UINT_PTR kTimerMenuCheck = 0x53445203;
 static constexpr UINT kMenuCheckMs = 150;
 // Ignore "menu not visible yet" for this long after the menu was requested;
 // building a shell context menu can take a moment.
@@ -140,6 +140,7 @@ static constexpr int kMaxRippleItems = 1024;
 struct RippleItem {
     RECT bounds;
     float delayMs;
+    float startU;  // progress already covered (when reversing a ripple)
     int lastKey;  // alpha | scale bucket last painted; -1 = unknown
 };
 
@@ -419,12 +420,8 @@ static void LoadSettings() {
     if (g_settings.animationDuration > 1000)
         g_settings.animationDuration = 1000;
 
-    {
-        PCWSTR effect = Wh_GetStringSetting(L"effect");
-        g_settings.ripple = !effect || wcscmp(effect, L"fade") != 0;
-        if (effect)
-            Wh_FreeStringSetting(effect);
-    }
+    g_settings.ripple =
+        wcscmp(WindhawkUtils::StringSetting::make(L"effect"), L"fade") != 0;
 
     g_settings.rippleSpread = Wh_GetIntSetting(L"rippleSpread");
     if (g_settings.rippleSpread < 0)
@@ -776,7 +773,9 @@ static bool DrawImageListScaled(const IMAGELISTDRAWPARAMS* p, int cx, int cy,
         return false;
     GdiFlush();
 
-    // Mask-only (non-alpha) images leave alpha at 0: make drawn pixels opaque.
+    // Mask-only (non-alpha) images leave alpha at 0. Draw them again over
+    // white: pixels that match the black-background pass belong to the image
+    // (including opaque black ones), the rest is transparent background.
     bool anyAlpha = false;
     for (int row = 0; row < cy && !anyAlpha; ++row) {
         const DWORD* line = g_iconBuf.bits + row * g_iconBuf.w;
@@ -784,12 +783,33 @@ static bool DrawImageListScaled(const IMAGELISTDRAWPARAMS* p, int cx, int cy,
             if (line[col] & 0xFF000000) { anyAlpha = true; break; }
     }
     if (!anyAlpha) {
+        DWORD* overBlack = static_cast<DWORD*>(
+            HeapAlloc(GetProcessHeap(), 0, cx * cy * sizeof(DWORD)));
+        if (!overBlack)
+            return false;
+        for (int row = 0; row < cy; ++row)
+            CopyMemory(overBlack + row * cx, g_iconBuf.bits + row * g_iconBuf.w,
+                       cx * sizeof(DWORD));
         for (int row = 0; row < cy; ++row) {
             DWORD* line = g_iconBuf.bits + row * g_iconBuf.w;
             for (int col = 0; col < cx; ++col)
-                if (line[col] & 0x00FFFFFF)
-                    line[col] |= 0xFF000000;
+                line[col] = 0x00FFFFFF;
         }
+        ++tl_drawDepth;
+        const BOOL ok2 = g_ImageList_DrawIndirect(&params);
+        --tl_drawDepth;
+        GdiFlush();
+        for (int row = 0; ok2 && row < cy; ++row) {
+            DWORD* line = g_iconBuf.bits + row * g_iconBuf.w;
+            const DWORD* black = overBlack + row * cx;
+            for (int col = 0; col < cx; ++col) {
+                const DWORD c = black[col] & 0x00FFFFFF;
+                line[col] = (c == (line[col] & 0x00FFFFFF)) ? (c | 0xFF000000) : 0;
+            }
+        }
+        HeapFree(GetProcessHeap(), 0, overBlack);
+        if (!ok2)
+            return false;
     }
 
     const DWORD baseAlpha = (p->fState & ILS_ALPHA) ? p->Frame : 255;
@@ -1151,7 +1171,7 @@ static void SetAlpha(
 static int RippleItemValue(const DesktopState* state, const RippleItem& item,
                            float elapsedMs, float* scaleOut) {
     const float per = state->ripplePerItemMs > 1.0f ? state->ripplePerItemMs : 1.0f;
-    const float u = Clamp01((elapsedMs - item.delayMs) / per);
+    const float u = Clamp01(item.startU + (elapsedMs - item.delayMs) / per);
     const float minS = g_settings.minScale / 100.0f;
     float vis, scale;
     if (state->rippleShowing) {
@@ -1218,7 +1238,11 @@ static bool IsScratchDC(HDC hdc) {
     return bm.bmWidth < cw / 2 || bm.bmHeight < ch / 2;
 }
 
-static void SetupRipple(DesktopState* state, bool showing) {
+// prevElapsedMs >= 0: a ripple is being interrupted after that many ms; each
+// item continues from where it is instead of restarting.
+static void SetupRipple(DesktopState* state, bool showing, float prevElapsedMs) {
+    const bool continuing = state->ripple && prevElapsedMs >= 0.0f;
+    const int prevCount = state->rippleCount;
     state->ripple = false;
     state->rippleCount = 0;
     if (!g_settings.ripple || !state->list)
@@ -1239,6 +1263,8 @@ static void SetupRipple(DesktopState* state, bool showing) {
     if (origin.y > client.bottom) origin.y = client.bottom;
 
     float dists[kMaxRippleItems];
+    float prevU[kMaxRippleItems];  // progress in the old direction, -1 = none
+    int prevKey[kMaxRippleItems];
     float maxDist = 1.0f;
     int n = 0;
     for (int i = 0; i < count && n < kMaxRippleItems; ++i) {
@@ -1254,6 +1280,18 @@ static void SetupRipple(DesktopState* state, bool showing) {
         const float dy = (icon.top + icon.bottom) / 2.0f - origin.y;
         // Small margin so labels/overlays drawn slightly outside still match.
         InflateRect(&bounds, 2, 2);
+        prevU[n] = -1.0f;
+        if (continuing && n < prevCount) {
+            const RippleItem& old = state->rippleItems[n];
+            if (EqualRect(&old.bounds, &bounds)) {
+                const float per = state->ripplePerItemMs > 1.0f
+                                      ? state->ripplePerItemMs
+                                      : 1.0f;
+                prevU[n] = Clamp01(old.startU +
+                                   (prevElapsedMs - old.delayMs) / per);
+                prevKey[n] = old.lastKey;
+            }
+        }
         state->rippleItems[n].bounds = bounds;
         dists[n] = sqrtf(dx * dx + dy * dy);
         if (dists[n] > maxDist)
@@ -1263,17 +1301,27 @@ static void SetupRipple(DesktopState* state, bool showing) {
     if (n == 0)
         return;
 
-    for (int i = 0; i < n; ++i)
-        state->rippleItems[i].delayMs = g_settings.rippleSpread * (dists[i] / maxDist);
+    for (int i = 0; i < n; ++i) {
+        RippleItem& item = state->rippleItems[i];
+        const float delay = g_settings.rippleSpread * (dists[i] / maxDist);
+        if (prevU[i] >= 0.0f) {
+            // Reversing: EaseOutBack(t) == 1 - EaseInBack(1 - t), so 1 - u
+            // keeps the item's scale continuous. Items the old wave never
+            // reached are already done; partly animated ones wait less.
+            item.startU = 1.0f - prevU[i];
+            item.delayMs = delay * (1.0f - item.startU);
+            item.lastKey = prevKey[i];
+        } else {
+            item.startU = 0.0f;
+            item.delayMs = delay;
+            // Hiding starts from fully drawn icons, showing from nothing.
+            item.lastKey = showing ? 0 : (255 | (200 << 8));
+        }
+    }
 
     state->rippleCount = n;
     state->rippleShowing = showing;
     state->ripplePerItemMs = static_cast<float>(g_settings.animationDuration);
-    for (int i = 0; i < n; ++i) {
-        // Hiding starts from fully drawn icons, showing from nothing.
-        state->rippleItems[i].lastKey =
-            showing ? 0 : (255 | (200 << 8));
-    }
     state->ripple = true;
 }
 
@@ -1419,9 +1467,14 @@ static void AnimateTo(
                           ? targetAlpha - state->alpha
                           : state->alpha - targetAlpha;
 
+    const LONGLONG now = QpcNow();
+    const float prevElapsedMs =
+        state->ripple ? static_cast<float>(QpcToMs(now - state->animStart))
+                      : -1.0f;
+
     state->animFrom = state->alpha;
     state->animTo = targetAlpha;
-    state->animStart = QpcNow();
+    state->animStart = now;
     // An interrupted fade only covers part of the range; scale its duration
     // so the perceived speed stays constant.
     state->animDurationMs =
@@ -1430,7 +1483,7 @@ static void AnimateTo(
     if (state->animDurationMs < 40.0f)
         state->animDurationMs = 40.0f;
 
-    SetupRipple(state, targetAlpha > state->alpha);
+    SetupRipple(state, targetAlpha > state->alpha, prevElapsedMs);
     if (state->ripple) {
         state->animDurationMs = static_cast<float>(
             g_settings.animationDuration + g_settings.rippleSpread);
@@ -2204,8 +2257,16 @@ LRESULT CALLBACK DesktopShellSubclassProc(
         (uMsg == g_msgRefresh && wParam == 0)
             ? GetOrCreateState(hWnd)
             : FindStateByShell(hWnd);
-    if (!state)
+    if (!state) {
+        if (uMsg == g_msgUninit) {
+            // Subclassed, but the initial refresh hasn't created a state yet
+            // (or all state slots were taken): just remove the subclass.
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                hWnd, DesktopShellSubclassProc);
+            return 1;
+        }
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
 
     if (uMsg == g_msgRefresh && wParam == 1) {
         // Settings changed: keep the current visual state, only restart the
@@ -2630,6 +2691,21 @@ static void Cleanup() {
     }
 
     g_stateCount = 0;
+
+    // Also reach desktop views that were subclassed but never got a state.
+    // Views without our subclass ignore the message.
+    EnumWindows(
+        [](HWND hWnd, LPARAM) -> BOOL {
+            for (HWND shell = FindWindowExW(hWnd, nullptr, L"SHELLDLL_DefView",
+                                            nullptr);
+                 shell; shell = FindWindowExW(hWnd, shell,
+                                              L"SHELLDLL_DefView", nullptr)) {
+                if (IsDesktopShellView(shell) && IsExpectedDesktopShell(shell))
+                    SendMessageW(shell, g_msgUninit, 0, 0);
+            }
+            return TRUE;
+        },
+        0);
 }
 
 static HWND FindExistingDesktopList() {
@@ -2660,27 +2736,27 @@ BOOL Wh_ModInit() {
 
     g_msgRefresh =
         RegisterWindowMessageW(
-            L"Windhawk.SmoothDesktop.Refresh");
+            L"Windhawk_SmoothDesktop_Refresh_" WH_MOD_ID);
 
     g_msgShow =
         RegisterWindowMessageW(
-            L"Windhawk.SmoothDesktop.Show");
+            L"Windhawk_SmoothDesktop_Show_" WH_MOD_ID);
 
     g_msgHide =
         RegisterWindowMessageW(
-            L"Windhawk.SmoothDesktop.Hide");
+            L"Windhawk_SmoothDesktop_Hide_" WH_MOD_ID);
 
     g_msgUninit =
         RegisterWindowMessageW(
-            L"Windhawk.SmoothDesktop.Uninit");
+            L"Windhawk_SmoothDesktop_Uninit_" WH_MOD_ID);
 
     g_msgDragEnter =
         RegisterWindowMessageW(
-            L"Windhawk.SmoothDesktop.DragEnter");
+            L"Windhawk_SmoothDesktop_DragEnter_" WH_MOD_ID);
 
     g_msgDragLeave =
         RegisterWindowMessageW(
-            L"Windhawk.SmoothDesktop.DragLeave");
+            L"Windhawk_SmoothDesktop_DragLeave_" WH_MOD_ID);
 
     if (!g_msgRefresh ||
         !g_msgShow ||
