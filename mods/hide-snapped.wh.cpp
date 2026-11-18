@@ -2,7 +2,7 @@
 // @id              hide-snapped
 // @name            Snap Groups: Alt+Tab and taskbar
 // @description     Group-only Alt+Tab and separate taskbar buttons with tiled member icons.
-// @version         0.4.22
+// @version         0.4.23
 // @author          coldfeudal
 // @github          https://github.com/coldfeudal
 // @include         explorer.exe
@@ -61,6 +61,8 @@ still need testing.
 
 - **Independent taskbar per monitor 1.7.0:** the 0.4.19 runtime retest on
   the configuration above produced no empty buttons or Explorer crashes.
+  Version 0.4.23 routes group buttons to their members' monitor and refreshes
+  placement when it changes; multi-monitor runtime verification is pending.
   Earlier versions exhibited both problems. Longer sessions and other
   configurations still need testing.
 - **Alt+Tab per monitor 1.2.1:** Alt+Tab continued to open during the
@@ -903,6 +905,15 @@ std::mutex g_hiddenMembersMutex;
 std::set<WindowIdentity> g_hiddenMembers;
 std::map<WindowIdentity, HWND> g_groupButtons;
 std::set<WindowIdentity> g_proxyWindows;
+// Worker-published immutable routing. Monitor queries can occur while shell
+// code holds our membership mutex, so this hook must not acquire that mutex.
+using ProxyMonitors = std::map<WindowIdentity, HMONITOR>;
+struct ProxyMonitorCache {
+    std::shared_ptr<const ProxyMonitors> value;
+    auto load() { return std::atomic_load(&value); }
+    void store(std::shared_ptr<const ProxyMonitors> next) { std::atomic_store(&value, std::move(next)); }
+} g_proxyMonitors;
+decltype(&MonitorFromWindow) g_monitorFromWindow = nullptr;
 std::map<WindowIdentity, ComPtr<IUnknown>> g_proxyGroups;
 WindowIdentity g_lastAppForeground;
 std::atomic<bool> g_taskbarFilterReady = false;
@@ -919,6 +930,7 @@ thread_local const PresentationRefresh* g_presentationRefresh = nullptr;
 bool SuppressTaskbarCreation(void* self, void* group, void* item);
 void* FindTaskListInterface(void* object, void* vtable);
 WindowIdentity IdentifyWindow(HWND window);
+HMONITOR WINAPI MonitorFromWindowHook(HWND window, DWORD flags);
 
 // The worker can change membership while native creation is between its first
 // eligibility test and the synchronous XAML collection notification. Both must
@@ -1471,6 +1483,8 @@ bool HookTaskbarFilter() {
     constexpr size_t kTraceHookCount = 6;
     size_t count = ARRAYSIZE(taskbarHooks) - (g_binaryTraceEnabled ? 0 : kTraceHookCount);
     bool hooked = WindhawkUtils::HookSymbols(module, taskbarHooks, count, &options);
+    if (hooked) hooked = Wh_SetFunctionHook(reinterpret_cast<void*>(MonitorFromWindow),
+        reinterpret_cast<void*>(MonitorFromWindowHook), reinterpret_cast<void**>(&g_monitorFromWindow));
     FreeLibrary(module);
     g_taskbarFilterReady = hooked;
     Wh_Log(L"phase=taskbar inclusion-filter symbols=%d", hooked);
@@ -1483,6 +1497,32 @@ WindowIdentity IdentifyWindow(HWND window) {
 }
 bool StillExists(const WindowIdentity& member) {
     return member.thread && IsWindow(member.window) && IdentifyWindow(member.window) == member;
+}
+// One writer: the taskbar worker owns proxy creation, updates and retirement.
+bool PublishProxyMonitor(const WindowIdentity& proxy, HMONITOR monitor) {
+    auto old = g_proxyMonitors.load();
+    auto found = old ? old->find(proxy) : ProxyMonitors::const_iterator{};
+    if (old && found != old->end() && found->second == monitor) return false;
+    if (!monitor && (!old || found == old->end())) return false;
+    auto next = old ? std::make_shared<ProxyMonitors>(*old) : std::make_shared<ProxyMonitors>();
+    if (monitor) (*next)[proxy] = monitor;
+    else next->erase(proxy);
+    g_proxyMonitors.store(std::move(next));
+    return true;
+}
+HMONITOR WINAPI MonitorFromWindowHook(HWND window, DWORD flags) {
+    HMONITOR result = g_monitorFromWindow(window, flags);
+    DWORD error = GetLastError();
+    auto monitors = g_proxyMonitors.load();
+    if (monitors && flags <= MONITOR_DEFAULTTONEAREST) {
+        auto found = monitors->lower_bound(WindowIdentity{window});
+        MONITORINFO info{sizeof(info)};
+        if (found != monitors->end() && found->first.window == window &&
+                found->first.thread && found->first == IdentifyWindow(window) &&
+                GetMonitorInfoW(found->second, &info)) result = found->second;
+    }
+    SetLastError(error);
+    return result;
 }
 bool TaskbarCandidate(HWND window) {
     if (!IsWindowVisible(window) || GetAncestor(window, GA_ROOT) != window) return false;
@@ -1755,6 +1795,7 @@ struct GroupButton {
     bool registered = false;
     bool registrationLost = false;
     bool registrationPending = false;
+    bool monitorRefreshPending = false;
     HRESULT registrationResult = S_OK;
     bool activating = false;
     bool activationPending = false;
@@ -2126,6 +2167,21 @@ public:
         return !subclassedLists.empty();
     }
     virtual bool MemberExists(const WindowIdentity& member) { return StillExists(member); }
+    virtual HMONITOR GroupMonitor(const GroupButton& button) {
+        for (const auto& member : button.members) {
+            if (!MemberExists(member)) continue;
+            // Windows uses the restore rectangle for minimized windows.
+            HMONITOR monitor = g_monitorFromWindow(member.window, MONITOR_DEFAULTTONULL);
+            if (monitor) return monitor;
+        }
+        return nullptr;
+    }
+    void UpdateProxyMonitor(GroupButton& button) {
+        if (PublishProxyMonitor(IdentifyWindow(button.window), GroupMonitor(button)))
+            button.monitorRefreshPending = true;
+        if (button.registered && button.monitorRefreshPending)
+            button.monitorRefreshPending = FAILED(RefreshMember(button.window));
+    }
     virtual HRESULT NotifyIconChanged(HWND window) {
         return DispatchTaskRefresh(window, kRefreshTaskIcon);
     }
@@ -2195,6 +2251,9 @@ public:
         return button.registrationPending;
     }
     void Update(GroupButton& button) override {
+        // Publish before AddTab/confirmation and before any synchronous shell
+        // refresh. Per-monitor mods query this HWND, not the group members.
+        UpdateProxyMonitor(button);
         bool confirmedNow = false;
         bool previewChanged = false;
         if (button.previewDirty && button.settings.nativePreview && button.nativeGroup) {
@@ -2261,6 +2320,7 @@ public:
             if (SUCCEEDED(hr)) {
                 button.registered = true;
                 button.registrationPending = false;
+                button.monitorRefreshPending = false;
                 confirmedNow = true;
                 Wh_Log(L"phase=taskbar button-confirmed=1");
             }
@@ -2310,6 +2370,7 @@ public:
         return hr;
     }
     void Destroy(GroupButton& button) override {
+        auto proxy = IdentifyWindow(button.window);
         TraceWrite(TraceProxyRetire, TracePointer(button.window), button.registered,
                    button.registrationPending, button.members.size());
         {
@@ -2327,6 +2388,8 @@ public:
           g_proxyWindows.erase(identity);
           g_proxyGroups.erase(identity); }
         if (button.window) DestroyWindow(button.window);
+        // Retain routing through DeleteTab and HWND destruction callbacks.
+        PublishProxyMonitor(proxy, nullptr);
         button.window = nullptr;
         if (button.icon) DestroyIcon(button.icon);
         button.icon = nullptr;
