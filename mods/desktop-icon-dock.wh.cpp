@@ -58,7 +58,8 @@ magnified with its label shown.*
   style; the transparent style has no border to grab.
 - **Position reset actions**: right-click an empty part of the dock, or use
   the "Dock position action" setting, to reset the position to the default
-  (centered, panel bottom 80 px above the taskbar), to center it horizontally,
+  (centered, at the configured default distance from the taskbar), to center
+  it horizontally,
   or to reset only the distance from the taskbar.
 - **Adjustable corners**: the corner roundness of the panel can be set from
   square (0%) to fully rounded (100%).
@@ -149,7 +150,8 @@ desktop icons.
 - **Empty state**: the centered hint pill is drawn with a non-transparent
   background and is registered as part of the same drop target.
 - **Layout**: the default position is horizontally centered with the panel's
-  bottom edge 80 px above the taskbar (at 100% DPI); the panel widens as items
+  bottom edge at the configured default distance from the taskbar (80 px by
+  default at 100% DPI); the panel widens as items
   are added, and icons are vertically centered at rest.
 - **Moving**: the top and bottom edges move the dock vertically, and the left
   and right edges move it horizontally. The bottom distance is measured from
@@ -179,6 +181,7 @@ desktop icons.
 | Neighbor spread (%) | 60 | How much neighboring icons move aside while magnifying |
 | Smoothing speed | 16 | Higher is snappier, lower is softer |
 | Corner radius (%) | 72 | Corner roundness of the panel; 0 = square corners, 100 = fully rounded |
+| Default bottom distance | 80 | Distance from the panel's bottom edge to the taskbar on a fresh install and for the reset actions, in pixels at 100% DPI; a drag overrides it until the next reset |
 | Dock position action | Keep current position | One-shot position action from the settings page: reset the position, center only, or reset the bottom distance only. The same actions are available by right-clicking an empty part of the dock |
 | Background style | Transparent | Transparent, Clear, Frosted, Acrylic, Mica or Liquid Glass |
 | Panel tone | Auto | Light, Dark or Auto (follow the wallpaper) for panel styles |
@@ -188,12 +191,12 @@ desktop icons.
 
 ## Adjusting the position
 
-![Moving the dock vertically](https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/3862103c2470acdec2e3906f658ec0b80592ac54/images/dock-move.gif)
+![Moving the dock vertically](https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/b9402bec82648ee05ea0dc39acee1fef1d41c0fb/images/dock-move.gif)
 
 *Drag the top or bottom edge to move vertically; the dock position is saved
 automatically.*
 
-![Moving the dock horizontally](https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/3862103c2470acdec2e3906f658ec0b80592ac54/images/dock-move-horizontal.gif)
+![Moving the dock horizontally](https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/b9402bec82648ee05ea0dc39acee1fef1d41c0fb/images/dock-move-horizontal.gif)
 
 *Drag the left or right edge to move horizontally.*
 
@@ -202,9 +205,10 @@ automatically.*
   along its own axis.
 - **Right-click an empty part of the dock** to open the three reset actions:
   - **Reset position**: centered horizontally, with the panel's bottom edge
-    80 px above the taskbar.
+    at the configured default distance from the taskbar.
   - **Center horizontally**: keeps the current distance from the taskbar.
-  - **Reset distance from the taskbar**: sets it back to 80 px.
+  - **Reset distance from the taskbar**: sets it back to the configured
+    default distance.
 - **From the settings page**: the **Dock position action** setting offers the
   same three actions plus "Keep current position". The selected action is
   applied once when it changes; select "Keep current position" and save, then
@@ -212,14 +216,16 @@ automatically.*
   to the right-click menu.
 - **What the numbers mean**: the bottom distance is measured from the lower
   edge of the panel to the top of the taskbar, so 0 means the panel touches
-  the taskbar; the reset/default value is 80 px at 100% DPI. The horizontal
-  position is centered by default.
+  the taskbar. The reset/default value comes from the **Default bottom
+  distance** setting (80 px by default). The horizontal position is centered
+  by default.
 - **Saving**: the position is written to the current user's mod-local values
   immediately when a drag ends or a reset action is used. No settings save is
   needed; the position survives restarts and Explorer restarts.
-- **Transparent style**: it has no visible border or background. Use a panel
-  style, or the empty-state hint while the dock is empty, to reach the reset
-  actions.
+- **Transparent style**: it has no visible border or background, so edge
+  dragging is unavailable. Set **Default bottom distance**, then use the
+  **Dock position action** setting's "Reset distance from the taskbar" option
+  (or the empty-state hint while the dock is empty) to place it.
 
 ## How it differs from existing mods
 
@@ -306,14 +312,17 @@ not a launcher that stays on top of other windows.
 - CornerRadius: 72
   $name: Corner radius (%)
   $description: Roundness of the dock panel corners; 0 draws square corners and 100 draws fully rounded ones
+- DefaultBottomDistance: 80
+  $name: Default bottom distance
+  $description: Distance from the panel's bottom edge to the taskbar for a fresh install and for the reset actions, in pixels at 100% DPI. A drag overrides it until the next reset.
 - PositionAction: keep
   $name: Dock position action
   $description: Applies once when the selection changes. Reset moves the dock to the default position; the same three actions are also available by right-clicking an empty part of the dock. Select "Keep current position" and save, then select an action again, to repeat it.
   $options:
   - keep: Keep current position
-  - reset: Reset position (centered, 80 px from the taskbar)
+  - reset: Reset position (centered, default distance)
   - center: Center horizontally
-  - reset-bottom: Reset distance from the taskbar (80 px)
+  - reset-bottom: Reset distance from the taskbar
 - BackgroundStyle: transparent
   $name: Background style
   $description: Panel material used when the dock has a background. "Transparent" draws only the icons.
@@ -421,6 +430,7 @@ struct Settings {
     int spacingFactor = 60;
     int smoothing = 16;
     int cornerRadiusPercent = 72;
+    int defaultBottomDistance = kDefaultBottomDistance;
     int positionAction = 0;
     PanelStyle backgroundStyle = PanelStyle::Transparent;
     PanelTone tone = PanelTone::Auto;
@@ -904,6 +914,11 @@ void LoadSettings() {
     s.smoothing = ClampInt(Wh_GetIntSetting(L"Smoothing"), 1, 60);
     s.cornerRadiusPercent =
         ClampInt(Wh_GetIntSetting(L"CornerRadius"), 0, 100);
+    int configuredBottomDistance =
+        Wh_GetIntSetting(L"DefaultBottomDistance");
+    s.defaultBottomDistance = configuredBottomDistance > 0
+                                  ? ClampInt(configuredBottomDistance, 1, 20000)
+                                  : kDefaultBottomDistance;
 
     PCWSTR actionValue = Wh_GetStringSetting(L"PositionAction");
     std::wstring actionText = actionValue ? actionValue : L"";
@@ -1897,10 +1912,10 @@ int BaseWindowX() {
 
 // The bottom distance is measured from the bottom edge of the panel to the
 // top of the taskbar (the work area bottom), so 0 means the panel touches the
-// taskbar. A fresh install uses the same 80 px default as the reset action.
+// taskbar. A fresh install and the reset actions use the configured default.
 int EffectiveBottomDistance() {
     if (g_dockBottomDistance >= 0) return g_dockBottomDistance;
-    return kDefaultBottomDistance;
+    return g_settings.defaultBottomDistance;
 }
 
 // The window may overhang the monitor by its transparent glow margin, and it
@@ -2671,8 +2686,6 @@ void UpdateHoverPollTimer() {
     }
 }
 
-int ItemAtCursor(POINT screenPoint);
-
 bool UpdateAnimation() {
     if (g_items.empty() || !g_hwnd) return false;
     if (g_dockMoveAxis != DockMoveAxis::None) return false;
@@ -2690,9 +2703,7 @@ bool UpdateAnimation() {
     // An edge belongs to moving the dock, not to magnification. Suppressing
     // hover keeps the panel at its rest size, which is also the geometry the
     // edge zones are based on, so the pointer cannot chase a moving edge.
-    bool overItem = ItemAtCursor(screenPoint) >= 0;
-    bool onEdge = !overItem &&
-                  PanelEdgeAtClientPoint(clientPoint) != DockEdge::None;
+    bool onEdge = PanelEdgeAtClientPoint(clientPoint) != DockEdge::None;
     bool inside = !dragging && !onEdge && IsPointerOverDock(screenPoint);
 
     if (inside) {
@@ -2868,12 +2879,12 @@ void ApplyPendingPositionAction() {
 
     if (action == 1) {
         g_dockOffsetX = 0;
-        g_dockBottomDistance = kDefaultBottomDistance;
+        g_dockBottomDistance = g_settings.defaultBottomDistance;
     } else if (action == 2) {
         g_dockOffsetX = 0;
         g_dockBottomDistance = EffectiveBottomDistance();
     } else if (action == 3) {
-        g_dockBottomDistance = kDefaultBottomDistance;
+        g_dockBottomDistance = g_settings.defaultBottomDistance;
     }
     StoreDockPosition();
     Wh_SetIntValue(appliedName.c_str(), action);
@@ -3022,10 +3033,10 @@ void ShowDockPositionMenu(POINT screenPoint) {
     AppendMenuW(popup, MF_STRING | MF_GRAYED, 0, L"Dock position");
     AppendMenuW(popup, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(popup, MF_STRING, kResetAll,
-                L"Reset position (centered, 80 px from the taskbar)");
+                L"Reset position (centered, default distance)");
     AppendMenuW(popup, MF_STRING, kCenter, L"Center horizontally");
     AppendMenuW(popup, MF_STRING, kResetBottom,
-                L"Reset distance from the taskbar (80 px)");
+                L"Reset distance from the taskbar");
 
     g_menuOpen = true;
     HWND previousForeground = GetForegroundWindow();
@@ -3047,11 +3058,11 @@ void ShowDockPositionMenu(POINT screenPoint) {
     DestroyMenu(popup);
 
     if (command == kResetAll) {
-        ApplyDockPosition(0, kDefaultBottomDistance);
+        ApplyDockPosition(0, g_settings.defaultBottomDistance);
     } else if (command == kCenter) {
         ApplyDockPosition(0, EffectiveBottomDistance());
     } else if (command == kResetBottom) {
-        ApplyDockPosition(g_dockOffsetX, kDefaultBottomDistance);
+        ApplyDockPosition(g_dockOffsetX, g_settings.defaultBottomDistance);
     }
 }
 
@@ -4054,23 +4065,21 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
             if (g_externalDragActive || g_menuOpen) return 0;
             POINT point{};
             GetCursorPos(&point);
-            int index = ItemAtCursor(point);
-            if (index >= 0) {
-                g_leftDown = true;
-                g_dragCandidate = true;
-                g_internalDragActive = false;
-                g_dragOutside = false;
-                g_leftDownPoint = point;
-                g_dragIndex = index;
-                g_dragKey = g_items[index].key;
-                SetCapture(hwnd);
-                return 0;
-            }
             DockEdge edge = PanelEdgeAtScreenPoint(point);
             if (edge != DockEdge::None) {
                 StartDockMove(edge, point);
                 return 0;
             }
+            int index = ItemAtCursor(point);
+            if (index < 0) return 0;
+            g_leftDown = true;
+            g_dragCandidate = true;
+            g_internalDragActive = false;
+            g_dragOutside = false;
+            g_leftDownPoint = point;
+            g_dragIndex = index;
+            g_dragKey = g_items[index].key;
+            SetCapture(hwnd);
             return 0;
         }
 
@@ -4146,11 +4155,6 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
                 }
                 POINT point{};
                 GetCursorPos(&point);
-                int index = ItemAtCursor(point);
-                if (index >= 0) {
-                    SetCursor(LoadCursorW(nullptr, IDC_HAND));
-                    return TRUE;
-                }
                 DockEdge edge = PanelEdgeAtScreenPoint(point);
                 if (edge != DockEdge::None) {
                     SetCursor(LoadCursorW(
@@ -4160,7 +4164,8 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
                                      : IDC_SIZEWE));
                     return TRUE;
                 }
-                SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+                int index = ItemAtCursor(point);
+                SetCursor(LoadCursorW(nullptr, index >= 0 ? IDC_HAND : IDC_ARROW));
                 return TRUE;
             }
             break;
@@ -4345,6 +4350,15 @@ int RunDockThread() {
             Wh_GetIntValue(L"DockBottomDistance", kMissingLocalValue);
         if (legacyDistance != kMissingLocalValue) {
             storedDistance = legacyDistance;
+            Wh_SetIntValue(userBottomDistance.c_str(), storedDistance);
+        }
+    }
+    if (storedDistance == kMissingLocalValue) {
+        // 2.1.x used a BottomOffset setting plus the 10 DIP glow margin.
+        int legacyBottomOffset = Wh_GetIntSetting(L"BottomOffset");
+        if (legacyBottomOffset > 0) {
+            storedDistance =
+                ClampInt(legacyBottomOffset + 10, 0, 20000);
             Wh_SetIntValue(userBottomDistance.c_str(), storedDistance);
         }
     }
