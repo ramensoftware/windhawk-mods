@@ -313,10 +313,7 @@ static void ReleaseCom(T*& pointer) {
 // State
 // ---------------------------------------------------------------------------
 
-// Fixed names: the classes are registered once in Wh_ModInit and removed in
-// Wh_ModUninit. A name still taken at init means a copy of the mod did not
-// unload, and creating a window with it would call into unmapped code, so
-// registration failure is fatal instead of tolerated.
+// A name still taken at init means a copy did not unload, so registering it is fatal.
 static const wchar_t* g_panelClass = L"QuickLookPanel";
 static const wchar_t* g_menuClass = L"QuickLookViewMenu";
 static const UINT_PTR QL_TIMER_SELECTION = 1;
@@ -345,9 +342,7 @@ static const UINT QL_WM_TEXT_LOADED = WM_APP + 21;
 static const UINT QL_WM_IMAGE_LOADED = WM_APP + 22;
 // A worker thread finished probing the selected item.
 static const UINT QL_WM_PROBE_DONE = WM_APP + 23;
-// Messages sent to Explorer's own top-level windows. They are registered at
-// init (RegisterWindowMessageW), so their numbers can never collide with a
-// message Explorer, another mod or a future Windows build already uses.
+// Registered messages: the numbers can never collide with anything Explorer uses.
 static UINT QL_WM_TOGGLE = 0;
 static UINT QL_WM_SETTINGS = 0;
 static UINT QL_WM_CLEANUP = 0;
@@ -355,12 +350,7 @@ static UINT QL_WM_CLEANUP = 0;
 // close must not run inside the browser's own event dispatch.
 static UINT QL_WM_CLOSE_PANEL = 0;
 
-// Wh_ModUninit sends a cleanup request to every Explorer window and waits for
-// the windows that answer. Only a window that handles the request in
-// TopSubclassProc adds itself to the set, so a window that never got the
-// subclass (opened during the unload, or a failed install) is never waited for.
-// The event is auto-reset because the set can empty and fill again while the
-// requests are still being sent.
+// Only a window that answered the request registers, so a window without the subclass is never waited for.
 static HANDLE g_cleanupEvent = nullptr;
 static std::mutex g_cleanupMutex;
 static std::set<HWND> g_cleanupPending;
@@ -405,9 +395,7 @@ struct PanelState {
     std::vector<UINT> columnWidths;
     bool columnsSaved = false;
 
-    // The Explorer tab's browser object, and the connection that tells the
-    // panel the moment that tab starts to navigate (item: columns must be given
-    // back before Explorer saves the folder's view settings).
+    // The tab's browser: its navigation events give the columns back before Explorer saves them.
     IWebBrowser2* webBrowser = nullptr;
     IConnectionPoint* navPoint = nullptr;
     DWORD navCookie = 0;
@@ -531,10 +519,7 @@ struct PanelState {
     // True only while FillFromObject navigates to its own results folder: that
     // navigation is ours, not the user entering a folder from the preview.
     bool fillingResults = false;
-    // Set when the browser itself asked to navigate or close. The columns are
-    // given back right there, because Explorer saves a folder's widths as it
-    // leaves it; the rest of the close runs from the panel's message loop, once
-    // the browser's own event dispatch has returned.
+    // Browser asked to navigate/close: the rest of the close waits for the panel queue.
     bool pendingNavClose = false;
     // A fresh browser first paints a light, empty list. A cover window of the
     // panel's own background sits above it until the view exists, is themed and
@@ -656,9 +641,7 @@ static bool IsWindows11OrLater();
 static void DrawViewMenuLineGlyph(HDC dc, const RECT& rect, QlView mode,
                                   int iconSize, COLORREF color, UINT dpi);
 
-// Whether a top-level window has a panel open. It lives on the window itself,
-// so the low-level keyboard hook reads it without taking a lock: a hook that
-// waits for the UI thread would stall the input of the whole system.
+// On the window, so the input hook reads it without a lock.
 static const wchar_t kPanelOpenProp[] = L"QuickLookPanelOpen";
 
 static bool IsTopWithOpenPanel(HWND top) {
@@ -1338,10 +1321,8 @@ struct CancelScope {
 namespace qldoc {
 
 // --- Numbers ---------------------------------------------------------------
-//
-// Parses a decimal run without undefined behaviour: it stops at the first
-// non-digit and at a sane magnitude, so a crafted document cannot overflow an
-// int the way atoi() would.
+
+// Stops at the first non-digit and at a sane magnitude: no int overflow like atoi().
 static int ParseDecimal(const char* text, size_t length) {
     int value = 0;
     for (size_t i = 0; i < length; i++) {
@@ -2676,10 +2657,7 @@ static bool ReadDocumentContent(const std::wstring& path, std::wstring& raw,
 // ---------------------------------------------------------------------------
 //
 // Explorer's UI thread must never wait for a disk, a network share, a cloud
-// placeholder or a shell extension, so every such call runs on a worker. The
-// handle of every worker is kept in a list: Wh_ModUninit asks the workers to
-// stop and waits for each one before it returns, so no worker can ever run code
-// of a mod image that Windhawk has already unloaded.
+// Every worker handle is kept so Wh_ModUninit can wait for each one before the image is unmapped.
 
 static std::atomic<int> g_activeWorkers{0};
 static const int kMaxActiveWorkers = 12;
@@ -2747,11 +2725,7 @@ static void StopAllWorkers() {
         handles.swap(g_workerHandles);
     }
     for (HANDLE thread : handles) {
-        // The wait has no timeout: returning while a worker still runs would
-        // unmap code it is executing. The cancel is repeated because a worker
-        // can enter a new blocking call after the first one. A worker that is
-        // stuck in something none of this can interrupt (a decode, a shell
-        // thumbnail provider) is logged so the hang can be diagnosed.
+        // No timeout: returning while a worker runs would unmap code it is executing.
         int waited = 0;
         while (WaitForSingleObject(thread, 50) == WAIT_TIMEOUT) {
             CancelSynchronousIo(thread);
@@ -2807,9 +2781,7 @@ static DWORD WINAPI TextLoadThreadProc(void* parameter) {
     return 0;
 }
 
-// A worker that cannot start is not a failure: the concurrency cap frees itself
-// as soon as any other load finishes, so the same load is retried from a timer.
-// Without this the panel would keep its loading state forever.
+// Retried from a timer: the cap frees itself, and the panel would otherwise stay loading.
 static void ScheduleLoadRetry(PanelState* state, int kind) {
     if (!state || !state->panel || !IsWindow(state->panel)) {
         return;
@@ -3787,12 +3759,10 @@ static void PositionPdfPreview(PanelState* state) {
 #define CLSCTX_ACTIVATE_32_BIT_SERVER 0x40000
 #endif
 
-// Also looks under SystemFileAssociations, where some programs register their
-// preview handler instead of on the extension itself.
+// Also looks under SystemFileAssociations, where some programs register their handler.
 static bool FindPreviewHandlerClsid(const std::wstring& extension,
                                     CLSID& clsid) {
-    // First ask the shell, which is how Explorer itself resolves the handler:
-    // it follows the ProgID and the per-user association chain.
+    // Ask the shell first: it follows the ProgID and the per-user association chain.
     wchar_t assoc[128] = {};
     DWORD assocLength = ARRAYSIZE(assoc);
     if (SUCCEEDED(AssocQueryStringW(
@@ -3817,10 +3787,7 @@ static bool FindPreviewHandlerClsid(const std::wstring& extension,
     return SUCCEEDED(CLSIDFromString(value, &clsid));
 }
 
-// Hands the file to a freshly created handler. A handler may expose an
-// interface and still answer E_NOTIMPL from it, so every way is tried in turn:
-// by path, by stream (what Office really uses) and by shell item. What each one
-// answered is appended to `trace`.
+// Tries stream, then path, then shell item: handlers often expose an interface and answer E_NOTIMPL.
 static HRESULT InitializePreviewHandler(IUnknown* unknown,
                                         const std::wstring& path,
                                         std::wstring& trace) {
@@ -3886,13 +3853,7 @@ static HRESULT InitializePreviewHandler(IUnknown* unknown,
     return result;
 }
 
-// The preview handler comes from Windows itself (the same one Explorer's
-// preview pane uses), so the page is rendered by the system and not by this mod.
-// It serves PDFs and every document format a program has registered a handler
-// for (Office, OpenDocument, ...). `extension` includes the leading dot.
-// `diag` (optional) receives what went wrong when the handler fails; it belongs
-// to the caller, so two Explorer windows loading a preview at the same time
-// never share it.
+// Rendered by the Windows preview handler; "diag" belongs to the caller so windows never share it.
 static bool LoadPdfPreview(PanelState* state,
                            const std::wstring& extension = L".pdf",
                            std::wstring* diag = nullptr) {
@@ -3916,11 +3877,7 @@ static bool LoadPdfPreview(PanelState* state,
     // A 32-bit Office has its handler in the 32-bit registry view, which a
     // 64-bit Explorer does not see by default: retry asking COM for a 32-bit
     // (then 64-bit) server explicitly.
-    // The handler is created out of process only (the prevhost.exe surrogate
-    // Explorer's own preview pane uses), then as a 32-bit server. It is never
-    // loaded into explorer.exe: a handler that crashes or hangs must not take
-    // the shell down with it. Each way gets the full initialization cascade and
-    // the first one that accepts the file wins.
+    // Out of process only: a handler that crashes must not take the shell down.
     struct CreateAttempt {
         DWORD context;
         const wchar_t* name;
@@ -4309,12 +4266,7 @@ static bool ShellItemIsFolder(const std::wstring& path) {
 
 // `attributesOnly` asks the shell for the icon by file type alone, so it does not
 // have to open the file (used for cloud placeholders).
-//
-// The extra-large list is used, not the jumbo one: for a file whose icon has no
-// large frame the jumbo list returns a 48x48 picture in the corner of a 256x256
-// canvas (wireguard-installer.exe, for one), which drew as a tiny icon in the
-// corner of the panel's box. The extra-large entry always returns the artwork
-// filling its 48x48 image, and the panel lets DrawIconEx scale it to the box.
+// Extra-large, not jumbo: the jumbo list can return a 48px picture in a 256px canvas.
 static HICON LoadPropertyIcon(const std::wstring& path,
                               bool attributesOnly = false) {
     SHFILEINFOW info = {};
@@ -5135,10 +5087,7 @@ static void OpenPathExternally(PanelState* state, const std::wstring& path) {
     state->lastOpenPath = path;
     state->lastOpenTick = now;
 
-    // The panel only shows the direct children of the previewed folder, so the
-    // entry is already known. An unknown path (an archive item, say) is treated
-    // as a file: a file system call here could block the UI thread on an
-    // unreachable share.
+    // Unknown paths are treated as files: a file system call here could block on an unreachable share.
     bool isFolder = false;
     for (const FolderEntry& entry : state->entries) {
         if (SameFolderPath(entry.path, path)) {
@@ -5742,9 +5691,7 @@ static IResultsFolder* GetResultsFolder(PanelState* state) {
     return folder;
 }
 
-// Collects the absolute PIDLs of the first `limit` filtered entries. Only direct
-// children of the previewed folder are in state->entries, so the result never
-// reaches into a subfolder.
+// Only direct children of the previewed folder, so this never reaches into a subfolder.
 static void CollectFilteredPidls(PanelState* state,
                                  std::vector<PIDLIST_ABSOLUTE>& out,
                                  size_t limit) {
@@ -5764,11 +5711,7 @@ static void CollectFilteredPidls(PanelState* state,
     }
 }
 
-// FillFromObject walks the object it is given (it is built for data objects and
-// namespace walks), so a folder in that list is expanded instead of listed, and
-// a matching folder goes missing from the results. One leaf item is enough to
-// make the browser create its results folder; every product item is added
-// afterwards with IResultsFolder::AddItem, which takes folders as they are.
+// FillFromObject expands folders instead of listing them: seed with one leaf item, then AddItem.
 static IShellItemArray* SeedItemArray(PanelState* state) {
     std::vector<PIDLIST_ABSOLUTE> owned;
 
@@ -5812,21 +5755,11 @@ static IShellItemArray* SeedItemArray(PanelState* state) {
     return items;
 }
 
-// The embedded browser themes itself from the Windows app mode, not from this
-// panel: with the mod forced to dark and Windows light (or the reverse), the
-// folder list, an archive and a results folder would all come out in the wrong
-// palette. The pass runs from our own timer, never from inside a shell callback,
-// and only invalidates: painting synchronously there re-entered the view and
-// could keep re-arming the settle loop. The theme is applied to the view and to
-// its children, which is where the shell reads it for its items and infotips.
-// uxtheme ordinal 133: lets a window use the dark palette (scrollbars, header,
-// infotips). Explorer does this for its own views, but not for a results view
-// created by us, which is why its scrollbars stayed white.
+// The shell themes the list from the Windows app mode, not from the panel: a forced mode needs classic colors.
 static void AllowDarkModeForWindowSafe(HWND hwnd, bool allow) {
     typedef BOOL(WINAPI * AllowDarkModeForWindowFn)(HWND, BOOL);
     static AllowDarkModeForWindowFn fn = []() -> AllowDarkModeForWindowFn {
-        // uxtheme is linked (-luxtheme), so it is always loaded: no
-        // LoadLibrary by bare name.
+        // Linked (-luxtheme), so no LoadLibrary by bare name.
         HMODULE module = GetModuleHandleW(L"uxtheme.dll");
         if (!module) {
             return nullptr;
@@ -5856,15 +5789,12 @@ static void ThemeOneWindow(HWND hwnd, const wchar_t* theme, bool dark) {
 static BOOL CALLBACK ThemeChildProc(HWND child, LPARAM parameter) {
     const wchar_t* theme = reinterpret_cast<const wchar_t*>(parameter);
     std::wstring className = ClassNameOf(child);
-    // Skip the rename edit box; everything else (list, header, tooltips,
-    // scrollbar controls) takes the theme.
+    // Skip the rename edit; everything else takes the theme.
     if (_wcsicmp(className.c_str(), L"Edit") != 0) {
         bool dark = _wcsicmp(theme, L"DarkMode_Explorer") == 0;
         AllowDarkModeForWindowSafe(child, dark);
         SetWindowTheme(child, theme, nullptr);
-        // Posted, not sent: this runs inside EnumChildWindows, and a child that
-        // reacts by recreating windows would make the enumeration skip the ones
-        // after it.
+        // Posted, not sent: inside EnumChildWindows a recreated child would make it skip entries.
         PostMessageW(child, WM_THEMECHANGED, 0, 0);
     }
     return TRUE;
@@ -5892,10 +5822,7 @@ static void ThemeBrowserView(PanelState* state) {
     }
     ShowScrollBar(state->browserViewWnd, SB_HORZ, FALSE);
 
-    // The shell paints its list from the Windows app mode, not from the window
-    // theme, so a panel forced to the other mode would keep the system list.
-    // Classic colors, driven by the panel palette, make the list follow the
-    // panel in that case. When both modes agree the native theme is better.
+    // The list follows the app mode, so a forced panel needs classic colors.
     if (dark != SystemPrefersDark() && state->browserListWnd &&
         IsWindow(state->browserListWnd) && state->background != CLR_INVALID &&
         _wcsicmp(ClassNameOf(state->browserListWnd).c_str(),
@@ -6215,9 +6142,7 @@ class ExplorerBrowserEvents final : public IExplorerBrowserEvents {
         if (!state_ || !pidlFolder || state_->browserPath.empty()) {
             return S_OK;
         }
-        // FillFromObject navigates the browser to its own results folder. That
-        // is our fill, not the user leaving the preview: let it through, or the
-        // fill fails and the retry recreates the browser in a loop.
+        // Our own fill, not the user leaving: let it through or the retry loops.
         if (state_->fillingResults) {
             return S_OK;
         }
@@ -6246,11 +6171,7 @@ class ExplorerBrowserEvents final : public IExplorerBrowserEvents {
         if (SameFolderPath(target, state_->browserPath)) {
             return S_OK;
         }
-        // This panel is a preview, never a navigator: the navigation is always
-        // cancelled. Only an item of the previewed folder becomes an open
-        // request (a folder shows its Properties); the parent folder, a results
-        // folder or any other namespace target is refused silently, never
-        // opened as an Explorer window.
+        // Only an item of the previewed folder becomes an open request; anything else is refused.
         if (!IsSameOrInside(target, state_->browserPath)) {
             Wh_Log(L"navigation blocked outside the preview: %s", target.c_str());
             return E_ABORT;
@@ -6596,9 +6517,7 @@ static int ColorLuma(COLORREF color) {
            1000;
 }
 
-// WCAG relative luminance and contrast ratio. Contrast, not a luminance
-// distance, is what decides whether text is readable on a background: two dark
-// colors 60 levels apart are still dark on dark.
+// Contrast, not luminance distance: two dark colors 60 levels apart are still dark on dark.
 static double LinearChannel(double value) {
     return value <= 0.03928
                ? value / 12.92
@@ -6633,9 +6552,7 @@ static COLORREF ReadableTextColor(COLORREF background) {
                : RGB(255, 255, 255);
 }
 
-// What Explorer considers its app mode. A custom visual style can disagree with
-// this value; UpdatePanelColors lets a clearly dark or light sampled surface
-// override it.
+// A custom visual style can disagree with it; a clearly dark/light sample overrides it.
 static bool SystemPrefersDark() {
     DWORD value = 1;
     DWORD size = sizeof(value);
@@ -6722,9 +6639,7 @@ static bool ReadAccentFromUISettings(UserAccent& out) {
         out.fromUiSettings = true;
         ok = true;
     } catch (...) {
-        // No UISettings here: the caller falls back to the registry value.
-        // Catch everything: an exception escaping into explorer.exe would
-        // take the shell down.
+        // Catch everything: an exception escaping into explorer.exe would take the shell down.
     }
 
     if (initialized) {
@@ -7061,10 +6976,7 @@ static void UpdatePanelColors(PanelState* state) {
         }
     }
 
-    // The dominant sampled color is Explorer's own surface. It only classifies
-    // the theme; it never supplies the text color. That sampling was what made
-    // the title dark on a dark Mica surface: a dark gray 60 levels away from a
-    // dark blue passed the old luminance-distance test.
+    // Only classifies the theme; sampling it as the text color made the title unreadable.
     COLORREF dominant = CLR_INVALID;
     if (!counts.empty()) {
         dominant = counts.begin()->first;
@@ -7086,9 +6998,7 @@ static void UpdatePanelColors(PanelState* state) {
     } else if (dominant == CLR_INVALID) {
         dark = SystemPrefersDark();
     } else {
-        // A clearly dark or light Explorer surface wins over the Windows app
-        // mode, because a custom visual style can disagree with it. An ambiguous
-        // sample (a folder full of thumbnails, say) follows the app mode.
+        // A clearly dark or light sample wins over the app mode; an ambiguous one follows it.
         double sample = RelativeLuminance(dominant);
         if (sample < 0.10) {
             dark = true;
@@ -7099,11 +7009,7 @@ static void UpdatePanelColors(PanelState* state) {
         }
     }
 
-    // Keep Explorer's own surface verbatim when it belongs to the chosen
-    // palette: with Mica or a wallpaper behind the list, that sampled color is
-    // the effect the user sees. Only when the sample does not match the palette
-    // (a forced mode, or a bright thumbnail in a dark mode) fall back to the
-    // neutral of that palette.
+    // Keep the surface verbatim when it matches the palette: that is the Mica/wallpaper effect.
     COLORREF background = dark ? RGB(32, 32, 32) : RGB(249, 249, 249);
     if (dominant != CLR_INVALID && IsDarkColor(dominant) == dark) {
         background = dominant;
@@ -7279,9 +7185,7 @@ static void LayoutPanelContent(PanelState* state) {
     ClampScroll(state);
 }
 
-// The icon is resolved from the name and the attributes cached by the folder
-// enumeration, never from the file itself: this runs while painting, and a
-// shell call for a path on an unreachable share would freeze the panel.
+// From the name and cached attributes: this runs while painting, and a shell call could freeze it.
 static HICON GetSmallIcon(FolderEntry& entry) {
     if (!entry.smallIcon) {
         SHFILEINFOW info = {};
@@ -8401,10 +8305,7 @@ static bool EnsureBackBuffer(PanelState* state, HDC reference, int width,
     return true;
 }
 
-// Gives the file view its space and its Details columns back. With "shrink
-// columns to fit" the real view carries the shrunk widths while the panel is
-// open, and Explorer saves a folder's widths when it leaves it, so this has to
-// run before a navigation starts, not after it.
+// Columns back before a navigation starts: Explorer saves a folder's widths as it leaves.
 static void RestoreViewForClose(PanelState* state) {
     if (!state) {
         return;
@@ -8541,11 +8442,8 @@ class NavigationEvents final : public IDispatch {
             AddRef();
             Wh_Log(L"navigation or close starting (dispid %ld): closing the panel",
                    (long)dispIdMember);
-            // The columns have to go back now: Explorer saves a folder's widths
-            // as it leaves it, and that happens after this notification. The
-            // rest of the close waits for the panel's message loop, because
-            // removing this sink and releasing the browser's objects from inside
-            // the browser's own event dispatch is re-entrant COM.
+            // Columns back now (Explorer saves widths on leave); the rest of the close
+            // waits for the panel queue, outside this dispatch.
             state->open = false;
             state->pendingNavClose = true;
             RestoreViewForClose(state);
@@ -8646,9 +8544,7 @@ static LRESULT CALLBACK ParentSubclassProc(HWND hwnd, UINT message,
         CloseState(state);
     }
 
-    // The window or tab this state is keyed on is going away: give the columns
-    // back and free everything (browser, preview handler, GDI objects) now,
-    // while the view still exists, instead of keeping it for the whole session.
+    // The window is going away: free everything now, while the view still exists.
     if (message == WM_DESTROY && state && hwnd == state->tab) {
         Wh_Log(L"window destroyed: freeing the panel state for %p",
                (void*)hwnd);
@@ -9888,10 +9784,7 @@ static void DestroyState(PanelState* state, bool removeFromMap) {
         }
     }
 
-    // The panel-open property lives on the window, and the deferred close turns
-    // the state off before its own message runs: a state destroyed inside that
-    // gap must still clear it, or the hook keeps posting close-toggles for a
-    // window that has no panel.
+    // A state destroyed inside the deferred-close gap must still clear the flag.
     UpdateTopOpenFlag(state->top);
 
     delete state;
@@ -10105,9 +9998,7 @@ static void ToggleOnExplorerThread(ToggleParam* param) {
 // this message to the Explorer top-level window, and this subclass runs the
 // real work from the normal message loop.
 
-// The panel that is already open in this window, if any. A settings change must
-// not create a panel (and its browser, filter edit and subclasses) in a window
-// that never showed one.
+// A settings change must not create a panel in a window that never showed one.
 static PanelState* FindOpenStateForTop(HWND top) {
     PanelState* found = nullptr;
     std::lock_guard<std::mutex> lock(g_stateLock);
@@ -10241,17 +10132,11 @@ static LRESULT CALLBACK TopSubclassProc(HWND hwnd, UINT message,
         return 0;
     }
 
-    // Wh_ModUninit asks for the cleanup of this window. wParam 0 comes from a
-    // blocking SendMessage, so this thread is inside an input-synchronous call
-    // and COM refuses the outgoing calls that releasing a preview handler
-    // needs; re-post it so the real cleanup runs from the normal message loop.
-    // wParam 1 is that posted pass (or the direct call when there is no queue
-    // to wait on).
+    // wParam 0 comes from a SendMessage: re-post, because COM refuses the handler
+    // release here. wParam 1 is the posted pass.
     if (message == QL_WM_CLEANUP) {
         if (wParam == 0) {
-            // Register before the sent message returns: Wh_ModUninit starts
-            // waiting as soon as its SendMessage comes back, so every window
-            // that will post must already be in the set.
+            // Register before the sent message returns: the unload waits as soon as it returns.
             {
                 std::lock_guard<std::mutex> lock(g_cleanupMutex);
                 g_cleanupPending.insert(hwnd);
@@ -10435,9 +10320,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam,
             return CallNextHookEx(nullptr, code, wParam, lParam);
         }
 
-        // A Space still held from a press we already acted on is an
-        // auto-repeat, whatever the system repeat delay is: swallow it so the
-        // panel opens once and stays open.
+        // Auto-repeat of a press already handled: swallow it so the panel toggles once.
         if (g_swallowSpaceUp.load() || repeat) {
             g_swallowSpaceUp = true;
             return 1;
@@ -10452,9 +10335,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam,
         return CallNextHookEx(nullptr, code, wParam, lParam);
     }
 
-    // Esc: only for the window whose own panel is open, and only when the
-    // focus is on the file list or the panel. A rename, the address bar and the
-    // search box keep their Esc.
+    // Esc only for the window whose own panel is open, with the list or panel focused.
     if (key->vkCode == VK_ESCAPE && IsTopWithOpenPanel(foreground) &&
         IsFileViewFocus(foreground)) {
         if (PostMessageW(foreground, QL_WM_TOGGLE, 1, 0)) {
@@ -10504,9 +10385,7 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
     return 0;
 }
 
-// Quits the hook thread and waits for it, however long that takes: the hook
-// callback and the message loop live in this mod's image, so the image must not
-// be unmapped while the thread can still run.
+// Waits however long it takes: the hook lives in this image, so it must not be unmapped.
 static void StopHookThread() {
     if (!g_hookThread) {
         return;
@@ -10526,15 +10405,16 @@ static void StopHookThread() {
 // ---------------------------------------------------------------------------
 
 static void LoadSettings() {
-    PCWSTR theme = Wh_GetStringSetting(L"theme");
-    if (_wcsicmp(theme, L"light") == 0) {
+    // RAII: WindhawkUtils::StringSetting frees the string itself.
+    WindhawkUtils::StringSetting theme =
+        WindhawkUtils::StringSetting::make(L"theme");
+    if (_wcsicmp(theme.get(), L"light") == 0) {
         g_themeMode = QlTheme::Light;
-    } else if (_wcsicmp(theme, L"dark") == 0) {
+    } else if (_wcsicmp(theme.get(), L"dark") == 0) {
         g_themeMode = QlTheme::Dark;
     } else {
         g_themeMode = QlTheme::Auto;
     }
-    Wh_FreeStringSetting(theme);
     g_reflowColumns = Wh_GetIntSetting(L"reflowColumns") != 0;
     g_textRememberOptions = Wh_GetIntSetting(L"textRememberOptions") != 0;
     g_defaultTextLineNumbers = Wh_GetIntSetting(L"textLineNumbers") != 0;
@@ -10634,10 +10514,7 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-// Installs the top-level subclass from the engine thread. The helper sends a
-// message to the target thread and waits for it, so a window that does not
-// answer is probed first: loading a mod must never freeze Windhawk on a hung
-// Explorer window.
+// Probes first: the helper's send would otherwise wait forever on a hung window.
 static void InstallTopSubclassBounded(HWND top) {
     if (!top || !IsWindow(top)) {
         return;
@@ -10683,20 +10560,9 @@ void Wh_ModSettingsChanged() {
     }
 }
 
-// Sends one cleanup request with a timeout: a window that stops answering must
-// not keep Wh_ModUninit, and with it Windhawk's engine thread, waiting for good.
-static bool SendCleanupRequest(HWND window, WPARAM phase) {
-    DWORD_PTR ignored = 0;
-    if (SendMessageTimeoutW(window, QL_WM_CLEANUP, phase, 0,
-                            SMTO_ABORTIFHUNG | SMTO_BLOCK, 5000, &ignored)) {
-        return true;
-    }
-    // The window keeps the subclass it already has: removing it needs that
-    // window's own thread, and this one never answered. A bounded unload that
-    // leaves it behind beats a Windhawk that never finishes unloading.
-    Wh_Log(L"cleanup: window %p did not answer (phase %u)", (void*)window,
-           (unsigned)phase);
-    return false;
+// No timeout: unmapping with a subclass still installed crashes Explorer on its next message.
+static void SendCleanupRequest(HWND window, WPARAM phase) {
+    SendMessageW(window, QL_WM_CLEANUP, phase, 0);
 }
 
 void Wh_ModUninit() {
@@ -10708,28 +10574,21 @@ void Wh_ModUninit() {
     StopHookThread();
     StopAllWorkers();
 
-    // 2. Every Explorer window undoes what the mod did to it, on its own
-    //    thread. The sends are bounded: a window that stops answering must not
-    //    freeze Windhawk's engine thread for good.
+    // 2. Every window undoes the mod on its own thread; the wait has no deadline.
     std::vector<HWND> windows = GetExplorerWindows();
     if (!g_cleanupEvent) {
-        // No event to wait on: clean inline. Still correct; only the release of
-        // an open preview handler can fail inside a sent call.
+        // No event to wait on: clean inline, on each window's own thread.
         for (HWND window : windows) {
             SendCleanupRequest(window, 1);
         }
     } else {
-        // Each window registers itself while it handles the request, so the set
-        // only ever contains windows that can answer. Sending first and then
-        // waiting means a window opened in the meantime (without the subclass)
-        // can never stall the unload.
+        // Only windows that answered the request are in the set, so a window opened
+        // in the meantime can never stall the unload.
         for (HWND window : windows) {
             SendCleanupRequest(window, 0);
         }
 
-        const ULONGLONG deadline = GetTickCount64() + 10000;
         for (;;) {
-            size_t pending = 0;
             {
                 std::lock_guard<std::mutex> lock(g_cleanupMutex);
                 // A window destroyed before its posted cleanup ran dropped
@@ -10742,22 +10601,9 @@ void Wh_ModUninit() {
                         ++it;
                     }
                 }
-                pending = g_cleanupPending.size();
-            }
-            if (!pending) {
-                break;
-            }
-            if (GetTickCount64() >= deadline) {
-                // Whatever is left never ran its posted cleanup. Its state is
-                // freed by WM_DESTROY when the window goes away; logging it is
-                // all that can be done without hanging the unload for good.
-                // Residual risk, on purpose: a window that stays hung keeps the
-                // subclass it already has, and a later message would dispatch
-                // into this mod after Windhawk unloads it. A bounded unload that
-                // may crash later beats a Windhawk that never finishes.
-                Wh_Log(L"cleanup: %u window(s) did not answer in time",
-                       (unsigned)pending);
-                break;
+                if (g_cleanupPending.empty()) {
+                    break;
+                }
             }
             WaitForSingleObject(g_cleanupEvent, 200);
         }
