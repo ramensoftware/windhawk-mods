@@ -11,7 +11,7 @@
 // @description:fr  Ce mod recrée l'écran d'accueil de Windows 8.1 sur Windows 10 et Windows 11
 // @description:pt  Este mod recria a Tela Inicial do Windows 8.1 no Windows 10 e no Windows 11
 // @version         1.3.0
-// @license         GPL-3.0-or-later
+// @license         GPL-3.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
@@ -26,6 +26,15 @@
 This mod recreates the Windows 8.1 Start Screen on Windows 10 and Windows 11.
 
 ![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/startscreen.png)
+
+## Local tile content
+The reconstructed Metro icons are used for recognized Microsoft apps. The app search also includes
+separate Weather, Calendar and Clock tiles that can be pinned again after removal. They open the
+corresponding Microsoft web pages. Calendar can alternate between its icon and the local date;
+Clock shows the local time. The Weather tile currently shows its icon only, not live weather.
+Photos can optionally show JPG and PNG files directly from the local Pictures folder while Start
+is open and Photos is pinned. Images are not uploaded; decoding runs on a worker thread and stopping
+can wait for it. These are simulated features, not notifications read from other apps.
 
 ## About the mod
 The mod replaces the Start experience with a full-screen Start screen modeled after
@@ -264,6 +273,16 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $description:es: "Esta configuración define mosaicos personalizados. Los cambios recargan la mod. Cada mosaico debe tener nombre, destino y color #RRGGBB. Las imágenes deben ser locales y no superar 8 MiB."
   $description:fr: "Ce paramètre définit des vignettes personnalisées. Les modifications rechargent le mod. Chaque vignette doit avoir un nom, une cible et une couleur #RRGGBB. Les images doivent être locales et ne pas dépasser 8 Mio."
   $description:pt: "Esta configuração define blocos personalizados. As alterações recarregam a mod. Cada bloco deve ter nome, destino e cor #RRGGBB. As imagens devem ser locais e não ultrapassar 8 MiB."
+- photoSlideshow: false
+  $name: "Photos tile: local slideshow"
+  $name:it: "Riquadro Foto: presentazione locale"
+  $description: "With Photos pinned, read JPG and PNG files directly in the local Windows Pictures folder while Start is open. Images are not uploaded. Stopping may wait for decoding to finish."
+  $description:it: "Con Foto fissata, legge JPG e PNG direttamente nella cartella locale Immagini di Windows mentre Start è aperto. Le immagini non vengono caricate online. L'arresto può attendere la fine della decodifica."
+- calendarSlide: false
+  $name: "Calendar live tile slide"
+  $name:it: "Animazione del riquadro Calendario"
+  $description: "For the pinned Microsoft Calendar tile, alternate the icon with the current local date using a downward slide. This does not read app notifications."
+  $description:it: "Per il riquadro fissato di Microsoft Calendario, alterna l'icona alla data locale con uno scorrimento verso il basso. Non legge le notifiche dell'app."
 - taskbarOnBottomHover: true
   $name: "Taskbar back when the pointer touches the bottom of Start"
   $name:it: "Barra delle applicazioni quando il puntatore tocca il fondo di Start"
@@ -636,6 +655,7 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
 #include <math.h>
 #include <exception>
 #include <atomic>
+#include <mutex>
 #include <unordered_map>
 #include <memory>
 #include <optional>
@@ -1419,6 +1439,17 @@ static int g_advHoverRow = -1, g_advPressedRow = -1;
 static int g_resizeHoverRow = -1, g_resizePressedRow = -1;
 
 static HDC g_tileDC[MAX_TILES][2] = {};
+static volatile LONG g_calendarSlide = 0;
+struct CalendarSurface { HDC dc = NULL; HBITMAP bmp = NULL; HGDIOBJ old = NULL; void* bits = NULL; ID2D1Bitmap* gpu = NULL; int w = 0, h = 0, date = 0; };
+static CalendarSurface g_calendarFace[MAX_TILES];
+static void FreeCalendarFace(int i) {
+    CalendarSurface& c = g_calendarFace[i];
+    if (c.gpu) c.gpu->Release();
+    if (c.dc) { if (c.old) SelectObject(c.dc, c.old); DeleteDC(c.dc); }
+    if (c.bmp) DeleteObject(c.bmp);
+    c = CalendarSurface{};
+}
+
 static HBITMAP g_tileBmp[MAX_TILES][2] = {};
 static HGDIOBJ g_tileOld[MAX_TILES][2] = {};
 static void* g_tileBits[MAX_TILES][2] = {};
@@ -2561,6 +2592,7 @@ static HWND CreateTopWindow(int w, int h) {
 static void FreeBuffers() {
     g_snapReady = false;
     ReleaseGpuTarget();
+    for (int i = 0; i < MAX_TILES; ++i) FreeCalendarFace(i);
     g_bgBits = g_snapBits = NULL;
     for (int i = 0; i < g_tileCount; ++i) for (int v = 0; v < 2; ++v) {
         if (g_tileDC[i][v]) {
@@ -3158,9 +3190,6 @@ static void DrawDesktopWallpaperTile(HDC dc, HDC screen, int w, int h) {
     SetBkMode(dc, TRANSPARENT);
     SelectObject(dc, g_fLabel);
     RECT label = { 12, h - 30, w - 8, h - 8 };
-    RECT shadow = label; OffsetRect(&shadow, 1, 1);
-    SetTextColor(dc, RGB(17, 12, 35));
-    DrawTextW(dc, T(STR_DESKTOP), -1, &shadow, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
     SetTextColor(dc, RGB(255, 255, 255));
     DrawTextW(dc, T(STR_DESKTOP), -1, &label, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
 }
@@ -3193,11 +3222,718 @@ static void DrawModernTileCaption(HDC dc, const wchar_t* text, int w, int h, boo
         DrawTextW(dc, text, -1, &label, flags);
         return;
     }
-    RECT shadow = label; OffsetRect(&shadow, ScI(1), ScI(1));
-    SetTextColor(dc, RGB(17, 12, 35));
-    DrawTextW(dc, text, -1, &shadow, flags);
     SetTextColor(dc, RGB(255, 255, 255));
     DrawTextW(dc, text, -1, &label, flags);
+}
+
+// Vector artwork adapted from Windows 8.1/10 Start Menu Recreation (GPL-3.0).
+static bool DrawImportedMetroIcon(HDC dc, const wchar_t* target, int x, int y, int size) {
+    enum class Icon { None, Weather, Calculator, Mail, Calendar, Settings, Photos, Xbox, Cloud, Solitaire, Store, Camera, Clock, Maps, Music, Video, Recorder } icon = Icon::None;
+    if (!target) return false;
+    const wchar_t* id = target;
+    const wchar_t* prefix = L"shell:AppsFolder\\";
+    if (!_wcsnicmp(id, prefix, wcslen(prefix))) id += wcslen(prefix);
+    if (_wcsicmp(id,L"windhawk:weather-tile-v1")==0) icon=Icon::Weather;
+    else if (_wcsicmp(id,L"windhawk:calendar-tile-v1")==0) icon=Icon::Calendar;
+    else if (_wcsicmp(id, L"windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel") == 0) icon = Icon::Settings;
+    else if (_wcsicmp(id, L"Microsoft.BingWeather_8wekyb3d8bbwe!App") == 0) icon = Icon::Weather;
+    else if (_wcsicmp(id, L"Microsoft.WindowsCalculator_8wekyb3d8bbwe!App") == 0) icon = Icon::Calculator;
+    else if (_wcsicmp(id, L"microsoft.windowscommunicationsapps_8wekyb3d8bbwe!microsoft.windowslive.mail") == 0 ||
+             _wcsicmp(id, L"Microsoft.OutlookForWindows_8wekyb3d8bbwe!Microsoft.OutlookforWindows") == 0) icon = Icon::Mail;
+    else if (_wcsicmp(id, L"microsoft.windowscommunicationsapps_8wekyb3d8bbwe!microsoft.windowslive.calendar") == 0) icon = Icon::Calendar;
+    else if (_wcsicmp(id,L"Microsoft.WindowsStore_8wekyb3d8bbwe!App")==0) icon=Icon::Store;
+    else if (_wcsicmp(id,L"Microsoft.WindowsCamera_8wekyb3d8bbwe!App")==0) icon=Icon::Camera;
+    else if (_wcsicmp(id,L"Microsoft.WindowsAlarms_8wekyb3d8bbwe!App")==0 || _wcsicmp(id,L"windhawk:clock-tile-v1")==0) icon=Icon::Clock;
+    else if (_wcsicmp(id,L"Microsoft.WindowsMaps_8wekyb3d8bbwe!App")==0) icon=Icon::Maps;
+    else if (_wcsicmp(id,L"Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic")==0) icon=Icon::Music;
+    else if (_wcsicmp(id,L"Microsoft.ZuneVideo_8wekyb3d8bbwe!Microsoft.ZuneVideo")==0) icon=Icon::Video;
+    else if (_wcsicmp(id,L"Microsoft.WindowsSoundRecorder_8wekyb3d8bbwe!App")==0) icon=Icon::Recorder;
+    else if (_wcsicmp(id,L"Microsoft.Windows.Photos_8wekyb3d8bbwe!App")==0) icon=Icon::Photos;
+    else if (_wcsicmp(id,L"Microsoft.GamingApp_8wekyb3d8bbwe!Microsoft.Xbox.App")==0 ||
+             _wcsicmp(id,L"Microsoft.XboxApp_8wekyb3d8bbwe!Microsoft.XboxApp")==0) icon=Icon::Xbox;
+    else if (_wcsicmp(id,L"Microsoft.MicrosoftSolitaireCollection_8wekyb3d8bbwe!App")==0) icon=Icon::Solitaire;
+    else if (!_wcsicmp(id,L"Microsoft.SkyDrive.Desktop")) icon=Icon::Cloud;
+    if (icon == Icon::None || !g_gdipToken || size <= 0) return false;
+    Gdiplus::Graphics g(dc);
+    if (g.GetLastStatus() != Gdiplus::Ok) return false;
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.TranslateTransform(static_cast<Gdiplus::REAL>(x), static_cast<Gdiplus::REAL>(y));
+    const Gdiplus::REAL scale = size / 48.0f;
+    g.ScaleTransform(scale, scale);
+    Gdiplus::Pen pen(Gdiplus::Color(255,255,255,255), 2.5f);
+    Gdiplus::SolidBrush white(Gdiplus::Color(255,255,255,255));
+    if (icon == Icon::Weather) {
+        g.DrawEllipse(&pen, 17.0f, 7.0f, 14.0f, 14.0f);
+        g.DrawLine(&pen, 24.0f, 1.0f, 24.0f, 5.0f);
+        g.DrawLine(&pen, 8.0f, 14.0f, 13.0f, 14.0f);
+        g.DrawLine(&pen, 35.0f, 14.0f, 40.0f, 14.0f);
+        g.DrawLine(&pen, 13.0f, 4.0f, 16.0f, 7.0f);
+        g.DrawLine(&pen, 32.0f, 7.0f, 35.0f, 4.0f);
+        g.FillEllipse(&white, 7.0f, 25.0f, 14.0f, 13.0f);
+        g.FillEllipse(&white, 14.0f, 20.0f, 18.0f, 18.0f);
+        g.FillEllipse(&white, 27.0f, 25.0f, 14.0f, 13.0f);
+    } else if (icon == Icon::Settings) {
+        // Scaled vector contour.
+        const Gdiplus::PointF outer[] = {
+            Gdiplus::PointF(16.333f,0.000f),
+            Gdiplus::PointF(16.000f,0.331f),
+            Gdiplus::PointF(15.333f,0.331f),
+            Gdiplus::PointF(15.000f,0.662f),
+            Gdiplus::PointF(14.667f,0.662f),
+            Gdiplus::PointF(14.333f,0.993f),
+            Gdiplus::PointF(14.000f,0.993f),
+            Gdiplus::PointF(13.000f,1.655f),
+            Gdiplus::PointF(12.333f,1.655f),
+            Gdiplus::PointF(11.333f,2.317f),
+            Gdiplus::PointF(11.333f,2.648f),
+            Gdiplus::PointF(11.000f,2.979f),
+            Gdiplus::PointF(11.000f,3.310f),
+            Gdiplus::PointF(11.333f,3.641f),
+            Gdiplus::PointF(11.333f,4.303f),
+            Gdiplus::PointF(12.000f,5.297f),
+            Gdiplus::PointF(12.000f,5.959f),
+            Gdiplus::PointF(12.333f,6.290f),
+            Gdiplus::PointF(12.333f,6.621f),
+            Gdiplus::PointF(12.667f,6.952f),
+            Gdiplus::PointF(12.667f,7.283f),
+            Gdiplus::PointF(13.333f,8.276f),
+            Gdiplus::PointF(12.333f,9.269f),
+            Gdiplus::PointF(12.000f,9.269f),
+            Gdiplus::PointF(10.667f,10.593f),
+            Gdiplus::PointF(10.333f,10.593f),
+            Gdiplus::PointF(10.333f,10.924f),
+            Gdiplus::PointF(8.667f,12.579f),
+            Gdiplus::PointF(8.667f,12.910f),
+            Gdiplus::PointF(8.333f,13.241f),
+            Gdiplus::PointF(7.667f,13.241f),
+            Gdiplus::PointF(7.333f,12.910f),
+            Gdiplus::PointF(6.667f,12.910f),
+            Gdiplus::PointF(6.333f,12.579f),
+            Gdiplus::PointF(6.000f,12.579f),
+            Gdiplus::PointF(5.667f,12.248f),
+            Gdiplus::PointF(5.000f,12.248f),
+            Gdiplus::PointF(4.667f,11.917f),
+            Gdiplus::PointF(4.333f,11.917f),
+            Gdiplus::PointF(3.333f,11.255f),
+            Gdiplus::PointF(2.667f,11.255f),
+            Gdiplus::PointF(2.333f,11.586f),
+            Gdiplus::PointF(2.000f,11.586f),
+            Gdiplus::PointF(2.000f,11.917f),
+            Gdiplus::PointF(1.667f,12.248f),
+            Gdiplus::PointF(1.667f,12.579f),
+            Gdiplus::PointF(1.000f,13.572f),
+            Gdiplus::PointF(1.000f,14.234f),
+            Gdiplus::PointF(0.667f,14.566f),
+            Gdiplus::PointF(0.667f,14.897f),
+            Gdiplus::PointF(0.000f,15.890f),
+            Gdiplus::PointF(0.000f,17.876f),
+            Gdiplus::PointF(0.333f,18.207f),
+            Gdiplus::PointF(0.667f,18.207f),
+            Gdiplus::PointF(1.667f,18.869f),
+            Gdiplus::PointF(2.333f,18.869f),
+            Gdiplus::PointF(3.333f,19.531f),
+            Gdiplus::PointF(4.000f,19.531f),
+            Gdiplus::PointF(4.333f,19.862f),
+            Gdiplus::PointF(4.667f,19.862f),
+            Gdiplus::PointF(5.333f,20.524f),
+            Gdiplus::PointF(5.000f,20.855f),
+            Gdiplus::PointF(5.000f,26.814f),
+            Gdiplus::PointF(5.333f,27.145f),
+            Gdiplus::PointF(5.333f,27.476f),
+            Gdiplus::PointF(5.000f,27.807f),
+            Gdiplus::PointF(4.667f,27.807f),
+            Gdiplus::PointF(3.667f,28.469f),
+            Gdiplus::PointF(3.000f,28.469f),
+            Gdiplus::PointF(2.000f,29.131f),
+            Gdiplus::PointF(1.333f,29.131f),
+            Gdiplus::PointF(1.000f,29.462f),
+            Gdiplus::PointF(0.667f,29.462f),
+            Gdiplus::PointF(0.000f,30.124f),
+            Gdiplus::PointF(0.000f,31.779f),
+            Gdiplus::PointF(0.333f,32.110f),
+            Gdiplus::PointF(0.333f,32.441f),
+            Gdiplus::PointF(1.000f,33.434f),
+            Gdiplus::PointF(1.000f,34.097f),
+            Gdiplus::PointF(1.333f,34.428f),
+            Gdiplus::PointF(1.333f,34.759f),
+            Gdiplus::PointF(1.667f,35.090f),
+            Gdiplus::PointF(1.667f,35.421f),
+            Gdiplus::PointF(2.333f,36.414f),
+            Gdiplus::PointF(3.667f,36.414f),
+            Gdiplus::PointF(4.667f,35.752f),
+            Gdiplus::PointF(5.333f,35.752f),
+            Gdiplus::PointF(5.667f,35.421f),
+            Gdiplus::PointF(6.000f,35.421f),
+            Gdiplus::PointF(6.333f,35.090f),
+            Gdiplus::PointF(7.000f,35.090f),
+            Gdiplus::PointF(8.000f,34.428f),
+            Gdiplus::PointF(9.667f,36.083f),
+            Gdiplus::PointF(9.667f,36.414f),
+            Gdiplus::PointF(10.667f,37.407f),
+            Gdiplus::PointF(11.000f,37.407f),
+            Gdiplus::PointF(12.333f,38.731f),
+            Gdiplus::PointF(12.667f,38.731f),
+            Gdiplus::PointF(13.333f,39.393f),
+            Gdiplus::PointF(13.333f,40.386f),
+            Gdiplus::PointF(13.000f,40.717f),
+            Gdiplus::PointF(13.000f,41.379f),
+            Gdiplus::PointF(12.667f,41.710f),
+            Gdiplus::PointF(12.667f,42.041f),
+            Gdiplus::PointF(12.333f,42.372f),
+            Gdiplus::PointF(12.333f,43.034f),
+            Gdiplus::PointF(11.667f,44.028f),
+            Gdiplus::PointF(11.667f,45.352f),
+            Gdiplus::PointF(12.333f,46.014f),
+            Gdiplus::PointF(13.000f,46.014f),
+            Gdiplus::PointF(13.333f,46.345f),
+            Gdiplus::PointF(13.667f,46.345f),
+            Gdiplus::PointF(14.667f,47.007f),
+            Gdiplus::PointF(15.333f,47.007f),
+            Gdiplus::PointF(15.667f,47.338f),
+            Gdiplus::PointF(16.333f,47.338f),
+            Gdiplus::PointF(16.667f,47.669f),
+            Gdiplus::PointF(18.000f,47.669f),
+            Gdiplus::PointF(18.667f,47.007f),
+            Gdiplus::PointF(18.667f,46.345f),
+            Gdiplus::PointF(19.333f,45.352f),
+            Gdiplus::PointF(19.333f,44.690f),
+            Gdiplus::PointF(19.667f,44.359f),
+            Gdiplus::PointF(19.667f,44.028f),
+            Gdiplus::PointF(20.333f,43.034f),
+            Gdiplus::PointF(20.333f,42.372f),
+            Gdiplus::PointF(20.667f,42.041f),
+            Gdiplus::PointF(22.333f,42.041f),
+            Gdiplus::PointF(22.667f,42.372f),
+            Gdiplus::PointF(24.000f,42.372f),
+            Gdiplus::PointF(24.333f,42.041f),
+            Gdiplus::PointF(26.667f,42.041f),
+            Gdiplus::PointF(27.000f,41.710f),
+            Gdiplus::PointF(28.000f,42.703f),
+            Gdiplus::PointF(28.000f,43.366f),
+            Gdiplus::PointF(28.333f,43.697f),
+            Gdiplus::PointF(28.333f,44.359f),
+            Gdiplus::PointF(28.667f,44.690f),
+            Gdiplus::PointF(28.667f,45.021f),
+            Gdiplus::PointF(29.000f,45.352f),
+            Gdiplus::PointF(29.000f,45.683f),
+            Gdiplus::PointF(29.333f,46.014f),
+            Gdiplus::PointF(29.333f,46.345f),
+            Gdiplus::PointF(29.667f,46.676f),
+            Gdiplus::PointF(29.667f,47.007f),
+            Gdiplus::PointF(30.333f,47.669f),
+            Gdiplus::PointF(31.333f,47.669f),
+            Gdiplus::PointF(32.333f,47.007f),
+            Gdiplus::PointF(33.000f,47.007f),
+            Gdiplus::PointF(33.333f,46.676f),
+            Gdiplus::PointF(33.667f,46.676f),
+            Gdiplus::PointF(34.667f,46.014f),
+            Gdiplus::PointF(35.333f,46.014f),
+            Gdiplus::PointF(36.333f,45.352f),
+            Gdiplus::PointF(36.333f,43.366f),
+            Gdiplus::PointF(36.000f,43.034f),
+            Gdiplus::PointF(36.000f,42.703f),
+            Gdiplus::PointF(35.333f,41.710f),
+            Gdiplus::PointF(35.333f,41.048f),
+            Gdiplus::PointF(35.000f,40.717f),
+            Gdiplus::PointF(35.000f,40.386f),
+            Gdiplus::PointF(34.333f,39.393f),
+            Gdiplus::PointF(34.333f,38.731f),
+            Gdiplus::PointF(35.000f,38.069f),
+            Gdiplus::PointF(35.333f,38.069f),
+            Gdiplus::PointF(37.333f,36.083f),
+            Gdiplus::PointF(37.333f,35.752f),
+            Gdiplus::PointF(39.000f,34.097f),
+            Gdiplus::PointF(39.333f,34.097f),
+            Gdiplus::PointF(40.333f,34.759f),
+            Gdiplus::PointF(41.000f,34.759f),
+            Gdiplus::PointF(42.000f,35.421f),
+            Gdiplus::PointF(42.667f,35.421f),
+            Gdiplus::PointF(43.000f,35.752f),
+            Gdiplus::PointF(43.333f,35.752f),
+            Gdiplus::PointF(44.333f,36.414f),
+            Gdiplus::PointF(45.000f,36.414f),
+            Gdiplus::PointF(45.333f,36.083f),
+            Gdiplus::PointF(45.667f,36.083f),
+            Gdiplus::PointF(45.667f,35.752f),
+            Gdiplus::PointF(46.000f,35.421f),
+            Gdiplus::PointF(46.000f,35.090f),
+            Gdiplus::PointF(46.667f,34.097f),
+            Gdiplus::PointF(46.667f,33.434f),
+            Gdiplus::PointF(47.000f,33.103f),
+            Gdiplus::PointF(47.000f,32.441f),
+            Gdiplus::PointF(47.667f,31.448f),
+            Gdiplus::PointF(47.667f,29.793f),
+            Gdiplus::PointF(46.667f,29.131f),
+            Gdiplus::PointF(46.000f,29.131f),
+            Gdiplus::PointF(45.000f,28.469f),
+            Gdiplus::PointF(44.333f,28.469f),
+            Gdiplus::PointF(44.000f,28.138f),
+            Gdiplus::PointF(43.667f,28.138f),
+            Gdiplus::PointF(43.333f,27.807f),
+            Gdiplus::PointF(43.000f,27.807f),
+            Gdiplus::PointF(42.667f,27.476f),
+            Gdiplus::PointF(42.333f,27.476f),
+            Gdiplus::PointF(41.667f,26.814f),
+            Gdiplus::PointF(41.667f,26.483f),
+            Gdiplus::PointF(42.000f,26.152f),
+            Gdiplus::PointF(42.000f,21.517f),
+            Gdiplus::PointF(41.667f,21.186f),
+            Gdiplus::PointF(41.667f,20.524f),
+            Gdiplus::PointF(42.000f,20.193f),
+            Gdiplus::PointF(42.333f,20.193f),
+            Gdiplus::PointF(42.667f,19.862f),
+            Gdiplus::PointF(43.000f,19.862f),
+            Gdiplus::PointF(44.000f,19.200f),
+            Gdiplus::PointF(44.667f,19.200f),
+            Gdiplus::PointF(45.000f,18.869f),
+            Gdiplus::PointF(45.333f,18.869f),
+            Gdiplus::PointF(46.333f,18.207f),
+            Gdiplus::PointF(47.000f,18.207f),
+            Gdiplus::PointF(47.667f,17.545f),
+            Gdiplus::PointF(47.667f,16.221f),
+            Gdiplus::PointF(47.333f,15.890f),
+            Gdiplus::PointF(47.333f,15.228f),
+            Gdiplus::PointF(46.667f,14.234f),
+            Gdiplus::PointF(46.667f,13.572f),
+            Gdiplus::PointF(46.333f,13.241f),
+            Gdiplus::PointF(46.333f,12.910f),
+            Gdiplus::PointF(46.000f,12.579f),
+            Gdiplus::PointF(46.000f,12.248f),
+            Gdiplus::PointF(45.333f,11.255f),
+            Gdiplus::PointF(44.000f,11.255f),
+            Gdiplus::PointF(43.000f,11.917f),
+            Gdiplus::PointF(42.333f,11.917f),
+            Gdiplus::PointF(41.333f,12.579f),
+            Gdiplus::PointF(40.667f,12.579f),
+            Gdiplus::PointF(40.333f,12.910f),
+            Gdiplus::PointF(40.000f,12.910f),
+            Gdiplus::PointF(39.667f,13.241f),
+            Gdiplus::PointF(39.333f,13.241f),
+            Gdiplus::PointF(39.000f,13.572f),
+            Gdiplus::PointF(38.667f,13.572f),
+            Gdiplus::PointF(38.333f,13.241f),
+            Gdiplus::PointF(38.333f,12.910f),
+            Gdiplus::PointF(36.667f,11.255f),
+            Gdiplus::PointF(36.667f,10.924f),
+            Gdiplus::PointF(36.333f,10.593f),
+            Gdiplus::PointF(36.000f,10.593f),
+            Gdiplus::PointF(34.000f,8.607f),
+            Gdiplus::PointF(34.000f,7.945f),
+            Gdiplus::PointF(34.667f,6.952f),
+            Gdiplus::PointF(34.667f,6.290f),
+            Gdiplus::PointF(35.000f,5.959f),
+            Gdiplus::PointF(35.000f,5.628f),
+            Gdiplus::PointF(35.333f,5.297f),
+            Gdiplus::PointF(35.333f,4.634f),
+            Gdiplus::PointF(36.000f,3.641f),
+            Gdiplus::PointF(36.000f,2.317f),
+            Gdiplus::PointF(35.333f,1.655f),
+            Gdiplus::PointF(34.667f,1.655f),
+            Gdiplus::PointF(34.333f,1.324f),
+            Gdiplus::PointF(34.000f,1.324f),
+            Gdiplus::PointF(33.000f,0.662f),
+            Gdiplus::PointF(32.333f,0.662f),
+            Gdiplus::PointF(32.000f,0.331f),
+            Gdiplus::PointF(31.333f,0.331f),
+            Gdiplus::PointF(31.000f,0.000f),
+            Gdiplus::PointF(29.667f,0.000f),
+            Gdiplus::PointF(29.000f,0.662f),
+            Gdiplus::PointF(29.000f,0.993f),
+            Gdiplus::PointF(28.333f,1.986f),
+            Gdiplus::PointF(28.333f,2.648f),
+            Gdiplus::PointF(28.000f,2.979f),
+            Gdiplus::PointF(28.000f,3.641f),
+            Gdiplus::PointF(27.333f,4.634f),
+            Gdiplus::PointF(27.333f,5.297f),
+            Gdiplus::PointF(26.667f,5.959f),
+            Gdiplus::PointF(26.333f,5.628f),
+            Gdiplus::PointF(20.333f,5.628f),
+            Gdiplus::PointF(19.667f,4.966f),
+            Gdiplus::PointF(19.667f,4.303f),
+            Gdiplus::PointF(19.333f,3.972f),
+            Gdiplus::PointF(19.333f,3.641f),
+            Gdiplus::PointF(18.667f,2.648f),
+            Gdiplus::PointF(18.667f,1.986f),
+            Gdiplus::PointF(18.333f,1.655f),
+            Gdiplus::PointF(18.333f,1.324f),
+            Gdiplus::PointF(18.000f,0.993f),
+            Gdiplus::PointF(18.000f,0.662f),
+            Gdiplus::PointF(17.333f,0.000f)
+        };
+        const Gdiplus::PointF inner[] = {
+            Gdiplus::PointF(22.000f,12.248f),
+            Gdiplus::PointF(25.333f,12.248f),
+            Gdiplus::PointF(25.667f,12.579f),
+            Gdiplus::PointF(26.667f,12.579f),
+            Gdiplus::PointF(27.000f,12.910f),
+            Gdiplus::PointF(27.667f,12.910f),
+            Gdiplus::PointF(28.000f,13.241f),
+            Gdiplus::PointF(28.667f,13.241f),
+            Gdiplus::PointF(29.333f,13.903f),
+            Gdiplus::PointF(29.667f,13.903f),
+            Gdiplus::PointF(30.333f,14.566f),
+            Gdiplus::PointF(30.667f,14.566f),
+            Gdiplus::PointF(33.333f,17.214f),
+            Gdiplus::PointF(33.333f,17.545f),
+            Gdiplus::PointF(34.000f,18.207f),
+            Gdiplus::PointF(34.000f,18.538f),
+            Gdiplus::PointF(34.333f,18.869f),
+            Gdiplus::PointF(34.333f,19.531f),
+            Gdiplus::PointF(35.000f,20.524f),
+            Gdiplus::PointF(35.000f,21.517f),
+            Gdiplus::PointF(35.333f,21.848f),
+            Gdiplus::PointF(35.333f,26.152f),
+            Gdiplus::PointF(35.000f,26.483f),
+            Gdiplus::PointF(35.000f,27.145f),
+            Gdiplus::PointF(34.667f,27.476f),
+            Gdiplus::PointF(34.667f,28.138f),
+            Gdiplus::PointF(34.333f,28.469f),
+            Gdiplus::PointF(34.333f,28.800f),
+            Gdiplus::PointF(34.000f,29.131f),
+            Gdiplus::PointF(34.000f,29.462f),
+            Gdiplus::PointF(33.667f,29.793f),
+            Gdiplus::PointF(33.667f,30.124f),
+            Gdiplus::PointF(32.667f,31.117f),
+            Gdiplus::PointF(32.667f,31.448f),
+            Gdiplus::PointF(31.000f,33.103f),
+            Gdiplus::PointF(30.667f,33.103f),
+            Gdiplus::PointF(30.000f,33.766f),
+            Gdiplus::PointF(29.667f,33.766f),
+            Gdiplus::PointF(29.000f,34.428f),
+            Gdiplus::PointF(28.333f,34.428f),
+            Gdiplus::PointF(28.000f,34.759f),
+            Gdiplus::PointF(27.667f,34.759f),
+            Gdiplus::PointF(27.333f,35.090f),
+            Gdiplus::PointF(26.667f,35.090f),
+            Gdiplus::PointF(26.333f,35.421f),
+            Gdiplus::PointF(24.667f,35.421f),
+            Gdiplus::PointF(24.333f,35.752f),
+            Gdiplus::PointF(23.000f,35.752f),
+            Gdiplus::PointF(22.667f,35.421f),
+            Gdiplus::PointF(21.000f,35.421f),
+            Gdiplus::PointF(20.667f,35.090f),
+            Gdiplus::PointF(20.000f,35.090f),
+            Gdiplus::PointF(19.000f,34.428f),
+            Gdiplus::PointF(18.333f,34.428f),
+            Gdiplus::PointF(18.000f,34.097f),
+            Gdiplus::PointF(17.667f,34.097f),
+            Gdiplus::PointF(16.667f,33.103f),
+            Gdiplus::PointF(16.333f,33.103f),
+            Gdiplus::PointF(14.333f,31.117f),
+            Gdiplus::PointF(14.333f,30.786f),
+            Gdiplus::PointF(13.667f,30.124f),
+            Gdiplus::PointF(13.667f,29.793f),
+            Gdiplus::PointF(13.000f,29.131f),
+            Gdiplus::PointF(13.000f,28.469f),
+            Gdiplus::PointF(12.667f,28.138f),
+            Gdiplus::PointF(12.667f,27.476f),
+            Gdiplus::PointF(12.333f,27.145f),
+            Gdiplus::PointF(12.333f,26.483f),
+            Gdiplus::PointF(12.000f,26.152f),
+            Gdiplus::PointF(12.000f,21.848f),
+            Gdiplus::PointF(12.333f,21.517f),
+            Gdiplus::PointF(12.333f,20.524f),
+            Gdiplus::PointF(12.667f,20.193f),
+            Gdiplus::PointF(12.667f,19.531f),
+            Gdiplus::PointF(13.000f,19.200f),
+            Gdiplus::PointF(13.000f,18.869f),
+            Gdiplus::PointF(13.333f,18.538f),
+            Gdiplus::PointF(13.333f,18.207f),
+            Gdiplus::PointF(14.000f,17.545f),
+            Gdiplus::PointF(14.000f,17.214f),
+            Gdiplus::PointF(16.667f,14.566f),
+            Gdiplus::PointF(17.000f,14.566f),
+            Gdiplus::PointF(18.000f,13.572f),
+            Gdiplus::PointF(18.333f,13.572f),
+            Gdiplus::PointF(18.667f,13.241f),
+            Gdiplus::PointF(19.333f,13.241f),
+            Gdiplus::PointF(19.667f,12.910f),
+            Gdiplus::PointF(20.333f,12.910f),
+            Gdiplus::PointF(20.667f,12.579f),
+            Gdiplus::PointF(21.667f,12.579f)
+        };
+        Gdiplus::GraphicsPath gear(Gdiplus::FillModeAlternate);
+        gear.AddPolygon(outer, ARRAYSIZE(outer));
+        gear.AddPolygon(inner, ARRAYSIZE(inner));
+        g.FillPath(&white,&gear);
+    } else if (icon == Icon::Store) {
+        // Vector reconstruction of the Music tile icon.
+        Gdiplus::GraphicsPath store(Gdiplus::FillModeAlternate);
+        { const Gdiplus::PointF pts[] = {{13.244f,1.639f},{11.195f,4.215f},{10.171f,6.556f},{9.966f,7.961f},{9.761f,8.195f},{9.761f,11.941f},{9.351f,12.410f},{8.737f,12.410f},{8.532f,12.644f},{6.483f,12.878f},{6.278f,13.112f},{5.459f,13.112f},{5.254f,13.346f},{3.000f,13.815f},{3.000f,40.976f},{5.663f,41.444f},{5.868f,41.678f},{6.688f,41.678f},{6.893f,41.912f},{7.712f,41.912f},{7.917f,42.146f},{8.737f,42.146f},{8.941f,42.380f},{9.761f,42.380f},{9.966f,42.615f},{10.785f,42.615f},{10.990f,42.849f},{11.810f,42.849f},{12.015f,43.083f},{12.834f,43.083f},{13.039f,43.317f},{13.859f,43.317f},{14.063f,43.551f},{14.883f,43.551f},{15.088f,43.785f},{15.907f,43.785f},{16.112f,44.020f},{17.137f,44.020f},{17.341f,44.254f},{20.005f,44.722f},{20.210f,44.956f},{21.234f,44.956f},{21.439f,45.190f},{24.102f,45.659f},{24.307f,45.893f},{25.332f,45.893f},{25.537f,46.127f},{28.200f,46.595f},{28.405f,46.829f},{29.429f,46.829f},{29.634f,47.063f},{32.298f,47.532f},{32.502f,47.766f},{34.141f,47.532f},{34.756f,47.063f},{35.166f,47.063f},{35.780f,46.595f},{36.190f,46.595f},{36.805f,46.127f},{37.829f,45.893f},{38.444f,45.424f},{40.288f,44.722f},{40.288f,10.068f},{36.395f,9.366f},{33.527f,7.024f},{32.093f,7.024f},{31.888f,7.259f},{30.249f,7.493f},{29.224f,7.961f},{28.815f,7.493f},{28.610f,6.556f},{27.790f,4.917f},{25.946f,2.810f},{24.307f,1.873f},{25.127f,2.810f},{25.537f,3.746f},{25.946f,3.980f},{27.380f,5.854f},{27.995f,7.259f},{27.995f,7.961f},{27.790f,8.195f},{25.537f,8.663f},{25.332f,8.429f},{24.922f,5.854f},{23.693f,3.278f},{22.463f,1.873f},{21.234f,0.937f},{20.824f,0.937f},{19.595f,0.234f},{18.980f,0.234f},{18.776f,0.000f},{16.522f,0.000f},{16.317f,0.234f},{15.498f,0.234f}}; store.AddPolygon(pts, ARRAYSIZE(pts)); }
+        { const Gdiplus::PointF pts[] = {{16.112f,19.200f},{16.317f,19.434f},{16.317f,26.927f},{16.112f,27.161f},{16.317f,27.395f},{16.317f,34.654f},{16.112f,34.888f},{15.293f,34.888f},{15.088f,34.654f},{13.859f,34.654f},{13.654f,34.420f},{9.556f,33.951f},{9.146f,33.483f},{9.146f,27.395f},{9.351f,27.161f},{9.146f,26.693f},{9.146f,20.605f},{9.556f,20.137f}}; store.AddPolygon(pts, ARRAYSIZE(pts)); }
+        { const Gdiplus::PointF pts[] = {{25.537f,17.795f},{25.741f,18.029f},{25.741f,26.693f},{25.537f,26.927f},{25.741f,27.395f},{25.741f,36.059f},{25.537f,36.293f},{24.102f,36.293f},{23.898f,36.059f},{22.668f,36.059f},{22.463f,35.824f},{21.234f,35.824f},{21.029f,35.590f},{19.800f,35.590f},{19.595f,35.356f},{18.366f,35.356f},{18.161f,35.122f},{16.727f,35.122f},{16.317f,34.654f},{16.317f,27.395f},{16.522f,27.161f},{16.317f,26.693f},{16.317f,19.434f},{16.727f,18.966f},{18.161f,18.966f},{18.366f,18.732f},{19.595f,18.732f},{19.800f,18.498f},{21.029f,18.498f},{21.234f,18.263f},{22.463f,18.263f},{22.668f,18.029f}}; store.AddPolygon(pts, ARRAYSIZE(pts)); }
+        { const Gdiplus::PointF pts[] = {{24.102f,5.854f},{24.512f,7.259f},{24.512f,8.663f},{24.307f,8.898f},{22.873f,9.132f},{21.849f,9.600f},{21.029f,9.600f},{20.824f,9.834f},{20.005f,9.834f},{19.800f,10.068f},{18.776f,10.068f},{18.571f,10.302f},{15.907f,10.771f},{15.702f,11.005f},{14.883f,11.005f},{14.678f,11.239f},{14.268f,10.771f},{14.268f,10.068f},{15.293f,6.790f},{16.112f,5.385f},{17.751f,3.512f},{18.980f,2.810f},{18.776f,2.576f},{17.546f,2.576f},{15.907f,4.215f},{14.883f,5.854f},{13.859f,8.429f},{13.449f,11.239f},{11.605f,11.941f},{10.580f,11.941f},{10.376f,11.707f},{10.376f,9.132f},{10.580f,8.898f},{10.580f,7.961f},{11.605f,5.151f},{14.063f,2.107f},{16.112f,0.937f},{18.980f,0.937f},{19.185f,1.171f},{19.800f,1.171f},{21.644f,2.341f},{23.283f,4.215f}}; store.AddPolygon(pts, ARRAYSIZE(pts)); }
+        g.FillPath(&white,&store);
+    } else if (icon == Icon::Camera) {
+        g.DrawRectangle(&pen,5.0f,13.0f,38.0f,26.0f);
+        g.DrawLine(&pen,12.0f,13.0f,16.0f,8.0f);g.DrawLine(&pen,16.0f,8.0f,28.0f,8.0f);
+        g.DrawLine(&pen,28.0f,8.0f,32.0f,13.0f);g.DrawEllipse(&pen,17.0f,18.0f,14.0f,14.0f);
+    } else if (icon == Icon::Clock) {
+        g.DrawEllipse(&pen,5.0f,5.0f,38.0f,38.0f);g.DrawLine(&pen,24.0f,10.0f,24.0f,25.0f);
+        g.DrawLine(&pen,24.0f,25.0f,34.0f,30.0f);
+    } else if (icon == Icon::Maps) {
+        g.DrawEllipse(&pen,13.0f,5.0f,22.0f,22.0f);g.DrawEllipse(&pen,20.0f,12.0f,8.0f,8.0f);
+        g.DrawLine(&pen,14.0f,21.0f,24.0f,42.0f);g.DrawLine(&pen,34.0f,21.0f,24.0f,42.0f);
+    } else if (icon == Icon::Music) {
+        // Scaled vector contour for the Music tile.
+        Gdiplus::GraphicsPath shape(Gdiplus::FillModeAlternate);
+        { const Gdiplus::PointF pts[] = {{37.818f,26.667f},{36.364f,26.667f},{35.394f,27.636f},{34.909f,27.636f},{34.424f,28.606f},{34.424f,30.061f},{33.939f,30.545f},{33.939f,33.939f},{33.455f,34.424f},{33.455f,37.818f},{32.970f,38.303f},{32.970f,41.212f},{32.485f,41.697f},{32.485f,44.606f},{32.970f,45.576f},{33.939f,46.545f},{34.909f,46.545f},{35.394f,47.030f},{36.848f,46.545f},{39.273f,43.636f},{39.758f,42.667f},{39.758f,41.697f},{40.242f,41.212f},{40.242f,40.242f},{40.727f,39.758f},{40.727f,37.818f},{41.212f,37.333f},{41.212f,32.485f},{40.727f,32.000f},{40.727f,30.545f},{40.242f,30.061f},{40.242f,29.091f},{39.758f,28.121f}}; shape.AddPolygon(pts, ARRAYSIZE(pts)); }
+        { const Gdiplus::PointF pts[] = {{9.697f,26.667f},{7.758f,28.121f},{7.273f,29.091f},{7.273f,30.061f},{6.788f,30.545f},{6.788f,32.000f},{6.303f,32.485f},{6.303f,37.333f},{6.788f,37.818f},{6.788f,39.758f},{7.273f,40.242f},{7.273f,41.212f},{7.758f,41.697f},{7.758f,42.667f},{8.242f,43.636f},{10.667f,46.545f},{12.121f,47.030f},{12.606f,46.545f},{13.576f,46.545f},{14.545f,45.576f},{15.030f,44.606f},{15.030f,41.697f},{14.545f,41.212f},{14.545f,38.303f},{14.061f,37.818f},{14.061f,34.424f},{13.576f,33.939f},{13.576f,30.545f},{13.091f,30.061f},{13.091f,28.606f},{12.121f,27.152f},{11.152f,26.667f}}; shape.AddPolygon(pts, ARRAYSIZE(pts)); }
+        { const Gdiplus::PointF pts[] = {{8.727f,4.848f},{4.848f,8.727f},{4.848f,9.212f},{2.909f,11.636f},{1.939f,13.576f},{1.939f,14.545f},{0.970f,16.000f},{0.970f,17.455f},{0.485f,17.939f},{0.485f,19.394f},{0.000f,19.879f},{0.000f,26.182f},{0.970f,27.636f},{0.970f,33.939f},{1.455f,34.424f},{1.455f,36.848f},{1.939f,37.333f},{1.939f,39.273f},{2.424f,39.758f},{2.424f,41.212f},{2.909f,41.697f},{2.909f,42.667f},{3.879f,44.606f},{4.364f,45.091f},{5.333f,45.091f},{5.333f,44.121f},{4.364f,42.667f},{4.364f,41.697f},{3.394f,39.758f},{3.394f,38.303f},{2.909f,37.818f},{2.909f,35.394f},{2.424f,34.909f},{2.424f,31.030f},{1.939f,30.545f},{1.939f,27.152f},{2.909f,26.182f},{2.909f,21.818f},{3.394f,21.333f},{3.394f,19.394f},{3.879f,18.909f},{3.879f,17.455f},{4.364f,16.970f},{4.364f,16.000f},{5.818f,13.091f},{6.788f,12.121f},{6.788f,11.636f},{11.636f,6.788f},{12.121f,6.788f},{13.091f,5.818f},{15.030f,4.848f},{16.000f,4.848f},{17.939f,3.879f},{19.879f,3.879f},{20.364f,3.394f},{27.152f,3.394f},{27.636f,3.879f},{29.576f,3.879f},{30.061f,4.364f},{32.485f,4.848f},{34.424f,5.818f},{35.394f,6.788f},{35.879f,6.788f},{40.727f,11.636f},{40.727f,12.121f},{41.697f,13.091f},{43.152f,16.000f},{43.152f,16.970f},{43.636f,17.455f},{43.636f,18.909f},{44.121f,19.394f},{44.121f,21.333f},{44.606f,21.818f},{44.606f,26.182f},{45.576f,27.152f},{45.576f,30.545f},{45.091f,31.030f},{45.091f,34.909f},{44.606f,35.394f},{44.606f,37.818f},{44.121f,38.303f},{44.121f,39.758f},{43.636f,40.242f},{43.152f,42.667f},{42.182f,44.121f},{42.182f,45.091f},{43.152f,45.091f},{44.606f,42.667f},{44.606f,41.697f},{45.091f,41.212f},{45.091f,39.758f},{45.576f,39.273f},{45.576f,37.333f},{46.061f,36.848f},{46.061f,34.424f},{46.545f,33.939f},{46.545f,27.636f},{47.515f,26.182f},{47.515f,19.879f},{47.030f,19.394f},{47.030f,17.939f},{46.545f,17.455f},{46.545f,16.000f},{45.576f,14.545f},{45.576f,13.576f},{44.606f,11.636f},{42.667f,9.212f},{42.667f,8.727f},{38.788f,4.848f},{38.303f,4.848f},{37.333f,3.879f},{32.485f,1.455f},{31.515f,1.455f},{31.030f,0.970f},{29.576f,0.970f},{29.091f,0.485f},{25.697f,0.485f},{25.212f,0.000f},{22.303f,0.000f},{21.818f,0.485f},{18.424f,0.485f},{17.939f,0.970f},{16.485f,0.970f}}; shape.AddPolygon(pts, ARRAYSIZE(pts)); }
+        g.FillPath(&white,&shape);
+    } else if (icon == Icon::Video) {
+        g.DrawRectangle(&pen,6.0f,11.0f,36.0f,29.0f);Gdiplus::PointF play[]={{19,17},{19,34},{33,25}};g.FillPolygon(&white,play,3);
+    } else if (icon == Icon::Recorder) {
+        g.DrawEllipse(&pen,17.0f,5.0f,14.0f,25.0f);g.DrawArc(&pen,12.0f,13.0f,24.0f,22.0f,0.0f,180.0f);
+        g.DrawLine(&pen,24.0f,35.0f,24.0f,43.0f);g.DrawLine(&pen,16.0f,43.0f,32.0f,43.0f);
+    } else if (icon == Icon::Photos) {
+        // Recreated geometry, not extracted Microsoft artwork.
+        g.DrawRectangle(&pen,5.0f,8.0f,38.0f,32.0f);
+        g.FillEllipse(&white,12.0f,13.0f,7.0f,7.0f);
+        Gdiplus::PointF mountains[]={{8,36},{19,23},{25,29},{30,23},{40,36}};
+        g.FillPolygon(&white,mountains,5);
+    } else if (icon == Icon::Xbox) {
+        g.DrawEllipse(&pen,5.0f,5.0f,38.0f,38.0f);
+        Gdiplus::Pen cross(Gdiplus::Color(255,255,255,255),4.0f);
+        g.DrawBezier(&cross,11.0f,35.0f,16.0f,20.0f,30.0f,10.0f,36.0f,12.0f);
+        g.DrawBezier(&cross,12.0f,12.0f,19.0f,11.0f,33.0f,21.0f,37.0f,35.0f);
+    } else if (icon == Icon::Cloud) {
+        g.FillEllipse(&white,5.0f,23.0f,17.0f,13.0f);
+        g.FillEllipse(&white,15.0f,13.0f,20.0f,23.0f);
+        g.FillEllipse(&white,29.0f,22.0f,14.0f,14.0f);
+        g.FillRectangle(&white,11.0f,28.0f,27.0f,8.0f);
+    } else if (icon == Icon::Solitaire) {
+        g.DrawRectangle(&pen,10.0f,5.0f,25.0f,34.0f);
+        g.DrawLine(&pen,15.0f,42.0f,39.0f,42.0f);
+        g.DrawLine(&pen,39.0f,11.0f,39.0f,42.0f);
+        Gdiplus::PointF diamond[]={{22.5f,14.0f},{29.0f,22.0f},{22.5f,30.0f},{16.0f,22.0f}};
+        g.FillPolygon(&white,diamond,4);
+    } else if (icon == Icon::Calculator) {
+        g.DrawRectangle(&pen, 11.0f, 5.0f, 26.0f, 38.0f);
+        g.FillRectangle(&white, 15.0f, 9.0f, 18.0f, 7.0f);
+        for (int row=0; row<3; ++row) for (int col=0; col<3; ++col)
+            g.FillRectangle(&white, 15.0f+col*7, 21.0f+row*7, 4.0f, 4.0f);
+    } else if (icon == Icon::Mail) {
+        g.DrawRectangle(&pen, 5.0f, 12.0f, 38.0f, 25.0f);
+        g.DrawLine(&pen, 5.0f, 13.0f, 24.0f, 27.0f);
+        g.DrawLine(&pen, 24.0f, 27.0f, 43.0f, 13.0f);
+    } else {
+        g.DrawRectangle(&pen, 7.0f, 9.0f, 34.0f, 32.0f);
+        g.DrawLine(&pen, 7.0f, 18.0f, 41.0f, 18.0f);
+        g.DrawLine(&pen, 15.0f, 5.0f, 15.0f, 13.0f);
+        g.DrawLine(&pen, 33.0f, 5.0f, 33.0f, 13.0f);
+        for (int row=0; row<2; ++row) for (int col=0; col<3; ++col)
+            g.FillRectangle(&white, 13.0f+col*9, 23.0f+row*9, 5.0f, 5.0f);
+    }
+    return g.GetLastStatus() == Gdiplus::Ok;
+}
+
+
+static bool IsLocalInfoTile(const wchar_t* id) {
+    return id && (!_wcsicmp(id,L"windhawk:weather-tile-v1") || !_wcsicmp(id,L"windhawk:calendar-tile-v1") || !_wcsicmp(id,L"windhawk:clock-tile-v1"));
+}
+static const wchar_t* LocalInfoUrl(const wchar_t* id) {
+    if (!id) return NULL;
+    if (!_wcsicmp(id,L"windhawk:weather-tile-v1")) return L"https://www.msn.com/weather";
+    if (!_wcsicmp(id,L"windhawk:calendar-tile-v1")) return L"https://outlook.live.com/calendar/";
+    if (!_wcsicmp(id,L"windhawk:clock-tile-v1")) return L"https://apps.microsoft.com/detail/9wzdncrfj3pr";
+    return NULL;
+}
+// Local slideshow adapted from Windows 8.1/10 Start Menu Recreation (GPL-3.0).
+class LocalPhotoSlideshow {
+    HANDLE stop_=nullptr, thread_=nullptr;
+    HWND owner_=nullptr;
+    std::mutex mutex_;
+    std::vector<BYTE> current_, previous_;
+    ULONGLONG changed_=0;
+    static constexpr int side_=256;
+    static DWORD WINAPI Worker(void* raw) {
+        auto* self=static_cast<LocalPhotoSlideshow*>(raw);
+        HRESULT init=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
+        try { self->Run(); } catch (...) { Wh_Log(L"[Photos] worker failed"); }
+        if (SUCCEEDED(init)) CoUninitialize();
+        return 0;
+    }
+    void Run() {
+        PWSTR raw=nullptr;
+        // The known folder may be redirected; the Shell supplies its current path.
+        // https://learn.microsoft.com/windows/win32/api/shlobj_core/nf-shlobj_core-shgetknownfolderpath
+        HRESULT hr=SHGetKnownFolderPath(FOLDERID_Pictures,KF_FLAG_DEFAULT,nullptr,&raw);
+        std::wstring root=SUCCEEDED(hr) && raw ? raw : L"";
+        if(raw)CoTaskMemFree(raw);
+        // Only fixed local drives. Avoid waking remote and offline content.
+        if(root.size()<3 || root[1]!=L':' || root[2]!=L'\\') return;
+        wchar_t drive[]={root[0],L':',L'\\',0};
+        if(GetDriveTypeW(drive)!=DRIVE_FIXED) return;
+        DWORD folder=GetFileAttributesW(root.c_str());
+        if(folder==INVALID_FILE_ATTRIBUTES || (folder & (FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_OFFLINE))) return;
+        std::vector<std::wstring> files;
+            WIN32_FIND_DATAW entry{};
+            HANDLE find=FindFirstFileW((root+L"\\*").c_str(),&entry);
+            if(find!=INVALID_HANDLE_VALUE) {
+                do {
+                    if(WaitForSingleObject(stop_,0)!=WAIT_TIMEOUT) break;
+                    if(entry.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_OFFLINE)) continue;
+                    unsigned long long bytes=((unsigned long long)entry.nFileSizeHigh<<32)|entry.nFileSizeLow;
+                    if(!bytes || bytes>16ull*1024*1024) continue;
+                    std::wstring name=entry.cFileName; size_t dot=name.find_last_of(L'.');
+                    if(dot==std::wstring::npos) continue;
+                    const wchar_t* ext=name.c_str()+dot;
+                    if(_wcsicmp(ext,L".jpg") && _wcsicmp(ext,L".jpeg") && _wcsicmp(ext,L".png")) continue;
+                    files.push_back(root+L"\\"+name);
+                } while(files.size()<128 && FindNextFileW(find,&entry));
+                FindClose(find);
+            }
+        std::sort(files.begin(),files.end());
+        std::vector<std::vector<BYTE>> thumbnails(files.size());
+        std::vector<bool> attempted(files.size(),false);
+        size_t next=0;
+        while(WaitForSingleObject(stop_,0)==WAIT_TIMEOUT) {
+            if(!files.empty() && WaitForSingleObject(stop_,0)==WAIT_TIMEOUT) {
+                const size_t index=next++ % files.size();
+                if (!attempted[index]) {
+                attempted[index]=true;
+                const std::wstring& path=files[index];
+                Gdiplus::Bitmap source(path.c_str(),FALSE);
+                UINT w=source.GetWidth(), h=source.GetHeight();
+                if(source.GetLastStatus()==Gdiplus::Ok && w && h && w<=10000 && h<=10000 && (unsigned long long)w*h<=40000000) {
+                    Gdiplus::Bitmap thumb(side_,side_,PixelFormat32bppARGB);
+                    Gdiplus::Status drawStatus;
+                    {
+                        Gdiplus::Graphics graphics(&thumb);
+                        graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                        float crop=(float)(std::min)(w,h),x=(w-crop)/2,y=(h-crop)/2;
+                        drawStatus=graphics.DrawImage(&source,Gdiplus::Rect(0,0,side_,side_),x,y,crop,crop,Gdiplus::UnitPixel);
+                    }
+                    if(drawStatus==Gdiplus::Ok) {
+                        Gdiplus::Rect r(0,0,side_,side_); Gdiplus::BitmapData data{};
+                        if(thumb.LockBits(&r,Gdiplus::ImageLockModeRead,PixelFormat32bppARGB,&data)==Gdiplus::Ok) {
+                            std::vector<BYTE> pixels(side_*side_*4);
+                            for(int row=0;row<side_;row++) memcpy(pixels.data()+row*side_*4,(BYTE*)data.Scan0+row*data.Stride,side_*4);
+                            thumb.UnlockBits(&data);
+                            thumbnails[index]=std::move(pixels);
+                        }
+                    }
+                }
+                }
+                if (!thumbnails[index].empty() && WaitForSingleObject(stop_,0)==WAIT_TIMEOUT) {
+                    {std::lock_guard<std::mutex> lock(mutex_);
+                     previous_=std::move(current_);current_=thumbnails[index];changed_=GetTickCount64();}
+                    PostMessageW(owner_,(WM_APP + 20),0,0);
+                }
+            }
+            if(WaitForSingleObject(stop_,8000)!=WAIT_TIMEOUT) break;
+        }
+    }
+public:
+    ~LocalPhotoSlideshow(){ Stop(); }
+    void Start(HWND owner) {
+        if(thread_ || !owner) return;
+        owner_=owner;stop_=CreateEventW(nullptr,TRUE,FALSE,nullptr);
+        if(stop_) thread_=CreateThread(nullptr,0,Worker,this,0,nullptr);
+        if(stop_ && !thread_){CloseHandle(stop_);stop_=nullptr;}
+    }
+    void Stop() {
+        if(stop_)SetEvent(stop_);
+        if(thread_){WaitForSingleObject(thread_,INFINITE);CloseHandle(thread_);thread_=nullptr;}
+        if(stop_){CloseHandle(stop_);stop_=nullptr;}
+        std::lock_guard<std::mutex> lock(mutex_);current_.clear();previous_.clear();changed_=0;
+    }
+    bool Draw(HDC dc,const RECT& rc,bool slide) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if(current_.empty()) return false;
+        int w=rc.right-rc.left,h=rc.bottom-rc.top;if(w<=0 || h<=0)return false;
+        Gdiplus::Graphics g(dc);if(g.GetLastStatus()!=Gdiplus::Ok)return false;
+        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        g.SetClip(Gdiplus::Rect(rc.left,rc.top,w,h));
+        float t=(std::min)(1.0f,(GetTickCount64()-changed_)/400.0f);
+        Gdiplus::Bitmap now(side_,side_,side_*4,PixelFormat32bppARGB,current_.data());
+        if(!previous_.empty() && t<1.0f) {
+            Gdiplus::Bitmap prev(side_,side_,side_*4,PixelFormat32bppARGB,previous_.data());
+            if (slide) {
+                int dy=(int)(h*(t*t*(3.0f-2.0f*t)));
+                g.DrawImage(&prev,Gdiplus::Rect(rc.left,rc.top+dy,w,h));
+                g.DrawImage(&now,Gdiplus::Rect(rc.left,rc.top+dy-h,w,h));
+            }
+            else {
+                float z=(std::max)(0.05f,cosf((t<0.5f?t:1.0f-t)*3.14159265f));
+                int ht=(std::max)(1,(int)(h*z));
+                g.DrawImage(t<0.5f?&prev:&now,Gdiplus::Rect(rc.left,rc.top+(h-ht)/2,w,ht));
+            }
+        } else g.DrawImage(&now,Gdiplus::Rect(rc.left,rc.top,w,h));
+        return true;
+    }
+};
+
+
+static LocalPhotoSlideshow g_photoSlideshow;
+static volatile LONG g_photoEnabled = 0;
+static DWORD g_photoAnimationTick = 0;
+static bool IsPhotoTile(const Tile& t) {
+    if (!t.alive || t.customTile || !t.target) return false;
+    const wchar_t* id=t.target; const wchar_t* prefix=L"shell:AppsFolder\\";
+    if (!_wcsnicmp(id,prefix,wcslen(prefix))) id+=wcslen(prefix);
+    return !_wcsicmp(id,L"Microsoft.Windows.Photos_8wekyb3d8bbwe!App");
+}
+static void UpdatePhotoWorker();
+static void RefreshPhotoSurfaces();
+
+static bool IsCalendarLiveTile(const Tile& t) {
+    if (!InterlockedCompareExchange(&g_calendarSlide, 0, 0) || !t.alive || t.customTile ||
+        t.cw == TS_SMALL || !t.target) return false;
+    const wchar_t* prefix = L"shell:AppsFolder\\";
+    const wchar_t* id = t.target;
+    if (!_wcsnicmp(id, prefix, wcslen(prefix))) id += wcslen(prefix);
+    return !_wcsicmp(id, L"microsoft.windowscommunicationsapps_8wekyb3d8bbwe!microsoft.windowslive.calendar") ||
+           !_wcsicmp(id, L"windhawk:calendar-tile-v1");
+}
+static float CalendarSlide(int i, bool* oldBack) {
+    DWORD elapsed = NowMs() - g_openTick;
+    DWORD cycle = elapsed / 4000, inCycle = elapsed % 4000;
+    *oldBack = cycle > 0 && (cycle & 1) == 0;
+    if (!cycle) { *oldBack = false; return 0.0f; }
+    float p = std::min(1.0f, inCycle / 400.0f);
+    return p * p * (3.0f - 2.0f * p);
+}
+static bool EnsureCalendarFace(int i, int w, int h) {
+    SYSTEMTIME st; GetLocalTime(&st);
+    int date = st.wYear * 10000 + st.wMonth * 100 + st.wDay;
+    CalendarSurface& c = g_calendarFace[i];
+    if (c.dc && c.w == w && c.h == h && c.date == date) return true;
+    FreeCalendarFace(i);
+    if (w <= 0 || h <= 0 || w > 4096 || h > 4096) return false;
+    HDC screen = GetDC(NULL);
+    if (!screen) return false;
+    c.dc = CreateCompatibleDC(screen);
+    c.bmp = c.dc ? MakeDib(screen, w, h, &c.bits) : NULL;
+    ReleaseDC(NULL, screen);
+    if (!c.dc || !c.bmp || !c.bits) { FreeCalendarFace(i); return false; }
+    c.old = SelectObject(c.dc, c.bmp);
+    if (!c.old || c.old == HGDI_ERROR) { c.old = NULL; FreeCalendarFace(i); return false; }
+    c.w = w; c.h = h; c.date = date;
+    const Tile& t = g_tiles[i];
+    COLORREF color = IsLocalInfoTile(t.target) ? RGB(0,114,198) : (t.hasAppC ? t.appC : t.c1);
+    HBRUSH brush = CreateSolidBrush(color);
+    RECT full = {0,0,w,h};
+    if (!brush) { FreeCalendarFace(i); return false; }
+    FillRect(c.dc, &full, brush); DeleteObject(brush);
+    SetBkMode(c.dc, TRANSPARENT); SetTextColor(c.dc, RGB(255,255,255));
+    wchar_t day[16] = {}, weekday[64] = {}, month[64] = {};
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, NULL, L"d", day, ARRAYSIZE(day), NULL);
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, NULL, L"dddd", weekday, ARRAYSIZE(weekday), NULL);
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, NULL, L"MMMM yyyy", month, ARRAYSIZE(month), NULL);
+    HFONT dayFont = CreateFontW(-ScI(34),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI Light");
+    HGDIOBJ previous = SelectObject(c.dc, dayFont ? dayFont : g_fTitle);
+    RECT dr = {ScI(8),ScI(6),w-ScI(8),ScI(46)};
+    DrawTextW(c.dc, day, -1, &dr, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+    SelectObject(c.dc, g_fLabel);
+    RECT wr = {ScI(8),ScI(46),w-ScI(8),ScI(66)};
+    DrawTextW(c.dc, weekday, -1, &wr, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+    RECT mr = {ScI(8),h-ScI(25),w-ScI(8),h-ScI(4)};
+    DrawTextW(c.dc, month, -1, &mr, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+    SelectObject(c.dc, previous); if (dayFont) DeleteObject(dayFont);
+    GdiFlush();
+    return true;
 }
 
 static void DrawTileHover(HDC dc, int w, int h) {
@@ -3970,8 +4706,13 @@ static void BuildOneTile(int i, HDC screenDC) {
         const bool sampledDesktop = t.mg < 0 && t.style != PINNED_APP &&
                                     t.style != DESKTOP_REFERENCE && t.hasAppC &&
                                     InterlockedCompareExchange(&g_appTileColors, 0, 0);
+        if (IsLocalInfoTile(t.target)) {
+            c1 = c2 = base = !_wcsicmp(t.target,L"windhawk:weather-tile-v1") ? RGB(0,137,179) :
+                   !_wcsicmp(t.target,L"windhawk:calendar-tile-v1") ? RGB(0,114,198) : RGB(70,80,145);
+            topColor = bottomColor = base;
+        }
         if (sampledDesktop) c1 = c2 = base;
-        const bool desktopTheme = !sampledDesktop && t.mg < 0 && t.style != PINNED_APP &&
+        const bool desktopTheme = !IsLocalInfoTile(t.target) && !sampledDesktop && t.mg < 0 && t.style != PINNED_APP &&
                                   t.c1 == kDesktopTileLeft && t.c2 == kDesktopTileRight;
         if (shaded && t.style == DESKTOP_REFERENCE) {
             // The desktop tile is a live wallpaper preview: keep its own dark-to-light shading.
@@ -4003,6 +4744,30 @@ static void BuildOneTile(int i, HDC screenDC) {
         }
 
         SetBkMode(tdc, TRANSPARENT);
+        if (IsPhotoTile(t) && InterlockedCompareExchange(&g_photoEnabled,0,0) && g_open) {
+            RECT photoRect = {0,0,w,h};
+            if (g_photoSlideshow.Draw(tdc,photoRect,true)) {
+                if (t.cw != TS_SMALL) DrawModernTileCaption(tdc,t.label,w,h);
+                if (hover) DrawTileHover(tdc,w,h);
+                continue;
+            }
+        }
+        if (!t.customTile && t.target && (t.style == PINNED_APP || IsLocalInfoTile(t.target))) {
+            const bool small = t.cw == TS_SMALL;
+            int size = ScI(small ? 32 : 48), x = (w-size)/2, y = (h-size)/2 - (small ? 0 : ScI(13));
+            if (DrawImportedMetroIcon(tdc, t.target, x, y, size)) {
+                if (IsLocalInfoTile(t.target) && !_wcsicmp(t.target,L"windhawk:clock-tile-v1") && !small) {
+                    wchar_t timeText[64] = {};
+                    GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, NULL, NULL, timeText, ARRAYSIZE(timeText));
+                    RECT clockRect = {ScI(8),ScI(8),w-ScI(8),ScI(40)};
+                    SetTextColor(tdc, RGB(255,255,255)); SelectObject(tdc, g_fLabel);
+                    DrawTextW(tdc, timeText, -1, &clockRect, DT_LEFT|DT_TOP|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+                }
+                if (!small) DrawModernTileCaption(tdc, t.label, w, h);
+                if (hover) DrawTileHover(tdc, w, h);
+                continue;
+            }
+        }
         if (t.mg < 0 && t.style == PINNED_APP && aw > 0 && ah > 0 && art.size() == (size_t)aw * (size_t)ah * 4) {
                 HDC src = CreateCompatibleDC(tdc);
                 void* artBits = NULL;
@@ -4262,7 +5027,15 @@ static void DrawTile(int i, float a, float slide, float gs) {
         }
     }
     BLENDFUNCTION bf = { AC_SRC_OVER, 0, (BYTE)(255.0f * Clamp01(a)), 0 };
-    AlphaBlend(g_bbDC, dx, dy, dw, dh, tdc, 0, 0, w, h, bf);
+    if (IsCalendarLiveTile(t) && EnsureCalendarFace(i, w, h)) {
+        bool oldBack; float p = CalendarSlide(i, &oldBack);
+        int cut = std::max(0, std::min(h, (int)(h * p)));
+        HDC oldFace = oldBack ? g_calendarFace[i].dc : tdc;
+        HDC nextFace = oldBack ? tdc : g_calendarFace[i].dc;
+        int dcut = dh * cut / h;
+        if (dh-dcut > 0) AlphaBlend(g_bbDC, dx, dy+dcut, dw, dh-dcut, oldFace, 0, 0, w, h-cut, bf);
+        if (dcut > 0) AlphaBlend(g_bbDC, dx, dy, dw, dcut, nextFace, 0, h-cut, w, cut, bf);
+    } else AlphaBlend(g_bbDC, dx, dy, dw, dh, tdc, 0, 0, w, h, bf);
 }
 
 static void DrawHeader(float a, HDC sdc, float userA = -1.0f) {
@@ -4328,6 +5101,7 @@ static void DrawHeader(float a, HDC sdc, float userA = -1.0f) {
 }
 
 static void ReleaseGpuTarget() {
+    for (int i = 0; i < MAX_TILES; ++i) if (g_calendarFace[i].gpu) { g_calendarFace[i].gpu->Release(); g_calendarFace[i].gpu = NULL; }
     for (int i = 0; i < g_tileCount; ++i) for (int v = 0; v < 2; ++v) {
         if (g_tileGpu[i][v]) { g_tileGpu[i][v]->Release(); g_tileGpu[i][v] = NULL; }
     }
@@ -4637,9 +5411,18 @@ static void DrawTileGpu(int i, float a, float slide, float gs) {
     D2D1_RECT_F dest = D2D1::RectF(ncx - dw * 0.5f, ncy - dh * 0.5f, ncx + dw * 0.5f, ncy + dh * 0.5f);
     const bool pixelExact = dw == w && dh == h &&
                             dest.left == (float)(int)dest.left && dest.top == (float)(int)dest.top;
-    if (bitmap) g_rt->DrawBitmap(bitmap, dest, Clamp01(a),
-                                 pixelExact ? D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
-                                            : D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+    D2D1_BITMAP_INTERPOLATION_MODE interp = pixelExact ? D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR : D2D1_BITMAP_INTERPOLATION_MODE_LINEAR;
+    if (bitmap && IsCalendarLiveTile(t) && EnsureCalendarFace(i, (int)w, (int)h)) {
+        CalendarSurface& c = g_calendarFace[i];
+        if (!c.gpu) { D2D1_BITMAP_PROPERTIES bp = GpuBitmapProperties(); g_rt->CreateBitmap(D2D1::SizeU((UINT32)w,(UINT32)h), c.bits, (UINT32)w*4, &bp, &c.gpu); }
+        if (c.gpu) {
+            bool oldBack; float p = CalendarSlide(i, &oldBack);
+            ID2D1Bitmap* oldFace = oldBack ? c.gpu : bitmap;
+            ID2D1Bitmap* nextFace = oldBack ? bitmap : c.gpu;
+            if (p < 1.0f) { D2D1_RECT_F d = D2D1::RectF(dest.left,dest.top+dh*p,dest.right,dest.bottom); D2D1_RECT_F src = D2D1::RectF(0,0,w,h*(1-p)); g_rt->DrawBitmap(oldFace,d,Clamp01(a),interp,src); }
+            if (p > 0.0f) { D2D1_RECT_F d = D2D1::RectF(dest.left,dest.top,dest.right,dest.top+dh*p); D2D1_RECT_F src = D2D1::RectF(0,h*(1-p),w,h); g_rt->DrawBitmap(nextFace,d,Clamp01(a),interp,src); }
+        } else g_rt->DrawBitmap(bitmap,dest,Clamp01(a),interp);
+    } else if (bitmap) g_rt->DrawBitmap(bitmap,dest,Clamp01(a),interp);
     if (g_scratch && g_barVisible && g_barMode == 1 && g_barIdx == i) {
         SetBr(RGB(255, 140, 32), 1.0f);
         g_rt->DrawRectangle(D2D1::RectF(dest.left + 1.5f, dest.top + 1.5f, dest.right - 1.5f, dest.bottom - 1.5f),
@@ -5108,6 +5891,29 @@ static void LoadIconFor(size_t i) {
     const AppEntry& a = g_apps[i];
     if (a.desktop) return;
     std::wstring path = AppTarget(a);
+    if (a.charmCat == CC_APP && !a.exe && g_gdipToken) {
+        const int side = 64;
+        HDC screen = GetDC(NULL); HDC dc = screen ? CreateCompatibleDC(screen) : NULL;
+        void* bits = NULL; HBITMAP bmp = dc ? MakeDib(screen,side,side,&bits) : NULL;
+        if (screen) ReleaseDC(NULL,screen);
+        if (dc && bmp && bits) {
+            HGDIOBJ old = SelectObject(dc,bmp);
+            if (old && old != HGDI_ERROR) {
+                RECT r = {0,0,side,side}; HBRUSH bg = CreateSolidBrush(RGB(0,114,198));
+                if (bg) { FillRect(dc,&r,bg); DeleteObject(bg); }
+                bool drawn = bg && DrawImportedMetroIcon(dc,path.c_str(),8,8,48);
+                GdiFlush();
+                if (drawn) {
+                    BYTE* copy = new (std::nothrow) BYTE[side*side*4];
+                    if (copy) { memcpy(copy,bits,side*side*4); for (int j=3;j<side*side*4;j+=4) copy[j]=255;
+                        g_icons[i].px=copy; g_icons[i].w=side; g_icons[i].h=side; InterlockedExchange(&g_icons[i].ready,1); }
+                }
+                SelectObject(dc,old);
+            }
+        }
+        if (bmp) DeleteObject(bmp); if (dc) DeleteDC(dc);
+        if (InterlockedCompareExchange(&g_icons[i].ready,0,0)) return;
+    }
     if (a.charmCat == CC_FILE) {
         SHFILEINFOW info = {};
         const DWORD attrs = a.dir ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL;
@@ -6115,6 +6921,19 @@ static DWORD WINAPI AppsThread(LPVOID) {
 
     if (g_settingsBuilt) AppendSettingsTo(list);   // refreshes reuse the settings built at start-up
     AddCharmSystemEntries(list);
+    {
+        const bool it = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_ITALIAN;
+        struct Local { const wchar_t* id; const wchar_t* en; const wchar_t* italian; const wchar_t* words; };
+        const Local items[] = {
+            {L"windhawk:weather-tile-v1",L"Weather (tile)",L"Meteo (riquadro)",L"weather meteo"},
+            {L"windhawk:calendar-tile-v1",L"Calendar (tile)",L"Calendario (riquadro)",L"calendar calendario"},
+            {L"windhawk:clock-tile-v1",L"Clock (tile)",L"Orologio (riquadro)",L"clock orologio alarms sveglie"}
+        };
+        for (const auto& item : items) {
+            AddApp(list, it ? item.italian : item.en, item.id, false, false, CC_APP, true, true);
+            list.back().keywords = item.words;
+        }
+    }
     Wh_Log(L"Search: %u catalog entries including charm settings", (unsigned)list.size());
 
     g_catalogBuiltTick = GetTickCount64();
@@ -6479,7 +7298,8 @@ static void LaunchEntry(const AppEntry& a) {
     if (a.launchKind != 0) { CloseStart(); LaunchSettingEntry(a); return; }
     std::wstring target = AppTarget(a);
     CloseStart();
-    ShellExecuteW(NULL, L"open", target.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    const wchar_t* url = LocalInfoUrl(target.c_str());
+    ShellExecuteW(NULL, L"open", url ? url : target.c_str(), NULL, NULL, SW_SHOWNORMAL);
 }
 static void LaunchResult(int i) {
     if (i < 0 || i >= (int)g_results.size()) return;
@@ -6775,10 +7595,37 @@ static void ReleaseTileSurface(int i) {
 }
 
 static void RebuildTile(int i) {
+    FreeCalendarFace(i);
     ReleaseTileSurface(i);
     HDC screen = GetDC(NULL);
     if (screen) { BuildOneTile(i, screen); ReleaseDC(NULL, screen); }
     GdiFlush();
+}
+
+static void RefreshPhotoSurfaces() {
+    if (!g_open || !InterlockedCompareExchange(&g_photoEnabled,0,0)) return;
+    for (int i=0; i<g_tileCount; ++i) {
+        Tile& t=g_tiles[i]; if (!IsPhotoTile(t)) continue;
+        RECT bounds; TileRect(t,&bounds); int w=bounds.right-bounds.left,h=bounds.bottom-bounds.top;
+        if (w<=0 || h<=0) continue;
+        for (int v=0;v<2;++v) {
+            HDC dc=g_tileDC[i][v]; if (!dc || !g_tileBits[i][v]) continue;
+            RECT r={0,0,w,h};
+            if (!g_photoSlideshow.Draw(dc,r,true)) continue;
+            if (t.cw!=TS_SMALL) DrawModernTileCaption(dc,t.label,w,h);
+            if (v) DrawTileHover(dc,w,h);
+            GdiFlush();
+            if (g_tileGpu[i][v] && FAILED(g_tileGpu[i][v]->CopyFromMemory(NULL,g_tileBits[i][v],(UINT32)w*4))) {
+                g_tileGpu[i][v]->Release(); g_tileGpu[i][v]=NULL;
+            }
+        }
+    }
+}
+static void UpdatePhotoWorker() {
+    bool want = g_open && InterlockedCompareExchange(&g_photoEnabled,0,0);
+    bool found=false;
+    if (want) for (int i=0;i<g_tileCount;++i) if (IsPhotoTile(g_tiles[i])) {found=true;break;}
+    if (found) g_photoSlideshow.Start(g_wnd); else g_photoSlideshow.Stop();
 }
 
 static void ApplyPackageArtChanges() {
@@ -7492,6 +8339,7 @@ static void PinAppSized(const wchar_t* name, const std::wstring& target, int cw,
     Relayout(true);
     RebuildTile(idx);
     SaveLayout();
+    UpdatePhotoWorker();
     RepaintNow();
 }
 static void PinApp(const wchar_t* name, const std::wstring& target) {
@@ -7668,6 +8516,7 @@ static void UnpinTile(int idx) {
         MetroRemovedAdd(key);
     }
     RemoveTileFromOrder(idx);
+    UpdatePhotoWorker();
     Relayout(true);
     ClampScroll();
     SaveLayout();
@@ -11298,7 +12147,7 @@ static void BuildMenuEntries(int kind, std::vector<UserMenuEntry>& out) {
     } else if (kind == 4) {
         if (!g_ctxAppValid) return;
         const AppEntry& a = g_ctxApp;
-        bool fileish = !a.parse.empty() && wcsstr(a.parse.c_str(), L"shell:") == NULL &&
+        bool fileish = !IsLocalInfoTile(a.parse.c_str()) && !a.parse.empty() && wcsstr(a.parse.c_str(), L"shell:") == NULL &&
                        wcsstr(a.parse.c_str(), L"ms-") == NULL;
         out.push_back({ T(STR_CTX_OPEN), CM_OPEN });
         if (a.charmCat == CC_APP && !AppTarget(a).empty())
@@ -11315,7 +12164,7 @@ static void BuildMenuEntries(int kind, std::vector<UserMenuEntry>& out) {
         const Tile& tile = g_tiles[g_ctxTile];
         SelectedItem item = CurrentSelection();
         out.push_back({ T(STR_CTX_UNPIN_START), TC_UNPIN });
-        if (tile.kind == 1) out.push_back({ T(STR_CTX_UNINSTALL), TC_UNINSTALL });
+        if (tile.kind == 1 && !IsLocalInfoTile(tile.target)) out.push_back({ T(STR_CTX_UNINSTALL), TC_UNINSTALL });
         // A simulated Metro tile can go back to this mod's normal tile, keeping its program.
         if (tile.mg >= 0) out.push_back({ T(STR_CTX_STANDARD_TILE), TC_STANDARD_TILE });
         out.push_back({ (item.classic || item.computer) ? T(STR_CTX_NEWWINDOW) : T(STR_CTX_OPEN), TC_OPEN });
@@ -12223,6 +13072,7 @@ static void OpenStart(bool atLogon = false) {
     g_openTick = g_lastTick = NowMs();
     g_open = true;
     g_closing = false;
+    UpdatePhotoWorker();
     g_dirty = true;
     if (atLogon && g_allAppsAtSignIn.load()) {
         // allAppsAtSignIn: the automatic opening shows the list of all apps.
@@ -12256,6 +13106,9 @@ static void CloseStart(bool immediate) {
     bool instantDesktop = immediate && g_firstDesktopAfterLogon;
     if (instantDesktop) g_firstDesktopAfterLogon = false;
     g_open = false;
+    UpdatePhotoWorker();
+    g_photoAnimationTick = 0;
+    for (int i=0;i<g_tileCount;++i) if (IsPhotoTile(g_tiles[i])) RebuildTile(i);
     if (g_namingGroup >= 0) CommitNaming();
     g_customize = false;
     HideBar();
@@ -12295,7 +13148,8 @@ static void Launch(int i) {
         wchar_t full[MAX_PATH] = L"";
         if (FileInSystemDir(target, full, ARRAYSIZE(full)) && full[0]) exe = full;
     }
-    ShellExecuteW(NULL, L"open", exe.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    const wchar_t* url = LocalInfoUrl(target);
+    ShellExecuteW(NULL, L"open", url ? url : exe.c_str(), NULL, NULL, SW_SHOWNORMAL);
 }
 
 static int HitTile(int mx, int my) {
@@ -12321,6 +13175,25 @@ static void Tick() {
     if (dt > 0.1f) dt = 0.1f;
     g_lastTick = now;
     bool changed = false;
+    if (g_photoAnimationTick && g_open && !g_closing) {
+        RefreshPhotoSurfaces(); changed = true;
+        if ((DWORD)(now-g_photoAnimationTick) >= 450) g_photoAnimationTick = 0;
+    }
+    if (g_open && !g_closing) {
+        SYSTEMTIME time; GetLocalTime(&time);
+        int minute = time.wYear*600000 + time.wMonth*40000 + time.wDay*1440 + time.wHour*60 + time.wMinute;
+        static int lastMinute = -1;
+        if (minute != lastMinute) {
+            lastMinute = minute;
+            for (int i=0; i<g_tileCount; ++i) if (g_tiles[i].alive && g_tiles[i].target &&
+                !_wcsicmp(g_tiles[i].target,L"windhawk:clock-tile-v1")) { RebuildTile(i); changed = true; }
+        }
+    }
+    if (g_open && !g_closing && InterlockedCompareExchange(&g_calendarSlide, 0, 0)) {
+        DWORD elapsed = now - g_openTick;
+        if (elapsed >= 4000 && elapsed % 4000 < 500)
+            for (int i = 0; i < g_tileCount; ++i) if (IsCalendarLiveTile(g_tiles[i])) { changed = true; break; }
+    }
     ScrollArrowTick();
 
     if (g_leaveTick) {
@@ -12591,6 +13464,12 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             ApplyPackageArtChanges();
         }
         if (g_dirty && IsWindowVisible(h)) UpdateWindow(h);
+        return 0;
+    case WM_APP + 20:
+        if (g_open && InterlockedCompareExchange(&g_photoEnabled,0,0)) {
+            g_photoAnimationTick = NowMs(); RefreshPhotoSurfaces();
+            g_dirty = true; InvalidateRect(h,NULL,FALSE); ResumeFrames();
+        }
         return 0;
     case WM_APP_LOGON_OPEN:
         if (InterlockedCompareExchange(&g_openAtLogon, 0, 0) != 0) {
@@ -13943,6 +14822,7 @@ static void UiRun() {
 }
 
 static void UiTeardown() {
+    g_photoSlideshow.Stop();
     if (g_logonStop) SetEvent(g_logonStop);
     if (g_logonThread) { WaitForSingleObject(g_logonThread, INFINITE); CloseHandle(g_logonThread); g_logonThread = NULL; }
     if (g_logonStop) { CloseHandle(g_logonStop); g_logonStop = NULL; }
@@ -14065,6 +14945,8 @@ static void LoadNavigationOptions() {
 }
 
 static void LoadSettings() {
+    InterlockedExchange(&g_photoEnabled, Wh_GetIntSetting(L"photoSlideshow") != 0);
+    InterlockedExchange(&g_calendarSlide, Wh_GetIntSetting(L"calendarSlide") != 0);
     g_useWinKey = Wh_GetIntSetting(L"winKey") != 0;
     g_searchEnabled = Wh_GetIntSetting(L"searchOnType") != 0;
     g_trayRevealOn = Wh_GetIntSetting(L"taskbarOnBottomHover") != 0;
@@ -14198,6 +15080,8 @@ static void LoadSettings() {
 // Mod entry points
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     const bool oldKeyboardOnly = g_keyboardOnly;
+    const LONG oldCalendarSlide = InterlockedCompareExchange(&g_calendarSlide, 0, 0);
+    const LONG oldPhotoEnabled = InterlockedCompareExchange(&g_photoEnabled, 0, 0);
     bool customChanged = false;
     RunGuarded(L"ModSettingsChanged", [&] {
         auto current = CustomTileSnapshot();
@@ -14208,7 +15092,7 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
         LoadSettings();
     });
     // Recreate the UI thread to apply custom tile additions, removals and edits.
-    if (bReload && (g_keyboardOnly != oldKeyboardOnly || customChanged)) *bReload = TRUE;
+    if (bReload && (g_keyboardOnly != oldKeyboardOnly || customChanged || oldCalendarSlide != InterlockedCompareExchange(&g_calendarSlide, 0, 0) || oldPhotoEnabled != InterlockedCompareExchange(&g_photoEnabled, 0, 0))) *bReload = TRUE;
     return TRUE;
 }
 
