@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              macos-gestures-mission-control
 // @name            macOS Gestures - Mission Control
-// @description     Windows Mission Control: three- or four-finger swipe up opens a live animated window overview. Swipe down shows current desktop windows or minimizes them. Win+Tab opens the overview, while left/right swipes switch apps like Alt+Tab.
+// @description     Mission Control for Windows: a three- or four-finger swipe up opens a live, animated overview of your windows (app icons, minimized windows, taskbar slide, spring physics) that follows your fingers, a swipe down shows the windows of the current desktop (or minimizes them), Win+Tab opens it from the keyboard, and left/right swipes keep switching apps like Alt+Tab
 // @version         1.6.0
 // @author          Frixed
 // @github          https://github.com/frixed
@@ -113,7 +113,6 @@ which parts to show, and the animation tuning (speed, bounce, stretch, backgroun
 If you enjoy using this mod and would like to support its development, you can make a donation through PayPal. Every contribution is appreciated!
 
 [**Donate with PayPal**](https://www.paypal.com/donate?hosted_button_id=W7BHDHGZP6CHY)
-
 */
 // ==/WindhawkModReadme==
 
@@ -424,8 +423,8 @@ static bool CLOSE_BUTTON = true;
 static bool SHOW_TITLES = true;
 static bool DESKTOP_BAR = true;
 static int FINGER_COUNT = 3;          // fingers of the swipes (3 or 4)
-static bool REPLACE_WIN_TAB = true;   // Win+Tab opens Mission Control
-static int ALT_TAB_MC_MODE = 2;      // Alt+Tab while Mission Control is on screen: 0 = Windows handles it, 1 = ignored, 2 = cycles the selection
+static std::atomic<bool> REPLACE_WIN_TAB{true};   // Win+Tab opens Mission Control (the keyboard hook thread reads it too)
+static std::atomic<int> ALT_TAB_MC_MODE{2};  // Alt+Tab while Mission Control is on screen: 0 = Windows handles it, 1 = ignored, 2 = cycles the selection (the hook thread reads it too)
 static bool SWIPE_DOWN_MINIMIZES = false;  // swipe down (Mission Control closed): minimize instead of App Exposé
 // A swipe down that minimizes fires once the fingers travelled this share of
 // GESTURE_DISTANCE (so the "Swipe distance" setting also tunes this one).
@@ -686,9 +685,10 @@ constexpr GUID kIidVdmInternal = {
     0x53F5CA0B, 0x158F, 0x4124, { 0x90, 0x0C, 0x05, 0x71, 0x58, 0x06, 0x0B, 0x27 } };
 
 static IVdmInternal* g_vdmInternal = nullptr;  // created on first use
+static bool g_vdmUnavailable = false;  // the query failed once: don't repeat it on every click
 
 static IVdmInternal* GetVdmInternal() {
-    if (g_vdmInternal) {
+    if (g_vdmInternal || g_vdmUnavailable) {
         return g_vdmInternal;
     }
     IServiceProvider* shell = nullptr;
@@ -699,9 +699,8 @@ static IVdmInternal* GetVdmInternal() {
                                  reinterpret_cast<void**>(&g_vdmInternal));
         shell->Release();
     }
-    static bool logged = false;
-    if ((FAILED(hr) || !g_vdmInternal) && !logged) {
-        logged = true;
+    if (FAILED(hr) || !g_vdmInternal) {
+        g_vdmUnavailable = true;
         Wh_Log(L"Desktop bar: reordering desktops isn't available on this Windows build (0x%08X).",
                static_cast<unsigned>(hr));
     }
@@ -1402,6 +1401,7 @@ static void ShutdownDComp() {
     for (auto& xs : g_xSurf) { if (xs) { xs->Release(); xs = nullptr; } }
     if (g_vdm) { g_vdm->Release(); g_vdm = nullptr; }
     if (g_vdmInternal) { g_vdmInternal->Release(); g_vdmInternal = nullptr; }
+    g_vdmUnavailable = false;  // a new device (or a reload) may get it
     if (g_d3dCtx) { g_d3dCtx->Release(); g_d3dCtx = nullptr; }
     if (g_dcRoot) { g_dcRoot->Release(); g_dcRoot = nullptr; }
     if (g_dcTarget) { g_dcTarget->Release(); g_dcTarget = nullptr; }
@@ -6721,6 +6721,7 @@ constexpr UINT WM_APP_ALT_COMMIT = WM_APP + 5;  // thread message: Alt let go af
 static HANDLE g_hookThread = nullptr;
 static DWORD g_hookThreadId = 0;
 static HANDLE g_hookReady = nullptr;
+static bool g_hookOk = false;  // set by the hook thread before it signals g_hookReady
 static bool g_winTabDown = false;  // hook thread only
 static bool g_altTabDown = false;  // hook thread only: a swallowed Alt+Tab press is down
 static bool g_altCycling = false;  // hook thread only: Alt+Tab cycled Mission Control, Alt still held
@@ -6795,6 +6796,7 @@ static DWORD WINAPI HookThreadProc(void*) {
     MSG msg{};
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
     HHOOK hook = SetWindowsHookExW(WH_KEYBOARD_LL, WinTabHookProc, ModuleInstance(), 0);
+    g_hookOk = hook != nullptr;
     SetEvent(g_hookReady);
     if (!hook) {
         Wh_Log(L"Win+Tab: SetWindowsHookExW failed: %lu", GetLastError());
@@ -6825,7 +6827,13 @@ static void UpdateWinTabHook() {
         return;
     }
     if (g_hookThread) {
-        return;
+        if (WaitForSingleObject(g_hookThread, 0) != WAIT_OBJECT_0) {
+            return;  // running
+        }
+        // It ended on its own (the hook couldn't be installed): clean up and try again.
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+        g_hookThreadId = 0;
     }
     if (!g_hookReady) {
         g_hookReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -6842,6 +6850,9 @@ static void UpdateWinTabHook() {
     // Until its message queue exists (so StopWinTabHook's WM_QUIT can't get lost).
     HANDLE waits[2] = { g_hookReady, g_hookThread };
     WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+    if (!g_hookOk) {
+        return;  // the thread already logged why; the next settings change retries
+    }
     Wh_Log(L"Keyboard hook running (Win+Tab opens Mission Control: %s, Alt+Tab inside it: %s).",
            REPLACE_WIN_TAB ? L"yes" : L"no",
            ALT_TAB_MC_MODE == 2 ? L"cycles" : (ALT_TAB_MC_MODE == 1 ? L"ignored" : L"Windows"));
