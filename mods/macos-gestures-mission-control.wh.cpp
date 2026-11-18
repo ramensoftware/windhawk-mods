@@ -107,6 +107,13 @@ which parts to show, and the animation tuning (speed, bounce, stretch, backgroun
 * Mission Control shows up to 24 windows.
 * If the mod does not start at logon, turn on logging in the mod's **Advanced** tab in
   Windhawk and check the log output: the start-up steps are logged there.
+
+## Support the project
+
+If you enjoy using this mod and would like to support its development, you can make a donation through PayPal. Every contribution is appreciated!
+
+[**Donate with PayPal**](https://www.paypal.com/donate?hosted_button_id=W7BHDHGZP6CHY)
+
 */
 // ==/WindhawkModReadme==
 
