@@ -27,21 +27,6 @@ This mod recreates the Windows 8.1 Start Screen on Windows 10 and Windows 11.
 
 ![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/startscreen.png)
 
-## Local tile content
-The reconstructed Metro icons are used for recognized Microsoft apps. The app search also includes
-separate Weather, Calendar and Clock tiles that can be pinned again after removal. They open the
-corresponding Microsoft web pages. Calendar can alternate between its icon and the local date;
-Clock shows the local time. Online Weather is off by default. If enabled, Open-Meteo receives
-coordinates and the public IP every 30 minutes even while Start is closed. Users can enter both
-coordinates or separately enable approximate IP location via ipwho.is, which receives the public
-IP. IP lookup retries every five minutes until successful; forecast failures retry every 30 minutes.
-Privacy mode hides only the label, not the data sent to the services. If coordinates and IP
-location are unavailable, no forecast request is made. In-flight requests may delay shutdown until
-their timeouts. Data: Open-Meteo.com, CC BY 4.0; the free API is for non-commercial use.
-Photos can optionally show JPG and PNG files directly from the local Pictures folder while Start
-is open and Photos is pinned. Images are not uploaded; decoding runs on a worker thread and stopping
-can wait for it. These are simulated features, not notifications read from other apps.
-
 ## About the mod
 The mod replaces the Start experience with a full-screen Start screen modeled after
 Windows 8.1: tiles arranged in groups, an All Apps view, type-to-search, and the
@@ -139,6 +124,21 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
 - If the old taskbar still comes back, restart Explorer from StartAllBack or ExplorerPatcher, or
   set **Compatibility with StartAllBack and ExplorerPatcher** to *Always on* and the delay to 8000 ms.
 
+## Local tile content
+The reconstructed Metro icons are used for recognized Microsoft apps. The app search also includes
+separate Weather, Calendar and Clock tiles that can be pinned again after removal. They open the
+corresponding Microsoft web pages. Calendar can alternate between its icon and the local date;
+Clock shows the local time. Online Weather is off by default. If enabled, Open-Meteo receives
+coordinates and the public IP every 30 minutes while a Weather tile is pinned, even while Start is closed. Users can enter both
+coordinates or separately enable approximate IP location via ipwho.is, which receives the public
+IP. IP lookup retries every five minutes until successful; forecast failures retry every 30 minutes.
+Privacy mode hides only the label, not the data sent to the services. If coordinates and IP
+location are unavailable, no forecast request is made. In-flight requests are cancelled when the
+worker stops; shutdown may still wait for WinHTTP to finish closing the request. Data: Open-Meteo.com, CC BY 4.0; the free API is for non-commercial use.
+Photos can optionally show JPG and PNG files directly from the local Pictures folder while Start
+is open and Photos is pinned. Images are not uploaded; decoding runs on a worker thread and stopping
+can wait for it. These are simulated features, not notifications read from other apps.
+
 ## Additional information
 - The mod is compatible with the **Windows 8/8.1 Charms Bar Recreation** and the
   **Windows 8/8.1 Search Charm Recreation** mods for a complete Windows 8.1
@@ -169,17 +169,168 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
-- appTileColors: false
-  $name: "Use app-specific tile colors (sampled from the app icon)"
-  $name:it: "Usa colori specifici delle app (campionati dall'icona)"
-  $name:es: "Usar colores específicos de cada aplicación (muestreados del icono)"
-  $name:fr: "Utiliser les couleurs propres aux applications (prélevées sur leur icône)"
-  $name:pt: "Usar cores específicas dos aplicativos (extraídas do ícone)"
-  $description: "This setting optionally uses a color sampled from the application icon for desktop tiles. Simulated and packaged tiles keep their own artwork and color."
-  $description:it: "Questa impostazione usa facoltativamente il colore campionato dall'icona dell'app per i riquadri desktop. I riquadri simulati e delle app in pacchetto conservano immagini e colori propri."
-  $description:es: "Esta configuración usa opcionalmente un color tomado del icono de la aplicación para los mosaicos de escritorio. Los mosaicos simulados y de aplicaciones empaquetadas conservan sus imágenes y colores."
-  $description:fr: "Ce paramètre utilise éventuellement une couleur prélevée sur l'icône de l'application pour les vignettes de bureau. Les vignettes simulées et celles des applications packagées conservent leurs images et leurs couleurs."
-  $description:pt: "Esta configuração usa opcionalmente uma cor extraída do ícone do aplicativo nos blocos de desktop. Os blocos simulados e de aplicativos empacotados mantêm suas imagens e cores."
+- winKey: true
+  $name: "Open with the Windows key and the Start button"
+  $name:it: "Apri con il tasto Windows e il pulsante Start"
+  $name:es: "Abrir con la tecla Windows y el botón Inicio"
+  $name:fr: "Ouvrir avec la touche Windows et le bouton Démarrer"
+  $name:pt: "Abrir com a tecla Windows e o botão Iniciar"
+  $description: "This setting makes pressing the Windows key on its own, or clicking the taskbar Start button, open this Start screen instead of the Windows Start menu (Win+E, Win+D and the other shortcuts keep working)."
+  $description:it: "Questa impostazione fa aprire questa schermata Start, al posto del menu Start di Windows, quando premi il tasto Windows da solo o fai clic sul pulsante Start della barra (Win+E, Win+D e le altre combinazioni continuano a funzionare)."
+  $description:es: "Esta configuración hace que, al pulsar la tecla Windows sola o hacer clic en el botón Inicio de la barra, se abra esta pantalla de inicio en lugar del menú Inicio de Windows (Win+E, Win+D y el resto de accesos siguen funcionando)."
+  $description:fr: "Ce paramètre fait ouvrir cet écran d'accueil, au lieu du menu Démarrer de Windows, quand vous appuyez sur la touche Windows seule ou cliquez sur le bouton Démarrer de la barre (Win+E, Win+D et les autres raccourcis continuent de fonctionner)."
+  $description:pt: "Esta configuração faz com que, ao pressionar a tecla Windows sozinha ou clicar no botão Iniciar da barra, esta Tela Inicial seja aberta em vez do menu Iniciar do Windows (Win+E, Win+D e os outros atalhos continuam funcionando)."
+- openAtLogon: true
+  $name: "Open Start once at sign-in"
+  $name:it: "Apri Start una volta all'accesso"
+  $name:es: "Abrir Inicio una vez al iniciar sesión"
+  $name:fr: "Ouvrir l'écran d'accueil une fois à l'ouverture de session"
+  $name:pt: "Abrir a Tela Inicial uma vez ao entrar"
+  $description: "This setting shows Start after the Explorer desktop is ready on a new sign-in, using the slower 8102-style tile reveal. Does not reopen Start when this mod is edited or Explorer is restarted later in the same sign-in. Turn off to keep the desktop at sign-in."
+  $description:it: "Questa impostazione mostra Start dopo che il desktop di Explorer è pronto a un nuovo accesso, usando la rivelazione delle tile più lenta in stile 8102. Non riapre Start se questa mod viene modificata o se Explorer viene riavviato più tardi nella stessa sessione. Disattivala per mantenere il desktop all'accesso."
+  $description:es: "Esta configuración muestra Inicio cuando el escritorio de Explorer está listo tras un nuevo inicio de sesión, con la revelación de iconos más lenta al estilo 8102. No reabre Inicio si se edita esta mod o se reinicia Explorer más tarde en la misma sesión. Desactívala para mantener el escritorio al iniciar sesión."
+  $description:fr: "Ce paramètre affiche l'écran d'accueil dès que le bureau d'Explorer est prêt après une nouvelle ouverture de session, avec la révélation des vignettes plus lente de style 8102. Il ne rouvre pas l'écran d'accueil si le mod est modifié ou si Explorer redémarre plus tard dans la même session. Désactivez-le pour garder le bureau à l'ouverture de session."
+  $description:pt: "Esta configuração mostra a Tela Inicial quando a área de trabalho do Explorer está pronta após um novo logon, usando a revelação de blocos mais lenta no estilo 8102. Não reabre a Tela Inicial se este mod for editado ou se o Explorer reiniciar depois no mesmo logon. Desative para manter a área de trabalho ao entrar."
+- allAppsAtSignIn: false
+  $name: "Open the list of all apps once at sign-in"
+  $name:it: "Apri l'elenco di tutte le app una volta all'accesso"
+  $name:es: "Abrir la lista de todas las aplicaciones una vez al iniciar sesión"
+  $name:fr: "Ouvrir la liste de toutes les applications une fois à l'ouverture de session"
+  $name:pt: "Abrir a lista de todos os apps uma vez ao entrar"
+  $description: "This setting concerns the following. With 'Open Start once at sign-in' on, the screen opens on the list of all apps instead of the tiles. It only affects that automatic opening: pressing the Windows key later still shows the tiles first."
+  $description:it: "Questa impostazione riguarda quanto segue. Con 'Apri Start una volta all'accesso' attivo, la schermata si apre sull'elenco di tutte le app invece che sulle tile. Vale solo per quell'apertura automatica: premendo il tasto Windows più tardi si vedono comunque le tile."
+  $description:es: "Esta configuración se refiere a lo siguiente. Con 'Abrir Inicio una vez al iniciar sesión' activo, la pantalla se abre en la lista de todas las aplicaciones en lugar de los iconos."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Avec 'Ouvrir l'écran d'accueil une fois à l'ouverture de session', l'écran s'ouvre sur la liste de toutes les applications au lieu des vignettes."
+  $description:pt: "Esta configuração refere-se ao seguinte. Com 'Abrir a Tela Inicial uma vez ao entrar' ativado, a tela abre na lista de todos os apps em vez dos blocos."
+- searchOnType: true
+  $name: "Typing on Start opens Search"
+  $name:it: "Digitare su Start apre la ricerca"
+  $name:es: "Escribir en Inicio abre la búsqueda"
+  $name:fr: "Taper sur l'écran d'accueil ouvre la recherche"
+  $name:pt: "Digitar na Tela Inicial abre a pesquisa"
+  $description: "This setting makes typing while the Start screen is open search your apps (programs, Store apps, and system commands such as winver). A sidebar slides in; click outside it to hide it, and press the Windows key to go back to Start."
+  $description:it: "Questa impostazione fa sì che, digitando mentre la schermata Start è aperta, vengano cercate le tue app (programmi, app dello Store e comandi di sistema come winver). Una barra laterale scorre dentro; fai clic fuori per nasconderla e premi il tasto Windows per tornare a Start."
+  $description:es: "Esta configuración hace que, al escribir con la pantalla de inicio abierta, se busquen tus aplicaciones (programas, aplicaciones de la Tienda y comandos del sistema como winver). Una barra lateral se desliza; haz clic fuera para ocultarla y pulsa la tecla Windows para volver a Inicio."
+  $description:fr: "Ce paramètre fait en sorte que, lorsque vous tapez alors que l'écran d'accueil est ouvert, vos applications soient recherchées (programmes, applications Store et commandes système comme winver). Un panneau latéral glisse ; cliquez à l'extérieur pour le masquer et appuyez sur la touche Windows pour revenir à l'accueil."
+  $description:pt: "Esta configuração faz com que, ao digitar com a Tela Inicial aberta, seus aplicativos sejam pesquisados (programas, aplicativos da Loja e comandos do sistema como winver). Uma barra lateral desliza; clique fora para ocultá-la e pressione a tecla Windows para voltar à Tela Inicial."
+- taskbarOnBottomHover: true
+  $name: "Taskbar back when the pointer touches the bottom of Start"
+  $name:it: "Barra delle applicazioni quando il puntatore tocca il fondo di Start"
+  $name:es: "Barra de tareas cuando el puntero toca la parte inferior de Inicio"
+  $name:fr: "Barre des tâches quand le pointeur touche le bas de l'accueil"
+  $name:pt: "Barra de tarefas quando o ponteiro toca a parte inferior da Tela Inicial"
+  $description: "This setting reveals the taskbar when the pointer touches the bottom of Start, giving priority to Windows 7/8/8.1 Taskbar Recreation when detected on that monitor. The Start screen gives up space by clipping or resizing its own window; other windows are not moved or hidden. Turn it off to keep the taskbar covered."
+  $description:it: "Questa impostazione mostra la barra quando il puntatore tocca il bordo inferiore di Start, dando priorità a Windows 7/8/8.1 Taskbar Recreation quando viene rilevata sul monitor. Start libera spazio ritagliando o ridimensionando la propria finestra, senza spostare o nascondere le altre finestre. Disattivala per mantenere coperta la barra."
+  $description:es: "Esta configuración muestra la barra al tocar el borde inferior de Inicio con el puntero y da prioridad a Windows 7/8/8.1 Taskbar Recreation si se detecta en el monitor. Inicio libera espacio recortando o redimensionando su propia ventana, sin mover ni ocultar otras ventanas. Desactívala para mantener cubierta la barra."
+  $description:fr: "Ce paramètre affiche la barre lorsque le pointeur touche le bas de l'écran d'accueil et donne la priorité à Windows 7/8/8.1 Taskbar Recreation si elle est détectée sur le moniteur. L'accueil libère de l'espace en rognant ou redimensionnant sa propre fenêtre, sans déplacer ni masquer les autres fenêtres. Désactivez-le pour garder la barre couverte."
+  $description:pt: "Esta configuração mostra a barra quando o ponteiro toca a borda inferior da Tela Inicial e dá prioridade ao Windows 7/8/8.1 Taskbar Recreation quando detectado no monitor. A Tela Inicial libera espaço recortando ou redimensionando sua própria janela, sem mover ou ocultar outras janelas. Desative para manter a barra coberta."
+- startOnPointerMonitor: true
+  $name: "Open the Start screen on the monitor that holds the pointer"
+  $name:it: "Apri la schermata Start sul monitor dove sta il puntatore"
+  $name:es: "Abrir la pantalla de inicio en el monitor donde está el puntero"
+  $name:fr: "Ouvrir l'écran d'accueil sur le moniteur du pointeur"
+  $name:pt: "Abrir a Tela Inicial no monitor onde está o ponteiro"
+  $description: "This setting concerns the following. On: the screen opens on whichever monitor the mouse pointer is on, which is what this mod has always done. Off: it always opens on the primary monitor. The position is decided when the screen opens, so no reload is needed."
+  $description:it: "Questa impostazione riguarda quanto segue. Attiva: la schermata si apre sul monitor dove sta il puntatore del mouse, cioè quello che il mod ha sempre fatto. Disattiva: si apre sempre sul monitor principale. La posizione viene decisa all'apertura della schermata, quindi non serve ricaricare il mod."
+  $description:es: "Esta configuración se refiere a lo siguiente. Activada: la pantalla se abre en el monitor donde está el puntero del ratón, que es lo que la mod ha hecho siempre. Desactivada: se abre siempre en el monitor principal."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Activé : l'écran s'ouvre sur le moniteur où se trouve le pointeur de la souris, ce que le mod a toujours fait. Désactivé : il s'ouvre toujours sur le moniteur principal."
+  $description:pt: "Esta configuração refere-se ao seguinte. Ativado: a tela abre no monitor onde está o ponteiro do mouse, que é o que o mod sempre fez. Desativado: abre sempre no monitor principal."
+- backgroundMode: petals
+  $name: "Start screen background"
+  $name:it: "Sfondo della schermata Start"
+  $name:es: "Fondo de la pantalla de inicio"
+  $name:fr: "Arrière-plan de l'écran d'accueil"
+  $name:pt: "Plano de fundo da Tela Inicial"
+  $description: "This setting chooses what the Start screen uses as its background, like the Windows 8.1 personalization options: the petal artwork drawn as vector shapes, a solid colour, the system accent colour, the desktop wallpaper with a translucent colour overlay, or your own image file from the background image path setting. Whenever a provided image cannot be loaded or decoded, the petal artwork is used as fallback."
+  $description:it: "Questa impostazione sceglie cosa usa come sfondo la schermata Start, come le opzioni di personalizzazione di Windows 8.1: l'arte a petali disegnata come forme vettoriali, un colore pieno, il colore accent di sistema, lo sfondo del desktop con una velatura colorata traslucida oppure un tuo file immagine dal percorso dell'immagine di sfondo. Quando un'immagine fornita non può essere caricata o decodificata, viene usata come riserva l'arte a petali."
+  $description:es: "Esta configuración elige qué usa como fondo la pantalla de inicio, como las opciones de personalización de Windows 8.1: el arte de pétalos dibujado como formas vectoriales, un color sólido, el color de acento del sistema, el fondo de escritorio con una veladura translúcida o tu propio archivo de imagen desde la ruta de imagen de fondo. Cuando una imagen proporcionada no puede cargarse o descodificarse, se usa como reserva el arte de pétalos."
+  $description:fr: "Ce paramètre choisit ce que l'écran d'accueil utilise comme arrière-plan, comme les options de personnalisation de Windows 8.1 : l'art à pétales dessiné en formes vectorielles, une couleur unie, la couleur d'accent du système, le fond d'écran du bureau avec un voile coloré translucide ou votre propre fichier image depuis le chemin d'image d'arrière-plan. Lorsqu'une image fournie ne peut pas être chargée ou décodée, l'art à pétales sert de repli."
+  $description:pt: "Esta configuração escolhe o que a Tela Inicial usa como plano de fundo, como as opções de personalização do Windows 8.1: a arte de pétalas desenhada como formas vetoriais, uma cor sólida, a cor de destaque do sistema, o papel de parede da área de trabalho com uma véu colorido translúcido ou seu próprio arquivo de imagem do caminho de imagem de fundo. Quando uma imagem fornecida não pode ser carregada ou decodificada, a arte de pétalas é usada como reserva."
+  $options:
+  - petals: "Petal background drawn as vector artwork"
+  - solid: "Solid colour from the background colour setting"
+  - accent: "Solid colour tied to the system accent colour"
+  - wallpaper: "Desktop wallpaper with a translucent colour overlay, like Windows 8.1"
+  - image: "Custom image from the background image path setting"
+  $options:it:
+  - petals: "Sfondo a petali disegnato come arte vettoriale"
+  - solid: "Colore pieno dall'impostazione del colore di sfondo"
+  - accent: "Colore pieno legato al colore accent di sistema"
+  - wallpaper: "Sfondo del desktop con velatura colorata traslucida, come Windows 8.1"
+  - image: "Immagine personalizzata dal percorso dell'immagine di sfondo"
+  $options:es:
+  - petals: "Fondo de pétalos dibujado como arte vectorial"
+  - solid: "Color sólido del ajuste de color de fondo"
+  - accent: "Color sólido ligado al color de acento del sistema"
+  - wallpaper: "Fondo de escritorio con veladura translúcida, como Windows 8.1"
+  - image: "Imagen personalizada desde la ruta de imagen de fondo"
+  $options:fr:
+  - petals: "Fond à pétales dessiné en art vectoriel"
+  - solid: "Couleur unie du paramètre de couleur d'arrière-plan"
+  - accent: "Couleur unie liée à la couleur d'accent du système"
+  - wallpaper: "Fond d'écran du bureau avec voile translucide, comme Windows 8.1"
+  - image: "Image personnalisée depuis le chemin d'image d'arrière-plan"
+  $options:pt:
+  - petals: "Fundo de pétalas desenhado como arte vetorial"
+  - solid: "Cor sólida da configuração de cor de fundo"
+  - accent: "Cor sólida ligada à cor de destaque do sistema"
+  - wallpaper: "Papel de parede da área de trabalho com véu translúcido, como o Windows 8.1"
+  - image: "Imagem personalizada do caminho de imagem de fundo"
+- backgroundColor: "#4617b4"
+  $name: "Start background and overlay colour (hex)"
+  $name:it: "Colore di sfondo Start e di velatura (esadecimale)"
+  $name:es: "Color de fondo de Inicio y de veladura (hex)"
+  $name:fr: "Couleur d'arrière-plan Start et de voile (hex)"
+  $name:pt: "Cor de fundo da Tela Inicial e do véu (hex)"
+  $description: "This setting is the solid Windows 8.1 style background colour used by the solid and desktop-wallpaper background modes (in wallpaper mode it is the translucent overlay tint, since in Windows 8.1 the Start background colour was independent of the accent colour). Accepts #RRGGBB; invalid values fall back to the Windows 8.1 default purple #4617b4."
+  $description:it: "Questa impostazione è il colore di sfondo pieno in stile Windows 8.1 usato dalle modalità colore pieno e sfondo del desktop (in modalità sfondo del desktop è la tinta traslucida di velatura, perché in Windows 8.1 il colore di sfondo di Start era indipendente dal colore accent). Accetta #RRGGBB; i valori non validi ripiegano sul viola predefinito di Windows 8.1 #4617b4."
+  $description:es: "Esta configuración es el color de fondo sólido al estilo de Windows 8.1 que usan los modos color sólido y fondo de escritorio (en modo fondo de escritorio es el tinte translúcido, ya que en Windows 8.1 el color de fondo de Inicio era independiente del color de acento). Acepta #RRGGBB; los valores no válidos usan el púrpura predeterminado de Windows 8.1 #4617b4."
+  $description:fr: "Ce paramètre est la couleur d'arrière-plan unie de style Windows 8.1 utilisée par les modes couleur unie et fond d'écran du bureau (en mode fond d'écran, c'est la teinte translucide du voile, car sous Windows 8.1 la couleur d'arrière-plan de l'écran d'accueil était indépendante de la couleur d'accent). Accepte #RRGGBB ; les valeurs invalides reviennent au violet par défaut de Windows 8.1 #4617b4."
+  $description:pt: "Esta configuração é a cor de fundo sólida no estilo do Windows 8.1 usada pelos modos cor sólida e papel de parede da área de trabalho (no modo papel de parede, é o tom translúcido do véu, pois no Windows 8.1 a cor de fundo da Tela Inicial era independente da cor de destaque). Aceita #RRGGBB; valores inválidos usam o roxo padrão do Windows 8.1 #4617b4."
+- backgroundImagePath: ""
+  $name: "Custom background image path"
+  $name:it: "Percorso dell'immagine di sfondo personalizzata"
+  $name:es: "Ruta de la imagen de fondo personalizada"
+  $name:fr: "Chemin de l'image d'arrière-plan personnalisée"
+  $name:pt: "Caminho da imagem de fundo personalizada"
+  $description: "This setting is the full path of the image file used when the Start screen background is set to the custom image mode, for example C:\\Users\\YourName\\Pictures\\start.png. Environment variables such as %USERPROFILE% are expanded. The image is cover-cropped to fill the screen, like a wallpaper set to Fill. If the path is empty or the image cannot be loaded, the petal artwork is used instead."
+  $description:it: "Questa impostazione è il percorso completo del file immagine usato quando lo sfondo della schermata Start è in modalità immagine personalizzata, per esempio C:\\Users\\TuoNome\\Immagini\\start.png. Le variabili d'ambiente come %USERPROFILE% vengono espanse. L'immagine viene ritagliata per riempire lo schermo, come uno sfondo impostato su Riempimento. Se il percorso è vuoto o l'immagine non può essere caricata, viene usata l'arte a petali."
+  $description:es: "Esta configuración es la ruta completa del archivo de imagen usado cuando el fondo de la pantalla de inicio está en modo de imagen personalizada, por ejemplo C:\\Users\\TuNombre\\Imágenes\\start.png. Las variables de entorno como %USERPROFILE% se expanden. La imagen se recorta para llenar la pantalla, como un fondo en modo Rellenar. Si la ruta está vacía o la imagen no puede cargarse, se usa el arte de pétalos."
+  $description:fr: "Ce paramètre est le chemin complet du fichier image utilisé quand l'arrière-plan de l'écran d'accueil est en mode image personnalisée, par exemple C:\\Users\\VotreNom\\Images\\start.png. Les variables d'environnement comme %USERPROFILE% sont développées. L'image est recadrée pour remplir l'écran, comme un fond d'écran en mode Remplir. Si le chemin est vide ou l'image illisible, l'art à pétales est utilisé."
+  $description:pt: "Esta configuração é o caminho completo do arquivo de imagem usado quando o plano de fundo da Tela Inicial está no modo de imagem personalizada, por exemplo C:\\Users\\SeuNome\\Imagens\\start.png. Variáveis de ambiente como %USERPROFILE% são expandidas. A imagem é cortada para preencher a tela, como um papel de parede no modo Preencher. Se o caminho estiver vazio ou a imagem não puder ser carregada, a arte de pétalas é usada."
+- seedStartLayout: false
+  $name: "Populate Start with a Windows 8.1 style layout from installed apps"
+  $name:it: "Popola Start con un layout stile Windows 8.1 dalle app installate"
+  $name:es: "Rellenar Inicio con un diseño estilo Windows 8.1 desde las apps instaladas"
+  $name:fr: "Peupler l'écran d'accueil façon Windows 8.1 depuis les applications installées"
+  $name:pt: "Preencher a Tela Inicial com um layout estilo Windows 8.1 dos apps instalados"
+  $description: "This setting is optional and off by default. There are no real Metro apps left to download on Windows 10/11, so to spare you pinning dozens of apps by hand, turning this on pins the modern counterparts of the Windows 8.1 inbox apps that are actually installed (Mail/Outlook, Calendar, Weather, Photos, Edge, News, Camera, Xbox, Music, Movies, OneDrive, Maps, Settings, Calculator, Clock, Notepad, Paint) in Windows 8.1 sizes and groups - Wide Mail, Large Weather and so on. It only adds groups after your current tiles, never removes or moves anything, skips apps that are already pinned or not installed, and the added tiles are ordinary tiles you can resize, move or unpin. Turning it off again changes nothing that was added."
+  $description:it: "Questa impostazione è opzionale e disattivata in partenza. Su Windows 10/11 non restano vere app Metro da scaricare, quindi per risparmiarti di pinnare decine di app a mano, attivandola vengono pinnate le controparti moderne delle app di sistema di Windows 8.1 che sono davvero installate (Posta/Outlook, Calendario, Meteo, Foto, Edge, Notizie, Fotocamera, Xbox, Musica, Film, OneDrive, Mappe, Impostazioni, Calcolatrice, Orologio, Blocco note, Paint) con dimensioni e gruppi in stile 8.1: Posta Larga, Meteo Grande e così via. Aggiunge solo gruppi dopo le tue tile attuali, non rimuove né sposta nulla, salta le app già pinnate o non installate, e le tile aggiunte sono tile normali da ridimensionare, spostare o rimuovere. Disattivandola non cambia nulla di ciò che è stato aggiunto."
+  $description:es: "Esta configuración es opcional y viene desactivada. En Windows 10/11 ya no quedan apps Metro reales para descargar, así que, para ahorrarte fijar docenas de apps a mano, al activarla se fijan las equivalentes modernas de las apps del sistema de Windows 8.1 que estén instaladas (Correo/Outlook, Calendario, Tiempo, Fotos, Edge, Noticias, Cámara, Xbox, Música, Películas, OneDrive, Mapas, Configuración, Calculadora, Reloj, Bloc de notas, Paint) con tamaños y grupos estilo 8.1: Correo Ancho, Tiempo Grande, etc. Solo añade grupos tras tus iconos actuales, nunca quita ni mueve nada, salta las apps ya fijadas o no instaladas, y los iconos añadidos son normales: puedes redimensionarlos, moverlos o quitarlos. Desactivarla no cambia lo ya añadido."
+  $description:fr: "Ce paramètre est optionnel et désactivé par défaut. Sur Windows 10/11, il ne reste plus de vraies applications Metro à télécharger ; pour vous épargner d'épingler des dizaines d'applications à la main, l'activer épingle les équivalents modernes des applications système de Windows 8.1 réellement installées (Courrier/Outlook, Calendrier, Météo, Photos, Edge, Actualités, Caméra, Xbox, Musique, Films, OneDrive, Cartes, Paramètres, Calculatrice, Horloge, Bloc-notes, Paint) aux tailles et groupes de Windows 8.1 : Courrier Large, Météo Grand, etc. Il ajoute seulement des groupes après vos vignettes actuelles, ne retire ni ne déplace rien, ignore les applications déjà épinglées ou absentes, et les vignettes ajoutées sont ordinaires : redimensionnables, déplaçables, retirables. Le désactiver ne change rien à ce qui a été ajouté."
+  $description:pt: "Esta configuração é opcional e vem desativada. No Windows 10/11 não restam apps Metro de verdade para baixar, então, para poupar você de fixar dezenas de apps manualmente, ao ativá-la são fixados os equivalentes modernos dos apps de sistema do Windows 8.1 que estiverem instalados (Email/Outlook, Calendário, Clima, Fotos, Edge, Notícias, Câmera, Xbox, Música, Filmes, OneDrive, Mapas, Configurações, Calculadora, Relógio, Bloco de Notas, Paint) com tamanhos e grupos no estilo 8.1: Email Largo, Clima Grande e assim por diante. Ela apenas adiciona grupos depois dos seus blocos atuais, nunca remove nem move nada, pula apps já fixados ou não instalados, e os blocos adicionados são comuns: redimensionáveis, móveis e removíveis. Desativá-la não muda o que foi adicionado."
+- groupColumns: 2
+  $name: "Tiles per group (horizontal)"
+  $name:it: "Tile per gruppo (orizzontali)"
+  $name:es: "Iconos por grupo (horizontales)"
+  $name:fr: "Vignettes par groupe (horizontales)"
+  $name:pt: "Blocos por grupo (horizontais)"
+  $description: "This setting chooses the number of Medium-tile columns in each Start group. Allowed range 2 to 8; default 2. A Small tile takes a quarter of a Medium slot, a Wide tile two slots, a Large tile four. Changes apply immediately."
+  $description:it: "Questa impostazione sceglie il numero di colonne di tile medie in ogni gruppo di Start. Intervallo consentito da 2 a 8; predefinito 2. Una tile piccola occupa un quarto di posto medio, una larga due posti, una grande quattro. Le modifiche si applicano subito."
+  $description:es: "Esta configuración elige el número de columnas de iconos medianos de cada grupo de Inicio. Rango permitido de 2 a 8; predeterminado 2. Un icono pequeño ocupa un cuarto de hueco mediano, uno ancho dos huecos y uno grande cuatro. Los cambios se aplican al momento."
+  $description:fr: "Ce paramètre choisit le nombre de colonnes de vignettes moyennes dans chaque groupe de l'écran d'accueil. Plage autorisée de 2 à 8 ; défaut 2. Une petite vignette occupe un quart d'emplacement moyen, une large deux emplacements, une grande quatre. Les changements s'appliquent immédiatement."
+  $description:pt: "Esta configuração escolhe o número de colunas de blocos médios em cada grupo da Tela Inicial. Faixa permitida de 2 a 8; padrão 2. Um bloco pequeno ocupa um quarto de espaço médio, um largo dois espaços, um grande quatro. As mudanças valem na hora."
+- groupRows: 3
+  $name: "Tiles per group (vertical)"
+  $name:it: "Tile per gruppo (verticali)"
+  $name:es: "Iconos por grupo (verticales)"
+  $name:fr: "Vignettes par groupe (verticales)"
+  $name:pt: "Blocos por grupo (verticais)"
+  $description: "This setting chooses the number of tile rows in each Start group. Allowed range 1 to 8; default 3. On shorter displays the visible row count is limited to fit above the bottom command bar. Changes apply immediately."
+  $description:it: "Questa impostazione sceglie il numero di righe di tile in ogni gruppo di Start. Intervallo consentito da 1 a 8; predefinito 3. Sugli schermi più bassi il numero di righe visibili è limitato per restare sopra la barra dei comandi. Le modifiche si applicano subito."
+  $description:es: "Esta configuración elige el número de filas de iconos de cada grupo de Inicio. Rango permitido de 1 a 8; predeterminado 3. En pantallas bajas el número de filas visibles se limita para caber sobre la barra de comandos inferior. Los cambios se aplican al momento."
+  $description:fr: "Ce paramètre choisit le nombre de rangées de vignettes dans chaque groupe de l'écran d'accueil. Plage autorisée de 1 à 8 ; défaut 3. Sur les écrans peu hauts, le nombre de rangées visibles est limité pour rester au-dessus de la barre de commandes. Les changements s'appliquent immédiatement."
+  $description:pt: "Esta configuração escolhe o número de fileiras de blocos em cada grupo da Tela Inicial. Faixa permitida de 1 a 8; padrão 3. Em telas mais baixas, o número de fileiras visíveis é limitado para caber acima da barra de comandos inferior. As mudanças valem na hora."
 - customTiles:
   - - name: ""
       $name: "Name"
@@ -279,200 +430,87 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $description:es: "Esta configuración define mosaicos personalizados. Los cambios recargan la mod. Cada mosaico debe tener nombre, destino y color #RRGGBB. Las imágenes deben ser locales y no superar 8 MiB."
   $description:fr: "Ce paramètre définit des vignettes personnalisées. Les modifications rechargent le mod. Chaque vignette doit avoir un nom, une cible et une couleur #RRGGBB. Les images doivent être locales et ne pas dépasser 8 Mio."
   $description:pt: "Esta configuração define blocos personalizados. As alterações recarregam a mod. Cada bloco deve ter nome, destino e cor #RRGGBB. As imagens devem ser locais e não ultrapassar 8 MiB."
+- photoSlideshow: false
+  $name: "Photos tile: local slideshow"
+  $name:it: "Riquadro Foto: presentazione locale"
+  $name:es: "Mosaico Fotos: presentación local"
+  $name:fr: "Vignette Photos : diaporama local"
+  $name:pt: "Bloco Fotos: apresentação local"
+  $description: "This setting shows JPG and PNG files from the local Windows Pictures folder while Start is open and Photos is pinned. Images are not uploaded. Stopping may wait for decoding to finish."
+  $description:it: "Questa impostazione mostra JPG e PNG dalla cartella locale Immagini di Windows mentre Start è aperto e Foto è fissata. Le immagini non vengono caricate online. L'arresto può attendere la fine della decodifica."
+  $description:es: "Esta configuración muestra archivos JPG y PNG de la carpeta local Imágenes de Windows mientras Inicio está abierto y Fotos está fijado. Las imágenes no se suben. Al detenerse puede esperar a que termine la decodificación."
+  $description:fr: "Ce paramètre affiche les fichiers JPG et PNG du dossier local Images de Windows lorsque l'écran d'accueil est ouvert et Photos est épinglé. Les images ne sont pas envoyées en ligne. L'arrêt peut attendre la fin du décodage."
+  $description:pt: "Esta configuração mostra arquivos JPG e PNG da pasta local Imagens do Windows enquanto a Tela Inicial está aberta e Fotos está fixado. As imagens não são enviadas. A parada pode aguardar o fim da decodificação."
+- calendarSlide: false
+  $name: "Calendar live tile slide"
+  $name:it: "Animazione del riquadro Calendario"
+  $name:es: "Deslizamiento del mosaico Calendario"
+  $name:fr: "Défilement de la vignette Calendrier"
+  $name:pt: "Deslizamento do bloco Calendário"
+  $description: "This setting alternates the pinned Microsoft Calendar tile between its icon and the current local date using a downward slide. It does not read app notifications."
+  $description:it: "Questa impostazione alterna l'icona del riquadro Calendario Microsoft fissato alla data locale con uno scorrimento verso il basso. Non legge le notifiche dell'app."
+  $description:es: "Esta configuración alterna el icono del mosaico fijado de Calendario de Microsoft con la fecha local mediante un deslizamiento hacia abajo. No lee las notificaciones de la aplicación."
+  $description:fr: "Ce paramètre alterne l'icône de la vignette Calendrier Microsoft épinglée et la date locale par un glissement vers le bas. Il ne lit pas les notifications de l'application."
+  $description:pt: "Esta configuração alterna o ícone do bloco fixado do Calendário Microsoft com a data local por meio de um deslizamento para baixo. Ela não lê as notificações do aplicativo."
 - weatherOnline: false
   $name: "Online Weather (Open-Meteo)"
   $name:it: "Meteo online (Open-Meteo)"
-  $description: "Enable online weather. Provide both coordinates or separately enable IP location. Open-Meteo receives your IP and coordinates every 30 minutes even when Start is closed. Its free API is for non-commercial use."
-  $description:it: "Attiva il meteo online. Inserisci entrambe le coordinate oppure attiva separatamente la posizione via IP. Open-Meteo riceve IP e coordinate ogni 30 minuti anche a Start chiuso. L'API gratuita è per uso non commerciale."
-- weatherIpLocation: false
-  #! $showIf: {weatherOnline: true}
-  $name: "Approximate location from IP (ipwho.is)"
-  $name:it: "Posizione approssimativa tramite IP (ipwho.is)"
-  $description: "Allow ipwho.is to receive your IP and estimate a location when coordinates are not supplied. VPNs can reduce accuracy."
-  $description:it: "Consente a ipwho.is di ricevere l'IP e stimare la posizione quando non sono inserite le coordinate. Una VPN può ridurre la precisione."
-- weatherLocationName: ""
-  #! $showIf: {weatherOnline: true}
-  $name: "Weather location label"
-  $name:it: "Nome località Meteo"
-  $description: "Optional display label, not sent to the weather service. Privacy mode hides it, not the location sent to the service."
-  $description:it: "Nome facoltativo mostrato, non inviato al servizio meteo. La privacy nasconde il nome, non la posizione inviata al servizio."
+  $name:es: "Tiempo en línea (Open-Meteo)"
+  $name:fr: "Météo en ligne (Open-Meteo)"
+  $name:pt: "Clima online (Open-Meteo)"
+  $description: "This setting enables online weather. Provide both coordinates or separately enable IP location. While a Weather tile is pinned, Open-Meteo receives your IP and coordinates every 30 minutes, even when Start is closed. Its free API is for non-commercial use."
+  $description:it: "Questa impostazione attiva il meteo online. Inserisci entrambe le coordinate oppure attiva separatamente la posizione via IP. Quando una tile Meteo è fissata, Open-Meteo riceve IP e coordinate ogni 30 minuti anche a Start chiuso. L'API gratuita è per uso non commerciale."
+  $description:es: "Esta configuración activa el tiempo en línea. Introduce ambas coordenadas o activa por separado la ubicación por IP. Mientras haya un mosaico de Tiempo fijado, Open-Meteo recibe tu IP y coordenadas cada 30 minutos, incluso con Inicio cerrado. Su API gratuita es para uso no comercial."
+  $description:fr: "Ce paramètre active la météo en ligne. Saisissez les deux coordonnées ou activez séparément la localisation par IP. Tant qu'une vignette Météo est épinglée, Open-Meteo reçoit votre IP et vos coordonnées toutes les 30 minutes, même lorsque l'écran d'accueil est fermé. Son API gratuite est réservée à un usage non commercial."
+  $description:pt: "Esta configuração ativa o clima online. Informe as duas coordenadas ou ative separadamente a localização por IP. Enquanto um bloco de Clima estiver fixado, o Open-Meteo recebe seu IP e suas coordenadas a cada 30 minutos, mesmo com a Tela Inicial fechada. A API gratuita é para uso não comercial."
 - weatherLatitude: ""
   #! $showIf: {weatherOnline: true}
   $name: "Latitude (decimal degrees)"
   $name:it: "Latitudine (gradi decimali)"
-  $description: "Enter a decimal number using a dot, for example 41.90. Both coordinates override IP location."
-  $description:it: "Inserisci un numero decimale con il punto, per esempio 41.90. Entrambe le coordinate prevalgono sulla posizione via IP."
+  $name:es: "Latitud (grados decimales)"
+  $name:fr: "Latitude (degrés décimaux)"
+  $name:pt: "Latitude (graus decimais)"
+  $description: "This setting specifies a decimal latitude using a dot, for example 41.90. Both coordinates override IP location."
+  $description:it: "Questa impostazione specifica la latitudine decimale con il punto, per esempio 41.90. Se entrambe le coordinate sono inserite, prevalgono sulla posizione via IP."
+  $description:es: "Esta configuración especifica la latitud decimal con un punto, por ejemplo 41.90. Si se indican ambas coordenadas, tienen prioridad sobre la ubicación por IP."
+  $description:fr: "Ce paramètre indique la latitude décimale avec un point, par exemple 41.90. Si les deux coordonnées sont renseignées, elles remplacent la localisation par IP."
+  $description:pt: "Esta configuração especifica a latitude decimal usando ponto, por exemplo 41.90. Se as duas coordenadas forem informadas, elas têm prioridade sobre a localização por IP."
 - weatherLongitude: ""
   #! $showIf: {weatherOnline: true}
   $name: "Longitude (decimal degrees)"
   $name:it: "Longitudine (gradi decimali)"
-  $description: "Enter a decimal number using a dot, for example 12.50."
-  $description:it: "Inserisci un numero decimale con il punto, per esempio 12.50."
-- photoSlideshow: false
-  $name: "Photos tile: local slideshow"
-  $name:it: "Riquadro Foto: presentazione locale"
-  $description: "With Photos pinned, read JPG and PNG files directly in the local Windows Pictures folder while Start is open. Images are not uploaded. Stopping may wait for decoding to finish."
-  $description:it: "Con Foto fissata, legge JPG e PNG direttamente nella cartella locale Immagini di Windows mentre Start è aperto. Le immagini non vengono caricate online. L'arresto può attendere la fine della decodifica."
-- calendarSlide: false
-  $name: "Calendar live tile slide"
-  $name:it: "Animazione del riquadro Calendario"
-  $description: "For the pinned Microsoft Calendar tile, alternate the icon with the current local date using a downward slide. This does not read app notifications."
-  $description:it: "Per il riquadro fissato di Microsoft Calendario, alterna l'icona alla data locale con uno scorrimento verso il basso. Non legge le notifiche dell'app."
-- taskbarOnBottomHover: true
-  $name: "Taskbar back when the pointer touches the bottom of Start"
-  $name:it: "Barra delle applicazioni quando il puntatore tocca il fondo di Start"
-  $name:es: "Barra de tareas cuando el puntero toca la parte inferior de Inicio"
-  $name:fr: "Barre des tâches quand le pointeur touche le bas de l'accueil"
-  $name:pt: "Barra de tarefas quando o ponteiro toca a parte inferior da Tela Inicial"
-  $description: "This setting reveals the taskbar when the pointer touches the bottom of Start, giving priority to Windows 7/8/8.1 Taskbar Recreation when detected on that monitor. The Start screen gives up space by clipping or resizing its own window; other windows are not moved or hidden. Turn it off to keep the taskbar covered."
-  $description:it: "Questa impostazione mostra la barra quando il puntatore tocca il bordo inferiore di Start, dando priorità a Windows 7/8/8.1 Taskbar Recreation quando viene rilevata sul monitor. Start libera spazio ritagliando o ridimensionando la propria finestra, senza spostare o nascondere le altre finestre. Disattivala per mantenere coperta la barra."
-  $description:es: "Esta configuración muestra la barra al tocar el borde inferior de Inicio con el puntero y da prioridad a Windows 7/8/8.1 Taskbar Recreation si se detecta en el monitor. Inicio libera espacio recortando o redimensionando su propia ventana, sin mover ni ocultar otras ventanas. Desactívala para mantener cubierta la barra."
-  $description:fr: "Ce paramètre affiche la barre lorsque le pointeur touche le bas de l'écran d'accueil et donne la priorité à Windows 7/8/8.1 Taskbar Recreation si elle est détectée sur le moniteur. L'accueil libère de l'espace en rognant ou redimensionnant sa propre fenêtre, sans déplacer ni masquer les autres fenêtres. Désactivez-le pour garder la barre couverte."
-  $description:pt: "Esta configuração mostra a barra quando o ponteiro toca a borda inferior da Tela Inicial e dá prioridade ao Windows 7/8/8.1 Taskbar Recreation quando detectado no monitor. A Tela Inicial libera espaço recortando ou redimensionando sua própria janela, sem mover ou ocultar outras janelas. Desative para manter a barra coberta."
-- winKey: true
-  $name: "Open with the Windows key and the Start button"
-  $name:it: "Apri con il tasto Windows e il pulsante Start"
-  $name:es: "Abrir con la tecla Windows y el botón Inicio"
-  $name:fr: "Ouvrir avec la touche Windows et le bouton Démarrer"
-  $name:pt: "Abrir com a tecla Windows e o botão Iniciar"
-  $description: "This setting makes pressing the Windows key on its own, or clicking the taskbar Start button, open this Start screen instead of the Windows Start menu (Win+E, Win+D and the other shortcuts keep working)."
-  $description:it: "Questa impostazione fa aprire questa schermata Start, al posto del menu Start di Windows, quando premi il tasto Windows da solo o fai clic sul pulsante Start della barra (Win+E, Win+D e le altre combinazioni continuano a funzionare)."
-  $description:es: "Esta configuración hace que, al pulsar la tecla Windows sola o hacer clic en el botón Inicio de la barra, se abra esta pantalla de inicio en lugar del menú Inicio de Windows (Win+E, Win+D y el resto de accesos siguen funcionando)."
-  $description:fr: "Ce paramètre fait ouvrir cet écran d'accueil, au lieu du menu Démarrer de Windows, quand vous appuyez sur la touche Windows seule ou cliquez sur le bouton Démarrer de la barre (Win+E, Win+D et les autres raccourcis continuent de fonctionner)."
-  $description:pt: "Esta configuração faz com que, ao pressionar a tecla Windows sozinha ou clicar no botão Iniciar da barra, esta Tela Inicial seja aberta em vez do menu Iniciar do Windows (Win+E, Win+D e os outros atalhos continuam funcionando)."
-- searchOnType: true
-  $name: "Typing on Start opens Search"
-  $name:it: "Digitare su Start apre la ricerca"
-  $name:es: "Escribir en Inicio abre la búsqueda"
-  $name:fr: "Taper sur l'écran d'accueil ouvre la recherche"
-  $name:pt: "Digitar na Tela Inicial abre a pesquisa"
-  $description: "This setting makes typing while the Start screen is open search your apps (programs, Store apps, and system commands such as winver). A sidebar slides in; click outside it to hide it, and press the Windows key to go back to Start."
-  $description:it: "Questa impostazione fa sì che, digitando mentre la schermata Start è aperta, vengano cercate le tue app (programmi, app dello Store e comandi di sistema come winver). Una barra laterale scorre dentro; fai clic fuori per nasconderla e premi il tasto Windows per tornare a Start."
-  $description:es: "Esta configuración hace que, al escribir con la pantalla de inicio abierta, se busquen tus aplicaciones (programas, aplicaciones de la Tienda y comandos del sistema como winver). Una barra lateral se desliza; haz clic fuera para ocultarla y pulsa la tecla Windows para volver a Inicio."
-  $description:fr: "Ce paramètre fait en sorte que, lorsque vous tapez alors que l'écran d'accueil est ouvert, vos applications soient recherchées (programmes, applications Store et commandes système comme winver). Un panneau latéral glisse ; cliquez à l'extérieur pour le masquer et appuyez sur la touche Windows pour revenir à l'accueil."
-  $description:pt: "Esta configuração faz com que, ao digitar com a Tela Inicial aberta, seus aplicativos sejam pesquisados (programas, aplicativos da Loja e comandos do sistema como winver). Uma barra lateral desliza; clique fora para ocultá-la e pressione a tecla Windows para voltar à Tela Inicial."
-- interceptMode: auto
-  $name: "How the Windows key / Start button are caught"
-  $name:it: "Come vengono intercettati il tasto Windows e il pulsante Start"
-  $name:es: "Cómo se capturan la tecla Windows y el botón Inicio"
-  $name:fr: "Comment la touche Windows et le bouton Démarrer sont capturés"
-  $name:pt: "Como a tecla Windows e o botão Iniciar são capturados"
-  $description: "This setting chooses how the Windows key and the Start button are intercepted. Changing this needs the mod to be disabled and enabled again."
-  $description:it: "Questa impostazione sceglie come vengono intercettati il tasto Windows e il pulsante Start. Per modificarla è necessario disabilitare e riabilitare la mod."
-  $description:es: "Esta configuración elige cómo se interceptan la tecla Windows y el botón Inicio. Cambiarla requiere desactivar y volver a activar la mod."
-  $description:fr: "Ce paramètre choisit comment la touche Windows et le bouton Démarrer sont interceptés. Le modifier nécessite de désactiver puis réactiver le mod."
-  $description:pt: "Esta configuração escolhe como a tecla Windows e o botão Iniciar são interceptados. Alterá-la exige desativar e ativar o mod novamente."
-  $options:
-  - auto: "Hook the Start menu inside Explorer (recommended), plus the keyboard hook as a backup"
-  - keyboard: "Keyboard hook only (the taskbar Start button is not caught)"
-  $options:it:
-  - auto: "Aggancia il menu Start dentro Explorer (consigliato), più l'hook da tastiera come riserva"
-  - keyboard: "Solo hook da tastiera (il pulsante Start della barra non viene intercettato)"
-  $options:es:
-  - auto: "Enganchar el menú Inicio dentro de Explorer (recomendado), más el hook de teclado como reserva"
-  - keyboard: "Solo hook de teclado (el botón Inicio de la barra no se captura)"
-  $options:fr:
-  - auto: "Ancrer le menu Démarrer dans Explorer (recommandé), plus le hook clavier en secours"
-  - keyboard: "Hook clavier uniquement (le bouton Démarrer de la barre n'est pas capturé)"
-  $options:pt:
-  - auto: "Ancorar o menu Iniciar dentro do Explorer (recomendado), mais o hook de teclado como reserva"
-  - keyboard: "Somente hook de teclado (o botão Iniciar da barra não é capturado)"
-- closeSlideMs: 320
-  $name: "Closing animation duration (milliseconds)"
-  $name:it: "Durata dell'animazione di chiusura (millisecondi)"
-  $name:es: "Duración de la animación de cierre (milisegundos)"
-  $name:fr: "Durée de l'animation de fermeture (millisecondes)"
-  $name:pt: "Duração da animação de fechamento (milissegundos)"
-  $description: "This setting controls the duration of the closing animation: the tiles shrink and fade, then the desktop fades back in. Smaller is faster. Allowed range 80 to 3000; default 320."
-  $description:it: "Questa impostazione controlla la durata dell'animazione di chiusura: i tile si riducono e svaniscono, poi il desktop ricompare con una dissolvenza. Un valore più piccolo è più veloce. Intervallo consentito da 80 a 3000; predefinito 320."
-  $description:es: "Esta configuración controla la duración de la animación de cierre: los iconos se reducen y se desvanecen, y después el escritorio reaparece con un fundido. Un valor menor es más rápido. Rango permitido de 80 a 3000; predeterminado 320."
-  $description:fr: "Ce paramètre contrôle la durée de l'animation de fermeture : les vignettes rétrécissent et s'estompent, puis le bureau réapparaît en fondu. Plus petit = plus rapide. Plage autorisée de 80 à 3000 ; défaut 320."
-  $description:pt: "Esta configuração controla a duração da animação de fechamento: os blocos diminuem e desaparecem, e depois a área de trabalho reaparece com um esmaecimento. Menor é mais rápido. Faixa permitida de 80 a 3000; padrão 320."
-- groupColumns: 2
-  $name: "Tiles per group (horizontal)"
-  $name:it: "Tile per gruppo (orizzontali)"
-  $name:es: "Iconos por grupo (horizontales)"
-  $name:fr: "Vignettes par groupe (horizontales)"
-  $name:pt: "Blocos por grupo (horizontais)"
-  $description: "This setting chooses the number of Medium-tile columns in each Start group. Allowed range 2 to 8; default 2. A Small tile takes a quarter of a Medium slot, a Wide tile two slots, a Large tile four. Changes apply immediately."
-  $description:it: "Questa impostazione sceglie il numero di colonne di tile medie in ogni gruppo di Start. Intervallo consentito da 2 a 8; predefinito 2. Una tile piccola occupa un quarto di posto medio, una larga due posti, una grande quattro. Le modifiche si applicano subito."
-  $description:es: "Esta configuración elige el número de columnas de iconos medianos de cada grupo de Inicio. Rango permitido de 2 a 8; predeterminado 2. Un icono pequeño ocupa un cuarto de hueco mediano, uno ancho dos huecos y uno grande cuatro. Los cambios se aplican al momento."
-  $description:fr: "Ce paramètre choisit le nombre de colonnes de vignettes moyennes dans chaque groupe de l'écran d'accueil. Plage autorisée de 2 à 8 ; défaut 2. Une petite vignette occupe un quart d'emplacement moyen, une large deux emplacements, une grande quatre. Les changements s'appliquent immédiatement."
-  $description:pt: "Esta configuração escolhe o número de colunas de blocos médios em cada grupo da Tela Inicial. Faixa permitida de 2 a 8; padrão 2. Um bloco pequeno ocupa um quarto de espaço médio, um largo dois espaços, um grande quatro. As mudanças valem na hora."
-- groupRows: 3
-  $name: "Tiles per group (vertical)"
-  $name:it: "Tile per gruppo (verticali)"
-  $name:es: "Iconos por grupo (verticales)"
-  $name:fr: "Vignettes par groupe (verticales)"
-  $name:pt: "Blocos por grupo (verticais)"
-  $description: "This setting chooses the number of tile rows in each Start group. Allowed range 1 to 8; default 3. On shorter displays the visible row count is limited to fit above the bottom command bar. Changes apply immediately."
-  $description:it: "Questa impostazione sceglie il numero di righe di tile in ogni gruppo di Start. Intervallo consentito da 1 a 8; predefinito 3. Sugli schermi più bassi il numero di righe visibili è limitato per restare sopra la barra dei comandi. Le modifiche si applicano subito."
-  $description:es: "Esta configuración elige el número de filas de iconos de cada grupo de Inicio. Rango permitido de 1 a 8; predeterminado 3. En pantallas bajas el número de filas visibles se limita para caber sobre la barra de comandos inferior. Los cambios se aplican al momento."
-  $description:fr: "Ce paramètre choisit le nombre de rangées de vignettes dans chaque groupe de l'écran d'accueil. Plage autorisée de 1 à 8 ; défaut 3. Sur les écrans peu hauts, le nombre de rangées visibles est limité pour rester au-dessus de la barre de commandes. Les changements s'appliquent immédiatement."
-  $description:pt: "Esta configuração escolhe o número de fileiras de blocos em cada grupo da Tela Inicial. Faixa permitida de 1 a 8; padrão 3. Em telas mais baixas, o número de fileiras visíveis é limitado para caber acima da barra de comandos inferior. As mudanças valem na hora."
-- backgroundMode: petals
-  $name: "Start screen background"
-  $name:it: "Sfondo della schermata Start"
-  $name:es: "Fondo de la pantalla de inicio"
-  $name:fr: "Arrière-plan de l'écran d'accueil"
-  $name:pt: "Plano de fundo da Tela Inicial"
-  $description: "This setting chooses what the Start screen uses as its background, like the Windows 8.1 personalization options: the petal artwork drawn as vector shapes, a solid colour, the system accent colour, the desktop wallpaper with a translucent colour overlay, or your own image file from the background image path setting. Whenever a provided image cannot be loaded or decoded, the petal artwork is used as fallback."
-  $description:it: "Questa impostazione sceglie cosa usa come sfondo la schermata Start, come le opzioni di personalizzazione di Windows 8.1: l'arte a petali disegnata come forme vettoriali, un colore pieno, il colore accent di sistema, lo sfondo del desktop con una velatura colorata traslucida oppure un tuo file immagine dal percorso dell'immagine di sfondo. Quando un'immagine fornita non può essere caricata o decodificata, viene usata come riserva l'arte a petali."
-  $description:es: "Esta configuración elige qué usa como fondo la pantalla de inicio, como las opciones de personalización de Windows 8.1: el arte de pétalos dibujado como formas vectoriales, un color sólido, el color de acento del sistema, el fondo de escritorio con una veladura translúcida o tu propio archivo de imagen desde la ruta de imagen de fondo. Cuando una imagen proporcionada no puede cargarse o descodificarse, se usa como reserva el arte de pétalos."
-  $description:fr: "Ce paramètre choisit ce que l'écran d'accueil utilise comme arrière-plan, comme les options de personnalisation de Windows 8.1 : l'art à pétales dessiné en formes vectorielles, une couleur unie, la couleur d'accent du système, le fond d'écran du bureau avec un voile coloré translucide ou votre propre fichier image depuis le chemin d'image d'arrière-plan. Lorsqu'une image fournie ne peut pas être chargée ou décodée, l'art à pétales sert de repli."
-  $description:pt: "Esta configuração escolhe o que a Tela Inicial usa como plano de fundo, como as opções de personalização do Windows 8.1: a arte de pétalas desenhada como formas vetoriais, uma cor sólida, a cor de destaque do sistema, o papel de parede da área de trabalho com uma véu colorido translúcido ou seu próprio arquivo de imagem do caminho de imagem de fundo. Quando uma imagem fornecida não pode ser carregada ou decodificada, a arte de pétalas é usada como reserva."
-  $options:
-  - petals: "Petal background drawn as vector artwork"
-  - solid: "Solid colour from the background colour setting"
-  - accent: "Solid colour tied to the system accent colour"
-  - wallpaper: "Desktop wallpaper with a translucent colour overlay, like Windows 8.1"
-  - image: "Custom image from the background image path setting"
-  $options:it:
-  - petals: "Sfondo a petali disegnato come arte vettoriale"
-  - solid: "Colore pieno dall'impostazione del colore di sfondo"
-  - accent: "Colore pieno legato al colore accent di sistema"
-  - wallpaper: "Sfondo del desktop con velatura colorata traslucida, come Windows 8.1"
-  - image: "Immagine personalizzata dal percorso dell'immagine di sfondo"
-  $options:es:
-  - petals: "Fondo de pétalos dibujado como arte vectorial"
-  - solid: "Color sólido del ajuste de color de fondo"
-  - accent: "Color sólido ligado al color de acento del sistema"
-  - wallpaper: "Fondo de escritorio con veladura translúcida, como Windows 8.1"
-  - image: "Imagen personalizada desde la ruta de imagen de fondo"
-  $options:fr:
-  - petals: "Fond à pétales dessiné en art vectoriel"
-  - solid: "Couleur unie du paramètre de couleur d'arrière-plan"
-  - accent: "Couleur unie liée à la couleur d'accent du système"
-  - wallpaper: "Fond d'écran du bureau avec voile translucide, comme Windows 8.1"
-  - image: "Image personnalisée depuis le chemin d'image d'arrière-plan"
-  $options:pt:
-  - petals: "Fundo de pétalas desenhado como arte vetorial"
-  - solid: "Cor sólida da configuração de cor de fundo"
-  - accent: "Cor sólida ligada à cor de destaque do sistema"
-  - wallpaper: "Papel de parede da área de trabalho com véu translúcido, como o Windows 8.1"
-  - image: "Imagem personalizada do caminho de imagem de fundo"
-- backgroundImagePath: ""
-  $name: "Custom background image path"
-  $name:it: "Percorso dell'immagine di sfondo personalizzata"
-  $name:es: "Ruta de la imagen de fondo personalizada"
-  $name:fr: "Chemin de l'image d'arrière-plan personnalisée"
-  $name:pt: "Caminho da imagem de fundo personalizada"
-  $description: "This setting is the full path of the image file used when the Start screen background is set to the custom image mode, for example C:\\Users\\YourName\\Pictures\\start.png. Environment variables such as %USERPROFILE% are expanded. The image is cover-cropped to fill the screen, like a wallpaper set to Fill. If the path is empty or the image cannot be loaded, the petal artwork is used instead."
-  $description:it: "Questa impostazione è il percorso completo del file immagine usato quando lo sfondo della schermata Start è in modalità immagine personalizzata, per esempio C:\\Users\\TuoNome\\Immagini\\start.png. Le variabili d'ambiente come %USERPROFILE% vengono espanse. L'immagine viene ritagliata per riempire lo schermo, come uno sfondo impostato su Riempimento. Se il percorso è vuoto o l'immagine non può essere caricata, viene usata l'arte a petali."
-  $description:es: "Esta configuración es la ruta completa del archivo de imagen usado cuando el fondo de la pantalla de inicio está en modo de imagen personalizada, por ejemplo C:\\Users\\TuNombre\\Imágenes\\start.png. Las variables de entorno como %USERPROFILE% se expanden. La imagen se recorta para llenar la pantalla, como un fondo en modo Rellenar. Si la ruta está vacía o la imagen no puede cargarse, se usa el arte de pétalos."
-  $description:fr: "Ce paramètre est le chemin complet du fichier image utilisé quand l'arrière-plan de l'écran d'accueil est en mode image personnalisée, par exemple C:\\Users\\VotreNom\\Images\\start.png. Les variables d'environnement comme %USERPROFILE% sont développées. L'image est recadrée pour remplir l'écran, comme un fond d'écran en mode Remplir. Si le chemin est vide ou l'image illisible, l'art à pétales est utilisé."
-  $description:pt: "Esta configuração é o caminho completo do arquivo de imagem usado quando o plano de fundo da Tela Inicial está no modo de imagem personalizada, por exemplo C:\\Users\\SeuNome\\Imagens\\start.png. Variáveis de ambiente como %USERPROFILE% são expandidas. A imagem é cortada para preencher a tela, como um papel de parede no modo Preencher. Se o caminho estiver vazio ou a imagem não puder ser carregada, a arte de pétalas é usada."
-- backgroundColor: "#4617b4"
-  $name: "Start background and overlay colour (hex)"
-  $name:it: "Colore di sfondo Start e di velatura (esadecimale)"
-  $name:es: "Color de fondo de Inicio y de veladura (hex)"
-  $name:fr: "Couleur d'arrière-plan Start et de voile (hex)"
-  $name:pt: "Cor de fundo da Tela Inicial e do véu (hex)"
-  $description: "This setting is the solid Windows 8.1 style background colour used by the solid and desktop-wallpaper background modes (in wallpaper mode it is the translucent overlay tint, since in Windows 8.1 the Start background colour was independent of the accent colour). Accepts #RRGGBB; invalid values fall back to the Windows 8.1 default purple #4617b4."
-  $description:it: "Questa impostazione è il colore di sfondo pieno in stile Windows 8.1 usato dalle modalità colore pieno e sfondo del desktop (in modalità sfondo del desktop è la tinta traslucida di velatura, perché in Windows 8.1 il colore di sfondo di Start era indipendente dal colore accent). Accetta #RRGGBB; i valori non validi ripiegano sul viola predefinito di Windows 8.1 #4617b4."
-  $description:es: "Esta configuración es el color de fondo sólido al estilo de Windows 8.1 que usan los modos color sólido y fondo de escritorio (en modo fondo de escritorio es el tinte translúcido, ya que en Windows 8.1 el color de fondo de Inicio era independiente del color de acento). Acepta #RRGGBB; los valores no válidos usan el púrpura predeterminado de Windows 8.1 #4617b4."
-  $description:fr: "Ce paramètre est la couleur d'arrière-plan unie de style Windows 8.1 utilisée par les modes couleur unie et fond d'écran du bureau (en mode fond d'écran, c'est la teinte translucide du voile, car sous Windows 8.1 la couleur d'arrière-plan de l'écran d'accueil était indépendante de la couleur d'accent). Accepte #RRGGBB ; les valeurs invalides reviennent au violet par défaut de Windows 8.1 #4617b4."
-  $description:pt: "Esta configuração é a cor de fundo sólida no estilo do Windows 8.1 usada pelos modos cor sólida e papel de parede da área de trabalho (no modo papel de parede, é o tom translúcido do véu, pois no Windows 8.1 a cor de fundo da Tela Inicial era independente da cor de destaque). Aceita #RRGGBB; valores inválidos usam o roxo padrão do Windows 8.1 #4617b4."
+  $name:es: "Longitud (grados decimales)"
+  $name:fr: "Longitude (degrés décimaux)"
+  $name:pt: "Longitude (graus decimais)"
+  $description: "This setting specifies a decimal longitude using a dot, for example 12.50."
+  $description:it: "Questa impostazione specifica la longitudine decimale con il punto, per esempio 12.50."
+  $description:es: "Esta configuración especifica la longitud decimal con un punto, por ejemplo 12.50."
+  $description:fr: "Ce paramètre indique la longitude décimale avec un point, par exemple 12.50."
+  $description:pt: "Esta configuração especifica a longitude decimal usando ponto, por exemplo 12.50."
+- weatherIpLocation: false
+  #! $showIf: {weatherOnline: true}
+  $name: "Approximate location from IP (ipwho.is)"
+  $name:it: "Posizione approssimativa tramite IP (ipwho.is)"
+  $name:es: "Ubicación aproximada por IP (ipwho.is)"
+  $name:fr: "Position approximative par IP (ipwho.is)"
+  $name:pt: "Localização aproximada por IP (ipwho.is)"
+  $description: "This setting allows ipwho.is to receive your IP and estimate a location when coordinates are not supplied. VPNs can reduce accuracy."
+  $description:it: "Questa impostazione consente a ipwho.is di ricevere l'IP e stimare la posizione quando non sono inserite le coordinate. Una VPN può ridurre la precisione."
+  $description:es: "Esta configuración permite que ipwho.is reciba tu IP y estime una ubicación cuando no se proporcionan coordenadas. Una VPN puede reducir la precisión."
+  $description:fr: "Ce paramètre autorise ipwho.is à recevoir votre IP et à estimer une position lorsque les coordonnées ne sont pas indiquées. Un VPN peut réduire la précision."
+  $description:pt: "Esta configuração permite que ipwho.is receba seu IP e estime uma localização quando as coordenadas não são informadas. Uma VPN pode reduzir a precisão."
+- weatherLocationName: ""
+  #! $showIf: {weatherOnline: true}
+  $name: "Weather location label"
+  $name:it: "Nome località Meteo"
+  $name:es: "Nombre de la ubicación del tiempo"
+  $name:fr: "Nom du lieu météo"
+  $name:pt: "Nome da localização do clima"
+  $description: "This setting provides an optional display label, not sent to the weather service. Privacy mode hides it, not the location sent to the service."
+  $description:it: "Questa impostazione specifica un nome facoltativo da mostrare, non inviato al servizio meteo. La modalità privacy nasconde il nome, non la posizione inviata al servizio."
+  $description:es: "Esta configuración define un nombre opcional que no se envía al servicio meteorológico. El modo de privacidad oculta el nombre, no la ubicación enviada al servicio."
+  $description:fr: "Ce paramètre définit un nom facultatif qui n'est pas envoyé au service météo. Le mode confidentialité masque le nom, pas la position envoyée au service."
+  $description:pt: "Esta configuração define um nome opcional que não é enviado ao serviço de clima. O modo de privacidade oculta o nome, não a localização enviada ao serviço."
 - privacyMode: false
   $name: "Privacy mode (generic account name)"
   $name:it: "Modalità privacy (nome account generico)"
@@ -484,6 +522,39 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $description:es: "Esta configuración sustituye el nombre de tu cuenta de Windows por una etiqueta genérica localizada (por ejemplo Usuario) en el encabezado de la pantalla de inicio, para capturas, grabaciones y directos. La imagen de cuenta y su menú siguen funcionando con normalidad. Portada de la mod Windows 10 1507 Start Menu Recreation."
   $description:fr: "Ce paramètre remplace le nom de votre compte Windows par un libellé générique localisé (par exemple Utilisateur) dans l'en-tête de l'écran d'accueil, pour captures, enregistrements et streams. L'image du compte et son menu continuent de fonctionner normalement. Porté du mod Windows 10 1507 Start Menu Recreation."
   $description:pt: "Esta configuração substitui o nome da sua conta do Windows por um rótulo genérico localizado (por exemplo Usuário) no cabeçalho da Tela Inicial, para capturas, gravações e transmissões. A imagem da conta e seu menu continuam funcionando normalmente. Portado da mod Windows 10 1507 Start Menu Recreation."
+- appTileColors: false
+  $name: "Use app-specific tile colors (sampled from the app icon)"
+  $name:it: "Usa colori specifici delle app (campionati dall'icona)"
+  $name:es: "Usar colores específicos de cada aplicación (muestreados del icono)"
+  $name:fr: "Utiliser les couleurs propres aux applications (prélevées sur leur icône)"
+  $name:pt: "Usar cores específicas dos aplicativos (extraídas do ícone)"
+  $description: "This setting optionally uses a color sampled from the application icon for desktop tiles. Simulated and packaged tiles keep their own artwork and color."
+  $description:it: "Questa impostazione usa facoltativamente il colore campionato dall'icona dell'app per i riquadri desktop. I riquadri simulati e delle app in pacchetto conservano immagini e colori propri."
+  $description:es: "Esta configuración usa opcionalmente un color tomado del icono de la aplicación para los mosaicos de escritorio. Los mosaicos simulados y de aplicaciones empaquetadas conservan sus imágenes y colores."
+  $description:fr: "Ce paramètre utilise éventuellement une couleur prélevée sur l'icône de l'application pour les vignettes de bureau. Les vignettes simulées et celles des applications packagées conservent leurs images et leurs couleurs."
+  $description:pt: "Esta configuração usa opcionalmente uma cor extraída do ícone do aplicativo nos blocos de desktop. Os blocos simulados e de aplicativos empacotados mantêm suas imagens e cores."
+- closeSlideMs: 320
+  $name: "Closing animation duration (milliseconds)"
+  $name:it: "Durata dell'animazione di chiusura (millisecondi)"
+  $name:es: "Duración de la animación de cierre (milisegundos)"
+  $name:fr: "Durée de l'animation de fermeture (millisecondes)"
+  $name:pt: "Duração da animação de fechamento (milissegundos)"
+  $description: "This setting controls the duration of the closing animation: the tiles shrink and fade, then the desktop fades back in. Smaller is faster. Allowed range 80 to 3000; default 320."
+  $description:it: "Questa impostazione controlla la durata dell'animazione di chiusura: i tile si riducono e svaniscono, poi il desktop ricompare con una dissolvenza. Un valore più piccolo è più veloce. Intervallo consentito da 80 a 3000; predefinito 320."
+  $description:es: "Esta configuración controla la duración de la animación de cierre: los iconos se reducen y se desvanecen, y después el escritorio reaparece con un fundido. Un valor menor es más rápido. Rango permitido de 80 a 3000; predeterminado 320."
+  $description:fr: "Ce paramètre contrôle la durée de l'animation de fermeture : les vignettes rétrécissent et s'estompent, puis le bureau réapparaît en fondu. Plus petit = plus rapide. Plage autorisée de 80 à 3000 ; défaut 320."
+  $description:pt: "Esta configuração controla a duração da animação de fechamento: os blocos diminuem e desaparecem, e depois a área de trabalho reaparece com um esmaecimento. Menor é mais rápido. Faixa permitida de 80 a 3000; padrão 320."
+- desktopAppsFirstInCategories: false
+  $name: "Desktop programs before Store apps in the list of all apps"
+  $name:it: "Programmi desktop prima delle app dello Store nell'elenco di tutte le app"
+  $name:es: "Programas de escritorio antes que las apps de la Store en la lista de todas las aplicaciones"
+  $name:fr: "Programmes de bureau avant les applications du Store dans la liste de toutes les applications"
+  $name:pt: "Programas de desktop antes dos apps da Store na lista de todos os apps"
+  $description: "This setting concerns the following. This only matters with the 'by category' sort of the list of all apps. On: desktop programs are listed before the Store apps. Off: the Store apps come first, as in the Windows 8.1 Start screen and in this mod."
+  $description:it: "Questa impostazione riguarda quanto segue. Conta solo con l'ordinamento 'per categoria' dell'elenco di tutte le app. Attiva: i programmi desktop sono elencati prima delle app dello Store. Disattiva: prima le app dello Store, come nella schermata Start di Windows 8.1 e come fa questo mod."
+  $description:es: "Esta configuración se refiere a lo siguiente. Solo cuenta con el orden 'por categoría' de la lista de todas las aplicaciones. Activada: los programas de escritorio van antes que las apps de la Store. Desactivada: las apps van primero, como en Windows 8.1."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Ne compte qu'avec le tri 'par catégorie' de la liste de toutes les applications. Activé : les programmes de bureau passent avant les applications du Store. Désactivé : les applications passent en premier, comme sous Windows 8.1."
+  $description:pt: "Esta configuração refere-se ao seguinte. Só conta com a ordenação 'por categoria' da lista de todos os apps. Ativado: os programas de desktop vêm antes dos apps da Store. Desativado: os apps vêm primeiro, como no Windows 8.1."
 - tileGradients: true
   $name: "Windows 8/8.1 tile gradients"
   $name:it: "Sfumatura delle tile in stile Windows 8/8.1"
@@ -601,61 +672,32 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $description:es: "Esta configuración se refiere a lo siguiente. StartAllBack dibuja su propio botón Inicio, que la opción de la tecla Windows no puede capturar. Con esta opción activada, al hacer clic en él se abre esta pantalla de inicio en lugar del menú Inicio de Windows 11. Solo se usa mientras StartAllBack está en ejecución. Desactívala si quieres recuperar el menú Inicio de StartAllBack."
   $description:fr: "Ce paramètre concerne les éléments suivants. StartAllBack dessine son propre bouton Démarrer, que l'option de la touche Windows ne peut pas capturer. Avec cette option active, cliquer dessus ouvre cet écran d'accueil au lieu du menu Démarrer de Windows 11. Utilisée uniquement quand StartAllBack est en cours d'exécution. Désactivez-la pour retrouver le menu Démarrer de StartAllBack."
   $description:pt: "Esta configuração refere-se ao seguinte. O StartAllBack desenha seu próprio botão Iniciar, que a opção da tecla Windows não consegue capturar. Com esta opção ativa, clicar nele abre esta Tela Inicial em vez do menu Iniciar do Windows 11. Só é usada enquanto o StartAllBack está em execução. Desative-a se quiser o menu Iniciar do StartAllBack de volta."
-- seedStartLayout: false
-  $name: "Populate Start with a Windows 8.1 style layout from installed apps"
-  $name:it: "Popola Start con un layout stile Windows 8.1 dalle app installate"
-  $name:es: "Rellenar Inicio con un diseño estilo Windows 8.1 desde las apps instaladas"
-  $name:fr: "Peupler l'écran d'accueil façon Windows 8.1 depuis les applications installées"
-  $name:pt: "Preencher a Tela Inicial com um layout estilo Windows 8.1 dos apps instalados"
-  $description: "This setting is optional and off by default. There are no real Metro apps left to download on Windows 10/11, so to spare you pinning dozens of apps by hand, turning this on pins the modern counterparts of the Windows 8.1 inbox apps that are actually installed (Mail/Outlook, Calendar, Weather, Photos, Edge, News, Camera, Xbox, Music, Movies, OneDrive, Maps, Settings, Calculator, Clock, Notepad, Paint) in Windows 8.1 sizes and groups - Wide Mail, Large Weather and so on. It only adds groups after your current tiles, never removes or moves anything, skips apps that are already pinned or not installed, and the added tiles are ordinary tiles you can resize, move or unpin. Turning it off again changes nothing that was added."
-  $description:it: "Questa impostazione è opzionale e disattivata in partenza. Su Windows 10/11 non restano vere app Metro da scaricare, quindi per risparmiarti di pinnare decine di app a mano, attivandola vengono pinnate le controparti moderne delle app di sistema di Windows 8.1 che sono davvero installate (Posta/Outlook, Calendario, Meteo, Foto, Edge, Notizie, Fotocamera, Xbox, Musica, Film, OneDrive, Mappe, Impostazioni, Calcolatrice, Orologio, Blocco note, Paint) con dimensioni e gruppi in stile 8.1: Posta Larga, Meteo Grande e così via. Aggiunge solo gruppi dopo le tue tile attuali, non rimuove né sposta nulla, salta le app già pinnate o non installate, e le tile aggiunte sono tile normali da ridimensionare, spostare o rimuovere. Disattivandola non cambia nulla di ciò che è stato aggiunto."
-  $description:es: "Esta configuración es opcional y viene desactivada. En Windows 10/11 ya no quedan apps Metro reales para descargar, así que, para ahorrarte fijar docenas de apps a mano, al activarla se fijan las equivalentes modernas de las apps del sistema de Windows 8.1 que estén instaladas (Correo/Outlook, Calendario, Tiempo, Fotos, Edge, Noticias, Cámara, Xbox, Música, Películas, OneDrive, Mapas, Configuración, Calculadora, Reloj, Bloc de notas, Paint) con tamaños y grupos estilo 8.1: Correo Ancho, Tiempo Grande, etc. Solo añade grupos tras tus iconos actuales, nunca quita ni mueve nada, salta las apps ya fijadas o no instaladas, y los iconos añadidos son normales: puedes redimensionarlos, moverlos o quitarlos. Desactivarla no cambia lo ya añadido."
-  $description:fr: "Ce paramètre est optionnel et désactivé par défaut. Sur Windows 10/11, il ne reste plus de vraies applications Metro à télécharger ; pour vous épargner d'épingler des dizaines d'applications à la main, l'activer épingle les équivalents modernes des applications système de Windows 8.1 réellement installées (Courrier/Outlook, Calendrier, Météo, Photos, Edge, Actualités, Caméra, Xbox, Musique, Films, OneDrive, Cartes, Paramètres, Calculatrice, Horloge, Bloc-notes, Paint) aux tailles et groupes de Windows 8.1 : Courrier Large, Météo Grand, etc. Il ajoute seulement des groupes après vos vignettes actuelles, ne retire ni ne déplace rien, ignore les applications déjà épinglées ou absentes, et les vignettes ajoutées sont ordinaires : redimensionnables, déplaçables, retirables. Le désactiver ne change rien à ce qui a été ajouté."
-  $description:pt: "Esta configuração é opcional e vem desativada. No Windows 10/11 não restam apps Metro de verdade para baixar, então, para poupar você de fixar dezenas de apps manualmente, ao ativá-la são fixados os equivalentes modernos dos apps de sistema do Windows 8.1 que estiverem instalados (Email/Outlook, Calendário, Clima, Fotos, Edge, Notícias, Câmera, Xbox, Música, Filmes, OneDrive, Mapas, Configurações, Calculadora, Relógio, Bloco de Notas, Paint) com tamanhos e grupos no estilo 8.1: Email Largo, Clima Grande e assim por diante. Ela apenas adiciona grupos depois dos seus blocos atuais, nunca remove nem move nada, pula apps já fixados ou não instalados, e os blocos adicionados são comuns: redimensionáveis, móveis e removíveis. Desativá-la não muda o que foi adicionado."
-- openAtLogon: true
-  $name: "Open Start once at sign-in"
-  $name:it: "Apri Start una volta all'accesso"
-  $name:es: "Abrir Inicio una vez al iniciar sesión"
-  $name:fr: "Ouvrir l'écran d'accueil une fois à l'ouverture de session"
-  $name:pt: "Abrir a Tela Inicial uma vez ao entrar"
-  $description: "This setting shows Start after the Explorer desktop is ready on a new sign-in, using the slower 8102-style tile reveal. Does not reopen Start when this mod is edited or Explorer is restarted later in the same sign-in. Turn off to keep the desktop at sign-in."
-  $description:it: "Questa impostazione mostra Start dopo che il desktop di Explorer è pronto a un nuovo accesso, usando la rivelazione delle tile più lenta in stile 8102. Non riapre Start se questa mod viene modificata o se Explorer viene riavviato più tardi nella stessa sessione. Disattivala per mantenere il desktop all'accesso."
-  $description:es: "Esta configuración muestra Inicio cuando el escritorio de Explorer está listo tras un nuevo inicio de sesión, con la revelación de iconos más lenta al estilo 8102. No reabre Inicio si se edita esta mod o se reinicia Explorer más tarde en la misma sesión. Desactívala para mantener el escritorio al iniciar sesión."
-  $description:fr: "Ce paramètre affiche l'écran d'accueil dès que le bureau d'Explorer est prêt après une nouvelle ouverture de session, avec la révélation des vignettes plus lente de style 8102. Il ne rouvre pas l'écran d'accueil si le mod est modifié ou si Explorer redémarre plus tard dans la même session. Désactivez-le pour garder le bureau à l'ouverture de session."
-  $description:pt: "Esta configuração mostra a Tela Inicial quando a área de trabalho do Explorer está pronta após um novo logon, usando a revelação de blocos mais lenta no estilo 8102. Não reabre a Tela Inicial se este mod for editado ou se o Explorer reiniciar depois no mesmo logon. Desative para manter a área de trabalho ao entrar."
-- startOnPointerMonitor: true
-  $name: "Open the Start screen on the monitor that holds the pointer"
-  $name:it: "Apri la schermata Start sul monitor dove sta il puntatore"
-  $name:es: "Abrir la pantalla de inicio en el monitor donde está el puntero"
-  $name:fr: "Ouvrir l'écran d'accueil sur le moniteur du pointeur"
-  $name:pt: "Abrir a Tela Inicial no monitor onde está o ponteiro"
-  $description: "This setting concerns the following. On: the screen opens on whichever monitor the mouse pointer is on, which is what this mod has always done. Off: it always opens on the primary monitor. The position is decided when the screen opens, so no reload is needed."
-  $description:it: "Questa impostazione riguarda quanto segue. Attiva: la schermata si apre sul monitor dove sta il puntatore del mouse, cioè quello che il mod ha sempre fatto. Disattiva: si apre sempre sul monitor principale. La posizione viene decisa all'apertura della schermata, quindi non serve ricaricare il mod."
-  $description:es: "Esta configuración se refiere a lo siguiente. Activada: la pantalla se abre en el monitor donde está el puntero del ratón, que es lo que la mod ha hecho siempre. Desactivada: se abre siempre en el monitor principal."
-  $description:fr: "Ce paramètre concerne les éléments suivants. Activé : l'écran s'ouvre sur le moniteur où se trouve le pointeur de la souris, ce que le mod a toujours fait. Désactivé : il s'ouvre toujours sur le moniteur principal."
-  $description:pt: "Esta configuração refere-se ao seguinte. Ativado: a tela abre no monitor onde está o ponteiro do mouse, que é o que o mod sempre fez. Desativado: abre sempre no monitor principal."
-- allAppsAtSignIn: false
-  $name: "Open the list of all apps once at sign-in"
-  $name:it: "Apri l'elenco di tutte le app una volta all'accesso"
-  $name:es: "Abrir la lista de todas las aplicaciones una vez al iniciar sesión"
-  $name:fr: "Ouvrir la liste de toutes les applications une fois à l'ouverture de session"
-  $name:pt: "Abrir a lista de todos os apps uma vez ao entrar"
-  $description: "This setting concerns the following. With 'Open Start once at sign-in' on, the screen opens on the list of all apps instead of the tiles. It only affects that automatic opening: pressing the Windows key later still shows the tiles first."
-  $description:it: "Questa impostazione riguarda quanto segue. Con 'Apri Start una volta all'accesso' attivo, la schermata si apre sull'elenco di tutte le app invece che sulle tile. Vale solo per quell'apertura automatica: premendo il tasto Windows più tardi si vedono comunque le tile."
-  $description:es: "Esta configuración se refiere a lo siguiente. Con 'Abrir Inicio una vez al iniciar sesión' activo, la pantalla se abre en la lista de todas las aplicaciones en lugar de los iconos."
-  $description:fr: "Ce paramètre concerne les éléments suivants. Avec 'Ouvrir l'écran d'accueil une fois à l'ouverture de session', l'écran s'ouvre sur la liste de toutes les applications au lieu des vignettes."
-  $description:pt: "Esta configuração refere-se ao seguinte. Com 'Abrir a Tela Inicial uma vez ao entrar' ativado, a tela abre na lista de todos os apps em vez dos blocos."
-- desktopAppsFirstInCategories: false
-  $name: "Desktop programs before Store apps in the list of all apps"
-  $name:it: "Programmi desktop prima delle app dello Store nell'elenco di tutte le app"
-  $name:es: "Programas de escritorio antes que las apps de la Store en la lista de todas las aplicaciones"
-  $name:fr: "Programmes de bureau avant les applications du Store dans la liste de toutes les applications"
-  $name:pt: "Programas de desktop antes dos apps da Store na lista de todos os apps"
-  $description: "This setting concerns the following. This only matters with the 'by category' sort of the list of all apps. On: desktop programs are listed before the Store apps. Off: the Store apps come first, as in the Windows 8.1 Start screen and in this mod."
-  $description:it: "Questa impostazione riguarda quanto segue. Conta solo con l'ordinamento 'per categoria' dell'elenco di tutte le app. Attiva: i programmi desktop sono elencati prima delle app dello Store. Disattiva: prima le app dello Store, come nella schermata Start di Windows 8.1 e come fa questo mod."
-  $description:es: "Esta configuración se refiere a lo siguiente. Solo cuenta con el orden 'por categoría' de la lista de todas las aplicaciones. Activada: los programas de escritorio van antes que las apps de la Store. Desactivada: las apps van primero, como en Windows 8.1."
-  $description:fr: "Ce paramètre concerne les éléments suivants. Ne compte qu'avec le tri 'par catégorie' de la liste de toutes les applications. Activé : les programmes de bureau passent avant les applications du Store. Désactivé : les applications passent en premier, comme sous Windows 8.1."
-  $description:pt: "Esta configuração refere-se ao seguinte. Só conta com a ordenação 'por categoria' da lista de todos os apps. Ativado: os programas de desktop vêm antes dos apps da Store. Desativado: os apps vêm primeiro, como no Windows 8.1."
+- interceptMode: auto
+  $name: "How the Windows key / Start button are caught"
+  $name:it: "Come vengono intercettati il tasto Windows e il pulsante Start"
+  $name:es: "Cómo se capturan la tecla Windows y el botón Inicio"
+  $name:fr: "Comment la touche Windows et le bouton Démarrer sont capturés"
+  $name:pt: "Como a tecla Windows e o botão Iniciar são capturados"
+  $description: "This setting chooses how the Windows key and the Start button are intercepted. Changing this needs the mod to be disabled and enabled again."
+  $description:it: "Questa impostazione sceglie come vengono intercettati il tasto Windows e il pulsante Start. Per modificarla è necessario disabilitare e riabilitare la mod."
+  $description:es: "Esta configuración elige cómo se interceptan la tecla Windows y el botón Inicio. Cambiarla requiere desactivar y volver a activar la mod."
+  $description:fr: "Ce paramètre choisit comment la touche Windows et le bouton Démarrer sont interceptés. Le modifier nécessite de désactiver puis réactiver le mod."
+  $description:pt: "Esta configuração escolhe como a tecla Windows e o botão Iniciar são interceptados. Alterá-la exige desativar e ativar o mod novamente."
+  $options:
+  - auto: "Hook the Start menu inside Explorer (recommended), plus the keyboard hook as a backup"
+  - keyboard: "Keyboard hook only (the taskbar Start button is not caught)"
+  $options:it:
+  - auto: "Aggancia il menu Start dentro Explorer (consigliato), più l'hook da tastiera come riserva"
+  - keyboard: "Solo hook da tastiera (il pulsante Start della barra non viene intercettato)"
+  $options:es:
+  - auto: "Enganchar el menú Inicio dentro de Explorer (recomendado), más el hook de teclado como reserva"
+  - keyboard: "Solo hook de teclado (el botón Inicio de la barra no se captura)"
+  $options:fr:
+  - auto: "Ancrer le menu Démarrer dans Explorer (recommandé), plus le hook clavier en secours"
+  - keyboard: "Hook clavier uniquement (le bouton Démarrer de la barre n'est pas capturé)"
+  $options:pt:
+  - auto: "Ancorar o menu Iniciar dentro do Explorer (recomendado), mais o hook de teclado como reserva"
+  - keyboard: "Somente hook de teclado (o botão Iniciar da barra não é capturado)"
 */
 // ==/WindhawkModSettings==
 
@@ -3838,8 +3880,33 @@ class LocalPhotoSlideshow {
                 attempted[index]=true;
                 const std::wstring& path=files[index];
                 Gdiplus::Bitmap source(path.c_str(),FALSE);
+                const bool sourceValid = source.GetLastStatus() == Gdiplus::Ok;
+                const UINT originalWidth = source.GetWidth(), originalHeight = source.GetHeight();
+                const bool safeSize = originalWidth && originalHeight && originalWidth <= 10000 &&
+                    originalHeight <= 10000 && (unsigned long long)originalWidth * originalHeight <= 40000000;
+                if (sourceValid && safeSize) {
+                    // Honor EXIF orientation before measuring and cropping camera photos.
+                    UINT size = source.GetPropertyItemSize(PropertyTagOrientation);
+                    if (size >= sizeof(Gdiplus::PropertyItem) && size <= 65536) {
+                        std::vector<BYTE> storage(size);
+                        auto* property = reinterpret_cast<Gdiplus::PropertyItem*>(storage.data());
+                        if (source.GetPropertyItem(PropertyTagOrientation, size, property) == Gdiplus::Ok &&
+                            property->type == PropertyTagTypeShort && property->length >= sizeof(USHORT) && property->value) {
+                            USHORT orientation = 1;
+                            memcpy(&orientation, property->value, sizeof(orientation));
+                            const Gdiplus::RotateFlipType transforms[] = {
+                                Gdiplus::RotateNoneFlipNone, Gdiplus::RotateNoneFlipNone,
+                                Gdiplus::RotateNoneFlipX, Gdiplus::Rotate180FlipNone,
+                                Gdiplus::Rotate180FlipX, Gdiplus::Rotate90FlipX,
+                                Gdiplus::Rotate90FlipNone, Gdiplus::Rotate270FlipX,
+                                Gdiplus::Rotate270FlipNone
+                            };
+                            if (orientation >= 2 && orientation <= 8) source.RotateFlip(transforms[orientation]);
+                        }
+                    }
+                }
                 UINT w=source.GetWidth(), h=source.GetHeight();
-                if(source.GetLastStatus()==Gdiplus::Ok && w && h && w<=10000 && h<=10000 && (unsigned long long)w*h<=40000000) {
+                if(sourceValid && safeSize && w && h && w<=10000 && h<=10000 && (unsigned long long)w*h<=40000000) {
                     Gdiplus::Bitmap thumb(side_,side_,PixelFormat32bppARGB);
                     Gdiplus::Status drawStatus;
                     {
@@ -3869,7 +3936,7 @@ class LocalPhotoSlideshow {
         }
     }
 public:
-    ~LocalPhotoSlideshow(){ Stop(); }
+    // Stop is called from UiTeardown, not under the loader lock at process exit.
     void Start(HWND owner) {
         if(thread_ || !owner) return;
         owner_=owner;stop_=CreateEventW(nullptr,TRUE,FALSE,nullptr);
@@ -3882,28 +3949,38 @@ public:
         if(stop_){CloseHandle(stop_);stop_=nullptr;}
         std::lock_guard<std::mutex> lock(mutex_);current_.clear();previous_.clear();changed_=0;
     }
-    bool Draw(HDC dc,const RECT& rc,bool slide) {
+    bool Draw(HDC dc,const RECT& rc,bool slide,COLORREF background) {
         std::lock_guard<std::mutex> lock(mutex_);
         if(current_.empty()) return false;
         int w=rc.right-rc.left,h=rc.bottom-rc.top;if(w<=0 || h<=0)return false;
         Gdiplus::Graphics g(dc);if(g.GetLastStatus()!=Gdiplus::Ok)return false;
         g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
         g.SetClip(Gdiplus::Rect(rc.left,rc.top,w,h));
+        Gdiplus::SolidBrush backgroundBrush(Gdiplus::Color(255,GetRValue(background),GetGValue(background),GetBValue(background)));
+        g.FillRectangle(&backgroundBrush,rc.left,rc.top,w,h);
         float t=(std::min)(1.0f,(GetTickCount64()-changed_)/400.0f);
         Gdiplus::Bitmap now(side_,side_,side_*4,PixelFormat32bppARGB,current_.data());
+        // Fill the tile without stretching a square thumbnail on wide tiles.
+        auto drawCover = [&](Gdiplus::Bitmap* image, int y, int height) {
+            float sw=(float)side_, sh=(float)side_;
+            if (w>h) sh=sw*(float)h/(float)w;
+            else sw=sh*(float)w/(float)h;
+            g.DrawImage(image, Gdiplus::Rect(rc.left,y,w,height),
+                        (side_-sw)/2, (side_-sh)/2, sw, sh, Gdiplus::UnitPixel);
+        };
         if(!previous_.empty() && t<1.0f) {
             Gdiplus::Bitmap prev(side_,side_,side_*4,PixelFormat32bppARGB,previous_.data());
             if (slide) {
                 int dy=(int)(h*(t*t*(3.0f-2.0f*t)));
-                g.DrawImage(&prev,Gdiplus::Rect(rc.left,rc.top+dy,w,h));
-                g.DrawImage(&now,Gdiplus::Rect(rc.left,rc.top+dy-h,w,h));
+                drawCover(&prev,rc.top+dy,h);
+                drawCover(&now,rc.top+dy-h,h);
             }
             else {
                 float z=(std::max)(0.05f,cosf((t<0.5f?t:1.0f-t)*3.14159265f));
                 int ht=(std::max)(1,(int)(h*z));
-                g.DrawImage(t<0.5f?&prev:&now,Gdiplus::Rect(rc.left,rc.top+(h-ht)/2,w,ht));
+                drawCover(t<0.5f?&prev:&now,rc.top+(h-ht)/2,ht);
             }
-        } else g.DrawImage(&now,Gdiplus::Rect(rc.left,rc.top,w,h));
+        } else drawCover(&now,rc.top,h);
         return true;
     }
 };
@@ -3985,80 +4062,116 @@ class ScreenWeather {
         if (!digit || pos == json.size() || (json[pos] != ',' && json[pos] != '}' && json[pos] != ' ' && json[pos] != '\n')) return false;
         out = negative ? -n : n; return true;
     }
-    static bool IpWeatherLocation(std::wstring& lat,std::wstring& lon) {
-        HINTERNET session=WinHttpOpen(L"Win81StartWeather/1.0",WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0);
-        if (!session) return false;
-        WinHttpSetTimeouts(session,3000,3000,3000,3000);
-        HINTERNET conn=WinHttpConnect(session,L"ipwho.is",INTERNET_DEFAULT_HTTPS_PORT,0);
-        HINTERNET req=conn ? WinHttpOpenRequest(conn,L"GET",L"/",nullptr,WINHTTP_NO_REFERER,WINHTTP_DEFAULT_ACCEPT_TYPES,WINHTTP_FLAG_SECURE) : nullptr;
-        bool ok=false;
-        if (req) {
-            DWORD disable=WINHTTP_DISABLE_REDIRECTS;
-            if (WinHttpSetOption(req,WINHTTP_OPTION_DISABLE_FEATURE,&disable,sizeof(disable)) &&
-                WinHttpSendRequest(req,WINHTTP_NO_ADDITIONAL_HEADERS,0,WINHTTP_NO_REQUEST_DATA,0,0,0) && WinHttpReceiveResponse(req,nullptr)) {
-                DWORD status=0,n=sizeof(status);
-                if (WinHttpQueryHeaders(req,WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER,WINHTTP_HEADER_NAME_BY_INDEX,&status,&n,WINHTTP_NO_HEADER_INDEX) && status==200) {
-                    std::string body; char buf[1024];DWORD read=0;bool complete=true;
-                    do { if (!WinHttpReadData(req,buf,sizeof(buf),&read) || body.size()+read>16384) {complete=false;break;} body.append(buf,read); } while(read);
-                    double la=0,lo=0;
-                    size_t k=body.find("\"success\"");size_t c=k==std::string::npos ? k : body.find(':',k+9);
-                    if (c!=std::string::npos) {++c;while(c<body.size() && (body[c]==' ' || body[c]=='\n' || body[c]=='\r' || body[c]=='\t'))++c;}
-                    if (complete && c!=std::string::npos && body.compare(c,4,"true")==0 &&
-                        c+4<body.size() && (body[c+4]==',' || body[c+4]=='}' || body[c+4]==' ') &&
-                        WeatherNumber(body,"latitude",la) && WeatherNumber(body,"longitude",lo) &&
-                        la>=-90 && la<=90 && lo>=-180 && lo<=180) {
-                        lat=FormatWeatherCoordinate(la);lon=FormatWeatherCoordinate(lo);ok=true;
-                    }
-                }
-            }
-            WinHttpCloseHandle(req);
+    struct AsyncRequest {
+        HANDLE done = NULL, closed = NULL;
+        DWORD status = 0, bytes = 0;
+        char buffer[4096] = {};
+    };
+    static void CALLBACK WeatherCallback(HINTERNET, DWORD_PTR context, DWORD status, void*, DWORD length) {
+        auto* state = reinterpret_cast<AsyncRequest*>(context);
+        if (!state) return;
+        if (status == WINHTTP_CALLBACK_STATUS_HANDLE_CLOSING) {
+            SetEvent(state->closed);
+        } else if (status == WINHTTP_CALLBACK_STATUS_SENDREQUEST_COMPLETE ||
+                   status == WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE ||
+                   status == WINHTTP_CALLBACK_STATUS_READ_COMPLETE ||
+                   status == WINHTTP_CALLBACK_STATUS_REQUEST_ERROR) {
+            state->status = status;
+            state->bytes = length;
+            SetEvent(state->done);
         }
-        if(conn)WinHttpCloseHandle(conn);WinHttpCloseHandle(session);return ok;
     }
-    static bool FetchWeather(const std::wstring& lat, const std::wstring& lon, double& temp, int& code) {
-        HINTERNET session=WinHttpOpen(L"Win81StartWeather/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-                                     WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-        if (!session) return false;
-        WinHttpSetTimeouts(session, 3000, 3000, 3000, 3000);
-        HINTERNET conn=WinHttpConnect(session,L"api.open-meteo.com",INTERNET_DEFAULT_HTTPS_PORT,0);
-        std::wstring path=L"/v1/forecast?latitude="+lat+L"&longitude="+lon+
-            L"&current=temperature_2m,weather_code&forecast_days=1";
-        HINTERNET req=conn ? WinHttpOpenRequest(conn,L"GET",path.c_str(),nullptr,WINHTTP_NO_REFERER,
-                                                WINHTTP_DEFAULT_ACCEPT_TYPES,WINHTTP_FLAG_SECURE) : nullptr;
-        bool ok=false;
+    bool HttpGet(const wchar_t* host, const std::wstring& path, size_t limit, std::string& body) {
+        AsyncRequest state;
+        state.done = CreateEventW(NULL, FALSE, FALSE, NULL);
+        state.closed = CreateEventW(NULL, TRUE, FALSE, NULL);
+        HINTERNET session = NULL, conn = NULL, req = NULL;
+        bool registered = false, ok = false;
+        if (state.done && state.closed && WaitForSingleObject(stop_, 0) == WAIT_TIMEOUT) {
+            session = WinHttpOpen(L"Win81StartWeather/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                  WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, WINHTTP_FLAG_ASYNC);
+        }
+        if (session) {
+            WinHttpSetTimeouts(session, 3000, 3000, 3000, 3000);
+            conn = WinHttpConnect(session, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
+        }
+        if (conn) req = WinHttpOpenRequest(conn, L"GET", path.c_str(), NULL, WINHTTP_NO_REFERER,
+                                           WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
         if (req) {
-            DWORD disable=WINHTTP_DISABLE_REDIRECTS;
-            if (WinHttpSetOption(req,WINHTTP_OPTION_DISABLE_FEATURE,&disable,sizeof(disable)) &&
-                WinHttpSendRequest(req,WINHTTP_NO_ADDITIONAL_HEADERS,0,WINHTTP_NO_REQUEST_DATA,0,0,0) &&
-                WinHttpReceiveResponse(req,nullptr)) {
-                DWORD status=0, statusSize=sizeof(status);
-                if (WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                                        WINHTTP_HEADER_NAME_BY_INDEX, &status, &statusSize, WINHTTP_NO_HEADER_INDEX) && status==200) {
-                    std::string body; char buf[1024]; DWORD read=0; bool complete=true;
-                    do {
-                        if (!WinHttpReadData(req,buf,sizeof(buf),&read)) { complete=false; break; }
-                        if (body.size()+read > 32768) { complete=false; break; }
-                        body.append(buf,read);
-                    } while (read);
-                    // Search only inside the current object, not current_units.
-                    size_t current=body.find("\"current\":{");
-                    if (complete && current!=std::string::npos) {
-                        size_t end=body.find('}',current);
-                        if (end!=std::string::npos) {
-                            std::string obj=body.substr(current,end-current+1); double c=0;
-                            if (WeatherNumber(obj,"temperature_2m",temp) && temp>=-100 && temp<=70 &&
-                                WeatherNumber(obj,"weather_code",c) && c>=0 && c<=99 && c==(int)c) {
-                                code=(int)c; ok=true;
-                            }
+            DWORD_PTR context = reinterpret_cast<DWORD_PTR>(&state);
+            DWORD disable = WINHTTP_DISABLE_REDIRECTS;
+            if (WinHttpSetOption(req, WINHTTP_OPTION_CONTEXT_VALUE, &context, sizeof(context)) &&
+                WinHttpSetOption(req, WINHTTP_OPTION_DISABLE_FEATURE, &disable, sizeof(disable)) &&
+                WinHttpSetStatusCallback(req, WeatherCallback,
+                    WINHTTP_CALLBACK_FLAG_SENDREQUEST_COMPLETE | WINHTTP_CALLBACK_FLAG_HEADERS_AVAILABLE |
+                    WINHTTP_CALLBACK_FLAG_READ_COMPLETE | WINHTTP_CALLBACK_FLAG_REQUEST_ERROR |
+                    WINHTTP_CALLBACK_FLAG_HANDLES, 0) != WINHTTP_INVALID_STATUS_CALLBACK) {
+                registered = true;
+                HANDLE waits[] = {stop_, state.done};
+                auto completed = [&](DWORD expected) {
+                    return WaitForMultipleObjects(2, waits, FALSE, INFINITE) == WAIT_OBJECT_0 + 1 &&
+                           state.status == expected;
+                };
+                if (WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA,
+                                       0, 0, context) && completed(WINHTTP_CALLBACK_STATUS_SENDREQUEST_COMPLETE) &&
+                    WinHttpReceiveResponse(req, NULL) && completed(WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE)) {
+                    DWORD status = 0, size = sizeof(status);
+                    if (WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                                            WINHTTP_HEADER_NAME_BY_INDEX, &status, &size,
+                                            WINHTTP_NO_HEADER_INDEX) && status == 200) {
+                        for (;;) {
+                            if (!WinHttpReadData(req, state.buffer, sizeof(state.buffer), NULL) ||
+                                !completed(WINHTTP_CALLBACK_STATUS_READ_COMPLETE)) break;
+                            if (!state.bytes) { ok = true; break; }
+                            if (body.size() + state.bytes > limit) break;
+                            try { body.append(state.buffer, state.bytes); }
+                            catch (const std::bad_alloc&) { break; }
                         }
                     }
                 }
             }
+            // This thread is the sole owner of the asynchronous request. A pending
+            // operation can be cancelled here; its context stays alive until the
+            // final HANDLE_CLOSING notification, including after cancellation.
             WinHttpCloseHandle(req);
+            if (registered) WaitForSingleObject(state.closed, INFINITE);
         }
         if (conn) WinHttpCloseHandle(conn);
-        WinHttpCloseHandle(session);
+        if (session) WinHttpCloseHandle(session);
+        if (state.done) CloseHandle(state.done);
+        if (state.closed) CloseHandle(state.closed);
         return ok;
+    }
+    bool IpWeatherLocation(std::wstring& lat, std::wstring& lon) {
+        std::string body;
+        if (!HttpGet(L"ipwho.is", L"/", 16384, body)) return false;
+        double la = 0, lo = 0;
+        size_t k = body.find("\"success\"");
+        size_t c = k == std::string::npos ? k : body.find(':', k + 9);
+        if (c != std::string::npos) {
+            ++c;
+            while (c < body.size() && (body[c] == ' ' || body[c] == '\n' || body[c] == '\r' || body[c] == '\t')) ++c;
+        }
+        if (c == std::string::npos || body.compare(c, 4, "true") || c + 4 >= body.size() ||
+            (body[c+4] != ',' && body[c+4] != '}' && body[c+4] != ' ') ||
+            !WeatherNumber(body, "latitude", la) || !WeatherNumber(body, "longitude", lo) ||
+            la < -90 || la > 90 || lo < -180 || lo > 180) return false;
+        lat = FormatWeatherCoordinate(la); lon = FormatWeatherCoordinate(lo); return true;
+    }
+    bool FetchWeather(const std::wstring& lat, const std::wstring& lon, double& temp, int& code) {
+        std::wstring path = L"/v1/forecast?latitude=" + lat + L"&longitude=" + lon +
+            L"&current=temperature_2m,weather_code&forecast_days=1";
+        std::string body;
+        if (!HttpGet(L"api.open-meteo.com", path, 32768, body)) return false;
+        size_t current = body.find("\"current\":{");
+        if (current == std::string::npos) return false;
+        size_t end = body.find('}', current);
+        if (end == std::string::npos) return false;
+        std::string obj = body.substr(current, end-current+1);
+        double c = 0;
+        if (!WeatherNumber(obj, "temperature_2m", temp) || temp < -100 || temp > 70 ||
+            !WeatherNumber(obj, "weather_code", c) || c < 0 || c > 99 || c != (int)c) return false;
+        code = (int)c; return true;
     }
 
     static DWORD WINAPI Worker(void* raw) {
@@ -4067,11 +4180,11 @@ class ScreenWeather {
             std::wstring lat = self->latitude_, lon = self->longitude_;
             bool located = !lat.empty() && !lon.empty();
             while (WaitForSingleObject(self->stop_, 0) == WAIT_TIMEOUT) {
-                if (!located && self->ipLocation_) located = IpWeatherLocation(lat, lon);
+                if (!located && self->ipLocation_) located = self->IpWeatherLocation(lat, lon);
                 if (WaitForSingleObject(self->stop_, 0) != WAIT_TIMEOUT) break;
                 double temperature = 0;
                 int code = 0;
-                bool ok = located && FetchWeather(lat, lon, temperature, code);
+                bool ok = located && self->FetchWeather(lat, lon, temperature, code);
                 if (WaitForSingleObject(self->stop_, 0) != WAIT_TIMEOUT) break;
                 if (ok) {
                     {
@@ -4093,7 +4206,7 @@ class ScreenWeather {
     }
 public:
     void Start(HWND owner) {
-        if (!owner || !Wh_GetIntSetting(L"weatherOnline")) return;
+        if (thread_ || !owner || !Wh_GetIntSetting(L"weatherOnline")) return;
         WindhawkUtils::StringSetting lat(WindhawkUtils::StringSetting::make(L"weatherLatitude"));
         WindhawkUtils::StringSetting lon(WindhawkUtils::StringSetting::make(L"weatherLongitude"));
         WindhawkUtils::StringSetting label(WindhawkUtils::StringSetting::make(L"weatherLocationName"));
@@ -4143,6 +4256,14 @@ static bool IsWeatherTile(const Tile& t) {
     if (!_wcsnicmp(id, prefix, wcslen(prefix))) id += wcslen(prefix);
     return !_wcsicmp(id, L"windhawk:weather-tile-v1") ||
            !_wcsicmp(id, L"Microsoft.BingWeather_8wekyb3d8bbwe!App");
+}
+
+static void UpdateWeatherWorker() {
+    bool found = false;
+    for (int i = 0; i < g_tileCount; ++i) {
+        if (IsWeatherTile(g_tiles[i])) { found = true; break; }
+    }
+    if (found) g_weather.Start(g_wnd); else g_weather.Stop();
 }
 
 static int GetUiLanguageIndex() {
@@ -4305,6 +4426,40 @@ static bool EnsureCalendarFace(int i, int w, int h) {
     RECT mr = {ScI(8),h-ScI(25),w-ScI(8),h-ScI(4)};
     DrawTextW(c.dc, month, -1, &mr, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
     SelectObject(c.dc, previous); if (dayFont) DeleteObject(dayFont);
+    GdiFlush();
+    return true;
+}
+
+// The medium Weather tile alternates between the real forecast and a logo face.
+static bool IsWeatherLiveTile(const Tile& t) {
+    double temperature = 0; int code = 0;
+    return t.cw == TS_MEDIUM && IsWeatherTile(t) && g_weather.Current(temperature, code);
+}
+static bool EnsureWeatherFace(int i, int w, int h) {
+    CalendarSurface& c = g_calendarFace[i];
+    if (c.dc && c.w == w && c.h == h && c.date == -1) return true;
+    FreeCalendarFace(i);
+    if (w <= 0 || h <= 0 || w > 4096 || h > 4096) return false;
+    HDC screen = GetDC(NULL);
+    if (!screen) return false;
+    c.dc = CreateCompatibleDC(screen);
+    c.bmp = c.dc ? MakeDib(screen, w, h, &c.bits) : NULL;
+    ReleaseDC(NULL, screen);
+    if (!c.dc || !c.bmp || !c.bits) { FreeCalendarFace(i); return false; }
+    c.old = SelectObject(c.dc, c.bmp);
+    if (!c.old || c.old == HGDI_ERROR) { c.old = NULL; FreeCalendarFace(i); return false; }
+    c.w = w; c.h = h; c.date = -1;
+    const Tile& tile = g_tiles[i];
+    COLORREF color = tile.hasAppC ? tile.appC : tile.c1;
+    HBRUSH brush = CreateSolidBrush(color);
+    if (!brush) { FreeCalendarFace(i); return false; }
+    RECT area = {0, 0, w, h}; FillRect(c.dc, &area, brush); DeleteObject(brush);
+    int side = std::max(1, std::min(ScI(64), std::min(w-ScI(12), h-ScI(30))));
+    int x = (w-side)/2, y = (h-side)/2-ScI(7);
+    if (!DrawImportedMetroIcon(c.dc, tile.target, x, y, side)) {
+        RECT icon = {x, y, x+side, y+side}; DrawWeatherPicture(c.dc, 0, icon);
+    }
+    DrawModernTileCaption(c.dc, tile.label, w, h);
     GdiFlush();
     return true;
 }
@@ -5119,7 +5274,7 @@ static void BuildOneTile(int i, HDC screenDC) {
         SetBkMode(tdc, TRANSPARENT);
         if (IsPhotoTile(t) && InterlockedCompareExchange(&g_photoEnabled,0,0) && g_open) {
             RECT photoRect = {0,0,w,h};
-            if (g_photoSlideshow.Draw(tdc,photoRect,true)) {
+            if (g_photoSlideshow.Draw(tdc,photoRect,true,t.hasAppC ? t.appC : t.c1)) {
                 if (t.cw != TS_SMALL) DrawModernTileCaption(tdc,t.label,w,h);
                 if (hover) DrawTileHover(tdc,w,h);
                 continue;
@@ -5411,7 +5566,17 @@ static float LogonHeaderShift(bool account, float to) {
     return (account ? -shift : shift) * ((float)g_sw / 1920.0f);
 }
 
+static int g_resizeFadeTile = -1;
+static DWORD g_resizeFadeTick = 0;
+static float ResizeFadeOpacity(int i) {
+    if (i != g_resizeFadeTile) return 1.0f;
+    DWORD elapsed = NowMs() - g_resizeFadeTick;
+    if (elapsed >= 200) return 1.0f;
+    return 0.70f + 0.30f * ((float)elapsed / 200.0f);
+}
+
 static void DrawTile(int i, float a, float slide, float gs) {
+    a *= ResizeFadeOpacity(i);
     if (a <= 0.0f) return;
     const Tile& t = g_tiles[i];
     RECT r; TileRect(t, &r);
@@ -5438,7 +5603,8 @@ static void DrawTile(int i, float a, float slide, float gs) {
         }
     }
     BLENDFUNCTION bf = { AC_SRC_OVER, 0, (BYTE)(255.0f * Clamp01(a)), 0 };
-    if (IsCalendarLiveTile(t) && EnsureCalendarFace(i, w, h)) {
+    if ((IsCalendarLiveTile(t) && EnsureCalendarFace(i, w, h)) ||
+        (IsWeatherLiveTile(t) && EnsureWeatherFace(i, w, h))) {
         bool oldBack; float p = CalendarSlide(i, &oldBack);
         int cut = std::max(0, std::min(h, (int)(h * p)));
         HDC oldFace = oldBack ? g_calendarFace[i].dc : tdc;
@@ -5801,6 +5967,7 @@ static void DrawHeaderGpu(float a, float userA = -1.0f) {
 }
 
 static void DrawTileGpu(int i, float a, float slide, float gs) {
+    a *= ResizeFadeOpacity(i);
     if (!g_tiles[i].alive) return;
     const Tile& t = g_tiles[i];
     RECT r; TileRect(t, &r);
@@ -5823,7 +5990,8 @@ static void DrawTileGpu(int i, float a, float slide, float gs) {
     const bool pixelExact = dw == w && dh == h &&
                             dest.left == (float)(int)dest.left && dest.top == (float)(int)dest.top;
     D2D1_BITMAP_INTERPOLATION_MODE interp = pixelExact ? D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR : D2D1_BITMAP_INTERPOLATION_MODE_LINEAR;
-    if (bitmap && IsCalendarLiveTile(t) && EnsureCalendarFace(i, (int)w, (int)h)) {
+    if (bitmap && ((IsCalendarLiveTile(t) && EnsureCalendarFace(i, (int)w, (int)h)) ||
+                   (IsWeatherLiveTile(t) && EnsureWeatherFace(i, (int)w, (int)h)))) {
         CalendarSurface& c = g_calendarFace[i];
         if (!c.gpu) { D2D1_BITMAP_PROPERTIES bp = GpuBitmapProperties(); g_rt->CreateBitmap(D2D1::SizeU((UINT32)w,(UINT32)h), c.bits, (UINT32)w*4, &bp, &c.gpu); }
         if (c.gpu) {
@@ -8030,7 +8198,7 @@ static void RefreshPhotoSurfaces() {
         for (int v=0;v<2;++v) {
             HDC dc=g_tileDC[i][v]; if (!dc || !g_tileBits[i][v]) continue;
             RECT r={0,0,w,h};
-            if (!g_photoSlideshow.Draw(dc,r,true)) continue;
+            if (!g_photoSlideshow.Draw(dc,r,true,t.hasAppC ? t.appC : t.c1)) continue;
             if (t.cw!=TS_SMALL) DrawModernTileCaption(dc,t.label,w,h);
             if (v) DrawTileHover(dc,w,h);
             GdiFlush();
@@ -8759,6 +8927,7 @@ static void PinAppSized(const wchar_t* name, const std::wstring& target, int cw,
     RebuildTile(idx);
     SaveLayout();
     UpdatePhotoWorker();
+    UpdateWeatherWorker();
     RepaintNow();
 }
 static void PinApp(const wchar_t* name, const std::wstring& target) {
@@ -8936,6 +9105,7 @@ static void UnpinTile(int idx) {
     }
     RemoveTileFromOrder(idx);
     UpdatePhotoWorker();
+    UpdateWeatherWorker();
     Relayout(true);
     ClampScroll();
     SaveLayout();
@@ -9250,6 +9420,8 @@ static void ResizeTileTo(int idx, int size) {
     bool allowed = false;
     for (int i = 0; i < count; ++i) if (supported[i] == size) allowed = true;
     if (!allowed || g_tiles[idx].cw == size) return;
+    g_resizeFadeTile = idx;
+    g_resizeFadeTick = NowMs();
     g_tiles[idx].cw = size;
     RebuildTile(idx);
     Relayout(true);
@@ -11138,26 +11310,26 @@ static void GlyphRingBrush(Gdiplus::Graphics& g, float cx, float cy, float R, fl
     const float rp = R - t * 0.5f;
     g.DrawEllipse(&ring, cx - rp, cy - rp, rp * 2.0f, rp * 2.0f);
 }
-// The arrow inside the ring: a shaft with a straight chevron head, both filled, as this mod has
-// always drawn it. Its proportions are percentages of the box, so it looks the same at every DPI.
-// The shape is filled with whatever brush the caller gives: a solid white for the normal glyph, a
-// gradient of the accent colour for the one laid over it while the pointer is on the arrow.
+// The arrow is derived from the reference silhouette and scales with the icon box.
 static void GlyphArrowBrush(Gdiplus::Graphics& g, float sz, bool down, Gdiplus::Brush& br) {
     float cx, cy, R, t;
     GlyphRingFrame(sz, &cx, &cy, &R, &t);
     GlyphRingBrush(g, cx, cy, R, t, br);
-    const float d = down ? 1.0f : -1.0f;
-    const float shaftW = sz * 0.10f, headW = sz * 0.333f;
-    const float yT = cy - d * sz * 0.22f;   // top of the shaft
-    const float yB = cy - d * sz * 0.04f;   // where the head starts
-    const float yS = cy + d * sz * 0.07f;
-    const float yP = cy + d * sz * 0.22f;   // the tip
-    Gdiplus::PointF pts[9] = {
-        { cx - shaftW * 0.5f, yT }, { cx + shaftW * 0.5f, yT },
-        { cx + shaftW * 0.5f, yB }, { cx + headW * 0.5f, yB },
-        { cx + headW * 0.5f, yS }, { cx, yP },
-        { cx - headW * 0.5f, yS }, { cx - headW * 0.5f, yB },
-        { cx - shaftW * 0.5f, yB } };
+    // Trace the supplied up-arrow silhouette; mirror it vertically for All Apps.
+    const float scale = sz * 0.0043f * 0.975f;
+    const float x0 = cx - 145.0f * scale;
+    // Shorten the shaft while preserving the reference arrowhead and ring.
+    const float y0 = cy - 137.5f * scale;
+    const Gdiplus::PointF reference[] = {
+        {145,75}, {198,128}, {198,160}, {157,120}, {157,200},
+        {132,200}, {132,120}, {92,160}, {92,128}
+    };
+    Gdiplus::PointF pts[9];
+    for (int i = 0; i < 9; ++i) {
+        pts[i].X = x0 + reference[i].X * scale;
+        float y = y0 + reference[i].Y * scale;
+        pts[i].Y = down ? sz - y : y;
+    }
     g.FillPolygon(&br, pts, 9);
 }
 static void GlyphArrow(Gdiplus::Graphics& g, float sz, bool down, const Gdiplus::Color& c) {
@@ -13594,6 +13766,10 @@ static void Tick() {
     if (dt > 0.1f) dt = 0.1f;
     g_lastTick = now;
     bool changed = false;
+    if (g_resizeFadeTile >= 0) {
+        if ((DWORD)(now - g_resizeFadeTick) < 200 && g_open && !g_closing) changed = true;
+        else g_resizeFadeTile = -1;
+    }
     if (g_open && !g_closing) {
         static bool wasWeatherFresh = false;
         double weatherTemperature = 0;
@@ -13621,10 +13797,11 @@ static void Tick() {
                 !_wcsicmp(g_tiles[i].target,L"windhawk:clock-tile-v1")) { RebuildTile(i); changed = true; }
         }
     }
-    if (g_open && !g_closing && InterlockedCompareExchange(&g_calendarSlide, 0, 0)) {
+    if (g_open && !g_closing) {
         DWORD elapsed = now - g_openTick;
         if (elapsed >= 4000 && elapsed % 4000 < 500)
-            for (int i = 0; i < g_tileCount; ++i) if (IsCalendarLiveTile(g_tiles[i])) { changed = true; break; }
+            for (int i = 0; i < g_tileCount; ++i)
+                if (IsCalendarLiveTile(g_tiles[i]) || IsWeatherLiveTile(g_tiles[i])) { changed = true; break; }
     }
     ScrollArrowTick();
 
@@ -13855,6 +14032,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         // The option was turned on or off, or the count changed: create or remove the tiles, then
         // refresh the shading and the textures as for any other setting.
         SyncMetroTiles(true);
+        UpdateWeatherWorker();
         if (InterlockedExchange(&g_tileColorsDirty, 0)) UpdateTileAppColors();
         BuildBuffers();
         InitGpu();
@@ -15223,7 +15401,7 @@ static void UiRun() {
     Relayout(false);
     g_wnd = CreateTopWindow(g_sw, g_sh);
     if (g_wnd) BuildBuffers();
-    if (g_wnd) g_weather.Start(g_wnd);
+    if (g_wnd) UpdateWeatherWorker();
     if (g_wnd && InterlockedCompareExchange(&g_openAtLogon, 0, 0) != 0) {
         g_logonStop = CreateEventW(NULL, TRUE, FALSE, NULL);
         if (g_logonStop) g_logonThread = CreateThread(NULL, 0, LogonOpenThread, NULL, 0, NULL);
