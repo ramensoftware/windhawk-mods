@@ -454,6 +454,8 @@ static bool TransparencyOn() {
     return v != 0 && !saver;
 }
 
+static bool g_transparencyUsed = true;  // what the theme was built with (see WM_SETTINGCHANGE)
+
 static void BuildTheme() {
     float op = g_set.tintOpacity / 100.0f;
     Theme t;
@@ -482,7 +484,8 @@ static void BuildTheme() {
     }
     // Transparency effects off in Windows (or battery saver): its blur draws a black block, so the
     // glass becomes the solid tint.
-    if (!TransparencyOn()) {
+    g_transparencyUsed = TransparencyOn();
+    if (!g_transparencyUsed) {
         t.blur = false;
         t.tint.a = 1;
     }
@@ -703,7 +706,10 @@ static WinInfo GetWinInfo(HWND hwnd) {
     }
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
-    info.exe = MainProgramOf(pid, ProcessPath(pid));
+    info.exe = ProcessPath(pid);
+    // Helpers that carry their app's AUMID (Steam's web helper) belong to the parent program. Games
+    // started by a launcher from its own library folder (Steam, GOG, Ubisoft) set none and keep their exe.
+    if (!info.aumid.empty()) info.exe = MainProgramOf(pid, info.exe);
     g_winCache[hwnd] = info;
     return info;
 }
@@ -1872,11 +1878,24 @@ static bool EndTaskEnabled() {
 }
 
 static void EndTask(const std::vector<HWND>& wins) {
+    // Never the shell: File Explorer windows usually belong to the explorer.exe of the desktop.
+    DWORD shellPid = 0;
+    GetWindowThreadProcessId(GetShellWindow(), &shellPid);
     std::vector<DWORD> pids;
     for (HWND h : wins) {
+        HWND owner = h;
+        wchar_t cls[64] = {};
+        GetClassNameW(h, cls, ARRAYSIZE(cls));
+        if (!wcscmp(cls, L"ApplicationFrameWindow")) {
+            // Store apps: the frame belongs to ApplicationFrameHost.exe (shared by all of them); the
+            // app itself owns the inner CoreWindow, which is detached while minimized or suspended.
+            owner = FindWindowExW(h, nullptr, L"Windows.UI.Core.CoreWindow", nullptr);
+            if (!owner) continue;
+        }
         DWORD pid = 0;
-        GetWindowThreadProcessId(h, &pid);
-        if (pid && pid != GetCurrentProcessId() && std::find(pids.begin(), pids.end(), pid) == pids.end())
+        GetWindowThreadProcessId(owner, &pid);
+        if (pid && pid != shellPid && pid != GetCurrentProcessId() &&
+            std::find(pids.begin(), pids.end(), pid) == pids.end())
             pids.push_back(pid);
     }
     for (DWORD pid : pids) {
@@ -2518,10 +2537,10 @@ static std::wstring EverythingExe() {
     wchar_t buf[MAX_PATH];
     DWORD size = sizeof(buf);
     if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Everything.exe",
-                     nullptr, RRF_RT_REG_SZ, nullptr, buf, &size) == ERROR_SUCCESS &&
+                     nullptr, RRF_RT_REG_SZ | RRF_SUBKEY_WOW6464KEY, nullptr, buf, &size) == ERROR_SUCCESS &&
         GetFileAttributesW(buf) != INVALID_FILE_ATTRIBUTES)
         return buf;
-    for (const wchar_t* var : {L"ProgramFiles", L"ProgramFiles(x86)", L"LOCALAPPDATA"}) {
+    for (const wchar_t* var : {L"ProgramW6432", L"ProgramFiles", L"ProgramFiles(x86)", L"LOCALAPPDATA"}) {
         wchar_t base[MAX_PATH];
         if (!GetEnvironmentVariableW(var, base, MAX_PATH)) continue;
         std::wstring p = std::wstring(base) + (wcscmp(var, L"LOCALAPPDATA") ? L"\\Everything\\Everything.exe"
@@ -2767,22 +2786,39 @@ static void OnEverythingRecentReply(const COPYDATASTRUCT* cds) {
     }
     struct Item2 { DWORD flags, dataOffset; };
     const Item2* items = (const Item2*)(list + 5);
+    (void)end;
+    // (Any process of this user can send this message: offsets are checked as integers.)
+    size_t numItems = std::min<size_t>(num, (cds->cbData - sizeof(DWORD) * 5) / sizeof(Item2));
     int checked = 0, marked = 0;
-    for (DWORD i = 0; i < num && marked < (int)kRecentMax; i++) {
-        if ((const BYTE*)(items + i + 1) > end) break;
-        const BYTE* d = base + items[i].dataOffset;
-        if (d + sizeof(DWORD) > end) break;
-        DWORD len = *(const DWORD*)d;
+    // The checks below run on the UI thread: stop after a short while, and only look at fixed drives
+    // (a sleeping USB disk or a slow network share would freeze the dock).
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(150);
+    wchar_t fixedDrives[26] = {};  // 0 unknown, 1 fixed, 2 other
+    for (size_t i = 0; i < numItems && marked < (int)kRecentMax; i++) {
+        if (std::chrono::steady_clock::now() > deadline) break;
+        DWORD off = items[i].dataOffset;
+        if (off > cds->cbData || cds->cbData - off < sizeof(DWORD)) break;
+        const BYTE* d = base + off;
+        size_t len = *(const DWORD UNALIGNED*)d;
         d += sizeof(DWORD);
-        if (d + (size_t)(len + 1) * sizeof(WCHAR) + 8 + sizeof(DWORD) > end) break;
+        // text, null, FILETIME (4 WCHARs), attributes (2 WCHARs)
+        if ((cds->cbData - off - sizeof(DWORD)) / sizeof(WCHAR) < len + 1 + 6) break;
         std::wstring full((const wchar_t*)d, len);
-        d += (size_t)(len + 1) * sizeof(WCHAR);
+        d += (len + 1) * sizeof(WCHAR);
         ULONGLONG when = *(const ULONGLONG UNALIGNED*)d;
         d += 8;
         DWORD attr = *(const DWORD UNALIGNED*)d;
         // Cloud placeholders (OneDrive "online only"): reading their streams could download them.
         if (attr & (FILE_ATTRIBUTE_OFFLINE | 0x00040000 /* RECALL_ON_OPEN */ | 0x00400000 /* RECALL_ON_DATA_ACCESS */))
             continue;
+        if (full.size() < 3 || full[1] != L':' || !iswalpha(full[0])) continue;
+        int drive = towupper(full[0]) - L'A';
+        if (drive < 0 || drive >= 26) continue;
+        if (!fixedDrives[drive]) {
+            wchar_t root[4] = {full[0], L':', L'\\', 0};
+            fixedDrives[drive] = GetDriveTypeW(root) == DRIVE_FIXED ? 1 : 2;
+        }
+        if (fixedDrives[drive] != 1) continue;
         checked++;
         if (CameFromInternet(full)) {
             AddRecent(full, when);
@@ -2904,17 +2940,19 @@ static void Power(int which) {
 constexpr UINT_PTR TIMER_START_ICONS = 25;
 static std::chrono::steady_clock::time_point g_iconBudgetEnd;
 static bool g_iconsPending = false;
+static bool g_iconLoadedThisFrame = false;
 
 static ID2D1Bitmap* StartIcon(StartItem& it) {
     std::wstring key = it.launch;
     auto f = g_start.bmps.find(key);
     if (f != g_start.bmps.end()) return f->second.Get();
-    if (!it.iconTried && std::chrono::steady_clock::now() > g_iconBudgetEnd) {
+    if (!it.iconTried && g_iconLoadedThisFrame && std::chrono::steady_clock::now() > g_iconBudgetEnd) {
         g_iconsPending = true;
         return nullptr;
     }
     if (!it.iconTried) {
         it.iconTried = true;
+        g_iconLoadedThisFrame = true;  // (at least one per frame, so loading always moves on)
         ComPtr<IShellItem> item;
         if (SUCCEEDED(SHCreateItemFromParsingName(it.launch.c_str(), nullptr, IID_PPV_ARGS(&item))))
             it.icon = IconFromItem(item.Get(), 64);
@@ -2943,6 +2981,7 @@ static void RenderStartFrame();
 static void RenderStart() {
     g_iconBudgetEnd = std::chrono::steady_clock::now() + std::chrono::milliseconds(8);
     g_iconsPending = false;
+    g_iconLoadedThisFrame = false;
     RenderStartFrame();
     if (g_iconsPending && g_start.open) SetTimer(g_start.hwnd, TIMER_START_ICONS, 16, nullptr);
 }
@@ -3566,15 +3605,12 @@ static void MoveTextCaret(size_t to, bool extend) {
     RenderStart();
 }
 
-static void CopyTextSel(HWND hwnd) {
-    auto& s = g_start;
-    if (!HasTextSel()) return;
-    size_t a = std::min(s.caret, s.anchor), n = std::max(s.caret, s.anchor) - a;
+static void SetClipboardText(HWND hwnd, const wchar_t* text, size_t n) {
     if (!OpenClipboard(hwnd)) return;
     EmptyClipboard();
     if (HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (n + 1) * sizeof(wchar_t))) {
         if (auto* p = (wchar_t*)GlobalLock(h)) {
-            memcpy(p, s.query.c_str() + a, n * sizeof(wchar_t));
+            memcpy(p, text, n * sizeof(wchar_t));
             p[n] = 0;
             GlobalUnlock(h);
             if (!SetClipboardData(CF_UNICODETEXT, h)) GlobalFree(h);
@@ -3583,6 +3619,13 @@ static void CopyTextSel(HWND hwnd) {
         }
     }
     CloseClipboard();
+}
+
+static void CopyTextSel(HWND hwnd) {
+    auto& s = g_start;
+    if (!HasTextSel()) return;
+    size_t a = std::min(s.caret, s.anchor), n = std::max(s.caret, s.anchor) - a;
+    SetClipboardText(hwnd, s.query.c_str() + a, n);
 }
 
 static StartItem* SelectedResult() {
@@ -3610,12 +3653,12 @@ static std::wstring AppFileLocation(const std::wstring& launch) {
     }
     // "shell:AppsFolder\{known folder}\sub\app.exe"
     std::wstring id = launch.rfind(L"shell:AppsFolder\\", 0) == 0 ? launch.substr(17) : L"";
-    if (path.empty() && id.size() > 39 && id[0] == L'{' && id[38] == L'}' && id[39] == L'\\') {
+    if (path.empty() && id.size() > 38 && id[0] == L'{' && id[37] == L'}' && id[38] == L'\\') {
         GUID g;
         PWSTR base = nullptr;
-        if (SUCCEEDED(CLSIDFromString(id.substr(0, 39).c_str(), &g)) &&
+        if (SUCCEEDED(CLSIDFromString(id.substr(0, 38).c_str(), &g)) &&
             SUCCEEDED(SHGetKnownFolderPath(g, 0, nullptr, &base)) && base) {
-            path = std::wstring(base) + id.substr(39);
+            path = std::wstring(base) + id.substr(38);
             CoTaskMemFree(base);
         }
     }
@@ -3644,19 +3687,7 @@ static void FileItemMenu(StartItem& it, POINT pt) {
         }
         return;
     }
-    if (cmd == 3 && OpenClipboard(g_start.hwnd)) {
-        EmptyClipboard();
-        if (HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (path.size() + 1) * sizeof(wchar_t))) {
-            if (auto* p = (wchar_t*)GlobalLock(h)) {
-                memcpy(p, path.c_str(), (path.size() + 1) * sizeof(wchar_t));
-                GlobalUnlock(h);
-                if (!SetClipboardData(CF_UNICODETEXT, h)) GlobalFree(h);
-            } else {
-                GlobalFree(h);
-            }
-        }
-        CloseClipboard();
-    }
+    if (cmd == 3) SetClipboardText(g_start.hwnd, path.c_str(), path.size());
     SetForegroundWindow(g_start.hwnd);
     RenderStart();
 }
@@ -4423,7 +4454,9 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case WM_SETTINGCHANGE:
             // Transparency effects turned on or off (see BuildTheme).
-            if (lp && !wcscmp((LPCWSTR)lp, L"ImmersiveColorSet")) PostMessageW(hwnd, WM_APP_SETTINGS, 0, 0);
+            // (Also sent for light/dark and accent changes: reload only when the glass would change.)
+            if (lp && !wcscmp((LPCWSTR)lp, L"ImmersiveColorSet") && TransparencyOn() != g_transparencyUsed)
+                PostMessageW(hwnd, WM_APP_SETTINGS, 0, 0);
             break;
         case WM_APP_SETTINGS:
             LoadSettings();
@@ -4566,6 +4599,7 @@ DWORD WINAPI UiThread(LPVOID) {
     // Release every COM/D2D object here, on this thread, before CoUninitialize (not at ExitProcess).
     g_apps.clear();
     g_allApps.clear();
+    g_recent.clear();
     g_startPins.clear();
     g_settingsItems.clear();
     g_start.appHits.clear();
@@ -4686,7 +4720,7 @@ static BOOL ExplorerInit() {
     };
     WindhawkUtils::HookSymbols(twinui, hooks, ARRAYSIZE(hooks));
     if (void* target = xamlLauncherState ? xamlLauncherState : xamlLauncher) {
-        Wh_SetFunctionHook(target, (void*)ShowStartView_hook, (void**)&ShowStartView_orig);
+        WindhawkUtils::SetFunctionHook((ShowStartView_t)target, ShowStartView_hook, &ShowStartView_orig);
     } else {
         Wh_Log(L"ShowStartView not found: the Windows key keeps opening Windows' Start");
     }
