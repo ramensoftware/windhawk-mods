@@ -57,11 +57,27 @@ The interface is available in English, Russian, Spanish, German, Brazilian Portu
 
 - Shell borders depend on the Windows build and Windows Web Experience Pack. After enabling or updating the mod, some panels may require restarting Windows Explorer or signing out and back in.
 - Apps running as administrator, including Windhawk, may retain their borders. Apps that draw their own frames control their appearance.
-- Mods that change the same border or title bar can override each other, including Windows 11 Accent Window Border.
 
 ## Platforms
 
 Requires Windows 11 x64 or ARM64.
+
+### Compatibility
+
+The following mods overlap with Windows Border Switch for application window borders:
+
+- [Invisible Window Borders](https://windhawk.net/mods/invisible-borders) — also hides system-drawn window borders.
+- [Windows 11 Accent Window Border](https://windhawk.net/mods/win11-accent-border) — sets window border colors, which can conflict with hiding those borders.
+
+Do not use multiple mods to control the same window border or title bar: they can override each other's settings and exceptions. To use either mod for window borders and Windows Border Switch only for shell panels, set **Active window**, **Inactive windows**, and **Dialogs** to **Windows-defined** in Windows Border Switch.
+
+The following Styler mods customize shell panels. Their themes and custom rules may also change borders:
+
+- [Windows 11 Start Menu Styler](https://windhawk.net/mods/windows-11-start-menu-styler) — styles the Start menu and Search panel ([styling guide](https://github.com/ramensoftware/windows-11-start-menu-styling-guide)).
+- [Windows 11 Taskbar Styler](https://windhawk.net/mods/windows-11-taskbar-styler) — styles the taskbar, including its edge ([styling guide](https://github.com/ramensoftware/windows-11-taskbar-styling-guide)).
+- [Windows 11 Notification Center Styler](https://windhawk.net/mods/windows-11-notification-center-styler) — styles notifications, the calendar, Quick Settings, and media controls ([styling guide](https://github.com/ramensoftware/windows-11-notification-center-styling-guide)).
+
+If a theme or rule controls the same border, set the corresponding Windows Border Switch option to **Windows-defined**, or remove the overlapping Styler rules.
 
 ## Usage
 
