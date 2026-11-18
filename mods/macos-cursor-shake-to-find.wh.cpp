@@ -1,30 +1,28 @@
 // ==WindhawkMod==
 // @id              macos-cursor-shake-to-find
 // @name            macOS Cursor & Shake to Find (4K HD)
-// @description     Complete built-in 4K macOS cursor suite (no external files needed) with smooth "Shake to Find" magnification.
-// @version         4.4.2
+// @description     Complete built-in 4K macOS cursor suite with smooth "Shake to Find" magnification.
+// @version         6.4.0
 // @author          brcarvp
 // @github          https://github.com/brcarvp
-// @include         explorer.exe
-// @include         chrome.exe
-// @include         msedge.exe
-// @include         brave.exe
-// @compilerOptions -luser32 -lgdi32 -lgdiplus -lole32
+// @include         windhawk.exe
+// @compilerOptions -luser32 -lshell32 -lgdi32 -lgdiplus -lole32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # macOS Cursor & Shake to Find (4K HD) - Golden Gate Edition
 
-Transform all your Windows mouse pointers into the authentic **macOS cursor suite** (true-to-scale macOS proportions with crisp white borders) and unlock the native macOS **"Shake to Find"** feature—**with zero external files or manual setup required!**
+Transform all your Windows mouse pointers into the authentic **macOS cursor suite** with crisp white borders and unlock the native macOS **"Shake to Find"** feature.
+
+![macOS Golden Gate Cursors Preview](https://i.imgur.com/AH6rkDP.jpeg)
 
 ## Features
 
-- **Authentic Built-In 4K macOS Cursors:** Procedurally renders all 13 system pointers directly in memory based on the latest macOS cursor design language.
-- **Custom Cursor Size & Colors:** Change the fill color, border color, and globally scale the cursor size directly from the settings.
-- **Hardware Accelerated `.ani` Compilation:** Dynamically builds native Windows animated files for the Wait and AppStarting cursors on launch for zero-flicker, 60fps animations.
-- **Shake to Find:** Rapidly shaking the mouse triggers a smooth, 60 FPS bicubic-interpolated magnification overlay.
-- **Native Windows Cursors in Word:** Automatically restores 100% native Windows cursors when Microsoft Word or custom excluded apps are focused. **Shake to Find still works perfectly inside Word.**
+- **Authentic Built-In 4K macOS Cursors:** Procedurally renders all system pointers directly in memory based on the latest macOS cursor design language.
+- **Custom Cursor Size & Colors:** Change the fill color, border color, and scale directly from the settings.
+- **Smart App Exclusions:** Restores native Windows cursors inside Word while keeping Shake to Find fully operational (shakes the actual Windows cursor!).
+- **Hardware Accelerated `.ani` Compilation:** Dynamically builds native Windows animated files securely.
 */
 // ==/WindhawkModReadme==
 
@@ -38,10 +36,10 @@ Transform all your Windows mouse pointers into the authentic **macOS cursor suit
   $description: "Increase or decrease the normal cursor size (100 = Default, 150 = 50% larger, 200 = Double size)"
 - useDefaultMacOSColors: true
   $name: "Use Default macOS Colors"
-  $description: "Activate to use authentic macOS colors (Dark Gray Fill, White Border). If ON, the custom color boxes below are ignored."
+  $description: "Activate to use authentic macOS colors (Dark Gray Fill, White Border). If ON, custom colors are ignored."
 - cursorFillColor: "Black"
   $name: "Cursor Fill Color (Internal)"
-  $description: "Select the main internal color of the cursor (Requires 'Use Default macOS Colors' to be OFF)"
+  $description: "Select the main internal color of the cursor"
   $options:
     - Black: "Black"
     - White: "White"
@@ -57,7 +55,7 @@ Transform all your Windows mouse pointers into the authentic **macOS cursor suit
     - Gray: "Gray"
 - cursorBorderColor: "White"
   $name: "Cursor Border Color (Outline)"
-  $description: "Select the outline color of the cursor (Requires 'Use Default macOS Colors' to be OFF)"
+  $description: "Select the outline color of the cursor"
   $options:
     - Black: "Black"
     - White: "White"
@@ -73,19 +71,16 @@ Transform all your Windows mouse pointers into the authentic **macOS cursor suit
     - Gray: "Gray"
 - enableShakeToFind: true
   $name: "Enable Shake to Find"
-  $description: "Temporarily enlarges the macOS cursor when shaking the mouse rapidly"
+  $description: "Temporarily enlarges the current cursor when shaking the mouse rapidly"
 - maxScalePercent: 350
   $name: "Maximum Shake Scale (%)"
-  $description: "Magnification percentage when shaking the mouse (350 = 3.5x normal size)"
+  $description: "Magnification percentage when shaking the mouse"
 - shakeSensitivity: 3
   $name: "Shake Sensitivity (Reversals)"
-  $description: "Number of rapid direction changes required to trigger (2 = very easy, 4 = normal)"
+  $description: "Number of rapid direction changes required to trigger"
 - restoreDelayMs: 700
   $name: "Restore Delay (ms)"
   $description: "Time in milliseconds after stopping before the cursor shrinks back to normal"
-- keepCursorVisibleWhileTyping: true
-  $name: "Keep Cursor Visible While Typing"
-  $description: "Prevents Windows and Chrome/Edge/Brave from hiding the cursor when typing on the keyboard"
 - excludeOfficeAndExternalApps: true
   $name: "Use Default Windows Cursors in Word & External Apps"
   $description: "Restores original Windows cursors while Word or custom excluded apps are focused (Shake to Find remains active)"
@@ -96,13 +91,16 @@ Transform all your Windows mouse pointers into the authentic **macOS cursor suit
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <shellapi.h>
+#include <shlobj.h>
+#include <stdio.h>
+#include <wchar.h>
 #include <gdiplus.h>
-#include <vector>
-#include <string>
+
 #include <cmath>
-#include <atomic>
-#include <cwctype>
 #include <cstdlib>
+#include <string>
+#include <vector>
 
 #ifndef OCR_NORMAL
 #define OCR_NORMAL      32512
@@ -131,7 +129,6 @@ struct ModSettings {
     float maxScale;
     int shakeSensitivity;
     int restoreDelayMs;
-    bool keepCursorVisibleWhileTyping;
     bool excludeOfficeAndExternalApps;
     std::vector<std::wstring> customExcludedList;
 } g_settings;
@@ -148,31 +145,30 @@ const wchar_t* g_builtInExcludedApps[] = {
 
 constexpr float MAC_TRUE_SCALE = 0.82f;
 
-bool g_isExplorer = false;
+HANDLE g_stopEvent = NULL;
 HANDLE g_thread = NULL;
-std::atomic<bool> g_running{false};
 HWND g_hwndOverlay = NULL;
 Gdiplus::Bitmap* g_pHighResArrowBmp = nullptr;
 bool g_sysCursorHidden = false;
 bool g_macCursorsCurrentlyApplied = false;
-BOOL g_origMouseVanish = TRUE;
-bool g_savedMouseVanish = false;
+ULONG_PTR g_gdiplusToken = 0;
 
 // ============================================================================
-// HELPERS DO COMPILADOR DE .ANI (ARQUIVOS DE ANIMAÇÃO NATIVOS)
+// COMPILADOR DE .ANI E GERENCIAMENTO DE ARQUIVOS (%TEMP%)
 // ============================================================================
+
+std::wstring GetTempAniPath(const std::wstring& name) {
+    WCHAR tempPath[MAX_PATH];
+    GetTempPathW(MAX_PATH, tempPath);
+    return std::wstring(tempPath) + name;
+}
 
 int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
-    UINT num = 0;
-    UINT size = 0;
+    UINT num = 0, size = 0;
     Gdiplus::GetImageEncodersSize(&num, &size);
-    if (size == 0) {
-        return -1;
-    }
+    if (size == 0) return -1;
     Gdiplus::ImageCodecInfo* pImageCodecInfo = (Gdiplus::ImageCodecInfo*)(malloc(size));
-    if (pImageCodecInfo == NULL) {
-        return -1;
-    }
+    if (pImageCodecInfo == NULL) return -1;
     Gdiplus::GetImageEncoders(num, size, pImageCodecInfo);
     for (UINT j = 0; j < num; ++j) {
         if (wcscmp(pImageCodecInfo[j].MimeType, format) == 0) {
@@ -186,17 +182,13 @@ int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
 }
 
 void WriteDWORD(std::vector<BYTE>& buf, DWORD v) {
-    buf.push_back(v & 0xFF);
-    buf.push_back((v >> 8) & 0xFF);
-    buf.push_back((v >> 16) & 0xFF);
-    buf.push_back((v >> 24) & 0xFF);
+    buf.push_back(v & 0xFF); buf.push_back((v >> 8) & 0xFF);
+    buf.push_back((v >> 16) & 0xFF); buf.push_back((v >> 24) & 0xFF);
 }
 
 void WriteFourCC(std::vector<BYTE>& buf, const char* fcc) {
-    buf.push_back(fcc[0]);
-    buf.push_back(fcc[1]);
-    buf.push_back(fcc[2]);
-    buf.push_back(fcc[3]);
+    buf.push_back(fcc[0]); buf.push_back(fcc[1]);
+    buf.push_back(fcc[2]); buf.push_back(fcc[3]);
 }
 
 std::vector<BYTE> BuildAniFile(const std::vector<std::vector<BYTE>>& frames, DWORD jifRate) {
@@ -223,9 +215,7 @@ std::vector<BYTE> BuildAniFile(const std::vector<std::vector<BYTE>>& frames, DWO
     DWORD listSize = 4; 
     for (const auto& f : frames) {
         listSize += 8 + f.size();
-        if (f.size() % 2 != 0) {
-            listSize += 1;
-        }
+        if (f.size() % 2 != 0) listSize += 1;
     }
     WriteDWORD(buf, listSize);
     WriteFourCC(buf, "fram");
@@ -234,57 +224,37 @@ std::vector<BYTE> BuildAniFile(const std::vector<std::vector<BYTE>>& frames, DWO
         WriteFourCC(buf, "icon");
         WriteDWORD(buf, f.size());
         buf.insert(buf.end(), f.begin(), f.end());
-        if (f.size() % 2 != 0) {
-            buf.push_back(0); 
-        }
+        if (f.size() % 2 != 0) buf.push_back(0); 
     }
     
     DWORD fileSize = buf.size() - 8;
-    buf[4] = fileSize & 0xFF;
-    buf[5] = (fileSize >> 8) & 0xFF;
-    buf[6] = (fileSize >> 16) & 0xFF;
-    buf[7] = (fileSize >> 24) & 0xFF;
+    buf[4] = fileSize & 0xFF; buf[5] = (fileSize >> 8) & 0xFF;
+    buf[6] = (fileSize >> 16) & 0xFF; buf[7] = (fileSize >> 24) & 0xFF;
     
     return buf;
 }
 
-std::wstring GetTempAniPath(const std::wstring& name) {
-    WCHAR tempPath[MAX_PATH];
-    GetTempPathW(MAX_PATH, tempPath);
-    return std::wstring(tempPath) + name;
-}
-
 // ============================================================================
-// DETECÇÃO DE JANELA E HOOKS DO SISTEMA
+// DETECÇÃO DE APLICATIVOS EXCLUÍDOS
 // ============================================================================
 
 std::wstring ToLowerStr(const std::wstring& str) {
     std::wstring res = str;
-    for (auto& ch : res) {
-        ch = static_cast<wchar_t>(towlower(ch));
-    }
+    for (auto& ch : res) ch = static_cast<wchar_t>(towlower(ch));
     return res;
 }
 
 bool IsProcessExcluded(HWND hwnd) {
-    if (!hwnd) {
-        return false;
-    }
+    if (!hwnd) return false;
     HWND hRoot = GetAncestor(hwnd, GA_ROOT);
-    if (!hRoot) {
-        hRoot = hwnd;
-    }
+    if (!hRoot) hRoot = hwnd;
 
     DWORD pid = 0;
     GetWindowThreadProcessId(hRoot, &pid);
-    if (pid == 0) {
-        return false;
-    }
+    if (pid == 0) return false;
 
     HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!hProc) {
-        return false;
-    }
+    if (!hProc) return false;
 
     WCHAR fullPath[MAX_PATH] = { 0 };
     DWORD size = MAX_PATH;
@@ -296,17 +266,11 @@ bool IsProcessExcluded(HWND hwnd) {
         std::wstring exeLower = ToLowerStr(fileName);
 
         for (const wchar_t* builtIn : g_builtInExcludedApps) {
-            if (exeLower == builtIn) {
-                matched = true;
-                break;
-            }
+            if (exeLower == builtIn) { matched = true; break; }
         }
         if (!matched) {
             for (const auto& customExe : g_settings.customExcludedList) {
-                if (!customExe.empty() && exeLower == customExe) {
-                    matched = true;
-                    break;
-                }
+                if (!customExe.empty() && exeLower == customExe) { matched = true; break; }
             }
         }
     }
@@ -315,41 +279,13 @@ bool IsProcessExcluded(HWND hwnd) {
 }
 
 bool IsForegroundAppExcluded() {
-    if (!g_settings.excludeOfficeAndExternalApps) {
-        return false;
-    }
+    if (!g_settings.excludeOfficeAndExternalApps) return false;
     HWND hFg = GetForegroundWindow();
     return IsProcessExcluded(hFg);
 }
 
-using SetCursor_t = decltype(&SetCursor);
-SetCursor_t SetCursor_Orig = nullptr;
-
-HCURSOR WINAPI SetCursor_Hook(HCURSOR hCursor) {
-    if (hCursor == NULL && g_settings.keepCursorVisibleWhileTyping) {
-        HWND hFg = GetForegroundWindow();
-        if (hFg) {
-            RECT rcWin{};
-            RECT rcMon{};
-            GetWindowRect(hFg, &rcWin);
-            HMONITOR hMon = MonitorFromWindow(hFg, MONITOR_DEFAULTTONEAREST);
-            MONITORINFO mi = { sizeof(MONITORINFO) };
-            if (GetMonitorInfoW(hMon, &mi)) {
-                rcMon = mi.rcMonitor;
-                bool isFullscreen = (rcWin.left <= rcMon.left && rcWin.top <= rcMon.top &&
-                                     rcWin.right >= rcMon.right && rcWin.bottom >= rcMon.bottom);
-                if (!isFullscreen) {
-                    HCURSOR hCurrent = GetCursor();
-                    return hCurrent ? hCurrent : LoadCursorW(NULL, IDC_IBEAM);
-                }
-            }
-        }
-    }
-    return SetCursor_Orig(hCursor);
-}
-
 // ============================================================================
-// DESENHOS VETORIAIS COM CORES DINÂMICAS E PADRÃO MACOS
+// DESENHOS VETORIAIS (GOLDEN GATE & MAC AUTHENTIC)
 // ============================================================================
 
 void SetupHighQualityGraphics(Gdiplus::Graphics& g) {
@@ -407,12 +343,8 @@ Gdiplus::Bitmap* RenderMacOSAlternate(int size) {
     float cx = 16.0f * trueS;
 
     Gdiplus::PointF pts[7] = { 
-        { cx, 3.0f * s },
-        { cx + 7.5f * s, 18.0f * s },
-        { cx + 3.0f * s, 15.0f * s },
-        { cx + 3.0f * s, 24.0f * s },
-        { cx - 3.0f * s, 24.0f * s },
-        { cx - 3.0f * s, 15.0f * s },
+        { cx, 3.0f * s }, { cx + 7.5f * s, 18.0f * s }, { cx + 3.0f * s, 15.0f * s },
+        { cx + 3.0f * s, 24.0f * s }, { cx - 3.0f * s, 24.0f * s }, { cx - 3.0f * s, 15.0f * s },
         { cx - 7.5f * s, 18.0f * s }
     };
 
@@ -729,46 +661,8 @@ Gdiplus::Bitmap* RenderMacOSNo(int size) {
 }
 
 // ============================================================================
-// CONSTRUÇÃO E APLICAÇÃO DOS CURSORES NO SISTEMA
+// COMPILAÇÃO .ANI
 // ============================================================================
-
-HCURSOR BitmapToHCURSOR(Gdiplus::Bitmap* bmp, int hotspotX, int hotspotY) {
-    if (!bmp) {
-        return NULL;
-    }
-    HBITMAP hbmColor = NULL;
-    bmp->GetHBITMAP(Gdiplus::Color(0, 0, 0, 0), &hbmColor);
-    if (!hbmColor) {
-        return NULL;
-    }
-
-    int w = bmp->GetWidth();
-    int h = bmp->GetHeight();
-    HBITMAP hbmMask = CreateBitmap(w, h, 1, 1, NULL);
-
-    ICONINFO ii = { 0 };
-    ii.fIcon = FALSE;
-    ii.xHotspot = hotspotX;
-    ii.yHotspot = hotspotY;
-    ii.hbmMask = hbmMask;
-    ii.hbmColor = hbmColor;
-
-    HCURSOR hCursor = CreateIconIndirect(&ii);
-    DeleteObject(hbmMask);
-    DeleteObject(hbmColor);
-    return hCursor;
-}
-
-void SetRenderedCursor(DWORD ocrId, Gdiplus::Bitmap* bmp, int hotX, int hotY) {
-    if (!bmp) {
-        return;
-    }
-    HCURSOR hCur = BitmapToHCURSOR(bmp, hotX, hotY);
-    delete bmp;
-    if (hCur) {
-        SetSystemCursor(hCur, ocrId);
-    }
-}
 
 void CompileAnimatedCursors(int sz) {
     std::vector<std::vector<BYTE>> appStartFrames;
@@ -840,14 +734,17 @@ void CompileAnimatedCursors(int sz) {
     std::vector<BYTE> appStartAni = BuildAniFile(appStartFrames, 3);
     std::vector<BYTE> waitAni = BuildAniFile(waitFrames, 3);
 
-    HANDLE hFile1 = CreateFileW(GetTempAniPath(L"mac_appstart.ani").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    std::wstring appStartPath = GetTempAniPath(L"mac_appstart.ani");
+    std::wstring waitPath = GetTempAniPath(L"mac_wait.ani");
+
+    HANDLE hFile1 = CreateFileW(appStartPath.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile1 != INVALID_HANDLE_VALUE) {
         DWORD written = 0;
         WriteFile(hFile1, appStartAni.data(), appStartAni.size(), &written, NULL);
         CloseHandle(hFile1);
     }
     
-    HANDLE hFile2 = CreateFileW(GetTempAniPath(L"mac_wait.ani").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE hFile2 = CreateFileW(waitPath.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile2 != INVALID_HANDLE_VALUE) {
         DWORD written = 0;
         WriteFile(hFile2, waitAni.data(), waitAni.size(), &written, NULL);
@@ -856,16 +753,40 @@ void CompileAnimatedCursors(int sz) {
 }
 
 void RestoreNativeWindowsCursors() {
-    if (!g_isExplorer) {
-        return;
-    }
     SystemParametersInfoW(SPI_SETCURSORS, 0, NULL, 0);
     g_sysCursorHidden = false;
     g_macCursorsCurrentlyApplied = false;
 }
 
+HCURSOR BitmapToHCURSOR(Gdiplus::Bitmap* bmp, int hotspotX, int hotspotY) {
+    if (!bmp) {
+        return NULL;
+    }
+    HBITMAP hbmColor = NULL;
+    bmp->GetHBITMAP(Gdiplus::Color(0, 0, 0, 0), &hbmColor);
+    if (!hbmColor) {
+        return NULL;
+    }
+
+    int w = bmp->GetWidth();
+    int h = bmp->GetHeight();
+    HBITMAP hbmMask = CreateBitmap(w, h, 1, 1, NULL);
+
+    ICONINFO ii = { 0 };
+    ii.fIcon = FALSE;
+    ii.xHotspot = hotspotX;
+    ii.yHotspot = hotspotY;
+    ii.hbmMask = hbmMask;
+    ii.hbmColor = hbmColor;
+
+    HCURSOR hCursor = CreateIconIndirect(&ii);
+    DeleteObject(hbmMask);
+    DeleteObject(hbmColor);
+    return hCursor;
+}
+
 void ApplyBuiltInMacOSCursors() {
-    if (!g_isExplorer || !g_settings.applyMacCursors) {
+    if (!g_settings.applyMacCursors) {
         return;
     }
 
@@ -882,25 +803,50 @@ void ApplyBuiltInMacOSCursors() {
         g_pHighResArrowBmp = RenderMacOSArrow(256, MAC_TRUE_SCALE);
     }
 
-    SetRenderedCursor(OCR_NORMAL,      RenderMacOSArrow(sz),                    static_cast<int>(6.2f * r), static_cast<int>(3.5f * r));
-    SetRenderedCursor(OCR_UP,          RenderMacOSAlternate(sz),                static_cast<int>(16.0f * (sz / 32.0f)), static_cast<int>(3.0f * r));
-    SetRenderedCursor(OCR_HAND,        RenderMacOSHand(sz),                     static_cast<int>(10.0f * r), static_cast<int>(3.0f * r));
-    SetRenderedCursor(OCR_IBEAM,       RenderMacOSIBeam(sz),                    center,                   center);
-    SetRenderedCursor(OCR_CROSS,       RenderMacOSCross(sz),                    center,                   center);
-    SetRenderedCursor(OCR_SIZEALL,     RenderMacOSMove(sz),                     center,                   center);
-    SetRenderedCursor(OCR_SIZENS,      RenderMacOSGoldenGateResize(sz, 0.0f),   center,                   center);
-    SetRenderedCursor(OCR_SIZEWE,      RenderMacOSGoldenGateResize(sz, 90.0f),  center,                   center);
-    SetRenderedCursor(OCR_SIZENWSE,    RenderMacOSGoldenGateResize(sz, -45.0f), center,                   center);
-    SetRenderedCursor(OCR_SIZENESW,    RenderMacOSGoldenGateResize(sz, 45.0f),  center,                   center);
-    SetRenderedCursor(OCR_HELP,        RenderMacOSHelp(sz),                     center,                   center);
-    SetRenderedCursor(OCR_NO,          RenderMacOSNo(sz),                       static_cast<int>(3.2f * (sz / 32.0f)), static_cast<int>(1.8f * (sz / 32.0f)));
+    HCURSOR hNormal = BitmapToHCURSOR(RenderMacOSArrow(sz), static_cast<int>(6.2f * r), static_cast<int>(3.5f * r));
+    if (hNormal) SetSystemCursor(hNormal, OCR_NORMAL);
 
-    HCURSOR hAppStart = (HCURSOR)LoadImageW(NULL, GetTempAniPath(L"mac_appstart.ani").c_str(), IMAGE_CURSOR, 0, 0, LR_LOADFROMFILE);
+    HCURSOR hUp = BitmapToHCURSOR(RenderMacOSAlternate(sz), static_cast<int>(16.0f * (sz / 32.0f)), static_cast<int>(3.0f * r));
+    if (hUp) SetSystemCursor(hUp, OCR_UP);
+
+    HCURSOR hHand = BitmapToHCURSOR(RenderMacOSHand(sz), static_cast<int>(10.0f * r), static_cast<int>(3.0f * r));
+    if (hHand) SetSystemCursor(hHand, OCR_HAND);
+
+    HCURSOR hIBeam = BitmapToHCURSOR(RenderMacOSIBeam(sz), center, center);
+    if (hIBeam) SetSystemCursor(hIBeam, OCR_IBEAM);
+
+    HCURSOR hCross = BitmapToHCURSOR(RenderMacOSCross(sz), center, center);
+    if (hCross) SetSystemCursor(hCross, OCR_CROSS);
+
+    HCURSOR hMove = BitmapToHCURSOR(RenderMacOSMove(sz), center, center);
+    if (hMove) SetSystemCursor(hMove, OCR_SIZEALL);
+
+    HCURSOR hSizeNS = BitmapToHCURSOR(RenderMacOSGoldenGateResize(sz, 0.0f), center, center);
+    if (hSizeNS) SetSystemCursor(hSizeNS, OCR_SIZENS);
+
+    HCURSOR hSizeWE = BitmapToHCURSOR(RenderMacOSGoldenGateResize(sz, 90.0f), center, center);
+    if (hSizeWE) SetSystemCursor(hSizeWE, OCR_SIZEWE);
+
+    HCURSOR hSizeNWSE = BitmapToHCURSOR(RenderMacOSGoldenGateResize(sz, -45.0f), center, center);
+    if (hSizeNWSE) SetSystemCursor(hSizeNWSE, OCR_SIZENWSE);
+
+    HCURSOR hSizeNESW = BitmapToHCURSOR(RenderMacOSGoldenGateResize(sz, 45.0f), center, center);
+    if (hSizeNESW) SetSystemCursor(hSizeNESW, OCR_SIZENESW);
+
+    HCURSOR hHelp = BitmapToHCURSOR(RenderMacOSHelp(sz), center, center);
+    if (hHelp) SetSystemCursor(hHelp, OCR_HELP);
+
+    HCURSOR hNo = BitmapToHCURSOR(RenderMacOSNo(sz), static_cast<int>(3.2f * (sz / 32.0f)), static_cast<int>(1.8f * (sz / 32.0f)));
+    if (hNo) SetSystemCursor(hNo, OCR_NO);
+
+    std::wstring appStartPath = GetTempAniPath(L"mac_appstart.ani");
+    HCURSOR hAppStart = (HCURSOR)LoadImageW(NULL, appStartPath.c_str(), IMAGE_CURSOR, 0, 0, LR_LOADFROMFILE);
     if (hAppStart) {
         SetSystemCursor(hAppStart, OCR_APPSTARTING);
     }
     
-    HCURSOR hWait = (HCURSOR)LoadImageW(NULL, GetTempAniPath(L"mac_wait.ani").c_str(), IMAGE_CURSOR, 0, 0, LR_LOADFROMFILE);
+    std::wstring waitPath = GetTempAniPath(L"mac_wait.ani");
+    HCURSOR hWait = (HCURSOR)LoadImageW(NULL, waitPath.c_str(), IMAGE_CURSOR, 0, 0, LR_LOADFROMFILE);
     if (hWait) {
         SetSystemCursor(hWait, OCR_WAIT);
     }
@@ -910,7 +856,7 @@ void ApplyBuiltInMacOSCursors() {
 }
 
 // ============================================================================
-// LÓGICA DO SHAKE TO FIND
+// LÓGICA DO SHAKE TO FIND COM EVENT LOOP
 // ============================================================================
 
 HCURSOR CreateBlankCursor() {
@@ -948,11 +894,7 @@ void HideSystemCursorsForShake() {
     g_sysCursorHidden = true;
 }
 
-void DrawScaledOverlay4K(HWND hwnd, POINT pt, float scale) {
-    if (!g_pHighResArrowBmp) {
-        return;
-    }
-
+void DrawScaledOverlay4K(HWND hwnd, POINT pt, float scale, bool useNativeCursor, HCURSOR hActiveCursor) {
     int baseDisplaySize = GetSystemMetrics(SM_CXCURSOR);
     if (baseDisplaySize <= 0) {
         baseDisplaySize = 32;
@@ -962,6 +904,26 @@ void DrawScaledOverlay4K(HWND hwnd, POINT pt, float scale) {
 
     int winX = pt.x - static_cast<int>(targetW * (6.2f / 32.0f) * MAC_TRUE_SCALE);
     int winY = pt.y - static_cast<int>(targetH * (3.5f / 32.0f) * MAC_TRUE_SCALE);
+
+    if (useNativeCursor && hActiveCursor) {
+        ICONINFO ii = {0};
+        if (GetIconInfo(hActiveCursor, &ii)) {
+            BITMAP bm;
+            GetObject(ii.hbmMask, sizeof(BITMAP), &bm);
+            int origW = bm.bmWidth;
+            int origH = ii.hbmColor ? bm.bmHeight : bm.bmHeight / 2;
+            if (origW > 0 && origH > 0) {
+                float hotXRatio = (float)ii.xHotspot / (float)origW;
+                float hotYRatio = (float)ii.yHotspot / (float)origH;
+                winX = pt.x - static_cast<int>(targetW * hotXRatio);
+                winY = pt.y - static_cast<int>(targetH * hotYRatio);
+            }
+            DeleteObject(ii.hbmMask);
+            if (ii.hbmColor) {
+                DeleteObject(ii.hbmColor);
+            }
+        }
+    }
 
     HDC hdcScreen = GetDC(NULL);
     HDC hdcMem = CreateCompatibleDC(hdcScreen);
@@ -979,7 +941,16 @@ void DrawScaledOverlay4K(HWND hwnd, POINT pt, float scale) {
             graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
             graphics.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
             graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
-            graphics.DrawImage(g_pHighResArrowBmp, 0, 0, targetW, targetH);
+
+            if (useNativeCursor && hActiveCursor) {
+                Gdiplus::Bitmap* bmpCursor = Gdiplus::Bitmap::FromHICON(hActiveCursor);
+                if (bmpCursor) {
+                    graphics.DrawImage(bmpCursor, 0, 0, targetW, targetH);
+                    delete bmpCursor;
+                }
+            } else if (g_pHighResArrowBmp) {
+                graphics.DrawImage(g_pHighResArrowBmp, 0, 0, targetW, targetH);
+            }
         }
 
         DWORD* px = static_cast<DWORD*>(pBits);
@@ -987,7 +958,7 @@ void DrawScaledOverlay4K(HWND hwnd, POINT pt, float scale) {
         for (size_t i = 0; i < count; ++i) {
             DWORD c = px[i];
             BYTE a = (c >> 24) & 0xFF;
-            if (a < 255) {
+            if (a < 255 && a > 0) {
                 BYTE r = (((c >> 16) & 0xFF) * a) / 255;
                 BYTE g = (((c >> 8) & 0xFF) * a) / 255;
                 BYTE b = ((c & 0xFF) * a) / 255;
@@ -1007,12 +978,10 @@ void DrawScaledOverlay4K(HWND hwnd, POINT pt, float scale) {
     ReleaseDC(NULL, hdcScreen);
 }
 
-typedef BOOL (WINAPI *pfn_SetThreadDpiAwarenessContext)(HANDLE);
-
 DWORD WINAPI ShakeMonitorThread(LPVOID) {
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
     if (hUser32) {
-        auto pSetDpi = (pfn_SetThreadDpiAwarenessContext)GetProcAddress(hUser32, "SetThreadDpiAwarenessContext");
+        auto pSetDpi = (BOOL(WINAPI*)(HANDLE))GetProcAddress(hUser32, "SetThreadDpiAwarenessContext");
         if (pSetDpi) {
             pSetDpi((HANDLE)-4);
         }
@@ -1033,11 +1002,24 @@ DWORD WINAPI ShakeMonitorThread(LPVOID) {
     float currentScale = 1.0f;
     float targetScale = 1.0f;
     bool visible = false;
+    HCURSOR hCapturedCursor = NULL;
 
-    while (g_running.load()) {
+    while (true) {
+        DWORD waitRes = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, 16, QS_ALLINPUT);
+        if (waitRes == WAIT_OBJECT_0) {
+            break;
+        }
+
+        MSG msg;
+        while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+
         POINT pt{};
         ULONGLONG now = GetTickCount64();
         bool inExcludedApp = IsForegroundAppExcluded();
+        bool useNativeCursor = inExcludedApp || !g_settings.applyMacCursors;
 
         if (!g_sysCursorHidden && !visible) {
             if (inExcludedApp && g_macCursorsCurrentlyApplied) {
@@ -1087,16 +1069,28 @@ DWORD WINAPI ShakeMonitorThread(LPVOID) {
             currentScale += (targetScale - currentScale) * speed;
 
             if (currentScale > 1.05f) {
-                HideSystemCursorsForShake();
-                DrawScaledOverlay4K(g_hwndOverlay, pt, currentScale);
                 if (!visible) {
+                    CURSORINFO ci = { sizeof(CURSORINFO) };
+                    if (GetCursorInfo(&ci) && ci.hCursor) {
+                        hCapturedCursor = CopyIcon(ci.hCursor);
+                    } else {
+                        hCapturedCursor = (HCURSOR)LoadImageW(NULL, IDC_ARROW, IMAGE_CURSOR, 0, 0, LR_SHARED);
+                    }
+
+                    HideSystemCursorsForShake();
                     SetWindowPos(g_hwndOverlay, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
                     visible = true;
                 }
+                DrawScaledOverlay4K(g_hwndOverlay, pt, currentScale, useNativeCursor, hCapturedCursor);
             } else {
                 if (visible) {
                     ShowWindow(g_hwndOverlay, SW_HIDE);
                     visible = false;
+                    
+                    if (hCapturedCursor) {
+                        DestroyIcon(hCapturedCursor);
+                        hCapturedCursor = NULL;
+                    }
                 }
                 if (g_sysCursorHidden) {
                     if (inExcludedApp || !g_settings.applyMacCursors) {
@@ -1109,8 +1103,12 @@ DWORD WINAPI ShakeMonitorThread(LPVOID) {
         } else if (GetCursorPos(&pt)) {
             lastPt = pt;
         }
-        Sleep(16);
     }
+    
+    if (hCapturedCursor) {
+        DestroyIcon(hCapturedCursor);
+    }
+    
     if (g_hwndOverlay) {
         DestroyWindow(g_hwndOverlay);
         g_hwndOverlay = NULL;
@@ -1120,7 +1118,7 @@ DWORD WINAPI ShakeMonitorThread(LPVOID) {
 }
 
 // ============================================================================
-// INICIALIZAÇÃO E CARREGAMENTO DAS CORES
+// CONFIGURAÇÕES
 // ============================================================================
 
 Gdiplus::Color GetColorFromName(const std::wstring& name, Gdiplus::Color fallback) {
@@ -1214,7 +1212,6 @@ void LoadSettings() {
     g_settings.shakeSensitivity = (sens >= 2 && sens <= 10) ? sens : 3;
     int delay = Wh_GetIntSetting(L"restoreDelayMs");
     g_settings.restoreDelayMs = (delay >= 200) ? delay : 700;
-    g_settings.keepCursorVisibleWhileTyping = Wh_GetIntSetting(L"keepCursorVisibleWhileTyping") != 0;
     g_settings.excludeOfficeAndExternalApps = Wh_GetIntSetting(L"excludeOfficeAndExternalApps") != 0;
     
     PCWSTR customApps = Wh_GetStringSetting(L"customExcludedApps");
@@ -1222,48 +1219,16 @@ void LoadSettings() {
     Wh_FreeStringSetting(customApps);
 }
 
-void UpdateMouseVanishSetting() {
-    if (!g_isExplorer) {
-        return;
-    }
-    if (g_settings.keepCursorVisibleWhileTyping) {
-        if (!g_savedMouseVanish) {
-            SystemParametersInfoW(SPI_GETMOUSEVANISH, 0, &g_origMouseVanish, 0);
-            g_savedMouseVanish = true;
-        }
-        SystemParametersInfoW(SPI_SETMOUSEVANISH, 0, (PVOID)FALSE, 0);
-    } else if (g_savedMouseVanish) {
-        SystemParametersInfoW(SPI_SETMOUSEVANISH, 0, (PVOID)(INT_PTR)g_origMouseVanish, 0);
-        g_savedMouseVanish = false;
-    }
-}
+// ============================================================================
+// INICIALIZAÇÃO DA FERRAMENTA (WINDHAWK TOOL)
+// ============================================================================
 
-bool IsCurrentProcessExplorer() {
-    WCHAR path[MAX_PATH] = { 0 };
-    if (!GetModuleFileNameW(NULL, path, MAX_PATH)) {
-        return false;
-    }
-    const WCHAR* fileName = wcsrchr(path, L'\\');
-    fileName = fileName ? (fileName + 1) : path;
-    return _wcsicmp(fileName, L"explorer.exe") == 0;
-}
-
-ULONG_PTR g_gdiplusToken = 0;
-
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     LoadSettings();
-    g_isExplorer = IsCurrentProcessExplorer();
-
-    if (!g_isExplorer) {
-        Wh_SetFunctionHook((void*)SetCursor, (void*)SetCursor_Hook, (void**)&SetCursor_Orig);
-        return TRUE;
-    }
 
     Gdiplus::GdiplusStartupInput gdiplusStartupInput;
     Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, NULL);
 
-    UpdateMouseVanishSetting();
-    
     int baseSz = GetSystemMetrics(SM_CXCURSOR);
     if (baseSz <= 0) {
         baseSz = 32;
@@ -1278,20 +1243,25 @@ BOOL Wh_ModInit() {
         RestoreNativeWindowsCursors();
     }
 
-    g_running = true;
+    g_stopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!g_stopEvent) return FALSE;
+
     g_thread = CreateThread(NULL, 0, ShakeMonitorThread, NULL, 0, NULL);
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    if (!g_isExplorer) {
-        return;
+void WhTool_ModUninit() {
+    if (g_stopEvent) {
+        SetEvent(g_stopEvent);
     }
-    g_running = false;
     if (g_thread) {
-        WaitForSingleObject(g_thread, 2000);
+        WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = NULL;
+    }
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = NULL;
     }
     if (g_pHighResArrowBmp) {
         delete g_pHighResArrowBmp;
@@ -1301,19 +1271,11 @@ void Wh_ModUninit() {
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
         g_gdiplusToken = 0;
     }
-    if (g_savedMouseVanish) {
-        SystemParametersInfoW(SPI_SETMOUSEVANISH, 0, (PVOID)(INT_PTR)g_origMouseVanish, 0);
-        g_savedMouseVanish = false;
-    }
     RestoreNativeWindowsCursors();
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     LoadSettings();
-    if (!g_isExplorer) {
-        return;
-    }
-    UpdateMouseVanishSetting();
     
     int baseSz = GetSystemMetrics(SM_CXCURSOR);
     if (baseSz <= 0) {
@@ -1333,4 +1295,164 @@ void Wh_ModSettingsChanged() {
     } else {
         RestoreNativeWindowsCursors();
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation launcher
+////////////////////////////////////////////////////////////////////////////////
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
