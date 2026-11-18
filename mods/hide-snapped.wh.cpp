@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              hide-snapped
 // @name            Snap Groups: Alt+Tab and taskbar
-// @description     Group-only Alt+Tab and separate taskbar buttons with tiled member icons (experimental).
+// @description     Group-only Alt+Tab and separate taskbar buttons with tiled member icons.
 // @version         0.4.19
 // @author          coldfeudal
 // @github          https://github.com/coldfeudal
@@ -53,7 +53,7 @@ activation/minimization; animation behavior follows those native commands.
 
 ## Tested configuration and limitations
 
-This is an experimental release. The verified environment is Windows 11 25H2
+The verified environment is Windows 11 25H2
 (26200.8246, x64) with Windhawk 1.7.3. Earlier builds were tested interactively
 for group switching, independent buttons, previews, icon layout and cleanup
 on one monitor/DPI configuration. Version 0.4.19 passed a local build, native
@@ -426,6 +426,7 @@ bool HookTaskbarViewTrace() {
     bool image = GetModuleFileNameW(module, path, ARRAYSIZE(path)) &&
                  CheckedNativeImage(path, 0x69a22f5e, 0xab6000);
     if (!image) { Wh_Log(L"phase=trace view-image-rejected=1"); return false; }
+    // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{L"?CollectionRealityCheck@TaskbarController@implementation@Taskbar@winrt@@AEAAXXZ"}, &g_realityCheck, RealityCheckTraceHook},
         {{L"?NumTaskListGroups@TaskbarCollapsibleItemsCollection@implementation@Taskbar@winrt@@QEBAIXZ"}, &g_collectionCount, CollectionCountTraceHook},
@@ -1315,6 +1316,7 @@ bool HookTaskbarFilter() {
     HMODULE module = LoadLibraryExW(L"Taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) return false;
     g_nativeAppIdReturn = reinterpret_cast<uintptr_t>(module) + 0x28a82;
+    // Taskbar.dll
     WindhawkUtils::SYMBOL_HOOK taskbarHooks[] = {
         {{L"?_CreateTBGroup@CTaskListWnd@@IEAAPEAUITaskBtnGroup@@PEAUITaskGroup@@H@Z"}, &g_createButton, CreateButtonTraceHook},
         {{L"?NotifyTaskGroupInserted@CTaskListWnd@@IEAAXPEAUITaskGroup@@H@Z"}, &g_notifyInserted, NotifyInsertedTraceHook},
@@ -2609,6 +2611,7 @@ BOOL Wh_ModInit() {
     HMODULE module = LoadLibraryExW(L"twinui.pcshell.dll", nullptr,
                                      LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) return FALSE;
+    // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{L"?GetWindowForView@ApplicationViewHelpers@@YAPEAUHWND__@@PEAUIApplicationView@@@Z"},
          &g_getWindowForView},
