@@ -2,7 +2,7 @@
 // @id              quick-look
 // @name            Quick Look
 // @description     Preview the file or folder selected in File Explorer with Space, in a panel docked inside the window.
-// @version         1.0.0
+// @version         1.1.0
 // @author          David Ravelo
 // @github          https://github.com/DavidRaveloU
 // @include         explorer.exe
@@ -13,6 +13,16 @@
 
 // ==WindhawkModSettings==
 /*
+- theme: auto
+  $name: Theme
+  $description: >-
+    Follow the Windows light or dark app mode, or force the panel to light or
+    dark. Force a mode when a custom visual style does not match the Windows
+    theme setting.
+  $options:
+    - auto: Follow Windows
+    - light: Always light
+    - dark: Always dark
 - reflowColumns: true
   $name: Shrink columns to fit the panel
   $description: >-
@@ -85,8 +95,10 @@ touches the disk ever blocks Explorer.
   list. Formats with no shell namespace fall back to the properties view.
 - **A fallback that still helps.** Anything else shows the real file icon plus its type, size, modified
   date and full path.
-- **Colors that follow Windows.** The panel samples Explorer's actual pixels for the background and the
-  text, and takes the accent from Windows itself, so light, dark and custom accents look native.
+- **Colors that follow Windows.** The panel samples Explorer's actual surface for its background and
+  takes the accent from Windows itself; its text is chosen for contrast, so light, dark, Mica-style and
+  custom visual styles stay readable. The theme can be left on Auto or forced to light or dark in the
+  settings.
 - **Explorer never freezes.** Listing a folder, reading a file, decoding an image, building a thumbnail or
   checking a cloud placeholder all run on worker threads. The panel opens at once with a loading state,
   a new selection cancels the previous load, and a file that is only a cloud placeholder is never
@@ -127,6 +139,7 @@ child of the window instead of a window that follows it.
 
 | Setting | Default | What it does |
 | --- | --- | --- |
+| Theme | Auto | Follows the Windows light or dark app mode, with the sampled Explorer surface as a tie-breaker. Force light or dark for a custom visual style that does not match the Windows theme. The embedded folder and archive list follows it too. |
 | Shrink columns to fit the panel | On | Shrinks the file view and scales the Details columns to the space left by the panel. Turn it off to overlay the panel instead. |
 | Remember the text preview options | On | Keeps wrap, line numbers, whitespace dots and alternating rows as you left them for the next window or session. |
 | Line numbers by default | Off | The gutter used when the options are not remembered. |
@@ -153,6 +166,13 @@ child of the window instead of a window that follows it.
 - **Single click selects.** A double click on empty space does nothing.
 - **Cloud files are left alone.** A file that is only a placeholder is not downloaded to be previewed.
 - **Text is capped.** A text preview reads the first 200 KB and says so in the footer.
+
+## Limitations
+
+- **A forced theme can mismatch the Windows mode.** The folder and archive list is drawn by Explorer
+  itself. When the panel's Theme is forced to a mode that differs from Windows' own app mode, the
+  list's rows follow the panel but its scrollbar and parts of its header can keep the Windows look.
+  For the most native result, set the same mode as Windows, or leave Theme on Auto.
 
 ## Troubleshooting
 
@@ -313,6 +333,8 @@ static const UINT_PTR QL_TIMER_PROBE = 10;
 static const UINT_PTR QL_TIMER_SPINNER = 11;
 // Feeds filtered items to the results view in small batches.
 static const UINT_PTR QL_TIMER_RESULTS = 12;
+// Retries a load whose worker could not start (the cap was reached).
+static const UINT_PTR QL_TIMER_LOAD_RETRY = 13;
 static const int kFilterEditId = 1001;
 // Posted to the panel when a click or a blocked navigation asks to open an item,
 // so the shell dialog is not created inside a browser callback.
@@ -329,6 +351,9 @@ static const UINT QL_WM_PROBE_DONE = WM_APP + 23;
 static UINT QL_WM_TOGGLE = 0;
 static UINT QL_WM_SETTINGS = 0;
 static UINT QL_WM_CLEANUP = 0;
+// Sent to a panel when the browser it hosts asked to navigate or close: the
+// close must not run inside the browser's own event dispatch.
+static UINT QL_WM_CLOSE_PANEL = 0;
 
 // Wh_ModUninit sends a cleanup request to every Explorer window and waits for
 // the windows that answer. Only a window that handles the request in
@@ -506,6 +531,11 @@ struct PanelState {
     // True only while FillFromObject navigates to its own results folder: that
     // navigation is ours, not the user entering a folder from the preview.
     bool fillingResults = false;
+    // Set when the browser itself asked to navigate or close. The columns are
+    // given back right there, because Explorer saves a folder's widths as it
+    // leaves it; the rest of the close runs from the panel's message loop, once
+    // the browser's own event dispatch has returned.
+    bool pendingNavClose = false;
     // A fresh browser first paints a light, empty list. A cover window of the
     // panel's own background sits above it until the view exists, is themed and
     // has its first items, so that unfinished frame is never visible.
@@ -525,6 +555,11 @@ struct PanelState {
     bool loadPending = false;
     bool probeStarted = false;
     bool loadSlowCleared = false;
+    // A worker that could not start because the concurrent-worker cap was
+    // reached is retried from a timer instead of leaving the panel loading.
+    int loadRetryKind = 0;  // 0 none, 1 text, 2 document, 3 image
+    int loadRetryTicks = 0;
+    unsigned loadRetryGeneration = 0;
     ULONGLONG loadingSince = 0;
     int spinnerFrame = 0;
     RECT loadingRect = {};
@@ -552,6 +587,10 @@ static std::atomic<bool> g_unloading{false};
 // Set by Wh_ModUninit: workers stop what they are doing as soon as they see it.
 static std::atomic<bool> g_stopWorkers{false};
 static std::atomic<bool> g_swallowSpaceUp{false};
+// Auto follows the Windows app mode (with the sampled Explorer surface as a
+// tie-breaker); Light and Dark force the palette for custom visual styles.
+enum class QlTheme { Auto, Light, Dark };
+static std::atomic<QlTheme> g_themeMode{QlTheme::Auto};
 static std::atomic<bool> g_reflowColumns{true};
 // Text preview toggles. They live for the session, like the panel width.
 static std::atomic<bool> g_textWrap{true};
@@ -608,6 +647,9 @@ static void UnloadPdfPreview(PanelState* state);
 static void CloseViewMenu(PanelState* state);
 static COLORREF BlendColor(COLORREF from, COLORREF to, int percent);
 static int ColorLuma(COLORREF color);
+static COLORREF ReadableTextColor(COLORREF background);
+static bool IsDarkColor(COLORREF color);
+static bool SystemPrefersDark();
 static COLORREF GetUserAccentColor();
 static void UpdateFilterEditVisibility(PanelState* state);
 static bool IsWindows11OrLater();
@@ -2707,9 +2749,16 @@ static void StopAllWorkers() {
     for (HANDLE thread : handles) {
         // The wait has no timeout: returning while a worker still runs would
         // unmap code it is executing. The cancel is repeated because a worker
-        // can enter a new blocking call after the first one.
+        // can enter a new blocking call after the first one. A worker that is
+        // stuck in something none of this can interrupt (a decode, a shell
+        // thumbnail provider) is logged so the hang can be diagnosed.
+        int waited = 0;
         while (WaitForSingleObject(thread, 50) == WAIT_TIMEOUT) {
             CancelSynchronousIo(thread);
+            if (++waited % 100 == 0) {
+                Wh_Log(L"unload: a worker is still running after %d s",
+                       waited / 20);
+            }
         }
         CloseHandle(thread);
     }
@@ -2758,6 +2807,24 @@ static DWORD WINAPI TextLoadThreadProc(void* parameter) {
     return 0;
 }
 
+// A worker that cannot start is not a failure: the concurrency cap frees itself
+// as soon as any other load finishes, so the same load is retried from a timer.
+// Without this the panel would keep its loading state forever.
+static void ScheduleLoadRetry(PanelState* state, int kind) {
+    if (!state || !state->panel || !IsWindow(state->panel)) {
+        return;
+    }
+    // A new selection or a different load starts a fresh attempt counter; a
+    // retry of the same one keeps counting, so a cap that never frees gives up.
+    if (kind != state->loadRetryKind ||
+        state->loadRetryGeneration != state->loadGeneration) {
+        state->loadRetryTicks = 0;
+    }
+    state->loadRetryKind = kind;
+    state->loadRetryGeneration = state->loadGeneration;
+    SetTimer(state->panel, QL_TIMER_LOAD_RETRY, 150, nullptr);
+}
+
 // Opens the preview immediately and leaves the file work to a worker thread, so
 // a big file never blocks Explorer. A stale result is dropped by generation.
 static void StartTextLoad(PanelState* state, bool document = false) {
@@ -2777,8 +2844,10 @@ static void StartTextLoad(PanelState* state, bool document = false) {
     result->document = document;
 
     if (!StartWorker(TextLoadThreadProc, result)) {
-        state->textLoading = false;
+        // The concurrent-worker cap is reached: keep the loading state and try
+        // again shortly instead of dropping the preview.
         delete result;
+        ScheduleLoadRetry(state, document ? 2 : 1);
     }
     SetTimer(state->panel, QL_TIMER_SPINNER, 70, nullptr);
     InvalidateRect(state->panel, nullptr, TRUE);
@@ -2824,13 +2893,10 @@ static void ApplyTextLoadResult(PanelState* state, TextLoadResult* result) {
           (unsigned)state->textLines.size(), result->encoding.c_str());
 }
 
-// The content needs real contrast in both modes: the sampled Explorer text can
-// be a dim gray that disappears on a dark panel, so the content color is derived
-// from the sampled background instead of copied from it.
+// The content needs real contrast in both modes, so it is derived from the
+// readable text color of the background instead of a sampled gray.
 static COLORREF ContentTextColor(COLORREF background) {
-    bool dark = ColorLuma(background) < 140;
-    return dark ? BlendColor(background, RGB(255, 255, 255), 88)
-                : BlendColor(background, RGB(0, 0, 0), 84);
+    return BlendColor(background, ReadableTextColor(background), 88);
 }
 
 static void DrawTextToolbar(HDC dc, PanelState* state, UINT dpi,
@@ -3098,8 +3164,7 @@ static void DrawTextPreview(HDC dc, PanelState* state, UINT dpi,
                 HBRUSH brush = CreateSolidBrush(accent);
                 FillRect(dc, &highlight, brush);
                 DeleteObject(brush);
-                SetTextColor(dc, ColorLuma(accent) > 140 ? RGB(0, 0, 0)
-                                                         : RGB(255, 255, 255));
+                SetTextColor(dc, ReadableTextColor(accent));
             } else {
                 SetTextColor(dc, isDot ? dotColor : content);
             }
@@ -4027,11 +4092,40 @@ static void StartImageLoad(PanelState* state) {
     result->bytes = state->mediaBytes;
 
     if (!StartWorker(ImageLoadThreadProc, result)) {
-        state->mediaPending = false;
+        // The concurrent-worker cap is reached: retry shortly, keep the spinner.
         delete result;
+        ScheduleLoadRetry(state, 3);
     }
     SetTimer(state->panel, QL_TIMER_SPINNER, 70, nullptr);
     InvalidateRect(state->panel, nullptr, TRUE);
+}
+
+// Runs the retry scheduled by ScheduleLoadRetry. Bounded, so a cap that never
+// frees leaves neither a spinning 150 ms timer nor a phantom loading state.
+static void RetryPendingLoad(PanelState* state) {
+    if (!state || !state->panel || !IsWindow(state->panel)) {
+        return;
+    }
+    KillTimer(state->panel, QL_TIMER_LOAD_RETRY);
+    const int kind = state->loadRetryKind;
+    if (!kind || state->loadGeneration != state->loadRetryGeneration) {
+        state->loadRetryKind = 0;
+        return;
+    }
+    if (++state->loadRetryTicks > 40) {
+        Wh_Log(L"load: retry limit reached, the worker cap never freed");
+        state->loadRetryKind = 0;
+        state->textLoading = false;
+        state->mediaPending = false;
+        return;
+    }
+    if (kind == 1) {
+        StartTextLoad(state, false);
+    } else if (kind == 2) {
+        StartTextLoad(state, true);
+    } else if (kind == 3) {
+        StartImageLoad(state);
+    }
 }
 
 // Takes ownership of the bitmap when it is used; whatever is left over is freed
@@ -4215,39 +4309,47 @@ static bool ShellItemIsFolder(const std::wstring& path) {
 
 // `attributesOnly` asks the shell for the icon by file type alone, so it does not
 // have to open the file (used for cloud placeholders).
+//
+// The extra-large list is used, not the jumbo one: for a file whose icon has no
+// large frame the jumbo list returns a 48x48 picture in the corner of a 256x256
+// canvas (wireguard-installer.exe, for one), which drew as a tiny icon in the
+// corner of the panel's box. The extra-large entry always returns the artwork
+// filling its 48x48 image, and the panel lets DrawIconEx scale it to the box.
 static HICON LoadPropertyIcon(const std::wstring& path,
                               bool attributesOnly = false) {
     SHFILEINFOW info = {};
-    UINT flags = SHGFI_SYSICONINDEX | (attributesOnly ? SHGFI_USEFILEATTRIBUTES : 0);
-    if (!SHGetFileInfoW(path.c_str(), FILE_ATTRIBUTE_NORMAL, &info,
-                        sizeof(info), flags)) {
-        return nullptr;
+    UINT indexFlags =
+        SHGFI_SYSICONINDEX | (attributesOnly ? SHGFI_USEFILEATTRIBUTES : 0);
+    if (SHGetFileInfoW(path.c_str(), FILE_ATTRIBUTE_NORMAL, &info,
+                       sizeof(info), indexFlags)) {
+        // IID_IImageList is not exported by every toolchain, so it is spelled
+        // out.
+        static const GUID kImageListIid = {
+            0x46EB5926, 0x582E, 0x4017,
+            {0x9F, 0xDF, 0xE8, 0x99, 0x8D, 0xAA, 0x09, 0x50}};
+        IImageList* imageList = nullptr;
+        if (SUCCEEDED(SHGetImageList(SHIL_EXTRALARGE, kImageListIid,
+                                     (void**)&imageList)) &&
+            imageList) {
+            HICON icon = nullptr;
+            if (FAILED(imageList->GetIcon(info.iIcon, ILD_TRANSPARENT, &icon))) {
+                icon = nullptr;
+            }
+            imageList->Release();
+            if (icon) {
+                return icon;
+            }
+        }
     }
 
-    HICON icon = nullptr;
-    IImageList* imageList = nullptr;
-    // IID_IImageList is not exported by every toolchain, so it is spelled out.
-    static const GUID kImageListIid = {
-        0x46EB5926, 0x582E, 0x4017,
-        {0x9F, 0xDF, 0xE8, 0x99, 0x8D, 0xAA, 0x09, 0x50}};
-    if (SUCCEEDED(SHGetImageList(SHIL_JUMBO, kImageListIid,
-                                 (void**)&imageList)) &&
-        imageList) {
-        if (FAILED(imageList->GetIcon(info.iIcon, ILD_TRANSPARENT, &icon))) {
-            icon = nullptr;
-        }
-        imageList->Release();
+    SHFILEINFOW fallback = {};
+    UINT fallbackFlags = SHGFI_ICON | SHGFI_LARGEICON |
+                         (attributesOnly ? SHGFI_USEFILEATTRIBUTES : 0);
+    if (SHGetFileInfoW(path.c_str(), FILE_ATTRIBUTE_NORMAL, &fallback,
+                       sizeof(fallback), fallbackFlags)) {
+        return fallback.hIcon;
     }
-    if (!icon) {
-        SHFILEINFOW fallback = {};
-        UINT fallbackFlags = SHGFI_ICON | SHGFI_LARGEICON |
-                             (attributesOnly ? SHGFI_USEFILEATTRIBUTES : 0);
-        if (SHGetFileInfoW(path.c_str(), FILE_ATTRIBUTE_NORMAL, &fallback,
-                           sizeof(fallback), fallbackFlags)) {
-            icon = fallback.hIcon;
-        }
-    }
-    return icon;
+    return nullptr;
 }
 
 static std::wstring FormatPropertyDate(const FILETIME& fileTime) {
@@ -5710,13 +5812,13 @@ static IShellItemArray* SeedItemArray(PanelState* state) {
     return items;
 }
 
-// A results folder is a brand new shell view: Explorer does not hand it the
-// theme it gives the folder view, so its first cells and its infotips come out
-// in the light palette. The pass runs from our own timer, never from inside a
-// shell callback, and only invalidates: painting synchronously there re-entered
-// the view and could keep re-arming the settle loop. The theme is applied only
-// to the view and to the list, which is where the shell reads it for its items
-// and infotips; walking every descendant is not worth the risk.
+// The embedded browser themes itself from the Windows app mode, not from this
+// panel: with the mod forced to dark and Windows light (or the reverse), the
+// folder list, an archive and a results folder would all come out in the wrong
+// palette. The pass runs from our own timer, never from inside a shell callback,
+// and only invalidates: painting synchronously there re-entered the view and
+// could keep re-arming the settle loop. The theme is applied to the view and to
+// its children, which is where the shell reads it for its items and infotips.
 // uxtheme ordinal 133: lets a window use the dark palette (scrollbars, header,
 // infotips). Explorer does this for its own views, but not for a results view
 // created by us, which is why its scrollbars stayed white.
@@ -5760,24 +5862,23 @@ static BOOL CALLBACK ThemeChildProc(HWND child, LPARAM parameter) {
         bool dark = _wcsicmp(theme, L"DarkMode_Explorer") == 0;
         AllowDarkModeForWindowSafe(child, dark);
         SetWindowTheme(child, theme, nullptr);
+        // Posted, not sent: this runs inside EnumChildWindows, and a child that
+        // reacts by recreating windows would make the enumeration skip the ones
+        // after it.
+        PostMessageW(child, WM_THEMECHANGED, 0, 0);
     }
     return TRUE;
 }
 
 static void ThemeBrowserView(PanelState* state) {
-    if (!state || !state->resultsMode || !state->browserViewWnd ||
+    if (!state || !state->browserViewWnd ||
         !IsWindow(state->browserViewWnd)) {
         return;
     }
 
-    bool dark = false;
-    if (state->background != CLR_INVALID) {
-        int luminance = (GetRValue(state->background) * 3 +
-                         GetGValue(state->background) * 4 +
-                         GetBValue(state->background)) /
-                        8;
-        dark = luminance < 128;
-    }
+    // Follow the panel's palette, which already accounts for the forced theme.
+    bool dark = state->background != CLR_INVALID &&
+                IsDarkColor(state->background);
     const wchar_t* theme = dark ? L"DarkMode_Explorer" : L"Explorer";
 
     EnsureBrowserListSubclass(state);
@@ -5791,6 +5892,21 @@ static void ThemeBrowserView(PanelState* state) {
     }
     ShowScrollBar(state->browserViewWnd, SB_HORZ, FALSE);
 
+    // The shell paints its list from the Windows app mode, not from the window
+    // theme, so a panel forced to the other mode would keep the system list.
+    // Classic colors, driven by the panel palette, make the list follow the
+    // panel in that case. When both modes agree the native theme is better.
+    if (dark != SystemPrefersDark() && state->browserListWnd &&
+        IsWindow(state->browserListWnd) && state->background != CLR_INVALID &&
+        _wcsicmp(ClassNameOf(state->browserListWnd).c_str(),
+                 L"SysListView32") == 0) {
+        SetWindowTheme(state->browserListWnd, L"", L"");
+        ListView_SetBkColor(state->browserListWnd, state->background);
+        ListView_SetTextBkColor(state->browserListWnd, state->background);
+        ListView_SetTextColor(state->browserListWnd, state->text);
+        InvalidateRect(state->browserListWnd, nullptr, TRUE);
+    }
+
     // RDW_FRAME is what repaints the scrollbars.
     RedrawWindow(state->browserViewWnd, nullptr, nullptr,
                  RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
@@ -5799,8 +5915,7 @@ static void ThemeBrowserView(PanelState* state) {
 }
 
 static void ScheduleThemeBrowserView(PanelState* state) {
-    if (!state || !state->resultsMode || !state->panel ||
-        !IsWindow(state->panel)) {
+    if (!state || !state->panel || !IsWindow(state->panel)) {
         return;
     }
     SetTimer(state->panel, QL_TIMER_BROWSER_THEME, 40, nullptr);
@@ -6024,9 +6139,7 @@ static void OnBrowserViewCreated(PanelState* state, IShellView* view) {
     }
     EnsureBrowserListSubclass(state);
     RemoveBrowserBorders(state);
-    if (state->resultsMode) {
-        ScheduleThemeBrowserView(state);
-    }
+    ScheduleThemeBrowserView(state);
     ArmBrowserSettle(state);
 }
 
@@ -6161,6 +6274,7 @@ class ExplorerBrowserEvents final : public IExplorerBrowserEvents {
         PCIDLIST_ABSOLUTE) override {
         if (state_) {
             EnsureBrowserListSubclass(state_);
+            ScheduleThemeBrowserView(state_);
             ArmBrowserSettle(state_);
             ApplyBrowserFilter(state_);
         }
@@ -6265,7 +6379,7 @@ static void TickBrowserCover(PanelState* state) {
     bool ready = false;
     if (state->browserViewWnd && IsWindow(state->browserViewWnd)) {
         EnsureBrowserListSubclass(state);
-        bool themed = !state->resultsMode || state->browserThemed;
+        bool themed = state->browserThemed;
         if (themed && state->coverTicks >= 3) {
             if (state->browserListWnd && IsWindow(state->browserListWnd) &&
                 _wcsicmp(ClassNameOf(state->browserListWnd).c_str(),
@@ -6482,6 +6596,59 @@ static int ColorLuma(COLORREF color) {
            1000;
 }
 
+// WCAG relative luminance and contrast ratio. Contrast, not a luminance
+// distance, is what decides whether text is readable on a background: two dark
+// colors 60 levels apart are still dark on dark.
+static double LinearChannel(double value) {
+    return value <= 0.03928
+               ? value / 12.92
+               : std::pow((value + 0.055) / 1.055, 2.4);
+}
+
+static double RelativeLuminance(COLORREF color) {
+    return 0.2126 * LinearChannel(GetRValue(color) / 255.0) +
+           0.7152 * LinearChannel(GetGValue(color) / 255.0) +
+           0.0722 * LinearChannel(GetBValue(color) / 255.0);
+}
+
+static double ContrastRatio(COLORREF a, COLORREF b) {
+    double first = RelativeLuminance(a);
+    double second = RelativeLuminance(b);
+    if (first < second) {
+        std::swap(first, second);
+    }
+    return (first + 0.05) / (second + 0.05);
+}
+
+static bool IsDarkColor(COLORREF color) {
+    return RelativeLuminance(color) < 0.5;
+}
+
+// The readable text color for a background: black or white, whichever has the
+// higher contrast ratio. The text color is never sampled from Explorer's pixels.
+static COLORREF ReadableTextColor(COLORREF background) {
+    return ContrastRatio(background, RGB(0, 0, 0)) >=
+                   ContrastRatio(background, RGB(255, 255, 255))
+               ? RGB(0, 0, 0)
+               : RGB(255, 255, 255);
+}
+
+// What Explorer considers its app mode. A custom visual style can disagree with
+// this value; UpdatePanelColors lets a clearly dark or light sampled surface
+// override it.
+static bool SystemPrefersDark() {
+    DWORD value = 1;
+    DWORD size = sizeof(value);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\"
+                     L"Themes\\Personalize",
+                     L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value,
+                     &size) == ERROR_SUCCESS) {
+        return value == 0;
+    }
+    return IsDarkColor(GetSysColor(COLOR_WINDOW));
+}
+
 static COLORREF BlendColor(COLORREF from, COLORREF to, int percent) {
     percent = std::clamp(percent, 0, 100);
     int r = GetRValue(from) + (GetRValue(to) - GetRValue(from)) * percent / 100;
@@ -6492,14 +6659,6 @@ static COLORREF BlendColor(COLORREF from, COLORREF to, int percent) {
 
 static int ColorDistance(COLORREF a, COLORREF b) {
     return std::abs(ColorLuma(a) - ColorLuma(b));
-}
-
-static bool IsNeutralColor(COLORREF color) {
-    int maximum = std::max({GetRValue(color), GetGValue(color),
-                            GetBValue(color)});
-    int minimum = std::min({GetRValue(color), GetGValue(color),
-                            GetBValue(color)});
-    return maximum - minimum <= 30;
 }
 
 static COLORREF FilterBoxFill(const PanelState* state) {
@@ -6762,9 +6921,7 @@ static LRESULT CALLBACK FilterEditSubclassProc(HWND hwnd, UINT message,
                                      static_cast<LONG>(format.right)),
                             height);
                         SelectClipRgn(memory, selectionClip);
-                        SetTextColor(memory, ColorLuma(accent) > 190
-                                                 ? RGB(0, 0, 0)
-                                                 : RGB(255, 255, 255));
+                        SetTextColor(memory, ReadableTextColor(accent));
                         TextOutW(memory, originX, textTop, value.c_str(),
                                  static_cast<int>(value.size()));
                         DeleteObject(selectionClip);
@@ -6904,44 +7061,57 @@ static void UpdatePanelColors(PanelState* state) {
         }
     }
 
-    if (counts.empty()) {
-        Wh_Log(L"colors: no pixels sampled, falling back to system colors");
-        state->background = GetSysColor(COLOR_WINDOW);
-        state->text = GetSysColor(COLOR_WINDOWTEXT);
-        state->accent = GetUserAccentColor();
-        RefreshFilterBrush(state);
-        return;
-    }
-
-    COLORREF background = counts.begin()->first;
-    int backgroundCount = 0;
-    for (const auto& entry : counts) {
-        if (entry.second > backgroundCount) {
-            backgroundCount = entry.second;
-            background = entry.first;
+    // The dominant sampled color is Explorer's own surface. It only classifies
+    // the theme; it never supplies the text color. That sampling was what made
+    // the title dark on a dark Mica surface: a dark gray 60 levels away from a
+    // dark blue passed the old luminance-distance test.
+    COLORREF dominant = CLR_INVALID;
+    if (!counts.empty()) {
+        dominant = counts.begin()->first;
+        int dominantCount = 0;
+        for (const auto& entry : counts) {
+            if (entry.second > dominantCount) {
+                dominantCount = entry.second;
+                dominant = entry.first;
+            }
         }
     }
 
-    COLORREF text = CLR_INVALID;
-    int textCount = 0;
-    for (const auto& entry : counts) {
-        if (ColorDistance(entry.first, background) < 60 ||
-            !IsNeutralColor(entry.first)) {
-            continue;
+    QlTheme requested = g_themeMode.load();
+    bool dark = false;
+    if (requested == QlTheme::Light) {
+        dark = false;
+    } else if (requested == QlTheme::Dark) {
+        dark = true;
+    } else if (dominant == CLR_INVALID) {
+        dark = SystemPrefersDark();
+    } else {
+        // A clearly dark or light Explorer surface wins over the Windows app
+        // mode, because a custom visual style can disagree with it. An ambiguous
+        // sample (a folder full of thumbnails, say) follows the app mode.
+        double sample = RelativeLuminance(dominant);
+        if (sample < 0.10) {
+            dark = true;
+        } else if (sample > 0.90) {
+            dark = false;
+        } else {
+            dark = SystemPrefersDark();
         }
-        if (entry.second > textCount) {
-            textCount = entry.second;
-            text = entry.first;
-        }
-    }
-    if (textCount < 6 || text == CLR_INVALID ||
-        ColorDistance(text, background) < 50) {
-        text = ColorLuma(background) > 140 ? RGB(0, 0, 0) : RGB(255, 255, 255);
     }
 
+    // Keep Explorer's own surface verbatim when it belongs to the chosen
+    // palette: with Mica or a wallpaper behind the list, that sampled color is
+    // the effect the user sees. Only when the sample does not match the palette
+    // (a forced mode, or a bright thumbnail in a dark mode) fall back to the
+    // neutral of that palette.
+    COLORREF background = dark ? RGB(32, 32, 32) : RGB(249, 249, 249);
+    if (dominant != CLR_INVALID && IsDarkColor(dominant) == dark) {
+        background = dominant;
+    }
+
+    COLORREF text = ReadableTextColor(background);
     COLORREF accent = GetUserAccentColor();
-    if (accent == CLR_INVALID ||
-        ColorDistance(accent, background) < 20) {
+    if (accent == CLR_INVALID || ColorDistance(accent, background) < 20) {
         accent = BlendColor(background, text, 35);
     }
 
@@ -6950,11 +7120,10 @@ static void UpdatePanelColors(PanelState* state) {
     state->accent = accent;
     RefreshFilterBrush(state);
 
-    Wh_Log(L"colors: bg=%06X text=%06X accent=%06X sysBg=%06X sysText=%06X points=%u bgCount=%d textCount=%d took=%lu",
+    Wh_Log(L"colors: bg=%06X text=%06X accent=%06X theme=%d sysBg=%06X sysText=%06X points=%u took=%lu",
           (unsigned)background, (unsigned)text, (unsigned)accent,
-          (unsigned)GetSysColor(COLOR_WINDOW),
-          (unsigned)GetSysColor(COLOR_WINDOWTEXT),
-          (unsigned)counts.size(), backgroundCount, textCount,
+          (int)requested, (unsigned)GetSysColor(COLOR_WINDOW),
+          (unsigned)GetSysColor(COLOR_WINDOWTEXT), (unsigned)counts.size(),
           (unsigned long)(GetTickCount64() - start));
 }
 
@@ -7380,7 +7549,7 @@ static void DrawFilterBox(HDC dc, PanelState* state, UINT dpi) {
 
     if (win11 && focused) {
         HBRUSH line = CreateSolidBrush(
-            GetUserAccentFocusColor(ColorLuma(background) < 128));
+            GetUserAccentFocusColor(IsDarkColor(background)));
         RECT underline = {box.left + Scale(4, dpi),
                           box.bottom - Scale(2, dpi),
                           box.right - Scale(4, dpi), box.bottom - 1};
@@ -8232,13 +8401,34 @@ static bool EnsureBackBuffer(PanelState* state, HDC reference, int width,
     return true;
 }
 
+// Gives the file view its space and its Details columns back. With "shrink
+// columns to fit" the real view carries the shrunk widths while the panel is
+// open, and Explorer saves a folder's widths when it leaves it, so this has to
+// run before a navigation starts, not after it.
+static void RestoreViewForClose(PanelState* state) {
+    if (!state) {
+        return;
+    }
+    if (state->view && IsWindow(state->view)) {
+        SetWindowPos(state->view, nullptr, state->viewFull.left,
+                     state->viewFull.top,
+                     state->viewFull.right - state->viewFull.left,
+                     state->viewFull.bottom - state->viewFull.top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+        RestoreColumns(state);
+    }
+    RestoreBrowserColumns(state);
+}
+
 static void CloseState(PanelState* state) {
     if (!state) {
         return;
     }
     state->open = false;
+    state->pendingNavClose = false;
     DisconnectNavigationEvents(state);
     state->pendingOpenPath.clear();
+    state->loadRetryKind = 0;
     state->loadGeneration++;
     if (state->loadToken) {
         state->loadToken->store(state->loadGeneration);
@@ -8249,15 +8439,7 @@ static void CloseState(PanelState* state) {
     ClearMediaPreview(state);
     ReleaseBackBuffer(state);
     CloseViewMenu(state);
-    if (state->view && IsWindow(state->view)) {
-        SetWindowPos(state->view, nullptr, state->viewFull.left,
-                     state->viewFull.top,
-                     state->viewFull.right - state->viewFull.left,
-                     state->viewFull.bottom - state->viewFull.top,
-                     SWP_NOZORDER | SWP_NOACTIVATE);
-        RestoreColumns(state);
-    }
-    RestoreBrowserColumns(state);
+    RestoreViewForClose(state);
     ReleaseColumns(state);
     if (state->panel && IsWindow(state->panel)) {
         KillTimer(state->panel, QL_TIMER_SELECTION);
@@ -8268,6 +8450,7 @@ static void CloseState(PanelState* state) {
         KillTimer(state->panel, QL_TIMER_PROBE);
         KillTimer(state->panel, QL_TIMER_SPINNER);
         KillTimer(state->panel, QL_TIMER_RESULTS);
+        KillTimer(state->panel, QL_TIMER_LOAD_RETRY);
         state->coverActive = false;
         ShowWindow(state->panel, SW_HIDE);
     }
@@ -8353,11 +8536,25 @@ class NavigationEvents final : public IDispatch {
              dispIdMember == kDispWindowClosing) &&
             state_ && state_->open) {
             PanelState* state = state_;
-            // CloseState disconnects this sink; keep it alive until we return.
+            // The close below disconnects this sink; keep it alive until we
+            // return.
             AddRef();
             Wh_Log(L"navigation or close starting (dispid %ld): closing the panel",
                    (long)dispIdMember);
-            CloseState(state);
+            // The columns have to go back now: Explorer saves a folder's widths
+            // as it leaves it, and that happens after this notification. The
+            // rest of the close waits for the panel's message loop, because
+            // removing this sink and releasing the browser's objects from inside
+            // the browser's own event dispatch is re-entrant COM.
+            state->open = false;
+            state->pendingNavClose = true;
+            RestoreViewForClose(state);
+            if (!state->panel || !IsWindow(state->panel) ||
+                !PostMessageW(state->panel, QL_WM_CLOSE_PANEL, 0, 0)) {
+                // No queue to post to: finish the close here rather than leave a
+                // half-closed panel.
+                CloseState(state);
+            }
             Release();
         }
         return S_OK;
@@ -8655,6 +8852,7 @@ static void ApplyViewSelection(PanelState* state, QlView mode, int iconSize,
     state->viewMode = mode;
     state->iconSize = iconSize;
     ApplyBrowserViewMode(state);
+    ScheduleThemeBrowserView(state);
     if (state->viewMode == QlView::Details) {
         if (!state->browserColumnsSaved) {
             SaveBrowserColumns(state);
@@ -8959,15 +9157,11 @@ static void ShowViewMenu(HWND hwnd, PanelState* state) {
     UINT dpi = GetDpiForWindowSafe(hwnd);
     popup->dpi = dpi;
 
-    // Dark or light follows the panel, which follows Explorer's theme.
+    // Dark or light follows the panel, which follows the chosen theme.
     COLORREF panelBackground = state->background != CLR_INVALID
                                    ? state->background
                                    : GetSysColor(COLOR_WINDOW);
-    bool dark = (GetRValue(panelBackground) * 299 +
-                 GetGValue(panelBackground) * 587 +
-                 GetBValue(panelBackground) * 114) /
-                    1000 <
-                128;
+    bool dark = IsDarkColor(panelBackground);
     COLORREF white = RGB(255, 255, 255);
     COLORREF black = RGB(0, 0, 0);
     if (win11) {
@@ -9096,6 +9290,17 @@ static LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT message, WPARAM wParam,
                                      LPARAM lParam) {
     PanelState* state =
         reinterpret_cast<PanelState*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+
+    // Registered at init, so its number is not a compile-time constant: it can
+    // not be a switch label.
+    if (message == QL_WM_CLOSE_PANEL) {
+        // The browser asked to navigate or close. The columns are already back;
+        // the rest of the close runs here, outside its event dispatch.
+        if (state && state->pendingNavClose) {
+            CloseState(state);
+        }
+        return 0;
+    }
 
     switch (message) {
         case WM_NCCREATE: {
@@ -9508,6 +9713,10 @@ static LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT message, WPARAM wParam,
                 PumpResultsItems(state);
                 return 0;
             }
+            if (wParam == QL_TIMER_LOAD_RETRY) {
+                RetryPendingLoad(state);
+                return 0;
+            }
             if (wParam == QL_TIMER_FILTER) {
                 KillTimer(hwnd, QL_TIMER_FILTER);
                 ApplyBrowserFilter(state);
@@ -9679,6 +9888,12 @@ static void DestroyState(PanelState* state, bool removeFromMap) {
         }
     }
 
+    // The panel-open property lives on the window, and the deferred close turns
+    // the state off before its own message runs: a state destroyed inside that
+    // gap must still clear it, or the hook keeps posting close-toggles for a
+    // window that has no panel.
+    UpdateTopOpenFlag(state->top);
+
     delete state;
 }
 
@@ -9793,6 +10008,7 @@ static PanelState* EnsureState(HWND top, IShellView** outView = nullptr) {
     }
 
     state->path = GetSelectedPath(shellView, &state->debug);
+    DisconnectNavigationEvents(state);
     ReleaseCom(state->webBrowser);
     state->webBrowser = webBrowser;
     ReleaseCom(state->shellView);
@@ -9942,6 +10158,7 @@ static void RefreshColorsOnExplorerThread(HWND top) {
 
     for (PanelState* state : states) {
         UpdatePanelColors(state);
+        ScheduleThemeBrowserView(state);
         if (state->panel && IsWindow(state->panel)) {
             InvalidateRect(state->panel, nullptr, TRUE);
         }
@@ -10137,8 +10354,8 @@ static bool IsFileViewFocus(HWND top) {
 // runs, the keyboard of the whole machine waits. So this callback only reads
 // cheap state and posts messages. It never waits for an Explorer thread, never
 // touches the disk and never logs; if the Explorer window is busy or hung the
-// key is simply handed on. It only ever acts on Space and Esc, and only when
-// the foreground window is one of this process's Explorer windows.
+// key is simply handed on. It only ever acts on Space, Esc and Ctrl+W, and only
+// when the foreground window is one of this process's Explorer windows.
 static LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam,
                                              LPARAM lParam) {
     if (code != HC_ACTION || g_unloading.load()) {
@@ -10238,7 +10455,8 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam,
     // Esc: only for the window whose own panel is open, and only when the
     // focus is on the file list or the panel. A rename, the address bar and the
     // search box keep their Esc.
-    if (IsTopWithOpenPanel(foreground) && IsFileViewFocus(foreground)) {
+    if (key->vkCode == VK_ESCAPE && IsTopWithOpenPanel(foreground) &&
+        IsFileViewFocus(foreground)) {
         if (PostMessageW(foreground, QL_WM_TOGGLE, 1, 0)) {
             return 1;
         }
@@ -10308,6 +10526,15 @@ static void StopHookThread() {
 // ---------------------------------------------------------------------------
 
 static void LoadSettings() {
+    PCWSTR theme = Wh_GetStringSetting(L"theme");
+    if (_wcsicmp(theme, L"light") == 0) {
+        g_themeMode = QlTheme::Light;
+    } else if (_wcsicmp(theme, L"dark") == 0) {
+        g_themeMode = QlTheme::Dark;
+    } else {
+        g_themeMode = QlTheme::Auto;
+    }
+    Wh_FreeStringSetting(theme);
     g_reflowColumns = Wh_GetIntSetting(L"reflowColumns") != 0;
     g_textRememberOptions = Wh_GetIntSetting(L"textRememberOptions") != 0;
     g_defaultTextLineNumbers = Wh_GetIntSetting(L"textLineNumbers") != 0;
@@ -10323,8 +10550,8 @@ static void LoadSettings() {
     } else {
         ResetTextOptionsToDefaults();
     }
-    Wh_Log(L"settings: reflowColumns=%d rememberTextOptions=%d numbers=%d zebra=%d",
-          g_reflowColumns.load() ? 1 : 0,
+    Wh_Log(L"settings: theme=%d reflowColumns=%d rememberTextOptions=%d numbers=%d zebra=%d",
+          (int)g_themeMode.load(), g_reflowColumns.load() ? 1 : 0,
           g_textRememberOptions.load() ? 1 : 0,
           g_textLineNumbers.load() ? 1 : 0, g_textZebra.load() ? 1 : 0);
 }
@@ -10368,7 +10595,10 @@ BOOL Wh_ModInit() {
     QL_WM_TOGGLE = RegisterWindowMessageW(L"QuickLook_Toggle_" WH_MOD_ID);
     QL_WM_SETTINGS = RegisterWindowMessageW(L"QuickLook_Settings_" WH_MOD_ID);
     QL_WM_CLEANUP = RegisterWindowMessageW(L"QuickLook_Cleanup_" WH_MOD_ID);
-    if (!QL_WM_TOGGLE || !QL_WM_SETTINGS || !QL_WM_CLEANUP) {
+    QL_WM_CLOSE_PANEL =
+        RegisterWindowMessageW(L"QuickLook_ClosePanel_" WH_MOD_ID);
+    if (!QL_WM_TOGGLE || !QL_WM_SETTINGS || !QL_WM_CLEANUP ||
+        !QL_WM_CLOSE_PANEL) {
         Wh_Log(L"RegisterWindowMessageW failed: %lu", GetLastError());
         return FALSE;
     }
@@ -10404,6 +10634,25 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
+// Installs the top-level subclass from the engine thread. The helper sends a
+// message to the target thread and waits for it, so a window that does not
+// answer is probed first: loading a mod must never freeze Windhawk on a hung
+// Explorer window.
+static void InstallTopSubclassBounded(HWND top) {
+    if (!top || !IsWindow(top)) {
+        return;
+    }
+    if (GetWindowThreadProcessId(top, nullptr) != GetCurrentThreadId()) {
+        DWORD_PTR ignored = 0;
+        if (!SendMessageTimeoutW(top, WM_NULL, 0, 0,
+                                 SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &ignored)) {
+            Wh_Log(L"subclass skipped: window %p does not answer", (void*)top);
+            return;
+        }
+    }
+    WindhawkUtils::SetWindowSubclassFromAnyThread(top, TopSubclassProc, 0);
+}
+
 void Wh_ModAfterInit() {
     // The windows that already exist; the ones created from now on are caught by
     // the CreateWindowExW hook.
@@ -10411,8 +10660,7 @@ void Wh_ModAfterInit() {
     Wh_Log(L"after init: pid=%u explorer windows=%u", GetCurrentProcessId(),
            (unsigned)windows.size());
     for (HWND window : windows) {
-        WindhawkUtils::SetWindowSubclassFromAnyThread(window, TopSubclassProc,
-                                                      0);
+        InstallTopSubclassBounded(window);
         Wh_Log(L"Explorer window: %p", (void*)window);
     }
 
@@ -10435,6 +10683,22 @@ void Wh_ModSettingsChanged() {
     }
 }
 
+// Sends one cleanup request with a timeout: a window that stops answering must
+// not keep Wh_ModUninit, and with it Windhawk's engine thread, waiting for good.
+static bool SendCleanupRequest(HWND window, WPARAM phase) {
+    DWORD_PTR ignored = 0;
+    if (SendMessageTimeoutW(window, QL_WM_CLEANUP, phase, 0,
+                            SMTO_ABORTIFHUNG | SMTO_BLOCK, 5000, &ignored)) {
+        return true;
+    }
+    // The window keeps the subclass it already has: removing it needs that
+    // window's own thread, and this one never answered. A bounded unload that
+    // leaves it behind beats a Windhawk that never finishes unloading.
+    Wh_Log(L"cleanup: window %p did not answer (phase %u)", (void*)window,
+           (unsigned)phase);
+    return false;
+}
+
 void Wh_ModUninit() {
     Wh_Log(L"Quick Look unloading");
     g_unloading = true;
@@ -10445,14 +10709,14 @@ void Wh_ModUninit() {
     StopAllWorkers();
 
     // 2. Every Explorer window undoes what the mod did to it, on its own
-    //    thread. Waiting for a busy window is better than leaving a subclass
-    //    behind that would crash Explorer on its next message.
+    //    thread. The sends are bounded: a window that stops answering must not
+    //    freeze Windhawk's engine thread for good.
     std::vector<HWND> windows = GetExplorerWindows();
     if (!g_cleanupEvent) {
         // No event to wait on: clean inline. Still correct; only the release of
         // an open preview handler can fail inside a sent call.
         for (HWND window : windows) {
-            SendMessageW(window, QL_WM_CLEANUP, 1, 0);
+            SendCleanupRequest(window, 1);
         }
     } else {
         // Each window registers itself while it handles the request, so the set
@@ -10460,10 +10724,12 @@ void Wh_ModUninit() {
         // waiting means a window opened in the meantime (without the subclass)
         // can never stall the unload.
         for (HWND window : windows) {
-            SendMessageW(window, QL_WM_CLEANUP, 0, 0);
+            SendCleanupRequest(window, 0);
         }
 
+        const ULONGLONG deadline = GetTickCount64() + 10000;
         for (;;) {
+            size_t pending = 0;
             {
                 std::lock_guard<std::mutex> lock(g_cleanupMutex);
                 // A window destroyed before its posted cleanup ran dropped
@@ -10476,9 +10742,22 @@ void Wh_ModUninit() {
                         ++it;
                     }
                 }
-                if (g_cleanupPending.empty()) {
-                    break;
-                }
+                pending = g_cleanupPending.size();
+            }
+            if (!pending) {
+                break;
+            }
+            if (GetTickCount64() >= deadline) {
+                // Whatever is left never ran its posted cleanup. Its state is
+                // freed by WM_DESTROY when the window goes away; logging it is
+                // all that can be done without hanging the unload for good.
+                // Residual risk, on purpose: a window that stays hung keeps the
+                // subclass it already has, and a later message would dispatch
+                // into this mod after Windhawk unloads it. A bounded unload that
+                // may crash later beats a Windhawk that never finishes.
+                Wh_Log(L"cleanup: %u window(s) did not answer in time",
+                       (unsigned)pending);
+                break;
             }
             WaitForSingleObject(g_cleanupEvent, 200);
         }
