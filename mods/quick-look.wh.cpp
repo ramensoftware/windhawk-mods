@@ -96,9 +96,9 @@ touches the disk ever blocks Explorer.
 - **A fallback that still helps.** Anything else shows the real file icon plus its type, size, modified
   date and full path.
 - **Colors that follow Windows.** The panel samples Explorer's actual surface for its background and
-  takes the accent from Windows itself; its text is chosen for contrast, so light, dark, Mica-style and
-  custom visual styles stay readable. The theme can be left on Auto or forced to light or dark in the
-  settings.
+  takes the accent from Windows itself; its text follows the theme, so it never flips between previews,
+  and the sampled surface is kept only when that text stays readable on it. The theme can be left on
+  Auto or forced to light or dark in the settings.
 - **Explorer never freezes.** Listing a folder, reading a file, decoding an image, building a thumbnail or
   checking a cloud placeholder all run on worker threads. The panel opens at once with a loading state,
   a new selection cancels the previous load, and a file that is only a cloud placeholder is never
@@ -482,6 +482,7 @@ struct PanelState {
     HDC backDc = nullptr;
     HBITMAP backBitmap = nullptr;
     HGDIOBJ backOldBitmap = nullptr;
+    DWORD* backBits = nullptr;
     int backWidth = 0;
     int backHeight = 0;
     RECT viewDropdown = {};
@@ -6548,7 +6549,7 @@ static bool IsDarkColor(COLORREF color) {
 static COLORREF ReadableTextColor(COLORREF background) {
     return ContrastRatio(background, RGB(0, 0, 0)) >=
                    ContrastRatio(background, RGB(255, 255, 255))
-               ? RGB(0, 0, 0)
+               ? RGB(26, 26, 26)  // not pure black: glass effects treat #000000 as transparent
                : RGB(255, 255, 255);
 }
 
@@ -6718,6 +6719,40 @@ static COLORREF GetUserAccentFocusColor(bool darkTheme) {
 // subclass renders the text, the "Filter by name" hint and the selection with
 // the accent color, double-buffered, like the native Windows search box. The
 // control still owns editing, scrolling and the caret.
+// GDI leaves the alpha of a 32bpp bitmap at 0, which glass effects such as
+// ExplorerBlurMica show through. Off-screen buffers are therefore DIBs whose
+// alpha is forced to 255 before the blit.
+static HBITMAP CreateTopDownDib(HDC reference, int width, int height,
+                                DWORD** bits) {
+    BITMAPINFO info = {};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = width;
+    info.bmiHeader.biHeight = -height;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    void* data = nullptr;
+    HBITMAP bitmap = CreateDIBSection(reference, &info, DIB_RGB_COLORS, &data,
+                                      nullptr, 0);
+    *bits = static_cast<DWORD*>(data);
+    return bitmap;
+}
+
+static void MakeDibOpaque(DWORD* bits, int width, int height,
+                          const RECT& area) {
+    GdiFlush();
+    int left = std::max<LONG>(0, area.left);
+    int right = std::min<LONG>(width, area.right);
+    int top = std::max<LONG>(0, area.top);
+    int bottom = std::min<LONG>(height, area.bottom);
+    for (int y = top; y < bottom; ++y) {
+        DWORD* row = bits + static_cast<size_t>(y) * width;
+        for (int x = left; x < right; ++x) {
+            row[x] |= 0xFF000000;
+        }
+    }
+}
+
 static LRESULT CALLBACK FilterEditSubclassProc(HWND hwnd, UINT message,
                                                WPARAM wParam, LPARAM lParam,
                                                UINT_PTR subclassId,
@@ -6746,7 +6781,8 @@ static LRESULT CALLBACK FilterEditSubclassProc(HWND hwnd, UINT message,
             int height = client.bottom - client.top;
             if (width > 0 && height > 0) {
                 HDC memory = CreateCompatibleDC(dc);
-                HBITMAP bitmap = CreateCompatibleBitmap(dc, width, height);
+                DWORD* bits = nullptr;
+                HBITMAP bitmap = CreateTopDownDib(dc, width, height, &bits);
                 HGDIOBJ oldBitmap = SelectObject(memory, bitmap);
 
                 COLORREF fill = FilterBoxFill(state);
@@ -6846,6 +6882,9 @@ static LRESULT CALLBACK FilterEditSubclassProc(HWND hwnd, UINT message,
                 }
 
                 SelectObject(memory, oldFont);
+                if (bits) {
+                    MakeDibOpaque(bits, width, height, client);
+                }
                 BitBlt(dc, 0, 0, width, height, memory, 0, 0, SRCCOPY);
                 SelectObject(memory, oldBitmap);
                 DeleteObject(bitmap);
@@ -6995,7 +7034,9 @@ static void UpdatePanelColors(PanelState* state) {
         dark = false;
     } else if (requested == QlTheme::Dark) {
         dark = true;
-    } else if (dominant == CLR_INVALID) {
+    } else if (dominant == CLR_INVALID || dominant == RGB(0, 0, 0)) {
+        // Pure black is what a capture of a glass surface (ExplorerBlurMica and similar) returns:
+        // it says nothing about the theme, so follow Windows.
         dark = SystemPrefersDark();
     } else {
         // A clearly dark or light sample wins over the app mode; an ambiguous one follows it.
@@ -7009,13 +7050,12 @@ static void UpdatePanelColors(PanelState* state) {
         }
     }
 
-    // Keep the surface verbatim when it matches the palette: that is the Mica/wallpaper effect.
+    // The theme picks the text so it never flips; the sample is kept only if that text reads on it.
+    COLORREF text = dark ? RGB(255, 255, 255) : RGB(26, 26, 26);
     COLORREF background = dark ? RGB(32, 32, 32) : RGB(249, 249, 249);
-    if (dominant != CLR_INVALID && IsDarkColor(dominant) == dark) {
+    if (dominant != CLR_INVALID && ContrastRatio(dominant, text) >= 4.5) {
         background = dominant;
     }
-
-    COLORREF text = ReadableTextColor(background);
     COLORREF accent = GetUserAccentColor();
     if (accent == CLR_INVALID || ColorDistance(accent, background) < 20) {
         accent = BlendColor(background, text, 35);
@@ -7026,10 +7066,10 @@ static void UpdatePanelColors(PanelState* state) {
     state->accent = accent;
     RefreshFilterBrush(state);
 
-    Wh_Log(L"colors: bg=%06X text=%06X accent=%06X theme=%d sysBg=%06X sysText=%06X points=%u took=%lu",
-          (unsigned)background, (unsigned)text, (unsigned)accent,
-          (int)requested, (unsigned)GetSysColor(COLOR_WINDOW),
-          (unsigned)GetSysColor(COLOR_WINDOWTEXT), (unsigned)counts.size(),
+    Wh_Log(L"colors: bg=%06X text=%06X accent=%06X theme=%d dominant=%06X points=%u took=%lu",
+          (unsigned)background, (unsigned)text, (unsigned)accent, (int)requested,
+          dominant == CLR_INVALID ? 0u : (unsigned)dominant,
+          (unsigned)counts.size(),
           (unsigned long)(GetTickCount64() - start));
 }
 
@@ -8272,6 +8312,7 @@ static void ReleaseBackBuffer(PanelState* state) {
     state->backDc = nullptr;
     state->backBitmap = nullptr;
     state->backOldBitmap = nullptr;
+    state->backBits = nullptr;
     state->backWidth = 0;
     state->backHeight = 0;
 }
@@ -8294,8 +8335,9 @@ static bool EnsureBackBuffer(PanelState* state, HDC reference, int width,
     if (!state->backDc) {
         return false;
     }
-    state->backBitmap = CreateCompatibleBitmap(reference, width, height);
-    if (!state->backBitmap) {
+    state->backBitmap =
+        CreateTopDownDib(reference, width, height, &state->backBits);
+    if (!state->backBitmap || !state->backBits) {
         ReleaseBackBuffer(state);
         return false;
     }
@@ -9531,6 +9573,8 @@ static LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT message, WPARAM wParam,
             if (state && EnsureBackBuffer(state, dc, width, height)) {
                 DrawPanel(state->backDc, client, state);
                 DrawSplitter(state->backDc, client, state);
+                MakeDibOpaque(state->backBits, state->backWidth,
+                              state->backHeight, paint.rcPaint);
                 // One blit for the dirty rectangle: the window never shows the
                 // intermediate background-then-content of a direct paint.
                 BitBlt(dc, paint.rcPaint.left, paint.rcPaint.top,
