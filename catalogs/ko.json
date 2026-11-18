@@ -8337,6 +8337,35 @@
         "version": "1.4.0"
       }
     },
+    "file-type-properties-customization": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794963821000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794963821000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86",
+          "x86-64"
+        ],
+        "author": "Momo",
+        "compilerOptions": "-lshell32 -lshlwapi -lole32 -loleaut32 -lpropsys -luuid",
+        "description": "Customize file icons and type descriptions by extension while preserving system thumbnails",
+        "github": "https://github.com/FreshP-0325",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "File Type Properties Customization",
+        "version": "1.0.0"
+      }
+    },
     "files-2-folders": {
       "details": {
         "defaultSorting": 2349,
@@ -12500,6 +12529,32 @@
         "version": "1.0.0"
       }
     },
+    "no-click-touchpad-tap-and-hold": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794963811000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794963811000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "mario0318",
+        "compilerOptions": "-lhid -lshcore -lgdi32 -lwtsapi32",
+        "description": "Tap a corner to right-click and hold two fingers to drag, with a ring around the pointer while the drag is on. For touchpads that no longer click.",
+        "github": "https://github.com/mario0318",
+        "include": [
+          "windhawk.exe",
+          "windhawk-mod.exe",
+          "windhawk-mod-uiaccess.exe"
+        ],
+        "name": "No-Click Touchpad: Tap & Hold",
+        "version": "1.0"
+      }
+    },
     "no-flash-window": {
       "details": {
         "defaultSorting": 7112,
@@ -12709,6 +12764,34 @@
         ],
         "name": "Disable Windows Ink modifier tooltips",
         "version": "1.0.0"
+      }
+    },
+    "not-net": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794963806000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794963806000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Ashix",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lfwpuclnt -lrpcrt4 -lole32 -loleaut32 -luuid -lshell32 -lgdi32 -lgdiplus -ld2d1 -ldwrite -ldwmapi -luser32 -lcomctl32 -liphlpapi -ladvapi32",
+        "description": "A panel to manage per app internet connection.",
+        "donateUrl": "https://ko-fi.com/kashix",
+        "github": "https://github.com/k-ashix",
+        "include": [
+          "windhawk-mod-elevated.exe",
+          "windhawk-mod.exe",
+          "windhawk.exe"
+        ],
+        "name": "!Net — Per-App Kill Switch",
+        "twitter": "https://x.com/k_ashix",
+        "version": "1.2026.1510"
       }
     },
     "notepad-clientedge": {
@@ -21862,6 +21945,31 @@
         ],
         "name": "Windows 10 Colorization Tweaks",
         "version": "1.1.0"
+      }
+    },
+    "win10-ime-tray-icon-fix": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794963816000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794963816000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "yumeyao",
+        "compilerOptions": "-lcomctl32",
+        "description": "Moves the input indicator to the left of the notification area so its width change cannot shift the tray icons. Alternative modes provided.",
+        "github": "https://github.com/yumeyao",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Windows 10 IME Tray Icon Fix",
+        "version": "1.1"
       }
     },
     "win10-taskbar-24h2-26100": {

@@ -163,39 +163,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/aadfc986be6ee1dcddcb6ca2b8d08b2c907b8f6b/mods/explorer-no-help.wh.cpp"
       }
     },
-    "file-type-properties-customization": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794840456805,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794840456805,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86",
-          "x86-64"
-        ],
-        "author": "Momo",
-        "compilerOptions": "-lshell32 -lshlwapi -lole32 -loleaut32 -lpropsys -luuid",
-        "description": "Customize file icons and type descriptions by extension while preserving system thumbnails",
-        "github": "https://github.com/FreshP-0325",
-        "include": [
-          "explorer.exe"
-        ],
-        "license": "MIT",
-        "name": "File Type Properties Customization",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7505",
-      "source": {
-        "sha256": "078d3786e775037ae1000b817164122a5d6926500b24b079d06b98e1e5daf96a",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/293fcb80a08279a7d156bd852c1b1b8204d58d58/mods/file-type-properties-customization.wh.cpp"
-      }
-    },
     "fluent-radial-menu": {
       "details": {
         "defaultSorting": 0,
@@ -256,36 +223,6 @@
       "source": {
         "sha256": "bb4c6638764e7f2b49bc822e1b4ed547667ed746e26c4e416e584b02c4fd8d42",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/760b91ecf9f50687cd4b2ed315b32d32ad8372ea/mods/lockscreen-background.wh.cpp"
-      }
-    },
-    "no-click-touchpad-tap-and-hold": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794840456805,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794840456805,
-        "users": 0
-      },
-      "metadata": {
-        "author": "mario0318",
-        "compilerOptions": "-lhid -lshcore -lgdi32 -lwtsapi32",
-        "description": "Tap a corner to right-click and hold two fingers to drag, with a ring around the pointer while the drag is on. For touchpads that no longer click.",
-        "github": "https://github.com/mario0318",
-        "include": [
-          "windhawk.exe",
-          "windhawk-mod.exe",
-          "windhawk-mod-uiaccess.exe"
-        ],
-        "name": "No-Click Touchpad: Tap & Hold",
-        "version": "1.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7443",
-      "source": {
-        "sha256": "62723f9879a6058c51eb54be1ea997a3d2ec3d14a555e9380fb5301cc00b0797",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/7bcddad73b5441e93d24ec279e9d0b0f70972dd4/mods/no-click-touchpad-tap-and-hold.wh.cpp"
       }
     },
     "taskbar-position-shortcut": {
@@ -356,13 +293,13 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1794957138481,
+        "updated": 1794964065891,
         "users": 0
       },
       "metadata": {
         "author": "Solo_mag",
         "compilerOptions": "-luser32 -lshell32 -lcomctl32",
-        "description": "Removes leftover tray icons of programs that crashed or were killed, the moment they exit, without hovering the mouse over the tray",
+        "description": "Removes leftover tray icons of programs that crashed or were killed, the moment they exit. For Windows 10 and older Windows 11 versions; newer Windows 11 already does this itself",
         "github": "https://github.com/Solomag",
         "include": [
           "explorer.exe"
@@ -372,37 +309,8 @@
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7582",
       "source": {
-        "sha256": "d910e82aeb34c2790b2b698c8070c5529bf2e941a9244046fb99d3ecf1911576",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/956327276cd60aa721be41b8ae39836bb596bac8/mods/tray-ghost-cleaner.wh.cpp"
-      }
-    },
-    "win10-ime-tray-icon-fix": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794812695613,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794812695613,
-        "users": 0
-      },
-      "metadata": {
-        "author": "yumeyao",
-        "compilerOptions": "-lcomctl32",
-        "description": "Moves the input indicator to the left of the notification area so its width change cannot shift the tray icons. Alternative modes provided.",
-        "github": "https://github.com/yumeyao",
-        "include": [
-          "explorer.exe"
-        ],
-        "license": "MIT",
-        "name": "Windows 10 IME Tray Icon Fix",
-        "version": "1.1"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7447",
-      "source": {
-        "sha256": "90bea635c35324ff5f60874238e851695eddfadc9c2b0957cebe459388615876",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/5534e0993449597f18415c36c16e24b6ee0f73c1/mods/win10-ime-tray-icon-fix.wh.cpp"
+        "sha256": "2bf5a7ed7f5aea767ef591b6826bea2202733123c833f6251b8f30c4626a1999",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/2b2ab6f415d6d5412beb4cef0e040dff283310c3/mods/tray-ghost-cleaner.wh.cpp"
       }
     },
     "windowpilot": {
