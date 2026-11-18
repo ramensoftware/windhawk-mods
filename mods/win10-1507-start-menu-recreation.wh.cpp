@@ -18,7 +18,7 @@
 /*
 # Windows 8.1/10 Start Menu Recreation
 
-This mod is a best-effort replica of the Windows 10 1507 and Windows 8.1 Update 3 Start menus, not a theme. Select the appearance in the settings; 8.1 is the default. The 8.1 menu uses a separate Explorer helper. Do not use another Start replacement at the same time.
+This mod is a best-effort replica of the Windows 10 1507 and Windows 8.1 Update 3 Start menus, not a theme. Select the appearance in the settings; Windows 10 1507 is the default.
 
 The menus support search, tiles and resizing. Optional app-registered colors and a tile-caption font can be configured for both appearances. Ctrl+Shift+F12 is optional and disabled by default. Each appearance keeps its own layout. The Metro options draw recreated icons for recognized Microsoft apps; other apps keep their own icon. Recognized OneDrive tiles display the name SkyDrive without changing their launch target.
 
@@ -34,11 +34,23 @@ The appearance can vary with display scaling and settings.
 
 ![Windows 8.1 menu](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/start8.png)
 
+## Process and compatibility
+
+The Windows 10 1507 menu runs in the desktop shell Explorer process. The 8.1 menu uses a second `explorer.exe` helper, which appears as another Windows Explorer in Task Manager. The shell process supervises it and restarts it if it exits. On Windhawk 1.7.3, other enabled Explorer mods that are not tool mods can also load into this helper. Do not run another Start replacement alongside this mod, including Open-Shell or Windows 8.1 Start Screen Recreation.
+
+The original 1507 implementation was tested on Windows 10 21H2 and Windows 11 24H2/25H2; behavior of this combined version, particularly the 8.1 helper and third-party taskbars, still needs testing on real Windows. Start-button clicks require reliable button identification; the Win key remains available when detection fails. Windhawk must be running with the mod enabled at sign-in; portable installations need a startup shortcut such as `windhawk.exe -tray-only`.
+
+## Keyboard and limitations
+
+Use Win to open or close Start, type to search, arrow keys or Tab to navigate, Enter to activate, Menu or Shift+F10 for the context menu, and Esc to clear search or close Start. Ctrl+Shift+F12 is optional and off by default. The menu cannot read arbitrary apps' live-tile data through a documented API; local Calendar, Clock, optional Photos and optional Weather provide their own content. The menu animation approximates the original. The file and Settings search index is built on first search and may not reflect later file changes until Explorer restarts.
+
 ## Optional Weather (both skins)
 
-Enable online Weather and separately opt into approximate IP location (ipwho.is), or enter both coordinates manually (e.g. Rome: 41.90 and 12.50). IP detection contacts ipwho.is and sends the public IP; it may be inaccurate, particularly with a VPN. Forecasts from Open-Meteo receive your IP and coordinates. Privacy mode only hides the displayed location. In either skin find the local Weather, Calendar and Clock tiles in search and pin them. They open MSN Weather, Outlook Calendar and the Microsoft Clock store page respectively. Open-Meteo receives your IP address and coordinates every 30 minutes, even with Start closed. Without valid coordinates no request is sent. If Microsoft Weather is absent, an informational tile is added; it can be unpinned. The simulated tiles open Microsoft web pages rather than a local app. Disabling Weather stops future requests; an ongoing request may delay shutdown until its timeout. Data: Open-Meteo.com, CC BY 4.0; free API for non-commercial use under its terms. 
+Online Weather and IP location are both off by default. When Weather is enabled, enter both coordinates manually (for example, 41.90 and 12.50 for Rome), or separately opt in to approximate IP location. Manual coordinates take precedence. If IP location is enabled and needed, ipwho.is receives your public IP once when the weather worker starts; the result is kept for that worker session. If it fails, it retries every five minutes until successful. Changes to relevant settings or a mod reload restart the worker. Open-Meteo receives your IP and coordinates immediately after location succeeds and every 30 minutes thereafter, including while Start is closed. Its requests retry every 30 minutes on failure. Privacy mode only hides the displayed location. If neither coordinates nor IP location are available, no forecast request is made. Disabling Weather stops future requests, but an ongoing synchronous request can delay shutdown until its timeout. Data: Open-Meteo.com, CC BY 4.0; free API for non-commercial use under its terms.
 
-Photos slideshow is optional and only reads local JPG/PNG files directly in the Windows Pictures folder (not subfolders); images are not uploaded.
+In either skin, find the local Weather, Calendar and Clock tiles in search and pin them. These open MSN Weather, Outlook Calendar and the Microsoft Clock store page. If Microsoft Weather is absent, an informational tile can be added and unpinned.
+
+Photos slideshow is optional and only reads local JPG/PNG files directly in the Windows Pictures folder (not subfolders); images are not uploaded. It runs only while Start is visible and an available Photos tile is pinned. It caches thumbnails for that opening; source images can still be decoded at full resolution and stopping can wait for a decode to finish.
 
 No system or app files are replaced. Not affiliated with Microsoft.
 
@@ -47,39 +59,7 @@ Credits: cips, AdmnistratoX, m417z and contributors to the original mods.
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
-- tileFinish: native
-  $name: Tile finish
-  $description: "This setting changes the background finish of pinned tiles in either skin. Native preserves the selected skin's existing appearance."
-  $options:
-  - native: Native skin
-  - metro10: Flat
-  - metro8: Metro gradient
-  - luna: Luna gradient
-  - aero: Aero gradient
-  $name:it-IT: Finitura dei riquadri
-  $description:it-IT: "Questa impostazione cambia la finitura dello sfondo dei riquadri in entrambe le skin. Nativa mantiene l’aspetto attuale della skin."
-  $options:it-IT:
-  - native: Nativa
-  - metro10: Piatta
-  - metro8: Sfumatura Metro
-  - luna: Sfumatura Luna
-  - aero: Sfumatura Aero
-- registeredTileColors: false
-  $name: App-registered tile colors (experimental)
-  $description: "This setting uses an app's Shell tile background color when available. It affects only identified app tiles and otherwise preserves the selected color mode. App colors appear after the next full app catalog refresh."
-  $name:it-IT: Colori dei riquadri registrati dalle app (sperimentale)
-  $description:it-IT: "Questa impostazione usa il colore del riquadro registrato dall’app nella Shell, quando disponibile. Si applica solo alle app identificate; altrimenti mantiene la modalità colore scelta. I colori appaiono dopo il prossimo aggiornamento completo del catalogo app."
-- tileCaptionFont: ""
-  $name: Tile caption font family
-  $description: "This setting selects a font family for tile captions in both skins. Leave empty for Segoe UI. Windows may substitute a font if the requested family is unavailable."
-  $name:it-IT: Carattere delle didascalie dei riquadri
-  $description:it-IT: "Questa impostazione sceglie il carattere delle didascalie dei riquadri in entrambe le skin. Lascia vuoto per Segoe UI. Windows può sostituire un carattere non disponibile."
-- photoSlideshow: false
-  $name: Photos slideshow (both skins)
-  $description: "This setting allows the mod to read local JPG and PNG files directly in the Windows Pictures folder and display them in Photos tiles. No photos are uploaded. Disable to stop and clear the slideshow."
-  $name:it-IT: Presentazione Foto (entrambe le skin)
-  $description:it-IT: "Questa impostazione consente alla mod di leggere file JPG e PNG direttamente nella cartella Immagini di Windows e mostrarli nei riquadri Foto. Le foto non vengono caricate online. Disattiva per fermare e cancellare la presentazione."
-- menuSkin: win81
+- menuSkin: win10
   $name: Start menu appearance
   $description: "This setting selects the independent menu implementation and reloads the mod when changed."
   $options:
@@ -90,6 +70,109 @@ Credits: cips, AdmnistratoX, m417z and contributors to the original mods.
   $options:it-IT:
   - win10: Windows 10 1507
   - win81: Windows 8.1 Update 3
+- liveTileAnimation: false
+  #! $showIf: {menuSkin: win10}
+  $name: 1507 - Calendar tile flip animation
+  $description: "This setting enables the periodic flip animation on the Calendar tile only, which then alternates between its icon and today's weekday and date, computed locally. It is disabled by default. Microsoft documents tile notifications as a write-only API for an app's own tile (TileUpdateManager.CreateTileUpdaterForApplication), so there is no supported way for a third-party Start menu to read the live content of Mail, Photos, Weather or other apps; those tiles therefore stay static instead of showing made-up content."
+
+  $name:it-IT: "1507 - Animazione del Calendario"
+  $description:it-IT: "Questa impostazione attiva l’animazione del riquadro Calendario."
+- skin81_liveTileAnimation: false
+  #! $showIf: {menuSkin: win81}
+  $name: 8.1 - Calendar tile slide animation
+  $description: "This setting: When enabled, the Calendar tile periodically slides between its icon and today's weekday and date. This animation affects only the Calendar tile."
+  $name:it-IT: 8.1 - Animazione del riquadro Calendario
+  $description:it-IT: "Questa impostazione: Se attiva, il riquadro Calendario scorre periodicamente tra la propria icona e il giorno della settimana con la data di oggi. L’animazione riguarda solo questo riquadro."
+  $name:es-ES: Animación del mosaico Calendario
+  $description:es-ES: "Esta configuración: Si se activa, el mosaico Calendario alterna periódicamente entre su icono y el día de la semana con la fecha de hoy. La animación solo afecta a ese mosaico."
+  $name:fr-FR: Animation de la vignette Calendrier
+  $description:fr-FR: "Ce paramètre: Lorsqu’elle est activée, la vignette Calendrier alterne périodiquement entre son icône et le jour de la semaine avec la date du jour. Cette animation ne concerne que cette vignette."
+  $name:pt-PT: Animação do bloco Calendário
+  $description:pt-PT: "Esta definição: Quando ativada, o bloco Calendário alterna periodicamente entre o ícone e o dia da semana com a data de hoje. A animação afeta apenas esse bloco."
+- menuAnimation: true
+  #! $showIf: {menuSkin: win10}
+  $name: 1507 - Menu open/close slide animation
+  $description: "This setting enables a nonblocking, reversible 120 ms eased Win32 slide when the Start menu opens or closes. It is intended to approximate the original Start menu motion but is not the original private DWM transition, so timing and easing may differ slightly from the genuine Windows 10 1507 behaviour."
+
+  $name:it-IT: "1507 - Animazione del menu"
+  $description:it-IT: "Questa impostazione attiva l’animazione di apertura e chiusura."
+- metroVectorIcons: true
+  #! $showIf: {menuSkin: win10}
+  $name: 1507 - Metro tile icons
+  $description: "This setting draws recreated Metro-style icons for recognized Microsoft apps, including Settings, Mail and new Outlook. Other apps keep their own icons."
+  $name:it-IT: 1507 - Icone Metro dei riquadri
+  $description:it-IT: "Questa impostazione mostra icone Metro ricreate per le app Microsoft riconosciute, tra cui Impostazioni, Posta e il nuovo Outlook. Le altre app mantengono le proprie icone."
+- skin81_metroVectorIcons: true
+  #! $showIf: {menuSkin: win81}
+  $name: 8.1 - Experimental Metro tile icons
+  $description: "This setting enables recreated Metro-style icons for recognized Microsoft apps; unsupported apps retain their own icons."
+  $name:it-IT: 8.1 - Icone Metro sperimentali nei riquadri
+  $description:it-IT: "Questa impostazione attiva icone Metro ricreate per le app Microsoft riconosciute; le altre mantengono le proprie icone."
+- privacyMode: false
+  #! $showIf: {menuSkin: win10}
+  $name: 1507 - Privacy mode (hide account name)
+  $description: "This setting hides the Windows account name in the Start menu and replaces it with a generic placeholder label, which is useful when taking screenshots, recording videos, or streaming without exposing personal information. When enabled, the account name is replaced with a localized generic label (for example \"User\" on English Windows)."
+
+  $name:it-IT: "1507 - Modalità privacy"
+  $description:it-IT: "Questa impostazione sostituisce il nome dell’account con un nome generico."
+- skin81_privacyMode: false
+  #! $showIf: {menuSkin: win81}
+  $name: 8.1 - Privacy mode (hide account name)
+  $description: "This setting replaces the Windows account name with a generic localized label in the Start menu."
+  $name:it-IT: 8.1 - Modalità privacy (nascondi il nome dell'account)
+  $description:it-IT: "Questa impostazione sostituisce il nome dell’account Windows con una dicitura generica tradotta nel menu Start."
+  $name:es-ES: Modo privacidad (ocultar el nombre de la cuenta)
+  $description:es-ES: "Esta configuración sustituye el nombre de la cuenta de Windows por una etiqueta genérica traducida en el menú Inicio."
+  $name:fr-FR: Mode confidentialité (masquer le nom du compte)
+  $description:fr-FR: "Ce paramètre remplace le nom du compte Windows par une étiquette générique traduite dans le menu Démarrer."
+  $name:pt-PT: Modo privacidade (ocultar o nome da conta)
+  $description:pt-PT: "Esta definição substitui o nome da conta Windows por uma designação genérica traduzida no menu Iniciar."
+- alternateShortcut: false
+  #! $showIf: {menuSkin: win10}
+  $name: 1507 - Ctrl + Shift + F12 shortcut
+  $description: "This setting: Register this global shortcut to open or close the menu. Registration can fail if another application already uses it."
+  $name:it-IT: 1507 - Scorciatoia Ctrl + Maiusc + F12
+  $description:it-IT: "Questa impostazione: Registra questa scorciatoia globale per aprire o chiudere il menu. Può fallire se è già occupata."
+- skin81_alternateShortcut: false
+  #! $showIf: {menuSkin: win81}
+  $name: 8.1 - Ctrl + Shift + F12 shortcut
+  $description: "This setting: Register Ctrl + Shift + F12 globally to open or close this Start menu. Turn off to release the shortcut for other applications. If another app already uses it, the shortcut cannot be registered."
+  $name:it-IT: 8.1 - Scorciatoia Ctrl + Maiusc + F12
+  $description:it-IT: "Questa impostazione: Registra Ctrl + Maiusc + F12 come scorciatoia globale per aprire o chiudere questo menu Start. Disattivala per lasciarla disponibile alle altre app. Se è già occupata la registrazione può fallire."
+- skin81_weatherOnline: false
+  $name: Weather tile (both skins) (Open-Meteo)
+  $description: "This setting enables online Weather. Enter both coordinates or separately enable IP location. Open-Meteo receives your IP and coordinates every 30 minutes even with Start closed. Privacy mode hides only the label. The free API is for non-commercial use."
+  $name:it-IT: Entrambe le skin - Riquadro Meteo online (Open-Meteo)
+  $description:it-IT: "Questa impostazione attiva il Meteo online. Inserisci entrambe le coordinate oppure attiva separatamente la posizione tramite IP. Open-Meteo riceve IP e coordinate ogni 30 minuti anche a Start chiuso. La privacy nasconde solo il nome. L’API gratuita è per uso non commerciale."
+- skin81_weatherIpLocation: false
+  #! $showIf: {skin81_weatherOnline: true}
+  $name: Both skins - Approximate location from IP (ipwho.is)
+  $description: "This setting permits an HTTPS request to ipwho.is to estimate your location from your public IP address when Weather is enabled and both manual coordinates are not supplied. The estimate can be inaccurate, particularly with a VPN. Open-Meteo receives your IP and coordinates. Privacy mode only hides the displayed location."
+  $name:it-IT: Entrambe le skin - Posizione approssimativa da IP (ipwho.is)
+  $description:it-IT: "Questa impostazione autorizza una richiesta HTTPS a ipwho.is per stimare la posizione dall’indirizzo IP pubblico quando il Meteo è attivo e mancano le coordinate manuali complete. La stima può essere imprecisa, soprattutto con VPN. Open-Meteo riceve IP e coordinate. La privacy nasconde solo il nome mostrato."
+- skin81_weatherLocationName: ""
+  #! $showIf: {skin81_weatherOnline: true}
+  $name: Both skins - Weather location label
+  $description: "This setting provides an optional label; it does not change or verify coordinates and is not sent to Open-Meteo."
+  $name:it-IT: Entrambe le skin - Nome della località Meteo
+  $description:it-IT: "Questa impostazione definisce un nome facoltativo; non modifica né verifica le coordinate e non viene inviata a Open-Meteo."
+- skin81_weatherLatitude: ""
+  #! $showIf: {skin81_weatherOnline: true}
+  $name: Both skins - Latitude (decimal degrees)
+  $description: "This setting overrides IP location when both coordinates are valid. Use decimal degrees and a dot, for example 40.85."
+  $name:it-IT: Entrambe le skin - Latitudine (gradi decimali)
+  $description:it-IT: "Questa impostazione sostituisce la posizione tramite IP quando entrambe le coordinate sono valide. Usa gradi decimali con il punto, ad esempio 40.85."
+- skin81_weatherLongitude: ""
+  #! $showIf: {skin81_weatherOnline: true}
+  $name: Both skins - Longitude (decimal degrees)
+  $description: "This setting overrides IP location when both coordinates are valid. Use decimal degrees and a dot, for example 14.27."
+  $name:it-IT: Entrambe le skin - Longitudine (gradi decimali)
+  $description:it-IT: "Questa impostazione sostituisce la posizione tramite IP quando entrambe le coordinate sono valide. Usa gradi decimali con il punto, ad esempio 14.27."
+- photoSlideshow: false
+  $name: Photos slideshow (both skins)
+  $description: "This setting allows the mod to read local JPG and PNG files directly in the Windows Pictures folder and display them in Photos tiles. No photos are uploaded. Disable to stop and clear the slideshow."
+  $name:it-IT: Presentazione Foto (entrambe le skin)
+  $description:it-IT: "Questa impostazione consente alla mod di leggere file JPG e PNG direttamente nella cartella Immagini di Windows e mostrarli nei riquadri Foto. Le foto non vengono caricate online. Disattiva per fermare e cancellare la presentazione."
 - accentMode: auto
   #! $showIf: {menuSkin: win10}
   $name: 1507 - Accent color
@@ -100,80 +183,6 @@ Credits: cips, AdmnistratoX, m417z and contributors to the original mods.
 
   $name:it-IT: "1507 - Colore di accento"
   $description:it-IT: "Questa impostazione sceglie il colore di accento del menu 1507."
-- metroVectorIcons: true
-  #! $showIf: {menuSkin: win10}
-  $name: 1507 - Metro tile icons
-  $description: "This setting draws recreated Metro-style icons for recognized Microsoft apps, including Settings, Mail and new Outlook. Other apps keep their own icons."
-  $name:it-IT: 1507 - Icone Metro dei riquadri
-  $description:it-IT: "Questa impostazione mostra icone Metro ricreate per le app Microsoft riconosciute, tra cui Impostazioni, Posta e il nuovo Outlook. Le altre app mantengono le proprie icone."
-- liveTileAnimation: false
-  #! $showIf: {menuSkin: win10}
-  $name: 1507 - Calendar tile flip animation
-  $description: "This setting enables the periodic flip animation on the Calendar tile only, which then alternates between its icon and today's weekday and date, computed locally. It is disabled by default. Microsoft documents tile notifications as a write-only API for an app's own tile (TileUpdateManager.CreateTileUpdaterForApplication), so there is no supported way for a third-party Start menu to read the live content of Mail, Photos, Weather or other apps; those tiles therefore stay static instead of showing made-up content."
-
-  $name:it-IT: "1507 - Animazione del Calendario"
-  $description:it-IT: "Questa impostazione attiva l’animazione del riquadro Calendario."
-- menuAnimation: true
-  #! $showIf: {menuSkin: win10}
-  $name: 1507 - Menu open/close slide animation
-  $description: "This setting enables a nonblocking, reversible 120 ms eased Win32 slide when the Start menu opens or closes. It is intended to approximate the original Start menu motion but is not the original private DWM transition, so timing and easing may differ slightly from the genuine Windows 10 1507 behaviour."
-
-  $name:it-IT: "1507 - Animazione del menu"
-  $description:it-IT: "Questa impostazione attiva l’animazione di apertura e chiusura."
-- appTileColors: false
-  #! $showIf: {menuSkin: win10}
-  $name: 1507 - Use app-specific tile colors (sampled from the app icon)
-  $description: "This setting makes each Start menu tile use a color sampled directly from the corresponding application icon instead of the global accent color. This produces a more colorful and varied tile grid reminiscent of the original Windows 10 Start screen, at the cost of a slightly longer tile rendering pass when the menu is first shown."
-
-  $name:it-IT: "1507 - Colori delle app"
-  $description:it-IT: "Questa impostazione usa colori campionati dalle icone per i riquadri."
-- liveTileIntervalMs: 4000
-  #! $showIf: {menuSkin: win10, liveTileAnimation: true}
-  $name: 1507 - Live tile flip interval (ms)
-  $description: "This setting defines how many milliseconds elapse between each Calendar tile flip when the flip animation is enabled. Lower values make the tiles cycle more rapidly and feel busier, while higher values produce a calmer, more subdued effect. The default of 4000 ms matches the pacing used by the original Windows 10 live tiles."
-
-  $name:it-IT: "1507 - Intervallo animazione (ms)"
-  $description:it-IT: "Questa impostazione sceglie l’intervallo tra le animazioni del Calendario."
-- menuWidthOverride: 0
-  #! $showIf: {menuSkin: win10}
-  $name: 1507 - Menu width override in px (0 = default)
-  $description: "This setting overrides the width of the Start menu in pixels (measured at 100% scaling). A value of 0 keeps the default width, or the width the menu was last resized to. Any positive value forces the menu to that width, even if the menu was resized by dragging its edge. This is useful for replicating the narrower Start menu proportions seen in early Windows 10 builds."
-
-  $name:it-IT: "1507 - Larghezza del menu"
-  $description:it-IT: "Questa impostazione forza la larghezza in pixel al 100% di scala; 0 conserva la larghezza predefinita o salvata."
-- profilePicturePath: ""
-  #! $showIf: {menuSkin: win10}
-  $name: 1507 - Profile picture file path (empty = use Windows account picture, then bundled avatar fallback)
-  $description: "This setting specifies a custom file path to an image that will be used as the profile picture shown in the Start menu. When left empty, the mod falls back to the Windows account picture, and if that is unavailable it uses the bundled fallback avatar shipped with the mod, ensuring a picture is always displayed."
-
-  $name:it-IT: "1507 - Percorso immagine profilo"
-  $description:it-IT: "Questa impostazione sceglie un’immagine del profilo; se vuota usa quella dell’account o l’avatar incluso."
-- privacyMode: false
-  #! $showIf: {menuSkin: win10}
-  $name: 1507 - Privacy mode (hide account name)
-  $description: "This setting hides the Windows account name in the Start menu and replaces it with a generic placeholder label, which is useful when taking screenshots, recording videos, or streaming without exposing personal information. When enabled, the account name is replaced with a localized generic label (for example \"User\" on English Windows)."
-
-  $name:it-IT: "1507 - Modalità privacy"
-  $description:it-IT: "Questa impostazione sostituisce il nome dell’account con un nome generico."
-- tileLayout: ""
-  #! $showIf: {menuSkin: win10}
-  $name: 1507 - Import tile layout (one-time, empty = none)
-  $description: "This setting allows to paste a serialized tile layout here (a \"WHSM2#...\" string) to import it. The layout is applied once, the first time the value changes; after that, your own tile drags, resizes and pins take precedence again. The current layout is otherwise saved automatically in Windhawk's mod storage, so most users can leave this empty."
-
-  $name:it-IT: "1507 - Importa disposizione dei riquadri"
-  $description:it-IT: "Questa impostazione importa una disposizione serializzata una sola volta quando il valore cambia."
-- diagnosticDisableKeyboardHook: false
-  #! $showIf: {menuSkin: win10}
-  $name: 1507 - Diagnostic - disable low-level keyboard hook (reload required)
-  $description: "This setting: Disable only the low-level keyboard hook for a controlled comparison. Reload the mod after changing this setting. The mouse hook remains active; Win key may no longer open the menu."
-  $name:it-IT: 1507 - Diagnostica - disattiva hook tastiera (riavvio richiesto)
-  $description:it-IT: "Questa impostazione: Disattiva solo l'hook tastiera per una prova comparativa. Ricarica la mod dopo la modifica. L'hook mouse rimane attivo; il tasto Windows potrebbe non aprire il menu."
-- alternateShortcut: false
-  #! $showIf: {menuSkin: win10}
-  $name: 1507 - Ctrl + Shift + F12 shortcut
-  $description: "This setting: Register this global shortcut to open or close the menu. Registration can fail if another application already uses it."
-  $name:it-IT: 1507 - Scorciatoia Ctrl + Maiusc + F12
-  $description:it-IT: "Questa impostazione: Registra questa scorciatoia globale per aprire o chiudere il menu. Può fallire se è già occupata."
 - skin81_accentMode: auto
   #! $showIf: {menuSkin: win81}
   $name: 8.1 - Accent color
@@ -245,6 +254,13 @@ Credits: cips, AdmnistratoX, m417z and contributors to the original mods.
   $description:fr-FR: "Ce paramètre définit la couleur de fond personnalisée au format hexadécimal RRGGBB, par exemple 4617B4. Elle est utilisée en mode personnalisé ; une valeur incorrecte utilise le violet par défaut."
   $name:pt-PT: Cor de fundo personalizada (RRGGBB)
   $description:pt-PT: "Esta definição especifica a cor de fundo personalizada em hexadecimal RRGGBB, por exemplo 4617B4. É usada no modo personalizado; valores inválidos usam o roxo predefinido."
+- appTileColors: false
+  #! $showIf: {menuSkin: win10}
+  $name: 1507 - Use app-specific tile colors (sampled from the app icon)
+  $description: "This setting makes each Start menu tile use a color sampled directly from the corresponding application icon instead of the global accent color. This produces a more colorful and varied tile grid reminiscent of the original Windows 10 Start screen, at the cost of a slightly longer tile rendering pass when the menu is first shown."
+
+  $name:it-IT: "1507 - Colori delle app"
+  $description:it-IT: "Questa impostazione usa colori campionati dalle icone per i riquadri."
 - skin81_tileColorMode: metro
   #! $showIf: {menuSkin: win81}
   $name: 8.1 - Tile colors
@@ -277,77 +293,18 @@ Credits: cips, AdmnistratoX, m417z and contributors to the original mods.
   - metro: Paleta predefinida do Windows 8 (por app)
   - accent: Cor de destaque
   - icon: Amostrada do ícone da app
-- skin81_tileGradients: true
-  #! $showIf: {menuSkin: win81}
-  $name: 8.1 - Windows 8.1 tile shading
-  $description: "This setting enables shading across tile backgrounds; turn it off to use flat colors."
-  $name:it-IT: 8.1 - Sfumatura dei riquadri di Windows 8.1
-  $description:it-IT: "Questa impostazione attiva la sfumatura sugli sfondi dei riquadri; disattivala per usare colori uniformi."
-  $name:es-ES: Sombreado de mosaicos de Windows 8.1
-  $description:es-ES: "Esta configuración activa el sombreado de los fondos de mosaico; desactívala para usar colores lisos."
-  $name:fr-FR: Dégradé des vignettes de Windows 8.1
-  $description:fr-FR: "Ce paramètre active le dégradé des fonds de vignettes ; désactivez-le pour utiliser des couleurs unies."
-  $name:pt-PT: Sombreamento dos blocos do Windows 8.1
-  $description:pt-PT: "Esta definição ativa o sombreado nos fundos dos blocos; desative-a para usar cores uniformes."
-- skin81_diagnosticDisableKeyboardHook: false
-  #! $showIf: {menuSkin: win81}
-  $name: 8.1 - Diagnostic - disable low-level keyboard hook (reload required)
-  $name:it-IT: 8.1 - Diagnostica - disattiva hook tastiera (riavvio richiesto)
-  $description: "This setting: Only for A/B testing. Reload the mod after changing this option. The mouse hook and Ctrl+Shift+F12 remain; the isolated Windows-key shortcut is normally unavailable."
-  $description:it-IT: "Questa impostazione: Solo per prove A/B. Ricarica la mod dopo la modifica. Restano hook mouse e Ctrl+Maiusc+F12; il tasto Windows da solo normalmente non aprirà il menu."
-- skin81_alternateShortcut: false
-  #! $showIf: {menuSkin: win81}
-  $name: 8.1 - Ctrl + Shift + F12 shortcut
-  $description: "This setting: Register Ctrl + Shift + F12 globally to open or close this Start menu. Turn off to release the shortcut for other applications. If another app already uses it, the shortcut cannot be registered."
-  $name:it-IT: 8.1 - Scorciatoia Ctrl + Maiusc + F12
-  $description:it-IT: "Questa impostazione: Registra Ctrl + Maiusc + F12 come scorciatoia globale per aprire o chiudere questo menu Start. Disattivala per lasciarla disponibile alle altre app. Se è già occupata la registrazione può fallire."
-- skin81_weatherOnline: false
-  $name: Weather tile (both skins) (Open-Meteo)
-  $description: "This setting enables online Weather. Enter both coordinates or separately enable IP location. Open-Meteo receives your IP and coordinates every 30 minutes even with Start closed. Privacy mode hides only the label. The free API is for non-commercial use."
-  $name:it-IT: Entrambe le skin - Riquadro Meteo online (Open-Meteo)
-  $description:it-IT: "Questa impostazione attiva il Meteo online. Inserisci entrambe le coordinate oppure attiva separatamente la posizione tramite IP. Open-Meteo riceve IP e coordinate ogni 30 minuti anche a Start chiuso. La privacy nasconde solo il nome. L’API gratuita è per uso non commerciale."
-- skin81_weatherIpLocation: false
-  #! $showIf: {skin81_weatherOnline: true}
-  $name: Both skins - Approximate location from IP (ipwho.is)
-  $description: "This setting permits an HTTPS request to ipwho.is to estimate your location from your public IP address when Weather is enabled and both manual coordinates are not supplied. The estimate can be inaccurate, particularly with a VPN. Open-Meteo receives your IP and coordinates. Privacy mode only hides the displayed location."
-  $name:it-IT: Entrambe le skin - Posizione approssimativa da IP (ipwho.is)
-  $description:it-IT: "Questa impostazione autorizza una richiesta HTTPS a ipwho.is per stimare la posizione dall’indirizzo IP pubblico quando il Meteo è attivo e mancano le coordinate manuali complete. La stima può essere imprecisa, soprattutto con VPN. Open-Meteo riceve IP e coordinate. La privacy nasconde solo il nome mostrato."
-- skin81_weatherLocationName: ""
-  #! $showIf: {skin81_weatherOnline: true}
-  $name: Both skins - Weather location label
-  $description: "This setting provides an optional label; it does not change or verify coordinates and is not sent to Open-Meteo."
-  $name:it-IT: Entrambe le skin - Nome della località Meteo
-  $description:it-IT: "Questa impostazione definisce un nome facoltativo; non modifica né verifica le coordinate e non viene inviata a Open-Meteo."
-- skin81_weatherLatitude: ""
-  #! $showIf: {skin81_weatherOnline: true}
-  $name: Both skins - Latitude (decimal degrees)
-  $description: "This setting overrides IP location when both coordinates are valid. Use decimal degrees and a dot, for example 40.85."
-  $name:it-IT: Entrambe le skin - Latitudine (gradi decimali)
-  $description:it-IT: "Questa impostazione sostituisce la posizione tramite IP quando entrambe le coordinate sono valide. Usa gradi decimali con il punto, ad esempio 40.85."
-- skin81_weatherLongitude: ""
-  #! $showIf: {skin81_weatherOnline: true}
-  $name: Both skins - Longitude (decimal degrees)
-  $description: "This setting overrides IP location when both coordinates are valid. Use decimal degrees and a dot, for example 14.27."
-  $name:it-IT: Entrambe le skin - Longitudine (gradi decimali)
-  $description:it-IT: "Questa impostazione sostituisce la posizione tramite IP quando entrambe le coordinate sono valide. Usa gradi decimali con il punto, ad esempio 14.27."
-- skin81_metroVectorIcons: true
-  #! $showIf: {menuSkin: win81}
-  $name: 8.1 - Experimental Metro tile icons
-  $description: "This setting enables recreated Metro-style icons for recognized Microsoft apps; unsupported apps retain their own icons."
-  $name:it-IT: 8.1 - Icone Metro sperimentali nei riquadri
-  $description:it-IT: "Questa impostazione attiva icone Metro ricreate per le app Microsoft riconosciute; le altre mantengono le proprie icone."
-- skin81_liveTileAnimation: false
-  #! $showIf: {menuSkin: win81}
-  $name: 8.1 - Calendar tile slide animation
-  $description: "This setting: When enabled, the Calendar tile periodically slides between its icon and today's weekday and date. This animation affects only the Calendar tile."
-  $name:it-IT: 8.1 - Animazione del riquadro Calendario
-  $description:it-IT: "Questa impostazione: Se attiva, il riquadro Calendario scorre periodicamente tra la propria icona e il giorno della settimana con la data di oggi. L’animazione riguarda solo questo riquadro."
-  $name:es-ES: Animación del mosaico Calendario
-  $description:es-ES: "Esta configuración: Si se activa, el mosaico Calendario alterna periódicamente entre su icono y el día de la semana con la fecha de hoy. La animación solo afecta a ese mosaico."
-  $name:fr-FR: Animation de la vignette Calendrier
-  $description:fr-FR: "Ce paramètre: Lorsqu’elle est activée, la vignette Calendrier alterne périodiquement entre son icône et le jour de la semaine avec la date du jour. Cette animation ne concerne que cette vignette."
-  $name:pt-PT: Animação do bloco Calendário
-  $description:pt-PT: "Esta definição: Quando ativada, o bloco Calendário alterna periodicamente entre o ícone e o dia da semana com a data de hoje. A animação afeta apenas esse bloco."
+- registeredTileColors: false
+  $name: App-registered tile colors (experimental)
+  $description: "This setting uses an app's Shell tile background color when available. It affects only identified app tiles and otherwise preserves the selected color mode. App colors appear after the next full app catalog refresh."
+  $name:it-IT: Colori dei riquadri registrati dalle app (sperimentale)
+  $description:it-IT: "Questa impostazione usa il colore del riquadro registrato dall’app nella Shell, quando disponibile. Si applica solo alle app identificate; altrimenti mantiene la modalità colore scelta. I colori appaiono dopo il prossimo aggiornamento completo del catalogo app."
+- liveTileIntervalMs: 4000
+  #! $showIf: {menuSkin: win10, liveTileAnimation: true}
+  $name: 1507 - Live tile flip interval (ms)
+  $description: "This setting defines how many milliseconds elapse between each Calendar tile flip when the flip animation is enabled. Lower values make the tiles cycle more rapidly and feel busier, while higher values produce a calmer, more subdued effect. The default of 4000 ms matches the pacing used by the original Windows 10 live tiles."
+
+  $name:it-IT: "1507 - Intervallo animazione (ms)"
+  $description:it-IT: "Questa impostazione sceglie l’intervallo tra le animazioni del Calendario."
 - skin81_liveTileIntervalMs: 4000
   #! $showIf: {menuSkin: win81, skin81_liveTileAnimation: true}
   $name: 8.1 - Calendar slide interval (ms)
@@ -360,6 +317,13 @@ Credits: cips, AdmnistratoX, m417z and contributors to the original mods.
   $description:fr-FR: "Ce paramètre: Définit la fréquence de changement de la vignette Calendrier lorsque l’animation est activée. Une valeur basse augmente la fréquence ; une valeur élevée la réduit."
   $name:pt-PT: Intervalo da animação dos blocos dinâmicos (ms)
   $description:pt-PT: "Esta definição: Define a frequência com que o bloco Calendário muda quando a animação está ativada. Valores baixos aumentam a frequência; valores altos reduzem-na."
+- menuWidthOverride: 0
+  #! $showIf: {menuSkin: win10}
+  $name: 1507 - Menu width override in px (0 = default)
+  $description: "This setting overrides the width of the Start menu in pixels (measured at 100% scaling). A value of 0 keeps the default width, or the width the menu was last resized to. Any positive value forces the menu to that width, even if the menu was resized by dragging its edge. This is useful for replicating the narrower Start menu proportions seen in early Windows 10 builds."
+
+  $name:it-IT: "1507 - Larghezza del menu"
+  $description:it-IT: "Questa impostazione forza la larghezza in pixel al 100% di scala; 0 conserva la larghezza predefinita o salvata."
 - skin81_menuWidthOverride: 0
   #! $showIf: {menuSkin: win81}
   $name: 8.1 - Menu width override in px (0 = default)
@@ -372,6 +336,13 @@ Credits: cips, AdmnistratoX, m417z and contributors to the original mods.
   $description:fr-FR: "Ce paramètre: Définit une largeur fixe du menu Démarrer en pixels à 100 % de mise à l’échelle. Utilisez 0 pour conserver la largeur par défaut ou celle choisie en redimensionnant le menu."
   $name:pt-PT: Impor a largura do menu em px (0 = predefinição)
   $description:pt-PT: "Esta definição: Define uma largura fixa do menu Iniciar em píxeis a 100% de escala. Use 0 para manter a largura predefinida ou a escolhida ao redimensionar o menu."
+- profilePicturePath: ""
+  #! $showIf: {menuSkin: win10}
+  $name: 1507 - Profile picture file path (empty = use Windows account picture, then bundled avatar fallback)
+  $description: "This setting specifies a custom file path to an image that will be used as the profile picture shown in the Start menu. When left empty, the mod falls back to the Windows account picture, and if that is unavailable it uses the bundled fallback avatar shipped with the mod, ensuring a picture is always displayed."
+
+  $name:it-IT: "1507 - Percorso immagine profilo"
+  $description:it-IT: "Questa impostazione sceglie un’immagine del profilo; se vuota usa quella dell’account o l’avatar incluso."
 - skin81_profilePicturePath: ""
   #! $showIf: {menuSkin: win81}
   $name: 8.1 - Profile picture file path (empty = use Windows account picture, then bundled avatar fallback)
@@ -384,18 +355,45 @@ Credits: cips, AdmnistratoX, m417z and contributors to the original mods.
   $description:fr-FR: "Ce paramètre spécifie un chemin de fichier vers une image à utiliser comme photo de profil affichée dans le menu Démarrer. Lorsqu'il est laissé vide, le mod utilise la photo du compte Windows, et si elle n'est pas disponible, l'avatar intégré fourni avec le mod, ce qui garantit qu'une image est toujours affichée."
   $name:pt-PT: Caminho da imagem de perfil (vazio = imagem da conta do Windows, depois avatar incluído)
   $description:pt-PT: "Esta definição especifica um caminho de ficheiro para uma imagem a usar como imagem de perfil mostrada no menu Iniciar. Quando deixado vazio, o mod usa a imagem da conta do Windows e, se não estiver disponível, o avatar incluído distribuído com o mod, garantindo que é sempre mostrada uma imagem."
-- skin81_privacyMode: false
+- tileFinish: native
+  $name: Tile finish
+  $description: "This setting changes the background finish of pinned tiles in either skin. Native preserves the selected skin's existing appearance."
+  $options:
+  - native: Native skin
+  - metro10: Flat
+  - metro8: Metro gradient
+  - aero: Aero gradient
+  $name:it-IT: Finitura dei riquadri
+  $description:it-IT: "Questa impostazione cambia la finitura dello sfondo dei riquadri in entrambe le skin. Nativa mantiene l’aspetto attuale della skin."
+  $options:it-IT:
+  - native: Nativa
+  - metro10: Piatta
+  - metro8: Sfumatura Metro
+  - aero: Sfumatura Aero
+- skin81_tileGradients: true
   #! $showIf: {menuSkin: win81}
-  $name: 8.1 - Privacy mode (hide account name)
-  $description: "This setting replaces the Windows account name with a generic localized label in the Start menu."
-  $name:it-IT: 8.1 - Modalità privacy (nascondi il nome dell'account)
-  $description:it-IT: "Questa impostazione sostituisce il nome dell’account Windows con una dicitura generica tradotta nel menu Start."
-  $name:es-ES: Modo privacidad (ocultar el nombre de la cuenta)
-  $description:es-ES: "Esta configuración sustituye el nombre de la cuenta de Windows por una etiqueta genérica traducida en el menú Inicio."
-  $name:fr-FR: Mode confidentialité (masquer le nom du compte)
-  $description:fr-FR: "Ce paramètre remplace le nom du compte Windows par une étiquette générique traduite dans le menu Démarrer."
-  $name:pt-PT: Modo privacidade (ocultar o nome da conta)
-  $description:pt-PT: "Esta definição substitui o nome da conta Windows por uma designação genérica traduzida no menu Iniciar."
+  $name: 8.1 - Windows 8.1 tile shading
+  $description: "This setting enables shading across tile backgrounds; turn it off to use flat colors."
+  $name:it-IT: 8.1 - Sfumatura dei riquadri di Windows 8.1
+  $description:it-IT: "Questa impostazione attiva la sfumatura sugli sfondi dei riquadri; disattivala per usare colori uniformi."
+  $name:es-ES: Sombreado de mosaicos de Windows 8.1
+  $description:es-ES: "Esta configuración activa el sombreado de los fondos de mosaico; desactívala para usar colores lisos."
+  $name:fr-FR: Dégradé des vignettes de Windows 8.1
+  $description:fr-FR: "Ce paramètre active le dégradé des fonds de vignettes ; désactivez-le pour utiliser des couleurs unies."
+  $name:pt-PT: Sombreamento dos blocos do Windows 8.1
+  $description:pt-PT: "Esta definição ativa o sombreado nos fundos dos blocos; desative-a para usar cores uniformes."
+- tileCaptionFont: ""
+  $name: Tile caption font family
+  $description: "This setting selects a font family for tile captions in both skins. Leave empty for Segoe UI. Windows may substitute a font if the requested family is unavailable."
+  $name:it-IT: Carattere delle didascalie dei riquadri
+  $description:it-IT: "Questa impostazione sceglie il carattere delle didascalie dei riquadri in entrambe le skin. Lascia vuoto per Segoe UI. Windows può sostituire un carattere non disponibile."
+- tileLayout: ""
+  #! $showIf: {menuSkin: win10}
+  $name: 1507 - Import tile layout (one-time, empty = none)
+  $description: "This setting allows to paste a serialized tile layout here (a \"WHSM2#...\" string) to import it. The layout is applied once, the first time the value changes; after that, your own tile drags, resizes and pins take precedence again. The current layout is otherwise saved automatically in Windhawk's mod storage, so most users can leave this empty."
+
+  $name:it-IT: "1507 - Importa disposizione dei riquadri"
+  $description:it-IT: "Questa impostazione importa una disposizione serializzata una sola volta quando il valore cambia."
 - skin81_tileLayout: ""
   #! $showIf: {menuSkin: win81}
   $name: 8.1 - Import tile layout (one-time, empty = none)
@@ -408,6 +406,18 @@ Credits: cips, AdmnistratoX, m417z and contributors to the original mods.
   $description:fr-FR: "Ce paramètre permet de coller ici une disposition de vignettes sérialisée (une chaîne WHSM2#...) pour l'importer. La disposition est appliquée une seule fois, la première fois que la valeur change ; ensuite, vos propres glisser-déposer, redimensionnements et épinglages de vignettes reprennent le dessus. La disposition actuelle est par ailleurs enregistrée automatiquement dans le stockage du mod de Windhawk, donc la plupart des utilisateurs peuvent laisser ceci vide."
   $name:pt-PT: Importar disposição de blocos (uma vez, vazio = nenhuma)
   $description:pt-PT: "Esta definição permite colar aqui uma disposição de blocos serializada (uma cadeia WHSM2#...) para a importar. A disposição é aplicada uma única vez, na primeira vez que o valor muda; depois, os seus próprios arrastes, redimensionamentos e afixações de blocos voltam a prevalecer. A disposição atual é guardada automaticamente no armazenamento do mod do Windhawk, por isso a maioria dos utilizadores pode deixar isto vazio."
+- diagnosticDisableKeyboardHook: false
+  #! $showIf: {menuSkin: win10}
+  $name: 1507 - Diagnostic - disable low-level keyboard hook (reload required)
+  $description: "This setting: Disable only the low-level keyboard hook for a controlled comparison. Reload the mod after changing this setting. The mouse hook remains active; Win key may no longer open the menu."
+  $name:it-IT: 1507 - Diagnostica - disattiva hook tastiera (riavvio richiesto)
+  $description:it-IT: "Questa impostazione: Disattiva solo l'hook tastiera per una prova comparativa. Ricarica la mod dopo la modifica. L'hook mouse rimane attivo; il tasto Windows potrebbe non aprire il menu."
+- skin81_diagnosticDisableKeyboardHook: false
+  #! $showIf: {menuSkin: win81}
+  $name: 8.1 - Diagnostic - disable low-level keyboard hook (reload required)
+  $name:it-IT: 8.1 - Diagnostica - disattiva hook tastiera (riavvio richiesto)
+  $description: "This setting: Only for A/B testing. Reload the mod after changing this option. The mouse hook and Ctrl+Shift+F12 remain; the isolated Windows-key shortcut is normally unavailable."
+  $description:it-IT: "Questa impostazione: Solo per prove A/B. Ricarica la mod dopo la modifica. Restano hook mouse e Ctrl+Maiusc+F12; il tasto Windows da solo normalmente non aprirà il menu."
 */
 // ==/WindhawkModSettings==
 /*
@@ -485,48 +495,18 @@ Credits: cips, AdmnistratoX, m417z and contributors to the original mods.
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <windows.h>
 #include <winhttp.h>
 #include <cstdlib>
-#include <windowsx.h>
-#include <commctrl.h>
-#include <dwmapi.h>
-#include <gdiplus.h>
-#include <shellapi.h>
-#include <shlobj.h>
-#include <shlwapi.h>
-#include <shobjidl.h>
-#include <knownfolders.h>
-#include <sddl.h>
-#include <uiautomation.h>
-#include <uxtheme.h>
-#include <shellscalingapi.h>
-#include <powrprof.h>
-#include <security.h>
-#include <windhawk_utils.h>
-#include <wrl/client.h>
-#include <algorithm>
-#include <cwctype>
-#include <atomic>
-#include <cmath>
-#include <cstdint>
-#include <climits>
-#include <exception>
-#include <map>
-#include <memory>
-#include <mutex>
-#include <optional>
-#include <set>
-#include <string>
 #include <string_view>
-#include <unordered_map>
-#include <vector>
 
 
 
 // Optional, local-only Photos slideshow. File enumeration and decoding stay off
 // the UI thread; no paths or picture contents are written to logs or network.
 static float SmoothSlideProgress(float progress);
+
+constexpr UINT kPhotoReadyMessage = WM_APP + 115;
+constexpr UINT_PTR kPhotoAnimationTimer = 2015;
 
 class LocalPhotoSlideshow {
     HANDLE stop_=nullptr, thread_=nullptr;
@@ -555,9 +535,7 @@ class LocalPhotoSlideshow {
         if(GetDriveTypeW(drive)!=DRIVE_FIXED) return;
         DWORD folder=GetFileAttributesW(root.c_str());
         if(folder==INVALID_FILE_ATTRIBUTES || (folder & (FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_OFFLINE))) return;
-        size_t next=0;
-        while(WaitForSingleObject(stop_,0)==WAIT_TIMEOUT) {
-            std::vector<std::wstring> files;
+        std::vector<std::wstring> files;
             WIN32_FIND_DATAW entry{};
             HANDLE find=FindFirstFileW((root+L"\\*").c_str(),&entry);
             if(find!=INVALID_HANDLE_VALUE) {
@@ -574,9 +552,16 @@ class LocalPhotoSlideshow {
                 } while(files.size()<128 && FindNextFileW(find,&entry));
                 FindClose(find);
             }
+        std::sort(files.begin(),files.end());
+        std::vector<std::vector<BYTE>> thumbnails(files.size());
+        std::vector<bool> attempted(files.size(),false);
+        size_t next=0;
+        while(WaitForSingleObject(stop_,0)==WAIT_TIMEOUT) {
             if(!files.empty() && WaitForSingleObject(stop_,0)==WAIT_TIMEOUT) {
-                std::sort(files.begin(),files.end());
-                const std::wstring& path=files[next++ % files.size()];
+                const size_t index=next++ % files.size();
+                if (!attempted[index]) {
+                attempted[index]=true;
+                const std::wstring& path=files[index];
                 Gdiplus::Bitmap source(path.c_str(),FALSE);
                 UINT w=source.GetWidth(), h=source.GetHeight();
                 if(source.GetLastStatus()==Gdiplus::Ok && w && h && w<=10000 && h<=10000 && (unsigned long long)w*h<=40000000) {
@@ -594,10 +579,15 @@ class LocalPhotoSlideshow {
                             std::vector<BYTE> pixels(side_*side_*4);
                             for(int row=0;row<side_;row++) memcpy(pixels.data()+row*side_*4,(BYTE*)data.Scan0+row*data.Stride,side_*4);
                             thumb.UnlockBits(&data);
-                            {std::lock_guard<std::mutex> lock(mutex_);previous_=std::move(current_);current_=std::move(pixels);changed_=GetTickCount64();}
-                            PostMessageW(owner_,WM_APP+115,0,0);
+                            thumbnails[index]=std::move(pixels);
                         }
                     }
+                }
+                }
+                if (!thumbnails[index].empty() && WaitForSingleObject(stop_,0)==WAIT_TIMEOUT) {
+                    {std::lock_guard<std::mutex> lock(mutex_);
+                     previous_=std::move(current_);current_=thumbnails[index];changed_=GetTickCount64();}
+                    PostMessageW(owner_,kPhotoReadyMessage,0,0);
                 }
             }
             if(WaitForSingleObject(stop_,8000)!=WAIT_TIMEOUT) break;
@@ -661,17 +651,17 @@ static bool PaintTileFinish(HDC dc,const RECT& rc,COLORREF base,const std::wstri
     };
     Gdiplus::Rect rect(rc.left,rc.top,rc.right-rc.left,rc.bottom-rc.top);
     if (finish==L"metro10") { Gdiplus::SolidBrush brush(shade(1));return g.FillRectangle(&brush,rect)==Gdiplus::Ok; }
-    if (finish!=L"metro8" && finish!=L"luna" && finish!=L"aero") return false;
+    if (finish!=L"metro8" && finish!=L"aero") return false;
     auto direction=finish==L"metro8" ? Gdiplus::LinearGradientModeHorizontal : Gdiplus::LinearGradientModeVertical;
-    Gdiplus::LinearGradientBrush brush(rect,shade(finish==L"metro8" ? .65f : 1.3f),shade(finish==L"metro8" ? 1.0f : .7f),direction);
+    Gdiplus::LinearGradientBrush brush(rect,shade(finish==L"metro8" ? .6578f : 1.3156f),shade(finish==L"metro8" ? 1.012f : .7084f),direction);
     if (finish==L"aero") {
-        const Gdiplus::Color colors[]={shade(1.4f),shade(1.15f),shade(.75f),shade(.98f)};
+        const Gdiplus::Color colors[]={shade(1.4168f),shade(1.1638f),shade(.759f),shade(.99176f)};
         const Gdiplus::REAL positions[]={0.0f,.48f,.51f,1.0f};
         brush.SetInterpolationColors(colors,positions,4);
     }
     if (g.FillRectangle(&brush,rect)!=Gdiplus::Ok) return false;
-    if (finish==L"luna" || finish==L"aero") {
-        Gdiplus::Pen outline(shade(finish==L"luna" ? .65f : 1.35f));
+    if (finish==L"aero") {
+        Gdiplus::Pen outline(shade(1.3662f));
         g.DrawRectangle(&outline,static_cast<int>(rc.left),static_cast<int>(rc.top),
                         static_cast<int>(rc.right-rc.left-1),static_cast<int>(rc.bottom-rc.top-1));
     }
@@ -1657,6 +1647,56 @@ static std::wstring ReadStorageString(const wchar_t* name) {
     return std::wstring(buffer.data(), chars);
 }
 
+// Ordinary string storage is kept for small layouts. Larger ones are stored
+// atomically as UTF-16 under Wh_GetModStoragePath and referenced by this marker.
+constexpr size_t kPortableLayoutStringMaxChars = 30 * 1024;
+constexpr size_t kMaxTileLayoutFileChars = 16 * 1024 * 1024;
+static constexpr wchar_t kTileLayoutFileMarker[] = L"WHSM_LAYOUT_FILE_V1";
+
+static std::wstring ReadStoredTileLayout() {
+    const std::wstring stored = ReadStorageString(L"startMenuLayout");
+    if (stored != kTileLayoutFileMarker) return stored;
+    std::wstring layout;
+    if (ModStorageFiles::ReadText(L"startMenuLayout.v1", layout, kMaxTileLayoutFileChars) &&
+        !layout.empty()) return layout;
+    Wh_Log(L"[TileLayout] the saved layout file could not be read");
+    return {};
+}
+
+static bool WriteStoredTileLayout(const std::wstring& layout) {
+    if (layout.empty() || layout.size() > kMaxTileLayoutFileChars) return false;
+    if (layout.size() <= kPortableLayoutStringMaxChars)
+        return Wh_SetStringValue(L"startMenuLayout", layout.c_str()) != FALSE;
+
+    if (!ModStorageFiles::WriteTextAtomic(L"startMenuLayout.v1", layout, kMaxTileLayoutFileChars))
+        return false;
+    // Publish the small pointer only after the complete temporary file has
+    // been flushed and atomically renamed into place.
+    return Wh_SetStringValue(L"startMenuLayout", kTileLayoutFileMarker) != FALSE;
+}
+
+static std::wstring TileLayoutImportFingerprint(const std::wstring& layout) {
+    uint64_t hash = 14695981039346656037ull;
+    for (wchar_t ch : layout) {
+        const uint16_t unit = static_cast<uint16_t>(ch);
+        hash = (hash ^ (unit & 0xffu)) * 1099511628211ull;
+        hash = (hash ^ (unit >> 8)) * 1099511628211ull;
+    }
+    return L"WHSMI1#" + std::to_wstring(layout.size()) + L"#" + std::to_wstring(hash);
+}
+
+static bool TileLayoutImportWasApplied(const std::wstring& layout) {
+    const std::wstring stored = ReadStorageString(L"tileLayoutImported");
+    // The raw string is accepted to preserve state written by earlier builds.
+    return stored == layout || stored == TileLayoutImportFingerprint(layout);
+}
+
+static void RememberImportedTileLayout(const std::wstring& layout) {
+    const std::wstring fingerprint = TileLayoutImportFingerprint(layout);
+    if (!Wh_SetStringValue(L"tileLayoutImported", fingerprint.c_str()))
+        Wh_Log(L"[TileLayout] failed to record the imported layout fingerprint");
+}
+
 struct Settings {
     bool diagnosticDisableKeyboardHook = false;
     bool alternateShortcut = false;
@@ -1715,11 +1755,11 @@ struct Settings {
         // unrelated option never discards the user's own tile edits.
         const std::wstring importLayout = StringSetting::make(L"tileLayout").get();
         tileLayoutImportPending = false;
-        if (!importLayout.empty() && importLayout != ReadStorageString(L"tileLayoutImported")) {
+        if (!importLayout.empty() && !TileLayoutImportWasApplied(importLayout)) {
             tileLayout = importLayout;
             tileLayoutImportPending = true;
         } else {
-            tileLayout = ReadStorageString(L"startMenuLayout");
+            tileLayout = ReadStoredTileLayout();
         }
 
         Wh_Log(L"[Settings] Loaded: classicAccent=%d, liveTiles=%d, menuAnimation=%d, appTileColors=%d, privacyMode=%d, interval=%d ms, widthOverride=%d, layoutImport=%d",
@@ -1906,7 +1946,7 @@ static bool DrawMetroTileIcon(HDC dc, const Tile& tile, int x, int y, int size) 
         g.FillEllipse(&white, 14.0f, 20.0f, 18.0f, 18.0f);
         g.FillEllipse(&white, 27.0f, 25.0f, 14.0f, 13.0f);
     } else if (icon == Icon::Settings) {
-        // Scaled vector contour for the Store tile.
+        // Scaled vector contour.
         const Gdiplus::PointF outer[] = {
             Gdiplus::PointF(16.333f,0.000f),
             Gdiplus::PointF(16.000f,0.331f),
@@ -2290,7 +2330,7 @@ static bool DrawMetroTileIcon(HDC dc, const Tile& tile, int x, int y, int size) 
         gear.AddPolygon(inner, ARRAYSIZE(inner));
         g.FillPath(&white,&gear);
     } else if (icon == Icon::Store) {
-        // Traced from the image provided by the user, not a Microsoft asset file.
+        // Vector reconstruction of the Music tile icon.
         Gdiplus::GraphicsPath store(Gdiplus::FillModeAlternate);
         { const Gdiplus::PointF pts[] = {{13.244f,1.639f},{11.195f,4.215f},{10.171f,6.556f},{9.966f,7.961f},{9.761f,8.195f},{9.761f,11.941f},{9.351f,12.410f},{8.737f,12.410f},{8.532f,12.644f},{6.483f,12.878f},{6.278f,13.112f},{5.459f,13.112f},{5.254f,13.346f},{3.000f,13.815f},{3.000f,40.976f},{5.663f,41.444f},{5.868f,41.678f},{6.688f,41.678f},{6.893f,41.912f},{7.712f,41.912f},{7.917f,42.146f},{8.737f,42.146f},{8.941f,42.380f},{9.761f,42.380f},{9.966f,42.615f},{10.785f,42.615f},{10.990f,42.849f},{11.810f,42.849f},{12.015f,43.083f},{12.834f,43.083f},{13.039f,43.317f},{13.859f,43.317f},{14.063f,43.551f},{14.883f,43.551f},{15.088f,43.785f},{15.907f,43.785f},{16.112f,44.020f},{17.137f,44.020f},{17.341f,44.254f},{20.005f,44.722f},{20.210f,44.956f},{21.234f,44.956f},{21.439f,45.190f},{24.102f,45.659f},{24.307f,45.893f},{25.332f,45.893f},{25.537f,46.127f},{28.200f,46.595f},{28.405f,46.829f},{29.429f,46.829f},{29.634f,47.063f},{32.298f,47.532f},{32.502f,47.766f},{34.141f,47.532f},{34.756f,47.063f},{35.166f,47.063f},{35.780f,46.595f},{36.190f,46.595f},{36.805f,46.127f},{37.829f,45.893f},{38.444f,45.424f},{40.288f,44.722f},{40.288f,10.068f},{36.395f,9.366f},{33.527f,7.024f},{32.093f,7.024f},{31.888f,7.259f},{30.249f,7.493f},{29.224f,7.961f},{28.815f,7.493f},{28.610f,6.556f},{27.790f,4.917f},{25.946f,2.810f},{24.307f,1.873f},{25.127f,2.810f},{25.537f,3.746f},{25.946f,3.980f},{27.380f,5.854f},{27.995f,7.259f},{27.995f,7.961f},{27.790f,8.195f},{25.537f,8.663f},{25.332f,8.429f},{24.922f,5.854f},{23.693f,3.278f},{22.463f,1.873f},{21.234f,0.937f},{20.824f,0.937f},{19.595f,0.234f},{18.980f,0.234f},{18.776f,0.000f},{16.522f,0.000f},{16.317f,0.234f},{15.498f,0.234f}}; store.AddPolygon(pts, ARRAYSIZE(pts)); }
         { const Gdiplus::PointF pts[] = {{16.112f,19.200f},{16.317f,19.434f},{16.317f,26.927f},{16.112f,27.161f},{16.317f,27.395f},{16.317f,34.654f},{16.112f,34.888f},{15.293f,34.888f},{15.088f,34.654f},{13.859f,34.654f},{13.654f,34.420f},{9.556f,33.951f},{9.146f,33.483f},{9.146f,27.395f},{9.351f,27.161f},{9.146f,26.693f},{9.146f,20.605f},{9.556f,20.137f}}; store.AddPolygon(pts, ARRAYSIZE(pts)); }
@@ -2768,8 +2808,9 @@ private:
         return key;
     }
 
-    // Storage format: "<key>=<count>\n" per entry; keys never contain '\n'
-    // and the '=' separator is searched from the end because paths may contain it.
+    // Storage format: "<key>=<count>\t" per entry. A tab cannot occur in a
+    // Windows path or AUMID and survives portable INI storage without newline normalization.
+    // Accept old newline-delimited values for compatibility with existing installs.
     void LoadLaunchCounts() {
         if (launchCountsLoaded_) return;
         launchCountsLoaded_ = true;
@@ -2777,10 +2818,10 @@ private:
         const std::wstring stored = ReadStorageString(L"startMenuLaunchCounts");
         size_t pos = 0;
         while (pos < stored.size()) {
-            size_t lineEnd = stored.find(L'\n', pos);
+            size_t lineEnd = stored.find_first_of(L"\t\n", pos);
             if (lineEnd == std::wstring::npos) lineEnd = stored.size();
             const std::wstring line = stored.substr(pos, lineEnd - pos);
-            pos = lineEnd + 1;
+            pos = lineEnd == stored.size() ? stored.size() : lineEnd + 1;
             const size_t sep = line.rfind(L'=');
             if (sep == std::wstring::npos || sep == 0) continue;
             const int count = _wtoi(line.c_str() + sep + 1);
@@ -2799,7 +2840,7 @@ private:
             out += key;
             out += L'=';
             out += std::to_wstring(count);
-            out += L'\n';
+            out += L'\t';
         }
         if (!Wh_SetStringValue(L"startMenuLaunchCounts", out.c_str()))
             Wh_Log(L"[Catalog] failed to persist launch counts");
@@ -5066,6 +5107,7 @@ public:
             showTick_ = GetTickCount64();
             Wh_Log(L"[StartMenu] Show: pos=(%ld,%ld) size=%dx%d anchorMethod=%d edge=%u", pt.x, pt.y, menuW, menuH, anchor.method, (unsigned)anchor.edge);
             visible_ = true;
+            UpdatePhotoWorker();
             visibleAnchorEdge_ = anchor.edge;
             visibleTaskbarHwnd_ = anchor.taskbarHwnd;
             visibleTaskbarRect_ = anchor.taskbarRect;
@@ -5117,6 +5159,7 @@ public:
     void Hide() {
         if (!visible_ || !hwnd_) return;
         GUARDED(L"Hide", {
+            photoSlideshow_.Stop();
             StopAllAppsArrowRepeat(true);
             KillTimer(hwnd_.get(), TIMER_LIVE_FLIP);
             KillTimer(hwnd_.get(), TIMER_LIVE_TICK);
@@ -5151,10 +5194,8 @@ public:
 
     void ApplySettings(const Settings& s) {
         bool photoEnable=Wh_GetIntSetting(L"photoSlideshow")!=0;
-        if(photoEnabled_!=photoEnable) {
-            photoEnabled_=photoEnable;
-            if(photoEnabled_) photoSlideshow_.Start(hwnd_.get()); else photoSlideshow_.Stop();
-        }
+        photoEnabled_=photoEnable;
+        UpdatePhotoWorker();
         bool weatherReenabled=!settings_.weatherOnline && s.weatherOnline;
         if (weatherReenabled) Wh_SetIntValue(L"weather1507FallbackDismissed",0);
         bool weatherChanged=settings_.weatherOnline!=s.weatherOnline || settings_.weatherIpLocation!=s.weatherIpLocation ||
@@ -5176,14 +5217,33 @@ public:
         // Apply a layout only on first creation (restore from storage) or when a
         // new layout was pasted into the tileLayout setting. Other settings
         // changes leave the user's current tile arrangement untouched.
+        if (!layoutApplied_ && ReadStorageString(L"startMenuLayout")==kTileLayoutFileMarker &&
+            ReadStoredTileLayout().empty()) layoutStorageBlocked_=true;
         if (!settings_.tileLayout.empty() && (!layoutApplied_ || settings_.tileLayoutImportPending)) {
-            if (layout_.Deserialize(settings_.tileLayout, catalog_)) {
-                if (settings_.tileLayoutImportPending) {
-                    Wh_Log(L"[TileLayout] imported layout from the tileLayout setting");
-                    Wh_SetStringValue(L"tileLayoutImported", settings_.tileLayout.c_str());
+            const bool importPending = settings_.tileLayoutImportPending;
+            bool applied = layout_.Deserialize(settings_.tileLayout, catalog_);
+            if (applied && importPending) {
+                layoutStorageBlocked_=false;
+                Wh_Log(L"[TileLayout] imported layout from the tileLayout setting");
+                RememberImportedTileLayout(settings_.tileLayout);
+            } else if (!applied && importPending && !layoutApplied_) {
+                // A bad first-time paste must not replace the user's saved tiles
+                // with the default layout. Restore the stored layout instead.
+                const std::wstring stored = ReadStoredTileLayout();
+                if (!stored.empty()) applied = layout_.Deserialize(stored, catalog_);
+                if (!applied && !ReadStorageString(L"startMenuLayout").empty()) layoutStorageBlocked_=true;
+                RememberImportedTileLayout(settings_.tileLayout);
+                if (applied) {
+                    Wh_Log(L"[TileLayout] import was invalid; restored the saved layout");
                 }
-            } else {
+                settings_.tileLayoutImportPending = false;
+            }
+            if (!applied) {
+                if (!layoutApplied_ && !importPending && !ReadStorageString(L"startMenuLayout").empty())
+                    layoutStorageBlocked_=true;
+                if (importPending && layoutApplied_) RememberImportedTileLayout(settings_.tileLayout);
                 Wh_Log(L"[TileLayout] stored/imported layout could not be parsed; keeping current layout");
+                settings_.tileLayoutImportPending = false;
             }
         }
         layoutApplied_ = true;
@@ -5295,10 +5355,33 @@ public:
         }
     }
 
+    void UpdatePhotoWorker() {
+        bool pinned=false;
+        if (photoEnabled_ && visible_ && catalogReady_) {
+            for (const auto& group : layout_.groups) for (const auto& tile : group.tiles)
+                if (tile.available && _wcsicmp(tile.aumid.c_str(),
+                    L"Microsoft.Windows.Photos_8wekyb3d8bbwe!App")==0) pinned=true;
+        }
+        if (pinned && hwnd_) photoSlideshow_.Start(hwnd_.get());
+        else photoSlideshow_.Stop();
+    }
+
     void PersistTileLayout() {
-        const std::wstring serialized = layout_.Serialize();
-        if (!Wh_SetStringValue(L"startMenuLayout", serialized.c_str()))
-            Wh_Log(L"[TileLayout] failed to save layout to Windhawk mod storage");
+        UpdatePhotoWorker();
+        if (!catalogReady_ || layoutStorageBlocked_) return;
+        try {
+            const std::wstring serialized = layout_.Serialize();
+            if (serialized.empty() || serialized.size() > kMaxTileLayoutFileChars) {
+                Wh_Log(L"[TileLayout] serialized layout exceeds the supported storage size; keeping the previous saved layout");
+                return;
+            }
+            if (!WriteStoredTileLayout(serialized))
+                Wh_Log(L"[TileLayout] failed to save layout to Windhawk mod storage");
+        } catch (const std::exception& e) {
+            Wh_Log(L"[TileLayout] failed to serialize layout: %S", e.what());
+        } catch (...) {
+            Wh_Log(L"[TileLayout] unexpected failure while saving layout");
+        }
     }
 
     const AppEntry* GetListAppByIndex(int index) const {
@@ -5976,11 +6059,10 @@ private:
     static DWORD WINAPI WeatherWorker(void* arg) {
         auto* self=static_cast<StartMenuWindow*>(arg);
         try {
-        const std::wstring manualLat=self->weatherWorkerLatitude_, manualLon=self->weatherWorkerLongitude_;
+        std::wstring lat=self->weatherWorkerLatitude_, lon=self->weatherWorkerLongitude_;
+        bool located=!lat.empty() && !lon.empty();
         HANDLE stop=self->weatherStop_.get();
         while (WaitForSingleObject(stop,0)==WAIT_TIMEOUT) {
-            std::wstring lat=manualLat,lon=manualLon;
-            bool located=!lat.empty() && !lon.empty();
             if (!located && self->weatherWorkerIpLocation_) located=IpWeatherLocation(lat,lon);
             if (WaitForSingleObject(stop,0)!=WAIT_TIMEOUT) break;
             double temperature=0; int code=0;
@@ -6125,6 +6207,7 @@ private:
         } else {
             layout_.RefreshInstalledApps(catalog_);
         }
+        UpdatePhotoWorker();
         if (!searchQuery_.empty()) FilterSearch();
         ClearKeyboardFocus();
         keyboardTileGroup_ = keyboardTileIndex_ = -1;
@@ -6164,7 +6247,8 @@ private:
     RECT customResizeStartRect_{};
     bool hasUserSized_ = false;
     bool classRegistered_ = false;
-    bool layoutApplied_ = false;      // stored/imported layout applied once per window
+    bool layoutApplied_ = false;
+    bool layoutStorageBlocked_ = false;      // stored/imported layout applied once per window
     bool catalogRefreshPending_ = false; // refresh requested while the menu was open
     ULONGLONG lastCatalogScanTick_ = 0;
     HWND requestedTaskbar_ = nullptr; // taskbar whose Start button was clicked (0 = primary)
@@ -6720,11 +6804,11 @@ private:
                 return 0;
 
             case WM_TIMER:
-                if (wParam==2015) {
+                if (wParam==kPhotoAnimationTimer) {
                     static ULONGLONG started=0;
                     if (!started) started=GetTickCount64();
                     InvalidateRect(hwnd,nullptr,FALSE);
-                    if(GetTickCount64()-started>=450 || !visible_) {KillTimer(hwnd,2015);started=0;}
+                    if(GetTickCount64()-started>=450 || !visible_) {KillTimer(hwnd,kPhotoAnimationTimer);started=0;}
                     return 0;
                 }
                 if (wParam==TIMER_CATALOG_ENRICH) {
@@ -6871,8 +6955,8 @@ private:
                 RefreshCatalog();
                 return 0;
 
-            case WM_APP+115:
-                if (visible_) { InvalidateRect(hwnd,nullptr,FALSE); SetTimer(hwnd,2015,40,nullptr); }
+            case kPhotoReadyMessage:
+                if (visible_) { InvalidateRect(hwnd,nullptr,FALSE); SetTimer(hwnd,kPhotoAnimationTimer,40,nullptr); }
                 return 0;
             case WM_APP_WEATHER_READY:
                 if (visible_) InvalidateRect(hwnd,nullptr,FALSE);
@@ -12083,7 +12167,7 @@ static bool DrawMetroTileIcon(HDC dc, const Tile& tile, int x, int y, int size) 
         g.FillEllipse(&white, 14.0f, 20.0f, 18.0f, 18.0f);
         g.FillEllipse(&white, 27.0f, 25.0f, 14.0f, 13.0f);
     } else if (icon == Icon::Settings) {
-        // Scaled vector contour for the Store tile.
+        // Scaled vector contour.
         const Gdiplus::PointF outer[] = {
             Gdiplus::PointF(16.333f,0.000f),
             Gdiplus::PointF(16.000f,0.331f),
@@ -12467,7 +12551,7 @@ static bool DrawMetroTileIcon(HDC dc, const Tile& tile, int x, int y, int size) 
         gear.AddPolygon(inner, ARRAYSIZE(inner));
         g.FillPath(&white,&gear);
     } else if (icon == Icon::Store) {
-        // Traced from the image provided by the user, not a Microsoft asset file.
+        // Vector reconstruction of the Music tile icon.
         Gdiplus::GraphicsPath store(Gdiplus::FillModeAlternate);
         { const Gdiplus::PointF pts[] = {{13.244f,1.639f},{11.195f,4.215f},{10.171f,6.556f},{9.966f,7.961f},{9.761f,8.195f},{9.761f,11.941f},{9.351f,12.410f},{8.737f,12.410f},{8.532f,12.644f},{6.483f,12.878f},{6.278f,13.112f},{5.459f,13.112f},{5.254f,13.346f},{3.000f,13.815f},{3.000f,40.976f},{5.663f,41.444f},{5.868f,41.678f},{6.688f,41.678f},{6.893f,41.912f},{7.712f,41.912f},{7.917f,42.146f},{8.737f,42.146f},{8.941f,42.380f},{9.761f,42.380f},{9.966f,42.615f},{10.785f,42.615f},{10.990f,42.849f},{11.810f,42.849f},{12.015f,43.083f},{12.834f,43.083f},{13.039f,43.317f},{13.859f,43.317f},{14.063f,43.551f},{14.883f,43.551f},{15.088f,43.785f},{15.907f,43.785f},{16.112f,44.020f},{17.137f,44.020f},{17.341f,44.254f},{20.005f,44.722f},{20.210f,44.956f},{21.234f,44.956f},{21.439f,45.190f},{24.102f,45.659f},{24.307f,45.893f},{25.332f,45.893f},{25.537f,46.127f},{28.200f,46.595f},{28.405f,46.829f},{29.429f,46.829f},{29.634f,47.063f},{32.298f,47.532f},{32.502f,47.766f},{34.141f,47.532f},{34.756f,47.063f},{35.166f,47.063f},{35.780f,46.595f},{36.190f,46.595f},{36.805f,46.127f},{37.829f,45.893f},{38.444f,45.424f},{40.288f,44.722f},{40.288f,10.068f},{36.395f,9.366f},{33.527f,7.024f},{32.093f,7.024f},{31.888f,7.259f},{30.249f,7.493f},{29.224f,7.961f},{28.815f,7.493f},{28.610f,6.556f},{27.790f,4.917f},{25.946f,2.810f},{24.307f,1.873f},{25.127f,2.810f},{25.537f,3.746f},{25.946f,3.980f},{27.380f,5.854f},{27.995f,7.259f},{27.995f,7.961f},{27.790f,8.195f},{25.537f,8.663f},{25.332f,8.429f},{24.922f,5.854f},{23.693f,3.278f},{22.463f,1.873f},{21.234f,0.937f},{20.824f,0.937f},{19.595f,0.234f},{18.980f,0.234f},{18.776f,0.000f},{16.522f,0.000f},{16.317f,0.234f},{15.498f,0.234f}}; store.AddPolygon(pts, ARRAYSIZE(pts)); }
         { const Gdiplus::PointF pts[] = {{16.112f,19.200f},{16.317f,19.434f},{16.317f,26.927f},{16.112f,27.161f},{16.317f,27.395f},{16.317f,34.654f},{16.112f,34.888f},{15.293f,34.888f},{15.088f,34.654f},{13.859f,34.654f},{13.654f,34.420f},{9.556f,33.951f},{9.146f,33.483f},{9.146f,27.395f},{9.351f,27.161f},{9.146f,26.693f},{9.146f,20.605f},{9.556f,20.137f}}; store.AddPolygon(pts, ARRAYSIZE(pts)); }
@@ -15612,6 +15696,7 @@ public:
             showTick_ = GetTickCount64();
             Wh_Log(L"[StartMenu] Show: pos=(%ld,%ld) size=%dx%d anchorMethod=%d edge=%u", pt.x, pt.y, menuW, menuH, anchor.method, (unsigned)anchor.edge);
             visible_ = true;
+            UpdatePhotoWorker();
             visibleAnchorEdge_ = anchor.edge;
             visibleTaskbarHwnd_ = anchor.taskbarHwnd;
             visibleTaskbarRect_ = anchor.taskbarRect;
@@ -15660,6 +15745,7 @@ public:
     void Hide() {
         if (!visible_ || !hwnd_) return;
         GUARDED(L"Hide", {
+            photoSlideshow_.Stop();
             StopAllAppsArrowRepeat(true);
             KillTimer(hwnd_.get(), TIMER_LIVE_FLIP);
             KillTimer(hwnd_.get(), TIMER_LIVE_TICK);
@@ -15689,10 +15775,8 @@ public:
 
     void ApplySettings(const Settings& s) {
         bool photoEnable=Wh_GetIntSetting(L"photoSlideshow")!=0;
-        if(photoEnabled_!=photoEnable) {
-            photoEnabled_=photoEnable;
-            if(photoEnabled_) photoSlideshow_.Start(hwnd_.get()); else photoSlideshow_.Stop();
-        }
+        photoEnabled_=photoEnable;
+        UpdatePhotoWorker();
         const bool reenabledWeather = settingsApplied_ && !settings_.weatherOnline && s.weatherOnline;
         if (reenabledWeather) Wh_SetIntValue(L"skin81_weatherFallbackDismissed", 0);
         bool weatherChanged = settings_.weatherOnline != s.weatherOnline ||
@@ -15722,10 +15806,13 @@ public:
         // Apply a layout only on first creation (restore from storage) or when a
         // new layout was pasted into the tileLayout setting. Other settings
         // changes leave the user's current tile arrangement untouched.
+        if (!layoutApplied_ && ReadStorageString(L"skin81_startMenuLayout")==kTileLayoutFileMarker &&
+            ReadStoredTileLayout().empty()) layoutStorageBlocked_=true;
         if (!settings_.tileLayout.empty() && (!layoutApplied_ || settings_.tileLayoutImportPending)) {
             const bool importPending = settings_.tileLayoutImportPending;
             bool applied = layout_.Deserialize(settings_.tileLayout, catalog_);
             if (applied && importPending) {
+                layoutStorageBlocked_=false;
                 Wh_Log(L"[TileLayout] imported layout from the tileLayout setting");
                 RememberImportedTileLayout(settings_.tileLayout);
             } else if (!applied && importPending && !layoutApplied_) {
@@ -15733,12 +15820,17 @@ public:
                 // with the default layout. Restore the stored layout instead.
                 const std::wstring stored = ReadStoredTileLayout();
                 if (!stored.empty()) applied = layout_.Deserialize(stored, catalog_);
+                if (!applied && !ReadStorageString(L"skin81_startMenuLayout").empty()) layoutStorageBlocked_=true;
+                RememberImportedTileLayout(settings_.tileLayout);
                 if (applied) {
                     Wh_Log(L"[TileLayout] import was invalid; restored the saved layout");
                 }
                 settings_.tileLayoutImportPending = false;
             }
             if (!applied) {
+                if (!layoutApplied_ && !importPending && !ReadStorageString(L"skin81_startMenuLayout").empty())
+                    layoutStorageBlocked_=true;
+                if (importPending && layoutApplied_) RememberImportedTileLayout(settings_.tileLayout);
                 Wh_Log(L"[TileLayout] stored/imported layout could not be parsed; keeping current layout");
                 settings_.tileLayoutImportPending = false;
             }
@@ -15864,8 +15956,20 @@ public:
         }
     }
 
+    void UpdatePhotoWorker() {
+        bool pinned=false;
+        if (photoEnabled_ && visible_ && catalogReady_) {
+            for (const auto& group : layout_.groups) for (const auto& tile : group.tiles)
+                if (tile.available && _wcsicmp(tile.aumid.c_str(),
+                    L"Microsoft.Windows.Photos_8wekyb3d8bbwe!App")==0) pinned=true;
+        }
+        if (pinned && hwnd_) photoSlideshow_.Start(hwnd_.get());
+        else photoSlideshow_.Stop();
+    }
+
     void PersistTileLayout() {
-        if (!catalogReady_) return;
+        UpdatePhotoWorker();
+        if (!catalogReady_ || layoutStorageBlocked_) return;
         try {
             const std::wstring serialized = layout_.Serialize();
             if (serialized.empty() || serialized.size() > kMaxTileLayoutFileChars) {
@@ -16583,11 +16687,10 @@ private:
     static DWORD WINAPI WeatherWorker(void* arg) {
         auto* self=static_cast<StartMenuWindow*>(arg);
         try {
-        const std::wstring manualLat=self->weatherWorkerLatitude_, manualLon=self->weatherWorkerLongitude_;
+        std::wstring lat=self->weatherWorkerLatitude_, lon=self->weatherWorkerLongitude_;
+        bool located=!lat.empty() && !lon.empty();
         HANDLE stop=self->weatherStop_.get();
         while (WaitForSingleObject(stop,0)==WAIT_TIMEOUT) {
-            std::wstring lat=manualLat,lon=manualLon;
-            bool located=!lat.empty() && !lon.empty();
             if (!located && self->weatherWorkerIpLocation_) located=IpWeatherLocation(lat,lon);
             if (WaitForSingleObject(stop,0)!=WAIT_TIMEOUT) break;
             double temperature=0; int code=0;
@@ -16769,6 +16872,7 @@ private:
             layout_.RefreshInstalledApps(catalog_);
         }
         allAppsRowsDirty_ = true;
+        UpdatePhotoWorker();
         if (!searchQuery_.empty()) FilterSearch();
         ClearKeyboardFocus();
         keyboardTileGroup_ = keyboardTileIndex_ = -1;
@@ -16809,7 +16913,8 @@ private:
     RECT customResizeStartRect_{};
     bool hasUserSized_ = false;
     bool classRegistered_ = false;
-    bool layoutApplied_ = false;      // stored/imported layout applied once per window
+    bool layoutApplied_ = false;
+    bool layoutStorageBlocked_ = false;      // stored/imported layout applied once per window
     bool catalogRefreshPending_ = false; // refresh requested while the menu was open
     ULONGLONG lastCatalogScanTick_ = 0;
     HWND requestedTaskbar_ = nullptr; // taskbar whose Start button was clicked (0 = primary)
@@ -17088,8 +17193,8 @@ private:
                 }
                 break;
             }
-            case WM_APP+115:
-                if (visible_) { InvalidateRect(hwnd,nullptr,FALSE); SetTimer(hwnd,2015,16,nullptr); }
+            case kPhotoReadyMessage:
+                if (visible_) { InvalidateRect(hwnd,nullptr,FALSE); SetTimer(hwnd,kPhotoAnimationTimer,16,nullptr); }
                 return 0;
             case WM_APP_WEATHER_READY:
                 if (visible_) InvalidateRect(hwnd, nullptr, FALSE);
@@ -17398,11 +17503,11 @@ private:
                 return 0;
 
             case WM_TIMER:
-                if (wParam==2015) {
+                if (wParam==kPhotoAnimationTimer) {
                     static ULONGLONG started=0;
                     if (!started) started=GetTickCount64();
                     InvalidateRect(hwnd,nullptr,FALSE);
-                    if(GetTickCount64()-started>=450 || !visible_) {KillTimer(hwnd,2015);started=0;}
+                    if(GetTickCount64()-started>=450 || !visible_) {KillTimer(hwnd,kPhotoAnimationTimer);started=0;}
                     return 0;
                 }
                 if (wParam == TIMER_ALL_APPS_SCROLL_REPEAT) OnAllAppsArrowRepeatTimer();
@@ -21464,6 +21569,10 @@ static bool WaitForMainExplorerReady() {
             Wh_Log(L"[Init] desktop shell owner PID %u; discovered taskbar PID %u", shellPid, trayPid);
             return true;
         }
+        if (!g_isHybridTool && shellPid && shellPid != GetCurrentProcessId()) {
+            Wh_Log(L"[Init] desktop belongs to another Explorer process");
+            return false;
+        }
         if (shellPid != lastOwner) {
             Wh_Log(L"[Init] waiting for desktop shell owner (owner=%u this=%u)",shellPid,GetCurrentProcessId());
             lastOwner = shellPid;
@@ -21621,6 +21730,8 @@ BOOL Wh_ModInit() {
         if (!Wh_SetFunctionHook(entry,reinterpret_cast<void*>(HybridEntryPointHook),nullptr)) ExitProcess(1);
         return TRUE;
     }
+    const DWORD desktopOwner=DesktopShellOwnerPid();
+    if (desktopOwner && desktopOwner!=GetCurrentProcessId()) return FALSE;
     g_stopRequested=false;
     InstallNativeKeyboardStartHook();
     return TRUE;
@@ -21678,10 +21789,8 @@ void Wh_ModUninit() {
 // change needs a full reload because the 8.1 bridge owns a helper process.
 static bool g_selected81 = false;
 static bool Is81Selected() {
-    PCWSTR setting = Wh_GetStringSetting(L"menuSkin");
-    bool selected = setting && wcscmp(setting,L"win81") == 0;
-    if (setting) Wh_FreeStringSetting(setting);
-    return selected;
+    auto setting = WindhawkUtils::StringSetting::make(L"menuSkin");
+    return wcscmp(setting.get(),L"win81") == 0;
 }
 BOOL Wh_ModInit() {
     g_selected81=Is81Selected();
