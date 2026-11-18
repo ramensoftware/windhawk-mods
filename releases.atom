@@ -2,12 +2,46 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-18T02:00:09.000Z</updated>
+    <updated>2026-11-18T03:01:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer: No Help 1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-no-help#80cb448b9b93e1d9af4c234fdfdd9d393d6f555f</id>
+        <link href="https://windhawk.net/mods/explorer-no-help"/>
+        <updated>2026-11-18T03:01:35.000Z</updated>
+        <content type="html"><![CDATA[<h1>Explorer: No Help</h1>
+<p>For Windows 10 File Explorer (the ribbon one).</p>
+<p>Before:
+<img src="https://raw.githubusercontent.com/vt-idiot/windhawk-mods/refs/heads/reeeeeeeee/before.png" alt="Before"></p>
+<p>After:
+<img src="https://raw.githubusercontent.com/vt-idiot/windhawk-mods/refs/heads/reeeeeeeee/after.png" alt="After"></p>
+<ul>
+<li><strong>Hide Help button</strong>: Explorer's ribbon ships pre-compiled inside
+<code>SystemResources\ExplorerFrame.dll.mun</code> (resource <code>UIFILE/EXPLORER_RIBBON</code>).
+When the ribbon framework loads it, this mod hands back a patched copy with
+the <code>tabs_help</code> block (the <code>?</code> button) removed, the same result as if
+Microsoft had compiled the ribbon without a help button. Nothing on disk is
+touched.</li>
+<li><strong>Block F1</strong>: swallows bare F1 inside explorer.exe (folder windows, desktop,
+taskbar). Ctrl/Shift/Alt+F1 still go through, so Ctrl+F1 still collapses
+the ribbon. F1 in every other app is left alone.</li>
+</ul>
+<p>Restart Explorer after enabling the mod or toggling the Help button setting.
+The F1 setting takes effect immediately.</p>
+<p>If anything about the ribbon binary doesn't look exactly as expected, the
+patch bails out and logs why, and Explorer gets the original ribbon.</p>
+<p>Special thanks to d0gkiller87, whose <a href="https://windhawk.net/mods/f1-blocker">F1 Blocker</a>
+the F1 part copies, and to DarkShadow44’s reverse-engineering notes on UIRibbon.</p>
+]]></content>
+        <author>
+            <name>vt-idiot</name>
+            <uri>https://github.com/vt-idiot</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[AI Text Assistant (?fix, ?formal, ?emojify, ?undo) 2.4.0]]></title>
         <id>https://windhawk.net/mods/ai-inline-text-fixer#7476c81a7b59669ec34953c168b213bc782e60ac</id>
@@ -1178,67 +1212,6 @@ on disk.</li>
         <author>
             <name>DavidHiFi</name>
             <uri>https://github.com/DavidHiFi</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Compact RDP connection bar 3.0.0]]></title>
-        <id>https://windhawk.net/mods/compact-rdp-connection-bar#a0a4aa02a5463fd3ee74a5ddb2b6c2d89d8e27b6</id>
-        <link href="https://windhawk.net/mods/compact-rdp-connection-bar"/>
-        <updated>2026-11-14T04:04:48.000Z</updated>
-        <content type="html"><![CDATA[<h1>Compact RDP connection bar</h1>
-<p>Shrinks the top connection bar of Remote Desktop Connection (Ctrl+Alt+Home).</p>
-<p>The bar normally spans a large fixed width: a small button group on the left,
-the hostname in the middle, the window buttons on the right. This mod keeps the
-hostname zone, keeps the button groups, and drops the empty space between them.</p>
-<p>Works with any number of toolbars. A toolbar whose buttons are all hidden needs
-no width and is simply not given any, which is what happens once the pin and
-quality buttons are hidden.</p>
-<p>The right toolbar carries the window buttons - minimize, restore and close.
-Each can be hidden separately; hide all three and the bar shrinks to the
-hostname alone. A single remaining toolbar keeps the side it originally sat on,
-so hiding the window buttons does not move the pin group to the right.</p>
-<p>The quality indicator is a lock icon that mstsc only shows in some sessions.
-Ticking the setting when it is absent changes nothing, and the bar is laid out
-exactly as it would be without the setting.</p>
-<h2>Screenshots</h2>
-<table>
-<thead>
-<tr>
-<th>Before</th>
-<th>After</th>
-<th>After2</th>
-<th>After3</th>
-<th>After4</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/Before.png" alt="Original wide connection bar"></td>
-<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/After.png" alt="Compact bar, pin hidden"></td>
-<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/After2.png" alt="Compact bar, pin and quality hidden"></td>
-<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/After3.png" alt="Compact bar, pin, minimize and restore hidden"></td>
-<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/After4.png" alt="Compact bar, all buttons hidden, hostname only"></td>
-</tr>
-</tbody>
-</table>
-<h2>Settings</h2>
-<ul>
-<li><strong>Text area width</strong> - target width of the hostname zone, scaled for DPI.
-Raised automatically when the hostname needs more room.</li>
-<li><strong>Hide pin button</strong> - hides the pin (keep on top) button.</li>
-<li><strong>Hide quality button</strong> - hides the connection quality indicator.</li>
-<li><strong>Hide lock button</strong> - hides the lock icon mstsc shows next to the quality
-indicator. The button is only present in some sessions; when it is absent,
-nothing changes.</li>
-<li><strong>Hide minimize / restore / close</strong> - hide the window buttons on the
-right. Hiding the close button removes the only visible way to disconnect;
-the session can still be closed from the taskbar icon, or Ctrl+Alt+Break
-leaves full screen so the bar and the window controls come back.</li>
-</ul>
-]]></content>
-        <author>
-            <name>hsb5</name>
-            <uri>https://github.com/hsb5</uri>
         </author>
     </entry>
 </feed>
