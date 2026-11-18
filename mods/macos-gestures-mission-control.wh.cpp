@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              macos-gestures-mission-control
 // @name            macOS Gestures - Mission Control
-// @description     Mission Control for Windows: a three- or four-finger swipe up opens a live, animated overview of your windows that follows your fingers. Swipe down for App Exposé or to minimize, Win+Tab from the keyboard, left/right to switch apps.
+// @description     Windows Mission Control: three- or four-finger swipe up opens a live animated window overview. Swipe down shows current desktop windows or minimizes them. Win+Tab opens the overview, while left/right swipes switch apps like Alt+Tab.
 // @version         1.6.0
 // @author          Frixed
 // @github          https://github.com/frixed
@@ -26,12 +26,14 @@ on a precision touchpad opens a live, animated overview of all your windows; the
 **follows your fingers** the whole way, and springs into place when you let go. Swipe back
 down, press Esc, or pick a window to leave.
 
-* **Swipe down** while Mission Control is closed: App Exposé, every window of the current
-  desktop without the desktops bar. Swipe back up to leave. In the settings you can choose
-  instead that the swipe down **minimizes all the windows** of the current desktop (swipe
-  up afterwards to see them in Mission Control and bring one back).
+* **Swipe down** while Mission Control is closed: App Exposé, the windows of the app in
+  front, without the desktops bar (the settings can show every window of the current
+  desktop instead). Swipe back up to leave. The settings can also make the swipe down
+  **minimize all the windows** of the current desktop: a swipe up then brings them back,
+  as long as nothing else was opened or restored by hand in the meantime.
 * **Win+Tab** opens Mission Control from the keyboard (also without a touchpad), in place of
-  Windows' Task View. Win+Tab again, Esc or a pick closes it.
+  Windows' Task View, on the monitor of the window in front. Win+Tab again, Esc or a pick
+  closes it.
 
 ## What you get
 
@@ -148,9 +150,10 @@ If you enjoy using this mod and would like to support its development, you can m
   $description: How far the fingers travel to go from 0% to 100% (60 to 400). Lower = more sensitive.
 - swipeDown: appExpose
   $name: Swipe down (Mission Control closed)
-  $description: What a swipe down does while Mission Control is not on screen. Minimize hides every window of the current desktop, and a swipe up shows them again in Mission Control so you can pick one.
+  $description: What a swipe down does while Mission Control is not on screen. App Exposé shows only the windows of the app in front. All windows shows every window of the current desktop, without the desktops bar. Minimize hides every window of the current desktop, and a swipe up brings them back.
   $options:
-  - appExpose: App Exposé (windows of the current desktop)
+  - appExpose: App Exposé (windows of the app in front)
+  - allWindows: All windows of the current desktop
   - minimize: Minimize all windows
 - invertSwipe: false
   $name: Invert swipe direction
@@ -366,6 +369,12 @@ static float FADE_END_PROGRESS = 0.18f;    // ...and is fully there here
 
 constexpr UINT WM_APP_FRAME = WM_APP + 1;     // posted by the vsync clock thread
 constexpr UINT WM_APP_SETTINGS = WM_APP + 2;  // thread message: reload the settings
+// Window messages the keyboard hook thread posts to the overlay window. They go to
+// the window and not to the thread because a modal loop on the UI thread (the wait
+// of an outgoing COM call, say) dispatches thread messages to nobody and loses them.
+constexpr UINT WM_APP_WIN_TAB = WM_APP + 3;     // Win+Tab was pressed
+constexpr UINT WM_APP_ALT_TAB = WM_APP + 4;     // Alt+Tab in Mission Control (wParam 1 = forward)
+constexpr UINT WM_APP_ALT_COMMIT = WM_APP + 5;  // Alt let go after cycling with Alt+Tab
 
 // App icon centered under each tile. Drawn as DirectComposition visuals, so
 // moving and fading them costs nothing on the CPU side. Its fade is driven by
@@ -425,7 +434,7 @@ static bool DESKTOP_BAR = true;
 static int FINGER_COUNT = 3;          // fingers of the swipes (3 or 4)
 static std::atomic<bool> REPLACE_WIN_TAB{true};   // Win+Tab opens Mission Control (the keyboard hook thread reads it too)
 static std::atomic<int> ALT_TAB_MC_MODE{2};  // Alt+Tab while Mission Control is on screen: 0 = Windows handles it, 1 = ignored, 2 = cycles the selection (the hook thread reads it too)
-static bool SWIPE_DOWN_MINIMIZES = false;  // swipe down (Mission Control closed): minimize instead of App Exposé
+static int SWIPE_DOWN_MODE = 0;  // swipe down (Mission Control closed): 0 = App Exposé (windows of the app in front), 1 = all windows, 2 = minimize all windows
 // A swipe down that minimizes fires once the fingers travelled this share of
 // GESTURE_DISTANCE (so the "Swipe distance" setting also tunes this one).
 constexpr float MINIMIZE_TRIGGER_FRACTION = 0.35f;
@@ -548,6 +557,22 @@ struct Tile {
 
 static std::vector<Tile> g_tiles;
 static HWND g_overlay = nullptr;
+
+// Timer of the desktops bar animation. SetTimer with an ID that is still running
+// restarts its countdown, so asking for it on every mouse move of a card drag
+// kept it from ever firing: only set it when it isn't running.
+static bool g_barTimerSet = false;
+static void StartBarTimer() {
+    if (g_overlay && !g_barTimerSet) {
+        g_barTimerSet = SetTimer(g_overlay, BAR_TIMER_ID, 15, nullptr) != 0;
+    }
+}
+static void StopBarTimer() {
+    if (g_overlay) {
+        KillTimer(g_overlay, BAR_TIMER_ID);
+    }
+    g_barTimerSet = false;
+}
 static HBRUSH g_backdropBrush = nullptr;
 static bool g_classRegistered = false;
 static bool g_micaOk = false;  // true when a blurred backdrop was applied
@@ -574,6 +599,7 @@ static bool g_dragging = false;  // the fingers are currently driving it
 // App Exposé: opened with a swipe DOWN, shows the windows without the desktops
 // bar, and the swipe direction is reversed (up closes it). Until the overlay hides.
 static bool g_exposeMode = false;
+static bool g_exposeAppOnly = false;  // App Exposé lists only the windows of the app that was in front
 static float g_progress = 0.0f;  // 0 = windows in place, 1 = grid
 static float g_target = 0.0f;
 static float g_dragBase = 0.0f;
@@ -614,6 +640,10 @@ static bool g_eventsSeen = false;     // touchpad events have arrived since the 
 static bool g_reduceMotion = false;   // Windows "Animation effects" are off
 static double g_lastHideMs = -1.0e9;  // when the overlay was last hidden
 static int g_kbSel = -1;              // tile selected with the keyboard
+static bool g_openFromKeyboard = false;  // Win+Tab: open on the monitor of the window in front, not the cursor's
+static std::vector<HWND> g_swipeMinimized;  // windows the last "minimize all" swipe minimized, bottom to top
+static bool g_altCycleActive = false; // Alt+Tab is cycling the selection (Alt still held)
+static POINT g_altMouseAnchor{};      // where the cursor was (client coordinates) when it started
 static POINT g_lastMouse{ -1, -1 };
 static bool g_hoverClose = false;     // mouse is over the close button
 static bool g_relayoutActive = false; // grid gliding to a new layout
@@ -866,7 +896,11 @@ static UINT MonitorDpi(HMONITOR mon) {
 struct EnumCtx {
     RECT work;
     std::vector<HWND> hwnds;
+    bool noCap = false;                    // list every window, not just the ones that fit in the grid
+    const std::wstring* appKey = nullptr;  // only the windows of this app (App Exposé)
 };
+
+static bool GetAppKey(HWND hwnd, std::wstring& key);
 
 // Click-through / fully transparent overlays (GPU overlays, widgets...).
 static bool IsInvisibleLayered(HWND hwnd, LONG_PTR ex) {
@@ -1076,8 +1110,15 @@ static BOOL CALLBACK EnumProc(HWND hwnd, LPARAM lp) {
         return TRUE;
     }
 
+    if (ctx->appKey) {
+        std::wstring key;
+        if (!GetAppKey(hwnd, key) || key != *ctx->appKey) {
+            return TRUE;
+        }
+    }
+
     ctx->hwnds.push_back(hwnd);
-    return ctx->hwnds.size() < MAX_TILES;  // FALSE stops the enumeration
+    return ctx->noCap || ctx->hwnds.size() < MAX_TILES;  // FALSE stops the enumeration
 }
 
 static float Smooth01(float t) {
@@ -2004,6 +2045,21 @@ static bool GetAumidForWindow(HWND hwnd, std::wstring& out) {
         return false;
     }
     out = id;
+    return true;
+}
+
+// What "the same app" means for App Exposé: the AppUserModelID of a packaged app
+// (all its frames are hosted by ApplicationFrameHost), otherwise the executable.
+static bool GetAppKey(HWND hwnd, std::wstring& key) {
+    if (GetAumidForWindow(hwnd, key)) {
+        return true;
+    }
+    wchar_t path[MAX_PATH * 2] = {};
+    if (!GetWindowExePath(hwnd, path, static_cast<DWORD>(ARRAYSIZE(path)))) {
+        return false;
+    }
+    CharLowerW(path);
+    key = path;
     return true;
 }
 
@@ -3482,8 +3538,8 @@ static void SetBarHover(int idx) {
             changed = true;
         }
     }
-    if (changed && g_overlay) {
-        SetTimer(g_overlay, BAR_TIMER_ID, 15, nullptr);
+    if (changed) {
+        StartBarTimer();
     }
 }
 
@@ -3517,8 +3573,8 @@ static void StepBarHover() {
     if (g_dcDevice) {
         g_dcDevice->Commit();
     }
-    if (!moving && g_overlay) {
-        KillTimer(g_overlay, BAR_TIMER_ID);
+    if (!moving) {
+        StopBarTimer();
     }
 }
 
@@ -3609,7 +3665,19 @@ static void BuildTiles() {
     g_relayoutT = 1.0f;
 
     EnumCtx ctx{ g_workRect, {} };
+    std::wstring appKey;
+    if (g_exposeMode && g_exposeAppOnly && g_prevForeground) {
+        HWND root = GetAncestor(g_prevForeground, GA_ROOTOWNER);
+        if (GetAppKey(root ? root : g_prevForeground, appKey)) {
+            ctx.appKey = &appKey;
+        }
+    }
     EnumWindows(EnumProc, reinterpret_cast<LPARAM>(&ctx));
+    if (ctx.appKey && ctx.hwnds.empty()) {
+        // Nothing of that app on this desktop (you were on the desktop, say): show everything.
+        ctx.appKey = nullptr;
+        EnumWindows(EnumProc, reinterpret_cast<LPARAM>(&ctx));
+    }
 
     // EnumWindows returns top-most first. Minimized windows go after the
     // normal ones: they are "behind" everything and end up last in the grid.
@@ -4899,11 +4967,23 @@ static void ApplyBackdropStyle(bool wallpaper) {
 
 static void ShowOverlay() {
     UpdateReducedMotion();
+    g_swipeMinimized.clear();  // you're in Mission Control now: that "undo" is gone
 
     POINT pt{};
     GetCursorPos(&pt);
 
-    HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    HMONITOR mon = nullptr;
+    if (g_openFromKeyboard) {
+        // From the keyboard the cursor says nothing about where you are working:
+        // use the monitor of the window in front.
+        if (HWND fg = GetForegroundWindow()) {
+            mon = MonitorFromWindow(fg, MONITOR_DEFAULTTONULL);
+        }
+        g_openFromKeyboard = false;
+    }
+    if (!mon) {
+        mon = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    }
     MONITORINFO mi{};
     mi.cbSize = sizeof(mi);
     GetMonitorInfoW(mon, &mi);
@@ -5053,7 +5133,7 @@ static void HideOverlay(bool restoreFocus = false) {
 
     if (g_overlay) {
         KillTimer(g_overlay, RENDER_TIMER_ID);
-        KillTimer(g_overlay, BAR_TIMER_ID);
+        StopBarTimer();
         if (g_pendingCloses.empty()) {
             KillTimer(g_overlay, CLOSE_POLL_TIMER_ID);
         }
@@ -5575,6 +5655,20 @@ static void SelectTile(int idx) {
     ShowHighlight(r);
 }
 
+// The tile of the window you were in when Mission Control opened, or -1.
+static int PrevForegroundTile() {
+    if (!g_prevForeground) {
+        return -1;
+    }
+    HWND root = GetAncestor(g_prevForeground, GA_ROOTOWNER);
+    for (int i = 0; i < static_cast<int>(g_tiles.size()); i++) {
+        if (g_tiles[i].hwnd == g_prevForeground || g_tiles[i].hwnd == root) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 // Arrow keys: the nearest tile in that direction (rows count less than distance).
 static void MoveSelection(int dx, int dy) {
     const int n = static_cast<int>(g_tiles.size());
@@ -5584,17 +5678,7 @@ static void MoveSelection(int dx, int dy) {
 
     if (g_kbSel < 0 || g_kbSel >= n) {
         // First key press: start from the window you were in.
-        int start = 0;
-        if (g_prevForeground) {
-            HWND root = GetAncestor(g_prevForeground, GA_ROOTOWNER);
-            for (int i = 0; i < n; i++) {
-                if (g_tiles[i].hwnd == g_prevForeground || g_tiles[i].hwnd == root) {
-                    start = i;
-                    break;
-                }
-            }
-        }
-        SelectTile(start);
+        SelectTile(std::max(0, PrevForegroundTile()));
         return;
     }
 
@@ -5775,7 +5859,7 @@ static void UpdateCardPress(int x, int y) {
     if (g_dcDevice) {
         g_dcDevice->Commit();
     }
-    SetTimer(g_overlay, BAR_TIMER_ID, 15, nullptr);
+    StartBarTimer();
 }
 
 // The button was let go (or the press was cancelled).
@@ -5845,7 +5929,7 @@ static void EndCardPress(bool cancel) {
     if (g_dcDevice) {
         g_dcDevice->Commit();
     }
-    SetTimer(g_overlay, BAR_TIMER_ID, 15, nullptr);
+    StartBarTimer();
 }
 
 static void HandleClick(int x, int y) {
@@ -5902,8 +5986,21 @@ static void DrawEmptyMessage(HDC dc, HWND hwnd) {
     DeleteObject(font);
 }
 
+static void ToggleFromKeyboard();
+static void OnAltTabInMc(bool forward);
+static void OnAltReleaseInMc();
+
 static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
+        case WM_APP_WIN_TAB:
+            ToggleFromKeyboard();
+            return 0;
+        case WM_APP_ALT_TAB:
+            OnAltTabInMc(wp != 0);
+            return 0;
+        case WM_APP_ALT_COMMIT:
+            OnAltReleaseInMc();
+            return 0;
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC dc = BeginPaint(hwnd, &ps);
@@ -6011,6 +6108,15 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 // spurious WM_MOUSEMOVE doesn't override a keyboard selection.
                 const POINT mp{ static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp)) };
                 if (std::abs(mp.x - g_lastMouse.x) + std::abs(mp.y - g_lastMouse.y) >= 3) {
+                    if (g_altCycleActive) {
+                        // Cycling with Alt+Tab: a nudge of the touchpad while typing
+                        // must not drop the selection; a real move hands over to the mouse.
+                        if (std::abs(mp.x - g_altMouseAnchor.x) +
+                                std::abs(mp.y - g_altMouseAnchor.y) < 16) {
+                            return 0;
+                        }
+                        g_altCycleActive = false;
+                    }
                     g_lastMouse = mp;
                     g_kbSel = -1;
                     UpdateHover(mp.x, mp.y);
@@ -6154,6 +6260,7 @@ static void DestroyOverlayWindow() {
     if (g_overlay) {
         DestroyWindow(g_overlay);
         g_overlay = nullptr;
+        g_barTimerSet = false;
     }
     FreeOverlayClass();
 }
@@ -6287,6 +6394,7 @@ static bool g_altHeld = false;   // we are holding Alt down
 static bool g_altSwipe = false;  // this horizontal swipe is driving Alt+Tab
 static float g_altAccX = 0.0f;   // travel since the last Alt+Tab step
 static bool g_minimizeSwipe = false;  // this vertical swipe is a "minimize all windows" one
+static bool g_restoreSwipe = false;   // ...or the swipe up that brings those windows back
 static float g_minimizeAccY = 0.0f;   // downward travel of that swipe
 static bool g_minimizeDone = false;   // it already fired, once per swipe
 
@@ -6339,6 +6447,7 @@ static void EndSwipe() {
     g_axisAccX = 0.0f;
     g_axisAccY = 0.0f;
     g_minimizeSwipe = false;
+    g_restoreSwipe = false;
     g_minimizeAccY = 0.0f;
     g_minimizeDone = false;
 }
@@ -6390,33 +6499,85 @@ static bool IsFullscreenAppActive() {
 
 // Swipe down with "Minimize all windows": minimizes what Mission Control would
 // have listed (same filters, current virtual desktop), on every monitor.
-static void MinimizeAllWindows() {
+static std::vector<HWND> ListAllWindows() {
     const int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
     const int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
     EnumCtx ctx;
+    ctx.noCap = true;  // all of them, not only the first MAX_TILES
     ctx.work = RECT{ vx, vy, vx + GetSystemMetrics(SM_CXVIRTUALSCREEN),
                      vy + GetSystemMetrics(SM_CYVIRTUALSCREEN) };
     EnumWindows(EnumProc, reinterpret_cast<LPARAM>(&ctx));
+    return ctx.hwnds;  // top to bottom
+}
 
-    // EnumWindows goes top to bottom. Minimizing from the bottom up keeps
-    // Windows from activating (and animating) the next window after each one.
+static void MinimizeAllWindows() {
+    const std::vector<HWND> list = ListAllWindows();
+
+    // Minimizing from the bottom up keeps Windows from activating (and animating)
+    // the next window after each one. The order is kept to bring them back.
+    g_swipeMinimized.clear();
     int count = 0;
-    for (auto it = ctx.hwnds.rbegin(); it != ctx.hwnds.rend(); ++it) {
+    for (auto it = list.rbegin(); it != list.rend(); ++it) {
         HWND h = *it;
         if (IsIconic(h) || !(GetWindowLongPtrW(h, GWL_STYLE) & WS_MINIMIZEBOX)) {
             continue;
         }
         ShowWindowAsync(h, SW_MINIMIZE);
+        g_swipeMinimized.push_back(h);
         count++;
     }
     Wh_Log(L"Swipe down: minimizing %d window(s).", count);
 }
 
+// The undo of a minimize-all swipe, like Windows' own Show desktop: it only
+// stands while every window that swipe minimized is still there and still
+// minimized, and nothing else has come on screen since.
+static bool CanRestoreMinimized() {
+    g_swipeMinimized.erase(std::remove_if(g_swipeMinimized.begin(), g_swipeMinimized.end(),
+                                          [](HWND h) { return !IsWindow(h); }),
+                           g_swipeMinimized.end());
+    if (g_swipeMinimized.empty()) {
+        return false;
+    }
+    for (HWND h : g_swipeMinimized) {
+        if (!IsIconic(h)) {  // one was brought back by hand: the undo is stale
+            g_swipeMinimized.clear();
+            return false;
+        }
+    }
+    for (HWND h : ListAllWindows()) {
+        // Windows without a minimize button were never minimized, so they don't count.
+        if (!IsIconic(h) && (GetWindowLongPtrW(h, GWL_STYLE) & WS_MINIMIZEBOX)) {
+            g_swipeMinimized.clear();  // something else is on screen now
+            return false;
+        }
+    }
+    return true;
+}
+
+static void RestoreMinimizedWindows() {
+    if (!CanRestoreMinimized()) {
+        return;
+    }
+    // Bottom to top, as they were minimized: the window that was on top ends up
+    // on top, and active.
+    for (HWND h : g_swipeMinimized) {
+        ShowWindowAsync(h, SW_RESTORE);
+    }
+    Wh_Log(L"Swipe up: bringing back %d window(s).", static_cast<int>(g_swipeMinimized.size()));
+    g_swipeMinimized.clear();
+}
+
 static void OnMinimizeDelta(float dy) {
-    g_minimizeAccY += INVERT_Y ? -dy : dy;  // positive = the fingers go down
+    const float down = INVERT_Y ? -dy : dy;  // positive = the fingers go down
+    g_minimizeAccY += g_restoreSwipe ? -down : down;
     if (!g_minimizeDone && g_minimizeAccY >= GESTURE_DISTANCE * MINIMIZE_TRIGGER_FRACTION) {
         g_minimizeDone = true;
-        MinimizeAllWindows();
+        if (g_restoreSwipe) {
+            RestoreMinimizedWindows();
+        } else {
+            MinimizeAllWindows();
+        }
     }
 }
 
@@ -6462,14 +6623,18 @@ static void OnSwipeDelta(float dx, float dy) {
             // Closed: up opens Mission Control, down opens App Exposé or
             // minimizes the windows, depending on the setting.
             const bool down = (INVERT_Y ? -g_axisAccY : g_axisAccY) > 0.0f;
-            if (down && SWIPE_DOWN_MINIMIZES) {
+            if (SWIPE_DOWN_MODE == 2 && (down || CanRestoreMinimized())) {
+                // A one-shot action instead of the interactive animation: down
+                // minimizes, up (while that left windows minimized) brings them back.
                 g_minimizeSwipe = true;
+                g_restoreSwipe = !down;
                 g_minimizeAccY = 0.0f;
                 g_minimizeDone = false;
                 OnMinimizeDelta(g_axisAccY);  // replay what was collected
                 return;
             }
             g_exposeMode = down;
+            g_exposeAppOnly = down && SWIPE_DOWN_MODE == 0;
         }
         OnGestureDelta(g_axisAccY);  // replay what was collected
         return;
@@ -6714,9 +6879,6 @@ static void EnsureControllerConfig(bool& controllerReady) {
 // is busy rendering) swallows Win+Tab and asks the UI thread to open or close.
 // ---------------------------------------------------------------------------
 
-constexpr UINT WM_APP_WIN_TAB = WM_APP + 3;  // thread message: Win+Tab was pressed
-constexpr UINT WM_APP_ALT_TAB = WM_APP + 4;     // thread message: Alt+Tab in Mission Control (wParam 1 = forward)
-constexpr UINT WM_APP_ALT_COMMIT = WM_APP + 5;  // thread message: Alt let go after cycling with Alt+Tab
 
 static HANDLE g_hookThread = nullptr;
 static DWORD g_hookThreadId = 0;
@@ -6741,6 +6903,15 @@ static void MaskWinKey() {
     SendInput(2, in, sizeof(INPUT));
 }
 
+// The overlay window exists whenever the hook runs: the hook starts after
+// CreateOverlayWindow and stops before DestroyOverlayWindow.
+static void PostToOverlay(UINT msg, WPARAM wp) {
+    HWND overlay = g_overlay;
+    if (overlay) {
+        PostMessageW(overlay, msg, wp, 0);
+    }
+}
+
 static LRESULT CALLBACK WinTabHookProc(int code, WPARAM wp, LPARAM lp) {
     if (code == HC_ACTION) {
         const auto* k = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lp);
@@ -6750,7 +6921,7 @@ static LRESULT CALLBACK WinTabHookProc(int code, WPARAM wp, LPARAM lp) {
             (k->vkCode == VK_LMENU || k->vkCode == VK_RMENU || k->vkCode == VK_MENU) &&
             (wp == WM_KEYUP || wp == WM_SYSKEYUP)) {
             g_altCycling = false;
-            PostThreadMessageW(g_threadId, WM_APP_ALT_COMMIT, 0, 0);
+            PostToOverlay(WM_APP_ALT_COMMIT, 0);
         }
         if (k->vkCode == VK_TAB && !(k->flags & LLKHF_INJECTED)) {
             const bool down = (wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN);
@@ -6760,7 +6931,7 @@ static LRESULT CALLBACK WinTabHookProc(int code, WPARAM wp, LPARAM lp) {
                     if (!g_winTabDown) {  // the key repeat doesn't toggle again
                         g_winTabDown = true;
                         MaskWinKey();
-                        PostThreadMessageW(g_threadId, WM_APP_WIN_TAB, 0, 0);
+                        PostToOverlay(WM_APP_WIN_TAB, 0);
                     }
                     return 1;
                 }
@@ -6775,8 +6946,7 @@ static LRESULT CALLBACK WinTabHookProc(int code, WPARAM wp, LPARAM lp) {
                     }
                     if (ALT_TAB_MC_MODE == 2) {
                         g_altCycling = true;  // the key repeat keeps cycling, like Windows
-                        PostThreadMessageW(g_threadId, WM_APP_ALT_TAB,
-                                           KeyHeld(VK_SHIFT) ? 0 : 1, 0);
+                        PostToOverlay(WM_APP_ALT_TAB, KeyHeld(VK_SHIFT) ? 0 : 1);
                     }
                     return 1;
                 }
@@ -6875,6 +7045,7 @@ static void ToggleFromKeyboard() {
     g_closeTarget = nullptr;
     g_restoreIssued = false;
     g_progress = 0.0f;
+    g_openFromKeyboard = true;
     ShowOverlay();
     g_open = true;
     SetClickThrough(false);
@@ -6883,14 +7054,26 @@ static void ToggleFromKeyboard() {
 
 // Alt+Tab inside Mission Control / App Exposé: moves the selection like Tab does
 // (Shift = backwards). As in Windows' own switcher the first press goes to the
-// NEXT window: the tiles are in z-order, so tile 0 is the one you were in.
+// window after the one you were in. The tiles follow z-order but always-on-top
+// windows sort first, so that window's tile is looked up, not assumed to be 0.
 static void OnAltTabInMc(bool forward) {
     if (!g_visible || !g_open || g_dragging) {
         return;
     }
     const int n = static_cast<int>(g_tiles.size());
-    if (forward && (g_kbSel < 0 || g_kbSel >= n) && n > 1) {
-        SelectTile(1);
+    if (n == 0) {
+        return;
+    }
+    if (!g_altCycleActive) {
+        g_altCycleActive = true;  // small mouse nudges no longer cancel the selection
+        POINT p{};
+        GetCursorPos(&p);
+        ScreenToClient(g_overlay, &p);
+        g_altMouseAnchor = p;
+    }
+    if (g_kbSel < 0 || g_kbSel >= n) {
+        const int cur = std::max(0, PrevForegroundTile());
+        SelectTile((cur + (forward ? 1 : -1) + n) % n);
         return;
     }
     CycleSelection(forward ? 1 : -1);
@@ -6898,6 +7081,7 @@ static void OnAltTabInMc(bool forward) {
 
 // Alt let go after cycling: pick the selected window, like Windows' switcher.
 static void OnAltReleaseInMc() {
+    g_altCycleActive = false;
     if (!g_visible || !g_open || g_dragging || g_kbSel < 0) {
         return;
     }
@@ -7102,18 +7286,6 @@ DWORD WINAPI TouchpadThreadProc(void*) {
                     Wh_Log(L"Settings reloaded.");
                     continue;
                 }
-                if (msg.message == WM_APP_WIN_TAB) {
-                    ToggleFromKeyboard();
-                    continue;
-                }
-                if (msg.message == WM_APP_ALT_TAB) {
-                    OnAltTabInMc(msg.wParam != 0);
-                    continue;
-                }
-                if (msg.message == WM_APP_ALT_COMMIT) {
-                    OnAltReleaseInMc();
-                    continue;
-                }
             }
 
             TranslateMessage(&msg);
@@ -7197,8 +7369,11 @@ static void LoadSettings() {
         PCWSTR m = altTab.get();
         ALT_TAB_MC_MODE = !wcscmp(m, L"windows") ? 0 : (!wcscmp(m, L"block") ? 1 : 2);
     }
-    SWIPE_DOWN_MINIMIZES =
-        wcscmp(WindhawkUtils::StringSetting::make(L"swipeDown").get(), L"minimize") == 0;
+    {
+        const auto swipeDown = WindhawkUtils::StringSetting::make(L"swipeDown");
+        PCWSTR m = swipeDown.get();
+        SWIPE_DOWN_MODE = !wcscmp(m, L"minimize") ? 2 : (!wcscmp(m, L"allWindows") ? 1 : 0);
+    }
     KEYBOARD_SUPPORT = Wh_GetIntSetting(L"keyboardSupport") != 0;
     DISABLE_IN_FULLSCREEN = Wh_GetIntSetting(L"disableInFullscreen") != 0;
     RESPECT_REDUCED_MOTION = Wh_GetIntSetting(L"respectReducedMotion") != 0;
