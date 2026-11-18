@@ -16,7 +16,7 @@
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -luser32 -lmsimg32 -lshell32 -ladvapi32 -lole32 -ld2d1 -ldwrite -ldwmapi -lgdiplus -luuid -lshlwapi -lwtsapi32 -lpowrprof -lshcore -lcomctl32
+// @compilerOptions -lgdi32 -luser32 -lmsimg32 -lshell32 -ladvapi32 -lole32 -ld2d1 -ldwrite -ldwmapi -lgdiplus -luuid -lshlwapi -lwtsapi32 -lpowrprof -lshcore -lcomctl32 -lwinhttp
 // ==/WindhawkMod==
 //
 // ==WindhawkModReadme==
@@ -31,7 +31,13 @@ This mod recreates the Windows 8.1 Start Screen on Windows 10 and Windows 11.
 The reconstructed Metro icons are used for recognized Microsoft apps. The app search also includes
 separate Weather, Calendar and Clock tiles that can be pinned again after removal. They open the
 corresponding Microsoft web pages. Calendar can alternate between its icon and the local date;
-Clock shows the local time. The Weather tile currently shows its icon only, not live weather.
+Clock shows the local time. Online Weather is off by default. If enabled, Open-Meteo receives
+coordinates and the public IP every 30 minutes even while Start is closed. Users can enter both
+coordinates or separately enable approximate IP location via ipwho.is, which receives the public
+IP. IP lookup retries every five minutes until successful; forecast failures retry every 30 minutes.
+Privacy mode hides only the label, not the data sent to the services. If coordinates and IP
+location are unavailable, no forecast request is made. In-flight requests may delay shutdown until
+their timeouts. Data: Open-Meteo.com, CC BY 4.0; the free API is for non-commercial use.
 Photos can optionally show JPG and PNG files directly from the local Pictures folder while Start
 is open and Photos is pinned. Images are not uploaded; decoding runs on a worker thread and stopping
 can wait for it. These are simulated features, not notifications read from other apps.
@@ -273,6 +279,35 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $description:es: "Esta configuración define mosaicos personalizados. Los cambios recargan la mod. Cada mosaico debe tener nombre, destino y color #RRGGBB. Las imágenes deben ser locales y no superar 8 MiB."
   $description:fr: "Ce paramètre définit des vignettes personnalisées. Les modifications rechargent le mod. Chaque vignette doit avoir un nom, une cible et une couleur #RRGGBB. Les images doivent être locales et ne pas dépasser 8 Mio."
   $description:pt: "Esta configuração define blocos personalizados. As alterações recarregam a mod. Cada bloco deve ter nome, destino e cor #RRGGBB. As imagens devem ser locais e não ultrapassar 8 MiB."
+- weatherOnline: false
+  $name: "Online Weather (Open-Meteo)"
+  $name:it: "Meteo online (Open-Meteo)"
+  $description: "Enable online weather. Provide both coordinates or separately enable IP location. Open-Meteo receives your IP and coordinates every 30 minutes even when Start is closed. Its free API is for non-commercial use."
+  $description:it: "Attiva il meteo online. Inserisci entrambe le coordinate oppure attiva separatamente la posizione via IP. Open-Meteo riceve IP e coordinate ogni 30 minuti anche a Start chiuso. L'API gratuita è per uso non commerciale."
+- weatherIpLocation: false
+  #! $showIf: {weatherOnline: true}
+  $name: "Approximate location from IP (ipwho.is)"
+  $name:it: "Posizione approssimativa tramite IP (ipwho.is)"
+  $description: "Allow ipwho.is to receive your IP and estimate a location when coordinates are not supplied. VPNs can reduce accuracy."
+  $description:it: "Consente a ipwho.is di ricevere l'IP e stimare la posizione quando non sono inserite le coordinate. Una VPN può ridurre la precisione."
+- weatherLocationName: ""
+  #! $showIf: {weatherOnline: true}
+  $name: "Weather location label"
+  $name:it: "Nome località Meteo"
+  $description: "Optional display label, not sent to the weather service. Privacy mode hides it, not the location sent to the service."
+  $description:it: "Nome facoltativo mostrato, non inviato al servizio meteo. La privacy nasconde il nome, non la posizione inviata al servizio."
+- weatherLatitude: ""
+  #! $showIf: {weatherOnline: true}
+  $name: "Latitude (decimal degrees)"
+  $name:it: "Latitudine (gradi decimali)"
+  $description: "Enter a decimal number using a dot, for example 41.90. Both coordinates override IP location."
+  $description:it: "Inserisci un numero decimale con il punto, per esempio 41.90. Entrambe le coordinate prevalgono sulla posizione via IP."
+- weatherLongitude: ""
+  #! $showIf: {weatherOnline: true}
+  $name: "Longitude (decimal degrees)"
+  $name:it: "Longitudine (gradi decimali)"
+  $description: "Enter a decimal number using a dot, for example 12.50."
+  $description:it: "Inserisci un numero decimale con il punto, per esempio 12.50."
 - photoSlideshow: false
   $name: "Photos tile: local slideshow"
   $name:it: "Riquadro Foto: presentazione locale"
@@ -656,6 +691,7 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
 #include <exception>
 #include <atomic>
 #include <mutex>
+#include <winhttp.h>
 #include <unordered_map>
 #include <memory>
 #include <optional>
@@ -3885,6 +3921,336 @@ static bool IsPhotoTile(const Tile& t) {
 static void UpdatePhotoWorker();
 static void RefreshPhotoSurfaces();
 
+// Weather network code adapted from Windows 8.1/10 Start Menu Recreation (GPL-3.0).
+class ScreenWeather {
+    HANDLE stop_ = NULL, thread_ = NULL;
+    HWND owner_ = NULL;
+    std::wstring latitude_, longitude_, label_;
+    bool ipLocation_ = false;
+    std::mutex mutex_;
+    double temperature_ = 0;
+    int code_ = 0;
+    ULONGLONG updated_ = 0;
+    // Restrict input to literal ASCII decimal coordinates; never treat it as URL text.
+    static bool ParseCoordinate(const std::wstring& text, double limit, double& value) {
+        if (text.empty() || text.size() > 20) return false;
+        size_t i = text[0] == L'-' ? 1 : 0;
+        bool digit = false, dot = false; double n = 0, fraction = 0.1;
+        for (; i < text.size(); ++i) {
+            wchar_t c = text[i];
+            if (c == L'.' && !dot) { dot = true; continue; }
+            if (c < L'0' || c > L'9') return false;
+            digit = true;
+            if (dot) { n += (c-L'0')*fraction; fraction *= 0.1; }
+            else n = n*10 + (c-L'0');
+            if (n > limit) return false;
+        }
+        if (!digit) return false;
+        value = text[0] == L'-' ? -n : n;
+        return true;
+    }
+    // Coordinates are rounded to roughly city scale, formatted without depending on locale.
+    static std::wstring FormatWeatherCoordinate(double value) {
+        bool negative = value < 0;
+        unsigned long long n = static_cast<unsigned long long>(fabs(value)*10000.0 + 0.5);
+        wchar_t out[32]{};
+        swprintf_s(out, ARRAYSIZE(out), L"%ls%llu.%04llu", negative ? L"-" : L"", n/10000, n%10000);
+        return out;
+    }
+    static const wchar_t* PrivateWeatherLabel() {
+        switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
+            case LANG_ITALIAN: return L"Mondo";
+            case LANG_SPANISH: return L"Mundo";
+            case LANG_PORTUGUESE: return L"Mundo";
+            case LANG_FRENCH: return L"Monde";
+            case LANG_GERMAN: return L"Welt";
+            default: return L"World";
+        }
+    }
+    static bool WeatherNumber(const std::string& json, const char* key, double& out) {
+        std::string needle = std::string("\"") + key + "\"";
+        size_t pos = json.find(needle);
+        if (pos == std::string::npos || (pos = json.find(':', pos + needle.size())) == std::string::npos) return false;
+        ++pos; while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\n')) ++pos;
+        bool negative = pos < json.size() && json[pos] == '-'; if (negative) ++pos;
+        bool digit = false, dot = false; double n=0, fraction=0.1;
+        for (; pos < json.size(); ++pos) {
+            char c=json[pos];
+            if (c == '.' && !dot) { dot=true; continue; }
+            if (c < '0' || c > '9') break;
+            digit=true;
+            if (dot) { n+=(c-'0')*fraction; fraction*=0.1; } else n=n*10+(c-'0');
+            if (n > 10000) return false;
+        }
+        if (!digit || pos == json.size() || (json[pos] != ',' && json[pos] != '}' && json[pos] != ' ' && json[pos] != '\n')) return false;
+        out = negative ? -n : n; return true;
+    }
+    static bool IpWeatherLocation(std::wstring& lat,std::wstring& lon) {
+        HINTERNET session=WinHttpOpen(L"Win81StartWeather/1.0",WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0);
+        if (!session) return false;
+        WinHttpSetTimeouts(session,3000,3000,3000,3000);
+        HINTERNET conn=WinHttpConnect(session,L"ipwho.is",INTERNET_DEFAULT_HTTPS_PORT,0);
+        HINTERNET req=conn ? WinHttpOpenRequest(conn,L"GET",L"/",nullptr,WINHTTP_NO_REFERER,WINHTTP_DEFAULT_ACCEPT_TYPES,WINHTTP_FLAG_SECURE) : nullptr;
+        bool ok=false;
+        if (req) {
+            DWORD disable=WINHTTP_DISABLE_REDIRECTS;
+            if (WinHttpSetOption(req,WINHTTP_OPTION_DISABLE_FEATURE,&disable,sizeof(disable)) &&
+                WinHttpSendRequest(req,WINHTTP_NO_ADDITIONAL_HEADERS,0,WINHTTP_NO_REQUEST_DATA,0,0,0) && WinHttpReceiveResponse(req,nullptr)) {
+                DWORD status=0,n=sizeof(status);
+                if (WinHttpQueryHeaders(req,WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER,WINHTTP_HEADER_NAME_BY_INDEX,&status,&n,WINHTTP_NO_HEADER_INDEX) && status==200) {
+                    std::string body; char buf[1024];DWORD read=0;bool complete=true;
+                    do { if (!WinHttpReadData(req,buf,sizeof(buf),&read) || body.size()+read>16384) {complete=false;break;} body.append(buf,read); } while(read);
+                    double la=0,lo=0;
+                    size_t k=body.find("\"success\"");size_t c=k==std::string::npos ? k : body.find(':',k+9);
+                    if (c!=std::string::npos) {++c;while(c<body.size() && (body[c]==' ' || body[c]=='\n' || body[c]=='\r' || body[c]=='\t'))++c;}
+                    if (complete && c!=std::string::npos && body.compare(c,4,"true")==0 &&
+                        c+4<body.size() && (body[c+4]==',' || body[c+4]=='}' || body[c+4]==' ') &&
+                        WeatherNumber(body,"latitude",la) && WeatherNumber(body,"longitude",lo) &&
+                        la>=-90 && la<=90 && lo>=-180 && lo<=180) {
+                        lat=FormatWeatherCoordinate(la);lon=FormatWeatherCoordinate(lo);ok=true;
+                    }
+                }
+            }
+            WinHttpCloseHandle(req);
+        }
+        if(conn)WinHttpCloseHandle(conn);WinHttpCloseHandle(session);return ok;
+    }
+    static bool FetchWeather(const std::wstring& lat, const std::wstring& lon, double& temp, int& code) {
+        HINTERNET session=WinHttpOpen(L"Win81StartWeather/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                     WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+        if (!session) return false;
+        WinHttpSetTimeouts(session, 3000, 3000, 3000, 3000);
+        HINTERNET conn=WinHttpConnect(session,L"api.open-meteo.com",INTERNET_DEFAULT_HTTPS_PORT,0);
+        std::wstring path=L"/v1/forecast?latitude="+lat+L"&longitude="+lon+
+            L"&current=temperature_2m,weather_code&forecast_days=1";
+        HINTERNET req=conn ? WinHttpOpenRequest(conn,L"GET",path.c_str(),nullptr,WINHTTP_NO_REFERER,
+                                                WINHTTP_DEFAULT_ACCEPT_TYPES,WINHTTP_FLAG_SECURE) : nullptr;
+        bool ok=false;
+        if (req) {
+            DWORD disable=WINHTTP_DISABLE_REDIRECTS;
+            if (WinHttpSetOption(req,WINHTTP_OPTION_DISABLE_FEATURE,&disable,sizeof(disable)) &&
+                WinHttpSendRequest(req,WINHTTP_NO_ADDITIONAL_HEADERS,0,WINHTTP_NO_REQUEST_DATA,0,0,0) &&
+                WinHttpReceiveResponse(req,nullptr)) {
+                DWORD status=0, statusSize=sizeof(status);
+                if (WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                                        WINHTTP_HEADER_NAME_BY_INDEX, &status, &statusSize, WINHTTP_NO_HEADER_INDEX) && status==200) {
+                    std::string body; char buf[1024]; DWORD read=0; bool complete=true;
+                    do {
+                        if (!WinHttpReadData(req,buf,sizeof(buf),&read)) { complete=false; break; }
+                        if (body.size()+read > 32768) { complete=false; break; }
+                        body.append(buf,read);
+                    } while (read);
+                    // Search only inside the current object, not current_units.
+                    size_t current=body.find("\"current\":{");
+                    if (complete && current!=std::string::npos) {
+                        size_t end=body.find('}',current);
+                        if (end!=std::string::npos) {
+                            std::string obj=body.substr(current,end-current+1); double c=0;
+                            if (WeatherNumber(obj,"temperature_2m",temp) && temp>=-100 && temp<=70 &&
+                                WeatherNumber(obj,"weather_code",c) && c>=0 && c<=99 && c==(int)c) {
+                                code=(int)c; ok=true;
+                            }
+                        }
+                    }
+                }
+            }
+            WinHttpCloseHandle(req);
+        }
+        if (conn) WinHttpCloseHandle(conn);
+        WinHttpCloseHandle(session);
+        return ok;
+    }
+
+    static DWORD WINAPI Worker(void* raw) {
+        auto* self = static_cast<ScreenWeather*>(raw);
+        try {
+            std::wstring lat = self->latitude_, lon = self->longitude_;
+            bool located = !lat.empty() && !lon.empty();
+            while (WaitForSingleObject(self->stop_, 0) == WAIT_TIMEOUT) {
+                if (!located && self->ipLocation_) located = IpWeatherLocation(lat, lon);
+                if (WaitForSingleObject(self->stop_, 0) != WAIT_TIMEOUT) break;
+                double temperature = 0;
+                int code = 0;
+                bool ok = located && FetchWeather(lat, lon, temperature, code);
+                if (WaitForSingleObject(self->stop_, 0) != WAIT_TIMEOUT) break;
+                if (ok) {
+                    {
+                        std::lock_guard<std::mutex> lock(self->mutex_);
+                        self->temperature_ = temperature;
+                        self->code_ = code;
+                        self->updated_ = GetTickCount64();
+                    }
+                    Wh_Log(L"[Weather] current data received successfully");
+                    if (self->owner_) PostMessageW(self->owner_, WM_APP + 21, 0, 0);
+                } else if (located) Wh_Log(L"[Weather] forecast request failed; retry in 30 minutes");
+                const DWORD delay = located ? 30 * 60 * 1000 : 5 * 60 * 1000;
+                if (WaitForSingleObject(self->stop_, delay) != WAIT_TIMEOUT) break;
+            }
+        } catch (...) {
+            Wh_Log(L"[Weather] worker failed");
+        }
+        return 0;
+    }
+public:
+    void Start(HWND owner) {
+        if (!owner || !Wh_GetIntSetting(L"weatherOnline")) return;
+        WindhawkUtils::StringSetting lat(WindhawkUtils::StringSetting::make(L"weatherLatitude"));
+        WindhawkUtils::StringSetting lon(WindhawkUtils::StringSetting::make(L"weatherLongitude"));
+        WindhawkUtils::StringSetting label(WindhawkUtils::StringSetting::make(L"weatherLocationName"));
+        latitude_ = lat.get(); longitude_ = lon.get(); label_ = label.get();
+        if (label_.size() > 80) label_.resize(80);
+        const bool manual = !latitude_.empty() && !longitude_.empty();
+        double la = 0, lo = 0;
+        if (manual && (!ParseCoordinate(latitude_, 90, la) || !ParseCoordinate(longitude_, 180, lo))) {
+            Wh_Log(L"[Weather] invalid coordinates; no request sent");
+            return;
+        }
+        ipLocation_ = !manual && Wh_GetIntSetting(L"weatherIpLocation") != 0;
+        if (!manual && !ipLocation_) {
+            Wh_Log(L"[Weather] no coordinates; IP location is disabled");
+            return;
+        }
+        if (!manual) { latitude_.clear(); longitude_.clear(); }
+        owner_ = owner;
+        stop_ = CreateEventW(NULL, TRUE, FALSE, NULL);
+        if (stop_) thread_ = CreateThread(NULL, 0, Worker, this, 0, NULL);
+        if (stop_ && !thread_) { CloseHandle(stop_); stop_ = NULL; }
+    }
+    void Stop() {
+        if (stop_) SetEvent(stop_);
+        if (thread_) { WaitForSingleObject(thread_, INFINITE); CloseHandle(thread_); thread_ = NULL; }
+        if (stop_) { CloseHandle(stop_); stop_ = NULL; }
+        std::lock_guard<std::mutex> lock(mutex_);
+        updated_ = 0;
+        owner_ = NULL;
+    }
+    bool Current(double& temperature, int& code) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!updated_ || GetTickCount64() - updated_ > 3ull * 60 * 60 * 1000) return false;
+        temperature = temperature_;
+        code = code_;
+        return true;
+    }
+    const wchar_t* Label() const {
+        return InterlockedCompareExchange(&g_privacyMode, 0, 0) ? PrivateWeatherLabel() : label_.c_str();
+    }
+};
+static ScreenWeather g_weather;
+static bool IsWeatherTile(const Tile& t) {
+    if (!t.alive || t.customTile || !t.target) return false;
+    const wchar_t* id = t.target;
+    const wchar_t* prefix = L"shell:AppsFolder\\";
+    if (!_wcsnicmp(id, prefix, wcslen(prefix))) id += wcslen(prefix);
+    return !_wcsicmp(id, L"windhawk:weather-tile-v1") ||
+           !_wcsicmp(id, L"Microsoft.BingWeather_8wekyb3d8bbwe!App");
+}
+
+static int GetUiLanguageIndex() {
+    switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
+        case 0x10: return 0; // Italian
+        case 0x09: return 1; // English
+        case 0x0A: return 2; // Spanish
+        case 0x0C: return 3; // French
+        case 0x29: return 4; // Persian
+        case 0x01: return 5; // Arabic
+        case 0x16: return 6; // Portuguese
+        case 0x04: return 7; // Chinese
+        case 0x11: return 8; // Japanese
+        case 0x15: return 9; // Polish
+        case 0x19: return 10; // Russian
+        default: return 1;
+    }
+}
+
+// Descriptions derived from Open-Meteo's WMO weather codes, not an API text.
+// Intensity is intentionally omitted when several WMO codes share a label.
+static int WeatherKind(int code) {
+    switch (code) {
+    case 0:return 0; case 1:return 1; case 2:return 2; case 3:return 3;
+    case 45:return 4; case 48:return 5;
+    case 51:case 53:case 55:return 6; case 56:case 57:return 7;
+    case 61:case 63:case 65:return 8; case 66:case 67:return 9;
+    case 71:case 73:case 75:return 10; case 77:return 11;
+    case 80:case 81:case 82:return 12; case 85:case 86:return 13;
+    case 95:case 97:return 14; case 96:case 99:return 15;
+    default:return 16;
+    }
+}
+static const wchar_t* WeatherDescription(int code) {
+    static const wchar_t* const names[][11] = {
+        {L"Sereno", L"Clear sky", L"Despejado", L"Ciel dégagé", L"آسمان صاف", L"سماء صافية", L"Céu limpo", L"晴朗", L"快晴", L"Bezchmurnie", L"Ясно"},
+        {L"Prevalentemente sereno", L"Mainly clear", L"Mayormente despejado", L"Généralement dégagé", L"عمدتاً صاف", L"صحو غالباً", L"Predominantemente limpo", L"大部晴朗", L"おおむね晴れ", L"Przeważnie bezchmurnie", L"Преимущественно ясно"},
+        {L"Parzialmente nuvoloso", L"Partly cloudy", L"Parcialmente nublado", L"Partiellement nuageux", L"نیمه ابری", L"غائم جزئياً", L"Parcialmente nublado", L"局部多云", L"所により曇り", L"Częściowe zachmurzenie", L"Переменная облачность"},
+        {L"Coperto", L"Overcast", L"Cubierto", L"Couvert", L"ابری", L"غائم", L"Encoberto", L"阴天", L"曇り", L"Pochmurno", L"Пасмурно"},
+        {L"Nebbia", L"Fog", L"Niebla", L"Brouillard", L"مه", L"ضباب", L"Nevoeiro", L"雾", L"霧", L"Mgła", L"Туман"},
+        {L"Nebbia con brina", L"Rime fog", L"Niebla con escarcha", L"Brouillard givrant", L"مه یخ\u200Cزده", L"ضباب متجمد", L"Nevoeiro com geada", L"雾凇", L"着氷性の霧", L"Mgła osadzająca szadź", L"Туман с инеем"},
+        {L"Pioviggine", L"Drizzle", L"Llovizna", L"Bruine", L"نم\u200Cنم باران", L"رذاذ", L"Chuvisco", L"毛毛雨", L"霧雨", L"Mżawka", L"Морось"},
+        {L"Pioviggine gelata", L"Freezing drizzle", L"Llovizna helada", L"Bruine verglaçante", L"نم\u200Cنم باران یخ\u200Cزده", L"رذاذ متجمد", L"Chuvisco gelado", L"冻毛毛雨", L"着氷性の霧雨", L"Marznąca mżawka", L"Ледяная морось"},
+        {L"Pioggia", L"Rain", L"Lluvia", L"Pluie", L"باران", L"مطر", L"Chuva", L"雨", L"雨", L"Deszcz", L"Дождь"},
+        {L"Pioggia gelata", L"Freezing rain", L"Lluvia helada", L"Pluie verglaçante", L"باران یخ\u200Cزده", L"مطر متجمد", L"Chuva gelada", L"冻雨", L"着氷性の雨", L"Marznący deszcz", L"Ледяной дождь"},
+        {L"Neve", L"Snow", L"Nieve", L"Neige", L"برف", L"ثلج", L"Neve", L"雪", L"雪", L"Śnieg", L"Снег"},
+        {L"Nevischio granuloso", L"Snow grains", L"Granos de nieve", L"Grains de neige", L"دانه\u200Cهای برف", L"حبيبات ثلج", L"Grãos de neve", L"米雪", L"霧雪", L"Ziarna śnieżne", L"Снежные зёрна"},
+        {L"Rovesci di pioggia", L"Rain showers", L"Chubascos", L"Averses de pluie", L"رگبار باران", L"زخات مطر", L"Aguaceiros", L"阵雨", L"にわか雨", L"Przelotne opady deszczu", L"Ливневый дождь"},
+        {L"Rovesci di neve", L"Snow showers", L"Chubascos de nieve", L"Averses de neige", L"رگبار برف", L"زخات ثلج", L"Aguaceiros de neve", L"阵雪", L"にわか雪", L"Przelotne opady śniegu", L"Снегопад"},
+        {L"Temporale", L"Thunderstorm", L"Tormenta", L"Orage", L"رعدوبرق", L"عاصفة رعدية", L"Trovoada", L"雷暴", L"雷雨", L"Burza", L"Гроза"},
+        {L"Temporale con grandine", L"Thunderstorm with hail", L"Tormenta con granizo", L"Orage avec grêle", L"رعدوبرق با تگرگ", L"عاصفة رعدية مع بَرَد", L"Trovoada com granizo", L"雷暴伴冰雹", L"ひょうを伴う雷雨", L"Burza z gradem", L"Гроза с градом"},
+        {L"Condizioni sconosciute", L"Unknown conditions", L"Condiciones desconocidas", L"Conditions inconnues", L"وضعیت نامشخص", L"حالة غير معروفة", L"Condições desconhecidas", L"天气状况未知", L"天候不明", L"Nieznane warunki", L"Неизвестные условия"},
+    };
+    return names[WeatherKind(code)][GetUiLanguageIndex()];
+}
+// Original vector sun, based on the shape and proportions in the reference.
+static void DrawWeatherLogo(HDC dc, const RECT& rc) {
+    if (!g_gdipToken || rc.right<=rc.left || rc.bottom<=rc.top) return;
+    Gdiplus::Graphics g(dc); if (g.GetLastStatus()!=Gdiplus::Ok) return;
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.TranslateTransform((Gdiplus::REAL)rc.left,(Gdiplus::REAL)rc.top);
+    g.ScaleTransform((rc.right-rc.left)/64.0f,(rc.bottom-rc.top)/64.0f);
+    Gdiplus::SolidBrush white(Gdiplus::Color(255,255,255,255));
+    Gdiplus::Pen ray(Gdiplus::Color(255,255,255,255),3.5f);
+    ray.SetStartCap(Gdiplus::LineCapRound); ray.SetEndCap(Gdiplus::LineCapRound);
+    g.FillEllipse(&white,16.0f,16.0f,32.0f,32.0f);
+    for (int i=0;i<12;++i) {
+        const double angle=i*3.14159265358979323846/6.0;
+        float dx=(float)cos(angle), dy=(float)sin(angle);
+        g.DrawLine(&ray,32.0f+dx*21.0f,32.0f+dy*21.0f,32.0f+dx*27.5f,32.0f+dy*27.5f);
+    }
+}
+
+// Original GDI+ vector art, inspired by the flat Weather tile, not Microsoft assets.
+static void DrawWeatherPicture(HDC dc, int code, const RECT& rc) {
+    if (!g_gdipToken || rc.right<=rc.left || rc.bottom<=rc.top) return;
+    Gdiplus::Graphics g(dc); if (g.GetLastStatus()!=Gdiplus::Ok) return;
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.TranslateTransform((Gdiplus::REAL)rc.left,(Gdiplus::REAL)rc.top);
+    g.ScaleTransform((rc.right-rc.left)/48.0f,(rc.bottom-rc.top)/48.0f);
+    Gdiplus::Pen pen(Gdiplus::Color(255,255,255,255),2.0f);
+    Gdiplus::SolidBrush white(Gdiplus::Color(255,255,255,255));
+    const int k=WeatherKind(code);
+    if (k<=2) {
+        g.DrawEllipse(&pen,9.0f,4.0f,16.0f,16.0f);
+        g.DrawLine(&pen,17.0f,0.0f,17.0f,3.0f);
+        g.DrawLine(&pen,4.0f,4.0f,7.0f,7.0f);
+        g.DrawLine(&pen,27.0f,4.0f,30.0f,7.0f);
+        g.DrawLine(&pen,1.0f,12.0f,6.0f,12.0f);
+        g.DrawLine(&pen,28.0f,12.0f,33.0f,12.0f);
+    }
+    if (k>=2 && k<=15) {
+        g.FillEllipse(&white,5.0f,18.0f,16.0f,13.0f);
+        g.FillEllipse(&white,13.0f,12.0f,20.0f,20.0f);
+        g.FillEllipse(&white,27.0f,19.0f,16.0f,12.0f);
+        g.FillRectangle(&white,12.0f,24.0f,25.0f,7.0f);
+    }
+    if ((k>=6 && k<=9) || k==12)
+        for (int i=0;i<3;++i) g.DrawLine(&pen,12.0f+i*10,35.0f,9.0f+i*10,43.0f);
+    if (k==10 || k==11 || k==13)
+        for (int i=0;i<3;++i) { float x=10.0f+i*12;
+            g.DrawLine(&pen,x,34.0f,x,44.0f); g.DrawLine(&pen,x-4,39.0f,x+4,39.0f);
+            g.DrawLine(&pen,x-3,36.0f,x+3,42.0f); g.DrawLine(&pen,x+3,36.0f,x-3,42.0f); }
+    if (k==14 || k==15) { Gdiplus::PointF bolt[]={{25,30},{18,39},{24,39},{20,47},{33,35},{26,35}}; g.FillPolygon(&white,bolt,6); }
+    if (k==4 || k==5) { g.DrawLine(&pen,6.0f,36.0f,38.0f,36.0f); g.DrawLine(&pen,11.0f,42.0f,42.0f,42.0f); }
+    if (k==16) { g.DrawEllipse(&pen,15.0f,10.0f,18.0f,18.0f); g.DrawLine(&pen,24.0f,28.0f,24.0f,35.0f); }
+}
+
 static bool IsCalendarLiveTile(const Tile& t) {
     if (!InterlockedCompareExchange(&g_calendarSlide, 0, 0) || !t.alive || t.customTile ||
         t.cw == TS_SMALL || !t.target) return false;
@@ -4758,6 +5124,44 @@ static void BuildOneTile(int i, HDC screenDC) {
                 if (hover) DrawTileHover(tdc,w,h);
                 continue;
             }
+        }
+        double weatherTemperature = 0;
+        int weatherCode = 0;
+        if (IsWeatherTile(t) && g_weather.Current(weatherTemperature, weatherCode)) {
+            const int pad = ScI(8);
+            wchar_t temperature[32] = {};
+            swprintf_s(temperature, ARRAYSIZE(temperature), L"%.0f°", weatherTemperature);
+            SetBkMode(tdc, TRANSPARENT);
+            SetTextColor(tdc, RGB(255,255,255));
+            if (t.cw == TS_SMALL) {
+                SelectObject(tdc, g_fLabel);
+                RECT temp = {pad, pad, w-pad, h-pad};
+                DrawTextW(tdc, temperature, -1, &temp, DT_LEFT|DT_TOP|DT_SINGLELINE|DT_END_ELLIPSIS);
+            } else {
+                const bool wide = t.cw == TS_WIDE;
+                const int side = std::min(ScI(wide ? 64 : 48), std::max(1, std::min(w/2-pad*2, h-ScI(42))));
+                RECT icon = wide ? RECT{pad,pad,pad+side,pad+side} : RECT{w-pad-side,pad,w-pad,pad+side};
+                DrawWeatherPicture(tdc, weatherCode, icon);
+                RECT text = wide ? RECT{icon.right+pad,pad,w-pad,h-ScI(27)} : RECT{pad,pad,icon.left-2,h-ScI(27)};
+                HFONT font = CreateFontW(-ScI(30),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI Light");
+                HGDIOBJ oldFont = SelectObject(tdc, font ? font : g_fLabel);
+                DrawTextW(tdc,temperature,-1,&text,DT_LEFT|DT_TOP|DT_SINGLELINE|DT_END_ELLIPSIS);
+                SelectObject(tdc, g_fLabelMedium ? g_fLabelMedium : g_fLabel);
+                text.top += ScI(wide ? 34 : 48);
+                if (!wide) text.right = w-pad;
+                const wchar_t* label = g_weather.Label();
+                if (label && *label && text.top < text.bottom) {
+                    DrawTextW(tdc,label,-1,&text,DT_LEFT|DT_TOP|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+                    text.top += ScI(16);
+                }
+                if (text.top < text.bottom)
+                    DrawTextW(tdc,WeatherDescription(weatherCode),-1,&text,DT_LEFT|DT_TOP|DT_WORDBREAK|DT_END_ELLIPSIS);
+                SelectObject(tdc, oldFont);
+                if (font) DeleteObject(font);
+                DrawModernTileCaption(tdc,t.label,w,h);
+            }
+            if (hover) DrawTileHover(tdc,w,h);
+            continue;
         }
         if (!t.customTile && t.target && (t.style == PINNED_APP || IsLocalInfoTile(t.target))) {
             const bool small = t.cw == TS_SMALL;
@@ -13190,6 +13594,19 @@ static void Tick() {
     if (dt > 0.1f) dt = 0.1f;
     g_lastTick = now;
     bool changed = false;
+    if (g_open && !g_closing) {
+        static bool wasWeatherFresh = false;
+        double weatherTemperature = 0;
+        int weatherCode = 0;
+        bool fresh = g_weather.Current(weatherTemperature, weatherCode);
+        if (fresh != wasWeatherFresh) {
+            wasWeatherFresh = fresh;
+            for (int i = 0; i < g_tileCount; ++i) {
+                if (IsWeatherTile(g_tiles[i])) RebuildTile(i);
+            }
+            changed = true;
+        }
+    }
     if (g_photoAnimationTick && g_open && !g_closing) {
         RefreshPhotoSurfaces(); changed = true;
         if ((DWORD)(now-g_photoAnimationTick) >= 450) g_photoAnimationTick = 0;
@@ -13479,6 +13896,10 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             ApplyPackageArtChanges();
         }
         if (g_dirty && IsWindowVisible(h)) UpdateWindow(h);
+        return 0;
+    case WM_APP + 21:
+        for (int i = 0; i < g_tileCount; ++i) if (IsWeatherTile(g_tiles[i])) RebuildTile(i);
+        RepaintNow();
         return 0;
     case WM_APP + 20:
         if (g_open && InterlockedCompareExchange(&g_photoEnabled,0,0)) {
@@ -14645,6 +15066,13 @@ static std::vector<std::wstring> CustomTileSnapshot() {
     std::vector<std::wstring> snapshot;
     for (const auto& cfg : ReadCustomTiles())
         for (const auto& field : cfg.fields) snapshot.push_back(field);
+    snapshot.push_back(Wh_GetIntSetting(L"weatherOnline") ? L"1" : L"0");
+    snapshot.push_back(Wh_GetIntSetting(L"weatherIpLocation") ? L"1" : L"0");
+    snapshot.push_back(Wh_GetIntSetting(L"privacyMode") ? L"1" : L"0");
+    for (const wchar_t* key : {L"weatherLatitude", L"weatherLongitude", L"weatherLocationName"}) {
+        WindhawkUtils::StringSetting value(WindhawkUtils::StringSetting::make(key));
+        snapshot.push_back(value.get());
+    }
     return snapshot;
 }
 static SRWLOCK g_customSnapshotLock = SRWLOCK_INIT;
@@ -14795,6 +15223,7 @@ static void UiRun() {
     Relayout(false);
     g_wnd = CreateTopWindow(g_sw, g_sh);
     if (g_wnd) BuildBuffers();
+    if (g_wnd) g_weather.Start(g_wnd);
     if (g_wnd && InterlockedCompareExchange(&g_openAtLogon, 0, 0) != 0) {
         g_logonStop = CreateEventW(NULL, TRUE, FALSE, NULL);
         if (g_logonStop) g_logonThread = CreateThread(NULL, 0, LogonOpenThread, NULL, 0, NULL);
@@ -14837,6 +15266,7 @@ static void UiRun() {
 }
 
 static void UiTeardown() {
+    g_weather.Stop();
     g_photoSlideshow.Stop();
     if (g_logonStop) SetEvent(g_logonStop);
     if (g_logonThread) { WaitForSingleObject(g_logonThread, INFINITE); CloseHandle(g_logonThread); g_logonThread = NULL; }
