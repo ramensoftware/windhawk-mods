@@ -134,7 +134,11 @@ Turning the mod off puts the taskbar back to normal.
   - Each tile gets a soft shadow.
 
   Tiles appear a few seconds after the mod starts, once the taskbar has
-  finished loading its icons.
+  finished loading its icons. If the taskbar never lets an icon be drawn,
+  its tile is made from the app's icon as Start shows it.
+- **Still icons** (off by default). Windows bounces an app's icon as its
+  windows open, close, minimize or are restored. Turn on "Keep Icons Still"
+  to stop that.
 
 ## File Explorer, Start and the Recycle Bin
 
@@ -284,8 +288,8 @@ apply right away.
   padding, the brightness limit behind it, and a shadow under its text and
   icons.
 - **Dock Items:** hiding Start, keeping File Explorer first, the Recycle Bin,
-  high resolution icons, tooltips, activity indicators, window previews,
-  dividers, and squircle icons and their tile color.
+  high resolution icons, tooltips, activity indicators, keeping icons still,
+  window previews, dividers, and squircle icons and their tile color.
 - **Custom Icons:** your own File Explorer, Start and Recycle Bin icons, and
   their margins.
 - **Hot Corners:** what each bottom corner does.
@@ -481,6 +485,9 @@ Apple's curve.
     - hybrid: Hybrid Dots
     - windows: Windows 11 Style
     - none: None
+  - keepIconsStill: false
+    $name: Keep Icons Still
+    $description: Turns off the bounce Windows gives an app's icon as it opens, closes, minimizes or is restored. (Default = Disabled)
   - previews: false
     $name: See Window Previews
     $description: Shows window previews on hover. (Default = Disabled)
@@ -586,6 +593,7 @@ Apple's curve.
 #include <gdiplus.h>
 #include <shcore.h>
 #include <shlobj.h>
+#include <shobjidl.h>
 #include <wincodec.h>
 
 #include <algorithm>
@@ -718,6 +726,7 @@ struct Settings {
     bool dividerBeforeTrash;
     std::vector<int> customDividers;  // after these icons, counted from 1; sorted
     bool squircleIcons;
+    bool keepIconsStill;  // no bounce as apps open, close, minimize or are restored
     TileColor tileColor;
     uint8_t tileCustomColor[3];
     CustomIcon customFinder, customStart, customTrash;
@@ -889,6 +898,7 @@ void LoadSettings() {
     s.customDividers.erase(std::unique(s.customDividers.begin(), s.customDividers.end()),
                            s.customDividers.end());
     s.squircleIcons = Wh_GetIntSetting(L"dockItems.squircleIcons");
+    s.keepIconsStill = Wh_GetIntSetting(L"dockItems.keepIconsStill");
     s.tileColor = (TileColor)ChoiceSetting(
         L"dockItems.squircleColor",
         {L"alwaysLight", L"preferLight", L"auto", L"preferDark", L"alwaysDark", L"custom"}, 2);
@@ -2490,6 +2500,61 @@ wuxc::Border AddDivider(wuxc::Panel const& panel, wux::UIElement const& row) {
 
 enum class IconLook { Stock, Finder, Squircle };
 
+// What a bitmap loaded from, if it's a file or an address; empty otherwise.
+std::wstring UriText(wuxm::ImageSource const& source) {
+    auto bitmap = source ? source.try_as<wuxm::Imaging::BitmapImage>() : nullptr;
+    auto uri = bitmap ? bitmap.UriSource() : nullptr;
+    return uri ? std::wstring(uri.AbsoluteUri()) : std::wstring();
+}
+
+// Calls `changed` when the taskbar loads another icon into a bitmap it already
+// has, as it can when an app's windows open or close, without setting it on
+// the Image again: as it opens (decoded), or as its file or address changes.
+class StockWatch {
+public:
+    StockWatch() = default;
+    StockWatch(StockWatch const&) = delete;
+    StockWatch& operator=(StockWatch const&) = delete;
+    ~StockWatch() { Stop(); }
+
+    void Watch(wuxm::ImageSource const& source, std::function<void(wf::IInspectable const&)> changed) {
+        Stop();
+        auto bitmap = source ? source.try_as<wuxm::Imaging::BitmapImage>() : nullptr;
+        if (!bitmap) return;
+        bitmap_ = winrt::make_weak(bitmap);
+        opened_ = bitmap.ImageOpened(
+            winrt::auto_revoke,
+            [changed](wf::IInspectable const& sender, wux::RoutedEventArgs const&) {
+                if (!g_unloading) changed(sender);
+            });
+        uriToken_ = bitmap.RegisterPropertyChangedCallback(
+            wuxm::Imaging::BitmapImage::UriSourceProperty(),
+            [changed](wux::DependencyObject const& sender, wux::DependencyProperty const&) {
+                if (!g_unloading) changed(sender);
+            });
+    }
+
+    void Stop() {
+        opened_.revoke();
+        if (uriToken_) {
+            if (auto bitmap = bitmap_.get()) {
+                try {
+                    bitmap.UnregisterPropertyChangedCallback(
+                        wuxm::Imaging::BitmapImage::UriSourceProperty(), uriToken_);
+                } catch (...) {
+                }
+            }
+        }
+        uriToken_ = 0;
+        bitmap_ = nullptr;
+    }
+
+private:
+    winrt::weak_ref<wuxm::Imaging::BitmapImage> bitmap_;
+    wuxm::Imaging::BitmapImage::ImageOpened_revoker opened_;
+    int64_t uriToken_ = 0;
+};
+
 struct IconSwap {
     winrt::weak_ref<wuxc::Image> image;
     winrt::weak_ref<wux::FrameworkElement> button;
@@ -2499,8 +2564,13 @@ struct IconSwap {
     wuxm::ScaleTransform transform{nullptr};  // the mod's, while a replacement shows
     wf::IAsyncInfo render{nullptr};           // drawing the icon to make a tile from
     bool rendering = false;
-    bool retry = false;  // drawn again on the retry timer
+    int generation = 0;  // up when a drawing in progress is of an icon since replaced
+    bool retry = false;  // drawn again on the retry timer, at `retryAt`
+    std::chrono::steady_clock::time_point retryAt{};
     int retries = 0;
+    bool renderParent = false;  // drawing the icon alone was refused: what holds it is drawn
+    std::wstring tileUri;       // what the taskbar's icon loaded from, as its tile was made
+    StockWatch watch;           // the taskbar's icon, loading anew
 };
 
 [[clang::no_destroy]] std::list<IconSwap> g_iconSwaps;
@@ -2553,6 +2623,16 @@ void ApplyIconScale(wux::FrameworkElement const& el) {
 void RequestSquircle(IconSwap& s, wuxc::Image const& image);
 wuxm::ImageSource CachedSquircle(wuxm::ImageSource const& stock);
 void NoteIconChange();
+void OnStockChanged(wf::IInspectable const& sender);
+
+// Only tiles are made from the taskbar's icon, so only they need to know when
+// it changes in place.
+void WatchStock(IconSwap& s) {
+    if (s.look != IconLook::Squircle) return s.watch.Stop();
+    s.watch.Watch(s.stock, [](wf::IInspectable const& sender) {
+        Try([&] { OnStockChanged(sender); }, L"Squircle icon");
+    });
+}
 
 void ShowSwap(IconSwap& s, wuxc::Image const& image) {
     auto source = s.shown ? s.shown : s.stock;
@@ -2563,7 +2643,10 @@ void ShowSwap(IconSwap& s, wuxc::Image const& image) {
 
 void UpdateSwap(IconSwap& s, wuxc::Image const& image) {
     if (s.look == IconLook::Finder) s.shown = FinderIconSource(image);
-    if (s.look == IconLook::Squircle && !s.shown) s.shown = CachedSquircle(s.stock);
+    if (s.look == IconLook::Squircle && !s.shown) {
+        s.shown = CachedSquircle(s.stock);
+        if (s.shown) s.tileUri = UriText(s.stock);
+    }
     ShowSwap(s, image);
     if (s.look == IconLook::Squircle && !s.shown) RequestSquircle(s, image);
 }
@@ -2583,6 +2666,8 @@ void OnIconSourceChanged(wux::FrameworkElement const& el) {
     s->look = button ? LookFor(button) : IconLook::Stock;
     s->shown = nullptr;
     s->retries = 0;
+    s->renderParent = false;
+    WatchStock(*s);
     UpdateSwap(*s, image);
 }
 
@@ -2617,6 +2702,8 @@ void UpdateAppIcon(wux::FrameworkElement const& el, wux::FrameworkElement const&
         s->look = look;
         s->shown = nullptr;
         s->retries = 0;
+        s->renderParent = false;
+        WatchStock(*s);
     }
     UpdateSwap(*s, image);
 }
@@ -2804,7 +2891,9 @@ constexpr float kTileShadowOpacity = 0.3f;
 constexpr std::array<Color, 2> kLightTile{{{255, 0xFF, 0xFF, 0xFF}, {255, 0xE9, 0xE9, 0xEE}}};
 constexpr std::array<Color, 2> kDarkTile{{{255, 0x4A, 0x4A, 0x4E}, {255, 0x1F, 0x1F, 0x22}}};
 constexpr float kCustomTileShade = 0.08f;    // a custom tile's bottom, darker than its top
-constexpr int kSquircleRetries = 30;         // while the icon isn't laid out or drawn yet
+constexpr int kSquircleRetries = 30;         // while the icon isn't laid out or drawn yet,
+constexpr int kSquircleSlowRetries = 30;     // then these, as with a button that arrives late
+constexpr auto kSquircleSlowRetryDelay = std::chrono::milliseconds(1000);
 constexpr size_t kSquircleCacheSize = 64;
 
 ULONG_PTR g_gdiplus = 0;
@@ -3002,13 +3091,46 @@ IconPixels MakeSquircleIcon(std::vector<BYTE> source, int w, int h) {
     return out;
 }
 
-[[clang::no_destroy]] std::list<std::pair<wuxm::ImageSource, wuxm::ImageSource>> g_squircleCache;
+// Tiles by the taskbar's icon they were made from. The taskbar can load another
+// icon into one it has, so each is also by what it loaded from, and forgotten
+// when it loads anew (see StockWatch).
+struct CachedTile {
+    wuxm::ImageSource icon{nullptr};
+    std::wstring uri;
+    wuxm::ImageSource tile{nullptr};
+    bool stale = false;
+    StockWatch watch;
+};
+
+[[clang::no_destroy]] std::list<CachedTile> g_squircleCache;
+
+// `icon` loaded anew, from `uri`: its tiles are out of date, unless it's the
+// same file again.
+void ForgetCachedSquircle(wf::IInspectable const& icon, std::wstring const& uri) {
+    for (auto& c : g_squircleCache) {
+        if (c.icon == icon && (uri.empty() || uri != c.uri)) c.stale = true;
+    }
+}
 
 wuxm::ImageSource CachedSquircle(wuxm::ImageSource const& stock) {
-    for (auto& [icon, tile] : g_squircleCache) {
-        if (icon == stock) return tile;
+    if (!stock) return nullptr;
+    auto uri = UriText(stock);
+    for (auto& c : g_squircleCache) {
+        if (!c.stale && c.icon == stock && c.uri == uri) return c.tile;
     }
     return nullptr;
+}
+
+void CacheSquircle(wuxm::ImageSource const& stock, wuxm::ImageSource const& tile) {
+    g_squircleCache.remove_if([&](CachedTile const& c) { return c.stale || c.icon == stock; });
+    auto& c = g_squircleCache.emplace_front();
+    c.icon = stock;
+    c.uri = UriText(stock);
+    c.tile = tile;
+    c.watch.Watch(stock, [](wf::IInspectable const& sender) {
+        ForgetCachedSquircle(sender, UriText(sender.try_as<wuxm::ImageSource>()));
+    });
+    while (g_squircleCache.size() > kSquircleCacheSize) g_squircleCache.pop_back();
 }
 
 // Tiles are forgotten when their color or the size they're drawn at changes
@@ -3106,38 +3228,200 @@ void CancelSquircleRenders() {
     }
 }
 
-// Icons not drawn yet, tried again shortly.
-void RetrySquircles() {
+// The taskbar loaded another icon into a bitmap it already had, without setting
+// it on the Image again: a tile made from what it held is out of date, unless
+// it's loaded from the same file again. Any drawing in progress is of the old
+// icon, so it's dropped.
+void OnStockChanged(wf::IInspectable const& sender) {
+    auto uri = UriText(sender.try_as<wuxm::ImageSource>());
+    ForgetCachedSquircle(sender, uri);
     for (auto& s : g_iconSwaps) {
-        if (!s.retry) continue;
+        if (s.look != IconLook::Squircle || !s.stock || s.stock != sender) continue;
+        if (s.shown && !uri.empty() && uri == s.tileUri) continue;  // the same icon again
+        NoteIconChange();
+        if (s.render) Try([&] { s.render.Cancel(); });
+        s.render = nullptr;
+        s.rendering = false;
+        s.generation++;
+        s.shown = nullptr;
+        s.tileUri.clear();
         s.retry = false;
-        if (auto image = s.image.get()) Try([&] { UpdateSwap(s, image); }, L"Squircle icon");
+        s.retries = 0;
+        s.renderParent = false;
+        if (auto image = s.image.get()) UpdateSwap(s, image);
     }
 }
 
-// Not laid out or drawn yet, as with a button still sliding in: tried again
-// shortly, a limited number of times.
-void RetrySquircleSoon(IconSwap& s) {
-    if (++s.retries > kSquircleRetries) return;
+// The retry timer, set for the soonest retry due, if any.
+void ArmSquircleRetry() {
     HWND window = EnsureModWindow();
-    if (window && SetTimer(window, kSquircleRetryTimer, kSquircleRetryMs, nullptr)) s.retry = true;
+    if (!window) return;
+    auto next = std::chrono::steady_clock::time_point::max();
+    for (auto& s : g_iconSwaps) {
+        if (s.retry) next = std::min(next, s.retryAt);
+    }
+    if (next == std::chrono::steady_clock::time_point::max()) {
+        KillTimer(window, kSquircleRetryTimer);
+        return;
+    }
+    auto wait = std::chrono::duration_cast<std::chrono::milliseconds>(
+        next - std::chrono::steady_clock::now());
+    SetTimer(window, kSquircleRetryTimer, (UINT)std::max<long long>(10, wait.count()), nullptr);
 }
 
+// Icons not drawn yet, tried again when due.
+void RetrySquircles() {
+    auto now = std::chrono::steady_clock::now();
+    for (auto& s : g_iconSwaps) {
+        if (!s.retry || s.retryAt > now) continue;
+        s.retry = false;
+        if (auto image = s.image.get()) Try([&] { UpdateSwap(s, image); }, L"Squircle icon");
+    }
+    ArmSquircleRetry();
+}
+
+// The app id of a taskbar button, from its automation id ("Appid: ...").
+std::wstring ButtonAppId(wux::FrameworkElement const& button) {
+    std::wstring id{wux::Automation::AutomationProperties::GetAutomationId(button)};
+    constexpr std::wstring_view prefix = L"Appid: ";
+    if (id.size() <= prefix.size() || id.compare(0, prefix.size(), prefix) != 0) return {};
+    return id.substr(prefix.size());
+}
+
+// IShellItemImageFactory, without linking uuid.lib.
+constexpr GUID kIShellItemImageFactoryId = {
+    0xbcc18b79, 0xba16, 0x442f, {0x80, 0xc4, 0x8a, 0x59, 0xc3, 0x0c, 0x46, 0x3b}};
+
+// An `px` pixel icon of `name` (a shell path) from the shell, as premultiplied
+// BGRA, top row first; empty if there's none.
+std::vector<BYTE> ShellIconPixels(std::wstring const& name, int px, int& w, int& h) {
+    winrt::com_ptr<IShellItemImageFactory> factory;
+    if (FAILED(SHCreateItemFromParsingName(name.c_str(), nullptr, kIShellItemImageFactoryId,
+                                           factory.put_void()))) {
+        return {};
+    }
+    HBITMAP bitmap = nullptr;
+    if (FAILED(factory->GetImage({px, px}, (SIIGBF)(SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK), &bitmap)) ||
+        !bitmap) {
+        return {};
+    }
+    std::vector<BYTE> pixels;
+    BITMAP bm{};
+    if (GetObject(bitmap, sizeof(bm), &bm) && bm.bmWidth > 0 && bm.bmHeight > 0) {
+        BITMAPINFO bi{};
+        bi.bmiHeader = {sizeof(BITMAPINFOHEADER), bm.bmWidth, -bm.bmHeight, 1, 32, BI_RGB};
+        pixels.resize((size_t)bm.bmWidth * bm.bmHeight * 4);
+        HDC dc = GetDC(nullptr);
+        if (GetDIBits(dc, bitmap, 0, bm.bmHeight, pixels.data(), &bi, DIB_RGB_COLORS) !=
+            bm.bmHeight) {
+            pixels.clear();
+        }
+        ReleaseDC(nullptr, dc);
+    }
+    DeleteObject(bitmap);
+    if (pixels.empty()) return {};
+
+    // Usually premultiplied already; with no alpha at all, it's opaque.
+    bool anyAlpha = false, straight = false;
+    for (size_t i = 0; i < pixels.size(); i += 4) {
+        BYTE a = pixels[i + 3];
+        anyAlpha |= a != 0;
+        straight |= pixels[i] > a || pixels[i + 1] > a || pixels[i + 2] > a;
+    }
+    for (size_t i = 0; i < pixels.size(); i += 4) {
+        if (!anyAlpha) {
+            pixels[i + 3] = 255;
+        } else if (straight) {
+            BYTE a = pixels[i + 3];
+            for (int c = 0; c < 3; c++) pixels[i + c] = (BYTE)(pixels[i + c] * a / 255);
+        }
+    }
+    w = bm.bmWidth;
+    h = bm.bmHeight;
+    return pixels;
+}
+
+// An app's icon as Start shows it, by its app id; or, for an app without an id
+// of its own, from its program file: its id is then the file's path, or a known
+// folder's id and the path within it.
+std::vector<BYTE> AppIconPixels(std::wstring const& appId, int px, int& w, int& h) {
+    auto pixels = ShellIconPixels(L"shell:AppsFolder\\" + appId, px, w, h);
+    if (!pixels.empty()) return pixels;
+    std::wstring path;
+    if (appId.size() > 38 && appId[0] == L'{' && appId[37] == L'}') {
+        GUID folder;
+        PWSTR folderPath = nullptr;
+        if (SUCCEEDED(CLSIDFromString(appId.substr(0, 38).c_str(), &folder)) &&
+            SUCCEEDED(SHGetKnownFolderPath(folder, 0, nullptr, &folderPath))) {
+            path = folderPath + appId.substr(38);
+        }
+        CoTaskMemFree(folderPath);
+    } else if (appId.find(L":\\") != std::wstring::npos || appId.rfind(L"\\\\", 0) == 0) {
+        path = appId;
+    }
+    if (path.empty()) return {};
+    return ShellIconPixels(path, px, w, h);
+}
+
+// A tile from the app's icon as Start shows it, for an icon the taskbar's never
+// let the mod draw. Not cached: it isn't the taskbar's icon.
+bool SquircleFromShell(IconSwap& s, wuxc::Image const& image) {
+    auto button = s.button.get();
+    std::wstring appId = button ? ButtonAppId(button) : std::wstring();
+    if (appId.empty()) return false;
+    int w = 0, h = 0;
+    auto pixels = AppIconPixels(appId, MagnifiedPixels(image, 1), w, h);
+    if (pixels.empty()) return false;
+    IconPixels tile = MakeSquircleIcon(std::move(pixels), w, h);
+    if (!tile.size) return false;
+    s.shown = BitmapFromPixels(tile.size, tile.size, tile.pixels);
+    s.tileUri = UriText(s.stock);
+    ShowSwap(s, image);
+    Wh_Log(L"Squircle icon for %s made from Start's icon", appId.c_str());
+    return true;
+}
+
+// Not laid out or drawn yet, as with a button still sliding in: tried again
+// shortly, a limited number of times, then each second for a while. Once the
+// quick tries are used up, the tile's made from Start's icon for the app if it
+// can be.
+void RetrySquircleSoon(IconSwap& s) {
+    ++s.retries;
+    if (s.retries == kSquircleRetries + 1) {
+        auto image = s.image.get();
+        if (image && SquircleFromShell(s, image)) return;
+    }
+    if (s.retries > kSquircleRetries + kSquircleSlowRetries) return;
+    auto delay = s.retries > kSquircleRetries
+                     ? std::chrono::steady_clock::duration(kSquircleSlowRetryDelay)
+                     : std::chrono::steady_clock::duration(
+                           std::chrono::milliseconds(kSquircleRetryMs));
+    s.retryAt = std::chrono::steady_clock::now() + delay;
+    s.retry = true;
+    ArmSquircleRetry();
+}
+
+// `refused` if drawing it failed outright, as it can for an icon on its own:
+// next time, what holds it is drawn instead.
 void OnStockPixels(winrt::weak_ref<wuxc::Image> const& weak, wuxm::ImageSource const& stock,
-                   std::vector<BYTE> pixels, int w, int h) {
+                   int generation, bool refused, std::vector<BYTE> pixels, int w, int h) {
     auto image = weak.get();
     IconSwap* s = image ? FindSwap(image) : nullptr;
-    if (!s) return;
+    if (!s || s->generation != generation) return;  // gone, or its icon changed since
     s->rendering = false;
     s->render = nullptr;
     if (s->stock != stock || s->look != IconLook::Squircle) return UpdateSwap(*s, image);
+    if (refused && !s->renderParent) {
+        s->renderParent = true;
+        return RetrySquircleSoon(*s);
+    }
 
     IconPixels tile;
     if (!pixels.empty() && w > 0 && h > 0) tile = MakeSquircleIcon(std::move(pixels), w, h);
     if (!tile.size) return RetrySquircleSoon(*s);
     s->shown = BitmapFromPixels(tile.size, tile.size, tile.pixels);
-    g_squircleCache.emplace_front(stock, s->shown);
-    if (g_squircleCache.size() > kSquircleCacheSize) g_squircleCache.pop_back();
+    s->tileUri = UriText(stock);
+    CacheSquircle(stock, s->shown);
     ShowSwap(*s, image);
 }
 
@@ -3147,26 +3431,73 @@ std::vector<BYTE> BufferBytes(wss::IBuffer const& buffer) {
     return std::vector<BYTE>(data, data + buffer.Length());
 }
 
+// Of `w` x `h` pixels drawn from something `whole` big, the part `rect` covers
+// (both in its own units). `w` and `h` become the part's size.
+std::vector<BYTE> CropPixels(std::vector<BYTE> const& pixels, int& w, int& h, wf::Rect rect,
+                             wf::Size whole) {
+    if (whole.Width <= 0 || whole.Height <= 0 || pixels.size() < (size_t)w * h * 4) {
+        w = h = 0;
+        return {};
+    }
+    float fx = w / whole.Width, fy = h / whole.Height;
+    int x0 = std::clamp((int)std::floor(rect.X * fx), 0, w);
+    int y0 = std::clamp((int)std::floor(rect.Y * fy), 0, h);
+    int x1 = std::clamp((int)std::ceil((rect.X + rect.Width) * fx), 0, w);
+    int y1 = std::clamp((int)std::ceil((rect.Y + rect.Height) * fy), 0, h);
+    if (x1 <= x0 || y1 <= y0) {
+        w = h = 0;
+        return {};
+    }
+    int cw = x1 - x0, ch = y1 - y0;
+    std::vector<BYTE> out((size_t)cw * ch * 4);
+    for (int y = 0; y < ch; y++) {
+        memcpy(&out[(size_t)y * cw * 4], &pixels[((size_t)(y0 + y) * w + x0) * 4], (size_t)cw * 4);
+    }
+    w = cw;
+    h = ch;
+    return out;
+}
+
 // Its own pixels if it's a bitmap the mod can read, or else the icon as drawn,
-// at its fully magnified size.
+// at its fully magnified size: on its own, or if that's been refused, what
+// holds it, cut down to the icon.
 void RequestSquircle(IconSwap& s, wuxc::Image const& image) {
-    if (s.rendering || !s.stock || s.retries > kSquircleRetries) return;
+    if (s.rendering || !s.stock || s.retries > kSquircleRetries + kSquircleSlowRetries) return;
     if (g_iconsSettling) return WaitForIconsToSettle();
     if (image.Source() != s.stock) return;
-    if (image.ActualWidth() <= 0) return RetrySquircleSoon(s);
+    if (image.ActualWidth() <= 0 || image.ActualHeight() <= 0) return RetrySquircleSoon(s);
     auto weak = winrt::make_weak(image);
     auto stock = s.stock;
+    int generation = s.generation;
     if (auto bitmap = stock.try_as<wuxm::Imaging::WriteableBitmap>()) {
         s.rendering = true;
-        return OnStockPixels(weak, stock, BufferBytes(bitmap.PixelBuffer()), bitmap.PixelWidth(),
-                             bitmap.PixelHeight());
+        return OnStockPixels(weak, stock, generation, false, BufferBytes(bitmap.PixelBuffer()),
+                             bitmap.PixelWidth(), bitmap.PixelHeight());
     }
     auto queue = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
     if (!queue) return;
-    s.rendering = true;
+
     int px = (int)std::ceil(g_size.icon * g_settings.scale);
+    wux::UIElement drawn = image;
+    int drawnW = px, drawnH = px;
+    wf::Rect crop{0, 0, 0, 0};  // the icon in what's drawn; empty for the icon alone
+    wf::Size whole{0, 0};       // what's drawn, in the same units
+    if (s.renderParent) {
+        auto parent = wuxm::VisualTreeHelper::GetParent(image).try_as<wux::FrameworkElement>();
+        if (parent && parent.ActualWidth() > 0 && parent.ActualHeight() > 0) {
+            crop = image.TransformToVisual(parent).TransformBounds(
+                {0, 0, (float)image.ActualWidth(), (float)image.ActualHeight()});
+            whole = {(float)parent.ActualWidth(), (float)parent.ActualHeight()};
+            float k = px / std::max(1.0f, std::max(crop.Width, crop.Height));
+            drawnW = std::max(1, (int)std::ceil(whole.Width * k));
+            drawnH = std::max(1, (int)std::ceil(whole.Height * k));
+            drawn = parent;
+        }
+    }
+
+    s.rendering = true;
     wuxm::Imaging::RenderTargetBitmap target;
-    auto render = target.RenderAsync(image, px, px);
+    auto render = target.RenderAsync(drawn, drawnW, drawnH);
     s.render = render;
     // Each callback holds the count till it's done, the next one included.
     render.Completed([=, pending = TrackPendingCallback()](wf::IAsyncAction const&,
@@ -3175,11 +3506,13 @@ void RequestSquircle(IconSwap& s, wuxc::Image const& image) {
             if (g_unloading) return;
             Try([&] {
                 if (status != wf::AsyncStatus::Completed) {
-                    return OnStockPixels(weak, stock, {}, 0, 0);
+                    return OnStockPixels(weak, stock, generation,
+                                         status == wf::AsyncStatus::Error, {}, 0, 0);
                 }
                 auto read = target.GetPixelsAsync();
                 if (auto image = weak.get()) {
-                    if (IconSwap* swap = FindSwap(image)) swap->render = read;
+                    IconSwap* swap = FindSwap(image);
+                    if (swap && swap->generation == generation) swap->render = read;
                 }
                 read.Completed([=, pending = pending](auto const& op, wf::AsyncStatus status) {
                     queue.TryEnqueue([=, pending = pending] {
@@ -3189,8 +3522,12 @@ void RequestSquircle(IconSwap& s, wuxc::Image const& image) {
                             if (status == wf::AsyncStatus::Completed) {
                                 pixels = BufferBytes(op.GetResults());
                             }
-                            OnStockPixels(weak, stock, std::move(pixels), target.PixelWidth(),
-                                          target.PixelHeight());
+                            int w = target.PixelWidth(), h = target.PixelHeight();
+                            if (crop.Width > 0 && !pixels.empty()) {
+                                pixels = CropPixels(pixels, w, h, crop, whole);
+                            }
+                            OnStockPixels(weak, stock, generation, false, std::move(pixels), w,
+                                          h);
                         }, L"Squircle icon");
                     });
                 });
@@ -5202,16 +5539,59 @@ void OnFrame() {
 constexpr int kTraySlideInMs = 280;
 constexpr int kTraySlideOutMs = 320;
 
+// One per taskbar. Measured whenever its size changes, as the tray fills in
+// after the mod's loaded, or grows with more icons: each taskbar window is cut
+// to its tray's width (see TaskbarRegion), and a stale width cuts the tray off.
 struct TrayFrame {
     winrt::weak_ref<wux::FrameworkElement> element;
     bool hidden = false;        // collapsed for Hidden
     bool corner = false;        // set up for its hot corner
     bool cornerHidden = false;  // slid out of view
+    int width = 0;              // in pixels, as last measured
+    SIZE island{};              // its taskbar's content, in pixels: to match it to its window
+    wux::FrameworkElement::SizeChanged_revoker sizeChanged;
 };
 
 std::list<TrayFrame> g_trayFrames;
 bool g_trayRevealed = false;
-int g_trayWidth = 0;  // in pixels, for the hot corner
+
+// Whether its width or its taskbar's size changed.
+bool MeasureTrayFrame(wux::FrameworkElement const& el, TrayFrame& t) {
+    if (g_settings.tray == Show::Hidden || el.ActualWidth() <= 0) return false;
+    auto root = el.XamlRoot();
+    double scale = root ? root.RasterizationScale() : 1;
+    int width = (int)std::lround(el.ActualWidth() * scale);
+    SIZE island{};
+    if (root) {
+        auto size = root.Size();
+        island = {(LONG)std::lround(size.Width * scale), (LONG)std::lround(size.Height * scale)};
+    }
+    bool changed = width != t.width || island.cx != t.island.cx || island.cy != t.island.cy;
+    t.width = width;
+    t.island = island;
+    return changed;
+}
+
+// The widest tray, in pixels: 0 if none's been measured.
+int WidestTray() {
+    int widest = 0;
+    for (auto& t : g_trayFrames) widest = std::max(widest, t.width);
+    return widest;
+}
+
+// The width of the tray on a `width` x `height` taskbar window, in pixels: the
+// tray whose taskbar is that size. Taskbars the same size can't be told apart,
+// so it's the widest of those, as too wide only leaves a little more of the
+// window showing, while too narrow cuts the tray off; with none, the widest.
+int TrayWidthFor(int width, int height) {
+    int matched = 0;
+    for (auto& t : g_trayFrames) {
+        if (std::abs(t.island.cx - width) <= 2 && std::abs(t.island.cy - height) <= 2) {
+            matched = std::max(matched, t.width);
+        }
+    }
+    return matched ? matched : WidestTray();
+}
 
 bool TrayShown() {
     return g_settings.tray == Show::Visible || (g_settings.tray == Show::HotCorner && g_trayRevealed);
@@ -5252,32 +5632,30 @@ void FixTrayRow(wux::FrameworkElement const& row) {
     }
 }
 
-// In: eases to a stop. Out: picks up speed, fading in the second half.
+// How far past the tray's own left edge its background and shadows reach, so a
+// hidden tray is slid wholly past the screen's edge.
+constexpr float kTrayOffscreenMargin = 48;
+
+// A plain slide over the screen's edge, with no fade. In: eases to a stop.
+// Out: picks up speed.
 void SlideTray(wux::FrameworkElement const& el, bool hidden, bool animate) {
     auto visual = wuxh::ElementCompositionPreview::GetElementVisual(el);
     wuxh::ElementCompositionPreview::SetIsTranslationEnabled(el, true);
-    float x = hidden ? (float)el.ActualWidth() + 24 : 0;
-    float opacity = hidden ? 0.0f : 1.0f;
+    float x = hidden ? (float)el.ActualWidth() + TrayPlateLeft() + kTrayOffscreenMargin : 0;
+    visual.StopAnimation(L"Opacity");  // as faded by earlier versions
+    if (visual.Opacity() != 1) visual.Opacity(1);
     if (!animate) {
         visual.StopAnimation(L"Translation.X");
-        visual.StopAnimation(L"Opacity");
         SetTranslation(el, x);
-        visual.Opacity(opacity);
         return;
     }
     auto compositor = visual.Compositor();
     auto slide = compositor.CreateScalarKeyFrameAnimation();
-    auto fade = compositor.CreateScalarKeyFrameAnimation();
     auto ease = hidden ? compositor.CreateCubicBezierEasingFunction({0.45f, 0.0f}, {0.6f, 1.0f})
                        : compositor.CreateCubicBezierEasingFunction({0.2f, 0.9f}, {0.3f, 1.0f});
-    if (hidden) fade.InsertKeyFrame(0.5f, 1.0f);
     slide.InsertKeyFrame(1.0f, x, ease);
-    fade.InsertKeyFrame(1.0f, opacity, ease);
-    auto duration = std::chrono::milliseconds(hidden ? kTraySlideOutMs : kTraySlideInMs);
-    slide.Duration(duration);
-    fade.Duration(duration);
+    slide.Duration(std::chrono::milliseconds(hidden ? kTraySlideOutMs : kTraySlideInMs));
     visual.StartAnimation(L"Translation.X", slide);
-    visual.StartAnimation(L"Opacity", fade);
 }
 
 void ResetTraySlide(wux::FrameworkElement const& el) {
@@ -5312,11 +5690,7 @@ void ApplyTrayVisibility(wux::FrameworkElement const& el, TrayFrame& t) {
         PutBack(el, hitTest);
     }
 
-    if (show != Show::Hidden && el.ActualWidth() > 0) {
-        auto root = el.XamlRoot();
-        double scale = root ? root.RasterizationScale() : 1;
-        g_trayWidth = (int)std::lround(el.ActualWidth() * scale);
-    }
+    if (!g_unloading && MeasureTrayFrame(el, t)) ScheduleOverWindows(false);  // the clip
 }
 
 void ApplyTrayFrame(wux::FrameworkElement const& el) {
@@ -5335,7 +5709,21 @@ void FixTrayFrame(wux::FrameworkElement const& el) {
     g_trayFrames.remove_if([](TrayFrame const& t) { return !t.element.get(); });
     if (std::none_of(g_trayFrames.begin(), g_trayFrames.end(),
                      [&](TrayFrame const& t) { return t.element.get() == el; })) {
-        g_trayFrames.push_back({winrt::make_weak(el)});
+        auto& t = g_trayFrames.emplace_back();
+        t.element = winrt::make_weak(el);
+        t.sizeChanged = el.SizeChanged(
+            winrt::auto_revoke,
+            [](wf::IInspectable const& sender, wux::SizeChangedEventArgs const&) {
+                if (g_unloading) return;
+                Try([&] {
+                    auto el = sender.try_as<wux::FrameworkElement>();
+                    for (auto& t : g_trayFrames) {
+                        if (!el || t.element.get() != el) continue;
+                        if (MeasureTrayFrame(el, t)) ScheduleOverWindows(false);  // the clip
+                        return;
+                    }
+                }, L"Tray size");
+            });
         Track(el, wux::UIElement::VisibilityProperty(), ApplyTrayFrame);
         Track(el, wux::UIElement::IsHitTestVisibleProperty());
     }
@@ -5455,6 +5843,28 @@ void OpenTaskView() {
                   nullptr, SW_SHOWNORMAL);
 }
 
+// Whether an app is full screen on `monitor`, whose bounds are `m`, as games
+// and videos are. Windows' own answer (SHQueryUserNotificationState) can stay
+// "full screen" after an exclusive full screen game is minimized or switched
+// away from, which left the corners and the hidden dock blocked over the
+// desktop until the game closed. So it's trusted only for presentation mode;
+// otherwise it's the window in front, without a title bar (unlike a maximized
+// one), covering the whole screen.
+bool FullScreenAppOn(HMONITOR monitor, RECT const& m) {
+    QUERY_USER_NOTIFICATION_STATE state;
+    if (SUCCEEDED(SHQueryUserNotificationState(&state)) && state == QUNS_PRESENTATION_MODE) {
+        return true;
+    }
+    HWND w = GetForegroundWindow();
+    if (!w || !IsAppWindow(w) || MonitorFromWindow(w, MONITOR_DEFAULTTONULL) != monitor) {
+        return false;  // none, minimized, the desktop or the shell's, or on another screen
+    }
+    if ((GetWindowLongPtr(w, GWL_STYLE) & WS_CAPTION) == WS_CAPTION) return false;
+    RECT r;
+    return GetWindowRect(w, &r) && r.left <= m.left && r.top <= m.top && r.right >= m.right &&
+           r.bottom >= m.bottom;
+}
+
 void OnPollTimer() {
     POINT p;
     if (g_unloading || !GetCursorPos(&p)) return;
@@ -5473,10 +5883,7 @@ void OnPollTimer() {
     bool held = (GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000;
     // Only asked at the bottom edge, the only place the answer is used (the
     // corners, and revealing a hidden dock), rather than on every poll.
-    QUERY_USER_NOTIFICATION_STATE state;
-    bool fullscreen = bottom && SUCCEEDED(SHQueryUserNotificationState(&state)) &&
-                      (state == QUNS_RUNNING_D3D_FULL_SCREEN || state == QUNS_BUSY ||
-                       state == QUNS_PRESENTATION_MODE);
+    bool fullscreen = bottom && FullScreenAppOn(monitor, m);
     bool blocked = held || fullscreen;
 
     if (g_settings.leftCorner != LeftCorner::Off) {
@@ -5491,7 +5898,7 @@ void OnPollTimer() {
     }
 
     if (g_settings.tray == Show::HotCorner) {
-        int zoneW = std::max(g_trayWidth, (int)(200 * scale)) +
+        int zoneW = std::max(WidestTray(), (int)(200 * scale)) +
                     (int)((TrayPlateLeft() + 16) * scale);
         int zoneH = (int)((TrayRowSpan() + 8) * scale);
         bool overTray = p.x >= m.right - zoneW && p.y >= m.bottom - zoneH;
@@ -5523,6 +5930,109 @@ void OnPollTimer() {
 std::vector<winrt::weak_ref<wux::FrameworkElement>> g_frames;
 int g_reapplyCount = 0;
 
+// ---- Keeping icons still ----
+// Windows bounces an app's icon as its windows open, close, minimize or are
+// restored, moving it by its Translation (as noted in "Vertical Taskbar for
+// Windows 11"). With "Keep Icons Still", the icon's Translation animation is
+// taken away, and for a moment after each change to a button, every app icon
+// is held in place each frame: any animation of its Translation stopped, and
+// its Translation put back to none.
+
+constexpr auto kHoldIconsFor = std::chrono::milliseconds(1500);
+
+struct StillIcon {
+    winrt::weak_ref<wux::UIElement> icon;
+    wux::Vector3Transition original{nullptr};  // its Translation animation, to put back
+    bool cleared = false;
+};
+
+[[clang::no_destroy]] std::optional<std::list<StillIcon>> g_stillIcons{std::in_place};
+winrt::event_token g_holdToken{};
+bool g_holdingIcons = false;
+std::chrono::steady_clock::time_point g_holdIconsUntil;
+// Each way of holding an icon is given up for good once Windows refuses it, so
+// a refusal isn't repeated (and logged) every frame.
+bool g_iconTranslationUsable = true;
+bool g_iconVisualsUsable = true;
+
+void HoldIcon(StillIcon& s, wux::UIElement const& icon) {
+    if (!g_iconTranslationUsable) return;
+    try {
+        if (auto transition = icon.TranslationTransition()) {
+            if (!s.cleared) {
+                s.original = transition;
+                s.cleared = true;
+            }
+            icon.TranslationTransition(nullptr);
+        }
+    } catch (...) {
+        g_iconTranslationUsable = false;
+        Wh_Log(L"Keep Icons Still: the icon's Translation can't be used");
+        return;
+    }
+    if (g_iconVisualsUsable) {
+        try {
+            wuxh::ElementCompositionPreview::GetElementVisual(icon).StopAnimation(L"Translation");
+        } catch (...) {
+            g_iconVisualsUsable = false;
+        }
+    }
+    // Set even when it reads as none, as a stopped animation can leave the icon
+    // where it was: a different value first makes sure none is applied.
+    try {
+        icon.Translation({0, 0.01f, 0});
+        icon.Translation({0, 0, 0});
+    } catch (...) {
+        g_iconTranslationUsable = false;
+        Wh_Log(L"Keep Icons Still: the icon's Translation can't be set");
+    }
+}
+
+void StopHoldingIcons() {
+    if (!g_holdingIcons) return;
+    wuxm::CompositionTarget::Rendering(g_holdToken);
+    g_holdingIcons = false;
+}
+
+// Each frame for a moment, from now.
+void HoldIconsAWhile() {
+    if (!g_settings.keepIconsStill || g_unloading || g_stillIcons->empty()) return;
+    g_holdIconsUntil = std::chrono::steady_clock::now() + kHoldIconsFor;
+    if (g_holdingIcons) return;
+    g_holdToken = wuxm::CompositionTarget::Rendering([](wf::IInspectable const&,
+                                                        wf::IInspectable const&) {
+        if (g_unloading || std::chrono::steady_clock::now() > g_holdIconsUntil) {
+            return StopHoldingIcons();
+        }
+        for (auto& s : *g_stillIcons) {
+            if (auto icon = s.icon.get()) Try([&] { HoldIcon(s, icon); }, L"Keep icons still");
+        }
+    });
+    g_holdingIcons = true;
+}
+
+// An app's icon (Icon, or DefaultIcon for some apps).
+void KeepIconStill(wux::FrameworkElement const& el, wux::FrameworkElement const& button) {
+    if (!g_settings.keepIconsStill || !IsAppButton(button)) return;
+    g_stillIcons->remove_if([](StillIcon const& s) { return !s.icon.get(); });
+    for (auto& s : *g_stillIcons) {
+        if (s.icon.get() == el) return HoldIcon(s, el);
+    }
+    auto& s = g_stillIcons->emplace_back();
+    s.icon = winrt::make_weak<wux::UIElement>(el);
+    HoldIcon(s, el);
+}
+
+// Their Translation animations back.
+void ReleaseStillIcons() {
+    StopHoldingIcons();
+    for (auto& s : *g_stillIcons) {
+        auto icon = s.icon.get();
+        if (icon && s.cleared) Try([&] { icon.TranslationTransition(s.original); });
+    }
+    g_stillIcons->clear();
+}
+
 // Everything the mod changes in one button. Safe to call again.
 void ProcessButton(wux::FrameworkElement const& button) {
     UpdateStartHidden(button);
@@ -5538,8 +6048,10 @@ void ProcessButton(wux::FrameworkElement const& button) {
             TrackIconImage(el);
             UpdateAppIcon(el, button);
             UpdateStartLogo(el, button);
+            KeepIconStill(el, button);
         } else if (name == L"DefaultIcon") {
             TrackIconImage(el);  // shown in place of Icon for some apps
+            KeepIconStill(el, button);
         } else if (name == L"OverlayIcon") {
             TrackOverlayIcon(el);
         } else if (name == L"RunningIndicator") {
@@ -6056,11 +6568,13 @@ void ResetAll() {
         });
     }
     for (auto& t : g_trayFrames) {
+        t.sizeChanged.revoke();
         auto el = t.element.get();
         if (el && t.corner) Try([&] { ResetTraySlide(el); });
     }
     Try([] { RemoveTrayDecor(true); });
     Try(RemoveStartIcons);
+    Try(ReleaseStillIcons);
     Try(UndimDragged);
     Try(StopSettlingIcons);
     RestoreIndicators();
@@ -6109,6 +6623,7 @@ void OnTaskListButtonUpdated(void* pThis) {
             ProcessButton(button);
             if (Button* b = FindButton(button)) b->impl = pThis;
             NoteTaskbarFrame(FindTaskbarFrame(button));
+            HoldIconsAWhile();  // as its state changes, Windows may bounce its icon
         }
     }, L"Button update");
 }
@@ -7458,7 +7973,8 @@ HRGN TaskbarRegion(HWND tb) {
                       : CreateRectRgn(0, std::max(0, height - StripHeight(dpi)), width, height);
     if (!trayShown) return region;
     // The tray, with its background reaching past its left and top.
-    int trayWidth = g_trayWidth > 0 ? g_trayWidth : MulDiv(200, dpi, 96);
+    int trayWidth = TrayWidthFor(width, height);
+    if (trayWidth <= 0) trayWidth = MulDiv(200, dpi, 96);
     trayWidth += MulDiv((int)std::ceil(TrayPlateLeft()), dpi, 96);
     int trayHeight = MulDiv((int)std::ceil(TrayRowSpan()), dpi, 96);
     HRGN tray = CreateRectRgn(std::max(0, width - trayWidth), std::max(0, height - trayHeight),
@@ -7955,6 +8471,7 @@ void Wh_ModSettingsChanged() {
         Try(UpdatePolling);
         g_finderIconSource.reset();  // reloaded at the new size and image
         SettleIconsAgain();
+        Try(ReleaseStillIcons);  // held again below, if still on
         for (auto& b : *g_buttons) {
             if (auto el = b.element.get()) Try([&] { ProcessButton(el); });
         }
