@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-18T18:01:36.000Z</updated>
+    <updated>2026-11-18T19:03:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better Volume Mixer 1.6.3]]></title>
+        <id>https://windhawk.net/mods/better-volume-mixer#3c964427620c63c6fe2613822c6482ac4bd62ffc</id>
+        <link href="https://windhawk.net/mods/better-volume-mixer"/>
+        <updated>2026-11-18T19:03:18.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added option to hide the close button</li>
+<li>Added option to show the volume percentage as the tray icon</li>
+<li>The tray icon's tooltip now shows the output device and volume</li>
+</ul>
+]]></content>
+        <author>
+            <name>0Allu</name>
+            <uri>https://github.com/0Allu</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WinRAR Tweaks 1.1.0]]></title>
         <id>https://windhawk.net/mods/winrar-tweaks#d70192267c179a459be7217c1f56d3cc96f94736</id>
@@ -662,20 +678,6 @@ page</a>.</p>
         <author>
             <name>DanRotaru</name>
             <uri>https://github.com/DanRotaru</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar ContentPresenter Injector 1.4.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-content-presenter-injector#dc122909f36cf8cb99e69f17dbc3721219e869c3</id>
-        <link href="https://windhawk.net/mods/taskbar-content-presenter-injector"/>
-        <updated>2026-11-17T23:04:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for <code>Grid#IconPanel</code> control, which replaces <code>Taskbar.TaskListLabeledButtonPanel</code>, in newer W11 builds.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
         </author>
     </entry>
 </feed>

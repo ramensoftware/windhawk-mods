@@ -1,3 +1,9 @@
+## 1.6.3 ([Nov 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3c964427620c63c6fe2613822c6482ac4bd62ffc/mods/better-volume-mixer.wh.cpp))
+
+* Added option to hide the close button
+* Added option to show the volume percentage as the tray icon
+* The tray icon's tooltip now shows the output device and volume
+
 ## 1.6.0 ([Oct 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1783f8739a19d202886cb964262eb4c3d66fd943/mods/better-volume-mixer.wh.cpp))
 
 * Added optional alert sound when changing volume

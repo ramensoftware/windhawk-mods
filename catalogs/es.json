@@ -1362,7 +1362,7 @@
         "ratingUsers": 98,
         "reviews": 0,
         "trendingSorting": 4.755756395503373,
-        "updated": 1793048559000,
+        "updated": 1795028598000,
         "users": 3832
       },
       "metadata": {
@@ -1377,7 +1377,7 @@
         ],
         "license": "MIT",
         "name": "Better Volume Mixer",
-        "version": "1.6.0"
+        "version": "1.6.3"
       }
     },
     "block-smb-quick-access": {
