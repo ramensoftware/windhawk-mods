@@ -16,6 +16,8 @@
 
 Forces a specific set of columns whenever a File Explorer folder is in _Details_ view. **Other view modes (_Icons_, _Tiles_, _List_, etc.) are not affected.**
 
+![A folder in Details view with the forced columns, next to the mod's settings](https://raw.githubusercontent.com/ernisn/windhawk-mods/main/Screenshot/explorer-force-details-columns.png)
+
 Configure which columns to show and in what order in Settings. Each entry takes a Shell property name and a width **(if _Force Width_ enabled)** in logical pixels at 100% DPI scaling (for consistent widths in case of multiple monitors with different DPI settings). A sort column and direction can optionally be enforced as well.
 
 Common property names:
@@ -35,11 +37,12 @@ For a full list of available Shell property names, see: https://learn.microsoft.
 **Note:**
 - Any property name not recognised by Windows will be skipped. Duplicate property entries will only take the first occurrence.
 - To allow a column to be freely resized, turn off "Force Width". To auto-size a column to its content instead, set its Width to -1. Like Explorer's own "Size column to fit", only the items currently shown in the window are measured, so longer values further down the list can still be cut off.
-- If "Sort By" is set, manual sorting changes stay temporary, e.g. manual width changes of forced-width columns.
+- If "Sort By" is set, manual sorting changes stay temporary, like manual width changes of forced-width columns.
 - By default, virtual folders that have their own specialized columns (such as the Recycle Bin with _Original Location_ and _Date Deleted_) are not affected. Turn off "Exclude virtual folders" to force the columns there as well.
+- Explorer saves the forced columns, widths and sorting for each folder, the same way as manual changes. Folders keep them after the mod is disabled, until they're changed manually or reset (_Folder Options_ → _View_ → _Reset Folders_).
 
 **Minimum Column Width:**
-- Windows doesn't allow a column to be narrower than about 10 characters (around 90 logical pixels on Windows 11), neither when forced here nor when dragged manually. "Minimum Column Width" lowers that limit, so that smaller widths take effect and columns can be dragged narrower. Set it to 0 to keep the Windows limit.
+- Windows doesn't allow a column to be narrower than about 10 characters (around 90 logical pixels on Windows 11), either when forced here or when dragged manually. "Minimum Column Width" lowers that limit, so that smaller widths take effect and columns can be dragged narrower. Set it to 0 to keep the Windows limit.
 - The lowered limit applies to all folders in File Explorer, including the virtual folders that are excluded from the forced columns.
 
 */
@@ -50,18 +53,18 @@ For a full list of available Shell property names, see: https://learn.microsoft.
 - columns:
   - - property: System.ItemNameDisplay
       $name: Column Property Name
-    - force_width: true
+    - force_width: false
       $name: Force Width
       $description: If enabled, the column width will always use the value below, regardless of manual changes, which will stay temporary and be reverted after re-opening the folder.
-    - width: 270
+    - width: 210
       $name: Width
       $description: Width in logical pixels at 100% DPI scaling, or -1 to auto-size to the items shown in the window. Only takes effect if Force Width is turned on.
   - - property: System.Size
     - force_width: false
     - width: 30
   - - property: System.DateModified
-    - force_width: true
-    - width: 110
+    - force_width: false
+    - width: 120
   - - property: System.ItemTypeText
     - force_width: false
     - width: 60
@@ -94,6 +97,7 @@ For a full list of available Shell property names, see: https://learn.microsoft.
 #include <algorithm>
 #include <atomic>
 #include <cstdlib>
+#include <memory>
 #include <mutex>
 #include <unordered_set>
 #include <utility>
@@ -118,12 +122,18 @@ struct ColumnEntry {
     int         width;  // logical px at 96 DPI; 0 = free resize, -1 = auto-size
 };
 
-static std::vector<ColumnEntry> g_columns;
-static PROPERTYKEY              g_sortKey;
-static bool                     g_sortEnabled;
-static bool                     g_sortDescending;
-static bool                     g_excludeVirtualFolders;
-static std::atomic<int>         g_minColumnWidth;  // logical px at 96 DPI; 0 = Windows limit
+struct Settings {
+    std::vector<ColumnEntry> columns;
+    PROPERTYKEY              sortKey;
+    bool                     sortEnabled = false;
+    bool                     sortDescending = false;
+    bool                     excludeVirtualFolders = true;
+};
+
+// Replaced as a whole on settings change, while Explorer window threads keep using the copy they took
+static std::mutex                      g_settingsMutex;
+static std::shared_ptr<const Settings> g_settings;
+static std::atomic<int>                g_minColumnWidth;  // logical px at 96 DPI; 0 = Windows limit
 
 static std::mutex               g_subclassedMutex;
 static std::unordered_set<HWND> g_subclassed;
@@ -135,20 +145,27 @@ static std::mutex               g_pendingAutoSizeMutex;
 static std::unordered_set<HWND> g_pendingAutoSize;
 static std::atomic<bool>        g_anyPendingAutoSize;
 
-static void LoadSettings() {
-    g_columns.clear();
+static std::shared_ptr<const Settings> GetSettings() {
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    return g_settings;
+}
 
-    g_excludeVirtualFolders = Wh_GetIntSetting(L"exclude_virtual");
-    g_sortDescending = Wh_GetIntSetting(L"sort_descending");
+static void LoadSettings() {
+    auto settings = std::make_shared<Settings>();
+
+    settings->excludeVirtualFolders = Wh_GetIntSetting(L"exclude_virtual");
+    settings->sortDescending = Wh_GetIntSetting(L"sort_descending");
     g_minColumnWidth = std::max(0, Wh_GetIntSetting(L"min_width"));
 
     PCWSTR sortProp = Wh_GetStringSetting(L"sort_property");
-    g_sortEnabled =
-        *sortProp && SUCCEEDED(PSGetPropertyKeyFromName(sortProp, &g_sortKey));
-    if (*sortProp && !g_sortEnabled)
+    settings->sortEnabled =
+        *sortProp &&
+        SUCCEEDED(PSGetPropertyKeyFromName(sortProp, &settings->sortKey));
+    if (*sortProp && !settings->sortEnabled)
         Wh_Log(L"Sort property %s not recognised", sortProp);
     Wh_FreeStringSetting(sortProp);
 
+    auto& columns = settings->columns;
     for (int i = 0;; i++) {
         PCWSTR prop = Wh_GetStringSetting(L"columns[%d].property", i);
         if (!*prop) {
@@ -159,28 +176,43 @@ static void LoadSettings() {
         PROPERTYKEY key;
         if (FAILED(PSGetPropertyKeyFromName(prop, &key))) {
             Wh_Log(L"Column[%d]: %s not recognised, skipped", i, prop);
-        } else if (std::any_of(g_columns.begin(), g_columns.end(),
+        } else if (std::any_of(columns.begin(), columns.end(),
                                [&key](const auto& c) { return c.key == key; })) {
             Wh_Log(L"Column[%d]: %s duplicate, skipped", i, prop);
         } else {
             int width = Wh_GetIntSetting(L"columns[%d].force_width", i)
                             ? Wh_GetIntSetting(L"columns[%d].width", i)
                             : 0;
-            g_columns.push_back({key, width});
+            columns.push_back({key, width});
         }
         Wh_FreeStringSetting(prop);
     }
 
-    Wh_Log(L"Loaded %zu columns", g_columns.size());
+    Wh_Log(L"Loaded %zu columns", columns.size());
+
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    g_settings = std::move(settings);
 }
 
 // ---------------------------------------------------------------------------
 // Column enforcement
 // ---------------------------------------------------------------------------
 
-static bool ApplyForcedColumns(IUnknown* view,
-                               bool subclassForDpi,
-                               bool autoSizeNow);
+enum : int {
+    // The column set, the forced widths and the sorting
+    APPLY_LAYOUT = 1 << 0,
+    // Without it, -1 columns are auto-sized once the items are displayed
+    APPLY_AUTOSIZE_NOW = 1 << 1,
+    // Only when the view can be retained
+    APPLY_SUBCLASS = 1 << 2,
+};
+
+// Auto-sizes right away only if it can't wait for the items to be displayed
+static int AutoSizeFlags() {
+    return g_deferAutoSize ? 0 : APPLY_AUTOSIZE_NOW;
+}
+
+static bool ApplyForcedColumns(IUnknown* view, int flags);
 
 static void SetAutoSizePending(HWND hwnd, bool pending) {
     std::lock_guard<std::mutex> lock(g_pendingAutoSizeMutex);
@@ -195,7 +227,7 @@ static void SetAutoSizePending(HWND hwnd, bool pending) {
 static LRESULT CALLBACK ViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                                          LPARAM lParam, DWORD_PTR dwRefData) {
     if (g_autoSizeMessage && uMsg == g_autoSizeMessage) {
-        ApplyForcedColumns((IUnknown*)dwRefData, false, true);
+        ApplyForcedColumns((IUnknown*)dwRefData, APPLY_AUTOSIZE_NOW);
         return 0;
     }
 
@@ -211,7 +243,8 @@ static LRESULT CALLBACK ViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
 
     // After the view has handled the DPI change itself
     if (uMsg == WM_DPICHANGED_AFTERPARENT)
-        ApplyForcedColumns((IUnknown*)dwRefData, false, !g_deferAutoSize);
+        ApplyForcedColumns((IUnknown*)dwRefData,
+                           APPLY_LAYOUT | AutoSizeFlags());
 
     return result;
 }
@@ -232,12 +265,13 @@ static bool IsVirtualFolder(IFolderView2* folderView) {
     return SUCCEEDED(hr) && !(attributes & SFGAO_FILESYSTEM);
 }
 
-// Returns true if anything actually changed. subclassForDpi is set only when view can be retained. Without autoSizeNow, auto-sized columns are sized once the items are displayed
-static bool ApplyForcedColumns(IUnknown* view,
-                               bool subclassForDpi,
-                               bool autoSizeNow) {
-    if (g_columns.empty())
+// Returns true if the layout actually changed. Auto-sizing isn't counted, since it follows the content
+static bool ApplyForcedColumns(IUnknown* view, int flags) {
+    auto settings = GetSettings();
+    if (!settings || settings->columns.empty())
         return false;
+
+    const auto& columns = settings->columns;
 
     ComPtr<IShellView> shellView;
     ComPtr<IFolderView2> folderView;
@@ -253,100 +287,111 @@ static bool ApplyForcedColumns(IUnknown* view,
         viewMode != FVM_DETAILS)
         return false;
 
-    if (g_excludeVirtualFolders && IsVirtualFolder(folderView.Get())) {
+    if (settings->excludeVirtualFolders && IsVirtualFolder(folderView.Get())) {
         Wh_Log(L"Skipping virtual folder");
         return false;
     }
 
-    bool changed = false;
-
-    // Column set and order
-    UINT count = 0;
-    bool setColumns =
-        FAILED(columnManager->GetColumnCount(CM_ENUM_VISIBLE, &count)) ||
-        count != g_columns.size();
-    if (!setColumns) {
-        std::vector<PROPERTYKEY> current(count);
-        setColumns = FAILED(
-            columnManager->GetColumns(CM_ENUM_VISIBLE, current.data(), count));
-        for (UINT i = 0; !setColumns && i < count; i++)
-            setColumns = !(current[i] == g_columns[i].key);
-    }
-    if (setColumns) {
-        // SetColumns resets widths to the defaults, which Explorer won't let the user drag back down, so widths that aren't forced are kept
-        std::vector<PROPERTYKEY> keys;
-        std::vector<std::pair<PROPERTYKEY, UINT>> keptWidths;
-        for (const auto& col : g_columns) {
-            keys.push_back(col.key);
-
-            CM_COLUMNINFO ci = {sizeof(ci), CM_MASK_WIDTH};
-            if (!col.width &&
-                SUCCEEDED(columnManager->GetColumnInfo(col.key, &ci)) &&
-                ci.uWidth)
-                keptWidths.push_back({col.key, ci.uWidth});
-        }
-
-        changed |= SUCCEEDED(
-            columnManager->SetColumns(keys.data(), (UINT)keys.size()));
-
-        for (const auto& [key, width] : keptWidths) {
-            CM_COLUMNINFO ci = {sizeof(ci), CM_MASK_WIDTH};
-            ci.uWidth = width;
-            columnManager->SetColumnInfo(key, &ci);
-        }
-    }
-
-    // Widths
     HWND hwnd = nullptr;
     shellView->GetWindow(&hwnd);
-    UINT dpi = hwnd ? GetDpiForWindow(hwnd) : GetDpiForSystem();
-    bool autoSizeLater = false;
 
-    for (const auto& col : g_columns) {
-        if (!col.width)
-            continue;
+    bool changed = false;
 
-        if (col.width < 0 && !autoSizeNow) {
-            autoSizeLater = true;
-            continue;
+    if (flags & APPLY_LAYOUT) {
+        // Column set and order
+        UINT count = 0;
+        bool setColumns =
+            FAILED(columnManager->GetColumnCount(CM_ENUM_VISIBLE, &count)) ||
+            count != columns.size();
+        if (!setColumns) {
+            std::vector<PROPERTYKEY> current(count);
+            setColumns = FAILED(columnManager->GetColumns(
+                CM_ENUM_VISIBLE, current.data(), count));
+            for (UINT i = 0; !setColumns && i < count; i++)
+                setColumns = !(current[i] == columns[i].key);
+        }
+        if (setColumns) {
+            // SetColumns resets widths to the defaults, which Explorer won't let the user drag back down, so widths that aren't forced are kept
+            std::vector<PROPERTYKEY> keys;
+            std::vector<std::pair<PROPERTYKEY, UINT>> keptWidths;
+            for (const auto& col : columns) {
+                keys.push_back(col.key);
+
+                CM_COLUMNINFO ci = {sizeof(ci), CM_MASK_WIDTH};
+                if (!col.width &&
+                    SUCCEEDED(columnManager->GetColumnInfo(col.key, &ci)) &&
+                    ci.uWidth)
+                    keptWidths.push_back({col.key, ci.uWidth});
+            }
+
+            changed |= SUCCEEDED(
+                columnManager->SetColumns(keys.data(), (UINT)keys.size()));
+
+            for (const auto& [key, width] : keptWidths) {
+                CM_COLUMNINFO ci = {sizeof(ci), CM_MASK_WIDTH};
+                ci.uWidth = width;
+                columnManager->SetColumnInfo(key, &ci);
+            }
         }
 
-        CM_COLUMNINFO ci = {sizeof(ci), CM_MASK_WIDTH};
-        if (FAILED(columnManager->GetColumnInfo(col.key, &ci)))
-            continue;
+        // Forced widths
+        UINT dpi = hwnd ? GetDpiForWindow(hwnd) : GetDpiForSystem();
+        for (const auto& col : columns) {
+            if (col.width <= 0)
+                continue;
 
-        UINT width =
-            col.width < 0 ? CM_WIDTH_AUTOSIZE : MulDiv(col.width, dpi, 96);
-        // ±1px tolerance avoids update loops from DPI rounding
-        if (col.width < 0 || std::abs((int)ci.uWidth - (int)width) > 1) {
-            ci.uWidth = width;
-            if (col.width > 0) {
-                // Used when the column is resized or auto-sized
-                ci.dwMask |= CM_MASK_DEFAULTWIDTH | CM_MASK_IDEALWIDTH;
-                ci.uDefaultWidth = ci.uIdealWidth = width;
-            }
+            CM_COLUMNINFO current = {sizeof(current), CM_MASK_WIDTH};
+            if (FAILED(columnManager->GetColumnInfo(col.key, &current)))
+                continue;
+
+            UINT width = MulDiv(col.width, dpi, 96);
+            // ±1px tolerance avoids update loops from DPI rounding
+            if (std::abs((int)current.uWidth - (int)width) <= 1)
+                continue;
+
+            // The default and ideal widths are used when the column is resized or auto-sized
+            CM_COLUMNINFO ci = {sizeof(ci), CM_MASK_WIDTH |
+                                                CM_MASK_DEFAULTWIDTH |
+                                                CM_MASK_IDEALWIDTH};
+            ci.uWidth = ci.uDefaultWidth = ci.uIdealWidth = width;
             changed |= SUCCEEDED(columnManager->SetColumnInfo(col.key, &ci));
         }
-    }
 
-    // Sorting
-    if (g_sortEnabled) {
-        SORTCOLUMN sort = {g_sortKey,
-                           g_sortDescending ? SORT_DESCENDING : SORT_ASCENDING};
-        SORTCOLUMN current;
-        int sortCount = 0;
-        folderView->GetSortColumnCount(&sortCount);
-        if (sortCount != 1 || FAILED(folderView->GetSortColumns(&current, 1)) ||
-            !(current.propkey == sort.propkey) ||
-            current.direction != sort.direction) {
-            changed |= SUCCEEDED(folderView->SetSortColumns(&sort, 1));
+        // Sorting
+        if (settings->sortEnabled) {
+            SORTCOLUMN sort = {settings->sortKey, settings->sortDescending
+                                                      ? SORT_DESCENDING
+                                                      : SORT_ASCENDING};
+            SORTCOLUMN current;
+            int sortCount = 0;
+            folderView->GetSortColumnCount(&sortCount);
+            if (sortCount != 1 ||
+                FAILED(folderView->GetSortColumns(&current, 1)) ||
+                !(current.propkey == sort.propkey) ||
+                current.direction != sort.direction) {
+                changed |= SUCCEEDED(folderView->SetSortColumns(&sort, 1));
+            }
         }
     }
 
-    if (autoSizeLater && hwnd)
-        SetAutoSizePending(hwnd, true);
+    // Auto-sized widths
+    if (std::any_of(columns.begin(), columns.end(),
+                    [](const auto& c) { return c.width < 0; })) {
+        if (flags & APPLY_AUTOSIZE_NOW) {
+            for (const auto& col : columns) {
+                if (col.width >= 0)
+                    continue;
 
-    if (subclassForDpi && hwnd) {
+                CM_COLUMNINFO ci = {sizeof(ci), CM_MASK_WIDTH};
+                ci.uWidth = CM_WIDTH_AUTOSIZE;
+                columnManager->SetColumnInfo(col.key, &ci);
+            }
+        } else if (hwnd) {
+            SetAutoSizePending(hwnd, true);
+        }
+    }
+
+    if ((flags & APPLY_SUBCLASS) && hwnd) {
         std::lock_guard<std::mutex> lock(g_subclassedMutex);
         if (g_subclassed.insert(hwnd).second)
             WindhawkUtils::SetWindowSubclassFromAnyThread(
@@ -413,7 +458,9 @@ static void RefreshMinimumWidths(IShellView* view) {
     }
 }
 
-static void ApplyToAllOpenWindows(bool minWidthChanged) {
+// Calls callback with the active view of each Explorer window of this process. The views may be proxies, so they aren't retained
+template <typename Callback>
+static void ForEachOpenView(Callback callback) {
     HRESULT hrInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     {
         ComPtr<IShellWindows> shellWindows;
@@ -449,21 +496,25 @@ static void ApplyToAllOpenWindows(bool minWidthChanged) {
             ComPtr<IServiceProvider> services;
             ComPtr<IShellBrowser> shellBrowser;
             ComPtr<IShellView> shellView;
-            if (FAILED(browser.As(&services)) ||
-                FAILED(services->QueryService(SID_STopLevelBrowser,
-                                              IID_PPV_ARGS(&shellBrowser))) ||
-                FAILED(shellBrowser->QueryActiveShellView(&shellView)))
-                continue;
-
-            // shellView may be a proxy, don't retain it for the subclass. The items are already displayed
-            if (ApplyForcedColumns(shellView.Get(), false, true))
-                shellView->Refresh();
-            if (minWidthChanged)
-                RefreshMinimumWidths(shellView.Get());
+            if (SUCCEEDED(browser.As(&services)) &&
+                SUCCEEDED(services->QueryService(SID_STopLevelBrowser,
+                                                 IID_PPV_ARGS(&shellBrowser))) &&
+                SUCCEEDED(shellBrowser->QueryActiveShellView(&shellView)))
+                callback(shellView.Get());
         }
     }
     if (SUCCEEDED(hrInit))
         CoUninitialize();
+}
+
+static void ApplyToAllOpenWindows(bool minWidthChanged) {
+    ForEachOpenView([minWidthChanged](IShellView* shellView) {
+        // The items are already displayed
+        if (ApplyForcedColumns(shellView, APPLY_LAYOUT | APPLY_AUTOSIZE_NOW))
+            shellView->Refresh();
+        if (minWidthChanged)
+            RefreshMinimumWidths(shellView);
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -477,7 +528,8 @@ HRESULT __thiscall CDefView_UIActivate_hook(void* pThis, UINT uState) {
     HRESULT hr = CDefView_UIActivate_orig(pThis, uState);
     if (SUCCEEDED(hr) &&
         (uState == SVUIA_ACTIVATE_FOCUS || uState == SVUIA_ACTIVATE_NOFOCUS))
-        ApplyForcedColumns((IUnknown*)pThis, true, !g_deferAutoSize);
+        ApplyForcedColumns((IUnknown*)pThis,
+                           APPLY_LAYOUT | APPLY_SUBCLASS | AutoSizeFlags());
     return hr;
 }
 
@@ -489,17 +541,18 @@ HRESULT __thiscall CDefView_SetCurrentViewMode_hook(void* pThis,
                                                     UINT viewMode) {
     HRESULT hr = CDefView_SetCurrentViewMode_orig(pThis, viewMode);
     if (SUCCEEDED(hr) && viewMode == FVM_DETAILS)
-        ApplyForcedColumns((IUnknown*)pThis, true, !g_deferAutoSize);
+        ApplyForcedColumns((IUnknown*)pThis,
+                           APPLY_LAYOUT | APPLY_SUBCLASS | AutoSizeFlags());
     return hr;
 }
 
 using CDefView__OnEnumDoneMessage_t = void(__thiscall*)(void*);
 CDefView__OnEnumDoneMessage_t CDefView__OnEnumDoneMessage_orig;
 
-// The folder finished loading, e.g. after a refresh, auto-size again once the items are displayed
+// The folder finished loading, e.g. after a refresh, only auto-size again once the items are displayed
 void __thiscall CDefView__OnEnumDoneMessage_hook(void* pThis) {
     CDefView__OnEnumDoneMessage_orig(pThis);
-    ApplyForcedColumns((IUnknown*)pThis, true, !g_deferAutoSize);
+    ApplyForcedColumns((IUnknown*)pThis, APPLY_SUBCLASS | AutoSizeFlags());
 }
 
 using CDefView_PaintComplete_t = void(__thiscall*)(void*, BOOL);
@@ -629,6 +682,12 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     ApplyToAllOpenWindows(g_minColumnWidth > 0);
+}
+
+void Wh_ModBeforeUninit() {
+    // The hook passes the Windows minimum through from now on, open views read it again
+    if (g_minColumnWidth.exchange(0) > 0)
+        ForEachOpenView(RefreshMinimumWidths);
 }
 
 void Wh_ModUninit() {
