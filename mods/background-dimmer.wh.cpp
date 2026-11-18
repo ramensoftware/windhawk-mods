@@ -13,11 +13,11 @@
 
 // ==WindhawkModReadme==
 /*
-![Background Dimmer](https://i.imgur.com/HvfnpFn.png)
+![Background Dimmer](https://i.imgur.com/sWClZXZ.png)
 
 # Background Dimmer
 
-Dims inactive windows so the one you are working on stands out, keeping the background from readable to completely covered. Especially useful with side-by-side app layouts.
+Dims inactive windows so the one you are working on stands out, with the background anywhere from readable to fully covered. Especially useful with side-by-side app layouts.
 
 The dimming layer can be a solid tint, checkerboard, stripes at any angle, or a tiled image of your own as a custom pattern. Opacity, brightness, contrast, pattern size / image scale, rotation and base color are all adjustable, plus a fading out animation timing for the window that loses focus.
 
@@ -27,7 +27,7 @@ Apps that run as administrator need Windhawk 2 (currently in alpha). On Windhawk
 
 The look is tuned in the mod's secondary **Configuration window**, where every change shows up immediately on screen. **Win+Ctrl+Alt+D** hotkey opens it by default. The window opens by itself the first time the mod runs.
 
-**Tray icon** option enables it in the notification area to be opened with a secondary-click and (de)activated with a click.
+**Tray icon** option enables it in the notification area. Clicking (de)activates dimming, right-click opens the configuration window.
 
 Changes made in the configuration window are saved automatically. Dimming can be turned off with the **Active** checkbox in the window, optional on/off hotkey, or tray icon clicking.
 
@@ -47,7 +47,7 @@ Brightness and contrast set the two pattern tones as *brightness ± contrast / 2
 
 ## Behavior
 
-- Any generalized window that has focus dims what is inactive.
+- Whatever window has focus stays lit; everything behind it is dimmed.
 - Dialogs and menus can be toggled for parent-window background dimming.
 - The menus option works with standard Windows menus; apps that draw their own, such as Office and web-based apps, aren't detected and might also be treated as dialog windows (Office).
 - The taskbar can be dimmed too, lighting up whenever it, Start or Alt+Tab has focus.
@@ -122,7 +122,7 @@ struct Appearance {
     wchar_t image[MAX_PATH];
 };
 
-// config defaults
+// condiguration window defaults
 const Appearance kDefaults = {PAT_STRIPES, {20, 0, 60, 20, 45, 100, 300}, 0xFFFFFF, true, true, true, false, false, true, L""};
 const wchar_t* const kSliderKeys[SL_COUNT] = {L"opacity", L"brightness", L"contrast", L"size",
                                               L"angle",   L"scale",      L"fade"};
@@ -158,6 +158,7 @@ HWND g_pendingForeground;  // focused window still waiting to show before the ov
 ULONGLONG g_pendingSince;
 HWND g_pingTarget;  // focused window asked to answer a WM_NULL, to know it finished loading
 bool g_pingAnswered;
+HWND g_waitedOut;   // focused window that already used up the 2 s wait
 HWND g_taskbarLayers[4];
 bool g_overlayVisible;
 bool g_shellFocused;
@@ -191,7 +192,6 @@ constexpr wchar_t kOverlayClass[] = L"BackgroundDimmer_Overlay";
 constexpr wchar_t kConfigClass[] = L"BackgroundDimmer_Config";
 
 enum { WM_APP_RELOAD = WM_APP + 1, WM_APP_EXIT, WM_APP_TRAY };
-void SyncMonitorControls();
 enum { HK_TOGGLE = 1, HK_CONFIG = 2 };
 enum { TIMER_REPOSITION = 1, TIMER_SAVE = 2, TIMER_FIT = 3, TIMER_FADE = 4, TIMER_IMAGE_PATH = 5, TIMER_VALUES = 6,
        TIMER_PENDING = 7 };
@@ -225,6 +225,8 @@ void LoadAppearance() {
         g_ap.slider[SL_CONTRAST] = 100;
     }
     g_ap.colorRgb = Wh_GetIntValue(L"color", kDefaults.colorRgb) & 0xFFFFFF;
+    if (g_ap.pattern == PAT_IMAGE && Wh_GetIntValue(L"scale", -1) < 0)
+        g_ap.colorRgb = 0xFFFFFF;  // the image ignored the color until 1.1 too
     g_ap.hideOnDesktop = Wh_GetIntValue(L"hideOnDesktop", kDefaults.hideOnDesktop) != 0;
     g_ap.hideFromCapture = Wh_GetIntValue(L"hideFromCapture", kDefaults.hideFromCapture) != 0;
     g_ap.dimOwners = Wh_GetIntValue(L"dimOwners", kDefaults.dimOwners) != 0;
@@ -380,8 +382,13 @@ HBITMAP BuildImageTile(HBITMAP src) {
     if (!GetObject(src, sizeof(bm), &bm))
         return nullptr;
     int w = bm.bmWidth, h = abs(bm.bmHeight);
-    int tw = Clamp(MulDiv(w, g_ap.slider[SL_SCALE], 100), 1, 4096);
-    int th = Clamp(MulDiv(h, g_ap.slider[SL_SCALE], 100), 1, 4096);
+    // Both sides by the same factor, capped so the longer side is at most 4096 px.
+    int scale = g_ap.slider[SL_SCALE];
+    int longer = w > h ? w : h;
+    if ((long long)longer * scale > 4096LL * 100)
+        scale = (int)(4096LL * 100 / longer);
+    int tw = Clamp(MulDiv(w, scale, 100), 1, 4096);
+    int th = Clamp(MulDiv(h, scale, 100), 1, 4096);
 
     BITMAPINFO bi = {};
     bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
@@ -400,6 +407,12 @@ HBITMAP BuildImageTile(HBITMAP src) {
     HDC m2 = CreateCompatibleDC(screen);
     HBITMAP tile = CreateCompatibleBitmap(screen, tw, th);
     ReleaseDC(nullptr, screen);
+    if (!tile) {
+        DeleteDC(m1);
+        DeleteDC(m2);
+        DeleteObject(scaled);
+        return nullptr;
+    }
     HGDIOBJ o1 = SelectObject(m1, src);
     HGDIOBJ o2 = SelectObject(m2, scaled);
     SetStretchBltMode(m2, HALFTONE);
@@ -994,6 +1007,10 @@ void CALLBACK PingAnswered(HWND, UINT, ULONG_PTR target, LRESULT) {
 /// while hidden or transparent and keep their thread busy loading; the fade waits until the window shows and its
 /// thread answers a WM_NULL, checking again every 30 ms, for at most 2 s.
 bool ForegroundReady(HWND fg) {
+    // The mod's own windows (configuration, color and file dialogs) need no wait, and for them
+    // SendMessageCallbackW calls PingAnswered before it returns.
+    if (fg == g_waitedOut || GetWindowThreadProcessId(fg, nullptr) == GetCurrentThreadId())
+        return true;
     if (fg != g_pendingForeground) {
         g_pendingForeground = fg;
         g_pendingSince = GetTickCount64();
@@ -1007,10 +1024,16 @@ bool ForegroundReady(HWND fg) {
     bool ready = IsWindowVisible(fg) && !cloaked && !transparent;
     if (ready && g_pingTarget != fg) {
         g_pingTarget = fg;
-        g_pingAnswered = !SendMessageCallbackW(fg, WM_NULL, 0, 0, PingAnswered, (ULONG_PTR)fg);
+        g_pingAnswered = false;
+        if (!SendMessageCallbackW(fg, WM_NULL, 0, 0, PingAnswered, (ULONG_PTR)fg))
+            g_pingAnswered = true;
     }
-    if ((ready && g_pingAnswered) || GetTickCount64() - g_pendingSince >= 2000)
+    if (ready && g_pingAnswered)
         return true;
+    if (GetTickCount64() - g_pendingSince >= 2000) {
+        g_waitedOut = fg;
+        return true;
+    }
     SetTimer(g_hwndMain, TIMER_PENDING, 30, nullptr);
     return false;
 }
@@ -1050,7 +1073,6 @@ void PlaceOverlay() {
     }
     bool wasVisible = g_overlayVisible;
     if (g_ap.dimMenus && g_menuCount) {
-        g_shellFocused = false;
         ShowOverlay(true);
         MoveOverlay(g_menus[0], wasVisible);
         return;
@@ -1061,8 +1083,11 @@ void PlaceOverlay() {
     wchar_t cls[256];
     if (!GetClassNameW(fg, cls, ARRAYSIZE(cls)) || IsIgnoredClass(cls))
         return;
-    g_shellFocused = IsShellClass(cls);
-    if (g_shellFocused) {
+    // A hidden foreground window (a tray app showing its menu) keeps the taskbar's state, so a menu opened from the
+    // taskbar doesn't bring the taskbar layer back.
+    if (IsWindowVisible(fg))
+        g_shellFocused = IsShellClass(cls);
+    if (IsShellClass(cls)) {
         ShowOverlay(true);
         MoveOverlay(HWND_TOP, wasVisible);
         return;
@@ -1176,6 +1201,8 @@ void UpdateTrayIcon() {
 
 // ───────────── Configuration window ─────────────
 
+void SyncMonitorControls();
+
 enum {
     ID_PATTERN = 100,
     ID_SLIDER = 110,      // + SL_* index
@@ -1261,12 +1288,18 @@ void ApplyValueFields(bool rewrite) {
 }
 
 // Solid ignores contrast, size and rotation; the image takes Scale in place of Size and can't rotate.
+void EnableSlider(int i, bool enable) {
+    EnableWindow(Ctl(ID_SLIDER + i), enable);
+    EnableWindow(Ctl(ID_VALUE + i), enable);
+    EnableWindow(Ctl(ID_UNIT + i), enable);
+}
+
 void UpdateEnabled() {
     bool image = g_ap.pattern == PAT_IMAGE;
     bool geometric = g_ap.pattern == PAT_CHECKER || g_ap.pattern == PAT_STRIPES;
-    EnableWindow(Ctl(ID_SLIDER + SL_CONTRAST), g_ap.pattern != PAT_SOLID);
-    EnableWindow(Ctl(ID_SLIDER + SL_SIZE), geometric);
-    EnableWindow(Ctl(ID_SLIDER + SL_ANGLE), geometric);
+    EnableSlider(SL_CONTRAST, g_ap.pattern != PAT_SOLID);
+    EnableSlider(SL_SIZE, geometric);
+    EnableSlider(SL_ANGLE, geometric);
     const int sizeSliders[] = {SL_SIZE, SL_SCALE};
     for (int i : sizeSliders) {
         int show = (i == SL_SCALE) == image ? SW_SHOW : SW_HIDE;
@@ -1612,12 +1645,12 @@ LRESULT CALLBACK ConfigProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             break;
         }
         case WM_COMMAND:
-            // Number fields: applied after a pause in typing, and shown clamped when the field loses focus.
             if (LOWORD(wParam) >= ID_MONITOR && LOWORD(wParam) < ID_MONITOR + kMaxMonitors) {
                 int i = LOWORD(wParam) - ID_MONITOR;
                 SetMonitorDim(i, IsDlgButtonChecked(hwnd, ID_MONITOR + i) == BST_CHECKED);
                 return 0;
             }
+            // Number fields: applied after a pause in typing, and shown clamped when the field loses focus.
             if (LOWORD(wParam) >= ID_VALUE && LOWORD(wParam) < ID_VALUE + SL_COUNT) {
                 if (HIWORD(wParam) == EN_CHANGE)
                     SetTimer(g_hwndMain, TIMER_VALUES, 500, nullptr);
@@ -1753,10 +1786,11 @@ void ApplyModSettings() {
 }
 
 void Shutdown() {
-    if (g_savePending)
-        SaveAppearance();
+    // The configuration window first: closing it applies a value typed just before, which then gets saved.
     if (g_hwndConfig)
         DestroyWindow(g_hwndConfig);
+    if (g_savePending)
+        SaveAppearance();
     if (g_hook)
         UnhookWinEvent(g_hook);
     g_hook = nullptr;
