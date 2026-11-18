@@ -1,13 +1,13 @@
 // ==WindhawkMod==
 // @id              macos-gestures-mission-control
 // @name            macOS Gestures - Mission Control
-// @description     Mission Control for Windows: a three- or four-finger swipe up opens a live, animated overview of your windows (app icons, minimized windows, taskbar slide, spring physics) that follows your fingers, a swipe down shows the windows of the current desktop, Win+Tab opens it from the keyboard, and left/right swipes keep switching apps like Alt+Tab
-// @version         1.4.0
+// @description     Mission Control for Windows: a three- or four-finger swipe up opens a live, animated overview of your windows (app icons, minimized windows, taskbar slide, spring physics) that follows your fingers, a swipe down shows the windows of the current desktop (or minimizes them), Win+Tab opens it from the keyboard, and left/right swipes keep switching apps like Alt+Tab
+// @version         1.6.0
 // @author          Frixed
 // @github          https://github.com/frixed
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -luser32 -lwindowsapp -ldwmapi -lgdi32 -ladvapi32 -lole32 -lwindowscodecs -luuid -ld3d11
+// @compilerOptions -luser32 -lwindowsapp -ldwmapi -lgdi32 -ladvapi32 -lole32 -lwindowscodecs -luuid -ld3d11 -ld2d1 -ldwrite
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -27,7 +27,9 @@ on a precision touchpad opens a live, animated overview of all your windows; the
 down, press Esc, or pick a window to leave.
 
 * **Swipe down** while Mission Control is closed: App Exposé, every window of the current
-  desktop without the desktops bar. Swipe back up to leave.
+  desktop without the desktops bar. Swipe back up to leave. In the settings you can choose
+  instead that the swipe down **minimizes all the windows** of the current desktop (swipe
+  up afterwards to see them in Mission Control and bring one back).
 * **Win+Tab** opens Mission Control from the keyboard (also without a touchpad), in place of
   Windows' Task View. Win+Tab again, Esc or a pick closes it.
 
@@ -42,6 +44,7 @@ down, press Esc, or pick a window to leave.
 * A close button on the window under the mouse (also the middle mouse button and the Delete
   key), with the remaining windows gliding to their new places.
 * Keyboard: Esc closes, arrow keys / Tab move the selection, Enter or Space picks it.
+  Alt+Tab cycles through the windows too, and letting go of Alt picks the selected one.
 * Spring physics with the finger speed carried over; pushing further up when everything is
   already open stretches the grid with rubber-band resistance.
 * Respects the Windows "Animation effects" setting, and is switched off over fullscreen
@@ -70,6 +73,11 @@ cycling. It can also be set to do nothing.
 * Win+Tab is caught with a keyboard hook. The taskbar's Task View button still opens Windows'
   Task View, and while an app running as administrator has the focus, Windows doesn't pass
   its keys to the hook, so Win+Tab opens Task View there.
+* While Mission Control is on screen, Alt+Tab doesn't open Windows' switcher (it doesn't mix
+  with the overlay): it moves the selection between the windows of Mission Control (Shift
+  goes back, holding Tab keeps cycling) and picks the selected one when Alt is let go. The
+  settings can also make it ignore Alt+Tab, or leave it to Windows. Same limit as Win+Tab
+  with apps running as administrator.
 * The left/right swipe sends Alt+Tab as keystrokes. When an app running as administrator has
   the focus, Windows blocks those keystrokes, so that swipe does nothing there. The desktops
   bar uses Windows' Win+Ctrl shortcuts the same way and has the same limit.
@@ -122,9 +130,22 @@ which parts to show, and the animation tuning (speed, bounce, stretch, backgroun
 - replaceWinTab: true
   $name: Win+Tab opens Mission Control
   $description: Replaces Windows' Task View on Win+Tab. Works without a touchpad too.
+- altTabInMissionControl: cycle
+  $name: Alt+Tab while Mission Control is open
+  $description: Windows' own Alt+Tab switcher doesn't work well on top of Mission Control and breaks it. Cycle moves the selection between the windows of Mission Control (Shift goes back) and picks the selected one when you let go of Alt. Ignore does nothing. The last option leaves Alt+Tab to Windows (not recommended).
+  $options:
+  - cycle: Cycle through the windows (let go of Alt to pick)
+  - block: Ignore Alt+Tab
+  - windows: Let Windows handle it
 - swipeDistance: 150
   $name: Swipe distance
   $description: How far the fingers travel to go from 0% to 100% (60 to 400). Lower = more sensitive.
+- swipeDown: appExpose
+  $name: Swipe down (Mission Control closed)
+  $description: What a swipe down does while Mission Control is not on screen. Minimize hides every window of the current desktop, and a swipe up shows them again in Mission Control so you can pick one.
+  $options:
+  - appExpose: App Exposé (windows of the current desktop)
+  - minimize: Minimize all windows
 - invertSwipe: false
   $name: Invert swipe direction
 - horizontalSwipe: altTab
@@ -196,6 +217,8 @@ which parts to show, and the animation tuning (speed, bounce, stretch, backgroun
 #include <dxgi.h>
 #include <dcomp.h>
 #include <shobjidl.h>
+#include <d2d1.h>
+#include <dwrite_1.h>
 #include <windhawk_utils.h>
 
 #include <winrt/base.h>
@@ -203,6 +226,7 @@ which parts to show, and the animation tuning (speed, bounce, stretch, backgroun
 #include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Core.h>  // PointerEventArgs
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -394,6 +418,11 @@ static bool SHOW_TITLES = true;
 static bool DESKTOP_BAR = true;
 static int FINGER_COUNT = 3;          // fingers of the swipes (3 or 4)
 static bool REPLACE_WIN_TAB = true;   // Win+Tab opens Mission Control
+static int ALT_TAB_MC_MODE = 2;      // Alt+Tab while Mission Control is on screen: 0 = Windows handles it, 1 = ignored, 2 = cycles the selection
+static bool SWIPE_DOWN_MINIMIZES = false;  // swipe down (Mission Control closed): minimize instead of App Exposé
+// A swipe down that minimizes fires once the fingers travelled this share of
+// GESTURE_DISTANCE (so the "Swipe distance" setting also tunes this one).
+constexpr float MINIMIZE_TRIGGER_FRACTION = 0.35f;
 static bool HIDE_BEFORE_CLOSE = true;
 static bool MIDDLE_CLICK_CLOSE = true;
 static bool KEYBOARD_SUPPORT = true;
@@ -533,7 +562,7 @@ static bool g_wallpaperOk = false;
 static BYTE g_accR = 0, g_accG = 120, g_accB = 212;
 static RECT g_workRect{};  // despite the name: the full monitor rect
 
-static bool g_visible = false;   // overlay window shown
+static std::atomic<bool> g_visible{false};   // overlay window shown (the keyboard hook thread reads it too)
 static bool g_open = false;      // committed open (accepts clicks)
 static bool g_dragging = false;  // the fingers are currently driving it
 // App Exposé: opened with a swipe DOWN, shows the windows without the desktops
@@ -1725,86 +1754,207 @@ static IDCompositionSurface* CreatePixelSurface(const std::vector<uint32_t>& px,
     return surf;
 }
 
-// Renders one line of text into premultiplied BGRA pixels.
-//
-// The text is drawn white on black with grayscale smoothing, which gives the
-// coverage of every pixel directly; that coverage becomes the alpha of ONE flat
-// color. (Recovering the alpha from a black and a white rendering, as the icons
-// do, is inexact for text and leaves a bold, haloed look.)
+// Text is drawn with Direct2D + DirectWrite into a premultiplied BGRA bitmap.
+// It sits on a transparent surface, where ClearType can't work, so it uses
+// grayscale antialiasing, tuned for small interface text:
+// * GDI-natural rendering: glyph outlines are hinted to the pixel grid, so
+//   stems land on whole pixels (one dark column instead of two or three gray
+//   ones), while the spacing keeps the font's natural widths.
+// * Extra contrast for the grayscale edges, so the text reads dark and solid.
+static ID2D1Factory* g_d2dFactory = nullptr;
+static IDWriteFactory* g_dwFactory = nullptr;
+static IWICImagingFactory* g_textWic = nullptr;
+static IDWriteRenderingParams* g_textParams = nullptr;
 
+// How much darker the antialiased edges of the text are drawn (0 = plain
+// coverage). Higher = bolder, crisper-looking text.
+constexpr float TEXT_GRAY_CONTRAST = 1.0f;
+static int g_hasVariableFont = -1;  // Segoe UI Variable Text installed? -1 = not checked
+
+static bool InitTextRendering() {
+    if (!g_d2dFactory &&
+        FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory),
+                                 nullptr, reinterpret_cast<void**>(&g_d2dFactory)))) {
+        g_d2dFactory = nullptr;
+    }
+    if (!g_dwFactory &&
+        FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+                                   reinterpret_cast<IUnknown**>(&g_dwFactory)))) {
+        g_dwFactory = nullptr;
+    }
+    if (!g_textWic &&
+        FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                                IID_IWICImagingFactory, reinterpret_cast<void**>(&g_textWic)))) {
+        g_textWic = nullptr;
+    }
+    if (g_dwFactory && !g_textParams) {
+        // The system's gamma (from the display's text tuning), our rendering
+        // mode and grayscale contrast.
+        float gamma = 1.8f;
+        IDWriteRenderingParams* system = nullptr;
+        if (SUCCEEDED(g_dwFactory->CreateRenderingParams(&system)) && system) {
+            gamma = system->GetGamma();
+            system->Release();
+        }
+        IDWriteFactory1* f1 = nullptr;
+        if (SUCCEEDED(g_dwFactory->QueryInterface(__uuidof(IDWriteFactory1),
+                                                  reinterpret_cast<void**>(&f1))) && f1) {
+            IDWriteRenderingParams1* p1 = nullptr;
+            if (SUCCEEDED(f1->CreateCustomRenderingParams(
+                    gamma, TEXT_GRAY_CONTRAST, TEXT_GRAY_CONTRAST, 0.0f, DWRITE_PIXEL_GEOMETRY_FLAT,
+                    DWRITE_RENDERING_MODE_GDI_NATURAL, &p1))) {
+                g_textParams = p1;
+            }
+            f1->Release();
+        }
+        if (!g_textParams) {
+            g_dwFactory->CreateCustomRenderingParams(gamma, TEXT_GRAY_CONTRAST, 0.0f,
+                                                     DWRITE_PIXEL_GEOMETRY_FLAT,
+                                                     DWRITE_RENDERING_MODE_GDI_NATURAL,
+                                                     &g_textParams);
+        }
+    }
+    return g_d2dFactory && g_dwFactory && g_textWic;
+}
+
+static void ShutdownTextRendering() {
+    if (g_textParams) { g_textParams->Release(); g_textParams = nullptr; }
+    if (g_textWic) { g_textWic->Release(); g_textWic = nullptr; }
+    if (g_dwFactory) { g_dwFactory->Release(); g_dwFactory = nullptr; }
+    if (g_d2dFactory) { g_d2dFactory->Release(); g_d2dFactory = nullptr; }
+    g_hasVariableFont = -1;
+}
+
+// Segoe UI Variable (Text) when it is installed, otherwise the face asked for.
+static const wchar_t* ResolveUiFace(const wchar_t* face) {
+    if (wcscmp(face, L"Segoe UI") != 0) {
+        return face;
+    }
+    if (g_hasVariableFont < 0) {
+        g_hasVariableFont = 0;
+        IDWriteFontCollection* fonts = nullptr;
+        if (SUCCEEDED(g_dwFactory->GetSystemFontCollection(&fonts, FALSE)) && fonts) {
+            UINT32 index = 0;
+            BOOL exists = FALSE;
+            if (SUCCEEDED(fonts->FindFamilyName(L"Segoe UI Variable Text", &index, &exists)) &&
+                exists) {
+                g_hasVariableFont = 1;
+            }
+            fonts->Release();
+        }
+    }
+    return g_hasVariableFont == 1 ? L"Segoe UI Variable Text" : face;
+}
+
+// Renders one line of text, in one flat color, into premultiplied BGRA pixels
+// with TITLE_PAD pixels of room around it. Text wider than maxWidth (with the
+// padding) ends with an ellipsis. `semibold` for window titles, which sit on
+// a busy background. Complex scripts (Arabic, Hebrew, Hindi,
+// Thai...) are shaped and ordered by DirectWrite, which also picks a fallback
+// font for characters the face doesn't have.
 static bool RenderTextPixels(const wchar_t* text, COLORREF color, int fontPx,
                              const wchar_t* face, bool rtl,
                              std::vector<uint32_t>& out, int& outW, int& outH,
-                             int maxWidth = 0) {
-    HDC screen = GetDC(nullptr);
-    HDC mem = CreateCompatibleDC(screen);
-    HFONT font = CreateUiFont(mem, fontPx, face);
-    HGDIOBJ oldFont = SelectObject(mem, font);
-
-    // DrawText (not TextOut) so complex scripts (Arabic, Hebrew, Hindi, Thai...)
-    // are shaped and ordered correctly. The ellipsis flag must NOT be used to
-    // measure: with an empty rectangle it would make the text look like it has
-    // no room at all ("V...").
-    const UINT flags = DT_NOPREFIX | DT_SINGLELINE | (rtl ? DT_RTLREADING : 0);
-    RECT measure{ 0, 0, 0, 0 };
-    DrawTextW(mem, text, -1, &measure, flags | DT_CALCRECT);
-    const int pad = 8;
-    int w = (measure.right - measure.left) + 2 * pad;
-    const int h = (measure.bottom - measure.top) + 2 * pad;
-    if (maxWidth > 0 && w > maxWidth) {
-        w = maxWidth;  // longer text ends with an ellipsis
+                             int maxWidth = 0, bool semibold = false) {
+    if (!text || !text[0] || fontPx <= 0 || !InitTextRendering()) {
+        return false;
     }
 
-    BITMAPINFO bi{};
-    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = w;
-    bi.bmiHeader.biHeight = -h;
-    bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = 32;
-    bi.bmiHeader.biCompression = BI_RGB;
-
-    void* bits = nullptr;
-    HBITMAP bmp = nullptr;
-    if (w > 2 * pad && h > 2 * pad) {
-        bmp = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-    }
-
+    IDWriteTextFormat* format = nullptr;
+    IDWriteTextLayout* layout = nullptr;
+    IDWriteInlineObject* ellipsis = nullptr;
+    IWICBitmap* bitmap = nullptr;
+    ID2D1RenderTarget* target = nullptr;
+    ID2D1SolidColorBrush* brush = nullptr;
     bool ok = false;
-    if (bmp && bits) {
-        const size_t count = static_cast<size_t>(w) * h;
-        SetBkMode(mem, TRANSPARENT);
-        SetTextColor(mem, RGB(255, 255, 255));
 
-        HGDIOBJ oldBmp = SelectObject(mem, bmp);
-        memset(bits, 0x00, count * 4);
-        RECT area{ pad, pad, w - pad, h - pad };
-        DrawTextW(mem, text, -1, &area, flags | DT_END_ELLIPSIS);  // only cuts what doesn't fit
-        GdiFlush();
-        SelectObject(mem, oldBmp);
+    do {
+        if (FAILED(g_dwFactory->CreateTextFormat(
+                ResolveUiFace(face), nullptr,
+                semibold ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
+                DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_STRETCH_NORMAL, static_cast<float>(fontPx), L"", &format))) {
+            break;
+        }
+        format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+        format->SetReadingDirection(rtl ? DWRITE_READING_DIRECTION_RIGHT_TO_LEFT
+                                        : DWRITE_READING_DIRECTION_LEFT_TO_RIGHT);
+        // Measured the way it is drawn (GDI-natural widths, one pixel per unit).
+        if (FAILED(g_dwFactory->CreateGdiCompatibleTextLayout(
+                text, static_cast<UINT32>(wcslen(text)), format, 100000.0f, 10000.0f, 1.0f,
+                nullptr, TRUE, &layout))) {
+            break;
+        }
 
-        const uint32_t* src = static_cast<const uint32_t*>(bits);
-        const float cr = static_cast<float>(GetRValue(color));
-        const float cg = static_cast<float>(GetGValue(color));
-        const float cb = static_cast<float>(GetBValue(color));
-        out.resize(count);
-        for (size_t i = 0; i < count; i++) {
-            const float a = static_cast<float>(src[i] & 0xFF) / 255.0f;  // R = G = B
-            const uint32_t ua = static_cast<uint32_t>(a * 255.0f + 0.5f);
-            out[i] = (ua << 24) |
-                     (static_cast<uint32_t>(cr * a + 0.5f) << 16) |
-                     (static_cast<uint32_t>(cg * a + 0.5f) << 8) |
-                     static_cast<uint32_t>(cb * a + 0.5f);
+        DWRITE_TEXT_METRICS m{};
+        if (FAILED(layout->GetMetrics(&m))) {
+            break;
+        }
+        const int pad = TITLE_PAD;
+        const int textW = static_cast<int>(std::ceil(m.widthIncludingTrailingWhitespace));
+        int w = textW + 2 * pad;
+        const int h = static_cast<int>(std::ceil(m.height)) + 2 * pad;
+        if (maxWidth > 0 && w > maxWidth) {
+            w = maxWidth;  // longer text ends with an ellipsis
+            DWRITE_TRIMMING trim{ DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0 };
+            if (SUCCEEDED(g_dwFactory->CreateEllipsisTrimmingSign(format, &ellipsis))) {
+                layout->SetTrimming(&trim, ellipsis);
+            }
+        }
+        if (w <= 2 * pad || h <= 2 * pad) {
+            break;
+        }
+        layout->SetMaxWidth(static_cast<float>(w - 2 * pad));
+
+        if (FAILED(g_textWic->CreateBitmap(static_cast<UINT>(w), static_cast<UINT>(h),
+                                           GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnLoad,
+                                           &bitmap))) {
+            break;
+        }
+        const D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(
+            D2D1_RENDER_TARGET_TYPE_SOFTWARE,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+            96.0f, 96.0f);  // 96 DPI: one DirectWrite unit = one pixel
+        if (FAILED(g_d2dFactory->CreateWicBitmapRenderTarget(bitmap, &props, &target))) {
+            break;
+        }
+        target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+        if (g_textParams) {
+            target->SetTextRenderingParams(g_textParams);
+        }
+        if (FAILED(target->CreateSolidColorBrush(
+                D2D1::ColorF(GetRValue(color) / 255.0f, GetGValue(color) / 255.0f,
+                             GetBValue(color) / 255.0f, 1.0f),
+                &brush))) {
+            break;
+        }
+
+        target->BeginDraw();
+        target->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
+        target->DrawTextLayout(D2D1::Point2F(static_cast<float>(pad), static_cast<float>(pad)),
+                               layout, brush);
+        if (FAILED(target->EndDraw())) {
+            break;
+        }
+
+        out.resize(static_cast<size_t>(w) * h);
+        WICRect all{ 0, 0, w, h };
+        if (FAILED(bitmap->CopyPixels(&all, static_cast<UINT>(w) * 4,
+                                      static_cast<UINT>(out.size() * 4),
+                                      reinterpret_cast<BYTE*>(out.data())))) {
+            break;
         }
         outW = w;
         outH = h;
         ok = true;
-    }
+    } while (false);
 
-    if (bmp) DeleteObject(bmp);
-    SelectObject(mem, oldFont);
-    DeleteObject(font);
-    DeleteDC(mem);
-    ReleaseDC(nullptr, screen);
+    if (brush) brush->Release();
+    if (target) target->Release();
+    if (bitmap) bitmap->Release();
+    if (ellipsis) ellipsis->Release();
+    if (layout) layout->Release();
+    if (format) format->Release();
     return ok;
 }
 
@@ -2198,7 +2348,7 @@ static void AddTitleChild(IDCompositionVisual2* parent, const Tile& t) {
 
     std::vector<uint32_t> px;
     int w = 0, h = 0;
-    if (!RenderTextPixels(title, color, TITLE_FONT_PX, L"Segoe UI", false, px, w, h, maxW)) {
+    if (!RenderTextPixels(title, color, TITLE_FONT_PX, L"Segoe UI", false, px, w, h, maxW, true)) {
         return;
     }
     IDCompositionSurface* surf = CreatePixelSurface(px, w, h);
@@ -3885,9 +4035,11 @@ static void FlushPendingCloses() {
 // scale) and everything is then multiplied by the DPI scale, since this thread
 // works in physical pixels. The icons are proportional to the logical height
 // (56 px at 1440); the rest (gaps, titles, close button, the desktops bar)
-// scales more gently so text stays readable on small screens. Run before every
-// layout.
-static void UpdateUiScale(int monitorHeight, UINT dpi) {
+// scales more gently so text stays readable on small screens. Window titles
+// also grow on monitors wider than 16:9: more windows fit in each row there,
+// so the previews are smaller and a title sized only by the height reads small.
+// Run before every layout.
+static void UpdateUiScale(int monitorWidth, int monitorHeight, UINT dpi) {
     const float d = static_cast<float>(dpi < 96 ? 96 : dpi) / 96.0f;
     g_dpiScale = d;
 
@@ -3913,8 +4065,12 @@ static void UpdateUiScale(int monitorHeight, UINT dpi) {
     icon = icon < 32.0f ? 32.0f : (icon > 96.0f ? 96.0f : icon);
     ICON_SIZE = static_cast<int>(std::lround(icon * d));
     ICON_GAP = sc(14.0f, 8);
-    TITLE_FONT_PX = sc(14.0f, 11);
-    TITLE_H = sc(20.0f, 16);
+    // sqrt(aspect / 16:9), from 1 (16:9 or narrower) to 1.25 (32:9).
+    float wide = std::sqrt((static_cast<float>(monitorWidth) / static_cast<float>(monitorHeight > 0 ? monitorHeight : 1)) /
+                           (16.0f / 9.0f));
+    wide = wide < 1.0f ? 1.0f : (wide > 1.25f ? 1.25f : wide);
+    TITLE_FONT_PX = sc(14.0f * wide, 11);
+    TITLE_H = sc(20.0f * wide, 16);
     TITLE_GAP = sc(4.0f, 3);
     CB_RADIUS = sc(13.0f, 10);
     CB_INSET = sc(10.0f, 7);
@@ -4797,7 +4953,8 @@ static void ShowOverlay() {
                      SWP_SHOWWINDOW | SWP_NOACTIVATE);
     }
 
-    UpdateUiScale(g_workRect.bottom - g_workRect.top, MonitorDpi(mon));
+    UpdateUiScale(g_workRect.right - g_workRect.left, g_workRect.bottom - g_workRect.top,
+                  MonitorDpi(mon));
     PurgeDeadWindowIcons();
     BuildTiles();
     g_visible = true;
@@ -6122,6 +6279,9 @@ static float g_axisAccY = 0.0f;
 static bool g_altHeld = false;   // we are holding Alt down
 static bool g_altSwipe = false;  // this horizontal swipe is driving Alt+Tab
 static float g_altAccX = 0.0f;   // travel since the last Alt+Tab step
+static bool g_minimizeSwipe = false;  // this vertical swipe is a "minimize all windows" one
+static float g_minimizeAccY = 0.0f;   // downward travel of that swipe
+static bool g_minimizeDone = false;   // it already fired, once per swipe
 
 static void SendAltTabStep(bool forward) {
     INPUT in[5] = {};
@@ -6171,6 +6331,9 @@ static void EndSwipe() {
     g_axis = SwipeAxis::Unknown;
     g_axisAccX = 0.0f;
     g_axisAccY = 0.0f;
+    g_minimizeSwipe = false;
+    g_minimizeAccY = 0.0f;
+    g_minimizeDone = false;
 }
 
 // A game, a fullscreen video or a presentation has the screen. Mission Control
@@ -6218,8 +6381,44 @@ static bool IsFullscreenAppActive() {
            wr.right >= mi.rcMonitor.right && wr.bottom >= mi.rcMonitor.bottom;
 }
 
+// Swipe down with "Minimize all windows": minimizes what Mission Control would
+// have listed (same filters, current virtual desktop), on every monitor.
+static void MinimizeAllWindows() {
+    const int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    EnumCtx ctx;
+    ctx.work = RECT{ vx, vy, vx + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                     vy + GetSystemMetrics(SM_CYVIRTUALSCREEN) };
+    EnumWindows(EnumProc, reinterpret_cast<LPARAM>(&ctx));
+
+    // EnumWindows goes top to bottom. Minimizing from the bottom up keeps
+    // Windows from activating (and animating) the next window after each one.
+    int count = 0;
+    for (auto it = ctx.hwnds.rbegin(); it != ctx.hwnds.rend(); ++it) {
+        HWND h = *it;
+        if (IsIconic(h) || !(GetWindowLongPtrW(h, GWL_STYLE) & WS_MINIMIZEBOX)) {
+            continue;
+        }
+        ShowWindowAsync(h, SW_MINIMIZE);
+        count++;
+    }
+    Wh_Log(L"Swipe down: minimizing %d window(s).", count);
+}
+
+static void OnMinimizeDelta(float dy) {
+    g_minimizeAccY += INVERT_Y ? -dy : dy;  // positive = the fingers go down
+    if (!g_minimizeDone && g_minimizeAccY >= GESTURE_DISTANCE * MINIMIZE_TRIGGER_FRACTION) {
+        g_minimizeDone = true;
+        MinimizeAllWindows();
+    }
+}
+
 static void OnSwipeDelta(float dx, float dy) {
     if (g_axis == SwipeAxis::Vertical) {
+        if (g_minimizeSwipe) {
+            OnMinimizeDelta(dy);
+            return;
+        }
         OnGestureDelta(dy);
         return;
     }
@@ -6253,8 +6452,17 @@ static void OnSwipeDelta(float dx, float dy) {
         }
         g_axis = SwipeAxis::Vertical;
         if (!g_visible) {
-            // Closed: up opens Mission Control, down opens App Exposé.
-            g_exposeMode = (INVERT_Y ? -g_axisAccY : g_axisAccY) > 0.0f;
+            // Closed: up opens Mission Control, down opens App Exposé or
+            // minimizes the windows, depending on the setting.
+            const bool down = (INVERT_Y ? -g_axisAccY : g_axisAccY) > 0.0f;
+            if (down && SWIPE_DOWN_MINIMIZES) {
+                g_minimizeSwipe = true;
+                g_minimizeAccY = 0.0f;
+                g_minimizeDone = false;
+                OnMinimizeDelta(g_axisAccY);  // replay what was collected
+                return;
+            }
+            g_exposeMode = down;
         }
         OnGestureDelta(g_axisAccY);  // replay what was collected
         return;
@@ -6500,11 +6708,15 @@ static void EnsureControllerConfig(bool& controllerReady) {
 // ---------------------------------------------------------------------------
 
 constexpr UINT WM_APP_WIN_TAB = WM_APP + 3;  // thread message: Win+Tab was pressed
+constexpr UINT WM_APP_ALT_TAB = WM_APP + 4;     // thread message: Alt+Tab in Mission Control (wParam 1 = forward)
+constexpr UINT WM_APP_ALT_COMMIT = WM_APP + 5;  // thread message: Alt let go after cycling with Alt+Tab
 
 static HANDLE g_hookThread = nullptr;
 static DWORD g_hookThreadId = 0;
 static HANDLE g_hookReady = nullptr;
 static bool g_winTabDown = false;  // hook thread only
+static bool g_altTabDown = false;  // hook thread only: a swallowed Alt+Tab press is down
+static bool g_altCycling = false;  // hook thread only: Alt+Tab cycled Mission Control, Alt still held
 
 static bool KeyHeld(int vk) {
     return (GetAsyncKeyState(vk) & 0x8000) != 0;
@@ -6524,11 +6736,19 @@ static void MaskWinKey() {
 static LRESULT CALLBACK WinTabHookProc(int code, WPARAM wp, LPARAM lp) {
     if (code == HC_ACTION) {
         const auto* k = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lp);
+        // Alt let go after cycling with Alt+Tab: pick the selected window. The
+        // Alt release itself goes through (the masked press can't open a menu).
+        if (g_altCycling && !(k->flags & LLKHF_INJECTED) &&
+            (k->vkCode == VK_LMENU || k->vkCode == VK_RMENU || k->vkCode == VK_MENU) &&
+            (wp == WM_KEYUP || wp == WM_SYSKEYUP)) {
+            g_altCycling = false;
+            PostThreadMessageW(g_threadId, WM_APP_ALT_COMMIT, 0, 0);
+        }
         if (k->vkCode == VK_TAB && !(k->flags & LLKHF_INJECTED)) {
             const bool down = (wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN);
             if (down) {
-                if ((KeyHeld(VK_LWIN) || KeyHeld(VK_RWIN)) && !KeyHeld(VK_CONTROL) &&
-                    !KeyHeld(VK_MENU)) {
+                if (REPLACE_WIN_TAB && (KeyHeld(VK_LWIN) || KeyHeld(VK_RWIN)) &&
+                    !KeyHeld(VK_CONTROL) && !KeyHeld(VK_MENU)) {
                     if (!g_winTabDown) {  // the key repeat doesn't toggle again
                         g_winTabDown = true;
                         MaskWinKey();
@@ -6536,9 +6756,28 @@ static LRESULT CALLBACK WinTabHookProc(int code, WPARAM wp, LPARAM lp) {
                     }
                     return 1;
                 }
+                // Alt+Tab (and Ctrl+Alt+Tab) while Mission Control is on screen:
+                // Windows' switcher on top of the overlay breaks it, so it never
+                // gets the key. Our own Alt+Tab (the left/right swipe) is
+                // injected, so it never gets here.
+                if (ALT_TAB_MC_MODE != 0 && g_visible && (k->flags & LLKHF_ALTDOWN)) {
+                    if (!g_altTabDown) {
+                        g_altTabDown = true;
+                        MaskWinKey();  // so letting go of Alt alone doesn't light up a menu bar
+                    }
+                    if (ALT_TAB_MC_MODE == 2) {
+                        g_altCycling = true;  // the key repeat keeps cycling, like Windows
+                        PostThreadMessageW(g_threadId, WM_APP_ALT_TAB,
+                                           KeyHeld(VK_SHIFT) ? 0 : 1, 0);
+                    }
+                    return 1;
+                }
             } else if (g_winTabDown) {
                 g_winTabDown = false;
                 return 1;  // the Tab release of a swallowed press
+            } else if (g_altTabDown) {
+                g_altTabDown = false;
+                return 1;  // same for a swallowed Alt+Tab
             }
         }
     }
@@ -6574,7 +6813,7 @@ static void StopWinTabHook() {
 
 // Starts or stops the hook to match the setting.
 static void UpdateWinTabHook() {
-    if (!REPLACE_WIN_TAB) {
+    if (!REPLACE_WIN_TAB && ALT_TAB_MC_MODE == 0) {  // the hook serves both
         StopWinTabHook();
         return;
     }
@@ -6596,7 +6835,9 @@ static void UpdateWinTabHook() {
     // Until its message queue exists (so StopWinTabHook's WM_QUIT can't get lost).
     HANDLE waits[2] = { g_hookReady, g_hookThread };
     WaitForMultipleObjects(2, waits, FALSE, INFINITE);
-    Wh_Log(L"Win+Tab now opens Mission Control.");
+    Wh_Log(L"Keyboard hook running (Win+Tab opens Mission Control: %s, Alt+Tab inside it: %s).",
+           REPLACE_WIN_TAB ? L"yes" : L"no",
+           ALT_TAB_MC_MODE == 2 ? L"cycles" : (ALT_TAB_MC_MODE == 1 ? L"ignored" : L"Windows"));
 }
 
 // Win+Tab: opens Mission Control with the same spring as a released swipe, or
@@ -6620,6 +6861,29 @@ static void ToggleFromKeyboard() {
     g_open = true;
     SetClickThrough(false);
     StartSpring(1.0f, 0.0f);
+}
+
+// Alt+Tab inside Mission Control / App Exposé: moves the selection like Tab does
+// (Shift = backwards). As in Windows' own switcher the first press goes to the
+// NEXT window: the tiles are in z-order, so tile 0 is the one you were in.
+static void OnAltTabInMc(bool forward) {
+    if (!g_visible || !g_open || g_dragging) {
+        return;
+    }
+    const int n = static_cast<int>(g_tiles.size());
+    if (forward && (g_kbSel < 0 || g_kbSel >= n) && n > 1) {
+        SelectTile(1);
+        return;
+    }
+    CycleSelection(forward ? 1 : -1);
+}
+
+// Alt let go after cycling: pick the selected window, like Windows' switcher.
+static void OnAltReleaseInMc() {
+    if (!g_visible || !g_open || g_dragging || g_kbSel < 0) {
+        return;
+    }
+    BeginClose(g_kbSel);
 }
 
 static void LoadSettings();
@@ -6694,7 +6958,8 @@ DWORD WINAPI TouchpadThreadProc(void*) {
                         MONITORINFO scaleMi{};
                         scaleMi.cbSize = sizeof(scaleMi);
                         if (GetMonitorInfoW(primary, &scaleMi)) {
-                            UpdateUiScale(scaleMi.rcMonitor.bottom - scaleMi.rcMonitor.top,
+                            UpdateUiScale(scaleMi.rcMonitor.right - scaleMi.rcMonitor.left,
+                                          scaleMi.rcMonitor.bottom - scaleMi.rcMonitor.top,
                                           MonitorDpi(primary));
                         }
                     }
@@ -6823,6 +7088,14 @@ DWORD WINAPI TouchpadThreadProc(void*) {
                     ToggleFromKeyboard();
                     continue;
                 }
+                if (msg.message == WM_APP_ALT_TAB) {
+                    OnAltTabInMc(msg.wParam != 0);
+                    continue;
+                }
+                if (msg.message == WM_APP_ALT_COMMIT) {
+                    OnAltReleaseInMc();
+                    continue;
+                }
             }
 
             TranslateMessage(&msg);
@@ -6850,6 +7123,7 @@ DWORD WINAPI TouchpadThreadProc(void*) {
 
     StopPrewarm();
     DestroyOverlayWindow();
+    ShutdownTextRendering();
 
     if (apartmentInitialized) {
         winrt::uninit_apartment();
@@ -6900,6 +7174,13 @@ static void LoadSettings() {
     FINGER_COUNT =
         wcscmp(WindhawkUtils::StringSetting::make(L"fingers").get(), L"four") == 0 ? 4 : 3;
     REPLACE_WIN_TAB = Wh_GetIntSetting(L"replaceWinTab") != 0;
+    {
+        const auto altTab = WindhawkUtils::StringSetting::make(L"altTabInMissionControl");
+        PCWSTR m = altTab.get();
+        ALT_TAB_MC_MODE = !wcscmp(m, L"windows") ? 0 : (!wcscmp(m, L"block") ? 1 : 2);
+    }
+    SWIPE_DOWN_MINIMIZES =
+        wcscmp(WindhawkUtils::StringSetting::make(L"swipeDown").get(), L"minimize") == 0;
     KEYBOARD_SUPPORT = Wh_GetIntSetting(L"keyboardSupport") != 0;
     DISABLE_IN_FULLSCREEN = Wh_GetIntSetting(L"disableInFullscreen") != 0;
     RESPECT_REDUCED_MOTION = Wh_GetIntSetting(L"respectReducedMotion") != 0;
