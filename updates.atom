@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-18T03:01:35.000Z</updated>
+    <updated>2026-11-18T05:14:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.6.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#f16bd5f3b6a39f11e72878aa0efdbc804c0ffb23</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2026-11-18T05:14:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to always show the program name, not the window title, when combining, even when there's a single item. It was unintentionally the behavior in previous versions, and it turns out that some users preferred it that way.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer: No Help 1.0]]></title>
         <id>https://windhawk.net/mods/explorer-no-help#80cb448b9b93e1d9af4c234fdfdd9d393d6f555f</id>
@@ -642,23 +656,6 @@ page</a>.</p>
 <li>Keyboard shortcuts can use human-friendly key names, such as <code>Alt+[</code>, <code>Ctrl+F1</code> or <code>Win+Left</code>. The <code>VK_</code> key names are still supported.</li>
 <li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame: scrolling over the system tray no longer cycles between taskbar buttons.</li>
 <li>Fixed the &quot;Customize the old taskbar on Windows 11&quot; option on Windows 11 24H2 builds before 26100.1301, which still include the old taskbar.</li>
-</ul>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.5.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-vertical#553760a3d14275c881c2971761db35355d07509b</id>
-        <link href="https://windhawk.net/mods/taskbar-vertical"/>
-        <updated>2026-11-17T09:02:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved taskbar button badges placement.</li>
-<li>Improved compatibility with the &quot;Primary taskbar on secondary monitor&quot; mod.</li>
-<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
-<li>Fixed jump list of the primary taskbar animating in the wrong direction in some cases.</li>
 </ul>
 ]]></content>
         <author>

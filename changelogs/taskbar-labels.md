@@ -1,3 +1,7 @@
+## 1.6.1 ([Nov 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f16bd5f3b6a39f11e72878aa0efdbc804c0ffb23/mods/taskbar-labels.wh.cpp))
+
+* Added an option to always show the program name, not the window title, when combining, even when there's a single item. It was unintentionally the behavior in previous versions, and it turns out that some users preferred it that way.
+
 ## 1.6 ([Nov 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5e44fbdb4dd4433ef2ddd99c5ff59214cbf74fde/mods/taskbar-labels.wh.cpp))
 
 * When taskbar buttons are combined, a button with a single window now shows the window title instead of the program name, same as when taskbar buttons aren't combined.
