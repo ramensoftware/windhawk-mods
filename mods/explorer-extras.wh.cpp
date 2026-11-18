@@ -2,7 +2,7 @@
 // @id              explorer-extras
 // @name            Explorer Extras
 // @description     Beta. Additions for File Explorer, one switch per area: Columns (Miller columns), a details and preview pane (PDF, text, Markdown, images, video, sound), colour labels (tags), and a toolbar with tighter gaps, a resizable search box and round corners.
-// @version         0.78.6
+// @version         0.78.7
 // @author          AristideBH
 // @github          https://github.com/AristideBH
 // @donateUrl       https://ko-fi.com/aristidebh
@@ -21944,8 +21944,11 @@ bool LabelsInstallGroupHook() {
     if (SUCCEEDED(init)) {
         CoUninitialize();
     }
-    Wh_Log(ok ? L"labels: Sort by and Group by tags are on (property store hook installed)"
-              : L"labels: the property store hook could not be set, Sort by and Group by tags are off");
+    if (ok) {
+        Wh_Log(L"labels: Sort by and Group by tags are on (property store hook installed)");
+    } else {
+        Wh_Log(L"labels: the property store hook could not be set, Sort by and Group by tags are off");
+    }
     return ok;
 }
 
