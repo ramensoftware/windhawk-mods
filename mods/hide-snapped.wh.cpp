@@ -2,7 +2,7 @@
 // @id              hide-snapped
 // @name            Snap Groups: Alt+Tab and taskbar
 // @description     Group-only Alt+Tab and separate taskbar buttons with tiled member icons.
-// @version         0.4.19
+// @version         0.4.20
 // @author          coldfeudal
 // @github          https://github.com/coldfeudal
 // @include         explorer.exe
@@ -56,8 +56,8 @@ activation/minimization; animation behavior follows those native commands.
 The verified environment is Windows 11 25H2
 (26200.8246, x64) with Windhawk 1.7.3. Earlier builds were tested interactively
 for group switching, independent buttons, previews, icon layout and cleanup
-on one monitor/DPI configuration. Version 0.4.19 passed a local build, native
-interface checks and isolated regressions. Extended runtime testing is pending.
+on one monitor/DPI configuration. Longer sessions and additional configurations
+still need testing.
 
 - **Independent taskbar per monitor 1.7.0:** the 0.4.19 runtime retest on
   the configuration above produced no empty buttons or Explorer crashes.
@@ -70,7 +70,7 @@ interface checks and isolated regressions. Extended runtime testing is pending.
   Other multi-monitor, DPI, and virtual desktop configurations have limited
   coverage.
 
-The mod currently accepts only x64 Windows build 26200. Taskbar integration
+The mod currently accepts Windows build 26200. ARM64 is untested. Taskbar integration
 checks the inspected revisions of Windows shell DLLs. A Windows update can
 disable taskbar integration until its interfaces are checked again.
 
@@ -81,10 +81,11 @@ Include "hide-snapped" in the title and mention @coldfeudal in the report.
 
 Windhawk debug logging records phase codes and counts without window/document
 titles. Disable this mod to restore the native taskbar and switcher behavior.
-The taskbar integration also records bounded local diagnostic journals in
-`%LOCALAPPDATA%\Windhawk\hide-snapped-traces`. They contain numeric identifiers,
-counts, and module information for stack traces. They omit window titles and
-AppID strings.
+Enable Record support trace only when collecting diagnostics. Changing this
+setting reloads the mod. Bounded journals are stored in Windhawk's per-mod
+storage directory, in the traces subfolder. A background writer saves queued
+records. Records may be dropped under load. Journals contain numeric identities,
+counts and stack/module information, without window titles or AppID strings.
 
 The Alt+Tab scoping approach was informed by
 [Alt+Tab per monitor](https://windhawk.net/mods/alt-tab-per-monitor).
@@ -135,6 +136,9 @@ The Alt+Tab scoping approach was informed by
 - nativeGroupPreview: true
   $name: Native Snap Group preview on hover
   $description: Host the same system composition visual factory used by Alt+Tab; no screenshot copying.
+- binaryTrace: false
+  $name: Record support trace
+  $description: Opt-in bounded journals in Windhawk mod storage. Changing this reloads the mod. Records may be dropped under load.
 - diagnosticMode: false
   $name: Diagnostic mode (keep all windows, disable taskbar integration)
   $description: Count Alt+Tab candidates without hiding cards; restore individual taskbar buttons.
@@ -169,9 +173,9 @@ using Microsoft::WRL::ComPtr;
 
 namespace {
 
-// Temporary causal diagnostics. Fixed-size records contain only numeric object
+// Opt-in support diagnostics. Fixed-size records contain only numeric object
 // identities, counts and PCs; never titles, AppIDs or arbitrary process memory.
-constexpr char kSourceVersion[] = "0.4.19";
+constexpr char kSourceVersion[] = "0.4.20";
 constexpr uint32_t kTraceCapacity = 4096;
 struct TraceModule {
     uint64_t base;
@@ -196,11 +200,15 @@ static_assert(sizeof(TraceRecord) == 200 && sizeof(TraceModule) == 208);
 enum TraceEvent : uint32_t {
     TraceStart = 1, TraceEnd, TraceFilter, TraceHide, TraceRestore, TraceSnapshot,
     TraceCheckBegin, TraceCheckEnd, TraceCounts, TraceViewReady, TraceNullAppId,
-    TraceScan, TraceScanCounters, TraceProxyRetire, TraceReserved, TraceWorker,
+    TraceScan, TraceScanCounters, TraceProxyRetire, TraceWorker = 16,
     TraceInsert = 20, TraceRemove, TraceMove, TraceCreateButton, TraceNotify,
     TraceCreateTask, TraceInclusion, TraceMultiInclusion, TraceRefresh, TracePresentation,
 };
 std::mutex g_traceMutex;
+bool g_binaryTraceEnabled = false; // changes request a mod reload
+HANDLE g_traceStop = nullptr, g_traceThread = nullptr;
+std::vector<TraceRecord> g_tracePending;
+std::atomic<bool> g_traceFlush = false, g_traceModulesRequested = false;
 HANDLE g_traceFile = INVALID_HANDLE_VALUE;
 std::atomic<bool> g_traceActive = false;
 std::atomic<bool> g_traceNativeReady = false;
@@ -227,24 +235,17 @@ void TraceWrite(uint32_t event, uint64_t a = 0, uint64_t b = 0, uint64_t c = 0, 
     record.a = a; record.b = b; record.c = c; record.d = d;
     record.frames = CaptureStackBackTrace(1, ARRAYSIZE(record.stack),
         reinterpret_cast<void**>(record.stack), nullptr);
-    DWORD ioError = 0;
     {
-        std::lock_guard lock(g_traceMutex);
-        if (g_traceFile != INVALID_HANDLE_VALUE) {
+        // Hooks never wait for the writer or perform file I/O. A busy/full
+        // queue drops the record; native behavior must continue immediately.
+        std::unique_lock lock(g_traceMutex, std::try_to_lock);
+        if (lock.owns_lock() && g_traceActive.load(std::memory_order_relaxed) &&
+            g_tracePending.size() < kTraceCapacity) {
             record.sequence = ++g_traceSequence;
             record.checksum = TraceChecksum(record);
-            LARGE_INTEGER offset{};
-            offset.QuadPart = sizeof(TraceHeader) + ((record.sequence - 1) % kTraceCapacity) * sizeof(record);
-            DWORD written = 0;
-            if (!SetFilePointerEx(g_traceFile, offset, nullptr, FILE_BEGIN) ||
-                !WriteFile(g_traceFile, &record, sizeof(record), &written, nullptr) || written != sizeof(record))
-            {
-                ioError = GetLastError();
-                g_traceActive = false; // never break native behavior on diagnostic I/O failure
-            }
+            g_tracePending.push_back(record); // capacity reserved before enabling
         }
     }
-    if (ioError) Wh_Log(L"phase=trace write-failed code=%lu", ioError);
     g_traceWriting = false;
     SetLastError(error);
 }
@@ -278,7 +279,6 @@ uint64_t TraceVectorCount(const void* base, size_t offset, size_t stride) {
 }
 void TraceModules() {
     // Called only at diagnostic startup/observer attachment, never in a hook.
-    std::lock_guard lock(g_traceMutex);
     if (g_traceFile == INVALID_HANDLE_VALUE) return;
     TraceHeader header{};
     memcpy(header.magic, "SNAPTRC", 8);
@@ -306,12 +306,43 @@ void TraceModules() {
         !WriteFile(g_traceFile, &header, sizeof(header), &written, nullptr) || written != sizeof(header))
         g_traceActive = false;
 }
+void DrainTaskbarTrace() {
+    std::vector<TraceRecord> records;
+    records.reserve(kTraceCapacity);
+    {
+        std::lock_guard lock(g_traceMutex);
+        records.swap(g_tracePending);
+    }
+    if (g_traceModulesRequested.exchange(false)) TraceModules();
+    for (const auto& record : records) {
+        LARGE_INTEGER offset{};
+        offset.QuadPart = sizeof(TraceHeader) + ((record.sequence - 1) % kTraceCapacity) * sizeof(record);
+        DWORD written = 0;
+        if (!SetFilePointerEx(g_traceFile, offset, nullptr, FILE_BEGIN) ||
+            !WriteFile(g_traceFile, &record, sizeof(record), &written, nullptr) ||
+            written != sizeof(record)) {
+            g_traceActive = false;
+            Wh_Log(L"phase=trace write-failed code=%lu", GetLastError());
+            break;
+        }
+    }
+    if (g_traceFlush.exchange(false) && g_traceFile != INVALID_HANDLE_VALUE)
+        FlushFileBuffers(g_traceFile);
+}
+DWORD WINAPI TaskbarTraceWriter(void*) {
+    TraceModules();
+    while (WaitForSingleObject(g_traceStop, 100) == WAIT_TIMEOUT) DrainTaskbarTrace();
+    DrainTaskbarTrace();
+    return 0;
+}
 void StartTaskbarTrace() {
-    wchar_t root[MAX_PATH]{};
-    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, root))) return;
-    std::wstring folder = std::wstring(root) + L"\\Windhawk";
-    CreateDirectoryW(folder.c_str(), nullptr);
-    folder += L"\\hide-snapped-traces"; CreateDirectoryW(folder.c_str(), nullptr);
+    if (!g_binaryTraceEnabled) return;
+    wchar_t root[32768]{};
+    if (!Wh_GetModStoragePath(root, ARRAYSIZE(root))) return;
+    std::wstring folder(root);
+    if (!CreateDirectoryW(folder.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) return;
+    folder += L"\\traces";
+    if (!CreateDirectoryW(folder.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) return;
     // Retain seven older journals plus this process. Delete only our own
     // matching files, never recursively; locked journals are left untouched.
     struct OldTrace { std::wstring name; FILETIME time; };
@@ -334,25 +365,31 @@ void StartTaskbarTrace() {
         g_traceFile = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
                                  CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
         g_traceSequence = 0;
+        g_tracePending.clear(); g_tracePending.reserve(kTraceCapacity);
         FILETIME now{}; GetSystemTimeAsFileTime(&now);
         memcpy(&g_traceStartTime, &now, sizeof(now));
     }
     g_traceActive = g_traceFile != INVALID_HANDLE_VALUE;
-    TraceModules();
+    g_traceStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (g_traceActive && g_traceStop)
+        g_traceThread = CreateThread(nullptr, 0, TaskbarTraceWriter, nullptr, 0, nullptr);
+    if (!g_traceThread) g_traceActive = false;
     TraceWrite(TraceStart);
     Wh_Log(L"phase=trace ready=%d path=%s capacity=%u", g_traceActive.load(), path.c_str(), kTraceCapacity);
 }
 void StopTaskbarTrace() {
     TraceWrite(TraceEnd, TraceStart);
     g_traceActive = false;
-    std::lock_guard lock(g_traceMutex);
+    if (g_traceStop) SetEvent(g_traceStop);
+    if (g_traceThread) {
+        WaitForSingleObject(g_traceThread, INFINITE);
+        CloseHandle(g_traceThread); g_traceThread = nullptr;
+    }
+    if (g_traceStop) { CloseHandle(g_traceStop); g_traceStop = nullptr; }
     if (g_traceFile != INVALID_HANDLE_VALUE) { CloseHandle(g_traceFile); g_traceFile = INVALID_HANDLE_VALUE; }
 }
 void FlushTaskbarTrace() {
-    DWORD error = GetLastError();
-    std::lock_guard lock(g_traceMutex);
-    if (g_traceFile != INVALID_HANDLE_VALUE) FlushFileBuffers(g_traceFile);
-    SetLastError(error);
+    g_traceFlush = true; // worker handles even urgent flush requests
 }
 
 struct RealityContext {
@@ -439,7 +476,7 @@ bool HookTaskbarViewTrace() {
     g_realityCountReturn = reinterpret_cast<uintptr_t>(module) + 0x3790b2;
     // Observer is attached after ModInit; it must apply its own queued hooks.
     bool applied = hooked && Wh_ApplyHookOperations();
-    TraceModules();
+    g_traceModulesRequested = true;
     TraceWrite(TraceViewReady, image, hooked, applied);
     Wh_Log(L"phase=trace view-hooks=%d applied=%d", hooked, applied);
     return applied;
@@ -448,7 +485,7 @@ bool HookTaskbarViewTrace() {
 // Internal, versioned ABI. Only use these slots after QueryInterface succeeds.
 // Slots were checked against twinui.pcshell.dll 10.0.26100.8117 public symbols
 // and call sites. WindowId is a uint32_t containing the low 32 bits of HWND.
-// See docs/implementation.md for evidence and the compatibility boundary.
+// Native layouts are accepted only for the inspected shell DLL revisions.
 constexpr GUID kDataModelStatics = {
     0xb9215acb, 0x5441, 0x5728, {0x93, 0x03, 0xed, 0xa3, 0xf4, 0x96, 0x83, 0xe6}};
 constexpr GUID kDataModel = {
@@ -538,6 +575,8 @@ HRESULT GetCurrentModel(ComPtr<IUnknown>& model) {
                                   reinterpret_cast<void**>(model.GetAddressOf()));
 }
 
+bool g_cachedOnlyAltTab = false;
+
 class AltTabScope {
 public:
     explicit AltTabScope(bool acquireModel = true) {
@@ -545,7 +584,7 @@ public:
         ownsContext_ = true;
         g_context = &context_;
         context_.groupsEnabled = NativeGroupsEnabled();
-        if (context_.groupsEnabled && acquireModel && !g_cachedEvaluationDepth) {
+        if (context_.groupsEnabled && acquireModel && !g_cachedEvaluationDepth && !g_cachedOnlyAltTab) {
             HRESULT hr = GetCurrentModel(context_.model);
             if (FAILED(hr)) {
                 ++context_.failures;
@@ -612,7 +651,7 @@ HRESULT WINAPI IsViewVisibleHook(void* desktop, void* view, BOOL* visible) {
         g_context->groupVisibilityDepth != 0 || !g_context->groupsEnabled ||
         !g_altTabEnabled.load()) return hr;
     HWND window = g_getWindowForView(view);
-    bool member = g_cachedEvaluationDepth ? CachedAltTabMember(window) : bool(FindGroup(window));
+    bool member = (g_cachedEvaluationDepth || g_cachedOnlyAltTab) ? CachedAltTabMember(window) : bool(FindGroup(window));
     if (member) {
         ++g_context->candidates;
         if (!g_diagnosticMode.load()) {
@@ -626,7 +665,8 @@ HRESULT WINAPI IsViewVisibleHook(void* desktop, void* view, BOOL* visible) {
 // The native CachedDataSource EvaluateItem delegate runs for both initial
 // evaluation and later invalidations (including re-insertion of the active view).
 // Keep the filter active for the whole evaluation, not a guessed number of ms.
-// This generated symbol is deliberately required: unsupported DLLs fail to load.
+// If this compiler-generated symbol is absent, all filtering scopes use the
+// background cache and skip model-based selection anchoring.
 using EvaluateItem = void(WINAPI*)(void*, const void*, const void*);
 EvaluateItem g_evaluateItem = nullptr;
 void WINAPI EvaluateItemHook(void* self, const void* sender, const void* args) {
@@ -659,6 +699,7 @@ static_assert(offsetof(CachedSourcePrefix, groupAdapter) == 48);
 using GetItemForView = IUnknown*(WINAPI*)(const CachedSourcePrefix*, void*);
 GetItemForView g_getItemForView = nullptr;
 IUnknown* WINAPI GetItemForViewHook(const CachedSourcePrefix* self, void* view) {
+    if (g_cachedOnlyAltTab) return g_getItemForView(self, view);
     if (!view || !self->groupsEnabled || !self->groupAdapter ||
         g_diagnosticMode.load() || !g_altTabEnabled.load() || g_cachedEvaluationDepth) return g_getItemForView(self, view);
     AltTabScope scope;
@@ -1247,7 +1288,7 @@ HRESULT RefreshTaskWindow(WPARAM action, void* band, void* list, HWND window,
     // _MatchWindow can already find a proxy's unresolved native task. AddTab
     // completion does not imply that CTaskGroup's AppID is initialized. Our
     // inclusion refresh would create its XAML button early; get_AppId then
-    // dereferences the null native ID (captured in the0.4.15 dump/journal).
+    // dereferences the null native ID before it can return an error.
     // Native ITaskGroup slot19 only reads the field, with no COM/reentrancy.
     // Defer our request; leave native resolution/creation and failures intact.
     using GetNativeAppId = PCWSTR(WINAPI*)(IUnknown*);
@@ -1317,13 +1358,16 @@ bool HookTaskbarFilter() {
     if (!module) return false;
     g_nativeAppIdReturn = reinterpret_cast<uintptr_t>(module) + 0x28a82;
     // Taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK traceHooks[] = {
         {{L"?_CreateTBGroup@CTaskListWnd@@IEAAPEAUITaskBtnGroup@@PEAUITaskGroup@@H@Z"}, &g_createButton, CreateButtonTraceHook},
         {{L"?NotifyTaskGroupInserted@CTaskListWnd@@IEAAXPEAUITaskGroup@@H@Z"}, &g_notifyInserted, NotifyInsertedTraceHook},
         {{L"?InsertGroup@TaskbarAppsList@implementation@Shell@UI@WindowsUdk@winrt@@QEAAXAEBV?$com_ptr_t@UITaskGroup@@Uerr_exception_policy@wil@@@wil@@I@Z"}, &g_insertSourceGroup, InsertSourceTraceHook},
         {{L"?RemoveGroup@TaskbarAppsList@implementation@Shell@UI@WindowsUdk@winrt@@QEAAXAEBV?$com_ptr_t@UITaskGroup@@Uerr_exception_policy@wil@@@wil@@@Z"}, &g_removeSourceGroup, RemoveSourceTraceHook},
         {{L"?MoveGroup@TaskbarAppsList@implementation@Shell@UI@WindowsUdk@winrt@@QEAAXAEBV?$com_ptr_t@UITaskGroup@@Uerr_exception_policy@wil@@@wil@@I@Z"}, &g_moveSourceGroup, MoveSourceTraceHook},
         {{L"?GetAppID@CTaskGroup@@UEAAPEBGXZ"}, &g_nativeAppId, NativeAppIdTraceHook},
+    };
+    // Taskbar.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarHooks[] = {
         {{L"?IsTaskAllowed@TaskItemFilter@@UEAA_NPEAUITaskItem@@@Z"}, &g_isTaskAllowed, IsTaskAllowedHook},
         {{L"?IsTaskAllowed@CTaskListWnd@@UEAA_NPEAUITaskItem@@@Z"}, &g_listIsTaskAllowed},
         {{L"?_MatchWindow@CTaskBand@@IEAAJPEAUHWND__@@PEBU_ITEMIDLIST_ABSOLUTE@@PEBGW4WINDOWMATCHCONFIDENCE@@PEAPEAUITaskGroup@@PEAPEAUITaskItem@@@Z"}, &g_matchTaskWindow},
@@ -1347,6 +1391,9 @@ bool HookTaskbarFilter() {
     options.optionsSize = sizeof(options);
     options.noUndecoratedSymbols = TRUE;
     bool hooked = WindhawkUtils::HookSymbols(module, taskbarHooks, ARRAYSIZE(taskbarHooks), &options);
+    if (hooked && g_binaryTraceEnabled)
+        Wh_Log(L"phase=trace taskbar-symbols=%d",
+               WindhawkUtils::HookSymbols(module, traceHooks, ARRAYSIZE(traceHooks), &options));
     FreeLibrary(module);
     g_taskbarFilterReady = hooked;
     Wh_Log(L"phase=taskbar inclusion-filter symbols=%d", hooked);
@@ -1474,13 +1521,15 @@ std::vector<IconCell> IconLayout(size_t memberCount, const TaskbarSettings& sett
     return cells;
 }
 
+std::atomic<bool> g_nativePreviewAvailable = true;
 struct NativeSize { float width, height; };
 class NativeGroupPreview {
 public:
     ComPtr<IUnknown> device, factory;
     int width = 480, height = 270;
 
-    HRESULT Initialize(HWND, IUnknown* group) {
+    HRESULT Initialize(IUnknown* group) {
+        if (!g_nativePreviewAvailable) return E_NOINTERFACE;
         constexpr wchar_t className[] = L"Windows.Internal.Shell.Multitasking.Desktop.DesktopThumbnailDevice";
         HSTRING name = nullptr;
         HRESULT hr = WindowsCreateString(className, ARRAYSIZE(className) - 1, &name);
@@ -1542,7 +1591,7 @@ void ReplaceThumbnailFactory(NativeModernThumbnail& thumbnail, ComPtr<IUnknown> 
 }
 HRESULT CreateGroupPreviewFactory(IUnknown* group, IUnknown** factory) {
     NativeGroupPreview preview;
-    HRESULT hr = preview.Initialize(nullptr, group);
+    HRESULT hr = preview.Initialize(group);
     if (SUCCEEDED(hr)) *factory = preview.factory.Detach();
     return hr;
 }
@@ -1609,7 +1658,7 @@ HRESULT WINAPI CreateWindowVisualHook(void* self, HWND window, SIZE size) {
       if (found != g_proxyGroups.end()) group = found->second; }
     if (!group) return g_createWindowVisual(self, window, size);
     NativeGroupPreview preview;
-    HRESULT hr = preview.Initialize(nullptr, group.Get());
+    HRESULT hr = preview.Initialize(group.Get());
     if (SUCCEEDED(hr)) hr = AttachGroupHoverVisual(*static_cast<NativeTaskThumbnail*>(self), preview.factory.Get(), size);
     Wh_Log(L"phase=taskbar hover-visual hr=%08X", hr);
     return hr;
@@ -1621,7 +1670,6 @@ struct GroupButton {
     std::vector<WindowIdentity> members;
     std::vector<WindowIdentity> iconMembers;
     std::map<WindowIdentity, RECT> iconRects;
-    HWND lastActive{};
     HWND activationSource{};
     ULONGLONG iconTime{};
     bool iconRedrawPending{};
@@ -1721,7 +1769,6 @@ public:
             if (button->members != snapshot.members || button->nativeGroup.Get() != snapshot.nativeGroup.Get()) {
                 button->iconTime = 0;
                 button->previewDirty = true;
-                button->lastActive = nullptr;
                 button->activationSource = nullptr;
             }
             button->members = snapshot.members;
@@ -1922,8 +1969,6 @@ LRESULT CALLBACK GroupButtonProc(HWND window, UINT message, WPARAM wParam, LPARA
         if (LOWORD(wParam) != WA_INACTIVE && button->registered) {
             Wh_Log(L"phase=taskbar click-source=window-activate");
             button->activationSource = reinterpret_cast<HWND>(lParam);
-            for (const auto& member : button->members)
-                if (member.window == button->activationSource) button->lastActive = member.window;
             QueueGroupClick(*button);
         }
         return 0;
@@ -2077,7 +2122,7 @@ public:
         bool previewChanged = false;
         if (button.previewDirty && button.settings.nativePreview && button.nativeGroup) {
             auto preview = std::make_unique<NativeGroupPreview>();
-            HRESULT hr = preview->Initialize(button.window, button.nativeGroup.Get());
+            HRESULT hr = preview->Initialize(button.nativeGroup.Get());
             Wh_Log(L"phase=taskbar native-preview hr=%08X", hr);
             // Never retain metadata/factory for the previous native group.
             button.preview = SUCCEEDED(hr) ? std::move(preview) : nullptr;
@@ -2157,7 +2202,6 @@ public:
         HWND foreground = GetForegroundWindow();
         RememberAppForeground(foreground);
         for (const auto& member : button.members) if (member.window == foreground) {
-            button.lastActive = foreground;
             // Initialize once if the group was already active at registration.
             // Subsequent activity uses native hooks, never timer-driven ActivateTab.
             if (confirmedNow) RefreshMember(button.window, true);
@@ -2213,7 +2257,7 @@ public:
 };
 
 struct TaskbarScanCounts {
-    unsigned candidates = 0, noGroup = 0, queryFailures = 0, invalid = 0, desktopRejected = 0;
+    unsigned candidates = 0, queryFailures = 0, invalid = 0, desktopRejected = 0;
 };
 HRESULT ReadNativeGroups(IUnknown* model, std::vector<ComPtr<IUnknown>>& groups) {
     using GetGroups = HRESULT(STDMETHODCALLTYPE*)(IUnknown*, uint32_t*, IUnknown***);
@@ -2221,7 +2265,8 @@ HRESULT ReadNativeGroups(IUnknown* model, std::vector<ComPtr<IUnknown>>& groups)
     IUnknown** items = nullptr;
     HRESULT hr = AbiMethod<GetGroups>(model, 6)(model, &count, &items);
     if (count && !items) return E_UNEXPECTED;
-    if (count > 4096) { CoTaskMemFree(items); return E_UNEXPECTED; }
+    bool oversized = count > 4096;
+    if (oversized) hr = E_UNEXPECTED;
     for (uint32_t i = 0; i < count; ++i) {
         ComPtr<IUnknown> item;
         item.Attach(items[i]); // array entries carry owned WinRT references
@@ -2256,15 +2301,23 @@ void PublishAltTabMembership(IUnknown* model, bool enabled) {
     snapshot->updated = GetTickCount64();
     g_altTabMembership.store(std::move(snapshot));
 }
+DWORD TaskbarProcessId();
+
 DWORD WINAPI AltTabSnapshotWorker(void*) {
     HRESULT apartment = RoInitialize(RO_INIT_MULTITHREADED);
     if (FAILED(apartment)) return 0;
     CoEnableCallCancellation(nullptr);
     while (WaitForSingleObject(g_taskbarStop, 0) == WAIT_TIMEOUT) {
-        bool enabled = g_altTabEnabled.load() && !g_diagnosticMode.load() && NativeGroupsEnabled();
+        bool enabled = TaskbarProcessId() == GetCurrentProcessId() &&
+                       g_altTabEnabled.load() && !g_diagnosticMode.load() && NativeGroupsEnabled();
+        if (!enabled) {
+            g_altTabMembership.store(nullptr);
+            if (WaitForSingleObject(g_taskbarStop, 1000) != WAIT_TIMEOUT) break;
+            continue;
+        }
         ComPtr<IUnknown> model;
-        if (enabled) GetCurrentModel(model);
-        PublishAltTabMembership(model.Get(), enabled);
+        GetCurrentModel(model);
+        PublishAltTabMembership(model.Get(), true);
         if (WaitForSingleObject(g_taskbarStop, 500) != WAIT_TIMEOUT) break;
     }
     g_altTabMembership.store(nullptr);
@@ -2344,10 +2397,9 @@ DWORD TaskbarProcessId() {
     GetWindowThreadProcessId(FindWindowW(L"Shell_TrayWnd", nullptr), &process);
     return process;
 }
-bool PrepareTaskbarWorker(HANDLE stop, DWORD process,
+bool WaitForShellOwnership(HANDLE stop, DWORD process,
         DWORD (*owner)() = TaskbarProcessId,
-        DWORD (WINAPI* wait)(HANDLE, DWORD) = WaitForSingleObject,
-        bool (*initialize)(bool) = InitializeTaskbarIntegration) {
+        DWORD (WINAPI* wait)(HANDLE, DWORD) = WaitForSingleObject) {
     bool waiting = false;
     for (;;) {
         if (wait(stop, 0) != WAIT_TIMEOUT) return false;
@@ -2364,11 +2416,20 @@ bool PrepareTaskbarWorker(HANDLE stop, DWORD process,
         // hooks or create proxy buttons until this process owns the shell.
         if (wait(stop, shell ? 1000 : 100) != WAIT_TIMEOUT) return false;
     }
+    return true;
+}
+bool PrepareTaskbarWorker(HANDLE stop, DWORD process,
+        DWORD (*owner)() = TaskbarProcessId,
+        DWORD (WINAPI* wait)(HANDLE, DWORD) = WaitForSingleObject,
+        bool (*initialize)(bool) = InitializeTaskbarIntegration) {
+    if (!WaitForShellOwnership(stop, process, owner, wait)) return false;
     if (g_taskbarFilterReady.load()) return true;
     return initialize(true);
 }
 
 DWORD WINAPI TaskbarThread(void*) {
+    if (!WaitForShellOwnership(g_taskbarStop, GetCurrentProcessId())) return 0;
+    g_altTabSnapshotThread = CreateThread(nullptr, 0, AltTabSnapshotWorker, nullptr, 0, nullptr);
     if (!PrepareTaskbarWorker(g_taskbarStop, GetCurrentProcessId())) return 0;
     Wh_Log(L"phase=taskbar worker-started=1");
     TraceWrite(TraceWorker, 1);
@@ -2464,7 +2525,7 @@ DWORD WINAPI TaskbarThread(void*) {
                 }
                 uint64_t scanFlags = uint64_t(settings.enabled) | (uint64_t(scanFailed) << 1);
                 TraceWrite(TraceScan, snapshots.size(), state.buttons.size(), state.hidden.size(), scanFlags);
-                TraceWrite(TraceScanCounters, scan.candidates, scan.noGroup, scan.queryFailures,
+                TraceWrite(TraceScanCounters, scan.candidates, 0, scan.queryFailures,
                            uint64_t(scan.invalid) | (uint64_t(scan.desktopRejected) << 32));
                 state.Reconcile(snapshots, settings, operations, !scanFailed);
                 TraceWrite(TraceScan, snapshots.size(), state.buttons.size(), state.hidden.size(), scanFlags | 4);
@@ -2472,8 +2533,8 @@ DWORD WINAPI TaskbarThread(void*) {
                     lastButtons = static_cast<unsigned>(state.buttons.size());
                     lastHidden = static_cast<unsigned>(state.hidden.size());
                     Wh_Log(L"phase=taskbar buttons=%u hidden=%u", lastButtons, lastHidden);
-                    Wh_Log(L"phase=taskbar scan candidates=%u no-group=%u query-failures=%u invalid=%u desktop-rejected=%u",
-                           scan.candidates, scan.noGroup, scan.queryFailures, scan.invalid, scan.desktopRejected);
+                    Wh_Log(L"phase=taskbar scan candidates=%u query-failures=%u invalid=%u desktop-rejected=%u",
+                           scan.candidates, scan.queryFailures, scan.invalid, scan.desktopRejected);
                 }
                 nextRefresh = GetTickCount64() + settings.interval;
             }
@@ -2531,18 +2592,15 @@ void LoadSettings() {
     settings.maxIcons = std::clamp(Wh_GetIntSetting(L"maxIcons"), 2, 4);
     settings.iconSize = std::clamp(Wh_GetIntSetting(L"iconSize"), 4, 15);
     settings.gap = std::clamp(Wh_GetIntSetting(L"iconGap"), 0, 8);
-    PCWSTR order = Wh_GetStringSetting(L"iconOrder");
-    settings.screenIconOrder = !order || wcscmp(order, L"native") != 0;
-    Wh_FreeStringSetting(order);
+    WindhawkUtils::StringSetting order(Wh_GetStringSetting(L"iconOrder"));
+    settings.screenIconOrder = wcscmp(order, L"native") != 0;
     settings.interval = std::clamp(Wh_GetIntSetting(L"refreshInterval"), 100, 5000);
-    PCWSTR click = Wh_GetStringSetting(L"clickAction");
-    settings.toggleOnClick = click && wcscmp(click, L"toggle") == 0;
-    Wh_FreeStringSetting(click);
+    WindhawkUtils::StringSetting click(Wh_GetStringSetting(L"clickAction"));
+    settings.toggleOnClick = wcscmp(click, L"toggle") == 0;
     Wh_Log(L"phase=settings version=%hs toggle=%d native-preview=%d icon-order=%s",
            kSourceVersion, settings.toggleOnClick, settings.nativePreview, settings.screenIconOrder ? L"screen" : L"native");
-    PCWSTR close = Wh_GetStringSetting(L"closeAction");
-    settings.minimizeOnClose = !close || wcscmp(close, L"ignore") != 0;
-    Wh_FreeStringSetting(close);
+    WindhawkUtils::StringSetting close(Wh_GetStringSetting(L"closeAction"));
+    settings.minimizeOnClose = wcscmp(close, L"ignore") != 0;
     { std::lock_guard lock(g_taskbarSettingsMutex);
       g_taskbarSettings = settings; ++g_settingsGeneration; }
 }
@@ -2591,9 +2649,11 @@ bool ActivateTaskbarFilter(bool deferred, bool (*hook)() = HookTaskbarFilter,
 }
 bool InitializeTaskbarIntegration(bool deferred) {
     if (g_taskbarInitAttempted.exchange(true)) return g_taskbarFilterReady.load();
+    // Preview ABI failure disables previews independently of taskbar buttons.
+    g_nativePreviewAvailable = CheckedNativeImage(L"DesktopSwitcherDataModel.dll", 0xf9a924c5, 0x56000);
+    Wh_Log(L"phase=taskbar preview-abi=%d", g_nativePreviewAvailable.load());
     bool nativeAbi = CheckedNativeImage(L"Taskbar.dll", 0x4059c321, 0x30d000) &&
-                     CheckedNativeImage(L"Windows.Internal.ShellCommon.dll", 0x0ca85704, 0xa0000) &&
-                     CheckedNativeImage(L"DesktopSwitcherDataModel.dll", 0xf9a924c5, 0x56000);
+                     CheckedNativeImage(L"Windows.Internal.ShellCommon.dll", 0x0ca85704, 0xa0000);
     Wh_Log(L"phase=taskbar native-group-abi=%d", nativeAbi);
     bool ready = nativeAbi && ActivateTaskbarFilter(deferred);
     g_traceNativeReady = ready;
@@ -2604,6 +2664,7 @@ bool InitializeTaskbarIntegration(bool deferred) {
 
 BOOL Wh_ModInit() {
     LoadSettings();
+    g_binaryTraceEnabled = Wh_GetIntSetting(L"binaryTrace") != 0;
     if (!IsSupportedBuild()) {
         Wh_Log(L"phase=init unsupported-build; no hooks installed");
         return FALSE;
@@ -2624,7 +2685,7 @@ BOOL Wh_ModInit() {
         {{L"?XamlAltTabViewHost_CreateInstance@@YAJAEBUXamlViewHostInitializeArgs@@AEBU_GUID@@PEAPEAX@Z"},
          &g_createInstance, CreateInstanceHook},
         {{L"<lambda_d61b288df26b99e0330e99e4b6525b65>::operator()"},
-         &g_evaluateItem, EvaluateItemHook},
+         &g_evaluateItem, EvaluateItemHook, true},
         {{L"?GetItemForView@CachedDataSource@@QEBAPE$AAUISwitchItem@Multitasking@ComposableShell@Internal@Windows@@PEAUIApplicationView@@@Z"},
          &g_getItemForView, GetItemForViewHook},
     };
@@ -2634,7 +2695,9 @@ BOOL Wh_ModInit() {
     options.optionsSize = sizeof(options);
     options.noUndecoratedSymbols = TRUE;
     const bool hooked = WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks), &options);
-    FreeLibrary(module);
+    g_cachedOnlyAltTab = !g_evaluateItem;
+    // Keep the reference for the process lifetime. Hooks are queued until Init
+    // returns and their trampolines can outlive BeforeUninit.
     Wh_Log(L"phase=init lookup=raw symbols=%d", hooked);
     if (!hooked) {
         Wh_Log(L"phase=init hook-install-failed; enable Windhawk debug logging for symbol details");
@@ -2647,7 +2710,8 @@ BOOL Wh_ModInit() {
     return hooked;
 }
 
-void Wh_ModSettingsChanged() {
+void Wh_ModSettingsChanged(BOOL* reload) {
+    *reload = g_binaryTraceEnabled != (Wh_GetIntSetting(L"binaryTrace") != 0);
     LoadSettings();
 }
 
@@ -2655,8 +2719,7 @@ void Wh_ModAfterInit() {
     // Explorer can have many folder processes; only the real taskbar process
     // owns proxy buttons. A disabled taskbar setting can be enabled later.
     g_taskbarStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (g_taskbarStop) g_altTabSnapshotThread = CreateThread(nullptr, 0, AltTabSnapshotWorker, nullptr, 0, nullptr);
-    if (g_taskbarStop) g_viewTraceThread = CreateThread(nullptr, 0, [](void*) -> DWORD {
+    if (g_taskbarStop && g_binaryTraceEnabled) g_viewTraceThread = CreateThread(nullptr, 0, [](void*) -> DWORD {
         for (unsigned attempt = 0; attempt < 300; ++attempt) {
             if (WaitForSingleObject(g_taskbarStop, 100) != WAIT_TIMEOUT) break;
             if (g_traceActive.load() && g_traceNativeReady.load() && GetModuleHandleW(L"Taskbar.View.dll")) {
@@ -2670,7 +2733,7 @@ void Wh_ModAfterInit() {
         return 0;
     }, nullptr, 0, nullptr);
     if (g_taskbarStop) g_taskbarThread = CreateThread(nullptr, 0, TaskbarThread, nullptr, 0, nullptr);
-    if (!g_taskbarThread && !g_viewTraceThread && !g_altTabSnapshotThread && g_taskbarStop) {
+    if (!g_taskbarThread && !g_viewTraceThread && g_taskbarStop) {
         CloseHandle(g_taskbarStop); g_taskbarStop = nullptr;
     }
     Wh_Log(L"phase=taskbar startup-thread-started=%d", g_taskbarThread != nullptr);
@@ -2678,12 +2741,6 @@ void Wh_ModAfterInit() {
 
 void Wh_ModBeforeUninit() {
     if (g_taskbarStop) SetEvent(g_taskbarStop);
-    if (g_altTabSnapshotThread) {
-        if (WaitForSingleObject(g_altTabSnapshotThread, 1000) == WAIT_TIMEOUT)
-            CoCancelCall(GetThreadId(g_altTabSnapshotThread), 0);
-        WaitForSingleObject(g_altTabSnapshotThread, INFINITE);
-        CloseHandle(g_altTabSnapshotThread); g_altTabSnapshotThread = nullptr;
-    }
     if (g_viewTraceThread) {
         WaitForSingleObject(g_viewTraceThread, INFINITE);
         CloseHandle(g_viewTraceThread); g_viewTraceThread = nullptr;
@@ -2691,6 +2748,12 @@ void Wh_ModBeforeUninit() {
     if (g_taskbarThread) {
         WaitForSingleObject(g_taskbarThread, INFINITE);
         CloseHandle(g_taskbarThread); g_taskbarThread = nullptr;
+    }
+    if (g_altTabSnapshotThread) {
+        if (WaitForSingleObject(g_altTabSnapshotThread, 1000) == WAIT_TIMEOUT)
+            CoCancelCall(GetThreadId(g_altTabSnapshotThread), 0);
+        WaitForSingleObject(g_altTabSnapshotThread, INFINITE);
+        CloseHandle(g_altTabSnapshotThread); g_altTabSnapshotThread = nullptr;
     }
     if (g_taskbarStop) { CloseHandle(g_taskbarStop); g_taskbarStop = nullptr; }
 }
