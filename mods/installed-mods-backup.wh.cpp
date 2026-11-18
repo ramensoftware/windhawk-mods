@@ -4,7 +4,7 @@
 // @description     Backs up your Windhawk ModsSource folder and Registry settings to a timestamped folder on your Desktop when enabled or settings are saved.
 // @version         1.0.6
 // @author          acooza
-// @github          acooza1
+// @github          https://github.com/acooza1
 // @include         explorer.exe
 // @compilerOptions -lshlwapi -ladvapi32 -lshell32
 // ==/WindhawkMod==
