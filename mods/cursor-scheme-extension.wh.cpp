@@ -59,10 +59,6 @@ The interface is available in English, Russian, Spanish, German, Brazilian Portu
 - Each mod load creates at most 128 replacement instances per process. When full, further requests use the application's original pointer.
 - After disabling, the application restores its pointer at its next cursor update, usually the next mouse move. Replacement cursor handles remain allocated until the process exits so that pointers still used by Windows stay valid.
 
-### Compatibility
-
-This mod extends the active Windows scheme across application families, including autoscroll and transformed selection arrows. Some replacements overlap with [Chromium Cursor Remap](https://windhawk.net/mods/chromium-cursor-remap) and [Cursor Override](https://windhawk.net/mods/cursor-override). Avoid enabling overlapping replacements in the same applications; separate their targets with Windhawk's process exclusion lists.
-
 ## Platforms
 
 Requires Windows 11. Runtime checks cover x86 and x64 processes on Windows 11 x64 with Windhawk 1.7.3. ARM64 has been compiled without a runtime check. Microsoft 365 and Qt WebEngine have not been verified.
