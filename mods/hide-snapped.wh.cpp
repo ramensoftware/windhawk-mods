@@ -2,12 +2,12 @@
 // @id              hide-snapped
 // @name            Snap Groups: Alt+Tab and taskbar
 // @description     Group-only Alt+Tab and separate taskbar buttons with tiled member icons.
-// @version         0.4.20
+// @version         0.4.21
 // @author          coldfeudal
 // @github          https://github.com/coldfeudal
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ladvapi32 -lversion -lshell32 -luuid -lgdi32 -lcomctl32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ladvapi32 -lshell32 -luuid -lgdi32 -lcomctl32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -70,9 +70,11 @@ still need testing.
   Other multi-monitor, DPI, and virtual desktop configurations have limited
   coverage.
 
-The mod currently accepts Windows build 26200. ARM64 is untested. Taskbar integration
-checks the inspected revisions of Windows shell DLLs. A Windows update can
-disable taskbar integration until its interfaces are checked again.
+The mod has no Windows build-number restriction. The configuration above is
+the tested environment. Other Windows versions and ARM64 remain untested.
+Features require the corresponding Windows shell interfaces. Taskbar integration
+also checks the inspected shell DLL layouts and can be unavailable after an
+update until those interfaces are verified.
 
 Report mod problems in https://github.com/ramensoftware/windhawk-mods/issues.
 Include "hide-snapped" in the title and mention @coldfeudal in the report.
@@ -175,7 +177,6 @@ namespace {
 
 // Opt-in support diagnostics. Fixed-size records contain only numeric object
 // identities, counts and PCs; never titles, AppIDs or arbitrary process memory.
-constexpr char kSourceVersion[] = "0.4.20";
 constexpr uint32_t kTraceCapacity = 4096;
 struct TraceModule {
     uint64_t base;
@@ -284,7 +285,9 @@ void TraceModules() {
     memcpy(header.magic, "SNAPTRC", 8);
     header.format = 1; header.headerSize = sizeof(header); header.recordSize = sizeof(TraceRecord);
     header.capacity = kTraceCapacity; header.pid = GetCurrentProcessId();
-    memcpy(header.version, kSourceVersion, sizeof(kSourceVersion));
+    // Keep the journal format narrow while using Windhawk's version metadata.
+    for (size_t i = 0; i + 1 < ARRAYSIZE(header.version) && WH_MOD_VERSION[i]; ++i)
+        header.version[i] = static_cast<char>(WH_MOD_VERSION[i]);
     header.startTime = g_traceStartTime;
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetCurrentProcessId());
     MODULEENTRY32W entry{sizeof(entry)};
@@ -1358,15 +1361,6 @@ bool HookTaskbarFilter() {
     if (!module) return false;
     g_nativeAppIdReturn = reinterpret_cast<uintptr_t>(module) + 0x28a82;
     // Taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK traceHooks[] = {
-        {{L"?_CreateTBGroup@CTaskListWnd@@IEAAPEAUITaskBtnGroup@@PEAUITaskGroup@@H@Z"}, &g_createButton, CreateButtonTraceHook},
-        {{L"?NotifyTaskGroupInserted@CTaskListWnd@@IEAAXPEAUITaskGroup@@H@Z"}, &g_notifyInserted, NotifyInsertedTraceHook},
-        {{L"?InsertGroup@TaskbarAppsList@implementation@Shell@UI@WindowsUdk@winrt@@QEAAXAEBV?$com_ptr_t@UITaskGroup@@Uerr_exception_policy@wil@@@wil@@I@Z"}, &g_insertSourceGroup, InsertSourceTraceHook},
-        {{L"?RemoveGroup@TaskbarAppsList@implementation@Shell@UI@WindowsUdk@winrt@@QEAAXAEBV?$com_ptr_t@UITaskGroup@@Uerr_exception_policy@wil@@@wil@@@Z"}, &g_removeSourceGroup, RemoveSourceTraceHook},
-        {{L"?MoveGroup@TaskbarAppsList@implementation@Shell@UI@WindowsUdk@winrt@@QEAAXAEBV?$com_ptr_t@UITaskGroup@@Uerr_exception_policy@wil@@@wil@@I@Z"}, &g_moveSourceGroup, MoveSourceTraceHook},
-        {{L"?GetAppID@CTaskGroup@@UEAAPEBGXZ"}, &g_nativeAppId, NativeAppIdTraceHook},
-    };
-    // Taskbar.dll
     WindhawkUtils::SYMBOL_HOOK taskbarHooks[] = {
         {{L"?IsTaskAllowed@TaskItemFilter@@UEAA_NPEAUITaskItem@@@Z"}, &g_isTaskAllowed, IsTaskAllowedHook},
         {{L"?IsTaskAllowed@CTaskListWnd@@UEAA_NPEAUITaskItem@@@Z"}, &g_listIsTaskAllowed},
@@ -1386,14 +1380,20 @@ bool HookTaskbarFilter() {
         {{L"?UpdateThumbnailFactory@TaskItemThumbnail@implementation@Shell@UI@WindowsUdk@winrt@@QEAAXXZ"}, &g_updateThumbnailFactory, UpdateThumbnailFactoryHook},
         {{L"?GetIcon@CTaskListWnd@@UEAAJPEAUITaskGroup@@PEAUITaskItem@@PEAPEAUHICON__@@@Z"}, &g_getTaskIcon, GetTaskIconHook},
         {{L"?_UpdateItemIcon@CTaskBand@@IEAAXPEAUITaskGroup@@PEAUITaskItem@@@Z"}, &g_updateTaskIcon},
+        // Optional trace-only hooks must remain the last six entries.
+        {{L"?_CreateTBGroup@CTaskListWnd@@IEAAPEAUITaskBtnGroup@@PEAUITaskGroup@@H@Z"}, &g_createButton, CreateButtonTraceHook, true},
+        {{L"?NotifyTaskGroupInserted@CTaskListWnd@@IEAAXPEAUITaskGroup@@H@Z"}, &g_notifyInserted, NotifyInsertedTraceHook, true},
+        {{L"?InsertGroup@TaskbarAppsList@implementation@Shell@UI@WindowsUdk@winrt@@QEAAXAEBV?$com_ptr_t@UITaskGroup@@Uerr_exception_policy@wil@@@wil@@I@Z"}, &g_insertSourceGroup, InsertSourceTraceHook, true},
+        {{L"?RemoveGroup@TaskbarAppsList@implementation@Shell@UI@WindowsUdk@winrt@@QEAAXAEBV?$com_ptr_t@UITaskGroup@@Uerr_exception_policy@wil@@@wil@@@Z"}, &g_removeSourceGroup, RemoveSourceTraceHook, true},
+        {{L"?MoveGroup@TaskbarAppsList@implementation@Shell@UI@WindowsUdk@winrt@@QEAAXAEBV?$com_ptr_t@UITaskGroup@@Uerr_exception_policy@wil@@@wil@@I@Z"}, &g_moveSourceGroup, MoveSourceTraceHook, true},
+        {{L"?GetAppID@CTaskGroup@@UEAAPEBGXZ"}, &g_nativeAppId, NativeAppIdTraceHook, true},
     };
     WH_HOOK_SYMBOLS_OPTIONS options{};
     options.optionsSize = sizeof(options);
     options.noUndecoratedSymbols = TRUE;
-    bool hooked = WindhawkUtils::HookSymbols(module, taskbarHooks, ARRAYSIZE(taskbarHooks), &options);
-    if (hooked && g_binaryTraceEnabled)
-        Wh_Log(L"phase=trace taskbar-symbols=%d",
-               WindhawkUtils::HookSymbols(module, traceHooks, ARRAYSIZE(traceHooks), &options));
+    constexpr size_t kTraceHookCount = 6;
+    size_t count = ARRAYSIZE(taskbarHooks) - (g_binaryTraceEnabled ? 0 : kTraceHookCount);
+    bool hooked = WindhawkUtils::HookSymbols(module, taskbarHooks, count, &options);
     FreeLibrary(module);
     g_taskbarFilterReady = hooked;
     Wh_Log(L"phase=taskbar inclusion-filter symbols=%d", hooked);
@@ -2597,22 +2597,12 @@ void LoadSettings() {
     settings.interval = std::clamp(Wh_GetIntSetting(L"refreshInterval"), 100, 5000);
     WindhawkUtils::StringSetting click(Wh_GetStringSetting(L"clickAction"));
     settings.toggleOnClick = wcscmp(click, L"toggle") == 0;
-    Wh_Log(L"phase=settings version=%hs toggle=%d native-preview=%d icon-order=%s",
-           kSourceVersion, settings.toggleOnClick, settings.nativePreview, settings.screenIconOrder ? L"screen" : L"native");
+    Wh_Log(L"phase=settings version=%s toggle=%d native-preview=%d icon-order=%s",
+           WH_MOD_VERSION, settings.toggleOnClick, settings.nativePreview, settings.screenIconOrder ? L"screen" : L"native");
     WindhawkUtils::StringSetting close(Wh_GetStringSetting(L"closeAction"));
     settings.minimizeOnClose = wcscmp(close, L"ignore") != 0;
     { std::lock_guard lock(g_taskbarSettingsMutex);
       g_taskbarSettings = settings; ++g_settingsGeneration; }
-}
-
-bool IsSupportedBuild() {
-    using RtlGetVersion = LONG(WINAPI*)(OSVERSIONINFOW*);
-    auto getVersion = reinterpret_cast<RtlGetVersion>(
-        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion"));
-    OSVERSIONINFOW version{sizeof(version)};
-    if (!getVersion || getVersion(&version) < 0) return false;
-    Wh_Log(L"phase=init build=%lu", version.dwBuildNumber);
-    return version.dwMajorVersion == 10 && version.dwBuildNumber == 26200;
 }
 
 bool CheckedNativeImage(PCWSTR name, DWORD timestamp, DWORD imageSize) {
@@ -2665,10 +2655,6 @@ bool InitializeTaskbarIntegration(bool deferred) {
 BOOL Wh_ModInit() {
     LoadSettings();
     g_binaryTraceEnabled = Wh_GetIntSetting(L"binaryTrace") != 0;
-    if (!IsSupportedBuild()) {
-        Wh_Log(L"phase=init unsupported-build; no hooks installed");
-        return FALSE;
-    }
     HMODULE module = LoadLibraryExW(L"twinui.pcshell.dll", nullptr,
                                      LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) return FALSE;
