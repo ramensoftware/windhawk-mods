@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              desktop-weather-overlay
+// @id              Desktop-Weather-Overlay
 // @name            Desktop Weather Overlay
 // @description     Snow, cherry blossom, autumn leaves and rain over the desktop, with wind, mouse sweeping, snow piling up on windows and a gust on weather change.
 // @version         1.3.2
