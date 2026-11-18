@@ -1014,8 +1014,7 @@ Theme CurrentTheme() {
     t.accent = ParseHexColor(g_settings.accentColor, t.accent) ? t.accent
                                                                : SystemAccent();
     t.onAccent = Color(255, 255, 255, 255);
-    t.border = t.dark ? Color(0x14, 0xFF, 0xFF, 0xFF)
-                      : Color(0x1A, 0x00, 0x00, 0x00);
+    // t.border is only drawn in high contrast, where it is set above.
     return t;
 }
 
@@ -2411,7 +2410,9 @@ void PaintCardBackground(Graphics& g, const GraphicsPath& card, float width,
     // The glass edge is lit from above and fades out towards the bottom: the
     // eye decides "this is a pane of glass" mostly from the boundary, and a
     // border at one flat alpha reads like a sticker instead. Solid matches the
-    // app's solid card: a plain filled surface with no outline at all.
+    // app's solid card: a plain filled surface with no outline at all - except
+    // in high contrast, where the COLOR_WINDOW fill can blend into the desktop
+    // and the outline is what shows the card's shape.
     if (acrylic && !theme.highContrast) {
         LinearGradientBrush lit(
             PointF(0.0f, 0.0f), PointF(0.0f, height),
@@ -2421,7 +2422,7 @@ void PaintCardBackground(Graphics& g, const GraphicsPath& card, float width,
                        : Color(0x14, 0x00, 0x00, 0x00));
         Pen border(&lit, 1.0f);
         g.DrawPath(&border, &card);
-    } else if (acrylic) {
+    } else if (theme.highContrast) {
         Pen border(theme.border, 1.0f);
         g.DrawPath(&border, &card);
     }
@@ -2558,7 +2559,18 @@ InputState CurrentInputState() {
         state.imeWnd = ImmGetDefaultIMEWnd(hwnd);
         if (state.imeWnd) {
             state.conversionMode = ReadConversionMode(state.imeWnd);
-            state.openStatus = ReadOpenStatus(state.imeWnd);
+            if (state.conversionMode >= 0) {
+                state.openStatus = ReadOpenStatus(state.imeWnd);
+                if (state.openStatus < 0) {
+                    // Half a reading: the two reads share one default IME
+                    // window procedure, so a sample with only one of the two
+                    // values is a timing artifact, not a different kind of
+                    // IME. Don't let IsNative() mix the two rules - with the
+                    // open status missing it would fall back to the NATIVE
+                    // bit, which WeType keeps set in both modes.
+                    state.conversionMode = -1;
+                }
+            }
         }
     }
     return state;
@@ -2717,7 +2729,7 @@ InputState g_inputLast;
 // the truth again - which is why the whole gesture is opt-in.
 // UI thread only, here and below.
 bool g_inferNative = true;
-bool g_readMoved = false; // the system read was seen to actually follow a toggle
+HKL g_readMovedHkl = nullptr; // the layout whose read was seen to actually follow a toggle
 int g_hintCount;          // solo Shift releases inside the running watch
 ULONGLONG g_hintAt;       // when the last one landed, 0 = none pending
 bool g_loggedReadLost = false; // logged "mode read lost" once for the running watch
@@ -3813,8 +3825,8 @@ bool ClipboardHasContent() {
 
 // Two scales: the display's DPI decides how many physical pixels a DIP is, the
 // card size setting scales the card itself. Everything inside the card uses
-// their product; margins, the slide distance and the blur radius stay on the
-// DPI scale, so a bigger card still keeps the same 16 DIP gap to the edge.
+// their product; margins and the slide distance stay on the DPI scale, so a
+// bigger card still keeps the same 16 DIP gap to the edge.
 void UpdateScales() {
     g_scale = g_monitor.valid ? g_monitor.scale : 1.0f;
     g_cardScale = g_scale * g_settings.TipScale();
@@ -5231,8 +5243,10 @@ void StopInputWatch() {
     g_hintCount = 0;
     g_hintAt = 0;
     g_loggedReadLost = false;
-    // g_readMoved stays: once a read has proven itself, it stays trusted for
-    // the session - an IME's answering habits don't change mid-session.
+    // g_readMovedHkl stays: once a layout's read has proven itself, it stays
+    // trusted for the session - an IME's answering habits don't change
+    // mid-session. Trusting per layout keeps a second IME whose read never
+    // moves eligible for the Shift inference.
 }
 
 void StartInputWatch() {
@@ -5296,7 +5310,8 @@ void InputTick() {
                    L"last[hkl=%08llX tid=%u ime=%p cmode=%d open=%d]",
                    g_hintCount,
                    (unsigned long long)g_inputLast.hkl, g_inputLast.threadId,
-                   (void*)g_inputLast.imeWnd, g_inputLast.conversionMode);
+                   (void*)g_inputLast.imeWnd, g_inputLast.conversionMode,
+                   g_inputLast.openStatus);
         }
         StopInputWatch();
         return;
@@ -5357,7 +5372,7 @@ bool ModeTick(const InputState& now) {
     if (now.HasIme()) {
         if (g_inputLast.HasIme()) {
             if (now.IsNative() == g_inputLast.IsNative()) {
-                if (g_readMoved) {
+                if (g_readMovedHkl == now.hkl) {
                     // The read has actually followed a toggle at least once:
                     // trust it. Silence now means no change, so the Shift
                     // gesture is worth nothing here - reporting the opposite
@@ -5375,7 +5390,7 @@ bool ModeTick(const InputState& now) {
             bool native = now.IsNative();
             g_inputLast = now;
             g_inferNative = native;
-            g_readMoved = true;
+            g_readMovedHkl = now.hkl;
             HandleLanguageTip(native ? 1 : 2, nullptr);
             StopInputWatch();
             return true;
@@ -5386,7 +5401,7 @@ bool ModeTick(const InputState& now) {
         // that disagrees with the cache means the toggle happened during the
         // unreadable stretch - report by the read. Before that proof the
         // cache stays with the inference, and the Shift gesture decides.
-        if (g_hintCount > 0 && g_readMoved &&
+        if (g_hintCount > 0 && g_readMovedHkl == now.hkl &&
             now.IsNative() != g_inferNative) {
             bool native = now.IsNative();
             g_inputLast = now;
@@ -5396,7 +5411,7 @@ bool ModeTick(const InputState& now) {
             return true;
         }
 
-        if (g_readMoved) {
+        if (g_readMovedHkl == now.hkl) {
             g_inputLast = now;
             g_inferNative = now.IsNative();
         }
@@ -5424,10 +5439,11 @@ bool ModeTick(const InputState& now) {
                    g_inputLast.openStatus,
                    (unsigned long long)now.hkl, now.threadId,
                    (void*)now.imeWnd, now.conversionMode, now.openStatus,
-                   g_hintCount, (int)g_readMoved);
+                   g_hintCount,
+                   (int)(g_readMovedHkl == now.hkl));
         }
 
-        if (g_hintCount > 0 && !g_readMoved && g_hintAt &&
+        if (g_hintCount > 0 && g_readMovedHkl != now.hkl && g_hintAt &&
             GetTickCount64() - g_hintAt > kInferGraceMs) {
             Wh_Log(L"mode read not restored %lu ms after shift, infer fallback",
                    (unsigned long)(GetTickCount64() - g_hintAt));
