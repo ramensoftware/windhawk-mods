@@ -8960,29 +8960,39 @@ static std::vector<std::wstring> PathCommandFiles() {
         if (dir.empty()) continue;
 
         // Enumerate through the Sysnative alias: from this 32-bit process a plain "System32" is
-        // redirected to SysWOW64, so tools with no 32-bit copy (wsl, the OpenSSH client) would
-        // never be found. The stored path stays in its normal System32 form.
-        const std::wstring scanDir = NativeSystemPath(dir);
-        WIN32_FIND_DATAW fd = {};
-        HANDLE h = FindFirstFileW((scanDir + L"\\*").c_str(), &fd);
-        if (h == INVALID_HANDLE_VALUE) continue;
-        do {
-            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
-            const std::wstring name = fd.cFileName;
-            const std::wstring folded = FoldString(name);
-            bool matches = false;
-            for (const wchar_t* suffix : kSuffix) {
-                if (EndsWith(folded, suffix)) {
-                    matches = true;
-                    break;
+        // redirected to SysWOW64, so tools with no 32-bit copy (wsl) would never be found. The
+        // alias only covers paths that end with a separator, so it goes on before the conversion:
+        // without it the system folder itself, the first and largest entry on every PATH, was
+        // still scanned through the redirector and every 64-bit-only tool in it stayed hidden. The
+        // redirected view is then scanned as well, so tools that only exist as 32-bit (regedit,
+        // hh) are not dropped, and the stored path is always the plain System32 form.
+        std::wstring views[2];
+        int viewCount = 0;
+        const std::wstring nativeDir = NativeSystemPath(dir + L"\\");
+        if (nativeDir != dir + L"\\") views[viewCount++] = nativeDir;
+        views[viewCount++] = dir + L"\\";
+        for (int v = 0; v < viewCount; v++) {
+            WIN32_FIND_DATAW fd = {};
+            HANDLE h = FindFirstFileW((views[v] + L"*").c_str(), &fd);
+            if (h == INVALID_HANDLE_VALUE) continue;
+            do {
+                if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+                const std::wstring name = fd.cFileName;
+                const std::wstring folded = FoldString(name);
+                bool matches = false;
+                for (const wchar_t* suffix : kSuffix) {
+                    if (EndsWith(folded, suffix)) {
+                        matches = true;
+                        break;
+                    }
                 }
-            }
-            if (!matches) continue;
-            const std::wstring stem = name.substr(0, name.find_last_of(L'.'));
-            if (stem.empty() || !seen.insert(FoldString(stem)).second) continue;
-            out.push_back(dir + L"\\" + name);
-        } while (FindNextFileW(h, &fd));
-        FindClose(h);
+                if (!matches) continue;
+                const std::wstring stem = name.substr(0, name.find_last_of(L'.'));
+                if (stem.empty() || !seen.insert(FoldString(stem)).second) continue;
+                out.push_back(dir + L"\\" + name);
+            } while (FindNextFileW(h, &fd));
+            FindClose(h);
+        }
     }
     return out;
 }
@@ -14999,10 +15009,15 @@ static void LaunchApp(int appIdx) {
     // arguments, working folder and elevation prompt exactly as when it is double-clicked.
     if (!a.launch.empty()) {
         const std::wstring dir = ParentDir(a.launch);
-        // A command that lives in System32 has to start the 64-bit copy: from this 32-bit process
-        // the plain path resolves through the WOW64 redirector to SysWOW64, where "cmd" and
-        // "powershell" are the 32-bit tools and cannot reach wsl or ssh.
-        const std::wstring exe = NativeSystemPath(a.launch);
+        // A file this process starts itself has to come from the 64-bit System32: from this 32-bit
+        // process the plain path resolves through the WOW64 redirector to SysWOW64, where "cmd" and
+        // "powershell" are the 32-bit tools and cannot reach wsl or ssh. Every other type is handed
+        // to a file association handler instead, and that handler may run as a 64-bit process, for
+        // which "Sysnative" does not exist: services.msc or ncpa.cpl would reach the 64-bit MMC and
+        // control.exe as a path they cannot open. Those keep their plain path.
+        const std::wstring folded = FoldString(a.launch);
+        const bool startsDirectly = EndsWith(folded, L".exe") || EndsWith(folded, L".com");
+        const std::wstring exe = startsDirectly ? NativeSystemPath(a.launch) : a.launch;
         const HINSTANCE launched = ShellExecuteW(nullptr, L"open", exe.c_str(), nullptr,
                                                  dir.empty() ? nullptr : dir.c_str(),
                                                  SW_SHOWNORMAL);
