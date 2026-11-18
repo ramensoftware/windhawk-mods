@@ -55,6 +55,9 @@ stop all requests, disable the mod.
   when Custom is selected.
 * **Background mode** - Transparent (default) or Solid. Solid gives the monitor
   its own opaque background for transparent taskbar themes such as DockLike.
+* **Background sizing** - Monitor area (default) or Fit text. Fit text in Solid
+  mode shrinks the background to the longest line and text height, with padding.
+  It grows and shrinks as prices change, keeping the configured alignment.
 * **Custom background color** - `#RRGGBB` used with Custom in Solid mode
   (default `#1E2633`). Named presets use their matching backgrounds.
 * **Refresh interval** - seconds between fetches (minimum 15).
@@ -154,6 +157,15 @@ Changing any setting reloads the mod.
   $options:
   - transparent: Transparent
   - solid: Solid
+- BackgroundSizing: area
+  $name: Background sizing
+  $description: >-
+    In Solid mode, Monitor area fills the configured width and taskbar height.
+    Fit text hugs the longest line and line count, with DPI-scaled padding.
+    Text alignment keeps the same left or right anchor inside Monitor width.
+  $options:
+  - area: Monitor area
+  - text: Fit text
 - BackgroundColor: "#1E2633"
   $name: Custom background color
   $description: >-
@@ -211,6 +223,7 @@ constexpr DWORD kTaskbarPollIntervalMs = 1000;
 constexpr int kMinRefreshSeconds = 15;
 constexpr COLORREF kColorKey = RGB(255, 0, 255);
 constexpr int kTextPaddingX = 8;
+constexpr int kTextPaddingY = 3;
 constexpr size_t kSymbolsPerLine = 2;
 constexpr size_t kMaxSymbols = 4;
 constexpr int kFontPointSize = 9;
@@ -255,6 +268,7 @@ struct Settings {
     COLORREF upColor = 0;
     COLORREF downColor = 0;
     bool solidBackground = false;
+    bool fitBackgroundToText = false;
     COLORREF backgroundColor = RGB(0x1E, 0x26, 0x33);
 };
 
@@ -755,34 +769,57 @@ int MeasureLineWidth(HDC dc, const TextLine& line) {
     return width;
 }
 
-int MeasureTextWidth(HWND overlay, const TextLines& lines) {
+SIZE MeasureTextSize(HWND overlay, const TextLines& lines) {
     HDC dc = GetDC(overlay);
     HGDIOBJ oldFont = SelectObject(dc, g_font);
-    int width = 0;
+    SIZE size{};
     for (const TextLine& line : lines) {
-        width = std::max(width, MeasureLineWidth(dc, line));
+        size.cx = std::max(size.cx, static_cast<LONG>(MeasureLineWidth(dc, line)));
     }
+    TEXTMETRICW metrics{};
+    GetTextMetricsW(dc, &metrics);
+    size.cy = metrics.tmHeight * static_cast<LONG>(lines.size());
     SelectObject(dc, oldFont);
     ReleaseDC(overlay, dc);
-    return width;
+    return size;
 }
 
-// Places the monitor area at LeftOffset from the taskbar's left edge. The text is
-// aligned inside the area. The area is at least Width wide, and wider if the text
-// needs more room.
+bool FitBackgroundToText() {
+    return g_settings.solidBackground && g_settings.fitBackgroundToText;
+}
+
+int TextPaddingX(int dpi) {
+    return FitBackgroundToText() ? MulDiv(kTextPaddingX, dpi, 96) : kTextPaddingX;
+}
+
+RECT CalculateOverlayRect(int taskbarHeight, int dpi, SIZE textSize) {
+    const bool fitText = FitBackgroundToText();
+    const int contentWidth = static_cast<int>(textSize.cx) + 2 * TextPaddingX(dpi);
+    const int areaWidth = std::max(MulDiv(g_settings.width, dpi, 96), contentWidth);
+    const int width = fitText ? contentWidth : areaWidth;
+    const int contentHeight = static_cast<int>(textSize.cy) +
+                              2 * MulDiv(kTextPaddingY, dpi, 96);
+    const int height = fitText ? std::min(taskbarHeight, contentHeight) : taskbarHeight;
+    int left = MulDiv(g_settings.leftOffset, dpi, 96);
+    if (fitText && g_settings.alignRight) {
+        left += areaWidth - width;
+    }
+    const int top = (taskbarHeight - height) / 2;
+    return {left, top, left + width, top + height};
+}
+
+// Fit-text Solid mode resizes the actual opaque child window, so no transparent
+// color-key border or extra filled area is needed around its background.
 void RefreshOverlay(HWND overlay) {
     HWND taskbar = GetParent(overlay);
     int dpi = static_cast<int>(GetDpiForWindow(taskbar));
-
-    RECT taskbarClient;
+    RECT taskbarClient{};
     GetClientRect(taskbar, &taskbarClient);
-
-    int textWidth = MeasureTextWidth(overlay, GetDisplayLines());
-    int width = std::max(MulDiv(g_settings.width, dpi, 96),
-                         textWidth + 2 * kTextPaddingX);
-    int left = MulDiv(g_settings.leftOffset, dpi, 96);
-    SetWindowPos(overlay, HWND_TOP, left, 0, width, taskbarClient.bottom,
-                 SWP_NOACTIVATE);
+    RECT placement = CalculateOverlayRect(
+        taskbarClient.bottom, dpi, MeasureTextSize(overlay, GetDisplayLines()));
+    SetWindowPos(overlay, HWND_TOP, placement.left, placement.top,
+                 placement.right - placement.left,
+                 placement.bottom - placement.top, SWP_NOACTIVATE);
     InvalidateRect(overlay, nullptr, TRUE);
 }
 
@@ -805,11 +842,12 @@ void PaintOverlay(HWND overlay) {
     GetTextMetricsW(dc, &metrics);
     int lineHeight = metrics.tmHeight;
     int y = (rect.bottom - lineHeight * static_cast<int>(lines.size())) / 2;
+    const int paddingX = TextPaddingX(static_cast<int>(GetDpiForWindow(overlay)));
 
     for (const TextLine& line : lines) {
         int width = MeasureLineWidth(dc, line);
-        int x = g_settings.alignRight ? rect.right - kTextPaddingX - width
-                                      : rect.left + kTextPaddingX;
+        int x = g_settings.alignRight ? rect.right - paddingX - width
+                                     : rect.left + paddingX;
         for (const TextPart& part : line) {
             SetTextColor(dc, ResolveColor(part.tone));
             TextOutW(dc, x, y, part.text.c_str(),
@@ -1020,6 +1058,8 @@ void LoadSettings() {
     }
     g_settings.solidBackground =
         wcscmp(StringSetting::make(L"BackgroundMode").get(), L"solid") == 0;
+    g_settings.fitBackgroundToText =
+        wcscmp(StringSetting::make(L"BackgroundSizing").get(), L"text") == 0;
 }
 
 }  // namespace
