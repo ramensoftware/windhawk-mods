@@ -1440,7 +1440,14 @@ static int g_resizeHoverRow = -1, g_resizePressedRow = -1;
 
 static HDC g_tileDC[MAX_TILES][2] = {};
 static volatile LONG g_calendarSlide = 0;
-struct CalendarSurface { HDC dc = NULL; HBITMAP bmp = NULL; HGDIOBJ old = NULL; void* bits = NULL; ID2D1Bitmap* gpu = NULL; int w = 0, h = 0, date = 0; };
+struct CalendarSurface {
+    HDC dc = NULL;
+    HBITMAP bmp = NULL;
+    HGDIOBJ old = NULL;
+    void* bits = NULL;
+    ID2D1Bitmap* gpu = NULL;
+    int w = 0, h = 0, date = 0;
+};
 static CalendarSurface g_calendarFace[MAX_TILES];
 static void FreeCalendarFace(int i) {
     CalendarSurface& c = g_calendarFace[i];
@@ -5419,8 +5426,16 @@ static void DrawTileGpu(int i, float a, float slide, float gs) {
             bool oldBack; float p = CalendarSlide(i, &oldBack);
             ID2D1Bitmap* oldFace = oldBack ? c.gpu : bitmap;
             ID2D1Bitmap* nextFace = oldBack ? bitmap : c.gpu;
-            if (p < 1.0f) { D2D1_RECT_F d = D2D1::RectF(dest.left,dest.top+dh*p,dest.right,dest.bottom); D2D1_RECT_F src = D2D1::RectF(0,0,w,h*(1-p)); g_rt->DrawBitmap(oldFace,d,Clamp01(a),interp,src); }
-            if (p > 0.0f) { D2D1_RECT_F d = D2D1::RectF(dest.left,dest.top,dest.right,dest.top+dh*p); D2D1_RECT_F src = D2D1::RectF(0,h*(1-p),w,h); g_rt->DrawBitmap(nextFace,d,Clamp01(a),interp,src); }
+            if (p < 1.0f) {
+                D2D1_RECT_F d = D2D1::RectF(dest.left, dest.top + dh * p, dest.right, dest.bottom);
+                D2D1_RECT_F src = D2D1::RectF(0, 0, w, h * (1 - p));
+                g_rt->DrawBitmap(oldFace, d, Clamp01(a), interp, src);
+            }
+            if (p > 0.0f) {
+                D2D1_RECT_F d = D2D1::RectF(dest.left, dest.top, dest.right, dest.top + dh * p);
+                D2D1_RECT_F src = D2D1::RectF(0, h * (1 - p), w, h);
+                g_rt->DrawBitmap(nextFace, d, Clamp01(a), interp, src);
+            }
         } else g_rt->DrawBitmap(bitmap,dest,Clamp01(a),interp);
     } else if (bitmap) g_rt->DrawBitmap(bitmap,dest,Clamp01(a),interp);
     if (g_scratch && g_barVisible && g_barMode == 1 && g_barIdx == i) {
