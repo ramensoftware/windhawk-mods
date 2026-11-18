@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              macos-gestures-mission-control
 // @name            macOS Gestures - Mission Control
-// @description     Mission Control for Windows: a three- or four-finger swipe up opens a live, animated overview of your windows (app icons, minimized windows, taskbar slide, spring physics) that follows your fingers, a swipe down shows the windows of the current desktop (or minimizes them), Win+Tab opens it from the keyboard, and left/right swipes keep switching apps like Alt+Tab
+// @description     Windows Mission Control: three- or four-finger swipe up opens a live animated window overview. Swipe down shows current desktop windows or minimizes them. Win+Tab opens the overview, while left/right swipes switch apps like Alt+Tab.
 // @version         1.6.0
 // @author          Frixed
 // @github          https://github.com/frixed
