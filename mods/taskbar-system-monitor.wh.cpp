@@ -160,7 +160,8 @@ below, and only while they are shown or in use:
 
 Nothing else is sent. Every request uses HTTPS (ping uses ICMP), the mod
 asks for no administrator rights and opens no port. Settings are kept only
-in Windhawk's mod storage; nothing is written to `%APPDATA%`.
+in Windhawk's mod storage. Files are written only when you ask: presets,
+reports and CSV exports.
 
 ## Privacy Mode
 
@@ -893,7 +894,7 @@ struct ModSettings {
          privacySystem = true;
     // Auto-detect: apps that record, stream or hold meetings; a comma list
     // of extra .exe names of the user's own.
-    bool privacyAutoDetect = true;
+    bool privacyAutoDetect = false;
     std::wstring privacyCustomApps;
     int privacyTrayMode = 1;  // Tray icon: 0 off, 1 only when active, 2 always.
     bool privacyTrayInteractive = false;  // Click toggles; else view only.
@@ -1184,7 +1185,8 @@ std::optional<double> g_lastAppliedRepeaterMarginLeft;
 [[clang::no_destroy]] DispatcherTimer g_timer{nullptr};
 // Short-lived timers (retries, "Copied" labels, watchers). Teardown stops
 // them all on the UI thread so none can fire after the mod is unloaded.
-std::optional<std::vector<DispatcherTimer>> g_trackedTimers{std::in_place};
+[[clang::no_destroy]] std::optional<std::vector<DispatcherTimer>>
+    g_trackedTimers{std::in_place};
 // Queued lambdas that have not run yet; unload waits briefly for them.
 std::atomic<int> g_pendingQueued{0};
 // Counts one lambda queued to the taskbar thread. The count drops when the
@@ -1235,7 +1237,7 @@ std::optional<std::list<FrameworkElement::Loaded_revoker>> g_loadedRevokers{
 
 // Optional so Wh_ModUninit can release it explicitly (see the end of the
 // file); MainView() always returns a usable object.
-std::optional<WidgetElements> g_view{std::in_place};
+[[clang::no_destroy]] std::optional<WidgetElements> g_view{std::in_place};
 WidgetElements& MainView() {
     if (!g_view) g_view.emplace();
     return *g_view;
@@ -8653,7 +8655,7 @@ void SaveFxCache(const std::wstring& pair,
 // Every WinHTTP handle the mod opens is tracked, so unloading can close them
 // all at once. That makes a request that is waiting on the network fail at
 // once instead of holding up the unload for its whole timeout.
-[[clang::no_destroy]] std::set<HINTERNET> g_httpHandles;
+std::set<HINTERNET> g_httpHandles;
 std::mutex g_httpHandlesMutex;
 
 HINTERNET HttpTrack(HINTERNET handle) {
@@ -11229,7 +11231,6 @@ std::atomic<bool> g_pingTrayStop{false};  // Stop asked, even before the window 
 std::mutex g_pingTrayMutex;  // Guards g_pingTrayThread (start and stop).
 [[clang::no_destroy]] std::optional<std::thread> g_pingTrayThread;
 constexpr UINT kPingTrayUpdate = WM_APP + 51;
-constexpr UINT kPingTrayCallback = WM_APP + 52;
 
 void PingProbeProc() {
     HANDLE icmp = IcmpCreateFile();
@@ -11414,8 +11415,7 @@ void UpdatePingTray() {
         }
     }
     if (!tray.icon) return;
-    tray.data.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE;
-    tray.data.uCallbackMessage = kPingTrayCallback;
+    tray.data.uFlags = NIF_ICON | NIF_TIP;
     tray.data.hIcon = tray.icon;
     wcsncpy_s(tray.data.szTip, tip.c_str(), _TRUNCATE);
     if (!tray.added) {
@@ -11451,12 +11451,22 @@ LRESULT CALLBACK PingTrayWindowProc(HWND window, UINT message, WPARAM wParam,
 
 void PingTrayProc() {
     constexpr wchar_t kClass[] = L"TaskbarSystemMonitorPingTray";
-    HINSTANCE module = GetModuleHandleW(nullptr);
+    // Register with the mod's own module (not Explorer's), so a class left
+    // behind by an earlier load can never route messages to an unloaded
+    // WndProc. Any registration failure, including "already exists", stops.
+    HMODULE module = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<LPCWSTR>(&PingTrayWindowProc),
+                            &module) ||
+        !module) {
+        return;
+    }
     WNDCLASSW wc{};
     wc.lpfnWndProc = PingTrayWindowProc;
     wc.hInstance = module;
     wc.lpszClassName = kClass;
-    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+    if (!RegisterClassW(&wc)) {
         return;
     }
     // A real (hidden) window, not message-only: only those get the
@@ -18018,7 +18028,7 @@ bool InjectWidget(FrameworkElement taskbarFrame) {
     }
     EnsureTimer();
     UpdateWidgetText();
-    ModLog(L"Taskbar System Info injected");
+    ModLog(L"Taskbar System Monitor injected");
     return true;
 }
 
@@ -21377,7 +21387,7 @@ void BeginMoveEditor() {
     g_moveEditor = std::make_shared<MoveEditorState>(std::move(editor));
     HWND window = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED, kMoveWindowClass,
-        L"Taskbar System Info - Move", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr,
+        L"Taskbar System Monitor - Move", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr,
         cls.hInstance, nullptr);
     if (!window) {
         g_moveEditor.reset();
@@ -22436,7 +22446,7 @@ void FinishHoverHide() {
 
 // The pin in the panel's bottom bar. Unpinning starts the usual rules
 // afresh: keys pressed and windows opened while it was pinned are not news.
-void SetHoverPinned(bool pinned) {
+[[maybe_unused]] void SetHoverPinned(bool pinned) {
     DiagLog(kDiagDetails, L"pinned %d", pinned ? 1 : 0);
     g_hover.pinned = pinned;
     g_hover.lastInput = 0;
@@ -24493,7 +24503,8 @@ void OpenWindowsPlace(PCWSTR file, PCWSTR parameters = nullptr) {
 // folder and opened in the browser. It runs in its own hidden command
 // window, so Explorer does not wait for it.
 std::mutex g_batteryReportMutex;
-std::optional<std::thread> g_batteryReportThread;
+[[clang::no_destroy]] std::optional<std::thread> g_batteryReportThread;
+std::atomic<bool> g_batteryReportBusy{false};
 
 void StopBatteryReportThread() {
     std::lock_guard lock(g_batteryReportMutex);
@@ -24504,6 +24515,9 @@ void StopBatteryReportThread() {
 }
 
 void OpenBatteryReport() {
+    // A report is already being made: ignore the click instead of blocking
+    // the taskbar thread on the helper.
+    if (g_batteryReportBusy.load()) return;
     wchar_t temp[MAX_PATH] = {};
     if (!GetTempPathW(MAX_PATH, temp)) return;
     std::wstring path = std::wstring(temp) + L"battery-report.html";
@@ -24524,14 +24538,16 @@ void OpenBatteryReport() {
         CloseHandle(process.hThread);
         std::lock_guard lock(g_batteryReportMutex);
         if (g_batteryReportThread && g_batteryReportThread->joinable()) {
-            g_batteryReportThread->join();
+            g_batteryReportThread->join();  // Finished already (not busy).
         }
+        g_batteryReportBusy = true;
         g_batteryReportThread.emplace([handle, path] {
             bool done = false;
             for (int i = 0; i < 300 && !g_unloading && !done; ++i) {
                 done = WaitForSingleObject(handle, 100) == WAIT_OBJECT_0;
             }
             CloseHandle(handle);
+            g_batteryReportBusy = false;
             if (done && !g_unloading) {
                 ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr,
                               SW_SHOWNORMAL);
@@ -24944,7 +24960,7 @@ std::atomic<int> g_processSamplingMode{0};  // 0 off, 1 apps, 2 apps + GPU.
 std::atomic<bool> g_stopProcessSampler{false};
 std::mutex g_processThreadMutex;
 HANDLE g_processWake = nullptr;
-std::optional<std::thread> g_processThread;
+[[clang::no_destroy]] std::optional<std::thread> g_processThread;
 
 void ResetProcessSamplerState() {
     if (g_processes.query) PdhCloseQuery(g_processes.query);
@@ -24989,6 +25005,7 @@ void StartProcessSampling(bool withGpu) {
 
 // The panel closed: the thread goes back to sleep (it frees its own state).
 void StopProcessSampling() {
+    std::lock_guard lock(g_processThreadMutex);
     g_processSamplingMode = 0;
     if (g_processWake) SetEvent(g_processWake);
 }
@@ -44759,9 +44776,8 @@ void SettingsThreadProc() {
             wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
             wc.hbrBackground = CreateSolidBrush(RGB(32, 32, 32));
             wc.lpszClassName = kSettingsClass;
-            g_settingsClassRegistered =
-                RegisterClassExW(&wc) != 0 ||
-                GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+            // A stale registration from an earlier load must not be reused.
+            g_settingsClassRegistered = RegisterClassExW(&wc) != 0;
             if (!g_settingsClassRegistered) {
                 throw std::runtime_error("window class");
             }
