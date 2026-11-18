@@ -2,7 +2,7 @@
 // @id              hide-snapped
 // @name            Snap Groups: Alt+Tab and taskbar
 // @description     Group-only Alt+Tab and separate taskbar buttons with tiled member icons.
-// @version         0.4.21
+// @version         0.4.22
 // @author          coldfeudal
 // @github          https://github.com/coldfeudal
 // @include         explorer.exe
@@ -153,6 +153,7 @@ The Alt+Tab scoping approach was informed by
 #include <winstring.h>
 #include <wrl/client.h>
 #include <atomic>
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <cwchar>
@@ -684,33 +685,109 @@ void WINAPI EvaluateItemHook(void* self, const void* sender, const void* args) {
     g_evaluateItem(self, sender, args);
 }
 
-// Only read the cached source's native prefix. Constructor call sites establish
-// that offset 48 holds the TaskGroupDataSourceAdapter projection. No writes to
-// native objects, no synthetic key presses, and no navigation after rendering.
-struct CachedSourcePrefix {
-    IUnknown* applicationAdapter;
-    bool desktopScoped;
-    bool groupsEnabled;
-    unsigned char padding[6];
-    void* registration[2];
-    void* filteredSource;
-    void* source;
-    IUnknown* groupAdapter;
+// Recover selection-only fields from the resolved constructor. An unrecognized
+// instruction form leaves selection native; member filtering has no dependency
+// on this layout. Only the r14=this/r15b=groupsEnabled compiler form is decoded.
+struct CachedSourceLayout {
+    size_t groupsEnabled = 0, groupAdapter = 0;
+    explicit operator bool() const { return groupsEnabled && groupAdapter; }
 };
-static_assert(offsetof(CachedSourcePrefix, groupAdapter) == 48);
+CachedSourceLayout g_cachedSourceLayout;
+void* g_cachedSourceConstructor = nullptr;
+void* g_tryGetGroupAdapter = nullptr;
+CachedSourceLayout DecodeCachedSourceLayout(const void* constructor, const void* adapterHelper,
+        BOOL (*disasm)(void*, WH_DISASM_RESULT*) = Wh_Disasm) {
+    if (!constructor || !adapterHelper) return {};
+    std::array<unsigned char, 512> code{};
+    if (!TraceRead(constructor, 0, code)) return {};
+    bool thisSaved = false, argumentSaved = false;
+    CachedSourceLayout layout;
+    auto fieldOffset = [](const unsigned char* bytes, size_t length, unsigned char shortOpcode,
+                          unsigned char longOpcode) -> size_t {
+        int32_t offset = 0;
+        if (length == 4 && bytes[2] == shortOpcode)
+            offset = static_cast<int8_t>(bytes[3]);
+        else if (length == 7 && bytes[2] == longOpcode)
+            memcpy(&offset, bytes + 3, sizeof(offset));
+        return offset > 0 && offset <= 4096 ? size_t(offset) : 0;
+    };
+    // Leave at least 16 readable bytes for the disassembler's maximum fetch.
+    for (size_t cursor = 0; cursor + 16 <= code.size();) {
+        auto* instruction = code.data() + cursor;
+        WH_DISASM_RESULT decoded{};
+        if (!disasm(instruction, &decoded) || !decoded.length || decoded.length > 15) return {};
+        const size_t length = decoded.length;
+        if (instruction[0] == 0xc3 || instruction[0] == 0xc2 ||
+            instruction[0] == 0xe9 || instruction[0] == 0xeb) return {};
+        if (length == 3 && !memcmp(instruction, "\x4c\x8b\xf1", 3)) thisSaved = true;
+        if (length == 3 && !memcmp(instruction, "\x45\x8a\xf8", 3)) argumentSaved = true;
+        if (thisSaved && argumentSaved && instruction[0] == 0x45 && instruction[1] == 0x88) {
+            auto offset = fieldOffset(instruction, length, 0x7e, 0xbe);
+            if (offset) {
+                if (layout.groupsEnabled) return {}; // ambiguous assignments
+                layout.groupsEnabled = offset;
+            }
+        }
+        if (thisSaved && layout.groupsEnabled && instruction[0] == 0x49 && instruction[1] == 0x8d) {
+            auto offset = fieldOffset(instruction, length, 0x5e, 0x9e);
+            if (offset && cursor + length + 3 <= code.size() &&
+                !memcmp(instruction + length, "\x48\x89\x0b", 3)) {
+                if (layout.groupAdapter || offset % sizeof(void*)) return {};
+                layout.groupAdapter = offset;
+            }
+        }
+        // Match the groups-enabled branch and assignment of the result of the
+        // independently resolved TryGetTaskGroupsDataSourceAdapter helper.
+        if (layout && instruction[0] == 0x41 && instruction[1] == 0x80 &&
+            (length == 5 || length == 8) && instruction[length - 1] == 0) {
+            auto offset = fieldOffset(instruction, length - 1, 0x7e, 0xbe);
+            if (offset == layout.groupsEnabled) {
+                size_t branch = cursor + length;
+                size_t jump = code[branch] == 0x74 ? 2 :
+                    code[branch] == 0x0f && code[branch + 1] == 0x84 ? 6 : 0;
+                size_t callBlock = branch + jump;
+                if (!jump || callBlock + 24 > code.size()) return {};
+                int32_t skip = 0;
+                if (jump == 2) skip = static_cast<int8_t>(code[branch + 1]);
+                else memcpy(&skip, code.data() + branch + 2, sizeof(skip));
+                if (skip < 24 || callBlock + size_t(skip) > code.size()) return {};
+                auto* block = code.data() + callBlock;
+                if (memcmp(block, "\x49\x8b\x16\x48\x8d\x4c\x24", 7) ||
+                    block[8] != 0xe8 || memcmp(block + 13, "\x48\x8b\xd0\x48\x8b\xcb\xe8", 7))
+                    return {};
+                int32_t displacement = 0;
+                memcpy(&displacement, block + 9, sizeof(displacement));
+                auto target = reinterpret_cast<uintptr_t>(constructor) + callBlock + 13 + displacement;
+                if (target != reinterpret_cast<uintptr_t>(adapterHelper) ||
+                    (layout.groupsEnabled >= layout.groupAdapter &&
+                     layout.groupsEnabled < layout.groupAdapter + sizeof(void*))) return {};
+                return layout;
+            }
+        }
+        cursor += length;
+    }
+    return {};
+}
 
-using GetItemForView = IUnknown*(WINAPI*)(const CachedSourcePrefix*, void*);
+using GetItemForView = IUnknown*(WINAPI*)(const void*, void*);
 GetItemForView g_getItemForView = nullptr;
-IUnknown* WINAPI GetItemForViewHook(const CachedSourcePrefix* self, void* view) {
-    if (g_cachedOnlyAltTab) return g_getItemForView(self, view);
-    if (!view || !self->groupsEnabled || !self->groupAdapter ||
-        g_diagnosticMode.load() || !g_altTabEnabled.load() || g_cachedEvaluationDepth) return g_getItemForView(self, view);
+IUnknown* WINAPI GetItemForViewHook(const void* self, void* view) {
+    if (g_cachedOnlyAltTab || !g_cachedSourceLayout || !self || !view ||
+        g_diagnosticMode.load() || !g_altTabEnabled.load() || g_cachedEvaluationDepth)
+        return g_getItemForView(self, view);
+    unsigned char groupsEnabled = 0;
+    IUnknown* groupAdapter = nullptr;
+    if (!TraceRead(self, g_cachedSourceLayout.groupsEnabled, groupsEnabled) || groupsEnabled != 1 ||
+        !TraceRead(self, g_cachedSourceLayout.groupAdapter, groupAdapter) || !groupAdapter)
+        return g_getItemForView(self, view);
+    ComPtr<IUnknown> adapter;
+    // Retain the interface before model COM can pump a change to the source.
+    HRESULT hr = groupAdapter->QueryInterface(kGroupAdapter,
+        reinterpret_cast<void**>(adapter.GetAddressOf()));
+    if (FAILED(hr) || !adapter) return g_getItemForView(self, view);
     AltTabScope scope;
     auto group = FindGroup(g_getWindowForView(view));
     if (!group) return g_getItemForView(self, view);
-    ComPtr<IUnknown> adapter;
-    HRESULT hr = self->groupAdapter->QueryInterface(
-        kGroupAdapter, reinterpret_cast<void**>(adapter.GetAddressOf()));
     ComPtr<IUnknown> source;
     using GetSource = HRESULT(STDMETHODCALLTYPE*)(IUnknown*, IUnknown**);
     if (SUCCEEDED(hr)) {
@@ -2674,6 +2751,10 @@ BOOL Wh_ModInit() {
          &g_evaluateItem, EvaluateItemHook, true},
         {{L"?GetItemForView@CachedDataSource@@QEBAPE$AAUISwitchItem@Multitasking@ComposableShell@Internal@Windows@@PEAUIApplicationView@@@Z"},
          &g_getItemForView, GetItemForViewHook},
+        {{L"??0CachedDataSource@@QEAA@_N0PEAUIAppViewDataSourceAdapter@@AEBUIVirtualDesktopController@Multitasking@ComposableShell@Internal@Windows@winrt@@AEBUIVirtualDesktopDataSource@34567@@Z"},
+         &g_cachedSourceConstructor, nullptr, true},
+        {{L"?TryGetTaskGroupsDataSourceAdapter@@YA?AUTaskGroupDataSourceAdapter@TaskGroups@Shell@Internal@Windows@winrt@@PEAUIAppViewDataSourceAdapter@@@Z"},
+         &g_tryGetGroupAdapter, nullptr, true},
     };
     // DIA and DbgHelp disagree on some undecorated function names, including
     // the local EvaluateItem lambda. Match exact PDB names instead.
@@ -2682,6 +2763,9 @@ BOOL Wh_ModInit() {
     options.noUndecoratedSymbols = TRUE;
     const bool hooked = WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks), &options);
     g_cachedOnlyAltTab = !g_evaluateItem;
+    g_cachedSourceLayout = DecodeCachedSourceLayout(g_cachedSourceConstructor, g_tryGetGroupAdapter);
+    Wh_Log(L"phase=selection layout=%d groups-offset=%zu adapter-offset=%zu",
+           bool(g_cachedSourceLayout), g_cachedSourceLayout.groupsEnabled, g_cachedSourceLayout.groupAdapter);
     // Keep the reference for the process lifetime. Hooks are queued until Init
     // returns and their trampolines can outlive BeforeUninit.
     Wh_Log(L"phase=init lookup=raw symbols=%d", hooked);
