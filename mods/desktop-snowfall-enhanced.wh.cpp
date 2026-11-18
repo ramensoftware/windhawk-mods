@@ -2,11 +2,11 @@
 // @id              desktop-snowfall-enhanced
 // @name            Desktop Snowfall Enhanced
 // @description     Snow, cherry blossom, autumn leaves and rain over the desktop, with wind, mouse sweeping, snow piling up on windows and a gust on weather change.
-// @version         1.1.3
-// @author          hiol09
+// @version         1.2.0
+// @author          damir
 // @github          https://github.com/hiol09
-// @include         explorer.exe
-// @compilerOptions -ld2d1 -ldwmapi -lgdi32 -lole32 -luuid
+// @include         windhawk.exe
+// @compilerOptions -ld2d1 -ldwmapi -lgdi32 -lole32 -luuid -lshell32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -16,8 +16,11 @@
 
 Animated weather rendered over the whole desktop: snow, cherry blossom
 (sakura) petals, autumn leaves and rain. Several kinds can be mixed
-together. Direct2D renders into a per-monitor transparent layered window,
-so the desktop and all windows stay fully interactive.
+together. Direct2D renders into a transparent layered window, so the
+desktop and all windows stay fully interactive.
+
+This is a tool mod: it runs in its own dedicated process instead of
+inside Explorer.
 
 ## Features
 
@@ -28,10 +31,14 @@ so the desktop and all windows stay fully interactive.
   old weather away, and the new one drifts in gradually from the top.
 - Snow settles on the top edges of windows and the taskbar; leaves and
   petals may stay lying there too, a few at a time.
+- Snow on a window top follows the window as it moves. Drag a window
+  sideways and the snow that runs out of surface falls off; shrink a
+  window from the top and the snow drops as well.
 - The mouse can sweep snow, leaves and petals off window tops.
-- Snow that cannot follow a moving window comes loose and falls.
 - Cartoon wind sweep can also run on a timer to clean everything up.
 - Optional cartoon-style gray streaks for snow.
+- The overlay hides itself over fullscreen apps and pauses while the
+  session is locked or the display is off.
 - Particles are small, rare and slow by design, so the overlay stays
   lightweight and looks calm rather than busy.
 
@@ -134,6 +141,7 @@ so the desktop and all windows stay fully interactive.
 #include <d2d1.h>
 #include <dwmapi.h>
 #include <dxgiformat.h>
+#include <shellapi.h>
 
 #include <vector>
 #include <cmath>
@@ -141,7 +149,8 @@ so the desktop and all windows stay fully interactive.
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Engine constants (ported from the SnowDesktop physics)
+// Engine constants, tuned in my own C# prototype of the same effect. No
+// third-party code is used.
 // ─────────────────────────────────────────────────────────────────────────────
 
 static const float kPi2          = 6.2832f;
@@ -199,7 +208,8 @@ static void ParseWeatherMode(const wchar_t* mode, WeatherSet& w) {
 
 static const float kColWidth    = 5.0f;   // cap column width, px
 static const float kCapMaxH     = 10.0f;  // max snow height on a window top
-static const float kMeltPerSec  = 0.05f;  // slow melt so caps don't grow forever
+static const float kMeltPerSec  = 0.35f;  // slow melt so caps don't grow forever
+static const float kMinCapH     = 0.3f;   // below this the snow is not drawn at all
 
 struct WinLitter {
     float offX;   // offset from the window's left edge
@@ -214,6 +224,9 @@ struct WinCap {
     RECT rc;                       // window rect on screen
     std::vector<float> cols;       // snow height per column
     std::vector<WinLitter> litter;
+    float slideAcc = 0.0f;         // sub-column horizontal offset
+    int z = 0x7fffffff;            // z-order, 0 = topmost
+    std::vector<uint8_t> vis;      // per column: 1 = not hidden by another window
 };
 
 // Owned by the overlay thread only.
@@ -351,7 +364,9 @@ struct Engine {
 
             default: // Snow
                 f.size      = (0.8f + depth * depth * 2.7f) * sizeMul;
-                f.fallSpeed = 35.0f + f.size * 22.0f;
+                // Fast enough to read as falling snow: a flake crosses the
+                // screen in a few seconds, not half a minute.
+                f.fallSpeed = 62.0f + f.size * 30.0f;
                 f.sway      = 6.0f + Rand() * 14.0f;
                 f.alpha     = 0.45f + 0.5f * Rand();
                 f.rotSpeed  = 0.0f;
@@ -463,6 +478,11 @@ struct Engine {
             // Lying leaves and petals are flicked off first, so the snow
             // underneath is revealed and then cleared in turn.
             for (int j = (int)c.litter.size() - 1; j >= 0; j--) {
+                int ci = (int)(c.litter[j].offX / kColWidth);
+                if (!c.vis.empty() &&
+                    (ci < 0 || ci >= (int)c.vis.size() || !c.vis[ci]))
+                    continue; // hidden behind a higher window
+
                 float lx = (float)c.rc.left + c.litter[j].offX;
                 if (lx < x0 || lx > x1) continue;
 
@@ -495,13 +515,14 @@ struct Engine {
             if (to > n) to = n;
             for (int i = from; i < to; i++) {
                 float h = c.cols[i];
-                if (h < 0.4f) continue;
+                if (h < 0.6f) continue; // a hairline is not snow
+                if (!c.vis.empty() && !c.vis[i]) continue;
 
                 if (debrisBudget > 0 && flakes.size() < 1100) {
                     Particle p = {};
                     p.kind      = kSnow;
                     p.size      = 0.7f + h * 0.25f;
-                    p.fallSpeed = 45.0f + h * 6.0f;
+                    p.fallSpeed = 70.0f + h * 8.0f;
                     p.sway      = 8.0f;
                     p.alpha     = 0.9f;
                     p.flutter   = 1.0f;
@@ -628,8 +649,11 @@ struct Engine {
                     }
                 }
             } else {
-                for (auto& h : c.cols)
-                    if (h > 0.0f) h -= kMeltPerSec * dt;
+                for (auto& h : c.cols) {
+                    if (h <= 0.0f) continue;
+                    h -= kMeltPerSec * dt;
+                    if (h < 0.15f) h = 0.0f;
+                }
             }
         }
 
@@ -896,6 +920,26 @@ static void BuildPetalsAndLeaves() {
     });
 }
 
+static HRESULT CreateRenderTargetResources() {
+    SafeRelease(&g_brush);
+    SafeRelease(&g_rt);
+
+    D2D1_RENDER_TARGET_PROPERTIES rtProps = {};
+    rtProps.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
+    rtProps.pixelFormat.format    = DXGI_FORMAT_B8G8R8A8_UNORM;
+    rtProps.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+    rtProps.usage    = D2D1_RENDER_TARGET_USAGE_NONE;
+    rtProps.minLevel = D2D1_FEATURE_LEVEL_DEFAULT;
+    rtProps.dpiX     = 0.0f;
+    rtProps.dpiY     = 0.0f;
+
+    HRESULT hr = g_factory->CreateDCRenderTarget(&rtProps, &g_rt);
+    if (FAILED(hr) || !g_rt) return hr;
+
+    hr = g_rt->CreateSolidColorBrush(Col(kSnowColor, 1.0f), &g_brush);
+    return hr;
+}
+
 static bool InitD2D() {
     D2D1_FACTORY_OPTIONS fo = {};
     fo.debugLevel = D2D1_DEBUG_LEVEL_NONE;
@@ -907,24 +951,9 @@ static bool InitD2D() {
         return false;
     }
 
-    D2D1_RENDER_TARGET_PROPERTIES rtProps = {};
-    rtProps.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
-    rtProps.pixelFormat.format    = DXGI_FORMAT_B8G8R8A8_UNORM;
-    rtProps.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
-    rtProps.usage    = D2D1_RENDER_TARGET_USAGE_NONE;
-    rtProps.minLevel = D2D1_FEATURE_LEVEL_DEFAULT;
-    rtProps.dpiX     = 0.0f;
-    rtProps.dpiY     = 0.0f;
-
-    hr = g_factory->CreateDCRenderTarget(&rtProps, &g_rt);
-    if (FAILED(hr) || !g_rt) {
-        Wh_Log(L"CreateDCRenderTarget failed: 0x%08lX", hr);
-        return false;
-    }
-
-    hr = g_rt->CreateSolidColorBrush(Col(kSnowColor, 1.0f), &g_brush);
-    if (FAILED(hr) || !g_brush) {
-        Wh_Log(L"CreateSolidColorBrush failed: 0x%08lX", hr);
+    hr = CreateRenderTargetResources();
+    if (FAILED(hr) || !g_rt || !g_brush) {
+        Wh_Log(L"Creating the D2D render target failed: 0x%08lX", hr);
         return false;
     }
 
@@ -950,8 +979,12 @@ static void DrawWindowCaps(ID2D1RenderTarget* rt) {
 
         // ─── snow cap: smoothed white layer along the top edge ───
         bool any = false;
-        for (float h : c.cols)
-            if (h > 0.05f) { any = true; break; }
+        for (int i = 0; i < n; i++) {
+            if ((c.vis.empty() || c.vis[i]) && c.cols[i] >= kMinCapH) {
+                any = true;
+                break;
+            }
+        }
 
         if (any) {
             ID2D1PathGeometry* geo = nullptr;
@@ -959,17 +992,25 @@ static void DrawWindowCaps(ID2D1RenderTarget* rt) {
             if (SUCCEEDED(g_factory->CreatePathGeometry(&geo)) &&
                 SUCCEEDED(geo->Open(&sink))) {
                 sink->SetFillMode(D2D1_FILL_MODE_WINDING);
-                D2D1_POINT_2F start = { left, top + 1.0f };
+                // The baseline is the top edge itself: with no snow the
+                // polygon has no area, so no hairline is drawn along windows.
+                D2D1_POINT_2F start = { left, top };
                 sink->BeginFigure(start, D2D1_FIGURE_BEGIN_FILLED);
                 for (int i = 0; i < n; i++) {
-                    float h = c.cols[i] * 2.0f;
-                    if (i > 0)     h += c.cols[i - 1];
-                    if (i + 1 < n) h += c.cols[i + 1];
-                    h *= 0.25f;
+                    float h = 0.0f;
+                    if (c.vis.empty() || c.vis[i]) {
+                        h = c.cols[i] * 2.0f;
+                        if (i > 0 && (c.vis.empty() || c.vis[i - 1]))
+                            h += c.cols[i - 1];
+                        if (i + 1 < n && (c.vis.empty() || c.vis[i + 1]))
+                            h += c.cols[i + 1];
+                        h *= 0.25f;
+                        if (h < kMinCapH) h = 0.0f;
+                    }
                     D2D1_POINT_2F pt = { left + (float)i * kColWidth, top - h };
                     sink->AddLine(pt);
                 }
-                D2D1_POINT_2F end = { right, top + 1.0f };
+                D2D1_POINT_2F end = { right, top };
                 sink->AddLine(end);
                 sink->EndFigure(D2D1_FIGURE_END_CLOSED);
                 sink->Close();
@@ -982,6 +1023,11 @@ static void DrawWindowCaps(ID2D1RenderTarget* rt) {
 
         // ─── litter: petals and leaves lying on the edge ───
         for (auto& l : c.litter) {
+            int ci = (int)(l.offX / kColWidth);
+            if (!c.vis.empty() &&
+                (ci < 0 || ci >= (int)c.vis.size() || !c.vis[ci]))
+                continue; // hidden behind a higher window
+
             ID2D1PathGeometry* geo =
                 l.kind == kPetal ? g_petalGeo : g_leafGeo[l.tint & 3];
             if (!geo) continue;
@@ -1121,12 +1167,22 @@ static bool RenderFrame(HWND hwnd, const Engine& eng) {
     if (!g_rt || !g_memDC) return false;
 
     RECT rc = { 0, 0, g_width, g_height };
-    g_rt->BindDC(g_memDC, &rc);
+    HRESULT hr = g_rt->BindDC(g_memDC, &rc);
+    if (FAILED(hr)) return false;
     g_rt->BeginDraw();
     g_rt->Clear(nullptr);
     DrawScene(g_rt, eng);
     DrawSweeps(g_rt, eng);
-    g_rt->EndDraw();
+    hr = g_rt->EndDraw();
+
+    // A GPU reset or driver update invalidates the device. Without this the
+    // DIB would keep showing the last frame forever.
+    if (hr == D2DERR_RECREATE_TARGET) {
+        if (FAILED(CreateRenderTargetResources()))
+            Wh_Log(L"Recreating the D2D render target failed");
+        return false;
+    }
+    if (FAILED(hr)) return false;
 
     GdiFlush();
 
@@ -1145,7 +1201,7 @@ static bool RenderFrame(HWND hwnd, const Engine& eng) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Overlay window (owned by a dedicated thread inside explorer.exe)
+// Overlay window (owned by a dedicated thread in the tool mod process)
 // ─────────────────────────────────────────────────────────────────────────────
 
 static const wchar_t* kWndClass = L"DesktopWeatherOverlayWnd";
@@ -1198,11 +1254,31 @@ static void SpawnCapFlake(float x, float y, float h, float vx) {
     Particle p = {};
     p.kind      = kSnow;
     p.size      = 0.8f + h * 0.22f;
-    p.fallSpeed = 40.0f + h * 6.0f;
+    p.fallSpeed = 70.0f + h * 8.0f;
     p.sway      = 8.0f;
     p.alpha     = 0.9f;
     p.flutter   = 1.0f;
     p.vx        = vx * 0.25f + (g_engine.Rand() - 0.5f) * 30.0f;
+    p.x         = x;
+    p.y         = y;
+    p.debris    = true;
+    g_engine.flakes.push_back(p);
+}
+
+static void SpawnLitterFlake(float x, float y, const WinLitter& l, float vx) {
+    if (g_engine.flakes.size() >= 1100) return;
+    Particle p = {};
+    p.kind      = (PKind)l.kind;
+    p.tint      = l.tint;
+    p.size      = l.size;
+    p.rot       = l.rot;
+    p.rotSpeed  = (g_engine.Rand() - 0.5f) * 2.0f;
+    p.alpha     = 0.95f;
+    p.flutter   = 2.0f;
+    p.phase     = g_engine.Rand() * kPi2;
+    p.sway      = 12.0f;
+    p.fallSpeed = 35.0f + g_engine.Rand() * 30.0f;
+    p.vx        = vx * 0.3f + (g_engine.Rand() - 0.5f) * 40.0f;
     p.x         = x;
     p.y         = y;
     p.debris    = true;
@@ -1222,102 +1298,222 @@ static void DetachCap(WinCap& cap, float vx) {
     }
 
     for (auto& l : cap.litter) {
-        if (g_engine.flakes.size() >= 1100) break;
-        Particle p = {};
-        p.kind      = (PKind)l.kind;
-        p.tint      = l.tint;
-        p.size      = l.size;
-        p.rot       = l.rot;
-        p.rotSpeed  = (g_engine.Rand() - 0.5f) * 2.0f;
-        p.alpha     = 0.95f;
-        p.flutter   = 2.0f;
-        p.phase     = g_engine.Rand() * kPi2;
-        p.sway      = 12.0f;
-        p.fallSpeed = 35.0f + g_engine.Rand() * 30.0f;
-        p.vx        = vx * 0.3f + (g_engine.Rand() - 0.5f) * 40.0f;
-        p.x         = (float)cap.rc.left + l.offX;
-        p.y         = (float)cap.rc.top - 2.0f;
-        p.debris    = true;
-        g_engine.flakes.push_back(p);
+        SpawnLitterFlake((float)cap.rc.left + l.offX,
+                         (float)cap.rc.top - 2.0f, l, vx);
     }
     cap.litter.clear();
 }
 
-static void UpdateWindowList() {
+// Starts a cap over: fresh columns for the current rectangle, nothing on top.
+static void RebuildCap(WinCap& cap, const RECT& rc) {
+    int n = (rc.right - rc.left) / (int)kColWidth;
+    if (n < 1) n = 1;
+    if (n > 400) n = 400;
+    cap.cols.assign(n, 0.0f);
+    cap.litter.clear();
+    cap.slideAcc = 0.0f;
+    cap.rc = rc;
+}
+
+// The snow strip keeps its screen position while the window slides under
+// it, like snow with no grip on the surface. A sideways drag therefore
+// scrapes snow off the trailing edge, and it falls.
+static void SlideCap(WinCap& cap, float dx) {
+    if (dx == 0.0f || cap.cols.empty()) return;
+
+    cap.slideAcc += dx;
+
+    while (cap.slideAcc >= kColWidth) {
+        cap.slideAcc -= kColWidth;
+        if (cap.cols[0] >= 0.25f) {
+            SpawnCapFlake((float)cap.rc.left + kColWidth * 0.5f,
+                          (float)cap.rc.top - cap.cols[0] * 0.6f,
+                          cap.cols[0], 0.0f);
+        }
+        cap.cols.erase(cap.cols.begin());
+        cap.cols.push_back(0.0f);
+    }
+    while (cap.slideAcc <= -kColWidth) {
+        cap.slideAcc += kColWidth;
+        size_t last = cap.cols.size() - 1;
+        if (cap.cols[last] >= 0.25f) {
+            SpawnCapFlake((float)cap.rc.left + (last + 0.5f) * kColWidth,
+                          (float)cap.rc.top - cap.cols[last] * 0.6f,
+                          cap.cols[last], 0.0f);
+        }
+        cap.cols.pop_back();
+        cap.cols.insert(cap.cols.begin(), 0.0f);
+    }
+
+    // Litter stays in screen space as well; whatever runs past an edge falls.
+    float w = (float)(cap.rc.right - cap.rc.left);
+    for (auto& l : cap.litter) l.offX -= dx;
+    for (size_t j = 0; j < cap.litter.size();) {
+        WinLitter& l = cap.litter[j];
+        if (l.offX < 0.0f || l.offX >= w) {
+            SpawnLitterFlake((float)cap.rc.left + l.offX,
+                             (float)cap.rc.top - 2.0f, l, 0.0f);
+            cap.litter.erase(cap.litter.begin() + j);
+        } else {
+            j++;
+        }
+    }
+}
+
+// Brings one cap up to date with its window's current rectangle.
+static void MoveCap(WinCap& cap, const RECT& rc) {
+    int oldW = cap.rc.right - cap.rc.left;
+    int oldH = cap.rc.bottom - cap.rc.top;
+    int newW = rc.right - rc.left;
+    int newH = rc.bottom - rc.top;
+    int dx = rc.left - cap.rc.left;
+    int dy = rc.top  - cap.rc.top;
+
+    if (dx == 0 && dy == 0 && oldW == newW && oldH == newH) return;
+
+    // A jump (snap, maximise, a fast fling): the snow cannot follow and
+    // falls where it was.
+    if (abs(dx) > 120 || abs(dy) > 120) {
+        DetachCap(cap, (float)dx);
+        RebuildCap(cap, rc);
+        return;
+    }
+
+    if (oldW == newW && oldH == newH) {
+        // A plain move: the cap follows immediately, while sideways travel
+        // scrapes snow off the trailing edge.
+        SlideCap(cap, (float)dx);
+        cap.rc = rc;
+        return;
+    }
+
+    // Resized. Moving the top edge means the snow lost its support (the
+    // window shrank from the top) or would end up buried inside the window
+    // (it grew upwards), so it falls.
+    if (dy != 0) {
+        DetachCap(cap, (float)dx);
+        RebuildCap(cap, rc);
+        return;
+    }
+
+    // Width changed, top stayed put. Keep the snow that is still over the
+    // window; the part that ran out of surface falls where it was.
+    int n = newW / (int)kColWidth;
+    if (n < 1) n = 1;
+    if (n > 400) n = 400;
+    std::vector<float> cols((size_t)n, 0.0f);
+    int nOld = (int)cap.cols.size();
+    for (int i = 0; i < nOld; i++) {
+        float h = cap.cols[i];
+        if (h < 0.25f) continue;
+        float x = (float)cap.rc.left + (i + 0.5f) * kColWidth;
+        if (x < (float)rc.left || x >= (float)rc.right) {
+            SpawnCapFlake(x, (float)cap.rc.top - h * 0.6f, h, 0.0f);
+            continue;
+        }
+        int j = (int)((x - (float)rc.left) / kColWidth);
+        if (j < 0) j = 0;
+        if (j >= n) j = n - 1;
+        if (h > cols[j]) cols[j] = h;
+    }
+    cap.cols.swap(cols);
+
+    for (auto& l : cap.litter) l.offX -= (float)dx;
+    float w = (float)newW;
+    for (size_t j = 0; j < cap.litter.size();) {
+        if (cap.litter[j].offX < 0.0f || cap.litter[j].offX >= w)
+            cap.litter.erase(cap.litter.begin() + j);
+        else
+            j++;
+    }
+    cap.slideAcc = 0.0f;
+    cap.rc = rc;
+}
+
+// Picks up new top-level windows and forgets the ones that closed.
+static void RefreshWindowList() {
     g_capsEnum.clear();
     EnumWindows(EnumWndProc, 0);
 
-    // Merge with the previous list, keeping snow columns and litter.
-    std::vector<WinCap> merged;
-    merged.reserve(g_capsEnum.size());
-    for (auto& nu : g_capsEnum) {
-        WinCap c = std::move(nu);
-        int n = (c.rc.right - c.rc.left) / (int)kColWidth;
-        if (n < 1) n = 1;
-        if (n > 400) n = 400;
-        c.cols.assign(n, 0.0f);
-
-        for (auto& old : g_caps) {
-            if (old.hwnd != c.hwnd) continue;
-
-            int dx = (int)(c.rc.left - old.rc.left);
-            int dy = (int)(c.rc.top  - old.rc.top);
-
-            if (dx == 0 && dy == 0) {
-                // The window is standing still: snow and litter stay put.
-                c.litter = old.litter;
-                size_t m = old.cols.size() < (size_t)n ? old.cols.size() : (size_t)n;
-                for (size_t i = 0; i < m; i++) c.cols[i] = old.cols[i];
-                break;
-            }
-
-            if (dy < -4 || dx < -60 || dx > 60 || dy > 60) {
-                // The window jumped (snap, maximise, or pulled up faster
-                // than the snow can follow). The cap comes loose and falls
-                // where it was instead of sticking to the new position.
-                WinCap moved = old;
-                DetachCap(moved, (float)dx);
-                break;
-            }
-
-            // A slow drag: the cap rides along with the window. Columns
-            // scraped past a side edge slide off and fall to the ground.
-            int shift = dx >= 0
-                ? (dx + (int)kColWidth / 2) / (int)kColWidth
-                : -((-dx + (int)kColWidth / 2) / (int)kColWidth);
-            int nOld = (int)old.cols.size();
-            int lo = shift > 0 ? 0 : nOld + shift;
-            int hi = shift > 0 ? shift : nOld;
-            if (lo < 0) lo = 0;
-            if (hi > nOld) hi = nOld;
-            for (int i = lo; i < hi; i++) {
-                SpawnCapFlake((float)old.rc.left + (i + 0.5f) * kColWidth,
-                              (float)old.rc.top - old.cols[i] * 0.6f,
-                              old.cols[i], 0.0f);
-            }
-
-            for (int i = 0; i < n; i++) {
-                int src = i + shift;
-                if (src < 0 || src >= nOld) continue;
-                c.cols[i] = old.cols[src];
-            }
-
-            c.litter = old.litter;
-            for (auto& l : c.litter) l.offX -= (float)dx;
-            c.litter.erase(std::remove_if(c.litter.begin(), c.litter.end(),
-                                          [n](const WinLitter& l) {
-                                              return l.offX < 0.0f ||
-                                                     l.offX >= (float)n * kColWidth;
-                                          }),
-                           c.litter.end());
-            break;
+    for (size_t i = 0; i < g_caps.size();) {
+        bool found = false;
+        for (auto& e : g_capsEnum) {
+            if (e.hwnd == g_caps[i].hwnd) { found = true; break; }
         }
-        merged.push_back(std::move(c));
+        if (!found) g_caps.erase(g_caps.begin() + i);
+        else i++;
     }
-    g_caps = std::move(merged);
+
+    for (auto& e : g_capsEnum) {
+        bool known = false;
+        for (auto& c : g_caps) {
+            if (c.hwnd == e.hwnd) { known = true; break; }
+        }
+        if (known) continue;
+
+        WinCap cap = {};
+        cap.hwnd = e.hwnd;
+        RebuildCap(cap, e.rc);
+        g_caps.push_back(std::move(cap));
+    }
+}
+
+// Runs every frame: a dragged window must not leave its snow in mid-air.
+static void TrackWindowCaps() {
+    for (size_t i = 0; i < g_caps.size();) {
+        WinCap& c = g_caps[i];
+        RECT rc;
+        if (!IsWindow(c.hwnd) || !IsWindowVisible(c.hwnd) || IsIconic(c.hwnd) ||
+            !GetWindowRect(c.hwnd, &rc)) {
+            g_caps.erase(g_caps.begin() + i);
+            continue;
+        }
+        MoveCap(c, rc);
+        i++;
+    }
+}
+
+// Z-order of the tracked windows, 0 = topmost. The overlay is a topmost
+// window of its own, so only the relative order of the tracked windows
+// matters here.
+static void UpdateCapZOrder() {
+    for (auto& c : g_caps) c.z = 0x7fffffff;
+
+    int z = 0;
+    for (HWND h = GetTopWindow(nullptr); h; h = GetWindow(h, GW_HWNDNEXT), z++) {
+        for (auto& c : g_caps) {
+            if (c.hwnd == h) { c.z = z; break; }
+        }
+    }
+}
+
+// Marks the columns of every cap that are hidden behind a higher window, so
+// the snow of a window that is behind another one is not drawn on top of it.
+static void UpdateCapVisibility() {
+    for (auto& c : g_caps) {
+        int n = (int)c.cols.size();
+        c.vis.assign((size_t)n, 1);
+        if (n == 0) continue;
+
+        for (auto& o : g_caps) {
+            if (o.hwnd == c.hwnd || o.z >= c.z) continue;
+            // Only a window that starts at or above this top edge and reaches
+            // into the thin strip above it can hide the snow.
+            if (o.rc.top > c.rc.top) continue;
+            if (o.rc.bottom <= c.rc.top - (int)kCapMaxH - 2) continue;
+
+            int i0 = (int)ceilf(((float)o.rc.left - (float)c.rc.left) / kColWidth - 0.5f);
+            int i1 = (int)floorf(((float)o.rc.right - (float)c.rc.left) / kColWidth - 0.5f);
+            if (i1 < 0 || i0 >= n) continue;
+            if (i0 < 0) i0 = 0;
+            if (i1 >= n) i1 = n - 1;
+            for (int i = i0; i <= i1; i++) c.vis[i] = 0;
+        }
+    }
 }
 
 static HANDLE g_thread = nullptr;
+static HANDLE g_stopEvent = nullptr;   // manual-reset, tells the thread to exit
 static volatile LONG g_settingsDirty = 0;
 
 static int  g_fpsCap = 0;
@@ -1325,6 +1521,12 @@ static UINT g_timerIntervalMs = 10;
 static bool g_gustOnChange = true;
 
 static LARGE_INTEGER g_qpcFreq = {};
+static LARGE_INTEGER g_lastTick = {};
+
+// Overlay thread only.
+static bool g_paused = false;
+static bool g_displayOff = false;
+static HPOWERNOTIFY g_powerNotify = nullptr;
 
 static int ClampInt(int v, int lo, int hi) {
     return v < lo ? lo : v > hi ? hi : v;
@@ -1353,7 +1555,7 @@ static void ApplySettingsToEngine() {
     if (fpsCap != g_fpsCap) {
         g_fpsCap = fpsCap;
         g_timerIntervalMs = g_fpsCap > 0 ? (UINT)((1000 + g_fpsCap - 1) / g_fpsCap) : 10;
-        if (g_wnd) SetTimer(g_wnd, 1, g_timerIntervalMs, nullptr);
+        if (g_wnd && !g_paused) SetTimer(g_wnd, 1, g_timerIntervalMs, nullptr);
     }
 }
 
@@ -1362,26 +1564,30 @@ static void Tick(HWND hwnd) {
         ApplySettingsToEngine();
     }
 
-    static LARGE_INTEGER last = {};
     LARGE_INTEGER now;
     QueryPerformanceCounter(&now);
-    float dt = last.QuadPart
-        ? (float)((double)(now.QuadPart - last.QuadPart) / (double)g_qpcFreq.QuadPart)
+    float dt = g_lastTick.QuadPart
+        ? (float)((double)(now.QuadPart - g_lastTick.QuadPart) / (double)g_qpcFreq.QuadPart)
         : 0.016f;
-    last = now;
+    g_lastTick = now;
     if (dt > 0.05f) dt = 0.05f;   // clamp, e.g. after a sleep
     if (dt < 0.0f) dt = 0.0f;
 
-    g_engine.Update(dt);
-
-    // Window list refresh: often enough that a dragged window does not leave
-    // its snow hanging in mid-air.
-    static float capsTimer = 0.2f;
-    capsTimer += dt;
-    if (capsTimer >= 0.2f) {
-        capsTimer = 0.0f;
-        UpdateWindowList();
+    // Keep the caps glued to their windows and their occlusion up to date
+    // before physics runs, so the cursor sweep cannot brush invisible snow.
+    // The full window list is re-enumerated rarely, as that is the costly
+    // part; rectangles and z-order are cheap and are updated every frame.
+    static float enumTimer = 0.0f;
+    enumTimer += dt;
+    if (enumTimer >= 0.5f) {
+        enumTimer = 0.0f;
+        RefreshWindowList();
     }
+    UpdateCapZOrder();
+    TrackWindowCaps();
+    UpdateCapVisibility();
+
+    g_engine.Update(dt);
 
     // Cartoon wind sweep on a timer (0 = off).
     if (g_engine.autoWind > 0) {
@@ -1394,6 +1600,60 @@ static void Tick(HWND hwnd) {
     }
 
     RenderFrame(hwnd, g_engine);
+}
+
+// ─── Fullscreen, lock screen and display-off handling ───
+
+// A foreground window that covers the whole primary monitor counts as a
+// fullscreen app: a game, a video, a slideshow.
+static bool IsFullscreenAppActive() {
+    HWND fg = GetForegroundWindow();
+    if (!fg || fg == g_wnd) return false;
+
+    wchar_t cls[64] = {};
+    GetClassNameW(fg, cls, 64);
+    if (!wcscmp(cls, L"Progman") || !wcscmp(cls, L"WorkerW") ||
+        !wcscmp(cls, L"Shell_TrayWnd"))
+        return false;
+
+    HMONITOR mon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    if (!GetMonitorInfoW(mon, &mi)) return false;
+
+    // The overlay covers the primary monitor, which always starts at (0, 0).
+    if (mi.rcMonitor.left != 0 || mi.rcMonitor.top != 0) return false;
+
+    RECT rc;
+    if (!GetWindowRect(fg, &rc)) return false;
+
+    return rc.left  <= mi.rcMonitor.left && rc.top    <= mi.rcMonitor.top &&
+           rc.right >= mi.rcMonitor.right && rc.bottom >= mi.rcMonitor.bottom;
+}
+
+// While the session is locked, the input desktop is not accessible.
+static bool IsSessionLocked() {
+    HDESK desk = OpenInputDesktop(0, FALSE, DESKTOP_READOBJECTS);
+    if (desk) {
+        CloseDesktop(desk);
+        return false;
+    }
+    return GetLastError() == ERROR_ACCESS_DENIED;
+}
+
+// Hides the overlay and stops rendering while it would only get in the way.
+static void CheckPause(HWND hwnd) {
+    bool pause = g_displayOff || IsSessionLocked() || IsFullscreenAppActive();
+    if (pause == g_paused) return;
+    g_paused = pause;
+
+    if (pause) {
+        KillTimer(hwnd, 1);
+        ShowWindow(hwnd, SW_HIDE);
+    } else {
+        g_lastTick = {};
+        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        SetTimer(hwnd, 1, g_timerIntervalMs, nullptr);
+    }
 }
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -1418,12 +1678,33 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 return -1;
             }
             SelectObject(g_memDC, g_dib);
+
+            // The watchdog timer keeps running while rendering is paused, so
+            // the overlay can come back by itself.
+            SetTimer(hwnd, 2, 500, nullptr);
+            g_powerNotify = RegisterPowerSettingNotification(
+                hwnd, &GUID_CONSOLE_DISPLAY_STATE, DEVICE_NOTIFY_WINDOW_HANDLE);
             return 0;
         }
 
         case WM_TIMER:
-            if (wParam == 1) Tick(hwnd);
+            if (wParam == 1) {
+                Tick(hwnd);
+            } else if (wParam == 2) {
+                CheckPause(hwnd);
+            }
             return 0;
+
+        case WM_POWERBROADCAST:
+            if (wParam == PBT_POWERSETTINGCHANGE && lParam) {
+                auto* ps = (POWERBROADCAST_SETTING*)lParam;
+                if (IsEqualGUID(ps->PowerSetting, GUID_CONSOLE_DISPLAY_STATE) &&
+                    ps->DataLength >= sizeof(DWORD)) {
+                    g_displayOff = *(DWORD*)ps->Data == 0;
+                    CheckPause(hwnd);
+                }
+            }
+            return TRUE;
 
         case WM_PAINT: {
             PAINTSTRUCT ps;
@@ -1438,10 +1719,14 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         case WM_DESTROY: {
             KillTimer(hwnd, 1);
+            KillTimer(hwnd, 2);
+            if (g_powerNotify) {
+                UnregisterPowerSettingNotification(g_powerNotify);
+                g_powerNotify = nullptr;
+            }
             if (g_dib) { DeleteObject(g_dib); g_dib = nullptr; }
             if (g_memDC) { DeleteDC(g_memDC); g_memDC = nullptr; }
             CleanupD2D();
-            PostQuitMessage(0);
             return 0;
         }
     }
@@ -1460,31 +1745,15 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
     wc.hInstance     = GetModuleHandleW(nullptr);
     wc.lpszClassName = kWndClass;
     if (!RegisterClassExW(&wc)) {
-        DWORD err = GetLastError();
-        if (err == ERROR_CLASS_ALREADY_EXISTS) {
-            // A previous instance of the mod left the class registered in
-            // explorer.exe; its WndProc now points into an unloaded DLL.
-            Wh_Log(L"Window class already exists, re-registering");
-            UnregisterClassW(kWndClass, wc.hInstance);
-            if (!RegisterClassExW(&wc)) {
-                Wh_Log(L"Re-registration failed: %lu", GetLastError());
-                return 1;
-            }
-        } else {
-            Wh_Log(L"RegisterClassExW failed: %lu", err);
-            return 1;
-        }
+        Wh_Log(L"RegisterClassExW failed: %lu", GetLastError());
+        return 1;
     }
 
     ApplySettingsToEngine();
-    UpdateWindowList(); // snow caps appear right away, not after 2s
+    RefreshWindowList(); // snow caps appear right away, not after a second
 
     // Initial weather covers the screen right away.
     {
-        WeatherSet w;
-        PCWSTR mode = Wh_GetStringSetting(L"WeatherMode");
-        ParseWeatherMode(mode, w);
-        Wh_FreeStringSetting(mode);
         int target = (int)(g_engine.intensity * 1.5f * g_engine.WeatherDensity() *
                            (g_width * (float)g_height) / (1920.0f * 1080.0f));
         if (target > 900) target = 900;
@@ -1495,44 +1764,65 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
         }
     }
 
-    g_wnd = CreateWindowExW(
+    HWND wnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
         kWndClass, L"DesktopWeatherOverlay", WS_POPUP,
         0, 0, g_width, g_height,
         nullptr, nullptr, wc.hInstance, nullptr);
-    if (!g_wnd) {
+    if (!wnd) {
         Wh_Log(L"CreateWindowExW failed: %lu", GetLastError());
+        UnregisterClassW(kWndClass, wc.hInstance);
         return 1;
     }
+    g_wnd = wnd;
 
-    ShowWindow(g_wnd, SW_SHOWNOACTIVATE);
-    SetTimer(g_wnd, 1, g_timerIntervalMs, nullptr);
+    ShowWindow(wnd, SW_SHOWNOACTIVATE);
+    g_lastTick = {};
+    SetTimer(wnd, 1, g_timerIntervalMs, nullptr);
 
-    MSG msg;
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
+    // The message loop owns the window, but it must also wake up when the
+    // mod is being unloaded, even before the window exists.
+    for (;;) {
+        DWORD r = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE,
+                                            QS_ALLINPUT);
+        if (r != WAIT_OBJECT_0 + 1) break; // stop event or an error
+
+        MSG msg;
+        bool quit = false;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) { quit = true; break; }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        if (quit) break;
     }
 
+    if (IsWindow(wnd)) DestroyWindow(wnd);
     g_wnd = nullptr;
+    UnregisterClassW(kWndClass, wc.hInstance);
     return 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Windhawk mod lifecycle
+// Tool mod lifecycle: the mod runs in its own windhawk.exe process, not in
+// Explorer or any other host process.
 // ─────────────────────────────────────────────────────────────────────────────
 
-BOOL Wh_ModInit() {
-    Wh_Log(L"Init");
-    return TRUE;
+static void SetDpiAwareness() {
+    // Physical pixels, so the overlay lines up with window rectangles on
+    // scaled displays.
+    using SetProcessDpiAwarenessContext_t = BOOL(WINAPI*)(DPI_AWARENESS_CONTEXT);
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32) return;
+    auto setCtx = (SetProcessDpiAwarenessContext_t)GetProcAddress(
+        user32, "SetProcessDpiAwarenessContext");
+    if (setCtx) setCtx(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"Uninit");
-}
+BOOL WhTool_ModInit() {
+    Wh_Log(L"Tool init");
 
-void Wh_ModAfterInit() {
-    Wh_Log(L"AfterInit");
+    SetDpiAwareness();
 
     g_width  = GetSystemMetrics(SM_CXSCREEN);
     g_height = GetSystemMetrics(SM_CYSCREEN);
@@ -1541,27 +1831,219 @@ void Wh_ModAfterInit() {
 
     QueryPerformanceFrequency(&g_qpcFreq);
 
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_stopEvent) {
+        Wh_Log(L"CreateEvent failed: %lu", GetLastError());
+        return FALSE;
+    }
+
     g_settingsDirty = 0;
     g_thread = CreateThread(nullptr, 0, OverlayThreadProc, nullptr, 0, nullptr);
     if (!g_thread) {
         Wh_Log(L"CreateThread failed: %lu", GetLastError());
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+        return FALSE;
     }
+    return TRUE;
 }
 
-void Wh_ModBeforeUninit() {
-    Wh_Log(L"BeforeUninit");
+void WhTool_ModSettingsChanged() {
+    InterlockedExchange(&g_settingsDirty, 1);
+}
 
-    if (g_wnd) {
-        PostMessageW(g_wnd, WM_CLOSE, 0, 0);
-    }
+void WhTool_ModUninit() {
+    Wh_Log(L"Tool uninit");
+
+    if (g_stopEvent) SetEvent(g_stopEvent);
+
     if (g_thread) {
-        WaitForSingleObject(g_thread, 5000);
+        WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
+
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    Wh_Log(L"SettingsChanged");
-    InterlockedExchange(&g_settingsDirty, 1);
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
