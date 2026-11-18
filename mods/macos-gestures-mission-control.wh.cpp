@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              macos-gestures-mission-control
 // @name            macOS Gestures - Mission Control
-// @description     Windows Mission Control: three- or four-finger swipe up opens a live animated window overview. Swipe down shows current desktop windows or minimizes them. Win+Tab opens the overview, while left/right swipes switch apps like Alt+Tab.
+// @description     Mission Control for Windows: a three- or four-finger swipe up opens a live, animated overview of your windows that follows your fingers. Swipe down for App Exposé or to minimize, Win+Tab from the keyboard, left/right to switch apps.
 // @version         1.6.0
 // @author          Frixed
 // @github          https://github.com/frixed
@@ -2054,6 +2054,13 @@ static bool GetAppKey(HWND hwnd, std::wstring& key) {
     if (GetAumidForWindow(hwnd, key)) {
         return true;
     }
+    wchar_t cls[64] = {};
+    GetClassNameW(hwnd, cls, 64);
+    if (!wcscmp(cls, L"ApplicationFrameWindow")) {
+        // No CoreWindow to ask (a suspended or minimized frame): its executable would be
+        // ApplicationFrameHost, shared by every packaged app, so there's no key at all.
+        return false;
+    }
     wchar_t path[MAX_PATH * 2] = {};
     if (!GetWindowExePath(hwnd, path, static_cast<DWORD>(ARRAYSIZE(path)))) {
         return false;
@@ -3668,7 +3675,12 @@ static void BuildTiles() {
     std::wstring appKey;
     if (g_exposeMode && g_exposeAppOnly && g_prevForeground) {
         HWND root = GetAncestor(g_prevForeground, GA_ROOTOWNER);
-        if (GetAppKey(root ? root : g_prevForeground, appKey)) {
+        HWND front = root ? root : g_prevForeground;
+        // The desktop and the taskbar belong to the shell's explorer.exe, which File
+        // Explorer windows share: with those in front there is no app to filter by.
+        wchar_t frontCls[96] = {};
+        GetClassNameW(front, frontCls, 96);
+        if (!IsDeniedClass(frontCls) && GetAppKey(front, appKey)) {
             ctx.appKey = &appKey;
         }
     }
@@ -4967,7 +4979,6 @@ static void ApplyBackdropStyle(bool wallpaper) {
 
 static void ShowOverlay() {
     UpdateReducedMotion();
-    g_swipeMinimized.clear();  // you're in Mission Control now: that "undo" is gone
 
     POINT pt{};
     GetCursorPos(&pt);
@@ -6539,10 +6550,15 @@ static bool CanRestoreMinimized() {
     if (g_swipeMinimized.empty()) {
         return false;
     }
+    IVirtualDesktopManager* vdm = GetVdm();
     for (HWND h : g_swipeMinimized) {
         if (!IsIconic(h)) {  // one was brought back by hand: the undo is stale
             g_swipeMinimized.clear();
             return false;
+        }
+        BOOL onThis = TRUE;
+        if (vdm && SUCCEEDED(vdm->IsWindowOnCurrentVirtualDesktop(h, &onThis)) && !onThis) {
+            return false;  // you're on another desktop: keep the list for when you're back
         }
     }
     for (HWND h : ListAllWindows()) {
