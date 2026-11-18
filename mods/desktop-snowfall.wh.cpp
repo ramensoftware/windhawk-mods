@@ -3762,6 +3762,12 @@ LRESULT CALLBACK ListenerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             return TRUE;
 
         case WM_HOTKEY:
+            // Outside the season or hours nothing is shown either way, and a
+            // flipped state would keep it off when its time comes.
+            if (g_offSchedule) {
+                Wh_Log(L"Outside the season or hours, the hotkey does nothing");
+                return 0;
+            }
             g_snowOff = !g_snowOff;
             g_hotkeyPressed = true;
             Wh_Log(L"Snow turned %s with the hotkey", g_snowOff ? L"off" : L"on");
