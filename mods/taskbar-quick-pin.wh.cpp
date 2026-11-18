@@ -83,7 +83,6 @@ A lightweight, DPI-aware icon dock anchored left of the Start button. Pin apps o
   - maxVisibleApps: 10
     $name: Max visible app pins
     $description: Visible app slots before scrolling when Limit visible pins is ON (1 - 30).
-    $showIf: {limitVisiblePins: true}
   - maxVisibleWorkspaces: 10
     $name: Max visible workspaces
     $description: Visible workspace slots before scrolling when Limit visible pins is ON (1 - 30).
