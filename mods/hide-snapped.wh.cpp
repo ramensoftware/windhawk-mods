@@ -2710,9 +2710,10 @@ BOOL Wh_ModInit() {
     return hooked;
 }
 
-void Wh_ModSettingsChanged(BOOL* reload) {
+BOOL Wh_ModSettingsChanged(BOOL* reload) {
     *reload = g_binaryTraceEnabled != (Wh_GetIntSetting(L"binaryTrace") != 0);
     LoadSettings();
+    return TRUE;
 }
 
 void Wh_ModAfterInit() {
