@@ -2,12 +2,72 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-18T06:49:39.000Z</updated>
+    <updated>2026-11-18T18:01:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[WinRAR Tweaks 1.1.0]]></title>
+        <id>https://windhawk.net/mods/winrar-tweaks#d70192267c179a459be7217c1f56d3cc96f94736</id>
+        <link href="https://windhawk.net/mods/winrar-tweaks"/>
+        <updated>2026-11-18T18:01:36.000Z</updated>
+        <content type="html"><![CDATA[<h3>✨ New Features</h3>
+<ul>
+<li><strong>VS Code-Style Quick Filter Bar (<code>Ctrl+F</code>):</strong> Added a native bottom filter bar (<code>quick_search_bar</code>) with a live match counter, <code>↑</code> / <code>↓</code> / <code>✕</code> buttons, <code>Enter</code> / <code>Shift+Enter</code> navigation, and automatic Light/Dark theme adaptation. Includes optional settings for <strong>Always Visible</strong> (<code>always_visible</code>), <strong>Type to Search</strong> (<code>type_to_search</code>), and <strong>Alt+Enter Selects All Matches</strong> (<code>alt_enter_select_all</code>).</li>
+<li><strong>Auto-Dismiss Trial Popup:</strong> Added <code>auto_dismiss_eval_dialog</code> to automatically block <em>&quot;Please purchase WinRAR license&quot;</em> and <em>&quot;Trial Expired&quot;</em> reminder popups on startup before they appear on screen.</li>
+<li><strong>Optional IEC Binary Units (<code>KiB</code> / <code>MiB</code>):</strong> Added <code>use_iec_terms</code> to switch file size labels between standard (<code>KB</code>, <code>MB</code>, <code>GB</code>, <code>TB</code>) and IEC (<code>KiB</code>, <code>MiB</code>, <code>GiB</code>, <code>TiB</code>) units on the fly.</li>
+</ul>
+<h3>🛠️ Improvements &amp; Fixes</h3>
+<ul>
+<li><strong>Universal Language Support for File Sizes:</strong> Replaced hardcoded column header keywords with semantic column and byte-format detection (excluding <code>Name</code> and <code>CRC</code> columns), making human-readable file sizes work automatically across all WinRAR display languages.</li>
+<li><strong>Search-Aware <code>Esc</code> Handling:</strong> Updated <code>Close on Esc</code> so pressing <code>Escape</code> clears or closes the Quick Filter Bar first (while preserving multi-selections) before closing the main WinRAR window.</li>
+<li><strong>Live Settings Sync &amp; Thread Safety:</strong> Added custom UI-thread messaging and <code>std::atomic</code> settings so toggling options (<code>KB</code>/<code>KiB</code>, <code>Always Visible</code>, etc.) or unloading the mod updates open WinRAR windows immediately without freezing.</li>
+</ul>
+]]></content>
+        <author>
+            <name>ArvindSaini978</name>
+            <uri>https://github.com/ArvindSaini978</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Window Rules 1.1]]></title>
+        <id>https://windhawk.net/mods/window-rules#bfdca3ffc98a8775535679b5776de91d451f5554</id>
+        <link href="https://windhawk.net/mods/window-rules"/>
+        <updated>2026-11-18T18:01:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add an opt-in setting for matching owned dialogs.</li>
+<li>Add an opt-in setting for matching hosted app executables.</li>
+<li>Reconsider recently created hosted windows when their title or visibility changes.</li>
+</ul>
+]]></content>
+        <author>
+            <name>metanoid18</name>
+            <uri>https://github.com/Metanoid18</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Zones 1.0.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-zones#f2e0ed554398b8b91bcb5a9e92e8e8ea2f9ba9d3</id>
+        <link href="https://windhawk.net/mods/taskbar-zones"/>
+        <updated>2026-11-18T18:01:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Made the left and right app zones adapt to the available taskbar space on each monitor.</li>
+<li>Added automatic detection of Taskbar System Info and an advanced setting for additional named widgets.</li>
+<li>Kept icon overlays from other mods out of the widget reservation logic.</li>
+<li>Improved widget spacing and layout updates when the notification area changes size.</li>
+<li>Improved button width checks to avoid unexpected gaps during Windows layout changes.</li>
+<li>Updated drag boundaries when widgets or the notification area move.</li>
+<li>Removed the right-zone icon scaling option and two spacing options that are no longer needed.</li>
+<li>Kept saved app positions and zone assignments unchanged.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Luiz Bizzio</name>
+            <uri>https://github.com/luizbizzio</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[AltDrag 1.2]]></title>
         <id>https://windhawk.net/mods/alt-drag#624914d4ab53e3effc884f667821807179a8c8f5</id>
@@ -616,53 +676,6 @@ page</a>.</p>
         <author>
             <name>Lockframe</name>
             <uri>https://github.com/Lockframe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix file dialogs for Classic theme 2.1]]></title>
-        <id>https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg#53a12aa0ae3fc61698348133404e3bd514a97f9c</id>
-        <link href="https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg"/>
-        <updated>2026-11-17T23:04:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Update README</li>
-</ul>
-]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar AI Usage 1.0.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-ai-usage#8f087f9652d831e96376083d1f795e987f0c2662</id>
-        <link href="https://windhawk.net/mods/taskbar-ai-usage"/>
-        <updated>2026-11-17T23:04:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Claude rate limits (HTTP 429): the first two without a usable <code>Retry-After</code> retry at the selected interval, then the wait grows in five-minute steps up to 15 minutes. Waits sent by the server are honored, the streak survives reloads, and a successful reading resets it.</li>
-<li>Default flyout material in dark mode: the wallpaper color is now blended over a dark base, so the card keeps a steady dark tone as the wallpaper changes. Light mode is unchanged.</li>
-<li>The &quot;+&quot; setup tile has an accessible name (&quot;Add an AI account&quot;).</li>
-<li>Removed dead code, unused strings and legacy paths.</li>
-<li>Fixed a Spanish string.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Sof2245</name>
-            <uri>https://github.com/Sof2245</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.11.2]]></title>
-        <id>https://windhawk.net/mods/windows-11-taskbar-styler#6f3d126440ecd46f08e48bec2cd9c1e91d3e2919</id>
-        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
-        <updated>2026-11-17T10:03:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated most themes to be compatible with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
-<li>Updated the click-through taskbar to be compatible with these newer Windows 11 versions.</li>
-</ul>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

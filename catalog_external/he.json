@@ -38,6 +38,40 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/114c34fb366f7ef3cff732c942e4c80248fde58e/mods/change-more-fonts.wh.cpp"
       }
     },
+    "cursor-scheme-extension": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795025098004,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795025098004,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86",
+          "x86-64"
+        ],
+        "author": "CTravkin",
+        "compilerOptions": "-lgdi32 -ladvapi32 -lshell32",
+        "description": "Replaces built-in application pointers with pointers from the selected Windows scheme",
+        "github": "https://github.com/CTravkin",
+        "homepage": "https://ctravkin.ru",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "Cursor Scheme Extension",
+        "version": "1.0.2"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7594",
+      "source": {
+        "sha256": "544885ff02bc8b45254a8892b0d581719b63464223b0c3349f4fe741dda73386",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d12d691dd21b44e8856aaab1264eb62b7bfd8f33/mods/cursor-scheme-extension.wh.cpp"
+      }
+    },
     "desktop-app-groups": {
       "details": {
         "defaultSorting": 0,
@@ -69,6 +103,35 @@
       "source": {
         "sha256": "613216c9975de48546a79ef46909bf453378d8830c566222d1bb1c8af65ff7ff",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/db8842f6699931bdde1c9190c16b0b94d5670362/mods/desktop-app-groups.wh.cpp"
+      }
+    },
+    "desktop-weather-overlay": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795025098004,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795025098004,
+        "users": 0
+      },
+      "metadata": {
+        "author": "hiol09",
+        "compilerOptions": "-ld2d1 -ldwmapi -lgdi32 -luuid -lshell32",
+        "description": "Snow, cherry blossom, autumn leaves and rain over the desktop, with wind, mouse sweeping, snow piling up on windows and a gust on weather change.",
+        "github": "https://github.com/hiol09",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Desktop Weather Overlay",
+        "version": "1.3.2"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7458",
+      "source": {
+        "sha256": "b235ea6857d078c7f120b8cf868ef8494e1a02e16a4ff0111a8d5d06f7a48c19",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4b23515094a8a13273ebccf7a9399aec126cbb9c/mods/desktop-weather-overlay.wh.cpp"
       }
     },
     "explorer-default-folder": {
@@ -195,6 +258,35 @@
       "source": {
         "sha256": "bb4c6638764e7f2b49bc822e1b4ed547667ed746e26c4e416e584b02c4fd8d42",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/760b91ecf9f50687cd4b2ed315b32d32ad8372ea/mods/lockscreen-background.wh.cpp"
+      }
+    },
+    "simple-wallpaper-switcher": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795025098004,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795025098004,
+        "users": 0
+      },
+      "metadata": {
+        "author": "HHeitlager",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -lcomctl32 -lshlwapi -luuid -ldwmapi -luxtheme -lgdi32 -lmsimg32 -ld2d1 -lwindowscodecs -lgdiplus -ladvapi32 -lshcore",
+        "description": "Browse your wallpaper folders, preview thumbnails, and switch with smooth transitions.",
+        "github": "https://github.com/hheitlager",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Simple Wallpaper Switcher",
+        "version": "0.1.3"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7616",
+      "source": {
+        "sha256": "2978547c6d362ab07707b7cffb1f8c35272bdc0ff1d61376c20e3ec9975ebc13",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6c18b97917c56324382a01f017de9e09648c01ea/mods/simple-wallpaper-switcher.wh.cpp"
       }
     },
     "taskbar-position-shortcut": {
@@ -353,7 +445,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1794796718242,
+        "updated": 1795025098004,
         "users": 0
       },
       "metadata": {
@@ -380,8 +472,36 @@
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7408",
       "source": {
-        "sha256": "4c6a8617d16b98dd9dd86dd89d113bb210288bdf9ff10b2a2fa002aa486c52af",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/fd54ec5cb1949b06bffa49c38ceda0573133299f/mods/windows-border-switch.wh.cpp"
+        "sha256": "bafec5efeb32cd3b3c54326c5d589bc905eb4166250cf28b8860931f4e76f8df",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/1ee07968473c4ddc9abfb576643156ccc75424e0/mods/windows-border-switch.wh.cpp"
+      }
+    },
+    "yandex-music-transparency": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795025098004,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795025098004,
+        "users": 0
+      },
+      "metadata": {
+        "author": "NIKTO",
+        "compilerOptions": "-lcomctl32",
+        "description": "Automatically applies and enforces custom transparency for Yandex Music",
+        "github": "https://github.com/NIKTO-2",
+        "include": [
+          "Яндекс Музыка.exe"
+        ],
+        "name": "Yandex Music Transparency",
+        "version": "1.1"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/3509",
+      "source": {
+        "sha256": "fc57f2b6e65bf93e9457c235ee3d34497ae9652699bc77ebcd94d6bdb80e31a0",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/9f06ed627f8ab7ccc6ea0c64b86982c365aa48a3/mods/yandex-music-transparency.wh.cpp"
       }
     }
   }

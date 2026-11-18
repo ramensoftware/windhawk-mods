@@ -20111,7 +20111,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794457977000,
+        "updated": 1795024884000,
         "users": 40
       },
       "metadata": {
@@ -20129,7 +20129,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Zones",
-        "version": "1.0.1"
+        "version": "1.0.2"
       }
     },
     "taskmgr-esc": {
@@ -23664,7 +23664,7 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793027065000,
+        "updated": 1795024890000,
         "users": 52
       },
       "metadata": {
@@ -23677,7 +23677,7 @@
         ],
         "license": "MIT",
         "name": "Window Rules",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "window-size-presets": {
@@ -24408,13 +24408,13 @@
         "ratingUsers": 8,
         "reviews": 0,
         "trendingSorting": 2.757585288374459,
-        "updated": 1793660561000,
+        "updated": 1795024896000,
         "users": 299
       },
       "metadata": {
         "author": "ArvindSaini978",
-        "compilerOptions": "-lcomctl32",
-        "description": "Closes WinRAR on Esc (dialog-aware) and converts Size and Packed columns into readable units (B, KB, MB, GB, TB).",
+        "compilerOptions": "-lcomctl32 -luser32 -lgdi32 -luxtheme",
+        "description": "Convert file sizes into readable units (KB, MB, GB), add a VS Code-style Ctrl+F quick filter bar, close WinRAR with Esc, and optionally auto-dismiss the trial reminder popup.",
         "github": "https://github.com/ArvindSaini978",
         "homepage": "https://github.com/ArvindSaini978/my-windhawk-mods",
         "include": [
@@ -24422,7 +24422,7 @@
         ],
         "license": "MIT",
         "name": "WinRAR Tweaks",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "winstant": {
