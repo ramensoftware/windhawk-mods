@@ -2,14 +2,14 @@
 // @id              explorer-fast-navigation
 // @name            Explorer Fast Navigation
 // @description     Improves File Explorer navigation latency and eliminates redraw flicker
-// @version         1.0.0
+// @version         1.1.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @donateUrl       https://buymeacoffee.com/gilnett
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshell32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -48,6 +48,8 @@ Real-world behavior varies depending on the storage medium and system load:
 - **Defer classic ribbon updates**: Delay classic ribbon refreshes during navigation.
 - **Defer XAML command bar updates**: Delay modern command bar refreshes during navigation.
 - **Defer navigation bar updates**: Delay navigation state updates in classic and modern navigation bars.
+- **Accelerate grouped folder batching**: Shorten Explorer's internal category grouping timer delay on grouped views
+  for faster folder presentation.
 - **Safety fallback ceiling (ms)**: Maximum time (in ms) to wait before forcing a deferred UI update to flush if
   navigation stalls or on slow storage.
 
@@ -84,6 +86,10 @@ If you find this mod useful, you can support its development and maintenance:
 - navigationBar: true
   $name: Defer navigation bar updates
   $description: Delay navigation state updates in both the classic and modern navigation bars.
+- groupedFolderBatching: true
+  $name: Accelerate grouped folder batching
+  $description: Shorten Explorer's internal grouping timer interval on grouped views while preserving standard
+    non-grouped behavior.
 - safetyCeilingMs: 2000
   $name: Safety fallback ceiling (ms)
   $description: Maximum time in milliseconds before forcing pending UI updates to flush if navigation stalls or on slow network drives.
@@ -93,19 +99,26 @@ If you find this mod useful, you can support its development and maintenance:
 #include <windows.h>
 
 #include <oaidl.h>
+#include <propkey.h>
 #include <shdispid.h>
 #include <shlobj.h>
+#include <shobjidl.h>
+#include <threadpoolapiset.h>
 #include <windhawk_utils.h>
+#include <winrt/Windows.System.h>
 #include <wrl/client.h>
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
+#include <cstring>
 #include <deque>
-#include <functional>
 #include <memory>
 #include <mutex>
+#include <tuple>
 #include <vector>
 
 // Shared types.
@@ -115,6 +128,7 @@ struct Settings {
     bool classicRibbon = true;
     bool xamlCommandBar = true;
     bool navigationBar = true;
+    bool groupedFolderBatching = true;
     int safetyCeilingMs = 2000;
 };
 
@@ -124,22 +138,29 @@ class WindowLifetime {
     std::mutex mutex;
     std::condition_variable changed;
     std::atomic<bool> stopping{false};
-    size_t operations = 0;
+    std::atomic<size_t> operations{0};
     std::atomic<size_t> callbacks{0};
     std::vector<HWND> windows;
 
   public:
     class Operation {
         WindowLifetime& owner;
-        bool admitted;
+        bool admitted = false;
 
       public:
         explicit Operation(WindowLifetime& owner) : owner(owner) {
-            std::lock_guard lock(owner.mutex);
-            admitted = !owner.stopping.load(std::memory_order_relaxed);
-            if (admitted) {
-                ++owner.operations;
+            if (owner.stopping.load(std::memory_order_acquire)) {
+                return;
             }
+            owner.operations.fetch_add(1, std::memory_order_relaxed);
+            if (owner.stopping.load(std::memory_order_acquire)) {
+                if (owner.operations.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+                    std::lock_guard lock(owner.mutex);
+                    owner.changed.notify_all();
+                }
+                return;
+            }
+            admitted = true;
         }
 
         Operation(const Operation&) = delete;
@@ -147,9 +168,9 @@ class WindowLifetime {
 
         ~Operation() {
             if (admitted) {
-                std::lock_guard lock(owner.mutex);
-                --owner.operations;
-                if (owner.stopping.load(std::memory_order_relaxed)) {
+                if (owner.operations.fetch_sub(1, std::memory_order_acq_rel) == 1 &&
+                    owner.stopping.load(std::memory_order_acquire)) {
+                    std::lock_guard lock(owner.mutex);
                     owner.changed.notify_all();
                 }
             }
@@ -201,7 +222,7 @@ class WindowLifetime {
         {
             std::unique_lock lock(mutex);
             changed.wait(lock, [this] {
-                return operations == 0;
+                return operations.load(std::memory_order_acquire) == 0;
             });
             copy = windows;
         }
@@ -209,11 +230,21 @@ class WindowLifetime {
             PostMessageW(hwnd, WM_CLOSE, 0, 0);
         }
         std::unique_lock lock(mutex);
+        const ULONGLONG startTick = GetTickCount64();
         while (!changed.wait_for(lock, std::chrono::seconds(2), [this] {
+            std::erase_if(windows, [](HWND hwnd) { return !IsWindow(hwnd); });
             return windows.empty() && callbacks.load(std::memory_order_acquire) == 0;
         })) {
-            Wh_Log(L"[LIFETIME] Waiting for %zu queue window(s) and %zu callback(s)",
-                   windows.size(), callbacks.load(std::memory_order_relaxed));
+            const ULONGLONG elapsed = GetTickCount64() - startTick;
+            Wh_Log(L"[LIFETIME] Waiting for %zu queue window(s) and %zu callback(s) (elapsed=%llu s)",
+                   windows.size(), callbacks.load(std::memory_order_relaxed), elapsed / 1000);
+            if (elapsed >= 4000) {
+                for (HWND h : windows) {
+                    if (IsWindow(h)) {
+                        PostMessageW(h, WM_CLOSE, 0, 0);
+                    }
+                }
+            }
         }
     }
 };
@@ -231,8 +262,9 @@ struct Action { // GMA_ACTION ABI; checked before reading callback/parameters.
     void* context{};
 };
 
-static_assert(sizeof(Action) == (sizeof(void*) == 8 ? 40 : 32) &&
-              offsetof(Action, callback) == 24);
+#if defined(_WIN64)
+static_assert(sizeof(Action) == 40 && offsetof(Action, callback) == 24);
+#endif
 
 using CreateAction = uintptr_t (*)(const Action*);
 using DeleteAction = BOOL(WINAPI*)(void*);
@@ -284,17 +316,97 @@ static void LoadSettings() {
     settings.classicRibbon = Wh_GetIntSetting(L"classicRibbon") != 0;
     settings.xamlCommandBar = Wh_GetIntSetting(L"xamlCommandBar") != 0;
     settings.navigationBar = Wh_GetIntSetting(L"navigationBar") != 0;
-    settings.safetyCeilingMs = Wh_GetIntSetting(L"safetyCeilingMs");
-    if (settings.safetyCeilingMs < 200) {
-        settings.safetyCeilingMs = 200;
-    } else if (settings.safetyCeilingMs > 10000) {
-        settings.safetyCeilingMs = 10000;
+    settings.groupedFolderBatching = Wh_GetIntSetting(L"groupedFolderBatching") != 0;
+    settings.safetyCeilingMs =
+        std::clamp(Wh_GetIntSetting(L"safetyCeilingMs"), 200, 10000);
+}
+
+static constexpr GUID kNullIid{};
+static constexpr UINT kMsgMetadataResult = WM_APP + 1;
+
+template <size_t Capacity>
+class BoundedPtrSet {
+  public:
+    [[nodiscard]] bool contains(const void* ptr) const noexcept {
+        if (!ptr) {
+            return false;
+        }
+        for (size_t i = 0; i < m_count; ++i) {
+            if (m_entries[i] == ptr) {
+                return true;
+            }
+        }
+        return false;
     }
+
+    void insert(void* ptr) noexcept {
+        if (!ptr) {
+            return;
+        }
+        for (size_t i = 0; i < m_count; ++i) {
+            if (m_entries[i] == ptr) {
+                if (i + 1 < m_count) {
+                    std::rotate(m_entries.begin() + static_cast<ptrdiff_t>(i),
+                                m_entries.begin() + static_cast<ptrdiff_t>(i + 1),
+                                m_entries.begin() + static_cast<ptrdiff_t>(m_count));
+                }
+                return;
+            }
+        }
+        if (m_count == Capacity) {
+            std::shift_left(m_entries.begin(), m_entries.end(), 1);
+            --m_count;
+        }
+        m_entries[m_count++] = ptr;
+    }
+
+    bool erase(const void* ptr) noexcept {
+        if (!ptr) {
+            return false;
+        }
+        for (size_t i = 0; i < m_count; ++i) {
+            if (m_entries[i] == ptr) {
+                for (size_t j = i; j + 1 < m_count; ++j) {
+                    m_entries[j] = m_entries[j + 1];
+                }
+                m_entries[--m_count] = nullptr;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void clear() noexcept {
+        m_entries.fill(nullptr);
+        m_count = 0;
+    }
+
+    [[nodiscard]] bool empty() const noexcept {
+        return m_count == 0;
+    }
+
+    [[nodiscard]] size_t size() const noexcept {
+        return m_count;
+    }
+
+  private:
+    std::array<void*, Capacity> m_entries{};
+    size_t m_count = 0;
+};
+
+static Microsoft::WRL::ComPtr<IUnknown> CanonicalUnknown(IUnknown* obj) noexcept {
+    Microsoft::WRL::ComPtr<IUnknown> canonical;
+    if (!obj) {
+        return canonical;
+    }
+    if (FAILED(obj->QueryInterface(IID_PPV_ARGS(&canonical))) || !canonical) {
+        canonical = obj;
+    }
+    return canonical;
 }
 
 static bool CanDeferInvoke(REFIID iid, WORD flags, const DISPPARAMS* args) {
-    const GUID nullIid{};
-    return IsEqualGUID(iid, nullIid) && flags == DISPATCH_METHOD && args &&
+    return IsEqualGUID(iid, kNullIid) && flags == DISPATCH_METHOD && args &&
            args->cArgs == 0 && args->cNamedArgs == 0;
 }
 
@@ -313,6 +425,10 @@ static BOOL IsShellDesktopOrTrayWindow(HWND hwnd) {
     return FALSE;
 }
 
+// If a thread hosts multiple CabinetWClass windows (e.g. multi-window or dual-pane
+// scenarios hosted on the same thread), returning nullptr intentionally disables deferral
+// for this thread. The deferral queue is thread-local and subclasses a single root window;
+// sharing it across multiple windows would cause cross-talk and state synchronization hazards.
 static BOOL CALLBACK FindBrowserWindowProc(HWND hwnd, LPARAM param) {
     wchar_t name[64];
     if (!GetClassNameW(hwnd, name, ARRAYSIZE(name)) ||
@@ -321,6 +437,12 @@ static BOOL CALLBACK FindBrowserWindowProc(HWND hwnd, LPARAM param) {
     }
     auto& found = *reinterpret_cast<HWND*>(param);
     if (found) {
+        static thread_local bool loggedMultiWindow = false;
+        if (!loggedMultiWindow) {
+            loggedMultiWindow = true;
+            Wh_Log(L"[TAB] Multiple CabinetWClass windows on thread %lu; deferral disabled",
+                   GetCurrentThreadId());
+        }
         found = nullptr;
         return FALSE;
     }
@@ -335,28 +457,564 @@ static HWND FindThreadBrowserWindow() {
     return browser;
 }
 
-// Cross-namespace notifications used by FileTransition.
+static BOOL CALLBACK FindAnyBrowserWindowProc(HWND hwnd, LPARAM param) {
+    wchar_t name[64];
+    if (GetClassNameW(hwnd, name, ARRAYSIZE(name)) && wcscmp(name, L"CabinetWClass") == 0) {
+        *reinterpret_cast<HWND*>(param) = hwnd;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static HWND FindAnyThreadBrowserWindow() {
+    HWND browser = nullptr;
+    EnumThreadWindows(GetCurrentThreadId(), FindAnyBrowserWindowProc,
+                      reinterpret_cast<LPARAM>(&browser));
+    return browser;
+}
+
+// Cross-namespace notifications used by FileTransition and MetadataWork.
 namespace RibbonWork {
 static bool DeferInvoke(void*, DISPID, REFIID, LCID, WORD, const DISPPARAMS*);
 static void NavigationStarted();
 static void ViewReady();
 static bool Pending();
+static HWND EnsureQueueWindow();
 extern thread_local ULONGLONG started;
 } // namespace RibbonWork
+
+namespace XamlWork {
+static void ClearThreadConnections() noexcept;
+} // namespace XamlWork
+
+namespace FileTransition {
+static void ApplyMetadataResult(void* browserKey, ULONG generation, bool isSlowStorage);
+static void ClearThreadTabs() noexcept;
+} // namespace FileTransition
+
+// Offload slow non-UI storage/cloud metadata checks to the Windows NT Threadpool.
+namespace MetadataWork {
+struct Result {
+    void* browserKey = nullptr;
+    ULONG generation = 0;
+    bool isSlowStorage = false;
+    bool isCloudPlaceholder = false;
+    bool isUnc = false;
+    bool isRemoteDrive = false;
+};
+
+struct PidlDeleter {
+    void operator()(ITEMIDLIST_ABSOLUTE* pidl) const noexcept {
+        if (pidl) {
+            ILFree(pidl);
+        }
+    }
+};
+using UniquePidl = std::unique_ptr<ITEMIDLIST_ABSOLUTE, PidlDeleter>;
+
+struct CoTaskMemDeleter {
+    void operator()(wchar_t* ptr) const noexcept {
+        if (ptr) {
+            CoTaskMemFree(ptr);
+        }
+    }
+};
+using UniqueCoTaskWstr = std::unique_ptr<wchar_t, CoTaskMemDeleter>;
+
+struct WorkJob {
+    void* browserKey = nullptr;
+    ULONG generation = 0;
+    UniquePidl pidl{};
+    HWND uiHwnd = nullptr;
+    winrt::Windows::System::DispatcherQueue dispatcherQueue{nullptr};
+};
+
+using CfGetSyncRootInfoByPathFn = HRESULT(WINAPI*)(LPCWSTR filePath, DWORD infoClass,
+                                                   PVOID infoBuffer, DWORD infoBufferLength,
+                                                   DWORD* returnedLength);
+
+static constexpr size_t kMaxPendingJobs = 32;
+
+static TP_CALLBACK_ENVIRON tpEnv{};
+static PTP_CLEANUP_GROUP cleanupGroup = nullptr;
+static PTP_WORK sharedWork = nullptr;
+static HMODULE cldapiModule = nullptr;
+static CfGetSyncRootInfoByPathFn cfGetSyncRootInfoByPath = nullptr;
+
+static std::mutex jobsMutex;
+static std::deque<std::unique_ptr<WorkJob>> pendingJobs;
+static std::atomic<bool> unloading{false};
+static std::atomic<long> activeSubmitters{0};
+static std::atomic<size_t> pendingUiCallbacks{0};
+static std::atomic<HWND> lastUiProbeHwnd{nullptr};
+static std::mutex uiDrainMutex;
+static std::condition_variable uiDrainCv;
+
+struct SubmitterGuard {
+    bool admitted = false;
+
+    SubmitterGuard() noexcept {
+        if (unloading.load(std::memory_order_seq_cst)) {
+            return;
+        }
+        activeSubmitters.fetch_add(1, std::memory_order_seq_cst);
+        if (unloading.load(std::memory_order_seq_cst)) {
+            activeSubmitters.fetch_sub(1, std::memory_order_seq_cst);
+            return;
+        }
+        admitted = true;
+    }
+
+    SubmitterGuard(const SubmitterGuard&) = delete;
+    SubmitterGuard& operator=(const SubmitterGuard&) = delete;
+
+    ~SubmitterGuard() {
+        if (admitted) {
+            activeSubmitters.fetch_sub(1, std::memory_order_seq_cst);
+        }
+    }
+
+    explicit operator bool() const noexcept {
+        return admitted;
+    }
+};
+
+static bool IsUnloading() noexcept {
+    return unloading.load(std::memory_order_acquire);
+}
+
+static void OnUiCallbackFinished() noexcept {
+    if (pendingUiCallbacks.fetch_sub(1, std::memory_order_acq_rel) == 1 &&
+        unloading.load(std::memory_order_acquire)) {
+        std::lock_guard lock(uiDrainMutex);
+        uiDrainCv.notify_all();
+    }
+}
+
+struct UiToken {
+    UiToken() noexcept {
+        pendingUiCallbacks.fetch_add(1, std::memory_order_acq_rel);
+    }
+
+    UiToken(const UiToken&) = delete;
+    UiToken& operator=(const UiToken&) = delete;
+
+    ~UiToken() {
+        OnUiCallbackFinished();
+    }
+};
+
+struct UiCallbackGuard {
+    UiCallbackGuard() noexcept = default;
+    UiCallbackGuard(const UiCallbackGuard&) = delete;
+    UiCallbackGuard& operator=(const UiCallbackGuard&) = delete;
+    ~UiCallbackGuard() {
+        OnUiCallbackFinished();
+    }
+};
+
+struct ComScope {
+    HRESULT hr = E_FAIL;
+
+    ComScope() noexcept : hr(CoInitializeEx(nullptr, COINIT_MULTITHREADED)) {}
+    ComScope(const ComScope&) = delete;
+    ComScope& operator=(const ComScope&) = delete;
+    ~ComScope() {
+        if (SUCCEEDED(hr)) {
+            CoUninitialize();
+        }
+    }
+};
+
+static bool IsCloudProviderAttributeOrProp(const wchar_t* fsPath) {
+    if (fsPath && fsPath[0] != L'\0') {
+        const DWORD attrs = GetFileAttributesW(fsPath);
+        if (attrs != INVALID_FILE_ATTRIBUTES &&
+            (attrs & (FILE_ATTRIBUTE_RECALL_ON_OPEN | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS |
+                      FILE_ATTRIBUTE_OFFLINE)) != 0) {
+            return true;
+        }
+        if (cfGetSyncRootInfoByPath) {
+            std::array<BYTE, 512> syncRootBuf{};
+            DWORD returnedLen = 0;
+            if (SUCCEEDED(cfGetSyncRootInfoByPath(fsPath, 0, syncRootBuf.data(),
+                                                  static_cast<DWORD>(syncRootBuf.size()),
+                                                  &returnedLen))) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static void InspectStorageMetadata(const WorkJob& job, Result& out) {
+    out.browserKey = job.browserKey;
+    out.generation = job.generation;
+    if (!job.pidl) {
+        return;
+    }
+
+    wchar_t rawPath[MAX_PATH]{};
+    if (SHGetPathFromIDListW(job.pidl.get(), rawPath) && rawPath[0] != L'\0') {
+        out.isUnc = (wcsncmp(rawPath, L"\\\\", 2) == 0);
+        if (!out.isUnc && rawPath[0] != L'\0' && rawPath[1] == L':' && rawPath[2] == L'\\') {
+            wchar_t root[4]{rawPath[0], L':', L'\\', L'\0'};
+            const UINT driveType = GetDriveTypeW(root);
+            out.isRemoteDrive = (driveType == DRIVE_REMOTE || driveType == DRIVE_CDROM);
+        }
+        out.isCloudPlaceholder = IsCloudProviderAttributeOrProp(rawPath);
+    }
+    out.isSlowStorage = out.isUnc || out.isRemoteDrive || out.isCloudPlaceholder;
+}
+
+static VOID CALLBACK WorkerCallback(PTP_CALLBACK_INSTANCE, PVOID, PTP_WORK) {
+    std::unique_ptr<WorkJob> job;
+    {
+        std::lock_guard lock(jobsMutex);
+        if (!pendingJobs.empty()) {
+            job = std::move(pendingJobs.front());
+            pendingJobs.pop_front();
+        }
+    }
+    if (!job || unloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    auto res = std::make_shared<Result>();
+    try {
+        ComScope comScope;
+        InspectStorageMetadata(*job, *res);
+    } catch (...) {
+        Wh_Log(L"[POOL] Metadata inspection raised exception");
+        return;
+    }
+
+    if (unloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    bool dispatched = false;
+    if (job->dispatcherQueue) {
+        auto token = std::make_shared<UiToken>();
+        if (!unloading.load(std::memory_order_acquire)) {
+            try {
+                dispatched = job->dispatcherQueue.TryEnqueue([res, token]() {
+                    try {
+                        if (!unloading.load(std::memory_order_acquire) && res) {
+                            FileTransition::ApplyMetadataResult(
+                                res->browserKey, res->generation, res->isSlowStorage);
+                        }
+                    } catch (...) {
+                        Wh_Log(L"[POOL] DispatcherQueue result callback failed");
+                    }
+                });
+            } catch (...) {
+                Wh_Log(L"[POOL] DispatcherQueue TryEnqueue threw exception");
+                dispatched = false;
+            }
+        }
+    }
+
+    if (!dispatched && !unloading.load(std::memory_order_acquire) && job->uiHwnd &&
+        IsWindow(job->uiHwnd)) {
+        auto rawResult = std::make_unique<Result>(*res);
+        pendingUiCallbacks.fetch_add(1, std::memory_order_acq_rel);
+        if (unloading.load(std::memory_order_acquire) ||
+            !PostMessageW(job->uiHwnd, kMsgMetadataResult, 0,
+                          reinterpret_cast<LPARAM>(rawResult.get()))) {
+            OnUiCallbackFinished();
+        } else {
+            std::ignore = rawResult.release();
+        }
+    }
+}
+
+static void EnqueueForNavigation(void* browserKey, ULONG generation, PCIDLIST_ABSOLUTE pidl,
+                                 HWND uiHwnd, HWND probeHwnd = nullptr) {
+    if (unloading.load(std::memory_order_acquire) || !pidl || !browserKey) {
+        return;
+    }
+
+    UniquePidl cloned(ILClone(pidl));
+    if (!cloned) {
+        return;
+    }
+
+    winrt::Windows::System::DispatcherQueue dq{nullptr};
+    try {
+        dq = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
+    } catch (...) {
+        Wh_Log(L"[POOL] DispatcherQueue unavailable on current thread");
+    }
+
+    if (!dq && !uiHwnd) {
+        return;
+    }
+
+    if (HWND effectiveProbe = uiHwnd ? uiHwnd : probeHwnd) {
+        lastUiProbeHwnd.store(effectiveProbe, std::memory_order_relaxed);
+    }
+
+    auto job = std::make_unique<WorkJob>();
+    job->browserKey = browserKey;
+    job->generation = generation;
+    job->pidl = std::move(cloned);
+    job->uiHwnd = uiHwnd;
+    job->dispatcherQueue = std::move(dq);
+
+    SubmitterGuard submitter;
+    if (!submitter || !sharedWork) {
+        return;
+    }
+    {
+        std::lock_guard lock(jobsMutex);
+        if (unloading.load(std::memory_order_acquire)) {
+            return;
+        }
+        if (pendingJobs.size() >= kMaxPendingJobs) {
+            pendingJobs.pop_front();
+        }
+        pendingJobs.push_back(std::move(job));
+    }
+    SubmitThreadpoolWork(sharedWork);
+}
+
+static bool Initialize() {
+    unloading.store(false, std::memory_order_release);
+    activeSubmitters.store(0, std::memory_order_release);
+    pendingUiCallbacks.store(0, std::memory_order_release);
+    lastUiProbeHwnd.store(nullptr, std::memory_order_release);
+
+    cldapiModule = LoadLibraryExW(L"cldapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (cldapiModule) {
+        cfGetSyncRootInfoByPath = reinterpret_cast<CfGetSyncRootInfoByPathFn>(
+            GetProcAddress(cldapiModule, "CfGetSyncRootInfoByPath"));
+    }
+
+    InitializeThreadpoolEnvironment(&tpEnv);
+    cleanupGroup = CreateThreadpoolCleanupGroup();
+    if (!cleanupGroup) {
+        DestroyThreadpoolEnvironment(&tpEnv);
+        return false;
+    }
+    SetThreadpoolCallbackCleanupGroup(&tpEnv, cleanupGroup, nullptr);
+    sharedWork = CreateThreadpoolWork(WorkerCallback, nullptr, &tpEnv);
+    if (!sharedWork) {
+        CloseThreadpoolCleanupGroupMembers(cleanupGroup, TRUE, nullptr);
+        CloseThreadpoolCleanupGroup(cleanupGroup);
+        cleanupGroup = nullptr;
+        DestroyThreadpoolEnvironment(&tpEnv);
+        return false;
+    }
+    return true;
+}
+
+static void BeginUnload() {
+    unloading.store(true, std::memory_order_seq_cst);
+    while (activeSubmitters.load(std::memory_order_seq_cst) != 0) {
+        SwitchToThread();
+    }
+    {
+        std::lock_guard lock(jobsMutex);
+        pendingJobs.clear();
+    }
+    if (cleanupGroup) {
+        CloseThreadpoolCleanupGroupMembers(cleanupGroup, TRUE, nullptr);
+        CloseThreadpoolCleanupGroup(cleanupGroup);
+        cleanupGroup = nullptr;
+        sharedWork = nullptr;
+        DestroyThreadpoolEnvironment(&tpEnv);
+    }
+}
+
+static void DrainUiCallbacks() {
+    std::unique_lock lock(uiDrainMutex);
+    const ULONGLONG startTick = GetTickCount64();
+    while (pendingUiCallbacks.load(std::memory_order_acquire) > 0) {
+        if (uiDrainCv.wait_for(lock, std::chrono::milliseconds(100), [] {
+                return pendingUiCallbacks.load(std::memory_order_acquire) == 0;
+            })) {
+            break;
+        }
+        if (GetTickCount64() - startTick >= 2000) {
+            const HWND probe = lastUiProbeHwnd.load(std::memory_order_relaxed);
+            DWORD_PTR dummy = 0;
+            if (!probe || !IsWindow(probe) ||
+                !SendMessageTimeoutW(probe, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 250, &dummy)) {
+                Wh_Log(L"[POOL] UI drain stopped with %zu pending callback(s)",
+                       pendingUiCallbacks.load(std::memory_order_relaxed));
+                break;
+            }
+        }
+    }
+}
+
+static void Uninit() {
+    cfGetSyncRootInfoByPath = nullptr;
+    if (cldapiModule) {
+        FreeLibrary(cldapiModule);
+        cldapiModule = nullptr;
+    }
+}
+} // namespace MetadataWork
 
 // Track view completion for deferred UI work without taking over file painting.
 namespace FileTransition {
 static constexpr UINT kAdaptiveCheckMs = 45;
+static constexpr UINT kBatchQuiescenceMs = 85;
+static constexpr UINT kSlowBatchQuiescenceMs = 150;
+static constexpr size_t kMaxTabs = 32;
 
 struct State {
+    void* browser{};
     void* itemsView{};
     void* batchAction{};
     ULONGLONG lastActivityTick = 0;
+    ULONGLONG navStartTick = 0;
+    ULONGLONG lastGroupProbeTick = 0;
     ULONG generation = 0;
     size_t batchCount = 0;
     size_t lastCheckedBatchCount = 0;
+    bool inUse = false;
     bool pending = false;
     bool enumerated = false;
+    bool isGroupedView = false;
+    bool groupedChecked = false;
+    bool groupItemSeen = false;
+    bool isSlowStorage = false;
+    bool telemetryReported = false;
+};
+
+class TabTable {
+  public:
+    State* FindByBrowser(const void* browser) noexcept {
+        if (!browser) {
+            return nullptr;
+        }
+        for (auto& entry : m_entries) {
+            if (entry.inUse && entry.browser == browser) {
+                return &entry;
+            }
+        }
+        return nullptr;
+    }
+
+    State* FindByItemsView(const void* itemsView) noexcept {
+        if (!itemsView) {
+            return nullptr;
+        }
+        for (auto& entry : m_entries) {
+            if (entry.inUse && entry.itemsView == itemsView) {
+                return &entry;
+            }
+        }
+        return nullptr;
+    }
+
+    State* FindOrAllocateByBrowser(void* browser) noexcept {
+        if (State* existing = FindByBrowser(browser)) {
+            return existing;
+        }
+        State* slot = AllocateSlot();
+        slot->browser = browser;
+        return slot;
+    }
+
+    State* FindOrAllocateByItemsView(void* itemsView, void* currentBrowser) noexcept {
+        if (currentBrowser) {
+            if (State* byBrowser = FindByBrowser(currentBrowser)) {
+                if (itemsView) {
+                    for (auto& entry : m_entries) {
+                        if (&entry != byBrowser && entry.inUse && entry.itemsView == itemsView) {
+                            entry.itemsView = nullptr;
+                        }
+                    }
+                }
+                byBrowser->itemsView = itemsView;
+                return byBrowser;
+            }
+        }
+        if (State* existing = FindByItemsView(itemsView);
+            existing && (!currentBrowser || !existing->browser || existing->browser == currentBrowser)) {
+            if (currentBrowser && !existing->browser) {
+                existing->browser = currentBrowser;
+            }
+            return existing;
+        }
+        State* slot = AllocateSlot();
+        if (itemsView) {
+            for (auto& entry : m_entries) {
+                if (&entry != slot && entry.inUse && entry.itemsView == itemsView) {
+                    entry.itemsView = nullptr;
+                }
+            }
+        }
+        slot->browser = currentBrowser;
+        slot->itemsView = itemsView;
+        return slot;
+    }
+
+    void EraseByBrowser(const void* browser) noexcept {
+        if (State* entry = FindByBrowser(browser)) {
+            ResetEntry(*entry);
+        }
+    }
+
+    void EraseByItemsView(const void* itemsView) noexcept {
+        if (State* entry = FindByItemsView(itemsView)) {
+            ResetEntry(*entry);
+        }
+    }
+
+    void clear() noexcept {
+        for (auto& entry : m_entries) {
+            ResetEntry(entry);
+        }
+    }
+
+  private:
+    static void ResetEntry(State& entry) noexcept {
+        entry = {};
+    }
+
+    State* AllocateSlot() noexcept {
+        for (auto& entry : m_entries) {
+            if (!entry.inUse) {
+                ResetEntry(entry);
+                entry.inUse = true;
+                return &entry;
+            }
+        }
+        State* victim = &m_entries[0];
+        for (size_t i = 1; i < kMaxTabs; ++i) {
+            State& cand = m_entries[i];
+            const bool victimIdle = !victim->pending || victim->enumerated;
+            const bool candIdle = !cand.pending || cand.enumerated;
+            if ((candIdle && !victimIdle) ||
+                (candIdle == victimIdle && cand.lastActivityTick < victim->lastActivityTick)) {
+                victim = &cand;
+            }
+        }
+        ResetEntry(*victim);
+        victim->inUse = true;
+        return victim;
+    }
+
+    std::array<State, kMaxTabs> m_entries{};
+};
+
+struct BrowserScope {
+    void*& slot;
+    void* previous;
+
+    BrowserScope(void*& s, void* current) noexcept : slot(s), previous(s) {
+        slot = current;
+    }
+    BrowserScope(const BrowserScope&) = delete;
+    BrowserScope& operator=(const BrowserScope&) = delete;
+    ~BrowserScope() {
+        slot = previous;
+    }
 };
 
 using ResetRoot = HRESULT(__fastcall*)(void*, void*, void*);
@@ -369,11 +1027,21 @@ using DeleteBatchTimer = bool(__fastcall*)(void*);
 using Invoke = HRESULT(__fastcall*)(void*, DISPID, REFIID, LCID, WORD, DISPPARAMS*, VARIANT*,
                                     EXCEPINFO*, UINT*);
 
-static thread_local State state;
-static thread_local State* active;
-static thread_local void* processingBatch;
-static thread_local unsigned navigationDepth;
+static thread_local TabTable tabs;
+static thread_local State* active = nullptr;
+static thread_local void* currentBrowser = nullptr;
+static thread_local void* processingBatch = nullptr;
+static thread_local unsigned navigationDepth = 0;
+static thread_local ULONG nextTabGeneration = 0;
 static bool completionTracking = true;
+
+static ULONG NextGeneration() noexcept {
+    ULONG next = ++nextTabGeneration;
+    if (next == 0) {
+        next = ++nextTabGeneration;
+    }
+    return next;
+}
 
 static ResetRoot resetOriginal;
 static Navigate navigateOriginal;
@@ -382,6 +1050,56 @@ static EnsureBatching ensureOriginal;
 static BatchTimer batchOriginal;
 static DeleteBatchTimer deleteOriginal;
 static Invoke invokeOriginal;
+
+static bool IsActiveViewGrouped() noexcept {
+    return active != nullptr && active->inUse && (active->isGroupedView || active->groupItemSeen);
+}
+
+static void OnGroupItem() {
+    if (!active || !active->inUse) {
+        return;
+    }
+    active->groupItemSeen = true;
+    active->isGroupedView = true;
+}
+
+static void ApplyMetadataResult(void* browserKey, ULONG generation, bool isSlowStorage) {
+    State* tab = tabs.FindByBrowser(browserKey);
+    if (tab && tab->generation == generation) {
+        tab->isSlowStorage = isSlowStorage;
+    }
+}
+
+static void ClearThreadTabs() noexcept {
+    tabs.clear();
+    active = nullptr;
+}
+
+static void ReportTelemetryIfNeeded(const wchar_t* reason, ULONGLONG fallbackStartTick) {
+    State* target = active;
+    if (target && target->inUse) {
+        if (target->telemetryReported) {
+            return;
+        }
+        const ULONGLONG startTick = target->navStartTick ? target->navStartTick : fallbackStartTick;
+        if (!startTick) {
+            return;
+        }
+        target->telemetryReported = true;
+        const ULONGLONG now = GetTickCount64();
+        const ULONGLONG navMs = now >= startTick ? (now - startTick) : 0;
+        Wh_Log(L"[TELEMETRY] Transition complete (navMs=%llu, batchCount=%zu, grouped=%d, "
+               L"flushReason=%s, groupItemSeen=%d)",
+               navMs, target->batchCount, target->isGroupedView ? 1 : 0,
+               reason ? reason : L"unknown", target->groupItemSeen ? 1 : 0);
+    } else if (fallbackStartTick) {
+        const ULONGLONG now = GetTickCount64();
+        const ULONGLONG navMs = now >= fallbackStartTick ? (now - fallbackStartTick) : 0;
+        Wh_Log(L"[TELEMETRY] Transition complete (navMs=%llu, batchCount=%zu, grouped=%d, "
+               L"flushReason=%s, groupItemSeen=%d)",
+               navMs, static_cast<size_t>(0), 0, reason ? reason : L"unknown", 0);
+    }
+}
 
 static bool DeferNavigationPaint() {
     if (!settings.navigationPaint || !navigationDepth) {
@@ -396,22 +1114,24 @@ static bool DeferNavigationPaint() {
 }
 
 static bool IsReady() {
-    return completionTracking && active && active->itemsView && active->enumerated &&
-           !active->pending && !navigationDepth && !processingBatch;
+    return completionTracking && active && active->inUse && active->itemsView &&
+           active->enumerated && !active->pending && !navigationDepth && !processingBatch;
 }
 
 static bool HasActiveWork() {
     if (navigationDepth > 0 || processingBatch != nullptr) {
         return true;
     }
-    if (!active || active->enumerated) {
+    if (!active || !active->inUse || active->enumerated) {
         return false;
     }
     if (active->batchCount > active->lastCheckedBatchCount) {
         active->lastCheckedBatchCount = active->batchCount;
         return true;
     }
-    if (GetTickCount64() - active->lastActivityTick <= 85) {
+    const UINT quiescenceMs =
+        active->isSlowStorage ? kSlowBatchQuiescenceMs : kBatchQuiescenceMs;
+    if (GetTickCount64() - active->lastActivityTick <= quiescenceMs) {
         return true;
     }
     active->pending = false;
@@ -425,30 +1145,79 @@ static void NotifyReady() {
 }
 
 static void EnumerationDone() {
-    if (active && active->itemsView) {
+    if (active && active->inUse && active->itemsView) {
         active->enumerated = true;
         active->pending = false;
         NotifyReady();
     }
 }
 
-static void Begin(void* itemsView) {
-    state = {itemsView, nullptr, GetTickCount64(), state.generation + 1, 0, 0, false, false};
-    active = &state;
+static State* BeginForBrowser(void* browser) {
+    State* tab = tabs.FindOrAllocateByBrowser(browser);
+    const ULONGLONG now = GetTickCount64();
+    const ULONG nextGen = NextGeneration();
+    *tab = State{};
+    tab->inUse = true;
+    tab->browser = browser;
+    tab->lastActivityTick = now;
+    tab->navStartTick = now;
+    tab->generation = nextGen;
+    active = tab;
+    return tab;
+}
+
+static State* BeginForItemsView(void* itemsView) {
+    State* tab = tabs.FindOrAllocateByItemsView(itemsView, currentBrowser);
+    const ULONGLONG now = GetTickCount64();
+    void* savedBrowser = tab->browser;
+    const bool keepStart =
+        (currentBrowser != nullptr && tab->browser == currentBrowser && tab->navStartTick != 0);
+    const ULONG nextGen = (keepStart && tab->generation != 0) ? tab->generation : NextGeneration();
+    const ULONGLONG savedNavStart = keepStart ? tab->navStartTick : now;
+    const bool savedSlow = keepStart ? tab->isSlowStorage : false;
+    const bool savedGrouped = keepStart ? tab->isGroupedView : false;
+    const bool savedGroupedChecked = keepStart ? tab->groupedChecked : false;
+    const ULONGLONG savedGroupProbeTick = keepStart ? tab->lastGroupProbeTick : 0;
+    *tab = State{};
+    tab->inUse = true;
+    tab->browser = savedBrowser;
+    tab->itemsView = itemsView;
+    tab->lastActivityTick = now;
+    tab->navStartTick = savedNavStart;
+    tab->generation = nextGen;
+    tab->isSlowStorage = savedSlow;
+    tab->isGroupedView = savedGrouped;
+    tab->groupedChecked = savedGroupedChecked;
+    tab->lastGroupProbeTick = savedGroupProbeTick;
+    active = tab;
+    return tab;
 }
 
 static HRESULT __fastcall NavigateHook(void* self, PCIDLIST_ABSOLUTE pidl, ULONG flags,
                                        ULONG extra) {
     RibbonWork::NavigationStarted();
-    Begin(nullptr);
+    State* tab = BeginForBrowser(self);
+    const ULONG generation = tab->generation;
+    if (pidl) {
+        const HWND uiHwnd = RibbonWork::EnsureQueueWindow();
+        const HWND probeHwnd = uiHwnd ? uiHwnd : FindAnyThreadBrowserWindow();
+        MetadataWork::EnqueueForNavigation(self, generation, pidl, uiHwnd, probeHwnd);
+    }
     HRESULT result;
     {
+        BrowserScope browserScope(currentBrowser, self);
         PaintScope scope(navigationDepth);
         result = navigateOriginal(self, pidl, flags, extra);
     }
     if (FAILED(result)) {
-        active = nullptr;
+        tabs.EraseByBrowser(self);
+        if (active == tab) {
+            active = nullptr;
+        }
     } else {
+        if (tab->inUse && tab->generation == generation) {
+            active = tab;
+        }
         NotifyReady();
     }
     return result;
@@ -457,16 +1226,18 @@ static HRESULT __fastcall NavigateHook(void* self, PCIDLIST_ABSOLUTE pidl, ULONG
 static HRESULT __fastcall ConnectionHook(void* self, IShellItem* item, IUnknown* connection,
                                          ULONG flags, ULONG extra, IUnknown* first,
                                          IUnknown* second, REFGUID id) {
-    if (active) {
-        active->lastActivityTick = GetTickCount64();
-    }
+    State* tab = tabs.FindOrAllocateByBrowser(self);
+    tab->lastActivityTick = GetTickCount64();
+    active = tab;
     HRESULT result;
     {
+        BrowserScope browserScope(currentBrowser, self);
         PaintScope scope(navigationDepth);
         result = connectionOriginal(self, item, connection, flags, extra, first, second, id);
     }
-    if (active) {
-        active->lastActivityTick = GetTickCount64();
+    if (tab->inUse) {
+        tab->lastActivityTick = GetTickCount64();
+        active = tab;
     }
     NotifyReady();
     return result;
@@ -476,18 +1247,22 @@ static HRESULT __fastcall ResetHook(void* self, void* item, void* collection) {
     if (!RibbonWork::Pending()) {
         RibbonWork::NavigationStarted();
     }
-    Begin(self);
-    ULONG generation = state.generation;
+    State* tab = BeginForItemsView(self);
+    const ULONG generation = tab->generation;
     HRESULT result;
     {
         PaintScope scope(navigationDepth);
         result = resetOriginal(self, item, collection);
     }
-    if (active && active->generation == generation) {
+    if (tab->inUse && tab->generation == generation) {
         if (FAILED(result)) {
-            active = nullptr;
+            tabs.EraseByItemsView(self);
+            if (active == tab) {
+                active = nullptr;
+            }
         } else {
-            active->lastActivityTick = GetTickCount64();
+            tab->lastActivityTick = GetTickCount64();
+            active = tab;
             NotifyReady();
         }
     }
@@ -495,25 +1270,29 @@ static HRESULT __fastcall ResetHook(void* self, void* item, void* collection) {
 }
 
 static HRESULT __fastcall EnsureHook(void* self) {
-    ULONG generation = state.generation;
+    State* tab = tabs.FindByItemsView(self);
+    const ULONG generation = tab ? tab->generation : 0;
     HRESULT result = ensureOriginal(self);
-    if (SUCCEEDED(result) && active && active->itemsView == self &&
-        active->generation == generation) {
-        active->lastActivityTick = GetTickCount64();
-        if (!active->pending) {
-            active->pending = true;
-            ++active->batchCount;
+    if (SUCCEEDED(result) && tab && tab->inUse && tab->itemsView == self &&
+        tab->generation == generation) {
+        tab->lastActivityTick = GetTickCount64();
+        if (!tab->pending) {
+            tab->pending = true;
+            ++tab->batchCount;
         }
+        active = tab;
     }
     return result;
 }
 
 static bool __fastcall DeleteHook(void* self) {
-    ULONG generation = state.generation;
+    State* tab = tabs.FindByItemsView(self);
+    const ULONG generation = tab ? tab->generation : 0;
     bool result = deleteOriginal(self);
-    if (result && active && active->itemsView == self &&
-        active->generation == generation) {
-        active->pending = false;
+    if (result && tab && tab->inUse && tab->itemsView == self &&
+        tab->generation == generation) {
+        tab->pending = false;
+        active = tab;
         NotifyReady();
     }
     return result;
@@ -522,13 +1301,16 @@ static bool __fastcall DeleteHook(void* self) {
 static void __fastcall BatchHook(void* self, void* info) {
     void* previous = processingBatch;
     processingBatch = self;
-    if (active && active->itemsView == self) {
-        ++active->batchCount;
-        active->lastActivityTick = GetTickCount64();
+    State* tab = tabs.FindByItemsView(self);
+    if (tab && tab->inUse) {
+        ++tab->batchCount;
+        tab->lastActivityTick = GetTickCount64();
+        active = tab;
     }
     batchOriginal(self, info);
-    if (active && active->itemsView == self) {
-        active->lastActivityTick = GetTickCount64();
+    if (tab && tab->inUse) {
+        tab->lastActivityTick = GetTickCount64();
+        active = tab;
     }
     processingBatch = previous;
     NotifyReady();
@@ -568,18 +1350,120 @@ enum class TaskKind : unsigned char {
 };
 
 struct Task {
+    using Invoker = void (*)(const Task&);
+
     Microsoft::WRL::ComPtr<IUnknown> object{};
-    void* target{};
-    TaskKind kind{};
+    void* target = nullptr;
+    Invoker run = nullptr;
     ULONG param = 0;
-    std::function<void()> run{};
+    LCID locale = 0;
+    WORD flags = 0;
+    TaskKind kind{};
+
+    void Reset() noexcept {
+        object.Reset();
+        target = nullptr;
+        run = nullptr;
+        param = 0;
+        locale = 0;
+        flags = 0;
+        kind = {};
+    }
+};
+
+#if defined(_WIN64)
+static_assert(sizeof(Task) == 40, "Task struct must be 40 bytes on 64-bit");
+#endif
+
+class TaskQueue {
+  public:
+    static constexpr size_t kCapacity = 64;
+
+    [[nodiscard]] bool empty() const noexcept {
+        return m_count == 0;
+    }
+
+    [[nodiscard]] size_t size() const noexcept {
+        return m_count;
+    }
+
+    [[nodiscard]] Task& operator[](size_t index) noexcept {
+        return m_buffer[(m_head + index) & (kCapacity - 1)];
+    }
+
+    [[nodiscard]] const Task& operator[](size_t index) const noexcept {
+        return m_buffer[(m_head + index) & (kCapacity - 1)];
+    }
+
+    bool Push(Task&& task) noexcept {
+        if (m_count >= kCapacity) {
+            return false;
+        }
+        size_t tail = (m_head + m_count) & (kCapacity - 1);
+        m_buffer[tail] = std::move(task);
+        task.Reset();
+        ++m_count;
+        return true;
+    }
+
+    Task Pop() noexcept {
+        if (m_count == 0) {
+            return Task{};
+        }
+        Task task = std::move(m_buffer[m_head]);
+        m_buffer[m_head].Reset();
+        m_head = (m_head + 1) & (kCapacity - 1);
+        --m_count;
+        if (m_count == 0) {
+            m_head = 0;
+        }
+        return task;
+    }
+
+    void DropTarget(void* target) noexcept {
+        if (!target || m_count == 0) {
+            return;
+        }
+        size_t writeIdx = 0;
+        for (size_t readIdx = 0; readIdx < m_count; ++readIdx) {
+            size_t actualIdx = (m_head + readIdx) & (kCapacity - 1);
+            if (m_buffer[actualIdx].object.Get() == target ||
+                m_buffer[actualIdx].target == target) {
+                m_buffer[actualIdx].Reset();
+            } else {
+                if (writeIdx != readIdx) {
+                    size_t destIdx = (m_head + writeIdx) & (kCapacity - 1);
+                    m_buffer[destIdx] = std::move(m_buffer[actualIdx]);
+                    m_buffer[actualIdx].Reset();
+                }
+                ++writeIdx;
+            }
+        }
+        m_count = writeIdx;
+        if (m_count == 0) {
+            m_head = 0;
+        }
+    }
+
+    void Clear() noexcept {
+        for (size_t i = 0; i < m_count; ++i) {
+            m_buffer[(m_head + i) & (kCapacity - 1)].Reset();
+        }
+        m_head = 0;
+        m_count = 0;
+    }
+
+  private:
+    std::array<Task, kCapacity> m_buffer{};
+    size_t m_head = 0;
+    size_t m_count = 0;
 };
 
 struct Queue {
     HWND hwnd{};
     HWND root{};
     HHOOK inputHook{};
-    std::deque<Task> tasks;
+    TaskQueue tasks{};
     bool timerActive = false;
     bool draining = false;
     bool closing = false;
@@ -592,9 +1476,10 @@ using NavState = HRESULT(__fastcall*)(void*, ULONG);
 static constexpr wchar_t ClassName[] = L"Windhawk.ExplorerFastNavigation.RibbonWork";
 
 static thread_local Queue* queue;
-static thread_local void* connected;
+static thread_local BoundedPtrSet<32> connectedTargets;
 thread_local ULONGLONG started = 0;
 static thread_local bool ready;
+static thread_local bool telemetryReported;
 static WindowLifetime lifetime;
 static HINSTANCE instance;
 static bool registered;
@@ -604,8 +1489,12 @@ static Notification changedOriginal;
 static Destroy destroyOriginal;
 static NavState navStateOriginal;
 
-static void Flush() {
+static void Flush(const wchar_t* reason = L"unknown") {
     WindowLifetime::Callback callback(lifetime);
+    if (started && !telemetryReported) {
+        telemetryReported = true;
+        FileTransition::ReportTelemetryIfNeeded(reason, started);
+    }
     Queue* q = queue;
     if (!q || q->draining) {
         return;
@@ -616,10 +1505,9 @@ static void Flush() {
         q->timerActive = false;
     }
     while (!q->tasks.empty()) {
-        Task task = std::move(q->tasks.front());
-        q->tasks.pop_front();
-        if (!q->closing) {
-            task.run();
+        Task task = q->tasks.Pop();
+        if (!q->closing && task.run) {
+            task.run(task);
         }
     }
     q->draining = false;
@@ -632,9 +1520,13 @@ static void DropTasksForTarget(void* target) {
     if (!queue || !target) {
         return;
     }
-    std::erase_if(queue->tasks, [target](const Task& t) {
-        return t.target == target;
-    });
+    if (!queue->tasks.empty()) {
+        auto canonical = CanonicalUnknown(reinterpret_cast<IUnknown*>(target));
+        if (canonical && canonical.Get() != target) {
+            queue->tasks.DropTarget(canonical.Get());
+        }
+        queue->tasks.DropTarget(target);
+    }
     if (queue->tasks.empty() && queue->timerActive) {
         KillTimer(queue->hwnd, 1);
         queue->timerActive = false;
@@ -649,53 +1541,83 @@ static LRESULT CALLBACK InputHook(int code, WPARAM wp, LPARAM lp) {
             msg->message == WM_LBUTTONDOWN || msg->message == WM_RBUTTONDOWN ||
             msg->message == WM_MBUTTONDOWN || msg->message == WM_NCLBUTTONDOWN) {
             ready = true;
-            Flush();
+            Flush(L"input");
         }
     }
     return CallNextHookEx(nullptr, code, wp, lp);
 }
 
 static LRESULT CALLBACK OwnerSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR data) {
-    WindowLifetime::Callback callback(lifetime);
     if (msg == WM_DESTROY) {
+        WindowLifetime::Callback callback(lifetime);
         auto q = reinterpret_cast<Queue*>(data);
         q->closing = true;
-        Flush();
+        Flush(L"teardown");
+        connectedTargets.clear();
+        XamlWork::ClearThreadConnections();
+        FileTransition::ClearThreadTabs();
     }
     return DefSubclassProc(hwnd, msg, wp, lp);
+}
+
+static void DrainQueuedMetadataMessages(HWND hwnd) noexcept {
+    MSG queuedMsg{};
+    while (PeekMessageW(&queuedMsg, hwnd, kMsgMetadataResult, kMsgMetadataResult, PM_REMOVE)) {
+        auto* rawRes = reinterpret_cast<MetadataWork::Result*>(queuedMsg.lParam);
+        delete rawRes;
+        MetadataWork::OnUiCallbackFinished();
+    }
 }
 
 static LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     WindowLifetime::Callback callback(lifetime);
     if (msg == WM_APP) {
         if (ready && !FileTransition::navigationDepth && !FileTransition::processingBatch) {
-            Flush();
+            Flush(L"enumDone");
+        }
+        return 0;
+    }
+    if (msg == kMsgMetadataResult) {
+        std::unique_ptr<MetadataWork::Result> owned(reinterpret_cast<MetadataWork::Result*>(lp));
+        MetadataWork::UiCallbackGuard guard;
+        if (!MetadataWork::IsUnloading() && owned) {
+            FileTransition::ApplyMetadataResult(owned->browserKey, owned->generation,
+                                                owned->isSlowStorage);
         }
         return 0;
     }
     if (msg == WM_TIMER && wp == 1) {
-        if ((ready && !FileTransition::navigationDepth && !FileTransition::processingBatch) ||
-            !FileTransition::HasActiveWork() ||
-            (GetTickCount64() - started >= static_cast<ULONGLONG>(settings.safetyCeilingMs))) {
+        const bool viewSettled =
+            ready && !FileTransition::navigationDepth && !FileTransition::processingBatch;
+        const bool ceilingReached =
+            GetTickCount64() - started >= static_cast<ULONGLONG>(settings.safetyCeilingMs);
+        if (viewSettled || !FileTransition::HasActiveWork() || ceilingReached) {
+            const wchar_t* reason =
+                viewSettled ? L"enumDone" : (ceilingReached ? L"ceiling" : L"quiescence");
             ready = true;
-            Flush();
+            Flush(reason);
         }
         return 0;
     }
     if (msg == WM_CLOSE) {
         auto q = reinterpret_cast<Queue*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
         if (!q) {
+            DrainQueuedMetadataMessages(hwnd);
             DestroyWindow(hwnd);
             return 0;
         }
         if (!q->draining) {
-            Flush();
+            Flush(L"teardown");
         }
         q->closing = true;
-        Flush();
+        Flush(L"teardown");
         return 0;
     }
     if (msg == WM_NCDESTROY) {
+        DrainQueuedMetadataMessages(hwnd);
+        connectedTargets.clear();
+        XamlWork::ClearThreadConnections();
+        FileTransition::ClearThreadTabs();
         auto q = reinterpret_cast<Queue*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
         if (q) {
@@ -715,21 +1637,21 @@ static LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
-static bool Enqueue(IUnknown* object, TaskKind kind, ULONG param, std::function<void()> run) {
+static HWND EnsureQueueWindow() {
     WindowLifetime::Operation operation(lifetime);
-    if (!operation || (queue && queue->draining)) {
-        return false;
+    if (!operation || !registered) {
+        return nullptr;
     }
     if (!queue) {
         HWND root = FindThreadBrowserWindow();
         if (!root) {
-            return false;
+            return nullptr;
         }
         auto q = std::make_unique<Queue>();
         q->hwnd = CreateWindowExW(0, ClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
                                   instance, nullptr);
         if (!q->hwnd) {
-            return false;
+            return nullptr;
         }
         SetWindowLongPtrW(q->hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(q.get()));
         q->root = root;
@@ -737,20 +1659,34 @@ static bool Enqueue(IUnknown* object, TaskKind kind, ULONG param, std::function<
         if (!q->inputHook || !WindhawkUtils::SetWindowSubclassFromAnyThread(
                                  root, OwnerSubclass, reinterpret_cast<DWORD_PTR>(q.get()))) {
             DestroyWindow(q->hwnd);
-            return false;
+            return nullptr;
         }
         lifetime.Add(q->hwnd);
         queue = q.release();
     }
-    if (queue->closing) {
-        Flush();
+    return queue->closing ? nullptr : queue->hwnd;
+}
+
+static bool Enqueue(IUnknown* object, TaskKind kind, ULONG param, Task::Invoker run,
+                    LCID locale = 0, WORD flags = 0) {
+    WindowLifetime::Operation operation(lifetime);
+    if (!operation || (queue && queue->draining) || !run) {
         return false;
     }
-    for (Task& existing : queue->tasks) {
-        if (existing.target == object && existing.kind == kind) {
+    if (!EnsureQueueWindow()) {
+        if (queue && queue->closing) {
+            Flush(L"teardown");
+        }
+        return false;
+    }
+    Microsoft::WRL::ComPtr<IUnknown> canonical = CanonicalUnknown(object);
+    for (size_t i = 0; i < queue->tasks.size(); ++i) {
+        Task& existing = queue->tasks[i];
+        if ((existing.object.Get() == canonical.Get() || existing.target == object) &&
+            existing.kind == kind) {
             if (kind == TaskKind::ClassicNavState || kind == TaskKind::XamlNavState) {
                 existing.param = param;
-                existing.run = std::move(run);
+                existing.run = run;
                 return true;
             }
             if (existing.param == param) {
@@ -758,32 +1694,40 @@ static bool Enqueue(IUnknown* object, TaskKind kind, ULONG param, std::function<
             }
         }
     }
-    if (queue->tasks.size() >= 64) {
-        Flush();
+    if (queue->tasks.size() >= TaskQueue::kCapacity) {
+        Flush(L"capacity");
         return false;
     }
     if (!queue->timerActive) {
         if (!SetTimer(queue->hwnd, 1, FileTransition::kAdaptiveCheckMs, nullptr)) {
-            Flush();
+            Flush(L"teardown");
             return false;
         }
         queue->timerActive = true;
     }
-    queue->tasks.push_back(
-        {Microsoft::WRL::ComPtr<IUnknown>(object), object, kind, param, std::move(run)});
+    Task task{};
+    task.object = std::move(canonical);
+    task.target = object;
+    task.run = run;
+    task.kind = kind;
+    task.param = param;
+    task.locale = locale;
+    task.flags = flags;
+    queue->tasks.Push(std::move(task));
     return true;
 }
 
 static void NavigationStarted() {
-    Flush();
+    Flush(L"preempt");
     started = GetTickCount64();
     ready = false;
+    telemetryReported = false;
 }
 
 static void ViewReady() {
     ready = true;
     if (!FileTransition::navigationDepth && !FileTransition::processingBatch) {
-        Flush();
+        Flush(L"enumDone");
     } else if (queue && queue->hwnd) {
         PostMessageW(queue->hwnd, WM_APP, 0, 0);
     }
@@ -794,32 +1738,49 @@ static bool Pending() {
            (GetTickCount64() - started < static_cast<ULONGLONG>(settings.safetyCeilingMs));
 }
 
+static void RunClassicInvoke(const Task& task) {
+    DISPPARAMS empty{};
+    FileTransition::invokeOriginal(task.target, static_cast<DISPID>(task.param),
+                                   kNullIid, task.locale, task.flags,
+                                   &empty, nullptr, nullptr, nullptr);
+}
+
+static void RunClassicNavigated(const Task& task) {
+    navigatedOriginal(task.target);
+}
+
+static void RunClassicNavState(const Task& task) {
+    navStateOriginal(task.target, task.param);
+}
+
 // DISPID_FILELISTENUMDONE is deferred alongside other UI updates so that
 // the Ribbon is notified only after the view settles, while
 // EnumerationDone() uses the event internally as the trigger to flush.
 static bool DeferInvoke(void* self, DISPID id, REFIID iid, LCID locale, WORD flags,
                         const DISPPARAMS* args) {
-    if (!destroyOriginal || !settings.classicRibbon || !CanDeferInvoke(iid, flags, args) ||
-        !Pending() ||
-        (id != DISPID_SELECTIONCHANGED && id != DISPID_FILELISTENUMDONE &&
-         id != DISPID_VIEWMODECHANGED && id != DISPID_CONTENTSCHANGED &&
-         id != DISPID_COLUMNSCHANGED && id != DISPID_ICONSIZECHANGED &&
-         id != DISPID_SELECTEDITEMCHANGED)) {
+    if (!destroyOriginal || !settings.classicRibbon ||
+        (!FileTransition::navigationDepth && !Pending())) {
+        return false;
+    }
+    if (id != DISPID_SELECTIONCHANGED && id != DISPID_FILELISTENUMDONE &&
+        id != DISPID_VIEWMODECHANGED && id != DISPID_CONTENTSCHANGED &&
+        id != DISPID_COLUMNSCHANGED && id != DISPID_ICONSIZECHANGED &&
+        id != DISPID_SELECTEDITEMCHANGED) {
+        return false;
+    }
+    if (!CanDeferInvoke(iid, flags, args)) {
         return false;
     }
     return Enqueue(reinterpret_cast<IUnknown*>(self), TaskKind::ClassicInvoke,
-                   static_cast<ULONG>(id), [self, id, iid, locale, flags] {
-                       DISPPARAMS empty{};
-                       FileTransition::invokeOriginal(self, id, iid, locale, flags, &empty, nullptr,
-                                                      nullptr, nullptr);
-                   });
+                   static_cast<ULONG>(id), RunClassicInvoke, locale, flags);
 }
 
 static HRESULT __fastcall NavigatedHook(void* self) {
-    if (destroyOriginal && settings.classicRibbon && self == connected && Pending() &&
-        Enqueue(reinterpret_cast<IUnknown*>(self), TaskKind::ClassicNavigated, 0, [self] {
-            navigatedOriginal(self);
-        })) {
+    auto canonical = CanonicalUnknown(reinterpret_cast<IUnknown*>(self));
+    if (destroyOriginal && settings.classicRibbon &&
+        connectedTargets.contains(canonical.Get()) && Pending() &&
+        Enqueue(reinterpret_cast<IUnknown*>(self), TaskKind::ClassicNavigated, 0,
+                RunClassicNavigated)) {
         return S_OK;
     }
     return navigatedOriginal(self);
@@ -827,23 +1788,30 @@ static HRESULT __fastcall NavigatedHook(void* self) {
 
 static HRESULT __fastcall ChangedHook(void* self) {
     if (!Pending()) {
-        Flush();
+        Flush(L"quiescence");
     }
     HRESULT hr = changedOriginal(self);
-    connected = SUCCEEDED(hr) ? self : nullptr;
+    auto canonical = CanonicalUnknown(reinterpret_cast<IUnknown*>(self));
+    if (SUCCEEDED(hr)) {
+        connectedTargets.insert(canonical.Get());
+    } else {
+        connectedTargets.erase(canonical.Get());
+    }
     return hr;
 }
 
 static HRESULT __fastcall DestroyHook(void* self, BOOL final) {
     if (queue) {
         if (!queue->draining) {
-            Flush();
+            Flush(L"teardown");
         } else {
             DropTasksForTarget(self);
         }
     }
-    if (connected == self) {
-        connected = nullptr;
+    if (!connectedTargets.empty()) {
+        auto canonical = CanonicalUnknown(reinterpret_cast<IUnknown*>(self));
+        connectedTargets.erase(canonical.Get());
+        connectedTargets.erase(self);
     }
     return destroyOriginal(self, final);
 }
@@ -851,9 +1819,7 @@ static HRESULT __fastcall DestroyHook(void* self, BOOL final) {
 static HRESULT __fastcall NavStateHook(void* self, ULONG flags) {
     if (settings.navigationBar && Pending() &&
         Enqueue(reinterpret_cast<IUnknown*>(self), TaskKind::ClassicNavState, flags,
-                [self, flags] {
-                    navStateOriginal(self, flags);
-                })) {
+                RunClassicNavState)) {
         return S_OK;
     }
     return navStateOriginal(self, flags);
@@ -897,7 +1863,7 @@ static constexpr ULONG NAVSTATE_LOCATION = 0x4;
 
 static std::atomic<bool> enabled{false};
 static std::atomic<bool> hooksInstalled{false};
-static thread_local void* connected;
+static thread_local BoundedPtrSet<32> connectedTargets;
 static Notification navigatedOriginal;
 static Notification changedOriginal;
 static Notification invalidatedOriginal;
@@ -905,6 +1871,10 @@ static Notification cleanupOriginal;
 static StateChange stateOriginal;
 static StateChange invalidateOriginal;
 static Invoke invokeOriginal;
+
+static void ClearThreadConnections() noexcept {
+    connectedTargets.clear();
+}
 
 static bool Pending() {
     return enabled.load(std::memory_order_relaxed) && RibbonWork::Pending();
@@ -920,16 +1890,48 @@ static HRESULT Run(Notification original, void* self, const wchar_t* label) {
 
 static HRESULT __fastcall ChangedHook(void* self) {
     HRESULT hr = changedOriginal(self);
-    connected = SUCCEEDED(hr) ? self : nullptr;
+    auto canonical = CanonicalUnknown(reinterpret_cast<IUnknown*>(self));
+    if (SUCCEEDED(hr)) {
+        connectedTargets.insert(canonical.Get());
+    } else {
+        connectedTargets.erase(canonical.Get());
+    }
     return hr;
 }
 
+static void RunXamlNavigated(const RibbonWork::Task& task) {
+    Run(navigatedOriginal, task.target, L"xaml_navigated");
+}
+
+static void RunXamlInvalidated(const RibbonWork::Task& task) {
+    Run(invalidatedOriginal, task.target, L"xaml_invalidated");
+}
+
+static void RunXamlNavState(const RibbonWork::Task& task) {
+    HRESULT hr = stateOriginal(task.target, task.param);
+    if (FAILED(hr)) {
+        Wh_Log(L"[XAML] Deferred location failed (hr=0x%08X)", hr);
+    }
+}
+
+static void RunXamlInvalidateCommands(const RibbonWork::Task& task) {
+    invalidateOriginal(task.target, task.param);
+}
+
+static void RunXamlInvoke(const RibbonWork::Task& task) {
+    DISPPARAMS empty{};
+    invokeOriginal(task.target, static_cast<DISPID>(task.param),
+                   kNullIid, task.locale, task.flags,
+                   &empty, nullptr, nullptr, nullptr);
+}
+
 static HRESULT __fastcall NavigatedHook(void* self) {
-    if (settings.xamlCommandBar && Pending() && self == connected &&
-        RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self), RibbonWork::TaskKind::XamlNavigated,
-                            0, [self] {
-                                Run(navigatedOriginal, self, L"xaml_navigated");
-                            })) {
+    auto canonical = CanonicalUnknown(reinterpret_cast<IUnknown*>(self));
+    if (settings.xamlCommandBar && Pending() &&
+        connectedTargets.contains(canonical.Get()) &&
+        RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self),
+                            RibbonWork::TaskKind::XamlNavigated, 0,
+                            RunXamlNavigated)) {
         return S_OK;
     }
     return navigatedOriginal(self);
@@ -938,9 +1940,8 @@ static HRESULT __fastcall NavigatedHook(void* self) {
 static HRESULT __fastcall InvalidatedHook(void* self) {
     if (settings.xamlCommandBar && Pending() &&
         RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self),
-                            RibbonWork::TaskKind::XamlInvalidated, 0, [self] {
-                                Run(invalidatedOriginal, self, L"xaml_invalidated");
-                            })) {
+                            RibbonWork::TaskKind::XamlInvalidated, 0,
+                            RunXamlInvalidated)) {
         return S_OK;
     }
     return invalidatedOriginal(self);
@@ -948,13 +1949,9 @@ static HRESULT __fastcall InvalidatedHook(void* self) {
 
 static HRESULT __fastcall StateHook(void* self, ULONG flags) {
     if (settings.navigationBar && (flags & NAVSTATE_LOCATION) && Pending() &&
-        RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self), RibbonWork::TaskKind::XamlNavState,
-                            flags, [self, flags] {
-                                HRESULT hr = stateOriginal(self, flags);
-                                if (FAILED(hr)) {
-                                    Wh_Log(L"[XAML] Deferred location failed (hr=0x%08X)", hr);
-                                }
-                            })) {
+        RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self),
+                            RibbonWork::TaskKind::XamlNavState, flags,
+                            RunXamlNavState)) {
         return S_OK;
     }
     return stateOriginal(self, flags);
@@ -963,10 +1960,8 @@ static HRESULT __fastcall StateHook(void* self, ULONG flags) {
 static HRESULT __fastcall InvalidateHook(void* self, ULONG commands) {
     if (settings.xamlCommandBar && Pending() &&
         RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self),
-                            RibbonWork::TaskKind::XamlInvalidateCommands, commands,
-                            [self, commands] {
-                                invalidateOriginal(self, commands);
-                            })) {
+                            RibbonWork::TaskKind::XamlInvalidateCommands,
+                            commands, RunXamlInvalidateCommands)) {
         return S_OK;
     }
     return invalidateOriginal(self, commands);
@@ -978,25 +1973,27 @@ static HRESULT __fastcall InvokeHook(void* self, DISPID id, REFIID iid, LCID loc
     // DISPID_FILELISTENUMDONE is deferred alongside other UI updates so that
     // the XAML command bar is notified only after the view settles, while
     // EnumerationDone() uses the event internally as the trigger to flush.
-    bool invalidation = id == DISPID_SELECTIONCHANGED || id == DISPID_FILELISTENUMDONE ||
-                        id == DISPID_VIEWMODECHANGED || id == DISPID_CONTENTSCHANGED ||
-                        id == DISPID_VIEWPAINTDONE || id == DISPID_COLUMNSCHANGED ||
-                        id == DISPID_ICONSIZECHANGED || id == DISPID_SELECTEDITEMCHANGED;
-    HRESULT hr;
-    if (settings.xamlCommandBar && invalidation && CanDeferInvoke(iid, flags, args) && Pending() &&
-        RibbonWork::Enqueue(
-            reinterpret_cast<IUnknown*>(self), RibbonWork::TaskKind::XamlInvoke,
-            static_cast<ULONG>(id), [self, id, iid, locale, flags] {
-                DISPPARAMS empty{};
-                invokeOriginal(self, id, iid, locale, flags, &empty, nullptr, nullptr, nullptr);
-            })) {
-        if (result) {
-            *result = {};
+    if (settings.xamlCommandBar && (FileTransition::navigationDepth || Pending())) {
+        bool invalidation = id == DISPID_SELECTIONCHANGED || id == DISPID_FILELISTENUMDONE ||
+                            id == DISPID_VIEWMODECHANGED || id == DISPID_CONTENTSCHANGED ||
+                            id == DISPID_VIEWPAINTDONE || id == DISPID_COLUMNSCHANGED ||
+                            id == DISPID_ICONSIZECHANGED || id == DISPID_SELECTEDITEMCHANGED;
+        if (invalidation && CanDeferInvoke(iid, flags, args) &&
+            RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self),
+                                RibbonWork::TaskKind::XamlInvoke,
+                                static_cast<ULONG>(id), RunXamlInvoke, locale,
+                                flags)) {
+            if (result) {
+                *result = {};
+            }
+            if (id == DISPID_FILELISTENUMDONE) {
+                FileTransition::EnumerationDone();
+            }
+            return S_OK;
         }
-        hr = S_OK;
-    } else {
-        hr = invokeOriginal(self, id, iid, locale, flags, args, result, exception, argError);
     }
+
+    HRESULT hr = invokeOriginal(self, id, iid, locale, flags, args, result, exception, argError);
     if (id == DISPID_FILELISTENUMDONE) {
         FileTransition::EnumerationDone();
     }
@@ -1006,12 +2003,16 @@ static HRESULT __fastcall InvokeHook(void* self, DISPID id, REFIID iid, LCID loc
 static HRESULT __fastcall CleanupHook(void* self) {
     if (RibbonWork::queue) {
         if (!RibbonWork::queue->draining) {
-            RibbonWork::Flush();
+            RibbonWork::Flush(L"teardown");
         } else {
             RibbonWork::DropTasksForTarget(self);
         }
     }
-    connected = nullptr;
+    if (!connectedTargets.empty()) {
+        auto canonical = CanonicalUnknown(reinterpret_cast<IUnknown*>(self));
+        connectedTargets.erase(canonical.Get());
+        connectedTargets.erase(self);
+    }
     return cleanupOriginal(self);
 }
 
@@ -1096,6 +2097,71 @@ static void Uninit() {
 
 } // namespace XamlWork
 
+// Grouped folders use a separate category timer before ItemsView batching.
+namespace GroupingWork {
+using GroupItem = void(__fastcall*)(void*, const void*, int);
+
+static HMODULE storage = nullptr;
+static GroupItem groupItemOriginal = nullptr;
+static decltype(&SetTimer) setTimerOriginal = nullptr;
+static thread_local unsigned depth = 0;
+
+static bool IsActiveOnCurrentThread() noexcept {
+    return depth > 0;
+}
+
+static void __fastcall GroupItemHook(void* self, const void* key, int flags) {
+    FileTransition::OnGroupItem();
+    PaintScope scope(depth);
+    groupItemOriginal(self, key, flags);
+}
+
+static UINT_PTR WINAPI SetTimerHook(HWND hwnd, UINT_PTR id, UINT elapsed, TIMERPROC callback) {
+    if (!IsActiveOnCurrentThread()) {
+        return setTimerOriginal(hwnd, id, elapsed, callback);
+    }
+    if (settings.groupedFolderBatching && FileTransition::IsActiveViewGrouped() &&
+        hwnd != nullptr && id == 7 && elapsed == 50 && callback == nullptr) {
+        elapsed = 10;
+    }
+    return setTimerOriginal(hwnd, id, elapsed, callback);
+}
+
+static void Initialize() {
+    if (!settings.groupedFolderBatching) {
+        return;
+    }
+    storage = LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!storage) {
+        Wh_Log(L"[GROUP] Failed to load windows.storage.dll");
+        return;
+    }
+    // windows.storage.dll
+    WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
+        {
+            {LR"(private: void __cdecl CDefCollection::_GroupItem(struct tagITEMKEY const *,int))"},
+            reinterpret_cast<void**>(&groupItemOriginal),
+            reinterpret_cast<void*>(GroupItemHook),
+            true,
+        },
+    };
+    WindhawkUtils::HookSymbols(storage, windowsStorageHooks, ARRAYSIZE(windowsStorageHooks));
+    bool timerHooked = false;
+    if (groupItemOriginal != nullptr) {
+        timerHooked = WindhawkUtils::SetFunctionHook(SetTimer, SetTimerHook, &setTimerOriginal);
+    }
+    Wh_Log(L"[GROUP] Grouped folder batching (groupItem=%d, setTimer=%d)",
+           groupItemOriginal != nullptr ? 1 : 0, timerHooked ? 1 : 0);
+}
+
+static void Uninit() {
+    if (storage) {
+        FreeLibrary(storage);
+        storage = nullptr;
+    }
+}
+} // namespace GroupingWork
+
 // Native paint and batching hooks.
 
 static void __fastcall RedrawFrameHook(void* self) {
@@ -1110,16 +2176,19 @@ static HRESULT __fastcall RenderSizerHook(void* self) {
 
 static BOOL WINAPI SetWindowPosHook(HWND hwnd, HWND after, int x, int y, int cx, int cy,
                                     UINT flags) {
-    if (!FileTransition::navigationDepth || !settings.navigationPaint) {
+    if (!FileTransition::navigationDepth || !settings.navigationPaint || (flags & SWP_NOREDRAW)) {
+        return setWindowPosOriginal(hwnd, after, x, y, cx, cy, flags);
+    }
+    if (GetWindowThreadProcessId(hwnd, nullptr) != GetCurrentThreadId()) {
+        return setWindowPosOriginal(hwnd, after, x, y, cx, cy, flags);
+    }
+    if (!(GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CHILD)) {
         return setWindowPosOriginal(hwnd, after, x, y, cx, cy, flags);
     }
     if (IsShellDesktopOrTrayWindow(hwnd)) {
         return setWindowPosOriginal(hwnd, after, x, y, cx, cy, flags);
     }
-    bool defer = FileTransition::DeferNavigationPaint() && !(flags & SWP_NOREDRAW) &&
-                 GetWindowThreadProcessId(hwnd, nullptr) == GetCurrentThreadId() &&
-                 (GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CHILD);
-    if (!defer) {
+    if (!FileTransition::DeferNavigationPaint()) {
         return setWindowPosOriginal(hwnd, after, x, y, cx, cy, flags);
     }
 
@@ -1139,9 +2208,9 @@ static BOOL WINAPI SetWindowPosHook(HWND hwnd, HWND after, int x, int y, int cx,
             MapWindowPoints(HWND_DESKTOP, parent, reinterpret_cast<LPPOINT>(&afterRect), 2);
             RECT dirty{};
             UnionRect(&dirty, &beforeRect, &afterRect);
-            RedrawWindow(parent, &dirty, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+            redrawWindowOriginal(parent, &dirty, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
         } else {
-            RedrawWindow(parent, &beforeRect, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+            redrawWindowOriginal(parent, &beforeRect, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
         }
     }
 
@@ -1213,6 +2282,9 @@ static BOOL WINAPI DeleteActionHook(void* handle) {
 // Module initialization and cleanup.
 
 static void ReleaseModules() {
+    MetadataWork::BeginUnload();
+    MetadataWork::Uninit();
+    GroupingWork::Uninit();
     XamlWork::Uninit();
     if (duser) {
         FreeLibrary(duser);
@@ -1371,6 +2443,12 @@ static BOOL InitializeMod() {
         return FALSE;
     }
 
+    if (!MetadataWork::Initialize()) {
+        Wh_Log(L"[POOL] Metadata threadpool unavailable; continuing without async probe");
+    }
+
+    GroupingWork::Initialize();
+
     bool nativeBatchTracking =
         FileTransition::ensureOriginal && FileTransition::deleteOriginal;
     bool batches = nativeBatchTracking;
@@ -1425,6 +2503,8 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
 }
 
 void Wh_ModBeforeUninit() {
+    MetadataWork::BeginUnload();
+    MetadataWork::DrainUiCallbacks();
     RibbonWork::BeforeUninit();
 }
 
