@@ -2,7 +2,7 @@
 // @id              explorer-extras
 // @name            Explorer Extras
 // @description     Beta. Additions for File Explorer, one switch per area: Columns (Miller columns), a details and preview pane (PDF, text, Markdown, images, video, sound), colour labels (tags), and a toolbar with tighter gaps, a resizable search box and round corners.
-// @version         0.78.7
+// @version         0.78.8
 // @author          AristideBH
 // @github          https://github.com/AristideBH
 // @donateUrl       https://ko-fi.com/aristidebh
@@ -21824,6 +21824,28 @@ LabelsGroupPlan LabelsPlanGroups(std::vector<std::vector<std::wstring>> const& p
     return plan;
 }
 
+// What an editor writes back as Keywords (it showed the merged list): `written` without the labels that the file did not have as
+// keywords (`real` is what the file has). A label that is also a real keyword is kept, as is anything else. Pure.
+std::vector<std::wstring> LabelsKeywordsToWrite(std::vector<std::wstring> const& written, std::vector<std::wstring> const& real,
+                                                std::vector<std::wstring> const& labels) {
+    auto in = [](std::vector<std::wstring> const& list, std::wstring const& text) {
+        for (auto const& item : list) {
+            if (_wcsicmp(item.c_str(), text.c_str()) == 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+    std::vector<std::wstring> kept;
+    for (auto const& keyword : written) {
+        if (in(labels, keyword) && !in(real, keyword)) {
+            continue;  // Ours: it must not become a keyword of the file.
+        }
+        kept.push_back(keyword);
+    }
+    return kept;
+}
+
 namespace {
 
 using LabelsGetValue_t = HRESULT(STDMETHODCALLTYPE*)(void*, REFPROPERTYKEY, PROPVARIANT*);
@@ -21843,39 +21865,61 @@ std::wstring LabelsStoreText(void* store, REFPROPERTYKEY key) {
     return text;
 }
 
-HRESULT LabelsServeKeywords(void* store, HRESULT hr, PROPVARIANT* out) {
+// The label names of the item of `store`, as Keywords values. Empty when it has none, is not a file system item, or its folder is not
+// read yet (then `*waiting` is set and the folder remembered, to be read again by Explorer when it is).
+std::vector<std::wstring> LabelsNamesOfStore(void* store, bool* waiting) {
+    std::vector<std::wstring> labels;
+    *waiting = false;
     std::wstring path = LabelsStoreText(store, PKEY_ParsingPath);
     std::wstring name = LabelsStoreText(store, PKEY_ItemNameDisplay);
     if (path.size() < 4 || path[1] != L':' || name.empty()) {
-        return hr;  // Not a file system item.
+        return labels;  // Not a file system item.
     }
     std::wstring folder = path;
     PathRemoveFileSpecW(folder.data());
     folder.resize(wcslen(folder.c_str()));
     auto data = LabelsFolderFor(folder);
     if (!data->complete) {
+        *waiting = true;
         std::lock_guard<std::mutex> lock(g_keywordsAskedMutex);
         g_keywordsAsked.insert(folder);
-        return hr;
+        return labels;
     }
     auto found = data->byName.find(name);
-    if (found == data->byName.end() || found->second.empty()) {
-        return hr;
+    if (found == data->byName.end()) {
+        return labels;
     }
-    std::vector<std::wstring> existing;
-    if (SUCCEEDED(hr) && out->vt == (VT_VECTOR | VT_LPWSTR)) {
-        for (ULONG i = 0; i < out->calpwstr.cElems; i++) {
-            if (out->calpwstr.pElems[i]) {
-                existing.push_back(out->calpwstr.pElems[i]);
-            }
-        }
-    } else if (SUCCEEDED(hr) && out->vt == VT_LPWSTR && out->pwszVal) {
-        existing.push_back(out->pwszVal);
-    }
-    std::vector<std::wstring> labels;
     for (auto const& tag : found->second) {
         std::wstring shown = tag.name.empty() ? LabelsColourName(tag.colour) : tag.name;
         labels.push_back(shown.empty() ? std::wstring(L"Gray") : shown);
+    }
+    return labels;
+}
+
+// The strings of a PROPVARIANT that holds Keywords (a vector, or one string).
+std::vector<std::wstring> LabelsStrings(PROPVARIANT const& value) {
+    std::vector<std::wstring> strings;
+    if (value.vt == (VT_VECTOR | VT_LPWSTR)) {
+        for (ULONG i = 0; i < value.calpwstr.cElems; i++) {
+            if (value.calpwstr.pElems[i]) {
+                strings.push_back(value.calpwstr.pElems[i]);
+            }
+        }
+    } else if (value.vt == VT_LPWSTR && value.pwszVal) {
+        strings.push_back(value.pwszVal);
+    }
+    return strings;
+}
+
+HRESULT LabelsServeKeywords(void* store, HRESULT hr, PROPVARIANT* out) {
+    bool waiting = false;
+    std::vector<std::wstring> labels = LabelsNamesOfStore(store, &waiting);
+    if (labels.empty()) {
+        return hr;
+    }
+    std::vector<std::wstring> existing;
+    if (SUCCEEDED(hr)) {
+        existing = LabelsStrings(*out);
     }
     std::vector<std::wstring> values = LabelsKeywordValues(existing, labels);
     std::vector<PCWSTR> pointers;
@@ -21903,6 +21947,49 @@ HRESULT STDMETHODCALLTYPE LabelsGetValue_Hook(void* store, REFPROPERTYKEY key, P
     }
 }
 
+// IPropertyStore slot 6. An editor (Properties, Details, or the details pane) shows the Keywords it was served, labels included, and
+// writes the whole list back: the labels are taken out of what is written, so they never become keywords of the file.
+using LabelsSetValue_t = HRESULT(STDMETHODCALLTYPE*)(void*, REFPROPERTYKEY, REFPROPVARIANT);
+LabelsSetValue_t LabelsSetValue_Original = nullptr;
+
+HRESULT STDMETHODCALLTYPE LabelsSetValue_Hook(void* store, REFPROPERTYKEY key, REFPROPVARIANT value) {
+    if (!g_unloading && g_labels && g_labelsGroup && IsEqualPropertyKey(key, PKEY_Keywords) &&
+        (value.vt == (VT_VECTOR | VT_LPWSTR) || value.vt == VT_LPWSTR)) {
+        try {
+            bool waiting = false;
+            std::vector<std::wstring> labels = LabelsNamesOfStore(store, &waiting);
+            if (!labels.empty()) {
+                PROPVARIANT current;
+                PropVariantInit(&current);
+                std::vector<std::wstring> real;
+                if (SUCCEEDED(LabelsGetValue_Original(store, key, &current))) {
+                    real = LabelsStrings(current);
+                }
+                PropVariantClear(&current);
+                std::vector<std::wstring> kept = LabelsKeywordsToWrite(LabelsStrings(value), real, labels);
+                LogVerbose(L"GROUP SetValue Keywords: %d written, %d real, %d labels, %d kept", (int)LabelsStrings(value).size(),
+                           (int)real.size(), (int)labels.size(), (int)kept.size());
+                std::vector<PCWSTR> pointers;
+                for (auto const& keyword : kept) {
+                    pointers.push_back(keyword.c_str());
+                }
+                PROPVARIANT cleaned;
+                PropVariantInit(&cleaned);
+                if (pointers.empty()) {
+                    return LabelsSetValue_Original(store, key, cleaned);  // VT_EMPTY: the keywords are cleared.
+                }
+                if (SUCCEEDED(InitPropVariantFromStringVector(pointers.data(), (ULONG)pointers.size(), &cleaned))) {
+                    HRESULT hr = LabelsSetValue_Original(store, key, cleaned);
+                    PropVariantClear(&cleaned);
+                    return hr;
+                }
+            }
+        } catch (...) {
+        }
+    }
+    return LabelsSetValue_Original(store, key, value);
+}
+
 }  // namespace
 
 // Hooks GetValue of the store that Explorer uses for the items of the file system: found from the store of one file of the
@@ -21925,6 +22012,10 @@ bool LabelsInstallGroupHook() {
                     if (SUCCEEDED(item->GetPropertyStore(GPS_DEFAULT, IID_PPV_ARGS(&store))) && store) {
                         void* target = (*(void***)store)[5];  // IPropertyStore: 3 GetCount, 4 GetAt, 5 GetValue.
                         ok = Wh_SetFunctionHook(target, (void*)LabelsGetValue_Hook, (void**)&LabelsGetValue_Original) != FALSE;
+                        void* setter = (*(void***)store)[6];  // 6 SetValue.
+                        if (ok && !Wh_SetFunctionHook(setter, (void*)LabelsSetValue_Hook, (void**)&LabelsSetValue_Original)) {
+                            Wh_Log(L"labels: the SetValue hook could not be set");
+                        }
                         store->Release();
                     }
                     item->Release();
