@@ -3,7 +3,7 @@
 // @name            Left Taskbar Quick Pin Dock
 // @description     A persistent icon dock anchored left of the Start button. Drag any app or File Explorer window to pin, left-click to launch or focus, drag within the dock to reorder, or drag off to unpin.
 // @author          Ashix
-// @version         1.2026.1811
+// @version         3.2026.1811
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
 // @donateUrl       https://ko-fi.com/kashix
