@@ -1,9 +1,10 @@
 // ==WindhawkMod==
-// @id              desktop-weather-overlay
-// @name            Desktop Weather Overlay
-// @description     Snow, cherry blossom, autumn leaves and rain over the desktop, with wind and a gust on weather change.
+// @id              desktop-snowfall-enhanced
+// @name            Desktop Snowfall Enhanced
+// @description     Snow, cherry blossom, autumn leaves and rain over the desktop, with wind, mouse sweeping, snow piling up on windows and a gust on weather change.
 // @version         1.1.3
-// @author          damir
+// @author          hiol09
+// @github          https://github.com/hiol09
 // @include         explorer.exe
 // @compilerOptions -ld2d1 -ldwmapi -lgdi32 -lole32 -luuid
 // @license         MIT
@@ -11,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Desktop Weather Overlay
+# Desktop Snowfall Enhanced
 
 Animated weather rendered over the whole desktop: snow, cherry blossom
 (sakura) petals, autumn leaves and rain. Several kinds can be mixed
@@ -136,8 +137,6 @@ so the desktop and all windows stay fully interactive.
 
 #include <vector>
 #include <cmath>
-#include <cstdio>
-#include <cstdarg>
 #include <algorithm>
 
 
@@ -221,33 +220,6 @@ struct WinCap {
 static std::vector<WinCap> g_caps;
 
 static bool g_loggedFirstLanding = false;
-
-static void LogToFile(const wchar_t* fmt, ...) {
-    wchar_t path[MAX_PATH];
-    if (GetEnvironmentVariableW(L"USERPROFILE", path, MAX_PATH)) {
-        wcscat(path, L"\\Desktop\\weather_debug.txt");
-        FILE* f = _wfopen(path, L"a, csc=UTF-16LE");
-        if (!f) f = _wfopen(L"C:\\SnowLog.txt", L"a, csc=UTF-16LE");
-        if (f) {
-            SYSTEMTIME st;
-            GetLocalTime(&st);
-            fwprintf(f, L"[%02d:%02d:%02d] ", st.wHour, st.wMinute, st.wSecond);
-            va_list args;
-            va_start(args, fmt);
-            vfwprintf(f, fmt, args);
-            va_end(args);
-            fwprintf(f, L"\n");
-            fclose(f);
-        }
-    }
-    // Also log to Windhawk's internal log
-    va_list args2;
-    va_start(args2, fmt);
-    wchar_t buf[512];
-    vswprintf_s(buf, fmt, args2);
-    Wh_Log(L"%s", buf);
-    va_end(args2);
-}
 
 // Cartoon wind sweep visuals, shown while the gust clears the screen.
 struct SweepFx {
@@ -1146,12 +1118,6 @@ static void DrawScene(ID2D1RenderTarget* rt, const Engine& eng) {
 }
 
 static bool RenderFrame(HWND hwnd, const Engine& eng) {
-    static bool loggedFirstFrame = false;
-    if (!loggedFirstFrame) {
-        loggedFirstFrame = true;
-        LogToFile(L"RenderFrame: first frame attempt");
-    }
-
     if (!g_rt || !g_memDC) return false;
 
     RECT rc = { 0, 0, g_width, g_height };
@@ -1389,8 +1355,6 @@ static void ApplySettingsToEngine() {
         g_timerIntervalMs = g_fpsCap > 0 ? (UINT)((1000 + g_fpsCap - 1) / g_fpsCap) : 10;
         if (g_wnd) SetTimer(g_wnd, 1, g_timerIntervalMs, nullptr);
     }
-    LogToFile(L"Settings updated: intensity=%d, size=%d, speed=%d, wind=%d, gust=%d, snowWin=%d, leafWin=%d, streak=%d, autowind=%d, fps=%d",
-        Wh_GetIntSetting(L"Intensity"), g_engine.sizePct, g_engine.speedPct, g_engine.wind, g_gustOnChange, g_engine.snowOnWindows, g_engine.leavesOnWindows, g_engine.streakSnow, g_engine.autoWind, g_fpsCap);
 }
 
 static void Tick(HWND hwnd) {
@@ -1489,7 +1453,6 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
     g_engine.width = g_width;
     g_engine.height = g_height;
     Wh_Log(L"overlay thread: %dx%d", g_width, g_height);
-    LogToFile(L"overlay thread started: %dx%d", g_width, g_height);
 
     WNDCLASSEXW wc = {};
     wc.cbSize        = sizeof(wc);
@@ -1499,14 +1462,16 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
     if (!RegisterClassExW(&wc)) {
         DWORD err = GetLastError();
         if (err == ERROR_CLASS_ALREADY_EXISTS) {
-            LogToFile(L"Class already exists, re-registering...");
+            // A previous instance of the mod left the class registered in
+            // explorer.exe; its WndProc now points into an unloaded DLL.
+            Wh_Log(L"Window class already exists, re-registering");
             UnregisterClassW(kWndClass, wc.hInstance);
             if (!RegisterClassExW(&wc)) {
-                LogToFile(L"Re-registration failed: %lu", GetLastError());
+                Wh_Log(L"Re-registration failed: %lu", GetLastError());
                 return 1;
             }
         } else {
-            LogToFile(L"RegisterClassExW failed: %lu", err);
+            Wh_Log(L"RegisterClassExW failed: %lu", err);
             return 1;
         }
     }
@@ -1537,10 +1502,8 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
         nullptr, nullptr, wc.hInstance, nullptr);
     if (!g_wnd) {
         Wh_Log(L"CreateWindowExW failed: %lu", GetLastError());
-        LogToFile(L"CreateWindowExW failed: %lu", GetLastError());
         return 1;
     }
-    LogToFile(L"Window created: %p", g_wnd);
 
     ShowWindow(g_wnd, SW_SHOWNOACTIVATE);
     SetTimer(g_wnd, 1, g_timerIntervalMs, nullptr);
@@ -1585,7 +1548,7 @@ void Wh_ModAfterInit() {
     }
 }
 
-BOOL Wh_ModBeforeUninit() {
+void Wh_ModBeforeUninit() {
     Wh_Log(L"BeforeUninit");
 
     if (g_wnd) {
@@ -1596,7 +1559,6 @@ BOOL Wh_ModBeforeUninit() {
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
-    return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
