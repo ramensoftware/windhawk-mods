@@ -3341,25 +3341,43 @@ std::vector<BYTE> ShellIconPixels(std::wstring const& name, int px, int& w, int&
     return pixels;
 }
 
+// Whether `path` is on a local drive (fixed, removable or a RAM disk), so its
+// icon can be read without waiting on the network: not a UNC share, a mapped
+// network drive, or anything else.
+bool IsLocalPath(std::wstring const& path) {
+    if (path.size() < 3 || !iswalpha(path[0]) || path[1] != L':' || path[2] != L'\\') {
+        return false;
+    }
+    WCHAR root[] = {path[0], L':', L'\\', L'\0'};
+    UINT type = GetDriveTypeW(root);
+    return type == DRIVE_FIXED || type == DRIVE_REMOVABLE || type == DRIVE_RAMDISK;
+}
+
 // An app's icon as Start shows it, by its app id; or, for an app without an id
 // of its own, from its program file: its id is then the file's path, or a known
-// folder's id and the path within it.
+// folder's id and the path within it. This runs on the taskbar's thread, and
+// the shell blocks while it reads an icon, so a program that isn't on a local
+// drive is skipped: a slow or offline share would freeze the taskbar.
 std::vector<BYTE> AppIconPixels(std::wstring const& appId, int px, int& w, int& h) {
-    auto pixels = ShellIconPixels(L"shell:AppsFolder\\" + appId, px, w, h);
-    if (!pixels.empty()) return pixels;
     std::wstring path;
     if (appId.size() > 38 && appId[0] == L'{' && appId[37] == L'}') {
         GUID folder;
         PWSTR folderPath = nullptr;
+        // Not verified: that would check a redirected folder on its server.
         if (SUCCEEDED(CLSIDFromString(appId.substr(0, 38).c_str(), &folder)) &&
-            SUCCEEDED(SHGetKnownFolderPath(folder, 0, nullptr, &folderPath))) {
+            SUCCEEDED(SHGetKnownFolderPath(folder, KF_FLAG_DONT_VERIFY, nullptr, &folderPath))) {
             path = folderPath + appId.substr(38);
         }
         CoTaskMemFree(folderPath);
     } else if (appId.find(L":\\") != std::wstring::npos || appId.rfind(L"\\\\", 0) == 0) {
         path = appId;
     }
-    if (path.empty()) return {};
+    if (!path.empty() && !IsLocalPath(path)) {
+        Wh_Log(L"Not reading Start's icon for %s: not on a local drive", appId.c_str());
+        return {};
+    }
+    auto pixels = ShellIconPixels(L"shell:AppsFolder\\" + appId, px, w, h);
+    if (!pixels.empty() || path.empty()) return pixels;
     return ShellIconPixels(path, px, w, h);
 }
 
@@ -5552,7 +5570,9 @@ struct TrayFrame {
     wux::FrameworkElement::SizeChanged_revoker sizeChanged;
 };
 
-std::list<TrayFrame> g_trayFrames;
+// no_destroy, like the other lists of XAML objects: its revokers would run XAML
+// code after XAML has shut down when Explorer exits. ResetAll destroys it.
+[[clang::no_destroy]] std::optional<std::list<TrayFrame>> g_trayFrames{std::in_place};
 bool g_trayRevealed = false;
 
 // Whether its width or its taskbar's size changed.
@@ -5575,7 +5595,8 @@ bool MeasureTrayFrame(wux::FrameworkElement const& el, TrayFrame& t) {
 // The widest tray, in pixels: 0 if none's been measured.
 int WidestTray() {
     int widest = 0;
-    for (auto& t : g_trayFrames) widest = std::max(widest, t.width);
+    if (!g_trayFrames) return widest;
+    for (auto& t : *g_trayFrames) widest = std::max(widest, t.width);
     return widest;
 }
 
@@ -5585,7 +5606,8 @@ int WidestTray() {
 // window showing, while too narrow cuts the tray off; with none, the widest.
 int TrayWidthFor(int width, int height) {
     int matched = 0;
-    for (auto& t : g_trayFrames) {
+    if (!g_trayFrames) return matched;
+    for (auto& t : *g_trayFrames) {
         if (std::abs(t.island.cx - width) <= 2 && std::abs(t.island.cy - height) <= 2) {
             matched = std::max(matched, t.width);
         }
@@ -5694,30 +5716,33 @@ void ApplyTrayVisibility(wux::FrameworkElement const& el, TrayFrame& t) {
 }
 
 void ApplyTrayFrame(wux::FrameworkElement const& el) {
-    for (auto& t : g_trayFrames) {
+    if (!g_trayFrames) return;
+    for (auto& t : *g_trayFrames) {
         if (t.element.get() == el) return ApplyTrayVisibility(el, t);
     }
 }
 
 void ApplyTrayFrames() {
-    for (auto& t : g_trayFrames) {
+    if (!g_trayFrames) return;
+    for (auto& t : *g_trayFrames) {
         if (auto el = t.element.get()) Try([&] { ApplyTrayVisibility(el, t); });
     }
 }
 
 void FixTrayFrame(wux::FrameworkElement const& el) {
-    g_trayFrames.remove_if([](TrayFrame const& t) { return !t.element.get(); });
-    if (std::none_of(g_trayFrames.begin(), g_trayFrames.end(),
+    if (!g_trayFrames) return;
+    g_trayFrames->remove_if([](TrayFrame const& t) { return !t.element.get(); });
+    if (std::none_of(g_trayFrames->begin(), g_trayFrames->end(),
                      [&](TrayFrame const& t) { return t.element.get() == el; })) {
-        auto& t = g_trayFrames.emplace_back();
+        auto& t = g_trayFrames->emplace_back();
         t.element = winrt::make_weak(el);
         t.sizeChanged = el.SizeChanged(
             winrt::auto_revoke,
             [](wf::IInspectable const& sender, wux::SizeChangedEventArgs const&) {
-                if (g_unloading) return;
+                if (g_unloading || !g_trayFrames) return;
                 Try([&] {
                     auto el = sender.try_as<wux::FrameworkElement>();
-                    for (auto& t : g_trayFrames) {
+                    for (auto& t : *g_trayFrames) {
                         if (!el || t.element.get() != el) continue;
                         if (MeasureTrayFrame(el, t)) ScheduleOverWindows(false);  // the clip
                         return;
@@ -6567,10 +6592,12 @@ void ResetAll() {
             wuxh::ElementCompositionPreview::SetIsTranslationEnabled(el, false);
         });
     }
-    for (auto& t : g_trayFrames) {
-        t.sizeChanged.revoke();
-        auto el = t.element.get();
-        if (el && t.corner) Try([&] { ResetTraySlide(el); });
+    if (g_trayFrames) {
+        for (auto& t : *g_trayFrames) {
+            t.sizeChanged.revoke();
+            auto el = t.element.get();
+            if (el && t.corner) Try([&] { ResetTraySlide(el); });
+        }
     }
     Try([] { RemoveTrayDecor(true); });
     Try(RemoveStartIcons);
@@ -6591,7 +6618,7 @@ void ResetAll() {
     g_row.clear();
     g_rowParent = nullptr;
     g_frames.clear();
-    g_trayFrames.clear();
+    g_trayFrames.reset();
     // Last, as everything above reads them, and nothing does after.
     g_buttons.reset();
     g_plates.reset();
