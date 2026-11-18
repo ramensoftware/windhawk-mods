@@ -2,7 +2,7 @@
 // @id              explorer-extras
 // @name            Explorer Extras
 // @description     Beta. Additions for File Explorer, one switch per area: Columns (Miller columns), a details and preview pane (PDF, text, Markdown, images, video, sound), colour labels (tags), and a toolbar with tighter gaps, a resizable search box and round corners.
-// @version         0.78.10
+// @version         0.79.6
 // @author          AristideBH
 // @github          https://github.com/AristideBH
 // @donateUrl       https://ko-fi.com/aristidebh
@@ -51,6 +51,7 @@ Colour labels, like the tags of macOS, on files and folders. A label is a colour
 - **Where they show.** As a dot after the name, stacked when there are several, in every view of Explorer's own list (Details, List, Tiles, Content and the icon sizes) and in Columns. They follow the light and dark theme.
 - **How you set them.** In the **Tags** section of the details pane (badges that wrap, and an **Add a tag** link), and in the right-click menu, both in Explorer's own list and in Columns: a **Tags** entry with the colours, **Add tag** and **Clear tags**.
 - **Where they live.** In a named stream of the file itself, so they follow it when it is copied or moved on an NTFS drive. They need NTFS: the menu entry and the pane say so when a drive cannot keep them. The file's dates are not changed.
+- **Recent tags.** The **Add a tag** flyout lists the last eight tags you named, so a name is typed once.
 - **Sort and group.** Explorer's own **Sort by**, **Group by** and the **Tags** column use them: choose **Tags** (the entry is renamed to the mod's name, **Étiquettes** in French: in **Group by**, and under **More** in **Sort by**), in Explorer's list and in Columns, and the items are grouped by label, an item with two labels in both groups, the tags a file already has kept. A label shows by its name, or by its colour's name. Switch it off with **Sort and group by tags**.
 - **Your own meanings.** Each colour has a name you can edit on Windhawk's page (Labels, Colour names), such as "Red = Urgent".
 - Switch them off with **Show labels**.
@@ -779,6 +780,7 @@ constexpr StringInfo kStrings[] = {
     {L"labels.clear", L"Clear tags"},
     {L"labels.ambiguous", L"Another item here has the same displayed name, so no dot is shown for it. Show file name extensions to tell them apart."},
     {L"labels.menu.ntfs", L"Tags (needs an NTFS drive)"},
+    {L"labels.recent", L"Recent"},
 };
 
 constexpr StringInfo kStringsFr[] = {
@@ -825,6 +827,7 @@ constexpr StringInfo kStringsFr[] = {
     {L"labels.clear", L"Effacer les \u00E9tiquettes"},
     {L"labels.ambiguous", L"Un autre \u00E9l\u00E9ment porte le m\u00EAme nom affich\u00E9, donc aucun point n\u2019est montr\u00E9. Affichez les extensions de nom de fichier pour les distinguer."},
     {L"labels.menu.ntfs", L"\u00C9tiquettes (disque NTFS requis)"},
+    {L"labels.recent", L"R\u00E9cents"},
 };
 constexpr size_t kSettingCount = sizeof(kSettings) / sizeof(kSettings[0]);
 constexpr size_t kStringCount = sizeof(kStrings) / sizeof(kStrings[0]);
@@ -2223,6 +2226,67 @@ void LabelsLoadSettings() {
 // Labels: the self-test of the tag stream. It only exists in the debug build (EXTRAS_VERBOSE), runs once
 // when the mod loads and writes one line to the log: "LABELS SELFTEST pass", or "LABELS SELFTEST FAIL <what>".
 // tools/smoke-test-explorer-extras.ps1 reads that line.
+// The tags the user gave a name lately, offered again in the "Add a tag" flyout so a name is typed once. Kept in the mod's storage.
+
+constexpr size_t kLabelsRecentMax = 8;
+
+// The list with `tag` first, once (same colour and name, any case), the others after it, at most `max`. A tag with no name is not
+// remembered (the colours are always there). Pure.
+std::vector<LabelTag> LabelsRecentPush(std::vector<LabelTag> recent, LabelTag const& tag, size_t max = kLabelsRecentMax) {
+    if (tag.name.empty()) {
+        return recent;
+    }
+    recent.erase(std::remove_if(recent.begin(), recent.end(),
+                                [&tag](LabelTag const& other) {
+                                    return other.colour == tag.colour && _wcsicmp(other.name.c_str(), tag.name.c_str()) == 0;
+                                }),
+                 recent.end());
+    recent.insert(recent.begin(), tag);
+    if (recent.size() > max) {
+        recent.resize(max);
+    }
+    return recent;
+}
+
+namespace {
+
+[[clang::no_destroy]] std::mutex g_labelsRecentMutex;
+[[clang::no_destroy]] std::vector<LabelTag> g_labelsRecent;
+bool g_labelsRecentLoaded = false;
+
+void LabelsRecentLoad() {  // The caller holds the lock.
+    if (g_labelsRecentLoaded) {
+        return;
+    }
+    g_labelsRecentLoaded = true;
+    std::vector<wchar_t> buffer(4000);
+    size_t length = Wh_GetStringValue(L"labels.recent", buffer.data(), buffer.size());
+    if (length > 0 && length < buffer.size()) {
+        std::vector<LabelTag> parsed;
+        if (LabelsParse(std::wstring_view(buffer.data(), length), &parsed)) {
+            g_labelsRecent = std::move(parsed);
+        }
+    }
+}
+
+}  // namespace
+
+std::vector<LabelTag> LabelsRecentGet() {
+    std::lock_guard<std::mutex> lock(g_labelsRecentMutex);
+    LabelsRecentLoad();
+    return g_labelsRecent;
+}
+
+void LabelsRecentRemember(LabelTag const& tag) {
+    if (tag.name.empty()) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_labelsRecentMutex);
+    LabelsRecentLoad();
+    g_labelsRecent = LabelsRecentPush(g_labelsRecent, tag);
+    Wh_SetStringValue(L"labels.recent", LabelsSerialize(g_labelsRecent).c_str());
+}
+// The self-test of the recent tags (debug build only): "LABELS RECENT SELFTEST pass" or "LABELS RECENT SELFTEST FAIL <what>".
 // ---- Change notifications: a hidden window per Explorer window receives
 // the shell's "this folder changed" messages for every open column. ----
 
@@ -19831,14 +19895,15 @@ LabelsPlace LabelsPlaceFor(LabelsPlaceInput const& in) {
             break;
         case LabelsView::Tiles:
             place.x = in.textRight >= in.textLeft ? in.textRight + gap : in.cell.left;
-            place.centreY = (in.cell.top + in.cell.bottom) / 2 + in.lineHeight / 8;  // A little below the middle: the text sits low.
+            place.centreY = (in.cell.top + in.cell.bottom) / 2 - in.lineHeight / 8 + 2 * std::max(1, in.side / 8);  // On the text line, a pixel lower than Content.
             place.corner = place.x + in.blockWidth > in.cell.right;
             break;
         case LabelsView::Content:
             if (in.textRight >= in.textLeft) {
-                // The cell is the type line: after its text.
-                place.x = in.textRight + gap;
-                place.centreY = (in.cell.top + in.cell.bottom) / 2 + in.lineHeight / 8;
+                // The cell is the type line: after its text, a little further than elsewhere (the width of the type text is
+                // measured, and ends close to the dot), on the line of the text.
+                place.x = in.textRight + gap + in.side / 2;
+                place.centreY = (in.cell.top + in.cell.bottom) / 2 - in.lineHeight / 8 + std::max(1, in.side / 8);
             } else {
                 // The cell is the name line: at the start of the line below it.
                 place.x = in.cell.left;
@@ -20972,6 +21037,9 @@ void LabelsDo(winrt::weak_ref<muxc::StackPanel> const& weakHost, LabelsPaths con
     if (g_unloading) {
         return;
     }
+    if (add) {
+        LabelsRecentRemember(tag);  // A named tag is offered again in the Add a tag flyout.
+    }
     {
         auto queue = mud::DispatcherQueue::GetForCurrentThread();
         bool started = LabelsRunAsync([paths, tag, add]() { return LabelsApplyToSelection(*paths, tag, add); },
@@ -21034,6 +21102,32 @@ muxc::Flyout LabelsMakeFlyout(winrt::weak_ref<muxc::StackPanel> const& weakHost,
     }));
     content.Children().Append(colours);
     content.Children().Append(box);
+    // The tags named lately: one click puts the colour and the name.
+    auto recent = LabelsRecentGet();
+    if (!recent.empty()) {
+        content.Children().Append(MakeText(Str(L"labels.recent"), 12, false, true));
+        muxc::StackPanel list;
+        list.Spacing(2);
+        for (auto const& tag : recent) {
+            auto button = LoadXaml(std::wstring(L"<Button ") + kXamlNs +
+                                   L" HorizontalAlignment='Stretch' HorizontalContentAlignment='Left' Padding='6,3' MinHeight='0' "
+                                   L"MinWidth='0' Background='Transparent' BorderThickness='0'/>").as<muxc::Button>();
+            muxc::StackPanel row;
+            row.Orientation(muxc::Orientation::Horizontal);
+            row.Spacing(8);
+            row.Children().Append(LabelsDotElement(tag.colour, 12));
+            row.Children().Append(MakeText(tag.name, 13, false, false));
+            button.Content(row);
+            Keep(button, button.Click(winrt::auto_revoke, [weakHost, paths, weakFlyout, tag](Inspectable const&, mux::RoutedEventArgs const&) {
+                if (auto shown = weakFlyout.get()) {
+                    shown.Hide();
+                }
+                LabelsDo(weakHost, paths, tag, true);
+            }));
+            list.Children().Append(button);
+        }
+        content.Children().Append(list);
+    }
     flyout.Content(content);
     return flyout;
 }
