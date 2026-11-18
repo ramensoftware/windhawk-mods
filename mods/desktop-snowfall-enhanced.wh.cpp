@@ -1,18 +1,18 @@
 // ==WindhawkMod==
-// @id              desktop-snowfall-enhanced
-// @name            Desktop Snowfall Enhanced
+// @id              desktop-weather-overlay
+// @name            Desktop Weather Overlay
 // @description     Snow, cherry blossom, autumn leaves and rain over the desktop, with wind, mouse sweeping, snow piling up on windows and a gust on weather change.
-// @version         1.2.0
+// @version         1.3.2
 // @author          damir
 // @github          https://github.com/hiol09
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -ldwmapi -lgdi32 -lole32 -luuid -lshell32
+// @compilerOptions -ld2d1 -ldwmapi -lgdi32 -luuid -lshell32
 // @license         MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Desktop Snowfall Enhanced
+# Desktop Weather Overlay
 
 Animated weather rendered over the whole desktop: snow, cherry blossom
 (sakura) petals, autumn leaves and rain. Several kinds can be mixed
@@ -20,7 +20,8 @@ together. Direct2D renders into a transparent layered window, so the
 desktop and all windows stay fully interactive.
 
 This is a tool mod: it runs in its own dedicated process instead of
-inside Explorer.
+inside Explorer. It is an independent implementation written from scratch,
+not a fork of, and sharing no code with, the *Desktop Snowfall* mod.
 
 ## Features
 
@@ -44,9 +45,12 @@ inside Explorer.
 
 ## Notes
 
-- v1 renders on the primary monitor only.
-- FPS is uncapped by default (matched to the monitor refresh);
-  set a cap in the settings if you prefer a fixed budget.
+- Renders on the primary monitor only.
+- FPS is uncapped by default and paced by the compositor, so it follows the
+  monitor refresh rate; set a cap in the settings if you prefer a fixed
+  budget.
+- Windows flush with the top of the screen (maximized ones, for example)
+  do not collect snow: their top edge is not visible.
 */
 // ==/WindhawkModReadme==
 
@@ -142,10 +146,16 @@ inside Explorer.
 #include <dwmapi.h>
 #include <dxgiformat.h>
 #include <shellapi.h>
+#include <windhawk_utils.h>
 
+#include <cstdint>
 #include <vector>
 #include <cmath>
 #include <algorithm>
+
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -192,7 +202,7 @@ struct WeatherSet {
 
 static void ParseWeatherMode(const wchar_t* mode, WeatherSet& w) {
     w = { true, false, false, false }; // default: snow
-    if (!mode || !*mode) return;
+    if (!*mode) return;
     if (wcscmp(mode, L"sakura") == 0)       w = { false, true,  false, false };
     else if (wcscmp(mode, L"autumn") == 0)  w = { false, false, true,  false };
     else if (wcscmp(mode, L"rain") == 0)    w = { false, false, false, true  };
@@ -206,10 +216,14 @@ static void ParseWeatherMode(const wchar_t* mode, WeatherSet& w) {
 // Snow caps and litter on window tops
 // ─────────────────────────────────────────────────────────────────────────────
 
-static const float kColWidth    = 5.0f;   // cap column width, px
-static const float kCapMaxH     = 10.0f;  // max snow height on a window top
-static const float kMeltPerSec  = 0.35f;  // slow melt so caps don't grow forever
-static const float kMinCapH     = 0.3f;   // below this the snow is not drawn at all
+// Cap geometry follows the display DPI (see UpdatePixelScale): on a 200%
+// display the snow layer is twice as tall and its columns twice as wide, so
+// it keeps the same physical proportions as the rest of the UI.
+static float g_scale       = 1.0f;
+static float g_colWidth    = 5.0f;   // cap column width, px
+static float g_capMaxH     = 22.0f;  // max snow height on a window top
+static float g_meltPerSec  = 0.12f;  // slow melt so caps don't grow forever
+static float g_minCapH     = 0.3f;   // below this the snow is not drawn at all
 
 struct WinLitter {
     float offX;   // offset from the window's left edge
@@ -227,12 +241,34 @@ struct WinCap {
     float slideAcc = 0.0f;         // sub-column horizontal offset
     int z = 0x7fffffff;            // z-order, 0 = topmost
     std::vector<uint8_t> vis;      // per column: 1 = not hidden by another window
+    bool noSnow = false;           // maximized / above the screen top: no visible edge
 };
 
 // Owned by the overlay thread only.
 static std::vector<WinCap> g_caps;
 
-static bool g_loggedFirstLanding = false;
+// A column that another window covers must not catch falling snow: the
+// snow would pile up in a place nobody can see and pop into view later.
+static bool CapColVisible(const WinCap& c, int col) {
+    if (c.vis.empty()) return true;
+    return col >= 0 && col < (int)c.vis.size() && c.vis[col] != 0;
+}
+
+// Height multiplier for a column, evaluated in screen space from the window
+// handle and the column position. It makes drifts high in some places and
+// low in others instead of a uniform white line, the way wind shapes snow on
+// a ledge. Because it follows the screen position, it also fits the snow that
+// stays in place while the window slides underneath it.
+static float CapProfile(const WinCap& c, int i) {
+    float x = (float)c.rc.left + ((float)i + 0.5f) * g_colWidth;
+    float seed = (float)((uintptr_t)c.hwnd & 0x3ff);
+    float a = sinf(x * 0.0113f + seed * 0.31f);
+    float b = sinf(x * 0.0371f + seed * 0.73f);
+    float t = 0.62f + 0.24f * a + 0.14f * b;   // about 0.24 .. 1.0
+    if (t < 0.22f) t = 0.22f;
+    if (t > 1.0f) t = 1.0f;
+    return t;
+}
 
 // Cartoon wind sweep visuals, shown while the gust clears the screen.
 struct SweepFx {
@@ -333,7 +369,7 @@ struct Engine {
         f.vx    = 0.0f;
         f.debris = false;
 
-        float sizeMul = sizePct / 100.0f;
+        float sizeMul = sizePct / 100.0f * g_scale;
 
         switch (f.kind) {
             case kPetal:
@@ -364,9 +400,9 @@ struct Engine {
 
             default: // Snow
                 f.size      = (0.8f + depth * depth * 2.7f) * sizeMul;
-                // Fast enough to read as falling snow: a flake crosses the
-                // screen in a few seconds, not half a minute.
-                f.fallSpeed = 62.0f + f.size * 30.0f;
+                // A calm, readable descent: small flakes drift down slowly,
+                // large ones fall a bit faster, like real snow.
+                f.fallSpeed = 46.0f + f.size * 18.0f;
                 f.sway      = 6.0f + Rand() * 14.0f;
                 f.alpha     = 0.45f + 0.5f * Rand();
                 f.rotSpeed  = 0.0f;
@@ -406,15 +442,19 @@ struct Engine {
     void AddSnowTo(WinCap& c, const Particle& f) {
         int n = (int)c.cols.size();
         if (n == 0) return;
-        int col = (int)((f.x - (float)c.rc.left) / kColWidth);
+        int col = (int)((f.x - (float)c.rc.left) / g_colWidth);
         if (col < 0 || col >= n) return;
-        // Amount proportional to the flake, smoothed across neighbors.
-        float amount = f.size * 1.8f * 0.9f;
+        // Amount proportional to the flake, smoothed across neighbours. Each
+        // column stops at its own share of the maximum, so the cap grows into
+        // uneven drifts: tall mounds next to almost bare stretches.
+        float amount = f.size * 2.0f;
         for (int i = col - 2; i <= col + 2; i++) {
             if (i < 0 || i >= n) continue;
             float w = 1.0f - 0.25f * (float)(i - col < 0 ? col - i : i - col);
+            float limit = g_capMaxH * CapProfile(c, i);
+            if (limit < 2.0f) limit = 2.0f;
             float next = c.cols[i] + amount * w;
-            c.cols[i] = next > kCapMaxH ? kCapMaxH : next;
+            c.cols[i] = next > limit ? limit : next;
         }
     }
 
@@ -478,7 +518,7 @@ struct Engine {
             // Lying leaves and petals are flicked off first, so the snow
             // underneath is revealed and then cleared in turn.
             for (int j = (int)c.litter.size() - 1; j >= 0; j--) {
-                int ci = (int)(c.litter[j].offX / kColWidth);
+                int ci = (int)(c.litter[j].offX / g_colWidth);
                 if (!c.vis.empty() &&
                     (ci < 0 || ci >= (int)c.vis.size() || !c.vis[ci]))
                     continue; // hidden behind a higher window
@@ -509,8 +549,8 @@ struct Engine {
             }
 
             // Snow swept by the cursor is knocked loose as falling flakes.
-            int from = (int)((x0 - (float)c.rc.left) / kColWidth);
-            int to   = (int)((x1 - (float)c.rc.left) / kColWidth) + 1;
+            int from = (int)((x0 - (float)c.rc.left) / g_colWidth);
+            int to   = (int)((x1 - (float)c.rc.left) / g_colWidth) + 1;
             if (from < 0) from = 0;
             if (to > n) to = n;
             for (int i = from; i < to; i++) {
@@ -522,12 +562,12 @@ struct Engine {
                     Particle p = {};
                     p.kind      = kSnow;
                     p.size      = 0.7f + h * 0.25f;
-                    p.fallSpeed = 70.0f + h * 8.0f;
+                    p.fallSpeed = 55.0f + h * 5.0f;
                     p.sway      = 8.0f;
                     p.alpha     = 0.9f;
                     p.flutter   = 1.0f;
                     p.vx        = vx * 0.3f + (Rand() - 0.5f) * 40.0f;
-                    p.x         = (float)c.rc.left + (i + 0.5f) * kColWidth;
+                    p.x         = (float)c.rc.left + (i + 0.5f) * g_colWidth;
                     p.y         = top - h * 0.6f;
                     p.debris    = true;
                     flakes.push_back(p);
@@ -623,7 +663,7 @@ struct Engine {
             if (gust) {
                 int n = (int)c.cols.size();
                 for (int i = 0; i < n; i++) {
-                    float x = (float)c.rc.left + (i + 0.5f) * kColWidth;
+                    float x = (float)c.rc.left + (i + 0.5f) * g_colWidth;
                     if ((front - x) * gustDir > 0.0f) c.cols[i] = 0.0f;
                 }
                 for (int j = (int)c.litter.size() - 1; j >= 0; j--) {
@@ -651,7 +691,7 @@ struct Engine {
             } else {
                 for (auto& h : c.cols) {
                     if (h <= 0.0f) continue;
-                    h -= kMeltPerSec * dt;
+                    h -= g_meltPerSec * dt;
                     if (h < 0.15f) h = 0.0f;
                 }
             }
@@ -719,17 +759,25 @@ struct Engine {
             else if (f.x < -10.0f)   f.x += width + 20.0f;
 
             // Landing on window tops: snow accumulates, leaves and petals
-            // sometimes stay lying there for a while.
-            if (!gust && f.kind != kRain) {
+            // sometimes stay lying there for a while. Debris knocked off a
+            // window is falling away and must never land again: otherwise
+            // sweeping the cursor would pour the snow straight back.
+            if (!gust && !f.debris && f.kind != kRain) {
                 bool wantsLanding =
                     (f.kind == kSnow && snowOnWindows) ||
                     (f.kind != kSnow && leavesOnWindows);
                 if (wantsLanding) {
                     bool landed = false;
                     for (auto& c : g_caps) {
+                        if (c.noSnow) continue; // no visible top edge to land on
                         float top = (float)c.rc.top;
                         if (oldY < top && f.y >= top &&
                             f.x >= (float)c.rc.left && f.x < (float)c.rc.right) {
+                            // The edge may be hidden behind a higher window: the
+                            // snowflake must fly on, not land out of sight.
+                            int col = (int)((f.x - (float)c.rc.left) / g_colWidth);
+                            if (!CapColVisible(c, col)) continue;
+
                             if (f.kind == kSnow) {
                                 AddSnowTo(c, f);
                             } else if (Rand() < 0.4f) {
@@ -742,11 +790,6 @@ struct Engine {
                         }
                     }
                     if (landed) {
-                        if (!g_loggedFirstLanding) {
-                            g_loggedFirstLanding = true;
-                            Wh_Log(L"first landing at %.0f,%.0f (windows: %d)",
-                                   f.x, f.y, (int)g_caps.size());
-                        }
                         if (f.debris) continue; // it settled; that was its last fall
                         SpawnFlake(f, false); // loop back to the top
                         flakes[write++] = f;
@@ -785,9 +828,6 @@ struct Engine {
 // Renderer: Direct2D → memory DIB → UpdateLayeredWindow
 // ─────────────────────────────────────────────────────────────────────────────
 
-static const IID kIID_ID2D1Factory =
-    { 0x06152247, 0x6f50, 0x465a, { 0x92, 0x45, 0x11, 0x8b, 0xfd, 0x3b, 0x60, 0x07 } };
-
 static const float kPetalColors[4][3] = {
     { 255, 205, 222 }, { 249, 175, 205 }, { 244, 143, 177 }, { 252, 228, 236 },
 };
@@ -810,7 +850,6 @@ static ID2D1PathGeometry*    g_leafGeo[4] = {};
 
 static HDC      g_memDC = nullptr;
 static HBITMAP  g_dib   = nullptr;
-static void*    g_bits  = nullptr;
 
 static int g_width  = 1920;
 static int g_height = 1080;
@@ -944,8 +983,8 @@ static bool InitD2D() {
     D2D1_FACTORY_OPTIONS fo = {};
     fo.debugLevel = D2D1_DEBUG_LEVEL_NONE;
 
-    HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
-                                   kIID_ID2D1Factory, &fo, (void**)&g_factory);
+    HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, fo,
+                                   &g_factory);
     if (FAILED(hr) || !g_factory) {
         Wh_Log(L"D2D1CreateFactory failed: 0x%08lX", hr);
         return false;
@@ -980,7 +1019,7 @@ static void DrawWindowCaps(ID2D1RenderTarget* rt) {
         // ─── snow cap: smoothed white layer along the top edge ───
         bool any = false;
         for (int i = 0; i < n; i++) {
-            if ((c.vis.empty() || c.vis[i]) && c.cols[i] >= kMinCapH) {
+            if ((c.vis.empty() || c.vis[i]) && c.cols[i] >= g_minCapH) {
                 any = true;
                 break;
             }
@@ -1005,9 +1044,9 @@ static void DrawWindowCaps(ID2D1RenderTarget* rt) {
                         if (i + 1 < n && (c.vis.empty() || c.vis[i + 1]))
                             h += c.cols[i + 1];
                         h *= 0.25f;
-                        if (h < kMinCapH) h = 0.0f;
+                        if (h < g_minCapH) h = 0.0f;
                     }
-                    D2D1_POINT_2F pt = { left + (float)i * kColWidth, top - h };
+                    D2D1_POINT_2F pt = { left + (float)i * g_colWidth, top - h };
                     sink->AddLine(pt);
                 }
                 D2D1_POINT_2F end = { right, top };
@@ -1023,7 +1062,7 @@ static void DrawWindowCaps(ID2D1RenderTarget* rt) {
 
         // ─── litter: petals and leaves lying on the edge ───
         for (auto& l : c.litter) {
-            int ci = (int)(l.offX / kColWidth);
+            int ci = (int)(l.offX / g_colWidth);
             if (!c.vis.empty() &&
                 (ci < 0 || ci >= (int)c.vis.size() || !c.vis[ci]))
                 continue; // hidden behind a higher window
@@ -1213,6 +1252,16 @@ static HWND g_wnd = nullptr; // used by the enumeration below
 static Engine g_engine;                // overlay thread only
 static std::vector<WinCap> g_capsEnum; // temp, overlay thread only
 
+// The visible frame, without the invisible resize borders of GetWindowRect:
+// otherwise the snow hangs ~7 px past the left and right edges of a window.
+static bool GetWindowFrameRect(HWND h, RECT* rc) {
+    if (SUCCEEDED(DwmGetWindowAttribute(h, DWMWA_EXTENDED_FRAME_BOUNDS, rc,
+                                        sizeof(*rc))) &&
+        rc->right > rc->left && rc->bottom > rc->top)
+        return true;
+    return GetWindowRect(h, rc) != FALSE;
+}
+
 static BOOL CALLBACK EnumWndProc(HWND h, LPARAM) {
     if (h == g_wnd) return TRUE;
     if (!IsWindowVisible(h) || IsIconic(h)) return TRUE;
@@ -1233,15 +1282,19 @@ static BOOL CALLBACK EnumWndProc(HWND h, LPARAM) {
     if (!wcscmp(cls, L"DesktopWeatherOverlayWnd")) return TRUE;
 
     RECT rc;
-    if (!GetWindowRect(h, &rc)) return TRUE;
+    if (!GetWindowFrameRect(h, &rc)) return TRUE;
     RECT area = { 0, 0, g_width, g_height };
     RECT inter;
     if (!IntersectRect(&inter, &rc, &area)) return TRUE;
     if (rc.right - rc.left < 60 || rc.bottom - rc.top < 24) return TRUE;
 
+    // A maximized window has no visible top edge (its frame is at or above
+    // the screen top). It still takes part in occlusion, so the snow of a
+    // window behind it is hidden, but it never collects snow itself.
     WinCap cap = {};
     cap.hwnd = h;
     cap.rc = rc;
+    cap.noSnow = IsZoomed(h) || rc.top <= 0;
     g_capsEnum.push_back(std::move(cap));
     return TRUE;
 }
@@ -1254,7 +1307,7 @@ static void SpawnCapFlake(float x, float y, float h, float vx) {
     Particle p = {};
     p.kind      = kSnow;
     p.size      = 0.8f + h * 0.22f;
-    p.fallSpeed = 70.0f + h * 8.0f;
+    p.fallSpeed = 55.0f + h * 5.0f;
     p.sway      = 8.0f;
     p.alpha     = 0.9f;
     p.flutter   = 1.0f;
@@ -1291,7 +1344,7 @@ static void DetachCap(WinCap& cap, float vx) {
     int n = (int)cap.cols.size();
     for (int i = 0; i < n; i++) {
         if (cap.cols[i] < 0.25f) continue;
-        SpawnCapFlake((float)cap.rc.left + (i + 0.5f) * kColWidth,
+        SpawnCapFlake((float)cap.rc.left + (i + 0.5f) * g_colWidth,
                       (float)cap.rc.top - cap.cols[i] * 0.6f,
                       cap.cols[i], vx);
         cap.cols[i] = 0.0f;
@@ -1306,9 +1359,9 @@ static void DetachCap(WinCap& cap, float vx) {
 
 // Starts a cap over: fresh columns for the current rectangle, nothing on top.
 static void RebuildCap(WinCap& cap, const RECT& rc) {
-    int n = (rc.right - rc.left) / (int)kColWidth;
+    int n = (int)ceilf((float)(rc.right - rc.left) / g_colWidth);
     if (n < 1) n = 1;
-    if (n > 400) n = 400;
+    if (n > 4096) n = 4096; // wide 4K/8K windows need far more than 2000 px
     cap.cols.assign(n, 0.0f);
     cap.litter.clear();
     cap.slideAcc = 0.0f;
@@ -1323,21 +1376,21 @@ static void SlideCap(WinCap& cap, float dx) {
 
     cap.slideAcc += dx;
 
-    while (cap.slideAcc >= kColWidth) {
-        cap.slideAcc -= kColWidth;
+    while (cap.slideAcc >= g_colWidth) {
+        cap.slideAcc -= g_colWidth;
         if (cap.cols[0] >= 0.25f) {
-            SpawnCapFlake((float)cap.rc.left + kColWidth * 0.5f,
+            SpawnCapFlake((float)cap.rc.left + g_colWidth * 0.5f,
                           (float)cap.rc.top - cap.cols[0] * 0.6f,
                           cap.cols[0], 0.0f);
         }
         cap.cols.erase(cap.cols.begin());
         cap.cols.push_back(0.0f);
     }
-    while (cap.slideAcc <= -kColWidth) {
-        cap.slideAcc += kColWidth;
+    while (cap.slideAcc <= -g_colWidth) {
+        cap.slideAcc += g_colWidth;
         size_t last = cap.cols.size() - 1;
         if (cap.cols[last] >= 0.25f) {
-            SpawnCapFlake((float)cap.rc.left + (last + 0.5f) * kColWidth,
+            SpawnCapFlake((float)cap.rc.left + (last + 0.5f) * g_colWidth,
                           (float)cap.rc.top - cap.cols[last] * 0.6f,
                           cap.cols[last], 0.0f);
         }
@@ -1398,20 +1451,20 @@ static void MoveCap(WinCap& cap, const RECT& rc) {
 
     // Width changed, top stayed put. Keep the snow that is still over the
     // window; the part that ran out of surface falls where it was.
-    int n = newW / (int)kColWidth;
+    int n = (int)ceilf((float)newW / g_colWidth);
     if (n < 1) n = 1;
-    if (n > 400) n = 400;
+    if (n > 4096) n = 4096; // wide 4K/8K windows need far more than 2000 px
     std::vector<float> cols((size_t)n, 0.0f);
     int nOld = (int)cap.cols.size();
     for (int i = 0; i < nOld; i++) {
         float h = cap.cols[i];
         if (h < 0.25f) continue;
-        float x = (float)cap.rc.left + (i + 0.5f) * kColWidth;
+        float x = (float)cap.rc.left + (i + 0.5f) * g_colWidth;
         if (x < (float)rc.left || x >= (float)rc.right) {
             SpawnCapFlake(x, (float)cap.rc.top - h * 0.6f, h, 0.0f);
             continue;
         }
-        int j = (int)((x - (float)rc.left) / kColWidth);
+        int j = (int)((x - (float)rc.left) / g_colWidth);
         if (j < 0) j = 0;
         if (j >= n) j = n - 1;
         if (h > cols[j]) cols[j] = h;
@@ -1440,8 +1493,14 @@ static void RefreshWindowList() {
         for (auto& e : g_capsEnum) {
             if (e.hwnd == g_caps[i].hwnd) { found = true; break; }
         }
-        if (!found) g_caps.erase(g_caps.begin() + i);
-        else i++;
+        if (!found) {
+            // The window is gone: its snow falls where it was instead of
+            // disappearing together with the window.
+            DetachCap(g_caps[i], 0.0f);
+            g_caps.erase(g_caps.begin() + i);
+        } else {
+            i++;
+        }
     }
 
     for (auto& e : g_capsEnum) {
@@ -1453,6 +1512,7 @@ static void RefreshWindowList() {
 
         WinCap cap = {};
         cap.hwnd = e.hwnd;
+        cap.noSnow = e.noSnow;
         RebuildCap(cap, e.rc);
         g_caps.push_back(std::move(cap));
     }
@@ -1464,27 +1524,46 @@ static void TrackWindowCaps() {
         WinCap& c = g_caps[i];
         RECT rc;
         if (!IsWindow(c.hwnd) || !IsWindowVisible(c.hwnd) || IsIconic(c.hwnd) ||
-            !GetWindowRect(c.hwnd, &rc)) {
+            !GetWindowFrameRect(c.hwnd, &rc)) {
+            // Closed or minimized: the snow and the litter drop from the
+            // last known position instead of vanishing.
+            DetachCap(c, 0.0f);
             g_caps.erase(g_caps.begin() + i);
             continue;
         }
+
+        // Became maximized, or moved to the screen top: its edge is no
+        // longer visible, so whatever was lying there falls.
+        bool noSnow = IsZoomed(c.hwnd) || rc.top <= 0;
+        if (noSnow && !c.noSnow) {
+            DetachCap(c, 0.0f);
+            RebuildCap(c, rc);
+        }
+        c.noSnow = noSnow;
+
         MoveCap(c, rc);
         i++;
     }
 }
 
-// Z-order of the tracked windows, 0 = topmost. The overlay is a topmost
-// window of its own, so only the relative order of the tracked windows
-// matters here.
+// Z-order of the tracked windows, 0 = topmost. EnumWindows walks the
+// top-level windows from top to bottom, which is the same order the old
+// GetTopWindow/GetWindow loop produced, without risking a loop over
+// destroyed windows while the desktop changes underneath.
+static BOOL CALLBACK EnumZOrderProc(HWND h, LPARAM lp) {
+    int* z = (int*)lp;
+    for (auto& c : g_caps) {
+        if (c.hwnd == h) { c.z = *z; break; }
+    }
+    (*z)++;
+    return TRUE;
+}
+
 static void UpdateCapZOrder() {
     for (auto& c : g_caps) c.z = 0x7fffffff;
 
     int z = 0;
-    for (HWND h = GetTopWindow(nullptr); h; h = GetWindow(h, GW_HWNDNEXT), z++) {
-        for (auto& c : g_caps) {
-            if (c.hwnd == h) { c.z = z; break; }
-        }
-    }
+    EnumWindows(EnumZOrderProc, (LPARAM)&z);
 }
 
 // Marks the columns of every cap that are hidden behind a higher window, so
@@ -1500,10 +1579,10 @@ static void UpdateCapVisibility() {
             // Only a window that starts at or above this top edge and reaches
             // into the thin strip above it can hide the snow.
             if (o.rc.top > c.rc.top) continue;
-            if (o.rc.bottom <= c.rc.top - (int)kCapMaxH - 2) continue;
+            if (o.rc.bottom <= c.rc.top - (int)g_capMaxH - 2) continue;
 
-            int i0 = (int)ceilf(((float)o.rc.left - (float)c.rc.left) / kColWidth - 0.5f);
-            int i1 = (int)floorf(((float)o.rc.right - (float)c.rc.left) / kColWidth - 0.5f);
+            int i0 = (int)ceilf(((float)o.rc.left - (float)c.rc.left) / g_colWidth - 0.5f);
+            int i1 = (int)floorf(((float)o.rc.right - (float)c.rc.left) / g_colWidth - 0.5f);
             if (i1 < 0 || i0 >= n) continue;
             if (i0 < 0) i0 = 0;
             if (i1 >= n) i1 = n - 1;
@@ -1518,6 +1597,13 @@ static volatile LONG g_settingsDirty = 0;
 
 static int  g_fpsCap = 0;
 static UINT g_timerIntervalMs = 10;
+
+// Frame pacing. SetTimer cannot fire faster than ~15.6 ms, so a high
+// resolution waitable timer drives the uncapped mode and the FPS setting;
+// SetTimer remains only as a fallback when the timer cannot be created.
+static HANDLE g_frameTimer = nullptr;
+static bool   g_useFrameTimer = false;
+
 static bool g_gustOnChange = true;
 
 static LARGE_INTEGER g_qpcFreq = {};
@@ -1532,11 +1618,23 @@ static int ClampInt(int v, int lo, int hi) {
     return v < lo ? lo : v > hi ? hi : v;
 }
 
+// Schedules the next frame. Uncounted frames (FpsCap = 0) are paced by
+// DwmFlush in the message loop instead, so the timer is not armed for them.
+static void ArmFrameTimer(bool immediate) {
+    if (!g_useFrameTimer || !g_frameTimer || g_paused || g_fpsCap <= 0) return;
+
+    LONGLONG ticks = 10000000LL / g_fpsCap;
+    if (ticks < 10000) ticks = 10000; // 1 ms is the practical floor
+    LARGE_INTEGER due;
+    due.QuadPart = immediate ? -1 : -ticks;
+    SetWaitableTimer(g_frameTimer, &due, 0, nullptr, nullptr, FALSE);
+}
+
 static void ApplySettingsToEngine() {
     WeatherSet next;
-    PCWSTR mode = Wh_GetStringSetting(L"WeatherMode");
+    WindhawkUtils::StringSetting mode =
+        WindhawkUtils::StringSetting::make(L"WeatherMode");
     ParseWeatherMode(mode, next);
-    Wh_FreeStringSetting(mode);
 
     g_engine.intensity = ClampInt(Wh_GetIntSetting(L"Intensity"), 0, 200);
     g_engine.sizePct   = ClampInt(Wh_GetIntSetting(L"Size"), 50, 200);
@@ -1555,7 +1653,11 @@ static void ApplySettingsToEngine() {
     if (fpsCap != g_fpsCap) {
         g_fpsCap = fpsCap;
         g_timerIntervalMs = g_fpsCap > 0 ? (UINT)((1000 + g_fpsCap - 1) / g_fpsCap) : 10;
-        if (g_wnd && !g_paused) SetTimer(g_wnd, 1, g_timerIntervalMs, nullptr);
+        if (g_useFrameTimer) {
+            ArmFrameTimer(true); // pick up the new rate right away
+        } else if (g_wnd && !g_paused) {
+            SetTimer(g_wnd, 1, g_timerIntervalMs, nullptr);
+        }
     }
 }
 
@@ -1600,6 +1702,19 @@ static void Tick(HWND hwnd) {
     }
 
     RenderFrame(hwnd, g_engine);
+
+    // Uncapped: block on the next composited frame instead of a timer, which
+    // is what "follow the monitor refresh" actually means.
+    if (g_useFrameTimer && g_fpsCap == 0) {
+        LARGE_INTEGER before, after;
+        QueryPerformanceCounter(&before);
+        DwmFlush();
+        QueryPerformanceCounter(&after);
+        // If the compositor returned immediately (DWM off, remote session),
+        // do not turn the loop into a busy spin.
+        if ((after.QuadPart - before.QuadPart) * 1000 < g_qpcFreq.QuadPart)
+            Sleep(1);
+    }
 }
 
 // ─── Fullscreen, lock screen and display-off handling ───
@@ -1626,8 +1741,17 @@ static bool IsFullscreenAppActive() {
     RECT rc;
     if (!GetWindowRect(fg, &rc)) return false;
 
-    return rc.left  <= mi.rcMonitor.left && rc.top    <= mi.rcMonitor.top &&
-           rc.right >= mi.rcMonitor.right && rc.bottom >= mi.rcMonitor.bottom;
+    if (!(rc.left  <= mi.rcMonitor.left && rc.top    <= mi.rcMonitor.top &&
+          rc.right >= mi.rcMonitor.right && rc.bottom >= mi.rcMonitor.bottom))
+        return false;
+
+    // A maximized window with a title bar just fills the monitor, it is not
+    // a fullscreen app. This matters with an auto-hiding taskbar, where a
+    // maximized window covers the whole monitor as well.
+    LONG_PTR style = GetWindowLongPtrW(fg, GWL_STYLE);
+    if (IsZoomed(fg) && (style & WS_CAPTION) == WS_CAPTION) return false;
+
+    return true;
 }
 
 // While the session is locked, the input desktop is not accessible.
@@ -1647,37 +1771,112 @@ static void CheckPause(HWND hwnd) {
     g_paused = pause;
 
     if (pause) {
-        KillTimer(hwnd, 1);
+        if (g_useFrameTimer) CancelWaitableTimer(g_frameTimer);
+        else KillTimer(hwnd, 1);
         ShowWindow(hwnd, SW_HIDE);
     } else {
         g_lastTick = {};
         ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-        SetTimer(hwnd, 1, g_timerIntervalMs, nullptr);
+        if (g_useFrameTimer) ArmFrameTimer(true);
+        else SetTimer(hwnd, 1, g_timerIntervalMs, nullptr);
     }
+}
+
+// Creates the 32-bit top-down DIB that Direct2D draws into.
+static bool CreateBackBuffer() {
+    HDC screen = GetDC(nullptr);
+    HDC memDC = CreateCompatibleDC(screen);
+
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth       = g_width;
+    bi.bmiHeader.biHeight      = -g_height; // top-down
+    bi.bmiHeader.biPlanes      = 1;
+    bi.bmiHeader.biBitCount    = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HBITMAP dib = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    ReleaseDC(nullptr, screen);
+
+    if (!memDC || !dib) {
+        if (memDC) DeleteDC(memDC);
+        if (dib) DeleteObject(dib);
+        return false;
+    }
+    SelectObject(memDC, dib);
+
+    if (g_memDC) DeleteDC(g_memDC);
+    if (g_dib) DeleteObject(g_dib);
+    g_memDC = memDC;
+    g_dib = dib;
+    return true;
+}
+
+// Snow keeps the same physical proportions at 150%, 200% and so on.
+static void UpdatePixelScale() {
+    using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+    UINT dpi = 0;
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    auto getDpi = user32 ? (GetDpiForWindow_t)GetProcAddress(
+                               user32, "GetDpiForWindow")
+                         : nullptr;
+    if (getDpi) dpi = getDpi(GetDesktopWindow());
+    if (dpi < 96 || dpi > 480) dpi = 96;
+
+    g_scale      = (float)dpi / 96.0f;
+    g_colWidth   = 5.0f  * g_scale;
+    g_capMaxH    = 22.0f * g_scale;
+    g_meltPerSec = 0.12f * g_scale;
+    g_minCapH    = 0.3f  * g_scale;
+}
+
+// Resolution or DPI changed: rebuild the back buffer and the caps for the
+// new primary-monitor geometry instead of keeping the old size until the mod
+// is restarted.
+static void RecreateSurface() {
+    UpdatePixelScale();
+
+    int w = GetSystemMetrics(SM_CXSCREEN);
+    int h = GetSystemMetrics(SM_CYSCREEN);
+    if (w <= 0 || h <= 0) return;
+
+    if (w != g_width || h != g_height) {
+        g_width = w;
+        g_height = h;
+        g_engine.width = w;
+        g_engine.height = h;
+        if (!CreateBackBuffer()) Wh_Log(L"Recreating the back buffer failed");
+    }
+
+    // The columns were sized for the old scale; drop the old snow (it falls
+    // where it was) and pick the windows up again.
+    for (auto& c : g_caps) DetachCap(c, 0.0f);
+    g_caps.clear();
+    RefreshWindowList();
+    g_lastTick = {};
 }
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_CREATE: {
-            HDC screen = GetDC(nullptr);
-            g_memDC = CreateCompatibleDC(screen);
-
-            BITMAPINFO bi = {};
-            bi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-            bi.bmiHeader.biWidth       = g_width;
-            bi.bmiHeader.biHeight      = -g_height; // top-down
-            bi.bmiHeader.biPlanes      = 1;
-            bi.bmiHeader.biBitCount    = 32;
-            bi.bmiHeader.biCompression = BI_RGB;
-
-            g_dib = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &g_bits, nullptr, 0);
-            ReleaseDC(nullptr, screen);
-
-            if (!g_memDC || !g_dib || !InitD2D()) {
+            if (!CreateBackBuffer() || !InitD2D()) {
                 Wh_Log(L"Overlay initialization failed");
                 return -1;
             }
-            SelectObject(g_memDC, g_dib);
+
+            // High-resolution timer: SetTimer is limited to the ~15.6 ms
+            // system tick, which made the FPS setting a no-op.
+            g_frameTimer = CreateWaitableTimerExW(
+                nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                TIMER_ALL_ACCESS);
+            if (!g_frameTimer)
+                g_frameTimer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
+            g_useFrameTimer = g_frameTimer != nullptr;
+            if (!g_useFrameTimer) {
+                Wh_Log(L"No waitable timer, falling back to SetTimer");
+                SetTimer(hwnd, 1, g_timerIntervalMs, nullptr);
+            }
 
             // The watchdog timer keeps running while rendering is paused, so
             // the overlay can come back by itself.
@@ -1689,10 +1888,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         case WM_TIMER:
             if (wParam == 1) {
-                Tick(hwnd);
+                Tick(hwnd); // only used when no waitable timer is available
             } else if (wParam == 2) {
                 CheckPause(hwnd);
             }
+            return 0;
+
+        case WM_DISPLAYCHANGE:
+        case WM_DPICHANGED:
+            RecreateSurface();
             return 0;
 
         case WM_POWERBROADCAST:
@@ -1720,6 +1924,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         case WM_DESTROY: {
             KillTimer(hwnd, 1);
             KillTimer(hwnd, 2);
+            if (g_frameTimer) {
+                CancelWaitableTimer(g_frameTimer);
+                CloseHandle(g_frameTimer);
+                g_frameTimer = nullptr;
+            }
+            g_useFrameTimer = false;
             if (g_powerNotify) {
                 UnregisterPowerSettingNotification(g_powerNotify);
                 g_powerNotify = nullptr;
@@ -1778,14 +1988,36 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
 
     ShowWindow(wnd, SW_SHOWNOACTIVATE);
     g_lastTick = {};
-    SetTimer(wnd, 1, g_timerIntervalMs, nullptr);
+    if (g_useFrameTimer) ArmFrameTimer(true);
+    else SetTimer(wnd, 1, g_timerIntervalMs, nullptr);
 
     // The message loop owns the window, but it must also wake up when the
-    // mod is being unloaded, even before the window exists.
+    // mod is being unloaded, when a frame is due, and when the window
+    // receives messages.
     for (;;) {
-        DWORD r = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE,
-                                            QS_ALLINPUT);
-        if (r != WAIT_OBJECT_0 + 1) break; // stop event or an error
+        HANDLE waitHandles[2] = { g_stopEvent, g_frameTimer };
+        DWORD waitCount = 1;
+        DWORD waitMs = INFINITE;
+
+        if (g_useFrameTimer) {
+            if (g_paused) {
+                waitMs = INFINITE;   // the 500 ms watchdog wakes us up
+            } else if (g_fpsCap > 0) {
+                waitCount = 2;       // wait for the frame timer
+            } else {
+                waitMs = 0;          // render now; DwmFlush paces the frames
+            }
+        }
+
+        DWORD r = MsgWaitForMultipleObjects(waitCount, waitHandles, FALSE,
+                                            waitMs, QS_ALLINPUT);
+        if (r == WAIT_OBJECT_0) break;                   // stop event
+        if (r == WAIT_OBJECT_0 + 1 && waitCount == 2) {  // frame is due
+            Tick(wnd);
+            ArmFrameTimer(false);
+            continue;
+        }
+        if (r != WAIT_OBJECT_0 + waitCount && r != WAIT_TIMEOUT) break;
 
         MSG msg;
         bool quit = false;
@@ -1795,6 +2027,10 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
             DispatchMessageW(&msg);
         }
         if (quit) break;
+
+        if (g_useFrameTimer && !g_paused && g_fpsCap == 0) {
+            Tick(wnd); // uncapped: Tick blocks on DwmFlush
+        }
     }
 
     if (IsWindow(wnd)) DestroyWindow(wnd);
@@ -1808,26 +2044,19 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
 // Explorer or any other host process.
 // ─────────────────────────────────────────────────────────────────────────────
 
-static void SetDpiAwareness() {
-    // Physical pixels, so the overlay lines up with window rectangles on
-    // scaled displays.
-    using SetProcessDpiAwarenessContext_t = BOOL(WINAPI*)(DPI_AWARENESS_CONTEXT);
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (!user32) return;
-    auto setCtx = (SetProcessDpiAwarenessContext_t)GetProcAddress(
-        user32, "SetProcessDpiAwarenessContext");
-    if (setCtx) setCtx(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+static void ReadMonitorInfo() {
+    g_width  = GetSystemMetrics(SM_CXSCREEN);
+    g_height = GetSystemMetrics(SM_CYSCREEN);
+    if (g_width <= 0)  g_width = 1920;
+    if (g_height <= 0) g_height = 1080;
+
+    UpdatePixelScale();
 }
 
 BOOL WhTool_ModInit() {
     Wh_Log(L"Tool init");
 
-    SetDpiAwareness();
-
-    g_width  = GetSystemMetrics(SM_CXSCREEN);
-    g_height = GetSystemMetrics(SM_CYSCREEN);
-    if (g_width <= 0)  g_width = 1920;
-    if (g_height <= 0) g_height = 1080;
+    ReadMonitorInfo();
 
     QueryPerformanceFrequency(&g_qpcFreq);
 
