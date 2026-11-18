@@ -17,9 +17,9 @@
 
 // Archive Preview v1.1.0: Windows Shell browsing with optional external GUI extraction.
 // Native transfers use Windows Shell without mod-managed disk staging.
-// Optional external dragging extracts into a private temporary folder.
+// Optional external dragging extracts into a private folder in the mod's storage.
 // Temporary data is retained while transfer objects and streams use it;
-// cleanup may leave files behind if the extractor is still running or deletion fails.
+// the broker retries cleanup after restart when it can verify the folder is idle.
 // Windows Shell providers may also create their own temporary data.
 // Native extraction does not enforce a mod-defined expanded-size limit.
 // Updating the mod never terminates Explorer or Preview Host processes.
@@ -105,9 +105,9 @@ Install the program first. Leave its path empty for automatic detection or speci
 
 Extraction actions use the selected backend. External programs provide their own progress, password and overwrite dialogs as supported. External extraction preserves archive paths, including for selected items.
 
-With external dragging enabled and an external backend selected, dragged items are extracted into a private temporary folder before Explorer transfers them to the destination. This requires additional temporary disk space.
+With external dragging enabled and an external backend selected, dragged items are extracted into a private temporary folder in the mod's storage before Explorer transfers them to the destination. This requires additional temporary disk space.
 
-The mod keeps temporary files while the transfer uses them and tries to remove them when the transfer releases them. Files can remain if the extractor is still running or if Windows cannot delete them.
+The mod keeps temporary files while the transfer uses them and tries to remove them when the transfer releases them. The broker checks for leftovers the next time it starts. It keeps folders that are still in use or whose status it cannot confirm.
 
 Disable external dragging to restore native dragging. **Clipboard copy and paste always continue using Windows.** Explorer may still display its own copy window.
 
@@ -126,7 +126,7 @@ Disable external dragging to restore native dragging. **Clipboard copy and paste
 | **Appearance** | Theme and preview language. Automatic follows the Windows display language. The preview offers 105 languages and variants. Some messages use English when a translation is unavailable. |
 | **Columns** | Visibility, horizontal scrollbar, and date and size lookups for archives of 256 MiB or more. Windhawk settings take priority over saved column visibility choices. |
 | **Shortcuts** | Four extraction shortcuts. Enter `disabled` to turn a shortcut off. If two actions use the same keys, both shortcuts are disabled until you change one. |
-| **Updates and disabling** | Close Explorer windows that still contain an archive preview when the mod updates, recompiles, or is disabled. This is on by default and closes all tabs in each affected window. |
+| **Updates and disabling** | Optionally close Explorer windows that still contain an archive preview when the mod updates, recompiles, or is disabled. This is off by default. Enabling it closes all tabs in each affected window. |
 | **Diagnostics** | Enable detailed logs when reporting a preview or extraction issue. Turn on Windhawk logging to see them. |
 
 Translated setting labels follow Windhawk's language. The preview language setting applies to the mod's controls. Windows and external extractor dialogs use their own language settings.
@@ -425,7 +425,7 @@ Created by **[Luiz Bizzio](https://github.com/luizbizzio)** and licensed under *
   $name:es: Atajos
   $name:pt: Atalhos
 - ModLifecycle:
-    - CloseExplorerWindowOnUnload: true
+    - CloseExplorerWindowOnUnload: false
       $name: Close Explorer windows with an archive preview
       $name:es: Cerrar ventanas del Explorador con una vista previa
       $name:pt: Fechar janelas do Explorador com uma prévia
@@ -473,6 +473,7 @@ Created by **[Luiz Bizzio](https://github.com/luizbizzio)** and licensed under *
 #include <propkey.h>
 #include <psapi.h>
 #include <sddl.h>
+#include <aclapi.h>
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -2301,40 +2302,60 @@ namespace ArchivePreviewPathSafety {
             if ( * ch == L':' || * ch == L'/') return false;
         return true;
     }
-    static bool ValidPathComponents(const std::filesystem::path & path,
-                                    bool lastMustBeDirectory,
-                                    bool lockAncestors,
-                                    std::vector < HANDLE >  * retained = nullptr) {
+    // Call only for absolute local drive paths whose components are validated.
+    static std::wstring ExtendedLocalPath(const std::wstring & path) {
+        return L"\\\\?\\"+path;
+    }
+    static HRESULT CheckPathComponents(const std::filesystem::path & path,
+                                       bool lastMustBeDirectory,
+                                       bool lockAncestors,
+                                       std::vector < HANDLE >  * retained,
+                                       bool extendedLength) {
         const std::wstring value = path.wstring();
-        if (!PlainDrivePath(value.c_str()) || !path.is_absolute()) return false;
+        if (!PlainDrivePath(value.c_str()) || !path.is_absolute()) return E_ACCESSDENIED;
         const wchar_t root[4] = {value[0],L':',L'\\',L'\0'};
-        if (GetDriveTypeW(root) != DRIVE_FIXED) return false;
+        if (GetDriveTypeW(root) != DRIVE_FIXED) return E_ACCESSDENIED;
         std::filesystem::path cursor = path.root_path();
         auto parts = path.relative_path();
-        if (parts.empty()) return false;
+        if (parts.empty()) return E_ACCESSDENIED;
         const size_t count = static_cast < size_t > (std::distance(parts.begin(),parts.end()));
         size_t index = 0;
         for (const auto & component:parts) {
             const std::wstring name = component.wstring();
-            if (name.empty() || name == L"." || name == L"..") return false;
+            if (name.empty() || name == L"." || name == L"..") return E_ACCESSDENIED;
             cursor /= component;
             const bool isLast = (++index == count);
-            HANDLE handle = CreateFileW(cursor.c_str(),FILE_READ_ATTRIBUTES,
+            const std::wstring extended = extendedLength ? ExtendedLocalPath(cursor.native()) :
+                std::wstring{};
+            const PCWSTR openPath = extendedLength ? extended.c_str() : cursor.c_str();
+            HANDLE handle = CreateFileW(openPath,FILE_READ_ATTRIBUTES,
                 FILE_SHARE_READ | FILE_SHARE_WRITE | (lockAncestors?0:FILE_SHARE_DELETE),
                 nullptr,OPEN_EXISTING,
                 FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,nullptr);
-            if (handle == INVALID_HANDLE_VALUE) return false;
+            if (handle == INVALID_HANDLE_VALUE) return HRESULT_FROM_WIN32(GetLastError());
             FILE_ATTRIBUTE_TAG_INFO info{};
-            const bool good = GetFileInformationByHandleEx(handle,FileAttributeTagInfo,
-                & info,sizeof(info)) && !(info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) &&
+            HRESULT result = E_ACCESSDENIED;
+            if (!GetFileInformationByHandleEx(handle,FileAttributeTagInfo,&info,sizeof(info)))
+                result = HRESULT_FROM_WIN32(GetLastError());
+            else if (!(info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) &&
                 ((!isLast || lastMustBeDirectory)
                     ? (info.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0
-                    : (info.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0);
-            if (!good) {CloseHandle(handle);return false;}
+                    : (info.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0))
+                result = S_OK;
+            if (FAILED(result)) {
+                CloseHandle(handle);
+                return result;
+            }
             if (lockAncestors && retained) retained->push_back(handle);
             else CloseHandle(handle);
         }
-        return true;
+        return S_OK;
+    }
+    static bool ValidPathComponents(const std::filesystem::path & path,
+                                    bool lastMustBeDirectory,
+                                    bool lockAncestors,
+                                    std::vector < HANDLE >  * retained = nullptr) {
+        return SUCCEEDED(CheckPathComponents(path,lastMustBeDirectory,lockAncestors,retained,false));
     }
 }
 
@@ -4775,7 +4796,7 @@ class ArchiveHandler final : public IPreviewHandler, public IInitializeWithFile,
         for (size_t i = 1;i < col.visibleColumns.size();++i) {
             const int kind = col.visibleColumns[i];
             const int width = ListView_GetColumnWidth(col.list,static_cast < int > (i));
-            const std::wstring text = kind == 1?(e.modifiedLabel.empty()?L"—":e.modifiedLabel):
+            const std::wstring text = kind == 1?e.modifiedLabel:
                 (kind == 2?e.kind:(e.hasSize?HumanSize(e.bytes):L""));
             RECT cell{columnLeft + Scale(window_,6),r.top,
                 columnLeft + width - Scale(window_,10),r.bottom};
@@ -5737,7 +5758,13 @@ namespace fs = std::filesystem;
 // Shutdown is cooperative. Never terminate a thread while it can be inside
 // a Windows Shell/COM provider; join worker handles before DLL unload.
 static std::atomic < bool > g_cancelForShutdown{false};
+// The service owner keeps this event alive until the service and UI have joined.
+static HANDLE g_brokerStopEvent = nullptr;
 static thread_local const std::atomic < bool >  * t_operationCancelFlag = nullptr;
+static void SignalBrokerShutdown() {
+    g_cancelForShutdown.store(true,std::memory_order_release);
+    if (g_brokerStopEvent) SetEvent(g_brokerStopEvent);
+}
 static bool CancelledForCurrentOperation(const std::atomic < bool >  * overrideFlag = nullptr) {
     return g_cancelForShutdown.load(std::memory_order_acquire) ||
         (t_operationCancelFlag && t_operationCancelFlag->load(std::memory_order_acquire)) ||
@@ -6652,9 +6679,26 @@ static std::wstring ExternalFindExecutable(int kind) {
         if (ExternalExistingExecutable(candidate,kind)) return candidate;
     return {};
 }
+enum class ExternalDragLeaseStatus : DWORD { Idle, Launching, Running };
+static constexpr DWORD kExternalDragLeaseSignature = 0x31445041; // APD1
+struct ExternalDragLeaseRecord {
+    DWORD signature{};
+    ExternalDragLeaseStatus status{};
+    DWORD pid{};
+    FILETIME created{};
+};
+static bool WriteExternalDragLease(HANDLE file,ExternalDragLeaseStatus status,
+                                   DWORD pid = 0,FILETIME created = {}) {
+    const ExternalDragLeaseRecord record{kExternalDragLeaseSignature,status,pid,created};
+    LARGE_INTEGER start{};
+    DWORD written = 0;
+    return SetFilePointerEx(file,start,nullptr,FILE_BEGIN) &&
+        WriteFile(file,&record,sizeof(record),&written,nullptr) &&
+        written == sizeof(record) && FlushFileBuffers(file);
+}
 static HRESULT ExternalShellExtract(const Request & req,
     const ArchivePreviewOptions::ExtractionOptions & options,
-    const std::wstring & forcedDestination = {},bool * detached = nullptr) {
+    const std::wstring & forcedDestination = {},HANDLE dragLease = nullptr) {
     if (!SafeArchivePath(req.archive,true) || req.items.size() > ARCHIVE_BROKER_MAX_PATHS)
         return E_INVALIDARG;
     for (const auto & item:req.items) if (!SafeRelativePath(item)) return E_INVALIDARG;
@@ -6736,20 +6780,35 @@ static HRESULT ExternalShellExtract(const Request & req,
     // accepted cancel must prevent launch. After the handoff the extractor owns it.
     if (!NativeProgressRecord(req.requestId,ARCHIVE_PROGRESS_EXTERNAL,false,0,true,true))
         return HRESULT_FROM_WIN32(ERROR_CANCELLED);
+    // Persist an uncertain state before launch. Recovery must retain a stage
+    // if Explorer exits before the extractor's identity can be recorded.
+    if (dragLease && !WriteExternalDragLease(dragLease,ExternalDragLeaseStatus::Launching))
+        return E_FAIL;
+    if (CancelledForCurrentOperation()) {
+        if (dragLease) WriteExternalDragLease(dragLease,ExternalDragLeaseStatus::Idle);
+        return HRESULT_FROM_WIN32(ERROR_CANCELLED);
+    }
     // Pin the executable in lpApplicationName and do not inherit broker handles.
     if (!CreateProcessW(executable.c_str(),command.data(),nullptr,nullptr,FALSE,0,
         nullptr,working.empty()?nullptr:working.c_str(),&startup,&child)) {
         const DWORD error = GetLastError();
+        if (dragLease) WriteExternalDragLease(dragLease,ExternalDragLeaseStatus::Idle);
         Wh_Log(L"[AP external] launch failed program=%s resolution=%s Win32=%lu",program,resolution,error);
         return HRESULT_FROM_WIN32(error);
     }
     CloseHandle(child.hThread);
+    if (dragLease) {
+        FILETIME created{},exited{},kernel{},user{};
+        if (GetProcessTimes(child.hProcess,&created,&exited,&kernel,&user))
+            WriteExternalDragLease(dragLease,ExternalDragLeaseStatus::Running,child.dwProcessId,created);
+    }
     Wh_Log(L"[AP external] started program=%s resolution=%s pid=%lu selected=%zu",program,resolution,child.dwProcessId,req.items.size());
     HRESULT result = E_FAIL;
     for (;;) {
         const DWORD wake = MsgWaitForMultipleObjects(1,&child.hProcess,FALSE,250,QS_ALLINPUT);
         if (wake == WAIT_OBJECT_0) {
             DWORD code = 0;
+            if (dragLease) WriteExternalDragLease(dragLease,ExternalDragLeaseStatus::Idle);
             if (!GetExitCodeProcess(child.hProcess,&code)) result = HRESULT_FROM_WIN32(GetLastError());
             else {
                 Wh_Log(L"[AP external] finished pid=%lu exit=%lu",child.dwProcessId,code);
@@ -6761,7 +6820,8 @@ static HRESULT ExternalShellExtract(const Request & req,
         if (wake == WAIT_FAILED) {result = HRESULT_FROM_WIN32(GetLastError());break;}
         if (wake == WAIT_OBJECT_0 + 1) {
             MSG message{};
-            while (PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
+            while (!CancelledForCurrentOperation() &&
+                   PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
                 TranslateMessage(&message);DispatchMessageW(&message);
             }
         }
@@ -6769,7 +6829,6 @@ static HRESULT ExternalShellExtract(const Request & req,
             // Independent user application continues safely after mod unload.
             // Never terminate the extractor while it is writing user files.
             Wh_Log(L"[AP external] mod shutdown; extractor pid=%lu continues independently",child.dwProcessId);
-            if (detached) *detached = true;
             result = HRESULT_FROM_WIN32(ERROR_CANCELLED);break;
         }
     }
@@ -6952,7 +7011,8 @@ public:
         if (!queries) firstKeys = keys;
         ++queries;
         lastKeys = keys;
-        if (escape || GetTickCount64() - started_ >= 5ULL * 60 * 1000)
+        if (escape || CancelledForCurrentOperation() ||
+            GetTickCount64() - started_ >= 5ULL * 60 * 1000)
             return DRAGDROP_S_CANCEL;
         // The popup owns the physical gesture, so OLE's button state is valid.
         // Never combine this with stale cross-process state.
@@ -7008,8 +7068,7 @@ struct BrowserProgressSnapshot {
 static BrowserProgressSnapshot BrowserQueryProgress(const std::wstring & archive,DWORD ownerPid);
 struct BrowserLocalExtractResult { GUID requestId{}; HRESULT outcome{E_FAIL}; DWORD command{}; };
 // Completion is queried by the originating request GUID, never broadcast.
-// Stable case-insensitive archive key for message-only notification. No raw
-// pointers are sent to the broker manager, which is a Win32 window.
+// Stable case-insensitive archive key for notifications without a payload.
 static WPARAM BrowserArchiveKey(const std::wstring & path) {
     uint64_t hash = 14695981039346656037ULL;
     for (wchar_t c:path) {
@@ -7021,8 +7080,19 @@ static WPARAM BrowserArchiveKey(const std::wstring & path) {
 static constexpr wchar_t kPreviewHostClass[] = L"ArchivePreview.RealHost.0607";
 static std::atomic < HWND > g_gripManager{nullptr};
 static std::atomic < bool > g_gripReady{false};
-// Stop producers before draining raw-pointer WM_BROWSER_MODEL_* messages.
-static std::mutex g_browserModelPostMutex;
+static std::mutex g_browserPostMutex;
+template<typename T>
+static HRESULT PostBrowserPayload(UINT message,WPARAM param,std::unique_ptr<T> payload) {
+    std::lock_guard<std::mutex> lock(g_browserPostMutex);
+    if (g_cancelForShutdown.load(std::memory_order_acquire))
+        return HRESULT_FROM_WIN32(ERROR_CANCELLED);
+    const HWND manager = g_gripManager.load(std::memory_order_acquire);
+    if (!manager) return HRESULT_FROM_WIN32(ERROR_NOT_READY);
+    if (!PostMessageW(manager,message,param,reinterpret_cast<LPARAM>(payload.get())))
+        return HRESULT_FROM_WIN32(GetLastError());
+    payload.release();
+    return S_OK;
+}
 
 struct BrowserEntry {
     std::wstring name;
@@ -7835,10 +7905,7 @@ static std::wstring BrowserHeaderCaption(const BrowserState * s,BrowserColumnKin
 }
 static const std::wstring & BrowserEntryColumn(const BrowserEntry & entry, BrowserColumnKind column) {
     switch(column) {
-      case BrowserColumnKind::DateModified: {
-          static const std::wstring unavailable = L"—";
-          return entry.modifiedLabel.empty()?unavailable:entry.modifiedLabel;
-      }
+      case BrowserColumnKind::DateModified: return entry.modifiedLabel;
       case BrowserColumnKind::Type: return entry.typeLabel;
       case BrowserColumnKind::Size: return entry.sizeLabel;
       default: return entry.name;
@@ -8048,10 +8115,26 @@ static std::wstring BrowserZipFolderKey(std::wstring path) {
     return path;
 }
 static void BrowserZipUpdateFolder(BrowserZipFolderDates & dates,
-        const std::wstring & folder,const SYSTEMTIME & st,bool stored) {
-    if (folder.empty() || !SafeRelativePath(folder)) return;
-    auto [it,inserted] = dates.try_emplace(folder,BrowserZipFolderDate{st,stored});
-    if (inserted) return;
+        std::wstring_view folderPrefix,const std::wstring & name,bool directory,
+        WORD dosDate,WORD dosTime) {
+    if (!name.starts_with(folderPrefix)) return;
+    const std::wstring_view relative = std::wstring_view(name).substr(folderPrefix.size());
+    const size_t separator = relative.find(L'\\');
+    const bool stored = separator == std::wstring_view::npos;
+    if (relative.empty() || (stored && !directory) || !SafeRelativePath(name)) return;
+    SYSTEMTIME st{};
+    if (!BrowserZipDosTime(dosDate,dosTime,st)) return;
+
+    // SafeRelativePath limits each leaf to 255 characters. Store only the
+    // direct child name, regardless of the depth of the central directory entry.
+    constexpr size_t kMaxFolderDates = 8192;
+    std::wstring child(relative.substr(0,separator));
+    auto it = dates.find(child);
+    if (it == dates.end()) {
+        if (dates.size() < kMaxFolderDates)
+            dates.emplace(std::move(child),BrowserZipFolderDate{st,stored});
+        return;
+    }
     // Real directory timestamps outrank those derived from children.
     if (stored && !it->second.explicitFolder) {it->second = {st,true};return;}
     if (stored == it->second.explicitFolder &&
@@ -8059,14 +8142,19 @@ static void BrowserZipUpdateFolder(BrowserZipFolderDates & dates,
         it->second.local = st;
 }
 static bool BrowserReadZipFolderDates(const std::wstring & archive,
-                                     BrowserZipFolderDates & dates) {
+                                     const std::wstring & folder,
+                                     BrowserZipFolderDates & dates) try {
     dates.clear();
-    if (archive.size() < 4 || _wcsicmp(archive.c_str() + archive.size() - 4,L".zip") != 0)
+    if (CancelledForCurrentOperation() || archive.size() < 4 ||
+        _wcsicmp(archive.c_str() + archive.size() - 4,L".zip") != 0)
         return false;
+    std::wstring folderPrefix = BrowserZipFolderKey(folder);
+    if (!folderPrefix.empty()) folderPrefix += L'\\';
     HANDLE file = CreateFileW(archive.c_str(),GENERIC_READ,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL,nullptr);
     if (file == INVALID_HANDLE_VALUE) return false;
+    const std::unique_ptr<void,decltype(&CloseHandle)> fileGuard(file,CloseHandle);
     // The end-of-central-directory record is at most 65,557 bytes from EOF.
     LARGE_INTEGER fileLength{};
     constexpr DWORD kTailMax = 65557;
@@ -8097,6 +8185,7 @@ static bool BrowserReadZipFolderDates(const std::wstring & archive,
             dirOffset == 0xFFFFFFFF || dirLength > kDirectoryMax ||
             static_cast < ULONGLONG > (dirOffset) + dirLength >
                 static_cast < ULONGLONG > (fileLength.QuadPart)) break; // Zip64: skip
+        if (CancelledForCurrentOperation()) break;
         std::vector < BYTE > directory(dirLength);
         from.QuadPart = dirOffset;
         got = 0;
@@ -8106,6 +8195,10 @@ static bool BrowserReadZipFolderDates(const std::wstring & archive,
         size_t at = 0;
         bool malformed = false;
         for (DWORD i = 0;i < records;++i) {
+            if (i % 128 == 0 && CancelledForCurrentOperation()) {
+                dates.clear();
+                return false;
+            }
             if (at > directory.size() || directory.size() - at < 46 ||
                 BrowserZipU32(directory.data() + at) != 0x02014b50) {malformed = true;break;}
             const BYTE * record = directory.data() + at;
@@ -8121,29 +8214,21 @@ static bool BrowserReadZipFolderDates(const std::wstring & archive,
             if (count > 0 && count <= 2048) {
                 std::wstring name(static_cast < size_t > (count),L'\0');
                 if (MultiByteToWideChar(page,flags,raw,nameBytes,name.data(),count) == count) {
-                    const bool folder = (!name.empty() && (name.back() == L'/' || name.back() == L'\\'));
+                    const bool directoryEntry = name.back() == L'/' || name.back() == L'\\';
                     name = BrowserZipFolderKey(std::move(name));
-                    SYSTEMTIME stamp{};
-                    if (SafeRelativePath(name) && BrowserZipDosTime(
-                            BrowserZipU16(record + 14),BrowserZipU16(record + 12),stamp)) {
-                        if (folder) BrowserZipUpdateFolder(dates,name,stamp,true);
-                        size_t endPart = name.size();
-                        while (endPart > 0) {
-                            const size_t slash = name.rfind(L'\\',endPart - 1);
-                            if (slash == std::wstring::npos) break;
-                            BrowserZipUpdateFolder(dates,name.substr(0,slash),stamp,false);
-                            endPart = slash;
-                        }
-                    }
+                    BrowserZipUpdateFolder(dates,folderPrefix,name,directoryEntry,
+                        BrowserZipU16(record + 14),BrowserZipU16(record + 12));
                 }
             }
             at += advance;
         }
-        if (malformed) {dates.clear();break;}
-        ok = true;
+        ok = !malformed && !CancelledForCurrentOperation();
     } while(false);
-    CloseHandle(file);
+    if (!ok) dates.clear();
     return ok;
+} catch (const std::bad_alloc &) {
+    dates.clear();
+    return false;
 }
 
 static std::wstring BrowserItemSize(IShellItem * item, ULONGLONG & bytes, bool & hasSize) {
@@ -8737,7 +8822,7 @@ static void BrowserPublishFirstRows(const BrowserModelJob & job,
         CancelledForCurrentOperation()) return;
     // The receiver adopts this pointer into unique_ptr when it processes the
     // posted message. Delete it here if posting is not possible or fails.
-    auto * preview = new(std::nothrow) BrowserModelPreview;
+    std::unique_ptr<BrowserModelPreview> preview(new(std::nothrow) BrowserModelPreview);
     if (!preview) return;
     preview->ticket = job.cancelled;
     preview->anchor = job.anchor;
@@ -8748,10 +8833,7 @@ static void BrowserPublishFirstRows(const BrowserModelJob & job,
     preview->archiveBytes = job.archiveBytes;
     preview->metadataMask = job.metadataMask;
     preview->rows = rows;
-    std::lock_guard < std::mutex > postLock(g_browserModelPostMutex);
-    const HWND manager = g_gripManager.load(std::memory_order_acquire);
-    if (!manager || !PostMessageW(manager,WM_BROWSER_MODEL_PREVIEW,0,
-        reinterpret_cast < LPARAM > (preview))) delete preview;
+    PostBrowserPayload(WM_BROWSER_MODEL_PREVIEW,0,std::move(preview));
 }
 
 // Query the original archive's URL zone before invoking an independent
@@ -8778,7 +8860,8 @@ static HRESULT BrowserBuildModel(BrowserModelJob & job) {
         BrowserZipFolderDates zipFolderDates;
         const bool wantDate = (job.metadataMask & 1u) != 0;
         const bool wantSize = (job.metadataMask & 2u) != 0;
-        if (wantDate) BrowserReadZipFolderDates(archive,zipFolderDates);
+        if (wantDate) BrowserReadZipFolderDates(archive,folder,zipFolderDates);
+        if (CancelledForCurrentOperation()) return HRESULT_FROM_WIN32(ERROR_CANCELLED);
         if (diagnostics && job.heavyModelSlot) {
             wchar_t startedLine[160]{};
             swprintf_s(startedLine,L"ArchivePreview model start: archiveMiB=%llu active=%u heavy=%u",
@@ -8872,7 +8955,7 @@ static HRESULT BrowserBuildModel(BrowserModelJob & job) {
                 if (wantDate) {
                     entry.modifiedLabel = BrowserModifiedLabel(item,entry.modifiedValue);
                     if (entry.folder && entry.modifiedLabel.empty() && !zipFolderDates.empty()) {
-                        const auto found = zipFolderDates.find(BrowserZipFolderKey(entry.relative));
+                        const auto found = zipFolderDates.find(BrowserZipFolderKey(entry.name));
                         if (found != zipFolderDates.end()) {
                             entry.modifiedLabel = BrowserZipDateLabel(found->second.local);
                             FILETIME local{},utc{};
@@ -8987,7 +9070,7 @@ static DWORD WINAPI BrowserModelWorker(LPVOID raw) {
     // Global shutdown owns the worker handle and joins before unloading.
     // The UI manager consumes this pointer on a successful PostMessageW.
     // Otherwise the worker deletes it. Neither path ignores an ownership result.
-    auto * job = static_cast < BrowserModelJob *  > (raw);
+    std::unique_ptr<BrowserModelJob> job(static_cast<BrowserModelJob*>(raw));
     const HRESULT initialized = OleInitialize(nullptr);
     if (SUCCEEDED(initialized)) {
         ScopedOperationCancellation scope(job->cancelled.get());
@@ -8996,15 +9079,8 @@ static DWORD WINAPI BrowserModelWorker(LPVOID raw) {
     } else job->result = initialized;
     // Snapshot before transferring ownership of job to the UI thread.
     const bool heavyModelSlot = job->heavyModelSlot;
-    {
-        std::lock_guard < std::mutex > postLock(g_browserModelPostMutex);
-        const HWND manager = g_gripManager.load(std::memory_order_acquire);
-        if (!manager || !PostMessageW(manager,WM_BROWSER_MODEL_READY,0,
-                                      reinterpret_cast < LPARAM > (job))) {
-            Wh_Log(L"Background archive model discarded: browser manager exited");
-            delete job;
-        }
-    }
+    if (FAILED(PostBrowserPayload(WM_BROWSER_MODEL_READY,0,std::move(job))))
+        Wh_Log(L"Background archive model discarded: browser manager exited");
     BrowserReleaseModelWorker(heavyModelSlot);
     return 0;
 }
@@ -9414,33 +9490,190 @@ struct ExternalDragEntry {
     std::wstring displayPath;
     bool directory{};
 };
-static bool ExternalDragRemoveTree(const std::wstring & path,unsigned depth = 0) {
-    const DWORD attrs = GetFileAttributesW(path.c_str());
-    if (attrs == INVALID_FILE_ATTRIBUTES) return GetLastError() == ERROR_FILE_NOT_FOUND ||
-        GetLastError() == ERROR_PATH_NOT_FOUND;
-    if (attrs & FILE_ATTRIBUTE_REPARSE_POINT)
-        return (attrs & FILE_ATTRIBUTE_DIRECTORY)?RemoveDirectoryW(path.c_str()) != FALSE:
-            DeleteFileW(path.c_str()) != FALSE;
-    bool success = true;
-    if (attrs & FILE_ATTRIBUTE_DIRECTORY) {
-        if (depth >= 128) return false;
-        WIN32_FIND_DATAW entry{};
-        HANDLE find = FindFirstFileW((path+L"\\*").c_str(),&entry);
-        if (find != INVALID_HANDLE_VALUE) {
-            do {
-                if (wcscmp(entry.cFileName,L".") == 0 || wcscmp(entry.cFileName,L"..") == 0) continue;
-                if (!ExternalDragRemoveTree(path+L"\\"+entry.cFileName,depth+1)) success = false;
-            } while (FindNextFileW(find,&entry));
-            if (GetLastError() != ERROR_NO_MORE_FILES) success = false;
-            FindClose(find);
-        } else if (GetLastError() != ERROR_FILE_NOT_FOUND) success = false;
-        SetFileAttributesW(path.c_str(),attrs & ~FILE_ATTRIBUTE_READONLY);
-        if (!RemoveDirectoryW(path.c_str())) success = false;
-    } else {
-        SetFileAttributesW(path.c_str(),(attrs & ~FILE_ATTRIBUTE_READONLY) | FILE_ATTRIBUTE_NORMAL);
-        if (!DeleteFileW(path.c_str())) success = false;
+using ExternalDragHandle = std::unique_ptr<void,decltype(&CloseHandle)>;
+static constexpr wchar_t kExternalDragPrefix[] = L"ArchivePreview-Drag-";
+static constexpr wchar_t kExternalDragLeaseName[] = L"\\lease.bin";
+static constexpr wchar_t kExternalDragFilesName[] = L"\\files";
+
+struct ExternalDragPathLocks {
+    std::vector<HANDLE> retained;
+    ~ExternalDragPathLocks() {
+        for (HANDLE handle:retained) CloseHandle(handle);
     }
-    return success;
+    bool Lock(const fs::path & path) {
+        // Reserve before opening handles so allocation failure leaves no untracked handle.
+        const auto relative = path.relative_path();
+        retained.reserve(static_cast<size_t>(std::distance(relative.begin(),relative.end())));
+        return SUCCEEDED(ArchivePreviewPathSafety::CheckPathComponents(path,true,true,&retained,true));
+    }
+};
+static ExternalDragHandle OpenExternalDragEntry(const std::wstring & path,DWORD access,
+                                                DWORD share,DWORD creation = OPEN_EXISTING) {
+    const std::wstring openPath = ArchivePreviewPathSafety::ExtendedLocalPath(path);
+    HANDLE handle = CreateFileW(openPath.c_str(),access,share,nullptr,creation,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,nullptr);
+    return ExternalDragHandle(handle == INVALID_HANDLE_VALUE ? nullptr : handle,CloseHandle);
+}
+static bool ExternalDragIsDirectory(HANDLE handle) {
+    FILE_ATTRIBUTE_TAG_INFO info{};
+    return GetFileInformationByHandleEx(handle,FileAttributeTagInfo,&info,sizeof(info)) &&
+        (info.FileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) ==
+            FILE_ATTRIBUTE_DIRECTORY;
+}
+static bool SameExternalDragEntry(HANDLE first,HANDLE second) {
+    BY_HANDLE_FILE_INFORMATION a{},b{};
+    return GetFileInformationByHandle(first,&a) && GetFileInformationByHandle(second,&b) &&
+        (a.nFileIndexHigh || a.nFileIndexLow) && a.dwVolumeSerialNumber == b.dwVolumeSerialNumber &&
+        a.nFileIndexHigh == b.nFileIndexHigh && a.nFileIndexLow == b.nFileIndexLow;
+}
+static HRESULT ExternalDragRoot(std::wstring & path,ExternalDragPathLocks & rootLocks,bool create) {
+    std::vector<wchar_t> storage(32768);
+    if (!Wh_GetModStoragePath(storage.data(),storage.size())) return E_ACCESSDENIED;
+    std::wstring sid;
+    const HRESULT sidResult = ArchiveGetUserSid(sid);
+    if (FAILED(sidResult)) return sidResult;
+    const fs::path base = fs::path(storage.data()).lexically_normal();
+    const fs::path parent = base.has_filename() ? base : base.parent_path();
+    ExternalDragPathLocks locks;
+    if (!locks.Lock(parent)) return E_ACCESSDENIED;
+    path = (parent / (std::wstring(L"ArchivePreview-ExternalDrag-")+sid)).wstring();
+    if (create) {
+        const std::wstring createPath = ArchivePreviewPathSafety::ExtendedLocalPath(path);
+        const std::wstring acl = L"D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;" + sid + L")";
+        PSECURITY_DESCRIPTOR descriptor = nullptr;
+        if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                acl.c_str(),SDDL_REVISION_1,&descriptor,nullptr))
+            return HRESULT_FROM_WIN32(GetLastError());
+        SECURITY_ATTRIBUTES attributes{sizeof(attributes),descriptor,FALSE};
+        const BOOL created = CreateDirectoryW(createPath.c_str(),&attributes);
+        const DWORD error = created ? ERROR_SUCCESS : GetLastError();
+        LocalFree(descriptor);
+        if (error != ERROR_SUCCESS && error != ERROR_ALREADY_EXISTS)
+            return HRESULT_FROM_WIN32(error);
+    }
+    const auto root = OpenExternalDragEntry(path,FILE_READ_ATTRIBUTES | READ_CONTROL,
+        FILE_SHARE_READ | FILE_SHARE_WRITE);
+    if (!root) return HRESULT_FROM_WIN32(GetLastError());
+    if (!ExternalDragIsDirectory(root.get()) || !rootLocks.Lock(fs::path(path)))
+        return E_ACCESSDENIED;
+    PSID expected = nullptr;
+    if (!ConvertStringSidToSidW(sid.c_str(),&expected)) return E_ACCESSDENIED;
+    PSID owner = nullptr;
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    const DWORD error = GetSecurityInfo(root.get(),SE_FILE_OBJECT,OWNER_SECURITY_INFORMATION,
+        &owner,nullptr,nullptr,nullptr,&descriptor);
+    const bool allowed = error == ERROR_SUCCESS && owner && EqualSid(owner,expected);
+    LocalFree(descriptor);
+    LocalFree(expected);
+    return allowed ? S_OK : E_ACCESSDENIED;
+}
+static bool ExternalDragLeaseIsIdle(HANDLE file) {
+    FILE_ATTRIBUTE_TAG_INFO attrs{};
+    LARGE_INTEGER start{},size{};
+    ExternalDragLeaseRecord record{};
+    DWORD read = 0;
+    if (!GetFileInformationByHandleEx(file,FileAttributeTagInfo,&attrs,sizeof(attrs)) ||
+        (attrs.FileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) ||
+        !GetFileSizeEx(file,&size) || size.QuadPart != sizeof(record) ||
+        !SetFilePointerEx(file,start,nullptr,FILE_BEGIN) ||
+        !ReadFile(file,&record,sizeof(record),&read,nullptr) || read != sizeof(record) ||
+        record.signature != kExternalDragLeaseSignature)
+        return false;
+
+    const bool hasCreationTime = record.created.dwHighDateTime || record.created.dwLowDateTime;
+    if (record.status == ExternalDragLeaseStatus::Idle) return !record.pid && !hasCreationTime;
+    if (record.status != ExternalDragLeaseStatus::Running || !record.pid || !hasCreationTime)
+        return false;
+    const ExternalDragHandle process(OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+        FALSE,record.pid),CloseHandle);
+    if (!process) return GetLastError() == ERROR_INVALID_PARAMETER;
+    if (WaitForSingleObject(process.get(),0) == WAIT_OBJECT_0) return true;
+    FILETIME created{},exited{},kernel{},user{};
+    return GetProcessTimes(process.get(),&created,&exited,&kernel,&user) &&
+        CompareFileTime(&record.created,&created) != 0;
+}
+static bool DeleteExternalDragEntry(HANDLE file) {
+    FILE_DISPOSITION_INFO remove{TRUE};
+    if (SetFileInformationByHandle(file,FileDispositionInfo,&remove,sizeof(remove))) return true;
+    if (GetLastError() != ERROR_ACCESS_DENIED) return false;
+    FILE_DISPOSITION_INFO_EX readOnly{
+        FILE_DISPOSITION_FLAG_DELETE | FILE_DISPOSITION_FLAG_IGNORE_READONLY_ATTRIBUTE};
+    return SetFileInformationByHandle(file,FileDispositionInfoEx,&readOnly,sizeof(readOnly)) != FALSE;
+}
+static bool ExternalDragRemoveTree(const std::wstring & path,bool cancellable,unsigned depth = 0) {
+    if (depth >= 128 || (cancellable && CancelledForCurrentOperation())) return false;
+    // Open the entry itself and keep it pinned during enumeration. Reparse
+    // points are removed by handle without visiting their targets.
+    const auto file = OpenExternalDragEntry(path,DELETE | FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE);
+    if (!file) {
+        const DWORD error = GetLastError();
+        return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND;
+    }
+    FILE_ATTRIBUTE_TAG_INFO info{};
+    if (!GetFileInformationByHandleEx(file.get(),FileAttributeTagInfo,&info,sizeof(info)))
+        return false;
+    if ((info.FileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) ==
+            FILE_ATTRIBUTE_DIRECTORY) {
+        WIN32_FIND_DATAW entry{};
+        const std::wstring searchPath = ArchivePreviewPathSafety::ExtendedLocalPath(path+L"\\*");
+        HANDLE found = FindFirstFileW(searchPath.c_str(),&entry);
+        if (found == INVALID_HANDLE_VALUE) {
+            if (GetLastError() != ERROR_FILE_NOT_FOUND) return false;
+        } else {
+            const std::unique_ptr<void,decltype(&FindClose)> find(found,FindClose);
+            bool removed = true;
+            do {
+                if (cancellable && CancelledForCurrentOperation()) return false;
+                if (wcscmp(entry.cFileName,L".") == 0 || wcscmp(entry.cFileName,L"..") == 0) continue;
+                if (!ExternalDragRemoveTree(path+L"\\"+entry.cFileName,cancellable,depth+1))
+                    removed = false;
+            } while (FindNextFileW(find.get(),&entry));
+            if (GetLastError() != ERROR_NO_MORE_FILES || !removed) return false;
+        }
+    }
+    return DeleteExternalDragEntry(file.get());
+}
+static bool ReclaimExternalDragStage(const std::wstring & path,HANDLE directory,
+                                     ExternalDragHandle & lease,bool cancellable) {
+    if (!lease || !ExternalDragLeaseIsIdle(lease.get()) ||
+        !ExternalDragRemoveTree(path+kExternalDragFilesName,cancellable) ||
+        !DeleteExternalDragEntry(lease.get())) return false;
+    lease.reset();
+    return DeleteExternalDragEntry(directory);
+}
+static DWORD WINAPI RecoverExternalDragStages(LPVOID) try {
+    if (CancelledForCurrentOperation()) return 0;
+    std::wstring root;
+    ExternalDragPathLocks locks;
+    if (FAILED(ExternalDragRoot(root,locks,false))) return 0;
+    const std::wstring prefix(kExternalDragPrefix);
+    WIN32_FIND_DATAW entry{};
+    const std::wstring searchPath = ArchivePreviewPathSafety::ExtendedLocalPath(root+L"\\"+prefix+L"*");
+    HANDLE found = FindFirstFileW(searchPath.c_str(),&entry);
+    if (found == INVALID_HANDLE_VALUE) return 0;
+    const std::unique_ptr<void,decltype(&FindClose)> find(found,FindClose);
+    do {
+        if (CancelledForCurrentOperation()) break;
+        const std::wstring name(entry.cFileName);
+        if (name.size() != prefix.size()+38 || !name.starts_with(prefix) ||
+            name[prefix.size()] != L'{' || name.back() != L'}') continue;
+        GUID id{};
+        if (FAILED(CLSIDFromString(name.c_str()+prefix.size(),&id))) continue;
+        const std::wstring path = root+L"\\"+name;
+        auto directory = OpenExternalDragEntry(path,DELETE | FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE);
+        if (!directory || !ExternalDragIsDirectory(directory.get())) continue;
+        auto lease = OpenExternalDragEntry(path+kExternalDragLeaseName,GENERIC_READ | DELETE,0);
+        if (ReclaimExternalDragStage(path,directory.get(),lease,true)) {
+            directory.reset();
+            Wh_Log(L"[AP external drag] phase=recovery-cleanup result=removed stage=%s",name.c_str());
+        }
+    } while (FindNextFileW(find.get(),&entry));
+    return 0;
+} catch (const std::bad_alloc &) {
+    Wh_Log(L"[AP external drag] recovery cleanup stopped: out of memory");
+    return 1;
 }
 struct ExternalDragStage : public std::enable_shared_from_this<ExternalDragStage> {
     Request request;
@@ -9449,10 +9682,11 @@ struct ExternalDragStage : public std::enable_shared_from_this<ExternalDragStage
     ULONGLONG archiveBytes{};
     ArchiveFileIdentity identity{};
     std::wstring directory;
+    ExternalDragHandle directoryHandle{nullptr,CloseHandle};
+    ExternalDragHandle lease{nullptr,CloseHandle};
     std::mutex mutex;
     HANDLE ready{CreateEventW(nullptr,TRUE,FALSE,nullptr)};
     bool attempted{};
-    bool detached{};
     HRESULT outcome{E_PENDING};
     bool MatchesArchive() const {
         FILETIME stamp{};ULONGLONG bytes{};ArchiveFileIdentity current{};
@@ -9461,26 +9695,37 @@ struct ExternalDragStage : public std::enable_shared_from_this<ExternalDragStage
     }
     HRESULT Extract() {
         if (!MatchesArchive()) return HRESULT_FROM_WIN32(ERROR_FILE_INVALID);
-        std::vector<wchar_t> temp(32768);
-        const DWORD length = GetTempPathW(static_cast<DWORD>(temp.size()),temp.data());
-        if (!length || length >= temp.size()) return E_FAIL;
         GUID unique{};
         HRESULT hr = CoCreateGuid(&unique);
         if (FAILED(hr)) return hr;
         wchar_t text[48]{};StringFromGUID2(unique,text,_countof(text));
-        directory = std::wstring(temp.data())+L"ArchivePreview-Drag-"+text;
-        if (!CreateDirectoryW(directory.c_str(),nullptr)) {
-            const DWORD error = GetLastError();directory.clear();
-            return HRESULT_FROM_WIN32(error);
+        std::wstring files;
+        {
+            std::wstring root;
+            ExternalDragPathLocks locks;
+            hr = ExternalDragRoot(root,locks,true);
+            if (FAILED(hr)) return hr;
+            directory = root+L"\\"+kExternalDragPrefix+text;
+            files = directory+kExternalDragFilesName;
+            if (!CreateDirectoryW(ArchivePreviewPathSafety::ExtendedLocalPath(directory).c_str(),nullptr))
+                return HRESULT_FROM_WIN32(GetLastError());
+            directoryHandle = OpenExternalDragEntry(directory,DELETE | FILE_READ_ATTRIBUTES,
+                FILE_SHARE_READ | FILE_SHARE_WRITE);
+            if (!directoryHandle || !ExternalDragIsDirectory(directoryHandle.get()))
+                return E_ACCESSDENIED;
+            lease = OpenExternalDragEntry(directory+kExternalDragLeaseName,
+                GENERIC_READ | GENERIC_WRITE | DELETE,0,CREATE_NEW);
+            if (!lease) return HRESULT_FROM_WIN32(GetLastError());
+            if (!WriteExternalDragLease(lease.get(),ExternalDragLeaseStatus::Idle)) return E_FAIL;
+            if (!CreateDirectoryW(ArchivePreviewPathSafety::ExtendedLocalPath(files).c_str(),nullptr))
+                return HRESULT_FROM_WIN32(GetLastError());
         }
-        if (!ArchivePreviewPathSafety::ValidPathComponents(fs::path(directory),true,false))
-            return E_ACCESSDENIED;
         Request extraction = request;
         extraction.command = ARCHIVE_BROKER_EXTRACT_SELECTED_HERE;
         extraction.requestId = unique;
         Wh_Log(L"[AP external drag] phase=extract items=%zu stage=ArchivePreview-Drag-%s",
             extraction.items.size(),text);
-        hr = ExternalShellExtract(extraction,options,directory,&detached);
+        hr = ExternalShellExtract(extraction,options,files,lease.get());
         if (FAILED(hr)) return hr;
         return MatchesArchive()?S_OK:HRESULT_FROM_WIN32(ERROR_FILE_INVALID);
     }
@@ -9489,7 +9734,11 @@ struct ExternalDragStage : public std::enable_shared_from_this<ExternalDragStage
             static_cast<std::shared_ptr<ExternalDragStage>*>(raw));
         const auto stage = *holder;
         const HRESULT initialized = OleInitialize(nullptr);
-        stage->outcome = SUCCEEDED(initialized)?stage->Extract():initialized;
+        try {
+            stage->outcome = SUCCEEDED(initialized)?stage->Extract():initialized;
+        } catch (const std::bad_alloc &) {
+            stage->outcome = E_OUTOFMEMORY;
+        }
         if (SUCCEEDED(initialized)) OleUninitialize();
         Wh_Log(L"[AP external drag] preparation result=0x%08lX",static_cast<unsigned long>(stage->outcome));
         SetEvent(stage->ready);
@@ -9497,6 +9746,7 @@ struct ExternalDragStage : public std::enable_shared_from_this<ExternalDragStage
     }
     HRESULT Prepare() {
         if (!ready) return E_OUTOFMEMORY;
+        if (CancelledForCurrentOperation()) return HRESULT_FROM_WIN32(ERROR_CANCELLED);
         {
             std::lock_guard<std::mutex> lock(mutex);
             if (!attempted) {
@@ -9510,29 +9760,51 @@ struct ExternalDragStage : public std::enable_shared_from_this<ExternalDragStage
         // Concurrent/reentrant content requests wait for the SAME extraction.
         // The extractor runs on a separate STA, so dispatching an incoming OLE
         // request cannot deadlock an extraction suspended on this UI thread.
-        for (;;) {
-            const DWORD wake = MsgWaitForMultipleObjects(1,&ready,FALSE,250,QS_ALLINPUT);
-            if (wake == WAIT_OBJECT_0) return outcome;
+        const HANDLE events[] = {g_brokerStopEvent,ready};
+        while (!CancelledForCurrentOperation()) {
+            const DWORD wake = MsgWaitForMultipleObjectsEx(_countof(events),events,INFINITE,
+                QS_ALLINPUT,MWMO_INPUTAVAILABLE);
+            if (wake == WAIT_OBJECT_0) break;
+            if (wake == WAIT_OBJECT_0 + 1) return outcome;
             if (wake == WAIT_FAILED) return HRESULT_FROM_WIN32(GetLastError());
-            if (wake == WAIT_OBJECT_0 + 1) {
+            if (wake == WAIT_OBJECT_0 + _countof(events)) {
                 MSG pending{};
-                while (PeekMessageW(&pending,nullptr,0,0,PM_REMOVE)) {
-                    if (pending.message == WM_QUIT) continue;
+                while (!CancelledForCurrentOperation() &&
+                       PeekMessageW(&pending,nullptr,0,0,PM_REMOVE)) {
+                    if (pending.message == WM_QUIT) {
+                        PostQuitMessage(static_cast<int>(pending.wParam));
+                        return HRESULT_FROM_WIN32(ERROR_CANCELLED);
+                    }
                     TranslateMessage(&pending);DispatchMessageW(&pending);
                 }
             }
         }
+        return HRESULT_FROM_WIN32(ERROR_CANCELLED);
     }
     ~ExternalDragStage() {
         if (ready) CloseHandle(ready);
-        if (directory.empty()) return;
-        // A launched extractor can outlive mod shutdown. Do not remove its
-        // working directory while that independent process is still writing.
-        const bool removed = !detached && ExternalDragRemoveTree(directory);
+        if (!directoryHandle) return;
+        bool removed = false;
+        try {
+            ExternalDragPathLocks locks;
+            if (locks.Lock(fs::path(directory).parent_path()) &&
+                ExternalDragIsDirectory(directoryHandle.get())) {
+                // The path may have changed when no ancestor handles were held.
+                const auto current = OpenExternalDragEntry(directory,FILE_READ_ATTRIBUTES,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE);
+                if (current && SameExternalDragEntry(directoryHandle.get(),current.get())) {
+                    removed = lease ? ReclaimExternalDragStage(directory,directoryHandle.get(),lease,false) :
+                        DeleteExternalDragEntry(directoryHandle.get());
+                }
+            }
+        } catch (const std::bad_alloc &) {
+            // The next broker session can retry using the persistent record.
+        }
+        directoryHandle.reset();
         if (ArchivePreviewDiagnostics::Enabled()) {
             const wchar_t * stageName = wcsrchr(directory.c_str(),L'\\');
             Wh_Log(L"[AP external drag] phase=cleanup result=%s stage=%s",
-                removed?L"removed":detached?L"extractor-running":L"retained",
+                removed?L"removed":L"retained",
                 stageName?stageName+1:directory.c_str());
         }
     }
@@ -9543,9 +9815,13 @@ class ExternalDragStream final : public IStream {
     std::atomic<ULONG> refs_{1};
     IStream * stream_{};
     std::shared_ptr<ExternalDragStage> stage_;
+    const LONG index_;
 public:
-    ExternalDragStream(IStream * stream,std::shared_ptr<ExternalDragStage> stage):
-        stream_(stream),stage_(std::move(stage)){++ArchivePreviewHost::g_objects;++g_externalDragInterfaces;}
+    ExternalDragStream(IStream * stream,std::shared_ptr<ExternalDragStage> stage,LONG index):
+        stream_(stream),stage_(std::move(stage)),index_(index) {
+        ++ArchivePreviewHost::g_objects;
+        ++g_externalDragInterfaces;
+    }
     ~ExternalDragStream(){stream_->Release();stage_.reset();--ArchivePreviewHost::g_objects;--g_externalDragInterfaces;}
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,void ** out) override {
         if (!out) return E_POINTER;*out = nullptr;
@@ -9554,11 +9830,24 @@ public:
     }
     ULONG STDMETHODCALLTYPE AddRef() override {return refs_.fetch_add(1)+1;}
     ULONG STDMETHODCALLTYPE Release() override {const ULONG n = refs_.fetch_sub(1)-1;if(!n)delete this;return n;}
-    HRESULT STDMETHODCALLTYPE Read(void * p,ULONG n,ULONG * read) override {return stream_->Read(p,n,read);}
+    HRESULT STDMETHODCALLTYPE Read(void * p,ULONG n,ULONG * read) override {
+        const HRESULT hr = stream_->Read(p,n,read);
+        if (FAILED(hr))
+            Wh_Log(L"[AP external drag] phase=stream-read index=%ld hr=0x%08lX",
+                index_,static_cast<unsigned long>(hr));
+        return hr;
+    }
     HRESULT STDMETHODCALLTYPE Write(const void *,ULONG,ULONG * written) override {if(written)*written=0;return STG_E_ACCESSDENIED;}
     HRESULT STDMETHODCALLTYPE Seek(LARGE_INTEGER move,DWORD origin,ULARGE_INTEGER * position) override {return stream_->Seek(move,origin,position);}
     HRESULT STDMETHODCALLTYPE SetSize(ULARGE_INTEGER) override {return STG_E_ACCESSDENIED;}
-    HRESULT STDMETHODCALLTYPE CopyTo(IStream * target,ULARGE_INTEGER n,ULARGE_INTEGER * read,ULARGE_INTEGER * written) override {return stream_->CopyTo(target,n,read,written);}
+    HRESULT STDMETHODCALLTYPE CopyTo(IStream * target,ULARGE_INTEGER n,
+                                     ULARGE_INTEGER * read,ULARGE_INTEGER * written) override {
+        const HRESULT hr = stream_->CopyTo(target,n,read,written);
+        if (FAILED(hr))
+            Wh_Log(L"[AP external drag] phase=stream-copy index=%ld hr=0x%08lX",
+                index_,static_cast<unsigned long>(hr));
+        return hr;
+    }
     HRESULT STDMETHODCALLTYPE Commit(DWORD flags) override {return stream_->Commit(flags);}
     HRESULT STDMETHODCALLTYPE Revert() override {return stream_->Revert();}
     HRESULT STDMETHODCALLTYPE LockRegion(ULARGE_INTEGER at,ULARGE_INTEGER n,DWORD type) override {return stream_->LockRegion(at,n,type);}
@@ -9568,7 +9857,7 @@ public:
         if (!out) return E_POINTER;*out = nullptr;
         IStream * copy = nullptr;HRESULT hr = stream_->Clone(&copy);
         if (FAILED(hr)) return hr;
-        auto * wrapper = new(std::nothrow) ExternalDragStream(copy,stage_);
+        auto * wrapper = new(std::nothrow) ExternalDragStream(copy,stage_,index_);
         if (!wrapper) {copy->Release();return E_OUTOFMEMORY;}
         *out = wrapper;return S_OK;
     }
@@ -9726,13 +10015,24 @@ public:
                 if(FAILED(hr))*out={};return hr;
             }
             hr=stage_->Prepare();if(FAILED(hr))return hr;
-            const std::wstring path=stage_->directory+L"\\"+entry.archivePath;
-            if(!ArchivePreviewPathSafety::ValidPathComponents(fs::path(path),false,false))return E_ACCESSDENIED;
+            const std::wstring path=stage_->directory+kExternalDragFilesName+L"\\"+entry.archivePath;
+            hr = ArchivePreviewPathSafety::CheckPathComponents(fs::path(path),false,false,nullptr,true);
+            if (FAILED(hr)) {
+                Wh_Log(L"[AP external drag] phase=stream-validate index=%ld path_chars=%zu hr=0x%08lX",
+                    format->lindex,path.size(),static_cast<unsigned long>(hr));
+                return hr;
+            }
+            const std::wstring streamPath = path.size() >= MAX_PATH ?
+                ArchivePreviewPathSafety::ExtendedLocalPath(path) : path;
             IStream * file=nullptr;
-            hr=SHCreateStreamOnFileEx(path.c_str(),STGM_READ | STGM_SHARE_DENY_WRITE,
+            hr=SHCreateStreamOnFileEx(streamPath.c_str(),STGM_READ | STGM_SHARE_DENY_WRITE,
                 FILE_ATTRIBUTE_NORMAL,FALSE,nullptr,&file);
-            if(FAILED(hr))return hr;
-            auto * wrapper=new(std::nothrow)ExternalDragStream(file,stage_);
+            if (FAILED(hr)) {
+                Wh_Log(L"[AP external drag] phase=stream-open index=%ld path_chars=%zu hr=0x%08lX",
+                    format->lindex,path.size(),static_cast<unsigned long>(hr));
+                return hr;
+            }
+            auto * wrapper=new(std::nothrow)ExternalDragStream(file,stage_,format->lindex);
             if(!wrapper){file->Release();return E_OUTOFMEMORY;}
             out->tymed=TYMED_ISTREAM;out->pstm=wrapper;return S_OK;
         }
@@ -10997,6 +11297,8 @@ static void BrowserRetireOverlappingPreviews(HWND newAnchor) {
     }
 }
 static LRESULT CALLBACK BrowserManagerProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
+    // The UI thread destroys this internal window after reclaiming its queue.
+    if (msg == WM_CLOSE) return 0;
     if (msg == WM_TIMER && wp == kBrowserParkSweepTimer) {
         BrowserSweepParked();
         size_t parkedCount = 0;
@@ -11492,7 +11794,29 @@ static LRESULT CALLBACK BrowserManagerProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM l
     }
     return DefWindowProcW(hwnd,msg,wp,lp);
 }
+static void RunBrokerMessageLoop() {
+    while (!CancelledForCurrentOperation()) {
+        const DWORD wake = MsgWaitForMultipleObjectsEx(1,&g_brokerStopEvent,INFINITE,
+            QS_ALLINPUT,MWMO_INPUTAVAILABLE);
+        if (wake != WAIT_OBJECT_0 + 1) return;
+        MSG message{};
+        while (!CancelledForCurrentOperation() &&
+               PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
+            if (message.message == WM_QUIT) return;
+            TranslateMessage(&message);DispatchMessageW(&message);
+        }
+    }
+}
+template<typename T>
+static void DiscardBrowserPayloads(HWND manager,UINT message) {
+    MSG stranded{};
+    while (PeekMessageW(&stranded,manager,message,message,PM_REMOVE)) {
+        if (stranded.message == message)
+            delete reinterpret_cast<T*>(stranded.lParam);
+    }
+}
 static DWORD WINAPI GripUiThread(LPVOID) {
+    if (CancelledForCurrentOperation()) return 0;
     HRESULT init = OleInitialize(nullptr);
     if (FAILED(init)) return 1;
     INITCOMMONCONTROLSEX cc{};cc.dwSize = sizeof(cc);cc.dwICC = ICC_LISTVIEW_CLASSES;
@@ -11532,26 +11856,22 @@ static DWORD WINAPI GripUiThread(LPVOID) {
     g_browserParkHost = CreateWindowExW(WS_EX_TOOLWINDOW,L"STATIC",L"",
         WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
         - 32000, - 32000,1,1,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
-    g_gripManager.store(manager);g_gripReady.store(manager != nullptr);
-    Wh_Log(L"%s", std::wstring(manager?L"Broker-owned ListView manager ready":L"Broker-owned ListView manager failed").c_str());
-    MSG message{};
-    while (manager && GetMessageW( & message,nullptr,0,0) > 0) {
-        TranslateMessage( & message);DispatchMessageW( & message);
+    if (manager && !CancelledForCurrentOperation()) {
+        g_gripManager.store(manager,std::memory_order_release);
+        g_gripReady.store(true,std::memory_order_release);
     }
+    Wh_Log(L"%s", std::wstring(manager?L"Broker-owned ListView manager ready":L"Broker-owned ListView manager failed").c_str());
+    if (manager) RunBrokerMessageLoop();
     {
-        std::lock_guard < std::mutex > postLock(g_browserModelPostMutex);
+        std::lock_guard<std::mutex> lock(g_browserPostMutex);
         g_gripManager.store(nullptr,std::memory_order_release);
-        // PostMessageW transfers ownership of raw result pointers. Stop
-        // producers, then reclaim messages that are still queued after the
-        // message loop exits. A blocked worker will delete its result itself
-        // when it eventually returns and sees the null manager.
-        MSG stranded{};
-        while (manager && PeekMessageW( & stranded,manager,
-               WM_BROWSER_MODEL_READY,WM_BROWSER_MODEL_READY,PM_REMOVE))
-            delete reinterpret_cast < BrowserModelJob *  > (stranded.lParam);
-        while (manager && PeekMessageW( & stranded,manager,
-               WM_BROWSER_MODEL_PREVIEW,WM_BROWSER_MODEL_PREVIEW,PM_REMOVE))
-            delete reinterpret_cast < BrowserModelPreview *  > (stranded.lParam);
+        g_gripReady.store(false,std::memory_order_release);
+    }
+    if (manager) {
+        DiscardBrowserPayloads<BrowserModelJob>(manager,WM_BROWSER_MODEL_READY);
+        DiscardBrowserPayloads<BrowserModelPreview>(manager,WM_BROWSER_MODEL_PREVIEW);
+        DiscardBrowserPayloads<Request>(manager,WM_BROWSER_CHANGE);
+        DiscardBrowserPayloads<BrowserLocalExtractResult>(manager,WM_BROWSER_LOCAL_EXTRACT_DONE);
     }
     // No new browser may subscribe after manager shutdown. The worker's own
     // token remains valid until it returns; this map holds no thread handles.
@@ -11576,8 +11896,6 @@ static DWORD WINAPI GripUiThread(LPVOID) {
     UnregisterClassW(kBrowserHeaderClass,instance);
     UnregisterClassW(kBrowserFooterClass,instance);
     UnregisterClassW(kBrowserHostClass,instance);
-    g_gripManager.store(nullptr);
-    g_gripReady.store(false);
     while (g_externalDragInterfaces.load(std::memory_order_acquire)) {
         MSG pending{};
         while (PeekMessageW(&pending,nullptr,0,0,PM_REMOVE)) {
@@ -11590,20 +11908,9 @@ static DWORD WINAPI GripUiThread(LPVOID) {
     OleUninitialize();return 0;
 }
 static HRESULT DispatchGripUpdate(const Request & req) {
-    HWND manager = g_gripManager.load();
-    if (!manager || !IsWindow(manager)) {
-        Wh_Log(L"Browser command rejected: manager not ready");
-        return HRESULT_FROM_WIN32(ERROR_NOT_READY);
-    }
-    Request * copy = new (std::nothrow) Request(req);
+    std::unique_ptr<Request> copy(new(std::nothrow) Request(req));
     if (!copy) return E_OUTOFMEMORY;
-    if (!PostMessageW(manager,WM_BROWSER_CHANGE,req.command,
-                      reinterpret_cast < LPARAM > (copy))) {
-        const HRESULT hr = HRESULT_FROM_WIN32(GetLastError());
-        delete copy;
-        return hr;
-    }
-    return S_OK;
+    return PostBrowserPayload(WM_BROWSER_CHANGE,req.command,std::move(copy));
 }
 
 static void Report(const Request & req,HRESULT hr) {
@@ -11646,11 +11953,9 @@ static HRESULT Process(const Request & req) {
         req.command == ARCHIVE_BROKER_OPEN_FILE) {
         const GUID zero{};
         if (!InlineIsEqualGUID(req.requestId,zero)) {
-            const HWND manager = g_gripManager.load();
-            auto * result = new(std::nothrow) BrowserLocalExtractResult{req.requestId,hr,req.command};
-            if (result && (!manager || !PostMessageW(manager,
-                    WM_BROWSER_LOCAL_EXTRACT_DONE,0,reinterpret_cast < LPARAM > (result))))
-                delete result;
+            std::unique_ptr<BrowserLocalExtractResult> result(
+                new(std::nothrow) BrowserLocalExtractResult{req.requestId,hr,req.command});
+            if (result) PostBrowserPayload(WM_BROWSER_LOCAL_EXTRACT_DONE,0,std::move(result));
         }
     }
     if (req.command == ARCHIVE_BROKER_EXTRACT_HERE ||
@@ -12623,7 +12928,18 @@ static DWORD WINAPI ServeOnePipeClient(LPVOID state) {
 
 static std::atomic < bool > g_stopBroker{false};
 static std::atomic < bool > g_serviceReady{false};
-static HANDLE g_gripWorkerThread = nullptr;
+static void JoinBrokerThread(HANDLE thread,PCWSTR name) {
+    for (;;) {
+        const DWORD result = WaitForSingleObject(thread,30000);
+        if (result == WAIT_OBJECT_0) return;
+        if (result == WAIT_TIMEOUT) {
+            Wh_Log(L"Shutdown waiting for %s",name);
+        } else {
+            Wh_Log(L"Shutdown wait failed for %s (Win32=%lu)",name,GetLastError());
+            Sleep(100);
+        }
+    }
+}
 static int Serve() {
     if(g_stopBroker.load(std::memory_order_acquire))return 0;
     HANDLE token = nullptr;
@@ -12647,17 +12963,19 @@ static int Serve() {
     attrs.lpSecurityDescriptor = descriptor;
     Wh_Log(L"Broker started: normal-user transfer mode");
     if (!StartWorkQueue()) { LocalFree(descriptor); Wh_Log(L"Worker queue startup failed"); return 8; }
-    g_gripWorkerThread = CreateThread(nullptr,0,GripUiThread,nullptr,0,nullptr);
-    // Start maintenance after the work queue is ready. It never blocks IPC
-    // startup and the owning service thread joins it before DLL unmapping.
-    if(!g_gripWorkerThread) {
+    HANDLE gripWorkerThread = CreateThread(nullptr,0,GripUiThread,nullptr,0,nullptr);
+    // Maintenance never delays preview startup. The service joins the worker
+    // before allowing another service instance to reuse the cancellation state.
+    const ExternalDragHandle cleanupThread(gripWorkerThread ?
+        CreateThread(nullptr,0,RecoverExternalDragStages,nullptr,0,nullptr) : nullptr,CloseHandle);
+    if(!gripWorkerThread) {
         Wh_Log(L"Cannot launch broker UI apartment; stopping work queue");
         g_stopBroker.store(true,std::memory_order_release);
     }
     // Never publish the service as healthy before its UI manager exists.
     for (int attempt = 0; attempt < 300 && !g_stopBroker.load() &&
          !g_gripReady.load(); ++attempt) {
-        if(g_gripWorkerThread && WaitForSingleObject(g_gripWorkerThread,0) == WAIT_OBJECT_0) break;
+        if(gripWorkerThread && WaitForSingleObject(gripWorkerThread,0) == WAIT_OBJECT_0) break;
         Sleep(10);
     }
     if(!g_gripReady.load()) {
@@ -12672,6 +12990,10 @@ static int Serve() {
             PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
             kMaxPipeReaders + 1,65536,65536,0, & attrs);
         if (pipe == INVALID_HANDLE_VALUE) {Wh_Log(L"CreateNamedPipe failed");break;}
+        if (g_stopBroker.load(std::memory_order_acquire)) {
+            CloseHandle(pipe);
+            break;
+        }
         g_serviceReady.store(true,std::memory_order_release);
         if (ConnectNamedPipe(pipe,nullptr) || GetLastError() == ERROR_PIPE_CONNECTED) {
             if (g_stopBroker.load(std::memory_order_acquire)) { DisconnectNamedPipe(pipe); CloseHandle(pipe); break; }
@@ -12696,7 +13018,7 @@ static int Serve() {
             ReapFinishedPipeReaders();
         } else CloseHandle(pipe);
     }
-    g_cancelForShutdown.store(true,std::memory_order_release);
+    SignalBrokerShutdown();
     // Draining is deliberate: outstanding Shell operations may need time.
     // If they hang, unload stays blocked until the live workers can exit.
     std::vector < HANDLE > readers;
@@ -12721,10 +13043,6 @@ static int Serve() {
         if (g_workEvent) SetEvent(g_workEvent);
         if (g_clipboardEvent) SetEvent(g_clipboardEvent);
     }
-    if (HWND manager = g_gripManager.load()) {
-        PostMessageW(manager, WM_CLOSE, 0, 0);
-        if (g_gripWorkerThread) PostThreadMessageW(GetThreadId(g_gripWorkerThread), WM_QUIT, 0, 0);
-    }
     for (HANDLE & worker:g_workerThreads) {
         if (worker) {
             while(WaitForSingleObject(worker,30000) == WAIT_TIMEOUT)
@@ -12732,11 +13050,11 @@ static int Serve() {
             CloseHandle(worker);worker = nullptr;
         }
     }
-    if (g_gripWorkerThread) {
-        while(WaitForSingleObject(g_gripWorkerThread,30000) == WAIT_TIMEOUT)
-            Wh_Log(L"Shutdown waiting for Broker UI thread");
-        CloseHandle(g_gripWorkerThread);g_gripWorkerThread = nullptr;
+    if (gripWorkerThread) {
+        JoinBrokerThread(gripWorkerThread,L"Broker UI thread");
+        CloseHandle(gripWorkerThread);
     }
+    if (cleanupThread) JoinBrokerThread(cleanupThread.get(),L"external drag cleanup");
     if (g_clipboardThread) {
         while (WaitForSingleObject(g_clipboardThread, 30000) == WAIT_TIMEOUT)
             Wh_Log(L"Shutdown waiting for clipboard STA");
@@ -12760,8 +13078,8 @@ static int Serve() {
 }
 // Service shutdown preserves COM-worker lifetime until callbacks return.
 static void StopService() {
-    g_cancelForShutdown.store(true,std::memory_order_release);
     g_stopBroker.store(true, std::memory_order_release);
+    SignalBrokerShutdown();
     g_stopWorkers.store(true, std::memory_order_release);
     {
         std::lock_guard<std::mutex> lock(g_workMutex);
@@ -12769,10 +13087,6 @@ static void StopService() {
         g_clipboardQueue.clear();
         if (g_workEvent) SetEvent(g_workEvent);
         if (g_clipboardEvent) SetEvent(g_clipboardEvent);
-    }
-    if (HWND manager = g_gripManager.load()) {
-        PostMessageW(manager,WM_CLOSE,0,0);
-        if (g_gripWorkerThread) PostThreadMessageW(GetThreadId(g_gripWorkerThread),WM_QUIT,0,0);
     }
     std::wstring pipe;
     if (SUCCEEDED(ArchiveBrokerPipeName(pipe))) {
@@ -12808,6 +13122,11 @@ static bool StartService(){
         Wh_Log(L"ArchivePreview: another instance still owns the broker; retry pending");
         return false;
     }
+    ArchivePreviewBroker::g_brokerStopEvent = CreateEventW(nullptr,TRUE,FALSE,nullptr);
+    if (!ArchivePreviewBroker::g_brokerStopEvent) {
+        CloseHandle(own);
+        return false;
+    }
     g_brokerOwner.store(own);
     ArchivePreviewBroker::g_cancelForShutdown.store(false,std::memory_order_release);
     ArchivePreviewBroker::g_stopBroker.store(false, std::memory_order_release);
@@ -12817,6 +13136,7 @@ static bool StartService(){
     g_serviceThread = CreateThread(nullptr,0,ServiceThread,own,0,nullptr);
     if(!g_serviceThread){
         g_brokerOwner.store(nullptr);
+        CloseHandle(std::exchange(ArchivePreviewBroker::g_brokerStopEvent,nullptr));
         CloseHandle(own);
         return false;
     }
@@ -12827,6 +13147,10 @@ static bool StartService(){
 }
 static std::atomic_flag g_brokerAttempt = ATOMIC_FLAG_INIT;
 static std::atomic < ULONGLONG > g_brokerLastAttempt{0};
+static void ReleaseServiceHandles() {
+    CloseHandle(std::exchange(g_serviceThread,nullptr));
+    CloseHandle(std::exchange(ArchivePreviewBroker::g_brokerStopEvent,nullptr));
+}
 static void StopService(){
     // Do not race a concurrent MaybeStartService inside an Explorer hook.
     while(g_brokerAttempt.test(std::memory_order_acquire))Sleep(1);
@@ -12836,18 +13160,24 @@ static void StopService(){
     // A timeout is NOT a safe indication that executable code can unload.
     // Windhawk calls FreeLibrary immediately after Wh_ModUninit. Do not return
     // while the service thread, its COM workers or its HWND callbacks are live.
+    ULONGLONG lastLog = GetTickCount64();
     for(;;){
-        const DWORD result = WaitForSingleObject(g_serviceThread,30000);
+        const DWORD result = WaitForSingleObject(g_serviceThread,250);
         if(result == WAIT_OBJECT_0)break;
         if(result == WAIT_TIMEOUT){
-            Wh_Log(L"ArchivePreview unload: waiting for broker/Shell provider to exit");
+            // The first cancellation may have raced the start of ConnectNamedPipe.
             CancelSynchronousIo(g_serviceThread);
+            const ULONGLONG now = GetTickCount64();
+            if (now - lastLog >= 30000) {
+                Wh_Log(L"ArchivePreview unload: waiting for broker/Shell provider to exit");
+                lastLog = now;
+            }
             continue;
         }
         Wh_Log(L"ArchivePreview unload: broker wait failed (Win32=%lu)",GetLastError());
         Sleep(100);
     }
-    CloseHandle(g_serviceThread);g_serviceThread = nullptr;
+    ReleaseServiceHandles();
 }
 
 static void MaybeStartService(){
@@ -12862,7 +13192,7 @@ static void MaybeStartService(){
     // If an earlier broker shutdown has completed, reap the thread handle.
     // The old owner event has already been closed by ServiceThread.
     if(g_serviceThread && WaitForSingleObject(g_serviceThread,0) == WAIT_OBJECT_0){
-        CloseHandle(g_serviceThread);g_serviceThread = nullptr;
+        ReleaseServiceHandles();
     }
     if(!g_serviceThread && !g_stopping.load(std::memory_order_acquire)){
         if(StartService())
