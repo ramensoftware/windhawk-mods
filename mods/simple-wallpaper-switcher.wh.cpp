@@ -71,10 +71,9 @@ Supported image formats: JPEG, PNG, BMP, and WebP.
   - dissolve: Dissolve
   - blur-fade: Blur Fade
   - split-reveal: Split Reveal (random orientation)
-- toggleHotkey: "ctrl+alt+87"
+- toggleHotkey: "ctrl+alt+w"
   $name: Open picker hotkey
-  $description: Click to record a shortcut. If it cannot be registered, Ctrl+Alt+W is tried as a fallback. Leave empty to disable the hotkey.
-  $format: hotkey
+  $description: Shortcut such as ctrl+alt+w, ctrl+shift+f1, or alt+space. Letters, digits, common key names, and F1-F24 are supported. Numeric virtual-key codes from older settings are still accepted. Leave empty to disable the hotkey.
 - Appearance:
   - Theme: system
     $name: Theme
@@ -154,7 +153,9 @@ Supported image formats: JPEG, PNG, BMP, and WebP.
 #include <shellapi.h>
 #include <uxtheme.h>
 #include <windhawk_api.h>
+#if __has_include(<windhawk_tool_mod.h>)
 #include <windhawk_tool_mod.h>
+#endif
 #include <winrt/base.h>
 
 #include <algorithm>
@@ -540,9 +541,73 @@ void ApplyPickerThemeColors() {
     }
 }
 
+bool ParseHotkeyKey(const std::wstring& token, UINT* key) {
+    if (token.empty() || !key) {
+        return false;
+    }
+
+    if (token.size() == 1) {
+        const wchar_t character = token[0];
+        if ((character >= L'a' && character <= L'z') ||
+            (character >= L'A' && character <= L'Z')) {
+            *key = (UINT)(character >= L'a' ? character - (L'a' - L'A')
+                                           : character);
+            return true;
+        }
+        if (character >= L'0' && character <= L'9') {
+            *key = (UINT)character;
+            return true;
+        }
+    }
+
+    struct NamedKey {
+        PCWSTR name;
+        UINT value;
+    };
+    static const NamedKey namedKeys[] = {
+        {L"space", VK_SPACE},       {L"tab", VK_TAB},
+        {L"enter", VK_RETURN},      {L"return", VK_RETURN},
+        {L"escape", VK_ESCAPE},     {L"esc", VK_ESCAPE},
+        {L"backspace", VK_BACK},    {L"delete", VK_DELETE},
+        {L"del", VK_DELETE},        {L"insert", VK_INSERT},
+        {L"home", VK_HOME},         {L"end", VK_END},
+        {L"pageup", VK_PRIOR},      {L"pagedown", VK_NEXT},
+        {L"left", VK_LEFT},         {L"right", VK_RIGHT},
+        {L"up", VK_UP},             {L"down", VK_DOWN},
+    };
+    for (const NamedKey& namedKey : namedKeys) {
+        if (_wcsicmp(token.c_str(), namedKey.name) == 0) {
+            *key = namedKey.value;
+            return true;
+        }
+    }
+
+    if (token.size() >= 2 && (token[0] == L'f' || token[0] == L'F')) {
+        wchar_t* parsedEnd = nullptr;
+        const unsigned long functionNumber =
+            std::wcstoul(token.c_str() + 1, &parsedEnd, 10);
+        if (parsedEnd != token.c_str() + 1 && parsedEnd &&
+            *parsedEnd == L'\0' && functionNumber >= 1UL &&
+            functionNumber <= 24UL) {
+            *key = VK_F1 + (UINT)functionNumber - 1;
+            return true;
+        }
+    }
+
+    // Keep accepting the numeric virtual-key format used by earlier builds.
+    wchar_t* parsedEnd = nullptr;
+    const unsigned long numericKey = std::wcstoul(token.c_str(), &parsedEnd, 10);
+    if (parsedEnd == token.c_str() || !parsedEnd || *parsedEnd != L'\0' ||
+        numericKey == 0UL || numericKey > 255UL) {
+        return false;
+    }
+    *key = (UINT)numericKey;
+    return true;
+}
+
 void LoadHotkeySetting() {
     PCWSTR setting = Wh_GetStringSetting(L"toggleHotkey");
-    const std::wstring value = setting ? setting : L"ctrl+alt+87";
+    const std::wstring value = setting ? setting : L"ctrl+alt+w";
     if (setting) {
         Wh_FreeStringSetting(setting);
     }
@@ -567,14 +632,12 @@ void LoadHotkeySetting() {
         } else if (_wcsicmp(token.c_str(), L"win") == 0 && !keySeen) {
             g_hotkeyModifiers |= MOD_WIN;
         } else {
-            wchar_t* parsedEnd = nullptr;
-            const unsigned long key = std::wcstoul(token.c_str(), &parsedEnd, 10);
-            if (keySeen || token.empty() || parsedEnd == token.c_str() ||
-                !parsedEnd || *parsedEnd != L'\0' || key == 0 || key > 255) {
+            UINT key = 0;
+            if (keySeen || !ParseHotkeyKey(token, &key)) {
                 valid = false;
                 break;
             }
-            g_hotkeyKey = (UINT)key;
+            g_hotkeyKey = key;
             keySeen = true;
         }
 
@@ -3264,7 +3327,8 @@ bool HandlePickerKey(UINT key) {
 
 LRESULT CALLBACK TileSubclassProc(HWND hwnd, UINT message, WPARAM wParam,
                                   LPARAM lParam, UINT_PTR, DWORD_PTR) {
-    if (message == WM_MOUSEWHEEL && GetDlgCtrlID(hwnd) >= kFirstTileId) {
+    if (message == WM_MOUSEWHEEL &&
+        GetDlgCtrlID(hwnd) >= static_cast<int>(kFirstTileId)) {
         StepPage(GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? -1 : 1);
         return 0;
     }
@@ -5324,3 +5388,186 @@ void WhTool_ModUninit() {
         g_readyEvent = nullptr;
     }
 }
+
+#if !__has_include(<windhawk_tool_mod.h>)
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
+
+#endif
