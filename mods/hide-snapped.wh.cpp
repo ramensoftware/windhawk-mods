@@ -61,18 +61,15 @@ still need testing.
 
 - **Independent taskbar per monitor 1.7.0:** the 0.4.19 runtime retest on
   the configuration above produced no empty buttons or Explorer crashes.
-  Version 0.4.23 routes group buttons to their members' monitor; the author
-  confirmed creation and monitor moves. Minimized-member placement needs testing.
-  Earlier versions exhibited both problems. Longer sessions and other
-  configurations still need testing.
-- **Alt+Tab per monitor 1.2.1:** Alt+Tab continued to open during the
-  0.4.19 runtime retest with both mods loaded. Longer sessions and unload
-  behavior still need testing.
-- Duplicate group entries may appear in ordinary application hover previews.
-- Version 0.4.24 retries taskbar API initialization after an Explorer restart;
-  recovery from the captured 80004001 startup error still needs a live retest.
-  Other multi-monitor, DPI, and virtual desktop configurations have limited
-  coverage.
+  On 0.4.24 the author confirmed group creation, monitor moves, restoration
+  from minimized state and disable/enable without empty buttons or unload stalls.
+- **Alt+Tab per monitor 1.2.1:** the author confirmed Alt+Tab during a heavy
+  game and after closing it, including disabling both mods without restarting
+  Explorer. No duplicate group preview appeared on an ordinary application button.
+- On 0.4.24, Explorer restart and toggling Record support trace returned the
+  mod to normal operation. Startup API failure is retried until ready or stopped.
+- Longer sessions and other monitor/DPI/virtual desktop configurations have
+  limited coverage; these results describe the tested configuration.
 
 The mod has no Windows build-number restriction. The configuration above is
 the tested environment. Other Windows versions and ARM64 remain untested.
