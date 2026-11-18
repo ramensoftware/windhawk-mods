@@ -168,36 +168,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6b19ead230c08403dab28d1d30bcfd28e2abb0e2/mods/explorer-default-folder.wh.cpp"
       }
     },
-    "explorer-list-status-indent-fix": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794957138481,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794957138481,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "NDruce",
-        "description": "Removes the empty space before every item in the List, Small icons and Content views of File Explorer, and evens out the gaps around the items, icons and names of the files area",
-        "github": "https://github.com/NDruce",
-        "include": [
-          "explorer.exe"
-        ],
-        "name": "File Explorer List view indent fix and files area spacing",
-        "version": "1.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7433",
-      "source": {
-        "sha256": "997878c9d65b42fa358edeb9372889adeb7c791d14bffcc0ecf06d19682d0eb9",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6ffdf3d7f1497d42bc09fb42eb2f4842659c8daf/mods/explorer-list-status-indent-fix.wh.cpp"
-      }
-    },
     "fluent-radial-menu": {
       "details": {
         "defaultSorting": 0,
@@ -224,6 +194,35 @@
       "source": {
         "sha256": "7571a55cfb140859931d74630fb31538cdf31c3456fb46a8ad012b1b769e44a8",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/eeac62b6a66aa6639897fb7783e471b3319bbe3a/mods/fluent-radial-menu.wh.cpp"
+      }
+    },
+    "frosted-window-blur": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795043328083,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795043328083,
+        "users": 0
+      },
+      "metadata": {
+        "author": "JeremyWayne93",
+        "compilerOptions": "-ldwmapi -lgdi32 -luser32 -lshell32 -ladvapi32",
+        "description": "Frosted glass blur behind any window, with adjustable strength per window: hold Ctrl+Shift and scroll over it",
+        "github": "https://github.com/JeremyWayne93",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Frosted Window Blur",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7557",
+      "source": {
+        "sha256": "49af09e1239f83589f71d873ebbeec0374bec0bf11e65fee29e007d3d9940b15",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/f3a2ffa323df5b5872a0de892f5411cec70f73ff/mods/frosted-window-blur.wh.cpp"
       }
     },
     "lockscreen-background": {
@@ -287,37 +286,6 @@
       "source": {
         "sha256": "2978547c6d362ab07707b7cffb1f8c35272bdc0ff1d61376c20e3ec9975ebc13",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6c18b97917c56324382a01f017de9e09648c01ea/mods/simple-wallpaper-switcher.wh.cpp"
-      }
-    },
-    "taskbar-position-shortcut": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794906315053,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794906315053,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "Oji",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion -ladvapi32 -ldwmapi",
-        "description": "Adds quick taskbar position controls and optional saved positions for individual apps.",
-        "github": "https://github.com/eliogos",
-        "include": [
-          "explorer.exe"
-        ],
-        "name": "Taskbar Position Shortcut",
-        "version": "0.1.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7510",
-      "source": {
-        "sha256": "6513f361588e7dd7dc578b8ccf4a098e7b7e2eba871d5c6bdc0dbc9a3320b77b",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/9005105b74f1623858c3571f8d3ab110ccf074a8/mods/taskbar-position-shortcut.wh.cpp"
       }
     },
     "titlebar-opacity-button": {

@@ -2,12 +2,153 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-18T03:01:35.000Z</updated>
+    <updated>2026-11-18T23:04:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Position Shortcut 0.1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-position-shortcut#0af45f01bc2ecac581634d47e558017659639256</id>
+        <link href="https://windhawk.net/mods/taskbar-position-shortcut"/>
+        <updated>2026-11-18T23:04:15.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Position Shortcut</h1>
+<p>Adds a <strong>Taskbar position</strong> submenu when you right-click the Windows 11 taskbar. Choose a global position for this Explorer session, or set a position for a specific app.</p>
+<p>Finally, Windows brought back a feature they thought was not being used. I prefer my taskbar on the left when working in Photoshop, and on top when scrolling through layers in After Effects.
+<img src="https://i.imgur.com/FlhqlgP.png" alt="Taskbar position context menu"></p>
+<h2>Features</h2>
+<ul>
+<li><strong>Global position:</strong> Choose Follow Windows setting, Top, Left, Right, or Bottom. This lasts for the current Explorer session and does not save an app rule.</li>
+<li><strong>Per-app positions:</strong> Open the app's submenu to save a position that overrides the global choice. Choose Default to use the global position.</li>
+<li><strong>Maximized-only mode:</strong> Only apply app rules when a maximized window is found.</li>
+<li><strong>Switch delay:</strong> Adjust how long the mod waits before moving the taskbar.</li>
+<li><strong>Blacklist:</strong> Ignore apps you don't want triggering position changes.</li>
+</ul>
+<p>App rules are saved locally in Windhawk and won't appear in its Settings tab.</p>
+<h2>Compatibility</h2>
+<p>Requires Windows 11 with native taskbar positioning. I've tried it on builds <strong>26220.9836</strong> and <strong>26300.9818</strong>. Older builds haven't been tested. I've only tested it with one monitor.</p>
+<p>The mod doesn't change the saved Windows taskbar position. It may conflict with other mods that move the taskbar.</p>
+<p>Credits: Taskbar menu injection based on <code>taskbar-restart-explorer</code>; runtime position hooking based on <code>taskbar-on-top</code>.</p>
+]]></content>
+        <author>
+            <name>Oji</name>
+            <uri>https://github.com/eliogos</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[File Explorer List view indent fix and files area spacing 1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-list-status-indent-fix#c46c6d935191a92e85fccde1603e585cce1860cf</id>
+        <link href="https://windhawk.net/mods/explorer-list-status-indent-fix"/>
+        <updated>2026-11-18T23:04:09.000Z</updated>
+        <content type="html"><![CDATA[<h1>File Explorer List view indent fix and files area spacing</h1>
+<p>Starting with Windows 11 version 22H2, File Explorer reserves a 28 pixels wide
+area to the left of <strong>every</strong> item in the <strong>List</strong>, <strong>Small icons</strong> and
+<strong>Content</strong> views.
+The area is meant for sync status icons of cloud folders (OneDrive and other
+sync providers), but it's reserved in every folder, including the folders
+which have nothing to do with the cloud. The result is an odd indent between
+the edge of an item and its icon.</p>
+<p>The mod removes that area where there's nothing to show. It also fixes a
+number of smaller spacing inconsistencies in the files area. Every adjustment
+has a setting, and can be changed or turned off.</p>
+<p>The mod only deals with the files area: the part of a folder window which
+shows the files and the folders. It doesn't touch the navigation pane, the
+command bar or the address bar.</p>
+<h2>Before and after</h2>
+<p>All the files are selected in the screenshots, to show the gaps around the
+items. The top half of each image is without the mod, the bottom half is with
+the mod and its default settings.</p>
+<p><strong>List</strong></p>
+<p><img src="https://i.imgur.com/wiG8znW.png" alt="List view, before and after"></p>
+<p><strong>Small icons</strong></p>
+<p><img src="https://i.imgur.com/zTgetJS.png" alt="Small icons view, before and after"></p>
+<p><strong>Content</strong></p>
+<p><img src="https://i.imgur.com/hpi1nNR.png" alt="Content view, before and after"></p>
+<p><strong>Details</strong></p>
+<p><img src="https://i.imgur.com/fYZUSwC.png" alt="Details view, before and after"></p>
+<p><strong>Tiles</strong></p>
+<p><img src="https://i.imgur.com/aKs5Nfm.png" alt="Tiles view, before and after"></p>
+<h2>What it does</h2>
+<ul>
+<li><strong>No empty status area.</strong> The reserved area is removed where there's nothing
+to show. Items which have a status icon, and all the items inside of a cloud
+folder, still have it, so the status icons keep working and stay aligned.
+Optionally, the status icons can be hidden in the List and Small icons views
+altogether.</li>
+<li><strong>Even gaps around an item.</strong> The gap between the border of an item and its
+content is the same on the left and on the right, in the List, Small icons,
+Tiles, Content and Details views. The size of the gap is configurable. The
+right gap of the List view has a correction of its own.</li>
+<li><strong>Narrower status icon area.</strong> The same gap is used on both sides of a
+status icon, also in the Tiles and Content views.</li>
+<li><strong>Icon and name.</strong> A configurable gap is added between the item icon and the
+name, the same in the List, Small icons and Details views. The names and the
+status icons can be moved vertically. The Small icons view has a separate
+offset for the names.</li>
+<li><strong>Rows of the Details view.</strong> The gap between the icon and the name is made
+the same as in the List view. A negative offset of the names is taken from
+the height of the rows, so that the names stay centered in the rows.</li>
+<li><strong>Rows of the Content view.</strong> The padding below the text of a row is
+configurable.</li>
+<li><strong>Even margins around the files area.</strong> The files area gets margins on all
+four sides, in all views. The horizontal and the vertical margins are
+configurable separately.</li>
+</ul>
+<h2>Defaults</h2>
+<p>Only the removal of the empty status area is a fix in the strict sense. The
+other adjustments are a matter of taste, and they're turned on by default too.
+To get the stock look of a part back, use these values:</p>
+<ul>
+<li>Even item spacing: off. That also turns off the gaps and the offsets of the
+icons and the names, and the adjustments of the Details and Content rows.</li>
+<li>Horizontal and vertical margins of the files area: 0.</li>
+</ul>
+<h2>Scaling</h2>
+<p>The gaps, the paddings and the margins follow the display scaling. The
+vertical offsets and the correction of the right gap are small corrections of
+a pixel or two, and are applied in physical pixels regardless of the scaling.</p>
+<p>Items which are already displayed when the display scaling changes keep the
+old spacing until the folder is reopened or refreshed. With fractional scaling
+such as 125%, the gaps can differ by a pixel because of rounding.</p>
+<p>The mod works with the compact view of File Explorer turned on or off, and
+with the item check boxes.</p>
+<h2>Other programs</h2>
+<p>By default, the mod only applies to File Explorer (<code>explorer.exe</code>). That's the
+recommended setup, and nothing has to be configured for it.</p>
+<p>The same items view is used by the Open/Save dialogs of other programs. To fix
+it there too, add the programs to the custom process inclusion list in the
+Advanced tab of the mod, by the name of the executable file, for example
+<code>notepad.exe</code>. <code>explorer.exe</code> doesn't have to be added, it's always included.</p>
+<p>It's also possible to add <code>*</code>, which means all programs. The mod is then
+loaded into every process, including the ones which never show a file dialog,
+so adding only the programs you need is the lighter option.</p>
+<p>Only 64-bit programs are supported. In a program other than File Explorer, the
+mod does nothing until the program loads the items view (<code>explorerframe.dll</code>),
+which usually happens when a file dialog is opened for the first time.</p>
+<h2>How it works</h2>
+<p>The indent comes from <code>UIProperty::HasVisibleContent</code> in <code>explorerframe.dll</code>,
+which reports the status icons area as having content in the List, Small icons
+and Content views regardless of the actual content. The mod makes it report the
+actual state.</p>
+<p>Everything else is done by changing properties of DirectUI elements: of the
+items and of the items area. The elements are adjusted when they're created,
+and the windows which are already open are adjusted when the mod is loaded.
+The functions which are exported by <code>dui70.dll</code> are used for that.</p>
+<p>No files are modified. The adjustments are only made to elements which have
+the expected stock values, so that the mod stays out of the way of other
+customizations. When the mod is turned off, the stock values are restored.</p>
+<p>The code of the status area fix was verified to have the expected shape in
+Windows 11 builds 22621.317 - 22621.6274 (22H2, 23H2), 26100.1 - 26100.9974
+(24H2, 25H2), 28000.1761 - 28000.3086 (26H1) and 26300 (26H2 preview). The
+adjustments of the Details view rows were tested on build 26300 at 125%
+scaling.</p>
+]]></content>
+        <author>
+            <name>NDruce</name>
+            <uri>https://github.com/NDruce</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer: No Help 1.0]]></title>
         <id>https://windhawk.net/mods/explorer-no-help#80cb448b9b93e1d9af4c234fdfdd9d393d6f555f</id>
@@ -1121,97 +1262,6 @@ SystemTray.AdaptiveTextBlock#LanguageInnerTextBlock &gt; TextBlock#InnerTextBloc
         <author>
             <name>Deen-0x</name>
             <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Item Pins 1.1.5]]></title>
-        <id>https://windhawk.net/mods/explorer-item-pins#43b8a9cd94e699082b09c6c054278f680f583ffd</id>
-        <link href="https://windhawk.net/mods/explorer-item-pins"/>
-        <updated>2026-11-14T20:03:16.000Z</updated>
-        <content type="html"><![CDATA[<h1>Explorer Item Pins</h1>
-<p><strong>English</strong> · <a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/Explorer_Item_Pins/README.ru.md">Русский</a></p>
-<p>Explorer Item Pins keeps selected files and folders at the top of their parent folder in Windows File Explorer. Each folder has its own pins.</p>
-<h2>Features</h2>
-<table>
-<thead>
-<tr>
-<th style="text-align:center"><img src="https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Explorer_Item_Pins/Assets/Screenshots/Dark_Large_Icons.png" alt="Dark theme with large icons and the Pin command"></th>
-<th style="text-align:center"><img src="https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Explorer_Item_Pins/Assets/Screenshots/Light_Small_Icons.png" alt="Light theme with the Unpin command and its toolbar tooltip"></th>
-</tr>
-</thead>
-</table>
-<ul>
-<li><strong>Two ways to pin.</strong> Use the modern context menu or the pin button between <strong>Share</strong> and <strong>Delete</strong> on the command bar.</li>
-<li><strong>Sort and group.</strong> Pins stay at the top in either sort direction. With grouping on, they appear in the first group, <strong>Pinned</strong>. Explorer's sorting still applies within the group.</li>
-<li><strong>Pin indicator.</strong> A pushpin appears at the upper-right corner of the file or folder icon. It follows the icon size and works with thumbnails, lists, details, tiles and content view.</li>
-<li><strong>Interface languages.</strong> English, Russian, Spanish, German, Brazilian Portuguese, and Simplified Chinese.</li>
-</ul>
-<h2>Platforms</h2>
-<p>Requires Windows 11 x64 or ARM64 with the tabbed File Explorer.</p>
-<h2>Data exchange</h2>
-<p>Pins are stored separately for each Windows account. Uninstalling the mod removes its pins. Replacing a file under the same name keeps its pin. A rename within the same folder can keep the pin when the mod can identify the original file. Copying or moving an item to another folder does not carry its pin with it.</p>
-<h2>Usage</h2>
-<ol>
-<li>Select a file or folder and choose <strong>Pin in item pane</strong> in its context menu, or click the pin on the command bar.</li>
-<li>To remove the pin, select the item and choose <strong>Unpin from item pane</strong> or click the crossed-out pin on the command bar. The item returns to its usual position in the folder.</li>
-</ol>
-<p>In Windhawk, open the mod's <strong>Settings</strong> to control these options independently. All three are enabled by default.</p>
-<p>If the pin commands are missing from a File Explorer window that was already open when the mod was enabled or updated, reopen that window.</p>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Controls</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Context menu command</td>
-<td>Pin and unpin in the context menu</td>
-</tr>
-<tr>
-<td>Command bar button</td>
-<td>Pin and unpin on the File Explorer command bar</td>
-</tr>
-<tr>
-<td>Pinned item indicator</td>
-<td>The pushpin on pinned file and folder icons</td>
-</tr>
-</tbody>
-</table>
-<h2>Links</h2>
-<ul>
-<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/tree/main/Explorer_Item_Pins">Explorer Item Pins on GitHub</a></li>
-<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/README.md">DSN Windhawk Mods</a></li>
-</ul>
-]]></content>
-        <author>
-            <name>CTravkin</name>
-            <uri>https://github.com/CTravkin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Notepad++ Dark Dialog Fix 1.0.3]]></title>
-        <id>https://windhawk.net/mods/npp-taskdlg-textcolor#da3467732c84ae737d5d3a156be78075781f0d06</id>
-        <link href="https://windhawk.net/mods/npp-taskdlg-textcolor"/>
-        <updated>2026-11-14T19:01:29.000Z</updated>
-        <content type="html"><![CDATA[<h1>Notepad++ Dark Dialog Fix</h1>
-<p>In dark mode, Notepad++ paints its Save and confirm dialogs dark but leaves the
-text black, so you can barely read it. This mod makes that text light again.</p>
-<p><img src="https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/npp-taskdlg-textcolor.png" alt="Notepad++ Dark Dialog Fix preview"></p>
-<h2>Features</h2>
-<ul>
-<li><strong>Readable dialog text</strong> in Save, Save changes and other confirm dialogs.</li>
-<li><strong>Fixes labels and buttons</strong> drawn with the theme's text color.</li>
-<li><strong>Only in dark mode.</strong> The mod asks Notepad++ whether dark mode is on, so
-light mode dialogs are left alone. Needs Notepad++ 8.4.1 or newer.</li>
-<li><strong>Only touches Notepad++.</strong> No other app is affected, and nothing is changed
-on disk.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DavidHiFi</name>
-            <uri>https://github.com/DavidHiFi</uri>
         </author>
     </entry>
 </feed>

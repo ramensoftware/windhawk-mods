@@ -2,12 +2,189 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-18T19:03:18.000Z</updated>
+    <updated>2026-11-18T23:04:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Winstant 1.6.1]]></title>
+        <id>https://windhawk.net/mods/winstant#3f02b6d1cf2da9000ca24027f44145eda5eab1ea</id>
+        <link href="https://windhawk.net/mods/winstant"/>
+        <updated>2026-11-18T23:04:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Ctrl+Backspace</strong> now deletes the previous word in the panel's search box.
+Windows sends Ctrl+Backspace as the control character <code>0x7F</code> (DEL), which
+the panel didn't filter out: it was added to the search text and shown as a
+little box.</li>
+<li>The same now works in the text box used to rename a window (F2) and to
+name a saved layout. It's a standard EDIT control, which inserts <code>0x7F</code> on
+Ctrl+Backspace too; the subclass now handles it.</li>
+</ul>
+]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[OSD Custom Pill 4.9.19]]></title>
+        <id>https://windhawk.net/mods/osd-custom-pill#c2369c542042717fa98eead476b46904a73bec09</id>
+        <link href="https://windhawk.net/mods/osd-custom-pill"/>
+        <updated>2026-11-18T23:04:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New option to use the Windows accent color for the progress bar.</li>
+<li>Improved virtual desktop switching detection and event handling</li>
+<li>Added smooth spring-based transitions between volume, brightness and virtual desktop indicators, including animated icons, values, progress bars and desktop labels</li>
+</ul>
+]]></content>
+        <author>
+            <name>yelloxygene</name>
+            <uri>https://github.com/yelloxygene</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Position Shortcut 0.1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-position-shortcut#0af45f01bc2ecac581634d47e558017659639256</id>
+        <link href="https://windhawk.net/mods/taskbar-position-shortcut"/>
+        <updated>2026-11-18T23:04:15.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Position Shortcut</h1>
+<p>Adds a <strong>Taskbar position</strong> submenu when you right-click the Windows 11 taskbar. Choose a global position for this Explorer session, or set a position for a specific app.</p>
+<p>Finally, Windows brought back a feature they thought was not being used. I prefer my taskbar on the left when working in Photoshop, and on top when scrolling through layers in After Effects.
+<img src="https://i.imgur.com/FlhqlgP.png" alt="Taskbar position context menu"></p>
+<h2>Features</h2>
+<ul>
+<li><strong>Global position:</strong> Choose Follow Windows setting, Top, Left, Right, or Bottom. This lasts for the current Explorer session and does not save an app rule.</li>
+<li><strong>Per-app positions:</strong> Open the app's submenu to save a position that overrides the global choice. Choose Default to use the global position.</li>
+<li><strong>Maximized-only mode:</strong> Only apply app rules when a maximized window is found.</li>
+<li><strong>Switch delay:</strong> Adjust how long the mod waits before moving the taskbar.</li>
+<li><strong>Blacklist:</strong> Ignore apps you don't want triggering position changes.</li>
+</ul>
+<p>App rules are saved locally in Windhawk and won't appear in its Settings tab.</p>
+<h2>Compatibility</h2>
+<p>Requires Windows 11 with native taskbar positioning. I've tried it on builds <strong>26220.9836</strong> and <strong>26300.9818</strong>. Older builds haven't been tested. I've only tested it with one monitor.</p>
+<p>The mod doesn't change the saved Windows taskbar position. It may conflict with other mods that move the taskbar.</p>
+<p>Credits: Taskbar menu injection based on <code>taskbar-restart-explorer</code>; runtime position hooking based on <code>taskbar-on-top</code>.</p>
+]]></content>
+        <author>
+            <name>Oji</name>
+            <uri>https://github.com/eliogos</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[File Explorer List view indent fix and files area spacing 1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-list-status-indent-fix#c46c6d935191a92e85fccde1603e585cce1860cf</id>
+        <link href="https://windhawk.net/mods/explorer-list-status-indent-fix"/>
+        <updated>2026-11-18T23:04:09.000Z</updated>
+        <content type="html"><![CDATA[<h1>File Explorer List view indent fix and files area spacing</h1>
+<p>Starting with Windows 11 version 22H2, File Explorer reserves a 28 pixels wide
+area to the left of <strong>every</strong> item in the <strong>List</strong>, <strong>Small icons</strong> and
+<strong>Content</strong> views.
+The area is meant for sync status icons of cloud folders (OneDrive and other
+sync providers), but it's reserved in every folder, including the folders
+which have nothing to do with the cloud. The result is an odd indent between
+the edge of an item and its icon.</p>
+<p>The mod removes that area where there's nothing to show. It also fixes a
+number of smaller spacing inconsistencies in the files area. Every adjustment
+has a setting, and can be changed or turned off.</p>
+<p>The mod only deals with the files area: the part of a folder window which
+shows the files and the folders. It doesn't touch the navigation pane, the
+command bar or the address bar.</p>
+<h2>Before and after</h2>
+<p>All the files are selected in the screenshots, to show the gaps around the
+items. The top half of each image is without the mod, the bottom half is with
+the mod and its default settings.</p>
+<p><strong>List</strong></p>
+<p><img src="https://i.imgur.com/wiG8znW.png" alt="List view, before and after"></p>
+<p><strong>Small icons</strong></p>
+<p><img src="https://i.imgur.com/zTgetJS.png" alt="Small icons view, before and after"></p>
+<p><strong>Content</strong></p>
+<p><img src="https://i.imgur.com/hpi1nNR.png" alt="Content view, before and after"></p>
+<p><strong>Details</strong></p>
+<p><img src="https://i.imgur.com/fYZUSwC.png" alt="Details view, before and after"></p>
+<p><strong>Tiles</strong></p>
+<p><img src="https://i.imgur.com/aKs5Nfm.png" alt="Tiles view, before and after"></p>
+<h2>What it does</h2>
+<ul>
+<li><strong>No empty status area.</strong> The reserved area is removed where there's nothing
+to show. Items which have a status icon, and all the items inside of a cloud
+folder, still have it, so the status icons keep working and stay aligned.
+Optionally, the status icons can be hidden in the List and Small icons views
+altogether.</li>
+<li><strong>Even gaps around an item.</strong> The gap between the border of an item and its
+content is the same on the left and on the right, in the List, Small icons,
+Tiles, Content and Details views. The size of the gap is configurable. The
+right gap of the List view has a correction of its own.</li>
+<li><strong>Narrower status icon area.</strong> The same gap is used on both sides of a
+status icon, also in the Tiles and Content views.</li>
+<li><strong>Icon and name.</strong> A configurable gap is added between the item icon and the
+name, the same in the List, Small icons and Details views. The names and the
+status icons can be moved vertically. The Small icons view has a separate
+offset for the names.</li>
+<li><strong>Rows of the Details view.</strong> The gap between the icon and the name is made
+the same as in the List view. A negative offset of the names is taken from
+the height of the rows, so that the names stay centered in the rows.</li>
+<li><strong>Rows of the Content view.</strong> The padding below the text of a row is
+configurable.</li>
+<li><strong>Even margins around the files area.</strong> The files area gets margins on all
+four sides, in all views. The horizontal and the vertical margins are
+configurable separately.</li>
+</ul>
+<h2>Defaults</h2>
+<p>Only the removal of the empty status area is a fix in the strict sense. The
+other adjustments are a matter of taste, and they're turned on by default too.
+To get the stock look of a part back, use these values:</p>
+<ul>
+<li>Even item spacing: off. That also turns off the gaps and the offsets of the
+icons and the names, and the adjustments of the Details and Content rows.</li>
+<li>Horizontal and vertical margins of the files area: 0.</li>
+</ul>
+<h2>Scaling</h2>
+<p>The gaps, the paddings and the margins follow the display scaling. The
+vertical offsets and the correction of the right gap are small corrections of
+a pixel or two, and are applied in physical pixels regardless of the scaling.</p>
+<p>Items which are already displayed when the display scaling changes keep the
+old spacing until the folder is reopened or refreshed. With fractional scaling
+such as 125%, the gaps can differ by a pixel because of rounding.</p>
+<p>The mod works with the compact view of File Explorer turned on or off, and
+with the item check boxes.</p>
+<h2>Other programs</h2>
+<p>By default, the mod only applies to File Explorer (<code>explorer.exe</code>). That's the
+recommended setup, and nothing has to be configured for it.</p>
+<p>The same items view is used by the Open/Save dialogs of other programs. To fix
+it there too, add the programs to the custom process inclusion list in the
+Advanced tab of the mod, by the name of the executable file, for example
+<code>notepad.exe</code>. <code>explorer.exe</code> doesn't have to be added, it's always included.</p>
+<p>It's also possible to add <code>*</code>, which means all programs. The mod is then
+loaded into every process, including the ones which never show a file dialog,
+so adding only the programs you need is the lighter option.</p>
+<p>Only 64-bit programs are supported. In a program other than File Explorer, the
+mod does nothing until the program loads the items view (<code>explorerframe.dll</code>),
+which usually happens when a file dialog is opened for the first time.</p>
+<h2>How it works</h2>
+<p>The indent comes from <code>UIProperty::HasVisibleContent</code> in <code>explorerframe.dll</code>,
+which reports the status icons area as having content in the List, Small icons
+and Content views regardless of the actual content. The mod makes it report the
+actual state.</p>
+<p>Everything else is done by changing properties of DirectUI elements: of the
+items and of the items area. The elements are adjusted when they're created,
+and the windows which are already open are adjusted when the mod is loaded.
+The functions which are exported by <code>dui70.dll</code> are used for that.</p>
+<p>No files are modified. The adjustments are only made to elements which have
+the expected stock values, so that the mod stays out of the way of other
+customizations. When the mod is turned off, the stock values are restored.</p>
+<p>The code of the status area fix was verified to have the expected shape in
+Windows 11 builds 22621.317 - 22621.6274 (22H2, 23H2), 26100.1 - 26100.9974
+(24H2, 25H2), 28000.1761 - 28000.3086 (26H1) and 26300 (26H2 preview). The
+adjustments of the Details view rows were tested on build 26300 at 125%
+scaling.</p>
+]]></content>
+        <author>
+            <name>NDruce</name>
+            <uri>https://github.com/NDruce</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better Volume Mixer 1.6.3]]></title>
         <id>https://windhawk.net/mods/better-volume-mixer#3c964427620c63c6fe2613822c6482ac4bd62ffc</id>
@@ -523,161 +700,6 @@ page</a>.</p>
         <author>
             <name>Ar4ujo_009</name>
             <uri>https://github.com/Ar4ujo009</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Volume Percentage Indicator 1.11.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-volume-percentage#990d755862f4334382291f9e4457dd94012d2e85</id>
-        <link href="https://windhawk.net/mods/taskbar-volume-percentage"/>
-        <updated>2026-11-18T00:01:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add custom text and mute color settings (textColor, muteTextColor)</li>
-<li>Show indicator immediately on mod load via taskbar XAML tree traversal</li>
-<li>Synchronize colors dynamically on Windows theme changes (light/dark mode)</li>
-<li>Preserve and restore Taskbar Styler and shell native foreground brushes</li>
-<li>Optimize color parsing and resource allocations</li>
-</ul>
-]]></content>
-        <author>
-            <name>gilnett</name>
-            <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MMC Dark Mode 1.1.1]]></title>
-        <id>https://windhawk.net/mods/mmc-dark-mode#2039286cadcadec491cb0d9959b72c9da0be489e</id>
-        <link href="https://windhawk.net/mods/mmc-dark-mode"/>
-        <updated>2026-11-18T00:01:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improve dark mode coverage for dialogs, wizard pages, check boxes and radio buttons.</li>
-<li>Improve Task Scheduler, property sheets, hosted controls and MMC frames.</li>
-<li>Reduce light areas and flashes in result views and embedded content.</li>
-<li>Update live disable and cleanup handling.</li>
-</ul>
-]]></content>
-        <author>
-            <name>metanoid18</name>
-            <uri>https://github.com/Metanoid18</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Nimbus Menu 1.0.0]]></title>
-        <id>https://windhawk.net/mods/nimbus-menu#f97981a8e580c12cc3eaa170a499de7e5b087d4b</id>
-        <link href="https://windhawk.net/mods/nimbus-menu"/>
-        <updated>2026-11-18T00:01:21.000Z</updated>
-        <content type="html"><![CDATA[<h1>Nimbus Menu</h1>
-<p>Replaces the Windows taskbar with a light dock, one per monitor, with its own Start menu.</p>
-<p><img src="https://raw.githubusercontent.com/igoredm/windhawk-mods/b8319aac0d112762c582a7a0b4778d6c1d72790a/start.png" alt="Dock and Start"></p>
-<p><img src="https://raw.githubusercontent.com/igoredm/windhawk-mods/b8319aac0d112762c582a7a0b4778d6c1d72790a/search.png" alt="Start search"></p>
-<ul>
-<li>Floating dock or full-width bar; 4 looks (Névoa, Cristal, Grafite, Aurora).</li>
-<li>macOS-like zoom (or Lift / Focus), live window previews (hover a thumbnail to peek), drag icons to reorder, pin and unpin.</li>
-<li>Its own Start: pinned apps, all apps, app search, files (with <a href="https://www.voidtools.com">Everything</a> or Windows Search) and Windows Settings pages. Compact or wide search.</li>
-<li>The Windows key opens Nimbus' Start over any window (administrator ones too) and in games. Ctrl+Esc still opens Windows' Start. An optional shortcut (Alt+Space or Ctrl+Space) can open it too.</li>
-<li>Per-monitor settings: format, auto-hide, what shows, only that monitor's windows.</li>
-<li>The dock runs in its own Windhawk process and hides when a game or video is in full screen. Explorer only gets one small hook, for the Windows key.</li>
-<li>The text is in English, or in Portuguese when Windows is in Portuguese.</li>
-</ul>
-<p><strong>What it changes in Windows.</strong> With &quot;Hide the Windows taskbar&quot; on (the default), the whole Windows taskbar is hidden, so its tray, clock and quick settings are gone too: use another mod or app for those if you need them. To stop the hidden taskbar from reserving screen space, the mod turns on the taskbar's own &quot;Automatically hide the taskbar&quot; option, which Windows saves in your profile. The mod remembers your original choice and puts it back when it's turned off, also after a crash or a shutdown with the mod on. If the Windows taskbar ever stays hidden, turn the mod off or restart Explorer.</p>
-<hr>
-<p><strong>Português</strong></p>
-<p>Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Iniciar próprio.</p>
-<ul>
-<li>Dock flutuante ou barra fixa; 4 visuais (Névoa, Cristal, Grafite, Aurora).</li>
-<li>Zoom como no macOS (ou Elevar / Foco), prévia das janelas ao vivo (parar o mouse na miniatura mostra a janela), arrastar ícones pra reorganizar, fixar e desafixar.</li>
-<li>Iniciar próprio: fixados, todos os apps, busca de apps, arquivos (com o <a href="https://www.voidtools.com">Everything</a> ou a busca do Windows) e telas das Configurações do Windows. Busca compacta ou larga.</li>
-<li>A tecla Windows abre o Iniciar do Nimbus em qualquer janela (até de administrador) e em jogos. Ctrl+Esc continua abrindo o Iniciar do Windows. Um atalho opcional (Alt+Espaço ou Ctrl+Espaço) também pode abrir.</li>
-<li>Ajustes por monitor: formato, esconder sozinha, o que aparece, só as janelas daquele monitor.</li>
-<li>A dock roda num processo próprio do Windhawk e some quando um jogo ou vídeo está em tela cheia. No Explorador entra só um gancho pequeno, o da tecla Windows.</li>
-<li>Os textos ficam em inglês, ou em português quando o Windows está em português.</li>
-</ul>
-<p><strong>O que muda no Windows.</strong> Com &quot;Esconder a barra do Windows&quot; ligado (o padrão), a barra do Windows some inteira, então a bandeja, o relógio e as configurações rápidas somem junto: use outro mod ou app pra isso se precisar. Pra barra escondida não reservar espaço na tela, o mod liga a opção &quot;Ocultar automaticamente a barra de tarefas&quot; do próprio Windows, que fica salva no seu perfil. O mod guarda a sua escolha original e devolve quando é desligado, até depois de um travamento ou de desligar o PC com o mod ligado. Se a barra do Windows ficar escondida, desligue o mod ou reinicie o Explorador.</p>
-]]></content>
-        <author>
-            <name>igoredm</name>
-            <uri>https://github.com/igoredm</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Command Bar 1.3.0]]></title>
-        <id>https://windhawk.net/mods/explorer-command-bar#96f8ea0ad98a9612d5e0e5aa24f7ed7e8ca757df</id>
-        <link href="https://windhawk.net/mods/explorer-command-bar"/>
-        <updated>2026-11-17T23:05:00.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>
-<p>New</p>
-</li>
-<li>
-<p>Drag and drop to reorder items in the settings window preview: your own buttons and menus, and File Explorer's built-in buttons (New, Cut, Copy, Paste, Rename, Share, Delete, Sort, View) with their separators</p>
-</li>
-<li>
-<p>Drag and drop to reorder the entries of a menu</p>
-</li>
-<li>
-<p>Reset order button that brings back File Explorer's own order of the built-in buttons</p>
-</li>
-<li>
-<p>Built-in button order setting, e.g. <code>sort, view | new | cut, copy, paste, rename, share, delete</code></p>
-</li>
-<li>
-<p>New placeholders: <code>%dir%</code>, <code>%files%</code>, <code>%folders%</code>, <code>%name%</code>, <code>%base%</code>, <code>%file_name%</code>, <code>%1%</code>, <code>%ext%</code>, <code>%count%</code>, <code>%d_name%</code>, <code>%d_smart%</code>, <code>%parent%</code> and more</p>
-</li>
-<li>
-<p>Live labels: button and menu entry labels can use <code>%name%</code>, <code>%base%</code>, <code>%ext%</code>, <code>%count%</code>, <code>%d_name%</code> and <code>%path%</code>, and update as the selection changes</p>
-</li>
-<li>
-<p>File extension filter setting to show a button only for chosen selections, e.g. <code>only txt</code>, <code>files + single</code> or <code>-zip</code></p>
-</li>
-<li>
-<p>Setting to gray out buttons that don't match the filter instead of hiding them</p>
-</li>
-<li>
-<p>Run as administrator and Window style (normal, minimized, maximized, hidden) options for buttons and menu entries</p>
-</li>
-<li>
-<p>Ctrl+Shift+click runs any item as administrator</p>
-</li>
-<li>
-<p>Internal commands: <code>internal:CopyPath</code>, <code>internal:CopyName</code>, <code>internal:CopyDir</code>, <code>internal:NewFolder</code>, <code>internal:NewFile</code> and <code>internal:Refresh</code></p>
-</li>
-<li>
-<p>Hide built-in button labels settings for New, Sort, View and the Details pane button</p>
-</li>
-<li>
-<p>Show chevrons on dropdowns setting for custom menu buttons</p>
-</li>
-<li>
-<p>Changed</p>
-</li>
-<li>
-<p><code>%sel_each%</code> fills in the placeholders again for each selected item</p>
-</li>
-<li>
-<p>Long labels are shortened, with the full text in the tooltip</p>
-</li>
-<li>
-<p>Dropdown chevrons use the Fluent chevron instead of the ▾ arrow</p>
-</li>
-<li>
-<p>Buttons with no icon get a fallback icon, and the new internal commands have default icons</p>
-</li>
-<li>
-<p>Readme and setting descriptions updated with the new features</p>
-</li>
-<li>
-<p>Fixed</p>
-</li>
-<li>
-<p>A placeholder with no value no longer drops all parameters</p>
-</li>
-<li>
-<p>Commands started in locations that aren't folders on disk, such as This PC, now get a valid working directory</p>
-</li>
-</ul>
-]]></content>
-        <author>
-            <name>DanRotaru</name>
-            <uri>https://github.com/DanRotaru</uri>
         </author>
     </entry>
 </feed>

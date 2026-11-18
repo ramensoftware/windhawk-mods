@@ -7071,6 +7071,32 @@
         "version": "2.0.0"
       }
     },
+    "explorer-list-status-indent-fix": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795043049000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795043049000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "NDruce",
+        "description": "Removes the empty space before every item in the List, Small icons and Content views of File Explorer, and evens out the gaps around the items, icons and names of the files area",
+        "github": "https://github.com/NDruce",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "File Explorer List view indent fix and files area spacing",
+        "version": "1.0"
+      }
+    },
     "explorer-name-windows": {
       "details": {
         "defaultSorting": 7056,
@@ -13551,7 +13577,7 @@
         "ratingUsers": 28,
         "reviews": 0,
         "trendingSorting": 37.5,
-        "updated": 1794376881000,
+        "updated": 1795043060000,
         "users": 375
       },
       "metadata": {
@@ -13566,7 +13592,7 @@
           "explorer.exe"
         ],
         "name": "OSD Custom Pill",
-        "version": "4.9.11"
+        "version": "4.9.19"
       }
     },
     "osu-tray-profile": {
@@ -19049,6 +19075,33 @@
         "version": "1.0.1"
       }
     },
+    "taskbar-position-shortcut": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795043055000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795043055000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Oji",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion -ladvapi32 -ldwmapi",
+        "description": "Adds quick taskbar position controls and optional saved positions for individual apps.",
+        "github": "https://github.com/eliogos",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Taskbar Position Shortcut",
+        "version": "0.1.0"
+      }
+    },
     "taskbar-primary-on-secondary-monitor": {
       "details": {
         "defaultSorting": 79450,
@@ -24346,7 +24399,7 @@
         "ratingUsers": 14,
         "reviews": 0,
         "trendingSorting": 0.8027686533028886,
-        "updated": 1794690027000,
+        "updated": 1795043065000,
         "users": 371
       },
       "metadata": {
@@ -24358,7 +24411,7 @@
           "windhawk.exe"
         ],
         "name": "Winstant",
-        "version": "1.6"
+        "version": "1.6.1"
       }
     },
     "wintips-osd": {
