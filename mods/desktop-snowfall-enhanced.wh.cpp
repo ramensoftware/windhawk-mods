@@ -1,3007 +1,1605 @@
 // ==WindhawkMod==
-// @id              desktop-snowfall-enhanced
-// @name            Desktop Snowfall & Winter Wonderland
-// @name:ru-RU      Снегопад на рабочем столе и Зимняя сказка
-// @description     Enhanced Desktop Snowfall with plowing Steam Train / Bulldozer, snowman building, presets, and customization
-// @description:ru-RU Улучшенный снегопад с паровозиком и бульдозером для расчистки снега, лепкой снеговиков, пресетами и кастомизацией
-// @version         2.0
-// @author          hiol09
-// @github          https://github.com/hiol09
+// @id              desktop-weather-overlay
+// @name            Desktop Weather Overlay
+// @description     Snow, cherry blossom, autumn leaves and rain over the desktop, with wind and a gust on weather change.
+// @version         1.1.3
+// @author          damir
+// @include         explorer.exe
+// @compilerOptions -ld2d1 -ldwmapi -lgdi32 -lole32 -luuid
 // @license         MIT
-// @include         windhawk.exe
-// @compilerOptions -ld2d1 -ld3d11 -ldcomp -ldwmapi -luser32 -lole32 -loleaut32 -lshell32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Desktop Snowfall & Winter Wonderland
+# Desktop Weather Overlay
 
-An enhanced edition of [Desktop Snowfall](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-snowfall.wh.cpp) by [mikybuilds](https://github.com/mikybuilds).
+Animated weather rendered over the whole desktop: snow, cherry blossom
+(sakura) petals, autumn leaves and rain. Several kinds can be mixed
+together. Direct2D renders into a per-monitor transparent layered window,
+so the desktop and all windows stay fully interactive.
 
-Snow falls over your desktop and settles on top of windows and the taskbar, with realistic physics, interactive snowplow vehicles, and snowman building!
+## Features
 
-![Desktop Snowfall demo](https://raw.githubusercontent.com/mikybuilds/desktop-snowfall/main/demo.gif)
+- Four weather kinds: snow, cherry blossom, autumn leaves, rain.
+- Mixable: "Winter + spring", "Autumn + rain" or "All together".
+- Wind affects drift, slant of the rain and the direction of the gust.
+- On a weather change a cartoon wind sweeps across the screen, carries the
+  old weather away, and the new one drifts in gradually from the top.
+- Snow settles on the top edges of windows and the taskbar; leaves and
+  petals may stay lying there too, a few at a time.
+- The mouse can sweep snow, leaves and petals off window tops.
+- Snow that cannot follow a moving window comes loose and falls.
+- Cartoon wind sweep can also run on a timer to clean everything up.
+- Optional cartoon-style gray streaks for snow.
+- Particles are small, rare and slow by design, so the overlay stays
+  lightweight and looks calm rather than busy.
 
-### New Features:
-* **Steam Train & Bulldozer Snowplow:** Vehicles drive along windows and the taskbar, plowing snow with flying clumps and chimney smoke. Drag them with the mouse, or let them auto-deploy when snow accumulates.
-* **Interactive Snowman Building:** Hold **[Ctrl + E]** over snowdrifts to roll a snowball with your cursor; bring two snowballs together to build a snowman with a carrot nose, branch arms, customizable hats and scarves! Click a snowman with LMB to melt it.
-* **Presets:** Quick selection of snow styles (Classic, Blizzard, Fluffy, Magic, Light) or full custom control with individual sliders.
-* **Russian Translation:** Full localization for all settings and descriptions.
+## Notes
 
-### Original Features by mikybuilds:
-* Snow follows window motion with realistic tosses, hang time, bounce, and squash & stretch.
-* Snow slides off windows moved sideways (optional).
-* Sweep snow with the mouse cursor.
-* Works with default and stylized taskbars (floating dock, auto-hide).
-* GPU-accelerated Direct2D / DirectComposition transparent click-through overlay.
+- v1 renders on the primary monitor only.
+- FPS is uncapped by default (matched to the monitor refresh);
+  set a cap in the settings if you prefer a fixed budget.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- snowMode: custom
-  $name: Snow Preset / Custom Mode
-  $name:ru-RU: Пресет снега / Пользовательский режим
-  $description: Choose 'Custom' to use the sliders below, or select a preset style
-  $description:ru-RU: Выберите 'Пользовательский', чтобы использовать ползунки ниже, или выберите готовый пресет
+- WeatherMode: snow
+  $name: Weather mode
+  $description: >-
+    Which weather to render. The mixed options combine two or more kinds
+    with balanced proportions.
   $options:
-    - custom: Custom (Use sliders below)
-    - classic: Classic
-    - blizzard: Blizzard
-    - fluffy: Fluffy Snow
-    - magic: Magic
-    - light: Light Snow
-  $options:ru-RU:
-    - custom: Пользовательский (настройки ниже)
-    - classic: Классический
-    - blizzard: Метель / Снегопад
-    - fluffy: Пушистый снег
-    - magic: Волшебный
-    - light: Легкий снежок
-- intensity: 100
-  $name: Snowfall Intensity
-  $name:ru-RU: Интенсивность снегопада
-  $description: Number of snowflakes on the screen (0-600)
-  $description:ru-RU: Количество снежинок на экране (0-600)
-  #! $min: 0
-  #! $max: 600
-  #! $format: slider
-- speed: 100
-  $name: Falling Speed
-  $name:ru-RU: Скорость падения
-  $description: Snow falling speed (10-500)
-  $description:ru-RU: Скорость падения снега (10-500)
-  #! $min: 10
-  #! $max: 500
-  #! $format: slider
-- wind: 15
-  $name: Wind Strength
-  $name:ru-RU: Сила ветра
-  $description: Horizontal wind strength (-100 to 100)
-  $description:ru-RU: Сила горизонтального ветра (-100 до 100)
-  #! $min: -100
-  #! $max: 100
-  #! $format: slider
-- size: 100
-  $name: Snowflake Size
-  $name:ru-RU: Размер снежинок
-  $description: Relative size of snowflakes (20-400)
-  $description:ru-RU: Относительный размер снежинок (20-400)
-  #! $min: 20
-  #! $max: 400
-  #! $format: slider
-- capHeight: 8
-  $name: Max Snow Drift Height
-  $name:ru-RU: Максимальная высота сугробов
-  $description: Maximum thickness of snow caps on windows and taskbar (0-40)
-  $description:ru-RU: Максимальная толщина шапок снега на окнах и панели задач (0-40)
-  #! $min: 0
-  #! $max: 40
-  #! $format: slider
-- slideOff: false
-  $name: Snow slides off moved windows
-  $name:ru-RU: Снег соскальзывает при смещении окна
-  $description: When a window moves sideways, snow stays in place and falls off
-  $description:ru-RU: При перемещении окна вбок снег соскальзывает с открывшегося края
-- sweepWithCursor: true
-  $name: Sweep Snow with Cursor
-  $name:ru-RU: Сгребание снега курсором
-  $description: Moving cursor over snowdrifts sweeps the snow away
-  $description:ru-RU: Движение курсора над сугробами сгребает снег
-- vehicleType: train
-  $name: Vehicle Type
-  $name:ru-RU: Тип уборочной техники
-  $description: Plow vehicle that drives along windows and taskbar to clean snow
-  $description:ru-RU: Снегоуборочная машина, очищающая окна и панель задач
-  $options:
-    - none: None (Disabled)
-    - bulldozer: Bulldozer
-    - train: Steam Train
-  $options:ru-RU:
-    - none: Выключено
-    - bulldozer: Бульдозер
-    - train: Паровозик
-- vehicleSpawnMode: auto
-  $name: Vehicle Spawn Mode
-  $name:ru-RU: Режим выезда техники
-  $description: When does the vehicle appear to plow the snow
-  $description:ru-RU: Когда техника выезжает на расчистку
-  $options:
-    - auto: Auto (Cleans when snow piles up)
-    - always: Always Driving
-  $options:ru-RU:
-    - auto: Автоматически (выезжает при накоплении сугробов)
-    - always: Всегда на экране
-- vehicleSpeed: 100
-  $name: Vehicle Speed
-  $name:ru-RU: Скорость техники
-  $description: Driving speed in px/s (30-300)
-  $description:ru-RU: Скорость движения техники (30-300)
-  #! $min: 30
-  #! $max: 300
-  #! $format: slider
-- enableSnowman: false
-  $name: Enable Snowman Building
-  $name:ru-RU: Включить лепку снеговиков
-  $description: Hold [Ctrl + E] over snow to roll a snowball; stack 2 to build a snowman! Note that Ctrl+E also opens search in Explorer or Browsers; click snowmen with LMB to melt
-  $description:ru-RU: Зажмите [Ctrl + E] над сугробом для лепки снежка; соедините 2 снежка в снеговика! Обратите внимание что Ctrl+E также открывает поиск в Проводнике или браузерах; клик ЛКМ растапливает
-- hatStyle: tophat
-  $name: Snowman Hat Style
-  $name:ru-RU: Головной убор снеговика
-  $description: Style of hat worn by snowmen
-  $description:ru-RU: Выберите стиль шапки для снеговиков
-  $options:
-    - tophat: Top Hat
-    - santa: Santa Hat
-    - beanie: Winter Beanie
-    - bucket: Bucket
-  $options:ru-RU:
-    - tophat: Цилиндр
-    - santa: Новогодний колпак Санты
-    - beanie: Зимняя шапочка
-    - bucket: Ведро
-- scarfColor: red
-  $name: Snowman Scarf Color
-  $name:ru-RU: Цвет шарфика
-  $description: Color of the snowman's scarf
-  $description:ru-RU: Цвет шарфика снеговика
-  $options:
-    - red: Red
-    - blue: Blue
-    - green: Green
-    - gold: Gold
-    - purple: Purple
-  $options:ru-RU:
-    - red: Красный
-    - blue: Синий
-    - green: Зеленый
-    - gold: Золотой
-    - purple: Фиолетовый
-- taskbarSnow: auto
-  $name: Taskbar Snow
-  $name:ru-RU: Снег на панели задач
-  $description: How snow is placed on the Windows taskbar
-  $description:ru-RU: Как снег ложится на панель задач Windows
-  $options:
-    - auto: Auto (detect visible parts)
-    - whole: Whole window
-    - parts: Visible parts only
-    - off: Disabled
-  $options:ru-RU:
-    - auto: Авто (определять видимые области)
-    - whole: Вся панель целиком
-    - parts: Только видимые части
-    - off: Отключено
-- maxFps: 60
-  $name: Maximum Framerate
-  $name:ru-RU: Ограничение FPS
-  $description: Frame rate limit to optimize GPU and CPU performance (15-240)
-  $description:ru-RU: Частота кадров анимации снега (15-240)
-  #! $min: 15
-  #! $max: 240
-  #! $format: slider
-- allMonitors: false
-  $name: Show on all monitors
-  $name:ru-RU: Показывать на всех мониторах
-- pauseInFullscreen: true
-  $name: Pause in fullscreen applications
-  $name:ru-RU: Приостанавливать в полноэкранных приложениях
+    - snow: Snow
+    - sakura: Cherry blossom
+    - autumn: Autumn leaves
+    - rain: Rain
+    - winterspring: Winter + spring (snow + petals)
+    - autumnrain: Autumn + rain (leaves + rain)
+    - all: All together
+
+- Intensity: 100
+  $name: Intensity (%)
+  $description: >-
+    Overall amount of particles, in percent. Higher means denser weather
+    (0-200).
+
+- Size: 100
+  $name: Size (%)
+  $description: >-
+    Particle size, in percent (50-200).
+
+- Speed: 100
+  $name: Fall speed (%)
+  $description: >-
+    Fall speed, in percent (20-200).
+
+- Wind: 15
+  $name: Wind
+  $description: >-
+    Horizontal wind, from -30 (left) to 30 (right). Large values also pick
+    the gust direction; values near zero randomize it.
+
+- FpsCap: 0
+  $name: FPS limit
+  $description: >-
+    Frames per second limit, 0-240. 0 means uncapped (follows the monitor
+    refresh).
+
+- GustOnChange: true
+  $name: Gust on weather change
+  $description: >-
+    When the weather mode is changed, a wind front sweeps across the screen,
+    carries the old weather away, and the new one starts drifting in from the
+    top. Uncheck to switch weather instantly instead.
+
+- SweepMouse: true
+  $name: Sweep with the mouse
+  $description: >-
+    Moving the mouse along the top edge of a window brushes the snow, leaves
+    and petals off it, the way a hand would.
+
+- SnowOnWindows: true
+  $name: Snow on windows
+  $description: >-
+    Snow settles and accumulates on the top edges of windows and the taskbar,
+    like in the cartoons.
+
+- LeavesOnWindows: true
+  $name: Leaves and petals on windows
+  $description: >-
+    Falling leaves and petals sometimes stay lying on the top edges of
+    windows, a few at a time.
+
+- StreakSnow: false
+  $name: Cartoon snow streaks
+  $description: >-
+    Draw snow as slanted gray streaks (like wind-blown snow in cartoons)
+    instead of round flakes.
+
+- AutoWind: 0
+  $name: Cartoon wind sweep (seconds)
+  $description: >-
+    Every N seconds a cartoon wind sweeps across the screen and clears the
+    weather and the snow on windows. 0 = only on weather change.
 */
 // ==/WindhawkModSettings==
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include <windows.h>
-
-#include <d2d1_1.h>
-#include <d2d1_1helper.h>
-#include <d3d11.h>
-#include <dcomp.h>
+#include <d2d1.h>
 #include <dwmapi.h>
-#include <dxgi1_3.h>
-#include <uiautomation.h>
-#include <wrl/client.h>
+#include <dxgiformat.h>
 
-#include <windhawk_utils.h>
-
-#include <algorithm>
-#include <atomic>
-#include <cmath>
-#include <cstdint>
-#include <memory>
-#include <mutex>
-#include <unordered_map>
 #include <vector>
+#include <cmath>
+#include <cstdio>
+#include <cstdarg>
+#include <algorithm>
 
-using Microsoft::WRL::ComPtr;
 
-constexpr float kGravity = 2600.0f;      // px/s^2, for snow caps
-constexpr float kHangSeconds = 0.12f;    // snow hangs in the air this long
-constexpr float kTossFactor = 0.5f;      // share of the window speed snow keeps
-constexpr float kMinTossSpeed = 250.0f;  // px/s
-constexpr float kMaxTossSpeed = 550.0f;  // px/s
-constexpr float kBounceSpeed = 350.0f;   // snow landing faster bounces
-constexpr float kChunkMaxSpeed = 700.0f;
-constexpr size_t kMaxChunks = 4000;
-constexpr size_t kMaxPuffs = 800;
-constexpr int kSweepRadius = 7;
-constexpr int kChunkColumns = 3;
-constexpr float kCapEdgeTaper = 8.0f;
-constexpr float kSnowKernel[] = {0.1f, 0.25f, 0.5f, 0.8f, 1.0f,
-                                 0.8f, 0.5f,  0.25f, 0.1f};
-constexpr float kSnowKernelSum = 4.3f;
+// ─────────────────────────────────────────────────────────────────────────────
+// Engine constants (ported from the SnowDesktop physics)
+// ─────────────────────────────────────────────────────────────────────────────
 
-enum class TaskbarSnow { Auto, Whole, Parts, Off };
-enum class VehicleType { None, Bulldozer, Train };
-enum class VehicleSpawnMode { Always, Auto };
-enum class HatStyle { TopHat, SantaHat, Beanie, Bucket };
-enum class ScarfColor { Red, Blue, Green, Gold, Purple };
-enum class SnowMode { Custom, Classic, Blizzard, Fluffy, Magic, Light };
+static const float kPi2          = 6.2832f;
+static const float kGustLength   = 2.2f;   // how long the wind blows, seconds
+static const float kGustSweep    = 0.7f;   // how long the front takes to cross
 
-struct {
-    std::atomic<SnowMode> snowMode{SnowMode::Custom};
-    std::atomic<int> intensity{100};
-    std::atomic<bool> slideOff{false};
-    std::atomic<int> speed{100};
-    std::atomic<int> wind{15};
-    std::atomic<int> size{100};
-    std::atomic<int> capHeight{8};
-    std::atomic<bool> sweepWithCursor{true};
-    std::atomic<TaskbarSnow> taskbarSnow{TaskbarSnow::Auto};
-    std::atomic<int> maxFps{60};
-    std::atomic<bool> allMonitors{false};
-    std::atomic<bool> pauseInFullscreen{true};
+static const float kSnowWeight  = 1.0f;
+static const float kPetalWeight = 0.55f;
+static const float kLeafWeight  = 0.55f;
+static const float kRainWeight  = 11.0f;
 
-    // Extended settings
-    std::atomic<VehicleType> vehicleType{VehicleType::Train};
-    std::atomic<VehicleSpawnMode> vehicleSpawnMode{VehicleSpawnMode::Auto};
-    std::atomic<int> vehicleSpeed{100};
-    std::atomic<bool> enableSnowman{false};
-    std::atomic<HatStyle> hatStyle{HatStyle::TopHat};
-    std::atomic<ScarfColor> scarfColor{ScarfColor::Red};
-} g_settings;
+enum PKind { kSnow = 0, kPetal, kLeaf, kRain };
 
-HANDLE g_stopEvent;
-HANDLE g_snowThread;
-HANDLE g_taskbarThread;
-std::atomic<bool> g_overlayHidden{false};  // hidden while a fullscreen app runs
-
-void LoadSettings() {
-    WindhawkUtils::StringSetting snowModeStr =
-        WindhawkUtils::StringSetting::make(L"snowMode");
-    if (!wcscmp(snowModeStr, L"blizzard")) {
-        g_settings.snowMode = SnowMode::Blizzard;
-        g_settings.intensity = 280;
-        g_settings.speed = 220;
-        g_settings.wind = 65;
-        g_settings.size = 90;
-        g_settings.capHeight = 18;
-    } else if (!wcscmp(snowModeStr, L"fluffy")) {
-        g_settings.snowMode = SnowMode::Fluffy;
-        g_settings.intensity = 80;
-        g_settings.speed = 50;
-        g_settings.wind = 5;
-        g_settings.size = 180;
-        g_settings.capHeight = 14;
-    } else if (!wcscmp(snowModeStr, L"magic")) {
-        g_settings.snowMode = SnowMode::Magic;
-        g_settings.intensity = 130;
-        g_settings.speed = 80;
-        g_settings.wind = -10;
-        g_settings.size = 115;
-        g_settings.capHeight = 12;
-    } else if (!wcscmp(snowModeStr, L"light")) {
-        g_settings.snowMode = SnowMode::Light;
-        g_settings.intensity = 40;
-        g_settings.speed = 70;
-        g_settings.wind = 8;
-        g_settings.size = 85;
-        g_settings.capHeight = 5;
-    } else if (!wcscmp(snowModeStr, L"classic")) {
-        g_settings.snowMode = SnowMode::Classic;
-        g_settings.intensity = 100;
-        g_settings.speed = 100;
-        g_settings.wind = 15;
-        g_settings.size = 100;
-        g_settings.capHeight = 8;
-    } else {
-        g_settings.snowMode = SnowMode::Custom;
-        g_settings.intensity = std::clamp(Wh_GetIntSetting(L"intensity"), 0, 600);
-        g_settings.speed = std::clamp(Wh_GetIntSetting(L"speed"), 10, 500);
-        g_settings.wind = std::clamp(Wh_GetIntSetting(L"wind"), -100, 100);
-        g_settings.size = std::clamp(Wh_GetIntSetting(L"size"), 20, 400);
-        g_settings.capHeight = std::clamp(Wh_GetIntSetting(L"capHeight"), 0, 40);
-    }
-
-    g_settings.slideOff = Wh_GetIntSetting(L"slideOff") != 0;
-    g_settings.sweepWithCursor = Wh_GetIntSetting(L"sweepWithCursor") != 0;
-    g_settings.maxFps = std::clamp(Wh_GetIntSetting(L"maxFps"), 15, 240);
-    g_settings.allMonitors = Wh_GetIntSetting(L"allMonitors") != 0;
-    g_settings.pauseInFullscreen = Wh_GetIntSetting(L"pauseInFullscreen") != 0;
-
-    WindhawkUtils::StringSetting vehicleTypeStr =
-        WindhawkUtils::StringSetting::make(L"vehicleType");
-    if (!wcscmp(vehicleTypeStr, L"none")) {
-        g_settings.vehicleType = VehicleType::None;
-    } else if (!wcscmp(vehicleTypeStr, L"bulldozer")) {
-        g_settings.vehicleType = VehicleType::Bulldozer;
-    } else {
-        g_settings.vehicleType = VehicleType::Train;
-    }
-
-    WindhawkUtils::StringSetting vehicleSpawnModeStr =
-        WindhawkUtils::StringSetting::make(L"vehicleSpawnMode");
-    if (!wcscmp(vehicleSpawnModeStr, L"always")) {
-        g_settings.vehicleSpawnMode = VehicleSpawnMode::Always;
-    } else {
-        g_settings.vehicleSpawnMode = VehicleSpawnMode::Auto;
-    }
-
-    int spd = Wh_GetIntSetting(L"vehicleSpeed");
-    g_settings.vehicleSpeed = std::clamp(spd <= 0 ? 100 : spd, 30, 300);
-
-    g_settings.enableSnowman = Wh_GetIntSetting(L"enableSnowman") != 0;
-
-    WindhawkUtils::StringSetting hatStyleStr =
-        WindhawkUtils::StringSetting::make(L"hatStyle");
-    if (!wcscmp(hatStyleStr, L"santa")) {
-        g_settings.hatStyle = HatStyle::SantaHat;
-    } else if (!wcscmp(hatStyleStr, L"beanie")) {
-        g_settings.hatStyle = HatStyle::Beanie;
-    } else if (!wcscmp(hatStyleStr, L"bucket")) {
-        g_settings.hatStyle = HatStyle::Bucket;
-    } else {
-        g_settings.hatStyle = HatStyle::TopHat;
-    }
-
-    WindhawkUtils::StringSetting scarfColorStr =
-        WindhawkUtils::StringSetting::make(L"scarfColor");
-    if (!wcscmp(scarfColorStr, L"blue")) {
-        g_settings.scarfColor = ScarfColor::Blue;
-    } else if (!wcscmp(scarfColorStr, L"green")) {
-        g_settings.scarfColor = ScarfColor::Green;
-    } else if (!wcscmp(scarfColorStr, L"gold")) {
-        g_settings.scarfColor = ScarfColor::Gold;
-    } else if (!wcscmp(scarfColorStr, L"purple")) {
-        g_settings.scarfColor = ScarfColor::Purple;
-    } else {
-        g_settings.scarfColor = ScarfColor::Red;
-    }
-
-    WindhawkUtils::StringSetting taskbarSnow =
-        WindhawkUtils::StringSetting::make(L"taskbarSnow");
-    TaskbarSnow mode = TaskbarSnow::Auto;
-    if (!wcscmp(taskbarSnow, L"whole")) {
-        mode = TaskbarSnow::Whole;
-    } else if (!wcscmp(taskbarSnow, L"parts")) {
-        mode = TaskbarSnow::Parts;
-    } else if (!wcscmp(taskbarSnow, L"off")) {
-        mode = TaskbarSnow::Off;
-    }
-    g_settings.taskbarSnow = mode;
-}
-
-static bool IsTaskbarClass(const wchar_t* cls) {
-    return !wcscmp(cls, L"Shell_TrayWnd") ||
-           !wcscmp(cls, L"Shell_SecondaryTrayWnd");
-}
-
-static bool IsShellWindowClass(const wchar_t* cls) {
-    return !wcscmp(cls, L"Progman") || !wcscmp(cls, L"WorkerW");
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Taskbar parts (Original implementation).
-
-struct TaskbarParts {
-    RECT frame;  // relative to the taskbar window
-    RECT tray;
-    bool hasFrame;
-    bool hasTray;
-    int windowWidth;
+struct Particle {
+    PKind  kind;
+    int    tint;        // petal: 0..3 color, leaf: 0..5 color, variant tint&3
+    float  x, y;
+    float  size;
+    float  fallSpeed;
+    float  sway;
+    float  alpha;
+    float  rot;
+    float  rotSpeed;
+    float  phase;
+    float  flutter;
+    float  blown;       // gust carry direction once caught, 0 = not caught
+    float  vx = 0.0f;   // extra horizontal kick (cursor sweep, window moves)
+    bool   debris = false; // knocked off a window top: falls once, never respawns
 };
 
-// CLSID_CUIAutomation, defined here to avoid linking with uuid.lib.
-constexpr GUID kClsidCUIAutomation = {
-    0xff48dba4, 0x60ef, 0x4201, {0xaa, 0x87, 0x54, 0x10, 0x3e, 0xef, 0x59, 0x4e}};
+// Weather flags, comparable so a settings change can be detected.
+struct WeatherSet {
+    bool snow, petal, leaf, rain;
+    bool operator==(const WeatherSet& o) const {
+        return snow == o.snow && petal == o.petal && leaf == o.leaf && rain == o.rain;
+    }
+    bool operator!=(const WeatherSet& o) const { return !(*this == o); }
+};
 
-std::mutex g_taskbarPartsMutex;
-std::unordered_map<HWND, TaskbarParts> g_taskbarParts;
-
-static bool IsUsableRect(const RECT& rc) {
-    return rc.right > rc.left && rc.bottom > rc.top &&
-           rc.right - rc.left < 100000 && rc.bottom - rc.top < 100000;
+static void ParseWeatherMode(const wchar_t* mode, WeatherSet& w) {
+    w = { true, false, false, false }; // default: snow
+    if (!mode || !*mode) return;
+    if (wcscmp(mode, L"sakura") == 0)       w = { false, true,  false, false };
+    else if (wcscmp(mode, L"autumn") == 0)  w = { false, false, true,  false };
+    else if (wcscmp(mode, L"rain") == 0)    w = { false, false, false, true  };
+    else if (wcscmp(mode, L"winterspring") == 0) w = { true,  true,  false, false };
+    else if (wcscmp(mode, L"autumnrain") == 0)   w = { false, false, true,  true  };
+    else if (wcscmp(mode, L"all") == 0)          w = { true,  true,  true,  true  };
+    // "snow" and anything unknown fall back to the default above
 }
 
-static void UnionInto(RECT& dst, bool& has, const RECT& rc) {
-    if (!has) {
-        dst = rc;
-        has = true;
-    } else {
-        UnionRect(&dst, &dst, &rc);
+// ─────────────────────────────────────────────────────────────────────────────
+// Snow caps and litter on window tops
+// ─────────────────────────────────────────────────────────────────────────────
+
+static const float kColWidth    = 5.0f;   // cap column width, px
+static const float kCapMaxH     = 10.0f;  // max snow height on a window top
+static const float kMeltPerSec  = 0.05f;  // slow melt so caps don't grow forever
+
+struct WinLitter {
+    float offX;   // offset from the window's left edge
+    float size;
+    float rot;    // small tilt, the item lies almost flat
+    int   kind;   // PKind (petal or leaf)
+    int   tint;
+};
+
+struct WinCap {
+    HWND hwnd;
+    RECT rc;                       // window rect on screen
+    std::vector<float> cols;       // snow height per column
+    std::vector<WinLitter> litter;
+};
+
+// Owned by the overlay thread only.
+static std::vector<WinCap> g_caps;
+
+static bool g_loggedFirstLanding = false;
+
+static void LogToFile(const wchar_t* fmt, ...) {
+    wchar_t path[MAX_PATH];
+    if (GetEnvironmentVariableW(L"USERPROFILE", path, MAX_PATH)) {
+        wcscat(path, L"\\Desktop\\weather_debug.txt");
+        FILE* f = _wfopen(path, L"a, csc=UTF-16LE");
+        if (!f) f = _wfopen(L"C:\\SnowLog.txt", L"a, csc=UTF-16LE");
+        if (f) {
+            SYSTEMTIME st;
+            GetLocalTime(&st);
+            fwprintf(f, L"[%02d:%02d:%02d] ", st.wHour, st.wMinute, st.wSecond);
+            va_list args;
+            va_start(args, fmt);
+            vfwprintf(f, fmt, args);
+            va_end(args);
+            fwprintf(f, L"\n");
+            fclose(f);
+        }
     }
+    // Also log to Windhawk's internal log
+    va_list args2;
+    va_start(args2, fmt);
+    wchar_t buf[512];
+    vswprintf_s(buf, fmt, args2);
+    Wh_Log(L"%s", buf);
+    va_end(args2);
 }
 
-static bool QueryTaskbarParts(IUIAutomation* uia,
-                              IUIAutomationCondition* trueCondition,
-                              HWND taskbar,
-                              TaskbarParts* parts) {
-    RECT windowRect;
-    if (!GetWindowRect(taskbar, &windowRect)) {
-        return false;
+// Cartoon wind sweep visuals, shown while the gust clears the screen.
+struct SweepFx {
+    float yFrac;   // 0..1, vertical position of the streak
+    float delay;   // stagger, seconds behind the front
+};
+static std::vector<SweepFx> g_sweeps;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Weather engine
+// ─────────────────────────────────────────────────────────────────────────────
+
+struct Engine {
+    uint32_t rng    = 0x12345678u;
+    float    time   = 0.0f;
+    float    mixCursor = 0.0f;
+
+    WeatherSet weather = { true, false, false, false };
+    int   intensity = 100;
+    int   sizePct   = 100;
+    int   speedPct  = 100;
+    int   wind      = 15;   // raw setting; formulas use wind*0.6
+
+    bool  gustActive = false;
+    float gustStart  = -100.0f;
+    float gustDir    = 1.0f;
+
+    bool snowOnWindows   = true;
+    bool leavesOnWindows = true;
+    bool streakSnow      = false;  // cartoon-style gray streaks instead of flakes
+    int  autoWind        = 0;      // cartoon wind sweep interval, seconds (0 = off)
+
+    // Cursor sweep: the mouse brushes snow and leaves off window tops.
+    bool  sweepWithCursor = true;
+    POINT cursorLast      = {};
+    bool  cursorValid     = false;
+
+    std::vector<Particle> flakes;
+
+    int width  = 1920;
+    int height = 1080;
+
+    void Seed(uint32_t seed) { rng = seed ? seed : 0x12345678u; }
+
+    float Rand() {
+        rng ^= rng << 13;
+        rng ^= rng >> 17;
+        rng ^= rng << 5;
+        return (rng & 0xFFFFFF) / 16777216.0f;
     }
 
-    ComPtr<IUIAutomationElement> root;
-    if (FAILED(uia->ElementFromHandle(taskbar, &root)) || !root) {
-        return false;
+    float WeatherWeight() const {
+        float total = 0.0f;
+        if (weather.snow)  total += kSnowWeight;
+        if (weather.petal) total += kPetalWeight;
+        if (weather.leaf)  total += kLeafWeight;
+        if (weather.rain)  total += kRainWeight;
+        return total;
     }
 
-    ComPtr<IUIAutomationElementArray> children;
-    if (FAILED(root->FindAll(TreeScope_Children, trueCondition, &children)) ||
-        !children) {
-        return false;
+    // Per-kind density compensation so mixing several weathers keeps each
+    // layer visually balanced (rain is naturally sparser per particle).
+    float WeatherDensity() const {
+        float total = WeatherWeight();
+        if (total <= 0.0f) return 1.0f;
+        float sum = 0.0f;
+        if (weather.snow)  sum += kSnowWeight  * 1.0f;
+        if (weather.petal) sum += kPetalWeight * 0.9f;
+        if (weather.leaf)  sum += kLeafWeight  * 0.9f;
+        if (weather.rain)  sum += kRainWeight  * 1.3f;
+        return sum / total;
     }
 
-    RECT frame = {}, tray = {};
-    bool hasFrame = false, hasTray = false;
+    // Low-discrepancy (golden ratio) mixing keeps the layers evenly spread
+    // over time instead of clustering.
+    PKind PickKind() {
+        float total = WeatherWeight();
+        if (total <= 0.0f) return kSnow;
 
-    int childCount = 0;
-    children->get_Length(&childCount);
-    for (int i = 0; i < childCount; i++) {
-        ComPtr<IUIAutomationElement> child;
-        if (FAILED(children->GetElement(i, &child)) || !child) {
-            continue;
+        mixCursor += 0.6180339887f;
+        if (mixCursor >= 1.0f) mixCursor -= 1.0f;
+
+        float r = mixCursor * total;
+        if (weather.snow)  { r -= kSnowWeight;  if (r < 0.0f) return kSnow;  }
+        if (weather.petal) { r -= kPetalWeight; if (r < 0.0f) return kPetal; }
+        if (weather.leaf)  { r -= kLeafWeight;  if (r < 0.0f) return kLeaf;  }
+        if (weather.rain)  { r -= kRainWeight;  if (r < 0.0f) return kRain;  }
+        return kSnow;
+    }
+
+    void SpawnFlake(Particle& f, bool scatter) {
+        float depth = Rand();
+        f.kind = PickKind();
+        f.tint = (int)(Rand() * 6.0f) % 6;
+        f.rot  = Rand() * kPi2;
+        f.flutter = 1.0f + Rand() * 2.0f;
+        f.blown = 0.0f;
+        f.vx    = 0.0f;
+        f.debris = false;
+
+        float sizeMul = sizePct / 100.0f;
+
+        switch (f.kind) {
+            case kPetal:
+                f.size      = (2.0f + depth * 0.8f) * sizeMul;
+                f.fallSpeed = 20.0f + depth * 22.0f + Rand() * 8.0f;
+                f.sway      = 22.0f + Rand() * 20.0f;
+                f.alpha     = 0.62f + 0.32f * Rand();
+                f.rotSpeed  = (Rand() - 0.5f) * 1.8f;
+                break;
+
+            case kLeaf:
+                // Small but detailed: slow descent, a wide unhurried sweep
+                // and a slow turn, the way a real leaf glides down.
+                f.size      = (2.1f + depth * 0.9f) * sizeMul;
+                f.fallSpeed = 26.0f + depth * 30.0f + Rand() * 10.0f;
+                f.sway      = 20.0f + Rand() * 16.0f;
+                f.alpha     = 0.8f + 0.2f * Rand();
+                f.rotSpeed  = (Rand() - 0.5f) * 1.0f;
+                break;
+
+            case kRain:
+                f.size      = (0.45f + depth * 0.55f) * sizeMul;
+                f.fallSpeed = 420.0f + depth * 380.0f;
+                f.sway      = 2.0f;
+                f.alpha     = 0.26f + 0.24f * Rand();
+                f.rotSpeed  = 0.0f;
+                break;
+
+            default: // Snow
+                f.size      = (0.8f + depth * depth * 2.7f) * sizeMul;
+                f.fallSpeed = 35.0f + f.size * 22.0f;
+                f.sway      = 6.0f + Rand() * 14.0f;
+                f.alpha     = 0.45f + 0.5f * Rand();
+                f.rotSpeed  = 0.0f;
+                break;
         }
 
-        ComPtr<IUIAutomationElementArray> items;
-        if (FAILED(child->FindAll(TreeScope_Children, trueCondition, &items)) ||
-            !items) {
-            continue;
+        f.phase = Rand() * kPi2;
+        f.x = Rand() * width;
+        f.y = scatter ? Rand() * height : -f.size * 2.0f - Rand() * 40.0f;
+    }
+
+    void BeginWeatherGust() {
+        if (gustActive) return; // the running gust clears the screen for both changes
+
+        // Nothing falling and nothing lying about: nothing to clear.
+        if (flakes.empty() && CapsAreClear()) return;
+
+        gustDir = wind > 1 ? 1.0f : wind < -1 ? -1.0f : (Rand() < 0.5f ? -1.0f : 1.0f);
+        gustActive = true;
+        gustStart = time;
+
+        // The gust is drawn as cartoon wind streaks chasing the front.
+        g_sweeps.clear();
+        for (int i = 0; i < 3; i++)
+            g_sweeps.push_back({ 0.12f + 0.72f * Rand(), i * 0.22f });
+    }
+
+    bool CapsAreClear() {
+        for (auto& c : g_caps) {
+            for (float h : c.cols)
+                if (h > 0.05f) return false;
+            if (!c.litter.empty()) return false;
+        }
+        return true;
+    }
+
+    void AddSnowTo(WinCap& c, const Particle& f) {
+        int n = (int)c.cols.size();
+        if (n == 0) return;
+        int col = (int)((f.x - (float)c.rc.left) / kColWidth);
+        if (col < 0 || col >= n) return;
+        // Amount proportional to the flake, smoothed across neighbors.
+        float amount = f.size * 1.8f * 0.9f;
+        for (int i = col - 2; i <= col + 2; i++) {
+            if (i < 0 || i >= n) continue;
+            float w = 1.0f - 0.25f * (float)(i - col < 0 ? col - i : i - col);
+            float next = c.cols[i] + amount * w;
+            c.cols[i] = next > kCapMaxH ? kCapMaxH : next;
+        }
+    }
+
+    void AddLitterTo(WinCap& c, const Particle& f) {
+        int w = (int)c.rc.right - (int)c.rc.left;
+        if (w <= 0) return;
+        int maxLitter = w / 240 + 2;
+        if ((int)c.litter.size() >= maxLitter)
+            c.litter.erase(c.litter.begin()); // drop the oldest
+
+        WinLitter l;
+        l.offX = f.x - (float)c.rc.left;
+        if (l.offX < 4.0f) l.offX = 4.0f;
+        if (l.offX > (float)w - 4.0f) l.offX = (float)w - 4.0f;
+        l.size = f.size;
+        l.rot = f.rot * 0.2f;   // lie almost flat
+        l.kind = (int)f.kind;
+        l.tint = f.tint;
+        c.litter.push_back(l);
+    }
+
+    // ─── Cursor sweep ───
+    // The mouse is polled instead of hooked: the overlay window is
+    // click-through, so it never receives mouse messages itself.
+    void SweepWithCursor(float dt) {
+        POINT pt;
+        if (!GetCursorPos(&pt)) return;
+        POINT last = cursorLast;
+        cursorLast = pt;
+        if (!cursorValid) {
+            cursorValid = true;
+            return;
+        }
+        if (!sweepWithCursor) return;
+        if (pt.x == last.x && pt.y == last.y) return;
+
+        float dtSafe = dt > 0.001f ? dt : 0.016f;
+        float vx = (pt.x - last.x) / dtSafe;
+        if (vx > 2200.0f) vx = 2200.0f;
+        if (vx < -2200.0f) vx = -2200.0f;
+
+        const float radius = 24.0f;
+        float x0 = (float)(last.x < pt.x ? last.x : pt.x) - radius;
+        float x1 = (float)(last.x < pt.x ? pt.x : last.x) + radius;
+        if (x1 - x0 > 360.0f) {
+            x0 = (float)pt.x - radius;
+            x1 = (float)pt.x + radius;
         }
 
-        int itemCount = 0;
-        items->get_Length(&itemCount);
-        for (int j = 0; j < itemCount; j++) {
-            ComPtr<IUIAutomationElement> item;
-            if (FAILED(items->GetElement(j, &item)) || !item) {
-                continue;
-            }
+        int debrisBudget = 16;
 
-            BSTR className = nullptr;
-            RECT rc;
-            if (FAILED(item->get_CurrentClassName(&className)) || !className) {
-                continue;
-            }
-            if (SUCCEEDED(item->get_CurrentBoundingRectangle(&rc)) &&
-                IsUsableRect(rc) && rc.bottom - rc.top >= 10) {
-                if (!wcscmp(className, L"Taskbar.TaskbarFrameAutomationPeer")) {
-                    UnionInto(frame, hasFrame, rc);
-                } else if (!wcsncmp(className, L"SystemTray.", 11)) {
-                    UnionInto(tray, hasTray, rc);
+        for (auto& c : g_caps) {
+            float top = (float)c.rc.top;
+            // Only the top edge of a window is swept; the hand passes over it.
+            if ((float)pt.y > top + 10.0f || (float)pt.y < top - 40.0f) continue;
+            if (x1 < (float)c.rc.left || x0 > (float)c.rc.right) continue;
+
+            int n = (int)c.cols.size();
+            if (n == 0) continue;
+
+            // Lying leaves and petals are flicked off first, so the snow
+            // underneath is revealed and then cleared in turn.
+            for (int j = (int)c.litter.size() - 1; j >= 0; j--) {
+                float lx = (float)c.rc.left + c.litter[j].offX;
+                if (lx < x0 || lx > x1) continue;
+
+                if (debrisBudget > 0 && flakes.size() < 1100) {
+                    Particle p = {};
+                    p.kind      = (PKind)c.litter[j].kind;
+                    p.tint      = c.litter[j].tint;
+                    p.size      = c.litter[j].size;
+                    p.rot       = c.litter[j].rot;
+                    p.rotSpeed  = (Rand() - 0.5f) * 3.0f;
+                    p.alpha     = 0.95f;
+                    p.flutter   = 2.0f;
+                    p.phase     = Rand() * kPi2;
+                    p.sway      = 12.0f;
+                    p.fallSpeed = 35.0f + Rand() * 35.0f;
+                    p.vx        = vx * 0.45f + (Rand() - 0.5f) * 70.0f;
+                    p.x         = lx;
+                    p.y         = top - 2.0f;
+                    p.debris    = true;
+                    flakes.push_back(p);
+                    debrisBudget--;
                 }
+                c.litter.erase(c.litter.begin() + j);
             }
-            SysFreeString(className);
+
+            // Snow swept by the cursor is knocked loose as falling flakes.
+            int from = (int)((x0 - (float)c.rc.left) / kColWidth);
+            int to   = (int)((x1 - (float)c.rc.left) / kColWidth) + 1;
+            if (from < 0) from = 0;
+            if (to > n) to = n;
+            for (int i = from; i < to; i++) {
+                float h = c.cols[i];
+                if (h < 0.4f) continue;
+
+                if (debrisBudget > 0 && flakes.size() < 1100) {
+                    Particle p = {};
+                    p.kind      = kSnow;
+                    p.size      = 0.7f + h * 0.25f;
+                    p.fallSpeed = 45.0f + h * 6.0f;
+                    p.sway      = 8.0f;
+                    p.alpha     = 0.9f;
+                    p.flutter   = 1.0f;
+                    p.vx        = vx * 0.3f + (Rand() - 0.5f) * 40.0f;
+                    p.x         = (float)c.rc.left + (i + 0.5f) * kColWidth;
+                    p.y         = top - h * 0.6f;
+                    p.debris    = true;
+                    flakes.push_back(p);
+                    debrisBudget--;
+                }
+                c.cols[i] = 0.0f;
+            }
+        }
+
+        // Leaves already in the air get pushed along by the passing hand.
+        for (auto& f : flakes) {
+            if (f.kind != kLeaf && f.kind != kPetal) continue;
+            if (fabsf(f.x - (float)pt.x) > 26.0f) continue;
+            if (fabsf(f.y - (float)pt.y) > 26.0f) continue;
+            f.vx += vx * 0.25f;
+            if (f.vx > 900.0f)  f.vx = 900.0f;
+            if (f.vx < -900.0f) f.vx = -900.0f;
         }
     }
 
-    RECT windowRectAfter;
-    if (!hasFrame || !GetWindowRect(taskbar, &windowRectAfter) ||
-        !EqualRect(&windowRect, &windowRectAfter)) {
-        return false;
+    float GustFront() const {
+        float age = (time - gustStart) / kGustSweep;
+        if (age < 0.0f) age = 0.0f;
+        if (age > 1.0f) age = 1.0f;
+        float span = width + 140.0f;
+        return gustDir > 0
+            ? -70.0f + span * age
+            : width + 70.0f - span * age;
     }
 
-    OffsetRect(&frame, -windowRect.left, -windowRect.top);
-    OffsetRect(&tray, -windowRect.left, -windowRect.top);
-    parts->frame = frame;
-    parts->tray = tray;
-    parts->hasFrame = hasFrame;
-    parts->hasTray = hasTray;
-    parts->windowWidth = windowRect.right - windowRect.left;
-    return true;
-}
-
-static BOOL CALLBACK CollectTaskbarsEnumProc(HWND hwnd, LPARAM lParam) {
-    wchar_t cls[64];
-    if (GetClassName(hwnd, cls, ARRAYSIZE(cls)) && IsTaskbarClass(cls)) {
-        reinterpret_cast<std::vector<HWND>*>(lParam)->push_back(hwnd);
-    }
-    return TRUE;
-}
-
-DWORD WINAPI TaskbarThread(LPVOID) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-
-    if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
-        return 0;
+    void ApplyMode(const WeatherSet& next, bool gustOnChange) {
+        if (next == weather) return;
+        if (gustOnChange) BeginWeatherGust();
+        weather = next;
     }
 
-    {
-        ComPtr<IUIAutomation> uia;
-        ComPtr<IUIAutomationCondition> trueCondition;
-        if (SUCCEEDED(CoCreateInstance(kClsidCUIAutomation, nullptr,
-                                       CLSCTX_INPROC_SERVER,
-                                       IID_PPV_ARGS(&uia))) &&
-            SUCCEEDED(uia->CreateTrueCondition(&trueCondition))) {
-            ComPtr<IUIAutomation2> uia2;
-            if (SUCCEEDED(uia.As(&uia2))) {
-                uia2->put_ConnectionTimeout(1000);
-                uia2->put_TransactionTimeout(1000);
-            }
+    void Update(float dt) {
+        time += dt;
 
-            do {
-                TaskbarSnow mode = g_settings.taskbarSnow;
-                if ((mode != TaskbarSnow::Auto && mode != TaskbarSnow::Parts) ||
-                    g_overlayHidden) {
+        // Mouse sweep comes first: a hand passing over a window top knocks
+        // the snow and litter loose before physics runs on them.
+        SweepWithCursor(dt);
+
+        // ─── WEATHER-SWITCH GUST ───
+        // While it blows, nothing new spawns; the front catches particle
+        // after particle and carries them off the screen, staggered so they
+        // don't go as one straight line.
+        if (gustActive && time - gustStart >= kGustLength) {
+            gustActive = false;
+            flakes.clear();
+        }
+        bool gust = gustActive;
+        float gustFront = gust ? GustFront() : 0.0f;
+
+        int target = gust ? 0
+            : (int)(intensity * 1.5f * WeatherDensity() * (width * (float)height) / (1920.0f * 1080.0f));
+        if (target > 900) target = 900;
+
+        // Refill gradually so the new weather drifts in from the top
+        // instead of popping onto the screen all at once. Debris knocked
+        // off window tops is not part of the weather budget.
+        int ambient = 0;
+        for (const auto& f : flakes)
+            if (!f.debris) ambient++;
+
+        int spawnBudget = 4;
+        while (ambient < target && spawnBudget-- > 0) {
+            Particle f = {};
+            SpawnFlake(f, false);
+            flakes.push_back(f);
+            ambient++;
+        }
+        if (!gust && ambient > target) {
+            int excess = ambient - target;
+            size_t w = 0;
+            for (size_t r = 0; r < flakes.size(); r++) {
+                if (excess > 0 && !flakes[r].debris) {
+                    excess--;
                     continue;
                 }
+                if (w != r) flakes[w] = flakes[r];
+                w++;
+            }
+            flakes.resize(w);
+        }
 
-                std::vector<HWND> taskbars;
-                EnumWindows(CollectTaskbarsEnumProc, reinterpret_cast<LPARAM>(&taskbars));
+        float speedScale = speedPct / 100.0f;
+        float windVal = wind * 0.6f;
 
-                std::unordered_map<HWND, TaskbarParts> previous;
-                {
-                    std::lock_guard<std::mutex> lock(g_taskbarPartsMutex);
-                    previous = g_taskbarParts;
+        // ─── WINDOW CAPS: melt, gust clearing, litter blown away ───
+        float front = gust ? GustFront() : 0.0f;
+        for (auto& c : g_caps) {
+            if (gust) {
+                int n = (int)c.cols.size();
+                for (int i = 0; i < n; i++) {
+                    float x = (float)c.rc.left + (i + 0.5f) * kColWidth;
+                    if ((front - x) * gustDir > 0.0f) c.cols[i] = 0.0f;
                 }
-
-                std::unordered_map<HWND, TaskbarParts> found;
-                for (HWND taskbar : taskbars) {
-                    TaskbarParts parts;
-                    if (QueryTaskbarParts(uia.Get(), trueCondition.Get(),
-                                          taskbar, &parts)) {
-                        found[taskbar] = parts;
-                    } else if (auto it = previous.find(taskbar);
-                               it != previous.end()) {
-                        found[taskbar] = it->second;
+                for (int j = (int)c.litter.size() - 1; j >= 0; j--) {
+                    float x = (float)c.rc.left + c.litter[j].offX;
+                    if ((front - x) * gustDir > 0.0f) {
+                        if (flakes.size() < 1000) {
+                            Particle p = {};
+                            p.kind = (PKind)c.litter[j].kind;
+                            p.tint = c.litter[j].tint;
+                            p.size = c.litter[j].size;
+                            p.rot = c.litter[j].rot;
+                            p.alpha = 0.9f;
+                            p.flutter = 1.5f;
+                            p.phase = Rand() * kPi2;
+                            p.rotSpeed = (Rand() - 0.5f) * 2.0f;
+                            p.blown = gustDir;
+                            p.x = x;
+                            p.y = (float)c.rc.top - 2.0f;
+                            p.debris = true;
+                            flakes.push_back(p);
+                        }
+                        c.litter.erase(c.litter.begin() + j);
                     }
                 }
-
-                std::lock_guard<std::mutex> lock(g_taskbarPartsMutex);
-                g_taskbarParts = std::move(found);
-            } while (WaitForSingleObject(g_stopEvent, 500) == WAIT_TIMEOUT);
-        }
-    }
-
-    CoUninitialize();
-    return 0;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// The snow and objects.
-
-struct Flake {
-    float x, y;  // screen coordinates
-    float size;
-    float fallSpeed;
-    float phase;
-    float sway;
-    float alpha;
-};
-
-struct Chunk {
-    float x, y;
-    float vx, vy;
-    float size;
-    float area;
-    uint64_t ignoreKey;
-};
-
-struct Body {
-    uint64_t key;
-    HWND hwnd;
-    RECT rc;
-    bool snowCap;
-};
-
-struct Puff {
-    float x, y;
-    float vx, vy;
-    float size;
-    float life;
-    float maxLife;
-};
-
-struct Column {
-    float h = 0;
-    float lift = 0;
-    float vel = 0;
-    float hang = 0;
-};
-
-struct Cap {
-    HWND hwnd = nullptr;
-    RECT rc = {};
-    std::vector<Column> cols;
-    uint32_t seed = 0;
-    int offset = 0;
-    float vx = 0, vy = 0;
-    float carry = 0;
-    float squash = 0, squashVel = 0;
-    bool airborne = false;
-    unsigned seenFrame = 0;
-};
-
-struct SmokePuff {
-    float x, y;
-    float vx, vy;
-    float size;
-    float life;
-    float maxLife;
-};
-
-struct VehicleItem {
-    float x = 0;
-    float y = 0;
-    int direction = 1;
-    float speed = 100.0f;
-    uint64_t bodyKey = 0;
-    float width = 46.0f;
-    float height = 24.0f;
-    float wheelAngle = 0;
-    bool isBeingDragged = false;
-    float smokeTimer = 0;
-    std::vector<SmokePuff> smokePuffs;
-};
-
-struct SnowballItem {
-    float x;
-    float y;
-    float radius;
-};
-
-struct SnowmanItem {
-    float x;
-    float y;
-    float scale = 1.0f;
-    ScarfColor scarf = ScarfColor::Red;
-    HatStyle hat = HatStyle::TopHat;
-};
-
-static uint64_t BodyKey(HWND hwnd, int part) {
-    return (static_cast<uint64_t>(reinterpret_cast<uintptr_t>(hwnd)) << 2) |
-           part;
-}
-
-static uint32_t Hash32(uint32_t x) {
-    x ^= x >> 16;
-    x *= 0x7feb352d;
-    x ^= x >> 15;
-    x *= 0x846ca68b;
-    x ^= x >> 16;
-    return x;
-}
-
-static float SmoothNoise(uint32_t seed, float x) {
-    float cell = std::floor(x);
-    uint32_t i = static_cast<uint32_t>(static_cast<int>(cell));
-    float t = x - cell;
-    t = t * t * (3.0f - 2.0f * t);
-    float a = (Hash32(seed + i * 0x9E3779B1u) & 0xFFFFFF) / 16777216.0f;
-    float b = (Hash32(seed + (i + 1) * 0x9E3779B1u) & 0xFFFFFF) / 16777216.0f;
-    return a + (b - a) * t;
-}
-
-static float CapNoise(const Cap& cap, int column, uint32_t salt, float scale) {
-    return SmoothNoise(cap.seed + salt * 0x51ED27u,
-                       static_cast<float>(column + cap.offset) / scale);
-}
-
-static float SnowLimit(const Cap& cap, int column, float maxHeight) {
-    float n = 0.65f * CapNoise(cap, column, 1, 70.0f) +
-              0.35f * CapNoise(cap, column, 2, 23.0f);
-    n = std::clamp((n - 0.5f) * 1.8f + 0.5f, 0.0f, 1.0f);
-    return maxHeight * (0.3f + 0.7f * n);
-}
-
-class Overlay {
-   public:
-    ~Overlay();
-
-    bool Create();
-    void Run();
-
-   private:
-    bool CreateDeviceResources();
-    void ReleaseDeviceResources();
-    bool CreateTargetBitmap();
-    bool CreateFlakeSprite();
-    RECT ComputeArea();
-    bool ApplyArea(const RECT& area);
-    UINT ComputeSyncInterval();
-
-    float Rand();
-    void SpawnFlake(Flake& f, bool scatter);
-    void SpawnChunk(float x, float y, float area, float vx, float vy,
-                    uint64_t ignoreKey);
-    void SpawnPuff(float x, float y, float vx, float vy, float size,
-                   float life);
-    void DropColumns(Cap& cap, int first, int count);
-
-    static BOOL CALLBACK CollectBodiesEnumProc(HWND hwnd, LPARAM lParam);
-    void CollectBodies();
-    void AddTaskbarBodies(HWND hwnd, const RECT& rc);
-    bool IsFullscreenAppActive();
-    bool IsCoveredAbove(size_t bodyIndex, int x, int y);
-    const Body* FindLanding(float x, float oldY, float newY,
-                            uint64_t ignoreKey);
-    void AddSnow(uint64_t key, int column, float amount);
-
-    void UpdateCaps(float dt);
-    bool InheritSnow(Cap& cap, unsigned lastSeen);
-    void ResizeCap(Cap& cap, const RECT& rc);
-    void MoveCap(Cap& cap, const RECT& rc, float dt);
-    void Ambient(float dt);
-    void Sweep(float dt);
-    void UpdateFlakes(float dt);
-    void UpdateChunks(float dt);
-    void UpdatePuffs(float dt);
-
-    // Vehicle and Snowman updates
-    void UpdateVehicle(const POINT& cursor, bool isLButtonDown, float dt);
-    void SummonVehicle(uint64_t targetKey = 0);
-    bool IsCursorOverSnow(const POINT& cursor);
-    void UpdateSnowballKeyE(const POINT& cursor, bool isEKeyDown, float dt);
-    void CheckClickSnowman(const POINT& cursor, bool isLButtonDown);
-
-    bool Render();
-    void DrawCap(const Cap& cap, const RECT& rc);
-    void DrawVehicle();
-    void DrawBulldozer(const VehicleItem& v);
-    void DrawTrain(const VehicleItem& v);
-    void DrawSnowmen();
-    void DrawSnowballs();
-
-    ID2D1SolidColorBrush* GetScarfBrush(ScarfColor color);
-
-    HWND m_hwnd = nullptr;
-    RECT m_area = {};
-    int m_width = 0;
-    int m_height = 0;
-    bool m_visible = true;
-    UINT m_syncInterval = 1;
-
-    ComPtr<ID3D11Device> m_d3dDevice;
-    ComPtr<ID2D1Factory1> m_d2dFactory;
-    ComPtr<ID2D1Device> m_d2dDevice;
-    ComPtr<ID2D1DeviceContext> m_ctx;
-    ComPtr<IDXGISwapChain1> m_swapChain;
-    HANDLE m_frameWait = nullptr;
-    ComPtr<IDCompositionDevice> m_dcompDevice;
-    ComPtr<IDCompositionTarget> m_dcompTarget;
-    ComPtr<IDCompositionVisual> m_dcompVisual;
-    ComPtr<ID2D1Bitmap1> m_targetBitmap;
-    ComPtr<ID2D1Bitmap1> m_flakeSprite;
-    ComPtr<ID2D1LinearGradientBrush> m_capBrush;
-
-    // Brushes
-    ComPtr<ID2D1SolidColorBrush> m_whiteBrush;
-    ComPtr<ID2D1SolidColorBrush> m_coalBrush;
-    ComPtr<ID2D1SolidColorBrush> m_carrotBrush;
-    ComPtr<ID2D1SolidColorBrush> m_twigBrush;
-
-    ComPtr<ID2D1SolidColorBrush> m_dozerBodyBrush;
-    ComPtr<ID2D1SolidColorBrush> m_dozerGlassBrush;
-    ComPtr<ID2D1SolidColorBrush> m_dozerTrackBrush;
-    ComPtr<ID2D1SolidColorBrush> m_dozerBladeBrush;
-
-    ComPtr<ID2D1SolidColorBrush> m_trainTenderBrush;
-    ComPtr<ID2D1SolidColorBrush> m_trainChimneyBrush;
-    ComPtr<ID2D1SolidColorBrush> m_trainTrimBrush;
-    ComPtr<ID2D1SolidColorBrush> m_trainLightBrush;
-
-    ComPtr<ID2D1SolidColorBrush> m_scarfRedBrush;
-    ComPtr<ID2D1SolidColorBrush> m_scarfBlueBrush;
-    ComPtr<ID2D1SolidColorBrush> m_scarfGreenBrush;
-    ComPtr<ID2D1SolidColorBrush> m_scarfGoldBrush;
-    ComPtr<ID2D1SolidColorBrush> m_scarfPurpleBrush;
-
-    ComPtr<ID2D1SolidColorBrush> m_topHatBrush;
-    ComPtr<ID2D1SolidColorBrush> m_santaHatBrush;
-    ComPtr<ID2D1SolidColorBrush> m_bucketBrush;
-
-    std::vector<Flake> m_flakes;
-    std::vector<Chunk> m_chunks;
-    std::vector<Puff> m_puffs;
-    std::vector<Body> m_bodies;
-    std::unordered_map<uint64_t, Cap> m_caps;
-
-    VehicleItem m_vehicle;
-    bool m_vehicleActive = false;
-    float m_vehicleCooldown = 0.0f;
-    std::vector<SnowballItem> m_snowballs;
-    std::vector<SnowmanItem> m_snowmen;
-    std::unique_ptr<SnowballItem> m_heldSnowball;
-    bool m_prevLButtonDown = false;
-
-    POINT m_lastCursor = {};
-    bool m_cursorValid = false;
-    uint32_t m_rng = 0x9E3779B9;
-    float m_time = 0;
-    float m_frameTime = 1.0f / 60;
-    unsigned m_frame = 0;
-};
-
-constexpr wchar_t kOverlayClass[] = L"WindhawkWinterWonderlandOverlay";
-
-Overlay::~Overlay() {
-    ReleaseDeviceResources();
-    if (m_hwnd) {
-        RemoveProp(m_hwnd, L"NonRudeHWND");
-        DestroyWindow(m_hwnd);
-        UnregisterClass(kOverlayClass, GetModuleHandle(nullptr));
-    }
-}
-
-float Overlay::Rand() {
-    m_rng ^= m_rng << 13;
-    m_rng ^= m_rng >> 17;
-    m_rng ^= m_rng << 5;
-    return (m_rng & 0xFFFFFF) / 16777216.0f;
-}
-
-RECT Overlay::ComputeArea() {
-    RECT rc;
-    if (g_settings.allMonitors) {
-        rc = {GetSystemMetrics(SM_XVIRTUALSCREEN),
-              GetSystemMetrics(SM_YVIRTUALSCREEN),
-              GetSystemMetrics(SM_XVIRTUALSCREEN) +
-                  GetSystemMetrics(SM_CXVIRTUALSCREEN),
-              GetSystemMetrics(SM_YVIRTUALSCREEN) +
-                  GetSystemMetrics(SM_CYVIRTUALSCREEN)};
-    } else {
-        rc = {0, 0, GetSystemMetrics(SM_CXSCREEN),
-              GetSystemMetrics(SM_CYSCREEN)};
-    }
-    return rc;
-}
-
-bool Overlay::ApplyArea(const RECT& area) {
-    m_area = area;
-    m_width = m_area.right - m_area.left;
-    m_height = m_area.bottom - m_area.top;
-    if (m_width <= 0 || m_height <= 0) {
-        return false;
-    }
-
-    SetWindowPos(m_hwnd, nullptr, m_area.left, m_area.top, m_width, m_height,
-                 SWP_NOZORDER | SWP_NOACTIVATE);
-
-    if (m_swapChain) {
-        m_ctx->SetTarget(nullptr);
-        m_targetBitmap.Reset();
-        if (FAILED(m_swapChain->ResizeBuffers(2, m_width, m_height,
-                                              DXGI_FORMAT_B8G8R8A8_UNORM,
-                                              DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT))) {
-            return false;
-        }
-        return CreateTargetBitmap();
-    }
-    return true;
-}
-
-UINT Overlay::ComputeSyncInterval() {
-    int cap = g_settings.maxFps;
-    HMONITOR hMon = MonitorFromWindow(m_hwnd, MONITOR_DEFAULTTOPRIMARY);
-    MONITORINFOEX mi{};
-    mi.cbSize = sizeof(mi);
-    if (GetMonitorInfo(hMon, &mi)) {
-        DEVMODE dm{};
-        dm.dmSize = sizeof(dm);
-        if (EnumDisplaySettings(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) &&
-            dm.dmDisplayFrequency > 0) {
-            int rate = static_cast<int>(dm.dmDisplayFrequency);
-            int interval = (rate + cap / 2) / cap;
-            return static_cast<UINT>(std::clamp(interval, 1, 4));
-        }
-    }
-    return 1;
-}
-
-bool Overlay::CreateDeviceResources() {
-    UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
-    HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
-                                   flags, nullptr, 0, D3D11_SDK_VERSION,
-                                   &m_d3dDevice, nullptr, nullptr);
-    if (FAILED(hr)) {
-        hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, flags,
-                               nullptr, 0, D3D11_SDK_VERSION, &m_d3dDevice,
-                               nullptr, nullptr);
-    }
-    if (FAILED(hr)) {
-        Wh_Log(L"D3D11CreateDevice failed: %08X", hr);
-        return false;
-    }
-
-    ComPtr<IDXGIDevice1> dxgiDevice;
-    if (FAILED(m_d3dDevice.As(&dxgiDevice))) {
-        Wh_Log(L"Querying IDXGIDevice1 failed");
-        return false;
-    }
-    dxgiDevice->SetMaximumFrameLatency(1);
-
-    D2D1_FACTORY_OPTIONS d2dOptions = {};
-    if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
-                                 __uuidof(ID2D1Factory1), &d2dOptions,
-                                 &m_d2dFactory)) ||
-        FAILED(m_d2dFactory->CreateDevice(dxgiDevice.Get(), &m_d2dDevice)) ||
-        FAILED(m_d2dDevice->CreateDeviceContext(
-            D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &m_ctx))) {
-        Wh_Log(L"Creating Direct2D factory/device failed");
-        return false;
-    }
-
-    ComPtr<IDXGIAdapter> adapter;
-    ComPtr<IDXGIFactory2> dxgiFactory;
-    if (FAILED(dxgiDevice->GetAdapter(&adapter)) ||
-        FAILED(adapter->GetParent(IID_PPV_ARGS(&dxgiFactory)))) {
-        Wh_Log(L"Querying IDXGIFactory2 failed");
-        return false;
-    }
-
-    DXGI_SWAP_CHAIN_DESC1 desc = {};
-    desc.Width = m_width;
-    desc.Height = m_height;
-    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    desc.SampleDesc.Count = 1;
-    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    desc.BufferCount = 2;
-    desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-    desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
-    desc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
-
-    if (FAILED(dxgiFactory->CreateSwapChainForComposition(
-            m_d3dDevice.Get(), &desc, nullptr, &m_swapChain))) {
-        Wh_Log(L"CreateSwapChainForComposition failed");
-        return false;
-    }
-
-    ComPtr<IDXGISwapChain2> swapChain2;
-    if (SUCCEEDED(m_swapChain.As(&swapChain2))) {
-        m_frameWait = swapChain2->GetFrameLatencyWaitableObject();
-    }
-
-    if (FAILED(DCompositionCreateDevice(dxgiDevice.Get(),
-                                        IID_PPV_ARGS(&m_dcompDevice))) ||
-        FAILED(m_dcompDevice->CreateTargetForHwnd(m_hwnd, TRUE,
-                                                 &m_dcompTarget)) ||
-        FAILED(m_dcompDevice->CreateVisual(&m_dcompVisual)) ||
-        FAILED(m_dcompVisual->SetContent(m_swapChain.Get())) ||
-        FAILED(m_dcompTarget->SetRoot(m_dcompVisual.Get())) ||
-        FAILED(m_dcompDevice->Commit())) {
-        Wh_Log(L"DirectComposition setup failed");
-        return false;
-    }
-
-    if (!CreateTargetBitmap() || !CreateFlakeSprite()) {
-        return false;
-    }
-
-    D2D1_GRADIENT_STOP stops[] = {
-        {0.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.98f)},
-        {0.8f, D2D1::ColorF(0.92f, 0.95f, 0.99f, 0.95f)},
-        {1.0f, D2D1::ColorF(0.72f, 0.82f, 0.92f, 0.92f)},
-    };
-    ComPtr<ID2D1GradientStopCollection> stopCollection;
-    if (FAILED(m_ctx->CreateGradientStopCollection(
-            stops, ARRAYSIZE(stops), D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP,
-            &stopCollection)) ||
-        FAILED(m_ctx->CreateLinearGradientBrush(
-            D2D1::LinearGradientBrushProperties(D2D1::Point2F(0, 0),
-                                                D2D1::Point2F(0, 1)),
-            stopCollection.Get(), &m_capBrush))) {
-        return false;
-    }
-
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f), &m_whiteBrush);
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(0.14f, 0.14f, 0.16f, 1.0f), &m_coalBrush);
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.47f, 0.12f, 1.0f), &m_carrotBrush);
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(0.43f, 0.29f, 0.18f, 1.0f), &m_twigBrush);
-
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(0.96f, 0.73f, 0.08f, 1.0f), &m_dozerBodyBrush);
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(0.24f, 0.24f, 0.27f, 1.0f), &m_dozerTrackBrush);
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(0.69f, 0.75f, 0.77f, 1.0f), &m_dozerBladeBrush);
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(0.70f, 0.88f, 0.98f, 0.75f), &m_dozerGlassBrush);
-
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(0.16f, 0.16f, 0.19f, 1.0f), &m_trainTenderBrush);
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(0.11f, 0.11f, 0.13f, 1.0f), &m_trainChimneyBrush);
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.84f, 0.0f, 1.0f), &m_trainTrimBrush);
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.94f, 0.59f, 0.9f), &m_trainLightBrush);
-
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(0.88f, 0.18f, 0.22f, 1.0f), &m_scarfRedBrush);
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(0.12f, 0.53f, 0.90f, 1.0f), &m_scarfBlueBrush);
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(0.26f, 0.63f, 0.28f, 1.0f), &m_scarfGreenBrush);
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(0.99f, 0.85f, 0.21f, 1.0f), &m_scarfGoldBrush);
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(0.56f, 0.14f, 0.67f, 1.0f), &m_scarfPurpleBrush);
-
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(0.10f, 0.10f, 0.12f, 1.0f), &m_topHatBrush);
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(0.88f, 0.14f, 0.18f, 1.0f), &m_santaHatBrush);
-    m_ctx->CreateSolidColorBrush(D2D1::ColorF(0.69f, 0.75f, 0.77f, 1.0f), &m_bucketBrush);
-
-    return true;
-}
-
-ID2D1SolidColorBrush* Overlay::GetScarfBrush(ScarfColor color) {
-    switch (color) {
-        case ScarfColor::Blue: return m_scarfBlueBrush.Get();
-        case ScarfColor::Green: return m_scarfGreenBrush.Get();
-        case ScarfColor::Gold: return m_scarfGoldBrush.Get();
-        case ScarfColor::Purple: return m_scarfPurpleBrush.Get();
-        default: return m_scarfRedBrush.Get();
-    }
-}
-
-void Overlay::ReleaseDeviceResources() {
-    if (m_ctx) {
-        m_ctx->SetTarget(nullptr);
-    }
-    m_targetBitmap.Reset();
-    m_flakeSprite.Reset();
-    m_capBrush.Reset();
-
-    m_whiteBrush.Reset();
-    m_coalBrush.Reset();
-    m_carrotBrush.Reset();
-    m_twigBrush.Reset();
-    m_dozerBodyBrush.Reset();
-    m_dozerGlassBrush.Reset();
-    m_dozerTrackBrush.Reset();
-    m_dozerBladeBrush.Reset();
-    m_trainTenderBrush.Reset();
-    m_trainChimneyBrush.Reset();
-    m_trainTrimBrush.Reset();
-    m_trainLightBrush.Reset();
-    m_scarfRedBrush.Reset();
-    m_scarfBlueBrush.Reset();
-    m_scarfGreenBrush.Reset();
-    m_scarfGoldBrush.Reset();
-    m_scarfPurpleBrush.Reset();
-    m_topHatBrush.Reset();
-    m_santaHatBrush.Reset();
-    m_bucketBrush.Reset();
-
-    m_dcompVisual.Reset();
-    m_dcompTarget.Reset();
-    m_dcompDevice.Reset();
-    if (m_frameWait) {
-        CloseHandle(m_frameWait);
-        m_frameWait = nullptr;
-    }
-    m_swapChain.Reset();
-    m_ctx.Reset();
-    m_d2dDevice.Reset();
-    m_d2dFactory.Reset();
-    m_d3dDevice.Reset();
-}
-
-bool Overlay::CreateTargetBitmap() {
-    ComPtr<IDXGISurface> surface;
-    if (FAILED(m_swapChain->GetBuffer(0, IID_PPV_ARGS(&surface)))) {
-        return false;
-    }
-    D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
-        D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
-        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                          D2D1_ALPHA_MODE_PREMULTIPLIED));
-    if (FAILED(m_ctx->CreateBitmapFromDxgiSurface(surface.Get(), &props,
-                                                  &m_targetBitmap))) {
-        return false;
-    }
-    m_ctx->SetTarget(m_targetBitmap.Get());
-    return true;
-}
-
-bool Overlay::CreateFlakeSprite() {
-    constexpr int kRadius = 16;
-    constexpr int kDim = 2 * kRadius;
-    uint32_t pixels[kDim * kDim];
-
-    for (int y = 0; y < kDim; y++) {
-        for (int x = 0; x < kDim; x++) {
-            float dx = (x + 0.5f - kRadius) / kRadius;
-            float dy = (y + 0.5f - kRadius) / kRadius;
-            float d = std::sqrt(dx * dx + dy * dy);
-            float a = std::clamp(1.0f - d, 0.0f, 1.0f);
-            a = a * a * (3.0f - 2.0f * a);
-
-            float r = (d < 0.6f) ? 1.0f : (0.85f + 0.15f * (1.0f - d) / 0.4f);
-            float g = (d < 0.6f) ? 1.0f : (0.90f + 0.10f * (1.0f - d) / 0.4f);
-            float b = 1.0f;
-
-            uint8_t a8 = static_cast<uint8_t>(std::round(a * 255.0f));
-            uint8_t r8 = static_cast<uint8_t>(std::round(a * r * 255.0f));
-            uint8_t g8 = static_cast<uint8_t>(std::round(a * g * 255.0f));
-            uint8_t b8 = static_cast<uint8_t>(std::round(a * b * 255.0f));
-            pixels[y * kDim + x] =
-                (a8 << 24) | (r8 << 16) | (g8 << 8) | b8;
-        }
-    }
-
-    D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
-        D2D1_BITMAP_OPTIONS_NONE,
-        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                          D2D1_ALPHA_MODE_PREMULTIPLIED));
-    return SUCCEEDED(m_ctx->CreateBitmap(D2D1::SizeU(kDim, kDim), pixels,
-                                         kDim * sizeof(uint32_t), &props,
-                                         &m_flakeSprite));
-}
-
-bool Overlay::Create() {
-    HINSTANCE hInst = GetModuleHandle(nullptr);
-    WNDCLASSEX wc = {sizeof(wc)};
-    wc.lpfnWndProc = DefWindowProc;
-    wc.hInstance = hInst;
-    wc.lpszClassName = kOverlayClass;
-    RegisterClassEx(&wc);
-
-    m_area = ComputeArea();
-    m_width = m_area.right - m_area.left;
-    m_height = m_area.bottom - m_area.top;
-
-    m_hwnd = CreateWindowEx(
-        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW |
-            WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP,
-        kOverlayClass, L"Desktop Snowfall & Winter Wonderland", WS_POPUP, m_area.left, m_area.top,
-        m_width, m_height, nullptr, nullptr, wc.hInstance, nullptr);
-    if (!m_hwnd) {
-        return false;
-    }
-
-    SetLayeredWindowAttributes(m_hwnd, 0, 255, LWA_ALPHA);
-    SetProp(m_hwnd, L"NonRudeHWND", reinterpret_cast<HANDLE>(TRUE));
-
-    if (!CreateDeviceResources()) {
-        return false;
-    }
-
-    ShowWindow(m_hwnd, SW_SHOWNOACTIVATE);
-    m_syncInterval = ComputeSyncInterval();
-    return true;
-}
-
-void Overlay::SpawnFlake(Flake& f, bool scatter) {
-    float depth = Rand();
-    f.size = (0.8f + depth * depth * 2.7f) * g_settings.size / 100.0f;
-    f.fallSpeed = 35.0f + f.size * 22.0f;
-    f.phase = Rand() * 6.2832f;
-    f.sway = 6.0f + Rand() * 14.0f;
-    f.alpha = 0.45f + 0.5f * Rand();
-    f.x = m_area.left + Rand() * m_width;
-    f.y = scatter ? m_area.top + Rand() * m_height
-                  : m_area.top - f.size * 2 - Rand() * 40.0f;
-}
-
-void Overlay::SpawnChunk(float x, float y, float area, float vx, float vy,
-                        uint64_t ignoreKey) {
-    if (m_chunks.size() >= kMaxChunks || area < 0.5f) {
-        return;
-    }
-    m_chunks.push_back({
-        .x = x,
-        .y = y,
-        .vx = vx,
-        .vy = vy,
-        .size = std::clamp(std::sqrt(area) * 0.55f, 1.0f, 3.5f),
-        .area = area,
-        .ignoreKey = ignoreKey,
-    });
-}
-
-void Overlay::SpawnPuff(float x, float y, float vx, float vy, float size,
-                       float life) {
-    if (m_puffs.size() >= kMaxPuffs) {
-        return;
-    }
-    m_puffs.push_back({
-        .x = x,
-        .y = y,
-        .vx = vx,
-        .vy = vy,
-        .size = size,
-        .life = life,
-        .maxLife = life,
-    });
-}
-
-void Overlay::DropColumns(Cap& cap, int first, int count) {
-    for (int i = 0; i < count; i += kChunkColumns) {
-        float area = 0, top = 0, lift = 0;
-        int end = std::min(i + kChunkColumns, count);
-        for (int k = i; k < end; k++) {
-            Column& col = cap.cols[first + k];
-            area += col.h;
-            top = std::max(top, col.h);
-            lift = std::max(lift, col.lift);
-            col.h = 0;
-        }
-        SpawnChunk(cap.rc.left + first + i + 1.0f, cap.rc.top - lift - top / 2,
-                   area, (Rand() - 0.5f) * 30.0f, 0, 0);
-    }
-}
-
-void Overlay::AddTaskbarBodies(HWND hwnd, const RECT& rc) {
-    TaskbarSnow mode = g_settings.taskbarSnow;
-    if (mode == TaskbarSnow::Off) {
-        return;
-    }
-
-    if (mode != TaskbarSnow::Whole) {
-        TaskbarParts parts;
-        bool found = false;
-        {
-            std::lock_guard<std::mutex> lock(g_taskbarPartsMutex);
-            auto it = g_taskbarParts.find(hwnd);
-            if (it != g_taskbarParts.end()) {
-                parts = it->second;
-                found = true;
-            }
-        }
-
-        if (found && parts.windowWidth == rc.right - rc.left) {
-            bool useParts =
-                mode == TaskbarSnow::Parts ||
-                parts.frame.right - parts.frame.left < parts.windowWidth * 0.85;
-            if (useParts) {
-                RECT frame = parts.frame;
-                OffsetRect(&frame, rc.left, rc.top);
-                m_bodies.push_back({BodyKey(hwnd, 1), hwnd, frame, true});
-                if (parts.hasTray) {
-                    RECT tray = parts.tray;
-                    OffsetRect(&tray, rc.left, rc.top);
-                    m_bodies.push_back({BodyKey(hwnd, 2), hwnd, tray, true});
-                }
-                return;
-            }
-        }
-    }
-
-    m_bodies.push_back({BodyKey(hwnd, 0), hwnd, rc, true});
-}
-
-BOOL CALLBACK Overlay::CollectBodiesEnumProc(HWND hwnd, LPARAM lParam) {
-    Overlay* self = reinterpret_cast<Overlay*>(lParam);
-    if (hwnd == self->m_hwnd || !IsWindowVisible(hwnd) || IsIconic(hwnd)) {
-        return TRUE;
-    }
-
-    wchar_t cls[64];
-    if (!GetClassName(hwnd, cls, ARRAYSIZE(cls)) || IsShellWindowClass(cls)) {
-        return TRUE;
-    }
-
-    bool isTaskbar = IsTaskbarClass(cls);
-    LONG exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-    if (!isTaskbar) {
-        if (exStyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) {
-            return TRUE;
-        }
-        if ((exStyle & WS_EX_LAYERED) && (exStyle & WS_EX_TRANSPARENT)) {
-            return TRUE;
-        }
-    }
-
-    DWORD cloaked = 0;
-    DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
-    if (cloaked) {
-        return TRUE;
-    }
-
-    RECT rc;
-    if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rc, sizeof(rc)))) {
-        GetWindowRect(hwnd, &rc);
-    }
-    if (rc.right - rc.left < 80 || rc.bottom - rc.top < 30) {
-        return TRUE;
-    }
-
-    if (isTaskbar) {
-        self->AddTaskbarBodies(hwnd, rc);
-    } else {
-        bool snowCap = !IsZoomed(hwnd);
-        self->m_bodies.push_back({BodyKey(hwnd, 0), hwnd, rc, snowCap});
-    }
-    return TRUE;
-}
-
-void Overlay::CollectBodies() {
-    m_bodies.clear();
-    EnumWindows(CollectBodiesEnumProc, reinterpret_cast<LPARAM>(this));
-}
-
-bool Overlay::IsFullscreenAppActive() {
-    HWND fg = GetForegroundWindow();
-    if (!fg || fg == m_hwnd) {
-        return false;
-    }
-
-    wchar_t cls[64];
-    if (!GetClassName(fg, cls, ARRAYSIZE(cls)) || IsShellWindowClass(cls) ||
-        IsTaskbarClass(cls)) {
-        return false;
-    }
-
-    RECT rc;
-    MONITORINFO mi = {sizeof(mi)};
-    if (!GetWindowRect(fg, &rc) ||
-        !GetMonitorInfo(MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST), &mi)) {
-        return false;
-    }
-
-    if (rc.left > mi.rcMonitor.left || rc.top > mi.rcMonitor.top ||
-        rc.right < mi.rcMonitor.right || rc.bottom < mi.rcMonitor.bottom) {
-        return false;
-    }
-
-    LONG style = GetWindowLong(fg, GWL_STYLE);
-    return !(IsZoomed(fg) && (style & WS_CAPTION) == WS_CAPTION);
-}
-
-bool Overlay::IsCoveredAbove(size_t bodyIndex, int x, int y) {
-    for (size_t j = 0; j < bodyIndex; j++) {
-        const RECT& o = m_bodies[j].rc;
-        if (x >= o.left && x < o.right && y >= o.top && y < o.bottom) {
-            return true;
-        }
-    }
-    return false;
-}
-
-const Body* Overlay::FindLanding(float x, float oldY, float newY,
-                                 uint64_t ignoreKey) {
-    int sx = static_cast<int>(std::floor(x));
-    for (const Body& b : m_bodies) {
-        if (sx < b.rc.left || sx >= b.rc.right || newY < b.rc.top ||
-            newY >= b.rc.bottom) {
-            continue;
-        }
-        if (b.key != ignoreKey && b.snowCap && oldY < b.rc.top) {
-            return &b;
-        }
-        return nullptr;
-    }
-    return nullptr;
-}
-
-void Overlay::AddSnow(uint64_t key, int column, float amount) {
-    auto it = m_caps.find(key);
-    if (it == m_caps.end()) {
-        return;
-    }
-
-    Cap& cap = it->second;
-    std::vector<Column>& cols = cap.cols;
-    const int width = static_cast<int>(cols.size());
-    const float maxHeight = static_cast<float>(g_settings.capHeight);
-
-    constexpr int kReach = 14;
-    int from = std::max(column - kReach, 1);
-    int to = std::min(column + kReach, width - 2);
-    if (from > to) {
-        return;
-    }
-
-    float limit[2 * kReach + 1];
-    for (int c = from; c <= to; c++) {
-        limit[c - from] = SnowLimit(cap, c, maxHeight);
-    }
-
-    for (int i = 0; i < 9; i++) {
-        int c = column + i - 4;
-        if (c >= from && c <= to) {
-            cols[c].h = std::min(limit[c - from],
-                                 cols[c].h + amount * kSnowKernel[i]);
-        }
-    }
-
-    for (int pass = 0; pass < 2; pass++) {
-        for (int c = from; c <= to; c++) {
-            float h = cols[c].h * 0.5f + (cols[c - 1].h + cols[c + 1].h) * 0.25f;
-            cols[c].h = std::min(h, limit[c - from]);
-        }
-    }
-}
-
-void Overlay::ResizeCap(Cap& cap, const RECT& rc) {
-    int oldWidth = cap.rc.right - cap.rc.left;
-    int newWidth = rc.right - rc.left;
-    std::vector<Column>& cols = cap.cols;
-
-    if (oldWidth == newWidth) {
-        int dx = rc.left - cap.rc.left;
-        int width = static_cast<int>(cols.size());
-        if (dx == 0 || !g_settings.slideOff || width == 0) {
-            return;
-        }
-
-        cap.offset -= dx;
-        if (std::abs(dx) >= width) {
-            DropColumns(cap, 0, width);
-            return;
-        }
-
-        if (dx > 0) {
-            DropColumns(cap, width - dx, dx);
-            for (int i = width - 1; i >= dx; i--) {
-                cols[i] = cols[i - dx];
-            }
-            for (int i = 0; i < dx; i++) {
-                cols[i] = {};
-            }
-        } else {
-            int shift = -dx;
-            DropColumns(cap, 0, shift);
-            for (int i = 0; i < width - shift; i++) {
-                cols[i] = cols[i + shift];
-            }
-            for (int i = width - shift; i < width; i++) {
-                cols[i] = {};
-            }
-        }
-        return;
-    }
-
-    int leftDelta = rc.left - cap.rc.left;
-    int rightDelta = rc.right - cap.rc.right;
-
-    if (newWidth < oldWidth) {
-        if (leftDelta > 0) {
-            DropColumns(cap, 0, std::min(leftDelta, oldWidth));
-        }
-        if (rightDelta < 0) {
-            int dropped = -rightDelta;
-            int start = std::max(0, oldWidth - dropped);
-            DropColumns(cap, start, oldWidth - start);
-        }
-    }
-
-    cap.offset -= leftDelta;
-    std::vector<Column> newCols(newWidth);
-    for (int i = 0; i < newWidth; i++) {
-        int src = i + leftDelta;
-        if (src >= 0 && src < oldWidth) {
-            newCols[i] = cols[src];
-        }
-    }
-    cap.cols = std::move(newCols);
-}
-
-void Overlay::MoveCap(Cap& cap, const RECT& rc, float dt) {
-    const float dTop = static_cast<float>(rc.top - cap.rc.top);
-    const float prevVy = cap.vy;
-    float vxNow = 0;
-    if (rc.right - rc.left == cap.rc.right - cap.rc.left) {
-        vxNow = (rc.left - cap.rc.left) / dt;
-    }
-    cap.vy = cap.vy * 0.5f + dTop / dt * 0.5f;
-    cap.vx = cap.vx * 0.5f + vxNow * 0.5f;
-
-    bool launch = false;
-    float tossSpeed = 0;
-    if (cap.vy < cap.carry) {
-        cap.carry = cap.vy;
-    } else if (cap.carry < -kMinTossSpeed && cap.vy > cap.carry * 0.35f) {
-        launch = true;
-        tossSpeed = std::max(cap.carry * kTossFactor, -kMaxTossSpeed);
-        cap.carry = 0;
-    } else if (cap.vy > -kMinTossSpeed * 0.5f) {
-        cap.carry = 0;
-    }
-
-    const float excess = dTop - std::max(prevVy, 0.0f) * dt;
-    const bool drop = excess > 3.0f;
-    const float hang = excess > 8.0f ? kHangSeconds * (0.8f + 0.4f * Rand()) : 0.0f;
-
-    float impact = 0;
-    int width = static_cast<int>(cap.cols.size());
-    bool anyInAir = false;
-
-    for (int c = 0; c < width; c++) {
-        Column& col = cap.cols[c];
-        if (col.h <= 0) {
-            continue;
-        }
-
-        if (launch && col.lift == 0) {
-            col.vel = tossSpeed * (0.85f + 0.3f * Rand());
-            col.hang = kHangSeconds * (0.8f + 0.4f * Rand());
-            col.lift = 0.001f;
-        } else if (drop && col.lift == 0) {
-            col.vel = prevVy * 0.4f;
-            col.hang = hang;
-            col.lift = excess;
-        }
-
-        if (col.lift > 0) {
-            if (col.hang > 0) {
-                col.hang -= dt;
             } else {
-                col.vel += kGravity * dt;
+                for (auto& h : c.cols)
+                    if (h > 0.0f) h -= kMeltPerSec * dt;
             }
-            col.lift -= col.vel * dt;
+        }
 
-            if (col.lift <= 0) {
-                col.lift = 0;
-                impact = std::max(impact, col.vel);
-                if (col.vel > kBounceSpeed) {
-                    col.vel = -col.vel * 0.25f;
-                    col.lift = 0.001f;
-                } else {
-                    col.vel = 0;
+        size_t write = 0;
+        for (size_t i = 0; i < flakes.size(); i++) {
+            Particle f = flakes[i];
+            float oldY = f.y;
+
+            if (gust) {
+                if (f.blown == 0.0f) {
+                    float stagger = (f.phase / kPi2) * 160.0f;
+                    if ((gustFront - f.x) * gustDir > stagger) f.blown = gustDir;
+                }
+                if (f.blown != 0.0f) {
+                    f.x += f.blown * (650.0f + 900.0f * (f.phase / kPi2)) * dt;
+                    f.y -= 60.0f * dt;
+                    f.rot += f.rotSpeed * 4.0f * dt;
+                    if (f.blown > 0 ? f.x > width + 60.0f : f.x < -60.0f) continue;
+                    flakes[write++] = f;
+                    continue;
                 }
             }
-        }
-        if (col.lift > 0 || col.vel < 0) {
-            anyInAir = true;
-        }
-    }
-    cap.airborne = anyInAir;
 
-    if (launch) {
-        cap.squashVel += 1.5f;
-
-        float breakShare =
-            0.06f + std::clamp((-tossSpeed / kTossFactor - 900.0f) / 2500.0f,
-                               0.0f, 0.25f);
-        for (int c = 0; c + kChunkColumns <= width; c += kChunkColumns) {
-            float top = 0;
-            for (int k = c; k < c + kChunkColumns; k++) {
-                top = std::max(top, cap.cols[k].h);
-            }
-            if (top < 1.0f) {
-                continue;
-            }
-            if (Rand() < breakShare) {
-                float area = 0;
-                for (int k = c; k < c + kChunkColumns; k++) {
-                    area += cap.cols[k].h * 0.35f;
-                    cap.cols[k].h *= 0.65f;
-                }
-                SpawnChunk(rc.left + c + 1.0f, rc.top - top, area,
-                           cap.vx * 0.3f + (Rand() - 0.5f) * 100.0f,
-                           tossSpeed * (1.1f + 0.4f * Rand()), 0);
-            }
-            if (Rand() < 0.04f) {
-                SpawnPuff(rc.left + c + 1.0f, rc.top - top,
-                          (Rand() - 0.5f) * 60.0f,
-                          tossSpeed * (0.4f + 0.5f * Rand()),
-                          0.6f + Rand() * 0.8f, 0.6f + Rand() * 0.5f);
-            }
-        }
-    }
-
-    if (impact > 0) {
-        cap.squashVel -= std::min(impact * 0.003f, 4.0f);
-    }
-}
-
-void Overlay::Ambient(float dt) {
-    const float maxHeight = static_cast<float>(g_settings.capHeight);
-    const float wind = g_settings.wind * 0.6f;
-    const float powderRate = 0.4f + std::fabs(wind) / 30.0f;
-
-    for (size_t i = 0; i < m_bodies.size(); i++) {
-        const Body& b = m_bodies[i];
-        if (!b.snowCap) {
-            continue;
-        }
-        auto it = m_caps.find(b.key);
-        if (it == m_caps.end()) {
-            continue;
-        }
-
-        Cap& cap = it->second;
-
-        if (cap.squash != 0 || cap.squashVel != 0) {
-            cap.squashVel += (-220.0f * cap.squash - 16.0f * cap.squashVel) * dt;
-            cap.squash = std::clamp(cap.squash + cap.squashVel * dt, -0.4f,
-                                    0.35f);
-            if (std::fabs(cap.squash) < 0.002f &&
-                std::fabs(cap.squashVel) < 0.02f) {
-                cap.squash = cap.squashVel = 0;
-            }
-        }
-
-        std::vector<Column>& cols = cap.cols;
-        const int width = static_cast<int>(cols.size());
-        if (cap.airborne || width < 40) {
-            continue;
-        }
-
-        if (Rand() < powderRate * width / 1000.0f * dt) {
-            int c = static_cast<int>(Rand() * width);
-            float x = static_cast<float>(b.rc.left + c);
-            float y = b.rc.top - cols[c].h;
-            if (cols[c].h > 0.6f * SnowLimit(cap, c, maxHeight) &&
-                !IsCoveredAbove(i, static_cast<int>(x),
-                                static_cast<int>(y) - 1)) {
-                SpawnPuff(x, y, wind * (0.5f + Rand()) + (Rand() - 0.5f) * 20.0f,
-                          -15.0f - Rand() * 30.0f, 0.5f + Rand() * 0.7f,
-                          1.0f + Rand() * 1.2f);
-            }
-        }
-
-        constexpr int kLump = 6;
-        if (Rand() < 0.05f * dt) {
-            bool right = Rand() < 0.5f;
-            int first = right ? width - kLump - 2 : 2;
-            float area = 0;
-            for (int c = first; c < first + kLump; c++) {
-                area += cols[c].h * 0.5f;
-            }
-            float x = static_cast<float>(right ? b.rc.right - 2 : b.rc.left + 2);
-            if (area > kLump * 0.3f * maxHeight &&
-                !IsCoveredAbove(i, static_cast<int>(x), b.rc.top - 2)) {
-                for (int c = first; c < first + kLump; c++) {
-                    cols[c].h *= 0.5f;
-                }
-                SpawnChunk(x, b.rc.top - 2.0f, area,
-                           (right ? 1.0f : -1.0f) * (25.0f + Rand() * 30.0f),
-                           -20.0f, b.key);
-            }
-        }
-    }
-}
-
-void Overlay::Sweep(float dt) {
-    if (!g_settings.sweepWithCursor) {
-        return;
-    }
-
-    POINT pt;
-    if (!GetCursorPos(&pt)) {
-        return;
-    }
-
-    if (!m_cursorValid) {
-        m_lastCursor = pt;
-        m_cursorValid = true;
-        return;
-    }
-
-    float speedX = (pt.x - m_lastCursor.x) / dt;
-    float speedY = (pt.y - m_lastCursor.y) / dt;
-    float speedSq = speedX * speedX + speedY * speedY;
-    if (speedSq < 30.0f * 30.0f) {
-        return;
-    }
-
-    float cursorVx = (pt.x - m_lastCursor.x) / dt;
-    int x0 = std::min(m_lastCursor.x, pt.x) - kSweepRadius;
-    int x1 = std::max(m_lastCursor.x, pt.x) + kSweepRadius;
-    m_lastCursor = pt;
-    const float maxHeight = static_cast<float>(g_settings.capHeight);
-
-    if (x1 - x0 > 300) {
-        x0 = pt.x - kSweepRadius;
-        x1 = pt.x + kSweepRadius;
-    }
-
-    for (size_t i = 0; i < m_bodies.size(); i++) {
-        const Body& b = m_bodies[i];
-        if (!b.snowCap) {
-            continue;
-        }
-        auto it = m_caps.find(b.key);
-        if (it == m_caps.end()) {
-            continue;
-        }
-
-        Cap& cap = it->second;
-        const float top = static_cast<float>(b.rc.top);
-        if (pt.y > top + 4 || pt.y < top - 400 || x1 < b.rc.left ||
-            x0 >= b.rc.right || IsCoveredAbove(i, pt.x, b.rc.top - 2)) {
-            continue;
-        }
-
-        std::vector<Column>& cols = cap.cols;
-        int from = std::max(x0 - static_cast<int>(b.rc.left), 0);
-        int to = std::min(x1 - static_cast<int>(b.rc.left),
-                          static_cast<int>(cols.size()));
-        for (int c = from; c < to; c += kChunkColumns) {
-            float area = 0, height = 0;
-            const float base = top - cols[c].lift;
-            if (pt.y < base - maxHeight - 6 || pt.y > base + 4) {
-                continue;
-            }
-            for (int k = c; k < std::min(c + kChunkColumns, to); k++) {
-                area += cols[k].h;
-                height = std::max(height, cols[k].h);
-                cols[k].h = 0;
-            }
-            if (area < 0.5f) {
-                continue;
-            }
-            SpawnChunk(b.rc.left + c + 1.0f, base - height / 2, area,
-                       cursorVx * 0.35f + (Rand() - 0.5f) * 80.0f,
-                       -Rand() * 120.0f, b.key);
-            if (Rand() < 0.35f) {
-                SpawnPuff(b.rc.left + c + 1.0f, base - height,
-                          cursorVx * 0.2f + (Rand() - 0.5f) * 60.0f,
-                          -30.0f - Rand() * 60.0f, 0.6f + Rand() * 0.7f,
-                          0.5f + Rand() * 0.5f);
-            }
-        }
-    }
-}
-
-void Overlay::UpdateFlakes(float dt) {
-    const float wind = g_settings.wind * 3.5f;
-    const float speedMult = g_settings.speed / 100.0f;
-    const float capSnowMult = g_settings.capHeight / 8.0f;
-    m_time += dt;
-
-    for (Flake& f : m_flakes) {
-        float sway = std::sin(m_time * 2.0f + f.phase) * f.sway;
-        float oldY = f.y;
-        f.x += (wind + sway) * dt;
-        f.y += f.fallSpeed * speedMult * dt;
-
-        if (f.y >= m_area.bottom) {
-            SpawnFlake(f, false);
-            continue;
-        }
-
-        if (f.x < m_area.left) {
-            f.x += m_width;
-        } else if (f.x >= m_area.right) {
-            f.x -= m_width;
-        }
-
-        if (g_settings.capHeight > 0) {
-            if (const Body* b = FindLanding(f.x, oldY, f.y, 0)) {
-                int col = static_cast<int>(std::floor(f.x)) - b->rc.left;
-                AddSnow(b->key, col, (0.35f + f.size * 0.25f) * capSnowMult);
-                SpawnFlake(f, false);
-            }
-        }
-    }
-}
-
-void Overlay::UpdateChunks(float dt) {
-    const float wind = g_settings.wind * 1.5f;
-
-    for (size_t i = m_chunks.size(); i-- > 0;) {
-        Chunk& c = m_chunks[i];
-        c.vx += (wind - c.vx) * 0.8f * dt;
-        c.vy += kGravity * dt;
-        c.vx = std::clamp(c.vx, -kChunkMaxSpeed, kChunkMaxSpeed);
-        c.vy = std::clamp(c.vy, -kChunkMaxSpeed, kChunkMaxSpeed);
-
-        float oldY = c.y;
-        c.x += c.vx * dt;
-        c.y += c.vy * dt;
-
-        if (c.y >= m_area.bottom || c.x < m_area.left ||
-            c.x >= m_area.right) {
-            m_chunks.erase(m_chunks.begin() + i);
-            continue;
-        }
-
-        if (c.vy > 0) {
-            if (const Body* b = FindLanding(c.x, oldY, c.y, c.ignoreKey)) {
-                int col = static_cast<int>(std::floor(c.x)) - b->rc.left;
-                AddSnow(b->key, col, c.area * 0.7f / kSnowKernelSum);
-
-                if (c.vy > 350.0f) {
-                    SpawnPuff(c.x, b->rc.top - 2.0f,
-                              c.vx * 0.3f + (Rand() - 0.5f) * 40.0f,
-                              -c.vy * 0.2f - Rand() * 30.0f,
-                              0.5f + Rand() * 0.5f, 0.4f + Rand() * 0.4f);
-                }
-
-                m_chunks.erase(m_chunks.begin() + i);
-            }
-        }
-    }
-}
-
-void Overlay::UpdatePuffs(float dt) {
-    const float wind = g_settings.wind * 2.5f;
-
-    for (size_t i = m_puffs.size(); i-- > 0;) {
-        Puff& p = m_puffs[i];
-        p.life -= dt;
-        if (p.life <= 0) {
-            m_puffs.erase(m_puffs.begin() + i);
-            continue;
-        }
-
-        p.vx += (wind - p.vx) * 1.5f * dt;
-        p.vy += 60.0f * dt;
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-    }
-}
-
-bool Overlay::InheritSnow(Cap& cap, unsigned lastSeen) {
-    bool inherited = false;
-    for (auto& [key, other] : m_caps) {
-        if (&other == &cap || other.hwnd != cap.hwnd ||
-            other.seenFrame != m_frame - 1 || other.seenFrame <= lastSeen) {
-            continue;
-        }
-
-        for (size_t c = 0; c < other.cols.size(); c++) {
-            int dst = other.rc.left + static_cast<int>(c) - cap.rc.left;
-            if (dst >= 0 && dst < static_cast<int>(cap.cols.size())) {
-                cap.cols[dst].h = std::max(cap.cols[dst].h, other.cols[c].h);
-                other.cols[c].h = 0;
-            }
-        }
-        inherited = true;
-    }
-    return inherited;
-}
-
-void Overlay::UpdateCaps(float dt) {
-    if (g_settings.capHeight <= 0) {
-        m_caps.clear();
-        return;
-    }
-
-    std::vector<HWND> inheritedFrom;
-    for (const Body& b : m_bodies) {
-        if (!b.snowCap) {
-            continue;
-        }
-
-        auto [it, inserted] = m_caps.try_emplace(b.key);
-        Cap& cap = it->second;
-        const int width = b.rc.right - b.rc.left;
-
-        if (inserted || cap.seenFrame != m_frame - 1) {
-            // New, or back after being minimized or hidden: just put the snow
-            // on top.
-            unsigned lastSeen = inserted ? 0 : cap.seenFrame;
-            if (inserted) {
-                cap.hwnd = b.hwnd;
-                cap.seed = Hash32(static_cast<uint32_t>(b.key) ^
-                                  static_cast<uint32_t>(b.key >> 32));
-            }
-            cap.rc = b.rc;
-            cap.cols.resize(width);
-            for (Column& col : cap.cols) {
-                col.lift = col.vel = col.hang = 0;
-            }
-            cap.vx = cap.vy = cap.carry = 0;
-            cap.squash = cap.squashVel = 0;
-            cap.airborne = false;
-            if (InheritSnow(cap, lastSeen)) {
-                inheritedFrom.push_back(cap.hwnd);
-            }
-        } else {
-            ResizeCap(cap, b.rc);
-            MoveCap(cap, b.rc, dt);
-        }
-
-        cap.rc = b.rc;
-        cap.seenFrame = m_frame;
-    }
-
-    for (HWND hwnd : inheritedFrom) {
-        for (auto it = m_caps.begin(); it != m_caps.end();) {
-            Cap& other = it->second;
-            if (other.hwnd == hwnd && other.seenFrame != m_frame) {
-                if (other.seenFrame == m_frame - 1) {
-                    DropColumns(other, 0, static_cast<int>(other.cols.size()));
-                }
-                it = m_caps.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
-
-    if (m_frame % 60 == 0) {
-        for (auto it = m_caps.begin(); it != m_caps.end();) {
-            it = IsWindow(it->second.hwnd) ? std::next(it) : m_caps.erase(it);
-        }
-    }
-}
-
-// ─── VEHICLE (STEAM TRAIN & BULLDOZER) ───
-void Overlay::SummonVehicle(uint64_t targetKey) {
-    if (m_bodies.empty()) return;
-    int bestIdx = -1;
-    if (targetKey != 0) {
-        for (size_t i = 0; i < m_bodies.size(); i++) {
-            if (m_bodies[i].key == targetKey && m_bodies[i].snowCap) {
-                bestIdx = static_cast<int>(i);
-                break;
-            }
-        }
-    }
-    if (bestIdx == -1) {
-        int bestW = 0;
-        for (size_t i = 0; i < m_bodies.size(); i++) {
-            if (m_bodies[i].snowCap) {
-                int w = m_bodies[i].rc.right - m_bodies[i].rc.left;
-                if (w > bestW) {
-                    bestW = w;
-                    bestIdx = static_cast<int>(i);
-                }
-            }
-        }
-    }
-    if (bestIdx == -1) return;
-    const auto& b = m_bodies[bestIdx];
-    float vWidth = (g_settings.vehicleType == VehicleType::Train) ? 110.0f : 46.0f;
-    float vHeight = (g_settings.vehicleType == VehicleType::Train) ? 40.0f : 24.0f;
-    int dir = (Rand() > 0.5f) ? 1 : -1;
-    float startX = (g_settings.vehicleSpawnMode == VehicleSpawnMode::Auto)
-        ? ((dir > 0) ? (b.rc.left - 120.0f) : (b.rc.right + 120.0f))
-        : (b.rc.left + (b.rc.right - b.rc.left) * 0.5f);
-
-    m_vehicle.x = startX;
-    m_vehicle.y = static_cast<float>(b.rc.top);
-    m_vehicle.bodyKey = b.key;
-    m_vehicle.speed = static_cast<float>(g_settings.vehicleSpeed);
-    m_vehicle.width = vWidth;
-    m_vehicle.height = vHeight;
-    m_vehicle.direction = dir;
-    m_vehicle.smokePuffs.clear();
-    m_vehicle.isBeingDragged = false;
-    m_vehicleActive = true;
-    m_vehicleCooldown = 0.0f;
-}
-
-void Overlay::UpdateVehicle(const POINT& cursor, bool isLButtonDown, float dt) {
-    if (g_settings.vehicleType == VehicleType::None || m_bodies.empty()) {
-        m_vehicleActive = false;
-        return;
-    }
-
-    if (!m_vehicleActive) {
-        m_vehicleCooldown = std::max(0.0f, m_vehicleCooldown - dt);
-
-        if (g_settings.vehicleSpawnMode == VehicleSpawnMode::Always) {
-            SummonVehicle(0);
-        } else { // Auto
-            if (m_vehicleCooldown <= 0.0f) {
-                float maxAvgSnow = 0.0f;
-                uint64_t bestTargetKey = 0;
-                for (size_t i = 0; i < m_bodies.size(); i++) {
-                    const auto& b = m_bodies[i];
-                    if (!b.snowCap) continue;
-                    auto it = m_caps.find(b.key);
-                    if (it == m_caps.end() || it->second.cols.empty()) continue;
-                    float sumH = 0.0f;
-                    for (const auto& col : it->second.cols) sumH += col.h;
-                    float avgH = sumH / it->second.cols.size();
-                    if (avgH > maxAvgSnow && (b.rc.right - b.rc.left) > 150) {
-                        maxAvgSnow = avgH;
-                        bestTargetKey = b.key;
-                    }
-                }
-
-                if (maxAvgSnow >= 2.0f && bestTargetKey != 0) {
-                    SummonVehicle(bestTargetKey);
-                }
-            }
-        }
-
-        if (!m_vehicleActive) return;
-    }
-
-    // Drag & Drop
-    if (isLButtonDown) {
-        if (!m_vehicle.isBeingDragged) {
-            float bzTop = m_vehicle.y - m_vehicle.height;
-            if (std::abs(cursor.x - m_vehicle.x) < m_vehicle.width * 0.7f &&
-                cursor.y >= bzTop - 8 && cursor.y <= m_vehicle.y + 10) {
-                m_vehicle.isBeingDragged = true;
-            }
-        }
-        if (m_vehicle.isBeingDragged) {
-            m_vehicle.x = static_cast<float>(cursor.x);
-            m_vehicle.y = static_cast<float>(cursor.y);
-            return;
-        }
-    } else if (m_vehicle.isBeingDragged) {
-        m_vehicle.isBeingDragged = false;
-        uint64_t bestKey = m_vehicle.bodyKey;
-        float bestDist = 1e9f;
-        float snapY = m_vehicle.y;
-        for (const auto& b : m_bodies) {
-            if (b.snowCap && m_vehicle.x >= b.rc.left && m_vehicle.x <= b.rc.right) {
-                float dist = std::abs(m_vehicle.y - b.rc.top);
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    bestKey = b.key;
-                    snapY = static_cast<float>(b.rc.top);
-                }
-            }
-        }
-        m_vehicle.bodyKey = bestKey;
-        m_vehicle.y = snapY;
-    }
-
-    // Offscreen safety guard: despawn if vehicle drove far offscreen
-    if (m_vehicle.x < m_area.left - 250.0f || m_vehicle.x > m_area.right + 250.0f) {
-        m_vehicleActive = false;
-        m_vehicleCooldown = 8.0f;
-        return;
-    }
-
-    // Plowing and moving
-    float targetW = (g_settings.vehicleType == VehicleType::Train) ? 110.0f : 46.0f;
-    float targetH = (g_settings.vehicleType == VehicleType::Train) ? 40.0f : 24.0f;
-    m_vehicle.width = targetW;
-    m_vehicle.height = targetH;
-    m_vehicle.speed = static_cast<float>(g_settings.vehicleSpeed);
-
-    m_vehicle.x += m_vehicle.speed * m_vehicle.direction * dt;
-    m_vehicle.wheelAngle += m_vehicle.speed * 0.08f * dt;
-
-    // Chimney smoke puffs
-    m_vehicle.smokeTimer -= dt;
-    if (m_vehicle.smokeTimer <= 0.0f) {
-        m_vehicle.smokeTimer = (g_settings.vehicleType == VehicleType::Train) ? 0.10f : 0.35f;
-        float chimX = (g_settings.vehicleType == VehicleType::Train)
-            ? ((m_vehicle.direction > 0) ? (m_vehicle.x + 34.0f) : (m_vehicle.x - 34.0f))
-            : ((m_vehicle.direction > 0) ? (m_vehicle.x - m_vehicle.width * 0.3f) : (m_vehicle.x + m_vehicle.width * 0.3f));
-        float chimY = m_vehicle.y - m_vehicle.height - 4.0f;
-        m_vehicle.smokePuffs.push_back({
-            chimX,
-            chimY,
-            -m_vehicle.direction * (15.0f + Rand() * 20.0f),
-            -35.0f - Rand() * 30.0f,
-            (g_settings.vehicleType == VehicleType::Train) ? (4.0f + Rand() * 4.0f) : (2.5f + Rand() * 2.0f),
-            1.2f,
-            1.2f
-        });
-    }
-
-    for (size_t i = m_vehicle.smokePuffs.size(); i-- > 0;) {
-        auto& sp = m_vehicle.smokePuffs[i];
-        sp.life -= dt;
-        if (sp.life <= 0.0f) {
-            m_vehicle.smokePuffs.erase(m_vehicle.smokePuffs.begin() + i);
-        } else {
-            sp.x += sp.vx * dt;
-            sp.y += sp.vy * dt;
-            sp.vy += 10.0f * dt;
-        }
-    }
-
-    // Check if body still exists and is currently visible
-    auto it = m_caps.find(m_vehicle.bodyKey);
-    if (it == m_caps.end() || it->second.seenFrame != m_frame) {
-        // Body was closed, minimized, or hidden: find another active body or despawn
-        bool foundOther = false;
-        for (const auto& b : m_bodies) {
-            if (b.snowCap) {
-                auto otherIt = m_caps.find(b.key);
-                if (otherIt != m_caps.end() && otherIt->second.seenFrame == m_frame) {
-                    m_vehicle.bodyKey = b.key;
-                    m_vehicle.y = static_cast<float>(b.rc.top);
-                    m_vehicle.x = (m_vehicle.direction > 0) ? static_cast<float>(b.rc.left) : static_cast<float>(b.rc.right);
-                    foundOther = true;
+            switch (f.kind) {
+                case kPetal:
+                    f.rot += f.rotSpeed * dt;
+                    f.y += f.fallSpeed * speedScale * dt;
+                    f.x += (windVal * 1.35f
+                            + sinf(time * 0.9f + f.phase) * f.sway
+                            + sinf(time * 2.3f + f.phase * 1.7f) * f.sway * 0.35f) * dt;
                     break;
-                }
+
+                case kLeaf:
+                    f.rot += f.rotSpeed * dt;
+                    // Close to a snowflake's steady descent, with a little
+                    // lift and side sway so it still reads as a leaf.
+                    f.y += f.fallSpeed * speedScale * (0.92f + 0.14f * sinf(time * 1.9f + f.phase)) * dt;
+                    f.x += (windVal * 1.25f + sinf(time * 1.1f + f.phase) * f.sway) * dt;
+                    break;
+
+                case kRain:
+                    f.y += f.fallSpeed * (speedScale < 0.4f ? 0.4f : speedScale) * dt;
+                    f.x += windVal * 1.15f * dt;
+                    break;
+
+                default: // Snow
+                    f.y += f.fallSpeed * speedScale * dt;
+                    f.x += (windVal * (0.6f + 0.4f * f.size / 3.5f)
+                            + sinf(time * 1.3f + f.phase) * f.sway) * dt;
+                    break;
             }
-        }
-        if (!foundOther) {
-            m_vehicleActive = false;
-            m_vehicleCooldown = 5.0f;
-            return;
-        }
-        it = m_caps.find(m_vehicle.bodyKey);
-    }
 
-    Cap& cap = it->second;
-    int dozerCol = static_cast<int>(m_vehicle.x - cap.rc.left);
-    int halfW = static_cast<int>(m_vehicle.width * 0.5f);
-    int start = std::max(0, dozerCol - halfW);
-    int end = std::min(static_cast<int>(cap.cols.size()) - 1, dozerCol + halfW);
-
-    float plowedArea = 0.0f;
-    for (int c = start; c <= end; c++) {
-        plowedArea += cap.cols[c].h;
-        cap.cols[c].h = 0.0f;
-    }
-
-    if (plowedArea > 2.0f && Rand() < 0.35f) {
-        float frontX = (m_vehicle.direction > 0) ? (m_vehicle.x + halfW) : (m_vehicle.x - halfW);
-        SpawnChunk(frontX, m_vehicle.y - 4.0f, plowedArea * 0.4f,
-                   m_vehicle.direction * (40.0f + Rand() * 50.0f),
-                   -20.0f - Rand() * 40.0f, m_vehicle.bodyKey);
-        SpawnPuff(frontX, m_vehicle.y - 6.0f,
-                  m_vehicle.direction * 30.0f, -30.0f, 0.7f, 0.6f);
-    }
-
-    if (g_settings.vehicleSpawnMode == VehicleSpawnMode::Always) {
-        if (m_vehicle.direction > 0 && m_vehicle.x >= cap.rc.right - 20) {
-            m_vehicle.direction = -1;
-        } else if (m_vehicle.direction < 0 && m_vehicle.x <= cap.rc.left + 20) {
-            m_vehicle.direction = 1;
-        }
-    } else { // Auto
-        bool finished = (m_vehicle.direction > 0 && m_vehicle.x > cap.rc.right + 120.0f) ||
-                        (m_vehicle.direction < 0 && m_vehicle.x < cap.rc.left - 120.0f);
-        if (finished) {
-            for (auto& c : cap.cols) c.h = 0.0f;
-            m_vehicleActive = false;
-            m_vehicleCooldown = 15.0f;
-        }
-    }
-}
-
-// ─── SNOWBALL ROLLING WITH [Ctrl + E] & SNOWMEN ───
-bool Overlay::IsCursorOverSnow(const POINT& cursor) {
-    for (size_t i = 0; i < m_bodies.size(); i++) {
-        const auto& b = m_bodies[i];
-        if (!b.snowCap || IsCoveredAbove(i, cursor.x, cursor.y)) continue;
-        if (cursor.x >= b.rc.left && cursor.x <= b.rc.right &&
-            cursor.y >= b.rc.top - 35 && cursor.y <= b.rc.top + 15) {
-            auto it = m_caps.find(b.key);
-            if (it != m_caps.end()) {
-                int col = cursor.x - b.rc.left;
-                if (col >= 0 && col < static_cast<int>(it->second.cols.size())) {
-                    if (it->second.cols[col].h > 0.4f) {
-                        return true;
-                    }
-                }
+            // A kick from the cursor or from a moving window: a short
+            // sideways toss that fades out.
+            if (f.vx != 0.0f) {
+                f.x += f.vx * dt;
+                float decay = 1.0f - 2.6f * dt;
+                if (decay < 0.0f) decay = 0.0f;
+                f.vx *= decay;
             }
-        }
-    }
-    return false;
-}
 
-void Overlay::UpdateSnowballKeyE(const POINT& cursor, bool isEKeyDown, float dt) {
-    if (!g_settings.enableSnowman) {
-        m_heldSnowball.reset();
-        return;
-    }
+            if (f.x > width + 10.0f) f.x -= width + 20.0f;
+            else if (f.x < -10.0f)   f.x += width + 20.0f;
 
-    if (isEKeyDown) {
-        if (!m_heldSnowball) {
-            if (IsCursorOverSnow(cursor)) {
-                m_heldSnowball = std::make_unique<SnowballItem>(SnowballItem{
-                    static_cast<float>(cursor.x),
-                    static_cast<float>(cursor.y),
-                    8.0f
-                });
-            }
-        } else {
-            m_heldSnowball->x = static_cast<float>(cursor.x);
-            m_heldSnowball->y = static_cast<float>(cursor.y);
-
-            float gathered = 0.0f;
-            for (const auto& b : m_bodies) {
-                if (!b.snowCap) continue;
-                auto it = m_caps.find(b.key);
-                if (it == m_caps.end()) continue;
-                Cap& cap = it->second;
-                if (cursor.x >= b.rc.left && cursor.x <= b.rc.right &&
-                    std::abs(cursor.y - b.rc.top) < 30) {
-                    int c = cursor.x - b.rc.left;
-                    for (int off = -5; off <= 5; off++) {
-                        int col = c + off;
-                        if (col >= 0 && col < static_cast<int>(cap.cols.size())) {
-                            if (cap.cols[col].h > 0.5f) {
-                                gathered += 0.4f;
-                                cap.cols[col].h = std::max(0.0f, cap.cols[col].h - 1.2f * dt);
+            // Landing on window tops: snow accumulates, leaves and petals
+            // sometimes stay lying there for a while.
+            if (!gust && f.kind != kRain) {
+                bool wantsLanding =
+                    (f.kind == kSnow && snowOnWindows) ||
+                    (f.kind != kSnow && leavesOnWindows);
+                if (wantsLanding) {
+                    bool landed = false;
+                    for (auto& c : g_caps) {
+                        float top = (float)c.rc.top;
+                        if (oldY < top && f.y >= top &&
+                            f.x >= (float)c.rc.left && f.x < (float)c.rc.right) {
+                            if (f.kind == kSnow) {
+                                AddSnowTo(c, f);
+                            } else if (Rand() < 0.4f) {
+                                AddLitterTo(c, f);
+                            } else {
+                                break; // flies on past the window
                             }
+                            landed = true;
+                            break;
                         }
                     }
+                    if (landed) {
+                        if (!g_loggedFirstLanding) {
+                            g_loggedFirstLanding = true;
+                            Wh_Log(L"first landing at %.0f,%.0f (windows: %d)",
+                                   f.x, f.y, (int)g_caps.size());
+                        }
+                        if (f.debris) continue; // it settled; that was its last fall
+                        SpawnFlake(f, false); // loop back to the top
+                        flakes[write++] = f;
+                        continue;
+                    }
                 }
             }
 
-            m_heldSnowball->radius = std::min(24.0f, m_heldSnowball->radius + (3.0f + gathered * 2.0f) * dt);
-        }
-    } else if (m_heldSnowball) {
-        SnowballItem dropped = *m_heldSnowball;
-        m_heldSnowball.reset();
-
-        bool fused = false;
-        for (size_t i = 0; i < m_snowballs.size(); i++) {
-            float dx = std::abs(dropped.x - m_snowballs[i].x);
-            float dy = std::abs(dropped.y - m_snowballs[i].y);
-            if (dx < 40.0f && dy < 55.0f) {
-                float avgX = (dropped.x + m_snowballs[i].x) * 0.5f;
-                float baseY = std::max(dropped.y + dropped.radius, m_snowballs[i].y + m_snowballs[i].radius);
-
-                if (m_snowmen.size() >= 8) {
-                    m_snowmen.erase(m_snowmen.begin());
+            if (f.kind == kRain) {
+                if (f.y > height + 5.0f) {
+                    if (!gust) {
+                        SpawnFlake(f, false);
+                        flakes[write++] = f;
+                    }
+                    continue; // during the gust the old weather is just dropped
                 }
-
-                m_snowmen.push_back({
-                    avgX,
-                    baseY,
-                    1.0f,
-                    g_settings.scarfColor,
-                    g_settings.hatStyle
-                });
-
-                SpawnPuff(avgX, baseY - 20.0f, -20.0f, -40.0f, 1.2f, 0.8f);
-                m_snowballs.erase(m_snowballs.begin() + i);
-                fused = true;
-                break;
+                flakes[write++] = f;
+                continue;
             }
-        }
 
-        if (!fused) {
-            m_snowballs.push_back(dropped);
-            if (m_snowballs.size() > 10) {
-                m_snowballs.erase(m_snowballs.begin());
+            if (f.y > height + 10.0f) {
+                if (!gust && !f.debris) {
+                    SpawnFlake(f, false); // loop back to the top
+                    flakes[write++] = f;
+                }
+                continue;
             }
+
+            flakes[write++] = f;
         }
+        flakes.resize(write);
     }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Renderer: Direct2D → memory DIB → UpdateLayeredWindow
+// ─────────────────────────────────────────────────────────────────────────────
+
+static const IID kIID_ID2D1Factory =
+    { 0x06152247, 0x6f50, 0x465a, { 0x92, 0x45, 0x11, 0x8b, 0xfd, 0x3b, 0x60, 0x07 } };
+
+static const float kPetalColors[4][3] = {
+    { 255, 205, 222 }, { 249, 175, 205 }, { 244, 143, 177 }, { 252, 228, 236 },
+};
+static const float kLeafColors[6][3] = {
+    { 216, 67, 21 }, { 245, 124, 0 }, { 183, 28, 28 },
+    { 249, 168, 37 }, { 141, 110, 99 }, { 191, 54, 12 },
+};
+static const float kRainColor[3]   = { 200, 224, 247 };
+static const float kSnowColor[3]   = { 247, 251, 255 };
+static const float kStreakColor[3] = { 205, 212, 222 }; // cartoon gray streaks
+static const float kDarkSideMul    = 0.72f;   // edge-on leaves/petals read darker
+
+static const D2D1_MATRIX_3X2_F kIdentity = { 1, 0, 0, 1, 0, 0 };
+
+static ID2D1Factory*         g_factory    = nullptr;
+static ID2D1DCRenderTarget*  g_rt         = nullptr;
+static ID2D1SolidColorBrush* g_brush      = nullptr;
+static ID2D1PathGeometry*    g_petalGeo   = nullptr;
+static ID2D1PathGeometry*    g_leafGeo[4] = {};
+
+static HDC      g_memDC = nullptr;
+static HBITMAP  g_dib   = nullptr;
+static void*    g_bits  = nullptr;
+
+static int g_width  = 1920;
+static int g_height = 1080;
+
+template <class T> static void SafeRelease(T** pp) {
+    if (*pp) { (*pp)->Release(); *pp = nullptr; }
 }
 
-void Overlay::CheckClickSnowman(const POINT& cursor, bool isLButtonDown) {
-    if (isLButtonDown && !m_prevLButtonDown && g_settings.enableSnowman) {
-        for (size_t i = m_snowmen.size(); i-- > 0;) {
-            float dx = cursor.x - m_snowmen[i].x;
-            float dy = cursor.y - (m_snowmen[i].y - 18.0f);
-            if (dx * dx + dy * dy < 32.0f * 32.0f) {
-                for (int k = 0; k < 6; k++) {
-                    SpawnPuff(m_snowmen[i].x, m_snowmen[i].y - 18.0f,
-                              (Rand() - 0.5f) * 80.0f, -20.0f - Rand() * 50.0f,
-                              1.2f, 0.7f);
-                    SpawnChunk(m_snowmen[i].x, m_snowmen[i].y - 18.0f, 12.0f,
-                               (Rand() - 0.5f) * 100.0f, -30.0f - Rand() * 40.0f, 0);
-                }
-                m_snowmen.erase(m_snowmen.begin() + i);
-                return;
-            }
-        }
-
-        for (size_t i = m_snowballs.size(); i-- > 0;) {
-            float dx = cursor.x - m_snowballs[i].x;
-            float dy = cursor.y - m_snowballs[i].y;
-            if (dx * dx + dy * dy < 25.0f * 25.0f) {
-                SpawnPuff(m_snowballs[i].x, m_snowballs[i].y, 0, -30.0f, 1.0f, 0.5f);
-                m_snowballs.erase(m_snowballs.begin() + i);
-                return;
-            }
-        }
-    }
+static D2D1_COLOR_F Col(const float rgb[3], float a) {
+    D2D1_COLOR_F c;
+    c.r = rgb[0] / 255.0f; c.g = rgb[1] / 255.0f; c.b = rgb[2] / 255.0f; c.a = a;
+    return c;
 }
 
-// ─── RENDERING ───
-void Overlay::DrawCap(const Cap& cap, const RECT& rc) {
-    const std::vector<Column>& cols = cap.cols;
-    int width = static_cast<int>(cols.size());
-    if (width < 2) {
-        return;
-    }
-
-    float highest = 0, liftSum = 0;
-    int snowy = 0;
-    for (const Column& col : cols) {
-        highest = std::max(highest, col.h);
-        if (col.h > 0.2f) {
-            liftSum += col.lift;
-            snowy++;
+// Unit-space figures, transformed per particle at draw time.
+static void BuildPetalsAndLeaves() {
+    struct Builder {
+        static void Lines(ID2D1GeometrySink* s, const D2D1_POINT_2F* pts, int n) {
+            s->BeginFigure(pts[0], D2D1_FIGURE_BEGIN_FILLED);
+            s->AddLines(&pts[1], n - 1);
+            s->EndFigure(D2D1_FIGURE_END_CLOSED);
         }
-    }
-    if (highest < 0.2f) {
-        return;
-    }
-
-    ComPtr<ID2D1PathGeometry> path;
-    ComPtr<ID2D1GeometrySink> sink;
-    if (FAILED(m_d2dFactory->CreatePathGeometry(&path)) ||
-        FAILED(path->Open(&sink))) {
-        return;
-    }
-
-    const float dx = g_settings.slideOff
-                         ? 0.0f
-                         : std::clamp(cap.vx * m_frameTime, -40.0f, 40.0f);
-    const float dy = -std::min(std::fabs(cap.vy) * m_frameTime, 40.0f);
-    const float left = rc.left + dx;
-    const float top = rc.top + dy;
-    const float scale = 1.0f + cap.squash;
-
-    auto height = [&](int c) {
-        float edge = static_cast<float>(std::min(c, width - 1 - c));
-        return cols[c].h * scale * std::clamp(edge / kCapEdgeTaper, 0.0f, 1.0f);
+        static void QuadChain(ID2D1GeometrySink* s, const D2D1_POINT_2F* start,
+                              const D2D1_QUADRATIC_BEZIER_SEGMENT* segs, int n) {
+            s->BeginFigure(*start, D2D1_FIGURE_BEGIN_FILLED);
+            s->AddQuadraticBeziers(segs, n);
+            s->EndFigure(D2D1_FIGURE_END_CLOSED);
+        }
     };
 
-    constexpr float kMinHeight = 0.3f;
-    for (int c = 0; c < width;) {
-        if (height(c) < kMinHeight) {
-            c++;
-            continue;
-        }
-        int first = c;
-        while (c < width && height(c) >= kMinHeight) {
-            c++;
-        }
-        int last = c - 1;
+    auto makeGeo = [](ID2D1PathGeometry** out, void (*fill)(ID2D1GeometrySink*)) {
+        if (FAILED(g_factory->CreatePathGeometry(out))) { *out = nullptr; return; }
+        ID2D1GeometrySink* sink = nullptr;
+        if (FAILED((*out)->Open(&sink))) { SafeRelease(out); return; }
+        sink->SetFillMode(D2D1_FILL_MODE_WINDING);
+        fill(sink);
+        if (FAILED(sink->Close())) { sink->Release(); SafeRelease(out); return; }
+        sink->Release();
+    };
 
-        float x0 = left + first;
-        float x1 = left + last + 1.0f;
-        sink->BeginFigure({x0, top - cols[first].lift},
-                          D2D1_FIGURE_BEGIN_FILLED);
-        for (int k = first; k <= last; k += 2) {
-            sink->AddLine({left + k + 0.5f, top - cols[k].lift - height(k)});
-        }
-        sink->AddLine({x1 - 0.5f, top - cols[last].lift - height(last)});
-        sink->AddLine({x1, top - cols[last].lift});
-        if (cap.airborne) {
-            for (int k = last; k >= first; k -= 2) {
-                sink->AddLine({left + k + 0.5f, top - cols[k].lift});
-            }
-        }
-        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-    }
-    if (FAILED(sink->Close())) {
-        return;
-    }
+    // Sakura petal: rounded body with a small notch at the outer tip.
+    makeGeo(&g_petalGeo, [](ID2D1GeometrySink* s) {
+        const D2D1_POINT_2F start = { 0.0f, 0.85f };
+        const D2D1_QUADRATIC_BEZIER_SEGMENT segs[] = {
+            { { -0.85f,  0.35f }, { -0.72f, -0.30f } },
+            { { -0.62f, -0.78f }, { -0.12f, -0.58f } },
+            { {  0.00f, -0.50f }, {  0.12f, -0.58f } },
+            { {  0.62f, -0.78f }, {  0.72f, -0.30f } },
+            { {  0.85f,  0.35f }, {  0.00f,  0.85f } },
+        };
+        Builder::QuadChain(s, &start, segs, 5);
+    });
 
-    const float base = top - (snowy ? liftSum / snowy : 0.0f);
-    m_capBrush->SetStartPoint({0, base - highest * scale});
-    m_capBrush->SetEndPoint({0, base});
-    m_ctx->FillGeometry(path.Get(), m_capBrush.Get());
+    // Maple: five jagged lobes.
+    makeGeo(&g_leafGeo[0], [](ID2D1GeometrySink* s) {
+        const D2D1_POINT_2F p[] = {
+            { 0.0f, -1.0f }, { 0.18f, -0.62f }, { 0.52f, -0.78f }, { 0.40f, -0.36f },
+            { 0.95f, -0.30f }, { 0.62f, 0.02f }, { 0.82f, 0.42f }, { 0.36f, 0.38f },
+            { 0.20f, 0.72f }, { 0.0f, 0.62f }, { -0.20f, 0.72f }, { -0.36f, 0.38f },
+            { -0.82f, 0.42f }, { -0.62f, 0.02f }, { -0.95f, -0.30f }, { -0.40f, -0.36f },
+            { -0.52f, -0.78f }, { -0.18f, -0.62f },
+        };
+        Builder::Lines(s, p, 18);
+    });
+
+    // Oak: rounded lobes.
+    makeGeo(&g_leafGeo[1], [](ID2D1GeometrySink* s) {
+        const D2D1_POINT_2F start = { 0.0f, -1.0f };
+        const D2D1_QUADRATIC_BEZIER_SEGMENT segs[] = {
+            { {  0.38f, -0.72f }, {  0.30f, -0.45f } },
+            { {  0.62f, -0.38f }, {  0.56f, -0.10f } },
+            { {  0.88f, -0.02f }, {  0.62f,  0.28f } },
+            { {  0.74f,  0.52f }, {  0.38f,  0.58f } },
+            { {  0.28f,  0.84f }, {  0.00f,  0.78f } },
+            { { -0.28f,  0.84f }, { -0.38f,  0.58f } },
+            { { -0.74f,  0.52f }, { -0.62f,  0.28f } },
+            { { -0.88f, -0.02f }, { -0.56f, -0.10f } },
+            { { -0.62f, -0.38f }, { -0.30f, -0.45f } },
+            { { -0.38f, -0.72f }, {  0.00f, -1.00f } },
+        };
+        Builder::QuadChain(s, &start, segs, 10);
+    });
+
+    // Birch: narrow serrated.
+    makeGeo(&g_leafGeo[2], [](ID2D1GeometrySink* s) {
+        const D2D1_POINT_2F p[] = {
+            { 0.0f, -1.0f }, { 0.34f, -0.45f }, { 0.42f, -0.28f }, { 0.30f, -0.14f },
+            { 0.38f, 0.0f }, { 0.26f, 0.16f }, { 0.32f, 0.30f }, { 0.18f, 0.44f },
+            { 0.22f, 0.60f }, { 0.06f, 0.72f }, { 0.0f, 0.80f },
+            { -0.06f, 0.72f }, { -0.22f, 0.60f }, { -0.18f, 0.44f }, { -0.32f, 0.30f },
+            { -0.26f, 0.16f }, { -0.38f, 0.0f }, { -0.30f, -0.14f }, { -0.42f, -0.28f },
+            { -0.34f, -0.45f },
+        };
+        Builder::Lines(s, p, 19);
+    });
+
+    // Willow: smooth lanceolate.
+    makeGeo(&g_leafGeo[3], [](ID2D1GeometrySink* s) {
+        const D2D1_POINT_2F start = { 0.0f, -1.0f };
+        const D2D1_QUADRATIC_BEZIER_SEGMENT segs[] = {
+            { {  0.52f, -0.42f }, {  0.40f,  0.18f } },
+            { {  0.28f,  0.60f }, {  0.00f,  0.82f } },
+            { { -0.28f,  0.60f }, { -0.40f,  0.18f } },
+            { { -0.52f, -0.42f }, {  0.00f, -1.00f } },
+        };
+        Builder::QuadChain(s, &start, segs, 4);
+    });
 }
 
-void Overlay::DrawBulldozer(const VehicleItem& v) {
-    float x = v.x;
-    float y = v.y;
-    float w = v.width;
-    float h = v.height;
-    int dir = v.direction;
+static bool InitD2D() {
+    D2D1_FACTORY_OPTIONS fo = {};
+    fo.debugLevel = D2D1_DEBUG_LEVEL_NONE;
 
-    // Body
-    D2D1_ROUNDED_RECT bodyRect = D2D1::RoundedRect(
-        D2D1::RectF(x - w * 0.5f, y - h, x + w * 0.5f, y - 4.0f), 3.0f, 3.0f);
-    m_ctx->FillRoundedRectangle(bodyRect, m_dozerBodyBrush.Get());
-    m_ctx->DrawRoundedRectangle(bodyRect, m_coalBrush.Get(), 1.0f);
-
-    // Cab window
-    float winW = 12.0f;
-    float winH = 8.0f;
-    float winX = x + (dir > 0 ? 0.0f : -winW);
-    D2D1_ROUNDED_RECT winRect = D2D1::RoundedRect(
-        D2D1::RectF(winX, y - h + 2.0f, winX + winW, y - h + 2.0f + winH), 2.0f, 2.0f);
-    m_ctx->FillRoundedRectangle(winRect, m_dozerGlassBrush.Get());
-    m_ctx->DrawRoundedRectangle(winRect, m_coalBrush.Get(), 1.0f);
-
-    // Track
-    D2D1_ROUNDED_RECT trackRect = D2D1::RoundedRect(
-        D2D1::RectF(x - w * 0.5f - 2.0f, y - 6.0f, x + w * 0.5f + 2.0f, y + 1.0f), 3.0f, 3.0f);
-    m_ctx->FillRoundedRectangle(trackRect, m_dozerTrackBrush.Get());
-
-    // Wheels inside track with animated rotation
-    for (int i = 0; i < 4; i++) {
-        float wheelX = x - w * 0.5f + 4.0f + i * (w / 3.8f);
-        m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(wheelX, y - 2.5f), 2.5f, 2.5f), m_dozerBladeBrush.Get());
-        float a = v.wheelAngle + i * 0.5f;
-        m_ctx->DrawLine(D2D1::Point2F(wheelX - std::cos(a) * 2.0f, y - 2.5f - std::sin(a) * 2.0f),
-                        D2D1::Point2F(wheelX + std::cos(a) * 2.0f, y - 2.5f + std::sin(a) * 2.0f),
-                        m_coalBrush.Get(), 0.8f);
-    }
-
-    // Blade
-    float bladeX = dir > 0 ? (x + w * 0.5f) : (x - w * 0.5f - 4.0f);
-    D2D1_ROUNDED_RECT bladeRect = D2D1::RoundedRect(
-        D2D1::RectF(bladeX, y - h - 3.0f, bladeX + 4.0f, y), 1.0f, 1.0f);
-    m_ctx->FillRoundedRectangle(bladeRect, m_dozerBladeBrush.Get());
-    m_ctx->DrawRoundedRectangle(bladeRect, m_coalBrush.Get(), 1.0f);
-
-    // Exhaust
-    float exhaustX = dir > 0 ? (x - w * 0.3f) : (x + w * 0.3f);
-    m_ctx->FillRectangle(D2D1::RectF(exhaustX - 1.5f, y - h - 6.0f, exhaustX + 1.5f, y - h), m_dozerTrackBrush.Get());
-}
-
-void Overlay::DrawTrain(const VehicleItem& v) {
-    float x = v.x;
-    float y = v.y;
-    int dir = v.direction;
-
-    // 1. Cargo Wagon (Tender)
-    float wagonX = dir > 0 ? (x - 46.0f) : (x + 18.0f);
-    D2D1_ROUNDED_RECT wagonRect = D2D1::RoundedRect(
-        D2D1::RectF(wagonX, y - 22.0f, wagonX + 28.0f, y - 6.0f), 2.0f, 2.0f);
-    m_ctx->FillRoundedRectangle(wagonRect, m_trainTenderBrush.Get());
-    m_ctx->DrawRoundedRectangle(wagonRect, m_coalBrush.Get(), 1.0f);
-
-    m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(wagonX + 14.0f, y - 22.0f), 12.0f, 5.0f), m_whiteBrush.Get());
-    m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(wagonX + 7.0f, y - 4.0f), 4.0f, 4.0f), m_dozerTrackBrush.Get());
-    m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(wagonX + 21.0f, y - 4.0f), 4.0f, 4.0f), m_dozerTrackBrush.Get());
-
-    // Coupling
-    float linkX = dir > 0 ? (x - 18.0f) : (x + 14.0f);
-    m_ctx->FillRectangle(D2D1::RectF(linkX, y - 12.0f, linkX + 6.0f, y - 9.0f), m_dozerTrackBrush.Get());
-
-    // 2. Cabin
-    float cabX = dir > 0 ? (x - 12.0f) : (x - 16.0f);
-    D2D1_ROUNDED_RECT cabRect = D2D1::RoundedRect(
-        D2D1::RectF(cabX, y - 36.0f, cabX + 26.0f, y - 6.0f), 2.0f, 2.0f);
-    m_ctx->FillRoundedRectangle(cabRect, m_dozerBodyBrush.Get());
-    m_ctx->DrawRoundedRectangle(cabRect, m_coalBrush.Get(), 1.0f);
-
-    float winX = cabX + (dir > 0 ? 6.0f : 4.0f);
-    D2D1_ROUNDED_RECT cabWin = D2D1::RoundedRect(
-        D2D1::RectF(winX, y - 32.0f, winX + 14.0f, y - 20.0f), 2.0f, 2.0f);
-    m_ctx->FillRoundedRectangle(cabWin, m_dozerGlassBrush.Get());
-    m_ctx->DrawRoundedRectangle(cabWin, m_coalBrush.Get(), 1.0f);
-
-    // 3. Boiler
-    float boilerX = dir > 0 ? (x + 12.0f) : (x - 44.0f);
-    D2D1_ROUNDED_RECT boilerRect = D2D1::RoundedRect(
-        D2D1::RectF(boilerX, y - 26.0f, boilerX + 32.0f, y - 6.0f), 4.0f, 4.0f);
-    m_ctx->FillRoundedRectangle(boilerRect, m_dozerBodyBrush.Get());
-    m_ctx->DrawRoundedRectangle(boilerRect, m_coalBrush.Get(), 1.0f);
-
-    m_ctx->FillRectangle(D2D1::RectF(boilerX + 10.0f, y - 26.0f, boilerX + 12.0f, y - 6.0f), m_trainTrimBrush.Get());
-    m_ctx->FillRectangle(D2D1::RectF(boilerX + 22.0f, y - 26.0f, boilerX + 24.0f, y - 6.0f), m_trainTrimBrush.Get());
-
-    // 4. Chimney
-    float chimX = dir > 0 ? (boilerX + 22.0f) : (boilerX + 10.0f);
-    m_ctx->FillRectangle(D2D1::RectF(chimX - 3.5f, y - 38.0f, chimX + 3.5f, y - 24.0f), m_trainChimneyBrush.Get());
-    D2D1_ROUNDED_RECT chimTrim = D2D1::RoundedRect(
-        D2D1::RectF(chimX - 5.5f, y - 40.0f, chimX + 5.5f, y - 37.0f), 1.0f, 1.0f);
-    m_ctx->FillRoundedRectangle(chimTrim, m_trainTrimBrush.Get());
-
-    // 5. Headlight
-    float lightX = dir > 0 ? (boilerX + 31.0f) : (boilerX - 4.0f);
-    m_ctx->FillRoundedRectangle(
-        D2D1::RoundedRect(D2D1::RectF(lightX, y - 22.0f, lightX + 5.0f, y - 14.0f), 1.0f, 1.0f),
-        m_trainTrimBrush.Get());
-    m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(lightX + (dir > 0 ? 5.0f : 0.0f), y - 18.0f), 7.0f, 7.0f), m_trainLightBrush.Get());
-
-    // 6. Driving Wheels with rotating animated spokes
-    for (int i = 0; i < 3; i++) {
-        float wx = (dir > 0 ? (x - 6.0f) : (x - 38.0f)) + i * 16.0f;
-        float wy = y - 7.0f;
-        m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(wx, wy), 6.5f, 6.5f), m_dozerTrackBrush.Get());
-        m_ctx->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(wx, wy), 6.5f, 6.5f), m_coalBrush.Get(), 1.0f);
-        m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(wx, wy), 2.5f, 2.5f), m_trainTrimBrush.Get());
-
-        float a = v.wheelAngle + i * 0.7f;
-        m_ctx->DrawLine(D2D1::Point2F(wx - std::cos(a) * 5.0f, wy - std::sin(a) * 5.0f),
-                        D2D1::Point2F(wx + std::cos(a) * 5.0f, wy + std::sin(a) * 5.0f),
-                        m_trainTrimBrush.Get(), 1.0f);
-    }
-
-    // 7. Cowcatcher / Plow
-    float plowX = dir > 0 ? (boilerX + 32.0f) : (boilerX - 8.0f);
-    m_ctx->FillRoundedRectangle(
-        D2D1::RoundedRect(D2D1::RectF(plowX, y - 14.0f, plowX + 8.0f, y), 2.0f, 2.0f),
-        m_dozerBladeBrush.Get());
-    m_ctx->DrawRoundedRectangle(
-        D2D1::RoundedRect(D2D1::RectF(plowX, y - 14.0f, plowX + 8.0f, y), 2.0f, 2.0f),
-        m_coalBrush.Get(), 1.0f);
-}
-
-void Overlay::DrawVehicle() {
-    if (!m_vehicleActive || g_settings.vehicleType == VehicleType::None) {
-        return;
-    }
-
-    for (const auto& sp : m_vehicle.smokePuffs) {
-        float fade = std::clamp(sp.life / sp.maxLife, 0.0f, 1.0f);
-        float r = sp.size * (1.0f + (1.0f - fade) * 0.8f);
-        m_ctx->DrawBitmap(m_flakeSprite.Get(),
-                          D2D1::RectF(sp.x - r, sp.y - r, sp.x + r, sp.y + r),
-                          0.65f * fade, D2D1_INTERPOLATION_MODE_LINEAR);
-    }
-
-    if (g_settings.vehicleType == VehicleType::Bulldozer) {
-        DrawBulldozer(m_vehicle);
-    } else {
-        DrawTrain(m_vehicle);
-    }
-}
-
-void Overlay::DrawSnowmen() {
-    for (const auto& sm : m_snowmen) {
-        float x = sm.x;
-        float y = sm.y;
-
-        float rBottom = 18.0f;
-        float rHead = 12.0f;
-        float cyBottom = y - rBottom;
-        float cyHead = cyBottom - rBottom - rHead + 4.0f;
-
-        // Twig arms
-        m_ctx->DrawLine(D2D1::Point2F(x - rBottom + 2.0f, cyBottom - 2.0f),
-                        D2D1::Point2F(x - rBottom - 18.0f, cyBottom - 14.0f),
-                        m_twigBrush.Get(), 2.0f);
-        m_ctx->DrawLine(D2D1::Point2F(x + rBottom - 2.0f, cyBottom - 2.0f),
-                        D2D1::Point2F(x + rBottom + 18.0f, cyBottom - 14.0f),
-                        m_twigBrush.Get(), 2.0f);
-
-        // Body spheres
-        m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x, cyBottom), rBottom, rBottom), m_whiteBrush.Get());
-        m_ctx->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(x, cyBottom), rBottom, rBottom), m_dozerGlassBrush.Get(), 1.0f);
-
-        m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x, cyHead), rHead, rHead), m_whiteBrush.Get());
-        m_ctx->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(x, cyHead), rHead, rHead), m_dozerGlassBrush.Get(), 1.0f);
-
-        // Coal buttons
-        m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x, cyBottom - 6.0f), 2.0f, 2.0f), m_coalBrush.Get());
-        m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x, cyBottom + 2.0f), 2.0f, 2.0f), m_coalBrush.Get());
-
-        // Eyes
-        m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x - 4.0f, cyHead - 2.0f), 1.8f, 1.8f), m_coalBrush.Get());
-        m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + 4.0f, cyHead - 2.0f), 1.8f, 1.8f), m_coalBrush.Get());
-
-        // Carrot nose
-        m_ctx->DrawLine(D2D1::Point2F(x, cyHead + 2.0f), D2D1::Point2F(x + 9.0f, cyHead + 3.0f), m_carrotBrush.Get(), 2.5f);
-
-        // Smile
-        for (int s = -2; s <= 2; s++) {
-            float sx = x + s * 2.5f;
-            float sy = cyHead + 7.0f + (s * s) * 0.4f;
-            m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(sx, sy), 0.9f, 0.9f), m_coalBrush.Get());
-        }
-
-        // Scarf
-        ID2D1SolidColorBrush* scarfBrush = GetScarfBrush(sm.scarf);
-        D2D1_ROUNDED_RECT scarfNeck = D2D1::RoundedRect(
-            D2D1::RectF(x - 9.0f, cyHead + rHead - 3.0f, x + 9.0f, cyHead + rHead + 4.0f), 2.5f, 2.5f);
-        m_ctx->FillRoundedRectangle(scarfNeck, scarfBrush);
-        D2D1_ROUNDED_RECT scarfTail = D2D1::RoundedRect(
-            D2D1::RectF(x + 2.0f, cyHead + rHead + 2.0f, x + 8.0f, cyHead + rHead + 16.0f), 2.0f, 2.0f);
-        m_ctx->FillRoundedRectangle(scarfTail, scarfBrush);
-
-        // Hat
-        if (sm.hat == HatStyle::TopHat) {
-            m_ctx->FillRoundedRectangle(
-                D2D1::RoundedRect(D2D1::RectF(x - 14.0f, cyHead - rHead - 1.0f, x + 14.0f, cyHead - rHead + 3.0f), 1.0f, 1.0f),
-                m_topHatBrush.Get());
-            m_ctx->FillRoundedRectangle(
-                D2D1::RoundedRect(D2D1::RectF(x - 8.0f, cyHead - rHead - 18.0f, x + 8.0f, cyHead - rHead), 1.0f, 1.0f),
-                m_topHatBrush.Get());
-            m_ctx->FillRectangle(
-                D2D1::RectF(x - 8.0f, cyHead - rHead - 4.0f, x + 8.0f, cyHead - rHead - 1.0f),
-                m_scarfRedBrush.Get());
-        } else if (sm.hat == HatStyle::SantaHat) {
-            m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + 5.0f, cyHead - rHead - 6.0f), 9.0f, 7.0f), m_santaHatBrush.Get());
-            m_ctx->FillRoundedRectangle(
-                D2D1::RoundedRect(D2D1::RectF(x - 12.0f, cyHead - rHead - 2.0f, x + 12.0f, cyHead - rHead + 3.0f), 2.0f, 2.0f),
-                m_whiteBrush.Get());
-            m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + 14.0f, cyHead - rHead - 4.0f), 3.5f, 3.5f), m_whiteBrush.Get());
-        } else if (sm.hat == HatStyle::Bucket) {
-            m_ctx->FillRoundedRectangle(
-                D2D1::RoundedRect(D2D1::RectF(x - 8.0f, cyHead - rHead - 14.0f, x + 8.0f, cyHead - rHead + 1.0f), 2.0f, 2.0f),
-                m_bucketBrush.Get());
-            m_ctx->DrawRoundedRectangle(
-                D2D1::RoundedRect(D2D1::RectF(x - 8.0f, cyHead - rHead - 14.0f, x + 8.0f, cyHead - rHead + 1.0f), 2.0f, 2.0f),
-                m_coalBrush.Get(), 1.0f);
-        } else { // Beanie
-            m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x, cyHead - rHead - 2.0f), 10.0f, 8.0f), m_scarfBlueBrush.Get());
-            m_ctx->FillRoundedRectangle(
-                D2D1::RoundedRect(D2D1::RectF(x - 11.0f, cyHead - rHead - 2.0f, x + 11.0f, cyHead - rHead + 3.0f), 2.0f, 2.0f),
-                m_whiteBrush.Get());
-            m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x, cyHead - rHead - 10.0f), 3.0f, 3.0f), m_whiteBrush.Get());
-        }
-    }
-}
-
-void Overlay::DrawSnowballs() {
-    for (const auto& sb : m_snowballs) {
-        m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(sb.x, sb.y), sb.radius, sb.radius), m_whiteBrush.Get());
-        m_ctx->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(sb.x, sb.y), sb.radius, sb.radius), m_dozerGlassBrush.Get(), 1.0f);
-    }
-    if (m_heldSnowball) {
-        m_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(m_heldSnowball->x, m_heldSnowball->y), m_heldSnowball->radius, m_heldSnowball->radius), m_whiteBrush.Get());
-        m_ctx->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(m_heldSnowball->x, m_heldSnowball->y), m_heldSnowball->radius, m_heldSnowball->radius), m_scarfGoldBrush.Get(), 1.5f);
-    }
-}
-
-bool Overlay::Render() {
-    m_ctx->BeginDraw();
-    m_ctx->SetTransform(D2D1::Matrix3x2F::Translation(
-        static_cast<float>(-m_area.left), static_cast<float>(-m_area.top)));
-    m_ctx->Clear(D2D1::ColorF(0, 0, 0, 0));
-
-    bool anyDrawn = false;
-    for (size_t i = m_bodies.size(); i-- > 0;) {
-        const Body& b = m_bodies[i];
-        if (anyDrawn) {
-            m_ctx->PushAxisAlignedClip(
-                D2D1::RectF(static_cast<float>(b.rc.left),
-                            static_cast<float>(b.rc.top),
-                            static_cast<float>(b.rc.right),
-                            static_cast<float>(b.rc.bottom)),
-                D2D1_ANTIALIAS_MODE_ALIASED);
-            m_ctx->Clear(D2D1::ColorF(0, 0, 0, 0));
-            m_ctx->PopAxisAlignedClip();
-        }
-
-        if (!b.snowCap) {
-            continue;
-        }
-        auto it = m_caps.find(b.key);
-        if (it != m_caps.end()) {
-            DrawCap(it->second, b.rc);
-            anyDrawn = true;
-        }
-    }
-
-    for (const Chunk& c : m_chunks) {
-        float r = c.size * 2.0f;
-        m_ctx->DrawBitmap(m_flakeSprite.Get(),
-                          D2D1::RectF(c.x - r, c.y - r, c.x + r, c.y + r), 0.95f,
-                          D2D1_INTERPOLATION_MODE_LINEAR);
-    }
-
-    for (const Puff& p : m_puffs) {
-        float r = p.size * 2.0f;
-        float alpha = 0.7f * std::min(1.0f, 2.5f * p.life / p.maxLife);
-        m_ctx->DrawBitmap(m_flakeSprite.Get(),
-                          D2D1::RectF(p.x - r, p.y - r, p.x + r, p.y + r),
-                          alpha, D2D1_INTERPOLATION_MODE_LINEAR);
-    }
-
-    DrawSnowballs();
-    DrawSnowmen();
-    DrawVehicle();
-
-    for (const Flake& f : m_flakes) {
-        float r = f.size * 2.0f;
-        m_ctx->DrawBitmap(m_flakeSprite.Get(),
-                          D2D1::RectF(f.x - r, f.y - r, f.x + r, f.y + r),
-                          f.alpha, D2D1_INTERPOLATION_MODE_LINEAR);
-    }
-
-    if (FAILED(m_ctx->EndDraw())) {
+    HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                                   kIID_ID2D1Factory, &fo, (void**)&g_factory);
+    if (FAILED(hr) || !g_factory) {
+        Wh_Log(L"D2D1CreateFactory failed: 0x%08lX", hr);
         return false;
     }
 
-    HRESULT hr = m_swapChain->Present(m_syncInterval, 0);
-    return SUCCEEDED(hr) || hr == DXGI_STATUS_OCCLUDED;
+    D2D1_RENDER_TARGET_PROPERTIES rtProps = {};
+    rtProps.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
+    rtProps.pixelFormat.format    = DXGI_FORMAT_B8G8R8A8_UNORM;
+    rtProps.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+    rtProps.usage    = D2D1_RENDER_TARGET_USAGE_NONE;
+    rtProps.minLevel = D2D1_FEATURE_LEVEL_DEFAULT;
+    rtProps.dpiX     = 0.0f;
+    rtProps.dpiY     = 0.0f;
+
+    hr = g_factory->CreateDCRenderTarget(&rtProps, &g_rt);
+    if (FAILED(hr) || !g_rt) {
+        Wh_Log(L"CreateDCRenderTarget failed: 0x%08lX", hr);
+        return false;
+    }
+
+    hr = g_rt->CreateSolidColorBrush(Col(kSnowColor, 1.0f), &g_brush);
+    if (FAILED(hr) || !g_brush) {
+        Wh_Log(L"CreateSolidColorBrush failed: 0x%08lX", hr);
+        return false;
+    }
+
+    BuildPetalsAndLeaves();
+    return g_petalGeo && g_leafGeo[0] && g_leafGeo[1] && g_leafGeo[2] && g_leafGeo[3];
 }
 
-void Overlay::Run() {
-    LARGE_INTEGER freq, last;
-    QueryPerformanceFrequency(&freq);
-    QueryPerformanceCounter(&last);
+static void CleanupD2D() {
+    for (auto& g : g_leafGeo) SafeRelease(&g);
+    SafeRelease(&g_petalGeo);
+    SafeRelease(&g_brush);
+    SafeRelease(&g_rt);
+    SafeRelease(&g_factory);
+}
 
-    for (;;) {
-        DWORD result;
-        if (m_visible && m_frameWait) {
-            HANDLE handles[] = {g_stopEvent, m_frameWait};
-            result = WaitForMultipleObjects(2, handles, FALSE, 200);
+static void DrawWindowCaps(ID2D1RenderTarget* rt) {
+    rt->SetTransform(kIdentity);
+    for (auto& c : g_caps) {
+        int n = (int)c.cols.size();
+        if (n == 0) continue;
+        float left = (float)c.rc.left, top = (float)c.rc.top;
+        float right = (float)c.rc.right;
+
+        // ─── snow cap: smoothed white layer along the top edge ───
+        bool any = false;
+        for (float h : c.cols)
+            if (h > 0.05f) { any = true; break; }
+
+        if (any) {
+            ID2D1PathGeometry* geo = nullptr;
+            ID2D1GeometrySink* sink = nullptr;
+            if (SUCCEEDED(g_factory->CreatePathGeometry(&geo)) &&
+                SUCCEEDED(geo->Open(&sink))) {
+                sink->SetFillMode(D2D1_FILL_MODE_WINDING);
+                D2D1_POINT_2F start = { left, top + 1.0f };
+                sink->BeginFigure(start, D2D1_FIGURE_BEGIN_FILLED);
+                for (int i = 0; i < n; i++) {
+                    float h = c.cols[i] * 2.0f;
+                    if (i > 0)     h += c.cols[i - 1];
+                    if (i + 1 < n) h += c.cols[i + 1];
+                    h *= 0.25f;
+                    D2D1_POINT_2F pt = { left + (float)i * kColWidth, top - h };
+                    sink->AddLine(pt);
+                }
+                D2D1_POINT_2F end = { right, top + 1.0f };
+                sink->AddLine(end);
+                sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                sink->Close();
+                sink->Release();
+                g_brush->SetColor(Col(kSnowColor, 0.95f));
+                rt->FillGeometry(geo, g_brush);
+                geo->Release();
+            }
+        }
+
+        // ─── litter: petals and leaves lying on the edge ───
+        for (auto& l : c.litter) {
+            ID2D1PathGeometry* geo =
+                l.kind == kPetal ? g_petalGeo : g_leafGeo[l.tint & 3];
+            if (!geo) continue;
+            const float* rgb = l.kind == kPetal
+                ? kPetalColors[l.tint & 3] : kLeafColors[l.tint % 6];
+            float scale = l.size * 2.3f;
+            float cos_ = cosf(l.rot), sin_ = sinf(l.rot);
+            D2D1_MATRIX_3X2_F m;
+            m._11 = scale * cos_;    m._12 = scale * sin_;
+            m._21 = -scale * sin_;   m._22 = scale * cos_;
+            m.dx = left + l.offX;
+            m.dy = top - scale * 0.30f;
+            rt->SetTransform(m);
+            g_brush->SetColor(Col(rgb, 0.9f));
+            rt->FillGeometry(geo, g_brush);
+        }
+    }
+    rt->SetTransform(kIdentity);
+}
+
+// Cartoon wind streaks chasing the gust front, like in animations.
+static void DrawSweeps(ID2D1RenderTarget* rt, const Engine& eng) {
+    if (!eng.gustActive || g_sweeps.empty()) return;
+    float front = eng.GustFront();
+    float age = eng.time - eng.gustStart;
+    float dir = eng.gustDir;
+
+    rt->SetTransform(kIdentity);
+    for (auto& s : g_sweeps) {
+        float t = age - s.delay;
+        if (t < -0.25f || t > kGustLength - 0.35f) continue;
+        float fadeIn = t < 0.0f ? (t + 0.25f) / 0.25f : 1.0f;
+        if (fadeIn < 0.0f) fadeIn = 0.0f;
+        float fadeOut = (kGustLength - 0.35f - t) / 0.4f;
+        if (fadeOut > 1.0f) fadeOut = 1.0f;
+        float a = fadeIn * (fadeOut > 0.0f ? fadeOut : 0.0f);
+        if (a <= 0.0f) continue;
+
+        float y = s.yFrac * (float)eng.height;
+        float head = front - dir * s.delay * 220.0f;
+
+        g_brush->SetColor(Col(kSnowColor, 0.5f * a));
+        // Wavy trail behind the head.
+        float len = 250.0f;
+        D2D1_POINT_2F prev = { head, y };
+        for (int i = 1; i <= 8; i++) {
+            float f = (float)i / 8.0f;
+            D2D1_POINT_2F pt = { head - dir * len * f,
+                                 y + sinf(t * 4.0f + f * 5.0f) * 14.0f * f };
+            rt->DrawLine(prev, pt, g_brush, 3.5f);
+            prev = pt;
+        }
+        // Curl at the head.
+        D2D1_ELLIPSE curl = { { head - dir * 4.0f, y - 9.0f }, 8.0f, 6.0f };
+        rt->DrawEllipse(&curl, g_brush, 2.5f);
+    }
+}
+
+static void DrawScene(ID2D1RenderTarget* rt, const Engine& eng) {
+    ID2D1SolidColorBrush* b = g_brush;
+
+    // Snow caps and litter sit on the windows, under the falling weather.
+    DrawWindowCaps(rt);
+
+    // Pass 1, identity transform: snow and rain.
+    rt->SetTransform(kIdentity);
+
+    for (const Particle& f : eng.flakes) {
+        if (f.kind != kSnow) continue;
+        if (eng.streakSnow) {
+            // Cartoon-style: slanted gray streaks, wind-blown snow.
+            float slant = -(4.0f + eng.wind * 0.25f +
+                            sinf(eng.time * 1.3f + f.phase) * 2.5f);
+            float len = 4.0f + f.size * 3.0f;
+            b->SetColor(Col(kStreakColor, f.alpha * 0.85f));
+            rt->DrawLine({ f.x, f.y }, { f.x - slant, f.y - len }, b, 1.6f);
         } else {
-            result = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE,
-                                               m_visible ? 16 : 100,
-                                               QS_ALLINPUT);
+            b->SetColor(Col(kSnowColor, f.alpha));
+            float r = f.size * 1.8f;
+            D2D1_ELLIPSE el = { { f.x, f.y }, r, r };
+            rt->FillEllipse(&el, b);
         }
-        if (result == WAIT_OBJECT_0) {
-            break;
-        }
+    }
 
-        MSG msg;
-        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
+    float slant = -(float)eng.wind * 0.14f;
+    for (const Particle& f : eng.flakes) {
+        if (f.kind != kRain) continue;
+        float len = f.fallSpeed * 0.045f;
+        if (len < 6.0f) len = 6.0f;
+        if (len > 26.0f) len = 26.0f;
+        b->SetColor(Col(kRainColor, f.alpha));
+        rt->DrawLine({ f.x, f.y }, { f.x - slant, f.y - len }, b, 1.2f);
+    }
 
-        LARGE_INTEGER now;
-        QueryPerformanceCounter(&now);
-        float dt = static_cast<float>(now.QuadPart - last.QuadPart) /
-                   freq.QuadPart;
-        last = now;
-        dt = std::clamp(dt, 0.001f, 0.05f);
-        m_frameTime = m_frameTime * 0.9f + dt * 0.1f;
-        m_frame++;
+    // Pass 2, per-particle transform: petals and leaves with 3D tumble.
+    for (const Particle& f : eng.flakes) {
+        ID2D1PathGeometry* geo = nullptr;
+        const float* rgb = nullptr;
+        float scale = 0.0f;
 
-        bool fullscreen =
-            g_settings.pauseInFullscreen && IsFullscreenAppActive();
-        if (fullscreen == m_visible) {
-            m_visible = !fullscreen;
-            g_overlayHidden = !m_visible;
-            ShowWindow(m_hwnd, m_visible ? SW_SHOWNOACTIVATE : SW_HIDE);
-            m_cursorValid = false;
-        }
-        if (!m_visible) {
+        if (f.kind == kPetal) {
+            geo = g_petalGeo;
+            rgb = kPetalColors[f.tint & 3];
+            scale = f.size * 2.3f;
+        } else if (f.kind == kLeaf) {
+            geo = g_leafGeo[f.tint & 3];
+            rgb = kLeafColors[f.tint % 6];
+            scale = f.size * 2.3f;
+        } else {
             continue;
         }
+        if (!geo) continue;
 
-        if (m_frame % 60 == 0) {
-            RECT area = ComputeArea();
-            if (!EqualRect(&area, &m_area)) {
-                ApplyArea(area);
-            }
-            m_syncInterval = ComputeSyncInterval();
-            SetWindowPos(m_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        }
+        // Tumbling flip around the leaf's long axis; past half-tumble the
+        // face turns edge-on and reads darker, like the shaded side.
+        float tumble = 0.35f + 0.65f * fabsf(cosf(eng.time * f.flutter * 1.7f + f.phase));
 
-        size_t targetFlakes = static_cast<size_t>(
-            g_settings.intensity * m_width * m_height / 1000000.0f);
-        if (m_flakes.size() < targetFlakes) {
-            size_t addCount = std::min(targetFlakes - m_flakes.size(), size_t(20));
-            for (size_t k = 0; k < addCount; k++) {
-                Flake f;
-                SpawnFlake(f, m_frame < 5);
-                m_flakes.push_back(f);
-            }
-        } else if (m_flakes.size() > targetFlakes) {
-            m_flakes.resize(targetFlakes);
-        }
+        float mul = tumble < 0.5f ? kDarkSideMul : 1.0f;
+        float darkened[3] = { rgb[0] * mul, rgb[1] * mul, rgb[2] * mul };
+        b->SetColor(Col(darkened, f.alpha));
 
-        POINT cursor = {};
-        GetCursorPos(&cursor);
-        bool isLButtonDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-        bool isCtrlDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-        bool isEKeyDown = isCtrlDown && ((GetAsyncKeyState('E') & 0x8000) != 0);
+        float cos = cosf(f.rot), sin = sinf(f.rot);
+        float ax = scale * tumble; // local x compresses with the tumble
+        D2D1_MATRIX_3X2_F m;
+        m._11 = ax * cos;  m._12 = ax * sin;
+        m._21 = -scale * sin; m._22 = scale * cos;
+        m.dx = f.x; m.dy = f.y;
+        rt->SetTransform(m);
 
-        CollectBodies();
-        UpdateCaps(dt);
-        Ambient(dt);
-        Sweep(dt);
-        CheckClickSnowman(cursor, isLButtonDown);
-        UpdateSnowballKeyE(cursor, isEKeyDown, dt);
-        UpdateVehicle(cursor, isLButtonDown, dt);
-        UpdateFlakes(dt);
-        UpdateChunks(dt);
-        UpdatePuffs(dt);
-
-        m_prevLButtonDown = isLButtonDown;
-
-        if (!Render()) {
-            Wh_Log(L"Recreating device resources");
-            ReleaseDeviceResources();
-            if (!CreateDeviceResources()) {
-                Wh_Log(L"Failed to recreate device resources");
-                break;
-            }
-        }
+        rt->FillGeometry(geo, b);
     }
+
+    rt->SetTransform(kIdentity);
 }
 
-DWORD WINAPI SnowThread(LPVOID) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+static bool RenderFrame(HWND hwnd, const Engine& eng) {
+    static bool loggedFirstFrame = false;
+    if (!loggedFirstFrame) {
+        loggedFirstFrame = true;
+        LogToFile(L"RenderFrame: first frame attempt");
+    }
 
-    g_taskbarThread = CreateThread(nullptr, 0, TaskbarThread, nullptr, 0,
-                                   nullptr);
+    if (!g_rt || !g_memDC) return false;
 
-    {
-        Overlay overlay;
-        if (overlay.Create()) {
-            overlay.Run();
-        } else {
-            Wh_Log(L"Failed to create the overlay");
+    RECT rc = { 0, 0, g_width, g_height };
+    g_rt->BindDC(g_memDC, &rc);
+    g_rt->BeginDraw();
+    g_rt->Clear(nullptr);
+    DrawScene(g_rt, eng);
+    DrawSweeps(g_rt, eng);
+    g_rt->EndDraw();
+
+    GdiFlush();
+
+    BLENDFUNCTION bf = {};
+    bf.BlendOp = AC_SRC_OVER;
+    bf.SourceConstantAlpha = 255;
+    bf.AlphaFormat = AC_SRC_ALPHA;
+
+    POINT ptSrc = { 0, 0 };
+    SIZE size = { g_width, g_height };
+    HDC screen = GetDC(nullptr);
+    BOOL ok = UpdateLayeredWindow(hwnd, screen, nullptr, &size,
+                                  g_memDC, &ptSrc, 0, &bf, ULW_ALPHA);
+    ReleaseDC(nullptr, screen);
+    return ok != FALSE;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Overlay window (owned by a dedicated thread inside explorer.exe)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static const wchar_t* kWndClass = L"DesktopWeatherOverlayWnd";
+
+static HWND g_wnd = nullptr; // used by the enumeration below
+
+// ─── Window enumeration for snow caps ───
+
+static Engine g_engine;                // overlay thread only
+static std::vector<WinCap> g_capsEnum; // temp, overlay thread only
+
+static BOOL CALLBACK EnumWndProc(HWND h, LPARAM) {
+    if (h == g_wnd) return TRUE;
+    if (!IsWindowVisible(h) || IsIconic(h)) return TRUE;
+
+    LONG_PTR ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
+    if (ex & WS_EX_TRANSPARENT) return TRUE;
+
+    wchar_t cls[64];
+    GetClassNameW(h, cls, 64);
+    bool shell = wcsncmp(cls, L"Shell_", 6) == 0;   // taskbar and friends
+    if ((ex & WS_EX_TOOLWINDOW) && !shell) return TRUE;
+
+    DWORD cloaked = 0;
+    DwmGetWindowAttribute(h, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+    if (cloaked) return TRUE;
+
+    if (!wcscmp(cls, L"Progman") || !wcscmp(cls, L"WorkerW")) return TRUE;
+    if (!wcscmp(cls, L"DesktopWeatherOverlayWnd")) return TRUE;
+
+    RECT rc;
+    if (!GetWindowRect(h, &rc)) return TRUE;
+    RECT area = { 0, 0, g_width, g_height };
+    RECT inter;
+    if (!IntersectRect(&inter, &rc, &area)) return TRUE;
+    if (rc.right - rc.left < 60 || rc.bottom - rc.top < 24) return TRUE;
+
+    WinCap cap = {};
+    cap.hwnd = h;
+    cap.rc = rc;
+    g_capsEnum.push_back(std::move(cap));
+    return TRUE;
+}
+
+// ─── Cap debris: loose snow and litter that leaves a window top ───
+
+static void SpawnCapFlake(float x, float y, float h, float vx) {
+    if (h < 0.25f) return;
+    if (g_engine.flakes.size() >= 1100) return;
+    Particle p = {};
+    p.kind      = kSnow;
+    p.size      = 0.8f + h * 0.22f;
+    p.fallSpeed = 40.0f + h * 6.0f;
+    p.sway      = 8.0f;
+    p.alpha     = 0.9f;
+    p.flutter   = 1.0f;
+    p.vx        = vx * 0.25f + (g_engine.Rand() - 0.5f) * 30.0f;
+    p.x         = x;
+    p.y         = y;
+    p.debris    = true;
+    g_engine.flakes.push_back(p);
+}
+
+// Breaks a whole cap loose: the snow and the litter stop following the
+// window and fall where they were.
+static void DetachCap(WinCap& cap, float vx) {
+    int n = (int)cap.cols.size();
+    for (int i = 0; i < n; i++) {
+        if (cap.cols[i] < 0.25f) continue;
+        SpawnCapFlake((float)cap.rc.left + (i + 0.5f) * kColWidth,
+                      (float)cap.rc.top - cap.cols[i] * 0.6f,
+                      cap.cols[i], vx);
+        cap.cols[i] = 0.0f;
+    }
+
+    for (auto& l : cap.litter) {
+        if (g_engine.flakes.size() >= 1100) break;
+        Particle p = {};
+        p.kind      = (PKind)l.kind;
+        p.tint      = l.tint;
+        p.size      = l.size;
+        p.rot       = l.rot;
+        p.rotSpeed  = (g_engine.Rand() - 0.5f) * 2.0f;
+        p.alpha     = 0.95f;
+        p.flutter   = 2.0f;
+        p.phase     = g_engine.Rand() * kPi2;
+        p.sway      = 12.0f;
+        p.fallSpeed = 35.0f + g_engine.Rand() * 30.0f;
+        p.vx        = vx * 0.3f + (g_engine.Rand() - 0.5f) * 40.0f;
+        p.x         = (float)cap.rc.left + l.offX;
+        p.y         = (float)cap.rc.top - 2.0f;
+        p.debris    = true;
+        g_engine.flakes.push_back(p);
+    }
+    cap.litter.clear();
+}
+
+static void UpdateWindowList() {
+    g_capsEnum.clear();
+    EnumWindows(EnumWndProc, 0);
+
+    // Merge with the previous list, keeping snow columns and litter.
+    std::vector<WinCap> merged;
+    merged.reserve(g_capsEnum.size());
+    for (auto& nu : g_capsEnum) {
+        WinCap c = std::move(nu);
+        int n = (c.rc.right - c.rc.left) / (int)kColWidth;
+        if (n < 1) n = 1;
+        if (n > 400) n = 400;
+        c.cols.assign(n, 0.0f);
+
+        for (auto& old : g_caps) {
+            if (old.hwnd != c.hwnd) continue;
+
+            int dx = (int)(c.rc.left - old.rc.left);
+            int dy = (int)(c.rc.top  - old.rc.top);
+
+            if (dx == 0 && dy == 0) {
+                // The window is standing still: snow and litter stay put.
+                c.litter = old.litter;
+                size_t m = old.cols.size() < (size_t)n ? old.cols.size() : (size_t)n;
+                for (size_t i = 0; i < m; i++) c.cols[i] = old.cols[i];
+                break;
+            }
+
+            if (dy < -4 || dx < -60 || dx > 60 || dy > 60) {
+                // The window jumped (snap, maximise, or pulled up faster
+                // than the snow can follow). The cap comes loose and falls
+                // where it was instead of sticking to the new position.
+                WinCap moved = old;
+                DetachCap(moved, (float)dx);
+                break;
+            }
+
+            // A slow drag: the cap rides along with the window. Columns
+            // scraped past a side edge slide off and fall to the ground.
+            int shift = dx >= 0
+                ? (dx + (int)kColWidth / 2) / (int)kColWidth
+                : -((-dx + (int)kColWidth / 2) / (int)kColWidth);
+            int nOld = (int)old.cols.size();
+            int lo = shift > 0 ? 0 : nOld + shift;
+            int hi = shift > 0 ? shift : nOld;
+            if (lo < 0) lo = 0;
+            if (hi > nOld) hi = nOld;
+            for (int i = lo; i < hi; i++) {
+                SpawnCapFlake((float)old.rc.left + (i + 0.5f) * kColWidth,
+                              (float)old.rc.top - old.cols[i] * 0.6f,
+                              old.cols[i], 0.0f);
+            }
+
+            for (int i = 0; i < n; i++) {
+                int src = i + shift;
+                if (src < 0 || src >= nOld) continue;
+                c.cols[i] = old.cols[src];
+            }
+
+            c.litter = old.litter;
+            for (auto& l : c.litter) l.offX -= (float)dx;
+            c.litter.erase(std::remove_if(c.litter.begin(), c.litter.end(),
+                                          [n](const WinLitter& l) {
+                                              return l.offX < 0.0f ||
+                                                     l.offX >= (float)n * kColWidth;
+                                          }),
+                           c.litter.end());
+            break;
+        }
+        merged.push_back(std::move(c));
+    }
+    g_caps = std::move(merged);
+}
+
+static HANDLE g_thread = nullptr;
+static volatile LONG g_settingsDirty = 0;
+
+static int  g_fpsCap = 0;
+static UINT g_timerIntervalMs = 10;
+static bool g_gustOnChange = true;
+
+static LARGE_INTEGER g_qpcFreq = {};
+
+static int ClampInt(int v, int lo, int hi) {
+    return v < lo ? lo : v > hi ? hi : v;
+}
+
+static void ApplySettingsToEngine() {
+    WeatherSet next;
+    PCWSTR mode = Wh_GetStringSetting(L"WeatherMode");
+    ParseWeatherMode(mode, next);
+    Wh_FreeStringSetting(mode);
+
+    g_engine.intensity = ClampInt(Wh_GetIntSetting(L"Intensity"), 0, 200);
+    g_engine.sizePct   = ClampInt(Wh_GetIntSetting(L"Size"), 50, 200);
+    g_engine.speedPct  = ClampInt(Wh_GetIntSetting(L"Speed"), 20, 200);
+    g_engine.wind      = ClampInt(Wh_GetIntSetting(L"Wind"), -30, 30);
+    g_gustOnChange     = Wh_GetIntSetting(L"GustOnChange") != 0;
+    g_engine.snowOnWindows   = Wh_GetIntSetting(L"SnowOnWindows") != 0;
+    g_engine.leavesOnWindows = Wh_GetIntSetting(L"LeavesOnWindows") != 0;
+    g_engine.streakSnow      = Wh_GetIntSetting(L"StreakSnow") != 0;
+    g_engine.sweepWithCursor = Wh_GetIntSetting(L"SweepMouse") != 0;
+    g_engine.autoWind        = ClampInt(Wh_GetIntSetting(L"AutoWind"), 0, 3600);
+
+    g_engine.ApplyMode(next, g_gustOnChange);
+
+    int fpsCap = ClampInt(Wh_GetIntSetting(L"FpsCap"), 0, 240);
+    if (fpsCap != g_fpsCap) {
+        g_fpsCap = fpsCap;
+        g_timerIntervalMs = g_fpsCap > 0 ? (UINT)((1000 + g_fpsCap - 1) / g_fpsCap) : 10;
+        if (g_wnd) SetTimer(g_wnd, 1, g_timerIntervalMs, nullptr);
+    }
+    LogToFile(L"Settings updated: intensity=%d, size=%d, speed=%d, wind=%d, gust=%d, snowWin=%d, leafWin=%d, streak=%d, autowind=%d, fps=%d",
+        Wh_GetIntSetting(L"Intensity"), g_engine.sizePct, g_engine.speedPct, g_engine.wind, g_gustOnChange, g_engine.snowOnWindows, g_engine.leavesOnWindows, g_engine.streakSnow, g_engine.autoWind, g_fpsCap);
+}
+
+static void Tick(HWND hwnd) {
+    if (InterlockedExchange(&g_settingsDirty, 0)) {
+        ApplySettingsToEngine();
+    }
+
+    static LARGE_INTEGER last = {};
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    float dt = last.QuadPart
+        ? (float)((double)(now.QuadPart - last.QuadPart) / (double)g_qpcFreq.QuadPart)
+        : 0.016f;
+    last = now;
+    if (dt > 0.05f) dt = 0.05f;   // clamp, e.g. after a sleep
+    if (dt < 0.0f) dt = 0.0f;
+
+    g_engine.Update(dt);
+
+    // Window list refresh: often enough that a dragged window does not leave
+    // its snow hanging in mid-air.
+    static float capsTimer = 0.2f;
+    capsTimer += dt;
+    if (capsTimer >= 0.2f) {
+        capsTimer = 0.0f;
+        UpdateWindowList();
+    }
+
+    // Cartoon wind sweep on a timer (0 = off).
+    if (g_engine.autoWind > 0) {
+        static float autoWindTimer = 0.0f;
+        autoWindTimer += dt;
+        if (autoWindTimer >= (float)g_engine.autoWind) {
+            autoWindTimer = 0.0f;
+            g_engine.BeginWeatherGust();
         }
     }
 
-    if (g_taskbarThread) {
-        SetEvent(g_stopEvent);
-        WaitForSingleObject(g_taskbarThread, INFINITE);
-        CloseHandle(g_taskbarThread);
-        g_taskbarThread = nullptr;
+    RenderFrame(hwnd, g_engine);
+}
+
+static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_CREATE: {
+            HDC screen = GetDC(nullptr);
+            g_memDC = CreateCompatibleDC(screen);
+
+            BITMAPINFO bi = {};
+            bi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+            bi.bmiHeader.biWidth       = g_width;
+            bi.bmiHeader.biHeight      = -g_height; // top-down
+            bi.bmiHeader.biPlanes      = 1;
+            bi.bmiHeader.biBitCount    = 32;
+            bi.bmiHeader.biCompression = BI_RGB;
+
+            g_dib = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &g_bits, nullptr, 0);
+            ReleaseDC(nullptr, screen);
+
+            if (!g_memDC || !g_dib || !InitD2D()) {
+                Wh_Log(L"Overlay initialization failed");
+                return -1;
+            }
+            SelectObject(g_memDC, g_dib);
+            return 0;
+        }
+
+        case WM_TIMER:
+            if (wParam == 1) Tick(hwnd);
+            return 0;
+
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            BeginPaint(hwnd, &ps);
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            return 0;
+
+        case WM_DESTROY: {
+            KillTimer(hwnd, 1);
+            if (g_dib) { DeleteObject(g_dib); g_dib = nullptr; }
+            if (g_memDC) { DeleteDC(g_memDC); g_memDC = nullptr; }
+            CleanupD2D();
+            PostQuitMessage(0);
+            return 0;
+        }
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+static DWORD WINAPI OverlayThreadProc(LPVOID) {
+    g_engine.Seed(0x12345678u ^ GetTickCount());
+    g_engine.width = g_width;
+    g_engine.height = g_height;
+    Wh_Log(L"overlay thread: %dx%d", g_width, g_height);
+    LogToFile(L"overlay thread started: %dx%d", g_width, g_height);
+
+    WNDCLASSEXW wc = {};
+    wc.cbSize        = sizeof(wc);
+    wc.lpfnWndProc   = WndProc;
+    wc.hInstance     = GetModuleHandleW(nullptr);
+    wc.lpszClassName = kWndClass;
+    if (!RegisterClassExW(&wc)) {
+        DWORD err = GetLastError();
+        if (err == ERROR_CLASS_ALREADY_EXISTS) {
+            LogToFile(L"Class already exists, re-registering...");
+            UnregisterClassW(kWndClass, wc.hInstance);
+            if (!RegisterClassExW(&wc)) {
+                LogToFile(L"Re-registration failed: %lu", GetLastError());
+                return 1;
+            }
+        } else {
+            LogToFile(L"RegisterClassExW failed: %lu", err);
+            return 1;
+        }
     }
 
+    ApplySettingsToEngine();
+    UpdateWindowList(); // snow caps appear right away, not after 2s
+
+    // Initial weather covers the screen right away.
+    {
+        WeatherSet w;
+        PCWSTR mode = Wh_GetStringSetting(L"WeatherMode");
+        ParseWeatherMode(mode, w);
+        Wh_FreeStringSetting(mode);
+        int target = (int)(g_engine.intensity * 1.5f * g_engine.WeatherDensity() *
+                           (g_width * (float)g_height) / (1920.0f * 1080.0f));
+        if (target > 900) target = 900;
+        while ((int)g_engine.flakes.size() < target) {
+            Particle f = {};
+            g_engine.SpawnFlake(f, true);
+            g_engine.flakes.push_back(f);
+        }
+    }
+
+    g_wnd = CreateWindowExW(
+        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
+        kWndClass, L"DesktopWeatherOverlay", WS_POPUP,
+        0, 0, g_width, g_height,
+        nullptr, nullptr, wc.hInstance, nullptr);
+    if (!g_wnd) {
+        Wh_Log(L"CreateWindowExW failed: %lu", GetLastError());
+        LogToFile(L"CreateWindowExW failed: %lu", GetLastError());
+        return 1;
+    }
+    LogToFile(L"Window created: %p", g_wnd);
+
+    ShowWindow(g_wnd, SW_SHOWNOACTIVATE);
+    SetTimer(g_wnd, 1, g_timerIntervalMs, nullptr);
+
+    MSG msg;
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    g_wnd = nullptr;
     return 0;
 }
 
-BOOL WhTool_ModInit() {
-    Wh_Log(L"Init");
-
-    LoadSettings();
-
-    g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    if (!g_stopEvent) {
-        return FALSE;
-    }
-
-    g_snowThread = CreateThread(nullptr, 0, SnowThread, nullptr, 0, nullptr);
-    if (!g_snowThread) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
-void WhTool_ModSettingsChanged() {
-    Wh_Log(L"SettingsChanged");
-    LoadSettings();
-}
-
-void WhTool_ModUninit() {
-    Wh_Log(L"Uninit");
-
-    SetEvent(g_stopEvent);
-    WaitForSingleObject(g_snowThread, INFINITE);
-    CloseHandle(g_snowThread);
-    CloseHandle(g_stopEvent);
-    g_snowThread = nullptr;
-    g_stopEvent = nullptr;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-//
-// The mod will load and run in a dedicated windhawk.exe process.
-//
-// Paste the code below as part of the mod code, and use these callbacks:
-// * WhTool_ModInit
-// * WhTool_ModSettingsChanged
-// * WhTool_ModUninit
-//
-// Currently, other callbacks are not supported.
-
-bool g_isToolModProcessLauncher;
-HANDLE g_toolModProcessMutex;
-
-void WINAPI EntryPoint_Hook() {
-    Wh_Log(L">");
-    ExitThread(0);
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Windhawk mod lifecycle
+// ─────────────────────────────────────────────────────────────────────────────
 
 BOOL Wh_ModInit() {
-    DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
-        sessionId == 0) {
-        return FALSE;
-    }
-
-    bool isExcluded = false;
-    bool isToolModProcess = false;
-    bool isCurrentToolModProcess = false;
-    int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
-    if (!argv) {
-        Wh_Log(L"CommandLineToArgvW failed");
-        return FALSE;
-    }
-
-    for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0 ||
-            wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0) {
-            isExcluded = true;
-            break;
-        }
-    }
-
-    for (int i = 1; i < argc - 1; i++) {
-        if (wcscmp(argv[i], L"-tool-mod") == 0) {
-            isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
-                isCurrentToolModProcess = true;
-            }
-            break;
-        }
-    }
-
-    LocalFree(argv);
-
-    if (isExcluded) {
-        return FALSE;
-    }
-
-    if (isCurrentToolModProcess) {
-        g_toolModProcessMutex =
-            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutex failed");
-            ExitProcess(1);
-        }
-
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            ExitProcess(1);
-        }
-
-        if (!WhTool_ModInit()) {
-            ExitProcess(1);
-        }
-
-        IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders =
-            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-
-        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
-
-        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
-        return TRUE;
-    }
-
-    if (isToolModProcess) {
-        return FALSE;
-    }
-
-    g_isToolModProcessLauncher = true;
+    Wh_Log(L"Init");
     return TRUE;
-}
-
-void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, currentProcessPath,
-                              ARRAYSIZE(currentProcessPath))) {
-        case 0:
-        case ARRAYSIZE(currentProcessPath):
-            Wh_Log(L"GetModuleFileName failed");
-            return;
-    }
-
-    WCHAR
-    commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-               WH_MOD_ID);
-
-    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-    if (!kernelModule) {
-        kernelModule = GetModuleHandle(L"kernel32.dll");
-        if (!kernelModule) {
-            Wh_Log(L"No kernelbase.dll/kernel32.dll");
-            return;
-        }
-    }
-
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-        LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo,
-        LPPROCESS_INFORMATION lpProcessInformation,
-        PHANDLE hRestrictedUserToken);
-    CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
-                                                 "CreateProcessInternalW");
-    if (!pCreateProcessInternalW) {
-        Wh_Log(L"No CreateProcessInternalW");
-        return;
-    }
-
-    STARTUPINFO si{
-        .cb = sizeof(STARTUPINFO),
-        .dwFlags = STARTF_FORCEOFFFEEDBACK,
-    };
-    PROCESS_INFORMATION pi;
-    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                 nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"CreateProcess failed");
-        return;
-    }
-
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-}
-
-void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
+    Wh_Log(L"Uninit");
+}
 
-    WhTool_ModUninit();
-    ExitProcess(0);
+void Wh_ModAfterInit() {
+    Wh_Log(L"AfterInit");
+
+    g_width  = GetSystemMetrics(SM_CXSCREEN);
+    g_height = GetSystemMetrics(SM_CYSCREEN);
+    if (g_width <= 0)  g_width = 1920;
+    if (g_height <= 0) g_height = 1080;
+
+    QueryPerformanceFrequency(&g_qpcFreq);
+
+    g_settingsDirty = 0;
+    g_thread = CreateThread(nullptr, 0, OverlayThreadProc, nullptr, 0, nullptr);
+    if (!g_thread) {
+        Wh_Log(L"CreateThread failed: %lu", GetLastError());
+    }
+}
+
+BOOL Wh_ModBeforeUninit() {
+    Wh_Log(L"BeforeUninit");
+
+    if (g_wnd) {
+        PostMessageW(g_wnd, WM_CLOSE, 0, 0);
+    }
+    if (g_thread) {
+        WaitForSingleObject(g_thread, 5000);
+        CloseHandle(g_thread);
+        g_thread = nullptr;
+    }
+    return TRUE;
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L"SettingsChanged");
+    InterlockedExchange(&g_settingsDirty, 1);
 }
