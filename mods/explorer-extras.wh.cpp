@@ -2,7 +2,7 @@
 // @id              explorer-extras
 // @name            Explorer Extras
 // @description     Beta. Additions for File Explorer, one switch per area: Columns (Miller columns), a details and preview pane (PDF, text, Markdown, images, video, sound), colour labels (tags), and a toolbar with tighter gaps, a resizable search box and round corners.
-// @version         0.78.8
+// @version         0.78.10
 // @author          AristideBH
 // @github          https://github.com/AristideBH
 // @donateUrl       https://ko-fi.com/aristidebh
@@ -502,11 +502,23 @@ BOOL CALLBACK FindVisibleChildProc(HWND hwnd, LPARAM lParam) {
     return TRUE;
 }
 
+// The same, from a cache kept by the caller: a window that is still there, visible and a child of `parent` is the answer, so a
+// timer tick does not walk the whole window tree each time. Another tab coming to the front hides this one, and the walk is done.
+HWND FindVisibleChildCached(HWND* cache, HWND parent, const wchar_t* className);
+
 HWND FindVisibleChild(HWND parent, const wchar_t* className) {
     FindContext context;
     context.className = className;
     EnumChildWindows(parent, FindVisibleChildProc, (LPARAM)&context);
     return context.found;
+}
+
+HWND FindVisibleChildCached(HWND* cache, HWND parent, const wchar_t* className) {
+    if (*cache && IsWindow(*cache) && IsWindowVisible(*cache) && IsChild(parent, *cache)) {
+        return *cache;
+    }
+    *cache = FindVisibleChild(parent, className);
+    return *cache;
 }
 
 BOOL CALLBACK FindCabinetOnThread(HWND hwnd, LPARAM lParam) {
@@ -647,7 +659,6 @@ struct Entry {
     // A shortcut to a folder: it opens as that folder, in the next column.
     Pidl linkTarget;
 };
-
 
 // ---- Settings ----
 //
@@ -1434,7 +1445,6 @@ void GroupFallback(IShellFolder* folder, const SortSpec& spec,
     IShellFolder2* folder2 = nullptr;
     folder->QueryInterface(IID_PPV_ARGS(&folder2));
     if (!folder2) {
-        LogVerbose(L"group fallback: no IShellFolder2");
         return;
     }
     size_t count = result->entries.size();
@@ -1546,7 +1556,6 @@ void GroupFallback(IShellFolder* folder, const SortSpec& spec,
     for (auto& value : values) {
         VariantClear(&value);
     }
-    LogVerbose(L"group fallback: key pid=%lu, first value type=%d", key.pid, firstType);
     folder2->Release();
 
     // The groups that occur, in display order.
@@ -1579,13 +1588,9 @@ void GroupFallback(IShellFolder* folder, const SortSpec& spec,
         names.push_back(id >= 0 && id < (int)texts.size() ? texts[id] : L"");
     }
     if (names.size() == 1 && names[0] == L"Unspecified") {
-        LogVerbose(L"group fallback: the key gives no values here, not grouping");
         return;
     }
     ApplyGroups(result, ids, order, names);
-    LogVerbose(L"group fallback: %d groups, date=%d size=%d name=%d column=%d",
-        (int)order.size(), isDate ? 1 : 0, isSize ? 1 : 0, isName ? 1 : 0,
-        column);
 }
 
 // Splits the sorted entries into groups for `spec.groupKey`: the shell's own
@@ -1614,8 +1619,6 @@ void GroupEntries(IShellFolder* folder, const SortSpec& spec, FolderResult* resu
         }
         static std::atomic<int> logged{0};
         if (logged++ < 6) {
-            LogVerbose(L"group: key pid=%lu, CanCategorizeOnSCID=0x%08lX GetCategoryForSCID=0x%08lX CreateCategory=0x%08lX",
-                spec.groupKey.pid, can, forScid, create);
         }
         provider->Release();
     } else {
@@ -1817,8 +1820,6 @@ void LoadFolder(PCIDLIST_ABSOLUTE folderPidl, const SortSpec& spec,
             int column = ColumnForKey(folder2, sortColumn.propkey);
             static std::atomic<int> logged{0};
             if (logged++ < 8) {
-                LogVerbose(L"sort: key pid=%lu maps to column %d, direction %d",
-                    sortColumn.propkey.pid, column, (int)sortColumn.direction);
             }
             if (column >= 0) {
                 keys.push_back({column, sortColumn.direction < 0 ? -1 : 1});
@@ -3338,6 +3339,8 @@ struct WindowState {
     // Columns per tab: the tab that is showing, and the stacks of the others.
     DragState drag;
     HWND currentTab = nullptr;
+    HWND tickFileList = nullptr;  // The windows OnTick found last time (see FindVisibleChildCached).
+    HWND tickTab = nullptr;
     ULONGLONG specSyncDue = 0;  // When to read the sort of the folder Explorer shows.
     std::wstring hiddenFolder;  // The folder a tab that is not in Columns showed last.
     std::vector<TabSnapshot> tabSnapshots;
@@ -5457,11 +5460,21 @@ void ScheduleNavigation(WindowState* state, PCIDLIST_ABSOLUTE folder, ULONGLONG 
 void SetActiveColumn(WindowState* state, int index, bool ensureVisible);
 
 // A folder on disk that is no longer there: deleted, renamed or moved.
-// Folders that aren't on disk (This PC, Control Panel) are never "gone" here.
+// Folders that aren't on disk (This PC, Control Panel) are never "gone" here, and neither are those on a network: asking an
+// offline share can take half a minute, on the window's own thread, so its answer is not waited for.
 bool FolderGone(PCIDLIST_ABSOLUTE folder) {
     wchar_t path[MAX_PATH] = L"";
     if (!folder || ILIsEmpty(folder) || !SHGetPathFromIDListW(folder, path) || !path[0]) {
         return false;
+    }
+    if (PathIsUNCW(path)) {
+        return false;
+    }
+    if (path[1] == L':') {
+        wchar_t root[4] = {path[0], L':', L'\\', 0};
+        if (GetDriveTypeW(root) == DRIVE_REMOTE) {
+            return false;
+        }
     }
     return !PathFileExistsW(path);
 }
@@ -5945,7 +5958,6 @@ void AddColumn(WindowState* state, Pidl folder, bool atFront = false, bool archi
                         scroller.VerticalScrollMode(mode);
                         static int logged = 0;
                         if (logged++ < 6) {
-                            LogVerbose(L"a press stops the scroll of a list, offset %.1f", offset);
                         }
                     }
                 }
@@ -5957,8 +5969,6 @@ void AddColumn(WindowState* state, Pidl folder, bool atFront = false, bool archi
     column->releaseToken = list.PointerReleased(
         [](Inspectable const& sender, mux::Input::PointerRoutedEventArgs const& relArgs) {
             if (relArgs.Pointer().PointerDeviceType() != winrt::Microsoft::UI::Input::PointerDeviceType::Mouse) {
-                LogVerbose(L"touch: pointer released, device=%d id=%u", (int)relArgs.Pointer().PointerDeviceType(),
-                    relArgs.Pointer().PointerId());
                 if (WindowState* releaseState = StateForThisThread(false)) {
                     TouchTrack(releaseState, relArgs, true);
                 }
@@ -5984,7 +5994,6 @@ void AddColumn(WindowState* state, Pidl folder, bool atFront = false, bool archi
                                 contact = lostArgs.GetCurrentPoint(list).IsInContact();
                             } catch (...) {
                             }
-                            LogVerbose(L"touch: capture lost in a rectangle, xaml contact=%d", contact ? 1 : 0);
                             if (contact && band.recaptures++ < 5) {
                                 try {
                                     list.CapturePointer(lostArgs.Pointer());
@@ -6002,9 +6011,6 @@ void AddColumn(WindowState* state, Pidl folder, bool atFront = false, bool archi
                     POINTER_INFO win32Info{};
                     bool win32Ok = GetPointerInfo(drag.pointerId, &win32Info) != 0;
                     if (drag.active || drag.armed) {
-                        LogVerbose(L"touch: capture lost in a drag, xaml contact=%d, GetPointerInfo=%d (err %lu, flags 0x%lX)",
-                            xamlContact ? 1 : 0, win32Ok ? 1 : 0, win32Ok ? 0ul : GetLastError(),
-                            (unsigned long)win32Info.pointerFlags);
                     }
                     if ((drag.active || (drag.pending && drag.armed)) && drag.pointerId == lostArgs.Pointer().PointerId() &&
                         xamlContact) {
@@ -6028,7 +6034,6 @@ void AddColumn(WindowState* state, Pidl folder, bool atFront = false, bool archi
         });
     // Touch, for the log: a hold, and a pointer that the system takes away (a pan).
     Keep(list, list.Holding(winrt::auto_revoke, [](Inspectable const& sender, mux::Input::HoldingRoutedEventArgs const& args) {
-        LogVerbose(L"touch: holding state=%d device=%d", (int)args.HoldingState(), (int)args.PointerDeviceType());
         if ((int)args.HoldingState() == 0 && (int)args.PointerDeviceType() == 0) {
             WindowState* holdState = StateForThisThread(false);
             if (auto list = sender.try_as<muxc::ListView>(); list && holdState && holdState->on && !g_unloading) {
@@ -6037,13 +6042,9 @@ void AddColumn(WindowState* state, Pidl folder, bool atFront = false, bool archi
         }
     }));
     Keep(list, list.PointerCanceled(winrt::auto_revoke, [](Inspectable const&, mux::Input::PointerRoutedEventArgs const& args) {
-        LogVerbose(L"touch: the pointer was cancelled, device=%d id=%u", (int)args.Pointer().PointerDeviceType(),
-            args.Pointer().PointerId());
     }));
     Keep(list, list.PointerCaptureLost(winrt::auto_revoke, [](Inspectable const&, mux::Input::PointerRoutedEventArgs const& args) {
         if (args.Pointer().PointerDeviceType() != winrt::Microsoft::UI::Input::PointerDeviceType::Mouse) {
-            LogVerbose(L"touch: the pointer capture was lost, device=%d id=%u", (int)args.Pointer().PointerDeviceType(),
-                args.Pointer().PointerId());
         }
     }));
     column->rightTapToken = list.RightTapped(
@@ -6489,8 +6490,6 @@ void RebuildFromExplorer(WindowState* state) {
         if (ReadSortSpec(browser, &fresh)) {
             state->spec = fresh;
             RememberFolderSpec(PathOf(current.get()), fresh);
-            LogVerbose(L"rebuild: spec %d sort columns, grouped=%d", (int)fresh.columns.size(),
-                fresh.grouped ? 1 : 0);
         }
     }
     if (state->columns.empty()) {
@@ -9763,7 +9762,6 @@ void ShowBackgroundMenu(WindowState* state, Column* column,
 void OnRowRightTapped(muxc::ListView const& list,
                       mux::Input::RightTappedRoutedEventArgs const& args) {
     if (args.PointerDeviceType() != winrt::Microsoft::UI::Input::PointerDeviceType::Mouse) {
-        LogVerbose(L"touch: a right tap, device=%d", (int)args.PointerDeviceType());
     }
     WindowState* state = StateForThisThread(false);
     if (!state || !state->on || g_unloading) {
@@ -10428,7 +10426,6 @@ void OnBandPressed(muxc::ListView const& list, mux::Input::PointerRoutedEventArg
                 state->band.column->list.ReleasePointerCaptures();
             }
             EndBand(state, false);
-            LogVerbose(L"touch: a second finger, the rectangle is given up for the two-finger scroll");
             return;
         }
         // The middle button on a folder opens it in a new tab.
@@ -10533,8 +10530,6 @@ void OnBandPressed(muxc::ListView const& list, mux::Input::PointerRoutedEventArg
                 }
             }
             list.CapturePointer(args.Pointer());
-            LogVerbose(L"touch: pressed on the empty space of column %d, a rectangle may start (scrollers locked=%d)", index + 1,
-                (int)band.locked.size());
         }
     } catch (...) {
         LogHresult(L"OnBandPressed");
@@ -10589,7 +10584,6 @@ bool OnBandMoved(WindowState* state, Column* column, muxc::ListView const& list,
             band.panLastAt = GetTickCount64();
             band.panVelocity = 0;
             list.CapturePointer(args.Pointer());
-            LogVerbose(L"touch: a sideways drag on the empty space, the columns scroll");
             return true;
         }
         // A drag: take the pointer, remember the rows, start from the selection
@@ -10597,7 +10591,6 @@ bool OnBandMoved(WindowState* state, Column* column, muxc::ListView const& list,
         band.pending = false;
         band.active = true;
         if (band.touch) {
-            LogVerbose(L"touch: the finger moved, the rectangle starts");
         }
         list.CapturePointer(args.Pointer());
         auto scroller = FindListScroller(list);
@@ -12011,8 +12004,6 @@ void SyncSelectionFromExplorer(WindowState* state) {
             }
         }
         state->building = false;
-        LogVerbose(L"the toolbar changed Explorer's selection: %d items now selected in column %d", (int)wanted.size(),
-            state->active + 1);
         OnRowSelected(column->list);
     } catch (...) {
         state->building = false;
@@ -12083,10 +12074,10 @@ void OnTick() {
         SyncViewButtonIcon(state);
         UpdateLastEdge(state);
 
-        HWND fileList = FindVisibleChild(state->topLevel, L"SHELLDLL_DefView");
+        HWND fileList = FindVisibleChildCached(&state->tickFileList, state->topLevel, L"SHELLDLL_DefView");
 
         // Columns per tab: another tab came to the front.
-        HWND tab = FindVisibleChild(state->topLevel, L"ShellTabWindowClass");
+        HWND tab = FindVisibleChildCached(&state->tickTab, state->topLevel, L"ShellTabWindowClass");
         if (tab && tab != state->currentTab && HandleTabSwitch(state, tab, fileList)) {
             return;
         }
@@ -12119,7 +12110,6 @@ void OnTick() {
                              SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 static int logged = 0;
                 if (logged++ < 8) {
-                    LogVerbose(L"the panel was covered by a sibling window, raised again");
                 }
             }
         }
@@ -12528,7 +12518,6 @@ void OnTick() {
             // brings it into view, which cut the centring short.
             if (known && panel && !inside && now >= state->scrollQuietUntil) {
                 state->focusColumn->list.Focus(mux::FocusState::Programmatic);
-                LogVerbose(L"focus taken back from Explorer's view");
             }
         } else {
             state->focusColumn = nullptr;
@@ -13142,7 +13131,6 @@ void TouchTrack(WindowState* state, mux::Input::PointerRoutedEventArgs const& ar
         g_touchY = screen.y;
         g_touchDown = down;
         if (g_outPointerId && g_touchEvents++ < 12) {
-            LogVerbose(L"touch: finger event during the drag out, down=%d at %ld,%ld", down ? 1 : 0, screen.x, screen.y);
         }
     } catch (...) {
     }
@@ -13172,8 +13160,6 @@ LRESULT CALLBACK TouchSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
             if (g_touchLogs++ < 30) {
                 wchar_t cls[64] = L"";
                 GetClassNameW(hwnd, cls, 64);
-                LogVerbose(L"touch: win32 message 0x%04X id=%u ok=%d at %ld,%ld hwnd=%p %s", msg, id, ok ? 1 : 0,
-                    ok ? info.ptPixelLocation.x : 0L, ok ? info.ptPixelLocation.y : 0L, hwnd, cls);
             }
         }
     }
@@ -13200,7 +13186,6 @@ void InstallTouchHook(WindowState* state) {
                 g_touchHooked.push_back(hwnd);
             }
         }
-        LogVerbose(L"touch: listening to the finger on %d window(s)", (int)g_touchHooked.size());
     } catch (...) {
         LogHresult(L"InstallTouchHook");
     }
@@ -13285,7 +13270,6 @@ winrt::fire_and_forget TouchDragPrepare(std::vector<std::wstring> paths, std::sh
         }
     } catch (...) {
         items.clear();
-        LogVerbose(L"touch: the files of the drag could not be opened, only the shell items go");
     }
     // The label of the panel's own drag, drawn once into a bitmap: the system's drag shows that
     // instead of a snapshot of the row. It is built off screen, then taken away.
@@ -13310,14 +13294,12 @@ winrt::fire_and_forget TouchDragPrepare(std::vector<std::wstring> paths, std::sh
                         pixels, winrt::Windows::Graphics::Imaging::BitmapPixelFormat::Bgra8, width, height,
                         winrt::Windows::Graphics::Imaging::BitmapAlphaMode::Premultiplied);
                 }
-                LogVerbose(L"touch: the label was drawn for the drag, %d x %d", width, height);
             }
             if (WindowState* after = StateForThisThread(false)) {
                 RemoveGhost(after);
             }
         }
     } catch (...) {
-        LogVerbose(L"touch: the label could not be drawn, the row's picture will do");
         if (WindowState* after = StateForThisThread(false)) {
             RemoveGhost(after);
         }
@@ -13327,7 +13309,6 @@ winrt::fire_and_forget TouchDragPrepare(std::vector<std::wstring> paths, std::sh
         g_touchPrep.cida = cida;
         g_touchPrep.picture = picture;
         g_touchPrep.ready = true;
-        LogVerbose(L"touch: the drag's items are ready (%d file(s))", (int)g_touchPrep.items.size());
     }
 }
 
@@ -13353,8 +13334,6 @@ winrt::fire_and_forget TouchDragRun(mux::UIElement list, decltype(DragState::tou
                 } catch (...) {
                 }
             }
-            LogVerbose(L"touch: the system's drag is starting with %d file(s) and %d byte(s) of shell items", (int)items.size(),
-                cida ? (int)cida->size() : 0);
             if (!items.empty()) {
                 args.Data().SetStorageItems(items);
             }
@@ -13405,8 +13384,6 @@ winrt::fire_and_forget TouchDragRun(mux::UIElement list, decltype(DragState::tou
                     POINT cursor{};
                     GetCursorPos(&cursor);
                     if (overLogs++ < 16) {
-                        LogVerbose(L"touch: over the panel at %.0f,%.0f (host), the cursor is at %ld,%ld", where.X, where.Y,
-                            cursor.x, cursor.y);
                     }
                 }
                 DragRefreshTarget(now, where);
@@ -13433,9 +13410,6 @@ winrt::fire_and_forget TouchDragRun(mux::UIElement list, decltype(DragState::tou
                 }
                 auto where = args.GetPosition(now->rootGrid);
                 DragRefreshTarget(now, where);
-                LogVerbose(L"touch: dropped in the panel, target column %d entry %d ok=%d",
-                    now->drag.targetColumn ? ColumnIndexOfList(now, now->drag.targetColumn->list) + 1 : 0,
-                    now->drag.targetEntry, now->drag.targetOk ? 1 : 0);
                 now->drag.platformDrag = false;
                 OnDragReleased(now);  // The drop itself, as for a drag of the mouse.
                 args.AcceptedOperation(dt::DataPackageOperation::Move);
@@ -13443,19 +13417,15 @@ winrt::fire_and_forget TouchDragRun(mux::UIElement list, decltype(DragState::tou
             });
             dropHooked = true;
         }
-        LogVerbose(L"touch: asking the system to drag %d item(s)", (int)items.size());
         auto dragOp = list.StartDragAsync(*point);
         g_dragOp = dragOp.as<winrt::Windows::Foundation::IAsyncInfo>();
         auto result = co_await dragOp;
         g_dragOp = nullptr;
-        LogVerbose(L"touch: the system's drag ended, operation %d", (int)result);
     } catch (winrt::hresult_error const& error) {
-        LogVerbose(L"touch: the system's drag failed, hr=0x%08lX %s", (unsigned long)error.code().value, error.message().c_str());
         if (WindowState* state = StateForThisThread(false)) {
             state->drag.platformDrag = false;  // The shell's drag takes over at the first move.
         }
     } catch (...) {
-        LogVerbose(L"touch: the system's drag failed");
         if (WindowState* state = StateForThisThread(false)) {
             state->drag.platformDrag = false;
         }
@@ -13523,7 +13493,6 @@ void OnDragHold(WindowState* state, muxc::ListView const& list) {
     } catch (...) {
         LogHresult(L"arming a touch drag");
     }
-    LogVerbose(L"touch: held, the drag is armed, scrollers locked=%d", (int)d.locked.size());
     // The system's drag, for what is on disk.
     try {
         std::vector<size_t> picked = SelectedEntries(d.column, list);
@@ -13563,7 +13532,6 @@ void OnDragHold(WindowState* state, muxc::ListView const& list) {
         if (!kids.empty() && d.touchPoint) {
             TouchDragPrepare(std::move(paths), cida);  // The drag itself starts at the first move.
         } else {
-            LogVerbose(L"touch: nothing on disk to hand to the system's drag, the shell's drag will do");
         }
     } catch (...) {
         LogHresult(L"starting the system's drag");
@@ -13605,13 +13573,9 @@ void OnDragPressed(WindowState* state, muxc::ListView const& list, muxc::ListVie
     }
     if (d.deviceType != 2) {
         auto point = args.GetCurrentPoint(list);
-        LogVerbose(L"touch: a press on a row, device=%d id=%u left=%d inContact=%d pressure=%.2f", d.deviceType,
-            args.Pointer().PointerId(), point.Properties().IsLeftButtonPressed() ? 1 : 0, point.IsInContact() ? 1 : 0,
-            point.Properties().Pressure());
     }
     static int logged = 0;
     if (logged++ < 6) {
-        LogVerbose(L"drag may start: pressed on row %d (entry %d) of column %d", rowIndex, entry, at + 1);
     }
 }
 
@@ -13941,8 +13905,6 @@ bool OnDragMoved(WindowState* state, Column* column, muxc::ListView const& list,
     auto at = point.Position();
     if (d.deviceType != 2 && d.movesLogged < 8) {
         d.movesLogged++;
-        LogVerbose(L"touch: move %d at %.0f,%.0f, left=%d inContact=%d, pending=%d active=%d", d.movesLogged, at.X, at.Y,
-            point.Properties().IsLeftButtonPressed() ? 1 : 0, point.IsInContact() ? 1 : 0, d.pending ? 1 : 0, d.active ? 1 : 0);
     }
     if (d.pending) {
         if (d.deviceType == 0 && (!d.armed || d.platformDrag)) {
@@ -13957,7 +13919,6 @@ bool OnDragMoved(WindowState* state, Column* column, muxc::ListView const& list,
             if (!g_touchPrep.ready || !d.pressedRow) {
                 return false;
             }
-            LogVerbose(L"touch: moved after the hold, starting the system's drag");
             decltype(DragState::touchPoint) now = args.GetCurrentPoint(d.pressedRow);
             TouchDragRun(d.pressedRow.as<mux::UIElement>(), now, g_touchPrep.items, g_touchPrep.cida, g_touchPrep.picture);
             return true;
@@ -14127,8 +14088,6 @@ struct OutDropSource : IDropSource {
             g_dropSourceLogs++;
             POINT where;
             GetCursorPos(&where);
-            LogVerbose(L"touch: the drag loop asks, keys=0x%lX escape=%d, cursor %ld,%ld, left button %s", (unsigned long)keys,
-                escape ? 1 : 0, where.x, where.y, (GetAsyncKeyState(VK_LBUTTON) & 0x8000) ? L"down" : L"up");
         }
         if (g_outPointerId) {
             POINT where;
@@ -14442,8 +14401,6 @@ void DoOutDrag(WindowState* state, Pidl sourceFolder, std::vector<Pidl> children
                       &effect);
     state->outDragActive = false;
     if (g_outDevice != 2) {
-        LogVerbose(L"touch: the shell's drag ran for %d ms, hr=0x%08lX, effect %lu", (int)(GetTickCount64() - outStarted), hr,
-            (unsigned long)effect);
     }
     g_outDevice = 2;
     if (g_outPointerId) {
@@ -14619,8 +14576,6 @@ void StartOutDrag(WindowState* state) {
     if (g_outDevice != 2) {
         POINT where;
         GetCursorPos(&where);
-        LogVerbose(L"touch: the drag leaves the panel, device=%d, the cursor is at %ld,%ld, the left button is %s", g_outDevice,
-            where.x, where.y, (GetAsyncKeyState(VK_LBUTTON) & 0x8000) ? L"down" : L"up");
     }
     g_keepCapture = g_outPointerId != 0;
     DragEnd(state);
@@ -18399,7 +18354,6 @@ void PaneAnimateIn(WindowState* state, DetailsPane* pane, float dx, float dy, mu
     if (!body || !inner) {
         return;
     }
-    LogVerbose(L"details pane: content in, dx=%.0f dy=%.0f", dx, dy);
     if (!g_paneAnim) {
         for (mux::UIElement e : {mux::UIElement(body), mux::UIElement(inner)}) {
             e.TranslationTransition(nullptr);
@@ -18526,7 +18480,6 @@ bool PaneHandleAltP(HWND hwnd, LPMSG msg) {
     if (msg->message == WM_SYSKEYDOWN && !(msg->lParam & (1 << 30))) {  // Not an auto-repeat.
         // No hold on the buttons: nothing flips them here (a click does), so they follow the pane at once.
         state->details->shortcutAt = GetTickCount64();
-        LogVerbose(L"details pane: Alt+P");
     }
     return true;
 }
@@ -19154,7 +19107,6 @@ bool PaneReadSelection(WindowState* state, DetailsPane* pane, std::wstring* key)
     swprintf(tail, ARRAYSIZE(tail), L"|%d|%llx", (int)children.size(), hash);
     std::wstring next = PathOf(folder.get()) + tail;
     if (next != pane->wantedKey) {
-        LogVerbose(L"details pane: Explorer's selection is now %d item(s) in \"%s\"", (int)children.size(), PathOf(folder.get()).c_str());
         pane->wantedKey = next;
         PaneClosePreview(pane);
         pane->wantedSince = GetTickCount64();
@@ -20690,7 +20642,7 @@ bool LabelsInstallPaintHooks() {
                g_labelsClassSlot, g_labelsNameSlot);
         return false;
     }
-    if (!Wh_SetFunctionHook(paintContent, (void*)LabelsPaintContent_Hook, (void**)&LabelsPaintContent_Original)) {
+    if (!WindhawkUtils::SetFunctionHook((LabelsPaintContent_t)paintContent, LabelsPaintContent_Hook, &LabelsPaintContent_Original)) {
         Wh_Log(L"labels: the PaintContent hook could not be set, labels are off");
         return false;
     }
@@ -21397,7 +21349,6 @@ void LabelsRefreshColumns() {
                 }
             }
         }
-        LogVerbose(L"LABELS COLUMNS refreshed rows=%d withDots=%d", rows, dots);
     } catch (...) {
     }
 }
@@ -21508,9 +21459,11 @@ muxc::MenuFlyout LabelsTagsSubmenu(std::vector<std::wstring> const& pathList, st
 
 // Called on each UI thread that holds label objects, at unload: its flyouts, its notice and its fonts.
 void LabelsRemoveMenuEntries();  // 10h
+void LabelsRestoreSortMenu();    // 10i2
 
 void LabelsReleaseThreadObjects() {
     LabelsRemoveMenuEntries();
+    LabelsRestoreSortMenu();
     t_labelsMenuFlyout = nullptr;
     t_labelsNotice = nullptr;
     t_labelsSection = LabelsSectionRef();
@@ -21527,21 +21480,17 @@ std::vector<std::wstring> LabelsSelectedPaths() {
     std::vector<std::wstring> paths;
     HWND topLevel = LabelsThreadTopLevel();
     if (!topLevel) {
-        LogVerbose(L"LABELS MENU selection: no Explorer window on this thread");
         return paths;
     }
     IShellBrowser* browser = BrowserOf(topLevel);
     if (!browser) {
-        LogVerbose(L"LABELS MENU selection: no shell browser for window %p", (void*)topLevel);
         return paths;
     }
     Pidl folder = CurrentFolder(browser);
     if (!folder) {
-        LogVerbose(L"LABELS MENU selection: no current folder");
         return paths;
     }
     std::vector<Pidl> selected = ExplorerSelection(browser);
-    LogVerbose(L"LABELS MENU selection: folder \"%s\", %d selected", PathOf(folder.get()).c_str(), (int)selected.size());
     for (auto const& child : selected) {
         std::wstring path = FilePathOf(folder.get(), child.get());
         if (path.empty()) {
@@ -21606,12 +21555,10 @@ void LabelsOnMenuOpening(Inspectable const& sender) {
         return;
     }
     if (LabelsMenuIsForNavPane()) {
-        LogVerbose(L"LABELS MENU no entry, the menu is the navigation pane's");
         return;
     }
     std::vector<std::wstring> paths = LabelsSelectedPaths();
     if (paths.empty()) {
-        LogVerbose(L"LABELS MENU no entry, selection=%d", (int)paths.size());
         return;
     }
     // The entry is there at once, disabled; whether the drive keeps the stream is asked on a mod thread (a share may be slow).
@@ -21657,7 +21604,6 @@ void LabelsOnMenuOpening(Inspectable const& sender) {
         }
     }
     secondary.InsertAt(at, button);
-    LogVerbose(L"LABELS MENU appended entries=%u selection=%d at=%u", secondary.Size(), (int)paths.size(), at);
 }
 
 }  // namespace
@@ -21714,7 +21660,6 @@ void WINAPI LabelsAppendMenuItem_Hook(void* self, void* flyout, void* menuItem) 
         hooked.key = key;
         hooked.flyout = winrt::make_weak(bar);
         all.push_back(std::move(hooked));
-        LogVerbose(L"LABELS MENU flyout seen, handler attached");
     } catch (...) {
     }
 }
@@ -21967,8 +21912,6 @@ HRESULT STDMETHODCALLTYPE LabelsSetValue_Hook(void* store, REFPROPERTYKEY key, R
                 }
                 PropVariantClear(&current);
                 std::vector<std::wstring> kept = LabelsKeywordsToWrite(LabelsStrings(value), real, labels);
-                LogVerbose(L"GROUP SetValue Keywords: %d written, %d real, %d labels, %d kept", (int)LabelsStrings(value).size(),
-                           (int)real.size(), (int)labels.size(), (int)kept.size());
                 std::vector<PCWSTR> pointers;
                 for (auto const& keyword : kept) {
                     pointers.push_back(keyword.c_str());
@@ -22011,9 +21954,9 @@ bool LabelsInstallGroupHook() {
                     IPropertyStore* store = nullptr;
                     if (SUCCEEDED(item->GetPropertyStore(GPS_DEFAULT, IID_PPV_ARGS(&store))) && store) {
                         void* target = (*(void***)store)[5];  // IPropertyStore: 3 GetCount, 4 GetAt, 5 GetValue.
-                        ok = Wh_SetFunctionHook(target, (void*)LabelsGetValue_Hook, (void**)&LabelsGetValue_Original) != FALSE;
+                        ok = WindhawkUtils::SetFunctionHook((LabelsGetValue_t)target, LabelsGetValue_Hook, &LabelsGetValue_Original) != FALSE;
                         void* setter = (*(void***)store)[6];  // 6 SetValue.
-                        if (ok && !Wh_SetFunctionHook(setter, (void*)LabelsSetValue_Hook, (void**)&LabelsSetValue_Original)) {
+                        if (ok && !WindhawkUtils::SetFunctionHook((LabelsSetValue_t)setter, LabelsSetValue_Hook, &LabelsSetValue_Original)) {
                             Wh_Log(L"labels: the SetValue hook could not be set");
                         }
                         store->Release();
@@ -22241,7 +22184,6 @@ struct ToolbarButtons {
 void ToolbarApplyCommandBar() {
     auto stack = t_toolbar.commandStack.get();
     if (!stack || !t_toolbar.known) {
-        LogVerbose(L"TOOLBAR command bar not applied: stack=%d known=%d", stack ? 1 : 0, t_toolbar.known ? 1 : 0);
         return;
     }
     int changed = 0, seen = 0;
@@ -22281,9 +22223,7 @@ void ToolbarApplyCommandBar() {
             entry->applied = wanted;
         }
     } catch (...) {
-        LogVerbose(L"TOOLBAR command bar apply threw");
     }
-    LogVerbose(L"TOOLBAR command bar: gap %d, %d of %d buttons changed", g_cmdGap.load(), changed, seen);
 }
 
 // The wanted width of the search box: the dragged one (kept while the setting it was made against is unchanged), else the setting.
@@ -22482,8 +22422,6 @@ void ToolbarSettingsChanged() {
         } catch (...) {
         }
     }
-    LogVerbose(L"TOOLBAR settings changed: on=%d navGap=%d commandGap=%d, %d threads", g_toolbar.load() ? 1 : 0, g_navGap.load(),
-               g_cmdGap.load(), (int)queues.size());
 }
 
 // At unload, on each thread that holds buttons: Explorer's margins are put back.
@@ -22563,7 +22501,6 @@ bool ToolbarTick(WindowState* state) {
     for (auto id : kToolbarIds) {
         auto found = ToolbarFindById(root, id, 0);
         if (!found) {
-            LogVerbose(L"TOOLBAR not found yet: %s", id);
             return false;
         }
         buttons.push_back(found);
@@ -22588,7 +22525,6 @@ bool ToolbarTick(WindowState* state) {
     // The command bar's buttons.
     auto commandBar = ToolbarFindById(root, L"FileExplorerCommandBar", 0);
     if (!commandBar) {
-        LogVerbose(L"TOOLBAR the command bar is not there yet");
         return false;
     }
     auto items = ToolbarFindById(commandBar, L"PrimaryItemsControl", 0);
@@ -22612,7 +22548,6 @@ bool ToolbarTick(WindowState* state) {
         stack = firstPanel(items, 0);
     }
     if (!stack) {
-        LogVerbose(L"TOOLBAR the command bar's stack is not there yet");
         return false;
     }
     found.commandStack = winrt::make_weak(stack);
@@ -22649,8 +22584,6 @@ bool ToolbarTick(WindowState* state) {
             found.addressGrid[1] = winrt::make_weak(normal);
             found.addressGridOriginal[1] = normal.CornerRadius();
         }
-        LogVerbose(L"TOOLBAR address radius: box %.1f text %.1f border %.1f", found.addressOriginal.TopLeft,
-                   found.addressTextOriginal.TopLeft, found.addressBorderOriginal.TopLeft);
     }
     if (auto box = ToolbarFindById(root, L"FileExplorerSearchBox", 0).try_as<muxc::Control>()) {
         found.search = winrt::make_weak(box);
@@ -22662,8 +22595,6 @@ bool ToolbarTick(WindowState* state) {
         ToolbarMakeHandle(grid);
     }
     ToolbarApplyNow();
-    LogVerbose(L"TOOLBAR gap %d applied to the four buttons, window=%p, contentRoot found=%d", g_navGap.load(),
-               (void*)state->topLevel, t_toolbar.contentRoot.get() ? 1 : 0);
     return true;
 }
 // The self-test of the toolbar's margins (debug build only): "TOOLBAR SELFTEST pass" or "TOOLBAR SELFTEST FAIL <what>".
@@ -22699,9 +22630,8 @@ void LabelsRenameKeywords(winrt::Windows::Foundation::Collections::IVector<muxc:
     for (auto const& base : items) {
         if (auto radio = base.try_as<muxc::RadioMenuFlyoutItem>()) {
             std::wstring text = std::wstring(radio.Text());
-            bool on = g_labels && g_labelsGroup;
+            bool on = g_labels && g_labelsGroup && !g_unloading;  // At unload the entry gets Windows' own name back.
             if (on && text == original) {
-                LogVerbose(L"SORTMENU renamed '%s' to '%s'", text.c_str(), ours.c_str());
                 radio.Text(ours);
             } else if (!on && text == ours) {
                 radio.Text(original);
@@ -22711,6 +22641,8 @@ void LabelsRenameKeywords(winrt::Windows::Foundation::Collections::IVector<muxc:
         }
     }
 }
+
+[[clang::no_destroy]] thread_local winrt::weak_ref<muxc::MenuFlyout> t_labelsSortMenu;  // This window's Sort and group menu.
 
 void LabelsOnSortMenuOpening(Inspectable const& sender) {
     if (g_unloading) {
@@ -22741,9 +22673,21 @@ bool LabelsSortMenuTick(WindowState* state) {
     if (!menu) {
         return false;
     }
+    t_labelsSortMenu = winrt::make_weak(menu);
     Keep(menu, menu.Opening(winrt::auto_revoke, [](Inspectable const& sender, Inspectable const&) { LabelsOnSortMenuOpening(sender); }));
     LabelsRenameKeywords(menu.Items());
     return true;
+}
+
+// At unload, on each thread that renamed the entry: Windows' own name is put back (the handler that would do it is revoked).
+void LabelsRestoreSortMenu() {
+    try {
+        if (auto menu = t_labelsSortMenu.get()) {
+            LabelsRenameKeywords(menu.Items());
+        }
+    } catch (...) {
+    }
+    t_labelsSortMenu = nullptr;
 }
 // ---- Window creation ----
 //
@@ -23287,8 +23231,6 @@ void DrainUi(mud::DispatcherQueue const& queue) {
             }
             MsgWaitForMultipleObjects(0, nullptr, FALSE, 10, QS_ALLINPUT);
         }
-        LogVerbose(L"window cleanup: the queue was run, round %d, %s after %llu ms", round + 1,
-            *ran ? L"marker reached" : L"timed out", GetTickCount64() - began);
     }
 }
 
