@@ -52,7 +52,7 @@ Brings a "Quick Commands" submenu to Windows Terminal, giving you one-click acce
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <cwctype>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -68,10 +68,12 @@ struct Settings {
 
 static Settings g_settings;
 
+static constexpr UINT QUICK_CMD_SUBMENU_ID = 0x6FFF; // ID of the "Quick Commands" submenu item itself
 static constexpr UINT QUICK_CMD_ID_BASE = 0x7000; // 28672
 static constexpr UINT QUICK_CMD_ID_MAX  = 0x7FFF; // up to 4096 items
 
-static HMENU g_lastInjectedMenu = nullptr;
+static std::mutex g_injectedMutex;
+static std::vector<HMENU> g_injectedMenus;
 
 static void AddKey(std::vector<INPUT>& inputs, WORD vk, WORD scan, DWORD flags) {
     INPUT in{};
@@ -87,6 +89,16 @@ static void AddUnicodeChar(std::vector<INPUT>& inputs, wchar_t ch) {
     AddKey(inputs, 0, ch, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP);
 }
 
+static bool KeyTypesChar(UINT vk, UINT scan, bool shift, bool capsOn,
+                         wchar_t ch, HKL hkl) {
+    BYTE keyState[256]{};
+    if (shift) keyState[VK_SHIFT] = 0x80;
+    if (capsOn) keyState[VK_CAPITAL] = 0x01;
+    WCHAR buf[4];
+    int n = ToUnicodeEx(vk, scan, keyState, buf, ARRAYSIZE(buf), 0x4, hkl);
+    return n == 1 && buf[0] == ch;
+}
+
 static void SendString(const std::wstring& text) {
     if (text.empty()) return;
 
@@ -94,6 +106,11 @@ static void SendString(const std::wstring& text) {
     DWORD tid = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
     HKL hkl = GetKeyboardLayout(tid);
     bool capsOn = (GetKeyState(VK_CAPITAL) & 1) != 0;
+
+    WORD lang = PRIMARYLANGID(LOWORD(reinterpret_cast<UINT_PTR>(hkl)));
+    bool imeLayout = lang == LANG_JAPANESE || lang == LANG_CHINESE || lang == LANG_KOREAN;
+
+    WORD shiftScan = static_cast<WORD>(MapVirtualKeyExW(VK_SHIFT, MAPVK_VK_TO_VSC, hkl));
 
     std::vector<INPUT> inputs;
     inputs.reserve(text.size() * 4);
@@ -109,34 +126,27 @@ static void SendString(const std::wstring& text) {
         }
 
         SHORT res = VkKeyScanExW(ch, hkl);
-        if (res == -1) {
+        WORD vk = LOBYTE(res);
+        UINT scan = MapVirtualKeyExW(vk, MAPVK_VK_TO_VSC, hkl);
+        bool shift = HIBYTE(static_cast<WORD>(res)) & 1;
+
+        bool useKey = !imeLayout && res != -1 &&
+                      (HIBYTE(static_cast<WORD>(res)) & ~1) == 0 && scan != 0;
+
+        if (useKey && !KeyTypesChar(vk, scan, shift, capsOn, ch, hkl)) {
+            shift = !shift; // Caps Lock may invert Shift for this key
+            useKey = KeyTypesChar(vk, scan, shift, capsOn, ch, hkl);
+        }
+
+        if (!useKey) {
             AddUnicodeChar(inputs, ch);
             continue;
         }
 
-        WORD vk    = LOBYTE(res);
-        BYTE state = HIBYTE(res); // 1 = Shift, 2 = Ctrl, 4 = Alt
-        WORD scan  = static_cast<WORD>(MapVirtualKeyExW(vk, MAPVK_VK_TO_VSC, hkl));
-
-        if ((state & ~7) != 0 || scan == 0) {
-            AddUnicodeChar(inputs, ch);
-            continue;
-        }
-
-        if (capsOn && iswalpha(ch)) state ^= 1;
-
-        bool shift = state & 1, ctrl = state & 2, alt = state & 4;
-
-        if (shift) AddKey(inputs, VK_SHIFT,   static_cast<WORD>(MapVirtualKeyExW(VK_SHIFT,   MAPVK_VK_TO_VSC, hkl)), 0);
-        if (ctrl)  AddKey(inputs, VK_CONTROL, static_cast<WORD>(MapVirtualKeyExW(VK_CONTROL, MAPVK_VK_TO_VSC, hkl)), 0);
-        if (alt)   AddKey(inputs, VK_MENU,    static_cast<WORD>(MapVirtualKeyExW(VK_MENU,    MAPVK_VK_TO_VSC, hkl)), 0);
-
-        AddKey(inputs, vk, scan, 0);
-        AddKey(inputs, vk, scan, KEYEVENTF_KEYUP);
-
-        if (alt)   AddKey(inputs, VK_MENU,    static_cast<WORD>(MapVirtualKeyExW(VK_MENU,    MAPVK_VK_TO_VSC, hkl)), KEYEVENTF_KEYUP);
-        if (ctrl)  AddKey(inputs, VK_CONTROL, static_cast<WORD>(MapVirtualKeyExW(VK_CONTROL, MAPVK_VK_TO_VSC, hkl)), KEYEVENTF_KEYUP);
-        if (shift) AddKey(inputs, VK_SHIFT,   static_cast<WORD>(MapVirtualKeyExW(VK_SHIFT,   MAPVK_VK_TO_VSC, hkl)), KEYEVENTF_KEYUP);
+        if (shift) AddKey(inputs, VK_SHIFT, shiftScan, 0);
+        AddKey(inputs, vk, static_cast<WORD>(scan), 0);
+        AddKey(inputs, vk, static_cast<WORD>(scan), KEYEVENTF_KEYUP);
+        if (shift) AddKey(inputs, VK_SHIFT, shiftScan, KEYEVENTF_KEYUP);
     }
 
     if (!inputs.empty()) {
@@ -186,13 +196,61 @@ static HMENU BuildSubMenu() {
     return hSub;
 }
 
-static void PrependQuickCommandsMenu(HMENU hMenu) {
-    HMENU hSub = BuildSubMenu();
-    if (!hSub) return;
+static int FindQuickCommandsItem(HMENU hMenu) {
+    int count = GetMenuItemCount(hMenu);
+    for (int i = 0; i < count; i++) {
+        MENUITEMINFOW mii{};
+        mii.cbSize = sizeof(mii);
+        mii.fMask  = MIIM_ID;
+        if (GetMenuItemInfoW(hMenu, i, TRUE, &mii) && mii.wID == QUICK_CMD_SUBMENU_ID) {
+            return i;
+        }
+    }
+    return -1;
+}
 
-    InsertMenuW(hMenu, 0, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
-    InsertMenuW(hMenu, 0, MF_BYPOSITION | MF_POPUP | MF_STRING,
-                reinterpret_cast<UINT_PTR>(hSub), L"Quick Commands");
+static void RemoveQuickCommandsMenu(HMENU hMenu) {
+    int idx;
+    while ((idx = FindQuickCommandsItem(hMenu)) != -1) {
+        DeleteMenu(hMenu, idx, MF_BYPOSITION);
+
+        if (idx < GetMenuItemCount(hMenu)) {
+            MENUITEMINFOW mii{};
+            mii.cbSize = sizeof(mii);
+            mii.fMask  = MIIM_FTYPE;
+            if (GetMenuItemInfoW(hMenu, idx, TRUE, &mii) && (mii.fType & MFT_SEPARATOR)) {
+                DeleteMenu(hMenu, idx, MF_BYPOSITION);
+            }
+        }
+    }
+}
+
+static bool PrependQuickCommandsMenu(HMENU hMenu) {
+    HMENU hSub = BuildSubMenu();
+    if (!hSub) return false;
+
+    MENUITEMINFOW mii{};
+    mii.cbSize     = sizeof(mii);
+    mii.fMask      = MIIM_ID | MIIM_SUBMENU | MIIM_STRING;
+    mii.wID        = QUICK_CMD_SUBMENU_ID;
+    mii.hSubMenu   = hSub;
+    mii.dwTypeData = const_cast<LPWSTR>(L"Quick Commands");
+
+    if (!InsertMenuItemW(hMenu, 0, TRUE, &mii)) {
+        DestroyMenu(hSub);
+        return false;
+    }
+
+    InsertMenuW(hMenu, 1, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
+    return true;
+}
+
+static void TrackInjectedMenu(HMENU hMenu) {
+    std::lock_guard<std::mutex> lock(g_injectedMutex);
+    for (HMENU h : g_injectedMenus) {
+        if (h == hMenu) return;
+    }
+    g_injectedMenus.push_back(hMenu);
 }
 
 using GetSystemMenu_t = HMENU(WINAPI*)(HWND, BOOL);
@@ -214,18 +272,12 @@ static bool ResolveSelection(UINT id, std::wstring& out) {
 static HMENU WINAPI Hook_GetSystemMenu(HWND hWnd, BOOL bRevert) {
     HMENU hMenu = Original_GetSystemMenu(hWnd, bRevert);
 
-    if (hMenu && !bRevert && hMenu != g_lastInjectedMenu) {
-        MENUITEMINFOW mii{};
-        mii.cbSize = sizeof(mii);
-        mii.fMask  = MIIM_ID;
-        if (GetMenuItemInfoW(hMenu, 0, TRUE, &mii)) {
-            if (mii.wID >= QUICK_CMD_ID_BASE && mii.wID <= QUICK_CMD_ID_MAX) {
-                return hMenu;
-            }
+    if (hMenu && !bRevert) {
+        RemoveQuickCommandsMenu(hMenu);
+        if (PrependQuickCommandsMenu(hMenu)) {
+            TrackInjectedMenu(hMenu);
+            Wh_Log(L"Quick Commands injected into system menu %p for HWND %p", hMenu, hWnd);
         }
-        PrependQuickCommandsMenu(hMenu);
-        g_lastInjectedMenu = hMenu;
-        Wh_Log(L"Quick Commands injected into system menu %p for HWND %p", hMenu, hWnd);
     }
     return hMenu;
 }
@@ -234,6 +286,10 @@ static BOOL WINAPI Hook_TrackPopupMenu(
     HMENU hMenu, UINT uFlags, int x, int y,
     int nReserved, HWND hWnd, const RECT* prcRect)
 {
+    if (FindQuickCommandsItem(hMenu) == -1) {
+        return Original_TrackPopupMenu(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
+    }
+
     UINT flags = uFlags | TPM_RETURNCMD;
     BOOL result = Original_TrackPopupMenu(hMenu, flags, x, y, nReserved, hWnd, prcRect);
 
@@ -244,7 +300,7 @@ static BOOL WINAPI Hook_TrackPopupMenu(
     }
 
     if (result && hWnd && !(uFlags & TPM_RETURNCMD)) {
-        PostMessageW(hWnd, WM_SYSCOMMAND, result & 0xFFF0, 0);
+        PostMessageW(hWnd, WM_SYSCOMMAND, result, 0);
         return TRUE;
     }
 
@@ -255,6 +311,10 @@ static BOOL WINAPI Hook_TrackPopupMenuEx(
     HMENU hMenu, UINT uFlags, int x, int y,
     HWND hWnd, LPTPMPARAMS lptpm)
 {
+    if (FindQuickCommandsItem(hMenu) == -1) {
+        return Original_TrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+    }
+
     UINT flags = uFlags | TPM_RETURNCMD;
     BOOL result = Original_TrackPopupMenuEx(hMenu, flags, x, y, hWnd, lptpm);
 
@@ -265,7 +325,7 @@ static BOOL WINAPI Hook_TrackPopupMenuEx(
     }
 
     if (result && hWnd && !(uFlags & TPM_RETURNCMD)) {
-        PostMessageW(hWnd, WM_SYSCOMMAND, result & 0xFFF0, 0);
+        PostMessageW(hWnd, WM_SYSCOMMAND, result, 0);
         return TRUE;
     }
 
@@ -338,7 +398,6 @@ BOOL Wh_ModInit() {
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Console Quick Paste: settings changed, reloading");
-    g_lastInjectedMenu = nullptr; // force re-injection on next GetSystemMenu call
     LoadSettings();
     Wh_Log(L"Console Quick Paste: %zu command(s), auto-enter=%s",
            g_settings.commands.size(),
@@ -346,5 +405,14 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
+    {
+        std::lock_guard<std::mutex> lock(g_injectedMutex);
+        for (HMENU hMenu : g_injectedMenus) {
+            if (IsMenu(hMenu)) {
+                RemoveQuickCommandsMenu(hMenu);
+            }
+        }
+        g_injectedMenus.clear();
+    }
     Wh_Log(L"Console Quick Paste: unloaded");
 }
