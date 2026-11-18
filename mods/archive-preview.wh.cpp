@@ -127,6 +127,7 @@ Disable external dragging to restore native dragging. **Clipboard copy and paste
 | **Columns** | Visibility, horizontal scrollbar, and date and size lookups for archives of 256 MiB or more. Windhawk settings take priority over saved column visibility choices. |
 | **Shortcuts** | Four extraction shortcuts. Enter `disabled` to turn a shortcut off. If two actions use the same keys, both shortcuts are disabled until you change one. |
 | **Updates and disabling** | Close Explorer windows that still contain an archive preview when the mod updates, recompiles, or is disabled. This is on by default and closes all tabs in each affected window. |
+| **Diagnostics** | Enable detailed logs when reporting a preview or extraction issue. Turn on Windhawk logging to see them. |
 
 Translated setting labels follow Windhawk's language. The preview language setting applies to the mod's controls. Windows and external extractor dialogs use their own language settings.
 
@@ -176,7 +177,7 @@ Check column visibility and the large-archive metadata settings. The provider ma
 
 ### Report a problem
 
-When reporting a problem, include your Windows version, archive format, selected backend, steps and result. Enable logs in Windhawk before reproducing it. Include `[AP lifecycle]` for a slow update or shutdown, `[AP list]` for a list recovery, or `[AP external drag]` for temporary folder cleanup. Remove private names and paths before sharing logs.
+When reporting a problem, include your Windows version, archive format, selected backend, steps and result. Enable Windhawk logging and turn on **Diagnostics > Detailed logs** before reproducing it. Include `[AP lifecycle]` for a slow update or shutdown, `[AP list]` for a list recovery, or `[AP external drag]` for temporary folder cleanup. Remove private names and paths before sharing logs.
 
 &nbsp;
 
@@ -434,6 +435,17 @@ Created by **[Luiz Bizzio](https://github.com/luizbizzio)** and licensed under *
   $name: Updates and disabling
   $name:es: Actualizaciones y desactivación
   $name:pt: Atualizações e desativação
+- Diagnostics:
+    - DetailedLogs: false
+      $name: Detailed logs
+      $name:es: Registros detallados
+      $name:pt: Logs detalhados
+      $description: Collect extra details about previews and extraction. Enable Windhawk logging to see them.
+      $description:es: Recopila más detalles sobre las vistas previas y la extracción. Activa los registros de Windhawk para verlos.
+      $description:pt: Coleta mais detalhes sobre prévias e extração. Ative os logs do Windhawk para vê-los.
+  $name: Diagnostics
+  $name:es: Diagnóstico
+  $name:pt: Diagnóstico
 */
 // ==/WindhawkModSettings==
 
@@ -713,14 +725,15 @@ namespace ArchivePreviewButtons {
 }
 
 namespace ArchivePreviewDiagnostics {
+    static std::atomic<bool> detailedLogs{false};
+
+    static void Load() {
+        detailedLogs.store(Wh_GetIntSetting(L"Diagnostics.DetailedLogs") != 0,
+                           std::memory_order_relaxed);
+    }
+
     static bool Enabled() {
-#ifdef WH_EDITING
-        return false;
-#else
-        // Use the same live switch as the Windhawk Wh_Log macro before work
-        // that has to happen outside that macro's argument list.
-        return InternalWh_IsLogEnabled(InternalWhModPtr) != FALSE;
-#endif
+        return detailedLogs.load(std::memory_order_relaxed);
     }
 }
 
@@ -1229,7 +1242,7 @@ static constexpr NoticeStrings kNotices_th = {
 };
 
 static constexpr NoticeStrings kNotices_fa = {
-    L"در حال استخراج…", L"در حال آماده‌سازی فایل‌ها…",
+    L"در حال استخراج…", L"در حال آماده\u200Cسازی فایل\u200Cها…",
     L"در حال شروع استخراج…", L"در حال لغو…",
     L"پیشرفت در برنامهٔ خارجی", L"استخراج را از پنجرهٔ برنامهٔ خارجی لغو کنید.",
     L"برنامهٔ استخراج پیدا نشد. تنظیمات افزونه را بررسی کنید.", L"برآورد",
@@ -1585,9 +1598,9 @@ static constexpr Catalog kCatalogs[] = {
     }, nullptr},
     {L"kn", false, {
         L"ಹೆಸರು", L"ಬದಲಾಯಿಸಿದ ದಿನಾಂಕ", L"ವಿಧ", L"ಗಾತ್ರ",
-        L"ಹಿಂದೆ", L"ಇಲ್ಲಿ ಹೊರತೆಗೆಯಿರಿ", L"ಈ ಫೋಲ್ಡರ್‌ಗೆ ಹೊರತೆಗೆಯಿರಿ…", L"ಆಯ್ದವುಗಳನ್ನು ಹೊರತೆಗೆಯಿರಿ",
-        L"ಆಯ್ದವು", L"ರದ್ದುಮಾಡಿ", L"ಆಯ್ದವುಗಳನ್ನು ಇಲ್ಲಿ ಹೊರತೆಗೆಯಿರಿ", L"ಆಯ್ದವುಗಳನ್ನು ಫೋಲ್ಡರ್‌ಗೆ ಹೊರತೆಗೆಯಿರಿ…",
-        L"ಆರ್ಕೈವ್ ಅನ್ನು ಫೋಲ್ಡರ್‌ಗೆ ಹೊರತೆಗೆಯಿರಿ…"
+        L"ಹಿಂದೆ", L"ಇಲ್ಲಿ ಹೊರತೆಗೆಯಿರಿ", L"ಈ ಫೋಲ್ಡರ್\u200Cಗೆ ಹೊರತೆಗೆಯಿರಿ…", L"ಆಯ್ದವುಗಳನ್ನು ಹೊರತೆಗೆಯಿರಿ",
+        L"ಆಯ್ದವು", L"ರದ್ದುಮಾಡಿ", L"ಆಯ್ದವುಗಳನ್ನು ಇಲ್ಲಿ ಹೊರತೆಗೆಯಿರಿ", L"ಆಯ್ದವುಗಳನ್ನು ಫೋಲ್ಡರ್\u200Cಗೆ ಹೊರತೆಗೆಯಿರಿ…",
+        L"ಆರ್ಕೈವ್ ಅನ್ನು ಫೋಲ್ಡರ್\u200Cಗೆ ಹೊರತೆಗೆಯಿರಿ…"
     }, nullptr},
     {L"kk", false, {
         L"Атауы", L"Өзгертілген күні", L"Түрі", L"Өлшемі",
@@ -1675,8 +1688,8 @@ static constexpr Catalog kCatalogs[] = {
     }, nullptr},
     {L"fa", true, {
         L"نام", L"تاریخ تغییر", L"نوع", L"اندازه",
-        L"بازگشت", L"استخراج در اینجا", L"استخراج در…", L"استخراج موارد انتخاب‌شده",
-        L"انتخاب‌شده", L"لغو", L"استخراج موارد انتخاب‌شده در اینجا", L"استخراج موارد انتخاب‌شده در…",
+        L"بازگشت", L"استخراج در اینجا", L"استخراج در…", L"استخراج موارد انتخاب\u200Cشده",
+        L"انتخاب\u200Cشده", L"لغو", L"استخراج موارد انتخاب\u200Cشده در اینجا", L"استخراج موارد انتخاب\u200Cشده در…",
         L"استخراج بایگانی در…"
     }, &kNotices_fa},
     {L"pa", false, {
@@ -1705,9 +1718,9 @@ static constexpr Catalog kCatalogs[] = {
     }, nullptr},
     {L"te", false, {
         L"పేరు", L"మార్చిన తేదీ", L"రకం", L"పరిమాణం",
-        L"వెనుకకు", L"ఇక్కడ వెలికితీయండి", L"ఫోల్డర్‌కు వెలికితీయండి…", L"ఎంచుకున్న వాటిని వెలికితీయండి",
-        L"ఎంచుకున్నవి", L"రద్దు చేయండి", L"ఎంచుకున్న వాటిని ఇక్కడ వెలికితీయండి", L"ఎంచుకున్న వాటిని ఫోల్డర్‌కు వెలికితీయండి…",
-        L"ఆర్కైవ్‌ను ఫోల్డర్‌కు వెలికితీయండి…"
+        L"వెనుకకు", L"ఇక్కడ వెలికితీయండి", L"ఫోల్డర్\u200Cకు వెలికితీయండి…", L"ఎంచుకున్న వాటిని వెలికితీయండి",
+        L"ఎంచుకున్నవి", L"రద్దు చేయండి", L"ఎంచుకున్న వాటిని ఇక్కడ వెలికితీయండి", L"ఎంచుకున్న వాటిని ఫోల్డర్\u200Cకు వెలికితీయండి…",
+        L"ఆర్కైవ్\u200Cను ఫోల్డర్\u200Cకు వెలికితీయండి…"
     }, nullptr},
     {L"ur", true, {
         L"نام", L"ترمیم کی تاریخ", L"قسم", L"حجم",
@@ -1818,7 +1831,7 @@ static constexpr Catalog kCatalogs[] = {
         L"آرڪائيو فولڊر ۾ ڪڍو…"
     }, nullptr},
     {L"si", false, {
-        L"නම", L"වෙනස් කළ දිනය", L"වර්ගය", L"ප්‍රමාණය",
+        L"නම", L"වෙනස් කළ දිනය", L"වර්ගය", L"ප්\u200Dරමාණය",
         L"ආපසු", L"මෙතැනට උපුටා ගන්න", L"ෆෝල්ඩරයකට උපුටා ගන්න…", L"තෝරාගත් දේ උපුටා ගන්න",
         L"තෝරාගත් දේ", L"අවලංගු කරන්න", L"තෝරාගත් දේ මෙතැනට උපුටා ගන්න", L"තෝරාගත් දේ ෆෝල්ඩරයකට උපුටා ගන්න…",
         L"සංරක්ෂිතය ෆෝල්ඩරයකට උපුටා ගන්න…"
@@ -1873,8 +1886,8 @@ static constexpr Catalog kCatalogs[] = {
     }, nullptr},
     {L"prs", true, {
         L"نام", L"تاریخ تغییر", L"نوع", L"اندازه",
-        L"برگشت", L"استخراج در اینجا", L"استخراج در فولدر…", L"استخراج موارد انتخاب‌شده",
-        L"انتخاب‌شده", L"لغو", L"استخراج موارد انتخاب‌شده در اینجا", L"استخراج موارد انتخاب‌شده در فولدر…",
+        L"برگشت", L"استخراج در اینجا", L"استخراج در فولدر…", L"استخراج موارد انتخاب\u200Cشده",
+        L"انتخاب\u200Cشده", L"لغو", L"استخراج موارد انتخاب\u200Cشده در اینجا", L"استخراج موارد انتخاب\u200Cشده در فولدر…",
         L"استخراج آرشیف در فولدر…"
     }, nullptr},
 };
@@ -13870,6 +13883,7 @@ static void LogShutdownState(PCWSTR phase, ULONGLONG elapsed) {
 }
 BOOL Wh_ModInit(){
     ArchivePreviewOptions::Load();
+    ArchivePreviewDiagnostics::Load();
     ArchivePreviewColumns::Load();
     Wh_Log(L"[AP lifecycle] phase=init version=%s pid=%lu windows_build=%lu mod_arch=x64 windows_ui_lang=0x%04X mod_lang=%s",
         WH_MOD_VERSION,GetCurrentProcessId(),WindowsBuildForLog(),
@@ -13902,6 +13916,7 @@ BOOL Wh_ModInit(){
 }
 void Wh_ModSettingsChanged(){
     ArchivePreviewOptions::Load();
+    ArchivePreviewDiagnostics::Load();
     ArchivePreviewColumns::Load(true);
     Wh_Log(L"[AP lifecycle] phase=settings-changed mod_lang=%s",ArchivePreviewText::LanguageTag());
     if(IsExplorer()){
