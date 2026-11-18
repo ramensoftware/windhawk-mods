@@ -48,14 +48,15 @@ stop all requests, disable the mod.
 * **Text alignment** - left or right inside the monitor area.
 * **Left offset** and **Monitor width** - position and size of the monitor area, in
   pixels from the left edge of the taskbar.
-* **Color preset** - Slate (default), Charcoal, Warm Graphite, Blue / Amber,
-  Porcelain, or Custom.
+* **Color preset** - Custom (default), Slate, Charcoal, Warm Graphite,
+  Blue / Amber, or Porcelain. New installs use Slate colors through the Custom
+  defaults. Existing installs keep their saved colors, including theme following.
 * **Custom text, gain and loss colors** - editable `#RRGGBB` values used
-  when Color preset is Custom. Existing custom color settings are preserved.
+  when Custom is selected.
 * **Background mode** - Transparent (default) or Solid. Solid gives the monitor
   its own opaque background for transparent taskbar themes such as DockLike.
-* **Background color** - `#RRGGBB`, used in Solid mode (default `#1E2633`). The
-  background fills the monitor area, including its full taskbar height.
+* **Custom background color** - `#RRGGBB` used with Custom in Solid mode
+  (default `#1E2633`). Named presets use their matching backgrounds.
 * **Refresh interval** - seconds between fetches (minimum 15).
 
 Changing any setting reloads the mod.
@@ -114,34 +115,37 @@ Changing any setting reloads the mod.
   $options:
   - left: Left
   - right: Right
-- ColorPreset: slate
+- ColorPreset: custom
   $name: Color preset
   $description: >-
-    Select a coordinated text, gain and loss palette. Custom keeps the
-    individual color settings below.
+    Custom preserves existing saved colors, including theme following.
+    New installs use Slate colors by default. Named presets include matching
+    backgrounds for Solid mode; their labels indicate suitable taskbar themes.
   $options:
-  - slate: Slate (default)
-  - charcoal: Charcoal
-  - warm_graphite: Warm Graphite
-  - blue_amber: Blue / Amber
-  - porcelain: Porcelain
-  - custom: Custom colors
-- TextColor: "#19FF00"
+  - custom: Custom (default)
+  - slate: Slate (dark taskbar)
+  - charcoal: Charcoal (dark taskbar)
+  - warm_graphite: Warm Graphite (dark taskbar)
+  - blue_amber: Blue / Amber (dark taskbar)
+  - porcelain: Porcelain (light taskbar)
+- TextColor: "#DEE5EF"
   $name: Custom text color
   $description: >-
     Hex color (#RRGGBB) for symbols and prices without an entry price.
-    Used only when Color preset is Custom. Leave empty to follow the taskbar theme.
-    Avoid pure magenta (#FF00FF) when Background mode is Transparent.
-- UpColor: "#00A850"
+    Used only with Custom. Leave empty to follow the taskbar theme.
+    Avoid #FF00FF in Transparent mode; it is the overlay color key.
+- UpColor: "#70DCC0"
   $name: Custom gain color
   $description: >-
     Hex color (#RRGGBB) for prices and percentages at or above their entry price.
-    Used only when Color preset is Custom.
-- DownColor: "#E0301E"
+    Used only with Custom. Avoid #FF00FF in Transparent mode;
+    it is the overlay color key.
+- DownColor: "#FFA0AD"
   $name: Custom loss color
   $description: >-
     Hex color (#RRGGBB) for prices and percentages below their entry price.
-    Used only when Color preset is Custom.
+    Used only with Custom. Avoid #FF00FF in Transparent mode;
+    it is the overlay color key.
 - BackgroundMode: transparent
   $name: Background mode
   $description: >-
@@ -151,10 +155,10 @@ Changing any setting reloads the mod.
   - transparent: Transparent
   - solid: Solid
 - BackgroundColor: "#1E2633"
-  $name: Background color
+  $name: Custom background color
   $description: >-
-    Hex color (#RRGGBB) used in Solid mode. Fills the full monitor area, whose
-    size is controlled by Monitor width and the taskbar height.
+    Hex color (#RRGGBB) used only with Custom in Solid mode.
+    Named presets automatically use their matching backgrounds.
 - RefreshSeconds: 60
   $name: Refresh interval (seconds)
   $description: >-
@@ -216,14 +220,20 @@ struct ColorPalette {
     COLORREF text;
     COLORREF gain;
     COLORREF loss;
+    COLORREF background;
 };
 
 constexpr ColorPalette kColorPalettes[] = {
-    {L"slate", RGB(0xDE, 0xE5, 0xEF), RGB(0x70, 0xDC, 0xC0), RGB(0xFF, 0xA0, 0xAD)},
-    {L"charcoal", RGB(0xE6, 0xE6, 0xE6), RGB(0x72, 0xD5, 0xA3), RGB(0xFF, 0x92, 0x92)},
-    {L"warm_graphite", RGB(0xEA, 0xE3, 0xD9), RGB(0xB2, 0xD4, 0x9A), RGB(0xF5, 0xA4, 0x91)},
-    {L"blue_amber", RGB(0xE4, 0xE8, 0xEE), RGB(0x8A, 0xC8, 0xFF), RGB(0xFF, 0xC0, 0x78)},
-    {L"porcelain", RGB(0x30, 0x36, 0x40), RGB(0x17, 0x62, 0x3D), RGB(0xA5, 0x27, 0x37)},
+    {L"slate", RGB(0xDE, 0xE5, 0xEF), RGB(0x70, 0xDC, 0xC0),
+     RGB(0xFF, 0xA0, 0xAD), RGB(0x1E, 0x26, 0x33)},
+    {L"charcoal", RGB(0xE6, 0xE6, 0xE6), RGB(0x72, 0xD5, 0xA3),
+     RGB(0xFF, 0x92, 0x92), RGB(0x20, 0x20, 0x20)},
+    {L"warm_graphite", RGB(0xEA, 0xE3, 0xD9), RGB(0xB2, 0xD4, 0x9A),
+     RGB(0xF5, 0xA4, 0x91), RGB(0x28, 0x25, 0x22)},
+    {L"blue_amber", RGB(0xE4, 0xE8, 0xEE), RGB(0x8A, 0xC8, 0xFF),
+     RGB(0xFF, 0xC0, 0x78), RGB(0x20, 0x24, 0x2B)},
+    {L"porcelain", RGB(0x30, 0x36, 0x40), RGB(0x17, 0x62, 0x3D),
+     RGB(0xA5, 0x27, 0x37), RGB(0xF3, 0xF4, 0xF6)},
 };
 
 struct EntryPrice {
@@ -867,11 +877,14 @@ void WINAPI CreateOverlayOnTaskbarThread(PVOID parameter) {
 
     if (!g_font) {
         int dpi = static_cast<int>(GetDpiForWindow(taskbar));
-        // Avoid color-key-colored fringes around glyphs in transparent mode.
+        // Avoid color-key fringes in Transparent mode; antialias on Solid.
+        const int fontQuality = g_settings.solidBackground
+                                    ? ANTIALIASED_QUALITY
+                                    : NONANTIALIASED_QUALITY;
         g_font = CreateFontW(-MulDiv(kFontPointSize, dpi, 72), 0, 0, 0,
                              FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                             NONANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+                             fontQuality, DEFAULT_PITCH, L"Segoe UI");
     }
 
     // Transparent mode uses a color key. Solid mode uses full opacity without a
@@ -985,7 +998,7 @@ void LoadSettings() {
 
     std::wstring preset = StringSetting::make(L"ColorPreset").get();
     if (preset.empty()) {
-        preset = L"slate";
+        preset = L"custom";
     }
     const ColorPalette* palette = FindColorPalette(preset.c_str());
     if (palette) {
@@ -993,19 +1006,20 @@ void LoadSettings() {
         g_settings.textColor = palette->text;
         g_settings.upColor = palette->gain;
         g_settings.downColor = palette->loss;
+        g_settings.backgroundColor = palette->background;
     } else {
         if (preset != L"custom") {
             Wh_Log(L"Unknown color preset %s, using custom colors", preset.c_str());
         }
         std::wstring textColor = StringSetting::make(L"TextColor").get();
         g_settings.hasTextColor = ParseColor(textColor, g_settings.textColor);
-        g_settings.upColor = ColorSetting(L"UpColor", RGB(0x00, 0xA8, 0x50));
-        g_settings.downColor = ColorSetting(L"DownColor", RGB(0xE0, 0x30, 0x1E));
+        g_settings.upColor = ColorSetting(L"UpColor", RGB(0x70, 0xDC, 0xC0));
+        g_settings.downColor = ColorSetting(L"DownColor", RGB(0xFF, 0xA0, 0xAD));
+        g_settings.backgroundColor =
+            ColorSetting(L"BackgroundColor", RGB(0x1E, 0x26, 0x33));
     }
     g_settings.solidBackground =
         wcscmp(StringSetting::make(L"BackgroundMode").get(), L"solid") == 0;
-    g_settings.backgroundColor =
-        ColorSetting(L"BackgroundColor", RGB(0x1E, 0x26, 0x33));
 }
 
 }  // namespace
