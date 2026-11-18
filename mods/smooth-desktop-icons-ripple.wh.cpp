@@ -140,7 +140,8 @@ static constexpr int kMaxRippleItems = 1024;
 struct RippleItem {
     RECT bounds;
     float delayMs;
-    float startU;  // progress already covered (when reversing a ripple)
+    float startU;    // progress already covered (when reversing a ripple)
+    float visDelta;  // opacity offset at startU, fades out by the end
     int lastKey;  // alpha | scale bucket last painted; -1 = unknown
 };
 
@@ -1168,19 +1169,33 @@ static void SetAlpha(
     RepaintList(state);
 }
 
+// Progress (0-1) of an item. It holds at startU until the item's delay has
+// passed, so a reversed item never jumps back while waiting.
+static float RippleItemProgress(const DesktopState* state, const RippleItem& item,
+                                float elapsedMs) {
+    const float per = state->ripplePerItemMs > 1.0f ? state->ripplePerItemMs : 1.0f;
+    const float t = elapsedMs > item.delayMs ? elapsedMs - item.delayMs : 0.0f;
+    return Clamp01(item.startU + t / per);
+}
+
+static float RippleCurveVis(bool showing, float u) {
+    return showing ? SmoothStep01(u * 1.6f) : 1.0f - SmoothStep01(u);
+}
+
 static int RippleItemValue(const DesktopState* state, const RippleItem& item,
                            float elapsedMs, float* scaleOut) {
-    const float per = state->ripplePerItemMs > 1.0f ? state->ripplePerItemMs : 1.0f;
-    const float u = Clamp01(item.startU + (elapsedMs - item.delayMs) / per);
+    const float u = RippleItemProgress(state, item, elapsedMs);
     const float minS = g_settings.minScale / 100.0f;
-    float vis, scale;
-    if (state->rippleShowing) {
-        vis = SmoothStep01(u * 1.6f);
-        scale = minS + (1.0f - minS) * EaseOutBack(u);
-    } else {
-        vis = 1.0f - SmoothStep01(u);
-        scale = minS + (1.0f - minS) * (1.0f - EaseInBack(u));
+    float vis = RippleCurveVis(state->rippleShowing, u);
+    if (item.visDelta != 0.0f && item.startU < 1.0f) {
+        // Reversed mid-way: the show and hide opacity curves aren't mirror
+        // images, so blend from the opacity the item had towards the curve.
+        const float w = 1.0f - Clamp01((u - item.startU) / (1.0f - item.startU));
+        vis = Clamp01(vis + item.visDelta * w);
     }
+    const float scale = state->rippleShowing
+                            ? minS + (1.0f - minS) * EaseOutBack(u)
+                            : minS + (1.0f - minS) * (1.0f - EaseInBack(u));
     if (scaleOut)
         *scaleOut = scale;
     return static_cast<int>(vis * 255.0f + 0.5f);
@@ -1264,6 +1279,7 @@ static void SetupRipple(DesktopState* state, bool showing, float prevElapsedMs) 
 
     float dists[kMaxRippleItems];
     float prevU[kMaxRippleItems];  // progress in the old direction, -1 = none
+    float prevVis[kMaxRippleItems];
     int prevKey[kMaxRippleItems];
     float maxDist = 1.0f;
     int n = 0;
@@ -1284,11 +1300,9 @@ static void SetupRipple(DesktopState* state, bool showing, float prevElapsedMs) 
         if (continuing && n < prevCount) {
             const RippleItem& old = state->rippleItems[n];
             if (EqualRect(&old.bounds, &bounds)) {
-                const float per = state->ripplePerItemMs > 1.0f
-                                      ? state->ripplePerItemMs
-                                      : 1.0f;
-                prevU[n] = Clamp01(old.startU +
-                                   (prevElapsedMs - old.delayMs) / per);
+                prevU[n] = RippleItemProgress(state, old, prevElapsedMs);
+                prevVis[n] =
+                    RippleItemValue(state, old, prevElapsedMs, nullptr) / 255.0f;
                 prevKey[n] = old.lastKey;
             }
         }
@@ -1310,9 +1324,13 @@ static void SetupRipple(DesktopState* state, bool showing, float prevElapsedMs) 
             // reached are already done; partly animated ones wait less.
             item.startU = 1.0f - prevU[i];
             item.delayMs = delay * (1.0f - item.startU);
+            item.visDelta = item.startU < 1.0f
+                                ? prevVis[i] - RippleCurveVis(showing, item.startU)
+                                : 0.0f;
             item.lastKey = prevKey[i];
         } else {
             item.startU = 0.0f;
+            item.visDelta = 0.0f;
             item.delayMs = delay;
             // Hiding starts from fully drawn icons, showing from nothing.
             item.lastKey = showing ? 0 : (255 | (200 << 8));
