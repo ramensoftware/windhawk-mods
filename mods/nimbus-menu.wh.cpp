@@ -3,7 +3,7 @@
 // @name            Nimbus Menu
 // @description     Replaces the Windows taskbar with a light dock and its own Start menu (also on the Windows key): smoked glass, macOS-like zoom, live window previews, one bar per monitor, file search with Everything
 // @description:pt-BR Troca a barra de tarefas do Windows por uma dock leve com Iniciar próprio (também na tecla Windows): vidro fumê, zoom como no macOS, prévia das janelas ao vivo, uma barra por monitor, busca de arquivos com o Everything
-// @version         1.0.0
+// @version         1.1.0
 // @author          igoredm
 // @github          https://github.com/igoredm
 // @include         windhawk.exe
@@ -23,7 +23,8 @@ Replaces the Windows taskbar with a light dock, one per monitor, with its own St
 
 * Floating dock or full-width bar; 4 looks (Névoa, Cristal, Grafite, Aurora).
 * macOS-like zoom (or Lift / Focus), live window previews (hover a thumbnail to peek), drag icons to reorder, pin and unpin.
-* Its own Start: pinned apps, all apps, app search, files (with [Everything](https://www.voidtools.com) or Windows Search) and Windows Settings pages. Compact or wide search.
+* Its own Start: pinned apps, all apps, recent downloads, app search, files (with [Everything](https://www.voidtools.com) or Windows Search) and Windows Settings pages. Compact or wide search.
+* Right-click menus like Windows': open file location, copy path, and End task on the dock (when it's on in Windows, or always).
 * The Windows key opens Nimbus' Start over any window (administrator ones too) and in games. Ctrl+Esc still opens Windows' Start. An optional shortcut (Alt+Space or Ctrl+Space) can open it too.
 * Per-monitor settings: format, auto-hide, what shows, only that monitor's windows.
 * The dock runs in its own Windhawk process and hides when a game or video is in full screen. Explorer only gets one small hook, for the Windows key.
@@ -39,7 +40,8 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
 
 * Dock flutuante ou barra fixa; 4 visuais (Névoa, Cristal, Grafite, Aurora).
 * Zoom como no macOS (ou Elevar / Foco), prévia das janelas ao vivo (parar o mouse na miniatura mostra a janela), arrastar ícones pra reorganizar, fixar e desafixar.
-* Iniciar próprio: fixados, todos os apps, busca de apps, arquivos (com o [Everything](https://www.voidtools.com) ou a busca do Windows) e telas das Configurações do Windows. Busca compacta ou larga.
+* Iniciar próprio: fixados, todos os apps, baixados recentes, busca de apps, arquivos (com o [Everything](https://www.voidtools.com) ou a busca do Windows) e telas das Configurações do Windows. Busca compacta ou larga.
+* Menus do botão direito como os do Windows: abrir o local do arquivo, copiar caminho e Finalizar tarefa na dock (quando está ligado no Windows, ou sempre).
 * A tecla Windows abre o Iniciar do Nimbus em qualquer janela (até de administrador) e em jogos. Ctrl+Esc continua abrindo o Iniciar do Windows. Um atalho opcional (Alt+Espaço ou Ctrl+Espaço) também pode abrir.
 * Ajustes por monitor: formato, esconder sozinha, o que aparece, só as janelas daquele monitor.
 * A dock roda num processo próprio do Windhawk e some quando um jogo ou vídeo está em tela cheia. No Explorador entra só um gancho pequeno, o da tecla Windows.
@@ -124,6 +126,21 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
   - altSpace: Alt + Espaço
   - ctrlSpace: Ctrl + Espaço
   - none: Nenhum
+- endTask: windows
+  $name: End task in the dock's app menu
+  $name:pt-BR: Finalizar tarefa no menu dos apps da dock
+  $description: >-
+    Ends the app even when it doesn't respond, like the Windows taskbar's option
+  $description:pt-BR: >-
+    Encerra o app mesmo quando ele não responde, como a opção da barra do Windows
+  $options:
+  - windows: Same as Windows (Settings, System, For developers)
+  - on: Always show
+  - off: Never show
+  $options:pt-BR:
+  - windows: Igual ao Windows (Configurações, Sistema, Para desenvolvedores)
+  - on: Sempre mostrar
+  - off: Nunca mostrar
 - searchLayout: larga
   $name: Search in Start
   $name:pt-BR: Busca no Iniciar
@@ -155,8 +172,8 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
 - magnification: 150
   $name: Hover zoom (%)
   $name:pt-BR: Zoom ao passar o mouse (%)
-  $description: 100 turns the zoom off
-  $description:pt-BR: 100 desliga o zoom
+  $description: From 100 (off) to 250
+  $description:pt-BR: De 100 (desligado) a 250
 - autoHide: true
   $name: Auto-hide
   $name:pt-BR: Esconder sozinha
@@ -372,6 +389,8 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
 #include <shellscalingapi.h>
 #include <wrl/client.h>
 #include <sddl.h>
+#include <chrono>
+#include <tlhelp32.h>
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -403,6 +422,7 @@ struct Settings {
     bool nevoaStart = true;             // startMenu: nevoa
     bool winKey = false;                // winKeyMode: nevoa (the Windows key opens Nimbus' Start)
     std::wstring startHotkey = L"none";  // altSpace | ctrlSpace | none
+    std::wstring endTask = L"windows";  // windows | on | off
     std::wstring fileSearch = L"everything";  // everything | windows | off
     bool wideSearch = false;            // searchLayout: larga
     std::wstring animation = L"zoom";   // zoom | elevar | foco | nenhuma
@@ -418,6 +438,16 @@ struct Theme {
 } g_theme;
 
 static D2D1_COLOR_F Rgba(int r, int g, int b, float a) { return D2D1::ColorF(r / 255.0f, g / 255.0f, b / 255.0f, a); }
+
+static bool TransparencyOn() {
+    DWORD v = 1, size = sizeof(v);
+    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                 L"EnableTransparency", RRF_RT_REG_DWORD, nullptr, &v, &size);
+    BOOL saver = FALSE;
+    SYSTEM_POWER_STATUS ps;
+    if (GetSystemPowerStatus(&ps) && ps.SystemStatusFlag == 1) saver = TRUE;
+    return v != 0 && !saver;
+}
 
 static void BuildTheme() {
     float op = g_set.tintOpacity / 100.0f;
@@ -445,6 +475,12 @@ static void BuildTheme() {
     if (g_set.customTint && g_set.style != L"grafite") {
         t.tint = Rgba(GetRValue(g_set.tint), GetGValue(g_set.tint), GetBValue(g_set.tint), t.tint.a);
     }
+    // Transparency effects off in Windows (or battery saver): its blur draws a black block, so the
+    // glass becomes the solid tint.
+    if (!TransparencyOn()) {
+        t.blur = false;
+        t.tint.a = 1;
+    }
     g_theme = t;
 }
 
@@ -462,7 +498,8 @@ enum StrId {
     S_TabAll, S_CountPinned, S_CountApps, S_PinHint, S_Apps, S_NoApps, S_BestMatch, S_FilesFolders,
     S_SearchFilesPre, S_SearchFilesPost, S_OpenEverything, S_ExplorerSearch, S_GetEverything, S_TypeMore,
     S_NoFiles, S_Settings, S_KindSetting, S_KindFolder, S_KindFile, S_KindApp, S_Open, S_OpenLocation,
-    S_Count
+    S_EndTask, S_TabRecent, S_CountRecent, S_NoRecent, S_CopyPath, S_AgoNow, S_AgoMin, S_AgoHour,
+    S_AgoDay, S_Count
 };
 
 static const wchar_t* const kStrEn[S_Count] = {
@@ -475,6 +512,8 @@ static const wchar_t* const kStrEn[S_Count] = {
     L"Open Everything to search files", L"Search files with File Explorer",
     L"Get Everything (free, instant search)", L"Type at least 2 letters", L"No files", L"Settings",
     L"Windows Settings", L"Folder", L"File", L"App", L"Open", L"Open file location",
+    L"End task", L"Downloads", L"%d files", L"Nothing downloaded in the last 30 days", L"Copy path",
+    L"just now", L"%d min ago", L"%d h ago", L"%d d ago",
 };
 
 static const wchar_t* const kStrPt[S_Count] = {
@@ -488,6 +527,8 @@ static const wchar_t* const kStrPt[S_Count] = {
     L"Buscar nos arquivos pelo Explorador", L"Baixar o Everything (grátis, busca na hora)",
     L"Digite pelo menos 2 letras", L"Nenhum arquivo", L"Configurações", L"Configurações do Windows", L"Pasta",
     L"Arquivo", L"App", L"Abrir", L"Abrir o local do arquivo",
+    L"Finalizar tarefa", L"Baixados", L"%d arquivos", L"Nada baixado nos últimos 30 dias",
+    L"Copiar caminho", L"agora", L"há %d min", L"há %d h", L"há %d d",
 };
 
 static bool IsPortugueseUi() {
@@ -518,6 +559,7 @@ void LoadSettings() {
     g_set.nevoaStart = str(L"startMenu", L"nevoa") != L"windows";
     g_set.winKey = str(L"winKeyMode", L"nevoa") == L"nevoa";
     g_set.startHotkey = str(L"startHotkey", L"none");
+    g_set.endTask = str(L"endTask", L"windows");
     g_set.fileSearch = str(L"fileSearch", L"everything");
     g_set.wideSearch = str(L"searchLayout", L"larga") == L"larga";
     g_set.animation = str(L"animation", L"zoom");
@@ -623,6 +665,29 @@ static std::wstring ProcessPath(DWORD pid) {
     return out;
 }
 
+static std::wstring DirOf(const std::wstring& p);
+static bool IsGenericDir(const std::wstring& dirLower);
+
+// Some apps show their window from a helper in a subfolder (Steam: bin\cef\...\steamwebhelper.exe,
+// started by steam.exe). Then the app is the parent program, whose folder contains the helper's.
+static std::wstring MainProgramOf(DWORD pid, const std::wstring& exe) {
+    if (exe.empty()) return exe;
+    DWORD parent = 0;
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return exe;
+    PROCESSENTRY32W pe = {sizeof(pe)};
+    for (BOOL ok = Process32FirstW(snap, &pe); ok; ok = Process32NextW(snap, &pe)) {
+        if (pe.th32ProcessID == pid) { parent = pe.th32ParentProcessID; break; }
+    }
+    CloseHandle(snap);
+    if (!parent) return exe;
+    std::wstring pexe = ProcessPath(parent);
+    if (pexe.empty()) return exe;
+    std::wstring dir = DirOf(exe), pdir = DirOf(pexe);
+    if (pdir.size() < dir.size() && dir.compare(0, pdir.size(), pdir) == 0 && !IsGenericDir(pdir)) return pexe;
+    return exe;
+}
+
 static WinInfo GetWinInfo(HWND hwnd) {
     auto it = g_winCache.find(hwnd);
     if (it != g_winCache.end()) return it->second;
@@ -633,7 +698,7 @@ static WinInfo GetWinInfo(HWND hwnd) {
     }
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
-    info.exe = ProcessPath(pid);
+    info.exe = MainProgramOf(pid, ProcessPath(pid));
     g_winCache[hwnd] = info;
     return info;
 }
@@ -1168,7 +1233,7 @@ static std::vector<HWND> DockWins(const Dock& d, const App& a) {
         if (MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) == d.mon) out.push_back(h);
     return out;
 }
-constexpr int kBandSteps = 5;  // blur bands per rounded end (2 * steps + 1 windows per dock)
+constexpr int kBandSteps = 10;  // blur bands per rounded end (2 * steps + 1 windows per dock)
 
 // Where a dragged icon would land among the pinned ones (index in g_pins).
 static int PinInsertIndexAt(Dock& d, float x) {
@@ -1689,15 +1754,28 @@ static void ClickApp(Dock& d, App& a) {
     Activate(wins.front());
 }
 
+// How to pin an open app. Its window's AppUserModelID only works when an app in Start has it (Steam
+// sets Valve.Steam.Client on its window, but its shortcut doesn't): otherwise the program's path.
+static bool AumidInStart(const std::wstring& aumid) {
+    ComPtr<IShellItem> item;
+    return SUCCEEDED(SHCreateItemFromParsingName((L"shell:AppsFolder\\" + aumid).c_str(), nullptr, IID_PPV_ARGS(&item)));
+}
+
+static bool PinForApp(const App& a, Pin& out) {
+    if (!a.aumid.empty() && (a.exe.empty() || AumidInStart(a.aumid))) out = {L"aumid", a.aumid};
+    else if (!a.exe.empty()) out = {L"exe", a.exe};
+    else return false;
+    return true;
+}
+
 static void TogglePin(const std::wstring& key) {
     for (auto& a : g_apps) {
         if (a.key != key || a.start) continue;
         if (a.pinned) {
             if (a.pinIndex >= 0 && a.pinIndex < (int)g_pins.size()) g_pins.erase(g_pins.begin() + a.pinIndex);
-        } else if (!a.aumid.empty()) {
-            g_pins.push_back({L"aumid", a.aumid});
-        } else if (!a.exe.empty()) {
-            g_pins.push_back({L"exe", a.exe});
+        } else {
+            Pin p;
+            if (PinForApp(a, p)) g_pins.push_back(p);
         }
         SavePins();
         break;
@@ -1719,11 +1797,7 @@ static void DropDrag(Dock& d, const std::wstring& key, float x, float y) {
             moving = g_pins[a.pinIndex];
             g_pins.erase(g_pins.begin() + a.pinIndex);
             if (ins > a.pinIndex) ins--;
-        } else if (!a.aumid.empty()) {
-            moving = {L"aumid", a.aumid};
-        } else if (!a.exe.empty()) {
-            moving = {L"exe", a.exe};
-        } else {
+        } else if (!PinForApp(a, moving)) {
             return;
         }
         ins = std::clamp(ins, 0, (int)g_pins.size());
@@ -1778,6 +1852,39 @@ static void ShowDockMenu(Dock& d, POINT screen) {
     Invalidate(d);
 }
 
+// "End task", like the Windows taskbar's: only when it's turned on in Windows (Settings > System >
+// For developers > End task). Ends the processes of the app's windows, even when they don't respond.
+static bool EndTaskEnabled() {
+    if (g_set.endTask == L"on") return true;
+    if (g_set.endTask == L"off") return false;
+    for (const wchar_t* key : {L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced\\TaskbarDeveloperSettings",
+                               L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"}) {
+        DWORD v = 0, size = sizeof(v);
+        if (RegGetValueW(HKEY_CURRENT_USER, key, L"TaskbarEndTask", RRF_RT_REG_DWORD, nullptr, &v, &size) == ERROR_SUCCESS)
+            return v != 0;
+    }
+    return false;
+}
+
+static void EndTask(const std::vector<HWND>& wins) {
+    std::vector<DWORD> pids;
+    for (HWND h : wins) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(h, &pid);
+        if (pid && pid != GetCurrentProcessId() && std::find(pids.begin(), pids.end(), pid) == pids.end())
+            pids.push_back(pid);
+    }
+    for (DWORD pid : pids) {
+        HANDLE p = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
+        if (!p) {
+            Log(L"End task: can't open process %u (%u)", pid, GetLastError());
+            continue;
+        }
+        if (!TerminateProcess(p, 1)) Log(L"End task: TerminateProcess %u failed (%u)", pid, GetLastError());
+        CloseHandle(p);
+    }
+}
+
 static void ShowMenu(Dock& d, int elem, POINT screen) {
     App& a = g_apps[d.elems[elem].app];
     if (a.start) { ShowDockMenu(d, screen); return; }
@@ -1789,12 +1896,14 @@ static void ShowMenu(Dock& d, int elem, POINT screen) {
     if (!wins.empty()) {
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(m, MF_STRING, 3, wins.size() > 1 ? Tr(S_CloseAll) : Tr(S_CloseWindow));
+        if (EndTaskEnabled()) AppendMenuW(m, MF_STRING, 4, Tr(S_EndTask));
     }
     int cmd = TrackDockMenu(d, m, screen);
     for (auto& x : g_apps) {
         if (x.key != key) continue;
         if (cmd == 1) Launch(x);
         if (cmd == 3) for (HWND h : wins) PostMessageW(h, WM_SYSCOMMAND, SC_CLOSE, 0);
+        if (cmd == 4) EndTask(wins);
         break;
     }
     if (cmd == 2) TogglePin(key);
@@ -2161,9 +2270,10 @@ struct StartItem {
     std::wstring keywords;      // settings: other words that find it
     ComPtr<IWICBitmapSource> icon;
     bool iconTried = false;
+    ULONGLONG when = 0;         // Downloads tab: last change
 };
 
-enum StartRowKind { RowApp, RowFile, RowTabPinned, RowTabAll, RowPower, RowAction };
+enum StartRowKind { RowApp, RowFile, RowTabPinned, RowTabAll, RowPower, RowAction, RowTabRecent };
 
 // Without Everything running: what the files part offers instead.
 enum EverythingState { EvOk, EvClosed, EvMissing };
@@ -2194,6 +2304,11 @@ struct StartMenu {
     ComPtr<IDWriteTextFormat> font, small, section, glyphs;
     std::unordered_map<std::wstring, ComPtr<ID2D1Bitmap>> bmps;
     std::wstring query;
+    size_t caret = 0, anchor = 0;  // text cursor and the other end of the selection (equal: no selection)
+    float textScroll = 0;           // search text scrolled left when it doesn't fit
+    D2D1_RECT_F textRc{};           // search text box (panel coordinates)
+    bool selecting = false;         // mouse held down in the search text
+    DWORD lastTextClick = 0;
     int tab = 0;  // 0 pinned, 1 all apps
     float scroll = 0, maxScroll = 0;
     int hover = -1, sel = 0;
@@ -2525,6 +2640,155 @@ static void OnEverythingReply(const COPYDATASTRUCT* cds) {
     RenderStart();
 }
 
+// ---- "Downloads" tab: files that came from the internet (any folder), newest first ----
+// Windows marks them with a Zone.Identifier stream (the "this file came from another computer"
+// warning). Everything lists the files changed in the last 30 days, newest first; the ones with that
+// mark are shown. Without Everything: the Downloads folder.
+
+constexpr ULONG_PTR kEverythingRecentReply = 0x4E455642;
+constexpr size_t kRecentMax = 30;
+std::vector<StartItem> g_recent;
+bool g_recentLoaded = false;
+
+static std::wstring AgoText(ULONGLONG when) {
+    FILETIME nowFt;
+    GetSystemTimeAsFileTime(&nowFt);
+    ULONGLONG now = ((ULONGLONG)nowFt.dwHighDateTime << 32) | nowFt.dwLowDateTime;
+    long long mins = now > when ? (long long)((now - when) / 600000000ULL) : 0;
+    wchar_t buf[64];
+    if (mins < 1) return Tr(S_AgoNow);
+    if (mins < 60) swprintf_s(buf, Tr(S_AgoMin), (int)mins);
+    else if (mins < 60 * 24) swprintf_s(buf, Tr(S_AgoHour), (int)(mins / 60));
+    else swprintf_s(buf, Tr(S_AgoDay), (int)(mins / (60 * 24)));
+    return buf;
+}
+
+static void AddRecent(const std::wstring& full, ULONGLONG when) {
+    StartItem it;
+    it.file = true;
+    it.launch = full;
+    it.name = PathFindFileNameW(full.c_str());
+    std::wstring dir = full.substr(0, full.size() - it.name.size());
+    if (dir.size() > 3 && dir.back() == L'\\') dir.pop_back();
+    it.path = AgoText(when) + L"   " + dir;
+    it.when = when;
+    g_recent.push_back(std::move(it));
+}
+
+static bool CameFromInternet(const std::wstring& full) {
+    return GetFileAttributesW((full + L":Zone.Identifier").c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+static void LoadRecentFromDownloads() {
+    PWSTR dl = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_Downloads, 0, nullptr, &dl)) || !dl) return;
+    std::wstring dir = dl;
+    CoTaskMemFree(dl);
+    struct F { std::wstring path; ULONGLONG when; };
+    std::vector<F> files;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileExW((dir + L"\\*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, 0);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (fd.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)) continue;
+        ULONGLONG w = ((ULONGLONG)fd.ftLastWriteTime.dwHighDateTime << 32) | fd.ftLastWriteTime.dwLowDateTime;
+        ULONGLONG c = ((ULONGLONG)fd.ftCreationTime.dwHighDateTime << 32) | fd.ftCreationTime.dwLowDateTime;
+        files.push_back({dir + L"\\" + fd.cFileName, std::max(w, c)});
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    std::sort(files.begin(), files.end(), [](const F& a, const F& b) { return a.when > b.when; });
+    for (size_t i = 0; i < files.size() && i < kRecentMax; i++) AddRecent(files[i].path, files[i].when);
+}
+
+// Newest first, each file once, at most kRecentMax.
+static void FinishRecent() {
+    std::stable_sort(g_recent.begin(), g_recent.end(), [](const StartItem& a, const StartItem& b) { return a.when > b.when; });
+    std::vector<StartItem> out;
+    for (auto& it : g_recent) {
+        if (out.size() >= kRecentMax) break;
+        if (std::none_of(out.begin(), out.end(), [&](const StartItem& o) { return EqI(o.launch, it.launch); }))
+            out.push_back(std::move(it));
+    }
+    g_recent = std::move(out);
+}
+
+static void LoadRecent() {
+    g_recent.clear();
+    g_recentLoaded = true;
+    // Everything in the Downloads folder (many browsers and apps don't mark their files)...
+    LoadRecentFromDownloads();
+    // ...plus files with the "from the internet" mark anywhere else (Everything's answer adds them).
+    HWND ev = g_set.fileSearch == L"everything" ? FindWindowW(L"EVERYTHING_TASKBAR_NOTIFICATION", nullptr) : nullptr;
+    if (ev) {
+        // EVERYTHING_IPC_QUERY2W: reply window, reply id, search flags, offset, max results, request
+        // flags (full path 0x4, date modified 0x40, attributes 0x100), sort (date modified, newest first).
+        const wchar_t* search =
+            L"file: dm:last30days !\\AppData\\ !\\Windows\\ !\\$Recycle.Bin\\ !\\ProgramData\\ "
+            L"!\"\\Program Files\" !\\node_modules\\ !\\.git\\";
+        size_t len = wcslen(search);
+        std::vector<BYTE> buf(sizeof(DWORD) * 7 + (len + 1) * sizeof(WCHAR));
+        DWORD* p = (DWORD*)buf.data();
+        p[0] = (DWORD)(UINT_PTR)g_start.hwnd;
+        p[1] = (DWORD)kEverythingRecentReply;
+        p[2] = 0;
+        p[3] = 0;
+        p[4] = 1500;
+        p[5] = 0x4 | 0x40 | 0x100;
+        p[6] = 14;  // EVERYTHING_SORT_DATE_MODIFIED_DESCENDING
+        memcpy(buf.data() + sizeof(DWORD) * 7, search, (len + 1) * sizeof(WCHAR));
+        COPYDATASTRUCT cds = {18 /* EVERYTHING_IPC_COPYDATA_QUERY2W */, (DWORD)buf.size(), buf.data()};
+        DWORD_PTR result = 0;
+        if (SendMessageTimeoutW(ev, WM_COPYDATA, (WPARAM)g_start.hwnd, (LPARAM)&cds, SMTO_ABORTIFHUNG, 500, &result) &&
+            result)
+            return;  // the answer comes as WM_COPYDATA (OnEverythingRecentReply)
+        Log(L"downloads: Everything didn't take the query");
+    }
+    FinishRecent();
+}
+
+static void OnEverythingRecentReply(const COPYDATASTRUCT* cds) {
+    // EVERYTHING_IPC_LIST2: total, count, offset, request flags, sort, then {flags, data offset} per
+    // item; each item's data: full path (DWORD length, text, null), date modified (FILETIME), attributes.
+    if (!cds->lpData || cds->cbData < sizeof(DWORD) * 5) return;
+    const BYTE* base = (const BYTE*)cds->lpData;
+    const BYTE* end = base + cds->cbData;
+    const DWORD* list = (const DWORD*)base;
+    DWORD num = list[1], flags = list[3];
+    if (flags != (0x4 | 0x40 | 0x100)) {
+        Log(L"downloads: unexpected reply flags %X", flags);
+        FinishRecent();
+        if (g_start.open) RenderStart();
+        return;
+    }
+    struct Item2 { DWORD flags, dataOffset; };
+    const Item2* items = (const Item2*)(list + 5);
+    int checked = 0, marked = 0;
+    for (DWORD i = 0; i < num && marked < (int)kRecentMax; i++) {
+        if ((const BYTE*)(items + i + 1) > end) break;
+        const BYTE* d = base + items[i].dataOffset;
+        if (d + sizeof(DWORD) > end) break;
+        DWORD len = *(const DWORD*)d;
+        d += sizeof(DWORD);
+        if (d + (size_t)(len + 1) * sizeof(WCHAR) + 8 + sizeof(DWORD) > end) break;
+        std::wstring full((const wchar_t*)d, len);
+        d += (size_t)(len + 1) * sizeof(WCHAR);
+        ULONGLONG when = *(const ULONGLONG UNALIGNED*)d;
+        d += 8;
+        DWORD attr = *(const DWORD UNALIGNED*)d;
+        // Cloud placeholders (OneDrive "online only"): reading their streams could download them.
+        if (attr & (FILE_ATTRIBUTE_OFFLINE | 0x00040000 /* RECALL_ON_OPEN */ | 0x00400000 /* RECALL_ON_DATA_ACCESS */))
+            continue;
+        checked++;
+        if (CameFromInternet(full)) {
+            AddRecent(full, when);
+            marked++;
+        }
+    }
+    FinishRecent();
+    Log(L"downloads: %u files from Everything, %d checked, %d marked, %zu shown", num, checked, marked, g_recent.size());
+    if (g_start.open) RenderStart();
+}
+
 static void PlaceStartBands();
 
 static void UpdateSearch() {
@@ -2629,10 +2893,21 @@ static void Power(int which) {
     }
 }
 
+// Icons come from the shell, and some take a while (Store apps): each frame loads only what fits in
+// a few milliseconds, and the rest comes in the next frames (TIMER_START_ICONS), so scrolling
+// through all apps never stalls.
+constexpr UINT_PTR TIMER_START_ICONS = 25;
+static std::chrono::steady_clock::time_point g_iconBudgetEnd;
+static bool g_iconsPending = false;
+
 static ID2D1Bitmap* StartIcon(StartItem& it) {
     std::wstring key = it.launch;
     auto f = g_start.bmps.find(key);
     if (f != g_start.bmps.end()) return f->second.Get();
+    if (!it.iconTried && std::chrono::steady_clock::now() > g_iconBudgetEnd) {
+        g_iconsPending = true;
+        return nullptr;
+    }
     if (!it.iconTried) {
         it.iconTried = true;
         ComPtr<IShellItem> item;
@@ -2647,7 +2922,27 @@ static ID2D1Bitmap* StartIcon(StartItem& it) {
 
 static float SS(float v) { return v * g_start.scale; }
 
+// The search text on one line (no wrapping), for drawing and for mouse hit tests.
+static ComPtr<IDWriteTextLayout> QueryLayout() {
+    auto& s = g_start;
+    ComPtr<IDWriteTextLayout> lay;
+    if (!g_dw || !s.font) return lay;
+    g_dw->CreateTextLayout(s.query.c_str(), (UINT32)s.query.size(), s.font.Get(), 100000.0f,
+                           s.textRc.bottom - s.textRc.top, &lay);
+    if (lay) lay->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    return lay;
+}
+
+static void RenderStartFrame();
+
 static void RenderStart() {
+    g_iconBudgetEnd = std::chrono::steady_clock::now() + std::chrono::milliseconds(8);
+    g_iconsPending = false;
+    RenderStartFrame();
+    if (g_iconsPending && g_start.open) SetTimer(g_start.hwnd, TIMER_START_ICONS, 16, nullptr);
+}
+
+static void RenderStartFrame() {
     if (!g_start.open && !g_start.closing) return;
     auto& s = g_start;
     if (!s.rt) {
@@ -2717,23 +3012,46 @@ static void RenderStart() {
     rt->DrawRoundedRectangle(D2D1::RoundedRect(sr, SS(22), SS(22)), line.Get(), sw);
     rt->DrawTextW(L"", 1, s.glyphs.Get(), D2D1::RectF(sr.left + SS(16), sr.top, sr.left + SS(40), sr.bottom), sub.Get());
     D2D1_RECT_F tr = D2D1::RectF(sr.left + SS(44), sr.top, sr.right - SS(16), sr.bottom);
+    s.textRc = tr;
+    s.caret = std::min(s.caret, s.query.size());
+    s.anchor = std::min(s.anchor, s.query.size());
     if (s.query.empty()) {
+        s.textScroll = 0;
         rt->DrawTextW(Tr(S_SearchHint), (UINT32)wcslen(Tr(S_SearchHint)), s.font.Get(), tr, sub.Get());
-    } else {
-        ComPtr<IDWriteTextLayout> lay;
-        g_dw->CreateTextLayout(s.query.c_str(), (UINT32)s.query.size(), s.font.Get(), tr.right - tr.left, tr.bottom - tr.top, &lay);
-        if (lay) {
-            rt->DrawTextLayout(D2D1::Point2F(tr.left, tr.top), lay.Get(), text.Get());
-            DWRITE_TEXT_METRICS tm;
-            lay->GetMetrics(&tm);
-            if (s.caretOn) {
-                float cx = tr.left + tm.widthIncludingTrailingWhitespace + SS(1);
-                rt->FillRectangle(D2D1::RectF(cx, sr.top + SS(13), cx + sw, sr.bottom - SS(13)), text.Get());
+        if (s.caretOn)
+            rt->FillRectangle(D2D1::RectF(tr.left, sr.top + SS(13), tr.left + sw, sr.bottom - SS(13)), text.Get());
+    } else if (ComPtr<IDWriteTextLayout> lay = QueryLayout()) {
+        float boxW = tr.right - tr.left;
+        DWRITE_HIT_TEST_METRICS hm;
+        FLOAT cx = 0, cy = 0;
+        lay->HitTestTextPosition((UINT32)s.caret, FALSE, &cx, &cy, &hm);
+        DWRITE_TEXT_METRICS tm;
+        lay->GetMetrics(&tm);
+        // Keep the cursor in view when the text is wider than the box.
+        if (cx - s.textScroll > boxW - SS(2)) s.textScroll = cx - boxW + SS(2);
+        if (cx - s.textScroll < 0) s.textScroll = cx;
+        s.textScroll = std::clamp(s.textScroll, 0.0f, std::max(0.0f, tm.widthIncludingTrailingWhitespace + SS(2) - boxW));
+        float ox = tr.left - s.textScroll;
+        rt->PushAxisAlignedClip(D2D1::RectF(tr.left - SS(2), sr.top, tr.right, sr.bottom), D2D1_ANTIALIAS_MODE_ALIASED);
+        if (s.caret != s.anchor) {
+            D2D1_COLOR_F selC = T.text;
+            selC.a = 0.26f;
+            ComPtr<ID2D1SolidColorBrush> selB;
+            rt->CreateSolidColorBrush(selC, &selB);
+            UINT32 a = (UINT32)std::min(s.caret, s.anchor), n = (UINT32)(std::max(s.caret, s.anchor) - a);
+            DWRITE_HIT_TEST_METRICS rg[8];
+            UINT32 count = 0;
+            if (SUCCEEDED(lay->HitTestTextRange(a, n, 0, 0, rg, ARRAYSIZE(rg), &count)) && selB) {
+                for (UINT32 i = 0; i < count; i++)
+                    rt->FillRectangle(D2D1::RectF(ox + rg[i].left, sr.top + SS(11), ox + rg[i].left + rg[i].width,
+                                                  sr.bottom - SS(11)),
+                                      selB.Get());
             }
         }
-    }
-    if (s.query.empty() && s.caretOn) {
-        rt->FillRectangle(D2D1::RectF(tr.left, sr.top + SS(13), tr.left + sw, sr.bottom - SS(13)), text.Get());
+        rt->DrawTextLayout(D2D1::Point2F(ox, tr.top), lay.Get(), text.Get());
+        if (s.caretOn)
+            rt->FillRectangle(D2D1::RectF(ox + cx, sr.top + SS(13), ox + cx + sw, sr.bottom - SS(13)), text.Get());
+        rt->PopAxisAlignedClip();
     }
 
     // Footer: power buttons.
@@ -2808,40 +3126,49 @@ static void RenderStart() {
     float listTop = sr.bottom + SS(16), listBottom = footTop - SS(24);
     if (s.query.empty()) {
         // Tabs.
-        D2D1_RECT_F tabs = D2D1::RectF(pad, listTop, pad + SS(236), listTop + SS(36));
+        D2D1_RECT_F tabs = D2D1::RectF(pad, listTop, pad + SS(342), listTop + SS(36));
         rt->FillRoundedRectangle(D2D1::RoundedRect(tabs, SS(10), SS(10)), card.Get());
-        const wchar_t* names[] = {Tr(S_TabPinned), Tr(S_TabAll)};
+        const wchar_t* names[] = {Tr(S_TabPinned), Tr(S_TabAll), Tr(S_TabRecent)};
+        const StartRowKind kinds[] = {RowTabPinned, RowTabAll, RowTabRecent};
+        const float widths[] = {SS(92), SS(128), SS(110)};
         float tx = tabs.left + SS(3);
-        for (int i = 0; i < 2; i++) {
-            float tw = i == 0 ? SS(92) : SS(138);
+        for (int i = 0; i < 3; i++) {
+            float tw = widths[i];
             D2D1_RECT_F t = D2D1::RectF(tx, tabs.top + SS(3), tx + tw, tabs.bottom - SS(3));
-            s.rows.push_back({t, i == 0 ? RowTabPinned : RowTabAll, nullptr, 0});
+            s.rows.push_back({t, kinds[i], nullptr, 0});
             if (s.tab == i) rt->FillRoundedRectangle(D2D1::RoundedRect(t, SS(8), SS(8)), hi.Get());
             s.small->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
             rt->DrawTextW(names[i], (UINT32)wcslen(names[i]), s.small.Get(), t, s.tab == i ? text.Get() : sub.Get());
             s.small->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
             tx += tw + SS(3);
         }
-        std::vector<StartItem>& list = s.tab == 0 ? g_startPins : g_allApps;
+        std::vector<StartItem>& list = s.tab == 0 ? g_startPins : s.tab == 1 ? g_allApps : g_recent;
         wchar_t count[64];
-        swprintf_s(count, s.tab == 0 ? Tr(S_CountPinned) : Tr(S_CountApps), (int)list.size());
+        swprintf_s(count, s.tab == 0 ? Tr(S_CountPinned) : s.tab == 1 ? Tr(S_CountApps) : Tr(S_CountRecent),
+                   (int)list.size());
         s.small->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
         rt->DrawTextW(count, (UINT32)wcslen(count), s.small.Get(), D2D1::RectF(W / 2, listTop, W - pad, listTop + SS(36)), sub.Get());
         s.small->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
 
         float gridTop = listTop + SS(48);
-        float colW = (W - pad * 2 - SS(6)) / 2, rowH = SS(48), gap = SS(6);
-        int rowsN = ((int)list.size() + 1) / 2;
+        // Pinned and all apps: two columns. Downloads: one, with when and where under the name.
+        int cols = s.tab == 2 ? 1 : 2;
+        float colW = (W - pad * 2 - SS(6) * (cols - 1)) / cols, rowH = SS(s.tab == 2 ? 50 : 48), gap = SS(6);
+        int rowsN = ((int)list.size() + cols - 1) / cols;
         s.maxScroll = std::max(0.0f, rowsN * (rowH + gap) - gap - (listBottom - gridTop));
         s.scroll = std::clamp(s.scroll, 0.0f, s.maxScroll);
         rt->PushAxisAlignedClip(D2D1::RectF(0, gridTop, W, listBottom), D2D1_ANTIALIAS_MODE_ALIASED);
         for (size_t i = 0; i < list.size(); i++) {
-            float x = pad + (i % 2) * (colW + gap);
-            float y = gridTop + (i / 2) * (rowH + gap) - s.scroll;
+            float x = pad + (i % cols) * (colW + gap);
+            float y = gridTop + (i / cols) * (rowH + gap) - s.scroll;
             if (y + rowH < gridTop || y > listBottom) continue;
-            drawRow(list[i], D2D1::RectF(x, y, x + colW, y + rowH), false, false);
+            drawRow(list[i], D2D1::RectF(x, y, x + colW, y + rowH), false, s.tab == 2);
         }
         rt->PopAxisAlignedClip();
+        if (list.empty() && s.tab == 2 && g_recentLoaded) {
+            const wchar_t* hint = Tr(S_NoRecent);
+            rt->DrawTextW(hint, (UINT32)wcslen(hint), s.small.Get(), D2D1::RectF(pad, gridTop, W - pad, gridTop + SS(40)), sub.Get());
+        }
         if (list.empty() && s.tab == 0) {
             const wchar_t* hint = Tr(S_PinHint);
             rt->DrawTextW(hint, (UINT32)wcslen(hint), s.small.Get(), D2D1::RectF(pad, gridTop, W - pad, gridTop + SS(40)), sub.Get());
@@ -3175,12 +3502,158 @@ static int StartRowAt(int x, int y) {
     return -1;
 }
 
+// ---- Search text editing: cursor, selection (Shift + arrows, mouse), clipboard ----
+
+static bool InSearchText(int x, int y) {
+    auto& s = g_start;
+    float lx = x - s.offX;
+    return lx >= s.textRc.left - SS(44) && lx < s.textRc.right + SS(16) && y >= s.textRc.top && y < s.textRc.bottom;
+}
+
+static size_t QueryPosAt(int x) {
+    auto& s = g_start;
+    ComPtr<IDWriteTextLayout> lay = QueryLayout();
+    if (!lay) return s.query.size();
+    float lx = x - s.offX - s.textRc.left + s.textScroll;
+    BOOL trailing = FALSE, inside = FALSE;
+    DWRITE_HIT_TEST_METRICS hm{};
+    lay->HitTestPoint(lx, (s.textRc.bottom - s.textRc.top) / 2, &trailing, &inside, &hm);
+    return std::min(s.query.size(), (size_t)hm.textPosition + (trailing ? hm.length : 0));
+}
+
+static bool HasTextSel() { return g_start.caret != g_start.anchor; }
+
+static void DeleteTextSel() {
+    auto& s = g_start;
+    size_t a = std::min(s.caret, s.anchor), b = std::max(s.caret, s.anchor);
+    s.query.erase(a, b - a);
+    s.caret = s.anchor = a;
+}
+
+static void InsertText(std::wstring t) {
+    auto& s = g_start;
+    t.erase(std::remove_if(t.begin(), t.end(), [](wchar_t c) { return c < 32; }), t.end());
+    DeleteTextSel();
+    t = t.substr(0, 200 - std::min<size_t>(200, s.query.size()));
+    s.query.insert(s.caret, t);
+    s.caret = s.anchor = s.caret + t.size();
+}
+
+static size_t WordLeft(size_t i) {
+    const auto& q = g_start.query;
+    while (i > 0 && q[i - 1] == L' ') i--;
+    while (i > 0 && q[i - 1] != L' ') i--;
+    return i;
+}
+
+static size_t WordRight(size_t i) {
+    const auto& q = g_start.query;
+    while (i < q.size() && q[i] != L' ') i++;
+    while (i < q.size() && q[i] == L' ') i++;
+    return i;
+}
+
+static void MoveTextCaret(size_t to, bool extend) {
+    auto& s = g_start;
+    s.caret = std::min(to, s.query.size());
+    if (!extend) s.anchor = s.caret;
+    s.caretOn = true;
+    RenderStart();
+}
+
+static void CopyTextSel(HWND hwnd) {
+    auto& s = g_start;
+    if (!HasTextSel()) return;
+    size_t a = std::min(s.caret, s.anchor), n = std::max(s.caret, s.anchor) - a;
+    if (!OpenClipboard(hwnd)) return;
+    EmptyClipboard();
+    if (HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (n + 1) * sizeof(wchar_t))) {
+        if (auto* p = (wchar_t*)GlobalLock(h)) {
+            memcpy(p, s.query.c_str() + a, n * sizeof(wchar_t));
+            p[n] = 0;
+            GlobalUnlock(h);
+            if (!SetClipboardData(CF_UNICODETEXT, h)) GlobalFree(h);
+        } else {
+            GlobalFree(h);
+        }
+    }
+    CloseClipboard();
+}
+
 static StartItem* SelectedResult() {
     int k = 0;
     for (auto* a : g_start.appHits) if (k++ == g_start.sel) return a;
     for (auto& f : g_start.files) if (k++ == g_start.sel) return &f;
     for (auto* st : g_start.setHits) if (k++ == g_start.sel) return st;
     return nullptr;
+}
+
+// Where an app in Start lives on disk (for "Open file location"): its program, for desktop apps.
+// Store apps have none.
+static std::wstring AppFileLocation(const std::wstring& launch) {
+    static const PROPERTYKEY kPkeyLinkTarget = {
+        {0xB9B4B3FC, 0x2B51, 0x4A42, {0xB5, 0xD8, 0x32, 0x41, 0x46, 0xAF, 0xCF, 0x25}}, 2};
+    std::wstring path;
+    ComPtr<IShellItem> item;
+    if (SUCCEEDED(SHCreateItemFromParsingName(launch.c_str(), nullptr, IID_PPV_ARGS(&item)))) {
+        ComPtr<IShellItem2> item2;
+        PWSTR s = nullptr;
+        if (SUCCEEDED(item.As(&item2)) && SUCCEEDED(item2->GetString(kPkeyLinkTarget, &s)) && s) {
+            path = s;
+            CoTaskMemFree(s);
+        }
+    }
+    // "shell:AppsFolder\{known folder}\sub\app.exe"
+    std::wstring id = launch.rfind(L"shell:AppsFolder\\", 0) == 0 ? launch.substr(17) : L"";
+    if (path.empty() && id.size() > 39 && id[0] == L'{' && id[38] == L'}' && id[39] == L'\\') {
+        GUID g;
+        PWSTR base = nullptr;
+        if (SUCCEEDED(CLSIDFromString(id.substr(0, 39).c_str(), &g)) &&
+            SUCCEEDED(SHGetKnownFolderPath(g, 0, nullptr, &base)) && base) {
+            path = std::wstring(base) + id.substr(39);
+            CoTaskMemFree(base);
+        }
+    }
+    if (!path.empty() && GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) path.clear();
+    return path;
+}
+
+// Right-click on a file (search results, Downloads tab): open, open its folder, copy its path.
+static void FileItemMenu(StartItem& it, POINT pt) {
+    std::wstring path = it.launch;
+    HMENU m = CreatePopupMenu();
+    AppendMenuW(m, MF_STRING, 1, Tr(S_Open));
+    AppendMenuW(m, MF_STRING, 2, Tr(S_OpenLocation));
+    AppendMenuW(m, MF_STRING, 3, Tr(S_CopyPath));
+    g_start.menuOpen = true;
+    int cmd = TrackPopupMenuEx(m, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, g_start.hwnd, nullptr);
+    g_start.menuOpen = false;
+    DestroyMenu(m);
+    if (cmd == 1 || cmd == 2) {
+        CloseStart(true);
+        if (cmd == 1) {
+            ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        } else {
+            std::wstring args = L"/select,\"" + path + L"\"";
+            ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
+        }
+        return;
+    }
+    if (cmd == 3 && OpenClipboard(g_start.hwnd)) {
+        EmptyClipboard();
+        if (HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (path.size() + 1) * sizeof(wchar_t))) {
+            if (auto* p = (wchar_t*)GlobalLock(h)) {
+                memcpy(p, path.c_str(), (path.size() + 1) * sizeof(wchar_t));
+                GlobalUnlock(h);
+                if (!SetClipboardData(CF_UNICODETEXT, h)) GlobalFree(h);
+            } else {
+                GlobalFree(h);
+            }
+        }
+        CloseClipboard();
+    }
+    SetForegroundWindow(g_start.hwnd);
+    RenderStart();
 }
 
 static void StartItemMenu(StartItem& it, POINT pt) {
@@ -3191,6 +3664,8 @@ static void StartItemMenu(StartItem& it, POINT pt) {
     std::wstring id = it.launch.rfind(L"shell:AppsFolder\\", 0) == 0 ? it.launch.substr(17) : L"";
     bool uwp = !id.empty() && id.find(L'\\') == std::wstring::npos;
     if (uwp) AppendMenuW(m, MF_STRING, 2, Tr(S_PinDock));
+    std::wstring location = AppFileLocation(it.launch);
+    if (!location.empty()) AppendMenuW(m, MF_STRING, 3, Tr(S_OpenLocation));
     g_start.menuOpen = true;
     int cmd = TrackPopupMenuEx(m, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, g_start.hwnd, nullptr);
     g_start.menuOpen = false;
@@ -3212,11 +3687,65 @@ static void StartItemMenu(StartItem& it, POINT pt) {
         SavePins();
         RebuildApps();
         for (auto* d : g_docks) { BuildElems(*d, true); Invalidate(*d); }
+    } else if (cmd == 3) {
+        std::wstring args = L"/select,\"" + location + L"\"";
+        CloseStart(true);
+        ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
+        return;
     }
     SetForegroundWindow(g_start.hwnd);
     RenderStart();
 }
 
+// Right after the Windows key, Windows' own search box (an invisible CoreWindow in SearchHost) can take
+// the keyboard back after Nimbus' Start got it. For a short while, check that the Start keeps the
+// foreground, and if a CoreWindow took it, make it let go (Esc) and come back.
+constexpr UINT_PTR TIMER_WINKEY_GUARD = 24;
+static DWORD g_winKeyGuardStart = 0;
+static int g_winKeyGuardEsc = 0;
+static DWORD g_startClosedBySearchAt = 0;  // the Start lost the focus to Windows' search box (a Windows key press)
+
+static void StartWinKeyGuard() {
+    g_winKeyGuardStart = GetTickCount();
+    g_winKeyGuardEsc = 0;
+    SetTimer(g_start.hwnd, TIMER_WINKEY_GUARD, 30, nullptr);
+}
+
+static void WinKeyGuardStep() {
+    auto& s = g_start;
+    DWORD since = GetTickCount() - g_winKeyGuardStart;
+    if (!s.open || since > 1500) {
+        KillTimer(s.hwnd, TIMER_WINKEY_GUARD);
+        return;
+    }
+    HWND fg = GetForegroundWindow();
+    if (fg == s.hwnd || s.menuOpen) return;
+    wchar_t cls[64] = {};
+    if (fg) GetClassNameW(fg, cls, ARRAYSIZE(cls));
+    if (!wcscmp(cls, L"Windows.UI.Core.CoreWindow")) {
+        // Windows' search box still has the keyboard. (The first 250 ms belong to the Explorer part,
+        // which does the same; two Esc presses at once could reach the Start itself.)
+        if (since < 250 || g_winKeyGuardEsc >= 3) return;
+        g_winKeyGuardEsc++;
+        INPUT in[2] = {};
+        in[0].type = in[1].type = INPUT_KEYBOARD;
+        in[0].ki.wVk = in[1].ki.wVk = VK_ESCAPE;
+        in[1].ki.dwFlags = KEYEVENTF_KEYUP;
+        SendInput(2, in, sizeof(INPUT));
+        Sleep(20);
+        ForceForeground(s.hwnd);
+        Log(L"start: took the keyboard back from Windows' search box (%d, ok=%d)", g_winKeyGuardEsc,
+            GetForegroundWindow() == s.hwnd);
+        return;
+    }
+    // Windows' search box let go, but the keyboard went back to the previous window (seen with
+    // Chrome): the Start is still open, so bring it to the front.
+    if (g_winKeyGuardEsc >= 6) return;
+    g_winKeyGuardEsc++;
+    ForceForeground(s.hwnd);
+    Log(L"start: took the keyboard back from %s after %ums (%d, ok=%d)", cls, since, g_winKeyGuardEsc,
+        GetForegroundWindow() == s.hwnd);
+}
 LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     auto& s = g_start;
     switch (msg) {
@@ -3225,8 +3754,16 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             // close it and come back, so that doesn't count as clicking away.)
             extern DWORD g_lastWinAlone;
             if (LOWORD(wp) == WA_INACTIVE && s.open && !s.menuOpen && GetTickCount() - s.openedAt > 150 &&
-                GetTickCount() - g_lastWinAlone > 1500)
+                GetTickCount() - g_lastWinAlone > 1500) {
+                // Windows' search box takes the focus as soon as the Windows key goes down: that press
+                // is closing the Start, and the Explorer part must not open it again right after.
+                HWND other = GetForegroundWindow();
+                wchar_t cls[64] = {};
+                if (other) GetClassNameW(other, cls, ARRAYSIZE(cls));
+                if (!wcscmp(cls, L"Windows.UI.Core.CoreWindow")) g_startClosedBySearchAt = GetTickCount();
+                Log(L"start: lost the focus to %s", cls);
                 CloseStart(true);
+            }
             return 0;
         }
         case WM_MOUSEACTIVATE:
@@ -3236,7 +3773,12 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (s.open && !s.menuOpen && GetTickCount() - s.openedAt > 150) CloseStart(true);
             return 0;
         case WM_TIMER:
-            if (wp == TIMER_START_ANIM) {
+            if (wp == TIMER_START_ICONS) {
+                KillTimer(hwnd, TIMER_START_ICONS);
+                RenderStart();
+            } else if (wp == TIMER_WINKEY_GUARD) {
+                WinKeyGuardStep();
+            } else if (wp == TIMER_START_ANIM) {
                 StartAnimStep();
             } else if (wp == TIMER_START_WIDE) {
                 StartWideStep();
@@ -3252,9 +3794,43 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_COPYDATA: {
             auto* cds = (const COPYDATASTRUCT*)lp;
             if (cds && cds->dwData == kEverythingReply) OnEverythingReply(cds);
+            if (cds && cds->dwData == kEverythingRecentReply) OnEverythingRecentReply(cds);
             return TRUE;
         }
+        case WM_LBUTTONDOWN: {
+            int x = GET_X_LPARAM(lp), y = GET_Y_LPARAM(lp);
+            if (!InSearchText(x, y)) return 0;
+            size_t pos = QueryPosAt(x);
+            DWORD now = GetTickCount();
+            if (now - s.lastTextClick < GetDoubleClickTime() && !s.query.empty()) {
+                // Double click: the word under the mouse (a third click selects everything).
+                size_t a = WordLeft(std::min(pos + 1, s.query.size())), b = WordRight(pos);
+                while (b > a && s.query[b - 1] == L' ') b--;
+                if (s.anchor == a && s.caret == b) a = 0, b = s.query.size();
+                s.anchor = a;
+                s.caret = b;
+                s.lastTextClick = now;
+                RenderStart();
+                return 0;
+            }
+            s.lastTextClick = now;
+            s.caret = pos;
+            if (!(GetKeyState(VK_SHIFT) & 0x8000)) s.anchor = pos;
+            s.selecting = true;
+            s.caretOn = true;
+            SetCapture(hwnd);
+            RenderStart();
+            return 0;
+        }
+        case WM_CAPTURECHANGED:
+            s.selecting = false;
+            return 0;
         case WM_MOUSEMOVE: {
+            if (s.selecting) {
+                size_t pos = QueryPosAt(GET_X_LPARAM(lp));
+                if (pos != s.caret) MoveTextCaret(pos, true);
+                return 0;
+            }
             int r = StartRowAt(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
             if (r != s.hover) {
                 s.hover = r;
@@ -3280,11 +3856,17 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         case WM_LBUTTONUP: {
+            if (s.selecting) {
+                s.selecting = false;
+                ReleaseCapture();
+                return 0;
+            }
             int r = StartRowAt(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
             if (r < 0) return 0;
             StartRow row = s.rows[r];
-            if (row.kind == RowTabPinned || row.kind == RowTabAll) {
-                s.tab = row.kind == RowTabPinned ? 0 : 1;
+            if (row.kind == RowTabPinned || row.kind == RowTabAll || row.kind == RowTabRecent) {
+                s.tab = row.kind == RowTabPinned ? 0 : row.kind == RowTabAll ? 1 : 2;
+                if (s.tab == 2) LoadRecent();
                 s.scroll = 0;
                 RenderStart();
             } else if (row.kind == RowAction) {
@@ -3308,10 +3890,11 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_RBUTTONUP: {
             int r = StartRowAt(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
-            if (r >= 0 && s.rows[r].item && s.rows[r].kind == RowApp) {
+            if (r >= 0 && s.rows[r].item && (s.rows[r].kind == RowApp || s.rows[r].kind == RowFile)) {
                 POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
                 ClientToScreen(hwnd, &pt);
-                StartItemMenu(*s.rows[r].item, pt);
+                if (s.rows[r].kind == RowFile) FileItemMenu(*s.rows[r].item, pt);
+                else StartItemMenu(*s.rows[r].item, pt);
             }
             return 0;
         }
@@ -3345,6 +3928,51 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     }
                     return 0;
                 }
+                case VK_LEFT:
+                case VK_RIGHT:
+                case VK_HOME:
+                case VK_END: {
+                    bool shift = GetKeyState(VK_SHIFT) & 0x8000, ctrl = GetKeyState(VK_CONTROL) & 0x8000;
+                    size_t to;
+                    if (wp == VK_HOME) to = 0;
+                    else if (wp == VK_END) to = s.query.size();
+                    else if (!shift && HasTextSel()) to = wp == VK_LEFT ? std::min(s.caret, s.anchor) : std::max(s.caret, s.anchor);
+                    else if (wp == VK_LEFT) to = ctrl ? WordLeft(s.caret) : (s.caret ? s.caret - 1 : 0);
+                    else to = ctrl ? WordRight(s.caret) : s.caret + 1;
+                    MoveTextCaret(to, shift);
+                    return 0;
+                }
+                case VK_DELETE:
+                    if (HasTextSel()) {
+                        DeleteTextSel();
+                    } else if (s.caret < s.query.size()) {
+                        size_t b = (GetKeyState(VK_CONTROL) & 0x8000) ? WordRight(s.caret) : s.caret + 1;
+                        s.query.erase(s.caret, b - s.caret);
+                    } else {
+                        return 0;
+                    }
+                    s.caretOn = true;
+                    UpdateSearch();
+                    RenderStart();
+                    return 0;
+                case 'A':
+                    if (GetKeyState(VK_CONTROL) & 0x8000) {
+                        s.anchor = 0;
+                        s.caret = s.query.size();
+                        RenderStart();
+                    }
+                    return 0;
+                case 'C':
+                case 'X':
+                    if ((GetKeyState(VK_CONTROL) & 0x8000) && HasTextSel()) {
+                        CopyTextSel(hwnd);
+                        if (wp == 'X') {
+                            DeleteTextSel();
+                            UpdateSearch();
+                            RenderStart();
+                        }
+                    }
+                    return 0;
                 case 'V':
                     if (GetKeyState(VK_CONTROL) & 0x8000) {
                         if (OpenClipboard(hwnd)) {
@@ -3352,8 +3980,7 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                                 if (auto* t = (const wchar_t*)GlobalLock(hd)) {
                                     std::wstring add = t;
                                     GlobalUnlock(hd);
-                                    add.erase(std::remove_if(add.begin(), add.end(), [](wchar_t c) { return c < 32; }), add.end());
-                                    s.query += add.substr(0, 200);
+                                    InsertText(add);
                                     UpdateSearch();
                                     RenderStart();
                                 }
@@ -3367,12 +3994,22 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_CHAR: {
             wchar_t c = (wchar_t)wp;
             if (c == 8) {  // Backspace (Ctrl+Backspace arrives as 127)
-                if (!s.query.empty()) s.query.pop_back();
+                if (HasTextSel()) {
+                    DeleteTextSel();
+                } else if (s.caret > 0) {
+                    s.query.erase(s.caret - 1, 1);
+                    s.caret = s.anchor = s.caret - 1;
+                }
             } else if (c == 127) {
-                while (!s.query.empty() && s.query.back() == L' ') s.query.pop_back();
-                while (!s.query.empty() && s.query.back() != L' ') s.query.pop_back();
-            } else if (c >= 32 && s.query.size() < 200) {
-                s.query += c;
+                if (HasTextSel()) {
+                    DeleteTextSel();
+                } else {
+                    size_t w = WordLeft(s.caret);
+                    s.query.erase(w, s.caret - w);
+                    s.caret = s.anchor = w;
+                }
+            } else if (c >= 32) {
+                InsertText(std::wstring(1, c));
             } else {
                 return 0;
             }
@@ -3779,6 +4416,10 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             // (Not on work-area changes: the fixed bar's own app bar causes those.)
             SetTimer(hwnd, TIMER_DOCKS, 800, nullptr);
             return 0;
+        case WM_SETTINGCHANGE:
+            // Transparency effects turned on or off (see BuildTheme).
+            if (lp && !wcscmp((LPCWSTR)lp, L"ImmersiveColorSet")) PostMessageW(hwnd, WM_APP_SETTINGS, 0, 0);
+            break;
         case WM_APP_SETTINGS:
             LoadSettings();
             RegisterStartHotkey();
@@ -3795,6 +4436,12 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             CreateDocks();
             return 0;
         case WM_APP_WINKEY: {
+            if (!g_start.open && GetTickCount() - g_startClosedBySearchAt < 700) {
+                // This press already closed the Start (Windows' search box took the focus).
+                g_startClosedBySearchAt = 0;
+                Log(L"Windows key: Start already closed by this press");
+                return 0;
+            }
             g_lastWinAlone = GetTickCount();
             POINT pt;
             GetCursorPos(&pt);
@@ -3804,6 +4451,7 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (!target && !g_docks.empty()) target = g_docks[0];
             if (target) ToggleStart(*target);
             // (The explorer.exe part brings the open Start to the front itself.)
+            if (g_start.open) StartWinKeyGuard();
             return g_start.open ? (LRESULT)g_start.hwnd : 0;
         }
         case WM_HOTKEY:
@@ -3978,7 +4626,9 @@ long __cdecl ShowStartView_hook(void* self, int method, int flags) {
             wchar_t cls[64] = {};
             GetClassNameW(fg, cls, ARRAYSIZE(cls));
             HWND w = (sent && opened && IsWindow((HWND)opened)) ? (HWND)opened : nullptr;
-            if (w && SetForegroundWindow(w)) return S_OK;
+            BOOL fgOk = w ? SetForegroundWindow(w) : FALSE;
+            Wh_Log(L"Windows key: sent=%d start=%p foreground=%s set=%d", sent, w, cls, fgOk);
+            if (fgOk) return S_OK;
             if (!wcscmp(cls, L"Windows.UI.Core.CoreWindow")) {
                 INPUT in[2] = {};
                 in[0].type = in[1].type = INPUT_KEYBOARD;
