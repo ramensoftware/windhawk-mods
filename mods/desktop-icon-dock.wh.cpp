@@ -154,14 +154,13 @@ desktop icons.
 - **Moving**: the top and bottom edges move the dock vertically, and the left
   and right edges move it horizontally. The bottom distance is measured from
   the lower edge of the panel to the top of the taskbar, so 0 means the panel
-  touches the taskbar. The position is stored in the mod's local values and
-  survives restarts and Explorer restarts without a settings change. The dock
-  stays inside the primary monitor (the transparent glow margin may overhang
-  it).
+  touches the taskbar. The position is stored in the current user's mod-local
+  values and survives restarts and Explorer restarts without a settings
+  change. The dock stays inside the primary monitor (the transparent glow
+  margin may overhang it).
 - **Reset actions**: right-clicking an empty part of the dock opens the three
-  position actions described under "Adjusting the position". They are
-  available with a panel style; in the transparent style the empty-state hint
-  can be used while the dock is empty.
+  position actions described under "Adjusting the position". With a transparent
+  background, the empty-state hint can be right-clicked while the dock is empty.
 - **Maintenance**: every 30 seconds, entries that failed to resolve earlier
   are retried and the icons of virtual items are refreshed. Items that still
   cannot be resolved are skipped on screen but kept in storage.
@@ -179,7 +178,6 @@ desktop icons.
 | Effect radius | 160 | Distance in pixels over which magnification fades out from the cursor |
 | Neighbor spread (%) | 60 | How much neighboring icons move aside while magnifying |
 | Smoothing speed | 16 | Higher is snappier, lower is softer |
-| Bottom offset | 10 | Kept for compatibility: it positions the dock until the dock is moved or reset, after which the saved bottom distance is used |
 | Corner radius (%) | 72 | Corner roundness of the panel; 0 = square corners, 100 = fully rounded |
 | Dock position action | Keep current position | One-shot position action from the settings page: reset the position, center only, or reset the bottom distance only. The same actions are available by right-clicking an empty part of the dock |
 | Background style | Transparent | Transparent, Clear, Frosted, Acrylic, Mica or Liquid Glass |
@@ -190,12 +188,12 @@ desktop icons.
 
 ## Adjusting the position
 
-![Moving the dock vertically](https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/0587bf438d61d89c8ae3af315ee33962f010e235/images/dock-move.gif)
+![Moving the dock vertically](https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/3862103c2470acdec2e3906f658ec0b80592ac54/images/dock-move.gif)
 
 *Drag the top or bottom edge to move vertically; the dock position is saved
 automatically.*
 
-![Moving the dock horizontally](https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/0587bf438d61d89c8ae3af315ee33962f010e235/images/dock-move-horizontal.gif)
+![Moving the dock horizontally](https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/3862103c2470acdec2e3906f658ec0b80592ac54/images/dock-move-horizontal.gif)
 
 *Drag the left or right edge to move horizontally.*
 
@@ -216,10 +214,9 @@ automatically.*
   edge of the panel to the top of the taskbar, so 0 means the panel touches
   the taskbar; the reset/default value is 80 px at 100% DPI. The horizontal
   position is centered by default.
-- **Saving**: the position is written to the mod's local values immediately
-  when a drag ends or a reset action is used. No settings save is needed; the
-  position survives restarts and Explorer restarts. The legacy Bottom offset
-  setting is only used until the first move or reset.
+- **Saving**: the position is written to the current user's mod-local values
+  immediately when a drag ends or a reset action is used. No settings save is
+  needed; the position survives restarts and Explorer restarts.
 - **Transparent style**: it has no visible border or background. Use a panel
   style, or the empty-state hint while the dock is empty, to reach the reset
   actions.
@@ -256,9 +253,9 @@ not a launcher that stays on top of other windows.
 - The dock is a layered window placed below normal windows; full-screen apps
   and other windows cover it, which is expected.
 - In transparent mode, fully transparent pixels are click-through; the icons
-  themselves remain clickable. There is no visible border to drag and no
-  background to right-click, so edge moving and the position reset actions
-  require a panel style (or the empty-state hint while the dock is empty).
+  themselves remain clickable. Edge moving requires a panel style. The position
+  reset menu also requires a panel style, except that the empty-state hint can
+  be right-clicked while the dock is empty.
 
 ## Troubleshooting
 
@@ -306,9 +303,6 @@ not a launcher that stays on top of other windows.
 - Smoothing: 16
   $name: Smoothing speed
   $description: Higher is snappier, lower is softer
-- BottomOffset: 10
-  $name: Bottom offset
-  $description: Gap between the dock and the taskbar, in pixels
 - CornerRadius: 72
   $name: Corner radius (%)
   $description: Roundness of the dock panel corners; 0 draws square corners and 100 draws fully rounded ones
@@ -426,7 +420,6 @@ struct Settings {
     int effectRadius = 160;
     int spacingFactor = 60;
     int smoothing = 16;
-    int bottomOffset = 10;
     int cornerRadiusPercent = 72;
     int positionAction = 0;
     PanelStyle backgroundStyle = PanelStyle::Transparent;
@@ -515,6 +508,7 @@ std::map<std::wstring, std::shared_ptr<Bitmap>> g_iconCache;
 // Windhawk's storage is shared between users, so the list and the shortcut
 // copies live in a per-user subfolder.
 std::wstring g_userStorageRoot;
+std::wstring g_userValueSuffix;
 std::wstring g_itemsFolderPath;
 std::wstring g_itemsFilePath;
 // Original shortcut path of each dock copy, keyed by the lowercased copy path.
@@ -533,10 +527,8 @@ int g_windowWidth = 0;
 int g_windowHeight = 0;
 int g_dockOffsetX = 0;
 // Distance from the top of the taskbar to the panel's bottom edge, in DIPs.
-// -1 means "not stored yet": it is derived from the legacy Bottom offset
-// setting until the dock is moved or reset.
+// -1 means "not stored yet": the default position is used.
 int g_dockBottomDistance = -1;
-int g_legacyOffsetY = 0;
 RECT g_lastWorkArea{};
 
 enum class DockEdge {
@@ -910,7 +902,6 @@ void LoadSettings() {
     s.effectRadius = ClampInt(Wh_GetIntSetting(L"EffectRadius"), 20, 900);
     s.spacingFactor = ClampInt(Wh_GetIntSetting(L"SpacingFactor"), 0, 100);
     s.smoothing = ClampInt(Wh_GetIntSetting(L"Smoothing"), 1, 60);
-    s.bottomOffset = ClampInt(Wh_GetIntSetting(L"BottomOffset"), 0, 300);
     s.cornerRadiusPercent =
         ClampInt(Wh_GetIntSetting(L"CornerRadius"), 0, 100);
 
@@ -1042,6 +1033,10 @@ std::wstring GetCurrentUserSidString() {
 void EnsureStoragePaths() {
     if (!g_itemsFolderPath.empty()) return;
 
+    std::wstring sid = GetCurrentUserSidString();
+    if (sid.empty()) sid = L"default";
+    g_userValueSuffix = L"_" + sid;
+
     wchar_t storage[MAX_PATH * 4] = L"";
     size_t length = Wh_GetModStoragePath(storage, ARRAYSIZE(storage));
     if (length == 0 || length >= ARRAYSIZE(storage)) {
@@ -1049,8 +1044,6 @@ void EnsureStoragePaths() {
         return;
     }
 
-    std::wstring sid = GetCurrentUserSidString();
-    if (sid.empty()) sid = L"default";
     g_userStorageRoot = std::wstring(storage) + L"\\" + sid;
     int result =
         SHCreateDirectoryExW(nullptr, g_userStorageRoot.c_str(), nullptr);
@@ -1062,6 +1055,10 @@ void EnsureStoragePaths() {
     g_itemsFolderPath = g_userStorageRoot + L"\\Items";
     g_itemsFilePath = g_userStorageRoot + L"\\" + kItemsFileName;
     Wh_Log(L"Mod storage folder: %ls", g_userStorageRoot.c_str());
+}
+
+std::wstring UserValueName(PCWSTR name) {
+    return std::wstring(name) + g_userValueSuffix;
 }
 
 bool ReadFileBytes(const std::wstring& path, std::vector<BYTE>& data) {
@@ -1819,6 +1816,8 @@ RECT RestPanelClientRect() {
 
 DockEdge PanelEdgeAtClientPoint(POINT point) {
     if (IsTransparentStyle()) return DockEdge::None;
+    // A magnified panel belongs to the icons; edges exist only at rest.
+    if (g_intensity > 0.01) return DockEdge::None;
     RECT panel = RestPanelClientRect();
     if (point.x < panel.left || point.x > panel.right || point.y < panel.top ||
         point.y > panel.bottom) {
@@ -1898,13 +1897,10 @@ int BaseWindowX() {
 
 // The bottom distance is measured from the bottom edge of the panel to the
 // top of the taskbar (the work area bottom), so 0 means the panel touches the
-// taskbar. Until the dock is moved or reset, the value follows the legacy
-// Bottom offset setting plus any offset left by the previous version.
+// taskbar. A fresh install uses the same 80 px default as the reset action.
 int EffectiveBottomDistance() {
     if (g_dockBottomDistance >= 0) return g_dockBottomDistance;
-    int glowDip = (int)lround(g_layout.glowMargin / std::max(0.1, g_dpiScale));
-    return ClampInt(g_settings.bottomOffset + glowDip + g_legacyOffsetY, 0,
-                    20000);
+    return kDefaultBottomDistance;
 }
 
 // The window may overhang the monitor by its transparent glow margin, and it
@@ -2675,6 +2671,8 @@ void UpdateHoverPollTimer() {
     }
 }
 
+int ItemAtCursor(POINT screenPoint);
+
 bool UpdateAnimation() {
     if (g_items.empty() || !g_hwnd) return false;
     if (g_dockMoveAxis != DockMoveAxis::None) return false;
@@ -2692,7 +2690,9 @@ bool UpdateAnimation() {
     // An edge belongs to moving the dock, not to magnification. Suppressing
     // hover keeps the panel at its rest size, which is also the geometry the
     // edge zones are based on, so the pointer cannot chase a moving edge.
-    bool onEdge = PanelEdgeAtClientPoint(clientPoint) != DockEdge::None;
+    bool overItem = ItemAtCursor(screenPoint) >= 0;
+    bool onEdge = !overItem &&
+                  PanelEdgeAtClientPoint(clientPoint) != DockEdge::None;
     bool inside = !dragging && !onEdge && IsPointerOverDock(screenPoint);
 
     if (inside) {
@@ -2820,9 +2820,15 @@ void MoveDockWindow(int x, int y) {
     RenderFrame();
 }
 
-// The position is kept in Windhawk's mod-local values rather than in the user
-// settings: it is written silently, has no settings page round trip, and
-// therefore does not reload the mod.
+// The position is kept in Windhawk's per-user mod-local values rather than in
+// the user settings: it is written silently, has no settings page round trip,
+// and therefore does not reload the mod.
+void StoreDockPosition() {
+    Wh_SetIntValue(UserValueName(L"DockOffsetX").c_str(), g_dockOffsetX);
+    Wh_SetIntValue(UserValueName(L"DockBottomDistance").c_str(),
+                   g_dockBottomDistance);
+}
+
 void SaveDockOffsets() {
     MONITORINFO monitorInfo{};
     monitorInfo.cbSize = sizeof(monitorInfo);
@@ -2835,21 +2841,13 @@ void SaveDockOffsets() {
     g_dockBottomDistance =
         ClampInt((int)lround((monitorInfo.rcWork.bottom - panelBottom) / scale),
                  0, 20000);
-    Wh_SetIntValue(L"DockOffsetX", g_dockOffsetX);
-    Wh_SetIntValue(L"DockBottomDistance", g_dockBottomDistance);
-    // The old relative offset must not be applied again after the absolute
-    // bottom distance has been stored.
-    Wh_SetIntValue(L"DockOffsetY", 0);
-    g_legacyOffsetY = 0;
+    StoreDockPosition();
 }
 
 void ApplyDockPosition(int offsetX, int bottomDistance) {
     g_dockOffsetX = offsetX;
     g_dockBottomDistance = ClampInt(bottomDistance, 0, 20000);
-    Wh_SetIntValue(L"DockOffsetX", g_dockOffsetX);
-    Wh_SetIntValue(L"DockBottomDistance", g_dockBottomDistance);
-    Wh_SetIntValue(L"DockOffsetY", 0);
-    g_legacyOffsetY = 0;
+    StoreDockPosition();
     PositionWindow();
     CaptureBackdrop();
     RenderFrame();
@@ -2860,9 +2858,10 @@ void ApplyDockPosition(int offsetX, int bottomDistance) {
 // save or Explorer restart would move the dock again.
 void ApplyPendingPositionAction() {
     int action = g_settings.positionAction;
-    int applied = Wh_GetIntValue(L"PositionActionApplied", 0);
+    std::wstring appliedName = UserValueName(L"PositionActionApplied");
+    int applied = Wh_GetIntValue(appliedName.c_str(), 0);
     if (action == 0) {
-        if (applied != 0) Wh_SetIntValue(L"PositionActionApplied", 0);
+        if (applied != 0) Wh_SetIntValue(appliedName.c_str(), 0);
         return;
     }
     if (action == applied) return;
@@ -2876,11 +2875,8 @@ void ApplyPendingPositionAction() {
     } else if (action == 3) {
         g_dockBottomDistance = kDefaultBottomDistance;
     }
-    Wh_SetIntValue(L"DockOffsetX", g_dockOffsetX);
-    Wh_SetIntValue(L"DockBottomDistance", g_dockBottomDistance);
-    Wh_SetIntValue(L"DockOffsetY", 0);
-    g_legacyOffsetY = 0;
-    Wh_SetIntValue(L"PositionActionApplied", action);
+    StoreDockPosition();
+    Wh_SetIntValue(appliedName.c_str(), action);
 }
 
 void FinishDockMove(bool releaseCapture) {
@@ -3014,9 +3010,8 @@ void ShowItemContextMenu(int index, POINT screenPoint) {
     DestroyMenu(popup);
 }
 
-// Right-clicking an empty part of the dock opens position actions. Windhawk
-// does not let a mod write its own user settings, so these actions live in the
-// dock itself rather than on the settings page.
+// Right-clicking an empty part of the dock opens position actions. The same
+// one-shot actions are exposed by the PositionAction setting.
 void ShowDockPositionMenu(POINT screenPoint) {
     constexpr UINT kResetAll = 1;
     constexpr UINT kCenter = 2;
@@ -3931,6 +3926,7 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
                     auto now = std::chrono::steady_clock::now();
                     if (!g_menuOpen && !g_internalDragActive &&
                         !g_externalDragActive &&
+                        g_dockMoveAxis == DockMoveAxis::None &&
                         now - g_lastItemCheckTime >
                             std::chrono::seconds(kMaintenanceSeconds)) {
                         g_lastItemCheckTime = now;
@@ -4058,21 +4054,23 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
             if (g_externalDragActive || g_menuOpen) return 0;
             POINT point{};
             GetCursorPos(&point);
+            int index = ItemAtCursor(point);
+            if (index >= 0) {
+                g_leftDown = true;
+                g_dragCandidate = true;
+                g_internalDragActive = false;
+                g_dragOutside = false;
+                g_leftDownPoint = point;
+                g_dragIndex = index;
+                g_dragKey = g_items[index].key;
+                SetCapture(hwnd);
+                return 0;
+            }
             DockEdge edge = PanelEdgeAtScreenPoint(point);
             if (edge != DockEdge::None) {
                 StartDockMove(edge, point);
                 return 0;
             }
-            int index = ItemAtCursor(point);
-            if (index < 0) return 0;
-            g_leftDown = true;
-            g_dragCandidate = true;
-            g_internalDragActive = false;
-            g_dragOutside = false;
-            g_leftDownPoint = point;
-            g_dragIndex = index;
-            g_dragKey = g_items[index].key;
-            SetCapture(hwnd);
             return 0;
         }
 
@@ -4117,7 +4115,8 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
             return 0;
 
         case WM_RBUTTONUP: {
-            if (g_internalDragActive || g_leftDown || g_externalDragActive) {
+            if (g_internalDragActive || g_leftDown || g_externalDragActive ||
+                g_dockMoveAxis != DockMoveAxis::None) {
                 return 0;
             }
             POINT point{};
@@ -4147,6 +4146,11 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
                 }
                 POINT point{};
                 GetCursorPos(&point);
+                int index = ItemAtCursor(point);
+                if (index >= 0) {
+                    SetCursor(LoadCursorW(nullptr, IDC_HAND));
+                    return TRUE;
+                }
                 DockEdge edge = PanelEdgeAtScreenPoint(point);
                 if (edge != DockEdge::None) {
                     SetCursor(LoadCursorW(
@@ -4156,8 +4160,7 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
                                      : IDC_SIZEWE));
                     return TRUE;
                 }
-                int index = ItemAtCursor(point);
-                SetCursor(LoadCursorW(nullptr, index >= 0 ? IDC_HAND : IDC_ARROW));
+                SetCursor(LoadCursorW(nullptr, IDC_ARROW));
                 return TRUE;
             }
             break;
@@ -4324,15 +4327,31 @@ int RunDockThread() {
     CreateTextures();
 
     LoadSettings();
-    g_dockOffsetX = ClampInt(Wh_GetIntValue(L"DockOffsetX", 0), -20000, 20000);
+    EnsureStoragePaths();
+
+    std::wstring userOffsetX = UserValueName(L"DockOffsetX");
+    int offsetX = Wh_GetIntValue(userOffsetX.c_str(), kMissingLocalValue);
+    if (offsetX == kMissingLocalValue) {
+        offsetX = Wh_GetIntValue(L"DockOffsetX", 0);
+        Wh_SetIntValue(userOffsetX.c_str(), offsetX);
+    }
+    g_dockOffsetX = ClampInt(offsetX, -20000, 20000);
+
+    std::wstring userBottomDistance = UserValueName(L"DockBottomDistance");
     int storedDistance =
-        Wh_GetIntValue(L"DockBottomDistance", kMissingLocalValue);
+        Wh_GetIntValue(userBottomDistance.c_str(), kMissingLocalValue);
+    if (storedDistance == kMissingLocalValue) {
+        int legacyDistance =
+            Wh_GetIntValue(L"DockBottomDistance", kMissingLocalValue);
+        if (legacyDistance != kMissingLocalValue) {
+            storedDistance = legacyDistance;
+            Wh_SetIntValue(userBottomDistance.c_str(), storedDistance);
+        }
+    }
     if (storedDistance != kMissingLocalValue) {
         g_dockBottomDistance = ClampInt(storedDistance, 0, 20000);
-    } else {
-        g_legacyOffsetY =
-            ClampInt(Wh_GetIntValue(L"DockOffsetY", 0), -20000, 20000);
     }
+
     g_storedKeys = LoadDockKeys();
     g_lastItemCheckTime = std::chrono::steady_clock::now();
     if (auto* dropTarget = new (std::nothrow) DockDropTarget()) {
