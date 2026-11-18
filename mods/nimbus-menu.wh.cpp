@@ -2775,7 +2775,6 @@ static void OnEverythingRecentReply(const COPYDATASTRUCT* cds) {
     // item; each item's data: full path (DWORD length, text, null), date modified (FILETIME), attributes.
     if (!cds->lpData || cds->cbData < sizeof(DWORD) * 5) return;
     const BYTE* base = (const BYTE*)cds->lpData;
-    const BYTE* end = base + cds->cbData;
     const DWORD* list = (const DWORD*)base;
     DWORD num = list[1], flags = list[3];
     if (flags != (0x4 | 0x40 | 0x100)) {
@@ -2786,14 +2785,13 @@ static void OnEverythingRecentReply(const COPYDATASTRUCT* cds) {
     }
     struct Item2 { DWORD flags, dataOffset; };
     const Item2* items = (const Item2*)(list + 5);
-    (void)end;
     // (Any process of this user can send this message: offsets are checked as integers.)
     size_t numItems = std::min<size_t>(num, (cds->cbData - sizeof(DWORD) * 5) / sizeof(Item2));
     int checked = 0, marked = 0;
     // The checks below run on the UI thread: stop after a short while, and only look at fixed drives
     // (a sleeping USB disk or a slow network share would freeze the dock).
     auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(150);
-    wchar_t fixedDrives[26] = {};  // 0 unknown, 1 fixed, 2 other
+    BYTE fixedDrives[26] = {};  // 0 unknown, 1 fixed, 2 other
     for (size_t i = 0; i < numItems && marked < (int)kRecentMax; i++) {
         if (std::chrono::steady_clock::now() > deadline) break;
         DWORD off = items[i].dataOffset;
@@ -2801,8 +2799,9 @@ static void OnEverythingRecentReply(const COPYDATASTRUCT* cds) {
         const BYTE* d = base + off;
         size_t len = *(const DWORD UNALIGNED*)d;
         d += sizeof(DWORD);
-        // text, null, FILETIME (4 WCHARs), attributes (2 WCHARs)
-        if ((cds->cbData - off - sizeof(DWORD)) / sizeof(WCHAR) < len + 1 + 6) break;
+        // text, null, FILETIME (4 WCHARs), attributes (2 WCHARs); subtract, never add (32-bit size_t)
+        size_t avail = (cds->cbData - off - sizeof(DWORD)) / sizeof(WCHAR);
+        if (avail < 7 || len > avail - 7) break;
         std::wstring full((const wchar_t*)d, len);
         d += (len + 1) * sizeof(WCHAR);
         ULONGLONG when = *(const ULONGLONG UNALIGNED*)d;
