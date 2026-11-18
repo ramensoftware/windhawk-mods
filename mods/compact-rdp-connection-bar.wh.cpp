@@ -2,7 +2,7 @@
 // @id              compact-rdp-connection-bar
 // @name            Compact RDP connection bar
 // @description     Shrinks the top connection bar, optionally hides pin/quality/lock buttons, keeps drag working
-// @version         3.3.3
+// @version         3.3.4
 // @author          hsb5
 // @github          https://github.com/hsb5
 // @include         mstsc.exe
@@ -418,32 +418,29 @@ static int CollectToolbars(HWND bbar) {
     origin.y = 0;
     ClientToScreen(bbar, &origin);
 
-    // Match slots by HWND, not by sort position: after a toolbar is destroyed
-    // and a new one appears, a survivor must not record its already-compacted
-    // rect as "original" just because it shifted into the cleared slot.
+    // Rebuild the array in the current left-to-right order, while preserving
+    // the original geometry for toolbars that survived this collection pass.
+    TbInfo next[MAX_TB] = {};
     for (int i = 0; i < n; i++) {
-        int slot = -1;
-        for (int j = 0; j < g_tbCount; j++)
-            if (g_tb[j].hwnd == found[i]) { slot = j; break; }
-        if (slot < 0) {
-            for (int j = 0; j < MAX_TB; j++)
-                if (g_tb[j].hwnd == NULL) { slot = j; break; }
+        next[i].hwnd = found[i];
+        for (int j = 0; j < g_tbCount; j++) {
+            if (g_tb[j].hwnd == found[i]) {
+                next[i] = g_tb[j];
+                break;
+            }
         }
-        if (slot < 0) continue;
-
-        TbInfo* t = &g_tb[slot];
-        t->hwnd = found[i];
-        if (!t->haveOrig) {
+        if (!next[i].haveOrig) {
             RECT r;
             GetWindowRect(found[i], &r);
-            t->ox = (int)r.left - origin.x;
-            t->oy = (int)r.top - origin.y;
-            t->ow = (int)(r.right - r.left);
-            t->oh = (int)(r.bottom - r.top);
-            t->haveOrig = true;
+            next[i].ox = (int)r.left - origin.x;
+            next[i].oy = (int)r.top - origin.y;
+            next[i].ow = (int)(r.right - r.left);
+            next[i].oh = (int)(r.bottom - r.top);
+            next[i].haveOrig = true;
         }
     }
-    g_tbCount = n < MAX_TB ? n : MAX_TB;
+    for (int i = 0; i < MAX_TB; i++) g_tb[i] = next[i];
+    g_tbCount = n;
     return g_tbCount;
 }
 
@@ -905,6 +902,17 @@ static LRESULT CALLBACK TbProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_
             g_stale = true;
             if (g_bbar && IsWindow(g_bbar)) InvalidateRect(g_bbar, NULL, FALSE);
         }
+    }
+
+    // mstsc sometimes hides a button on its own, for example the lock icon
+    // when the session changes. Drop the record then, or RestoreButtons would
+    // unhide a button mstsc wants hidden.
+    if (!g_inHide && msg == TB_HIDEBUTTON && LOWORD(lp)) {
+        int k = 0;
+        for (int j = 0; j < g_hiddenCount; j++)
+            if (g_hidden[j].tb != hwnd || g_hidden[j].id != (int)LOWORD(lp))
+                g_hidden[k++] = g_hidden[j];
+        g_hiddenCount = k;
     }
 
     // mstsc can rebuild or update toolbar buttons when the connection mode
