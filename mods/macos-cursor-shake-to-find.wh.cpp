@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              macos-cursor-shake-to-find
 // @name            macOS Cursor & Shake to Find (4K HD)
-// @description     Complete built-in 4K macOS cursor suite with smooth "Shake to Find" magnification.
-// @version         8.0.0
+// @description     Complete built-in 4K macOS cursor suite with smooth "Shake to Find" magnification and custom Pan/CloseHand cursors.
+// @version         18.2.0
 // @author          brcarvp
 // @github          https://github.com/brcarvp
 // @include         windhawk.exe
@@ -13,16 +13,16 @@
 /*
 # macOS Cursor & Shake to Find (4K HD) - Golden Gate Edition
 
-Transform all your Windows mouse pointers into the authentic **macOS cursor suite** with crisp white borders and unlock the native macOS **"Shake to Find"** feature.
+Transform all your Windows mouse pointers into the authentic **macOS cursor suite** with crisp white borders, including authentic **Pan** and **CloseHand** dragging pointers, plus the native macOS **"Shake to Find"** feature.
 
 ![macOS Golden Gate Cursors Preview](https://i.imgur.com/AH6rkDP.jpeg)
 
 ## Features
 
-- **Authentic Built-In 4K macOS Cursors:** Procedurally renders all system pointers directly in memory based on the latest macOS cursor design language.
+- **Authentic Built-In 4K macOS Cursors:** Procedurally renders all system pointers directly in memory based on the latest macOS cursor design language, including grab/pan hands.
 - **Custom Cursor Size & Colors:** Change the fill color, border color, and scale directly from the settings.
-- **Smart App Exclusions:** Restores native Windows cursors inside Word while keeping Shake to Find fully operational (shakes the actual Windows cursor!).
-- **Hardware Accelerated `.ani` Compilation:** Dynamically builds native Windows animated files securely in Mod Storage.
+- **Smart App Exclusions:** Restores native Windows cursors inside Word while keeping Shake to Find fully operational.
+- **Hardware Accelerated .ani/.cur Compilation:** Dynamically builds native Windows files securely in Mod Storage.
 - **Zero-Polling Hybrid Engine:** Uses raw input as an idle-wake trigger, achieving 0% CPU footprint while idle.
 */
 // ==/WindhawkModReadme==
@@ -99,6 +99,8 @@ Transform all your Windows mouse pointers into the authentic **macOS cursor suit
 #include <cstdlib>
 #include <string>
 #include <vector>
+#include <algorithm>
+#include <cwctype>
 #include <shlobj.h>
 
 #ifndef OCR_NORMAL
@@ -116,6 +118,10 @@ Transform all your Windows mouse pointers into the authentic **macOS cursor suit
 #define OCR_HAND        32649
 #define OCR_APPSTARTING 32650
 #define OCR_HELP        32651
+#endif
+
+#ifndef OCR_PAN
+#define OCR_PAN         32652
 #endif
 
 #define WM_APP_SETTINGS (WM_APP + 1)
@@ -139,7 +145,7 @@ struct ModSettings {
 const DWORD g_allCursorIds[] = {
     OCR_NORMAL, OCR_IBEAM, OCR_WAIT, OCR_CROSS, OCR_UP,
     OCR_SIZENWSE, OCR_SIZENESW, OCR_SIZEWE, OCR_SIZENS, OCR_SIZEALL,
-    OCR_NO, OCR_HAND, OCR_APPSTARTING, OCR_HELP
+    OCR_NO, OCR_HAND, OCR_APPSTARTING, OCR_HELP, OCR_PAN
 };
 
 const wchar_t* g_builtInExcludedApps[] = { 
@@ -168,7 +174,6 @@ bool g_overlayVisible = false;
 HCURSOR g_hCapturedCursor = NULL;
 bool g_inExcludedApp = false;
 
-// Estado de Correção para Starvation e Balística (Wake-and-Poll Hybrid)
 POINT g_lastPt = {0, 0};
 bool g_isTimerRunning = false;
 ULONGLONG g_lastMoveTime = 0;
@@ -176,14 +181,77 @@ ULONGLONG g_lastMoveTime = 0;
 // ============================================================================
 // FORWARD DECLARATIONS
 // ============================================================================
+std::wstring ToLowerStr(const std::wstring& str);
 bool IsProcessExcluded(HWND hwnd);
 bool IsForegroundAppExcluded();
+bool IsScreenLockedOrSecure();
 void ApplyBuiltInMacOSCursors();
 void RestoreNativeWindowsCursors();
 void CompileAnimatedCursors(int sz);
 void HideSystemCursorsForShake();
 void DrawScaledOverlay4K(HWND hwnd, POINT pt, float scale, bool useNativeCursor, HCURSOR hActiveCursor);
 void LoadSettings();
+
+// ============================================================================
+// STRING HELPERS
+// ============================================================================
+std::wstring ToLowerStr(const std::wstring& str) {
+    std::wstring res = str;
+    for (auto& ch : res) {
+        ch = static_cast<wchar_t>(std::towlower(ch));
+    }
+    return res;
+}
+
+// ============================================================================
+// SECURE DESKTOP CHECK (LOCK SCREEN / UAC)
+// ============================================================================
+bool IsScreenLockedOrSecure() {
+    HDESK hDesk = OpenInputDesktop(0, FALSE, DESKTOP_READOBJECTS);
+    if (!hDesk) {
+        return true;
+    }
+    
+    WCHAR deskName[256] = {0};
+    DWORD needed = 0;
+    bool isDefaultDesktop = false;
+    
+    if (GetUserObjectInformationW(hDesk, UOI_NAME, deskName, sizeof(deskName), &needed)) {
+        if (_wcsicmp(deskName, L"Default") == 0) {
+            isDefaultDesktop = true;
+        }
+    }
+    CloseDesktop(hDesk);
+    
+    if (!isDefaultDesktop) {
+        return true;
+    }
+
+    HWND hwndFg = GetForegroundWindow();
+    if (hwndFg) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwndFg, &pid);
+        if (pid) {
+            HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+            if (hProc) {
+                WCHAR path[MAX_PATH] = {0};
+                DWORD size = MAX_PATH;
+                if (QueryFullProcessImageNameW(hProc, 0, path, &size)) {
+                    std::wstring exeName = path;
+                    std::transform(exeName.begin(), exeName.end(), exeName.begin(), ::towlower);
+                    if (exeName.find(L"lockapp.exe") != std::wstring::npos || 
+                        exeName.find(L"logonui.exe") != std::wstring::npos ||
+                        exeName.find(L"consent.exe") != std::wstring::npos) {
+                        CloseHandle(hProc);
+                        return true;
+                    }
+                }
+                CloseHandle(hProc);
+            }
+        }
+    }
+    return false;
+}
 
 // ============================================================================
 // DIRECTORY MANAGEMENT (SESSION MOD STORAGE)
@@ -198,10 +266,7 @@ static DWORD GetSessionId() {
 static bool EnsureDir() {
     WCHAR storage[MAX_PATH];
     size_t len = Wh_GetModStoragePath(storage, ARRAYSIZE(storage));
-    if (len == 0) {
-        return false;
-    }
-    if (len >= ARRAYSIZE(storage)) {
+    if (len == 0 || len >= ARRAYSIZE(storage)) {
         return false;
     }
     
@@ -229,10 +294,7 @@ static void CleanupFiles(const std::wstring& keepPrefix) {
         size_t len = name.size();
         bool ours = false;
         if (len > 4) {
-            if (name.compare(len - 4, 4, L".cur") == 0) {
-                ours = true;
-            }
-            if (name.compare(len - 4, 4, L".ani") == 0) {
+            if (name.compare(len - 4, 4, L".cur") == 0 || name.compare(len - 4, 4, L".ani") == 0) {
                 ours = true;
             }
         }
@@ -257,20 +319,16 @@ static void RemoveSessionDir() {
 }
 
 // ============================================================================
-// .ANI COMPILATION
+// .CUR & .ANI COMPILATION GENERATORS
 // ============================================================================
 
 int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
     UINT num = 0;
     UINT size = 0;
     Gdiplus::GetImageEncodersSize(&num, &size);
-    if (size == 0) {
-        return -1;
-    }
+    if (size == 0) return -1;
     Gdiplus::ImageCodecInfo* pImageCodecInfo = (Gdiplus::ImageCodecInfo*)(malloc(size));
-    if (pImageCodecInfo == NULL) {
-        return -1;
-    }
+    if (pImageCodecInfo == NULL) return -1;
     Gdiplus::GetImageEncoders(num, size, pImageCodecInfo);
     for (UINT j = 0; j < num; ++j) {
         if (wcscmp(pImageCodecInfo[j].MimeType, format) == 0) {
@@ -297,6 +355,55 @@ void WriteFourCC(std::vector<BYTE>& buf, const char* fcc) {
     buf.push_back(fcc[3]);
 }
 
+std::vector<BYTE> BuildCurData(Gdiplus::Bitmap* bmp, int hotX, int hotY, CLSID* pPngClsid) {
+    IStream* stream = nullptr;
+    CreateStreamOnHGlobal(NULL, TRUE, &stream);
+    bmp->Save(stream, pPngClsid, NULL);
+
+    STATSTG stat;
+    stream->Stat(&stat, STATFLAG_NONAME);
+    ULONG pngSize = stat.cbSize.LowPart;
+
+    std::vector<BYTE> pngData(pngSize);
+    LARGE_INTEGER liZero = {};
+    stream->Seek(liZero, STREAM_SEEK_SET, NULL);
+    ULONG bytesRead;
+    stream->Read(pngData.data(), pngSize, &bytesRead);
+    stream->Release();
+
+    std::vector<BYTE> curData;
+    curData.push_back(0); curData.push_back(0);
+    curData.push_back(2); curData.push_back(0); // Type 2 = Cursor
+    curData.push_back(1); curData.push_back(0); // 1 image
+    
+    int w = bmp->GetWidth();
+    int h = bmp->GetHeight();
+    curData.push_back(w >= 256 ? 0 : (BYTE)w);
+    curData.push_back(h >= 256 ? 0 : (BYTE)h);
+    curData.push_back(0);
+    curData.push_back(0);
+    
+    curData.push_back(hotX & 0xFF);
+    curData.push_back((hotX >> 8) & 0xFF);
+    curData.push_back(hotY & 0xFF);
+    curData.push_back((hotY >> 8) & 0xFF);
+    
+    curData.push_back(pngSize & 0xFF);
+    curData.push_back((pngSize >> 8) & 0xFF);
+    curData.push_back((pngSize >> 16) & 0xFF);
+    curData.push_back((pngSize >> 24) & 0xFF);
+    
+    int offset = 22; 
+    curData.push_back(offset & 0xFF);
+    curData.push_back((offset >> 8) & 0xFF);
+    curData.push_back((offset >> 16) & 0xFF);
+    curData.push_back((offset >> 24) & 0xFF);
+    
+    curData.insert(curData.end(), pngData.begin(), pngData.end());
+    delete bmp;
+    return curData;
+}
+
 std::vector<BYTE> BuildAniFile(const std::vector<std::vector<BYTE>>& frames, DWORD jifRate) {
     std::vector<BYTE> buf;
     WriteFourCC(buf, "RIFF");
@@ -306,7 +413,7 @@ std::vector<BYTE> BuildAniFile(const std::vector<std::vector<BYTE>>& frames, DWO
     WriteFourCC(buf, "anih");
     WriteDWORD(buf, 36); 
     
-    DWORD cFrames = frames.size();
+    DWORD cFrames = (DWORD)frames.size();
     WriteDWORD(buf, 36);
     WriteDWORD(buf, cFrames);
     WriteDWORD(buf, cFrames);
@@ -320,7 +427,7 @@ std::vector<BYTE> BuildAniFile(const std::vector<std::vector<BYTE>>& frames, DWO
     WriteFourCC(buf, "LIST");
     DWORD listSize = 4; 
     for (const auto& f : frames) {
-        listSize += 8 + f.size();
+        listSize += 8 + (DWORD)f.size();
         if (f.size() % 2 != 0) {
             listSize += 1;
         }
@@ -330,14 +437,14 @@ std::vector<BYTE> BuildAniFile(const std::vector<std::vector<BYTE>>& frames, DWO
     
     for (const auto& f : frames) {
         WriteFourCC(buf, "icon");
-        WriteDWORD(buf, f.size());
+        WriteDWORD(buf, (DWORD)f.size());
         buf.insert(buf.end(), f.begin(), f.end());
         if (f.size() % 2 != 0) {
             buf.push_back(0); 
         }
     }
     
-    DWORD fileSize = buf.size() - 8;
+    DWORD fileSize = (DWORD)buf.size() - 8;
     buf[4] = fileSize & 0xFF;
     buf[5] = (fileSize >> 8) & 0xFF;
     buf[6] = (fileSize >> 16) & 0xFF;
@@ -349,14 +456,6 @@ std::vector<BYTE> BuildAniFile(const std::vector<std::vector<BYTE>>& frames, DWO
 // ============================================================================
 // PROCESS EXCLUSION
 // ============================================================================
-
-std::wstring ToLowerStr(const std::wstring& str) {
-    std::wstring res = str;
-    for (auto& ch : res) {
-        ch = static_cast<wchar_t>(towlower(ch));
-    }
-    return res;
-}
 
 bool IsProcessExcluded(HWND hwnd) {
     if (!hwnd) {
@@ -420,7 +519,7 @@ bool IsForegroundAppExcluded() {
 }
 
 // ============================================================================
-// VECTOR DRAWING
+// VECTOR DRAWING (INCLUDING PAN & CLOSEHAND)
 // ============================================================================
 
 void SetupHighQualityGraphics(Gdiplus::Graphics& g) {
@@ -503,6 +602,78 @@ Gdiplus::Bitmap* RenderMacOSAlternate(int size) {
     g.DrawPolygon(&borderPen, pts, 7);
     g.FillPolygon(&fillBrush, pts, 7);
     
+    return bmp;
+}
+
+Gdiplus::Bitmap* RenderMacOSPan(int size) {
+    Gdiplus::Bitmap* bmp = new Gdiplus::Bitmap(size, size, PixelFormat32bppARGB);
+    Gdiplus::Graphics g(bmp);
+    SetupHighQualityGraphics(g);
+    float s = (static_cast<float>(size) / 32.0f) * MAC_TRUE_SCALE;
+
+    Gdiplus::GraphicsPath handPath;
+    handPath.AddBezier(9.2f * s, 10.8f * s,  8.9f * s,  7.0f * s, 11.7f * s,  6.0f * s, 12.1f * s,  9.0f * s);
+    handPath.AddLine(12.1f * s, 9.0f * s, 13.7f * s, 15.2f * s);
+    handPath.AddBezier(13.7f * s, 15.2f * s, 13.9f * s, 12.4f * s, 16.9f * s, 12.4f * s, 17.0f * s, 15.3f * s);
+    handPath.AddBezier(17.0f * s, 15.3f * s, 17.2f * s, 12.8f * s, 20.1f * s, 12.9f * s, 20.2f * s, 15.7f * s);
+    handPath.AddBezier(20.2f * s, 15.7f * s, 20.4f * s, 13.5f * s, 23.0f * s, 13.8f * s, 23.0f * s, 16.6f * s);
+    handPath.AddBezier(23.0f * s, 16.6f * s, 23.1f * s, 20.5f * s, 22.9f * s, 24.8f * s, 22.0f * s, 27.4f * s);
+    handPath.AddBezier(22.0f * s, 27.4f * s, 21.6f * s, 29.6f * s, 18.2f * s, 29.6f * s, 17.4f * s, 27.5f * s);
+    handPath.AddBezier(17.4f * s, 27.5f * s, 16.6f * s, 29.6f * s, 13.0f * s, 29.6f * s, 12.2f * s, 27.6f * s);
+    handPath.AddBezier(12.2f * s, 27.6f * s, 10.4f * s, 25.6f * s,  8.2f * s, 22.6f * s,  5.6f * s, 19.6f * s);
+    handPath.CloseFigure();
+
+    Gdiplus::Matrix shadowMat;
+    shadowMat.Translate(0.6f * s, 1.3f * s);
+    g.SetTransform(&shadowMat);
+    Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(65, 0, 0, 0));
+    g.FillPath(&shadowBrush, &handPath);
+    g.ResetTransform();
+
+    Gdiplus::SolidBrush fillBrush(g_settings.cursorFillColor);
+    Gdiplus::Pen borderPen(g_settings.cursorBorderColor, 2.15f * s);
+    borderPen.SetLineJoin(Gdiplus::LineJoinRound);
+
+    g.FillPath(&fillBrush, &handPath);
+    g.DrawPath(&borderPen, &handPath);
+    return bmp;
+}
+
+Gdiplus::Bitmap* RenderMacOSCloseHand(int size) {
+    Gdiplus::Bitmap* bmp = new Gdiplus::Bitmap(size, size, PixelFormat32bppARGB);
+    Gdiplus::Graphics g(bmp);
+    SetupHighQualityGraphics(g);
+    float s = (static_cast<float>(size) / 32.0f) * MAC_TRUE_SCALE;
+
+    Gdiplus::GraphicsPath fistPath;
+    float rx = 7.0f * s, ry = 10.0f * s, rw = 18.0f * s, rh = 15.0f * s, radius = 5.0f * s;
+    fistPath.AddArc(rx, ry, radius * 2, radius * 2, 180, 90);
+    fistPath.AddArc(rx + rw - radius * 2, ry, radius * 2, radius * 2, 270, 90);
+    fistPath.AddArc(rx + rw - radius * 2, ry + rh - radius * 2, radius * 2, radius * 2, 0, 90);
+    fistPath.AddArc(rx, ry + rh - radius * 2, radius * 2, radius * 2, 90, 90);
+    fistPath.CloseFigure();
+
+    Gdiplus::Matrix shadowMat;
+    shadowMat.Translate(0.6f * s, 1.3f * s);
+    g.SetTransform(&shadowMat);
+    Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(65, 0, 0, 0));
+    g.FillPath(&shadowBrush, &fistPath);
+    g.ResetTransform();
+
+    Gdiplus::SolidBrush fillBrush(g_settings.cursorFillColor);
+    Gdiplus::Pen borderPen(g_settings.cursorBorderColor, 2.15f * s);
+    borderPen.SetLineJoin(Gdiplus::LineJoinRound);
+
+    g.FillPath(&fillBrush, &fistPath);
+    g.DrawPath(&borderPen, &fistPath);
+
+    Gdiplus::Pen linesPen(g_settings.cursorBorderColor, 1.8f * s);
+    linesPen.SetStartCap(Gdiplus::LineCapRound);
+    linesPen.SetEndCap(Gdiplus::LineCapRound);
+    g.DrawLine(&linesPen, 13.0f * s, 14.0f * s, 13.0f * s, 21.0f * s);
+    g.DrawLine(&linesPen, 16.0f * s, 14.0f * s, 16.0f * s, 21.0f * s);
+    g.DrawLine(&linesPen, 19.0f * s, 14.0f * s, 19.0f * s, 21.0f * s);
+
     return bmp;
 }
 
@@ -596,10 +767,10 @@ Gdiplus::Bitmap* RenderMacOSHand(int size) {
     handPath.AddBezier(23.0f * s, 13.6f * s, 23.1f * s, 17.5f * s, 22.9f * s, 21.8f * s, 22.0f * s, 25.4f * s);
     handPath.AddBezier(22.0f * s, 25.4f * s, 21.6f * s, 27.6f * s, 18.2f * s, 27.6f * s, 17.4f * s, 25.5f * s);
     handPath.AddBezier(17.4f * s, 25.5f * s, 16.6f * s, 27.6f * s, 13.0f * s, 27.6f * s, 12.2f * s, 25.6f * s);
-    handPath.AddBezier(12.2f * s, 25.6f * s, 10.4f * s, 23.6f * s, 8.2f * s, 20.6f * s, 5.6f * s, 17.6f * s);
-    handPath.AddBezier(5.6f * s, 17.6f * s, 4.3f * s, 16.0f * s, 6.2f * s, 14.0f * s, 7.8f * s, 15.4f * s);
+    handPath.AddBezier(12.2f * s, 25.6f * s, 10.4f * s, 23.6f * s,  8.2f * s, 20.6f * s,  5.6f * s, 17.6f * s);
+    handPath.AddBezier( 5.6f * s, 17.6f * s,  4.3f * s, 16.0f * s,  6.2f * s, 14.0f * s,  7.8f * s, 15.4f * s);
     handPath.AddLine(7.8f * s, 15.4f * s, 10.6f * s, 18.0f * s);
-    handPath.AddLine(10.6f * s, 18.0f * s, 9.2f * s, 4.8f * s);
+    handPath.AddLine(10.6f * s, 18.0f * s,  9.2f * s,  4.8f * s);
     handPath.CloseFigure();
     
     Gdiplus::Matrix shadowMat;
@@ -682,6 +853,7 @@ Gdiplus::Bitmap* RenderMacOSCross(int size) {
     g.DrawLine(&borderPen, cx, cy - arm, cx, cy + arm);
     g.DrawLine(&fillPen, cx - arm, cy, cx + arm, cy);
     g.DrawLine(&fillPen, cx, cy - arm, cx, cy + arm);
+    
     return bmp;
 }
 
@@ -699,7 +871,6 @@ Gdiplus::Bitmap* RenderMacOSMove(int size) {
     Gdiplus::Pen borderPen(g_settings.cursorBorderColor, 2.3f * s);
     borderPen.SetLineJoin(Gdiplus::LineJoinMiter);
     Gdiplus::SolidBrush fillBrush(g_settings.cursorFillColor);
-    
     g.DrawPolygon(&borderPen, diamond, 4);
     g.FillPolygon(&fillBrush, diamond, 4);
     
@@ -720,6 +891,7 @@ Gdiplus::Bitmap* RenderMacOSMove(int size) {
     g.FillPolygon(&innerBrush, botTip, 3);
     g.FillPolygon(&innerBrush, leftTip, 3);
     g.FillPolygon(&innerBrush, rightTip, 3);
+    
     return bmp;
 }
 
@@ -742,11 +914,11 @@ Gdiplus::Bitmap* RenderMacOSGoldenGateResize(int size, float angleDegrees) {
     Gdiplus::Pen borderPen(g_settings.cursorBorderColor, 2.5f * s);
     borderPen.SetLineJoin(Gdiplus::LineJoinMiter);
     Gdiplus::SolidBrush fillBrush(g_settings.cursorFillColor);
-    
     g.DrawPolygon(&borderPen, topTriangle, 3);
     g.FillPolygon(&fillBrush, topTriangle, 3);
     g.DrawPolygon(&borderPen, botTriangle, 3);
     g.FillPolygon(&fillBrush, botTriangle, 3);
+    
     return bmp;
 }
 
@@ -778,11 +950,9 @@ Gdiplus::Bitmap* RenderMacOSHelp(int size) {
     Gdiplus::Matrix shadowMat;
     shadowMat.Translate(0.0f, 1.5f * s);
     g.SetTransform(&shadowMat);
-    
     Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(60, 0, 0, 0));
     Gdiplus::Pen shadowPen(Gdiplus::Color(60, 0, 0, 0), 2.5f * s);
     shadowPen.SetLineJoin(Gdiplus::LineJoinRound);
-    
     g.FillPath(&shadowBrush, &fullPath);
     g.DrawPath(&shadowPen, &fullPath);
     g.ResetTransform();
@@ -790,7 +960,6 @@ Gdiplus::Bitmap* RenderMacOSHelp(int size) {
     Gdiplus::Pen borderPen(g_settings.cursorBorderColor, 3.2f * s); 
     borderPen.SetLineJoin(Gdiplus::LineJoinRound);
     Gdiplus::SolidBrush fillBrush(g_settings.cursorFillColor);
-
     g.DrawPath(&borderPen, &fullPath);
     g.FillPath(&fillBrush, &fullPath);
 
@@ -979,6 +1148,8 @@ void ApplyBuiltInMacOSCursors() {
     trySet(BitmapToHCURSOR(RenderMacOSArrow(sz), static_cast<int>(6.2f * r), static_cast<int>(3.5f * r)), OCR_NORMAL);
     trySet(BitmapToHCURSOR(RenderMacOSAlternate(sz), static_cast<int>(16.0f * (sz / 32.0f)), static_cast<int>(3.0f * r)), OCR_UP);
     trySet(BitmapToHCURSOR(RenderMacOSHand(sz), static_cast<int>(10.0f * r), static_cast<int>(3.0f * r)), OCR_HAND);
+    trySet(BitmapToHCURSOR(RenderMacOSPan(sz), static_cast<int>(10.0f * r), static_cast<int>(10.0f * r)), OCR_PAN);
+    trySet(BitmapToHCURSOR(RenderMacOSCloseHand(sz), static_cast<int>(10.0f * r), static_cast<int>(10.0f * r)), OCR_SIZEALL);
     trySet(BitmapToHCURSOR(RenderMacOSIBeam(sz), center, center), OCR_IBEAM);
     trySet(BitmapToHCURSOR(RenderMacOSCross(sz), center, center), OCR_CROSS);
     trySet(BitmapToHCURSOR(RenderMacOSMove(sz), center, center), OCR_SIZEALL);
@@ -992,7 +1163,6 @@ void ApplyBuiltInMacOSCursors() {
     if (!g_dir.empty()) {
         std::wstring appStartPath = g_dir + L"\\mac_appstart.ani";
         trySet((HCURSOR)LoadImageW(NULL, appStartPath.c_str(), IMAGE_CURSOR, 0, 0, LR_LOADFROMFILE), OCR_APPSTARTING);
-        
         std::wstring waitPath = g_dir + L"\\mac_wait.ani";
         trySet((HCURSOR)LoadImageW(NULL, waitPath.c_str(), IMAGE_CURSOR, 0, 0, LR_LOADFROMFILE), OCR_WAIT);
     }
@@ -1126,8 +1296,6 @@ void HandleRawInput(LPARAM lParam) {
     if (!g_settings.enableShakeToFind) {
         return;
     }
-    
-    // Se o timer ja esta rodando (ativo), descartamos o processamento raw
     if (g_isTimerRunning) {
         return;
     }
@@ -1181,6 +1349,32 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             
         case WM_TIMER:
             if (wParam == TIMER_ID_SHAKE) {
+                if (IsScreenLockedOrSecure()) {
+                    g_reversals = 0;
+                    g_lastDir = 0;
+                    g_accumDx = 0;
+                    g_targetScale = 1.0f;
+                    g_currentScale = 1.0f;
+                    if (g_overlayVisible) {
+                        ShowWindow(hwnd, SW_HIDE);
+                        g_overlayVisible = false;
+                        if (g_hCapturedCursor) {
+                            DestroyIcon(g_hCapturedCursor);
+                            g_hCapturedCursor = NULL;
+                        }
+                    }
+                    if (g_sysCursorHidden) {
+                        if (g_inExcludedApp || !g_settings.applyMacCursors) {
+                            RestoreNativeWindowsCursors();
+                        } else {
+                            ApplyBuiltInMacOSCursors();
+                        }
+                    }
+                    KillTimer(hwnd, TIMER_ID_SHAKE);
+                    g_isTimerRunning = false;
+                    return 0;
+                }
+                
                 ULONGLONG now = GetTickCount64();
                 POINT pt;
                 GetCursorPos(&pt);
@@ -1194,7 +1388,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                         g_lastDir = 0;
                         g_accumDx = 0;
                     }
-                    
                     int dir = (dx > 0) ? 1 : -1;
                     if (dir == g_lastDir || g_lastDir == 0) {
                         g_accumDx += std::abs(dx);
@@ -1246,7 +1439,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                             DestroyIcon(g_hCapturedCursor);
                             g_hCapturedCursor = NULL;
                         }
-                        
                         if (g_sysCursorHidden) {
                             if (g_inExcludedApp || !g_settings.applyMacCursors) {
                                 RestoreNativeWindowsCursors();
@@ -1256,18 +1448,16 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                         }
                     }
                     
-                    if (now - g_lastMoveTime > 250 && g_reversals == 0) {
+                    if (now - g_lastMoveTime > 320 && g_reversals == 0) {
                         KillTimer(hwnd, TIMER_ID_SHAKE);
                         g_isTimerRunning = false;
                     }
                 }
             }
             return 0;
-            
         case WM_APP_SETTINGS:
             ReloadSettingsAndApply();
             return 0;
-            
         case WM_APP_FOREGROUND:
             HandleForegroundChange((HWND)lParam);
             return 0;
@@ -1309,25 +1499,15 @@ DWORD WINAPI WorkerThread(LPVOID) {
     MSG msg;
     BOOL bRet;
     while ((bRet = GetMessageW(&msg, NULL, 0, 0)) != 0) {
-        if (bRet == -1) {
-            break;
-        }
-        if (msg.message == WM_QUIT) {
-            break;
-        }
+        if (bRet == -1) break;
+        if (msg.message == WM_QUIT) break;
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
 
-    if (hHook) {
-        UnhookWinEvent(hHook);
-    }
-    if (g_hCapturedCursor) {
-        DestroyIcon(g_hCapturedCursor);
-    }
-    if (g_hwndOverlay) {
-        DestroyWindow(g_hwndOverlay);
-    }
+    if (hHook) UnhookWinEvent(hHook);
+    if (g_hCapturedCursor) DestroyIcon(g_hCapturedCursor);
+    if (g_hwndOverlay) DestroyWindow(g_hwndOverlay);
     UnregisterClassW(wc.lpszClassName, wc.hInstance);
     return 0;
 }
@@ -1337,42 +1517,18 @@ DWORD WINAPI WorkerThread(LPVOID) {
 // ============================================================================
 
 Gdiplus::Color GetColorFromName(const std::wstring& name, Gdiplus::Color fallback) {
-    if (name == L"Black") {
-        return Gdiplus::Color(255, 0, 0, 0);
-    }
-    if (name == L"White") {
-        return Gdiplus::Color(255, 255, 255, 255);
-    }
-    if (name == L"Red") {
-        return Gdiplus::Color(255, 255, 0, 0);
-    }
-    if (name == L"Green") {
-        return Gdiplus::Color(255, 0, 200, 0);
-    }
-    if (name == L"Blue") {
-        return Gdiplus::Color(255, 0, 122, 255);
-    }
-    if (name == L"Yellow") {
-        return Gdiplus::Color(255, 255, 204, 0);
-    }
-    if (name == L"Cyan") {
-        return Gdiplus::Color(255, 0, 255, 255);
-    }
-    if (name == L"Magenta") {
-        return Gdiplus::Color(255, 255, 0, 255);
-    }
-    if (name == L"Orange") {
-        return Gdiplus::Color(255, 255, 149, 0);
-    }
-    if (name == L"Purple") {
-        return Gdiplus::Color(255, 175, 82, 222);
-    }
-    if (name == L"Pink") {
-        return Gdiplus::Color(255, 255, 105, 180);
-    }
-    if (name == L"Gray") {
-        return Gdiplus::Color(255, 128, 128, 128);
-    }
+    if (name == L"Black") return Gdiplus::Color(255, 0, 0, 0);
+    if (name == L"White") return Gdiplus::Color(255, 255, 255, 255);
+    if (name == L"Red") return Gdiplus::Color(255, 255, 0, 0);
+    if (name == L"Green") return Gdiplus::Color(255, 0, 200, 0);
+    if (name == L"Blue") return Gdiplus::Color(255, 0, 122, 255);
+    if (name == L"Yellow") return Gdiplus::Color(255, 255, 204, 0);
+    if (name == L"Cyan") return Gdiplus::Color(255, 0, 255, 255);
+    if (name == L"Magenta") return Gdiplus::Color(255, 255, 0, 255);
+    if (name == L"Orange") return Gdiplus::Color(255, 255, 149, 0);
+    if (name == L"Purple") return Gdiplus::Color(255, 175, 82, 222);
+    if (name == L"Pink") return Gdiplus::Color(255, 255, 105, 180);
+    if (name == L"Gray") return Gdiplus::Color(255, 128, 128, 128);
     return fallback;
 }
 
@@ -1382,9 +1538,7 @@ void ParseCustomExcludedApps(PCWSTR rawStr) {
     size_t start = 0;
     while (start < input.size()) {
         size_t end = input.find(L';', start);
-        if (end == std::wstring::npos) {
-            end = input.size();
-        }
+        if (end == std::wstring::npos) end = input.size();
         std::wstring token = input.substr(start, end - start);
         size_t first = token.find_first_not_of(L" \t\r\n");
         size_t last = token.find_last_not_of(L" \t\r\n");
@@ -1476,49 +1630,35 @@ void WINAPI EntryPoint_Hook() {
 
 BOOL Wh_ModInit() {
     DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
-        return FALSE;
-    }
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) return FALSE;
 
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
-    if (!argv) {
-        Wh_Log(L"CommandLineToArgvW failed");
-        return FALSE;
-    }
+    if (!argv) return FALSE;
 
     for (int i = 1; i < argc; i++) {
         if (wcscmp(argv[i], L"-service") == 0 || wcscmp(argv[i], L"-service-start") == 0 || wcscmp(argv[i], L"-service-stop") == 0) {
-            isExcluded = true;
-            break;
+            isExcluded = true; break;
         }
     }
     for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
-                isCurrentToolModProcess = true;
-            }
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) isCurrentToolModProcess = true;
             break;
         }
     }
     LocalFree(argv);
 
-    if (isExcluded) {
-        return FALSE;
-    }
+    if (isExcluded) return FALSE;
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex || GetLastError() == ERROR_ALREADY_EXISTS) {
-            ExitProcess(1);
-        }
-        if (!WhTool_ModInit()) {
-            ExitProcess(1);
-        }
+        if (!g_toolModProcessMutex || GetLastError() == ERROR_ALREADY_EXISTS) ExitProcess(1);
+        if (!WhTool_ModInit()) ExitProcess(1);
 
         IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
@@ -1528,47 +1668,34 @@ BOOL Wh_ModInit() {
         return TRUE;
     }
 
-    if (isToolModProcess) {
-        return FALSE;
-    }
+    if (isToolModProcess) return FALSE;
     g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) {
-        return;
-    }
+    if (!g_isToolModProcessLauncher) return;
     WCHAR currentProcessPath[MAX_PATH];
-    if (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath)) == 0) {
-        return;
-    }
+    if (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath)) == 0) return;
     WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll") ? GetModuleHandle(L"kernelbase.dll") : GetModuleHandle(L"kernel32.dll");
-    if (!kernelModule) {
-        return;
-    }
+    if (!kernelModule) return;
 
     using CreateProcessInternalW_t = BOOL(WINAPI*)(HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, WINBOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
     CreateProcessInternalW_t pCreateProcessInternalW = (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
-    if (!pCreateProcessInternalW) {
-        return;
-    }
+    if (!pCreateProcessInternalW) return;
 
     STARTUPINFO si{ .cb = sizeof(STARTUPINFO), .dwFlags = STARTF_FORCEOFFFEEDBACK };
     PROCESS_INFORMATION pi;
     if (pCreateProcessInternalW(nullptr, currentProcessPath, commandLine, nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi, nullptr)) {
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
     }
 }
 
 void Wh_ModSettingsChanged() {
-    if (!g_isToolModProcessLauncher) {
-        WhTool_ModSettingsChanged();
-    }
+    if (!g_isToolModProcessLauncher) WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
