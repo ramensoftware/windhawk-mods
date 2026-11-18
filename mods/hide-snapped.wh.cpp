@@ -2,7 +2,7 @@
 // @id              hide-snapped
 // @name            Snap Groups: Alt+Tab and taskbar
 // @description     Group-only Alt+Tab and separate taskbar buttons with tiled member icons.
-// @version         0.4.23
+// @version         0.4.24
 // @author          coldfeudal
 // @github          https://github.com/coldfeudal
 // @include         explorer.exe
@@ -61,14 +61,16 @@ still need testing.
 
 - **Independent taskbar per monitor 1.7.0:** the 0.4.19 runtime retest on
   the configuration above produced no empty buttons or Explorer crashes.
-  Version 0.4.23 routes group buttons to their members' monitor and refreshes
-  placement when it changes; multi-monitor runtime verification is pending.
+  Version 0.4.23 routes group buttons to their members' monitor; the author
+  confirmed creation and monitor moves. Minimized-member placement needs testing.
   Earlier versions exhibited both problems. Longer sessions and other
   configurations still need testing.
 - **Alt+Tab per monitor 1.2.1:** Alt+Tab continued to open during the
   0.4.19 runtime retest with both mods loaded. Longer sessions and unload
   behavior still need testing.
 - Duplicate group entries may appear in ordinary application hover previews.
+- Version 0.4.24 retries taskbar API initialization after an Explorer restart;
+  recovery from the captured 80004001 startup error still needs a live retest.
   Other multi-monitor, DPI, and virtual desktop configurations have limited
   coverage.
 
@@ -2567,6 +2569,65 @@ bool PrepareTaskbarWorker(HANDLE stop, DWORD process,
     return initialize(true);
 }
 
+DWORD WINAPI WaitForTaskbarRetry(HANDLE stop, DWORD timeout) {
+    if (!timeout) return WaitForSingleObject(stop, 0);
+    ULONGLONG deadline = GetTickCount64() + timeout;
+    for (;;) {
+        ULONGLONG now = GetTickCount64();
+        if (now >= deadline) return WaitForSingleObject(stop, 0);
+        DWORD result = MsgWaitForMultipleObjects(1, &stop, FALSE,
+            static_cast<DWORD>(deadline - now), QS_ALLINPUT);
+        if (result != WAIT_OBJECT_0 + 1) return result;
+        // The STA's dispatcher/COM can need messages while shell services
+        // start. Bound each batch so messages cannot starve stop/deadline.
+        MSG message;
+        for (unsigned i = 0; i < 32 && PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE); ++i) {
+            DWORD stopped = WaitForSingleObject(stop, 0);
+            if (stopped != WAIT_TIMEOUT) return stopped;
+            TranslateMessage(&message); DispatchMessageW(&message);
+        }
+    }
+}
+HRESULT InitializeTaskbarApi(HANDLE stop, ComPtr<ITaskbarList>& taskbar,
+        decltype(&CoCreateInstance) create = CoCreateInstance,
+        DWORD (WINAPI* wait)(HANDLE, DWORD) = WaitForTaskbarRetry) {
+    taskbar.Reset();
+    HRESULT lastFailure = S_OK;
+    unsigned lastStage = 0, attempts = 0;
+    auto cancelled = [](DWORD status) {
+        return status == WAIT_OBJECT_0 ? HRESULT_FROM_WIN32(ERROR_CANCELLED) : E_FAIL;
+    };
+    for (;;) {
+        DWORD status = wait(stop, 0);
+        if (status != WAIT_TIMEOUT) return cancelled(status);
+        ++attempts;
+        ComPtr<ITaskbarList> candidate;
+        HRESULT hr = create(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER,
+            IID_PPV_ARGS(&candidate));
+        unsigned stage = 1; // COM creation
+        if (SUCCEEDED(hr) && !candidate) hr = E_UNEXPECTED;
+        if (SUCCEEDED(hr)) { stage = 2; hr = candidate->HrInit(); }
+        if (SUCCEEDED(hr)) {
+            status = wait(stop, 0);
+            if (status != WAIT_TIMEOUT) return cancelled(status);
+            taskbar = std::move(candidate);
+            Wh_Log(L"phase=taskbar shell-api-ready attempts=%u", attempts);
+            TraceWrite(TraceWorker, 4, 0, attempts);
+            return S_OK;
+        }
+        // A failed object may retain failed initialization state. Release it
+        // before waiting and retry with a fresh instance, never hide members.
+        candidate.Reset();
+        if (hr != lastFailure || stage != lastStage) {
+            Wh_Log(L"phase=taskbar shell-api-retry stage=%u hr=%08X", stage, hr);
+            TraceWrite(TraceWorker, 2, uint32_t(hr), stage);
+            lastFailure = hr; lastStage = stage;
+        }
+        status = wait(stop, 1000);
+        if (status != WAIT_TIMEOUT) return cancelled(status);
+    }
+}
+
 DWORD WINAPI TaskbarThread(void*) {
     if (!WaitForShellOwnership(g_taskbarStop, GetCurrentProcessId())) return 0;
     g_altTabSnapshotThread = CreateThread(nullptr, 0, AltTabSnapshotWorker, nullptr, 0, nullptr);
@@ -2592,12 +2653,9 @@ DWORD WINAPI TaskbarThread(void*) {
     }
     Wh_Log(L"phase=taskbar preview-dispatcher=%d", bool(dispatcher));
     ShellTaskbarOperations operations;
-    HRESULT hr = CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER,
-                                  IID_PPV_ARGS(&operations.taskbar));
-    if (SUCCEEDED(hr)) hr = operations.taskbar->HrInit();
+    HRESULT hr = InitializeTaskbarApi(g_taskbarStop, operations.taskbar);
     if (FAILED(hr)) {
-        Wh_Log(L"phase=taskbar shell-api-failed hr=%08X", hr);
-        TraceWrite(TraceWorker, 2, uint32_t(hr));
+        Wh_Log(L"phase=taskbar shell-api-stopped hr=%08X", hr);
         operations.taskbar.Reset();
         if (dispatcher) dispatcher.ShutdownQueueAsync();
         dispatcher = nullptr;
