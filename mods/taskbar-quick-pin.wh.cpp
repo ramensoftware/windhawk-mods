@@ -86,7 +86,6 @@ A lightweight, DPI-aware icon dock anchored left of the Start button. Pin apps o
   - maxVisibleWorkspaces: 10
     $name: Max visible workspaces
     $description: Visible workspace slots before scrolling when Limit visible pins is ON (1 - 30).
-    $showIf: {limitVisiblePins: true}
   - iconSize: 33
     $name: Icon size (px at 96 DPI)
     $description: Base icon size in pixels before DPI scaling (16 - 48).
@@ -187,7 +186,6 @@ A lightweight, DPI-aware icon dock anchored left of the Start button. Pin apps o
   - tripleTapWindowMs: 300
     $name: Triple-tap max gap (ms)
     $description: Maximum milliseconds allowed between consecutive taps (150 - 350).
-    $showIf: {enableKeyGestures: true}
   - enableLockAnimation: true
     $name: Lock/unlock sweep animation
     $description: OFF = subtle edge highlight; ON = left-to-right sweep across the dock.
