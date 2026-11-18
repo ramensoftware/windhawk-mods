@@ -41,9 +41,15 @@ Choose another wallpaper while a transition is running. The effect retargets to 
 
 Choose from the shared Emberveil themes and set the picker background to Solid, Blur, or Acrylic. Pick a transition effect, or let Random choose one for you.
 
+## Wallpaper behavior
+
+Applying a wallpaper updates the Windows desktop wallpaper setting. Windows keeps that image after the mod is disabled or removed, and applying an image replaces a Slideshow or Windows Spotlight background. The picker applies the image to the monitor under the pointer.
+
 ## Get started
 
 Set your wallpaper folder in the mod settings, then open the picker from its tray icon or keyboard shortcut.
+
+The tray icon stays available while the mod is enabled. Disable the mod in Windhawk to stop the switcher.
 
 Click a thumbnail to apply it. Use the arrow keys to move, Enter or Space to apply, and the mouse wheel to change pages. Click the magnifying glass in the breadcrumb, or start typing, to filter filenames in the current folder. Press Escape to clear the search.
 
@@ -73,7 +79,7 @@ Supported image formats: JPEG, PNG, BMP, and WebP.
   - split-reveal: Split Reveal (random orientation)
 - toggleHotkey: "ctrl+alt+w"
   $name: Open picker hotkey
-  $description: Shortcut such as ctrl+alt+w, ctrl+shift+f1, or alt+space. Letters, digits, common key names, and F1-F24 are supported. Numeric virtual-key codes from older settings are still accepted. Leave empty to disable the hotkey.
+  $description: Shortcut such as ctrl+alt+w, ctrl+shift+f1, or alt+space. Letters, digits, common key names, and F1-F24 are supported. Leave empty to disable the hotkey.
 - Appearance:
   - Theme: system
     $name: Theme
@@ -139,6 +145,7 @@ Supported image formats: JPEG, PNG, BMP, and WebP.
 
 #include <windows.h>
 #include <winreg.h>
+#include <sddl.h>
 #include <propidl.h>
 #include <gdiplus.h>
 #include <commctrl.h>
@@ -180,14 +187,13 @@ constexpr UINT kSearchEditId = 3003;
 constexpr UINT kTrayOpen = 2001;
 constexpr UINT kTrayPrevious = 2002;
 constexpr UINT kTrayNext = 2003;
-constexpr UINT kTrayExit = 2004;
-constexpr UINT kTraySeparator = 2005;
 constexpr UINT kHotkeyId = 1;
 constexpr UINT kReloadSettings = WM_APP + 10;
 constexpr UINT kWallpaperChangeDone = WM_APP + 11;
 constexpr UINT kImageListReady = WM_APP + 12;
 constexpr UINT kThumbnailPageReady = WM_APP + 13;
 constexpr UINT_PTR kSearchFilterTimer = 0xB743;
+constexpr UINT_PTR kTrayRetryTimer = 0xB744;
 constexpr UINT kSearchFilterDelayMs = 160;
 constexpr UINT kFirstTileId = 4000;
 constexpr size_t kPageSize = 12;
@@ -327,6 +333,8 @@ WallpaperTargetRequest g_latestWallpaperRequest;
 RECT g_transitionMonitor{};
 bool g_transitionCurrentSuperseded = false;
 NOTIFYICONDATA g_notifyIcon{};
+UINT g_taskbarCreatedMessage;
+std::wstring g_userStorageSuffix;
 
 struct ImageScanJob {
     HWND notifyWindow;
@@ -373,12 +381,59 @@ LRESULT CALLBACK SearchEditSubclassProc(HWND hwnd, UINT message,
                                         DWORD_PTR referenceData);
 
 std::wstring ReadStringSetting(PCWSTR name, size_t capacity = 2048) {
+    if (!name || !*name) {
+        return {};
+    }
     std::wstring value(capacity, L'\0');
     if (!Wh_GetStringValue(name, value.data(), (DWORD)value.size())) {
         return {};
     }
     value.resize(wcsnlen(value.c_str(), value.size()));
     return value;
+}
+
+std::wstring GetCurrentUserStorageSuffix() {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        Wh_Log(L"OpenProcessToken failed while building per-user storage keys");
+        return {};
+    }
+
+    DWORD tokenUserSize = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &tokenUserSize);
+    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || !tokenUserSize) {
+        CloseHandle(token);
+        Wh_Log(L"GetTokenInformation size query failed for the current user");
+        return {};
+    }
+
+    std::vector<BYTE> tokenUserBuffer(tokenUserSize);
+    if (!GetTokenInformation(token, TokenUser, tokenUserBuffer.data(),
+                             tokenUserSize, &tokenUserSize)) {
+        CloseHandle(token);
+        Wh_Log(L"GetTokenInformation failed for the current user");
+        return {};
+    }
+    CloseHandle(token);
+
+    const TOKEN_USER* tokenUser =
+        reinterpret_cast<const TOKEN_USER*>(tokenUserBuffer.data());
+    LPWSTR sidString = nullptr;
+    if (!ConvertSidToStringSidW(tokenUser->User.Sid, &sidString)) {
+        Wh_Log(L"ConvertSidToStringSidW failed for the current user");
+        return {};
+    }
+
+    std::wstring suffix(sidString);
+    LocalFree(sidString);
+    return suffix;
+}
+
+std::wstring UserStorageName(PCWSTR name) {
+    if (!name || !*name || g_userStorageSuffix.empty()) {
+        return {};
+    }
+    return std::wstring(name) + L"_" + g_userStorageSuffix;
 }
 
 std::wstring ReadConfiguredStringSetting(PCWSTR name) {
@@ -594,15 +649,7 @@ bool ParseHotkeyKey(const std::wstring& token, UINT* key) {
         }
     }
 
-    // Keep accepting the numeric virtual-key format used by earlier builds.
-    wchar_t* parsedEnd = nullptr;
-    const unsigned long numericKey = std::wcstoul(token.c_str(), &parsedEnd, 10);
-    if (parsedEnd == token.c_str() || !parsedEnd || *parsedEnd != L'\0' ||
-        numericKey == 0UL || numericKey > 255UL) {
-        return false;
-    }
-    *key = (UINT)numericKey;
-    return true;
+    return false;
 }
 
 void LoadHotkeySetting() {
@@ -708,19 +755,28 @@ void LoadSettings() {
 
     const std::wstring configuredFolder =
         ReadConfiguredStringSetting(L"wallpaperFolder");
+    const std::wstring folderSnapshotKey =
+        UserStorageName(L"wallpaperFolderSettingSnapshot");
+    const std::wstring runtimeFolderKey = UserStorageName(L"wallpaperFolder");
+    const std::wstring selectedWallpaperKey =
+        UserStorageName(L"lastSelectedWallpaper");
     const std::wstring lastConfiguredFolder =
-        ReadStringSetting(L"wallpaperFolderSettingSnapshot");
+        ReadStringSetting(folderSnapshotKey.c_str());
     const std::wstring storedRuntimeFolder =
-        ReadStringSetting(L"wallpaperFolder");
+        ReadStringSetting(runtimeFolderKey.c_str());
 
     if (configuredFolder != lastConfiguredFolder) {
         // The Windhawk folder setting changed since it was last loaded, so it
         // becomes the active folder. Keep a snapshot to distinguish this from
         // a newer folder chosen inside the picker on a later restart.
         g_folder = configuredFolder;
-        Wh_SetStringValue(L"wallpaperFolder", g_folder.c_str());
-        Wh_SetStringValue(L"wallpaperFolderSettingSnapshot",
-                          configuredFolder.c_str());
+        if (!runtimeFolderKey.empty()) {
+            Wh_SetStringValue(runtimeFolderKey.c_str(), g_folder.c_str());
+        }
+        if (!folderSnapshotKey.empty()) {
+            Wh_SetStringValue(folderSnapshotKey.c_str(),
+                              configuredFolder.c_str());
+        }
     } else {
         // No Settings change: preserve the most recently chosen folder from
         // the picker's value store, falling back to the configured path if
@@ -730,7 +786,7 @@ void LoadSettings() {
             g_folder = configuredFolder;
         }
     }
-    g_lastSelectedPath = ReadStringSetting(L"lastSelectedWallpaper");
+    g_lastSelectedPath = ReadStringSetting(selectedWallpaperKey.c_str());
     LoadHotkeySetting();
     PCWSTR transitionSetting = Wh_GetStringSetting(L"wallpaperTransition");
     const std::wstring transition = transitionSetting
@@ -965,7 +1021,10 @@ DWORD WINAPI ThumbnailPageThreadProc(void* parameter) {
     return 0;
 }
 void PersistFolder() {
-    Wh_SetStringValue(L"wallpaperFolder", g_folder.c_str());
+    const std::wstring key = UserStorageName(L"wallpaperFolder");
+    if (!key.empty()) {
+        Wh_SetStringValue(key.c_str(), g_folder.c_str());
+    }
 }
 
 void PersistSelectedImage(int image) {
@@ -974,7 +1033,10 @@ void PersistSelectedImage(int image) {
     }
     g_selectedImage = image;
     g_lastSelectedPath = g_images[(size_t)image];
-    Wh_SetStringValue(L"lastSelectedWallpaper", g_lastSelectedPath.c_str());
+    const std::wstring key = UserStorageName(L"lastSelectedWallpaper");
+    if (!key.empty()) {
+        Wh_SetStringValue(key.c_str(), g_lastSelectedPath.c_str());
+    }
 }
 
 std::wstring FolderDisplayName() {
@@ -1159,8 +1221,7 @@ bool MeasureBreadcrumbMenuItem(HWND hwnd, MEASUREITEMSTRUCT* item) {
 
     const wchar_t* label =
         (const wchar_t*)(ULONG_PTR)item->itemData;
-    const bool isTraySeparator = item->itemID == kTraySeparator;
-    if (!label && !isTraySeparator) {
+    if (!label) {
         return false;
     }
 
@@ -1173,10 +1234,7 @@ bool MeasureBreadcrumbMenuItem(HWND hwnd, MEASUREITEMSTRUCT* item) {
         g_pickerFont ? SelectObject(dc, g_pickerFont) : nullptr;
 
     SIZE textSize{};
-    const wchar_t* measuredLabel =
-        isTraySeparator ? L"Open wallpaper picker" : label;
-    GetTextExtentPoint32W(dc, measuredLabel,
-                          (int)wcslen(measuredLabel), &textSize);
+    GetTextExtentPoint32W(dc, label, (int)wcslen(label), &textSize);
 
     if (oldFont) {
         SelectObject(dc, oldFont);
@@ -1185,12 +1243,8 @@ bool MeasureBreadcrumbMenuItem(HWND hwnd, MEASUREITEMSTRUCT* item) {
 
     // Reserve an icon gutter so every folder name starts in the same place.
     item->itemWidth = (UINT)((int)textSize.cx + 46);
-    if (isTraySeparator) {
-        item->itemHeight = 10;
-    } else {
-        const int height = (int)textSize.cy + 14;
-        item->itemHeight = (UINT)(height < 29 ? 29 : height);
-    }
+    const int height = (int)textSize.cy + 14;
+    item->itemHeight = (UINT)(height < 29 ? 29 : height);
     return true;
 }
 
@@ -1199,7 +1253,6 @@ WCHAR BreadcrumbMenuItemGlyph(UINT itemId) {
         case kTrayOpen: return 0xEB9F;      // Wallpaper / picture
         case kTrayPrevious: return 0xE892;  // Previous
         case kTrayNext: return 0xE893;      // Next
-        case kTrayExit: return 0xE8BB;      // Close
         default: return 0xE8B7;             // Folder
     }
 }
@@ -1210,23 +1263,6 @@ bool DrawBreadcrumbMenuItem(const DRAWITEMSTRUCT* item) {
     }
 
     ApplyBreadcrumbMenuCorners();
-
-    if (item->itemID == kTraySeparator) {
-        FillRect(item->hDC, &item->rcItem, g_backgroundBrush);
-        RECT dividerRect = item->rcItem;
-        dividerRect.left += 12;
-        dividerRect.right -= 12;
-        const int centerY =
-            (item->rcItem.top + item->rcItem.bottom) / 2;
-        dividerRect.top = centerY;
-        dividerRect.bottom = centerY + 1;
-        HBRUSH dividerBrush = CreateSolidBrush(RGB(66, 62, 84));
-        if (dividerBrush) {
-            FillRect(item->hDC, &dividerRect, dividerBrush);
-            DeleteObject(dividerBrush);
-        }
-        return true;
-    }
 
     const wchar_t* label =
         (const wchar_t*)(ULONG_PTR)item->itemData;
@@ -2744,6 +2780,34 @@ void DrawWallpaperTransitionFrame(ID2D1Factory* geometryFactory,
             return;
     }
 }
+void SleepPumpingMessages(DWORD durationMs) {
+    const ULONGLONG deadline = GetTickCount64() + durationMs;
+    while (true) {
+        const ULONGLONG now = GetTickCount64();
+        if (now >= deadline) {
+            return;
+        }
+
+        const DWORD remainingMs = (DWORD)(deadline - now);
+        const DWORD waitResult = MsgWaitForMultipleObjectsEx(
+            0, nullptr, remainingMs, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        if (waitResult == WAIT_FAILED) {
+            Sleep(remainingMs);
+            return;
+        }
+
+        MSG message{};
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+            if (message.message == WM_QUIT) {
+                PostQuitMessage((int)message.wParam);
+                return;
+            }
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+    }
+}
+
 DWORD WINAPI WallpaperChangeThreadProc(void* parameter) {
     std::unique_ptr<WallpaperChange> change((WallpaperChange*)parameter);
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -2909,7 +2973,7 @@ DWORD WINAPI WallpaperChangeThreadProc(void* parameter) {
                 if (progress >= 1.0f) {
                     break;
                 }
-                Sleep(16);
+                SleepPumpingMessages(16);
             }
 
             if (!shown || !bitmap) {
@@ -2948,7 +3012,7 @@ DWORD WINAPI WallpaperChangeThreadProc(void* parameter) {
             bool retargeted = false;
             const ULONGLONG settleStart = GetTickCount64();
             while (applied && GetTickCount64() - settleStart < 650) {
-                Sleep(25);
+                SleepPumpingMessages(25);
                 latest = ReadWallpaperRequest();
                 if (latest.generation != target.generation &&
                     !latest.path.empty()) {
@@ -3003,7 +3067,7 @@ DWORD WINAPI WallpaperChangeThreadProc(void* parameter) {
                 }
                 canvas.SetAlpha(overlay, position,
                                 (BYTE)(step * 255 / 8));
-                Sleep(25);
+                SleepPumpingMessages(25);
             }
             if (restart) {
                 continue;
@@ -3089,11 +3153,35 @@ WallpaperTransition ChooseWallpaperTransition() {
     g_lastRandomTransition = choice;
     return (WallpaperTransition)choice;
 }
+class ScopedDpiAwarenessContext {
+   public:
+    explicit ScopedDpiAwarenessContext(DPI_AWARENESS_CONTEXT context)
+        : previous_(SetThreadDpiAwarenessContext(context)) {}
+
+    ~ScopedDpiAwarenessContext() {
+        if (previous_) {
+            SetThreadDpiAwarenessContext(previous_);
+        }
+    }
+
+    ScopedDpiAwarenessContext(const ScopedDpiAwarenessContext&) = delete;
+    ScopedDpiAwarenessContext& operator=(
+        const ScopedDpiAwarenessContext&) = delete;
+
+   private:
+    DPI_AWARENESS_CONTEXT previous_;
+};
+
 void StartWallpaperChange(int image) {
     if (g_shuttingDown.load() || image < 0 || image >= (int)g_images.size() ||
         !g_hostWindow) {
         return;
     }
+    // Monitor rectangles and cursor coordinates passed to the transition
+    // worker must remain in physical pixels, despite the UI thread's
+    // DPI-virtualized context used to scale the picker.
+    ScopedDpiAwarenessContext dpiContext(
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     POINT cursor{};
     GetCursorPos(&cursor);
     HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
@@ -3494,8 +3582,15 @@ void PositionPickerWindow(HMONITOR monitor) {
     if (!g_pickerWindow) {
         return;
     }
+    // The UI thread uses GDI scaling for the fixed-size picker. Query and
+    // position the window in physical screen coordinates so this context
+    // doesn't leak into the transition overlay's monitor geometry.
+    ScopedDpiAwarenessContext dpiContext(
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     if (!monitor) {
-        monitor = MonitorFromWindow(g_pickerWindow, MONITOR_DEFAULTTONEAREST);
+        POINT cursor{};
+        GetCursorPos(&cursor);
+        monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
     }
     MONITORINFO info{sizeof(info)};
     if (!monitor || !GetMonitorInfoW(monitor, &info)) {
@@ -3572,10 +3667,7 @@ void ShowPicker() {
             g_previousForegroundWindow =
                 GetAncestor(foreground, GA_ROOT);
         }
-        POINT cursor{};
-        GetCursorPos(&cursor);
-        HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
-        PositionPickerWindow(monitor);
+        PositionPickerWindow(nullptr);
     }
     const bool currentIsVisible = g_currentImage >= 0 &&
         std::find(g_visibleImageIndices.begin(), g_visibleImageIndices.end(),
@@ -4565,6 +4657,9 @@ void ApplyPickerMaterial(HWND hwnd) {
         HidePickerBackdrop();
         SetPickerColorKey(hwnd, false);
         RedrawPickerChildren();
+        // Keep native DWM corner rendering for Solid. A window region can
+        // force the corners on unsupported systems, but its binary edge loses
+        // the antialiasing of DWM's native rounded corners.
         SetPickerRoundRegion(hwnd, false, 0);
         SetPickerRoundRegion(g_pickerBackdropWindow, false, 0);
         return;
@@ -4674,12 +4769,18 @@ void AddTrayIcon(HWND hwnd) {
     g_notifyIcon.uID = 1;
     g_notifyIcon.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     g_notifyIcon.uCallbackMessage = kTrayCallback;
-    g_trayIcon = CreateWallpaperTrayIcon();
+    if (!g_trayIcon) {
+        g_trayIcon = CreateWallpaperTrayIcon();
+    }
     g_notifyIcon.hIcon = g_trayIcon ? g_trayIcon : LoadIcon(nullptr, IDI_APPLICATION);
     wcscpy_s(g_notifyIcon.szTip, L"Simple Wallpaper Switcher");
-    Shell_NotifyIconW(NIM_ADD, &g_notifyIcon);
+    if (!Shell_NotifyIconW(NIM_ADD, &g_notifyIcon)) {
+        SetTimer(hwnd, kTrayRetryTimer, 2000, nullptr);
+        return;
+    }
     g_notifyIcon.uVersion = NOTIFYICON_VERSION_4;
     Shell_NotifyIconW(NIM_SETVERSION, &g_notifyIcon);
+    KillTimer(hwnd, kTrayRetryTimer);
 }
 
 void ShowTrayMenu(HWND hwnd, POINT callbackPoint) {
@@ -4700,8 +4801,6 @@ void ShowTrayMenu(HWND hwnd, POINT callbackPoint) {
     appendOwnerDrawItem(kTrayOpen, L"Open wallpaper picker");
     appendOwnerDrawItem(kTrayPrevious, L"Previous wallpaper");
     appendOwnerDrawItem(kTrayNext, L"Next wallpaper");
-    appendOwnerDrawItem(kTraySeparator, nullptr);
-    appendOwnerDrawItem(kTrayExit, L"Close switcher");
 
     MENUINFO menuInfo{};
     menuInfo.cbSize = sizeof(menuInfo);
@@ -5091,7 +5190,18 @@ void FreeQueuedBackgroundResults(HWND window) {
 
 LRESULT CALLBACK HostProc(HWND hwnd, UINT message, WPARAM wParam,
                           LPARAM lParam) {
+    if (g_taskbarCreatedMessage && message == g_taskbarCreatedMessage) {
+        AddTrayIcon(hwnd);
+        return 0;
+    }
+
     switch (message) {
+        case WM_TIMER:
+            if (wParam == kTrayRetryTimer) {
+                AddTrayIcon(hwnd);
+                return 0;
+            }
+            break;
         case kImageListReady: {
             std::unique_ptr<ImageScanResult> result(
                 (ImageScanResult*)lParam);
@@ -5178,6 +5288,7 @@ LRESULT CALLBACK HostProc(HWND hwnd, UINT message, WPARAM wParam,
             }
             return 0;
         case kReloadSettings:
+            LoadSettings();
             RefreshPickerAppearance(g_pickerWindow);
             if (g_pickerWindow && IsWindowVisible(g_pickerWindow)) {
                 PositionPickerWindow(nullptr);
@@ -5229,9 +5340,6 @@ LRESULT CALLBACK HostProc(HWND hwnd, UINT message, WPARAM wParam,
                 case kTrayNext:
                     StepImage(1);
                     return 0;
-                case kTrayExit:
-                    DestroyWindow(hwnd);
-                    return 0;
             }
             break;
         case WM_DESTROY:
@@ -5254,6 +5362,14 @@ LRESULT CALLBACK HostProc(HWND hwnd, UINT message, WPARAM wParam,
 }
 
 DWORD WINAPI UiThreadProc(void*) {
+    // Keep the fixed-layout picker in 96-DPI logical coordinates. Windows
+    // scales this UI for the monitor that displays it, avoiding clipped text
+    // and mismatched child sizes on high-DPI and mixed-DPI desktops.
+    if (!SetThreadDpiAwarenessContext(
+            DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED)) {
+        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_UNAWARE);
+    }
+
     INITCOMMONCONTROLSEX controls{sizeof(controls), ICC_LISTVIEW_CLASSES};
     InitCommonControlsEx(&controls);
     ApplyPickerThemeColors();
@@ -5264,6 +5380,7 @@ DWORD WINAPI UiThreadProc(void*) {
     hostClass.hInstance = GetModuleHandleW(nullptr);
     hostClass.lpszClassName = L"SimpleWallpaperSwitcherHost";
     RegisterClassExW(&hostClass);
+    g_taskbarCreatedMessage = RegisterWindowMessageW(L"TaskbarCreated");
     WNDCLASSEXW pickerClass{sizeof(pickerClass)};
     pickerClass.lpfnWndProc = PickerProc;
     pickerClass.style = CS_DROPSHADOW;
@@ -5279,8 +5396,9 @@ DWORD WINAPI UiThreadProc(void*) {
     backdropClass.lpszClassName = kBackdropWindowClass;
     RegisterClassExW(&backdropClass);
 
-    g_hostWindow = CreateWindowExW(0, hostClass.lpszClassName, L"", 0,
-        0, 0, 0, 0, HWND_MESSAGE, nullptr, hostClass.hInstance, nullptr);
+    g_hostWindow = CreateWindowExW(WS_EX_TOOLWINDOW,
+        hostClass.lpszClassName, L"", WS_POPUP,
+        0, 0, 0, 0, nullptr, nullptr, hostClass.hInstance, nullptr);
     if (g_hostWindow) {
         g_pickerWindow = CreateWindowExW(WS_EX_TOOLWINDOW,
             kWindowClass, L"Simple Wallpaper Switcher",
@@ -5337,6 +5455,10 @@ void WhTool_ModUninit();
 
 BOOL WhTool_ModInit() {
     g_shuttingDown.store(false);
+    g_userStorageSuffix = GetCurrentUserStorageSuffix();
+    if (g_userStorageSuffix.empty()) {
+        Wh_Log(L"Unable to resolve current user SID; per-user picker state will not be persisted");
+    }
     LoadSettings();
     g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_readyEvent) {
@@ -5358,10 +5480,8 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() {
-    LoadSettings();
     if (g_hostWindow) {
         PostMessageW(g_hostWindow, kReloadSettings, 0, 0);
-    } else {
     }
 }
 
