@@ -4,7 +4,7 @@
 // @name:zh-CN      任务栏无线设备电量监控
 // @description     Show wireless peripheral battery levels on the taskbar or in the system tray.
 // @description:zh-CN 显示多品牌无线外设电量，支持任务栏和托盘显示，以及可选的 AirPods 附近广播接收。
-// @version         0.1.2
+// @version         0.1.3
 // @author          yaoiyiXu
 // @github          https://github.com/yaoiyiXu
 // @homepage        https://github.com/yaoiyiXu/taskbar-wireless-battery-monitor
@@ -25,7 +25,8 @@ device spacing in Windhawk. Windhawk manages startup and enabling/disabling the 
 The interface uses Chinese on Chinese Windows installations and English otherwise.
 
 This tool runs in a dedicated Windhawk process, without injecting into Explorer.
-Exit the standalone WirelessBattery.exe before enabling it. If the display does
+Exit BOTH the original Wireless Battery and this project's Chinese standalone
+WirelessBattery.exe before enabling it. Both standalone mutex names are checked. If the display does
 not start, exit that app and disable/re-enable the mod.
 
 ## Device support and limitations
@@ -36,17 +37,28 @@ not start, exit that app and disable/re-enable the mod.
 - Vendor-specific battery queries send HID output/feature reports, or serial
   commands for supported ATK headsets, to peripherals and read their replies.
   These community-derived protocols have not been verified on every supported
-  model. Some matches use vendor IDs and report sizes rather than exact model IDs.
+  model. The formerly broad Glorious/Hitscan/G-Wolves and Kysona matches now use
+  explicit VID:PID lists; ZOWIE DW queries are limited to 04A5:800A.
+  AJ179/AJ-series and Keychron vendor queries are excluded from this mod until
+  exact PID/protocol pairings are verified. Standard battery fallbacks remain available.
   Queries can conflict with vendor utilities that access a device exclusively.
+- Periodic queries may wake peripherals or prevent their lights from sleeping.
+  Use the **Devices to exclude from queries** setting (hex VID:PID pairs such as
+  28BD:0947,046D:C52B) to stop HID/ATK battery queries for a product on the next
+  poll. This differs from hiding a device in the menu, which only hides its display.
+  Malformed exclusions pause HID/ATK queries until corrected. Digitizer products
+  are excluded automatically. Identification metadata may still be enumerated.
+- Bluetooth PlayStation controllers are only read passively. Full battery reports
+  must already be enabled by another application; this mod never changes their mode.
 - Standard Bluetooth battery readings depend on what Windows exposes.
 - Only the primary, horizontal taskbar is supported. On Windows 11 a crowded or
   left-aligned taskbar can overlap the widget; Windows 10 taskbar resizing can
   flicker. Switch to tray mode if the taskbar layout is unsuitable.
 - In taskbar mode low battery is indicated by red text; notification balloons
   are available in tray mode. Sleep/last-known readings are dimmed.
-- Disabling the mod waits for the active driver query to finish. Remaining
-  drivers are skipped when stopping; an individual device timeout can still
-  take several seconds.
+- Remaining drivers are skipped when stopping. If shutdown has not completed in
+  five seconds (including a stuck synchronous HID call), the dedicated tool
+  process exits; a live driver thread is never left executing in an unloaded DLL.
 
 ## Optional AirPods reception
 
@@ -81,12 +93,15 @@ AirPods 广播接收默认关闭，可在设置中手动开启。电量约 10% �
 超过 30 秒未更新的数据在下一次刷新时标成历史，约两分钟无广播后移除。
 
 厂商协议会向设备发送 HID 查询报文，部分 ATK 耳机使用串口命令。协议来自社区，
-并未逐型号验证，部分驱动根据厂商 ID 和报文长度匹配设备；可能与独占设备的
+并未逐型号验证。原先宽泛的匹配已收紧；AJ179/AJ 系列和 Keychron 的厂商查询暂不包含，
+等待验证精确型号 ID 与协议。查询可能唤醒设备或阻止灯光休眠，也可能与独占设备的
 厂商软件冲突。支持某品牌不代表支持其全部型号，不包含外部 HeadsetControl 扩展。
+可在“排除查询的设备”中填写十六进制 VID:PID，逗号分隔，下次轮询生效。
+菜单隐藏仅影响显示。数位板自动排除；蓝牙 PlayStation 手柄不会被本模组切换模式。
 
 仅支持主显示器的横向任务栏；Windows 11 拥挤或左对齐时可能重叠，Windows 10
 调整任务按钮区域时可能闪烁，可切换托盘模式。任务栏模式通过红字提示低电量，
-托盘模式另有气泡通知。关闭时仍需等待当前设备查询结束，可能耗时数秒。
+托盘模式另有气泡通知。关闭超过五秒时会退出模组的独立宿主进程，避免无限等待。
 */
 // ==/WindhawkModReadme==
 
@@ -121,6 +136,11 @@ AirPods 广播接收默认关闭，可在设置中手动开启。电量约 10% �
   $name:zh-CN: 接收附近 AirPods 电量广播
   $description: Approximate readings; ownership is unverified and nearby people's AirPods may appear.
   $description:zh-CN: 电量为近似值，广播归属未验证，可能显示附近其他人的耳机。
+- ignoreDevices: ""
+  $name: Devices to exclude from queries (VID:PID)
+  $name:zh-CN: 排除查询的设备（VID:PID）
+  $description: "Comma-separated hex IDs, e.g. 28BD:0947,046D:C52B. Stops HID/ATK battery queries on the next poll. Hiding in the menu only hides the display."
+  $description:zh-CN: "十六进制 ID，逗号分隔，例如 28BD:0947,046D:C52B。下次轮询停止 HID/ATK 电量查询；菜单隐藏仅影响显示。"
 */
 // ==/WindhawkModSettings==
 
@@ -377,7 +397,6 @@ void PollGlorious(PollContext& ctx);  // also Hitscan
 void PollAula(PollContext& ctx);      // AULA F75 / F87 Pro / F99 wireless keyboards (before Kysona, same vendor id)
 void PollMchose(PollContext& ctx);    // MCHOSE G87 41E4:2001, 2.4 GHz only
 void PollAtkSerial(PollContext& ctx); // ATK N9 Pro headset (virtual COM port)
-void PollKeychron(PollContext& ctx);  // Keychron mice
 void PollLamzu(PollContext& ctx);     // LAMZU mice on vendor ids 373E / 37B0
 void PollRongyuan(PollContext& ctx);  // Rongyuan receivers (Attack Shark, Ajazz keyboards, ...)
 void PollSonyInzone(PollContext& ctx);  // Sony INZONE H9 II / H5
@@ -587,6 +606,61 @@ inline bool DecodeBattery(const std::uint8_t* data, std::size_t size, Battery& o
 
 }  // namespace Rapoo
 
+// Upstream driver baseline: bbb5c75f4aaca0adc85fd56fcf377b78ea680f4f, plus PR #43 (MCHOSE).
+// Safety backports: 99c55b211bc9ab1d40e9c863c74f59480e0039b6 (digitizers/ignore),
+// 1e07289997d91cbb67d00a879e39f2a26130de49 (Razer/Synapse).
+// This is a selective backport, NOT a full update to upstream main.
+namespace ModSafety {
+std::mutex ignoredMutex;
+std::set<std::pair<USHORT, USHORT>> ignored;
+
+void ConfigureIgnored(const std::wstring& text) {
+    std::set<std::pair<USHORT, USHORT>> parsed;
+    size_t start = 0;
+    while (start < text.size()) {
+        size_t end = text.find_first_of(L",; \t\r\n", start);
+        std::wstring token = text.substr(start, end == std::wstring::npos ? end : end - start);
+        if (!token.empty()) {
+            if (token.size() != 9 || token[4] != L':' ||
+                token.find_first_not_of(L"0123456789abcdefABCDEF", 0) != 4 ||
+                token.substr(5).find_first_not_of(L"0123456789abcdefABCDEF") != std::wstring::npos) {
+                Wh_Log(L"Invalid ignored-device entry; polling paused until the setting is corrected.");
+                // Fail closed rather than accidentally querying a mistyped exclusion.
+                parsed.insert({0, 0});
+            } else {
+                parsed.insert({(USHORT)wcstoul(token.substr(0, 4).c_str(), nullptr, 16),
+                               (USHORT)wcstoul(token.substr(5).c_str(), nullptr, 16)});
+            }
+        }
+        if (end == std::wstring::npos) break;
+        start = end + 1;
+    }
+    std::lock_guard<std::mutex> lock(ignoredMutex);
+    ignored = std::move(parsed);
+}
+
+bool IsIgnored(USHORT vid, USHORT pid) {
+    std::lock_guard<std::mutex> lock(ignoredMutex);
+    return ignored.count({0, 0}) || ignored.count({vid, pid});
+}
+
+void Filter(std::vector<HidColl>& colls) {
+    std::set<std::pair<USHORT, USHORT>> digitizers;
+    for (const auto& c : colls)
+        if (c.page() == 0x0D) digitizers.insert({c.vid, c.pid});
+    colls.erase(std::remove_if(colls.begin(), colls.end(), [&](const HidColl& c) {
+        return IsIgnored(c.vid, c.pid) || digitizers.count({c.vid, c.pid});
+    }), colls.end());
+}
+
+bool KysonaKnown(USHORT vid, USHORT pid) {
+    // IDs explicitly documented in upstream kysona.cpp at 666b7def119066d098c105805d68f9314af2fc64.
+    return (vid == 0x3554 && (pid == 0xF55D || pid == 0xF5D5 || pid == 0xF55E ||
+            pid == 0xF58A || pid == 0xF58C || pid == 0xF58E || pid == 0xF58F || pid == 0xF505 || pid == 0xF506)) ||
+           (vid == 0x3770 && pid == 0x0200) || (vid == 0x3710 && pid == 0x5406);
+}
+} // namespace ModSafety
+
 namespace ModConfig {
 inline std::atomic<int> pollMs{60000}, warning{15}, fontSize{13}, gap{14};
 inline std::atomic<bool> taskbar{true}, hideSleeping{false}, airpodsEnabled{false};
@@ -600,6 +674,8 @@ inline void Load() {
     airpodsEnabled = !!Wh_GetIntSetting(L"enableAirPods");
     auto mode = WindhawkUtils::StringSetting::make(L"displayMode");
     taskbar = wcscmp(mode, L"tray") != 0;
+    auto ignored = WindhawkUtils::StringSetting::make(L"ignoreDevices");
+    ModSafety::ConfigureIgnored(ignored.get());
 }
 }
 namespace ModHost { extern std::atomic<bool> stopRequested; extern std::atomic<HWND> window; }
@@ -635,6 +711,7 @@ std::vector<HidColl> EnumHid() {
         out.push_back(std::move(c));
     }
     SetupDiDestroyDeviceInfoList(di);
+    ModSafety::Filter(out);
     return out;
 }
 
@@ -642,6 +719,7 @@ std::vector<HidColl> EnumHid() {
 
 bool HidDev::Open(const HidColl& c) {
     Close();
+    if (ModSafety::IsIgnored(c.vid, c.pid)) return false;
     c_ = c;
     h_ = CreateFileW(c.path.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
                      FILE_FLAG_OVERLAPPED, nullptr);
@@ -651,6 +729,7 @@ bool HidDev::Open(const HidColl& c) {
 
 bool HidDev::OpenFeatureOnly(const HidColl& c) {
     Close();
+    if (ModSafety::IsIgnored(c.vid, c.pid)) return false;
     c_ = c;
     h_ = CreateFileW(c.path.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
     overlapped_ = false;
@@ -1101,6 +1180,7 @@ private:
 
 void PollAtkSerial(PollContext& ctx) {
     for (const Port& p : FindPorts()) {
+        if (ModSafety::IsIgnored(0x373B, p.pid)) continue;
         if (ctx.IsClaimed(0x373B, p.pid)) continue;
         Serial port(p.name);
         if (!port.ok()) continue;  // in use (ATK app open) or not a working port
@@ -1484,7 +1564,12 @@ std::wstring StripServiceSuffix(std::wstring n) {
 }  // namespace
 
 void PollGenericHid(PollContext& ctx) {
+    // Backport upstream 99c55b2 / issue #232: never battery-poll drawing tablets.
+    std::set<std::pair<USHORT, USHORT>> digitizers;
+    for (const auto& c : ctx.colls)
+        if (c.page() == 0x0D) digitizers.insert({c.vid, c.pid});
     for (const auto& c : ctx.colls) {
+        if (digitizers.count({c.vid, c.pid})) continue;
         if (ctx.IsClaimed(c.vid, c.pid)) continue;
         if (c.page() == 0x84 || c.page() == 0x85) continue;  // UPS / power supplies
         if (!c.caps.NumberFeatureValueCaps && !c.caps.NumberInputValueCaps) continue;
@@ -1725,6 +1810,11 @@ const Vendor kVendors[] = {
 void PollGlorious(PollContext& ctx) {
     for (const Vendor& v : kVendors) {
         for (auto [vid, pid] : ctx.Products(v.vid)) {
+            // Exact PIDs from the model table and protocol references above.
+            bool known = vid == 0x258A ? GloriousName(pid) != nullptr :
+                         vid == 0x3770 ? (pid == 0x0136 || pid == 0x0194) :
+                         vid == 0x33E4 && pid == 0x3854;
+            if (!known) continue;
             for (const HidColl* c : ctx.Find(vid, pid, [](const HidColl& c) { return c.featLen() == 65; })) {
                 HidDev d;
                 if (!d.OpenFeatureOnly(*c)) continue;
@@ -1966,94 +2056,6 @@ void PollHyperX(PollContext& ctx) {
 
 void PollHyperX(PollContext& ctx) { wb_driver_hyperx::PollHyperX(ctx); }
 
-namespace wb_driver_keychron {
-// Keychron wireless mice (VID 3434, e.g. M4), from Keychron's own web Launcher (launcher.keychron.com).
-// 64-byte output report without report id: [01][00][81][01][0...][checksum], checksum (byte 63)
-// = 0xA1 - sum(bytes 0..62). The reply [01][..][..][01][state][rate][vid lo][vid hi][pid lo][pid hi]
-// [charging][battery %]... carries the mouse's own vendor id, which is checked so that only a
-// genuine reply is accepted. Keychron keyboards do not report their battery this way (only over
-// Bluetooth, which the Bluetooth fallback already covers).
-// The 8K mice (M5 8K, G6 HE 8K ... on the TurboLink 8K receiver, Launcher protocol "8k_nordic") use
-// the same request, but on the receiver bit 6 of the first byte is set (41 00 81 01 ...). Their reply
-// [41][..][..][01][..][max rate][..]..[state][battery %][profile] has no vendor id; state 1 =
-// charging, 3 is treated as 0.
-namespace {
-
-void SetChecksum(std::vector<BYTE>& payload) {  // payload = 64 bytes without the report id
-    unsigned sum = 0;
-    for (int i = 0; i < 63; i++) sum += payload[i];
-    payload[63] = (BYTE)(0xA1 - sum);
-}
-
-std::wstring CleanName(std::wstring n) {
-    if (n.empty() || n.find(L"Link") != std::wstring::npos || n.find(L"Receiver") != std::wstring::npos) return L"Keychron mouse";
-    return n;
-}
-
-}  // namespace
-
-namespace {
-
-// Sends [cmd][00][81][01] and waits up to 600 ms for a reply starting with cmd whose byte 3 is 01.
-bool Query(HidDev& d, BYTE cmd, std::vector<BYTE>& r) {
-    std::vector<BYTE> payload(64, 0);
-    payload[0] = cmd;
-    payload[2] = 0x81;
-    payload[3] = 0x01;
-    SetChecksum(payload);
-    std::vector<BYTE> req(1, 0x00);  // report id 0 (unnumbered)
-    req.insert(req.end(), payload.begin(), payload.end());
-    d.Flush();
-    if (!d.Write(req)) return false;
-    ULONGLONG end = GetTickCount64() + 600;
-    while ((LONGLONG)end - (LONGLONG)GetTickCount64() > 0) {
-        int left = (int)((LONGLONG)end - (LONGLONG)GetTickCount64());
-        if (d.Read(r, left) < 13) return false;
-        if (r[0] == cmd && r[3] == 0x01) return true;
-    }
-    return false;
-}
-
-}  // namespace
-
-void PollKeychron(PollContext& ctx) {
-    for (auto [vid, pid] : ctx.Products(0x3434)) {
-        for (const HidColl* c : ctx.Find(vid, pid, [](const HidColl& c) { return c.page() >= 0xFF00 && c.outLen() == 65 && c.inLen() == 65; })) {
-            HidDev d;
-            if (!d.Open(*c)) continue;
-            std::vector<BYTE> r, r1;
-            int percent = -1;
-            bool charging = false, wireless = true;
-            bool got1 = Query(d, 0x01, r1);
-            if (got1 && (USHORT)(r1[6] | (r1[7] << 8)) == 0x3434 && r1[11] <= 100) {
-                percent = r1[11];  // M4 and other mice on the classic protocol: the reply carries the vendor id
-                charging = r1[10] != 0;
-            } else if (Query(d, 0x41, r) && r[10] <= 3 && r[11] <= 100) {
-                percent = r[11];  // 8K mouse on its receiver
-                charging = r[10] == 1;
-            } else if (got1 && r1[10] <= 3 && r1[11] >= 1 && r1[11] <= 100 && r1[5] >= 1 && r1[5] <= 8) {
-                percent = r1[11];  // 8K mouse on the USB cable (no bit 6); byte 5 = highest polling rate level
-                charging = r1[10] == 1;
-                wireless = false;
-            }
-            if (percent < 0) continue;
-            DeviceStatus s;
-            s.key = L"keychron:" + Hex4(pid);
-            s.name = CleanName(HidProduct(*c));
-            s.kind = DeviceKind::Mouse;
-            s.via = wireless ? L"2.4 GHz receiver" : L"USB cable";
-            s.percent = percent;
-            s.charging = charging;
-            ctx.Add(s, vid, pid);
-            break;
-        }
-    }
-}
-
-}
-
-void PollKeychron(PollContext& ctx) { wb_driver_keychron::PollKeychron(ctx); }
-
 namespace wb_driver_kysona {
 // Kysona, Pulsar and ATK / VXE wireless mice (VID 3554, ATK dongles 373B), G-Wolves models on this protocol
 // (VID 33E4, e.g. Fenrir Asym) and the original Hitscan
@@ -2115,6 +2117,7 @@ void PollKysona(PollContext& ctx) {
     std::vector<std::wstring> seenNames;
     for (USHORT vendor : { (USHORT)0x3554, (USHORT)0x373B, (USHORT)0x3770, (USHORT)0x33E4, (USHORT)0x3710 }) {
         for (auto [vid, pid] : ctx.Products(vendor)) {
+            if (!ModSafety::KysonaKnown(vid, pid)) continue;
             // Kysona exposes a dedicated 17-byte collection; ATK / VXE receivers put report 08 in a
             // vendor collection that also carries larger reports. The checksummed reply filters out
             // anything that does not speak this protocol.
@@ -2701,78 +2704,12 @@ void PollXenta(PollContext& ctx) {
         it = present.count(it->first) ? std::next(it) : g_xenta.erase(it);
 }
 
-void PollAjazz(PollContext& ctx) {
-    for (USHORT vendor : { (USHORT)0x249A, (USHORT)0x248A }) {
-        for (auto [vid, pid] : ctx.Products(vendor)) {
-            for (const HidColl* c : ctx.Find(vid, pid, [](const HidColl& c) { return c.iface == 2 && c.outLen() == 33 && c.inLen() == 33; })) {
-                HidDev d;
-                if (!d.Open(*c)) continue;
-                d.Flush();
-                if (!d.Write({ 0x00, 0x10 })) continue;  // report id 0, command 10, zero payload (checksum 0)
-                std::vector<BYTE> r;
-                bool ok = ReadUntil(d, r, 1500, [](const std::vector<BYTE>& r) {
-                    if (r.size() < 32 || r[0] != 0x10 || r[1] != 0x00) return false;
-                    unsigned sum = 0;
-                    for (int i = 4; i <= 30; i++) sum += r[i];
-                    return (BYTE)sum == r[31];
-                });
-                if (!ok || r[13] > 100) continue;
-                DeviceStatus s;
-                s.key = L"ajazz:" + Hex4(vid) + L":" + Hex4(pid);
-                std::string model;
-                for (int i = 4; i < 8 && r[i] >= 0x20 && r[i] < 0x7F; i++) model += (char)r[i];
-                s.name = model.size() == 4 && model[0] == 'M' ? L"Ajazz AJ" + std::wstring(model.begin() + 1, model.end()) : L"Ajazz mouse";
-                s.kind = DeviceKind::Mouse;
-                bool receiver = vid == 0x249A;
-                s.via = receiver ? L"2.4 GHz receiver" : L"USB cable";
-                s.connected = !receiver || r[14] != 0;
-                s.charging = r[12] != 0;
-                if (s.connected) s.percent = r[13];
-                ctx.Add(s, vid, pid);
-                break;
-            }
-        }
-    }
-}
-
-void PollAjazzAjSeries(PollContext& ctx) {
-    for (auto [vid, pid] : ctx.Products(0x3151)) {
-        for (const HidColl* c : ctx.Find(vid, pid, [](const HidColl& c) {
-                 return c.page() == 0xFFFF && c.usage() == 0x02 && c.featLen() >= 65;
-             })) {
-            HidDev d;
-            if (!d.OpenFeatureOnly(*c)) continue;
-            std::vector<BYTE> req(c->featLen(), 0);
-            req[0] = 0x00;  // unnumbered report
-            req[1] = 0xF7;  // status poll: brings the 2.4 GHz telemetry link up
-            if (!d.SetFeature(req)) continue;
-            Sleep(30);
-            std::vector<BYTE> r;
-            if (!d.GetFeature(0x05, r) || r.size() < 4) continue;
-            if (r[0] != 0x05 || r[1] != 0 || r[2] != 0) continue;  // malformed / reconnect frame
-            int pct = r[3];
-            if (pct > 100) continue;
-            DeviceStatus s;
-            s.key = L"ajazzaj:" + Hex4(vid) + L":" + Hex4(pid);
-            s.name = HidProduct(*c);
-            if (s.name.empty()) s.name = L"AJAZZ mouse";
-            s.kind = DeviceKind::Mouse;
-            s.via = L"2.4 GHz receiver";
-            s.connected = pct > 0;  // 0 means the link is up but the mouse is off
-            if (s.connected) s.percent = pct;
-            ctx.Add(s, vid, pid);
-            break;
-        }
-    }
-}
-
 }  // namespace
 
 void PollMiscMice(PollContext& ctx) {
     PollMotospeed(ctx);
     PollXenta(ctx);
-    PollAjazz(ctx);
-    PollAjazzAjSeries(ctx);
+
 }
 
 }
@@ -2784,8 +2721,8 @@ namespace wb_driver_playstation {
 // The battery is part of the regular input report:
 //   DualShock 4: USB report 01 byte 30, Bluetooth report 11 byte 32: bits 0-3 level, bit 4 cable
 //   DualSense:   USB report 01 byte 53, Bluetooth report 31 byte 54: bits 0-3 level (0-10), bits 4-7 state
-// Over Bluetooth both controllers send a reduced report until a feature report is read, so we read
-// the calibration report (05) once, which is what games do too.
+// Never enable enhanced Bluetooth reports: doing so breaks legacy DirectInput until power cycling.
+// Bluetooth battery readings require another app to have already enabled full reports.
 // Layout reference: Linux drivers/hid/hid-playstation.c.
 namespace {
 
@@ -2801,10 +2738,6 @@ void PollPlayStation(PollContext& ctx) {
         HidDev d;
         if (!d.Open(c)) continue;
         bool bt = c.inLen() > 64;
-        if (bt) {
-            std::vector<BYTE> f;
-            d.GetFeature(0x05, f);  // switches the controller to full reports
-        }
         std::vector<BYTE> r;
         int pct = -1;
         bool charging = false, found = false;
@@ -2968,10 +2901,22 @@ namespace wb_driver_razer {
 //   [0] status  [1] transaction id  [2..3] remaining packets  [4] protocol type  [5] data size
 //   [6] command class  [7] command id  [8..87] arguments  [88] crc (xor of 2..87)  [89] reserved
 // Battery: class 07 id 80 -> args[1] = 0..255. Charging: class 07 id 84 -> args[1] = 1.
-// Reply status: 01 busy, 02 ok, 03 failed, 04 timeout (device off), 05 not supported.
-// Different models expect different transaction ids, so the known ones are tried in turn.
+// Reply status: 01 busy, 02 ok, 03 failed, 04 timeout, 05 not supported.
+// Use documented keyboard transaction ids; probe the known ids for other models.
 // Reference: github.com/openrazer/openrazer (protocol documentation in its driver sources).
 namespace {
+
+BYTE KeyboardBatteryTid(USHORT pid) {
+    // OpenRazer razerkbd_driver.c: razer_attr_read_charge_level / charge_status.
+    switch (pid) {
+        case 0x025C: case 0x0271: case 0x0290: case 0x0296:
+        case 0x02BA: case 0x02D2: case 0x02D5: return 0x9F;  // wireless keyboards
+        case 0x0258: case 0x0292: case 0x0298: case 0x02B9:
+        case 0x02CD: case 0x02D4: case 0x02D7: return 0x1F;  // wired keyboards / Joro
+        case 0x025A: return 0x3F;  // BlackWidow V3 Pro wired
+        default: return 0;
+    }
+}
 
 enum class Rz { Ok, Offline, Unsupported, NoReply };
 
@@ -2985,20 +2930,28 @@ Rz Command(HidDev& d, BYTE tid, BYTE cls, BYTE id, BYTE size, std::vector<BYTE>&
     BYTE crc = 0;
     for (int i = 2; i < 88; i++) crc ^= r[i];
     r[88] = crc;
-    if (!d.SetFeature(rep)) return Rz::NoReply;
     std::vector<BYTE> resp;
+    bool send = true;
+    Rz res = Rz::NoReply;
     for (int attempt = 0; attempt < 8; attempt++) {
-        Sleep(attempt == 0 ? 15 : 40);
-        if (!d.GetFeature(0, resp) || resp.size() < 91) return Rz::NoReply;
+        if (send && !d.SetFeature(rep)) return Rz::NoReply;
+        // Wireless keyboards need about 5 ms (OpenRazer); a long wait lets Synapse replace the reply.
+        Sleep(KeyboardBatteryTid(d.coll().pid) ? 5 : (attempt == 0 ? 15 : 40));
+        send = true;
+        res = Rz::NoReply;
+        if (!d.GetFeature(0, resp) || resp.size() < 91) continue;
         const BYTE* a = resp.data() + 1;
-        if (a[0] == 0x01) continue;  // busy
-        if (a[6] != cls || a[7] != id) return Rz::NoReply;
+        BYTE replyCrc = 0;
+        for (int i = 2; i < 88; i++) replyCrc ^= a[i];
+        // Synapse shares the feature-report mailbox. A different reply needs a fresh request.
+        if (a[1] != tid || a[2] || a[3] || a[4] || a[5] != size || a[6] != cls || a[7] != id ||
+            a[88] != replyCrc) continue;
+        if (a[0] == 0x01) { send = false; continue; }  // busy: wait for this request to finish
         if (a[0] == 0x02) { args.assign(a + 8, a + 88); return Rz::Ok; }
-        if (a[0] == 0x04) return Rz::Offline;
+        if (a[0] == 0x04) { res = Rz::Offline; continue; }  // retry a transient receiver timeout
         if (a[0] == 0x05 || a[0] == 0x03) return Rz::Unsupported;
-        return Rz::NoReply;
     }
-    return Rz::NoReply;
+    return res;
 }
 
 std::wstring CleanName(std::wstring n) {
@@ -3066,7 +3019,10 @@ void PollRazer(PollContext& ctx) {
             BYTE tid = 0;
             std::vector<BYTE> args;
             bool sawOffline = false;
-            for (BYTE t : { 0x1F, 0x3F, 0xFF, 0x08, 0x9F }) {
+            BYTE keyboardTid = KeyboardBatteryTid(pid);
+            std::vector<BYTE> tids = keyboardTid ? std::vector<BYTE>{ keyboardTid } :
+                                                  std::vector<BYTE>{ 0x1F, 0x3F, 0xFF, 0x08, 0x9F };
+            for (BYTE t : tids) {
                 Rz r = Command(d, t, 0x07, 0x80, 0x02, args);
                 if (r == Rz::Ok) { res = r; tid = t; break; }
                 sawOffline |= r == Rz::Offline;  // may also mean "wrong transaction id": keep trying
@@ -3080,6 +3036,7 @@ void PollRazer(PollContext& ctx) {
             s.kind = Kind(ctx.colls, vid, pid);
             if (s.kind == DeviceKind::Other) s.kind = GuessKind(s.name);
             s.via = L"Razer receiver";
+            s.graceSec = 120;  // retain the last reading briefly when Synapse prevents a valid reply
             if (res == Rz::Offline) {
                 s.connected = false;
             } else {
@@ -3142,7 +3099,7 @@ bool Get(HidDev& d, BYTE cls, std::vector<BYTE>& reply) {
     return false;
 }
 
-struct Cached { ULONGLONG at = 0; DeviceStatus status; bool valid = false; };
+struct Cached { ULONGLONG at = 0; DeviceStatus status; bool valid = false; bool attempted = false; };
 std::map<USHORT, Cached> g_cache;
 
 const wchar_t* Name(USHORT pid) { return (pid == 0x0576 || pid == 0x0577) ? L"Razer BlackShark V3 Pro" : L"Razer BlackShark V3"; }
@@ -3155,10 +3112,14 @@ void PollRazerHeadsets(PollContext& ctx) {
         auto colls = ctx.Find(0x1532, pid, [](const HidColl& c) { return c.iface == 5 && c.outLen() >= 64 && c.inLen() >= 15; });
         if (colls.empty()) continue;
         Cached& cache = g_cache[pid];
-        if (cache.valid && GetTickCount64() - cache.at < kMinIntervalMs) {
-            ctx.Add(cache.status, 0x1532, pid);
+        if (cache.attempted && GetTickCount64() - cache.at < kMinIntervalMs) {
+            if (cache.valid) ctx.Add(cache.status, 0x1532, pid);
+            else ctx.Claim(0x1532, pid); // prevent the generic Razer driver from retrying
             continue;
         }
+        cache.at = GetTickCount64();
+        cache.attempted = true; // rate-limit failed opens, handshakes and timeouts too
+        ctx.Claim(0x1532, pid);
         HidDev d;
         if (!d.Open(*colls[0])) continue;
         // Handshake the headset expects before reads (init, charging state on both links).
@@ -3176,7 +3137,8 @@ void PollRazerHeadsets(PollContext& ctx) {
         s.via = L"2.4 GHz receiver";
         s.percent = r[13];
         s.charging = r[14] != 0;
-        cache = { GetTickCount64(), s, true };
+        cache.status = s;
+        cache.valid = true;
         ctx.Add(s, 0x1532, pid);
     }
 }
@@ -4016,7 +3978,7 @@ bool PollDw(PollContext& ctx, USHORT pid) {
 void PollZowie(PollContext& ctx) {
     for (auto [vid, pid] : ctx.Products(0x04A5)) {
         if (pid == 0x8005 || pid == 0x8006) PollCw(ctx, pid);
-        else PollDw(ctx, pid);  // only acts on devices with the DW command/reply collections
+        else if (pid == 0x800A) PollDw(ctx, pid);  // only acts on devices with the DW command/reply collections
     }
 }
 
@@ -4042,8 +4004,6 @@ std::vector<DeviceStatus> PollAllDevices(HANDLE stopEvent) {
     PollAtkSerial(ctx);  // before Kysona, which shares the ATK vendor id
     if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollKysona(ctx);
-    if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
-    PollKeychron(ctx);
     if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
     PollLamzu(ctx);
     if (stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) return ctx.out;
@@ -4972,7 +4932,10 @@ LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             KillTimer(h, TIMER_WIDGET);
             widget::Destroy();
             SetEvent(g_stopEvt);
-            if (g_worker) WaitForSingleObject(g_worker, INFINITE);
+            if (g_worker && WaitForSingleObject(g_worker, 5000) != WAIT_OBJECT_0) {
+                // Dedicated tool host: exit instead of unloading code still running in a driver.
+                ExitProcess(0);
+            }
             for (auto& [k, e] : g_entries) {
                 if (e.added) TrayDelete(e.uid);
                 if (e.icon) DestroyIcon(e.icon);
@@ -5065,11 +5028,13 @@ DWORD WINAPI Run(LPVOID) {
 }
 
 BOOL WhTool_ModInit() {
-    HANDLE existing = OpenMutexW(SYNCHRONIZE, FALSE, L"Local\\TaskbarWirelessBatteryTray");
-    if (existing) {
-        CloseHandle(existing);
-        Wh_Log(L"Exit the standalone WirelessBattery.exe before enabling this mod.");
-        return FALSE;
+    for (PCWSTR name : {L"Local\\TaskbarWirelessBatteryTray", L"Local\\WirelessBatteryTray"}) {
+        HANDLE existing = OpenMutexW(SYNCHRONIZE, FALSE, name);
+        if (existing) {
+            CloseHandle(existing);
+            Wh_Log(L"Exit both the original and Chinese standalone WirelessBattery.exe before enabling this mod.");
+            return FALSE;
+        }
     }
     ModConfig::Load();
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -5090,7 +5055,11 @@ void WhTool_ModUninit() {
     if (ModHost::uiThread) {
         ModHost::stopRequested = true;
         if (HWND window = ModHost::window.load()) PostMessageW(window, WM_CLOSE, 0, 0);
-        WaitForSingleObject(ModHost::uiThread, INFINITE);
+        if (WaitForSingleObject(ModHost::uiThread, 5000) != WAIT_OBJECT_0) {
+            // Only the dedicated -tool-mod process reaches this callback.
+            // Never return to DLL unload with a live UI/driver thread.
+            ExitProcess(0);
+        }
         CloseHandle(ModHost::uiThread); ModHost::uiThread = nullptr;
     }
 }
