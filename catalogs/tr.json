@@ -418,6 +418,30 @@
         "version": "1.3"
       }
     },
+    "ai-inline-text-fixer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794967209000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794967209000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Narayan",
+        "compilerOptions": "-lwinhttp -luser32 -lshell32 -lgdi32",
+        "description": "Type commands like ?fix, ?formal, ?casual, ?short, or ?emojify at the end of any text field to enhance your writing instantly with free AI",
+        "github": "https://github.com/NarayanChetri",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "AI Text Assistant (?fix, ?formal, ?emojify, ?undo)",
+        "version": "2.4.0"
+      }
+    },
     "ai-voice-typing": {
       "details": {
         "defaultSorting": 1700,
@@ -10524,23 +10548,23 @@
         "ratingUsers": 14,
         "reviews": 0,
         "trendingSorting": -0.7814473782018281,
-        "updated": 1792915279000,
+        "updated": 1794967221000,
         "users": 123
       },
       "metadata": {
         "architecture": [
           "x86-64"
         ],
-        "author": "caotu2k5",
+        "author": "caotu2005",
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ldwmapi -lgdi32 -luser32 -lwindowscodecs -luuid -ladvapi32 -lshell32 -lversion -lsetupapi -lpowrprof",
         "description": "Live taskbar activities: media, Windows Clock, battery, tasks, recording, displays, hotspot, privacy and lunar almanac",
-        "github": "https://github.com/caotu2k5",
+        "github": "https://github.com/caotu2005",
         "include": [
           "explorer.exe"
         ],
         "license": "GPL-3.0-only",
         "name": "Live Update for Windows 11",
-        "version": "2.0.206"
+        "version": "2.0.207"
       }
     },
     "live-video-wallpaper": {
@@ -11640,22 +11664,22 @@
         "ratingUsers": 95,
         "reviews": 0,
         "trendingSorting": 18.20609268760007,
-        "updated": 1793858601000,
+        "updated": 1794967214000,
         "users": 4855
       },
       "metadata": {
         "architecture": [
           "x86-64"
         ],
-        "author": "caotu2k5",
-        "compilerOptions": "-ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lcomctl32 -lversion -limm32 -lcomdlg32 -ld2d1 -ldwrite -ladvapi32 -lole32 -luuid -lwindowscodecs -lmfplat -lmfreadwrite -lmfuuid",
-        "description": "Replaces the classic Win + R dialog with a modern Liquid Glass / Fluent UI, custom image/video backgrounds, and quick settings.",
-        "github": "https://github.com/caotu2k5",
+        "author": "caotu2005",
+        "compilerOptions": "-ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lcomctl32 -lversion -limm32 -lcomdlg32 -ld2d1 -ldwrite -ladvapi32 -lole32 -luuid -lwindowscodecs",
+        "description": "Replaces the classic Win + R dialog with a floating Liquid Glass / Fluent pill launcher, Compact Mini-Pill mode, instant calculator, multi-language Google Translate, and smart app suggestions.",
+        "github": "https://github.com/caotu2005",
         "include": [
           "explorer.exe"
         ],
         "name": "Modern Run Dialog UI For Windows 10 & 11",
-        "version": "4.0.101"
+        "version": "5.0.104"
       }
     },
     "modernize-folder-picker-dialog": {
@@ -14950,7 +14974,7 @@
         "ratingUsers": 139,
         "reviews": 0,
         "trendingSorting": -0.9691530173835483,
-        "updated": 1789131448000,
+        "updated": 1794967225000,
         "users": 5657
       },
       "metadata": {
@@ -14966,7 +14990,7 @@
         ],
         "license": "MIT",
         "name": "Remove Context Menu Items",
-        "version": "1.12.0"
+        "version": "1.13.0"
       }
     },
     "remove-fullscreen-popup-chrome": {

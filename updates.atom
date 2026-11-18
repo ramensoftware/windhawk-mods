@@ -2,12 +2,143 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-18T01:03:41.000Z</updated>
+    <updated>2026-11-18T02:00:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Context Menu Items 1.13.0]]></title>
+        <id>https://windhawk.net/mods/remove-context-menu-items#b42475141002a12ff4fa218eee827c875eebfe78</id>
+        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
+        <updated>2026-11-18T02:00:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Restored the Ctrl key as a bypass option, with a dropdown to choose Ctrl, Alt, or both</li>
+<li>Localized the predefined item names in the Windhawk settings for available languages</li>
+<li>Renamed &quot;NVIDIA Control Panel&quot; to &quot;NVIDIA App&quot; (existing languages need updating)</li>
+</ul>
+]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Live Update for Windows 11 2.0.207]]></title>
+        <id>https://windhawk.net/mods/live-update-for-windows-widget#9ae9b06673de83205d9bdd629e646062c4f81e56</id>
+        <link href="https://windhawk.net/mods/live-update-for-windows-widget"/>
+        <updated>2026-11-18T02:00:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Mod Ownership Transfer:</strong> Transferred mod ownership and maintenance from <code>@caotu2k5</code> to <code>@caotu2005</code>.</li>
+</ul>
+]]></content>
+        <author>
+            <name>caotu2005</name>
+            <uri>https://github.com/caotu2005</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Modern Run Dialog UI For Windows 10 & 11 5.0.104]]></title>
+        <id>https://windhawk.net/mods/modern-run-dialog-ui#376de0f3fc56737e6a09c7ef1d8af3d822adbdc6</id>
+        <link href="https://windhawk.net/mods/modern-run-dialog-ui"/>
+        <updated>2026-11-18T02:00:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Mod Ownership Transfer:</strong> Transferred mod ownership and maintenance from <code>@caotu2k5</code> to <code>@caotu2005</code> ( supersedes #7422 ).</li>
+<li><strong>Major UI Overhaul — Floating Pill Launcher &amp; Compact Mini-Pill Mode:</strong> Redesigned the Run dialog into a synchronized floating pill command bar with a detached rounded pill card for History, App Suggestions, Math Results, and Translations, complete with smooth open/close animations, smart taskbar-aware centering, and a default <code>340px</code> <strong>Compact Mini-Pill Mode</strong>.</li>
+<li><strong>Instant Math Calculator &amp; Built-in Google Translate (<code>文A</code>):</strong> Added live mathematical expression evaluation directly in the input bar (<code>1+1</code>, <code>sqrt(144)</code>, <code>sin(pi/2)</code>, <code>2^10</code>) and an in-app multi-language <strong>Translate Mode</strong> (<code>文A</code>) with a multi-line expanding input box, 22-language selector pills with one-click swap (<code>⇄</code>), and browser popup translation integration.</li>
+<li><strong>Refined <code>⚙️</code> Quick Settings Menu, Native Vietnamese IME &amp; Memory Optimizations:</strong> Redesigned the <code>⚙️</code> popup menu with 3D Liquid Glass toggle switches, upgraded the input control to <code>RICHEDIT50W</code> (<code>msftedit.dll</code>) for seamless Windows 11 TSF inline Vietnamese IME composition and auto-focus on <code>Win + R</code>, unified web search under <code>google:&lt;keyword&gt;</code>, and optimized Liquid Glass <code>1/4</code>-res backdrop caching &amp; memory cleanup.</li>
+</ul>
+]]></content>
+        <author>
+            <name>caotu2005</name>
+            <uri>https://github.com/caotu2005</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[AI Text Assistant (?fix, ?formal, ?emojify, ?undo) 2.4.0]]></title>
+        <id>https://windhawk.net/mods/ai-inline-text-fixer#7476c81a7b59669ec34953c168b213bc782e60ac</id>
+        <link href="https://windhawk.net/mods/ai-inline-text-fixer"/>
+        <updated>2026-11-18T02:00:09.000Z</updated>
+        <content type="html"><![CDATA[<h1>AI Text Assistant (<code>?fix</code>, <code>?formal</code>, <code>?emojify</code>, <code>?undo</code>, ...)</h1>
+<p>Transform, polish, or rewrite your text anywhere in Windows simply by typing a quick command at the end of any text box.</p>
+<p>Works across chat apps, emails, web browsers, documents, social media, and forms.</p>
+<p><img src="https://raw.githubusercontent.com/NarayanChetri/Files/main/AI%20assistant.gif" alt="AI Text Assistant Demo"></p>
+<hr>
+<h3>Instant Commands (Type at the end of your text)</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+<th>Example input</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>?fix</code></td>
+<td>Fixes spelling, grammar, punctuation, and clarity</td>
+<td><code>She dont has no time for that ?fix</code></td>
+</tr>
+<tr>
+<td><code>?formal</code></td>
+<td>Rewrites in a professional, polite business tone</td>
+<td><code>cant make it to the meeting today ?formal</code></td>
+</tr>
+<tr>
+<td><code>?casual</code></td>
+<td>Rewrites in a friendly, conversational tone</td>
+<td><code>I am writing to inquire regarding your plans ?casual</code></td>
+</tr>
+<tr>
+<td><code>?short</code></td>
+<td>Makes your message concise, crisp, and to the point</td>
+<td><code>Due to the fact that it is raining heavily outside right now ?short</code></td>
+</tr>
+<tr>
+<td><code>?emojify</code></td>
+<td>Enriches your text with expressive, fitting emojis</td>
+<td><code>Super excited for the weekend party ?emojify</code></td>
+</tr>
+<tr>
+<td><code>?undo</code></td>
+<td>Instantly reverts back to your original text</td>
+<td><code>?undo</code></td>
+</tr>
+</tbody>
+</table>
+<p><em>(You can type commands with or without a space, e.g., <code>?fix</code> or <code>? fix</code>).</em></p>
+<hr>
+<h3>Instant Undo &amp; Cancellation</h3>
+<ul>
+<li><strong>During AI generation</strong>: Press <strong>Esc</strong> at any time to immediately cancel and keep your original text untouched.</li>
+<li><strong>After AI generation</strong>: If you don't like the AI's result, simply type <strong><code>?undo</code></strong> (or <code>? undo</code>) in the text field to immediately revert back to your original text.</li>
+</ul>
+<hr>
+<h2>Free API Key Setup (No credit card required)</h2>
+<p>Get a free key from either provider below and paste it into the mod settings:</p>
+<ul>
+<li><strong>Google Gemini (Recommended)</strong>: <a href="https://aistudio.google.com/app/apikey">Get free Gemini API Key</a></li>
+<li><strong>Groq</strong>: <a href="https://console.groq.com/keys">Get free Groq API Key</a></li>
+</ul>
+<p><strong>Auto-Verification</strong>: As soon as you paste your key and save settings, the mod automatically tests the connection in the background and confirms it is working.</p>
+<hr>
+<h2>Safety &amp; Privacy</h2>
+<ul>
+<li><strong>What Data is Sent</strong>: When you type an active trigger (e.g. <code>?fix</code>, <code>?formal</code>), the text content of the active field (whatever Select All selects, up to the configured <code>max_chars</code> limit, 4,000 characters by default) is sent over an encrypted HTTPS connection directly to your chosen AI provider (<code>generativelanguage.googleapis.com</code> for Google Gemini, or <code>api.groq.com</code> for Groq). When you add or change an API key in settings, a brief connection test request sending the word <code>&quot;Hi&quot;</code> is performed to verify your key.</li>
+<li><strong>Provider Terms &amp; Data Handling</strong>: Because this mod uses your own direct API key with the provider, each provider's respective privacy policy and terms of service apply. For example, on Google Gemini's free tier, Google's terms state that submitted content may be used to improve products and may be reviewed by human reviewers. Groq's data retention and privacy policies apply when using Groq.</li>
+<li><strong>Clipboard History &amp; Cloud Sync</strong>: Reading the field uses <code>Ctrl+C</code>, so each time you use a command, the field's full text is added to your clipboard history (<code>Win+V</code>) and, if clipboard sync is set to automatic, synced to your other devices. However, during the replacement paste and when restoring your previous clipboard content, the mod applies Windows exclusion formats (<code>ExcludeClipboardContentFromMonitorProcessing</code>, <code>CanIncludeInClipboardHistory</code>, and <code>CanUploadToCloudClipboard</code>) so that intermediate changes and restored clipboard data are not duplicated into clipboard history or synced across devices.</li>
+<li><strong>Accidental Typing Protection</strong>: While the AI processes your request, keyboard input in the target window is safely paused so typed keystrokes do not interfere with processing. You can cancel any in-flight request at any time by pressing <code>Esc</code>. If you switch to another window or app while the AI is thinking, input in your other window is never blocked.</li>
+<li><strong>Terminal Protection</strong>: Command prompts and terminal windows (PowerShell, Command Prompt, Windows Terminal, ConHost, MinTTY, PuTTY, ConEmu) are excluded by class and process so shortcuts and triggers never interfere with console sessions.</li>
+<li><strong>Document Protection</strong>: Fields longer than the configured maximum character limit (<code>max_chars</code>) are left untouched to protect large open files and documents.</li>
+<li><strong>Dedicated Background Process</strong>: This mod runs safely as a dedicated Windhawk tool mod, isolating network and keyboard handling from <code>explorer.exe</code> to protect your taskbar and desktop stability.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Narayan</name>
+            <uri>https://github.com/NarayanChetri</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[File Type Properties Customization 1.0.0]]></title>
         <id>https://windhawk.net/mods/file-type-properties-customization#1732db7b1ee9a37ded2057ba2502f8415229625d</id>
@@ -512,69 +643,6 @@ page</a>.</p>
 <li>Added the &quot;Touchpad scrolling&quot; option, which changes the volume with two-finger scrolling on precision touchpads whose scrolling doesn't work over the taskbar.</li>
 <li>Fixed the tooltip being cut off with a vertical taskbar, set in the Windows settings or by the &quot;Vertical Taskbar for Windows 11&quot; mod. The tooltip is shown at the screen edge, above thumbnail previews.</li>
 <li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
-</ul>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.3.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#78d6aca1308703ee2fd2182f7106d1cd7343036c</id>
-        <link href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks"/>
-        <updated>2026-11-17T08:00:29.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Bell settings are now applied on secondary taskbars.</li>
-<li>Improved support for the native vertical taskbar.</li>
-<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
-</ul>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar tray auto-hide (show on hover) 1.0.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-tray-show-on-hover#62344c8ec7898437efad72b3f89132d0e7389028</id>
-        <link href="https://windhawk.net/mods/taskbar-tray-show-on-hover"/>
-        <updated>2026-11-17T08:00:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
-<li>Improved ARM64 compatibility.</li>
-</ul>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.6]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#5e44fbdb4dd4433ef2ddd99c5ff59214cbf74fde</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2026-11-17T08:00:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>When taskbar buttons are combined, a button with a single window now shows the window title instead of the program name, same as when taskbar buttons aren't combined.</li>
-<li>Added support for the native vertical taskbar in newer Windows 11 versions for the &quot;Show labels, combine taskbar buttons&quot; and &quot;Hide labels, don't combine taskbar buttons&quot; modes.</li>
-<li>Fixed the running and progress indicator styles on the native vertical taskbar.</li>
-</ul>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start button always on the left 1.3.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-start-button-position#8854f71d0182663987a14d5670f3d309a2a88484</id>
-        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
-        <updated>2026-11-17T07:04:00.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
-<li>The Start button right-click menu is now always aligned to the left, not only when &quot;Start menu on the left&quot; is enabled.</li>
-<li>Fixed the search menu being moved incorrectly in some cases.</li>
 </ul>
 ]]></content>
         <author>

@@ -1,3 +1,10 @@
+## 5.0.104 ([Nov 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/376de0f3fc56737e6a09c7ef1d8af3d822adbdc6/mods/modern-run-dialog-ui.wh.cpp))
+
+* **Mod Ownership Transfer:** Transferred mod ownership and maintenance from `@caotu2k5` to `@caotu2005` ( supersedes #7422 ).
+* **Major UI Overhaul — Floating Pill Launcher & Compact Mini-Pill Mode:** Redesigned the Run dialog into a synchronized floating pill command bar with a detached rounded pill card for History, App Suggestions, Math Results, and Translations, complete with smooth open/close animations, smart taskbar-aware centering, and a default `340px` **Compact Mini-Pill Mode**.
+* **Instant Math Calculator & Built-in Google Translate (`文A`):** Added live mathematical expression evaluation directly in the input bar (`1+1`, `sqrt(144)`, `sin(pi/2)`, `2^10`) and an in-app multi-language **Translate Mode** (`文A`) with a multi-line expanding input box, 22-language selector pills with one-click swap (`⇄`), and browser popup translation integration.
+* **Refined `⚙️` Quick Settings Menu, Native Vietnamese IME & Memory Optimizations:** Redesigned the `⚙️` popup menu with 3D Liquid Glass toggle switches, upgraded the input control to `RICHEDIT50W` (`msftedit.dll`) for seamless Windows 11 TSF inline Vietnamese IME composition and auto-focus on `Win + R`, unified web search under `google:<keyword>`, and optimized Liquid Glass `1/4`-res backdrop caching & memory cleanup.
+
 ## 4.0.101 ([Nov 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fee6d20e88618018c299d1d4bf18008a916798c8/mods/modern-run-dialog-ui.wh.cpp))
 
 * Added manual Run dialog size and font customization: adjust dialog width (`360`–`1200 px`), command bar/total height (`36`–`96 px` / `150`–`600 px`), and font size (`9`–`24 pt`) with live preview via inline `-` / `[value]` / `+` controls in the in-app `⚙️` quick settings menu or Windhawk settings.

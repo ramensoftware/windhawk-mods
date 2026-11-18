@@ -1,3 +1,9 @@
+## 1.13.0 ([Nov 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b42475141002a12ff4fa218eee827c875eebfe78/mods/remove-context-menu-items.wh.cpp))
+
+* Restored the Ctrl key as a bypass option, with a dropdown to choose Ctrl, Alt, or both
+* Localized the predefined item names in the Windhawk settings for available languages
+* Renamed "NVIDIA Control Panel" to "NVIDIA App" (existing languages need updating)
+
 ## 1.12.0 ([Sep 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/00d16690c8ac0726d4b9c16db136b0a9c772b8b2/mods/remove-context-menu-items.wh.cpp))
 
 * Added Polish language support (thanks to [FadeMind](https://github.com/FadeMind))
