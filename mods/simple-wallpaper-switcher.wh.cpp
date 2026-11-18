@@ -6,7 +6,7 @@
 // @author          HHeitlager
 // @github          https://github.com/hheitlager
 // @include         windhawk.exe
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -lcomctl32 -lshlwapi -luuid -ldwmapi -luxtheme -lgdi32 -lmsimg32 -ld2d1 -lwindowscodecs -lgdiplus -ladvapi32
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -lcomctl32 -lshlwapi -luuid -ldwmapi -luxtheme -lgdi32 -lmsimg32 -ld2d1 -lwindowscodecs -lgdiplus -ladvapi32 -lshcore
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -157,6 +157,7 @@ Supported image formats: JPEG, PNG, BMP, and WebP.
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <shlwapi.h>
+#include <shellscalingapi.h>
 #include <shellapi.h>
 #include <uxtheme.h>
 #include <windhawk_api.h>
@@ -3597,21 +3598,28 @@ void PositionPickerWindow(HMONITOR monitor) {
         return;
     }
 
-    RECT windowRect{};
-    int width = 560;
-    int height = 360;
-    if (GetWindowRect(g_pickerWindow, &windowRect)) {
-        width = windowRect.right - windowRect.left;
-        height = windowRect.bottom - windowRect.top;
+    UINT dpiX = 96;
+    UINT dpiY = 96;
+    if (FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI,
+                                &dpiX, &dpiY))) {
+        dpiX = dpiY = 96;
     }
+    const int width = MulDiv(560, (int)dpiX, 96);
+    const int height = MulDiv(360, (int)dpiY, 96);
+    const int horizontalEdgeMargin = MulDiv(kPickerEdgeMargin,
+                                            (int)dpiX, 96);
+    const int verticalEdgeMargin = MulDiv(kPickerEdgeMargin,
+                                          (int)dpiY, 96);
 
     const RECT& work = info.rcWork;
     const int workWidth = work.right - work.left;
     const int workHeight = work.bottom - work.top;
     const int horizontalMargin =
-        std::min(kPickerEdgeMargin, std::max(0, (workWidth - width) / 2));
+        std::min(horizontalEdgeMargin,
+                 std::max(0, (workWidth - width) / 2));
     const int verticalMargin =
-        std::min(kPickerEdgeMargin, std::max(0, (workHeight - height) / 2));
+        std::min(verticalEdgeMargin,
+                 std::max(0, (workHeight - height) / 2));
     const LONG left = work.left + horizontalMargin;
     const LONG right = std::max<LONG>(
         left, work.right - width - horizontalMargin);
@@ -4774,7 +4782,8 @@ void AddTrayIcon(HWND hwnd) {
     }
     g_notifyIcon.hIcon = g_trayIcon ? g_trayIcon : LoadIcon(nullptr, IDI_APPLICATION);
     wcscpy_s(g_notifyIcon.szTip, L"Simple Wallpaper Switcher");
-    if (!Shell_NotifyIconW(NIM_ADD, &g_notifyIcon)) {
+    if (!Shell_NotifyIconW(NIM_ADD, &g_notifyIcon) &&
+        !Shell_NotifyIconW(NIM_MODIFY, &g_notifyIcon)) {
         SetTimer(hwnd, kTrayRetryTimer, 2000, nullptr);
         return;
     }
