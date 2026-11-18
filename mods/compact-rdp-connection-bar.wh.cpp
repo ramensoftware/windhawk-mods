@@ -2,7 +2,7 @@
 // @id              compact-rdp-connection-bar
 // @name            Compact RDP connection bar
 // @description     Shrinks the top connection bar, optionally hides pin/quality/lock buttons, keeps drag working
-// @version         3.3.4
+// @version         3.3.5
 // @author          hsb5
 // @github          https://github.com/hsb5
 // @include         mstsc.exe
@@ -906,11 +906,13 @@ static LRESULT CALLBACK TbProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_
 
     // mstsc sometimes hides a button on its own, for example the lock icon
     // when the session changes. Drop the record then, or RestoreButtons would
-    // unhide a button mstsc wants hidden.
+    // unhide a button mstsc wants hidden. TB_HIDEBUTTON takes the command id
+    // in wParam; LOWORD(lParam) is only the hide flag.
     if (!g_inHide && msg == TB_HIDEBUTTON && LOWORD(lp)) {
+        int id = (int)wp;
         int k = 0;
         for (int j = 0; j < g_hiddenCount; j++)
-            if (g_hidden[j].tb != hwnd || g_hidden[j].id != (int)LOWORD(lp))
+            if (g_hidden[j].tb != hwnd || g_hidden[j].id != id)
                 g_hidden[k++] = g_hidden[j];
         g_hiddenCount = k;
     }
