@@ -1,13 +1,12 @@
 // ==WindhawkMod==
 // @id              taskbar-quick-pin
 // @name            Left Taskbar Quick Pin Dock
-// @description     A persistent icon dock anchored left of the Start button. Drag any app or File Explorer window to pin, left-click to launch or focus, drag within the dock to reorder, or drag off to unpin.
+// @description     A persistent icon dock anchored left of the Start button, plus a screen-edge workspace pill. Pin apps or File Explorer workspaces, reorder or unpin by drag, and capture/restore window layouts.
 // @author          Ashix
 // @version         3.2026.1811
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
 // @donateUrl       https://ko-fi.com/kashix
-// @include         windhawk-mod.exe
 // @include         windhawk.exe
 // @compilerOptions -luser32 -lshell32 -lole32 -loleaut32 -luuid -lshlwapi -lgdi32 -lgdiplus -lmsimg32 -ldwmapi -lwinmm
 // ==/WindhawkMod==
@@ -61,6 +60,13 @@ A lightweight, DPI-aware icon dock anchored left of the Start button. Pin apps o
 | **Grouped folder color palette** | Single-line pipe-separated `#RRGGBB` list (yellow/extremes auto-skipped) | 30 muted colors |
 | **Open grouped paths in separate windows** | OFF = restore as tabs in one Explorer window; ON = separate windows | `OFF` |
 | **Triple-tap `P` / `U` / `L` gestures** | Opt-in bare-key triple-tap to pin, unpin, or lock the dock | `OFF` |
+
+## Edge Pill & Workspace Layouts
+
+- **Screen-edge pill:** Displays a small capsule pill anchored to a screen edge (default: left edge; drag to any of the four edges, or disable **Show Edge Pill** in settings).
+- **Window layout capture & restore:** Clicking `+` on the Edge Pill arc captures visible windows and their screen positions into a layout workspace. Restoring a saved workspace launches apps that are not already running and moves/resizes their windows to the saved layout.
+- **Browser URL capture (opt-in):** Disabled by default. When **Capture active browser URL** is enabled, the mod reads the address bar URL of supported browsers during capture and stores it in mod storage so restoring can reopen that URL.
+- **Hotkeys:** Edge Pill toggle and capture hotkeys are disabled (`none`) by default and can be configured in settings.
 
 ## Known Limitations
 
@@ -260,12 +266,12 @@ A lightweight, DPI-aware icon dock anchored left of the Start button. Pin apps o
   $name: Edge Pill & Workspace Arc
 
 - edgeWorkspaces:
-  - toggleDockHotkey: "Alt+W"
+  - toggleDockHotkey: "none"
     $name: Toggle Edge Pill Hover Dock hotkey
-    $description: Shortcut (e.g. Alt+W, Ctrl+Alt+W, or none) to toggle the Edge Pill Hover Dock.
-  - captureWorkspaceHotkey: "Alt+Shift+W"
+    $description: Shortcut (e.g. Alt+W, Ctrl+Alt+W, or none) to toggle the Edge Pill Hover Dock (disabled by default).
+  - captureWorkspaceHotkey: "none"
     $name: Capture current monitor workspace hotkey
-    $description: Shortcut (e.g. Alt+Shift+W or none) to capture the cursor's monitor into a new layout workspace.
+    $description: Shortcut (e.g. Alt+Shift+W or none) to capture the cursor's monitor into a new layout workspace (disabled by default).
   - captureWindowFilter: edgeTouching
     $name: Workspace window capture mode
     $description: >-
@@ -274,11 +280,6 @@ A lightweight, DPI-aware icon dock anchored left of the Start button. Pin apps o
     $options:
     - edgeTouching: Edge-touching / snapped windows only (ignore floating windows)
     - allVisible: All visible non-occluded windows
-  - allowDuplicateWorkspaces: false
-    $name: Allow duplicate workspace shortcuts
-    $description: >-
-      OFF (default) = prevent clutter when pinning the same set of apps again
-      (e.g. Edge + VS Code). ON = allow creating duplicate pins for the same apps.
   - duplicateWorkspaceAction: ignore
     $name: When pinning an already-pinned app group
     $description: >-
@@ -294,7 +295,7 @@ A lightweight, DPI-aware icon dock anchored left of the Start button. Pin apps o
   - ignoreOccludedWindows: true
     $name: Ignore occluded background windows
     $description: Skip windows that are 86%+ covered by higher Z-order windows during capture.
-  - captureBrowserActiveTab: true
+  - captureBrowserActiveTab: false
     $name: Capture active browser URL
     $description: Record the active tab URL of Chromium/Firefox browsers when capturing a workspace.
   - reuseOpenWindows: true
@@ -311,6 +312,7 @@ A lightweight, DPI-aware icon dock anchored left of the Start button. Pin apps o
 //  INCLUDES
 // ============================================================
 #include <initguid.h>   // MUST be first: defines DEFINE_GUID to emit storage
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <windowsx.h>
 #include <winioctl.h>
@@ -398,7 +400,7 @@ static const float FRAME_DELTA_SNAP_MS    = 50.f;  // Snap animations on frames 
 
 // Interaction settings (user settings; loaded in WhTool_ModInit / WhTool_ModSettingsChanged).
 static bool ENABLE_RAPID_UNPIN_ALL     = false;  // "enableRapidUnpinAll": rapid triple-click in the dock zone unpins ALL pins (DEFAULT OFF, opt-in). Fixes accidental wipe from impatiently clicking a slow app.
-static bool ENABLE_KEY_GESTURES        = false;  // "enableKeyGestures": bare-key P/U/L triple-tap gestures (DEFAULT OFF, opt-in). The Ctrl+Alt+P hotkey covers pin/unpin without firing while typing.
+static std::atomic<bool> ENABLE_KEY_GESTURES{false};  // "enableKeyGestures": bare-key P/U/L triple-tap gestures (DEFAULT OFF, opt-in).
 
 // User-configurable (clamped in WhTool_ModInit)
 static int  MAX_PINNED_APPS      = 5;
@@ -407,10 +409,9 @@ static int  BASE_ICON_SPACING    = 12;
 static int  DOCK_GAP_FROM_START  = 6;      // Gap between dock right edge and Start (user-configurable, clamp 0..40)
 static std::atomic<bool> SHOW_WORKSPACE_DIVIDER{true};  // v2.5.4: boolean toggle (replaces the old int separatorOpacity). Worker LoadSettings writes, UI WM_PAINT reads.
 
-// v2.5.4 (this-round Issue 3): the right-edge separator LINE was removed, so the
+// the right-edge separator LINE was removed, so the
 // old 0..100 "separatorOpacity" (whose values 1..100 all behaved identically) is
 // now a plain on/off toggle for the gold workspace/app divider pill. Pure decision,
-// mirrored 1:1 into tests/workspace_divider.h and unit-tested in workspace_divider_test.cpp.
 static inline bool ShouldDrawWorkspaceDivider(bool showWorkspaceDivider,
                                               int workspaceSlots, int appCount) {
     return showWorkspaceDivider && workspaceSlots > 0 && appCount > 0;
@@ -419,8 +420,10 @@ static inline bool ShouldDrawWorkspaceDivider(bool showWorkspaceDivider,
 // and the setting description ("whole-dock red tint") was never implemented.
 // Shipping a setting that inverts what its label says is worse than no setting.
 static bool ENABLE_REORDER       = true;   // Drag-to-reorder within dock
-static std::atomic<bool> ENABLE_SCROLL_NAV{true};   // Scroll-wheel navigation across pins. FIX(Issue 1): atomic -- worker LoadSettings writes, UI WM_MOUSEWHEEL reads.
-static std::atomic<int> CORNER_ROUNDNESS{40};     // default: small-rounded. 0 = square dock, 100 = fully rounded (DWM). FIX(Issue 1): atomic -- worker writes, UI WM_PAINT reads.
+static std::atomic<bool> ENABLE_SCROLL_NAV{true};   // Scroll-wheel navigation across pins. : atomic -- worker LoadSettings writes, UI WM_MOUSEWHEEL reads.
+
+static std::atomic<int> CORNER_ROUNDNESS{40};     // default: small-rounded. 0 = square dock, 100 = fully rounded (DWM). : atomic -- worker writes, UI WM_PAINT reads.
+
 static bool HIDE_DOCK_BORDER     = false;  // "hideDockBorder": ON => colourless DWM window border (no grey outline). Default OFF.
 static bool ENABLE_EXPLORER_WORKSPACE_PINS = true;  // User-controlled explorer.exe exclusion
 static std::atomic<int>  DOCK_STYLE{1};                // 0 = frosted glass pill, 1 = transparent
@@ -469,7 +472,7 @@ static const int MIN_APP_SLOTS        = 5;
 // ============================================================
 //  REGISTRY / WINDOW CLASS NAMES
 // ============================================================
-// FIX-C3 (#7): REG_KEY removed -- pinned apps no longer live in HKCU. REG_VALUE
+// REG_KEY removed -- pinned apps no longer live in HKCU. REG_VALUE
 // is now the Windhawk mod-storage value name for the pinned-apps blob.
 static const wchar_t* REG_VALUE     = L"PinnedApps";
 static const wchar_t* OVERLAY_CLASS = L"QPDockOverlay";
@@ -479,7 +482,7 @@ static const wchar_t* GHOST_CLASS   = L"QPDockGhost";
 // ============================================================
 //  DRAG STATE MACHINE
 //  Transitions: IDLE -> PRESS -> DRAGGING -> DROPPED -> IDLE
-//                                        -> CANCELLED -> IDLE
+//                                        > CANCELLED -> IDLE
 // ============================================================
 enum DragState {
     DRAG_IDLE,      // No interaction in progress
@@ -500,7 +503,7 @@ static std::atomic<DragState> g_dragState{DRAG_IDLE};  // FIX #8: written by wor
 // ============================================================
 enum SystemState { STATE_BOOT, STATE_STABILIZING, STATE_STABLE };
 static SystemState g_systemState = STATE_BOOT;
-// FIX (Issue 2): set when the taskbar is left-aligned (Start hugs the left edge)
+// set when the taskbar is left-aligned (Start hugs the left edge)
 // so there is no room for the dock. The dock is hidden and the state machine is
 // settled to STATE_STABLE so polling backs off -- instead of the old behaviour
 // of returning early every call and spinning in STATE_BOOT at 100 ms forever.
@@ -565,7 +568,6 @@ struct WorkspaceSnapshot {
         int activeTab = 0;
         std::vector<std::wstring> tabPaths;
     };
-    std::vector<WindowGroup> windows;
 };
 
 struct PinnedApp {
@@ -587,8 +589,6 @@ struct PinnedApp {
     float        velocityX   = 0.f;  // Momentum for position animation
     float        opacity     = 0.f;  // 0.0 - 1.0 for fade-in animation
     bool         isNew       = true; // Triggers entrance animation
-    float        hoverScale  = 1.0f; // Animated scale: 1.0 = normal, HOVER_SCALE_FACTOR = hovered
-    float        hoverShiftX = 0.f;  // Animated horizontal spread: magnified icons push neighbours outward (macOS-dock feel)
     bool         running     = false; // True when >=1 visible window of this app exists
 };
 
@@ -651,7 +651,6 @@ static bool    g_dockPosAnimActive = false;
 // ============================================================
 //  GLOBALS  --  per-frame animation tracking
 // ============================================================
-static DWORD   g_lastFrameTime      = 0;
 static float   g_frameDeltaMs       = 16.f;
 static bool    g_anyAnimationActive = false;
 static int     g_idleFrames         = 0;
@@ -689,7 +688,6 @@ static void SetHighResTimer(bool enable) {
 // ============================================================
 static std::atomic<int> g_hoverIndex{-1};  // FIX #8: worker writes, window procs read -- atomic
 static POINT   g_dragStartPt     = {};
-static DWORD   g_mouseDownTime   = 0;
 static std::wstring g_draggedAppPath;  // Path locked at PRESS
 static std::wstring g_lockedDragPath;  // Second lock confirmed at DRAGGING threshold
 static PinType      g_draggedPinType = PIN_APP;
@@ -699,7 +697,6 @@ static HWND         g_lockedExplorerHwnd  = NULL;
 static HICON   g_dragGhostIcon   = NULL;
 static bool    g_dragFromDock    = false;
 static int     g_dragFromDockIdx = -1;
-static bool    g_dropZoneActive  = false;
 // Stage-1 lightweight source classification, recorded at mouse-down for a
 // non-dock press (WindowFromPoint only -- see GetRealWindowFromPoint). NOT a
 // resolved identity: no path, no process, no icon. Consumed once, at the
@@ -712,7 +709,7 @@ static int     g_rapidClickCount = 0;
 static DWORD   g_rapidClickStart = 0;
 static int     g_rapidClickIndex = -1;
 
-// ---- Keyboard triple-tap gesture (worker-thread polled) ----
+// Keyboard triple-tap gesture (worker-thread polled) ----
 // Tap the P key 3x quickly -> PIN the focused app; tap U key 3x quickly ->
 // UNPIN it. Rising-edge detected so a held key counts as one tap. Reset if the
 // taps are spread out beyond KEY_TAP_WINDOW_MS.
@@ -783,18 +780,59 @@ static LRESULT CALLBACK LowLevelKeyboardGestureProc(int nCode, WPARAM wParam, LP
 
 static HINSTANCE GetModHInstance();
 
-static void SyncKeyboardGestureHookOnUiThread() {
-    if (ENABLE_KEY_GESTURES && !g_kbHook) {
-        g_kbHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardGestureProc, GetModHInstance(), 0);
-    } else if (!ENABLE_KEY_GESTURES && g_kbHook) {
+static HANDLE g_kbHookThread   = NULL;
+static DWORD  g_kbHookThreadId = 0;
+static HANDLE g_kbHookReady    = NULL;
+
+static DWORD WINAPI KeyboardHookThreadProc(LPVOID) {
+    MSG probe;
+    PeekMessageW(&probe, NULL, WM_USER, WM_USER, PM_NOREMOVE);
+    g_kbHookThreadId = GetCurrentThreadId();
+    g_kbHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardGestureProc, GetModHInstance(), 0);
+    if (g_kbHookReady) SetEvent(g_kbHookReady);
+    if (g_kbHook) {
+        MSG msg;
+        while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
         UnhookWindowsHookEx(g_kbHook);
         g_kbHook = NULL;
-        ResetGestureGuard();
-        g_tapDownVk = 0;
+    }
+    g_kbHookThreadId = 0;
+    return 0;
+}
+
+static void StopKeyboardGestureHookThread() {
+    if (g_kbHookThread) {
+        if (g_kbHookThreadId) PostThreadMessageW(g_kbHookThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_kbHookThread, INFINITE);
+        CloseHandle(g_kbHookThread);
+        g_kbHookThread = NULL;
+    }
+    if (g_kbHookReady) {
+        CloseHandle(g_kbHookReady);
+        g_kbHookReady = NULL;
+    }
+    ResetGestureGuard();
+    g_tapDownVk = 0;
+}
+
+static void SyncKeyboardGestureHookOnUiThread() {
+    if (ENABLE_KEY_GESTURES && !g_kbHookThread) {
+        g_kbHookReady = CreateEventW(NULL, TRUE, FALSE, NULL);
+        g_kbHookThread = CreateThread(NULL, 0, KeyboardHookThreadProc, NULL, 0, NULL);
+        if (g_kbHookThread && g_kbHookReady) {
+            WaitForSingleObject(g_kbHookReady, 2000);
+        } else {
+            StopKeyboardGestureHookThread();
+        }
+    } else if (!ENABLE_KEY_GESTURES && g_kbHookThread) {
+        StopKeyboardGestureHookThread();
     }
 }
 
-// ---- Icon lock (triple-tap L) ----
+// Icon lock (triple-tap L) ----
 // Triple-tap the L key to LOCK the dock, tap it 3x again to UNLOCK. While
 // locked, all *gesture* unpins are refused -- triple-tap U, the rapid-click
 // unpin-all, double-right-click unpin, and the hotkey's unpin action -- so an
@@ -813,7 +851,7 @@ static std::atomic<bool> g_iconsLocked{false};  // FIX #8: toggled by worker (tr
 static std::atomic<DWORD>   g_lockGlowStart{0};
 static const int LOCK_GLOW_MS  = 750;
 
-// ---- Cinematic lock/unlock FLASH -- pure decision logic + layer state --------
+// Cinematic lock/unlock FLASH -- pure decision logic + layer state --------
 // The flash is a brief, premium bloom shown on the lock TOGGLE (and on a refused
 // gesture-unpin while locked). It renders on its OWN per-pixel-alpha layered
 // window (see EnsureLockGlowSurface / RenderLockGlow) so it can paint a true
@@ -824,7 +862,6 @@ static const int LOCK_GLOW_MS  = 750;
 //                     and the "denied" pulse of a blocked gesture-unpin).
 //   LOCKGLOW_RELEASE  cool GREEN ripple that EXPANDS outward from the edge (UNLOCK).
 // The colour ramp, alpha envelope and ring geometry below are mirrored 1:1 in
-// tests/lock_glow.h and unit-tested by tests/lock_glow_test.cpp.
 enum LockGlowKind { LOCKGLOW_SEAL, LOCKGLOW_RELEASE, LOCKGLOW_LIMIT };
 
 // TriggerLockGlow() runs AFTER the caller flips g_iconsLocked, so the NEW locked
@@ -851,7 +888,6 @@ static inline LockGlowRGB LockGlowColor(LockGlowKind kind, float p) {
     // RELEASE: deep green -> bright green
     return LockGlowRGB{ (int)(20 + (80 - 20) * p), (int)(120 + (235 - 120) * p), (int)(70 + (140 - 70) * p) };
 }
-// --- Confinement + render mode (mirrored 1:1 in tests/lock_glow.h) ----------
 // The glow is CONFINED to the dock's own rectangle: it never spills outside and
 // never draws a fabricated outline. One user setting picks the look:
 //   SWEEP (ON)  -- loading-style bar that fills the dock LEFT -> RIGHT.
@@ -868,7 +904,6 @@ static inline float LockGlowSweepX01(float t) {
     if (t >= 1.0f) return 1.0f;
     return t * t * (3.0f - 2.0f * t);
 }
-// --- Glow remover / lifecycle guard (mirrored 1:1 in tests/lock_glow.h) ------
 // The glow rides the dock's REAL rectangle (g_cachedDockRect). If the dock
 // stops showing mid-flash it must be torn down at once or it is left painting
 // over empty space. DockHiddenForGlow mirrors RepositionOverlay's three hard
@@ -887,7 +922,6 @@ static inline bool LockGlowShouldTeardown(bool glowActive, bool dockHidden,
     return elapsedMs >= durationMs;
 }
 
-// --- Dock-inactive gate (v2.5.3, mirrored 1:1 in tests/dock_active_gate.h) ---
 // Is the dock ACTIVE (on screen) and therefore allowed to run any drag / resolve
 // / dock-zone / pin-unpin / lock-glow work this frame? The overlay is suppressed
 // (kept hidden) for several reasons -- a fullscreen/exclusive app or secure snip
@@ -930,7 +964,8 @@ static bool    ENABLE_LOCK_ANIMATION = false;        // "enableLockAnimation" us
 // Lock/drag glow now renders directly on the ULW_ALPHA dock surface (zero Z-order fighting).
 
 // Visual feedback
-static std::atomic<bool>  g_shakeActive{false};  // Dock shake on pin-limit hit. FIX(Issue 3): atomic -- TriggerLimitFlash writes, UI WM_PAINT reads/clears.
+static std::atomic<bool>  g_shakeActive{false};  // Dock shake on pin-limit hit. : atomic -- TriggerLimitFlash writes, UI WM_PAINT reads/clears.
+
 static std::atomic<DWORD> g_shakeStart{0};
 // (g_limitFlash* removed: pin-limit feedback is now a RED lock-glow bloom, not the red right-edge line.)
 
@@ -942,11 +977,9 @@ static int     g_autoHideMiss     = 0;      // Hysteresis counter for auto-hide 
 // must fully hide while a fullscreen app / exclusive presentation / secure snip
 // overlay owns the screen (otherwise it floats on top of games, F11 video, and
 // the Snipping Tool clip). Sampled each poll by UpdateFullscreenState(); the
-// pure decision + hysteresis are mirrored in tests/fullscreen_suppress.h.
 static bool    g_fullscreenActive  = false; // latched result the worker acts on
 static int     g_fullscreenMiss    = 0;     // consecutive "clear" samples (anti-flicker restore)
 static const int FULLSCREEN_RESTORE_FRAMES = 2;  // clear samples required before the dock reappears
-// --- pure decision, mirrored 1:1 in tests/fullscreen_suppress.h ------------
 static inline bool ShouldSuppressForFullscreen(bool foregroundCoversMonitor,
                                                bool foregroundIsShell,
                                                bool shellReportsFullscreen) {
@@ -967,7 +1000,6 @@ static inline bool FullscreenHideDecision(bool suppressNow, bool prevActive,
 // Edge classification of the latched g_fullscreenActive flag across two poll
 // samples, so UpdateFullscreenState() logs EXACTLY ONE line when the dock
 // starts hiding and one when it clears -- never per-frame. Mirrored 1:1 in
-// tests/fullscreen_suppress.h.
 enum FullscreenTransition { FS_NONE, FS_ENTERED, FS_CLEARED };
 static inline FullscreenTransition
 FullscreenTransitionEvent(bool prevActive, bool nowActive) {
@@ -982,7 +1014,7 @@ static const DWORD SCROLL_NAV_LOCK_MS = 700; // How long a wheel-selected highli
 
 // Pin/unpin hotkey
 static const UINT HOTKEY_PIN_ID        = 1777;        // WM_HOTKEY wParam identifier
-// FIX (Issue 6): posted to the overlay window (from WhTool_ModSettingsChanged) so the
+// posted to the overlay window (from WhTool_ModSettingsChanged) so the
 // global hotkey is re-registered on its OWNING thread when the user changes the
 // modifier/key setting -- RegisterHotKey/UnregisterHotKey must run on the thread
 // that created g_overlayWnd, so a settings-thread call would silently no-op.
@@ -990,8 +1022,10 @@ static const UINT WM_QPD_REREGISTER_HOTKEY  = WM_APP + 7;
 static const UINT WM_QPD_RENDER_DOCK        = WM_APP + 8;
 static const UINT WM_QPD_WSPOPUP_OPEN       = WM_APP + 9;
 static const UINT WM_QPD_WSPOPUP_CLOSE      = WM_APP + 10;
-static std::atomic<UINT> g_hotkeyMods{MOD_CONTROL | MOD_ALT};  // FIX(Issue 1): atomic -- worker LoadSettings writes, UI hotkey re-register reads.
-static std::atomic<UINT> g_hotkeyKey{'P'};               // Default: Ctrl+Alt+P. FIX(v10): atomic -- worker LoadSettings writes, UI hotkey re-register reads.
+static std::atomic<UINT> g_hotkeyMods{MOD_CONTROL | MOD_ALT};  // atomic -- worker LoadSettings writes, UI hotkey re-register reads.
+
+static std::atomic<UINT> g_hotkeyKey{'P'};               // Default: Ctrl+Alt+P. : atomic -- worker LoadSettings writes, UI hotkey re-register reads.
+
 
 // Hover candidate  --  pre-sampled resolver result for anti-flicker stability
 
@@ -1041,9 +1075,11 @@ static bool    g_mouseTracking = false;
 // ============================================================
 static CRITICAL_SECTION g_cs;
 static bool    g_csInitialized  = false;
+static CRITICAL_SECTION g_saveCs;
+static bool    g_saveCsInit     = false;
 static HANDLE  g_exitEvent      = NULL;
 static HANDLE  g_workerThread   = NULL;
-// FIX-C1 (#1/#2/#8): dedicated UI thread that OWNS all top-level window/class/
+// dedicated UI thread that OWNS all top-level window/class/
 // hotkey lifecycle and runs the message pump. Windows are created, pumped, and
 // destroyed on this ONE thread (Windhawk's lifecycle callbacks run on an
 // arbitrary thread with no message pump, which broke dispatch + teardown).
@@ -1051,7 +1087,7 @@ static HANDLE g_uiThread     = NULL;
 static DWORD  g_uiThreadId   = 0;
 static HANDLE g_uiReadyEvent = NULL;  // signaled by the UI thread once windows exist (or creation failed)
 static bool   g_uiInitOk     = false; // set by the UI thread; read by WhTool_ModInit after the ready event
-// FIX-B2 (#6) + review #4 (Bug A): LaunchWorkspaceAsync's threads are tracked so
+//  + : LaunchWorkspaceAsync's threads are tracked so
 // WhTool_ModUninit can join EVERY outstanding one before the mod image unloads. The
 // old single-slot design closed+overwrote a still-running thread's handle when a
 // second launch overlapped it, dropping the join point -- that thread then ran
@@ -1065,13 +1101,12 @@ static bool                g_launchCsInit = false;
 static CRITICAL_SECTION    g_restoreExecCs;
 static bool                g_restoreExecCsInit = false;
 static std::atomic<bool>   g_launchWorkspaceStop{false};
-// FIX-B3 (#3): the mod's own module handle. Window classes must be registered
-// with (and unregistered against) THIS handle, not GetModuleHandleW(NULL) which
-// returns explorer.exe. Populated in WhTool_ModInit via GetModHInstance().
+// the mod's own module handle. Window classes must be registered
+// with (and unregistered against) THIS handle, not GetModuleHandleW(NULL). Populated in WhTool_ModInit via GetModHInstance().
 static HINSTANCE g_hModule = NULL;
 // g_animationActive removed  --  was written but never read. g_anyAnimationActive is the live flag.
 
-// FIX-B3 (#3): resolve the HINSTANCE of the mod DLL itself (the module that
+// resolve the HINSTANCE of the mod DLL itself (the module that
 // contains this code), regardless of which process/thread we run in. Cached in
 // g_hModule. Used as the hInstance for every RegisterClassExW / CreateWindowExW /
 // UnregisterClassW that belongs to this mod's own window classes.
@@ -1085,7 +1120,7 @@ static HINSTANCE GetModHInstance() {
     return g_hModule;
 }
 
-// FIX-A7 (#4): g_winEventHook / WinEventProc removed. The hook could never fire
+// g_winEventHook / WinEventProc removed. The hook could never fire
 // and the worker poll loop already drives every geometry refresh; see the note
 // in WhTool_ModInit.
 
@@ -1108,30 +1143,13 @@ static HINSTANCE GetModHInstance() {
 // Note: Wh_GetStringSetting never returns NULL -- it returns L"" when the key
 // is absent. The if (v) guards that were here were therefore dead. Use a local
 // std::wstring to get automatic lifetime instead of manual Wh_FreeStringSetting.
-static std::wstring ReadStringSettingWithFallback(PCWSTR nestedKey, PCWSTR legacyKey) {
-    PCWSTR raw = Wh_GetStringSetting(nestedKey);
-    std::wstring v(raw ? raw : L"");
-    Wh_FreeStringSetting(raw);
-    if (v.empty() && legacyKey) {
-        PCWSTR leg = Wh_GetStringSetting(legacyKey);
-        v = (leg ? leg : L"");
-        Wh_FreeStringSetting(leg);
-    }
-    return v;
-}
-
-static int ReadIntSettingWithFallback(PCWSTR nestedKey, PCWSTR legacyKey, int defVal) {
-    int val = Wh_GetIntSetting(nestedKey, INT_MIN);
-    if (val != INT_MIN) return val;
-    if (legacyKey) {
-        int leg = Wh_GetIntSetting(legacyKey, INT_MIN);
-        if (leg != INT_MIN) return leg;
-    }
-    return defVal;
+static std::wstring ReadStringSetting(PCWSTR key) {
+    auto s = WindhawkUtils::StringSetting::make(key);
+    return s.get() ? std::wstring(s.get()) : std::wstring();
 }
 
 static UINT LoadHotkeyModifiersSetting() {
-    std::wstring v = ReadStringSettingWithFallback(L"shortcuts.hotkeyModifiers", L"hotkeyModifiers");
+    std::wstring v = ReadStringSetting(L"shortcuts.hotkeyModifiers");
     if      (_wcsicmp(v.c_str(), L"none")      == 0) return 0;
     else if (_wcsicmp(v.c_str(), L"alt")       == 0) return MOD_ALT;
     else if (_wcsicmp(v.c_str(), L"ctrl")      == 0) return MOD_CONTROL;
@@ -1145,7 +1163,7 @@ static UINT LoadHotkeyModifiersSetting() {
 }
 
 static UINT LoadHotkeyKeySetting() {
-    std::wstring v = ReadStringSettingWithFallback(L"shortcuts.hotkeyKey", L"hotkeyKey");
+    std::wstring v = ReadStringSetting(L"shortcuts.hotkeyKey");
     while (!v.empty() && iswspace(v.front())) v.erase(v.begin());
     while (!v.empty() && iswspace(v.back()))  v.pop_back();
     if (v.empty() || _wcsicmp(v.c_str(), L"none") == 0) return 0;
@@ -1338,11 +1356,10 @@ static bool GetStartButtonLeftEdge(HWND taskbar, const RECT& tbRect, LONG* outLe
     ctx.found        = false;
     EnumChildWindows(taskbar, FindStartCallback, (LPARAM)&ctx);
 
-    // FIX (Issue 1B): report Start explicitly as not-found instead of
+    // report Start explicitly as not-found instead of
     // substituting a fabricated tbRect.left + width/5 estimate. Callers treat a
     // false result as QP_LAYOUT_PENDING (keep booting) rather than committing to
     // a layout for a Start position that was never actually resolved.
-    // (Layout decision mirrored + unit-tested in tests/start_edge_probe.h.)
     if (ctx.found) {
         if (outLeft) *outLeft = ctx.bestLeft;
         return true;
@@ -1359,7 +1376,6 @@ static bool HasTaskbarGeometryChanged() {
     // taskbar is a change while a stale dock still exists, so RefreshTaskbarCache
     // can tear it down; and a brand-new Shell_TrayWnd handle is a change even if
     // its rectangle matches the old one.
-    // (Mirrors DecideTaskbarChanged in tests/taskbar_lifecycle.h.)
     if (!tb) return (g_cachedTaskbar != NULL) || (g_dockLocalW > 0);
     if (tb != g_cachedTaskbar) return true;
 
@@ -1375,7 +1391,6 @@ static bool HasTaskbarGeometryChanged() {
     // placed, so RefreshTaskbarCache runs and tears the now-stale dock down
     // instead of leaving it anchored to a Start edge that no longer exists. A
     // resolved Start that simply MOVED is the ordinary tracked-field change.
-    // (Mirrors StartLossIsChange in tests/taskbar_lifecycle.h.)
     LONG startLeft = 0;
     bool startResolved = GetStartButtonLeftEdge(tb, tbr, &startLeft);
     if (!startResolved && g_dockLocalW > 0) return true;          // StartLossIsChange
@@ -1401,19 +1416,17 @@ static void UpdateDockTargetPosition(float newTargetX, float newTargetY) {
 // ============================================================
 //  TASKBAR CACHE REFRESH  --  called on change events and at boot
 // ============================================================
-// ---- Taskbar layout decision (refinement Issue 2) --------------------------
+// Taskbar layout decision () --------------------------
 // Left-aligned taskbars (Win11 "Align: Left", all Win10) put Start at ~tbr.left
 // + 16, so the dock -- which anchors to the LEFT of Start -- has no room. The
 // old code bailed with `if (startLeft <= tbr.left + 50) return;` BEFORE the
 // state machine ran, so g_systemState never left STATE_BOOT: the dock was
 // clamped over Start (eating clicks) and the worker polled at 100 ms forever.
-//
 // This helper turns that single early-return into three explicit outcomes so
 // the caller can ALWAYS settle the state machine instead of spinning:
 //   QP_LAYOUT_OK          -> room left of Start; place the dock normally.
 //   QP_LAYOUT_UNSUPPORTED -> left-aligned / no room; hide dock, go idle.
 //   QP_LAYOUT_PENDING     -> geometry not trustworthy yet; keep booting.
-// (Mirrors DecideTaskbarLayout in tests/taskbar_layout.h, which unit-tests this
 // exact decision.)
 enum QpLayoutDecision { QP_LAYOUT_PENDING = 0, QP_LAYOUT_OK, QP_LAYOUT_UNSUPPORTED };
 static inline QpLayoutDecision QpDecideTaskbarLayout(long tbrLeft, long tbrRight,
@@ -1467,9 +1480,10 @@ static int GetTaskbarSafeLeftEdge(HWND taskbar, const RECT& tbRect) {
 }
 
 static inline int GetVisibleAppSlots(int appCount) {
+    int screenCap = std::max(1, g_dynamicMaxAppSlots.load());
     int cap = LIMIT_VISIBLE_PINS.load()
-            ? std::max(1, MAX_VISIBLE_APPS_SETTING.load())
-            : std::max(MIN_APP_SLOTS, g_dynamicMaxAppSlots.load());
+            ? std::min(screenCap, std::max(1, MAX_VISIBLE_APPS_SETTING.load()))
+            : std::max(MIN_APP_SLOTS, screenCap);
     int vis = appCount;
     if (vis > cap) vis = cap;
     if (vis < 1) vis = 1;
@@ -1506,7 +1520,7 @@ static void RefreshTaskbarCache() {
         g_fixedDockWidth      = 0;
         g_layoutUnsupported   = false;
         g_systemState         = STATE_BOOT;
-        // FIX(v10): reset live dock geometry under g_cs (same lock WM_PAINT holds); after STATE_BOOT so the PART 2i char budget still matches.
+        // reset live dock geometry under g_cs (same lock WM_PAINT holds); after STATE_BOOT so the PART 2i char budget still matches.
         if (g_csInitialized) EnterCriticalSection(&g_cs);
         g_dockLocalW          = 0;
         g_dockLocalH          = 0;
@@ -1525,7 +1539,7 @@ static void RefreshTaskbarCache() {
         // FIX (v2.5.3): Shell_TrayWnd exists but the Start button could not be
         // resolved (taskbar mid-rebuild / Start temporarily gone). The old code
         // simply returned, leaving the previously cached dock geometry in place
-        // -- so the dock kept running against stale state anchored to a Start
+        // so the dock kept running against stale state anchored to a Start
         // edge that no longer exists. Invalidate EVERYTHING and drop back to
         // STATE_BOOT, exactly like the taskbar-lost teardown above, so no stale
         // geometry can survive an unavailable Start. The dock re-resolves from
@@ -1545,7 +1559,7 @@ static void RefreshTaskbarCache() {
         g_lastStartLeft       = 0;
         g_layoutUnsupported   = false;
         g_systemState         = STATE_BOOT;
-        // FIX(v10): reset live dock geometry under g_cs (same lock WM_PAINT holds).
+        // reset live dock geometry under g_cs (same lock WM_PAINT holds).
         if (g_csInitialized) EnterCriticalSection(&g_cs);
         g_dockLocalW          = 0;
         g_dockLocalH          = 0;
@@ -1666,7 +1680,7 @@ static void RefreshTaskbarCache() {
         s_lastGeomLog = now;
     }
 
-    // FIX (Issue 2): classify the layout instead of the old blanket early-return
+    // classify the layout instead of the old blanket early-return
     // `if (newW <= 0 || startLeft <= tbr.left + 50) return;`, which fired on every
     // call for a LEFT-ALIGNED taskbar (Start at ~tbr.left+16) and left the state
     // machine stuck in STATE_BOOT forever (dock clamped over Start, 100 ms poll
@@ -1692,7 +1706,7 @@ static void RefreshTaskbarCache() {
         }
         g_layoutUnsupported = true;
         g_systemState       = STATE_STABLE;   // terminal/idle: polling backs off
-        // FIX (Issue 2): hide BOTH the overlay AND the input window. Hiding only
+        // hide BOTH the overlay AND the input window. Hiding only
         // the overlay left the transparent g_inputWnd sitting at its last (now
         // wrong) position, still eating clicks over Start on a left-aligned
         // taskbar. Hide both so nothing is left at an old/fake position.
@@ -1708,7 +1722,7 @@ static void RefreshTaskbarCache() {
     // normal state-machine flow below re-establish geometry.
     if (g_layoutUnsupported) {
         g_layoutUnsupported = false;
-        // FIX (Issue 2): restore BOTH windows we hid above (overlay + input),
+        // restore BOTH windows we hid above (overlay + input),
         // mirroring the hide path, so the dock and its click surface both come
         // back. RepositionOverlay below re-seats them at the now-valid geometry
         // so neither is left at an old/fake position.
@@ -1733,8 +1747,6 @@ static void RefreshTaskbarCache() {
             g_pinnedApps[i].targetX  = (float)r.left;
             g_pinnedApps[i].currentX = (float)r.left;
             g_pinnedApps[i].velocityX = 0.f;
-            g_pinnedApps[i].hoverScale  = 1.0f;
-            g_pinnedApps[i].hoverShiftX = 0.f;
         }
         LeaveCriticalSection(&g_cs);
     };
@@ -1746,7 +1758,8 @@ static void RefreshTaskbarCache() {
     // requiring two extra STABILIZING calls instead of one.
     if (g_systemState == STATE_BOOT) {
         if (newW > MIN_VALID_DOCK_WIDTH) {
-            if (g_csInitialized) EnterCriticalSection(&g_cs);   // FIX(Issue 2): guard geometry writes with the lock WM_PAINT holds
+            if (g_csInitialized) EnterCriticalSection(&g_cs);   // guard geometry writes with the lock WM_PAINT holds
+
             g_dockLocalW          = newW;
             g_dockLocalH          = newH;
             if (g_csInitialized) LeaveCriticalSection(&g_cs);
@@ -1774,7 +1787,8 @@ static void RefreshTaskbarCache() {
                 g_lastStableWidth     = newW;
             }
             if (g_stableGeometryCount >= 2) {
-                if (g_csInitialized) EnterCriticalSection(&g_cs);   // FIX(Issue 2): guard geometry writes with the lock WM_PAINT holds
+                if (g_csInitialized) EnterCriticalSection(&g_cs);   // guard geometry writes with the lock WM_PAINT holds
+
                 g_dockLocalW      = newW;
                 g_dockLocalH      = newH;
                 if (g_csInitialized) LeaveCriticalSection(&g_cs);
@@ -1790,7 +1804,8 @@ static void RefreshTaskbarCache() {
         // Boot-phase timeout: lock whatever width we have after BOOT_PHASE_MS
         if (g_lastStableWidth > 0 &&
             (int)(GetTickCount() - g_bootStartTime) > BOOT_PHASE_MS) {
-            if (g_csInitialized) EnterCriticalSection(&g_cs);   // FIX(Issue 2): guard geometry writes with the lock WM_PAINT holds
+            if (g_csInitialized) EnterCriticalSection(&g_cs);   // guard geometry writes with the lock WM_PAINT holds
+
             g_dockLocalW      = g_lastStableWidth;
             g_dockLocalH      = newH;
             if (g_csInitialized) LeaveCriticalSection(&g_cs);
@@ -1808,7 +1823,8 @@ static void RefreshTaskbarCache() {
     // content/DPI resize -- never measurement jitter.  Follow it exactly and
     // re-seat every icon so the shrink/grow reflows the slots cleanly.
     if (newW != g_dockLocalW && newW > MIN_VALID_DOCK_WIDTH) {
-        if (g_csInitialized) EnterCriticalSection(&g_cs);   // FIX(Issue 2): guard geometry write with the lock WM_PAINT holds
+        if (g_csInitialized) EnterCriticalSection(&g_cs);   // guard geometry write with the lock WM_PAINT holds
+
         g_dockLocalW = newW;
         if (g_csInitialized) LeaveCriticalSection(&g_cs);
         ReseatIconPositions();
@@ -1817,7 +1833,8 @@ static void RefreshTaskbarCache() {
         if (g_overlayWnd && IsWindow(g_overlayWnd))
             InvalidateRect(g_overlayWnd, NULL, FALSE);
     }
-    if (g_csInitialized) EnterCriticalSection(&g_cs);   // FIX(Issue 2): guard geometry write with the lock WM_PAINT holds
+    if (g_csInitialized) EnterCriticalSection(&g_cs);   // guard geometry write with the lock WM_PAINT holds
+
     g_dockLocalH = newH;
     if (g_csInitialized) LeaveCriticalSection(&g_cs);
 }
@@ -2099,11 +2116,14 @@ static void UpdateFullscreenState() {
     // small tolerance for off-by-one borders.
     bool coversMonitor = false;
     if (fg && !isShell) {
+        HWND tb = g_cachedTaskbar ? g_cachedTaskbar : FindWindowW(L"Shell_TrayWnd", NULL);
+        HMONITOR tbMon = tb ? MonitorFromWindow(tb, MONITOR_DEFAULTTOPRIMARY)
+                            : MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY);
+        HMONITOR fgMon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
         RECT wr;
-        if (GetWindowRect(fg, &wr)) {
-            HMONITOR mon = MonitorFromWindow(fg, MONITOR_DEFAULTTOPRIMARY);
+        if (fgMon == tbMon && GetWindowRect(fg, &wr)) {
             MONITORINFO mi = { sizeof(mi) };
-            if (GetMonitorInfoW(mon, &mi)) {
+            if (GetMonitorInfoW(tbMon, &mi)) {
                 const LONG tol = 2;
                 coversMonitor =
                     (wr.left   <= mi.rcMonitor.left   + tol) &&
@@ -2169,7 +2189,7 @@ void RepositionOverlay() {
         return;
     }
 
-    // FIX (Issue 2): on an unsupported (left-aligned) layout the dock is hidden
+    // on an unsupported (left-aligned) layout the dock is hidden
     // and has no valid geometry. Keep both windows hidden and return so the
     // reposition/show path can never un-hide the dock we deliberately hid,
     // parking it back on top of Start. RefreshTaskbarCache re-shows it if room
@@ -2180,7 +2200,7 @@ void RepositionOverlay() {
         return;
     }
 
-    // FIX (Hotfix 2 -- premature fallback regression): if dock size is still
+    // if dock size is still
     // zero we do NOT yet have valid geometry. The synthetic 200x48 fallback was
     // removed entirely: it could un-hide the dock before RefreshTaskbarCache had
     // resolved a real geometry, violating the "stay hidden until valid ownership
@@ -2216,8 +2236,14 @@ void RepositionOverlay() {
                      SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
     if (g_taskbarAutoHide) {
-        bool tbOnScreen = (g_cachedTBRect.bottom - g_cachedTBRect.top) > 8 &&
-                          (g_cachedTBRect.right  - g_cachedTBRect.left) > 8;
+        bool tbOnScreen = false;
+        HMONITOR tbMon = g_cachedTaskbar ? MonitorFromWindow(g_cachedTaskbar, MONITOR_DEFAULTTOPRIMARY)
+                                         : MonitorFromRect(&g_cachedTBRect, MONITOR_DEFAULTTOPRIMARY);
+        MONITORINFO tbMi = { sizeof(tbMi) };
+        RECT visTb = {};
+        if (GetMonitorInfoW(tbMon, &tbMi) && IntersectRect(&visTb, &g_cachedTBRect, &tbMi.rcMonitor)) {
+            tbOnScreen = (visTb.bottom - visTb.top) > 8 && (visTb.right - visTb.left) > 8;
+        }
         if (tbOnScreen) g_autoHideMiss = 0;
         else            ++g_autoHideMiss;
         bool showDock = tbOnScreen || g_autoHideMiss < 2;
@@ -2496,8 +2522,32 @@ static bool IconIsUsable(HICON hIcon, bool checkGeneric) {
     return true;
 }
 
-static HICON LoadAppIconStrict(const std::wstring& path) {
-    if (path.empty()) return NULL;
+static std::wstring ResolveWow64Path(const std::wstring& path) {
+    if (path.empty()) return path;
+    static int s_isWow64 = -1;
+    if (s_isWow64 < 0) {
+        BOOL wow = FALSE;
+        s_isWow64 = (IsWow64Process(GetCurrentProcess(), &wow) && wow) ? 1 : 0;
+    }
+    if (s_isWow64 != 1) return path;
+
+    wchar_t winDir[MAX_PATH] = {};
+    UINT winLen = GetWindowsDirectoryW(winDir, ARRAYSIZE(winDir));
+    if (winLen == 0 || winLen >= ARRAYSIZE(winDir)) return path;
+    std::wstring sys32 = winDir;
+    if (!sys32.empty() && sys32.back() != L'\\') sys32 += L'\\';
+    std::wstring sysnative = sys32 + L"Sysnative\\";
+    sys32 += L"System32\\";
+    if (path.size() > sys32.size() &&
+        _wcsnicmp(path.c_str(), sys32.c_str(), sys32.size()) == 0) {
+        return sysnative + path.substr(sys32.size());
+    }
+    return path;
+}
+
+static HICON LoadAppIconStrict(const std::wstring& rawPath) {
+    if (rawPath.empty()) return NULL;
+    std::wstring path = ResolveWow64Path(rawPath);
 
     HICON hSource = NULL;
     bool  prone   = false;   // true if icon came from a generic-substituting fallback
@@ -2816,18 +2866,15 @@ static BOOL CALLBACK TitleMatchEnumProc(HWND hwnd, LPARAM lp) {
     if (!title[0]) return TRUE;
 
     // Score the match quality using TIERS, not a flat scale.
-    //
-    // BUG FIX ("skips most actions when the real windhawk.exe is open and
+        // BUG FIX ("skips most actions when the real windhawk.exe is open and
     // foreground"): the old flat scale (exact=100, title-contains-needle=60,
     // needle-contains-title=40, +20 app / -30 tool) let a foreground Windhawk
     // window -- an app window whose title embeds the mod moniker / target exe
     // name -- out-score the button's EXACT-title target once style bonuses were
     // applied, so the resolver picked windhawk.exe (then discarded it) and the
     // taskbar path MISSed with no fallback.
-    //
-    // Fix: an exact match is its own tier that no substring match + style bonus
+        // Fix: an exact match is its own tier that no substring match + style bonus
     // can ever beat. Style is only a small INTRA-tier tie-break. Mirrors
-    // tests/title_match.h (Tm_ScoreTier / Tm_Score).
     //   tier 3 = exact, 2 = window-title-in-needle, 1 = needle-in-window-title
     int tier;
     if (_wcsicmp(title, c->needle) == 0)         tier = 3;  // Exact
@@ -2871,14 +2918,8 @@ static std::wstring FindProcessPathByWindowTitle(const wchar_t* name) {
     return std::wstring(path);
 }
 
-// File-scope constant for the UIA AUMID property ID.
-// Declared here (not as a lambda-local static) for compatibility with all
-// Windhawk/Clang build configurations -- some versions reject static locals
-// inside lambdas.
-static const PROPERTYID kAumidPropId = 30113;
 
 // Layer 2: UIAutomation  --  authoritative resolver for the Windows 11 taskbar surface.
-//
 // Resolution pipeline:
 //   1. AUMID -> filesystem path  (works for UWP and many Store apps)
 //   2. Element process ID  --  if NOT explorer.exe, use it directly
@@ -2918,25 +2959,31 @@ static std::wstring Resolver_Layer2_TaskbarIntelligence(POINT pt) {
         if (!el) return L"";
         std::wstring res;
 
-        // Pass 1: AUMID -> filesystem path
-        VARIANT varAumid;
-        VariantInit(&varAumid);
-        // kAumidPropId is now at file scope (above Resolver_Layer2_TaskbarIntelligence)
-        // to avoid static-local-in-lambda issues with some Windhawk Clang builds.
-        if (SUCCEEDED(el->GetCurrentPropertyValue(kAumidPropId, &varAumid)) &&
-            varAumid.vt == VT_BSTR && varAumid.bstrVal && varAumid.bstrVal[0]) {
-            IShellItem2* pItem = NULL;
-            if (SUCCEEDED(SHCreateItemFromParsingName(varAumid.bstrVal, NULL,
-                                                       IID_PPV_ARGS(&pItem))) && pItem) {
-                PWSTR fsPath = NULL;
-                if (SUCCEEDED(pItem->GetDisplayName(SIGDN_FILESYSPATH, &fsPath)) && fsPath) {
-                    res = fsPath;
-                    CoTaskMemFree(fsPath);
+        // Pass 1: AutomationId ("Appid: <AUMID or path>") -> filesystem path
+        VARIANT varAutoId;
+        VariantInit(&varAutoId);
+        if (SUCCEEDED(el->GetCurrentPropertyValue(UIA_AutomationIdPropertyId, &varAutoId)) &&
+            varAutoId.vt == VT_BSTR && varAutoId.bstrVal && varAutoId.bstrVal[0]) {
+            std::wstring autoId(varAutoId.bstrVal);
+            const wchar_t* prefix = L"Appid: ";
+            if (autoId.rfind(prefix, 0) == 0) {
+                std::wstring appId = autoId.substr(wcslen(prefix));
+                std::wstring parseName = appId;
+                if (appId.find(L'\\') == std::wstring::npos && appId.find(L':') == std::wstring::npos)
+                    parseName = L"shell:AppsFolder\\" + appId;
+                IShellItem2* pItem = NULL;
+                if (SUCCEEDED(SHCreateItemFromParsingName(parseName.c_str(), NULL,
+                                                           IID_PPV_ARGS(&pItem))) && pItem) {
+                    PWSTR fsPath = NULL;
+                    if (SUCCEEDED(pItem->GetDisplayName(SIGDN_FILESYSPATH, &fsPath)) && fsPath) {
+                        res = fsPath;
+                        CoTaskMemFree(fsPath);
+                    }
+                    pItem->Release();
                 }
-                pItem->Release();
             }
         }
-        VariantClear(&varAumid);
+        VariantClear(&varAutoId);
         if (!res.empty() && !IsExcludedApp(res)) return res;
         res.clear();
 
@@ -3008,7 +3055,6 @@ static std::wstring Resolver_Layer2_TaskbarIntelligence(POINT pt) {
     // the button-row center. This stays UIA-only (still taskbar-authoritative;
     // it never consults the foreground/active window or process enum), and the
     // horizontal nudge is clamped to < half a button pitch so a probe can never
-    // resolve a NEIGHBORING button. Mirrors tests/taskbar_probe.h BuildTaskbarProbes.
     if (result.empty()) {
         // Button pitch/mid-Y derived from the taskbar rect. Win11 taskbar
         // buttons are ~square, so the taskbar row height is a good pitch proxy.
@@ -3068,7 +3114,6 @@ static BOOL CALLBACK Layer3EnumProc(HWND hwnd, LPARAM lp) {
     if (!GetWindowRect(hwnd, &rc)) return TRUE;
 
     // Manhattan gap from the cursor to this window's rect: 0 inside, dx+dy
-    // outside. (Mirrors Layer3PointRectDistance in tests/layer3_accept.h,
     // which unit-tests this exact geometry.)
     int dx = 0, dy = 0;
     if (c->pt.x < rc.left)        dx = rc.left - c->pt.x;
@@ -3076,10 +3121,9 @@ static BOOL CALLBACK Layer3EnumProc(HWND hwnd, LPARAM lp) {
     if (c->pt.y < rc.top)         dy = rc.top - c->pt.y;
     else if (c->pt.y > rc.bottom) dy = c->pt.y - rc.bottom;
     int dist = dx + dy;
-    // Functionality-note #1: only accept a window the cursor is actually INSIDE
+    // only accept a window the cursor is actually INSIDE
     // (dist == 0). The old "within 50 px" radius let a press on the desktop or
     // on a window's edge resolve to a neighbouring app and pin the wrong thing.
-    // (Mirrors Layer3AcceptsDistance in tests/layer3_accept.h.)
     if (dist != 0) return TRUE;
 
     DWORD pid = 0;
@@ -3145,7 +3189,6 @@ static std::wstring ResolveDragSourceZeroRejection(POINT pt) {
                     // Returning "" here (the old behaviour) made the resolver
                     // fall through to L1/L2/L3, which all miss over the dock, so
                     // a workspace pin could be opened only once and never again.
-                    // Mirrors tests/dock_icon_resolve.h ResolveDockIconSource.
                     std::wstring p;
                     if (g_pinnedApps[i].type == PIN_WORKSPACE)
                         p = g_pinnedApps[i].workspaceId.empty()
@@ -3163,18 +3206,16 @@ static std::wstring ResolveDragSourceZeroRejection(POINT pt) {
 
     std::wstring result;
 
-    // -- Taskbar-authority model ----------------------------------------------
+    // Taskbar-authority model ----------------------------------------------
     //  When the cursor is over the taskbar, only UIAutomation (L2) is used.
     //  Active window, foreground window, and process enumeration are ALL
     //  excluded  --  they contaminate the resolved identity with the foreground
     //  app rather than the clicked taskbar button.
     //  If L2 returns empty, the resolver returns empty immediately; there is
     //  no fallback when over the taskbar.  This is immutable.
-    //
-    //  When the cursor is NOT over the taskbar, L2 is skipped entirely.
+        //  When the cursor is NOT over the taskbar, L2 is skipped entirely.
     //  L1 (UI hit) runs first; L3 (process enum) runs only if L1 yields empty.
-    // ------------------------------------------------------------------------
-    bool overTaskbar = IsCursorOverTaskbar(pt);
+        bool overTaskbar = IsCursorOverTaskbar(pt);
     if (overTaskbar) {
         // Taskbar-exclusive pipeline: UIAutomation only
         result = Resolver_Layer2_TaskbarIntelligence(pt);
@@ -3232,28 +3273,6 @@ static inline std::wstring ResolveDragSourceAtPoint(POINT pt) {
 // ============================================================
 //  EXPLORER WORKSPACE RESOLVER / STORAGE
 // ============================================================
-static std::wstring JsonEscape(const std::wstring& s) {
-    std::wstring out;
-    out.reserve(s.size() + 8);
-    for (wchar_t ch : s) {
-        if (ch == L'\\' || ch == L'"') out += L'\\';
-        out += ch;
-    }
-    return out;
-}
-
-static std::wstring JsonUnescape(const std::wstring& s) {
-    std::wstring out;
-    out.reserve(s.size());
-    bool esc = false;
-    for (wchar_t ch : s) {
-        if (esc) { out += ch; esc = false; }
-        else if (ch == L'\\') esc = true;
-        else out += ch;
-    }
-    return out;
-}
-
 static bool IsUsbStorageBus(wchar_t driveLetter) {
     wchar_t volPath[16] = {};
     swprintf_s(volPath, L"\\\\.\\%c:", driveLetter);
@@ -3317,7 +3336,7 @@ static std::wstring NormalizeWorkspaceFolderPath(const std::wstring& path) {
     return path;
 }
 
-// FIX-C3 (#7): workspace snapshots are persisted in Windhawk's own per-mod
+// workspace snapshots are persisted in Windhawk's own per-mod
 // storage instead of JSON files under %APPDATA%\WindhawkMods\..., so disabling
 // or uninstalling the mod leaves nothing behind (Windhawk cleans its own values
 // up). One string value per workspace id, keyed "ws:<id>", with the character
@@ -3331,12 +3350,21 @@ static std::wstring WorkspaceValueName(const std::wstring& workspaceId) {
 static std::wstring WorkspaceLenName(const std::wstring& workspaceId) {
     return L"wslen:" + workspaceId;
 }
+static std::wstring SanitizeSingleLineValue(const std::wstring& in, size_t maxLen) {
+    std::wstring out;
+    out.reserve(std::min(in.size(), maxLen));
+    for (wchar_t ch : in) {
+        if (ch == L'\r' || ch == L'\n' || ch == L'\0') continue;
+        out += ch;
+        if (out.size() >= maxLen) break;
+    }
+    return out;
+}
 
 static std::wstring MakeWorkspaceId() {
-    // Functionality-note #10: GetTickCount() ^ time(NULL) could collide for two
+    // GetTickCount() ^ time(NULL) could collide for two
     // workspaces pinned in the same second on the same tick. A GUID gives 128
     // bits of collision-free entropy. (Formatting mirrors FormatWorkspaceId in
-    // tests/workspace_id.h, which unit-tests the exact layout.)
     GUID g = {};
     wchar_t buf[64] = {};
     if (SUCCEEDED(CoCreateGuid(&g))) {
@@ -3399,8 +3427,18 @@ static HICON LoadFolderIcon(const std::wstring& folderPath) {
 
 static void DeleteWorkspaceSnapshotStorage(const std::wstring& workspaceId) {
     if (workspaceId.empty()) return;
-    Wh_SetStringValue(WorkspaceValueName(workspaceId).c_str(), L"");
-    Wh_SetIntValue(WorkspaceLenName(workspaceId).c_str(), 0);
+    if (g_saveCsInit) EnterCriticalSection(&g_saveCs);
+    int oldCount = Wh_GetIntValue((L"ws:" + workspaceId + L":count").c_str(), 0);
+    for (int i = 0; i < oldCount && i < 64; ++i) {
+        Wh_DeleteValue((L"ws:" + workspaceId + L":p" + std::to_wstring(i)).c_str());
+    }
+    Wh_DeleteValue((L"ws:" + workspaceId + L":count").c_str());
+    Wh_DeleteValue((L"ws:" + workspaceId + L":name").c_str());
+    Wh_DeleteValue((L"ws:" + workspaceId + L":custom").c_str());
+    Wh_DeleteValue((L"ws:" + workspaceId + L":color").c_str());
+    Wh_DeleteValue(WorkspaceValueName(workspaceId).c_str());
+    Wh_DeleteValue(WorkspaceLenName(workspaceId).c_str());
+    if (g_saveCsInit) LeaveCriticalSection(&g_saveCs);
 }
 
 // ============================================================
@@ -3537,140 +3575,79 @@ static std::wstring PickGroupedWorkspaceColor(int wsOrdinalHint = -1) {
 }
 
 static bool SaveWorkspaceSnapshot(const WorkspaceSnapshot& snapshot) {
-    if (snapshot.id.empty()) return false;   // FIX-C3 (#7)
+    if (snapshot.id.empty()) return false;
+    if (g_saveCsInit) EnterCriticalSection(&g_saveCs);
 
-    std::wstring body;
-    // MEM: reserve up front so the ~dozen `+=` appends below don't trigger a
-    // chain of geometric reallocations (each realloc copies the whole buffer).
-    // Sized from the actual snapshot so it fits in one allocation in the common
-    // case without over-committing.
-    body.reserve(128 + snapshot.folderPaths.size() * 96 + snapshot.windows.size() * 160);
-    body += L"{\r\n";
-    body += L"  \"id\": \"" + JsonEscape(snapshot.id) + L"\",\r\n";
-    body += L"  \"displayName\": \"" + JsonEscape(snapshot.displayName) + L"\",\r\n";
-    if (snapshot.customNamed)
-        body += L"  \"customName\": 1,\r\n";
-    if (!snapshot.colorHex.empty())
-        body += L"  \"color\": \"" + JsonEscape(snapshot.colorHex) + L"\",\r\n";
-    body += L"  \"folders\": [\r\n";
-    for (size_t i = 0; i < snapshot.folderPaths.size(); ++i) {
-        body += L"    { \"path\": \"" + JsonEscape(snapshot.folderPaths[i]) + L"\" }";
-        if (i + 1 < snapshot.folderPaths.size()) body += L",";
-        body += L"\r\n";
-    }
-    body += L"  ],\r\n";
-    body += L"  \"windows\": [\r\n";
-    for (size_t w = 0; w < snapshot.windows.size(); ++w) {
-        const auto& group = snapshot.windows[w];
-        wchar_t activeBuf[32] = {};
-        swprintf_s(activeBuf, L"%d", group.activeTab);
-        body += L"    { \"window\": " + std::to_wstring((unsigned long long)(ULONG_PTR)group.hwnd)
-              + L", \"activeTab\": " + activeBuf + L", \"tabs\": [\r\n";
-        for (size_t t = 0; t < group.tabPaths.size(); ++t) {
-            body += L"      { \"path\": \"" + JsonEscape(group.tabPaths[t]) + L"\" }";
-            if (t + 1 < group.tabPaths.size()) body += L",";
-            body += L"\r\n";
+    std::wstring prefix = L"ws:" + snapshot.id + L":";
+    int prevCount = Wh_GetIntValue((prefix + L"count").c_str(), 0);
+
+    bool ok = true;
+    int maxCap = std::max(1, std::min(30, MAX_PATHS_PER_WORKSPACE.load()));
+    int count = 0;
+    for (const auto& p : snapshot.folderPaths) {
+        if (count >= maxCap) break;
+        std::wstring cleanPath = SanitizeSingleLineValue(p, 2048);
+        if (cleanPath.empty()) continue;
+        if (!Wh_SetStringValue((prefix + L"p" + std::to_wstring(count)).c_str(), cleanPath.c_str())) {
+            ok = false;
+            break;
         }
-        body += L"    ] }";
-        if (w + 1 < snapshot.windows.size()) body += L",";
-        body += L"\r\n";
+        ++count;
     }
-    body += L"  ]\r\n}\r\n";
 
-    // FIX-C3 (#7): persist to Windhawk mod storage instead of a %APPDATA% file.
-    // No BOM needed (that was a file-encoding marker); the loader still tolerates
-    // a leading BOM for safety. The companion length lets the loader size its buffer.
-    if (!Wh_SetStringValue(WorkspaceValueName(snapshot.id).c_str(), body.c_str()))
-        return false;
-    Wh_SetIntValue(WorkspaceLenName(snapshot.id).c_str(), (int)body.size());
-    return true;
-}
-
-static bool ExtractJsonStringValue(const std::wstring& line,
-                                   const wchar_t* key,
-                                   std::wstring& value) {
-    const wchar_t* k = StrStrIW(line.c_str(), key);
-    if (!k) return false;
-    const wchar_t* colon = wcschr(k, L':');
-    if (!colon) return false;
-    const wchar_t* start = wcschr(colon, L'"');
-    if (!start) return false;
-    ++start;
-    std::wstring raw;
-    bool esc = false;
-    for (const wchar_t* p = start; *p; ++p) {
-        if (esc) { raw += L'\\'; raw += *p; esc = false; continue; }
-        if (*p == L'\\') { esc = true; continue; }
-        if (*p == L'"') { value = raw; return true; }
-        raw += *p;
+    if (ok) {
+        std::wstring cleanName  = SanitizeSingleLineValue(snapshot.displayName, 128);
+        std::wstring cleanColor = SanitizeSingleLineValue(snapshot.colorHex, 16);
+        ok = Wh_SetStringValue((prefix + L"name").c_str(), cleanName.c_str()) &&
+             Wh_SetIntValue((prefix + L"custom").c_str(), snapshot.customNamed ? 1 : 0) &&
+             Wh_SetStringValue((prefix + L"color").c_str(), cleanColor.c_str());
     }
-    return false;
-}
 
-static bool ExtractJsonIntValue(const std::wstring& line,
-                                const wchar_t* key,
-                                int& value) {
-    const wchar_t* k = StrStrIW(line.c_str(), key);
-    if (!k) return false;
-    const wchar_t* colon = wcschr(k, L':');
-    if (!colon) return false;
-    value = _wtoi(colon + 1);
-    return true;
+    if (ok) {
+        ok = Wh_SetIntValue((prefix + L"count").c_str(), count);
+        for (int i = count; i < prevCount && i < 64; ++i) {
+            Wh_DeleteValue((prefix + L"p" + std::to_wstring(i)).c_str());
+        }
+        // Clean up any legacy multi-line JSON value
+        Wh_DeleteValue(WorkspaceValueName(snapshot.id).c_str());
+        Wh_DeleteValue(WorkspaceLenName(snapshot.id).c_str());
+    }
+
+    if (g_saveCsInit) LeaveCriticalSection(&g_saveCs);
+    return ok;
 }
 
 static bool LoadWorkspaceSnapshot(const std::wstring& workspaceId, WorkspaceSnapshot& snapshot) {
     if (workspaceId.empty()) return false;
 
-    // FIX-C3 (#7): read the snapshot from Windhawk mod storage. The companion
-    // "wslen:<id>" int (0 when unset) gives the exact character count so we can
-    // size the buffer -- Wh_GetStringValue copies nothing into a too-small buffer.
-    int chars = Wh_GetIntValue(WorkspaceLenName(workspaceId).c_str(), 0);
-    if (chars <= 0) return false;
-    std::vector<wchar_t> buf((size_t)chars + 1, 0);
-    if (Wh_GetStringValue(WorkspaceValueName(workspaceId).c_str(),
-                          buf.data(), buf.size()) == 0)
-        return false;
+    std::wstring prefix = L"ws:" + workspaceId + L":";
+    int count = Wh_GetIntValue((prefix + L"count").c_str(), 0);
+    if (count <= 0) return false;
+    if (count > 30) count = 30;
 
     snapshot = WorkspaceSnapshot();
     snapshot.id = workspaceId;
-    wchar_t* text = buf.data();
-    if (text[0] == 0xFEFF) ++text;
 
-    std::wstringstream ss(text);
-    std::wstring line;
-    WorkspaceSnapshot::WindowGroup* currentGroup = NULL;
-    while (std::getline(ss, line)) {
-        std::wstring v;
-        if (snapshot.displayName.empty() &&
-            ExtractJsonStringValue(line, L"\"displayName\"", v))
-            snapshot.displayName = JsonUnescape(v);
-        int cnVal = 0;
-        if (ExtractJsonIntValue(line, L"\"customName\"", cnVal) && cnVal != 0)
-            snapshot.customNamed = true;
-        if (snapshot.colorHex.empty() &&
-            ExtractJsonStringValue(line, L"\"color\"", v))
-            snapshot.colorHex = JsonUnescape(v);
-        if (StrStrIW(line.c_str(), L"\"window\"") != NULL) {
-            snapshot.windows.push_back(WorkspaceSnapshot::WindowGroup());
-            currentGroup = &snapshot.windows.back();
-            int active = 0;
-            if (ExtractJsonIntValue(line, L"\"activeTab\"", active))
-                currentGroup->activeTab = active;
-        }
-        if (ExtractJsonStringValue(line, L"\"path\"", v)) {
-            std::wstring path = NormalizeWorkspaceFolderPath(JsonUnescape(v));
+    wchar_t smallBuf[256] = {};
+    if (Wh_GetStringValue((prefix + L"name").c_str(), smallBuf, ARRAYSIZE(smallBuf)) > 0)
+        snapshot.displayName = smallBuf;
+    snapshot.customNamed = (Wh_GetIntValue((prefix + L"custom").c_str(), 0) != 0);
+    smallBuf[0] = L'\0';
+    if (Wh_GetStringValue((prefix + L"color").c_str(), smallBuf, ARRAYSIZE(smallBuf)) > 0)
+        snapshot.colorHex = smallBuf;
+
+    std::vector<wchar_t> pathBuf(2052, 0);
+    for (int i = 0; i < count; ++i) {
+        pathBuf[0] = L'\0';
+        if (Wh_GetStringValue((prefix + L"p" + std::to_wstring(i)).c_str(), pathBuf.data(), pathBuf.size()) > 0 &&
+            pathBuf[0] != L'\0') {
+            std::wstring path = NormalizeWorkspaceFolderPath(pathBuf.data());
             if (std::find_if(snapshot.folderPaths.begin(), snapshot.folderPaths.end(),
                              [&](const std::wstring& p) { return _wcsicmp(p.c_str(), path.c_str()) == 0; })
-                == snapshot.folderPaths.end())
+                == snapshot.folderPaths.end()) {
                 snapshot.folderPaths.push_back(path);
-            if (currentGroup) currentGroup->tabPaths.push_back(path);
+            }
         }
-    }
-    if (snapshot.windows.empty() && !snapshot.folderPaths.empty()) {
-        WorkspaceSnapshot::WindowGroup group;
-        group.activeTab = 0;
-        group.tabPaths = snapshot.folderPaths;
-        snapshot.windows.push_back(group);
     }
     return !snapshot.folderPaths.empty();
 }
@@ -3690,7 +3667,7 @@ static std::wstring FolderPathFromExplorer(IWebBrowserApp* app) {
 
     // Primary: query the ShellBrowser's active folder PIDL directly via
     // IShellBrowser -> QueryActiveShellView -> IFolderView -> IPersistFolder2::GetCurFolder
-    // -> SHGetNameFromIDList(SIGDN_FILESYSPATH). Unlike get_LocationURL + PathCreateFromUrlW,
+    // > SHGetNameFromIDList(SIGDN_FILESYSPATH). Unlike get_LocationURL + PathCreateFromUrlW,
     // this works for paths > MAX_PATH, paths with '#' or '%', and updates immediately after BrowseObject.
     IServiceProvider* sp = NULL;
     if (SUCCEEDED(app->QueryInterface(IID_IServiceProvider, (void**)&sp)) && sp) {
@@ -3871,7 +3848,8 @@ static bool CaptureWorkspaceSnapshot(WorkspaceSnapshot& snapshot, HWND ownerHwnd
                             groups.push_back(group);
                             groupIt = groups.end() - 1;
                         }
-                        groupIt->tabPaths.push_back(folder);
+                        if ((int)groupIt->tabPaths.size() < MAX_PATHS_PER_WORKSPACE)
+                            groupIt->tabPaths.push_back(folder);
 
                         if ((int)folders.size() < MAX_PATHS_PER_WORKSPACE &&
                             std::find_if(folders.begin(), folders.end(),
@@ -3925,7 +3903,6 @@ static bool CaptureWorkspaceSnapshot(WorkspaceSnapshot& snapshot, HWND ownerHwnd
 
     snapshot.id = MakeWorkspaceId();
     snapshot.folderPaths = folders;
-    snapshot.windows = groups;
     snapshot.displayName = BaseNameFromPath(folders[0]);
     if (folders.size() > 1) {
         wchar_t suffix[32] = {};
@@ -4042,7 +4019,7 @@ static void TriggerLimitFlash() {
 // ============================================================
 //  PIN
 // ============================================================
-// FIX-2: IsPinned MUST be called while g_cs is held by the caller.
+// IsPinned MUST be called while g_cs is held by the caller.
 // Calling it outside the lock while another thread erases elements is UB.
 static bool ExePathsMatchOrSameApp(const std::wstring& a, const std::wstring& b) {
     if (a.empty() || b.empty()) return false;
@@ -4087,7 +4064,7 @@ static bool IsWorkspacePinned(const std::wstring& idOrSig) {
 void PinApp(const std::wstring& path) {
     if (path.empty())        { DragTraceLog(L"PIN REJECT: empty path"); return; }
     if (IsExcludedApp(path)) { DragTraceLog(L"PIN REJECT: excluded", path.c_str()); return; }
-    // FIX-2: IsPinned check moved INSIDE the CS section below (see TOCTOU comment there).
+    // IsPinned check moved INSIDE the CS section below (see TOCTOU comment there).
     // Do NOT call IsPinned here  --  g_pinnedApps must not be read without the lock.
 
     // Belt-and-suspenders: block specific system executables by name
@@ -4120,7 +4097,7 @@ void PinApp(const std::wstring& path) {
 
     EnterCriticalSection(&g_cs);
 
-    // FIX-2: Re-check for duplicates inside the CS (TOCTOU guard).
+    // Re-check for duplicates inside the CS (TOCTOU guard).
     // Two concurrent PinApp calls  --  e.g. worker-thread DROP and main-thread hotkey  -- 
     // could both pass the pre-lock check and push the same app twice.
     // The re-check here, under the lock, guarantees exactly-once insertion.
@@ -4147,8 +4124,6 @@ void PinApp(const std::wstring& path) {
     app.opacity  = 0.f;
     app.isNew    = true;
     app.velocityX = 0.f;
-    app.hoverScale  = 1.0f;
-    app.hoverShiftX = 0.f;
 
     int n       = (int)g_pinnedApps.size();
     RECT r      = GetIconRectLocal(n, n + 1);
@@ -4166,7 +4141,7 @@ void PinApp(const std::wstring& path) {
     g_dockWidthDirty = true;   // pin count changed -> re-fit dock width (grow)
 
     LeaveCriticalSection(&g_cs);
-    SavePinnedApps();  // Outside CS  --  registry I/O must not block the input loop
+    SavePinnedApps();  // Outside CS  --  Windhawk storage I/O must not block the input loop
 
     if (g_overlayWnd && IsWindow(g_overlayWnd))
         InvalidateRect(g_overlayWnd, NULL, FALSE);
@@ -4229,11 +4204,6 @@ static bool AppendFoldersToWorkspace(int pinIdx, const std::vector<std::wstring>
 
     if (!snap.customNamed)
         snap.displayName = FormatWorkspaceDisplayName(snap.folderPaths);
-    snap.windows.clear();
-    WorkspaceSnapshot::WindowGroup grp;
-    grp.activeTab = 0;
-    grp.tabPaths  = snap.folderPaths;
-    snap.windows.push_back(grp);
     if (!SaveWorkspaceSnapshot(snap)) return false;
 
     std::wstring newSig = MakeWorkspaceSignature(snap.folderPaths);
@@ -4280,11 +4250,6 @@ static void RemoveWorkspacePath(int pinIdx, int pathIdx) {
 
     if (!snap.customNamed)
         snap.displayName = FormatWorkspaceDisplayName(snap.folderPaths);
-    snap.windows.clear();
-    WorkspaceSnapshot::WindowGroup grp;
-    grp.activeTab = 0;
-    grp.tabPaths  = snap.folderPaths;
-    snap.windows.push_back(grp);
     SaveWorkspaceSnapshot(snap);
 
     std::wstring newSig = MakeWorkspaceSignature(snap.folderPaths);
@@ -4326,11 +4291,6 @@ static void ReorderWorkspacePath(int pinIdx, int fromIdx, int toIdx) {
 
     if (!snap.customNamed)
         snap.displayName = FormatWorkspaceDisplayName(snap.folderPaths);
-    snap.windows.clear();
-    WorkspaceSnapshot::WindowGroup grp;
-    grp.activeTab = 0;
-    grp.tabPaths  = snap.folderPaths;
-    snap.windows.push_back(grp);
     SaveWorkspaceSnapshot(snap);
 
     EnterCriticalSection(&g_cs);
@@ -4419,14 +4379,8 @@ void PinWorkspace(HWND explorerHwnd) {
     else
         snapshot.colorHex.clear();
 
-    Wh_Log(L"WORKSPACE CAPTURE OK: owner=%p windows=%d folders=%d active=%d",
-                  explorerHwnd,
-                  (int)snapshot.windows.size(), (int)snapshot.folderPaths.size(),
-                  snapshot.windows.empty() ? 0 : snapshot.windows[0].activeTab);
-    if (!SaveWorkspaceSnapshot(snapshot)) {
-        DragTraceLog(L"WORKSPACE PIN REJECT: save failed", snapshot.id.c_str());
-        return;
-    }
+    Wh_Log(L"WORKSPACE CAPTURE OK: owner=%p folders=%d",
+                  explorerHwnd, (int)snapshot.folderPaths.size());
 
     HICON icon = LoadFolderIcon(snapshot.folderPaths[0]);
     if (!icon) {
@@ -4449,6 +4403,22 @@ void PinWorkspace(HWND explorerHwnd) {
         Wh_Log(L"WORKSPACE PIN BLOCKED limit=%d: %s", cap, snapshot.id.c_str());
         return;
     }
+    LeaveCriticalSection(&g_cs);
+
+    if (!SaveWorkspaceSnapshot(snapshot)) {
+        DestroyIcon(icon);
+        DragTraceLog(L"WORKSPACE PIN REJECT: save failed", snapshot.id.c_str());
+        return;
+    }
+
+    EnterCriticalSection(&g_cs);
+    if (IsWorkspacePinned(snapshot.id) || (!wsSig.empty() && IsWorkspacePinned(wsSig)) ||
+        CountPinsByType(PIN_WORKSPACE) >= MAX_WORKSPACE_PINS) {
+        LeaveCriticalSection(&g_cs);
+        DestroyIcon(icon);
+        DeleteWorkspaceSnapshotStorage(snapshot.id);
+        return;
+    }
 
     PinnedApp app;
     app.type         = PIN_WORKSPACE;
@@ -4461,8 +4431,6 @@ void PinWorkspace(HWND explorerHwnd) {
     app.opacity     = 0.f;
     app.isNew       = true;
     app.velocityX   = 0.f;
-    app.hoverScale  = 1.0f;
-    app.hoverShiftX = 0.f;
 
     int n = (int)g_pinnedApps.size();
     RECT r = GetIconRectLocal(n, n + 1);
@@ -4506,7 +4474,6 @@ static void GhostDragReset() {
     g_lockedExplorerHwnd = NULL;
     g_dragFromDock    = false;
     g_dragFromDockIdx = -1;
-    g_dropZoneActive  = false;
 }
 
 static void GhostCleanup() {
@@ -4518,47 +4485,14 @@ static void GhostCleanup() {
 //  HARD STATE RESET  --  called after unpin to guarantee clean UI state
 // ============================================================
 static void HardStateReset() {
+    // Only reset UI/click counters; never destroy worker-owned g_dragGhostIcon or drag state.
     g_hoverIndex      = -1;
-    g_dragFromDockIdx = -1;
-    g_dragState       = DRAG_IDLE;
-    g_dragFromDock    = false;
-    g_dropZoneActive  = false;
     g_rapidClickCount = 0;
     g_rapidClickIndex = -1;
     g_rapidClickStart = 0;
     g_launchCount     = 0;
     g_launchIndex     = -1;
     g_lastLaunchTime  = 0;
-
-    // Destroy the ghost icon directly without calling GhostCleanup() to
-    // avoid the g_dragState write conflicting with an in-progress drop.
-    if (g_dragGhostIcon) {
-        DestroyIcon(g_dragGhostIcon);
-        g_dragGhostIcon = NULL;
-    }
-    /* THREAD-SAFETY: g_draggedAppPath / g_lockedDragPath are std::wstrings owned
-       by the worker thread's drag state machine.  HardStateReset() runs on the
-       MAIN thread (unpin via hotkey / right-click / unpin-all), so clearing them
-       here raced with the worker reading/assigning them (non-atomic realloc -
-       potential crash).  They are intentionally NOT cleared from this thread; the
-       worker re-clears g_draggedAppPath at the next IDLE- transition and the
-       stale value is never read while g_dragState == DRAG_IDLE.  Only scalar
-       fields (atomic on x86-64) are reset here. */
-    g_draggedPinType = PIN_APP;
-    g_lockedDragPinType = PIN_APP;
-    g_draggedExplorerHwnd = NULL;
-    g_lockedExplorerHwnd = NULL;
-    g_dropZoneActive = false;
-    
-    // Snap all icon positions to their targets and reset per-icon state
-    g_reorderSrcIdx    = -1;
-    g_reorderTargetIdx = -1;
-    // FIX (smooth unpin): do NOT snap currentX to targetX here -- let the
-    // animation loop ease icons to their targets so reflow stays smooth.
-    for (auto& a : g_pinnedApps) {
-        a.hoverScale  = 1.0f;
-        a.hoverShiftX = 0.f;
-    }
 }
 
 // ============================================================
@@ -4568,7 +4502,7 @@ void UnpinAppByIndex(int i) {
     if (i < 0) return;
     // Unpin is blocked during any active drag to prevent mid-drag data destruction
     if (g_dragState == DRAG_DRAGGING || g_dragState == DRAG_PRESS ||
-        g_dragState == DRAG_REORDER) return;
+        g_dragState == DRAG_CANDIDATE || g_dragState == DRAG_REORDER) return;
 
     EnterCriticalSection(&g_cs);
     if (i >= (int)g_pinnedApps.size()) {
@@ -4608,7 +4542,7 @@ void UnpinAppByIndex(int i) {
     HardStateReset();
     LeaveCriticalSection(&g_cs);
     if (!removedWsId.empty()) DeleteWorkspaceSnapshotStorage(removedWsId);
-    SavePinnedApps();  // Outside CS  --  registry I/O must not block the input loop
+    SavePinnedApps();  // Outside CS  --  Windhawk storage I/O must not block the input loop
 
     // Dock width is fixed by MAX_PINNED_APPS  --  do NOT modify g_dockLocalW here
 
@@ -4618,7 +4552,7 @@ void UnpinAppByIndex(int i) {
 
 void UnpinAllApps() {
     if (g_dragState == DRAG_DRAGGING || g_dragState == DRAG_PRESS ||
-        g_dragState == DRAG_REORDER) return;
+        g_dragState == DRAG_CANDIDATE || g_dragState == DRAG_REORDER) return;
 
     std::vector<std::wstring> removedWsIds;
     EnterCriticalSection(&g_cs);
@@ -4634,7 +4568,7 @@ void UnpinAllApps() {
     if (g_overlayWnd && IsWindow(g_overlayWnd))
         PostMessageW(g_overlayWnd, WM_QPD_WSPOPUP_CLOSE, 1, 0);
     for (const auto& id : removedWsIds) DeleteWorkspaceSnapshotStorage(id);
-    SavePinnedApps();  // Outside CS  --  registry I/O must not block the input loop
+    SavePinnedApps();  // Outside CS  --  Windhawk storage I/O must not block the input loop
 
     if (g_overlayWnd && IsWindow(g_overlayWnd))
         InvalidateRect(g_overlayWnd, NULL, FALSE);
@@ -4657,20 +4591,18 @@ static void LaunchApp(int idx) {
     }
     if (path.empty()) return;
 
+    std::wstring launchPath = ResolveWow64Path(path);
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
-    sei.lpFile = path.c_str();
+    sei.lpFile = launchPath.c_str();
     sei.nShow  = SW_SHOWNORMAL;
     ShellExecuteExW(&sei);
 }
 
-// ------------------------------------------------------------------
 //  Workspace click: focus an already-open window instead of opening a
-//  duplicate. Mirrors PickWorkspaceWindowToFocus in tests/workspace_focus.h
 //  (unit-tested there with no Win32/COM deps). The app-pin path already
 //  focuses a running app (FindRunningAppWindow -> SetForegroundWindow);
 //  this gives workspace pins the same behaviour, so a second click doesn't
 //  stack another Explorer window on the same folder.
-// ------------------------------------------------------------------
 struct OpenExplorerWindow {
     HWND         hwnd;
     std::wstring folder;
@@ -4713,7 +4645,6 @@ static int PickWorkspaceWindowToFocus(const std::wstring& primaryFolder,
 // Home, a library) resolves to "" at capture time, so keying the focus-if-open
 // decision on ONLY the active tab meant such a workspace stacked a duplicate
 // window on every click. Mirrors PickWorkspaceWindowToFocusAny in
-// tests/workspace_focus.h.
 static int PickWorkspaceWindowToFocusAny(const std::vector<std::wstring>& candidateFolders,
                                          const std::vector<OpenExplorerWindow>& open) {
     for (const std::wstring& folder : candidateFolders) {
@@ -4821,13 +4752,12 @@ static void LaunchWorkspace(const std::wstring& workspaceId) {
 }
 
 static DWORD WINAPI LaunchWorkspaceThread(LPVOID param) {
-    // v2.5.4 (this-round Issue 2): the workspace-restore path calls window-geometry
+    // the workspace-restore path calls window-geometry
     // and SetForegroundWindow APIs, so set per-monitor-v2 DPI here too, matching the
     // UI and worker threads in the tool process.
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     std::wstring* workspaceId = (std::wstring*)param;
     if (workspaceId) {
-        // FIX-B2 (#6): bail out early if the mod is being torn down. Cheap guard
+        // bail out early if the mod is being torn down. Cheap guard
         // so a reload while this thread is queued doesn't kick off seconds of
         // COM/ShellExecuteExW work against a soon-to-be-unmapped image.
         if (!g_launchWorkspaceStop.load())
@@ -4840,7 +4770,7 @@ static DWORD WINAPI LaunchWorkspaceThread(LPVOID param) {
 static void LaunchWorkspaceAsync(const std::wstring& workspaceId) {
     if (workspaceId.empty()) return;
 
-    // Review #4 (Bug A): never drop a still-running launch thread. Track every
+    // never drop a still-running launch thread. Track every
     // outstanding handle in g_launchWorkspaceThreads and only reap the ones that
     // have already finished; WhTool_ModUninit joins whatever is left. Also refuse to
     // start a new launch once teardown has begun, so we can't spawn a thread that
@@ -4906,7 +4836,6 @@ static void OpenSingleFolderPath(const std::wstring& folderPath) {
 }
 
 static DWORD WINAPI OpenSingleFolderThread(LPVOID param) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     std::wstring* folderPath = (std::wstring*)param;
     if (folderPath) {
         if (!g_launchWorkspaceStop.load())
@@ -4945,7 +4874,7 @@ static void OpenSingleFolderAsync(const std::wstring& folderPath) {
 struct RunningCtx { const wchar_t* path; HWND found; };
 static BOOL CALLBACK FindRunningProc(HWND hwnd, LPARAM lp) {
     if (!IsWindowVisible(hwnd)) return TRUE;
-    // Functionality-note #3: the first visible top-level window of a process can
+    // the first visible top-level window of a process can
     // be a splash screen, a tooltip host or a hidden helper rather than the main
     // window. Skip tool windows and untitled windows so focus-if-running latches
     // onto a real app window. (Same idiom as RunStateEnumProc below.)
@@ -5459,21 +5388,17 @@ static IWebBrowserApp* CreateAndAttachNewExplorerTab(IUIAutomation* automation,
     int  beforeChildTabs = CountShellTabChildren(hwnd);
     long beforeSwCount   = GetShellWindowsTotalCount();
 
-    // Step 1: SendMessageTimeoutW WM_COMMAND 0xA21B to ShellTabWindowClass (never hangs if Explorer UI is busy).
-    HWND tabChild = NULL;
-    EnumChildWindows(hwnd, FindShellTabChildProc, (LPARAM)&tabChild);
-    if (tabChild && IsWindow(tabChild)) {
-        DWORD_PTR cmdRes = 0;
-        if (!SendMessageTimeoutW(tabChild, WM_COMMAND, 0xA21B, 0,
-                                 SMTO_ABORTIFHUNG | SMTO_NORMAL, 600, &cmdRes)) {
-            PostMessageW(tabChild, WM_COMMAND, 0xA21B, 0);
+    // Single trigger: prefer UIA AddButton invoke; only if it fails, send one WM_COMMAND 0xA21B.
+    if (!InvokeExplorerNewTabUIA(automation, hwnd)) {
+        HWND tabChild = NULL;
+        EnumChildWindows(hwnd, FindShellTabChildProc, (LPARAM)&tabChild);
+        if (tabChild && IsWindow(tabChild)) {
+            DWORD_PTR cmdRes = 0;
+            SendMessageTimeoutW(tabChild, WM_COMMAND, 0xA21B, 0,
+                                SMTO_ABORTIFHUNG | SMTO_NORMAL, 600, &cmdRes);
         }
-    } else {
-        InvokeExplorerNewTabUIA(automation, hwnd);
     }
 
-    bool uiaRetried   = false;
-    bool ctrlTRetried = false;
     DWORD start = GetTickCount();
     while (GetTickCount() - start < timeoutMs) {
         if (g_launchWorkspaceStop.load()) return NULL;
@@ -5484,22 +5409,6 @@ static IWebBrowserApp* CreateAndAttachNewExplorerTab(IUIAutomation* automation,
         if (nowSwCount > beforeSwCount && nowChildTabs > beforeChildTabs) {
             IWebBrowserApp* newTab = GetNewestShellWindowForRoot(hwnd, prevTabHwnds);
             if (newTab) return newTab;
-        }
-
-        DWORD elapsed = GetTickCount() - start;
-        if (!uiaRetried && nowChildTabs <= beforeChildTabs && elapsed >= 350) {
-            uiaRetried = true;
-            InvokeExplorerNewTabUIA(automation, hwnd);
-        }
-        if (!ctrlTRetried && nowChildTabs <= beforeChildTabs && elapsed >= 900) {
-            ctrlTRetried = true;
-            ForceForegroundWindow(hwnd);
-            INPUT inputs[4] = {};
-            inputs[0].type = INPUT_KEYBOARD; inputs[0].ki.wVk = VK_CONTROL;
-            inputs[1].type = INPUT_KEYBOARD; inputs[1].ki.wVk = 'T';
-            inputs[2].type = INPUT_KEYBOARD; inputs[2].ki.wVk = 'T';        inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
-            inputs[3].type = INPUT_KEYBOARD; inputs[3].ki.wVk = VK_CONTROL; inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
-            SendInput(4, inputs, sizeof(INPUT));
         }
 
         if (WaitWithStaPump(kRestorePollIntervalMs))
@@ -5724,38 +5633,17 @@ static void RestoreExplorerWindowGroup(const WorkspaceSnapshot::WindowGroup& gro
 // (SPI_SETFOREGROUNDLOCKTIMEOUT) -- the call silently fails and the taskbar
 // button just flashes. This is why clicks were "skipped" while the real
 // windhawk.exe (or any app) was foreground.
-//
 // Fix: attach our input queue to the current foreground thread's input queue so
 // the OS treats the call as coming from the foreground thread, then set it.
-// The attach/detach decision mirrors tests/foreground_focus.h PlanForegroundFocus.
 static void ForceForegroundWindow(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return;
 
     if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
 
-    HWND  fg          = GetForegroundWindow();
-    DWORD callerTid   = GetCurrentThreadId();
-    DWORD targetTid   = GetWindowThreadProcessId(hwnd, NULL);
-    DWORD foregroundTid = fg ? GetWindowThreadProcessId(fg, NULL) : 0;
-
-    // Decide whether we must attach (see tests/foreground_focus.h).
-    bool  needsAttach = (foregroundTid != 0 &&
-                         foregroundTid != targetTid &&
-                         foregroundTid != callerTid);
-
-    bool attached = false;
-    if (needsAttach && fg && IsWindow(fg) && !IsHungAppWindow(fg))
-        attached = (AttachThreadInput(callerTid, foregroundTid, TRUE) != FALSE);
-
-    // Nudge past the lock, then take foreground.
-    SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-    BringWindowToTop(hwnd);
+    // Allows to steal focus.
+    INPUT input{};
+    SendInput(1, &input, sizeof(INPUT));
     SetForegroundWindow(hwnd);
-    if (targetTid == callerTid)
-        SetActiveWindow(hwnd);
-
-    if (attached) AttachThreadInput(callerTid, foregroundTid, FALSE);
 }
 
 static void SmartLaunch(int idx) {
@@ -5831,37 +5719,50 @@ static void SmartLaunch(int idx) {
 // ============================================================
 // SavePinnedApps  --  MUST be called outside any Critical Section.
 // It acquires the CS briefly to snapshot the path list, then releases before
-// doing registry I/O. This prevents blocking the animation/input loop during
+// doing Windhawk storage I/O. This prevents blocking the animation/input loop during
 // potentially slow registry writes.
 void SavePinnedApps() {
-    // Snapshot under CS  --  fast: just string copies
-    std::wstring multiSz;
+    if (g_saveCsInit) EnterCriticalSection(&g_saveCs);
+
+    std::vector<std::wstring> records;
     if (g_csInitialized) EnterCriticalSection(&g_cs);
+    records.reserve(g_pinnedApps.size());
     for (const auto& app : g_pinnedApps) {
         if (app.type == PIN_WORKSPACE) {
-            multiSz += L"WORKSPACE|";
-            multiSz += app.workspaceId;
-            multiSz += L"|";
-            multiSz += app.displayName;
+            std::wstring rec = L"WORKSPACE|" +
+                               SanitizeSingleLineValue(app.workspaceId, 128) + L"|" +
+                               SanitizeSingleLineValue(app.displayName, 128);
+            records.push_back(std::move(rec));
         } else {
-            multiSz += L"APP|";
-            multiSz += app.exePath;
+            std::wstring rec = L"APP|" + SanitizeSingleLineValue(app.exePath, 2048);
+            records.push_back(std::move(rec));
         }
-        multiSz += L'\0';
     }
     if (g_csInitialized) LeaveCriticalSection(&g_cs);
-    multiSz += L'\0';
 
-    // FIX-C3 (#7): persist to Windhawk mod storage (reversible on uninstall)
-    // instead of HKCU. The exact same double-null-terminated blob is written
-    // verbatim via Wh_SetBinaryValue; its byte length is stored alongside so
-    // LoadPinnedApps can size its read buffer (Wh_GetBinaryValue copies nothing
-    // into a too-small buffer and gives no way to query the needed size). This is
-    // still outside the CS, so the (now local, fast) storage write can't block
-    // the animation/input loop.
-    size_t blobBytes = multiSz.size() * sizeof(wchar_t);
-    Wh_SetBinaryValue(REG_VALUE, multiSz.c_str(), blobBytes);
-    Wh_SetIntValue(L"PinnedAppsBytes", (int)blobBytes);
+    int prevCount = Wh_GetIntValue(L"PinnedAppCount", 0);
+    bool allOk = true;
+    int written = 0;
+    for (size_t i = 0; i < records.size(); ++i) {
+        std::wstring key = L"PinnedApp" + std::to_wstring(i);
+        if (!Wh_SetStringValue(key.c_str(), records[i].c_str())) {
+            allOk = false;
+            break;
+        }
+        ++written;
+    }
+
+    if (allOk) {
+        Wh_SetIntValue(L"PinnedAppCount", written);
+        for (int i = written; i < prevCount && i < 128; ++i) {
+            Wh_DeleteValue((L"PinnedApp" + std::to_wstring(i)).c_str());
+        }
+        // Clean up legacy binary blob after successful migration
+        Wh_DeleteValue(REG_VALUE);
+        Wh_DeleteValue(L"PinnedAppsBytes");
+    }
+
+    if (g_saveCsInit) LeaveCriticalSection(&g_saveCs);
 }
 
 // Remove invalid entries from the list.
@@ -5882,7 +5783,7 @@ static void ValidateAndCleanPinnedList() {
     std::vector<std::wstring> invalidExePaths;       // app pins invalid (phase 1)
     std::vector<std::wstring> invalidWorkspaceIds;   // phase 3 erase set
 
-    // ---- Phase 1: snapshot under the lock, no storage I/O ----
+    // Phase 1: snapshot under the lock, no storage I/O ----
     EnterCriticalSection(&g_cs);
     for (size_t i = 0; i < g_pinnedApps.size(); ++i) {
         const auto& e = g_pinnedApps[i];
@@ -5899,7 +5800,7 @@ static void ValidateAndCleanPinnedList() {
     }
     LeaveCriticalSection(&g_cs);
 
-    // ---- Phase 2: storage I/O with the lock RELEASED ----
+    // Phase 2: storage I/O with the lock RELEASED ----
     for (const auto& id : workspaceIdsToCheck) {
         WorkspaceSnapshot snapshot;
         if (!LoadWorkspaceSnapshot(id, snapshot))
@@ -5909,7 +5810,7 @@ static void ValidateAndCleanPinnedList() {
     if (invalidExePaths.empty() && invalidWorkspaceIds.empty())
         return;   // nothing to remove -- skip the re-lock entirely
 
-    // ---- Phase 3: re-take the lock and erase, matching by identity ----
+    // Phase 3: re-take the lock and erase, matching by identity ----
     EnterCriticalSection(&g_cs);
     for (int i = (int)g_pinnedApps.size() - 1; i >= 0; --i) {
         const auto& e = g_pinnedApps[i];
@@ -5933,22 +5834,41 @@ static void ValidateAndCleanPinnedList() {
 void LoadPinnedApps() {
     g_pinnedApps.clear();
 
-    // FIX-C3 (#7): read the pinned-apps blob from Windhawk mod storage instead of
-    // HKCU. "PinnedAppsBytes" (0 when unset) gives the exact byte length so we can
-    // size the read buffer -- Wh_GetBinaryValue copies nothing into a too-small one.
-    int savedBytes = Wh_GetIntValue(L"PinnedAppsBytes", 0);
-    if (savedBytes > (int)sizeof(wchar_t)) {
+    std::vector<std::wstring> rawRecords;
+    int savedCount = Wh_GetIntValue(L"PinnedAppCount", 0);
+    if (savedCount > 0) {
+        if (savedCount > 128) savedCount = 128;
+        std::vector<wchar_t> valBuf(2560, 0);
+        for (int i = 0; i < savedCount; ++i) {
+            valBuf[0] = L'\0';
+            std::wstring key = L"PinnedApp" + std::to_wstring(i);
+            if (Wh_GetStringValue(key.c_str(), valBuf.data(), valBuf.size()) > 0 && valBuf[0] != L'\0') {
+                rawRecords.emplace_back(valBuf.data());
+            }
+        }
+    } else {
+        // Legacy binary blob fallback for upgrading installs
+        int savedBytes = Wh_GetIntValue(L"PinnedAppsBytes", 0);
+        if (savedBytes > (int)sizeof(wchar_t) && savedBytes <= 65536) {
+            std::vector<BYTE> buf((size_t)savedBytes + sizeof(wchar_t), 0);
+            if (Wh_GetBinaryValue(REG_VALUE, buf.data(), (size_t)savedBytes) == (size_t)savedBytes) {
+                const wchar_t* p = (const wchar_t*)buf.data();
+                const wchar_t* end = (const wchar_t*)(buf.data() + savedBytes);
+                while (p < end && *p) {
+                    size_t len = wcsnlen(p, (size_t)(end - p));
+                    rawRecords.emplace_back(p, len);
+                    p += len + 1;
+                }
+            }
+        }
+    }
 
-        std::vector<BYTE> buf((size_t)savedBytes);
-        if (Wh_GetBinaryValue(REG_VALUE, buf.data(), buf.size()) == (size_t)savedBytes) {
-            const wchar_t* p = (const wchar_t*)buf.data();
-
+    if (!rawRecords.empty()) {
+        {
             int appCap = std::max(1, MAX_PINNED_APPS);
             int workspaceCap = MAX_WORKSPACE_PINS;
 
-            while (*p) {
-                std::wstring record = p;
-                p += wcslen(p) + 1;
+            for (const std::wstring& record : rawRecords) {
 
                 PinType type = PIN_APP;
                 std::wstring exePath;
@@ -5973,15 +5893,20 @@ void LoadPinnedApps() {
                 }
 
                 if (type == PIN_WORKSPACE) {
-                    if (CountPinsByType(PIN_WORKSPACE) >= workspaceCap) continue;
+                    if (CountPinsByType(PIN_WORKSPACE) >= workspaceCap) {
+                        DeleteWorkspaceSnapshotStorage(workspaceId);
+                        continue;
+                    }
                     WorkspaceSnapshot snapshot;
                     if (!LoadWorkspaceSnapshot(workspaceId, snapshot)) {
                         Wh_Log(L"LOAD SKIP (workspace missing): %s", workspaceId.c_str());
+                        DeleteWorkspaceSnapshotStorage(workspaceId);
                         continue;
                     }
                     HICON icon = LoadFolderIcon(snapshot.folderPaths[0]);
                     if (!icon) {
                         Wh_Log(L"LOAD SKIP (workspace no icon): %s", workspaceId.c_str());
+                        DeleteWorkspaceSnapshotStorage(workspaceId);
                         continue;
                     }
                     if (snapshot.folderPaths.size() <= 1) {
@@ -6030,8 +5955,6 @@ void LoadPinnedApps() {
                 app.opacity   = 1.0f;   // Pre-existing pins start fully visible
                 app.isNew     = false;  // No entrance animation
                 app.velocityX = 0.f;
-                app.hoverScale  = 1.0f;
-                app.hoverShiftX = 0.f;
                 g_pinnedApps.push_back(app);
                 Wh_Log(L"LOAD OK: %s", exePath.c_str());
             }
@@ -6045,8 +5968,6 @@ void LoadPinnedApps() {
     for (int i = 0; i < total; ++i) {
         RECT r = GetIconRectLocal(i, total);
         g_pinnedApps[i].currentX = g_pinnedApps[i].targetX = (float)r.left;
-        g_pinnedApps[i].hoverScale  = 1.0f;
-        g_pinnedApps[i].hoverShiftX = 0.f;
     }
     Wh_Log(L"LOAD DONE: %d apps", total);
 }
@@ -6160,17 +6081,23 @@ static void UpdateGhostWindow(POINT cursorPt) {
     ReleaseDC(NULL, sdc);
 }
 
-// Reads the current Windows app theme (Personalize\AppsUseLightTheme).
-static bool IsSystemLightTheme() {
+static std::atomic<bool> g_cachedLightTheme{false};
+
+// Reads and caches the Windows taskbar theme (Personalize\SystemUsesLightTheme).
+static void RefreshSystemLightTheme() {
     DWORD val = 0, sz = sizeof(val);
     HKEY k = NULL;
     if (RegOpenKeyExW(HKEY_CURRENT_USER,
             L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
             0, KEY_READ, &k) == ERROR_SUCCESS) {
-        RegQueryValueExW(k, L"AppsUseLightTheme", NULL, NULL, (LPBYTE)&val, &sz);
+        RegQueryValueExW(k, L"SystemUsesLightTheme", NULL, NULL, (LPBYTE)&val, &sz);
         RegCloseKey(k);
     }
-    return val != 0;
+    g_cachedLightTheme.store(val != 0);
+}
+
+static bool IsSystemLightTheme() {
+    return g_cachedLightTheme.load();
 }
 
 // ============================================================
@@ -6191,7 +6118,6 @@ static bool IsSystemLightTheme() {
 // ============================================================
 
 // Pure, Win32-free decision for the drag-to-pin feedback glow (mirrored 1:1 from
-// tests/edge_feedback_line.h). The old right-edge feedback LINE was removed; drag
 // feedback now reuses the lock-glow bloom. It shows:
 //   * only for a PIN drag (a NEW app dragged IN) -- never an unpin / reorder /
 //     rope-break drag of an already-pinned icon,
@@ -6207,7 +6133,6 @@ static inline DragGlow DragGlowFor(bool pinningDrag, bool inDropZone, bool dockF
 }
 
 // Pure, Win32-free companion to DragGlowFor (mirrored 1:1 in
-// tests/pin_limit_calm.h). Computes the `pinningDrag` input: a drag only earns
 // new-pin feedback (GREEN "will add" / RED "dock full" + shake) when it
 // genuinely adds a NEW pin -- an EXTERNAL drag (fromDock == false) of an app
 // that is NOT already pinned. Dragging or deleting an already-pinned dock icon
@@ -6410,14 +6335,12 @@ static void UpdateTooltipWindow(int hoverIdx) {
 
     std::wstring label;
     RECT iconLocal = {};
-    float shiftX = 0.f;
     float curX = 0.f;
     EnterCriticalSection(&g_cs);
     int n = (int)g_pinnedApps.size();
     if (hoverIdx >= 0 && hoverIdx < n && g_pinnedApps[hoverIdx].opacity > 0.5f) {
         label     = FriendlyPinLabel(g_pinnedApps[hoverIdx]);
         iconLocal = GetIconRectLocal(hoverIdx, n);
-        shiftX    = g_pinnedApps[hoverIdx].hoverShiftX;
         curX      = g_pinnedApps[hoverIdx].currentX;
     }
     LeaveCriticalSection(&g_cs);
@@ -6484,7 +6407,7 @@ static void UpdateTooltipWindow(int hoverIdx) {
         g_tooltipOldBmp = (HBITMAP)SelectObject(g_tooltipDC, g_tooltipDIB);
         memset(bits, 0, (size_t)w * h * 4);
 
-        int baseX = (int)(curX != 0.f ? curX : (float)iconLocal.left) + (int)lroundf(shiftX);
+        int baseX = (int)(curX != 0.f ? curX : (float)iconLocal.left);
         int iconCenterX = (int)g_dockCurrentX + baseX + ICON_SIZE / 2;
         int tx = std::max(4, iconCenterX - w / 2);
         int ty = (int)g_dockCurrentY - h - (int)lroundf(6.0f * s);
@@ -6532,10 +6455,10 @@ static void UpdateTooltipWindow(int hoverIdx) {
 
 // ============================================================
 //  GROUPED WORKSPACE DROP-UP POPUP (QPDockWorkspacePopup)
-//  - ULW_ALPHA layered window, zero-flash, zero ugly strokes/borders
-//  - Opens upward from the taskbar above the workspace icon
-//  - State machine: CLOSED -> OPEN_HOVER (200ms linger) -> OPEN_HOLD (on click)
-//  - Outside click / Esc / Fullscreen dismisses
+//  ULW_ALPHA layered window, zero-flash, zero ugly strokes/borders
+//  Opens upward from the taskbar above the workspace icon
+//  State machine: CLOSED -> OPEN_HOVER (200ms linger) -> OPEN_HOLD (on click)
+//  Outside click / Esc / Fullscreen dismisses
 // ============================================================
 static HBITMAP       g_wsPopupDIB         = NULL;
 static HDC           g_wsPopupDC          = NULL;
@@ -6707,7 +6630,6 @@ static void RenderWorkspacePopupULW() {
     std::wstring title;
     std::vector<std::wstring> paths;
     RECT iconLocal = {};
-    float shiftX = 0.f;
     float curX = 0.f;
 
     if (g_csInitialized) {
@@ -6717,7 +6639,6 @@ static void RenderWorkspacePopupULW() {
             title     = g_pinnedApps[pinIdx].displayName.empty() ? L"Workspace" : g_pinnedApps[pinIdx].displayName;
             paths     = g_pinnedApps[pinIdx].workspacePaths;
             iconLocal = GetIconRectLocal(pinIdx, n);
-            shiftX    = g_pinnedApps[pinIdx].hoverShiftX;
             curX      = g_pinnedApps[pinIdx].currentX;
         }
         LeaveCriticalSection(&g_cs);
@@ -6768,7 +6689,7 @@ static void RenderWorkspacePopupULW() {
     BYTE masterAlpha = (BYTE)std::max(0, std::min(255, (int)lroundf(255.0f * ease)));
     int riseOffset = (int)lroundf((1.0f - ease) * 6.0f * s);
 
-    int baseXPos = (int)(curX != 0.f ? curX : (float)iconLocal.left) + (int)lroundf(shiftX);
+    int baseXPos = (int)(curX != 0.f ? curX : (float)iconLocal.left);
     int iconCenterXPos = (int)g_dockCurrentX + baseXPos + ICON_SIZE / 2;
     int px = iconCenterXPos - w / 2;
     int targetPy = (int)g_dockCurrentY - h - (int)lroundf(8.0f * s);
@@ -7078,8 +6999,10 @@ static int WsPopupHitTestRow(POINT clientPt, bool* outOnDelete) {
     int row = g_wsPopupScrollOffset + visRow;
     if (row < 0 || row >= g_wsPopupRowCount) return -1;
     if (outOnDelete) {
-        int delRight = (g_wsPopupRect.right - g_wsPopupRect.left) - g_wsPopupPadX - 4;
-        int delLeft  = delRight - 24;
+        float s = (g_wsPopupScaleS > 0.1f) ? g_wsPopupScaleS : 1.0f;
+        int delSz    = (int)lroundf(18.0f * s);
+        int delRight = (g_wsPopupRect.right - g_wsPopupRect.left) - g_wsPopupPadX - (int)lroundf(4.0f * s);
+        int delLeft  = delRight - delSz - (int)lroundf(6.0f * s);
         if (clientPt.x >= delLeft && clientPt.x <= delRight)
             *outOnDelete = true;
     }
@@ -7381,11 +7304,11 @@ static LRESULT CALLBACK WsPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
     }
 
     case WM_LBUTTONUP: {
-        if (GetCapture() == hwnd) ReleaseCapture();
         bool wasDragging = g_wsPopupDraggingRow;
         int pinIdx = g_wsPopupPinIdx.load();
         int fromR  = g_wsPopupDragRow;
         int toR    = g_wsPopupDragDropRow;
+        if (GetCapture() == hwnd) ReleaseCapture();
         g_wsPopupPressRow    = -1;
         g_wsPopupDraggingRow = false;
         g_wsPopupDragRow     = -1;
@@ -7881,20 +7804,11 @@ static void RenderOverlayULW() {
         RECT r = GetIconRectLocal(i, n);
         float baseX = (app.currentX != 0.f ? app.currentX : (float)r.left) + (float)shakeOffset;
         if (baseX < DOCK_PAD_LEFT) baseX = (float)(r.left + shakeOffset);
-        baseX += app.hoverShiftX;
         if (baseX < 0.0f || baseX >= (float)g_dockLocalW) continue;
 
-        float scale = (app.opacity >= 0.99f && app.hoverScale > 1.0f) ? app.hoverScale : 1.0f;
-        float sz    = (float)ICON_SIZE * scale;
-        float cxF   = baseX + ICON_SIZE * 0.5f;
-        float cyF   = (float)(DOCK_TOP_OVERFLOW_PX + r.top) + ICON_SIZE * 0.5f;
-        float ix    = std::max(0.0f, cxF - sz * 0.5f);
-        float iy    = cyF - sz * 0.5f;
-        if (scale <= 1.001f) {
-            ix = (float)lroundf(ix);
-            iy = (float)lroundf(iy);
-            sz = (float)ICON_SIZE;
-        }
+        float sz = (float)ICON_SIZE;
+        float ix = (float)lroundf(std::max(0.0f, baseX));
+        float iy = (float)(DOCK_TOP_OVERFLOW_PX + r.top);
         float edgeFade = 1.0f;
         if (ix < (float)DOCK_PAD_LEFT)
             edgeFade = std::max(0.0f, 1.0f - ((float)DOCK_PAD_LEFT - ix) / (float)std::max(8, ICON_SIZE / 2));
@@ -7933,7 +7847,7 @@ static void RenderOverlayULW() {
             if (!app.running || !app.icon || app.opacity < 0.5f) continue;
             if (g_dragFromDock && i == g_dragFromDockIdx && g_dragState == DRAG_DRAGGING) continue;
             RECT r = GetIconRectLocal(i, n);
-            float baseX = (app.currentX > 0.f ? app.currentX : (float)r.left) + app.hoverShiftX;
+            float baseX = (app.currentX > 0.f ? app.currentX : (float)r.left);
             if (baseX < 0.0f || baseX >= (float)g_dockLocalW) continue;
             float cx = baseX + ICON_SIZE * 0.5f;
             float dotY = (float)(DOCK_TOP_OVERFLOW_PX + r.bottom + 2);
@@ -7970,9 +7884,17 @@ static void RenderOverlayULW() {
 static bool IsDockCurrentlyActive() {
     bool cachedRectValid = (g_cachedDockRect.right  > g_cachedDockRect.left) &&
                            (g_cachedDockRect.bottom > g_cachedDockRect.top);
-    bool autoHideHidden = g_taskbarAutoHide &&
-        !((g_cachedTBRect.bottom - g_cachedTBRect.top) > 8 &&
-          (g_cachedTBRect.right  - g_cachedTBRect.left) > 8);
+    bool autoHideHidden = false;
+    if (g_taskbarAutoHide) {
+        HMONITOR tbMon = g_cachedTaskbar ? MonitorFromWindow(g_cachedTaskbar, MONITOR_DEFAULTTOPRIMARY)
+                                         : MonitorFromRect(&g_cachedTBRect, MONITOR_DEFAULTTOPRIMARY);
+        MONITORINFO tbMi = { sizeof(tbMi) };
+        RECT visTb = {};
+        bool tbOnScreen = GetMonitorInfoW(tbMon, &tbMi) &&
+                          IntersectRect(&visTb, &g_cachedTBRect, &tbMi.rcMonitor) &&
+                          (visTb.bottom - visTb.top) > 8 && (visTb.right - visTb.left) > 8;
+        autoHideHidden = !tbOnScreen;
+    }
     bool fsSuppress = g_fullscreenActive && (FULLSCREEN_BEHAVIOR == 0);
     return DockInteractionAllowed(
         fsSuppress, g_layoutUnsupported,
@@ -8004,6 +7926,14 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 
     case WM_ERASEBKGND:
         return 1;
+
+    case WM_SETTINGCHANGE:
+        if (lParam && _wcsicmp((LPCWSTR)lParam, L"ImmersiveColorSet") == 0) {
+            RefreshSystemLightTheme();
+            RenderOverlayULW();
+            if (g_wsPopupState.load() != WS_POPUP_CLOSED) RenderWorkspacePopupULW();
+        }
+        return 0;
 
     case WM_QPD_RENDER_DOCK:
         g_renderQueued.store(false);
@@ -8054,7 +7984,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         bool changed = (nextIdx != g_hoverIndex);
         g_hoverIndex = nextIdx;
 
-        // ---- Viewport paging: keep the highlighted app inside the visible -----
+        // Viewport paging: keep the highlighted app inside the visible -----
         // window.  When more apps are pinned than MAX_VISIBLE_APP_SLOTS the dock
         // does not grow; instead this slides g_appScrollStart so the wheel walks
         // through every pin.  For <= MAX_VISIBLE_APP_SLOTS apps this is a no-op
@@ -8160,7 +8090,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         SyncKeyboardGestureHookOnUiThread();
         EwpCreateWindowsOnUiThread();
         EwpApplySettingsOnUiThread();
-        // FIX (Issue 6): re-register the global hotkey after a settings change.
+        // re-register the global hotkey after a settings change.
         // Runs on the overlay window's OWNING thread (this proc), which is the
         // thread that originally called RegisterHotKey -- the only thread on
         // which Register/UnregisterHotKey are valid. Always unregister the old
@@ -8342,7 +8272,8 @@ LRESULT CALLBACK InputOwnerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 static bool CreateInputOwnerWindow() {
     WNDCLASSEXW wc = { sizeof(wc) };
     wc.lpfnWndProc = InputOwnerProc;
-    wc.hInstance = GetModHInstance();   // FIX-B3 (#3): mod module, not explorer.exe
+    wc.hInstance = GetModHInstance();   // mod module handle
+
     wc.lpszClassName = INPUT_CLASS;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.style = CS_DBLCLKS;
@@ -8369,7 +8300,8 @@ static bool CreateInputOwnerWindow() {
 static bool CreateOverlayWindow() {
     WNDCLASSEXW wc   = { sizeof(wc) };
     wc.lpfnWndProc   = OverlayProc;
-    wc.hInstance     = GetModHInstance();   // FIX-B3 (#3): mod module, not explorer.exe
+    wc.hInstance     = GetModHInstance();   // mod module handle
+
     wc.lpszClassName = OVERLAY_CLASS;
     wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
     wc.style         = CS_DBLCLKS;
@@ -8413,7 +8345,8 @@ static bool CreateOverlayWindow() {
 static bool CreateGhostWindow() {
     WNDCLASSEXW gw   = { sizeof(gw) };
     gw.lpfnWndProc   = DefWindowProcW;
-    gw.hInstance     = GetModHInstance();   // FIX-B3 (#3): mod module, not explorer.exe
+    gw.hInstance     = GetModHInstance();   // mod module handle
+
     gw.lpszClassName = GHOST_CLASS;
     RegisterClassExW(&gw);
 
@@ -8434,20 +8367,10 @@ static bool CreateGhostWindow() {
     return true;
 }
 
-// ============================================================
-//  WINEVENT HOOK  --  event-driven taskbar geometry refresh
-// ============================================================
-// FIX-A7 (#4): WinEventProc removed together with its SetWinEventHook
-// registration. The hook could never fire (inverted event range,
-// WINEVENT_SKIPOWNPROCESS excluded explorer.exe, idThread pinned to our own
-// thread) and every geometry refresh it would have performed is already driven
-// by the worker poll loop below (see the
-// HasTaskbarGeometryChanged -> RefreshTaskbarCache -> RepositionOverlay block).
 
 // ============================================================
 //  WORKER THREAD  --  input polling and animation loop
 // ============================================================
-// ------------------------------------------------------------
 //  KEYBOARD-GESTURE HELPERS  --  explicit pin / unpin of the focused app.
 //  Shared by the triple-tap P (pin) and triple-tap U (unpin) gestures polled
 //  in the worker loop. They reuse the SAME validation pipeline as the drag and
@@ -8484,12 +8407,11 @@ static void UnpinForegroundApp() {
 }
 
 DWORD WINAPI WorkerThread(LPVOID) {
-    // v2.5.4 (this-round Issue 2): match the UI thread's per-monitor-v2 DPI context
+    // match the UI thread's per-monitor-v2 DPI context
     // so the worker's geometry polling (GetWindowRect on the taskbar/Start, dock
     // anchoring, GetDpiForWindow) reads true physical pixels in the tool process.
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-    // FIX-A8 (#11): the optional startup delay now runs HERE, on the worker
+    // the optional startup delay now runs HERE, on the worker
     // thread, instead of blocking WhTool_ModInit (which runs on the process main
     // thread at load, or the Windhawk Engine thread on a live reload -- either
     // way a Sleep there stalls Explorer startup / the Windhawk UI). Wait on
@@ -8578,9 +8500,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
             if (ENABLE_AUTOHIDE_SYNC) UpdateAutoHideState();
             UpdateRunningState();
             if (g_ewpEnabled.load() && !(g_fullscreenActive && FULLSCREEN_BEHAVIOR == 0) && g_overlayWnd) {
-                if (!g_ewpPillWnd || !IsWindow(g_ewpPillWnd)) {
-                    PostMessageW(g_overlayWnd, WM_QPD_REREGISTER_HOTKEY, 0, 0);
-                } else if (!IsWindowVisible(g_ewpPillWnd)) {
+                if (g_ewpPillWnd && IsWindow(g_ewpPillWnd) && !IsWindowVisible(g_ewpPillWnd)) {
                     needRefresh = true;
                 }
             }
@@ -8588,7 +8508,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
             lastGeometryCheck = now;
         }
 
-        // -- Hover pre-sampling: REMOVED --------------------------------------
+        // Hover pre-sampling: REMOVED --------------------------------------
         // This used to call ResolveDragSourceAtPoint() on a timer purely from
         // idle hovering near the dock/taskbar, with no mouse button down and no
         // drag underway at all. That is exactly the unnecessary work the new
@@ -8600,7 +8520,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
         // pinnable-candidate check have all passed.
 
         // Boot watchdog: force geometry recovery if dock width is still 0 after 100 ms.
-        // FIX (Issue 2): skip while the layout is UNSUPPORTED. There, g_dockLocalW
+        // skip while the layout is UNSUPPORTED. There, g_dockLocalW
         // stays 0 by design (RefreshTaskbarCache returns before locking a width),
         // so without this guard the watchdog would hammer RefreshTaskbarCache every
         // 100 ms forever on a left-aligned taskbar. RefreshTaskbarCache still runs
@@ -8625,14 +8545,12 @@ DWORD WINAPI WorkerThread(LPVOID) {
         // through the same validated pipeline as the drag and the Ctrl+Alt+P
         // hotkey. A held key counts as one tap (edge-detected), and the counter
         // resets when taps are too slow so it does not fire during typing.
-        //
-        // IMPORTANT: this runs BEFORE the "no overlay window" continue-guard
+                // IMPORTANT: this runs BEFORE the "no overlay window" continue-guard
         // below. These gestures act on GetForegroundWindow() and never touch the
         // dock's overlay window, so they must work whenever the feature is on --
         // even if the overlay hasn't come up yet (e.g. while the dock is still
         // stabilising its geometry). Gating them behind the overlay guard was the
         // "P/U/L do nothing even when enabled" bug. (Decision mirrored in
-        // tests/key_gesture_gating.h: ShouldEvalKeyGesture takes no overlay arg.)
         {
             wchar_t gesture = g_pendingKeyGesture.exchange(0);
             if (gesture != 0 && IsDockCurrentlyActive()) {
@@ -8656,7 +8574,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
         {
             static DWORD s_lastTopMostMs = 0;
             if (now - s_lastTopMostMs > 3000) {
-                // FIX (Issue 3): Z-order maintenance ONLY -- do NOT pass
+                // Z-order maintenance ONLY -- do NOT pass
                 // SWP_SHOWWINDOW here. This periodic re-assert must never change
                 // visibility: with SWP_SHOWWINDOW it would silently re-show a
                 // dock that another code path intentionally hid (e.g. the
@@ -8700,8 +8618,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
         // Do not process any drag logic when the layout is unsupported (dock
         // hidden): g_cachedDockRect describes a stale/invalid rect that would
         // accept drops onto a region with no dock visible.
-        //
-        // FIX (Issue 2 -- unsupported-layout busy loop): every OTHER early
+                // every OTHER early
         // `continue` in this loop first parks on g_exitEvent (the 8/16/50 ms
         // adaptive sleeps live BELOW this point), so a bare `continue` here
         // spins the worker at 100 % of a core (GetCursorPos / GetTickCount /
@@ -8721,7 +8638,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
         // those states the dock is NOT on screen, so NO drag / resolve / dock-zone
         // / pin-unpin / lock-glow work may run against the stale cached geometry.
         // Decide from one mirrored predicate (DockInteractionAllowed,
-        // tests/dock_active_gate.h); when the dock is down, cancel any in-flight
         // drag, drop the lightweight candidate, hide the ghost + tether, stop the
         // lock-glow, and skip the whole drag state machine for this frame.
         bool cachedRectValid = (g_cachedDockRect.right  > g_cachedDockRect.left) &&
@@ -8731,9 +8647,17 @@ DWORD WINAPI WorkerThread(LPVOID) {
         // cached rect stays valid. Mirror that hide condition (same >8px taskbar
         // threshold) so a dock hidden by auto-hide is treated as non-interactive --
         // no drag / resolve / hit-test / pin-unpin against a dock nobody can see.
-        bool autoHideHidden = g_taskbarAutoHide &&
-            !((g_cachedTBRect.bottom - g_cachedTBRect.top) > 8 &&
-              (g_cachedTBRect.right  - g_cachedTBRect.left) > 8);
+        bool autoHideHidden = false;
+        if (g_taskbarAutoHide) {
+            HMONITOR tbMon = g_cachedTaskbar ? MonitorFromWindow(g_cachedTaskbar, MONITOR_DEFAULTTOPRIMARY)
+                                             : MonitorFromRect(&g_cachedTBRect, MONITOR_DEFAULTTOPRIMARY);
+            MONITORINFO tbMi = { sizeof(tbMi) };
+            RECT visTb = {};
+            bool tbOnScreen = GetMonitorInfoW(tbMon, &tbMi) &&
+                              IntersectRect(&visTb, &g_cachedTBRect, &tbMi.rcMonitor) &&
+                              (visTb.bottom - visTb.top) > 8 && (visTb.right - visTb.left) > 8;
+            autoHideHidden = !tbOnScreen;
+        }
         bool fsSuppress = g_fullscreenActive && (FULLSCREEN_BEHAVIOR == 0);
         bool dockInteractive = DockInteractionAllowed(
             fsSuppress, g_layoutUnsupported,
@@ -8763,8 +8687,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
             // hi-res timer (Issue 2: never a 0 ms busy-loop). The other transient
             // inactive states (fullscreen / taskbar gone / booting) poll a little
             // faster so the dock re-arms the instant it returns.
-            if (g_layoutUnsupported) { SetHighResTimer(false); WaitForSingleObject(g_exitEvent, 50); }
-            else                     { WaitForSingleObject(g_exitEvent, 16); }
+            SetHighResTimer(false);
+            WaitForSingleObject(g_exitEvent, 150);
             continue;
         }
 
@@ -8778,9 +8702,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
         if ((g_dragState == DRAG_IDLE || g_dragState == DRAG_CANCELLED) &&
             lDown && !lastLDown && !clickInsideWsPopup) {
 
-            g_mouseDownTime   = now;
             g_dragStartPt     = cursor;
-            g_dropZoneActive  = false;
             g_dragFromDock    = false;
             g_dragFromDockIdx = -1;
             g_draggedAppPath.clear();
@@ -8812,8 +8734,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
             // its own side of the split.
             int dockIdx = HitTestIcon(cursor);
             if (dockIdx >= 0) {
-                // ---------------- INTERNAL DRAG PATH ----------------
-                // FIX-1: HitTestIcon acquires then releases g_cs.  The window
+                // INTERNAL DRAG PATH ----------------
+                // HitTestIcon acquires then releases g_cs.  The window
                 // between its return and here is a dangling-index window: the
                 // main thread (hotkey / right-click) may call UnpinAppByIndex
                 // which erases the element and reallocates the vector  --  making
@@ -8852,7 +8774,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
                     DragTraceLog(L"PRESS: dock index gone before snapshot  --  abort");
                 }
             } else {
-                // ---------------- EXTERNAL DRAG PATH ----------------
+                // EXTERNAL DRAG PATH ----------------
                 // Source: taskbar button or application window.
                 // Stage 1 (Mouse Down): record ONLY the lightweight source
                 // classification. WindowFromPoint (via GetRealWindowFromPoint)
@@ -8890,7 +8812,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
                 // (so it can never reach Stage 4/5 either), and EXTERNAL never
                 // touches g_reorderSrcIdx / g_dragFromDockIdx.
                 if (g_dragFromDock) {
-                    // ---------------- INTERNAL DRAG PATH ----------------
+                    // INTERNAL DRAG PATH ----------------
                     // Source is a pinned icon -- already known at PRESS with no
                     // resolver call, so it can transition immediately. No
                     // ResolveDragSourceAtPoint, UI Automation, OpenProcess, or
@@ -8913,7 +8835,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
                         DragTraceLog(L"DRAG CONFIRMED", g_draggedAppPath.c_str());
                     }
                 } else {
-                    // ---------------- EXTERNAL DRAG PATH ----------------
+                    // EXTERNAL DRAG PATH ----------------
                     // Stage 3 gate: a real drag exists, but dock intent has not
                     // been shown yet. Enter the candidate state -- checked every
                     // frame below -- WITHOUT calling the resolver here. Nothing
@@ -8965,8 +8887,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
                     // Stage 5 (Expensive Resolution): reached exactly once per
                     // genuine drag-to-pin -- only after a real drag, dock
                     // intent, AND a pinnable candidate have all been confirmed.
-                    //
-                    // Resolve at the RECORDED START POINT (g_dragStartPt), not
+                                        // Resolve at the RECORDED START POINT (g_dragStartPt), not
                     // the current cursor position. By the time dock intent
                     // fires, the cursor is over the dock/taskbar -- resolving
                     // "cursor" there identifies whatever taskbar button or
@@ -8983,7 +8904,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
                     // the expensive IShellWindows enumerate + UI Automation probe
                     // when the cheap resolve already says the pressed window is
                     // explorer.exe. (Gate mirrors ShouldConfirmExplorerWorkspace in
-                    // tests/workspace_press_gate.h.)
                     // FIX ("[DRAG] REJECT: no valid source" when pinning Explorer):
                     // ResolveDragSourceAtPoint intentionally returns "" for
                     // explorer.exe, so the gate also keys on whether the window
@@ -8992,7 +8912,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
                     // over a real Explorer window still probes while desktop/
                     // other-app presses do not.
                     // (Gate mirrors ShouldConfirmExplorerWorkspacePress in
-                    //  tests/workspace_press_gate.h.)
                     HWND workspaceHwnd = NULL;
                     bool workspaceSource = false;
                     if (ENABLE_EXPLORER_WORKSPACE_PINS) {
@@ -9043,7 +8962,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
 
         // DRAG_REORDER  --  update target slot and animate icons while button held
         if (g_dragState == DRAG_REORDER && lDown) {
-            // FIX (#5): g_pinnedApps.size() and CalculateReorderSlot() (which
+            // g_pinnedApps.size() and CalculateReorderSlot() (which
             // indexes g_pinnedApps and calls GetIconRectLocal) were read on this
             // worker thread WITHOUT g_cs. A Ctrl+Alt+P PinApp on the UI thread can
             // push_back concurrently and reallocate the vector mid-read -> torn
@@ -9057,7 +8976,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
                 int n = (int)g_pinnedApps.size();
                 if (n > 1 && g_reorderSrcIdx >= 0 && g_reorderSrcIdx < n) {
                     newTarget = CalculateReorderSlot(cursor, n);
-                    newTarget = std::max(0, std::min(newTarget, n - 1));
+                    newTarget = std::max(0, std::min(newTarget, n));
                     haveTarget = true;
                 }
                 LeaveCriticalSection(&g_cs);
@@ -9072,13 +8991,13 @@ DWORD WINAPI WorkerThread(LPVOID) {
             // FIX (rope never showed): the old threshold was MAGNETIC_RANGE_PX * 3
             // (~180px), so a normal pull-off stayed in DRAG_REORDER the whole time
             // and the tug-of-war rope (only pumped in DRAG_DRAGGING) never rendered
-            // -- you had to fling the icon ~180px away to see it. Convert to an
+            // you had to fling the icon ~180px away to see it. Convert to an
             // unpin drag as soon as the icon is pulled clearly off the dock (a small
             // hysteresis past the dock edge). Horizontal reorder keeps the cursor
             // inside the dock rect so this doesn't disturb reordering, while a
             // deliberate pull-away now unpins AND shows the rope immediately.
             // Use the SAME predicate the rope uses for its visibility
-            // (IsNearDockZone / g_dropZoneActive): the instant the icon leaves
+            // (IsNearDockZone): the instant the icon leaves
             // the magnetic zone the state flips to DRAG_DRAGGING and the
             // tug-of-war rope is pumped on that very frame -- so pulling an icon
             // off the dock always shows the rope, with no dead-zone gap.
@@ -9152,9 +9071,9 @@ DWORD WINAPI WorkerThread(LPVOID) {
             GhostCleanup();
         }
 
-        // Fire single-click SmartLaunch once the double-click window (230 ms) elapses
+        // Fire single-click SmartLaunch once the double-click window (260 ms) elapses
         if (pendingDockClickIdx >= 0 && g_dragState == DRAG_IDLE && !lDown &&
-            (now - pendingDockClickTick) > 230) {
+            (now - pendingDockClickTick) > 270) {
             int launchIdx = pendingDockClickIdx;
             pendingDockClickIdx  = -1;
             pendingDockClickTick = 0;
@@ -9301,7 +9220,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
                     if (g_lockGlowStart == 0) g_lockGlowStart = 1;
                 }
             }
-            g_dropZoneActive = nowInDropZone;
             // Present the rope FIRST, then the ghost icon. Both re-assert
             // HWND_TOPMOST every present, so the one presented LAST ends up on
             // top of the top-most band. Drawing the icon last keeps it cleanly
@@ -9410,14 +9328,11 @@ DWORD WINAPI WorkerThread(LPVOID) {
         // ================================================================
         //  TIME-BASED FRAME DELTA
         // ================================================================
-        DWORD frameNow = GetTickCount();
-        if (g_lastFrameTime == 0) g_lastFrameTime = frameNow;
-        g_frameDeltaMs = QpcFrameDeltaMs();  // sub-ms delta (was GetTickCount ~15ms quantised)
+        g_frameDeltaMs = QpcFrameDeltaMs();
         if (g_frameDeltaMs < 1.f) g_frameDeltaMs = 1.f;
 
         bool snapAnimations = (g_frameDeltaMs > FRAME_DELTA_SNAP_MS);
-        if (g_frameDeltaMs > 33.f) g_frameDeltaMs = 33.f;  // Cap for normal 30+ fps
-        g_lastFrameTime = frameNow;
+        if (g_frameDeltaMs > 33.f) g_frameDeltaMs = 33.f;
 
         // ================================================================
         //  PER-ICON ANIMATION (opacity fade + momentum position)
@@ -9483,9 +9398,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
                 if (app.isNew && fabsf(diff) < 2.0f && app.opacity >= 0.9f)
                     app.isNew = false;
 
-                // Hover magnification & neighbour spread disabled (crisp fixed ICON_SIZE).
-                app.hoverScale  = 1.0f;
-                app.hoverShiftX = 0.f;
 
                 // Smooth QPC-driven color crossfade (~260 ms)
                 if (app.prevCachedBmp && app.colorAnimProgress < 1.0f) {
@@ -9558,10 +9470,9 @@ DWORD WINAPI WorkerThread(LPVOID) {
         // recompile/reload and made the first "Compile" click(s) appear to do
         // nothing. WaitForSingleObject returns immediately once g_exitEvent is
         // signalled, so the thread exits within ~1 ms of teardown starting.
-        //
-        // BOOT: never fall to the slow 50 ms idle cadence until geometry is
+                // BOOT: never fall to the slow 50 ms idle cadence until geometry is
         // locked (STATE_STABLE). Otherwise the worker "goes to sleep" mid-init
-        // -- g_idleFrames climbs past 10 while still in STATE_BOOT/STABILIZING,
+        // g_idleFrames climbs past 10 while still in STATE_BOOT/STABILIZING,
         // the loop drops to 50 ms polls, and the dock stalls before it has
         // reached a stable width and painted its first correct frame. Staying at
         // the fast cadence during boot lets initialisation run straight through
@@ -9588,7 +9499,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
         }
     }
 
-    // v2.5.4 (this-round Issue 1): the lock-glow window is no longer created OR
+    // the lock-glow window is no longer created OR
     // destroyed on the worker. It is now a UI-thread-owned layer (prewarmed in
     // PrewarmDragEffectWindows, torn down in UiThreadProc next to the tether/vanish
     // windows); the worker only PRESENTS into it. Its DIB is freed in
@@ -9738,52 +9649,52 @@ static void UpdateRunningState() {
 //  REORDER HELPERS
 // ============================================================
 static int CalculateReorderSlot(POINT screenPt, int n) {
-    // Map screen X to overlay-local X and find the closest slot midpoint.
-    // CALLER MUST HOLD g_cs: this indexes g_pinnedApps[i].type and calls
-    // GetIconRectLocal (which also reads g_pinnedApps), so a concurrent PinApp
-    // push_back on the UI thread could reallocate the vector mid-read. (The old
-    // "safe to call outside CS" note was wrong -- it reads more than g_dockCurrentX.)
+    // Map screen X to overlay-local X and return an insert-before index in [0..n].
+    // CALLER MUST HOLD g_cs.
     if (n <= 1) return 0;
     int localX = screenPt.x - (int)g_dockCurrentX;
     PinType reorderType = g_draggedPinType;
-    int fallback = g_reorderSrcIdx;
+    int lastSameType = -1;
     for (int i = 0; i < n; ++i) {
         if (i >= (int)g_pinnedApps.size() || g_pinnedApps[i].type != reorderType) continue;
         RECT r   = GetIconRectLocal(i, n);
         int  mid = (r.left + r.right) / 2;
         if (localX < mid) return i;
-        fallback = i;
+        lastSameType = i;
     }
-    return fallback;
+    return (lastSameType >= 0) ? (lastSameType + 1) : g_reorderSrcIdx;
 }
 
 static void UpdateReorderPositions() {
-    // Assigns targetX to every icon as if g_reorderSrcIdx is placed at
-    // g_reorderTargetIdx and all others shift around it.
+    // Assigns targetX to every icon as if g_reorderSrcIdx is inserted before
+    // g_reorderTargetIdx so neighbours visibly slide aside during drag.
     if (g_reorderSrcIdx < 0 || g_reorderTargetIdx < 0) return;
     EnterCriticalSection(&g_cs);
     int n   = (int)g_pinnedApps.size();
     int src = g_reorderSrcIdx;
     int dst = g_reorderTargetIdx;
-    if (src >= 0 && src < n && dst >= 0 && dst < n &&
-        g_pinnedApps[src].type == g_pinnedApps[dst].type) {
+    if (src >= 0 && src < n && dst >= 0 && dst <= n) {
         PinType type = g_pinnedApps[src].type;
         std::vector<int> section;
         for (int i = 0; i < n; ++i)
             if (g_pinnedApps[i].type == type) section.push_back(i);
 
+        std::vector<int> origSlots = section;
         auto srcIt = std::find(section.begin(), section.end(), src);
-        auto dstIt = std::find(section.begin(), section.end(), dst);
-        if (srcIt != section.end() && dstIt != section.end()) {
+        if (srcIt != section.end()) {
             int moving = *srcIt;
             section.erase(srcIt);
-            dstIt = std::find(section.begin(), section.end(), dst);
-            if (dstIt == section.end()) section.push_back(moving);
-            else section.insert(dstIt, moving);
+            if (dst >= n || g_pinnedApps[dst].type != type) {
+                section.push_back(moving);
+            } else {
+                auto dstIt = std::find(section.begin(), section.end(), dst);
+                if (dstIt == section.end()) section.push_back(moving);
+                else section.insert(dstIt, moving);
+            }
 
-            for (int iconIdx : section) {
-                RECT r = GetIconRectLocal(iconIdx, n);
-                g_pinnedApps[iconIdx].targetX = (float)r.left;
+            for (size_t pos = 0; pos < section.size() && pos < origSlots.size(); ++pos) {
+                RECT r = GetIconRectLocal(origSlots[pos], n);
+                g_pinnedApps[section[pos]].targetX = (float)r.left;
             }
         }
     }
@@ -9791,8 +9702,7 @@ static void UpdateReorderPositions() {
 }
 
 static void CommitReorder() {
-    // Moves the reorder-source icon to the target slot, saves, and snaps positions.
-    // Production-safe: all state cleared even on early exit.
+    // Moves the reorder-source icon to the insert-before target slot, saves, and snaps positions.
     int src = g_reorderSrcIdx;
     int dst = g_reorderTargetIdx;
     g_reorderSrcIdx    = -1;
@@ -9800,16 +9710,15 @@ static void CommitReorder() {
     if (src < 0 || dst < 0 || src == dst || !g_csInitialized) return;
     EnterCriticalSection(&g_cs);
     int n = (int)g_pinnedApps.size();
-    if (src < n && dst < n && g_pinnedApps[src].type == g_pinnedApps[dst].type) {
+    if (src < n && dst <= n) {
+        int insertAt = (src < dst) ? (dst - 1) : dst;
+        if (insertAt == src) {
+            LeaveCriticalSection(&g_cs);
+            return;
+        }
         PinnedApp item = g_pinnedApps[src];
         g_pinnedApps.erase(g_pinnedApps.begin() + src);
-        // After erasing src, insert at dst directly.
-        // When src < dst the erase shifts all subsequent elements left by one,
-        // but std::vector::insert semantics mean insert(dst, x) still places x
-        // at display slot dst  --  verified by tracing UpdateReorderPositions.
-        // The old "(src<dst)?dst-1:dst" formula was wrong and produced off-by-one
-        // placement whenever the dragged icon moved rightward.
-        int insertAt = std::max(0, std::min(dst, (int)g_pinnedApps.size()));
+        insertAt = std::max(0, std::min(insertAt, (int)g_pinnedApps.size()));
         g_pinnedApps.insert(g_pinnedApps.begin() + insertAt, item);
         int curPopIdx = g_wsPopupPinIdx.load();
         if (curPopIdx == src) {
@@ -9829,8 +9738,6 @@ static void CommitReorder() {
             // layout is stable and never overshoots/jitters after the drop.
             g_pinnedApps[i].velocityX = 0.f;
             // Clear hover magnification/spread so the committed layout is clean.
-            g_pinnedApps[i].hoverScale  = 1.0f;
-            g_pinnedApps[i].hoverShiftX = 0.f;
         }
     }
     LeaveCriticalSection(&g_cs);
@@ -9845,7 +9752,7 @@ static void CommitReorder() {
 // even if Windhawk does not guarantee calling WhTool_ModUninit after a FALSE return.
 void WhTool_ModUninit();
 
-// FIX-C1 (#1/#2/#8): the dedicated UI thread. It creates every top-level window
+// the dedicated UI thread. It creates every top-level window
 // (input owner, overlay, ghost, the pre-warmed tether/vanish layers),
 // registers the pin hotkey (inside CreateOverlayWindow),
 // then runs a real GetMessageW/DispatchMessageW loop so WM_PAINT / WM_MOUSE* /
@@ -9858,13 +9765,13 @@ void WhTool_ModUninit();
 // ============================================================
 //  UNIFIED 4-EDGE WORKSPACE PILL, PARTIAL-CIRCLE CENTER-'+' ARC &
 //  COUPLED BORDERLESS CUSTOMIZATION THUMBNAIL ENGINE
-//  - Left Taskbar Quick Pin Dock stays 100% untouched as shared
-//  - Renders on frame 0 (even when registry settings are not yet saved)
+//  Left Taskbar Quick Pin Dock stays 100% untouched as shared
+//  Renders on frame 0 (even when registry settings are not yet saved)
 //    and automatically restores after Snipping Tool (Win+Shift+S) or fullscreen
-//  - 100% Borderless Fill-Only UI (zero outer bezel, zero 'x' buttons, zero Pen strokes)
-//  - True Partial-Circle Arc with '+' fixed at center (theta = 0)
-//  - Coupled/Nested Arc + Schematic Thumbnail state (open, hold, and close together)
-//  - Double-Click Customization Workflow:
+//  Borderless Fill-Only UI
+//  True Partial-Circle Arc with '+' fixed at center (theta = 0)
+//  Coupled/Nested Arc + Schematic Thumbnail state (open, hold, and close together)
+//  Double-Click Customization Workflow:
 //      * Double-click an Arc Card -> opens & holds the Schematic Thumbnail in Customize Mode
 //      * Double-click an app block in Schematic Thumbnail (or double-click an Arc Card when held) ->
 //        deletes/unpins that item and auto-reflows remaining apps to 100%
@@ -9892,7 +9799,7 @@ static const int HOTKEY_EWP_TRIGGER      = 0x2800;
 
 enum EwpEdge { EWP_EDGE_TOP = 0, EWP_EDGE_BOTTOM = 1, EWP_EDGE_LEFT = 2, EWP_EDGE_RIGHT = 3 };
 enum EwpDockState { EWP_DOCK_CLOSED = 0, EWP_DOCK_OPENING, EWP_DOCK_OPEN_HOVER, EWP_DOCK_OPEN_HOLD, EWP_DOCK_CLOSING };
-enum EwpTargetKind { EWP_KIND_EXE = 0, EWP_KIND_UWP = 1, EWP_KIND_PWA = 2, EWP_KIND_URL = 3 };
+enum EwpTargetKind { EWP_KIND_EXE = 0, EWP_KIND_UWP = 1, EWP_KIND_URL = 3 };
 enum EwpDuplicatePolicy { EWP_DUP_IGNORE = 0, EWP_DUP_UPDATE = 1, EWP_DUP_ALLOW = 2 };
 enum EwpCaptureFilterMode { EWP_CAP_EDGE_TOUCHING = 0, EWP_CAP_ALL_VISIBLE = 1 };
 
@@ -9921,6 +9828,7 @@ struct EwpPendingRestore {
     EwpAppLayoutEntry entry;
     RECT              targetWorkRect = {};
     DWORD             expireTick = 0;
+    DWORD             launchedPid = 0;
     bool              matched = false;
 };
 
@@ -9952,15 +9860,14 @@ static const int            g_ewpPreviewSplitGap    = 8;   // Fixed 8px split ga
 static int                  g_ewpLingerMs           = 280;
 static int                  g_ewpProxPx             = 48;
 static EwpCaptureFilterMode g_ewpCaptureFilter      = EWP_CAP_EDGE_TOUCHING;
-static bool                 g_ewpAllowDuplicates    = false;
 static EwpDuplicatePolicy   g_ewpDuplicatePolicy    = EWP_DUP_IGNORE;
 static int                  g_ewpMaxApps            = 8;
 static bool                 g_ewpIgnoreOccluded     = true;
-static bool                 g_ewpCaptureUrl         = true;
+static bool                 g_ewpCaptureUrl         = false;
 static bool                 g_ewpReuseOpen          = true;
 static std::vector<std::wstring> g_ewpUserExcluded;
-static std::wstring         g_ewpToggleHk           = L"Alt+W";
-static std::wstring         g_ewpCaptureHk          = L"Alt+Shift+W";
+static std::wstring         g_ewpToggleHk           = L"none";
+static std::wstring         g_ewpCaptureHk          = L"none";
 
 static EwpEdge              g_ewpCurEdge     = EWP_EDGE_LEFT;
 static float                g_ewpOffsetRatio = 0.5f;
@@ -9974,7 +9881,6 @@ HWND                        g_ewpPreviewWnd  = NULL;
 HWND                        g_ewpDropZoneWnd = NULL;
 static HWINEVENTHOOK        g_ewpMoveHook    = NULL;
 static HWINEVENTHOOK        g_ewpShowHook    = NULL;
-static IDropTarget*         g_ewpDropTarget  = NULL;
 
 // Coupled/Nested QPC animation state shared by BOTH the Arc Carousel and Schematic Thumbnail
 static EwpDockState         g_ewpDockState    = EWP_DOCK_CLOSED;
@@ -9983,8 +9889,8 @@ static float                g_ewpAnimProg     = 0.0f;
 static ULONGLONG            g_ewpLingerUntil  = 0;
 
 // Schematic Thumbnail state:
-// - g_ewpPreviewOpen: true whenever Thumbnail Preview is visible (either Read-Only on hover or Customize Mode on right-click)
-// - g_ewpPreviewEditMode: false = Read-Only hover preview; true = Locked Customize Mode (single/double right-click)
+// g_ewpPreviewOpen: true whenever Thumbnail Preview is visible (either Read-Only on hover or Customize Mode on right-click)
+// g_ewpPreviewEditMode: false = Read-Only hover preview; true = Locked Customize Mode (single/double right-click)
 static bool                 g_ewpPreviewOpen      = false;
 static bool                 g_ewpPreviewEditMode  = false;
 int                         g_ewpPrevActiveWsIdx  = -1;
@@ -10038,8 +9944,8 @@ static int                  g_ewpPrevW              = 0;
 static int                  g_ewpPrevH              = 0;
 
 static std::atomic<bool>    g_ewpMoveSizeActive{false};
-static bool                 g_ewpOleActive      = false;
 static bool                 g_ewpDropVis        = false;
+static ULONGLONG            g_ewpDropDwellStart = 0;
 static std::vector<EwpPendingRestore> g_ewpPendingRestores;
 static HANDLE               g_ewpCapThread      = NULL;
 static std::atomic<bool>    g_ewpCapBusy{false};
@@ -10069,28 +9975,6 @@ bool EwpPtInAnyWindow(POINT pt) {
         }
     }
     return false;
-}
-
-static BOOL CALLBACK EwpPurgeDuplicateEnumProc(HWND hwnd, LPARAM) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == GetCurrentProcessId()) return TRUE;
-    wchar_t cls[128] = {};
-    if (!GetClassNameW(hwnd, cls, 127)) return TRUE;
-    if (wcscmp(cls, EWP_PILL_CLASS) == 0 ||
-        wcscmp(cls, EWP_DOCK_CLASS) == 0 ||
-        wcscmp(cls, EWP_PREVIEW_CLASS) == 0 ||
-        wcscmp(cls, EWP_DROPZONE_CLASS) == 0 ||
-        wcsncmp(cls, L"EdgeWorkspacePin", 16) == 0 ||
-        wcsncmp(cls, L"WindhawkEdgePill", 16) == 0) {
-        ShowWindow(hwnd, SW_HIDE);
-        PostMessageW(hwnd, WM_CLOSE, 0, 0);
-    }
-    return TRUE;
-}
-
-static void EwpPurgeDuplicatePillWindows() {
-    EnumWindows(EwpPurgeDuplicateEnumProc, 0);
 }
 
 static float EwpDpiScale(HWND hwnd) {
@@ -10379,33 +10263,83 @@ static void EwpReflowWorkspaceRatios(EwpLayoutWorkspace& ws, int primaryAppIdx =
 }
 
 static void EwpSaveWorkspaces() {
-    std::wstringstream ss;
+    if (g_saveCsInit) EnterCriticalSection(&g_saveCs);
+
+    std::vector<EwpLayoutWorkspace> snap;
     if (g_csInitialized) EnterCriticalSection(&g_cs);
-    for (const auto& ws : g_ewpWorkspaces) {
+    snap = g_ewpWorkspaces;
+    if (g_csInitialized) LeaveCriticalSection(&g_cs);
+
+    int prevWsCount = Wh_GetIntValue(L"ewp_ws_count", 0);
+    bool allOk = true;
+    int writtenWs = 0;
+
+    for (const auto& ws : snap) {
         if (ws.apps.empty()) continue;
-        ss << EwpEscape(ws.id) << L"|" << EwpEscape(ws.name) << L"|";
-        for (size_t i = 0; i < ws.apps.size(); ++i) {
-            if (i > 0) ss << L";";
-            const auto& a = ws.apps[i];
-            ss << (int)a.kind << L"|" << EwpEscape(a.exePath) << L"|" << EwpEscape(a.aumid) << L"|"
-               << EwpEscape(a.activeUrl) << L"|" << EwpEscape(a.windowClass) << L"|"
-               << EwpEscape(a.displayName) << L"|"
+        std::wstring wsPrefix = L"ewp_ws_" + std::to_wstring(writtenWs) + L"_";
+        int prevAppCount = Wh_GetIntValue((wsPrefix + L"appCount").c_str(), 0);
+
+        std::wstring meta = EwpEscape(SanitizeSingleLineValue(ws.id, 128)) + L"|" +
+                            EwpEscape(SanitizeSingleLineValue(ws.name, 128));
+        if (!Wh_SetStringValue((wsPrefix + L"meta").c_str(), meta.c_str())) {
+            allOk = false;
+            break;
+        }
+
+        int writtenApps = 0;
+        for (size_t j = 0; j < ws.apps.size() && writtenApps < 12; ++j) {
+            const auto& a = ws.apps[j];
+            std::wstringstream as;
+            as << (int)a.kind << L"|"
+               << EwpEscape(SanitizeSingleLineValue(a.exePath, 512)) << L"|"
+               << EwpEscape(SanitizeSingleLineValue(a.aumid, 256)) << L"|"
+               << EwpEscape(SanitizeSingleLineValue(a.activeUrl, 2048)) << L"|"
+               << EwpEscape(SanitizeSingleLineValue(a.windowClass, 128)) << L"|"
+               << EwpEscape(SanitizeSingleLineValue(a.displayName, 128)) << L"|"
                << (int)lroundf(EwpClamp01(a.nx) * 10000.0f) << L"|"
                << (int)lroundf(EwpClamp01(a.ny) * 10000.0f) << L"|"
                << (int)lroundf(EwpClamp01(a.nw) * 10000.0f) << L"|"
                << (int)lroundf(EwpClamp01(a.nh) * 10000.0f) << L"|"
                << (a.isMaximized ? 1 : 0);
+            std::wstring appStr = as.str();
+            if (!Wh_SetStringValue((wsPrefix + L"app_" + std::to_wstring(writtenApps)).c_str(), appStr.c_str())) {
+                allOk = false;
+                break;
+            }
+            ++writtenApps;
         }
-        ss << L"\n";
+        if (!allOk) break;
+
+        if (!Wh_SetIntValue((wsPrefix + L"appCount").c_str(), writtenApps)) {
+            allOk = false;
+            break;
+        }
+        for (int j = writtenApps; j < prevAppCount && j < 16; ++j) {
+            Wh_DeleteValue((wsPrefix + L"app_" + std::to_wstring(j)).c_str());
+        }
+        ++writtenWs;
     }
-    if (g_csInitialized) LeaveCriticalSection(&g_cs);
-    std::wstring blob = ss.str();
-    Wh_SetIntValue(L"ewp_ws_len", (int)blob.size());
-    Wh_SetStringValue(L"ewp_ws_v1", blob.c_str());
+
+    if (allOk) {
+        Wh_SetIntValue(L"ewp_ws_count", writtenWs);
+        for (int i = writtenWs; i < prevWsCount && i < 64; ++i) {
+            std::wstring wsPrefix = L"ewp_ws_" + std::to_wstring(i) + L"_";
+            int oldAppCount = Wh_GetIntValue((wsPrefix + L"appCount").c_str(), 0);
+            for (int j = 0; j < oldAppCount && j < 16; ++j) {
+                Wh_DeleteValue((wsPrefix + L"app_" + std::to_wstring(j)).c_str());
+            }
+            Wh_DeleteValue((wsPrefix + L"appCount").c_str());
+            Wh_DeleteValue((wsPrefix + L"meta").c_str());
+        }
+        Wh_DeleteValue(L"ewp_ws_v1");
+        Wh_DeleteValue(L"ewp_ws_len");
+    }
+
+    if (g_saveCsInit) LeaveCriticalSection(&g_saveCs);
 }
 
 static void EwpDeduplicateWorkspacesInMemory() {
-    if (g_ewpAllowDuplicates || g_ewpDuplicatePolicy == EWP_DUP_ALLOW) return;
+    if (g_ewpDuplicatePolicy == EWP_DUP_ALLOW) return;
     std::vector<std::wstring> seenSigs;
     for (size_t i = 0; i < g_ewpWorkspaces.size();) {
         std::wstring sig = EwpMakeWorkspaceSignature(g_ewpWorkspaces[i]);
@@ -10423,36 +10357,36 @@ static void EwpDeduplicateWorkspacesInMemory() {
 }
 
 static void EwpLoadWorkspaces() {
-    int len = Wh_GetIntValue(L"ewp_ws_len", 0);
-    if (len <= 0 || len > 262144) return;
-    std::vector<wchar_t> buf((size_t)len + 2, 0);
-    if (Wh_GetStringValue(L"ewp_ws_v1", buf.data(), buf.size()) == 0) return;
+    int wsCount = Wh_GetIntValue(L"ewp_ws_count", 0);
+    if (wsCount <= 0) return;
+    if (wsCount > 64) wsCount = 64;
 
     std::vector<EwpLayoutWorkspace> list;
-    std::wstringstream ss(buf.data());
-    std::wstring line;
+    std::vector<wchar_t> metaBuf(512, 0);
+    std::vector<wchar_t> appBuf(8192, 0);
     bool anyNormalized = false;
-    while (std::getline(ss, line, L'\n')) {
-        line = EwpTrim(line);
-        if (line.empty()) continue;
-        auto cols = EwpSplit(line, L'|');
-        if (cols.size() < 3) continue;
+
+    for (int i = 0; i < wsCount; ++i) {
+        std::wstring wsPrefix = L"ewp_ws_" + std::to_wstring(i) + L"_";
+        int appCount = Wh_GetIntValue((wsPrefix + L"appCount").c_str(), 0);
+        if (appCount <= 0) continue;
+        if (appCount > g_ewpMaxApps) appCount = g_ewpMaxApps;
+
         EwpLayoutWorkspace ws;
-        ws.id = EwpUnescape(cols[0]);
-        ws.name = EwpUnescape(cols[1]);
-        size_t b1 = 0, b2 = 0;
-        for (size_t i = 0; i < line.size(); ++i) {
-            if (line[i] == L'\\' && i + 1 < line.size()) { ++i; continue; }
-            if (line[i] == L'|') { b1 = i; break; }
+        metaBuf[0] = L'\0';
+        if (Wh_GetStringValue((wsPrefix + L"meta").c_str(), metaBuf.data(), metaBuf.size()) > 0) {
+            auto cols = EwpSplit(metaBuf.data(), L'|');
+            if (cols.size() >= 1) ws.id = EwpUnescape(cols[0]);
+            if (cols.size() >= 2) ws.name = EwpUnescape(cols[1]);
         }
-        for (size_t i = b1 + 1; i < line.size(); ++i) {
-            if (line[i] == L'\\' && i + 1 < line.size()) { ++i; continue; }
-            if (line[i] == L'|') { b2 = i; break; }
-        }
-        if (!b2 || b2 + 1 >= line.size()) continue;
-        for (const auto& tok : EwpSplit(line.substr(b2 + 1), L';')) {
-            if ((int)ws.apps.size() >= g_ewpMaxApps) break;
-            auto f = EwpSplit(tok, L'|');
+        if (ws.id.empty()) ws.id = MakeWorkspaceId();
+
+        for (int j = 0; j < appCount; ++j) {
+            appBuf[0] = L'\0';
+            if (Wh_GetStringValue((wsPrefix + L"app_" + std::to_wstring(j)).c_str(),
+                                  appBuf.data(), appBuf.size()) == 0 || appBuf[0] == L'\0')
+                continue;
+            auto f = EwpSplit(appBuf.data(), L'|');
             if (f.size() < 11) continue;
             EwpAppLayoutEntry a;
             a.kind = (EwpTargetKind)std::max(0, std::min(3, _wtoi(f[0].c_str())));
@@ -10468,6 +10402,7 @@ static void EwpLoadWorkspaces() {
             a.isMaximized = (_wtoi(f[10].c_str()) != 0);
             if (!a.exePath.empty() || !a.aumid.empty()) ws.apps.push_back(std::move(a));
         }
+
         if (!ws.apps.empty()) {
             if (EwpHasOverlappingApps(ws)) {
                 EwpNormalizeNonOverlappingLayout(ws, true);
@@ -10476,6 +10411,7 @@ static void EwpLoadWorkspaces() {
             list.push_back(std::move(ws));
         }
     }
+
     bool changed = anyNormalized;
     if (g_csInitialized) {
         EnterCriticalSection(&g_cs);
@@ -10485,8 +10421,10 @@ static void EwpLoadWorkspaces() {
         if (g_ewpWorkspaces.size() != before) changed = true;
         LeaveCriticalSection(&g_cs);
     }
-    if (changed) ++g_ewpDockGeneration;
-    EwpSaveWorkspaces();
+    if (changed) {
+        ++g_ewpDockGeneration;
+        EwpSaveWorkspaces();
+    }
 }
 
 static MONITORINFO EwpGetMonitorInfo() {
@@ -10873,7 +10811,7 @@ static void EwpRenderHoverDock() {
     if (!g_ewpDockWnd || !IsWindow(g_ewpDockWnd)) return;
     if (!g_ewpEnabled.load() || g_ewpDockState == EWP_DOCK_CLOSED ||
         (g_fullscreenActive && FULLSCREEN_BEHAVIOR == 0)) {
-        ShowWindow(g_ewpDockWnd, SW_HIDE);
+        if (IsWindowVisible(g_ewpDockWnd)) ShowWindow(g_ewpDockWnd, SW_HIDE);
         if (g_ewpPreviewWnd && IsWindowVisible(g_ewpPreviewWnd))
             ShowWindow(g_ewpPreviewWnd, SW_HIDE);
         return;
@@ -10967,7 +10905,7 @@ static void EwpRenderHoverDock() {
 
 // ============================================================
 //  COUPLED BORDERLESS SCHEMATIC THUMBNAIL (CUSTOMIZATION CANVAS)
-//  - Zero 'x' buttons anywhere:
+//  Interactive workspace customization:
 //      * Double-clicking any app block inside the Schematic Thumbnail removes/unpins
 //        that item and auto-reflows remaining apps to 100%
 //      * Clicking the borderless '+' badge in the bottom-right corner of the
@@ -11508,50 +11446,85 @@ static BOOL CALLBACK EwpEnumCaptureProc(HWND hwnd, LPARAM lp) {
     return TRUE;
 }
 
+static std::wstring EwpSanitizeBrowserUrl(const std::wstring& raw) {
+    std::wstring cand = EwpTrim(raw);
+    if (cand.empty() || cand.size() > 2048) return L"";
+    if (cand.rfind(L"http://", 0) != 0 && cand.rfind(L"https://", 0) != 0)
+        return L"";
+    for (wchar_t ch : cand) {
+        if (ch <= 0x1F || ch == 0x7F || iswspace(ch) || ch == L'"')
+            return L"";
+    }
+    return cand;
+}
+
 static std::wstring EwpReadBrowserUrl(HWND hwnd, IUIAutomation* uia) {
     if (!hwnd || !uia) return L"";
     IUIAutomationElement* root = NULL;
     if (FAILED(uia->ElementFromHandle(hwnd, &root)) || !root) return L"";
-    VARIANT v; VariantInit(&v); v.vt = VT_I4; v.lVal = UIA_EditControlTypeId;
-    IUIAutomationCondition* cond = NULL;
+
     std::wstring url;
-    if (SUCCEEDED(uia->CreatePropertyCondition(UIA_ControlTypePropertyId, v, &cond)) && cond) {
-        IUIAutomationElementArray* arr = NULL;
-        if (SUCCEEDED(root->FindAll(TreeScope_Descendants, cond, &arr)) && arr) {
-            int len = 0; arr->get_Length(&len);
-            for (int i = 0; i < std::min(len, 12); ++i) {
-                IUIAutomationElement* el = NULL;
-                if (SUCCEEDED(arr->GetElement(i, &el)) && el) {
-                    IUIAutomationValuePattern* vp = NULL;
-                    if (SUCCEEDED(el->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&vp))) && vp) {
-                        BSTR bv = NULL;
-                        if (SUCCEEDED(vp->get_CurrentValue(&bv)) && bv) {
-                            std::wstring cand = EwpTrim(bv);
-                            SysFreeString(bv);
-                            if (!cand.empty() && cand.find(L' ') == std::wstring::npos &&
-                                (cand.rfind(L"http", 0) == 0 || cand.find(L'.') != std::wstring::npos)) {
-                                if (cand.rfind(L"http://", 0) != 0 && cand.rfind(L"https://", 0) != 0)
-                                    cand = L"https://" + cand;
-                                url = cand;
-                                vp->Release(); el->Release(); break;
+    VARIANT vTb; VariantInit(&vTb); vTb.vt = VT_I4; vTb.lVal = UIA_ToolBarControlTypeId;
+    IUIAutomationCondition* tbCond = NULL;
+    if (SUCCEEDED(uia->CreatePropertyCondition(UIA_ControlTypePropertyId, vTb, &tbCond)) && tbCond) {
+        IUIAutomationElementArray* toolbars = NULL;
+        if (SUCCEEDED(root->FindAll(TreeScope_Descendants, tbCond, &toolbars)) && toolbars) {
+            VARIANT vEdit; VariantInit(&vEdit); vEdit.vt = VT_I4; vEdit.lVal = UIA_EditControlTypeId;
+            IUIAutomationCondition* editCond = NULL;
+            if (SUCCEEDED(uia->CreatePropertyCondition(UIA_ControlTypePropertyId, vEdit, &editCond)) && editCond) {
+                int tbLen = 0;
+                toolbars->get_Length(&tbLen);
+                for (int i = 0; i < std::min(tbLen, 6) && url.empty(); ++i) {
+                    IUIAutomationElement* toolbar = NULL;
+                    if (FAILED(toolbars->GetElement(i, &toolbar)) || !toolbar) continue;
+                    IUIAutomationElement* addrBar = NULL;
+                    if (SUCCEEDED(toolbar->FindFirst(TreeScope_Descendants, editCond, &addrBar)) && addrBar) {
+                        IUIAutomationValuePattern* vp = NULL;
+                        if (SUCCEEDED(addrBar->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&vp))) && vp) {
+                            BSTR bv = NULL;
+                            if (SUCCEEDED(vp->get_CurrentValue(&bv)) && bv) {
+                                std::wstring raw = EwpTrim(bv);
+                                SysFreeString(bv);
+                                if (raw.rfind(L"http://", 0) != 0 && raw.rfind(L"https://", 0) != 0 &&
+                                    raw.find(L':') == std::wstring::npos &&
+                                    raw.find(L'.') != std::wstring::npos &&
+                                    raw.find(L'@') == std::wstring::npos) {
+                                    raw = L"https://" + raw;
+                                }
+                                url = EwpSanitizeBrowserUrl(raw);
                             }
+                            vp->Release();
                         }
-                        vp->Release();
+                        addrBar->Release();
                     }
-                    el->Release();
+                    toolbar->Release();
                 }
+                editCond->Release();
             }
-            arr->Release();
+            VariantClear(&vEdit);
+            toolbars->Release();
         }
-        cond->Release();
+        tbCond->Release();
     }
-    VariantClear(&v);
+    VariantClear(&vTb);
     root->Release();
     return url;
 }
 
+struct EwpCaptureParams {
+    HMONITOR             mon = NULL;
+    bool                 captureUrl = false;
+    int                  maxApps = 8;
+    bool                 ignoreOccluded = true;
+    EwpCaptureFilterMode captureFilter = EWP_CAP_EDGE_TOUCHING;
+};
+
 static DWORD WINAPI EwpCaptureWorkerThread(LPVOID param) {
-    HMONITOR mon = (HMONITOR)param;
+    EwpCaptureParams* p = (EwpCaptureParams*)param;
+    EwpCaptureParams cfg = p ? *p : EwpCaptureParams{};
+    delete p;
+
+    HMONITOR mon = cfg.mon;
     HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     MONITORINFO mi = { sizeof(mi) };
     if (!GetMonitorInfoW(mon, &mi)) {
@@ -11562,7 +11535,7 @@ static DWORD WINAPI EwpCaptureWorkerThread(LPVOID param) {
     EnumWindows(EwpEnumCaptureProc, (LPARAM)&ctx);
 
     IUIAutomation* uia = NULL;
-    if (g_ewpCaptureUrl) CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&uia));
+    if (cfg.captureUrl) CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&uia));
 
     auto* outWs = new EwpLayoutWorkspace();
     int workW = std::max<LONG>(1, mi.rcWork.right - mi.rcWork.left);
@@ -11572,11 +11545,11 @@ static DWORD WINAPI EwpCaptureWorkerThread(LPVOID param) {
         outWs->apps.clear();
         std::vector<RECT> occluders;
         for (const auto& w : ctx.list) {
-            if ((int)outWs->apps.size() >= g_ewpMaxApps) break;
+            if ((int)outWs->apps.size() >= cfg.maxApps) break;
             RECT clip = {};
             if (!IntersectRect(&clip, &w.frame, &mi.rcWork)) continue;
             float visibleFrac = EwpUncoveredFraction(clip, occluders);
-            if (g_ewpIgnoreOccluded && visibleFrac < 0.14f) continue;
+            if (cfg.ignoreOccluded && visibleFrac < 0.14f) continue;
             occluders.push_back(clip);
 
             if (requireEdgeTouching && !EwpIsEdgeTouchingWindow(clip, mi.rcWork, w.maxed))
@@ -11603,7 +11576,7 @@ static DWORD WINAPI EwpCaptureWorkerThread(LPVOID param) {
 
             if (!w.aumid.empty() && w.exe.find(L"WindowsApps") != std::wstring::npos) {
                 e.kind = EWP_KIND_UWP;
-            } else if (g_ewpCaptureUrl && uia && EwpIsBrowserExe(w.exe) && w.aumid.find(L"PWA") == std::wstring::npos) {
+            } else if (cfg.captureUrl && uia && EwpIsBrowserExe(w.exe) && w.aumid.find(L"PWA") == std::wstring::npos) {
                 std::wstring url = EwpReadBrowserUrl(w.hwnd, uia);
                 if (!url.empty()) { e.kind = EWP_KIND_URL; e.activeUrl = url; }
             }
@@ -11611,7 +11584,7 @@ static DWORD WINAPI EwpCaptureWorkerThread(LPVOID param) {
         }
     };
 
-    bool filterEdges = (g_ewpCaptureFilter == EWP_CAP_EDGE_TOUCHING);
+    bool filterEdges = (cfg.captureFilter == EWP_CAP_EDGE_TOUCHING);
     collectPass(filterEdges);
     if (outWs->apps.empty() && filterEdges) {
         collectPass(false);
@@ -11633,13 +11606,15 @@ static DWORD WINAPI EwpCaptureWorkerThread(LPVOID param) {
 }
 
 static void EwpTriggerCapture(int appendToWsIdx = -1) {
-    if (g_ewpCapBusy.exchange(true)) return;
+    if (g_launchWorkspaceStop.load() || g_ewpCapBusy.exchange(true)) return;
     g_ewpAppendTargetWs = appendToWsIdx;
     POINT pt = {}; GetCursorPos(&pt);
     HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
     if (g_ewpCapThread) { WaitForSingleObject(g_ewpCapThread, INFINITE); CloseHandle(g_ewpCapThread); g_ewpCapThread = NULL; }
-    g_ewpCapThread = CreateThread(NULL, 0, EwpCaptureWorkerThread, (LPVOID)mon, 0, NULL);
+    auto* capParams = new EwpCaptureParams{ mon, g_ewpCaptureUrl, g_ewpMaxApps, g_ewpIgnoreOccluded, g_ewpCaptureFilter };
+    g_ewpCapThread = CreateThread(NULL, 0, EwpCaptureWorkerThread, (LPVOID)capParams, 0, NULL);
     if (!g_ewpCapThread) {
+        delete capParams;
         g_ewpAppendTargetWs = -1;
         g_ewpCapBusy.store(false);
     }
@@ -11706,23 +11681,42 @@ static void EwpRestoreWorkspaceSlot(int idx) {
         if (running) {
             EwpPlaceWindowGuarded(running, a, mi.rcWork);
         } else {
-            g_ewpPendingRestores.push_back({ a, mi.rcWork, expire, false });
-            if ((a.kind == EWP_KIND_UWP || a.kind == EWP_KIND_PWA) && !a.aumid.empty()) {
+            DWORD launchedPid = 0;
+            bool launched = false;
+            if (a.kind == EWP_KIND_UWP && !a.aumid.empty()) {
                 std::wstring st = L"shell:AppsFolder\\" + a.aumid;
                 SHELLEXECUTEINFOW sei = { sizeof(sei) };
-                sei.fMask = SEE_MASK_FLAG_NO_UI; sei.lpVerb = L"open"; sei.lpFile = st.c_str(); sei.nShow = SW_SHOWNORMAL;
-                ShellExecuteExW(&sei);
-            } else if (!a.exePath.empty() && GetFileAttributesW(a.exePath.c_str()) != INVALID_FILE_ATTRIBUTES) {
-                std::wstring args = (a.kind == EWP_KIND_URL && !a.activeUrl.empty())
-                                        ? (L"--new-window \"" + a.activeUrl + L"\"") : L"";
-                SHELLEXECUTEINFOW sei = { sizeof(sei) };
-                sei.fMask = SEE_MASK_FLAG_NO_UI; sei.lpVerb = L"open"; sei.lpFile = a.exePath.c_str();
-                sei.lpParameters = args.empty() ? NULL : args.c_str();
-                sei.nShow = SW_SHOWNORMAL;
-                if (!ShellExecuteExW(&sei) && !args.empty()) {
-                    sei.lpParameters = NULL;
-                    ShellExecuteExW(&sei);
+                sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_NOCLOSEPROCESS;
+                sei.lpVerb = L"open"; sei.lpFile = st.c_str(); sei.nShow = SW_SHOWNORMAL;
+                launched = (ShellExecuteExW(&sei) != FALSE);
+                if (sei.hProcess) {
+                    launchedPid = GetProcessId(sei.hProcess);
+                    CloseHandle(sei.hProcess);
                 }
+            } else if (!a.exePath.empty()) {
+                std::wstring launchPath = ResolveWow64Path(a.exePath);
+                if (GetFileAttributesW(launchPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                    std::wstring safeUrl = (a.kind == EWP_KIND_URL) ? EwpSanitizeBrowserUrl(a.activeUrl) : L"";
+                    std::wstring args = !safeUrl.empty()
+                                            ? (L"--new-window \"" + safeUrl + L"\"") : L"";
+                    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+                    sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_NOCLOSEPROCESS;
+                    sei.lpVerb = L"open"; sei.lpFile = launchPath.c_str();
+                    sei.lpParameters = args.empty() ? NULL : args.c_str();
+                    sei.nShow = SW_SHOWNORMAL;
+                    launched = (ShellExecuteExW(&sei) != FALSE);
+                    if (!launched && !args.empty()) {
+                        sei.lpParameters = NULL;
+                        launched = (ShellExecuteExW(&sei) != FALSE);
+                    }
+                    if (sei.hProcess) {
+                        launchedPid = GetProcessId(sei.hProcess);
+                        CloseHandle(sei.hProcess);
+                    }
+                }
+            }
+            if (launched) {
+                g_ewpPendingRestores.push_back({ a, mi.rcWork, expire, launchedPid, false });
             }
         }
     }
@@ -11764,36 +11758,6 @@ static void EwpSetDropZoneVis(bool vis) {
     EwpPresentLayered(g_ewpDropZoneWnd, rc, 255, EwpDrawDropZone);
     SetWindowPos(g_ewpDropZoneWnd, HWND_TOPMOST, rc.left, rc.top, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
-
-class EwpOleDropTarget final : public IDropTarget {
-    LONG m_ref = 1;
-public:
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
-        if (riid == IID_IUnknown || riid == IID_IDropTarget) { *ppv = static_cast<IDropTarget*>(this); AddRef(); return S_OK; }
-        *ppv = NULL; return E_NOINTERFACE;
-    }
-    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&m_ref); }
-    ULONG STDMETHODCALLTYPE Release() override { ULONG r = InterlockedDecrement(&m_ref); if (!r) delete this; return r; }
-    HRESULT STDMETHODCALLTYPE DragEnter(IDataObject*, DWORD, POINTL pt, DWORD* eff) override {
-        g_ewpOleActive = true;
-        bool nearPill = EwpIsNearPill({ pt.x, pt.y });
-        EwpSetDropZoneVis(nearPill);
-        *eff = nearPill ? DROPEFFECT_LINK : DROPEFFECT_NONE;
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE DragOver(DWORD, POINTL pt, DWORD* eff) override {
-        bool nearPill = EwpIsNearPill({ pt.x, pt.y });
-        EwpSetDropZoneVis(nearPill);
-        *eff = nearPill ? DROPEFFECT_LINK : DROPEFFECT_NONE;
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE DragLeave() override { g_ewpOleActive = false; EwpSetDropZoneVis(false); return S_OK; }
-    HRESULT STDMETHODCALLTYPE Drop(IDataObject*, DWORD, POINTL, DWORD* eff) override {
-        g_ewpOleActive = false; EwpSetDropZoneVis(false); *eff = DROPEFFECT_LINK;
-        EwpTriggerCapture(-1);
-        return S_OK;
-    }
-};
 
 static void CALLBACK EwpWinEventMoveSize(HWINEVENTHOOK, DWORD ev, HWND hwnd, LONG idObj, LONG, DWORD, DWORD) {
     if (idObj != OBJID_WINDOW || !hwnd || !g_ewpPillWnd) return;
@@ -11968,10 +11932,10 @@ static void EwpOpenWorkspaceCustomizeMode(int wsIdx, int subAppIdx) {
 }
 
 // Interactive Schematic Thumbnail Window Procedure (Read-Only Hover Preview + Customize Mode):
-// - In Read-Only Mode (g_ewpPreviewEditMode == false):
+// In Read-Only Mode (g_ewpPreviewEditMode == false):
 //     * Left-click launches/restores the workspace
 //     * Right-click (single or double) upgrades into Customize Mode
-// - In Customize Mode (g_ewpPreviewEditMode == true):
+// In Customize Mode (g_ewpPreviewEditMode == true):
 //     * Click 'x' or double-click any app block -> removes/unpins that app and auto-reflows remaining apps
 //     * Click the corner '+' badge or drag-drop an app -> adds app into this workspace
 //     * Right-click any app block -> cycles its screen split ratio (65%, 75%, 50%, 35%)
@@ -12410,14 +12374,25 @@ static LRESULT CALLBACK EwpPillProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             return 0;
         }
         if (wParam == EWP_TIMER_PROX) {
-            if (!g_ewpMoveSizeActive.load() && !g_ewpOleActive) {
+            if (!g_ewpMoveSizeActive.load()) {
                 KillTimer(hwnd, EWP_TIMER_PROX);
+                g_ewpDropDwellStart = 0;
                 EwpSetDropZoneVis(false);
                 return 0;
             }
             POINT pt = {}; GetCursorPos(&pt);
             bool nearPill = EwpIsNearPill(pt);
-            if (nearPill != g_ewpDropVis) EwpSetDropZoneVis(nearPill);
+            bool modHeld = ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0) ||
+                           ((GetAsyncKeyState(VK_SHIFT)   & 0x8000) != 0);
+            bool ready = false;
+            if (nearPill) {
+                ULONGLONG now64 = GetTickCount64();
+                if (g_ewpDropDwellStart == 0) g_ewpDropDwellStart = now64;
+                ready = modHeld || ((now64 - g_ewpDropDwellStart) >= 350);
+            } else {
+                g_ewpDropDwellStart = 0;
+            }
+            if (ready != g_ewpDropVis) EwpSetDropZoneVis(ready);
             return 0;
         }
         if (wParam == EWP_TIMER_TOAST) {
@@ -12520,13 +12495,24 @@ static LRESULT CALLBACK EwpPillProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
     case WM_EWP_MOVESIZE_STATE: {
         if (wParam != 0) {
             g_ewpDraggedHwnd = (HWND)lParam;
+            g_ewpDropDwellStart = 0;
             SetTimer(hwnd, EWP_TIMER_PROX, 30, NULL);
         } else {
             KillTimer(hwnd, EWP_TIMER_PROX);
             HWND draggedWnd = g_ewpDraggedHwnd ? g_ewpDraggedHwnd : (HWND)lParam;
             g_ewpDraggedHwnd = NULL;
             POINT pt = {}; GetCursorPos(&pt);
-            bool droppedOnEwp = (g_ewpDropVis && EwpIsNearPill(pt)) || EwpPtInAnyWindow(pt);
+            bool onVisibleDockOrPreview = false;
+            if (g_ewpDockWnd && IsWindowVisible(g_ewpDockWnd)) {
+                RECT drc = {};
+                if (GetWindowRect(g_ewpDockWnd, &drc) && PtInRect(&drc, pt)) onVisibleDockOrPreview = true;
+            }
+            if (!onVisibleDockOrPreview && g_ewpPreviewWnd && IsWindowVisible(g_ewpPreviewWnd)) {
+                RECT prc = {};
+                if (GetWindowRect(g_ewpPreviewWnd, &prc) && PtInRect(&prc, pt)) onVisibleDockOrPreview = true;
+            }
+            bool droppedOnEwp = (g_ewpDropVis && EwpIsNearPill(pt)) || onVisibleDockOrPreview;
+            g_ewpDropDwellStart = 0;
             EwpSetDropZoneVis(false);
             if (droppedOnEwp && draggedWnd && IsWindow(draggedWnd)) {
                 HWND rootWnd = GetAncestor(draggedWnd, GA_ROOT);
@@ -12560,11 +12546,29 @@ static LRESULT CALLBACK EwpPillProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
     }
     case WM_EWP_OBJSHOW_EVENT: {
         HWND shown = (HWND)lParam;
-        if (!shown || g_ewpPendingRestores.empty()) return 0;
+        if (!shown || !IsWindow(shown) || !IsWindowVisible(shown) || g_ewpPendingRestores.empty()) return 0;
+        if (GetAncestor(shown, GA_ROOT) != shown) return 0;
+        if (GetWindow(shown, GW_OWNER) != NULL) return 0;
+        if (GetWindowLongPtrW(shown, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) return 0;
+
+        DWORD shownPid = 0;
+        GetWindowThreadProcessId(shown, &shownPid);
+
+        // Prefer exact PID match when available
+        if (shownPid != 0) {
+            for (auto& slot : g_ewpPendingRestores) {
+                if (!slot.matched && slot.launchedPid != 0 && slot.launchedPid == shownPid) {
+                    slot.matched = true;
+                    EwpPlaceWindowGuarded(shown, slot.entry, slot.targetWorkRect);
+                    return 0;
+                }
+            }
+        }
+
         std::wstring exe, aumid;
         if (!EwpResolveWindowApp(shown, exe, aumid)) return 0;
         for (auto& slot : g_ewpPendingRestores) {
-            if (!slot.matched && !slot.entry.exePath.empty() &&
+            if (!slot.matched && slot.launchedPid == 0 && !slot.entry.exePath.empty() &&
                 _wcsicmp(PathFindFileNameW(slot.entry.exePath.c_str()), PathFindFileNameW(exe.c_str())) == 0) {
                 slot.matched = true;
                 EwpPlaceWindowGuarded(shown, slot.entry, slot.targetWorkRect);
@@ -12619,7 +12623,7 @@ static LRESULT CALLBACK EwpPillProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 bool handledAsDuplicate = false;
                 if (g_csInitialized) EnterCriticalSection(&g_cs);
 
-                if (!g_ewpAllowDuplicates && g_ewpDuplicatePolicy != EWP_DUP_ALLOW && !newSig.empty()) {
+                if (g_ewpDuplicatePolicy != EWP_DUP_ALLOW && !newSig.empty()) {
                     for (int i = 0; i < (int)g_ewpWorkspaces.size(); ++i) {
                         if (EwpMakeWorkspaceSignature(g_ewpWorkspaces[i]) == newSig) {
                             handledAsDuplicate = true;
@@ -12670,81 +12674,190 @@ static LRESULT CALLBACK EwpPillProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-static void EwpApplySettingsOnUiThread() {
+static bool g_ewpClassesRegistered = false;
+static bool g_ewpCreateFailed      = false;
+
+static void EwpSyncWinEventHooksOnUiThread() {
+    if (g_ewpEnabled.load() && g_ewpPillWnd && IsWindow(g_ewpPillWnd)) {
+        if (!g_ewpMoveHook) {
+            g_ewpMoveHook = SetWinEventHook(EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND,
+                                            NULL, EwpWinEventMoveSize, 0, 0,
+                                            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+        }
+        if (!g_ewpShowHook) {
+            g_ewpShowHook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW,
+                                            NULL, EwpWinEventObjShow, 0, 0,
+                                            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+        }
+    } else {
+        if (g_ewpMoveHook) { UnhookWinEvent(g_ewpMoveHook); g_ewpMoveHook = NULL; }
+        if (g_ewpShowHook) { UnhookWinEvent(g_ewpShowHook); g_ewpShowHook = NULL; }
+    }
+}
+
+static void EwpLoadSettingsOnUiThread() {
+    g_ewpEnabled = (Wh_GetIntSetting(L"edgePin.enableEdgePill") != 0);
+    {
+        std::wstring es = ReadStringSetting(L"edgePin.defaultEdge");
+        if (_wcsicmp(es.c_str(), L"top") == 0)         g_ewpDefaultEdge = EWP_EDGE_TOP;
+        else if (_wcsicmp(es.c_str(), L"bottom") == 0) g_ewpDefaultEdge = EWP_EDGE_BOTTOM;
+        else if (_wcsicmp(es.c_str(), L"right") == 0)  g_ewpDefaultEdge = EWP_EDGE_RIGHT;
+        else                                           g_ewpDefaultEdge = EWP_EDGE_LEFT;
+    }
+    g_ewpRememberPos = (Wh_GetIntSetting(L"edgePin.rememberWindowPosition") != 0);
+    {
+        std::wstring ps = ReadStringSetting(L"edgePin.windowSizePreset");
+        if (_wcsicmp(ps.c_str(), L"default") == 0 || _wcsicmp(ps.c_str(), L"standard") == 0)
+            g_ewpSizePreset = 0;
+        else if (_wcsicmp(ps.c_str(), L"large") == 0)
+            g_ewpSizePreset = 1;
+        else
+            g_ewpSizePreset = 2;
+    }
+    int rawThick   = Wh_GetIntSetting(L"edgePin.pillThickness");
+    int rawPillLen = Wh_GetIntSetting(L"edgePin.pillLength");
+    int rawGap     = Wh_GetIntSetting(L"edgePin.pillToArcGap");
+    int rawCardSz  = Wh_GetIntSetting(L"edgePin.arcCardSize");
+    int rawVisSlot = Wh_GetIntSetting(L"edgePin.arcVisibleSlots");
+    int rawLinger  = Wh_GetIntSetting(L"edgePin.hoverLingerMs");
+    int rawProx    = Wh_GetIntSetting(L"edgePin.proximityRevealPx");
+
+    g_ewpPillThick       = std::max(4,   std::min(24,  rawThick   > 0 ? rawThick   : 8));
+    g_ewpPillLen         = std::max(48,  std::min(260, rawPillLen > 0 ? rawPillLen : 96));
+    g_ewpPillToArcGap    = std::max(4,   std::min(48,  rawGap     > 0 ? rawGap     : 10));
+    g_ewpArcCardSize     = std::max(32,  std::min(84,  rawCardSz  > 0 ? rawCardSz  : 48));
+    g_ewpArcVisibleSlots = std::max(2,   std::min(6,   rawVisSlot > 0 ? rawVisSlot : 4));
+    g_ewpLingerMs        = std::max(100, std::min(800, rawLinger  > 0 ? rawLinger  : 280));
+    g_ewpProxPx          = std::max(16,  std::min(160, rawProx    > 0 ? rawProx    : 48));
+
+    g_ewpToggleHk  = ReadStringSetting(L"edgeWorkspaces.toggleDockHotkey");
+    g_ewpCaptureHk = ReadStringSetting(L"edgeWorkspaces.captureWorkspaceHotkey");
+
+    {
+        std::wstring cf = ReadStringSetting(L"edgeWorkspaces.captureWindowFilter");
+        if (_wcsicmp(cf.c_str(), L"allVisible") == 0) g_ewpCaptureFilter = EWP_CAP_ALL_VISIBLE;
+        else                                          g_ewpCaptureFilter = EWP_CAP_EDGE_TOUCHING;
+    }
+    {
+        std::wstring da = ReadStringSetting(L"edgeWorkspaces.duplicateWorkspaceAction");
+        if (_wcsicmp(da.c_str(), L"update") == 0)     g_ewpDuplicatePolicy = EWP_DUP_UPDATE;
+        else if (_wcsicmp(da.c_str(), L"allow") == 0) g_ewpDuplicatePolicy = EWP_DUP_ALLOW;
+        else                                          g_ewpDuplicatePolicy = EWP_DUP_IGNORE;
+    }
+    int rawMaxApps = Wh_GetIntSetting(L"edgeWorkspaces.maxAppsPerWorkspace");
+    g_ewpMaxApps        = std::max(2, std::min(12, rawMaxApps > 0 ? rawMaxApps : 8));
+    g_ewpIgnoreOccluded = (Wh_GetIntSetting(L"edgeWorkspaces.ignoreOccludedWindows") != 0);
+    g_ewpCaptureUrl     = (Wh_GetIntSetting(L"edgeWorkspaces.captureBrowserActiveTab") != 0);
+    g_ewpReuseOpen      = (Wh_GetIntSetting(L"edgeWorkspaces.reuseOpenWindows") != 0);
+    {
+        std::wstring rawEx = ReadStringSetting(L"edgeWorkspaces.excludedProcesses");
+        for (wchar_t& c : rawEx) if (c == L';' || c == L'|') c = L',';
+        std::vector<std::wstring> parsedEx;
+        std::wstringstream ss(rawEx);
+        std::wstring item;
+        while (std::getline(ss, item, L',')) {
+            std::wstring tr = EwpTrim(item);
+            if (!tr.empty()) parsedEx.push_back(tr);
+        }
+        if (g_csInitialized) EnterCriticalSection(&g_cs);
+        g_ewpUserExcluded = std::move(parsedEx);
+        EwpDeduplicateWorkspacesInMemory();
+        if (g_csInitialized) LeaveCriticalSection(&g_cs);
+    }
+    g_ewpPrevChipIdx = -1;
+    EwpLoadPlacement();
+}
+
+static void EwpApplyLoadedSettingsOnUiThread() {
     ApplyCaptureAffinity(g_ewpPillWnd);
     ApplyCaptureAffinity(g_ewpDockWnd);
     ApplyCaptureAffinity(g_ewpPreviewWnd);
     ApplyCaptureAffinity(g_ewpDropZoneWnd);
     ApplyCaptureAffinity(g_ewpToastWnd);
+    EwpSyncWinEventHooksOnUiThread();
     EwpRegisterHotkeys();
     EwpRenderPill();
-    if (g_ewpDockState != EWP_DOCK_CLOSED) EwpRenderHoverDock();
+    if (!g_ewpEnabled.load()) {
+        g_ewpDockState = EWP_DOCK_CLOSED;
+        g_ewpPreviewOpen = false;
+        g_ewpPreviewEditMode = false;
+        if (g_ewpDockWnd && IsWindowVisible(g_ewpDockWnd)) ShowWindow(g_ewpDockWnd, SW_HIDE);
+        if (g_ewpPreviewWnd && IsWindowVisible(g_ewpPreviewWnd)) ShowWindow(g_ewpPreviewWnd, SW_HIDE);
+    } else if (g_ewpDockState != EWP_DOCK_CLOSED) {
+        EwpRenderHoverDock();
+    }
+}
+
+static void EwpApplySettingsOnUiThread() {
+    EwpLoadSettingsOnUiThread();
+    EwpApplyLoadedSettingsOnUiThread();
 }
 
 static void EwpCreateWindowsOnUiThread() {
     if (g_ewpPillWnd && IsWindow(g_ewpPillWnd)) {
-        EwpApplySettingsOnUiThread();
         return;
     }
-    EwpPurgeDuplicatePillWindows();
-    OleInitialize(NULL);
+    if (g_ewpCreateFailed) return;
+
     HINSTANCE hInst = GetModHInstance();
+    if (!g_ewpClassesRegistered) {
+        WNDCLASSEXW wcP = { sizeof(wcP) };
+        wcP.style = CS_DBLCLKS; wcP.lpfnWndProc = EwpPillProc; wcP.hInstance = hInst;
+        wcP.hCursor = LoadCursor(NULL, IDC_HAND); wcP.lpszClassName = EWP_PILL_CLASS;
+        RegisterClassExW(&wcP);
 
-    WNDCLASSEXW wcP = { sizeof(wcP) };
-    wcP.style = CS_DBLCLKS; wcP.lpfnWndProc = EwpPillProc; wcP.hInstance = hInst;
-    wcP.hCursor = LoadCursor(NULL, IDC_HAND); wcP.lpszClassName = EWP_PILL_CLASS;
-    RegisterClassExW(&wcP);
+        WNDCLASSEXW wcD = { sizeof(wcD) };
+        wcD.style = CS_DBLCLKS; wcD.lpfnWndProc = EwpHoverDockProc; wcD.hInstance = hInst;
+        wcD.hCursor = LoadCursor(NULL, IDC_HAND); wcD.lpszClassName = EWP_DOCK_CLASS;
+        RegisterClassExW(&wcD);
 
-    WNDCLASSEXW wcD = { sizeof(wcD) };
-    wcD.style = CS_DBLCLKS; wcD.lpfnWndProc = EwpHoverDockProc; wcD.hInstance = hInst;
-    wcD.hCursor = LoadCursor(NULL, IDC_HAND); wcD.lpszClassName = EWP_DOCK_CLASS;
-    RegisterClassExW(&wcD);
+        WNDCLASSEXW wcPr = { sizeof(wcPr) };
+        wcPr.style = CS_DBLCLKS; wcPr.lpfnWndProc = EwpPreviewProc; wcPr.hInstance = hInst;
+        wcPr.hCursor = LoadCursor(NULL, IDC_HAND); wcPr.lpszClassName = EWP_PREVIEW_CLASS;
+        RegisterClassExW(&wcPr);
 
-    WNDCLASSEXW wcPr = { sizeof(wcPr) };
-    wcPr.style = CS_DBLCLKS; wcPr.lpfnWndProc = EwpPreviewProc; wcPr.hInstance = hInst;
-    wcPr.hCursor = LoadCursor(NULL, IDC_HAND); wcPr.lpszClassName = EWP_PREVIEW_CLASS;
-    RegisterClassExW(&wcPr);
+        WNDCLASSEXW wcDz = { sizeof(wcDz) };
+        wcDz.lpfnWndProc = DefWindowProcW; wcDz.hInstance = hInst; wcDz.lpszClassName = EWP_DROPZONE_CLASS;
+        RegisterClassExW(&wcDz);
 
-    WNDCLASSEXW wcDz = { sizeof(wcDz) };
-    wcDz.lpfnWndProc = DefWindowProcW; wcDz.hInstance = hInst; wcDz.lpszClassName = EWP_DROPZONE_CLASS;
-    RegisterClassExW(&wcDz);
+        WNDCLASSEXW wcTs = { sizeof(wcTs) };
+        wcTs.lpfnWndProc = DefWindowProcW; wcTs.hInstance = hInst; wcTs.lpszClassName = EWP_TOAST_CLASS;
+        RegisterClassExW(&wcTs);
 
-    WNDCLASSEXW wcTs = { sizeof(wcTs) };
-    wcTs.lpfnWndProc = DefWindowProcW; wcTs.hInstance = hInst; wcTs.lpszClassName = EWP_TOAST_CLASS;
-    RegisterClassExW(&wcTs);
-
-    g_ewpPillWnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                                   EWP_PILL_CLASS, L"", WS_POPUP, 0, 0, 96, 8, NULL, NULL, hInst, NULL);
-    g_ewpDockWnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                                   EWP_DOCK_CLASS, L"", WS_POPUP, 0, 0, 200, 44, NULL, NULL, hInst, NULL);
-    g_ewpPreviewWnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                                      EWP_PREVIEW_CLASS, L"", WS_POPUP, 0, 0, 256, 154, NULL, NULL, hInst, NULL);
-    g_ewpDropZoneWnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                                       EWP_DROPZONE_CLASS, L"", WS_POPUP, 0, 0, 210, 42, NULL, NULL, hInst, NULL);
-    g_ewpToastWnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                                    EWP_TOAST_CLASS, L"", WS_POPUP, 0, 0, 160, 28, NULL, NULL, hInst, NULL);
-
-    if (g_ewpDropZoneWnd) {
-        g_ewpDropTarget = new EwpOleDropTarget();
-        RegisterDragDrop(g_ewpDropZoneWnd, g_ewpDropTarget);
+        g_ewpClassesRegistered = true;
     }
-    g_ewpMoveHook = SetWinEventHook(EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND,
-                                    NULL, EwpWinEventMoveSize, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-    g_ewpShowHook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW,
-                                    NULL, EwpWinEventObjShow, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 
-    EwpApplySettingsOnUiThread();
-    // Schedule an explicit post-pump render 60ms after GetMessageW starts so the pill is
-    // guaranteed to composite on frame 0 even during cold DWM / monitor startup!
-    if (g_ewpPillWnd) SetTimer(g_ewpPillWnd, EWP_TIMER_INIT_RENDER, 60, NULL);
+    if (!g_ewpPillWnd)
+        g_ewpPillWnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                                       EWP_PILL_CLASS, L"", WS_POPUP, 0, 0, 96, 8, NULL, NULL, hInst, NULL);
+    if (!g_ewpDockWnd)
+        g_ewpDockWnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                                       EWP_DOCK_CLASS, L"", WS_POPUP, 0, 0, 200, 44, NULL, NULL, hInst, NULL);
+    if (!g_ewpPreviewWnd)
+        g_ewpPreviewWnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                                          EWP_PREVIEW_CLASS, L"", WS_POPUP, 0, 0, 256, 154, NULL, NULL, hInst, NULL);
+    if (!g_ewpDropZoneWnd)
+        g_ewpDropZoneWnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                                           EWP_DROPZONE_CLASS, L"", WS_POPUP, 0, 0, 210, 42, NULL, NULL, hInst, NULL);
+    if (!g_ewpToastWnd)
+        g_ewpToastWnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                                        EWP_TOAST_CLASS, L"", WS_POPUP, 0, 0, 160, 28, NULL, NULL, hInst, NULL);
+
+    if (!g_ewpPillWnd) {
+        g_ewpCreateFailed = true;
+        return;
+    }
+
+    EwpLoadSettingsOnUiThread();
+    EwpLoadWorkspaces();
+    EwpApplyLoadedSettingsOnUiThread();
+    if (g_ewpEnabled.load()) SetTimer(g_ewpPillWnd, EWP_TIMER_INIT_RENDER, 60, NULL);
 }
 
 static void EwpDestroyWindowsOnUiThread() {
     if (g_ewpMoveHook) { UnhookWinEvent(g_ewpMoveHook); g_ewpMoveHook = NULL; }
     if (g_ewpShowHook) { UnhookWinEvent(g_ewpShowHook); g_ewpShowHook = NULL; }
     if (g_ewpDropZoneWnd) {
-        RevokeDragDrop(g_ewpDropZoneWnd);
-        if (g_ewpDropTarget) { g_ewpDropTarget->Release(); g_ewpDropTarget = NULL; }
         DestroyWindow(g_ewpDropZoneWnd); g_ewpDropZoneWnd = NULL;
     }
     if (g_ewpToastWnd)   { DestroyWindow(g_ewpToastWnd);   g_ewpToastWnd = NULL; }
@@ -12763,7 +12876,6 @@ static void EwpDestroyWindowsOnUiThread() {
     UnregisterClassW(EWP_PREVIEW_CLASS,  hInst);
     UnregisterClassW(EWP_DOCK_CLASS,     hInst);
     UnregisterClassW(EWP_PILL_CLASS,     hInst);
-    OleUninitialize();
 }
 
 static DWORD WINAPI UiThreadProc(LPVOID) {
@@ -12772,13 +12884,6 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     PeekMessageW(&probe, NULL, WM_USER, WM_USER, PM_NOREMOVE);
     g_uiThreadId = GetCurrentThreadId();
 
-    // v2.5.4 (this-round Issue 2): as a tool mod the host is windhawk-mod.exe, not
-    // explorer.exe, so we no longer inherit Explorer's per-monitor-v2 DPI context.
-    // A window inherits the DPI context of the thread that creates it, so set it
-    // HERE before any dock window is created -- otherwise GetWindowRect / anchoring
-    // are virtualized on scaled or mixed-DPI setups and the dock lands in the wrong
-    // place with DWM-stretched bitmaps.
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     bool ok = CreateInputOwnerWindow() && CreateOverlayWindow();
     InitGhostDIB();
@@ -12796,7 +12901,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
             g_positionInitialized = true;
         }
 
-        // FIX (Issue 3 -- do-not-show-first): do NOT show either window from
+        // do NOT show either window from
         // the UI thread. Previously this force-showed both windows at (0,0)
         // 200x48 unconditionally, before a valid dock geometry existed. On
         // Windows 10 / left-aligned Windows 11 the UNSUPPORTED branch of
@@ -12807,8 +12912,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
         // swallowing clicks and popping the context menu on right-click. On a
         // cold start it flashed a mini dock in the top-left until Shell_TrayWnd
         // appeared.
-        //
-        // Visibility now belongs SOLELY to the worker: once RefreshTaskbarCache
+                // Visibility now belongs SOLELY to the worker: once RefreshTaskbarCache
         // has produced a valid centered-taskbar geometry (g_dockLocalW > 0), its
         // RepositionOverlay call shows the windows in the correct place. Until
         // then they stay hidden. We still let RepositionOverlay run here to seat
@@ -12834,14 +12938,9 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     // happens here; the plain GDI/DIB/CS/icon frees stay in WhTool_ModUninit (which runs
     // this teardown's globals as harmless no-ops after it joins this thread). DIBs
     // are intentionally NOT deleted here to avoid a double-free with WhTool_ModUninit.
-    if (g_kbHook) { UnhookWindowsHookEx(g_kbHook); g_kbHook = NULL; }
+    StopKeyboardGestureHookThread();
     if (g_overlayWnd && IsWindow(g_overlayWnd) && g_hotkeyKey != 0 && g_hotkeyMods != 0)
         UnregisterHotKey(g_overlayWnd, HOTKEY_PIN_ID);
-    // v2.5.4 (this-round Issue 1): the lock-glow layer is now created on THIS UI
-    // thread (prewarmed in PrewarmDragEffectWindows), so it is destroyed here too,
-    // right next to the tether/vanish layers. The worker only presents into it and
-    // is joined before this UI thread is asked to quit, so the handle is untouched
-    // by the time we get here.
     EwpDestroyWindowsOnUiThread();
     if (g_wsPopupWnd) { DestroyWindow(g_wsPopupWnd);  g_wsPopupWnd  = NULL; }
     if (g_tooltipWnd) { DestroyWindow(g_tooltipWnd);  g_tooltipWnd  = NULL; }
@@ -12855,54 +12954,59 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
         UnregisterClassW(GHOST_CLASS,           hInst);   // QPDockGhost
         UnregisterClassW(L"QPDockWorkspacePopup", hInst);
         UnregisterClassW(L"QPDockTooltip",      hInst);
-        UnregisterClassW(L"QPDockRenameDialog", hInst);
     }
     return 0;
 }
 
-// FIX (D2 polish): the setting read+clamp block was duplicated verbatim in both
+// the setting read+clamp block was duplicated verbatim in both
 // WhTool_ModInit and WhTool_ModSettingsChanged (~40 lines), which is exactly how the two
 // drift apart (e.g. one reads a setting the other forgets). Factored into a single
 // LoadSettings() helper that both call, so there is now one source of truth.
 static void LoadSettings() {
-    MAX_PINNED_APPS             = ReadIntSettingWithFallback(L"dock.maxPinnedApps", L"maxPinnedApps", 5);
-    BASE_ICON_SIZE              = ReadIntSettingWithFallback(L"dock.iconSize", L"iconSize", 33);
+    auto getClampedPos = [](PCWSTR key, int defVal, int minVal, int maxVal) -> int {
+        int v = Wh_GetIntSetting(key);
+        if (v <= 0) v = defVal;
+        return std::max(minVal, std::min(maxVal, v));
+    };
+
+    MAX_PINNED_APPS             = getClampedPos(L"dock.maxPinnedApps", 5, 1, 50);
+    BASE_ICON_SIZE              = getClampedPos(L"dock.iconSize", 33, 16, 48);
     BASE_ICON_SPACING           = 12;
-    DOCK_GAP_FROM_START         = ReadIntSettingWithFallback(L"dock.dockGapFromStart", L"dockGapFromStart", 6);
-    SHOW_WORKSPACE_DIVIDER      = ReadIntSettingWithFallback(L"workspaces.showWorkspaceDivider", L"showWorkspaceDivider", 1) != 0;
-    CORNER_ROUNDNESS            = ReadIntSettingWithFallback(L"dock.cornerRoundness", L"cornerRoundness", 40);
-    SHOW_TOOLTIPS               = Wh_GetIntSetting(L"dock.showTooltips", 1) != 0;
+    DOCK_GAP_FROM_START         = std::max(0, std::min(40, Wh_GetIntSetting(L"dock.dockGapFromStart")));
+    SHOW_WORKSPACE_DIVIDER      = Wh_GetIntSetting(L"workspaces.showWorkspaceDivider") != 0;
+    CORNER_ROUNDNESS            = std::max(0, std::min(100, Wh_GetIntSetting(L"dock.cornerRoundness")));
+    SHOW_TOOLTIPS               = Wh_GetIntSetting(L"dock.showTooltips") != 0;
     {
-        std::wstring st = ReadStringSettingWithFallback(L"dock.dockStyle", nullptr);
+        std::wstring st = ReadStringSetting(L"dock.dockStyle");
         if (_wcsicmp(st.c_str(), L"glassBorder") == 0) {
             DOCK_STYLE = 0;
             HIDE_DOCK_BORDER = false;
         } else if (_wcsicmp(st.c_str(), L"glass") == 0) {
             DOCK_STYLE = 0;
-            HIDE_DOCK_BORDER = ReadIntSettingWithFallback(L"dock.hideDockBorder", L"hideDockBorder", 1) != 0;
+            HIDE_DOCK_BORDER = true;
         } else {
             DOCK_STYLE = 1;
             HIDE_DOCK_BORDER = true;
         }
     }
 
-    LIMIT_VISIBLE_PINS             = Wh_GetIntSetting(L"dock.limitVisiblePins", 0) != 0;
-    MAX_VISIBLE_APPS_SETTING       = std::max(1, std::min(30, Wh_GetIntSetting(L"dock.maxVisibleApps", 10)));
+    LIMIT_VISIBLE_PINS             = Wh_GetIntSetting(L"dock.limitVisiblePins") != 0;
+    MAX_VISIBLE_APPS_SETTING       = getClampedPos(L"dock.maxVisibleApps", 10, 1, 30);
 
-    ENABLE_EXPLORER_WORKSPACE_PINS = ReadIntSettingWithFallback(L"workspaces.enableExplorerWorkspacePins", L"enableExplorerWorkspacePins", 1) != 0;
-    MAX_WORKSPACE_PINS             = std::max(1, std::min(30, Wh_GetIntSetting(L"workspaces.maxWorkspacePins", 10)));
-    MAX_VISIBLE_WORKSPACES_SETTING = std::max(1, std::min(30, ReadIntSettingWithFallback(L"dock.maxVisibleWorkspaces", L"workspaces.maxVisibleWorkspaces", 10)));
-    MAX_PATHS_PER_WORKSPACE        = std::max(1, std::min(30, Wh_GetIntSetting(L"workspaces.maxPathsPerWorkspace", 15)));
-    POPUP_VISIBLE_PATHS            = std::max(3, std::min(20, Wh_GetIntSetting(L"workspaces.popupVisiblePaths", 8)));
-    OPEN_IN_SEPARATE_WINDOWS       = Wh_GetIntSetting(L"workspaces.openInSeparateWindows", 0) != 0;
-    REOPEN_CLOSED_PATHS_ON_FOCUS   = Wh_GetIntSetting(L"workspaces.reopenClosedPathsOnFocus", 0) != 0;
+    ENABLE_EXPLORER_WORKSPACE_PINS = Wh_GetIntSetting(L"workspaces.enableExplorerWorkspacePins") != 0;
+    MAX_WORKSPACE_PINS             = getClampedPos(L"workspaces.maxWorkspacePins", 10, 1, 30);
+    MAX_VISIBLE_WORKSPACES_SETTING = getClampedPos(L"dock.maxVisibleWorkspaces", 10, 1, 30);
+    MAX_PATHS_PER_WORKSPACE        = getClampedPos(L"workspaces.maxPathsPerWorkspace", 15, 1, 30);
+    POPUP_VISIBLE_PATHS            = getClampedPos(L"workspaces.popupVisiblePaths", 8, 3, 20);
+    OPEN_IN_SEPARATE_WINDOWS       = Wh_GetIntSetting(L"workspaces.openInSeparateWindows") != 0;
+    REOPEN_CLOSED_PATHS_ON_FOCUS   = Wh_GetIntSetting(L"workspaces.reopenClosedPathsOnFocus") != 0;
     {
-        std::wstring cm = ReadStringSettingWithFallback(L"workspaces.folderColorMode", nullptr);
+        std::wstring cm = ReadStringSetting(L"workspaces.folderColorMode");
         bool newOrdered = (_wcsicmp(cm.c_str(), L"ordered") == 0);
         bool modeChanged = (newOrdered != FOLDER_COLOR_MODE_ORDERED.load());
         FOLDER_COLOR_MODE_ORDERED = newOrdered;
 
-        std::wstring rawPal = ReadStringSettingWithFallback(L"workspaces.folderColorPalette", nullptr);
+        std::wstring rawPal = ReadStringSetting(L"workspaces.folderColorPalette");
         std::vector<std::wstring> parsed = ParseFolderColorPalette(rawPal.empty() ? DEFAULT_FOLDER_PALETTE : rawPal);
 
         std::vector<std::pair<std::wstring, std::wstring>> wsColorUpdates;
@@ -12923,7 +13027,7 @@ static void LoadSettings() {
                     BYTE r = 0, g = 0, b = 0;
                     bool inPal = std::find(g_folderPalette.begin(), g_folderPalette.end(), a.colorHex) != g_folderPalette.end();
                     if (!inPal || !ParseHexColor(a.colorHex, r, g, b) || IsExcludedFolderColor(r, g, b)) {
-                        a.colorHex.clear(); // reassigned below
+                        a.colorHex.clear();
                     }
                 }
                 if (a.colorHex != prevColor && !a.workspaceId.empty() && !a.colorHex.empty())
@@ -12952,7 +13056,6 @@ static void LoadSettings() {
         }
         if (g_csInitialized) LeaveCriticalSection(&g_cs);
 
-        // Persist any mode/palette-triggered color changes to Windhawk storage outside g_cs
         for (const auto& upd : wsColorUpdates) {
             WorkspaceSnapshot snap;
             if (LoadWorkspaceSnapshot(upd.first, snap)) {
@@ -12962,119 +13065,29 @@ static void LoadSettings() {
         }
     }
 
-    ENABLE_REORDER              = ReadIntSettingWithFallback(L"interactions.enableReorder", L"enableReorder", 1) != 0;
-    ENABLE_SCROLL_NAV           = ReadIntSettingWithFallback(L"interactions.enableScrollNav", L"enableScrollNav", 1) != 0;
-    ENABLE_RAPID_UNPIN_ALL      = ReadIntSettingWithFallback(L"interactions.enableRapidUnpinAll", L"enableRapidUnpinAll", 0) != 0;
+    ENABLE_REORDER              = Wh_GetIntSetting(L"interactions.enableReorder") != 0;
+    ENABLE_SCROLL_NAV           = Wh_GetIntSetting(L"interactions.enableScrollNav") != 0;
+    ENABLE_RAPID_UNPIN_ALL      = Wh_GetIntSetting(L"interactions.enableRapidUnpinAll") != 0;
 
-    ENABLE_KEY_GESTURES         = ReadIntSettingWithFallback(L"shortcuts.enableKeyGestures", L"enableKeyGestures", 0) != 0;
-    TRIPLE_TAP_WINDOW_MS        = std::max(150, std::min(350, Wh_GetIntSetting(L"shortcuts.tripleTapWindowMs", 300)));
-    ENABLE_LOCK_ANIMATION       = ReadIntSettingWithFallback(L"shortcuts.enableLockAnimation", L"enableLockAnimation", 1) != 0;
+    ENABLE_KEY_GESTURES         = Wh_GetIntSetting(L"shortcuts.enableKeyGestures") != 0;
+    TRIPLE_TAP_WINDOW_MS        = getClampedPos(L"shortcuts.tripleTapWindowMs", 300, 150, 350);
+    ENABLE_LOCK_ANIMATION       = Wh_GetIntSetting(L"shortcuts.enableLockAnimation") != 0;
     g_hotkeyMods                = LoadHotkeyModifiersSetting() & (MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN);
     g_hotkeyKey                 = LoadHotkeyKeySetting();
 
     {
-        std::wstring fs = ReadStringSettingWithFallback(L"advanced.fullscreenBehavior", nullptr);
+        std::wstring fs = ReadStringSetting(L"advanced.fullscreenBehavior");
         FULLSCREEN_BEHAVIOR = (_wcsicmp(fs.c_str(), L"allow") == 0) ? 1 : 0;
     }
     {
-        std::wstring cb = ReadStringSettingWithFallback(L"advanced.captureBehavior", nullptr);
+        std::wstring cb = ReadStringSetting(L"advanced.captureBehavior");
         CAPTURE_BEHAVIOR = (_wcsicmp(cb.c_str(), L"ignore") == 0) ? 1 : 0;
     }
-    ENABLE_AUTOHIDE_SYNC        = ReadIntSettingWithFallback(L"advanced.autoHideSync", L"autoHideSync", 0) != 0;
-    STARTUP_DELAY_MS            = ReadIntSettingWithFallback(L"advanced.startupDelay", L"startupDelay", 0);
-
-    MAX_PINNED_APPS     = std::max(1,  std::min(50,   MAX_PINNED_APPS));
-    BASE_ICON_SIZE      = std::max(16, std::min(48,   BASE_ICON_SIZE));
-    CORNER_ROUNDNESS    = std::max(0,  std::min(100,  (int)CORNER_ROUNDNESS));
-    STARTUP_DELAY_MS    = std::max(0,  std::min(3000, STARTUP_DELAY_MS));
-    DOCK_GAP_FROM_START = std::max(0,  std::min(40,   DOCK_GAP_FROM_START));
-
-    // Edge Pill & Workspace Arc + Workspace Capture & Hotkeys settings
-    // IMPORTANT FIX: In Windhawk's SDK (`windhawk_api.h`), `Wh_GetIntSetting(PCWSTR valueName, ...)`
-    // treats extra arguments as printf format arguments for `valueName`, NOT as a default value!
-    // When `edgePin` is newly added onto an already-installed mod whose registry key exists,
-    // `Wh_GetIntSetting` returns 0 for every unsaved `edgePin.*` key until the user opens and
-    // saves Settings in Windhawk UI. We check `rawPillLen > 0` (`pillLength` range is 48..260)
-    // to know whether `edgePin` has actually been written to the registry!
-    int rawPillLen   = Wh_GetIntSetting(L"edgePin.pillLength");
-    int rawVisProbe  = Wh_GetIntSetting(L"edgePin.arcVisibleSlots");
-    bool edgePinSaved = (rawPillLen > 0 && rawVisProbe > 0);
-    g_ewpEnabled     = edgePinSaved ? (Wh_GetIntSetting(L"edgePin.enableEdgePill") != 0) : true;
-    {
-        std::wstring es = ReadStringSettingWithFallback(L"edgePin.defaultEdge", nullptr);
-        if (_wcsicmp(es.c_str(), L"top") == 0)         g_ewpDefaultEdge = EWP_EDGE_TOP;
-        else if (_wcsicmp(es.c_str(), L"bottom") == 0) g_ewpDefaultEdge = EWP_EDGE_BOTTOM;
-        else if (_wcsicmp(es.c_str(), L"right") == 0)  g_ewpDefaultEdge = EWP_EDGE_RIGHT;
-        else                                           g_ewpDefaultEdge = EWP_EDGE_LEFT;
-    }
-    g_ewpRememberPos = edgePinSaved ? (Wh_GetIntSetting(L"edgePin.rememberWindowPosition") != 0) : true;
-    {
-        std::wstring ps = ReadStringSettingWithFallback(L"edgePin.windowSizePreset", nullptr);
-        if (_wcsicmp(ps.c_str(), L"default") == 0 || _wcsicmp(ps.c_str(), L"standard") == 0)
-            g_ewpSizePreset = 0;
-        else if (_wcsicmp(ps.c_str(), L"large") == 0)
-            g_ewpSizePreset = 1;
-        else
-            g_ewpSizePreset = 2; // Extra Large (135%) is the default!
-    }
-    int rawThick   = Wh_GetIntSetting(L"edgePin.pillThickness");
-    int rawGap     = Wh_GetIntSetting(L"edgePin.pillToArcGap");
-    int rawCardSz  = Wh_GetIntSetting(L"edgePin.arcCardSize");
-    int rawVisSlot = Wh_GetIntSetting(L"edgePin.arcVisibleSlots");
-    int rawLinger  = Wh_GetIntSetting(L"edgePin.hoverLingerMs");
-    int rawProx    = Wh_GetIntSetting(L"edgePin.proximityRevealPx");
-
-    g_ewpPillThick       = std::max(4,   std::min(24,  rawThick   > 0 ? rawThick   : 8));
-    g_ewpPillLen         = std::max(48,  std::min(260, rawPillLen > 0 ? rawPillLen : 96));
-    g_ewpPillToArcGap    = std::max(4,   std::min(48,  rawGap     > 0 ? rawGap     : 10));
-    g_ewpArcCardSize     = std::max(32,  std::min(84,  rawCardSz  > 0 ? rawCardSz  : 48));
-    g_ewpArcVisibleSlots = std::max(2,   std::min(6,   rawVisSlot > 0 ? rawVisSlot : 4));
-    g_ewpLingerMs        = std::max(100, std::min(800, rawLinger  > 0 ? rawLinger  : 280));
-    g_ewpProxPx          = std::max(16,  std::min(160, rawProx    > 0 ? rawProx    : 48));
-
-    g_ewpToggleHk = ReadStringSettingWithFallback(L"edgeWorkspaces.toggleDockHotkey", L"hotkeys.toggleDockHotkey");
-    if (g_ewpToggleHk.empty()) g_ewpToggleHk = L"Alt+W";
-    g_ewpCaptureHk = ReadStringSettingWithFallback(L"edgeWorkspaces.captureWorkspaceHotkey", L"hotkeys.captureWorkspaceHotkey");
-    if (g_ewpCaptureHk.empty()) g_ewpCaptureHk = L"Alt+Shift+W";
-
-    {
-        std::wstring cf = ReadStringSettingWithFallback(L"edgeWorkspaces.captureWindowFilter", L"edgePin.captureWindowFilter");
-        if (_wcsicmp(cf.c_str(), L"allVisible") == 0) g_ewpCaptureFilter = EWP_CAP_ALL_VISIBLE;
-        else                                          g_ewpCaptureFilter = EWP_CAP_EDGE_TOUCHING;
-    }
-    int rawMaxApps  = Wh_GetIntSetting(L"edgeWorkspaces.maxAppsPerWorkspace");
-    bool edgeWsSaved = (rawMaxApps > 0);
-    g_ewpAllowDuplicates = edgeWsSaved ? (Wh_GetIntSetting(L"edgeWorkspaces.allowDuplicateWorkspaces") != 0) : false;
-    {
-        std::wstring da = ReadStringSettingWithFallback(L"edgeWorkspaces.duplicateWorkspaceAction", L"edgePin.duplicateWorkspaceAction");
-        if (_wcsicmp(da.c_str(), L"update") == 0)     g_ewpDuplicatePolicy = EWP_DUP_UPDATE;
-        else if (_wcsicmp(da.c_str(), L"allow") == 0) g_ewpDuplicatePolicy = EWP_DUP_ALLOW;
-        else                                          g_ewpDuplicatePolicy = EWP_DUP_IGNORE;
-    }
-    g_ewpMaxApps        = std::max(2, std::min(12, rawMaxApps > 0 ? rawMaxApps : 8));
-    g_ewpIgnoreOccluded = edgeWsSaved ? (Wh_GetIntSetting(L"edgeWorkspaces.ignoreOccludedWindows") != 0) : true;
-    g_ewpCaptureUrl     = edgeWsSaved ? (Wh_GetIntSetting(L"edgeWorkspaces.captureBrowserActiveTab") != 0) : true;
-    g_ewpReuseOpen      = edgeWsSaved ? (Wh_GetIntSetting(L"edgeWorkspaces.reuseOpenWindows") != 0) : true;
-    {
-        std::wstring rawEx = ReadStringSettingWithFallback(L"edgeWorkspaces.excludedProcesses", L"edgePin.excludedProcesses");
-        for (wchar_t& c : rawEx) if (c == L';' || c == L'|') c = L',';
-        std::vector<std::wstring> parsedEx;
-        std::wstringstream ss(rawEx);
-        std::wstring item;
-        while (std::getline(ss, item, L',')) {
-            std::wstring tr = EwpTrim(item);
-            if (!tr.empty()) parsedEx.push_back(tr);
-        }
-        if (g_csInitialized) EnterCriticalSection(&g_cs);
-        g_ewpUserExcluded = std::move(parsedEx);
-        EwpDeduplicateWorkspacesInMemory();
-        if (g_csInitialized) LeaveCriticalSection(&g_cs);
-    }
-    g_ewpPrevChipIdx = -1;
-    EwpLoadPlacement();
+    ENABLE_AUTOHIDE_SYNC        = Wh_GetIntSetting(L"advanced.autoHideSync") != 0;
+    STARTUP_DELAY_MS            = std::max(0, std::min(3000, Wh_GetIntSetting(L"advanced.startupDelay")));
 }
 
-// FIX (Issue 3): the README states this mod supports Windows 11 only. On
+// the README states this mod supports Windows 11 only. On
 // Windows 10 the "Start at tbr.left" heuristic makes EVERY machine resolve to
 // QP_LAYOUT_UNSUPPORTED, so the mod can never draw a dock there -- yet it still
 // spun up two threads and two windows. Detect the OS build with RtlGetVersion
@@ -13099,11 +13112,10 @@ BOOL WhTool_ModInit() {
     // Read and clamp all user settings (shared with WhTool_ModSettingsChanged).
     LoadSettings();
 
-    // v2.5.4 (Issue 2): set per-monitor-v2 DPI before the first RefreshTaskbarCache()
+    // set per-monitor-v2 DPI before the first RefreshTaskbarCache()
     // geometry probe below, matching the UI/worker threads (tool host isn't Explorer).
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-    // FIX (Issue 3): Windows 11 only. On older builds the mod can never produce
+    // Windows 11 only. On older builds the mod can never produce
     // a supported layout, so return FALSE immediately -- creating NO resources
     // (WhTool_ModUninit has nothing to tear down) rather than idling two threads and
     // two hidden windows on a platform we can't serve.
@@ -13116,7 +13128,7 @@ BOOL WhTool_ModInit() {
     // (windhawk-tool-mod_<id>); no in-mod ownership probe is needed. The dock
     // stays hidden until the worker resolves valid geometry (see RepositionOverlay).
 
-    // FIX-A8 (#11): the optional startup delay was moved OUT of WhTool_ModInit and
+    // the optional startup delay was moved OUT of WhTool_ModInit and
     // into the worker thread (see WorkerThread) so init returns promptly and
     // never blocks Explorer startup / the Windhawk Engine thread for up to 3 s.
 
@@ -13130,8 +13142,10 @@ BOOL WhTool_ModInit() {
 
     InitializeCriticalSection(&g_cs);
     g_csInitialized = true;
+    InitializeCriticalSection(&g_saveCs);
+    g_saveCsInit = true;
 
-    // Review #4 (Bug A): guards the outstanding launch-thread list.
+    // guards the outstanding launch-thread list.
     InitializeCriticalSection(&g_launchCs);
     g_launchCsInit = true;
     InitializeCriticalSection(&g_restoreExecCs);
@@ -13144,28 +13158,26 @@ BOOL WhTool_ModInit() {
     QueryPerformanceFrequency(&g_perfFreq);  // enable sub-ms animation timing
     g_bootStartTime = GetTickCount();
     g_systemState   = STATE_BOOT;
-    g_layoutUnsupported = false;   // FIX (Issue 2): re-probe layout fresh on init
+    g_layoutUnsupported = false;   // re-probe layout fresh on init
 
-    // FIX-A8 (#11): single non-blocking geometry probe. Try once so the FIRST
+
+    // single non-blocking geometry probe. Try once so the FIRST
     // paint uses correct geometry when the taskbar/DWM are already up (the common
     // reload case). If composition isn't ready yet (cold boot) g_dockLocalW stays
     // 0 -- but we no longer Sleep-retry on the lifecycle thread: the worker's
     // 100 ms boot poll + snap-position logic recovers the geometry within one
     // cycle, so we don't block Explorer startup / the Windhawk UI here.
+    RefreshSystemLightTheme();
     RefreshTaskbarCache();
     LoadPinnedApps();
-    EwpLoadPlacement();
-    EwpLoadWorkspaces();
 
-    // FIX-C1 (#1/#2/#8): all top-level windows and the pin hotkey are now
+    // all top-level windows and the pin hotkey are now
     // created / pumped / destroyed on the dedicated UI thread
     // (UiThreadProc) so they finally have a guaranteed GetMessageW/DispatchMessageW
     // pump and are torn down on their creating thread. Windhawk lifecycle callbacks
     // (this function) run on an arbitrary, non-pumping thread, so we must own one.
     // Start the UI thread and wait for it to finish creating its windows before
     // starting the worker, which immediately expects g_overlayWnd/g_inputWnd to exist.
-    // (The former SetWinEventHook was already removed in FIX-A7 -- the worker poll
-    // drives every geometry update, now actually dispatched by this thread's pump.)
     g_uiReadyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!g_uiReadyEvent) { WhTool_ModUninit(); return FALSE; }
     g_uiThread = CreateThread(NULL, 0, UiThreadProc, NULL, 0, NULL);
@@ -13176,13 +13188,13 @@ BOOL WhTool_ModInit() {
     g_workerThread = CreateThread(NULL, 0, WorkerThread, NULL, 0, NULL);
     if (!g_workerThread) { WhTool_ModUninit(); return FALSE; }
 
-    // FIX(Issue 4): removed the init-thread UpdateAutoHideState() call. The worker
+    // removed the init-thread UpdateAutoHideState() call. The worker
     // thread was just created above, and its first poll iteration calls
     // UpdateAutoHideState() itself. Calling it here too raced the worker -- both paths
     // write g_taskbarAutoHide and call RepositionOverlay() concurrently. The worker is
     // now the single owner of the auto-hide state, so there is no startup race window.
 
-    Wh_Log(L"INIT: v2.6.0 (1.2026.1811) OK. state=%d pinned=%d reorder=%d explorerWorkspaces=%d delay=%d hotkey=0x%X+0x%X autohide=%d",
+    Wh_Log(L"INIT: v3.2026.1811 OK. state=%d pinned=%d reorder=%d explorerWorkspaces=%d delay=%d hotkey=0x%X+0x%X autohide=%d",
               g_systemState, (int)g_pinnedApps.size(),
               (int)ENABLE_REORDER,
               (int)ENABLE_EXPLORER_WORKSPACE_PINS,
@@ -13192,12 +13204,11 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModUninit() {
-    // FIX-A7 (#4): WinEvent hook removed -- nothing to unhook.
-    // FIX-C1 (#2): the pin hotkey and every window are unregistered/destroyed by
+    // the pin hotkey and every window are unregistered/destroyed by
     // the UI thread itself (UiThreadProc), on the thread that created them -- see
     // the WM_QUIT + join below. Nothing here touches those windows directly.
 
-    // FIX-B1 (#5): signal the worker thread and wait INFINITELY for it to exit.
+    // signal the worker thread and wait INFINITELY for it to exit.
     // The old 2 s timeout could return while the worker was still running mod
     // code (a single loop iteration can do a cross-process UIA hit-test +
     // EnumWindows/OpenProcess per window and exceed 2 s on a loaded machine);
@@ -13216,23 +13227,18 @@ void WhTool_ModUninit() {
         }
     }
 
-    // FIX-B2 (#6) + review #4: signal the launch stop flag NOW, before the UI
+    //  + : signal the launch stop flag NOW, before the UI
     // thread is quit. Because LaunchWorkspaceAsync refuses to start once this is
     // set, the UI thread's "Restore Workspace" menu path can no longer spawn a
     // launch thread that would outlive the drain below. The actual join of the
     // launch threads is deferred until AFTER the UI thread has been joined (see
     // below) so no in-flight menu handler can push a new handle after the drain.
     g_launchWorkspaceStop.store(true);
-    if (g_ewpCapThread) {
-        WaitForSingleObject(g_ewpCapThread, INFINITE);
-        CloseHandle(g_ewpCapThread);
-        g_ewpCapThread = NULL;
-    }
 
-    // FIX-C1 (#1/#2/#3): now that the worker (which may cross-thread SendMessage
+    // now that the worker (which may cross-thread SendMessage
     // into the overlay) has exited, ask the UI thread to quit. WM_QUIT breaks its
     // GetMessageW loop; UiThreadProc then destroys every top-level window,
-    // unregisters the pin hotkey and UnregisterClassW's all 7 classes ON ITS OWN
+    // unregisters the pin hotkey and unregisters its window classes ON ITS OWN
     // (creating) thread -- the only thread allowed to. We must join it here BEFORE
     // freeing any GDI/DIB/CS resources below, and before Windhawk FreeLibrary's the
     // image, so no window proc is ever entered against unmapped code. After the join
@@ -13250,7 +13256,13 @@ void WhTool_ModUninit() {
         g_uiReadyEvent = NULL;
     }
 
-    // Review #4 (Bug A): now that BOTH the worker and the UI thread are joined,
+    if (g_ewpCapThread) {
+        WaitForSingleObject(g_ewpCapThread, INFINITE);
+        CloseHandle(g_ewpCapThread);
+        g_ewpCapThread = NULL;
+    }
+
+    // now that BOTH the worker and the UI thread are joined,
     // no code path can spawn another launch thread. Drain and join every handle
     // still outstanding before the image is unmapped, so no LaunchWorkspaceThread
     // is ever executing mod code after FreeLibrary. The stop flag was set above,
@@ -13279,28 +13291,8 @@ void WhTool_ModUninit() {
 
     SetHighResTimer(false);  // release 1ms timer period if still held
 
-    // Destroy GDI resources in reverse creation order
+    // Destroy remaining GDI resources (windows and classes were torn down on the UI thread)
     if (g_ghostDIB)  { DeleteObject(g_ghostDIB);  g_ghostDIB  = NULL; }
-    if (g_ghostWnd)  { DestroyWindow(g_ghostWnd);  g_ghostWnd  = NULL; }
-    if (g_overlayWnd){ DestroyWindow(g_overlayWnd);g_overlayWnd= NULL; }
-    if (g_inputWnd)  { DestroyWindow(g_inputWnd);  g_inputWnd  = NULL; }
-
-    // FIX-B3 (#3): unregister every window class this mod registered. A class
-    // registration is NOT removed when the mod DLL unloads, so without this the
-    // next load's RegisterClassExW fails with ERROR_CLASS_ALREADY_EXISTS and
-    // CreateWindowExW binds to the stale class whose lpfnWndProc points into the
-    // now-unmapped previous image -> crash on the first message. All windows of
-    // these classes have been destroyed above, so UnregisterClassW can succeed.
-    // Registered with GetModHInstance() (see the RegisterClassExW sites), so we
-    // must unregister against the same module handle. (Phase C will move this to
-    // the dedicated window thread that owns the classes.)
-    {
-        HINSTANCE hInst = GetModHInstance();
-        UnregisterClassW(INPUT_CLASS,          hInst);   // QPDockInputOwner
-        UnregisterClassW(OVERLAY_CLASS,        hInst);   // QPDockOverlay
-        UnregisterClassW(GHOST_CLASS,          hInst);   // QPDockGhost
-        UnregisterClassW(L"QPDockRenameDialog", hInst);
-    }
 
     DestroyPaintBuffer();
     DestroyTooltipResources();
@@ -13315,6 +13307,10 @@ void WhTool_ModUninit() {
         LeaveCriticalSection(&g_cs);
         DeleteCriticalSection(&g_cs);
         g_csInitialized = false;
+    }
+    if (g_saveCsInit) {
+        DeleteCriticalSection(&g_saveCs);
+        g_saveCsInit = false;
     }
     if (g_gdiplusToken) {
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
@@ -13340,18 +13336,14 @@ void WhTool_ModSettingsChanged() {
     g_settingsReloadPending = true;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
+//////////////////////////////////////////////////////////////////////////////// Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-//
 // The mod will load and run in a dedicated windhawk.exe process.
-//
 // Paste the code below as part of the mod code, and use these callbacks:
 // * WhTool_ModInit
 // * WhTool_ModSettingsChanged
 // * WhTool_ModUninit
-//
 // Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
@@ -13400,54 +13392,24 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (!isToolModProcess) {
-        WCHAR modulePath[MAX_PATH] = {};
-        if (GetModuleFileNameW(nullptr, modulePath, ARRAYSIZE(modulePath))) {
-            PCWSTR baseName = PathFindFileNameW(modulePath);
-            if (baseName &&
-                (_wcsicmp(baseName, L"windhawk-mod.exe") == 0 ||
-                 _wcsicmp(baseName, L"windhawk-mod-uiaccess.exe") == 0 ||
-                 _wcsicmp(baseName, L"windhawk-mod-elevated.exe") == 0)) {
-                isToolModProcess = true;
-                isCurrentToolModProcess = true;
-            }
-        }
-    }
-
     if (isExcluded) {
         return FALSE;
     }
 
     if (isCurrentToolModProcess) {
-        // EntryPoint_Hook calls ExitThread(0) on the main thread right after Wh_ModInit,
-        // which abandons thread ownership of any mutex while keeping the kernel handle alive
-        // until Wh_ModUninit calls CloseHandle(g_toolModProcessMutex). Therefore, process
-        // uniqueness MUST be checked via ERROR_ALREADY_EXISTS (kernel handle existence)
-        // with a bounded retry loop for recompile handoffs, never via WAIT_ABANDONED!
-        for (int attempt = 0; attempt < 30; ++attempt) {
-            SetLastError(0);
-            g_toolModProcessMutex =
-                CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-            if (!g_toolModProcessMutex) {
-                Wh_Log(L"CreateMutex failed");
-                ExitProcess(1);
-            }
-            if (GetLastError() != ERROR_ALREADY_EXISTS) {
-                break;
-            }
-            CloseHandle(g_toolModProcessMutex);
-            g_toolModProcessMutex = nullptr;
-            Sleep(100);
-        }
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
             Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
 
         if (!WhTool_ModInit()) {
-            ReleaseMutex(g_toolModProcessMutex);
-            CloseHandle(g_toolModProcessMutex);
-            g_toolModProcessMutex = nullptr;
             ExitProcess(1);
         }
 
@@ -13473,14 +13435,6 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     if (!g_isToolModProcessLauncher) {
-        return;
-    }
-
-    // If Windhawk 2.0's dedicated windhawk-mod.exe host already created the tool mutex
-    // kernel object, do not spawn a duplicate tool process from windhawk.exe.
-    HANDLE hExistingMutex = OpenMutexW(SYNCHRONIZE, FALSE, L"windhawk-tool-mod_" WH_MOD_ID);
-    if (hExistingMutex) {
-        CloseHandle(hExistingMutex);
         return;
     }
 
@@ -13551,12 +13505,6 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
         return;
-    }
-
-    if (g_toolModProcessMutex) {
-        ReleaseMutex(g_toolModProcessMutex);
-        CloseHandle(g_toolModProcessMutex);
-        g_toolModProcessMutex = nullptr;
     }
 
     WhTool_ModUninit();
