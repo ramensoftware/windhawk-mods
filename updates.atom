@@ -2,12 +2,102 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-17T23:05:00.000Z</updated>
+    <updated>2026-11-18T00:01:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Middle Click Minimize 1.1.4]]></title>
+        <id>https://windhawk.net/mods/middle-click-minimize#17a92aae0916da7d6cec7d1d920cb2d92fd93d10</id>
+        <link href="https://windhawk.net/mods/middle-click-minimize"/>
+        <updated>2026-11-18T00:01:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add settings for middle, Ctrl and Shift + middle click</li>
+<li>Actions: minimize, maximize/restore, close, toggle always on top</li>
+<li>Skip disabled windows, CS_NOCLOSE windows and MDI topmost</li>
+<li>Unify DispatchMessageW/A hooks with a template</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ar4ujo_009</name>
+            <uri>https://github.com/Ar4ujo009</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Volume Percentage Indicator 1.11.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-volume-percentage#990d755862f4334382291f9e4457dd94012d2e85</id>
+        <link href="https://windhawk.net/mods/taskbar-volume-percentage"/>
+        <updated>2026-11-18T00:01:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add custom text and mute color settings (textColor, muteTextColor)</li>
+<li>Show indicator immediately on mod load via taskbar XAML tree traversal</li>
+<li>Synchronize colors dynamically on Windows theme changes (light/dark mode)</li>
+<li>Preserve and restore Taskbar Styler and shell native foreground brushes</li>
+<li>Optimize color parsing and resource allocations</li>
+</ul>
+]]></content>
+        <author>
+            <name>gilnett</name>
+            <uri>https://github.com/gilnett</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[MMC Dark Mode 1.1.1]]></title>
+        <id>https://windhawk.net/mods/mmc-dark-mode#2039286cadcadec491cb0d9959b72c9da0be489e</id>
+        <link href="https://windhawk.net/mods/mmc-dark-mode"/>
+        <updated>2026-11-18T00:01:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improve dark mode coverage for dialogs, wizard pages, check boxes and radio buttons.</li>
+<li>Improve Task Scheduler, property sheets, hosted controls and MMC frames.</li>
+<li>Reduce light areas and flashes in result views and embedded content.</li>
+<li>Update live disable and cleanup handling.</li>
+</ul>
+]]></content>
+        <author>
+            <name>metanoid18</name>
+            <uri>https://github.com/Metanoid18</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Nimbus Menu 1.0.0]]></title>
+        <id>https://windhawk.net/mods/nimbus-menu#f97981a8e580c12cc3eaa170a499de7e5b087d4b</id>
+        <link href="https://windhawk.net/mods/nimbus-menu"/>
+        <updated>2026-11-18T00:01:21.000Z</updated>
+        <content type="html"><![CDATA[<h1>Nimbus Menu</h1>
+<p>Replaces the Windows taskbar with a light dock, one per monitor, with its own Start menu.</p>
+<p><img src="https://raw.githubusercontent.com/igoredm/windhawk-mods/b8319aac0d112762c582a7a0b4778d6c1d72790a/start.png" alt="Dock and Start"></p>
+<p><img src="https://raw.githubusercontent.com/igoredm/windhawk-mods/b8319aac0d112762c582a7a0b4778d6c1d72790a/search.png" alt="Start search"></p>
+<ul>
+<li>Floating dock or full-width bar; 4 looks (Névoa, Cristal, Grafite, Aurora).</li>
+<li>macOS-like zoom (or Lift / Focus), live window previews (hover a thumbnail to peek), drag icons to reorder, pin and unpin.</li>
+<li>Its own Start: pinned apps, all apps, app search, files (with <a href="https://www.voidtools.com">Everything</a> or Windows Search) and Windows Settings pages. Compact or wide search.</li>
+<li>The Windows key opens Nimbus' Start over any window (administrator ones too) and in games. Ctrl+Esc still opens Windows' Start. An optional shortcut (Alt+Space or Ctrl+Space) can open it too.</li>
+<li>Per-monitor settings: format, auto-hide, what shows, only that monitor's windows.</li>
+<li>The dock runs in its own Windhawk process and hides when a game or video is in full screen. Explorer only gets one small hook, for the Windows key.</li>
+<li>The text is in English, or in Portuguese when Windows is in Portuguese.</li>
+</ul>
+<p><strong>What it changes in Windows.</strong> With &quot;Hide the Windows taskbar&quot; on (the default), the whole Windows taskbar is hidden, so its tray, clock and quick settings are gone too: use another mod or app for those if you need them. To stop the hidden taskbar from reserving screen space, the mod turns on the taskbar's own &quot;Automatically hide the taskbar&quot; option, which Windows saves in your profile. The mod remembers your original choice and puts it back when it's turned off, also after a crash or a shutdown with the mod on. If the Windows taskbar ever stays hidden, turn the mod off or restart Explorer.</p>
+<hr>
+<p><strong>Português</strong></p>
+<p>Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Iniciar próprio.</p>
+<ul>
+<li>Dock flutuante ou barra fixa; 4 visuais (Névoa, Cristal, Grafite, Aurora).</li>
+<li>Zoom como no macOS (ou Elevar / Foco), prévia das janelas ao vivo (parar o mouse na miniatura mostra a janela), arrastar ícones pra reorganizar, fixar e desafixar.</li>
+<li>Iniciar próprio: fixados, todos os apps, busca de apps, arquivos (com o <a href="https://www.voidtools.com">Everything</a> ou a busca do Windows) e telas das Configurações do Windows. Busca compacta ou larga.</li>
+<li>A tecla Windows abre o Iniciar do Nimbus em qualquer janela (até de administrador) e em jogos. Ctrl+Esc continua abrindo o Iniciar do Windows. Um atalho opcional (Alt+Espaço ou Ctrl+Espaço) também pode abrir.</li>
+<li>Ajustes por monitor: formato, esconder sozinha, o que aparece, só as janelas daquele monitor.</li>
+<li>A dock roda num processo próprio do Windhawk e some quando um jogo ou vídeo está em tela cheia. No Explorador entra só um gancho pequeno, o da tecla Windows.</li>
+<li>Os textos ficam em inglês, ou em português quando o Windows está em português.</li>
+</ul>
+<p><strong>O que muda no Windows.</strong> Com &quot;Esconder a barra do Windows&quot; ligado (o padrão), a barra do Windows some inteira, então a bandeja, o relógio e as configurações rápidas somem junto: use outro mod ou app pra isso se precisar. Pra barra escondida não reservar espaço na tela, o mod liga a opção &quot;Ocultar automaticamente a barra de tarefas&quot; do próprio Windows, que fica salva no seu perfil. O mod guarda a sua escolha original e devolve quando é desligado, até depois de um travamento ou de desligar o PC com o mod ligado. Se a barra do Windows ficar escondida, desligue o mod ou reinicie o Explorador.</p>
+]]></content>
+        <author>
+            <name>igoredm</name>
+            <uri>https://github.com/igoredm</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Command Bar 1.3.0]]></title>
         <id>https://windhawk.net/mods/explorer-command-bar#96f8ea0ad98a9612d5e0e5aa24f7ed7e8ca757df</id>
@@ -318,65 +408,6 @@
         <updated>2026-11-17T06:02:26.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
-</ul>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Scroll Actions 1.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-scroll-actions#560ad8d3d1bafdb9c5b78fd9b27289ca801e3c91</id>
-        <link href="https://windhawk.net/mods/taskbar-scroll-actions"/>
-        <updated>2026-11-17T06:02:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The brightness is now changed with the native Windows brightness API, and a native Windows indicator is shown. If the native method isn't available, or if disabled in the mod settings, the brightness is changed directly, as before.</li>
-<li>Brightness changes are now done in the background, so the taskbar no longer freezes while the brightness is being changed.</li>
-</ul>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-multirow#03995a0b0478cb8dfd10300f2d47a4b65476826a</id>
-        <link href="https://windhawk.net/mods/taskbar-multirow"/>
-        <updated>2026-11-17T05:00:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
-</ul>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide fine tuning 2.3.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#a9a85ba3f0a81211514de7ad3d7a09d870d97edf</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only"/>
-        <updated>2026-11-17T04:04:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the always-show toggle mouse event (middle click or double click) being triggered by clicks on the system tray on newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
-<li>Fixed the &quot;Customize the old taskbar on Windows 11&quot; option on Windows 11 24H2 builds older than 26100.1301.</li>
-</ul>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Shell Flyout Positions 1.3.1]]></title>
-        <id>https://windhawk.net/mods/shell-flyout-positions#b7ae0bc02245592cf21b356fd48826df054a6685</id>
-        <link href="https://windhawk.net/mods/shell-flyout-positions"/>
-        <updated>2026-11-17T04:04:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the &quot;Aligned to tray area&quot; option on newer Windows 11 versions, where the system tray is part of the taskbar frame.</li>
-<li>Fixed incorrect placement of the search menu opened with Win+S or the taskbar search box in some cases.</li>
 </ul>
 ]]></content>
         <author>

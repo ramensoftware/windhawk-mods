@@ -261,35 +261,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/760b91ecf9f50687cd4b2ed315b32d32ad8372ea/mods/lockscreen-background.wh.cpp"
       }
     },
-    "nimbus-menu": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794796718242,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794796718242,
-        "users": 0
-      },
-      "metadata": {
-        "author": "igoredm",
-        "compilerOptions": "-lole32 -loleaut32 -luuid -lgdi32 -ld2d1 -ldwrite -lwindowscodecs -ldwmapi -lshell32 -lshlwapi -lshcore -lpropsys -ladvapi32",
-        "description": "Replaces the Windows taskbar with a light dock and its own Start menu (also on the Windows key): smoked glass, macOS-like zoom, live window previews, one bar per monitor, file search with Everything",
-        "github": "https://github.com/igoredm",
-        "include": [
-          "windhawk.exe",
-          "explorer.exe"
-        ],
-        "name": "Nimbus Menu",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7489",
-      "source": {
-        "sha256": "321821e0a2aa7fac641a74568496ae1a52a0d7d3c9a5895cb42be166e4a23b2c",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4cb99f2b4c27e618215f22784d8c4bc35e761c65/mods/nimbus-menu.wh.cpp"
-      }
-    },
     "no-click-touchpad-tap-and-hold": {
       "details": {
         "defaultSorting": 0,

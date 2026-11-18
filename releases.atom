@@ -2,12 +2,50 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-17T00:04:32.000Z</updated>
+    <updated>2026-11-18T00:01:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Nimbus Menu 1.0.0]]></title>
+        <id>https://windhawk.net/mods/nimbus-menu#f97981a8e580c12cc3eaa170a499de7e5b087d4b</id>
+        <link href="https://windhawk.net/mods/nimbus-menu"/>
+        <updated>2026-11-18T00:01:21.000Z</updated>
+        <content type="html"><![CDATA[<h1>Nimbus Menu</h1>
+<p>Replaces the Windows taskbar with a light dock, one per monitor, with its own Start menu.</p>
+<p><img src="https://raw.githubusercontent.com/igoredm/windhawk-mods/b8319aac0d112762c582a7a0b4778d6c1d72790a/start.png" alt="Dock and Start"></p>
+<p><img src="https://raw.githubusercontent.com/igoredm/windhawk-mods/b8319aac0d112762c582a7a0b4778d6c1d72790a/search.png" alt="Start search"></p>
+<ul>
+<li>Floating dock or full-width bar; 4 looks (Névoa, Cristal, Grafite, Aurora).</li>
+<li>macOS-like zoom (or Lift / Focus), live window previews (hover a thumbnail to peek), drag icons to reorder, pin and unpin.</li>
+<li>Its own Start: pinned apps, all apps, app search, files (with <a href="https://www.voidtools.com">Everything</a> or Windows Search) and Windows Settings pages. Compact or wide search.</li>
+<li>The Windows key opens Nimbus' Start over any window (administrator ones too) and in games. Ctrl+Esc still opens Windows' Start. An optional shortcut (Alt+Space or Ctrl+Space) can open it too.</li>
+<li>Per-monitor settings: format, auto-hide, what shows, only that monitor's windows.</li>
+<li>The dock runs in its own Windhawk process and hides when a game or video is in full screen. Explorer only gets one small hook, for the Windows key.</li>
+<li>The text is in English, or in Portuguese when Windows is in Portuguese.</li>
+</ul>
+<p><strong>What it changes in Windows.</strong> With &quot;Hide the Windows taskbar&quot; on (the default), the whole Windows taskbar is hidden, so its tray, clock and quick settings are gone too: use another mod or app for those if you need them. To stop the hidden taskbar from reserving screen space, the mod turns on the taskbar's own &quot;Automatically hide the taskbar&quot; option, which Windows saves in your profile. The mod remembers your original choice and puts it back when it's turned off, also after a crash or a shutdown with the mod on. If the Windows taskbar ever stays hidden, turn the mod off or restart Explorer.</p>
+<hr>
+<p><strong>Português</strong></p>
+<p>Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Iniciar próprio.</p>
+<ul>
+<li>Dock flutuante ou barra fixa; 4 visuais (Névoa, Cristal, Grafite, Aurora).</li>
+<li>Zoom como no macOS (ou Elevar / Foco), prévia das janelas ao vivo (parar o mouse na miniatura mostra a janela), arrastar ícones pra reorganizar, fixar e desafixar.</li>
+<li>Iniciar próprio: fixados, todos os apps, busca de apps, arquivos (com o <a href="https://www.voidtools.com">Everything</a> ou a busca do Windows) e telas das Configurações do Windows. Busca compacta ou larga.</li>
+<li>A tecla Windows abre o Iniciar do Nimbus em qualquer janela (até de administrador) e em jogos. Ctrl+Esc continua abrindo o Iniciar do Windows. Um atalho opcional (Alt+Espaço ou Ctrl+Espaço) também pode abrir.</li>
+<li>Ajustes por monitor: formato, esconder sozinha, o que aparece, só as janelas daquele monitor.</li>
+<li>A dock roda num processo próprio do Windhawk e some quando um jogo ou vídeo está em tela cheia. No Explorador entra só um gancho pequeno, o da tecla Windows.</li>
+<li>Os textos ficam em inglês, ou em português quando o Windows está em português.</li>
+</ul>
+<p><strong>O que muda no Windows.</strong> Com &quot;Esconder a barra do Windows&quot; ligado (o padrão), a barra do Windows some inteira, então a bandeja, o relógio e as configurações rápidas somem junto: use outro mod ou app pra isso se precisar. Pra barra escondida não reservar espaço na tela, o mod liga a opção &quot;Ocultar automaticamente a barra de tarefas&quot; do próprio Windows, que fica salva no seu perfil. O mod guarda a sua escolha original e devolve quando é desligado, até depois de um travamento ou de desligar o PC com o mod ligado. Se a barra do Windows ficar escondida, desligue o mod ou reinicie o Explorador.</p>
+]]></content>
+        <author>
+            <name>igoredm</name>
+            <uri>https://github.com/igoredm</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Phone panel for NectarLink 1.0.0]]></title>
         <id>https://windhawk.net/mods/phone-panel-for-nectarlink#ec1f48a5f12d90c174d772b80a560e07bdbbdab4</id>
@@ -1242,30 +1280,6 @@ asks of the providers.</li>
         <author>
             <name>RandomGuy5747</name>
             <uri>https://github.com/RandomGuy5747</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Zen Duplicate Titlebar Fix (Win10) 1.0.0]]></title>
-        <id>https://windhawk.net/mods/zen-duplicate-titlebar-fix-win-10#fa72b34e6ff8225f45a1d2afd01370541e035428</id>
-        <link href="https://windhawk.net/mods/zen-duplicate-titlebar-fix-win-10"/>
-        <updated>2026-11-13T07:04:48.000Z</updated>
-        <content type="html"><![CDATA[<p>Duplicate titlebar buttons can occur on Zen when using transparent browser mods with DWMBlurGlass or OpenGlass, on Windows 10.<br>
-This mod hides the extra Windows-native titlebar buttons and lets Zen's remain.</p>
-<h3>Before</h3>
-<p><img src="https://raw.githubusercontent.com/landnthrnnn/DUMP/refs/heads/main/GitHub/repos/zen-duplicate-titlebar-fix/before.png" alt="Before fix"></p>
-<h3>After</h3>
-<p><img src="https://raw.githubusercontent.com/landnthrnnn/DUMP/refs/heads/main/GitHub/repos/zen-duplicate-titlebar-fix/after.png" alt="After fix"></p>
-<h2>How It Works</h2>
-<ul>
-<li>Removes the <code>WS_SYSMENU</code> window style from Zen's main browser windows, preventing Windows from drawing its native titlebar buttons over Zen's.</li>
-<li>Prevents Zen from restoring that style while the mod is active.</li>
-<li>Involves removing the native Windows system menu from being used on Zen, normally accessible with <code>alt + space</code>.</li>
-<li>Only targets <code>zen.exe</code> for it's main window(s), external windows from Zen such as Library or Browser Console are not targetted.</li>
-</ul>
-]]></content>
-        <author>
-            <name>landnthrn</name>
-            <uri>https://github.com/landnthrn</uri>
         </author>
     </entry>
 </feed>

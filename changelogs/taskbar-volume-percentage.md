@@ -1,3 +1,11 @@
+## 1.11.0 ([Nov 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/990d755862f4334382291f9e4457dd94012d2e85/mods/taskbar-volume-percentage.wh.cpp))
+
+- Add custom text and mute color settings (textColor, muteTextColor)
+- Show indicator immediately on mod load via taskbar XAML tree traversal
+- Synchronize colors dynamically on Windows theme changes (light/dark mode)
+- Preserve and restore Taskbar Styler and shell native foreground brushes
+- Optimize color parsing and resource allocations
+
 ## 1.10.0 ([Oct 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/296517f68b3f6840c58f222c5e810db41e96ff15/mods/taskbar-volume-percentage.wh.cpp))
 
 - Added visual mute cues for volume text (strikethrough and customizable dimming opacity) across all display styles when using "Same as Display style".
