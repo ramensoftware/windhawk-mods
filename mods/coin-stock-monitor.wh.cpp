@@ -2,7 +2,7 @@
 // @id              coin-stock-monitor
 // @name            Coin & Stock Monitor
 // @description     Shows stock and crypto prices on the Windows 11 taskbar, with a configurable price API, symbol list, colors and entry-price percentage
-// @version         1.2.1
+// @version         1.3.0
 // @author          jayll1303
 // @github          https://github.com/jayll1303
 // @license         MIT
@@ -48,10 +48,14 @@ stop all requests, disable the mod.
 * **Text alignment** - left or right inside the monitor area.
 * **Left offset** and **Monitor width** - position and size of the monitor area, in
   pixels from the left edge of the taskbar.
-* **Text color** - `#RRGGBB` for symbols and prices without an entry price. The
-  default is green. Leave empty to follow the taskbar theme.
-* **Gain color** and **Loss color** - `#RRGGBB` colors for prices and percentages
-  compared with entry prices.
+* **Color preset** - Slate (default), Charcoal, Warm Graphite, Blue / Amber,
+  Porcelain, or Custom.
+* **Custom text, gain and loss colors** - editable `#RRGGBB` values used
+  when Color preset is Custom. Existing custom color settings are preserved.
+* **Background mode** - Transparent (default) or Solid. Solid gives the monitor
+  its own opaque background for transparent taskbar themes such as DockLike.
+* **Background color** - `#RRGGBB`, used in Solid mode (default `#1E2633`). The
+  background fills the monitor area, including its full taskbar height.
 * **Refresh interval** - seconds between fetches (minimum 15).
 
 Changing any setting reloads the mod.
@@ -70,6 +74,8 @@ Changing any setting reloads the mod.
   With a left-aligned Start button, the monitor overlaps Start.
 * If the taskbar has many apps or a wide Start area, reduce **Monitor width** so
   the monitor does not cover the task list.
+* A solid background improves readability but does not reserve taskbar layout
+  space. The monitor still uses **Left offset** and **Monitor width**.
 * Pixel values are for 100% display scaling.
 */
 // ==/WindhawkModReadme==
@@ -108,19 +114,47 @@ Changing any setting reloads the mod.
   $options:
   - left: Left
   - right: Right
-- TextColor: "#19FF00"
-  $name: Text color
+- ColorPreset: slate
+  $name: Color preset
   $description: >-
-    Hex color (#RRGGBB) for symbols and prices without an entry price. Leave
-    empty to follow the taskbar theme.
+    Select a coordinated text, gain and loss palette. Custom keeps the
+    individual color settings below.
+  $options:
+  - slate: Slate (default)
+  - charcoal: Charcoal
+  - warm_graphite: Warm Graphite
+  - blue_amber: Blue / Amber
+  - porcelain: Porcelain
+  - custom: Custom colors
+- TextColor: "#19FF00"
+  $name: Custom text color
+  $description: >-
+    Hex color (#RRGGBB) for symbols and prices without an entry price.
+    Used only when Color preset is Custom. Leave empty to follow the taskbar theme.
+    Avoid pure magenta (#FF00FF) when Background mode is Transparent.
 - UpColor: "#00A850"
-  $name: Gain color
+  $name: Custom gain color
   $description: >-
     Hex color (#RRGGBB) for prices and percentages at or above their entry price.
+    Used only when Color preset is Custom.
 - DownColor: "#E0301E"
-  $name: Loss color
+  $name: Custom loss color
   $description: >-
     Hex color (#RRGGBB) for prices and percentages below their entry price.
+    Used only when Color preset is Custom.
+- BackgroundMode: transparent
+  $name: Background mode
+  $description: >-
+    Solid fills the monitor area with an opaque color, useful with transparent
+    taskbar themes such as DockLike. It does not reserve space for the monitor.
+  $options:
+  - transparent: Transparent
+  - solid: Solid
+- BackgroundColor: "#1E2633"
+  $name: Background color
+  $description: >-
+    Hex color (#RRGGBB) used in Solid mode. Fills the full monitor area, whose
+    size is controlled by Monitor width and the taskbar height.
 - RefreshSeconds: 60
   $name: Refresh interval (seconds)
   $description: >-
@@ -177,6 +211,21 @@ constexpr size_t kSymbolsPerLine = 2;
 constexpr size_t kMaxSymbols = 4;
 constexpr int kFontPointSize = 9;
 
+struct ColorPalette {
+    PCWSTR name;
+    COLORREF text;
+    COLORREF gain;
+    COLORREF loss;
+};
+
+constexpr ColorPalette kColorPalettes[] = {
+    {L"slate", RGB(0xDE, 0xE5, 0xEF), RGB(0x70, 0xDC, 0xC0), RGB(0xFF, 0xA0, 0xAD)},
+    {L"charcoal", RGB(0xE6, 0xE6, 0xE6), RGB(0x72, 0xD5, 0xA3), RGB(0xFF, 0x92, 0x92)},
+    {L"warm_graphite", RGB(0xEA, 0xE3, 0xD9), RGB(0xB2, 0xD4, 0x9A), RGB(0xF5, 0xA4, 0x91)},
+    {L"blue_amber", RGB(0xE4, 0xE8, 0xEE), RGB(0x8A, 0xC8, 0xFF), RGB(0xFF, 0xC0, 0x78)},
+    {L"porcelain", RGB(0x30, 0x36, 0x40), RGB(0x17, 0x62, 0x3D), RGB(0xA5, 0x27, 0x37)},
+};
+
 struct EntryPrice {
     std::wstring symbol;
     double price;
@@ -195,6 +244,8 @@ struct Settings {
     COLORREF textColor = 0;
     COLORREF upColor = 0;
     COLORREF downColor = 0;
+    bool solidBackground = false;
+    COLORREF backgroundColor = RGB(0x1E, 0x26, 0x33);
 };
 
 // Gain and loss tones use the configured up and down colors. Neutral uses the text color.
@@ -320,6 +371,7 @@ std::vector<EntryPrice> ParseEntryPrices(const std::wstring& list) {
 }
 
 // Parses "#RRGGBB" or "RRGGBB". Leaves `color` unchanged on failure.
+// RGB() packs COLORREF as 0x00BBGGRR; convert #RRGGBB channels before packing.
 bool ParseColor(const std::wstring& text, COLORREF& color) {
     std::wstring hex = Trim(text);
     if (!hex.empty() && hex[0] == L'#') {
@@ -730,9 +782,10 @@ void PaintOverlay(HWND overlay) {
 
     RECT rect;
     GetClientRect(overlay, &rect);
-    HBRUSH keyBrush = CreateSolidBrush(kColorKey);
-    FillRect(dc, &rect, keyBrush);
-    DeleteObject(keyBrush);
+    HBRUSH backgroundBrush = CreateSolidBrush(
+        g_settings.solidBackground ? g_settings.backgroundColor : kColorKey);
+    FillRect(dc, &rect, backgroundBrush);
+    DeleteObject(backgroundBrush);
 
     TextLines lines = GetDisplayLines();
     HGDIOBJ oldFont = SelectObject(dc, g_font);
@@ -765,6 +818,10 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
                                 WPARAM wParam,
                                 LPARAM lParam) {
     switch (message) {
+        case WM_NCHITTEST:
+            // Keep the overlay click-through in transparent and solid modes.
+            return HTTRANSPARENT;
+
         case WM_ERASEBKGND:
             return 1;
 
@@ -810,14 +867,16 @@ void WINAPI CreateOverlayOnTaskbarThread(PVOID parameter) {
 
     if (!g_font) {
         int dpi = static_cast<int>(GetDpiForWindow(taskbar));
+        // Avoid color-key-colored fringes around glyphs in transparent mode.
         g_font = CreateFontW(-MulDiv(kFontPointSize, dpi, 72), 0, 0, 0,
                              FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                              NONANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
     }
 
-    // Layered + color key makes the background transparent, and WS_EX_TRANSPARENT
-    // lets clicks fall through to the taskbar.
+    // Transparent mode uses a color key. Solid mode uses full opacity without a
+    // color key, so every background/text color (including magenta) stays opaque.
+    // WM_NCHITTEST keeps clicks falling through to the taskbar in both modes.
     HWND overlay = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE, kOverlayClassName,
         nullptr, WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, taskbar, nullptr, module,
@@ -825,7 +884,11 @@ void WINAPI CreateOverlayOnTaskbarThread(PVOID parameter) {
     if (!overlay) {
         return;
     }
-    SetLayeredWindowAttributes(overlay, kColorKey, 0, LWA_COLORKEY);
+    if (g_settings.solidBackground) {
+        SetLayeredWindowAttributes(overlay, 0, 255, LWA_ALPHA);
+    } else {
+        SetLayeredWindowAttributes(overlay, kColorKey, 0, LWA_COLORKEY);
+    }
     SetTimer(overlay, kPlacementTimerId, kPlacementIntervalMs, nullptr);
     g_overlay = overlay;
     RefreshOverlay(overlay);
@@ -884,6 +947,15 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     return 0;
 }
 
+const ColorPalette* FindColorPalette(PCWSTR name) {
+    for (const ColorPalette& palette : kColorPalettes) {
+        if (_wcsicmp(name, palette.name) == 0) {
+            return &palette;
+        }
+    }
+    return nullptr;
+}
+
 COLORREF ColorSetting(PCWSTR name, COLORREF fallback) {
     COLORREF color = fallback;
     std::wstring text = StringSetting::make(name).get();
@@ -911,11 +983,29 @@ void LoadSettings() {
     g_settings.alignRight =
         wcscmp(StringSetting::make(L"TextAlign").get(), L"left") != 0;
 
-    std::wstring textColor = StringSetting::make(L"TextColor").get();
-    g_settings.hasTextColor = ParseColor(textColor, g_settings.textColor);
-
-    g_settings.upColor = ColorSetting(L"UpColor", RGB(0x00, 0xA8, 0x50));
-    g_settings.downColor = ColorSetting(L"DownColor", RGB(0xE0, 0x30, 0x1E));
+    std::wstring preset = StringSetting::make(L"ColorPreset").get();
+    if (preset.empty()) {
+        preset = L"slate";
+    }
+    const ColorPalette* palette = FindColorPalette(preset.c_str());
+    if (palette) {
+        g_settings.hasTextColor = true;
+        g_settings.textColor = palette->text;
+        g_settings.upColor = palette->gain;
+        g_settings.downColor = palette->loss;
+    } else {
+        if (preset != L"custom") {
+            Wh_Log(L"Unknown color preset %s, using custom colors", preset.c_str());
+        }
+        std::wstring textColor = StringSetting::make(L"TextColor").get();
+        g_settings.hasTextColor = ParseColor(textColor, g_settings.textColor);
+        g_settings.upColor = ColorSetting(L"UpColor", RGB(0x00, 0xA8, 0x50));
+        g_settings.downColor = ColorSetting(L"DownColor", RGB(0xE0, 0x30, 0x1E));
+    }
+    g_settings.solidBackground =
+        wcscmp(StringSetting::make(L"BackgroundMode").get(), L"solid") == 0;
+    g_settings.backgroundColor =
+        ColorSetting(L"BackgroundColor", RGB(0x1E, 0x26, 0x33));
 }
 
 }  // namespace
