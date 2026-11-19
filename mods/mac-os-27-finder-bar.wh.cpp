@@ -28,7 +28,7 @@ Available in English, Português, Español, Français, Deutsch, Italiano and 中
 
 ## Left side
 
-- **Logo menu**: About This PC, System Settings, Microsoft Store (both with pending update counts), Force Quit, Show Desktop, Sleep, Hibernate, Restart, Shut Down, Lock Screen, Sign Out and **Menu Bar Settings…**
+- **Logo menu**: About This PC, System Settings, Microsoft Store (both with pending update counts), Force Quit, Show Desktop, Sleep, Hibernate, Restart, Shut Down, Lock Screen, Sign Out and **Menu Bar Settings…**; Restart, Shut Down and Sign Out ask in a glass dialog
 - **Active app name** (shown as *Finder* for the desktop and File Explorer, a name you can change): hide the app, hide others, open file location, close window, quit, force quit
 - **Global menu**:
   - apps with a classic menu bar (Win32): the app's real menus
@@ -59,7 +59,7 @@ Wi-Fi, Bluetooth, media playing, dark mode, Do Not Disturb, brightness, sound an
 
 ## Notice pills
 
-Small glass pills drop from the bar for headphones, audio output, low battery, charger, Focus, Caps Lock, USB devices and drives, finished downloads, copy and cut, screenshots and screen recordings. Pills you can act on (open and edit a screenshot or recording, open a download, reply to a message) stay 2.5 times longer and are kept in the bell panel; the rest only show in the pill. Volume, brightness and Bluetooth changes can show as floating pills too. The pill's style (the bar's background, glass, liquid glass, custom liquid glass, light, dark or OLED), text color (the theme's, white or black), live background for the glass styles, size, position, duration and opening and closing animations are all configurable.
+Small glass pills drop from the bar for headphones, audio output, low battery, charger, Focus, Caps Lock, Num Lock, Scroll Lock, USB devices and drives, finished downloads, copy and cut, screenshots and screen recordings. Pills you can act on (open and edit a screenshot or recording, open a download, reply to a message) stay 2.5 times longer and are kept in the bell panel; the rest only show in the pill. Volume, brightness and Bluetooth changes can show as floating pills too. The pill's style (the bar's background, glass, liquid glass, custom liquid glass, light, dark or OLED), text color (the theme's, white or black), live background for the glass styles, size, position, duration and opening and closing animations are all configurable.
 
 ## Notifications
 
@@ -83,7 +83,8 @@ Turn on **Receive app notifications** in logo → **Menu Bar Settings…** → *
 - "Window color" bar background: transparent over the desktop, and the color of the title bar of the maximized window on that display (it stays while a menu, search or another window is in front)
 - Bar text and icons in white, black or automatic (following the Windows theme, or the solid background)
 - Clicking the album cover (Control Center or Now Playing) brings the playing app's window to the front
-- Optional: hide the bar while a window is maximized on its display (the window gets the whole height) and bring it back when none is
+- Optional: hide the bar while a window is maximized on its display (the window gets the whole height) and bring it back when none is; pointing at the top edge shows it over the window until the pointer leaves, as on macOS. The bar slides up and down when it hides and shows
+- **Back up your settings**: export everything set in Menu Bar Settings to a file, and import it again later or on another PC
 - Hide with the handle (optional): the bar stays hidden and a click on a thin pill at the top center shows it, windows move down (with the "Window color" background, the bar takes the color of the active window's title bar); another click hides it. It works only while "Hide when a window is maximized" is off, since that one brings the bar back on its own
 - Choose where the bar shows: all displays, the main one, or a specific display (listed by name); if that display is disconnected, the bar moves to the main one
 - **Disks** (optional): its menu lists every local and removable disk with a usage bar and opens it in Explorer
@@ -349,6 +350,7 @@ struct Settings {
     bool showDisks;  // discos na barra, com quanto está cheio
     bool usbPills, downloadPills, clipPills, shotPills;
     bool islFocus, islBattery, islBluetooth, islAudio, islHistory, winNotifs, islHistNotices, islCaps;
+    bool islLocks = true;  // Num Lock e Scroll Lock (como o Caps Lock)
     bool islLive;  // pílulas de aviso com vidro: a foto do fundo acompanha ao vivo
     int islTextColor, ntfTextColor;  // cor do texto nas pílulas e nas notificações: 0 tema, 1 branco, 2 preto
     bool winNotifsOnly;  // só a barra mostra as notificações (faixas do Windows desligadas)
@@ -644,6 +646,7 @@ static const UiDefault kUiDefaults[] = {
     {L"ntfTextColor", L"theme"},
     {L"islHistNotices", L"1"},
     {L"islCaps", L"1"},
+    {L"islLocks", L"1"},
     {L"islStyle", L"follow"},
     {L"islSize", L"100"},
     {L"islDuration", L"26"},
@@ -899,6 +902,7 @@ static void LoadSettings() {
     s.shotPills = OvrInt(L"shotPills") != 0;
     s.islFocus = OvrInt(L"islFocus") != 0;
     s.islCaps = OvrInt(L"islCaps") != 0;
+    s.islLocks = OvrInt(L"islLocks") != 0;
     s.winNotifs = OvrInt(L"winNotifs") != 0;
     s.winNotifsOnly = OvrInt(L"winNotifsOnly") != 0;
     s.islBattery = OvrInt(L"islBattery") != 0;
@@ -1029,6 +1033,10 @@ struct Bar {
     bool appbarReleased = false;      // escondida por janela maximizada: o espaço do topo foi devolvido
     bool autoShown = false;
     int hideCountdown = 0;
+    // Deslizar ao mostrar e esconder (issue #9): de cima para baixo e de volta.
+    ULONGLONG slideTick = 0;
+    bool slideIn = false;
+    bool maxPeek = false;  // escondida por janela maximizada, mostrada pelo mouse no topo (issue #7)
     int hover = -1;
     int open = -1;
     int flash = -1;  // item destacado pelo indicador de volume/brilho
@@ -1325,6 +1333,9 @@ static void OpenUri(PCWSTR uri, PCWSTR params = nullptr) {
     ShellExecuteW(nullptr, L"open", target.c_str(), params, nullptr, SW_SHOWNORMAL);
 }
 
+// Uma caixa de confirmação de vidro, no estilo do macOS (issue #10): ícone,
+// título, texto e dois botões. Modal (espera a resposta). Mais abaixo.
+static bool GlassConfirm(wchar_t glyph, PCWSTR title, PCWSTR text, PCWSTR okLabel);
 static bool Confirm(PCWSTR text) {
     // Dono = a janela do mod: a caixa não vira o "app ativo" da barra.
     return MessageBoxW(g_owner, T(text), L"Mac OS 27 Finder Bar",
@@ -4074,13 +4085,13 @@ static void RunCommand(const TopMenu* tm, UINT cmd) {
             break;
         }
         case ID_RESTART:
-            if (Confirm(L"Reiniciar o computador agora?")) {
+            if (GlassConfirm(0xE777, L"Reiniciar o computador agora?", L"Os apps abertos serão fechados.", L"Reiniciar")) {
                 PrivGuard pg(SE_SHUTDOWN_NAME);
                 ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_MAJOR_OTHER | SHTDN_REASON_FLAG_PLANNED);
             }
             break;
         case ID_SHUTDOWN:
-            if (Confirm(L"Desligar o computador agora?")) {
+            if (GlassConfirm(0xE7E8, L"Desligar o computador agora?", L"Os apps abertos serão fechados.", L"Desligar")) {
                 PrivGuard pg(SE_SHUTDOWN_NAME);
                 ExitWindowsEx(EWX_SHUTDOWN | EWX_POWEROFF,
                               SHTDN_REASON_MAJOR_OTHER | SHTDN_REASON_FLAG_PLANNED);
@@ -4088,7 +4099,7 @@ static void RunCommand(const TopMenu* tm, UINT cmd) {
             break;
         case ID_LOCK: LockWorkStation(); break;
         case ID_LOGOFF:
-            if (Confirm(L"Encerrar a sessão agora? Os apps abertos serão fechados."))
+            if (GlassConfirm(0xF3B1, L"Encerrar a sessão agora?", L"Os apps abertos serão fechados.", L"Encerrar sessão"))
                 ExitWindowsEx(EWX_LOGOFF, 0);
             break;
 
@@ -13007,8 +13018,8 @@ enum BsKind { BR_HEADER, BR_ITEM, BR_SWITCH, BR_SLIDER, BR_NOTE, BR_CHOICE, BR_C
 enum BsVal {
     BV_NONE, BV_CLOCK, BV_GLOBALMENU, BV_NET, BV_BT, BV_BATT, BV_DISPLAY, BV_VOL, BV_KBD, BV_TRAY, BV_CC,
     BV_NOW, BV_FOCUS, BV_SEARCH, BV_PRIV, BV_MORE, BV_ISLAND, BV_KBDNAV, BV_USB, BV_DLDONE, BV_CLIP, BV_SHOT,
-    BV_ISLFOCUS, BV_ISLCAPS, BV_ISLBATT, BV_ISLBT, BV_ISLAUDIO, BV_ISLHIST, BV_ISLSTYLE, BV_ISLSIZE, BV_ISLDUR, BV_ISLIN, BV_ISLOUT,
-    BV_ISLPOS, BV_ISLTEST, BV_NTFTEST, BV_ISLCLEAR, BV_NPLAYOUT, BV_NPSIZE, BV_WINNOTIF, BV_WINONLY, BV_ISLHISTNOT,
+    BV_ISLFOCUS, BV_ISLCAPS, BV_ISLLOCKS, BV_ISLBATT, BV_ISLBT, BV_ISLAUDIO, BV_ISLHIST, BV_ISLSTYLE, BV_ISLSIZE, BV_ISLDUR, BV_ISLIN, BV_ISLOUT,
+    BV_ISLPOS, BV_ISLTEST, BV_NTFTEST, BV_CFGEXPORT, BV_CFGIMPORT, BV_ISLCLEAR, BV_NPLAYOUT, BV_NPSIZE, BV_WINNOTIF, BV_WINONLY, BV_ISLHISTNOT,
     BV_WXPROV, BV_WXUNIT, BV_WXLOOK, BV_WXANIM, BV_WXGLASS, BV_WXINT, BV_WXTEMP, BV_WXPLACE, BV_WXNOW, BV_WXRESULT,
     BV_BATTPCT, BV_HIDEFS, BV_OSD, BV_DIM,
     BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_SELBAR2, BV_UPDATES,
@@ -13161,6 +13172,7 @@ static const BsRowDef kBsRows[] = {
     {BR_SWITCH, BV_ISLBATT, L"Bateria fraca e carregador", 0, 0},
     {BR_SWITCH, BV_ISLFOCUS, L"Foco (Não Perturbe)", 0, 0},
     {BR_SWITCH, BV_ISLCAPS, L"Caps Lock ligado e desligado", 0, 0},
+    {BR_SWITCH, BV_ISLLOCKS, L"Num Lock e Scroll Lock ligados e desligados", 0, 0},
     {BR_HEADER, BV_NONE, L"Previsão do tempo", 0xE753, 0x5AC8FA, L"Lugar, serviço, unidade e aparência do widget"},
     {BR_SWITCH, BV_WEATHER, L"Mostrar na barra", 0, 0},
     {BR_SWITCH, BV_WXTEMP, L"Temperatura ao lado do ícone", 0, 0},
@@ -13183,6 +13195,9 @@ static const BsRowDef kBsRows[] = {
     {BR_HEADER, BV_NONE, L"Esta janela", 0xE713, 0x8E8E93, L"O vidro desta janela de Ajustes"},
     {BR_CHOICE, BV_BSSTYLE, L"Vidro", 0, 0},
     {BR_SLIDER, BV_BSTRANSP, L"Transparência", 0, 0},
+    {BR_GROUP, BV_NONE, L"Cópia dos ajustes", 0, 0},
+    {BR_ACTION, BV_CFGEXPORT, L"Exportar os ajustes", 0, 0, L"Salva todos os ajustes desta janela num arquivo, para guardar ou levar a outro PC"},
+    {BR_ACTION, BV_CFGIMPORT, L"Importar os ajustes", 0, 0, L"Troca os ajustes atuais pelos do arquivo"},
     {BR_NOTE, BV_NONE,
      L"O vidro líquido vale a partir do próximo painel aberto. Ao vivo (e no fundo Líquido da barra), a barra e os painéis não aparecem em capturas de tela.", 0,
      0},
@@ -13220,6 +13235,7 @@ static const BsBoolKey kBsKeys[] = {
     {BV_SHOT, L"shotPills", &Settings::shotPills},
     {BV_ISLFOCUS, L"islFocus", &Settings::islFocus},
     {BV_ISLCAPS, L"islCaps", &Settings::islCaps},
+    {BV_ISLLOCKS, L"islLocks", &Settings::islLocks},
     {BV_WINNOTIF, L"winNotifs", &Settings::winNotifs},
     {BV_WINONLY, L"winNotifsOnly", &Settings::winNotifsOnly},
     {BV_ISLBATT, L"islBattery", &Settings::islBattery},
@@ -14226,6 +14242,8 @@ static PCWSTR BsActionText(int val) {
         case BV_THEMERESET: return L"Restaurar";
         case BV_SIZERESET: return L"Restaurar";
         case BV_ICSADD: return L"Importar…";
+        case BV_CFGEXPORT: return L"Exportar…";
+        case BV_CFGIMPORT: return L"Importar…";
         case BV_ICSCLEAR: return L"Remover";
     }
     return L"Abrir";
@@ -19231,6 +19249,238 @@ static void IslandRender() {
     DeleteDC(dc);
 }
 
+// ---- A caixa de confirmação de vidro (Reiniciar, Desligar, Encerrar sessão) ----
+static const wchar_t kGcClass[] = L"WhFinderTopBarConfirm";
+struct GcState {
+    HWND hwnd = nullptr;
+    GlassLayer glass;
+    POINT pos{};
+    int W = 0, H = 0;
+    float s = 1, M = 0;
+    wchar_t glyph = 0;
+    std::wstring title, text, ok;
+    int hover = -1;   // 0 cancelar, 1 confirmar
+    int result = -1;  // -1 esperando
+    D2D1_RECT_F panel{}, btnOk{}, btnCancel{};
+};
+static GcState* g_gc = nullptr;
+static void GcRender() {
+    GcState& g = *g_gc;
+    PanelThemeScope panelTheme;
+    LiquidScope liquid(g.glass.lq, g.hwnd);
+    float s = g.s;
+    bool light = PanelLightNow();
+    D2D1_COLOR_F fg = light ? D2D1::ColorF(0, 0, 0, 0.88f) : D2D1::ColorF(1, 1, 1, 0.95f);
+    D2D1_COLOR_F sub = light ? D2D1::ColorF(0, 0, 0, 0.60f) : D2D1::ColorF(1, 1, 1, 0.68f);
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+    bi.bmiHeader.biWidth = g.W;
+    bi.bmiHeader.biHeight = -g.H;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HDC dc = CreateCompatibleDC(nullptr);
+    HBITMAP bmp = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    ID2D1DCRenderTarget* rt = nullptr;
+    ID2D1SolidColorBrush* br = nullptr;
+    IDWriteTextFormat* fT = MakeFormat(g_settings.fontFamily.c_str(), DWRITE_FONT_WEIGHT_SEMI_BOLD, 14 * s);
+    IDWriteTextFormat* fS = MakeFormat(g_settings.fontFamily.c_str(), DWRITE_FONT_WEIGHT_NORMAL, 12 * s);
+    IDWriteTextFormat* fB = MakeFormat(g_settings.fontFamily.c_str(), DWRITE_FONT_WEIGHT_SEMI_BOLD, 13 * s);
+    IDWriteTextFormat* fI = MakeFormat(g_iconFont.c_str(), DWRITE_FONT_WEIGHT_NORMAL, 28 * s);
+    auto props = D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                                              D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                                              96.0f, 96.0f);
+    if (bmp && fT && fS && fB && fI && SUCCEEDED(g_d2d->CreateDCRenderTarget(&props, &rt)) &&
+        SUCCEEDED(rt->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), &br))) {
+        HGDIOBJ old = SelectObject(dc, bmp);
+        RECT bind = {0, 0, g.W, g.H};
+        rt->BindDC(dc, &bind);
+        rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+        rt->BeginDraw();
+        rt->Clear(D2D1::ColorF(0, 0, 0, 0));
+        D2D1_RECT_F P = g.panel;
+        // Sombra suave e o vidro (o mesmo dos painéis).
+        for (int k = 3; k >= 1; k--) {
+            float o = k * 4 * s;
+            br->SetColor(D2D1::ColorF(0, 0, 0, 0.06f));
+            rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(P.left - o / 2, P.top + o / 2, P.right + o / 2, P.bottom + o), 18 * s + o, 18 * s + o), br);
+        }
+        DrawLiquidGlass(rt, br, P, 18 * s, s, false, false, g.glass.ok, true);
+        float cx = (P.left + P.right) / 2, y = P.top + 22 * s, w = P.right - P.left - 36 * s;
+        auto text = [&](const std::wstring& t, IDWriteTextFormat* f, D2D1_COLOR_F c, float top, float hgt) {
+            IDWriteTextLayout* l = nullptr;
+            if (SUCCEEDED(g_dwrite->CreateTextLayout(t.c_str(), (UINT32)t.size(), f, w, hgt, &l))) {
+                l->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                DWRITE_TEXT_METRICS m{};
+                l->GetMetrics(&m);
+                br->SetColor(c);
+                rt->DrawTextLayout(D2D1::Point2F(cx - w / 2, top), l, br);
+                l->Release();
+                return m.height;
+            }
+            return 0.0f;
+        };
+        // Ícone num círculo na cor de destaque.
+        D2D1_COLOR_F acc = D2D1::ColorF(0.04f, 0.52f, 1.0f, 1);
+        SelColor(&acc);
+        float ir = 26 * s;
+        br->SetColor(acc);
+        rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, y + ir), ir, ir), br);
+        {
+            std::wstring gl(1, g.glyph);
+            IDWriteTextLayout* l = nullptr;
+            if (SUCCEEDED(g_dwrite->CreateTextLayout(gl.c_str(), 1, fI, 2 * ir, 2 * ir, &l))) {
+                l->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                l->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                DWRITE_TEXT_RANGE all = {0, 1};
+                l->SetFontSize(24 * s, all);
+                br->SetColor(D2D1::ColorF(1, 1, 1, 1));
+                rt->DrawTextLayout(D2D1::Point2F(cx - ir, y), l, br);
+                l->Release();
+            }
+        }
+        y += 2 * ir + 14 * s;
+        y += text(T(g.title.c_str()), fT, fg, y, 60 * s) + 6 * s;
+        text(T(g.text.c_str()), fS, sub, y, 60 * s);
+        // Os botões: confirmar (na cor de destaque) em cima, Cancelar embaixo.
+        auto button = [&](const D2D1_RECT_F& rr, const std::wstring& label, bool primary, bool hot) {
+            D2D1_ROUNDED_RECT rd = D2D1::RoundedRect(rr, (rr.bottom - rr.top) / 2, (rr.bottom - rr.top) / 2);
+            if (primary) {
+                SelFill(rt, br, rd, acc, hot ? 1.0f : 0.92f);
+            } else {
+                br->SetColor(light ? D2D1::ColorF(0, 0, 0, hot ? 0.14f : 0.08f) : D2D1::ColorF(1, 1, 1, hot ? 0.22f : 0.14f));
+                rt->FillRoundedRectangle(rd, br);
+            }
+            IDWriteTextLayout* l = nullptr;
+            if (SUCCEEDED(g_dwrite->CreateTextLayout(label.c_str(), (UINT32)label.size(), fB, rr.right - rr.left, rr.bottom - rr.top, &l))) {
+                l->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                l->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                br->SetColor(primary ? D2D1::ColorF(1, 1, 1, 1) : fg);
+                rt->DrawTextLayout(D2D1::Point2F(rr.left, rr.top), l, br);
+                l->Release();
+            }
+        };
+        button(g.btnOk, T(g.ok.c_str()), true, g.hover == 1);
+        button(g.btnCancel, T(L"Cancelar"), false, g.hover == 0);
+        rt->EndDraw();
+        POINT src = {0, 0};
+        SIZE size = {g.W, g.H};
+        BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+        HDC screen = GetDC(nullptr);
+        UpdateLayeredWindow(g.hwnd, screen, &g.pos, &size, dc, &src, 0, &blend, ULW_ALPHA);
+        ReleaseDC(nullptr, screen);
+        SelectObject(dc, old);
+    }
+    SafeRelease(br);
+    SafeRelease(rt);
+    if (fT) fT->Release();
+    if (fS) fS->Release();
+    if (fB) fB->Release();
+    if (fI) fI->Release();
+    if (bmp) DeleteObject(bmp);
+    DeleteDC(dc);
+}
+static LRESULT CALLBACK GcWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (!g_gc || g_gc->hwnd != hwnd) return DefWindowProcW(hwnd, msg, wp, lp);
+    GcState& g = *g_gc;
+    switch (msg) {
+        case WM_MOUSEMOVE: {
+            float x = (float)LP_X(lp), y = (float)LP_Y(lp);
+            int h = InRect(g.btnOk, x, y) ? 1 : InRect(g.btnCancel, x, y) ? 0 : -1;
+            if (h != g.hover) {
+                g.hover = h;
+                GcRender();
+            }
+            TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, hwnd, 0};
+            TrackMouseEvent(&tme);
+            return 0;
+        }
+        case WM_MOUSELEAVE:
+            if (g.hover != -1) {
+                g.hover = -1;
+                GcRender();
+            }
+            return 0;
+        case WM_LBUTTONUP: {
+            float x = (float)LP_X(lp), y = (float)LP_Y(lp);
+            if (InRect(g.btnOk, x, y)) g.result = 1;
+            else if (InRect(g.btnCancel, x, y)) g.result = 0;
+            return 0;
+        }
+        case WM_KEYDOWN:
+            if (wp == VK_RETURN) g.result = 1;
+            else if (wp == VK_ESCAPE) g.result = 0;
+            return 0;
+        case WM_CLOSE:
+            g.result = 0;
+            return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+static bool GlassConfirm(wchar_t glyph, PCWSTR title, PCWSTR text, PCWSTR okLabel) {
+    if (g_gc || g_bars.empty()) return Confirm(title);
+    // No monitor do mouse, um pouco acima do meio.
+    POINT pt;
+    GetCursorPos(&pt);
+    Bar* b = g_bars[0];
+    for (Bar* x : g_bars)
+        if (x->monitor == MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST)) b = x;
+    GcState g;
+    g.s = b->dpi / 96.0f;
+    g.M = std::round(24 * g.s);
+    g.glyph = glyph;
+    g.title = title;
+    g.text = text;
+    g.ok = okLabel;
+    float s = g.s, pw = 272 * s, ph = 262 * s;
+    g.W = (int)std::ceil(pw + 2 * g.M);
+    g.H = (int)std::ceil(ph + 2 * g.M);
+    g.panel = D2D1::RectF(g.M, g.M, g.M + pw, g.M + ph);
+    g.btnOk = D2D1::RectF(g.M + 18 * s, g.M + ph - 82 * s, g.M + pw - 18 * s, g.M + ph - 52 * s);
+    g.btnCancel = D2D1::RectF(g.M + 18 * s, g.M + ph - 44 * s, g.M + pw - 18 * s, g.M + ph - 14 * s);
+    int cx = (b->monRect.left + b->monRect.right) / 2, cy = b->monRect.top + (b->monRect.bottom - b->monRect.top) * 2 / 5;
+    g.pos = {cx - g.W / 2, cy - g.H / 2};
+    g_gc = &g;
+    {
+        PanelThemeScope panelTheme;
+        if (GlassLayerCreate(g.glass, g.pos, g.W, g.H, true, true) && !g.glass.lq) GlassLayerDestroy(g.glass);
+    }
+    g.hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW, kGcClass, L"Mac OS 27 Finder Bar", WS_POPUP,
+                             g.pos.x, g.pos.y, g.W, g.H, g_owner, nullptr, g_hInst, nullptr);
+    if (!g.hwnd) {
+        GlassLayerDestroy(g.glass);
+        g_gc = nullptr;
+        return Confirm(title);
+    }
+    HideFromCapture(g.hwnd);
+    GcRender();
+    ShowWindow(g.hwnd, SW_SHOW);
+    ForceForeground(g.hwnd);
+    while (g.result < 0) {
+        DWORD w = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE, QS_ALLINPUT);
+        if (w == WAIT_OBJECT_0) {
+            g.result = 0;  // o mod está fechando
+            break;
+        }
+        MSG msg;
+        while (g.result < 0 && PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                PostQuitMessage((int)msg.wParam);
+                g.result = 0;
+                break;
+            }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        // Clique fora ou outra janela ativa: continua aberta (como no macOS).
+    }
+    DestroyWindow(g.hwnd);
+    GlassLayerDestroy(g.glass);
+    g_gc = nullptr;
+    return g.result == 1;
+}
+
 static void IslandStart(const IslandNote& n) {
     Bar* b = nullptr;
     for (Bar* x : g_bars)
@@ -20141,11 +20391,19 @@ static void ShotOnSaved(std::wstring* path) {
 // Caps Lock: a pílula avisa quando liga e desliga (lido a cada 200 ms).
 #define TIMER_CAPS 83
 static void CapsPoll() {
-    static int last = -1;
+    static int last = -1, lastNum = -1, lastScroll = -1;
     int cur = (GetKeyState(VK_CAPITAL) & 1) ? 1 : 0;
     if (last >= 0 && cur != last && g_settings.islCaps)
         IslandShow(0xE765, 0x0A84FF, cur ? L"Caps Lock ativado" : L"Caps Lock desativado");
     last = cur;
+    // Num Lock e Scroll Lock, do mesmo jeito (issue #8).
+    int num = (GetKeyState(VK_NUMLOCK) & 1) ? 1 : 0, scroll = (GetKeyState(VK_SCROLL) & 1) ? 1 : 0;
+    if (lastNum >= 0 && num != lastNum && g_settings.islLocks)
+        IslandShow(0xE765, 0x0A84FF, num ? L"Num Lock ativado" : L"Num Lock desativado");
+    if (lastScroll >= 0 && scroll != lastScroll && g_settings.islLocks)
+        IslandShow(0xE765, 0x0A84FF, scroll ? L"Scroll Lock ativado" : L"Scroll Lock desativado");
+    lastNum = num;
+    lastScroll = scroll;
 }
 
 // A mesma gravação pode chegar duas vezes (área de transferência e pasta):
@@ -21086,6 +21344,7 @@ struct NtfBlock {
     int depth = 0;        // na pilha: 0 na frente, 1 e 2 atrás (o resto escondido)
     D2D1_RECT_F rsFrom{}; // girando a pilha: de onde o cartão sai
     float alphaFrom = 1, contentFrom = 1;
+    int clearOrder = 0;   // "Limpar": a vez dele na cascata (de cima para baixo)
 };
 struct NtfGroup {
     std::wstring app, aumid;
@@ -21120,6 +21379,7 @@ struct NotifPanel {
     float stackHFrom = 0;
     size_t cardsEnd = 0;
     float cardsListEnd = 0;
+    ULONGLONG clearTick = 0;  // "Limpar": os cartões saem para a direita, um depois do outro
     bool dragScroll = false;
     float dragY0 = 0, dragScroll0 = 0;
     std::set<std::wstring> expanded;
@@ -21644,6 +21904,7 @@ static void NtfGlassShapes() {
         D2D1_RECT_F r = D2D1::RectF(b.r.left, b.r.top + oy, b.r.right, b.r.bottom + oy);
         float rad;
         if (b.alpha < 0.05f) continue;  // escondido atrás da pilha
+        if (g_ntf.clearTick && b.kind != 6) continue;  // limpando: os cartões saem sem o desfoque
         if (b.kind == 1) rad = 20 * s;
         else if (b.kind == 6) rad = (r.bottom - r.top) / 2;
         else if (b.kind == 4) {
@@ -21976,8 +22237,21 @@ static void NtfRender() {
                 }
                 rt->SetTransform(saved);
             }
-        } swipe(rt, g_ntf.swiping && g_ntf.swipeBlock == (int)bi, g_ntf.swipeDx,
-                1.0f - 0.75f * std::min(1.0f, std::fabs(g_ntf.swipeDx) / std::max(1.0f, (b.r.right - b.r.left) * 0.6f)));
+        };
+        // "Limpar": cada cartão desliza para a direita e some, em cascata (issue #14).
+        float clrDx = 0, clrA = 1;
+        if (g_ntf.clearTick) {
+            float u = std::clamp(((float)(GetTickCount64() - g_ntf.clearTick) - 45.0f * std::min(b.clearOrder, 8)) / 300.0f,
+                                 0.0f, 1.0f);
+            float e = u * u * (3 - 2 * u);
+            clrDx = e * (b.r.right - b.r.left + 40 * s);
+            clrA = 1 - e;
+            if (clrA < 0.01f) continue;
+        }
+        bool swiped = g_ntf.swiping && g_ntf.swipeBlock == (int)bi;
+        SwipeScope swipe(rt, swiped || g_ntf.clearTick, swiped ? g_ntf.swipeDx : clrDx,
+                         swiped ? 1.0f - 0.75f * std::min(1.0f, std::fabs(g_ntf.swipeDx) / std::max(1.0f, (b.r.right - b.r.left) * 0.6f))
+                                : clrA);
         bool hot = g_ntf.hover == (int)bi && !g_ntf.swiping;
         if (b.kind == 1) {
             // Cartão: ícone e nome do app, hora e seta; a foto de quem mandou e o
@@ -22342,6 +22616,22 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 NtfGlassShapes();
                 NtfRender();
                 if (done) KillTimer(hwnd, 4);
+            } else if (wp == 6) {
+                // "Limpar": a cascata acabou, apaga de verdade.
+                ULONGLONG ms = GetTickCount64() - g_ntf.clearTick;
+                int last = 0;
+                for (const NtfBlock& cb : g_ntf.blocks) last = std::max(last, std::min(cb.clearOrder, 8));
+                if (ms < (ULONGLONG)(45 * last + 320)) {
+                    NtfRender();
+                    return 0;
+                }
+                KillTimer(hwnd, 6);
+                g_ntf.clearTick = 0;
+                g_islHist.clear();
+                g_islUnread = 0;
+                g_ntf.expanded.clear();
+                NtfRefresh();
+                RedrawAll();
             } else if (wp == 5) {
                 // Rolagem suave: chega no alvo devagar, e os montes das bordas giram junto.
                 float d = g_ntf.scrollTarget - g_ntf.scroll;
@@ -22542,11 +22832,28 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 return 0;
             }
             if (h == -2) {
-                g_islHist.clear();
-                g_islUnread = 0;
-                g_ntf.expanded.clear();
-                NtfRefresh();
-                RedrawAll();
+                // Limpar: primeiro a animação (os cartões saem para a direita),
+                // depois apaga (no fim do timer 6).
+                if (g_ntf.clearTick) return 0;
+                std::vector<size_t> byTop;
+                for (size_t i = 0; i < g_ntf.blocks.size(); i++) byTop.push_back(i);
+                std::stable_sort(byTop.begin(), byTop.end(),
+                                 [](size_t a, size_t c) { return g_ntf.blocks[a].r.top < g_ntf.blocks[c].r.top; });
+                for (size_t k = 0; k < byTop.size(); k++) g_ntf.blocks[byTop[k]].clearOrder = (int)k;
+                bool any = false;
+                for (const NtfBlock& cb : g_ntf.blocks) any |= cb.kind == 1 || cb.kind == 4;
+                if (!any || g_settings.openAnim == 0) {
+                    g_islHist.clear();
+                    g_islUnread = 0;
+                    g_ntf.expanded.clear();
+                    NtfRefresh();
+                    RedrawAll();
+                    return 0;
+                }
+                g_ntf.clearTick = GetTickCount64();
+                g_ntf.hover = -1;
+                NtfGlassShapes();
+                SetTimer(hwnd, 6, 10, nullptr);
             } else if (h == -3) {
                 NtfClose();
                 SendKeys(M_WIN, 'N');
@@ -22583,6 +22890,14 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             KillTimer(hwnd, 3);
             KillTimer(hwnd, 4);
             KillTimer(hwnd, 5);
+            KillTimer(hwnd, 6);
+            if (g_ntf.clearTick) {
+                // Fechou no meio da animação: apaga do mesmo jeito.
+                g_ntf.clearTick = 0;
+                g_islHist.clear();
+                g_islUnread = 0;
+                g_ntf.expanded.clear();
+            }
             g_ntf.stackTick = 0;
             g_ntf.dragScroll = false;
             GlassLayerDestroy(g_ntf.glass);
@@ -22719,6 +23034,150 @@ static void IcsImport() {
     else if (added > 1) IslandShow(0xE787, 0xFF453A, TF(L"%s calendários importados", {std::to_wstring(added)}), L"", L"", false, true);
 }
 
+// ---- Exportar e importar os ajustes (issue #6) ----
+// Os ajustes da janela de Ajustes ficam no armazenamento do mod (ui.*, e alguns
+// sem o prefixo). O arquivo é texto UTF-8, uma linha "chave=valor" por ajuste;
+// a importação só aceita estas chaves.
+static std::vector<std::wstring> CfgKeys() {
+    std::vector<std::wstring> keys;
+    for (const UiDefault& d : kUiDefaults) keys.push_back(std::wstring(L"ui.") + d.key);
+    static const PCWSTR kUiExtra[] = {L"barStyleMon", L"textColorMon", L"fontFamily", L"barMonitor", L"barStyle",
+                                      L"selectionBar", L"selectionBar2", L"panelThemeMode", L"panelThemeStyle",
+                                      L"tintColor", L"tintLevel", L"tintReach", L"theme", L"language"};
+    for (PCWSTR k : kUiExtra) {
+        std::wstring full = std::wstring(L"ui.") + k;
+        if (std::find(keys.begin(), keys.end(), full) == keys.end()) keys.push_back(full);
+    }
+    static const PCWSTR kRaw[] = {L"barOrder", L"ccLayout", L"glassLive", L"glassTheme",
+                                  L"weather", L"weatherAnim", L"weatherOpts", L"weatherStyle"};
+    for (PCWSTR k : kRaw) keys.push_back(k);
+    return keys;
+}
+static std::wstring CfgEscape(const std::wstring& v) {
+    std::wstring o;
+    for (wchar_t c : v) {
+        if (c == L'\\') o += L"\\\\";
+        else if (c == L'\n') o += L"\\n";
+        else if (c == L'\r') o += L"\\r";
+        else if (c < 0x20) {
+            wchar_t h[8];
+            swprintf(h, ARRAYSIZE(h), L"\\x%02X", (unsigned)c);
+            o += h;
+        } else o += c;
+    }
+    return o;
+}
+static std::wstring CfgUnescape(const std::wstring& v) {
+    std::wstring o;
+    for (size_t i = 0; i < v.size(); i++) {
+        if (v[i] != L'\\' || i + 1 >= v.size()) {
+            o += v[i];
+            continue;
+        }
+        wchar_t n = v[++i];
+        if (n == L'n') o += L'\n';
+        else if (n == L'r') o += L'\r';
+        else if (n == L'x' && i + 2 < v.size()) {
+            o += (wchar_t)wcstoul(v.substr(i + 1, 2).c_str(), nullptr, 16);
+            i += 2;
+        } else o += n;
+    }
+    return o;
+}
+static std::wstring CfgPickFile(bool save) {
+    IFileDialog* dlg = nullptr;
+    if (FAILED(CoCreateInstance(save ? CLSID_FileSaveDialog : CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
+                                save ? IID_IFileSaveDialog : IID_IFileOpenDialog, (void**)&dlg)))
+        return L"";
+    COMDLG_FILTERSPEC spec[] = {{T(L"Ajustes da Finder Bar (.txt)"), L"*.txt"}};
+    dlg->SetFileTypes(1, spec);
+    dlg->SetDefaultExtension(L"txt");
+    if (save) dlg->SetFileName(L"Mac OS 27 Finder Bar.txt");
+    dlg->SetTitle(T(save ? L"Exportar os ajustes" : L"Importar os ajustes"));
+    DWORD opt = 0;
+    dlg->GetOptions(&opt);
+    dlg->SetOptions(opt | FOS_FORCEFILESYSTEM | (save ? FOS_OVERWRITEPROMPT : FOS_FILEMUSTEXIST));
+    std::wstring path;
+    if (SUCCEEDED(dlg->Show(g_bs.hwnd))) {
+        IShellItem* it = nullptr;
+        if (SUCCEEDED(dlg->GetResult(&it)) && it) {
+            PWSTR p = nullptr;
+            if (SUCCEEDED(it->GetDisplayName(SIGDN_FILESYSPATH, &p)) && p) {
+                path = p;
+                CoTaskMemFree(p);
+            }
+            it->Release();
+        }
+    }
+    dlg->Release();
+    if (g_bs.hwnd) SetForegroundWindow(g_bs.hwnd);
+    return path;
+}
+static void CfgExport() {
+    std::wstring path = CfgPickFile(true);
+    if (path.empty()) return;
+    std::wstring text = L"# Mac OS 27 Finder Bar\r\n";
+    int n = 0;
+    for (const std::wstring& k : CfgKeys()) {
+        std::vector<wchar_t> buf(8192, 0);
+        Wh_GetStringValue(k.c_str(), buf.data(), (size_t)buf.size());
+        if (!buf[0]) continue;
+        text += k + L"=" + CfgEscape(buf.data()) + L"\r\n";
+        n++;
+    }
+    int len = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(), nullptr, 0, nullptr, nullptr);
+    std::string utf8(len, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(), utf8.data(), len, nullptr, nullptr);
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    DWORD wrote = 0;
+    bool ok = f != INVALID_HANDLE_VALUE && WriteFile(f, utf8.data(), (DWORD)utf8.size(), &wrote, nullptr) &&
+              wrote == utf8.size();
+    if (f != INVALID_HANDLE_VALUE) CloseHandle(f);
+    if (ok) IslandShow(0xE74E, 0x30D158, L"Ajustes exportados", TF(L"%s ajustes salvos", {std::to_wstring(n)}), L"", false, true);
+    else IslandShow(0xE74E, 0xFF453A, L"Não foi possível exportar", L"", L"", false, true);
+}
+static void CfgImport() {
+    std::wstring path = CfgPickFile(false);
+    if (path.empty()) return;
+    std::string data;
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (f != INVALID_HANDLE_VALUE) {
+        LARGE_INTEGER sz{};
+        if (GetFileSizeEx(f, &sz) && sz.QuadPart > 0 && sz.QuadPart < 1024 * 1024) {
+            data.resize((size_t)sz.QuadPart);
+            DWORD got = 0;
+            if (!ReadFile(f, data.data(), (DWORD)data.size(), &got, nullptr)) got = 0;
+            data.resize(got);
+        }
+        CloseHandle(f);
+    }
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, data.data(), (int)data.size(), nullptr, 0);
+    std::wstring text(wlen, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, data.data(), (int)data.size(), text.data(), wlen);
+    if (text.rfind(L"# Mac OS 27 Finder Bar", 0) != 0 && text.rfind(L"\xFEFF# Mac OS 27 Finder Bar", 0) != 0) {
+        IslandShow(0xE74E, 0xFF453A, L"Não foi possível importar", L"O arquivo não é uma cópia dos ajustes", L"", false, true);
+        return;
+    }
+    std::vector<std::wstring> keys = CfgKeys();
+    int n = 0;
+    size_t pos = 0;
+    while (pos < text.size()) {
+        size_t end = text.find(L'\n', pos);
+        if (end == std::wstring::npos) end = text.size();
+        std::wstring line = text.substr(pos, end - pos);
+        pos = end + 1;
+        if (!line.empty() && line.back() == L'\r') line.pop_back();
+        size_t eq = line.find(L'=');
+        if (line.empty() || line[0] == L'#' || eq == std::wstring::npos) continue;
+        std::wstring k = line.substr(0, eq);
+        if (std::find(keys.begin(), keys.end(), k) == keys.end()) continue;  // só as chaves conhecidas
+        Wh_SetStringValue(k.c_str(), CfgUnescape(line.substr(eq + 1)).c_str());
+        n++;
+    }
+    IslandShow(0xE74E, 0x30D158, L"Ajustes importados", TF(L"%s ajustes aplicados", {std::to_wstring(n)}), L"", false, true);
+    RequestReload(1);  // recarrega tudo com os ajustes novos
+}
+
 static void BsAction(int val) {
     switch (val) {
         case BV_SIZERESET:
@@ -22748,6 +23207,8 @@ static void BsAction(int val) {
             break;
         }
         case BV_ICSADD: IcsImport(); break;
+        case BV_CFGEXPORT: CfgExport(); break;
+        case BV_CFGIMPORT: CfgImport(); break;
         case BV_ICSCLEAR:
             IcsImportedSave({});
             IslandShow(0xE787, 0x8E8E93, L"Calendários importados removidos", L"", L"", false, true);
@@ -23396,6 +23857,7 @@ static void BarSetupStyle(Bar* b) {
 
 // ---- Ícones animados da barra (volume, Wi-Fi, brilho) ----
 #define BAR_ANIM_TIMER 78
+#define BAR_SLIDE_TIMER 79  // a barra deslizando ao aparecer ou sumir
 
 
 // Corre `v` atrás de `target` (suave); diz se ainda está se mexendo.
@@ -24342,7 +24804,16 @@ static void BarReleaseSpace(Bar* b, bool release) {
 
 // Tela cheia (e janela maximizada, se pedido): confere a cada segundo (o aviso do
 // Windows nem sempre chega) e, com janelas maximizando ou restaurando, na hora.
+static void BarSlide(Bar* b, bool in);
 static void UpdateFullscreen() {
+    // O tique rápido também confere o mouse no topo (barra escondida por janela
+    // maximizada); liga quando a opção é ligada sem recriar as barras.
+    static bool fastOn = false;
+    bool wantFast = g_settings.autoHide || g_settings.hideWhenMaximized;
+    if (g_owner && wantFast != fastOn) {
+        fastOn = wantFast;
+        if (wantFast) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
+    }
     for (Bar* b : g_bars) {
         bool hide = false, forMax = false;
         // (Com "Ocultar com a alça", só a alça esconde e mostra a barra.)
@@ -24364,7 +24835,9 @@ static void UpdateFullscreen() {
                 Wh_Log(L"Tela cheia: barra oculta (janela %s)", cls);
             }
         }
+        bool wasMaxHidden = b->maxHidden;
         b->maxHidden = hide && forMax;
+        if (!b->maxHidden) b->maxPeek = false;
         if (!b->maxHidden && !g_settings.autoHide && b->autoShown) {
             b->autoShown = false;
             if (b->peekColorOn) {
@@ -24377,10 +24850,15 @@ static void UpdateFullscreen() {
             // Com a alça, a barra escondida por ela continua escondida ao sair da
             // tela cheia (issue #15): só a alça a mostra.
             bool handleHidden = g_settings.autoHide && !b->autoShown;
-            if (hide || !handleHidden) ShowWindow(b->hwnd, hide ? SW_HIDE : SW_SHOWNOACTIVATE);
-            if (hide && b->shadow) ShowWindow(b->shadow, SW_HIDE);
-            if (!hide && !handleHidden) BarSyncShadow(b);
-            if (!hide && !handleHidden) SetWindowPos(b->hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            if ((hide && forMax) || (!hide && wasMaxHidden && !handleHidden)) {
+                // Janela maximizada: a barra desliza (sobe e some; desce de volta).
+                BarSlide(b, !hide);
+            } else {
+                if (hide || !handleHidden) ShowWindow(b->hwnd, hide ? SW_HIDE : SW_SHOWNOACTIVATE);
+                if (hide && b->shadow) ShowWindow(b->shadow, SW_HIDE);
+                if (!hide && !handleHidden) BarSyncShadow(b);
+                if (!hide && !handleHidden) SetWindowPos(b->hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
         }
         // Escondida por janela maximizada, a barra devolve o espaço do topo; ao
         // voltar, reserva de novo.
@@ -24590,6 +25068,57 @@ static void HandleRender(Bar* b) {
     DeleteDC(dc);
 }
 // A alça aparece só quando a barra está escondida por um desses dois modos.
+// A barra desliza de cima para baixo ao aparecer, e de volta ao sumir, como no
+// macOS. Sem as animações dos painéis, é na hora.
+static void BarSlideStep(Bar* b) {
+    float u = std::clamp((float)(GetTickCount64() - b->slideTick) / 220.0f, 0.0f, 1.0f);
+    float e = b->slideIn ? 1 - (1 - u) * (1 - u) * (1 - u) : u * u * u;  // entra freando, sai acelerando
+    float off = b->slideIn ? 1 - e : e;
+    int y = b->monRect.top - (int)std::lround(b->heightPx * off);
+    SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+    if (u < 1) return;
+    KillTimer(b->hwnd, BAR_SLIDE_TIMER);
+    b->slideTick = 0;
+    if (!b->slideIn) {
+        ShowWindow(b->hwnd, SW_HIDE);
+        SetWindowPos(b->hwnd, nullptr, b->monRect.left, b->monRect.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    BarSyncShadow(b);
+}
+static void BarSlide(Bar* b, bool in) {
+    if (g_settings.openAnim == 0) {
+        if (in) {
+            SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, b->monRect.top, 0, 0,
+                         SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        } else {
+            ShowWindow(b->hwnd, SW_HIDE);
+        }
+        BarSyncShadow(b);
+        return;
+    }
+    if (b->shadow) ShowWindow(b->shadow, SW_HIDE);
+    // Continua de onde está, se já estava deslizando para o outro lado.
+    float from = 0;
+    if (b->slideTick) {
+        RECT wr;
+        GetWindowRect(b->hwnd, &wr);
+        from = std::clamp((float)(b->monRect.top - wr.top) / std::max(1, b->heightPx), 0.0f, 1.0f);  // 0 à vista, 1 escondida
+    } else {
+        from = in ? 1.0f : 0.0f;
+    }
+    if (in && !IsWindowVisible(b->hwnd)) {
+        SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, b->monRect.top - b->heightPx, 0, 0,
+                     SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        from = 1;
+    }
+    b->slideIn = in;
+    // O tempo já andado: entrar a partir de "from" escondida, sair a partir de "from".
+    float doneFrac = in ? 1 - std::cbrt(std::max(0.0f, from)) : std::cbrt(std::max(0.0f, from));
+    b->slideTick = GetTickCount64() - (ULONGLONG)(doneFrac * 220);
+    SetTimer(b->hwnd, BAR_SLIDE_TIMER, 10, nullptr);
+    BarSlideStep(b);
+}
+
 static void HandleSync(Bar* b) {
     // Modo "com a alça": a alça fica sempre, ela mostra e esconde a barra.
     bool want = g_settings.autoHide && g_settings.revealHandle && !b->hiddenForFullscreen;
@@ -24726,8 +25255,8 @@ static void BarRevealTemp(Bar* b) {
         if (b->appbar) SetAppBarPos(b, false);
     }
     SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, b->monRect.top, b->monRect.right - b->monRect.left, b->heightPx,
-                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    BarSyncShadow(b);
+                 SWP_NOACTIVATE | SWP_NOMOVE);
+    BarSlide(b, true);  // desce do topo
     HandleSync(b);
     HandleAnimTo(b);  // a alça vai para a borda de baixo da barra (some quando o mouse sai)
     if (b->handle) SetWindowPos(b->handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -24782,8 +25311,7 @@ static LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 // Segundo clique: a barra some, as janelas sobem e a alça volta ao alto.
                 b->autoShown = false;
                 b->hover = -1;
-                ShowWindow(b->hwnd, SW_HIDE);
-                if (b->shadow) ShowWindow(b->shadow, SW_HIDE);
+                BarSlide(b, false);  // sobe e some
                 BarPeekEnd(b);
                 HandleAnimTo(b);  // volta ao alto e reaparece crescendo
             } else {
@@ -24794,9 +25322,36 @@ static LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
+// Escondida por uma janela maximizada: o mouse encostado no topo do monitor
+// mostra a barra por cima da janela (sem empurrá-la), e ela sobe de novo quando
+// o mouse sai dela (issue #7), como no macOS.
+static void MaxPeekTick(Bar* b) {
+    if (!b->maxHidden || !b->hiddenForFullscreen) {
+        b->maxPeek = false;
+        return;
+    }
+    POINT pt;
+    if (!GetCursorPos(&pt)) return;
+    bool inX = pt.x >= b->monRect.left && pt.x < b->monRect.right;
+    bool buttons = (GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000;
+    if (!b->maxPeek) {
+        if (inX && pt.y <= b->monRect.top + 1 && pt.y >= b->monRect.top - 2 && !buttons) {
+            b->maxPeek = true;
+            BarSlide(b, true);
+        }
+    } else {
+        float s = b->dpi / 96.0f;
+        bool onBar = inX && pt.y < b->monRect.top + b->heightPx + (int)(10 * s);
+        if (!onBar && !g_menuOpen && !AnyOtherPanelOpen(nullptr)) {
+            b->maxPeek = false;
+            BarSlide(b, false);
+        }
+    }
+}
 static void AutoHideTick() {
     for (Bar* b : g_bars) {
-        // Só "Ocultar com a alça" usa isto.
+        MaxPeekTick(b);
+        // Só "Ocultar com a alça" usa o resto.
         if (!g_settings.autoHide) {
             b->autoShown = false;
             HandleSync(b);
@@ -24913,7 +25468,7 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
         case WM_WINDOWPOSCHANGED:
-            BarSyncShadow(b);
+            if (!b->slideTick) BarSyncShadow(b);  // (deslizando, a sombra volta no fim)
             break;
 
         case WM_MOUSEMOVE: {
@@ -25123,6 +25678,10 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
 
         case WM_TIMER:
+            if (wp == BAR_SLIDE_TIMER) {
+                BarSlideStep(b);
+                return 0;
+            }
             if (wp == BAR_ANIM_TIMER || wp == TIMER_MARQUEE) {
                 InvalidateRect(hwnd, nullptr, FALSE);
                 return 0;
@@ -25415,8 +25974,9 @@ static BOOL CALLBACK MonitorEnumProc(HMONITOR mon, HDC, LPRECT, LPARAM chosenPre
 static void CreateBars() {
     ResolveTheme();
     EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, BarChosenMonitorPresent() ? 1 : 0);
-    // O tique rápido: "Ocultar com a alça".
-    if (g_settings.autoHide) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
+    // O tique rápido: "Ocultar com a alça" e o mouse no topo com a barra
+    // escondida por janela maximizada.
+    if (g_settings.autoHide || g_settings.hideWhenMaximized) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
     else KillTimer(g_owner, TIMER_FAST);
     UpdateWindowColor();
 }
@@ -25626,6 +26186,14 @@ static DWORD WINAPI BarThread(LPVOID) {
     islc.hInstance = g_hInst;
     islc.lpszClassName = kIslClass;
     RegisterClassExW(&islc);
+
+    WNDCLASSEXW gcc{};
+    gcc.cbSize = sizeof(gcc);
+    gcc.lpfnWndProc = GcWndProc;
+    gcc.hInstance = g_hInst;
+    gcc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    gcc.lpszClassName = kGcClass;
+    RegisterClassExW(&gcc);
 
     WNDCLASSEXW tipc{};
     tipc.cbSize = sizeof(tipc);
@@ -25841,7 +26409,7 @@ static DWORD WINAPI BarThread(LPVOID) {
     }
     if (g_owner) { DestroyWindow(g_owner); g_owner = nullptr; }
     for (PCWSTR cls : {kWorkerClass, kOsdClass, kFlyClass, kNpClass, kNtfClass, kBsClass, kWxClass, kShadowClass, kTipClass,
-                       kIslClass, kCalClass, kCcClass, kGmClass, kCcGlassClass, kTrayClass, kBarClass, kHandleClass, kOwnerClass})
+                       kIslClass, kGcClass, kCalClass, kCcClass, kGmClass, kCcGlassClass, kTrayClass, kBarClass, kHandleClass, kOwnerClass})
         UnregisterClassW(cls, g_hInst);
     // 4) Composição: os painéis (e os visuais dentro deles) saem aqui, na
     //    thread que os criou, antes do compositor e da fila de despacho.
@@ -26308,6 +26876,25 @@ const UiTr kUiTr[] = {
     {L"Mostrar avisos em pílula", L"Show notice pills", L"Mostrar avisos en píldora", L"Afficher les pastilles d’alerte", L"Hinweis-Pillen anzeigen", L"Mostra avvisi a pillola", L"显示提醒胶囊"},
     {L"Segunda cor (degradê)", L"Second color (gradient)", L"Segundo color (degradado)", L"Deuxième couleur (dégradé)", L"Zweite Farbe (Verlauf)", L"Secondo colore (sfumatura)", L"第二种颜色（渐变）"},
     {L"O primeiro círculo: uma cor só; outra cor faz a seleção ir da cor de cima até ela", L"The first circle: one color; another color makes the selection go from the color above to it", L"El primer círculo: un solo color; otro color hace que la selección vaya del color de arriba a él", L"Le premier cercle : une seule couleur ; une autre couleur fait aller la sélection de la couleur du dessus jusqu’à elle", L"Der erste Kreis: eine Farbe; eine andere Farbe lässt die Auswahl von der Farbe darüber zu ihr verlaufen", L"Il primo cerchio: un solo colore; un altro colore fa andare la selezione dal colore sopra fino a esso", L"第一个圆：单色；选择其他颜色时，选中效果从上方颜色渐变到该颜色"},
+    {L"Cópia dos ajustes", L"Settings backup", L"Copia de los ajustes", L"Copie des réglages", L"Sicherung der Einstellungen", L"Copia delle impostazioni", L"设置备份"},
+    {L"Exportar os ajustes", L"Export settings", L"Exportar los ajustes", L"Exporter les réglages", L"Einstellungen exportieren", L"Esporta le impostazioni", L"导出设置"},
+    {L"Importar os ajustes", L"Import settings", L"Importar los ajustes", L"Importer les réglages", L"Einstellungen importieren", L"Importa le impostazioni", L"导入设置"},
+    {L"Salva todos os ajustes desta janela num arquivo, para guardar ou levar a outro PC", L"Saves all the settings of this window to a file, to keep or take to another PC", L"Guarda todos los ajustes de esta ventana en un archivo, para conservarlos o llevarlos a otro PC", L"Enregistre tous les réglages de cette fenêtre dans un fichier, à garder ou à emporter sur un autre PC", L"Speichert alle Einstellungen dieses Fensters in einer Datei, zum Aufbewahren oder für einen anderen PC", L"Salva tutte le impostazioni di questa finestra in un file, da conservare o portare su un altro PC", L"将此窗口的所有设置保存到文件，便于保留或带到另一台电脑"},
+    {L"Troca os ajustes atuais pelos do arquivo", L"Replaces the current settings with the ones in the file", L"Cambia los ajustes actuales por los del archivo", L"Remplace les réglages actuels par ceux du fichier", L"Ersetzt die aktuellen Einstellungen durch die aus der Datei", L"Sostituisce le impostazioni attuali con quelle del file", L"用文件中的设置替换当前设置"},
+    {L"Exportar…", L"Export…", L"Exportar…", L"Exporter…", L"Exportieren…", L"Esporta…", L"导出…"},
+    {L"Ajustes da Finder Bar (.txt)", L"Finder Bar settings (.txt)", L"Ajustes de Finder Bar (.txt)", L"Réglages de Finder Bar (.txt)", L"Finder-Bar-Einstellungen (.txt)", L"Impostazioni di Finder Bar (.txt)", L"Finder Bar 设置 (.txt)"},
+    {L"Ajustes exportados", L"Settings exported", L"Ajustes exportados", L"Réglages exportés", L"Einstellungen exportiert", L"Impostazioni esportate", L"设置已导出"},
+    {L"%s ajustes salvos", L"%s settings saved", L"%s ajustes guardados", L"%s réglages enregistrés", L"%s Einstellungen gespeichert", L"%s impostazioni salvate", L"已保存 %s 项设置"},
+    {L"Não foi possível exportar", L"Couldn’t export", L"No se pudo exportar", L"Impossible d’exporter", L"Export fehlgeschlagen", L"Impossibile esportare", L"无法导出"},
+    {L"Não foi possível importar", L"Couldn’t import", L"No se pudo importar", L"Impossible d’importer", L"Import fehlgeschlagen", L"Impossibile importare", L"无法导入"},
+    {L"O arquivo não é uma cópia dos ajustes", L"The file isn’t a settings backup", L"El archivo no es una copia de los ajustes", L"Le fichier n’est pas une copie des réglages", L"Die Datei ist keine Sicherung der Einstellungen", L"Il file non è una copia delle impostazioni", L"该文件不是设置备份"},
+    {L"Ajustes importados", L"Settings imported", L"Ajustes importados", L"Réglages importés", L"Einstellungen importiert", L"Impostazioni importate", L"设置已导入"},
+    {L"%s ajustes aplicados", L"%s settings applied", L"%s ajustes aplicados", L"%s réglages appliqués", L"%s Einstellungen übernommen", L"%s impostazioni applicate", L"已应用 %s 项设置"},
+    {L"Os apps abertos serão fechados.", L"Open apps will be closed.", L"Las apps abiertas se cerrarán.", L"Les apps ouvertes seront fermées.", L"Geöffnete Apps werden geschlossen.", L"Le app aperte verranno chiuse.", L"打开的应用将被关闭。"},
+    {L"Encerrar a sessão agora?", L"Sign out now?", L"¿Cerrar sesión ahora?", L"Se déconnecter maintenant ?", L"Jetzt abmelden?", L"Disconnettersi ora?", L"现在注销吗？"},
+    {L"Encerrar sessão", L"Sign out", L"Cerrar sesión", L"Se déconnecter", L"Abmelden", L"Disconnetti", L"注销"},
+    {L"Reiniciar", L"Restart", L"Reiniciar", L"Redémarrer", L"Neu starten", L"Riavvia", L"重启"},
+    {L"Desligar", L"Shut Down", L"Apagar", L"Éteindre", L"Herunterfahren", L"Arresta", L"关机"},
     {L"Testar notificações", L"Test notifications", L"Probar notificaciones", L"Tester les notifications", L"Benachrichtigungen testen", L"Prova le notifiche", L"测试通知"},
     {L"Cada toque manda uma notificação de teste, de um app diferente, que fica no botão; Limpar, no painel, tira todas", L"Each click sends a test notification from a different app, kept in the button; Clear, in the panel, removes them all", L"Cada clic envía una notificación de prueba de una app distinta, que queda en el botón; Borrar, en el panel, las quita todas", L"Chaque clic envoie une notification de test d’une app différente, gardée dans le bouton ; Effacer, dans le panneau, les retire toutes", L"Jeder Klick sendet eine Testbenachrichtigung einer anderen App, die im Knopf bleibt; Löschen im Bereich entfernt alle", L"Ogni clic invia una notifica di prova da un’app diversa, che resta nel pulsante; Cancella, nel pannello, le rimuove tutte", L"每次点击发送一条来自不同应用的测试通知，保留在按钮中；面板中的“清除”会全部移除"},
     {L"%s (teste %s)", L"%s (test %s)", L"%s (prueba %s)", L"%s (test %s)", L"%s (Test %s)", L"%s (prova %s)", L"%s（测试 %s）"},
@@ -26615,6 +27202,11 @@ const UiTr kUiTr[] = {
     {L"Não deu para responder daqui", L"Couldn’t reply from here", L"No se pudo responder desde aquí", L"Impossible de répondre d’ici", L"Antworten von hier nicht möglich", L"Impossibile rispondere da qui", L"无法在此回复"},
     {L"Texto copiado: cole na conversa", L"Text copied: paste it in the chat", L"Texto copiado: pégalo en la conversación", L"Texte copié : collez-le dans la conversation", L"Text kopiert: im Chat einfügen", L"Testo copiato: incollalo nella chat", L"文本已复制: 请粘贴到对话中"},
     {L"Recortado", L"Cut", L"Cortado", L"Coupé", L"Ausgeschnitten", L"Tagliato", L"已剪切"},
+    {L"Num Lock ativado", L"Num Lock on", L"Bloq Num activado", L"Verr. Num activé", L"Num-Taste an", L"Bloc Num attivo", L"数字锁定已开启"},
+    {L"Num Lock desativado", L"Num Lock off", L"Bloq Num desactivado", L"Verr. Num désactivé", L"Num-Taste aus", L"Bloc Num disattivato", L"数字锁定已关闭"},
+    {L"Scroll Lock ativado", L"Scroll Lock on", L"Bloq Despl activado", L"Arrêt défil activé", L"Rollen-Taste an", L"Bloc Scorr attivo", L"滚动锁定已开启"},
+    {L"Scroll Lock desativado", L"Scroll Lock off", L"Bloq Despl desactivado", L"Arrêt défil désactivé", L"Rollen-Taste aus", L"Bloc Scorr disattivato", L"滚动锁定已关闭"},
+    {L"Num Lock e Scroll Lock ligados e desligados", L"Num Lock and Scroll Lock on and off", L"Bloq Num y Bloq Despl activados y desactivados", L"Verr. Num et Arrêt défil activés et désactivés", L"Num- und Rollen-Taste an und aus", L"Bloc Num e Bloc Scorr attivati e disattivati", L"数字锁定和滚动锁定开启和关闭"},
     {L"Caps Lock ativado", L"Caps Lock on", L"Bloq Mayús activado", L"Verr. Maj activé", L"Feststelltaste an", L"Bloc Maiusc attivo", L"大写锁定已开启"},
     {L"Caps Lock desativado", L"Caps Lock off", L"Bloq Mayús desactivado", L"Verr. Maj désactivé", L"Feststelltaste aus", L"Bloc Maiusc disattivato", L"大写锁定已关闭"},
     {L"Caps Lock ligado e desligado", L"Caps Lock on and off", L"Bloq Mayús activado y desactivado", L"Verr. Maj activé et désactivé", L"Feststelltaste an und aus", L"Bloc Maiusc attivato e disattivato", L"大写锁定开启和关闭"},
