@@ -20,25 +20,72 @@
 Restyles the progress bar shown in the Windows file copy / move / delete dialog, and the
 extraction progress bar of 7-Zip and WinRAR.
 
+Every style is shown below.
+
 **Accent styles** (use the accent color)
 * **Solid** - flat color
+
+  ![Solid style](https://i.imgur.com/vdd9Uv5.png)
+
 * **Satin** - gradient with a top highlight
 * **Candy Cane** - diagonal stripes
+
+  ![Candy Cane style](https://i.imgur.com/FzzmGxh.png)
+
 * **Neon Tube** - dark track with a glowing core
+
+  ![Neon Tube style](https://i.imgur.com/fLQqUQt.png)
+
 * **Arcade** - retro blocks
+
+  ![Arcade style](https://i.imgur.com/kTFi3jM.png)
+
 
 **Designer styles** (fixed colors, some with their own track)
 * **Evergreen** - dark green timeline with stepped bands and a diamond knob
+
+  ![Evergreen style](https://i.imgur.com/G2zPbsh.png)
+
 * **Sorbet** - pink, yellow and blue segments
+
+  ![Sorbet style](https://i.imgur.com/nx5igz7.png)
+
 * **Polka** - blue gradient with dot markers
+
+  ![Polka style](https://i.imgur.com/VmmfywN.png)
+
 * **Aurora** - cyan-to-lilac gradient with an end marker and tick track
+
+  ![Aurora style](https://i.imgur.com/ZOjlvY1.png)
+
 * **Ember** - orange diagonal stripes on a striped gray track
+
+  ![Ember style](https://i.imgur.com/wf7WwLz.png)
+
 * **Mint** - soft green bar with a subtle bottom shade
+
+  ![Mint style](https://i.imgur.com/fvcFM5f.png)
+
 * **Fire & Ice** - red-to-icy-blue gradient
+
+  ![Fire & Ice style](https://i.imgur.com/URI28xU.png)
+
 * **Prism** - full-spectrum gradient
+
+  ![Prism style](https://i.imgur.com/OZzUoOu.png)
+
 * **Confetti** - colorful mosaic
+
+  ![Confetti style](https://i.imgur.com/J7TYCcC.png)
+
 * **Carbon** - dark mosaic on a dark track
+
+  ![Carbon style](https://i.imgur.com/RQL1wxd.png)
+
 * **Dusk** - navy-to-orange-to-lilac gradient
+
+  ![Dusk style](https://i.imgur.com/o1m91bm.png)
+
 
 Paused and error states automatically switch to amber and red.
 
@@ -47,9 +94,13 @@ Paused and error states automatically switch to amber and red.
   standard Windows look. Turn on "Also restyle other progress bars in Explorer" to
   restyle those too.
 * The mod also loads into 7-Zip (7zG.exe, 7zFM.exe) and WinRAR (WinRAR.exe) and restyles
-  their extraction progress bars. To turn that off, remove those processes from the
-  mod's custom process inclusion list (Advanced tab). Extracting a ZIP with Explorer's
-  built-in "Extract All" uses the normal copy dialog.
+  their extraction progress bars. To turn that off, switch off "Also style 7-Zip and
+  WinRAR" in the settings (or add those processes to the mod's custom process exclusion
+  list in the Advanced tab). Extracting a ZIP with Explorer's built-in "Extract All" uses
+  the normal copy dialog.
+* Tested on Windows 11. The theme lookup uses an undocumented uxtheme function (ordinal
+  74), so other Windows versions have not been verified.
+* In a dark copy dialog the tracks of the styles are darkened to match.
 * Windows itself turns a drive bar red when the drive has under 10% free.
 * Copy dialogs shown by other processes (for example inside an app's Open/Save dialog)
   are not styled. Add those processes in the mod's custom process inclusion list.
@@ -87,6 +138,8 @@ Paused and error states automatically switch to amber and red.
   $name: Corner radius in pixels at 100% scaling (0 = square)
 - hideOverlay: true
   $name: Hide the default moving glow
+- styleArchivers: true
+  $name: Also style 7-Zip and WinRAR
 - styleOtherBars: false
   $name: Also restyle other progress bars in Explorer
   $description: For example, the drive usage bars in This PC
@@ -143,6 +196,7 @@ struct Config {
     COLORREF track = RGB(230, 230, 230);
     int radius = 3;
     bool hideOverlay = true;
+    bool styleArchivers = true;
     bool styleOtherBars = false;
 } g;
 
@@ -296,20 +350,14 @@ static int BeginClip(HDC hdc, const RECT& clip, const RECT& shape, int radius) {
     return saved;
 }
 
-static bool ContainsI(LPCWSTR s, LPCWSTR lowerNeedle) {
-    if (!s) return false;
-    std::wstring t(s);
-    std::transform(t.begin(), t.end(), t.begin(), [](wchar_t c) { return (wchar_t)towlower(c); });
-    return t.find(lowerNeedle) != std::wstring::npos;
-}
-
 // Asks uxtheme which class the handle was opened with, and reports whether it is a
 // progress bar theme.
 static bool GetProgressClass(HTHEME t, WCHAR* cls, int count) {
     if (!t || !g_getThemeClass) return false;
     cls[0] = 0;
     if (FAILED(g_getThemeClass(t, cls, count))) return false;
-    return ContainsI(cls, L"progress");
+    CharLowerW(cls);  // lowercased in place, so later checks need no extra copy
+    return wcsstr(cls, L"progress") != nullptr;
 }
 
 static BOOL CALLBACK EnumThreadWndProc(HWND h, LPARAM lp) {
@@ -331,10 +379,11 @@ static bool ThreadHostsCopyDialog() {
 
 // Decides whether this progress bar should be restyled. By default only the copy dialog is.
 static bool ShouldStyle(LPCWSTR themeClass, HDC hdc) {
-    if (!g_isExplorer || g.styleOtherBars) return true;
+    if (!g_isExplorer) return g.styleArchivers;
+    if (g.styleOtherBars) return true;
 
     // Copy engine theme class (for example "CopyEngine::Progress"), when Windows uses one.
-    if (ContainsI(themeClass, L"copyengine")) return true;
+    if (wcsstr(themeClass, L"copyengine") != nullptr) return true;  // already lowercase
 
     HWND w = WindowFromDC(hdc);
     if (w) {
@@ -386,6 +435,7 @@ static void LoadSettings() {
     if (g.radius > 12) g.radius = 12;
     g.hideOverlay = Wh_GetIntSetting(L"hideOverlay") != 0;
     g.styleOtherBars = Wh_GetIntSetting(L"styleOtherBars") != 0;
+    g.styleArchivers = Wh_GetIntSetting(L"styleArchivers") != 0;
 }
 
 // ---------------------------------------------------------------- palettes
@@ -505,9 +555,10 @@ static void Mosaic(HDC hdc, const RECT& r, COLORREF base, const Tile* tiles, int
 
 // ---------------------------------------------------------------- painting
 
-static void DrawTrack(HDC hdc, RECT r, const RECT& clip) {
+static void DrawTrack(HDC hdc, RECT r, const RECT& clip, bool dark) {
     const int h = r.bottom - r.top;
     int saved = BeginClip(hdc, clip, r, ScaledRadius(h));
+    auto shade = [&](COLORREF c) { return dark ? Darken(c, 70) : c; };
 
     switch (g.style) {
         case S_NEON:
@@ -519,29 +570,29 @@ static void DrawTrack(HDC hdc, RECT r, const RECT& clip) {
             break;
 
         case S_POLKA:
-            Fill(hdc, r, RGB(204, 217, 245));
-            Dots(hdc, r, RGB(240, 251, 255));
+            Fill(hdc, r, shade(RGB(204, 217, 245)));
+            Dots(hdc, r, shade(RGB(240, 251, 255)));
             break;
 
         case S_AURORA: {
-            Fill(hdc, r, Lighten(g.track, 60));
+            Fill(hdc, r, shade(Lighten(g.track, 60)));
             const int tw = Imax(1, h * 115 / 1000);
             const int period = Imax(3, h * 328 / 1000);
             for (int x = r.left; x < r.right; x += period) {
                 RECT t = {x, r.top, x + tw, r.bottom};
-                Fill(hdc, t, RGB(219, 219, 221));
+                Fill(hdc, t, shade(RGB(219, 219, 221)));
             }
             break;
         }
 
         case S_EMBER:
-            Fill(hdc, r, RGB(198, 198, 198));
+            Fill(hdc, r, shade(RGB(198, 198, 198)));
             Stripes(hdc, r, h * 85 / 100, h * 193 / 100, r.left - h * 8 / 100, h, nullptr, 0,
-                    RGB(198, 198, 198), 25);
+                    shade(RGB(198, 198, 198)), 25);
             break;
 
         case S_MINT: {
-            const COLORREF base = RGB(198, 205, 211);
+            const COLORREF base = shade(RGB(198, 205, 211));
             Fill(hdc, r, base);
             RECT lower = r;
             lower.top = r.bottom - Imax(1, h * 47 / 100);
@@ -554,7 +605,7 @@ static void DrawTrack(HDC hdc, RECT r, const RECT& clip) {
             break;
 
         default:
-            Fill(hdc, r, g.track);
+            Fill(hdc, r, shade(g.track));
             break;
     }
 
@@ -729,7 +780,8 @@ static void DrawFill(HDC hdc, RECT r, const RECT& clip, int state) {
 }
 
 // Returns true if we fully handled the draw call.
-static bool PaintProgress(HDC hdc, int part, int state, const RECT* prc, const RECT* pclip) {
+static bool PaintProgress(HDC hdc, int part, int state, const RECT* prc, const RECT* pclip,
+                          bool dark) {
     if (!prc) return false;
     RECT r = *prc;
     if (r.right <= r.left || r.bottom <= r.top) return false;
@@ -745,7 +797,7 @@ static bool PaintProgress(HDC hdc, int part, int state, const RECT* prc, const R
 
     if (overlay) return true;  // swallow the stock glow animation
 
-    if (part == kPP_BAR) DrawTrack(hdc, r, clip);
+    if (part == kPP_BAR) DrawTrack(hdc, r, clip, dark);
     else DrawFill(hdc, r, clip, state);
     return true;
 }
@@ -770,7 +822,8 @@ HRESULT WINAPI DrawThemeBackground_Hook(HTHEME t, HDC hdc, int part, int state, 
         WCHAR cls[64];
         if (GetProgressClass(t, cls, ARRAYSIZE(cls))) {
             Wh_Log(L"Progress draw: class=%s part=%d state=%d", cls, part, state);
-            if (ShouldStyle(cls, hdc) && PaintProgress(hdc, part, state, rc, clip)) {
+            if (ShouldStyle(cls, hdc) && PaintProgress(hdc, part, state, rc, clip,
+                                                   wcsstr(cls, L"darkmode") != nullptr)) {
                 return S_OK;
             }
         }
@@ -792,7 +845,8 @@ HRESULT WINAPI DrawThemeBackgroundEx_Hook(HTHEME t, HDC hdc, int part, int state
         WCHAR cls[64];
         if (!computingRegion && GetProgressClass(t, cls, ARRAYSIZE(cls))) {
             Wh_Log(L"Progress draw (Ex): class=%s part=%d state=%d", cls, part, state);
-            if (ShouldStyle(cls, hdc) && PaintProgress(hdc, part, state, rc, pclip)) {
+            if (ShouldStyle(cls, hdc) && PaintProgress(hdc, part, state, rc, pclip,
+                                                   wcsstr(cls, L"darkmode") != nullptr)) {
                 return S_OK;
             }
         }
