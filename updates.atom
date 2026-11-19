@@ -2,12 +2,47 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-19T05:01:44.000Z</updated>
+    <updated>2026-11-19T22:02:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Details View Columns 1.5]]></title>
+        <id>https://windhawk.net/mods/explorer-force-details-columns#8a7c48cc3b4dd6c4ade9ac3a969cd35f36dc7dd8</id>
+        <link href="https://windhawk.net/mods/explorer-force-details-columns"/>
+        <updated>2026-11-19T22:02:55.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the &quot;Minimum Column Width&quot; setting, which lowers the minimum column width enforced by Windows (about 90 logical pixels), so that smaller forced widths take effect and columns can be dragged narrower.</li>
+<li>Fixed columns with width -1 being auto-sized before the folder's items were displayed, which made them only as wide as their header, or as narrow as the minimum width.</li>
+<li>Fixed a possible Explorer crash when settings are changed while a folder is opening.</li>
+<li>Changing settings no longer refreshes open folders, which reset their scroll position and selection, unless their columns or sorting change.</li>
+<li>Removed the note about the minimum column width known issue.</li>
+<li>Added a note that Explorer keeps the forced columns, widths and sorting of folders after the mod is disabled.</li>
+</ul>
+]]></content>
+        <author>
+            <name>ernisn</name>
+            <uri>https://github.com/ernisn</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 8/8.1 Charms Bar Recreation 1.1.0]]></title>
+        <id>https://windhawk.net/mods/win8-charms-bar-recreation#8a3d4890dde6afa55a8829047e50ef676f824cfd</id>
+        <link href="https://windhawk.net/mods/win8-charms-bar-recreation"/>
+        <updated>2026-11-19T22:02:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved the context menus</li>
+<li>Applied minor graphic improvements</li>
+<li>Applied minor improvements</li>
+</ul>
+]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar auto-hide speed 1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-speed#117a781f71dc5f3cf24815e2cda3a6773dba286c</id>
@@ -811,36 +846,6 @@ the F1 part copies, and to DarkShadow44’s reverse-engineering notes on UIRibbo
         <author>
             <name>vt-idiot</name>
             <uri>https://github.com/vt-idiot</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Context Menu Items 1.13.0]]></title>
-        <id>https://windhawk.net/mods/remove-context-menu-items#b42475141002a12ff4fa218eee827c875eebfe78</id>
-        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
-        <updated>2026-11-18T02:00:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Restored the Ctrl key as a bypass option, with a dropdown to choose Ctrl, Alt, or both</li>
-<li>Localized the predefined item names in the Windhawk settings for available languages</li>
-<li>Renamed &quot;NVIDIA Control Panel&quot; to &quot;NVIDIA App&quot; (existing languages need updating)</li>
-</ul>
-]]></content>
-        <author>
-            <name>Armaninyow</name>
-            <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Live Update for Windows 11 2.0.207]]></title>
-        <id>https://windhawk.net/mods/live-update-for-windows-widget#9ae9b06673de83205d9bdd629e646062c4f81e56</id>
-        <link href="https://windhawk.net/mods/live-update-for-windows-widget"/>
-        <updated>2026-11-18T02:00:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Mod Ownership Transfer:</strong> Transferred mod ownership and maintenance from <code>@caotu2k5</code> to <code>@caotu2005</code>.</li>
-</ul>
-]]></content>
-        <author>
-            <name>caotu2005</name>
-            <uri>https://github.com/caotu2005</uri>
         </author>
     </entry>
 </feed>

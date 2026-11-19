@@ -6893,7 +6893,7 @@
         "ratingUsers": 13,
         "reviews": 0,
         "trendingSorting": -0.14675291865196347,
-        "updated": 1785948930000,
+        "updated": 1795125775000,
         "users": 233
       },
       "metadata": {
@@ -6906,7 +6906,7 @@
         ],
         "license": "MIT",
         "name": "Explorer Details View Columns",
-        "version": "1.4"
+        "version": "1.5"
       }
     },
     "explorer-frame-classic": {
@@ -11810,7 +11810,7 @@
         "rating": 9,
         "ratingBreakdown": [10, 3, 3, 11, 64],
         "ratingUsers": 91,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 13.172576893033643,
         "updated": 1792864818000,
         "users": 4873
@@ -14528,7 +14528,7 @@
         "rating": 10,
         "ratingBreakdown": [1, 0, 1, 2, 32],
         "ratingUsers": 36,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 1.3173221207458194,
         "updated": 1792955014000,
         "users": 1273
@@ -16669,7 +16669,7 @@
         "rating": 10,
         "ratingBreakdown": [2, 0, 2, 10, 102],
         "ratingUsers": 116,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 5.773369164011731,
         "updated": 1794592943000,
         "users": 1648
@@ -23252,12 +23252,12 @@
         "ratingUsers": 7,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792577083000,
+        "updated": 1795125770000,
         "users": 98
       },
       "metadata": {
         "author": "babamohammed",
-        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -lshlwapi -ldwmapi -lshcore -lgdiplus -lmsimg32 -lwlanapi -liphlpapi -lwininet -lwindowsapp -luuid -ladvapi32 -lpowrprof -lcrypt32 -lwindowscodecs",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -lshlwapi -ldwmapi -lshcore -lgdiplus -lmsimg32 -lwlanapi -liphlpapi -lwininet -lwindowsapp -luuid -ladvapi32 -lpowrprof -lcrypt32 -lwindowscodecs -luxtheme",
         "description": "This mod recreates the Windows 8/8.1 Charms Bar on Windows 10 and Windows 11",
         "github": "https://github.com/babamohammed2022",
         "include": [
@@ -23265,7 +23265,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Windows 8/8.1 Charms Bar Recreation",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "win8-display-switch-recreation": {

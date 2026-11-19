@@ -1,3 +1,12 @@
+## 1.5 ([Nov 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8a7c48cc3b4dd6c4ade9ac3a969cd35f36dc7dd8/mods/explorer-force-details-columns.wh.cpp))
+
+* Added the "Minimum Column Width" setting, which lowers the minimum column width enforced by Windows (about 90 logical pixels), so that smaller forced widths take effect and columns can be dragged narrower.
+* Fixed columns with width -1 being auto-sized before the folder's items were displayed, which made them only as wide as their header, or as narrow as the minimum width.
+* Fixed a possible Explorer crash when settings are changed while a folder is opening.
+* Changing settings no longer refreshes open folders, which reset their scroll position and selection, unless their columns or sorting change.
+* Removed the note about the minimum column width known issue.
+* Added a note that Explorer keeps the forced columns, widths and sorting of folders after the mod is disabled.
+
 ## 1.4 ([Aug 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/da5a7e59605f811c25d98fb3e8c399b34906272f/mods/explorer-force-details-columns.wh.cpp))
 
 - Fixed normal folders sometimes being treated as virtual folders and left unchanged, which also affected their subfolders.

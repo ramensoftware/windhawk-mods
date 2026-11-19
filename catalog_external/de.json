@@ -1,5 +1,68 @@
 {
   "mods": {
+    "auto-folder-icons": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795125999736,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795125999736,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Sanekx Arcs",
+        "compilerOptions": "-lole32 -luuid -lshell32 -lshlwapi",
+        "description": "Uses folder.ico or favicon.ico inside local folders without desktop.ini.",
+        "github": "https://github.com/SanekxArcs",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Automatic Folder Icons",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7641",
+      "source": {
+        "sha256": "0cd0a595b079f67f5a1bf18c4564b852e722248479cb9838e9b1cfe2619804b8",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c1cf573ce429f7672526c9b2083e468bdbb87e01/mods/auto-folder-icons.wh.cpp"
+      }
+    },
+    "copy-progress-styles": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795125999736,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795125999736,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Pixeliota",
+        "compilerOptions": "-lgdi32 -lmsimg32",
+        "description": "Restyles the progress bar in the Windows copy/move/delete dialog and in 7-Zip / WinRAR extraction (16 styles)",
+        "github": "https://github.com/Pixeliota",
+        "include": [
+          "explorer.exe",
+          "7zG.exe",
+          "7zFM.exe",
+          "WinRAR.exe"
+        ],
+        "license": "MIT",
+        "name": "File Copy Progress Bar Styles",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7543",
+      "source": {
+        "sha256": "ee4e5d83bd250c6a79d39925abdd711a7e7c29e9195130bdfc60e174203f96c0",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3f4ab56669bfba9a62083d609df878425195142d/mods/copy-progress-styles.wh.cpp"
+      }
+    },
     "cursor-scheme-extension": {
       "details": {
         "defaultSorting": 0,
@@ -8,7 +71,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795025098004,
+        "updated": 1795125999736,
         "users": 0
       },
       "metadata": {
@@ -17,7 +80,7 @@
           "x86-64"
         ],
         "author": "CTravkin",
-        "compilerOptions": "-lgdi32 -ladvapi32 -lshell32",
+        "compilerOptions": "-lgdi32 -ladvapi32",
         "description": "Ersetzt anwendungseigene Mauszeiger durch die Zeiger des ausgewählten Windows-Schemas",
         "github": "https://github.com/CTravkin",
         "homepage": "https://ctravkin.ru",
@@ -26,15 +89,15 @@
         ],
         "license": "MIT",
         "name": "Cursor Scheme Extension",
-        "version": "1.0.2"
+        "version": "1.0.3"
       },
       "metadataEnglish": {
         "description": "Replaces built-in application pointers with pointers from the selected Windows scheme"
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7594",
       "source": {
-        "sha256": "544885ff02bc8b45254a8892b0d581719b63464223b0c3349f4fe741dda73386",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d12d691dd21b44e8856aaab1264eb62b7bfd8f33/mods/cursor-scheme-extension.wh.cpp"
+        "sha256": "3a6a360f9d6174505a2b155e61c756342387a5cd237784a7f9e3c0c2e4ed02b9",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/9adb8d4fc8e694e9f88842cc1057dea2eb5dafc3/mods/cursor-scheme-extension.wh.cpp"
       }
     },
     "desktop-app-groups": {
@@ -136,6 +199,37 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6b19ead230c08403dab28d1d30bcfd28e2abb0e2/mods/explorer-default-folder.wh.cpp"
       }
     },
+    "explorer-navigation-pane-spacing-fixes": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795125999736,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795125999736,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "NDruce",
+        "compilerOptions": "-lcomctl32 -lgdi32",
+        "description": "Tidies up the navigation pane of File Explorer: a thin divider next to the files area, even padding on all sides, faded or hidden pin icons, longer or shorter separators and a vertical offset of the expand arrows",
+        "github": "https://github.com/NDruce",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "File Explorer navigation pane: thin divider, even padding",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7672",
+      "source": {
+        "sha256": "e93dc86ff3cf3c748435416a26826f68ac892e1c681d25c10074fd45b836dd91",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/dda118b24150aa37202cd56e0158a87de825e8a1/mods/explorer-navigation-pane-spacing-fixes.wh.cpp"
+      }
+    },
     "explorer-tabs-session-saver-revamped": {
       "details": {
         "defaultSorting": 0,
@@ -172,7 +266,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795043328083,
+        "updated": 1795125999736,
         "users": 0
       },
       "metadata": {
@@ -189,8 +283,8 @@
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7557",
       "source": {
-        "sha256": "49af09e1239f83589f71d873ebbeec0374bec0bf11e65fee29e007d3d9940b15",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/f3a2ffa323df5b5872a0de892f5411cec70f73ff/mods/frosted-window-blur.wh.cpp"
+        "sha256": "e27fc3e55ade671eb6dab9e0a4c5d0577d5199cdef2914d39062f44bd54d72db",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/dde984adc382a397a87ef51864a6152c5711d3f6/mods/frosted-window-blur.wh.cpp"
       }
     },
     "lockscreen-background": {
@@ -235,7 +329,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795025098004,
+        "updated": 1795125999736,
         "users": 0
       },
       "metadata": {
@@ -252,8 +346,8 @@
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7616",
       "source": {
-        "sha256": "2978547c6d362ab07707b7cffb1f8c35272bdc0ff1d61376c20e3ec9975ebc13",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6c18b97917c56324382a01f017de9e09648c01ea/mods/simple-wallpaper-switcher.wh.cpp"
+        "sha256": "c00234e5ec1ec70e3150a26ceedfacb0665bd3c2a0fd5abae0970c7d70edf399",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/de5f05d8fa967fbf84c062e2301948725005fb83/mods/simple-wallpaper-switcher.wh.cpp"
       }
     },
     "taskbar-mini-folders": {
@@ -355,7 +449,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795025098004,
+        "updated": 1795125999736,
         "users": 0
       },
       "metadata": {
@@ -364,7 +458,7 @@
         ],
         "author": "CTravkin",
         "compilerOptions": "-ldwmapi -lole32 -loleaut32 -lruntimeobject -luuid -ladvapi32",
-        "description": "Blendet die Rahmen von Fenstern, dem Startmenü, der Taskleiste und anderen Systemelementen aus",
+        "description": "Blendet die vom System gezeichneten Rahmen von Anwendungsfenstern und Shell-Elementen aus",
         "github": "https://github.com/CTravkin",
         "homepage": "https://ctravkin.ru",
         "include": [
@@ -381,12 +475,12 @@
         "version": "1.2.1"
       },
       "metadataEnglish": {
-        "description": "Hide borders around windows, the Start menu, the taskbar, and other system elements"
+        "description": "Hide system-drawn borders on app windows and shell elements"
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7408",
       "source": {
-        "sha256": "bafec5efeb32cd3b3c54326c5d589bc905eb4166250cf28b8860931f4e76f8df",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/1ee07968473c4ddc9abfb576643156ccc75424e0/mods/windows-border-switch.wh.cpp"
+        "sha256": "1b864f3700c4a0ca7bfcfbda69c0a31129cdf17d797a51513e0398534aade9ba",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/cf59db87d6f3fc309afb7f39794cb20d62f4e29c/mods/windows-border-switch.wh.cpp"
       }
     }
   }
