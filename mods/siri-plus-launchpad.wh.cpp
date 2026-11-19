@@ -29,9 +29,10 @@ Press the **Windows key** (or click **Start**) and type, or pick what you want t
 - **Four modes**: Original Siri (default), Floating, Window and Fullscreen
 - **Live glass**: real-time blur behind the bar and panels (animated wallpapers and videos keep playing underneath), plus a liquid glass with refraction in the Siri modes
 - **Search everything at once**: type in the bar and apps, actions, folders and files show up together in one list, like Spotlight or Flow Launcher, or pick a category (Apps, Files, Actions, Clipboard) to search only there
+- **Accents don't matter**: *acao* finds *ação* and the other way around (can be turned off)
 - **Calculator**: type a calculation and its result shows first; Enter copies it
 - **Windows Settings**: type *display*, *startup apps*, *update*, *wi-fi*... and the matching Settings page opens
-- **App tabs**: All, automatic categories and up to 6 tabs of your own
+- **App tabs**: All, automatic categories and up to 6 tabs of your own (Original Siri and Floating)
 - **Recent apps row**: recently opened or installed apps (or the most used ones) on top
 - **Power options**: type *shut down*, *restart*, *sleep*, *lock* or *sign out*, or the floating power button (off by default; turn it on in *Siri bar*)
 - **Keyboard shortcuts**: Ctrl+1 … Ctrl+5 jump to Applications, Files, Actions, Clipboard and Phone, and can also open the launcher from any program (optional)
@@ -114,14 +115,14 @@ A search bar in the macOS 27 style.
 - **Open file location**: right-click a file or folder found by the search and choose *Open file location* to see it in File Explorer, already selected.
 
 ### Floating
-The bar appears out of an animated circle, the **Siri wave** or a soft glow, with zoom and an adjustable bounce. Clicking it or typing slides the results panel down. When it closes, the bar is "sucked" back into the bubble. Hover the category icon at the start of the bar and it turns into a back arrow, as in Original Siri: a click clears the search, goes back to Applications and closes the results panel.
+The bar appears out of an animated circle, the **Siri wave** or a soft glow, with zoom and an adjustable bounce. Clicking it or typing slides the results panel down. When it closes, the bar is "sucked" back into the bubble. Hover the category icon at the start of the bar and it turns into a back arrow, as in Original Siri: a click clears the search, goes back to Applications and closes the results panel. In Applications, the **app tabs** (All, the categories and your own tabs) sit in a row under the categories, and the **first row** shows the recent or most used apps, as in Original Siri.
 
 ### Window and Fullscreen
 The classic Launchpad grid with pages or vertical scrolling, folders and a power button. Pages always slide inside the glass. Fullscreen respects the work area and the space reserved by docks.
 
 ---
 
-## Managing app tabs (Original Siri)
+## Managing app tabs (Original Siri and Floating)
 
 | What | How |
 |---|---|
@@ -130,7 +131,7 @@ The classic Launchpad grid with pages or vertical scrolling, folders and a power
 | Remove an app | Inside a tab, right-click the app → **Remove from tab** |
 | Rename or delete | Right-click the tab → **Rename tab** / **Delete tab** |
 | Built-in tabs | They can also be edited (add or remove apps) and deleted. **Restore default tabs** brings them back |
-| Move through tabs | **Tab / Shift+Tab**, or click and drag the strip sideways (the mouse wheel works too) |
+| Move through tabs | **Tab / Shift+Tab** (Original Siri), or click and drag the strip sideways (the mouse wheel works too) |
 
 ---
 
@@ -190,7 +191,8 @@ All options are in the **⋯** settings panel (in seven languages) and in the mo
 | ④ Window and Fullscreen | Window size, search style (top bar or centered box), power button and its position, opening and closing animations (pop, fade, rise from/sink into the taskbar, CRT), animation speed, blur behind open folders |
 | ⑤ Floating and Original Siri | Bar size (96 px tall by default), results box width and rows for each category (Files and Clipboard as wide as the bar by default), circle animation (Siri wave, soft glow, none), circle zoom, bounce of the circle and of the results box, opening/closing duration, animation speed, search everything when typing, power options when typing, floating power button (off by default) and its side (left or right of the bar), first row (recent, most used, off), Original Siri category shortcuts for Applications, Files, Actions, Clipboard and Phone (defaults **Ctrl+1**, **Ctrl+2**, **Ctrl+3**, **Ctrl+4**, **Ctrl+5**; any combination starting with Ctrl, e.g. Ctrl+Shift+F or Ctrl+F2), and whether they also work with the launcher closed (off by default) |
 | ⑥ Opening | Open with the Windows key and/or the Start button |
-| ⑦ Apps and icons | Icon size, columns, scrolling direction, jiggle, drag to the taskbar to pin, icon gallery folder |
+| ⑦ Apps and icons | Icon size, text size of the results (80 to 160 %), columns, scrolling direction, jiggle, drag to the taskbar to pin, icon gallery folder |
+| Search | Ignore accents (on by default), calculator |
 | ⑧ Files | On/off, search history, list or icons, indexer, maximum results |
 | ⑨ Clipboard | On/off, number of items kept, how long a copy stays |
 | ⑩ Phone | On/off (off by default), notifications shown (1 to 10) |
@@ -209,7 +211,7 @@ All options are in the **⋯** settings panel (in seven languages) and in the mo
 | Other **Ctrl+digits** | Launch the matching result (never an action such as Shut down) |
 | **Esc** | Closes menus, then clears the search, goes back to the categories and finally closes |
 | Right-click on the search bar | Cut, Copy, Paste, Select all, Delete all |
-| Long-press an app | Select it; then a simple click selects or deselects more apps (Window/Fullscreen: right-click → **New folder with N items** puts them in a folder; Original Siri: inside the app picker) |
+| Long-press an app | Select it; then a simple click selects or deselects more apps (Window/Fullscreen: right-click → **New folder with N items** puts them in a folder; Floating: right-click → **Pin selected to taskbar**; Original Siri: inside the app picker) |
 
 ---
 
@@ -323,6 +325,11 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   $name:pt-BR: Calculadora na pesquisa
   $description: "Type a calculation (2+2, 15% * 80, (3+4)^2) and its result shows first; Enter copies it. Start with = or calc to always calculate (=5-3)"
   $description:pt-BR: "Digite uma conta (2+2, 15% * 80, (3+4)^2) e o resultado aparece primeiro; Enter copia. Comece com = ou calc para sempre calcular (=5-3)"
+- ignoreAccents: true
+  $name: Ignore accents in the search
+  $name:pt-BR: Ignorar acentos na pesquisa
+  $description: 'Searching for "acao" also finds "ação", and the other way around, in apps, files, actions and the other categories'
+  $description:pt-BR: 'Pesquisar "acao" também encontra "ação", e o contrário, em apps, arquivos, ações e nas outras categorias'
 - performance: normal
   $name: Performance
   $name:pt-BR: Desempenho
@@ -395,10 +402,10 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
     $description: The icons and the window under a right-click menu are blurred. 100 = default, up to 200
     $description:pt-BR: "Os ícones e a janela sob um menu de clique direito ficam desfocados. 100 = padrão, até 200"
   - menuSelection: glass
-    $name: "Glass, Liquid glass, Custom glass and OLED themes: selection in menus"
-    $name:pt-BR: "Temas Vidro, Vidro líquido, Vidro personalizado e OLED: seleção nos menus"
-    $description: How the item under the mouse is highlighted in the menus. Colored and Frosted use the selection color
-    $description:pt-BR: "Como o item sob o mouse fica destacado nos menus. Colorida e Fosca usam a cor da seleção"
+    $name: "Selection in menus and results"
+    $name:pt-BR: "Seleção nos menus e nos resultados"
+    $description: How the item under the mouse is highlighted in the menus and in the search results. Colored and Frosted use the selection color
+    $description:pt-BR: "Como o item sob o mouse fica destacado nos menus e nos resultados da pesquisa. Colorida e Fosca usam a cor da seleção"
     $options:
     - glass: Glass
     - color: Colored (like macOS)
@@ -696,8 +703,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
     - left: À esquerda da barra
     - right: À direita da barra
   - firstRow: recent
-    $name: "Original Siri: first row of apps (separated by a line)"
-    $name:pt-BR: "Siri original: primeira linha de aplicativos (separada por uma linha)"
+    $name: "Floating and Original Siri: first row of apps (separated by a line)"
+    $name:pt-BR: "Flutuante e Siri original: primeira linha de aplicativos (separada por uma linha)"
     $options:
     - recent: Recently opened or installed
     - used: Most used
@@ -747,6 +754,11 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - iconSize: 64
     $name: Icon size (px, Floating / Original Siri up to 56)
     $name:pt-BR: "Tamanho dos ícones (px; nos modos Flutuante e Siri original até 56)"
+  - textSize: 100
+    $name: Text size of the results (%, 80 to 160)
+    $name:pt-BR: "Tamanho do texto dos resultados (%, 80 a 160)"
+    $description: "The names of apps, files and the other results, in the grid and in lists. 100 = normal"
+    $description:pt-BR: "Os nomes dos apps, arquivos e dos outros resultados, na grade e nas listas. 100 = normal"
   - columns: 0
     $name: Columns (0 = automatic)
     $name:pt-BR: "Colunas (0 = automático)"
@@ -1113,7 +1125,7 @@ const ZhTranslation kZhTranslations[] = {
     {L"How much of what is behind shows through. 100 = completely clear", L"透出背后内容的程度。100 = 完全透明"},
     {L"How much the glass bends what is behind it at the edges. 0 = no bending", L"玻璃在边缘弯曲背后内容的程度。0 = 不弯曲"},
     {L"Glass effect", L"玻璃效果"},
-    {L"How the item under the mouse is highlighted. Colored is like macOS; Frosted lets the glass show through", L"鼠标下项目的高亮方式。彩色与 macOS 相同；磨砂会透出玻璃"},
+    {L"How the item under the mouse is highlighted, in the menus and in the search results. Colored is like macOS; Frosted lets the glass show through", L"鼠标下项目的高亮方式，包括菜单和搜索结果。彩色与 macOS 相同；磨砂会透出玻璃"},
     {L"Results: Applications", L"结果：应用"},
     {L"Results: Files", L"结果：文件"},
     {L"Results: Actions", L"结果：操作"},
@@ -1213,6 +1225,8 @@ const ZhTranslation kZhTranslations[] = {
     {L"Hold an app to select it", L"按住一个应用以选择它"},
     {L"Everything did not reply", L"Everything 没有响应"},
     {L"Calculator", L"计算器"},
+    {L"Ignore accents", L"忽略重音符号"},
+    {L"Searching for \"acao\" also finds \"ação\", and the other way around, in apps, files, actions and the other categories", L"搜索“acao”也能找到“ação”，反之亦然，适用于应用、文件、操作和其他类别"},
     {L"Windows Settings", L"Windows 设置"},
     {L"Display", L"显示"},
     {L"Night light", L"夜间模式"},
@@ -1554,6 +1568,8 @@ const ZhTranslation kZhTranslations[] = {
     {L"Open with the Windows key", L"用 Windows 键打开"},
     {L"Open with the Start button", L"用开始按钮打开"},
     {L"Icon size", L"图标大小"},
+    {L"Text size of the results", L"结果文字大小"},
+    {L"The names of apps, files and the other results, in the grid and in lists. 100 = normal", L"应用、文件和其他结果的名称，在网格和列表中。100 = 正常"},
     {L"Floating and Original Siri use up to 56 px", L"浮动和原版 Siri 最多使用 56 像素"},
     {L"Columns", L"列数"},
     {L"0 = automatic", L"0 = 自动"},
@@ -1682,6 +1698,24 @@ std::wstring ToLower(std::wstring text) {
     return text;
 }
 
+// The text without its accents ("ação" -> "acao"): split into letter + mark, then the marks are dropped
+std::wstring FoldAccents(const std::wstring& text) {
+    if (text.empty()) return text;
+    int n = FoldStringW(MAP_COMPOSITE, text.c_str(), (int)text.size(), nullptr, 0);
+    if (n <= 0) return text;
+    std::wstring split(n, L'\0');
+    if (FoldStringW(MAP_COMPOSITE, text.c_str(), (int)text.size(), split.data(), n) <= 0) return text;
+    std::wstring out;
+    out.reserve(split.size());
+    for (wchar_t c : split) if (c < 0x0300 || c > 0x036F) out += c;   // combining diacritical marks
+    return out;
+}
+// How a name and the typed text are compared: lowercase, and without accents when they are ignored
+std::wstring SearchKey(const std::wstring& text, bool ignoreAccents) {
+    std::wstring s = ToLower(text);
+    return ignoreAccents ? FoldAccents(s) : s;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Settings
 
@@ -1729,6 +1763,7 @@ struct Settings {
     int windowWidth = 80;
     int windowHeight = 75;
     int iconSize = 64;
+    int textSize = 100;            // results text, in % (80 to 160)
     int columns = 0;
     bool fullscreen = false;
     bool searchBox = false;
@@ -1755,6 +1790,7 @@ struct Settings {
     bool siriPowerLeft = false;   // the floating power button on the left of the bar
     bool generalSearch = true;    // Original Siri: typing in "Search" looks for apps, actions, folders and files
     bool calculator = true;       // a typed calculation shows its result
+    bool ignoreAccents = true;    // "acao" finds "ação" (and the other way around)
     int siriCircleZoom = 25;
     int siriOrbStyle = 0;   // 0 wave, 1 glow, 2 none
     int siriPanelBounce = 30;
@@ -1778,6 +1814,7 @@ struct Settings {
 };
 
 Settings g_settings;
+std::wstring SearchKey(const std::wstring& text) { return SearchKey(text, g_settings.ignoreAccents); }
 // Read by the Start menu hook (another thread): what is allowed to open the launcher
 std::atomic<bool> g_startButtonEnabled{true}, g_winKeyEnabled{true};
 std::vector<std::wstring> g_searchHistory;
@@ -2232,11 +2269,11 @@ const CfgTranslation kCfgTranslations[] = {
      L"Effet verre",
      L"Glaseffekt",
      L"Effetto vetro"},
-    {L"How the item under the mouse is highlighted. Colored is like macOS; Frosted lets the glass show through",
-     L"Cómo se resalta el elemento bajo el ratón. Coloreada es como en macOS; Esmerilada deja ver el cristal",
-     L"Comment l’élément sous la souris est mis en évidence. Colorée comme sur macOS ; Givrée laisse voir le verre",
-     L"Wie das Element unter der Maus hervorgehoben wird. Farbig wie bei macOS; Mattiert lässt das Glas durchscheinen",
-     L"Come viene evidenziato l’elemento sotto il mouse. Colorata è come su macOS; Satinata lascia vedere il vetro"},
+    {L"How the item under the mouse is highlighted, in the menus and in the search results. Colored is like macOS; Frosted lets the glass show through",
+     L"Cómo se resalta el elemento bajo el ratón, en los menús y en los resultados de búsqueda. Coloreada es como en macOS; Esmerilada deja ver el cristal",
+     L"Comment l’élément sous la souris est mis en évidence, dans les menus et les résultats de recherche. Colorée comme sur macOS ; Givrée laisse voir le verre",
+     L"Wie das Element unter der Maus hervorgehoben wird, in den Menüs und in den Suchergebnissen. Farbig wie bei macOS; Mattiert lässt das Glas durchscheinen",
+     L"Come viene evidenziato l’elemento sotto il mouse, nei menu e nei risultati della ricerca. Colorata è come su macOS; Satinata lascia vedere il vetro"},
     {L"Results: Applications",
      L"Resultados: Aplicaciones",
      L"Résultats : Applications",
@@ -2288,6 +2325,12 @@ const CfgTranslation kCfgTranslations[] = {
      L"Alles, was zum gewählten Design und Modus gehört. Jedes Design behält seine eigenen Werte; was es nicht nutzt, ist ausgeblendet",
      L"Tutto ciò che appartiene al tema e alla modalità scelti. Ogni tema conserva il suo; ciò che non usa è nascosto"},
     {L"Calculator", L"Calculadora", L"Calculatrice", L"Rechner", L"Calcolatrice"},
+    {L"Ignore accents", L"Ignorar acentos", L"Ignorer les accents", L"Akzente ignorieren", L"Ignora gli accenti"},
+    {L"Searching for \"acao\" also finds \"ação\", and the other way around, in apps, files, actions and the other categories",
+     L"Buscar \"acao\" también encuentra \"ação\", y al revés, en apps, archivos, acciones y las demás categorías",
+     L"Chercher « acao » trouve aussi « ação », et inversement, dans les apps, les fichiers, les actions et les autres catégories",
+     L"Die Suche nach „acao“ findet auch „ação“ und umgekehrt, in Apps, Dateien, Aktionen und den anderen Kategorien",
+     L"Cercare \"acao\" trova anche \"ação\", e viceversa, nelle app, nei file, nelle azioni e nelle altre categorie"},
     {L"Windows Settings", L"Configuración de Windows", L"Paramètres Windows", L"Windows-Einstellungen", L"Impostazioni di Windows"},
     {L"Display", L"Pantalla", L"Affichage", L"Anzeige", L"Schermo"},
     {L"Night light", L"Luz nocturna", L"Éclairage nocturne", L"Nachtmodus", L"Luce notturna"},
@@ -3724,6 +3767,16 @@ const CfgTranslation kCfgTranslations[] = {
      L"Ouvrir avec le bouton Démarrer",
      L"Mit der Start-Schaltfläche öffnen",
      L"Apri con il pulsante Start"},
+    {L"Text size of the results",
+     L"Tamaño del texto de los resultados",
+     L"Taille du texte des résultats",
+     L"Textgröße der Ergebnisse",
+     L"Dimensione del testo dei risultati"},
+    {L"The names of apps, files and the other results, in the grid and in lists. 100 = normal",
+     L"Los nombres de apps, archivos y los demás resultados, en la cuadrícula y en las listas. 100 = normal",
+     L"Les noms des apps, des fichiers et des autres résultats, dans la grille et dans les listes. 100 = normal",
+     L"Die Namen von Apps, Dateien und den anderen Ergebnissen, im Raster und in Listen. 100 = normal",
+     L"I nomi di app, file e degli altri risultati, nella griglia e negli elenchi. 100 = normale"},
     {L"Icon size",
      L"Tamaño de los iconos",
      L"Taille des icônes",
@@ -4074,8 +4127,8 @@ const CfgItem kCfgItems[] = {
      0, 0, 0, nullptr, nullptr, 0},
     {1, kCfgGroup, L"#g.menus", L"Menus", L"Menus", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
     {1, kCfgChoice, L"appearance.menuSelection", L"Selection in menus", L"Seleção nos menus",
-     L"How the item under the mouse is highlighted. Colored is like macOS; Frosted lets the glass show through",
-     L"Como o item sob o mouse fica destacado. Colorida é como no macOS; Fosca deixa o vidro aparecer", 0, 0, 0, nullptr, CFG_OPTS(kOptMenuSelection)},
+     L"How the item under the mouse is highlighted, in the menus and in the search results. Colored is like macOS; Frosted lets the glass show through",
+     L"Como o item sob o mouse fica destacado, nos menus e nos resultados da pesquisa. Colorida é como no macOS; Fosca deixa o vidro aparecer", 0, 0, 0, nullptr, CFG_OPTS(kOptMenuSelection)},
     {1, kCfgColor, L"appearance.menuSelectionColor", L"Selection color", L"Cor da seleção",
      L"Colored and Frosted selection, and the first of the two colors. Starts with the macOS blue",
      L"Seleção Colorida e Fosca, e a primeira das duas cores. Começa com o azul do macOS", 0, 0, 0, nullptr, nullptr, 0},
@@ -4161,6 +4214,8 @@ const CfgItem kCfgItems[] = {
     {2, kCfgToggle, L"calculator", L"Calculator", L"Calculadora",
      L"Type a calculation (2+2, 15% * 80, (3+4)^2) and its result shows first; Enter copies it. Start with = or calc to always calculate (=5-3)",
      L"Digite uma conta (2+2, 15% * 80, (3+4)^2) e o resultado aparece primeiro; Enter copia. Comece com = ou calc para sempre calcular (=5-3)", 0, 0, 0, nullptr, nullptr, 0},
+    {2, kCfgToggle, L"ignoreAccents", L"Ignore accents", L"Ignorar acentos", L"Searching for \"acao\" also finds \"ação\", and the other way around, in apps, files, actions and the other categories",
+     L"Pesquisar \"acao\" também encontra \"ação\", e o contrário, em apps, arquivos, ações e nas outras categorias", 0, 0, 0, nullptr, nullptr, 0},
     {2, kCfgGroup, L"#g.files", L"Files", L"Arquivos", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
     {2, kCfgToggle, L"files.enabled", L"Files category", L"Categoria Arquivos", L"Search for files and folders on this PC",
      L"Procurar arquivos e pastas neste PC", 0, 0, 0, nullptr, nullptr, 0},
@@ -4203,6 +4258,8 @@ const CfgItem kCfgItems[] = {
     // 5 Apps and icons
     {5, kCfgSlider, L"grid.iconSize", L"Icon size", L"Tamanho dos ícones", L"Floating and Original Siri use up to 56 px",
      L"Os modos Flutuante e Siri original usam até 56 px", 24, 192, 1, L"px", nullptr, 0},
+    {5, kCfgSlider, L"grid.textSize", L"Text size of the results", L"Tamanho do texto dos resultados", L"The names of apps, files and the other results, in the grid and in lists. 100 = normal",
+     L"Os nomes dos apps, arquivos e dos outros resultados, na grade e nas listas. 100 = normal", 80, 160, 5, L"%", nullptr, 0},
     {5, kCfgSlider, L"grid.columns", L"Columns", L"Colunas", L"How many apps fit side by side. 0 = automatic", L"Quantos apps cabem lado a lado. 0 = automático",
      0, 30, 1, nullptr, nullptr, 0},
     {5, kCfgChoice, L"grid.pageMode", L"Scrolling direction", L"Direção da rolagem", L"Pages side by side, as on macOS, or one long list going down",
@@ -4460,6 +4517,7 @@ const CfgDefault kCfgDefaults[] = {
     {L"siri.powerPill", L"1"},
     {L"siri.generalSearch", L"1"},
     {L"calculator", L"1"},
+    {L"ignoreAccents", L"1"},
     {L"siri.powerButton", L"0"},
     {L"siri.powerButtonSide", L"right"},
     {L"siri.orbStyle", L"wave"},
@@ -4487,6 +4545,7 @@ const CfgDefault kCfgDefaults[] = {
     {L"open.winKey", L"1"},
     {L"open.startButton", L"1"},
     {L"grid.iconSize", L"64"},
+    {L"grid.textSize", L"100"},
     {L"grid.columns", L"0"},
     {L"grid.pageMode", L"vertical"},
     {L"grid.jiggle", L"1"},
@@ -4605,6 +4664,9 @@ std::wstring ThemeDefaultFor(Theme t, PCWSTR key) {
     if (!wcscmp(key, L"appearance.blur")) return t == Theme::Tinted ? L"0" : L"";   // the bent picture stays sharp
     if (!wcscmp(key, L"appearance.liveGlass")) return t == Theme::Frost ? L"1" : L"";   // Glass: the live blur
     if (!wcscmp(key, L"appearance.chromeBorder")) return t == Theme::Oled ? L"1" : L"";   // OLED: the chrome border on
+    // OLED starts as deep black: no glass effect and no backlight
+    if (!wcscmp(key, L"appearance.glassEffect")) return t == Theme::Oled ? L"0" : L"";
+    if (!wcscmp(key, L"appearance.backlight")) return t == Theme::Oled ? L"0" : L"";
     if (!wcscmp(key, L"appearance.menuSelection")) return t == Theme::Oled ? L"gradient" : L"";   // OLED: two colors blended
     return L"";
 }
@@ -4736,6 +4798,7 @@ void LoadSettings() {
     s.siriPowerButton = I(L"siri.powerButton") != 0;
     s.generalSearch = I(L"siri.generalSearch") != 0;
     s.calculator = I(L"calculator") != 0;
+    s.ignoreAccents = I(L"ignoreAccents") != 0;
     s.siriPowerLeft = S(L"siri.powerButtonSide") == L"left";
     std::wstring firstRow = S(L"siri.firstRow");
     s.siriFirstRow = firstRow == L"off" ? 0 : firstRow == L"used" ? 2 : 1;
@@ -4743,6 +4806,7 @@ void LoadSettings() {
 
     // ⑧ Apps and icons
     s.iconSize = std::clamp(I(L"grid.iconSize"), 24, 192);
+    s.textSize = std::clamp(I(L"grid.textSize"), 80, 160);
     s.columns = std::clamp(I(L"grid.columns"), 0, 30);
     s.horizontal = s.siriHorizontal = S(L"grid.pageMode") == L"horizontal";
     s.jiggle = I(L"grid.jiggle") != 0;
@@ -5101,7 +5165,7 @@ std::unordered_map<std::wstring, unsigned long long> g_userAssistTime;   // ... 
 std::unordered_map<std::wstring, unsigned long long> g_launchTimes;      // last launch through the mod
 std::unordered_map<std::wstring, unsigned long long> g_firstSeen;         // when an app first showed up (installed)
 constexpr WCHAR kKnownAppsKey[] = L"knownApps";
-int g_firstRowCount;   // items in the Original Siri first row (a line is drawn under it)
+int g_firstRowCount;   // items in the Floating / Original Siri first row (a line is drawn under it)
 
 unsigned long long NowFileTime() {
     FILETIME ft;
@@ -5344,28 +5408,28 @@ bool ChipEditable(int chip) {
 
 void BuildMainItems(std::vector<int>& out) {
     out.clear();
-    std::wstring q = ToLower(g_query);
+    std::wstring q = SearchKey(g_query);
     if (g_siriTab == 4) { GhFilterItems(out, q); return; }   // icon gallery: name, color and order
     if (g_siriTab != 0) {
         bool indexed = (g_siriTab == 1 && !g_query.empty()) || g_siriTab == kTabAll; // already filtered
         for (int i = 0; i < (int)g_tabItems.size(); i++) {
             const App& a = *g_tabItems[i];
             const std::wstring& hay = a.kind == 2 ? a.target : a.name;
-            bool hit = ToLower(hay).find(q) != std::wstring::npos || (a.kind == kPhoneKind && ToLower(a.detail).find(q) != std::wstring::npos);
+            bool hit = SearchKey(hay).find(q) != std::wstring::npos || (a.kind == kPhoneKind && SearchKey(a.detail).find(q) != std::wstring::npos);
             if (indexed || hit) out.push_back(kTabBase + i);
         }
         return;
     }
     if (!g_query.empty() || g_settings.siri) {
         if (!g_tabItems.empty() && g_tabItems[0]->kind == 7) out.push_back(kTabBase);   // the calculator's result
-        bool picking = g_settings.siriOriginal && Picking();
-        bool filter = g_settings.siriOriginal && g_appFilter >= 0 && !picking;
+        bool picking = Picking();   // (Original Siri and Floating: the app tabs)
+        bool filter = g_appFilter >= 0 && !picking;
         auto keep = [&](const App& a) {
             return !filter || ChipHas(g_appFilter, a);
         };
         size_t prefix = 0;
         g_firstRowCount = 0;
-        if (g_settings.siriOriginal && g_settings.siriFirstRow && g_query.empty() && !filter && !picking) {
+        if (g_settings.siriFirstRow && g_query.empty() && !filter && !picking) {   // Floating and Original Siri
             // First row: recently opened/installed apps, or the most used ones; a line separates it from the rest
             std::vector<std::pair<unsigned long long, int>> scored;
             for (int i = 0; i < (int)g_apps.size() && i < kFolderBase; i++) {
@@ -5382,10 +5446,10 @@ void BuildMainItems(std::vector<int>& out) {
             prefix = out.size();
         }
         for (int i = 0; i < (int)g_apps.size() && i < kFolderBase; i++)
-            if (ToLower(g_apps[i]->name).find(q) != std::wstring::npos && keep(*g_apps[i])) out.push_back(i);
+            if (SearchKey(g_apps[i]->name).find(q) != std::wstring::npos && keep(*g_apps[i])) out.push_back(i);
         for (int f = 0; f < (int)g_folders.size(); f++)
             for (int a = 0; a < (int)g_folders[f].apps.size() && a < 10000; a++)
-                if (ToLower(g_folders[f].apps[a]->name).find(q) != std::wstring::npos && keep(*g_folders[f].apps[a]))
+                if (SearchKey(g_folders[f].apps[a]->name).find(q) != std::wstring::npos && keep(*g_folders[f].apps[a]))
                     out.push_back(kFolderAppBase + f * 10000 + a);
         std::stable_sort(out.begin() + prefix, out.end(), [](int x, int y) { return NameLess(ResolveApp(x)->name, ResolveApp(y)->name); });
         return;
@@ -5721,7 +5785,8 @@ std::vector<HANDLE> g_fileThreadHandles;   // file search threads (UI thread onl
 std::wstring g_fileStatus;
 bool g_fileSearching;
 
-struct FileJob { std::wstring query; Indexer indexer; int max; int iconPx; UINT gen; HWND wnd; bool noScan = false; };   // noScan: indexes only
+struct FileJob { std::wstring query; Indexer indexer; int max; int iconPx; UINT gen; HWND wnd; bool noScan = false;   // noScan: indexes only
+                 bool ignoreAccents = false; std::wstring key; };   // key: the query as names are compared (SearchKey)
 struct FileResult { UINT gen; AppList list; std::wstring status; };
 
 bool Stale(UINT gen) { return gen != g_fileSearchGen || g_workerStop; }
@@ -5731,6 +5796,7 @@ bool Stale(UINT gen) { return gen != g_fileSearchGen || g_workerStop; }
 constexpr WCHAR kEvIpcClass[] = L"WindhawkLaunchpadEverythingIPC";
 constexpr DWORD kEvCopyQuery2W = 18;                 // EVERYTHING_IPC_COPYDATA_QUERY2W
 constexpr DWORD kEvReqName = 0x1, kEvReqPath = 0x2, kEvReqFullPath = 0x4;
+constexpr DWORD kEvMatchAccents = 0x10;               // EVERYTHING_IPC_MATCHACCENTS
 constexpr DWORD kEvSortNameAsc = 1;                  // EVERYTHING_IPC_SORT_NAME_ASCENDING
 constexpr DWORD kEvReplyId = 0x4C503031;             // our dwData tag for replies
 constexpr UINT  kEvWmIpc = WM_USER;                  // EVERYTHING_WM_IPC
@@ -5834,7 +5900,7 @@ bool SearchEverything(const FileJob& job, std::vector<std::wstring>& out, std::w
     auto* q = (EvQuery2*)buf.data();
     q->reply_hwnd = (DWORD)(DWORD_PTR)wnd;
     q->reply_copydata_message = kEvReplyId;
-    q->search_flags = 0;
+    q->search_flags = job.ignoreAccents ? 0 : kEvMatchAccents;
     q->offset = 0;
     q->max_results = (DWORD)job.max;
     q->request_flags = kEvReqFullPath;
@@ -5874,6 +5940,7 @@ constexpr PROPERTYKEY kPkeyItemNameDisplay = {{0xb725f130, 0x47ef, 0x101a, {0xa5
 constexpr IID kIidConditionFactory2 = {0x71d222e1, 0x432f, 0x429e, {0x8c, 0x13, 0xb6, 0xda, 0xfd, 0xe5, 0x07, 0x7a}};
 constexpr IID kIidCondition         = {0x0fc988d4, 0xc935, 0x4b97, {0xa9, 0x73, 0x46, 0x28, 0x2e, 0xa1, 0x75, 0xc8}};
 constexpr int kCopValueContains = 9; // COP_VALUE_CONTAINS
+constexpr int kCopWordStartsWith = 13; // COP_WORD_STARTSWITH (the full-text index, which ignores accents by default)
 
 struct IConditionFactory2Min : IUnknown {
     // IConditionFactory
@@ -5891,13 +5958,13 @@ struct IConditionFactory2Min : IUnknown {
 };
 
 
-bool SearchWindowsIndex(const FileJob& job, std::vector<std::wstring>& out) {
+bool SearchWindowsIndexOp(const FileJob& job, int op, std::vector<std::wstring>& out) {
     ComPtr<ISearchFolderItemFactory> factory;
     ComPtr<IConditionFactory2Min> conditions;
     ComPtr<ICondition> condition;
     if (FAILED(CoCreateInstance(kClsidSearchFolderFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory))) ||
         FAILED(CoCreateInstance(kClsidConditionFactory, nullptr, CLSCTX_INPROC_SERVER, kIidConditionFactory2, (void**)conditions.GetAddressOf())) ||
-        FAILED(conditions->CreateStringLeaf(kPkeyItemNameDisplay, kCopValueContains, job.query.c_str(), nullptr,
+        FAILED(conditions->CreateStringLeaf(kPkeyItemNameDisplay, op, job.query.c_str(), nullptr,
                                             0, kIidCondition, (void**)condition.GetAddressOf()))) {
         Wh_Log(L"Windows Search: factory failed");
         return false;
@@ -5930,6 +5997,17 @@ bool SearchWindowsIndex(const FileJob& job, std::vector<std::wstring>& out) {
     Wh_Log(L"Windows Search: %d results", (int)out.size());
     return true;
 }
+// The name contains the text; ignoring accents, also the names with a word starting with it in any accent
+// (the name match compares accents, the word match of the index doesn't): "acao" finds "Relatório de ação.docx"
+bool SearchWindowsIndex(const FileJob& job, std::vector<std::wstring>& out) {
+    if (!SearchWindowsIndexOp(job, kCopValueContains, out)) return false;
+    if (job.ignoreAccents && (int)out.size() < job.max && !Stale(job.gen)) {
+        std::vector<std::wstring> words;
+        SearchWindowsIndexOp(job, kCopWordStartsWith, words);
+        for (auto& w : words) if ((int)out.size() < job.max) out.push_back(std::move(w));   // duplicates are removed later
+    }
+    return true;
+}
 // ---------- Direct scan (fallback, time-limited) ----------
 void ScanDir(const std::wstring& dir, const FileJob& job, std::vector<std::wstring>& out, double deadline, int depth) {
     if (depth > 12 || (int)out.size() >= job.max || Stale(job.gen) || Now() > deadline) return;
@@ -5942,7 +6020,8 @@ void ScanDir(const std::wstring& dir, const FileJob& job, std::vector<std::wstri
         if (Stale(job.gen) || Now() >= deadline || (int)out.size() >= job.max) break;
         if (fd.cFileName[0] == L'.' || fd.cFileName[0] == L'$') continue;
         std::wstring full = dir + L"\\" + fd.cFileName;
-        if (StrStrIW(fd.cFileName, job.query.c_str())) out.push_back(full);
+        if (job.ignoreAccents ? SearchKey(fd.cFileName, true).find(job.key) != std::wstring::npos : StrStrIW(fd.cFileName, job.query.c_str()) != nullptr)
+            out.push_back(full);
         if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
             !(fd.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_SYSTEM)))
             subdirs.push_back(full);
@@ -6063,7 +6142,8 @@ void StartFileSearch(const std::wstring& q) {
     g_fileResults.clear(); g_fileStatus.clear();
     g_fileSearching = g_settings.filesEnabled && q.size() >= 2;
     if (!g_fileSearching) return;
-    auto* job = new FileJob{q, g_settings.indexer, g_settings.maxResults, CurrentIconPixels(), gen, g_wnd, g_siriTab == kTabAll};
+    auto* job = new FileJob{q, g_settings.indexer, g_settings.maxResults, CurrentIconPixels(), gen, g_wnd, g_siriTab == kTabAll,
+                            g_settings.ignoreAccents, SearchKey(q)};
     if (HANDLE t = CreateThread(nullptr, 0, FileSearchThread, job, 0, nullptr)) {
         // Forget the searches that already finished; the running ones are waited for at teardown
         std::erase_if(g_fileThreadHandles, [](HANDLE h) {
@@ -6289,7 +6369,7 @@ PCWSTR SettingsGlyph(const std::wstring& target) {
 // How well a name matches what was typed: 4 starts with it, 3 a word starts with it, 2 the initials, 1 anywhere, 0 no
 int MatchScore(const std::wstring& name, const std::wstring& q) {
     if (q.empty()) return 0;
-    std::wstring n = ToLower(name);
+    std::wstring n = SearchKey(name);
     size_t at = n.find(q);
     if (at == 0) return 4;
     auto wordStart = [&](size_t i) { return i == 0 || !iswalnum(n[i - 1]); };
@@ -6305,7 +6385,7 @@ int MatchScore(const std::wstring& name, const std::wstring& q) {
 bool IsGroupTitle(const App* a) { return a && a->kind == 6; }
 
 void BuildGeneralResults(AppList& out) {
-    std::wstring q = ToLower(g_query);
+    std::wstring q = SearchKey(g_query);
     if (q.empty()) return;
     if (auto calc = CalcItem()) out.push_back(std::move(calc));   // a calculation's result comes first
     auto title = [&](PCWSTR text, int showAll, int total, int shown) {
@@ -6570,7 +6650,7 @@ float ThemeShadowMargin(float s) {
 }
 
 // The themes where the selection in menus can be colored (Glass, Liquid glass and Custom glass)
-bool MenuSelectionTheme() { Theme t = ActiveTheme(); return t == Theme::Glass || t == Theme::Tinted || t == Theme::Frost || t == Theme::Oled; }
+bool MenuSelectionTheme() { return true; }   // every theme can use every selection (glass, colored, frosted, two colors)
 // Base color for popups (context menu) that matches the theme
 D2D1_COLOR_F ThemeMenuColor() {
     switch (ActiveTheme()) {
@@ -6745,6 +6825,7 @@ struct Layout {
     D2D1_RECT_F siriPanel{};
     D2D1_RECT_F siriPower{};
     D2D1_RECT_F siriTabs{};   // category strip (all modes)
+    D2D1_RECT_F siriChips{};  // app tabs strip (Original Siri: the same as siriTabs; Floating: a row under it)
     bool list = false;        // Files tab shown as a one-column list
     D2D1_RECT_F listHeader{}; // 'Recent searches' strip above the list
 };
@@ -6787,21 +6868,24 @@ ComPtr<IDWriteTextFormat> OneLineFormat(PCWSTR family, float px, DWRITE_FONT_WEI
     return format;
 }
 
+int g_formatText;   // the results text size the formats were made with
+float TextScale() { return g_settings.textSize / 100.0f; }   // results text (grid.textSize)
+float TextGrow() { return std::max(1.0f, TextScale()); }    // rows grow with bigger text (smaller text keeps the rows)
 void EnsureFormats(float scale) {
-    if (g_labelFormat && g_formatScale == scale) return;
-    g_formatScale = scale;
+    if (g_labelFormat && g_formatScale == scale && g_formatText == g_settings.textSize) return;
+    g_formatScale = scale; g_formatText = g_settings.textSize;
     auto make = [&](float size, DWRITE_FONT_WEIGHT weight, DWRITE_TEXT_ALIGNMENT align, ComPtr<IDWriteTextFormat>& format) {
         format = OneLineFormat(L"Segoe UI Variable Text", size * scale, weight, align);
     };
-    make(12.0f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER, g_labelFormat);
+    make(12.0f * TextScale(), DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER, g_labelFormat);   // the results' names
     make(14.0f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, g_searchFormat);
     make(18.0f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, g_siriFormat);
     make(16.0f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER, g_titleFormat);
     make(16, DWRITE_FONT_WEIGHT_SEMI_LIGHT, DWRITE_TEXT_ALIGNMENT_CENTER, g_messageFormat);
     make(13.0f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, g_menuFormat);
     make(13.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER, g_tabFormat);
-    make(14.0f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, g_listFormat);
-    make(11.0f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, g_listSubFormat);
+    make(14.0f * TextScale(), DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, g_listFormat);
+    make(11.0f * TextScale(), DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, g_listSubFormat);
     make(12.0f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING, g_hintFormat);
     make(15.0f, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_LEADING, g_categoryFormat);
     make(11.5f, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_CENTER, g_keyFormat);
@@ -6837,6 +6921,8 @@ void EnsureFormats(float scale) {
     }
 }
 
+// Floating: the app tabs show in a row of their own while Applications is open
+bool FloatingChipsShown() { return g_settings.siri && !g_settings.siriOriginal && g_siriTab == 0 && g_openFolderIndex < 0; }
 // Original Siri shows the app filters instead of the category strip (categories come from the hover menu)
 bool SiriStripVisible() { return g_siriTab == 4 || (g_settings.siriOriginal ? g_siriTab == 0 : TabsVisible()); }   // 4: the icon gallery search
 // Chips: "All", the built-in categories and the user tabs (while picking apps: Cancel and Done)
@@ -6901,17 +6987,17 @@ void FilterSlotRect(const D2D1_RECT_F& r, const std::vector<int>& chips, int i, 
 }
 
 void ClampChipScroll() {
-    const D2D1_RECT_F& r = g_layout.siriTabs;
+    const D2D1_RECT_F& r = g_layout.siriChips;
     g_chipScroll = std::clamp(g_chipScroll, 0.0f, std::max(0.0f, FiltersNaturalWidth() - (r.right - r.left)));
 }
 
 bool ChipsOverflow() {
-    const D2D1_RECT_F& r = g_layout.siriTabs;
+    const D2D1_RECT_F& r = g_layout.siriChips;
     return r.right > r.left && FiltersNaturalWidth() > r.right - r.left + 0.5f;
 }
 
 void EnsureChipVisible(int chip) {
-    const D2D1_RECT_F& r = g_layout.siriTabs;
+    const D2D1_RECT_F& r = g_layout.siriChips;
     if (r.right <= r.left) return;
     ClampChipScroll();
     auto chips = Chips();
@@ -7062,7 +7148,8 @@ PCWSTR TabGlyph(int tab) {
 constexpr float kSiriGap = 10, kSiriPad = 14, kSiriTabs = 32;
 
 float SiriIconPx(float s) { return std::round(std::min(g_settings.iconSize, 56) * s); }
-float SiriCellHeight(float s) { return std::round(SiriIconPx(s) + std::round(18 * s) + 30 * s); }
+float TextGrow();
+float SiriCellHeight(float s) { return std::round(SiriIconPx(s) + std::round(18 * s * TextGrow()) + 30 * s); }
 
 // Room above the pill so the zoomed circle (bigger than the bar) is never cut at the window top
 float SiriTopPad(float s) {
@@ -7100,6 +7187,7 @@ float SiriPanelWidthNow(float s) {
 int SiriWindowHeight(float s) {
     float pillH = std::round(g_settings.siriPillH * s), gap = std::round(kSiriGap * s), pad = std::round(kSiriPad * s);
     float tabsBlock = TabsVisible() || g_settings.siriOriginal ? std::round(kSiriTabs * s) + std::round(pad * 0.6f) : 0;
+    if (!g_settings.siriOriginal) tabsBlock += std::round(kSiriTabs * s) + std::round(pad * 0.3f);   // Floating: the app tabs row
     float h = SiriTopPad(s) + pillH + gap + pad + tabsBlock + SiriMaxRows() * SiriCellHeight(s) + pad;   // room for the tallest box
     if (g_settings.siriPower) h += std::round(kSiriPowerPill * s) + gap;
     h += SiriShadowMargin(s);
@@ -7133,7 +7221,7 @@ void ComputeSiriLayout() {
         L.btnPower = D2D1::RectF(left, cy - btn / 2, left + btn, cy + btn / 2);
     }
     L.icon = SiriIconPx(s);
-    L.labelHeight = std::round(18 * s);
+    L.labelHeight = std::round(18 * s * TextGrow());
     L.cellPad = std::round(6 * s);
     L.cellHeight = SiriCellHeight(s);
 
@@ -7165,10 +7253,20 @@ void ComputeSiriLayout() {
         L.siriTabs = D2D1::RectF(0, 0, 0, 0);
         L.viewTop = panelTop + pad;
     }
+    L.siriChips = D2D1::RectF(0, 0, 0, 0);
+    if (g_settings.siriOriginal) {
+        if (g_siriTab == 0) L.siriChips = L.siriTabs;
+    } else if (FloatingChipsShown()) {
+        // Floating: the app tabs (All, the categories, your own tabs) in a row of their own, under the category strip
+        float chipsW = std::min(panelW - 2 * pad, FiltersNaturalWidth());
+        float chipsLeft = std::round((W - chipsW) / 2), top = L.siriTabs.bottom > L.siriTabs.top ? L.viewTop - std::round(pad * 0.3f) : L.viewTop;
+        L.siriChips = D2D1::RectF(chipsLeft, top, chipsLeft + chipsW, top + tabsH);
+        L.viewTop = L.siriChips.bottom + std::round(pad * 0.6f);
+    }
     L.visibleRows = std::max(1, rowsNow);
     L.list = ListMode(); L.listHeader = D2D1::RectF(0, 0, 0, 0);
     if (L.list) {
-        float viewportH = rowsNow * SiriCellHeight(s), rowH = std::round(44 * s);
+        float viewportH = rowsNow * SiriCellHeight(s), rowH = std::round(44 * s * (0.4f + 0.6f * TextGrow()));
         float hdr = HistoryHeader() ? std::round(30 * s) : 0;
         if (hdr > 0) { L.listHeader = D2D1::RectF(panelLeft + pad, L.viewTop, panelRight - pad, L.viewTop + hdr); L.viewTop += hdr; }
         L.icon = std::round(30 * s); L.cellPad = std::round(3 * s); L.columns = 1;
@@ -7226,7 +7324,7 @@ void ComputeSiriLayout() {
         auto move = [](D2D1_RECT_F& r, float dy) { if (r.bottom > r.top) { r.top += dy; r.bottom += dy; } };
         mirror(L.search); mirror(L.btnPower); mirror(L.siriPower);
         float dy = (H - contentBottom) - panelTop;
-        move(L.siriTabs, dy); move(L.listHeader, dy); move(L.dots, dy); move(full, dy);
+        move(L.siriTabs, dy); move(L.siriChips, dy); move(L.listHeader, dy); move(L.dots, dy); move(full, dy);
         L.viewTop += dy; L.viewBottom += dy;
         L.siriPanel = ex > 0.001f ? LerpRect(L.search, full, ex) : D2D1::RectF(0, 0, 0, 0);
         L.siriPanel.left = std::max(L.siriPanel.left, 0.0f);
@@ -7239,7 +7337,7 @@ void ComputeSiriLayout() {
 
 void ComputeLayout() {
     if (g_settings.siri) { ComputeSiriLayout(); if (g_cfg.active) CfgApplyLayout(); return; }
-    g_layout.siriPanel = g_layout.siriPower = g_layout.siriTabs = D2D1::RectF(0, 0, 0, 0);
+    g_layout.siriPanel = g_layout.siriPower = g_layout.siriTabs = g_layout.siriChips = D2D1::RectF(0, 0, 0, 0);
     Layout& L = g_layout; float s = L.scale; float W = (float)L.width, H = (float)L.height;
     float padding = 40 * s;
     bool inFolder = g_openFolderIndex >= 0;
@@ -7294,7 +7392,7 @@ void ComputeLayout() {
 
     // A cell: the icon, its name under it and some air
     L.icon = std::round(g_settings.iconSize * s);
-    L.labelHeight = std::round(18 * s);
+    L.labelHeight = std::round(18 * s * TextGrow());
     L.cellPad = std::round(6 * s);
     L.cellHeight = L.icon + std::round(L.labelHeight + 45 * s);
 
@@ -7314,7 +7412,7 @@ void ComputeLayout() {
         L.gridLeft = std::round((W - listW) / 2);
         if (hdr > 0) { L.listHeader = D2D1::RectF(L.gridLeft, L.viewTop, L.gridLeft + listW, L.viewTop + hdr); L.viewTop += hdr; }
         L.icon = std::round(32 * s); L.cellPad = std::round(3 * s); L.columns = 1;
-        L.cellWidth = std::floor(listW); L.cellHeight = std::round(46 * s);
+        L.cellWidth = std::floor(listW); L.cellHeight = std::round(46 * s * (0.4f + 0.6f * TextGrow()));
     }
     L.horizontal = (g_settings.siri ? g_settings.siriHorizontal : g_settings.horizontal) && !L.list;
     L.dotsH = std::round(std::clamp(std::min(W, H) * 0.028f, 16 * s, 28 * s));
@@ -7671,7 +7769,14 @@ void DrawChromeEdge(const D2D1_RECT_F& r, float radius, float a, float turnsPerS
     D2D1_RECT_F er = D2D1::RectF(r.left + in, r.top + in, r.right - in, r.bottom - in);
     float rr = std::max(0.0f, std::min(radius - in, std::min(er.right - er.left, er.bottom - er.top) / 2));
     D2D1_ROUNDED_RECT edge = D2D1::RoundedRect(er, rr, rr);
-    g_brush->SetColor(D2D1::ColorF(1, 1, 1, 0.14f * a));
+    // On a light surface (dark text: Light, light glass, a light custom color) white light would vanish: the same
+    // metal is drawn darker there (graphite, with deeper blue and amber), so the edge shows on every color and transparency
+    const bool lightSurface = g_settings.darkText;
+    // A dark hairline just outside the polished line keeps it apart from any wallpaper or surface color
+    g_brush->SetColor(D2D1::ColorF(0, 0, 0, (lightSurface ? 0.10f : 0.22f) * a));
+    g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(er.left - w * 0.5f, er.top - w * 0.5f, er.right + w * 0.5f, er.bottom + w * 0.5f),
+                                                     rr + w * 0.5f, rr + w * 0.5f), g_brush.Get(), std::max(1.0f, 0.6f * s));
+    g_brush->SetColor(lightSurface ? D2D1::ColorF(0.18f, 0.20f, 0.24f, 0.30f * a) : D2D1::ColorF(1, 1, 1, 0.16f * a));
     g_target->DrawRoundedRectangle(edge, g_brush.Get(), w);
     EdgeWalk e(er, rr);
     const float phase = (float)std::fmod(Now() * turnsPerSecond, 1.0);
@@ -7679,6 +7784,11 @@ void DrawChromeEdge(const D2D1_RECT_F& r, float radius, float a, float turnsPerS
     D2D1_GRADIENT_STOP spot[5] = {{0.0f, D2D1::ColorF(1, 1, 1, 1.0f)}, {0.30f, D2D1::ColorF(0.96f, 0.98f, 1, 0.85f)},
                                   {0.55f, D2D1::ColorF(0.62f, 0.80f, 1, 0.50f)}, {0.78f, D2D1::ColorF(1, 0.86f, 0.58f, 0.22f)},
                                   {1.0f, D2D1::ColorF(1, 1, 1, 0.0f)}};
+    if (lightSurface) {
+        spot[0] = {0.0f, D2D1::ColorF(0.10f, 0.11f, 0.14f, 0.95f)}; spot[1] = {0.30f, D2D1::ColorF(0.22f, 0.25f, 0.32f, 0.80f)};
+        spot[2] = {0.55f, D2D1::ColorF(0.10f, 0.38f, 0.85f, 0.50f)}; spot[3] = {0.78f, D2D1::ColorF(0.80f, 0.50f, 0.10f, 0.25f)};
+        spot[4] = {1.0f, D2D1::ColorF(0.1f, 0.1f, 0.1f, 0.0f)};
+    }
     float size = std::clamp(e.total * 0.09f, 9 * s, 80 * s);
     for (int k = 0; k < 2; k++) {
         D2D1_POINT_2F c = e.At(phase + 0.5f * k);
@@ -7856,6 +7966,21 @@ bool DrawMenuSelection(const D2D1_RECT_F& row, float radius, bool danger) {
     return false;
 }
 D2D1_COLOR_F MenuInk(bool onColor, float a) { return onColor ? D2D1::ColorF(1, 1, 1, std::min(1.0f, a + 0.05f)) : Fg(a); }
+// A result under the mouse (weak) or the one Enter opens (strong): the menus' selection color when the theme has one
+// (Colored, Frosted color, Two colors), otherwise clear glass (or a plain veil with glass buttons off).
+// Returns true when the row is a solid color, so its text turns white
+bool DrawResultHighlight(const D2D1_RECT_F& r, float radius, bool strong) {
+    if (MenuSelectionTheme() && g_settings.menuSelection != 0) {
+        if (strong) return DrawMenuSelection(r, radius, false);
+        PushOpacity(0.45f);
+        DrawMenuSelection(r, radius, false);
+        g_target->PopLayer();
+        return false;
+    }
+    if (g_settings.glassButtons) { DrawGlassButton(r, radius, 1.0f, strong ? 1.8f : 1.2f, false); return false; }
+    Fill(r, Fg(strong ? 0.22f : 0.13f), radius);
+    return false;
+}
 
 void DrawCategoryMenu(const D2D1_RECT_F& r, float rad, float e) {
     const Layout& L = g_layout;
@@ -7873,6 +7998,7 @@ void DrawCategoryMenu(const D2D1_RECT_F& r, float rad, float e) {
             float rowRad = std::max(4 * s, rad - 8 * s);   // concentric with the menu
             bool custom = MenuSelectionTheme() && g_settings.menuSelection != 0;
             if (custom) onColor = DrawMenuSelection(row, rowRad, false);
+            else if (g_settings.glassButtons) DrawGlassButton(row, rowRad, 1.0f, 1.5f, false);   // Glass selection: clear glass
             else Fill(row, Fg(0.11f), rowRad);
         }
         if (it.glyph && g_glyphLargeFormat) {
@@ -8279,7 +8405,8 @@ void DrawSearchBar(const Layout& L, float a) {
             g_target->DrawText(ph, (UINT32)wcslen(ph), fmt, text, g_brush.Get());
         }
     } else if (g_query.empty()) {
-        PCWSTR ph = g_siriTab == 1 ? Tr(L"Search Files") : g_siriTab == 2 ? Tr(L"Search Clipboard") : g_siriTab == 3 ? Tr(L"Search Actions") : g_siriTab == 6 ? Tr(L"Search Phone")
+        PCWSTR ph = Picking() ? (g_selection.empty() ? Tr(L"Hold an app to select it") : Tr(L"Click apps to select or deselect them"))   // Floating picking
+                  : g_siriTab == 1 ? Tr(L"Search Files") : g_siriTab == 2 ? Tr(L"Search Clipboard") : g_siriTab == 3 ? Tr(L"Search Actions") : g_siriTab == 6 ? Tr(L"Search Phone")
                   : siri ? Tr(L"Search Apps") : Tr(L"Search Applications");
         g_brush->SetColor(Fg(0.4f * a));
         g_target->DrawText(ph, (UINT32)wcslen(ph), fmt, text, g_brush.Get());
@@ -8596,9 +8723,11 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
         D2D1_RECT_F hl = c.highlight;
         if (interactive && L.list && ClipRows() && RowHasX(IsFolderItem(item) ? nullptr : ResolveApp(item)))
             hl.right = ClipDeleteRect(c.highlight).left - 6 * s;
+        bool onColor = false;   // the row is a solid selection color: its text is white
         if (sel) Fill(hl, D2D1::ColorF(0.04f, 0.52f, 1.0f, 0.22f), 12 * s);
         else if (interactive && (i == g_selected || i == g_hover))
-            Fill(hl, Fg(i == g_selected ? 0.18f : 0.10f), 12 * s);
+            onColor = DrawResultHighlight(hl, 12 * s, i == g_selected);
+        auto ink = [&](float a) { return MenuInk(onColor, a); };
         float dragDim = (interactive && ((i == g_pressed && g_isDragging) || i == g_dragItem || (sel && GroupDrag()))) ? 0.4f : 1.0f;
         float opacity = dragDim * alpha * PageFade(L, scroll, i);
 
@@ -8608,7 +8737,7 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
             if (item == hiddenFolderItem) labelOpacity *= 1.0f - hiddenFade;
             else DrawFolderIcon(f, c.icon, opacity);
             if (g_labelFormat) {
-                g_brush->SetColor(Fg(0.95f * labelOpacity));
+                g_brush->SetColor(ink(0.95f * labelOpacity));
                 g_target->DrawText(f.name.c_str(), (UINT32)f.name.size(), g_labelFormat.Get(), c.label, g_brush.Get());
             }
         } else {
@@ -8630,26 +8759,26 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
                 else Fill(disc, Fg(0.12f * opacity), d / 2);
                 PCWSTR glyph = app.glyph ? app.glyph : app.glyphText.c_str();
                 if (g_glyphFormat && glyph && *glyph) {
-                    g_brush->SetColor(Fg(0.88f * opacity));
+                    g_brush->SetColor(ink(0.88f * opacity));
                     g_target->DrawText(glyph, (UINT32)wcslen(glyph), g_glyphFormat.Get(), disc, g_brush.Get());
                 }
             } else {
                 Fill(c.icon, Fg(0.12f * opacity), 14 * s);
                 if (app.kind == 2 && L.list && g_glyphFormat) {
-                    g_brush->SetColor(Fg(0.8f * opacity));
+                    g_brush->SetColor(ink(0.8f * opacity));
                     g_target->DrawText(L"\uE77F", 1, g_glyphFormat.Get(), c.icon, g_brush.Get());   // clipboard
                 } else if ((app.kind == 2 || app.kind == 3) && g_titleFormat) {
                     PCWSTR glyph = app.kind == 2 ? L"Aa" : L"\u21BA"; // ↺
-                    g_brush->SetColor(Fg(0.8f * opacity));
+                    g_brush->SetColor(ink(0.8f * opacity));
                     g_target->DrawText(glyph, (UINT32)wcslen(glyph), g_titleFormat.Get(), c.icon, g_brush.Get());
                 }
                 if (app.kind == 7 && g_glyphFormat) {   // calculator
-                    g_brush->SetColor(Fg(0.85f * opacity));
+                    g_brush->SetColor(ink(0.85f * opacity));
                     g_target->DrawText(L"\uE8EF", 1, g_glyphFormat.Get(), c.icon, g_brush.Get());
                 }
                 if (app.kind == 4 && g_glyphFormat) {
                     PCWSTR glyph = ActionGlyph(app.target);
-                    g_brush->SetColor(Fg(0.85f * opacity));
+                    g_brush->SetColor(ink(0.85f * opacity));
                     g_target->DrawText(glyph, (UINT32)wcslen(glyph), g_glyphFormat.Get(), c.icon, g_brush.Get());
                 }
 
@@ -8684,15 +8813,15 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
                     else if (twoLines) folder = app.target.substr(0, app.target.find_last_of(L'\\'));
                     if (app.kind == kPhoneKind && !app.when.empty() && g_hintFormat) {   // when, on the right of the first line
                         D2D1_RECT_F whenRect = D2D1::RectF(nameRect.right - 110 * s, nameRect.top, nameRect.right - 6 * s, nameRect.bottom);
-                        g_brush->SetColor(Fg(0.50f * opacity));
+                        g_brush->SetColor(ink(0.50f * opacity));
                         g_target->DrawText(app.when.c_str(), (UINT32)app.when.size(), g_hintFormat.Get(), whenRect, g_brush.Get());
                         nameRect.right -= 116 * s;
                     }
-                    g_brush->SetColor(Fg(0.95f * opacity));
+                    g_brush->SetColor(ink(0.95f * opacity));
                     g_target->DrawText(name.c_str(), (UINT32)name.size(), g_listFormat.Get(), nameRect, g_brush.Get());
                     if (twoLines) {
                         D2D1_RECT_F subRect = D2D1::RectF(c.label.left, nameRect.bottom - 3 * s, nameRect.right, c.label.bottom - 2 * s);
-                        g_brush->SetColor(Fg((app.kind == kPhoneKind ? 0.72f : 0.5f) * opacity));   // a notification's text is easy to read
+                        g_brush->SetColor(ink((app.kind == kPhoneKind ? 0.72f : 0.5f) * opacity));   // a notification's text is easy to read
                         g_target->DrawText(folder.c_str(), (UINT32)folder.size(), g_listSubFormat.Get(), subRect, g_brush.Get());
                     }
                 }
@@ -8702,7 +8831,7 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
                         g_brush->SetColor(D2D1::ColorF(0, 0, 0, 0.45f * opacity));
                         g_target->DrawTextLayout(D2D1::Point2F(c.label.left, c.label.top + 1 * s), tl, g_brush.Get());
                     }
-                    g_brush->SetColor(Fg(0.95f * opacity));
+                    g_brush->SetColor(ink(0.95f * opacity));
                     g_target->DrawTextLayout(D2D1::Point2F(c.label.left, c.label.top), tl, g_brush.Get());
                 }
             }
@@ -8722,8 +8851,8 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
         }
     }
 
-    // Original Siri: a thin line under the first row (recent / most used apps)
-    if (interactive && g_settings.siriOriginal && g_siriTab == 0 && !L.list && g_firstRowCount > 0 &&
+    // Floating and Original Siri: a thin line under the first row (recent / most used apps)
+    if (interactive && g_settings.siri && g_siriTab == 0 && !L.list && g_firstRowCount > 0 &&
         (int)items.size() > g_firstRowCount && L.columns > 0) {
         Cell rowStart = CellAtIn(L, scroll, 0), rowEnd = CellAtIn(L, scroll, std::min(L.columns, g_firstRowCount) - 1);
         float y = std::round(rowStart.highlight.top + L.cellHeight - L.cellPad) + 0.5f;
@@ -8768,9 +8897,7 @@ void DrawFolderPanel(float t, const D2D1_RECT_F& from, float fromPad, bool settl
         App& app = *folder.apps[appIdx];
         Cell c = CellAtIn(L, g_scroll, i);
 
-        if (settled && (i == g_selected || i == g_hover)) {
-            Fill(c.highlight, Fg(i == g_selected ? 0.18f : 0.10f), 12 * s);
-        }
+        bool onColor = settled && (i == g_selected || i == g_hover) && DrawResultHighlight(c.highlight, 12 * s, i == g_selected);
 
         D2D1_RECT_F slot = FolderMiniSlot(from, appIdx, fromPad);
         float delay = std::min(appIdx, 8) * 0.035f;
@@ -8803,7 +8930,7 @@ void DrawFolderPanel(float t, const D2D1_RECT_F& from, float fromPad, bool settl
                     g_brush->SetColor(D2D1::ColorF(0, 0, 0, 0.45f * lo));
                     g_target->DrawTextLayout(D2D1::Point2F(label.left, label.top + s), tl, g_brush.Get());
                 }
-                g_brush->SetColor(Fg(0.95f * lo));
+                g_brush->SetColor(MenuInk(onColor, 0.95f * lo));
                 g_target->DrawTextLayout(D2D1::Point2F(label.left, label.top), tl, g_brush.Get());
             }
         }
@@ -9630,8 +9757,8 @@ void DrawSiriPillContent(const Layout& L) {
 
 // Category strip — only the enabled categories, shared by every mode
 int FilterAt(float x, float y) {
-    if (!g_settings.siriOriginal || g_siriTab != 0 || g_siriAnim < 0.95f) return kNoChip;
-    const D2D1_RECT_F& r = g_layout.siriTabs;
+    if (!g_settings.siri || g_siriTab != 0 || g_siriAnim < 0.95f) return kNoChip;   // Original Siri and Floating
+    const D2D1_RECT_F& r = g_layout.siriChips;
     if (r.right <= r.left || !InRect(r, x, y)) return kNoChip;
     auto chips = Chips();
     for (int i = 0; i < (int)chips.size(); i++) {
@@ -9643,7 +9770,7 @@ int FilterAt(float x, float y) {
 }
 
 void DrawFilters(const Layout& L) {
-    const D2D1_RECT_F& r = L.siriTabs;
+    const D2D1_RECT_F& r = L.siriChips;
     if (g_siriTab != 0 || r.right <= r.left || !g_tabFormat) return;
     float s = L.scale, h = r.bottom - r.top, rad = h / 2, inset = 3 * s;
     auto chips = Chips();
@@ -9694,6 +9821,7 @@ void DrawGhSearchBox(const Layout& L);
 void DrawTabs(const Layout& L) {
     if (g_siriTab == 4) { DrawGhSearchBox(L); return; }   // icon gallery: a search field for the icon names
     if (g_settings.siriOriginal) { DrawFilters(L); return; }
+    if (FloatingChipsShown()) DrawFilters(L);   // Floating: the app tabs row under the category strip
     const D2D1_RECT_F& r = L.siriTabs;
     if (!TabsVisible() || r.right <= r.left || !g_tabFormat) return;
     float s = L.scale, h = r.bottom - r.top, rad = h / 2, inset = 3 * s;
@@ -10065,6 +10193,8 @@ void Render() {
         // Window mode keeps a margin so the theme shadow fits inside the window
         float m = WindowInset(L.scale);
         DrawThemedShape(D2D1::RectF(m, m, W - m, H - m), std::max(0.0f, radius - m * 0.25f), GetBackdropBitmap(), !g_settings.fullscreen);
+        // Fullscreen casts no shadow (so DrawThemedShape leaves the border out): the chrome border is drawn here
+        if (g_settings.fullscreen && ChromeBorderOn()) DrawChromeEdge(D2D1::RectF(m, m, W - m, H - m), std::max(0.0f, radius - m * 0.25f), 0.9f, 0.09f);
     }
 
     D2D1::Matrix3x2F zoomMatrix = fx.m;
@@ -12338,7 +12468,7 @@ std::wstring CfgNow(PCWSTR key);
 int CfgItemModes(const CfgItem& it) {
     std::wstring k = it.key;
     if (k == L"floatingOpen") return kModesFloating;
-    if (k == L"siri.generalSearch" || k == L"siri.firstRow" || k.rfind(L"siri.shortcut", 0) == 0) return kModesOriginal;
+    if (k == L"siri.generalSearch" || k.rfind(L"siri.shortcut", 0) == 0) return kModesOriginal;
     if (k == L"appearance.liveGlass" && (CfgNow(L"theme") == L"frost" || CfgNow(L"theme") == L"glass")) return kModesAll;
     if (k.rfind(L"siri.", 0) == 0 || k == L"appearance.refraction" || k == L"appearance.liveGlass") return kModesSiri;
     if (k.rfind(L"window.", 0) == 0) return kModesWindow;
@@ -12380,7 +12510,6 @@ bool CfgItemHidden(const CfgItem& it) {
     if (!CfgModeNote(CfgItemModes(it)).empty()) return true;
     const std::wstring k = it.key, theme = CfgNow(L"theme");
     if (k == L"appearance.menuSelection" || k == L"appearance.menuSelectionColor" || k == L"appearance.menuSelectionColor2") {
-        if (theme != L"frost" && theme != L"glass" && theme != L"tintedliquid" && theme != L"oled") return true;
         if (k == L"appearance.menuSelectionColor2") return CfgNow(L"appearance.menuSelection") != L"gradient";
     }
     if (k == L"appearance.tintLevel" || k == L"appearance.tintReach" || k == L"appearance.tintColor") return theme != L"tintedliquid";
@@ -12571,7 +12700,7 @@ void CfgApplyLayout() {
     float fm = std::round(12 * s), fh = std::round(30 * s);
     g_cfg.bar = D2D1::RectF(left0 + fm, top0 + std::round(16 * s), left0 + sideW - fm, top0 + std::round(16 * s) + fh);
     L.search = g_cfg.bar;   // the settings search (typing goes there)
-    L.btnPower = L.btnBack = L.panel = L.dots = L.siriPanel = L.siriPower = L.siriTabs = D2D1::RectF(0, 0, 0, 0);
+    L.btnPower = L.btnBack = L.panel = L.dots = L.siriPanel = L.siriPower = L.siriTabs = L.siriChips = D2D1::RectF(0, 0, 0, 0);
     g_cfg.scroll = std::clamp(g_cfg.scroll, 0.0f, std::max(0.0f, g_cfg.contentH));
     // The rows only move when something they depend on changes (not with every frame of the opening)
     struct BuiltFor { float W, H, s, scroll; int section; std::wstring search; unsigned version; UiLanguage lang; };
@@ -13161,6 +13290,7 @@ void CfgSetDefault(const CfgDefault& d) {
 
 // The active theme was customized (Customize theme: something of its own was changed)
 bool CfgThemeChangedNow();
+std::wstring ThemeKeyDefault(Theme t, PCWSTR key);
 bool CfgThemeChanged() {   // (drawn with every frame of the Appearance section: worked out once per change)
     static unsigned version = 0;
     static Theme theme = Theme::Custom;
@@ -13171,7 +13301,10 @@ bool CfgThemeChanged() {   // (drawn with every frame of the Appearance section:
 bool CfgThemeChangedNow() {
     if (!g_themeValuesLoaded) LoadThemeValues();
     auto found = g_themeValues.find(ThemeName(g_settings.theme));
-    return found != g_themeValues.end() && !found->second.empty();
+    if (found == g_themeValues.end()) return false;
+    for (const auto& [key, value] : found->second)   // values equal to how the theme comes don't count
+        if (ToLower(value) != ToLower(ThemeKeyDefault(g_settings.theme, key.c_str()))) return true;
+    return false;
 }
 
 // A folder dialog for the icon gallery
@@ -13233,10 +13366,22 @@ bool PickIconsFolderFromMenu() {
     return true;
 }
 
-// The active theme back to how it comes: everything it had of its own is forgotten
+// How a theme setting comes with the mod: the theme's own default (OLED: deep black...), else the mod's default
+std::wstring ThemeKeyDefault(Theme t, PCWSTR key) {
+    std::wstring own = ThemeDefaultFor(t, key);
+    if (!own.empty()) return own;
+    for (const CfgDefault& d : kCfgDefaults) if (!wcscmp(d.key, key)) return d.value;
+    return {};
+}
+// The active theme back to how it comes with the mod (bar 96 px tall, no floating power button...). Its values are
+// written out, so values changed in Windhawk's own Settings tab (shared by the themes) don't come back with it
 void CfgResetTheme() {
     if (!g_themeValuesLoaded) LoadThemeValues();
-    g_themeValues.erase(ThemeName(g_settings.theme));
+    auto& values = g_themeValues[ThemeName(g_settings.theme)];
+    values.clear();
+    for (const CfgItem& it : kCfgItems)
+        if (IsThemeKey(it.key)) { std::wstring d = ThemeKeyDefault(g_settings.theme, it.key); if (!d.empty()) values[it.key] = d; }
+    SaveThemeValues();
     SaveCfgOverrides();
     CfgApplySettings();
     CfgRefreshValues();
@@ -14949,7 +15094,7 @@ void GhFilterItems(std::vector<int>& out, const std::wstring& q) {
     out.clear();
     for (int i = 0; i < (int)g_tabItems.size(); i++) {
         const App& a = *g_tabItems[i];
-        if (ToLower(a.name).find(q) == std::wstring::npos) continue;
+        if (SearchKey(a.name).find(q) == std::wstring::npos) continue;
         if (g_gh.colorFilter >= 0) {
             auto c = g_ghColors.find(a.target);
             if (c == g_ghColors.end() || c->second.cls != g_gh.colorFilter) continue;
@@ -15804,7 +15949,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 if (g_openFolderIndex >= 0) {
                     if (!InRect(g_layout.panel, (float)x, (float)y)) CloseFolder();
                 } else if (!InRect(g_layout.search, (float)x, (float)y) && !InRect(g_layout.siriPanel, (float)x, (float)y) &&
-                           !InRect(g_layout.siriPower, (float)x, (float)y) && !InRect(g_layout.siriTabs, (float)x, (float)y)) {
+                           !InRect(g_layout.siriPower, (float)x, (float)y) && !InRect(g_layout.siriTabs, (float)x, (float)y) &&
+                           !InRect(g_layout.siriChips, (float)x, (float)y)) {
                     if (!g_selection.empty()) g_selection.clear();
                     else Close();
                 }
@@ -15869,8 +16015,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 return 0;
             }
 
-            if (g_settings.siriOriginal && g_openFolderIndex < 0) {
-                // Original Siri: user tabs instead of folders (only inside the apps panel)
+            if (g_settings.siri && g_openFolderIndex < 0) {
+                // Original Siri and Floating: user tabs instead of folders (only inside the apps panel)
                 if (Picking() || !InRect(g_layout.siriPanel, (float)x, (float)y)) return 0;
                 CommitChipRename();
                 g_menu.open = false; g_menu.folder = g_menu.appIdx = g_menu.folderApp = -1;
@@ -15895,6 +16041,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 } else if (App* a = AppOfMain(ItemAt(x, y))) {
                     g_menu.appIdx = ItemAt(x, y);
                     g_menuChip = current;
+                    // Floating also selects apps (long press, Ctrl+click) to pin several at once
+                    bool floatSel = !g_settings.siriOriginal && SelectableApp(g_menu.appIdx) != nullptr;
+                    bool sel = floatSel && g_selection.count(a) != 0;
+                    if (floatSel) { items.push_back({sel ? Tr(L"Deselect") : Tr(L"Select"), kMenuSelect}); separate(); }
                     if (editable) {
                         items.push_back({Tr(L"Add app"), kMenuAddApps});
                         items.push_back({Tr(L"Remove from tab"), kMenuRemoveFromTab});
@@ -15908,7 +16058,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         }
                     }
                     separate();
-                    items.push_back({Tr(L"Pin to taskbar"), kMenuPin});
+                    items.push_back({sel && g_selection.size() > 1 ? Tr(L"Pin selected to taskbar") : Tr(L"Pin to taskbar"), kMenuPin});
                     items.push_back({Tr(L"Create desktop shortcut"), kMenuDesktop});
                     separate();
                     items.push_back({Tr(L"Change icon..."), kMenuGhIcon});
@@ -15920,6 +16070,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     if (editable) items.push_back({Tr(L"Add app"), kMenuAddApps});
                     if (room) items.push_back({Tr(L"New tab"), kMenuNewTab});
                     if (hidden) items.push_back({Tr(L"Restore default tabs"), kMenuRestoreTabs});
+                    if (!g_settings.siriOriginal && !g_selection.empty()) { separate(); items.push_back({Tr(L"Clear selection"), kMenuClearSelection}); }
                 }
                 if (items.empty()) return 0;
                 OpenMenu((float)x, (float)y, std::move(items));
@@ -15993,10 +16144,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_MOUSEWHEEL:
         case WM_MOUSEHWHEEL: {
             if (g_menu.open || g_closing) return 0;
-            if (g_settings.siriOriginal && g_siriTab == 0 && ChipsOverflow()) {
+            if (g_settings.siri && g_siriTab == 0 && ChipsOverflow()) {
                 POINT p{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
                 ScreenToClient(hwnd, &p);
-                if (InRect(g_layout.siriTabs, (float)p.x, (float)p.y)) {
+                if (InRect(g_layout.siriChips, (float)p.x, (float)p.y)) {
                     // The filter strip scrolls sideways
                     float d = (float)GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA * 60 * g_layout.scale;
                     g_chipScroll += msg == WM_MOUSEHWHEEL ? d : -d;
