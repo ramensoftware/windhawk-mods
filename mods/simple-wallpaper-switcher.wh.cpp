@@ -2,7 +2,7 @@
 // @id              simple-wallpaper-switcher
 // @name            Simple Wallpaper Switcher
 // @description     Browse your wallpaper folders, preview thumbnails, and switch with smooth transitions.
-// @version         0.1.3
+// @version         0.1.4
 // @author          HHeitlager
 // @github          https://github.com/hheitlager
 // @include         windhawk.exe
@@ -371,7 +371,8 @@ void ApplyImageIndex(int image);
 bool HandlePickerKey(UINT key);
 void StepPage(int step);
 size_t DisplayImageCount();
-void RebuildSearchResults(bool invalidateThumbnailGeneration = true);
+void RebuildSearchResults(bool invalidateThumbnailGeneration = true,
+                          bool selectFirstResult = false);
 void SetSearchExpanded(bool expanded, WCHAR initialCharacter = L'\0');
 void UpdateSearchFromEdit();
 void ApplyPendingSearch();
@@ -1586,7 +1587,8 @@ size_t DisplayImageCount() {
     return g_visibleImageIndices.size();
 }
 
-void RebuildSearchResults(bool invalidateThumbnailGeneration) {
+void RebuildSearchResults(bool invalidateThumbnailGeneration,
+                          bool selectFirstResult) {
     g_visibleImageIndices.clear();
     g_visibleImageIndices.reserve(g_images.size());
     for (size_t i = 0; i < g_images.size(); ++i) {
@@ -1597,7 +1599,13 @@ void RebuildSearchResults(bool invalidateThumbnailGeneration) {
         }
     }
 
-    if (g_selectedImage < 0 ||
+    if (selectFirstResult) {
+        // Start a new search at its first match instead of retaining the
+        // previous wallpaper selection, which may be far into the result set.
+        g_selectedImage = g_visibleImageIndices.empty()
+                              ? -1
+                              : (int)g_visibleImageIndices.front();
+    } else if (g_selectedImage < 0 ||
         std::find(g_visibleImageIndices.begin(), g_visibleImageIndices.end(),
                   (size_t)g_selectedImage) == g_visibleImageIndices.end()) {
         g_selectedImage = g_visibleImageIndices.empty()
@@ -1684,8 +1692,12 @@ void ApplyPendingSearch() {
         KillTimer(g_pickerWindow, kSearchFilterTimer);
     }
     if (g_pendingSearchQuery != g_searchQuery) {
-        g_searchQuery = std::move(g_pendingSearchQuery);
-        RebuildSearchResults();
+        const bool selectFirstResult = !g_pendingSearchQuery.empty();
+        // Keep the pending value in sync with the active query. Moving from
+        // it leaves an empty string behind, which a later keyboard handoff
+        // could mistake for a request to clear the search.
+        g_searchQuery = g_pendingSearchQuery;
+        RebuildSearchResults(true, selectFirstResult);
         if (g_searchEdit && IsWindowVisible(g_searchEdit)) {
             InvalidateRect(g_searchEdit, nullptr, FALSE);
         }
@@ -1708,8 +1720,9 @@ LRESULT CALLBACK SearchEditSubclassProc(HWND hwnd, UINT message,
             return 0;
         }
         if (wParam == VK_RETURN) {
-            ApplyPendingSearch();
-            if (g_selectedImage >= 0) {
+            if (GetWindowTextLengthW(hwnd) > 0 || !g_searchQuery.empty()) {
+                FocusSelectedResult();
+            } else if (g_selectedImage >= 0) {
                 ApplyImageIndex(g_selectedImage);
             }
             return 0;
@@ -1718,12 +1731,10 @@ LRESULT CALLBACK SearchEditSubclassProc(HWND hwnd, UINT message,
             FocusSelectedResult();
             return 0;
         }
-        if ((wParam == VK_LEFT || wParam == VK_RIGHT ||
-             wParam == VK_UP || wParam == VK_DOWN) &&
+        if ((wParam == VK_UP || wParam == VK_DOWN) &&
             !(GetKeyState(VK_SHIFT) & 0x8000) &&
             !(GetKeyState(VK_CONTROL) & 0x8000)) {
-            ApplyPendingSearch();
-            HandlePickerKey((UINT)wParam);
+            FocusSelectedResult();
             return 0;
         }
     }
@@ -3438,7 +3449,7 @@ LRESULT CALLBACK TileSubclassProc(HWND hwnd, UINT message, WPARAM wParam,
         return 0;
     }
     if (message == WM_CHAR && wParam >= 0x20 && wParam != 0x7F &&
-        !g_searchExpanded) {
+        wParam != L' ' && !g_searchExpanded) {
         SetSearchExpanded(true, (WCHAR)wParam);
         return 0;
     }
