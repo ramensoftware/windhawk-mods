@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              Desktop-in-Alt-Tab
+// @id              desktop-in-alt-tab
 // @name            Desktop in Alt+Tab
 // @description     Adds a "Desktop" entry to Alt+Tab (with wallpaper thumbnail) that un-maximizes and minimizes all windows at once
 // @version         1.4
