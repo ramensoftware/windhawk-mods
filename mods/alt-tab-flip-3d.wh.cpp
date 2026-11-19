@@ -1066,6 +1066,13 @@ constexpr float kMinCloseButtonRadius = 4;
 // The size of the large icons (see LoadLargeIcons), at 100% scaling: the
 // largest an icon is drawn at (the radial style's selected one).
 constexpr float kLargeIconSize = 64;
+// Reading large icons waits on files and the shell. A session gives them
+// this long (seconds) before it opens; the rest are read during its frames,
+// this long in each, and swapped in as they come.
+constexpr double kLargeIconOpenBudget = 0.015;
+constexpr double kLargeIconFrameBudget = 0.004;
+
+constexpr float kPi = 3.14159265f;
 
 // Overlay window timers.
 // Checks that the window switched to is in front and restored (see
@@ -1344,8 +1351,8 @@ Settings LoadSettings() {
     s.flipSpeed = std::clamp(Wh_GetIntSetting(L"flipSpeed"), 25, 400) / 100.0f;
     s.showDelayMs = std::clamp(Wh_GetIntSetting(L"showDelay"), 0, 1000);
     s.showOnSecondTab = Wh_GetIntSetting(L"showOnSecondTab") != 0;
-    s.tiltRadians = std::clamp(Wh_GetIntSetting(L"tiltAngle"), 0, 70) *
-                    3.14159265f / 180.0f;
+    s.tiltRadians =
+        std::clamp(Wh_GetIntSetting(L"tiltAngle"), 0, 70) * kPi / 180.0f;
     s.stackSpacing =
         std::clamp(Wh_GetIntSetting(L"stackSpacing"), 40, 250) / 100.0f;
     s.windowSize =
@@ -2957,6 +2964,8 @@ class Switcher {
     int RadialSliceAt(D2D1_POINT_2F point) const;
     CloseButton CloseButtonForSlice(int index) const;
     void UpdateRadialStick();
+    void WatchRawMouse(bool on);
+    void OnRawInput(HRAWINPUT handle);
     void DrawRadialBack(float t);
     void DrawRadialFront(float t);
     bool EnsureRadialTexts(int index);
@@ -2974,7 +2983,10 @@ class Switcher {
     com_ptr<IWICBitmap> ReadAppIconPixels(HWND hwnd);
     com_ptr<IWICBitmap> ReadIconPixelsAt(HICON icon, int size);
     com_ptr<IWICBitmap> ReadLargeIconPixels(HWND hwnd, HICON icon);
-    void LoadLargeIcons(const std::vector<HWND>& windows);
+    int LargeIconPixels() const;
+    bool LoadLargeIcons(const std::vector<HWND>& windows,
+                        double deadline = HUGE_VAL);
+    void LoadSessionLargeIcons(double budget);
     bool AnyShortcutStyle(bool (*test)(AnimationStyle)) const;
     com_ptr<ID2D1Bitmap1> CreateIconBitmap(IWICBitmap* pixels);
     com_ptr<ID2D1Bitmap1> CreatePlaceholder(const Item& item);
@@ -3078,11 +3090,15 @@ class Switcher {
         HICON source = nullptr;  // The window icon it was made from, if any.
         com_ptr<IWICBitmap> pixels;
         com_ptr<ID2D1Bitmap1> bitmap;
-        // Its large version was looked for (see LoadLargeIcons); the pixels
-        // are that version when it was found.
-        bool large = false;
+        // The size (pixels) its large version was looked for at (see
+        // LoadLargeIcons), 0 before; the pixels are that version when it was
+        // found.
+        int largeSize = 0;
     };
     std::unordered_map<HWND, CachedIcon> m_iconCache;
+    // The session's windows still miss large icons (see
+    // LoadSessionLargeIcons).
+    bool m_largeIconsPending = false;
 
     // Background.
     com_ptr<ID2D1Bitmap1> m_background;
@@ -3216,11 +3232,16 @@ class Switcher {
     float m_ringOpen = 0;
     // The mouse stick (see UpdateRadialStick): the cursor's last position,
     // and the motion since the session opened or Tab was last pressed, as a
-    // direction (limited in length) and as a distance.
+    // direction (limited in length) and in full.
     POINT m_stickCursor{};
     bool m_stickCursorKnown = false;
     float m_stickX = 0, m_stickY = 0;
-    float m_stickTravel = 0;
+    float m_stickMoveX = 0, m_stickMoveY = 0;
+    // The mouse's own motion since the last frame (raw input, see
+    // WatchRawMouse), which goes on where the cursor stops at the screen's
+    // edges.
+    bool m_rawMouse = false;
+    float m_rawX = 0, m_rawY = 0;
     // The app's name and the title in the middle of the wheel, laid out for
     // the item at m_ringTextIndex.
     int m_ringTextIndex = -1;
@@ -4038,6 +4059,10 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
             OnMiddleClick({(short)LOWORD(lParam), (short)HIWORD(lParam)});
             return 0;
 
+        case WM_INPUT:
+            OnRawInput((HRAWINPUT)lParam);
+            break;  // DefWindowProc frees the input.
+
         case WM_APP_START:
             OnStart(wParam);
             return 0;
@@ -4481,7 +4506,8 @@ void Switcher::OnStep(int step) {
     m_target += step;
     // The radial style's mouse stick starts over from here.
     m_stickX = m_stickY = 0;
-    m_stickTravel = 0;
+    m_stickMoveX = m_stickMoveY = 0;
+    m_rawX = m_rawY = 0;
     if (m_state == State::Pending) {
         m_scroll = (double)m_target;
         // Looking for a window further away: no need to wait (see Run).
@@ -5368,6 +5394,8 @@ void Switcher::Teardown() {
     m_hdrFrameTexture = nullptr;
     m_filter = {};
     m_desktops = nullptr;
+    m_largeIconsPending = false;
+    WatchRawMouse(false);
 }
 
 void Switcher::ShowOverlay() {
@@ -5395,24 +5423,18 @@ void Switcher::ShowOverlay() {
         StartCaptures();
     }
     // App names and large icons, usually found after an earlier session
-    // already. Before the cards below, which show the icons.
-    if (ShowsAppName(m_settings.style) || ShowsLargeIcons(m_settings.style)) {
+    // already. Before the cards below, which show the icons. Large icons
+    // that take longer come during the first frames.
+    if (ShowsAppName(m_settings.style)) {
         std::vector<HWND> windows;
         for (const auto& item : m_items) {
             windows.push_back(item->hwnd);
         }
-        if (ShowsAppName(m_settings.style)) {
-            LookUpAppNames(windows);
-        }
-        if (ShowsLargeIcons(m_settings.style)) {
-            LoadLargeIcons(windows);
-            for (auto& item : m_items) {
-                const auto it = m_iconCache.find(item->hwnd);
-                if (it != m_iconCache.end() && it->second.bitmap) {
-                    item->icon = it->second.bitmap;
-                }
-            }
-        }
+        LookUpAppNames(windows);
+    }
+    m_largeIconsPending = false;
+    if (ShowsLargeIcons(m_settings.style)) {
+        LoadSessionLargeIcons(kLargeIconOpenBudget);
     }
     // Windows still without a picture show a card with their icon. Made only
     // now, so a quick Alt+Tab, which never shows the stack, doesn't pay for
@@ -5427,7 +5449,9 @@ void Switcher::ShowOverlay() {
     // The mouse stick counts the motion from here on.
     m_stickCursorKnown = false;
     m_stickX = m_stickY = 0;
-    m_stickTravel = 0;
+    m_stickMoveX = m_stickMoveY = 0;
+    m_rawX = m_rawY = 0;
+    WatchRawMouse(m_settings.style == AnimationStyle::Radial);
     m_ringOpen = 0;
 
     m_open = {0, 1, NowSeconds(), m_settings.animationDurationMs / 1000.0,
@@ -5697,7 +5721,7 @@ void Switcher::ComputeLayout() {
             m_frontY = m_height * 0.08f;
             m_stepX = m_width * 0.30f * spacing;  // Ring radius.
             m_stepY = 0;
-            m_stepZ = 2 * 3.14159265f / std::max(count, 5);  // Angle per window.
+            m_stepZ = 2 * kPi / std::max(count, 5);  // Angle per window.
             break;
 
         case AnimationStyle::Grid: {
@@ -5787,7 +5811,7 @@ void Switcher::ComputeLayout() {
             m_frontY = -m_height * 0.02f;
             m_stepX = m_boxWidth / 2;  // Half the cube's side.
             m_stepY = 0;
-            m_stepZ = 3.14159265f / 2;  // Angle per window.
+            m_stepZ = kPi / 2;  // Angle per window.
             break;
 
         case AnimationStyle::Sphere: {
@@ -5807,9 +5831,9 @@ void Switcher::ComputeLayout() {
             constexpr float kMaxLatitude = 1.15f;
             m_stepZ = std::min(
                 std::clamp(m_boxWidth * 0.95f / m_stepX, 0.3f, 1.0f),
-                2 * std::sqrt(3.14159265f * kMaxLatitude / count));
+                2 * std::sqrt(kPi * kMaxLatitude / count));
             // Latitude per window: one step per turn.
-            m_stepY = m_stepZ * m_stepZ / (2 * 3.14159265f);
+            m_stepY = m_stepZ * m_stepZ / (2 * kPi);
             break;
         }
 
@@ -6139,7 +6163,7 @@ Pose Switcher::LayoutPose(const Item& item, int index, float rel) const {
                 // Leaving the front: lifted over the deck in an arc, then
                 // slid in at the back.
                 const float progress = -rel;
-                const float arc = std::sin(progress * 3.14159265f);
+                const float arc = std::sin(progress * kPi);
                 const float back = (float)std::max(count - 1, 1);
                 pose.x = m_frontX + arc * m_width * 0.16f;
                 pose.y = m_frontY + progress * back * m_stepY -
@@ -6702,7 +6726,6 @@ void Switcher::DrawPanelFront(float t) {
 ////////////////////////////////////////////////////////////////////////////////
 // Radial style.
 
-constexpr float kPi = 3.14159265f;
 // The wheel turns this much (radians, clockwise) into place while opening,
 // and back while closing.
 constexpr float kRingOpeningTurn = 0.45f;
@@ -6960,9 +6983,11 @@ CloseButton Switcher::CloseButtonForSlice(int index) const {
 }
 
 // The radial style's mouse stick, like a game's weapon wheel: moving the
-// mouse points at a slice, which gets selected, wherever the cursor is. Only
-// motion counts: a cursor left alone selects nothing, and after Tab the
-// stick starts over (see OnStep). Over a slice, the cursor picks that one.
+// mouse points at a slice, which gets selected, wherever the cursor is, also
+// against a screen's edge (raw input, see OnRawInput). Only motion counts: a
+// cursor left alone selects nothing, and after Tab the stick starts over
+// (see OnStep). Over a slice, once the mouse really moved, the cursor picks
+// that one.
 void Switcher::UpdateRadialStick() {
     POINT cursor;
     if (m_items.size() < 2 || !GetCursorPos(&cursor)) {
@@ -6971,15 +6996,26 @@ void Switcher::UpdateRadialStick() {
     if (!m_stickCursorKnown) {
         m_stickCursor = cursor;
         m_stickCursorKnown = true;
+        m_rawX = m_rawY = 0;
         return;
     }
-    const float dx = (float)(cursor.x - m_stickCursor.x);
-    const float dy = (float)(cursor.y - m_stickCursor.y);
+    float dx = (float)(cursor.x - m_stickCursor.x);
+    float dy = (float)(cursor.y - m_stickCursor.y);
+    // The cursor stops at the screen's edges, the mouse doesn't: on each
+    // axis, the larger of the two motions counts.
+    if (std::abs(m_rawX) > std::abs(dx)) {
+        dx = m_rawX;
+    }
+    if (std::abs(m_rawY) > std::abs(dy)) {
+        dy = m_rawY;
+    }
+    m_rawX = m_rawY = 0;
     if (dx == 0 && dy == 0) {
         return;
     }
     m_stickCursor = cursor;
-    m_stickTravel += std::hypot(dx, dy);
+    m_stickMoveX += dx;
+    m_stickMoveY += dy;
     m_stickX += dx;
     m_stickY += dy;
     const float reach = kStickReach * m_dpiScale;
@@ -6990,8 +7026,10 @@ void Switcher::UpdateRadialStick() {
         m_stickY *= reach / length;
     }
 
+    // As far as the dead zone, so a hand resting on the mouse picks nothing.
     int index = -1;
-    if (m_stickTravel >= deadZone * 0.4f && PtInRect(&m_monitor, cursor)) {
+    if (std::hypot(m_stickMoveX, m_stickMoveY) >= deadZone &&
+        PtInRect(&m_monitor, cursor)) {
         index = RadialSliceAt({(float)(cursor.x - m_monitor.left),
                                (float)(cursor.y - m_monitor.top)});
     }
@@ -7007,6 +7045,40 @@ void Switcher::UpdateRadialStick() {
     if (index >= 0 && index != SelectedIndex()) {
         MoveTargetTo(index);
     }
+}
+
+// The mouse's own motion reaches the overlay while the radial style is open
+// (see UpdateRadialStick), though it never has the focus.
+void Switcher::WatchRawMouse(bool on) {
+    if (on == m_rawMouse) {
+        return;
+    }
+    RAWINPUTDEVICE device{};
+    device.usUsagePage = 0x01;  // Generic desktop controls.
+    device.usUsage = 0x02;      // Mouse.
+    device.dwFlags = on ? RIDEV_INPUTSINK : RIDEV_REMOVE;
+    device.hwndTarget = on ? m_hwnd : nullptr;
+    if (RegisterRawInputDevices(&device, 1, sizeof(device)) || !on) {
+        m_rawMouse = on;
+    }
+}
+
+// Relative motion only: for devices that give positions (pen tablets, remote
+// desktop), the cursor's motion is the one that counts.
+void Switcher::OnRawInput(HRAWINPUT handle) {
+    if (!m_rawMouse || m_state != State::Open) {
+        return;
+    }
+    RAWINPUT input;
+    UINT size = sizeof(input);
+    if (GetRawInputData(handle, RID_INPUT, &input, &size,
+                        sizeof(RAWINPUTHEADER)) == (UINT)-1 ||
+        input.header.dwType != RIM_TYPEMOUSE ||
+        (input.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE)) {
+        return;
+    }
+    m_rawX += (float)input.data.mouse.lLastX;
+    m_rawY += (float)input.data.mouse.lLastY;
 }
 
 // The wheel, under the windows flying in and out: the slices, the selected
@@ -7710,6 +7782,11 @@ void Switcher::RenderFrame() {
     if (radial && m_state == State::Open) {
         UpdateRadialStick();
     }
+    // Large icons that didn't fit in the time the opening gave them (see
+    // ShowOverlay): a frame's share at a time.
+    if (m_largeIconsPending && m_state == State::Open) {
+        LoadSessionLargeIcons(kLargeIconFrameBudget);
+    }
 
     // Critically damped spring towards the target. The wheel's selection,
     // led by the mouse, answers faster.
@@ -7895,7 +7972,7 @@ com_ptr<ID2D1Bitmap1> Switcher::GetIconBitmap(HWND hwnd) {
     if (!entry.pixels) {
         // Already at the large size.
         entry.pixels = ReadAppIconPixels(hwnd);
-        entry.large = (bool)entry.pixels;
+        entry.largeSize = entry.pixels ? LargeIconPixels() : 0;
     }
     if (entry.pixels) {
         entry.bitmap = CreateIconBitmap(entry.pixels.get());
@@ -7940,7 +8017,7 @@ void Switcher::RefreshIcons() {
         } else if (!icon && !entry.pixels) {
             // Still no window icon; the app may have finished starting.
             entry.pixels = ReadAppIconPixels(hwnd);
-            entry.large = (bool)entry.pixels;
+            entry.largeSize = entry.pixels ? LargeIconPixels() : 0;
             if (entry.pixels) {
                 entry.bitmap = CreateIconBitmap(entry.pixels.get());
             }
@@ -8000,7 +8077,7 @@ com_ptr<IWICBitmap> Switcher::ReadAppIconPixels(HWND hwnd) {
                                          IID_PPV_ARGS(imageFactory.put())))) {
         return nullptr;
     }
-    const int size = (int)std::round(kLargeIconSize * m_dpiScale);
+    const int size = LargeIconPixels();
     HBITMAP hbitmap = nullptr;
     if (FAILED(imageFactory->GetImage({size, size}, SIIGBF_ICONONLY,
                                       &hbitmap))) {
@@ -8062,13 +8139,38 @@ bool IsHostProgram(const std::wstring& path) {
                        [&](PCWSTR host) { return name == host; });
 }
 
+// Windhawk 1.7 runs the switcher as a 32-bit program on 64-bit Windows,
+// where Windows reads its System32 paths from SysWOW64: 64-bit programs'
+// files may be missing there or differ. Their System32 is reached as
+// Sysnative then.
+std::wstring NativeSystemPath(const std::wstring& path) {
+    static const std::wstring windows = [] {
+        BOOL wow64 = FALSE;
+        WCHAR folder[MAX_PATH];
+        if (!IsWow64Process(GetCurrentProcess(), &wow64) || !wow64 ||
+            !GetSystemWindowsDirectoryW(folder, ARRAYSIZE(folder))) {
+            return std::wstring();
+        }
+        return std::wstring(folder) + L"\\";
+    }();
+    constexpr std::wstring_view kSystem32 = L"System32\\";
+    const size_t prefix = windows.size() + kSystem32.size();
+    if (windows.empty() || path.size() <= prefix ||
+        _wcsnicmp(path.c_str(), windows.c_str(), windows.size()) != 0 ||
+        _wcsnicmp(path.c_str() + windows.size(), kSystem32.data(),
+                  kSystem32.size()) != 0) {
+        return path;
+    }
+    return windows + L"Sysnative\\" + path.substr(prefix);
+}
+
 // The large version of a window's icon, at the size the largest icons are
 // drawn at: the same icon read again from the file it came from, at 256
 // pixels (most apps' largest size), made smaller with care; or, for an icon
 // the window made itself, its app's icon (by its AppUserModelID, or its
 // program's, unless the program runs other ones).
 com_ptr<IWICBitmap> Switcher::ReadLargeIconPixels(HWND hwnd, HICON icon) {
-    const int size = (int)std::round(kLargeIconSize * m_dpiScale);
+    const int size = LargeIconPixels();
     constexpr int kLargestIcon = 256;
     HICON large = nullptr;
     ICONINFOEXW info{};
@@ -8085,8 +8187,9 @@ com_ptr<IWICBitmap> Switcher::ReadLargeIconPixels(HWND hwnd, HICON icon) {
                                               : nullptr;
         // Only a full path: the file the icon was loaded from.
         if (resource && wcschr(info.szModName, L'\\')) {
+            const std::wstring file = NativeSystemPath(info.szModName);
             if (HMODULE module = LoadLibraryExW(
-                    info.szModName, nullptr,
+                    file.c_str(), nullptr,
                     LOAD_LIBRARY_AS_DATAFILE |
                         LOAD_LIBRARY_AS_IMAGE_RESOURCE)) {
                 large = (HICON)LoadImageW(module, resource, IMAGE_ICON,
@@ -8100,7 +8203,8 @@ com_ptr<IWICBitmap> Switcher::ReadLargeIconPixels(HWND hwnd, HICON icon) {
         if (auto pixels = ReadAppIconPixels(hwnd)) {
             return pixels;
         }
-        const std::wstring path = GetWindowProcessPath(hwnd);
+        const std::wstring path =
+            NativeSystemPath(GetWindowProcessPath(hwnd));
         if (path.empty() || IsHostProgram(path) ||
             SHDefExtractIconW(path.c_str(), 0, 0, &large, nullptr,
                               kLargestIcon) != S_OK ||
@@ -8113,19 +8217,30 @@ com_ptr<IWICBitmap> Switcher::ReadLargeIconPixels(HWND hwnd, HICON icon) {
     return pixels;
 }
 
+// The size the large icons are made at (pixels), for the session's monitor.
+int Switcher::LargeIconPixels() const {
+    return (int)std::round(kLargeIconSize * m_dpiScale);
+}
+
 // Window icons are usually 32 pixels at 100% scaling, blurry where they're
 // drawn larger (see ShowsLargeIcons). This looks for the large version of
-// the icons of these windows that weren't looked for yet. It reads files,
-// so like the app names, it's done after a session (see RefreshIcons), and
-// before a session opens for new windows (see ShowOverlay).
-void Switcher::LoadLargeIcons(const std::vector<HWND>& windows) {
+// these windows' icons where it wasn't looked for at the session monitor's
+// size yet, until `deadline` (in NowSeconds() time). It reads files, so it's
+// done after a session (see RefreshIcons), and for a moment when a session
+// opens (see LoadSessionLargeIcons). Returns whether none is left.
+bool Switcher::LoadLargeIcons(const std::vector<HWND>& windows,
+                              double deadline) {
+    const int size = LargeIconPixels();
     for (HWND hwnd : windows) {
         const auto it = m_iconCache.find(hwnd);
-        if (it == m_iconCache.end() || it->second.large) {
+        if (it == m_iconCache.end() || it->second.largeSize == size) {
             continue;
         }
+        if (NowSeconds() > deadline) {
+            return false;
+        }
         CachedIcon& entry = it->second;
-        entry.large = true;
+        entry.largeSize = size;
         com_ptr<IWICBitmap> pixels = ReadLargeIconPixels(hwnd, entry.source);
         com_ptr<ID2D1Bitmap1> bitmap;
         if (pixels) {
@@ -8134,6 +8249,26 @@ void Switcher::LoadLargeIcons(const std::vector<HWND>& windows) {
         if (bitmap) {
             entry.pixels = pixels;
             entry.bitmap = bitmap;
+        }
+    }
+    return true;
+}
+
+// The large icons of the session's windows (see LoadLargeIcons), for at most
+// `budget` seconds; the items get the ones found. The rest come in the next
+// frames (see RenderFrame), or after the session.
+void Switcher::LoadSessionLargeIcons(double budget) {
+    std::vector<HWND> windows;
+    for (const auto& item : m_items) {
+        windows.push_back(item->hwnd);
+    }
+    m_largeIconsPending = !LoadLargeIcons(windows, NowSeconds() + budget);
+    for (auto& item : m_items) {
+        const auto it = m_iconCache.find(item->hwnd);
+        if (it != m_iconCache.end() && it->second.bitmap &&
+            it->second.bitmap.get() != item->icon.get()) {
+            item->icon = it->second.bitmap;
+            m_redraw = true;
         }
     }
 }
