@@ -69,7 +69,8 @@ the settings.
 * A thin level meter under each bar shows which apps are playing sound right
   now, and how loud.
 * New apps and volume changes made elsewhere show up while the popup is open.
-* While the popup is closed, the mod runs no timers and does no polling.
+* While the popup is closed, the mod runs no timers and does no polling, apart
+  from a short check when a jump list opens.
 
 ## Snap to every 5th value
 
@@ -108,6 +109,12 @@ one thing:
 Don't enable one of these together with the same feature of this mod. Turn the
 feature off in the settings of this mod instead.
 
+[Better Volume Mixer](https://windhawk.net/mods/better-volume-mixer) is another
+mixer popup with per-app volume, mute and output device switching. It isn't
+related to this mod and works in a different way: it opens from its own tray
+icon and has pinned apps and themes, which this mod doesn't have. It doesn't
+react to scrolling over the taskbar. Both can be enabled at the same time.
+
 ## Limitations
 
 * Only apps that have an audio session are listed (playing now or played
@@ -142,7 +149,8 @@ feature off in the settings of this mod instead.
   $name: Scrolling over an app's taskbar button changes that app
   $description: >-
     Windows 11 only. Applies if the app has sound, otherwise the scroll works
-    as set above.
+    as set above. The taskbar buttons must be inside the scroll area that is
+    set below.
 - jumpListSlider: true
   $name: Volume slider in the jump list of taskbar buttons
   $description: >-
@@ -2166,7 +2174,7 @@ std::atomic<bool> g_taskbarViewDllHooked;
 
 // The taskbar button under the mouse. Taskbar thread only.
 void* g_hoverButtonThis;
-[[clang::no_destroy]] winrt::weak_ref<wux::UIElement> g_hoverButton;
+winrt::weak_ref<wux::UIElement> g_hoverButton;
 
 thread_local bool g_captureTaskGroup;
 thread_local void* g_capturedTaskGroup;
@@ -3334,7 +3342,7 @@ void UninitJumpListShell() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerMoved(void *))"},
