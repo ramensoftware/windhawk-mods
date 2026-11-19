@@ -165,10 +165,13 @@ Clicking outside the icons or switching to another window closes it.
   (Launchpad style) before you enable this mod. All of them replace Start, so
   only one should run. RYJS refuses to load while another Launchpad window is
   present and never disables or unloads that mod for you.
-- On its first run, RYJS copies your order, folders, pins, icons and private
-  settings from the storage of Seamless Launchpad Custom, Seamless Launchpad
-  or Fullscreen Start Plus, if one of them is installed. The old data is only
-  read, never modified or deleted.
+- On its first run, RYJS copies your order, folders, pins and icons from the
+  storage folder of Seamless Launchpad Custom, Seamless Launchpad or Fullscreen
+  Start Plus, if one of them is installed. Only those layout files are read,
+  and nothing in the old folder is modified or deleted; the old settings file
+  is copied into the new folder as `migration-original-ui-settings.ini` for
+  reference rather than applied, so no settings are inherited silently. Set
+  the appearance you want once in the settings window.
 - The power buttons never force apps to close. If an app has unsaved work,
   Windows asks about it as usual. Hibernate shows only when hibernation is on
   in Windows.
@@ -1659,7 +1662,6 @@ struct Settings {
     std::wstring font;
     std::wstring theme=L"custom";
     float backgroundDim=0;
-    int labelRadius=6;
     bool gpuPresenter = true, performanceLogging = false, reducedMotion = false;
     bool iconFlyIn = true;
     int openMs = 280, closeMs = 180, folderMs = 180, frameRateLimit = 0;
@@ -1834,7 +1836,6 @@ void LoadSettings() {
     s.normalizeIcons = IntSetting(L"normalizeIcons", 1) != 0;
     s.trayIcon = IntSetting(L"settingsTrayIcon", 1) != 0;
     s.theme=GetStringSetting(L"themeMode");
-    s.labelRadius=6;  // Internal: the label plate was removed from the UI.
     s.backgroundDim=std::clamp(IntSetting(L"backgroundDim",0),0,80)/100.0f;
     bool light=s.theme==L"light";
     if(s.theme==L"system") {
@@ -2687,8 +2688,13 @@ bool PrepareStorage() {
     if (target.empty()) return false;
     if (std::filesystem::exists(target))
         return ryjs_data::Prepare(L"", target, [](const auto&) { return true; });
+    // First run: inherit the layout, groups, pins and icons of a predecessor.
+    // Those files are the data a user would miss. Its settings are not copied:
+    // reading them means reading Windhawk's private per-mod registry layout,
+    // which is not API, does not exist on portable Windhawk, and is a layout
+    // the user can review and retype in the settings window anyway.
     auto parent = std::filesystem::path(target).parent_path().parent_path();
-    std::wstring source, oldId;
+    std::wstring source;
     for (PCWSTR id : {L"local@seamless-launchpad-custom", L"seamless-launchpad-custom",
                       L"local@seamless-launchpad", L"seamless-launchpad",
                       L"local@fullscreen-start-plus", L"fullscreen-start-plus"}) {
@@ -2697,83 +2703,18 @@ bool PrepareStorage() {
         for (const auto& file : std::filesystem::directory_iterator(candidate)) {
             auto name = file.path().filename().wstring();
             if (name.starts_with(L"layout-") || name.starts_with(L"groups-")) {
-                source = candidate.wstring(); oldId = id; break;
+                source = candidate.wstring(); break;
             }
         }
         if (!source.empty()) break;
     }
-    std::vector<launchpad_settings_store::Change> changes;
-    if (!source.empty()) {
-        HKEY key = nullptr;
-        auto location = L"SOFTWARE\\Windhawk\\Engine\\Mods\\" + oldId + L"\\Settings";
-        const bool hostSettings =
-            RegOpenKeyExW(HKEY_LOCAL_MACHINE, location.c_str(), 0, KEY_READ, &key) ==
-                ERROR_SUCCESS ||
-            RegOpenKeyExW(HKEY_CURRENT_USER, location.c_str(), 0, KEY_READ, &key) ==
-                ERROR_SUCCESS;
-        if (!hostSettings) {
-            // Portable Windhawk keeps settings in an INI file, and a removed
-            // predecessor can leave its storage folder behind. The layout is
-            // still worth copying; the settings keep their defaults.
-            Wh_Log(L"Legacy settings key is unavailable; copying the layout with default settings.");
-        }
-        bool ok = hostSettings &&
-                  GetPrivateProfileIntW(L"meta", L"version", 1, (source+L"\\ui-settings.ini").c_str()) == 1;
-        std::map<std::wstring, std::wstring> sourceHost;
-        for (DWORD index = 0; ok; ++index) {
-            WCHAR name[512], value[32768]; DWORD nameSize = ARRAYSIZE(name), size = sizeof(value), type;
-            LSTATUS status = RegEnumValueW(key, index, name, &nameSize, nullptr, &type, (BYTE*)value, &size);
-            if (status == ERROR_NO_MORE_ITEMS) break;
-            if (status != ERROR_SUCCESS) { ok = false; break; }
-            std::wstring host;
-            if ((type == REG_SZ || type == REG_EXPAND_SZ) && size >= sizeof(WCHAR) && value[size/sizeof(WCHAR)-1] == 0)
-                host = value;
-            else if (type == REG_DWORD && size == sizeof(DWORD)) host = std::to_wstring(*(DWORD*)value);
-            else { ok = false; break; }
-            sourceHost[name] = host;
-        }
-        if (key) RegCloseKey(key);
-        WCHAR section[32768];
-        auto privateFile = source+L"\\ui-settings.ini";
-        DWORD sectionSize = ok ? GetPrivateProfileSectionW(L"present", section, ARRAYSIZE(section), privateFile.c_str()) : 0;
-        if (sectionSize >= ARRAYSIZE(section)-2) ok = false;
-        for (PCWSTR entry = section; ok && *entry; entry += wcslen(entry)+1) {
-            std::wstring value = entry;
-            auto equals = value.find(L'=');
-            if (equals == std::wstring::npos) { ok = false; break; }
-            auto name = value.substr(0, equals);
-            if (value.substr(equals+1) != L"1") continue;
-            std::wstring baseline, setting;
-            if (!launchpad_settings_store::Decode(launchpad_settings_store::Read(privateFile,L"host",name.c_str()),baseline) ||
-                !launchpad_settings_store::Decode(launchpad_settings_store::Read(privateFile,L"values",name.c_str()),setting)) { ok = false; break; }
-            sourceHost.try_emplace(name, L"");
-        }
-        for (const auto& [name, host] : sourceHost) {
-            auto effective = launchpad_settings_store::ResolveReadOnly(privateFile, name.c_str(), host);
-            changes.push_back({name, effective, std::wstring(WindhawkUtils::StringSetting::make(name.c_str()).get())});
-        }
-        // Settings are a bonus here; the layout and icons are the data the
-        // user would miss. A missing key or a newer private store must not
-        // stop the first run.
-        if (!ok) changes.clear();
-        if (!changes.empty()) {
-            auto inherited = [&](PCWSTR name, PCWSTR fallback) {
-                auto found = std::find_if(changes.begin(), changes.end(), [&](const auto& c) { return c.key == name; });
-                return found == changes.end() || found->value.empty() ? std::wstring(fallback) : found->value;
-            };
-            auto appSource = inherited(L"appSource", L"allApps");
-            auto activeFile = (inherited(L"gridLayout", L"scroll") == L"groups" ? L"groups-v1-" : L"layout-") + appSource + L".txt";
-            if (!std::filesystem::is_regular_file(std::filesystem::path(source)/activeFile) ||
-                (appSource == L"pinned" && !std::filesystem::is_regular_file(std::filesystem::path(source)/L"pins.txt"))) {
-                Wh_Log(L"The legacy active layout or pins file is missing; copying the remaining files.");
-            }
-        }
-    }
-    bool copied = ryjs_data::Prepare(source, target, [&](const std::wstring& stage) {
-        auto original = stage+L"\\ui-settings.ini";
-        if (GetFileAttributesW(original.c_str()) != INVALID_FILE_ATTRIBUTES &&
-            !MoveFileW(original.c_str(), (stage+L"\\migration-original-ui-settings.ini").c_str())) return false;
-        return changes.empty() || launchpad_settings_store::Save(original, changes);
+    bool copied = ryjs_data::Prepare(source, target, [](const std::wstring& stage) {
+        // Keep the predecessor's settings file with the copied data instead of
+        // applying it: nothing is lost, and no settings are inherited silently.
+        auto original = stage + L"\\ui-settings.ini";
+        if (GetFileAttributesW(original.c_str()) == INVALID_FILE_ATTRIBUTES) return true;
+        return MoveFileW(original.c_str(),
+                         (stage + L"\\migration-original-ui-settings.ini").c_str()) != FALSE;
     });
     if (copied) { Wh_Log(L"RYJS data ready, original storage untouched: %s", source.c_str()); }
     else { Wh_Log(L"RYJS data preparation failed; originals kept: %s", source.c_str()); }
@@ -8971,12 +8912,15 @@ bool RequestLaunch(const std::wstring& target,PCWSTR verb,const App* entry,bool 
 void LaunchTarget(const std::wstring& target, PCWSTR verb = nullptr,
                   const App* entry = nullptr, bool quiet = false) {
     if (RequestLaunch(target,verb,entry,quiet)) Close();
-    else {
+    else if (GetLastError() != ERROR_CANCELLED) {
+        // A cancelled UAC prompt is the user saying no, not a broken entry.
         bool previous=g_modal;
         g_modal=true;
         MessageBoxW(g_wnd,Tr(L"Could not open this entry. Use Edit entry to repair its target."),Tr(L"Launch failed"),MB_OK|MB_ICONWARNING);
         g_modal=previous;
         if(g_shown)ForceForeground(g_wnd);
+    } else if (g_shown) {
+        Close();
     }
 }
 template<typename Request>
@@ -15338,9 +15282,11 @@ bool HookXamlStartVisibility() {
             ?reinterpret_cast<XamlLoadLibrary_t>(GetProcAddress(kernelbase,"LoadLibraryExW"))
             :nullptr;
         if(loadLibrary&&!g_xamlLoadLibraryOriginal){
+            // Registered here; Windhawk applies queued hooks when Wh_ModInit
+            // returns, so no explicit apply is needed (and during init the API
+            // refuses one anyway).
             WindhawkUtils::SetFunctionHook(loadLibrary,XamlTaskbarLoadHook,
                                            &g_xamlLoadLibraryOriginal);
-            Wh_ApplyHookOperations();
         }
         Wh_Log(L"XAML taskbar not loaded; waiting for its module load.");return false;
     }
