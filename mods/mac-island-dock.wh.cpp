@@ -12,7 +12,7 @@
 // @description:fr-FR Une île en haut de l'écran comme la barre de menus de macOS et la Dynamic Island de l'iPhone (horloge, centre de contrôle, notifications, lecture en cours, icônes de la zone de notification), et un dock façon macOS à la place de la barre des tâches (ou la barre des tâches Windows, transparente ou telle quelle)
 // @description:tr-TR Ekranın üstünde macOS menü çubuğu ve iPhone'un Dynamic Island'ı gibi bir ada (saat, denetim merkezi, bildirimler, medya, sistem tepsisi simgeleri) ve görev çubuğu yerine macOS benzeri bir dock (ya da Windows görev çubuğu, saydam veya olduğu gibi)
 // @description:ko-KR macOS 메뉴 막대와 iPhone의 다이내믹 아일랜드 같은 화면 상단의 아일랜드(시계, 제어 센터, 알림, 미디어, 트레이 아이콘)와 작업 표시줄 대신 쓰는 macOS 같은 Dock(또는 투명하거나 그대로인 Windows 작업 표시줄)
-// @version         3.2.0
+// @version         3.3.0
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://island.caliberda.com.br
@@ -56,8 +56,9 @@ GitHub](https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BMac%2
 
 **New features are on hold after 3.2:** the mod has reached the size
 Windhawk's current compiler (a 32-bit program) can build, so new versions
-bring fixes only until Windhawk has a 64-bit compiler. Bug reports are as
-welcome as ever, and ideas are kept for then.
+bring fixes only (3.3 has two exceptions, see What's new) until Windhawk has
+a 64-bit compiler. Bug reports are as welcome as ever, and ideas are kept for
+then.
 
 The top of macOS and the iPhone's Dynamic Island on Windows 11: an island at
 the top of the screen with the clock, a control center, your notifications
@@ -67,7 +68,7 @@ instead of the taskbar.
 ![The island at the top of the screen opening: a message, the apps, the control center, what's playing and Faísca](https://i.imgur.com/stXnZQj.gif)
 
 **On this page:** [What it does](#what-it-does) ·
-[Getting started](#getting-started) · [What's new](#whats-new-in-32) ·
+[Getting started](#getting-started) · [What's new](#whats-new-in-33) ·
 [Screenshots](#screenshots) · [The island in detail](#the-island-in-detail) ·
 [The dock](#the-dock-in-detail) · [Compatibility](#compatibility) ·
 [Good to know](#good-to-know) · [Not planned](#not-planned-and-why) ·
@@ -98,6 +99,58 @@ instead of the taskbar.
    only), the transparent one, or Windows' own.
 
 Everything the mod does, in detail, is below.
+
+## What's new in 3.3
+
+**Plot twist:** the feature freeze had two more stops. With the GTA VI hype
+everywhere, the island gets **Vice**, a new theme (Look tab, Colors):
+
+![The island turning from Black to Vice, then its power menu opening as a pause menu](https://i.imgur.com/H6UxMXU.gif)
+
+| The pause menu | Wasted |
+| :---: | :---: |
+| ![The power menu in Vice: PAUSED, Resume, Lock, Sign out, Sleep, Hibernate, Restart, Shut down and Wasted](https://i.imgur.com/jS28F2K.png) | ![The Wasted screen: the screen gone gray with a big red WASTED](https://i.imgur.com/LXMRgxe.png) |
+
+* **A neon sunset over a dark night**: teal icons, pink highlights and a
+  neon line along the island, in the Island, Fixed and Bar styles.
+* **A condensed font** (Windows' Bahnschrift) with the pill's texts in
+  capitals.
+* **The power menu becomes a game's pause menu**, with Resume and Wasted:
+  the screen goes gray, a big red WASTED shows, then the PC shuts down (Esc
+  or a click cancels).
+
+The other stop came from the community: **Pedro** wrote the code that
+lets AI usage show other services too (#7307).
+
+![AI usage showing services read from JSON files, each with its name and icon](https://i.imgur.com/I7r2msI.png)
+
+* **AI usage from your own file**: besides Claude Code and Codex, it can
+  show other services' limits, read from a JSON file on your PC that
+  another tool of yours keeps up to date, each with its name and icon (Apps
+  and tools tab, off by default). "+ Add provider" in its panel adds more
+  files.
+
+Everything else in 3.3 is fixes:
+
+* **Fixed, opening and crashing**: the apps launcher opens Chrome, Brave,
+  Office and the like again when Windhawk doesn't run as administrator
+  (#7521, #7360), and choosing a power mode in the control center no longer
+  closes the island (#7539).
+* **Fixed, the pill**: the minimized line keeps the timer's ring and time
+  together (#7483), the timer's color fill grows smoothly, two separator
+  lines no longer show side by side (#7330) and an upright pill no longer
+  draws a second clock over a count or a percentage (#7605).
+* **Fixed, Faísca**: her games run at the screen's pace and a Cloud jump
+  that reaches a cloud lands on it (#7559), and her size goes up to 160%.
+* **Also fixed**: Folders and places shows the own icons of shortcuts and
+  programs (#7575), the Recycle Bin count is right after startup, the
+  visualizer keeps its pace on 60 Hz screens, the pill's fill and its line
+  follow a notch's curves, and AI usage names the day a limit starts over in
+  the island's language.
+
+The full list, every version's and every fix, is in the island's settings
+(What's new tab) and on
+[island.caliberda.com.br](https://island.caliberda.com.br/#news).
 
 ## What's new in 3.2
 
@@ -265,7 +318,8 @@ the bell; and the notches hiding together as one line:
     voice messages), and not for the apps turned off under "Apps that look
     for lyrics";
   * AI usage (an option, off by default, never online): how much of Claude
-    Code's and Codex's limits is used, the one closer to its end on the pill
+    Code's and Codex's limits is used (and other services', from a JSON
+    file on this PC that you choose), the one closer to its end on the pill
     with the time until it starts over (yellow from 70%, red from 90%), and
     both the 5-hour session and the week in its panel. It reads only what
     the agents keep on this PC, never their logins: Codex's own logs, and
@@ -734,6 +788,11 @@ Portuguese or your own language.
   thin sliders and the white circle on the buttons that are on.
 * **caotu2k5**: the review of the Vietnamese texts.
 * **11ethann11**: the first French texts (#7063).
+* **Pedro** ([pedrospeckv](https://github.com/pedrospeckv)): the code for AI
+  usage to show other services from a JSON file (#7307).
+* The Vice theme: inspired by the neon desktop setup that
+  [**Unknown Tech**](https://www.youtube.com/watch?v=A2qGRvOqDeo) made with
+  [**YASB**](https://github.com/amnweb/yasb)'s top bar and pause menu.
 * The online icon packs, downloaded when chosen (not part of this mod):
   [**Fluent UI System Icons**](https://github.com/microsoft/fluentui-system-icons)
   by Microsoft (MIT), [**Ionicons**](https://ionic.io/ionicons) by Ionic
@@ -809,7 +868,17 @@ left out if Windows doesn't match):
   PowerShell script that read it with
   `$stdin = [Console]::In.ReadToEnd()` (add it after that line). Without
   a status line yet, the command `cat > '<that file>'` (Git Bash) only
-  saves it and shows nothing;
+  saves it and shows nothing. Custom (JSON file): a `.json` file on a
+  drive of this PC (never a network path, up to 256 KB) that you choose
+  and that another tool of yours keeps up to date; the island only reads
+  it. One service is `{"name": "...", "windows": [{"label": "5h",
+  "used_percentage": 42, "resets_at": 1767225600}]}` (`used` works too,
+  `resets_at` in seconds or milliseconds), with an optional `"pill_name"`
+  (a shorter name for the pill), `"updated_at"` and `"icon"` (a picture,
+  `.ico` or `.exe` on this PC, or an app's AppUserModelID). Several go in
+  a JSON array or in `{"providers": [...]}` (up to 8, with 6 limits each).
+  "+ Add provider" in the panel keeps more files, each with its own name,
+  short name and icon;
 * world clocks: Windows' additional clocks (read from the registry,
   watched for changes);
 * the pill filling with downloads: the progress apps give their taskbar
@@ -876,9 +945,10 @@ cada opção explicada: [island.caliberda.com.br](https://island.caliberda.com.b
 
 **Novos recursos estão congelados depois da 3.2:** o mod chegou ao tamanho
 que o compilador atual do Windhawk (um programa de 32 bits) consegue
-compilar, então as novas versões trazem só correções até o Windhawk ter um
-compilador de 64 bits. Bugs continuam muito bem-vindos, e as ideias ficam
-guardadas para quando isso acontecer.
+compilar, então as novas versões trazem só correções (a 3.3 tem duas
+exceções, veja as Novidades) até o Windhawk ter um compilador de 64 bits.
+Bugs continuam muito bem-vindos, e as ideias ficam guardadas para quando
+isso acontecer.
 
 O topo do macOS e a Dynamic Island do iPhone no Windows 11: uma ilha no topo
 da tela com o relógio, uma central de controle, as suas notificações e o
@@ -888,7 +958,7 @@ de tarefas.
 ![A ilha no topo da tela abrindo: uma mensagem, os apps, a central de controle, o que está tocando e a Faísca](https://i.imgur.com/stXnZQj.gif)
 
 **Nesta página:** [O que ele faz](#o-que-ele-faz) ·
-[Começando](#começando) · [Novidades](#novidades-da-32) ·
+[Começando](#começando) · [Novidades](#novidades-da-33) ·
 [Capturas de tela](#capturas-de-tela) · [Compatibilidade](#compatibilidade) ·
 [Bom saber](#bom-saber) · [Contato](#contato) · [English](#mac-island--dock)
 
@@ -918,6 +988,62 @@ de tarefas.
 
 Os detalhes de cada opção estão em inglês acima e, passo a passo, no site
 [island.caliberda.com.br](https://island.caliberda.com.br).
+
+### Novidades da 3.3
+
+**Plot twist:** o congelamento de recursos teve mais duas paradas. Com o hype
+do GTA VI em todo lugar, a ilha ganha o **Vice**, um tema novo (aba
+Aparência, Cores):
+
+![A ilha passando do Preto para o Vice e o menu de energia abrindo como menu de pausa](https://i.imgur.com/H6UxMXU.gif)
+
+| O menu de pausa | Wasted |
+| :---: | :---: |
+| ![O menu de energia no Vice: PAUSED, Resume, Lock, Sign out, Sleep, Hibernate, Restart, Shut down e Wasted](https://i.imgur.com/jS28F2K.png) | ![A tela do Wasted: tudo cinza com um WASTED vermelho grande](https://i.imgur.com/LXMRgxe.png) |
+
+* **Um pôr do sol neon sobre uma noite escura**: ícones verde-água,
+  destaques rosa e uma linha neon ao longo da ilha, nos estilos Ilha, Fixo e
+  Barra.
+* **Uma fonte condensada** (a Bahnschrift do Windows) com os textos da
+  pílula em maiúsculas.
+* **O menu de energia vira o menu de pausa de um jogo**, com Continuar e
+  Wasted: a tela fica cinza, aparece um WASTED vermelho grande e o PC
+  desliga (Esc ou um clique cancela).
+
+A outra parada veio da comunidade: o **Pedro** escreveu o código que deixa
+o uso de IA mostrar também outros serviços (#7307).
+
+![O uso de IA mostrando serviços lidos de arquivos JSON, cada um com nome e ícone](https://i.imgur.com/I7r2msI.png)
+
+* **Uso de IA de um arquivo seu**: além do Claude Code e do Codex, ele pode
+  mostrar os limites de outros serviços, lidos de um arquivo JSON no seu PC
+  que outra ferramenta sua mantém atualizado, cada um com nome e ícone (aba
+  Apps e ferramentas, desligado por padrão). "+ Incluir provedor" no painel
+  dele inclui mais arquivos.
+
+O resto da 3.3 são correções:
+
+* **Corrigido, abrir e travar**: o lançador de apps volta a abrir Chrome,
+  Brave, Office e afins quando o Windhawk não roda como administrador
+  (#7521, #7360), e escolher um modo de energia na central de controle não
+  fecha mais a ilha (#7539).
+* **Corrigido, a pílula**: a linha minimizada mantém o anel do timer e o
+  tempo dele juntos (#7483), o preenchimento de cor do timer cresce suave,
+  duas linhas separadoras não aparecem mais lado a lado (#7330) e uma pílula
+  em pé não desenha mais um segundo relógio sobre uma contagem ou uma
+  porcentagem (#7605).
+* **Corrigido, a Faísca**: os jogos dela rodam no ritmo da tela e um pulo no
+  Pulo nas nuvens que alcança a nuvem pousa nela (#7559), e o tamanho dela
+  vai até 160%.
+* **Também corrigido**: Pastas e locais mostra o ícone próprio de atalhos e
+  programas (#7575), a contagem da Lixeira fica certa depois de ligar o PC,
+  o visualizador mantém o ritmo numa tela de 60 Hz, o preenchimento da
+  pílula e a linha dele seguem as curvas do entalhe, e o uso de IA mostra o
+  dia em que um limite recomeça no idioma da ilha.
+
+A lista completa, de cada versão e com todas as correções, fica nas
+configurações da ilha (aba Novidades) e em
+[island.caliberda.com.br](https://island.caliberda.com.br/#novidades).
 
 ### Novidades da 3.2
 
@@ -1083,6 +1209,11 @@ parte). Pode escrever em português.
   sliders finos e o círculo branco nos botões ligados.
 * **caotu2k5**: a revisão dos textos em vietnamita.
 * **11ethann11**: os primeiros textos em francês (#7063).
+* **Pedro** ([pedrospeckv](https://github.com/pedrospeckv)): o código para o
+  uso de IA mostrar outros serviços a partir de um arquivo JSON (#7307).
+* O tema Vice: inspirado no desktop neon que o
+  [**Unknown Tech**](https://www.youtube.com/watch?v=A2qGRvOqDeo) montou com a
+  barra e o menu de pausa do [**YASB**](https://github.com/amnweb/yasb).
 * Os pacotes de ícones online, baixados quando escolhidos (não fazem parte
   deste mod):
   [**Fluent UI System Icons**](https://github.com/microsoft/fluentui-system-icons),
@@ -2660,6 +2791,7 @@ struct {
     bool islandAiUsage;
     bool islandAiClaude;
     bool islandAiCodex;
+    bool islandAiCustom;
     // The app in focus with its window's title too (see
     // Island::FocusedText).
     bool islandFocusedTitle;
@@ -3052,6 +3184,9 @@ struct IslandTheme {
     // Dark text on a light background needs more of it to read well (0 to 1,
     // in between while the colors change).
     float light = 0;
+    // How much of the Vice theme's neon shows (0 to 1, in between while the
+    // colors change, see ViceAmount).
+    float vice = 0;
 };
 // The colors shown (blending from one theme to another while they change).
 IslandTheme g_theme;
@@ -3116,9 +3251,53 @@ enum class ThemeId {
     Auto,
     AutoInverted,
     Custom,
+    // A neon sunset over a dark night (since 3.2.1): pink and teal, a
+    // condensed font and a neon line along the island (see ViceAmount).
+    Vice,
     Count
 };
 int g_themeIndex;
+
+// The Vice theme chosen (the island's texts take its font, its panels its
+// look).
+bool ViceThemeOn() {
+    return g_themeIndex == (int)ThemeId::Vice;
+}
+
+// How much of the Vice theme's neon shows, from 0 to 1 (blending with the
+// colors when the theme changes).
+float ViceAmount() {
+    return std::clamp(g_theme.vice, 0.0f, 1.0f);
+}
+
+// A pill text in capitals while the Vice theme is chosen (like its neon bar's
+// texts), as it is; the same string is measured and drawn.
+std::wstring ViceCaps(const std::wstring& text) {
+    if (!ViceThemeOn() || text.empty()) {
+        return text;
+    }
+    std::wstring result(text.size(), L'\0');
+    if (LCMapStringEx(LOCALE_NAME_USER_DEFAULT,
+                      LCMAP_UPPERCASE | LCMAP_LINGUISTIC_CASING, text.c_str(),
+                      (int)text.size(), result.data(), (int)result.size(),
+                      nullptr, nullptr, 0) != (int)text.size()) {
+        return text;
+    }
+    return result;
+}
+
+// The Vice theme's neon colors (red, green and blue, from 0 to 1): its pink
+// (the highlight too), the sunset's orange and violet, and the sea's teal
+// (the pill's icons).
+constexpr float kVicePink[3] = {1.0f, 0.31f, 0.64f};
+constexpr float kViceOrange[3] = {1.0f, 0.62f, 0.32f};
+constexpr float kViceViolet[3] = {0.56f, 0.38f, 1.0f};
+constexpr float kViceTeal[3] = {0.33f, 0.87f, 0.91f};
+
+// One of them with an opacity.
+D2D1_COLOR_F ViceColor(const float (&color)[3], float alpha) {
+    return {color[0], color[1], color[2], alpha};
+}
 
 // The color of the app in front (0xRRGGBB, see WindowColor), or -1: the
 // island's background takes it when chosen (islandWindowColor).
@@ -3213,6 +3392,9 @@ bool CustomColorsHardToRead() {
 // stronger (as vivid as it goes on a dark background, deeper on a light
 // one), and pushed away from the background when they're too alike.
 D2D1_COLOR_F Accent(float alpha) {
+    if (ViceThemeOn() && !UsesWindowColor()) {
+        return ViceColor(kVicePink, alpha);
+    }
     if (g_themeIndex != (int)ThemeId::Custom && !UsesWindowColor()) {
         return {0.04f, 0.52f, 1.0f, alpha};
     }
@@ -3555,9 +3737,21 @@ void ApplyThemeIndex(bool blend) {
         target.background[1] = 0.19f;
         target.background[2] = 0.21f;
         target.backgroundAlpha = 0.94f;
+    } else if (theme == ThemeId::Vice) {
+        // A night sky a little see-through, pale texts and teal icons.
+        target.background[0] = 0.09f;
+        target.background[1] = 0.08f;
+        target.background[2] = 0.13f;
+        target.backgroundAlpha = 0.93f;
+        target.foreground[0] = 0.88f;
+        target.foreground[1] = 0.91f;
+        target.foreground[2] = 0.96f;
+        target.vice = 1;
     }
     if (theme == ThemeId::Custom) {
         CustomColorParts(g_customColors[kColorIcons], target.icon);
+    } else if (theme == ThemeId::Vice) {
+        std::copy(kViceTeal, kViceTeal + 3, target.icon);
     } else {
         std::copy(target.foreground, target.foreground + 3, target.icon);
     }
@@ -3575,6 +3769,7 @@ void ApplyThemeIndex(bool blend) {
         }
         target.light = 0;
         target.backgroundAlpha = 1;
+        target.vice = 0;
     }
     if (blend) {
         g_themeFrom = g_theme;
@@ -3613,6 +3808,7 @@ bool StepTheme() {
     g_theme.backgroundAlpha =
         mix(g_themeFrom.backgroundAlpha, g_themeTarget.backgroundAlpha);
     g_theme.light = mix(g_themeFrom.light, g_themeTarget.light);
+    g_theme.vice = mix(g_themeFrom.vice, g_themeTarget.vice);
     if (t >= 1) {
         g_theme = g_themeTarget;
         g_themeChangeStart = 0;
@@ -3870,6 +4066,10 @@ bool IsKeptShown(HWND taskbar) {
     return taskbar && taskbar == g_keepShownWnd &&
            NowSeconds() < g_keepShownUntil;
 }
+
+// Pi, for every angle and wave (float, as the drawing takes it; promoted
+// where the math is double).
+constexpr float kPi = 3.14159265f;
 
 // Bounces come in groups of three, each one a little lower, like on macOS.
 // Opening an app and asking for attention are one group each.
@@ -7372,7 +7572,7 @@ bool OnRenderingUnsafe(double now, double dt) {
             const double distance = std::fabs(mouseX - item.restCenter) /
                                     g_settings.magnificationRange;
             if (distance < 1) {
-                const double bell = 0.5 + 0.5 * std::cos(3.14159265 * distance);
+                const double bell = 0.5 + 0.5 * std::cos(kPi * distance);
                 target = 1 + (maxScale - 1) * bell;
             }
         }
@@ -15132,9 +15332,11 @@ constexpr GUID kSID_STopLevelBrowser = {
 // A program, file or app (shell:AppsFolder\...) started by Explorer's own
 // shell, as the user and unelevated: the desktop's view, its shell's
 // IShellDispatch2::ShellExecute (see "How can I launch an unelevated
-// process from my elevated process", The Old New Thing). On a thread with
-// COM. False if it can't be.
-bool ShellExecuteAsUser(const std::wstring& target) {
+// process from my elevated process", The Old New Thing). Explorer is 64-bit,
+// so it also reads a shortcut's path as Start does (see
+// OpensThroughExplorer). On a thread with COM. False if it can't be.
+bool ShellExecuteAsUser(const std::wstring& target,
+                        const std::wstring& arguments = {}) {
     winrt::com_ptr<IShellWindows> windows;
     winrt::com_ptr<IDispatch> desktop;
     VARIANT none;
@@ -15169,15 +15371,48 @@ bool ShellExecuteAsUser(const std::wstring& target) {
         return false;
     }
     BSTR file = SysAllocString(target.c_str());
+    VARIANT args;
+    VariantInit(&args);
+    if (!arguments.empty()) {
+        args.vt = VT_BSTR;
+        args.bstrVal = SysAllocString(arguments.c_str());
+    }
     VARIANT show;
     VariantInit(&show);
     show.vt = VT_I4;
     show.lVal = SW_SHOWNORMAL;
+    // (Explorer starts it: let it bring it to the front, as the click that
+    // asked for it would.)
+    DWORD explorer = 0;
+    GetWindowThreadProcessId(GetShellWindow(), &explorer);
+    if (explorer) {
+        AllowSetForegroundWindow(explorer);
+    }
     const HRESULT hr =
-        file ? shell->ShellExecute(file, none, none, none, show)
+        file ? shell->ShellExecute(file, args, none, none, show)
              : E_OUTOFMEMORY;
     SysFreeString(file);
+    VariantClear(&args);
     return SUCCEEDED(hr);
+}
+
+bool IsWow64();
+
+// A Start app (shell:AppsFolder\...) or a shortcut (.lnk) opened by the
+// 32-bit Windhawk process: the shortcut's own path often comes as
+// %ProgramFiles%\... (Chrome's, Brave's, Office's), which this process
+// reads as "Program Files (x86)", so the app wasn't found ("The specified
+// path does not exist", #7521, #7360). Explorer's shell reads it right
+// (ShellExecuteAsUser); the 64-bit process doesn't need it.
+bool OpensThroughExplorer(const std::wstring& target) {
+    constexpr std::wstring_view kApps = L"shell:AppsFolder\\";
+    const bool app =
+        target.size() > kApps.size() &&
+        _wcsnicmp(target.c_str(), kApps.data(), kApps.size()) == 0;
+    const bool shortcut =
+        target.size() > 4 &&
+        _wcsicmp(target.c_str() + target.size() - 4, L".lnk") == 0;
+    return (app || shortcut) && IsWow64();
 }
 
 // Brings an app to the front by its AppUserModelID: its window if it has one
@@ -15206,6 +15441,9 @@ void OpenApp(const std::wstring& appId) {
         if (!ShellExecuteAsUser(target)) {
             IslandLog(L"An app couldn't be started through Explorer");
         }
+        return;
+    }
+    if (OpensThroughExplorer(target) && ShellExecuteAsUser(target)) {
         return;
     }
     ShellExecute(nullptr, L"open", target.c_str(), nullptr, nullptr,
@@ -16213,6 +16451,7 @@ constexpr WCHAR kChineseTexts[] =
     L"Add clocks in Windows' date and time settings (Additional clocks)\0" L"在 Windows 的日期和时间设置中添加时钟（附加时钟）\0"
     L"Add controls\0" L"添加控件\0"
     L"Add note  (Ctrl+Enter)\0" L"添加笔记  (Ctrl+Enter)\0"
+    L"Add provider\0" L"添加服务\0"
     L"Add the shortcuts you want to remember\0" L"添加你想记住的快捷键\0"
     L"Added to your commands\0" L"已添加到你的命令\0"
     L"Adds a button for sleep, restart and shut down\0" L"添加用于睡眠、重启和关机的按钮\0"
@@ -16375,6 +16614,7 @@ constexpr WCHAR kChineseTexts[] =
     L"Charging battery color (own)\0" L"充电时的电池颜色（自定义）\0"
     L"Check every\0" L"检查间隔\0"
     L"Choose\0" L"选择\0"
+    L"Choose a JSON file\0" L"选择 JSON 文件\0"
     L"Choose a power plan\0" L"选择电源计划\0"
     L"Choose a program or a file\0" L"选择程序或文件\0"
     L"Choose it…\0" L"选择…\0"
@@ -16463,6 +16703,7 @@ constexpr WCHAR kChineseTexts[] =
     L"Cuddle\0" L"抚摸\0"
     L"Current\0" L"当前\0"
     L"Custom\0" L"自定义\0"
+    L"Custom (JSON file)\0" L"自定义（JSON 文件）\0"
     L"Customize…\0" L"自定义…\0"
     L"Cyan\0" L"青色\0"
     L"Cycles through the pictures of a folder as your wallpaper\0" L"将文件夹中的图片轮流设为壁纸\0"
@@ -16535,6 +16776,7 @@ constexpr WCHAR kChineseTexts[] =
     L"Edge distance\0" L"与边缘的距离\0"
     L"Edit\0" L"编辑\0"
     L"Edit command\0" L"编辑命令\0"
+    L"Edit provider\0" L"编辑服务\0"
     L"Edit task\0" L"编辑任务\0"
     L"Efficiency\0" L"节能\0"
     L"Eight colors, Windows' accent or your own\0" L"八种颜色、Windows 强调色或你自己的颜色\0"
@@ -16735,6 +16977,7 @@ constexpr WCHAR kChineseTexts[] =
     L"I'm all alone…\0" L"就剩我一个了……\0"
     L"I'm bored…\0" L"好无聊啊……\0"
     L"I'm drying up here.\0" L"我快渴干啦。\0"
+    L"Icon\0" L"图标\0"
     L"Icon and color\0" L"图标和颜色\0"
     L"Icon colors\0" L"图标颜色\0"
     L"Icon pack\0" L"图标包\0"
@@ -16777,6 +17020,7 @@ constexpr WCHAR kChineseTexts[] =
     L"Its focus or break ending, while it runs\0" L"番茄钟运行时，专注或休息的结束\0"
     L"Its look (profile):\0" L"外观（配置文件）：\0"
     L"Its style, size, hiding and animations are in Windhawk's settings for this mod\0" L"样式、大小、隐藏和动画在 Windhawk 中此模组的设置里\0"
+    L"JSON file\0" L"JSON 文件\0"
     L"Just one little game?\0" L"就玩一小局嘛？\0"
     L"Just watching…\0" L"就看看……\0"
     L"Keep as it is\0" L"保持现状\0"
@@ -17120,6 +17364,7 @@ constexpr WCHAR kChineseTexts[] =
     L"Plan: \0" L"计划：\0"
     L"Play\0" L"玩\0"
     L"Plug me in?\0" L"帮我插上电源？\0"
+    L"Point to a JSON file with \"name\" and \"windows\" (or a list of them) to show other services here\0" L"指向包含 \"name\" 和 \"windows\"（或其列表）的 JSON 文件，即可在此显示其他服务\0"
     L"Pomodoro finished\0" L"番茄钟结束\0"
     L"Power\0" L"电源\0"
     L"Power button\0" L"电源按钮\0"
@@ -17172,6 +17417,7 @@ constexpr WCHAR kChineseTexts[] =
     L"Rainbow\0" L"彩虹\0"
     L"Reacts to what the PC is doing\0" L"对电脑的状态做出反应\0"
     L"Reading…\0" L"正在读取…\0"
+    L"Reads limits from a JSON file on this PC ({\"name\", \"windows\"})\0" L"从这台电脑上的 JSON 文件读取额度（{\"name\"、\"windows\"}）\0"
     L"Record shortcut\0" L"录制快捷键\0"
     L"Record: %s\0" L"纪录：%s\0"
     L"Recycle Bin\0" L"回收站\0"
@@ -17277,6 +17523,7 @@ constexpr WCHAR kChineseTexts[] =
     L"Shh, nobody wakes me up now.\0" L"嘘，现在没人能叫醒我。\0"
     L"Shh… focus mode.\0" L"嘘……专注模式。\0"
     L"Short\0" L"短\0"
+    L"Short name\0" L"简称\0"
     L"Shortcut: let clicks through the pill\0" L"快捷键：让点击穿透胶囊\0"
     L"Shortcuts\0" L"快捷键\0"
     L"Shortcuts to programs and files (or command lines) you add, with their own icons, a click away in their panel; any of them can be a button on the pill or have a keyboard shortcut (set in its editor)\0" L"你添加的程序和文件（或命令行）的快捷方式，带有它们自己的图标，在其面板中一键打开；任何一个都可以成为胶囊上的按钮，或设置键盘快捷键（在其编辑器中设置）\0"
@@ -17412,6 +17659,7 @@ constexpr WCHAR kChineseTexts[] =
     L"That sound off\0" L"该声音已关闭\0"
     L"The Bar also shrinks to a thin line on the screen's edge when the mouse is away, and comes back as the mouse reaches the line. Windows then use the strip it kept, and the Bar shows over them\0" L"条形样式也会在鼠标离开时缩成屏幕边缘的细线，鼠标移到线上时恢复。窗口会使用它原先保留的区域，条形显示在窗口上方\0"
     L"The Bar style\0" L"条形样式\0"
+    L"The PC shuts down after it. Esc or a click stops it.\0" L"之后电脑会关机。按 Esc 或点击一下即可取消。\0"
     L"The app in focus on this monitor (its icon and name)\0" L"此显示器上的焦点应用（图标和名称）\0"
     L"The apps heard playing, also players without Windows' media controls; with some on, only they bring it. With none on, any sound does\0" L"检测到正在播放的应用，包括没有 Windows 媒体控件的播放器；开启其中一些后，只有它们会显示可视化。全部关闭时，任何声音都会显示\0"
     L"The apps seen playing; a click turns one's lyrics off, and nothing of its songs is sent to lrclib.net\0" L"已检测到播放内容的应用；点击可关闭某个应用的歌词，其歌曲信息将不会发送到 lrclib.net\0"
@@ -17548,7 +17796,7 @@ constexpr WCHAR kChineseTexts[] =
     L"Try again, or share the file from Explorer\0" L"请重试，或在文件资源管理器中分享该文件\0"
     L"Turn it on once in Windows' settings: from then on the island switches it\0" L"请先在 Windows 设置中打开一次，之后灵动岛就能开关它\0"
     L"Turn it up, I know this one.\0" L"调大声点，这首我会！\0"
-    L"Turn on Claude Code or Codex in the settings\0" L"请在设置中打开 Claude Code 或 Codex\0"
+    L"Turn on Claude Code, Codex or Custom in the settings\0" L"请在设置中打开 Claude Code、Codex 或自定义\0"
     L"Turned off\0" L"已关闭\0"
     L"Turned on\0" L"已开启\0"
     L"Turns the island's animations on or off, on every monitor\0" L"开启或关闭灵动岛的动画，对所有显示器生效\0"
@@ -17588,6 +17836,7 @@ constexpr WCHAR kChineseTexts[] =
     L"VLC 3 doesn't tell Windows' media controls what it plays, so the island can't see it. With this on, while VLC makes sound, the island reads the song's name from VLC's window title, shows it with VLC's icon, and its buttons press play/pause, previous and next in VLC. No cover or time, and VLC must show the name in its window title (its default)\0" L"VLC 3 不会把正在播放的内容告知 Windows 媒体控件，所以灵动岛看不到它。开启后，VLC 发出声音时，灵动岛会从 VLC 的窗口标题读取歌曲名称，并用 VLC 的图标显示，其按钮会在 VLC 中执行播放/暂停、上一首和下一首。没有封面和时间，且 VLC 必须在窗口标题中显示名称（默认如此）\0"
     L"Vertical stack\0" L"垂直堆叠\0"
     L"Vertical stack, main on the right\0" L"垂直堆叠（主窗口在右侧）\0"
+    L"Vice (neon sunset)\0" L"Vice（霓虹日落）\0"
     L"Video memory in use (VRAM)\0" L"显存使用量 (VRAM)\0"
     L"Videos\0" L"视频\0"
     L"Violet\0" L"紫色\0"
@@ -17600,10 +17849,13 @@ constexpr WCHAR kChineseTexts[] =
     L"Volume and mixer in the panel\0" L"面板中的音量和混音器\0"
     L"Volume mixer\0" L"音量合成器\0"
     L"Volume percentage beside its icon\0" L"在音量图标旁显示百分比\0"
+    L"Waiting for valid data in the chosen file\0" L"正在等待所选文件中的有效数据\0"
     L"Wallpaper\0" L"壁纸\0"
     L"Wallpaper (the wheel: the next one)\0" L"壁纸（滚轮：下一张）\0"
     L"Wallpaper transition\0" L"壁纸过渡效果\0"
     L"Wallpapers from a folder (with a transition)\0" L"来自文件夹的壁纸（带过渡效果）\0"
+    L"Wasted\0" L"Wasted\0"
+    L"Wasted now?\0" L"现在就 Wasted？\0"
     L"Water\0" L"水\0"
     L"Weather\0" L"天气\0"
     L"Weather (goes online)\0" L"天气（需联网）\0"
@@ -17889,6 +18141,7 @@ constexpr WCHAR kGermanTexts[] =
     L"Add clocks in Windows' date and time settings (Additional clocks)\0" L"Uhren in den Datums- und Uhrzeiteinstellungen von Windows hinzufügen (Zusätzliche Uhren)\0"
     L"Add controls\0" L"Steuerelemente hinzufügen\0"
     L"Add note  (Ctrl+Enter)\0" L"Notiz hinzufügen  (Strg+Enter)\0"
+    L"Add provider\0" L"Anbieter hinzufügen\0"
     L"Add the shortcuts you want to remember\0" L"Fügen Sie die Tastenkombinationen hinzu, die Sie sich merken wollen\0"
     L"Added to your commands\0" L"Zu deinen Befehlen hinzugefügt\0"
     L"Adds a button for sleep, restart and shut down\0" L"Fügt eine Schaltfläche für Energie sparen, Neustart und Herunterfahren hinzu\0"
@@ -18051,6 +18304,7 @@ constexpr WCHAR kGermanTexts[] =
     L"Charging battery color (own)\0" L"Farbe des ladenden Akkus (eigene)\0"
     L"Check every\0" L"Prüfen alle\0"
     L"Choose\0" L"Auswählen\0"
+    L"Choose a JSON file\0" L"JSON-Datei wählen\0"
     L"Choose a power plan\0" L"Energiesparplan wählen\0"
     L"Choose a program or a file\0" L"Programm oder Datei wählen\0"
     L"Choose it…\0" L"Auswählen…\0"
@@ -18139,6 +18393,7 @@ constexpr WCHAR kGermanTexts[] =
     L"Cuddle\0" L"Kuscheln\0"
     L"Current\0" L"Aktuell\0"
     L"Custom\0" L"Benutzerdefiniert\0"
+    L"Custom (JSON file)\0" L"Benutzerdefiniert (JSON-Datei)\0"
     L"Customize…\0" L"Anpassen…\0"
     L"Cyan\0" L"Cyan\0"
     L"Cycles through the pictures of a folder as your wallpaper\0" L"Wechselt die Bilder eines Ordners als Hintergrund durch\0"
@@ -18211,6 +18466,7 @@ constexpr WCHAR kGermanTexts[] =
     L"Edge distance\0" L"Randabstand\0"
     L"Edit\0" L"Bearbeiten\0"
     L"Edit command\0" L"Befehl bearbeiten\0"
+    L"Edit provider\0" L"Anbieter bearbeiten\0"
     L"Edit task\0" L"Aufgabe bearbeiten\0"
     L"Efficiency\0" L"Effizienz\0"
     L"Eight colors, Windows' accent or your own\0" L"Acht Farben, die Akzentfarbe von Windows oder deine eigene\0"
@@ -18411,6 +18667,7 @@ constexpr WCHAR kGermanTexts[] =
     L"I'm all alone…\0" L"Ich bin ganz allein…\0"
     L"I'm bored…\0" L"Mir ist langweilig…\0"
     L"I'm drying up here.\0" L"Ich trockne hier aus.\0"
+    L"Icon\0" L"Symbol\0"
     L"Icon and color\0" L"Symbol und Farbe\0"
     L"Icon colors\0" L"Symbolfarben\0"
     L"Icon pack\0" L"Symbolpaket\0"
@@ -18453,6 +18710,7 @@ constexpr WCHAR kGermanTexts[] =
     L"Its focus or break ending, while it runs\0" L"Ende von Fokus oder Pause, solange er läuft\0"
     L"Its look (profile):\0" L"Sein Aussehen (Profil):\0"
     L"Its style, size, hiding and animations are in Windhawk's settings for this mod\0" L"Stil, Größe, Ausblenden und Animationen stehen in den Windhawk-Einstellungen dieses Mods\0"
+    L"JSON file\0" L"JSON-Datei\0"
     L"Just one little game?\0" L"Nur ein kleines Spiel?\0"
     L"Just watching…\0" L"Ich schau nur…\0"
     L"Keep as it is\0" L"Unverändert lassen\0"
@@ -18796,6 +19054,7 @@ constexpr WCHAR kGermanTexts[] =
     L"Plan: \0" L"Plan: \0"
     L"Play\0" L"Spielen\0"
     L"Plug me in?\0" L"Steckst du mich an?\0"
+    L"Point to a JSON file with \"name\" and \"windows\" (or a list of them) to show other services here\0" L"Wähle eine JSON-Datei mit \"name\" und \"windows\" (oder einer Liste davon), um hier weitere Dienste anzuzeigen\0"
     L"Pomodoro finished\0" L"Pomodoro beendet\0"
     L"Power\0" L"Energie\0"
     L"Power button\0" L"Ein/Aus-Schaltfläche\0"
@@ -18848,6 +19107,7 @@ constexpr WCHAR kGermanTexts[] =
     L"Rainbow\0" L"Regenbogen\0"
     L"Reacts to what the PC is doing\0" L"Reagiert auf das, was der PC tut\0"
     L"Reading…\0" L"Wird gelesen…\0"
+    L"Reads limits from a JSON file on this PC ({\"name\", \"windows\"})\0" L"Liest Limits aus einer JSON-Datei auf diesem PC ({\"name\", \"windows\"})\0"
     L"Record shortcut\0" L"Tastenkürzel aufzeichnen\0"
     L"Record: %s\0" L"Rekord: %s\0"
     L"Recycle Bin\0" L"Papierkorb\0"
@@ -18953,6 +19213,7 @@ constexpr WCHAR kGermanTexts[] =
     L"Shh, nobody wakes me up now.\0" L"Psst, jetzt weckt mich keiner.\0"
     L"Shh… focus mode.\0" L"Psst… Fokusmodus.\0"
     L"Short\0" L"Kurz\0"
+    L"Short name\0" L"Kurzname\0"
     L"Shortcut: let clicks through the pill\0" L"Tastenkürzel: Klicks durch die Kapsel lassen\0"
     L"Shortcuts\0" L"Tastenkombinationen\0"
     L"Shortcuts to programs and files (or command lines) you add, with their own icons, a click away in their panel; any of them can be a button on the pill or have a keyboard shortcut (set in its editor)\0" L"Verknüpfungen zu Programmen und Dateien (oder Befehlszeilen), die du hinzufügst, mit ihren eigenen Symbolen, mit einem Klick im Panel; jede kann ein Knopf in der Kapsel sein oder ein Tastenkürzel bekommen (im Editor des Befehls)\0"
@@ -19088,6 +19349,7 @@ constexpr WCHAR kGermanTexts[] =
     L"That sound off\0" L"Dieser Ton aus\0"
     L"The Bar also shrinks to a thin line on the screen's edge when the mouse is away, and comes back as the mouse reaches the line. Windows then use the strip it kept, and the Bar shows over them\0" L"Auch die Leiste schrumpft zu einer dünnen Linie am Bildschirmrand, wenn die Maus weg ist, und kommt zurück, sobald die Maus die Linie erreicht. Fenster nutzen dann den Streifen, den sie freihielt, und die Leiste erscheint darüber\0"
     L"The Bar style\0" L"Der Leisten-Stil\0"
+    L"The PC shuts down after it. Esc or a click stops it.\0" L"Danach fährt der PC herunter. Esc oder ein Klick bricht ab.\0"
     L"The app in focus on this monitor (its icon and name)\0" L"Die App im Fokus auf diesem Monitor (Symbol und Name)\0"
     L"The apps heard playing, also players without Windows' media controls; with some on, only they bring it. With none on, any sound does\0" L"Die Apps, die gerade zu hören waren, auch Player ohne Windows-Mediensteuerung; sind einige an, zeigen nur sie ihn. Ist keine an, zeigt ihn jeder Ton\0"
     L"The apps seen playing; a click turns one's lyrics off, and nothing of its songs is sent to lrclib.net\0" L"Die Apps, die schon etwas abgespielt haben; ein Klick schaltet die Songtexte einer App aus, und von ihren Songs wird nichts an lrclib.net gesendet\0"
@@ -19224,7 +19486,7 @@ constexpr WCHAR kGermanTexts[] =
     L"Try again, or share the file from Explorer\0" L"Versuche es noch einmal oder teile die Datei im Explorer\0"
     L"Turn it on once in Windows' settings: from then on the island switches it\0" L"Schalte ihn einmal in den Windows-Einstellungen ein, danach schaltet die Insel ihn\0"
     L"Turn it up, I know this one.\0" L"Dreh auf, den kenne ich!\0"
-    L"Turn on Claude Code or Codex in the settings\0" L"Schalte Claude Code oder Codex in den Einstellungen ein\0"
+    L"Turn on Claude Code, Codex or Custom in the settings\0" L"Schalte Claude Code, Codex oder Benutzerdefiniert in den Einstellungen ein\0"
     L"Turned off\0" L"Ausgeschaltet\0"
     L"Turned on\0" L"Eingeschaltet\0"
     L"Turns the island's animations on or off, on every monitor\0" L"Schaltet die Animationen der Insel ein oder aus, auf jedem Monitor\0"
@@ -19264,6 +19526,7 @@ constexpr WCHAR kGermanTexts[] =
     L"VLC 3 doesn't tell Windows' media controls what it plays, so the island can't see it. With this on, while VLC makes sound, the island reads the song's name from VLC's window title, shows it with VLC's icon, and its buttons press play/pause, previous and next in VLC. No cover or time, and VLC must show the name in its window title (its default)\0" L"VLC 3 meldet den Medien-Steuerelementen von Windows nicht, was es spielt, daher sieht die Insel es nicht. Ist das aktiviert, liest die Insel, solange VLC Ton ausgibt, den Titelnamen aus dem Fenstertitel von VLC, zeigt ihn mit dem VLC-Symbol an, und ihre Tasten lösen in VLC Wiedergabe/Pause, Zurück und Weiter aus. Kein Cover und keine Zeit; VLC muss den Namen im Fenstertitel anzeigen (Standard)\0"
     L"Vertical stack\0" L"Vertikal gestapelt\0"
     L"Vertical stack, main on the right\0" L"Vertikal gestapelt, Hauptfenster rechts\0"
+    L"Vice (neon sunset)\0" L"Vice (Neon-Sonnenuntergang)\0"
     L"Video memory in use (VRAM)\0" L"Belegter Grafikspeicher (VRAM)\0"
     L"Videos\0" L"Videos\0"
     L"Violet\0" L"Violett\0"
@@ -19276,10 +19539,13 @@ constexpr WCHAR kGermanTexts[] =
     L"Volume and mixer in the panel\0" L"Lautstärke und Mixer im Panel\0"
     L"Volume mixer\0" L"Lautstärkemixer\0"
     L"Volume percentage beside its icon\0" L"Lautstärkeprozent neben dem Symbol\0"
+    L"Waiting for valid data in the chosen file\0" L"Warte auf gültige Daten in der gewählten Datei\0"
     L"Wallpaper\0" L"Hintergrund\0"
     L"Wallpaper (the wheel: the next one)\0" L"Hintergrund (das Rad: der nächste)\0"
     L"Wallpaper transition\0" L"Hintergrundübergang\0"
     L"Wallpapers from a folder (with a transition)\0" L"Hintergründe aus einem Ordner (mit Übergang)\0"
+    L"Wasted\0" L"Wasted\0"
+    L"Wasted now?\0" L"Jetzt Wasted?\0"
     L"Water\0" L"Wasser\0"
     L"Weather\0" L"Wetter\0"
     L"Weather (goes online)\0" L"Wetter (online)\0"
@@ -19565,6 +19831,7 @@ constexpr WCHAR kSpanishTexts[] =
     L"Add clocks in Windows' date and time settings (Additional clocks)\0" L"Añade relojes en la configuración de fecha y hora de Windows (Relojes adicionales)\0"
     L"Add controls\0" L"Añadir controles\0"
     L"Add note  (Ctrl+Enter)\0" L"Añadir nota  (Ctrl+Intro)\0"
+    L"Add provider\0" L"Agregar proveedor\0"
     L"Add the shortcuts you want to remember\0" L"Añade los atajos que quieres recordar\0"
     L"Added to your commands\0" L"Añadido a tus comandos\0"
     L"Adds a button for sleep, restart and shut down\0" L"Añade un botón para suspender, reiniciar y apagar\0"
@@ -19727,6 +19994,7 @@ constexpr WCHAR kSpanishTexts[] =
     L"Charging battery color (own)\0" L"Color de la batería al cargar (propio)\0"
     L"Check every\0" L"Comprobar cada\0"
     L"Choose\0" L"Elegir\0"
+    L"Choose a JSON file\0" L"Elige un archivo JSON\0"
     L"Choose a power plan\0" L"Elige un plan de energía\0"
     L"Choose a program or a file\0" L"Elige un programa o un archivo\0"
     L"Choose it…\0" L"Elegir…\0"
@@ -19815,6 +20083,7 @@ constexpr WCHAR kSpanishTexts[] =
     L"Cuddle\0" L"Mimos\0"
     L"Current\0" L"Actual\0"
     L"Custom\0" L"Personalizado\0"
+    L"Custom (JSON file)\0" L"Personalizado (archivo JSON)\0"
     L"Customize…\0" L"Personalizar…\0"
     L"Cyan\0" L"Cian\0"
     L"Cycles through the pictures of a folder as your wallpaper\0" L"Rota las imágenes de una carpeta como fondo de pantalla\0"
@@ -19887,6 +20156,7 @@ constexpr WCHAR kSpanishTexts[] =
     L"Edge distance\0" L"Distancia al borde\0"
     L"Edit\0" L"Editar\0"
     L"Edit command\0" L"Editar comando\0"
+    L"Edit provider\0" L"Editar proveedor\0"
     L"Edit task\0" L"Editar tarea\0"
     L"Efficiency\0" L"Eficiencia\0"
     L"Eight colors, Windows' accent or your own\0" L"Ocho colores, el color de énfasis de Windows o el tuyo\0"
@@ -20087,6 +20357,7 @@ constexpr WCHAR kSpanishTexts[] =
     L"I'm all alone…\0" L"Me quedé solita…\0"
     L"I'm bored…\0" L"Qué aburrida estoy…\0"
     L"I'm drying up here.\0" L"Me estoy secando aquí.\0"
+    L"Icon\0" L"Ícono\0"
     L"Icon and color\0" L"Icono y color\0"
     L"Icon colors\0" L"Colores de los iconos\0"
     L"Icon pack\0" L"Paquete de iconos\0"
@@ -20129,6 +20400,7 @@ constexpr WCHAR kSpanishTexts[] =
     L"Its focus or break ending, while it runs\0" L"El final del enfoque o del descanso, mientras corre\0"
     L"Its look (profile):\0" L"Su aspecto (perfil):\0"
     L"Its style, size, hiding and animations are in Windhawk's settings for this mod\0" L"Su estilo, tamaño, ocultación y animaciones están en la configuración de Windhawk de este mod\0"
+    L"JSON file\0" L"Archivo JSON\0"
     L"Just one little game?\0" L"¿Solo una partidita?\0"
     L"Just watching…\0" L"Solo observando…\0"
     L"Keep as it is\0" L"Dejar como está\0"
@@ -20472,6 +20744,7 @@ constexpr WCHAR kSpanishTexts[] =
     L"Plan: \0" L"Plan: \0"
     L"Play\0" L"Jugar\0"
     L"Plug me in?\0" L"¿Me enchufas?\0"
+    L"Point to a JSON file with \"name\" and \"windows\" (or a list of them) to show other services here\0" L"Señala un archivo JSON con \"name\" y \"windows\" (o una lista de ellos) para mostrar otros servicios aquí\0"
     L"Pomodoro finished\0" L"Pomodoro terminado\0"
     L"Power\0" L"Energía\0"
     L"Power button\0" L"Botón de encendido\0"
@@ -20524,6 +20797,7 @@ constexpr WCHAR kSpanishTexts[] =
     L"Rainbow\0" L"Arcoíris\0"
     L"Reacts to what the PC is doing\0" L"Reacciona a lo que hace el PC\0"
     L"Reading…\0" L"Leyendo…\0"
+    L"Reads limits from a JSON file on this PC ({\"name\", \"windows\"})\0" L"Lee los límites desde un archivo JSON en este PC ({\"name\", \"windows\"})\0"
     L"Record shortcut\0" L"Grabar atajo\0"
     L"Record: %s\0" L"Récord: %s\0"
     L"Recycle Bin\0" L"Papelera de reciclaje\0"
@@ -20629,6 +20903,7 @@ constexpr WCHAR kSpanishTexts[] =
     L"Shh, nobody wakes me up now.\0" L"Shh, ahora nadie me despierta.\0"
     L"Shh… focus mode.\0" L"Shh… modo concentración.\0"
     L"Short\0" L"Corta\0"
+    L"Short name\0" L"Nombre corto\0"
     L"Shortcut: let clicks through the pill\0" L"Atajo: dejar pasar los clics a través de la píldora\0"
     L"Shortcuts\0" L"Atajos\0"
     L"Shortcuts to programs and files (or command lines) you add, with their own icons, a click away in their panel; any of them can be a button on the pill or have a keyboard shortcut (set in its editor)\0" L"Accesos directos a programas y archivos (o líneas de comando) que añades, con sus propios iconos, a un clic en su panel; cualquiera puede ser un botón en la píldora o tener un atajo de teclado (en su editor)\0"
@@ -20764,6 +21039,7 @@ constexpr WCHAR kSpanishTexts[] =
     L"That sound off\0" L"Ese sonido desactivado\0"
     L"The Bar also shrinks to a thin line on the screen's edge when the mouse is away, and comes back as the mouse reaches the line. Windows then use the strip it kept, and the Bar shows over them\0" L"La Barra también se reduce a una línea fina en el borde de la pantalla cuando el ratón se aleja, y vuelve cuando el ratón llega a la línea. Las ventanas pasan a usar la franja que reservaba, y la Barra aparece encima de ellas\0"
     L"The Bar style\0" L"El estilo Barra\0"
+    L"The PC shuts down after it. Esc or a click stops it.\0" L"Después el PC se apaga. Esc o un clic lo cancela.\0"
     L"The app in focus on this monitor (its icon and name)\0" L"La app en primer plano en este monitor (icono y nombre)\0"
     L"The apps heard playing, also players without Windows' media controls; with some on, only they bring it. With none on, any sound does\0" L"Las apps que se oyeron reproduciendo, también reproductores sin los controles multimedia de Windows; con algunas activadas, solo ellas lo muestran. Sin ninguna activada, cualquier sonido lo hace\0"
     L"The apps seen playing; a click turns one's lyrics off, and nothing of its songs is sent to lrclib.net\0" L"Las apps que se vieron reproduciendo; un clic desactiva las letras de una, y nada de sus canciones se envía a lrclib.net\0"
@@ -20900,7 +21176,7 @@ constexpr WCHAR kSpanishTexts[] =
     L"Try again, or share the file from Explorer\0" L"Inténtalo de nuevo o comparte el archivo desde el Explorador\0"
     L"Turn it on once in Windows' settings: from then on the island switches it\0" L"Actívala una vez en la configuración de Windows; después la isla la enciende y apaga\0"
     L"Turn it up, I know this one.\0" L"Sube el volumen, ¡esta me la sé!\0"
-    L"Turn on Claude Code or Codex in the settings\0" L"Activa Claude Code o Codex en la configuración\0"
+    L"Turn on Claude Code, Codex or Custom in the settings\0" L"Activa Claude Code, Codex o Personalizado en la configuración\0"
     L"Turned off\0" L"Desactivado\0"
     L"Turned on\0" L"Activado\0"
     L"Turns the island's animations on or off, on every monitor\0" L"Activa o desactiva las animaciones de la isla, en todos los monitores\0"
@@ -20940,6 +21216,7 @@ constexpr WCHAR kSpanishTexts[] =
     L"VLC 3 doesn't tell Windows' media controls what it plays, so the island can't see it. With this on, while VLC makes sound, the island reads the song's name from VLC's window title, shows it with VLC's icon, and its buttons press play/pause, previous and next in VLC. No cover or time, and VLC must show the name in its window title (its default)\0" L"VLC 3 no informa a los controles multimedia de Windows de lo que reproduce, así que la isla no lo ve. Con esto activado, mientras VLC emite sonido, la isla lee el nombre de la canción en el título de la ventana de VLC, lo muestra con el icono de VLC y sus botones pulsan reproducir/pausa, anterior y siguiente en VLC. Sin carátula ni tiempo, y VLC debe mostrar el nombre en el título de su ventana (es lo habitual)\0"
     L"Vertical stack\0" L"Pila vertical\0"
     L"Vertical stack, main on the right\0" L"Pila vertical, principal a la derecha\0"
+    L"Vice (neon sunset)\0" L"Vice (atardecer neón)\0"
     L"Video memory in use (VRAM)\0" L"Memoria de vídeo en uso (VRAM)\0"
     L"Videos\0" L"Vídeos\0"
     L"Violet\0" L"Violeta\0"
@@ -20952,10 +21229,13 @@ constexpr WCHAR kSpanishTexts[] =
     L"Volume and mixer in the panel\0" L"Volumen y mezclador en el panel\0"
     L"Volume mixer\0" L"Mezclador de volumen\0"
     L"Volume percentage beside its icon\0" L"Porcentaje de volumen junto al icono\0"
+    L"Waiting for valid data in the chosen file\0" L"Esperando datos válidos en el archivo elegido\0"
     L"Wallpaper\0" L"Fondo de pantalla\0"
     L"Wallpaper (the wheel: the next one)\0" L"Fondo de pantalla (la rueda: el siguiente)\0"
     L"Wallpaper transition\0" L"Transición del fondo\0"
     L"Wallpapers from a folder (with a transition)\0" L"Fondos de pantalla de una carpeta (con transición)\0"
+    L"Wasted\0" L"Wasted\0"
+    L"Wasted now?\0" L"¿Wasted ahora?\0"
     L"Water\0" L"Agua\0"
     L"Weather\0" L"Tiempo\0"
     L"Weather (goes online)\0" L"Tiempo (usa internet)\0"
@@ -21241,6 +21521,7 @@ constexpr WCHAR kRussianTexts[] =
     L"Add clocks in Windows' date and time settings (Additional clocks)\0" L"Добавьте часы в настройках даты и времени Windows (Дополнительные часы)\0"
     L"Add controls\0" L"Добавить элементы\0"
     L"Add note  (Ctrl+Enter)\0" L"Добавить заметку  (Ctrl+Enter)\0"
+    L"Add provider\0" L"Добавить сервис\0"
     L"Add the shortcuts you want to remember\0" L"Добавьте сочетания клавиш, которые хотите запомнить\0"
     L"Added to your commands\0" L"Добавлено в ваши команды\0"
     L"Adds a button for sleep, restart and shut down\0" L"Добавляет кнопку сна, перезагрузки и выключения\0"
@@ -21403,6 +21684,7 @@ constexpr WCHAR kRussianTexts[] =
     L"Charging battery color (own)\0" L"Цвет батареи при зарядке (свой)\0"
     L"Check every\0" L"Проверять каждые\0"
     L"Choose\0" L"Выбрать\0"
+    L"Choose a JSON file\0" L"Выберите файл JSON\0"
     L"Choose a power plan\0" L"Выберите схему питания\0"
     L"Choose a program or a file\0" L"Выберите программу или файл\0"
     L"Choose it…\0" L"Выбрать…\0"
@@ -21491,6 +21773,7 @@ constexpr WCHAR kRussianTexts[] =
     L"Cuddle\0" L"Погладить\0"
     L"Current\0" L"Текущий\0"
     L"Custom\0" L"Свой\0"
+    L"Custom (JSON file)\0" L"Пользовательский (файл JSON)\0"
     L"Customize…\0" L"Настроить…\0"
     L"Cyan\0" L"Бирюзовый\0"
     L"Cycles through the pictures of a folder as your wallpaper\0" L"Меняет обои, перебирая изображения из папки\0"
@@ -21563,6 +21846,7 @@ constexpr WCHAR kRussianTexts[] =
     L"Edge distance\0" L"Отступ от края\0"
     L"Edit\0" L"Изменить\0"
     L"Edit command\0" L"Изменить команду\0"
+    L"Edit provider\0" L"Изменить сервис\0"
     L"Edit task\0" L"Изменить задачу\0"
     L"Efficiency\0" L"Эффективность\0"
     L"Eight colors, Windows' accent or your own\0" L"Восемь цветов, цвет акцента Windows или свой\0"
@@ -21763,6 +22047,7 @@ constexpr WCHAR kRussianTexts[] =
     L"I'm all alone…\0" L"Я осталась совсем одна…\0"
     L"I'm bored…\0" L"Мне скучно…\0"
     L"I'm drying up here.\0" L"Я тут пересохла.\0"
+    L"Icon\0" L"Значок\0"
     L"Icon and color\0" L"Значок и цвет\0"
     L"Icon colors\0" L"Цвета значков\0"
     L"Icon pack\0" L"Набор значков\0"
@@ -21805,6 +22090,7 @@ constexpr WCHAR kRussianTexts[] =
     L"Its focus or break ending, while it runs\0" L"Конец фокуса или перерыва во время работы\0"
     L"Its look (profile):\0" L"Её вид (профиль):\0"
     L"Its style, size, hiding and animations are in Windhawk's settings for this mod\0" L"Стиль, размер, скрытие и анимации — в настройках этого мода в Windhawk\0"
+    L"JSON file\0" L"Файл JSON\0"
     L"Just one little game?\0" L"Ну хоть одну партию?\0"
     L"Just watching…\0" L"Просто смотрю…\0"
     L"Keep as it is\0" L"Оставить как есть\0"
@@ -22148,6 +22434,7 @@ constexpr WCHAR kRussianTexts[] =
     L"Plan: \0" L"Схема: \0"
     L"Play\0" L"Играть\0"
     L"Plug me in?\0" L"Подключишь меня к розетке?\0"
+    L"Point to a JSON file with \"name\" and \"windows\" (or a list of them) to show other services here\0" L"Укажите JSON-файл с полями \"name\" и \"windows\" (или их списком), чтобы показывать здесь другие сервисы\0"
     L"Pomodoro finished\0" L"Помидор завершён\0"
     L"Power\0" L"Питание\0"
     L"Power button\0" L"Кнопка питания\0"
@@ -22200,6 +22487,7 @@ constexpr WCHAR kRussianTexts[] =
     L"Rainbow\0" L"Радуга\0"
     L"Reacts to what the PC is doing\0" L"Реагирует на то, что делает ПК\0"
     L"Reading…\0" L"Чтение…\0"
+    L"Reads limits from a JSON file on this PC ({\"name\", \"windows\"})\0" L"Читает лимиты из JSON-файла на этом ПК ({\"name\", \"windows\"})\0"
     L"Record shortcut\0" L"Записать сочетание\0"
     L"Record: %s\0" L"Рекорд: %s\0"
     L"Recycle Bin\0" L"Корзина\0"
@@ -22305,6 +22593,7 @@ constexpr WCHAR kRussianTexts[] =
     L"Shh, nobody wakes me up now.\0" L"Тсс, теперь меня никто не разбудит.\0"
     L"Shh… focus mode.\0" L"Тсс… режим фокуса.\0"
     L"Short\0" L"Короткая\0"
+    L"Short name\0" L"Короткое имя\0"
     L"Shortcut: let clicks through the pill\0" L"Сочетание клавиш: пропускать щелчки сквозь капсулу\0"
     L"Shortcuts\0" L"Сочетания клавиш\0"
     L"Shortcuts to programs and files (or command lines) you add, with their own icons, a click away in their panel; any of them can be a button on the pill or have a keyboard shortcut (set in its editor)\0" L"Ярлыки программ и файлов (или командные строки), которые вы добавляете, со своими значками, в один клик в их панели; любой может стать кнопкой в капсуле или получить сочетание клавиш (в его редакторе)\0"
@@ -22440,6 +22729,7 @@ constexpr WCHAR kRussianTexts[] =
     L"That sound off\0" L"Этот звук выключен\0"
     L"The Bar also shrinks to a thin line on the screen's edge when the mouse is away, and comes back as the mouse reaches the line. Windows then use the strip it kept, and the Bar shows over them\0" L"Панель тоже сворачивается в тонкую линию у края экрана, когда мышь далеко, и возвращается, когда мышь доходит до линии. Окна занимают полосу, которую она резервировала, а панель появляется поверх них\0"
     L"The Bar style\0" L"Стиль «Панель»\0"
+    L"The PC shuts down after it. Esc or a click stops it.\0" L"После этого ПК выключится. Esc или щелчок — отмена.\0"
     L"The app in focus on this monitor (its icon and name)\0" L"Активное приложение на этом мониторе (значок и имя)\0"
     L"The apps heard playing, also players without Windows' media controls; with some on, only they bring it. With none on, any sound does\0" L"Приложения, которые были слышны, в том числе плееры без медиаэлементов Windows; если некоторые включены, визуализатор вызывают только они. Если ни одно не включено — любой звук\0"
     L"The apps seen playing; a click turns one's lyrics off, and nothing of its songs is sent to lrclib.net\0" L"Приложения, которые что-то воспроизводили; щелчок выключает тексты для приложения, и ничего о его песнях не отправляется на lrclib.net\0"
@@ -22576,7 +22866,7 @@ constexpr WCHAR kRussianTexts[] =
     L"Try again, or share the file from Explorer\0" L"Повторите попытку или поделитесь файлом из Проводника\0"
     L"Turn it on once in Windows' settings: from then on the island switches it\0" L"Включите его один раз в параметрах Windows, после этого остров сможет его переключать\0"
     L"Turn it up, I know this one.\0" L"Сделай громче, эту я знаю!\0"
-    L"Turn on Claude Code or Codex in the settings\0" L"Включите Claude Code или Codex в настройках\0"
+    L"Turn on Claude Code, Codex or Custom in the settings\0" L"Включите Claude Code, Codex или Пользовательский в настройках\0"
     L"Turned off\0" L"Выключено\0"
     L"Turned on\0" L"Включено\0"
     L"Turns the island's animations on or off, on every monitor\0" L"Включает или выключает анимации острова на всех мониторах\0"
@@ -22616,6 +22906,7 @@ constexpr WCHAR kRussianTexts[] =
     L"VLC 3 doesn't tell Windows' media controls what it plays, so the island can't see it. With this on, while VLC makes sound, the island reads the song's name from VLC's window title, shows it with VLC's icon, and its buttons press play/pause, previous and next in VLC. No cover or time, and VLC must show the name in its window title (its default)\0" L"VLC 3 не сообщает медиаэлементам управления Windows, что играет, поэтому остров его не видит. Если включить, пока VLC воспроизводит звук, остров читает название песни из заголовка окна VLC, показывает его со значком VLC, а его кнопки нажимают в VLC воспроизведение/паузу, предыдущий и следующий. Без обложки и времени; VLC должен показывать название в заголовке окна (так по умолчанию)\0"
     L"Vertical stack\0" L"Вертикальная стопка\0"
     L"Vertical stack, main on the right\0" L"Вертикальная стопка, главное справа\0"
+    L"Vice (neon sunset)\0" L"Vice (неоновый закат)\0"
     L"Video memory in use (VRAM)\0" L"Занято видеопамяти (VRAM)\0"
     L"Videos\0" L"Видео\0"
     L"Violet\0" L"Фиолетовый\0"
@@ -22628,10 +22919,13 @@ constexpr WCHAR kRussianTexts[] =
     L"Volume and mixer in the panel\0" L"Громкость и микшер в панели\0"
     L"Volume mixer\0" L"Микшер громкости\0"
     L"Volume percentage beside its icon\0" L"Процент громкости рядом со значком\0"
+    L"Waiting for valid data in the chosen file\0" L"Ожидание корректных данных в выбранном файле\0"
     L"Wallpaper\0" L"Обои\0"
     L"Wallpaper (the wheel: the next one)\0" L"Обои (колесо: следующие)\0"
     L"Wallpaper transition\0" L"Смена обоев\0"
     L"Wallpapers from a folder (with a transition)\0" L"Обои из папки (с переходом)\0"
+    L"Wasted\0" L"Wasted\0"
+    L"Wasted now?\0" L"Wasted прямо сейчас?\0"
     L"Water\0" L"Вода\0"
     L"Weather\0" L"Погода\0"
     L"Weather (goes online)\0" L"Погода (нужен интернет)\0"
@@ -22917,6 +23211,7 @@ constexpr WCHAR kJapaneseTexts[] =
     L"Add clocks in Windows' date and time settings (Additional clocks)\0" L"Windows の日付と時刻の設定で時計を追加します（追加の時計）\0"
     L"Add controls\0" L"コントロールを追加\0"
     L"Add note  (Ctrl+Enter)\0" L"メモを追加  (Ctrl+Enter)\0"
+    L"Add provider\0" L"プロバイダーを追加\0"
     L"Add the shortcuts you want to remember\0" L"覚えておきたいショートカットを追加\0"
     L"Added to your commands\0" L"自分のコマンドに追加しました\0"
     L"Adds a button for sleep, restart and shut down\0" L"スリープ、再起動、シャットダウンのボタンを追加します\0"
@@ -23079,6 +23374,7 @@ constexpr WCHAR kJapaneseTexts[] =
     L"Charging battery color (own)\0" L"充電中のバッテリーの色（専用）\0"
     L"Check every\0" L"確認間隔\0"
     L"Choose\0" L"選択\0"
+    L"Choose a JSON file\0" L"JSON ファイルを選択\0"
     L"Choose a power plan\0" L"電源プランを選択\0"
     L"Choose a program or a file\0" L"プログラムまたはファイルを選択\0"
     L"Choose it…\0" L"選択…\0"
@@ -23167,6 +23463,7 @@ constexpr WCHAR kJapaneseTexts[] =
     L"Cuddle\0" L"なでる\0"
     L"Current\0" L"現在\0"
     L"Custom\0" L"カスタム\0"
+    L"Custom (JSON file)\0" L"カスタム（JSON ファイル）\0"
     L"Customize…\0" L"カスタマイズ…\0"
     L"Cyan\0" L"シアン\0"
     L"Cycles through the pictures of a folder as your wallpaper\0" L"フォルダー内の画像を壁紙として順番に切り替えます\0"
@@ -23239,6 +23536,7 @@ constexpr WCHAR kJapaneseTexts[] =
     L"Edge distance\0" L"端からの距離\0"
     L"Edit\0" L"編集\0"
     L"Edit command\0" L"コマンドを編集\0"
+    L"Edit provider\0" L"プロバイダーを編集\0"
     L"Edit task\0" L"タスクを編集\0"
     L"Efficiency\0" L"効率\0"
     L"Eight colors, Windows' accent or your own\0" L"8 色、Windows のアクセントカラー、または自分の色\0"
@@ -23439,6 +23737,7 @@ constexpr WCHAR kJapaneseTexts[] =
     L"I'm all alone…\0" L"ひとりぼっちになっちゃった…\0"
     L"I'm bored…\0" L"退屈だなあ…\0"
     L"I'm drying up here.\0" L"からからに乾いちゃう。\0"
+    L"Icon\0" L"アイコン\0"
     L"Icon and color\0" L"アイコンと色\0"
     L"Icon colors\0" L"アイコンの色\0"
     L"Icon pack\0" L"アイコンパック\0"
@@ -23481,6 +23780,7 @@ constexpr WCHAR kJapaneseTexts[] =
     L"Its focus or break ending, while it runs\0" L"実行中の集中または休憩の終了\0"
     L"Its look (profile):\0" L"外観（プロファイル）:\0"
     L"Its style, size, hiding and animations are in Windhawk's settings for this mod\0" L"スタイル、サイズ、非表示、アニメーションは、Windhawk のこの Mod の設定にあります\0"
+    L"JSON file\0" L"JSON ファイル\0"
     L"Just one little game?\0" L"ちょっとだけ遊ばない？\0"
     L"Just watching…\0" L"ただ眺めてるだけ…\0"
     L"Keep as it is\0" L"そのままにする\0"
@@ -23824,6 +24124,7 @@ constexpr WCHAR kJapaneseTexts[] =
     L"Plan: \0" L"プラン: \0"
     L"Play\0" L"遊ぶ\0"
     L"Plug me in?\0" L"充電してくれる？\0"
+    L"Point to a JSON file with \"name\" and \"windows\" (or a list of them) to show other services here\0" L"他のサービスをここに表示するには、\"name\" と \"windows\"（またはその一覧）を含む JSON ファイルを指定してください\0"
     L"Pomodoro finished\0" L"ポモドーロ終了\0"
     L"Power\0" L"電源\0"
     L"Power button\0" L"電源ボタン\0"
@@ -23876,6 +24177,7 @@ constexpr WCHAR kJapaneseTexts[] =
     L"Rainbow\0" L"レインボー\0"
     L"Reacts to what the PC is doing\0" L"PC の状態に反応する\0"
     L"Reading…\0" L"読み取り中…\0"
+    L"Reads limits from a JSON file on this PC ({\"name\", \"windows\"})\0" L"この PC 上の JSON ファイルから上限を読み取ります（{\"name\", \"windows\"}）\0"
     L"Record shortcut\0" L"ショートカットを記録\0"
     L"Record: %s\0" L"記録：%s\0"
     L"Recycle Bin\0" L"ごみ箱\0"
@@ -23981,6 +24283,7 @@ constexpr WCHAR kJapaneseTexts[] =
     L"Shh, nobody wakes me up now.\0" L"しーっ、今は誰にも起こされないよ。\0"
     L"Shh… focus mode.\0" L"しーっ…集中モードだよ。\0"
     L"Short\0" L"短い\0"
+    L"Short name\0" L"短縮名\0"
     L"Shortcut: let clicks through the pill\0" L"ショートカット：クリックをカプセルの下へ通す\0"
     L"Shortcuts\0" L"ショートカット\0"
     L"Shortcuts to programs and files (or command lines) you add, with their own icons, a click away in their panel; any of them can be a button on the pill or have a keyboard shortcut (set in its editor)\0" L"追加したプログラムやファイル（またはコマンドライン）へのショートカットを、それぞれのアイコン付きでパネルからワンクリックで。どれでもカプセルのボタンにでき、キーボードショートカットも設定できます（編集画面で）\0"
@@ -24116,6 +24419,7 @@ constexpr WCHAR kJapaneseTexts[] =
     L"That sound off\0" L"この音はオフ\0"
     L"The Bar also shrinks to a thin line on the screen's edge when the mouse is away, and comes back as the mouse reaches the line. Windows then use the strip it kept, and the Bar shows over them\0" L"バーも、マウスが離れると画面の端の細い線に縮み、マウスが線に届くと戻ります。バーが確保していた領域はウィンドウが使えるようになり、バーはその上に表示されます\0"
     L"The Bar style\0" L"バー スタイル\0"
+    L"The PC shuts down after it. Esc or a click stops it.\0" L"そのあと PC がシャットダウンします。Esc かクリックで取り消せます。\0"
     L"The app in focus on this monitor (its icon and name)\0" L"このモニターでフォーカス中のアプリ（アイコンと名前）\0"
     L"The apps heard playing, also players without Windows' media controls; with some on, only they bring it. With none on, any sound does\0" L"再生が聞こえたアプリ（Windows のメディア コントロールがないプレーヤーも含む）。いくつかをオンにすると、それらだけが表示します。どれもオンでなければ、どんな音でも表示します\0"
     L"The apps seen playing; a click turns one's lyrics off, and nothing of its songs is sent to lrclib.net\0" L"再生していたアプリ。クリックするとそのアプリの歌詞がオフになり、その曲の情報は lrclib.net に送信されません\0"
@@ -24252,7 +24556,7 @@ constexpr WCHAR kJapaneseTexts[] =
     L"Try again, or share the file from Explorer\0" L"もう一度試すか、エクスプローラーからファイルを共有してください\0"
     L"Turn it on once in Windows' settings: from then on the island switches it\0" L"Windows の設定で一度オンにしてください。その後はアイランドで切り替えられます\0"
     L"Turn it up, I know this one.\0" L"音量上げて、この曲知ってる！\0"
-    L"Turn on Claude Code or Codex in the settings\0" L"設定で Claude Code または Codex をオンにしてください\0"
+    L"Turn on Claude Code, Codex or Custom in the settings\0" L"設定で Claude Code、Codex、またはカスタムをオンにしてください\0"
     L"Turned off\0" L"オフにしました\0"
     L"Turned on\0" L"オンにしました\0"
     L"Turns the island's animations on or off, on every monitor\0" L"すべてのモニターでアイランドのアニメーションをオンまたはオフにします\0"
@@ -24292,6 +24596,7 @@ constexpr WCHAR kJapaneseTexts[] =
     L"VLC 3 doesn't tell Windows' media controls what it plays, so the island can't see it. With this on, while VLC makes sound, the island reads the song's name from VLC's window title, shows it with VLC's icon, and its buttons press play/pause, previous and next in VLC. No cover or time, and VLC must show the name in its window title (its default)\0" L"VLC 3 は再生中の内容を Windows のメディアコントロールに伝えないため、アイランドからは見えません。オンにすると、VLC が音を出している間、アイランドは VLC のウィンドウタイトルから曲名を読み取り、VLC のアイコンとともに表示し、ボタンで VLC の再生/一時停止・前へ・次へを操作できます。カバーや時間は表示されず、VLC がウィンドウタイトルに名前を表示している必要があります（既定）\0"
     L"Vertical stack\0" L"縦積み\0"
     L"Vertical stack, main on the right\0" L"縦積み（メインは右）\0"
+    L"Vice (neon sunset)\0" L"Vice（ネオンの夕焼け）\0"
     L"Video memory in use (VRAM)\0" L"ビデオ メモリ使用量 (VRAM)\0"
     L"Videos\0" L"ビデオ\0"
     L"Violet\0" L"バイオレット\0"
@@ -24304,10 +24609,13 @@ constexpr WCHAR kJapaneseTexts[] =
     L"Volume and mixer in the panel\0" L"パネルに音量とミキサーを表示\0"
     L"Volume mixer\0" L"音量ミキサー\0"
     L"Volume percentage beside its icon\0" L"アイコンの横に音量(%)を表示\0"
+    L"Waiting for valid data in the chosen file\0" L"選択したファイル内の有効なデータを待っています\0"
     L"Wallpaper\0" L"壁紙\0"
     L"Wallpaper (the wheel: the next one)\0" L"壁紙（ホイール: 次へ）\0"
     L"Wallpaper transition\0" L"壁紙のトランジション\0"
     L"Wallpapers from a folder (with a transition)\0" L"フォルダーの壁紙（トランジション付き）\0"
+    L"Wasted\0" L"Wasted\0"
+    L"Wasted now?\0" L"今すぐ Wasted？\0"
     L"Water\0" L"お水\0"
     L"Weather\0" L"天気\0"
     L"Weather (goes online)\0" L"天気（オンライン）\0"
@@ -24593,6 +24901,7 @@ constexpr WCHAR kVietnameseTexts[] =
     L"Add clocks in Windows' date and time settings (Additional clocks)\0" L"Thêm đồng hồ trong cài đặt Ngày & giờ của Windows, mục Additional clocks\0"
     L"Add controls\0" L"Thêm nút điều khiển\0"
     L"Add note  (Ctrl+Enter)\0" L"Thêm ghi chú  (Ctrl+Enter)\0"
+    L"Add provider\0" L"Thêm dịch vụ\0"
     L"Add the shortcuts you want to remember\0" L"Lưu các phím tắt cần nhớ để tra cứu nhanh\0"
     L"Added to your commands\0" L"Đã thêm vào lệnh của bạn\0"
     L"Adds a button for sleep, restart and shut down\0" L"Thêm nút với các tùy chọn Ngủ, Khởi động lại và Tắt máy\0"
@@ -24755,6 +25064,7 @@ constexpr WCHAR kVietnameseTexts[] =
     L"Charging battery color (own)\0" L"Màu pin khi đang sạc (riêng)\0"
     L"Check every\0" L"Kiểm tra mỗi\0"
     L"Choose\0" L"Chọn\0"
+    L"Choose a JSON file\0" L"Chọn tệp JSON\0"
     L"Choose a power plan\0" L"Chọn chế độ nguồn (Power plan)\0"
     L"Choose a program or a file\0" L"Chọn chương trình hoặc tệp\0"
     L"Choose it…\0" L"Chọn…\0"
@@ -24843,6 +25153,7 @@ constexpr WCHAR kVietnameseTexts[] =
     L"Cuddle\0" L"Vuốt ve\0"
     L"Current\0" L"Hiện tại\0"
     L"Custom\0" L"Tùy chỉnh\0"
+    L"Custom (JSON file)\0" L"Tùy chỉnh (tệp JSON)\0"
     L"Customize…\0" L"Tùy chỉnh…\0"
     L"Cyan\0" L"Lục lam\0"
     L"Cycles through the pictures of a folder as your wallpaper\0" L"Luân phiên dùng các ảnh trong thư mục làm hình nền\0"
@@ -24915,6 +25226,7 @@ constexpr WCHAR kVietnameseTexts[] =
     L"Edge distance\0" L"Khoảng cách tới mép màn hình\0"
     L"Edit\0" L"Sửa\0"
     L"Edit command\0" L"Sửa lệnh\0"
+    L"Edit provider\0" L"Sửa dịch vụ\0"
     L"Edit task\0" L"Sửa việc cần làm\0"
     L"Efficiency\0" L"Tiết kiệm điện\0"
     L"Eight colors, Windows' accent or your own\0" L"Tám màu, màu nhấn của Windows hoặc màu riêng của bạn\0"
@@ -25115,6 +25427,7 @@ constexpr WCHAR kVietnameseTexts[] =
     L"I'm all alone…\0" L"Mình lại một mình rồi…\0"
     L"I'm bored…\0" L"Chán quá…\0"
     L"I'm drying up here.\0" L"Mình khô cả người rồi.\0"
+    L"Icon\0" L"Biểu tượng\0"
     L"Icon and color\0" L"Biểu tượng & màu sắc\0"
     L"Icon colors\0" L"Màu biểu tượng\0"
     L"Icon pack\0" L"Bộ biểu tượng\0"
@@ -25157,6 +25470,7 @@ constexpr WCHAR kVietnameseTexts[] =
     L"Its focus or break ending, while it runs\0" L"Đếm ngược đến khi kết thúc giai đoạn tập trung hoặc nghỉ hiện tại\0"
     L"Its look (profile):\0" L"Cấu hình giao diện:\0"
     L"Its style, size, hiding and animations are in Windhawk's settings for this mod\0" L"Chỉnh kiểu dáng, kích thước, chế độ tự động ẩn và hiệu ứng của Dock trong phần cài đặt mod trên Windhawk\0"
+    L"JSON file\0" L"Tệp JSON\0"
     L"Just one little game?\0" L"Chỉ một ván thôi nhé?\0"
     L"Just watching…\0" L"Mình chỉ đang ngắm thôi…\0"
     L"Keep as it is\0" L"Giữ nguyên\0"
@@ -25500,6 +25814,7 @@ constexpr WCHAR kVietnameseTexts[] =
     L"Plan: \0" L"Chế độ: \0"
     L"Play\0" L"Chơi\0"
     L"Plug me in?\0" L"Cắm sạc cho mình nhé?\0"
+    L"Point to a JSON file with \"name\" and \"windows\" (or a list of them) to show other services here\0" L"Trỏ tới tệp JSON có \"name\" và \"windows\" (hoặc danh sách các mục đó) để hiển thị dịch vụ khác tại đây\0"
     L"Pomodoro finished\0" L"Pomodoro xong\0"
     L"Power\0" L"Nguồn\0"
     L"Power button\0" L"Nút nguồn\0"
@@ -25552,6 +25867,7 @@ constexpr WCHAR kVietnameseTexts[] =
     L"Rainbow\0" L"Cầu vồng\0"
     L"Reacts to what the PC is doing\0" L"Phản ứng theo những gì máy tính đang làm\0"
     L"Reading…\0" L"Đang đọc…\0"
+    L"Reads limits from a JSON file on this PC ({\"name\", \"windows\"})\0" L"Đọc hạn mức từ tệp JSON trên máy này ({\"name\", \"windows\"})\0"
     L"Record shortcut\0" L"Ghi phím tắt\0"
     L"Record: %s\0" L"Kỷ lục: %s\0"
     L"Recycle Bin\0" L"Thùng rác\0"
@@ -25657,6 +25973,7 @@ constexpr WCHAR kVietnameseTexts[] =
     L"Shh, nobody wakes me up now.\0" L"Suỵt, giờ không ai đánh thức mình được.\0"
     L"Shh… focus mode.\0" L"Suỵt… chế độ tập trung.\0"
     L"Short\0" L"Ngắn\0"
+    L"Short name\0" L"Tên ngắn\0"
     L"Shortcut: let clicks through the pill\0" L"Phím tắt: cho phép bấm xuyên qua Island\0"
     L"Shortcuts\0" L"Phím tắt\0"
     L"Shortcuts to programs and files (or command lines) you add, with their own icons, a click away in their panel; any of them can be a button on the pill or have a keyboard shortcut (set in its editor)\0" L"Thêm lối tắt đến chương trình, tệp hoặc dòng lệnh, mỗi mục có biểu tượng riêng và mở được từ bảng lệnh. Bạn có thể đưa bất kỳ mục nào lên Island làm nút truy cập nhanh hoặc gán phím tắt cho nó (trong trình sửa lệnh)\0"
@@ -25792,6 +26109,7 @@ constexpr WCHAR kVietnameseTexts[] =
     L"That sound off\0" L"Âm thanh này đang tắt\0"
     L"The Bar also shrinks to a thin line on the screen's edge when the mouse is away, and comes back as the mouse reaches the line. Windows then use the strip it kept, and the Bar shows over them\0" L"Thanh cũng thu thành một vạch mỏng ở cạnh màn hình khi chuột rời đi, và hiện lại khi chuột chạm vào vạch. Cửa sổ sẽ dùng vùng mà Thanh từng dành riêng, còn Thanh hiển thị phía trên chúng\0"
     L"The Bar style\0" L"Kiểu Thanh\0"
+    L"The PC shuts down after it. Esc or a click stops it.\0" L"Sau đó máy tính sẽ tắt. Nhấn Esc hoặc bấm chuột để hủy.\0"
     L"The app in focus on this monitor (its icon and name)\0" L"Ứng dụng đang hoạt động trên màn hình này (biểu tượng và tên)\0"
     L"The apps heard playing, also players without Windows' media controls; with some on, only they bring it. With none on, any sound does\0" L"Các ứng dụng đã phát âm thanh, kể cả trình phát không có điều khiển phương tiện của Windows; khi bật một số ứng dụng, chỉ chúng mới hiện sóng nhạc. Khi không bật ứng dụng nào, mọi âm thanh đều hiện\0"
     L"The apps seen playing; a click turns one's lyrics off, and nothing of its songs is sent to lrclib.net\0" L"Các ứng dụng đã từng phát nội dung. Bấm vào ứng dụng để tắt tìm lời bài hát; thông tin bài hát từ ứng dụng đó sẽ không được gửi đến lrclib.net\0"
@@ -25928,7 +26246,7 @@ constexpr WCHAR kVietnameseTexts[] =
     L"Try again, or share the file from Explorer\0" L"Hãy thử lại, hoặc chia sẻ tệp từ File Explorer\0"
     L"Turn it on once in Windows' settings: from then on the island switches it\0" L"Hãy bật một lần trong cài đặt Windows, sau đó đảo sẽ tự bật tắt được\0"
     L"Turn it up, I know this one.\0" L"Mở to lên đi, bài này mình biết!\0"
-    L"Turn on Claude Code or Codex in the settings\0" L"Hãy bật Claude Code hoặc Codex trong cài đặt\0"
+    L"Turn on Claude Code, Codex or Custom in the settings\0" L"Hãy bật Claude Code, Codex hoặc Tùy chỉnh trong cài đặt\0"
     L"Turned off\0" L"Đã tắt\0"
     L"Turned on\0" L"Đã bật\0"
     L"Turns the island's animations on or off, on every monitor\0" L"Bật hoặc tắt hiệu ứng chuyển động của Island trên mọi màn hình\0"
@@ -25968,6 +26286,7 @@ constexpr WCHAR kVietnameseTexts[] =
     L"VLC 3 doesn't tell Windows' media controls what it plays, so the island can't see it. With this on, while VLC makes sound, the island reads the song's name from VLC's window title, shows it with VLC's icon, and its buttons press play/pause, previous and next in VLC. No cover or time, and VLC must show the name in its window title (its default)\0" L"VLC 3 không báo cho các điều khiển phương tiện của Windows biết nó đang phát gì nên Island không thấy được. Khi bật, lúc VLC phát ra âm thanh, Island đọc tên bài từ tiêu đề cửa sổ VLC, hiện cùng biểu tượng VLC, và các nút của nó bấm phát/tạm dừng, trước và sau trong VLC. Không có ảnh bìa hay thời gian, và VLC phải hiện tên trong tiêu đề cửa sổ (mặc định)\0"
     L"Vertical stack\0" L"Xếp chồng dọc\0"
     L"Vertical stack, main on the right\0" L"Xếp chồng dọc (cửa sổ chính bên phải)\0"
+    L"Vice (neon sunset)\0" L"Vice (hoàng hôn neon)\0"
     L"Video memory in use (VRAM)\0" L"Bộ nhớ đồ họa đang dùng (VRAM)\0"
     L"Videos\0" L"Video\0"
     L"Violet\0" L"Tím\0"
@@ -25980,10 +26299,13 @@ constexpr WCHAR kVietnameseTexts[] =
     L"Volume and mixer in the panel\0" L"Âm lượng và bộ trộn trong bảng\0"
     L"Volume mixer\0" L"Bộ trộn âm lượng\0"
     L"Volume percentage beside its icon\0" L"Phần trăm âm lượng cạnh biểu tượng\0"
+    L"Waiting for valid data in the chosen file\0" L"Đang chờ dữ liệu hợp lệ trong tệp đã chọn\0"
     L"Wallpaper\0" L"Hình nền\0"
     L"Wallpaper (the wheel: the next one)\0" L"Đổi hình nền (lăn chuột để qua ảnh tiếp)\0"
     L"Wallpaper transition\0" L"Hiệu ứng chuyển hình nền\0"
     L"Wallpapers from a folder (with a transition)\0" L"Đổi hình nền từ thư mục (kèm hiệu ứng chuyển cảnh)\0"
+    L"Wasted\0" L"Wasted\0"
+    L"Wasted now?\0" L"Wasted ngay bây giờ?\0"
     L"Water\0" L"Nước\0"
     L"Weather\0" L"Thời tiết\0"
     L"Weather (goes online)\0" L"Thời tiết (cần internet)\0"
@@ -26269,6 +26591,7 @@ constexpr WCHAR kFrenchTexts[] =
     L"Add clocks in Windows' date and time settings (Additional clocks)\0" L"Ajoutez des horloges dans les paramètres de date et d'heure de Windows (Horloges supplémentaires)\0"
     L"Add controls\0" L"Ajouter des contrôles\0"
     L"Add note  (Ctrl+Enter)\0" L"Ajouter une note  (Ctrl+Entrée)\0"
+    L"Add provider\0" L"Ajouter un service\0"
     L"Add the shortcuts you want to remember\0" L"Ajoutez les raccourcis dont vous voulez vous souvenir\0"
     L"Added to your commands\0" L"Ajouté à vos commandes\0"
     L"Adds a button for sleep, restart and shut down\0" L"Ajoute un bouton pour la mise en veille, le redémarrage et l'arrêt\0"
@@ -26431,6 +26754,7 @@ constexpr WCHAR kFrenchTexts[] =
     L"Charging battery color (own)\0" L"Couleur de la batterie en charge (propre)\0"
     L"Check every\0" L"Vérifier chaque\0"
     L"Choose\0" L"Choisir\0"
+    L"Choose a JSON file\0" L"Choisir un fichier JSON\0"
     L"Choose a power plan\0" L"Choisir un plan d'alimentation\0"
     L"Choose a program or a file\0" L"Choisir un programme ou un fichier\0"
     L"Choose it…\0" L"Choisir…\0"
@@ -26519,6 +26843,7 @@ constexpr WCHAR kFrenchTexts[] =
     L"Cuddle\0" L"Câlin\0"
     L"Current\0" L"Actuel\0"
     L"Custom\0" L"Personnalisé\0"
+    L"Custom (JSON file)\0" L"Personnalisé (fichier JSON)\0"
     L"Customize…\0" L"Personnaliser…\0"
     L"Cyan\0" L"Cyan\0"
     L"Cycles through the pictures of a folder as your wallpaper\0" L"Parcourt les images d'un dossier comme fond d'écran\0"
@@ -26591,6 +26916,7 @@ constexpr WCHAR kFrenchTexts[] =
     L"Edge distance\0" L"Distance au bord\0"
     L"Edit\0" L"Modifier\0"
     L"Edit command\0" L"Modifier la commande\0"
+    L"Edit provider\0" L"Modifier le service\0"
     L"Edit task\0" L"Modifier la tâche\0"
     L"Efficiency\0" L"Efficacité\0"
     L"Eight colors, Windows' accent or your own\0" L"Huit couleurs, la couleur d'accentuation de Windows ou la vôtre\0"
@@ -26791,6 +27117,7 @@ constexpr WCHAR kFrenchTexts[] =
     L"I'm all alone…\0" L"Je suis toute seule…\0"
     L"I'm bored…\0" L"Je m'ennuie…\0"
     L"I'm drying up here.\0" L"Je me dessèche ici.\0"
+    L"Icon\0" L"Icône\0"
     L"Icon and color\0" L"Icône et couleur\0"
     L"Icon colors\0" L"Couleurs des icônes\0"
     L"Icon pack\0" L"Pack d'icônes\0"
@@ -26833,6 +27160,7 @@ constexpr WCHAR kFrenchTexts[] =
     L"Its focus or break ending, while it runs\0" L"La fin de sa concentration ou de sa pause, pendant qu'il tourne\0"
     L"Its look (profile):\0" L"Son apparence (profil)\u00A0:\0"
     L"Its style, size, hiding and animations are in Windhawk's settings for this mod\0" L"Son style, sa taille, son masquage et ses animations se règlent dans les paramètres Windhawk de ce mod\0"
+    L"JSON file\0" L"Fichier JSON\0"
     L"Just one little game?\0" L"Juste un petit jeu\u00A0?\0"
     L"Just watching…\0" L"Je regarde juste…\0"
     L"Keep as it is\0" L"Laisser tel quel\0"
@@ -27176,6 +27504,7 @@ constexpr WCHAR kFrenchTexts[] =
     L"Plan: \0" L"Plan\u00A0: \0"
     L"Play\0" L"Jouer\0"
     L"Plug me in?\0" L"Vous me branchez\u00A0?\0"
+    L"Point to a JSON file with \"name\" and \"windows\" (or a list of them) to show other services here\0" L"Indiquez un fichier JSON avec \"name\" et \"windows\" (ou une liste) pour afficher d'autres services ici\0"
     L"Pomodoro finished\0" L"Pomodoro terminé\0"
     L"Power\0" L"Alimentation\0"
     L"Power button\0" L"Bouton d'alimentation\0"
@@ -27228,6 +27557,7 @@ constexpr WCHAR kFrenchTexts[] =
     L"Rainbow\0" L"Arc-en-ciel\0"
     L"Reacts to what the PC is doing\0" L"Réagit à ce que fait le PC\0"
     L"Reading…\0" L"Lecture…\0"
+    L"Reads limits from a JSON file on this PC ({\"name\", \"windows\"})\0" L"Lit les limites depuis un fichier JSON sur ce PC ({\"name\", \"windows\"})\0"
     L"Record shortcut\0" L"Enregistrer un raccourci\0"
     L"Record: %s\0" L"Record\u00A0: %s\0"
     L"Recycle Bin\0" L"Corbeille\0"
@@ -27333,6 +27663,7 @@ constexpr WCHAR kFrenchTexts[] =
     L"Shh, nobody wakes me up now.\0" L"Chut, personne ne me réveille maintenant.\0"
     L"Shh… focus mode.\0" L"Chut… mode concentration.\0"
     L"Short\0" L"Court\0"
+    L"Short name\0" L"Nom court\0"
     L"Shortcut: let clicks through the pill\0" L"Raccourci\u00A0: laisser passer les clics à travers la pilule\0"
     L"Shortcuts\0" L"Raccourcis\0"
     L"Shortcuts to programs and files (or command lines) you add, with their own icons, a click away in their panel; any of them can be a button on the pill or have a keyboard shortcut (set in its editor)\0" L"Raccourcis vers des programmes et des fichiers (ou des lignes de commande) que vous ajoutez, avec leurs propres icônes, à un clic dans leur panneau\u00A0; chacun peut devenir un bouton de la pilule ou avoir un raccourci clavier (défini dans son éditeur)\0"
@@ -27468,6 +27799,7 @@ constexpr WCHAR kFrenchTexts[] =
     L"That sound off\0" L"Désactiver ce son\0"
     L"The Bar also shrinks to a thin line on the screen's edge when the mouse is away, and comes back as the mouse reaches the line. Windows then use the strip it kept, and the Bar shows over them\0" L"La barre se réduit aussi à une fine ligne au bord de l'écran quand la souris est loin, et revient quand la souris atteint la ligne. Les fenêtres utilisent alors la bande qu'elle libérait, et la barre s'affiche par-dessus\0"
     L"The Bar style\0" L"Le style Barre\0"
+    L"The PC shuts down after it. Esc or a click stops it.\0" L"Le PC s'éteint ensuite. Échap ou un clic l'annule.\0"
     L"The app in focus on this monitor (its icon and name)\0" L"L'app au premier plan sur cet écran (son icône et son nom)\0"
     L"The apps heard playing, also players without Windows' media controls; with some on, only they bring it. With none on, any sound does\0" L"Les apps entendues en lecture, y compris les lecteurs sans commandes multimédias de Windows\u00A0; si certaines sont activées, seules elles le déclenchent. Si aucune ne l'est, n'importe quel son le fait\0"
     L"The apps seen playing; a click turns one's lyrics off, and nothing of its songs is sent to lrclib.net\0" L"Les apps vues en lecture\u00A0; un clic désactive les paroles de l'une, et rien de ses morceaux n'est envoyé à lrclib.net\0"
@@ -27604,7 +27936,7 @@ constexpr WCHAR kFrenchTexts[] =
     L"Try again, or share the file from Explorer\0" L"Réessayez, ou partagez le fichier depuis l'Explorateur\0"
     L"Turn it on once in Windows' settings: from then on the island switches it\0" L"Activez-le une fois dans les paramètres de Windows, ensuite l'île pourra le basculer\0"
     L"Turn it up, I know this one.\0" L"Montez le son, celui-là, je le connais\u00A0!\0"
-    L"Turn on Claude Code or Codex in the settings\0" L"Activez Claude Code ou Codex dans les paramètres\0"
+    L"Turn on Claude Code, Codex or Custom in the settings\0" L"Activez Claude Code, Codex ou Personnalisé dans les paramètres\0"
     L"Turned off\0" L"Désactivé\0"
     L"Turned on\0" L"Activé\0"
     L"Turns the island's animations on or off, on every monitor\0" L"Active ou désactive les animations de l'île, sur chaque écran\0"
@@ -27644,6 +27976,7 @@ constexpr WCHAR kFrenchTexts[] =
     L"VLC 3 doesn't tell Windows' media controls what it plays, so the island can't see it. With this on, while VLC makes sound, the island reads the song's name from VLC's window title, shows it with VLC's icon, and its buttons press play/pause, previous and next in VLC. No cover or time, and VLC must show the name in its window title (its default)\0" L"VLC 3 n'indique pas aux commandes multimédias de Windows ce qu'il joue, donc l'île ne peut pas le voir. Une fois activé, tant que VLC émet du son, l'île lit le nom du morceau dans le titre de la fenêtre de VLC, l'affiche avec l'icône de VLC, et ses boutons appuient sur lecture/pause, précédent et suivant dans VLC. Pas de pochette ni de durée, et VLC doit afficher le nom dans le titre de sa fenêtre (par défaut)\0"
     L"Vertical stack\0" L"Empilement vertical\0"
     L"Vertical stack, main on the right\0" L"Empilement vertical, fenêtre principale à droite\0"
+    L"Vice (neon sunset)\0" L"Vice (coucher de soleil néon)\0"
     L"Video memory in use (VRAM)\0" L"Mémoire vidéo utilisée (VRAM)\0"
     L"Videos\0" L"Vidéos\0"
     L"Violet\0" L"Violet\0"
@@ -27656,10 +27989,13 @@ constexpr WCHAR kFrenchTexts[] =
     L"Volume and mixer in the panel\0" L"Volume et mélangeur dans le panneau\0"
     L"Volume mixer\0" L"Mélangeur de volume\0"
     L"Volume percentage beside its icon\0" L"Pourcentage du volume à côté de son icône\0"
+    L"Waiting for valid data in the chosen file\0" L"En attente de données valides dans le fichier choisi\0"
     L"Wallpaper\0" L"Fond d'écran\0"
     L"Wallpaper (the wheel: the next one)\0" L"Fond d'écran (la molette\u00A0: le suivant)\0"
     L"Wallpaper transition\0" L"Transition du fond d'écran\0"
     L"Wallpapers from a folder (with a transition)\0" L"Fonds d'écran d'un dossier (avec une transition)\0"
+    L"Wasted\0" L"Wasted\0"
+    L"Wasted now?\0" L"Wasted maintenant ?\0"
     L"Water\0" L"Eau\0"
     L"Weather\0" L"Météo\0"
     L"Weather (goes online)\0" L"Météo (en ligne)\0"
@@ -27945,6 +28281,7 @@ constexpr WCHAR kTurkishTexts[] =
     L"Add clocks in Windows' date and time settings (Additional clocks)\0" L"Saatleri Windows'un tarih ve saat ayarlarından ekleyin (Ek saatler)\0"
     L"Add controls\0" L"Denetim ekle\0"
     L"Add note  (Ctrl+Enter)\0" L"Not ekle  (Ctrl+Enter)\0"
+    L"Add provider\0" L"Sağlayıcı ekle\0"
     L"Add the shortcuts you want to remember\0" L"Hatırlamak istediğiniz kısayolları ekleyin\0"
     L"Added to your commands\0" L"Komutlarınıza eklendi\0"
     L"Adds a button for sleep, restart and shut down\0" L"Uyku, yeniden başlatma ve kapatma için bir düğme ekler\0"
@@ -28107,6 +28444,7 @@ constexpr WCHAR kTurkishTexts[] =
     L"Charging battery color (own)\0" L"Şarj olan pilin rengi (kendi)\0"
     L"Check every\0" L"Kontrol aralığı\0"
     L"Choose\0" L"Seç\0"
+    L"Choose a JSON file\0" L"Bir JSON dosyası seçin\0"
     L"Choose a power plan\0" L"Güç planı seç\0"
     L"Choose a program or a file\0" L"Bir program veya dosya seçin\0"
     L"Choose it…\0" L"Seç…\0"
@@ -28195,6 +28533,7 @@ constexpr WCHAR kTurkishTexts[] =
     L"Cuddle\0" L"Sarıl\0"
     L"Current\0" L"Geçerli\0"
     L"Custom\0" L"Özel\0"
+    L"Custom (JSON file)\0" L"Özel (JSON dosyası)\0"
     L"Customize…\0" L"Özelleştir…\0"
     L"Cyan\0" L"Camgöbeği\0"
     L"Cycles through the pictures of a folder as your wallpaper\0" L"Bir klasördeki resimleri duvar kâğıdınız olarak sırayla değiştirir\0"
@@ -28267,6 +28606,7 @@ constexpr WCHAR kTurkishTexts[] =
     L"Edge distance\0" L"Kenar mesafesi\0"
     L"Edit\0" L"Düzenle\0"
     L"Edit command\0" L"Komutu düzenle\0"
+    L"Edit provider\0" L"Sağlayıcıyı düzenle\0"
     L"Edit task\0" L"Görevi düzenle\0"
     L"Efficiency\0" L"Verimlilik\0"
     L"Eight colors, Windows' accent or your own\0" L"Sekiz renk, Windows vurgu rengi veya kendi renginiz\0"
@@ -28467,6 +28807,7 @@ constexpr WCHAR kTurkishTexts[] =
     L"I'm all alone…\0" L"Yapayalnızım…\0"
     L"I'm bored…\0" L"Canım sıkılıyor…\0"
     L"I'm drying up here.\0" L"Burada kuruyorum.\0"
+    L"Icon\0" L"Simge\0"
     L"Icon and color\0" L"Simge ve renk\0"
     L"Icon colors\0" L"Simge renkleri\0"
     L"Icon pack\0" L"Simge paketi\0"
@@ -28509,6 +28850,7 @@ constexpr WCHAR kTurkishTexts[] =
     L"Its focus or break ending, while it runs\0" L"Çalışırken odak veya mola bitişi\0"
     L"Its look (profile):\0" L"Görünümü (profil):\0"
     L"Its style, size, hiding and animations are in Windhawk's settings for this mod\0" L"Stili, boyutu, gizlenmesi ve animasyonları bu modun Windhawk ayarlarındadır\0"
+    L"JSON file\0" L"JSON dosyası\0"
     L"Just one little game?\0" L"Sadece küçük bir oyun?\0"
     L"Just watching…\0" L"Sadece izliyorum…\0"
     L"Keep as it is\0" L"Olduğu gibi bırak\0"
@@ -28852,6 +29194,7 @@ constexpr WCHAR kTurkishTexts[] =
     L"Plan: \0" L"Plan: \0"
     L"Play\0" L"Oyna\0"
     L"Plug me in?\0" L"Beni prize takar mısın?\0"
+    L"Point to a JSON file with \"name\" and \"windows\" (or a list of them) to show other services here\0" L"Diğer hizmetleri burada göstermek için \"name\" ve \"windows\" içeren bir JSON dosyası (veya bunların listesini) seçin\0"
     L"Pomodoro finished\0" L"Pomodoro bitti\0"
     L"Power\0" L"Güç\0"
     L"Power button\0" L"Güç düğmesi\0"
@@ -28904,6 +29247,7 @@ constexpr WCHAR kTurkishTexts[] =
     L"Rainbow\0" L"Gökkuşağı\0"
     L"Reacts to what the PC is doing\0" L"Bilgisayarın yaptığına tepki verir\0"
     L"Reading…\0" L"Okunuyor…\0"
+    L"Reads limits from a JSON file on this PC ({\"name\", \"windows\"})\0" L"Bu bilgisayardaki bir JSON dosyasından sınırları okur ({\"name\", \"windows\"})\0"
     L"Record shortcut\0" L"Kısayolu kaydet\0"
     L"Record: %s\0" L"Rekor: %s\0"
     L"Recycle Bin\0" L"Geri Dönüşüm Kutusu\0"
@@ -29009,6 +29353,7 @@ constexpr WCHAR kTurkishTexts[] =
     L"Shh, nobody wakes me up now.\0" L"Şş, şimdi kimse beni uyandırmasın.\0"
     L"Shh… focus mode.\0" L"Şş… odak modu.\0"
     L"Short\0" L"Kısa\0"
+    L"Short name\0" L"Kısa ad\0"
     L"Shortcut: let clicks through the pill\0" L"Kısayol: tıklamaları kapsülün içinden geçir\0"
     L"Shortcuts\0" L"Kısayollar\0"
     L"Shortcuts to programs and files (or command lines) you add, with their own icons, a click away in their panel; any of them can be a button on the pill or have a keyboard shortcut (set in its editor)\0" L"Eklediğiniz program ve dosyalara (veya komut satırlarına) kendi simgeleriyle kısayollar, panelinde tek tıkla; hepsi kapsülde düğme olabilir veya klavye kısayoluna sahip olabilir (düzenleyicisinde ayarlanır)\0"
@@ -29144,6 +29489,7 @@ constexpr WCHAR kTurkishTexts[] =
     L"That sound off\0" L"Bu sesi kapat\0"
     L"The Bar also shrinks to a thin line on the screen's edge when the mouse is away, and comes back as the mouse reaches the line. Windows then use the strip it kept, and the Bar shows over them\0" L"Fare uzaktayken Çubuk da ekranın kenarında ince bir çizgiye küçülür ve fare çizgiye varınca geri gelir. Pencereler o zaman koruduğu şeridi kullanır ve Çubuk onların üstünde görünür\0"
     L"The Bar style\0" L"Çubuk stili\0"
+    L"The PC shuts down after it. Esc or a click stops it.\0" L"Ardından bilgisayar kapanır. Esc veya bir tıklama iptal eder.\0"
     L"The app in focus on this monitor (its icon and name)\0" L"Bu monitörde odaktaki uygulama (simgesi ve adı)\0"
     L"The apps heard playing, also players without Windows' media controls; with some on, only they bring it. With none on, any sound does\0" L"Çalarken duyulan uygulamalar, Windows medya denetimleri olmayan oynatıcılar da; bazıları açıksa yalnızca onlar getirir. Hiçbiri açık değilse her ses getirir\0"
     L"The apps seen playing; a click turns one's lyrics off, and nothing of its songs is sent to lrclib.net\0" L"Çalarken görülen uygulamalar; tıklamak birinin sözlerini kapatır ve şarkılarından hiçbiri lrclib.net'e gönderilmez\0"
@@ -29280,7 +29626,7 @@ constexpr WCHAR kTurkishTexts[] =
     L"Try again, or share the file from Explorer\0" L"Tekrar deneyin veya dosyayı Dosya Gezgini'nden paylaşın\0"
     L"Turn it on once in Windows' settings: from then on the island switches it\0" L"Bir kez Windows ayarlarından açın, sonrasında ada onu açıp kapatabilir\0"
     L"Turn it up, I know this one.\0" L"Sesi aç, bunu biliyorum.\0"
-    L"Turn on Claude Code or Codex in the settings\0" L"Ayarlarda Claude Code veya Codex'i açın\0"
+    L"Turn on Claude Code, Codex or Custom in the settings\0" L"Ayarlarda Claude Code, Codex veya Özel'i açın\0"
     L"Turned off\0" L"Kapatıldı\0"
     L"Turned on\0" L"Açıldı\0"
     L"Turns the island's animations on or off, on every monitor\0" L"Adanın animasyonlarını her monitörde açar veya kapatır\0"
@@ -29320,6 +29666,7 @@ constexpr WCHAR kTurkishTexts[] =
     L"VLC 3 doesn't tell Windows' media controls what it plays, so the island can't see it. With this on, while VLC makes sound, the island reads the song's name from VLC's window title, shows it with VLC's icon, and its buttons press play/pause, previous and next in VLC. No cover or time, and VLC must show the name in its window title (its default)\0" L"VLC 3, ne çaldığını Windows medya denetimlerine bildirmez, bu yüzden ada onu göremez. Bu açıkken, VLC ses çıkarırken ada şarkının adını VLC'nin pencere başlığından okur, VLC'nin simgesiyle gösterir ve düğmeleri VLC'de oynat/duraklat, önceki ve sonrakine basar. Kapak veya süre yok ve VLC adı pencere başlığında göstermelidir (varsayılanı budur)\0"
     L"Vertical stack\0" L"Dikey yığın\0"
     L"Vertical stack, main on the right\0" L"Dikey yığın, ana pencere sağda\0"
+    L"Vice (neon sunset)\0" L"Vice (neon gün batımı)\0"
     L"Video memory in use (VRAM)\0" L"Kullanılan video belleği (VRAM)\0"
     L"Videos\0" L"Videolar\0"
     L"Violet\0" L"Mor\0"
@@ -29332,10 +29679,13 @@ constexpr WCHAR kTurkishTexts[] =
     L"Volume and mixer in the panel\0" L"Panelde ses ve karıştırıcı\0"
     L"Volume mixer\0" L"Ses karıştırıcı\0"
     L"Volume percentage beside its icon\0" L"Simgesinin yanında ses yüzdesi\0"
+    L"Waiting for valid data in the chosen file\0" L"Seçilen dosyada geçerli veri bekleniyor\0"
     L"Wallpaper\0" L"Duvar kâğıdı\0"
     L"Wallpaper (the wheel: the next one)\0" L"Duvar kâğıdı (tekerlek: sonraki)\0"
     L"Wallpaper transition\0" L"Duvar kâğıdı geçişi\0"
     L"Wallpapers from a folder (with a transition)\0" L"Bir klasörden duvar kâğıtları (geçişle)\0"
+    L"Wasted\0" L"Wasted\0"
+    L"Wasted now?\0" L"Şimdi Wasted?\0"
     L"Water\0" L"Su\0"
     L"Weather\0" L"Hava durumu\0"
     L"Weather (goes online)\0" L"Hava durumu (çevrimiçi)\0"
@@ -29621,6 +29971,7 @@ constexpr WCHAR kKoreanTexts[] =
     L"Add clocks in Windows' date and time settings (Additional clocks)\0" L"Windows 날짜 및 시간 설정에서 시계를 추가하세요 (추가 시계)\0"
     L"Add controls\0" L"컨트롤 추가\0"
     L"Add note  (Ctrl+Enter)\0" L"메모 추가  (Ctrl+Enter)\0"
+    L"Add provider\0" L"공급자 추가\0"
     L"Add the shortcuts you want to remember\0" L"기억하고 싶은 바로 가기를 추가하세요\0"
     L"Added to your commands\0" L"내 명령에 추가했어요\0"
     L"Adds a button for sleep, restart and shut down\0" L"절전, 다시 시작, 시스템 종료 버튼을 추가해요\0"
@@ -29783,6 +30134,7 @@ constexpr WCHAR kKoreanTexts[] =
     L"Charging battery color (own)\0" L"충전 중 배터리 색 (고유)\0"
     L"Check every\0" L"확인 주기\0"
     L"Choose\0" L"선택\0"
+    L"Choose a JSON file\0" L"JSON 파일 선택\0"
     L"Choose a power plan\0" L"전원 관리 옵션 선택\0"
     L"Choose a program or a file\0" L"프로그램이나 파일 선택\0"
     L"Choose it…\0" L"선택…\0"
@@ -29871,6 +30223,7 @@ constexpr WCHAR kKoreanTexts[] =
     L"Cuddle\0" L"쓰다듬기\0"
     L"Current\0" L"현재\0"
     L"Custom\0" L"사용자 지정\0"
+    L"Custom (JSON file)\0" L"사용자 지정 (JSON 파일)\0"
     L"Customize…\0" L"사용자 지정…\0"
     L"Cyan\0" L"청록\0"
     L"Cycles through the pictures of a folder as your wallpaper\0" L"폴더의 사진들을 배경 화면으로 차례로 바꿔요\0"
@@ -29943,6 +30296,7 @@ constexpr WCHAR kKoreanTexts[] =
     L"Edge distance\0" L"가장자리와의 거리\0"
     L"Edit\0" L"편집\0"
     L"Edit command\0" L"명령 편집\0"
+    L"Edit provider\0" L"공급자 편집\0"
     L"Edit task\0" L"작업 편집\0"
     L"Efficiency\0" L"효율\0"
     L"Eight colors, Windows' accent or your own\0" L"여덟 가지 색, Windows 강조 색 또는 내가 고른 색\0"
@@ -30143,6 +30497,7 @@ constexpr WCHAR kKoreanTexts[] =
     L"I'm all alone…\0" L"나 혼자 남았어요…\0"
     L"I'm bored…\0" L"심심해요…\0"
     L"I'm drying up here.\0" L"여기서 말라 가고 있어요.\0"
+    L"Icon\0" L"아이콘\0"
     L"Icon and color\0" L"아이콘 및 색\0"
     L"Icon colors\0" L"아이콘 색\0"
     L"Icon pack\0" L"아이콘 팩\0"
@@ -30185,6 +30540,7 @@ constexpr WCHAR kKoreanTexts[] =
     L"Its focus or break ending, while it runs\0" L"실행 중일 때 집중 또는 휴식이 끝나는 시점\0"
     L"Its look (profile):\0" L"모양 (프로필):\0"
     L"Its style, size, hiding and animations are in Windhawk's settings for this mod\0" L"스타일, 크기, 숨기기, 애니메이션은 이 모드의 Windhawk 설정에 있어요\0"
+    L"JSON file\0" L"JSON 파일\0"
     L"Just one little game?\0" L"게임 한 판만?\0"
     L"Just watching…\0" L"그냥 지켜보는 중…\0"
     L"Keep as it is\0" L"그대로 두기\0"
@@ -30528,6 +30884,7 @@ constexpr WCHAR kKoreanTexts[] =
     L"Plan: \0" L"요금제: \0"
     L"Play\0" L"놀기\0"
     L"Plug me in?\0" L"나 좀 충전해 줄래요?\0"
+    L"Point to a JSON file with \"name\" and \"windows\" (or a list of them) to show other services here\0" L"여기에 다른 서비스를 표시하려면 \"name\"과 \"windows\"(또는 그 목록)가 있는 JSON 파일을 지정하세요\0"
     L"Pomodoro finished\0" L"뽀모도로 종료\0"
     L"Power\0" L"전원\0"
     L"Power button\0" L"전원 버튼\0"
@@ -30580,6 +30937,7 @@ constexpr WCHAR kKoreanTexts[] =
     L"Rainbow\0" L"무지개\0"
     L"Reacts to what the PC is doing\0" L"PC가 하는 일에 반응해요\0"
     L"Reading…\0" L"읽는 중…\0"
+    L"Reads limits from a JSON file on this PC ({\"name\", \"windows\"})\0" L"이 PC의 JSON 파일에서 한도를 읽어요 ({\"name\", \"windows\"})\0"
     L"Record shortcut\0" L"바로 가기 기록\0"
     L"Record: %s\0" L"기록: %s\0"
     L"Recycle Bin\0" L"휴지통\0"
@@ -30685,6 +31043,7 @@ constexpr WCHAR kKoreanTexts[] =
     L"Shh, nobody wakes me up now.\0" L"쉿, 이제 아무도 날 깨우지 않아요.\0"
     L"Shh… focus mode.\0" L"쉿… 집중 모드예요.\0"
     L"Short\0" L"짧게\0"
+    L"Short name\0" L"짧은 이름\0"
     L"Shortcut: let clicks through the pill\0" L"바로 가기: 클릭이 캡슐을 통과하게 하기\0"
     L"Shortcuts\0" L"바로 가기\0"
     L"Shortcuts to programs and files (or command lines) you add, with their own icons, a click away in their panel; any of them can be a button on the pill or have a keyboard shortcut (set in its editor)\0" L"추가한 프로그램과 파일(또는 명령줄)로 가는 바로 가기를 고유 아이콘과 함께 패널에서 한 번에 클릭할 수 있어요. 어느 것이든 캡슐 버튼이 되거나 키보드 바로 가기를 지정할 수 있어요(편집기에서 설정)\0"
@@ -30820,6 +31179,7 @@ constexpr WCHAR kKoreanTexts[] =
     L"That sound off\0" L"이 소리 꺼짐\0"
     L"The Bar also shrinks to a thin line on the screen's edge when the mouse is away, and comes back as the mouse reaches the line. Windows then use the strip it kept, and the Bar shows over them\0" L"마우스가 멀어지면 바도 화면 가장자리의 얇은 선으로 줄어들고, 마우스가 선에 닿으면 다시 나타나요. 이때 창은 바가 비워 둔 영역을 사용하고, 바는 창 위에 표시돼요\0"
     L"The Bar style\0" L"바 스타일\0"
+    L"The PC shuts down after it. Esc or a click stops it.\0" L"그다음 PC가 종료돼요. Esc 키나 클릭으로 취소할 수 있어요.\0"
     L"The app in focus on this monitor (its icon and name)\0" L"이 모니터에서 포커스가 있는 앱 (아이콘과 이름)\0"
     L"The apps heard playing, also players without Windows' media controls; with some on, only they bring it. With none on, any sound does\0" L"재생 중인 소리가 들린 앱이에요. Windows 미디어 컨트롤이 없는 플레이어도 포함돼요. 일부를 켜면 해당 앱에서만 표시하고, 하나도 켜지 않으면 어떤 소리에서든 표시해요\0"
     L"The apps seen playing; a click turns one's lyrics off, and nothing of its songs is sent to lrclib.net\0" L"재생 중인 것으로 확인된 앱이에요. 클릭하면 해당 앱의 가사가 꺼지고, 그 앱의 노래 정보는 lrclib.net으로 전송되지 않아요\0"
@@ -30956,7 +31316,7 @@ constexpr WCHAR kKoreanTexts[] =
     L"Try again, or share the file from Explorer\0" L"다시 시도하거나 탐색기에서 파일을 공유하세요\0"
     L"Turn it on once in Windows' settings: from then on the island switches it\0" L"Windows 설정에서 한 번 켜 주세요. 그다음부터는 아일랜드에서 켜고 끌 수 있어요\0"
     L"Turn it up, I know this one.\0" L"볼륨 좀 올려요, 이 노래 알아요!\0"
-    L"Turn on Claude Code or Codex in the settings\0" L"설정에서 Claude Code 또는 Codex를 켜세요\0"
+    L"Turn on Claude Code, Codex or Custom in the settings\0" L"설정에서 Claude Code, Codex 또는 사용자 지정을 켜세요\0"
     L"Turned off\0" L"꺼졌어요\0"
     L"Turned on\0" L"켜졌어요\0"
     L"Turns the island's animations on or off, on every monitor\0" L"모든 모니터에서 아일랜드의 애니메이션을 켜거나 꺼요\0"
@@ -30996,6 +31356,7 @@ constexpr WCHAR kKoreanTexts[] =
     L"VLC 3 doesn't tell Windows' media controls what it plays, so the island can't see it. With this on, while VLC makes sound, the island reads the song's name from VLC's window title, shows it with VLC's icon, and its buttons press play/pause, previous and next in VLC. No cover or time, and VLC must show the name in its window title (its default)\0" L"VLC 3은 재생 중인 내용을 Windows 미디어 컨트롤에 알리지 않아서 아일랜드가 볼 수 없어요. 이 옵션을 켜면 VLC에서 소리가 나는 동안 아일랜드가 VLC 창 제목에서 노래 이름을 읽어 VLC 아이콘과 함께 표시하고, 버튼으로 VLC의 재생/일시 중지, 이전, 다음을 제어해요. 커버와 시간은 없으며, VLC가 창 제목에 이름을 표시해야 해요(기본 설정)\0"
     L"Vertical stack\0" L"세로 스택\0"
     L"Vertical stack, main on the right\0" L"세로 스택, 메인은 오른쪽\0"
+    L"Vice (neon sunset)\0" L"Vice (네온 노을)\0"
     L"Video memory in use (VRAM)\0" L"사용 중인 비디오 메모리 (VRAM)\0"
     L"Videos\0" L"동영상\0"
     L"Violet\0" L"보라\0"
@@ -31008,10 +31369,13 @@ constexpr WCHAR kKoreanTexts[] =
     L"Volume and mixer in the panel\0" L"패널의 볼륨 및 믹서\0"
     L"Volume mixer\0" L"볼륨 믹서\0"
     L"Volume percentage beside its icon\0" L"아이콘 옆에 볼륨 비율 표시\0"
+    L"Waiting for valid data in the chosen file\0" L"선택한 파일의 올바른 데이터를 기다리는 중이에요\0"
     L"Wallpaper\0" L"배경 화면\0"
     L"Wallpaper (the wheel: the next one)\0" L"배경 화면 (휠: 다음 항목)\0"
     L"Wallpaper transition\0" L"배경 화면 전환 효과\0"
     L"Wallpapers from a folder (with a transition)\0" L"폴더의 배경 화면 (전환 효과 포함)\0"
+    L"Wasted\0" L"Wasted\0"
+    L"Wasted now?\0" L"지금 Wasted?\0"
     L"Water\0" L"물\0"
     L"Weather\0" L"날씨\0"
     L"Weather (goes online)\0" L"날씨 (온라인 사용)\0"
@@ -31220,6 +31584,206 @@ struct ReleaseNotes {
     PCWSTR text[kTextLanguages];
 };
 const ReleaseNotes kReleaseNotes[] = {
+    {L"3.3.0",
+     {
+         L"#New\n"
+         L"{Theme}Vice, a new theme in Colors (Look tab): a neon sunset over a dark night, like the city status bars made for desktops. Teal icons, pink highlights, Windows' Bahnschrift condensed font with the pill's texts in capitals, and a neon line along the island in every style. The power menu becomes a game's pause menu: Resume, the usual actions, and Wasted, which turns the screen gray before the PC shuts down (Esc cancels).\n"
+         L"{AiCustom}AI usage can also show other services' limits, read from a JSON file on this PC that another tool of yours keeps up to date, each with its name and icon on the pill and in the panel; \"+ Add provider\" in the panel adds more files (Apps and tools tab, off by default, #7307, made by Pedro).\n"
+         L"#Fixes\n"
+         L"Apps (launcher) opens its apps again when Windhawk doesn't run as administrator. Chrome, Brave, Office and other apps whose Start menu shortcut points into Program Files gave \"The specified path does not exist\" (#7521, #7360). The same goes for opening them from a notification, a command or Folders and places.\n"
+         L"Choosing a power mode in the control center no longer closes the island (#7539).\n"
+         L"Folders and places shows the own icons of shortcuts and programs, not the plain icon of their type (#7575).\n"
+         L"On the minimized line, the timer's ring and its time stay together, with the clock after them (#7483).\n"
+         L"The timer filling the pill with color grows smoothly, also across the notches and on an upright Bar, and with the notches the minimized line shows the timer's real progress instead of filling too early.\n"
+         L"Two separator lines no longer show side by side when the items between them have nothing to show, like what's playing with nothing playing (#7330).\n"
+         L"Faísca's games run at the screen's pace (up to 60 frames a second) and at the same speed whatever the frame rate, a Cloud jump that reaches a cloud lands on it, and her panel stays smooth while she sleeps (#7559).\n"
+         L"The Recycle Bin is watched and counted again a few times in the first minutes after the island starts or the PC wakes, and when a drive is plugged in, so it no longer keeps a wrong count after startup.\n"
+         L"Faísca's \"Her size\" goes up to 160%, for big screens at a small scale.\n"
+         L"The visualizer's bars and the panels' animations keep their pace on a 60 Hz screen (they dropped to 30 or 20 frames a second).\n"
+         L"With the pill upright (the Bar or the Island on a side), a count or a percentage beside an icon, like the Shelf's files, the battery, the volume, the Recycle Bin or AI usage, no longer draws a second clock over it (#7605).\n"
+         L"In What's playing's panel, the names of shuffle and repeat open above the button when the panel's bottom would cut them.\n"
+         L"The pill filling with color (a download, the battery charging or the timer) also fills a notch's curve down the screen's side.\n"
+         L"In AI usage's panel, the day a limit starts over shows in the island's language, not in Windows'.",
+         L"#Novidades\n"
+         L"{Theme}Vice, um tema novo em Cores (aba Aparência): um pôr do sol neon sobre uma noite escura, como as barras de status de cidade feitas para o desktop. Ícones verde-água, destaques rosa, a fonte Bahnschrift condensada do Windows com os textos da pílula em maiúsculas e uma linha neon ao longo da ilha em todos os estilos. O menu de energia vira o menu de pausa de um jogo: Continuar, as ações de sempre e Wasted, que deixa a tela cinza antes de desligar o PC (Esc cancela).\n"
+         L"{AiCustom}O uso de IA pode mostrar também os limites de outros serviços, lidos de um arquivo JSON neste PC que outra ferramenta sua mantém atualizado, cada um com nome e ícone na pílula e no painel; \"+ Incluir provedor\" no painel inclui mais arquivos (aba Apps e ferramentas, desligado por padrão, #7307, feito pelo Pedro).\n"
+         L"#Correções\n"
+         L"Apps (lançador) volta a abrir os apps quando o Windhawk não roda como administrador. Chrome, Brave, Office e outros apps cujo atalho do menu Iniciar aponta para a pasta Arquivos de Programas davam \"O caminho especificado não existe\" (#7521, #7360). O mesmo vale ao abri-los por uma notificação, um comando ou Pastas e locais.\n"
+         L"Escolher um modo de energia na central de controle não fecha mais a ilha (#7539).\n"
+         L"Pastas e locais mostra o ícone próprio de atalhos e programas, e não o ícone genérico do tipo deles (#7575).\n"
+         L"Na linha minimizada, o anel do timer e o tempo dele ficam juntos, com o relógio depois (#7483).\n"
+         L"O timer que enche a pílula de cor cresce suave, também pelos entalhes e na Barra em pé, e com entalhes a linha minimizada mostra o progresso real do timer, em vez de encher cedo demais.\n"
+         L"Duas linhas separadoras não aparecem mais lado a lado quando os itens entre elas não têm nada para mostrar, como o que está tocando sem nada tocando (#7330).\n"
+         L"Os jogos da Faísca rodam no ritmo da tela (até 60 quadros por segundo) e na mesma velocidade em qualquer taxa de quadros. No Pulo nas nuvens, um pulo que alcança a nuvem pousa nela, e o painel dela fica suave enquanto ela dorme (#7559).\n"
+         L"A Lixeira é vigiada e contada de novo algumas vezes nos primeiros minutos depois que a ilha começa ou o PC acorda, e quando um disco é conectado, então ela não fica mais com a contagem errada depois de ligar o PC.\n"
+         L"\"O tamanho dela\", da Faísca, vai até 160%, pensando em telas grandes com escala pequena.\n"
+         L"As barras do visualizador e as animações dos painéis mantêm o ritmo numa tela de 60 Hz (caíam para 30 ou 20 quadros por segundo).\n"
+         L"Com a pílula em pé (a Barra ou a Ilha na lateral), uma contagem ou porcentagem ao lado de um ícone, como os arquivos da Estante, a bateria, o volume, a Lixeira ou o uso de IA, não desenha mais um segundo relógio por cima (#7605).\n"
+         L"No painel do que está tocando, os nomes de aleatório e repetir abrem acima do botão quando a borda de baixo do painel os cortaria.\n"
+         L"O preenchimento de cor da pílula (um download, a bateria carregando ou o timer) também enche a curva do entalhe que desce pela lateral da tela.\n"
+         L"No painel do uso de IA, o dia em que um limite recomeça aparece no idioma da ilha, não no do Windows.",
+         L"#新功能\n"
+         L"{Theme}新主题 Vice，位于“颜色”(外观选项卡)：深夜上空的霓虹日落，就像为桌面打造的城市状态栏。青色图标、粉色强调色、Windows 的 Bahnschrift 窄体字体，胶囊上的文字全部大写，并且在每种样式中岛的边缘都有一条霓虹线。电源菜单变成游戏的暂停菜单：继续、常用操作，以及 Wasted：屏幕先变灰，然后电脑关机(按 Esc 取消)。\n"
+         L"{AiCustom}AI 用量现在也能显示其他服务的额度，读取自本机上由你的其他工具持续更新的 JSON 文件，每个服务在胶囊和面板中都有自己的名称和图标；在面板中点“+ 添加服务”可以添加更多文件（“应用和工具”选项卡，默认关闭，#7307，由 Pedro 制作）。\n"
+         L"#修复\n"
+         L"Windhawk 未以管理员身份运行时，应用（启动器）又能打开应用了。Chrome、Brave、Office 等开始菜单快捷方式指向 Program Files 的应用之前会提示“指定的路径不存在”(#7521, #7360)。从通知、命令或“文件夹和位置”打开它们时也一样。\n"
+         L"在控制中心选择电源模式时，灵动岛不会再关闭 (#7539)。\n"
+         L"“文件夹和位置”现在显示快捷方式和程序自己的图标，而不是按类型显示的通用图标 (#7575)。\n"
+         L"在最小化细线上，计时器的圆环和时间会挨在一起，时钟放在它们后面 (#7483)。\n"
+         L"计时器用颜色填满胶囊时会平滑增长，跨刘海和竖直的栏上也一样；使用刘海时，最小化细线显示计时器的实际进度，不会再过早填满。\n"
+         L"当两条分隔线之间的项目没有内容可显示时（例如没有播放任何内容时的“正在播放”），不会再并排出现两条分隔线 (#7330)。\n"
+         L"Faísca 的小游戏会按屏幕的节奏运行（最高每秒 60 帧），帧率不同速度也一样；云端跳跃中够到云朵的跳跃会落在云上；她睡觉时面板也保持流畅 (#7559)。\n"
+         L"灵动岛启动或电脑唤醒后的最初几分钟内，以及插入驱动器时，回收站会重新监视并计数几次，开机后不会再一直显示错误的数量。\n"
+         L"Faísca 的“她的大小”最高可达 160%，适合缩放比例较小的大屏幕。\n"
+         L"在 60 Hz 屏幕上，音频可视化的音柱和面板动画会保持原有节奏（之前会掉到每秒 30 或 20 帧）。\n"
+         L"胶囊竖直时（栏或灵动岛位于侧边），图标旁的数量或百分比（例如暂存架的文件、电池、音量、回收站或 AI 用量）不会再在上面画出第二个时钟 (#7605)。\n"
+         L"在“正在播放”面板中，当面板底部会遮住时，随机播放和重复的名称会显示在按钮上方。\n"
+         L"胶囊的颜色填充（下载、电池充电或计时器）现在也会填满刘海沿屏幕侧边向下的弧线部分。\n"
+         L"在 AI 用量面板中，额度重置的星期现在以灵动岛的语言显示，而不是 Windows 的语言。",
+         L"#Neu\n"
+         L"{Theme}Vice, ein neues Design unter Farben (Tab Aussehen): ein Neon-Sonnenuntergang über einer dunklen Nacht, wie die Stadt-Statusleisten, die man für den Desktop baut. Türkise Symbole, pinke Hervorhebungen, die schmale Windows-Schrift Bahnschrift mit Großbuchstaben auf der Pille und eine Neonlinie an der Insel in jedem Stil. Das Energiemenü wird zum Pausenmenü eines Spiels: Fortsetzen, die üblichen Aktionen und Wasted, das den Bildschirm grau färbt, bevor der PC herunterfährt (Esc bricht ab).\n"
+         L"{AiCustom}Die KI-Nutzung kann auch die Limits anderer Dienste zeigen, gelesen aus einer JSON-Datei auf diesem PC, die ein anderes Tool von dir aktuell hält, jeder mit Namen und Symbol in der Kapsel und im Panel; „+ Anbieter hinzufügen“ im Panel fügt weitere Dateien hinzu (Tab „Apps und Tools“, standardmäßig aus, #7307, von Pedro).\n"
+         L"#Korrekturen\n"
+         L"Apps (Starter) öffnet seine Apps wieder, wenn Windhawk nicht als Administrator läuft. Chrome, Brave, Office und andere Apps, deren Startmenü-Verknüpfung in den Ordner „Programme“ (Program Files) zeigt, meldeten „Der angegebene Pfad ist nicht vorhanden“ (#7521, #7360). Das gilt auch beim Öffnen über eine Benachrichtigung, einen Befehl oder Ordner und Orte.\n"
+         L"Einen Energiemodus im Kontrollzentrum zu wählen, schließt die Insel nicht mehr (#7539).\n"
+         L"Ordner und Orte zeigt bei Verknüpfungen und Programmen ihr eigenes Symbol statt des allgemeinen Symbols ihres Typs (#7575).\n"
+         L"Auf der minimierten Linie bleiben der Ring des Timers und seine Zeit zusammen, die Uhr folgt danach (#7483).\n"
+         L"Der Timer, der die Pille mit Farbe füllt, wächst gleichmäßig, auch über die Notches hinweg und in einer senkrechten Leiste; mit Notches zeigt die minimierte Linie den echten Fortschritt, statt zu früh voll zu sein.\n"
+         L"Zwei Trennlinien erscheinen nicht mehr nebeneinander, wenn die Elemente dazwischen nichts zu zeigen haben, etwa die Wiedergabe, während nichts läuft (#7330).\n"
+         L"Faíscas Spiele laufen im Takt des Bildschirms (bis zu 60 Bilder pro Sekunde) und bei jeder Bildrate gleich schnell, ein Sprung im Wolkensprung, der eine Wolke erreicht, landet darauf, und ihr Panel bleibt flüssig, während sie schläft (#7559).\n"
+         L"Der Papierkorb wird in den ersten Minuten nach dem Start der Insel oder dem Aufwachen des PCs sowie beim Anschließen eines Laufwerks erneut überwacht und gezählt, sodass er nach dem Hochfahren keine falsche Zahl mehr behält.\n"
+         L"Faíscas „Ihre Größe“ geht bis 160 %, für große Bildschirme mit kleiner Skalierung.\n"
+         L"Die Balken des Visualizers und die Animationen der Panels halten auf einem 60-Hz-Bildschirm ihr Tempo (sie fielen auf 30 oder 20 Bilder pro Sekunde).\n"
+         L"Mit aufrechter Kapsel (die Leiste oder die Insel an einer Seite) zeichnet eine Anzahl oder Prozentzahl neben einem Symbol, etwa die Dateien der Ablage, der Akku, die Lautstärke, der Papierkorb oder die KI-Nutzung, keine zweite Uhr mehr darüber (#7605).\n"
+         L"Im Wiedergabe-Panel erscheinen die Namen von Zufallswiedergabe und Wiederholen über der Schaltfläche, wenn der untere Rand des Panels sie abschneiden würde.\n"
+         L"Die Farbfüllung der Pille (ein Download, der ladende Akku oder der Timer) füllt jetzt auch die Kurve einer Notch, die an der Bildschirmseite nach unten läuft.\n"
+         L"Im Panel der KI-Nutzung erscheint der Tag, an dem ein Limit neu beginnt, in der Sprache der Insel statt in der von Windows.",
+         L"#Novedades\n"
+         L"{Theme}Vice, un tema nuevo en Colores (pestaña Aspecto): un atardecer neón sobre una noche oscura, como las barras de estado de ciudad hechas para el escritorio. Iconos turquesa, resaltes rosa, la fuente Bahnschrift condensada de Windows con los textos de la píldora en mayúsculas y una línea neón a lo largo de la isla en todos los estilos. El menú de energía se convierte en el menú de pausa de un juego: Reanudar, las acciones de siempre y Wasted, que pone la pantalla gris antes de apagar el PC (Esc cancela).\n"
+         L"{AiCustom}El uso de IA también puede mostrar los límites de otros servicios, leídos de un archivo JSON en este PC que otra herramienta tuya mantiene al día, cada uno con su nombre e icono en la píldora y en el panel; \"+ Agregar proveedor\" en el panel agrega más archivos (pestaña Apps y herramientas, desactivado por defecto, #7307, hecho por Pedro).\n"
+         L"#Correcciones\n"
+         L"Apps (lanzador) vuelve a abrir sus apps cuando Windhawk no se ejecuta como administrador. Chrome, Brave, Office y otras apps cuyo acceso directo del menú Inicio apunta a Archivos de programa daban \"La ruta de acceso especificada no existe\" (#7521, #7360). Lo mismo al abrirlas desde una notificación, un comando o Carpetas y lugares.\n"
+         L"Elegir un modo de energía en el Centro de control ya no cierra la isla (#7539).\n"
+         L"Carpetas y lugares muestra el icono propio de los accesos directos y los programas, no el icono genérico de su tipo (#7575).\n"
+         L"En la línea minimizada, el anillo del temporizador y su tiempo quedan juntos, con el reloj después (#7483).\n"
+         L"El temporizador que llena la píldora de color crece con suavidad, también a través de las muescas y en una Barra vertical, y con muescas la línea minimizada muestra el progreso real en lugar de llenarse demasiado pronto.\n"
+         L"Ya no aparecen dos líneas separadoras juntas cuando los elementos entre ellas no tienen nada que mostrar, como lo que suena cuando no suena nada (#7330).\n"
+         L"Los juegos de Faísca van al ritmo de la pantalla (hasta 60 fotogramas por segundo) y a la misma velocidad con cualquier tasa de fotogramas, un salto en Salto entre nubes que alcanza una nube aterriza en ella, y su panel sigue fluido mientras duerme (#7559).\n"
+         L"La Papelera de reciclaje se vigila y se cuenta de nuevo varias veces en los primeros minutos después de que la isla se inicia o el PC se despierta, y al conectar una unidad, así que ya no se queda con un recuento erróneo tras el arranque.\n"
+         L"\"Su tamaño\", de Faísca, llega hasta el 160 %, para pantallas grandes con escala pequeña.\n"
+         L"Las barras del visualizador y las animaciones de los paneles mantienen su ritmo en una pantalla de 60 Hz (bajaban a 30 o 20 fotogramas por segundo).\n"
+         L"Con la píldora en vertical (la Barra o la Isla en un lado), un número o un porcentaje junto a un icono, como los archivos del Estante, la batería, el volumen, la Papelera de reciclaje o el uso de IA, ya no dibuja un segundo reloj encima (#7605).\n"
+         L"En el panel de Reproduciendo, los nombres de aleatorio y repetir se abren sobre el botón cuando el borde inferior del panel los cortaría.\n"
+         L"El relleno de color de la píldora (una descarga, la batería cargando o el temporizador) ahora también llena la curva de la muesca que baja por el lado de la pantalla.\n"
+         L"En el panel del uso de IA, el día en que un límite se reinicia aparece en el idioma de la isla, no en el de Windows.",
+         L"#Новое\n"
+         L"{Theme}Vice — новая тема в разделе «Цвета» (вкладка «Вид»): неоновый закат над тёмной ночью, как городские панели состояния для рабочего стола. Бирюзовые значки, розовые акценты, узкий шрифт Windows Bahnschrift с текстами пилюли заглавными буквами и неоновая линия вдоль острова в любом стиле. Меню питания превращается в меню паузы из игры: «Продолжить», обычные действия и Wasted — экран сереет, затем ПК выключается (Esc отменяет).\n"
+         L"{AiCustom}Использование ИИ теперь может показывать и лимиты других сервисов, прочитанные из JSON-файла на этом ПК, который обновляет другой ваш инструмент, каждый со своим именем и значком на капсуле и в панели; «+ Добавить сервис» в панели добавляет другие файлы (вкладка «Приложения и инструменты», по умолчанию выключено, #7307, сделал Pedro).\n"
+         L"#Исправления\n"
+         L"«Приложения (запуск)» снова открывают приложения, когда Windhawk запущен не от имени администратора. Chrome, Brave, Office и другие приложения, чей ярлык в меню «Пуск» ведёт в Program Files, выдавали «Указанный путь не существует» (#7521, #7360). То же самое при открытии из уведомления, команды или «Папок и мест».\n"
+         L"Выбор режима питания в центре управления больше не закрывает остров (#7539).\n"
+         L"«Папки и места» показывают собственные значки ярлыков и программ, а не общий значок их типа (#7575).\n"
+         L"На свёрнутой линии кольцо таймера и его время стоят рядом, а часы идут после них (#7483).\n"
+         L"Заливка таймера на капсуле растёт плавно, в том числе через вырезы и на вертикальной панели, а с вырезами свёрнутая линия показывает реальный прогресс таймера и не заполняется раньше времени.\n"
+         L"Две разделительные линии больше не стоят рядом, когда элементам между ними нечего показать, например «Сейчас играет», когда ничего не играет (#7330).\n"
+         L"Игры Faísca идут в темпе экрана (до 60 кадров в секунду) и с одной скоростью при любой частоте кадров, прыжок в «Прыжках по облакам», который достаёт до облака, приземляется на него, а её панель остаётся плавной, пока она спит (#7559).\n"
+         L"Корзина заново отслеживается и пересчитывается несколько раз в первые минуты после запуска острова или пробуждения ПК, а также при подключении диска, поэтому после включения она больше не показывает неверное число.\n"
+         L"«Её размер» у Faísca теперь доходит до 160% для больших экранов с маленьким масштабом.\n"
+         L"Полосы визуализатора и анимации панелей держат свой темп на экране 60 Гц (раньше падали до 30 или 20 кадров в секунду).\n"
+         L"Когда капсула стоит вертикально (панель или остров сбоку), число или процент рядом со значком, например файлы на полке, батарея, громкость, корзина или использование ИИ, больше не рисует поверх вторые часы (#7605).\n"
+         L"В панели «Сейчас играет» названия кнопок перемешивания и повтора открываются над кнопкой, если нижний край панели обрезал бы их.\n"
+         L"Цветная заливка капсулы (загрузка, зарядка батареи или таймер) теперь заполняет и изгиб выреза, спускающийся по краю экрана.\n"
+         L"В панели использования ИИ день, когда лимит начинается заново, показывается на языке острова, а не Windows.",
+         L"#新機能\n"
+         L"{Theme}新しいテーマ Vice を「色」(外観タブ) に追加：暗い夜に浮かぶネオンの夕焼け。デスクトップ用に作られた街のステータスバーのような見た目です。ティールのアイコン、ピンクのハイライト、Windows の Bahnschrift コンデンスド フォント (ピルの文字は大文字)、そしてどのスタイルでもアイランドに沿ったネオンライン。電源メニューはゲームのポーズメニューになります：再開、いつもの操作、そして Wasted (画面がグレーになってから PC がシャットダウン。Esc でキャンセル)。\n"
+         L"{AiCustom}AI の使用量に、ほかのサービスの上限も表示できるようになりました。ほかのツールが更新し続けるこの PC 上の JSON ファイルから読み取り、それぞれカプセルとパネルに名前とアイコンが付きます。パネルの「+ プロバイダーを追加」でファイルを追加できます（「アプリとツール」タブ、既定でオフ、#7307、Pedro さん作）。\n"
+         L"#修正\n"
+         L"Windhawk を管理者として実行していないときも、アプリ（ランチャー）からアプリを開けるようになりました。スタートメニューのショートカットが Program Files を指す Chrome、Brave、Office などで「指定されたパスは存在しません」と表示されていました（#7521、#7360）。通知、コマンド、「フォルダーと場所」から開く場合も同様です。\n"
+         L"コントロール センターで電源モードを選んでも、アイランドが閉じなくなりました（#7539）。\n"
+         L"「フォルダーと場所」で、ショートカットとプログラムに種類ごとの汎用アイコンではなく、それぞれのアイコンが表示されるようになりました（#7575）。\n"
+         L"最小化したラインで、タイマーのリングと残り時間が並んで表示され、時計はその後ろに来るようになりました（#7483）。\n"
+         L"タイマーがピルを色で満たす表示がなめらかに伸びるようになり、ノッチをまたぐ場合や縦置きのバーでも同様です。ノッチ使用時は、最小化したラインがタイマーの実際の進み具合を示し、早く満タンにならなくなりました。\n"
+         L"間の項目に表示するものがないとき（何も再生していないときの再生中など）、区切り線が 2 本並んで表示されなくなりました（#7330）。\n"
+         L"Faísca のゲームが画面のペース（最大 60 フレーム/秒）で動き、フレームレートに関係なく同じ速さになりました。雲のジャンプで雲に届いたジャンプはその上に着地し、眠っている間もパネルがなめらかです（#7559）。\n"
+         L"アイランドの起動後や PC のスリープ解除後の数分間、およびドライブ接続時に、ごみ箱を何度か監視し直して数え直すようになりました。起動後に数が間違ったままになりません。\n"
+         L"Faísca の「彼女の大きさ」が 160% まで上げられるようになりました。拡大率の小さい大画面向けです。\n"
+         L"60 Hz の画面でも、ビジュアライザーのバーとパネルのアニメーションが本来のペースを保つようになりました（以前は 30 や 20 フレーム/秒に落ちていました）。\n"
+         L"カプセルを縦向きにしたとき（バーやアイランドを横に置いたとき）、アイコン横の数やパーセント（シェルフのファイル数、バッテリー、音量、ごみ箱、AI の使用量など）の上に、2 つ目の時計が描かれなくなりました (#7605)。\n"
+         L"再生中パネルで、シャッフルと繰り返すの名前は、パネルの下端で切れてしまうときはボタンの上に表示されるようになりました。\n"
+         L"ピルの色の塗りつぶし（ダウンロード、バッテリーの充電、タイマー）が、画面の端に沿って下りるノッチのカーブ部分も満たすようになりました。\n"
+         L"AI の使用量のパネルで、上限がリセットされる曜日が Windows ではなくアイランドの言語で表示されるようになりました。",
+         L"#Tính năng mới\n"
+         L"{Theme}Vice, một chủ đề mới trong Màu sắc (thẻ Giao diện): hoàng hôn neon trên nền đêm tối, giống các thanh trạng thái thành phố làm cho màn hình desktop. Biểu tượng xanh ngọc, điểm nhấn hồng, phông Bahnschrift hẹp của Windows với chữ trên viên thuốc viết hoa, và một đường neon dọc theo đảo ở mọi kiểu. Menu nguồn trở thành menu tạm dừng của trò chơi: Tiếp tục, các thao tác quen thuộc và Wasted, làm màn hình chuyển xám trước khi tắt máy (Esc để hủy).\n"
+         L"{AiCustom}Mức sử dụng AI giờ cũng có thể hiện giới hạn của các dịch vụ khác, đọc từ một tệp JSON trên máy này do một công cụ khác của bạn cập nhật, mỗi dịch vụ có tên và biểu tượng riêng trên Island và trong bảng; \"+ Thêm dịch vụ\" trong bảng để thêm tệp (tab Ứng dụng & công cụ, mặc định tắt, #7307, do Pedro làm).\n"
+         L"#Sửa lỗi\n"
+         L"Ứng dụng (trình khởi chạy) lại mở được ứng dụng khi Windhawk không chạy với quyền quản trị. Chrome, Brave, Office và các ứng dụng khác có lối tắt trong menu Start trỏ tới Program Files từng báo \"Đường dẫn đã chỉ định không tồn tại\" (#7521, #7360). Điều này cũng áp dụng khi mở chúng từ thông báo, lệnh hoặc Thư mục & lối tắt.\n"
+         L"Chọn chế độ nguồn trong Trung tâm điều khiển không còn làm đảo bị tắt (#7539).\n"
+         L"Thư mục & lối tắt hiện biểu tượng riêng của lối tắt và chương trình, thay vì biểu tượng chung theo loại tệp (#7575).\n"
+         L"Trên đường thu gọn, vòng tròn và thời gian của hẹn giờ nằm cạnh nhau, đồng hồ đứng sau (#7483).\n"
+         L"Hẹn giờ tô màu viên thuốc giờ tăng mượt, cả khi trải qua các notch và trên Thanh dựng đứng; với notch, đường thu gọn hiện đúng tiến độ của hẹn giờ thay vì đầy quá sớm.\n"
+         L"Hai đường phân cách không còn nằm sát nhau khi các mục ở giữa không có gì để hiện, ví dụ mục đang phát khi không phát gì (#7330).\n"
+         L"Trò chơi của Faísca chạy theo nhịp màn hình (tối đa 60 khung hình/giây) và cùng tốc độ ở mọi tốc độ khung hình, cú nhảy trong Nhảy qua mây chạm tới mây sẽ đáp lên mây, và bảng của cô ấy vẫn mượt khi cô ấy ngủ (#7559).\n"
+         L"Thùng rác được theo dõi và đếm lại vài lần trong những phút đầu sau khi đảo khởi động hoặc PC thức dậy, và khi cắm ổ đĩa, nên không còn giữ số sai sau khi bật máy.\n"
+         L"\"Kích thước của cô ấy\" của Faísca giờ lên tới 160%, dành cho màn hình lớn có tỉ lệ thu phóng nhỏ.\n"
+         L"Các cột sóng nhạc và hiệu ứng của các bảng giữ đúng nhịp trên màn hình 60 Hz (trước đây tụt xuống 30 hoặc 20 khung hình/giây).\n"
+         L"Khi Island dựng đứng (Thanh hoặc Island ở cạnh bên), con số hay phần trăm cạnh một biểu tượng, như số tệp trong Khay tệp, pin, âm lượng, Thùng rác hay mức sử dụng AI, không còn vẽ thêm một đồng hồ thứ hai đè lên (#7605).\n"
+         L"Trong bảng Đang phát, tên của nút phát ngẫu nhiên và lặp lại hiện phía trên nút khi cạnh dưới của bảng sẽ che mất chúng.\n"
+         L"Phần tô màu của viên thuốc (tải xuống, pin đang sạc hoặc hẹn giờ) giờ cũng tô kín đường cong của notch chạy xuống cạnh màn hình.\n"
+         L"Trong bảng mức sử dụng AI, ngày một giới hạn bắt đầu lại hiện theo ngôn ngữ của đảo, không theo ngôn ngữ của Windows.",
+         L"#Nouveautés\n"
+         L"{Theme}Vice, un nouveau thème dans Couleurs (onglet Apparence) : un coucher de soleil néon sur une nuit sombre, comme les barres d'état de ville faites pour le bureau. Icônes turquoise, accents roses, la police Bahnschrift condensée de Windows avec les textes de la pilule en majuscules, et une ligne néon le long de l'île dans tous les styles. Le menu d'alimentation devient le menu pause d'un jeu : Reprendre, les actions habituelles et Wasted, qui rend l'écran gris avant d'éteindre le PC (Échap annule).\n"
+         L"{AiCustom}L'utilisation de l'IA peut aussi montrer les limites d'autres services, lues dans un fichier JSON sur ce PC qu'un autre de vos outils tient à jour, chacun avec son nom et son icône sur la pilule et dans le panneau\u00A0; «\u00A0+ Ajouter un service\u00A0» dans le panneau ajoute d'autres fichiers (onglet Apps et outils, désactivé par défaut, #7307, fait par Pedro).\n"
+         L"#Corrections\n"
+         L"Apps (lanceur) ouvre de nouveau ses apps quand Windhawk n'est pas lancé en administrateur. Chrome, Brave, Office et d'autres apps dont le raccourci du menu Démarrer pointe vers Program Files affichaient \"Le chemin d'accès spécifié n'existe pas\" (#7521, #7360). Il en va de même en les ouvrant depuis une notification, une commande ou Dossiers et lieux.\n"
+         L"Choisir un mode d'alimentation dans le Centre de contrôle ne ferme plus l'île (#7539).\n"
+         L"Dossiers et lieux affiche l'icône propre des raccourcis et des programmes, et non l'icône générique de leur type (#7575).\n"
+         L"Sur la ligne réduite, l'anneau du minuteur et son temps restent ensemble, l'horloge vient après (#7483).\n"
+         L"Le minuteur qui remplit la pilule de couleur avance en douceur, aussi à travers les encoches et sur une Barre verticale, et avec les encoches la ligne réduite montre la vraie progression au lieu de se remplir trop tôt.\n"
+         L"Deux lignes de séparation n'apparaissent plus côte à côte quand les éléments entre elles n'ont rien à montrer, comme la lecture en cours quand rien ne joue (#7330).\n"
+         L"Les jeux de Faísca tournent au rythme de l'écran (jusqu'à 60 images par seconde) et à la même vitesse quel que soit le nombre d'images, un saut dans Saut de nuage en nuage qui atteint un nuage s'y pose, et son panneau reste fluide pendant qu'elle dort (#7559).\n"
+         L"La Corbeille est surveillée et recomptée plusieurs fois dans les premières minutes après le démarrage de l'île ou le réveil du PC, et quand un lecteur est branché, elle ne garde donc plus un mauvais compte après le démarrage.\n"
+         L"« Sa taille », pour Faísca, va jusqu'à 160 %, pour les grands écrans à petite échelle.\n"
+         L"Les barres du visualiseur et les animations des panneaux gardent leur rythme sur un écran à 60 Hz (elles tombaient à 30 ou 20 images par seconde).\n"
+         L"Avec la pilule à la verticale (la Barre ou l'Île sur un côté), un nombre ou un pourcentage à côté d'une icône, comme les fichiers de l'Étagère, la batterie, le volume, la Corbeille ou l'utilisation de l'IA, ne dessine plus une deuxième horloge par-dessus (#7605).\n"
+         L"Dans le panneau Lecture en cours, les noms de lecture aléatoire et de répétition s'ouvrent au-dessus du bouton quand le bas du panneau les couperait.\n"
+         L"Le remplissage de couleur de la pilule (un téléchargement, la batterie en charge ou le minuteur) remplit aussi la courbe de l'encoche qui descend le long du bord de l'écran.\n"
+         L"Dans le panneau de l'utilisation de l'IA, le jour où une limite repart s'affiche dans la langue de l'île, pas dans celle de Windows.",
+         L"#Yeni\n"
+         L"{Theme}Vice, Renkler'de yeni bir tema (Görünüm sekmesi): karanlık bir gecenin üzerinde neon bir gün batımı, masaüstü için yapılan şehir durum çubukları gibi. Turkuaz simgeler, pembe vurgular, hapın yazıları büyük harfle Windows'un dar Bahnschrift yazı tipi ve her stilde adanın boyunca neon bir çizgi. Güç menüsü bir oyunun duraklatma menüsüne dönüşür: Devam et, her zamanki işlemler ve PC kapanmadan önce ekranı griye çeviren Wasted (Esc iptal eder).\n"
+         L"{AiCustom}Yapay zekâ kullanımı artık başka hizmetlerin sınırlarını da gösterebiliyor; bunlar bu PC'de başka bir aracınızın güncel tuttuğu bir JSON dosyasından okunur ve her biri kapsülde ve panelde kendi adı ve simgesiyle görünür; paneldeki \"+ Sağlayıcı ekle\" daha fazla dosya ekler (Uygulamalar ve araçlar sekmesi, varsayılan olarak kapalı, #7307, Pedro yaptı).\n"
+         L"#Düzeltmeler\n"
+         L"Windhawk yönetici olarak çalışmadığında Uygulamalar (başlatıcı) uygulamaları yeniden açıyor. Başlat menüsü kısayolu Program Files klasörünü gösteren Chrome, Brave, Office ve diğer uygulamalar \"Belirtilen yol yok\" hatası veriyordu (#7521, #7360). Bunları bir bildirimden, bir komuttan veya Klasörler ve yerler bölümünden açarken de aynısı geçerli.\n"
+         L"Denetim merkezinde bir güç modu seçmek artık adayı kapatmıyor (#7539).\n"
+         L"Klasörler ve yerler, kısayolların ve programların türlerine ait genel simge yerine kendi simgelerini gösteriyor (#7575).\n"
+         L"Küçültülmüş çizgide zamanlayıcının halkası ve süresi yan yana duruyor, saat onlardan sonra geliyor (#7483).\n"
+         L"Hapı renkle dolduran zamanlayıcı artık akıcı biçimde ilerliyor; çentikler boyunca ve dikey Çubukta da öyle. Çentiklerde küçültülmüş çizgi, erkenden dolmak yerine zamanlayıcının gerçek ilerlemesini gösteriyor.\n"
+         L"Aradaki öğelerin gösterecek bir şeyi olmadığında, örneğin hiçbir şey çalmazken şimdi çalan, iki ayırıcı çizgi artık yan yana görünmüyor (#7330).\n"
+         L"Faísca'nın oyunları ekranın hızında (saniyede 60 kareye kadar) ve kare hızı ne olursa olsun aynı hızda çalışıyor, Bulutlarda zıplama'da buluta yetişen bir zıplama bulutun üstüne konuyor ve o uyurken paneli akıcı kalıyor (#7559).\n"
+         L"Geri Dönüşüm Kutusu, ada başladıktan veya bilgisayar uyandıktan sonraki ilk dakikalarda ve bir sürücü takıldığında birkaç kez yeniden izleniyor ve sayılıyor; böylece açılıştan sonra yanlış sayıda kalmıyor.\n"
+         L"Faísca'nın \"Boyutu\" artık %160'a kadar çıkıyor; küçük ölçekli büyük ekranlar için.\n"
+         L"Görselleştiricinin çubukları ve panellerin animasyonları 60 Hz ekranda hızını koruyor (saniyede 30 ya da 20 kareye düşüyordu).\n"
+         L"Kapsül dikey durduğunda (Çubuk ya da Ada bir kenarda), bir simgenin yanındaki sayı veya yüzde, örneğin Raf'taki dosyalar, pil, ses, Geri Dönüşüm Kutusu ya da yapay zekâ kullanımı, artık üstüne ikinci bir saat çizmiyor (#7605).\n"
+         L"Şimdi çalan panelinde, panelin alt kenarı keseceği zaman karıştır ve tekrarla düğmelerinin adları düğmenin üstünde açılıyor.\n"
+         L"Hapın renk dolgusu (bir indirme, şarj olan pil veya zamanlayıcı) artık ekranın kenarından aşağı inen çentik kıvrımını da dolduruyor.\n"
+         L"Yapay zekâ kullanımı panelinde bir sınırın yeniden başladığı gün artık Windows'un değil adanın dilinde gösteriliyor.",
+         L"#새 기능\n"
+         L"{Theme}새 테마 Vice를 색(모양 탭)에 추가: 어두운 밤 위의 네온 노을로, 데스크톱용으로 만든 도시 상태 표시줄 같은 모습입니다. 청록색 아이콘, 분홍색 강조, 알약의 글자를 대문자로 쓴 Windows의 Bahnschrift 압축 글꼴, 그리고 모든 스타일에서 아일랜드를 따라 흐르는 네온 선. 전원 메뉴는 게임의 일시 정지 메뉴가 됩니다: 재개, 평소의 동작, 그리고 PC를 끄기 전에 화면을 회색으로 바꾸는 Wasted(Esc로 취소).\n"
+         L"{AiCustom}AI 사용량에 다른 서비스의 한도도 표시할 수 있어요. 내 다른 도구가 계속 갱신하는 이 PC의 JSON 파일에서 읽고, 서비스마다 캡슐과 패널에 이름과 아이콘이 붙어요. 패널의 \"+ 공급자 추가\"로 파일을 더 추가해요(앱 및 도구 탭, 기본값 꺼짐, #7307, Pedro 제작).\n"
+         L"#수정\n"
+         L"Windhawk를 관리자 권한으로 실행하지 않아도 앱 (런처)에서 앱이 다시 열려요. 시작 메뉴 바로 가기가 Program Files를 가리키는 Chrome, Brave, Office 등의 앱은 \"지정된 경로가 없습니다\" 오류가 났어요(#7521, #7360). 알림, 명령, 폴더 및 위치에서 열 때도 마찬가지예요.\n"
+         L"제어 센터에서 전원 모드를 골라도 더 이상 아일랜드가 닫히지 않아요(#7539).\n"
+         L"폴더 및 위치에서 바로 가기와 프로그램이 형식별 기본 아이콘 대신 각자의 아이콘으로 보여요(#7575).\n"
+         L"최소화된 선에서 타이머의 링과 시간이 함께 붙어 있고, 시계는 그 뒤에 와요(#7483).\n"
+         L"알약을 색으로 채우는 타이머가 노치를 가로지를 때와 세로 바에서도 부드럽게 늘어나요. 노치를 쓸 때 최소화된 선은 너무 일찍 차지 않고 타이머의 실제 진행 상황을 보여 줘요.\n"
+         L"사이에 있는 항목에 보여 줄 것이 없을 때(아무것도 재생하지 않을 때의 재생 중 등) 구분선 두 개가 나란히 보이지 않아요(#7330).\n"
+         L"Faísca의 게임이 화면 속도(초당 최대 60프레임)로, 프레임 속도와 상관없이 같은 빠르기로 돌아가요. 구름 점프에서 구름에 닿은 점프는 구름 위에 착지하고, 잠자는 동안에도 패널이 부드러워요(#7559).\n"
+         L"아일랜드가 시작되거나 PC가 깨어난 뒤 처음 몇 분 동안, 그리고 드라이브를 연결할 때 휴지통을 다시 감시하고 몇 번 더 세요. 그래서 부팅 후 잘못된 개수가 그대로 남지 않아요.\n"
+         L"Faísca의 \"크기\"를 160%까지 키울 수 있어요. 배율이 작은 큰 화면을 위한 거예요.\n"
+         L"60Hz 화면에서도 비주얼라이저 막대와 패널 애니메이션이 제 속도를 유지해요(초당 30이나 20프레임으로 떨어졌어요).\n"
+         L"캡슐을 세로로 두면(바나 아일랜드를 옆에 둘 때) 아이콘 옆의 숫자나 퍼센트(선반의 파일 수, 배터리, 볼륨, 휴지통, AI 사용량 등) 위에 두 번째 시계가 더 이상 그려지지 않아요 (#7605).\n"
+         L"재생 중 패널에서 셔플과 반복의 이름이 패널 아래쪽에 잘릴 때는 버튼 위에 표시돼요.\n"
+         L"알약의 색 채우기(다운로드, 배터리 충전 또는 타이머)가 이제 화면 가장자리를 따라 내려가는 노치의 곡선 부분도 채워요.\n"
+         L"AI 사용량 패널에서 한도가 다시 시작되는 요일이 Windows가 아닌 아일랜드의 언어로 표시돼요."}},
     {L"3.2.0",
      {
          L"#New\n"
@@ -36787,14 +37351,23 @@ constexpr UINT kRecycleSettleMs = 600;
 // A count or a watch that failed (Windows not ready yet, right after the PC
 // starts, #7048): tried again this long after.
 constexpr UINT kRecycleRetryMs = 10000;
+// Right after the PC starts or wakes, Windows may count the bin before
+// every drive is ready, and a watch made then may never be told (the item
+// kept the first count, Discord): watched and counted again after each of
+// these delays from the island's start (whenever it starts: with Fast
+// startup the PC's own uptime doesn't begin again) or a wake (see
+// Island::OnRecycleCounted).
+constexpr UINT kRecycleWarmupMs[] = {20000, 60000, 180000};
 // The folded apps go back into their arrow (see Island::OpenFoldedApps).
 constexpr UINT_PTR kAppsFoldTimerId = 52;
 constexpr UINT kAppsFoldMs = 1200;
 // The visualizer reads the sound this often while something plays (see
 // Island::StepVisualizer).
 constexpr double kVizStepSeconds = 1.0 / 30;
-// The bars drawn at most this often (see Island::StepVisualizer).
-constexpr double kVizFrameSeconds = 1.0 / 60;
+// The bars drawn at most this often (see Island::StepVisualizer): a hair
+// under a 60th, like kWindowFrameSeconds, so that every frame of a 60 Hz
+// screen, a little early, passes (exactly a 60th kept them at 30).
+constexpr double kVizFrameSeconds = 0.0125;
 // A meter's peak at most this low is silence.
 constexpr float kVizSilentPeak = 0.001f;
 // Its seven bars (an odd count: one in the middle), the middle one the
@@ -36917,9 +37490,11 @@ constexpr int kPetBusyMax = 100;
 constexpr int kPetBusyDefault = 85;
 constexpr int kPetBusyStep = 5;
 // Her size, in percent of the item's height (islandPetSize, a
-// slider).
+// slider). Up to 160% for big screens at a small scale (a 32" 4K at 100%
+// left her a few millimeters tall on the line, Discord); over 100% she has
+// her own window over the island (see PetWindowWanted).
 constexpr int kPetSizeMin = 70;
-constexpr int kPetSizeMax = 130;
+constexpr int kPetSizeMax = 160;
 constexpr int kPetSizeDefault = 100;
 constexpr int kPetSizeStep = 5;
 
@@ -37760,7 +38335,6 @@ constexpr size_t kPetSoundFileMost = 32 * 1024 * 1024;
 // kPetNoises, from the sound design), all sent a little into a room, then
 // trimmed and set to a level. Made once per sound when first needed.
 
-constexpr double kPetPi = 3.14159265358979323846;
 // The room: the seconds it goes on after the last tone, how long it takes to
 // fade, how much of it is heard, its level and its brightness.
 constexpr double kPetSoundTail = 1.1;
@@ -37882,7 +38456,7 @@ struct PetBiquad {
     double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
     void Set(Kind kind, double freq, double q) {
         freq = std::clamp(freq, 20.0, kPetSoundRate * 0.45);
-        const double w = 2 * kPetPi * freq / kPetSoundRate;
+        const double w = 2 * kPi * freq / kPetSoundRate;
         const double c = std::cos(w);
         const double alpha = std::sin(w) / (2 * q);
         const double a0 = 1 + alpha;
@@ -37938,14 +38512,14 @@ void PetAddTone(const PetTone& tone,
                                : tone.glide;
         }
         if (tone.vib > 0) {
-            freq += tone.freq * 0.03 * std::sin(2 * kPetPi * tone.vib * time);
+            freq += tone.freq * 0.03 * std::sin(2 * kPi * tone.vib * time);
         }
-        phase += 2 * kPetPi * freq / kPetSoundRate;
+        phase += 2 * kPi * freq / kPetSoundRate;
         double wave;
         if (tone.wave == PetOsc::Sine) {
             wave = std::sin(phase);
         } else {
-            const double turns = phase / (2 * kPetPi);
+            const double turns = phase / (2 * kPi);
             const double p = turns - std::floor(turns);
             if (tone.wave == PetOsc::Triangle) {
                 wave = p < 0.25 ? 4 * p : p < 0.75 ? 2 - 4 * p : 4 * p - 4;
@@ -39616,7 +40190,7 @@ void PetAnim::Step(double now,
                    now - emotionAt >= 0.45) {
             sneezed = true;
             for (int i = 0; i < 7; i++) {
-                const float side = PetRandom(random) < 0.5 ? 0 : 3.14159265f;
+                const float side = PetRandom(random) < 0.5 ? 0 : kPi;
                 sparks.push_back(
                     {now, 0.6, (float)(PetRandom(random) - 0.5) * 0.9f + side,
                      1.8f});
@@ -39655,7 +40229,7 @@ void PetAnim::Burst(double now, int count, double life, float spread) {
     for (int i = 0; i < count; i++) {
         sparks.push_back(
             {now, life * (0.8 + PetRandom(random) * 0.4),
-             (float)(i * 6.2831853 / count + PetRandom(random) * 0.4),
+             (float)(i * 2 * kPi / count + PetRandom(random) * 0.4),
              (float)(1.2 + PetRandom(random) * 0.8) * spread});
     }
 }
@@ -40048,8 +40622,7 @@ PetPaint* PetPaintFor(ID2D1RenderTarget* target) {
     }
     made.target.copy_from(target);
     made.usedAt = g_petPaintUses;
-    constexpr float kPi = 3.14159265f;
-    made.rim = PetUnitArc(target, 3.299f, 5.027f);
+    made.rim = PetUnitArc(target, 1.05f * kPi, 1.6f * kPi);
     made.fanArc = PetUnitArc(target, 0, 0.9f);
     made.wifiArc = PetUnitArc(target, 1.2f * kPi, 1.8f * kPi);
     made.soundArc = PetUnitArc(target, -0.6f, 0.6f);
@@ -40282,7 +40855,7 @@ void DrawPetStress(ID2D1RenderTarget* target,
             const float y0 = -r * 1.05f - p * r * (leak ? 0.9f : 0.45f);
             brush->SetColor(D2D1::ColorF(
                 1, 0.667f, 0.353f,
-                (float)std::sin(p * 3.14159265) * 0.8f * opacity));
+                (float)std::sin(p * kPi) * 0.8f * opacity));
             D2D1_POINT_2F from{};
             for (int k = 0; k <= 6; k++) {
                 const D2D1_POINT_2F at{
@@ -40303,13 +40876,13 @@ void DrawPetStress(ID2D1RenderTarget* target,
                                  place);
             brush->SetColor(D2D1::ColorF(
                 0.784f, 0.922f, 1,
-                0.9f * (float)std::sin(k * 3.14159265) * opacity));
+                0.9f * (float)std::sin(k * kPi) * opacity));
             target->FillGeometry(paint.sweat.get(), brush);
             target->SetTransform(place);
         }
     } else if (mood == PetMood::Ram) {
         for (int i = 0; i < 5; i++) {
-            const double angle = t * 0.7 + i * 1.257;
+            const double angle = t * 0.7 + i * 2 * kPi / 5;
             const float bx = (float)std::cos(angle) * r * 1.5f;
             const float by = (float)std::sin(angle) * r * 1.5f * 0.42f -
                              r * 0.1f;
@@ -40329,10 +40902,10 @@ void DrawPetStress(ID2D1RenderTarget* target,
                                                   {1, 0.839f, 0.353f, 1}};
         const float radius = r * 1.38f;
         for (int i = 0; i < 3; i++) {
-            const double from = t * 7 + i * 2.094;
+            const double from = t * 7 + i * 2 * kPi / 3;
             target->SetTransform(
                 D2D1::Matrix3x2F::Rotation(
-                    (float)std::fmod(from * 57.29578, 360.0)) *
+                    (float)std::fmod(from * 180 / kPi, 360.0)) *
                 D2D1::Matrix3x2F::Scale(radius, radius) * place);
             brush->SetColor(
                 PetAlpha(PetMix(color, kHues[i], 0.55f), 0.85f * opacity));
@@ -40368,11 +40941,10 @@ void DrawPetProp(ID2D1RenderTarget* target,
         (float)PetEase(e / 0.2f) * (1 - (float)PetEase((e - 0.75f) / 0.25f)) *
         seen;
     const float s = h * 0.2f;
-    constexpr float kPi = 3.14159265f;
     auto lerp = [](float a, float b, float k) { return a + (b - a) * k; };
     const D2D1_COLOR_F light = PetMix(color, {1, 1, 1, 1}, 0.4f);
     auto doc = [&](float x, float y, float turn) {
-        target->SetTransform(D2D1::Matrix3x2F::Rotation(turn * 57.29578f) *
+        target->SetTransform(D2D1::Matrix3x2F::Rotation(turn * 180 / kPi) *
                              D2D1::Matrix3x2F::Translation(x, y) * place);
         brush->SetColor(D2D1::ColorF(0.957f, 0.969f, 0.973f, shown));
         target->FillRoundedRectangle({{-s * 0.4f, -s * 0.52f, s * 0.4f,
@@ -40487,7 +41059,7 @@ void DrawPetProp(ID2D1RenderTarget* target,
                 alarm ? (float)std::sin(now * 30) * 0.2f * (1 - e) : 0;
             target->SetTransform(
                 D2D1::Matrix3x2F::Scale(k, k) *
-                D2D1::Matrix3x2F::Rotation(wobble * 57.29578f) *
+                D2D1::Matrix3x2F::Rotation(wobble * 180 / kPi) *
                 D2D1::Matrix3x2F::Translation(r * 0.2f, -r * 1.55f) * place);
             brush->SetColor(alarm ? D2D1::ColorF(1, 0.761f, 0.294f, shown)
                                   : D2D1::ColorF(0.933f, 0.953f, 0.961f,
@@ -40523,7 +41095,7 @@ void DrawPetProp(ID2D1RenderTarget* target,
             brush->SetColor(PetAlpha(PetMix(color, {1, 1, 1, 1}, 0.5f), shown));
             target->FillRectangle(
                 {x + s * 0.16f, y - s * 0.7f, x + s * 0.24f, y}, brush);
-            target->SetTransform(D2D1::Matrix3x2F::Rotation(-0.4f * 57.29578f) *
+            target->SetTransform(D2D1::Matrix3x2F::Rotation(-0.4f * 180 / kPi) *
                                  D2D1::Matrix3x2F::Translation(x, y) * place);
             target->FillEllipse({{0, 0}, s * 0.22f, s * 0.16f}, brush);
             target->SetTransform(place);
@@ -40580,7 +41152,6 @@ void DrawPetFaisca(ID2D1RenderTarget* target,
     const bool still = level >= 2;
     const bool full = level == 0;
     const double t = now;
-    constexpr float kPi = 3.14159265f;
     D2D1_COLOR_F color = PetShownColor(a, style);
     const float r0 = h * 0.3f;
     // (Hops and jumps reach higher when she may leave the pill.)
@@ -40925,7 +41496,7 @@ void DrawPetFaisca(ID2D1RenderTarget* target,
     // The body: lit from its top left (its hot spot as bright as her
     // light, in steps), turned and squashed.
     const D2D1::Matrix3x2F body = D2D1::Matrix3x2F::Scale(sx, sy) *
-                                  D2D1::Matrix3x2F::Rotation(rot * 57.29578f) *
+                                  D2D1::Matrix3x2F::Rotation(rot * 180 / kPi) *
                                   place;
     target->SetTransform(body);
     const D2D1_COLOR_F light = PetMix(stepped, {1, 1, 1, 1}, 0.62f);
@@ -40972,7 +41543,7 @@ void DrawPetFaisca(ID2D1RenderTarget* target,
             continue;
         }
         target->SetTransform(
-            D2D1::Matrix3x2F::Rotation(s * a.squeeze * 0.42f * 57.29578f) *
+            D2D1::Matrix3x2F::Rotation(s * a.squeeze * 0.42f * 180 / kPi) *
             D2D1::Matrix3x2F::Translation(s * ex + anim.eyeX * r * 0.17f,
                                           ey + anim.eyeY * r * 0.13f) *
             body);
@@ -41456,7 +42027,7 @@ D2D1_COLOR_F CaretColor(float opacity = 1) {
     const double shown =
         since < 0.6 || since >= kCaretBlinkSeconds
             ? 1.0
-            : 0.5 + 0.5 * std::cos((since - 0.6) * 2 * 3.14159265 / 1.1);
+            : 0.5 + 0.5 * std::cos((since - 0.6) * 2 * kPi / 1.1);
     return Accent((float)shown * opacity);
 }
 
@@ -44063,15 +44634,29 @@ unsigned long long HoverKey(int a, long long b) {
 std::wstring g_textFont;
 std::wstring g_clockFont;
 
+// The Vice theme's font, without one of your own: Windows' Bahnschrift
+// (a road sign's lettering), condensed (see UiStretch).
+constexpr WCHAR kViceFont[] = L"Bahnschrift";
+
 // `family` (one of Windows' the island draws with) as chosen: only Segoe UI
 // Variable's (its texts) is swapped, never the icons' fonts.
 PCWSTR UiFont(PCWSTR family) {
-    if (!g_textFont.empty() &&
-        (wcscmp(family, L"Segoe UI Variable Text") == 0 ||
-         wcscmp(family, L"Segoe UI Variable Display") == 0)) {
+    const bool texts = wcscmp(family, L"Segoe UI Variable Text") == 0 ||
+                       wcscmp(family, L"Segoe UI Variable Display") == 0;
+    if (texts && !g_textFont.empty()) {
         return g_textFont.c_str();
     }
+    if (texts && ViceThemeOn()) {
+        return kViceFont;
+    }
     return family;
+}
+
+// How wide the letters of a font UiFont gave are: the Vice theme's own
+// condensed, any other as it is.
+DWRITE_FONT_STRETCH UiStretch(PCWSTR font) {
+    return font == kViceFont ? DWRITE_FONT_STRETCH_CONDENSED
+                             : DWRITE_FONT_STRETCH_NORMAL;
 }
 
 // The clock's font: its own, or the island's.
@@ -44083,12 +44668,160 @@ PCWSTR ClockFont(PCWSTR family) {
 // (see Panel::m_preparedFonts, Island::UpdateFormats).
 size_t FontsKey() {
     const std::hash<std::wstring> hash;
-    return hash(g_textFont) * 31 + hash(g_clockFont);
+    return (hash(g_textFont) * 31 + hash(g_clockFont)) * 2 +
+           (ViceThemeOn() ? 1 : 0);
 }
 
 // A panel opening without taking the focus (opened by the mouse resting on
 // its item, see Island::HoverOpen): the app in front keeps it.
 bool g_panelOpenQuiet = false;
+
+// The Vice theme's neon line (see DrawViceNeon): its brushes and the layer
+// that keeps it inside a notch, kept for the target they were made on (the
+// target too, so the address of one gone is never taken for a new one's).
+struct ViceNeonPaint {
+    winrt::com_ptr<ID2D1RenderTarget> target;
+    winrt::com_ptr<ID2D1LinearGradientBrush> line;
+    winrt::com_ptr<ID2D1LinearGradientBrush> glow;
+    // A notch's glow, in strokes along its outline.
+    winrt::com_ptr<ID2D1SolidColorBrush> soft;
+    winrt::com_ptr<ID2D1Layer> layer;
+};
+
+// The edge of a shape the neon line goes along: the one facing the
+// screen's middle (away from the edge the island is against).
+enum class ViceSide { Bottom, Top, Right, Left };
+
+// The Vice theme's neon line inside a shape of the island or a panel
+// (`shape`, a notch's; else `rect` with its `radius`), along its `side`: a
+// thin stripe from violet through pink to orange, and a soft pink glow
+// going inward from it, as much as `amount`. Each is the shape filled
+// inside its band, so it follows the round corners. A notch's stripe and
+// glow go along its `outline` (away from the screen's edges) instead, down
+// its curves too.
+void DrawViceNeon(ID2D1RenderTarget* target,
+                  ViceNeonPaint& paint,
+                  const D2D1_RECT_F& rect,
+                  float radius,
+                  ID2D1Geometry* shape,
+                  ViceSide side,
+                  float scale,
+                  float amount,
+                  ID2D1Geometry* outline = nullptr) {
+    // (Made once for the target, placed and dimmed each time; another
+    // target's, after the device was lost, let go even when not drawn.)
+    if (paint.target && paint.target.get() != target) {
+        paint = {};
+    }
+    if (amount <= 0.01f || rect.right - rect.left < 1 ||
+        rect.bottom - rect.top < 1) {
+        return;
+    }
+    const bool made = paint.target.get() == target && paint.line && paint.glow;
+    if (!made) {
+        paint = {};
+        auto make = [&](const D2D1_GRADIENT_STOP* stops, UINT32 count,
+                        winrt::com_ptr<ID2D1LinearGradientBrush>& brush) {
+            winrt::com_ptr<ID2D1GradientStopCollection> collection;
+            if (SUCCEEDED(target->CreateGradientStopCollection(
+                    stops, count, collection.put()))) {
+                target->CreateLinearGradientBrush({}, collection.get(),
+                                                  brush.put());
+            }
+        };
+        const D2D1_GRADIENT_STOP lineStops[] = {
+            {0, ViceColor(kViceViolet, 1)},
+            {0.45f, ViceColor(kVicePink, 1)},
+            {1, ViceColor(kViceOrange, 1)}};
+        const D2D1_GRADIENT_STOP glowStops[] = {{0, ViceColor(kVicePink, 1)},
+                                                {1, ViceColor(kVicePink, 0)}};
+        make(lineStops, 3, paint.line);
+        make(glowStops, 2, paint.glow);
+        if (!paint.line || !paint.glow) {
+            paint = {};
+            return;
+        }
+        // (Without them, a notch's neon only along its bottom.)
+        target->CreateLayer(nullptr, paint.layer.put());
+        target->CreateSolidColorBrush(ViceColor(kVicePink, 1),
+                                      paint.soft.put());
+        paint.target.copy_from(target);
+    }
+    const bool upright = side == ViceSide::Right || side == ViceSide::Left;
+    // Where the edge is across the shape, which way is inward, and where
+    // the stripe and the glow end.
+    const float edge = side == ViceSide::Bottom  ? rect.bottom
+                       : side == ViceSide::Top   ? rect.top
+                       : side == ViceSide::Right ? rect.right
+                                                 : rect.left;
+    const float inward =
+        side == ViceSide::Bottom || side == ViceSide::Right ? -1.0f : 1.0f;
+    const float stripeEnd =
+        edge + inward * std::max(1.0f, std::round(2 * scale));
+    const float glowEnd = stripeEnd + inward * std::round(10 * scale);
+    // (Along the whole shape: a notch's curves reach past `rect`.)
+    D2D1_RECT_F along = rect;
+    if (shape) {
+        shape->GetBounds(nullptr, &along);
+    }
+    auto fill = [&](float from, float to, ID2D1Brush* brush) {
+        const float a = std::min(from, to);
+        const float b = std::max(from, to);
+        target->PushAxisAlignedClip(
+            upright ? D2D1_RECT_F{a, along.top, b, along.bottom}
+                    : D2D1_RECT_F{along.left, a, along.right, b},
+            D2D1_ANTIALIAS_MODE_ALIASED);
+        if (shape) {
+            target->FillGeometry(shape, brush);
+        } else {
+            target->FillRoundedRectangle({rect, radius, radius}, brush);
+        }
+        target->PopAxisAlignedClip();
+    };
+    auto point = [upright](float alongIt, float across) {
+        return upright ? D2D1_POINT_2F{across, alongIt}
+                       : D2D1_POINT_2F{alongIt, across};
+    };
+    paint.line->SetStartPoint(point(upright ? rect.top : rect.left, edge));
+    paint.line->SetEndPoint(point(upright ? rect.bottom : rect.right, edge));
+    paint.line->SetOpacity(0.95f * amount);
+    if (shape && outline && paint.layer && paint.soft) {
+        // Each stroke twice as wide, its outer half left out by the shape;
+        // the glow in wider and wider faint ones, so it fades inward (about
+        // as strong by the stripe as the band's).
+        const float stripe = std::abs(stripeEnd - edge);
+        const float glow = std::abs(glowEnd - stripeEnd);
+        target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), shape),
+                          paint.layer.get());
+        paint.soft->SetOpacity(0.032f * amount);
+        for (int k = 1; k <= 5; k++) {
+            target->DrawGeometry(outline, paint.soft.get(),
+                                 2 * (stripe + glow * k / 5));
+        }
+        target->DrawGeometry(outline, paint.line.get(), 2 * stripe);
+        target->PopLayer();
+        return;
+    }
+    paint.glow->SetStartPoint(point(0, stripeEnd));
+    paint.glow->SetEndPoint(point(0, glowEnd));
+    paint.glow->SetOpacity(0.16f * amount);
+    fill(stripeEnd, glowEnd, paint.glow.get());
+    fill(edge, stripeEnd, paint.line.get());
+}
+
+// The minimized line's color: a light gray, seen over dark and light windows
+// alike, going to a light pink (as easy to see) as the Vice theme's neon
+// shows.
+D2D1_COLOR_F MinimizedLineColor(float alpha) {
+    const float vice = ViceAmount();
+    return {0.55f + 0.31f * vice, 0.55f - 0.13f * vice, 0.55f + 0.17f * vice,
+            alpha};
+}
+
+// A panel's paced frames (see Panel::m_idleMotion): about 30 a second, a
+// hair under a 30th so that every second frame of a 60 Hz screen, a little
+// early, passes (exactly a 30th dropped some to 20 a second).
+constexpr double kIdleFrameSeconds = 1.0 / 30 - 0.004;
 
 class Panel {
    public:
@@ -44403,7 +45136,7 @@ class Panel {
     double m_lastIdleFrame = 0;
     // The interval of those frames (see m_idleMotion): 30 a second, or what
     // the panel's contents ask (a game being played, see PetPanel).
-    double m_idleFrameSeconds = 1.0 / 30;
+    double m_idleFrameSeconds = kIdleFrameSeconds;
 
     winrt::com_ptr<IDWriteTextFormat> MakeFormat(
         PCWSTR family,
@@ -44417,6 +45150,8 @@ class Panel {
     LayeredCanvas m_canvas;
     // Its Liquid Glass (islandLiquidGlass, see GlassLayer).
     GlassLayer m_liquid;
+    // The Vice theme's neon line's brushes (see DrawViceNeon).
+    ViceNeonPaint m_viceNeon;
     // The fonts its texts were made with (see FontsKey).
     size_t m_preparedFonts = 0;
     float m_scale = 0;
@@ -44647,9 +45382,11 @@ void Panel::OpenWindowed(float size, PCWSTR title) {
 void Panel::Destroy() {
     OnDestroy();
     m_captionLogo = nullptr;
-    // (Faísca's paints for its targets let go with them.)
+    // (Faísca's paints for its targets let go with them, the Vice theme's
+    // neon's too.)
     ForgetPetPaint(m_windowTarget.get());
     ForgetPetPaint(m_canvas.target.get());
+    m_viceNeon = {};
     m_windowTarget = nullptr;
     m_liquid.Destroy();
     if (m_hwnd) {
@@ -44672,9 +45409,10 @@ winrt::com_ptr<IDWriteTextFormat> Panel::MakeFormat(
     float size,
     DWRITE_TEXT_ALIGNMENT alignment) {
     winrt::com_ptr<IDWriteTextFormat> format;
+    const PCWSTR font = UiFont(family);
     if (SUCCEEDED(m_dwrite->CreateTextFormat(
-            UiFont(family), nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL, size, L"", format.put()))) {
+            font, nullptr, weight, DWRITE_FONT_STYLE_NORMAL, UiStretch(font),
+            size, L"", format.put()))) {
         format->SetTextAlignment(alignment);
         format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
         format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -45173,6 +45911,19 @@ void Panel::Render() {
         target->SetTransform(D2D1::Matrix3x2F::Identity());
         target->PopLayer();
     }
+
+    // The Vice theme's neon line along its edge away from the island (the
+    // one facing the screen's middle, like the island's own), over its
+    // contents, coming with its edge.
+    DrawViceNeon(target, m_viceNeon, shape, radius, nullptr,
+                 m_direction == Direction::Up      ? ViceSide::Top
+                 : m_direction == Direction::Right ? ViceSide::Right
+                 : m_direction == Direction::Left  ? ViceSide::Left
+                                                   : ViceSide::Bottom,
+                 m_scale,
+                 ViceAmount() * (m_fromPill ? 1.0f
+                                            : std::clamp(progress * 2, 0.0f,
+                                                         1.0f)));
 
     m_canvas.End(m_hwnd, windowPosition, m_placing ? 0.0f : 1.0f);
     if (liquid) {
@@ -49398,7 +50149,7 @@ void DrawFlag(ID2D1RenderTarget* target,
         }
         for (int k = 0; k < 10; k++) {
             const float reach = k % 2 ? r * 0.4f : r;
-            const float angle = -1.5708f + k * 0.62832f;
+            const float angle = -kPi / 2 + k * kPi / 5;
             const D2D1_POINT_2F point{x + reach * std::cos(angle),
                                       y + reach * std::sin(angle)};
             if (k == 0) {
@@ -55921,6 +56672,7 @@ enum class IslandPref {
     CalendarTasks,
     CopyCodes,
     PetAskPlay,
+    AiCustom,
 };
 
 struct IslandPrefInfo {
@@ -56523,6 +57275,8 @@ const IslandPrefInfo kIslandPrefs[] = {
      L"Copy verification codes", L"Copiar códigos de verificação"},
     {IslandPref::PetAskPlay, L"islandPetAskPlay", 0xE7FC,
      L"She asks to play when bored", L"Ela pede para brincar quando entediada"},
+    {IslandPref::AiCustom, L"islandAiCustom", kGlyphAiUsage,
+     L"Custom (JSON file)", L"Personalizado (arquivo JSON)"},
 };
 
 // The groups of items on the pill, which can be put in another order in the
@@ -59282,9 +60036,8 @@ constexpr GUID kPowerModes[3] = {
 constexpr GUID kBalancedPowerPlan = {
     0x381b4222, 0xf694, 0x41f0, {0x96, 0x85, 0xff, 0x5b, 0xb2, 0x60, 0xdf, 0x2e}};
 
-// powrprof.dll, loaded once and kept: setting the power mode leaves work of
-// its own going on in it, and freeing it right after crashed the island
-// (an address in no module any more).
+// powrprof.dll, loaded once and kept while the island runs (its functions
+// looked up where they're used).
 HMODULE Powrprof() {
     static const HMODULE module =
         LoadLibraryEx(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -59400,10 +60153,13 @@ bool SetPowerMode(int mode) {
     if (!powrprof) {
         return false;
     }
-    using SetOverlay_t = DWORD(WINAPI*)(GUID);
+    // (It takes the GUID's address: passed by value, the 32-bit island pushed
+    // 16 bytes that the function, popping 4, left on the stack, and crashed
+    // as soon as a mode was chosen, #7539.)
+    using SetOverlay_t = DWORD(WINAPI*)(const GUID*);
     auto setOverlay =
         (SetOverlay_t)GetProcAddress(powrprof, "PowerSetActiveOverlayScheme");
-    return setOverlay && setOverlay(kPowerModes[mode]) == ERROR_SUCCESS;
+    return setOverlay && setOverlay(&kPowerModes[mode]) == ERROR_SUCCESS;
 }
 
 // A power mode or plan chosen, set on a thread of its own: Windows tells
@@ -60643,6 +61399,7 @@ class ControlPanel : public Panel {
         IconCellColor,   // Its brush: a color of its own (its kIcons index).
         IconPackDelete,  // An icon pack's bin: its pictures deleted (its pack).
         SetupButton,     // A button of the setup assistant (its SetupButton).
+        AiCustomFile,    // "Choose..." on the Custom AI usage row.
     };
 
     struct Hit {
@@ -60910,7 +61667,8 @@ class ControlPanel : public Panel {
                  pref == IslandPref::CountdownTimer ||
                  pref == IslandPref::CountdownPomodoro) &&
                 !GetIslandPref(IslandPref::Countdown)) ||
-               ((pref == IslandPref::AiClaude || pref == IslandPref::AiCodex) &&
+               ((pref == IslandPref::AiClaude || pref == IslandPref::AiCodex ||
+                 pref == IslandPref::AiCustom) &&
                 !GetIslandPref(IslandPref::AiUsage)) ||
                (pref == IslandPref::FocusedTitle &&
                 !GetIslandPref(IslandPref::FocusedApp)) ||
@@ -61721,6 +62479,8 @@ class ControlPanel : public Panel {
     std::array<unsigned, kPetSounds> m_petSoundEpoch{};
     void StartPetSoundFileDialog(int sound);
     void SetPetSoundSource(int sound, int choice);
+    std::wstring m_aiCustomStatus;
+    void StartAiCustomFileDialog();
     bool m_profileTyping = false;
     // "Delete" pressed once: it asks, and deletes when pressed again.
     bool m_profileDeleteArmed = false;
@@ -64537,6 +65297,327 @@ void RunPowerAction(PowerAction action, HWND window) {
     }
 }
 
+// A short text in capitals, as the user's language writes them (the Vice
+// theme's pause menu and its WASTED).
+std::wstring CapitalsOf(PCWSTR text) {
+    const int length = (int)wcslen(text);
+    const DWORD flags = LCMAP_UPPERCASE | LCMAP_LINGUISTIC_CASING;
+    const int needed = LCMapStringEx(LOCALE_NAME_USER_DEFAULT, flags, text,
+                                     length, nullptr, 0, nullptr, nullptr, 0);
+    if (needed <= 0) {
+        return text;
+    }
+    std::wstring capitals(needed, L'\0');
+    if (LCMapStringEx(LOCALE_NAME_USER_DEFAULT, flags, text, length,
+                      capitals.data(), needed, nullptr, nullptr,
+                      0) != needed) {
+        return text;
+    }
+    return capitals;
+}
+
+// The Vice theme's Wasted (kept in English: players know it so).
+PCWSTR WastedText() {
+    return Tr(L"Wasted", L"Wasted");
+}
+
+// The Vice theme's Wasted, the pause menu's last row: every screen fades to
+// gray, a big red WASTED comes in over the main one, then the PC shuts down
+// the menu's way (RunPowerAction). Esc, any key or a click stops it: it
+// fades away and nothing happens. Two windows of the island's thread: the
+// veil over the whole desktop (one gray that Windows fades), which takes the
+// keyboard and the mouse, and the word over it, drawn only while it moves.
+class WastedScreen {
+   public:
+    // `owner`: the menu's window (for RunPowerAction).
+    void Show(ID2D1Factory* factory, IDWriteFactory* dwrite, HWND owner);
+    // Gone at once, with all it made (also when the island goes away).
+    void Destroy();
+
+   private:
+    static LRESULT CALLBACK VeilProc(HWND hWnd,
+                                     UINT msg,
+                                     WPARAM wParam,
+                                     LPARAM lParam,
+                                     UINT_PTR,
+                                     DWORD_PTR data);
+    // The word laid out for the main monitor (false if it can't be).
+    bool MakeWord(IDWriteFactory* dwrite);
+    // Shows the moment it's at: true while something still moves.
+    bool Frame();
+    // Esc, a key or a click: no shutdown, it fades away.
+    void Stop();
+
+    static constexpr UINT_PTR kFrameTimer = 1;
+    static constexpr UINT_PTR kShutDownTimer = 2;
+    static constexpr UINT kFrameMs = 15;
+    HWND m_owner = nullptr;
+    HWND m_veil = nullptr;
+    HWND m_word = nullptr;
+    LayeredCanvas m_canvas;
+    // Made with its first frame, for the canvas' target.
+    winrt::com_ptr<ID2D1SolidColorBrush> m_brush;
+    winrt::com_ptr<IDWriteTextLayout> m_layout;
+    // The word's window (on the main monitor), where the word is drawn in
+    // it, and its outline's width.
+    POINT m_wordAt{};
+    SIZE m_wordSize{};
+    D2D1_POINT_2F m_wordOrigin{};
+    float m_edge = 0;
+    double m_start = 0;
+    // When it was stopped (0: it wasn't), and whether it shows without
+    // animations (all at once).
+    double m_stopped = 0;
+    bool m_still = false;
+};
+
+void WastedScreen::Show(ID2D1Factory* factory,
+                        IDWriteFactory* dwrite,
+                        HWND owner) {
+    if (m_veil) {
+        return;
+    }
+    m_owner = owner;
+    m_start = NowSeconds();
+    m_stopped = 0;
+    // The veil over every monitor: not a full-screen app to Windows (see the
+    // wallpaper's transition).
+    m_veil = CreateWindowEx(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+                            kPanelClassName, L"", WS_POPUP,
+                            GetSystemMetrics(SM_XVIRTUALSCREEN),
+                            GetSystemMetrics(SM_YVIRTUALSCREEN),
+                            GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                            GetSystemMetrics(SM_CYVIRTUALSCREEN), nullptr,
+                            nullptr, g_module, nullptr);
+    if (!m_veil || !SetWindowSubclass(m_veil, VeilProc, 0, (DWORD_PTR)this) ||
+        !SetTimer(m_veil, kShutDownTimer, 4200, nullptr)) {
+        // (Nothing to show it on: the shutdown chosen, as the menu's.)
+        IslandLog(L"Wasted: its screen failed (%u)", GetLastError());
+        Destroy();
+        RunPowerAction(PowerAction::ShutDown, owner);
+        return;
+    }
+    SetProp(m_veil, L"NonRudeHWND", (HANDLE)TRUE);
+    SetLayeredWindowAttributes(m_veil, 0, 0, LWA_ALPHA);
+    // The word over it, the mouse going through. (Drawn only for it: a
+    // failure loses a frame, it never starts the island over.)
+    m_word = CreateWindowEx(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST |
+                                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                            kPanelClassName, L"", WS_POPUP, 0, 0, 0, 0,
+                            nullptr, nullptr, g_module, nullptr);
+    m_canvas.tellsLostDevice = false;
+    if (!m_word || !factory || !dwrite || !m_canvas.Create(factory) ||
+        !MakeWord(dwrite)) {
+        m_layout = nullptr;
+    }
+    // In front of everything, with the keyboard (Esc), its gray painted
+    // before it shows.
+    ShowWindow(m_veil, SW_SHOW);
+    UpdateWindow(m_veil);
+    SetForegroundWindow(m_veil);
+    m_still = AnimationLevel() >= 2 ||
+              !SetTimer(m_veil, kFrameTimer, kFrameMs, nullptr);
+    Frame();
+}
+
+bool WastedScreen::MakeWord(IDWriteFactory* dwrite) {
+    MONITORINFO monitor{sizeof(monitor)};
+    if (!GetMonitorInfo(MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY),
+                        &monitor)) {
+        return false;
+    }
+    const RECT& screen = monitor.rcMonitor;
+    // Its capitals about a seventh of the screen's height, bold and
+    // condensed.
+    const float size = std::round((screen.bottom - screen.top) / 5.0f);
+    const std::wstring word = CapitalsOf(WastedText());
+    winrt::com_ptr<IDWriteTextFormat> format;
+    DWRITE_TEXT_METRICS metrics{};
+    DWRITE_LINE_METRICS line{};
+    UINT32 lines = 0;
+    if (size < 1 ||
+        FAILED(dwrite->CreateTextFormat(
+            kViceFont, nullptr, DWRITE_FONT_WEIGHT_BOLD,
+            DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_CONDENSED, size, L"",
+            format.put())) ||
+        FAILED(dwrite->CreateTextLayout(word.c_str(), (UINT32)word.size(),
+                                        format.get(), 100000, 100000,
+                                        m_layout.put())) ||
+        FAILED(m_layout->GetMetrics(&metrics)) ||
+        FAILED(m_layout->GetLineMetrics(&line, 1, &lines))) {
+        return false;
+    }
+    // Room for it at its biggest (it comes in bigger) with its outline, in
+    // the middle of the screen; its capitals' middle on the window's.
+    m_edge = std::max(2.0f, std::round(size * 0.025f));
+    m_wordSize = {(LONG)std::ceil(metrics.width * 1.25f + m_edge * 8),
+                  (LONG)std::ceil(size * 1.25f + m_edge * 8)};
+    m_wordAt = {(screen.left + screen.right - m_wordSize.cx) / 2,
+                (screen.top + screen.bottom - m_wordSize.cy) / 2};
+    m_wordOrigin = {(m_wordSize.cx - metrics.width) / 2,
+                    m_wordSize.cy / 2.0f - line.baseline + size * 0.35f};
+    return true;
+}
+
+bool WastedScreen::Frame() {
+    const double now = NowSeconds();
+    // Stopped, it stays at that moment and all of it fades away.
+    const double t = m_still ? 10 : (m_stopped > 0 ? m_stopped : now) - m_start;
+    const float out =
+        m_stopped <= 0
+            ? 1
+            : (float)std::clamp(1 - (now - m_stopped) / 0.3, 0.0, 1.0);
+    auto easeOut = [](double x) {
+        x = std::clamp(x, 0.0, 1.0);
+        return (float)(1 - (1 - x) * (1 - x) * (1 - x));
+    };
+    // The gray over everything (0.8 seconds), then the word from 0.9: it
+    // fades in, shrinking from a quarter bigger to its size.
+    const float veil = 0.6f * easeOut(t / 0.8) * out;
+    SetLayeredWindowAttributes(m_veil, 0, (BYTE)std::lround(veil * 255),
+                               LWA_ALPHA);
+    const float word = easeOut((t - 0.9) / 0.5) * out;
+    if (m_layout && word > 0 && m_canvas.Begin(m_wordSize)) {
+        ID2D1DCRenderTarget* target = m_canvas.target.get();
+        const float grow = 1.25f - 0.25f * easeOut((t - 0.9) / 0.7);
+        target->SetTransform(D2D1::Matrix3x2F::Scale(
+            grow, grow, {m_wordSize.cx / 2.0f, m_wordSize.cy / 2.0f}));
+        if (!m_brush) {
+            target->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 0.5f),
+                                          m_brush.put());
+        }
+        if (m_brush) {
+            // A shadow under it and a dark outline all around (copies a
+            // little off each way), so it reads on any screen; the red on
+            // top.
+            ID2D1SolidColorBrush* brush = m_brush.get();
+            brush->SetColor(D2D1::ColorF(0, 0, 0, 0.5f));
+            target->DrawTextLayout(
+                {m_wordOrigin.x, m_wordOrigin.y + m_edge * 2.5f},
+                m_layout.get(), brush);
+            brush->SetColor(D2D1::ColorF(0.04f, 0.02f, 0.02f, 0.9f));
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    if (dx || dy) {
+                        target->DrawTextLayout(
+                            {m_wordOrigin.x + dx * m_edge,
+                             m_wordOrigin.y + dy * m_edge},
+                            m_layout.get(), brush);
+                    }
+                }
+            }
+            brush->SetColor(D2D1::ColorF(0.78f, 0.07f, 0.12f, 1));
+            target->DrawTextLayout(m_wordOrigin, m_layout.get(), brush);
+        }
+        target->SetTransform(D2D1::Matrix3x2F::Identity());
+        if (m_canvas.End(m_word, m_wordAt, word) && !IsWindowVisible(m_word)) {
+            SetWindowPos(m_word, HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                             SWP_SHOWWINDOW);
+        }
+    }
+    // Over the island, which comes back on top for some apps in front.
+    const HWND above = GetWindow(m_veil, GW_HWNDPREV);
+    if (above && above != m_word) {
+        SetWindowPos(m_veil, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        if (m_word) {
+            SetWindowPos(m_word, HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+    }
+    return m_stopped > 0 ? out > 0 : !m_still && t < 1.6;
+}
+
+void WastedScreen::Stop() {
+    if (!m_veil || m_stopped > 0) {
+        return;
+    }
+    m_stopped = NowSeconds();
+    KillTimer(m_veil, kShutDownTimer);
+    // (Without animations, or without its timer: gone at once.)
+    if (m_still || !SetTimer(m_veil, kFrameTimer, kFrameMs, nullptr)) {
+        Destroy();
+    }
+}
+
+void WastedScreen::Destroy() {
+    if (m_veil) {
+        RemoveWindowSubclass(m_veil, VeilProc, 0);
+        RemoveProp(m_veil, L"NonRudeHWND");
+        DestroyWindow(m_veil);
+        m_veil = nullptr;
+    }
+    if (m_word) {
+        DestroyWindow(m_word);
+        m_word = nullptr;
+    }
+    m_brush = nullptr;
+    m_layout = nullptr;
+    m_canvas.Destroy();
+    // (Made again by the next one.)
+    m_canvas.target = nullptr;
+}
+
+LRESULT CALLBACK WastedScreen::VeilProc(HWND hWnd,
+                                        UINT msg,
+                                        WPARAM wParam,
+                                        LPARAM lParam,
+                                        UINT_PTR,
+                                        DWORD_PTR data) {
+    auto* screen = (WastedScreen*)data;
+    switch (msg) {
+        // Its one gray (faded by Windows, see Frame).
+        case WM_ERASEBKGND: {
+            RECT rect{};
+            GetClientRect(hWnd, &rect);
+            SetDCBrushColor((HDC)wParam, RGB(56, 56, 58));
+            FillRect((HDC)wParam, &rect, (HBRUSH)GetStockObject(DC_BRUSH));
+            return 1;
+        }
+        case WM_TIMER:
+            if (wParam == kShutDownTimer) {
+                // Gone first: an app that stops the shutdown (unsaved work)
+                // leaves nothing over the screen.
+                const HWND owner = screen->m_owner;
+                screen->Destroy();
+                RunPowerAction(PowerAction::ShutDown, owner);
+            } else if (wParam == kFrameTimer && !screen->Frame()) {
+                if (screen->m_stopped > 0) {
+                    screen->Destroy();
+                } else {
+                    KillTimer(hWnd, kFrameTimer);
+                }
+            }
+            return 0;
+        // Any key (not one still held from the menu, like its Enter), any
+        // click or another window in front stops it.
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+            if (!(lParam & (1 << 30))) {
+                screen->Stop();
+            }
+            return 0;
+        case WM_LBUTTONDOWN:
+        case WM_RBUTTONDOWN:
+        case WM_MBUTTONDOWN:
+        case WM_XBUTTONDOWN:
+            screen->Stop();
+            return 0;
+        case WM_ACTIVATE:
+            if (LOWORD(wParam) == WA_INACTIVE) {
+                screen->Stop();
+                return 0;
+            }
+            break;
+        // (Alt+F4 and the like: stopped, never destroyed behind its back.)
+        case WM_CLOSE:
+            screen->Stop();
+            return 0;
+    }
+    return DefSubclassProc(hWnd, msg, wParam, lParam);
+}
+
 // The menu's timer: the action runs once the menu has closed.
 constexpr UINT_PTR kPowerTimerId = 40;
 constexpr float kPowerWidth = 236;
@@ -64547,6 +65628,7 @@ class PowerPanel : public Panel {
         if (scale != m_preparedScale || m_preparedFonts != FontsKey()) {
             m_preparedScale = scale;
             m_preparedFonts = FontsKey();
+            m_vice = ViceThemeOn();
             m_iconFormat = MakeFormat(IconFont(),
                                       DWRITE_FONT_WEIGHT_NORMAL, 15 * scale);
             m_textFormat =
@@ -64565,6 +65647,22 @@ class PowerPanel : public Panel {
                 m_smallFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
                 m_smallFormat->SetParagraphAlignment(
                     DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+            }
+            // Vice: the big title, the small pink words under it and the
+            // rows' names in the middle.
+            m_titleFormat = nullptr;
+            m_tagFormat = nullptr;
+            m_rowFormat = nullptr;
+            if (m_vice) {
+                m_titleFormat =
+                    MakeFormat(L"Segoe UI Variable Display",
+                               DWRITE_FONT_WEIGHT_BOLD, 30 * scale);
+                m_tagFormat =
+                    MakeFormat(L"Segoe UI Variable Text",
+                               DWRITE_FONT_WEIGHT_SEMI_BOLD, 10.5f * scale);
+                m_rowFormat =
+                    MakeFormat(L"Segoe UI Variable Text",
+                               DWRITE_FONT_WEIGHT_SEMI_BOLD, 14 * scale);
             }
         }
         Layout();
@@ -64606,17 +65704,17 @@ class PowerPanel : public Panel {
             return true;
         }
         if (hit == kHitConfirm && m_confirm >= 0) {
-            Run((PowerAction)m_confirm);
+            Run(m_confirm);
             return false;
         }
         if (hit < 0) {
             return false;
         }
-        if (PowerAsks((PowerAction)hit)) {
+        if (Asks(hit)) {
             Ask(m_confirm == hit ? -1 : hit);
             return true;
         }
-        Run((PowerAction)hit);
+        Run(hit);
         return false;
     }
 
@@ -64630,7 +65728,7 @@ class PowerPanel : public Panel {
             return true;
         }
         if (key == VK_RETURN) {
-            Run((PowerAction)m_confirm);
+            Run(m_confirm);
         }
         return false;
     }
@@ -64643,9 +65741,18 @@ class PowerPanel : public Panel {
         return false;
     }
 
+    // (The island going away: the Wasted screen with it.)
+    void OnDestroy() override { m_wasted.Destroy(); }
+
     // The confirmation opens and closes (its room, and the rows under it
-    // making way); once closed, it's gone.
+    // making way); once closed, it's gone. Another theme chosen while it's
+    // open (Vice has rows of its own): laid out again for it.
     bool AnimateContents(double dt) override {
+        if (m_vice != ViceThemeOn()) {
+            m_confirm = m_confirmShown = -1;
+            m_confirmRoom = m_confirmVelocity = 0;
+            Prepare(m_scale);
+        }
         const bool moving =
             SpringTowards(m_confirmRoom, m_confirmVelocity,
                           m_confirm >= 0 ? 1 : 0, 0.36, dt, kBounceDamping);
@@ -64662,11 +65769,39 @@ class PowerPanel : public Panel {
     static constexpr int kHitCancel = 100;
     static constexpr int kHitConfirm = 101;
     static constexpr int kRows = (int)PowerAction::Count;
+    // Vice's own rows after the actions': Resume (closes the menu, like a
+    // game's) and Wasted (its screen, then the shutdown).
+    static constexpr int kRowResume = kRows;
+    static constexpr int kRowWasted = kRows + 1;
+    static constexpr int kAllRows = kRows + 2;
+    // Their order in Vice, like a game's pause menu: the shutdowns last.
+    static constexpr int kViceOrder[kAllRows] = {
+        kRowResume,
+        (int)PowerAction::Lock,
+        (int)PowerAction::SignOut,
+        (int)PowerAction::Sleep,
+        (int)PowerAction::Hibernate,
+        (int)PowerAction::Restart,
+        (int)PowerAction::ShutDown,
+        kRowWasted};
 
-    // Its option on (Hibernate's row only when Windows allows it too).
+    // Its option on (Hibernate's row only when Windows allows it too);
+    // Vice's rows with its look, Wasted with Shut down on (it ends so).
     bool Shown(int row) const {
+        if (row == kRowResume) {
+            return m_vice;
+        }
+        if (row == kRowWasted) {
+            return m_vice && PowerActionOn(PowerAction::ShutDown);
+        }
         return PowerActionOn((PowerAction)row) &&
                ((PowerAction)row != PowerAction::Hibernate || m_hibernate);
+    }
+
+    // Whether a row asks first (Wasted as Shut down does, see PowerAsks).
+    static bool Asks(int row) {
+        return row == kRowWasted ? PowerAsks(PowerAction::ShutDown)
+                                 : row < kRows && PowerAsks((PowerAction)row);
     }
 
     static WCHAR Glyph(PowerAction action) {
@@ -64686,8 +65821,14 @@ class PowerPanel : public Panel {
         }
     }
 
-    static PCWSTR Name(PowerAction action) {
-        switch (action) {
+    static PCWSTR Name(int row) {
+        if (row == kRowResume) {
+            return Tr(L"Resume", L"Continuar");
+        }
+        if (row == kRowWasted) {
+            return WastedText();
+        }
+        switch ((PowerAction)row) {
             case PowerAction::Sleep:
                 return Tr(L"Sleep", L"Suspender");
             case PowerAction::Hibernate:
@@ -64703,8 +65844,11 @@ class PowerPanel : public Panel {
         }
     }
 
-    static PCWSTR Question(PowerAction action) {
-        switch (action) {
+    static PCWSTR Question(int row) {
+        if (row == kRowWasted) {
+            return Tr(L"Wasted now?", L"Wasted agora?");
+        }
+        switch ((PowerAction)row) {
             case PowerAction::Restart:
                 return Tr(L"Restart now?", L"Reiniciar agora?");
             case PowerAction::ShutDown:
@@ -64714,8 +65858,11 @@ class PowerPanel : public Panel {
         }
     }
 
-    static PCWSTR ConfirmName(PowerAction action) {
-        switch (action) {
+    static PCWSTR ConfirmName(int row) {
+        if (row == kRowWasted) {
+            return WastedText();
+        }
+        switch ((PowerAction)row) {
             case PowerAction::Restart:
                 return Tr(L"Restart", L"Reiniciar");
             case PowerAction::ShutDown:
@@ -64738,12 +65885,27 @@ class PowerPanel : public Panel {
         StartIslandAnimation();
     }
 
-    void Run(PowerAction action) {
+    // Closes, then (once closed) runs its action; Resume only closes, and
+    // Wasted shows its screen, which ends with the shutdown.
+    void Run(int row) {
         Close();
-        SetTimer(m_hwnd, kPowerTimerId + (UINT_PTR)action, 380, nullptr);
+        if (row == kRowWasted) {
+            winrt::com_ptr<ID2D1Factory> factory;
+            if (m_canvas.target) {
+                m_canvas.target->GetFactory(factory.put());
+            }
+            m_wasted.Show(factory.get(), m_dwrite, m_hwnd);
+        } else if (row < kRows) {
+            SetTimer(m_hwnd, kPowerTimerId + (UINT_PTR)row, 380, nullptr);
+        }
     }
 
-    static PCWSTR Hint() {
+    // Under the question (Wasted's says how it ends).
+    PCWSTR Hint() const {
+        if (m_confirmShown == kRowWasted) {
+            return Tr(L"The PC shuts down after it. Esc or a click stops it.",
+                      L"O PC desliga logo depois. Esc ou um clique cancela.");
+        }
         return Tr(L"Apps with unsaved work can stop it.",
                   L"Apps com trabalho não salvo podem impedir.");
     }
@@ -64776,25 +65938,39 @@ class PowerPanel : public Panel {
         const float s = m_scale;
         const float width = std::round(kPowerWidth * s);
         const float padding = std::round(6 * s);
-        const float row = std::round(36 * s);
+        const float row = std::round((m_vice ? 34 : 36) * s);
         const float separator = std::round(9 * s);
         const float room = (float)std::clamp(m_confirmRoom, 0.0, 1.1);
         float y = padding;
         m_confirmRect = {};
-        // Lock and sign out apart from the others, when both parts show.
+        // Vice: "PAUSED" over the rows, small pink words under it, a divider.
+        m_dividerY = -1;
+        if (m_vice) {
+            m_titleRect = {0, y + std::round(6 * s), width,
+                           y + std::round(40 * s)};
+            m_tagRect = {0, m_titleRect.bottom, width,
+                         m_titleRect.bottom + std::round(16 * s)};
+            m_dividerY = m_tagRect.bottom + std::round(8 * s);
+            y = m_dividerY + std::round(6 * s);
+        }
+        // Lock and sign out apart from the others, when both parts show
+        // (Vice: its own order, each row across the whole menu).
         bool above = false;
         m_separatorY = -1;
-        for (int i = 0; i < kRows; i++) {
+        for (int k = 0; k < kAllRows; k++) {
+            const int i = m_vice ? kViceOrder[k] : k;
             if (!Shown(i)) {
                 m_rows[i] = {};
                 continue;
             }
-            if (i >= (int)PowerAction::Lock && above && m_separatorY < 0) {
+            if (!m_vice && i >= (int)PowerAction::Lock && above &&
+                m_separatorY < 0) {
                 m_separatorY = y + separator / 2;
                 y += separator;
             }
             above = above || i < (int)PowerAction::Lock;
-            m_rows[i] = {padding, y, width - padding, y + row};
+            const float inset = m_vice ? 0 : padding;
+            m_rows[i] = {inset, y, width - inset, y + row};
             y += row;
             if (i == m_confirmShown) {
                 const float height = ConfirmHeight(width - padding * 2);
@@ -64829,7 +66005,7 @@ class PowerPanel : public Panel {
                 return -1;
             }
         }
-        for (int i = 0; i < kRows; i++) {
+        for (int i = 0; i < kAllRows; i++) {
             if (Shown(i) && PointInRect(pt, m_rows[i])) {
                 return i;
             }
@@ -64842,9 +66018,19 @@ class PowerPanel : public Panel {
     winrt::com_ptr<IDWriteTextFormat> m_questionFormat;
     winrt::com_ptr<IDWriteTextFormat> m_smallFormat;
     winrt::com_ptr<IDWriteTextFormat> m_buttonFormat;
+    // Vice's own (see Prepare).
+    winrt::com_ptr<IDWriteTextFormat> m_titleFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_tagFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_rowFormat;
     float m_preparedScale = 0;
-    D2D1_RECT_F m_rows[kRows]{};
+    // Laid out with the Vice theme's look (its header and rows), as its
+    // texts were made: it changes with them.
+    bool m_vice = false;
+    D2D1_RECT_F m_rows[kAllRows]{};
     float m_separatorY = 0;
+    // Vice's header: its title, the small pink words under it, the divider.
+    D2D1_RECT_F m_titleRect{}, m_tagRect{};
+    float m_dividerY = -1;
     bool m_hibernate = false;
     int m_hover = -1;
     // The row asking for confirmation (-1: none), the one whose confirmation
@@ -64855,23 +66041,73 @@ class PowerPanel : public Panel {
     double m_confirmRoom = 0;
     double m_confirmVelocity = 0;
     D2D1_RECT_F m_confirmRect{}, m_cancelRect{}, m_confirmButton{};
+    WastedScreen m_wasted;
 };
 
 void PowerPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
     if (!m_iconFormat || !m_textFormat || !m_questionFormat || !m_smallFormat ||
-        !m_buttonFormat) {
+        !m_buttonFormat ||
+        (m_vice && (!m_titleFormat || !m_tagFormat || !m_rowFormat))) {
         return;
     }
     const float s = m_scale;
     const float radius = std::round(9 * s);
     const float icon = std::round(36 * s);
-    for (int i = 0; i < kRows; i++) {
+    const float width = std::round(kPowerWidth * s);
+    // Vice: how much of its neon shows (it blends as the theme changes), a
+    // color that far toward its pink, and its texts in capitals.
+    const float vice = m_vice ? ViceAmount() : 0;
+    auto pinkish = [&](float alpha) {
+        return PetMix(Fg(alpha), ViceColor(kVicePink, alpha), vice);
+    };
+    auto cased = [&](PCWSTR text) {
+        return m_vice ? CapitalsOf(text) : std::wstring(text);
+    };
+    if (m_vice) {
+        // A thin lilac line along its top edge (the panel's shape cuts it at
+        // the corners), "PAUSED", "VICE / SYSTEM" in pink and a divider.
+        brush->SetColor(PetMix(ViceColor(kViceViolet, 0.9f * vice),
+                               D2D1::ColorF(1, 1, 1), 0.35f));
+        target->FillRectangle(
+            {-width, 0, width * 2, std::max(1.0f, 1.5f * s)}, brush);
+        const std::wstring title = cased(Tr(L"Paused", L"Pausado"));
+        brush->SetColor(Fg(0.97f * vice));
+        target->DrawText(title.c_str(), (UINT32)title.size(),
+                         m_titleFormat.get(), m_titleRect, brush);
+        const std::wstring tag =
+            L"VICE / " + cased(Tr(L"System", L"Sistema"));
+        brush->SetColor(ViceColor(kVicePink, 0.9f * vice));
+        target->DrawText(tag.c_str(), (UINT32)tag.size(), m_tagFormat.get(),
+                         m_tagRect, brush);
+        const float edge = std::round(6 * s) + std::round(8 * s);
+        brush->SetColor(Fg(0.12f * vice));
+        target->FillRectangle({edge, m_dividerY, width - edge,
+                               m_dividerY + std::max(1.0f, std::round(s))},
+                              brush);
+    }
+    for (int i = 0; i < kAllRows; i++) {
         if (!Shown(i)) {
             continue;
         }
         const D2D1_RECT_F& row = m_rows[i];
         const bool asking = i == m_confirm;
         const float lit = Hover(HoverKey(6000, i), m_hover == i);
+        if (m_vice) {
+            // A flat band across the menu tinted pink, the name in the
+            // middle: Shut down and Wasted in pink, the others pale.
+            if (lit > 0.01f || asking) {
+                brush->SetColor(pinkish(asking ? 0.16f : 0.12f * lit));
+                target->FillRectangle(row, brush);
+            }
+            const bool ending =
+                i == (int)PowerAction::ShutDown || i == kRowWasted;
+            brush->SetColor(ending ? pinkish(0.85f + 0.15f * lit)
+                                   : Fg(0.88f + 0.12f * lit));
+            const std::wstring name = cased(Name(i));
+            target->DrawText(name.c_str(), (UINT32)name.size(),
+                             m_rowFormat.get(), row, brush);
+            continue;
+        }
         if (lit > 0.01f || asking) {
             brush->SetColor(Fg(asking ? 0.12f : 0.09f * lit));
             GlassFill(target, {row, radius, radius}, brush);
@@ -64881,7 +66117,7 @@ void PowerPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
         DrawGlyph(target, &glyph, 1, m_iconFormat.get(),
                   {row.left, row.top, row.left + icon, row.bottom},
                   brush);
-        PCWSTR name = Name((PowerAction)i);
+        PCWSTR name = Name(i);
         target->DrawText(name, (UINT32)wcslen(name), m_textFormat.get(),
                          {row.left + icon, row.top,
                           row.right - std::round(8 * s), row.bottom},
@@ -64901,7 +66137,7 @@ void PowerPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
     if (m_confirmShown < 0 || m_confirmRect.bottom - m_confirmRect.top < 0.5f) {
         return;
     }
-    const PowerAction action = (PowerAction)m_confirmShown;
+    const int asked = m_confirmShown;
     const float fade =
         (float)std::clamp((m_confirmRoom - 0.25) / 0.6, 0.0, 1.0);
     target->PushAxisAlignedClip(m_confirmRect, D2D1_ANTIALIAS_MODE_ALIASED);
@@ -64913,7 +66149,7 @@ void PowerPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
                       layer.get());
     const float inner = std::round(10 * s);
     const float top = m_confirmRect.top + std::round(4 * s);
-    PCWSTR question = Question(action);
+    PCWSTR question = Question(asked);
     brush->SetColor(Fg(0.95f));
     target->DrawText(question, (UINT32)wcslen(question), m_questionFormat.get(),
                      {m_confirmRect.left + inner, top,
@@ -64929,18 +66165,18 @@ void PowerPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
     brush->SetColor(
         Fg(0.13f + 0.07f * Hover(HoverKey(6001, 0), m_hover == kHitCancel)));
     GlassFill(target, {m_cancelRect, buttonRadius, buttonRadius}, brush);
-    PCWSTR cancel = Tr(L"Cancel", L"Cancelar");
+    const std::wstring cancel = cased(Tr(L"Cancel", L"Cancelar"));
     brush->SetColor(Fg(0.95f));
-    target->DrawText(cancel, (UINT32)wcslen(cancel), m_buttonFormat.get(),
-                     m_cancelRect, brush);
+    target->DrawText(cancel.c_str(), (UINT32)cancel.size(),
+                     m_buttonFormat.get(), m_cancelRect, brush);
     brush->SetColor(Accent(1.0f - 0.15f * Hover(HoverKey(6002, 0),
                                                       m_hover == kHitConfirm)));
     target->FillRoundedRectangle({m_confirmButton, buttonRadius, buttonRadius},
                                  brush);
-    PCWSTR confirm = ConfirmName(action);
+    const std::wstring confirm = cased(ConfirmName(asked));
     brush->SetColor(AccentInk(1));
-    target->DrawText(confirm, (UINT32)wcslen(confirm), m_buttonFormat.get(),
-                     m_confirmButton, brush);
+    target->DrawText(confirm.c_str(), (UINT32)confirm.size(),
+                     m_buttonFormat.get(), m_confirmButton, brush);
     target->PopLayer();
     target->PopAxisAlignedClip();
 }
@@ -68245,7 +69481,7 @@ void TasksPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
                             std::max(1.0f, 1.5f * s));
         if (filled > 0.01f) {
             // A little bigger as it fills, then back.
-            const float pop = 1 + 0.25f * std::sin(filled * 3.14159f);
+            const float pop = 1 + 0.25f * std::sin(filled * kPi);
             const float r = circle * filled * pop;
             brush->SetColor(D2D1::ColorF(0.2f, 0.78f, 0.35f, 1));
             target->FillEllipse({center, r, r}, brush);
@@ -68892,9 +70128,15 @@ DWORD WINAPI CommandOpenThreadProc(LPVOID parameter) {
     info.lpParameters =
         job->arguments.empty() ? nullptr : job->arguments.c_str();
     info.nShow = SW_SHOWNORMAL;
-    const bool opened = ShellExecuteEx(&info);
+    // (A Start app or a shortcut: through Explorer first, see
+    // OpensThroughExplorer.)
+    bool opened = OpensThroughExplorer(target) &&
+                  ShellExecuteAsUser(target, job->arguments);
     if (!opened) {
-        IslandLog(L"A command didn't open: %u", GetLastError());
+        opened = ShellExecuteEx(&info);
+        if (!opened) {
+            IslandLog(L"A command didn't open: %u", GetLastError());
+        }
     }
     if (job->report.wanted) {
         ReportCommandRun(job->report, opened);
@@ -77240,12 +78482,13 @@ TimerFillInfo TimerFillNow(double now) {
     return fill;
 }
 
-// The fill's share moves only when it changes by a pixel of the pill's
-// `length` or more (it goes on at once at the ends): the pill is drawn
-// again for each pixel it moves, not every second.
+// The fill's share moves only when it changes by a quarter of a pixel of
+// the bar's `length` or more (it goes on at once at the ends): drawn again
+// as it moves, at most each second (the timer's tick), its edge smoothed
+// between pixels; whole pixels made it creep in visible jumps (#7585).
 double TimerFillStep(double shown, double progress, double length) {
     if (progress <= 0 || progress >= 1 ||
-        std::fabs(progress - shown) >= 1.0 / std::max(length, 1.0)) {
+        std::fabs(progress - shown) >= 0.25 / std::max(length, 1.0)) {
         return progress;
     }
     return shown;
@@ -78360,7 +79603,6 @@ class TimerPanel : public Panel {
             FAILED(path->Open(sink.put()))) {
             return;
         }
-        constexpr float kPi = 3.14159265f;
         const float end = -kPi / 2 + fraction * 2 * kPi;
         sink->BeginFigure({center.x, center.y - radius},
                           D2D1_FIGURE_BEGIN_HOLLOW);
@@ -79155,7 +80397,7 @@ class RecycleBinPanel : public Panel {
                 D2D1::Matrix3x2F::Rotation(angle, middle) * transform);
         } else if (done >= 0 && done < 1) {
             const float hop =
-                1 + 0.22f * (float)(std::sin(done * 3.14159265) * (1 - done));
+                1 + 0.22f * (float)(std::sin(done * kPi) * (1 - done));
             target->SetTransform(
                 D2D1::Matrix3x2F::Scale(hop, hop, middle) * transform);
         }
@@ -79422,6 +80664,44 @@ struct AiUsage {
     long long writtenAt = 0;
 };
 
+// A service read from a custom JSON file (islandAiCustom): its limits
+// ("windows", each with its own label), the name shown in the panel and the
+// shorter one on the pill, and a picture of its own (a file or an app's
+// AppUserModelID, optional).
+struct AiCustomWindow {
+    std::wstring label;
+    AiLimit limit;
+};
+
+struct AiCustomUsage {
+    std::wstring name;
+    std::wstring pillName;
+    std::wstring icon;
+    std::vector<AiCustomWindow> windows;
+    long long writtenAt = 0;
+};
+
+// A file added with "+ Add provider" in the panel (aiCustomList, the
+// account's own like the file chosen, aiCustomFile): what it shows under
+// another name, short name or picture.
+struct AiCustomEntry {
+    std::wstring name;
+    std::wstring pillName;
+    std::wstring file;
+    std::wstring icon;
+};
+
+// A custom service's pill slots (their action: this plus its index), how
+// many are read, and the panel's file dialogs (FolderPickJob::purpose).
+constexpr int kAiCustomAction = 100;
+constexpr int kMaxCustomAi = 8;
+constexpr int kMaxCustomWindows = 6;
+// A name's or a label's length at most (as many as the panel's boxes take).
+constexpr size_t kAiCustomTextMost = 64;
+constexpr int kAiCustomFilePick = -2;
+constexpr int kAiCustomEntryFilePick = -3;
+constexpr int kAiCustomEntryIconPick = -4;
+
 // Read while an island shows them, on the thread watching their files (see
 // AiUsageThreadProc), a moment after the first change (an answer writes
 // many times) and never sooner than a few seconds after the last read
@@ -79429,6 +80709,16 @@ struct AiUsage {
 // main island; the islands laid out again each minute (the time left goes
 // down).
 AiUsage g_aiUsage[kAiAgents];
+std::vector<AiCustomUsage> g_aiCustom;
+std::wstring g_aiCustomFile;
+std::vector<AiCustomEntry> g_aiCustomEntries;
+int g_aiCustomEntriesVersion = 0;
+void SetAiCustomFile(const std::wstring& path);
+void LoadAiCustomEntries();
+void SaveAiCustomEntries();
+HANDLE StartAiCustomFileThread(HWND panel,
+                               int purpose = kAiCustomFilePick,
+                               bool picture = false);
 constexpr UINT kAiUsageReadMs = 1000;
 constexpr UINT kAiUsageGapMs = 5000;
 constexpr UINT kAiUsageMinuteMs = 60 * 1000;
@@ -79876,6 +81166,214 @@ bool AiUsageKnown(const AiUsage& usage) {
     return usage.session.used >= 0 || usage.week.used >= 0;
 }
 
+// A time in a custom JSON file: Unix seconds, or milliseconds (as
+// JavaScript gives them); 0 without one, or with one no time can be (not a
+// number, Infinity), never cast out of range.
+long long AiCustomSeconds(const Json& value) {
+    double seconds = value.Number(0);
+    if (seconds > 1e11) {
+        seconds /= 1000;
+    }
+    return seconds > 0 && seconds < 1e11 ? (long long)seconds : 0;
+}
+
+// The services of one custom JSON file, on a drive of this PC only (never a
+// network path): one object, a list of them, or {"providers": [...]}. False
+// when it can't be read whole (being written: the ones read before kept).
+bool ReadCustomAiUsage(const std::wstring& path,
+                       std::vector<AiCustomUsage>* out) {
+    out->clear();
+    std::wstring text;
+    long long writtenAt = 0;
+    Json root;
+    if (path.empty() || !IsLocalDrivePath(path) ||
+        !ReadFileEnd(path, 256 * 1024, &text, &writtenAt) ||
+        !JsonReader(text).Read(&root)) {
+        return false;
+    }
+    auto parseOne = [&](const Json& item) {
+        if (item.type != Json::Type::Object ||
+            item[L"name"].type != Json::Type::String ||
+            item[L"name"].string.empty() ||
+            item[L"windows"].type != Json::Type::Array) {
+            return;
+        }
+        AiCustomUsage custom;
+        custom.name = item[L"name"].string.substr(0, kAiCustomTextMost);
+        const Json& pill = item[L"pill_name"];
+        custom.pillName =
+            pill.type == Json::Type::String && !pill.string.empty()
+                ? pill.string.substr(0, kAiCustomTextMost)
+                : custom.name;
+        const Json& icon = item[L"icon"];
+        if (icon.type == Json::Type::String && !icon.string.empty()) {
+            custom.icon = icon.string;
+        }
+        const long long itemAt = AiCustomSeconds(item[L"updated_at"]);
+        custom.writtenAt = itemAt > 0 ? itemAt : writtenAt;
+        for (const Json& w : item[L"windows"].items) {
+            if (w.type != Json::Type::Object) {
+                continue;
+            }
+            double used = w[L"used_percentage"].Number(-1);
+            if (used < 0 && w[L"used"].type == Json::Type::Number) {
+                used = w[L"used"].number;
+            }
+            // (Not a number too, as Python writes NaN.)
+            if (!(used >= 0)) {
+                continue;
+            }
+            AiCustomWindow win;
+            if (w[L"label"].type == Json::Type::String) {
+                win.label = w[L"label"].string.substr(0, kAiCustomTextMost);
+            }
+            win.limit.used = std::clamp(used, 0.0, 100.0);
+            win.limit.resetsAt = AiCustomSeconds(w[L"resets_at"]);
+            custom.windows.push_back(std::move(win));
+            if ((int)custom.windows.size() >= kMaxCustomWindows) {
+                break;
+            }
+        }
+        if (!custom.windows.empty()) {
+            out->push_back(std::move(custom));
+        }
+    };
+    const Json* list = nullptr;
+    if (root.type == Json::Type::Array) {
+        list = &root;
+    } else if (root.type == Json::Type::Object &&
+               root[L"providers"].type == Json::Type::Array) {
+        list = &root[L"providers"];
+    }
+    if (list) {
+        for (const Json& item : list->items) {
+            parseOne(item);
+            if ((int)out->size() >= kMaxCustomAi) {
+                break;
+            }
+        }
+    } else {
+        parseOne(root);
+    }
+    return true;
+}
+
+// A custom service's limit closest to its end (the pill's), or none.
+const AiLimit* AiTightCustom(const AiCustomUsage& usage, long long now) {
+    const AiLimit* tight = nullptr;
+    double best = -1;
+    for (const auto& w : usage.windows) {
+        const double used = AiUsedNow(w.limit, now);
+        if (used > best) {
+            best = used;
+            tight = &w.limit;
+        }
+    }
+    return tight;
+}
+
+std::wstring TrimAiField(std::wstring text) {
+    const size_t first = text.find_first_not_of(L" \t\r\n");
+    if (first == std::wstring::npos) {
+        return {};
+    }
+    const size_t last = text.find_last_not_of(L" \t\r\n");
+    return text.substr(first, last - first + 1);
+}
+
+int FindAiCustomEntryIndex(const std::wstring& name) {
+    if (name.empty()) {
+        return -1;
+    }
+    for (size_t i = 0; i < g_aiCustomEntries.size(); i++) {
+        if (_wcsicmp(g_aiCustomEntries[i].name.c_str(), name.c_str()) == 0) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+void LoadAiCustomEntries() {
+    g_aiCustomEntries.clear();
+    const std::wstring list =
+        GetWholeUserStringValue(L"aiCustomList", 64 * 1024);
+    for (const auto& r : ParseRecords(list, 4, 4)) {
+        AiCustomEntry entry{TrimAiField(r[0]), TrimAiField(r[1]),
+                            TrimAiField(r[2]), TrimAiField(r[3])};
+        if (!entry.name.empty() || !entry.file.empty()) {
+            g_aiCustomEntries.push_back(std::move(entry));
+        }
+        if ((int)g_aiCustomEntries.size() >= kMaxCustomAi) {
+            break;
+        }
+    }
+    g_aiCustomEntriesVersion++;
+}
+
+// Every custom file (the one chosen in the settings, then the panel's),
+// with the panel's names and pictures over the files' own. `anyRead` false
+// when a file there couldn't be read whole (the ones read before kept).
+void ReadAllCustomAiUsage(const std::wstring& mainFile,
+                          const std::vector<AiCustomEntry>& entries,
+                          std::vector<AiCustomUsage>* out,
+                          bool* anyRead) {
+    out->clear();
+    *anyRead = true;
+    auto readInto = [&](const std::wstring& path,
+                        const AiCustomEntry* owner) {
+        // (Not one on a share, nor a drive mapped to one: never looked at.)
+        if (path.empty() || !IsLocalDrivePath(path)) {
+            return;
+        }
+        std::vector<AiCustomUsage> part;
+        if (!ReadCustomAiUsage(path, &part)) {
+            if (GetFileAttributes(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                *anyRead = false;
+            }
+            return;
+        }
+        for (auto& c : part) {
+            if (owner && part.size() == 1) {
+                if (!owner->name.empty()) {
+                    c.name = owner->name;
+                }
+                if (!owner->pillName.empty()) {
+                    c.pillName = owner->pillName;
+                }
+                if (!owner->icon.empty()) {
+                    c.icon = owner->icon;
+                }
+            }
+            if ((int)out->size() < kMaxCustomAi) {
+                out->push_back(std::move(c));
+            }
+        }
+    };
+    readInto(mainFile, nullptr);
+    for (const auto& entry : entries) {
+        if (!entry.file.empty() &&
+            _wcsicmp(entry.file.c_str(), mainFile.c_str()) != 0) {
+            readInto(entry.file, &entry);
+        }
+    }
+    for (const auto& entry : entries) {
+        if (entry.name.empty()) {
+            continue;
+        }
+        for (auto& c : *out) {
+            if (_wcsicmp(c.name.c_str(), entry.name.c_str()) == 0 ||
+                _wcsicmp(c.pillName.c_str(), entry.name.c_str()) == 0) {
+                if (!entry.pillName.empty()) {
+                    c.pillName = entry.pillName;
+                }
+                if (!entry.icon.empty()) {
+                    c.icon = entry.icon;
+                }
+            }
+        }
+    }
+}
+
 // Its color as it fills (-1 the text's).
 int AiUsageRgb(double used) {
     return used >= kAiUsageHigh   ? 0xFF453A
@@ -79902,10 +81400,8 @@ std::wstring AiTimeLeft(long long resetsAt, long long now) {
     return text;
 }
 
-// The pill's value: the tighter limit's use, and how long until it starts
-// over.
-std::wstring AiPillValue(const AiUsage& usage, long long now) {
-    const AiLimit& limit = AiTightLimit(usage, now);
+// A limit's use on the pill, and how long until it starts over.
+std::wstring AiPillLimitValue(const AiLimit& limit, long long now) {
     const double used = AiUsedNow(limit, now);
     if (used < 0) {
         return L"–";
@@ -79916,6 +81412,11 @@ std::wstring AiPillValue(const AiUsage& usage, long long now) {
         used > 0 ? AiTimeLeft(limit.resetsAt, now) : std::wstring();
     return left.empty() ? std::wstring(percent)
                         : std::wstring(percent) + L" · " + left;
+}
+
+// The pill's value: the tighter limit's (see AiPillLimitValue).
+std::wstring AiPillValue(const AiUsage& usage, long long now) {
+    return AiPillLimitValue(AiTightLimit(usage, now), now);
 }
 
 // When a limit starts over, as the clock shows a time (with the day when
@@ -79934,8 +81435,8 @@ std::wstring AiResetTime(long long resetsAt) {
     if (local.wYear != today.wYear || local.wMonth != today.wMonth ||
         local.wDay != today.wDay) {
         WCHAR day[32] = L"";
-        GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &local, L"ddd", day,
-                        ARRAYSIZE(day), nullptr);
+        GetDateFormatEx(DateLocale(), 0, &local, L"ddd", day, ARRAYSIZE(day),
+                        nullptr);
         text = std::wstring(day) + L" " + text;
     }
     return text;
@@ -79971,33 +81472,49 @@ constexpr UINT WM_APP_AI_USAGE = WM_APP + 101;
 // writes it, the ones read before are kept.
 struct AiUsageRead {
     bool claudeRead = false;
+    bool customRead = false;
     AiUsage claude;
     AiUsage codex;
+    std::vector<AiCustomUsage> custom;
 };
 
 // The folders their limits are written in, watched on a thread
 // (FindFirstChangeNotification, like the folders' panel): the mod's storage
-// (Claude Code's status line's file) and Codex's sessions (all of its days'
-// folders). Both read there, once at the start and a moment after the
-// first change of a burst (see kAiUsageGapMs), and posted to the island
-// (the files' reading never on its thread). A folder not there yet is left
-// out (see Island::OnAiUsageMinute).
+// (Claude Code's status line's file), Codex's sessions (all of its days'
+// folders) and the custom JSON file's folder. All read there, once at the
+// start and a moment after the first change of a burst (see kAiUsageGapMs),
+// and posted to the island (the files' reading never on its thread). A
+// folder not there yet is left out (see Island::OnAiUsageMinute).
 struct AiUsageJob {
     HWND notify;
     HANDLE stop;
-    std::wstring folders[kAiAgents];
+    std::wstring folders[kAiAgents + 1];
+    std::wstring customFile;
+    std::vector<std::wstring> extraFolders;
+    std::vector<AiCustomEntry> customEntries;
 };
 
 DWORD WINAPI AiUsageThreadProc(LPVOID parameter) {
     std::unique_ptr<AiUsageJob> job((AiUsageJob*)parameter);
-    HANDLE waits[1 + kAiAgents] = {job->stop};
+    HANDLE waits[MAXIMUM_WAIT_OBJECTS] = {job->stop};
     DWORD count = 1;
-    for (int agent = 0; agent < kAiAgents; agent++) {
-        if (job->folders[agent].empty()) {
+    for (int agent = 0; agent <= kAiAgents; agent++) {
+        if (job->folders[agent].empty() || count >= MAXIMUM_WAIT_OBJECTS) {
             continue;
         }
         const HANDLE change = FindFirstChangeNotification(
             job->folders[agent].c_str(), agent == (int)AiAgent::Codex,
+            FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE);
+        if (change != INVALID_HANDLE_VALUE) {
+            waits[count++] = change;
+        }
+    }
+    for (const auto& folder : job->extraFolders) {
+        if (folder.empty() || count >= MAXIMUM_WAIT_OBJECTS) {
+            continue;
+        }
+        const HANDLE change = FindFirstChangeNotification(
+            folder.c_str(), FALSE,
             FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE);
         if (change != INVALID_HANDLE_VALUE) {
             waits[count++] = change;
@@ -80022,6 +81539,8 @@ DWORD WINAPI AiUsageThreadProc(LPVOID parameter) {
                 GetFileAttributes(ClaudeUsageFile().c_str()) ==
                     INVALID_FILE_ATTRIBUTES;
             ReadCodexUsage(&read->codex);
+            ReadAllCustomAiUsage(job->customFile, job->customEntries,
+                                 &read->custom, &read->customRead);
             // (Not once it's being stopped.)
             if (WaitForSingleObject(job->stop, 0) != WAIT_TIMEOUT) {
                 break;
@@ -80054,11 +81573,12 @@ DWORD WINAPI AiUsageThreadProc(LPVOID parameter) {
 // session's and week's use as bars, with when each starts over; without its
 // limits, how to have them: for Claude Code, the line for the user's own
 // status line script is copied (Git Bash's or PowerShell's).
-class AiUsagePanel : public Panel {
+class AiUsagePanel : public EditingPanel {
    public:
     // The limits read again: shown at once if it's open.
     void Refresh() {
         if (IsOpen()) {
+            PrepareIcons();
             Layout();
             Render();
         }
@@ -80066,27 +81586,31 @@ class AiUsagePanel : public Panel {
 
    protected:
     void Prepare(float scale) override {
+        if (!m_wic) {
+            CoCreateInstance(CLSID_WICImagingFactory, nullptr,
+                             CLSCTX_INPROC_SERVER, IID_PPV_ARGS(m_wic.put()));
+        }
+        // (Its pictures made again for a bigger scale only, see
+        // PrepareIcons.)
+        if (scale > m_iconScale) {
+            m_iconScale = scale;
+            m_icons.clear();
+        }
         if (scale != m_preparedScale || m_preparedFonts != FontsKey()) {
-            m_preparedScale = scale;
-            m_preparedFonts = FontsKey();
-            m_iconFormat = MakeFormat(IconFont(), DWRITE_FONT_WEIGHT_NORMAL,
-                                      20 * scale);
-            m_titleFormat =
-                MakeFormat(L"Segoe UI Variable Text",
-                           DWRITE_FONT_WEIGHT_SEMI_BOLD, 13 * scale,
-                           DWRITE_TEXT_ALIGNMENT_LEADING);
+            m_panelIconFormat = MakeFormat(
+                IconFont(), DWRITE_FONT_WEIGHT_NORMAL, 20 * scale);
             m_nameFormat =
                 MakeFormat(L"Segoe UI Variable Text",
                            DWRITE_FONT_WEIGHT_SEMI_BOLD, 12 * scale,
                            DWRITE_TEXT_ALIGNMENT_LEADING);
-            m_textFormat =
+            m_rowFormat =
                 MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
                            11.5f * scale, DWRITE_TEXT_ALIGNMENT_LEADING);
             m_valueFormat =
                 MakeFormat(L"Segoe UI Variable Text",
                            DWRITE_FONT_WEIGHT_SEMI_BOLD, 11.5f * scale,
                            DWRITE_TEXT_ALIGNMENT_TRAILING);
-            m_smallFormat =
+            m_metaFormat =
                 MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
                            10.5f * scale, DWRITE_TEXT_ALIGNMENT_LEADING);
             m_updatedFormat =
@@ -80100,79 +81624,366 @@ class AiUsagePanel : public Panel {
                 m_helpFormat->SetParagraphAlignment(
                     DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
             }
-            m_buttonFormat =
+            m_pillBtnFormat =
                 MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
                            11 * scale, DWRITE_TEXT_ALIGNMENT_CENTER);
+            PrepareFormats(scale);
         }
+        PrepareIcons();
         Layout();
     }
 
     void OnOpen() override {
         m_hover = kNone;
+        m_hoverId = -1;
         m_copiedAt = -10;
+        m_editing = false;
+        m_customNote.clear();
         m_bash = GitBashFound();
+        PrepareIcons();
         Layout();
     }
 
     void Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) override {
-        if (m_iconFormat && m_titleFormat && m_nameFormat && m_textFormat &&
-            m_valueFormat && m_smallFormat && m_updatedFormat &&
-            m_helpFormat && m_buttonFormat) {
+        if (Ready() && m_panelIconFormat && m_nameFormat && m_rowFormat &&
+            m_valueFormat && m_metaFormat && m_updatedFormat && m_helpFormat &&
+            m_pillBtnFormat) {
             Walk(target, brush);
         }
     }
 
-    // ("Copied" said for a moment.)
+    bool StaysWhenDeactivated() const override {
+        return m_dialogShown || m_editing;
+    }
+
+    // ("Copied" said for a moment; caret blinks while editing.)
     bool AnimateContents(double) override {
-        return NowSeconds() - m_copiedAt < 2.2;
+        return AnimateTyping(m_editing, NowSeconds() - m_copiedAt < 2.2);
     }
 
     bool OnMouseMove(POINT pt) override {
-        const int hover = HitTest(pt);
-        if (hover == m_hover) {
+        int id = -1;
+        const int hover = HitTest(pt, &id);
+        if (hover == m_hover && id == m_hoverId) {
             return false;
         }
         m_hover = hover;
+        m_hoverId = id;
         return true;
     }
 
     bool OnMouseLeave() override {
-        if (m_hover == kNone) {
+        if (m_hover == kNone && m_hoverId == -1) {
             return false;
         }
         m_hover = kNone;
+        m_hoverId = -1;
         return true;
     }
 
-    bool OnMouseUp(POINT pt) override {
-        if (HitTest(pt) != kCopy) {
+    bool OnMouseDown(POINT pt) override {
+        if (!m_editing) {
             return false;
         }
-        // (Its file made first, only this account's.)
-        if (PrepareClaudeUsageFile() &&
-            CopyTextToClipboard(m_hwnd, ClaudeUsageLine(m_bash))) {
-            m_copiedAt = NowSeconds();
+        for (int field = 0; field < 3; field++) {
+            const D2D1_RECT_F& box = EditBoxOf(field);
+            if (PointInRect(pt, box)) {
+                m_field = field;
+                EditTextClick(EditTextOf(field), EditStateOf(field), pt);
+                g_lastTyped = NowSeconds();
+                return true;
+            }
         }
-        return true;
+        return false;
     }
+
+    bool OnMouseUp(POINT pt) override {
+        int id = -1;
+        const int hit = HitTest(pt, &id);
+        if (hit == kCopy) {
+            // (Its file made first, only this account's.)
+            if (PrepareClaudeUsageFile() &&
+                CopyTextToClipboard(m_hwnd, ClaudeUsageLine(m_bash))) {
+                m_copiedAt = NowSeconds();
+            }
+            return true;
+        }
+        if (hit == kPickFile && !m_dialogShown) {
+            m_fileThread = StartAiCustomFileThread(m_hwnd);
+            m_dialogShown = m_fileThread != nullptr;
+            return false;
+        }
+        if (hit == kAddProvider) {
+            StartEditing(-1);
+            return true;
+        }
+        if (hit == kEditProvider && id >= 0 && id < (int)g_aiCustom.size()) {
+            const AiCustomUsage& custom = g_aiCustom[id];
+            const int idx = FindAiCustomEntryIndex(custom.name);
+            if (idx >= 0) {
+                StartEditing(idx);
+            } else {
+                StartEditing(-1);
+                m_editTitle = true;
+                m_editName = custom.name;
+                m_editPill = custom.pillName;
+                m_editIcon = custom.icon;
+                m_nameEdit.caret = m_editName.size();
+                m_pillEdit.caret = m_editPill.size();
+                PrepareIcons();
+                Layout();
+            }
+            return true;
+        }
+        if (hit == kPickEntryFile && !m_dialogShown) {
+            m_fileThread = StartAiCustomFileThread(
+                m_hwnd, kAiCustomEntryFilePick, false);
+            m_dialogShown = m_fileThread != nullptr;
+            return false;
+        }
+        if (hit == kClearEntryFile) {
+            m_editFile.clear();
+            m_fileEdit = {};
+            Layout();
+            return true;
+        }
+        if (hit == kPickEntryIcon && !m_dialogShown) {
+            m_fileThread = StartAiCustomFileThread(
+                m_hwnd, kAiCustomEntryIconPick, true);
+            m_dialogShown = m_fileThread != nullptr;
+            return false;
+        }
+        if (hit == kClearEntryIcon) {
+            m_editIcon.clear();
+            Layout();
+            return true;
+        }
+        if (hit == kCancelEdit) {
+            StopEditing();
+            return true;
+        }
+        if (hit == kSaveEdit) {
+            CommitEdit();
+            return true;
+        }
+        if (hit == kDeleteEdit && m_editIndex >= 0 &&
+            m_editIndex < (int)g_aiCustomEntries.size()) {
+            g_aiCustomEntries.erase(g_aiCustomEntries.begin() + m_editIndex);
+            SaveAiCustomEntries();
+            StopEditing();
+            return true;
+        }
+        return false;
+    }
+
+    bool OnKey(WPARAM key) override {
+        if (!m_editing) {
+            return false;
+        }
+        if (key == VK_ESCAPE) {
+            StopEditing();
+            return true;
+        }
+        if (key == VK_TAB) {
+            const int step = GetKeyState(VK_SHIFT) < 0 ? 2 : 1;
+            m_field = (m_field + step) % 3;
+            g_lastTyped = NowSeconds();
+            return true;
+        }
+        return EditTextKey(EditTextOf(m_field), EditStateOf(m_field), key);
+    }
+
+    bool OnChar(WCHAR c) override {
+        if (!m_editing) {
+            return false;
+        }
+        if (c == L'\r' || c == 0x0A) {
+            CommitEdit();
+            return true;
+        }
+        if (c == 0x1B || c == L'\t') {
+            return false;
+        }
+        std::wstring& text = EditTextOf(m_field);
+        const bool taken =
+            c != L'\n' && EditTextChar(text, EditStateOf(m_field), c,
+                                       m_field == 2 ? (size_t)MAX_PATH
+                                                    : kAiCustomTextMost,
+                                       m_hwnd);
+        std::replace(text.begin(), text.end(), L'\n', L' ');
+        return taken;
+    }
+
+    bool OnAppMessage(UINT msg, WPARAM, LPARAM lParam) override;
+    void OnDestroy() override;
 
    private:
     static constexpr int kNone = -1;
     static constexpr int kCopy = 0;
-    static constexpr int kParts = 1;
+    static constexpr int kPickFile = 1;
+    static constexpr int kAddProvider = 2;
+    static constexpr int kPickEntryFile = 3;
+    static constexpr int kClearEntryFile = 4;
+    static constexpr int kPickEntryIcon = 5;
+    static constexpr int kClearEntryIcon = 6;
+    static constexpr int kCancelEdit = 7;
+    static constexpr int kSaveEdit = 8;
+    static constexpr int kDeleteEdit = 9;
+    static constexpr int kParts = 10;
+    static constexpr int kEditProvider = 100;
     static constexpr float kWidth = 320;
 
-    int HitTest(POINT pt) const {
+    std::wstring& EditTextOf(int field) {
+        return field == 0 ? m_editName : field == 1 ? m_editPill : m_editFile;
+    }
+    TextEdit& EditStateOf(int field) {
+        return field == 0 ? m_nameEdit : field == 1 ? m_pillEdit : m_fileEdit;
+    }
+    const D2D1_RECT_F& EditBoxOf(int field) const {
+        return field == 0 ? m_nameBox : field == 1 ? m_pillBox : m_fileBox;
+    }
+
+    void PrepareIcons() {
+        ID2D1RenderTarget* target = DrawingTarget();
+        if (!target || !m_wic) {
+            return;
+        }
+        std::vector<std::wstring> paths;
+        for (const auto& c : g_aiCustom) {
+            if (!c.icon.empty()) {
+                paths.push_back(c.icon);
+            }
+        }
+        if (!m_editIcon.empty()) {
+            paths.push_back(m_editIcon);
+        }
+        std::erase_if(m_icons, [&](const KeptAppIcon& icon) {
+            return std::find(paths.begin(), paths.end(), icon.appId) ==
+                   paths.end();
+        });
+        const double now = NowSeconds();
+        const int px =
+            (int)std::round(24 * std::max(m_scale, m_iconScale));
+        for (const std::wstring& path : paths) {
+            int misses = 0;
+            const auto kept = std::find_if(
+                m_icons.begin(), m_icons.end(),
+                [&](const KeptAppIcon& icon) { return icon.appId == path; });
+            if (kept != m_icons.end()) {
+                if (!kept->retryAt || now < kept->retryAt) {
+                    continue;
+                }
+                misses = kept->bitmap ? 0 : kept->misses + 1;
+                m_icons.erase(kept);
+            }
+            bool fromExplorer = false;
+            winrt::com_ptr<ID2D1Bitmap> bitmap = LoadAppIcon(
+                target, m_wic.get(), m_hwnd, path, px, &fromExplorer);
+            m_icons.push_back({path, bitmap,
+                               AppIconRetryAt(fromExplorer, !!bitmap, misses,
+                                              now),
+                               bitmap ? 0 : misses});
+        }
+    }
+
+    ID2D1Bitmap* IconOf(const std::wstring& path) const {
+        if (path.empty()) {
+            return nullptr;
+        }
+        for (const auto& icon : m_icons) {
+            if (icon.appId == path) {
+                return icon.bitmap.get();
+            }
+        }
+        return nullptr;
+    }
+
+    // The form of "+ Add provider", empty or with an entry's fields.
+    void StartEditing(int entryIndex) {
+        m_editing = true;
+        m_editIndex = entryIndex;
+        m_editTitle = entryIndex >= 0;
+        m_field = 0;
+        m_customNote.clear();
+        if (entryIndex >= 0 && entryIndex < (int)g_aiCustomEntries.size()) {
+            const auto& e = g_aiCustomEntries[entryIndex];
+            m_editName = e.name;
+            m_editPill = e.pillName;
+            m_editFile = e.file;
+            m_editIcon = e.icon;
+        } else {
+            m_editName.clear();
+            m_editPill.clear();
+            m_editFile.clear();
+            m_editIcon.clear();
+        }
+        m_nameEdit.Reset();
+        m_pillEdit.Reset();
+        m_fileEdit.Reset();
+        m_nameEdit.caret = m_editName.size();
+        m_pillEdit.caret = m_editPill.size();
+        m_fileEdit.caret = m_editFile.size();
+        g_lastTyped = NowSeconds();
+        PrepareIcons();
+        Layout();
+        StartIslandAnimation();
+    }
+
+    // Back to the limits (the form closed).
+    void StopEditing() {
+        m_editing = false;
+        m_customNote.clear();
+        PrepareIcons();
+        Layout();
+        StartIslandAnimation();
+    }
+
+    // The form kept (a name or a file needed; a file on this PC only).
+    void CommitEdit() {
+        AiCustomEntry entry{TrimAiField(m_editName), TrimAiField(m_editPill),
+                            TrimAiField(m_editFile), TrimAiField(m_editIcon)};
+        if (entry.name.empty() && entry.file.empty()) {
+            m_field = 0;
+            g_lastTyped = NowSeconds();
+            return;
+        }
+        if (!entry.file.empty() && !IsLocalDrivePath(entry.file)) {
+            m_customNote = Tr(L"Only a file on this computer",
+                              L"Só um arquivo deste computador");
+            m_field = 2;
+            Layout();
+            return;
+        }
+        if (m_editIndex >= 0 && m_editIndex < (int)g_aiCustomEntries.size()) {
+            g_aiCustomEntries[m_editIndex] = std::move(entry);
+        } else if (const int existing = FindAiCustomEntryIndex(entry.name);
+                   existing >= 0) {
+            g_aiCustomEntries[existing] = std::move(entry);
+        } else if ((int)g_aiCustomEntries.size() < kMaxCustomAi) {
+            g_aiCustomEntries.push_back(std::move(entry));
+        }
+        SaveAiCustomEntries();
+        StopEditing();
+    }
+
+    int HitTest(POINT pt, int* idOut) const {
+        *idOut = -1;
         for (int part = 0; part < kParts; part++) {
             if (PointInRect(pt, m_parts[part])) {
                 return part;
+            }
+        }
+        for (size_t i = 0; i < m_providerEditRects.size(); i++) {
+            if (PointInRect(pt, m_providerEditRects[i])) {
+                *idOut = (int)i;
+                return kEditProvider;
             }
         }
         return kNone;
     }
 
     void Layout() {
-        if (!m_titleFormat || !m_helpFormat) {
+        if (!Ready() || !m_helpFormat) {
             return;
         }
         const float bottom = Walk(nullptr, nullptr);
@@ -80186,13 +81997,14 @@ class AiUsagePanel : public Panel {
         const float width = std::round(kWidth * s);
         const float padding = std::round(14 * s);
         const float right = width - padding;
+        const float gap = std::round(8 * s);
         const long long now = UnixNow();
         auto text = [&](const std::wstring& value, IDWriteTextFormat* format,
                         const D2D1_RECT_F& rect, const D2D1_COLOR_F& color) {
             if (target) {
                 brush->SetColor(color);
                 target->DrawText(value.c_str(), (UINT32)value.size(), format,
-                                 rect, brush);
+                                 rect, brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
             }
         };
         // A wrapped text's height.
@@ -80227,23 +82039,261 @@ class AiUsagePanel : public Panel {
                 brush->SetColor(Fg(0.1f + 0.08f * lit));
                 GlassFill(target, {m_parts[part], radius, radius}, brush);
             }
-            text(label, m_buttonFormat.get(), m_parts[part], Fg(0.9f));
+            text(label, m_pillBtnFormat.get(), m_parts[part], Fg(0.9f));
             top += height;
         };
         for (D2D1_RECT_F& part : m_parts) {
             part = {};
         }
+        m_providerEditRects.clear();
+        m_nameBox = m_pillBox = m_fileBox = {};
         const float icon = std::round(28 * s);
         if (target) {
             const WCHAR glyph = kGlyphAiUsage;
             brush->SetColor(Fg(0.95f));
-            DrawGlyph(target, &glyph, 1, m_iconFormat.get(),
+            DrawGlyph(target, &glyph, 1, m_panelIconFormat.get(),
                       {padding, top, padding + icon, top + icon}, brush);
         }
+        if (m_editing) {
+            text(m_editTitle ? Tr(L"Edit provider", L"Editar provedor")
+                             : Tr(L"Add provider", L"Incluir provedor"),
+                 m_titleFormat.get(),
+                 {padding + icon + std::round(6 * s), top, right, top + icon},
+                 Fg(0.95f));
+            top += icon + std::round(10 * s);
+            const float labelH = std::round(16 * s);
+            const float boxH = std::round(34 * s);
+            const float btnH = std::round(30 * s);
+            auto fieldLabel = [&](PCWSTR label) {
+                text(label, m_metaFormat.get(),
+                     {padding + std::round(2 * s), top, right, top + labelH},
+                     Fg(0.6f));
+                top += labelH + std::round(3 * s);
+            };
+            fieldLabel(Tr(L"Name", L"Nome"));
+            m_nameBox = {padding, top, right, top + boxH};
+            if (target) {
+                DrawTextBox(target, brush, m_nameBox, m_editName, m_nameEdit,
+                            Tr(L"Name", L"Nome"), m_field == 0);
+            }
+            top += boxH + gap;
+            fieldLabel(Tr(L"Short name", L"Nome curto"));
+            m_pillBox = {padding, top, right, top + boxH};
+            if (target) {
+                DrawTextBox(target, brush, m_pillBox, m_editPill, m_pillEdit,
+                            Tr(L"Short name", L"Nome curto"), m_field == 1);
+            }
+            top += boxH + gap;
+            fieldLabel(Tr(L"JSON file", L"Arquivo JSON"));
+            const float pickW = std::round(86 * s);
+            const float clearW =
+                !m_editFile.empty() ? btnH + std::round(4 * s) : 0;
+            m_fileBox = {padding, top, right - pickW - clearW - gap,
+                         top + boxH};
+            m_parts[kPickEntryFile] = {right - pickW - clearW, top,
+                                       right - clearW, top + boxH};
+            if (!m_editFile.empty()) {
+                m_parts[kClearEntryFile] = {right - btnH,
+                                            top + (boxH - btnH) / 2, right,
+                                            top + (boxH + btnH) / 2};
+            }
+            if (target) {
+                DrawTextBox(target, brush, m_fileBox, m_editFile, m_fileEdit,
+                            L"JSON", m_field == 2);
+                DrawButton(target, brush, m_parts[kPickEntryFile],
+                           Tr(L"Choose...", L"Escolher..."), false,
+                           m_hover == kPickEntryFile,
+                           m_dialogShown ? 0.5f : 1.0f);
+                if (!m_editFile.empty()) {
+                    DrawIconButton(target, brush, m_parts[kClearEntryFile],
+                                   0xE711, m_hover == kClearEntryFile, 0.6f);
+                }
+            }
+            top += boxH + gap;
+            fieldLabel(Tr(L"Icon", L"Ícone"));
+            const float clearIconW =
+                !m_editIcon.empty() ? btnH + std::round(4 * s) : 0;
+            const D2D1_RECT_F iconRow{padding, top,
+                                      right - pickW - clearIconW - gap,
+                                      top + boxH};
+            m_parts[kPickEntryIcon] = {right - pickW - clearIconW, top,
+                                       right - clearIconW, top + boxH};
+            if (!m_editIcon.empty()) {
+                m_parts[kClearEntryIcon] = {right - btnH,
+                                            top + (boxH - btnH) / 2, right,
+                                            top + (boxH + btnH) / 2};
+            }
+            if (target) {
+                const float r = std::round(9 * s);
+                brush->SetColor(Fg(0.06f));
+                GlassFill(target, {iconRow, r, r}, brush);
+                float tx = iconRow.left + std::round(10 * s);
+                if (ID2D1Bitmap* bmp = IconOf(m_editIcon)) {
+                    const float p = std::round(20 * s);
+                    const float cy = (iconRow.top + iconRow.bottom) / 2;
+                    DrawBitmapSmooth(target, bmp,
+                                     {tx, cy - p / 2, tx + p, cy + p / 2});
+                    tx += p + std::round(8 * s);
+                }
+                const std::wstring iconLabel =
+                    m_editIcon.empty()
+                        ? std::wstring(Tr(L"Pictures", L"Imagens"))
+                        : std::wstring(PathFindFileName(m_editIcon.c_str()));
+                text(iconLabel, m_rowFormat.get(),
+                     {tx, iconRow.top, iconRow.right - std::round(8 * s),
+                      iconRow.bottom},
+                     m_editIcon.empty() ? Fg(0.45f) : Fg(0.9f));
+                DrawButton(target, brush, m_parts[kPickEntryIcon],
+                           Tr(L"Choose...", L"Escolher..."), false,
+                           m_hover == kPickEntryIcon,
+                           m_dialogShown ? 0.5f : 1.0f);
+                if (!m_editIcon.empty()) {
+                    DrawIconButton(target, brush, m_parts[kClearEntryIcon],
+                                   0xE711, m_hover == kClearEntryIcon, 0.6f);
+                }
+            }
+            top += boxH;
+            if (!m_customNote.empty()) {
+                paragraph(m_customNote, m_helpFormat.get(),
+                          RgbColor(0xFF453A, 0.95f));
+            }
+            top += std::round(12 * s);
+            const float delW = m_editIndex >= 0 ? btnH + gap : 0;
+            const float half =
+                std::floor((right - padding - delW - gap) / 2);
+            m_parts[kCancelEdit] = {padding, top, padding + half, top + btnH};
+            if (m_editIndex >= 0) {
+                m_parts[kDeleteEdit] = {padding + half + gap, top,
+                                        padding + half + gap + btnH,
+                                        top + btnH};
+            }
+            m_parts[kSaveEdit] = {right - half, top, right, top + btnH};
+            if (target) {
+                DrawButton(target, brush, m_parts[kCancelEdit],
+                           Tr(L"Cancel", L"Cancelar"), false,
+                           m_hover == kCancelEdit);
+                if (m_editIndex >= 0) {
+                    DrawIconButton(target, brush, m_parts[kDeleteEdit], 0xE74D,
+                                   m_hover == kDeleteEdit, 0.65f);
+                }
+                DrawButton(target, brush, m_parts[kSaveEdit],
+                           Tr(L"Save", L"Salvar"), true,
+                           m_hover == kSaveEdit);
+            }
+            top += btnH;
+            return top + padding;
+        }
+        const float addBtnW = std::round(124 * s);
+        const float addBtnH = std::round(24 * s);
+        m_parts[kAddProvider] = {right - addBtnW, top + (icon - addBtnH) / 2,
+                                 right, top + (icon + addBtnH) / 2};
         text(Tr(L"AI usage", L"Uso de IA"), m_titleFormat.get(),
-             {padding + icon + std::round(6 * s), top, right, top + icon},
+             {padding + icon + std::round(6 * s), top,
+              m_parts[kAddProvider].left - std::round(6 * s), top + icon},
              Fg(0.95f));
+        if (target) {
+            const float lit = Hover(HoverKey(7400, kAddProvider),
+                                    m_hover == kAddProvider);
+            const float r = addBtnH / 2;
+            brush->SetColor(Fg(0.1f + 0.08f * lit));
+            GlassFill(target, {m_parts[kAddProvider], r, r}, brush);
+            text((std::wstring(L"+ ") +
+                  Tr(L"Add provider", L"Incluir provedor"))
+                     .c_str(),
+                 m_pillBtnFormat.get(), m_parts[kAddProvider], Fg(0.9f));
+        }
         top += icon;
+        auto drawHeader = [&](const std::wstring& name,
+                              const std::wstring& iconPath,
+                              long long writtenAt, int customIndex) {
+            top += std::round(12 * s);
+            const float nameHeight = std::round(18 * s);
+            float nameLeft = padding;
+            if (ID2D1Bitmap* bmp = IconOf(iconPath)) {
+                const float p = std::round(15 * s);
+                const float cy = top + nameHeight / 2;
+                if (target) {
+                    DrawBitmapSmooth(target, bmp,
+                                     {padding, cy - p / 2, padding + p,
+                                      cy + p / 2});
+                }
+                nameLeft += p + std::round(6 * s);
+            }
+            float updRight = right;
+            if (customIndex >= 0) {
+                const float eb = std::round(18 * s);
+                const D2D1_RECT_F editRect{right - eb, top, right,
+                                           top + nameHeight};
+                m_providerEditRects.push_back(editRect);
+                if (target) {
+                    const float lit = Hover(
+                        HoverKey(7420, customIndex),
+                        m_hover == kEditProvider && m_hoverId == customIndex);
+                    if (lit > 0.01f) {
+                        brush->SetColor(Fg(0.12f * lit));
+                        GlassFill(target, {editRect, eb / 2, eb / 2}, brush);
+                    }
+                    brush->SetColor(Fg(0.45f + 0.5f * lit));
+                    const WCHAR glyph = kGlyphPencil;
+                    DrawGlyph(target, &glyph, 1, m_iconFormat.get(),
+                              editRect, brush);
+                }
+                updRight = right - eb - std::round(4 * s);
+            }
+            const D2D1_RECT_F nameRow{nameLeft, top, updRight,
+                                      top + nameHeight};
+            text(name, m_nameFormat.get(), nameRow, Fg(0.95f));
+            if (writtenAt > 0) {
+                text(AiUpdatedText(writtenAt, now), m_updatedFormat.get(),
+                     nameRow, Fg(0.5f));
+            }
+            top += nameHeight;
+        };
+        auto drawLimit = [&](const std::wstring& label, const AiLimit& limit) {
+            const double used = AiUsedNow(limit, now);
+            if (used < 0) {
+                return;
+            }
+            top += std::round(6 * s);
+            const float row = std::round(16 * s);
+            const D2D1_RECT_F labelRow{padding, top, right, top + row};
+            text(label, m_rowFormat.get(), labelRow, Fg(0.7f));
+            WCHAR percent[16];
+            swprintf_s(percent, L"%.0f%%", used);
+            const int rgb = AiUsageRgb(used);
+            text(percent, m_valueFormat.get(), labelRow,
+                 rgb >= 0 ? RgbColor(rgb, 1) : Fg(0.95f));
+            top += row + std::round(4 * s);
+            const float thickness = std::round(6 * s);
+            if (target) {
+                const D2D1_RECT_F track{padding, top, right, top + thickness};
+                brush->SetColor(Fg(0.12f));
+                target->FillRoundedRectangle(
+                    {track, thickness / 2, thickness / 2}, brush);
+                const float fill =
+                    (float)(used / 100) * (track.right - track.left);
+                if (fill > 0.5f) {
+                    brush->SetColor(rgb >= 0 ? RgbColor(rgb, 1) : Accent(1));
+                    target->FillRoundedRectangle(
+                        {{track.left, track.top,
+                          track.left + std::max(fill, thickness),
+                          track.bottom},
+                         thickness / 2,
+                         thickness / 2},
+                        brush);
+                }
+            }
+            top += thickness;
+            const std::wstring left = AiTimeLeft(limit.resetsAt, now);
+            if (!left.empty()) {
+                const float line = std::round(16 * s);
+                text(std::wstring(Tr(L"Starts over in", L"Recomeça em")) +
+                         L" " + left + L" · " + AiResetTime(limit.resetsAt),
+                     m_metaFormat.get(), {padding, top, right, top + line},
+                     Fg(0.5f));
+                top += line;
+            }
+        };
         bool any = false;
         for (int agent = 0; agent < kAiAgents; agent++) {
             if (!AiAgentOn(agent)) {
@@ -80252,66 +82302,10 @@ class AiUsagePanel : public Panel {
             any = true;
             const AiUsage& usage = g_aiUsage[agent];
             const bool claude = agent == (int)AiAgent::Claude;
-            top += std::round(12 * s);
-            const float nameHeight = std::round(18 * s);
-            const D2D1_RECT_F nameRow{padding, top, right, top + nameHeight};
-            text(AiAgentName(agent), m_nameFormat.get(), nameRow, Fg(0.95f));
-            if (usage.writtenAt > 0) {
-                text(AiUpdatedText(usage.writtenAt, now), m_updatedFormat.get(),
-                     nameRow, Fg(0.5f));
-            }
-            top += nameHeight;
-            for (const AiLimit* limit : {&usage.session, &usage.week}) {
-                const double used = AiUsedNow(*limit, now);
-                if (used < 0) {
-                    continue;
-                }
-                top += std::round(6 * s);
-                const float row = std::round(16 * s);
-                const D2D1_RECT_F labelRow{padding, top, right, top + row};
-                text(limit == &usage.session
-                         ? Tr(L"5-hour session", L"Sessão de 5 horas")
-                         : Tr(L"Week", L"Semana"),
-                     m_textFormat.get(), labelRow, Fg(0.7f));
-                WCHAR percent[16];
-                swprintf_s(percent, L"%.0f%%", used);
-                const int rgb = AiUsageRgb(used);
-                text(percent, m_valueFormat.get(), labelRow,
-                     rgb >= 0 ? RgbColor(rgb, 1) : Fg(0.95f));
-                top += row + std::round(4 * s);
-                const float thickness = std::round(6 * s);
-                if (target) {
-                    const D2D1_RECT_F track{padding, top, right,
-                                            top + thickness};
-                    brush->SetColor(Fg(0.12f));
-                    target->FillRoundedRectangle(
-                        {track, thickness / 2, thickness / 2}, brush);
-                    const float fill =
-                        (float)(used / 100) * (track.right - track.left);
-                    if (fill > 0.5f) {
-                        brush->SetColor(rgb >= 0 ? RgbColor(rgb, 1)
-                                                 : Accent(1));
-                        target->FillRoundedRectangle(
-                            {{track.left, track.top,
-                              track.left + std::max(fill, thickness),
-                              track.bottom},
-                             thickness / 2,
-                             thickness / 2},
-                            brush);
-                    }
-                }
-                top += thickness;
-                const std::wstring left = AiTimeLeft(limit->resetsAt, now);
-                if (!left.empty()) {
-                    const float line = std::round(16 * s);
-                    text(std::wstring(Tr(L"Starts over in", L"Recomeça em")) +
-                             L" " + left + L" · " +
-                             AiResetTime(limit->resetsAt),
-                         m_smallFormat.get(), {padding, top, right, top + line},
-                         Fg(0.5f));
-                    top += line;
-                }
-            }
+            drawHeader(AiAgentName(agent), {}, usage.writtenAt, -1);
+            drawLimit(Tr(L"5-hour session", L"Sessão de 5 horas"),
+                      usage.session);
+            drawLimit(Tr(L"Week", L"Semana"), usage.week);
             const bool known = AiUsageKnown(usage);
             if (!claude) {
                 if (!known) {
@@ -80362,30 +82356,86 @@ class AiUsagePanel : public Panel {
                                   : Tr(L"Copy the line", L"Copiar a linha"));
             }
         }
+        if (g_settings.islandAiCustom) {
+            any = true;
+            if (!g_aiCustom.empty()) {
+                for (size_t i = 0; i < g_aiCustom.size(); i++) {
+                    const auto& custom = g_aiCustom[i];
+                    drawHeader(custom.name, custom.icon, custom.writtenAt,
+                               (int)i);
+                    for (const auto& w : custom.windows) {
+                        drawLimit(w.label.empty() ? Tr(L"Usage", L"Uso")
+                                                  : w.label,
+                                  w.limit);
+                    }
+                }
+            } else {
+                drawHeader(Tr(L"Custom (JSON file)",
+                              L"Personalizado (arquivo JSON)"),
+                           {}, 0, -1);
+                paragraph(
+                    !m_customNote.empty() ? m_customNote
+                    : g_aiCustomFile.empty()
+                        ? Tr(L"Point to a JSON file with \"name\" and "
+                             L"\"windows\" (or a list of them) to show other "
+                             L"services here",
+                             L"Aponte um arquivo JSON com \"name\" e "
+                             L"\"windows\" (ou uma lista deles) para mostrar "
+                             L"outros serviços aqui")
+                        : Tr(L"Waiting for valid data in the chosen file",
+                             L"Aguardando dados válidos no arquivo escolhido"),
+                    m_helpFormat.get(), Fg(0.6f));
+                button(kPickFile,
+                       Tr(L"Choose a JSON file", L"Escolha um arquivo JSON"));
+            }
+        }
         if (!any) {
-            paragraph(Tr(L"Turn on Claude Code or Codex in the settings",
-                         L"Ligue o Claude Code ou o Codex nas configurações"),
-                      m_helpFormat.get(), Fg(0.6f));
+            paragraph(
+                Tr(L"Turn on Claude Code, Codex or Custom in the settings",
+                   L"Ligue o Claude Code, o Codex ou o Personalizado nas "
+                   L"configurações"),
+                m_helpFormat.get(), Fg(0.6f));
         }
         return top + padding;
     }
 
-    winrt::com_ptr<IDWriteTextFormat> m_iconFormat;
-    winrt::com_ptr<IDWriteTextFormat> m_titleFormat;
+    winrt::com_ptr<IWICImagingFactory> m_wic;
+    std::vector<KeptAppIcon> m_icons;
+    // The biggest scale they were made for (drawn smaller, they stay sharp).
+    float m_iconScale = 0;
+    winrt::com_ptr<IDWriteTextFormat> m_panelIconFormat;
     winrt::com_ptr<IDWriteTextFormat> m_nameFormat;
-    winrt::com_ptr<IDWriteTextFormat> m_textFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_rowFormat;
     winrt::com_ptr<IDWriteTextFormat> m_valueFormat;
-    winrt::com_ptr<IDWriteTextFormat> m_smallFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_metaFormat;
     winrt::com_ptr<IDWriteTextFormat> m_updatedFormat;
     winrt::com_ptr<IDWriteTextFormat> m_helpFormat;
-    winrt::com_ptr<IDWriteTextFormat> m_buttonFormat;
-    float m_preparedScale = 0;
+    winrt::com_ptr<IDWriteTextFormat> m_pillBtnFormat;
     D2D1_RECT_F m_parts[kParts]{};
+    std::vector<D2D1_RECT_F> m_providerEditRects;
+    D2D1_RECT_F m_nameBox{}, m_pillBox{}, m_fileBox{};
     int m_hover = kNone;
+    int m_hoverId = -1;
     double m_copiedAt = -10;
     // Whether Git Bash runs Claude Code's status line (which line is
     // copied), looked at as it opens.
     bool m_bash = false;
+    // The file dialog's thread (a JSON file or a picture, see
+    // StartAiCustomFileThread), and the form of "+ Add provider" (an entry
+    // of g_aiCustomEntries, -1 a new one; its fields).
+    HANDLE m_fileThread = nullptr;
+    bool m_dialogShown = false;
+    std::wstring m_customNote;
+    bool m_editing = false;
+    int m_editIndex = -1;
+    // Opened from a service's pencil (its title says so), not "+ Add".
+    bool m_editTitle = false;
+    int m_field = 0;
+    std::wstring m_editName;
+    std::wstring m_editPill;
+    std::wstring m_editFile;
+    std::wstring m_editIcon;
+    TextEdit m_nameEdit, m_pillEdit, m_fileEdit;
 };
 
 // The other apps' tray icons that aren't pinned, opened from the arrow when
@@ -84092,6 +86142,20 @@ struct ThumbnailQueue {
     bool appIcons = false;
 };
 
+// A file whose picture is its own icon (a shortcut, a program, a web link,
+// an icon), not its type's: Windows has no thumbnail for it, so its icon is
+// asked instead, with or without the thumbnails' option (#7575).
+bool HasOwnFileIcon(const std::wstring& path) {
+    const WCHAR* type = PathFindExtension(path.c_str());
+    for (const WCHAR* own :
+         {L".lnk", L".exe", L".url", L".ico", L".appref-ms"}) {
+        if (_wcsicmp(type, own) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 DWORD WINAPI ThumbnailThreadProc(LPVOID parameter) {
     const std::unique_ptr<std::shared_ptr<ThumbnailQueue>> held(
         (std::shared_ptr<ThumbnailQueue>*)parameter);
@@ -84126,7 +86190,9 @@ DWORD WINAPI ThumbnailThreadProc(LPVOID parameter) {
                         IID_PPV_ARGS(factory.put())))) {
                     factory->GetImage(
                         {job.second, job.second},
-                        SIIGBF_THUMBNAILONLY | SIIGBF_BIGGERSIZEOK,
+                        (HasOwnFileIcon(job.first) ? SIIGBF_ICONONLY
+                                                   : SIIGBF_THUMBNAILONLY) |
+                            SIIGBF_BIGGERSIZEOK,
                         &made->bitmap);
                 }
             }
@@ -84407,6 +86473,9 @@ void OpenPath(const std::wstring& path) {
                      nullptr, SW_SHOWNORMAL);
         return;
     }
+    if (OpensThroughExplorer(path) && ShellExecuteAsUser(path)) {
+        return;
+    }
     ShellExecute(nullptr, L"open", path.c_str(), nullptr, nullptr,
                  SW_SHOWNORMAL);
 }
@@ -84590,6 +86659,8 @@ struct FolderPickJob {
     int saved = 0;
     // A sound file instead (an event's of Faísca's, `purpose`).
     bool sound = false;
+    // A JSON file instead (custom AI usage).
+    bool json = false;
 };
 
 // What the settings' icon jobs are for (FolderPickJob::purpose; a
@@ -84610,17 +86681,29 @@ DWORD WINAPI FolderPickThreadProc(LPVOID parameter) {
         dialog->GetOptions(&options);
         dialog->SetOptions(
             options | FOS_FORCEFILESYSTEM |
-            (job->picture || job->sound ? 0 : FOS_PICKFOLDERS));
+            (job->picture || job->sound || job->json ? 0 : FOS_PICKFOLDERS));
         if (job->picture) {
+            // (A custom AI service's: the pictures LoadAppIcon shows as they
+            // are, an icon or a program's; an icon's of the island: what
+            // ReadIconPicture reads.)
             const COMDLG_FILTERSPEC filters[] = {
                 {Tr(L"Pictures", L"Imagens"),
-                 L"*.png;*.svg;*.ico;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff"}};
+                 job->purpose == kAiCustomEntryIconPick
+                     ? L"*.png;*.jpg;*.jpeg;*.bmp;*.webp;*.ico;*.exe"
+                     : L"*.png;*.svg;*.ico;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;"
+                       L"*.tiff"}};
             dialog->SetFileTypes(ARRAYSIZE(filters), filters);
         }
         if (job->sound) {
             const COMDLG_FILTERSPEC filters[] = {
                 {Tr(L"Sound files", L"Arquivos de som"),
                  L"*.wav;*.mp3;*.m4a;*.aac;*.wma;*.flac"}};
+            dialog->SetFileTypes(ARRAYSIZE(filters), filters);
+        }
+        if (job->json) {
+            const COMDLG_FILTERSPEC filters[] = {
+                {L"JSON", L"*.json"},
+                {Tr(L"All files", L"Todos os arquivos"), L"*.*"}};
             dialog->SetFileTypes(ARRAYSIZE(filters), filters);
         }
         dialog->SetTitle(job->title);
@@ -84645,6 +86728,59 @@ DWORD WINAPI FolderPickThreadProc(LPVOID parameter) {
         delete job;
     }
     return 0;
+}
+
+HANDLE StartAiCustomFileThread(HWND panel, int purpose, bool picture) {
+    auto* job = new FolderPickJob{
+        panel,
+        picture ? Tr(L"Pictures", L"Imagens")
+                : Tr(L"Choose a JSON file", L"Escolha um arquivo JSON"),
+        purpose, {}, picture, 0, false, !picture};
+    HANDLE thread =
+        CreateThread(nullptr, 0, FolderPickThreadProc, job, 0, nullptr);
+    if (!thread) {
+        delete job;
+    }
+    return thread;
+}
+
+void AiUsagePanel::OnDestroy() {
+    EndFileDialogThread(&m_fileThread);
+    MSG msg;
+    while (m_hwnd && PeekMessage(&msg, m_hwnd, WM_APP_FOLDER_PICKED,
+                                 WM_APP_FOLDER_PICKED, PM_REMOVE)) {
+        delete (FolderPickJob*)msg.lParam;
+    }
+}
+
+bool AiUsagePanel::OnAppMessage(UINT msg, WPARAM, LPARAM lParam) {
+    if (msg != WM_APP_FOLDER_PICKED) {
+        return false;
+    }
+    EndFileDialogThread(&m_fileThread);
+    m_dialogShown = false;
+    std::unique_ptr<FolderPickJob> job((FolderPickJob*)lParam);
+    if (job->path.empty()) {
+        // (Canceled.)
+    } else if (!IsLocalDrivePath(job->path)) {
+        m_customNote = Tr(L"Only a file on this computer",
+                          L"Só um arquivo deste computador");
+    } else {
+        m_customNote.clear();
+        if (job->purpose == kAiCustomEntryFilePick) {
+            m_editFile = job->path;
+            m_fileEdit.Reset();
+            m_fileEdit.caret = m_editFile.size();
+        } else if (job->purpose == kAiCustomEntryIconPick) {
+            m_editIcon = job->path;
+            PrepareIcons();
+        } else {
+            SetAiCustomFile(job->path);
+        }
+    }
+    Layout();
+    Render();
+    return true;
 }
 
 // Windows' icons saved into a folder (see SaveWindowsIcons: a few hundred
@@ -85410,7 +87546,7 @@ class ShelfPanel : public Panel {
                                   row.left + pad / 2 + thumb,
                                   row.bottom - pad / 2};
             ID2D1Bitmap* picture =
-                g_settings.islandFolderThumbnails
+                g_settings.islandFolderThumbnails || HasOwnFileIcon(path)
                     ? m_thumbs.Get(target, m_wic.get(), m_hwnd, path,
                                    (int)std::ceil(thumb))
                     : nullptr;
@@ -88560,8 +90696,9 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
         m_previewShown = false;
         m_previewSpot = {-1, -1};
         const FolderEntry* item = ItemAt(m_hover);
+        // (Not for a shortcut or a program: its icon, not a picture of it.)
         if (g_settings.islandFolderThumbnails && item &&
-            item->kind == FolderKind::File) {
+            item->kind == FolderKind::File && !HasOwnFileIcon(item->path)) {
             m_previewSpot = m_hover;
             SetTimer(m_hwnd, kFolderPreviewTimerId, kFolderPreviewMs, nullptr);
         }
@@ -89478,7 +91615,8 @@ void FoldersPanel::Draw(ID2D1RenderTarget* target,
                                     : (WCHAR)0;
             ID2D1Bitmap* thumbnail =
                 item.kind == FolderKind::File &&
-                        g_settings.islandFolderThumbnails
+                        (g_settings.islandFolderThumbnails ||
+                         HasOwnFileIcon(item.path))
                     ? m_thumbs.Get(target, m_wic.get(), m_hwnd, item.path,
                                    (int)std::ceil(iconSize))
                     : nullptr;
@@ -90902,6 +93040,9 @@ constexpr double kPetRhythmPerfect = 0.06;
 constexpr double kPetRhythmGood = 0.16;
 constexpr float kPetCloudGravity = 1150;
 constexpr float kPetCloudJump = 560;
+// The falling games' rules move in steps of this many seconds of real time
+// (see PetGames::Step), the same at any frame rate.
+constexpr double kPetGameStep = 1.0 / 240;
 constexpr int kPetMemoryCards = 12;
 constexpr int kPetReflexRounds = 5;
 constexpr int kPetReflexPenaltyMs = 300;
@@ -90917,7 +93058,6 @@ constexpr double kPetGameAwaySeconds = 0.22;
 constexpr double kPetGameShakeSeconds = 0.35;
 constexpr double kPetGameDealGap = 0.04;
 constexpr double kPetGameDealSeconds = 0.35;
-constexpr float kPetGamePi = 3.14159265f;
 
 // Lower is better for the time and the reaction; higher for the rest.
 bool PetGameLowerIsBetter(PetGameId id) {
@@ -91131,14 +93271,18 @@ double PetReflexScore(const std::vector<int>& times, int penaltyMs) {
 }
 
 // The pet, falling from `prevY` to `y` (down is more), lands on a cloud at
-// `cloudY` when it crosses just above its top and is over its width.
+// `cloudY` when it crosses just above its top and is over its width; a
+// jump that tops out a little short of it (her body drawn over the cloud's
+// puffs by then) still lands (#7559).
+constexpr float kPetCloudLedge = 6;
+
 bool PetCloudLands(float prevY,
                    float y,
                    float cloudY,
                    float petX,
                    float cloudX,
                    float cloudW) {
-    return prevY <= cloudY - 10 && y >= cloudY - 10 &&
+    return prevY <= cloudY - 10 + kPetCloudLedge && y >= cloudY - 10 &&
            std::fabs(petX - cloudX) < cloudW / 2 + 10;
 }
 
@@ -91229,7 +93373,7 @@ class PetGamePath {
                         0,
                         a1 > a0 ? D2D1_SWEEP_DIRECTION_CLOCKWISE
                                 : D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
-                        std::fabs(a1 - a0) > kPetGamePi
+                        std::fabs(a1 - a0) > kPi
                             ? D2D1_ARC_SIZE_LARGE
                             : D2D1_ARC_SIZE_SMALL});
     }
@@ -91295,8 +93439,7 @@ struct PetGameShapes {
         PetGamePath wifiPath;
         if (wifiPath.Open(made)) {
             for (int i = 1; i <= 3; i++) {
-                wifiPath.Arc(0, 0.32f, i * 0.2f, 1.22f * kPetGamePi,
-                             1.78f * kPetGamePi);
+                wifiPath.Arc(0, 0.32f, i * 0.2f, 1.22f * kPi, 1.78f * kPi);
             }
             wifi = wifiPath.Finish();
         }
@@ -91330,7 +93473,7 @@ struct PetGameShapes {
         if (bellPath.Open(made)) {
             bellPath.Begin(-0.32f, 0.2f, true);
             bellPath.Quad(-0.26f, 0.08f, -0.26f, -0.06f);
-            bellPath.ArcTo(0, -0.06f, 0.26f, kPetGamePi, 2 * kPetGamePi);
+            bellPath.ArcTo(0, -0.06f, 0.26f, kPi, 2 * kPi);
             bellPath.Quad(0.26f, 0.08f, 0.32f, 0.2f);
             bellPath.End(true);
             bell = bellPath.Finish();
@@ -91402,7 +93545,7 @@ struct PetGameInk {
                             float sy,
                             float angle) const {
         return D2D1::Matrix3x2F::Scale(sx, sy) *
-               D2D1::Matrix3x2F::Rotation(angle * 180 / kPetGamePi) *
+               D2D1::Matrix3x2F::Rotation(angle * 180 / kPi) *
                D2D1::Matrix3x2F::Translation(x, y) *
                *D2D1::Matrix3x2F::ReinterpretBaseType(&base);
     }
@@ -91513,16 +93656,33 @@ class PetGames {
     bool Step(double now, double dt) {
         const float d = (float)std::clamp(dt, 0.0, 0.05);
         const State before = m_state;
+        // The falling games follow the real time, in fixed steps: the
+        // frame's `dt` is capped and follows the animations' speed, so a late
+        // frame slowed them and how high a jump went changed with the frame
+        // rate (a cloud skipped was missed by a hair, #7559).
+        const bool falling =
+            m_id == PetGameId::Fruit || m_id == PetGameId::Clouds;
+        if (m_state == State::Playing && falling) {
+            if (m_steppedAt > 0) {
+                m_stepLeft += std::clamp(now - m_steppedAt, 0.0, 0.1);
+            }
+            m_steppedAt = now;
+            while (m_stepLeft >= kPetGameStep && m_state == State::Playing) {
+                m_stepLeft -= kPetGameStep;
+                if (m_id == PetGameId::Fruit) {
+                    StepFruit(now, (float)kPetGameStep);
+                } else {
+                    StepClouds(now, (float)kPetGameStep);
+                }
+            }
+        } else {
+            m_steppedAt = 0;
+            m_stepLeft = 0;
+        }
         if (m_state == State::Playing) {
             switch (m_id) {
-                case PetGameId::Fruit:
-                    StepFruit(now, d);
-                    break;
                 case PetGameId::Rhythm:
                     StepRhythm(now);
-                    break;
-                case PetGameId::Clouds:
-                    StepClouds(now, d);
                     break;
                 case PetGameId::Reflex:
                     StepReflex(now);
@@ -91769,6 +93929,10 @@ class PetGames {
     };
     PetGameId m_id = PetGameId::Fruit;
     State m_state = State::Title;
+    // The falling games' clock (see Step): the last step's time (0: none
+    // yet), and the real time not stepped yet.
+    double m_steppedAt = 0;
+    double m_stepLeft = 0;
     // The round's data exists (a round started and not stopped).
     bool m_ready = false;
     float m_scale = 1, m_w = 360, m_h = 340;
@@ -92370,8 +94534,7 @@ class PetGames {
                      {D2D1_POINT_2F{-0.14f, 0.24f},
                       D2D1_POINT_2F{0.24f, 0.14f}}) {
                     target->SetTransform(
-                        D2D1::Matrix3x2F::Rotation(-0.4f * 180 / kPetGamePi,
-                                                   head) *
+                        D2D1::Matrix3x2F::Rotation(-0.4f * 180 / kPi, head) *
                         placed);
                     target->FillEllipse(D2D1_ELLIPSE{head, 0.13f, 0.1f},
                                         ink.brush);
@@ -92423,10 +94586,10 @@ class PetGames {
             const double sincePop = now - card.pop;
             const float pop =
                 sincePop > 0 && sincePop < 0.35
-                    ? (float)std::sin(sincePop / 0.35 * kPetGamePi) * 0.1f
+                    ? (float)std::sin(sincePop / 0.35 * kPi) * 0.1f
                     : 0;
             const float sx =
-                std::max(0.02f, std::fabs(std::cos(card.up * kPetGamePi))) *
+                std::max(0.02f, std::fabs(std::cos(card.up * kPi))) *
                 (1 + pop);
             ink.Place(x, y, sx, 1 + pop, 0);
             const D2D1_RECT_F rect{-w / 2, -h / 2, w / 2, h / 2};
@@ -92639,9 +94802,10 @@ class PetGames {
         float size,
         DWRITE_TEXT_ALIGNMENT alignment) {
         winrt::com_ptr<IDWriteTextFormat> format;
+        const PCWSTR font = UiFont(family);
         if (SUCCEEDED(dwrite->CreateTextFormat(
-                UiFont(family), nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
-                DWRITE_FONT_STRETCH_NORMAL, size, L"", format.put()))) {
+                font, nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
+                UiStretch(font), size, L"", format.put()))) {
             format->SetTextAlignment(alignment);
             format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
             format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -93970,6 +96134,10 @@ class Island final : public DropTarget::Receiver {
     // The last count, or the watch, failed (logged once, tried again).
     bool m_recycleCountFailed = false;
     bool m_recycleWatchFailed = false;
+    // The counts again after a start or a wake done (see kRecycleWarmupMs),
+    // and whether the next one watches it again too.
+    size_t m_recycleWarmup = 0;
+    bool m_recycleRewatch = false;
     void UpdateRecycleWatch();
     void StartRecycleCount();
     void OnRecycleCounted(WPARAM items, LPARAM kilobytes);
@@ -93983,6 +96151,9 @@ class Island final : public DropTarget::Receiver {
     HANDLE m_aiUsageThread = nullptr;
     HANDLE m_aiUsageStop = nullptr;
     bool m_aiCodexWatched = false;
+    bool m_aiCustomWatched = false;
+    std::wstring m_aiCustomFileWatched;
+    int m_aiCustomEntriesWatched = -1;
     std::wstring AiAgentApp(int agent);
     SideText m_aiTexts[kAiAgents];
     // Status notices (see ShowStatusNotice): what was seen last (-1 not
@@ -94724,6 +96895,17 @@ class Island final : public DropTarget::Receiver {
                       float radius,
                       ID2D1Geometry* shape,
                       float amount);
+    // The Vice theme's neon line inside a shape of the island (`shape`, a
+    // notch's; else `rect` with its `radius`) along its edge facing the
+    // screen's middle, as much as `amount` (see DrawViceNeon; a notch's
+    // `outline` too).
+    void DrawViceEdge(ID2D1RenderTarget* target,
+                      const D2D1_RECT_F& rect,
+                      float radius,
+                      ID2D1Geometry* shape,
+                      float amount,
+                      ID2D1Geometry* outline = nullptr);
+    ViceNeonPaint m_viceNeon;
     // A pet drawn `reach` around `center`: its place kept for the next
     // frame (see m_petArea).
     void NotePetArea(ID2D1RenderTarget* target,
@@ -95318,6 +97500,9 @@ class Island final : public DropTarget::Receiver {
     // bit more while bouncing), and stays a moment after the media starts or
     // stops, so it doesn't flash. Kept as it last was while it goes away.
     MediaState m_mediaShown;
+    // Its app's name, looked up as it changes (see UpdateMediaShown), not
+    // at each layout: an app known by its file looks for its process.
+    std::wstring m_mediaAppName;
     bool m_mediaWanted = false;
     double m_mediaSince = 0;
     double m_mediaGoneAt = 0;
@@ -95813,12 +97998,14 @@ class Island final : public DropTarget::Receiver {
                          float radius,
                          ID2D1PathGeometry* notchLine,
                          float amount);
+    // (`asLine`: along the minimized line, see DrawFill.)
     void DrawFill(ID2D1RenderTarget* target,
                   ID2D1SolidColorBrush* brush,
                   const D2D1_RECT_F& rect,
                   float radius,
                   ID2D1Geometry* notch,
-                  float opacity);
+                  float opacity,
+                  bool asLine = false);
     // The visualizer: the default output's peak meter, its bars' heights (0
     // to 1), and whether its frames run (only while it's on the pill, seen,
     // and something plays).
@@ -97623,6 +99810,28 @@ void ControlPanel::StartIconPictureDialog(WCHAR glyph) {
         m_dialogShown = false;
         delete job;
     }
+}
+
+// The "Choose..." button of the Custom (JSON file) AI usage row, left of
+// its switch.
+D2D1_RECT_F AiCustomButtonRect(const D2D1_RECT_F& row, float s) {
+    const float toggleLeft =
+        row.right - std::round(8 * s) - std::round(36 * s);
+    const float h = std::round(26 * s);
+    const float mid = (row.top + row.bottom) / 2;
+    return {toggleLeft - std::round(8 * s) - std::round(96 * s), mid - h / 2,
+            toggleLeft - std::round(8 * s), mid + h / 2};
+}
+
+// The custom AI usage's JSON file chosen with Windows' file dialog (the
+// icons' dialog thread; the answer is handled with the icons', where
+// WM_APP_FOLDER_PICKED is).
+void ControlPanel::StartAiCustomFileDialog() {
+    if (m_dialogShown) {
+        return;
+    }
+    m_iconThread = StartAiCustomFileThread(m_hwnd);
+    m_dialogShown = m_iconThread != nullptr;
 }
 
 // A sound file chosen for an event with Windows' file dialog (the icons'
@@ -99891,7 +102100,10 @@ float ControlPanel::SettingHeight(const SettingEntry& entry,
         case SettingKind::Order:
             return std::round(66 * s);
         case SettingKind::Pref:
-            return beside(std::round(52 * s), 34);
+            return beside(
+                std::round(
+                    (entry.value == (int)IslandPref::AiCustom ? 156 : 52) * s),
+                34);
         case SettingKind::Shortcut:
         case SettingKind::PetName:
             return beside(std::round(176 * s), 34);
@@ -100253,6 +102465,9 @@ std::wstring ControlPanel::SettingName(const SettingEntry& entry) const {
                            L"LGUG2Z.whkd)",
                            L" · o whkd não está instalado (winget install "
                            L"LGUG2Z.whkd)");
+            }
+            if (pref == IslandPref::AiCustom && !m_aiCustomStatus.empty()) {
+                name += L" · " + m_aiCustomStatus;
             }
             return name;
         }
@@ -101028,6 +103243,9 @@ std::wstring ControlPanel::SettingDescription(const SettingEntry& entry) const {
         {SettingKind::Pref, (int)IslandPref::AiCodex,
          L"What Codex writes in its logs on this PC",
          L"O que o Codex escreve nos logs dele neste PC"},
+        {SettingKind::Pref, (int)IslandPref::AiCustom,
+         L"Reads limits from a JSON file on this PC ({\"name\", \"windows\"})",
+         L"Lê os limites de um arquivo JSON neste PC ({\"name\", \"windows\"})"},
         {SettingKind::Pref, (int)IslandPref::FocusedTitle,
          L"Also shows the title of the window in focus, like the page or the "
          L"file open in it",
@@ -101805,9 +104023,11 @@ ControlPanel::SettingTarget ControlPanel::NoteTarget(std::wstring_view key) {
         {L"BatteryRing", choice(kChoiceBatteryRing)},
         {L"UsageGpu", pref(IslandPref::UsageGpu)},
         {L"UsageCpuTemp", pref(IslandPref::UsageCpuTemp)},
+        {L"AiCustom", pref(IslandPref::AiCustom)},
         {L"ChargeColor", choice(kChoiceBatteryChargeColor)},
         {L"TextFont", choice(kChoiceTextFont)},
         {L"ClockFont", choice(kChoiceClockFont)},
+        {L"Theme", {SettingKind::Theme, 0}},
         {L"BarSide", choice(kChoiceBarSide)},
         {L"DndSilent", pref(IslandPref::DndSilent)},
         {L"BannerSize", choice(kChoiceBannerSize)},
@@ -103033,6 +105253,8 @@ void ControlPanel::LayoutSettings() {
              kSectionTools, 1},
             {(int)SettingKind::Pref, (int)IslandPref::AiCodex,
              kSectionTools, 1},
+            {(int)SettingKind::Pref, (int)IslandPref::AiCustom,
+             kSectionTools, 1},
             {(int)SettingKind::Pref, (int)IslandPref::Commands, kSectionTools},
             {(int)SettingKind::Pref, (int)IslandPref::Launcher, kSectionTools},
             {(int)SettingKind::Label, 0, kSectionActions},
@@ -103324,10 +105546,11 @@ void ControlPanel::LayoutSettings() {
             {(int)SettingKind::WhatsNew, 5, kSectionWhatsNew},
             {(int)SettingKind::WhatsNew, 6, kSectionWhatsNew},
             {(int)SettingKind::WhatsNew, 7, kSectionWhatsNew},
+            {(int)SettingKind::WhatsNew, 8, kSectionWhatsNew},
             {(int)SettingKind::Logs, 0, kSectionLogs},
             {(int)SettingKind::Logs, 1, kSectionLogs},
         };
-        static_assert(kReleaseNotesCount == 8,
+        static_assert(kReleaseNotesCount == 9,
                       "a What's new card above for each version");
         for (const auto& spec : kSpecs) {
             m_settings.push_back({(SettingKind)spec.kind, spec.value,
@@ -104469,6 +106692,11 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
                     break;
                 case SettingKind::Pref:
                     if (!PrefDisabled((IslandPref)entry.value)) {
+                        if (entry.value == (int)IslandPref::AiCustom &&
+                            PointInRect(list, AiCustomButtonRect(
+                                                  entry.rect, m_scale))) {
+                            return {Part::AiCustomFile};
+                        }
                         return {Part::SettingToggle, entry.value};
                     }
                     return {Part::DisabledSetting, entry.value};
@@ -105562,6 +107790,8 @@ D2D1_COLOR_F ThemeSwatchColor(int index) {
         }
         case ThemeId::Glass:
             return D2D1::ColorF(0.19f, 0.19f, 0.21f, 0.6f);
+        case ThemeId::Vice:
+            return D2D1::ColorF(0.09f, 0.08f, 0.13f, 1);
         case ThemeId::AutoInverted:
             return ThemeSwatchColor((int)ThemeId::Light);
         case ThemeId::Custom: {
@@ -105592,6 +107822,8 @@ PCWSTR ThemeName(int index) {
                       L"Automático invertido (o contrário do Windows)");
         case ThemeId::Custom:
             return Tr(L"Your own colors", L"Cores próprias");
+        case ThemeId::Vice:
+            return Tr(L"Vice (neon sunset)", L"Vice (pôr do sol neon)");
         default:
             return Tr(L"Black", L"Preto");
     }
@@ -107203,6 +109435,7 @@ std::wstring ControlPanel::DisabledReason(int index) {
             return needs(IslandPref::PetCare);
         case IslandPref::AiClaude:
         case IslandPref::AiCodex:
+        case IslandPref::AiCustom:
             return needs(IslandPref::AiUsage);
         case IslandPref::CountdownTimer:
         case IslandPref::CountdownPomodoro:
@@ -107650,6 +109883,7 @@ ControlPanel::SettingTarget ControlPanel::DisabledTarget(int index) {
             return pref(IslandPref::PetCare);
         case IslandPref::AiClaude:
         case IslandPref::AiCodex:
+        case IslandPref::AiCustom:
             return pref(IslandPref::AiUsage);
         case IslandPref::CountdownTimer:
         case IslandPref::CountdownPomodoro:
@@ -108939,6 +111173,23 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                             {center, radius + grow, radius + grow}, brush);
                         target->PopAxisAlignedClip();
                     }
+                    // Vice: a pink sun setting into its teal sea.
+                    if (i == (int)ThemeId::Vice) {
+                        brush->SetColor(ViceColor(kVicePink, 1));
+                        target->FillEllipse(
+                            {{center.x, center.y - radius * 0.12f},
+                             radius * 0.42f,
+                             radius * 0.42f},
+                            brush);
+                        brush->SetColor(ViceColor(kViceTeal, 1));
+                        target->FillRectangle(
+                            {center.x - radius * 0.62f,
+                             center.y + radius * 0.34f,
+                             center.x + radius * 0.62f,
+                             center.y + radius * 0.34f +
+                                 std::max(1.0f, std::round(1.5f * s))},
+                            brush);
+                    }
                     // The custom one: its background with a dot of its
                     // icons' color.
                     if (i == (int)ThemeId::Custom) {
@@ -109521,7 +111772,26 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                     std::round((row.top + row.bottom - toggleHeight) / 2) +
                         toggleHeight};
                 const float opacity = disabled ? 0.4f : 1.0f;
-                label(row, info.glyph, toggle.left, Fg(0.95f * opacity));
+                const bool custom = pref == IslandPref::AiCustom;
+                const D2D1_RECT_F pick = AiCustomButtonRect(row, s);
+                label(row, info.glyph, custom ? pick.left : toggle.left,
+                      Fg(0.95f * opacity));
+                if (custom) {
+                    const float radius = (pick.bottom - pick.top) / 2;
+                    const float lit =
+                        Hover(pick, !disabled &&
+                                        m_hover.part == Part::AiCustomFile);
+                    brush->SetColor(Fg((0.08f + 0.06f * lit) * opacity));
+                    GlassFill(target, {pick, radius, radius}, brush);
+                    brush->SetColor(Fg(0.9f * opacity));
+                    const std::wstring btnText =
+                        g_aiCustomFile.empty()
+                            ? Tr(L"Choose...", L"Escolher...")
+                            : std::wstring(
+                                  PathFindFileName(g_aiCustomFile.c_str()));
+                    DrawMarquee(target, brush, btnText, m_smallFormat.get(),
+                                pick, true);
+                }
                 winrt::com_ptr<ID2D1Layer> layer;
                 if (disabled) {
                     layer = LayerFor(target, kLayerRow);
@@ -112471,6 +114741,9 @@ bool ControlPanel::OnMouseUp(POINT pt) {
         case Part::PetName:
             StartPetNameEdit();
             return true;
+        case Part::AiCustomFile:
+            StartAiCustomFileDialog();
+            return true;
         case Part::ProfileName:
             m_profileTyping = true;
             return true;
@@ -113179,6 +115452,23 @@ bool ControlPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
         CloseHandle(m_iconThread);
         m_iconThread = nullptr;
         std::unique_ptr<FolderPickJob> job((FolderPickJob*)lParam);
+        if (job->json) {
+            if (job->path.empty()) {
+                // (Canceled.)
+            } else if (!IsLocalDrivePath(job->path)) {
+                m_aiCustomStatus = Tr(L"Only a file on this computer",
+                                      L"Só um arquivo deste computador");
+            } else {
+                m_aiCustomStatus.clear();
+                SetAiCustomFile(job->path);
+                if (!g_settings.islandAiCustom) {
+                    SetIslandPref(IslandPref::AiCustom, 1);
+                }
+            }
+            SetForegroundWindow(m_hwnd);
+            Layout();
+            return true;
+        }
         if (job->sound) {
             // A sound for an event: a file on this computer, kept and heard.
             if (job->path.empty()) {
@@ -114670,6 +116960,9 @@ bool OpenNotification(const std::wstring& appId, const ToastReply& reply) {
         return false;
     }
     const std::wstring target = L"shell:AppsFolder\\" + appId;
+    if (OpensThroughExplorer(target) && ShellExecuteAsUser(target)) {
+        return true;
+    }
     return (INT_PTR)ShellExecute(nullptr, L"open", target.c_str(), nullptr,
                                  nullptr, SW_SHOWNORMAL) > 32;
 }
@@ -115884,8 +118177,21 @@ const std::wstring& NotificationPanel::AppName(const std::wstring& appId) {
     return m_names.back().second;
 }
 
+// A picture file on a drive of this PC (a custom AI service's own icon).
+bool IsPictureFilePath(const std::wstring& path) {
+    const size_t dot = path.rfind(L'.');
+    if (dot == std::wstring::npos || !IsLocalDrivePath(path)) {
+        return false;
+    }
+    PCWSTR ext = path.c_str() + dot;
+    return _wcsicmp(ext, L".png") == 0 || _wcsicmp(ext, L".jpg") == 0 ||
+           _wcsicmp(ext, L".jpeg") == 0 || _wcsicmp(ext, L".bmp") == 0 ||
+           _wcsicmp(ext, L".webp") == 0;
+}
+
 // An app's icon (or a file's, a folder's) from the shell, in the island's
-// process (see LoadAppIconBitmap), at `size` pixels.
+// process (see LoadAppIconBitmap), at `size` pixels; a picture file as it
+// is (see IsPictureFilePath).
 winrt::com_ptr<ID2D1Bitmap> LoadShellIcon(ID2D1RenderTarget* target,
                                           IWICImagingFactory* wic,
                                           const std::wstring& appId,
@@ -115894,7 +118200,14 @@ winrt::com_ptr<ID2D1Bitmap> LoadShellIcon(ID2D1RenderTarget* target,
     if (!target || !wic) {
         return bitmap;
     }
-    if (HBITMAP icon = LoadAppIconBitmap(nullptr, appId, size)) {
+    // (A picture file as it is; anything else from the shell.)
+    HBITMAP icon = IsPictureFilePath(appId)
+                       ? LoadPictureBitmap(appId.c_str(), size)
+                       : nullptr;
+    if (!icon) {
+        icon = LoadAppIconBitmap(nullptr, appId, size);
+    }
+    if (icon) {
         winrt::com_ptr<IWICBitmap> wicBitmap;
         winrt::com_ptr<IWICFormatConverter> converter;
         if (SUCCEEDED(wic->CreateBitmapFromHBITMAP(
@@ -115941,6 +118254,12 @@ winrt::com_ptr<ID2D1Bitmap> LoadAppIcon(ID2D1RenderTarget* target,
                                               bitmap.put());
         }
     };
+    if (IsPictureFilePath(appId)) {
+        bitmap = LoadShellIcon(target, wic, appId, size);
+        if (bitmap) {
+            return bitmap;
+        }
+    }
     // VLC 3 from its title (#6164): the program's own icon at the size
     // asked (explorer's is its taskbar button's small picture).
     if (appId == L"vlc.exe") {
@@ -116241,7 +118560,7 @@ void NotificationPanel::Draw(ID2D1RenderTarget* target,
              (m_glowId < 0 &&
               _wcsicmp(n.appId.c_str(), m_glowApp.c_str()) == 0))) {
             const float glow =
-                (float)std::sin(std::min(glowing / 0.3, 1.0) * 1.5708) *
+                (float)std::sin(std::min(glowing / 0.3, 1.0) * kPi / 2) *
                 (float)(1 - glowing / kCardGlowSeconds);
             brush->SetColor(Accent(0.9f * glow));
             target->DrawRoundedRectangle(
@@ -118515,9 +120834,8 @@ void MediaPanel::DrawTimeline(ID2D1RenderTarget* target,
         line(left, reach, 1);
         if (wave && reach > left) {
             // A round end where the wave starts (it's cut there).
-            const float start = height * std::cos(6.2831853f *
-                                                  -m_wavePoints[0].x /
-                                                  wavelength);
+            const float start =
+                height * std::cos(2 * kPi * -m_wavePoints[0].x / wavelength);
             brush->SetColor(ink);
             target->FillEllipse({{left, middle + start}, stroke / 2,
                                  stroke / 2},
@@ -119393,9 +121711,9 @@ void MediaPanel::ChangeRepeat() {
     RequestFrame();
 }
 
-// A button's name in a small bubble under it (`shown` 0 to 1), kept inside
-// the panel; `which` 0 for shuffle, 1 for repeat, each laid out again only
-// for another text.
+// A button's name in a small bubble under it (over it near the panel's
+// bottom; `shown` 0 to 1), kept inside the panel; `which` 0 for shuffle, 1
+// for repeat, each laid out again only for another text.
 void MediaPanel::DrawButtonTip(ID2D1RenderTarget* target,
                                ID2D1SolidColorBrush* brush,
                                const D2D1_RECT_F& button,
@@ -119431,7 +121749,16 @@ void MediaPanel::DrawButtonTip(ID2D1RenderTarget* target,
     const float farthest = std::max(edge, (float)m_size.cx - edge - width);
     const float left = std::clamp((button.left + button.right) / 2 - width / 2,
                                   edge, farthest);
-    const float top = button.bottom + std::round(6 * s);
+    // Under it, or over it when the panel's bottom would cut it (the
+    // buttons in its last row; the list's coordinates, see BeginScrollArea).
+    const float gap = std::round(6 * s);
+    const float shownTop = m_scroll.Offset();
+    const float shownBottom =
+        shownTop + (m_viewport.bottom - m_viewport.top) - edge;
+    float top = button.bottom + gap;
+    if (top + height > shownBottom) {
+        top = std::max(shownTop + edge, button.top - gap - height);
+    }
     const D2D1_RECT_F bubble{left, top, left + width, top + height};
     const float radius = std::round(6 * s);
     D2D1_COLOR_F fill = Bg(1);
@@ -120046,6 +122373,8 @@ int GetIslandPref(IslandPref pref) {
             return g_settings.islandAiClaude;
         case IslandPref::AiCodex:
             return g_settings.islandAiCodex;
+        case IslandPref::AiCustom:
+            return g_settings.islandAiCustom;
         case IslandPref::FocusedTitle:
             return g_settings.islandFocusedTitle;
         case IslandPref::WeatherCards:
@@ -120794,6 +123123,9 @@ void SetIslandPref(IslandPref pref, int value) {
             break;
         case IslandPref::AiCodex:
             g_settings.islandAiCodex = on;
+            break;
+        case IslandPref::AiCustom:
+            g_settings.islandAiCustom = on;
             break;
         case IslandPref::FocusedTitle:
             g_settings.islandFocusedTitle = on;
@@ -122119,7 +124451,8 @@ constexpr BackupValue kBackupValues[] = {
     {L"trayPinned", 8192},
     {L"updatesIgnored", 4096},  {L"profiles", 1024},
     {L"monitorProfiles", 2048}, {L"folderPins", 16 * 1024, 0, true},
-    {L"wallpaperFolder", 1024}, {L"agendas", 32 * 1024},
+    {L"wallpaperFolder", 1024}, {L"aiCustomFile", 1024, 0, true},
+    {L"aiCustomList", 64 * 1024, 0, true}, {L"agendas", 32 * 1024},
     {L"trayOrder", 8192},       {L"trayAnchors", 8192},
     {L"profileActive", 0, -1},  {L"islandMinimized", 0, 0},
     {L"islandMinimizedNotch0", 0, 0}, {L"islandMinimizedNotch1", 0, 0},
@@ -122553,6 +124886,9 @@ void SetIslandPrefValue(IslandPref pref, int value) {
             break;
         case IslandPref::AiCodex:
             g_settings.islandAiCodex = on;
+            break;
+        case IslandPref::AiCustom:
+            g_settings.islandAiCustom = on;
             break;
         case IslandPref::FocusedTitle:
             g_settings.islandFocusedTitle = on;
@@ -124044,11 +126380,7 @@ void Island::StopStatusWatch() {
 
 // What's playing, as the pill shows it: its title, or its app's name.
 std::wstring Island::MediaTitleText() const {
-    if (!m_mediaShown.title.empty()) {
-        return m_mediaShown.title;
-    }
-    return m_mediaShown.appId.empty() ? std::wstring()
-                                      : AppDisplayName(m_mediaShown.appId);
+    return m_mediaShown.title.empty() ? m_mediaAppName : m_mediaShown.title;
 }
 
 // Whether the line sung now shows in the song title's place (its option,
@@ -125322,6 +127654,38 @@ void Island::OnNetSpeedTimer() {
     }
 }
 
+// The custom AI usage's JSON file chosen (in the settings or its panel):
+// kept, and watched from now on.
+void SetAiCustomFile(const std::wstring& path) {
+    if (path == g_aiCustomFile) {
+        return;
+    }
+    g_aiCustomFile = path;
+    SetUserStringValue(L"aiCustomFile", path.c_str());
+    if (Island* main = MainIsland()) {
+        IslandScope scope(main);
+        main->UpdateAiUsageWatch();
+    }
+}
+
+// The panel's providers kept (its option turned on with them), and their
+// files watched from now on.
+void SaveAiCustomEntries() {
+    std::vector<std::vector<std::wstring>> records;
+    for (const auto& e : g_aiCustomEntries) {
+        records.push_back({e.name, e.pillName, e.file, e.icon});
+    }
+    SetUserStringValue(L"aiCustomList", RecordsText(records).c_str());
+    g_aiCustomEntriesVersion++;
+    if (!g_settings.islandAiCustom) {
+        SetIslandPref(IslandPref::AiCustom, 1);
+    }
+    if (Island* main = MainIsland()) {
+        IslandScope scope(main);
+        main->UpdateAiUsageWatch();
+    }
+}
+
 // The AI agents' files watched by the main island while some island shows
 // them (a monitor with a profile of its own too): read when one changes,
 // and once now.
@@ -125338,10 +127702,25 @@ void Island::UpdateAiUsageWatch() {
     }
     if (!AnyIslandLook([](Island&) { return g_settings.islandAiUsage; })) {
         StopAiUsageWatch();
+        g_aiCustom.clear();
+        m_aiCustomFileWatched.clear();
+        m_aiCustomEntriesWatched = -1;
         return;
     }
+    const bool wantCustom = AnyIslandLook([](Island&) {
+        return g_settings.islandAiUsage && g_settings.islandAiCustom;
+    });
+    const std::wstring customFile =
+        wantCustom ? g_aiCustomFile : std::wstring();
     if (m_aiUsageThread) {
-        return;
+        if (customFile == m_aiCustomFileWatched &&
+            g_aiCustomEntriesVersion == m_aiCustomEntriesWatched) {
+            return;
+        }
+        StopAiUsageWatch();
+    }
+    if (!wantCustom) {
+        g_aiCustom.clear();
     }
     m_aiUsageStop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     if (!m_aiUsageStop) {
@@ -125359,6 +127738,46 @@ void Island::UpdateAiUsageWatch() {
                                              INVALID_FILE_ATTRIBUTES;
     if (m_aiCodexWatched) {
         job->folders[(int)AiAgent::Codex] = codex;
+    }
+    m_aiCustomFileWatched = customFile;
+    m_aiCustomEntriesWatched = g_aiCustomEntriesVersion;
+    m_aiCustomWatched = false;
+    // (Only of a file on a drive of this PC: a share's is never watched.)
+    auto folderOf = [](const std::wstring& path) {
+        const size_t slash = path.rfind(L'\\');
+        return slash == std::wstring::npos || !IsLocalDrivePath(path)
+                   ? std::wstring()
+                   : path.substr(0, slash);
+    };
+    if (!customFile.empty()) {
+        const std::wstring folder = folderOf(customFile);
+        m_aiCustomWatched = !folder.empty() &&
+                            GetFileAttributes(folder.c_str()) !=
+                                INVALID_FILE_ATTRIBUTES;
+        if (m_aiCustomWatched) {
+            job->folders[kAiAgents] = folder;
+        }
+        job->customFile = customFile;
+    }
+    if (wantCustom) {
+        job->customEntries = g_aiCustomEntries;
+        for (const auto& entry : g_aiCustomEntries) {
+            const std::wstring folder = folderOf(entry.file);
+            if (folder.empty() ||
+                _wcsicmp(folder.c_str(),
+                         job->folders[kAiAgents].c_str()) == 0 ||
+                GetFileAttributes(folder.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                continue;
+            }
+            const bool seen = std::any_of(
+                job->extraFolders.begin(), job->extraFolders.end(),
+                [&](const std::wstring& f) {
+                    return _wcsicmp(f.c_str(), folder.c_str()) == 0;
+                });
+            if (!seen) {
+                job->extraFolders.push_back(folder);
+            }
+        }
     }
     m_aiUsageThread =
         CreateThread(nullptr, 0, AiUsageThreadProc, job, 0, nullptr);
@@ -125394,8 +127813,8 @@ void Island::StopAiUsageWatch() {
 }
 
 // Each minute: the time left goes down (laid out again, nothing read); Codex's
-// sessions watched once they're there, and the watch started again if its
-// thread ended by itself (a folder it watched gone).
+// sessions and custom file's folder watched once they're there, and the watch
+// started again if its thread ended by itself (a folder it watched gone).
 void Island::OnAiUsageMinute() {
     if (m_aiUsageThread &&
         WaitForSingleObject(m_aiUsageThread, 0) == WAIT_OBJECT_0) {
@@ -125407,6 +127826,17 @@ void Island::OnAiUsageMinute() {
         const std::wstring codex = CodexSessionsFolder();
         if (!codex.empty() &&
             GetFileAttributes(codex.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            StopAiUsageWatch();
+            UpdateAiUsageWatch();
+            return;
+        }
+    }
+    if (!m_aiCustomWatched && IsLocalDrivePath(m_aiCustomFileWatched)) {
+        const size_t slash = m_aiCustomFileWatched.rfind(L'\\');
+        if (slash != std::wstring::npos &&
+            GetFileAttributes(
+                m_aiCustomFileWatched.substr(0, slash).c_str()) !=
+                INVALID_FILE_ATTRIBUTES) {
             StopAiUsageWatch();
             UpdateAiUsageWatch();
             return;
@@ -125444,6 +127874,9 @@ void Island::OnAiUsageRead(const AiUsageRead& read) {
         g_aiUsage[(int)AiAgent::Claude] = read.claude;
     }
     g_aiUsage[(int)AiAgent::Codex] = read.codex;
+    if (read.customRead) {
+        g_aiCustom = read.custom;
+    }
     ForEachIsland([](Island& island) {
         if (g_settings.islandAiUsage) {
             island.Relayout();
@@ -125718,6 +128151,12 @@ void Island::OnRecycleCounted(WPARAM items, LPARAM kilobytes) {
         return;
     }
     m_recycleCountFailed = false;
+    // (Just started or woken: watched and counted again a little later.)
+    if (m_recycleWarmup < ARRAYSIZE(kRecycleWarmupMs)) {
+        SetTimer(m_hwnd, kRecycleTimerId, kRecycleWarmupMs[m_recycleWarmup++],
+                 nullptr);
+        m_recycleRewatch = true;
+    }
     g_recycleItems = (long long)items;
     g_recycleKilobytes = (long long)kilobytes;
     ForEachIsland([](Island& island) {
@@ -127044,7 +129483,9 @@ bool Island::PetHere() const {
 }
 
 // What the small pill says: the time, the timer's (see TimerLineWanted), or
-// both; the time as it goes away.
+// both, the timer's first (next to its ring, drawn before the text: with
+// the clock between them the time was read for the timer, #7483); the time
+// as it goes away.
 std::wstring Island::HiddenPillText() const {
     const bool time = HiddenTimeWanted();
     std::wstring timer;
@@ -127058,7 +129499,7 @@ std::wstring Island::HiddenPillText() const {
     if (timer.empty()) {
         return m_hiddenMusicAlone ? std::wstring() : m_hiddenClockText;
     }
-    return time ? m_hiddenClockText + L"   " + timer : timer;
+    return time ? timer + L"   " + m_hiddenClockText : timer;
 }
 
 // The small pill's text in the middle of `rect`, the timer's ring before
@@ -127154,7 +129595,7 @@ void Island::DrawHiddenPillContents(ID2D1RenderTarget* target,
                    SUCCEEDED(factory->CreatePathGeometry(arc.put())) &&
                    SUCCEEDED(arc->Open(sink.put()))) {
             // From the top, clockwise, as much as is left.
-            const float angle = share * 2 * 3.14159265f;
+            const float angle = share * 2 * kPi;
             sink->BeginFigure({center.x, center.y - radius},
                               D2D1_FIGURE_BEGIN_HOLLOW);
             sink->AddArc({{center.x + radius * std::sin(angle),
@@ -127911,6 +130352,22 @@ void Island::NotePetArea(ID2D1RenderTarget* target,
     m_petKinds |= kind;
 }
 
+// The edge facing the screen's middle: the bottom (the top on the lower half
+// of the screen), or upright on a side, the one towards the middle.
+void Island::DrawViceEdge(ID2D1RenderTarget* target,
+                          const D2D1_RECT_F& rect,
+                          float radius,
+                          ID2D1Geometry* shape,
+                          float amount,
+                          ID2D1Geometry* outline) {
+    const ViceSide side = m_vertical ? (m_sideLeft ? ViceSide::Right
+                                                   : ViceSide::Left)
+                          : AtBottom() ? ViceSide::Top
+                                       : ViceSide::Bottom;
+    DrawViceNeon(target, m_viceNeon, rect, radius, shape, side, m_scale,
+                 amount, outline);
+}
+
 // Her light in the background of the pill (`rect` with its `radius`), a
 // notch (`shape`) or the bar, as much as `amount` (see DrawPetWash): only
 // with islandPetGlow, around her slot.
@@ -128607,7 +131064,8 @@ void PetPanel::Tap(double now) {
 
 // Each kPetPollMs while open: her stepped (a blink due, an act, the mouse
 // moved, another mood), her line looked at, and a frame only if she moves;
-// asleep, the "z" a few times a second; the memory game's clock.
+// asleep, a frame now and then, which starts her paced frames when they
+// aren't going (see AnimateContents); the memory game's clock.
 bool PetPanel::OnTimer(UINT_PTR id) {
     if (id != kPetPanelTimerId || !IsOpen()) {
         return false;
@@ -128680,7 +131138,11 @@ bool PetPanel::AnimateContents(double dt) {
         StepPet(now);
         const bool speaking = StepLine(now);
         moving = m_pet.Moving(now) || speaking || moving;
-        paced = PetMoodMoves(m_mood, g_settings.islandPetDance, level);
+        // (Asleep too: her "z" drifts and she breathes; a picture every
+        // quarter of a second there looked like 3 frames a second, #7559.
+        // On the pill she rests still in Do not disturb, see PetTick.)
+        paced = PetMoodMoves(m_mood, g_settings.islandPetDance, level) ||
+                (m_mood == PetMood::Sleep && level == 0);
         moving = moving || now - m_nowAt < kPetWhyFade ||
                  now - m_logAt < kPetWhySlide;
         if (CareShown()) {
@@ -128720,9 +131182,11 @@ bool PetPanel::AnimateContents(double dt) {
         }
     }
     // (Everything in her panel at a paced rate, not the monitor's: 30
-    // frames a second, 60 while a game is played.)
-    m_idleFrameSeconds =
-        m_gamesView && m_games.Playing() ? 1.0 / 60 : 1.0 / 30;
+    // frames a second, 60 while a game is played, each a hair early passing:
+    // exactly a 60th dropped every frame of a 60 Hz screen that came a
+    // little early, and games ran at 30, #7559.)
+    m_idleFrameSeconds = m_gamesView && m_games.Playing() ? kWindowFrameSeconds
+                                                          : kIdleFrameSeconds;
     m_idleMotion = moving || paced;
     return moving || paced;
 }
@@ -131507,7 +133971,8 @@ void Island::UpdateFormats(float scale) {
     m_dwrite->CreateTextFormat(UiFont(L"Segoe UI Variable Text"), nullptr,
                                DWRITE_FONT_WEIGHT_BOLD,
                                DWRITE_FONT_STYLE_NORMAL,
-                               DWRITE_FONT_STRETCH_NORMAL, 8.5f * scale, L"",
+                               UiStretch(UiFont(L"Segoe UI Variable Text")),
+                               8.5f * scale, L"",
                                m_badgeFormat.put());
     m_dwrite->CreateTextFormat(IconFont(), nullptr,
                                DWRITE_FONT_WEIGHT_NORMAL,
@@ -131524,12 +133989,14 @@ void Island::UpdateFormats(float scale) {
     m_dwrite->CreateTextFormat(
         UiFont(L"Segoe UI Variable Text"), nullptr,
         DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
-        DWRITE_FONT_STRETCH_NORMAL, kIslandTextSize * m_textScale, L"",
+        UiStretch(UiFont(L"Segoe UI Variable Text")),
+        kIslandTextSize * m_textScale, L"",
         m_textFormat.put());
     m_dwrite->CreateTextFormat(
         ClockFont(L"Segoe UI Variable Text"), nullptr,
         DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
-        DWRITE_FONT_STRETCH_NORMAL, kIslandTextSize * m_textScale, L"",
+        UiStretch(ClockFont(L"Segoe UI Variable Text")),
+        kIslandTextSize * m_textScale, L"",
         m_clockFormat.put());
     for (auto* format :
          {m_iconFormat.get(), m_smallIconFormat.get(), m_textFormat.get(),
@@ -131552,11 +134019,11 @@ void Island::UpdateFormats(float scale) {
                     DWRITE_TEXT_ALIGNMENT alignment,
                     PCWSTR family = nullptr) {
         winrt::com_ptr<IDWriteTextFormat> format;
+        const PCWSTR font =
+            family ? family : UiFont(L"Segoe UI Variable Text");
         if (SUCCEEDED(m_dwrite->CreateTextFormat(
-                family ? family : UiFont(L"Segoe UI Variable Text"),
-                nullptr, weight,
-                DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size, L"",
-                format.put()))) {
+                font, nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
+                UiStretch(font), size, L"", format.put()))) {
             format->SetTextAlignment(alignment);
             format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
             format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -131676,7 +134143,7 @@ void Island::Layout() {
     // the same as the time changes.
     // (Measured again only when that or the size changes: this runs with
     // every frame.)
-    std::wstring widest = m_clock;
+    std::wstring widest = ViceCaps(m_clock);
     for (auto& c : widest) {
         if (c >= L'0' && c <= L'9') {
             c = L'0';
@@ -131833,6 +134300,9 @@ void Island::Layout() {
         separators = PillSeparatorAmounts(order, shownNow);
     }
     float separatorAmount = 0;
+    // (On the Bar split at its corners the lines mark its parts: each stays
+    // where the order has it.)
+    const bool linesSplit = m_bar && g_settings.islandBarCorners;
     for (size_t entry = 0; entry < order.size(); entry++) {
         const PillGroup group = order[entry];
         if (IsPillSeparator(group)) {
@@ -131849,8 +134319,11 @@ void Island::Layout() {
         const size_t firstSlot = m_slots.size();
         const float groupStart = x;
         // The line before it, between it and the group shown before (not
-        // before the clock when that's kept in the middle: it leaves).
-        if (separatorAmount > 0.001f &&
+        // before the clock when that's kept in the middle: it leaves; nor at
+        // the pill's start, with nothing laid out before it).
+        const float lineAmount = separatorAmount;
+        bool lineAdded = false;
+        if (separatorAmount > 0.001f && (linesSplit || !m_slots.empty()) &&
             !(group == PillGroup::Clock && PlaceClockCenter(orderPlace))) {
             const float line = std::round(2 * scale);
             IslandSlot slot{IslandItem::None,
@@ -131860,6 +134333,7 @@ void Island::Layout() {
             slot.scale = separatorAmount;
             m_slots.push_back(slot);
             x += (line + spacing) * separatorAmount;
+            lineAdded = true;
         }
         separatorAmount = 0;
         switch (group) {
@@ -132053,7 +134527,7 @@ void Island::Layout() {
                     const float shownWidth = (float)m_clockWidth;
                     m_slots.push_back({IslandItem::Clock,
                                        {x, 0, x + shownWidth, height},
-                                       m_clock,
+                                       ViceCaps(m_clock),
                                        0});
                     x += shownWidth + spacing;
                 }
@@ -132110,7 +134584,8 @@ void Island::Layout() {
                         const bool lyric = LyricsInTitle();
                         const bool holding = PanelShownFromPill();
                         const std::wstring titleText =
-                            lyric ? m_lyricsLine : MediaTitleText();
+                            lyric ? m_lyricsLine
+                                  : ViceCaps(MediaTitleText());
                         const std::wstring measuredKey =
                             titleText + L"\n" + m_mediaShown.artist + L"\n" +
                             std::to_wstring(m_textScale) + L"\n" +
@@ -132139,7 +134614,7 @@ void Island::Layout() {
                                 !lyric && !m_mediaShown.title.empty() &&
                                 !m_mediaShown.artist.empty()) {
                                 m_mediaTitleShown +=
-                                    L" \u00B7 " + m_mediaShown.artist;
+                                    L" \u00B7 " + ViceCaps(m_mediaShown.artist);
                                 m_mediaTitleWidth = measure(m_mediaTitleShown);
                             }
                             m_mediaTitleFullWidth = m_mediaTitleWidth;
@@ -132417,6 +134892,30 @@ void Island::Layout() {
                     }
                     any = true;
                 }
+                // The custom JSON files' services after them: their own
+                // picture (when they give one) and their short name over
+                // the tighter limit's use (in its color, see Render).
+                for (size_t i = 0;
+                     g_settings.islandAiCustom && i < g_aiCustom.size(); i++) {
+                    const AiCustomUsage& custom = g_aiCustom[i];
+                    const AiLimit* tight = AiTightCustom(custom, now);
+                    if (!tight) {
+                        continue;
+                    }
+                    const int action = kAiCustomAction + (int)i;
+                    if (!custom.icon.empty() && GetAppBitmap(custom.icon)) {
+                        m_slots.push_back({IslandItem::AiUsage,
+                                           {x, 0, x + iconSlot, height},
+                                           custom.icon,
+                                           kAppIconFont});
+                        m_slots.back().action = action;
+                        x += iconSlot + spacing;
+                    }
+                    addStacked(IslandItem::AiUsage, custom.pillName,
+                               AiPillLimitValue(*tight, now));
+                    m_slots.back().action = action;
+                    any = true;
+                }
                 if (!any) {
                     addIcon(IslandItem::AiUsage, {kGlyphAiUsage});
                 }
@@ -132493,7 +134992,7 @@ void Island::Layout() {
                         continue;
                     }
                     addStacked(IslandItem::Timer,
-                               TimerModeName(mode, g_timer.onBreak),
+                               ViceCaps(TimerModeName(mode, g_timer.onBreak)),
                                TimerText(mode), L"88:88");
                     m_slots.back().action = (int)mode;
                     timed = true;
@@ -132755,10 +135254,22 @@ void Island::Layout() {
                 }
                 break;
         }
-        // Going (its items gone with its option): the ones it had, as it
-        // shrinks; wanted: kept for then.
         const int index = (int)group;
         const bool wanted = GroupWanted(group);
+        // On, but nothing of it laid out (what's playing with nothing
+        // playing, a group of an app's own place): its line goes on to the
+        // next group that shows something, so two lines don't meet around
+        // nothing (#7330).
+        if (wanted && !linesSplit &&
+            m_slots.size() == firstSlot + (lineAdded ? 1 : 0)) {
+            if (lineAdded) {
+                m_slots.pop_back();
+                x = groupStart;
+            }
+            separatorAmount = std::max(separatorAmount, lineAmount);
+        }
+        // Going (its items gone with its option): the ones it had, as it
+        // shrinks; wanted: kept for then.
         if (wanted && m_slots.size() > firstSlot) {
             m_groupKept[index].assign(m_slots.begin() + firstSlot,
                                       m_slots.end());
@@ -134267,6 +136778,7 @@ void Island::RenderPlacedBanner() {
                                       radius,
                                       radius},
                                      brush.get(), 1);
+        DrawViceEdge(target, rect, radius, nullptr, ViceAmount());
         const float contents =
             (float)std::clamp((m_bannerAmount - 0.45) / 0.55, 0.0, 1.0) *
             (1 - (float)std::clamp(m_bannerSwap, 0.0, 1.0));
@@ -135476,14 +137988,15 @@ void Island::Render(bool force) {
             // alike, as see-through as chosen (islandLineOpacity); over the
             // Liquid Glass only it has a color.
             if (gray > 0) {
+                const D2D1_COLOR_F lineColor = MinimizedLineColor(0.74f);
                 fill = overLiquid
-                           ? D2D1::ColorF(0.55f, 0.55f, 0.55f,
-                                          std::max(0.74f * gray, 1.0f / 255))
-                           : D2D1::ColorF(
-                                 fill.r + (0.55f - fill.r) * gray,
-                                 fill.g + (0.55f - fill.g) * gray,
-                                 fill.b + (0.55f - fill.b) * gray,
-                                 fill.a + (0.74f - fill.a) * gray);
+                           ? MinimizedLineColor(
+                                 std::max(0.74f * gray, 1.0f / 255))
+                           : D2D1_COLOR_F{
+                                 fill.r + (lineColor.r - fill.r) * gray,
+                                 fill.g + (lineColor.g - fill.g) * gray,
+                                 fill.b + (lineColor.b - fill.b) * gray,
+                                 fill.a + (lineColor.a - fill.a) * gray};
             }
             brush->SetOpacity(
                 1 - gray * (1 - g_settings.islandLineOpacity / 100.0f));
@@ -135503,6 +138016,13 @@ void Island::Render(bool force) {
                     brush.get(), 1);
             }
             brush->SetOpacity(1);
+            // (The Vice theme's neon line going as it closes, not on a
+            // see-through bar.)
+            if (!clear) {
+                DrawViceEdge(target, rect, radius, nullptr,
+                             ViceAmount() *
+                                 (1 - std::clamp(k * 3, 0.0f, 1.0f)));
+            }
             if (clock > 0.05f && BannerMorph() < 0.01f) {
                 DrawHiddenPillContents(
                     target, brush.get(), rect,
@@ -135533,8 +138053,10 @@ void Island::Render(bool force) {
                                 corner);
             }
         }
+        // Its faint line along the edge facing the screen (giving way to the
+        // Vice theme's neon one, below).
         if (!clear && clock <= 0.001f && barLine <= 0.001f) {
-            brush->SetColor(Fg(0.08f));
+            brush->SetColor(Fg(0.08f * (1 - ViceAmount())));
             target->FillRectangle(
                 !m_vertical ? D2D1_RECT_F{m_pill.left, m_pill.bottom - 1,
                                           m_pill.right, m_pill.bottom}
@@ -135544,10 +138066,12 @@ void Island::Render(bool force) {
                                            m_pill.left + 1, m_pill.bottom},
                 brush.get());
         }
-        // Her light in its background (islandPetGlow), not on a
+        // Her light in its background (islandPetGlow), and the Vice theme's
+        // neon line along it (going as it closes, above), not on a
         // see-through bar nor as it closes.
         if (!clear && clock <= 0.001f && barLine <= 0.001f) {
             DrawPillGlow(target, m_pill, 0, nullptr, 1);
+            DrawViceEdge(target, m_pill, 0, nullptr, ViceAmount());
         }
         // A new notification: a banner drops out of the bar's middle, like a
         // panel out of an item.
@@ -135598,6 +138122,9 @@ void Island::Render(bool force) {
                      radius},
                     brush.get(), 1);
             }
+            // (The Vice theme's neon line along it too, like the bar's.)
+            DrawViceEdge(target, rect, radius, nullptr,
+                         ViceAmount() * opacity);
         }
     } else {
         // Between the thin line (0) and the pill (1).
@@ -135736,15 +138263,15 @@ void Island::Render(bool force) {
         // (Over the Liquid Glass, only the line has a color, fading as the
         // pill opens, and the glass shows as much as it's gone.)
         const D2D1_COLOR_F background = Bg(1);
+        const D2D1_COLOR_F lineColor = MinimizedLineColor(0.74f);
         brush->SetColor(
             overLiquid
-                ? D2D1::ColorF(0.55f, 0.55f, 0.55f,
-                               std::max(0.74f * lineMix, 1.0f / 255))
-                : D2D1::ColorF(
-                      background.r + (0.55f - background.r) * lineMix,
-                      background.g + (0.55f - background.g) * lineMix,
-                      background.b + (0.55f - background.b) * lineMix,
-                      background.a + (0.74f - background.a) * lineMix));
+                ? MinimizedLineColor(std::max(0.74f * lineMix, 1.0f / 255))
+                : D2D1_COLOR_F{
+                      background.r + (lineColor.r - background.r) * lineMix,
+                      background.g + (lineColor.g - background.g) * lineMix,
+                      background.b + (lineColor.b - background.b) * lineMix,
+                      background.a + (lineColor.a - background.a) * lineMix});
         // A notch against the top edge: square there, its curves growing
         // out of the line as it opens (and staying with a banner).
         ID2D1PathGeometry* notchFill = nullptr;
@@ -135818,6 +138345,15 @@ void Island::Render(bool force) {
             glow > 0.01f && clock < 0.05f && peek < 0.05f) {
             DrawPillGlow(target, rect, radius, notchFill, glow);
         }
+        // The Vice theme's neon line along its edge facing the screen's
+        // middle: coming as it opens out of its line or its dot, and on a
+        // banner, not on the small pills of a peeking app or the clock.
+        const float neon =
+            (1 - lineMix) * std::clamp(open, 0.0f, 1.0f) *
+            (1 - std::clamp(std::max(clock, peek) * 3, 0.0f, 1.0f) *
+                     (1 - std::clamp(banner, 0.0f, 1.0f)));
+        DrawViceEdge(target, rect, radius, notchFill, ViceAmount() * neon,
+                     notchLine);
         // A download's progress or the battery charging: the pill filling
         // (not as its line, nor with a banner open).
         if (const float fill = (float)std::clamp(m_fillAmount, 0.0, 1.0) *
@@ -135835,7 +138371,7 @@ void Island::Render(bool force) {
                 (1 - std::clamp(banner * 3, 0.0f, 1.0f));
             if (lineFill > 0.01f) {
                 DrawFill(target, brush.get(), rect, radius, notchFill,
-                         lineFill);
+                         lineFill, true);
             }
         }
         // Its ring: not as its line, nor with a banner open or only the clock.
@@ -136450,6 +138986,17 @@ void Island::Render(bool force) {
                     brush->SetColor(RgbColor(
                         rest ? 0x30D158 : 0xFF9F0A,
                         (TimerClockOf(mode).running ? 0.95f : 0.6f) * shown));
+                } else if (slot.item == IslandItem::AiUsage &&
+                           slot.action >= kAiCustomAction &&
+                           slot.action <
+                               kAiCustomAction + (int)g_aiCustom.size()) {
+                    const long long now = UnixNow();
+                    const AiLimit* tight = AiTightCustom(
+                        g_aiCustom[slot.action - kAiCustomAction], now);
+                    const int rgb =
+                        tight ? AiUsageRgb(AiUsedNow(*tight, now)) : -1;
+                    brush->SetColor(rgb >= 0 ? RgbColor(rgb, 0.95f * shown)
+                                             : Fg(0.95f * shown));
                 } else {
                     brush->SetColor(Fg(0.95f * shown));
                 }
@@ -137073,8 +139620,11 @@ void Island::Render(bool force) {
                     brush.get());
                 brush->SetColor(Accent(0.95f * lit));
             }
-            // Upright, the clock is two lines: the time, the date under it.
-            if (slot.font == 0 && m_vertical && m_clockDateFormat) {
+            // Upright, the clock is two lines: the time, the date under it
+            // (only the clock's slot: a count or a percentage beside an icon
+            // is its own text, #7605).
+            if (slot.item == IslandItem::Clock && slot.font == 0 &&
+                m_vertical && m_clockDateFormat) {
                 const float middle = (slot.rect.top + slot.rect.bottom) / 2;
                 const D2D1_RECT_F timeRect{slot.rect.left, slot.rect.top,
                                            slot.rect.right, middle + 2 * scale};
@@ -137122,7 +139672,7 @@ void Island::Render(bool force) {
                                            layout.get(), brush.get());
                 };
                 if (swap > 0.004f) {
-                    drawText(m_clockBefore, swap * swap);
+                    drawText(ViceCaps(m_clockBefore), swap * swap);
                 }
                 drawText(slot.text, 1 - swap * swap);
                 if (scaled) {
@@ -137925,6 +140475,26 @@ std::wstring Island::ItemTip(IslandItem item, const std::wstring& text) const {
                        (limit == &usage.session ? L"5 h"
                                                 : Tr(L"week", L"semana")) +
                        L" " + percent;
+            }
+        }
+        if (g_settings.islandAiCustom) {
+            for (const auto& custom : g_aiCustom) {
+                if (custom.windows.empty()) {
+                    continue;
+                }
+                tip += L"\n" + custom.name;
+                for (const auto& w : custom.windows) {
+                    const double used = AiUsedNow(w.limit, now);
+                    if (used < 0) {
+                        continue;
+                    }
+                    WCHAR percent[16];
+                    swprintf_s(percent, L"%.0f%%", used);
+                    tip += L" \u00B7 " +
+                           (w.label.empty() ? std::wstring()
+                                            : w.label + L" ") +
+                           percent;
+                }
             }
         }
         return tip;
@@ -140092,8 +142662,8 @@ IDWriteTextFormat* Island::LyricsFormat() {
     m_lyricsFormatFonts = FontsKey();
     if (SUCCEEDED(m_dwrite->CreateTextFormat(
             UiFont(L"Segoe UI Variable Text"), nullptr,
-            DWRITE_FONT_WEIGHT_SEMI_BOLD,
-            DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size, L"",
+            DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
+            UiStretch(UiFont(L"Segoe UI Variable Text")), size, L"",
             m_lyricsFormat.put()))) {
         m_lyricsFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
         m_lyricsFormat->SetParagraphAlignment(
@@ -140135,6 +142705,11 @@ void Island::UpdateMediaShown() {
             m_musicStoppedAt = now;
         }
         m_mediaShown = m_mediaState;
+        if (newText) {
+            m_mediaAppName = m_mediaShown.appId.empty()
+                                 ? std::wstring()
+                                 : AppDisplayName(m_mediaShown.appId);
+        }
         // Its tip shown: with the new title.
         if (newText && m_tooltipKey.starts_with(kItemTipPrefix) &&
             (IslandItem)_wtoi(m_tooltipKey.c_str() + wcslen(kItemTipPrefix)) ==
@@ -140176,6 +142751,7 @@ void Island::UpdateMediaShown() {
         m_mediaShown.playing = false;
         if (m_mediaWanted) {
             m_mediaShown = {};
+            m_mediaAppName.clear();
         }
         // Nothing playing anymore: its panels close, its line goes.
         m_mediaPanel.Close();
@@ -140457,8 +143033,19 @@ bool Island::UpdateTimerFill(double now) {
     m_fillUnknown = false;
     const D2D1_COLOR_F color = RgbColor(
         timer.rest ? kTimerFillRestRgb : kTimerFillFocusRgb, 1);
-    // Moved by a pixel of the pill at a time, not every second.
-    const double length = std::max(m_pill.right - m_pill.left, 1.0f);
+    // Moved by a quarter of a pixel of the bar at a time, not every second:
+    // the bar as it's seen, the notches together (one alone was a third of
+    // it) or the pill's height when upright (its thickness was a jump of
+    // many pixels).
+    double length = m_vertical ? m_pill.bottom - m_pill.top
+                               : m_pill.right - m_pill.left;
+    if (m_notch >= 0 && !m_vertical) {
+        length = 0;
+        for (const Island* other : NotchSet()) {
+            length += other->m_pill.right - other->m_pill.left;
+        }
+    }
+    length = std::max(length, 1.0);
     const double target =
         m_fillTimer ? TimerFillStep(m_fillTarget, timer.progress, length)
                     : timer.progress;
@@ -141047,7 +143634,7 @@ void Island::EnsureActivityFormats() {
         winrt::com_ptr<IDWriteTextFormat> format;
         if (FAILED(m_dwrite->CreateTextFormat(
                 family, nullptr, spec.weight, DWRITE_FONT_STYLE_NORMAL,
-                DWRITE_FONT_STRETCH_NORMAL, spec.size * scale, L"",
+                UiStretch(family), spec.size * scale, L"",
                 format.put()))) {
             continue;
         }
@@ -141135,7 +143722,6 @@ void Island::DrawActivityRing(ID2D1RenderTarget* target,
         FAILED(path->Open(sink.put()))) {
         return;
     }
-    constexpr float kPi = 3.14159265f;
     const float end = -kPi / 2 + share * 2 * kPi;
     sink->BeginFigure({center.x, center.y - radius}, D2D1_FIGURE_BEGIN_HOLLOW);
     sink->AddArc({{center.x + radius * std::cos(end),
@@ -141760,7 +144346,8 @@ void Island::DrawFill(ID2D1RenderTarget* target,
                       const D2D1_RECT_F& rect,
                       float radius,
                       ID2D1Geometry* notch,
-                      float opacity) {
+                      float opacity,
+                      bool asLine) {
     // (In the pill's own shape, a notch's too; the pill's made again only
     // when it changes, the layer Direct2D's own.)
     ID2D1Geometry* shape = notch;
@@ -141788,22 +144375,31 @@ void Island::DrawFill(ID2D1RenderTarget* target,
     float before = 0;
     float total = own;
     if (m_notch >= 0 && !m_vertical && m_pill.right - m_pill.left >= 1) {
-        length = m_pill.right - m_pill.left;
+        // (Along the minimized line: the lines shown are the bar, each as
+        // long as it is (one alone, the whole of it), not the notches'
+        // expanded sizes, which filled a line far too early.)
+        length = asLine ? own : m_pill.right - m_pill.left;
         std::vector<NotchBarPart> parts;
         size_t self = 0;
         for (const Island* other : NotchSet()) {
+            if (asLine && other != this && !other->LineOpens()) {
+                continue;
+            }
             if (other == this) {
                 self = parts.size();
             }
-            parts.push_back({other->m_position.x + other->m_pill.left,
-                             other->m_pill.right - other->m_pill.left,
+            const float width =
+                asLine ? own : other->m_pill.right - other->m_pill.left;
+            parts.push_back({other->m_position.x + other->m_pill.left, width,
                              other->m_notch});
         }
         std::tie(before, total) = NotchBarPlace(parts, self);
     }
     // A notch's whole shape, its curves flaring out at the top (its
     // shoulders) beyond `rect`: a stretch reaching an end of it reaches
-    // into them, so the fill follows its curves.
+    // into them, so the fill follows its curves. (At a screen's side, its
+    // curve goes down that side below `rect`: each stretch goes down to the
+    // shape's bottom.)
     D2D1_RECT_F bounds = rect;
     if (notch) {
         notch->GetBounds(nullptr, &bounds);
@@ -141815,7 +144411,8 @@ void Island::DrawFill(ID2D1RenderTarget* target,
         if (m_vertical) {
             return D2D1_RECT_F{rect.left, rect.top + a, rect.right, rect.top + b};
         }
-        D2D1_RECT_F stretch{rect.left + a, rect.top, rect.left + b, rect.bottom};
+        D2D1_RECT_F stretch{rect.left + a, rect.top, rect.left + b,
+                            std::max(rect.bottom, bounds.bottom)};
         if (a <= 0.5f && b > a) {
             stretch.left = std::min(stretch.left, bounds.left);
         }
@@ -141874,10 +144471,11 @@ void Island::DrawFill(ID2D1RenderTarget* target,
             sink->BeginFigure({part.left, part.top},
                               D2D1_FIGURE_BEGIN_FILLED);
             for (int k = 0; k <= steps; k++) {
-                const float y = part.top + tall * k / steps;
+                const float y =
+                    part.top + (part.bottom - part.top) * k / steps;
                 const float x =
                     part.right - amplitude +
-                    amplitude * (float)std::sin(k * 6.2832 / steps * 0.9 +
+                    amplitude * (float)std::sin(k * 2 * kPi / steps * 0.9 +
                                                 now * 3.5);
                 sink->AddLine({x, y});
             }
@@ -141902,9 +144500,24 @@ void Island::DrawFill(ID2D1RenderTarget* target,
                    : D2D1_RECT_F{rect.left, stretch.top, rect.left + thickness,
                                  stretch.bottom};
     };
+    // (On a notch, along its outline instead, down its curves too: the
+    // stroke's inner half, kept by the shape's layer, in the stretch.)
+    ID2D1Geometry* const outline =
+        !m_vertical && !asLine && notch && notch == m_notchFill.get()
+            ? m_notchLine.get()
+            : nullptr;
+    auto drawLine = [&](const D2D1_RECT_F& stretch) {
+        if (!outline) {
+            target->FillRectangle(line(stretch), brush);
+            return;
+        }
+        target->PushAxisAlignedClip(stretch, D2D1_ANTIALIAS_MODE_ALIASED);
+        target->DrawGeometry(outline, brush, 2 * thickness);
+        target->PopAxisAlignedClip();
+    };
     brush->SetColor({color.r, color.g, color.b, 0.95f * opacity * breath});
     if (!m_fillUnknown) {
-        target->FillRectangle(line(part), brush);
+        drawLine(part);
     }
     // Liquid: small bubbles rising in what's filled.
     if (style == kFillStyleLiquid && !m_vertical &&
@@ -141985,7 +144598,7 @@ void Island::DrawFill(ID2D1RenderTarget* target,
             span(std::max(at, 0.0f), std::min(at + band, filled));
         if (m_fillUnknown) {
             brush->SetColor({color.r, color.g, color.b, 0.95f * opacity});
-            target->FillRectangle(line(stretch), brush);
+            drawLine(stretch);
         }
         brush->SetColor({light.r, light.g, light.b, 0.3f * opacity});
         target->FillRectangle(stretch, brush);
@@ -148003,6 +150616,11 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             if (m_main && UsbDrivesWatched()) {
                 OnDeviceChange(wParam, lParam);
             }
+            // (A drive that came holds its own part of the Recycle Bin:
+            // counted again a moment later.)
+            if (wParam == DBT_DEVICEARRIVAL && m_recycleNotify) {
+                SetTimer(m_hwnd, kRecycleTimerId, kRecycleSettleMs, nullptr);
+            }
             break;
         case WM_CLIPBOARDUPDATE:
             m_clipboardTries = 0;
@@ -148135,7 +150753,13 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             }
             if (wParam == kRecycleTimerId) {
                 KillTimer(m_hwnd, kRecycleTimerId);
-                // (Its watch failed: watched again, which counts it too.)
+                // (Its watch failed, or it's watched anew after a start or a
+                // wake: watched again, which counts it too.)
+                if (m_recycleRewatch && m_recycleNotify) {
+                    SHChangeNotifyDeregister(m_recycleNotify);
+                    m_recycleNotify = 0;
+                }
+                m_recycleRewatch = false;
                 if (!m_recycleNotify) {
                     UpdateRecycleWatch();
                 } else {
@@ -148508,6 +151132,14 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                 wParam == PBT_APMRESUMESUSPEND ||
                 wParam == PBT_APMRESUMECRITICAL) {
                 g_petResumedAt = NowSeconds();
+                // (The Recycle Bin watched and counted again in the minutes
+                // after, see kRecycleWarmupMs.)
+                if (m_recycleNotify) {
+                    m_recycleWarmup = 0;
+                    m_recycleRewatch = true;
+                    SetTimer(m_hwnd, kRecycleTimerId,
+                             kRecycleWarmupMs[m_recycleWarmup++], nullptr);
+                }
             }
             break;
 
@@ -149803,6 +152435,7 @@ void LoadSettings() {
     g_settings.islandAiUsage = Wh_GetIntValue(L"islandAiUsage", 0) != 0;
     g_settings.islandAiClaude = Wh_GetIntValue(L"islandAiClaude", 1) != 0;
     g_settings.islandAiCodex = Wh_GetIntValue(L"islandAiCodex", 1) != 0;
+    g_settings.islandAiCustom = Wh_GetIntValue(L"islandAiCustom", 0) != 0;
     g_settings.islandFocusedTitle =
         Wh_GetIntValue(L"islandFocusedTitle", 0) != 0;
     g_settings.islandWeatherCards =
@@ -150002,6 +152635,8 @@ void LoadSettings() {
             GetWholeStringValue(L"islandPetName", 64);
         g_settings.islandPetSoundList = GetWholeStringValue(
             L"islandPetSoundList", kPetSoundListRoom);
+        g_aiCustomFile = GetWholeUserStringValue(L"aiCustomFile", 1024);
+        LoadAiCustomEntries();
     }
     g_settings.islandTrayStyle =
         std::clamp(Wh_GetIntValue(L"islandTrayStyle", 0), 0, 2);
