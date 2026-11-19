@@ -5063,7 +5063,7 @@ int g_openFolderIndex = -1;
 int g_siriTab;            // 0 Apps, 1 Files, 2 Clipboard, 3 Actions, 4 icon gallery, 5 general search (kTabAll)
 constexpr int kTabAll = 5;  // Original Siri: typing in "Search" looks for apps, actions, folders and files together
 float g_tabSlide;         // animated tab indicator (visible slot)
-float g_tabNatural[4];
+float g_tabNatural[7];   // natural width of each category tab, indexed by tab id (0-3, 6 Phone)
 std::unordered_map<std::wstring, float> g_chipWidths;   // measured filter labels (cleared when the scale changes)
 float g_chipPad;   // padding around a filter label
 bool g_searchActive;      // Window/Fullscreen: category strip visible (search bar clicked or typing)
@@ -6825,7 +6825,7 @@ void EnsureFormats(float scale) {
     }
     g_chipWidths.clear();
     g_chipPad = 26 * scale;
-    for (int id = 0; id < 4; id++) {
+    for (int id : {0, 1, 2, 3, 6}) {
         PCWSTR label = TabLabel(id);
         float textWidth = 0;
         ComPtr<IDWriteTextLayout> layout;
