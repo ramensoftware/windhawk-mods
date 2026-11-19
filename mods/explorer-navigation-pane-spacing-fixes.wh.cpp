@@ -756,18 +756,25 @@ static bool IsTreeViewGlyph(HANDLE hTheme, int partId, const RECT* rect) {
            !Uxtheme_IsThemePartDefined(hTheme, kTVP_HOTGLYPH + 1, 0);
 }
 
+// DrawThemeBackground might call DrawThemeBackgroundEx on some builds. The
+// offset is applied once, by the outer call.
+static thread_local bool t_inDrawThemeBackground;
+
 static HRESULT WINAPI DrawThemeBackground_Hook(HANDLE hTheme, HDC hdc, int partId, int stateId, const RECT* rect, const RECT* clipRect) {
-    if (IsTreeViewGlyph(hTheme, partId, rect)) {
+    if (!t_inDrawThemeBackground && IsTreeViewGlyph(hTheme, partId, rect)) {
         RECT rc = *rect;
         OffsetRect(&rc, 0, g_settings.navArrowOffset);
-        return DrawThemeBackground_Original(hTheme, hdc, partId, stateId, &rc, clipRect);
+        t_inDrawThemeBackground = true;
+        HRESULT result = DrawThemeBackground_Original(hTheme, hdc, partId, stateId, &rc, clipRect);
+        t_inDrawThemeBackground = false;
+        return result;
     }
 
     return DrawThemeBackground_Original(hTheme, hdc, partId, stateId, rect, clipRect);
 }
 
 static HRESULT WINAPI DrawThemeBackgroundEx_Hook(HANDLE hTheme, HDC hdc, int partId, int stateId, const RECT* rect, const void* options) {
-    if (IsTreeViewGlyph(hTheme, partId, rect)) {
+    if (!t_inDrawThemeBackground && IsTreeViewGlyph(hTheme, partId, rect)) {
         RECT rc = *rect;
         OffsetRect(&rc, 0, g_settings.navArrowOffset);
         return DrawThemeBackgroundEx_Original(hTheme, hdc, partId, stateId, &rc, options);
@@ -1207,18 +1214,19 @@ void Wh_ModBeforeUninit() {
 
     g_unloading = true;
 
+    // Hooks can't be set after this function returns, and LateInit might
+    // still be setting them. The symbols might be loading, which can take a
+    // while.
+    while (g_lateInitRefCount > 0) {
+        Sleep(10);
+    }
+
     ApplyToExistingWindows(false);
     FreeNavStateImages();
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
-
-    // Don't unload in the middle of setting the hooks. The symbols might be
-    // loading, which can take a while.
-    while (g_lateInitRefCount > 0) {
-        Sleep(10);
-    }
 
     FreeLoadedModules();
 }
