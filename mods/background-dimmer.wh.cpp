@@ -160,6 +160,8 @@ HWND g_pingTarget;  // focused window asked to answer a WM_NULL, to know it fini
 bool g_pingAnswered;
 HWND g_waitedOut;   // focused window that already used up the 2 s wait
 HWND g_taskbarLayers[4];
+bool g_fastPoll;           // the reposition timer runs every 30 ms instead of 250 ms
+ULONGLONG g_fastPollUntil;
 bool g_overlayVisible;
 bool g_shellFocused;
 bool g_savePending;
@@ -834,12 +836,24 @@ HWND TopWindowOfProcess(DWORD pid) {
     return nullptr;
 }
 
+// After every move of the overlay, checks its place every 30 ms for 2 s instead of every 250 ms.
+// Some apps keep lifting windows over it on their own: Chrome raises the page window above the overlay every second
+// while its "Leave site?" dialog is open, and at 250 ms that window stayed lit for a visible moment each time.
+void NoteOverlayMoved() {
+    g_fastPollUntil = GetTickCount64() + 2000;
+    if (!g_fastPoll) {
+        g_fastPoll = true;
+        SetTimer(g_hwndMain, TIMER_REPOSITION, 30, nullptr);
+    }
+}
+
 // Moves the layer to the top of the non-topmost band, unless it is already there.
 void RaiseOverlayToTop() {
     HWND prev = GetWindow(g_hwndOverlay, GW_HWNDPREV);
     if (!prev || (GetWindowLongPtrW(prev, GWL_EXSTYLE) & WS_EX_TOPMOST))
         return;
     SetWindowPos(g_hwndOverlay, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+    NoteOverlayMoved();
 }
 
 // Puts the layer right below the window, or at the top of the normal band when the window is topmost:
@@ -852,6 +866,7 @@ void PlaceBelow(HWND hwnd) {
     if (GetWindow(hwnd, GW_HWNDNEXT) == g_hwndOverlay)
         return;
     SetWindowPos(g_hwndOverlay, hwnd, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+    NoteOverlayMoved();
 }
 
 void ForgetMenu(HWND hwnd) {
@@ -1056,9 +1071,14 @@ HWND LitWindowAboveOverlay() {
 }
 
 /// Moves the overlay below `target`, or to the top of the normal band for HWND_TOP, fading out the window that
-/// was lit when the overlay was already showing.
-void MoveOverlay(HWND target, bool wasVisible) {
-    if (wasVisible && g_ap.slider[SL_FADE] > 0 && StartFade(LitWindowAboveOverlay(), target))
+/// was lit when the overlay was already showing. `focus` is the window or menu the placement follows.
+// Fades only when `focus` changed: an app that lifts its own window over the overlay (Chrome's page behind its
+// "Leave site?" dialog, every second) gets put back at once instead of replaying the fade each time.
+void MoveOverlay(HWND target, bool wasVisible, HWND focus) {
+    static HWND lastFocus;
+    bool focusChanged = focus != lastFocus;
+    lastFocus = focus;
+    if (wasVisible && focusChanged && g_ap.slider[SL_FADE] > 0 && StartFade(LitWindowAboveOverlay(), target))
         return;
     if (target == HWND_TOP)
         RaiseOverlayToTop();
@@ -1074,7 +1094,7 @@ void PlaceOverlay() {
     bool wasVisible = g_overlayVisible;
     if (g_ap.dimMenus && g_menuCount) {
         ShowOverlay(true);
-        MoveOverlay(g_menus[0], wasVisible);
+        MoveOverlay(g_menus[0], wasVisible, g_menus[0]);
         return;
     }
     HWND fg = GetForegroundWindow();
@@ -1089,7 +1109,7 @@ void PlaceOverlay() {
         g_shellFocused = IsShellClass(cls);
     if (IsShellClass(cls)) {
         ShowOverlay(true);
-        MoveOverlay(HWND_TOP, wasVisible);
+        MoveOverlay(HWND_TOP, wasVisible, fg);
         return;
     }
     if (wcscmp(cls, L"Progman") == 0 || wcscmp(cls, L"WorkerW") == 0) {
@@ -1097,7 +1117,7 @@ void PlaceOverlay() {
             ShowOverlay(false);
         } else {
             ShowOverlay(true);
-            MoveOverlay(HWND_TOP, wasVisible);
+            MoveOverlay(HWND_TOP, wasVisible, fg);
         }
         return;
     }
@@ -1120,7 +1140,7 @@ void PlaceOverlay() {
                 root = top;
         }
     }
-    MoveOverlay(root, wasVisible);
+    MoveOverlay(root, wasVisible, fg);
 }
 
 void Reposition() {
@@ -1825,6 +1845,10 @@ LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (wParam == TIMER_REPOSITION) {
                 PruneMenus();
                 Reposition();
+                if (g_fastPoll && GetTickCount64() >= g_fastPollUntil) {
+                    g_fastPoll = false;
+                    SetTimer(hwnd, TIMER_REPOSITION, 250, nullptr);
+                }
             } else if (wParam == TIMER_SAVE) {
                 KillTimer(hwnd, TIMER_SAVE);
                 SaveAppearance();
