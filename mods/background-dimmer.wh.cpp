@@ -122,7 +122,7 @@ struct Appearance {
     wchar_t image[MAX_PATH];
 };
 
-// condiguration window defaults
+// configuration window defaults
 const Appearance kDefaults = {PAT_STRIPES, {20, 0, 60, 20, 45, 100, 300}, 0xFFFFFF, true, true, true, false, false, true, L""};
 const wchar_t* const kSliderKeys[SL_COUNT] = {L"opacity", L"brightness", L"contrast", L"size",
                                               L"angle",   L"scale",      L"fade"};
@@ -159,7 +159,7 @@ ULONGLONG g_pendingSince;
 HWND g_pingTarget;  // focused window asked to answer a WM_NULL, to know it finished loading
 bool g_pingAnswered;
 HWND g_waitedOut;   // focused window that already used up the 2 s wait
-HWND g_taskbarLayers[4];
+HWND g_taskbarLayers[8];   // one per taskbar, up to one per monitor
 bool g_fastPoll;           // the reposition timer runs every 30 ms instead of 250 ms
 ULONGLONG g_fastPollUntil;
 bool g_overlayVisible;
@@ -221,14 +221,13 @@ void LoadAppearance() {
         }
     }
     g_ap.pattern = Clamp(pattern, 0, PAT_COUNT - 1);
-    // Until 1.1 the image ignored brightness and contrast; these values keep showing it unchanged.
+    g_ap.colorRgb = Wh_GetIntValue(L"color", kDefaults.colorRgb) & 0xFFFFFF;
+    // Until 1.1 the image ignored brightness, contrast and color; these values keep showing it unchanged.
     if (g_ap.pattern == PAT_IMAGE && Wh_GetIntValue(L"scale", -1) < 0) {
         g_ap.slider[SL_BRIGHTNESS] = 50;
         g_ap.slider[SL_CONTRAST] = 100;
+        g_ap.colorRgb = 0xFFFFFF;
     }
-    g_ap.colorRgb = Wh_GetIntValue(L"color", kDefaults.colorRgb) & 0xFFFFFF;
-    if (g_ap.pattern == PAT_IMAGE && Wh_GetIntValue(L"scale", -1) < 0)
-        g_ap.colorRgb = 0xFFFFFF;  // the image ignored the color until 1.1 too
     g_ap.hideOnDesktop = Wh_GetIntValue(L"hideOnDesktop", kDefaults.hideOnDesktop) != 0;
     g_ap.hideFromCapture = Wh_GetIntValue(L"hideFromCapture", kDefaults.hideFromCapture) != 0;
     g_ap.dimOwners = Wh_GetIntValue(L"dimOwners", kDefaults.dimOwners) != 0;
@@ -562,7 +561,7 @@ int AllLayers(HWND* out) {
 }
 
 void InvalidateLayers() {
-    HWND layers[8];
+    HWND layers[2 + ARRAYSIZE(g_taskbarLayers)];
     for (int i = 0, n = AllLayers(layers); i < n; i++)
         InvalidateRect(layers[i], nullptr, TRUE);
 }
@@ -623,7 +622,7 @@ void ApplyCaptureExclusionTo(HWND hwnd) {
 }
 
 void ApplyCaptureExclusion() {
-    HWND layers[8];
+    HWND layers[2 + ARRAYSIZE(g_taskbarLayers)];
     for (int i = 0, n = AllLayers(layers); i < n; i++)
         ApplyCaptureExclusionTo(layers[i]);
 }
@@ -836,7 +835,7 @@ HWND TopWindowOfProcess(DWORD pid) {
     return nullptr;
 }
 
-// After every move of the overlay, checks its place every 30 ms for 2 s instead of every 250 ms.
+// After every successful move of the overlay, checks its place every 30 ms for 2 s instead of every 250 ms.
 // Some apps keep lifting windows over it on their own: Chrome raises the page window above the overlay every second
 // while its "Leave site?" dialog is open, and at 250 ms that window stayed lit for a visible moment each time.
 void NoteOverlayMoved() {
@@ -853,7 +852,9 @@ void RaiseOverlayToTop() {
     if (!prev || (GetWindowLongPtrW(prev, GWL_EXSTYLE) & WS_EX_TOPMOST))
         return;
     SetWindowPos(g_hwndOverlay, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
-    NoteOverlayMoved();
+    prev = GetWindow(g_hwndOverlay, GW_HWNDPREV);
+    if (!prev || IsTopmost(prev))
+        NoteOverlayMoved();
 }
 
 // Puts the layer right below the window, or at the top of the normal band when the window is topmost:
@@ -866,7 +867,9 @@ void PlaceBelow(HWND hwnd) {
     if (GetWindow(hwnd, GW_HWNDNEXT) == g_hwndOverlay)
         return;
     SetWindowPos(g_hwndOverlay, hwnd, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
-    NoteOverlayMoved();
+    // A move that can't work (below an admin window on Windhawk 1.x) must not keep the 30 ms polling going.
+    if (GetWindow(hwnd, GW_HWNDNEXT) == g_hwndOverlay)
+        NoteOverlayMoved();
 }
 
 void ForgetMenu(HWND hwnd) {
@@ -954,6 +957,11 @@ bool StartFade(HWND oldRoot, HWND target) {
         (target != HWND_TOP && GetWindow(target, GW_HWNDNEXT) == g_hwndOverlay))
         return false;
     if (!g_fadeLayer && !(g_fadeLayer = CreateLayer(false)))
+        return false;
+    // The hidden fade layer tries the move first: below an admin window on Windhawk 1.x it fails, and the fade
+    // would dim the old window only to light it up again when the overlay can't follow.
+    if (target != HWND_TOP && !IsTopmost(target) &&
+        !SetWindowPos(g_fadeLayer, target, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE))
         return false;
     CoverWindow(g_fadeLayer, oldRoot, 0);
     g_fading = true;
@@ -1307,13 +1315,13 @@ void ApplyValueFields(bool rewrite) {
     }
 }
 
-// Solid ignores contrast, size and rotation; the image takes Scale in place of Size and can't rotate.
 void EnableSlider(int i, bool enable) {
     EnableWindow(Ctl(ID_SLIDER + i), enable);
     EnableWindow(Ctl(ID_VALUE + i), enable);
     EnableWindow(Ctl(ID_UNIT + i), enable);
 }
 
+// Solid ignores contrast, size and rotation; the image takes Scale in place of Size and can't rotate.
 void UpdateEnabled() {
     bool image = g_ap.pattern == PAT_IMAGE;
     bool geometric = g_ap.pattern == PAT_CHECKER || g_ap.pattern == PAT_STRIPES;
