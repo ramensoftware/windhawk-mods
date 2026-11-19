@@ -2,7 +2,7 @@
 // @id              winrar-tweaks
 // @name            WinRAR Tweaks
 // @description     Convert file sizes into readable units (KB, MB, GB), add a VS Code-style Ctrl+F quick filter bar, close WinRAR with Esc, and optionally auto-dismiss the trial reminder popup.
-// @version         1.1.0
+// @version         1.1.1
 // @author          ArvindSaini978
 // @github          https://github.com/ArvindSaini978
 // @homepage        https://github.com/ArvindSaini978/my-windhawk-mods
@@ -24,7 +24,7 @@ Simple quality-of-life improvements that make **WinRAR** cleaner, easier to read
 ## ✨ Features
 
 * 🔍 **VS Code-Style Quick Filter Bar (`Ctrl+F`):** Press `Ctrl+F` (or just start typing with *Type to Search* enabled) to open a native bottom filter bar with `↑` / `↓` / `✕` buttons, a live match counter (`1 of 12`), `Enter` / `Shift+Enter` navigation, and optional `Alt+Enter` to select all matches at once. Automatically adapts to both Light and Dark themes.
-* 📊 **Readable File Sizes (All Languages):** Converts long, hard-to-read byte numbers (like `121,815,400`) in the **Size** and **Packed** columns into clean units (`B`, `KB`, `MB`, `GB`, `TB`). Works automatically in all WinRAR display languages.
+* 📊 **Readable File Sizes (All Languages):** Converts long, hard-to-read byte numbers (like `121,815,400`) in the **Size** and **Packed** columns as well as the bottom **Status Bar** into clean units (`B`, `KB`, `MB`, `GB`, `TB`). Works automatically in all WinRAR display languages.
 * 🏷️ **Optional `KiB` / `MiB` Labels:** Prefer technical binary units? Flip a single switch in Settings to display `KiB`, `MiB`, `GiB`, and `TiB` instead of `KB`, `MB`, `GB`, and `TB`.
 * ⌨️ **Smart Close on `Esc`:** Press `Escape` to quickly close WinRAR just like modern apps. Smart enough to close the quick search bar, open popups, menus, dropdowns, or file-rename boxes first before closing the main window.
 * 🚫 **Auto-Dismiss Trial Popup (Opt-In):** Optionally blocks the *"Please purchase WinRAR license"* and *"Trial Expired"* reminder popups on startup before they appear on screen (can be enabled in Settings).
@@ -55,7 +55,7 @@ Simple quality-of-life improvements that make **WinRAR** cleaner, easier to read
 ## 🛠️ How It Works
 
 * **Safe Quick Filtering:** Instead of deleting rows from WinRAR's list (which would break extraction indices), the quick filter bar highlights matching files in place, scrolls the active match into view, and lets you cycle through matches with `Enter` / `Shift+Enter` or `Up` / `Down`. Clicking the empty bar area returns focus to the file list while keeping your match highlighted.
-* **Smart Size Formatting:** Formats raw byte numbers on the fly as you browse folders inside an archive, supporting every language automatically.
+* **Smart Size Formatting:** Formats raw byte numbers on the fly in both the file list and bottom status bar as you browse folders inside an archive, supporting every language automatically.
 * **Safe `Esc` Handling:** Checks what you are doing before closing—so pressing `Esc` while using the search bar, renaming a file, dragging items, or browsing a right-click menu won't accidentally close your window.
 * **Instant Popup Blocking:** When enabled in Settings, detects WinRAR's startup trial reminder in the background and dismisses it before the window is drawn, so you never see a flicker. All other WinRAR dialogs (Extract, Add, Password, Info, Help, etc.) work normally.
 
@@ -64,7 +64,7 @@ Simple quality-of-life improvements that make **WinRAR** cleaner, easier to read
 ## 💡 Good to Know
 
 * **Sorting Still Works Perfectly:** Clicking the **Size**, **Packed**, or **Name** column headers still sorts your files accurately and automatically updates active filter matches.
-* **Toggling Settings Live:** Switching between `KB` and `KiB` or toggling the *Always Visible* search bar updates open WinRAR windows right away without freezing. If you turn off *Human-Readable File Sizes* completely while WinRAR is open, press **`F5`** (or open another folder) to switch the numbers back to raw bytes.
+* **Toggling Settings Live:** Switching between `KB` and `KiB` or toggling the *Always Visible* search bar updates open WinRAR windows right away without freezing. If you turn off *Human-Readable File Sizes* completely while WinRAR is open, press **`F5`** (or open another folder) to switch the file list numbers back to raw bytes.
 
 ---
 
@@ -99,7 +99,7 @@ Simple quality-of-life improvements that make **WinRAR** cleaner, easier to read
   $description: "Pressing Escape closes the active WinRAR dialog or main window while respecting menus, dropdowns, and inline text editing."
 - readable_file_sizes: true
   $name: "Human-Readable File Sizes"
-  $description: "Formats raw byte values in the Size and Packed columns into readable units (KB, MB, GB, TB) across all languages."
+  $description: "Formats raw byte values in the Size and Packed columns and the bottom status bar into readable units (KB, MB, GB, TB) across all languages."
 - use_iec_terms: false
   $name: "Use IEC terms"
   $description: "Use the International Electrotechnical Commission terms, such as KiB instead of KB."
@@ -120,6 +120,7 @@ Simple quality-of-life improvements that make **WinRAR** cleaner, easier to read
 #include <cwchar>
 #include <cwctype>
 #include <mutex>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -139,6 +140,18 @@ struct ModSettings {
 static ModSettings g_settings;
 static std::mutex g_listViewMutex;
 static std::unordered_set<HWND> g_subclassedListViews;
+static std::unordered_set<HWND> g_subclassedStatusBars;
+
+// Stores the original unformatted status bar text per part (0..7) so live
+// setting changes can re-format or restore raw bytes immediately
+struct StatusBarState {
+    std::wstring rawPartText[8];
+    WPARAM rawPartFlags[8] = {};
+    bool hasPart[8] = {};
+    bool isInternalUpdate = false;
+};
+
+static std::unordered_map<HWND, StatusBarState> g_statusBarStates;
 
 // Custom thread-safe messages dispatched to the ListView's own UI thread
 static UINT g_msgSettingsChanged = 0;
@@ -317,13 +330,12 @@ static void EnsureSearchBarFontDpi(QuickSearchState* state) {
     }
 }
 
-// Checks whether a ListView is the primary archive file list inside
-// WinRarWindow
-static bool IsMainWinRarListView(HWND hListView) {
-    if (!hListView || !IsWindow(hListView))
+// Checks whether a child control belongs directly to WinRarWindow
+static bool IsChildOfMainWinRarWindow(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd))
         return false;
 
-    HWND hParent = GetParent(hListView);
+    HWND hParent = GetParent(hWnd);
     if (!hParent)
         return false;
 
@@ -332,6 +344,12 @@ static bool IsMainWinRarListView(HWND hListView) {
         return false;
 
     return (_wcsicmp(parentCls, L"WinRarWindow") == 0);
+}
+
+// Checks whether a ListView is the primary archive file list inside
+// WinRarWindow
+static bool IsMainWinRarListView(HWND hListView) {
+    return IsChildOfMainWinRarWindow(hListView);
 }
 
 // Reliably detects whether WinRAR's ListView is using a Dark or Light theme
@@ -1206,8 +1224,62 @@ static LRESULT CALLBACK SearchButtonSubclassProc(HWND hWnd,
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
+// Deletes the previous word (or active selection) on Ctrl+Backspace in the
+// search Edit control without flashing a selection highlight or inserting 0x7F
+static void DeletePreviousWordInEdit(HWND hEdit) {
+    DWORD selStart = 0;
+    DWORD selEnd = 0;
+    SendMessageW(hEdit, EM_GETSEL, reinterpret_cast<WPARAM>(&selStart),
+                 reinterpret_cast<LPARAM>(&selEnd));
+
+    if (selStart != selEnd) {
+        SendMessageW(hEdit, EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(L""));
+        return;
+    }
+
+    if (selStart == 0)
+        return;
+
+    WCHAR text[256] = {};
+    int len = GetWindowTextW(hEdit, text, ARRAYSIZE(text));
+    if (len <= 0)
+        return;
+
+    int pos = static_cast<int>(selStart);
+    if (pos > len)
+        pos = len;
+
+    // 1. Skip any whitespace immediately preceding the caret
+    while (pos > 0 && iswspace(text[pos - 1])) {
+        --pos;
+    }
+
+    // 2. Delete either a contiguous run of alphanumeric characters or symbols
+    if (pos > 0) {
+        if (iswalnum(text[pos - 1])) {
+            while (pos > 0 && iswalnum(text[pos - 1])) {
+                --pos;
+            }
+        } else {
+            while (pos > 0 && !iswalnum(text[pos - 1]) &&
+                   !iswspace(text[pos - 1])) {
+                --pos;
+            }
+        }
+    }
+
+    // Suppress intermediate selection painting so rapid Ctrl+Backspace never
+    // flashes a selection highlight before deleting the word
+    SendMessageW(hEdit, WM_SETREDRAW, FALSE, 0);
+    SendMessageW(hEdit, EM_SETSEL, static_cast<WPARAM>(pos),
+                 static_cast<LPARAM>(selStart));
+    SendMessageW(hEdit, EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(L""));
+    SendMessageW(hEdit, WM_SETREDRAW, TRUE, 0);
+    InvalidateRect(hEdit, nullptr, TRUE);
+}
+
 // Subclass procedure for the search input Edit control (handles
-// Up/Down/Enter/Esc & placeholder)
+// Up/Down/Enter/Esc/Ctrl+Backspace & placeholder)
 static LRESULT CALLBACK SearchEditSubclassProc(HWND hWnd,
                                                UINT uMsg,
                                                WPARAM wParam,
@@ -1244,6 +1316,10 @@ static LRESULT CALLBACK SearchEditSubclassProc(HWND hWnd,
                 SendMessageW(hWnd, EM_SETSEL, 0, -1);
                 return 0;
             }
+            if (wParam == VK_BACK && ctrlDown && !altDown && !shiftDown) {
+                DeletePreviousWordInEdit(hWnd);
+                return 0;
+            }
             if (wParam == VK_DOWN) {
                 if (!ctrlDown && !altDown && !shiftDown) {
                     StepQuickFilterMatch(state, +1);
@@ -1278,7 +1354,8 @@ static LRESULT CALLBACK SearchEditSubclassProc(HWND hWnd,
     }
 
     if (uMsg == WM_CHAR || uMsg == WM_SYSCHAR) {
-        if (wParam == VK_RETURN || wParam == VK_ESCAPE || wParam == 1) {
+        if (wParam == VK_RETURN || wParam == VK_ESCAPE || wParam == 1 ||
+            wParam == 0x7F) {
             return 0;
         }
     }
@@ -1749,7 +1826,7 @@ static void SyncSearchBarSettingsStateOnUiThread(HWND hListView) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Human-Readable File Size Logic (Semantic All-Language Detection)
+// 3. Human-Readable File Size Logic (ListView & Status Bar, All Languages)
 // ---------------------------------------------------------------------------
 
 // Formats a raw byte value into Base-2 (1024) with KB/MB or KiB/MiB units
@@ -1920,6 +1997,106 @@ static bool ParseNumericBytes(const WCHAR* str, ULONGLONG* outBytes) {
     return true;
 }
 
+// Formats raw byte counts in WinRAR status bar summary strings across all
+// languages (e.g. "Selected 1 file, 766,232 bytes" -> "Selected 1 file, 748.27
+// KB" and "Total 1 folder, 34 files, 10,746,168 bytes" -> "Total 1 folder, 34
+// files, 10.25 MB") while leaving folder-only text ("Selected 1 folder") intact
+static bool FormatStatusBarSummaryText(const WCHAR* text,
+                                       WCHAR* outBuf,
+                                       size_t outSize) {
+    if (!text || !*text || !outBuf || outSize == 0)
+        return false;
+
+    // Find the last clause separator (e.g. ", " or localized comma) that
+    // separates the file/folder count from the trailing byte count clause
+    const WCHAR* lastClause = nullptr;
+    for (const WCHAR* p = text; *p; ++p) {
+        if ((*p == L',' || *p == L'\x060C' || *p == L'\x3001' ||
+             *p == L'\xFF0C') &&
+            (p[1] == L' ' || p[1] == 0x00A0)) {
+            lastClause = p + 1;
+            while (*lastClause == L' ' || *lastClause == 0x00A0) {
+                ++lastClause;
+            }
+        }
+    }
+
+    if (!lastClause || !*lastClause)
+        return false;
+
+    // Locate the first digit inside the final clause
+    const WCHAR* numStart = lastClause;
+    while (*numStart && (*numStart < L'0' || *numStart > L'9')) {
+        if (*numStart == L':' || *numStart == L'/' || *numStart == L'-')
+            return false;
+        ++numStart;
+    }
+
+    if (!*numStart)
+        return false;
+
+    // Scan through the grouped byte number (digits + thousand separators)
+    const WCHAR* p = numStart;
+    const WCHAR* numEnd = numStart;
+    while (*p) {
+        WCHAR ch = *p;
+        if (ch >= L'0' && ch <= L'9') {
+            ++p;
+            numEnd = p;
+        } else if ((ch == L',' || ch == L'.' || ch == L'\'' || ch == L' ' ||
+                    ch == 0x00A0 || ch == 0x202F || ch == 0x200E ||
+                    ch == 0x200F) &&
+                   (p[1] >= L'0' && p[1] <= L'9')) {
+            ++p;
+        } else {
+            break;
+        }
+    }
+
+    if (numEnd <= numStart)
+        return false;
+
+    // After the byte number, there must be a localized unit word (e.g. "bytes",
+    // "octets", "байт", "バイト", "字节") with no other digits following it
+    const WCHAR* unitStart = numEnd;
+    while (*unitStart == L' ' || *unitStart == 0x00A0 || *unitStart == 0x202F) {
+        ++unitStart;
+    }
+
+    if (!*unitStart)
+        return false;
+
+    const WCHAR* unitEnd = unitStart;
+    while (*unitEnd && !iswspace(*unitEnd) && *unitEnd != L',' &&
+           *unitEnd != L';' && *unitEnd != L')') {
+        if (*unitEnd >= L'0' && *unitEnd <= L'9')
+            return false;
+        ++unitEnd;
+    }
+
+    if (unitEnd <= unitStart)
+        return false;
+
+    size_t numLen = static_cast<size_t>(numEnd - numStart);
+    if (numLen >= 64)
+        return false;
+
+    WCHAR numBuf[64] = {};
+    wcsncpy_s(numBuf, numStart, numLen);
+
+    ULONGLONG bytes = 0;
+    if (!ParseNumericBytes(numBuf, &bytes))
+        return false;
+
+    WCHAR readable[64] = {};
+    FormatBytesReadable(bytes, readable, ARRAYSIZE(readable));
+
+    int prefixLen = static_cast<int>(numStart - text);
+    swprintf_s(outBuf, outSize, L"%.*s%s%s", prefixLen, text, readable,
+               unitEnd);
+    return true;
+}
+
 // Formats raw byte cells or updates unit labels in an already-open ListView on
 // the UI thread
 static void FormatExistingListViewItems(HWND hListView) {
@@ -1972,6 +2149,163 @@ static void FormatExistingListViewItems(HWND hListView) {
                              reinterpret_cast<LPARAM>(&lvi));
             }
         }
+    }
+}
+
+// Re-evaluates all status bar parts on the UI thread when settings change or
+// when attaching to an already-open WinRAR window
+static void RefreshStatusBarItems(HWND hStatusBar) {
+    if (!IsChildOfMainWinRarWindow(hStatusBar))
+        return;
+
+    int partCount =
+        static_cast<int>(SendMessageW(hStatusBar, SB_GETPARTS, 0, 0));
+    if (partCount <= 0)
+        partCount = 1;
+    if (partCount > 8)
+        partCount = 8;
+
+    for (int i = 0; i < partCount; ++i) {
+        std::wstring rawText;
+        WPARAM flags = static_cast<WPARAM>(i);
+        bool hasCached = false;
+
+        {
+            std::lock_guard<std::mutex> lock(g_listViewMutex);
+            auto it = g_statusBarStates.find(hStatusBar);
+            if (it != g_statusBarStates.end() && it->second.hasPart[i]) {
+                rawText = it->second.rawPartText[i];
+                flags = it->second.rawPartFlags[i];
+                hasCached = true;
+            }
+        }
+
+        if (!hasCached) {
+            LRESULT lenRes = SendMessageW(hStatusBar, SB_GETTEXTLENGTHW, i, 0);
+            int len = LOWORD(lenRes);
+            int type = HIWORD(lenRes);
+            if ((type & SBT_OWNERDRAW) != 0 || len <= 0 || len >= 512)
+                continue;
+
+            WCHAR currentText[512] = {};
+            SendMessageW(hStatusBar, SB_GETTEXTW, i,
+                         reinterpret_cast<LPARAM>(currentText));
+            rawText = currentText;
+            flags = static_cast<WPARAM>(i | type);
+
+            std::lock_guard<std::mutex> lock(g_listViewMutex);
+            StatusBarState& st = g_statusBarStates[hStatusBar];
+            st.rawPartText[i] = rawText;
+            st.rawPartFlags[i] = flags;
+            st.hasPart[i] = true;
+        }
+
+        const WCHAR* targetText = rawText.c_str();
+        WCHAR formatted[512] = {};
+        if (g_settings.readable_file_sizes &&
+            FormatStatusBarSummaryText(rawText.c_str(), formatted,
+                                       ARRAYSIZE(formatted))) {
+            targetText = formatted;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(g_listViewMutex);
+            g_statusBarStates[hStatusBar].isInternalUpdate = true;
+        }
+        SendMessageW(hStatusBar, SB_SETTEXTW, flags,
+                     reinterpret_cast<LPARAM>(targetText));
+        {
+            std::lock_guard<std::mutex> lock(g_listViewMutex);
+            g_statusBarStates[hStatusBar].isInternalUpdate = false;
+        }
+    }
+}
+
+// Intercepts SB_SETTEXTW on WinRAR's main status bar to format byte counts
+static LRESULT CALLBACK StatusBarSubclassProc(HWND hWnd,
+                                              UINT uMsg,
+                                              WPARAM wParam,
+                                              LPARAM lParam,
+                                              DWORD_PTR /*dwRefData*/) {
+    if (g_msgSettingsChanged != 0 && uMsg == g_msgSettingsChanged) {
+        RefreshStatusBarItems(hWnd);
+        return 0;
+    }
+
+    if (uMsg == SB_SETTEXTW && lParam != 0 && (wParam & SBT_OWNERDRAW) == 0 &&
+        IsChildOfMainWinRarWindow(hWnd)) {
+        int part = static_cast<int>(wParam & 0xFF);
+        bool isInternal = false;
+
+        {
+            std::lock_guard<std::mutex> lock(g_listViewMutex);
+            auto it = g_statusBarStates.find(hWnd);
+            if (it != g_statusBarStates.end()) {
+                isInternal = it->second.isInternalUpdate;
+            }
+            if (!isInternal && part >= 0 && part < 8) {
+                StatusBarState& st = g_statusBarStates[hWnd];
+                st.rawPartText[part] = reinterpret_cast<LPCWSTR>(lParam);
+                st.rawPartFlags[part] = wParam;
+                st.hasPart[part] = true;
+            }
+        }
+
+        if (!isInternal && g_settings.readable_file_sizes) {
+            const WCHAR* rawText = reinterpret_cast<LPCWSTR>(lParam);
+            WCHAR formatted[512] = {};
+            if (FormatStatusBarSummaryText(rawText, formatted,
+                                           ARRAYSIZE(formatted))) {
+                return DefSubclassProc(hWnd, uMsg, wParam,
+                                       reinterpret_cast<LPARAM>(formatted));
+            }
+        }
+    }
+
+    if (uMsg == WM_NCDESTROY) {
+        std::lock_guard<std::mutex> lock(g_listViewMutex);
+        g_subclassedStatusBars.erase(hWnd);
+        g_statusBarStates.erase(hWnd);
+    }
+
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+// Attaches our subclass procedure to a msctls_statusbar32 control safely
+static void AttachStatusBarSubclass(HWND hWnd, bool deferRefreshToUiThread) {
+    if (!hWnd || !IsWindow(hWnd))
+        return;
+
+    WCHAR cls[64] = {};
+    if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) ||
+        _wcsicmp(cls, STATUSCLASSNAMEW) != 0) {
+        return;
+    }
+
+    bool alreadySubclassed = false;
+    {
+        std::lock_guard<std::mutex> lock(g_listViewMutex);
+        alreadySubclassed =
+            (g_subclassedStatusBars.find(hWnd) != g_subclassedStatusBars.end());
+    }
+
+    if (!alreadySubclassed) {
+        if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+                hWnd, StatusBarSubclassProc, 0)) {
+            std::lock_guard<std::mutex> lock(g_listViewMutex);
+            g_subclassedStatusBars.insert(hWnd);
+            alreadySubclassed = true;
+        }
+    }
+
+    if (!alreadySubclassed)
+        return;
+
+    DWORD wndThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (!deferRefreshToUiThread && wndThreadId == GetCurrentThreadId()) {
+        RefreshStatusBarItems(hWnd);
+    } else if (g_msgSettingsChanged != 0) {
+        PostMessageW(hWnd, g_msgSettingsChanged, 0, 0);
     }
 }
 
@@ -2441,6 +2775,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
 // ---------------------------------------------------------------------------
 
 // Hooks window creation to block evaluation windows and subclass new ListViews
+// and StatusBars
 HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
                                  LPCWSTR lpClassName,
                                  LPCWSTR lpWindowName,
@@ -2467,14 +2802,17 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
 
     if (hWnd) {
         AttachListViewSubclass(hWnd, false);
+        AttachStatusBarSubclass(hWnd, false);
     }
 
     return hWnd;
 }
 
-// Enumerates child windows to find and subclass existing SysListView32 controls
+// Enumerates child windows to find and subclass existing SysListView32 and
+// msctls_statusbar32 controls
 static BOOL CALLBACK EnumChildProc(HWND hWnd, LPARAM /*lParam*/) {
     AttachListViewSubclass(hWnd, true);
+    AttachStatusBarSubclass(hWnd, true);
     return TRUE;
 }
 
@@ -2492,6 +2830,7 @@ static BOOL CALLBACK EnumTopWindowsProc(HWND hWnd, LPARAM /*lParam*/) {
         }
 
         AttachListViewSubclass(hWnd, true);
+        AttachStatusBarSubclass(hWnd, true);
         EnumChildWindows(hWnd, EnumChildProc, 0);
     }
     return TRUE;
@@ -2541,11 +2880,17 @@ void Wh_ModUninit() {
     Wh_Log(L"Unloading WinRAR Tweaks");
 
     std::vector<HWND> listViews;
+    std::vector<HWND> statusBars;
     {
         std::lock_guard<std::mutex> lock(g_listViewMutex);
         listViews.assign(g_subclassedListViews.begin(),
                          g_subclassedListViews.end());
         g_subclassedListViews.clear();
+
+        statusBars.assign(g_subclassedStatusBars.begin(),
+                          g_subclassedStatusBars.end());
+        g_subclassedStatusBars.clear();
+        g_statusBarStates.clear();
     }
 
     for (HWND hWnd : listViews) {
@@ -2555,6 +2900,13 @@ void Wh_ModUninit() {
             }
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                 hWnd, ListViewSubclassProc);
+        }
+    }
+
+    for (HWND hWnd : statusBars) {
+        if (IsWindow(hWnd)) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                hWnd, StatusBarSubclassProc);
         }
     }
 }
