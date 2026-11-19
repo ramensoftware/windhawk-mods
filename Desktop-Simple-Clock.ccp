@@ -1,9 +1,9 @@
 // ==WindhawkMod==
-// @id              taskbar-countdown-timer
-// @name            Taskbar Countdown Timer
+// @id              taskbar-timer-alarm
+// @name            Taskbar Timer & Alarm
 // @description     A countdown timer and alarm clock integrated into the Windows 11 taskbar (Windows 11 only)
-// @version         4
-// @author          K3M
+// @version         1.0
+// @author          yazanhani900-blip
 // @github          https://github.com/yazanhani900-blip
 // @include         explorer.exe
 // @architecture    x86-64
@@ -13,7 +13,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Countdown Timer + Alarm
+# Taskbar Timer & Alarm
 
 Adds a compact countdown timer **and alarm clock** directly to the Windows 11 taskbar.
 
@@ -66,7 +66,7 @@ Videos are muted by default (see settings) because the completion sound plays to
 
 ## Credits and license
 
-Original mod by K3M. This version re-organises the internals (classes with
+Based on the "Taskbar Countdown Timer" mod by K3M. This version re-organises the internals (classes with
 clear ownership instead of loose globals) while keeping the same interface and
 behaviour. It is a derivative work and stays under **GPL-3.0**.
 The taskbar / XAML integration technique is adapted from Windhawk's
@@ -106,7 +106,7 @@ taskbar-multirow and taskbar-notification-icon-spacing mods by m417z (GPL-3.0).
 // https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-multirow.wh.cpp
 // https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-notification-icon-spacing.wh.cpp
 //
-// This file is a restructured derivative of the original "Taskbar Countdown
+// This file is a restructured derivative of the "Taskbar Countdown
 // Timer" mod by K3M and is distributed under the same GPL-3.0 license.
 //
 // ARCHITECTURE OVERVIEW
@@ -1862,8 +1862,8 @@ public:
     HWND Handle() const { return hwnd_; }
 
 private:
-    static constexpr wchar_t kClass[] = L"TaskbarCountdownTimerFinishedAlert";
-    static constexpr wchar_t kCardClass[] = L"TaskbarCountdownTimerAlertCard";
+    static constexpr wchar_t kClass[] = L"TaskbarTimerAlarmFinishedAlert";
+    static constexpr wchar_t kCardClass[] = L"TaskbarTimerAlarmAlertCard";
 
     struct Particle {
         float x, y, vx, vy, radius, phase;
@@ -3376,7 +3376,8 @@ inline bool HookTaskbarDll(HMODULE module)
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // taskbar.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
             &TrayUI_StartTaskbar_Original,
@@ -3400,7 +3401,7 @@ inline bool HookTaskbarDll(HMODULE module)
         },
     };
 
-    return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
 // ---- taskbar XAML root -------------------------------------------------------------
@@ -3720,13 +3721,13 @@ inline void* WINAPI IconView_IconView_Hook(void* pThis)
 inline bool HookSystemTray(HMODULE module)
 {
     // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {{
+    WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {{
         {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
         &IconView_IconView_Original,
         IconView_IconView_Hook,
     }};
 
-    return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(module, systemTrayHooks, ARRAYSIZE(systemTrayHooks));
 }
 
 inline void OnModuleLoadedTaskbar(HMODULE module)
@@ -5031,7 +5032,7 @@ public:
         for (uint32_t i = 0; i < children.Size(); i++) {
             auto child = children.GetAt(i).try_as<FrameworkElement>();
 
-            if (child && child.Name() == L"TaskbarCountdownTimerButton") {
+            if (child && child.Name() == L"TaskbarTimerAlarmButton") {
                 existing = child;
                 break;
             }
@@ -5043,7 +5044,7 @@ public:
         }
 
         if (existing) {
-            Wh_Log(L"WARNING: A foreign TaskbarCountdownTimerButton already "
+            Wh_Log(L"WARNING: A foreign TaskbarTimerAlarmButton already "
                    L"exists; leaving it untouched for safety");
             return;
         }
@@ -5053,7 +5054,7 @@ public:
         button_ = Button();
         text_ = TextBlock();
 
-        button_.Name(L"TaskbarCountdownTimerButton");
+        button_.Name(L"TaskbarTimerAlarmButton");
         button_.MinWidth(0);
         button_.MinHeight(0);
         button_.BorderThickness(Thickness{0, 0, 0, 0});
@@ -5547,7 +5548,7 @@ BOOL Wh_ModInit()
 {
     using namespace tct;
 
-    Wh_Log(L"Taskbar Countdown Timer loading");
+    Wh_Log(L"Taskbar Timer & Alarm loading");
 
     g_unloading.store(false);
     g_xamlTornDown.store(false);
@@ -5697,7 +5698,7 @@ void Wh_ModUninit()
     g_runtimeStarted = false;
     ReleaseSRWLockExclusive(&g_runtimeLock);
 
-    Wh_Log(L"Taskbar Countdown Timer unloaded");
+    Wh_Log(L"Taskbar Timer & Alarm unloaded");
 }
 
 void Wh_ModSettingsChanged()
