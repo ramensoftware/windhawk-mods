@@ -221,7 +221,7 @@ feature off in the settings of this mod instead.
 
 // The taskbar button lookup uses names of functions of the 64-bit Intel/AMD
 // build of Windows 11.
-#if defined(__x86_64__) || defined(_M_X64)
+#ifdef _M_X64
 #define TASK_BUTTONS_SUPPORTED
 
 #undef GetCurrentTime
