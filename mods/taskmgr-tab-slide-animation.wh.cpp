@@ -2,12 +2,13 @@
 // @id              taskmgr-tab-slide-animation
 // @name            Task Manager Tab Slide Animation
 // @description     Smooth animated transition (crossfade or slide) when switching tabs (Processes, Performance, ...) in Task Manager.
-// @version         0.4.1
+// @version         0.4.2
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         Taskmgr.exe
 // @compilerOptions -ldwmapi -lgdi32 -lole32 -lmsimg32
 // @license         MIT
+// @donateUrl       https://buy.polar.sh/polar_cl_iccBChKQyqil3EgBBtV6qM3lfDpLk4sVu1OpK1j0jQ4
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
