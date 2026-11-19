@@ -29,7 +29,7 @@ Windows 10 and 11. Choose a preset or customize individual Start options.
 
 ## Features
 
-- Ten taskbar skins, including Aero Basic and classic beta styles.
+- Eleven taskbar skins, including Aero Basic and classic beta styles.
 - Task buttons, previews, Jump Lists, toolbars and a notification area.
 - Local pinned apps and ordering, without changing Windows pins.
 - Horizontal and vertical layouts, optional secondary taskbars and Aero Peek.
@@ -48,6 +48,18 @@ app list or Windows Search. Search visibility and Task View follow the Windows
 settings as their initial defaults; changes in this bar's menu are stored by
 this mod and do not change Windows settings. Action Center opens with Win+A on
 Windows 10 or Win+N on Windows 11.
+
+While the transparency effects of Windows are on, the flyouts and the panel of
+the hidden icons let the desktop show through.
+
+The Windows 10 RTM (1507) skin is the bar of the first Windows 10 release:
+always dark, black and opaque, with the flat "Search the web and Windows" box,
+the first Task View icon and Action Center as the last notification icon,
+before the clock. Its search panel follows that release without Cortana: a
+narrow rail with Home and Settings, the results in a white list and "My stuff"
+and "Web" below them. Its Jump Lists have the headings with a rule of that
+release, and the bar's own menus are plain system menus. Everything else is
+shared with the Windows 10 skin.
 
 ## Skins
 
@@ -95,12 +107,14 @@ include [Classic Taskbar and Start Menu Properties](https://windhawk.net/mods/cl
 [Windows 10 legacy flyouts on Win11 24H2 restorer](https://windhawk.net/mods/windows-10-legacy-flyouts-restorer),
 and [Windows 10 Win+X Restorer](https://windhawk.net/mods/windows-10-winx-restorer)
 for a Windows 10-style Win+X menu. Configure that companion mod separately; this
-mod does not embed its menu or install a Win+X keyboard hook. The companion
-ignores simulated keyboard input, so the physical Win+X shortcut should be used;
-the recreated Start button's right-click may not open its menu. On a horizontal
-recreated bar, a placement-only compatibility bridge anchors the companion menu
-to the bar while the native taskbar is hidden; this takes precedence over the
-companion's cursor-position and offset options in that configuration.
+mod does not embed its menu, install a Win+X keyboard hook or move the
+companion's menu. The companion ignores simulated keyboard input, so the
+recreated Start button's right-click may not open its menu. Known limitation:
+the companion looks for a visible native taskbar, which the integrated tray
+hides. In that configuration the companion may not respond to the physical
+Win+X shortcut, or may open its menu at the mouse pointer instead of next to
+the recreated Start button, until the companion itself supports the recreated
+bar.
 
 ## Notes
 
@@ -145,11 +159,11 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Estilo predefinido de la barra"
   $name:fr: "Thème prédéfini de la barre"
   $name:pt: "Tema predefinido da barra"
-  $description: "This setting selects a taskbar skin. Custom keeps the separate Start and beta settings; the other presets override those two settings without deleting their values. The Windows 7 skin is an approximation and uses the system DWM popup frame when available. Aero Basic uses an opaque window list and a custom overflow border. The Windows 10 skin adds the search box, Task View and Action Center, which have their own settings below."
-  $description:it: "Questa impostazione seleziona la skin della barra. Personalizzata usa le opzioni separate per Start e beta; gli altri preset le sostituiscono senza cancellarne i valori. La skin Windows 7 è approssimativa e usa la cornice DWM di sistema per i popup quando disponibile. Aero Basic usa un elenco opaco di finestre e un bordo personalizzato per le icone nascoste. La skin Windows 10 aggiunge la casella di ricerca, Visualizzazione attività e Centro notifiche, che hanno impostazioni proprie più sotto."
-  $description:es: "Esta configuración selecciona el estilo de la barra. Personalizado usa las opciones separadas de Inicio y beta; los otros estilos las anulan sin borrar sus valores. El estilo Windows 7 es aproximado y usa el marco DWM del sistema para ventanas emergentes cuando está disponible. Aero Basic usa una lista opaca de ventanas y un borde propio para los iconos ocultos. El estilo Windows 10 añade el cuadro de búsqueda, Vista de tareas y el Centro de actividades, que tienen sus propias opciones más abajo."
-  $description:fr: "Ce paramètre sélectionne le thème de la barre. Personnalisé utilise les options distinctes Démarrer et bêta ; les autres thèmes les remplacent sans effacer leurs valeurs. Le thème Windows 7 est approximatif et utilise le cadre DWM système pour les fenêtres contextuelles lorsqu'il est disponible. Aero Basic utilise une liste de fenêtres opaque et une bordure personnalisée pour les icônes masquées. Le thème Windows 10 ajoute la zone de recherche, la Vue des tâches et le Centre de notifications, qui ont leurs propres paramètres plus bas."
-  $description:pt: "Esta configuração seleciona o tema da barra. Personalizado usa as opções separadas de Iniciar e beta; os outros temas as substituem sem apagar seus valores. O tema Windows 7 é aproximado e usa a moldura DWM do sistema nos pop-ups quando disponível. Aero Basic usa uma lista opaca de janelas e uma borda própria para os ícones ocultos. O tema Windows 10 adiciona a caixa de pesquisa, a Visão de Tarefas e a Central de Ações, que têm configurações próprias mais abaixo."
+  $description: "This setting selects a taskbar skin. Custom keeps the separate Start and beta settings; the other presets override those two settings without deleting their values. The Windows 7 skin is an approximation and uses the system DWM popup frame when available. Aero Basic uses an opaque window list and a custom overflow border. The Windows 10 skin adds the search box, Task View and Action Center, which have their own settings below. Windows 10 RTM is the Windows 10 skin as first released in 2015 (version 1507): an opaque black bar that is always dark, the flat grey search box and the search panel of that release."
+  $description:it: "Questa impostazione seleziona la skin della barra. Personalizzata usa le opzioni separate per Start e beta; gli altri preset le sostituiscono senza cancellarne i valori. La skin Windows 7 è approssimativa e usa la cornice DWM di sistema per i popup quando disponibile. Aero Basic usa un elenco opaco di finestre e un bordo personalizzato per le icone nascoste. La skin Windows 10 aggiunge la casella di ricerca, Visualizzazione attività e Centro notifiche, che hanno impostazioni proprie più sotto. Windows 10 RTM è la skin Windows 10 com'era alla prima versione del 2015 (1507): barra nera opaca e sempre scura, casella di ricerca grigia piatta e pannello di ricerca di quella versione."
+  $description:es: "Esta configuración selecciona el estilo de la barra. Personalizado usa las opciones separadas de Inicio y beta; los otros estilos las anulan sin borrar sus valores. El estilo Windows 7 es aproximado y usa el marco DWM del sistema para ventanas emergentes cuando está disponible. Aero Basic usa una lista opaca de ventanas y un borde propio para los iconos ocultos. El estilo Windows 10 añade el cuadro de búsqueda, Vista de tareas y el Centro de actividades, que tienen sus propias opciones más abajo. Windows 10 RTM es el estilo Windows 10 tal como era en su primera versión de 2015 (1507): barra negra opaca y siempre oscura, cuadro de búsqueda gris plano y panel de búsqueda de esa versión."
+  $description:fr: "Ce paramètre sélectionne le thème de la barre. Personnalisé utilise les options distinctes Démarrer et bêta ; les autres thèmes les remplacent sans effacer leurs valeurs. Le thème Windows 7 est approximatif et utilise le cadre DWM système pour les fenêtres contextuelles lorsqu'il est disponible. Aero Basic utilise une liste de fenêtres opaque et une bordure personnalisée pour les icônes masquées. Le thème Windows 10 ajoute la zone de recherche, la Vue des tâches et le Centre de notifications, qui ont leurs propres paramètres plus bas. Windows 10 RTM est le thème Windows 10 tel qu'à sa première version de 2015 (1507) : barre noire opaque et toujours sombre, zone de recherche grise et plate, et volet de recherche de cette version."
+  $description:pt: "Esta configuração seleciona o tema da barra. Personalizado usa as opções separadas de Iniciar e beta; os outros temas as substituem sem apagar seus valores. O tema Windows 7 é aproximado e usa a moldura DWM do sistema nos pop-ups quando disponível. Aero Basic usa uma lista opaca de janelas e uma borda própria para os ícones ocultos. O tema Windows 10 adiciona a caixa de pesquisa, a Visão de Tarefas e a Central de Ações, que têm configurações próprias mais abaixo. Windows 10 RTM é o tema Windows 10 como na primeira versão de 2015 (1507): barra preta opaca e sempre escura, caixa de pesquisa cinza plana e painel de pesquisa dessa versão."
   $options:
     - win7: "Windows 7"
     - win7basic: "Windows 7 Aero Basic"
@@ -161,6 +175,7 @@ Use at your own risk. You are responsible for how you use the mod and for comply
     - win8: "Windows 8.0"
     - win81: "Windows 8.1"
     - win10: "Windows 10"
+    - win10rtm: "Windows 10 RTM (1507)"
     - custom: "Custom (individual options)"
   $options:it:
     - win7: "Windows 7"
@@ -173,6 +188,7 @@ Use at your own risk. You are responsible for how you use the mod and for comply
     - win8: "Windows 8.0"
     - win81: "Windows 8.1"
     - win10: "Windows 10"
+    - win10rtm: "Windows 10 RTM (1507)"
     - custom: "Personalizzata (opzioni singole)"
   $options:es:
     - win7: "Windows 7"
@@ -185,6 +201,7 @@ Use at your own risk. You are responsible for how you use the mod and for comply
     - win8: "Windows 8.0"
     - win81: "Windows 8.1"
     - win10: "Windows 10"
+    - win10rtm: "Windows 10 RTM (1507)"
     - custom: "Personalizado (opciones individuales)"
   $options:fr:
     - win7: "Windows 7"
@@ -197,6 +214,7 @@ Use at your own risk. You are responsible for how you use the mod and for comply
     - win8: "Windows 8.0"
     - win81: "Windows 8.1"
     - win10: "Windows 10"
+    - win10rtm: "Windows 10 RTM (1507)"
     - custom: "Personnalisé (options individuelles)"
   $options:pt:
     - win7: "Windows 7"
@@ -209,6 +227,7 @@ Use at your own risk. You are responsible for how you use the mod and for comply
     - win8: "Windows 8.0"
     - win81: "Windows 8.1"
     - win10: "Windows 10"
+    - win10rtm: "Windows 10 RTM (1507)"
     - custom: "Personalizado (opções individuais)"
 - win10ActionCenterButton: true
   $name: "Windows 10 skin: Action Center button"
@@ -238,29 +257,29 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Estilo Windows 10: búsqueda"
   $name:fr: "Thème Windows 10 : recherche"
   $name:pt: "Tema Windows 10: pesquisa"
-  $description: "This setting chooses what the search box or icon of the Windows 10 skin opens: the search of Windows 10 22H2 with tabs, a best match and a details pane, the classic narrow list of apps, or the search of the running Windows (Win+S). Whether the bar shows the box, the icon or nothing follows the taskbar setting of Windows and the Search entry of the bar's context menu."
-  $description:it: "Questa impostazione sceglie che cosa apre la casella o l'icona di ricerca della skin Windows 10: la ricerca di Windows 10 22H2 con schede, corrispondenza migliore e riquadro dei dettagli, l'elenco classico stretto delle app, oppure la ricerca del Windows in uso (Win+S). Se la barra mostra la casella, l'icona o niente dipende dall'impostazione della barra di Windows e dalla voce Ricerca del menu contestuale della barra."
-  $description:es: "Esta configuración elige qué abre el cuadro o el icono de búsqueda del estilo Windows 10: la búsqueda de Windows 10 22H2 con pestañas, mejor coincidencia y panel de detalles, la lista clásica estrecha de aplicaciones o la búsqueda del Windows en uso (Win+S). Que la barra muestre el cuadro, el icono o nada depende de la configuración de la barra de Windows y de la entrada Búsqueda del menú contextual de la barra."
-  $description:fr: "Ce paramètre choisit ce qu'ouvre la zone ou l'icône de recherche du thème Windows 10 : la recherche de Windows 10 22H2 avec onglets, meilleur résultat et volet de détails, la liste classique étroite des applications, ou la recherche du Windows en cours (Win+S). L'affichage de la zone, de l'icône ou de rien suit le paramètre de la barre de Windows et l'entrée Rechercher du menu contextuel de la barre."
-  $description:pt: "Esta configuração escolhe o que a caixa ou o ícone de pesquisa do tema Windows 10 abre: a pesquisa do Windows 10 22H2 com guias, melhor correspondência e painel de detalhes, a lista clássica estreita de aplicativos ou a pesquisa do Windows em uso (Win+S). Se a barra mostra a caixa, o ícone ou nada depende da configuração da barra do Windows e da entrada Pesquisar do menu de contexto da barra."
+  $description: "This setting chooses what the search box or icon of the Windows 10 skin opens: the search of Windows 10 22H2 with tabs, a best match and a details pane, the classic narrow list of apps, or the search of the running Windows (Win+S). In the Windows 10 RTM skin the first choice opens the search panel of that release instead: a narrow panel over Start and the box, with My stuff and Web under the results. Whether the bar shows the box, the icon or nothing follows the taskbar setting of Windows and the Search entry of the bar's context menu."
+  $description:it: "Questa impostazione sceglie che cosa apre la casella o l'icona di ricerca della skin Windows 10: la ricerca di Windows 10 22H2 con schede, corrispondenza migliore e riquadro dei dettagli, l'elenco classico stretto delle app, oppure la ricerca del Windows in uso (Win+S). Nella skin Windows 10 RTM la prima scelta apre invece il pannello di ricerca di quella versione: un pannello stretto sopra Start e la casella, con Contenuti personali e Web sotto i risultati. Se la barra mostra la casella, l'icona o niente dipende dall'impostazione della barra di Windows e dalla voce Ricerca del menu contestuale della barra."
+  $description:es: "Esta configuración elige qué abre el cuadro o el icono de búsqueda del estilo Windows 10: la búsqueda de Windows 10 22H2 con pestañas, mejor coincidencia y panel de detalles, la lista clásica estrecha de aplicaciones o la búsqueda del Windows en uso (Win+S). En el estilo Windows 10 RTM la primera opción abre en su lugar el panel de búsqueda de esa versión: un panel estrecho sobre Inicio y el cuadro, con Mis cosas y Web bajo los resultados. Que la barra muestre el cuadro, el icono o nada depende de la configuración de la barra de Windows y de la entrada Búsqueda del menú contextual de la barra."
+  $description:fr: "Ce paramètre choisit ce qu'ouvre la zone ou l'icône de recherche du thème Windows 10 : la recherche de Windows 10 22H2 avec onglets, meilleur résultat et volet de détails, la liste classique étroite des applications, ou la recherche du Windows en cours (Win+S). Dans le thème Windows 10 RTM, le premier choix ouvre à la place le volet de recherche de cette version : un volet étroit au-dessus de Démarrer et de la zone, avec Mes documents et Web sous les résultats. L'affichage de la zone, de l'icône ou de rien suit le paramètre de la barre de Windows et l'entrée Rechercher du menu contextuel de la barre."
+  $description:pt: "Esta configuração escolhe o que a caixa ou o ícone de pesquisa do tema Windows 10 abre: a pesquisa do Windows 10 22H2 com guias, melhor correspondência e painel de detalhes, a lista clássica estreita de aplicativos ou a pesquisa do Windows em uso (Win+S). No tema Windows 10 RTM a primeira opção abre, em vez disso, o painel de pesquisa dessa versão: um painel estreito sobre Iniciar e a caixa, com Minhas coisas e Web abaixo dos resultados. Se a barra mostra a caixa, o ícone ou nada depende da configuração da barra do Windows e da entrada Pesquisar do menu de contexto da barra."
   $options:
-  - "22h2": "Windows 10 22H2"
+  - "22h2": "Windows 10 (22H2, or 1507 in the RTM skin)"
   - "classic": "Classic"
   - "windows": "Search of Windows (Win+S)"
   $options:it:
-  - "22h2": "Windows 10 22H2"
+  - "22h2": "Windows 10 (22H2, oppure 1507 nella skin RTM)"
   - "classic": "Classica"
   - "windows": "Ricerca di Windows (Win+S)"
   $options:es:
-  - "22h2": "Windows 10 22H2"
+  - "22h2": "Windows 10 (22H2, o 1507 en el estilo RTM)"
   - "classic": "Clásica"
   - "windows": "Búsqueda de Windows (Win+S)"
   $options:fr:
-  - "22h2": "Windows 10 22H2"
+  - "22h2": "Windows 10 (22H2, ou 1507 dans le thème RTM)"
   - "classic": "Classique"
   - "windows": "Recherche de Windows (Win+S)"
   $options:pt:
-  - "22h2": "Windows 10 22H2"
+  - "22h2": "Windows 10 (22H2, ou 1507 no tema RTM)"
   - "classic": "Clássica"
   - "windows": "Pesquisa do Windows (Win+S)"
 - buttonWidthMode: "native"
@@ -1076,6 +1095,16 @@ static const UiTranslation kUiTranslations[] = {
      L"Afficher les icônes cachées", L"Mostrar ícones ocultos"},
     {L"Type here to search", L"Escribe aquí para buscar",
      L"Taper ici pour rechercher", L"Digite aqui para pesquisar"},
+    {L"Search the web and Windows", L"Buscar en la web y en Windows",
+     L"Rechercher sur le web et dans Windows",
+     L"Pesquisar na Web e no Windows"},
+    {L"Start typing to search for apps, documents and the web",
+     L"Empieza a escribir para buscar aplicaciones, documentos y en la web",
+     L"Commencez à taper pour rechercher des applications, des documents et "
+     L"sur le web",
+     L"Comece a digitar para pesquisar aplicativos, documentos e na Web"},
+    {L"My stuff", L"Mis cosas", L"Mes documents", L"Minhas coisas"},
+    {L"Home", L"Inicio", L"Accueil", L"Página inicial"},
     {L"Date and time settings", L"Configuración de fecha y hora",
      L"Paramètres de date et d'heure", L"Configurações de data e hora"},
     {L"Speakers", L"Altavoces", L"Haut-parleurs", L"Alto-falantes"},
@@ -1128,6 +1157,7 @@ static const UiTranslation kUiTranslations[] = {
      L"Principais aplicativos"},
     {L"Recent", L"Recientes", L"Récents", L"Recentes"},
     {L"No results", L"Sin resultados", L"Aucun résultat", L"Nenhum resultado"},
+    {L"Settings", L"Configuración", L"Paramètres", L"Configurações"},
     {L"See web results", L"Ver resultados web", L"Voir les résultats web",
      L"Ver resultados da Web"},
     {L" - See web results", L" - Ver resultados web",
@@ -3030,18 +3060,24 @@ static constexpr bool T81IsWin7Skin(int skin) {
 static constexpr bool T81IsWin7BetaBar(int skin) {
     return skin == 5 || skin == 9;
 }
+// Windows 10 (10) and Windows 10 RTM (11) are one skin; 11 only changes what
+// the first release of 2015 (version 1507, build 10240) showed differently.
 static constexpr bool T81IsWin10Skin(int skin) {
-    return skin == 10;
+    return skin == 10 || skin == 11;
+}
+static constexpr bool T81IsWin10Rtm(int skin) {
+    return skin == 11;
 }
 static constexpr bool T81SkinHasTrackedStartButton(int skin) {
     return (T81IsWin7Skin(skin) && skin != 8) || skin == 2 || skin == 4 ||
-           skin == 7 || skin == 10;
+           skin == 7 || T81IsWin10Skin(skin);
 }
 // Skins whose original taskbar blurred what lies behind it: the Aero ones and
 // Windows 10 (with transparency effects on). Aero Basic is excluded by the
-// callers.
+// callers. The bar of Windows 10 RTM did not blur: here it is opaque until the
+// opacity setting is changed, and from then on it is treated like Windows 10.
 static constexpr bool T81SkinWantsLiveBlur(int skin) {
-    return T81IsWin7Skin(skin) || skin == 2 || skin == 10;
+    return T81IsWin7Skin(skin) || skin == 2 || T81IsWin10Skin(skin);
 }
 static constexpr UINT WM_T81_START_STATE = WM_APP + 354;
 static constexpr UINT_PTR TIMER_T81_START_RECONCILE = 57;
@@ -3443,6 +3479,7 @@ void LoadSettings() {
                    : skin == L"win8"             ? 3
                    : skin == L"win81"            ? 4
                    : skin == L"win10"            ? 10
+                   : skin == L"win10rtm"         ? 11
                                                  : 0;
         taskbarSkin.store(mode);
         if (mode) {
@@ -11079,11 +11116,17 @@ static DWORD T81W10RegRead(const wchar_t* key,
 }
 static T81W10System gW10System;
 static ULONGLONG gW10SystemAt = 0;
+static int gW10SystemSkin = -1;
 static const T81W10System& T81W10Sys() {
     ULONGLONG now = GetTickCount64();
-    if (!gW10SystemAt || now - gW10SystemAt >= 1000) {
+    const int skin = taskbarSkin.load();
+    if (!gW10SystemAt || now - gW10SystemAt >= 1000 || gW10SystemSkin != skin) {
+        gW10SystemSkin = skin;
         T81W10System v;
+        // Windows 10 1507 had no light mode for its bar: that skin is dark
+        // whatever Windows says.
         v.lightSystem =
+            !T81IsWin10Rtm(skin) &&
             T81W10RegRead(kW10KeyPersonalize, L"SystemUsesLightTheme", 0) != 0;
         v.lightApps =
             T81W10RegRead(kW10KeyPersonalize, L"AppsUseLightTheme", 1) != 0;
@@ -12135,6 +12178,9 @@ static constexpr int kWin10StartLogical = 48, kWin10SlotLogical = 48,
                      kWin10SearchBoxLogical = 344, kWin10TaskPitchLogical = 49,
                      kWin10ActionLogical = 40, kWin10ActionGapLogical = 8,
                      kWin10DesktopLogical = 5, kWin10TaskLeadLogical = 2;
+// Windows 10 1507 (measured on a picture of July 2015): Action Center is the
+// last icon of the notification area, 24 wide, and the clock follows it.
+static constexpr int kWin10RtmActionLogical = 24;
 static bool T81WidthOverridden() {
     return buttonWidthMode.load() == 1;
 }
@@ -12592,12 +12638,18 @@ static Layout TaskAreaLayout(int w, int h, int& avail) {
                                  : win10 ? kWin10DesktopLogical
                                          : 8));
     // Windows 10: Action Center stands between the clock and Show desktop.
+    // Windows 10 1507 had it on the other side of the clock, after the last
+    // notification icon: `inner` is that cell, `outer` the one of the later
+    // releases.
+    const bool rtm = T81IsWin10Rtm(taskbarSkin.load());
     int action =
         win10 && !s->preservingTray && s->privateActive &&
                 win10ActionCenterButton.load()
             ? std::min(std::max(0, w - start - desk),
-                       Px(kWin10ActionLogical + kWin10ActionGapLogical))
+                       Px(rtm ? kWin10RtmActionLogical
+                              : kWin10ActionLogical + kWin10ActionGapLogical))
             : 0;
+    const int inner = rtm ? action : 0, outer = action - inner;
     int desiredClock = win10 && s->clockWidthPx > 0
                            ? s->clockWidthPx
                            : std::max(Px(kClockLogical), s->clockWidthPx);
@@ -12614,11 +12666,11 @@ static Layout TaskAreaLayout(int w, int h, int& avail) {
                startHotCorner.load() ? std::min(w, std::max(1, Px(2))) : start,
                h};
     L.desktop = {w - desk, 0, w, h};
-    if (action > 0)
-        L.action = {
-            w - desk - action, 0,
-            w - desk - action + std::min(action, Px(kWin10ActionLogical)), h};
-    L.clock = {w - desk - action - clock, 0, w - desk - action, h};
+    if (outer > 0)
+        L.action = {w - desk - outer, 0,
+                    w - desk - outer + std::min(outer, Px(kWin10ActionLogical)),
+                    h};
+    L.clock = {w - desk - outer - clock, 0, w - desk - outer, h};
     // 8148 only: leave a small visual gap after Start. L.first is the
     // shared origin for painting, hit testing, thumbnails and drag/drop.
     L.first =
@@ -12634,7 +12686,8 @@ static Layout TaskAreaLayout(int w, int h, int& avail) {
                      : mode == 1 ? Px(kWin10SlotLogical)
                                  : 0;
         int taskView = T81W10Sys().taskView ? Px(kWin10SlotLogical) : 0;
-        int room = (int)L.clock.left - language - PrivateTrayWidth() - start;
+        int room =
+            (int)L.clock.left - language - inner - PrivateTrayWidth() - start;
         int pitch = Px(kWin10TaskPitchLogical);
         if (mode == 2 && room - search - taskView < 3 * pitch)
             search = Px(kWin10SlotLogical);
@@ -12647,7 +12700,7 @@ static Layout TaskAreaLayout(int w, int h, int& avail) {
         L.first = lead;
     }
     int tw = std::min(PrivateTrayWidth(),
-                      std::max(0, (int)L.clock.left - language - lead));
+                      std::max(0, (int)L.clock.left - language - inner - lead));
     int bandRight;
     if (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 7) {
         // Win7: independent language cell on the task side of the tray.
@@ -12656,7 +12709,9 @@ static Layout TaskAreaLayout(int w, int h, int& avail) {
         bandRight = L.language.left;
     } else {
         L.language = {L.clock.left - language, 0, L.clock.left, h};
-        L.tray = {L.language.left - tw, 0, L.language.left, h};
+        if (inner > 0)
+            L.action = {L.language.left - inner, 0, L.language.left, h};
+        L.tray = {L.language.left - inner - tw, 0, L.language.left - inner, h};
         bandRight = L.tray.left;
     }
     // Bands are our own compact implementations, not the Explorer deskband.
@@ -15928,6 +15983,14 @@ static Color T81Win10AccentLight() {
     cached = result.GetValue();
     return result;
 }
+// What an empty search box says: Windows 10 1507 named the web first.
+static const wchar_t* T81Win10SearchPrompt() {
+    return T81IsWin10Rtm(taskbarSkin.load())
+               ? Tr(L"Cerca sul Web e in Windows",
+                    L"Search the web and Windows")
+               : Tr(L"Scrivi qui per eseguire la ricerca",
+                    L"Type here to search");
+}
 // The white box goes with light apps and with the light Windows mode, the dark
 // one with dark apps on a dark bar, as in Windows 10.
 static bool T81Win10LightSearch() {
@@ -16113,8 +16176,70 @@ static void T81Win10Magnifier(Graphics& g,
         ring, T81Win10Stroke(x, y, unit, 6.96f, 9.04f, 0.3f, 15.7f, 0.36f)};
     T81Win10FillShapes(g, shapes, color);
 }
+// The glyphs of Windows 10 1507 are outlines. This pen gives every line the
+// same whole thickness and rounds every edge once, so that the two sides of a
+// line cannot round apart: with T81Win10AddBars some lines were 2 px and the
+// others 1 px at 125 %. At 100 % both give the same pixels.
+struct T81Win10RtmPen {
+    std::vector<T81Win10Shape>& shapes;
+    float x, y, unit, line;
+    T81Win10RtmPen(std::vector<T81Win10Shape>& shapes,
+                   float x,
+                   float y,
+                   float unit)
+        : shapes(shapes),
+          x(x),
+          y(y),
+          unit(unit),
+          line(std::max(1.f, std::floor(unit + 0.5f))) {}
+    float AtX(float value) const { return std::floor(x + value * unit + 0.5f); }
+    float AtY(float value) const { return std::floor(y + value * unit + 0.5f); }
+    // A bar between device coordinates.
+    void Bar(float left, float top, float right, float bottom) const {
+        if (right > left && bottom > top)
+            shapes.push_back(T81Win10Quad({left, top}, {right, top},
+                                          {right, bottom}, {left, bottom}));
+    }
+    // The outline of a rectangle of the 16 px square, or some of its sides:
+    // 1 left, 2 top, 4 right, 8 bottom. The sides do not overlap.
+    void Frame(float left,
+               float top,
+               float right,
+               float bottom,
+               int sides) const {
+        const float l = AtX(left), t = AtY(top), r = AtX(right),
+                    b = AtY(bottom);
+        if (sides & 2)
+            Bar(l, t, r, t + line);
+        if (sides & 8)
+            Bar(l, b - line, r, b);
+        if (sides & 1)
+            Bar(l, t + line, l + line, b - line);
+        if (sides & 4)
+            Bar(r - line, t + line, r, b - line);
+    }
+    // Three lines one under the other, between the device coordinates left
+    // and right (the last one ends at lastRight). The first is at `first` of
+    // the 16 px square and the others are `pitch` apart: the middle line
+    // stands where it scales to and the others a whole pitch from it, so that
+    // the two spaces between them are equal at every scale.
+    void Lines(float left,
+               float right,
+               float lastRight,
+               float first,
+               float pitch) const {
+        const float step = std::floor(pitch * unit + 0.5f),
+                    middle = AtY(0) + std::floor((first + pitch + 0.5f) * unit -
+                                                 line / 2 + 0.5f);
+        for (int i = 0; i < 3; ++i) {
+            const float top = middle + (float)(i - 1) * step;
+            Bar(left, top, i == 2 ? lastRight : right, top + line);
+        }
+    }
+};
 // Task View as Windows 10 drew it from version 1803 on: a window between the
-// edges of two others, and the timeline mark on the right.
+// edges of two others, and the timeline mark on the right. The RTM skin has
+// the picture of the first release.
 static void T81Win10TaskViewGlyph(Graphics& g,
                                   float x,
                                   float y,
@@ -16126,7 +16251,17 @@ static void T81Win10TaskViewGlyph(Graphics& g,
         {0, 13, 1, 15},    {10, 13, 11, 15}, {14, 0, 15, 2.8f}, {13, 4, 16, 7},
         {14, 8.2f, 15, 15}};
     std::vector<T81Win10Shape> shapes;
-    T81Win10AddBars(shapes, kBars, std::size(kBars), x, y, unit);
+    if (T81IsWin10Rtm(taskbarSkin.load())) {
+        // Windows 10 1507: a window in front of two others, 20 x 14 px,
+        // measured on a picture of build 10240. It is centred on the same
+        // 16 px square; the windows behind show three sides each.
+        const T81Win10RtmPen pen(shapes, x, y, unit);
+        pen.Frame(2, 0, 14, 14, 15);
+        pen.Frame(-2, 2, 2, 12, 1 | 2 | 8);
+        pen.Frame(14, 2, 18, 12, 2 | 4 | 8);
+    } else {
+        T81Win10AddBars(shapes, kBars, std::size(kBars), x, y, unit);
+    }
     T81Win10FillShapes(g, shapes, color);
 }
 // Action Center: a note with a pointed tail under its lower edge, from
@@ -16142,6 +16277,27 @@ static void T81Win10ActionGlyph(Graphics& g,
                                          {1, 12, 5.6f, 13},
                                          {10.4f, 12, 15, 13}};
     std::vector<T81Win10Shape> shapes;
+    if (T81IsWin10Rtm(taskbarSkin.load())) {
+        // Windows 10 1507: a taller note, 16 x 14, with three lines of text
+        // at 3, 6 and 9, the last one shorter, and a tail of 2 px under the
+        // middle of its lower edge. Measured on a picture of July 2015.
+        const T81Win10RtmPen pen(shapes, x, y, unit);
+        const float bottom = pen.AtY(14), line = pen.line;
+        pen.Frame(0, 0, 16, 14, 1 | 2 | 4);
+        pen.Bar(pen.AtX(0), bottom - line, x + 6.7f * unit, bottom);
+        pen.Bar(x + 9.3f * unit, bottom - line, pen.AtX(16), bottom);
+        // The lines of text stand 2 px from the outline on both sides.
+        const float inset = line + std::floor(2 * unit + 0.5f);
+        pen.Lines(pen.AtX(0) + inset, pen.AtX(16) - inset, pen.AtX(10), 3, 3);
+        // The tail hangs on the lower edge wherever that was rounded to.
+        const float origin = bottom - 14 * unit;
+        shapes.push_back(
+            T81Win10Stroke(x, origin, unit, 6.4f, 13.4f, 8.0f, 15.6f, 0.36f));
+        shapes.push_back(
+            T81Win10Stroke(x, origin, unit, 9.6f, 13.4f, 8.0f, 15.6f, 0.36f));
+        T81Win10FillShapes(g, shapes, color);
+        return;
+    }
     T81Win10AddBars(shapes, kBars, std::size(kBars), x, y, unit);
     shapes.push_back(
         T81Win10Stroke(x, y, unit, 5.3f, 12.4f, 8.0f, 15.7f, 0.36f));
@@ -16199,29 +16355,47 @@ static void T81Win10PaintSearch(Graphics& g, const RECT& cell, int state) {
         return;
     }
     const bool light = T81Win10LightSearch(), lightBar = T81W10Light();
-    const int edge = std::max(1, Px(1));
+    // Windows 10 1507 (measured on pictures of build 10240): a field as tall
+    // as the bar and a quarter lighter than it, without a line around it and
+    // without the magnifier, the prompt in a dimmed white 12 px from its edge.
+    // While one types in it, it is #F3F3F3 with dark text.
+    const bool rtm = T81IsWin10Rtm(taskbarSkin.load()),
+               rtmTyping = rtm && T81Win10SearchInBar();
+    const int edge = rtm ? 0 : std::max(1, Px(1));
     // On the light bar the box is white inside a grey line.
-    Color fill = lightBar ? Color(255, 255, 255, 255)
-                 : light  ? (state ? Color(255, 255, 255, 255)
-                                   : Color(255, 242, 242, 242))
-                          : Color(state ? 72 : 51, 255, 255, 255);
+    Color fill = rtm ? (rtmTyping ? Color(255, 243, 243, 243)
+                                  : Color(state ? 84 : 64, 255, 255, 255))
+                 : lightBar ? Color(255, 255, 255, 255)
+                 : light    ? (state ? Color(255, 255, 255, 255)
+                                     : Color(255, 242, 242, 242))
+                            : Color(state ? 72 : 51, 255, 255, 255);
     Color border = lightBar ? (state ? Color(255, 102, 102, 102)
                                      : Color(255, 153, 153, 153))
                    : light  ? Color(255, 195, 195, 195)
                             : Color(92, 255, 255, 255);
-    Color ink = light ? Color(255, 0, 0, 0) : Color(255, 255, 255, 255);
-    Color prompt = light ? Color(255, 43, 43, 43) : Color(255, 255, 255, 255);
+    Color ink =
+        rtm     ? (rtmTyping ? Color(255, 0, 0, 0) : Color(255, 255, 255, 255))
+        : light ? Color(255, 0, 0, 0)
+                : Color(255, 255, 255, 255);
+    Color prompt =
+        rtm ? (rtmTyping ? Color(255, 96, 96, 96) : Color(153, 255, 255, 255))
+        : light ? Color(255, 43, 43, 43)
+                : Color(255, 255, 255, 255);
     SolidBrush fillBrush(fill), borderBrush(border);
     g.FillRectangle(&fillBrush, (INT)cell.left + edge, (INT)cell.top + edge,
                     width - 2 * edge, height - 2 * edge);
-    g.FillRectangle(&borderBrush, (INT)cell.left, (INT)cell.top, width, edge);
-    g.FillRectangle(&borderBrush, (INT)cell.left, (INT)cell.bottom - edge,
-                    width, edge);
-    g.FillRectangle(&borderBrush, (INT)cell.left, (INT)cell.top + edge, edge,
-                    height - 2 * edge);
-    g.FillRectangle(&borderBrush, (INT)cell.right - edge, (INT)cell.top + edge,
-                    edge, height - 2 * edge);
-    T81Win10Magnifier(g, (REAL)(cell.left + Px(12)), (REAL)glyphTop, unit, ink);
+    if (!rtm) {
+        g.FillRectangle(&borderBrush, (INT)cell.left, (INT)cell.top, width,
+                        edge);
+        g.FillRectangle(&borderBrush, (INT)cell.left, (INT)cell.bottom - edge,
+                        width, edge);
+        g.FillRectangle(&borderBrush, (INT)cell.left, (INT)cell.top + edge,
+                        edge, height - 2 * edge);
+        g.FillRectangle(&borderBrush, (INT)cell.right - edge,
+                        (INT)cell.top + edge, edge, height - 2 * edge);
+        T81Win10Magnifier(g, (REAL)(cell.left + Px(12)), (REAL)glyphTop, unit,
+                          ink);
+    }
     FontFamily segoe(L"Segoe UI");
     const FontFamily* family =
         segoe.GetLastStatus() == Ok && segoe.IsAvailable()
@@ -16249,14 +16423,11 @@ static void T81Win10PaintSearch(Graphics& g, const RECT& cell, int state) {
     // While the search pane is open the box holds the text typed so far.
     const bool typing = T81Win10SearchInBar(),
                typed = typing && !gW10Fly.query.empty();
-    const PointF origin(cell.left + 40.0f * unit,
+    const PointF origin(cell.left + (rtm ? 12.0f : 40.0f) * unit,
                         band + std::floor(26.0f * unit + 0.5f) - ascent);
     SolidBrush typedBrush(ink);
-    g.DrawString(
-        typed
-            ? gW10Fly.query.c_str()
-            : Tr(L"Scrivi qui per eseguire la ricerca", L"Type here to search"),
-        -1, &font, origin, &format, typed ? &typedBrush : &promptBrush);
+    g.DrawString(typed ? gW10Fly.query.c_str() : T81Win10SearchPrompt(), -1,
+                 &font, origin, &format, typed ? &typedBrush : &promptBrush);
     if (typing && gW10Fly.caret) {
         RectF box;
         if (typed) {
@@ -17454,22 +17625,15 @@ static void ResizePrivateOverflow() {
         InvalidateRect(s->overflowPanel, nullptr, FALSE);
     }
 }
-static void PaintPrivateOverflow(HWND h) {
-    ScopedPaintDC paint(h);
-    HDC dc = paint.dc;
-    if (!dc)
-        return;
-    RECT r{};
-    GetClientRect(h, &r);
-    std::unique_ptr<std::remove_pointer<HDC>::type, DeleteMemDC> memGuard(
-        CreateCompatibleDC(dc));
-    HDC mem = memGuard.get();
-    std::unique_ptr<std::remove_pointer<HBITMAP>::type, DeleteBitmapHandle>
-        bitmapGuard(CreateCompatibleBitmap(dc, std::max(1L, r.right),
-                                           std::max(1L, r.bottom)));
-    HBITMAP bitmap = bitmapGuard.get();
-    ScopedSelection selected(mem, bitmap);
-    if (mem && bitmap && selected.old && selected.old != HGDI_ERROR) {
+// Windows 10 skins: while Windows has its transparency effects on, the panel
+// lets the desktop through like the flyouts (defined with them, further down).
+static void T81ConfigureOverflowAlpha();
+static bool T81OverflowPresentAlpha(HWND h, const RECT& r);
+// The panel as a picture. Without `panel` the colour of the Windows 10 panel
+// is left out: that drawing is made on black and on white, which gives the
+// opacity of every pixel.
+static void T81DrawOverflowPanel(HDC mem, const RECT& r, bool panel) {
+    {
         auto entries = OverflowPrivateItems();
         int rowsShown = std::min(OverflowRowsFor(entries.size()), 10);
         {
@@ -17495,7 +17659,8 @@ static void PaintPrivateOverflow(HWND h) {
             if (win10) {
                 SolidBrush dark(T81W10Light() ? Color(255, 228, 228, 228)
                                               : Color(255, 32, 32, 32));
-                g.FillRectangle(&dark, paper);
+                if (panel)
+                    g.FillRectangle(&dark, paper);
             } else if (taskbarSkin.load() == 6 || taskbarSkin.load() == 7) {
                 SolidBrush white(Color(255, 255, 255, 255));
                 g.FillRectangle(&white, paper);
@@ -17617,6 +17782,31 @@ static void PaintPrivateOverflow(HWND h) {
                 DeleteObject(edge);
             }
         }
+    }
+}
+static void PaintPrivateOverflow(HWND h) {
+    ScopedPaintDC paint(h);
+    HDC dc = paint.dc;
+    if (!dc)
+        return;
+    RECT r{};
+    GetClientRect(h, &r);
+    // A window with per-pixel opacity takes its picture as a whole. When that
+    // fails the window goes back to the plain kind and is painted again.
+    if (GetWindowLongPtrW(h, GWL_EXSTYLE) & WS_EX_LAYERED) {
+        T81OverflowPresentAlpha(h, r);
+        return;
+    }
+    std::unique_ptr<std::remove_pointer<HDC>::type, DeleteMemDC> memGuard(
+        CreateCompatibleDC(dc));
+    HDC mem = memGuard.get();
+    std::unique_ptr<std::remove_pointer<HBITMAP>::type, DeleteBitmapHandle>
+        bitmapGuard(CreateCompatibleBitmap(dc, std::max(1L, r.right),
+                                           std::max(1L, r.bottom)));
+    HBITMAP bitmap = bitmapGuard.get();
+    ScopedSelection selected(mem, bitmap);
+    if (mem && bitmap && selected.old && selected.old != HGDI_ERROR) {
+        T81DrawOverflowPanel(mem, r, true);
         BitBlt(dc, 0, 0, r.right, r.bottom, mem, 0, 0, SRCCOPY);
     }
 }
@@ -17909,6 +18099,7 @@ static void ShowPrivateOverflow(const RECT* suppliedAnchor = nullptr) {
     s->overflowScroll = 0;
     s->overflowMouseMask = ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) ? 1 : 0) |
                            ((GetAsyncKeyState(VK_RBUTTON) & 0x8000) ? 2 : 0);
+    T81ConfigureOverflowAlpha();
     SetOverflowCloak(
         true);  // hidden from DWM until it is sized, placed and painted
     ResizePrivateOverflow();
@@ -24774,6 +24965,7 @@ static void T81W10Slide(HWND hwnd, bool opening);
 static void T81W10DropFrame();
 static void T81W10ApplyAcrylic(HWND hwnd);
 static bool T81W22On();
+static bool T81W15On();
 static void T81W10FinishClose();
 static void T81W10PaintContent(HDC dc, const RECT& client);
 static Color T81W10BaseColor();
@@ -25406,6 +25598,10 @@ static SIZE T81W10FlySize(int kind) {
         case kW10FlyNetwork:
             return T81W10NetSize();
         default:
+            // 1507: Start and the search box together; the box of the bar
+            // gives the exact width when the pane is placed.
+            if (T81W15On())
+                return SIZE{Px(392), Px(f.ownBox ? 640 : 600)};
             if (T81W22On())
                 return SIZE{Px(784), Px(f.ownBox ? 640 : 600)};
             return SIZE{
@@ -25743,11 +25939,9 @@ static void T81W10PaintSearch(Graphics& g,
         T81Win10Magnifier(g, (REAL)Px(12), (REAL)(boxTop + Px(12)), u, ink);
         float end = Px(40);
         if (f.query.empty())
-            T81W10Text(g,
-                       Tr(L"Scrivi qui per eseguire la ricerca",
-                          L"Type here to search"),
-                       (float)Px(40), (float)(boxTop + Px(26)), 15 * u, 0, soft,
-                       -1, (float)(width - Px(52)));
+            T81W10Text(g, T81Win10SearchPrompt(), (float)Px(40),
+                       (float)(boxTop + Px(26)), 15 * u, 0, soft, -1,
+                       (float)(width - Px(52)));
         else
             end += T81W10Text(g, f.query.c_str(), (float)Px(40),
                               (float)(boxTop + Px(26)), 15 * u, 0, ink, -1,
@@ -25772,6 +25966,12 @@ static void T81W10PaintSearch(Graphics& g,
 static bool T81W22On() {
     return win10SearchStyle.load() == 0;
 }
+// The RTM skin shows the same results in the pane of Windows 10 1507.
+static bool T81W15On() {
+    return T81W22On() && T81IsWin10Rtm(taskbarSkin.load());
+}
+static bool gW15Mine = false;  // "My stuff": the apps and the documents only
+static bool gW15Wide = false;  // the rail shows its names
 enum { kW22App, kW22Doc, kW22Web };
 enum { kW22ActOpen, kW22ActAdmin, kW22ActLocation };
 enum {
@@ -25869,6 +26069,8 @@ static void T81W22Find() {
     if (text.empty())
         return;
     const bool all = gW22Tab == 0;
+    // "My stuff" of the 1507 pane: more apps and documents, and no web row.
+    const bool mine = gW15Mine && T81W15On();
     auto rank = [&](size_t count, auto&& name, int type, size_t limit) {
         std::vector<std::pair<int, int>> ranked;
         for (size_t i = 0; i < count; ++i) {
@@ -25888,13 +26090,19 @@ static void T81W22Find() {
         rank(
             gW10Apps.size(),
             [](size_t i) -> const std::wstring& { return gW10Apps[i].name; },
-            kW22App, all ? 5 : 12);
+            kW22App,
+            mine  ? 8
+            : all ? 5
+                  : 12);
     if (all || gW22Tab == 2)
         rank(
             gW22Docs.size(),
             [](size_t i) -> const std::wstring& { return gW22Docs[i].name; },
-            kW22Doc, all ? 3 : 12);
-    if (all || gW22Tab == 3)
+            kW22Doc,
+            mine  ? 8
+            : all ? 3
+                  : 12);
+    if ((all || gW22Tab == 3) && !mine)
         gW22Res.push_back({kW22Web, 0});
 }
 struct T81W22Frame {
@@ -26334,11 +26542,9 @@ static void T81W22Paint(Graphics& g,
         T81Win10Magnifier(g, (REAL)Px(12), (REAL)(box.top + Px(12)), u, ink);
         float end = (float)Px(40);
         if (f.query.empty())
-            T81W10Text(g,
-                       Tr(L"Scrivi qui per eseguire la ricerca",
-                          L"Type here to search"),
-                       (float)Px(40), (float)(box.top + Px(26)), 15 * u, 0,
-                       soft, -1, (float)(width - Px(52)));
+            T81W10Text(g, T81Win10SearchPrompt(), (float)Px(40),
+                       (float)(box.top + Px(26)), 15 * u, 0, soft, -1,
+                       (float)(width - Px(52)));
         else
             end += T81W10Text(g, f.query.c_str(), (float)Px(40),
                               (float)(box.top + Px(26)), 15 * u, 0, ink, -1,
@@ -26552,6 +26758,8 @@ static bool T81W22Key(WPARAM key) {
         T81W10Invalidate();
         return true;
     }
+    if (key == VK_TAB && T81W15On())
+        return true;  // the pane of 1507 has no tabs
     if (key == VK_TAB) {
         const bool back = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
         gW22Tab = (gW22Tab + (back ? 3 : 1)) % 4;
@@ -26574,6 +26782,350 @@ static bool T81W22Key(WPARAM key) {
 static void T81W10OpenSettings(const wchar_t* page);
 static RECT T81W10Client();
 static int T81W10Hit(HWND hwnd, POINT p);
+// ---- search of Windows 10 1507 (the RTM skin) -------------------------------
+// Recreated from pictures of build 10240 at 96 DPI; no code, picture or text
+// of Windows is used. The pane stands at the left edge of the screen and ends
+// where the search box of the bar ends (48 + 344 px). A 48 px dark rail holds
+// 48 px rows: the menu button, which shows the names, Home and the search
+// settings; Cortana, her notebook and her reminders are left out. The rest is
+// dark and says what is searched until something is typed. Then it is a white
+// list: the first result in a 60 px band in a light tint of the accent, 36 px
+// rows under 36 px headings, and "My stuff" and "Web" in a 48 px row at the
+// foot. "My stuff" keeps the apps and the documents only, "Web" sends the text
+// to the default browser. The results are those of the 22H2 search. The pane
+// is opaque, as its list was.
+static void T81W10Typed();
+static std::vector<std::wstring> T81W10TwoLines(Graphics& g,
+                                                const std::wstring& text,
+                                                float size,
+                                                float limit);
+enum {
+    kW15PartMenu = 70,
+    kW15PartHome,
+    kW15PartSettings,
+    kW15PartMine = 80,
+    kW15PartWeb
+};
+struct T81W15Frame {
+    RECT box, list, foot;
+};
+static T81W15Frame T81W15Layout(const RECT& client) {
+    T81W15Frame frame{};
+    const LONG rail = std::min(client.right, (LONG)Px(48));
+    LONG top = client.top, bottom = client.bottom;
+    if (gW10Fly.ownBox) {
+        // The text box of the pane lies on the side of the bar.
+        const bool below = s && !s->verticalActive && s->nativeEdge != ABE_TOP;
+        if (below) {
+            frame.box = RECT{rail, bottom - Px(40), client.right, bottom};
+            bottom -= Px(40);
+        } else {
+            frame.box = RECT{rail, top, client.right, top + Px(40)};
+            top += Px(40);
+        }
+    }
+    const LONG foot = std::max(top, bottom - (LONG)Px(48));
+    frame.list = RECT{rail, top, client.right, foot};
+    frame.foot = RECT{rail, foot, client.right, bottom};
+    return frame;
+}
+// The rail, or the rail with its names, which lies over the list.
+static int T81W15RailWidth(const RECT& client) {
+    return std::min((int)client.right, Px(gW15Wide ? 240 : 48));
+}
+// Where "Web" starts in the foot. The two parts are equal unless the name of
+// the first needs more room, as the Italian one does: the drawing measures the
+// name and leaves the place here for the pointer.
+static int gW15FootSplit = 0;
+static int T81W15FootSplit(const T81W15Frame& frame) {
+    return gW15FootSplit > frame.foot.left && gW15FootSplit < frame.foot.right
+               ? gW15FootSplit
+               : (int)(frame.foot.left + frame.foot.right) / 2;
+}
+static const wchar_t* T81W15GroupName(int type) {
+    return type == kW22App   ? Tr(L"App", L"Apps")
+           : type == kW22Doc ? Tr(L"Documenti", L"Documents")
+                             : L"Web";
+}
+static std::vector<T81W22Row> T81W15Rows(const RECT& area) {
+    std::vector<T81W22Row> rows;
+    LONG y = area.top;
+    for (size_t i = 0; i < gW22Res.size(); ++i) {
+        // The first result stands alone at the top; the others follow the
+        // heading of their kind.
+        const wchar_t* label =
+            i > 0 && (i == 1 || gW22Res[i].type != gW22Res[i - 1].type)
+                ? T81W15GroupName(gW22Res[i].type)
+                : nullptr;
+        const int height = Px(i == 0 ? 60 : 36);
+        if (y + (label ? Px(36) : 0) + height > area.bottom)
+            break;
+        if (label) {
+            rows.push_back(
+                {RECT{area.left, y, area.right, y + Px(36)}, -1, label});
+            y += Px(36);
+        }
+        rows.push_back(
+            {RECT{area.left, y, area.right, y + height}, (int)i, nullptr});
+        y += height;
+    }
+    return rows;
+}
+// The pictures of the rail: the menu is three lines; Home and Settings come
+// from the symbol font of Windows 10 and 11 and are drawn as outlines where
+// that font is missing.
+static void T81W15Glyph(Graphics& g, int kind, int x, int y, Color color) {
+    const float u = Dpi() / 96.0f;
+    std::vector<T81Win10Shape> shapes;
+    if (kind == 0) {
+        // Three lines at 3, 8 and 13, of one thickness and one pitch at
+        // every scale.
+        const T81Win10RtmPen pen(shapes, (float)x, (float)y, u);
+        pen.Lines(pen.AtX(0), pen.AtX(16), pen.AtX(16), 3, 5);
+    } else if (T81Win10Mdl2(g, kind == 1 ? L'\uE80F' : L'\uE713', x, y, Px(16),
+                            color)) {
+        return;
+    } else if (kind == 1) {
+        static constexpr float kWalls[][4] = {
+            {3, 8, 4, 15}, {12, 8, 13, 15}, {3, 14, 13, 15}};
+        T81Win10AddBars(shapes, kWalls, std::size(kWalls), (float)x, (float)y,
+                        u);
+        shapes.push_back(
+            T81Win10Stroke((float)x, (float)y, u, 0.6f, 8.4f, 8, 1, 0.5f));
+        shapes.push_back(
+            T81Win10Stroke((float)x, (float)y, u, 8, 1, 15.4f, 8.4f, 0.5f));
+    } else {
+        T81Win10Shape ring(2), hub(2);
+        auto at = [&](float radius, float angle) {
+            return PointF(x + (8 + radius * std::cos(angle)) * u,
+                          y + (8 + radius * std::sin(angle)) * u);
+        };
+        for (int i = 0; i < 48; i++) {
+            const float angle = (float)i * 6.2831853f / 48.f;
+            ring[0].push_back(at(5.6f, angle));
+            ring[1].push_back(at(4.4f, angle));
+            hub[0].push_back(at(2.6f, angle));
+            hub[1].push_back(at(1.6f, angle));
+        }
+        shapes.push_back(ring);
+        shapes.push_back(hub);
+        for (int i = 0; i < 8; i++) {
+            const float angle = (float)i * 6.2831853f / 8.f;
+            shapes.push_back(
+                T81Win10Quad(at(5.2f, angle - 0.24f), at(7.6f, angle - 0.17f),
+                             at(7.6f, angle + 0.17f), at(5.2f, angle + 0.24f)));
+        }
+    }
+    T81Win10FillShapes(g, shapes, color);
+}
+static void T81W15Paint(Graphics& g,
+                        const RECT& client,
+                        std::vector<T81W10IconDraw>* icons) {
+    const T81W10Fly& f = gW10Fly;
+    const float u = Dpi() / 96.0f;
+    const T81W15Frame frame = T81W15Layout(client);
+    const bool tinted = T81W10Sys().accentBar;
+    const Color white(255, 255, 255, 255), ink(255, 0, 0, 0),
+        soft(255, 96, 96, 96),
+        accent = T81W10Accent(3), pick = Mix(white, accent, 27),
+        // The rail goes with the bar: black, or a dark shade of the accent.
+        railTone = tinted ? T81W10Accent(5) : Color(255, 16, 16, 16),
+        homeTone = tinted ? T81W10Accent(6) : Color(255, 31, 31, 31);
+    const int left = frame.list.left, width = frame.list.right - left,
+              one = std::max(1, Px(1));
+    if (T81W10Query().empty()) {
+        // Nothing typed: the dark pane says what it searches.
+        SolidBrush dark(homeTone);
+        g.FillRectangle(&dark, left, (INT)frame.list.top, width,
+                        (INT)(frame.foot.bottom - frame.list.top));
+        const auto lines = T81W10TwoLines(
+            g,
+            Tr(L"Inizia a digitare per cercare app, documenti e sul Web",
+               L"Start typing to search for apps, documents and the web"),
+            15 * u, (float)(width - Px(32)));
+        for (size_t i = 0; i < lines.size(); ++i)
+            T81W10Text(g, lines[i].c_str(), (float)(left + Px(16)),
+                       (float)(frame.list.top + Px(40) + (int)i * Px(20)),
+                       15 * u, 0, white, -1, (float)(width - Px(32)));
+    } else {
+        SolidBrush paper(white);
+        g.FillRectangle(&paper, left, (INT)frame.list.top, width,
+                        (INT)(frame.foot.bottom - frame.list.top));
+        auto saved = g.Save();
+        g.SetClip(Rect(left, (INT)frame.list.top, width,
+                       (INT)(frame.list.bottom - frame.list.top)));
+        const auto rows = T81W15Rows(frame.list);
+        for (const auto& row : rows) {
+            if (row.res < 0) {
+                T81W10Text(g, row.label, (float)(left + Px(12)),
+                           (float)(row.rect.top + Px(24)), 13 * u, 2, ink);
+                continue;
+            }
+            const T81W22Res& res = gW22Res[row.res];
+            const bool best = row.res == 0, chosen = row.res == f.selected,
+                       hot = f.hot == kW10PartRow + row.res;
+            if (chosen || hot) {
+                SolidBrush fill(chosen ? pick : Color(26, 0, 0, 0));
+                g.FillRectangle(&fill, left, (INT)row.rect.top, width,
+                                (INT)(row.rect.bottom - row.rect.top));
+            }
+            const int size = Px(best ? 32 : 16), iconLeft = left + Px(12),
+                      iconTop = (row.rect.top + row.rect.bottom - size) / 2;
+            if (HICON icon = T81W22ResIcon(res)) {
+                // The pictures are drawn after everything else: none where
+                // the names of the rail lie over the list.
+                if (iconLeft >= T81W15RailWidth(client))
+                    icons->push_back({icon, iconLeft, iconTop, size});
+            } else {
+                T81Win10Magnifier(g, (REAL)(iconLeft + (size - Px(16)) / 2),
+                                  (REAL)(iconTop + (size - Px(16)) / 2), u,
+                                  ink);
+            }
+            const float textLeft = (float)(left + Px(best ? 58 : 42)),
+                        room = (float)(frame.list.right - Px(12)) - textLeft;
+            const std::wstring name = T81W22ResName(res);
+            if (best) {
+                T81W10Text(g, name.c_str(), textLeft,
+                           (float)(row.rect.top + Px(26)), 15 * u, 0, ink, -1,
+                           room);
+                T81W10Text(
+                    g,
+                    res.type == kW22App ? L"App"
+                    : res.type == kW22Doc
+                        ? Tr(L"Documento", L"Document")
+                        : Tr(L"Visualizza risultati Web", L"See web results"),
+                    textLeft, (float)(row.rect.top + Px(45)), 12 * u, 0, soft,
+                    -1, room);
+            } else {
+                T81W10Text(g, name.c_str(), textLeft,
+                           (float)(row.rect.top + Px(23)), 15 * u, 0, ink, -1,
+                           room);
+            }
+        }
+        if (rows.empty())
+            T81W10Text(g, Tr(L"Nessun risultato", L"No results"),
+                       (float)(left + Px(12)), (float)(frame.list.top + Px(28)),
+                       13 * u, 0, soft);
+        g.Restore(saved);
+        // "My stuff" and "Web" share the foot.
+        SolidBrush rule(Color(255, 234, 234, 234));
+        g.FillRectangle(&rule, left, (INT)frame.foot.top, width, one);
+        const wchar_t* mine = Tr(L"Contenuti personali", L"My stuff");
+        const int need = left + Px(42) + Px(12) +
+                         (int)std::ceil(T81W10Text(g, mine, 0, 0, 15 * u, 0,
+                                                   ink, -1, 0, false));
+        const int half = std::max(
+            left + width / 2, std::min(need, (int)frame.foot.right - Px(96)));
+        gW15FootSplit = half;
+        for (int i = 0; i < 2; ++i) {
+            const int part = i ? kW15PartWeb : kW15PartMine;
+            const RECT r{i ? half : left, frame.foot.top + one,
+                         i ? frame.foot.right : half, frame.foot.bottom};
+            const bool on = !i && gW15Mine;
+            if (on || f.hot == part) {
+                SolidBrush fill(on || f.down == part
+                                    ? Color(255, 204, 204, 204)
+                                    : Color(255, 230, 230, 230));
+                g.FillRectangle(&fill, (INT)r.left, (INT)r.top,
+                                (INT)(r.right - r.left),
+                                (INT)(r.bottom - r.top));
+            }
+            const int glyphTop = (r.top + r.bottom - Px(16)) / 2;
+            if (i)
+                T81Win10Magnifier(g, (REAL)(r.left + Px(12)), (REAL)glyphTop, u,
+                                  ink);
+            else
+                T81Win10Logo(g, (REAL)(r.left + Px(12)), (REAL)glyphTop, u,
+                             accent);
+            T81W10Text(g, i ? L"Web" : mine, (float)(r.left + Px(42)),
+                       (float)((r.top + r.bottom) / 2 + Px(5)), 15 * u, 0, ink,
+                       -1, (float)(r.right - r.left - Px(50)));
+        }
+    }
+    if (f.ownBox) {
+        const RECT& box = frame.box;
+        SolidBrush field(Color(255, 243, 243, 243));
+        g.FillRectangle(&field, (INT)box.left, (INT)box.top,
+                        (INT)(box.right - box.left),
+                        (INT)(box.bottom - box.top));
+        const float room = (float)(box.right - box.left - Px(24));
+        float end = (float)(box.left + Px(12));
+        if (f.query.empty())
+            T81W10Text(g, T81Win10SearchPrompt(), end,
+                       (float)(box.top + Px(26)), 15 * u, 0, soft, -1, room);
+        else
+            end +=
+                T81W10Text(g, f.query.c_str(), end, (float)(box.top + Px(26)),
+                           15 * u, 0, ink, -1, room);
+        if (f.caret) {
+            SolidBrush caret(ink);
+            g.FillRectangle(&caret, (INT)std::lround(end),
+                            (INT)box.top + Px(11), one, Px(19));
+        }
+    }
+    // The rail last: with its names it lies over the list.
+    const int rail = T81W15RailWidth(client);
+    SolidBrush railBrush(railTone);
+    g.FillRectangle(&railBrush, 0, 0, rail, (INT)client.bottom);
+    for (int i = 0; i < 3; ++i) {
+        const int top = i * Px(48), part = kW15PartMenu + i;
+        if (i == 1) {
+            SolidBrush chosen(T81W10Accent(4));
+            g.FillRectangle(&chosen, 0, top, rail, Px(48));
+        }
+        if (f.hot == part) {
+            SolidBrush hot(Color(f.down == part ? 51 : 26, 255, 255, 255));
+            g.FillRectangle(&hot, 0, top, rail, Px(48));
+        }
+        T81W15Glyph(g, i, Px(16), top + Px(16), white);
+        if (gW15Wide && i)
+            T81W10Text(g,
+                       i == 1 ? Tr(L"Home", L"Home")
+                              : Tr(L"Impostazioni", L"Settings"),
+                       (float)Px(48), (float)(top + Px(29)), 15 * u, 0, white,
+                       -1, (float)(rail - Px(60)));
+    }
+}
+static int T81W15Hit(const RECT& client, POINT p) {
+    const T81W15Frame frame = T81W15Layout(client);
+    if (p.x < T81W15RailWidth(client)) {
+        const int row = p.y / std::max(1, Px(48));
+        return row >= 0 && row < 3 ? kW15PartMenu + row : 0;
+    }
+    if (T81W10Query().empty())
+        return 0;
+    if (PtInRect(&frame.foot, p))
+        return p.x < T81W15FootSplit(frame) ? kW15PartMine : kW15PartWeb;
+    if (PtInRect(&frame.list, p))
+        for (const auto& row : T81W15Rows(frame.list))
+            if (row.res >= 0 && PtInRect(&row.rect, p))
+                return kW10PartRow + row.res;
+    return 0;
+}
+static void T81W15Click(int part) {
+    T81W10Fly& f = gW10Fly;
+    // The names of the rail go away with every press but the one that asks
+    // for them.
+    gW15Wide = part == kW15PartMenu && !gW15Wide;
+    if (part == kW15PartHome) {
+        gW15Mine = false;
+        f.query.clear();
+        T81W10Typed();
+    } else if (part == kW15PartSettings) {
+        T81W10OpenSettings(L"ms-settings:search-permissions");
+    } else if (part == kW15PartMine) {
+        gW15Mine = !gW15Mine;
+        T81W22Find();
+        T81W10Invalidate();
+    } else if (part == kW15PartWeb) {
+        T81W22Run({kW22Web, 0}, kW22ActOpen);
+    } else if (part >= kW10PartRow &&
+               (size_t)(part - kW10PartRow) < gW22Res.size()) {
+        T81W22Run(gW22Res[part - kW10PartRow], kW22ActOpen);
+    } else {
+        T81W10Invalidate();
+    }
+}
 // ---- Windows 10 flyouts: the network flyout ---------------------------------
 // Recreated from Windows 10 screenshots at 96 DPI; no code, picture or text of
 // the flyout of Windows is used. The flyout is 360 px wide and at most 80 % of
@@ -27825,6 +28377,9 @@ static void T81W10NetTick() {
         T81W10NetRequest(kW10NetRead, n.ticks % 12 == 0);
 }
 static Color T81W10BaseColor() {
+    if (gW10Fly.kind == kW10FlySearch && T81W15On())
+        return T81W10Query().empty() ? Color(255, 31, 31, 31)
+                                     : Color(255, 255, 255, 255);
     if (gW10Fly.kind == kW10FlySearch && T81W22On())
         return T81W10Sys().lightSystem ? Color(255, 230, 230, 230)
                                        : Color(255, 46, 46, 46);
@@ -27862,7 +28417,9 @@ static void T81W10PaintContent(HDC dc, const RECT& client) {
                 break;
             case kW10FlySearch:
                 search = true;
-                if (T81W22On())
+                if (T81W15On())
+                    T81W15Paint(g, client, &icons);
+                else if (T81W22On())
                     T81W22Paint(g, client, &icons);
                 else
                     T81W10PaintSearch(g, client, &icons);
@@ -27971,6 +28528,8 @@ static int T81W10Hit(HWND hwnd, POINT p) {
             break;
         }
         case kW10FlySearch: {
+            if (T81W15On())
+                return T81W15Hit(c, p);
             if (T81W22On())
                 return T81W22Hit(c, p);
             int boxTop = 0, top = 0, bottom = 0;
@@ -28046,6 +28605,10 @@ static void T81W10Click(int part) {
                 T81W10ChooseLanguage((size_t)(part - kW10PartRow));
             break;
         case kW10FlySearch:
+            if (T81W15On()) {
+                T81W15Click(part);
+                break;
+            }
             if (T81W22On()) {
                 T81W22Click(part);
                 break;
@@ -28313,6 +28876,8 @@ static LRESULT CALLBACK T81W10FlyProc(HWND hwnd,
             case WM_LBUTTONDOWN: {
                 POINT p{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
                 f.down = T81W10Hit(hwnd, p);
+                if (!f.down && f.kind == kW10FlySearch)
+                    gW15Wide = false;  // a press beside the names of the rail
                 if (f.down == kW10PartSlider) {
                     f.drag = true;
                     SetCapture(hwnd);
@@ -28521,6 +29086,8 @@ static bool T81W10SearchBoxRect(RECT* box) {
                         f.rect.bottom}
                  : RECT{f.rect.left, f.rect.top, f.rect.right,
                         f.rect.top + Px(40)};
+    if (T81W15On())
+        box->left = std::min(box->right, box->left + (LONG)Px(48));
     return true;
 }
 static void T81W10HidePointerWhileTyping() {
@@ -28642,6 +29209,9 @@ static bool T81W10PlaceFlyout(int kind, RECT* place) {
                above = !vertical && s->nativeEdge == ABE_TOP;
     const RECT& m = monitor.rcMonitor;
     SIZE size = T81W10FlySize(kind);
+    // The pane of 1507 ends where the search box of the bar ends.
+    if (kind == kW10FlySearch && T81W15On() && !f.ownBox && !vertical)
+        size.cx = std::max((LONG)Px(300), f.anchor.right - m.left);
     const int room = vertical ? m.bottom - m.top
                      : above  ? m.bottom - barRect.bottom
                               : barRect.top - m.top;
@@ -28778,6 +29348,7 @@ static void T81Win10ToggleFlyout(int kind) {
             T81W22LoadDocs();
             gW22Tab = 0;
             gW22Res.clear();
+            gW15Mine = gW15Wide = false;
         }
     } else if (kind == kW10FlyNetwork) {
         T81W10Net& n = gW10Net;
@@ -30028,14 +30599,12 @@ static void T81SetExperimentalBlur(HWND h) {
 // compositor, 280 ms in with the curve Windows uses for things that arrive
 // (cubic-bezier 0.1, 0.9, 0.2, 1) and 170 ms out with the one for things that
 // leave (0.7, 0, 1, 0.5).
-static void T81W10ApplyAcrylic(HWND hwnd) {
+static void T81W10ApplyAcrylicColor(HWND hwnd, Color base, bool on) {
     using Fn = BOOL(WINAPI*)(HWND, const T81CompositionAttributeData*);
     static Fn set = reinterpret_cast<Fn>(GetProcAddress(
         GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute"));
     if (!hwnd || !set)
         return;
-    const bool on = T81W10Sys().transparency;
-    const Color base = T81W10BaseColor();
     // A faint tint of the panel colour, as AABBGGRR.
     const COLORREF tint =
         (COLORREF)((0x40u << 24) | ((DWORD)base.GetB() << 16) |
@@ -30052,6 +30621,89 @@ static void T81W10ApplyAcrylic(HWND hwnd) {
                 GetLastError());
         }
     }
+}
+static void T81W10ApplyAcrylic(HWND hwnd) {
+    T81W10ApplyAcrylicColor(hwnd, T81W10BaseColor(), T81W10Sys().transparency);
+}
+// The hidden-icons panel of the Windows 10 skins: the opacity of the flyouts
+// (70 %, 85 % for the light panel) and their request for the blur, while
+// Windows has its transparency effects on. The window takes the per-pixel
+// kind for that; when Windows refuses the picture, it goes back to the plain
+// kind for the rest of the session and the panel is opaque as before.
+static bool gOverflowAlphaFailed = false;
+static Color T81OverflowBase() {
+    return T81W10Light() ? Color(255, 228, 228, 228) : Color(255, 32, 32, 32);
+}
+static void T81ConfigureOverflowAlpha() {
+    if (!s || !s->overflowPanel)
+        return;
+    const HWND panel = s->overflowPanel;
+    // The picture is as large as the client area: only a window without a
+    // frame of Windows around it can take it.
+    const bool frameless =
+        !(GetWindowLongPtrW(panel, GWL_STYLE) & (WS_THICKFRAME | WS_BORDER));
+    const bool want = T81IsWin10Skin(taskbarSkin.load()) && frameless &&
+                      T81W10Sys().transparency && !gOverflowAlphaFailed;
+    const LONG_PTR style = GetWindowLongPtrW(panel, GWL_EXSTYLE);
+    const bool have = (style & WS_EX_LAYERED) != 0;
+    if (want != have)
+        SetWindowLongPtrW(
+            panel, GWL_EXSTYLE,
+            want ? style | WS_EX_LAYERED : style & ~((LONG_PTR)WS_EX_LAYERED));
+    // Nothing to take back from a window that never asked.
+    if (want || have)
+        T81W10ApplyAcrylicColor(panel, T81OverflowBase(), want);
+}
+static bool T81OverflowPresentAlpha(HWND h, const RECT& r) {
+    const int w = r.right, height = r.bottom;
+    if (w <= 0 || height <= 0)
+        return true;
+    bool ok = false;
+    DWORD error = 0;
+    RECT place{};
+    GetWindowRect(h, &place);
+    // UpdateLayeredWindow gives the window the size of the picture: a picture
+    // of the client area must never shrink a window that has a frame.
+    const bool whole =
+        place.right - place.left == w && place.bottom - place.top == height;
+    HDC screen = whole ? GetDC(nullptr) : nullptr;
+    if (screen) {
+        AlphaSurface frame(screen, w, height), black(screen, w, height),
+            white(screen, w, height);
+        if (frame.ok() && black.ok() && white.ok()) {
+            {
+                Graphics g(frame.dc);
+                SolidBrush fill(T81OverflowBase());
+                g.FillRectangle(&fill, 0, 0, w, height);
+            }
+            PatBlt(black.dc, 0, 0, w, height, BLACKNESS);
+            PatBlt(white.dc, 0, 0, w, height, WHITENESS);
+            T81DrawOverflowPanel(black.dc, r, false);
+            T81DrawOverflowPanel(white.dc, r, false);
+            GdiFlush();
+            ComposeForeground(frame.bits, black.bits, white.bits,
+                              (size_t)w * (size_t)height,
+                              T81W10Light() ? 216 : 178);
+            POINT dst{place.left, place.top}, src{0, 0};
+            SIZE size{w, height};
+            BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+            ok = UpdateLayeredWindow(h, nullptr, &dst, &size, frame.dc, &src, 0,
+                                     &blend, ULW_ALPHA) != FALSE;
+            if (!ok)
+                error = GetLastError();
+        }
+        ReleaseDC(nullptr, screen);
+    }
+    if (!ok) {
+        gOverflowAlphaFailed = true;
+        Wh_Log(
+            L"[T81-WIN10] hidden-icons panel: per-pixel drawing failed "
+            L"error=%lu; the panel stays opaque",
+            error);
+        T81ConfigureOverflowAlpha();
+        RedrawWindow(h, nullptr, nullptr, RDW_INVALIDATE | RDW_FRAME);
+    }
+    return ok;
 }
 // The finished picture of the open flyout.
 static std::unique_ptr<AlphaSurface> gW10Frame;
@@ -33265,14 +33917,13 @@ static void ShowBarButtonTooltip(int hit) {
     if (IsRectEmpty(&cell))
         return;
     MapWindowPoints(s->bar, nullptr, (POINT*)&cell, 2);
-    const wchar_t* text =
-        hit == HIT_START     ? Tr(L"Start", L"Start")
-        : hit == HIT_DESKTOP ? Tr(L"Mostra desktop", L"Show desktop")
-        : hit == HIT_W10_SEARCH
-            ? Tr(L"Scrivi qui per eseguire la ricerca", L"Type here to search")
-        : hit == HIT_W10_TASKVIEW
-            ? Tr(L"Visualizzazione attività", L"Task View")
-            : Tr(L"Centro notifiche", L"Action Center");
+    const wchar_t* text = hit == HIT_START ? Tr(L"Start", L"Start")
+                          : hit == HIT_DESKTOP
+                              ? Tr(L"Mostra desktop", L"Show desktop")
+                          : hit == HIT_W10_SEARCH ? T81Win10SearchPrompt()
+                          : hit == HIT_W10_TASKVIEW
+                              ? Tr(L"Visualizzazione attività", L"Task View")
+                              : Tr(L"Centro notifiche", L"Action Center");
     ShowInfoTooltip(text, (cell.left + cell.right) / 2);
 }
 // The documented Shell APIs do not specify a stable resource ID for this
@@ -34020,9 +34671,13 @@ static BYTE EffectiveBarBackgroundOpacity() {
     // an opacity of 196. The setting's initial value, 155, was estimated for
     // Windows 8.1; while it is left at that value the Windows 10 skin uses
     // its own.
+    // Windows 10 RTM: opaque (its black bar let about a tenth through and
+    // did not blur).
     if (T81IsWin10Skin(taskbarSkin.load()) &&
         taskbarBackgroundOpacity.load() == 155)
-        return T81W10Sys().transparency ? 196 : 255;
+        return T81W10Sys().transparency && !T81IsWin10Rtm(taskbarSkin.load())
+                   ? 196
+                   : 255;
     return (taskbarSkin.load() == 6 || taskbarSkin.load() == 7)
                ? 255
                : (BYTE)taskbarBackgroundOpacity.load();
@@ -34073,10 +34728,13 @@ static void PaintTaskbarBackground(Graphics& g, int width, int height) {
         // Flat. Windows 10's dark taskbar is #101010 and its light one
         // #EEEEEE; with the accent colour on the taskbar it is the first dark
         // shade of the accent. The custom taskbar color replaces them.
+        // Windows 10 RTM: black, as build 10240 shows it over a dark picture.
         const T81W10System& system = T81W10Sys();
         Color base = system.lightSystem ? Color(255, 238, 238, 238)
                      : system.accentBar ? T81W10Accent(4)
-                                        : Color(255, 16, 16, 16);
+                     : T81IsWin10Rtm(taskbarSkin.load())
+                         ? Color(255, 0, 0, 0)
+                         : Color(255, 16, 16, 16);
         if (customTaskbarColor.load()) {
             int c = taskbarColorRgb.load();
             base = Color(255, (c >> 16) & 255, (c >> 8) & 255, c & 255);
@@ -37678,6 +38336,26 @@ constexpr int kWin10JumpRowLogical = 30;
 constexpr int kWin10JumpPadLogical = 5;
 constexpr int kWin10JumpHeadingLogical = 32;
 constexpr int kWin10JumpSystemPadLogical = 7;
+// Windows 10 1507, measured on a picture of September 2015: 258 wide with a
+// 1 px edge, 32 high rows without padding around the list, the list at tone
+// 43 over the application rows at 64. A heading is white, takes 48 and has a
+// rule of tone 85 at 40 that stops 14 before both edges; pictures stand at 14
+// and text at 41.
+constexpr int kWin10RtmJumpWidthLogical = 258;
+constexpr int kWin10RtmJumpRowLogical = 32;
+constexpr int kWin10RtmJumpHeadingLogical = 48;
+static int T81Win10JumpWidthLogical() {
+    return T81IsWin10Rtm(taskbarSkin.load()) ? kWin10RtmJumpWidthLogical
+                                             : kWin10JumpWidthLogical;
+}
+static int T81Win10JumpRowLogical() {
+    return T81IsWin10Rtm(taskbarSkin.load()) ? kWin10RtmJumpRowLogical
+                                             : kWin10JumpRowLogical;
+}
+static int T81Win10JumpHeadingLogical() {
+    return T81IsWin10Rtm(taskbarSkin.load()) ? kWin10RtmJumpHeadingLogical
+                                             : kWin10JumpHeadingLogical;
+}
 static bool T81Win10JumpListRow(JumpRowKind kind) {
     return kind == JR_DOCUMENT || kind == JR_SCREEN_SNIP;
 }
@@ -37685,13 +38363,15 @@ static bool T81Win10JumpListRow(JumpRowKind kind) {
 static int T81Win10LayoutJump(JumpPopupData* d) {
     d->win10Headings.clear();
     d->win10SystemTop = -1;
-    const int width = Px(kWin10JumpWidthLogical),
-              rowHeight = Px(kWin10JumpRowLogical);
-    int y = Px(kWin10JumpPadLogical);
+    const bool rtm = T81IsWin10Rtm(taskbarSkin.load());
+    const int width = Px(T81Win10JumpWidthLogical()),
+              rowHeight = Px(T81Win10JumpRowLogical()),
+              pad = rtm ? 0 : Px(kWin10JumpPadLogical);
+    int y = pad;
     bool list = false, system = false;
     auto heading = [&](const wchar_t* text) {
         d->win10Headings.emplace_back(y, text);
-        y += Px(kWin10JumpHeadingLogical);
+        y += Px(T81Win10JumpHeadingLogical());
     };
     for (auto& row : d->rows) {
         if (T81Win10JumpListRow(row.kind) && !system) {
@@ -37709,20 +38389,29 @@ static int T81Win10LayoutJump(JumpPopupData* d) {
             list = true;
         } else if (!system) {
             system = true;
-            y = list ? y + Px(kWin10JumpPadLogical) : 0;
+            y = list ? y + pad : 0;
             d->win10SystemTop = y;
-            y += Px(kWin10JumpSystemPadLogical);
+            // 1507 starts the application rows at the edge of their ground.
+            y += rtm ? 0 : Px(kWin10JumpSystemPadLogical);
         }
         row.rect = RECT{0, y, width, y + rowHeight};
         y += rowHeight;
     }
-    return y + Px(system ? kWin10JumpSystemPadLogical : kWin10JumpPadLogical);
+    return y + (system ? Px(kWin10JumpSystemPadLogical) : pad);
 }
 static void T81Win10PaintJump(HDC dc, const RECT& client, JumpPopupData* d) {
     // Dark: the list at tone 31 over the application rows at 43. Light, as
     // in the light Windows mode of Windows 10: 228 over 210, black text.
-    const bool light = T81W10Light();
-    const int listTone = light ? 228 : 31, systemTone = light ? 210 : 43;
+    const bool light = T81W10Light(), rtm = T81IsWin10Rtm(taskbarSkin.load());
+    const int listTone = rtm     ? 43
+                         : light ? 228
+                                 : 31,
+              systemTone = rtm     ? 64
+                           : light ? 210
+                                   : 43;
+    // Where pictures and text start, and the margin of a heading.
+    const int pictureLeft = Px(rtm ? 14 : 12), textLeft = Px(rtm ? 41 : 40),
+              margin = Px(rtm ? 14 : 12);
     auto fill = [&](const RECT& r, int tone) {
         HBRUSH brush = CreateSolidBrush(RGB(tone, tone, tone));
         if (brush) {
@@ -37742,12 +38431,19 @@ static void T81Win10PaintJump(HDC dc, const RECT& client, JumpPopupData* d) {
     ScopedSelection fontSelection(dc, font.get());
     SetBkMode(dc, TRANSPARENT);
     // Headings: 60% white on the dark list tone, grey on the light one.
-    SetTextColor(dc, light ? RGB(96, 96, 96) : RGB(165, 165, 165));
+    // 1507: white, with a rule under the text.
+    SetTextColor(dc, rtm     ? RGB(255, 255, 255)
+                     : light ? RGB(96, 96, 96)
+                             : RGB(165, 165, 165));
     for (const auto& heading : d->win10Headings) {
-        RECT head{Px(12), heading.first + Px(10), client.right - Px(12),
-                  heading.first + Px(26)};
+        RECT head{margin, heading.first + Px(rtm ? 8 : 10),
+                  client.right - margin, heading.first + Px(26)};
         DrawTextW(dc, heading.second.c_str(), -1, &head,
                   DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+        if (rtm)
+            fill(RECT{margin, heading.first + Px(40), client.right - margin,
+                      heading.first + Px(40) + std::max(1, Px(1))},
+                 85);
     }
     const int size = Px(16);
     const COLORREF ink = light ? RGB(0, 0, 0) : RGB(255, 255, 255);
@@ -37770,7 +38466,7 @@ static void T81Win10PaintJump(HDC dc, const RECT& client, JumpPopupData* d) {
                            : base + ((255 - base) * wash + 50) / 100);
         }
         const int top = rr.top + ((rr.bottom - rr.top) - size) / 2;
-        const RECT cell{Px(12), top, Px(12) + size, top + size};
+        const RECT cell{pictureLeft, top, pictureLeft + size, top + size};
         HICON icon = nullptr;
         std::wstring text;
         bool drawn = false;
@@ -37822,10 +38518,20 @@ static void T81Win10PaintJump(HDC dc, const RECT& client, JumpPopupData* d) {
         if (icon && !drawn)
             DrawIconEx(dc, cell.left, cell.top, icon, size, size, 0, nullptr,
                        DI_NORMAL);
-        RECT tr{Px(40), rr.top, client.right - Px(12), rr.bottom};
+        RECT tr{textLeft, rr.top, client.right - margin, rr.bottom};
         SetTextColor(dc, ink);
         DrawTextW(dc, text.c_str(), -1, &tr,
                   DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+    }
+    if (rtm) {
+        // The 1 px edge of 1507, in the tone of the application rows.
+        const int edge = std::max(1, Px(1));
+        fill(RECT{0, 0, client.right, edge}, systemTone);
+        fill(RECT{0, client.bottom - edge, client.right, client.bottom},
+             systemTone);
+        fill(RECT{0, 0, edge, client.bottom}, systemTone);
+        fill(RECT{client.right - edge, 0, client.right, client.bottom},
+             systemTone);
     }
 }
 static void PaintJumpPopup(HWND h, JumpPopupData* d) {
@@ -38556,16 +39262,16 @@ static bool ShowJumpList(size_t index,
                    !d->docs.back().frequent;
     const bool win10Jump = T81IsWin10Skin(taskbarSkin.load());
     const int extraHeader = hasBoth
-                                ? Px(win10Jump ? kWin10JumpHeadingLogical
+                                ? Px(win10Jump ? T81Win10JumpHeadingLogical()
                                      : T81IsWin7Skin(taskbarSkin.load()) ? 25
                                                                          : 29)
                                 : 0;
     int available =
         (int)(mi.rcMonitor.bottom - mi.rcMonitor.top) - Px(150) - extraHeader;
     int maxDocs = std::max(
-        0, std::min(
-               10, available /
-                       std::max(1, Px(win10Jump ? kWin10JumpRowLogical : 22))));
+        0, std::min(10, available /
+                            std::max(1, Px(win10Jump ? T81Win10JumpRowLogical()
+                                                     : 22))));
     if (d->docs.size() > (size_t)maxDocs)
         d->docs.resize(maxDocs);
     const bool classicJump = taskbarSkin.load() == 7;
@@ -38626,7 +39332,7 @@ static bool ShowJumpList(size_t index,
         return false;
     int width = Px(classicJump ? 242 : 252), height = y + Px(win7Jump ? 6 : 12);
     if (win10Jump) {
-        width = Px(kWin10JumpWidthLogical);
+        width = Px(T81Win10JumpWidthLogical());
         height = T81Win10LayoutJump(d.get());
     }
     RECT frame{0, 0, width, height};
@@ -46185,13 +46891,15 @@ static UINT Track(HMENU menu,
 // The menus ShellMenu builds (bar, clock, notification icons, Show desktop):
 // in the Windows 10 skin they are drawn like the taskbar menus of Windows 10,
 // with 32 px rows, a check mark for chosen options and the dark or light
-// colours of the Windows mode. The other skins keep the plain popup.
+// colours of the Windows mode. The other skins keep the plain popup, and so
+// does Windows 10 RTM: its bar had the plain menu until version 1511.
 static UINT T81TrackShellMenu(HMENU menu,
                               UINT flags,
                               int x,
                               int y,
                               HWND owner) {
-    if (!T81IsWin10Skin(taskbarSkin.load()))
+    if (!T81IsWin10Skin(taskbarSkin.load()) ||
+        T81IsWin10Rtm(taskbarSkin.load()))
         return static_cast<UINT>(
             TrackPopupMenuEx(menu, flags, x, y, owner, nullptr));
     gT81MenuScheme = T81W10Sys().lightSystem ? 1 : 0;
@@ -46850,70 +47558,6 @@ static void T81InstallShellStartHook() {
     // Retain the module for the lifetime of the installed hook.
 }
 
-// Placement-only bridge for Windows 10 Win+X Restorer when this mod hides
-// the native taskbar. The companion retains its own menu, hooks and commands.
-// TrackPopupMenuEx uses screen coordinates and explicit alignment flags:
-// https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-trackpopupmenuex
-static decltype(&TrackPopupMenuEx) t81OriginalTrackPopupMenuEx = nullptr;
-static BOOL WINAPI T81TrackCompanionWinX(HMENU menu,
-                                         UINT flags,
-                                         int x,
-                                         int y,
-                                         HWND owner,
-                                         LPTPMPARAMS params) {
-    wchar_t cls[80]{};
-    DWORD ownerPid = 0;
-    if (owner && GetWindowThreadProcessId(owner, &ownerPid) &&
-        ownerPid == GetCurrentProcessId() &&
-        GetClassNameW(owner, cls, (int)std::size(cls)) &&
-        wcscmp(cls, L"Windows10WinXRestorer.MenuOwner") == 0) {
-        DWORD shellPid = 0;
-        HWND shell = GetShellWindow();
-        if (shell)
-            GetWindowThreadProcessId(shell, &shellPid);
-        HWND bar = FindWindowW(L"WH_Taskbar81_GDILab", nullptr);
-        HWND native = nullptr;
-        for (HWND h = nullptr;
-             (h = FindWindowExW(nullptr, h, L"Shell_TrayWnd", nullptr));) {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(h, &pid);
-            if (pid == shellPid) {
-                native = h;
-                break;
-            }
-        }
-        RECT r{};
-        MONITORINFO monitor{sizeof(monitor)};
-        if (shellPid && shellPid == GetCurrentProcessId() && native &&
-            !IsWindowVisible(native) && bar && IsWindowVisible(bar) &&
-            GetWindowRect(bar, &r) && r.right > r.left && r.bottom > r.top &&
-            r.right - r.left > r.bottom - r.top &&
-            GetMonitorInfoW(MonitorFromRect(&r, MONITOR_DEFAULTTONEAREST),
-                            &monitor)) {
-            const bool top = r.top <= monitor.rcMonitor.top + 1;
-            x = r.left;
-            y = top ? r.bottom : r.top;
-            flags &= ~(TPM_CENTERALIGN | TPM_RIGHTALIGN | TPM_VCENTERALIGN |
-                       TPM_BOTTOMALIGN);
-            flags |= TPM_LEFTALIGN | (top ? TPM_TOPALIGN : TPM_BOTTOMALIGN);
-            Wh_Log(
-                L"[T81-WINX] companion menu anchored to recreated bar "
-                L"x=%d y=%d edge=%ls",
-                x, y, top ? L"top" : L"bottom");
-        }
-    }
-    return t81OriginalTrackPopupMenuEx(menu, flags, x, y, owner, params);
-}
-static void T81InstallWinXPlacementBridge() {
-    HMODULE user = GetModuleHandleW(L"user32.dll");
-    void* target =
-        user ? (void*)GetProcAddress(user, "TrackPopupMenuEx") : nullptr;
-    bool ok =
-        target && Wh_SetFunctionHook(target, (void*)T81TrackCompanionWinX,
-                                     (void**)&t81OriginalTrackPopupMenuEx);
-    Wh_Log(L"[T81-WINX] companion placement bridge registered=%d", ok ? 1 : 0);
-}
-
 BOOL Wh_ModInit() {
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
@@ -46995,7 +47639,6 @@ BOOL Wh_ModInit() {
     }
 
     g_isToolModProcessLauncher = true;
-    T81InstallWinXPlacementBridge();
     T81InstallShellStartHook();
     // Limited CPL redirects run in Explorer. Taskbar state and server remain
     // in the dedicated process; this bridge is not crash-isolated from
