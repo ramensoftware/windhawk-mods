@@ -25,7 +25,7 @@ Apps that run as administrator need Windhawk 2 (currently in alpha). On Windhawk
 
 ## Live configuration
 
-The look is tuned in the mod's secondary **Configuration window**, where every change shows up immediately on screen. **Win+Ctrl+Alt+D** hotkey opens it by default. The window opens by itself the first time the mod runs.
+The look is tuned in the mod's secondary **Configuration window**, where every change shows up immediately on screen. It automatically opens on the first run, then, with a configured hotkey or the system tray icon.
 
 **Tray icon** option enables it in the notification area. Clicking (de)activates dimming, right-click opens the configuration window.
 
@@ -48,8 +48,7 @@ Brightness and contrast set the two pattern tones as *brightness ± contrast / 2
 ## Behavior
 
 - Whatever window has focus stays lit; everything behind it is dimmed.
-- Dialogs and menus can be toggled for parent-window background dimming.
-- The menus option works with standard Windows menus; apps that draw their own, such as Office and web-based apps, aren't detected and might also be treated as dialog windows (Office).
+- Dialogs (windows with title bar) and menus (without) can be toggled for parent-window background dimming. Some apps, like web-based ones, draw their own elements, which can't be detected.
 - The taskbar can be dimmed too, lighting up whenever it, Start or Alt+Tab has focus.
 - When the desktop has focus, the layer can either hide or cover everything.
 - By default, the layer is left out of screenshots, recordings and screen sharing while it stays visible on your screen (Windows 10 version 2004 or later).
@@ -60,12 +59,12 @@ Brightness and contrast set the two pattern tones as *brightness ± contrast / 2
 
 // ==WindhawkModSettings==
 /*
-- configHotkey: Win+Ctrl+Alt+D
+- configHotkey: Win+Ctrl+Shift+D
   $name: Configuration window hotkey
   $description: Opens the live configuration window. Win + Ctrl, Alt, Shift + key, like Win+Ctrl+Alt+D.
 - toggleHotkey: ""
   $name: On/off hotkey
-  $description: Turns the dimming on and off, same format as above.
+  $description: Turns the dimming on and off, same format as above (Win+Shift+D).
 - trayIcon: false
   $name: Tray icon
   $description: Shows an icon in the notification area. Click to toggle dimming on and off, secondary-click to open the configuration window.
@@ -803,6 +802,20 @@ bool IsIgnoredClass(const wchar_t* cls) {
     return ClassIn(cls, kIgnored, ARRAYSIZE(kIgnored));
 }
 
+/// Whether a focused window counts as a menu: one that belongs to a visible window and has no title bar (menus
+/// apps draw themselves, such as Office's, and panels like Chrome's extension popups). With a title bar it counts
+/// as a dialog. Menus follow the menus option, dialogs the dialogs option.
+bool IsMenuLikeWindow(HWND hwnd, const wchar_t* cls) {
+    // Office's menus, also when they have no owner.
+    static const wchar_t* const kAppMenus[] = {L"Net UI Tool Window", L"Net UI Tool Window Layered"};
+    if (ClassIn(cls, kAppMenus, ARRAYSIZE(kAppMenus)))
+        return true;
+    if (wcscmp(cls, L"#32770") == 0)
+        return false;  // native dialogs stay dialogs even without a title bar
+    HWND owner = GetWindow(hwnd, GW_OWNER);
+    return owner && IsWindowVisible(owner) && (GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CAPTION) != WS_CAPTION;
+}
+
 // Shell surfaces (taskbar, Start, Alt+Tab, notifications). They are topmost, so with the layer at the top of the
 // normal band every regular window is dimmed while one of them has focus.
 bool IsShellClass(const wchar_t* cls) {
@@ -1111,6 +1124,13 @@ void PlaceOverlay() {
     wchar_t cls[256];
     if (!GetClassNameW(fg, cls, ARRAYSIZE(cls)) || IsIgnoredClass(cls))
         return;
+    if (IsMenuLikeWindow(fg, cls)) {
+        if (g_ap.dimMenus) {
+            ShowOverlay(true);
+            MoveOverlay(fg, wasVisible, fg);
+        }
+        return;
+    }
     // A hidden foreground window (a tray app showing its menu) keeps the taskbar's state, so a menu opened from the
     // taskbar doesn't bring the taskbar layer back.
     if (IsWindowVisible(fg))
