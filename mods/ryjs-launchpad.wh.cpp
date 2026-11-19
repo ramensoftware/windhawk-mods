@@ -683,9 +683,6 @@ SOFTWARE.
 #include <d3d11.h>
 #include <dwrite.h>
 #include <wrl/client.h>
-#ifdef SEAMLESS_PREVIEW
-// preview_api.h is used by dev/preview only, never by the mod.
-#else
 #include <windhawk_utils.h>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
@@ -693,7 +690,6 @@ SOFTWARE.
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Core.h>
-#endif
 #include <windows.h>
 #include <algorithm>
 #include <atomic>
@@ -1586,13 +1582,8 @@ namespace {
 
 using launchpad_i18n::Tr;
 
-#ifdef SEAMLESS_PREVIEW
-constexpr WCHAR kWindowClass[] = L"RYJSLaunchpadPreview";
-constexpr WCHAR kBackdropClass[] = L"RYJSLaunchpadPreviewBackdrop";
-#else
 constexpr WCHAR kWindowClass[] = L"WindhawkRYJSLaunchpad";
 constexpr WCHAR kBackdropClass[] = L"WindhawkRYJSLaunchpadBackdrop";
-#endif
 constexpr WCHAR kAppsFolder[] = L"shell:AppsFolder\\";
 
 // From the Standalone Dock mod: the edge strip it takes.
@@ -1737,14 +1728,10 @@ std::wstring DataRoot();
 std::wstring ModTempPath();
 
 std::wstring GetStringSetting(PCWSTR name) {
-#ifdef SEAMLESS_PREVIEW
-    return Preview::Setting(name);
-#else
     std::wstring host = WindhawkUtils::StringSetting::make(name).get();
     auto root = DataRoot();
     if (root.empty()) return host;
     return launchpad_settings_store::Resolve(root+L"\\ui-settings.ini",name,host);
-#endif
 }
 
 // Windhawk stores a number or boolean setting as REG_DWORD, and
@@ -2666,11 +2653,7 @@ const std::wstring& LayoutAppKey(const App& app) {
 std::wstring DataRoot() {
     WCHAR path[32768];
     if (!Wh_GetModStoragePath(path, ARRAYSIZE(path))) return {};
-#ifdef SEAMLESS_PREVIEW
-    return path;
-#else
     return std::wstring(path) + L"\\data-v1";
-#endif
 }
 
 // Scratch files live next to data-v1, never inside it: a backup worker whose
@@ -2682,7 +2665,6 @@ std::wstring ModTempPath() {
     return (std::filesystem::path(root).parent_path() / L"tmp").wstring();
 }
 
-#ifndef SEAMLESS_PREVIEW
 bool PrepareStorage() {
     auto target = DataRoot();
     if (target.empty()) return false;
@@ -2720,7 +2702,6 @@ bool PrepareStorage() {
     else { Wh_Log(L"RYJS data preparation failed; originals kept: %s", source.c_str()); }
     return copied;
 }
-#endif
 
 std::wstring StoragePath(const std::wstring& file) {
     auto directory = DataRoot();
@@ -3695,9 +3676,6 @@ void RaiseDockWindows() {
 [[clang::no_destroy]] ComPtr<ID3D11Texture2D> g_staging;
 [[clang::no_destroy]] LaunchpadPresenter g_presenter;
 bool UseGpuPresenter() {
-#ifdef SEAMLESS_PREVIEW
-    if (Preview::smoke && !Preview::benchmarkGpu) return false;
-#endif
     return g_settings.gpuPresenter && !g_presenter.failed;
 }
 int g_frameWidth = 0, g_frameHeight = 0;
@@ -5647,10 +5625,8 @@ bool MoveAppSelection(int x,int y) {
 
 bool g_modal;  // A dialog of the grid is open: losing the focus is expected.
 
-#ifndef SEAMLESS_PREVIEW
 void ResetTaskbarStartButtons(bool ownRequest = false);
 void ClearStartButtonLatch(const wchar_t* why);  // launchpad_start_xaml.h
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 // Popup menus
@@ -6109,12 +6085,6 @@ ComPtr<ID2D1Bitmap1> SampledBlur(ComPtr<ID2D1Bitmap1> blurred) {
     return out;
 }
 
-#ifdef SEAMLESS_PREVIEW
-// Offscreen previews never put a window on screen, so the harness hands over
-// the grid it just drew and the capture reads that instead of the desktop.
-HBITMAP g_previewScreen = nullptr;
-POINT g_previewScreenOrigin = {0, 0};
-#endif
 
 // The blurred copy of whatever sits behind the menu window, taken while the
 // window is still hidden. Inside the grid that is the frame the launcher just
@@ -6138,11 +6108,7 @@ bool CaptureBackdrop(State& m) {
     // so frame pixels map one to one onto window position on screen.
     if (g_shown && !g_closing && g_appear >= 1 && g_frame && g_wnd) {
         RECT wnd{};
-#ifdef SEAMLESS_PREVIEW
-        wnd = g_layout.area;  // The preview window sits exactly on its area.
-#else
         if (GetWindowRect(g_wnd, &wnd))
-#endif
         {
             int x0 = m.origin.x - wnd.left, y0 = m.origin.y - wnd.top;
             int x1 = x0 + m.width, y1 = y0 + m.height;
@@ -6182,17 +6148,6 @@ bool CaptureBackdrop(State& m) {
     // Wait for the compositor, so a grid just selected under the pointer is on
     // screen before its pixels are blurred.
     DwmFlush();
-#ifdef SEAMLESS_PREVIEW
-    if (g_previewScreen) {
-        HDC source = CreateCompatibleDC(screen);
-        HGDIOBJ previous = SelectObject(source, g_previewScreen);
-        BitBlt(memory, 0, 0, m.width, m.height, source,
-               m.origin.x - g_previewScreenOrigin.x,
-               m.origin.y - g_previewScreenOrigin.y, SRCCOPY);
-        SelectObject(source, previous);
-        DeleteDC(source);
-    } else
-#endif
     {
         BitBlt(memory, 0, 0, m.width, m.height, screen, m.origin.x, m.origin.y,
                SRCCOPY);
@@ -6946,32 +6901,6 @@ UINT TrackLaunchpadPopupMenu(HMENU menu, UINT flags, int x, int y, HWND owner,
     return result;
 }
 
-#ifdef SEAMLESS_PREVIEW
-// Offscreen menu render for the smoke harness: lays a menu out exactly as the
-// window would and draws it over the launcher's last frame, so the material can
-// be checked without a window, input or a screen capture. hover and submenu
-// select an item and a level to open. The result is left in
-// LaunchpadMenu::g_menu.surface.
-bool PreviewRenderMenu(HMENU menu, int x, int y, UINT flags, int hover = -1,
-                       int submenu = -1) {
-    using namespace LaunchpadMenu;
-    State& m = g_menu;
-    if (m.running) return false;
-    Reset();
-    if (!Prepare(m, menu, x, y, flags)) return false;
-    CaptureBackdrop(m);
-    if (hover >= 0 && !m.panels.empty() &&
-        hover < (int)m.panels[0].items->size()) {
-        m.panels[0].hover = hover;
-    }
-    if (submenu >= 0 && !m.panels.empty() &&
-        submenu < (int)m.panels[0].items->size()) {
-        OpenSubmenu(0, submenu);
-        if (m.panels.size() > 1) m.panels[1].hover = 1;
-    }
-    return DrawFrame(m);
-}
-#endif
 
 void EndDrag(bool drop);
 void StartDrag();
@@ -7151,10 +7080,6 @@ DWORD WINAPI PowerThread(void* param) {
 }
 
 void RunPowerAction(PowerAction action) {
-#ifdef SEAMLESS_PREVIEW
-    MessageBoxW(g_wnd, Tr(L"Preview: power actions are disabled."), L"RYJS Launchpad", MB_OK | MB_ICONINFORMATION);
-    return;
-#endif
     Wh_Log(L"Power action: %s", kPower[(int)action].key);
     DisarmPower();
     HideNow();  // At once: no closing animation over a lock or sleep.
@@ -8511,13 +8436,11 @@ void StartFrames() {
 }
 
 void HideNow() {
-#ifndef SEAMLESS_PREVIEW
     if (g_shown) ResetTaskbarStartButtons();
     // The taskbar is about to be revealed: drop any checked latch the keyboard
     // path left on the Start button, or the user sees a clicked-state capsule
     // with no menu behind it.
     ClearStartButtonLatch(L"latch-hide");
-#endif
     CancelGroupPointer();
     CancelGroupEdit();
     ClearAppSelection();g_batchBlend=0;g_batchDisplayCount=0;g_groupTransitions.clear();
@@ -8717,9 +8640,7 @@ void OnFrame() {
 // input event; an empty SendInput provides it.
 void ForceForeground(HWND hwnd) {
     INPUT input{};
-#ifndef SEAMLESS_PREVIEW
     SendInput(1, &input, sizeof(INPUT));
-#endif
     SetForegroundWindow(hwnd);
     SetFocus(hwnd);
 }
@@ -9339,11 +9260,7 @@ static std::wstring Set_KeyStatusText() {
 #ifdef SCM_HARNESS
     if (!g_setFakeKeyStatus.empty()) return g_setFakeKeyStatus;
 #endif
-#ifdef SEAMLESS_PREVIEW
-    return launchpad_i18n::Text(L"Independent preview. Keyboard hooks and system integration are inactive.");
-#else
     return std::wstring();
-#endif
 }
 
 // ---- Factories and fonts ---------------------------------------------------
@@ -10887,26 +10804,6 @@ static void Set_Save(std::shared_ptr<SetWindow> keep) {
         Set_SetStatus(w, Tr(L"Nothing changed"));
         return;
     }
-#ifdef SEAMLESS_PREVIEW
-    bool ok = true;
-    for (auto& f : w.fields) {
-        auto value = Set_FieldValue(f);
-        if (value != f.value) {
-            ok = Preview::PutSetting(f.key, value) && ok;
-            if (wcscmp(f.key, L"interfaceLanguage") == 0) Preview::languageOverride.clear();
-        }
-    }
-    if (!ok) { Set_SetStatus(w, Tr(L"Preview settings could not be saved."), true); return; }
-    launchpad_i18n::Select(GetStringSetting(L"interfaceLanguage"));
-    Set_MakeFormats(w);
-    Set_LoadFields(w);
-    Set_ApplyFrame(w);
-    Set_Relayout(w);
-    SetWindowTextW(w.hwnd, Tr(L"RYJS Launchpad settings"));
-    Set_SetStatus(w, Tr(L"Saved"));
-    if (g_wnd) PostMessageW(g_wnd, WM_APP_RELOAD, 0, 0);
-    return;
-#else
     std::vector<launchpad_settings_store::Change> changes;
     for (const auto& field : w.fields) {
         auto value=Set_FieldValue(field);
@@ -10925,7 +10822,6 @@ static void Set_Save(std::shared_ptr<SetWindow> keep) {
     Set_SetStatus(w,Tr(L"Saved"));
     if (g_wnd) PostMessageW(g_wnd,WM_APP_RELOAD,0,0);
 
-#endif
 }
 
 // ---- Animation tick ----------------------------------------------------------------
@@ -12505,9 +12401,6 @@ std::wstring PromptGroupName(HWND owner, const std::wstring& initial,PCWSTR capt
         WS_CAPTION | WS_SYSMENU, (area.left + area.right - px(440))/2, (area.top + area.bottom - px(170))/2,
         px(440), px(170), owner, nullptr, wc.hInstance, &dialog);
     if (!window) return {};
-#ifdef SEAMLESS_PREVIEW
-    if(Preview::uiCheck)SetWindowLongPtrW(window,GWL_EXSTYLE,GetWindowLongPtrW(window,GWL_EXSTYLE)|WS_EX_APPWINDOW);
-#endif
     HFONT font = CreateFontW(-px(14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, g_settings.font.c_str());
     dialog.edit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", initial.c_str(), WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
@@ -14034,16 +13927,11 @@ bool StartFullBackupJob(const std::wstring& mode,const std::wstring& archive,con
     SHCreateDirectoryExW(nullptr,workRoot.c_str(),nullptr);
     job->work=workRoot+L"\\RYJSBackup-"+id;
     if(!CreateDirectoryW(job->work.c_str(),nullptr))return false;
-#ifdef SEAMLESS_PREVIEW
-    std::wstring preview=L"true";
-    std::wstring modId=L"ryjs-launchpad";
-#else
     std::wstring preview=L"false";
     std::wstring modId=L"ryjs-launchpad";
     WCHAR storage[32768]{};
     if (Wh_GetModStoragePath(storage, ARRAYSIZE(storage)))
         modId = std::filesystem::path(storage).filename().wstring();
-#endif
     std::wstring config=L"{\"mode\":"+BackupJsonString(mode)+L",\"archive\":"+BackupJsonString(archive)+
         L",\"expected_hash\":"+BackupJsonString(expected)+L",\"storage\":"+BackupJsonString(DataRoot())+
         L",\"mod_id\":"+BackupJsonString(modId)+L",\"version\":"+BackupJsonString(WH_MOD_VERSION)+
@@ -14053,21 +13941,13 @@ bool StartFullBackupJob(const std::wstring& mode,const std::wstring& archive,con
     for(const auto& field:Set_MakeFields()) {
         if(!first)host+=L",";
         first=false;
-#ifdef SEAMLESS_PREVIEW
-        auto baseline=Preview::Setting(field.key);
-#else
         std::wstring baseline=WindhawkUtils::StringSetting::make(field.key).get();
-#endif
         host+=BackupJsonString(field.key)+L":"+BackupJsonString(baseline);
     }
     // A legacy density setting the built-in window hides: the backup still
     // carries it so an imported profile keeps its saved column count.
     if(!first)host+=L",";
-#ifdef SEAMLESS_PREVIEW
-    std::wstring columns=Preview::Setting(L"gridColumns");
-#else
     std::wstring columns=WindhawkUtils::StringSetting::make(L"gridColumns").get();
-#endif
     host+=BackupJsonString(L"gridColumns")+L":"+BackupJsonString(columns);
     config+=L",\"defaults\":"+std::wstring(kFullBackupDefaults)+L",\"host_settings\":"+host+L"}}";
     auto script=job->work+L"\\worker.ps1",jobFile=job->work+L"\\job.json";
@@ -14093,12 +13973,6 @@ void BackupResumeAfterImport(bool succeeded) {
     g_fullImportBusy=false;g_workerStop=false;g_webStop=false;
     if(succeeded) {
         WritePrivateProfileStringW(nullptr,nullptr,nullptr,(DataRoot()+L"\\ui-settings.ini").c_str());
-#ifdef SEAMLESS_PREVIEW
-        for(const auto& field:Set_MakeFields()) {
-            auto stored=launchpad_settings_store::Read(DataRoot()+L"\\ui-settings.ini",L"values",field.key);
-            std::wstring value;if(!stored.empty()&&launchpad_settings_store::Decode(stored,value))Preview::PutSetting(field.key,value);
-        }
-#endif
         g_dataReadOnly=g_layoutReadOnly=g_entriesReadOnly=false;
         g_appsKey=-1;g_appsLoaded=false;g_appsTime=0;
         LoadSettings();g_labelFormat.Reset();StartLoadingApps();Open();
@@ -14386,9 +14260,6 @@ void ShowOptionsMenu(HWND hwnd, POINT pt) {
         }
     }
     HMENU menu = CreatePopupMenu();
-    #ifdef SEAMLESS_PREVIEW
-    AppendMenuW(menu, MF_STRING, 90, Tr(L"Exit preview"));
-#endif
     AppendMenuW(menu, MF_STRING, kOpenSettings, Tr(L"Open settings"));
     AppendMenuW(menu, MF_STRING, 54, Tr(L"Add entry…"));
     AppendMenuW(menu, MF_STRING, 56, Tr(L"Create complete backup…"));
@@ -14421,9 +14292,6 @@ void ShowOptionsMenu(HWND hwnd, POINT pt) {
     g_modal = false;
     DestroyMenu(menu);
 
-#ifdef SEAMLESS_PREVIEW
-    if (command == 90) { if(ConfirmGroupEditClose())PostMessageW(hwnd, WM_APP_QUIT, 0, 0); return; }
-#endif
     if(command==58){CancelGroupEdit();return;}
     if(g_groupEditMode&&command!=55)return;
     if (command == 50) { CreateGroup(hwnd); return; }
@@ -14877,17 +14745,12 @@ DWORD WINAPI KeyThread(void*) {
 }
 
 bool OwnsTaskbar() {
-#ifdef SEAMLESS_PREVIEW
-    return true;
-#else
     DWORD pid = 0;
     HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
     return tray && GetWindowThreadProcessId(tray, &pid) &&
            pid == GetCurrentProcessId();
-#endif
 }
 
-#ifndef SEAMLESS_PREVIEW
 
 // Classic/StartAllBack taskbars latch their Start button independently of
 // XamlLauncher. Consume the complete mouse gesture before that native latch
@@ -15313,9 +15176,7 @@ bool HookXamlStartVisibility() {
     Wh_Log(L"XAML Start visibility hook available=%d",ok);return ok;
 }
 
-#endif
 
-#ifndef SEAMLESS_PREVIEW
 // The ExperienceToggleButton hooks install when the taskbar's XAML module is
 // already mapped, or from the kernelbase LoadLibraryExW hook when it loads
 // later. A ShowStartView request runs the same check as a last-resort
@@ -15331,7 +15192,6 @@ void EnsureXamlStartHooks() {
     if (ok) Wh_ApplyHookOperations();
     StartStateTrace(ok ? L"xaml-hook-lazy-ok" : L"xaml-hook-lazy-fail");
 }
-#endif
 
 using XamlLauncher_ShowStartView_t = HRESULT(WINAPI*)(void* pThis,
                                                       int showMethod,
@@ -15349,7 +15209,6 @@ HRESULT WINAPI XamlLauncher_ShowStartView_Hook(void* pThis,
                            ? g_winKeyAction.load()
                            : g_startButtonAction.load();
     g_shiftWinUntil = 0;
-#ifndef SEAMLESS_PREVIEW
     // The keyboard path never reaches the toggle or pointer hooks, so the
     // show request is the only record of it in the state trace.
     {
@@ -15366,20 +15225,15 @@ HRESULT WINAPI XamlLauncher_ShowStartView_Hook(void* pThis,
     // Install them now so the latch this click left on the button is the
     // last one; every later click is intercepted inside OnToggle itself.
     EnsureXamlStartHooks();
-#endif
     HWND wnd = g_wnd;
     if (action == KeyAction::Start || !wnd) {
-#ifndef SEAMLESS_PREVIEW
         g_startButtonReplacementActive = false;
         g_nativeStartPassthrough=true;
-#endif
         return XamlLauncher_ShowStartView_Original(pThis, showMethod,
                                                    showFlags);
     }
-#ifndef SEAMLESS_PREVIEW
     g_nativeStartPassthrough=false;
     g_startButtonReplacementActive=true;
-#endif
     PostMessageW(wnd, action == KeyAction::Program ? WM_APP_RUN
                                                    : WM_APP_TOGGLE,
                  !shiftWin && !keyboard, 0);
@@ -15537,18 +15391,12 @@ static void OnTrayMessage(HWND hwnd, LPARAM lParam) {
             HMENU menu = CreatePopupMenu();
             AppendMenuW(menu, MF_STRING, 1, Tr(L"Settings"));
             AppendMenuW(menu, MF_STRING, 2, Tr(L"Open Launchpad"));
-#ifdef SEAMLESS_PREVIEW
-            AppendMenuW(menu, MF_STRING, 90, Tr(L"Exit preview"));
-#endif
             SetMenuDefaultItem(menu, 1, FALSE);
             POINT pt;
             GetCursorPos(&pt);
             SetForegroundWindow(hwnd);
             int cmd = TrackLaunchpadPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, pt.x, pt.y, hwnd, nullptr);
             DestroyMenu(menu);
-#ifdef SEAMLESS_PREVIEW
-            if (cmd == 90 && ConfirmGroupEditClose()) PostMessageW(hwnd, WM_APP_QUIT, 0, 0);
-#endif
             if (cmd == 1) OpenSettingsWindow();
             if (cmd == 2) PostMessageW(hwnd, WM_APP_TOGGLE, 0, 0);
             break;
@@ -15583,15 +15431,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 Render();
             }
             return 0;
-#ifdef SEAMLESS_PREVIEW
-        case WM_APP + 60: Preview_RunSmoke(hwnd); return 0;
-        case WM_APP + 61: Open(); return 0;
-#endif
         case WM_APP_TRAY: OnTrayMessage(hwnd, lParam); return 0;
         case WM_APP_TOGGLE:
-#ifndef SEAMLESS_PREVIEW
             ResetTaskbarStartButtons(true);
-#endif
             // The keyboard hook reports the same Windows key tap that produced
             // this request, so only the first of the pair toggles.
             if (!FirstOfKeystroke()) {
@@ -15616,9 +15458,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (!FirstOfKeystroke()) {
                 return 0;
             }
-#ifndef SEAMLESS_PREVIEW
             ResetTaskbarStartButtons(true);
-#endif
             Toggle();
             return 0;
 
@@ -15647,9 +15487,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_APP_RUN:
             if (g_fullImportBusy || !ConfirmGroupEditClose()) return 0;
-#ifndef SEAMLESS_PREVIEW
             ResetTaskbarStartButtons(true);
-#endif
             if (g_shown) {
                 HideNow();
             }
@@ -15734,9 +15572,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
 
         case WM_ACTIVATE:
-#ifdef SEAMLESS_PREVIEW
-            if(Preview::uiCheck)return 0;
-#endif
             if (LOWORD(wParam) == WA_INACTIVE && g_shown && !g_closing &&
                 !g_modal) {
                 g_lastClosed = Now();
@@ -16186,9 +16021,7 @@ DWORD WINAPI StartThread(void*) {
     g_frameWake = CreateWaitableTimerExW(nullptr, nullptr, 0x00000002 /* high resolution */, TIMER_ALL_ACCESS);
     if (!g_frameWake) g_frameWake = CreateWaitableTimerW(nullptr, FALSE, nullptr);
     LoadSettings();
-#ifndef SEAMLESS_PREVIEW
     // Storage was validated before installing shell hooks in Wh_ModInit.
-#endif
 
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, g_d2d.GetAddressOf());
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
@@ -16216,20 +16049,10 @@ DWORD WINAPI StartThread(void*) {
     HWND wnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED,
                                kWindowClass, L"Start", WS_POPUP, 0, 0, 0, 0,
                                nullptr, nullptr, instance, nullptr);
-#ifdef SEAMLESS_PREVIEW
-    // Isolated UI QA only: let automation enumerate the otherwise tool-only canvas.
-    if(Preview::uiCheck&&wnd) {
-        auto style=GetWindowLongPtrW(wnd,GWL_EXSTYLE);
-        SetWindowLongPtrW(wnd,GWL_EXSTYLE,(style&~WS_EX_TOOLWINDOW)|WS_EX_APPWINDOW);
-        SetWindowTextW(wnd,L"RYJS Launchpad UI validation");
-    }
-#endif
     bool ok = g_d2d && g_dwrite && g_backdrop && wnd;
     if (ok) {
         g_wnd = wnd;
-#ifndef SEAMLESS_PREVIEW
         StartButtonHooksStart();
-#endif
         g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
         ChangeWindowMessageFilterEx(wnd, g_taskbarCreated, MSGFLT_ALLOW, nullptr);
         UpdateTrayIcon(wnd);
@@ -16238,12 +16061,6 @@ DWORD WINAPI StartThread(void*) {
         SetTimer(wnd, kTimerFirstLoad, 3000, nullptr);
     }
     SetEvent(g_readyEvent);
-#ifdef SEAMLESS_PREVIEW
-    if (ok) {
-        if (!Preview::smoke) SetTimer(wnd, kTimerFirstLoad, 1, nullptr);
-        PostMessageW(wnd, Preview::smoke ? WM_APP + 60 : (Preview::settingsOnStart ? WM_APP + 20 : WM_APP_TOGGLE), 0, 0);
-    }
-#endif
 
     if (ok) {
         MSG msg;
@@ -16267,9 +16084,7 @@ DWORD WINAPI StartThread(void*) {
     }
     g_wnd = nullptr;
     StopFullBackupJob();
-#ifndef SEAMLESS_PREVIEW
     StartButtonHooksStop();
-#endif
 
     g_workerStop = true;
     StopWebIcons();
@@ -16339,7 +16154,6 @@ bool IsFolderWindowsProcess() {
            commandLine.find(L"/separate") != std::wstring::npos;
 }
 
-#ifndef SEAMLESS_PREVIEW
 bool HookShowStartView() {
     HMODULE module = LoadLibraryExW(L"twinui.pcshell.dll", nullptr,
                                     LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -16362,10 +16176,8 @@ bool HookShowStartView() {
     return true;
 }
 
-#endif
 }  // namespace
 
-#ifndef SEAMLESS_PREVIEW
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
@@ -16468,4 +16280,3 @@ void Wh_ModSettingsChanged() {
     }
 }
 
-#endif // !SEAMLESS_PREVIEW
