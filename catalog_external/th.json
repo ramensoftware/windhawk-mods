@@ -1,43 +1,5 @@
 {
   "mods": {
-    "change-more-fonts": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794957138481,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794957138481,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "xh1le",
-        "compilerOptions": "-lgdi32 -luser32",
-        "description": "Use an installed font for Windows 11 text in Explorer, Start, Settings, and other shell surfaces.",
-        "github": "https://github.com/xh1le",
-        "include": [
-          "explorer.exe",
-          "StartMenuExperienceHost.exe",
-          "SearchHost.exe",
-          "ShellExperienceHost.exe",
-          "ShellHost.exe",
-          "TextInputHost.exe",
-          "SystemSettings.exe"
-        ],
-        "license": "MIT",
-        "name": "Change More Fonts",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7574",
-      "source": {
-        "sha256": "5a6da45e85f2b730760dc3ec551efd975795ca81d8962dc4d463e2838cf175d3",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/114c34fb366f7ef3cff732c942e4c80248fde58e/mods/change-more-fonts.wh.cpp"
-      }
-    },
     "cursor-scheme-extension": {
       "details": {
         "defaultSorting": 0,
@@ -168,34 +130,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6b19ead230c08403dab28d1d30bcfd28e2abb0e2/mods/explorer-default-folder.wh.cpp"
       }
     },
-    "fluent-radial-menu": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794840456805,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794957138481,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Fenryr",
-        "compilerOptions": "-ld2d1 -ldwrite -ldwmapi -lgdi32 -lole32 -loleaut32 -lshell32 -ladvapi32 -lwindowscodecs -luuid -lruntimeobject -lmsimg32 -lcomctl32 -lcomdlg32",
-        "description": "Launch apps, files, folders, links, and shortcuts from a customizable radial menu on Windows 11.",
-        "github": "https://github.com/soldier93HUN",
-        "include": [
-          "windhawk.exe"
-        ],
-        "name": "Fluent Radial Menu",
-        "version": "0.9.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7432",
-      "source": {
-        "sha256": "7571a55cfb140859931d74630fb31538cdf31c3456fb46a8ad012b1b769e44a8",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/eeac62b6a66aa6639897fb7783e471b3319bbe3a/mods/fluent-radial-menu.wh.cpp"
-      }
-    },
     "frosted-window-blur": {
       "details": {
         "defaultSorting": 0,
@@ -315,63 +249,6 @@
       "source": {
         "sha256": "3a1e0f10e7ab714ec4af3fa6483030de22d2e1f6b1e1e511e9eadda818e44445",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3b284d718598ae924d4af8f3af3959f4e5c46d47/mods/titlebar-opacity-button.wh.cpp"
-      }
-    },
-    "tray-ghost-cleaner": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794957138481,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794964065891,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Solo_mag",
-        "compilerOptions": "-luser32 -lshell32 -lcomctl32",
-        "description": "Removes leftover tray icons of programs that crashed or were killed, the moment they exit. For Windows 10 and older Windows 11 versions; newer Windows 11 already does this itself",
-        "github": "https://github.com/Solomag",
-        "include": [
-          "explorer.exe"
-        ],
-        "name": "Tray Ghost Icon Cleaner",
-        "version": "1.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7582",
-      "source": {
-        "sha256": "2bf5a7ed7f5aea767ef591b6826bea2202733123c833f6251b8f30c4626a1999",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/2b2ab6f415d6d5412beb4cef0e040dff283310c3/mods/tray-ghost-cleaner.wh.cpp"
-      }
-    },
-    "windowpilot": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794957138481,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794957138481,
-        "users": 0
-      },
-      "metadata": {
-        "author": "ghostzpy",
-        "compilerOptions": "-luser32 -lgdi32 -lshlwapi -lshell32 -ladvapi32",
-        "description": "Configurable window shortcuts with game protection and optional double-press confirmation",
-        "github": "https://github.com/ghostzpy",
-        "include": [
-          "windhawk.exe"
-        ],
-        "license": "MIT",
-        "name": "WindowPilot",
-        "version": "1.2.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7587",
-      "source": {
-        "sha256": "678ff3495a92edb1337bd0c8fcbd8ffa74e5c0f25f419166fc2f445a00afb139",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/b99ad61dd5fc970a114f8a79c8afb151ddd4919a/mods/windowpilot.wh.cpp"
       }
     },
     "windows-11-lock-screen-styler": {

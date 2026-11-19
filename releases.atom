@@ -2,12 +2,436 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-18T23:04:15.000Z</updated>
+    <updated>2026-11-19T00:01:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[WindowPilot 1.2.0]]></title>
+        <id>https://windhawk.net/mods/windowpilot#0ec737dcbc499f06130908d2cb62fdbd537ac152</id>
+        <link href="https://windhawk.net/mods/windowpilot"/>
+        <updated>2026-11-19T00:01:43.000Z</updated>
+        <content type="html"><![CDATA[<h1>WindowPilot</h1>
+<h2>English</h2>
+<p>Control the foreground window with configurable shortcuts:</p>
+<table>
+<thead>
+<tr>
+<th>Default shortcut</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Win + Q</td>
+<td>Close normally, preserving the application's save prompts</td>
+</tr>
+<tr>
+<td>Win + Z</td>
+<td>Minimize</td>
+</tr>
+<tr>
+<td>Win + N</td>
+<td>Maximize; optionally restore when already maximized</td>
+</tr>
+<tr>
+<td>Win + Shift + N</td>
+<td>Open the native Windows Notification Center</td>
+</tr>
+<tr>
+<td>Win + S</td>
+<td>Original Windows Search, unchanged</td>
+</tr>
+</tbody>
+</table>
+<p>Each window action has independent enable, shortcut, game protection and
+double-press confirmation settings. Game protection is enabled by default;
+double-press confirmation is disabled by default. Shortcuts support Win, Ctrl,
+Alt, Shift, A–Z, 0–9, F1–F24 and common named keys. Examples: <code>Win+Q</code>,
+<code>Ctrl+Alt+F10</code>, <code>Win+Shift+N</code>. Only the exact configured combination is consumed.
+Changing or disabling a shortcut immediately releases its old combination.
+Win+S and Win+L are reserved; duplicate or invalid bindings show a warning.</p>
+<p>With confirmation enabled, press and release the shortcut twice in <strong>less than
+3 seconds</strong>. The hint disappears after 1.5 seconds by default; its disappearance
+does not shorten the confirmation deadline. Holding a key never confirms.
+Switching windows, choosing another action, pressing Esc or saving settings
+cancels a pending confirmation. Timings are configurable for each action.</p>
+<p><strong>Hint appearance:</strong> automatically follows the Windows display language in
+English, Portuguese or Spanish, with English fallback for other languages.
+You can also select a language manually. Dark and light themes can follow
+Windows or be selected explicitly. <strong>Always on top</strong> is configurable and
+enabled by default. The hint never steals keyboard focus or intercepts clicks.
+Settings labels follow the language selected in the Windhawk interface.</p>
+<p><strong>Compatibility:</strong> Windows 11 x64 and Windhawk 1.7.3 or later. WindowPilot
+runs in a dedicated Windhawk tool process for standard desktop windows.
+Elevated apps and secure-desktop prompts are outside the supported scope.</p>
+<p><strong>Games:</strong> detection uses editable executable/path patterns, Unity/Unreal
+window classes and optional fullscreen geometry. It is conservative: browser
+F11 fullscreen can be protected too; ordinary maximized windows are excluded
+from the fullscreen heuristic. Add unrecognized windowed games to the list.
+When game protection applies, the original Windows shortcut receives the key.
+The same applies on the desktop, taskbar, menus and windows that cannot perform
+the requested action. On eligible windows, the defaults take over Windows
+Search (Win+Q), Snap layouts (Win+Z) and Notification Center (Win+N).
+Use Win+S for Search, Win+Shift+N for notifications, or change the assignments
+to use the original combinations.</p>
+<p>Notifications use the original Win+N after the alternate shortcut's modifiers
+are released. Tagged synthetic input prevents recursive maximization. If an
+existing Windows policy disables Notification Center, the hint explains the
+restriction. Closing a window sends a normal close request to the application.</p>
+<h2>Português</h2>
+<p>Atalhos padrão: <strong>Win+Q</strong> fecha, <strong>Win+Z</strong> minimiza, <strong>Win+N</strong> maximiza/restaura,
+<strong>Win+Shift+N</strong> abre notificações e <strong>Win+S</strong> continua sendo a pesquisa nativa.
+Cada ação tem opções independentes de ativação, atalho, proteção para jogos e
+duas pressões. A proteção para jogos vem ativada e a confirmação desativada.</p>
+<p>Com a confirmação ligada, solte a tecla e pressione novamente em menos de
+3 segundos. O aviso some após 1,5 segundo, mas o prazo continua válido.
+Trocar de janela, usar outra ação, pressionar Esc ou salvar configurações cancela.</p>
+<p>Em <strong>Aparência do aviso</strong>, escolha idioma automático/inglês/português/espanhol,
+tema automático/escuro/claro e <strong>Sempre no topo</strong>. O modo automático acompanha
+o idioma de exibição e o tema do Windows; o aviso não captura foco nem cliques.
+Os rótulos das configurações seguem o idioma da interface do Windhawk.</p>
+<p>Compatível com Windows 11 x64 e Windhawk 1.7.3 ou posterior. O mod roda em um
+processo dedicado do Windhawk para janelas comuns. Aplicativos elevados e a
+área de trabalho segura ficam fora da cobertura. Use o botão do Windhawk para
+desativar o mod inteiro.</p>
+<p>Para jogos protegidos, área de trabalho, barra de tarefas, menus ou janelas que
+não aceitam a ação, vale o atalho original do Windows. Em janelas compatíveis,
+os padrões substituem Pesquisa (Win+Q), layouts de encaixe (Win+Z) e Central
+de Notificações (Win+N). Use Win+S para pesquisar, Win+Shift+N para notificações
+ou mude as combinações para recuperar os atalhos originais. Se uma política do
+Windows bloquear a Central de Notificações, o aviso indica a restrição.</p>
+<h2>Español</h2>
+<p>Atajos predeterminados: <strong>Win+Q</strong> cierra, <strong>Win+Z</strong> minimiza, <strong>Win+N</strong> maximiza/restaura,
+<strong>Win+Shift+N</strong> abre notificaciones y <strong>Win+S</strong> conserva la búsqueda de Windows.
+Cada acción tiene controles independientes para activar, cambiar el atajo,
+ignorar juegos y exigir dos pulsaciones. La protección para juegos está activada;
+la confirmación está desactivada de forma predeterminada.</p>
+<p>Con la confirmación activada, suelta la tecla y pulsa de nuevo en menos de
+3 segundos. El aviso desaparece después de 1,5 segundos, pero el plazo sigue
+vigente. Cambiar de ventana, usar otra acción, pulsar Esc o guardar ajustes cancela.</p>
+<p>En <strong>Apariencia del aviso</strong>, elige idioma automático/inglés/portugués/español,
+tema automático/oscuro/claro y <strong>Siempre visible</strong>. El modo automático sigue el
+idioma de visualización y el tema de Windows. El aviso no roba foco ni clics.
+Los ajustes siguen el idioma elegido en la interfaz de Windhawk.</p>
+<p>Compatible con Windows 11 x64 y Windhawk 1.7.3 o posterior. El mod se ejecuta
+en un proceso dedicado de Windhawk para ventanas normales. Las aplicaciones
+elevadas y el escritorio seguro quedan fuera del alcance. Usa el interruptor
+de Windhawk para desactivar todo el mod.</p>
+<p>En juegos protegidos, el escritorio, la barra de tareas, los menús o ventanas
+que no admiten la acción, se conserva el atajo original de Windows. En ventanas
+compatibles, los valores predeterminados sustituyen Búsqueda (Win+Q), diseños
+de acoplamiento (Win+Z) y Centro de notificaciones (Win+N). Usa Win+S para
+buscar, Win+Shift+N para las notificaciones o cambia las combinaciones para
+recuperar los atajos originales. Un aviso indica si una directiva de Windows
+bloquea el Centro de notificaciones.</p>
+]]></content>
+        <author>
+            <name>ghostzpy</name>
+            <uri>https://github.com/ghostzpy</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Tray Ghost Icon Cleaner 1.0]]></title>
+        <id>https://windhawk.net/mods/tray-ghost-cleaner#b4af9e5deb45f2750f14949ef4ee4de379043274</id>
+        <link href="https://windhawk.net/mods/tray-ghost-cleaner"/>
+        <updated>2026-11-19T00:01:38.000Z</updated>
+        <content type="html"><![CDATA[<h1>Tray Ghost Icon Cleaner</h1>
+<p><strong>For Windows 10 and older Windows 11 versions.</strong> Newer Windows 11 versions with the
+new (XAML) notification area already track the owner processes and remove these icons
+themselves, so the mod isn't needed there. See <a href="#compatibility">Compatibility</a>.</p>
+<p>When a program crashes or is terminated, it never removes its notification area (tray)
+icon. Explorer only notices that the owner is gone when the mouse passes over the icon,
+so &quot;ghost&quot; icons and duplicates pile up until you hover over the tray.</p>
+<p><img src="https://raw.githubusercontent.com/Solomag/windhawk-assets/main/tray-ghost-cleaner/demo.gif" alt="Demo"></p>
+<h2>How it works</h2>
+<p>Programs add and remove tray icons with <code>Shell_NotifyIcon</code>, which delivers each request
+to the taskbar window as a <code>WM_COPYDATA</code> message. The mod watches those messages inside
+Explorer, together with Explorer's answer to each of them, so it knows exactly which icon
+belongs to which process — including icons identified by GUID — without reading any
+internal Explorer data.</p>
+<ul>
+<li>For every process that owns an icon, the mod registers a wait on the process handle
+(no polling).</li>
+<li>When the process exits, the mod waits 1.5 s and then removes the icons that are still
+there with a regular <code>Shell_NotifyIcon(NIM_DELETE)</code>, using the same identity (window +
+ID, or GUID) the program registered them with. An icon is only removed when the window
+it belongs to is gone as well.</li>
+<li>A light 30 s check catches owners the mod couldn't open or wait on: it only looks at
+its own list, not at the tray.</li>
+<li>When the mod is loaded together with Explorer (the usual case), it sees every icon
+from the start. When it is enabled while Explorer is already running, it learns the
+existing icons the next time their program updates them (tooltip, image or state).
+Optionally, it can send the documented <code>TaskbarCreated</code> notification once so that
+running programs re-register their icons right away. Every program receives it as if
+Explorer had restarted, so it's off by default.</li>
+<li>Every removed ghost is logged — program path, PID and tooltip — to the Windhawk log
+and, optionally, to <code>ghosts.log</code> in the mod's storage folder (its full path is written
+to the Windhawk log), so you can find out which program keeps leaving them.</li>
+</ul>
+<h2>Compared to other approaches</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>This mod</th>
+<th>Tray refresh utilities</th>
+<th>Tray reset tools</th>
+<th>Restarting Explorer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Runs as</td>
+<td>part of Explorer, no extra process</td>
+<td>separate background program</td>
+<td>one-off program</td>
+<td>manual</td>
+</tr>
+<tr>
+<td>Trigger</td>
+<td>the owner process exiting</td>
+<td>timer or on demand</td>
+<td>when you run it</td>
+<td>when you do it</td>
+</tr>
+<tr>
+<td>Method</td>
+<td><code>NIM_DELETE</code> with the icon's own identity</td>
+<td>simulated mouse moves over the tray, or reading Explorer's toolbar memory from another process</td>
+<td>resets the tray settings in the registry</td>
+<td>full restart</td>
+</tr>
+<tr>
+<td>Icons registered by GUID</td>
+<td>removed (if the mod was enabled while Explorer was running: once their program has updated them)</td>
+<td>depends on the tool</td>
+<td>—</td>
+<td>removed</td>
+</tr>
+<tr>
+<td>Tells you who left the icon</td>
+<td>yes, program and PID</td>
+<td>no</td>
+<td>no</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Side effects</td>
+<td>none by default; the optional <code>TaskbarCreated</code> on load reaches every program, as if Explorer had restarted</td>
+<td>depends on the tool; may lag behind</td>
+<td>clears your icon visibility settings</td>
+<td>taskbar flickers, open Explorer windows close</td>
+</tr>
+</tbody>
+</table>
+<h2>Compatibility</h2>
+<ul>
+<li>Windows 10 — tested on 22H2.</li>
+<li>Older Windows 11 versions whose notification area still behaves like Windows 10's,
+and Windows 11 with the Windows 10 taskbar restored.</li>
+<li>Not needed on newer Windows 11 versions with the XAML notification area: Explorer
+there tracks the processes that own tray icons and removes the icons itself.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Solo_mag</name>
+            <uri>https://github.com/Solomag</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Change More Fonts 1.0.0]]></title>
+        <id>https://windhawk.net/mods/change-more-fonts#6c8d723b7e8dfef68d6b706de29dcf9a933cea70</id>
+        <link href="https://windhawk.net/mods/change-more-fonts"/>
+        <updated>2026-11-19T00:01:32.000Z</updated>
+        <content type="html"><![CDATA[<h1>Change More Fonts</h1>
+<p>Pick an installed font under <strong>Settings &gt; Font &gt; Font family</strong>. The default is
+Tahoma. The mod keeps the size requested by Windows. You can keep the requested
+weight or set your own. Some fonts take up more room, so labels may wrap or
+cut off sooner.</p>
+<h2>Where it applies</h2>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Text the mod can change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>File Explorer</td>
+<td>File names, details, navigation pane, address bar, and context menus</td>
+</tr>
+<tr>
+<td>Desktop</td>
+<td>Icon labels and menus</td>
+</tr>
+<tr>
+<td>Taskbar</td>
+<td>Labels, tooltips, and menus</td>
+</tr>
+<tr>
+<td>Start and Search</td>
+<td>Menu text, app labels, and the search box</td>
+</tr>
+<tr>
+<td>Quick Settings and notification center</td>
+<td>Labels and buttons</td>
+</tr>
+<tr>
+<td>Windows Settings</td>
+<td>Page headings, row labels, and descriptions</td>
+</tr>
+<tr>
+<td>Touch keyboard and input UI</td>
+<td>Labels drawn by the Windows input host</td>
+</tr>
+<tr>
+<td>Classic controls in these processes</td>
+<td>Menus, tooltips, status bars, and dialogs</td>
+</tr>
+</tbody>
+</table>
+<p>Coverage depends on how each control draws text. DWM title bars, web content,
+and text rendered as images are outside the supported paths. The mod skips icon
+fonts, emoji, and some fonts used for specific scripts. With classic controls,
+pick a font that has the characters you need, since GDI fallback is limited.</p>
+<h2>Screenshots</h2>
+<h3>Windows Settings</h3>
+<table>
+<thead>
+<tr>
+<th>Mod off</th>
+<th>Zen Maru Gothic</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/xh1le/windhawk-mods/b44a0888305a411b432af67fb948b54ea8408cc8/screenshots/change-more-fonts/settings-before.png" alt="Windows Settings with the mod off"></td>
+<td><img src="https://raw.githubusercontent.com/xh1le/windhawk-mods/b44a0888305a411b432af67fb948b54ea8408cc8/screenshots/change-more-fonts/settings-after.png" alt="Windows Settings with Zen Maru Gothic"></td>
+</tr>
+</tbody>
+</table>
+<h3>Explorer details view</h3>
+<table>
+<thead>
+<tr>
+<th>Mod off</th>
+<th>Tahoma</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/xh1le/windhawk-mods/b44a0888305a411b432af67fb948b54ea8408cc8/screenshots/change-more-fonts/explorer-before.png" alt="Explorer details with the mod off"></td>
+<td><img src="https://raw.githubusercontent.com/xh1le/windhawk-mods/b44a0888305a411b432af67fb948b54ea8408cc8/screenshots/change-more-fonts/explorer-after.png" alt="Explorer details with Tahoma"></td>
+</tr>
+</tbody>
+</table>
+<h2>Changing more fonts</h2>
+<p>The default list covers the usual Windows UI families. Add specific families
+under <strong>Also replace these fonts</strong> or turn on <strong>Replace all eligible fonts</strong>
+to include document fonts such as Arial and Calibri. Turn on <strong>Include
+monospace fonts</strong> if you want the same rules to apply to fonts such as Consolas.
+The <strong>Keep these fonts</strong> list takes priority.</p>
+<p>To try a different app, add its executable under this mod's <strong>Advanced &gt;
+Process inclusion list</strong>. The app needs to use GDI or system DirectWrite for
+its text. Use the per-mod exclusion list to skip apps.</p>
+<h2>Compatibility</h2>
+<p>Run one font replacement mod at a time. If you use Explorer Font Changer,
+disable it before enabling Change More Fonts.</p>
+<p>Taskbar, Start menu, and notification center stylers can assign fonts to
+individual controls. If a theme's font should stay, add its family to
+<strong>Keep these fonts</strong>. To use your chosen family on that control, update the
+theme's font rule or add its family to <strong>Also replace these fonts</strong>.</p>
+<p>Explorer Translucent Menus and Translucent Windows also hook classic text
+drawing. If menu text looks wrong with either mod enabled, try <strong>Rendering &gt;
+Keep cached GDI fonts</strong>. Font creation and DirectWrite changes
+still work with that option on.</p>
+<p>Windows font substitutions you set separately can still affect GDI text
+with Change More Fonts paused.</p>
+<h2>Refresh the text</h2>
+<p>Restart the affected app if it still shows the old font. Signing out and back
+in refreshes Start and other shell processes. Restarting also helps if text
+is clipped because the app measured it with a cached font. Turning the mod
+off and restarting the affected app restores its usual font.</p>
+<p>The mod runs in 64-bit processes on Windows 11 and changes fonts in memory.
+Optional apps added through the inclusion list also need to be 64-bit.</p>
+]]></content>
+        <author>
+            <name>xh1le</name>
+            <uri>https://github.com/xh1le</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Fluent Radial Menu 0.9.0]]></title>
+        <id>https://windhawk.net/mods/fluent-radial-menu#f214aa6b6da1e0c23cfe21d161701fddc96acbe7</id>
+        <link href="https://windhawk.net/mods/fluent-radial-menu"/>
+        <updated>2026-11-19T00:01:27.000Z</updated>
+        <content type="html"><![CDATA[<h1>Fluent Radial Menu</h1>
+<p>Fluent Radial Menu adds a circular launcher to Windows 11. It comes with
+three pages of apps, folders, Windows shortcuts, and screen capture tools.</p>
+<p><img src="https://i.imgur.com/fj0r5vV.gif" alt="Fluent Radial Menu in action"></p>
+<h2>Getting started</h2>
+<ol>
+<li>Enable the mod in Windhawk and press <strong>Ctrl+Alt+Space</strong> to open the wheel
+at the pointer. To change the shortcut, set <strong>Activation shortcut</strong> in the
+mod's Windhawk settings and click <strong>Save settings</strong>.</li>
+<li>Click a wedge to run its action. Scroll to switch pages or press <strong>Esc</strong>
+to dismiss the wheel. You can also use the arrow keys, <strong>Enter</strong>, and
+<strong>Page Up</strong> or <strong>Page Down</strong>.</li>
+<li>Press <strong>F2</strong> while the wheel is open, or right-click it and choose
+<strong>Edit radial menu</strong>, to open the built-in editor.</li>
+</ol>
+<p>The wheel stays closed while the foreground app is fullscreen.</p>
+<h2>Screen capture tools</h2>
+<p>Choose <strong>Color picker</strong> on the first page to open the capture toolbar at the
+top center of the display under the pointer. Use the toolbar to switch to
+<strong>Copy text from screen</strong>. In the color picker, the magnifier shows the exact pixel
+under the pointer, its <strong>#RRGGBB</strong> value, and its screen coordinates. Click
+to copy that color, or drag around text in the text tool. A confirmation
+appears after copying. Press <strong>Esc</strong> to cancel. Text recognition runs locally
+using Windows OCR and the recognition languages installed for your account.</p>
+<p>To add either tool to an existing layout, select a wedge in <strong>Actions</strong> and
+choose it from <strong>Action type</strong>.</p>
+<h2>Make it yours</h2>
+<ul>
+<li><strong>Actions</strong> lets you choose an installed app, folder, file, website,
+Windows settings page, keyboard shortcut, command, or capture tool. Select <strong>Custom…</strong>
+to browse for a local target. Choose the original app icon, a built-in
+symbol, or an icon file. Drag a wedge in the preview to move or swap it.</li>
+<li><strong>Pages</strong> lets you add, rename, reorder, or duplicate up to eight pages
+with eight slots each.</li>
+<li><strong>Appearance</strong> controls the theme, accent, size, transparency, blur, and
+labels. <strong>Motion &amp; activation</strong> controls the profile shortcut, positioning,
+and animation. It can follow Windows' reduced motion setting.</li>
+<li><strong>Apply</strong> saves your changes. <strong>Test on desktop</strong> opens the applied wheel
+with actions disabled.</li>
+</ul>
+<h2>Share or back up a layout</h2>
+<p><strong>Export profile</strong> saves the current editor layout and settings as JSON.
+<strong>Import profile</strong> opens a profile in the editor. Review its actions and
+select <strong>Apply</strong> when you are ready to use it. Shared profiles reference apps,
+folders, and custom icon files by path, so those may need to be updated on
+another PC. The built-in icons travel with the profile.</p>
+<p>A shortcut set in Windhawk takes priority over the profile shortcut. Clear
+the Windhawk field to use the profile shortcut again. In <strong>Motion &amp; activation</strong>,
+focus <strong>Profile shortcut</strong> and press the middle button or either side button
+to record it. Hold any modifiers you want to include, then click <strong>Apply</strong>.
+A mouse shortcut toggles the wheel. <strong>Hold keyboard shortcut to select</strong> applies
+to keyboard activation. Check the Windhawk mod log if Windows cannot register
+a new shortcut.</p>
+<p>On 64-bit Windows, the menu opens native system apps from either Windhawk
+host. In the 32-bit file picker, enter <strong>%WINDIR%\Sysnative</strong> in the address
+bar to browse the native System32 folder. The editor saves those selections
+as System32 paths so the same profile works in the 64-bit host.</p>
+]]></content>
+        <author>
+            <name>Fenryr</name>
+            <uri>https://github.com/soldier93HUN</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Position Shortcut 0.1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-position-shortcut#0af45f01bc2ecac581634d47e558017659639256</id>
@@ -963,305 +1387,6 @@ released under <strong>GPL-3.0</strong> as well.</p>
         <author>
             <name>Naeru</name>
             <uri>https://github.com/nathanaeru</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Confetti Spawner 1.4.0]]></title>
-        <id>https://windhawk.net/mods/confetti-spawner#99eea7d26e9ab1286b1dddfed37740eed9bcfaeb</id>
-        <link href="https://windhawk.net/mods/confetti-spawner"/>
-        <updated>2026-11-16T07:01:09.000Z</updated>
-        <content type="html"><![CDATA[<h1>Confetti Spawner</h1>
-<p>Press a hotkey and a burst of confetti (or color emoji) flies across the monitor
-under your mouse pointer. Hold the hotkey to keep it going. The effect is drawn on a click-through overlay that
-never takes focus, so you can keep typing and clicking while it plays.</p>
-<p><img src="https://raw.githubusercontent.com/JudeCJz/confetti-spawner/main/assets/windhawk-demo.gif" alt="Confetti Spawner demo"></p>
-<p>The overlay only exists while particles are on screen. When the last particle is
-gone the window is destroyed and the frame timer stops, so the mod uses no CPU
-while idle.</p>
-<p>The mod runs in its own small Windhawk process and does not inject into any
-other program.</p>
-<h2>Hotkeys</h2>
-<table>
-<thead>
-<tr>
-<th>Default</th>
-<th>Action</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>Ctrl+Alt+F10</code></td>
-<td>Fire a burst. Hold the keys to keep firing</td>
-</tr>
-<tr>
-<td>none</td>
-<td>Cycle the origin (sides, top, bottom, cursor, random) and fire</td>
-</tr>
-<tr>
-<td>none</td>
-<td>Cycle the mode (confetti, emoji, mixed) and fire</td>
-</tr>
-</tbody>
-</table>
-<p>The cycle hotkeys are off by default. Set them in the settings to use them.</p>
-<p>While the mod is enabled, its hotkey combinations are reserved system-wide, so
-other apps stop receiving them. Pick combinations you don't use elsewhere (for
-example <code>Ctrl+Shift+C</code> is copy in Windows Terminal). On keyboard layouts with
-AltGr, AltGr is sent as <code>Ctrl+Alt</code>, so a <code>Ctrl+Alt+&lt;letter&gt;</code> hotkey can block a
-character you type with AltGr. Function keys are a safe choice.</p>
-<p>Hotkeys are written as modifiers plus a key, for example <code>Ctrl+Alt+F10</code>,
-<code>Alt+F9</code>, <code>Ctrl+Shift+F9</code> or <code>Ctrl+Alt+Space</code>. Modifiers are <code>Ctrl</code>, <code>Shift</code>, <code>Alt</code> and
-<code>Win</code>. Keys can be a letter, a digit, <code>F1</code> to <code>F24</code>, <code>Space</code>, <code>Enter</code>, <code>Tab</code>,
-<code>Esc</code>, <code>Insert</code>, <code>Delete</code>, <code>Home</code>, <code>End</code>, <code>PageUp</code>, <code>PageDown</code>, the arrow keys
-(<code>Up</code>, <code>Down</code>, <code>Left</code>, <code>Right</code>), <code>Num0</code> to <code>Num9</code>, <code>Pause</code> or <code>PrintScreen</code>.
-Type <code>none</code> (or leave the field empty) to turn a hotkey off. If another program
-already owns a combination, it can't be registered; the mod log says so.</p>
-<p><strong>Hold to fire</strong>: while the fire hotkey (its main key and modifiers) stays held,
-the mod keeps emitting at the normal rate (particle count per emission time) and
-stops when you let go. A quick tap still plays one full burst.</p>
-<p>Cycling the origin or the mode only lasts until the settings are saved again or
-the mod restarts. The saved settings are not changed.</p>
-<h2>Modes</h2>
-<ul>
-<li><strong>Confetti</strong>: paper pieces in the shapes and colors you pick. With <code>Flip</code>
-enabled they tumble in 3D as they fall.</li>
-<li><strong>Emoji</strong>: the emoji from the <code>Emoji</code> list, drawn in full color.</li>
-<li><strong>Mixed</strong>: both at once. <code>Emoji share</code> sets how many of the particles are emoji.</li>
-</ul>
-<h2>Origins</h2>
-<ul>
-<li><strong>Sides</strong>: two cannons in the bottom corners shooting up and inward (the
-classic look). <code>Side cannon angle</code> sets how steeply they fire: 70 is classic,
-90 shoots straight up, lower values shoot flatter toward the middle.</li>
-<li><strong>Top</strong>: confetti rain from the top edge.</li>
-<li><strong>Bottom</strong>: a fountain from the bottom center.</li>
-<li><strong>Cursor</strong>: an explosion from the mouse pointer. Every particle spawns at the
-pointer position at the moment it is emitted, so moving the mouse while holding
-the hotkey drags the stream along, even onto another monitor.</li>
-<li><strong>Random</strong>: one of the above, picked per burst.</li>
-</ul>
-<h2>Settings</h2>
-<p>The defaults reproduce the original classic confetti: sides origin, 600
-rectangular pieces in six colors, no 3D flip, long lifetime.</p>
-<p>Windhawk number settings are whole numbers, so decimal values are stored scaled.
-Each setting's description says how: for example <code>Gravity</code> is in hundredths, so
-<code>50</code> means 0.50, and <code>Drag</code> is in thousandths, so <code>990</code> means 0.990.</p>
-<ul>
-<li><strong>Particle count, Emission time, Speed, Gravity, Spread, Source width</strong>: shape
-of the burst. Emission time is how long a burst keeps spawning particles.</li>
-<li><strong>Wobble, Size, Spin, Drag</strong>: how particles move and look while falling. Drag
-is the share of velocity kept per 60 Hz tick.</li>
-<li><strong>Lifetime, Fade, Opacity</strong>: how long particles live, whether they fade out
-over the last quarter of their life, and the overall overlay opacity.</li>
-<li><strong>Frame rate</strong>: animation frame rate. Physics is time based, so the motion
-looks the same at any frame rate; higher is only smoother.</li>
-<li><strong>Emoji, Emoji size, Emoji spin</strong>: the emoji list is separated by spaces.
-Joined emoji sequences (such as family or flag emoji) are kept intact.</li>
-<li><strong>Shapes, Colors</strong>: confetti shapes (<code>rect</code>, <code>square</code>, <code>circle</code>, <code>triangle</code>,
-<code>star</code>, <code>heart</code>) and colors (<code>#RRGGBB</code>). Each list item can also
-hold several values separated by commas.</li>
-<li><strong>Preview on save</strong>: fire one burst whenever you save the settings, handy
-while tuning.</li>
-</ul>
-<h2>Tips</h2>
-<ul>
-<li>Bursts land on the monitor under the pointer and on the virtual desktop you
-are on.</li>
-<li>Firing again while a burst is still playing on the same monitor adds to it.</li>
-<li>Old overlays keep animating until empty after the pointer moves to another
-monitor.</li>
-<li>For a snow look, use origin <code>Top</code>, shape <code>circle</code>, color <code>#FFFFFF</code>, gravity
-<code>5</code> and wobble <code>20</code>.</li>
-<li>Very high particle counts on 4K monitors cost more GPU and CPU time per frame.
-A single overlay is capped at 8000 live particles.</li>
-</ul>
-]]></content>
-        <author>
-            <name>JudeCJz</name>
-            <uri>https://github.com/JudeCJz</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[macOS Gestures - Mission Control 1.3.1]]></title>
-        <id>https://windhawk.net/mods/macos-gestures-mission-control#a7e0fd466e314ed06abf79ae5cd877daa644a62d</id>
-        <link href="https://windhawk.net/mods/macos-gestures-mission-control"/>
-        <updated>2026-11-16T05:02:39.000Z</updated>
-        <content type="html"><![CDATA[<h1>macOS Gestures - Mission Control</h1>
-<p><img src="https://i.imgur.com/9ONH63E.gif" alt="macOS Gestures for Windows"></p>
-<p>Mission Control for Windows. A <strong>three-finger swipe up</strong> on a precision touchpad opens a
-live, animated overview of all your windows; the overview <strong>follows your fingers</strong> the whole
-way, and springs into place when you let go. Swipe back down, press Esc, or pick a window to
-leave.</p>
-<h2>What you get</h2>
-<ul>
-<li>Live window previews (the same technology the taskbar and Alt+Tab use, so videos keep
-playing) laid out in a clean grid, with the app icon and title under each window.</li>
-<li>Minimized windows are shown too, and dialogs are drawn on top of the window they belong to.</li>
-<li>The taskbar slides out of the screen with your fingers and comes back when you pick a window.</li>
-<li>A <strong>virtual desktops bar</strong> flush with the bottom edge: see your desktops, switch to one or
-create a new one. It fades in with the swipe.</li>
-<li>A close button on the window under the mouse (also the middle mouse button and the Delete
-key), with the remaining windows gliding to their new places.</li>
-<li>Keyboard: Esc closes, arrow keys / Tab move the selection, Enter or Space picks it.</li>
-<li>Spring physics with the finger speed carried over; pushing further up when everything is
-already open stretches the grid with rubber-band resistance.</li>
-<li>Respects the Windows &quot;Animation effects&quot; setting, and is switched off over fullscreen
-apps and games.</li>
-</ul>
-<h2>Three-finger left / right</h2>
-<p>Windows only lets a program take over <em>all</em> three-finger swipes at once, so the mod performs
-the Alt+Tab itself: swipe right for Alt+Tab, left for Alt+Shift+Tab, and keep swiping to keep
-cycling. It can also be set to do nothing.</p>
-<h2>Requirements</h2>
-<ul>
-<li>Windows 11 with the touchpad gestures API (<code>TouchpadGesturesController</code>) and a precision
-touchpad. On builds without that API the mod stays idle and the log says
-&quot;TouchpadGesturesController not supported&quot;.</li>
-<li>The mod runs only in the shell's <code>explorer.exe</code> (not in folder windows opened in a separate
-process, nor in Explorer's COM helper processes).</li>
-</ul>
-<h2>What changes in Windows</h2>
-<ul>
-<li>While the mod runs it takes over <strong>all</strong> three-finger swipes, so Windows' own three-finger
-actions are off: swipe up (Task View) and swipe down (show desktop) have no Windows
-replacement while Mission Control is closed. Turning the mod off gives them back.</li>
-<li>The left/right swipe sends Alt+Tab as keystrokes. When an app running as administrator has
-the focus, Windows blocks those keystrokes, so that swipe does nothing there. The desktops
-bar uses Windows' Win+Ctrl shortcuts the same way and has the same limit.</li>
-</ul>
-<h2>Conflicts</h2>
-<ul>
-<li><strong>CoverTabby</strong> with its touchpad option turned on also takes over three-finger swipes. Use
-only one of the two for touchpad gestures.</li>
-</ul>
-<h2>Settings</h2>
-<p>Everything above can be changed from the <strong>Settings</strong> tab: background material (Mica, Mica
-Alt, Acrylic, live blur, blurred wallpaper), swipe distance, which parts to show, and the
-animation tuning (speed, bounce, stretch, background fade).</p>
-<h2>Notes</h2>
-<ul>
-<li>The live previews use private DWM functions, which Windows updates can change. If they stop
-working the mod falls back to the classic thumbnails on its own.</li>
-<li>Other mods that animate windows closing (like <em>Windows Animations</em>) are kept from playing
-their animation in front of Mission Control: a window is hidden just before it is closed.
-Keep that mod's option to animate hidden windows turned off. If the window is still there a
-moment later (it asked &quot;Save changes?&quot;, or it closes to the tray), it is shown again.</li>
-<li>Mission Control shows up to 24 windows.</li>
-<li>If the mod does not start at logon, turn on logging in the mod's <strong>Advanced</strong> tab in
-Windhawk and check the log output: the start-up steps are logged there.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Frixed</name>
-            <uri>https://github.com/frixed</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Active Window Highlight 0.1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-active-window-highlight#0356ef6ca8c046c0c8146151495dc3c217b0368d</id>
-        <link href="https://windhawk.net/mods/taskbar-active-window-highlight"/>
-        <updated>2026-11-15T20:00:21.000Z</updated>
-        <content type="html"><![CDATA[<h1>Taskbar Active Window Highlight</h1>
-<p>When an app has several windows, Windows 11's thumbnail preview gives no hint
-about which one is active. This mod adds an accent-colored highlight to the
-active window's card. The taskbar button keeps Windows' native indicator.</p>
-<p>Requires the Windows 11 taskbar's XAML thumbnail previews (tested on Windows 11
-build 26300). With the classic thumbnails, or with StartAllBack or
-ExplorerPatcher, the mod has no effect.</p>
-<p><img src="https://raw.githubusercontent.com/EphremTil17/taskbar-active-window-highlight/main/screenshots/preview.png" alt="Active window highlighted in the thumbnail preview"></p>
-<h2>How it works</h2>
-<p>The mod does not track focus itself. It reads the state Explorer already keeps:</p>
-<ul>
-<li>The taskbar's active task item (<code>TaskbarAppsList.ActiveItem</code>), which names
-the active window. The mod follows Explorer's own change notifications.</li>
-<li>Each thumbnail card's view model, which names the window the card shows.</li>
-</ul>
-<p>The highlight is a separate element placed right above the card's own
-background, below the title, icon and preview image. Its size and corner
-radius are bound to that background, so it follows themes such as
-Windows 11 Taskbar Styler.</p>
-<p>Clicking the taskbar or a preview list briefly moves focus to the taskbar
-itself. By default the last active window stays highlighted until another
-window or the desktop takes focus, or the window is minimized or closed.</p>
-<h2>How it differs from Taskbar Recent Focus Highlight</h2>
-<p><a href="https://windhawk.net/mods/taskbar-recent-focus-highlight">Taskbar Recent Focus Highlight</a>
-ranks apps and windows by recent use, from its own focus history. This mod
-answers a narrower question, which window is active right now, by reading
-Explorer's own active task item, with no focus tracking of its own. While
-another app has focus it marks nothing in this app's preview, and it also
-marks single-window previews.</p>
-<h2>Performance and footprint</h2>
-<ul>
-<li><strong>Event-driven only.</strong> No background thread, timers, polling or focus
-tracking. The mod runs only when Explorer reports a new active window or
-binds a preview card to a window.</li>
-<li><strong>Nothing on hover or layout.</strong> Moving the mouse over the taskbar or
-previews runs no mod code.</li>
-<li><strong>Under 1 ms, usually about 0.01 ms.</strong> Measured in normal use: typical
-0.004–0.013 ms per event, worst case 0.67 ms (the first time a card's
-highlight is created).</li>
-<li><strong>One element per card</strong>, created once and then only shown or hidden.</li>
-<li><strong>Safe to unload.</strong> No event handlers are left in Explorer, so disabling the
-mod cleanly removes it.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Ephrem T.</name>
-            <uri>https://github.com/EphremTil17</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[1 Letter Language Indicator 1.0]]></title>
-        <id>https://windhawk.net/mods/one-letter-language-indicator#b4d2a8ee55b15e05776a0a38fe0c22d62c08a931</id>
-        <link href="https://windhawk.net/mods/one-letter-language-indicator"/>
-        <updated>2026-11-15T19:03:56.000Z</updated>
-        <content type="html"><![CDATA[<h1>1 Letter Language Indicator</h1>
-<p>Simplifies the input language indicator in the Windows 11 taskbar tray to a
-single letter: <code>ENG</code> becomes <code>E</code>, and <code>ENG (US)</code> becomes <code>E</code>.</p>
-<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/one-letter-language-indicator/demo.png" alt="Demo"></p>
-<p>The indicator keeps updating when you switch input languages, and the original
-text is restored when the mod is disabled.</p>
-<h2>Settings</h2>
-<ul>
-<li><strong>Letter size</strong>: the font size of the letter. Set it to 0 to keep the
-Windows size (12).</li>
-<li><strong>Letter color</strong>: separate colors for light mode and dark mode, chosen by the
-taskbar's theme (the Windows mode). Each one can be:
-<ul>
-<li>A hex color (<code>#RRGGBB</code> or <code>#AARRGGBB</code>) or a color name (<code>Red</code>, <code>White</code>).</li>
-<li><code>accent</code> for the Windows accent color, or one of its shades:
-<code>accentLight1</code> to <code>accentLight3</code>, <code>accentDark1</code> to <code>accentDark3</code>. The
-letter follows accent color changes.</li>
-<li>Empty, to keep the Windows color in that mode.</li>
-</ul>
-</li>
-<li><strong>Vertical offset</strong>: moves the letter up (negative) or down (positive), in
-pixels. Useful for re-centering the letter after changing its size.</li>
-<li><strong>Indicator width</strong>: the language indicator normally reserves room for three
-letters. With a single letter that leaves empty space, so by default the
-indicator is narrowed to 32 pixels, the width of a regular tray icon. Set it
-to 0 to keep the Windows width.</li>
-</ul>
-<h2>Notes</h2>
-<ul>
-<li>Languages and layouts which start with the same letter look the same, e.g.
-<code>ENG (US)</code> and <code>ENG (UK)</code>, or <code>ENG</code> and <code>ESP</code>.</li>
-<li>Other mods may set the same properties. &quot;Taskbar tray icon spacing and grid&quot;
-sets the width of the language indicator: while <strong>Indicator width</strong> is set,
-this mod's width wins. Windows 11 Taskbar Styler themes which change the font
-size or color of the indicator conflict with <strong>Letter size</strong> and <strong>Letter
-color</strong>, and whichever mod applies last wins. To let the other mod control a
-property, set the matching setting to 0 (or leave the color empty).</li>
-</ul>
-<h2>Target</h2>
-<pre><code>SystemTray.LanguageTextIconContent &gt; Grid#ContainerGrid &gt;
-SystemTray.AdaptiveTextBlock#LanguageInnerTextBlock &gt; TextBlock#InnerTextBlock
-</code></pre>
-<p>Only Windows 11 is supported.</p>
-]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
         </author>
     </entry>
 </feed>
