@@ -27,7 +27,7 @@ This mod helps you multitask by pinning important windows so they always remain 
 - 🖥️ A floating text displayed at the bottom center of the screen, above the taskbar, to indicate pinning/unpinning.
 - 🟦 A highlight border around each pinned window. It follows the window when it moves, resizes or is minimised, and uses your Windows accent color, one color of your choice or a gradient. Corners can be rounded to match the window.
 ![windowDemo](https://raw.githubusercontent.com/AhmedAwad7/Always-On-Top-Windows-Windhawk-Mod-/main/Screenrecord/window.jpg)
-- 👁️ Opacity shortcuts: `Ctrl+Alt+(+)` and `Ctrl+Alt+(-)` make a pinned window more or less see-through, in steps.
+- 👁️ Opacity shortcuts: `Ctrl+Alt+I` and `Ctrl+Alt+D` make a pinned window more or less see-through, in steps.
 - ⌨️ The shortcut can be changed in the settings (Win, Ctrl, Alt, Shift and any key).
 - 🚫 An excluded apps list, and an option to not react while a full-screen game runs.
 - 📌 If Windows drops the always-on-top state, the mod puts it back.
@@ -45,9 +45,6 @@ This mod helps you multitask by pinning important windows so they always remain 
 
 ## Contributing:
   - Contributors are welcome! You can open Issues or Pull Requests on GitHub.
----
-## Download: 
-- [You can download the mod from the Windhawk mods here.](https://windhawk.net/mods/always-on-top)
 
 */
 // ==/WindhawkModReadme==
@@ -155,11 +152,11 @@ This mod helps you multitask by pinning important windows so they always remain 
   - "222": "Quote (')"
   - "19": "Pause"
   - "44": "Print screen"
-- hotkeyOpacityUp: "187"
+- hotkeyOpacityUp: "68"
   $name: More opaque shortcut key
   $name:ar-SA: أختصار مفتاح تقليل الشفافية
-  $description: 'Makes the active pinned window less see-through, in steps, using the same modifier keys as the pin shortcut (Suggested: +).'
-  $description:ar-SA: 'يجعل النافذة المثبتة الحالية أقل شفافية، على مراحل، باستخدام نفس مفاتيح التعديل مثل اختصار التثبيت (المقترح: +).'
+  $description: 'Makes the active pinned window less see-through, in steps, using the same modifier keys as the pin shortcut (Suggested: D).'
+  $description:ar-SA: 'يجعل النافذة المثبتة الحالية أقل شفافية، على مراحل، باستخدام نفس مفاتيح التعديل مثل اختصار التثبيت (المقترح: D).'
   $options:
   - "0": "Disabled"
   - "187": "Plus (+)"
@@ -212,11 +209,11 @@ This mod helps you multitask by pinning important windows so they always remain 
   - "121": "F10"
   - "122": "F11"
   - "123": "F12"
-- hotkeyOpacityDown: "189"
+- hotkeyOpacityDown: "73"
   $name: More transparent shortcut key
   $name:ar-SA: اختصار مفتاح زيادة الشفافية
-  $description: 'Makes the active pinned window more see-through, in steps, using the same modifier keys as the pin shortcut (Suggested: -).'
-  $description:ar-SA: 'يجعل النافذة المثبتة النشطة أكثر شفافية، على مراحل، باستخدام نفس مفاتيح التعديل الموجودة في اختصار التثبيت (مقترح: -).'
+  $description: 'Makes the active pinned window more see-through, in steps, using the same modifier keys as the pin shortcut (Suggested: I).'
+  $description:ar-SA: 'يجعل النافذة المثبتة النشطة أكثر شفافية، على مراحل، باستخدام نفس مفاتيح التعديل الموجودة في اختصار التثبيت (مقترح: I).'
   $options:
   - "0": "Disabled"
   - "187": "Plus (+)"
@@ -773,7 +770,8 @@ static UINT GetMonitorDpi(HMONITOR mon) {
 }
 
 static float ScalingFactor(HWND wnd) {
-    UINT dpi = GetWindowDpi(wnd);
+    HMONITOR mon = MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST);
+    UINT dpi = GetMonitorDpi(mon);
     if (dpi == 0) {
         dpi = 96;
     }
@@ -880,7 +878,7 @@ static COLORREF GetAccentColor() {
     if (RegGetValueW(HKEY_CURRENT_USER,
                      L"Software\\Microsoft\\Windows\\DWM", L"ColorizationColor",
                      RRF_RT_REG_DWORD, nullptr, &value, &size) == ERROR_SUCCESS) {
-        return RGB(value & 0xFF, (value >> 8) & 0xFF, (value >> 16) & 0xFF);
+        return RGB((value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF);
     }
     return RGB(0, 173, 239);
 }
