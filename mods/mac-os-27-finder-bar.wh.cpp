@@ -1000,6 +1000,7 @@ static void LoadSettings() {
 #define TIMER_REBUILD   3
 #define TIMER_MAXNOW    87  // logo depois de uma janela maximizar ou restaurar (o tique de 1 s é a reserva)
 #define TIMER_PEEKCOLOR 88  // a cor da janela ativa, depois que as janelas descem para a barra
+#define TIMER_ACTIVE    89  // confere o app ativo depois de minimizar ou fechar
 
 static const wchar_t kBarClass[] = L"WhFinderTopBar";
 static const wchar_t kOwnerClass[] = L"WhFinderTopBarOwner";
@@ -1406,6 +1407,18 @@ static void ForceForeground(HWND h) {
     SetFocus(h);
 }
 
+// Onde desenhar uma capa para ela cobrir a caixa sem deformar: a miniatura 16:9
+// de um vídeo (YouTube) é cortada dos lados, em vez de esticada (issue #13).
+// Quem chama recorta pela caixa.
+static D2D1_RECT_F CoverFill(ID2D1Bitmap* bmp, const D2D1_RECT_F& box) {
+    D2D1_SIZE_F bs = bmp->GetSize();
+    float bw = box.right - box.left, bh = box.bottom - box.top;
+    if (bs.width < 1 || bs.height < 1) return box;
+    float sc = std::max(bw / bs.width, bh / bs.height);
+    float dw = bs.width * sc, dh = bs.height * sc;
+    float cx = (box.left + box.right) / 2, cy = (box.top + box.bottom) / 2;
+    return D2D1::RectF(cx - dw / 2, cy - dh / 2, cx + dw / 2, cy + dh / 2);
+}
 static bool IsCloaked(HWND h) {
     DWORD cloaked = 0;
     return SUCCEEDED(DwmGetWindowAttribute(h, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked;
@@ -2852,7 +2865,10 @@ static int CountWindowsUpdates() {
     if (SUCCEEDED(CoCreateInstance(kClsid, nullptr, CLSCTX_INPROC_SERVER, kIid, (void**)&ses)) && ses &&
         SUCCEEDED(ses->CreateUpdateSearcher(&se)) && se) {
         se->put_Online(VARIANT_FALSE);
-        BSTR q = SysAllocString(L"IsInstalled=0 and IsHidden=0");
+        // BrowseOnly=0: sem as opcionais (drivers e prévias que as Configurações
+        // listam à parte, em "Atualizações opcionais"): contadas, o ícone ficava
+        // com "1" com o Windows já em dia (issue #2).
+        BSTR q = SysAllocString(L"IsInstalled=0 and IsHidden=0 and BrowseOnly=0");
         LONG c = 0;
         // Busca assíncrona: o encerramento pode interromper (RequestAbort).
         HANDLE ev = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -3025,7 +3041,7 @@ static HMENU BuildLogoMenu() {
         SetEvent(g_updKick);
     AddItem(m, ID_ABOUT, L"Sobre este PC");
     AddSep(m);
-    AddItem(m, ID_SETTINGS, L"Configurações do Sistema..." + UpdBadge(g_updWin));
+    AddItem(m, ID_SETTINGS, L"Ajustes do Sistema..." + UpdBadge(g_updWin));
     AddItem(m, ID_STORE, L"Microsoft Store..." + UpdBadge(g_updApps));
     AddSep(m);
     AddItem(m, ID_TASKMGR, L"Forçar encerramento...\tCtrl+Shift+Esc");
@@ -3781,6 +3797,11 @@ static HMENU BuildNetworkMenu() {
     return m;
 }
 
+// Aparelhos Bluetooth LE conectados (mouses e teclados novos, como os da
+// Logitech): a busca clássica não os lista (issue #16). A consulta (WinRT) roda
+// numa thread e fica guardada; o menu e a pílula usam a última e pedem outra.
+static void BleRefresh();
+static std::vector<std::wstring> BleConnectedNames();
 static HMENU BuildBluetoothMenu() {
     HMENU m = CreatePopupMenu();
     bool btOn = RadioStateBt() != 0;
@@ -3801,6 +3822,7 @@ static HMENU BuildBluetoothMenu() {
     di.dwSize = sizeof(di);
     HBLUETOOTH_DEVICE_FIND f = BluetoothFindFirstDevice(&sp, &di);
     int n = 0;
+    std::vector<std::wstring> names;  // os já listados (o mesmo aparelho pode estar nas duas buscas)
     if (f) {
         AddHeader(m, L"Dispositivos");
         do {
@@ -3809,12 +3831,21 @@ static HMENU BuildBluetoothMenu() {
             wchar_t icon = major == 1 ? 0xE7F8 : major == 2 ? 0xE8EA : major == 4 ? 0xE7F6 : major == 5 ? 0xE765 : 0xE702;
             std::wstring label = std::wstring(1, icon) + L" " + (di.szName[0] ? di.szName : L"Dispositivo");
             AddItem(m, ID_BT_LIST + n, label, di.fConnected != FALSE);
+            names.push_back(di.szName);
             n++;
             di.dwSize = sizeof(di);
         } while (n < 30 && BluetoothFindNextDevice(f, &di));
         BluetoothFindDeviceClose(f);
-        AddSep(m);
     }
+    BleRefresh();
+    for (const std::wstring& ble : BleConnectedNames()) {
+        if (n >= 45 || std::find(names.begin(), names.end(), ble) != names.end()) continue;
+        if (!n) AddHeader(m, L"Dispositivos");
+        AddItem(m, ID_BT_LIST + n, std::wstring(1, (wchar_t)0xE702) + L" " + ble, true);
+        names.push_back(ble);
+        n++;
+    }
+    if (n) AddSep(m);
     AddItem(m, ID_BT_ADD, L"Adicionar dispositivo...");
     AddItem(m, ID_BT_SETTINGS, L"Configurações de Bluetooth...");
     return m;
@@ -4559,6 +4590,14 @@ static void ApplyTrayMsg(const TrayMsg& m) {
 
 static void LayoutTrayPopup();
 static void CloseTrayPopup(bool refocus);
+// Os ícones do próprio Windows (volume, rede, energia…), que o explorer.exe ainda
+// registra na bandeja com GUIDs da família 7820AE7x-23E3-…: a barra já mostra
+// isso nos itens dela, então não entram no espelho da bandeja (issue #3).
+static bool TrayIsShellIcon(const TrayIcon& t) {
+    if (!t.hasGuid || t.guid.Data2 != 0x23E3 || t.guid.Data3 != 0x4229) return false;
+    if ((t.guid.Data1 & 0xFFFFFF00u) != 0x7820AE00u) return false;
+    return true;
+}
 
 static void ProcessTrayQueue() {
     std::vector<std::vector<BYTE>> q;
@@ -4901,6 +4940,50 @@ static auto CcAwait(Op const& op, DWORD ms = 3000) {
         throw winrt::hresult_canceled();
     }
     return op.GetResults();
+}
+
+static SRWLOCK g_bleLock = SRWLOCK_INIT;
+static std::vector<std::wstring> g_bleNames;
+static volatile LONG g_bleBusy = 0;
+static ULONGLONG g_bleTick = 0;
+static std::vector<std::wstring> BleConnectedNames() {
+    AcquireSRWLockShared(&g_bleLock);
+    std::vector<std::wstring> v = g_bleNames;
+    ReleaseSRWLockShared(&g_bleLock);
+    return v;
+}
+static DWORD WINAPI BleThread(void*) {
+    winrt::init_apartment(winrt::apartment_type::multi_threaded);
+    std::vector<std::wstring> found;
+    bool ok = false;
+    try {
+        using namespace winrt::Windows::Devices;
+        auto sel = Bluetooth::BluetoothLEDevice::GetDeviceSelectorFromConnectionStatus(
+            Bluetooth::BluetoothConnectionStatus::Connected);
+        auto all = CcAwait(Enumeration::DeviceInformation::FindAllAsync(sel), 4000);
+        for (auto const& d : all) {
+            std::wstring name(d.Name());
+            if (!name.empty() && std::find(found.begin(), found.end(), name) == found.end()) found.push_back(name);
+        }
+        ok = true;
+    } catch (...) {
+    }
+    if (ok) {
+        AcquireSRWLockExclusive(&g_bleLock);
+        g_bleNames.swap(found);
+        ReleaseSRWLockExclusive(&g_bleLock);
+    }
+    winrt::uninit_apartment();
+    InterlockedExchange(&g_bleBusy, 0);
+    return 0;
+}
+static void BleRefresh() {
+    // No máximo uma consulta a cada 2 s (o menu aberto pede de novo a cada 2,5 s).
+    ULONGLONG now = GetTickCount64();
+    if (g_bleTick && now - g_bleTick < 2000) return;
+    if (InterlockedCompareExchange(&g_bleBusy, 1, 0) != 0) return;
+    g_bleTick = now;
+    if (!StartJobThread(BleThread, nullptr)) InterlockedExchange(&g_bleBusy, 0);
 }
 
 static void CcDoRadios(unsigned jobs) {
@@ -7174,7 +7257,7 @@ static void CcDrawMedia(const CcShared& sh) {
         ID2D1Layer* layer = nullptr;
         if (SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(artR, &clip)) && SUCCEEDED(g_cc.rt->CreateLayer(&layer))) {
             g_cc.rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip), layer);
-            g_cc.rt->DrawBitmap(g_cc.art, art, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+            g_cc.rt->DrawBitmap(g_cc.art, CoverFill(g_cc.art, art), 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
             g_cc.rt->PopLayer();
         }
         SafeRelease(layer);
@@ -7916,16 +7999,21 @@ static void CcPowerChoose(int row) {
     }
     GUID plan{};
     bool hasPlan = PowerPlanActive(&plan);
+    // (Registro para a issue #4: a barra fechando ao trocar o modo de energia.)
+    Wh_Log(L"Energia: escolha %d (tipo %d)", it.index, it.kind);
     if (it.kind == 1) {
         // O modo só vale com o plano Equilibrado (como nas Configurações do Windows).
         if (hasPlan && !IsEqualGUID(plan, kPlanBalanced)) PowerPlanSet(kPlanBalanced);
-        PowerModeSet(kPowerModes[it.index].g);
+        bool ok = PowerModeSet(kPowerModes[it.index].g);
+        Wh_Log(L"Energia: modo trocado (%d)", ok ? 1 : 0);
     } else if (it.kind == 2 && it.index < (int)g_ccPowerPlans.size()) {
-        PowerPlanSet(g_ccPowerPlans[it.index]);
+        bool ok = PowerPlanSet(g_ccPowerPlans[it.index]);
+        Wh_Log(L"Energia: plano trocado (%d)", ok ? 1 : 0);
     }
     CcRefreshLocal();
     CcPowerBuild();
     CcApplyGeometry();
+    Wh_Log(L"Energia: central atualizada");
 }
 
 static void CcActivate(int id) {
@@ -9895,7 +9983,7 @@ static void TrayComputeLayout() {
 
     g_tray.shown.clear();
     for (int i = 0; i < (int)g_trayIcons.size(); i++)
-        if (!g_trayIcons[i].hidden && g_trayIcons[i].icon) g_tray.shown.push_back(i);
+        if (!g_trayIcons[i].hidden && g_trayIcons[i].icon && !TrayIsShellIcon(g_trayIcons[i])) g_tray.shown.push_back(i);
 
     int n = (int)g_tray.shown.size();
     int cols = std::max(1, std::min(n, 6));
@@ -10828,17 +10916,27 @@ static void FlyLoadBt() {
     BLUETOOTH_DEVICE_INFO di{};
     di.dwSize = sizeof(di);
     HBLUETOOTH_DEVICE_FIND f = BluetoothFindFirstDevice(&sp, &di);
-    if (!f) return;
-    int n = 0;
-    do {
-        if (di.fConnected) {
-            DWORD major = (di.ulClassofDevice >> 8) & 0x1F;
-            wchar_t icon = major == 1 ? 0xE7F8 : major == 2 ? 0xE8EA : major == 4 ? 0xE7F6 : major == 5 ? 0xE765 : 0xE702;
-            g_fly.devs.push_back({di.szName[0] ? di.szName : T(L"Dispositivo"), icon});
+    std::vector<std::wstring> names;
+    if (f) {
+        int n = 0;
+        do {
+            if (di.fConnected) {
+                DWORD major = (di.ulClassofDevice >> 8) & 0x1F;
+                wchar_t icon = major == 1 ? 0xE7F8 : major == 2 ? 0xE8EA : major == 4 ? 0xE7F6 : major == 5 ? 0xE765 : 0xE702;
+                g_fly.devs.push_back({di.szName[0] ? di.szName : T(L"Dispositivo"), icon});
+                names.push_back(di.szName);
+            }
+            di.dwSize = sizeof(di);
+        } while (++n < 40 && g_fly.devs.size() < 6 && BluetoothFindNextDevice(f, &di));
+        BluetoothFindDeviceClose(f);
+    }
+    // Os LE conectados (mouses e teclados novos).
+    BleRefresh();
+    for (const std::wstring& ble : BleConnectedNames())
+        if (g_fly.devs.size() < 6 && std::find(names.begin(), names.end(), ble) == names.end()) {
+            g_fly.devs.push_back({ble, (wchar_t)0xE702});
+            names.push_back(ble);
         }
-        di.dwSize = sizeof(di);
-    } while (++n < 40 && g_fly.devs.size() < 6 && BluetoothFindNextDevice(f, &di));
-    BluetoothFindDeviceClose(f);
 }
 
 // ---- Procurar e parear aparelhos Bluetooth (sem abrir as Configurações) ----
@@ -12354,7 +12452,7 @@ static void NpRender() {
         ID2D1Layer* cl = nullptr;
         if (SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(artR, &clip)) && SUCCEEDED(rt->CreateLayer(&cl))) {
             rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip), cl);
-            rt->DrawBitmap(g_np.artBmp, g_np.art, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+            rt->DrawBitmap(g_np.artBmp, CoverFill(g_np.artBmp, g_np.art), 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
             rt->PopLayer();
         }
         SafeRelease(cl);
@@ -19162,7 +19260,11 @@ static void IslandStart(const IslandNote& n) {
         // O mesmo vidro da Central: ao vivo, a foto do fundo acompanha a janela
         // de baixo (mas a pílula sai de gravações e capturas); sem ao vivo, a
         // foto é tirada quando ela aparece, e a pílula aparece nas gravações.
-        if (GlassLayerCreate(g_isl.glass, g_isl.pos, g_isl.W, g_isl.H) && !g_isl.glass.lq) GlassLayerDestroy(g_isl.glass);
+        // A pílula só usa o vidro desenhado por ela (a foto do fundo): no Vidro
+        // ao vivo, o padrão seria o desfoque do Windows, que a pílula não tem,
+        // e ela ficava sem vidro nenhum (issue #17). Força a foto.
+        if (GlassLayerCreate(g_isl.glass, g_isl.pos, g_isl.W, g_isl.H, true, true) && !g_isl.glass.lq)
+            GlassLayerDestroy(g_isl.glass);
         if (g_isl.glass.lq && g_isl.glass.lq->live && g_owner) SetTimer(g_owner, TIMER_LIQUID, 40, nullptr);
     }
     if (!g_isl.hwnd) {
@@ -19284,7 +19386,9 @@ static void IslandMakeGlass() {
     GlassLayerDestroy(g_isl.glass);
     if (IslSolid()) return;
     IslGlassScope islGlass;
-    if (GlassLayerCreate(g_isl.glass, g_isl.pos, g_isl.W, g_isl.H) && !g_isl.glass.lq) GlassLayerDestroy(g_isl.glass);
+    // Só o vidro desenhado pela pílula (a foto do fundo), como em IslandStart.
+    if (GlassLayerCreate(g_isl.glass, g_isl.pos, g_isl.W, g_isl.H, true, true) && !g_isl.glass.lq)
+        GlassLayerDestroy(g_isl.glass);
     if (g_isl.glass.lq && g_isl.glass.lq->live && g_owner) SetTimer(g_owner, TIMER_LIQUID, 40, nullptr);
 }
 
@@ -22899,6 +23003,9 @@ static void OpenItemMenu(Bar* b, int idx) {
 
     b->open = -1;
     InvalidateRect(b->hwnd, nullptr, FALSE);
+    // Deslizando para outro menu da barra: o app não volta para a frente entre um
+    // menu e o outro (isso fazia a janela dele piscar a cada troca; issue #12).
+    const bool switching = !cmd && g_gmSwitchTo >= 0;
 
     if (helpPicked) {
         // Resultado da busca: executa no menu de onde ele veio.
@@ -22925,7 +23032,7 @@ static void OpenItemMenu(Bar* b, int idx) {
             DWORD_PTR r;
             SendMessageTimeoutW(target, WM_UNINITMENUPOPUP, (WPARAM)nativeSub, 0, SMTO_ABORTIFHUNG, 200, &r);
         }
-        FocusActive();
+        if (!switching) FocusActive();
         if (cmd && target && IsWindow(target)) PostMessageW(target, WM_COMMAND, MAKEWPARAM(cmd, 0), 0);
         return;
     }
@@ -22972,7 +23079,7 @@ static void OpenItemMenu(Bar* b, int idx) {
         FlyToggle(b, idx, cmd == ID_SLIDER_VOL ? FLY_VOL : FLY_BRIGHT);
         return;
     }
-    bool keepFocus = it.kind == K_LOGO && (cmd == ID_SLEEP || cmd == ID_HIBERNATE || cmd == ID_LOCK);
+    bool keepFocus = switching || (it.kind == K_LOGO && (cmd == ID_SLEEP || cmd == ID_HIBERNATE || cmd == ID_LOCK));
     if (!keepFocus) FocusActive();
     RunCommand(hasTm ? &tm : nullptr, cmd);
 }
@@ -24099,8 +24206,9 @@ static void SetAppBarPos(Bar* b, bool onlyIfChanged) {
     if (onlyIfChanged && GetWindowRect(b->hwnd, &cur) && EqualRect(&cur, &abd.rc)) return;
     g_inSetPos = true;
     SHAppBarMessage(ABM_SETPOS, &abd);
+    bool handleHidden = g_settings.autoHide && !b->autoShown;  // escondida pela alça: continua
     SetWindowPos(b->hwnd, HWND_TOPMOST, abd.rc.left, abd.rc.top, abd.rc.right - abd.rc.left,
-                 b->heightPx, SWP_NOACTIVATE | (b->hiddenForFullscreen ? 0 : SWP_SHOWWINDOW));
+                 b->heightPx, SWP_NOACTIVATE | (b->hiddenForFullscreen || handleHidden ? 0 : SWP_SHOWWINDOW));
     g_inSetPos = false;
 }
 
@@ -24125,10 +24233,41 @@ static bool IsShellOverlayProcess(HWND w) {
     return false;
 }
 
+static bool WindowIsFullscreenOn(HWND fg, Bar* b);
+// A janela de cima neste monitor (a primeira de verdade na ordem do Windows).
+struct TopOnMon {
+    HMONITOR mon;
+    HWND found = nullptr;
+};
+static BOOL CALLBACK TopOnMonProc(HWND w, LPARAM lp) {
+    auto* f = reinterpret_cast<TopOnMon*>(lp);
+    if (!IsWindowVisible(w) || IsIconic(w) || IsCloaked(w)) return TRUE;
+    if (GetWindowLongW(w, GWL_EXSTYLE) & (WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) return TRUE;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(w, &pid);
+    if (IsShellOrSelf(pid)) return TRUE;  // a barra, os painéis dela e o shell (barra de tarefas)
+    if (MonitorFromWindow(w, MONITOR_DEFAULTTONULL) != f->mon) return TRUE;
+    f->found = w;
+    return FALSE;
+}
 static bool ForegroundIsFullscreenOn(Bar* b) {
     HWND fg = GetForegroundWindow();
     if (!fg || ClassIs(fg, L"Progman") || ClassIs(fg, L"WorkerW")) return false;
-    if (MonitorFromWindow(fg, MONITOR_DEFAULTTONULL) != b->monitor) return false;
+    if (MonitorFromWindow(fg, MONITOR_DEFAULTTONULL) != b->monitor) {
+        // O app ativo está noutro monitor: vale a janela de cima deste (um vídeo
+        // em tela cheia no segundo monitor enquanto se trabalha no primeiro;
+        // antes a barra continuava por cima dele, issue #1).
+        TopOnMon t{b->monitor};
+        EnumWindows(TopOnMonProc, (LPARAM)&t);
+        return t.found && WindowIsFullscreenOn(t.found, b);
+    }
+    DWORD pid = 0;
+    GetWindowThreadProcessId(fg, &pid);
+    if (IsShellOrSelf(pid)) return false;
+    return WindowIsFullscreenOn(fg, b);
+}
+static bool WindowIsFullscreenOn(HWND fg, Bar* b) {
+    if (!fg || ClassIs(fg, L"Progman") || ClassIs(fg, L"WorkerW")) return false;
     // Não contam: janelas invisíveis ou escondidas pelo DWM, sobreposições
     // (transparentes ao mouse, de ferramenta: Game Bar, NVIDIA, Discord, Steam,
     // gravadores), painéis do Windows e janelas maximizadas com barra de título.
@@ -24207,12 +24346,8 @@ static void UpdateFullscreen() {
     for (Bar* b : g_bars) {
         bool hide = false, forMax = false;
         // (Com "Ocultar com a alça", só a alça esconde e mostra a barra.)
-        if (g_settings.hideOnFullscreen && !(g_settings.autoHide && g_settings.revealHandle)) {
-            HWND fg = GetForegroundWindow();
-            DWORD pid = 0;
-            if (fg) GetWindowThreadProcessId(fg, &pid);
-            hide = !IsShellOrSelf(pid) && ForegroundIsFullscreenOn(b);
-        }
+        if (g_settings.hideOnFullscreen && !(g_settings.autoHide && g_settings.revealHandle))
+            hide = ForegroundIsFullscreenOn(b);  // (o shell e a própria barra não contam)
         if (!hide && g_settings.hideWhenMaximized && !g_settings.autoHide && AnyMaximizedOn(b)) hide = forMax = true;
         // Só esconde se continuar em tela cheia na conferência seguinte (uma janela
         // que pisca do tamanho da tela não derruba a barra); volta na hora.
@@ -24239,10 +24374,13 @@ static void UpdateFullscreen() {
         }
         if (hide != b->hiddenForFullscreen) {
             b->hiddenForFullscreen = hide;
-            ShowWindow(b->hwnd, hide ? SW_HIDE : SW_SHOWNOACTIVATE);
+            // Com a alça, a barra escondida por ela continua escondida ao sair da
+            // tela cheia (issue #15): só a alça a mostra.
+            bool handleHidden = g_settings.autoHide && !b->autoShown;
+            if (hide || !handleHidden) ShowWindow(b->hwnd, hide ? SW_HIDE : SW_SHOWNOACTIVATE);
             if (hide && b->shadow) ShowWindow(b->shadow, SW_HIDE);
-            if (!hide) BarSyncShadow(b);
-            if (!hide) SetWindowPos(b->hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            if (!hide && !handleHidden) BarSyncShadow(b);
+            if (!hide && !handleHidden) SetWindowPos(b->hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
         // Escondida por janela maximizada, a barra devolve o espaço do topo; ao
         // voltar, reserva de novo.
@@ -24675,6 +24813,19 @@ static void AutoHideTick() {
 // App ativo: atualização
 // ===========================================================================
 
+static void UpdateActiveApp(HWND fg);
+// O app da barra foi minimizado, escondido ou fechado, e o primeiro plano foi
+// para algo que não é app (a barra de tarefas, nada): a barra volta ao Finder,
+// como no macOS (antes só voltava com um clique na área de trabalho; issue #5).
+static void ActiveRecheck() {
+    HWND a = g_active.hwnd;
+    if (!a || g_active.finder) return;
+    if (IsWindow(a) && IsWindowVisible(a) && !IsIconic(a)) return;
+    HWND fg = GetForegroundWindow();
+    ActiveApp x;
+    if (fg && fg != a && ResolveActive(fg, x)) UpdateActiveApp(fg);
+    else UpdateActiveApp(GetShellWindow());  // Progman: a área de trabalho
+}
 static void UpdateActiveApp(HWND fg) {
     ActiveApp a;
     if (!ResolveActive(fg, a)) return;
@@ -24729,6 +24880,10 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
     if (event == EVENT_SYSTEM_FOREGROUND && g_owner) SetTimer(g_owner, TIMER_PEEKCOLOR, 120, nullptr);  // outra janela ativa: outra cor
     if (event == EVENT_SYSTEM_FOREGROUND) UpdateActiveApp(hwnd);
     else if (hwnd == g_active.hwnd) UpdateWindowColor();  // minimizar/restaurar
+    // Minimizar o app da barra, ou o primeiro plano ir para a barra de tarefas:
+    // confere daqui a pouco se o app ainda está à vista.
+    if ((event == EVENT_SYSTEM_MINIMIZESTART && hwnd == g_active.hwnd) || event == EVENT_SYSTEM_FOREGROUND)
+        if (g_owner) SetTimer(g_owner, TIMER_ACTIVE, 250, nullptr);
 }
 
 // ===========================================================================
@@ -24959,8 +25114,9 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 bool hide = lp && ForegroundIsFullscreenOn(b);
                 if (hide != b->hiddenForFullscreen) {
                     b->hiddenForFullscreen = hide;
-                    ShowWindow(hwnd, hide ? SW_HIDE : SW_SHOWNOACTIVATE);
-                    if (!hide)
+                    bool handleHidden = g_settings.autoHide && !b->autoShown;  // (issue #15)
+                    if (hide || !handleHidden) ShowWindow(hwnd, hide ? SW_HIDE : SW_SHOWNOACTIVATE);
+                    if (!hide && !handleHidden)
                         SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 }
             }
@@ -25110,6 +25266,11 @@ static LRESULT CALLBACK OwnerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
                     if (b->autoShown && BarPeekColors(b)) BarSamplePeekColor(b);
                 return 0;
             }
+            if (wp == TIMER_ACTIVE) {
+                KillTimer(hwnd, TIMER_ACTIVE);
+                ActiveRecheck();
+                return 0;
+            }
             if (wp == TIMER_MAXNOW) {
                 KillTimer(hwnd, TIMER_MAXNOW);
                 UpdateFullscreen();
@@ -25122,9 +25283,10 @@ static LRESULT CALLBACK OwnerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
                 UpdateFullscreen();
                 if (AnyBarStyle(4)) UpdateWindowColor();
                 if (g_statusTick % 5 == 0) PurgeDeadTrayIcons();
+                if (g_statusTick % 15 == 0 && RadioStateBt() != 0) BleRefresh();  // os LE conectados, para o menu já ter
                 if (g_cc.hwnd && g_cc.drag < 0) CcOnUpdate();
-                if (g_active.hwnd && !IsWindow(g_active.hwnd)) {
-                    UpdateActiveApp(GetForegroundWindow());
+                if (g_active.hwnd && (!IsWindow(g_active.hwnd) || IsIconic(g_active.hwnd) || !IsWindowVisible(g_active.hwnd))) {
+                    ActiveRecheck();  // fechado ou minimizado (a reserva do evento)
                 } else if (g_settings.showGlobalMenu && NativeMenuCount(g_active.hwnd) != g_nativeMenuCount) {
                     BuildTopMenus();
                     RedrawAll();
@@ -25955,7 +26117,7 @@ const UiTr kUiTr[] = {
     {L"%s atualização", L"%s update", L"%s actualización", L"%s mise à jour", L"%s Update", L"%s aggiornamento", L"%s 个更新"},
     {L"%s atualizações", L"%s updates", L"%s actualizaciones", L"%s mises à jour", L"%s Updates", L"%s aggiornamenti", L"%s 个更新"},
     {L"Sobre este PC", L"About This PC", L"Acerca de este equipo", L"À propos de ce PC", L"Über diesen PC", L"Informazioni su questo PC", L"关于此电脑"},
-    {L"Configurações do Sistema...", L"System Settings...", L"Configuración del sistema...", L"Paramètres système...", L"Systemeinstellungen...", L"Impostazioni di sistema...", L"系统设置..."},
+    {L"Ajustes do Sistema...", L"System Settings...", L"Configuración del sistema...", L"Paramètres système...", L"Systemeinstellungen...", L"Impostazioni di sistema...", L"系统设置..."},
     {L"Forçar encerramento...", L"Force Quit...", L"Forzar salida...", L"Forcer à quitter...", L"Sofort beenden...", L"Uscita forzata...", L"强制退出..."},
     {L"Mostrar área de trabalho", L"Show Desktop", L"Mostrar escritorio", L"Afficher le bureau", L"Desktop anzeigen", L"Mostra desktop", L"显示桌面"},
     {L"Suspender", L"Sleep", L"Suspender", L"Mettre en veille", L"Energie sparen", L"Sospendi", L"睡眠"},
