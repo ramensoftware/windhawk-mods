@@ -397,7 +397,12 @@ static bool SelColor(D2D1_COLOR_F* c, bool* darkText = nullptr) {
     if (i < 0 || i >= kSelCount) return false;
     DWORD v = kSelPalette[i].rgb;
     *c = D2D1::ColorF(((v >> 16) & 255) / 255.0f, ((v >> 8) & 255) / 255.0f, (v & 255) / 255.0f, 1.0f);
-    if (darkText) *darkText = v == 0xFFD60A;
+    if (darkText) {
+        *darkText = v == 0xFFD60A;
+        // Com o degradê, o texto escuro só quando as duas cores são claras (amarelo).
+        int j = g_settings.selBar2;
+        if (j >= 0 && j < kSelCount && j != i) *darkText = *darkText && kSelPalette[j].rgb == 0xFFD60A;
+    }
     return true;
 }
 // A segunda cor da seleção (o degradê), se houver.
@@ -12819,12 +12824,14 @@ static LRESULT CALLBACK NpWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 static void NpToggle(Bar* b, int idx) {
     if (g_np.hwnd && g_np.closing) DestroyWindow(g_np.hwnd);  // termina o fechamento já
     if (g_np.hwnd) {
-        bool same = g_np.bar == b;
-        NpClose();
-        if (same) {
+        if (g_np.bar == b) {
+            NpClose();
             FocusActive();
             return;
         }
+        // Outro monitor: fecha já (o novo painel usa o mesmo g_np).
+        g_captureNeedsFlush = true;
+        DestroyWindow(g_np.hwnd);
     }
     CcQueue(JOB_MEDIA);
     g_np.bar = b;
@@ -15311,6 +15318,7 @@ static LRESULT CALLBACK BsWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 } else if (d.kind == BR_COLORS) {
                     if (part >= 10) {
                         BsSet(d.val, part - 11);  // 10 = fosca (-1)
+                        BsLayout();  // linhas que dependem da cor (a segunda cor)
                         BsRender();
                     }
                 } else if (d.kind == BR_CHOICE) {
@@ -15333,7 +15341,10 @@ static LRESULT CALLBACK BsWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     }
                 } else if ((d.kind == BR_ITEM || d.kind == BR_SWITCH) && part == 1) {
                     BsSet(d.val, !BsGet(d.val));
-                    if (!BsReopenIfNeeded()) BsRender();
+                    if (!BsReopenIfNeeded()) {
+                        BsLayout();  // linhas que dependem de um interruptor
+                        BsRender();
+                    }
                 }
             }
             return 0;
@@ -19169,6 +19180,7 @@ static void IslandStart(const IslandNote& n) {
 }
 
 static void NtfRefresh();
+static void NtfFrontNewest();
 static void IslandPush(const IslandNote& n, bool force) {
     // Pílulas desligadas: as notificações dos apps ainda vão para o botão (sem
     // a pílula); os outros avisos, não.
@@ -19207,7 +19219,8 @@ static void IslandPush(const IslandNote& n, bool force) {
         }
         if (isNotif || g_settings.islHistNotices) g_islUnread++;
         if (g_settings.islHistory) RedrawAll();
-        NtfRefresh();  // painel de notificações aberto: entra na hora
+        NtfFrontNewest();  // a mais nova vai para a frente da pilha
+        NtfRefresh();      // painel de notificações aberto: entra na hora
     }
     if (noPill) return;
     if (g_isl.hwnd) {
@@ -20860,7 +20873,9 @@ static void BnrOnNotification() {
 
 // Liga/desliga conforme o ajuste.
 static void NotifApply() {
-    bool want = g_settings.winNotifs;  // mesmo sem as pílulas: as notificações vão para o botão
+    // Mesmo sem as pílulas as notificações vão para o botão; sem as pílulas e sem
+    // o sino na barra, nada as mostraria, então não lê.
+    bool want = g_settings.winNotifs && (g_settings.islandPills || g_settings.islHistory);
     if (!want) {
         NotifStop();
         g_notifApiOk = false;
@@ -20901,14 +20916,15 @@ static void NotifOnMsg(NotifMsg* m) {
             }
             if (g_settings.winNotifs) ToastWatchStart();
         }
-        IslandShow(0xEA8F, 0x8E8E93, L"Notificações do Windows",
-                   m->kind == 1 ? L"Acesso negado: lendo os avisos da tela (deixe as faixas ligadas)"
-                                : L"Lendo os avisos da tela (deixe as faixas ligadas)",
-                   L"", false, true);
+        if (g_settings.islandPills)
+            IslandShow(0xEA8F, 0x8E8E93, L"Notificações do Windows",
+                       m->kind == 1 ? L"Acesso negado: lendo os avisos da tela (deixe as faixas ligadas)"
+                                    : L"Lendo os avisos da tela (deixe as faixas ligadas)",
+                       L"", false, true);
     } else if (m->kind == 4) {
         g_notifApiOk = true;
         BnrApply();
-        IslandShow(0xEA8F, 0x30D158, L"Notificações do Windows", L"Ativas", L"", false, true);
+        if (g_settings.islandPills) IslandShow(0xEA8F, 0x30D158, L"Notificações do Windows", L"Ativas", L"", false, true);
     } else if (g_settings.winNotifs) {
         BnrOnNotification();
         // Título: a primeira linha (quem mandou/assunto). Embaixo: o app e a mensagem.
@@ -20995,6 +21011,7 @@ struct NotifPanel {
     float scrollTarget = 0;
     // Na pilha fechada, a roda do mouse gira os cartões: stackRot é o grupo da frente.
     int stackRot = 0;
+    int wheelAcc = 0;  // a roda somada até um "dente"
     ULONGLONG rotTick = 0;
     float stackHFrom = 0;
     size_t cardsEnd = 0;
@@ -21487,6 +21504,9 @@ static void NtfLayout() {
     else g_ntf.stackRot = 0;
     NtfStackRects();
     g_ntf.stackHFrom = g_ntf.stackH;
+    // Os blocos foram refeitos: um giro em andamento perderia de onde saiu (quem
+    // dispensa um cartão começa o seu depois daqui).
+    g_ntf.rotTick = 0;
     {
         MONITORINFO mi{};
         mi.cbSize = sizeof(mi);
@@ -21613,19 +21633,19 @@ struct NtfAlphaScope {
         }
     }
 };
-// Desenha tudo menos a área de um cartão arredondado (o da frente da pilha).
-struct NtfMaskScope {
-    ID2D1RenderTarget* rt;
-    ID2D1Layer* layer = nullptr;
+static void NtfFrontNewest() { g_ntf.stackRot = 0; }
+// O buraco do cartão da frente da pilha: a geometria (tudo menos o cartão) e
+// uma camada, feitas uma vez por quadro e usadas por todos os de trás.
+struct NtfHole {
     ID2D1Geometry* geo = nullptr;
-    NtfMaskScope(ID2D1RenderTarget* t, const D2D1_RECT_F* hole, float radius) : rt(t) {
-        if (!hole) return;
+    ID2D1Layer* layer = nullptr;
+    void Build(ID2D1RenderTarget* rt, const D2D1_RECT_F& hole, float radius) {
         ID2D1RectangleGeometry* all = nullptr;
         ID2D1RoundedRectangleGeometry* cut = nullptr;
         ID2D1PathGeometry* path = nullptr;
         ID2D1GeometrySink* sink = nullptr;
         if (SUCCEEDED(g_d2d->CreateRectangleGeometry(D2D1::RectF(-10000, -10000, 10000, 10000), &all)) &&
-            SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(*hole, radius, radius), &cut)) &&
+            SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(hole, radius, radius), &cut)) &&
             SUCCEEDED(g_d2d->CreatePathGeometry(&path)) && SUCCEEDED(path->Open(&sink)) &&
             SUCCEEDED(all->CombineWithGeometry(cut, D2D1_COMBINE_MODE_EXCLUDE, nullptr, sink)) && SUCCEEDED(sink->Close())) {
             geo = path;
@@ -21635,15 +21655,24 @@ struct NtfMaskScope {
         SafeRelease(path);
         SafeRelease(cut);
         SafeRelease(all);
-        if (geo && SUCCEEDED(rt->CreateLayer(&layer)))
-            rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), geo, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE), layer);
+        if (geo && FAILED(rt->CreateLayer(&layer))) layer = nullptr;
+    }
+    ~NtfHole() {
+        SafeRelease(layer);
+        SafeRelease(geo);
+    }
+};
+// Desenha tudo menos o buraco (o cartão da frente da pilha).
+struct NtfMaskScope {
+    ID2D1RenderTarget* rt;
+    bool on = false;
+    NtfMaskScope(ID2D1RenderTarget* t, const NtfHole* hole) : rt(t) {
+        if (!hole || !hole->geo || !hole->layer) return;
+        rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), hole->geo, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE), hole->layer);
+        on = true;
     }
     ~NtfMaskScope() {
-        if (layer) {
-            rt->PopLayer();
-            layer->Release();
-        }
-        SafeRelease(geo);
+        if (on) rt->PopLayer();
     }
 };
 static void NtfRender() {
@@ -21794,12 +21823,14 @@ static void NtfRender() {
             if (b.kind == 1 && b.depth == 0) {
                 frontR = D2D1::RectF(b.r.left, b.r.top + oy, b.r.right, b.r.bottom + oy);
                 // Arrastando o da frente para o lado: o de trás vai aparecendo.
-                if (g_ntf.swiping && g_ntf.swipeBlock >= 0 && &g_ntf.blocks[g_ntf.swipeBlock] == &b) {
+                if (g_ntf.swiping && g_ntf.swipeBlock >= 0 && g_ntf.swipeBlock == (int)(&b - g_ntf.blocks.data())) {
                     frontR.left += g_ntf.swipeDx;
                     frontR.right += g_ntf.swipeDx;
                 }
                 stackFront = true;
             }
+    NtfHole hole;
+    if (stackFront) hole.Build(rt, frontR, 20 * s);
     std::vector<size_t> drawOrder;
     for (size_t i = 0; i < g_ntf.blocks.size(); i++) drawOrder.push_back(i);
     std::stable_sort(drawOrder.begin(), drawOrder.end(), [](size_t a, size_t c) {
@@ -21816,7 +21847,7 @@ static void NtfRender() {
         if (b.alpha < 0.01f) continue;
         // Na pilha, o cartão da frente não deixa ver os de trás: eles só
         // aparecem fora dele (pela borda de baixo).
-        NtfMaskScope behind(rt, stackFront && b.kind == 1 && b.depth > 0 ? &frontR : nullptr, 20 * s);
+        NtfMaskScope behind(rt, stackFront && b.kind == 1 && b.depth > 0 ? &hole : nullptr);
         NtfAlphaScope fade(rt, b.alpha < 0.999f, b.alpha);
         // O cartão sendo arrastado: vai junto com o mouse e esmaece.
         struct SwipeScope {
@@ -22220,8 +22251,15 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case WM_MOUSEWHEEL: {
             if (g_ntf.stackable && !g_ntf.stackOpen) {
-                // A pilha fechada gira: para baixo, a próxima notificação vem para a frente.
-                NtfStackRotate(GET_WHEEL_DELTA_WPARAM(wp) < 0 ? 1 : -1);
+                // A pilha fechada gira: para baixo, a próxima notificação vem para a
+                // frente. Um cartão por "dente" (WHEEL_DELTA): touchpads mandam vários
+                // passos pequenos por gesto.
+                g_ntf.wheelAcc += GET_WHEEL_DELTA_WPARAM(wp);
+                while (std::abs(g_ntf.wheelAcc) >= WHEEL_DELTA) {
+                    int dir = g_ntf.wheelAcc < 0 ? 1 : -1;
+                    g_ntf.wheelAcc += dir * WHEEL_DELTA;
+                    NtfStackRotate(dir);
+                }
                 return 0;
             }
             g_ntf.scrollTarget = std::clamp(g_ntf.scrollTarget - GET_WHEEL_DELTA_WPARAM(wp) / 120.0f * 90 * g_ntf.s, 0.0f,
@@ -22466,12 +22504,15 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 static void NtfToggle(Bar* b, int idx) {
     if (g_ntf.hwnd && g_ntf.closing) DestroyWindow(g_ntf.hwnd);
     if (g_ntf.hwnd) {
-        bool same = g_ntf.bar == b;
-        NtfClose();
-        if (same) {
+        if (g_ntf.bar == b) {
+            NtfClose();
             FocusActive();
             return;
         }
+        // Clique no sino de outro monitor: o painel aberto fecha já (sem a
+        // animação), porque o novo usa o mesmo g_ntf (janela, vidro).
+        g_captureNeedsFlush = true;
+        DestroyWindow(g_ntf.hwnd);
     }
     g_ntf.bar = b;
     g_ntf.barIdx = idx;
@@ -23889,8 +23930,10 @@ static void Render(Bar* b) {
             }
             if (p.spec.kind == K_NOTIF && g_islUnread > 0) {
                 // Notificação não vista: o próprio sino fica vermelho, como o
-                // microfone e a câmera em uso (a sombra não).
-                b->brush->SetColor(shadowPass ? fg : D2D1::ColorF(1.0f, 0.27f, 0.23f, 1));
+                // microfone e a câmera em uso (a sombra não; sobre a pílula de
+                // seleção fica o branco dela, que o vermelho sumiria nela).
+                bool onSel = placedIdx > 0 && placedIdx - 1 < selItem.size() && selItem[placedIdx - 1];
+                b->brush->SetColor(shadowPass || onSel ? fg : D2D1::ColorF(1.0f, 0.27f, 0.23f, 1));
                 BarGlyph(b, (wchar_t)0xEA8F, std::round((p.l + p.r) / 2), h / 2, s);
                 b->brush->SetColor(fg);
                 continue;
@@ -26106,6 +26149,8 @@ const UiTr kUiTr[] = {
     {L"Testar notificações", L"Test notifications", L"Probar notificaciones", L"Tester les notifications", L"Benachrichtigungen testen", L"Prova le notifiche", L"测试通知"},
     {L"Cada toque manda uma notificação de teste, de um app diferente, que fica no botão; Limpar, no painel, tira todas", L"Each click sends a test notification from a different app, kept in the button; Clear, in the panel, removes them all", L"Cada clic envía una notificación de prueba de una app distinta, que queda en el botón; Borrar, en el panel, las quita todas", L"Chaque clic envoie une notification de test d’une app différente, gardée dans le bouton ; Effacer, dans le panneau, les retire toutes", L"Jeder Klick sendet eine Testbenachrichtigung einer anderen App, die im Knopf bleibt; Löschen im Bereich entfernt alle", L"Ogni clic invia una notifica di prova da un’app diversa, che resta nel pulsante; Cancella, nel pannello, le rimuove tutte", L"每次点击发送一条来自不同应用的测试通知，保留在按钮中；面板中的“清除”会全部移除"},
     {L"%s (teste %s)", L"%s (test %s)", L"%s (prueba %s)", L"%s (test %s)", L"%s (Test %s)", L"%s (prova %s)", L"%s（测试 %s）"},
+    {L"E-mail", L"Email", L"Correo", L"E-mail", L"E-Mail", L"E-mail", L"电子邮件"},
+    {L"Agenda", L"Calendar", L"Calendario", L"Calendrier", L"Kalender", L"Calendario", L"日历"},
     {L"Mensagens", L"Messages", L"Mensajes", L"Messages", L"Nachrichten", L"Messaggi", L"信息"},
     {L"Equipe", L"Team", L"Equipo", L"Équipe", L"Team", L"Team", L"团队"},
     {L"Chegou! Te espero na entrada.", L"I’m here! Waiting at the entrance.", L"¡Llegué! Te espero en la entrada.", L"Je suis là ! Je t’attends à l’entrée.", L"Bin da! Ich warte am Eingang.", L"Sono arrivata! Ti aspetto all’ingresso.", L"我到了！在门口等你。"},
