@@ -1025,6 +1025,7 @@ const UiTranslation kUiTranslations[] = {
     {L"Done (%d)", L"Concluir (%d)", L"Listo (%d)", L"Terminé (%d)", L"Fertig (%d)", L"Fine (%d)"},
     {L"New tab", L"Nova aba", L"Nueva pestaña", L"Nouvel onglet", L"Neuer Tab", L"Nuova scheda"},
     {L"New tab with this app", L"Nova aba com este aplicativo", L"Nueva pestaña con esta aplicación", L"Nouvel onglet avec cette application", L"Neuer Tab mit dieser App", L"Nuova scheda con questa app"},
+    {L"New tab with the selected apps", L"Nova aba com os aplicativos selecionados", L"Nueva pestaña con las aplicaciones seleccionadas", L"Nouvel onglet avec les applications sélectionnées", L"Neuer Tab mit den ausgewählten Apps", L"Nuova scheda con le app selezionate"},
     {L"Add app", L"Adicionar aplicativo", L"Añadir aplicación", L"Ajouter une application", L"App hinzufügen", L"Aggiungi app"},
     {L"Rename tab", L"Renomear aba", L"Renombrar pestaña", L"Renommer l’onglet", L"Tab umbenennen", L"Rinomina scheda"},
     {L"Delete tab", L"Excluir aba", L"Eliminar pestaña", L"Supprimer l’onglet", L"Tab löschen", L"Elimina scheda"},
@@ -1120,7 +1121,7 @@ const ZhTranslation kZhTranslations[] = {
     {L"Customize theme", L"自定义主题"},
     {L"Transparency, glass, menus and, for the chosen mode, the Siri bar, the window and the animations. Each theme keeps its own", L"透明度、玻璃、菜单，以及所选模式下的 Siri 栏、窗口和动画。每个主题各自保存"},
     {L"Restore theme defaults", L"恢复主题默认值"},
-    {L"Forgets everything you changed in this theme and brings back how it comes", L"忘记你对此主题的所有更改，恢复其初始状态"},
+    {L"Brings this theme back to how it comes. Its values are then kept for this theme, so changing them in Windhawk's Settings tab no longer reaches it", L"将此主题恢复为初始状态。之后这些值会保存在此主题中，在 Windhawk 的设置标签页中更改它们将不再影响它"},
     {L"Look", L"外观"},
     {L"How much of what is behind shows through. 100 = completely clear", L"透出背后内容的程度。100 = 完全透明"},
     {L"How much the glass bends what is behind it at the edges. 0 = no bending", L"玻璃在边缘弯曲背后内容的程度。0 = 不弯曲"},
@@ -1209,6 +1210,7 @@ const ZhTranslation kZhTranslations[] = {
     {L"Done (%d)", L"完成（%d）"},
     {L"New tab", L"新建标签"},
     {L"New tab with this app", L"用此应用新建标签"},
+    {L"New tab with the selected apps", L"用所选应用新建标签"},
     {L"Add app", L"添加应用"},
     {L"Rename tab", L"重命名标签"},
     {L"Delete tab", L"删除标签"},
@@ -2244,11 +2246,11 @@ const CfgTranslation kCfgTranslations[] = {
      L"Rétablir le thème par défaut",
      L"Design-Standard wiederherstellen",
      L"Ripristina tema predefinito"},
-    {L"Forgets everything you changed in this theme and brings back how it comes",
-     L"Olvida todo lo que cambiaste en este tema y vuelve a como viene",
-     L"Oublie tout ce que vous avez modifié dans ce thème et revient à son état d’origine",
-     L"Vergisst alles, was Sie an diesem Design geändert haben, und stellt den Auslieferungszustand wieder her",
-     L"Dimentica tutto ciò che hai cambiato in questo tema e torna a come era"},
+    {L"Brings this theme back to how it comes. Its values are then kept for this theme, so changing them in Windhawk's Settings tab no longer reaches it",
+     L"Devuelve este tema a como viene. Sus valores quedan guardados en este tema, así que cambiarlos en la pestaña Settings de Windhawk ya no le llega",
+     L"Ramène ce thème à son état d’origine. Ses valeurs sont alors gardées pour ce thème : les changer dans l’onglet Settings de Windhawk ne l’atteint plus",
+     L"Setzt dieses Design auf den Auslieferungszustand zurück. Seine Werte bleiben dann für dieses Design gespeichert, Änderungen im Settings-Tab von Windhawk erreichen es nicht mehr",
+     L"Riporta questo tema a come era. I suoi valori restano salvati per questo tema, quindi cambiarli nella scheda Settings di Windhawk non lo raggiunge più"},
     {L"Look",
      L"Aspecto",
      L"Apparence",
@@ -4066,8 +4068,8 @@ const CfgItem kCfgItems[] = {
     // Customize theme: everything below Theme is kept per theme; what the theme or the mode doesn't use is hidden
     {1, kCfgGroup, L"#g.customize", L"Customize theme", L"Personalizar tema", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
     {1, kCfgButton, L"#themeReset", L"Restore theme defaults", L"Restaurar tema padrão",
-     L"Forgets everything you changed in this theme and brings back how it comes",
-     L"Esquece tudo o que você mudou neste tema e volta a como ele vem", 0, 0, 0, nullptr, nullptr, 0},
+     L"Brings this theme back to how it comes. Its values are then kept for this theme, so changing them in Windhawk's Settings tab no longer reaches it",
+     L"Volta este tema a como ele vem. Os valores passam a ficar guardados neste tema, então mudá-los na aba Settings do Windhawk não chega mais a ele", 0, 0, 0, nullptr, nullptr, 0},
     {1, kCfgGroup, L"#g.look", L"Look", L"Visual", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
     {1, kCfgSlider, L"appearance.transparency", L"Glass transparency", L"Transparência do vidro",
      L"How much of what is behind shows through. 100 = completely clear",
@@ -5165,6 +5167,8 @@ std::unordered_map<std::wstring, unsigned long long> g_userAssistTime;   // ... 
 std::unordered_map<std::wstring, unsigned long long> g_launchTimes;      // last launch through the mod
 std::unordered_map<std::wstring, unsigned long long> g_firstSeen;         // when an app first showed up (installed)
 constexpr WCHAR kKnownAppsKey[] = L"knownApps";
+void SaveLongValue(PCWSTR base, const std::wstring& data);
+std::wstring LoadLongValue(PCWSTR base);
 int g_firstRowCount;   // items in the Floating / Original Siri first row (a line is drawn under it)
 
 unsigned long long NowFileTime() {
@@ -5209,11 +5213,9 @@ void LoadLaunchCounts() {
             g_launchTimes[parts[2]] = _wcstoui64(parts[1].c_str(), nullptr, 10);
         }
     }
-    std::vector<WCHAR> known(1 << 16, 0);
-    Wh_GetStringValue(kKnownAppsKey, known.data(), known.size());
-    known.back() = 0;
+    std::wstring known = LoadLongValue(kKnownAppsKey);
     g_firstSeen.clear();
-    for (auto& line : SplitRecords(known.data())) {
+    for (auto& line : SplitRecords(known.c_str())) {
         size_t tab = line.find(L'\t');
         if (tab != std::wstring::npos) g_firstSeen[line.substr(tab + 1)] = _wcstoui64(line.substr(0, tab).c_str(), nullptr, 10);
     }
@@ -5238,11 +5240,8 @@ void UpdateKnownApps(const AppList& apps) {
     }
     if (!changed) return;
     std::wstring data;
-    for (auto& [target, time] : g_firstSeen) {
-        if (data.size() > 30000) break;   // portable Windhawk reads a value back correctly only up to 32,767 characters
-        data += std::to_wstring(time) + L"\t" + target + kRecSep;
-    }
-    Wh_SetStringValue(kKnownAppsKey, data.c_str());
+    for (auto& [target, time] : g_firstSeen) data += std::to_wstring(time) + L"\t" + target + kRecSep;
+    SaveLongValue(kKnownAppsKey, data);   // every app is kept (in parts), so none comes back as "just installed"
 }
 
 void SaveLaunchCounts() {
@@ -5560,6 +5559,40 @@ std::wstring Clean(std::wstring s) {
     return s;
 }
 
+// A value that can grow long, kept in parts ("folders", "folders2", ...), each under 30,000 characters: portable
+// Windhawk reads a longer value back wrongly. The parts are joined again when it is read (a record can span two parts)
+constexpr int kMaxValueParts = 40;
+std::wstring ValuePartKey(PCWSTR base, int part) { return part == 0 ? std::wstring(base) : std::wstring(base) + std::to_wstring(part + 1); }
+void SaveLongValue(PCWSTR base, const std::wstring& data) {
+    int parts = 0;
+    size_t at = 0;
+    do {
+        size_t n = std::min<size_t>(30000, data.size() - at);
+        if (at + n < data.size() && n > 0 && IS_HIGH_SURROGATE(data[at + n - 1])) n--;   // a character's two halves stay together
+        Wh_SetStringValue(ValuePartKey(base, parts).c_str(), data.substr(at, n).c_str());
+        at += n; parts++;
+    } while (at < data.size() && parts < kMaxValueParts);
+    std::vector<WCHAR> probe(1 << 15);
+    for (int i = parts; i < kMaxValueParts; i++) {   // parts left from a longer value
+        std::wstring key = ValuePartKey(base, i);
+        if (!Wh_GetStringValue(key.c_str(), probe.data(), (int)probe.size())) break;
+        Wh_DeleteValue(key.c_str());
+    }
+}
+std::wstring LoadLongValue(PCWSTR base) {
+    std::wstring out;
+    std::vector<WCHAR> buf(1 << 18, 0);   // (earlier versions kept the whole value in the first part)
+    for (int part = 0; part < kMaxValueParts; part++) {
+        buf[0] = 0;
+        Wh_GetStringValue(ValuePartKey(base, part).c_str(), buf.data(), (int)buf.size());
+        buf.back() = 0;
+        if (!buf[0]) break;
+        out += buf.data();
+    }
+    return out;
+}
+bool IsLongValue(const std::wstring& key);
+
 void SaveFolders() {
     std::wstring data;
     for (const auto& f : g_folders) {
@@ -5567,15 +5600,13 @@ void SaveFolders() {
         for (const auto& a : f.apps) { data += L'\t'; data += Clean(a->target); }
         data += kRecSep;
     }
-    Wh_SetStringValue(kFoldersKey, data.c_str());
+    SaveLongValue(kFoldersKey, data);
 }
 
 void LoadFolders() {
-    std::vector<WCHAR> buf(1 << 18, 0);
-    Wh_GetStringValue(kFoldersKey, buf.data(), buf.size());
-    buf.back() = 0;
+    std::wstring stored = LoadLongValue(kFoldersKey);
     g_folders.clear();
-    for (const auto& line : SplitRecords(buf.data())) {
+    for (const auto& line : SplitRecords(stored.c_str())) {
         auto fields = Split(line, L'\t');
         if (fields.size() < 2) continue;
         Folder folder;
@@ -5597,15 +5628,13 @@ void SaveCustomTabs() {
         for (const auto& target : t.targets) { data += L'\t'; data += Clean(target); }
         data += kRecSep;
     }
-    Wh_SetStringValue(kCustomTabsKey, data.c_str());
+    SaveLongValue(kCustomTabsKey, data);
 }
 
 void LoadCustomTabs() {
-    std::vector<WCHAR> buf(1 << 17, 0);
-    Wh_GetStringValue(kCustomTabsKey, buf.data(), buf.size());
-    buf.back() = 0;
+    std::wstring stored = LoadLongValue(kCustomTabsKey);
     g_customTabs.clear();
-    for (const auto& line : SplitRecords(buf.data())) {
+    for (const auto& line : SplitRecords(stored.c_str())) {
         auto fields = Split(line, L'\t');
         if (fields.empty() || fields[0].empty() || (int)g_customTabs.size() >= kMaxCustomTabs) continue;
         CustomTab tab;
@@ -5625,15 +5654,13 @@ void SaveBuiltinTabs() {
         for (const auto& t : b.removed) { data += L"\t-"; data += Clean(t); }
         data += kRecSep;
     }
-    Wh_SetStringValue(kBuiltinTabsKey, data.c_str());
+    SaveLongValue(kBuiltinTabsKey, data);
 }
 
 void LoadBuiltinTabs() {
-    std::vector<WCHAR> buf(1 << 17, 0);
-    Wh_GetStringValue(kBuiltinTabsKey, buf.data(), buf.size());
-    buf.back() = 0;
+    std::wstring stored = LoadLongValue(kBuiltinTabsKey);
     for (auto& b : g_builtinTabs) b = BuiltinTab{};
-    for (const auto& line : SplitRecords(buf.data())) {
+    for (const auto& line : SplitRecords(stored.c_str())) {
         auto fields = Split(line, L'\t');
         if (fields.size() < 2) continue;
         int i = _wtoi(fields[0].c_str());
@@ -6649,8 +6676,6 @@ float ThemeShadowMargin(float s) {
     }
 }
 
-// The themes where the selection in menus can be colored (Glass, Liquid glass and Custom glass)
-bool MenuSelectionTheme() { return true; }   // every theme can use every selection (glass, colored, frosted, two colors)
 // Base color for popups (context menu) that matches the theme
 D2D1_COLOR_F ThemeMenuColor() {
     switch (ActiveTheme()) {
@@ -6869,11 +6894,12 @@ ComPtr<IDWriteTextFormat> OneLineFormat(PCWSTR family, float px, DWRITE_FONT_WEI
 }
 
 int g_formatText;   // the results text size the formats were made with
+UiLanguage g_formatLang;   // and the language (the tab widths are measured on the translated labels)
 float TextScale() { return g_settings.textSize / 100.0f; }   // results text (grid.textSize)
 float TextGrow() { return std::max(1.0f, TextScale()); }    // rows grow with bigger text (smaller text keeps the rows)
 void EnsureFormats(float scale) {
-    if (g_labelFormat && g_formatScale == scale && g_formatText == g_settings.textSize) return;
-    g_formatScale = scale; g_formatText = g_settings.textSize;
+    if (g_labelFormat && g_formatScale == scale && g_formatText == g_settings.textSize && g_formatLang == g_uiLanguage) return;
+    g_formatScale = scale; g_formatText = g_settings.textSize; g_formatLang = g_uiLanguage;
     auto make = [&](float size, DWRITE_FONT_WEIGHT weight, DWRITE_TEXT_ALIGNMENT align, ComPtr<IDWriteTextFormat>& format) {
         format = OneLineFormat(L"Segoe UI Variable Text", size * scale, weight, align);
     };
@@ -7802,6 +7828,9 @@ void DrawChromeRing(D2D1_POINT_2F c, float r, float a) {
     DrawChromeEdge(D2D1::RectF(c.x - r, c.y - r, c.x + r, c.y + r), r, a, 0.42f);
 }
 bool ChromeBorderOn() { return g_settings.chromeBorder && !g_settings.light && !g_noBacklight; }
+// Fullscreen: the border stays still (a moving light would redraw the whole monitor-sized window 30 times a second)
+bool ChromeBorderStill() { return g_settings.fullscreen && !g_settings.siri; }
+float ChromeBorderSpeed() { return ChromeBorderStill() ? 0.0f : 0.09f; }
 
 // Glass buttons: a clear, polished glass piece. Almost no fill (what is behind stays clean), a faint light on the top
 // half, a crisp hairline rim bright at the top and the bottom, and inside it a second fine line that only catches
@@ -7937,10 +7966,10 @@ int g_surfaceMaxTransparency = 100;
 void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, bool shadow);
 void PushOpacity(float a);
 D2D1_COLOR_F Alpha(D2D1_COLOR_F c, float a);
-// Item under the mouse in the clear glass theme's menus: the theme's glass, a solid color (macOS) or a frosted color.
+// Item under the mouse in the menus (every theme): the theme's glass, a solid color (macOS), a frosted color or two colors.
 // Returns true when the row is a solid color, so its text turns white
 bool DrawMenuSelection(const D2D1_RECT_F& row, float radius, bool danger) {
-    if (!MenuSelectionTheme() || g_settings.menuSelection == 0) return false;
+    if (g_settings.menuSelection == 0) return false;
     float s = g_layout.scale;
     D2D1_COLOR_F c = danger ? D2D1::ColorF(0.92f, 0.26f, 0.24f) : g_settings.menuSelectionColor;
     if (g_settings.menuSelection == 1) { Fill(row, Alpha(c, 1.0f), radius); return true; }
@@ -7970,7 +7999,7 @@ D2D1_COLOR_F MenuInk(bool onColor, float a) { return onColor ? D2D1::ColorF(1, 1
 // (Colored, Frosted color, Two colors), otherwise clear glass (or a plain veil with glass buttons off).
 // Returns true when the row is a solid color, so its text turns white
 bool DrawResultHighlight(const D2D1_RECT_F& r, float radius, bool strong) {
-    if (MenuSelectionTheme() && g_settings.menuSelection != 0) {
+    if (g_settings.menuSelection != 0) {
         if (strong) return DrawMenuSelection(r, radius, false);
         PushOpacity(0.45f);
         DrawMenuSelection(r, radius, false);
@@ -7996,7 +8025,7 @@ void DrawCategoryMenu(const D2D1_RECT_F& r, float rad, float e) {
         bool onColor = false;
         if (i == g_menu.hover) {
             float rowRad = std::max(4 * s, rad - 8 * s);   // concentric with the menu
-            bool custom = MenuSelectionTheme() && g_settings.menuSelection != 0;
+            bool custom = g_settings.menuSelection != 0;
             if (custom) onColor = DrawMenuSelection(row, rowRad, false);
             else if (g_settings.glassButtons) DrawGlassButton(row, rowRad, 1.0f, 1.5f, false);   // Glass selection: clear glass
             else Fill(row, Fg(0.11f), rowRad);
@@ -8105,7 +8134,7 @@ void DrawPopupMenu(const D2D1::Matrix3x2F& base) {
         D2D1_RECT_F row = D2D1::RectF(r.left + 6 * s, top, r.right - 6 * s, top + g_menu.itemH);
         bool onColor = false;
         if (i == g_menu.hover) {
-            if (MenuSelectionTheme() && g_settings.menuSelection != 0) onColor = DrawMenuSelection(row, 8 * s, it.danger);
+            if (g_settings.menuSelection != 0) onColor = DrawMenuSelection(row, 8 * s, it.danger);
             else {
                 if (it.danger) Fill(row, D2D1::ColorF(1, 0.3f, 0.3f, 0.20f), 8 * s);
                 DrawGlassButton(row, 8 * s, 1.0f, 1.2f, false);
@@ -8139,8 +8168,11 @@ App* AppOfMain(int idx) {
 }
 App* SelectableApp(int idx) {
     App* a = AppOfMain(idx);
+    if (!a) return nullptr;   // (also an index outside the list, such as -1 for empty space)
     int it = g_layoutItems[idx];
-    return a && (it < kFolderBase || (Picking() && it >= kFolderAppBase && it < kTabBase)) ? a : nullptr;
+    // Floating lists the apps of every folder too: they can be selected there like the others
+    bool folderApp = it >= kFolderAppBase && it < kTabBase;
+    return it < kFolderBase || (folderApp && (Picking() || (g_settings.siri && !g_settings.siriOriginal))) ? a : nullptr;
 }
 bool IsSelected(int idx) { App* a = SelectableApp(idx); return a && g_selection.count(a); }
 
@@ -8606,7 +8638,8 @@ void DrawHistoryHeader(const Layout& L) {
     if (g_listFormat) {
         D2D1_RECT_F t = D2D1::RectF(L.listHeader.left + 10 * s, L.listHeader.top, L.listHeader.right - 40 * s, L.listHeader.bottom);
         g_brush->SetColor(Fg(0.55f));
-        g_target->DrawText(Tr(L"Recent searches"), 15, g_listFormat.Get(), t, g_brush.Get());
+        PCWSTR header = Tr(L"Recent searches");
+        g_target->DrawText(header, (UINT32)wcslen(header), g_listFormat.Get(), t, g_brush.Get());
     }
     D2D1_RECT_F r = HistClearRect(L);
     if (g_histClearHover) Fill(r, Fg(0.12f), 8 * s);
@@ -9242,7 +9275,7 @@ ID2D1Bitmap* LiquidMapFor(float w, float h, float radius, float band, float dept
             return m.bitmap.Get();
         }
     std::vector<UINT32> px((size_t)mw * mh);
-    float hw = mw, hh = mh;   // half of the full size = the map size
+    float hw = mw * 0.5f, hh = mh * 0.5f;   // the shape's centre in map pixels (the map is stretched over the whole shape)
     float r = std::min({radius / 2, hw, hh}), b = std::max(1.0f, band / 2), dep = std::max(0.5f, depth / 2);
     for (int y = 0; y < mh; y++) {
         for (int x = 0; x < mw; x++) {
@@ -9470,7 +9503,7 @@ void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, 
     if (big) DrawBacklightGlow(r, rad, 1.0f, 22 * g_layout.scale);
     DrawThemedShapeBody(r, radius, backdrop, shadow);
     if (big) DrawBacklightRim(r, rad, 1.0f);
-    if (big && ChromeBorderOn()) DrawChromeEdge(r, rad, 0.9f, 0.09f);
+    if (big && ChromeBorderOn()) DrawChromeEdge(r, rad, 0.9f, ChromeBorderSpeed());
 }
 void DrawThemedShapeBody(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, bool shadow) {
     const Layout& L = g_layout;
@@ -10194,7 +10227,7 @@ void Render() {
         float m = WindowInset(L.scale);
         DrawThemedShape(D2D1::RectF(m, m, W - m, H - m), std::max(0.0f, radius - m * 0.25f), GetBackdropBitmap(), !g_settings.fullscreen);
         // Fullscreen casts no shadow (so DrawThemedShape leaves the border out): the chrome border is drawn here
-        if (g_settings.fullscreen && ChromeBorderOn()) DrawChromeEdge(D2D1::RectF(m, m, W - m, H - m), std::max(0.0f, radius - m * 0.25f), 0.9f, 0.09f);
+        if (g_settings.fullscreen && ChromeBorderOn()) DrawChromeEdge(D2D1::RectF(m, m, W - m, H - m), std::max(0.0f, radius - m * 0.25f), 0.9f, ChromeBorderSpeed());
     }
 
     D2D1::Matrix3x2F zoomMatrix = fx.m;
@@ -10338,7 +10371,7 @@ void StartFrames() {
 
 void StopFrames() {
     if (g_frameWaitTimer) CancelWaitableTimer(g_frameWaitTimer);
-    else KillTimer(g_wnd, kTimerFrame);
+    KillTimer(g_wnd, kTimerFrame);   // (also a fallback timer started before the waitable timer existed)
     g_frameTimer = false;
 }
 
@@ -11993,6 +12026,15 @@ void CancelChipRename() {
     ComputeLayout(); Render();
 }
 
+std::vector<App*> AllApps();
+// What a menu on an app acts on: the selected apps when it was opened on one of them (Floating), else that app
+std::vector<App*> MenuTargets(App* app) {
+    std::vector<App*> out;
+    if (app && g_selection.size() > 1 && g_selection.count(app)) { for (App* a : AllApps()) if (g_selection.count(a)) out.push_back(a); }
+    else if (app) out.push_back(app);
+    return out;
+}
+
 void NewCustomTab(App* app) {
     if ((int)g_customTabs.size() >= kMaxCustomTabs) return;
     std::wstring base = Tr(L"New tab"), name = base;
@@ -12002,7 +12044,11 @@ void NewCustomTab(App* app) {
     for (int n = 2; taken(name); n++) name = base + L" " + std::to_wstring(n);
     CustomTab tab;
     tab.name = name;
-    if (app) tab.targets.push_back(ToLower(app->target));
+    for (App* a : MenuTargets(app)) {   // the app, or all the selected apps
+        std::wstring t = ToLower(a->target);
+        if (std::find(tab.targets.begin(), tab.targets.end(), t) == tab.targets.end()) tab.targets.push_back(t);
+    }
+    g_selection.clear();   // they are in the tab now: the selection (and its jiggle) ends
     g_customTabs.push_back(std::move(tab));
     SaveCustomTabs();
     g_appFilter = kChipCustom + (int)g_customTabs.size() - 1;
@@ -12155,7 +12201,9 @@ void ExecuteMenu(int id) {
     CloseMenu();
     if (id >= kMenuCfgBase && id < kMenuCfgBase + kCfgItemCount * 32) { CfgChoose(id - kMenuCfgBase); return; }
     if (id >= kMenuAddToTab && id < kMenuAddToTab + kMaxCustomTabs) {
-        if (app) AddToChip(kChipCustom + id - kMenuAddToTab, *app);
+        for (App* a : MenuTargets(app)) AddToChip(kChipCustom + id - kMenuAddToTab, *a);
+        g_selection.clear();
+        RefreshAppsView();
         Render();
         return;
     }
@@ -12164,7 +12212,12 @@ void ExecuteMenu(int id) {
         case kMenuAddApps: StartPicker(g_menuChip); break;
         case kMenuRenameTab: if (g_menuChip >= kChipCustom) BeginChipRename(g_menuChip - kChipCustom); break;
         case kMenuDeleteTab: DeleteChip(g_menuChip); break;
-        case kMenuRemoveFromTab: if (app) RemoveFromChip(g_menuChip, *app); break;
+        case kMenuRemoveFromTab: {
+            auto apps = MenuTargets(app);
+            g_selection.clear();
+            for (App* a : apps) RemoveFromChip(g_menuChip, *a);
+            break;
+        }
         case kMenuRestoreTabs: RestoreBuiltinTabs(); break;
         case kMenuTextCopy: CopyQueryToClipboard(); break;
         case kMenuTextCut:
@@ -12208,7 +12261,7 @@ void ExecuteMenu(int id) {
         case kMenuDesktop: {
             bool ok = true;
             if (app && g_selection.count(app) && g_selection.size() > 1) {
-                for (auto& a : g_apps) if (g_selection.count(a.get())) ok = CreateDesktopShortcut(*a) && ok;
+                for (App* a : AllApps()) if (g_selection.count(a)) ok = CreateDesktopShortcut(*a) && ok;   // (folder apps too: Floating)
             } else if (app) ok = CreateDesktopShortcut(*app);
             if (!ok) {
                 DialogBegin(false);
@@ -12219,7 +12272,7 @@ void ExecuteMenu(int id) {
             break;
         }
         case kMenuPin:
-            if (app && g_selection.count(app) && g_selection.size() > 1) { for (auto& a : g_apps) if (g_selection.count(a.get())) PinToTaskbar(a->target); }
+            if (app && g_selection.count(app) && g_selection.size() > 1) { for (App* a : AllApps()) if (g_selection.count(a)) PinToTaskbar(a->target); }
             else if (app) PinToTaskbar(app->target);
             break;
         case kMenuHistRemove:
@@ -13083,7 +13136,7 @@ bool HoverRingSpinning() {
 }
 // The backlight's colors and the chrome border turn all the time the launcher is open (slowly: 30 frames a second is plenty)
 bool AmbientSpinning() {
-    return g_shown && !g_settings.light && ((g_settings.backlight && g_settings.backlightIntensity > 0) || g_settings.chromeBorder);
+    return g_shown && !g_settings.light && ((g_settings.backlight && g_settings.backlightIntensity > 0) || (g_settings.chromeBorder && !ChromeBorderStill()));
 }
 bool RingSpinning() { return HoverRingSpinning() || AmbientSpinning(); }
 void DrawMoreButton() {
@@ -13300,10 +13353,12 @@ bool CfgThemeChanged() {   // (drawn with every frame of the Appearance section:
 }
 bool CfgThemeChangedNow() {
     if (!g_themeValuesLoaded) LoadThemeValues();
-    auto found = g_themeValues.find(ThemeName(g_settings.theme));
-    if (found == g_themeValues.end()) return false;
-    for (const auto& [key, value] : found->second)   // values equal to how the theme comes don't count
-        if (ToLower(value) != ToLower(ThemeKeyDefault(g_settings.theme, key.c_str()))) return true;
+    // The values in effect (the theme's own, or those set in Windhawk's Settings tab), compared to how the theme comes
+    for (const CfgItem& it : kCfgItems) {
+        if (!IsThemeKey(it.key)) continue;
+        std::wstring d = ThemeKeyDefault(g_settings.theme, it.key);
+        if (!d.empty() && ToLower(CfgThemeStr(g_settings.theme, it.key)) != ToLower(d)) return true;
+    }
     return false;
 }
 
@@ -14211,7 +14266,11 @@ bool WriteWholeFile(const std::wstring& path, const std::string& data) {
     return ok;
 }
 
+bool IsLongValue(const std::wstring& key) {
+    return key == kFoldersKey || key == kCustomTabsKey || key == kBuiltinTabsKey || key == kKnownAppsKey;
+}
 std::wstring StorageString(PCWSTR key) {
+    if (IsLongValue(key)) return LoadLongValue(key);   // all its parts
     std::vector<WCHAR> buf(1 << 20, 0);
     Wh_GetStringValue(key, buf.data(), buf.size());
     buf.back() = 0;
@@ -14335,12 +14394,15 @@ void BackupImport() {
             if (!it) { g_cfgLegacy[key] = value; continue; }   // a setting this version no longer has (carried over below)
             if (it->type == kCfgButton || it->type == kCfgGroup) continue;
             std::wstring base = CfgWindhawkValue(*it);
+            for (WCHAR& c : value) if (c < 0x20 || c == kRecSep) c = L' ';   // a hand-edited file: no line breaks or tabs in a setting
             if (value != base) g_cfgOverrides[it->key] = {value, base};
         } else if (f.size() == 3 && f[0] == "V" && B64ToW(f[1], key) && B64ToW(f[2], value)) {
             for (PCWSTR k : kBackupStrings) if (key == k) {
                 if (key == kThemeValuesKey) themeValuesInFile = true;
                 for (WCHAR& c : value) if (c == L'\n') c = kRecSep;   // backups made by earlier versions
-                Wh_SetStringValue(k, value.c_str());
+                value.erase(std::remove_if(value.begin(), value.end(), [](WCHAR c) { return c < 0x20 && c != L'\t'; }), value.end());
+                if (IsLongValue(k)) SaveLongValue(k, value);   // in parts, as the mod keeps it
+                else Wh_SetStringValue(k, value.c_str());
             }
         } else if (f.size() == 3 && f[0] == "N" && B64ToW(f[1], key)) {
             for (PCWSTR k : kBackupInts) if (key == k) Wh_SetIntValue(k, atoi(f[2].c_str()));
@@ -15009,7 +15071,7 @@ DWORD WINAPI GhIconThread(void*) {
 
 void GhStopThreads() {
     g_ghStop = true;
-    if (g_ghWake) SetEvent(g_ghWake);
+    if (g_ghWake) ReleaseSemaphore(g_ghWake, kGhIconThreads + 1, nullptr);   // every icon thread wakes and sees the stop
     std::vector<HANDLE*> threads = {&g_ghListThread};
     for (HANDLE& h : g_ghIconThreads) threads.push_back(&h);
     for (HANDLE* h : threads)
@@ -15060,12 +15122,12 @@ void GhQueueVisible() {
     g_ghQueue = std::move(wanted);
     g_ghQueueFolder = g_gh.key;
     ReleaseSRWLockExclusive(&g_ghLock);
-    if (!g_ghWake) g_ghWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_ghWake) g_ghWake = CreateSemaphoreW(nullptr, 0, 1024, nullptr);   // one wake per thread (an event would wake only one)
     // One thread for the pictures on screen; more while the colors of the whole folder are being found
     int threads = g_gh.paths.empty() ? 0 : GhColorMode() ? kGhIconThreads : 1;
     for (int i = 0; i < threads; i++)
         if (!g_ghIconThreads[i]) g_ghIconThreads[i] = CreateThread(nullptr, 0, GhIconThread, nullptr, 0, nullptr);
-    if (g_ghWake) for (int i = 0; i < threads; i++) SetEvent(g_ghWake);
+    if (g_ghWake && threads > 0) ReleaseSemaphore(g_ghWake, threads, nullptr);
 }
 
 // Called on every frame: when the gallery was scrolled to other rows, the pictures there are asked for
@@ -16049,9 +16111,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         items.push_back({Tr(L"Add app"), kMenuAddApps});
                         items.push_back({Tr(L"Remove from tab"), kMenuRemoveFromTab});
                     } else {
-                        if (room) items.push_back({Tr(L"New tab with this app"), kMenuNewTab});
+                        bool many = sel && g_selection.size() > 1;   // the menu acts on all the selected apps
+                        if (room) items.push_back({many ? Tr(L"New tab with the selected apps") : Tr(L"New tab with this app"), kMenuNewTab});
                         for (int k = 0; k < (int)g_customTabs.size(); k++) {
-                            if (TabHas(k, *a)) continue;
+                            if (!many && TabHas(k, *a)) continue;
                             wchar_t text[160];
                             swprintf(text, 160, Tr(L"Add to \u201C%ls\u201D"), g_customTabs[k].name.c_str());
                             items.push_back({text, kMenuAddToTab + k});
