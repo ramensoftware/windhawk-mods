@@ -5,9 +5,8 @@
 // @version         0.3.1
 // @author          rockinggreninja-bot
 // @github          https://github.com/rockinggreninja-bot
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lgdi32 -luser32 -luiautomationcore
+// @include         windhawk.exe
+// @compilerOptions -lole32 -loleaut32 -lgdi32 -luser32 -luiautomationcore -lshcore
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -59,6 +58,7 @@ Compatibility depends on the target app supporting copy and paste and leaving th
 #include <ole2.h>
 #include <oleauto.h>
 #include <UIAutomation.h>
+#include <shellscalingapi.h>
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -118,10 +118,12 @@ const wchar_t* const kModeNames[kModeCount] = {
 
 
 HINSTANCE g_modInstance = nullptr;
+int g_dpi = 96;
 HMODULE g_modModule = nullptr;
 HANDLE g_threadHandle = nullptr;
 HANDLE g_readyEvent = nullptr;
 HANDLE g_applyThreadHandle = nullptr;
+HANDLE g_captureThreadHandle = nullptr;
 SRWLOCK g_lifecycleLock = SRWLOCK_INIT;
 DWORD g_threadId = 0;
 HWND g_messageWindow = nullptr;
@@ -184,6 +186,10 @@ struct ClipboardSnapshot {
     bool wasEmpty = false;
     IDataObject* dataObject = nullptr;
 };
+
+int DpiScale(int value) {
+    return MulDiv(value, g_dpi, 96);
+}
 
 bool IsValidMode(int value) {
     return value >= 0 && value < kModeCount;
@@ -649,7 +655,35 @@ LONG ModifierFlagForVk(UINT vk) {
     }
 }
 
-void UpdateHeldModifierState(UINT vk, bool down, bool up) {
+void UpdateHeldModifierState(UINT vk, bool down, bool up,
+                             const KBDLLHOOKSTRUCT* key) {
+    // AltGr arrives as a fake Left Ctrl (scan code 0x21D) followed by Right
+    // Alt. On layouts with AltGr it types characters, so it must never count
+    // as Ctrl+Alt (otherwise the default shortcuts swallow those characters).
+    static DWORD s_lctrlDownTime = 0;
+    static bool s_altGr = false;
+
+    if (down) {
+        if (vk == VK_LCONTROL) {
+            s_lctrlDownTime = key ? key->time : 0;
+            if (key && key->scanCode == 0x21D) {
+                s_altGr = true;
+            }
+        } else if (vk == VK_RMENU && key && key->time == s_lctrlDownTime) {
+            s_altGr = true;
+        }
+    } else if (up) {
+        if (vk == VK_LCONTROL || vk == VK_RMENU) {
+            s_altGr = false;
+        }
+    }
+
+    const bool altGr = s_altGr && (GetAsyncKeyState(VK_RMENU) & 0x8000) != 0;
+    if (altGr && (vk == VK_LCONTROL || vk == VK_RMENU)) {
+        // Don't let the AltGr components register as Ctrl/Alt modifiers.
+        return;
+    }
+
     LONG flag = ModifierFlagForVk(vk);
     if (!flag) {
         return;
@@ -1014,15 +1048,29 @@ void StartSelectionCapture(HWND foreground, HWND focus) {
         return;
     }
 
-    HANDLE thread = CreateThread(nullptr, 0, SelectionCaptureWorkerProc,
-                                 request, 0, nullptr);
-    if (!thread) {
+    AcquireSRWLockExclusive(&g_lifecycleLock);
+    if (InterlockedCompareExchange(&g_shuttingDown, 0, 0)) {
+        ReleaseSRWLockExclusive(&g_lifecycleLock);
+        delete request;
+        InterlockedExchange(&g_captureInProgress, 0);
+        return;
+    }
+
+    if (g_captureThreadHandle) {
+        // The previous capture worker has already handed off its result.
+        WaitForSingleObject(g_captureThreadHandle, INFINITE);
+        CloseHandle(g_captureThreadHandle);
+        g_captureThreadHandle = nullptr;
+    }
+
+    g_captureThreadHandle = CreateThread(nullptr, 0, SelectionCaptureWorkerProc,
+                                         request, 0, nullptr);
+    if (!g_captureThreadHandle) {
         delete request;
         InterlockedExchange(&g_captureInProgress, 0);
         Wh_Log(L"Text Capitalization: couldn't start selection capture worker.");
-        return;
     }
-    CloseHandle(thread);
+    ReleaseSRWLockExclusive(&g_lifecycleLock);
 }
 
 bool ApplyCapturedSelectionViaClipboard(const ApplyRequest& request) {
@@ -1297,22 +1345,31 @@ void OpenPicker() {
     GetMonitorInfoW(monitor, &monitorInfo);
     RECT work = monitorInfo.rcWork;
 
+    UINT dpiX = 96;
+    UINT dpiY = 96;
+    if (FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) || dpiX == 0) {
+        dpiX = 96;
+    }
+    g_dpi = static_cast<int>(dpiX);
+    const int pickerWidth = DpiScale(kPickerWidth);
+    const int pickerHeight = DpiScale(kPickerHeight);
+
     int x = cursor.x + 16;
     int y = cursor.y + 16;
-    if (x + kPickerWidth > work.right) {
-        x = cursor.x - kPickerWidth - 12;
+    if (x + pickerWidth > work.right) {
+        x = cursor.x - pickerWidth - 12;
     }
-    if (y + kPickerHeight > work.bottom) {
-        y = cursor.y - kPickerHeight - 12;
+    if (y + pickerHeight > work.bottom) {
+        y = cursor.y - pickerHeight - 12;
     }
-    x = std::max(static_cast<int>(work.left), std::min(x, static_cast<int>(work.right) - kPickerWidth));
-    y = std::max(static_cast<int>(work.top), std::min(y, static_cast<int>(work.bottom) - kPickerHeight));
+    x = std::max(static_cast<int>(work.left), std::min(x, static_cast<int>(work.right) - pickerWidth));
+    y = std::max(static_cast<int>(work.top), std::min(y, static_cast<int>(work.bottom) - pickerHeight));
 
     g_pickerWindow = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         kPickerClass, L"Text Capitalization", WS_POPUP,
-        x, y, kPickerWidth, kPickerHeight,
-        nullptr, nullptr, g_modInstance, nullptr);
+        x, y, pickerWidth, pickerHeight,
+        nullptr, nullptr, g_modModule, nullptr);
 
     if (!g_pickerWindow) {
         InterlockedExchange(&g_popupOpen, 0);
@@ -1320,13 +1377,13 @@ void OpenPicker() {
         return;
     }
 
-    HRGN region = CreateRoundRectRgn(0, 0, kPickerWidth + 1,
-                                    kPickerHeight + 1, 18, 18);
+    HRGN region = CreateRoundRectRgn(0, 0, pickerWidth + 1,
+                                    pickerHeight + 1, DpiScale(18), DpiScale(18));
     if (region) {
         SetWindowRgn(g_pickerWindow, region, TRUE);
     }
-    SetWindowPos(g_pickerWindow, HWND_TOPMOST, x, y, kPickerWidth,
-                 kPickerHeight, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    SetWindowPos(g_pickerWindow, HWND_TOPMOST, x, y, pickerWidth,
+                 pickerHeight, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     InvalidateRect(g_pickerWindow, nullptr, TRUE);
 }
 
@@ -1341,10 +1398,12 @@ void MoveHighlight(int delta) {
 }
 
 int GetModeAtPoint(int y) {
-    if (y < kRowTop || y >= kRowTop + kModeCount * kRowHeight) {
+    const int rowTop = DpiScale(kRowTop);
+    const int rowHeight = DpiScale(kRowHeight);
+    if (y < rowTop || y >= rowTop + kModeCount * rowHeight) {
         return -1;
     }
-    int mode = (y - kRowTop) / kRowHeight;
+    int mode = (y - rowTop) / rowHeight;
     return IsValidMode(mode) ? mode : -1;
 }
 
@@ -1367,7 +1426,8 @@ void DrawPicker(HWND hwnd) {
     HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(55, 61, 73));
     HGDIOBJ oldPen = SelectObject(memory, borderPen);
     HGDIOBJ oldBrush = SelectObject(memory, GetStockObject(NULL_BRUSH));
-    RoundRect(memory, 0, 0, width - 1, height - 1, 18, 18);
+    const int cornerRadius = DpiScale(18);
+    RoundRect(memory, 0, 0, width - 1, height - 1, cornerRadius, cornerRadius);
     SelectObject(memory, oldBrush);
     SelectObject(memory, oldPen);
     DeleteObject(borderPen);
@@ -1377,34 +1437,37 @@ void DrawPicker(HWND hwnd) {
 
     // Read-only, edit-like text preview. It shows the transformation for the
     // currently highlighted mode; it never accepts focus or keyboard input.
-    RECT previewRect = {10, kPreviewTop, width - 10, kPreviewTop + kPreviewHeight};
+    RECT previewRect = {DpiScale(10), DpiScale(kPreviewTop), width - DpiScale(10), DpiScale(kPreviewTop) + DpiScale(kPreviewHeight)};
     HBRUSH previewBrush = CreateSolidBrush(RGB(17, 19, 24));
     HPEN previewPen = CreatePen(PS_SOLID, 1, RGB(63, 69, 82));
     HGDIOBJ previousPreviewBrush = SelectObject(memory, previewBrush);
     HGDIOBJ previousPreviewPen = SelectObject(memory, previewPen);
+    const int smallCorner = DpiScale(8);
     RoundRect(memory, previewRect.left, previewRect.top, previewRect.right,
-              previewRect.bottom, 8, 8);
+              previewRect.bottom, smallCorner, smallCorner);
     SelectObject(memory, previousPreviewBrush);
     SelectObject(memory, previousPreviewPen);
     DeleteObject(previewBrush);
     DeleteObject(previewPen);
 
-    std::wstring preview = TransformText(g_selectedText,
-        static_cast<CaseMode>(IsValidMode(g_highlightedMode) ? g_highlightedMode : 0));
     const size_t previewLimit = 220;
+    std::wstring preview = TransformText(
+        g_selectedText.substr(0, previewLimit + 1),
+        static_cast<CaseMode>(IsValidMode(g_highlightedMode) ? g_highlightedMode : 0));
     if (preview.size() > previewLimit) {
         preview.resize(previewLimit);
-        preview += L"â€¦";
-    }
-    RECT previewTextRect = {previewRect.left + 9, previewRect.top + 6,
-                            previewRect.right - 9, previewRect.bottom - 6};
+        preview += L"\u2026";
+    RECT previewTextRect = {previewRect.left + DpiScale(9), previewRect.top + DpiScale(6),
+                            previewRect.right - DpiScale(9), previewRect.bottom - DpiScale(6)};
     SetTextColor(memory, RGB(232, 235, 242));
     DrawTextW(memory, preview.c_str(), -1, &previewTextRect,
               DT_LEFT | DT_TOP | DT_WORDBREAK | DT_NOPREFIX | DT_END_ELLIPSIS);
 
     for (int i = 0; i < kModeCount; ++i) {
-        RECT row = {7, kRowTop + i * kRowHeight,
-                    width - 7, kRowTop + (i + 1) * kRowHeight - 3};
+        const int rowTop = DpiScale(kRowTop);
+        const int rowHeight = DpiScale(kRowHeight);
+        RECT row = {DpiScale(7), rowTop + i * rowHeight,
+                    width - DpiScale(7), rowTop + (i + 1) * rowHeight - DpiScale(3)};
         const bool selected = (i == g_highlightedMode);
         const bool active = (i == static_cast<int>(GetActiveMode()));
         if (selected) {
@@ -1429,7 +1492,7 @@ void DrawPicker(HWND hwnd) {
             DeleteObject(rowPen);
         }
 
-        RECT nameRect = {row.left + 12, row.top + 2, row.right - 42, row.bottom - 2};
+        RECT nameRect = {row.left + DpiScale(12), row.top + DpiScale(2), row.right - DpiScale(42), row.bottom - DpiScale(2)};
         SelectObject(memory, g_bodyFont);
         SetTextColor(memory, selected ? RGB(255, 255, 255) : RGB(231, 234, 240));
         DrawTextW(memory, kModeNames[i], -1, &nameRect,
@@ -1438,9 +1501,8 @@ void DrawPicker(HWND hwnd) {
         if (active) {
             SelectObject(memory, g_bodyFont);
             SetTextColor(memory, selected ? RGB(255, 255, 255) : RGB(116, 177, 255));
-            RECT checkRect = {row.right - 37, row.top + 3, row.right - 10, row.bottom - 3};
-            DrawTextW(memory, L"âœ“", -1, &checkRect,
-                      DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            RECT checkRect = {row.right - DpiScale(37), row.top + DpiScale(3), row.right - DpiScale(10), row.bottom - DpiScale(3)};
+            DrawTextW(memory, L"\u2713", -1, &checkRect,
         }
     }
 
@@ -1456,7 +1518,7 @@ void DrawPicker(HWND hwnd) {
 LRESULT CALLBACK PickerWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
         case WM_CREATE:
-            g_bodyFont = CreateFontW(-14, 0, 0, 0, FW_MEDIUM, FALSE, FALSE,
+            g_bodyFont = CreateFontW(-DpiScale(14), 0, 0, 0, FW_MEDIUM, FALSE, FALSE,
                 FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
             SetTimer(hwnd, kPickerTimer, 120, nullptr);
@@ -1603,7 +1665,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
     const bool down = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
     const bool up = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
     const UINT vk = key->vkCode;
-    UpdateHeldModifierState(vk, down, up);
+    UpdateHeldModifierState(vk, down, up, key);
 
     LONG consumedVk = InterlockedCompareExchange(&g_consumedVk, 0, 0);
     if (consumedVk == static_cast<LONG>(vk)) {
@@ -1727,9 +1789,9 @@ DWORD WINAPI MessageThreadProc(void*) {
     WNDCLASSEXW messageClass = {};
     messageClass.cbSize = sizeof(messageClass);
     messageClass.lpfnWndProc = MessageWindowProc;
-    messageClass.hInstance = g_modInstance;
+    messageClass.hInstance = g_modModule;
     messageClass.lpszClassName = kMessageClass;
-    if (!RegisterClassExW(&messageClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+    if (!RegisterClassExW(&messageClass)) {
         if (g_uiAutomation) { g_uiAutomation->Release(); g_uiAutomation = nullptr; }
         if (comInitialized) CoUninitialize();
         InterlockedExchange(&g_threadReadyState, -1);
@@ -1740,11 +1802,11 @@ DWORD WINAPI MessageThreadProc(void*) {
     WNDCLASSEXW pickerClass = {};
     pickerClass.cbSize = sizeof(pickerClass);
     pickerClass.lpfnWndProc = PickerWindowProc;
-    pickerClass.hInstance = g_modInstance;
+    pickerClass.hInstance = g_modModule;
     pickerClass.lpszClassName = kPickerClass;
     pickerClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    if (!RegisterClassExW(&pickerClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-        UnregisterClassW(kMessageClass, g_modInstance);
+    if (!RegisterClassExW(&pickerClass)) {
+        UnregisterClassW(kMessageClass, g_modModule);
         if (g_uiAutomation) { g_uiAutomation->Release(); g_uiAutomation = nullptr; }
         if (comInitialized) CoUninitialize();
         InterlockedExchange(&g_threadReadyState, -1);
@@ -1755,10 +1817,10 @@ DWORD WINAPI MessageThreadProc(void*) {
     // Use a hidden top-level window rather than HWND_MESSAGE: clipboard
     // ownership requires a real, non-NULL owner HWND when EmptyClipboard runs.
     g_messageWindow = CreateWindowExW(0, kMessageClass, L"", WS_POPUP,
-        0, 0, 0, 0, nullptr, nullptr, g_modInstance, nullptr);
+        0, 0, 0, 0, nullptr, nullptr, g_modModule, nullptr);
     if (!g_messageWindow) {
-        UnregisterClassW(kPickerClass, g_modInstance);
-        UnregisterClassW(kMessageClass, g_modInstance);
+        UnregisterClassW(kPickerClass, g_modModule);
+        UnregisterClassW(kMessageClass, g_modModule);
         if (g_uiAutomation) { g_uiAutomation->Release(); g_uiAutomation = nullptr; }
         if (comInitialized) CoUninitialize();
         InterlockedExchange(&g_threadReadyState, -1);
@@ -1777,8 +1839,8 @@ DWORD WINAPI MessageThreadProc(void*) {
         if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = nullptr; }
         DestroyWindow(g_messageWindow);
         g_messageWindow = nullptr;
-        UnregisterClassW(kPickerClass, g_modInstance);
-        UnregisterClassW(kMessageClass, g_modInstance);
+        UnregisterClassW(kPickerClass, g_modModule);
+        UnregisterClassW(kMessageClass, g_modModule);
         if (g_uiAutomation) { g_uiAutomation->Release(); g_uiAutomation = nullptr; }
         if (comInitialized) CoUninitialize();
         InterlockedExchange(&g_threadReadyState, -1);
@@ -1788,7 +1850,7 @@ DWORD WINAPI MessageThreadProc(void*) {
 
     InterlockedExchange(&g_threadReadyState, 1);
     SetEvent(g_readyEvent);
-    Wh_Log(L"Text Capitalization: global shortcuts installed from Explorer.");
+    Wh_Log(L"Text Capitalization: global shortcuts installed.");
 
     MSG message = {};
     while (GetMessageW(&message, nullptr, 0, 0) > 0) {
@@ -1800,8 +1862,8 @@ DWORD WINAPI MessageThreadProc(void*) {
     if (g_keyboardHook) { UnhookWindowsHookEx(g_keyboardHook); g_keyboardHook = nullptr; }
     if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = nullptr; }
     if (g_messageWindow) { DestroyWindow(g_messageWindow); g_messageWindow = nullptr; }
-    UnregisterClassW(kPickerClass, g_modInstance);
-    UnregisterClassW(kMessageClass, g_modInstance);
+    UnregisterClassW(kPickerClass, g_modModule);
+    UnregisterClassW(kMessageClass, g_modModule);
     if (g_uiAutomation) { g_uiAutomation->Release(); g_uiAutomation = nullptr; }
     if (comInitialized) CoUninitialize();
     return 0;
@@ -1809,7 +1871,7 @@ DWORD WINAPI MessageThreadProc(void*) {
 
 } // namespace
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     InterlockedExchange(&g_shuttingDown, 0);
     g_modInstance = GetModuleHandleW(nullptr);
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -1856,23 +1918,31 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     if (g_messageWindow && IsWindow(g_messageWindow)) {
         PostMessageW(g_messageWindow, WM_APP_RELOAD_SHORTCUTS, 0, 0);
     }
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     InterlockedExchange(&g_shuttingDown, 1);
 
     HANDLE applyThread = nullptr;
+    HANDLE captureThread = nullptr;
     AcquireSRWLockExclusive(&g_lifecycleLock);
     applyThread = g_applyThreadHandle;
     g_applyThreadHandle = nullptr;
+    captureThread = g_captureThreadHandle;
+    g_captureThreadHandle = nullptr;
     ReleaseSRWLockExclusive(&g_lifecycleLock);
 
-    // Keep the hidden owner window's message loop alive until the apply worker
-    // finishes; OLE clipboard restoration can need that loop to service messages.
+    // Keep the hidden owner window's message loop alive until the worker
+    // threads finish; OLE clipboard restoration can need that loop to service
+    // messages.
+    if (captureThread) {
+        WaitForSingleObject(captureThread, INFINITE);
+        CloseHandle(captureThread);
+    }
     if (applyThread) {
         WaitForSingleObject(applyThread, INFINITE);
         CloseHandle(applyThread);
@@ -1893,4 +1963,176 @@ void Wh_ModUninit() {
         CloseHandle(g_readyEvent);
         g_readyEvent = nullptr;
     }
+}
+
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
