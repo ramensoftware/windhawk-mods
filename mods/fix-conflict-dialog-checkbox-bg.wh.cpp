@@ -2,7 +2,7 @@
 // @id              fix-conflict-dialog-checkbox-bg
 // @name            Fix file dialogs for Classic theme
 // @description     Fixes black backgrounds in shell dialogs (Classic Theme) under Win 11 24H2+
-// @version         2.0
+// @version         2.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -11,7 +11,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Fix File Conflict Dialog Checkbox Background
+# Fix file dialogs for Classic theme
 
 Fixes black backgrounds in Explorer shell dialogs when Windows Classic
 theme is active:
