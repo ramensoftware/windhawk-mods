@@ -2,7 +2,7 @@
 // @id              hide-snapped
 // @name            Snap Groups: Alt+Tab and taskbar
 // @description     Group-only Alt+Tab and separate taskbar buttons with tiled member icons.
-// @version         0.4.24
+// @version         0.4.25
 // @author          coldfeudal
 // @github          https://github.com/coldfeudal
 // @include         explorer.exe
@@ -53,29 +53,25 @@ activation/minimization; animation behavior follows those native commands.
 
 ## Tested configuration and limitations
 
-The verified environment is Windows 11 25H2
-(26200.8246, x64) with Windhawk 1.7.3. Earlier builds were tested interactively
-for group switching, independent buttons, previews, icon layout and cleanup
-on one monitor/DPI configuration. Longer sessions and additional configurations
-still need testing.
+Tested interactively on Windows 11 25H2 (26200.8246, x64) with Windhawk 1.7.3:
+group switching, independent taskbar buttons, native previews, icon layout,
+Explorer restart, disable/enable and the support-trace toggle.
 
-- **Independent taskbar per monitor 1.7.0:** the 0.4.19 runtime retest on
-  the configuration above produced no empty buttons or Explorer crashes.
-  On 0.4.24 the author confirmed group creation, monitor moves, restoration
-  from minimized state and disable/enable without empty buttons or unload stalls.
-- **Alt+Tab per monitor 1.2.1:** the author confirmed Alt+Tab during a heavy
-  game and after closing it, including disabling both mods without restarting
-  Explorer. No duplicate group preview appeared on an ordinary application button.
-- On 0.4.24, Explorer restart and toggling Record support trace returned the
-  mod to normal operation. Startup API failure is retried until ready or stopped.
-- Longer sessions and other monitor/DPI/virtual desktop configurations have
-  limited coverage; these results describe the tested configuration.
+- **Independent taskbar per monitor 1.7.0:** group creation, moving groups
+  between monitors and restoring minimized groups; no empty buttons or unload
+  stalls in the tested disable/enable scenario.
+- **Alt+Tab per monitor 1.2.1:** switching during a heavy game and after closing
+  it, including disabling both mods without restarting Explorer.
 
-The mod has no Windows build-number restriction. The configuration above is
-the tested environment. Other Windows versions and ARM64 remain untested.
-Features require the corresponding Windows shell interfaces. Taskbar integration
-also checks the inspected shell DLL layouts and can be unavailable after an
-update until those interfaces are verified.
+There is no Windows build-number restriction or exact Taskbar.dll/ShellCommon
+revision restriction. Taskbar integration requires its internal symbols and uses
+undocumented object fields and interface slots. A Windows update can change those
+without changing the symbol names, causing incorrect behavior or Explorer crashes.
+Other Windows versions and DLL revisions are unverified; allowing initialization
+on them is not a compatibility guarantee. Native previews and detailed trace
+observers retain separate DLL checks and may be unavailable after an update.
+Longer sessions and other monitor/DPI/virtual desktop configurations have limited
+coverage. ARM64 is not targeted.
 
 Report mod problems in https://github.com/ramensoftware/windhawk-mods/issues.
 Include "hide-snapped" in the title and mention @coldfeudal in the report.
@@ -165,6 +161,7 @@ The Alt+Tab scoping approach was informed by
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -913,7 +910,12 @@ struct ProxyMonitorCache {
     void store(std::shared_ptr<const ProxyMonitors> next) { std::atomic_store(&value, std::move(next)); }
 } g_proxyMonitors;
 decltype(&MonitorFromWindow) g_monitorFromWindow = nullptr;
-std::map<WindowIdentity, ComPtr<IUnknown>> g_proxyGroups;
+// Native groups belong to the worker apartment. Process exit kills that
+// worker before CRT teardown; never Release them from a global destructor.
+// The worker clears all references on controlled shutdown; ModUninit frees
+// the empty container after Windhawk has removed the hooks that read it.
+[[clang::no_destroy]] std::optional<std::map<WindowIdentity, ComPtr<IUnknown>>>
+    g_proxyGroups{std::in_place};
 WindowIdentity g_lastAppForeground;
 std::atomic<bool> g_taskbarFilterReady = false;
 std::atomic<bool> g_taskbarInitAttempted = false;
@@ -1447,7 +1449,11 @@ bool HookTaskbarFilter() {
     if (!g_refreshTask) return false;
     HMODULE module = LoadLibraryExW(L"Taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) return false;
-    g_nativeAppIdReturn = reinterpret_cast<uintptr_t>(module) + 0x28a82;
+    // This numeric return address identifies a diagnostic caller only. A new
+    // image disables that observation, never the functional taskbar hooks.
+    g_nativeAppIdReturn = g_binaryTraceEnabled &&
+        CheckedNativeImage(L"Taskbar.dll", 0x4059c321, 0x30d000) ?
+        reinterpret_cast<uintptr_t>(module) + 0x28a82 : 0;
     // Taskbar.dll
     WindhawkUtils::SYMBOL_HOOK taskbarHooks[] = {
         {{L"?IsTaskAllowed@TaskItemFilter@@UEAA_NPEAUITaskItem@@@Z"}, &g_isTaskAllowed, IsTaskAllowedHook},
@@ -1482,8 +1488,8 @@ bool HookTaskbarFilter() {
     constexpr size_t kTraceHookCount = 6;
     size_t count = ARRAYSIZE(taskbarHooks) - (g_binaryTraceEnabled ? 0 : kTraceHookCount);
     bool hooked = WindhawkUtils::HookSymbols(module, taskbarHooks, count, &options);
-    if (hooked) hooked = Wh_SetFunctionHook(reinterpret_cast<void*>(MonitorFromWindow),
-        reinterpret_cast<void*>(MonitorFromWindowHook), reinterpret_cast<void**>(&g_monitorFromWindow));
+    if (hooked) hooked = WindhawkUtils::SetFunctionHook(MonitorFromWindow,
+        MonitorFromWindowHook, &g_monitorFromWindow);
     FreeLibrary(module);
     g_taskbarFilterReady = hooked;
     Wh_Log(L"phase=taskbar inclusion-filter symbols=%d", hooked);
@@ -1671,7 +1677,7 @@ public:
     }
 };
 
-// Pinned Taskbar.dll CTaskThumbnail layout, relative to _CreateWindowVisual's
+// Inspected Taskbar.dll CTaskThumbnail layout, relative to _CreateWindowVisual's
 // concrete this pointer. Native destructor/unregistration owns these fields.
 struct NativeTaskThumbnail {
     unsigned char prefix[104];
@@ -1697,8 +1703,8 @@ ComPtr<IUnknown> ProxyPreviewGroup(IUnknown* item) {
     using GetWindow = HWND(WINAPI*)(IUnknown*);
     HWND window = item ? AbiMethod<GetWindow>(item, 12)(item) : nullptr;
     std::lock_guard lock(g_hiddenMembersMutex);
-    auto found = g_proxyGroups.find(IdentifyWindow(window));
-    return found == g_proxyGroups.end() ? ComPtr<IUnknown>{} : found->second;
+    auto found = g_proxyGroups->find(IdentifyWindow(window));
+    return found == g_proxyGroups->end() ? ComPtr<IUnknown>{} : found->second;
 }
 void ReplaceThumbnailFactory(NativeModernThumbnail& thumbnail, ComPtr<IUnknown> factory) {
     IUnknown* old = thumbnail.factory;
@@ -1770,8 +1776,8 @@ HRESULT AttachGroupHoverVisual(NativeTaskThumbnail& thumbnail, IUnknown* factory
 HRESULT WINAPI CreateWindowVisualHook(void* self, HWND window, SIZE size) {
     ComPtr<IUnknown> group;
     { std::lock_guard lock(g_hiddenMembersMutex);
-      auto found = g_proxyGroups.find(IdentifyWindow(window));
-      if (found != g_proxyGroups.end()) group = found->second; }
+      auto found = g_proxyGroups->find(IdentifyWindow(window));
+      if (found != g_proxyGroups->end()) group = found->second; }
     if (!group) return g_createWindowVisual(self, window, size);
     NativeGroupPreview preview;
     HRESULT hr = preview.Initialize(group.Get());
@@ -1918,9 +1924,15 @@ public:
         }
     }
     void Stop(TaskbarOperations& operations) {
-        unsigned failed = 0;
-        for (const auto& member : hidden) failed += FAILED(operations.Restore(member));
-        if (failed) Wh_Log(L"phase=taskbar cleanup restore-failures=%u", failed);
+        // A busy taskbar may time out the first inclusion request. Retry only
+        // failed members before retiring their proxies; never block forever.
+        for (unsigned attempt = 0; attempt < 3 && !hidden.empty(); ++attempt) {
+            for (auto it = hidden.begin(); it != hidden.end();) {
+                if (SUCCEEDED(operations.Restore(*it))) it = hidden.erase(it);
+                else ++it;
+            }
+        }
+        if (!hidden.empty()) Wh_Log(L"phase=taskbar cleanup restore-failures=%u", unsigned(hidden.size()));
         hidden.clear();
         for (auto& [key, button] : buttons) operations.Destroy(*button);
         buttons.clear();
@@ -2242,7 +2254,7 @@ public:
         { std::lock_guard lock(g_hiddenMembersMutex);
           auto identity = IdentifyWindow(button.window);
           g_proxyWindows.insert(identity);
-          if (button.preview) g_proxyGroups[identity] = button.nativeGroup; }
+          if (button.preview) (*g_proxyGroups)[identity] = button.nativeGroup; }
         ShowWindow(button.window, SW_SHOWNOACTIVATE);
         hr = taskbar->AddTab(button.window);
         button.registrationPending = SUCCEEDED(hr);
@@ -2272,8 +2284,8 @@ public:
                 for (const auto& member : button.members) g_groupButtons[member] = button.window;
             auto identity = IdentifyWindow(button.window);
             if (g_proxyWindows.contains(identity)) {
-                if (button.preview) g_proxyGroups[identity] = button.nativeGroup;
-                else g_proxyGroups.erase(identity);
+                if (button.preview) (*g_proxyGroups)[identity] = button.nativeGroup;
+                else g_proxyGroups->erase(identity);
             }
         }
         if (previewChanged) SetWindowPos(button.window, nullptr, -32000, -32000,
@@ -2327,7 +2339,7 @@ public:
         if (button.registered) {
             std::lock_guard lock(g_hiddenMembersMutex);
             for (const auto& member : button.members) g_groupButtons[member] = button.window;
-            if (button.preview) g_proxyGroups[IdentifyWindow(button.window)] = button.nativeGroup;
+            if (button.preview) (*g_proxyGroups)[IdentifyWindow(button.window)] = button.nativeGroup;
         }
         if (button.registered && button.iconRedrawPending) {
             HRESULT hr = NotifyIconChanged(button.window);
@@ -2385,7 +2397,7 @@ public:
         { std::lock_guard lock(g_hiddenMembersMutex);
           auto identity = IdentifyWindow(button.window);
           g_proxyWindows.erase(identity);
-          g_proxyGroups.erase(identity); }
+          g_proxyGroups->erase(identity); }
         if (button.window) DestroyWindow(button.window);
         // Retain routing through DeleteTab and HWND destruction callbacks.
         PublishProxyMonitor(proxy, nullptr);
@@ -2625,6 +2637,25 @@ HRESULT InitializeTaskbarApi(HANDLE stop, ComPtr<ITaskbarList>& taskbar,
     }
 }
 
+void ShutdownTaskbarDispatcher(winrt::Windows::System::DispatcherQueueController& dispatcher) {
+    if (!dispatcher) return;
+    try {
+        auto shutdown = dispatcher.ShutdownQueueAsync();
+        ULONGLONG deadline = GetTickCount64() + 5000;
+        while (shutdown.Status() == winrt::Windows::Foundation::AsyncStatus::Started && GetTickCount64() < deadline) {
+            MSG message;
+            for (unsigned count = 0; count < 32 && PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE); ++count) {
+                TranslateMessage(&message); DispatchMessageW(&message);
+            }
+            MsgWaitForMultipleObjects(0, nullptr, FALSE, 10, QS_ALLINPUT);
+        }
+        if (shutdown.Status() == winrt::Windows::Foundation::AsyncStatus::Started)
+            Wh_Log(L"phase=taskbar dispatcher-shutdown timeout=1");
+    } catch (const winrt::hresult_error& error) {
+        Wh_Log(L"phase=taskbar dispatcher-shutdown hr=%08X", int32_t(error.code()));
+    }
+    dispatcher = nullptr;
+}
 DWORD WINAPI TaskbarThread(void*) {
     if (!WaitForShellOwnership(g_taskbarStop, GetCurrentProcessId())) return 0;
     g_altTabSnapshotThread = CreateThread(nullptr, 0, AltTabSnapshotWorker, nullptr, 0, nullptr);
@@ -2654,8 +2685,7 @@ DWORD WINAPI TaskbarThread(void*) {
     if (FAILED(hr)) {
         Wh_Log(L"phase=taskbar shell-api-stopped hr=%08X", hr);
         operations.taskbar.Reset();
-        if (dispatcher) dispatcher.ShutdownQueueAsync();
-        dispatcher = nullptr;
+        ShutdownTaskbarDispatcher(dispatcher);
         if (coreMessaging) FreeLibrary(coreMessaging);
         RoUninitialize(); return 0;
     }
@@ -2747,27 +2777,14 @@ DWORD WINAPI TaskbarThread(void*) {
         g_taskbarHost = nullptr;
     } else Wh_Log(L"phase=taskbar window-init-failed code=%lu", GetLastError());
     state.Stop(operations);
+    { std::lock_guard lock(g_hiddenMembersMutex);
+      g_proxyGroups->clear(); } // release any remaining strong refs on their owning STA
     operations.DetachLists();
     if (host) DestroyWindow(host);
     if (hostAtom) UnregisterClassW(hostClass.lpszClassName, operations.instance);
     if (proxyAtom) UnregisterClassW(kProxyClass, operations.instance);
     desktops.Reset(); operations.taskbar.Reset();
-    if (dispatcher) {
-        try {
-            auto shutdown = dispatcher.ShutdownQueueAsync();
-            ULONGLONG deadline = GetTickCount64() + 5000;
-            while (shutdown.Status() == winrt::Windows::Foundation::AsyncStatus::Started && GetTickCount64() < deadline) {
-                MSG message;
-                while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
-                    TranslateMessage(&message); DispatchMessageW(&message);
-                }
-                MsgWaitForMultipleObjects(0, nullptr, FALSE, 10, QS_ALLINPUT);
-            }
-        } catch (const winrt::hresult_error& error) {
-            Wh_Log(L"phase=taskbar dispatcher-shutdown hr=%08X", int32_t(error.code()));
-        }
-        dispatcher = nullptr;
-    }
+    ShutdownTaskbarDispatcher(dispatcher);
     if (coreMessaging) FreeLibrary(coreMessaging);
     RoUninitialize();
     Wh_Log(L"phase=taskbar stopped");
@@ -2837,10 +2854,10 @@ bool InitializeTaskbarIntegration(bool deferred) {
     // Preview ABI failure disables previews independently of taskbar buttons.
     g_nativePreviewAvailable = CheckedNativeImage(L"DesktopSwitcherDataModel.dll", 0xf9a924c5, 0x56000);
     Wh_Log(L"phase=taskbar preview-abi=%d", g_nativePreviewAvailable.load());
-    bool nativeAbi = CheckedNativeImage(L"Taskbar.dll", 0x4059c321, 0x30d000) &&
-                     CheckedNativeImage(L"Windows.Internal.ShellCommon.dll", 0x0ca85704, 0xa0000);
-    Wh_Log(L"phase=taskbar native-group-abi=%d", nativeAbi);
-    bool ready = nativeAbi && ActivateTaskbarFilter(deferred);
+    // The user permits unverified revisions. Required symbols still have to
+    // resolve, but matching names do not validate our native fields/slots.
+    Wh_Log(L"phase=taskbar native-layout-version-gate=0");
+    bool ready = ActivateTaskbarFilter(deferred);
     g_traceNativeReady = ready;
     return ready;
 }
@@ -2949,5 +2966,6 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModUninit() {
     StopTaskbarTrace();
+    g_proxyGroups.reset();
     Wh_Log(L"phase=uninit");
 }
