@@ -21,7 +21,7 @@ shows through a soft, dark-tinted rounded panel with thin light edges. The
 widgets have no glass of their own; they are drawn straight onto the frame and
 separated by thin dividers.
 
-![Glass Widget Bar in English, Turkish, German and Japanese, with the optional weather widget](https://raw.githubusercontent.com/TheRealAlperN/glass-widget-bar/main/screenshots/glass-widget-bar.gif)
+![Glass Widget Bar in English, Turkish, German and Japanese, with the optional weather widget](https://raw.githubusercontent.com/TheRealAlperN/glass-widget-bar/main/screenshots/glass-widget-bar-weather.gif)
 
 | Widget | What it does |
 | --- | --- |
