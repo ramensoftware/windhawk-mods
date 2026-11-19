@@ -129,7 +129,7 @@ The bar runs in its own Windhawk process (shown as Windhawk in Task Manager), so
 ## Known limitations
 
 - Apps without a classic menu bar use ready-made menus based on keyboard shortcuts.
-- Bluetooth lists the connected classic (non-BLE) devices; connecting and disconnecting a paired device opens Settings. New devices can be found and paired in the bar's Bluetooth pill (a pairing code shows in the pill, to confirm or to type on the device), except devices that ask you to type a PIN on the PC, which need Settings.
+- Bluetooth lists the connected devices, classic and Bluetooth LE (mice, keyboards); connecting and disconnecting a paired device opens Settings. New devices can be found and paired in the bar's Bluetooth pill (a pairing code shows in the pill, to confirm or to type on the device), except devices that ask you to type a PIN on the PC, which need Settings.
 - Power mode and energy saver use undocumented Windows functions; if Windows refuses, the tile opens the matching Settings page.
 - Screen recording uses Win+Shift+R and needs an up-to-date Snipping Tool.
 - Replying from the pill works with apps that register a notification activator with Windows; otherwise the pill opens the app and copies your text.
@@ -1071,6 +1071,7 @@ struct Bar {
     ULONGLONG hVisTick = 0, hGrowTick = 0;
     bool maxHidden = false;       // escondida por janela maximizada
     bool reserveAfterSlide = false;  // alça: reservar o espaço (as janelas descem) quando a barra terminar de descer
+    bool restoreAfterSlide = false;  // janela maximizada saiu: reservar de novo quando a barra terminar de descer
     HWND peekSrc = nullptr;       // a janela de onde veio peekColor
     ULONGLONG lqShot = 0;         // vidro líquido sem "ao vivo": quando a foto do fundo foi tirada
     bool lqShown = false;         // a barra estava visível na última volta do vidro líquido
@@ -18996,6 +18997,7 @@ struct IslandHist {
     ULONGLONG id = 0;  // fixo: o índice muda quando uma conversa sobe para o fim
 };
 static ULONGLONG g_islHistNext = 1;
+static bool NtfClearing();  // "Limpar" do painel em andamento
 static std::vector<IslandHist> g_islHist;  // o mais novo no fim
 static int g_islUnread = 0;
 
@@ -19612,6 +19614,7 @@ static void IslandPush(const IslandNote& n, bool force) {
                     same = i;
                     break;
                 }
+        if (same >= 0 && NtfClearing()) same = -1;  // (sendo limpa: a mensagem nova abre outro cartão)
         if (same >= 0) {
             IslandHist h = std::move(g_islHist[same]);
             g_islHist.erase(g_islHist.begin() + same);
@@ -21439,6 +21442,8 @@ struct NotifPanel {
     size_t cardsEnd = 0;
     float cardsListEnd = 0;
     ULONGLONG clearTick = 0;  // "Limpar": os cartões saem para a direita, um depois do outro
+    std::vector<ULONGLONG> clearIds;  // as notificações que estavam no painel no clique (só elas são apagadas)
+    bool refreshAfterClear = false;   // chegou notificação durante a cascata: monta o painel no fim
     bool dragScroll = false;
     float dragY0 = 0, dragScroll0 = 0;
     std::set<std::wstring> expanded;
@@ -22057,7 +22062,9 @@ struct NtfAlphaScope {
         }
     }
 };
-static void NtfFrontNewest() { g_ntf.stackRot = 0; }
+static void NtfFrontNewest() {
+    if (!g_ntf.clearTick) g_ntf.stackRot = 0;  // (limpando: no fim)
+}
 // O buraco do cartão da frente da pilha: a geometria (tudo menos o cartão) e
 // uma camada, feitas uma vez por quadro e usadas por todos os de trás.
 struct NtfHole {
@@ -22592,8 +22599,28 @@ static void NtfClose() {
 
 // Nova notificação com o painel aberto: refaz a lista (o tamanho da janela fica).
 static bool g_ntfHoldRender = false;  // quem chamou desenha depois (com a animação)
+static bool NtfClearing() { return g_ntf.clearTick != 0; }
+// Fim do "Limpar": apaga as notificações que estavam no painel no clique. Uma que
+// chegou durante a cascata fica (e uma mensagem nova numa conversa que estava lá
+// virou um cartão novo, com outro id).
+static void NtfClearDone() {
+    g_ntf.clearTick = 0;
+    g_ntf.refreshAfterClear = false;
+    const std::vector<ULONGLONG>& ids = g_ntf.clearIds;
+    g_islHist.erase(std::remove_if(g_islHist.begin(), g_islHist.end(),
+                                   [&](const IslandHist& h) { return std::find(ids.begin(), ids.end(), h.id) != ids.end(); }),
+                    g_islHist.end());
+    g_ntf.clearIds.clear();
+    g_ntf.stackRot = 0;
+    g_islUnread = std::min<int>(g_islUnread, (int)g_islHist.size());
+    g_ntf.expanded.clear();
+}
 static void NtfRefresh() {
     if (!g_ntf.hwnd || g_ntf.closing) return;
+    if (g_ntf.clearTick) {  // (a cascata continua com os blocos do clique)
+        g_ntf.refreshAfterClear = true;
+        return;
+    }
     NtfBuildGroups();
     NtfLayout();
     // O painel não passa do tamanho da janela criada.
@@ -22685,10 +22712,7 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     return 0;
                 }
                 KillTimer(hwnd, 6);
-                g_ntf.clearTick = 0;
-                g_islHist.clear();
-                g_islUnread = 0;
-                g_ntf.expanded.clear();
+                NtfClearDone();
                 NtfRefresh();
                 RedrawAll();
             } else if (wp == 5) {
@@ -22909,6 +22933,9 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     RedrawAll();
                     return 0;
                 }
+                g_ntf.clearIds.clear();
+                for (const IslandHist& ih : g_islHist) g_ntf.clearIds.push_back(ih.id);
+                g_ntf.refreshAfterClear = false;
                 g_ntf.clearTick = GetTickCount64();
                 g_ntf.hover = -1;
                 NtfGlassShapes();
@@ -22950,13 +22977,7 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             KillTimer(hwnd, 4);
             KillTimer(hwnd, 5);
             KillTimer(hwnd, 6);
-            if (g_ntf.clearTick) {
-                // Fechou no meio da animação: apaga do mesmo jeito.
-                g_ntf.clearTick = 0;
-                g_islHist.clear();
-                g_islUnread = 0;
-                g_ntf.expanded.clear();
-            }
+            if (g_ntf.clearTick) NtfClearDone();  // fechou no meio da animação: apaga do mesmo jeito
             g_ntf.stackTick = 0;
             g_ntf.dragScroll = false;
             GlassLayerDestroy(g_ntf.glass);
@@ -23107,8 +23128,10 @@ static std::vector<std::wstring> CfgKeys() {
         std::wstring full = std::wstring(L"ui.") + k;
         if (std::find(keys.begin(), keys.end(), full) == keys.end()) keys.push_back(full);
     }
-    static const PCWSTR kRaw[] = {L"barOrder", L"ccLayout", L"glassLive", L"glassTheme",
-                                  L"weather", L"weatherAnim", L"weatherOpts", L"weatherStyle"};
+    // (As mesmas da restauração em LoadSettings, mais o "ao vivo", o tema do vidro,
+    // os blocos da Central e o lugar da previsão.)
+    static const PCWSTR kRaw[] = {L"glass",      L"settingsLook", L"barOrder",    L"weatherGlass", L"ccLayout",    L"glassLive",
+                                  L"glassTheme", L"weather",      L"weatherAnim", L"weatherOpts",  L"weatherStyle"};
     for (PCWSTR k : kRaw) keys.push_back(k);
     return keys;
 }
@@ -23218,6 +23241,9 @@ static void CfgImport() {
         return;
     }
     std::vector<std::wstring> keys = CfgKeys();
+    // Substitui: os ajustes que não estão no arquivo (estavam no padrão quando
+    // ele foi exportado) voltam ao padrão, como na restauração.
+    for (const std::wstring& k : keys) Wh_SetStringValue(k.c_str(), L"");
     int n = 0;
     size_t pos = 0;
     while (pos < text.size()) {
@@ -24777,7 +24803,9 @@ static BOOL CALLBACK TopOnMonProc(HWND w, LPARAM lp) {
     if (GetWindowLongW(w, GWL_EXSTYLE) & (WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) return TRUE;
     DWORD pid = 0;
     GetWindowThreadProcessId(w, &pid);
-    if (IsShellOrSelf(pid)) return TRUE;  // a barra, os painéis dela e o shell (barra de tarefas)
+    // A barra, os painéis dela e o shell (barra de tarefas); as janelas do
+    // Explorador de Arquivos contam (uma delas na frente do vídeo o cobre).
+    if (IsShellOrSelf(pid) && !ClassIs(w, L"CabinetWClass")) return TRUE;
     if (MonitorFromWindow(w, MONITOR_DEFAULTTONULL) != f->mon) return TRUE;
     // Sobreposições do tamanho da tela que não são um app em tela cheia: janelas
     // em camadas (efeitos do cursor, ilhas, papéis de parede animados) e as de
@@ -24893,6 +24921,7 @@ static void UpdateFullscreen() {
     if (g_owner && wantFast != fastOn) {
         fastOn = wantFast;
         if (wantFast) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
+        else KillTimer(g_owner, TIMER_FAST);
     }
     for (Bar* b : g_bars) {
         bool hide = false, forMax = false;
@@ -24937,7 +24966,9 @@ static void UpdateFullscreen() {
             // tela cheia (issue #15): só a alça a mostra.
             bool handleHidden = g_settings.autoHide && !b->autoShown;
             if ((hide && forMax) || (!hide && wasMaxHidden && !handleHidden)) {
-                // Janela maximizada: a barra desliza (sobe e some; desce de volta).
+                // Janela maximizada: a barra desliza (sobe e some; desce de volta e
+                // só então reserva o espaço de novo).
+                b->restoreAfterSlide = !hide;
                 BarSlide(b, !hide);
             } else {
                 if (hide || !handleHidden) ShowWindow(b->hwnd, hide ? SW_HIDE : SW_SHOWNOACTIVATE);
@@ -24948,7 +24979,7 @@ static void UpdateFullscreen() {
         }
         // Escondida por janela maximizada, a barra devolve o espaço do topo; ao
         // voltar, reserva de novo.
-        BarReleaseSpace(b, hide && forMax);
+        if (!(b->restoreAfterSlide && !hide)) BarReleaseSpace(b, hide && forMax);
         HandleSync(b);
     }
 }
@@ -25159,6 +25190,27 @@ static void HandleRender(Bar* b) {
 static bool g_barSlideMove = false;  // a própria barra está deslizando para fora do topo
 static constexpr float kSlideInMs = 320, kSlideOutMs = 220;
 static void BarReserveSpace(Bar* b);
+// Recorta a barra no próprio monitor enquanto ela desliza: a parte acima do topo
+// não aparece no monitor de cima (quando há um).
+static void BarClip(Bar* b, int hidden) {
+    if (hidden <= 0) {
+        SetWindowRgn(b->hwnd, nullptr, TRUE);
+        return;
+    }
+    int w = b->monRect.right - b->monRect.left;
+    HRGN r = CreateRectRgn(0, std::min(hidden, b->heightPx), w, b->heightPx);
+    if (r && !SetWindowRgn(b->hwnd, r, TRUE)) DeleteObject(r);  // (com sucesso, a janela fica com a região)
+}
+// A barra chegou ao lugar: agora reserva o espaço (as janelas descem), pela alça
+// ou depois de uma janela maximizada; reservar antes a punha no lugar por um
+// quadro e o deslizar recomeçava de cima.
+static void BarSlideDone(Bar* b) {
+    if (b->reserveAfterSlide) BarReserveSpace(b);
+    if (b->restoreAfterSlide) {
+        b->restoreAfterSlide = false;
+        BarReleaseSpace(b, false);
+    }
+}
 static void BarSlideStep(Bar* b) {
     if (!b->slideTick) {  // (não está deslizando)
         KillTimer(b->hwnd, BAR_SLIDE_TIMER);
@@ -25169,6 +25221,7 @@ static void BarSlideStep(Bar* b) {
     float v = 1 - u;
     float off = b->slideIn ? v * v * v * v : u * u * u;
     int y = b->monRect.top - (int)std::lround(b->heightPx * off);
+    BarClip(b, b->monRect.top - y);
     g_barSlideMove = true;
     SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
     g_barSlideMove = false;
@@ -25178,17 +25231,22 @@ static void BarSlideStep(Bar* b) {
     if (!b->slideIn) {
         ShowWindow(b->hwnd, SW_HIDE);
         SetWindowPos(b->hwnd, nullptr, b->monRect.left, b->monRect.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-    } else if (b->reserveAfterSlide) {
-        BarReserveSpace(b);
+        BarClip(b, 0);
+    } else {
+        BarClip(b, 0);
+        BarSlideDone(b);
     }
     BarSyncShadow(b);
 }
 static void BarSlide(Bar* b, bool in) {
     if (g_settings.openAnim == 0) {
         if (in) {
+            KillTimer(b->hwnd, BAR_SLIDE_TIMER);
+            b->slideTick = 0;
+            BarClip(b, 0);
             SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, b->monRect.top, 0, 0,
                          SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-            if (b->reserveAfterSlide) BarReserveSpace(b);
+            BarSlideDone(b);
         } else {
             ShowWindow(b->hwnd, SW_HIDE);
         }
@@ -25196,9 +25254,10 @@ static void BarSlide(Bar* b, bool in) {
         return;
     }
     if (b->shadow) ShowWindow(b->shadow, SW_HIDE);
-    // Continua de onde está, se já estava deslizando para o outro lado.
+    // Continua de onde está: no meio de um deslizar para o outro lado, ou já à
+    // vista (mostrada ao encostar no topo, quando a janela maximizada sai).
     float from = 0;
-    if (b->slideTick) {
+    if (b->slideTick || IsWindowVisible(b->hwnd)) {
         RECT wr;
         GetWindowRect(b->hwnd, &wr);
         from = std::clamp((float)(b->monRect.top - wr.top) / std::max(1, b->heightPx), 0.0f, 1.0f);  // 0 à vista, 1 escondida
@@ -25206,6 +25265,7 @@ static void BarSlide(Bar* b, bool in) {
         from = in ? 1.0f : 0.0f;
     }
     if (in && !IsWindowVisible(b->hwnd)) {
+        BarClip(b, b->heightPx);  // (escondida até o primeiro passo)
         g_barSlideMove = true;
         SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, b->monRect.top - b->heightPx, 0, 0,
                      SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
@@ -25865,6 +25925,7 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 // refaz; só põe a barra de volta no lugar.
                 UINT mx = 96, my = 96;
                 if (SUCCEEDED(GetDpiForMonitor(b->monitor, MDT_EFFECTIVE_DPI, &mx, &my)) && mx == b->dpi) {
+                    if (g_barSlideMove || b->slideTick) return 0;  // (deslizando: o fim do deslizar a põe no lugar)
                     RECT wr{};
                     GetWindowRect(hwnd, &wr);
                     Wh_Log(L"Barra %d,%d: WM_DPICHANGED ignorado (janela em %d,%d-%d,%d, a escala do monitor é a mesma)",
