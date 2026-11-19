@@ -85,6 +85,7 @@ Includes 24 custom-rendered flags in an authentic 3:2 aspect ratio (shown with *
 #include <cstring>
 #include <cstdint>
 #include <atomic>
+#include <optional>
 
 // 2. Win32, UxTheme, Direct2D, DirectWrite, GDI+ and WinRT base headers
 #include <windows.h>
@@ -94,7 +95,6 @@ Includes 24 custom-rendered flags in an authentic 3:2 aspect ratio (shown with *
 #include <d2d1.h>
 #include <dwrite.h>
 #include <gdiplus.h>
-#include <winstring.h>
 #include <robuffer.h>
 
 // 3. C++/WinRT headers
@@ -105,7 +105,6 @@ Includes 24 custom-rendered flags in an authentic 3:2 aspect ratio (shown with *
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
-#include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 
@@ -214,8 +213,7 @@ std::vector<HMODULE> g_loadedModules;
 std::atomic<HWND> g_shellTrayHwnd{ nullptr };
 std::atomic<HKL> g_lastKnownHkl{ nullptr };
 std::atomic<bool> g_modUnloading{ false };
-std::atomic<bool> g_taskbarDllHooked{ false };
-std::atomic<bool> g_win11ExistingScanned{ false };
+std::atomic<bool> g_systemTrayHookAttempted{ false };
 
 std::unordered_map<WORD, LANGID> g_deviceLayoutCache;
 std::unordered_map<LANGID, std::wstring> g_countryCodeCache;
@@ -1716,8 +1714,8 @@ void InvalidateAllWin10Indicators(bool triggerD2DRedraw = false) {
 
 struct TrackedWin11TextBlock {
     winrt::weak_ref<wuxc::TextBlock> weakTb;
+    winrt::Windows::Foundation::IInspectable originalOpacity{ nullptr };
     int64_t textCallbackToken = 0;
-    int64_t visibilityCallbackToken = 0;
 };
 
 struct TrackedWin11Indicator {
@@ -1736,9 +1734,47 @@ struct PendingLoadedEntry {
     wux::FrameworkElement::Loaded_revoker loadedRevoker;
 };
 
-// Accessed strictly on taskbar XAML UI thread(s)
-std::vector<TrackedWin11Indicator> g_win11Indicators;
-std::vector<PendingLoadedEntry> g_pendingLoadedEntries;
+// Accessed strictly on taskbar XAML UI thread(s).
+// [[clang::no_destroy]] prevents CRT exit-time destruction on an arbitrary thread
+// after XAML teardown; CleanupWin11IndicatorsOnUIThread explicitly resets them on the UI thread.
+[[clang::no_destroy]] std::optional<std::vector<TrackedWin11Indicator>>
+    g_win11Indicators{ std::in_place };
+[[clang::no_destroy]] std::optional<std::vector<PendingLoadedEntry>>
+    g_pendingLoadedEntries{ std::in_place };
+[[clang::no_destroy]] std::optional<std::unordered_set<HWND>>
+    g_scannedTrayHwnds{ std::in_place };
+
+HMODULE GetSystemTrayModuleHandle() {
+    static const PCWSTR moduleNames[] = {
+        L"SystemTray.dll",
+        L"Taskbar.View.dll",
+        L"ExplorerExtensions.dll",
+    };
+    for (PCWSTR moduleName : moduleNames) {
+        if (HMODULE mod = GetModuleHandleW(moduleName)) {
+            return mod;
+        }
+    }
+    return nullptr;
+}
+
+bool IsSystemTrayModuleName(PCWSTR baseName) {
+    if (!baseName) return false;
+    return _wcsicmp(baseName, L"SystemTray.dll") == 0 ||
+           _wcsicmp(baseName, L"Taskbar.View.dll") == 0 ||
+           _wcsicmp(baseName, L"ExplorerExtensions.dll") == 0;
+}
+
+wux::FrameworkElement GetFrameworkElementFromImplThis(void* pThis) {
+    if (!pThis) return nullptr;
+    IUnknown* unk = reinterpret_cast<IUnknown**>(pThis)[1];
+    if (!unk) return nullptr;
+    wux::FrameworkElement element{ nullptr };
+    if (FAILED(unk->QueryInterface(winrt::guid_of<wux::FrameworkElement>(), winrt::put_abi(element)))) {
+        return nullptr;
+    }
+    return element;
+}
 
 HWND FindTaskbarHwndForCurrentThread() {
     DWORD tid = GetCurrentThreadId();
@@ -1813,11 +1849,11 @@ void UpdateWin11IndicatorFlag(TrackedWin11Indicator& entry) {
 
     ReentrancyFlagGuard updateGuard(entry.isUpdating);
 
-    // Ensure native language TextBlocks remain collapsed
+    // Hide native language TextBlocks via Opacity so Windows' own Visibility state is untouched
     for (auto& ttb : entry.textBlocks) {
         if (auto tb = ttb.weakTb.get()) {
-            if (tb.Visibility() != wux::Visibility::Collapsed) {
-                tb.Visibility(wux::Visibility::Collapsed);
+            if (tb.Opacity() != 0.0) {
+                tb.Opacity(0.0);
             }
         }
     }
@@ -1883,37 +1919,111 @@ void UpdateWin11IndicatorFlag(TrackedWin11Indicator& entry) {
     }
 }
 
-void RemoveTrackedWin11IndicatorByIconView(const wux::FrameworkElement& iconView) {
-    for (size_t i = 0; i < g_win11Indicators.size(); ++i) {
-        auto existing = g_win11Indicators[i].weakIconView.get();
-        if (!existing || existing == iconView) {
-            for (auto& ttb : g_win11Indicators[i].textBlocks) {
-                if (auto tb = ttb.weakTb.get()) {
-                    if (ttb.textCallbackToken != 0) {
-                        tb.UnregisterPropertyChangedCallback(wuxc::TextBlock::TextProperty(), ttb.textCallbackToken);
-                    }
-                    if (ttb.visibilityCallbackToken != 0) {
-                        tb.UnregisterPropertyChangedCallback(wux::UIElement::VisibilityProperty(), ttb.visibilityCallbackToken);
+void RestoreAndDetachWin11Indicator(TrackedWin11Indicator& item) {
+    item.isUpdating = true;
+    item.unloadedRevoker.revoke();
+
+    for (auto& ttb : item.textBlocks) {
+        if (auto tb = ttb.weakTb.get()) {
+            if (ttb.textCallbackToken != 0) {
+                tb.UnregisterPropertyChangedCallback(wuxc::TextBlock::TextProperty(), ttb.textCallbackToken);
+            }
+            if (ttb.originalOpacity && ttb.originalOpacity != wux::DependencyProperty::UnsetValue()) {
+                tb.SetValue(wux::UIElement::OpacityProperty(), ttb.originalOpacity);
+            } else {
+                tb.ClearValue(wux::UIElement::OpacityProperty());
+            }
+        }
+    }
+    item.textBlocks.clear();
+
+    if (auto panel = item.weakPanel.get()) {
+        auto children = panel.Children();
+        for (uint32_t c = children.Size(); c > 0; --c) {
+            if (auto fe = children.GetAt(c - 1).try_as<wux::FrameworkElement>()) {
+                if (fe.Name() == L"WindhawkFlagImage") {
+                    children.RemoveAt(c - 1);
+                }
+            }
+        }
+    }
+}
+
+void TrackLanguageIconView(const wux::FrameworkElement& iconView);
+
+void QueuePendingLoadedForElement(const wux::FrameworkElement& iconView) {
+    if (!iconView || !g_pendingLoadedEntries || g_modUnloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    // Prune dead or duplicate pending entries first
+    for (size_t i = 0; i < g_pendingLoadedEntries->size();) {
+        auto existingEl = (*g_pendingLoadedEntries)[i].weakElement.get();
+        if (!existingEl || existingEl == iconView) {
+            (*g_pendingLoadedEntries)[i].loadedRevoker.revoke();
+            g_pendingLoadedEntries->erase(g_pendingLoadedEntries->begin() + i);
+        } else {
+            ++i;
+        }
+    }
+
+    PendingLoadedEntry pending{};
+    pending.trayHwnd = FindTaskbarHwndForCurrentThread();
+    pending.weakElement = winrt::make_weak(iconView);
+
+    winrt::weak_ref<wux::FrameworkElement> weakFe = pending.weakElement;
+    pending.loadedRevoker = iconView.Loaded(
+        winrt::auto_revoke,
+        [weakFe](winrt::Windows::Foundation::IInspectable const& sender, wux::RoutedEventArgs const&) {
+            // Erasing this pending entry destroys loadedRevoker, which revokes the Loaded handler.
+            if (g_pendingLoadedEntries) {
+                for (size_t i = 0; i < g_pendingLoadedEntries->size(); ++i) {
+                    auto el = (*g_pendingLoadedEntries)[i].weakElement.get();
+                    if (!el || el == weakFe.get()) {
+                        g_pendingLoadedEntries->erase(g_pendingLoadedEntries->begin() + i);
+                        break;
                     }
                 }
             }
-            g_win11Indicators[i].unloadedRevoker.revoke();
-            g_win11Indicators.erase(g_win11Indicators.begin() + i);
+            if (g_modUnloading.load(std::memory_order_acquire)) return;
+            if (auto loadedFe = sender.try_as<wux::FrameworkElement>()) {
+                TrackLanguageIconView(loadedFe);
+            }
+        });
+
+    g_pendingLoadedEntries->push_back(std::move(pending));
+}
+
+void HandleIconViewUnloaded(const wux::FrameworkElement& iconView) {
+    if (!g_win11Indicators) return;
+
+    bool found = false;
+    for (size_t i = 0; i < g_win11Indicators->size(); ++i) {
+        auto existing = (*g_win11Indicators)[i].weakIconView.get();
+        if (!existing || existing == iconView) {
+            RestoreAndDetachWin11Indicator((*g_win11Indicators)[i]);
+            g_win11Indicators->erase(g_win11Indicators->begin() + i);
             if (existing == iconView) {
+                found = true;
                 break;
             }
             --i;
         }
     }
+
+    // Re-queue Loaded listener in case XAML reloads this same IconView instance later
+    if (found && iconView && !g_modUnloading.load(std::memory_order_acquire)) {
+        QueuePendingLoadedForElement(iconView);
+    }
 }
 
 void TrackLanguageIconView(const wux::FrameworkElement& iconView) {
-    if (!iconView || g_modUnloading.load(std::memory_order_acquire)) {
+    if (!iconView || !g_win11Indicators || g_modUnloading.load(std::memory_order_acquire)) {
         return;
     }
 
     // Check if already tracked
-    for (auto& existing : g_win11Indicators) {
+    for (auto& existing : *g_win11Indicators) {
         if (auto iv = existing.weakIconView.get()) {
             if (iv == iconView) {
                 UpdateWin11IndicatorFlag(existing);
@@ -1971,43 +2081,24 @@ void TrackLanguageIconView(const wux::FrameworkElement& iconView) {
         [weakIconViewCopy](winrt::Windows::Foundation::IInspectable const&, wux::RoutedEventArgs const&) {
             if (g_modUnloading.load(std::memory_order_acquire)) return;
             if (auto iv = weakIconViewCopy.get()) {
-                RemoveTrackedWin11IndicatorByIconView(iv);
+                HandleIconViewUnloaded(iv);
             }
         });
 
     for (const auto& tb : nativeTextBlocks) {
         TrackedWin11TextBlock ttb{};
         ttb.weakTb = winrt::make_weak(tb);
+        ttb.originalOpacity = tb.ReadLocalValue(wux::UIElement::OpacityProperty());
 
         ttb.textCallbackToken = tb.RegisterPropertyChangedCallback(
             wuxc::TextBlock::TextProperty(),
             [weakIconViewCopy](wux::DependencyObject const&, wux::DependencyProperty const&) {
-                if (g_modUnloading.load(std::memory_order_acquire)) return;
+                if (g_modUnloading.load(std::memory_order_acquire) || !g_win11Indicators) return;
                 auto iv = weakIconViewCopy.get();
                 if (!iv) return;
-                for (auto& item : g_win11Indicators) {
+                for (auto& item : *g_win11Indicators) {
                     if (auto trackedIv = item.weakIconView.get(); trackedIv && trackedIv == iv) {
                         UpdateWin11IndicatorFlag(item);
-                        break;
-                    }
-                }
-            });
-
-        ttb.visibilityCallbackToken = tb.RegisterPropertyChangedCallback(
-            wux::UIElement::VisibilityProperty(),
-            [weakIconViewCopy](wux::DependencyObject const& sender, wux::DependencyProperty const&) {
-                if (g_modUnloading.load(std::memory_order_acquire)) return;
-                auto iv = weakIconViewCopy.get();
-                if (!iv) return;
-                for (auto& item : g_win11Indicators) {
-                    if (auto trackedIv = item.weakIconView.get(); trackedIv && trackedIv == iv) {
-                        if (!item.isUpdating) {
-                            if (auto changedTb = sender.try_as<wuxc::TextBlock>()) {
-                                if (changedTb.Visibility() != wux::Visibility::Collapsed) {
-                                    UpdateWin11IndicatorFlag(item);
-                                }
-                            }
-                        }
                         break;
                     }
                 }
@@ -2016,16 +2107,14 @@ void TrackLanguageIconView(const wux::FrameworkElement& iconView) {
         entry.textBlocks.push_back(std::move(ttb));
     }
 
-    g_win11Indicators.push_back(std::move(entry));
-    UpdateWin11IndicatorFlag(g_win11Indicators.back());
+    g_win11Indicators->push_back(std::move(entry));
+    UpdateWin11IndicatorFlag(g_win11Indicators->back());
 }
 
 void HandleIconViewInstance(void* pThis) {
     if (!pThis || g_modUnloading.load(std::memory_order_acquire)) return;
 
-    winrt::Windows::Foundation::IInspectable insp{ nullptr };
-    winrt::copy_from_abi(insp, pThis);
-    auto iconView = insp.try_as<wux::FrameworkElement>();
+    auto iconView = GetFrameworkElementFromImplThis(pThis);
     if (!iconView) return;
 
     if (iconView.IsLoaded()) {
@@ -2033,39 +2122,7 @@ void HandleIconViewInstance(void* pThis) {
         return;
     }
 
-    // Prune dead pending entries first
-    for (size_t i = 0; i < g_pendingLoadedEntries.size();) {
-        if (!g_pendingLoadedEntries[i].weakElement.get()) {
-            g_pendingLoadedEntries[i].loadedRevoker.revoke();
-            g_pendingLoadedEntries.erase(g_pendingLoadedEntries.begin() + i);
-        } else {
-            ++i;
-        }
-    }
-
-    PendingLoadedEntry pending{};
-    pending.trayHwnd = FindTaskbarHwndForCurrentThread();
-    pending.weakElement = winrt::make_weak(iconView);
-
-    winrt::weak_ref<wux::FrameworkElement> weakFe = pending.weakElement;
-    pending.loadedRevoker = iconView.Loaded(
-        winrt::auto_revoke,
-        [weakFe](winrt::Windows::Foundation::IInspectable const& sender, wux::RoutedEventArgs const&) {
-            // Remove this pending entry (auto_revoke already detached the event handler)
-            for (size_t i = 0; i < g_pendingLoadedEntries.size(); ++i) {
-                auto el = g_pendingLoadedEntries[i].weakElement.get();
-                if (!el || el == weakFe.get()) {
-                    g_pendingLoadedEntries.erase(g_pendingLoadedEntries.begin() + i);
-                    break;
-                }
-            }
-            if (g_modUnloading.load(std::memory_order_acquire)) return;
-            if (auto loadedFe = sender.try_as<wux::FrameworkElement>()) {
-                TrackLanguageIconView(loadedFe);
-            }
-        });
-
-    g_pendingLoadedEntries.push_back(std::move(pending));
+    QueuePendingLoadedForElement(iconView);
 }
 
 void ScanVisualTreeForExistingIndicators(const wux::DependencyObject& root) {
@@ -2109,19 +2166,23 @@ void ScanVisualTreeForExistingIndicators(const wux::DependencyObject& root) {
 }
 
 void DiscoverExistingIndicatorsFromIconView(void* pThis) {
-    if (!pThis || g_modUnloading.load(std::memory_order_acquire)) return;
-    if (g_win11ExistingScanned.load(std::memory_order_acquire)) return;
+    if (!pThis || !g_scannedTrayHwnds || g_modUnloading.load(std::memory_order_acquire)) return;
 
-    winrt::Windows::Foundation::IInspectable insp{ nullptr };
-    winrt::copy_from_abi(insp, pThis);
-    auto fe = insp.try_as<wux::FrameworkElement>();
+    HWND trayHwnd = FindTaskbarHwndForCurrentThread();
+    if (trayHwnd && g_scannedTrayHwnds->count(trayHwnd) > 0) {
+        return;
+    }
+
+    auto fe = GetFrameworkElementFromImplThis(pThis);
     if (!fe) return;
 
     auto xamlRoot = fe.XamlRoot();
     if (!xamlRoot || !xamlRoot.Content()) return;
 
+    if (trayHwnd) {
+        g_scannedTrayHwnds->insert(trayHwnd);
+    }
     ScanVisualTreeForExistingIndicators(xamlRoot.Content());
-    g_win11ExistingScanned.store(true, std::memory_order_release);
 }
 
 using IconView_Init_t = void*(WINAPI*)(void* pThis);
@@ -2141,11 +2202,9 @@ IconView_UpdateIcon_t IconView_UpdateIcon_Orig = nullptr;
 
 void WINAPI IconView_UpdateIcon_Hook(void* pThis) {
     IconView_UpdateIcon_Orig(pThis);
-    if (!g_win11ExistingScanned.load(std::memory_order_acquire)) {
-        try {
-            DiscoverExistingIndicatorsFromIconView(pThis);
-        } catch (...) {
-        }
+    try {
+        DiscoverExistingIndicatorsFromIconView(pThis);
+    } catch (...) {
     }
 }
 
@@ -2154,22 +2213,21 @@ IconView_OnPointerEntered_t IconView_OnPointerEntered_Orig = nullptr;
 
 void WINAPI IconView_OnPointerEntered_Hook(void* pThis, void* pArgs) {
     IconView_OnPointerEntered_Orig(pThis, pArgs);
-    if (!g_win11ExistingScanned.load(std::memory_order_acquire)) {
-        try {
-            DiscoverExistingIndicatorsFromIconView(pThis);
-        } catch (...) {
-        }
+    try {
+        DiscoverExistingIndicatorsFromIconView(pThis);
+    } catch (...) {
     }
 }
 
-bool HookTaskbarDllSymbols(HMODULE taskbarMod) {
-    if (!taskbarMod) return false;
+bool HookSystemTraySymbols(HMODULE systemTrayMod) {
+    if (!systemTrayMod) return false;
     bool expected = false;
-    if (!g_taskbarDllHooked.compare_exchange_strong(expected, true)) {
-        return true;
+    if (!g_systemTrayHookAttempted.compare_exchange_strong(expected, true)) {
+        return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {
         {
             { L"public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void)" },
             &IconView_Init_Orig,
@@ -2190,19 +2248,38 @@ bool HookTaskbarDllSymbols(HMODULE taskbarMod) {
         }
     };
 
-    if (!WindhawkUtils::HookSymbols(taskbarMod, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
-        Wh_Log(L"Failed to hook required SystemTray::IconView symbols in Taskbar.dll.");
-        g_taskbarDllHooked.store(false, std::memory_order_release);
+    if (!WindhawkUtils::HookSymbols(systemTrayMod, systemTrayHooks, ARRAYSIZE(systemTrayHooks))) {
+        Wh_Log(L"Failed to hook required SystemTray::IconView symbols in system tray module.");
         return false;
     }
 
     return true;
 }
 
+void HandleLoadedModuleIfSystemTray(HMODULE mod, PCWSTR modulePath) {
+    if (!mod || !modulePath || g_modUnloading.load(std::memory_order_acquire) ||
+        g_systemTrayHookAttempted.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    const wchar_t* baseName = modulePath;
+    for (const wchar_t* p = modulePath; *p; ++p) {
+        if (*p == L'\\' || *p == L'/') {
+            baseName = p + 1;
+        }
+    }
+
+    if (IsSystemTrayModuleName(baseName)) {
+        if (HookSystemTraySymbols(mod)) {
+            Wh_ApplyHookOperations();
+        }
+    }
+}
+
 void WINAPI RefreshWin11IndicatorsOnUIThread(void*) {
-    if (g_modUnloading.load(std::memory_order_acquire)) return;
+    if (g_modUnloading.load(std::memory_order_acquire) || !g_win11Indicators) return;
     DWORD tid = GetCurrentThreadId();
-    for (auto& item : g_win11Indicators) {
+    for (auto& item : *g_win11Indicators) {
         if (!item.trayHwnd || GetWindowThreadProcessId(item.trayHwnd, nullptr) == tid) {
             UpdateWin11IndicatorFlag(item);
         }
@@ -2212,50 +2289,48 @@ void WINAPI RefreshWin11IndicatorsOnUIThread(void*) {
 void WINAPI CleanupWin11IndicatorsOnUIThread(void*) {
     DWORD tid = GetCurrentThreadId();
 
-    for (size_t i = 0; i < g_pendingLoadedEntries.size();) {
-        if (!g_pendingLoadedEntries[i].trayHwnd ||
-            GetWindowThreadProcessId(g_pendingLoadedEntries[i].trayHwnd, nullptr) == tid) {
-            g_pendingLoadedEntries[i].loadedRevoker.revoke();
-            g_pendingLoadedEntries.erase(g_pendingLoadedEntries.begin() + i);
-        } else {
-            ++i;
+    if (g_pendingLoadedEntries) {
+        for (size_t i = 0; i < g_pendingLoadedEntries->size();) {
+            HWND hwnd = (*g_pendingLoadedEntries)[i].trayHwnd;
+            if (!hwnd || !IsWindow(hwnd) || GetWindowThreadProcessId(hwnd, nullptr) == tid) {
+                (*g_pendingLoadedEntries)[i].loadedRevoker.revoke();
+                g_pendingLoadedEntries->erase(g_pendingLoadedEntries->begin() + i);
+            } else {
+                ++i;
+            }
         }
     }
 
-    for (size_t i = 0; i < g_win11Indicators.size();) {
-        if (!g_win11Indicators[i].trayHwnd ||
-            GetWindowThreadProcessId(g_win11Indicators[i].trayHwnd, nullptr) == tid) {
-            auto& item = g_win11Indicators[i];
-            item.isUpdating = true;
-            item.unloadedRevoker.revoke();
-
-            for (auto& ttb : item.textBlocks) {
-                if (auto tb = ttb.weakTb.get()) {
-                    if (ttb.textCallbackToken != 0) {
-                        tb.UnregisterPropertyChangedCallback(wuxc::TextBlock::TextProperty(), ttb.textCallbackToken);
-                    }
-                    if (ttb.visibilityCallbackToken != 0) {
-                        tb.UnregisterPropertyChangedCallback(wux::UIElement::VisibilityProperty(), ttb.visibilityCallbackToken);
-                    }
-                    tb.Visibility(wux::Visibility::Visible);
-                }
+    if (g_win11Indicators) {
+        for (size_t i = 0; i < g_win11Indicators->size();) {
+            HWND hwnd = (*g_win11Indicators)[i].trayHwnd;
+            if (!hwnd || !IsWindow(hwnd) || GetWindowThreadProcessId(hwnd, nullptr) == tid) {
+                RestoreAndDetachWin11Indicator((*g_win11Indicators)[i]);
+                g_win11Indicators->erase(g_win11Indicators->begin() + i);
+            } else {
+                ++i;
             }
-
-            if (auto panel = item.weakPanel.get()) {
-                auto children = panel.Children();
-                for (uint32_t c = children.Size(); c > 0; --c) {
-                    if (auto fe = children.GetAt(c - 1).try_as<wux::FrameworkElement>()) {
-                        if (fe.Name() == L"WindhawkFlagImage") {
-                            children.RemoveAt(c - 1);
-                        }
-                    }
-                }
-            }
-
-            g_win11Indicators.erase(g_win11Indicators.begin() + i);
-        } else {
-            ++i;
         }
+    }
+
+    if (g_scannedTrayHwnds) {
+        for (auto it = g_scannedTrayHwnds->begin(); it != g_scannedTrayHwnds->end();) {
+            if (!IsWindow(*it) || GetWindowThreadProcessId(*it, nullptr) == tid) {
+                it = g_scannedTrayHwnds->erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    if (g_pendingLoadedEntries && g_pendingLoadedEntries->empty()) {
+        g_pendingLoadedEntries.reset();
+    }
+    if (g_win11Indicators && g_win11Indicators->empty()) {
+        g_win11Indicators.reset();
+    }
+    if (g_scannedTrayHwnds && g_scannedTrayHwnds->empty()) {
+        g_scannedTrayHwnds.reset();
     }
 }
 
@@ -2387,17 +2462,8 @@ LoadLibraryExW_t LoadLibraryExW_Orig = nullptr;
 
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
     HMODULE mod = LoadLibraryExW_Orig(lpLibFileName, hFile, dwFlags);
-    if (mod && lpLibFileName && !g_modUnloading.load(std::memory_order_acquire) &&
-        !g_taskbarDllHooked.load(std::memory_order_acquire)) {
-        const wchar_t* baseName = lpLibFileName;
-        for (const wchar_t* p = lpLibFileName; *p; ++p) {
-            if (*p == L'\\' || *p == L'/') {
-                baseName = p + 1;
-            }
-        }
-        if (_wcsicmp(baseName, L"Taskbar.dll") == 0) {
-            HookTaskbarDllSymbols(mod);
-        }
+    if (mod) {
+        HandleLoadedModuleIfSystemTray(mod, lpLibFileName);
     }
     return mod;
 }
@@ -2432,26 +2498,23 @@ BOOL Wh_ModInit() {
     Gdiplus::GdiplusStartupInput gdipInput;
     Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdipInput, nullptr);
 
-    // 1. Hook Windows 11 SystemTray::IconView in Taskbar.dll (either now or lazily when Taskbar.dll loads)
-    HMODULE taskbarMod = GetModuleHandleW(L"Taskbar.dll");
-    if (taskbarMod) {
-        HookTaskbarDllSymbols(taskbarMod);
-    } else {
-        HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
-        auto pLoadLibraryExW = kernelBase
-            ? reinterpret_cast<LoadLibraryExW_t>(GetProcAddress(kernelBase, "LoadLibraryExW"))
-            : LoadLibraryExW;
-        if (pLoadLibraryExW) {
-            WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExW_Hook, &LoadLibraryExW_Orig);
-        }
+    // 1. Hook Windows 11 SystemTray::IconView in SystemTray.dll / Taskbar.View.dll / ExplorerExtensions.dll
+    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+    auto pLoadLibraryExW = kernelBase
+        ? reinterpret_cast<LoadLibraryExW_t>(GetProcAddress(kernelBase, "LoadLibraryExW"))
+        : LoadLibraryExW;
+    if (pLoadLibraryExW) {
+        WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExW_Hook, &LoadLibraryExW_Orig);
+    }
+
+    HMODULE systemTrayMod = GetSystemTrayModuleHandle();
+    if (systemTrayMod) {
+        HookSystemTraySymbols(systemTrayMod);
     }
 
     // 2. Install Windows 10 indicator text suppression & buffered-paint hooks
-    //    (strictly gated to TrayInputIndicatorWClass paint; skip D2D/DWrite if Windows 11 XAML tray is active)
-    bool hasExistingWin10Tray = (FindWindowExW(FindWindowW(L"Shell_TrayWnd", nullptr), nullptr, L"TrayInputIndicatorWClass", nullptr) != nullptr);
-    if (!taskbarMod || hasExistingWin10Tray) {
-        InstallDirect2DAndDWriteHooks();
-    }
+    //    (strictly gated to TrayInputIndicatorWClass paint via thread-local checks)
+    InstallDirect2DAndDWriteHooks();
 
     WindhawkUtils::SetFunctionHook(BeginBufferedPaint, BeginBufferedPaint_Hook, &BeginBufferedPaint_Orig);
     WindhawkUtils::SetFunctionHook(EndBufferedPaint, EndBufferedPaint_Hook, &EndBufferedPaint_Orig);
@@ -2482,9 +2545,9 @@ BOOL Wh_ModInit() {
         }
     }
 
-    // 4. If enabled mid-session on Windows 11, prompt Taskbar.dll to refresh tray icons so
+    // 4. If enabled mid-session on Windows 11, prompt taskbars to refresh tray icons so
     //    IconView::UpdateIcon discovers existing language indicators via XamlRoot immediately.
-    if (g_taskbarDllHooked.load(std::memory_order_acquire)) {
+    if (systemTrayMod) {
         HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr);
         if (primary) {
             SendNotifyMessageW(primary, WM_SETTINGCHANGE, 0, 0);
@@ -2499,6 +2562,19 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Taskbar Keyboard Layout Flag v1.0 initialized (Scale=%d, %dx%d, DarkMode=%d).",
            settings.flagScale, settings.flagWidth, settings.flagHeight, settings.darkMode ? 1 : 0);
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (g_modUnloading.load(std::memory_order_acquire) ||
+        g_systemTrayHookAttempted.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (HMODULE systemTrayMod = GetSystemTrayModuleHandle()) {
+        if (HookSystemTraySymbols(systemTrayMod)) {
+            Wh_ApplyHookOperations();
+        }
+    }
 }
 
 void Wh_ModUninit() {
