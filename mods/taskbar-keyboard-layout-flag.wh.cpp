@@ -12,7 +12,8 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==x# Taskbar Keyboard Layout Flag
-
+/*
+==WindhawkModReadme==
 Replaces the Windows taskbar input language and keyboard layout indicator with a crisp, minimalist country flag.
 
 ## Overview
@@ -2000,6 +2001,7 @@ BOOL Wh_ModInit() {
     // 4. Hook Windows 11 XAML TextBlock visual tree
     HMODULE xamlMod = GetOrLoadSystemModule(L"Windows.UI.Xaml.dll");
     if (xamlMod) {
+      // Windows.UI.Xaml.dll
         WindhawkUtils::SYMBOL_HOOK xamlHooks[] = {
             {
                 { L"public: virtual void __cdecl DirectUI::TextBlock::OnPropertyChanged2(struct PropertyChangedParams const &)" },
