@@ -2,7 +2,7 @@
 // @id              app-owned-frame
 // @name            App Owned Frame
 // @description     Restores DWM clipping for selected custom-frame applications without changing their window styles or resizing.
-// @version         1.44
+// @version         1.45
 // @author          appEW
 // @github          https://github.com/appEW
 // @license         MIT
@@ -140,13 +140,13 @@ Before: without the mod. After: with the mod. Provided by the submitter.
     - legacyGutterColor: ""
       $name: Residual resize gutter color (empty disables)
       $name:ru: Цвет остаточного системного отступа (пусто — выключено)
-      $description: Optional #RRGGBB flat fill for the allocated non-client gutter, including the same DWM caption color for a residual top strip. Requires legacyPaint and Advanced inclusion. Never paints client/buttons/ordinary native captions. No geometry changes. Off restores queried original caption color or system default.
-      $description:ru: Необязательный цвет #RRGGBB для оставшегося системного отступа, включая верхнюю полосу DWM. Нужны legacyPaint и Advanced. Клиент, кнопки и обычные заголовки не закрашиваются; геометрия не меняется. При отключении восстанавливается прочитанный цвет заголовка или системный по умолчанию.
+      $description: Optional #RRGGBB flat fill for the allocated non-client gutter, including the same DWM caption color for a residual top strip. Requires Use the application's own title bar and the Advanced inclusion entry. Never paints client/buttons/ordinary native captions. No geometry changes. Off restores queried original caption color or system default.
+      $description:ru: Необязательный цвет #RRGGBB для оставшегося системного отступа, включая верхнюю полосу DWM. Нужны «Использовать собственный заголовок программы» и список Advanced. Клиент, кнопки и обычные заголовки не закрашиваются; геометрия не меняется. При отключении восстанавливается прочитанный цвет заголовка или системный по умолчанию.
     - dwmCaptionPaint: false
       $name: Delegate caption painting to DWM, not classic GDI
       $name:ru: Передавать отрисовку заголовка DWM, не классическому GDI
-      $description: Experimental for legacy custom captions; requires legacyPaint and Advanced inclusion. Uses real messages only. No geometry, style or maximize changes.
-      $description:ru: Эксперимент для собственных legacy-заголовков; нужны legacyPaint и включение Advanced. Только реальные сообщения. Не меняет размер, стиль или максимизацию.
+      $description: Experimental for legacy custom captions; requires Use the application's own title bar and the Advanced inclusion entry. Has no effect while Prepare the custom title bar at startup is enabled. Uses real messages only. No geometry, style or maximize changes.
+      $description:ru: Эксперимент для собственных legacy-заголовков; нужны «Использовать собственный заголовок программы» и список Advanced. Не действует, пока включена подготовка заголовка при запуске. Только реальные сообщения. Не меняет размер, стиль или максимизацию.
     - earlyDwm: false
       $name: Prepare the custom title bar at startup
       $name:ru: Подготавливать собственный заголовок при запуске
@@ -182,7 +182,7 @@ Before: without the mod. After: with the mod. Provided by the submitter.
     - frameGeometry: auto
     - legacyPaint: true
     - legacyGutterColor: ""
-    - dwmCaptionPaint: true
+    - dwmCaptionPaint: false
     - earlyDwm: true
     - removeBackdrop: false
     - nativeResize: false
@@ -214,7 +214,7 @@ Before: without the mod. After: with the mod. Provided by the submitter.
 #include <shlwapi.h>
 #include <shellscalingapi.h>
 #include <shellapi.h>
-#include <windhawk_api.h>
+#include <windhawk_utils.h>
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -235,8 +235,8 @@ struct CompositionData {
 using SetComposition = BOOL(WINAPI*)(HWND, CompositionData*);
 SetComposition setComposition = nullptr;
 constexpr int kNcRenderingExiled = 11;
-constexpr DWORD kBorderColor = 34;
-constexpr DWORD kSystemBackdrop = 38;
+constexpr DWORD kBorderColor = DWMWA_BORDER_COLOR;
+constexpr DWORD kSystemBackdrop = DWMWA_SYSTEMBACKDROP_TYPE;
 constexpr COLORREF kNoBorder = 0xFFFFFFFE;
 constexpr COLORREF kDefaultBorder = 0xFFFFFFFF;
 constexpr UINT kReconfigure = WM_APP + 33;
@@ -264,7 +264,7 @@ struct CaptionFillState {
 
 bool ReconcileCaptionFill(HWND window, CaptionFillState& state, COLORREF color,
                           bool force = false) {
-    constexpr DWORD captionAttribute = 35; // DWMWA_CAPTION_COLOR, Win11 22000+.
+    constexpr DWORD captionAttribute = DWMWA_CAPTION_COLOR; // Win11 22000+.
     if (color == 0xFFFFFFFE && !state.changed) return true;
     if (color != 0xFFFFFFFE && state.changed && state.applied == color && !force)
         return true;
@@ -492,39 +492,27 @@ void LoadSettings() {
     std::vector<std::wstring> earlyDwms;
     std::vector<std::wstring> backdrops;
     std::vector<std::wstring> nativeResize;
+    using WindhawkUtils::StringSetting;
     for (int i = 0; i < 256; ++i) {
-        const std::wstring key = L"programs[" + std::to_wstring(i) + L"].executable";
-        PCWSTR setting = Wh_GetStringSetting(key.c_str());
-        std::wstring value = setting ? setting : L"";
-        if (setting) Wh_FreeStringSetting(setting);
+        const std::wstring value = StringSetting::make(L"programs[%d].executable", i).get();
         if (value.empty()) break;
         const size_t first = value.find_first_not_of(L" \t\r\n");
         const size_t last = value.find_last_not_of(L" \t\r\n");
         if (first != std::wstring::npos) {
             result.push_back(value.substr(first, last-first+1));
-            const std::wstring geometryKey = L"programs[" + std::to_wstring(i) + L"].frameGeometry";
-            PCWSTR geometrySetting = Wh_GetStringSetting(geometryKey.c_str());
-            const std::wstring geometryValue = geometrySetting ? geometrySetting : L"";
-            if (geometrySetting) Wh_FreeStringSetting(geometrySetting);
+            const std::wstring geometryValue =
+                StringSetting::make(L"programs[%d].frameGeometry", i).get();
             const FrameGeometry geometry = geometryValue == L"off" ? FrameGeometry::Disabled :
                 geometryValue == L"compact" ? FrameGeometry::Compact :
                 geometryValue == L"resizeGutter" ? FrameGeometry::ResizeGutter : FrameGeometry::Automatic;
             geometryRules.push_back({result.back(), geometry});
-            const std::wstring paintKey = L"programs[" + std::to_wstring(i) + L"].legacyPaint";
-            if (Wh_GetIntSetting(paintKey.c_str())) legacy.push_back(result.back());
-            const std::wstring gutterKey = L"programs[" + std::to_wstring(i) + L"].legacyGutterColor";
-            PCWSTR gutterSetting = Wh_GetStringSetting(gutterKey.c_str());
-            const std::wstring gutterValue = gutterSetting ? gutterSetting : L"";
-            if (gutterSetting) Wh_FreeStringSetting(gutterSetting);
-            gutterRules.push_back({result.back(),ParseLegacyGutterColor(gutterValue)});
-            const std::wstring dwmCaptionKey = L"programs[" + std::to_wstring(i) + L"].dwmCaptionPaint";
-            if (Wh_GetIntSetting(dwmCaptionKey.c_str())) dwmCaptions.push_back(result.back());
-            const std::wstring earlyDwmKey = L"programs[" + std::to_wstring(i) + L"].earlyDwm";
-            if (Wh_GetIntSetting(earlyDwmKey.c_str())) earlyDwms.push_back(result.back());
-            const std::wstring backdropKey = L"programs[" + std::to_wstring(i) + L"].removeBackdrop";
-            if (Wh_GetIntSetting(backdropKey.c_str())) backdrops.push_back(result.back());
-            const std::wstring nativeKey = L"programs[" + std::to_wstring(i) + L"].nativeResize";
-            if (Wh_GetIntSetting(nativeKey.c_str())) nativeResize.push_back(result.back());
+            if (Wh_GetIntSetting(L"programs[%d].legacyPaint", i)) legacy.push_back(result.back());
+            gutterRules.push_back({result.back(),ParseLegacyGutterColor(
+                StringSetting::make(L"programs[%d].legacyGutterColor", i).get())});
+            if (Wh_GetIntSetting(L"programs[%d].dwmCaptionPaint", i)) dwmCaptions.push_back(result.back());
+            if (Wh_GetIntSetting(L"programs[%d].earlyDwm", i)) earlyDwms.push_back(result.back());
+            if (Wh_GetIntSetting(L"programs[%d].removeBackdrop", i)) backdrops.push_back(result.back());
+            if (Wh_GetIntSetting(L"programs[%d].nativeResize", i)) nativeResize.push_back(result.back());
         }
     }
     std::lock_guard lock(settingsMutex);
@@ -568,7 +556,7 @@ COLORREF MatchGutter(const wchar_t* path,
                      const std::vector<ProgramGutter>& rules = configuredGutters) {
     const wchar_t* basename = PathFindFileNameW(path);
     for (const auto& rule : rules) {
-        const wchar_t* candidate = rule.pattern.find_first_of(L"\\\\/") == std::wstring::npos ? basename : path;
+        const wchar_t* candidate = rule.pattern.find_first_of(L"\\/") == std::wstring::npos ? basename : path;
         if (PathMatchSpecW(candidate,rule.pattern.c_str())) return rule.color;
     }
     return kNoBorder;
@@ -674,10 +662,12 @@ UINT PhysicalFrameDpi(HWND window) {
 bool HasCustomFrameGeometry(const WINDOWINFO& info, int compactGutter,
                             int resizeGutter, int tolerance, FrameGeometry mode) {
     constexpr DWORD requiredStyle = WS_CAPTION | WS_THICKFRAME;
+    // WS_DISABLED is deliberately not checked: a modal file dialog disables
+    // its owner, which is still the same main window and must stay handled.
     if (mode == FrameGeometry::Disabled || compactGutter < 0 ||
         resizeGutter < compactGutter || tolerance < 0 ||
         (info.dwStyle & requiredStyle) != requiredStyle ||
-        (info.dwStyle & (WS_CHILD | WS_DISABLED)) ||
+        (info.dwStyle & WS_CHILD) ||
         (info.dwExStyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) ||
         info.rcWindow.right-info.rcWindow.left < 200 ||
         info.rcWindow.bottom-info.rcWindow.top < 150) return false;
@@ -892,8 +882,8 @@ bool HookNativeClass(void* procedure, bool renderer, bool applyNow) {
         return true;
     }
     const DefaultProc proxy = renderer ? NativeRendererProc : NativeWindowProc;
-    if (!Wh_SetFunctionHook(procedure, reinterpret_cast<void*>(proxy),
-            reinterpret_cast<void**>(&trampoline))) return false;
+    if (!WindhawkUtils::SetFunctionHook(reinterpret_cast<DefaultProc>(procedure), proxy,
+            &trampoline)) return false;
     target = procedure;
     if (applyNow && !Wh_ApplyHookOperations()) return false;
     hooked = true;
@@ -1346,10 +1336,12 @@ LRESULT HandleLegacyPaint(DefaultProc original, HWND window, UINT message,
             return handled ? dwmResult : 0;
         }
         // Preserve activation bookkeeping without allowing classic GDI paint,
-        // regardless of whether the independent DWM handler accepts it.
+        // regardless of whether the independent DWM handler accepts it. The
+        // return value decides whether deactivation may proceed, so it must
+        // come from DefWindowProc, never from the DWM handler.
         const LRESULT result = original(window, message, wp, -1);
         PaintLegacyGutter(window);
-        return handled ? dwmResult : result;
+        return result;
     }
     if (message == WM_SETTEXT || message == WM_SETICON) {
         const LRESULT result = original(window, message, wp, lp);
@@ -1646,8 +1638,8 @@ void Apply(HWND window, bool forceBorder = false) {
     if (state.process.removeBackdrop && state.backdropReadable) {
         DWORD backdrop = 0;
         if (SUCCEEDED(DwmGetWindowAttribute(window, kSystemBackdrop, &backdrop, sizeof(backdrop))) &&
-            backdrop != 1) {
-            const DWORD none = 1; // DWMSBT_NONE: no system material behind NC.
+            backdrop != DWMSBT_NONE) {
+            const DWORD none = DWMSBT_NONE; // No system material behind NC.
             if (RecordRollbackIntent(window,state,4) &&
                 SUCCEEDED(DwmSetWindowAttribute(window, kSystemBackdrop, &none, sizeof(none))))
                 state.backdropChanged = true;
@@ -2193,27 +2185,25 @@ BOOL Wh_ModInit() {
         }
         if (!legacyPaintEnabled && !nativeResizeProcess) return FALSE;
         if (legacyPaintEnabled &&
-            !(Wh_SetFunctionHook(reinterpret_cast<void*>(DefWindowProcW),
-                    reinterpret_cast<void*>(LegacyDefaultW), reinterpret_cast<void**>(&defaultProcW)) &&
-               Wh_SetFunctionHook(reinterpret_cast<void*>(DefWindowProcA),
-                    reinterpret_cast<void*>(LegacyDefaultA), reinterpret_cast<void**>(&defaultProcA))))
+            !(WindhawkUtils::SetFunctionHook(DefWindowProcW, LegacyDefaultW, &defaultProcW) &&
+              WindhawkUtils::SetFunctionHook(DefWindowProcA, LegacyDefaultA, &defaultProcA)))
             return FALSE;
         if (legacyPaintEnabled) {
             const auto composition=reinterpret_cast<SetComposition>(
                 GetProcAddress(GetModuleHandleW(L"user32.dll"),"SetWindowCompositionAttribute"));
             if (!composition ||
-                !Wh_SetFunctionHook(reinterpret_cast<void*>(composition),
-                    reinterpret_cast<void*>(EarlyComposition),reinterpret_cast<void**>(&earlyCompositionOriginal)) ||
-                !Wh_SetFunctionHook(reinterpret_cast<void*>(DwmExtendFrameIntoClientArea),
-                    reinterpret_cast<void*>(EarlyMargins),reinterpret_cast<void**>(&earlyMarginsOriginal)))
+                !WindhawkUtils::SetFunctionHook(composition, EarlyComposition,
+                    &earlyCompositionOriginal) ||
+                !WindhawkUtils::SetFunctionHook(DwmExtendFrameIntoClientArea, EarlyMargins,
+                    &earlyMarginsOriginal))
                 return FALSE;
             legacyHooksInstalled = true;
         }
         if (nativeResizeProcess) {
             // Existing classes are hooked during init. Registration handles
             // future launches once, never from a mouse/hit-test callback.
-            if (!Wh_SetFunctionHook(reinterpret_cast<void*>(RegisterClassExW),
-                    reinterpret_cast<void*>(NativeRegisterClass), reinterpret_cast<void**>(&registerClass)))
+            if (!WindhawkUtils::SetFunctionHook(RegisterClassExW, NativeRegisterClass,
+                    &registerClass))
                 return FALSE;
             EnumWindows(FindNativeClass, 0);
         }

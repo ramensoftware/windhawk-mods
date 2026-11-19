@@ -3,9 +3,10 @@ import * as fs from 'fs';
 import * as https from 'https';
 import * as path from 'path';
 import ModSourceUtils from './modSourceUtils.js';
+import { ExternalModListing, getExternalModListings } from './externalCatalog.js';
 import { Feed } from 'feed';
 import { OutgoingHttpHeaders } from 'http';
-import showdown from 'showdown';
+import MarkdownIt from 'markdown-it';
 
 // Author name variations of the same github account. The first item of each
 // pair is the canonical name.
@@ -21,6 +22,7 @@ const allowedAuthorNamePairs = [
 const allowedAuthorGithubPairs = [
     ['https://github.com/meteoni', 'https://github.com/meteony'],
     ['https://github.com/getrektbynoob15', 'https://github.com/getrektbynoob20'],
+    ['https://github.com/sharexza', 'https://github.com/raviadityasetiawan-oss'],
 ];
 
 type ModAuthorData = {
@@ -836,6 +838,69 @@ function enrichCatalog(
     };
 }
 
+function buildExternalCatalog(
+    listings: ExternalModListing[],
+    language: string,
+    enrichment: any,
+    modSourceUtils: ModSourceUtils,
+) {
+    const mods: Record<string, any> = {};
+    for (const listing of listings) {
+        const { id: idFromMetadata, ...rest } = modSourceUtils.extractMetadata(listing.source, language);
+        if (listing.id !== idFromMetadata) {
+            throw new Error(`Expected ${listing.id} === ${idFromMetadata}`);
+        }
+
+        mods[listing.id] = {
+            metadata: rest,
+            details: {
+                published: listing.published,
+                updated: listing.updated,
+                defaultSorting: 0,
+                trendingSorting: 0,
+                rating: 0,
+                users: 0,
+                ratingUsers: 0,
+                ratingBreakdown: [0, 0, 0, 0, 0],
+                // Keyed by the id the app installs it under.
+                ...enrichment.mods[`external@${listing.id}`]?.details,
+            },
+            source: {
+                url: listing.sourceUrl,
+                sha256: listing.sha256,
+            },
+            pullRequest: listing.pullRequestUrl,
+        };
+    }
+
+    return {
+        mods,
+    };
+}
+
+// Keeps the original (English) name and description for searching, copying
+// each field only if the translation changed it.
+function addMetadataEnglish(mods: Record<string, any>, englishMods: Record<string, any>) {
+    for (const [modId, mod] of Object.entries(mods)) {
+        const englishMod = englishMods[modId];
+        if (!englishMod) {
+            continue;
+        }
+        const metadata = mod.metadata;
+        const englishMetadata = englishMod.metadata;
+        const englishPartial: { name?: string; description?: string } = {};
+        if (metadata.name !== englishMetadata.name) {
+            englishPartial.name = englishMetadata.name;
+        }
+        if (metadata.description !== englishMetadata.description) {
+            englishPartial.description = englishMetadata.description;
+        }
+        if (Object.keys(englishPartial).length > 0) {
+            mod.metadataEnglish = englishPartial;
+        }
+    }
+}
+
 async function generateModCatalogs(cache: GitCache) {
     const enrichmentUrl = 'https://update.windhawk.net/mods_catalog_enrichment.json';
     const enrichment = await fetchJson(enrichmentUrl);
@@ -865,9 +930,20 @@ async function generateModCatalogs(cache: GitCache) {
     const englishCatalogEnriched = enrichCatalog(englishCatalog, enrichment, reviewsByMod, modTimes, cache);
     fs.writeFileSync('catalog.json', JSONcompactNumberArrays(JSONstringifyOrder(englishCatalogEnriched, 2)));
 
+    // The external catalog is written even when it lists nothing, since the
+    // app reads a missing document as a failure.
+    const externalListings = await getExternalModListings(new Set(Object.keys(englishCatalog)));
+    const englishExternalCatalog = buildExternalCatalog(externalListings, 'en-US', enrichment, modSourceUtils);
+    fs.writeFileSync('catalog_external.json', JSONcompactNumberArrays(JSONstringifyOrder(englishExternalCatalog, 2)));
+
     const catalogsDir = 'catalogs';
     if (!fs.existsSync(catalogsDir)) {
         fs.mkdirSync(catalogsDir);
+    }
+
+    const externalCatalogsDir = 'catalog_external';
+    if (!fs.existsSync(externalCatalogsDir)) {
+        fs.mkdirSync(externalCatalogsDir);
     }
 
     for (const translateFile of translateFiles) {
@@ -879,29 +955,12 @@ async function generateModCatalogs(cache: GitCache) {
         const language = translateFileName.slice(0, -'.yml'.length);
         const catalog = modSourceUtils.getMetadataOfMods(language);
         const catalogEnriched = enrichCatalog(catalog, enrichment, reviewsByMod, modTimes, cache);
-
-        // Keep the original (English) name and description for searching,
-        // copying each field only if the translation changed it.
-        for (const [modId, mod] of Object.entries(catalogEnriched.mods)) {
-            const englishMod = englishCatalogEnriched.mods[modId];
-            if (!englishMod) {
-                continue;
-            }
-            const metadata = mod.metadata;
-            const englishMetadata = englishMod.metadata;
-            const englishPartial: { name?: string; description?: string } = {};
-            if (metadata.name !== englishMetadata.name) {
-                englishPartial.name = englishMetadata.name;
-            }
-            if (metadata.description !== englishMetadata.description) {
-                englishPartial.description = englishMetadata.description;
-            }
-            if (Object.keys(englishPartial).length > 0) {
-                mod.metadataEnglish = englishPartial;
-            }
-        }
-
+        addMetadataEnglish(catalogEnriched.mods, englishCatalogEnriched.mods);
         fs.writeFileSync(path.join(catalogsDir, `${language}.json`), JSONcompactNumberArrays(JSONstringifyOrder(catalogEnriched, 2)));
+
+        const externalCatalog = buildExternalCatalog(externalListings, language, enrichment, modSourceUtils);
+        addMetadataEnglish(externalCatalog.mods, englishExternalCatalog.mods);
+        fs.writeFileSync(path.join(externalCatalogsDir, `${language}.json`), JSONcompactNumberArrays(JSONstringifyOrder(externalCatalog, 2)));
     }
 }
 
@@ -1007,22 +1066,16 @@ function generateRssFeed(feedType: 'updates' | 'releases', cache: GitCache) {
         updated: feedItems[0].date,
     });
 
-    const showdownConverter = new showdown.Converter();
-
-    const markdownToHtml = (markdown: string) => {
-        // Showdown doesn't support trailing backslashes as newlines. Use double
-        // spaces instead. https://github.com/showdownjs/showdown/issues/394
-        markdown = markdown.replace(/\\\n/g, '  \n');
-
-        return showdownConverter.makeHtml(markdown);
-    }
+    // Feed content is written by mod authors, so raw HTML is escaped rather than
+    // passed on to feed readers.
+    const markdown = new MarkdownIt({ html: false });
 
     for (const feedItem of feedItems) {
         feed.addItem({
             title: feedItem.title,
             id: feedItem.url + '#' + feedItem.commit,
             link: feedItem.url,
-            content: markdownToHtml(feedItem.content),
+            content: markdown.render(feedItem.content),
             date: feedItem.date,
             author: [feedItem.author],
         });

@@ -2,7 +2,7 @@
 // @id              windows-11-file-explorer-styler
 // @name            Windows 11 File Explorer Styler
 // @description     Customize the File Explorer with themes contributed by others or create your own
-// @version         1.7
+// @version         1.7.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -767,7 +767,7 @@ const Theme g_themeWindowGlass = {{
     ThemeTargetStyles{L"FileExplorerExtensions.GalleryViewControl#GalleryViewControl > Grid > Grid#GalleryRootGrid", {
         L"Background:=$MainContentBG"}},
     ThemeTargetStyles{L"ToolTip", {
-        L"Background:=$Background"}},
+        L"Background:=$AcrylicBackground"}},
     ThemeTargetStyles{L"Grid#TabContainerGrid > Border#LeftBottomBorderLine", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Grid#TabContainerGrid > Border#RightBottomBorderLine", {
@@ -805,7 +805,11 @@ const Theme g_themeWindowGlass = {{
         L"Background:=$Background",
         L"BorderThickness=$BorderThickness",
         L"BorderBrush:=$BorderBrush",
-        L"Margin=0,0,0,-5",
+        L"CornerRadius=$CornerRadius"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Primitives.CommandBarFlyoutCommandBar > Grid#LayoutRoot@ExpansionStates > Grid#OuterContentRoot > Grid#ContentRoot > Microsoft.UI.Xaml.Controls.Primitives.Popup#OverflowPopup", {
+        L"VerticalOffset@ExpandedUp=-5",
+        L"VerticalOffset@ExpandedDown=5"}},
+    ThemeTargetStyles{L"Grid#OuterOverflowContentRootV2", {
         L"CornerRadius=$CornerRadius"}},
     ThemeTargetStyles{L"Grid#OuterOverflowContentRootV2 > Grid#OverflowContentRoot > CommandBarOverflowPresenter#SecondaryItemsControl > Grid#LayoutRoot", {
         L"Background:=$Background",
@@ -817,8 +821,8 @@ const Theme g_themeWindowGlass = {{
         L"BorderThickness=$BorderThickness",
         L"BorderBrush:=$BorderBrush",
         L"CornerRadius=$CornerRadius"}},
-    ThemeTargetStyles{L"CommandBarOverflowPresenter#SecondaryItemsControl > Grid#LayoutRoot", {
-        L"Background:=$Background",
+    ThemeTargetStyles{L"Grid#SecondaryItemsControlShadowWrapper > CommandBarOverflowPresenter#SecondaryItemsControl > Grid#LayoutRoot", {
+        L"Background:=$AcrylicBackground",
         L"BorderThickness=$BorderThickness",
         L"BorderBrush:=$BorderBrush",
         L"CornerRadius=$CornerRadius"}},
@@ -838,12 +842,13 @@ const Theme g_themeWindowGlass = {{
         L"Background=Transparent"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Border > Microsoft.UI.Xaml.Controls.Button#AddButton", {
         L"RenderTransform:=<TranslateTransform Y=\"-6\" />"}},
-    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.TextBlock#TextLabel", {
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.CommandBar > * > Microsoft.UI.Xaml.Controls.TextBlock#TextLabel", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#SubItemChevronPanel > Microsoft.UI.Xaml.Controls.FontIcon#SubItemChevron", {
         L"RenderTransform:=<TranslateTransform X=\"-5\" Y=\"12\" />"}},
 }, {
     L"Background=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#15323232\"/>",
+    L"AcrylicBackground=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumLowColor}\" TintOpacity=\"0.9\" Opacity=\"0.96\"/>",
     L"BorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"{ThemeResource SystemChromeHighColor}\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SystemChromeLowColor}\" Offset=\"0.15\" /><GradientStop Color=\"{ThemeResource SystemChromeHighColor}\" Offset=\"0.95\" /></LinearGradientBrush>",
     L"BorderThickness=0.3,1,0.3,0.3",
     L"ButtonBackground=<SolidColorBrush Color=\"{ThemeResource SystemAccentColor}\" Opacity=\"1\" />",
@@ -988,8 +993,6 @@ const Theme g_themeLiquidGlass = {{
         L"Background:=Transparent"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Border > Microsoft.UI.Xaml.Controls.Button#AddButton", {
         L"RenderTransform:=<TranslateTransform Y=\"-8\" />"}},
-    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.TextBlock#TextLabel", {
-        L"Visibility=1"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#SubItemChevronPanel > Microsoft.UI.Xaml.Controls.FontIcon#SubItemChevron", {
         L"RenderTransform:=<TranslateTransform X=\"-5\" Y=\"12\" />"}},
     ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot", {
@@ -2690,6 +2693,14 @@ struct ElementCustomizationState {
 thread_local std::unordered_map<ElementId, ElementCustomizationState>
     g_elementsCustomizationState;
 
+// Empties a thread local container and frees its storage, which clear() keeps.
+// A thread local isn't destroyed when the module is unloaded while its thread
+// lives on, so what it still holds then is leaked.
+template <typename T>
+void ResetThreadLocal(T& container) {
+    container = T{};
+}
+
 // The weak reference is what keeps an id honest. A handle is an address, so a
 // destroyed element can be replaced by one reporting the same handle, and an
 // entry whose element is gone, or is no longer the element being asked about,
@@ -2843,6 +2854,9 @@ struct StyleVariableState {
     // by variable name, so without this, asking whether an element appears in
     // either of them means walking every name.
     std::unordered_map<ElementId, size_t> elementRefs;
+    // Elements whose captures are out of `variables` while they sit in a
+    // recycled repeater item. See RefreshRecycledItemCaptures.
+    std::unordered_set<ElementId> withdrawnCaptureOwners;
 };
 
 thread_local StyleVariableState g_styleVariableState;
@@ -2937,6 +2951,10 @@ struct TrackedImage {
     // remote address, which is what a load failure is judged by.
     bool usingCache = false;
 
+    // The BitmapImage the last retry assigned to the target, which is the mod's
+    // value just like the one the style declared.
+    winrt::weak_ref<Media::Imaging::BitmapImage> retryImage;
+
     ULONGLONG lastRetryTick = 0;
     int retryCount = 0;
 };
@@ -2985,6 +3003,9 @@ constexpr int kImageRetryMaxCount = 20;
 // UI thread pumps messages, which can re-enter this code on the same thread.
 std::mutex g_imageRetryMutex;
 bool g_imageRetryActive;
+// Set once the mod is being unloaded, so that nothing which runs during the
+// uninitialization tracks an image again.
+bool g_imageRetryStopping;
 // The dispatcher of each UI thread which has tracked images, used to run a
 // retry on the thread that owns the image.
 std::vector<winrt::weak_ref<winrt::Microsoft::UI::Dispatching::DispatcherQueue>>
@@ -3119,17 +3140,19 @@ winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
 // Generates a tileable noise BMP in memory. Density controls the brightness
 // distribution curve via a power function (lower density = sparser bright
 // pixels). Opacity is handled downstream by the composition effect graph.
+
+// The last stream generated, cached to avoid regenerating when density hasn't
+// changed. The cached stream is never read directly; callers get independent
+// clones via CloneStream() so they don't share a seek cursor.
+thread_local float g_noiseStreamDensity =
+    std::numeric_limits<float>::quiet_NaN();
+thread_local winrt::Windows::Storage::Streams::InMemoryRandomAccessStream
+    g_noiseStream{nullptr};
+
 winrt::Windows::Storage::Streams::IRandomAccessStream CreateNoiseStream(
     float density) {
-    // Cache the last stream to avoid regenerating when density hasn't changed.
-    // The cached stream is never read directly; callers get independent clones
-    // via CloneStream() so they don't share a seek cursor.
-    thread_local float cachedDensity = std::numeric_limits<float>::quiet_NaN();
-    thread_local winrt::Windows::Storage::Streams::InMemoryRandomAccessStream
-        cachedStream{nullptr};
-
-    if (density == cachedDensity && cachedStream) {
-        return cachedStream.CloneStream();
+    if (density == g_noiseStreamDensity && g_noiseStream) {
+        return g_noiseStream.CloneStream();
     }
 
     // Use 256x256 to minimize visible tiling seams.
@@ -3189,10 +3212,10 @@ winrt::Windows::Storage::Streams::IRandomAccessStream CreateNoiseStream(
     writer.StoreAsync().get();
     writer.DetachStream();
 
-    cachedStream = std::move(stream);
-    cachedDensity = density;
+    g_noiseStream = std::move(stream);
+    g_noiseStreamDensity = density;
 
-    return cachedStream.CloneStream();
+    return g_noiseStream.CloneStream();
 }
 
 // Blur background implementation, copied from TranslucentTB.
@@ -5045,6 +5068,7 @@ void StartImageRetry(const std::shared_ptr<TrackedImage>& tracked) {
         // the same URI to a BitmapImage doesn't reload it. The target's own
         // ImageOpened and ImageFailed report how this attempt went.
         target.SetValue(tracked->sourceProperty, retryImage);
+        tracked->retryImage = winrt::make_weak(retryImage);
 
         // The URI goes last: XAML decodes an image to the size it's displayed
         // at only when the BitmapImage is already connected to the live tree by
@@ -5314,6 +5338,7 @@ void StopImageLoadRetries() {
         // early, which is what stops the retries. Removing the handler only
         // stops further invocations.
         g_imageRetryActive = false;
+        g_imageRetryStopping = true;
 
         token = g_networkStatusChangedToken;
         g_networkStatusChangedToken = {};
@@ -5375,10 +5400,19 @@ void StopImageLoadRetriesForCurrentThread() {
     }
 }
 
-void SetupImageTracking(DependencyObject const& target,
-                        DependencyProperty const& sourceProperty,
-                        Media::Imaging::BitmapImage const& bitmapImage,
-                        winrt::Windows::Foundation::Uri const& uri) {
+Media::Imaging::BitmapImage SetupImageTracking(
+    DependencyObject const& target,
+    DependencyProperty const& sourceProperty,
+    Media::Imaging::BitmapImage const& bitmapImage,
+    winrt::Windows::Foundation::Uri const& uri) {
+    {
+        std::lock_guard<std::mutex> lock(g_imageRetryMutex);
+
+        if (g_imageRetryStopping) {
+            return nullptr;
+        }
+    }
+
     auto& images = g_trackedImagesForThread.images;
 
     std::erase_if(images,
@@ -5395,15 +5429,36 @@ void SetupImageTracking(DependencyObject const& target,
     if (it != images.end()) {
         // Resolved style values are cached, so the same source object is
         // applied to many targets and reapplied on every visual state change.
-        // Keep the load state which was collected so far unless the source
+        // Keep the retry state which was collected so far unless the source
         // changed.
         if ((*it)->uri.Equals(uri)) {
             RestoreRejectedImageSource(*it, bitmapImage);
 
-            // The value being applied takes over from whatever a retry has put
-            // there, so it's what a load failure is judged by.
-            (*it)->usingCache = !bitmapImage.UriSource().Equals(uri);
-            return;
+            // A declared image which shows nothing has typically failed, and
+            // isn't loaded again by being reapplied, so it would blank a retry
+            // image which has loaded since, or cut short one which is still
+            // loading. The target keeps its retry image instead.
+            Media::Imaging::BitmapImage retryImage{nullptr};
+            if (bitmapImage.PixelWidth() == 0) {
+                retryImage = (*it)->retryImage.get();
+            }
+            auto const& applied = retryImage ? retryImage : bitmapImage;
+
+            // The image being applied is what a load failure is judged by, and
+            // what decides whether the target has an image.
+            (*it)->usingCache = !applied.UriSource().Equals(uri);
+
+            bool wasLoaded = (*it)->loaded;
+            (*it)->loaded = applied.PixelWidth() != 0;
+
+            // Nothing else starts a round for a target which loses its image
+            // this way: the value may have failed already, which raises no
+            // further event.
+            if (wasLoaded && !(*it)->loaded) {
+                ScheduleImageLoadRetryOnCurrentThread(kImageRetryBaseDelayMs,
+                                                      /*reschedule=*/false);
+            }
+            return retryImage;
         }
 
         images.erase(it);
@@ -5540,6 +5595,11 @@ void SetupImageTracking(DependencyObject const& target,
     {
         std::lock_guard<std::mutex> lock(g_imageRetryMutex);
 
+        // Checked again, since StopImageLoadRetries runs on another thread.
+        if (g_imageRetryStopping) {
+            return nullptr;
+        }
+
         g_imageRetryActive = true;
 
         if (!g_trackedImagesForThread.dispatcher) {
@@ -5567,7 +5627,7 @@ void SetupImageTracking(DependencyObject const& target,
     }
 
     if (!registerHandler) {
-        return;
+        return nullptr;
     }
 
     winrt::event_token token = RegisterNetworkStatusChangedHandler();
@@ -5590,22 +5650,25 @@ void SetupImageTracking(DependencyObject const& target,
     if (stopped && token) {
         UnregisterNetworkStatusChangedHandler(token);
     }
+
+    return nullptr;
 }
 
 // Tracks the target if the image source is a remote URL, which can fail to
-// load and is worth caching.
-void TrackIfRemoteImageSource(
+// load and is worth caching. Returns the image to apply in place of
+// `imageSource`, null if it's `imageSource` itself.
+Media::Imaging::BitmapImage TrackIfRemoteImageSource(
     DependencyObject const& target,
     DependencyProperty const& sourceProperty,
     winrt::Windows::Foundation::IInspectable const& imageSource) {
     auto bitmapImage = imageSource.try_as<Media::Imaging::BitmapImage>();
     if (!bitmapImage) {
-        return;
+        return nullptr;
     }
 
     auto uri = bitmapImage.UriSource();
     if (!uri) {
-        return;
+        return nullptr;
     }
 
     auto scheme = uri.SchemeName();
@@ -5616,15 +5679,41 @@ void TrackIfRemoteImageSource(
         // them are given.
         auto it = g_imageCacheUriRemotes.find(std::wstring(uri.RawUri()));
         if (it == g_imageCacheUriRemotes.end()) {
-            return;
+            return nullptr;
         }
 
         uri = it->second;
     } else if (scheme != L"http" && scheme != L"https") {
-        return;
+        return nullptr;
     }
 
-    SetupImageTracking(target, sourceProperty, bitmapImage, uri);
+    return SetupImageTracking(target, sourceProperty, bitmapImage, uri);
+}
+
+// Stops tracking the image which the target shows through `sourceProperty`.
+void UntrackImageTarget(DependencyObject const& target,
+                        DependencyProperty const& sourceProperty) {
+    std::erase_if(g_trackedImagesForThread.images, [&](const auto& tracked) {
+        return tracked->sourceProperty == sourceProperty &&
+               tracked->target.get() == target;
+    });
+}
+
+// Whether `value` is the image a retry assigned to the target's
+// `sourceProperty`.
+bool IsImageRetryValue(DependencyObject const& target,
+                       DependencyProperty const& sourceProperty,
+                       winrt::Windows::Foundation::IInspectable const& value) {
+    if (!value) {
+        return false;
+    }
+
+    const auto& images = g_trackedImagesForThread.images;
+    return std::any_of(images.begin(), images.end(), [&](const auto& tracked) {
+        return tracked->sourceProperty == sourceProperty &&
+               tracked->retryImage.get() == value &&
+               tracked->target.get() == target;
+    });
 }
 
 // Returns the value written, UnsetValue for a clear, so that callers can
@@ -5635,7 +5724,8 @@ winrt::Windows::Foundation::IInspectable SetOrClearValue(
     DependencyObject elementDo,
     DependencyProperty property,
     const PropertyOverrideValue& overrideValue,
-    bool initialApply = false) {
+    bool initialApply = false,
+    bool trackImage = true) {
     winrt::Windows::Foundation::IInspectable value;
     if (auto* inspectable =
             std::get_if<winrt::Windows::Foundation::IInspectable>(
@@ -5677,18 +5767,28 @@ winrt::Windows::Foundation::IInspectable SetOrClearValue(
     // Track a remote image source for retry on network reconnection. A style
     // can declare one as the ImageBrush a property is set to (e.g. Background),
     // as the ImageSource of an ImageBrush it targets, or as the Source of an
-    // Image element.
-    if (auto imageBrush = value.try_as<Media::ImageBrush>()) {
-        TrackIfRemoteImageSource(imageBrush,
-                                 Media::ImageBrush::ImageSourceProperty(),
-                                 imageBrush.ImageSource());
-    } else if (auto imageBrush = elementDo.try_as<Media::ImageBrush>()) {
-        if (property == Media::ImageBrush::ImageSourceProperty()) {
-            TrackIfRemoteImageSource(imageBrush, property, value);
-        }
-    } else if (auto image = elementDo.try_as<Controls::Image>()) {
-        if (property == Controls::Image::SourceProperty()) {
-            TrackIfRemoteImageSource(image, property, value);
+    // Image element. A value being restored isn't tracked: it's the app's own,
+    // and during uninitialization tracking it would register handlers which
+    // outlive the mod.
+    if (trackImage) {
+        if (auto imageBrush = value.try_as<Media::ImageBrush>()) {
+            TrackIfRemoteImageSource(imageBrush,
+                                     Media::ImageBrush::ImageSourceProperty(),
+                                     imageBrush.ImageSource());
+        } else if (auto imageBrush = elementDo.try_as<Media::ImageBrush>()) {
+            if (property == Media::ImageBrush::ImageSourceProperty()) {
+                if (auto retryImage =
+                        TrackIfRemoteImageSource(imageBrush, property, value)) {
+                    value = retryImage;
+                }
+            }
+        } else if (auto image = elementDo.try_as<Controls::Image>()) {
+            if (property == Controls::Image::SourceProperty()) {
+                if (auto retryImage =
+                        TrackIfRemoteImageSource(image, property, value)) {
+                    value = retryImage;
+                }
+            }
         }
     }
 
@@ -5755,6 +5855,18 @@ winrt::Windows::Foundation::IInspectable SetOrClearValue(
     }
 
     return value;
+}
+
+// Puts back the value the property had before the style. The target's image
+// entry goes with the style's value: a retry would put that image back, and the
+// restored image's load events would be taken for it.
+void RestoreOriginalValue(
+    DependencyObject elementDo,
+    DependencyProperty property,
+    winrt::Windows::Foundation::IInspectable const& originalValue) {
+    UntrackImageTarget(elementDo, property);
+    SetOrClearValue(elementDo, property, originalValue, /*initialApply=*/false,
+                    /*trackImage=*/false);
 }
 
 // https://stackoverflow.com/a/5665377
@@ -7565,7 +7677,7 @@ bool SameLocalValue(winrt::Windows::Foundation::IInspectable const& a,
 // value. A local value still equal to the one the mod applied means nothing
 // external happened (an animation changes only the effective value), and
 // adopting the mod's own brush would make it survive cleanup and crash when
-// the DLL is unloaded.
+// the DLL is unloaded. An image which a retry assigned is the mod's too.
 void AdoptExternalValueAsOriginal(
     FrameworkElement element,
     DependencyProperty property,
@@ -7575,7 +7687,8 @@ void AdoptExternalValueAsOriginal(
     }
     auto localValue = ReadLocalValueWithWorkaround(element, property);
     if (!SameLocalValue(localValue,
-                        propertyCustomizationState->lastAppliedValue)) {
+                        propertyCustomizationState->lastAppliedValue) &&
+        !IsImageRetryValue(element, property, localValue)) {
         propertyCustomizationState->originalValue = localValue;
     }
 }
@@ -7591,8 +7704,8 @@ void UnapplyStyleValue(
     if (propertyCustomizationState->originalValue) {
         bool wasModifying = g_elementPropertyModifying;
         g_elementPropertyModifying = true;
-        SetOrClearValue(element, property,
-                        *propertyCustomizationState->originalValue);
+        RestoreOriginalValue(element, property,
+                             *propertyCustomizationState->originalValue);
         g_elementPropertyModifying = wasModifying;
         propertyCustomizationState->originalValue.reset();
     }
@@ -8085,6 +8198,79 @@ void RestoreCapturesForElement(FrameworkElement element,
     }
 }
 
+// Take an element's captures out of the registry, returning the names they were
+// under. Other elements may still capture the same names, so a name only
+// becomes undefined once its last capture is gone.
+std::vector<std::wstring> WithdrawCapturesForElement(
+    StyleVariableState* state,
+    ElementId elementId,
+    const ElementCustomizationState& elementState) {
+    std::vector<std::wstring> varNames;
+
+    for (const auto& [property, captureState] :
+         elementState.captureCustomizationStates) {
+        if (captureState.varName.empty()) {
+            continue;
+        }
+
+        auto varIt = state->variables.find(captureState.varName);
+        if (varIt == state->variables.end()) {
+            continue;
+        }
+
+        size_t removed = std::erase_if(
+            varIt->second, [elementId](const StyleVariableCapture& capture) {
+                return capture.elementId == elementId;
+            });
+        if (!removed) {
+            continue;
+        }
+
+        ReleaseStyleVariableElementRefs(state, elementId, removed);
+
+        varNames.push_back(captureState.varName);
+        if (varIt->second.empty()) {
+            state->variables.erase(varIt);
+        }
+    }
+
+    return varNames;
+}
+
+// Put back the captures WithdrawCapturesForElement took out, returning the
+// names they're under. Values are read afresh: the capture callbacks drop
+// changes for a capture that isn't in the registry.
+std::vector<std::wstring> RepublishCapturesForElement(
+    StyleVariableState* state,
+    ElementId elementId,
+    FrameworkElement element,
+    const ElementCustomizationState& elementState) {
+    std::vector<std::wstring> varNames;
+
+    for (const auto& [property, captureState] :
+         elementState.captureCustomizationStates) {
+        if (captureState.varName.empty()) {
+            continue;
+        }
+
+        auto& captures = state->variables[captureState.varName];
+        if (std::any_of(captures.begin(), captures.end(),
+                        [elementId](const StyleVariableCapture& capture) {
+                            return capture.elementId == elementId;
+                        })) {
+            continue;
+        }
+
+        captures.push_back(
+            {elementId, ReadCapturedStyleVariableValue(element, property)});
+        AddStyleVariableElementRef(state, elementId);
+
+        varNames.push_back(captureState.varName);
+    }
+
+    return varNames;
+}
+
 void ApplyCustomizationsForVisualStateGroup(
     StyleVariableState* state,
     ElementId elementId,
@@ -8305,6 +8491,22 @@ void RestoreCustomizationsForVisualStateGroup(
         visualStateGroupOptionalWeakPtr,
     const ElementCustomizationStateForVisualStateGroup&
         elementCustomizationStateForVisualStateGroup) {
+    // Before the properties are restored, so that a visual state change which
+    // restoring one causes can't apply the style again.
+    auto visualStateGroupIter = visualStateGroupOptionalWeakPtr
+                                    ? visualStateGroupOptionalWeakPtr->get()
+                                    : nullptr;
+    if (visualStateGroupIter && elementCustomizationStateForVisualStateGroup
+                                    .visualStateGroupCurrentStateChangedToken) {
+        try {
+            visualStateGroupIter.CurrentStateChanged(
+                elementCustomizationStateForVisualStateGroup
+                    .visualStateGroupCurrentStateChangedToken);
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+    }
+
     if (element) {
         for (const auto& [property, propState] :
              elementCustomizationStateForVisualStateGroup
@@ -8324,7 +8526,8 @@ void RestoreCustomizationsForVisualStateGroup(
             }
 
             if (propState.originalValue) {
-                SetOrClearValue(element, property, *propState.originalValue);
+                RestoreOriginalValue(element, property,
+                                     *propState.originalValue);
             }
         }
     } else {
@@ -8339,20 +8542,6 @@ void RestoreCustomizationsForVisualStateGroup(
                                              propState.variableDependencies,
                                              {});
             }
-        }
-    }
-
-    auto visualStateGroupIter = visualStateGroupOptionalWeakPtr
-                                    ? visualStateGroupOptionalWeakPtr->get()
-                                    : nullptr;
-    if (visualStateGroupIter && elementCustomizationStateForVisualStateGroup
-                                    .visualStateGroupCurrentStateChangedToken) {
-        try {
-            visualStateGroupIter.CurrentStateChanged(
-                elementCustomizationStateForVisualStateGroup
-                    .visualStateGroupCurrentStateChangedToken);
-        } catch (winrt::hresult_error const& ex) {
-            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
         }
     }
 }
@@ -8488,8 +8677,159 @@ bool SameRepeaterItem(RepeaterItem const& a, RepeaterItem const& b) {
     return valueB && std::get<UnboxedPropertyValue>(a) == *valueB;
 }
 
+// Whether the element is in an item element a repeater holds without having it
+// realized, i.e. one sitting in its recycle pool.
+bool IsInRecycledRepeaterItem(FrameworkElement element) {
+    try {
+        DependencyObject child = element;
+        while (child) {
+            auto parent = Media::VisualTreeHelper::GetParent(child);
+            if (auto repeater = parent.try_as<muxc::ItemsRepeater>()) {
+                if (repeater.GetElementIndex(child.as<UIElement>()) < 0) {
+                    return true;
+                }
+            }
+
+            child = std::move(parent);
+        }
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+
+    return false;
+}
+
+thread_local bool g_recycledItemCapturesRefreshQueued;
+thread_local winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer
+    g_recycledItemCapturesRefreshTimer{nullptr};
+thread_local winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer::
+    Tick_revoker g_recycledItemCapturesRefreshTimerTickRevoker;
+
+// The captures of an element in a recycled repeater item are withdrawn, as if
+// the item was removed: the recycle pool keeps the item in the tree, out of
+// sight, and its captures would keep publishing the values they last saw. This
+// runs once layout is done rather than on each clear and prepare, since a
+// layout can clear an element and hand it straight back within a pass, and
+// flipping the captures there would restyle their consumers on every pass.
+void RefreshRecycledItemCaptures() {
+    g_recycledItemCapturesRefreshQueued = false;
+
+    auto* state = GetStyleVariableState();
+
+    std::vector<ElementId> owners(state->withdrawnCaptureOwners.begin(),
+                                  state->withdrawnCaptureOwners.end());
+    for (const auto& [varName, captures] : state->variables) {
+        for (const auto& capture : captures) {
+            owners.push_back(capture.elementId);
+        }
+    }
+
+    std::sort(owners.begin(), owners.end());
+    owners.erase(std::unique(owners.begin(), owners.end()), owners.end());
+
+    std::vector<std::wstring> changedVarNames;
+    for (ElementId owner : owners) {
+        auto it = g_elementsCustomizationState.find(owner);
+        if (it == g_elementsCustomizationState.end()) {
+            continue;
+        }
+
+        auto& elementState = it->second;
+        auto element = elementState.element.get();
+        if (!element) {
+            continue;
+        }
+
+        bool withdrawn = state->withdrawnCaptureOwners.contains(owner);
+        if (IsInRecycledRepeaterItem(element) == withdrawn) {
+            continue;
+        }
+
+        std::vector<std::wstring> varNames;
+        if (withdrawn) {
+            Wh_Log(L"Republishing captures of %llu",
+                   static_cast<uint64_t>(owner));
+            varNames = RepublishCapturesForElement(state, owner, element,
+                                                   elementState);
+            state->withdrawnCaptureOwners.erase(owner);
+        } else {
+            Wh_Log(L"Withdrawing captures of %llu",
+                   static_cast<uint64_t>(owner));
+            varNames = WithdrawCapturesForElement(state, owner, elementState);
+            state->withdrawnCaptureOwners.insert(owner);
+        }
+
+        changedVarNames.insert(changedVarNames.end(), varNames.begin(),
+                               varNames.end());
+    }
+
+    std::sort(changedVarNames.begin(), changedVarNames.end());
+    changedVarNames.erase(
+        std::unique(changedVarNames.begin(), changedVarNames.end()),
+        changedVarNames.end());
+
+    for (const auto& varName : changedVarNames) {
+        PropagateStyleVariableChange(state, varName, std::nullopt);
+    }
+}
+
+// Armed from inside a layout pass, and the timer carries the refresh out of it.
+void QueueRecycledItemCapturesRefresh() {
+    if (g_recycledItemCapturesRefreshQueued) {
+        return;
+    }
+
+    auto* state = GetStyleVariableState();
+    if (state->variables.empty() && state->withdrawnCaptureOwners.empty()) {
+        return;
+    }
+
+    try {
+        if (!g_recycledItemCapturesRefreshTimer) {
+            auto dispatcherQueue = winrt::Microsoft::UI::Dispatching::
+                DispatcherQueue::GetForCurrentThread();
+            if (!dispatcherQueue) {
+                Wh_Log(L"No dispatcher queue, recycled item captures stay");
+                return;
+            }
+
+            g_recycledItemCapturesRefreshTimer = dispatcherQueue.CreateTimer();
+            g_recycledItemCapturesRefreshTimer.IsRepeating(false);
+            g_recycledItemCapturesRefreshTimer.Interval(
+                std::chrono::milliseconds{1});
+            g_recycledItemCapturesRefreshTimerTickRevoker =
+                g_recycledItemCapturesRefreshTimer.Tick(
+                    winrt::auto_revoke,
+                    [](winrt::Microsoft::UI::Dispatching::
+                           DispatcherQueueTimer const&,
+                       winrt::Windows::Foundation::IInspectable const&) {
+                        RefreshRecycledItemCaptures();
+                    });
+        }
+
+        g_recycledItemCapturesRefreshTimer.Start();
+        g_recycledItemCapturesRefreshQueued = true;
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+}
+
+void StopRecycledItemCapturesRefresh() {
+    if (g_recycledItemCapturesRefreshTimer) {
+        try {
+            g_recycledItemCapturesRefreshTimer.Stop();
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+    }
+
+    g_recycledItemCapturesRefreshTimerTickRevoker.revoke();
+    g_recycledItemCapturesRefreshTimer = nullptr;
+    g_recycledItemCapturesRefreshQueued = false;
+}
+
 // A virtualizing container recycles its item elements instead of destroying
-// them: the recycle pool collapses the element and leaves it parented, so XAML
+// them: the recycle pool keeps the element parented, out of sight, so XAML
 // diagnostics reports no Remove/Add mutation and the styles matched for the
 // previous item would stay on the element once it's reused for another one.
 // Treat a cleared element as removed and a prepared one as newly added.
@@ -8507,6 +8847,10 @@ void HandleVirtualizingRepeater(ElementId elementId, FrameworkElement element) {
         winrt::auto_revoke,
         [](muxc::ItemsRepeater const&,
            muxc::ItemsRepeaterElementClearingEventArgs const& args) {
+            // Ahead of the early returns: the item's descendants can hold
+            // captures even when the item itself has no id.
+            QueueRecycledItemCapturesRefresh();
+
             auto element = args.Element().try_as<FrameworkElement>();
             if (!element) {
                 return;
@@ -8530,6 +8874,8 @@ void HandleVirtualizingRepeater(ElementId elementId, FrameworkElement element) {
         winrt::auto_revoke,
         [](muxc::ItemsRepeater const& sender,
            muxc::ItemsRepeaterElementPreparedEventArgs const& args) {
+            QueueRecycledItemCapturesRefresh();
+
             auto element = args.Element().try_as<FrameworkElement>();
             if (!element) {
                 return;
@@ -8648,6 +8994,12 @@ void ApplyCustomizations(ElementId elementId,
     // consumer's own stored fallback.
     SetUpCapturesForElement(state, elementId, element, resolved.captures,
                             &elementCustomizationState);
+
+    // The element may be in an item already sitting in a recycle pool, which
+    // no clear will be reported for.
+    if (!resolved.captures.empty()) {
+        QueueRecycledItemCapturesRefresh();
+    }
 
     for (auto& [visualStateGroup, overridesForVisualStateGroup] :
          resolved.overridesPerVSG) {
@@ -8831,7 +9183,7 @@ void FlushDiagnosticsReleasesIfQuiet() {
 }
 
 void StopDiagnosticsReleases() {
-    g_pendingDiagnosticsRelease.clear();
+    ResetThreadLocal(g_pendingDiagnosticsRelease);
 
     if (g_diagnosticsReleaseDrainTimer) {
         try {
@@ -8872,40 +9224,13 @@ void CleanupCustomizations(ElementId elementId) {
 
     RestoreCapturesForElement(element, elementCustomizationState);
 
-    // Drop this element's captures from the registry. Other elements may still
-    // capture the same names, so a name only becomes undefined once its last
-    // capture is gone. Runs after RestoreCapturesForElement so the
-    // just-unregistered capture callbacks can't re-seed a variable
-    // mid-teardown.
+    // After RestoreCapturesForElement so the just-unregistered capture
+    // callbacks can't re-seed a variable mid-teardown.
     std::vector<std::wstring> removedVarNames;
     if (state) {
-        for (const auto& [property, captureState] :
-             elementCustomizationState.captureCustomizationStates) {
-            if (captureState.varName.empty()) {
-                continue;
-            }
-
-            auto varIt = state->variables.find(captureState.varName);
-            if (varIt == state->variables.end()) {
-                continue;
-            }
-
-            size_t removed =
-                std::erase_if(varIt->second,
-                              [elementId](const StyleVariableCapture& capture) {
-                                  return capture.elementId == elementId;
-                              });
-            if (!removed) {
-                continue;
-            }
-
-            ReleaseStyleVariableElementRefs(state, elementId, removed);
-
-            removedVarNames.push_back(captureState.varName);
-            if (varIt->second.empty()) {
-                state->variables.erase(varIt);
-            }
-        }
+        removedVarNames = WithdrawCapturesForElement(state, elementId,
+                                                     elementCustomizationState);
+        state->withdrawnCaptureOwners.erase(elementId);
     }
 
     for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
@@ -9785,7 +10110,7 @@ void UninitializeResourceVariables() {
         g_colorValuesChangedToken = {};
     }
     g_uiSettings = nullptr;
-    g_resourceVariables.clear();
+    ResetThreadLocal(g_resourceVariables);
 
     if (g_originalResourceValues.empty() && !g_resourceVariablesThemeDict) {
         return;
@@ -9801,7 +10126,7 @@ void UninitializeResourceVariables() {
             Wh_Log(L"Error %08X", hr);
         }
     }
-    g_originalResourceValues.clear();
+    ResetThreadLocal(g_originalResourceValues);
 
     // Remove our merged theme dictionary.
     if (g_resourceVariablesThemeDict) {
@@ -9828,16 +10153,17 @@ void UninitializeForCurrentThread() {
     g_trackedImagesForThread.retryTimer = nullptr;
     g_trackedImagesForThread.retryDueTick = 0;
     g_trackedImagesForThread.images.clear();
-    g_imageCacheUriRemotes.clear();
+    ResetThreadLocal(g_imageCacheUriRemotes);
     StopImageLoadRetriesForCurrentThread();
 
     // Before the teardown below, so that no recycling callback can fire into
     // half-cleared state, and no pending release can consult state which is
     // being cleared.
     StopDiagnosticsReleases();
-    g_virtualizingRepeaters.clear();
-    g_recycledElements.clear();
-    g_elementMatchedItems.clear();
+    StopRecycledItemCapturesRefresh();
+    ResetThreadLocal(g_virtualizingRepeaters);
+    ResetThreadLocal(g_recycledElements);
+    ResetThreadLocal(g_elementMatchedItems);
 
     // Detached from the global before being walked: restoring a value runs
     // arbitrary XAML work, and whatever it re-enters looks its elements up in
@@ -9865,19 +10191,21 @@ void UninitializeForCurrentThread() {
     // Before g_elementTreeNodes, since the states hold the last strong refs to
     // the spine nodes.
     elementsCustomizationState.clear();
-    g_elementTreeNodes.clear();
+    ResetThreadLocal(g_elementTreeNodes);
     g_elementTreeNodesReapThreshold = 64;
-    g_pendingStyleVariablePropagations.clear();
+    ResetThreadLocal(g_pendingStyleVariablePropagations);
     g_styleVariableState = {};
 
     // After everything keyed by an id. g_lastElementId keeps counting, since an
     // id must never name two elements.
-    g_elementIds.clear();
+    ResetThreadLocal(g_elementIds);
     g_elementIdsReapThreshold = 64;
 
-    g_elementsCustomizationRules.clear();
+    ResetThreadLocal(g_elementsCustomizationRules);
 
     UninitializeResourceVariables();
+
+    g_noiseStream = nullptr;
 
     g_initializedForThread = false;
 }
@@ -9924,6 +10252,13 @@ TargetWindowType GetTargetWindowType(HWND hWnd) {
     }
 
     if (_wcsicmp(className, L"CabinetWClass") == 0) {
+        // The legacy frame, used for Control Panel, hosts its toolbar in a
+        // WorkerW child. It has no XAML, and its content isn't readable over
+        // the background effect.
+        if (FindWindowEx(hWnd, nullptr, L"WorkerW", nullptr)) {
+            return TargetWindowType::None;
+        }
+
         return TargetWindowType::FileExplorer;
     }
 
@@ -10076,19 +10411,47 @@ void PopPaintingWnd(HWND hWnd) {
     }
 }
 
-bool IsEntireWindowEffectDC(HDC hdc) {
-    if (!g_entireWindowEffectWndForThread) {
-        return false;
+// Set while uxtheme renders text with DrawTextWithGlow. It draws the text on a
+// white mask with GDI and derives the alpha from it, so that drawing must not
+// be altered.
+thread_local bool g_drawingTextWithGlowForThread;
+
+// Set while DirectUI paints an element border.
+thread_local bool g_paintingDirectUIBorderForThread;
+
+// Returns the window of the DC if it's rendered with alpha, nullptr otherwise.
+HWND GetEntireWindowEffectDCWnd(HDC hdc) {
+    if (!g_entireWindowEffectWndForThread || g_drawingTextWithGlowForThread) {
+        return nullptr;
     }
 
     HWND hWnd = WindowFromDC(hdc);
     if (hWnd) {
-        return IsFileExplorerWindowPart(hWnd);
+        return IsFileExplorerWindowPart(hWnd) ? hWnd : nullptr;
     }
 
     // Memory DCs without a known window are skipped.
     const DCWnd* memoryDCWnd = GetMemoryDCWnd(hdc);
-    return memoryDCWnd && memoryDCWnd->fileExplorer;
+    return memoryDCWnd && memoryDCWnd->fileExplorer ? memoryDCWnd->hWnd
+                                                    : nullptr;
+}
+
+bool IsEntireWindowEffectDC(HDC hdc) {
+    return GetEntireWindowEffectDCWnd(hdc);
+}
+
+// GDI fills leave the alpha at zero, which DWM doesn't show in HDR mode. These
+// fills are made opaque: DirectUI element borders, which aren't backgrounds
+// even if they have a background color, and edit controls, since the system
+// caret inverts only the color bits.
+bool IsOpaqueFill(HWND hWnd) {
+    if (g_paintingDirectUIBorderForThread) {
+        return true;
+    }
+
+    WCHAR className[16];
+    return GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+           _wcsicmp(className, L"Edit") == 0;
 }
 
 using BeginPaint_t = decltype(&BeginPaint);
@@ -10118,8 +10481,54 @@ BOOL WINAPI EndPaint_Hook(HWND hWnd, const PAINTSTRUCT* lpPaint) {
     return EndPaint_Original(hWnd, lpPaint);
 }
 
-// The content background is painted with the window color, which is white in
-// light mode. Fills of that color are replaced with transparent black.
+// The theme parts with the content background fill in dark mode. The part ids
+// have no SDK constants.
+constexpr struct {
+    PCWSTR themeClass;
+    int partId;
+} kDarkModeBackgroundParts[] = {
+    {L"DarkMode::ItemsView", 0},         {L"DarkMode::ExplorerNavPane", 0},
+    {L"DarkMode::ExplorerStatusBar", 0}, {L"DarkMode::ReadingPane", 1},
+    {L"DarkMode::ProperTree", 2},
+};
+
+thread_local COLORREF
+    g_darkModeBackgroundColorsForThread[ARRAYSIZE(kDarkModeBackgroundParts)];
+thread_local size_t g_darkModeBackgroundColorCountForThread;
+
+void LoadDarkModeBackgroundColors() {
+    size_t count = 0;
+    for (const auto& [themeClass, partId] : kDarkModeBackgroundParts) {
+        HTHEME hTheme = OpenThemeData(nullptr, themeClass);
+        if (!hTheme) {
+            continue;
+        }
+
+        COLORREF color;
+        if (SUCCEEDED(
+                GetThemeColor(hTheme, partId, 0, TMT_FILLCOLOR, &color))) {
+            g_darkModeBackgroundColorsForThread[count++] = color;
+        }
+
+        CloseThemeData(hTheme);
+    }
+
+    g_darkModeBackgroundColorCountForThread = count;
+}
+
+// The content background is painted with the window color in light mode, and
+// with the fill colors of the theme's DarkMode classes in dark mode. Fills of
+// these colors are replaced with transparent black.
+bool IsWindowBackgroundColor(COLORREF color) {
+    for (size_t i = 0; i < g_darkModeBackgroundColorCountForThread; i++) {
+        if (g_darkModeBackgroundColorsForThread[i] == color) {
+            return true;
+        }
+    }
+
+    return color == GetSysColor(COLOR_WINDOW);
+}
+
 bool IsWindowBackgroundBrush(HDC hdc, HBRUSH hbr) {
     if (hbr == (HBRUSH)(COLOR_WINDOW + 1)) {
         return true;
@@ -10138,24 +10547,78 @@ bool IsWindowBackgroundBrush(HDC hdc, HBRUSH hbr) {
         color = logBrush.lbColor;
     }
 
-    return color == GetSysColor(COLOR_WINDOW);
+    return IsWindowBackgroundColor(color);
+}
+
+using PatBlt_t = decltype(&PatBlt);
+PatBlt_t PatBlt_Original;
+
+// A pattern of opaque black, with only the alpha bits set.
+HBRUSH g_alphaBrush;
+
+void CreateAlphaBrush() {
+    struct {
+        BITMAPINFOHEADER header;
+        DWORD bits[1];
+    } dib = {{sizeof(BITMAPINFOHEADER), 1, 1, 1, 32, BI_RGB}, {0xFF000000}};
+    g_alphaBrush = CreateDIBPatternBrushPt(&dib, DIB_RGB_COLORS);
+}
+
+void DeleteAlphaBrush() {
+    if (g_alphaBrush) {
+        DeleteObject(g_alphaBrush);
+        g_alphaBrush = nullptr;
+    }
+}
+
+// Sets the alpha of the area to opaque by ORing it with g_alphaBrush, which
+// keeps the colors and the clipping of what was drawn there.
+void MakeOpaque(HDC hdc, int x, int y, int w, int h) {
+    HGDIOBJ prevBrush = SelectObject(hdc, g_alphaBrush);
+    if (!prevBrush) {
+        return;
+    }
+
+    constexpr DWORD kRopDestOrPattern = 0x00FA0089;
+    PatBlt_Original(hdc, x, y, w, h, kRopDestOrPattern);
+    SelectObject(hdc, prevBrush);
 }
 
 using FillRect_t = decltype(&FillRect);
 FillRect_t FillRect_Original;
 int WINAPI FillRect_Hook(HDC hDC, const RECT* lprc, HBRUSH hbr) {
-    if (IsEntireWindowEffectDC(hDC) && IsWindowBackgroundBrush(hDC, hbr)) {
+    HWND hWnd = GetEntireWindowEffectDCWnd(hDC);
+    if (hWnd && IsOpaqueFill(hWnd)) {
+        int result = FillRect_Original(hDC, lprc, hbr);
+        if (result) {
+            MakeOpaque(hDC, lprc->left, lprc->top, lprc->right - lprc->left,
+                       lprc->bottom - lprc->top);
+        }
+        return result;
+    }
+
+    if (hWnd && IsWindowBackgroundBrush(hDC, hbr)) {
         hbr = (HBRUSH)GetStockObject(BLACK_BRUSH);
     }
 
     return FillRect_Original(hDC, lprc, hbr);
 }
 
-using PatBlt_t = decltype(&PatBlt);
-PatBlt_t PatBlt_Original;
 BOOL WINAPI PatBlt_Hook(HDC hdc, int x, int y, int w, int h, DWORD rop) {
-    if (rop == PATCOPY && IsEntireWindowEffectDC(hdc) &&
-        IsWindowBackgroundBrush(hdc,
+    HWND hWnd = rop == PATCOPY ? GetEntireWindowEffectDCWnd(hdc) : nullptr;
+    if (!hWnd) {
+        return PatBlt_Original(hdc, x, y, w, h, rop);
+    }
+
+    if (IsOpaqueFill(hWnd)) {
+        BOOL result = PatBlt_Original(hdc, x, y, w, h, rop);
+        if (result) {
+            MakeOpaque(hdc, x, y, w, h);
+        }
+        return result;
+    }
+
+    if (IsWindowBackgroundBrush(hdc,
                                 (HBRUSH)GetCurrentObject(hdc, OBJ_BRUSH))) {
         HGDIOBJ prevBrush = SelectObject(hdc, GetStockObject(BLACK_BRUSH));
         BOOL result = PatBlt_Original(hdc, x, y, w, h, rop);
@@ -10468,7 +10931,7 @@ bool PaintExtTextOutBackground(HDC hdc, const RECT* lprect) {
         return false;
     }
 
-    FillRect(memDC, lprect, GetSysColorBrush(COLOR_HIGHLIGHT));
+    FillRect_Original(memDC, lprect, GetSysColorBrush(COLOR_HIGHLIGHT));
     BufferedPaintMakeOpaque(hpb, lprect);
     EndBufferedPaint(hpb, TRUE);
     return true;
@@ -10578,13 +11041,15 @@ BOOL WINAPI ExtTextOutW_Hook(HDC hdc,
                              LPCWSTR lpString,
                              UINT c,
                              const INT* lpDx) {
-    if (!IsEntireWindowEffectDC(hdc)) {
+    HWND hWnd = GetEntireWindowEffectDCWnd(hdc);
+    if (!hWnd) {
         return ExtTextOutW_Original(hdc, x, y, options, lprect, lpString, c,
                                     lpDx);
     }
 
-    bool windowBk =
-        (options & ETO_OPAQUE) && GetBkColor(hdc) == GetSysColor(COLOR_WINDOW);
+    bool windowBk = (options & ETO_OPAQUE) &&
+                    IsWindowBackgroundColor(GetBkColor(hdc)) &&
+                    !IsOpaqueFill(hWnd);
     COLORREF prevBkColor = windowBk ? SetBkColor(hdc, RGB(0, 0, 0)) : 0;
     BOOL result =
         ExtTextOutWithAlpha(hdc, x, y, options, lprect, lpString, c, lpDx);
@@ -10622,9 +11087,13 @@ HRESULT WINAPI DrawTextWithGlow_Hook(HDC hdcMem,
                                      DTT_CALLBACK_PROC pfnDrawTextCallback,
                                      LPARAM lParam) {
     auto original = [=]() {
-        return DrawTextWithGlow_Original(
+        bool prevDrawingTextWithGlow = g_drawingTextWithGlowForThread;
+        g_drawingTextWithGlowForThread = true;
+        HRESULT result = DrawTextWithGlow_Original(
             hdcMem, pszText, cch, pRect, dwFlags, crText, crGlow, nGlowRadius,
             nGlowIntensity, fPreMultiply, pfnDrawTextCallback, lParam);
+        g_drawingTextWithGlowForThread = prevDrawingTextWithGlow;
+        return result;
     };
 
     if (nGlowRadius > 0 || !IsEntireWindowEffectDC(hdcMem)) {
@@ -11145,6 +11614,23 @@ HRESULT WINAPI DrawThemeBackgroundEx_Hook(HTHEME hTheme,
                                           pOptions);
 }
 
+using Element_PaintBorder_t = void(WINAPI*)(void* pThis,
+                                            HDC hdc,
+                                            void* pvBorder,
+                                            RECT* prcBounds,
+                                            const RECT& rcThickness);
+Element_PaintBorder_t Element_PaintBorder_Original;
+void WINAPI Element_PaintBorder_Hook(void* pThis,
+                                     HDC hdc,
+                                     void* pvBorder,
+                                     RECT* prcBounds,
+                                     const RECT& rcThickness) {
+    bool prevPaintingDirectUIBorder = g_paintingDirectUIBorderForThread;
+    g_paintingDirectUIBorderForThread = true;
+    Element_PaintBorder_Original(pThis, hdc, pvBorder, prcBounds, rcThickness);
+    g_paintingDirectUIBorderForThread = prevPaintingDirectUIBorder;
+}
+
 // Based on the Translucent Windows mod.
 void SetAccentBlurBehind(HWND hWnd, bool enable) {
     // Without blur behind, the extended frame is drawn over the accent blur.
@@ -11224,6 +11710,9 @@ void ApplyBackgroundTranslucentEffect(
         g_settings.backgroundTranslucentEffectRegion ==
             BackgroundTranslucentEffectRegion::kEntireWindow;
     g_entireWindowEffectWndForThread = entireWindowEffect ? hWnd : nullptr;
+    if (entireWindowEffect) {
+        LoadDarkModeBackgroundColors();
+    }
 
     if (effect == BackgroundTranslucentEffect::kDefault) {
         if (!RemoveProp(hWnd, kBackgroundTranslucentEffectAppliedKey)) {
@@ -11862,6 +12351,7 @@ BOOL Wh_ModInit() {
                                    &DwmExtendFrameIntoClientArea_Original);
 
     InitTextAlphaLuts();
+    CreateAlphaBrush();
 
     WindhawkUtils::SetFunctionHook(BeginPaint, BeginPaint_Hook,
                                    &BeginPaint_Original);
@@ -11889,6 +12379,20 @@ BOOL Wh_ModInit() {
     WindhawkUtils::SetFunctionHook(DrawThemeBackgroundEx,
                                    DrawThemeBackgroundEx_Hook,
                                    &DrawThemeBackgroundEx_Original);
+
+    HMODULE dui70Module =
+        LoadLibraryEx(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (dui70Module) {
+        auto pElement_PaintBorder = (Element_PaintBorder_t)GetProcAddress(
+            dui70Module,
+            "?PaintBorder@Element@DirectUI@@QEAAXPEAUHDC__@@PEAVValue@2@"
+            "PEAUtagRECT@@AEBU5@@Z");
+        if (pElement_PaintBorder) {
+            WindhawkUtils::SetFunctionHook(pElement_PaintBorder,
+                                           Element_PaintBorder_Hook,
+                                           &Element_PaintBorder_Original);
+        }
+    }
 
     HMODULE uxthemeModule = GetModuleHandle(L"uxtheme.dll");
     if (uxthemeModule) {
@@ -12003,6 +12507,7 @@ void Wh_ModUninit() {
     }
 
     ClearThemePartCache();
+    DeleteAlphaBrush();
 }
 
 void Wh_ModSettingsChanged() {

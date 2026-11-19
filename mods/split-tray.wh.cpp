@@ -2,7 +2,7 @@
 // @id              split-tray
 // @name            Split Tray
 // @description     A notification area on every display's taskbar: choose, per application, which tray its icon shows in
-// @version         1.3.3
+// @version         1.4.8
 // @author          Brandon Stonebridge
 // @github          https://github.com/st0nebridge
 // @homepage        https://github.com/st0nebridge/SplitTray
@@ -32,6 +32,8 @@ and lets you choose which tray each application's icon lives in.
   for any other icon.
 * Per-application rules - "this program's icon goes to tray 3" - and a
   default for everything else.
+* Drag application icons directly between the primary tray and Split Tray's
+  trays, including the secondary overflow popup.
 * Move any icon by hand: **Shift+right-click** an icon in one of Split Tray's
   trays for its menu, or open **Arrange icons** to drag icons between every
   tray. Where you put an icon is remembered, until it has not been seen for a
@@ -71,8 +73,30 @@ to another tray is really gone from the main one - it is not an overlay.
   first time it has one to show; the copy goes when the icon does.
 * More displays connected at once than ever before move the extra trays'
   numbers up by one, to make room.
-* A floating tray has the keyboard when an application gives the focus back to
-  its icon, or a screen reader moves to it. No key of its own reaches one.
+
+Moving icons between trays preserves their remembered order, including moves
+from menus and Arrange and round trips through the primary tray. Only explicit
+**Show on the tray** and dragging out of overflow promote an icon to the front
+to reveal it within the space budget. Drop onto a chevron or popup to hide it.
+
+## Keyboard and recovery
+
+Global shortcuts are off by default. Enable them in Settings to use
+Ctrl+Shift+F11 for Arrange and Ctrl+Shift+F12 to cycle floating trays.
+Ctrl+Shift+F10 on an icon opens Split Tray's menu; Shift+F10 opens its
+application's menu. The chevron and empty-tray handle support keyboard and
+screen-reader invocation. In Arrange, Ctrl+Up/Down changes order, Ctrl+R
+returns the selected icon to its rules, and the search box filters by name.
+Clear the search to change order. Tray status explains floating fallback.
+
+Floating trays honor the same order and hidden choices, using accessible
+menus for their overflow. Embedded overflow updates while open. A tray's row
+also has a spatial limit to leave room for Windows' taskbar controls.
+
+The repository's tools/configuration.ps1 exports/imports settings and remembered
+state, with validation and a recovery backup. Disable the target mod before
+importing; the tool requires the checkout and is not part of the installed mod.
+
 */
 // ==/WindhawkModReadme==
 
@@ -195,8 +219,14 @@ to another tray is really gone from the main one - it is not an overlay.
 - maxVisibleIcons: 8
   $name: Icons before the overflow chevron
   $description: >-
-    How many icons a tray in a taskbar shows before the rest move behind a
-    "show hidden icons" chevron, as the native tray does. 0 shows all of them.
+    Maximum visible icons in each embedded or floating tray before overflow.
+    0 removes the count limit. Embedded trays still use at most 25% of their
+    taskbar width; explicitly hidden icons stay in overflow.
+- enableGlobalHotkeys: false
+  $name: Enable global keyboard shortcuts
+  $description: >-
+    Opt in to Ctrl+Shift+F11 for Arrange and Ctrl+Shift+F12 to cycle floating
+    trays. Off by default so other applications keep their shortcuts.
 - repopulateOnLoad: true
   $name: Collect existing icons on load
   $description: >-
@@ -266,6 +296,9 @@ void RequestEmbeddedRefresh();
 // drawn, in screen pixels: its cell, or its tray's chevron when it is in the
 // overflow.
 bool IconScreenRect(uint64_t serial, RECT* out);
+int EmbeddedDropTargetAt(POINT point);
+int OverflowDropTargetAt(POINT point);
+void UpdateInsertionPreviewLifetime();
 // Whether a display's tray still has to be put into its taskbar, so the tray
 // thread keeps asking the taskbar's thread to try. Safe from any thread.
 bool AnyDisplayTrayWaitingToEmbed();
@@ -776,6 +809,7 @@ struct Settings {
     bool repopulateOnLoad = true;
     bool embedInTaskbar = true;
     int maxVisibleIcons = 8;
+    bool enableGlobalHotkeys = false;
 };
 
 // For the log: "primary", "tray 3", or "tray 2 and primary".
@@ -940,6 +974,7 @@ Settings LoadSettings() {
     s.mirrorHiddenIcons = Wh_GetIntSetting(L"mirrorHiddenIcons") != 0;
     s.repopulateOnLoad = Wh_GetIntSetting(L"repopulateOnLoad") != 0;
     s.embedInTaskbar = Wh_GetIntSetting(L"embedInTaskbar") != 0;
+    s.enableGlobalHotkeys = Wh_GetIntSetting(L"enableGlobalHotkeys") != 0;
     s.maxVisibleIcons = Clamp(Wh_GetIntSetting(L"maxVisibleIcons"), 0, 64);
 
     return s;
@@ -1318,6 +1353,18 @@ int HitTestCell(const TrayLayout& layout, int clientX, int clientY, int iconCoun
     return index < iconCount ? index : -1;
 }
 
+// A visual-only reorder marker at the actual destination cell's edge.
+// Dimensions scale with the tray; no slot is added to layout or hit testing.
+RECT InsertionLineRect(const TrayLayout& layout,int target,int count,bool after,UINT dpi) {
+    if (layout.cell<=0 || layout.columns<=0 || target<0 || target>=count || layout.width<=0) return {};
+    const int thickness=std::max(1,MulDiv(1,dpi,96));
+    const int inset=std::max(1,(layout.cell-MulDiv(20,dpi,96))/2);
+    const int edge=(target%layout.columns+(after ? 1 : 0))*layout.cell;
+    const int x=std::clamp(edge-(after ? thickness : 0),0,std::max(0,layout.width-thickness));
+    const int y=(target/layout.columns)*layout.cell;
+    return {x,y+inset,std::min(layout.width,x+thickness),y+layout.cell-inset};
+}
+
 // Where the icon at `index` is painted, in screen coordinates. The inverse of
 // HitTestCell, and next to it for the same reason.
 bool CellScreenRect(const TrayLayout& layout, int index, int iconCount, RECT* out) {
@@ -1364,6 +1411,114 @@ RECT IslandBoundsToScreen(POINT islandOrigin,
 // destroys the picture it replaces - on the taskbar's thread, whenever an
 // application changes its icon - so a bare handle copied out of it can be gone
 // by the time it is used (DECISIONS 60).
+struct IconPixels {
+    int width = 0;
+    int height = 0;
+    std::vector<BYTE> bgra;  // top-down, premultiplied
+};
+
+bool ReadIconPixels(HICON icon, IconPixels* out) {
+    if (!icon || !out) {
+        return false;
+    }
+
+    ICONINFO info = {};
+    if (!GetIconInfo(icon, &info)) {
+        return false;
+    }
+    // GetIconInfo hands back two bitmaps that belong to the caller.
+    struct BitmapGuard {
+        HBITMAP colour;
+        HBITMAP mask;
+        ~BitmapGuard() {
+            if (colour) DeleteObject(colour);
+            if (mask) DeleteObject(mask);
+        }
+    } guard{info.hbmColor, info.hbmMask};
+
+    BITMAP bitmap = {};
+    // A monochrome icon has no colour bitmap; its mask holds the image stacked
+    // above the mask, which is double height.
+    const HBITMAP source = info.hbmColor ? info.hbmColor : info.hbmMask;
+    if (!source || !GetObjectW(source, sizeof(bitmap), &bitmap)) {
+        return false;
+    }
+
+    const int width = bitmap.bmWidth;
+    const int height = info.hbmColor ? bitmap.bmHeight : bitmap.bmHeight / 2;
+    if (width <= 0 || height <= 0 || width > 512 || height > 512) {
+        return false;
+    }
+
+    HDC screenDc = GetDC(nullptr);
+    if (!screenDc) {
+        return false;
+    }
+    struct DcGuard {
+        HDC dc;
+        ~DcGuard() {
+            if (dc) ReleaseDC(nullptr, dc);
+        }
+    } dcGuard{screenDc};
+
+    BITMAPINFO header = {};
+    header.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    header.bmiHeader.biWidth = width;
+    header.bmiHeader.biHeight = -height;  // negative: top-down
+    header.bmiHeader.biPlanes = 1;
+    header.bmiHeader.biBitCount = 32;
+    header.bmiHeader.biCompression = BI_RGB;
+
+    std::vector<BYTE> pixels(static_cast<size_t>(width) * height * 4);
+    if (!GetDIBits(screenDc, source, 0, static_cast<UINT>(height), pixels.data(),
+                   &header, DIB_RGB_COLORS)) {
+        return false;
+    }
+
+    // Older icons come back with a zero alpha channel throughout; their
+    // transparency has to be taken from the mask instead.
+    bool hasAlpha = false;
+    for (size_t i = 3; i < pixels.size(); i += 4) {
+        if (pixels[i] != 0) {
+            hasAlpha = true;
+            break;
+        }
+    }
+
+    if (!hasAlpha && info.hbmMask) {
+        BITMAPINFO maskHeader = header;
+        std::vector<BYTE> maskPixels(static_cast<size_t>(width) * height * 4);
+        if (GetDIBits(screenDc, info.hbmMask, 0, static_cast<UINT>(height),
+                      maskPixels.data(), &maskHeader, DIB_RGB_COLORS)) {
+            for (size_t i = 0; i < pixels.size(); i += 4) {
+                // In the mask, white (non-zero) means transparent.
+                pixels[i + 3] = maskPixels[i] ? 0 : 255;
+            }
+        } else {
+            for (size_t i = 3; i < pixels.size(); i += 4) {
+                pixels[i] = 255;
+            }
+        }
+    }
+
+    // WriteableBitmap treats its buffer as premultiplied BGRA; handing it
+    // straight alpha leaves a dark fringe on every anti-aliased edge.
+    for (size_t i = 0; i < pixels.size(); i += 4) {
+        const unsigned alpha = pixels[i + 3];
+        if (alpha == 255) {
+            continue;
+        }
+        pixels[i + 0] = static_cast<BYTE>(pixels[i + 0] * alpha / 255);
+        pixels[i + 1] = static_cast<BYTE>(pixels[i + 1] * alpha / 255);
+        pixels[i + 2] = static_cast<BYTE>(pixels[i + 2] * alpha / 255);
+    }
+
+    out->width = width;
+    out->height = height;
+    out->bgra = std::move(pixels);
+    return true;
+}
+
 class OwnedIcon {
 public:
     OwnedIcon() = default;
@@ -2160,6 +2315,26 @@ std::wstring TrayLabelLocked(int number) {
 std::atomic<bool> g_unloading{false};
 std::atomic<HWND> g_trayWnd{nullptr};
 std::atomic<HWND> g_shellTrayWnd{nullptr};
+
+// A refresh reads the latest store: an icon burst needs one wake, not one per
+// notification. Track its target too, so a recreated window is never blocked
+// by an outstanding wake to its predecessor. Clear before rendering, so an
+// update arriving during that pass schedules the next one (DECISIONS 97).
+class RefreshWake {
+    std::atomic<HWND> pending_{nullptr};
+public:
+    void Post(HWND window, UINT message) {
+        if (!window || pending_.exchange(window) == window) return;
+        if (!PostMessageW(window, message, 0, 0)) Consume(window);
+    }
+    void Consume(HWND window) {
+        pending_.compare_exchange_strong(window, nullptr);
+    }
+    void Reset() { pending_.store(nullptr); }
+};
+RefreshWake g_workerRefresh;
+RefreshWake g_embeddedRefresh;
+RefreshWake g_dragHoverWake;
 HANDLE g_trayThread = nullptr;
 DWORD g_trayThreadId = 0;
 // How far it got: set once its window exists, or once it has given up.
@@ -2186,6 +2361,8 @@ std::atomic<int> g_subclassDepth{0};
 constexpr UINT WM_ST_REFRESH = WM_APP + 0x101;   // icons changed, re-layout
 constexpr UINT WM_ST_SETTINGS = WM_APP + 0x102;  // settings changed
 constexpr UINT WM_ST_SHUTDOWN = WM_APP + 0x103;
+constexpr UINT WM_ST_NATIVE_PRESS = WM_APP + 0x106;
+constexpr UINT WM_ST_DROP_RETRY = WM_APP + 0x107;
 constexpr UINT WM_ST_ARRANGE = WM_APP + 0x104;   // open the arrange window
 // wParam: the serial of an icon its application gave the focus back to
 // (NIM_SETFOCUS), for the floating tray that shows it (DECISIONS 85).
@@ -2363,12 +2540,312 @@ void UnregisterModClass(PCWSTR name) {
     }
 }
 
+// Cross-tray input contains values only; no XAML object crosses threads.
+// Shell_TrayWnd consumes queued drops after native pointer handlers return.
+struct TrayDrop {
+    uint64_t serial = 0;
+    int source = 0;
+    POINT point{};
+    ULONGLONG tick = 0;
+    bool fromOverflow = false;
+};
+std::mutex g_dropMutex;
+std::vector<TrayDrop> g_pendingDrops;
+std::map<int, HWND> g_dropWindows;  // protected by g_mutex
+std::map<int,double> g_dragIconSizeDips;  // actual embedded image sizes, g_mutex
+struct NativePress {
+    uint64_t serial = 0;
+    POINT point{};
+    ULONGLONG tick = 0;
+    int source = 1;
+    DWORD thread = 0;
+    bool fromOverflow = false;
+};
+std::atomic<uint64_t> g_cancelGestureSerial{0};
+NativePress g_pendingNativePress;  // protected by g_dropMutex
+
+UINT GetTrayDropMessage() {
+    static UINT msg = RegisterWindowMessageW(L"SplitTray_Drop_" WH_MOD_ID);
+    return msg;
+}
+
+// The same threshold in both axes; release can be the first distant sample.
+struct TrayGesture {
+    uint64_t serial = 0;
+    int source = 0;
+    POINT start{};
+    ULONGLONG tick = 0;
+    bool dragging = false;
+    bool fromOverflow = false;
+    bool Update(POINT point, bool down, bool cancel, ULONGLONG now,
+                int thresholdX, int thresholdY) {
+        if (!serial) return false;
+        if (cancel || now - tick >= 30000) { serial = 0; return false; }
+        dragging = dragging || std::abs(static_cast<long long>(point.x)-start.x) >= thresholdX ||
+                              std::abs(static_cast<long long>(point.y)-start.y) >= thresholdY;
+        return !down && dragging;
+    }
+};
+TrayGesture g_nativeGesture;  // worker thread only
+auto g_dragKeyState = GetAsyncKeyState;
+auto g_inputSystemMetrics = GetSystemMetrics;
+int PrimaryButtonKey() { return g_inputSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON; }
+int SecondaryButtonKey() { return g_inputSystemMetrics(SM_SWAPBUTTON) ? VK_LBUTTON : VK_RBUTTON; }
+auto g_dragCursor = GetCursorPos;
+auto g_dragCapture = GetCapture;
+auto g_dropWindowVisible = IsWindowVisible;
+
+
+// A decorative, per-drag layered window. It never takes input, activation,
+// UIA focus or a locked screen DC. All owned image/window resources live on the
+// worker thread and are released when the gesture ends or the mod unloads.
+constexpr PCWSTR kDragVisualClassName = L"SplitTrayDragVisual";
+struct DragVisualState {
+    HWND window = nullptr;
+    OwnedIcon icon;
+    uint64_t serial = 0;
+    int dpi = 0;
+    int size = 0;
+};
+DragVisualState g_dragVisual;
+std::atomic<uint64_t> g_dragFeedbackSerial{0};
+std::atomic<int> g_dragFeedbackSource{0};
+std::atomic<int> g_dragFeedbackTarget{0};
+std::atomic<bool> g_dragFeedbackAllowed{false};
+std::atomic<DWORD> g_dragFeedbackThread{0};
+std::atomic<HCURSOR> g_dragRequestedCursor{nullptr};
+NativePress g_dragHoverRequest; // point/source/thread; protected by g_dropMutex
+using SetCursor_t = decltype(&SetCursor);
+SetCursor_t g_setDragCursor = SetCursor;
+int DragIconPixels(int source,UINT dpi) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    double size=g_settings.iconSize;
+    if (auto image=g_dragIconSizeDips.find(source); image!=g_dragIconSizeDips.end()) size=image->second;
+    else if (auto layout=g_floatingLayouts.find(source); layout!=g_floatingLayouts.end()) {
+        if (const auto tray=FindTrayLocked(source); tray && tray->monitor.dpi)
+            size=static_cast<double>(layout->second.icon)*96/tray->monitor.dpi;
+    }
+    return std::clamp(static_cast<int>(std::lround(size*dpi/96)),8,256);
+}
+
+UINT GetDragHoverMessage() {
+    static UINT msg = RegisterWindowMessageW(L"SplitTray_DragHover_" WH_MOD_ID);
+    return msg;
+}
+
+HCURSOR DragFeedbackCursor(HCURSOR requested,DWORD thread) {
+    if (g_unloading.load() || !g_dragFeedbackSerial.load() || thread != g_dragFeedbackThread.load()) return requested;
+    if (g_dragFeedbackSource.load()==1) return requested;
+    if (g_dragFeedbackSource.load()>1) return LoadCursorW(nullptr,IDC_ARROW);
+    return requested || g_dragFeedbackTarget.load()==1 ? requested : LoadCursorW(nullptr,IDC_ARROW);
+}
+
+IconPixels ScaleDragPixels(const IconPixels& source,int size) {
+    IconPixels image;
+    if (source.width<=0 || source.height<=0 || size<=0 || size>256 ||
+        source.bgra.size()!=static_cast<size_t>(source.width)*source.height*4) return image;
+    image.width=image.height=size;
+    image.bgra.resize(static_cast<size_t>(size)*size*4);
+    for (int y=0;y<size;++y) for (int x=0;x<size;++x) {
+        const double sx=(x+0.5)*source.width/size-0.5;
+        const double sy=(y+0.5)*source.height/size-0.5;
+        const int left=static_cast<int>(std::floor(sx)), top=static_cast<int>(std::floor(sy));
+        const int x0=std::clamp(left,0,source.width-1), x1=std::clamp(left+1,0,source.width-1);
+        const int y0=std::clamp(top,0,source.height-1), y1=std::clamp(top+1,0,source.height-1);
+        const double fx=sx-left, fy=sy-top;
+        const size_t output=(static_cast<size_t>(y)*size+x)*4;
+        for (int channel=0;channel<4;++channel) {
+            auto sample=[&](int px,int py) {return source.bgra[(static_cast<size_t>(py)*source.width+px)*4+channel];};
+            const double upper=sample(x0,y0)*(1-fx)+sample(x1,y0)*fx;
+            const double lower=sample(x0,y1)*(1-fx)+sample(x1,y1)*fx;
+            image.bgra[output+channel]=static_cast<BYTE>(std::lround(upper*(1-fy)+lower*fy));
+        }
+    }
+    return image;
+}
+
+POINT DragImagePosition(POINT pointer,int size,RECT monitor,POINT hotspot) {
+    POINT point{pointer.x-hotspot.x,pointer.y-hotspot.y};
+    point.x=std::clamp(point.x,monitor.left,std::max(monitor.left,monitor.right-size));
+    point.y=std::clamp(point.y,monitor.top,std::max(monitor.top,monitor.bottom-size));
+    return point;
+}
+
+LRESULT CALLBACK DragVisualProc(HWND window,UINT message,WPARAM wParam,LPARAM lParam) {
+    if (message==WM_NCHITTEST) return HTTRANSPARENT;
+    if (message==WM_MOUSEACTIVATE) return MA_NOACTIVATE;
+    return DefWindowProcW(window,message,wParam,lParam);
+}
+
+bool PaintDragImage(HWND window,HICON icon,int size,POINT point) {
+    IconPixels original;
+    if (!ReadIconPixels(icon,&original)) return false;
+    const auto image=ScaleDragPixels(original,size);
+    if (image.bgra.empty()) return false;
+    HDC screen=GetDC(nullptr);
+    if (!screen) return false;
+    HDC memory=CreateCompatibleDC(screen);
+    BITMAPINFO info{}; info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth=size; info.bmiHeader.biHeight=-size;
+    info.bmiHeader.biPlanes=1; info.bmiHeader.biBitCount=32; info.bmiHeader.biCompression=BI_RGB;
+    void* bits=nullptr;
+    HBITMAP bitmap=memory ? CreateDIBSection(screen,&info,DIB_RGB_COLORS,&bits,nullptr,0) : nullptr;
+    bool painted=false;
+    if (bitmap && bits) {
+        memcpy(bits,image.bgra.data(),image.bgra.size());
+        HGDIOBJ previous=SelectObject(memory,bitmap);
+        SIZE dimensions{size,size}; POINT origin{};
+        BLENDFUNCTION blend{AC_SRC_OVER,0,255,AC_SRC_ALPHA};
+        painted=UpdateLayeredWindow(window,screen,&point,&dimensions,memory,&origin,0,&blend,ULW_ALPHA)!=FALSE;
+        SelectObject(memory,previous);
+    }
+    if (bitmap) DeleteObject(bitmap);
+    if (memory) DeleteDC(memory);
+    ReleaseDC(nullptr,screen);
+    return painted;
+}
+
+void StopDragFeedback() {
+    const bool active=g_dragFeedbackSerial.exchange(0)!=0;
+    if (active && g_dragFeedbackSource.load()>1 && GetCurrentThreadId()==g_dragFeedbackThread.load())
+        g_setDragCursor(LoadCursorW(nullptr,IDC_ARROW));
+    g_dragFeedbackAllowed.store(false);
+    g_dragFeedbackTarget.store(0);
+    if (g_dragVisual.window) DestroyWindow(g_dragVisual.window);
+    g_dragVisual = DragVisualState{};
+    { std::lock_guard<std::mutex> lock(g_dropMutex); g_dragHoverRequest={}; }
+    g_dragHoverWake.Post(g_shellTrayWnd.load(),GetDragHoverMessage());
+}
+
+void UpdateDragFeedback(uint64_t serial,int source,POINT pointer,DWORD inputThread) {
+    if (!serial || g_unloading.load()) return;
+    try {
+        if (g_dragVisual.serial!=serial) {
+            StopDragFeedback();
+            if (source>1) {
+                { std::lock_guard<std::mutex> lock(g_mutex);
+                  for (const auto list : {&g_icons,&g_primaryOnly}) for (const auto& icon : *list)
+                      if (icon.serial==serial && icon.icon) g_dragVisual.icon=OwnedIcon(CopyIcon(icon.icon)); }
+                if (!g_dragVisual.icon.get()) g_dragVisual.icon=OwnedIcon(CopyIcon(LoadIconW(nullptr,IDI_APPLICATION)));
+                g_dragVisual.window=CreateWindowExW(WS_EX_LAYERED|WS_EX_TRANSPARENT|WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW|WS_EX_TOPMOST,
+                    kDragVisualClassName,L"",WS_POPUP,0,0,1,1,nullptr,nullptr,ModuleInstance(),nullptr);
+                if (!g_dragVisual.window) { StopDragFeedback(); return; }
+            }
+            g_dragVisual.serial=serial;
+            g_dragRequestedCursor.store(LoadCursorW(nullptr,IDC_ARROW));
+            g_dragFeedbackSource.store(source);
+            g_dragFeedbackThread.store(inputThread);
+            g_dragFeedbackSerial.store(serial);
+            Wh_Log(L"[drag] feedback active for %llu (%s)",static_cast<unsigned long long>(serial),source==1 ? L"Windows image" : L"Split Tray image");
+        }
+        if (source>1) {
+            MONITORINFO monitor{sizeof(monitor)};
+            const HMONITOR display=MonitorFromPoint(pointer,MONITOR_DEFAULTTONEAREST);
+            if (!GetMonitorInfoW(display,&monitor)) return;
+            UINT dpi=96,dpiY=96;
+            if (FAILED(GetDpiForMonitor(display,MDT_EFFECTIVE_DPI,&dpi,&dpiY))) dpi=96;
+            const int size=DragIconPixels(source,dpi);
+            const POINT position=DragImagePosition(pointer,size,monitor.rcMonitor,POINT{size/2,size/2});
+            if (g_dragVisual.dpi!=static_cast<int>(dpi) || g_dragVisual.size!=size) {
+                if (!PaintDragImage(g_dragVisual.window,g_dragVisual.icon.get(),size,position)) { StopDragFeedback(); return; }
+                g_dragVisual.dpi=static_cast<int>(dpi); g_dragVisual.size=size;
+            }
+            SetWindowPos(g_dragVisual.window,HWND_TOPMOST,position.x,position.y,0,0,SWP_NOSIZE|SWP_NOACTIVATE|SWP_SHOWWINDOW);
+        }
+        { std::lock_guard<std::mutex> lock(g_dropMutex);
+          g_dragHoverRequest={serial,pointer,GetTickCount64(),source,inputThread}; }
+        g_dragHoverWake.Post(g_shellTrayWnd.load(),GetDragHoverMessage());
+        if (source>1 && GetCurrentThreadId()==inputThread)
+            g_setDragCursor(DragFeedbackCursor(g_dragRequestedCursor.load(),inputThread));
+    } catch (...) { StopDragFeedback(); }
+}
+
+void ProcessDragHover();
+
+void QueueTrayDrop(uint64_t serial, int source, POINT point, bool fromOverflow=false) {
+    if (!serial || g_unloading.load()) return;
+    std::lock_guard<std::mutex> lock(g_dropMutex);
+    if (g_pendingDrops.size() >= 16) return;
+    g_pendingDrops.push_back({serial,source,point,GetTickCount64(),fromOverflow});
+    if (HWND taskbar = g_shellTrayWnd.load()) {
+        if (!PostMessageW(taskbar,GetTrayDropMessage(),0,0)) g_pendingDrops.clear();
+    } else g_pendingDrops.clear();
+}
+
+void BeginNativeGesture(HWND window) {
+    NativePress press;
+    { std::lock_guard<std::mutex> lock(g_dropMutex);
+      press = std::exchange(g_pendingNativePress,NativePress{}); }
+    if (!press.serial || g_unloading.load()) return;
+    StopDragFeedback();
+    g_nativeGesture = {press.serial,press.source,press.point,press.tick,false,press.fromOverflow};
+    g_dragFeedbackThread.store(press.thread);
+    if (!SetTimer(window,2,16,nullptr)) g_nativeGesture = {};  // never an idle poll
+}
+
+void PollNativeGesture(HWND window) {
+    POINT point{};
+    const bool down = (g_dragKeyState(PrimaryButtonKey())&0x8000) != 0;
+    const bool cancel = g_unloading.load() || g_cancelGestureSerial.load() == g_nativeGesture.serial || (g_dragKeyState(VK_ESCAPE)&0x8000) ||
+                        (g_dragKeyState(SecondaryButtonKey())&0x8000) || !g_dragCursor(&point);
+    if (g_nativeGesture.Update(point,down,cancel,GetTickCount64(),
+                              GetSystemMetrics(SM_CXDRAG),GetSystemMetrics(SM_CYDRAG))) {
+        QueueTrayDrop(g_nativeGesture.serial,g_nativeGesture.source,point,g_nativeGesture.fromOverflow);
+    }
+    if (g_nativeGesture.serial && g_nativeGesture.dragging && down)
+        UpdateDragFeedback(g_nativeGesture.serial,g_nativeGesture.source,point,g_dragFeedbackThread.load());
+    if (!down || !g_nativeGesture.serial) {
+        StopDragFeedback();
+        KillTimer(window,2);
+        g_nativeGesture = {};
+    }
+}
+
+void CancelNativeGesture(HWND window) {
+    StopDragFeedback();
+    KillTimer(window,2);
+    KillTimer(window,3);
+    g_nativeGesture = {};
+    std::lock_guard<std::mutex> lock(g_dropMutex);
+    g_pendingNativePress = {};
+    g_cancelGestureSerial.store(0);
+    g_pendingDrops.clear();
+}
+
+int TrayDropTargetAt(POINT point);
+bool DropIconAt(uint64_t serial,int source,POINT point,bool fromOverflow=false);
+void ProcessTrayDrops();
+void ObserveNativeIconPress(POINT point);
+void QueueGesturePress(uint64_t serial,int source,POINT point,bool fromOverflow=false) {
+    HWND worker=g_trayWnd.load();
+    if (!serial || !worker || g_unloading.load()) return;
+    { std::lock_guard<std::mutex> lock(g_dropMutex);
+      g_pendingNativePress={serial,point,GetTickCount64(),source,GetCurrentThreadId(),fromOverflow}; }
+    g_cancelGestureSerial.store(0);
+    PostMessageW(worker,WM_ST_NATIVE_PRESS,0,0);
+}
+
+using DropTargetLookup = int(*)(POINT);
+DropTargetLookup g_dropTargetAt = TrayDropTargetAt;
+int OwnedOverflowDropTargetAt(POINT point) {
+#ifndef SPLITTRAY_NO_XAML
+    return SplitTrayXaml::OverflowDropTargetAt(point);
+#else
+    return 0;
+#endif
+}
+DropTargetLookup g_overflowDropTargetAt=OwnedOverflowDropTargetAt;
+
 class FloatingTrayUia;
 
 // Tray-thread state for one floating panel.
 struct FloatingTray {
     HWND wnd = nullptr;
     HWND tooltip = nullptr;
+    TrayGesture gesture;
+    bool doubleClick = false;
+    int insertionIndex = -1;
+    bool insertionAfter = false;
     int hotIndex = -1;  // the cell under the pointer, for the highlight
     // The icon whose own popup was opened (NIN_POPUPOPEN), to be closed when
     // the pointer leaves it (DECISIONS 79).
@@ -2446,12 +2923,99 @@ void SaveDisplaySlotsLocked() {
     WriteStoredString(kDisplaySlotsValue, joined);
 }
 
+// Guarded by g_mutex, like g_trays. Updated whenever displays are discovered.
+std::vector<MonitorInfoEntry> g_geometryMonitors;
+
+std::vector<std::wstring> g_iconOrder;
+bool g_iconOrderLoaded = false;
+
+std::recursive_mutex g_orderMutex;
+
+void LoadIconOrder() {
+    std::lock_guard<std::recursive_mutex> lock(g_orderMutex);
+    if (g_iconOrderLoaded) {
+        return;
+    }
+    g_iconOrderLoaded = true;
+    g_iconOrder.clear();
+
+    const std::wstring stored = SplitTray::ReadStoredString(SplitTray::kIconOrderValue);
+    std::wstring_view remaining(stored);
+    while (!remaining.empty()) {
+        const size_t split = remaining.find(L'\n');
+        std::wstring_view entry = remaining.substr(0, split);
+        if (!entry.empty()) {
+            g_iconOrder.emplace_back(entry);
+        }
+        if (split == std::wstring_view::npos) {
+            break;
+        }
+        remaining.remove_prefix(split + 1);
+    }
+}
+
+void SaveIconOrder() {
+    std::lock_guard<std::recursive_mutex> lock(g_orderMutex);
+    std::wstring joined;
+    for (const auto& key : g_iconOrder) {
+        if (!joined.empty()) {
+            joined += L'\n';
+        }
+        joined += key;
+    }
+    SplitTray::WriteStoredString(SplitTray::kIconOrderValue, joined);
+}
+
+size_t OrderPositionIn(const std::vector<std::wstring>& order, std::wstring_view key) {
+    const auto at = std::find(order.begin(), order.end(), key);
+    return static_cast<size_t>(at - order.begin());
+}
+
+size_t OrderPositionOf(std::wstring_view key) {
+    std::lock_guard<std::recursive_mutex> lock(g_orderMutex);
+    LoadIconOrder();
+    for (size_t i = 0; i < g_iconOrder.size(); i++) {
+        if (g_iconOrder[i] == key) {
+            return i;
+        }
+    }
+    return g_iconOrder.size();  // unknown icons go to the end, in store order
+}
+
+
+std::vector<std::wstring> IconOrderSnapshot() {
+    std::lock_guard<std::recursive_mutex> lock(g_orderMutex);
+    LoadIconOrder();
+    return g_iconOrder;
+}
+
+void SetIconOrder(std::vector<std::wstring> order) {
+    std::lock_guard<std::recursive_mutex> lock(g_orderMutex);
+    g_iconOrder = std::move(order);
+    g_iconOrderLoaded = true;
+    SaveIconOrder();
+}
+
+// An explicit move changes only relative order; disconnected icons keep theirs.
+bool ReorderIconKeys(std::vector<std::wstring> keys, size_t from, size_t to) {
+    if (from >= keys.size() || to >= keys.size() || from == to) return false;
+    auto key = keys[from];
+    keys.erase(keys.begin() + static_cast<ptrdiff_t>(from));
+    keys.insert(keys.begin() + static_cast<ptrdiff_t>(to), std::move(key));
+    for (auto& old : IconOrderSnapshot()) {
+        if (std::find(keys.begin(), keys.end(), old) == keys.end()) keys.push_back(old);
+    }
+    SetIconOrder(std::move(keys));
+    return true;
+}
+
 // Recomputes which trays exist and how the floating ones are laid out, for
 // `monitors`. Caller must hold g_mutex, and asks Windows for the displays
 // (g_enumerateMonitors) before taking it: that takes a call per display, and
 // every application's tray message waits on the lock (from Windhawk's catalog
 // review).
 void RecomputeGeometryLocked(const std::vector<MonitorInfoEntry>& monitors) {
+    g_geometryMonitors = monitors;
     LoadDisplaySlotsLocked();
     if (AssignDisplaySlots(monitors, &g_displaySlots)) {
         SaveDisplaySlotsLocked();
@@ -2473,7 +3037,12 @@ void RecomputeGeometryLocked(const std::vector<MonitorInfoEntry>& monitors) {
         // An empty tray still gets one cell: a handle to reach the mod's menu
         // by, as the embedded tray has. Otherwise an extra tray nothing has been
         // routed to yet would be invisible and unreachable.
-        const int count = static_cast<int>(IconsInTrayLocked(tray.number).size());
+        const auto indices = IconsInTrayLocked(tray.number);
+        int count = 0;
+        for (size_t i : indices) if (!IsIconHidden(StableKeyOf(g_icons[i]))) ++count;
+        const int total = static_cast<int>(indices.size());
+        if (g_settings.maxVisibleIcons > 0) count = std::min(count, g_settings.maxVisibleIcons);
+        if (count < total) ++count;
         g_floatingLayouts[tray.number] =
             ComputeLayout(tray.monitor.workArea, std::max(count, 1), g_settings,
                           tray.monitor.dpi, tray.corner);
@@ -2584,7 +3153,21 @@ FloatingView FloatingViewOf(int number, bool withIcons = true) {
     if (layout != g_floatingLayouts.end()) {
         view.layout = layout->second;
     }
-    for (size_t i : IconsInTrayLocked(number)) {
+    auto indices = IconsInTrayLocked(number);
+    const auto order = IconOrderSnapshot();
+    std::stable_sort(indices.begin(), indices.end(), [&order](size_t a, size_t b) {
+        return OrderPositionIn(order, StableKeyOf(g_icons[a])) < OrderPositionIn(order, StableKeyOf(g_icons[b]));
+    });
+    std::vector<std::wstring> keys;
+    for (size_t i : indices) keys.push_back(StableKeyOf(g_icons[i]));
+    auto split = SplitBarAndOverflow(keys, [](auto const& key) { return IsIconHidden(key); }, g_settings.maxVisibleIcons);
+    if (!split.overflow.empty()) {
+        view.serials.push_back(0);
+        if (withIcons) view.icons.emplace_back();
+        view.tips.push_back(L"Show hidden icons / Split Tray menu");
+    }
+    for (size_t position : split.shown) {
+        const size_t i = indices[position];
         view.serials.push_back(g_icons[i].serial);
         if (withIcons) {
             view.icons.push_back(OwnedIcon::CopyOf(g_icons[i].icon));
@@ -2761,6 +3344,31 @@ void UpdateTooltipText(HWND hWnd) {
     SendMessageW(tray->tooltip, TTM_UPDATETIPTEXTW, 0, reinterpret_cast<LPARAM>(&ti));
 }
 
+// Alpha-blend the same premultiplied icon pixels used by the moving image.
+// The original slot remains in place throughout a floating drag.
+bool DrawGhostIcon(HDC destination,int x,int y,HICON icon,int size) {
+    IconPixels source;
+    if (!ReadIconPixels(icon,&source)) return false;
+    const auto image=ScaleDragPixels(source,size);
+    if (image.bgra.empty()) return false;
+    HDC memory=CreateCompatibleDC(destination);
+    BITMAPINFO info{}; info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth=size; info.bmiHeader.biHeight=-size;
+    info.bmiHeader.biPlanes=1; info.bmiHeader.biBitCount=32; info.bmiHeader.biCompression=BI_RGB;
+    void* bits=nullptr;
+    HBITMAP bitmap=memory ? CreateDIBSection(destination,&info,DIB_RGB_COLORS,&bits,nullptr,0) : nullptr;
+    bool drawn=false;
+    if (bitmap && bits) {
+        memcpy(bits,image.bgra.data(),image.bgra.size());
+        const HGDIOBJ previous=SelectObject(memory,bitmap);
+        drawn=GdiAlphaBlend(destination,x,y,size,size,memory,0,0,size,size,BLENDFUNCTION{AC_SRC_OVER,0,102,AC_SRC_ALPHA})!=FALSE;
+        SelectObject(memory,previous);
+    }
+    if (bitmap) DeleteObject(bitmap);
+    if (memory) DeleteDC(memory);
+    return drawn;
+}
+
 void PaintTray(HWND hWnd) {
     PAINTSTRUCT ps;
     HDC hdc = BeginPaint(hWnd, &ps);
@@ -2786,6 +3394,9 @@ void PaintTray(HWND hWnd) {
         std::lock_guard<std::mutex> lock(g_mutex);
         background = g_settings.background;
     }
+    HIGHCONTRASTW hc{sizeof(hc)};
+    if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
+        (hc.dwFlags & HCF_HIGHCONTRASTON)) background = GetSysColor(COLOR_WINDOW);
     const TrayLayout& layout = view.layout;
 
     HBRUSH bgBrush = CreateSolidBrush(background);
@@ -2808,11 +3419,12 @@ void PaintTray(HWND hWnd) {
                 FillRect(memDc, &cell, hot);
                 DeleteObject(hot);
             }
-            if (i < static_cast<int>(view.icons.size())) {
+            if (i < static_cast<int>(view.icons.size()) && view.serials[static_cast<size_t>(i)] != 0) {
                 if (view.icons[static_cast<size_t>(i)].get()) {
-                    DrawIconEx(memDc, cell.left + inset, cell.top + inset,
-                               view.icons[static_cast<size_t>(i)].get(), layout.icon,
-                               layout.icon, 0, nullptr, DI_NORMAL);
+                    const HICON icon=view.icons[static_cast<size_t>(i)].get();
+                    const bool ghost=tray && tray->gesture.dragging && tray->gesture.serial==view.serials[static_cast<size_t>(i)];
+                    if (!ghost || !DrawGhostIcon(memDc,cell.left+inset,cell.top+inset,icon,layout.icon))
+                        DrawIconEx(memDc,cell.left+inset,cell.top+inset,icon,layout.icon,layout.icon,0,nullptr,DI_NORMAL);
                 }
                 continue;
             }
@@ -2831,6 +3443,12 @@ void PaintTray(HWND hWnd) {
             SelectObject(memDc, oldPen);
             SelectObject(memDc, oldBrush);
             DeleteObject(dots);
+        }
+        if (tray && tray->gesture.dragging && tray->insertionIndex>=0) {
+            const RECT marker=InsertionLineRect(layout,tray->insertionIndex,static_cast<int>(view.serials.size()),tray->insertionAfter,GetDpiForWindow(hWnd));
+            const COLORREF color=(hc.dwFlags&HCF_HIGHCONTRASTON) ? GetSysColor(COLOR_WINDOWTEXT) :
+                (GetRValue(background)+GetGValue(background)+GetBValue(background)>384 ? RGB(64,64,64) : RGB(192,192,192));
+            HBRUSH brush=CreateSolidBrush(color); FillRect(memDc,&marker,brush); DeleteObject(brush);
         }
         // The keyboard's cell, while the tray has the focus (DECISIONS 85).
         const int focusIndex = tray && tray->focused
@@ -2862,7 +3480,8 @@ void ForwardKey(uint64_t serial, bool contextMenu, POINT anchor);
 void ApplySettingsToTrackedIcons();
 void ReplayRoutingChanges();
 void WakeReplayDelivery();
-void MoveIconToTray(std::wstring_view key, Destination destination);
+void MoveIconToTray(std::wstring_view key, Destination destination, bool inOverflow=false);
+void ShowIconOnTray(std::wstring_view key);
 void EnsureShellTrayWindowSubclassed();
 UINT TaskbarCreatedMessage();
 void NoteShellAnnouncedTaskbar();
@@ -2871,6 +3490,7 @@ void CloseArrangeWindow();
 void RefreshArrangeWindow(bool repopulate);
 void NotifyTrayWindow(UINT message);
 void RequestRedrawOfAllTrays();
+void FollowRulesForIcon(std::wstring_view key);
 
 // The mod's menu on a floating tray, as ShowFloatingTrayMenu puts it up: built
 // and acted on apart from showing it, so what it offers and what each choice
@@ -2878,11 +3498,17 @@ void RequestRedrawOfAllTrays();
 struct FloatingTrayMenu {
     static constexpr UINT kArrange = 1;
     static constexpr UINT kResetMoved = 2;
+    static constexpr UINT kFollowRules = 3;
+    static constexpr UINT kToggleHidden = 4;
+    static constexpr UINT kHidden = 10000;
+    static constexpr UINT kHiddenContext = 20000;
+    static constexpr UINT kHiddenShow = 30000;
     static constexpr UINT kMoveThis = 100;   // + target tray number
     static constexpr UINT kMoveHere = 1000;  // + index into `others`
 
     HMENU menu = nullptr;           // with its submenu; the caller destroys it
     std::wstring key;               // the icon it was opened on, if any
+    std::vector<uint64_t> hidden;
     std::vector<KnownIcon> others;  // what "Move an icon to this tray" offers
 };
 
@@ -2909,6 +3535,31 @@ FloatingTrayMenu BuildFloatingTrayMenu(int number, uint64_t serial) {
         return built;
     }
     built.menu = menu;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        auto indices = IconsInTrayLocked(number);
+        const auto order = IconOrderSnapshot();
+        std::stable_sort(indices.begin(), indices.end(), [&order](size_t a, size_t b) {
+            return OrderPositionIn(order, StableKeyOf(g_icons[a])) < OrderPositionIn(order, StableKeyOf(g_icons[b]));
+        });
+        std::vector<std::wstring> keys;
+        for (size_t i : indices) keys.push_back(StableKeyOf(g_icons[i]));
+        auto split = SplitBarAndOverflow(keys, [](auto const& k) { return IsIconHidden(k); }, g_settings.maxVisibleIcons);
+        if (!split.overflow.empty()) {
+            HMENU hidden = CreatePopupMenu();
+            for (size_t pos : split.overflow) {
+                const auto& icon = g_icons[indices[pos]];
+                HMENU actions = CreatePopupMenu();
+                const UINT offset = static_cast<UINT>(built.hidden.size());
+                AppendMenuW(actions, MF_STRING, FloatingTrayMenu::kHidden + offset, L"Open");
+                AppendMenuW(actions, MF_STRING, FloatingTrayMenu::kHiddenContext + offset, L"Application menu");
+                AppendMenuW(actions, MF_STRING, FloatingTrayMenu::kHiddenShow + offset, L"Show on the tray");
+                AppendMenuW(hidden, MF_POPUP, reinterpret_cast<UINT_PTR>(actions), IconLabel(icon).c_str());
+                built.hidden.push_back(icon.serial);
+            }
+            AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(hidden), L"Hidden icons");
+        }
+    }
     if (!key.empty()) {
         for (int target : AvailableTrayNumbers()) {
             if (target == number) {
@@ -2940,6 +3591,10 @@ FloatingTrayMenu BuildFloatingTrayMenu(int number, uint64_t serial) {
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kArrange, L"Arrange icons\x2026");
     AppendMenuW(menu, MF_STRING, kResetMoved, L"Reset moved icons");
+    if (!key.empty()) {
+        AppendMenuW(menu, MF_STRING, FloatingTrayMenu::kFollowRules, L"Follow rules for this icon");
+        AppendMenuW(menu, MF_STRING, FloatingTrayMenu::kToggleHidden, L"Toggle hidden for this icon");
+    }
     return built;
 }
 
@@ -2954,6 +3609,34 @@ void RunFloatingTrayMenuCommand(const FloatingTrayMenu& menu, int number, UINT c
         }
         ApplySettingsToTrackedIcons();
         RequestRedrawOfAllTrays();
+    } else if (command == FloatingTrayMenu::kFollowRules) {
+        FollowRulesForIcon(menu.key);
+    } else if (command == FloatingTrayMenu::kToggleHidden && !menu.key.empty()) {
+        SetIconHidden(menu.key, !IsIconHidden(menu.key));
+        RequestRedrawOfAllTrays();
+    } else if (command >= FloatingTrayMenu::kHiddenShow) {
+        const size_t index = command - FloatingTrayMenu::kHiddenShow;
+        std::wstring key;
+        if (index < menu.hidden.size()) {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            const int icon = IndexOfSerialLocked(menu.hidden[index]);
+            if (icon >= 0) key = StableKeyOf(g_icons[icon]);
+        }
+        if (!key.empty()) ShowIconOnTray(key);
+    } else if (command >= FloatingTrayMenu::kHiddenContext) {
+        const size_t index = command - FloatingTrayMenu::kHiddenContext;
+        if (index < menu.hidden.size()) {
+            POINT at{}; RECT cell{}; auto view = FloatingViewOf(number,false);
+            if (CellScreenRect(view.layout,0,view.Cells(),&cell)) at = {(cell.left+cell.right)/2,(cell.top+cell.bottom)/2};
+            else GetCursorPos(&at);
+            ForwardKey(menu.hidden[index], true, at);
+        }
+    } else if (command >= FloatingTrayMenu::kHidden && command < FloatingTrayMenu::kHiddenContext) {
+        const size_t index = command - FloatingTrayMenu::kHidden;
+        if (index < menu.hidden.size()) {
+            POINT at{}; GetCursorPos(&at);
+            ForwardKey(menu.hidden[index], false, at);
+        }
     } else if (command >= FloatingTrayMenu::kMoveHere) {
         const size_t index = command - FloatingTrayMenu::kMoveHere;
         if (index < menu.others.size()) {
@@ -3166,6 +3849,16 @@ void FocusIconInFloatingTray(uint64_t serial) {
     }
     for (auto& [number, tray] : g_floatingTrays) {
         const FloatingView view = FloatingViewOf(number, /*withIcons=*/false);
+        bool belongs = false;
+        {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            const int index = IndexOfSerialLocked(serial);
+            belongs = index >= 0 && g_icons[index].shownTray == number;
+        }
+        if (tray.wnd && belongs && CellIndexOfSerial(view, serial) < 0) {
+            FocusFloatingCell(tray.wnd, 0);
+            return;
+        }
         if (tray.wnd && !view.serials.empty() && CellIndexOfSerial(view, serial) >= 0) {
             FocusFloatingCell(tray.wnd, serial);
             return;
@@ -3744,6 +4437,13 @@ LRESULT CALLBACK FloatingTrayProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
         }
 
         case WM_CONTEXTMENU:
+            if ((GetKeyState(VK_CONTROL) & 0x8000) && (GetKeyState(VK_SHIFT) & 0x8000)) {
+                if (auto* tray = FloatingTrayOfWindow(hWnd)) {
+                    POINT at{}; GetCursorPos(&at);
+                    ShowFloatingTrayMenu(hWnd, TrayNumberOfWindow(hWnd), tray->focusSerial, at);
+                }
+                return 0;
+            }
             // Shift+F10 or the menu key, which DefWindowProc turns into this
             // with no position. A right click never gets here: its release is
             // the application's, and is not passed on (DECISIONS 30).
@@ -3762,9 +4462,54 @@ LRESULT CALLBACK FloatingTrayProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
             FocusFloatingCell(hWnd, static_cast<uint64_t>(wParam));
             return 0;
 
+        case WM_TIMER:
+            if (wParam == 2) {
+                if (auto tray = FloatingTrayOfWindow(hWnd); tray && tray->gesture.serial) {
+                    if ((g_dragKeyState(VK_ESCAPE)&0x8000) || GetTickCount64()-tray->gesture.tick >= 30000) {
+                        tray->gesture = {};
+                        tray->insertionIndex=-1; InvalidateRect(hWnd,nullptr,FALSE);
+                        StopDragFeedback();
+                        KillTimer(hWnd,2);
+                        if (GetCapture() == hWnd) ReleaseCapture();
+                    } else if (tray->gesture.dragging) {
+                        POINT point{};
+                        if (g_dragCursor(&point)) UpdateDragFeedback(tray->gesture.serial,tray->gesture.source,point,GetCurrentThreadId());
+                    }
+                }
+                return 0;
+            }
+            break;
+
+        case WM_CANCELMODE:
+        case WM_CAPTURECHANGED:
+            if (auto tray = FloatingTrayOfWindow(hWnd)) { tray->gesture = {}; tray->insertionIndex=-1; }
+            InvalidateRect(hWnd,nullptr,FALSE);
+            StopDragFeedback();
+            KillTimer(hWnd,2);
+            if (msg == WM_CANCELMODE && GetCapture() == hWnd) ReleaseCapture();
+            return 0;
+
         case WM_MOUSEMOVE: {
             FloatingTray* tray = FloatingTrayOfWindow(hWnd);
             if (!tray) {
+                return 0;
+            }
+            if (tray->gesture.serial) {
+                const POINT point = ScreenPointOf(hWnd,lParam);
+                const bool wasDragging=tray->gesture.dragging;
+                tray->gesture.Update(point,true,(g_dragKeyState(VK_ESCAPE)&0x8000) != 0,
+                                     GetTickCount64(),GetSystemMetrics(SM_CXDRAG),GetSystemMetrics(SM_CYDRAG));
+                if (tray->gesture.dragging)
+                    UpdateDragFeedback(tray->gesture.serial,tray->gesture.source,point,GetCurrentThreadId());
+                const auto preview=FloatingViewOf(TrayNumberOfWindow(hWnd),false);
+                const int from=CellIndexOfSerial(preview,tray->gesture.serial);
+                int target=tray->gesture.dragging ? HitTestCell(preview.layout,GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam),static_cast<int>(preview.serials.size())) : -1;
+                if (from<0) target=-1;
+                const bool after=target>from || (target==from && preview.layout.cell>0 && GET_X_LPARAM(lParam)%preview.layout.cell>=preview.layout.cell/2);
+                if (wasDragging!=tray->gesture.dragging || tray->insertionIndex!=target || tray->insertionAfter!=after) {
+                    tray->insertionIndex=target; tray->insertionAfter=after;
+                    InvalidateRect(hWnd,nullptr,FALSE);
+                }
                 return 0;
             }
             const FloatingView view =
@@ -3825,13 +4570,43 @@ LRESULT CALLBACK FloatingTrayProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
             const FloatingView view = FloatingViewOf(number, /*withIcons=*/false);
             const POINT client = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             const int index = HitTestCell(view.layout, client.x, client.y, view.Cells());
-            if (index < 0) {
-                return 0;
-            }
             POINT screen = client;
             ClientToScreen(hWnd, &screen);
+            auto tray = FloatingTrayOfWindow(hWnd);
+            if (msg == WM_LBUTTONUP && tray && tray->gesture.serial) {
+                auto gesture = std::exchange(tray->gesture,TrayGesture{});
+                tray->insertionIndex=-1; InvalidateRect(hWnd,nullptr,FALSE);
+                StopDragFeedback();
+                KillTimer(hWnd,2);
+                if (GetCapture() == hWnd) ReleaseCapture();
+                const bool drop = gesture.Update(screen,false,(g_dragKeyState(VK_ESCAPE)&0x8000) != 0,
+                                                  GetTickCount64(),GetSystemMetrics(SM_CXDRAG),GetSystemMetrics(SM_CYDRAG));
+                if (drop) {
+                    // Reorder only over another visible icon in this panel.
+                    RECT rect{};
+                    if (GetWindowRect(hWnd,&rect) && PtInRect(&rect,screen) && index >= 0) {
+                        std::vector<std::wstring> keys;
+                        size_t from = SIZE_MAX, to = SIZE_MAX;
+                        { std::lock_guard<std::mutex> lock(g_mutex);
+                          for (size_t n=0;n<view.serials.size();++n) {
+                              uint64_t serial=view.serials[n];
+                              if (!serial) continue;
+                              if (serial==gesture.serial) from=keys.size();
+                              if (static_cast<int>(n)==index) to=keys.size();
+                              int i=IndexOfSerialLocked(serial);
+                              if (i>=0) keys.push_back(StableKeyOf(g_icons[static_cast<size_t>(i)]));
+                          } }
+                        if (ReorderIconKeys(std::move(keys),from,to)) RequestRedrawOfAllTrays();
+                    } else QueueTrayDrop(gesture.serial,number,screen);
+                } else if (gesture.serial && index >= 0 && SerialOfCellIndex(view,index)==gesture.serial) {
+                    ForwardClick(gesture.serial,WM_LBUTTONDOWN,gesture.start);
+                    ForwardClick(gesture.serial,WM_LBUTTONUP,screen);
+                }
+                return 0;
+            }
+            if (index < 0) return 0;
 
-            const bool onIcon = index < static_cast<int>(view.serials.size());
+            const bool onIcon = index < static_cast<int>(view.serials.size()) && view.serials[static_cast<size_t>(index)] != 0;
             const bool release = (msg == WM_LBUTTONUP || msg == WM_RBUTTONUP ||
                                   msg == WM_MBUTTONUP);
             // The handle belongs to the mod, so any click on it is the mod's.
@@ -3851,6 +4626,17 @@ LRESULT CALLBACK FloatingTrayProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
                 }
                 return 0;
             }
+            if (onIcon && msg == WM_LBUTTONDOWN && tray) {
+                ClosePopupOf(tray);
+                tray->gesture = {view.serials[static_cast<size_t>(index)],number,screen,GetTickCount64(),false};
+                tray->doubleClick = false;
+                SetCapture(hWnd);
+                if (GetCapture() != hWnd) { tray->gesture = {}; return 0; }
+                SetTimer(hWnd,2,16,nullptr);
+                return 0;
+            }
+            if (msg == WM_LBUTTONDBLCLK && tray) tray->doubleClick = true;
+            if (msg == WM_LBUTTONUP && tray && !std::exchange(tray->doubleClick,false)) return 0;
             ForwardClick(view.serials[static_cast<size_t>(index)], msg, screen);
             return 0;
         }
@@ -3914,15 +4700,22 @@ HWND CreateTooltip(HWND owner) {
 // two seconds whether or not anything happened. A tray is then moved and
 // redrawn only if where it goes, or how, has changed, so that it is not put
 // back on top of every other topmost window every two seconds.
-void SyncFloatingTrays(bool iconsMayHaveChanged = true) {
+void SyncFloatingTrays(bool iconsMayHaveChanged = true, bool discoverDisplays = true) {
     std::map<int, TrayLayout> layouts;
     int opacity;
     bool onTop;
     bool tooltips;
-    const auto monitors = g_enumerateMonitors();
+    // Icon-only refreshes use geometry maintained by settings/display changes
+    // and the watchdog. They do not query the displays for every icon update.
+    const auto monitors = discoverDisplays ? g_enumerateMonitors()
+                                          : std::vector<MonitorInfoEntry>{};
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        RecomputeGeometryLocked(monitors);
+        if (discoverDisplays) {
+            RecomputeGeometryLocked(monitors);
+        } else {
+            RecomputeGeometryLocked(g_geometryMonitors);
+        }
         if (!g_unloading.load()) {
             layouts = g_floatingLayouts;
         }
@@ -3949,6 +4742,7 @@ void SyncFloatingTrays(bool iconsMayHaveChanged = true) {
             ++it;
             continue;
         }
+        { std::lock_guard<std::mutex> lock(g_mutex); g_dropWindows.erase(it->first); }
         HWND wnd = it->second.wnd;
         if (wnd) {
             DestroyWindow(wnd);  // WM_DESTROY takes its tooltip with it
@@ -3975,6 +4769,7 @@ void SyncFloatingTrays(bool iconsMayHaveChanged = true) {
             Wh_Log(L"tray %d floats at (%d,%d) %dx%d", number, layout.x, layout.y,
                    layout.width, layout.height);
         }
+        { std::lock_guard<std::mutex> lock(g_mutex); g_dropWindows[number] = tray.wnd; }
         // Every time, not only for a new window: the setting was read when the
         // window was made, so switching it had no effect on a tray already
         // there (DECISIONS 77).
@@ -4015,12 +4810,27 @@ void SyncFloatingTrays(bool iconsMayHaveChanged = true) {
 }
 
 void DestroyFloatingTrays() {
+    { std::lock_guard<std::mutex> lock(g_mutex); g_dropWindows.clear(); }
     for (auto& [number, tray] : g_floatingTrays) {
         if (tray.wnd) {
             DestroyWindow(tray.wnd);
         }
     }
     g_floatingTrays.clear();
+}
+
+auto g_registerHotKey = RegisterHotKey;
+auto g_unregisterHotKey = UnregisterHotKey;
+void ConfigureGlobalHotkeys(HWND window) {
+    g_unregisterHotKey(window, 1);
+    g_unregisterHotKey(window, 2);
+    bool enabled;
+    { std::lock_guard<std::mutex> lock(g_mutex); enabled = g_settings.enableGlobalHotkeys; }
+    if (!enabled) return;
+    if (!g_registerHotKey(window, 1, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, VK_F11))
+        Wh_Log(L"Arrange shortcut Ctrl+Shift+F11 is unavailable");
+    if (!g_registerHotKey(window, 2, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, VK_F12))
+        Wh_Log(L"Floating tray shortcut Ctrl+Shift+F12 is unavailable");
 }
 
 LRESULT CALLBACK ControllerProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -4032,7 +4842,26 @@ LRESULT CALLBACK ControllerProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
     }
 
     switch (msg) {
+        case WM_ST_DROP_RETRY:
+            SetTimer(hWnd,3,32,nullptr);
+            return 0;
+
+        case WM_ST_NATIVE_PRESS:
+            BeginNativeGesture(hWnd);
+            PollNativeGesture(hWnd);
+            return 0;
+
+        case WM_TIMER:
+            if (wParam == 2) { PollNativeGesture(hWnd); return 0; }
+            if (wParam == 3) {
+                KillTimer(hWnd,3);
+                if (HWND shell=g_shellTrayWnd.load()) PostMessageW(shell,GetTrayDropMessage(),0,0);
+                return 0;
+            }
+            break;
+
         case WM_ST_SETTINGS:
+            ConfigureGlobalHotkeys(hWnd);
             // New rules can change where an icon that is already on screen
             // belongs, so re-resolve every tracked icon and replay the
             // difference into the shell before re-laying out.
@@ -4045,16 +4874,36 @@ LRESULT CALLBACK ControllerProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             g_attachTicksWaited = 0;  // embedding may just have been turned on
             return 0;
 
+        case WM_ST_REFRESH:
+            g_workerRefresh.Consume(hWnd);
+            for (auto& [number, tray] : g_floatingTrays) tray.hotIndex = -1;
+            SyncFloatingTrays(true, false);
+            RefreshArrangeWindow(false);
+            return 0;
+
         case WM_DISPLAYCHANGE:
             g_attachTicksWaited = 0;  // a taskbar may come with the display
             [[fallthrough]];
-        case WM_ST_REFRESH:
         case WM_SETTINGCHANGE:
             for (auto& [number, tray] : g_floatingTrays) {
                 tray.hotIndex = -1;
             }
             SyncFloatingTrays();
             RefreshArrangeWindow(false);
+            return 0;
+
+        case WM_HOTKEY:
+            if (wParam == 1) ShowArrangeWindow();
+            else if (wParam == 2) {
+                static int lastTray = 0;
+                auto next = g_floatingTrays.upper_bound(lastTray);
+                if (next == g_floatingTrays.end()) next = g_floatingTrays.begin();
+                if (next != g_floatingTrays.end()) {
+                    lastTray = next->first;
+                    auto view = FloatingViewOf(lastTray, false);
+                    FocusFloatingCell(next->second.wnd, view.serials.empty() ? 0 : view.serials.front());
+                }
+            }
             return 0;
 
         case WM_ST_ARRANGE:
@@ -4066,6 +4915,9 @@ LRESULT CALLBACK ControllerProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
 
         case WM_ST_SHUTDOWN:
+            CancelNativeGesture(hWnd);
+            UnregisterHotKey(hWnd, 1);
+            UnregisterHotKey(hWnd, 2);
             CloseArrangeWindow();
             DestroyFloatingTrays();
             DestroyWindow(hWnd);
@@ -4084,10 +4936,14 @@ void ReleaseArrangeResources();
 // Everything the tray thread registers, taken down again once its windows are
 // gone; a class with a window still open cannot be unregistered.
 void UnregisterTrayThreadClasses() {
+    UnregisterModClass(kDragVisualClassName);
     UnregisterModClass(kArrangeClassName);
     UnregisterModClass(kFloatingClassName);
     UnregisterModClass(kControllerClassName);
 }
+
+// Owned by the tray thread, including its message loop.
+HWND g_arrangeWnd = nullptr;
 
 DWORD WINAPI TrayThreadProc(LPVOID) {
     if (g_trayThreadHold) {
@@ -4103,6 +4959,10 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     floatingClass.lpszClassName = kFloatingClassName;
     floatingClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     floatingClass.style = CS_DBLCLKS;
+
+    WNDCLASSEXW dragClass{sizeof(dragClass)};
+    dragClass.lpfnWndProc=DragVisualProc;
+    dragClass.lpszClassName=kDragVisualClassName;
 
     WNDCLASSEXW arrangeClass = {sizeof(arrangeClass)};
     arrangeClass.lpfnWndProc = ArrangeWndProc;
@@ -4121,7 +4981,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         return 1;
     };
     if (!RegisterModClass(&controllerClass) || !RegisterModClass(&floatingClass) ||
-        !RegisterModClass(&arrangeClass)) {
+        !RegisterModClass(&arrangeClass) || !RegisterModClass(&dragClass)) {
         return giveUp();
     }
 
@@ -4135,6 +4995,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         return giveUp();
     }
 
+    ConfigureGlobalHotkeys(hWnd);
     g_trayWnd.store(hWnd);
     g_trayThreadState.store(TrayThreadState::Running);
     g_taskbarElsewhere = false;
@@ -4155,7 +5016,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (msg.message == WM_TIMER && msg.hwnd == hWnd) {
+        if (msg.message == WM_TIMER && msg.hwnd == hWnd && msg.wParam == 1) {
             EnsureShellTrayWindowSubclassed();
 #ifndef SPLITTRAY_NO_XAML
             // The IconView constructor hook only catches elements built after it
@@ -4179,6 +5040,9 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
             SyncFloatingTrays(false);
             continue;
         }
+        if (msg.message == WM_KEYDOWN && msg.wParam == VK_TAB) {
+            if (g_arrangeWnd && IsDialogMessageW(g_arrangeWnd, &msg)) continue;
+        }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
@@ -4186,6 +5050,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     if (foregroundHook) {
         UnhookWinEvent(foregroundHook);
     }
+    CancelNativeGesture(hWnd);
     g_trayWnd.store(nullptr);
     CloseArrangeWindow();
     DestroyFloatingTrays();
@@ -4217,7 +5082,6 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 constexpr int kArrangeListIdBase = 1001;
 
 // Tray-thread state only; no locking needed beyond the snapshot itself.
-HWND g_arrangeWnd = nullptr;
 // Whether it is open, for the taskbar's thread: a tooltip changed in the main
 // tray asks the arrange window to rename its row only then (DECISIONS 83).
 std::atomic<bool> g_arrangeOpen{false};
@@ -4235,6 +5099,29 @@ std::vector<uint64_t> g_arrangeSerials;   // likewise: which icon each row is
 bool g_arrangeDragging = false;
 int g_arrangeDragItem = -1;
 int g_arrangeDragList = -1;
+HWND g_arrangeSearch = nullptr;
+std::vector<HWND> g_arrangeLabels;
+int g_arrangeScroll = 0;
+int g_arrangeActiveList = -1;
+constexpr int kArrangeSearch = 900;
+constexpr int kArrangeUp = 901, kArrangeDown = 902, kArrangeFollow = 903, kArrangeStatus = 904;
+void LayoutArrangeChildren();
+void ShowTrayStatus();
+void RefreshArrangeDpi();
+
+bool MatchesIconSearch(std::wstring label, std::wstring query) {
+    std::transform(label.begin(), label.end(), label.begin(), towlower);
+    std::transform(query.begin(), query.end(), query.begin(), towlower);
+    return label.find(query) != std::wstring::npos;
+}
+
+std::wstring ArrangeSearchText() {
+    const int length = g_arrangeSearch ? GetWindowTextLengthW(g_arrangeSearch) : 0;
+    std::wstring query(static_cast<size_t>(length) + 1, L'\0');
+    if (length) GetWindowTextW(g_arrangeSearch, query.data(), length + 1);
+    query.resize(length);
+    return query;
+}
 
 int ArrangeListOfId(UINT_PTR id) {
     const int list = static_cast<int>(id) - kArrangeListIdBase;
@@ -4363,13 +5250,14 @@ void PopulateArrangeLists() {
                             list > 0 && IsIconHidden(key), icon.serial});
         }
     }
-    // Within a tray, the icons on its bar first, then those in its overflow.
-    std::sort(rows.begin(), rows.end(), [](Row const& a, Row const& b) {
-        if (a.hidden != b.hidden) {
-            return !a.hidden;
-        }
-        return _wcsicmp(a.label.c_str(), b.label.c_str()) < 0;
+    // Use the same persisted order as the tray; alphabetic sorting made a
+    // reliable order editor impossible. A filter never changes saved order.
+    const auto order = IconOrderSnapshot();
+    std::stable_sort(rows.begin(), rows.end(), [&order](Row const& a, Row const& b) {
+        return OrderPositionIn(order,a.key) < OrderPositionIn(order,b.key);
     });
+    const auto query = ArrangeSearchText();
+    std::erase_if(rows, [&](auto const& row) { return !MatchesIconSearch(row.label + L" " + row.key, query); });
 
     for (HWND list : g_arrangeLists) {
         ListView_DeleteAllItems(list);
@@ -4458,6 +5346,44 @@ void ArrangeMove(std::wstring key, int fromList, int toList) {
     RequestRedrawOfAllTrays();
 }
 
+
+int SelectedArrangeList() {
+    const HWND focus = GetFocus();
+    for (size_t i = 0; i < g_arrangeLists.size(); ++i)
+        if (g_arrangeLists[i] == focus && ListView_GetNextItem(g_arrangeLists[i], -1, LVNI_SELECTED) >= 0) return static_cast<int>(i);
+    if (g_arrangeActiveList >= 0 && g_arrangeActiveList < static_cast<int>(g_arrangeLists.size()) &&
+        ListView_GetNextItem(g_arrangeLists[g_arrangeActiveList], -1, LVNI_SELECTED) >= 0) return g_arrangeActiveList;
+    for (size_t i = 0; i < g_arrangeLists.size(); ++i)
+        if (ListView_GetNextItem(g_arrangeLists[i], -1, LVNI_SELECTED) >= 0) return static_cast<int>(i);
+    return -1;
+}
+
+void ArrangeReorder(int list, int delta) {
+    if (list < 0 || list >= static_cast<int>(g_arrangeLists.size()) || g_arrangeTrays[list] <= 1) return;
+    // Do not reorder a filtered subset: a hidden neighbor would be skipped.
+    if (!ArrangeSearchText().empty()) return;
+    HWND view = g_arrangeLists[list];
+    const int from = ListView_GetNextItem(view, -1, LVNI_SELECTED);
+    const int to = from + delta;
+    const int count = ListView_GetItemCount(view);
+    if (from < 0 || to < 0 || to >= count) return;
+    const auto selected = ArrangeKeyOfItem(list, from);
+    std::vector<std::wstring> keys;
+    for (int i = 0; i < count; ++i) keys.push_back(ArrangeKeyOfItem(list, i));
+    if (ReorderIconKeys(std::move(keys), from, to)) {
+        PopulateArrangeLists();
+        SetFocus(view);
+        RequestRedrawOfAllTrays();
+    }
+}
+
+void ArrangeFollowRules(int list) {
+    if (list < 0 || list >= static_cast<int>(g_arrangeLists.size())) return;
+    const int row = ListView_GetNextItem(g_arrangeLists[list], -1, LVNI_SELECTED);
+    FollowRulesForIcon(ArrangeKeyOfItem(list, row));
+    PopulateArrangeLists();
+}
+
 // H: into the tray's overflow, or back out onto its bar. The primary tray's
 // overflow is Windows' own business.
 void ArrangeToggleHidden(int list) {
@@ -4534,11 +5460,71 @@ void EndArrangeDrag(bool drop) {
 LRESULT CALLBACK ArrangeWndProc(HWND hWnd, UINT msg, WPARAM wParam,
                                 LPARAM lParam) {
     switch (msg) {
+        case WM_COMMAND:
+            if (LOWORD(wParam) == kArrangeSearch && HIWORD(wParam) == EN_CHANGE) PopulateArrangeLists();
+            else if (LOWORD(wParam) == kArrangeUp) ArrangeReorder(SelectedArrangeList(), -1);
+            else if (LOWORD(wParam) == kArrangeDown) ArrangeReorder(SelectedArrangeList(), 1);
+            else if (LOWORD(wParam) == kArrangeFollow) ArrangeFollowRules(SelectedArrangeList());
+            else if (LOWORD(wParam) == kArrangeStatus) ShowTrayStatus();
+            return 0;
+        case WM_GETMINMAXINFO: {
+            auto limits = reinterpret_cast<MINMAXINFO*>(lParam);
+            const UINT dpi = GetDpiForWindow(hWnd);
+            limits->ptMinTrackSize = {ScaleForDpi(460,dpi),ScaleForDpi(300,dpi)};
+            return 0;
+        }
+        case WM_SIZE:
+            LayoutArrangeChildren();
+            return 0;
+        case WM_DPICHANGED: {
+            auto rect = reinterpret_cast<RECT*>(lParam);
+            SetWindowPos(hWnd, nullptr, rect->left, rect->top, rect->right - rect->left,
+                         rect->bottom - rect->top, SWP_NOACTIVATE | SWP_NOZORDER);
+            RefreshArrangeDpi();
+            LayoutArrangeChildren();
+            return 0;
+        }
+        case WM_VSCROLL: {
+            SCROLLINFO info{sizeof(info), SIF_ALL}; GetScrollInfo(hWnd, SB_VERT, &info);
+            int next = g_arrangeScroll;
+            switch (LOWORD(wParam)) {
+                case SB_LINEUP: next -= 32; break;
+                case SB_LINEDOWN: next += 32; break;
+                case SB_PAGEUP: next -= info.nPage; break;
+                case SB_PAGEDOWN: next += info.nPage; break;
+                case SB_TOP: next = 0; break;
+                case SB_BOTTOM: next = info.nMax; break;
+                case SB_THUMBTRACK: next = info.nTrackPos; break;
+            }
+            g_arrangeScroll = std::clamp(next, 0, std::max(0, info.nMax - static_cast<int>(info.nPage) + 1));
+            LayoutArrangeChildren();
+            return 0;
+        }
         case WM_NOTIFY: {
             auto* header = reinterpret_cast<NMHDR*>(lParam);
             const int list = ArrangeListOfId(header->idFrom);
             if (list < 0) {
                 break;
+            }
+
+            if (header->code == NM_SETFOCUS) {
+                g_arrangeActiveList = list;
+                RECT client{}, cell{}; GetClientRect(hWnd,&client);
+                GetWindowRect(g_arrangeLists[list],&cell);
+                MapWindowPoints(nullptr,hWnd,reinterpret_cast<POINT*>(&cell),2);
+                const int top = ScaleForDpi(80,GetDpiForWindow(hWnd));
+                if (cell.top < top) g_arrangeScroll = std::max<int>(0,g_arrangeScroll-(top-cell.top));
+                else if (cell.bottom > client.bottom) g_arrangeScroll += cell.bottom-client.bottom;
+                LayoutArrangeChildren();
+            }
+            if (header->code == LVN_ITEMCHANGED &&
+                (reinterpret_cast<NMLISTVIEW*>(lParam)->uNewState & LVIS_SELECTED)) {
+                g_arrangeActiveList = list;
+                // Management buttons act on one icon across all tray lists.
+                for (size_t other = 0; other < g_arrangeLists.size(); ++other) {
+                    if (static_cast<int>(other) != list)
+                        ListView_SetItemState(g_arrangeLists[other], -1, 0, LVIS_SELECTED | LVIS_FOCUSED);
+                }
             }
 
             if (header->code == LVN_KEYDOWN) {
@@ -4551,7 +5537,11 @@ LRESULT CALLBACK ArrangeWndProc(HWND hWnd, UINT msg, WPARAM wParam,
                 } else if (key >= VK_NUMPAD1 && key <= VK_NUMPAD9) {
                     tray = key - VK_NUMPAD0;
                 }
-                if (tray > 0) {
+                if ((GetKeyState(VK_CONTROL) & 0x8000) && (key == VK_UP || key == VK_DOWN)) {
+                    ArrangeReorder(list, key == VK_UP ? -1 : 1);
+                } else if (key == L'R' && (GetKeyState(VK_CONTROL) & 0x8000)) {
+                    ArrangeFollowRules(list);
+                } else if (tray > 0) {
                     const int target = ArrangeListOfTray(tray);
                     if (target >= 0) {
                         ArrangeMoveSelected(list, target);
@@ -4631,6 +5621,9 @@ LRESULT CALLBACK ArrangeWndProc(HWND hWnd, UINT msg, WPARAM wParam,
             g_arrangeWnd = nullptr;
             g_arrangeOpen.store(false);
             g_arrangeLists.clear();
+            g_arrangeLabels.clear();
+            g_arrangeSearch = nullptr;
+            g_arrangeActiveList = -1;
             g_arrangeTrays.clear();
             g_arrangeKeys.clear();
             g_arrangeSerials.clear();
@@ -4705,6 +5698,66 @@ HWND CreateArrangeList(HWND parent, int id, int x, int y, int width, int height,
     return list;
 }
 
+
+void LayoutArrangeChildren() {
+    if (!g_arrangeWnd || g_arrangeLists.empty()) return;
+    const auto m = ArrangeMetricsFor(GetDpiForWindow(g_arrangeWnd));
+    RECT client{}; GetClientRect(g_arrangeWnd, &client);
+    const int columns = std::max<int>(1, (client.right - m.margin) / (m.listWidth + m.margin));
+    const int width = std::max<int>(m.listWidth / 2, (client.right - m.margin) / columns - m.margin);
+    const UINT dpi = GetDpiForWindow(g_arrangeWnd);
+    auto px = [dpi](int value) { return ScaleForDpi(value, dpi); };
+    if (g_arrangeSearch) SetWindowPos(g_arrangeSearch, nullptr, m.margin, px(8),
+        std::max<int>(px(100),client.right-2*m.margin),px(24),SWP_NOZORDER|SWP_NOACTIVATE);
+    const int actions[] = {kArrangeUp,kArrangeDown,kArrangeFollow,kArrangeStatus};
+    for (int i=0;i<4;++i) if (HWND button=GetDlgItem(g_arrangeWnd,actions[i]))
+        SetWindowPos(button,nullptr,m.margin+px(i*104),px(36),px(100),px(24),SWP_NOZORDER|SWP_NOACTIVATE);
+    if (HWND hint=GetDlgItem(g_arrangeWnd,905)) SetWindowPos(hint,nullptr,m.margin,px(62),
+        std::max<int>(px(100),client.right-2*m.margin),px(18),SWP_NOZORDER|SWP_NOACTIVATE);
+    const int top = px(80);
+    const int rowHeight = ScaleForDpi(280, GetDpiForWindow(g_arrangeWnd));
+    const int total = top + ((static_cast<int>(g_arrangeLists.size()) + columns - 1) / columns) * rowHeight;
+    const int viewport = std::max(1, static_cast<int>(client.bottom) - top);
+    SCROLLINFO scroll{sizeof(scroll), SIF_RANGE | SIF_PAGE | SIF_POS};
+    scroll.nMax = std::max(0, total - top - 1); scroll.nPage = viewport;
+    g_arrangeScroll = std::clamp(g_arrangeScroll, 0, std::max(0, total - top - viewport));
+    scroll.nPos = g_arrangeScroll; SetScrollInfo(g_arrangeWnd, SB_VERT, &scroll, TRUE);
+    for (size_t i = 0; i < g_arrangeLists.size(); ++i) {
+        const int x = m.margin + (static_cast<int>(i) % columns) * (width + m.margin);
+        const int y = top + (static_cast<int>(i) / columns) * rowHeight - g_arrangeScroll;
+        if (i < g_arrangeLabels.size()) SetWindowPos(g_arrangeLabels[i], nullptr, x, y, width, m.labelHeight, SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(g_arrangeLists[i], nullptr, x, y + m.labelHeight, width, rowHeight - m.labelHeight - m.margin, SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowRgn(g_arrangeLabels[i], CreateRectRgn(0, std::clamp(top - y, 0, m.labelHeight), width, m.labelHeight), TRUE);
+        const int listY = y + m.labelHeight;
+        const int listHeight = rowHeight - m.labelHeight - m.margin;
+        SetWindowRgn(g_arrangeLists[i], CreateRectRgn(0, std::clamp(top - listY, 0, listHeight), width, listHeight), TRUE);
+        ListView_SetColumnWidth(g_arrangeLists[i], 0, width - m.margin * 2);
+    }
+}
+
+void RefreshArrangeDpi() {
+    if (!g_arrangeWnd) return;
+    const UINT dpi = GetDpiForWindow(g_arrangeWnd);
+    HFONT previous = g_arrangeFont;
+    NONCLIENTMETRICSW metrics{sizeof(metrics)};
+    if (SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS,sizeof(metrics),&metrics,0,dpi)) {
+        if (HFONT font=CreateFontIndirectW(&metrics.lfMessageFont)) {
+            g_arrangeFont=font;
+            EnumChildWindows(g_arrangeWnd,[](HWND child,LPARAM font)->BOOL {
+                SendMessageW(child,WM_SETFONT,font,TRUE);return TRUE;
+            },reinterpret_cast<LPARAM>(font));
+            if (previous) DeleteObject(previous);
+        }
+    }
+    auto images=ImageList_Create(ScaleForDpi(16,dpi),ScaleForDpi(16,dpi),ILC_COLOR32|ILC_MASK,8,8);
+    if (images) {
+        for (HWND list:g_arrangeLists) ListView_SetImageList(list,images,LVSIL_SMALL);
+        if (g_arrangeImages) ImageList_Destroy(g_arrangeImages);
+        g_arrangeImages=images;
+        PopulateArrangeLists();
+    }
+}
+
 void ShowArrangeWindow() {
     if (g_arrangeWnd && IsWindow(g_arrangeWnd)) {
         ShowWindow(g_arrangeWnd, SW_RESTORE);
@@ -4721,7 +5774,7 @@ void ShowArrangeWindow() {
     const int lists = static_cast<int>(trays.size());
 
     // Made where Windows puts it, then sized for that display.
-    constexpr DWORD kStyle = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU;
+    constexpr DWORD kStyle = WS_OVERLAPPEDWINDOW | WS_VSCROLL | WS_CLIPCHILDREN;
     constexpr DWORD kExStyle = WS_EX_TOOLWINDOW;
     g_arrangeWnd = CreateWindowExW(kExStyle, kArrangeClassName,
                                    L"Split Tray - arrange icons", kStyle, CW_USEDEFAULT,
@@ -4735,8 +5788,14 @@ void ShowArrangeWindow() {
     const ArrangeMetrics m = ArrangeMetricsFor(dpi);
     RECT frame = {0, 0, m.margin + lists * (m.listWidth + m.margin), m.height};
     AdjustWindowRectExForDpi(&frame, kStyle, FALSE, kExStyle, dpi);
-    SetWindowPos(g_arrangeWnd, nullptr, 0, 0, frame.right - frame.left,
-                 frame.bottom - frame.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    MONITORINFO monitor{sizeof(monitor)};
+    GetMonitorInfoW(MonitorFromWindow(g_arrangeWnd, MONITOR_DEFAULTTONEAREST), &monitor);
+    const int width = std::min<int>(frame.right - frame.left, monitor.rcWork.right - monitor.rcWork.left);
+    const int height = std::min<int>(frame.bottom - frame.top, monitor.rcWork.bottom - monitor.rcWork.top);
+    SetWindowPos(g_arrangeWnd, nullptr, monitor.rcWork.left, monitor.rcWork.top, width,
+                 height, SWP_NOZORDER | SWP_NOACTIVATE);
+    g_arrangeScroll = 0;
+    g_arrangeLabels.clear();
 
     RECT client = {};
     GetClientRect(g_arrangeWnd, &client);
@@ -4757,25 +5816,29 @@ void ShowArrangeWindow() {
             title += label;
         }
         const int x = m.margin + i * (m.listWidth + m.margin);
-        CreateWindowExW(0, L"STATIC", title.c_str(),
+        g_arrangeLabels.push_back(CreateWindowExW(0, L"STATIC", title.c_str(),
                         WS_CHILD | WS_VISIBLE | SS_ENDELLIPSIS, x, m.margin,
                         m.listWidth, m.labelHeight, g_arrangeWnd, nullptr, nullptr,
-                        nullptr);
+                        nullptr));
         g_arrangeLists[static_cast<size_t>(i)] =
             CreateArrangeList(g_arrangeWnd, kArrangeListIdBase + i, x, listTop,
                               m.listWidth, listHeight, m.columnWidth);
+        SetWindowTextW(g_arrangeLists[static_cast<size_t>(i)], title.c_str());
     }
 
-    CreateWindowExW(0, L"STATIC",
-                    L"Drag an icon to another tray, or select it and press that "
-                    L"tray's number - hold the key to work down the list. H puts "
-                    L"an icon in its tray's overflow or brings it back. "
-                    L"Double-click or Enter moves it between the primary tray "
-                    L"and tray 2. Every choice is remembered.",
-                    WS_CHILD | WS_VISIBLE, m.margin,
-                    listTop + listHeight + ScaleForDpi(6, dpi),
-                    client.right - m.margin * 2, m.hintHeight, g_arrangeWnd, nullptr,
-                    nullptr, nullptr);
+
+    g_arrangeSearch = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+        m.margin, 8, std::max(100, static_cast<int>(client.right) - 2*m.margin), 24, g_arrangeWnd,
+        reinterpret_cast<HMENU>(kArrangeSearch), nullptr, nullptr);
+    SendMessageW(g_arrangeSearch, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"Search icons or executable names"));
+    const std::pair<int, PCWSTR> actions[] = {{kArrangeUp,L"Move up"},{kArrangeDown,L"Move down"},
+        {kArrangeFollow,L"Follow rules"},{kArrangeStatus,L"Tray status"}};
+    for (size_t i=0; i<std::size(actions); ++i) CreateWindowExW(0,L"BUTTON",actions[i].second,
+        WS_CHILD|WS_VISIBLE|WS_TABSTOP, m.margin+static_cast<int>(i)*104,36,100,24,g_arrangeWnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(actions[i].first)),nullptr,nullptr);
+    CreateWindowExW(0,L"STATIC",L"Ctrl+Up/Down: order (clear search). H: hide. Ctrl+R: follow rules. 1-9: move tray.",
+        WS_CHILD|WS_VISIBLE,m.margin,62,std::max(100,static_cast<int>(client.right)-2*m.margin),18,g_arrangeWnd,reinterpret_cast<HMENU>(905),nullptr,nullptr);
+    LayoutArrangeChildren();
 
     // Same font the rest of the shell uses, at this display's size; the
     // default is the 1990s one.
@@ -4805,6 +5868,30 @@ void ShowArrangeWindow() {
     ShowWindow(g_arrangeWnd, SW_SHOW);
     SetForegroundWindow(g_arrangeWnd);
     Wh_Log(L"arrange window opened with %d tray(s)", lists);
+}
+
+
+std::wstring TrayStatusText() {
+    std::wstring text = L"Global shortcuts are off by default; enable in Settings: Ctrl+Shift+F11 opens Arrange; Ctrl+Shift+F12 cycles floating trays.\n"
+        L"Ctrl+Shift+F10 on an icon opens Split Tray's menu.\n\n";
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        for (const auto& tray : g_trays) {
+            text += TrayLabelLocked(tray.number) + L": ";
+            if (!tray.available) text += L"unavailable; icons wait in the primary tray";
+            else if (TrayEmbeddedLocked(tray)) text += L"in taskbar";
+            else if (!tray.forDisplay) text += L"floating extra tray";
+            else if (!g_settings.embedInTaskbar) text += L"floating; embedding switched off";
+            else text += L"floating; taskbar attachment unavailable or still starting";
+            text += L"\n";
+        }
+    }
+    return text;
+}
+
+void ShowTrayStatus() {
+    const auto text = TrayStatusText();
+    MessageBoxW(g_arrangeWnd, text.c_str(), L"Split Tray status", MB_OK | MB_ICONINFORMATION);
 }
 
 void CloseArrangeWindow() {
@@ -4837,7 +5924,9 @@ void RefreshArrangeWindow(bool repopulate) {
 
 void NotifyTrayWindow(UINT message) {
     HWND hWnd = g_trayWnd.load();
-    if (hWnd) {
+    if (message == WM_ST_REFRESH) {
+        g_workerRefresh.Post(hWnd, message);
+    } else if (hWnd) {
         PostMessageW(hWnd, message, 0, 0);
     }
 }
@@ -5658,7 +6747,31 @@ void ReplayRoutingChanges() {
 // payload into the shell as an add or retracting it as a delete, not waiting for
 // the application to touch its icon again. Between two of Split Tray's trays
 // nothing goes to the shell at all.
-void MoveIconToTray(std::wstring_view key, Destination destination) {
+void FollowRulesForIcon(std::wstring_view key) {
+    if (key.empty()) return;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        LoadPlacements();
+        g_placements.erase(std::wstring(key));
+        SavePlacements();
+    }
+    ApplySettingsToTrackedIcons();
+    RequestRedrawOfAllTrays();
+}
+
+// Clearing a hidden flag alone cannot beat the visible-count/width budget.
+// Explicit Show and overflow-to-bar drops promote only the chosen key.
+void ShowIconOnTray(std::wstring_view key) {
+    if (key.empty()) return;
+    SetIconHidden(key,false);
+    auto order=IconOrderSnapshot();
+    std::erase(order,std::wstring(key));
+    order.insert(order.begin(),std::wstring(key));
+    SetIconOrder(std::move(order));
+    RequestRedrawOfAllTrays();
+}
+
+void MoveIconToTray(std::wstring_view key, Destination destination, bool inOverflow) {
     bool settle = false;
     bool found = false;
     std::wstring label;
@@ -5690,10 +6803,148 @@ void MoveIconToTray(std::wstring_view key, Destination destination) {
         WakeReplayDelivery();
     }
 
+    // Ordinary tray transfers retain the saved order, including round trips.
+    SetIconHidden(key,inOverflow && destination.tray>1);
+
     Wh_Log(L"moved icon '%s' to %s%s", std::wstring(key).c_str(), label.c_str(),
            found ? L"" : L" (not currently present)");
 
     RequestRedrawOfAllTrays();
+}
+
+// Cross-tray routing never treats arbitrary desktop space as a tray.
+void ProcessDragHover() {
+#ifndef SPLITTRAY_NO_XAML
+    SplitTrayXaml::UpdateInsertionPreviewLifetime();
+#endif
+    NativePress request;
+    { std::lock_guard<std::mutex> lock(g_dropMutex); request=g_dragHoverRequest; }
+    const uint64_t active=g_dragFeedbackSerial.load();
+    if (!active) {
+        if (g_dragFeedbackSource.load()>1 && GetCurrentThreadId()==g_dragFeedbackThread.load()) g_setDragCursor(LoadCursorW(nullptr,IDC_ARROW));
+        return;
+    }
+    if (active!=request.serial) return;
+    const int target=g_dropTargetAt(request.point);
+    const bool allowed=target>0 && (request.source!=1 || target!=1);
+    const int before=g_dragFeedbackTarget.exchange(target);
+    g_dragFeedbackAllowed.store(allowed);
+    if (before!=target) {
+        CURSORINFO cursor{sizeof(cursor)}; GetCursorInfo(&cursor);
+        Wh_Log(L"[drag] feedback target tray %d (%s); cursor=%p arrow=%p input=%lu hover=%lu",
+            target,allowed ? L"allowed" : L"native/none",cursor.hCursor,LoadCursorW(nullptr,IDC_ARROW),
+            request.thread,GetCurrentThreadId());
+    }
+    if (request.source>1 && GetCurrentThreadId()==request.thread)
+        g_setDragCursor(DragFeedbackCursor(g_dragRequestedCursor.load(),request.thread));
+}
+
+int TrayDropTargetAt(POINT point) {
+    if (int overflow=g_overflowDropTargetAt(point)) return overflow;
+#ifndef SPLITTRAY_NO_XAML
+    if (int embedded = SplitTrayXaml::EmbeddedDropTargetAt(point)) return embedded;
+#endif
+    std::map<int,HWND> windows;
+    { std::lock_guard<std::mutex> lock(g_mutex); windows = g_dropWindows; }
+    for (auto [number,window] : windows) {
+        RECT rect{};
+        if (g_dropWindowVisible(window) && GetWindowRect(window,&rect) && PtInRect(&rect,point)) return number;
+    }
+    HWND shell = g_shellTrayWnd.load();
+    HWND notify = shell ? FindWindowExW(shell,nullptr,L"TrayNotifyWnd",nullptr) : nullptr;
+    RECT rect{};
+    return notify && g_dropWindowVisible(notify) && GetWindowRect(notify,&rect) && PtInRect(&rect,point) ? 1 : 0;
+}
+
+int KnownTrayDragTargetAt(POINT point) {
+    const uint64_t serial=g_dragFeedbackSerial.load();
+    const int source=g_dragFeedbackSource.load();
+    if (!serial || g_unloading.load()) return 0;
+    const int target=g_dropTargetAt(point);
+    if (target<=0 || (source==1 && target==1)) return 0;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (target>1) { const auto tray=FindTrayLocked(target); if (!tray || !tray->available) return 0; }
+    for (const auto list : {&g_icons,&g_primaryOnly}) for (const auto& icon : *list) {
+        if (icon.serial==serial && (source==1 ? (icon.forwardedToShell && !icon.shellHidden) : icon.shownTray==source)) return target;
+    }
+    return 0;
+}
+
+bool DropIconAt(uint64_t serial,int source,POINT point,bool fromOverflow) {
+    if (g_unloading.load()) return false;
+    const int target = g_dropTargetAt(point);
+    const bool inOverflow=target>1 && g_overflowDropTargetAt(point)==target;
+    if (target<=0 || (target==source && !fromOverflow && !inOverflow)) return false;
+    if (target==source && fromOverflow && inOverflow) return false;
+    std::wstring key;
+    { std::lock_guard<std::mutex> lock(g_mutex);
+      if (target > 1) { const auto tray = FindTrayLocked(target); if (!tray || !tray->available) return false; }
+      for (const auto list : {&g_icons,&g_primaryOnly}) for (const auto& icon : *list) {
+          if (icon.serial != serial) continue;
+          if (source == 1 ? (!icon.forwardedToShell || icon.shellHidden) : icon.shownTray != source) return false;
+          key = StableKeyOf(icon);
+      }
+    }
+    if (key.empty()) return false;
+    Wh_Log(L"[drag] icon %llu: tray %d -> tray %d",static_cast<unsigned long long>(serial),source,target);
+    if (target==source) {
+        if (inOverflow) { SetIconHidden(key,true); RequestRedrawOfAllTrays(); }
+        else ShowIconOnTray(key);
+    } else {
+        MoveIconToTray(key,Destination::Tray(target),inOverflow);
+        if (fromOverflow && target>1 && !inOverflow) ShowIconOnTray(key);
+    }
+    return true;
+}
+
+void ProcessTrayDrops() {
+    std::vector<TrayDrop> drops;
+    { std::lock_guard<std::mutex> lock(g_dropMutex); drops.swap(g_pendingDrops); }
+    for (const auto& drop : drops) {
+        if (g_unloading.load() || GetTickCount64()-drop.tick >= 30000) continue;
+        // Windows can still be returning from a native drag loop when the
+        // button goes up. Do not delete its source while it owns capture.
+        if (drop.source == 1 && g_dragCapture()) {
+            { std::lock_guard<std::mutex> lock(g_dropMutex);
+              if (g_pendingDrops.size()<16) g_pendingDrops.push_back(drop); }
+            if (HWND worker=g_trayWnd.load()) PostMessageW(worker,WM_ST_DROP_RETRY,0,0);
+        } else DropIconAt(drop.serial,drop.source,drop.point,drop.fromOverflow);
+    }
+}
+
+struct PrimaryIconLocation { uint64_t serial; NOTIFYICONIDENTIFIER id; };
+using IconRectLookup = HRESULT(WINAPI*)(const NOTIFYICONIDENTIFIER*,RECT*);
+IconRectLookup g_nativeIconRect = Shell_NotifyIconGetRect;
+
+uint64_t PrimaryIconAt(POINT point) {
+    std::vector<PrimaryIconLocation> candidates;
+    { std::lock_guard<std::mutex> lock(g_mutex);
+      for (const auto list : {&g_icons,&g_primaryOnly}) for (const auto& icon : *list) {
+          if (!icon.forwardedToShell || icon.shellHidden || (icon.state & NIS_HIDDEN)) continue;
+          NOTIFYICONIDENTIFIER id{sizeof(id),icon.ownerWnd,icon.uID,{}};
+          if (UsableGuid(icon.hasGuid,icon.guid)) id.guidItem=icon.guid;
+          candidates.push_back({icon.serial,id});
+      }
+    }
+    uint64_t match = 0;
+    for (const auto& candidate : candidates) {
+        RECT rect{};
+        if (SUCCEEDED(g_nativeIconRect(&candidate.id,&rect)) && PtInRect(&rect,point)) {
+            // Some Windows versions report one chevron rect for several hidden
+            // icons. An ambiguous hit must never move an arbitrary application.
+            if (match && match != candidate.serial) return 0;
+            match = candidate.serial;
+        }
+    }
+    return match;
+}
+
+void ObserveNativeIconPress(POINT point) {
+    if (g_unloading.load() || !(g_dragKeyState(PrimaryButtonKey())&0x8000)) return;
+    uint64_t serial = PrimaryIconAt(point);
+    if (!serial) return;
+    QueueGesturePress(serial,1,point);
+    Wh_Log(L"[drag] native press identified icon %llu",static_cast<unsigned long long>(serial));
 }
 
 // Re-evaluates every tracked icon against freshly loaded settings, moving it
@@ -6105,13 +7356,20 @@ bool SecondaryIconScreenRect(const IconRectQuery& query, RECT* out) {
         embedded = tray && TrayEmbeddedLocked(*tray);
         auto layout = g_floatingLayouts.find(icon.shownTray);
         if (!embedded && layout != g_floatingLayouts.end()) {
-            const auto inTray = IconsInTrayLocked(icon.shownTray);
-            const auto at = std::find(inTray.begin(), inTray.end(),
-                                      static_cast<size_t>(index));
-            found = at != inTray.end() &&
-                    CellScreenRect(layout->second,
-                                   static_cast<int>(at - inTray.begin()),
-                                   static_cast<int>(inTray.size()), out);
+            auto inTray = IconsInTrayLocked(icon.shownTray);
+            const auto order = IconOrderSnapshot();
+            std::stable_sort(inTray.begin(), inTray.end(), [&order](size_t a, size_t b) {
+                return OrderPositionIn(order, StableKeyOf(g_icons[a])) < OrderPositionIn(order, StableKeyOf(g_icons[b]));
+            });
+            std::vector<std::wstring> keys;
+            for (size_t i : inTray) keys.push_back(StableKeyOf(g_icons[i]));
+            auto split = SplitBarAndOverflow(keys, [](auto const& key) { return IsIconHidden(key); }, g_settings.maxVisibleIcons);
+            const bool overflow = !split.overflow.empty();
+            int cell = overflow ? 0 : -1;
+            for (size_t i = 0; i < split.shown.size(); ++i) {
+                if (inTray[split.shown[i]] == static_cast<size_t>(index)) cell = static_cast<int>(i) + (overflow ? 1 : 0);
+            }
+            found = CellScreenRect(layout->second, cell, static_cast<int>(split.shown.size()) + (overflow ? 1 : 0), out);
         }
     }
 #ifndef SPLITTRAY_NO_XAML
@@ -6153,6 +7411,17 @@ LRESULT CALLBACK ShellTrayWndSubclassProc(HWND hWnd,
                                           DWORD_PTR) {
     const SubclassCall call;
 
+    if (msg == GetDragHoverMessage()) {
+        g_dragHoverWake.Consume(hWnd);
+        ProcessDragHover();
+        return 0;
+    }
+
+    if (msg == GetTrayDropMessage()) {
+        ProcessTrayDrops();
+        return 0;
+    }
+
     if (msg == GetReplayMessage()) {
         // Only a wake-up: what to hand Explorer is read from the icon store,
         // and wParam and lParam mean nothing (DECISIONS 58, 66). While the
@@ -6175,6 +7444,7 @@ LRESULT CALLBACK ShellTrayWndSubclassProc(HWND hWnd,
 
 #ifndef SPLITTRAY_NO_XAML
     if (msg == GetXamlRefreshMessage()) {
+        g_embeddedRefresh.Consume(hWnd);
         if (!g_unloading.load()) {
             SplitTrayXaml::OnIconStoreChanged();
         }
@@ -6260,10 +7530,9 @@ LRESULT CALLBACK ShellTrayWndSubclassProc(HWND hWnd,
     if (needsRepaint) {
         NotifyTrayWindow(WM_ST_REFRESH);
 #ifndef SPLITTRAY_NO_XAML
-        // This handler already runs on the taskbar's UI thread, which is the
-        // XAML thread, so the embedded tray is updated here rather than
-        // marshalled across.
-        SplitTrayXaml::OnIconStoreChanged();
+        // Defer XAML until the notification has returned. Many icons can
+        // change in a burst; one pending wake renders their latest state.
+        SplitTrayXaml::RequestEmbeddedRefresh();
 #endif
     } else if (n.message == NIM_ADD || n.message == NIM_DELETE ||
                (g_arrangeOpen.load() && (n.flags & NIF_TIP))) {
@@ -6462,6 +7731,7 @@ void EnsureShellTrayWindowSubclassed() {
     HWND watched = g_shellTrayWnd.load();
     if (watched && !(IsWindow(watched) && FindShellTrayWindow() == watched)) {
         Wh_Log(L"Shell_TrayWnd %p is gone; looking for the new one", watched);
+        g_embeddedRefresh.Consume(watched);
         g_shellTrayWnd.store(nullptr);
         watched = nullptr;
     }
@@ -6779,6 +8049,34 @@ IconView_IconView_t g_IconView_IconView_Original = nullptr;
 // With the rest of the XAML, below. The test binaries, which leave that out,
 // have a stand-in that is never installed.
 void* WINAPI IconView_IconView_Hook(void* pThis);
+void CaptureNativeDragVisual(const void* visual);
+void CorrectNativeDragVisual();
+using NotifyIconPressed_t = void(WINAPI*)(void*,const void*);
+NotifyIconPressed_t g_NotifyIconPressed_Original = nullptr;
+void WINAPI NotifyIconPressed_Hook(void* object,const void* args) {
+    if (!g_NotifyIconPressed_Original) return;
+    POINT point{};
+    try {
+        if (GetCursorPos(&point)) SplitTray::ObserveNativeIconPress(point);
+    } catch (...) { Wh_Log(L"[drag] native press observation failed; Windows handles this press"); }
+    g_NotifyIconPressed_Original(object,args);
+}
+
+// Opaque projected-object arguments preserve the native MS ABI and ownership.
+using NativeDragBegin_t=void(WINAPI*)(void*,const void*,const void*);
+using NativeDragMove_t=void(WINAPI*)(void*,const void*,const void*);
+NativeDragBegin_t g_NativeDragBegin_Original=nullptr;
+NativeDragMove_t g_NativeDragMove_Original=nullptr;
+void WINAPI NativeDragBegin_Hook(void* manager,const void* source,const void* visual) {
+    if (!g_NativeDragBegin_Original) return;
+    try { CaptureNativeDragVisual(visual); } catch (...) { Wh_Log(L"[drag] native visual capture failed"); }
+    g_NativeDragBegin_Original(manager,source,visual);
+}
+void WINAPI NativeDragMove_Hook(void* manager,const void* source,const void* args) {
+    if (!g_NativeDragMove_Original) return;
+    g_NativeDragMove_Original(manager,source,args);
+    try { CorrectNativeDragVisual(); } catch (...) { Wh_Log(L"[drag] native visual correction failed"); }
+}
 
 // --- state ------------------------------------------------------------------
 
@@ -6846,8 +8144,12 @@ bool HookSystemTraySymbols(HMODULE module) {
     // Verified present in this exact binary by tools/check-symbols.py;
     // Taskbar.View.dll does not carry it (DECISIONS.md 26).
     WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {
+        {{LR"(public: void __cdecl winrt::SystemTray::implementation::DragDropManager::BeginDrag(struct winrt::SystemTray::implementation::NotifyIconView const &,struct winrt::SystemTray::NotifyIconDragVisual))"}, &g_NativeDragBegin_Original, NativeDragBegin_Hook, true},
+        {{LR"(public: void __cdecl winrt::SystemTray::implementation::DragDropManager::DragMove(struct winrt::SystemTray::implementation::NotifyIconView const &,struct winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const &))"}, &g_NativeDragMove_Original, NativeDragMove_Hook, true},
         {{LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
          &g_IconView_IconView_Original, IconView_IconView_Hook},
+        {{LR"(private: virtual void __cdecl winrt::SystemTray::implementation::NotifyIconView::OnPointerPressed(struct winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const &))"},
+         &g_NotifyIconPressed_Original, NotifyIconPressed_Hook, true},
     };
 
     if (!WindhawkUtils::HookSymbols(module, systemTrayDllHooks,
@@ -6857,8 +8159,11 @@ bool HookSystemTraySymbols(HMODULE module) {
         return false;
     }
 
+    if (!g_NativeDragBegin_Original) Wh_Log(L"[drag] BeginDrag unavailable; native image correction disabled");
+    if (!g_NativeDragMove_Original) Wh_Log(L"[drag] DragMove unavailable; native image correction disabled");
+    if (!g_NotifyIconPressed_Original) Wh_Log(L"[drag] OnPointerPressed unavailable; primary-source dragging disabled");
     g_systemTraySymbolsHooked.store(true);
-    Wh_Log(L"[xaml] SystemTray.dll IconView constructor hooked");
+    Wh_Log(L"[xaml] SystemTray.dll IconView constructor hooked; optional drag availability logged above");
     return true;
 }
 
@@ -6885,7 +8190,10 @@ bool HookSystemTraySymbols(HMODULE module) {
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.Composition.h>
+#include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Automation.Peers.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
@@ -6991,113 +8299,8 @@ void DumpSubtree(wux::DependencyObject const& obj, int depth, int maxDepth) {
 // result is premultiplied, which is what WriteableBitmap expects.
 // ---------------------------------------------------------------------------
 
-struct IconPixels {
-    int width = 0;
-    int height = 0;
-    std::vector<BYTE> bgra;  // top-down, premultiplied
-};
-
-bool ReadIconPixels(HICON icon, IconPixels* out) {
-    if (!icon || !out) {
-        return false;
-    }
-
-    ICONINFO info = {};
-    if (!GetIconInfo(icon, &info)) {
-        return false;
-    }
-    // GetIconInfo hands back two bitmaps that belong to the caller.
-    struct BitmapGuard {
-        HBITMAP colour;
-        HBITMAP mask;
-        ~BitmapGuard() {
-            if (colour) DeleteObject(colour);
-            if (mask) DeleteObject(mask);
-        }
-    } guard{info.hbmColor, info.hbmMask};
-
-    BITMAP bitmap = {};
-    // A monochrome icon has no colour bitmap; its mask holds the image stacked
-    // above the mask, which is double height.
-    const HBITMAP source = info.hbmColor ? info.hbmColor : info.hbmMask;
-    if (!source || !GetObjectW(source, sizeof(bitmap), &bitmap)) {
-        return false;
-    }
-
-    const int width = bitmap.bmWidth;
-    const int height = info.hbmColor ? bitmap.bmHeight : bitmap.bmHeight / 2;
-    if (width <= 0 || height <= 0 || width > 512 || height > 512) {
-        return false;
-    }
-
-    HDC screenDc = GetDC(nullptr);
-    if (!screenDc) {
-        return false;
-    }
-    struct DcGuard {
-        HDC dc;
-        ~DcGuard() {
-            if (dc) ReleaseDC(nullptr, dc);
-        }
-    } dcGuard{screenDc};
-
-    BITMAPINFO header = {};
-    header.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    header.bmiHeader.biWidth = width;
-    header.bmiHeader.biHeight = -height;  // negative: top-down
-    header.bmiHeader.biPlanes = 1;
-    header.bmiHeader.biBitCount = 32;
-    header.bmiHeader.biCompression = BI_RGB;
-
-    std::vector<BYTE> pixels(static_cast<size_t>(width) * height * 4);
-    if (!GetDIBits(screenDc, source, 0, static_cast<UINT>(height), pixels.data(),
-                   &header, DIB_RGB_COLORS)) {
-        return false;
-    }
-
-    // Older icons come back with a zero alpha channel throughout; their
-    // transparency has to be taken from the mask instead.
-    bool hasAlpha = false;
-    for (size_t i = 3; i < pixels.size(); i += 4) {
-        if (pixels[i] != 0) {
-            hasAlpha = true;
-            break;
-        }
-    }
-
-    if (!hasAlpha && info.hbmMask) {
-        BITMAPINFO maskHeader = header;
-        std::vector<BYTE> maskPixels(static_cast<size_t>(width) * height * 4);
-        if (GetDIBits(screenDc, info.hbmMask, 0, static_cast<UINT>(height),
-                      maskPixels.data(), &maskHeader, DIB_RGB_COLORS)) {
-            for (size_t i = 0; i < pixels.size(); i += 4) {
-                // In the mask, white (non-zero) means transparent.
-                pixels[i + 3] = maskPixels[i] ? 0 : 255;
-            }
-        } else {
-            for (size_t i = 3; i < pixels.size(); i += 4) {
-                pixels[i] = 255;
-            }
-        }
-    }
-
-    // WriteableBitmap treats its buffer as premultiplied BGRA; handing it
-    // straight alpha leaves a dark fringe on every anti-aliased edge.
-    for (size_t i = 0; i < pixels.size(); i += 4) {
-        const unsigned alpha = pixels[i + 3];
-        if (alpha == 255) {
-            continue;
-        }
-        pixels[i + 0] = static_cast<BYTE>(pixels[i + 0] * alpha / 255);
-        pixels[i + 1] = static_cast<BYTE>(pixels[i + 1] * alpha / 255);
-        pixels[i + 2] = static_cast<BYTE>(pixels[i + 2] * alpha / 255);
-    }
-
-    out->width = width;
-    out->height = height;
-    out->bgra = std::move(pixels);
-    return true;
-}
+using SplitTray::IconPixels;
+using SplitTray::ReadIconPixels;
 
 // Builds a XAML image source from an icon. Must be called on the XAML thread.
 wuxmi::WriteableBitmap IconToBitmap(HICON icon) {
@@ -7298,6 +8501,37 @@ wux::XamlRoot XamlRootOfTaskbar(HWND taskbarWnd) {
     void* taskbarHostSharedPtr[2] = {};
     getTaskbarHost(site, taskbarHostSharedPtr);
     return XamlRootFromTaskbarHost(taskbarHostSharedPtr);
+}
+
+// Native SystemTray uses a manual drag visual, not XAML DataPackage drag/drop.
+// All access stays on the native taskbar input thread; no private object offsets.
+winrt::weak_ref<wuxc::Control> g_nativeDragVisual;
+DWORD g_nativeDragThread=0;
+bool (*g_nativeDragGoToState)(wuxc::Control const&)=+[](wuxc::Control const& control) {
+    return wux::VisualStateManager::GoToState(control,L"Normal",false);
+};
+void CaptureNativeDragVisual(const void* visual) {
+    g_nativeDragVisual={}; g_nativeDragThread=GetCurrentThreadId();
+    if (!visual || g_unloading.load()) return;
+    // The by-value projected WinRT object is passed indirectly in the MS x64 ABI.
+    const auto& object=*static_cast<wf::IInspectable const*>(visual);
+    if (object) if (auto control=object.try_as<wuxc::Control>()) {
+        g_nativeDragVisual=winrt::make_weak(control);
+        Wh_Log(L"[drag] captured native drag visual");
+    }
+}
+void CorrectNativeDragVisual() {
+    if (g_unloading.load() || g_nativeDragThread!=GetCurrentThreadId() ||
+        SplitTray::g_dragFeedbackSource.load()!=1) return;
+    POINT point{};
+    if (!GetCursorPos(&point) || SplitTray::KnownTrayDragTargetAt(point)<=1) return;
+    if (auto control=g_nativeDragVisual.get()) {
+        if (g_nativeDragGoToState(control)) {
+            static uint64_t last=0;
+            const auto serial=SplitTray::g_dragFeedbackSerial.load();
+            if (last!=serial) {last=serial;Wh_Log(L"[drag] native CantDropHere visual corrected over Split Tray");}
+        }
+    }
 }
 
 // A display's taskbar window, if it has one: Windows can be set to show the
@@ -7703,50 +8937,11 @@ TrayRow FindTrayRow(wux::FrameworkElement const& anchor) {
 
 // The saved order, most-left first. Kept in the mod's own storage rather than in
 // its settings: it is state the mod maintains, not something to hand-edit.
-std::vector<std::wstring> g_iconOrder;
-bool g_iconOrderLoaded = false;
-
-void LoadIconOrder() {
-    if (g_iconOrderLoaded) {
-        return;
-    }
-    g_iconOrderLoaded = true;
-    g_iconOrder.clear();
-
-    const std::wstring stored = SplitTray::ReadStoredString(SplitTray::kIconOrderValue);
-    std::wstring_view remaining(stored);
-    while (!remaining.empty()) {
-        const size_t split = remaining.find(L'\n');
-        std::wstring_view entry = remaining.substr(0, split);
-        if (!entry.empty()) {
-            g_iconOrder.emplace_back(entry);
-        }
-        if (split == std::wstring_view::npos) {
-            break;
-        }
-        remaining.remove_prefix(split + 1);
-    }
-}
-
-void SaveIconOrder() {
-    std::wstring joined;
-    for (const auto& key : g_iconOrder) {
-        if (!joined.empty()) {
-            joined += L'\n';
-        }
-        joined += key;
-    }
-    SplitTray::WriteStoredString(SplitTray::kIconOrderValue, joined);
-}
-
-size_t OrderPositionOf(std::wstring_view key) {
-    for (size_t i = 0; i < g_iconOrder.size(); i++) {
-        if (g_iconOrder[i] == key) {
-            return i;
-        }
-    }
-    return g_iconOrder.size();  // unknown icons go to the end, in store order
-}
+using SplitTray::g_iconOrder;
+using SplitTray::g_iconOrderLoaded;
+using SplitTray::LoadIconOrder;
+using SplitTray::SaveIconOrder;
+using SplitTray::OrderPositionOf;
 
 // ---------------------------------------------------------------------------
 // Dragging
@@ -7756,30 +8951,102 @@ uint64_t SerialOfCell(wux::FrameworkElement const& cell);
 void CommitVisualOrder(wuxc::StackPanel const& panel);
 
 struct DragState {
+    bool fromOverflow = false;
     bool pointerDown = false;
     bool dragging = false;
+    bool observed = false;
+    POINT screenStart{};
     // Set when a drag ended some way other than a clean release - capture taken
     // away, say. Without it the release that follows looks like a click and
     // activates whatever icon the pointer was over, which is the worst possible
     // outcome of a failed drag.
     bool suppressClick = false;
-    // The pointer has been dragged clear of the tray row, which means "move this
-    // icon to the other tray" rather than "reorder it".
+    // The pointer has left the row; stop reordering while a destination is chosen.
     bool outside = false;
     double startX = 0;
+    double startY = 10;
     // The row the press was in, and its cell size: a drag belongs to one tray.
     winrt::weak_ref<wuxc::StackPanel> panel;
     double cellWidthDip = 32;
     double cellHeightDip = 38;
+    int insertionSlot=-1;
+    int pendingTarget=-1;
+    winrt::weak_ref<wuxc::Border> sourceCell;
+    bool gestureCancelled=false;
+    bool insertionCancelled=false;
+    ULONGLONG pressTick=0;
     // Diagnostic only: keeps the move log to one line per press.
     bool loggedMove = false;
 };
 
 DragState g_drag;
+// Only this strong composition reference requires UI-thread teardown.
+[[clang::no_destroy]] winrt::Windows::UI::Composition::SpriteVisual g_insertionLine{nullptr};
 
 // A refresh that arrived while the pointer was down, to run once it is released.
 // See RefreshEmbeddedTray for why it waits.
 bool g_refreshPending = false;
+
+
+// A composition child draws above our row without adding a XAML child,
+// moving cells, taking input, or interrupting pointer capture.
+void ClearInsertionLine() {
+    auto line=std::exchange(g_insertionLine,nullptr);
+    g_drag.insertionSlot=-1;
+    if (!line) return;
+    try {
+        line.IsVisible(false);
+        if (auto panel=g_drag.panel.get()) winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(panel,nullptr);
+    }
+    catch (...) { Wh_Log(L"[drag] insertion-line row disconnected during cleanup"); }
+}
+void ClearDragGhost() {
+    if (auto source=g_drag.sourceCell.get()) source.Opacity(1.0);
+    g_drag.sourceCell=nullptr;
+}
+void UpdateInsertionPreviewLifetime() {
+    const bool released=!(SplitTray::g_dragKeyState(SplitTray::PrimaryButtonKey())&0x8000);
+    const bool cancelled=(SplitTray::g_dragKeyState(VK_ESCAPE)&0x8000) ||
+        (SplitTray::g_dragKeyState(SplitTray::SecondaryButtonKey())&0x8000) ||
+        (g_drag.pressTick && GetTickCount64()-g_drag.pressTick>=30000);
+    if (released || cancelled) {
+        // Popup cells have no row capture. If release arrived outside the
+        // popup, its observer must end the press and unblock deferred refreshes.
+        // The independent value-only drop queue retains the valid transfer.
+        if (g_drag.fromOverflow && g_drag.pointerDown) {
+            g_drag.pointerDown=false;
+            g_drag.observed=false;
+            g_drag.suppressClick=true;
+            if (g_refreshPending) RequestEmbeddedRefresh();
+        }
+        if (cancelled) { g_drag.gestureCancelled=true; g_drag.pendingTarget=-1; }
+        if (g_drag.dragging || g_insertionLine) g_drag.insertionCancelled=true;
+        ClearInsertionLine(); ClearDragGhost();
+    } else if (auto source=g_drag.sourceCell.get()) {
+        if (SplitTray::g_dragFeedbackSource.load()>1 && SplitTray::g_dragFeedbackSerial.load()==SerialOfCell(source) && std::abs(source.Opacity()-0.4)>0.01)
+            source.Opacity(0.4);
+    }
+}
+void ShowInsertionLine(wuxc::StackPanel const& panel,int slot) {
+    namespace hosting=winrt::Windows::UI::Xaml::Hosting;
+    if (!g_insertionLine) {
+        auto compositor=hosting::ElementCompositionPreview::GetElementVisual(panel).Compositor();
+        auto line=compositor.CreateSpriteVisual();
+        auto color=panel.ActualTheme()==wux::ElementTheme::Light ? winrt::Windows::UI::Color{192,0,0,0} : winrt::Windows::UI::Color{192,255,255,255};
+        HIGHCONTRASTW hc{sizeof(hc)};
+        if (SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(hc),&hc,0) && (hc.dwFlags&HCF_HIGHCONTRASTON)) {
+            const COLORREF c=GetSysColor(COLOR_WINDOWTEXT); color={255,GetRValue(c),GetGValue(c),GetBValue(c)};
+        }
+        line.Brush(compositor.CreateColorBrush(color));
+        hosting::ElementCompositionPreview::SetElementChildVisual(panel,line);
+        g_insertionLine=line;
+    }
+    const float height=static_cast<float>(std::min(20.0,std::max(1.0,g_drag.cellHeightDip-8.0)));
+    const float x=static_cast<float>(std::clamp(slot*g_drag.cellWidthDip,0.0,std::max(0.0,panel.ActualWidth()-1.0)));
+    g_insertionLine.Size({1.0f,height});
+    g_insertionLine.Offset({x,static_cast<float>((g_drag.cellHeightDip-height)/2),0.0f});
+    g_insertionLine.IsVisible(true);
+}
 
 // Far enough that a click with a shaky hand is still a click.
 constexpr double kDragThresholdDip = 5;
@@ -7829,6 +9096,8 @@ uint32_t FirstIconSlot(wuxc::StackPanel const& panel) {
 // appearing.
 // ---------------------------------------------------------------------------
 
+uint64_t g_heldIcon = 0;
+
 wuxc::Border MakeCell(EmbeddedTray const& tray, SplitTray::CellSnapshot const& entry,
                       bool draggable);
 void RefreshEmbeddedTray();
@@ -7841,14 +9110,30 @@ wuxm::SolidColorBrush TransparentBrush() {
     return wuxm::SolidColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0});
 }
 
-wuxm::SolidColorBrush HoverBrush() {
+wuxm::SolidColorBrush HoverBrush(wux::ElementTheme theme = wux::ElementTheme::Default) {
     // Close to the native tray's hover wash: a low-alpha white over whatever the
     // taskbar material is.
-    return wuxm::SolidColorBrush(winrt::Windows::UI::Color{36, 255, 255, 255});
+    HIGHCONTRASTW hc{sizeof(hc)};
+    if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
+        (hc.dwFlags & HCF_HIGHCONTRASTON)) {
+        const COLORREF color = GetSysColor(COLOR_HIGHLIGHT);
+        return wuxm::SolidColorBrush(winrt::Windows::UI::Color{
+            255, GetRValue(color), GetGValue(color), GetBValue(color)});
+    }
+    // Black wash on a light surface; white on a dark surface.
+    const COLORREF surface = GetSysColor(COLOR_WINDOW);
+    const bool light = theme == wux::ElementTheme::Light ||
+        (theme == wux::ElementTheme::Default && GetRValue(surface) + GetGValue(surface) + GetBValue(surface) > 384);
+    const BYTE wash = light ? 0 : 255;
+    return wuxm::SolidColorBrush(winrt::Windows::UI::Color{36, wash, wash, wash});
 }
 
-wuxm::SolidColorBrush PressedBrush() {
-    return wuxm::SolidColorBrush(winrt::Windows::UI::Color{64, 255, 255, 255});
+wuxm::SolidColorBrush PressedBrush(wux::ElementTheme theme = wux::ElementTheme::Default) {
+    auto brush = HoverBrush(theme);
+    auto color = brush.Color();
+    if (color.A != 255) color.A = 64;
+    brush.Color(color);
+    return brush;
 }
 
 // Which icon a cell draws: the serial it carries in its Tag (MirroredIcon::
@@ -8017,8 +9302,10 @@ void SetTrayEmbedded(EmbeddedTray& tray, bool embedded) {
         std::lock_guard<std::mutex> lock(g_mutex);
         if (embedded) {
             SplitTray::g_embeddedMonitors.insert(tray.monitor);
+            SplitTray::g_dragIconSizeDips[tray.number]=tray.iconSizeDip;
         } else {
             SplitTray::g_embeddedMonitors.erase(tray.monitor);
+            SplitTray::g_dragIconSizeDips.erase(tray.number);
         }
     }
     SplitTray::NotifyTrayWindow(SplitTray::WM_ST_REFRESH);
@@ -8148,15 +9435,15 @@ void CommitVisualOrder(wuxc::StackPanel const& panel) {
 
     // Anything not on screen right now - overflowed, or its application is not
     // running - keeps its saved position rather than being dropped.
-    for (const auto& existing : g_iconOrder) {
+    for (const auto& existing : SplitTray::IconOrderSnapshot()) {
         if (std::find(order.begin(), order.end(), existing) == order.end()) {
             order.push_back(existing);
         }
     }
 
-    g_iconOrder = std::move(order);
-    SaveIconOrder();
-    Wh_Log(L"[xaml] icon order updated (%zu entries)", g_iconOrder.size());
+    const size_t count = order.size();
+    SplitTray::SetIconOrder(std::move(order));
+    Wh_Log(L"[xaml] icon order updated (%zu entries)", count);
 }
 
 
@@ -8221,7 +9508,20 @@ wuxc::Border MakeTrayHandle(EmbeddedTray const& tray) {
     glyph.VerticalAlignment(wux::VerticalAlignment::Center);
     glyph.IsHitTestVisible(false);
     wux::Automation::AutomationProperties::SetName(glyph, L"Split Tray, no icons here yet");
-    handle.Child(glyph);
+    wuxc::Button face;
+    face.Template(FaceTemplate());
+    face.IsTabStop(true);
+    face.IsHitTestVisible(false);
+    face.UseSystemFocusVisuals(true);
+    face.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+    face.VerticalAlignment(wux::VerticalAlignment::Stretch);
+    wux::Automation::AutomationProperties::SetName(face, L"Split Tray, no icons here yet");
+    face.Content(glyph);
+    winrt::weak_ref<wuxc::Border> weakTarget{handle};
+    face.Click([weakTarget, monitor = tray.monitor](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+        if (auto target = weakTarget.get()) { ShowTrayContextMenu(target, 0, monitor); }
+    });
+    handle.Child(face);
 
     wuxc::ToolTipService::SetToolTip(
         handle, winrt::box_value(winrt::hstring{L"Split Tray - no icons here yet"}));
@@ -8229,7 +9529,7 @@ wuxc::Border MakeTrayHandle(EmbeddedTray const& tray) {
     handle.PointerEntered([](wf::IInspectable const& sender,
                              wux::Input::PointerRoutedEventArgs const&) {
         if (auto border = sender.try_as<wuxc::Border>()) {
-            border.Background(HoverBrush());
+            border.Background(HoverBrush(border.ActualTheme()));
         }
     });
     handle.PointerExited([](wf::IInspectable const& sender,
@@ -8287,14 +9587,24 @@ wuxc::MenuFlyout BuildTrayContextMenu(uint64_t serial, HMONITOR monitor) {
         }
 
         wuxc::MenuFlyoutItem hide;
-        const bool hidden = SplitTray::IsIconHidden(key);
+        const auto tray=TrayOfMonitor(monitor);
+        const bool inOverflow=tray && std::any_of(tray->hiddenEntries.begin(),tray->hiddenEntries.end(),
+            [serial](auto const& entry) { return entry.serial==serial; });
+        const bool hidden = SplitTray::IsIconHidden(key) || inOverflow;
         hide.Text(hidden ? L"Show on the tray" : L"Hide in the overflow menu");
         hide.Click([key, hidden](wf::IInspectable const&,
                                  wux::RoutedEventArgs const&) {
-            SplitTray::SetIconHidden(key, !hidden);
+            if (hidden) SplitTray::ShowIconOnTray(key);
+            else SplitTray::SetIconHidden(key,true);
             RefreshEmbeddedTray();
         });
         menu.Items().Append(hide);
+        wuxc::MenuFlyoutItem follow;
+        follow.Text(L"Follow rules for this icon");
+        follow.Click([key](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+            SplitTray::FollowRulesForIcon(key);
+        });
+        menu.Items().Append(follow);
     }
 
     if (here > 0) {
@@ -8318,8 +9628,7 @@ wuxc::MenuFlyout BuildTrayContextMenu(uint64_t serial, HMONITOR monitor) {
     wuxc::MenuFlyoutItem reset;
     reset.Text(L"Reset icon order");
     reset.Click([](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-        g_iconOrder.clear();
-        SaveIconOrder();
+        SplitTray::SetIconOrder({});
         RefreshEmbeddedTray();
         Wh_Log(L"[xaml] icon order reset");
     });
@@ -8400,7 +9709,7 @@ enum class PointerButton { Left, Right, Middle, Other };
 // The pointer came onto a cell: its application hears it, and an icon that
 // draws its own popup is waited on to open it (DECISIONS 79).
 void CellPointerEntered(wuxc::Border const& border, POINT screenPoint) {
-    border.Background(HoverBrush());
+    border.Background(HoverBrush(border.ActualTheme()));
     if (!g_drag.pointerDown) {
         const uint64_t serial = SerialOfCell(border);
         SplitTray::ForwardHover(serial, screenPoint);
@@ -8420,17 +9729,18 @@ void CellPointerExited(wuxc::Border const& border) {
 }
 
 void CellCaptureLost(wuxc::Border const& border) {
+    ClearInsertionLine();
     border.Background(TransparentBrush());
-    border.Opacity(1.0);
-    // Capture can be taken away mid-drag. Keep the rearranging done so far
-    // rather than discarding it, and make sure the release that follows is not
+    if (SplitTray::g_dragFeedbackSerial.load()!=SerialOfCell(border)) ClearDragGhost();
+    g_drag.pendingTarget=-1; g_drag.gestureCancelled=true;
+    // Capture can be taken away mid-drag. Keep the original order, and ensure
+    // the release that follows is not
     // mistaken for a click on whatever the icon was left sitting over.
+    if (g_drag.pointerDown) g_drag.suppressClick = true;
     if (g_drag.dragging) {
-        if (auto panel = g_drag.panel.get()) {
-            CommitVisualOrder(panel);
-        }
+        // Reordering is deferred, so cancellation keeps the original order.
         g_drag.suppressClick = true;
-        Wh_Log(L"[xaml][drag] capture lost mid-drag; order committed");
+        Wh_Log(L"[xaml][drag] capture lost mid-drag; original order retained");
     }
     g_drag.pointerDown = false;
     g_drag.dragging = false;
@@ -8442,18 +9752,34 @@ void CellCaptureLost(wuxc::Border const& border) {
     }
 }
 
+void CellOtherPressed(wuxc::Border const& border) {
+    ClearInsertionLine(); ClearDragGhost();
+    g_heldIcon = 0;
+    EndPopup(SerialOfCell(border));
+    g_drag = DragState{};
+    border.Background(PressedBrush(border.ActualTheme()));
+}
+
 // A press on a cell, at `rowX` along its row in the row's DIPs. Returns
 // whether the pointer is to be captured for a drag: the cell is in a tray's
 // row and can be dragged.
-bool CellPressed(wuxc::Border const& border, bool draggable, double rowX) {
-    border.Background(PressedBrush());
+bool CellPressed(wuxc::Border const& border, bool draggable, double rowX, double rowY = 10) {
+    ClearInsertionLine(); ClearDragGhost();
+    g_drag.fromOverflow=!draggable;
+    g_drag.sourceCell=winrt::make_weak(border);
+    g_drag.pendingTarget=-1; g_drag.gestureCancelled=false;
+    g_heldIcon = 0;
+    border.Background(PressedBrush(border.ActualTheme()));
     EndPopup(SerialOfCell(border));
 
     // Presses on a tray icon are rare enough to log every one.
     Wh_Log(L"[xaml][drag] PointerPressed on a cell (draggable=%d)", draggable ? 1 : 0);
     g_drag.loggedMove = false;
+    g_drag.insertionCancelled=false;
+    g_drag.pressTick=GetTickCount64();
 
     g_drag.pointerDown = true;
+    g_drag.observed = false;
     g_drag.dragging = false;
     g_drag.outside = false;
     g_drag.suppressClick = false;
@@ -8471,6 +9797,7 @@ bool CellPressed(wuxc::Border const& border, bool draggable, double rowX) {
     g_drag.cellWidthDip = tray->cellWidthDip;
     g_drag.cellHeightDip = tray->cellHeightDip;
     g_drag.startX = rowX;
+    g_drag.startY = rowY;
     return true;
 }
 
@@ -8492,23 +9819,26 @@ bool CellDragged(wuxc::Border const& border, double x, double y) {
     if (!panel || g_drag.cellWidthDip <= 0) {
         return false;
     }
-    if (!g_drag.dragging && std::abs(x - g_drag.startX) < kDragThresholdDip) {
+    if (!g_drag.dragging && std::abs(x - g_drag.startX) < kDragThresholdDip &&
+        std::abs(y - g_drag.startY) < kDragThresholdDip) {
         return false;  // still a click, not yet a drag
     }
     if (!g_drag.dragging) {
         Wh_Log(L"[xaml][drag] started");
     }
     g_drag.dragging = true;
+    if (!g_drag.insertionCancelled && std::abs(border.Opacity()-0.4)>0.01) border.Opacity(0.4);
 
-    // Dragged clear of the row: the gesture now means "send this icon to the
-    // other tray", so stop reordering and say so by dimming it.
+    // Clear of the row, stop reordering; only a real tray target accepts release.
     const bool outside =
+        x < 0 || x > panel.ActualWidth() ||
         (y < -kDragOutThresholdDip) || (y > g_drag.cellHeightDip + kDragOutThresholdDip);
     if (outside != g_drag.outside) {
         g_drag.outside = outside;
-        border.Opacity(outside ? 0.4 : 1.0);
+        if (outside) g_drag.pendingTarget=-1;
     }
     if (outside) {
+        if (g_insertionLine) g_insertionLine.IsVisible(false);
         return true;
     }
 
@@ -8522,14 +9852,10 @@ bool CellDragged(wuxc::Border const& border, double x, double y) {
     int target = static_cast<int>(x / g_drag.cellWidthDip);
     target = std::clamp(target, static_cast<int>(firstSlot),
                         static_cast<int>(children.Size()) - 1);
-    if (static_cast<uint32_t>(target) == current) {
-        return true;
-    }
-    try {
-        ShiftCellTo(panel, current, static_cast<uint32_t>(target));
-    } catch (...) {
-        Wh_Log(L"[xaml][drag] reorder failed: %08X", winrt::to_hresult());
-    }
+    g_drag.pendingTarget=target;
+    g_drag.insertionSlot=target+(target>static_cast<int>(current) || (target==static_cast<int>(current) && x>(target+0.5)*g_drag.cellWidthDip) ? 1 : 0);
+    try { if (!g_drag.insertionCancelled) ShowInsertionLine(panel,g_drag.insertionSlot); }
+    catch (...) { ClearInsertionLine(); Wh_Log(L"[drag] could not show insertion line"); }
     return true;
 }
 
@@ -8540,13 +9866,19 @@ bool CellDragged(wuxc::Border const& border, double x, double y) {
 // the overflow popup.
 void CellReleased(wuxc::Border const& border, bool draggable, HMONITOR monitor,
                   PointerButton button, bool shift,
-                  std::function<void()> const& releaseCapture) {
-    border.Background(HoverBrush());
+                  std::function<void()> const& releaseCapture, const POINT* inputPoint = nullptr) {
+    const int pendingTarget=g_drag.outside ? -1 : g_drag.pendingTarget;
+    const bool cancelled=g_drag.gestureCancelled;
+    ClearInsertionLine(); ClearDragGhost();
+    border.Background(HoverBrush(border.ActualTheme()));
     border.Opacity(1.0);
 
-    const bool wasDragging = g_drag.dragging;
-    const bool wasOutside = g_drag.outside;
+    const POINT endPoint=inputPoint ? *inputPoint : CursorPoint();
+    const bool wasDragging = g_drag.dragging || (g_drag.observed &&
+        (std::abs(static_cast<long long>(endPoint.x)-g_drag.screenStart.x) >= GetSystemMetrics(SM_CXDRAG) ||
+         std::abs(static_cast<long long>(endPoint.y)-g_drag.screenStart.y) >= GetSystemMetrics(SM_CYDRAG)));
     const bool suppressed = g_drag.suppressClick;
+    g_drag.observed = false;
     g_drag.pointerDown = false;
     g_drag.dragging = false;
     g_drag.outside = false;
@@ -8563,21 +9895,20 @@ void CellReleased(wuxc::Border const& border, bool draggable, HMONITOR monitor,
     // icon happened to be dropped on. That holds for a drag that ended badly
     // too - see CellCaptureLost.
     if (wasDragging || suppressed) {
-        if (wasDragging) {
-            if (auto panel = g_drag.panel.get()) {
-                CommitVisualOrder(panel);
+        if (wasDragging && !suppressed && !cancelled && pendingTarget>=0) {
+            if (auto panel=g_drag.panel.get()) {
+                uint32_t current=0;
+                if (panel.Children().IndexOf(border,current) && pendingTarget<static_cast<int>(panel.Children().Size())) {
+                    ShiftCellTo(panel,current,static_cast<uint32_t>(pendingTarget));
+                    CommitVisualOrder(panel);
+                }
             }
         }
-        // Dropped off the row: this is how an icon leaves for the primary tray,
-        // and the choice is remembered like any other.
-        if (wasOutside) {
-            const std::wstring key = KeyOfSerial(SerialOfCell(border));
-            if (!key.empty()) {
-                Wh_Log(L"[xaml][drag] dropped off the row: to the primary tray");
-                SplitTray::MoveIconToTray(key, SplitTray::Destination::Primary);
-                RefreshEmbeddedTray();
-            }
+        g_drag.pendingTarget=-1;
+        if (wasDragging && !suppressed && !cancelled && !(GetAsyncKeyState(VK_ESCAPE)&0x8000)) {
+            SplitTray::DropIconAt(SerialOfCell(border),TrayNumberOf(monitor),endPoint,!draggable);
         }
+        if (!draggable) HideOverflowFlyout();
         return;
     }
 
@@ -8621,7 +9952,7 @@ void CellReleased(wuxc::Border const& border, bool draggable, HMONITOR monitor,
             return;
     }
 
-    const POINT point = CursorPoint();
+    const POINT point = inputPoint ? *inputPoint : CursorPoint();
     SplitTray::ForwardClick(serial, down, point);
     SplitTray::ForwardClick(serial, up, point);
 
@@ -8637,6 +9968,20 @@ void CellDoubleTapped(wuxc::Border const& border) {
     if (const uint64_t serial = SerialOfCell(border)) {
         SplitTray::ForwardClick(serial, WM_LBUTTONDBLCLK, CursorPoint());
     }
+}
+
+void BeginCellHold(wuxc::Border const& cell) {
+    g_heldIcon = SerialOfCell(cell);
+    g_drag.suppressClick = true;
+    EndPopup(g_heldIcon);
+}
+
+void EndCellHold(wuxc::Border const& cell) {
+    const uint64_t serial = SerialOfCell(cell);
+    if (!serial || g_heldIcon != serial) return;
+    g_heldIcon = 0;
+    SplitTray::ForwardKey(serial, true, AnchorOfSerial(serial));
+    HideOverflowFlyout();
 }
 
 wuxc::Border MakeCell(EmbeddedTray const& tray,
@@ -8673,13 +10018,15 @@ wuxc::Border MakeCell(EmbeddedTray const& tray,
     // ContextRequested: checked in Explorer, neither reached the application
     // (2026-09-26). So the keys are taken as they come, and ContextRequested
     // is kept for a host that does raise it.
-    face.KeyDown([serial](wf::IInspectable const&,
+    face.KeyDown([serial, monitor, weakCell = winrt::make_weak(cell)](wf::IInspectable const&,
                           wux::Input::KeyRoutedEventArgs const& args) {
         const int key = static_cast<int>(args.Key());
         const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
         if (key == VK_APPS || (key == VK_F10 && shift)) {
             args.Handled(true);
-            SendKeyboardMenu(serial);
+            if (shift && (GetKeyState(VK_CONTROL) & 0x8000)) {
+                if (auto cell = weakCell.get()) ShowTrayContextMenu(cell, serial, monitor);
+            } else SendKeyboardMenu(serial);
         }
     });
     face.ContextRequested([serial](wux::UIElement const&,
@@ -8716,6 +10063,19 @@ wuxc::Border MakeCell(EmbeddedTray const& tray,
         }
     });
 
+    cell.IsHoldingEnabled(true);
+    cell.Holding([](wf::IInspectable const& sender, wux::Input::HoldingRoutedEventArgs const& args) {
+        if (args.HoldingState() == winrt::Windows::UI::Input::HoldingState::Started) {
+            if (auto cell = sender.try_as<wuxc::Border>()) BeginCellHold(cell);
+            args.Handled(true);
+        } else if (args.HoldingState() == winrt::Windows::UI::Input::HoldingState::Canceled) g_heldIcon = 0;
+    });
+    cell.RightTapped([](wf::IInspectable const& sender, wux::Input::RightTappedRoutedEventArgs const& args) {
+        if (auto cell = sender.try_as<wuxc::Border>(); cell && g_heldIcon == SerialOfCell(cell)) {
+            args.Handled(true);
+            EndCellHold(cell);
+        }
+    });
     cell.PointerCaptureLost([](wf::IInspectable const& sender,
                                wux::Input::PointerRoutedEventArgs const&) {
         if (auto border = sender.try_as<wuxc::Border>()) {
@@ -8723,7 +10083,7 @@ wuxc::Border MakeCell(EmbeddedTray const& tray,
         }
     });
 
-    cell.PointerPressed([draggable](wf::IInspectable const& sender,
+    cell.PointerPressed([draggable,monitor](wf::IInspectable const& sender,
                                     wux::Input::PointerRoutedEventArgs const& args) {
         auto border = sender.try_as<wuxc::Border>();
         if (!border) {
@@ -8732,27 +10092,41 @@ wuxc::Border MakeCell(EmbeddedTray const& tray,
         // Handled here as well as on release: an unhandled press reaches the
         // taskbar underneath and opens the clock flyout.
         args.Handled(true);
-        double rowX = 0;
+        // Right/middle remain application clicks and never become a drag.
+        if (!args.GetCurrentPoint(border).Properties().IsLeftButtonPressed()) {
+            CellOtherPressed(border);
+            return;
+        }
+        double rowX = 0, rowY = 10;
         bool located = false;
         try {
             if (auto row = wuxm::VisualTreeHelper::GetParent(border)
                                .try_as<wuxc::StackPanel>()) {
-                rowX = args.GetCurrentPoint(row).Position().X;
+                const auto position = args.GetCurrentPoint(row).Position();
+                rowX = position.X; rowY = position.Y;
                 located = true;
             }
         } catch (...) {
         }
-        if (!CellPressed(border, draggable, rowX)) {
-            return;
-        }
+        const bool capture=CellPressed(border,draggable,rowX,rowY);
+        POINT start=CursorPoint();
+        POINTER_INFO info{};
+        if (GetPointerInfo(args.Pointer().PointerId(),&info)) start=info.ptPixelLocation;
+        g_drag.screenStart=start;
+        g_drag.observed=true;
+        // Cross-tray transfer must survive Explorer refusing or taking capture.
+        // The value-only observer also covers icons in the overflow popup.
+        if (SplitTray::g_dragKeyState(SplitTray::PrimaryButtonKey())&0x8000)
+            SplitTray::QueueGesturePress(SerialOfCell(border),TrayNumberOf(monitor),start,!draggable);
+        if (!capture) return;
         // Without capture the pointer stops reporting the moment it leaves this
-        // 32-DIP cell, so a failure here is the whole gesture failing.
-        // Measured rather than assumed.
+        // 32-DIP cell. Failure disables in-row reordering; the value-only
+        // observer still handles cross-tray transfer.
         try {
             if (!located || !border.CapturePointer(args.Pointer())) {
                 g_drag.pointerDown = false;
                 Wh_Log(L"[xaml][drag] CapturePointer refused; this icon cannot be "
-                       L"dragged");
+                       L"reordered in place; cross-tray observation remains active");
             }
         } catch (...) {
             g_drag.pointerDown = false;
@@ -8785,6 +10159,14 @@ wuxc::Border MakeCell(EmbeddedTray const& tray,
     }
 
     // `draggable` is false only for cells in the overflow popup.
+    cell.PointerCanceled([](wf::IInspectable const& sender, wux::Input::PointerRoutedEventArgs const&) {
+        if (auto border = sender.try_as<wuxc::Border>()) {
+            SplitTray::g_cancelGestureSerial.store(SerialOfCell(border));
+            g_drag.observed=false;
+            CellCaptureLost(border);
+        }
+    });
+
     cell.PointerReleased([draggable, monitor](
                              wf::IInspectable const& sender,
                              wux::Input::PointerRoutedEventArgs const& args) {
@@ -8811,12 +10193,15 @@ wuxc::Border MakeCell(EmbeddedTray const& tray,
             }
         } catch (...) {
         }
+        POINT point = CursorPoint();
+        POINTER_INFO pointerInfo{};
+        if (GetPointerInfo(args.Pointer().PointerId(), &pointerInfo)) point = pointerInfo.ptPixelLocation;
         CellReleased(border, draggable, monitor, button, ShiftHeld(), [&] {
             try {
                 border.ReleasePointerCapture(args.Pointer());
             } catch (...) {
             }
-        });
+        }, &point);
     });
 
     cell.DoubleTapped([](wf::IInspectable const& sender,
@@ -8837,8 +10222,11 @@ wuxc::Border MakeCell(EmbeddedTray const& tray,
 // One popup for every tray: only one can be open at a time. Never destroyed by
 // the runtime, like g_embeddedTrays.
 [[clang::no_destroy]] wuxc::Flyout g_overflowFlyout{nullptr};
+HMONITOR g_overflowMonitor = nullptr;
+winrt::event_token g_overflowClosedToken{};
 
 void HideOverflowFlyout() {
+    g_overflowMonitor = nullptr;
     if (g_overflowFlyout) {
         try {
             g_overflowFlyout.Hide();
@@ -8855,6 +10243,7 @@ wuxc::VariableSizedWrapGrid OverflowContent(EmbeddedTray const& tray) {
     constexpr int kOverflowColumns = 5;
     wuxc::VariableSizedWrapGrid content;
     content.Orientation(wuxc::Orientation::Horizontal);
+    if (auto panel = tray.panel.get()) content.FlowDirection(panel.FlowDirection());
     content.ItemWidth(kOverflowCellDip);
     content.ItemHeight(kOverflowCellDip);
     content.MaximumRowsOrColumns(std::min<int>(
@@ -8886,6 +10275,9 @@ void ChevronReleased(wux::FrameworkElement const& chevron, HMONITOR monitor, boo
     // vanished.
     if (!g_overflowFlyout) {
         g_overflowFlyout = wuxc::Flyout();
+        g_overflowClosedToken=g_overflowFlyout.Closed([](wf::IInspectable const&,wf::IInspectable const&) {
+            g_overflowMonitor=nullptr;
+        });
 
         // Its own window. By default a Flyout is drawn inside the XAML root it
         // belongs to, and this one belongs to the taskbar - an island about 48
@@ -8908,6 +10300,14 @@ void ChevronReleased(wux::FrameworkElement const& chevron, HMONITOR monitor, boo
             wux::Setter(wux::FrameworkElement::MinHeightProperty(), winrt::box_value(0.0)));
         setters.Append(wux::Setter(wuxc::Control::CornerRadiusProperty(),
                                    winrt::box_value(wux::CornerRadius{8, 8, 8, 8})));
+        MONITORINFO monitorInfo{sizeof(monitorInfo)};
+        double maxHeight = 600;
+        if (GetMonitorInfoW(monitor, &monitorInfo)) {
+            double scale = 1;
+            if (auto panel = tray->panel.get()) if (auto root = panel.XamlRoot()) scale = root.RasterizationScale();
+            maxHeight = std::max(80.0, (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top) / scale * 0.75);
+        }
+        setters.Append(wux::Setter(wux::FrameworkElement::MaxHeightProperty(), winrt::box_value(maxHeight)));
         g_overflowFlyout.FlyoutPresenterStyle(presenter);
 
         // Standard, not Transient: the pointer sequence that opened it would
@@ -8915,6 +10315,7 @@ void ChevronReleased(wux::FrameworkElement const& chevron, HMONITOR monitor, boo
         g_overflowFlyout.ShowMode(wuxc::Primitives::FlyoutShowMode::Standard);
         g_overflowFlyout.Placement(wuxc::Primitives::FlyoutPlacementMode::Top);
     }
+    g_overflowMonitor = monitor;
     g_overflowFlyout.Content(OverflowContent(*tray));
     try {
         g_overflowFlyout.ShowAt(chevron);
@@ -8940,7 +10341,20 @@ wuxc::Border MakeChevron(EmbeddedTray const& tray) {
     glyph.IsHitTestVisible(false);
     // Read as what it does, not as the glyph's code point (DECISIONS 81).
     wux::Automation::AutomationProperties::SetName(glyph, L"Show hidden icons");
-    chevron.Child(glyph);
+    wuxc::Button face;
+    face.Template(FaceTemplate());
+    face.IsTabStop(true);
+    face.IsHitTestVisible(false);
+    face.UseSystemFocusVisuals(true);
+    face.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+    face.VerticalAlignment(wux::VerticalAlignment::Stretch);
+    wux::Automation::AutomationProperties::SetName(face, L"Show hidden icons");
+    face.Content(glyph);
+    winrt::weak_ref<wuxc::Border> weakTarget{chevron};
+    face.Click([weakTarget, monitor = tray.monitor](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+        if (auto target = weakTarget.get()) { ChevronReleased(target, monitor, ShiftHeld()); }
+    });
+    chevron.Child(face);
 
     wuxc::ToolTipService::SetToolTip(chevron,
                                      winrt::box_value(winrt::hstring{L"Show hidden icons"}));
@@ -8948,7 +10362,7 @@ wuxc::Border MakeChevron(EmbeddedTray const& tray) {
     chevron.PointerEntered([](wf::IInspectable const& sender,
                               wux::Input::PointerRoutedEventArgs const&) {
         if (auto border = sender.try_as<wuxc::Border>()) {
-            border.Background(HoverBrush());
+            border.Background(HoverBrush(border.ActualTheme()));
         }
     });
     chevron.PointerExited([](wf::IInspectable const& sender,
@@ -9035,6 +10449,12 @@ bool UpdateCellInPlace(EmbeddedTray const& tray, wuxc::Border const& cell,
 // panel is only rebuilt when the layout itself changes - which icons, in which
 // order, on the bar or in the overflow. Nothing is rebuilt while the pointer is
 // down; the refresh waits for the release.
+int VisibleLimitForWidth(int configured, double cell, double width) {
+    if (cell <= 0 || width <= 0) return configured;
+    const int capacity = std::max(1, static_cast<int>(width / cell) - 1);
+    return configured > 0 ? std::min(configured, capacity) : capacity;
+}
+
 void RefreshTray(EmbeddedTray& tray) {
     auto panel = tray.panel.get();
     if (!panel) {
@@ -9061,13 +10481,17 @@ void RefreshTray(EmbeddedTray& tray) {
         std::lock_guard<std::mutex> lock(g_mutex);
         maxVisible = g_settings.maxVisibleIcons;
     }
+    if (auto root = panel.XamlRoot()) {
+        maxVisible = VisibleLimitForWidth(maxVisible, tray.cellWidthDip, root.Size().Width * 0.25);
+    }
 
     LoadIconOrder();
     // Stable sort: icons the user has never moved keep the order the store gave
     // them, which is the order they registered in.
+    const auto order = SplitTray::IconOrderSnapshot();
     std::stable_sort(entries.begin(), entries.end(),
-                     [](Entry const& a, Entry const& b) {
-                         return OrderPositionOf(a.key) < OrderPositionOf(b.key);
+                     [&order](Entry const& a, Entry const& b) {
+                         return SplitTray::OrderPositionIn(order,a.key) < SplitTray::OrderPositionIn(order,b.key);
                      });
 
     std::vector<std::wstring> keys;
@@ -9085,14 +10509,21 @@ void RefreshTray(EmbeddedTray& tray) {
     const auto& shown = split.shown;
     const auto& overflow = split.overflow;
 
+    auto previousHidden = std::move(tray.hiddenEntries);
     tray.hiddenEntries.clear();
     std::vector<uint64_t> shownSerials;
     std::vector<uint64_t> overflowSerials;
     for (size_t i : overflow) {
         overflowSerials.push_back(entries[i].serial);
         // Kept for the popup, which is opened later; a shown icon is drawn now.
-        withPicture(entries[i]);
-        tray.drawnPictures.erase(entries[i].serial);
+        if (entries[i].pictureUnchanged) {
+            const auto previous = std::find_if(previousHidden.begin(), previousHidden.end(),
+                [&](auto const& old) { return old.serial == entries[i].serial; });
+            if (previous != previousHidden.end()) entries[i].icon = std::move(previous->icon);
+            else withPicture(entries[i]);
+        }
+        if (!entries[i].hasPicture || entries[i].icon.get())
+            tray.drawnPictures[entries[i].serial] = entries[i].pictureRevision;
         tray.hiddenEntries.push_back(std::move(entries[i]));
     }
     for (size_t i : shown) {
@@ -9113,6 +10544,17 @@ void RefreshTray(EmbeddedTray& tray) {
                                 overflowSerials == tray.drawnOverflow &&
                                 children.Size() == expectedChildren;
         if (sameLayout) {
+            // Keep an open popup current without replacing focused buttons.
+            if (g_overflowMonitor == tray.monitor && g_overflowFlyout) {
+                auto grid = g_overflowFlyout.Content().try_as<wuxc::VariableSizedWrapGrid>();
+                if (grid && grid.Children().Size() == tray.hiddenEntries.size()) {
+                    for (uint32_t i = 0; i < grid.Children().Size(); ++i) {
+                        if (auto cell = grid.Children().GetAt(i).try_as<wuxc::Border>()) {
+                            UpdateCellInPlace(tray, cell, tray.hiddenEntries[i]);
+                        }
+                    }
+                }
+            }
             for (size_t n = 0; n < shown.size(); n++) {
                 auto cell = children.GetAt(chevronSlots + static_cast<uint32_t>(n))
                                 .try_as<wuxc::Border>();
@@ -9137,7 +10579,9 @@ void RefreshTray(EmbeddedTray& tray) {
         if (!tray.hiddenEntries.empty()) {
             children.Append(MakeChevron(tray));
         }
-        tray.drawnPictures.clear();
+        std::erase_if(tray.drawnPictures, [&](auto const& item) {
+            return std::find(all.begin(), all.end(), item.first) == all.end();
+        });
         for (size_t i : shown) {
             withPicture(entries[i]);
             children.Append(MakeCell(tray, entries[i], true));
@@ -9211,6 +10655,85 @@ bool ElementScreenRect(EmbeddedTray const& tray, wux::FrameworkElement const& el
     } catch (...) {
         return false;
     }
+}
+
+// Read the visible presenter's screen bounds once per hover, not every cell.
+// The popup owns a separate window; a taskbar-relative origin is not valid.
+bool (*g_overflowScreenBounds)(wux::FrameworkElement const&, wf::Rect*) =
+    +[](wux::FrameworkElement const& element, wf::Rect* bounds) {
+        auto peer = winrt::Windows::UI::Xaml::Automation::Peers::
+            FrameworkElementAutomationPeer::CreatePeerForElement(element);
+        if (!peer || peer.IsOffscreen()) return false;
+        *bounds = peer.GetBoundingRectangle();
+        return bounds->Width > 0 && bounds->Height > 0;
+    };
+
+// The presenter remains visible when its content scrolls. Walk only this
+// owned popup's ancestors; do not search another XAML island or desktop window.
+wuxc::FlyoutPresenter OverflowPresenter(wux::FrameworkElement const& content) {
+    auto parent = wuxm::VisualTreeHelper::GetParent(content);
+    while (parent) {
+        if (auto presenter = parent.try_as<wuxc::FlyoutPresenter>()) return presenter;
+        parent = wuxm::VisualTreeHelper::GetParent(parent);
+    }
+    return nullptr;
+}
+
+// The chevron and the open popup's actual icon buttons accept overflow drops.
+// XAML transforms supply button bounds, clipped to the visible presenter.
+// A scrolled-out first cell cannot serve as the popup's origin.
+int OverflowDropTargetAt(POINT point) {
+    for (const auto& tray : g_embeddedTrays) {
+        auto panel = tray->panel.get();
+        if (!tray->active || !panel || tray->hiddenEntries.empty() ||
+            !SplitTray::g_dropWindowVisible(tray->taskbarWnd)) continue;
+        RECT rect{};
+        auto children = panel.Children();
+        if (children.Size() &&
+            ElementScreenRect(*tray, children.GetAt(0).as<wux::FrameworkElement>(), &rect) &&
+            PtInRect(&rect, point)) return tray->number;
+        if (g_overflowMonitor != tray->monitor || !g_overflowFlyout) continue;
+        auto grid = g_overflowFlyout.Content().try_as<wuxc::VariableSizedWrapGrid>();
+        if (!grid) continue;
+        try {
+            auto reference = OverflowPresenter(grid);
+            wf::Rect origin{};
+            if (!reference || !g_overflowScreenBounds(reference, &origin) ||
+                point.x < origin.X || point.x >= origin.X + origin.Width ||
+                point.y < origin.Y || point.y >= origin.Y + origin.Height) continue;
+            auto root = reference.XamlRoot();
+            if (!root) continue;
+            const double scale = root.RasterizationScale();
+            for (auto child : grid.Children()) {
+                auto cell = child.try_as<wuxc::Border>();
+                auto face = cell ? FaceOfCell(cell) : nullptr;
+                // The Border owns pointer input; its button face deliberately
+                // disables hit testing while retaining keyboard/UIA support.
+                if (!face || cell.Visibility() != wux::Visibility::Visible ||
+                    !cell.IsHitTestVisible()) continue;
+                auto bounds = face.TransformToVisual(reference).TransformBounds(
+                    {0, 0, static_cast<float>(face.ActualWidth()),
+                     static_cast<float>(face.ActualHeight())});
+                const double left = origin.X + bounds.X * scale;
+                const double top = origin.Y + bounds.Y * scale;
+                if (bounds.Width > 0 && bounds.Height > 0 &&
+                    point.x >= left && point.x < left + bounds.Width * scale &&
+                    point.y >= top && point.y < top + bounds.Height * scale)
+                    return tray->number;
+            }
+        } catch (...) { /* A popup dismissed during the hit test accepts nothing. */ }
+    }
+    return 0;
+}
+
+int EmbeddedDropTargetAt(POINT point) {
+    for (const auto& tray : g_embeddedTrays) {
+        auto panel = tray->panel.get();
+        RECT rect{};
+        if (tray->active && panel && SplitTray::g_dropWindowVisible(tray->taskbarWnd) &&
+            ElementScreenRect(*tray,panel,&rect) && PtInRect(&rect,point)) return tray->number;
+    }
+    return 0;
 }
 
 bool IconScreenRect(uint64_t serial, RECT* out) {
@@ -9415,9 +10938,7 @@ bool AnyDisplayTrayWaitingToEmbed() {
 // on the taskbar's UI thread, because XAML objects are thread-affine.
 void RequestEmbeddedRefresh() {
     HWND tray = SplitTray::g_shellTrayWnd.load();
-    if (tray && IsWindow(tray)) {
-        PostMessageW(tray, SplitTray::GetXamlRefreshMessage(), 0, 0);
-    }
+    SplitTray::g_embeddedRefresh.Post(tray, SplitTray::GetXamlRefreshMessage());
 }
 
 // Called from the Shell_TrayWnd subclass, which runs on this same UI thread,
@@ -9433,6 +10954,7 @@ void OnIconStoreChanged() {
 // embedding is turned off, and when the mod unloads, so no stray element is left
 // in Explorer's taskbar until the next restart.
 void RemovePanel(EmbeddedTray& tray) {
+    if (auto panel=tray.panel.get(); panel && panel==g_drag.panel.get()) { ClearInsertionLine(); ClearDragGhost(); }
     auto panel = tray.panel.get();
     tray.panel = nullptr;
     tray.loggedEmbedded = false;
@@ -9533,12 +11055,22 @@ void FocusIconCell(uint64_t serial) {
                     return;
                 }
             }
+            if (std::any_of(tray->hiddenEntries.begin(), tray->hiddenEntries.end(),
+                [serial](auto const& entry) { return entry.serial == serial; }) && panel.Children().Size()) {
+                if (auto cell = panel.Children().GetAt(0).try_as<wuxc::Border>())
+                    if (auto face = FaceOfCell(cell)) face.Focus(wux::FocusState::Keyboard);
+                return;
+            }
         } catch (...) {
         }
     }
 }
 
 void RemoveEverything() {
+    ClearInsertionLine(); ClearDragGhost();
+    g_drag=DragState{};
+    g_heldIcon = 0;
+    g_nativeDragVisual={}; g_nativeDragThread=0;
     // An application's popup open from one of the mod's cells is closed.
     ClosePopup();
     g_popupWaiting = 0;
@@ -9546,7 +11078,15 @@ void RemoveEverything() {
         g_popupTimer.Stop();
         g_popupTimer = nullptr;
     }
+    // A closing animation can outlive Hide(). Revoke our callback before
+    // detaching the flyout so it cannot call the module after unload.
+    if (g_overflowFlyout && g_overflowClosedToken.value) {
+        g_overflowFlyout.Closed(g_overflowClosedToken);
+    }
+    g_overflowClosedToken={};
     HideOverflowFlyout();
+    // Detach cells and their input delegates even while Hide is animating.
+    if (g_overflowFlyout) g_overflowFlyout.Content(nullptr);
     g_overflowFlyout = nullptr;
     for (auto& tray : g_embeddedTrays) {
         RemovePanel(*tray);
@@ -9565,6 +11105,9 @@ void RemoveEverything() {
 #else  // SPLITTRAY_NO_XAML
 
 namespace SplitTrayXaml {
+
+void CaptureNativeDragVisual(const void*) {}
+void CorrectNativeDragVisual() {}
 
 // The symbol table above names the hook, so the test binaries need one. They
 // never install it: a test process has no SystemTray.dll.
@@ -9600,6 +11143,12 @@ BOOL Wh_ModInit() {
     // would leave every hook path silently disabled.
     g_unloading.store(false);
     g_handedBack.store(false);
+    g_iconOrderLoaded = false;
+    g_iconOrder.clear();
+    g_workerRefresh.Reset();
+    g_embeddedRefresh.Reset();
+    g_dragHoverWake.Reset();
+
 
     const auto monitors = g_enumerateMonitors();
     {

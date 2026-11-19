@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-disappearing-icon-fix-win11
 // @name            Taskbar Disappearing Icon Fix for Windows 11
-// @description     Tries to fix disappearing icon in Windows 11 taskbar while switching virtual desktops.
-// @version         1.0
+// @description     [Deprecated for Win11 24H2+] Tries to fix disappearing icon in Windows 11 taskbar while switching virtual desktops.
+// @version         1.0.1
 // @author          yezhiyi9670
 // @github          https://github.com/yezhiyi9670
 // @include         explorer.exe
@@ -18,11 +18,17 @@
 /*
 # Taskbar Disappearing Icon Fix for Windows 11
 
+> **DEPRECATION NOTICE**
+>
+> This mod is considered deprecated now, since I have not been able to reproduce the "disappearing icons" bug at all after a certain Windows 11 24H2 version.
+>
+> Do not use this mod if you haven't confirmed that you have the bug in the first place, and do not expect that this will work well on Windows 11 24H2+ if you do experience the bug.
+
 Tries to fix disappearing icon bug in Windows 11 taskbar while switching virtual desktops.
 
 Since I cannot reproduce this bug very reliably, this mod may not have fixed the bug entirely. Let me know if it still persists.
 
-Takeaway message:
+How it works:
 
 - It is observed that hiding (`Visibility: Collapsed`) the invisible icon and then making it visible after a while will fix it.
 - However, hiding the icon for a while results in flickering.

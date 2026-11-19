@@ -2,7 +2,7 @@
 // @id              instant-taskbar-thumbnail-previews
 // @name            Instant Taskbar Thumbnail Previews
 // @description     Controls taskbar thumbnail preview show and close behavior.
-// @version         1.1.0
+// @version         1.2.1
 // @author          Alchemy
 // @github          https://github.com/alchemyyy
 // @license         MIT
@@ -22,13 +22,34 @@ as well as the ability to configure mouse actions that close them.
 
 The hover and close delay settings replace the corresponding Windows value, so they can make the transitions either shorter or longer than the stock delays.
 
-Version 1.1 changes the default "Thumbnail close delay" from 1 to 200 milliseconds. Set it to 1 to retain effectively immediate closing when the pointer leaves the thumbnail area.
+### Aim boundary feature (as of version 1.2)
 
-"Delay after thumbnail removal" controls how long the remaining thumbnail previews stay open after one is removed, whether it was closed from the preview or externally. The normal close delay applies when the last thumbnail is removed.
+This feature makes flicking to thumbnail previews more ergonomic. 
 
-The optional outside-click behavior arms the taskbar's native light-dismiss action while a thumbnail flyout is open.
+It does this by suppressing taskbar icon hovers closing the currently open previews and possibly opening their own, under certain conditions.
 
-The optional Start-button hover behavior closes an open thumbnail flyout directly from the Start button's XAML pointer-enter handler.
+The trick is tracking the *motion* of the cursor. If the cursor is not moving towards any of the thumbnail previews, then we don't suppress taskbar icon hover events.
+
+![Demo](https://raw.githubusercontent.com/alchemyyy/windhawk-mods/refs/heads/assets/instant-taskbar-thumbnails-aim-boundary-explanation.png)
+
+
+## Changelog 
+### Version 1.2.1
+
+* Fixed the hover delay, the aim boundary, and "Close on outside click" not working on recent Windows 11 taskbar updates.
+
+### Version 1.2
+
+* New feature: Aim boundary
+    * Keeps open thumbnail previews attached to their taskbar button while the pointer travels toward them.
+    * Not compatible with vertical taskbars.
+
+### Version 1.1
+
+* Changed the default "Thumbnail close delay" from 1 to 200 milliseconds.
+    * Set it to 1 to retain effectively immediate closing when the pointer leaves the thumbnail area.
+* New setting: "Delay after thumbnail removal"
+    * controls how long the remaining thumbnail previews stay open after one is removed, whether it was closed from the preview or externally. The normal close delay applies when the last thumbnail is removed.
 
 This mod targets the new Windows 11 taskbar used by Windows 11 24H2 and later.
 
@@ -52,6 +73,12 @@ This mod targets the new Windows 11 taskbar used by Windows 11 24H2 and later.
 - closeOnStartButtonHover: false
   $name: Close on Start button hover
   $description: Immediately close open thumbnail previews when hovering over the Start button.
+- aimTowardPreviews: false
+  $name: Keep previews while moving toward them (aim boundary)
+  $description: While the pointer moves from a taskbar button toward its open thumbnail previews, ignore other taskbar buttons it crosses and don't start closing the previews. Not compatible with vertical taskbars.
+- aimAnchorHeightPercent: 100
+  $name: Aim boundary height on the button (%)
+  $description: Where the two aim boundary lines meet the button's left and right edges, as a percentage of the button's height measured down from its top edge.
 */
 // ==/WindhawkModSettings==
 
@@ -59,6 +86,7 @@ This mod targets the new Windows 11 taskbar used by Windows 11 24H2 and later.
 
 #include <windows.h>
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 #include <unordered_map>
@@ -66,8 +94,13 @@ This mod targets the new Windows 11 taskbar used by Windows 11 24H2 and later.
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
+
+#include <string_view>
 
 namespace {
 
@@ -81,12 +114,36 @@ constexpr DWORD NONEXECUTABLE_LIBRARY_LOAD_FLAGS =
 // Allow deferred layout and pointer events while rejecting later pointer exits
 constexpr ULONGLONG THUMBNAIL_REMOVAL_CORRELATION_WINDOW_MS = 150;
 
-std::atomic<LONGLONG> g_hoverDelayTimeSpan{
-    MINIMUM_DELAY_MS * TIME_SPAN_TICKS_PER_MILLISECOND};
+// Pointer-aim tracking samples the cursor while a thumbnail flyout is open.
+// Direction is measured across at least the minimum motion distance, and the
+// pointer counts as at rest once it drifts slower than the minimum drift.
+constexpr UINT HOVER_AIM_SAMPLE_INTERVAL_MS = USER_TIMER_MINIMUM;
+constexpr LONG HOVER_AIM_MINIMUM_MOTION_PIXELS = 3;
+constexpr double HOVER_AIM_MINIMUM_DRIFT_PIXELS_PER_SECOND = 0.01;
+constexpr ULONGLONG HOVER_AIM_MOTION_WINDOW_MS = static_cast<ULONGLONG>(
+    HOVER_AIM_MINIMUM_MOTION_PIXELS * 1000.0 /
+    HOVER_AIM_MINIMUM_DRIFT_PIXELS_PER_SECOND);
+// Unique among the timers on the taskbar window the tracking timer uses
+constexpr UINT_PTR HOVER_AIM_TIMER_ID = 0x41494D54;
+constexpr size_t HOVER_AIM_CURSOR_SAMPLE_COUNT = 32;
+constexpr size_t HOVER_AIM_DEFERRED_EVENT_CAPACITY = 32;
+constexpr size_t HOVER_AIM_TARGET_CAPACITY = 8;
+// FlyoutFrame's template parts are a few levels below the frame
+constexpr int HOVER_AIM_TEMPLATE_SEARCH_DEPTH = 8;
+constexpr int DEFAULT_AIM_ANCHOR_HEIGHT_PERCENT = 100;
+
+// winrt::WindowsUdk::UI::Shell::TaskItemVisualState values that
+// HoverFlyoutModel::OnVisualStateStateChanged treats as pointer exit and enter.
+constexpr INT32 TASK_ITEM_VISUAL_STATE_NORMAL = 0;
+constexpr INT32 TASK_ITEM_VISUAL_STATE_POINTER_OVER = 1;
+
+std::atomic<UINT> g_hoverDelayMilliseconds{MINIMUM_DELAY_MS};
 std::atomic<UINT> g_closeDelayMilliseconds{MINIMUM_DELAY_MS};
 std::atomic<UINT> g_thumbnailRemovalDelayMilliseconds{MINIMUM_DELAY_MS};
 std::atomic<bool> g_closeOnOutsideClick{false};
 std::atomic<bool> g_closeOnStartButtonHover{false};
+std::atomic<bool> g_aimTowardPreviews{true};
+std::atomic<int> g_aimAnchorHeightPercent{DEFAULT_AIM_ANCHOR_HEIGHT_PERCENT};
 std::atomic<bool> g_initialized{false};
 std::atomic<bool> g_taskbarModuleHandled{false};
 std::atomic<bool> g_taskbarViewModuleHandled{false};
@@ -120,6 +177,8 @@ struct ThumbnailRemovalTrackingState {
 
 thread_local DismissDelaySource g_dismissDelaySource =
     DismissDelaySource::none;
+// The HoverFlyoutModel whose OnPointerEnteredItemWithHoverFlyout is running
+thread_local void* g_hoverDelayFlyoutModel = nullptr;
 thread_local ThumbnailRemovalTrackingState g_thumbnailRemovalTrackingState = {};
 thread_local HWND g_activeTaskbarWindow = nullptr;
 thread_local bool g_previewLightDismissArmed = false;
@@ -129,25 +188,69 @@ thread_local void* g_activeHoverFlyoutController = nullptr;
 thread_local void* g_pointerOverFlyoutFrameModel = nullptr;
 thread_local void* g_lastUnregisteredTaskbarHost = nullptr;
 
-struct ActiveTaskbarModelState {
-    void* hoverFlyoutController;
-    HWND taskbarWindow;
-    bool isExpanded;
-    bool valid;
-};
-
-thread_local ActiveTaskbarModelState g_activeTaskbarModelState = {};
-
-struct TaskbarModelStateCapture {
-    UINT64 hostWindowID;
-    bool isExpanded;
+// Window IDs UpdateFlyoutWindowPosition asks the taskbar model and the flyout
+// for while it positions the flyout
+struct WindowIDCapture {
+    UINT64 windowID;
     bool captured;
     bool active;
 };
 
 // Kept by value since MSVC exceptions unwind mod frames without destructors
 // A skipped restore then leaves stale state, never a dangling stack pointer
-thread_local TaskbarModelStateCapture g_taskbarModelStateCapture = {};
+thread_local WindowIDCapture g_hostWindowCapture = {};
+thread_local WindowIDCapture g_flyoutWindowCapture = {};
+
+// RegisterLightDismiss keeps an action the host already holds and skips a
+// frame outside the tree; it subscribes to Dismissed only on an action it
+// has just created.
+struct LightDismissRegistrationProbe {
+    bool actionCreated;
+    bool active;
+};
+
+thread_local LightDismissRegistrationProbe g_lightDismissRegistrationProbe =
+    {};
+
+struct HoverAimCursorSample {
+    POINT point;
+    ULONGLONG tick;
+};
+
+enum class DeferredHoverAimEventKind : UINT8 {
+    visualStateChange,
+    dismiss,
+};
+
+struct DeferredHoverAimEvent {
+    DeferredHoverAimEventKind kind;
+    // Owned HSTRING of the taskbar item key; null for dismiss events
+    void* itemKey;
+    bool hasHoverFlyout;
+    INT32 previousState;
+    INT32 currentState;
+};
+
+// Plain data only: thread_local destructors would outlive the mod module
+struct HoverAimState {
+    // Owned IWeakReference pointers to the flyout frame, its targets, and the
+    // preview card found in the frame's template
+    void* frameWeakReference;
+    void* targetWeakReferences[HOVER_AIM_TARGET_CAPACITY];
+    size_t targetCount;
+    void* cardWeakReference;
+    HWND flyoutWindow;
+    HWND timerWindow;
+    HoverAimCursorSample cursorSamples[HOVER_AIM_CURSOR_SAMPLE_COUNT];
+    size_t nextCursorSample;
+    size_t cursorSampleCount;
+    void* deferredModel;
+    DeferredHoverAimEvent deferredEvents[HOVER_AIM_DEFERRED_EVENT_CAPACITY];
+    size_t deferredEventCount;
+    bool flushing;
+};
+
+thread_local HoverAimState g_hoverAimState = {};
 
 bool HasActiveHoverFlyoutLifecycleSymbols();
 bool HasFlyoutPointerTrackingSymbols();
@@ -155,10 +258,29 @@ bool HasOutsideClickSymbols();
 bool HasStartButtonHoverSymbols();
 bool HasTaskbarLightDismissSymbols();
 bool HasThumbnailRemovalSymbols();
+bool HasHoverAimSymbols();
+void StartHoverAimTracking();
+void StopHoverAimTracking();
+void FlushDeferredHoverAimEvents(const WCHAR* reason);
+void DiscardDeferredHoverAimEvents();
+void ReleaseHoverAimTargets();
+bool TryHoldHoverAimDismiss(void* model);
 
 void ClearThumbnailRemovalTag() {
     g_thumbnailRemovalTrackingState.removalFlyoutModel = nullptr;
     g_thumbnailRemovalTrackingState.removalTick = 0;
+}
+
+// Every visible-pending transition, inlined or not, starts a new hover
+// target, which supersedes an unconsumed removal transition.
+void BeginHoverTarget(void* flyoutModel) {
+    if (!HasThumbnailRemovalSymbols()) {
+        return;
+    }
+
+    ClearThumbnailRemovalTag();
+    g_thumbnailRemovalTrackingState.activeThumbnailItemsCollection = nullptr;
+    g_thumbnailRemovalTrackingState.activeFlyoutModel = flyoutModel;
 }
 
 void* CTaskBand_ITaskListWndSite_Vftable;
@@ -178,14 +300,26 @@ TaskbarHostRegisterLightDismiss_t TaskbarHostRegisterLightDismiss_Original;
 using TaskbarHostUnregisterLightDismiss_t = void(WINAPI*)(void* object);
 TaskbarHostUnregisterLightDismiss_t TaskbarHostUnregisterLightDismiss_Original;
 
+// Returns the event token through the hidden pointer, as MSVC does for every
+// member function that returns a class.
+using LightDismissActionDismissed_t = void*(WINAPI*)(const void* object,
+                                                     void* eventToken,
+                                                     const void* handler);
+LightDismissActionDismissed_t LightDismissActionDismissed_Original;
+
 using TaskbarHostDestructor_t = void(WINAPI*)(void* object);
 TaskbarHostDestructor_t TaskbarHostDestructor_Original;
 
-using TaskbarModelHostWindowID_t = UINT64(WINAPI*)(const void* object);
-TaskbarModelHostWindowID_t TaskbarModelHostWindowID_Original;
+// Taskbar.dll implements the WindowsUdk TaskbarModel and TaskbarFlyout, so
+// their ABI getters see every Taskbar.View.dll call, whether it goes through a
+// consume wrapper or, with newer C++/WinRT versions, straight to the vtable.
+using TaskbarModelGetHostWindowID_t =
+    HRESULT(WINAPI*)(void* object, UINT64* hostWindowID);
+TaskbarModelGetHostWindowID_t TaskbarModelGetHostWindowID_Original;
 
-using TaskbarModelIsExpanded_t = bool(WINAPI*)(const void* object);
-TaskbarModelIsExpanded_t TaskbarModelIsExpanded_Original;
+using TaskbarFlyoutGetWindowID_t =
+    HRESULT(WINAPI*)(void* object, UINT64* windowID);
+TaskbarFlyoutGetWindowID_t TaskbarFlyoutGetWindowID_Original;
 
 using TaskbarControllerOnLightDismissTriggered_t = void(WINAPI*)(
     void* object,
@@ -363,10 +497,6 @@ bool IsTaskbarHostForWindow(
                });
 }
 
-void SetLightDismissOwnership(
-    void* taskbarHost,
-    LightDismissOwnership ownership);
-
 LightDismissOwnership GetLightDismissOwnership(void* taskbarHost) {
     if (!taskbarHost ||
         !g_lightDismissOwnershipTrackingReliable.load(
@@ -385,23 +515,6 @@ LightDismissOwnership GetLightDismissOwnership(void* taskbarHost) {
     return iterator == g_lightDismissOwnershipByTaskbarHost.end()
                ? LightDismissOwnership::unknown
                : iterator->second;
-}
-
-void SeedLightDismissOwnership(
-    void* taskbarHost,
-    bool taskbarModelIsExpanded) {
-    if (!taskbarHost ||
-        GetLightDismissOwnership(taskbarHost) !=
-            LightDismissOwnership::unknown) {
-        return;
-    }
-
-    // TaskbarHost::OnIsExpandedChanged uses this property to choose between
-    // native registration and unregistration.
-    SetLightDismissOwnership(
-        taskbarHost,
-        taskbarModelIsExpanded ? LightDismissOwnership::windows
-                               : LightDismissOwnership::unregistered);
 }
 
 void SetLightDismissOwnership(
@@ -443,30 +556,6 @@ void SetLightDismissOwnership(
     }
 }
 
-bool TryClaimUnregisteredLightDismiss(void* taskbarHost) {
-    if (!taskbarHost ||
-        !g_lightDismissOwnershipTrackingReliable.load(
-            std::memory_order_acquire)) {
-        return false;
-    }
-
-    std::lock_guard<std::mutex> lock(g_lightDismissOwnershipMutex);
-    if (!g_lightDismissOwnershipTrackingReliable.load(
-            std::memory_order_acquire)) {
-        return false;
-    }
-
-    LightDismissOwnershipMap::iterator iterator =
-        g_lightDismissOwnershipByTaskbarHost.find(taskbarHost);
-    if (iterator == g_lightDismissOwnershipByTaskbarHost.end() ||
-        iterator->second != LightDismissOwnership::unregistered) {
-        return false;
-    }
-
-    iterator->second = LightDismissOwnership::preview;
-    return true;
-}
-
 void ForgetLightDismissOwnership(void* taskbarHost) {
     std::lock_guard<std::mutex> lock(g_lightDismissOwnershipMutex);
     g_lightDismissOwnershipByTaskbarHost.erase(taskbarHost);
@@ -484,14 +573,44 @@ void ClearPreviewLightDismissStateForHost(void* taskbarHost) {
     }
 }
 
-void WINAPI TaskbarHostRegisterLightDismiss_Hook(void* object) {
-    TaskbarHostRegisterLightDismiss_Original(object);
+void* WINAPI LightDismissActionDismissed_Hook(const void* object,
+                                              void* eventToken,
+                                              const void* handler) {
+    void* result =
+        LightDismissActionDismissed_Original(object, eventToken, handler);
+    if (g_lightDismissRegistrationProbe.active) {
+        g_lightDismissRegistrationProbe.actionCreated = true;
+    }
 
+    return result;
+}
+
+// Calls the trampoline, which bypasses the ownership-tracking hook, and
+// returns whether the call created the host's action.
+bool RegisterLightDismissCreatingAction(void* taskbarHost) {
+    LightDismissRegistrationProbe previousProbe =
+        g_lightDismissRegistrationProbe;
+    g_lightDismissRegistrationProbe = {false, true};
+    TaskbarHostRegisterLightDismiss_Original(taskbarHost);
+    bool actionCreated = g_lightDismissRegistrationProbe.actionCreated;
+    g_lightDismissRegistrationProbe = previousProbe;
+    return actionCreated;
+}
+
+void WINAPI TaskbarHostRegisterLightDismiss_Hook(void* object) {
     if (!HasTaskbarLightDismissSymbols()) {
+        TaskbarHostRegisterLightDismiss_Original(object);
         return;
     }
 
-    SetLightDismissOwnership(object, LightDismissOwnership::windows);
+    bool previewActionHeld =
+        g_previewLightDismissTaskbarHost == object ||
+        GetLightDismissOwnership(object) == LightDismissOwnership::preview;
+    // Windows keeps a held preview action as its own.
+    if (RegisterLightDismissCreatingAction(object) || previewActionHeld) {
+        SetLightDismissOwnership(object, LightDismissOwnership::windows);
+    }
+
     ClearPreviewLightDismissStateForHost(object);
 }
 
@@ -514,25 +633,38 @@ void WINAPI TaskbarHostDestructor_Hook(void* object) {
     ForgetLightDismissOwnership(object);
 }
 
-using SetIsPointerOverFlyoutFrame_t =
-    void(WINAPI*)(void* object, bool isPointerOver);
-SetIsPointerOverFlyoutFrame_t SetIsPointerOverFlyoutFrame_Original;
+// Older builds reach these through HoverFlyoutModel::SetIsPointerOverFlyoutFrame,
+// which tail-calls them; newer builds inline that setter into the controller.
+using HoverFlyoutModelOnPointerEnteredFlyoutFrame_t =
+    void(WINAPI*)(void* object);
+HoverFlyoutModelOnPointerEnteredFlyoutFrame_t
+    HoverFlyoutModelOnPointerEnteredFlyoutFrame_Original;
+
+using HoverFlyoutModelOnPointerExitedFlyoutFrame_t =
+    void(WINAPI*)(void* object);
+HoverFlyoutModelOnPointerExitedFlyoutFrame_t
+    HoverFlyoutModelOnPointerExitedFlyoutFrame_Original;
 
 using HoverFlyoutModelDestructor_t = void(WINAPI*)(void* object);
 HoverFlyoutModelDestructor_t HoverFlyoutModelDestructor_Original;
 
-void WINAPI SetIsPointerOverFlyoutFrame_Hook(
-    void* object,
-    bool isPointerOver) {
+void WINAPI HoverFlyoutModelOnPointerEnteredFlyoutFrame_Hook(void* object) {
     if (HasFlyoutPointerTrackingSymbols()) {
-        if (isPointerOver) {
-            g_pointerOverFlyoutFrameModel = object;
-        } else if (g_pointerOverFlyoutFrameModel == object) {
-            g_pointerOverFlyoutFrameModel = nullptr;
-        }
+        g_pointerOverFlyoutFrameModel = object;
     }
 
-    SetIsPointerOverFlyoutFrame_Original(object, isPointerOver);
+    // Held hover changes precede the frame entry, matching the native order
+    // of item exit, dismiss-pending, then frame entry cancelling it.
+    FlushDeferredHoverAimEvents(L"pointer reached the previews");
+    HoverFlyoutModelOnPointerEnteredFlyoutFrame_Original(object);
+}
+
+void WINAPI HoverFlyoutModelOnPointerExitedFlyoutFrame_Hook(void* object) {
+    if (g_pointerOverFlyoutFrameModel == object) {
+        g_pointerOverFlyoutFrameModel = nullptr;
+    }
+
+    HoverFlyoutModelOnPointerExitedFlyoutFrame_Original(object);
 }
 
 void WINAPI HoverFlyoutModelDestructor_Hook(void* object) {
@@ -548,6 +680,10 @@ void WINAPI HoverFlyoutModelDestructor_Hook(void* object) {
 
     if (g_pointerOverFlyoutFrameModel == object) {
         g_pointerOverFlyoutFrameModel = nullptr;
+    }
+
+    if (g_hoverAimState.deferredModel == object) {
+        DiscardDeferredHoverAimEvents();
     }
 
     HoverFlyoutModelDestructor_Original(object);
@@ -598,38 +734,38 @@ void ArmPreviewLightDismiss() {
         !g_initialized.load(std::memory_order_acquire) ||
         !g_closeOnOutsideClick.load(std::memory_order_relaxed) ||
         !g_activeTaskbarWindow ||
-        !HasOutsideClickSymbols()) {
+        !HasOutsideClickSymbols() ||
+        !g_lightDismissOwnershipTrackingReliable.load(
+            std::memory_order_acquire)) {
         return;
     }
 
     // LightDismissAction observes the taskbar InputSite without taking focus.
     HWND taskbarWindow = g_activeTaskbarWindow;
-    bool taskbarModelStateAvailable =
-        g_activeTaskbarModelState.valid &&
-        g_activeTaskbarModelState.hoverFlyoutController ==
-            g_activeHoverFlyoutController &&
-        g_activeTaskbarModelState.taskbarWindow == taskbarWindow;
-    bool taskbarModelIsExpanded =
-        g_activeTaskbarModelState.isExpanded;
     void* registeredTaskbarHost = nullptr;
     bool registered = WithTaskbarHost(
         taskbarWindow,
-        [taskbarModelStateAvailable,
-         taskbarModelIsExpanded,
-         &registeredTaskbarHost](void* taskbarHost) {
-            if (taskbarModelStateAvailable) {
-                SeedLightDismissOwnership(
-                    taskbarHost, taskbarModelIsExpanded);
-            }
-
-            // Without a semantic snapshot or observed native transition, an
-            // unseen host may already contain a Windows action.
-            if (!TryClaimUnregisteredLightDismiss(taskbarHost)) {
+        [&registeredTaskbarHost](void* taskbarHost) {
+            LightDismissOwnership ownership =
+                GetLightDismissOwnership(taskbarHost);
+            // A Windows action already raises the event the previews close on.
+            if (ownership == LightDismissOwnership::windows) {
                 return false;
             }
 
-            // The trampoline bypasses the ownership-tracking hook.
-            TaskbarHostRegisterLightDismiss_Original(taskbarHost);
+            // Registration creates an action only when the host holds none,
+            // and one the hooks never saw is Windows'. TaskbarModel::IsExpanded
+            // can't tell: the desktop taskbar reports expanded without
+            // registering one.
+            if (!RegisterLightDismissCreatingAction(taskbarHost)) {
+                if (ownership == LightDismissOwnership::unknown) {
+                    SetLightDismissOwnership(
+                        taskbarHost,
+                        LightDismissOwnership::windows);
+                }
+
+                return false;
+            }
 
             SetLightDismissOwnership(
                 taskbarHost,
@@ -659,8 +795,8 @@ void ClearActiveHoverFlyoutController(void* object) {
         g_thumbnailRemovalTrackingState = {};
         g_activeHoverFlyoutController = nullptr;
         g_activeTaskbarWindow = nullptr;
-        g_activeTaskbarModelState = {};
         g_pointerOverFlyoutFrameModel = nullptr;
+        StopHoverAimTracking();
     }
 }
 
@@ -676,6 +812,7 @@ void CommitActiveHoverFlyoutImmediately() {
 
     ClearActiveHoverFlyoutController(hoverFlyoutController);
     CommitDismissFlyout_Original(hoverFlyoutController);
+    FlushDeferredHoverAimEvents(L"previews closed");
 }
 
 void DismissActiveHoverFlyoutForOutsideClick() {
@@ -689,39 +826,54 @@ void DismissActiveHoverFlyoutForOutsideClick() {
 void WINAPI CommitDismissFlyout_Hook(void* object) {
     ClearActiveHoverFlyoutController(object);
     CommitDismissFlyout_Original(object);
+    // Replayed after the close so the model sees the pointer's current item
+    FlushDeferredHoverAimEvents(L"previews closed");
 }
 
 using UpdateFlyoutWindowPosition_t = void(WINAPI*)(void* object);
 UpdateFlyoutWindowPosition_t UpdateFlyoutWindowPosition_Original;
 
-UINT64 WINAPI TaskbarModelHostWindowID_Hook(const void* object) {
-    UINT64 hostWindowID = TaskbarModelHostWindowID_Original(object);
-
-    // UpdateFlyoutWindowPosition asks its own TaskbarModel for this value. Use
-    // that semantic call to capture the matching per-taskbar expansion state.
-    TaskbarModelStateCapture& capture = g_taskbarModelStateCapture;
-    if (!capture.active || capture.captured || !hostWindowID ||
-        !TaskbarModelIsExpanded_Original) {
-        return hostWindowID;
+void CaptureWindowID(WindowIDCapture& capture,
+                     HRESULT result,
+                     const UINT64* windowID) {
+    if (capture.active && !capture.captured && SUCCEEDED(result) &&
+        *windowID) {
+        capture.captured = true;
+        capture.windowID = *windowID;
     }
+}
 
-    // Claim the slot before calling back into taskbar model code.
-    capture.captured = true;
-    bool isExpanded = TaskbarModelIsExpanded_Original(object);
-    capture.hostWindowID = hostWindowID;
-    capture.isExpanded = isExpanded;
-    return hostWindowID;
+HRESULT WINAPI TaskbarModelGetHostWindowID_Hook(void* object,
+                                                UINT64* hostWindowID) {
+    HRESULT result =
+        TaskbarModelGetHostWindowID_Original(object, hostWindowID);
+
+    // UpdateFlyoutWindowPosition asks its own TaskbarModel for the taskbar
+    // window the flyout belongs to.
+    CaptureWindowID(g_hostWindowCapture, result, hostWindowID);
+    return result;
+}
+
+HRESULT WINAPI TaskbarFlyoutGetWindowID_Hook(void* object, UINT64* windowID) {
+    HRESULT result = TaskbarFlyoutGetWindowID_Original(object, windowID);
+
+    // UpdateFlyoutWindowPosition asks its TaskbarFlyout for the window it
+    // sizes to the monitor and hosts the flyout frame in.
+    CaptureWindowID(g_flyoutWindowCapture, result, windowID);
+    return result;
 }
 
 void WINAPI UpdateFlyoutWindowPosition_Hook(void* object) {
-    TaskbarModelStateCapture previousCapture = g_taskbarModelStateCapture;
-    g_taskbarModelStateCapture = {};
-    g_taskbarModelStateCapture.active =
-        g_initialized.load(std::memory_order_acquire);
+    WindowIDCapture previousHostWindowCapture = g_hostWindowCapture;
+    WindowIDCapture previousFlyoutWindowCapture = g_flyoutWindowCapture;
+    bool initialized = g_initialized.load(std::memory_order_acquire);
+    g_hostWindowCapture = {0, false, initialized};
+    g_flyoutWindowCapture = {0, false, initialized};
     UpdateFlyoutWindowPosition_Original(object);
-    TaskbarModelStateCapture taskbarModelStateCapture =
-        g_taskbarModelStateCapture;
-    g_taskbarModelStateCapture = previousCapture;
+    WindowIDCapture hostWindowCapture = g_hostWindowCapture;
+    WindowIDCapture flyoutWindowCapture = g_flyoutWindowCapture;
+    g_hostWindowCapture = previousHostWindowCapture;
+    g_flyoutWindowCapture = previousFlyoutWindowCapture;
 
     if (!g_initialized.load(std::memory_order_acquire) ||
         !HasActiveHoverFlyoutLifecycleSymbols()) {
@@ -729,10 +881,9 @@ void WINAPI UpdateFlyoutWindowPosition_Hook(void* object) {
     }
 
     HWND taskbarWindow = nullptr;
-    if (taskbarModelStateCapture.captured) {
+    if (hostWindowCapture.captured) {
         taskbarWindow = NormalizeTaskbarWindow(
-            reinterpret_cast<HWND>(
-                taskbarModelStateCapture.hostWindowID));
+            reinterpret_cast<HWND>(hostWindowCapture.windowID));
     }
 
     bool controllerChanged =
@@ -740,10 +891,10 @@ void WINAPI UpdateFlyoutWindowPosition_Hook(void* object) {
     bool taskbarChanged =
         taskbarWindow &&
         g_activeTaskbarWindow != taskbarWindow;
-    bool taskbarModelStateInvalidated =
-        taskbarModelStateCapture.captured && !taskbarWindow;
+    bool taskbarWindowInvalidated =
+        hostWindowCapture.captured && !taskbarWindow;
     if (controllerChanged || taskbarChanged ||
-        taskbarModelStateInvalidated) {
+        taskbarWindowInvalidated) {
         DisarmPreviewLightDismiss();
         if (controllerChanged) {
             // The visible-pending model transition precedes the controller's
@@ -751,22 +902,28 @@ void WINAPI UpdateFlyoutWindowPosition_Hook(void* object) {
             g_pointerOverFlyoutFrameModel = nullptr;
         }
 
-        if (controllerChanged || taskbarModelStateInvalidated) {
+        if (controllerChanged || taskbarWindowInvalidated) {
             g_activeTaskbarWindow = nullptr;
-            g_activeTaskbarModelState = {};
         }
     }
 
     g_activeHoverFlyoutController = object;
     if (taskbarWindow) {
         g_activeTaskbarWindow = taskbarWindow;
-        g_activeTaskbarModelState = {
-            object,
-            taskbarWindow,
-            taskbarModelStateCapture.isExpanded,
-            true,
-        };
     }
+
+    if (controllerChanged) {
+        g_hoverAimState.flyoutWindow = nullptr;
+    }
+
+    if (flyoutWindowCapture.captured) {
+        HWND flyoutWindow =
+            reinterpret_cast<HWND>(flyoutWindowCapture.windowID);
+        g_hoverAimState.flyoutWindow =
+            IsWindow(flyoutWindow) ? flyoutWindow : nullptr;
+    }
+
+    StartHoverAimTracking();
     ArmPreviewLightDismiss();
 }
 
@@ -776,10 +933,13 @@ HideAllHoverFlyouts_t HideAllHoverFlyouts_Original;
 void WINAPI HideAllHoverFlyouts_Hook(void* object) {
     ClearActiveHoverFlyoutController(object);
     HideAllHoverFlyouts_Original(object);
+    FlushDeferredHoverAimEvents(L"previews hidden");
 }
 
 void WINAPI HoverFlyoutControllerDestructor_Hook(void* object) {
     ClearActiveHoverFlyoutController(object);
+    // The owned model may be destroyed with the controller
+    DiscardDeferredHoverAimEvents();
     HoverFlyoutControllerDestructor_Original(object);
 }
 
@@ -980,16 +1140,12 @@ void WINAPI TransitionToFlyoutVisiblePendingState_Hook(
     void* object,
     void* targetItemKey,
     LONGLONG delayTimeSpan) {
-    if (HasThumbnailRemovalSymbols()) {
-        // A new hover target supersedes an unconsumed removal transition
-        ClearThumbnailRemovalTag();
-        g_thumbnailRemovalTrackingState.activeThumbnailItemsCollection =
-            nullptr;
-        g_thumbnailRemovalTrackingState.activeFlyoutModel = object;
-    }
+    BeginHoverTarget(object);
 
     LONGLONG configuredDelayTimeSpan =
-        g_hoverDelayTimeSpan.load(std::memory_order_relaxed);
+        static_cast<LONGLONG>(
+            g_hoverDelayMilliseconds.load(std::memory_order_relaxed)) *
+        TIME_SPAN_TICKS_PER_MILLISECOND;
     LONGLONG appliedDelayTimeSpan =
         delayTimeSpan > 0 ? configuredDelayTimeSpan : delayTimeSpan;
 
@@ -998,6 +1154,25 @@ void WINAPI TransitionToFlyoutVisiblePendingState_Hook(
 
     TransitionToFlyoutVisiblePendingState_Original(
         object, targetItemKey, appliedDelayTimeSpan);
+}
+
+// Windows times its visible-pending transition from MouseHoverTime here.
+// Newer builds inline that transition for a first hover instead of calling
+// TransitionToFlyoutVisiblePendingState.
+using HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_t =
+    void(WINAPI*)(void* object, const void* itemKey);
+HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_t
+    HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_Original;
+
+void WINAPI HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_Hook(
+    void* object,
+    const void* itemKey) {
+    // Limits the MouseHoverTime override to this handler
+    // MSVC exceptions skip mod cleanup, so reset instead of restoring
+    g_hoverDelayFlyoutModel = object;
+    HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_Original(object,
+                                                                 itemKey);
+    g_hoverDelayFlyoutModel = nullptr;
 }
 
 using TransitionToFlyoutDismissPendingState_t = void(WINAPI*)(void* object);
@@ -1026,6 +1201,16 @@ void WINAPI TransitionToFlyoutDismissPendingState_Hook(void* object) {
         }
     }
 
+    // Pointer exits are held while the pointer heads toward the flyout. Any
+    // other close must reach the model after the hover changes held so far.
+    if (source == DismissDelaySource::pointerExit) {
+        if (TryHoldHoverAimDismiss(object)) {
+            return;
+        }
+    } else {
+        FlushDeferredHoverAimEvents(L"thumbnail removal");
+    }
+
     // Limits the MouseHoverTime override to this transition
     // MSVC exceptions skip mod cleanup, so reset instead of restoring
     g_dismissDelaySource = source;
@@ -1042,7 +1227,16 @@ UINT WINAPI MouseHoverTime_Hook(void* object) {
     const WCHAR* transitionName = nullptr;
     switch (g_dismissDelaySource) {
         case DismissDelaySource::none:
-            return systemDelayMilliseconds;
+            if (!g_hoverDelayFlyoutModel) {
+                return systemDelayMilliseconds;
+            }
+
+            // The handler reads it only to start a visible-pending transition
+            BeginHoverTarget(g_hoverDelayFlyoutModel);
+            configuredDelayMilliseconds =
+                g_hoverDelayMilliseconds.load(std::memory_order_relaxed);
+            transitionName = L"Hover";
+            break;
 
         case DismissDelaySource::pointerExit:
             configuredDelayMilliseconds =
@@ -1066,11 +1260,762 @@ UINT WINAPI MouseHoverTime_Hook(void* object) {
     return configuredDelayMilliseconds;
 }
 
+using HoverFlyoutModelOnVisualStateStateChanged_t =
+    void(WINAPI*)(void* object,
+                  const winrt::hstring& itemKey,
+                  bool hasHoverFlyout,
+                  INT32 previousState,
+                  INT32 currentState);
+HoverFlyoutModelOnVisualStateStateChanged_t
+    HoverFlyoutModelOnVisualStateStateChanged_Original;
+
+// Reports whether the model has a target item, including pending states
+using HoverFlyoutModelIsFlyoutVisible_t = bool(WINAPI*)(const void* object);
+HoverFlyoutModelIsFlyoutVisible_t HoverFlyoutModelIsFlyoutVisible_Original;
+
+// The std::vector<winrt::weak_ref<FrameworkElement>> is passed by value, so
+// the callee receives the address of the caller's temporary.
+using FlyoutFrameTargets_t = void(WINAPI*)(void* object, void* targets);
+FlyoutFrameTargets_t FlyoutFrameTargets_Original;
+
+struct WeakReferenceVector {
+    void** first;
+    void** last;
+    void** end;
+};
+
+struct HoverAimBounds {
+    double left;
+    double top;
+    double right;
+    double bottom;
+};
+
+struct HoverAimGeometry {
+    double buttonLeft;
+    double buttonRight;
+    double anchorY;
+    double flyoutLeft;
+    double flyoutRight;
+    double flyoutBottom;
+};
+
+enum class HoverAimResult {
+    aiming,
+    unavailable,
+    holdCapacityReached,
+    mouseButtonDown,
+    atRest,
+    noGeometry,
+    notBelowPreviews,
+    outsideBoundaries,
+};
+
+struct HoverAimEvaluation {
+    HoverAimGeometry geometry;
+    POINT cursor;
+    double motionX;
+    double motionY;
+    bool hasCursor;
+    bool hasMotion;
+    bool hasGeometry;
+};
+
+const WCHAR* DescribeHoverAimResult(HoverAimResult result) {
+    switch (result) {
+        case HoverAimResult::aiming:
+            return L"pointer aiming at the previews";
+        case HoverAimResult::unavailable:
+            return L"aim tracking inactive";
+        case HoverAimResult::holdCapacityReached:
+            return L"too many held changes";
+        case HoverAimResult::mouseButtonDown:
+            return L"mouse button down";
+        case HoverAimResult::atRest:
+            return L"pointer at rest";
+        case HoverAimResult::noGeometry:
+            return L"button or preview bounds unavailable";
+        case HoverAimResult::notBelowPreviews:
+            return L"pointer not below the previews";
+        case HoverAimResult::outsideBoundaries:
+            return L"motion outside the boundary lines";
+    }
+
+    return L"unknown";
+}
+
+void ReleaseAbiReference(void*& reference) {
+    if (reference) {
+        static_cast<winrt::impl::unknown_abi*>(reference)->Release();
+        reference = nullptr;
+    }
+}
+
+// The object must start with an IUnknown-compatible vtable. FlyoutFrame's
+// first vtable is its implements<> IUnknown.
+void* CreateWeakReference(void* object) {
+    void* source = nullptr;
+    if (static_cast<winrt::impl::unknown_abi*>(object)->QueryInterface(
+            winrt::impl::guid_v<winrt::impl::IWeakReferenceSource>,
+            &source) < 0 ||
+        !source) {
+        return nullptr;
+    }
+
+    winrt::impl::IWeakReference* weakReference = nullptr;
+    int32_t result =
+        static_cast<winrt::impl::IWeakReferenceSource*>(source)
+            ->GetWeakReference(&weakReference);
+    static_cast<winrt::impl::unknown_abi*>(source)->Release();
+    return result >= 0 ? weakReference : nullptr;
+}
+
+winrt::Windows::UI::Xaml::FrameworkElement ResolveFrameworkElement(
+    void* weakReference) {
+    winrt::Windows::UI::Xaml::FrameworkElement element = nullptr;
+    if (weakReference) {
+        static_cast<winrt::impl::IWeakReference*>(weakReference)->Resolve(
+            winrt::guid_of<winrt::Windows::UI::Xaml::FrameworkElement>(),
+            winrt::put_abi(element));
+    }
+
+    return element;
+}
+
+void ReleaseHoverAimTargets() {
+    HoverAimState& state = g_hoverAimState;
+    ReleaseAbiReference(state.frameWeakReference);
+    ReleaseAbiReference(state.cardWeakReference);
+    for (size_t index = 0; index < state.targetCount; index++) {
+        ReleaseAbiReference(state.targetWeakReferences[index]);
+    }
+
+    state.targetCount = 0;
+}
+
+void TrackFlyoutFrameTargets(void* frame, const void* targets) {
+    ReleaseHoverAimTargets();
+
+    HoverAimState& state = g_hoverAimState;
+    state.frameWeakReference = CreateWeakReference(frame);
+    if (!state.frameWeakReference) {
+        return;
+    }
+
+    const WeakReferenceVector* vector =
+        static_cast<const WeakReferenceVector*>(targets);
+    for (void** target = vector->first;
+         target != vector->last &&
+         state.targetCount < HOVER_AIM_TARGET_CAPACITY;
+         target++) {
+        if (!*target) {
+            continue;
+        }
+
+        static_cast<winrt::impl::unknown_abi*>(*target)->AddRef();
+        state.targetWeakReferences[state.targetCount++] = *target;
+    }
+}
+
+void WINAPI FlyoutFrameTargets_Hook(void* object, void* targets) {
+    // Read before the original moves the vector into the frame
+    if (HasHoverAimSymbols() && targets) {
+        TrackFlyoutFrameTargets(object, targets);
+    }
+
+    FlyoutFrameTargets_Original(object, targets);
+}
+
+HWND GetXamlContentWindow(HWND hostWindow) {
+    HWND contentWindow = FindWindowExW(
+        hostWindow,
+        nullptr,
+        L"Windows.UI.Composition.DesktopWindowContentBridge",
+        nullptr);
+    return contentWindow ? contentWindow : hostWindow;
+}
+
+bool GetElementScreenBounds(
+    const winrt::Windows::UI::Xaml::FrameworkElement& element,
+    HWND hostWindow,
+    HoverAimBounds* bounds) {
+    double width = element.ActualWidth();
+    double height = element.ActualHeight();
+    if (!(width > 0) || !(height > 0)) {
+        return false;
+    }
+
+    winrt::Windows::UI::Xaml::XamlRoot xamlRoot = element.XamlRoot();
+    if (!xamlRoot) {
+        return false;
+    }
+
+    // The native flyout placement converts window pixels with this scale
+    double scale = xamlRoot.RasterizationScale();
+    if (!(scale > 0)) {
+        return false;
+    }
+
+    winrt::Windows::Foundation::Rect elementBounds =
+        element.TransformToVisual(nullptr).TransformBounds(
+            winrt::Windows::Foundation::Rect{
+                0.0f,
+                0.0f,
+                static_cast<float>(width),
+                static_cast<float>(height),
+            });
+
+    POINT origin = {};
+    if (!ClientToScreen(GetXamlContentWindow(hostWindow), &origin)) {
+        return false;
+    }
+
+    bounds->left = origin.x + elementBounds.X * scale;
+    bounds->top = origin.y + elementBounds.Y * scale;
+    bounds->right = bounds->left + elementBounds.Width * scale;
+    bounds->bottom = bounds->top + elementBounds.Height * scale;
+    return true;
+}
+
+winrt::Windows::UI::Xaml::FrameworkElement FindNamedDescendant(
+    const winrt::Windows::UI::Xaml::DependencyObject& parent,
+    std::wstring_view name,
+    int depth) {
+    using winrt::Windows::UI::Xaml::Media::VisualTreeHelper;
+
+    int32_t childCount = VisualTreeHelper::GetChildrenCount(parent);
+    for (int32_t index = 0; index < childCount; index++) {
+        winrt::Windows::UI::Xaml::DependencyObject child =
+            VisualTreeHelper::GetChild(parent, index);
+        winrt::Windows::UI::Xaml::FrameworkElement element =
+            child.try_as<winrt::Windows::UI::Xaml::FrameworkElement>();
+        if (element && std::wstring_view(element.Name()) == name) {
+            return element;
+        }
+
+        if (depth > 1) {
+            winrt::Windows::UI::Xaml::FrameworkElement found =
+                FindNamedDescendant(child, name, depth - 1);
+            if (found) {
+                return found;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+// FlyoutFrame fills its monitor-sized window. Its template positions the
+// visible preview card, HoverFlyoutGrid, on HoverFlyoutCanvas.
+winrt::Windows::UI::Xaml::FrameworkElement GetHoverAimPreviewCard() {
+    HoverAimState& state = g_hoverAimState;
+    winrt::Windows::UI::Xaml::FrameworkElement card =
+        ResolveFrameworkElement(state.cardWeakReference);
+    if (card) {
+        return card;
+    }
+
+    winrt::Windows::UI::Xaml::FrameworkElement frame =
+        ResolveFrameworkElement(state.frameWeakReference);
+    if (!frame) {
+        return nullptr;
+    }
+
+    card = FindNamedDescendant(frame, L"HoverFlyoutGrid",
+                               HOVER_AIM_TEMPLATE_SEARCH_DEPTH);
+    if (card) {
+        ReleaseAbiReference(state.cardWeakReference);
+        state.cardWeakReference = CreateWeakReference(winrt::get_abi(card));
+        return card;
+    }
+
+    // Without the template part, the thumbnail list content is the closest
+    // element to the previews. It can be replaced, so it isn't cached.
+    winrt::Windows::UI::Xaml::Controls::ContentControl contentControl =
+        frame.try_as<winrt::Windows::UI::Xaml::Controls::ContentControl>();
+    if (!contentControl) {
+        return nullptr;
+    }
+
+    return contentControl.Content()
+        .try_as<winrt::Windows::UI::Xaml::FrameworkElement>();
+}
+
+bool GetHoverAimGeometry(HoverAimGeometry* geometry) {
+    const HoverAimState& state = g_hoverAimState;
+    HWND taskbarWindow = g_activeTaskbarWindow;
+    if (!taskbarWindow || !state.flyoutWindow ||
+        !state.frameWeakReference || !state.targetCount) {
+        return false;
+    }
+
+    try {
+        winrt::Windows::UI::Xaml::FrameworkElement card =
+            GetHoverAimPreviewCard();
+        HoverAimBounds flyoutBounds = {};
+        if (!card ||
+            !GetElementScreenBounds(card, state.flyoutWindow,
+                                    &flyoutBounds)) {
+            return false;
+        }
+
+        HoverAimBounds buttonBounds = {};
+        bool buttonFound = false;
+        for (size_t index = 0; index < state.targetCount; index++) {
+            winrt::Windows::UI::Xaml::FrameworkElement target =
+                ResolveFrameworkElement(state.targetWeakReferences[index]);
+            HoverAimBounds targetBounds = {};
+            if (!target ||
+                !GetElementScreenBounds(target, taskbarWindow,
+                                        &targetBounds)) {
+                continue;
+            }
+
+            if (!buttonFound) {
+                buttonBounds = targetBounds;
+                buttonFound = true;
+                continue;
+            }
+
+            buttonBounds.left = std::min(buttonBounds.left, targetBounds.left);
+            buttonBounds.top = std::min(buttonBounds.top, targetBounds.top);
+            buttonBounds.right =
+                std::max(buttonBounds.right, targetBounds.right);
+            buttonBounds.bottom =
+                std::max(buttonBounds.bottom, targetBounds.bottom);
+        }
+
+        if (!buttonFound) {
+            return false;
+        }
+
+        double anchorFraction =
+            g_aimAnchorHeightPercent.load(std::memory_order_relaxed) / 100.0;
+        geometry->buttonLeft = buttonBounds.left;
+        geometry->buttonRight = buttonBounds.right;
+        geometry->anchorY =
+            buttonBounds.top +
+            (buttonBounds.bottom - buttonBounds.top) * anchorFraction;
+        geometry->flyoutLeft = flyoutBounds.left;
+        geometry->flyoutRight = flyoutBounds.right;
+        geometry->flyoutBottom = flyoutBounds.bottom;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+// Only position changes are stored. While the pointer stays put, the newest
+// sample's time keeps advancing, so it records when the pointer last stood
+// there rather than when it arrived.
+bool RecordHoverAimCursorSample(POINT* cursor, ULONGLONG* tick) {
+    POINT point;
+    if (!GetCursorPos(&point)) {
+        return false;
+    }
+
+    HoverAimState& state = g_hoverAimState;
+    ULONGLONG now = GetTickCount64();
+    HoverAimCursorSample& newest =
+        state.cursorSamples[(state.nextCursorSample +
+                             HOVER_AIM_CURSOR_SAMPLE_COUNT - 1) %
+                            HOVER_AIM_CURSOR_SAMPLE_COUNT];
+    if (state.cursorSampleCount && newest.point.x == point.x &&
+        newest.point.y == point.y) {
+        newest.tick = now;
+    } else {
+        state.cursorSamples[state.nextCursorSample] = {point, now};
+        state.nextCursorSample =
+            (state.nextCursorSample + 1) % HOVER_AIM_CURSOR_SAMPLE_COUNT;
+        if (state.cursorSampleCount < HOVER_AIM_CURSOR_SAMPLE_COUNT) {
+            state.cursorSampleCount++;
+        }
+    }
+
+    *cursor = point;
+    *tick = now;
+    return true;
+}
+
+// Motion is measured from the newest position at least the minimum motion
+// distance away. If the pointer left it longer ago than that distance takes at
+// the minimum drift speed, the pointer is at rest and has no direction.
+bool GetRecentHoverAimMotion(POINT cursor,
+                             ULONGLONG now,
+                             double* motionX,
+                             double* motionY) {
+    const HoverAimState& state = g_hoverAimState;
+    for (size_t age = 1; age < state.cursorSampleCount; age++) {
+        const HoverAimCursorSample& sample =
+            state.cursorSamples[(state.nextCursorSample +
+                                 HOVER_AIM_CURSOR_SAMPLE_COUNT - 1 - age) %
+                                HOVER_AIM_CURSOR_SAMPLE_COUNT];
+        if (now - sample.tick > HOVER_AIM_MOTION_WINDOW_MS) {
+            break;
+        }
+
+        LONG deltaX = cursor.x - sample.point.x;
+        LONG deltaY = cursor.y - sample.point.y;
+        if (deltaX * deltaX + deltaY * deltaY >=
+            HOVER_AIM_MINIMUM_MOTION_PIXELS * HOVER_AIM_MINIMUM_MOTION_PIXELS) {
+            *motionX = deltaX;
+            *motionY = deltaY;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Screen y grows downward. The cone opens upward from the button between the
+// left boundary (button left edge to flyout bottom-left corner) and the right
+// boundary (button right edge to flyout bottom-right corner).
+bool IsMotionInsideHoverAimCone(double motionX,
+                                double motionY,
+                                const HoverAimGeometry& geometry) {
+    double leftX = geometry.flyoutLeft - geometry.buttonLeft;
+    double leftY = geometry.flyoutBottom - geometry.anchorY;
+    double rightX = geometry.flyoutRight - geometry.buttonRight;
+    double rightY = geometry.flyoutBottom - geometry.anchorY;
+    if (leftY >= 0 || rightY >= 0) {
+        return false;
+    }
+
+    return leftX * motionY - leftY * motionX >= 0 &&
+           motionX * rightY - motionY * rightX >= 0;
+}
+
+bool IsAnyMouseButtonDown() {
+    return ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON) |
+             GetAsyncKeyState(VK_MBUTTON)) &
+            0x8000) != 0;
+}
+
+HoverAimResult EvaluateHoverAim(HoverAimEvaluation* evaluation) {
+    ULONGLONG now;
+    if (!RecordHoverAimCursorSample(&evaluation->cursor, &now)) {
+        return HoverAimResult::unavailable;
+    }
+
+    evaluation->hasCursor = true;
+    if (!g_initialized.load(std::memory_order_acquire) ||
+        !g_aimTowardPreviews.load(std::memory_order_relaxed) ||
+        !HasHoverAimSymbols() || !g_activeHoverFlyoutController) {
+        return HoverAimResult::unavailable;
+    }
+
+    if (IsAnyMouseButtonDown()) {
+        return HoverAimResult::mouseButtonDown;
+    }
+
+    if (!GetRecentHoverAimMotion(evaluation->cursor, now,
+                                 &evaluation->motionX,
+                                 &evaluation->motionY)) {
+        return HoverAimResult::atRest;
+    }
+
+    evaluation->hasMotion = true;
+    if (!GetHoverAimGeometry(&evaluation->geometry)) {
+        return HoverAimResult::noGeometry;
+    }
+
+    evaluation->hasGeometry = true;
+    if (evaluation->cursor.y <= evaluation->geometry.flyoutBottom) {
+        return HoverAimResult::notBelowPreviews;
+    }
+
+    if (!IsMotionInsideHoverAimCone(evaluation->motionX,
+                                    evaluation->motionY,
+                                    evaluation->geometry)) {
+        return HoverAimResult::outsideBoundaries;
+    }
+
+    return HoverAimResult::aiming;
+}
+
+void LogHoverAimEvaluation(const WCHAR* action,
+                           const WCHAR* transitionName,
+                           HoverAimResult result,
+                           const HoverAimEvaluation& evaluation) {
+    WCHAR cursor[48] = L"";
+    WCHAR motion[48] = L"";
+    WCHAR geometry[128] = L"";
+    if (evaluation.hasCursor) {
+        swprintf_s(cursor, ARRAYSIZE(cursor), L" cursor (%ld, %ld)",
+                   evaluation.cursor.x, evaluation.cursor.y);
+    }
+
+    if (evaluation.hasMotion) {
+        swprintf_s(motion, ARRAYSIZE(motion), L" motion (%.0f, %.0f)",
+                   evaluation.motionX, evaluation.motionY);
+    }
+
+    if (evaluation.hasGeometry) {
+        const HoverAimGeometry& bounds = evaluation.geometry;
+        swprintf_s(geometry, ARRAYSIZE(geometry),
+                   L" button %.0f-%.0f anchor %.0f previews %.0f-%.0f "
+                   L"bottom %.0f",
+                   bounds.buttonLeft, bounds.buttonRight, bounds.anchorY,
+                   bounds.flyoutLeft, bounds.flyoutRight, bounds.flyoutBottom);
+    }
+
+    Wh_Log(L"%s %s (%s):%s%s%s", action, transitionName,
+           DescribeHoverAimResult(result), cursor, motion, geometry);
+}
+
+void ReleaseDeferredHoverAimEvents(DeferredHoverAimEvent* events,
+                                   size_t count) {
+    for (size_t index = 0; index < count; index++) {
+        if (events[index].itemKey) {
+            winrt::hstring itemKey;
+            winrt::attach_abi(itemKey, events[index].itemKey);
+            events[index].itemKey = nullptr;
+        }
+    }
+}
+
+void DiscardDeferredHoverAimEvents() {
+    HoverAimState& state = g_hoverAimState;
+    ReleaseDeferredHoverAimEvents(state.deferredEvents,
+                                  state.deferredEventCount);
+    state.deferredEventCount = 0;
+    state.deferredModel = nullptr;
+}
+
+bool IsSameItemKey(void* first, void* second) {
+    winrt::hstring firstKey;
+    winrt::hstring secondKey;
+    winrt::copy_from_abi(firstKey, first);
+    winrt::copy_from_abi(secondKey, second);
+    return firstKey == secondKey;
+}
+
+// Per item, replay only its net effect: the first held change if it left an
+// item the model already considered hovered, and the last held change if the
+// pointer still rests on that item. Items merely crossed on the way vanish.
+bool ShouldReplayDeferredVisualStateChange(
+    const DeferredHoverAimEvent* events,
+    size_t count,
+    size_t index) {
+    size_t firstIndex = index;
+    size_t lastIndex = index;
+    for (size_t other = 0; other < count; other++) {
+        if (events[other].kind !=
+                DeferredHoverAimEventKind::visualStateChange ||
+            !IsSameItemKey(events[other].itemKey, events[index].itemKey)) {
+            continue;
+        }
+
+        firstIndex = std::min(firstIndex, other);
+        lastIndex = std::max(lastIndex, other);
+    }
+
+    INT32 currentState = events[index].currentState;
+    return (index == firstIndex &&
+            currentState == TASK_ITEM_VISUAL_STATE_NORMAL) ||
+           (index == lastIndex &&
+            currentState == TASK_ITEM_VISUAL_STATE_POINTER_OVER);
+}
+
+void FlushDeferredHoverAimEvents(const WCHAR* reason) {
+    HoverAimState& state = g_hoverAimState;
+    if (state.flushing || !state.deferredEventCount) {
+        return;
+    }
+
+    // Detach first: replayed transitions may reach hooks that hold again
+    void* model = state.deferredModel;
+    size_t count = state.deferredEventCount;
+    DeferredHoverAimEvent events[HOVER_AIM_DEFERRED_EVENT_CAPACITY];
+    std::copy(state.deferredEvents, state.deferredEvents + count, events);
+    state.deferredEventCount = 0;
+    state.deferredModel = nullptr;
+
+    // MSVC exceptions skip mod cleanup, so reset instead of restoring
+    state.flushing = true;
+    size_t replayedCount = 0;
+    for (size_t index = 0; index < count; index++) {
+        const DeferredHoverAimEvent& event = events[index];
+        if (event.kind == DeferredHoverAimEventKind::dismiss) {
+            TransitionToFlyoutDismissPendingState_Hook(model);
+            replayedCount++;
+            continue;
+        }
+
+        if (!ShouldReplayDeferredVisualStateChange(events, count, index)) {
+            continue;
+        }
+
+        winrt::hstring itemKey;
+        winrt::copy_from_abi(itemKey, event.itemKey);
+        HoverFlyoutModelOnVisualStateStateChanged_Original(
+            model, itemKey, event.hasHoverFlyout, event.previousState,
+            event.currentState);
+        replayedCount++;
+    }
+
+    state.flushing = false;
+    ReleaseDeferredHoverAimEvents(events, count);
+    Wh_Log(L"Applied %zu of %zu held hover changes (%s)", replayedCount,
+           count, reason);
+}
+
+// Decides whether a pointer transition is held while the pointer aims at the
+// flyout. Otherwise the transitions held so far happened first, so they are
+// released before the caller lets this one through.
+bool TryHoldHoverAimTransition(void* model, const WCHAR* transitionName) {
+    HoverAimState& state = g_hoverAimState;
+    if (state.flushing) {
+        return false;
+    }
+
+    HoverAimEvaluation evaluation = {};
+    HoverAimResult result = HoverAimResult::unavailable;
+    if (HasHoverAimSymbols() &&
+        (!state.deferredModel || state.deferredModel == model) &&
+        HoverFlyoutModelIsFlyoutVisible_Original(model)) {
+        result = state.deferredEventCount < HOVER_AIM_DEFERRED_EVENT_CAPACITY
+                     ? EvaluateHoverAim(&evaluation)
+                     : HoverAimResult::holdCapacityReached;
+    }
+
+    if (result == HoverAimResult::aiming) {
+        if (!state.deferredEventCount) {
+            LogHoverAimEvaluation(L"Holding hover changes from",
+                                  transitionName, result, evaluation);
+        }
+
+        state.deferredModel = model;
+        return true;
+    }
+
+    if (state.deferredEventCount) {
+        FlushDeferredHoverAimEvents(DescribeHoverAimResult(result));
+    } else if (result != HoverAimResult::unavailable) {
+        LogHoverAimEvaluation(L"Not holding", transitionName, result,
+                              evaluation);
+    }
+
+    return false;
+}
+
+bool TryHoldHoverAimDismiss(void* model) {
+    if (!TryHoldHoverAimTransition(model, L"close")) {
+        return false;
+    }
+
+    HoverAimState& state = g_hoverAimState;
+    if (state.deferredEventCount &&
+        state.deferredEvents[state.deferredEventCount - 1].kind ==
+            DeferredHoverAimEventKind::dismiss) {
+        return true;
+    }
+
+    state.deferredEvents[state.deferredEventCount++] = {
+        DeferredHoverAimEventKind::dismiss,
+        nullptr,
+        false,
+        0,
+        0,
+    };
+    return true;
+}
+
+void WINAPI HoverFlyoutModelOnVisualStateStateChanged_Hook(
+    void* object,
+    const winrt::hstring& itemKey,
+    bool hasHoverFlyout,
+    INT32 previousState,
+    INT32 currentState) {
+    const WCHAR* transitionName = nullptr;
+    if (currentState == TASK_ITEM_VISUAL_STATE_NORMAL) {
+        transitionName = L"item exit";
+    } else if (currentState == TASK_ITEM_VISUAL_STATE_POINTER_OVER) {
+        transitionName = previousState == TASK_ITEM_VISUAL_STATE_NORMAL
+                             ? L"item enter"
+                             : L"item hover";
+    }
+
+    if (transitionName) {
+        if (TryHoldHoverAimTransition(object, transitionName)) {
+            winrt::hstring ownedItemKey = itemKey;
+            HoverAimState& state = g_hoverAimState;
+            state.deferredEvents[state.deferredEventCount++] = {
+                DeferredHoverAimEventKind::visualStateChange,
+                winrt::detach_abi(ownedItemKey),
+                hasHoverFlyout,
+                previousState,
+                currentState,
+            };
+            return;
+        }
+    } else {
+        // Presses aren't pointer travel; held changes happened before them
+        FlushDeferredHoverAimEvents(L"item pressed");
+    }
+
+    HoverFlyoutModelOnVisualStateStateChanged_Original(
+        object, itemKey, hasHoverFlyout, previousState, currentState);
+}
+
+void CALLBACK HoverAimTimerProc(HWND window,
+                                UINT message,
+                                UINT_PTR timer,
+                                DWORD time) {
+    // Samples the cursor outside the taskbar too, where no pointer events
+    // reach this thread, and releases held changes once aiming ends.
+    if (!g_hoverAimState.deferredEventCount) {
+        POINT cursor;
+        ULONGLONG tick;
+        RecordHoverAimCursorSample(&cursor, &tick);
+        return;
+    }
+
+    HoverAimEvaluation evaluation = {};
+    HoverAimResult result = EvaluateHoverAim(&evaluation);
+    if (result != HoverAimResult::aiming) {
+        FlushDeferredHoverAimEvents(DescribeHoverAimResult(result));
+    }
+}
+
+void StartHoverAimTracking() {
+    HoverAimState& state = g_hoverAimState;
+    HWND taskbarWindow = g_activeTaskbarWindow;
+    if (state.timerWindow || !taskbarWindow ||
+        !g_aimTowardPreviews.load(std::memory_order_relaxed) ||
+        !HasHoverAimSymbols()) {
+        return;
+    }
+
+    // A window timer with a callback is dispatched without reaching the
+    // taskbar's window procedure.
+    state.cursorSampleCount = 0;
+    state.nextCursorSample = 0;
+    if (!SetTimer(taskbarWindow, HOVER_AIM_TIMER_ID,
+                  HOVER_AIM_SAMPLE_INTERVAL_MS, HoverAimTimerProc)) {
+        Wh_Log(L"Failed to start pointer-aim tracking: %lu", GetLastError());
+        return;
+    }
+
+    state.timerWindow = taskbarWindow;
+}
+
+void StopHoverAimTracking() {
+    HoverAimState& state = g_hoverAimState;
+    if (state.timerWindow) {
+        KillTimer(state.timerWindow, HOVER_AIM_TIMER_ID);
+        state.timerWindow = nullptr;
+    }
+
+    state.flyoutWindow = nullptr;
+}
+
 // Each feature requires every optional symbol it touches to have resolved
 // That includes the destructor hooks that clear the pointers it tracks
 bool HasTaskbarLightDismissSymbols() {
     return TaskbarHostRegisterLightDismiss_Original &&
            TaskbarHostUnregisterLightDismiss_Original &&
+           LightDismissActionDismissed_Original &&
            TaskbarHostDestructor_Original &&
            CTaskBand_ITaskListWndSite_Vftable &&
            CSecondaryTaskBand_ITaskListWndSite_Vftable &&
@@ -1088,15 +2033,9 @@ bool HasActiveHoverFlyoutLifecycleSymbols() {
 
 bool HasFlyoutPointerTrackingSymbols() {
     return HasActiveHoverFlyoutLifecycleSymbols() &&
-           SetIsPointerOverFlyoutFrame_Original &&
+           HoverFlyoutModelOnPointerEnteredFlyoutFrame_Original &&
+           HoverFlyoutModelOnPointerExitedFlyoutFrame_Original &&
            HoverFlyoutModelDestructor_Original;
-}
-
-bool HasOutsideClickViewSymbols() {
-    return HasFlyoutPointerTrackingSymbols() &&
-           TaskbarModelHostWindowID_Original &&
-           TaskbarModelIsExpanded_Original &&
-           TaskbarControllerOnLightDismissTriggered_Original;
 }
 
 bool HasStartButtonHoverSymbols() {
@@ -1108,6 +2047,7 @@ bool HasThumbnailRemovalSymbols() {
     return TransitionToFlyoutVisiblePendingState_Original &&
            TransitionToFlyoutDismissPendingState_Original &&
            MouseHoverTime_Original &&
+           HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_Original &&
            HoverUIItemsCollectionSetTargetItem_Original &&
            HoverUIItemsCollectionDestructor_Original &&
            ThumbnailSourceArraySize_Original &&
@@ -1117,7 +2057,21 @@ bool HasThumbnailRemovalSymbols() {
 
 bool HasOutsideClickSymbols() {
     return HasTaskbarLightDismissSymbols() &&
-           HasOutsideClickViewSymbols();
+           HasFlyoutPointerTrackingSymbols() &&
+           TaskbarModelGetHostWindowID_Original &&
+           TaskbarControllerOnLightDismissTriggered_Original;
+}
+
+bool HasHoverAimSymbols() {
+    return HasActiveHoverFlyoutLifecycleSymbols() &&
+           HoverFlyoutModelDestructor_Original &&
+           HoverFlyoutModelOnPointerEnteredFlyoutFrame_Original &&
+           TaskbarModelGetHostWindowID_Original &&
+           TaskbarFlyoutGetWindowID_Original &&
+           TransitionToFlyoutDismissPendingState_Original &&
+           HoverFlyoutModelOnVisualStateStateChanged_Original &&
+           HoverFlyoutModelIsFlyoutVisible_Original &&
+           FlyoutFrameTargets_Original;
 }
 
 void LoadSettings() {
@@ -1137,10 +2091,9 @@ void LoadSettings() {
         thumbnailRemovalDelayMilliseconds = MINIMUM_DELAY_MS;
     }
 
-    LONGLONG delayTimeSpan =
-        static_cast<LONGLONG>(delayMilliseconds) *
-        TIME_SPAN_TICKS_PER_MILLISECOND;
-    g_hoverDelayTimeSpan.store(delayTimeSpan, std::memory_order_relaxed);
+    g_hoverDelayMilliseconds.store(
+        static_cast<UINT>(delayMilliseconds),
+        std::memory_order_relaxed);
     g_closeDelayMilliseconds.store(
         static_cast<UINT>(closeDelayMilliseconds),
         std::memory_order_relaxed);
@@ -1154,14 +2107,25 @@ void LoadSettings() {
         Wh_GetIntSetting(L"closeOnStartButtonHover") != 0,
         std::memory_order_relaxed);
 
+    int aimAnchorHeightPercent = Wh_GetIntSetting(L"aimAnchorHeightPercent");
+    aimAnchorHeightPercent = std::clamp(aimAnchorHeightPercent, 0, 100);
+    g_aimTowardPreviews.store(
+        Wh_GetIntSetting(L"aimTowardPreviews") != 0,
+        std::memory_order_relaxed);
+    g_aimAnchorHeightPercent.store(aimAnchorHeightPercent,
+                                   std::memory_order_relaxed);
+
     Wh_Log(L"Settings: delayMs=%d closeDelayMs=%d "
            L"thumbnailRemovalDelayMs=%d "
-           L"closeOnOutsideClick=%d closeOnStartButtonHover=%d",
+           L"closeOnOutsideClick=%d closeOnStartButtonHover=%d "
+           L"aimTowardPreviews=%d aimAnchorHeightPercent=%d",
            delayMilliseconds,
            closeDelayMilliseconds,
            thumbnailRemovalDelayMilliseconds,
            g_closeOnOutsideClick.load(std::memory_order_relaxed),
-           g_closeOnStartButtonHover.load(std::memory_order_relaxed));
+           g_closeOnStartButtonHover.load(std::memory_order_relaxed),
+           g_aimTowardPreviews.load(std::memory_order_relaxed),
+           aimAnchorHeightPercent);
 }
 
 HMODULE GetTaskbarModuleHandle() {
@@ -1268,10 +2232,35 @@ bool ResolveTaskbarSymbols(HMODULE module) {
         },
         {
             {
+                LR"(public: __cdecl winrt::impl::consume_Windows_UI_Internal_Input_ILightDismissAction<struct winrt::Windows::UI::Internal::Input::ILightDismissAction>::Dismissed(struct winrt::Windows::Foundation::TypedEventHandler<struct winrt::Windows::UI::Internal::Input::LightDismissAction,struct winrt::Windows::UI::Internal::Input::LightDismissEventArgs> const &)const )",
+                LR"(public: struct winrt::event_token __cdecl winrt::impl::consume_Windows_UI_Internal_Input_ILightDismissAction<struct winrt::Windows::UI::Internal::Input::ILightDismissAction>::Dismissed(struct winrt::Windows::Foundation::TypedEventHandler<struct winrt::Windows::UI::Internal::Input::LightDismissAction,struct winrt::Windows::UI::Internal::Input::LightDismissEventArgs> const &)const )",
+            },
+            &LightDismissActionDismissed_Original,
+            LightDismissActionDismissed_Hook,
+            true,
+        },
+        {
+            {
                 LR"(public: __cdecl TaskbarHost::~TaskbarHost(void))",
             },
             &TaskbarHostDestructor_Original,
             TaskbarHostDestructor_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskbarModel,struct winrt::WindowsUdk::UI::Shell::ITaskbarModel>::get_HostWindowId(unsigned __int64 *))",
+            },
+            &TaskbarModelGetHostWindowID_Original,
+            TaskbarModelGetHostWindowID_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskbarFlyout,struct winrt::WindowsUdk::UI::Shell::ITaskbarFlyout>::get_WindowId(unsigned __int64 *))",
+            },
+            &TaskbarFlyoutGetWindowID_Original,
+            TaskbarFlyoutGetWindowID_Hook,
             true,
         },
     };
@@ -1320,6 +2309,14 @@ bool ResolveTaskbarViewSymbols(HMODULE module) {
             },
             &MouseHoverTime_Original,
             MouseHoverTime_Hook,
+            true,
+        },
+        {
+            {
+                LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutModel::OnPointerEnteredItemWithHoverFlyout(struct winrt::hstring const &))",
+            },
+            &HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_Original,
+            HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_Hook,
             true,
         },
         {
@@ -1373,24 +2370,6 @@ bool ResolveTaskbarViewSymbols(HMODULE module) {
         },
         {
             {
-                LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarModel<struct winrt::WindowsUdk::UI::Shell::ITaskbarModel>::HostWindowId(void)const )",
-                LR"(public: unsigned __int64 __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarModel<struct winrt::WindowsUdk::UI::Shell::ITaskbarModel>::HostWindowId(void)const )",
-            },
-            &TaskbarModelHostWindowID_Original,
-            TaskbarModelHostWindowID_Hook,
-            true,
-        },
-        {
-            {
-                LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarModel3<struct winrt::WindowsUdk::UI::Shell::TaskbarModel>::IsExpanded(void)const )",
-                LR"(public: bool __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarModel3<struct winrt::WindowsUdk::UI::Shell::TaskbarModel>::IsExpanded(void)const )",
-            },
-            &TaskbarModelIsExpanded_Original,
-            nullptr,
-            true,
-        },
-        {
-            {
                 LR"(public: virtual __cdecl winrt::Taskbar::implementation::HoverFlyoutController::~HoverFlyoutController(void))",
             },
             &HoverFlyoutControllerDestructor_Original,
@@ -1407,10 +2386,18 @@ bool ResolveTaskbarViewSymbols(HMODULE module) {
         },
         {
             {
-                LR"(public: void __cdecl winrt::Taskbar::implementation::HoverFlyoutModel::SetIsPointerOverFlyoutFrame(bool))",
+                LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutModel::OnPointerEnteredFlyoutFrame(void))",
             },
-            &SetIsPointerOverFlyoutFrame_Original,
-            SetIsPointerOverFlyoutFrame_Hook,
+            &HoverFlyoutModelOnPointerEnteredFlyoutFrame_Original,
+            HoverFlyoutModelOnPointerEnteredFlyoutFrame_Hook,
+            true,
+        },
+        {
+            {
+                LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutModel::OnPointerExitedFlyoutFrame(void))",
+            },
+            &HoverFlyoutModelOnPointerExitedFlyoutFrame_Original,
+            HoverFlyoutModelOnPointerExitedFlyoutFrame_Hook,
             true,
         },
         {
@@ -1437,6 +2424,30 @@ bool ResolveTaskbarViewSymbols(HMODULE module) {
             ExperienceToggleButtonOnPointerEntered_Hook,
             true,
         },
+        {
+            {
+                LR"(public: void __cdecl winrt::Taskbar::implementation::HoverFlyoutModel::OnVisualStateStateChanged(struct winrt::hstring const &,bool,enum winrt::WindowsUdk::UI::Shell::TaskItemVisualState,enum winrt::WindowsUdk::UI::Shell::TaskItemVisualState))",
+            },
+            &HoverFlyoutModelOnVisualStateStateChanged_Original,
+            HoverFlyoutModelOnVisualStateStateChanged_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: bool __cdecl winrt::Taskbar::implementation::HoverFlyoutModel::IsFlyoutVisible(void)const )",
+            },
+            &HoverFlyoutModelIsFlyoutVisible_Original,
+            nullptr,
+            true,
+        },
+        {
+            {
+                LR"(public: void __cdecl winrt::Taskbar::implementation::FlyoutFrame::Targets(class std::vector<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement>,class std::allocator<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement> > >))",
+            },
+            &FlyoutFrameTargets_Original,
+            FlyoutFrameTargets_Hook,
+            true,
+        },
     };
 
     if (!WindhawkUtils::HookSymbols(
@@ -1454,12 +2465,20 @@ bool ResolveTaskbarViewSymbols(HMODULE module) {
                L"close-delay override is disabled on this build");
     }
 
+    if (!HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_Original ||
+        !MouseHoverTime_Original) {
+        Wh_Log(L"Item-hover delay symbols aren't available; the hover-delay "
+               L"override misses inlined first-hover transitions on this "
+               L"build");
+    }
+
     if (!HasThumbnailRemovalSymbols()) {
         Wh_Log(L"Thumbnail-removal delay isn't available on this build");
     }
 
+    // Taskbar.dll's TaskbarHost loads this module, so Taskbar.dll is handled.
     if (g_closeOnOutsideClick.load(std::memory_order_relaxed) &&
-        !HasOutsideClickViewSymbols()) {
+        !HasOutsideClickSymbols()) {
         Wh_Log(L"Thumbnail light-dismiss symbols aren't available; "
                L"close-on-outside-click is disabled on this build");
     }
@@ -1468,6 +2487,12 @@ bool ResolveTaskbarViewSymbols(HMODULE module) {
         !HasStartButtonHoverSymbols()) {
         Wh_Log(L"Start-button hover symbols aren't available; "
                L"close-on-Start-hover is disabled on this build");
+    }
+
+    if (g_aimTowardPreviews.load(std::memory_order_relaxed) &&
+        !HasHoverAimSymbols()) {
+        Wh_Log(L"Pointer-aim symbols aren't available; keeping previews "
+               L"while moving toward them is disabled on this build");
     }
 
     WCHAR modulePath[MAX_PATH] = {};
@@ -1656,10 +2681,14 @@ void WINAPI RefreshOutsideClickTaskbarThreadState() {
 
 void WINAPI CleanupTaskbarThreadState() {
     RefreshOutsideClickTaskbarThreadState();
+    // Hand held hover changes back to the model before the hooks go away
+    FlushDeferredHoverAimEvents(L"mod unloading");
+    DiscardDeferredHoverAimEvents();
+    StopHoverAimTracking();
+    ReleaseHoverAimTargets();
     g_thumbnailRemovalTrackingState = {};
     g_activeHoverFlyoutController = nullptr;
     g_activeTaskbarWindow = nullptr;
-    g_activeTaskbarModelState = {};
     g_pointerOverFlyoutFrameModel = nullptr;
 }
 

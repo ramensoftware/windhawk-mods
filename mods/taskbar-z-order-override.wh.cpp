@@ -2,7 +2,7 @@
 // @id              taskbar-z-order-override
 // @name            Taskbar Z-Order Override
 // @description     Control whether the taskbar stays always on top, always at the bottom, or behaves like a normal window
-// @version         0.8.1
+// @version         0.9.0
 // @author          meteoni
 // @github          https://github.com/Meteoni
 // @include         explorer.exe
@@ -29,6 +29,8 @@ Keeps the taskbar above normal windows.
 Great for games or browser fullscreen. 
 
 This is mainly useful for people who use **auto-hide** and want the taskbar to stay accessible consistently.
+
+Enable **Raise taskbar when switching windows** to raise it above other always-on-top windows on each foreground change.
 
 ![Always on top](https://raw.githubusercontent.com/Meteoni/meteoni-assets/main/taskbar-z-order-override/always_on_top_low.gif)
 
@@ -60,6 +62,10 @@ If you are more of a window enjoyer than a taskbar enjoyer, this is for you.
     - top: Always on top
     - bottom: Always at bottom
     - interactive: Behaves like a normal window
+- RaiseOnForeground: false
+  $name: Raise taskbar when switching windows
+  $description: Raise above other always-on-top windows when the foreground window changes.
+  #! $showIf: {TaskbarZOrder: top}
 */
 // ==/WindhawkModSettings==
 
@@ -84,6 +90,8 @@ using SetWindowBand_t = BOOL(WINAPI*)(HWND, HWND, DWORD);
 
 struct ModState {
   TaskbarZOrder mode = TaskbarZOrder::Interactive;
+  bool raiseOnForeground = false;
+  HWINEVENTHOOK foregroundEventHook = nullptr;
 
   HWND primaryTaskbarWnd = nullptr;
   std::vector<HWND> secondaryTaskbarWnds;
@@ -93,6 +101,8 @@ struct ModState {
 static ModState g_state;
 static SetWindowPos_t SetWindowPos_Original = nullptr;
 static SetWindowBand_t SetWindowBand_Original = nullptr;
+static UINT g_updateForegroundHookMessage = 0;
+static UINT g_raiseTaskbarMessage = 0;
 
 static bool IsPrimaryTaskbarWindow(HWND hWnd) {
   return hWnd && hWnd == g_state.primaryTaskbarWnd;
@@ -212,9 +222,42 @@ static BOOL WINAPI SetWindowBand_Hook(HWND hWnd,
   return SetWindowBand_Original(hWnd, hwndInsertAfter, dwBand);
 }
 
+static void CALLBACK ForegroundWinEventProc(HWINEVENTHOOK, DWORD, HWND,
+                                            LONG, LONG, DWORD, DWORD) {
+  PostMessageW(g_state.primaryTaskbarWnd, g_raiseTaskbarMessage, 0, 0);
+}
+
 static LRESULT CALLBACK TaskbarSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
                                             LPARAM lParam,
                                             DWORD_PTR dwRefData) {
+  if (msg == g_updateForegroundHookMessage) {
+    // WinEvent hooks are installed and removed on the taskbar's UI thread.
+    if (wParam && !g_state.foregroundEventHook) {
+      g_state.foregroundEventHook = SetWinEventHook(
+          EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
+          ForegroundWinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+      if (!g_state.foregroundEventHook) {
+        Wh_Log(L"Failed to install foreground event hook: %lu", GetLastError());
+      }
+    } else if (!wParam && g_state.foregroundEventHook) {
+      UnhookWinEvent(g_state.foregroundEventHook);
+      g_state.foregroundEventHook = nullptr;
+    }
+    return 0;
+  }
+
+  if (msg == g_raiseTaskbarMessage) {
+    if (g_state.mode == TaskbarZOrder::Top && g_state.raiseOnForeground) {
+      SetTaskbarZOrder(hwnd, HWND_TOPMOST);
+      if (hwnd == g_state.primaryTaskbarWnd) {
+        for (HWND secondaryTaskbar : g_state.secondaryTaskbarWnds) {
+          PostMessageW(secondaryTaskbar, g_raiseTaskbarMessage, 0, 0);
+        }
+      }
+    }
+    return 0;
+  }
+
   switch (g_state.mode) {
     case TaskbarZOrder::Top:
     case TaskbarZOrder::Bottom:
@@ -230,6 +273,10 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
   // handle destroyed taskbars
   if (msg == WM_NCDESTROY){
     if (hwnd == g_state.primaryTaskbarWnd) {
+      if (g_state.foregroundEventHook) {
+        UnhookWinEvent(g_state.foregroundEventHook);
+        g_state.foregroundEventHook = nullptr;
+      }
       g_state.primaryTaskbarWnd = nullptr;
     } else {
       g_state.secondaryTaskbarWnds.erase(
@@ -280,6 +327,8 @@ static void TryAttachPrimaryTaskbarWindow(HWND hwnd) {
   }
 
   g_state.primaryTaskbarWnd = hwnd;
+  SendMessageW(hwnd, g_updateForegroundHookMessage,
+               g_state.raiseOnForeground, 0);
   Wh_Log(L"Attached subclass to primary taskbar hwnd=%p", hwnd);
   ApplyConfiguredMode();
 }
@@ -383,12 +432,24 @@ static void ReadSettings() {
   } else {
     g_state.mode = TaskbarZOrder::Interactive;
   }
+
+  g_state.raiseOnForeground = g_state.mode == TaskbarZOrder::Top &&
+      Wh_GetIntSetting(L"RaiseOnForeground") != 0;
 }
 
 }  // namespace
 
 BOOL Wh_ModInit() {
   ReadSettings();
+
+  g_updateForegroundHookMessage = RegisterWindowMessageW(
+      L"Windhawk.taskbar-z-order-override.UpdateForegroundHook");
+  g_raiseTaskbarMessage = RegisterWindowMessageW(
+      L"Windhawk.taskbar-z-order-override.RaiseTaskbar");
+  if (!g_updateForegroundHookMessage || !g_raiseTaskbarMessage) {
+    Wh_Log(L"Failed to register taskbar messages: %lu", GetLastError());
+    return FALSE;
+  }
 
   HMODULE user32 = GetModuleHandleW(L"user32.dll");
   if (!user32) {
@@ -441,10 +502,18 @@ void Wh_ModAfterInit() { FindAndSubclassExistingTaskbars(); }
 
 void Wh_ModSettingsChanged() {
   ReadSettings();
+  if (g_state.primaryTaskbarWnd) {
+    SendMessageW(g_state.primaryTaskbarWnd, g_updateForegroundHookMessage,
+                 g_state.raiseOnForeground, 0);
+  }
   ApplyConfiguredMode();
 }
 
 void Wh_ModBeforeUninit() {
+  if (g_state.primaryTaskbarWnd) {
+    SendMessageW(g_state.primaryTaskbarWnd, g_updateForegroundHookMessage,
+                 FALSE, 0);
+  }
   ForceTaskbarTopStateBeforeUnload();
   RemoveTaskbarSubclasses();
 }
