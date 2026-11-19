@@ -1065,7 +1065,7 @@ static BOOL SetupHooksImpl() {
 
     // explorerframe.dll: the separators of the navigation pane. Optional, the
     // rest works without it.
-    WindhawkUtils::SYMBOL_HOOK explorerFrameHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] = {
         {
             {LR"(private: void __cdecl CNscTree::DrawDivider(struct HDC__ *,struct _TREEITEM *))"},
             &CNscTree_DrawDivider_Original,
@@ -1074,7 +1074,7 @@ static BOOL SetupHooksImpl() {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(g_explorerFrameModule, explorerFrameHooks, ARRAYSIZE(explorerFrameHooks))) {
+    if (!WindhawkUtils::HookSymbols(g_explorerFrameModule, explorerframe_dll_hooks, ARRAYSIZE(explorerframe_dll_hooks))) {
         Wh_Log(L"HookSymbols failed, the separators can't be adjusted");
     }
 
