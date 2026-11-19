@@ -2252,7 +2252,7 @@ void WINAPI IconView_OnPointerEntered_Hook(void* pThis, void* pArgs) {
 bool HookSystemTraySymbols(HMODULE systemTrayMod) {
     if (!systemTrayMod) return false;
 
-    // SystemTray.dll, Taskbar.View.dll (< 2604), ExplorerExtensions.dll
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {
         {
             { L"public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void)" },
