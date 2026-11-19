@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              outlook-refined
 // @name            Outlook Refined
-// @description     Restyles new Outlook: favorites groups, per-account compose buttons, a resizable folder pane, an agenda with a month grid, the Other inbox under Focused, a tidier calendar and reading pane, and a print layout
-// @version         0.6.5
+// @description     Restyles new Outlook: favorites groups, per-account compose buttons, folder colors, a resizable folder pane, an agenda with a month grid, the Other inbox under Focused, a tidier calendar and reading pane, and a print layout
+// @version         0.7.0
 // @author          Analytic Endeavors
 // @github          https://github.com/ae-reid-havens
 // @include         olk.exe
@@ -39,16 +39,18 @@ headers Outlook sets, in memory, and reuses them. Those features refresh every
 few minutes while they are on, and each is off until you turn it on. Nothing is
 stored, logged or sent anywhere else, and no credential is written down.
 
-**Where your edits are kept.** Groups, renames, folds, account order and the
-pane and card sizes are saved in Windhawk's own storage for this mod, so they
+**Where your edits are kept.** Groups, renames, folds, account order, folder
+colors and the pane and card sizes are saved in Windhawk's own storage for this mod, so they
 leave when the mod does. State an earlier version wrote into Outlook's own local
 storage is moved across the first time this one runs. Other Outlook windows
 that are already open pick up a change as soon as you move into them.
 
 **Folder pane:** Favorites in groups that fold (right-click a group header for
 its menu, drag a favorite to move it, Shift+right-click it to rename or move
-it), per-account compose buttons, a resizable pane, account trees under one
-foldable heading, accounts reordered by dragging.
+it), per-account compose buttons, short account labels (shared mailboxes
+included), a color for any folder (Shift+right-click it, then Color..., with
+Outlook's own palette in light and dark), a resizable pane, account trees under
+one foldable heading, accounts reordered by dragging.
 
 **Agenda:** today and the next days from every account's calendar at the bottom
 of the folder pane, with a join button for online meetings, under a month grid
@@ -99,7 +101,7 @@ the parts that depend on this most.
     - label: ""
       $name: Short label
   $name: Account labels
-  $description: Short names for accounts in the folder pane, pattern groups and the calendar list
+  $description: Short names for accounts and shared mailboxes in the folder pane, pattern groups and the calendar list
 - primaryAccount: ""
   $name: Primary account address
   $description: Leave empty to detect it. Outlook names the primary account's folders without an address suffix
@@ -170,7 +172,7 @@ the parts that depend on this most.
   $name: Print, quoted replies
   $options:
   - show: Print them as they are
-  - lighten: Print them smaller and grey
+  - lighten: Print them smaller and gray
   - hide: Leave them out
 */
 // ==/WindhawkModSettings==
@@ -245,7 +247,7 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
   const SESSION_V = 5;
   const session = (window.__olktSession && window.__olktSession.v === SESSION_V) ? window.__olktSession : (window.__olktSession = (() => {
     const byAnchor = new Map(); // x-anchormailbox -> { base, headers, at }
-    const byCategory = new Map(); // x-anchormailbox (or '*') -> Map(category name -> colour index)
+    const byCategory = new Map(); // x-anchormailbox (or '*') -> Map(category name -> color index)
     const asked = new Set(); // mailboxes whose palette has been asked for, so it is asked once
     const KEEP = ['authorization', 'x-owa-sessionid', 'x-client-version', 'x-tenantid', 'prefer', 'x-owa-hosted-ux', 'x-req-source'];
     const listeners = new Set();
@@ -278,7 +280,7 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
       if (fresh) for (const fn of listeners) { try { fn(anchor); } catch {} }
     };
     // Each category in the startup payload is written as {"Name":"...","Color":n,"Id":"..."},
-    // where the colour is an index into Outlook's fixed palette. Pulled out with a search
+    // where the color is an index into Outlook's fixed palette. Pulled out with a search
     // rather than by parsing the whole payload, which is large and none of our business.
     const CATEGORY = /\{"Name":"((?:[^"\\]|\\.)*)","Color":(-?\d+),"Id":"/g;
     const readPalette = (anchor, text) => {
@@ -291,7 +293,7 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
         if (name && color >= 0) map.set(name, color);
       }
       // Only for the mailbox it came from: two accounts can give the same category name
-      // different colours, and a palette with no mailbox on it belongs to none of them.
+      // different colors, and a palette with no mailbox on it belongs to none of them.
       if (map.size && anchor) byCategory.set(anchor, map);
     };
     const isStartup = url => { try { return /\/owa\/startupdata\.ashx/i.test(new URL(url, location.href).pathname); } catch { return false; } };
@@ -393,7 +395,8 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
   // The settings as the mod sends them in each state answer, without the per-load key.
   const configText = ({ key, ...rest }) => JSON.stringify(rest);
   const CONFIG_TEXT = configText(S);
-  const STORE_KEYS = [FOLD_KEY, WIDTH_KEY, FAVORITES_KEY, ACCOUNT_ORDER_KEY, 'olkt-agenda-height', 'olkt-other-height', 'olkt-other-split', 'olkt-other-folds'];
+  const COLORS_KEY = 'olkt-folder-colors';
+  const STORE_KEYS = [COLORS_KEY, FOLD_KEY, WIDTH_KEY, FAVORITES_KEY, ACCOUNT_ORDER_KEY, 'olkt-agenda-height', 'olkt-other-height', 'olkt-other-split', 'olkt-other-folds'];
   const store = (() => {
     const mem = new Map();
     // A copy started by a settings change takes over the state the copy before it had
@@ -633,6 +636,12 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
   // root, whose mailbox is some other account's. A node kept from an earlier render
   // can still point at the older fiber, so only the one drawn with this name counts.
   function rowAccount(el) {
+    return drawnProp(el, 'mailboxInfo', 2, b => lower(b.mailboxSmtpAddress));
+  }
+  // A prop from the row's React fiber or the `depth - 1` components above it, read through
+  // `pick`, which returns '' for a value it cannot use. Only the fiber drawn with the row's
+  // current name counts.
+  function drawnProp(el, prop, depth, pick) {
     try {
       const key = Object.keys(el).find(k => k.startsWith('__reactFiber$'));
       const name = el.getAttribute('data-folder-name');
@@ -640,9 +649,10 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
       let f = key && el[key];
       if (!drawn(f)) f = f && f.alternate;
       if (!drawn(f)) return '';
-      for (let i = 0; f && i < 2; f = f.return, i++) {
-        const box = f.memoizedProps && f.memoizedProps.mailboxInfo;
-        if (box && typeof box.mailboxSmtpAddress === 'string') return lower(box.mailboxSmtpAddress);
+      for (let i = 0; f && i < depth; f = f.return, i++) {
+        const v = f.memoizedProps && f.memoizedProps[prop];
+        const got = v ? pick(v) : '';
+        if (got) return got;
       }
     } catch {}
     return '';
@@ -747,8 +757,12 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
     }
     for (const [acct, name] of Object.entries(cfg.accounts || {})) {
       if (!name) continue;
-      const r = `${PANE} [role="treeitem"][aria-level="1"][data-folder-name=${q(acct)}] > span:first-of-type`;
-      out.push(`${r}{font-size:0!important}`, `${r}::after{content:${JSON.stringify(name)};font-size:${size}}`);
+      for (const r of [`${PANE} [role="treeitem"][aria-level="1"][data-folder-name=${q(acct)}] > span:first-of-type`,
+                       `${PANE} [role="treeitem"][data-olkt-acct=${q(acct)}] > span:first-of-type`,
+                       // A shared mailbox's root draws its name one wrapper deeper.
+                       `${PANE} [role="treeitem"][aria-level="1"]:not([id^="primaryMailboxRoot"])[data-olkt-acct=${q(acct)}] > div > div > span:first-child`]) {
+        out.push(`${r}{font-size:0!important}`, `${r}::after{content:${JSON.stringify(name)};font-size:${size}}`);
+      }
     }
     if (cfg.accountsHeading && folds[ACCOUNTS]) {
       out.push(`${PANE} div:has(> [role="treeitem"][aria-level="1"]:not([data-folder-name="favorites"])){display:none!important}`);
@@ -828,7 +842,7 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
     // width would otherwise come back for nobody but the few who turn the agenda on.
     out.push(`${PANE} div:has(> [role="tree"]){scrollbar-gutter:auto!important}`);
     // A scrollbar like Outlook's own: thin, no arrows, a rounded thumb in the theme's stroke
-    // colour, shown while the pointer is over the tree. (scrollbar-width or scrollbar-color
+    // color, shown while the pointer is over the tree. (scrollbar-width or scrollbar-color
     // would switch these ::-webkit-scrollbar rules off, so neither is set.)
     out.push(`.olkt-tree::-webkit-scrollbar{width:8px}`);
     out.push(`.olkt-tree::-webkit-scrollbar-button{display:none;height:0}`);
@@ -1079,6 +1093,28 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
     const found = key && (key.group ? findGroup(key.group) : findFolder(key.folder));
     // The names before the release: only a favorite that appears after it was dropped.
     lastDrop = found ? { ...key, at: Date.now(), before: new Set(favoriteNames()) } : null;
+  }
+
+  // A shared mailbox's root is not a primaryMailboxRoot and can name itself with its address in
+  // any letter case, so tag any account-tree node whose name, label text, element id (a shared
+  // root's id is its address) or drawn mailbox is a labelled account; the label rule above then
+  // matches data-olkt-acct. The Favorites root is never an account, though the component just
+  // above it carries the primary mailbox.
+  function tagSharedRoots() {
+    const keys = Object.keys(cfg.accounts || {}).filter(a => cfg.accounts[a]);
+    if (!keys.length && !document.querySelector('[data-olkt-acct]')) return;
+    for (const el of document.querySelectorAll(`${PANE} [role="treeitem"]`)) {
+      let acct = '';
+      if (keys.length && !el.closest(FAVS) && el.id !== 'favoritesRoot' && el.getAttribute('data-folder-name') !== 'favorites') {
+        const span = el.querySelector(':scope > span');
+        const root = el.getAttribute('aria-level') === '1';
+        acct = [el.getAttribute('data-folder-name'), span && span.textContent, root ? el.id : ''].map(lower).find(a => a && keys.includes(a)) || '';
+        if (!acct && root) acct = drawnProp(el, 'mailboxInfo', 4, b => lower(b.mailboxSmtpAddress));
+        if (!keys.includes(acct)) acct = '';
+      }
+      if (acct) setAttr(el, 'data-olkt-acct', acct);
+      else if (el.hasAttribute('data-olkt-acct')) el.removeAttribute('data-olkt-acct');
+    }
   }
 
   // Header above the first account tree. Inserted next to Outlook's nodes, never moving them.
@@ -1408,7 +1444,7 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
     return undefined;
   }
   const joinIn = (...texts) => { for (const t of texts) { const j = meetingLink(t); if (j) return j; } return undefined; };
-  // Outlook's 25 category colours, in the order its colour index uses.
+  // Outlook's 25 category colors, in the order its color index uses.
   const CATEGORY_COLORS = ('#d13438 #ca5010 #8e562e #c19c00 #498205 #038387 #5c7e10 #0078d4 #8764b8 #c30052 ' +
     '#69797e #394146 #7a7574 #525252 #000000 #750b1c #8e3b05 #4d291c #817400 #0b6a0b ' +
     '#005b70 #3a4d00 #004e8c #5c2e91 #77004d').split(' ');
@@ -1455,7 +1491,7 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
   const instant = s => new Date(s).toISOString();
   // One account's events between from and to (occurrences expanded), as the agenda draws them.
   async function readAccount(acct, from, to, joinsUntil) {
-    // Outlook colours an event by its calendar; a failure here only costs the colours.
+    // Outlook colors an event by its calendar; a failure here only costs the colors.
     const colors = await calendarColors(acct).catch(() => null);
     const found = await owa(acct, 'FindItem', { ItemShape: { __type: 'ItemResponseShape:#Exchange', BaseShape: 'Default', AdditionalProperties: CAL_PROPS }, ParentFolderIds: [{ __type: 'DistinguishedFolderId:#Exchange', Id: 'calendar' }], Traversal: 'Shallow', Paging: { __type: 'CalendarPageView:#Exchange', StartDate: from.toISOString(), EndDate: to.toISOString() } });
     const msg = found.ResponseMessages && found.ResponseMessages.Items && found.ResponseMessages.Items[0];
@@ -1486,7 +1522,7 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
       events.push(e);
     }
     if (!session.palette(acct.anchor) && events.some(e => e.categories && e.categories.length)) {
-      // The next read paints them; this one keeps the calendar colours it already has.
+      // The next read paints them; this one keeps the calendar colors it already has.
       session.palettes(acct.anchor).then(n => { if (n && current()) ensureAgendaData(true); }, () => {});
     }
     if (bodies.length) {
@@ -2041,6 +2077,11 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
       b.textContent = e.label;
       if (e.indent) b.style.paddingLeft = (12 + e.indent * 12) + 'px';
       if (e.disabled) b.disabled = true;
+      if (e.swatch !== undefined) {
+        const sw = document.createElement('span');
+        sw.style.cssText = 'display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:8px;vertical-align:-1px;' + (e.swatch ? 'background:' + e.swatch : 'border:1px solid currentColor;opacity:.6');
+        b.prepend(sw);
+      }
       b.addEventListener('click', ev => { ev.stopPropagation(); closeMenus(); e.run(); });
       menu.appendChild(b);
     }
@@ -2159,6 +2200,8 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
       targets.push({ label: g.label, indent: depth + 1, disabled: at && at.parent === g, run: () => { const cur = findGroup(g.id); if (cur) moveTo(self(), cur); } });
     }
     showMenu(x, y, [
+      { label: 'Color...', run: () => colorMenu(item, x, y) },
+      '-',
       { label: 'Rename (short label)', run: () => rename(item, node.label || original, v => { self().label = v && v !== original ? v : undefined; save(); }) },
       { label: 'Use original name', disabled: !node.label, run: () => { delete self().label; save(); } },
       { label: 'New group below', run: () => addGroupAfter(self()) },
@@ -2177,10 +2220,115 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
     const folder = item && item.getAttribute('data-folder-name');
     let node = folder && findFolder(folder);
     if (!node && folder && cfg.favorites.length && !matchesAnyGroup(folder) && placeUnplaced()) node = findFolder(folder);
-    if (!node) return;
+    if (!node) { onColorContextMenu(ev); return; }
     ev.preventDefault();
     ev.stopPropagation();
     folderMenu(node, item, ev.clientX, ev.clientY);
+  }
+
+  // ==== folder colors ====
+  // Outlook colors a folder icon through the custom property --customColor on the
+  // element around the icon, and offers no way to set it on a shared mailbox's folders.
+  // Here any folder row, shared or not, takes one of the 15 colors Outlook's own picker
+  // offers, in its order, with its dark and light theme values (read from Outlook's
+  // FolderColorPicker). Shift+right-click, Color... A choice is saved as the color's name
+  // per folder, so it follows the theme. The row's icon box gets data-olkt-color and a
+  // stylesheet rule overrides --customColor with !important, which outranks Outlook's own
+  // inline value without touching it, so "Automatic" (dropping the attribute) shows
+  // whatever Outlook draws now.
+  // name, label, dark theme, light theme
+  const FOLDER_COLORS = [
+    ['cranberry', 'Red', '#DC626D', '#C50F1F'], ['peach', 'Orange', '#FFBA66', '#FF8C00'],
+    ['gold', 'Yellow', '#F2C661', '#EAA300'], ['bronze', 'Copper', '#CA8057', '#A74109'],
+    ['lime', 'Light green', '#A4CC6C', '#73AA24'],
+    ['dark_green', 'Green', '#4DA64D', '#0B6A0B'], ['light_teal', 'Aqua', '#58D3DB', '#00B7C3'],
+    ['dark_teal', 'Teal', '#41A3A3', '#006666'], ['light_blue', 'Light blue', '#83BDEB', '#3A96DD'],
+    ['dark_blue', 'Steel blue', '#4178A3', '#003966'],
+    ['lavender', 'Lavender', '#A79CF1', '#7160E8'], ['dark_purple', 'Purple', '#7E5CA7', '#401B6C'],
+    ['pink', 'Pink', '#EF85C8', '#E43BA6'], ['magenta', 'Magenta', '#D957A8', '#BF0077'],
+    ['silver', 'Silver', '#B3BFC2', '#859599'],
+  ];
+  let folderColors = {};
+  // Read from the theme's background token: Outlook keeps the "dark" class on the html
+  // element after a switch to the light theme, so the class is only a fallback.
+  function isDarkTheme() {
+    const h = document.documentElement;
+    const m = /^#([0-9a-f]{6})$/i.exec(getComputedStyle(h).getPropertyValue('--colorNeutralBackground1').trim());
+    if (m) { const n = parseInt(m[1], 16); return ((n >> 16) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000 < 128; }
+    if (h.classList.contains('dark')) return true;
+    if (h.classList.contains('light')) return false;
+    return matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  function loadColors() {
+    try { const v = JSON.parse(store.getItem(COLORS_KEY) || '{}'); folderColors = v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch { folderColors = {}; }
+  }
+  loadColors();
+  const colorIcon = row => row.querySelector(':scope > div > div > i');
+  // A folder is known by Outlook's folder id, which its Favorites row and its tree row share
+  // and which survives a rename. A row drawn without one (a mailbox root) falls back to its
+  // account and name.
+  function colorKey(row) {
+    const id = drawnProp(row, 'folderId', 4, v => (typeof v === 'string' ? v : ''));
+    if (id) return 'id:' + id;
+    const name = row.getAttribute('data-folder-name') || '';
+    return accountOf(name, row) + '|' + name.replace(/ \([^()]+@[^()]+\)$/, '');
+  }
+  let colorsDark = null;
+  let colorStyle = null;
+  function ensureFolderColors() {
+    const any = Object.keys(folderColors).length > 0;
+    if (!any && !document.querySelector('[data-olkt-color]')) return;
+    const dark = isDarkTheme();
+    if (!colorStyle || !colorStyle.isConnected || dark !== colorsDark) {
+      colorsDark = dark;
+      if (!colorStyle || !colorStyle.isConnected) {
+        colorStyle = document.createElement('style');
+        colorStyle.id = 'olkt-colors';
+        document.head.appendChild(colorStyle);
+      }
+      colorStyle.textContent = FOLDER_COLORS.map(c => `[data-olkt-color="${c[0]}"]{--customColor:${c[dark ? 2 : 3]}!important}`).join('');
+    }
+    for (const row of document.querySelectorAll('[role="treeitem"][data-folder-name]')) {
+      const icon = colorIcon(row);
+      const box = icon && icon.parentElement;
+      if (!box) continue;
+      const name = any ? folderColors[colorKey(row)] : '';
+      if (name && FOLDER_COLORS.some(c => c[0] === name)) setAttr(box, 'data-olkt-color', name);
+      else if (box.hasAttribute('data-olkt-color')) box.removeAttribute('data-olkt-color');
+    }
+  }
+  function setFolderColor(row, name) {
+    const key = colorKey(row);
+    if (name) folderColors[key] = name; else delete folderColors[key];
+    try { store.setItem(COLORS_KEY, JSON.stringify(folderColors)); } catch {}
+    ensureFolderColors();
+  }
+  function colorMenu(row, x, y) {
+    const cur = folderColors[colorKey(row)];
+    const dark = isDarkTheme();
+    showMenu(x, y, [
+      { heading: 'COLOR' },
+      { label: 'Automatic', swatch: '', disabled: !cur, run: () => setFolderColor(row, null) },
+      '-',
+      ...FOLDER_COLORS.map(c => ({ label: c[1] + (cur === c[0] ? ' (current)' : ''), swatch: c[dark ? 2 : 3], run: () => setFolderColor(row, c[0]) })),
+    ]);
+  }
+  function onColorContextMenu(ev) {
+    if (!ev.shiftKey) return;
+    const row = ev.target.closest('[role="treeitem"][data-folder-name]');
+    if (!row || !colorIcon(row)) return;
+    if (boundList && boundList.contains(row) && ev.currentTarget !== boundList) return;  // the list's own handler takes it
+    ev.preventDefault();
+    ev.stopPropagation();
+    colorMenu(row, ev.clientX, ev.clientY);
+  }
+  // A theme switch changes no element the observer watches, so the colors check the theme
+  // every two seconds, and only while one is set.
+  let themeTimer = 0;
+  const onThemeTick = () => { if (Object.keys(folderColors).length && isDarkTheme() !== colorsDark) ensureFolderColors(); };
+  function restoreFolderColors() {
+    document.querySelectorAll('[data-olkt-color]').forEach(box => box.removeAttribute('data-olkt-color'));
+    if (colorStyle) colorStyle.remove();
   }
 
   // Favorites that are in no group yet (all of them, on a new install) show at the
@@ -2836,7 +2984,7 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
     out.push(`.olkt-agenda,.olkt-other,.olkt-other-toggle,.olkt-compose,.olkt-head,.olkt-resize{display:none!important}`);
     // Paper is white. Under a dark theme Outlook rewrites the message with inline
     // `color: ... !important`, which no stylesheet can outrank, so the text is painted black
-    // through its fill colour, which those inline rules do not set.
+    // through its fill color, which those inline rules do not set.
     out.push(`${READING}{background:#fff!important}`);
     out.push(`${READING} *{background-color:transparent!important;box-shadow:none!important}`);
     out.push(`${READING},${READING} *{color:#000!important;-webkit-text-fill-color:#000!important}`);
@@ -3255,6 +3403,9 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
     ensureReading();
     ensureAgendaData();
     ensureOther();
+    ensureFolderColors();
+    // Account trees are labelled whether or not there is a Favorites list.
+    tagSharedRoots();
     // The agenda hides with a collapsed navigation pane; the tree is fitted again when
     // it comes back, not a minute later.
     const shown = !!(agendaEl && agendaEl.isConnected && agendaEl.offsetParent);
@@ -3343,6 +3494,8 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
     document.addEventListener('pointerdown', onWellPress, true);
     document.addEventListener('keydown', onDocKey, true);
     document.addEventListener('keydown', onWellKey, true);
+    document.addEventListener('contextmenu', onColorContextMenu, true);
+    themeTimer = setInterval(onThemeTick, 2000);
     window.addEventListener('resize', onResize);
     window.addEventListener('beforeprint', onBeforePrint);
     window.addEventListener('afterprint', onAfterPrint);
@@ -3359,6 +3512,9 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
       document.removeEventListener('pointerdown', onWellPress, true);
       document.removeEventListener('keydown', onDocKey, true);
       document.removeEventListener('keydown', onWellKey, true);
+      document.removeEventListener('contextmenu', onColorContextMenu, true);
+      clearInterval(themeTimer);
+      restoreFolderColors();
       window.removeEventListener('resize', onResize);
       clearTimeout(resizeTimer);
       window.removeEventListener('beforeprint', onBeforePrint);
@@ -3375,7 +3531,7 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
       });
       document.querySelectorAll(OURS).forEach(n => n.remove());
       document.querySelectorAll('[data-olkt-favs]').forEach(n => n.removeAttribute('data-olkt-favs'));
-      for (const a of ['data-olkt-label', 'data-olkt-tz', 'data-olkt-short', 'data-olkt-off', 'data-olkt-time', 'data-olkt-chip', 'data-olkt-open', 'data-olkt-othertab', 'data-olkt-ov', 'data-olkt-sig', 'data-olkt-merges', 'data-olkt-marked', 'data-olkt-quoted', 'data-olkt-collapsed'])document.querySelectorAll(`[${a}]`).forEach(n => n.removeAttribute(a));
+      for (const a of ['data-olkt-label', 'data-olkt-tz', 'data-olkt-short', 'data-olkt-off', 'data-olkt-time', 'data-olkt-chip', 'data-olkt-open', 'data-olkt-othertab', 'data-olkt-ov', 'data-olkt-sig', 'data-olkt-merges', 'data-olkt-marked', 'data-olkt-quoted', 'data-olkt-collapsed', 'data-olkt-acct'])document.querySelectorAll(`[${a}]`).forEach(n => n.removeAttribute(a));
       delete window.__olkt;
       store.stop();
       if (full) session.stop();
@@ -3400,6 +3556,7 @@ const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
   function applyState() {
     if (S.favoritesGroups) cfg.favorites = stored(FAVORITES_KEY, DEFAULT_FAVORITES);
     cfg.accounts = orderedAccounts(stored(ACCOUNT_ORDER_KEY, []));
+    loadColors();
     // A value an older version left behind is deleted only once the mod has it: a
     // write it refuses, for being too large, must not take the last copy with it.
     for (const key of STORE_KEYS) {
@@ -3514,6 +3671,7 @@ void AddList(std::wstring& json, PCWSTR name, std::initializer_list<PCWSTR> fiel
 constexpr PCWSTR kStoreKeys[] = {
     L"olkt-favorites", L"olkt-account-order", L"olkt-folds",        L"olkt-pane-width",
     L"olkt-agenda-height", L"olkt-other-height", L"olkt-other-split", L"olkt-other-folds",
+    L"olkt-folder-colors",
 };
 constexpr size_t kStoreMaxChars = 65536;
 
