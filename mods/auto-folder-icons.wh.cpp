@@ -6,7 +6,7 @@
 // @author          Sanekx Arcs
 // @github          https://github.com/SanekxArcs
 // @include         explorer.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lole32 -luuid -lshell32 -lshlwapi
 // ==/WindhawkMod==
 
@@ -31,16 +31,17 @@ folders.
 
 ## Performance
 
-* Files are skipped without touching the disk. Only folders are checked, with
-  two small file lookups per folder.
+* Files, including ZIP and CAB archives, are skipped without touching the
+  disk. Only folders are checked, with two small file lookups per folder.
 * Up to 256 recently shown folders are remembered and rechecked every two
-  seconds, and only while Explorer is the active app. Nothing is checked while
-  you work in another app, and the disk tree is never scanned.
+  seconds, and only while Explorer is the active app and you are using the
+  PC. Nothing is checked while you work in another app or are away, and the
+  disk tree is never scanned.
 
 ## Limitations
 
-* Only `explorer.exe` on 64-bit Windows is affected. Other apps, including
-  their open and save dialogs, show the original icons.
+* Only `explorer.exe` is affected. Other apps, including their open and save
+  dialogs, show the original icons.
 * Only local fixed and removable drives are supported. Network paths, virtual
   folders, reparse points, cloud placeholders, paths longer than about 245
   characters and icon files larger than 4 MiB are skipped.
@@ -67,7 +68,10 @@ constexpr DWORD kPollMilliseconds = 2000;
 constexpr ULONGLONG kCacheMilliseconds = 1000;
 constexpr ULONGLONG kDriveCacheMilliseconds = 5000;
 constexpr DWORD kMaxIconBytes = 4 * 1024 * 1024;
-constexpr wchar_t kSeparator = 92;
+constexpr DWORD kIdleMilliseconds = 10000;
+constexpr wchar_t kSeparator = L'\\';
+// ZIP and CAB files report SFGAO_FOLDER too, together with SFGAO_STREAM.
+constexpr SFGAOF kFolderMask = SFGAO_FOLDER | SFGAO_STREAM;
 constexpr CLSID kThumbnailCacheClsid = {
     0x50ef4544, 0xac9f, 0x4a8e, {0xb2, 0x1b, 0x8a, 0x26, 0x18, 0x0d, 0xb1, 0x3f}};
 
@@ -241,9 +245,9 @@ IconState FindIcon(const std::wstring& folder) {
 // Answered from the item identifier, without touching the disk. Files are the
 // vast majority of the items Explorer asks about, and are rejected here.
 bool IsFolderItem(IShellFolder* folder, PCUITEMID_CHILD child) {
-    SFGAOF attributes = SFGAO_FOLDER;
+    SFGAOF attributes = kFolderMask;
     return child && SUCCEEDED(folder->GetAttributesOf(1, &child, &attributes)) &&
-        (attributes & SFGAO_FOLDER);
+        (attributes & kFolderMask) == SFGAO_FOLDER;
 }
 
 std::wstring ChildPath(IShellFolder* folder, PCUITEMID_CHILD child) {
@@ -256,8 +260,8 @@ std::wstring ChildPath(IShellFolder* folder, PCUITEMID_CHILD child) {
 
 IconState ItemIcon(IShellItem* item) {
     SFGAOF attributes = 0;
-    if (!item || FAILED(item->GetAttributes(SFGAO_FOLDER, &attributes)) ||
-        !(attributes & SFGAO_FOLDER)) { return {}; }
+    if (!item || FAILED(item->GetAttributes(kFolderMask, &attributes)) ||
+        (attributes & kFolderMask) != SFGAO_FOLDER) { return {}; }
     PWSTR path = nullptr;
     if (FAILED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) { return {}; }
     std::wstring folder;
@@ -353,10 +357,17 @@ bool IsExplorerInForeground() {
         process == GetCurrentProcessId();
 }
 
+// True if there was no keyboard or mouse input for a while, for example when
+// the PC is left at the desktop.
+bool IsUserIdle() {
+    LASTINPUTINFO input{sizeof(input)};
+    return GetLastInputInfo(&input) && GetTickCount() - input.dwTime > kIdleMilliseconds;
+}
+
 void PollFolders() {
-    // Don't touch the disks while the user is working in another app. Changes
-    // are picked up within one cycle after returning to Explorer.
-    if (!IsExplorerInForeground()) { return; }
+    // Don't touch the disks while the user is working in another app or is
+    // away. Changes are picked up within one cycle after returning.
+    if (!IsExplorerInForeground() || IsUserIdle()) { return; }
     std::vector<std::pair<std::wstring, CacheEntry>> snapshot;
     {
         std::lock_guard lock(g_cacheMutex);
