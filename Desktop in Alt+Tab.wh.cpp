@@ -1,13 +1,23 @@
 // ==WindhawkMod==
-// @id              desktop-in-alttab
+// @id              Desktop-in-Alt-Tab
 // @name            Desktop in Alt+Tab
 // @description     Adds a "Desktop" entry to Alt+Tab (with wallpaper thumbnail) that un-maximizes and minimizes all windows at once
 // @version         1.4
 // @author          K3M
+// @github          https://github.com/yazanhani900-blip
 // @include         explorer.exe
 // @compilerOptions -luser32 -lshell32 -lgdi32 -ldwmapi -lole32 -luuid
 // ==/WindhawkMod==
+// ==WindhawkModReadme==
+/*
+# Desktop in Alt+Tab
 
+This mod customizes Desktop behavior in Alt+Tab.
+
+## Features
+- Customize Desktop behavior in Alt+Tab.
+*/
+// ==/WindhawkModReadme==
 #include <windows.h>
 #include <wchar.h>
 #include <shellapi.h>
