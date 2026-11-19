@@ -1457,6 +1457,7 @@ void DrawPicker(HWND hwnd) {
     if (preview.size() > previewLimit) {
         preview.resize(previewLimit);
         preview += L"\u2026";
+    }
     RECT previewTextRect = {previewRect.left + DpiScale(9), previewRect.top + DpiScale(6),
                             previewRect.right - DpiScale(9), previewRect.bottom - DpiScale(6)};
     SetTextColor(memory, RGB(232, 235, 242));
@@ -1475,7 +1476,8 @@ void DrawPicker(HWND hwnd) {
             HPEN selectedPen = CreatePen(PS_SOLID, 1, RGB(47, 99, 190));
             HGDIOBJ previousBrush = SelectObject(memory, selectedBrush);
             HGDIOBJ previousPen = SelectObject(memory, selectedPen);
-            RoundRect(memory, row.left, row.top, row.right, row.bottom, 9, 9);
+            const int rowCorner = DpiScale(9);
+            RoundRect(memory, row.left, row.top, row.right, row.bottom, rowCorner, rowCorner);
             SelectObject(memory, previousBrush);
             SelectObject(memory, previousPen);
             DeleteObject(selectedBrush);
@@ -1485,7 +1487,8 @@ void DrawPicker(HWND hwnd) {
             HPEN rowPen = CreatePen(PS_SOLID, 1, RGB(43, 48, 58));
             HGDIOBJ previousBrush = SelectObject(memory, rowBrush);
             HGDIOBJ previousPen = SelectObject(memory, rowPen);
-            RoundRect(memory, row.left, row.top, row.right, row.bottom, 9, 9);
+            const int rowCorner = DpiScale(9);
+            RoundRect(memory, row.left, row.top, row.right, row.bottom, rowCorner, rowCorner);
             SelectObject(memory, previousBrush);
             SelectObject(memory, previousPen);
             DeleteObject(rowBrush);
@@ -1503,7 +1506,7 @@ void DrawPicker(HWND hwnd) {
             SetTextColor(memory, selected ? RGB(255, 255, 255) : RGB(116, 177, 255));
             RECT checkRect = {row.right - DpiScale(37), row.top + DpiScale(3), row.right - DpiScale(10), row.bottom - DpiScale(3)};
             DrawTextW(memory, L"\u2713", -1, &checkRect,
-        }
+                      DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
 
     BitBlt(target, 0, 0, width, height, memory, 0, 0, SRCCOPY);
