@@ -130,6 +130,34 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6b19ead230c08403dab28d1d30bcfd28e2abb0e2/mods/explorer-default-folder.wh.cpp"
       }
     },
+    "explorer-tabs-session-saver-revamped": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795061322192,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795061322192,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Peter2oo1",
+        "compilerOptions": "-lshlwapi -lole32 -loleaut32 -lshell32 -luuid -lcomctl32 -ladvapi32",
+        "description": "Saves and restores File Explorer tabs on reopen, without blank extra tabs or sidebar scroll glitches",
+        "github": "https://github.com/Peter2oo1",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Explorer Tabs Session Saver Revamped",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7645",
+      "source": {
+        "sha256": "4ed5ce94075b5359c4182850b0ac5c80c795c70aff97139e65e1fc614d3f37a8",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/721a9137674f8c731562f377925c9027c7af0a6d/mods/explorer-tabs-session-saver-revamped.wh.cpp"
+      }
+    },
     "frosted-window-blur": {
       "details": {
         "defaultSorting": 0,
@@ -220,6 +248,37 @@
       "source": {
         "sha256": "2978547c6d362ab07707b7cffb1f8c35272bdc0ff1d61376c20e3ec9975ebc13",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6c18b97917c56324382a01f017de9e09648c01ea/mods/simple-wallpaper-switcher.wh.cpp"
+      }
+    },
+    "taskbar-mini-folders": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795061322192,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795061322192,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Sanekx Arcs",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -lgdi32 -lmsimg32 -ldwmapi -lshcore -luuid",
+        "description": "Adds mini folders with a 2x2 icon preview to the Windows 11 taskbar. Click one to open a panel with all its apps, files and shortcuts.",
+        "github": "https://github.com/SanekxArcs",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Taskbar Mini Folders",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7644",
+      "source": {
+        "sha256": "b4c77e664af0e4eefcb833b1aae8bd7cd4ae80e6910fd8df56ede5cbafb7dcc7",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/70aae464a7eccc750e8751216d4ac66eceba89ef/mods/taskbar-mini-folders.wh.cpp"
       }
     },
     "titlebar-opacity-button": {
@@ -319,34 +378,6 @@
       "source": {
         "sha256": "bafec5efeb32cd3b3c54326c5d589bc905eb4166250cf28b8860931f4e76f8df",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/1ee07968473c4ddc9abfb576643156ccc75424e0/mods/windows-border-switch.wh.cpp"
-      }
-    },
-    "yandex-music-transparency": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795025098004,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795025098004,
-        "users": 0
-      },
-      "metadata": {
-        "author": "NIKTO",
-        "compilerOptions": "-lcomctl32",
-        "description": "Automatically applies and enforces custom transparency for Yandex Music",
-        "github": "https://github.com/NIKTO-2",
-        "include": [
-          "Яндекс Музыка.exe"
-        ],
-        "name": "Yandex Music Transparency",
-        "version": "1.1"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/3509",
-      "source": {
-        "sha256": "fc57f2b6e65bf93e9457c235ee3d34497ae9652699bc77ebcd94d6bdb80e31a0",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/9f06ed627f8ab7ccc6ea0c64b86982c365aa48a3/mods/yandex-music-transparency.wh.cpp"
       }
     }
   }

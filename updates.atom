@@ -2,12 +2,56 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-19T00:01:43.000Z</updated>
+    <updated>2026-11-19T04:05:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[WinTips OSD 1.6.2]]></title>
+        <id>https://windhawk.net/mods/wintips-osd#ea836b0306a8f90f3069597d97f3a0da689745de</id>
+        <link href="https://windhawk.net/mods/wintips-osd"/>
+        <updated>2026-11-19T04:05:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Acrylic: removed the backdrop saturation lift after blurring, so the card looks the same as the WinTips app on colorful wallpapers</li>
+<li>Acrylic: the blur radius no longer scales with DPI, matching the app's blur depth on high-DPI displays</li>
+<li>Solid: the card is now fully opaque without a border, matching the app's solid card</li>
+</ul>
+]]></content>
+        <author>
+            <name>DoYouNatureQ</name>
+            <uri>https://github.com/DoYouNatureQ</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Yandex Music Transparency 1.1]]></title>
+        <id>https://windhawk.net/mods/yandex-music-transparency#8f4eaeef62ea9804e81a529e792d7423b45d5c04</id>
+        <link href="https://windhawk.net/mods/yandex-music-transparency"/>
+        <updated>2026-11-19T04:05:06.000Z</updated>
+        <content type="html"><![CDATA[<h1>Yandex Music Transparency</h1>
+<p>Automatically makes the <strong>Yandex Music</strong> (<code>Яндекс Музыка.exe</code>) desktop window transparent on startup and continuously prevents the Electron application from resetting its opacity or removing <code>WS_EX_LAYERED</code>.</p>
+<p>Unlike one-shot rule-based or hotkey-based opacity mods, this mod injects into the process to actively preserve your chosen transparency level across window state changes and redraws.</p>
+<h2>Settings</h2>
+<ul>
+<li><strong>Window Opacity (<code>Alpha</code>)</strong>: Controls the opacity level from <code>50</code> (more transparent) to <code>255</code> (fully opaque). Default is <code>220</code>.</li>
+</ul>
+<h2>Using with other applications</h2>
+<p>Although tailored for Yandex Music by default, you can apply the same persistent transparency to other Chromium/Electron applications by adding their executable names in the mod's <strong>Advanced</strong> tab under <strong>Custom process inclusion list</strong>.</p>
+<h2>Limitations</h2>
+<ul>
+<li>Only affects top-level windows with the <code>Chrome_WidgetWin_1</code> window class.</li>
+<li>Windows that already use color-key transparency (<code>LWA_COLORKEY</code>) are skipped to avoid visual artifacts.</li>
+<li>Disabling or unloading the mod restores the window's original opacity and layered style.</li>
+</ul>
+<h2>Credits</h2>
+<p>Created with assistance from ChatGPT.</p>
+]]></content>
+        <author>
+            <name>NIKTO</name>
+            <uri>https://github.com/NIKTO-2</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WindowPilot 1.2.0]]></title>
         <id>https://windhawk.net/mods/windowpilot#0ec737dcbc499f06130908d2cb62fdbd537ac152</id>
@@ -796,155 +840,6 @@ the F1 part copies, and to DarkShadow44’s reverse-engineering notes on UIRibbo
         <author>
             <name>caotu2005</name>
             <uri>https://github.com/caotu2005</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AI Text Assistant (?fix, ?formal, ?emojify, ?undo) 2.4.0]]></title>
-        <id>https://windhawk.net/mods/ai-inline-text-fixer#7476c81a7b59669ec34953c168b213bc782e60ac</id>
-        <link href="https://windhawk.net/mods/ai-inline-text-fixer"/>
-        <updated>2026-11-18T02:00:09.000Z</updated>
-        <content type="html"><![CDATA[<h1>AI Text Assistant (<code>?fix</code>, <code>?formal</code>, <code>?emojify</code>, <code>?undo</code>, ...)</h1>
-<p>Transform, polish, or rewrite your text anywhere in Windows simply by typing a quick command at the end of any text box.</p>
-<p>Works across chat apps, emails, web browsers, documents, social media, and forms.</p>
-<p><img src="https://raw.githubusercontent.com/NarayanChetri/Files/main/AI%20assistant.gif" alt="AI Text Assistant Demo"></p>
-<hr>
-<h3>Instant Commands (Type at the end of your text)</h3>
-<table>
-<thead>
-<tr>
-<th>Command</th>
-<th>What it does</th>
-<th>Example input</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>?fix</code></td>
-<td>Fixes spelling, grammar, punctuation, and clarity</td>
-<td><code>She dont has no time for that ?fix</code></td>
-</tr>
-<tr>
-<td><code>?formal</code></td>
-<td>Rewrites in a professional, polite business tone</td>
-<td><code>cant make it to the meeting today ?formal</code></td>
-</tr>
-<tr>
-<td><code>?casual</code></td>
-<td>Rewrites in a friendly, conversational tone</td>
-<td><code>I am writing to inquire regarding your plans ?casual</code></td>
-</tr>
-<tr>
-<td><code>?short</code></td>
-<td>Makes your message concise, crisp, and to the point</td>
-<td><code>Due to the fact that it is raining heavily outside right now ?short</code></td>
-</tr>
-<tr>
-<td><code>?emojify</code></td>
-<td>Enriches your text with expressive, fitting emojis</td>
-<td><code>Super excited for the weekend party ?emojify</code></td>
-</tr>
-<tr>
-<td><code>?undo</code></td>
-<td>Instantly reverts back to your original text</td>
-<td><code>?undo</code></td>
-</tr>
-</tbody>
-</table>
-<p><em>(You can type commands with or without a space, e.g., <code>?fix</code> or <code>? fix</code>).</em></p>
-<hr>
-<h3>Instant Undo &amp; Cancellation</h3>
-<ul>
-<li><strong>During AI generation</strong>: Press <strong>Esc</strong> at any time to immediately cancel and keep your original text untouched.</li>
-<li><strong>After AI generation</strong>: If you don't like the AI's result, simply type <strong><code>?undo</code></strong> (or <code>? undo</code>) in the text field to immediately revert back to your original text.</li>
-</ul>
-<hr>
-<h2>Free API Key Setup (No credit card required)</h2>
-<p>Get a free key from either provider below and paste it into the mod settings:</p>
-<ul>
-<li><strong>Google Gemini (Recommended)</strong>: <a href="https://aistudio.google.com/app/apikey">Get free Gemini API Key</a></li>
-<li><strong>Groq</strong>: <a href="https://console.groq.com/keys">Get free Groq API Key</a></li>
-</ul>
-<p><strong>Auto-Verification</strong>: As soon as you paste your key and save settings, the mod automatically tests the connection in the background and confirms it is working.</p>
-<hr>
-<h2>Safety &amp; Privacy</h2>
-<ul>
-<li><strong>What Data is Sent</strong>: When you type an active trigger (e.g. <code>?fix</code>, <code>?formal</code>), the text content of the active field (whatever Select All selects, up to the configured <code>max_chars</code> limit, 4,000 characters by default) is sent over an encrypted HTTPS connection directly to your chosen AI provider (<code>generativelanguage.googleapis.com</code> for Google Gemini, or <code>api.groq.com</code> for Groq). When you add or change an API key in settings, a brief connection test request sending the word <code>&quot;Hi&quot;</code> is performed to verify your key.</li>
-<li><strong>Provider Terms &amp; Data Handling</strong>: Because this mod uses your own direct API key with the provider, each provider's respective privacy policy and terms of service apply. For example, on Google Gemini's free tier, Google's terms state that submitted content may be used to improve products and may be reviewed by human reviewers. Groq's data retention and privacy policies apply when using Groq.</li>
-<li><strong>Clipboard History &amp; Cloud Sync</strong>: Reading the field uses <code>Ctrl+C</code>, so each time you use a command, the field's full text is added to your clipboard history (<code>Win+V</code>) and, if clipboard sync is set to automatic, synced to your other devices. However, during the replacement paste and when restoring your previous clipboard content, the mod applies Windows exclusion formats (<code>ExcludeClipboardContentFromMonitorProcessing</code>, <code>CanIncludeInClipboardHistory</code>, and <code>CanUploadToCloudClipboard</code>) so that intermediate changes and restored clipboard data are not duplicated into clipboard history or synced across devices.</li>
-<li><strong>Accidental Typing Protection</strong>: While the AI processes your request, keyboard input in the target window is safely paused so typed keystrokes do not interfere with processing. You can cancel any in-flight request at any time by pressing <code>Esc</code>. If you switch to another window or app while the AI is thinking, input in your other window is never blocked.</li>
-<li><strong>Terminal Protection</strong>: Command prompts and terminal windows (PowerShell, Command Prompt, Windows Terminal, ConHost, MinTTY, PuTTY, ConEmu) are excluded by class and process so shortcuts and triggers never interfere with console sessions.</li>
-<li><strong>Document Protection</strong>: Fields longer than the configured maximum character limit (<code>max_chars</code>) are left untouched to protect large open files and documents.</li>
-<li><strong>Dedicated Background Process</strong>: This mod runs safely as a dedicated Windhawk tool mod, isolating network and keyboard handling from <code>explorer.exe</code> to protect your taskbar and desktop stability.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Narayan</name>
-            <uri>https://github.com/NarayanChetri</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Type Properties Customization 1.0.0]]></title>
-        <id>https://windhawk.net/mods/file-type-properties-customization#1732db7b1ee9a37ded2057ba2502f8415229625d</id>
-        <link href="https://windhawk.net/mods/file-type-properties-customization"/>
-        <updated>2026-11-18T01:03:41.000Z</updated>
-        <content type="html"><![CDATA[<h1>File Type Properties Customization</h1>
-<p>Customize file icons and type descriptions by extension. Icons and descriptions
-can be enabled independently. File associations, default applications, and
-system thumbnail providers are preserved.</p>
-<p>Before:</p>
-<p><img src="https://raw.githubusercontent.com/FreshP-0325/windhawk-mod-assets/refs/heads/master/file-type-properties-customization/1.0.0/before.png" alt="Before"></p>
-<p>After:</p>
-<p><img src="https://raw.githubusercontent.com/FreshP-0325/windhawk-mod-assets/refs/heads/master/file-type-properties-customization/1.0.0/after.png" alt="After"></p>
-<h2>Windhawk settings</h2>
-<p>Fill in the first File type properties entry, then save settings. For example:</p>
-<ul>
-<li>Extensions: <code>.txt,.log</code></li>
-<li>Icon: <code>%SystemRoot%\System32\shell32.dll,70</code></li>
-<li>Description: <code>Text document</code></li>
-</ul>
-<p>Either property may be left empty to keep the preset or system value. A completely
-empty entry ends the list; entries below it are ignored. Windhawk's Textual mode
-can edit the same settings as YAML.</p>
-<h2>Optional INI preset</h2>
-<p>Enable Load INI preset and select an absolute INI path. The preset is read first;
-nonempty valid Windhawk settings override individual properties afterward.</p>
-<pre><code class="language-ini">[.txt,.log]
-Icon=icons\text.ico
-Description=Text document
-
-[.log]
-Description=Log file
-</code></pre>
-<p>Sections and keys are case-insensitive. Repeated sections merge per property in
-file order. Empty or invalid values do not erase earlier usable values. Relative
-resource paths use the INI directory; paths in settings must be absolute. Paths
-support environment variables. Quote icon paths containing commas. Icon indexes
-start at 0; negative indexes select resource IDs. Descriptions also accept
-<code>@module,-resourceID</code>, or <code>@@</code> to start literal text with <code>@</code>.</p>
-<p>Save INI files as UTF-8, or UTF-16 LE with BOM. Full-line comments start with
-<code>;</code> or <code>#</code>. After editing the INI, re-enable the mod or save a changed mod setting.
-The file is not watched automatically.</p>
-<h2>Refresh and limitations</h2>
-<ul>
-<li>Refresh Explorer when mappings change is off by default. Enabling it may redraw
-windows and reload thumbnails after changed mappings are saved, including the
-first or last rule. An empty configuration stays loaded without hooks while
-this option is on. Startup and shutdown do not request a refresh.</li>
-<li>Reopen affected windows or menus if they still show cached values.</li>
-<li>Prefer local icon files. First use of a slow or disconnected network resource
-can block the requesting window until Windows finishes trying to load it.</li>
-<li>By default, only explorer.exe is targeted. For an application's standard
-Open/Save dialogs, add its executable to Custom process inclusion list and
-restart it. Applications with their own rendering or caches may be unaffected.</li>
-<li>Description overrides cover supported Type columns, file properties, details,
-and native Shell New menus. If optional Shell symbols are unavailable, some
-views keep system descriptions; details are logged.</li>
-<li>x86, x64, and ARM64 are targeted. ARM64 has not been tested on a physical device.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Momo</name>
-            <uri>https://github.com/FreshP-0325</uri>
         </author>
     </entry>
 </feed>

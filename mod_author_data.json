@@ -1844,6 +1844,12 @@
       "https://github.com/MuteAlert/windhawk"
     ]
   },
+  "https://github.com/nikto-2": {
+    "author": "NIKTO",
+    "github": "https://github.com/NIKTO-2",
+    "githubId": 221983206,
+    "homepages": []
+  },
   "https://github.com/nomoreplz": {
     "author": "Hùng",
     "github": "https://github.com/NoMorePlz",

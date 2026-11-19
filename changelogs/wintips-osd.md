@@ -1,3 +1,9 @@
+## 1.6.2 ([Nov 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ea836b0306a8f90f3069597d97f3a0da689745de/mods/wintips-osd.wh.cpp))
+
+* Acrylic: removed the backdrop saturation lift after blurring, so the card looks the same as the WinTips app on colorful wallpapers
+* Acrylic: the blur radius no longer scales with DPI, matching the app's blur depth on high-DPI displays
+* Solid: the card is now fully opaque without a border, matching the app's solid card
+
 ## 1.6.1 ([Nov 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/85ecb1ac17afbd692ef530313a3e17e85385f181/mods/wintips-osd.wh.cpp))
 
 * Added a solo-Shift inference fallback for the input language tip: third-party IMEs that never answer WM_IME_CONTROL now get their Chinese/English mode tracked by the classic solo Shift press-and-release gesture. A 350 ms grace window gives the system read a chance to report the toggle first; odd numbers of solo Shift releases flip the cached mode, even numbers settle silently, and Shift+letter, Alt+Shift and Ctrl+Shift all drop out of the gesture on their own. The inference only applies to Chinese IME layouts.

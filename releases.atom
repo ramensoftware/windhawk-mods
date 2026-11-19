@@ -2,12 +2,40 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-19T00:01:43.000Z</updated>
+    <updated>2026-11-19T04:05:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Yandex Music Transparency 1.1]]></title>
+        <id>https://windhawk.net/mods/yandex-music-transparency#8f4eaeef62ea9804e81a529e792d7423b45d5c04</id>
+        <link href="https://windhawk.net/mods/yandex-music-transparency"/>
+        <updated>2026-11-19T04:05:06.000Z</updated>
+        <content type="html"><![CDATA[<h1>Yandex Music Transparency</h1>
+<p>Automatically makes the <strong>Yandex Music</strong> (<code>Яндекс Музыка.exe</code>) desktop window transparent on startup and continuously prevents the Electron application from resetting its opacity or removing <code>WS_EX_LAYERED</code>.</p>
+<p>Unlike one-shot rule-based or hotkey-based opacity mods, this mod injects into the process to actively preserve your chosen transparency level across window state changes and redraws.</p>
+<h2>Settings</h2>
+<ul>
+<li><strong>Window Opacity (<code>Alpha</code>)</strong>: Controls the opacity level from <code>50</code> (more transparent) to <code>255</code> (fully opaque). Default is <code>220</code>.</li>
+</ul>
+<h2>Using with other applications</h2>
+<p>Although tailored for Yandex Music by default, you can apply the same persistent transparency to other Chromium/Electron applications by adding their executable names in the mod's <strong>Advanced</strong> tab under <strong>Custom process inclusion list</strong>.</p>
+<h2>Limitations</h2>
+<ul>
+<li>Only affects top-level windows with the <code>Chrome_WidgetWin_1</code> window class.</li>
+<li>Windows that already use color-key transparency (<code>LWA_COLORKEY</code>) are skipped to avoid visual artifacts.</li>
+<li>Disabling or unloading the mod restores the window's original opacity and layered style.</li>
+</ul>
+<h2>Credits</h2>
+<p>Created with assistance from ChatGPT.</p>
+]]></content>
+        <author>
+            <name>NIKTO</name>
+            <uri>https://github.com/NIKTO-2</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WindowPilot 1.2.0]]></title>
         <id>https://windhawk.net/mods/windowpilot#0ec737dcbc499f06130908d2cb62fdbd537ac152</id>
@@ -1313,80 +1341,6 @@ released under <strong>GPL-3.0</strong> as well.</p>
         <author>
             <name>TheRealAlperN</name>
             <uri>https://github.com/TheRealAlperN</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Color Picker / Eyedropper Tool 1.0.2]]></title>
-        <id>https://windhawk.net/mods/color-picker-eyedropper#be471af902a3370c41251653153ce4d94c170b81</id>
-        <link href="https://windhawk.net/mods/color-picker-eyedropper"/>
-        <updated>2026-11-16T07:01:14.000Z</updated>
-        <content type="html"><![CDATA[<h1>Color Picker / Eyedropper Tool for Windows 11</h1>
-<p>A lightweight, system-wide color picker overlay mod for <a href="https://windhawk.net/">Windhawk</a>, inspired by <a href="https://github.com/microsoft/powertoys">Microsoft PowerToys</a> Color Picker. Activated by the default keyboard shortcut <code>Win + Alt + C</code>, it allows you to select any pixel on your screen via a customizable global hotkey, view a magnified pixel grid loupe, and automatically obtain the color value in <strong>HEX</strong>, <strong>RGB</strong>, <strong>HSL</strong>, and <strong>CMYK</strong> formats with one-click clipboard copying.</p>
-<p><img src="https://raw.githubusercontent.com/nathanaeru/color-picker-eyedropper/refs/heads/main/demo.gif" alt="Color Picker mod in action"></p>
-<h2>Features</h2>
-<ul>
-<li><strong>System-Wide Screen Freeze &amp; Overlay</strong>: Freezes the screen upon activation to prevent accidental click-throughs onto underlying windows.</li>
-<li><strong>Magnified Loupe Cursor</strong>: Displays a magnified preview grid with a centered crosshair and a live color preview badge that follows your cursor.</li>
-<li><strong>Multi-Format Support</strong>: Automatically converts and displays captured colors in:
-<ul>
-<li><strong>HEX</strong> (e.g., <code>#FF5733</code> or <code>ff5733</code>)</li>
-<li><strong>RGB</strong> (e.g., <code>rgb(255, 87, 51)</code>)</li>
-<li><strong>HSL</strong> (e.g., <code>hsl(11, 100%, 60%)</code>)</li>
-<li><strong>CMYK</strong> (e.g., <code>cmyk(0%, 66%, 80%, 0%)</code>)</li>
-</ul>
-</li>
-<li><strong>Native Windows 11 Dark Mode Support</strong>: The result pop-up window automatically adapts to your system theme (Light or Dark mode).</li>
-<li><strong>Modern UI Styling</strong>: Clean, dialog-style UI using Segoe UI font, smooth rounded corners, drop-shadow effects, and single-click copy buttons.</li>
-<li><strong>Customizable Mod Settings</strong>: Directly configure hotkeys and color formatting preferences within the Windhawk UI.</li>
-</ul>
-<h2>Hotkey &amp; Controls</h2>
-<ul>
-<li><strong>Activate Eyedropper</strong>: Default hotkey is <code>Win + Alt + C</code> (customizable in Windhawk settings).</li>
-<li><strong>Pick Color</strong>: <strong>Left-Click</strong> anywhere on the screen to capture the pixel color and open the copy window.</li>
-<li><strong>Cancel Eyedropper</strong>: Press <strong>Escape</strong> or <strong>Right-Click</strong> to exit picking mode without selecting a color.</li>
-</ul>
-<h2>Configuration Settings</h2>
-<p>You can customize the mod settings directly from the Windhawk Mod Manager UI:</p>
-<table>
-<thead>
-<tr>
-<th style="text-align:left">Setting</th>
-<th style="text-align:left">Type</th>
-<th style="text-align:left">Default</th>
-<th style="text-align:left">Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left"><strong>Hotkey Key</strong></td>
-<td style="text-align:left">String</td>
-<td style="text-align:left"><code>C</code></td>
-<td style="text-align:left">Single alphabet character used with <code>Win + Alt</code> (selectable via a dropdown menu).</td>
-</tr>
-<tr>
-<td style="text-align:left"><strong>Include '#' Prefix in HEX</strong></td>
-<td style="text-align:left">Boolean</td>
-<td style="text-align:left"><code>true</code></td>
-<td style="text-align:left">Choose whether HEX values include the <code>#</code> symbol (<code>#CDCDCD</code> vs <code>CDCDCD</code>).</td>
-</tr>
-<tr>
-<td style="text-align:left"><strong>Uppercase HEX Characters</strong></td>
-<td style="text-align:left">Boolean</td>
-<td style="text-align:left"><code>true</code></td>
-<td style="text-align:left">Toggle uppercase vs. lowercase HEX characters (<code>#ABCDEF</code> vs <code>#abcdef</code>).</td>
-</tr>
-</tbody>
-</table>
-<h2>Dependencies &amp; Technical Details</h2>
-<ul>
-<li><strong>Target Process</strong>: <code>windhawk.exe</code> (runs as a Windhawk tool mod)</li>
-<li><strong>Libraries Linked</strong>: <code>-lgdi32</code>, <code>-lmsimg32</code>, <code>-ldwmapi</code>, <code>-luxtheme</code>, <code>-lshcore</code></li>
-<li><strong>Architecture</strong>: Pure Win32 GDI &amp; User32 APIs (no heavy external GUI dependencies).</li>
-</ul>
-]]></content>
-        <author>
-            <name>Naeru</name>
-            <uri>https://github.com/nathanaeru</uri>
         </author>
     </entry>
 </feed>

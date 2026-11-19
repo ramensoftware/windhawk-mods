@@ -24647,7 +24647,7 @@
         "ratingUsers": 43,
         "reviews": 0,
         "trendingSorting": 5.563916487715372,
-        "updated": 1794765749000,
+        "updated": 1795061111000,
         "users": 621
       },
       "metadata": {
@@ -24661,7 +24661,7 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "WinTips OSD",
-        "version": "1.6.1"
+        "version": "1.6.2"
       }
     },
     "winui-context-menu-animation": {
@@ -25037,6 +25037,30 @@
           "XboxGameBarWidgets.exe"
         ],
         "name": "No MS Edge WebView2 for Copilot",
+        "version": "1.1"
+      }
+    },
+    "yandex-music-transparency": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795061106000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795061106000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "NIKTO",
+        "compilerOptions": "-lcomctl32",
+        "description": "Automatically applies and enforces custom transparency for Yandex Music",
+        "github": "https://github.com/NIKTO-2",
+        "include": [
+          "Яндекс Музыка.exe"
+        ],
+        "name": "Yandex Music Transparency",
         "version": "1.1"
       }
     },
