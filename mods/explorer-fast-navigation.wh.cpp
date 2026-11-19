@@ -9,7 +9,7 @@
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshell32 -luuid
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -99,13 +99,9 @@ If you find this mod useful, you can support its development and maintenance:
 #include <windows.h>
 
 #include <oaidl.h>
-#include <propkey.h>
 #include <shdispid.h>
 #include <shlobj.h>
-#include <shobjidl.h>
-#include <threadpoolapiset.h>
 #include <windhawk_utils.h>
-#include <winrt/Windows.System.h>
 #include <wrl/client.h>
 
 #include <algorithm>
@@ -114,7 +110,6 @@ If you find this mod useful, you can support its development and maintenance:
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
-#include <cstring>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -132,8 +127,8 @@ struct Settings {
     int safetyCeilingMs = 2000;
 };
 
-// Admit window work and stop it under the same lock. Never hold this lock
-// across window/COM calls: they can reenter the mod on an owning UI thread.
+// Synchronize window work and mod unload. Never hold mutex across window/COM calls:
+// they can reenter the mod on an owning UI thread.
 class WindowLifetime {
     std::mutex mutex;
     std::condition_variable changed;
@@ -149,12 +144,12 @@ class WindowLifetime {
 
       public:
         explicit Operation(WindowLifetime& owner) : owner(owner) {
-            if (owner.stopping.load(std::memory_order_acquire)) {
+            if (owner.stopping.load(std::memory_order_seq_cst)) {
                 return;
             }
-            owner.operations.fetch_add(1, std::memory_order_relaxed);
-            if (owner.stopping.load(std::memory_order_acquire)) {
-                if (owner.operations.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+            owner.operations.fetch_add(1, std::memory_order_seq_cst);
+            if (owner.stopping.load(std::memory_order_seq_cst)) {
+                if (owner.operations.fetch_sub(1, std::memory_order_seq_cst) == 1) {
                     std::lock_guard lock(owner.mutex);
                     owner.changed.notify_all();
                 }
@@ -168,8 +163,8 @@ class WindowLifetime {
 
         ~Operation() {
             if (admitted) {
-                if (owner.operations.fetch_sub(1, std::memory_order_acq_rel) == 1 &&
-                    owner.stopping.load(std::memory_order_acquire)) {
+                if (owner.operations.fetch_sub(1, std::memory_order_seq_cst) == 1 &&
+                    owner.stopping.load(std::memory_order_seq_cst)) {
                     std::lock_guard lock(owner.mutex);
                     owner.changed.notify_all();
                 }
@@ -186,15 +181,15 @@ class WindowLifetime {
 
       public:
         explicit Callback(WindowLifetime& owner) : owner(owner) {
-            owner.callbacks.fetch_add(1, std::memory_order_relaxed);
+            owner.callbacks.fetch_add(1, std::memory_order_seq_cst);
         }
 
         Callback(const Callback&) = delete;
         Callback& operator=(const Callback&) = delete;
 
         ~Callback() {
-            if (owner.callbacks.fetch_sub(1, std::memory_order_acq_rel) == 1 &&
-                owner.stopping.load(std::memory_order_acquire)) {
+            if (owner.callbacks.fetch_sub(1, std::memory_order_seq_cst) == 1 &&
+                owner.stopping.load(std::memory_order_seq_cst)) {
                 std::lock_guard lock(owner.mutex);
                 owner.changed.notify_all();
             }
@@ -214,7 +209,7 @@ class WindowLifetime {
 
     void Stop() {
         std::lock_guard lock(mutex);
-        stopping.store(true, std::memory_order_release);
+        stopping.store(true, std::memory_order_seq_cst);
     }
 
     void CloseAndWait() {
@@ -222,7 +217,7 @@ class WindowLifetime {
         {
             std::unique_lock lock(mutex);
             changed.wait(lock, [this] {
-                return operations.load(std::memory_order_acquire) == 0;
+                return operations.load(std::memory_order_seq_cst) == 0;
             });
             copy = windows;
         }
@@ -233,7 +228,7 @@ class WindowLifetime {
         const ULONGLONG startTick = GetTickCount64();
         while (!changed.wait_for(lock, std::chrono::seconds(2), [this] {
             std::erase_if(windows, [](HWND hwnd) { return !IsWindow(hwnd); });
-            return windows.empty() && callbacks.load(std::memory_order_acquire) == 0;
+            return windows.empty() && callbacks.load(std::memory_order_seq_cst) == 0;
         })) {
             const ULONGLONG elapsed = GetTickCount64() - startTick;
             Wh_Log(L"[LIFETIME] Waiting for %zu queue window(s) and %zu callback(s) (elapsed=%llu s)",
@@ -457,22 +452,6 @@ static HWND FindThreadBrowserWindow() {
     return browser;
 }
 
-static BOOL CALLBACK FindAnyBrowserWindowProc(HWND hwnd, LPARAM param) {
-    wchar_t name[64];
-    if (GetClassNameW(hwnd, name, ARRAYSIZE(name)) && wcscmp(name, L"CabinetWClass") == 0) {
-        *reinterpret_cast<HWND*>(param) = hwnd;
-        return FALSE;
-    }
-    return TRUE;
-}
-
-static HWND FindAnyThreadBrowserWindow() {
-    HWND browser = nullptr;
-    EnumThreadWindows(GetCurrentThreadId(), FindAnyBrowserWindowProc,
-                      reinterpret_cast<LPARAM>(&browser));
-    return browser;
-}
-
 // Cross-namespace notifications used by FileTransition and MetadataWork.
 namespace RibbonWork {
 static bool DeferInvoke(void*, DISPID, REFIID, LCID, WORD, const DISPPARAMS*);
@@ -512,21 +491,11 @@ struct PidlDeleter {
 };
 using UniquePidl = std::unique_ptr<ITEMIDLIST_ABSOLUTE, PidlDeleter>;
 
-struct CoTaskMemDeleter {
-    void operator()(wchar_t* ptr) const noexcept {
-        if (ptr) {
-            CoTaskMemFree(ptr);
-        }
-    }
-};
-using UniqueCoTaskWstr = std::unique_ptr<wchar_t, CoTaskMemDeleter>;
-
 struct WorkJob {
     void* browserKey = nullptr;
     ULONG generation = 0;
     UniquePidl pidl{};
     HWND uiHwnd = nullptr;
-    winrt::Windows::System::DispatcherQueue dispatcherQueue{nullptr};
 };
 
 using CfGetSyncRootInfoByPathFn = HRESULT(WINAPI*)(LPCWSTR filePath, DWORD infoClass,
@@ -545,10 +514,6 @@ static std::mutex jobsMutex;
 static std::deque<std::unique_ptr<WorkJob>> pendingJobs;
 static std::atomic<bool> unloading{false};
 static std::atomic<long> activeSubmitters{0};
-static std::atomic<size_t> pendingUiCallbacks{0};
-static std::atomic<HWND> lastUiProbeHwnd{nullptr};
-static std::mutex uiDrainMutex;
-static std::condition_variable uiDrainCv;
 
 struct SubmitterGuard {
     bool admitted = false;
@@ -582,49 +547,6 @@ struct SubmitterGuard {
 static bool IsUnloading() noexcept {
     return unloading.load(std::memory_order_acquire);
 }
-
-static void OnUiCallbackFinished() noexcept {
-    if (pendingUiCallbacks.fetch_sub(1, std::memory_order_acq_rel) == 1 &&
-        unloading.load(std::memory_order_acquire)) {
-        std::lock_guard lock(uiDrainMutex);
-        uiDrainCv.notify_all();
-    }
-}
-
-struct UiToken {
-    UiToken() noexcept {
-        pendingUiCallbacks.fetch_add(1, std::memory_order_acq_rel);
-    }
-
-    UiToken(const UiToken&) = delete;
-    UiToken& operator=(const UiToken&) = delete;
-
-    ~UiToken() {
-        OnUiCallbackFinished();
-    }
-};
-
-struct UiCallbackGuard {
-    UiCallbackGuard() noexcept = default;
-    UiCallbackGuard(const UiCallbackGuard&) = delete;
-    UiCallbackGuard& operator=(const UiCallbackGuard&) = delete;
-    ~UiCallbackGuard() {
-        OnUiCallbackFinished();
-    }
-};
-
-struct ComScope {
-    HRESULT hr = E_FAIL;
-
-    ComScope() noexcept : hr(CoInitializeEx(nullptr, COINIT_MULTITHREADED)) {}
-    ComScope(const ComScope&) = delete;
-    ComScope& operator=(const ComScope&) = delete;
-    ~ComScope() {
-        if (SUCCEEDED(hr)) {
-            CoUninitialize();
-        }
-    }
-};
 
 static bool IsCloudProviderAttributeOrProp(const wchar_t* fsPath) {
     if (fsPath && fsPath[0] != L'\0') {
@@ -662,7 +584,9 @@ static void InspectStorageMetadata(const WorkJob& job, Result& out) {
             const UINT driveType = GetDriveTypeW(root);
             out.isRemoteDrive = (driveType == DRIVE_REMOTE || driveType == DRIVE_CDROM);
         }
-        out.isCloudPlaceholder = IsCloudProviderAttributeOrProp(rawPath);
+        if (!out.isUnc && !out.isRemoteDrive) {
+            out.isCloudPlaceholder = IsCloudProviderAttributeOrProp(rawPath);
+        }
     }
     out.isSlowStorage = out.isUnc || out.isRemoteDrive || out.isCloudPlaceholder;
 }
@@ -680,9 +604,8 @@ static VOID CALLBACK WorkerCallback(PTP_CALLBACK_INSTANCE, PVOID, PTP_WORK) {
         return;
     }
 
-    auto res = std::make_shared<Result>();
+    auto res = std::make_unique<Result>();
     try {
-        ComScope comScope;
         InspectStorageMetadata(*job, *res);
     } catch (...) {
         Wh_Log(L"[POOL] Metadata inspection raised exception");
@@ -693,45 +616,19 @@ static VOID CALLBACK WorkerCallback(PTP_CALLBACK_INSTANCE, PVOID, PTP_WORK) {
         return;
     }
 
-    bool dispatched = false;
-    if (job->dispatcherQueue) {
-        auto token = std::make_shared<UiToken>();
-        if (!unloading.load(std::memory_order_acquire)) {
-            try {
-                dispatched = job->dispatcherQueue.TryEnqueue([res, token]() {
-                    try {
-                        if (!unloading.load(std::memory_order_acquire) && res) {
-                            FileTransition::ApplyMetadataResult(
-                                res->browserKey, res->generation, res->isSlowStorage);
-                        }
-                    } catch (...) {
-                        Wh_Log(L"[POOL] DispatcherQueue result callback failed");
-                    }
-                });
-            } catch (...) {
-                Wh_Log(L"[POOL] DispatcherQueue TryEnqueue threw exception");
-                dispatched = false;
-            }
-        }
-    }
-
-    if (!dispatched && !unloading.load(std::memory_order_acquire) && job->uiHwnd &&
-        IsWindow(job->uiHwnd)) {
-        auto rawResult = std::make_unique<Result>(*res);
-        pendingUiCallbacks.fetch_add(1, std::memory_order_acq_rel);
+    if (job->uiHwnd && IsWindow(job->uiHwnd)) {
+        Result* rawResult = res.release();
         if (unloading.load(std::memory_order_acquire) ||
             !PostMessageW(job->uiHwnd, kMsgMetadataResult, 0,
-                          reinterpret_cast<LPARAM>(rawResult.get()))) {
-            OnUiCallbackFinished();
-        } else {
-            std::ignore = rawResult.release();
+                          reinterpret_cast<LPARAM>(rawResult))) {
+            delete rawResult;
         }
     }
 }
 
 static void EnqueueForNavigation(void* browserKey, ULONG generation, PCIDLIST_ABSOLUTE pidl,
-                                 HWND uiHwnd, HWND probeHwnd = nullptr) {
-    if (unloading.load(std::memory_order_acquire) || !pidl || !browserKey) {
+                                 HWND uiHwnd) {
+    if (unloading.load(std::memory_order_acquire) || !pidl || !browserKey || !uiHwnd) {
         return;
     }
 
@@ -740,27 +637,11 @@ static void EnqueueForNavigation(void* browserKey, ULONG generation, PCIDLIST_AB
         return;
     }
 
-    winrt::Windows::System::DispatcherQueue dq{nullptr};
-    try {
-        dq = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
-    } catch (...) {
-        Wh_Log(L"[POOL] DispatcherQueue unavailable on current thread");
-    }
-
-    if (!dq && !uiHwnd) {
-        return;
-    }
-
-    if (HWND effectiveProbe = uiHwnd ? uiHwnd : probeHwnd) {
-        lastUiProbeHwnd.store(effectiveProbe, std::memory_order_relaxed);
-    }
-
     auto job = std::make_unique<WorkJob>();
     job->browserKey = browserKey;
     job->generation = generation;
     job->pidl = std::move(cloned);
     job->uiHwnd = uiHwnd;
-    job->dispatcherQueue = std::move(dq);
 
     SubmitterGuard submitter;
     if (!submitter || !sharedWork) {
@@ -782,8 +663,6 @@ static void EnqueueForNavigation(void* browserKey, ULONG generation, PCIDLIST_AB
 static bool Initialize() {
     unloading.store(false, std::memory_order_release);
     activeSubmitters.store(0, std::memory_order_release);
-    pendingUiCallbacks.store(0, std::memory_order_release);
-    lastUiProbeHwnd.store(nullptr, std::memory_order_release);
 
     cldapiModule = LoadLibraryExW(L"cldapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (cldapiModule) {
@@ -827,28 +706,6 @@ static void BeginUnload() {
     }
 }
 
-static void DrainUiCallbacks() {
-    std::unique_lock lock(uiDrainMutex);
-    const ULONGLONG startTick = GetTickCount64();
-    while (pendingUiCallbacks.load(std::memory_order_acquire) > 0) {
-        if (uiDrainCv.wait_for(lock, std::chrono::milliseconds(100), [] {
-                return pendingUiCallbacks.load(std::memory_order_acquire) == 0;
-            })) {
-            break;
-        }
-        if (GetTickCount64() - startTick >= 2000) {
-            const HWND probe = lastUiProbeHwnd.load(std::memory_order_relaxed);
-            DWORD_PTR dummy = 0;
-            if (!probe || !IsWindow(probe) ||
-                !SendMessageTimeoutW(probe, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 250, &dummy)) {
-                Wh_Log(L"[POOL] UI drain stopped with %zu pending callback(s)",
-                       pendingUiCallbacks.load(std::memory_order_relaxed));
-                break;
-            }
-        }
-    }
-}
-
 static void Uninit() {
     cfGetSyncRootInfoByPath = nullptr;
     if (cldapiModule) {
@@ -871,7 +728,6 @@ struct State {
     void* batchAction{};
     ULONGLONG lastActivityTick = 0;
     ULONGLONG navStartTick = 0;
-    ULONGLONG lastGroupProbeTick = 0;
     ULONG generation = 0;
     size_t batchCount = 0;
     size_t lastCheckedBatchCount = 0;
@@ -879,8 +735,6 @@ struct State {
     bool pending = false;
     bool enumerated = false;
     bool isGroupedView = false;
-    bool groupedChecked = false;
-    bool groupItemSeen = false;
     bool isSlowStorage = false;
     bool telemetryReported = false;
 };
@@ -1052,14 +906,13 @@ static DeleteBatchTimer deleteOriginal;
 static Invoke invokeOriginal;
 
 static bool IsActiveViewGrouped() noexcept {
-    return active != nullptr && active->inUse && (active->isGroupedView || active->groupItemSeen);
+    return active != nullptr && active->inUse && active->isGroupedView;
 }
 
 static void OnGroupItem() {
     if (!active || !active->inUse) {
         return;
     }
-    active->groupItemSeen = true;
     active->isGroupedView = true;
 }
 
@@ -1089,15 +942,15 @@ static void ReportTelemetryIfNeeded(const wchar_t* reason, ULONGLONG fallbackSta
         const ULONGLONG now = GetTickCount64();
         const ULONGLONG navMs = now >= startTick ? (now - startTick) : 0;
         Wh_Log(L"[TELEMETRY] Transition complete (navMs=%llu, batchCount=%zu, grouped=%d, "
-               L"flushReason=%s, groupItemSeen=%d)",
+               L"flushReason=%s)",
                navMs, target->batchCount, target->isGroupedView ? 1 : 0,
-               reason ? reason : L"unknown", target->groupItemSeen ? 1 : 0);
+               reason ? reason : L"unknown");
     } else if (fallbackStartTick) {
         const ULONGLONG now = GetTickCount64();
         const ULONGLONG navMs = now >= fallbackStartTick ? (now - fallbackStartTick) : 0;
         Wh_Log(L"[TELEMETRY] Transition complete (navMs=%llu, batchCount=%zu, grouped=%d, "
-               L"flushReason=%s, groupItemSeen=%d)",
-               navMs, static_cast<size_t>(0), 0, reason ? reason : L"unknown", 0);
+               L"flushReason=%s)",
+               navMs, static_cast<size_t>(0), 0, reason ? reason : L"unknown");
     }
 }
 
@@ -1176,8 +1029,6 @@ static State* BeginForItemsView(void* itemsView) {
     const ULONGLONG savedNavStart = keepStart ? tab->navStartTick : now;
     const bool savedSlow = keepStart ? tab->isSlowStorage : false;
     const bool savedGrouped = keepStart ? tab->isGroupedView : false;
-    const bool savedGroupedChecked = keepStart ? tab->groupedChecked : false;
-    const ULONGLONG savedGroupProbeTick = keepStart ? tab->lastGroupProbeTick : 0;
     *tab = State{};
     tab->inUse = true;
     tab->browser = savedBrowser;
@@ -1187,8 +1038,6 @@ static State* BeginForItemsView(void* itemsView) {
     tab->generation = nextGen;
     tab->isSlowStorage = savedSlow;
     tab->isGroupedView = savedGrouped;
-    tab->groupedChecked = savedGroupedChecked;
-    tab->lastGroupProbeTick = savedGroupProbeTick;
     active = tab;
     return tab;
 }
@@ -1200,8 +1049,9 @@ static HRESULT __fastcall NavigateHook(void* self, PCIDLIST_ABSOLUTE pidl, ULONG
     const ULONG generation = tab->generation;
     if (pidl) {
         const HWND uiHwnd = RibbonWork::EnsureQueueWindow();
-        const HWND probeHwnd = uiHwnd ? uiHwnd : FindAnyThreadBrowserWindow();
-        MetadataWork::EnqueueForNavigation(self, generation, pidl, uiHwnd, probeHwnd);
+        if (uiHwnd) {
+            MetadataWork::EnqueueForNavigation(self, generation, pidl, uiHwnd);
+        }
     }
     HRESULT result;
     {
@@ -1370,10 +1220,6 @@ struct Task {
         kind = {};
     }
 };
-
-#if defined(_WIN64)
-static_assert(sizeof(Task) == 40, "Task struct must be 40 bytes on 64-bit");
-#endif
 
 class TaskQueue {
   public:
@@ -1548,8 +1394,8 @@ static LRESULT CALLBACK InputHook(int code, WPARAM wp, LPARAM lp) {
 }
 
 static LRESULT CALLBACK OwnerSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR data) {
+    WindowLifetime::Callback callback(lifetime);
     if (msg == WM_DESTROY) {
-        WindowLifetime::Callback callback(lifetime);
         auto q = reinterpret_cast<Queue*>(data);
         q->closing = true;
         Flush(L"teardown");
@@ -1565,7 +1411,6 @@ static void DrainQueuedMetadataMessages(HWND hwnd) noexcept {
     while (PeekMessageW(&queuedMsg, hwnd, kMsgMetadataResult, kMsgMetadataResult, PM_REMOVE)) {
         auto* rawRes = reinterpret_cast<MetadataWork::Result*>(queuedMsg.lParam);
         delete rawRes;
-        MetadataWork::OnUiCallbackFinished();
     }
 }
 
@@ -1579,7 +1424,6 @@ static LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     }
     if (msg == kMsgMetadataResult) {
         std::unique_ptr<MetadataWork::Result> owned(reinterpret_cast<MetadataWork::Result*>(lp));
-        MetadataWork::UiCallbackGuard guard;
         if (!MetadataWork::IsUnloading() && owned) {
             FileTransition::ApplyMetadataResult(owned->browserKey, owned->generation,
                                                 owned->isSlowStorage);
@@ -1776,12 +1620,13 @@ static bool DeferInvoke(void* self, DISPID id, REFIID iid, LCID locale, WORD fla
 }
 
 static HRESULT __fastcall NavigatedHook(void* self) {
-    auto canonical = CanonicalUnknown(reinterpret_cast<IUnknown*>(self));
-    if (destroyOriginal && settings.classicRibbon &&
-        connectedTargets.contains(canonical.Get()) && Pending() &&
-        Enqueue(reinterpret_cast<IUnknown*>(self), TaskKind::ClassicNavigated, 0,
-                RunClassicNavigated)) {
-        return S_OK;
+    if (destroyOriginal && settings.classicRibbon && Pending()) {
+        auto canonical = CanonicalUnknown(reinterpret_cast<IUnknown*>(self));
+        if (connectedTargets.contains(canonical.Get()) &&
+            Enqueue(reinterpret_cast<IUnknown*>(self), TaskKind::ClassicNavigated, 0,
+                    RunClassicNavigated)) {
+            return S_OK;
+        }
     }
     return navigatedOriginal(self);
 }
@@ -1926,13 +1771,14 @@ static void RunXamlInvoke(const RibbonWork::Task& task) {
 }
 
 static HRESULT __fastcall NavigatedHook(void* self) {
-    auto canonical = CanonicalUnknown(reinterpret_cast<IUnknown*>(self));
-    if (settings.xamlCommandBar && Pending() &&
-        connectedTargets.contains(canonical.Get()) &&
-        RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self),
-                            RibbonWork::TaskKind::XamlNavigated, 0,
-                            RunXamlNavigated)) {
-        return S_OK;
+    if (settings.xamlCommandBar && Pending()) {
+        auto canonical = CanonicalUnknown(reinterpret_cast<IUnknown*>(self));
+        if (connectedTargets.contains(canonical.Get()) &&
+            RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self),
+                                RibbonWork::TaskKind::XamlNavigated, 0,
+                                RunXamlNavigated)) {
+            return S_OK;
+        }
     }
     return navigatedOriginal(self);
 }
@@ -2504,11 +2350,11 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
 
 void Wh_ModBeforeUninit() {
     MetadataWork::BeginUnload();
-    MetadataWork::DrainUiCallbacks();
     RibbonWork::BeforeUninit();
 }
 
 void Wh_ModUninit() {
+    MetadataWork::Uninit();
     RibbonWork::Uninit();
     ReleaseModules();
 }
