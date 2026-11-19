@@ -6,7 +6,7 @@
 // @author          Peter2oo1
 // @github          https://github.com/Peter2oo1
 // @include         explorer.exe
-// @compilerOptions -lshlwapi -lole32 -loleaut32 -lshell32 -luuid -lcomctl32
+// @compilerOptions -lshlwapi -lole32 -loleaut32 -lshell32 -luuid -lcomctl32 -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -17,22 +17,32 @@ This mod saves your open File Explorer tabs and automatically restores them when
 
 It is an enhanced successor to [Explorer Tabs Session Saver](https://windhawk.net/mods/explorer-tabs-session-saver) by [noX1st](https://github.com/noX1st), fixing several core issues and edge cases.
 
-![Demonstration (original)](https://i.imgur.com/5ehPFaL.gif)
+![Demonstration](https://i.imgur.com/5ehPFaL.gif)
 
 ### Improvements Over the Original Mod
-- **No Extra "Blank" Tab on Restore:** Navigates the initial left-most tab in-place (`IWebBrowser2::Navigate` / `IShellBrowser::BrowseObject`) instead of spawning a separate `ShellExecuteExW` call for the first saved tab, preventing a blank or duplicate default tab from being left on the far left.
-- **Fixes Sidebar Auto-Scrolling to the Bottom:** Prevents File Explorer's Navigation Pane (`SysTreeView32`) from jumping or flickering to the bottom when opening a window and restoring tabs with Explorer Tab Utility.
+- **No Extra "Blank" Tab on Restore:** When File Explorer opens to a default start location (*Home* or *This PC*), the initial left-most tab is navigated in-place (`IWebBrowser2::Navigate` / `IShellBrowser::BrowseObject`) instead of spawning a separate `ShellExecuteExW` call for the first saved tab. If Explorer is opened for a specific folder (e.g. *"Show in folder"* or a folder shortcut), that folder and its selection are preserved and your saved tabs open alongside it.
+- **Fixes Sidebar Auto-Scrolling to the Bottom:** Prevents File Explorer's Navigation Pane (`SysTreeView32`) from jumping or flickering to the bottom when restoring tabs with Explorer Tab Utility.
 - **Persistent Session Protection:** Opening File Explorer and closing it immediately without interacting with the restored tabs will no longer delete or lose your saved session.
 - **Atomic Multi-Tab Window Close:** Ignores tabs belonging to a top-level Explorer window that is already in the middle of closing, preventing partial tab lists from overwriting your session when closing a multi-tab window.
-- **Full Unicode (UTF-8) Path Support:** Properly saves and restores folder paths containing non-ASCII, accented, or special Unicode characters.
-- **Instant Mod Reload / Unload:** Uses waitable stop events and clean cross-thread unsubclassing instead of blocking sleeps.
+- **Per-User UTF-8 Session Storage:** Stores sessions per Windows user account (`LastExplorerTabs-<SID>.txt`) in UTF-8 so folder paths with accented or Unicode characters are preserved and multi-user accounts do not collide.
+- **Clean Mod Reload / Unload:** Joins worker threads and unsubclasses controls deterministically on unload.
 
 ### Notes
-- Works independently of the built-in Windows feature *"Restore previous folder windows at log-on"*.
-- Session file location: `%AppData%\Windhawk\ModsData\explorer-tabs-session-saver-plus\LastExplorerTabs.txt` (or under your Windhawk `ModsData` directory).
+- Works independently of the built-in Windows feature *"Restore previous folder windows at logon"*.
 - **Important:** To restore tabs into a single File Explorer window, [Explorer Tab Utility](https://github.com/w4po/ExplorerTabUtility) (with its **"Window Hook"** feature enabled) or a similar tab-merging utility is required. Otherwise, each tab will be restored in its own separate window.
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- reuseInitialTab: true
+  $name: Reuse initial tab on restore
+  $description: Navigate the initial Home / This PC tab in-place to the first saved tab instead of leaving an extra default tab on the left.
+- lockSidebarScroll: true
+  $name: Prevent sidebar auto-scroll to bottom on restore
+  $description: Lock the Navigation Pane scroll position to the top while tabs are being restored.
+*/
+// ==/WindhawkModSettings==
 
 #include <windhawk_api.h>
 #include <windows.h>
@@ -40,18 +50,24 @@ It is an enhanced successor to [Explorer Tabs Session Saver](https://windhawk.ne
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <exdisp.h>
+#include <sddl.h>
 #include <vector>
 #include <string>
 #include <olectl.h>
 #include <algorithm>
 
-HANDLE g_hMainThread = NULL;
-HANDLE g_hStopEvent  = NULL;
-bool   g_bIsRunning  = false;
+struct {
+    bool reuseInitialTab = true;
+    bool lockSidebarScroll = true;
+} g_settings;
+
+HANDLE g_hMainThread    = NULL;
+HANDLE g_hRestoreThread = NULL;
+HANDLE g_hStopEvent     = NULL;
+bool   g_bIsRunning     = false;
 std::vector<std::wstring> g_lastKnownTabs;
 static volatile LONG g_restoreScheduled = 0;
 static volatile LONG g_isRestoring = 0;
-static volatile LONG g_activeRestoreThreads = 0;
 static volatile LONGLONG g_windowOpenLockUntilTick = 0;
 
 static const UINT_PTR SUBCLASS_ID = 1;
@@ -113,6 +129,8 @@ struct TreeViewLockState {
     ULONGLONG createdTick;
     ULONGLONG lockUntilTick;
     ULONGLONG firstVisibleWithItemsTick;
+    int depth;
+    bool removePending;
     bool userInteracted;
     bool inScrollReset;
 };
@@ -171,31 +189,24 @@ void ResetTreeViewScrollToTopViaSubclass(HWND hwnd) {
     DefSubclassProc(hwnd, WM_VSCROLL, MAKEWPARAM(SB_TOP, 0), 0);
 }
 
-LRESULT CALLBACK TreeViewSubclassProc(
+LRESULT TreeViewSubclassProcBody(
     HWND hwnd,
     UINT uMsg,
     WPARAM wParam,
     LPARAM lParam,
-    UINT_PTR uIdSubclass,
-    DWORD_PTR dwRefData
+    TreeViewLockState* state
 ) {
-    TreeViewLockState* state = reinterpret_cast<TreeViewLockState*>(dwRefData);
-
     if (g_msgUnsubclass != 0 && uMsg == g_msgUnsubclass) {
-        RemoveWindowSubclass(hwnd, TreeViewSubclassProc, uIdSubclass);
-        UnregisterSubclassedTree(hwnd);
-        delete state;
+        state->removePending = true;
         return 0;
     }
 
     if (uMsg == WM_NCDESTROY) {
-        RemoveWindowSubclass(hwnd, TreeViewSubclassProc, uIdSubclass);
-        UnregisterSubclassedTree(hwnd);
-        delete state;
+        state->removePending = true;
         return DefSubclassProc(hwnd, uMsg, wParam, lParam);
     }
 
-    if (!state) {
+    if (state->removePending) {
         return DefSubclassProc(hwnd, uMsg, wParam, lParam);
     }
 
@@ -236,7 +247,14 @@ LRESULT CALLBACK TreeViewSubclassProc(
         state->lockUntilTick = globalLockUntil;
     }
 
-    if (!state->userInteracted && state->firstVisibleWithItemsTick == 0) {
+    bool isRestoring = (InterlockedCompareExchange(&g_isRestoring, 0, 0) != 0);
+
+    // While tabs are still being restored and switched by Explorer Tab Utility, do not consume
+    // the visibility grace period (especially for the first tab which starts visible on Home
+    // and then gets hidden when subsequent tabs open).
+    if (isRestoring) {
+        state->firstVisibleWithItemsTick = 0;
+    } else if (!state->userInteracted && state->firstVisibleWithItemsTick == 0) {
         if (IsWindowVisible(hwnd)) {
             LRESULT itemCount = DefSubclassProc(hwnd, TVM_GETCOUNT, 0, 0);
             if (itemCount > 0) {
@@ -250,19 +268,17 @@ LRESULT CALLBACK TreeViewSubclassProc(
     }
 
     bool waitingForFirstVisible = (state->firstVisibleWithItemsTick == 0) &&
-                                  (now < state->createdTick + 30000);
+                                  (now < state->createdTick + 120000);
 
-    bool isLocked = !state->userInteracted &&
-                    (InterlockedCompareExchange(&g_isRestoring, 0, 0) != 0 ||
+    bool isLocked = g_settings.lockSidebarScroll &&
+                    !state->userInteracted &&
+                    (isRestoring ||
                      now < state->lockUntilTick ||
                      waitingForFirstVisible);
 
     if (!isLocked) {
-        // If the lock window has completely expired, unsubclass cleanly when not in a nested reset
         if (!state->inScrollReset) {
-            RemoveWindowSubclass(hwnd, TreeViewSubclassProc, uIdSubclass);
-            UnregisterSubclassedTree(hwnd);
-            delete state;
+            state->removePending = true;
         }
         return DefSubclassProc(hwnd, uMsg, wParam, lParam);
     }
@@ -289,7 +305,7 @@ LRESULT CALLBACK TreeViewSubclassProc(
 
     LRESULT res = DefSubclassProc(hwnd, uMsg, wParam, lParam);
 
-    if (!state->inScrollReset && IsTreeViewScrolledDownViaSubclass(hwnd)) {
+    if (!state->removePending && !state->inScrollReset && IsTreeViewScrolledDownViaSubclass(hwnd)) {
         state->inScrollReset = true;
         ResetTreeViewScrollToTopViaSubclass(hwnd);
         state->inScrollReset = false;
@@ -299,7 +315,38 @@ LRESULT CALLBACK TreeViewSubclassProc(
     return res;
 }
 
+LRESULT CALLBACK TreeViewSubclassProc(
+    HWND hwnd,
+    UINT uMsg,
+    WPARAM wParam,
+    LPARAM lParam,
+    UINT_PTR uIdSubclass,
+    DWORD_PTR dwRefData
+) {
+    TreeViewLockState* state = reinterpret_cast<TreeViewLockState*>(dwRefData);
+    if (!state) {
+        return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+    }
+
+    state->depth++;
+    LRESULT res = TreeViewSubclassProcBody(hwnd, uMsg, wParam, lParam, state);
+    if (--state->depth == 0 && state->removePending) {
+        RemoveWindowSubclass(hwnd, TreeViewSubclassProc, uIdSubclass);
+        UnregisterSubclassedTree(hwnd);
+        delete state;
+    }
+    return res;
+}
+
 void SubclassExplorerTreeView(HWND hwnd) {
+    EnterCriticalSection(&g_treeCs);
+    bool alreadySubclassed =
+        (std::find(g_subclassedTrees.begin(), g_subclassedTrees.end(), hwnd) != g_subclassedTrees.end());
+    LeaveCriticalSection(&g_treeCs);
+    if (alreadySubclassed) {
+        return;
+    }
+
     ULONGLONG now = GetTickCount64();
     ULONGLONG globalLockUntil = (ULONGLONG)InterlockedCompareExchange64(&g_windowOpenLockUntilTick, 0, 0);
     ULONGLONG lockUntil = (std::max)(now + 6000, globalLockUntil);
@@ -308,15 +355,58 @@ void SubclassExplorerTreeView(HWND hwnd) {
         now,
         lockUntil,
         0,
+        0,
+        false,
         false,
         false
     };
 
     if (SetWindowSubclass(hwnd, TreeViewSubclassProc, SUBCLASS_ID, reinterpret_cast<DWORD_PTR>(state))) {
         RegisterSubclassedTree(hwnd);
+        if (GetScrollPos(hwnd, SB_VERT) > 0) {
+            HTREEITEM hRoot = (HTREEITEM)SendMessageW(hwnd, TVM_GETNEXTITEM, TVGN_ROOT, 0);
+            if (hRoot) {
+                SendMessageW(hwnd, TVM_SELECTITEM, TVGN_FIRSTVISIBLE, (LPARAM)hRoot);
+            }
+            SendMessageW(hwnd, WM_VSCROLL, MAKEWPARAM(SB_TOP, 0), 0);
+        }
     } else {
         delete state;
     }
+}
+
+BOOL CALLBACK SubclassChildTreeViewsProc(HWND hwnd, LPARAM) {
+    if (GetWindowThreadProcessId(hwnd, NULL) == GetCurrentThreadId()) {
+        wchar_t className[64];
+        if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) &&
+            lstrcmpW(className, L"SysTreeView32") == 0 &&
+            IsExplorerSidebarTreeView(hwnd, NULL)) {
+            SubclassExplorerTreeView(hwnd);
+        }
+    }
+    return TRUE;
+}
+
+std::wstring GetCurrentUserSidString() {
+    std::wstring sidStr;
+    HANDLE hToken = NULL;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        DWORD dwSize = 0;
+        GetTokenInformation(hToken, TokenUser, NULL, 0, &dwSize);
+        if (dwSize > 0) {
+            std::vector<BYTE> buffer(dwSize);
+            PTOKEN_USER pTokenUser = reinterpret_cast<PTOKEN_USER>(buffer.data());
+            if (GetTokenInformation(hToken, TokenUser, pTokenUser, dwSize, &dwSize)) {
+                LPWSTR lpSid = NULL;
+                if (ConvertSidToStringSidW(pTokenUser->User.Sid, &lpSid) && lpSid) {
+                    sidStr = lpSid;
+                    LocalFree(lpSid);
+                }
+            }
+        }
+        CloseHandle(hToken);
+    }
+    return sidStr;
 }
 
 const std::wstring& GetTabListFilePath() {
@@ -328,7 +418,13 @@ const std::wstring& GetTabListFilePath() {
         }
         std::wstring modPath = modPathBuffer;
         SHCreateDirectoryExW(NULL, modPath.c_str(), NULL);
-        modPath += L"\\LastExplorerTabs.txt";
+
+        std::wstring sid = GetCurrentUserSidString();
+        if (!sid.empty()) {
+            modPath += L"\\LastExplorerTabs-" + sid + L".txt";
+        } else {
+            modPath += L"\\LastExplorerTabs.txt";
+        }
         return modPath;
     }();
     return s_cachedFilePath;
@@ -367,7 +463,7 @@ std::vector<std::wstring> GetCurrentTabs() {
                                     PIDLIST_ABSOLUTE pidl;
                                     if (SUCCEEDED(pPersistFolder2->GetCurFolder(&pidl))) {
                                         wchar_t path[MAX_PATH];
-                                        if (SHGetPathFromIDListW(pidl, path)) {
+                                        if (SHGetPathFromIDListW(pidl, path) && PathIsDirectoryW(path)) {
                                             currentTabs.push_back(path);
                                         }
                                         CoTaskMemFree(pidl);
@@ -420,17 +516,30 @@ void WriteTabsToFile(const std::vector<std::wstring>& tabs) {
     }
 }
 
-bool TryNavigateInitialTab(HWND targetHwnd, const std::wstring& targetPath) {
+enum class InitialTabAction {
+    NavigatedInPlace,
+    KeepSpecificFolderTab,
+    SkipNonFolderWindow
+};
+
+InitialTabAction InspectAndNavigateInitialTab(HWND targetHwnd, const std::wstring& targetPath) {
     PIDLIST_ABSOLUTE targetPidl = ILCreateFromPathW(targetPath.c_str());
     if (!targetPidl) {
-        return false;
+        return InitialTabAction::KeepSpecificFolderTab;
     }
+
+    PIDLIST_ABSOLUTE pidlHome = NULL;
+    SHParseDisplayName(L"shell:::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}", NULL, &pidlHome, 0, NULL);
+    PIDLIST_ABSOLUTE pidlThisPC = NULL;
+    SHParseDisplayName(L"shell:::{20D04FE0-3AEA-1069-A2D8-08002B30309D}", NULL, &pidlThisPC, 0, NULL);
 
     bool confirmedAtTarget = false;
     bool sentNavigate = false;
+    bool decidedKeepSpecificFolder = false;
+    bool decidedSkipNonFolderWindow = false;
     int postNavChecks = 0;
 
-    // Wait up to ~2.5 seconds for targetHwnd's initial tab to register and navigate in-place
+    // Wait up to ~2.5 seconds for targetHwnd's initial tab to register in IShellWindows
     for (int attempt = 0; attempt < 50 && g_bIsRunning; ++attempt) {
         if (!IsWindow(targetHwnd)) break;
 
@@ -454,28 +563,54 @@ bool TryNavigateInitialTab(HWND targetHwnd, const std::wstring& targetPath) {
                                 GetAncestor(hwndBrowser, GA_ROOT) == targetHwnd) {
                                 IShellView* pShellView = NULL;
                                 if (SUCCEEDED(pShellBrowser->QueryActiveShellView(&pShellView)) && pShellView) {
-                                    bool readyForNav = false;
+                                    bool canNavigateInPlace = false;
                                     IFolderView* pFolderView = NULL;
                                     if (SUCCEEDED(pShellView->QueryInterface(IID_PPV_ARGS(&pFolderView))) && pFolderView) {
                                         IPersistFolder2* pPersistFolder2 = NULL;
                                         if (SUCCEEDED(pFolderView->GetFolder(IID_PPV_ARGS(&pPersistFolder2))) && pPersistFolder2) {
                                             PIDLIST_ABSOLUTE curPidl = NULL;
                                             if (SUCCEEDED(pPersistFolder2->GetCurFolder(&curPidl)) && curPidl) {
-                                                readyForNav = true;
-                                                wchar_t curPath[MAX_PATH];
-                                                if (SHGetPathFromIDListW(curPidl, curPath) &&
-                                                    lstrcmpiW(curPath, targetPath.c_str()) == 0) {
-                                                    confirmedAtTarget = true;
+                                                bool isDefaultStart =
+                                                    (pidlHome && ILIsEqual(curPidl, pidlHome)) ||
+                                                    (pidlThisPC && ILIsEqual(curPidl, pidlThisPC));
+
+                                                if (sentNavigate) {
+                                                    wchar_t curPath[MAX_PATH];
+                                                    if (SHGetPathFromIDListW(curPidl, curPath) &&
+                                                        lstrcmpiW(curPath, targetPath.c_str()) == 0) {
+                                                        confirmedAtTarget = true;
+                                                    } else {
+                                                        canNavigateInPlace = true;
+                                                    }
+                                                } else if (isDefaultStart) {
+                                                    if (g_settings.reuseInitialTab) {
+                                                        canNavigateInPlace = true;
+                                                    } else {
+                                                        decidedKeepSpecificFolder = true;
+                                                    }
+                                                } else {
+                                                    wchar_t curPath[MAX_PATH];
+                                                    if (SHGetPathFromIDListW(curPidl, curPath) && PathIsDirectoryW(curPath)) {
+                                                        // Window was opened for a specific folder (e.g. "Show in folder", CLI path); keep it
+                                                        decidedKeepSpecificFolder = true;
+                                                    } else {
+                                                        // Non-folder virtual shell view (e.g. Control Panel); skip restoring on this window
+                                                        decidedSkipNonFolderWindow = true;
+                                                    }
                                                 }
                                                 CoTaskMemFree(curPidl);
                                             }
                                             pPersistFolder2->Release();
+                                        } else {
+                                            decidedSkipNonFolderWindow = true;
                                         }
                                         pFolderView->Release();
+                                    } else {
+                                        decidedSkipNonFolderWindow = true;
                                     }
                                     pShellView->Release();
 
-                                    if (!confirmedAtTarget && readyForNav) {
+                                    if (!confirmedAtTarget && canNavigateInPlace) {
                                         if (!sentNavigate || (postNavChecks % 4 == 3)) {
                                             bool navCalled = false;
                                             IWebBrowser2* pWebBrowser2 = NULL;
@@ -512,12 +647,12 @@ bool TryNavigateInitialTab(HWND targetHwnd, const std::wstring& targetPath) {
                     }
                     pDispatch->Release();
                 }
-                if (confirmedAtTarget) break;
+                if (confirmedAtTarget || decidedKeepSpecificFolder || decidedSkipNonFolderWindow) break;
             }
             pShellWindows->Release();
         }
 
-        if (confirmedAtTarget) break;
+        if (confirmedAtTarget || decidedKeepSpecificFolder || decidedSkipNonFolderWindow) break;
         if (sentNavigate && postNavChecks >= 10) break;
 
         if (g_hStopEvent) {
@@ -527,16 +662,25 @@ bool TryNavigateInitialTab(HWND targetHwnd, const std::wstring& targetPath) {
         }
     }
 
+    if (pidlHome) ILFree(pidlHome);
+    if (pidlThisPC) ILFree(pidlThisPC);
     ILFree(targetPidl);
-    return confirmedAtTarget || sentNavigate;
+
+    if (decidedSkipNonFolderWindow) {
+        return InitialTabAction::SkipNonFolderWindow;
+    }
+    if (confirmedAtTarget || sentNavigate) {
+        return InitialTabAction::NavigatedInPlace;
+    }
+    return InitialTabAction::KeepSpecificFolderTab;
 }
 
-void RestoreTabs(HWND targetHwnd) {
+bool RestoreTabs(HWND targetHwnd) {
     const std::wstring& filePath = GetTabListFilePath();
-    if (filePath.empty()) return;
+    if (filePath.empty()) return false;
 
     HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE) return;
+    if (hFile == INVALID_HANDLE_VALUE) return false;
 
     std::string rawData;
     DWORD fileSize = GetFileSize(hFile, NULL);
@@ -551,10 +695,10 @@ void RestoreTabs(HWND targetHwnd) {
     }
     CloseHandle(hFile);
 
-    if (rawData.empty()) return;
+    if (rawData.empty()) return false;
 
     int wlen = MultiByteToWideChar(CP_UTF8, 0, rawData.data(), (int)rawData.size(), NULL, 0);
-    if (wlen <= 0) return;
+    if (wlen <= 0) return false;
 
     std::wstring content(wlen, L'\0');
     MultiByteToWideChar(CP_UTF8, 0, rawData.data(), (int)rawData.size(), &content[0], wlen);
@@ -567,7 +711,10 @@ void RestoreTabs(HWND targetHwnd) {
             end = content.size();
         }
         if (end > start) {
-            paths.push_back(content.substr(start, end - start));
+            std::wstring candidate = content.substr(start, end - start);
+            if (PathIsDirectoryW(candidate.c_str())) {
+                paths.push_back(std::move(candidate));
+            }
         }
         start = content.find_first_not_of(L"\r\n", end);
         if (start == std::wstring::npos) {
@@ -575,20 +722,25 @@ void RestoreTabs(HWND targetHwnd) {
         }
     }
 
-    if (paths.empty()) return;
+    if (paths.empty()) return false;
+
+    InitialTabAction action = InspectAndNavigateInitialTab(targetHwnd, paths[0]);
+    if (action == InitialTabAction::SkipNonFolderWindow) {
+        // Target window is not a folder window (e.g. Control Panel); re-arm restore for the next Explorer window
+        InterlockedExchange(&g_restoreScheduled, 0);
+        return false;
+    }
 
     EnterCriticalSection(&g_treeCs);
     g_lastKnownTabs = paths;
     LeaveCriticalSection(&g_treeCs);
 
-    // Navigate the window's initial left-most tab in-place to paths[0] so no extra blank/default tab remains
-    size_t startIndex = 0;
-    if (TryNavigateInitialTab(targetHwnd, paths[0])) {
-        startIndex = 1;
-    }
+    size_t startIndex = (action == InitialTabAction::NavigatedInPlace) ? 1 : 0;
 
     for (size_t i = startIndex; i < paths.size(); ++i) {
         if (!g_bIsRunning) break;
+        if (!PathIsDirectoryW(paths[i].c_str())) continue;
+
         SHELLEXECUTEINFOW sei = { sizeof(sei) };
         sei.fMask = SEE_MASK_DEFAULT;
         sei.lpVerb = L"open";
@@ -601,6 +753,7 @@ void RestoreTabs(HWND targetHwnd) {
             Sleep(50);
         }
     }
+    return true;
 }
 
 BOOL CALLBACK CheckExplorerWindowProc(HWND hwnd, LPARAM lParam) {
@@ -627,30 +780,34 @@ DWORD WINAPI RestoreTabsThread(LPVOID lpParam) {
     HWND targetHwnd = (HWND)lpParam;
     if (!IsWindow(targetHwnd)) {
         Wh_Log(L"RestoreTabsThread: Invalid window handle received.");
+        InterlockedExchange64(&g_windowOpenLockUntilTick, 0);
         InterlockedExchange(&g_isRestoring, 0);
-        InterlockedDecrement(&g_activeRestoreThreads);
         return 1;
     }
 
     Wh_Log(L"RestoreTabsThread: Triggered for window %p.", targetHwnd);
 
+    bool restored = false;
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     if (SUCCEEDED(hr)) {
-        RestoreTabs(targetHwnd);
+        restored = RestoreTabs(targetHwnd);
         CoUninitialize();
     }
 
-    InterlockedExchange64(&g_windowOpenLockUntilTick, (LONGLONG)(GetTickCount64() + 5000));
+    if (restored) {
+        InterlockedExchange64(&g_windowOpenLockUntilTick, (LONGLONG)(GetTickCount64() + 5000));
 
-    // Brief grace period for Explorer Tab Utility to finish injecting the restored tabs
-    if (g_hStopEvent) {
-        WaitForSingleObject(g_hStopEvent, 1200);
+        // Brief grace period for Explorer Tab Utility to finish injecting the restored tabs
+        if (g_hStopEvent) {
+            WaitForSingleObject(g_hStopEvent, 1200);
+        } else {
+            Sleep(1200);
+        }
     } else {
-        Sleep(1200);
+        InterlockedExchange64(&g_windowOpenLockUntilTick, 0);
     }
 
     InterlockedExchange(&g_isRestoring, 0);
-    InterlockedDecrement(&g_activeRestoreThreads);
     return 0;
 }
 
@@ -664,7 +821,7 @@ HWND WINAPI CreateWindowExW_Hook(
 ) {
     HWND hwnd = pCreateWindowExW_Orig(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
 
-    if (hwnd) {
+    if (hwnd && g_bIsRunning) {
         // Fast check before calling GetClassNameW if lpClassName is a string pointer
         if (!IS_INTRESOURCE(lpClassName)) {
             wchar_t firstChar = lpClassName[0];
@@ -677,25 +834,35 @@ HWND WINAPI CreateWindowExW_Hook(
         wchar_t className[64];
         if (GetClassNameW(hwnd, className, ARRAYSIZE(className))) {
             if (lstrcmpW(className, L"CabinetWClass") == 0) {
-                InterlockedExchange64(&g_windowOpenLockUntilTick, (LONGLONG)(GetTickCount64() + 6000));
-
-                // trigger restore once per Explorer restart
+                // Trigger restore once when opening the first Explorer window
                 if (InterlockedCompareExchange(&g_restoreScheduled, 1, 0) == 0) {
                     const std::wstring& filePath = GetTabListFilePath();
                     if (!filePath.empty() && PathFileExistsW(filePath.c_str())) {
+                        InterlockedExchange64(&g_windowOpenLockUntilTick, (LONGLONG)(GetTickCount64() + 6000));
                         InterlockedExchange(&g_isRestoring, 1);
-                        InterlockedIncrement(&g_activeRestoreThreads);
+                        if (g_settings.lockSidebarScroll) {
+                            EnumChildWindows(hwnd, SubclassChildTreeViewsProc, 0);
+                        }
                         HANDLE hThread = CreateThread(NULL, 0, RestoreTabsThread, (LPVOID)hwnd, 0, NULL);
                         if (hThread) {
-                            CloseHandle(hThread);
+                            HANDLE prev = (HANDLE)InterlockedExchangePointer(&g_hRestoreThread, hThread);
+                            if (prev) {
+                                WaitForSingleObject(prev, INFINITE);
+                                CloseHandle(prev);
+                            }
                         } else {
+                            InterlockedExchange64(&g_windowOpenLockUntilTick, 0);
                             InterlockedExchange(&g_isRestoring, 0);
-                            InterlockedDecrement(&g_activeRestoreThreads);
                         }
                     }
                 }
             } else if (lstrcmpW(className, L"SysTreeView32") == 0) {
-                if (IsExplorerSidebarTreeView(hwnd, hWndParent)) {
+                // Only subclass Navigation Pane TreeViews created while a session restore is pending or active
+                if (g_settings.lockSidebarScroll &&
+                    (InterlockedCompareExchange(&g_isRestoring, 0, 0) != 0 ||
+                     InterlockedCompareExchange(&g_restoreScheduled, 0, 0) == 0 ||
+                     GetTickCount64() < (ULONGLONG)InterlockedCompareExchange64(&g_windowOpenLockUntilTick, 0, 0)) &&
+                    IsExplorerSidebarTreeView(hwnd, hWndParent)) {
                     SubclassExplorerTreeView(hwnd);
                 }
             }
@@ -737,10 +904,19 @@ DWORD WINAPI MainThread(LPVOID) {
     return 0;
 }
 
+void LoadSettings() {
+    g_settings.reuseInitialTab = Wh_GetIntSetting(L"reuseInitialTab") != 0;
+    g_settings.lockSidebarScroll = Wh_GetIntSetting(L"lockSidebarScroll") != 0;
+}
+
+void Wh_ModSettingsChanged() {
+    LoadSettings();
+}
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing Explorer Tabs Session Saver...");
 
+    LoadSettings();
     InitializeCriticalSection(&g_treeCs);
     g_msgUnsubclass = RegisterWindowMessageW(L"Windhawk_ETSS_Unsubclass");
     g_hStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
@@ -766,13 +942,15 @@ void Wh_ModUninit() {
     }
 
     if (g_hMainThread) {
-        WaitForSingleObject(g_hMainThread, 2500);
+        WaitForSingleObject(g_hMainThread, INFINITE);
         CloseHandle(g_hMainThread);
         g_hMainThread = NULL;
     }
 
-    for (int i = 0; i < 40 && InterlockedCompareExchange(&g_activeRestoreThreads, 0, 0) > 0; ++i) {
-        Sleep(50);
+    HANDLE hRestore = (HANDLE)InterlockedExchangePointer(&g_hRestoreThread, NULL);
+    if (hRestore) {
+        WaitForSingleObject(hRestore, INFINITE);
+        CloseHandle(hRestore);
     }
 
     if (g_hStopEvent) {
@@ -787,8 +965,7 @@ void Wh_ModUninit() {
 
     for (HWND hwnd : treesToUnsubclass) {
         if (IsWindow(hwnd) && g_msgUnsubclass != 0) {
-            DWORD_PTR result = 0;
-            SendMessageTimeoutW(hwnd, g_msgUnsubclass, 0, 0, SMTO_BLOCK, 1000, &result);
+            SendMessageW(hwnd, g_msgUnsubclass, 0, 0);
         }
     }
 
