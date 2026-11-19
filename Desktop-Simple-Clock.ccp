@@ -3376,7 +3376,6 @@ inline bool HookTaskbarDll(HMODULE module)
         return false;
     }
 
-    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
@@ -3721,13 +3720,13 @@ inline void* WINAPI IconView_IconView_Hook(void* pThis)
 inline bool HookSystemTray(HMODULE module)
 {
     // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {{
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {{
         {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
         &IconView_IconView_Original,
         IconView_IconView_Hook,
     }};
 
-    return WindhawkUtils::HookSymbols(module, systemTrayHooks, ARRAYSIZE(systemTrayHooks));
+    return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
 }
 
 inline void OnModuleLoadedTaskbar(HMODULE module)
