@@ -8,7 +8,7 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -lgdiplus -luxtheme -lcomctl32 -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lgdi32 -lgdiplus -luxtheme -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -1741,8 +1741,34 @@ struct PendingLoadedEntry {
     g_win11Indicators{ std::in_place };
 [[clang::no_destroy]] std::optional<std::vector<PendingLoadedEntry>>
     g_pendingLoadedEntries{ std::in_place };
-[[clang::no_destroy]] std::optional<std::unordered_set<HWND>>
-    g_scannedTrayHwnds{ std::in_place };
+std::unordered_set<void*> g_scannedXamlRoots;
+
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResourceW(hModule, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValueW(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen) {
+        *puPtrLen = uPtrLen;
+    }
+
+    return static_cast<VS_FIXEDFILEINFO*>(pFixedFileInfo);
+}
 
 HMODULE GetSystemTrayModuleHandle() {
     static const PCWSTR moduleNames[] = {
@@ -1750,19 +1776,25 @@ HMODULE GetSystemTrayModuleHandle() {
         L"Taskbar.View.dll",
         L"ExplorerExtensions.dll",
     };
-    for (PCWSTR moduleName : moduleNames) {
-        if (HMODULE mod = GetModuleHandleW(moduleName)) {
-            return mod;
-        }
-    }
-    return nullptr;
-}
 
-bool IsSystemTrayModuleName(PCWSTR baseName) {
-    if (!baseName) return false;
-    return _wcsicmp(baseName, L"SystemTray.dll") == 0 ||
-           _wcsicmp(baseName, L"Taskbar.View.dll") == 0 ||
-           _wcsicmp(baseName, L"ExplorerExtensions.dll") == 0;
+    for (PCWSTR moduleName : moduleNames) {
+        HMODULE module = GetModuleHandleW(moduleName);
+        if (!module) {
+            continue;
+        }
+
+        if (_wcsicmp(moduleName, L"Taskbar.View.dll") == 0) {
+            VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(module, nullptr);
+            if (fixedFileInfo &&
+                HIWORD(fixedFileInfo->dwFileVersionMS) >= 2604) {
+                continue;
+            }
+        }
+
+        return module;
+    }
+
+    return nullptr;
 }
 
 wux::FrameworkElement GetFrameworkElementFromImplThis(void* pThis) {
@@ -2166,12 +2198,7 @@ void ScanVisualTreeForExistingIndicators(const wux::DependencyObject& root) {
 }
 
 void DiscoverExistingIndicatorsFromIconView(void* pThis) {
-    if (!pThis || !g_scannedTrayHwnds || g_modUnloading.load(std::memory_order_acquire)) return;
-
-    HWND trayHwnd = FindTaskbarHwndForCurrentThread();
-    if (trayHwnd && g_scannedTrayHwnds->count(trayHwnd) > 0) {
-        return;
-    }
+    if (!pThis || g_modUnloading.load(std::memory_order_acquire)) return;
 
     auto fe = GetFrameworkElementFromImplThis(pThis);
     if (!fe) return;
@@ -2179,9 +2206,12 @@ void DiscoverExistingIndicatorsFromIconView(void* pThis) {
     auto xamlRoot = fe.XamlRoot();
     if (!xamlRoot || !xamlRoot.Content()) return;
 
-    if (trayHwnd) {
-        g_scannedTrayHwnds->insert(trayHwnd);
+    void* xamlRootAbi = winrt::get_abi(xamlRoot);
+    if (!xamlRootAbi || g_scannedXamlRoots.count(xamlRootAbi) > 0) {
+        return;
     }
+
+    g_scannedXamlRoots.insert(xamlRootAbi);
     ScanVisualTreeForExistingIndicators(xamlRoot.Content());
 }
 
@@ -2221,12 +2251,8 @@ void WINAPI IconView_OnPointerEntered_Hook(void* pThis, void* pArgs) {
 
 bool HookSystemTraySymbols(HMODULE systemTrayMod) {
     if (!systemTrayMod) return false;
-    bool expected = false;
-    if (!g_systemTrayHookAttempted.compare_exchange_strong(expected, true)) {
-        return false;
-    }
 
-    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+    // SystemTray.dll, Taskbar.View.dll (< 2604), ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {
         {
             { L"public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void)" },
@@ -2257,19 +2283,13 @@ bool HookSystemTraySymbols(HMODULE systemTrayMod) {
 }
 
 void HandleLoadedModuleIfSystemTray(HMODULE mod, PCWSTR modulePath) {
-    if (!mod || !modulePath || g_modUnloading.load(std::memory_order_acquire) ||
-        g_systemTrayHookAttempted.load(std::memory_order_acquire)) {
+    (void)modulePath;
+    if (!mod || g_modUnloading.load(std::memory_order_acquire)) {
         return;
     }
 
-    const wchar_t* baseName = modulePath;
-    for (const wchar_t* p = modulePath; *p; ++p) {
-        if (*p == L'\\' || *p == L'/') {
-            baseName = p + 1;
-        }
-    }
-
-    if (IsSystemTrayModuleName(baseName)) {
+    if (!g_systemTrayHookAttempted && GetSystemTrayModuleHandle() == mod &&
+        !g_systemTrayHookAttempted.exchange(true)) {
         if (HookSystemTraySymbols(mod)) {
             Wh_ApplyHookOperations();
         }
@@ -2313,24 +2333,13 @@ void WINAPI CleanupWin11IndicatorsOnUIThread(void*) {
         }
     }
 
-    if (g_scannedTrayHwnds) {
-        for (auto it = g_scannedTrayHwnds->begin(); it != g_scannedTrayHwnds->end();) {
-            if (!IsWindow(*it) || GetWindowThreadProcessId(*it, nullptr) == tid) {
-                it = g_scannedTrayHwnds->erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
+    g_scannedXamlRoots.clear();
 
     if (g_pendingLoadedEntries && g_pendingLoadedEntries->empty()) {
         g_pendingLoadedEntries.reset();
     }
     if (g_win11Indicators && g_win11Indicators->empty()) {
         g_win11Indicators.reset();
-    }
-    if (g_scannedTrayHwnds && g_scannedTrayHwnds->empty()) {
-        g_scannedTrayHwnds.reset();
     }
 }
 
@@ -2508,7 +2517,7 @@ BOOL Wh_ModInit() {
     }
 
     HMODULE systemTrayMod = GetSystemTrayModuleHandle();
-    if (systemTrayMod) {
+    if (systemTrayMod && !g_systemTrayHookAttempted.exchange(true)) {
         HookSystemTraySymbols(systemTrayMod);
     }
 
@@ -2571,8 +2580,10 @@ void Wh_ModAfterInit() {
     }
 
     if (HMODULE systemTrayMod = GetSystemTrayModuleHandle()) {
-        if (HookSystemTraySymbols(systemTrayMod)) {
-            Wh_ApplyHookOperations();
+        if (!g_systemTrayHookAttempted.exchange(true)) {
+            if (HookSystemTraySymbols(systemTrayMod)) {
+                Wh_ApplyHookOperations();
+            }
         }
     }
 }
