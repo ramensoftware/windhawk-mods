@@ -6,10 +6,11 @@
 // @description:zh-CN   在 Windows 11 恢复 Windows 10 的窗口贴靠动画
 // @version             1.0
 // @author              QCQ171-C
+// @github              https://github.com/QCQ171-C
 // @include             dwm.exe
 // @architecture        x86-64
 // @compilerOptions     -lgdi32
-// @license             GPLv3
+// @license             GPL-3.0
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
