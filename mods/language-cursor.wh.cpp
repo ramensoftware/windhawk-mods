@@ -8,7 +8,7 @@
 // @author          Sanekx Arcs
 // @github          https://github.com/SanekxArcs
 // @include         explorer.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lgdiplus -lgdi32 -lshcore -lole32
 // ==/WindhawkMod==
 
