@@ -63,15 +63,21 @@ machine-assisted, corrections are welcome.
   or to "Music only (auto)": a browser session is also shown when it reports an
   album title. Spotify Web, YouTube Music and Apple Music web do, a plain
   YouTube video does not.
-  This is a guess from the album field, not a certain split.
+  This is a guess from the album field, not a certain split. A browser is
+  recognised by its app id (Chrome, Edge, Opera, Brave, Vivaldi, Yandex,
+  Firefox); a browser that reports an id without its name, which Firefox may
+  do, is treated like any other app and is not filtered.
 - **Weather (optional, off by default).** In the settings, "Weather widget
   replaces" lets you swap one of the three areas (clock, calendar or music)
   for the weather; the replaced area is hidden. With the default "Off" the mod
-  never uses the network. When it is on, the mod contacts **open-meteo.com**:
-  the city name you typed is sent to its geocoding service to find the
-  coordinates, then the coordinates are sent to its forecast service, about
-  every 15 minutes. No API key, no account, and your location is never read
-  from Windows or from your IP address. Weather data by
+  never uses the network. When it is on, the mod contacts two Open-Meteo hosts
+  over HTTPS. **geocoding-api.open-meteo.com** gets the city name you typed and
+  the language code of the bar (it only localizes the place name), to find the
+  coordinates. **api.open-meteo.com** then gets the coordinates, about every 15
+  minutes (every 2 minutes after a failed request; a city that is not found is
+  not asked again until you change the settings). No API key, no account, and
+  your location is never read from Windows or from your IP address. Weather
+  data by
   [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0, free for
   non-commercial use); the credit "Open-Meteo.com" is shown in the weather
   area. The weather messages ("enter a city" and so on) exist in Turkish and English
@@ -210,8 +216,8 @@ released under **GPL-3.0** as well.
 - weatherCity: ""
   $name: Weather city
   $name:tr-TR: Hava durumu şehri
-  $description: City name, for example Istanbul or Berlin. Only this name is sent to open-meteo.com to find the coordinates.
-  $description:tr-TR: Şehir adı, örneğin İstanbul ya da Berlin. open-meteo.com'a koordinatı bulmak için yalnız bu ad gönderilir.
+  $description: City name, for example Istanbul or Berlin. This name is sent to geocoding-api.open-meteo.com to find the coordinates, together with the language code of the bar (only used to localize the place name).
+  $description:tr-TR: Şehir adı, örneğin İstanbul ya da Berlin. Koordinatı bulmak için bu ad, barın dil koduyla birlikte (yalnız yer adını yerelleştirmek için) geocoding-api.open-meteo.com'a gönderilir.
 - weatherFahrenheit: false
   $name: Show temperature in Fahrenheit
   $name:tr-TR: Sıcaklığı Fahrenheit göster
@@ -251,8 +257,12 @@ released under **GPL-3.0** as well.
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <cwctype>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -396,12 +406,15 @@ std::wstring Upper(const wchar_t* s) {
 // setting "browserMedia": 0 = show, 1 = hide, 2 = auto (music only) (read by the media thread)
 std::atomic<int> g_browserMode{0};
 
-// Weather: the setting picks which of the three cells it replaces (0 clock, 1 calendar,
-// 2 music; -1 = off, the default, and then nothing is ever sent over the network).
+enum { C_CLOCK, C_CAL, C_MUSIC, C_COUNT };
+
+// Weather: the setting picks which of the three cells it replaces (C_CLOCK, C_CAL or
+// C_MUSIC; -1 = off, the default, and then nothing is ever sent over the network).
 std::atomic<int> g_wxSlot{-1};
 struct WxCfg {
     int slot = -1;
     std::wstring city;
+    std::wstring lang;  // language code sent to the geocoder (only localizes the place name)
     bool fahrenheit = false;
 };
 WxCfg g_wxCfg;            // guarded by g_wxMx
@@ -461,13 +474,17 @@ void LoadSettings() {
     g_browserMode = !bm ? 0 : wcscmp(bm, L"hide") == 0 ? 1 : wcscmp(bm, L"auto") == 0 ? 2 : 0;
     Wh_FreeStringSetting(bm);
 
+    PCWSTR lang = Wh_GetStringSetting(L"language");
+    SelectLanguage(lang);  // before the weather config below, which carries the language code
+    Wh_FreeStringSetting(lang);
+
     {
         PCWSTR ws = Wh_GetStringSetting(L"weatherSlot");
         int slot = -1;
         if (ws) {
-            if (wcscmp(ws, L"clock") == 0) slot = 0;
-            else if (wcscmp(ws, L"calendar") == 0) slot = 1;
-            else if (wcscmp(ws, L"music") == 0) slot = 2;
+            if (wcscmp(ws, L"clock") == 0) slot = C_CLOCK;
+            else if (wcscmp(ws, L"calendar") == 0) slot = C_CAL;
+            else if (wcscmp(ws, L"music") == 0) slot = C_MUSIC;
         }
         Wh_FreeStringSetting(ws);
         PCWSTR wc = Wh_GetStringSetting(L"weatherCity");
@@ -481,19 +498,18 @@ void LoadSettings() {
             std::lock_guard<std::mutex> lk(g_wxMx);
             g_wxCfg.slot = slot;
             g_wxCfg.city = city;
+            g_wxCfg.lang = g_lang->id;
+            size_t dash = g_wxCfg.lang.find(L'-');
+            if (dash != std::wstring::npos) g_wxCfg.lang.resize(dash);
             g_wxCfg.fahrenheit = Wh_GetIntSetting(L"weatherFahrenheit") != 0;
         }
         g_wxSlot = slot;
         if (g_wxEvt) SetEvent(g_wxEvt);
     }
 
-    PCWSTR lang = Wh_GetStringSetting(L"language");
-    SelectLanguage(lang);
-    Wh_FreeStringSetting(lang);
 }
 
 // ---------------------------------------------------------------- state
-enum { C_CLOCK, C_CAL, C_MUSIC, C_COUNT };
 const float kCellW[C_COUNT] = {116, 236, 290};
 enum { B_PREV, B_PLAY, B_NEXT, B_COUNT };
 
@@ -542,7 +558,7 @@ std::mutex g_mediaMx;
 // process exit (releasing the proxy during shutdown can hang).
 [[clang::no_destroy]] wmc::GlobalSystemMediaTransportControlsSession g_session{nullptr};
 HANDLE g_mediaThread = nullptr;
-HANDLE g_mediaEvt = nullptr;  // manual-reset: asks the media thread to stop
+HANDLE g_stopEvt = nullptr;   // manual-reset: asks the media and weather threads to stop
 HANDLE g_cmdEvt = nullptr;    // auto-reset: a button command is waiting for the media thread
 std::vector<int> g_cmds;      // pending button commands (guarded by g_mediaMx)
 std::atomic<unsigned> g_mediaSeq{0};  // bumped each time the media thread publishes a state
@@ -1116,7 +1132,7 @@ DWORD WINAPI MediaThread(LPVOID) {
     // After a button command the state is re-read quickly, because players answer late.
     static const DWORD kBurst[] = {150, 300, 500};
     int burst = 0;
-    HANDLE waitHandles[2] = {g_mediaEvt, g_cmdEvt};
+    HANDLE waitHandles[2] = {g_stopEvt, g_cmdEvt};
 
     for (;;) {
         try {
@@ -1125,7 +1141,7 @@ DWORD WINAPI MediaThread(LPVOID) {
                     wmc::GlobalSystemMediaTransportControlsSessionManager::RequestAsync());
             // The music area is replaced by the weather: do not read the media session at all.
             wmc::GlobalSystemMediaTransportControlsSession s{nullptr};
-            if (g_wxSlot != 2) s = PickSession(mgr);
+            if (g_wxSlot != C_MUSIC) s = PickSession(mgr);
             MediaState ns;
             if (s) {
                 auto props = AwaitWithTimeout(s.TryGetMediaPropertiesAsync());
@@ -1359,8 +1375,12 @@ DWORD WINAPI WeatherThread(LPVOID) {
     double lat = 0, lon = 0;
     std::wstring place;
     bool geoOk = false;
+    bool notFound = false;  // the geocoder answered "no such city" for this city and language
+    WxState lastGood;       // last successful reading, kept through a short outage
+    bool haveGood = false;
+    ULONGLONG goodTick = 0;
     ULONGLONG nextFetch = 0;
-    HANDLE hs[2] = {g_mediaEvt, g_wxEvt};
+    HANDLE hs[2] = {g_stopEvt, g_wxEvt};
 
     for (;;) {
         WxCfg cfg;
@@ -1369,7 +1389,10 @@ DWORD WINAPI WeatherThread(LPVOID) {
             cfg = g_wxCfg;
         }
         bool changed = !haveLast || cfg.slot != last.slot || cfg.city != last.city ||
-                       cfg.fahrenheit != last.fahrenheit;
+                       cfg.lang != last.lang || cfg.fahrenheit != last.fahrenheit;
+        // The geocoder is only asked again for another city or language, not for a new slot or unit.
+        bool geoChanged = !haveLast || cfg.city != last.city || cfg.lang != last.lang;
+        if (!haveLast || cfg.city != last.city || cfg.fahrenheit != last.fahrenheit) haveGood = false;
         DWORD waitMs = INFINITE;
 
         if (cfg.slot < 0) {
@@ -1381,21 +1404,18 @@ DWORD WINAPI WeatherThread(LPVOID) {
                 WxPublish(st);
             }
         } else if (changed || GetTickCount64() >= nextFetch) {
-            if (changed || !geoOk) {
+            if (changed) {
                 WxState st;
-                st.status = WX_LOADING;
-                if (changed) WxPublish(st);
+                if (haveGood) st = lastGood;
+                else st.status = WX_LOADING;
+                WxPublish(st);
             }
             bool ok = false;
-            WxState st;
-            st.status = WX_ERROR;
             std::string body;
-            if (changed || !geoOk) {
+            if (geoChanged || (!geoOk && !notFound)) {
                 geoOk = false;
-                std::wstring lang = g_lang->id;
-                size_t dash = lang.find(L'-');
-                if (dash != std::wstring::npos) lang.resize(dash);
-                std::wstring path = L"/v1/search?count=1&format=json&language=" + lang +
+                notFound = false;
+                std::wstring path = L"/v1/search?count=1&format=json&language=" + cfg.lang +
                                     L"&name=" + FromUtf8(UrlEncode(Utf8(cfg.city)));
                 if (HttpGet(L"geocoding-api.open-meteo.com", path, body)) {
                     size_t r = body.find("\"results\":[");
@@ -1405,11 +1425,14 @@ DWORD WINAPI WeatherThread(LPVOID) {
                         geoOk = true;
                         place = JsonStr(body, r, "name", nm) ? FromUtf8(nm) : cfg.city;
                     } else {
-                        st.status = WX_NOT_FOUND;  // the service answered, but knows no such city
+                        notFound = true;  // the service answered, but knows no such city
                     }
                 }
             }
-            if (geoOk) {
+            WxState st;
+            st.status = notFound ? WX_NOT_FOUND : WX_ERROR;
+            // Unloading waits for this thread, so do not start the second request after a stop.
+            if (geoOk && WaitForSingleObject(g_stopEvt, 0) != WAIT_OBJECT_0) {
                 char coords[96];
                 snprintf(coords, sizeof(coords), "latitude=%.4f&longitude=%.4f", lat, lon);
                 std::string q = std::string("/v1/forecast?") + coords +
@@ -1430,9 +1453,18 @@ DWORD WINAPI WeatherThread(LPVOID) {
                     }
                 }
             }
+            ULONGLONG now = GetTickCount64();
+            if (ok) {
+                lastGood = st;
+                haveGood = true;
+                goodTick = now;
+            } else if (st.status == WX_ERROR && haveGood && now - goodTick < 60ULL * 60 * 1000) {
+                st = lastGood;  // a short outage: keep showing the last reading (for up to an hour)
+            }
             WxPublish(st);
-            // fresh data every 15 minutes; after a failure try again in 2 minutes
-            nextFetch = GetTickCount64() + (ok ? 15 * 60 * 1000 : 2 * 60 * 1000);
+            // fresh data every 15 minutes; after a failure try again in 2 minutes; a city that
+            // was not found is not retried until the settings change
+            nextFetch = now + (ok ? 15ULL * 60 * 1000 : notFound ? 24ULL * 3600 * 1000 : 2ULL * 60 * 1000);
         }
         last = cfg;
         haveLast = true;
@@ -2234,17 +2266,17 @@ DWORD WINAPI UiThread(LPVOID) {
 }  // namespace
 
 BOOL WhTool_ModInit() {
-    g_mediaEvt = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_stopEvt = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_cmdEvt = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_wxEvt = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_uiReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_mediaEvt || !g_cmdEvt || !g_wxEvt || !g_uiReady) {
+    if (!g_stopEvt || !g_cmdEvt || !g_wxEvt || !g_uiReady) {
         Wh_Log(L"CreateEventW failed: %lu", GetLastError());
-        if (g_mediaEvt) CloseHandle(g_mediaEvt);
+        if (g_stopEvt) CloseHandle(g_stopEvt);
         if (g_cmdEvt) CloseHandle(g_cmdEvt);
         if (g_wxEvt) CloseHandle(g_wxEvt);
         if (g_uiReady) CloseHandle(g_uiReady);
-        g_mediaEvt = g_cmdEvt = g_wxEvt = g_uiReady = nullptr;
+        g_stopEvt = g_cmdEvt = g_wxEvt = g_uiReady = nullptr;
         return FALSE;
     }
     g_mediaThread = CreateThread(nullptr, 0, MediaThread, nullptr, 0, nullptr);
@@ -2258,7 +2290,7 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-    if (g_mediaEvt) SetEvent(g_mediaEvt);
+    if (g_stopEvt) SetEvent(g_stopEvt);
     if (g_thread) {
         // Wait until the window exists, or until the thread has ended on its own
         // (startup failure); only then is it safe to ask it to close.
@@ -2285,9 +2317,9 @@ void WhTool_ModUninit() {
         CloseHandle(g_wxEvt);
         g_wxEvt = nullptr;
     }
-    if (g_mediaEvt) {
-        CloseHandle(g_mediaEvt);
-        g_mediaEvt = nullptr;
+    if (g_stopEvt) {
+        CloseHandle(g_stopEvt);
+        g_stopEvt = nullptr;
     }
     if (g_cmdEvt) {
         CloseHandle(g_cmdEvt);
