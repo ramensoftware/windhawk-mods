@@ -30,6 +30,14 @@ not an independent rewrite:
 All three are MIT licensed. The original copyright notices and the MIT text
 are kept verbatim in the License section at the end of this readme.
 
+**Settings precedence.** The built-in settings window (the `...` button) and
+Windhawk's settings page edit the same settings. A value saved in the built-in
+window overrides the Windhawk page; changing that same setting on the Windhawk
+page again takes precedence. The Windhawk page does not refresh to show values
+saved in the built-in window. Use either page, not both for the same setting.
+
+![RYJS Launchpad](https://raw.githubusercontent.com/ryjs140/ryjs-launchpad/main/media/preview.png)
+
 ## RYJS edition
 - Expanded groups show their apps directly. Choose Layout > Expanded groups;
   the original scrolling and paged folder modes remain available.
@@ -187,12 +195,18 @@ Clicking outside the icons or switching to another window closes it.
   the requests described next.
 - The only network requests are made when you add a web entry or ask to
   refresh its icon: the page is read to find its declared icon, with
-  `/favicon.ico` as the fallback. Requests have time limits and a size cap,
-  are sent without cookies, and the result is cached in the mod's storage.
-  Nothing is uploaded.
+  `/favicon.ico` as the fallback. Declared icons can be hosted on a different
+  server than the page you entered (a CDN or a third party). Requests have time
+  limits and a size cap, are sent without cookies, and the result is cached in
+  the mod's storage. Nothing is uploaded. Set a custom icon for the entry and
+  no request is made for it.
 - Layouts, groups, entries, icons and settings stay in Windhawk's per-mod
-  storage folder on this PC. The optional full backup writes a `.ryjs.zip`
-  file only where you choose, and import restores data, never code.
+  storage folder on this PC. Scratch files (the exported Start layout and the
+  backup worker) live in a `tmp` folder next to it and are removed when the
+  work is done. The optional full backup writes a `.ryjs.zip`
+  file only where you choose, and import restores data, never code. Running a
+  Store app as administrator uses a temporary shortcut in that same `tmp`
+  folder; it is deleted after the launch.
 
 ## Credits
 - [Fullscreen Start (Launchpad style)](https://windhawk.net/mods/fullscreen-start)
@@ -421,21 +435,11 @@ SOFTWARE.
   $description: 'In hexadecimal, like #1E1E2E.'
   $name:zh-CN: 背景颜色
   $description:zh-CN: '使用十六进制颜色，例如 #1E1E2E。'
-- accentColor: '#89B4FA'
-  $name: Accent color
-  $description: 'In hexadecimal, like #89B4FA. Tints the glows and highlights.'
-  $name:zh-CN: 强调色
-  $description:zh-CN: '使用十六进制颜色，例如 #89B4FA。用于光晕和高亮。'
 - glowStrength: 60
   $name: Glow strength
   $description: '0 to 100 (Suggested: 60). How strongly hovered buttons glow.'
   $name:zh-CN: 光晕强度
   $description:zh-CN: 范围 0–100（建议：60）。控制鼠标悬停时按钮的光晕强度。
-- glowSize: 14
-  $name: Glow size
-  $description: '4 to 40 (Suggested: 14). How far a glow spreads, in DIP at 100% scaling.'
-  $name:zh-CN: 光晕范围
-  $description:zh-CN: 范围 4–40（建议：14），单位为设备无关像素 DIP。
 - chromeOpacity: 90
   $name: Search bar and dock opacity (%)
   $description: '0 to 100 (Suggested: 90). How solid the search bar and the power dock are.'
@@ -524,7 +528,7 @@ SOFTWARE.
   $description: Use GPU composition for smoother animation. Turn off for the compatibility renderer.
   $name:zh-CN: GPU 合成呈现
   $description:zh-CN: 使用 GPU 合成呈现以改善动画流畅度；关闭后使用兼容渲染路径。
-- performanceLogging: true
+- performanceLogging: false
   $name: Record performance
   $description: Record opening latency, frame intervals and rendering cost in the mod storage folder.
   $name:zh-CN: 记录性能
@@ -629,26 +633,6 @@ SOFTWARE.
   - light: 浅色
   - dark: 深色
   - system: 跟随 Windows
-- groupColor: '#1E1E2E'
-  $name: Group background color
-  $description: Group and folder background in the custom theme.
-  $name:zh-CN: 分组背景颜色
-  $description:zh-CN: 自定义主题中的分组与文件夹背景色。
-- groupOpacity: 0
-  $name: Group background opacity
-  $description: 0–100 percent. Zero preserves transparent expanded groups.
-  $name:zh-CN: 分组背景透明度
-  $description:zh-CN: 0～100%。设为 0 时展开分组保持透明。
-- hoverColor: '#89B4FA'
-  $name: Hover color
-  $description: Background color of the application under the pointer.
-  $name:zh-CN: 悬停颜色
-  $description:zh-CN: 鼠标悬停应用的背景色。
-- selectionColor: '#CBA6F7'
-  $name: Selection color
-  $description: Background color of the keyboard-selected application.
-  $name:zh-CN: 选中颜色
-  $description:zh-CN: 键盘选中应用的背景色。
 - backgroundDim: 0
   $name: Background dimming
   $description: Additional darkening of the blurred background, 0–80 percent.
@@ -1483,7 +1467,10 @@ inline bool Validate(const std::wstring& name, const std::wstring& text) {
     bool layout = name.starts_with(L"layout-") || name.starts_with(L"groups-v1-");
     bool groups = name.starts_with(L"groups-v1-");
     if (!layout && name != L"pins.txt" && name != L"icons.txt") return true;
-    if (layout && text.empty()) return false; // Existing empty/corrupt layouts must not regenerate.
+    // An empty legacy layout is a valid empty list: unpinning the last app
+    // writes one, and refusing it used to make the whole mod load disabled.
+    // Group layouts always carry their schema header, so an empty one is bad.
+    if (layout && text.empty()) return !groups;
     size_t pos = 0, rows = 0;
     bool folder = false;
     while (pos < text.size()) {
@@ -1517,7 +1504,7 @@ inline bool Validate(const std::wstring& name, const std::wstring& text) {
         } else return false;
         ++rows;
     }
-    return !layout || rows > 0;
+    return !layout || !groups || rows > 0;
 }
 
 inline bool ValidateDirectory(const std::wstring& directory, const std::wstring& skip = {}) {
@@ -1547,7 +1534,14 @@ inline bool Prepare(const std::wstring& source, const std::wstring& target,
                    ValidateDirectory(target);
         }
         auto stage = target + L".pending";
-        if (fs::exists(stage)) return false; // Keep interrupted work for inspection.
+        if (fs::exists(stage)) {
+            // Explorer was killed, or a copy failed, during an earlier first
+            // run. The user's real data is still in the old folder, so drop
+            // the partial copy and start over instead of refusing to load.
+            std::error_code error;
+            fs::remove_all(stage, error);
+            if (error || fs::exists(stage)) return false;
+        }
         if (!source.empty() && !ValidateDirectory(source)) return false;
         fs::create_directories(stage);
         if (!source.empty()) {
@@ -1620,7 +1614,6 @@ constexpr UINT_PTR kTimerFirstLoad = 4;
 constexpr UINT_PTR kTimerShiftWin = 5;
 constexpr UINT_PTR kTimerCaret = 6;  // The search caret's blink.
 constexpr UINT_PTR kTimerPowerArm = 7;  // An unconfirmed power button resets.
-constexpr UINT_PTR kTimerXamlHook = 8;  // Waits for the XAML taskbar module.
 
 constexpr GUID kBhidEnumItems = {
     0x94f60519,
@@ -1667,7 +1660,7 @@ struct Settings {
     std::wstring theme=L"custom";
     float backgroundDim=0;
     int labelRadius=6;
-    bool gpuPresenter = true, performanceLogging = true, reducedMotion = false;
+    bool gpuPresenter = true, performanceLogging = false, reducedMotion = false;
     bool iconFlyIn = true;
     int openMs = 280, closeMs = 180, folderMs = 180, frameRateLimit = 0;
     std::wstring easing = L"settle";
@@ -1739,6 +1732,7 @@ std::atomic<KeyAction> g_shiftWinKeyAction{KeyAction::Start};
 std::atomic<KeyAction> g_startButtonAction{KeyAction::Grid};
 
 std::wstring DataRoot();
+std::wstring ModTempPath();
 
 std::wstring GetStringSetting(PCWSTR name) {
 #ifdef SEAMLESS_PREVIEW
@@ -1751,9 +1745,11 @@ std::wstring GetStringSetting(PCWSTR name) {
 #endif
 }
 
-// Wh_GetIntSetting returns 0 for a key the registry does not have yet, which
-// silently turns features off on a script-installed mod until the first
-// settings save. Fall back to the schema default while the key is missing.
+// Windhawk stores a number or boolean setting as REG_DWORD, and
+// Wh_GetStringSetting converts a DWORD to its decimal string (see
+// PortableSettings::RawItemToString in the Windhawk engine). Reading it as a
+// string therefore works for both storage shapes and still distinguishes a
+// missing key (empty string, use the schema default) from a real zero.
 int IntSetting(PCWSTR name, int def) {
     std::wstring value = GetStringSetting(name);
     return value.empty() ? def : _wtoi(value.c_str());
@@ -1778,7 +1774,7 @@ void LoadSettings() {
     Settings s;
     RefreshSystemAnimations();
     s.gpuPresenter = IntSetting(L"gpuPresenter", 1) != 0;
-    s.performanceLogging = IntSetting(L"performanceLogging", 1) != 0;
+    s.performanceLogging = IntSetting(L"performanceLogging", 0) != 0;
     s.reducedMotion = IntSetting(L"reducedMotion", 0) != 0;
     s.iconFlyIn = GetStringSetting(L"launchpadAnimation") != L"classic";
     s.openMs = std::clamp(IntSetting(L"openDuration", 280), 60, 1500);
@@ -1838,7 +1834,7 @@ void LoadSettings() {
     s.normalizeIcons = IntSetting(L"normalizeIcons", 1) != 0;
     s.trayIcon = IntSetting(L"settingsTrayIcon", 1) != 0;
     s.theme=GetStringSetting(L"themeMode");
-    s.labelRadius=std::clamp(IntSetting(L"labelRadius",6),0,24);
+    s.labelRadius=6;  // Internal: the label plate was removed from the UI.
     s.backgroundDim=std::clamp(IntSetting(L"backgroundDim",0),0,80)/100.0f;
     bool light=s.theme==L"light";
     if(s.theme==L"system") {
@@ -1917,6 +1913,7 @@ using AppList = std::vector<std::shared_ptr<App>>;
 bool g_appsLoaded;
 double g_appsTime;
 int g_appsKey;  // AppsKey() of the loaded list.
+bool g_appsNormalized = true;  // "Fill small icons" when the list was read.
 
 HANDLE g_worker;
 std::atomic<bool> g_workerStop;
@@ -1983,7 +1980,14 @@ static void StripIconFrame(const std::vector<UINT32>& pixels, int width,
                maxG - minG < 40 && maxB - minB < 40;
     };
     int strip[4] = {};  // Left, top, right, bottom.
-    for (int step = 0; step < 12; step++) {
+    // Keep at least one row and one column inside the box: a small, evenly
+    // opaque icon otherwise walks a side past the opposite one and reads
+    // pixels outside the image.
+    auto room = [&] {
+        return box.top + strip[1] < box.bottom - strip[3] &&
+               box.left + strip[0] < box.right - strip[2];
+    };
+    for (int step = 0; step < 12 && room(); step++) {
         if (frameLine(false, box.top + strip[1], box.left + strip[0],
                       box.right - strip[2])) {
             strip[1]++;
@@ -2344,12 +2348,16 @@ std::wstring ReadJsonString(const std::wstring& json, size_t& i) {
 // The file Start keeps them in (start2.bin) is encrypted, so the export is the
 // supported way to read them.
 std::wstring ExportStartLayout() {
-    WCHAR temp[MAX_PATH], system[MAX_PATH];
-    if (!GetTempPathW(MAX_PATH, temp) ||
-        !GetSystemDirectoryW(system, MAX_PATH)) {
+    WCHAR system[MAX_PATH];
+    auto directory = ModTempPath();
+    if (directory.empty() || !GetSystemDirectoryW(system, MAX_PATH) ||
+        (FAILED(SHCreateDirectoryExW(nullptr, directory.c_str(), nullptr)) &&
+         GetFileAttributesW(directory.c_str()) == INVALID_FILE_ATTRIBUTES)) {
         return {};
     }
-    std::wstring path = std::wstring(temp) + L"seamless-launchpad-pins.json";
+    std::wstring path = directory + L"\\pins-" +
+                        std::to_wstring(GetCurrentProcessId()) + L"-" +
+                        std::to_wstring(GetCurrentThreadId()) + L".json";
     DeleteFileW(path.c_str());
     std::wstring quoted;  // Inside '...' a quote is written twice.
     for (WCHAR c : path) {
@@ -2664,6 +2672,15 @@ std::wstring DataRoot() {
 #endif
 }
 
+// Scratch files live next to data-v1, never inside it: a backup worker whose
+// working directory sat inside the data folder would lock it against import,
+// and  clearing the mod's storage should take them with it.
+std::wstring ModTempPath() {
+    auto root = DataRoot();
+    if (root.empty()) return {};
+    return (std::filesystem::path(root).parent_path() / L"tmp").wstring();
+}
+
 #ifndef SEAMLESS_PREVIEW
 bool PrepareStorage() {
     auto target = DataRoot();
@@ -2689,12 +2706,19 @@ bool PrepareStorage() {
     if (!source.empty()) {
         HKEY key = nullptr;
         auto location = L"SOFTWARE\\Windhawk\\Engine\\Mods\\" + oldId + L"\\Settings";
-        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, location.c_str(), 0, KEY_READ, &key) != ERROR_SUCCESS &&
-            RegOpenKeyExW(HKEY_CURRENT_USER, location.c_str(), 0, KEY_READ, &key) != ERROR_SUCCESS) {
-            Wh_Log(L"Cannot inherit legacy host settings; export/import the backup before enabling RYJS.");
-            return false;
+        const bool hostSettings =
+            RegOpenKeyExW(HKEY_LOCAL_MACHINE, location.c_str(), 0, KEY_READ, &key) ==
+                ERROR_SUCCESS ||
+            RegOpenKeyExW(HKEY_CURRENT_USER, location.c_str(), 0, KEY_READ, &key) ==
+                ERROR_SUCCESS;
+        if (!hostSettings) {
+            // Portable Windhawk keeps settings in an INI file, and a removed
+            // predecessor can leave its storage folder behind. The layout is
+            // still worth copying; the settings keep their defaults.
+            Wh_Log(L"Legacy settings key is unavailable; copying the layout with default settings.");
         }
-        bool ok = GetPrivateProfileIntW(L"meta", L"version", 1, (source+L"\\ui-settings.ini").c_str()) == 1;
+        bool ok = hostSettings &&
+                  GetPrivateProfileIntW(L"meta", L"version", 1, (source+L"\\ui-settings.ini").c_str()) == 1;
         std::map<std::wstring, std::wstring> sourceHost;
         for (DWORD index = 0; ok; ++index) {
             WCHAR name[512], value[32768]; DWORD nameSize = ARRAYSIZE(name), size = sizeof(value), type;
@@ -2708,10 +2732,10 @@ bool PrepareStorage() {
             else { ok = false; break; }
             sourceHost[name] = host;
         }
-        RegCloseKey(key);
+        if (key) RegCloseKey(key);
         WCHAR section[32768];
         auto privateFile = source+L"\\ui-settings.ini";
-        DWORD sectionSize = GetPrivateProfileSectionW(L"present", section, ARRAYSIZE(section), privateFile.c_str());
+        DWORD sectionSize = ok ? GetPrivateProfileSectionW(L"present", section, ARRAYSIZE(section), privateFile.c_str()) : 0;
         if (sectionSize >= ARRAYSIZE(section)-2) ok = false;
         for (PCWSTR entry = section; ok && *entry; entry += wcslen(entry)+1) {
             std::wstring value = entry;
@@ -2728,17 +2752,21 @@ bool PrepareStorage() {
             auto effective = launchpad_settings_store::ResolveReadOnly(privateFile, name.c_str(), host);
             changes.push_back({name, effective, std::wstring(WindhawkUtils::StringSetting::make(name.c_str()).get())});
         }
-        if (!ok || changes.empty()) return false;
-        auto inherited = [&](PCWSTR name, PCWSTR fallback) {
-            auto found = std::find_if(changes.begin(), changes.end(), [&](const auto& c) { return c.key == name; });
-            return found == changes.end() || found->value.empty() ? std::wstring(fallback) : found->value;
-        };
-        auto appSource = inherited(L"appSource", L"allApps");
-        auto activeFile = (inherited(L"gridLayout", L"scroll") == L"groups" ? L"groups-v1-" : L"layout-") + appSource + L".txt";
-        if (!std::filesystem::is_regular_file(std::filesystem::path(source)/activeFile) ||
-            (appSource == L"pinned" && !std::filesystem::is_regular_file(std::filesystem::path(source)/L"pins.txt"))) {
-            Wh_Log(L"The active legacy layout or pins file is missing; refusing to seed a replacement.");
-            return false;
+        // Settings are a bonus here; the layout and icons are the data the
+        // user would miss. A missing key or a newer private store must not
+        // stop the first run.
+        if (!ok) changes.clear();
+        if (!changes.empty()) {
+            auto inherited = [&](PCWSTR name, PCWSTR fallback) {
+                auto found = std::find_if(changes.begin(), changes.end(), [&](const auto& c) { return c.key == name; });
+                return found == changes.end() || found->value.empty() ? std::wstring(fallback) : found->value;
+            };
+            auto appSource = inherited(L"appSource", L"allApps");
+            auto activeFile = (inherited(L"gridLayout", L"scroll") == L"groups" ? L"groups-v1-" : L"layout-") + appSource + L".txt";
+            if (!std::filesystem::is_regular_file(std::filesystem::path(source)/activeFile) ||
+                (appSource == L"pinned" && !std::filesystem::is_regular_file(std::filesystem::path(source)/L"pins.txt"))) {
+                Wh_Log(L"The legacy active layout or pins file is missing; copying the remaining files.");
+            }
         }
     }
     bool copied = ryjs_data::Prepare(source, target, [&](const std::wstring& stage) {
@@ -3717,6 +3745,9 @@ void RaiseDockWindows() {
 [[clang::no_destroy]] ComPtr<IDWriteFactory> g_dwrite;
 [[clang::no_destroy]] ComPtr<ID3D11Device> g_d3d;
 [[clang::no_destroy]] ComPtr<ID2D1Device> g_d2dDevice;
+// Private context for the label shadow renderer. Reset with the rest of the
+// device objects so a device loss cannot leave it pointing at the old device.
+[[clang::no_destroy]] ComPtr<ID2D1DeviceContext> g_shadowContext;
 [[clang::no_destroy]] ComPtr<ID2D1DeviceContext> g_target;
 [[clang::no_destroy]] ComPtr<ID2D1SolidColorBrush> g_brush;
 [[clang::no_destroy]] ComPtr<ID2D1Bitmap1> g_frame;  // The GPU frame.
@@ -3821,6 +3852,7 @@ void ResetTarget() {
     g_staging.Reset();
     g_frameWidth = g_frameHeight = 0;
     g_brush.Reset();
+    g_shadowContext.Reset();  // Private context of the label shadow renderer.
     g_target.Reset();
     g_d2dDevice.Reset();
     g_d3d.Reset();
@@ -4502,10 +4534,10 @@ bool RenderTextWithShadow(IDWriteTextLayout* layout, float width, float height,
     // context sits inside its own BeginDraw session while the frame is drawn,
     // and one context cannot nest BeginDraw on itself. Everything here is
     // device-scoped, so the bitmap draws fine from the visible context.
-    static ComPtr<ID2D1DeviceContext> dc;
-    if (!dc && FAILED(g_d2dDevice->CreateDeviceContext(
-                    D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &dc)))
+    if (!g_shadowContext && FAILED(g_d2dDevice->CreateDeviceContext(
+                    D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &g_shadowContext)))
         return false;
+    auto& dc = g_shadowContext;
     float s = g_layout.scale;
     float sigma = 2.4f * s;                       // blur radius, ~2.4 DIP
     float pad = sigma * 3;
@@ -4547,7 +4579,7 @@ bool RenderTextWithShadow(IDWriteTextLayout* layout, float width, float height,
     dc->DrawImage(offset.Get());
     dc->DrawImage(list.Get(), D2D1::Point2F(out.padX, out.padTop));
     if (FAILED(dc->EndDraw())) return false;
-    out.bitmap = bitmap.Detach();
+    out.bitmap = std::move(bitmap);  // Hand the one reference to the caller.
     return true;
 }
 Cell GroupCellAt(int index);
@@ -5692,10 +5724,32 @@ void ClearStartButtonLatch(const wchar_t* why);  // launchpad_start_xaml.h
 namespace LaunchpadMenu {
 
 constexpr WCHAR kMenuClass[] = L"RYJSLaunchpadMenu";
+
+// A window class outlives the image that registered it. Reusing one left by
+// an earlier build dispatches into code that is no longer mapped, while
+// refusing to register at all removed every menu right after an in-place
+// update. Each loaded image claims a class name of its own instead, so a new
+// build never inherits the old window procedure.
+const WCHAR* MenuClassName() {
+    static WCHAR name[80]{};
+    if (!name[0]) {
+        swprintf_s(name, L"%ls_%p_%llu", kMenuClass, (void*)&__ImageBase,
+                   (unsigned long long)GetTickCount64());
+        name[ARRAYSIZE(name) - 1] = 0;
+    }
+    return name;
+}
 constexpr UINT kAnimationTimer = 1;
 constexpr UINT kSubmenuTimer = 2;
+constexpr UINT kSubmenuCloseTimer = 3;
 constexpr int kAnimationMs = 120;
 constexpr int kSubmenuDelayMs = 140;
+// The only path from a row to its submenu is across the row itself, so the
+// pointer must not lose the submenu while it is still there. Leaving the row
+// for another one is a different story, but a hand rarely moves in a straight
+// line across a 32 DIP row: the submenu gets this much grace before it goes,
+// and returning to the row (or reaching the submenu) cancels the close.
+constexpr int kSubmenuCloseDelayMs = 320;
 
 // One row of a menu. Built from the HMENU the caller filled in, so the command
 // ids, the disabled states and the submenus all stay exactly as they were.
@@ -5868,16 +5922,13 @@ void EnsureFormats(State& m, float scale) {
     if (m.hintFormat) m.hintFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
 }
 
-IDWriteTextLayout* MakeLayout(IDWriteTextFormat* format,
-                              const std::wstring& text, float maxWidth,
-                              float maxHeight) {
-    if (!format || text.empty()) return nullptr;
-    IDWriteTextLayout* layout = nullptr;
-    if (FAILED(g_dwrite->CreateTextLayout(text.c_str(), (UINT32)text.size(),
-                                          format, maxWidth, maxHeight,
-                                          &layout))) {
-        return nullptr;
-    }
+ComPtr<IDWriteTextLayout> MakeLayout(IDWriteTextFormat* format,
+                                     const std::wstring& text, float maxWidth,
+                                     float maxHeight) {
+    ComPtr<IDWriteTextLayout> layout;
+    if (!g_dwrite || !format || text.empty()) return layout;
+    g_dwrite->CreateTextLayout(text.c_str(), (UINT32)text.size(), format,
+                               maxWidth, maxHeight, &layout);
     return layout;
 }
 
@@ -6383,10 +6434,26 @@ void SetHover(int level, int item) {
     if (changed) Paint(m);
 }
 
+// What a row in an ancestor panel means for the levels opened below it.
+enum class DeeperAction {
+    Keep,       // The row owns the open submenu: the pointer is on its way.
+    CloseNow,   // Another row with a submenu: its own level replaces this one.
+    CloseSoon,  // Any other row, separator or padding edge: wait for the hand.
+};
+
+DeeperAction DeeperLevelsAction(int item, int owner, bool itemHasSubmenu) {
+    if (item == owner) return DeeperAction::Keep;
+    if (item >= 0 && itemHasSubmenu) return DeeperAction::CloseNow;
+    return DeeperAction::CloseSoon;
+}
+
 void CloseDeeper(int level) {
     State& m = g_menu;
     m.pendingPanel = m.pendingItem = -1;
-    if (m.hwnd) KillTimer(m.hwnd, kSubmenuTimer);
+    if (m.hwnd) {
+        KillTimer(m.hwnd, kSubmenuTimer);
+        KillTimer(m.hwnd, kSubmenuCloseTimer);
+    }
     if ((int)m.panels.size() > level + 1) {
         m.panels.resize(level + 1);
         m.active = level;
@@ -6413,7 +6480,10 @@ void ScrollPanel(int level, float delta) {
     panel.scroll = value;
     panel.hover = -1;
     m.pendingPanel = m.pendingItem = -1;
-    if (m.hwnd) KillTimer(m.hwnd, kSubmenuTimer);
+    if (m.hwnd) {
+        KillTimer(m.hwnd, kSubmenuTimer);
+        KillTimer(m.hwnd, kSubmenuCloseTimer);
+    }
     Paint(m);
 }
 
@@ -6605,10 +6675,34 @@ LRESULT CALLBACK MenuWndProc(HWND hwnd, UINT message, WPARAM wParam,
                 SetHover(-1, -1);  // Over the shadow or outside: keep the levels.
                 return 0;
             }
-            if (level < (int)m.panels.size() - 1) CloseDeeper(level);
             int item = HitTest(m.panels[level], x, y);
+            if (level < (int)m.panels.size() - 1) {
+                // A level below this panel belongs to one of its rows. Keeping
+                // that row's submenu alive is what makes the row reachable:
+                // closing it as soon as another row is touched left no way to
+                // walk from "Move to group" to the groups it lists.
+                const int owner = m.panels[level + 1].parentItem;
+                const bool itemHasSubmenu =
+                    item >= 0 && !(*m.panels[level].items)[item].sub.empty();
+                switch (DeeperLevelsAction(item, owner, itemHasSubmenu)) {
+                    case DeeperAction::Keep:
+                        KillTimer(hwnd, kSubmenuCloseTimer);
+                        break;
+                    case DeeperAction::CloseNow:
+                        KillTimer(hwnd, kSubmenuCloseTimer);
+                        CloseDeeper(level);
+                        break;
+                    case DeeperAction::CloseSoon:
+                        SetTimer(hwnd, kSubmenuCloseTimer, kSubmenuCloseDelayMs,
+                                 nullptr);
+                        break;
+                }
+            } else {
+                KillTimer(hwnd, kSubmenuCloseTimer);
+            }
             SetHover(level, item);
-            if (item >= 0 && !(*m.panels[level].items)[item].sub.empty()) {
+            if (item >= 0 && (int)m.panels.size() == level + 1 &&
+                !(*m.panels[level].items)[item].sub.empty()) {
                 if (m.pendingPanel != level || m.pendingItem != item) {
                     m.pendingPanel = level;
                     m.pendingItem = item;
@@ -6687,6 +6781,21 @@ LRESULT CALLBACK MenuWndProc(HWND hwnd, UINT message, WPARAM wParam,
                     if (!(*m.panels[level].items)[item].sub.empty())
                         OpenSubmenu(level, item);
                 }
+            } else if (wParam == kSubmenuCloseTimer) {
+                KillTimer(hwnd, kSubmenuCloseTimer);
+                // Re-read the pointer instead of closing blind: it may have
+                // reached the submenu after the move that armed this timer.
+                POINT point{};
+                if (GetCursorPos(&point)) {
+                    int level = PanelAt((float)point.x, (float)point.y);
+                    if (level >= 0 && level < (int)m.panels.size() - 1) {
+                        int item = HitTest(m.panels[level], (float)point.x,
+                                           (float)point.y);
+                        if (item != m.panels[level + 1].parentItem) {
+                            CloseDeeper(level);
+                        }
+                    }
+                }
             } else if (wParam == kAnimationTimer) {
                 float t = AppearAmount(m);
                 if (t >= 1.0f) KillTimer(hwnd, kAnimationTimer);
@@ -6714,20 +6823,31 @@ LRESULT CALLBACK MenuWndProc(HWND hwnd, UINT message, WPARAM wParam,
     return DefWindowProcW(hwnd, message, wParam, lParam);
 }
 
+bool g_menuClassRegistered = false;
+
 bool EnsureMenuClass() {
-    static bool registered = false;
-    if (registered) return true;
+    if (g_menuClassRegistered) return true;
     WNDCLASSEXW wc{sizeof(wc)};
     wc.lpfnWndProc = MenuWndProc;
     wc.hInstance = (HINSTANCE)&__ImageBase;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    wc.lpszClassName = kMenuClass;
+    wc.lpszClassName = MenuClassName();
     if (RegisterClassExW(&wc)) {
-        registered = true;
-    } else if (GetLastError() == ERROR_CLASS_ALREADY_EXISTS) {
-        registered = true;
+        g_menuClassRegistered = true;
+    } else {
+        // The name is unique per image, so this is a real registration
+        // failure rather than a class left behind by an earlier build.
+        Wh_Log(L"Menu class %ls unavailable: %u", MenuClassName(),
+               GetLastError());
+        g_menuClassRegistered = false;
     }
-    return registered;
+    return g_menuClassRegistered;
+}
+
+void UnregisterMenuClass() {
+    if (!g_menuClassRegistered) return;
+    UnregisterClassW(MenuClassName(), (HINSTANCE)&__ImageBase);
+    g_menuClassRegistered = false;
 }
 
 void Reset() {
@@ -6735,6 +6855,7 @@ void Reset() {
     if (m.hwnd) {
         KillTimer(m.hwnd, kAnimationTimer);
         KillTimer(m.hwnd, kSubmenuTimer);
+        KillTimer(m.hwnd, kSubmenuCloseTimer);
     }
     FreeSurface(m.surface);
     m.surface = {};
@@ -6828,7 +6949,7 @@ UINT TrackLaunchpadPopupMenu(HMENU menu, UINT flags, int x, int y, HWND owner,
     m.result = 0;
     m.running = true;
     m.hwnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED,
-                             kMenuClass, L"", WS_POPUP, m.origin.x,
+                             MenuClassName(), L"", WS_POPUP, m.origin.x,
                              m.origin.y, m.width, m.height, owner, nullptr,
                              (HINSTANCE)&__ImageBase, nullptr);
     if (!m.hwnd) {
@@ -7039,7 +7160,10 @@ bool FastStartupOn() {
 }
 
 // Off the UI thread: sleep and hibernate return only after the PC wakes.
-// Holds a reference to this DLL so unloading the mod meanwhile is safe.
+// The handle is kept and joined before the mod unloads: Windhawk calls
+// FreeLibrary right after Wh_ModUninit, so no mod thread may outlive it.
+HANDLE g_powerThread = nullptr;
+
 DWORD WINAPI PowerThread(void* param) {
     auto action = (PowerAction)(INT_PTR)param;
     // Never EWX_FORCE: apps with unsaved work get to ask, as with Start.
@@ -7082,8 +7206,7 @@ DWORD WINAPI PowerThread(void* param) {
         Wh_Log(L"Power action %s failed: %u", kPower[(int)action].key,
                GetLastError());
     }
-    FreeLibraryAndExitThread((HMODULE)&__ImageBase, 0);
-    return 0;  // Unreachable live: the API exits the thread. Keeps test hosts returning.
+    return 0;
 }
 
 void RunPowerAction(PowerAction action) {
@@ -7094,17 +7217,18 @@ void RunPowerAction(PowerAction action) {
     Wh_Log(L"Power action: %s", kPower[(int)action].key);
     DisarmPower();
     HideNow();  // At once: no closing animation over a lock or sleep.
-    HMODULE self;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                            (PCWSTR)&PowerThread, &self)) {
-        return;
+    if (g_powerThread) {
+        if (WaitForSingleObject(g_powerThread, 0) != WAIT_OBJECT_0) {
+            Wh_Log(L"Power action already in progress");
+            return;
+        }
+        CloseHandle(g_powerThread);
+        g_powerThread = nullptr;
     }
-    HANDLE thread = CreateThread(nullptr, 0, PowerThread,
+    g_powerThread = CreateThread(nullptr, 0, PowerThread,
                                  (void*)(INT_PTR)action, 0, nullptr);
-    if (thread) {
-        CloseHandle(thread);
-    } else {
-        FreeLibrary(self);
+    if (!g_powerThread) {
+        Wh_Log(L"Power thread failed: %u", GetLastError());
     }
 }
 
@@ -8370,7 +8494,10 @@ void Render() {
         D2D1_RECT_F captureRect = g_appear >= 1 ? panel : dev;
         if (g_drag.active || !PanelBlurFresh(captureRect, folder, g_scroll)) {
             if (g_target->EndDraw() == D2DERR_RECREATE_TARGET) {
+                g_openFolder = realOpen;  // Do not leave a closing folder open.
                 ResetTarget();
+                g_labelCache.clear();
+                g_groupTitleRenders.clear();
                 return;
             }
             CapturePanelBlur(captureRect, folder, g_scroll, L.scale);
@@ -8402,6 +8529,9 @@ void Render() {
 
     if (g_target->EndDraw() == D2DERR_RECREATE_TARGET) {
         ResetTarget();
+        // Both caches hold bitmaps of the device that just went away.
+        g_labelCache.clear();
+        g_groupTitleRenders.clear();
         return;
     }
     if (UseGpuPresenter()) {
@@ -8785,29 +8915,46 @@ bool FirstOfKeystroke() {
 // target is a silent no-op, so a temporary .lnk aimed at the target carries
 // the elevation instead — the shell brokers that into an elevated launch
 // (verified: the spawned Terminal answers the elevation token query).
-void LaunchTarget(const std::wstring& target, PCWSTR verb, const App* entry = nullptr);
+// The link stays in the mod's own storage, is unique per launch, and is
+// removed again; nothing is left in the user's profile.
+void LaunchTarget(const std::wstring& target, PCWSTR verb, const App* entry,
+                  bool quiet);
 void ElevateViaTempLnk(const std::wstring& target) {
-    PWSTR temp = nullptr;
-    if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &temp))) {
+    auto directory = ModTempPath();
+    if (directory.empty() ||
+        (FAILED(SHCreateDirectoryExW(nullptr, directory.c_str(), nullptr)) &&
+         GetFileAttributesW(directory.c_str()) == INVALID_FILE_ATTRIBUTES)) {
+        Wh_Log(L"Cannot create the elevation folder: %s", directory.c_str());
         return;
     }
-    std::wstring dir = std::wstring(temp) + L"\\RYJSLaunchpad";
-    CoTaskMemFree(temp);
-    CreateDirectoryW(dir.c_str(), nullptr);
-    std::wstring lnk = dir + L"\\Run as administrator.lnk";
+    static LONG launches = 0;
+    WCHAR name[80];
+    swprintf_s(name, L"runas-%lu-%llu-%ld.lnk", GetCurrentProcessId(),
+               (unsigned long long)GetTickCount64(),
+               InterlockedIncrement(&launches));
+    std::wstring lnk = directory + L"\\" + name;
 
     IShellLinkW* link = nullptr;
+    bool saved = false;
     if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
                                    IID_PPV_ARGS(&link)))) {
-        link->SetPath(target.c_str());
         IPersistFile* file = nullptr;
-        if (SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&file)))) {
-            file->Save(lnk.c_str(), TRUE);
+        if (SUCCEEDED(link->SetPath(target.c_str())) &&
+            SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&file)))) {
+            saved = SUCCEEDED(file->Save(lnk.c_str(), TRUE));
             file->Release();
         }
         link->Release();
-        LaunchTarget(lnk, L"runas");
     }
+    if (!saved) {
+        Wh_Log(L"Could not write the elevation shortcut: %s", lnk.c_str());
+        DeleteFileW(lnk.c_str());
+        return;
+    }
+    // Quiet waits for the shell to consume the link, so deleting it below
+    // cannot race the elevated launch.
+    LaunchTarget(lnk, L"runas", nullptr, true);
+    DeleteFileW(lnk.c_str());
 }
 
 bool RequestLaunch(const std::wstring& target,PCWSTR verb,const App* entry,bool quiet=false) {
@@ -8821,8 +8968,9 @@ bool RequestLaunch(const std::wstring& target,PCWSTR verb,const App* entry,bool 
     AllowSetForegroundWindow(ASFW_ANY);
     return ShellExecuteExW(&sei);
 }
-void LaunchTarget(const std::wstring& target, PCWSTR verb = nullptr, const App* entry) {
-    if (RequestLaunch(target,verb,entry)) Close();
+void LaunchTarget(const std::wstring& target, PCWSTR verb = nullptr,
+                  const App* entry = nullptr, bool quiet = false) {
+    if (RequestLaunch(target,verb,entry,quiet)) Close();
     else {
         bool previous=g_modal;
         g_modal=true;
@@ -8865,6 +9013,7 @@ void LaunchSelectedApps() {
 constexpr WCHAR kSettingsClass[] = L"WindhawkRYJSLaunchpadSettings";
 constexpr UINT WM_APP_SETTINGS_RELOAD = WM_APP + 1, WM_APP_SETTINGS_ACTIVATE = WM_APP + 2;
 HANDLE g_settingsThread = nullptr;
+DWORD g_settingsThreadId = 0;
 std::atomic<HWND> g_settingsWnd;
 std::atomic<bool> g_settingsStop;
 void Settings_Close();
@@ -8951,7 +9100,7 @@ struct SetField {
     PCWSTR label;
     PCWSTR desc = nullptr;
     PCWSTR def = L"";                                // The schema default ("Reset to suggested").
-    std::vector<std::pair<PCWSTR, PCWSTR>> options;  // Value, label.
+    std::vector<std::pair<std::wstring, std::wstring>> options;  // Value, label. Owned: the monitor list is built per window.
     int min = 0, max = 0;
     int page = 0;        // Which sidebar page shows it.
     PCWSTR group = L"";  // Heading above it on that page.
@@ -9062,7 +9211,7 @@ static std::vector<SetField> Set_MakeFields() {
     std::vector<SetField> fields = {
 // Custom settings begin
 {K::Check, L"gpuPresenter", L"GPU composition", L"Use GPU composition for smoother animation. Turn off for the compatibility renderer.", L"1", {}, 0, 100, 1, L"Rendering"},
-{K::Check, L"performanceLogging", L"Record performance", L"Record opening latency, frame intervals and rendering cost in the mod storage folder.", L"1", {}, 0, 100, 1, L"Rendering"},
+{K::Check, L"performanceLogging", L"Record performance", L"Record opening latency, frame intervals and rendering cost in the mod storage folder.", L"0", {}, 0, 100, 1, L"Rendering"},
 {K::Number, L"frameRateLimit", L"Frame rate limit", L"0 follows the selected monitor. Other values cap animation updates without changing the monitor.", L"0", {}, 0, 1000, 1, L"Rendering"},
 {K::Choice, L"launchpadAnimation", L"Launchpad animation style", L"Choose how the launchpad opens and closes.", L"iconFlyIn", {{L"iconFlyIn", L"iOS icon fly-in"}, {L"classic", L"Classic zoom and fade"}}, 0, 100, 1, L"Motion"},
 {K::Number, L"openDuration", L"Open duration (ms)", L"Duration of the opening transition.", L"280", {}, 60, 1500, 1, L"Motion"},
@@ -9078,10 +9227,6 @@ static std::vector<SetField> Set_MakeFields() {
 {K::Choice, L"groupFlow", L"Group arrangement", L"Arrange groups in columns or use one full-width group per row.", L"columns", {{L"columns", L"Responsive columns"}, {L"rows", L"Full-width rows"}}, 0, 100, 1, L"Expanded groups"},
 {K::Choice, L"groupNavigation", L"Group navigation", L"Large groups continue on the next page when paging is selected.", L"scroll", {{L"scroll", L"Vertical scrolling"}, {L"pages", L"Horizontal pages"}}, 0, 100, 1, L"Expanded groups"},
 {K::Choice, L"themeMode", L"Theme mode", L"Choose a preset, follow Windows, or keep your own colors.", L"custom", {{L"custom", L"Custom"}, {L"light", L"Light"}, {L"dark", L"Dark"}, {L"system", L"Follow Windows"}}, 0, 100, 2, L"Theme"},
-{K::Color, L"groupColor", L"Group background color", L"Group and folder background in the custom theme.", L"#1E1E2E", {}, 0, 100, 2, L"Theme"},
-{K::Number, L"groupOpacity", L"Group background opacity", L"0–100 percent. Zero preserves transparent expanded groups.", L"0", {}, 0, 100, 2, L"Theme"},
-{K::Color, L"hoverColor", L"Hover color", L"Background color of the application under the pointer.", L"#89B4FA", {}, 0, 100, 2, L"Theme"},
-{K::Color, L"selectionColor", L"Selection color", L"Background color of the keyboard-selected application.", L"#CBA6F7", {}, 0, 100, 2, L"Theme"},
 {K::Number, L"backgroundDim", L"Background dimming", L"Additional darkening of the blurred background, 0–80 percent.", L"0", {}, 0, 80, 2, L"Readability"},
 // Custom settings end
 {K::Choice, L"interfaceLanguage", L"Interface language", L"Follow Windows display language. Save to apply; app names stay unchanged.", L"auto", {{L"auto", L"Automatic (Windows)"}, {L"zh-CN", L"Simplified Chinese"}, {L"en", L"English"}}, 0, 100, 2, L"Language"},
@@ -9102,9 +9247,7 @@ static std::vector<SetField> Set_MakeFields() {
 {K::Number, L"blurAmount", L"Blur strength", L"0 to 100 (Suggested: 60). Only for the adjustable blur. The Windows ones have a fixed strength.", L"60", {}, 0, 100, 2, L"Appearance"},
 {K::Number, L"backgroundOpacity", L"Background opacity (%)", L"0 to 100 (Suggested: 30). 0 leaves only the blur, 100 covers everything with the color.", L"30", {}, 0, 100, 2, L"Appearance"},
 {K::Color, L"tintColor", L"Background color", L"In hexadecimal, like #1E1E2E.", L"#000000", {}, 0, 100, 2, L"Appearance"},
-{K::Color, L"accentColor", L"Accent color", L"In hexadecimal, like #89B4FA. Tints the glows and highlights.", L"#89B4FA", {}, 0, 100, 2, L"Appearance"},
 {K::Number, L"glowStrength", L"Glow strength", L"0 to 100 (Suggested: 60). How strongly hovered buttons glow.", L"60", {}, 0, 100, 2, L"Appearance"},
-{K::Number, L"glowSize", L"Glow size", L"4 to 40 (Suggested: 14). How far a glow spreads, in DIP at 100% scaling.", L"14", {}, 4, 40, 2, L"Appearance"},
 {K::Number, L"chromeOpacity", L"Search bar and dock opacity (%)", L"0 to 100 (Suggested: 90). How solid the search bar and the power dock are.", L"90", {}, 0, 100, 2, L"Appearance"},
 {K::Check, L"powerBar", L"Power dock", L"The pill of power buttons at the bottom of the grid.", L"1", {}, 0, 100, 3, L"Power buttons"},
 {K::Choice, L"dockAlignment", L"Dock position", L"Where the power dock sits along the bottom edge.", L"center", {{L"left", L"Left"}, {L"center", L"Center"}, {L"right", L"Right"}}, 0, 100, 3, L"Power buttons"},
@@ -9122,20 +9265,15 @@ static std::vector<SetField> Set_MakeFields() {
 {K::Check, L"nativeSettingsTitleBar", L"Native Windows title bar", L"Use the Windows title bar and window buttons for this settings window. Applies when you save.", L"0", {}, 0, 100, 2, L"Settings window"},
 {K::Check, L"settingsTrayIcon", L"Tray icon", L"A Launchpad icon in the system tray. Click it to open these settings, right-click it for a menu.", L"1", {}, 0, 100, 2, L"Settings window"}
     };
-    std::erase_if(fields,[](const SetField& field) {
-        std::wstring_view key=field.key;
-        return key==L"groupColor"||key==L"groupOpacity"||key==L"hoverColor"||
-               key==L"selectionColor"||key==L"accentColor"||key==L"glowSize";
-    });
     for (auto& f : fields) if (wcscmp(f.key, L"uiFont") == 0)
-        for (const auto& name : Set_InstalledFontFamilies()) f.options.emplace_back(name.c_str(), name.c_str());
-    static std::vector<std::pair<std::wstring, std::wstring>> monitorLabels;  // Only grows.
-    size_t labelBase = monitorLabels.size();
+        for (const auto& name : Set_InstalledFontFamilies()) f.options.emplace_back(name, name);
+    // Built per call and moved into the field: a function-local static here
+    // would dangle as soon as it reallocated, and two threads build fields.
+    std::vector<std::pair<std::wstring, std::wstring>> monitorLabels;
     Set_MonitorLabels(monitorLabels);
     for (auto& f : fields) if (wcscmp(f.key, L"monitor") == 0)
-        for (size_t i = labelBase; i < monitorLabels.size(); i++)
-            f.options.emplace_back(monitorLabels[i].first.c_str(),
-                                   monitorLabels[i].second.c_str());
+        for (auto& label : monitorLabels)
+            f.options.emplace_back(std::move(label.first), std::move(label.second));
     return fields;
 }
 
@@ -9386,7 +9524,7 @@ static void Set_PutValue(SetField& f, const std::wstring& value) {
                 if (value == f.options[i].first) index = (int)i;
             }
             for (size_t i = 0; index < 0 && i < f.options.size(); i++) {
-                if (wcscmp(f.def, f.options[i].first) == 0) index = (int)i;
+                if (wcscmp(f.def, f.options[i].first.c_str()) == 0) index = (int)i;
             }
             f.cur = f.options[std::max(index, 0)].first;
             break;
@@ -9435,8 +9573,8 @@ static std::wstring Set_HexFromRgb(UINT32 rgb) {
 
 static const wchar_t* Set_ChoiceLabel(const SetField& f) {
     for (auto& o : f.options)
-        if (f.cur == o.first) return Tr(o.second);
-    return f.options.empty() ? L"" : Tr(f.options[0].second);
+        if (f.cur == o.first) return Tr(o.second.c_str());
+    return f.options.empty() ? L"" : Tr(f.options[0].second.c_str());
 }
 
 static bool Set_Anim(const SetWindow& w) {
@@ -9491,7 +9629,7 @@ static bool Set_FitBoxes(SetWindow& w) {
         std::wstring text;
         if (f.kind == SetField::Choice) {
             base = 200, pad = 46;  // 12 before the text, 30 for the arrow, 4 spare.
-            for (const auto& o : f.options) text += std::wstring(Tr(o.second)) + L'\n';
+            for (const auto& o : f.options) text += std::wstring(Tr(o.second.c_str())) + L'\n';
         } else if (f.kind == SetField::Hotkey) {
             base = 220, pad = 60;  // The key cap's own padding and the clear button.
             text = f.cur;
@@ -9504,7 +9642,7 @@ static bool Set_FitBoxes(SetWindow& w) {
         if (f.fitText < 0 || text != f.fitFor) {
             float m = 0;
             if (f.kind == SetField::Choice) {
-                for (const auto& o : f.options) m = std::max(m, Set_TextW(w.fValue.get(), Tr(o.second)));
+                for (const auto& o : f.options) m = std::max(m, Set_TextW(w.fValue.get(), Tr(o.second.c_str())));
             } else {
                 m = Set_TextW(w.fValue.get(), f.cur);
             }
@@ -10163,7 +10301,7 @@ static void Set_DrawPopup(SetPaint& p, SetWindow& w) {
             p.GradFill(it, 6, 0.28f);
             p.GradRing(it, 6, 0.6f, 1);
         }
-        p.Text(w.fValue.get(), Tr(f.options[i].second), {it.left + 10, it.top, it.right - 28, it.bottom}, sel ? mocha::text : mocha::text);
+        p.Text(w.fValue.get(), Tr(f.options[i].second.c_str()), {it.left + 10, it.top, it.right - 28, it.bottom}, sel ? mocha::text : mocha::text);
         if (sel) p.Glyph(w.fIconS.get(), 0xE73E, {it.right - 28, it.top, it.right - 6, it.bottom}, mocha::text);
     }
     if (scrolls) {
@@ -10572,7 +10710,7 @@ static void Set_OpenPopup(SetWindow& w, int k) {
     if (top + h > Set_ViewH(w) + 20 && boxTop - 4 - h > 0) top = boxTop - 4 - h;  // No room below: open upward.
     // As wide as the longest option (text, check mark, scrollbar), growing leftward from the box.
     float textW = 0;
-    for (const auto& o : f.options) textW = std::max(textW, Set_TextW(w.fValue.get(), Tr(o.second)));
+    for (const auto& o : f.options) textW = std::max(textW, Set_TextW(w.fValue.get(), Tr(o.second.c_str())));
     float width = std::max(pt.box.right - pt.box.left, std::ceil(textW) + 52 + (n > vis ? 8 : 0));
     float left = std::max(pt.box.right - width, Set_RailSpace(w) + 8);
     w.dropRect = {left, top, std::max(pt.box.right, left + width), top + h};
@@ -11657,25 +11795,77 @@ void Settings_Close() {
 bool Settings_IsOpen() { return g_setWin && g_setWin->hwnd && !g_setWin->render; }
 
 
+// Runs on the settings thread, after its message loop or its early exit.
+void SettingsThreadTeardown() {
+    Settings_Close();
+    UnregisterClassW(kSettingsClass, (HINSTANCE)&__ImageBase);
+    Set_ReleaseFactories();
+    CoUninitialize();
+}
+
 DWORD WINAPI SettingsThread(void*) {
- SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
- CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
- Settings_Open();
- if (g_setWin) g_settingsWnd=g_setWin->hwnd;
- MSG msg;
- while (g_settingsWnd && GetMessageW(&msg,nullptr,0,0)>0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
- Settings_Close(); UnregisterClassW(kSettingsClass,(HINSTANCE)&__ImageBase); Set_ReleaseFactories(); CoUninitialize(); return 0;
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    Settings_Open();
+    // CloseSettingsWindow may have run while the window was being built; the
+    // stop flag is what tells this thread to leave instead of entering the
+    // loop, where the posted WM_QUIT would already have been consumed.
+    if (g_settingsStop) {
+        SettingsThreadTeardown();
+        return 0;
+    }
+    if (g_setWin) g_settingsWnd = g_setWin->hwnd;
+    MSG msg;
+    while (g_settingsWnd && GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+    SettingsThreadTeardown();
+    return 0;
 }
+
 void OpenSettingsWindow() {
- if(g_fullImportBusy)return;
- if (HWND hwnd=g_settingsWnd) { PostMessageW(hwnd,WM_APP_SETTINGS_ACTIVATE,0,0); return; }
- if(g_settingsThread) { if(WaitForSingleObject(g_settingsThread,0)==WAIT_TIMEOUT) return; CloseHandle(g_settingsThread); }
- g_settingsStop=false; g_settingsThread=CreateThread(nullptr,0,SettingsThread,nullptr,0,nullptr);
+    if (g_fullImportBusy) return;
+    if (HWND hwnd = g_settingsWnd) {
+        PostMessageW(hwnd, WM_APP_SETTINGS_ACTIVATE, 0, 0);
+        return;
+    }
+    if (g_settingsThread) {
+        // A previous window was closed: reap that thread before starting one.
+        if (WaitForSingleObject(g_settingsThread, 0) == WAIT_TIMEOUT) return;
+        CloseHandle(g_settingsThread);
+        g_settingsThread = nullptr;
+        g_settingsThreadId = 0;
+    }
+    g_settingsStop = false;
+    g_settingsThread = CreateThread(nullptr, 0, SettingsThread, nullptr, 0,
+                                    &g_settingsThreadId);
 }
+
+// The settings window lives on its own thread, and the DLL must not unload
+// while either the window or the thread is still alive. The thread is asked
+// to quit through its message queue and then joined without a bound: the
+// thread's own exit path is what guarantees the join returns, so waiting for
+// it is the only correct order. g_settingsStop covers the window that has not
+// finished building yet.
 void CloseSettingsWindow() {
- g_settingsStop=true;
- if(HWND hwnd=g_settingsWnd) PostMessageW(hwnd,WM_CLOSE,0,0);
- if(g_settingsThread) { WaitForSingleObject(g_settingsThread,15000); CloseHandle(g_settingsThread); g_settingsThread=nullptr; }
+    g_settingsStop = true;
+    if (HWND hwnd = g_settingsWnd) PostMessageW(hwnd, WM_CLOSE, 0, 0);
+    if (g_settingsThread) {
+        if (g_settingsThreadId) {
+            // The queue may not exist yet while the window is being built, so
+            // post repeatedly until the thread is gone.
+            do {
+                PostThreadMessageW(g_settingsThreadId, WM_QUIT, 0, 0);
+            } while (WaitForSingleObject(g_settingsThread, 100) == WAIT_TIMEOUT);
+        } else {
+            WaitForSingleObject(g_settingsThread, INFINITE);
+        }
+        CloseHandle(g_settingsThread);
+        g_settingsThread = nullptr;
+        g_settingsThreadId = 0;
+    }
+    g_settingsWnd = nullptr;
 }
 
 void EnsureVisible(int index) {
@@ -13477,21 +13667,9 @@ function Read-Ini([byte[]]$bytes) {
     return $ini
 }
 function Read-HostSettings {
-    if ($job.preview) { return Object-Map $job.host_settings }
-    $location = 'SOFTWARE\Windhawk\Engine\Mods\' + $job.mod_id + '\Settings'
-    $script:registryHive='HKLM'
-    $key = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($location)
-    if (!$key) { $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($location); $script:registryHive='HKCU' }
-    if (!$key) { throw 'Windhawk settings could not be read.' }
-    try {
-        $values=@{}
-        foreach ($name in $key.GetValueNames()) {
-            $kind=$key.GetValueKind($name)
-            if ($kind -notin @('String','ExpandString','DWord')) { throw 'Unsupported registry setting type.' }
-            $values[$name]=[string]$key.GetValue($name,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
-        }
-        return $values
-    } finally { $key.Dispose() }
+    # The mod hands over the values it already reads through Windhawk's API.
+    # This works on portable Windhawk too, and never touches its registry.
+    return Object-Map $job.host_settings
 }
 function Read-Tree([string]$root) {
     $root=[IO.Path]::GetFullPath($root).TrimEnd('\')
@@ -13520,11 +13698,6 @@ function Same-Files($a,$b) {
     foreach ($name in $a.Keys) {
         if (!$b.ContainsKey($name) -or (Hash-Bytes $a[$name]) -ne (Hash-Bytes $b[$name])) { return $false }
     }
-    return $true
-}
-function Same-Settings($a,$b) {
-    if ($a.Count -ne $b.Count) { return $false }
-    foreach ($name in $a.Keys) { if (!$b.ContainsKey($name) -or [string]$a[$name] -cne [string]$b[$name]) { return $false } }
     return $true
 }
 function Safe-Entry([string]$name) {
@@ -13736,27 +13909,17 @@ function Export-Complete {
             $icons[$f[2]]=$name
         }
     }
-    foreach ($item in @(@('source',$job.source),@('binary',$job.binary))) {
-        if (!$item[1] -or !(Test-Path -LiteralPath $item[1] -PathType Leaf)) { throw 'Installed source or module could not be found.' }
-        $files[$item[0]+'/'+[IO.Path]::GetFileName($item[1])]=[IO.File]::ReadAllBytes($item[1])
-    }
-    if (!$job.preview) {
-        $regFile=Join-Path $work 'settings.reg'
-        & "$env:SystemRoot\System32\reg.exe" export ($script:registryHive+'\SOFTWARE\Windhawk\Engine\Mods\'+$job.mod_id+'\Settings') $regFile /y | Out-Null
-        if ($LASTEXITCODE) { throw 'Could not export Windhawk settings.' }
-        $files['metadata/settings.reg']=[IO.File]::ReadAllBytes($regFile)
-    }
     $instructions=@'
 RYJS Launchpad 完整备份
 在启动器菜单选择“导入完整备份”，选中本 ZIP，校验后确认即可。
-导入仅恢复布局、设置和图标；source/binary 用于保留当前安装文件，不会执行或安装。
+导入仅恢复布局、设置和图标；source/binary 仅用于兼容旧备份，不会安装或执行。
 替换前的数据保留在原 data-v1 同级的 .before-import-* 目录。
 '@
     $files['metadata/恢复说明.txt']=$utf8.GetBytes($instructions)
     $manifest=[ordered]@{schema=1; producer='ryjs-native-1'; source_mod=$job.mod_id; version=$job.version; created=[DateTimeOffset]::Now.ToString('o'); host_settings=$hostSettings; effective_settings=$effective; icons=$icons; files=@{}}
     foreach ($name in $files.Keys) { $manifest.files[$name]=@{size=$files[$name].Length;sha256=(Hash-Bytes $files[$name])} }
     Validate-Data ($manifest | ConvertTo-Json -Depth 8 | ConvertFrom-Json) $files
-    if (!(Same-Files $snapshot (Read-Tree $job.storage)) -or !(Same-Settings $hostSettings (Read-HostSettings))) { throw 'Layout or settings changed during backup. Please retry.' }
+    if (!(Same-Files $snapshot (Read-Tree $job.storage))) { throw 'Layout changed during backup. Please retry.' }
     $temporary=$job.archive+'.pending-'+[Guid]::NewGuid().ToString('N')
     try {
         $stream=[IO.File]::Open($temporary,[IO.FileMode]::CreateNew)
@@ -13826,7 +13989,6 @@ function Import-Complete($checked) {
     }
     [IO.File]::WriteAllText($ui,$text,[Text.Encoding]::Unicode)
     [IO.File]::WriteAllText((Join-Path $stage 'ryjs-storage.ini'),"[storage]`r`nschema=1`r`n",[Text.Encoding]::Unicode)
-    if (!(Same-Settings $hostSettings (Read-HostSettings))) { throw 'Windhawk settings changed during import.' }
     $previous=$destination+'.before-import-'+[DateTime]::Now.ToString('yyyyMMdd-HHmmss')+'-'+[Guid]::NewGuid().ToString('N')
     $hadPrevious=Test-Path -LiteralPath $destination
     if ($hadPrevious) { [IO.Directory]::Move($destination,$previous) }
@@ -13854,7 +14016,7 @@ try {
 }
 [IO.File]::WriteAllText((Join-Path $work 'result.ini'),$resultText,[Text.Encoding]::Unicode)
 )RYJS_BACKUP";
-constexpr wchar_t kFullBackupDefaults[] = LR"RYJS_DEFAULTS({"interfaceLanguage": "auto", "uiFont": "auto", "winKeyAction": "grid", "shiftWinKeyAction": "start", "startButtonAction": "grid", "program": "", "monitor": "mouse", "appSource": "allApps", "gridLayout": "groups", "gridColumns": "0", "globalColumns": "0", "coverScreen": "0", "gridIconSize": "56", "showLabels": "1", "normalizeIcons": "1", "blurMode": "custom", "blurAmount": "60", "backgroundOpacity": "30", "tintColor": "#000000", "accentColor": "#89B4FA", "glowStrength": "60", "glowSize": "14", "chromeOpacity": "90", "powerBar": "1", "dockAlignment": "center", "powerButtons.lock": "1", "powerButtons.signOut": "1", "powerButtons.sleep": "1", "powerButtons.hibernate": "1", "powerButtons.restart": "1", "powerButtons.shutDown": "1", "powerNoConfirm": "0", "wiggle": "1", "holdTime": "420", "animations": "1", "settingsGlass": "1", "nativeSettingsTitleBar": "0", "settingsTrayIcon": "1", "gpuPresenter": "1", "performanceLogging": "1", "frameRateLimit": "0", "openDuration": "280", "closeDuration": "180", "animationEasing": "settle", "reducedMotion": "0", "labelFontSize": "13", "horizontalSpacing": "56", "verticalSpacing": "16", "groupWidth": "0", "groupSpacing": "32", "groupFlow": "columns", "groupNavigation": "scroll", "folderDuration": "180", "themeMode": "custom", "groupColor": "#1E1E2E", "groupOpacity": "0", "hoverColor": "#89B4FA", "selectionColor": "#CBA6F7", "backgroundDim": "0", "launchpadAnimation": "iconFlyIn"})RYJS_DEFAULTS";
+constexpr wchar_t kFullBackupDefaults[] = LR"RYJS_DEFAULTS({"interfaceLanguage": "auto", "uiFont": "auto", "winKeyAction": "grid", "shiftWinKeyAction": "start", "startButtonAction": "grid", "program": "", "monitor": "mouse", "appSource": "allApps", "gridLayout": "groups", "gridColumns": "0", "globalColumns": "0", "coverScreen": "0", "gridIconSize": "56", "showLabels": "1", "normalizeIcons": "1", "blurMode": "custom", "blurAmount": "60", "backgroundOpacity": "30", "tintColor": "#000000", "glowStrength": "60", "chromeOpacity": "90", "powerBar": "1", "dockAlignment": "center", "powerButtons.lock": "1", "powerButtons.signOut": "1", "powerButtons.sleep": "1", "powerButtons.hibernate": "1", "powerButtons.restart": "1", "powerButtons.shutDown": "1", "powerNoConfirm": "0", "wiggle": "1", "holdTime": "420", "animations": "1", "settingsGlass": "1", "nativeSettingsTitleBar": "0", "settingsTrayIcon": "1", "gpuPresenter": "1", "performanceLogging": "0", "frameRateLimit": "0", "openDuration": "280", "closeDuration": "180", "animationEasing": "settle", "reducedMotion": "0", "labelFontSize": "13", "horizontalSpacing": "56", "verticalSpacing": "16", "groupWidth": "0", "groupSpacing": "32", "groupFlow": "columns", "groupNavigation": "scroll", "folderDuration": "180", "themeMode": "custom", "backgroundDim": "0", "launchpadAnimation": "iconFlyIn"})RYJS_DEFAULTS";
 
 constexpr UINT kFullBackupDone=WM_APP+65;
 struct FullBackupJob {
@@ -13889,14 +14051,18 @@ std::wstring BackupReadResult(const std::wstring& work,PCWSTR key,bool encoded=t
     std::wstring decoded;
     return launchpad_settings_store::Decode(value,decoded)?decoded:L"";
 }
+std::wstring BackupWorkRoot() {
+    return ModTempPath();
+}
 void BackupDeleteWork(const std::wstring& work) {
-    WCHAR temporary[32768]{};GetTempPathW(ARRAYSIZE(temporary),temporary);
-    auto parent=std::filesystem::path(work).parent_path().lexically_normal().wstring();
-    auto temp=std::filesystem::path(temporary).lexically_normal().wstring();
-    while(!temp.empty()&&(temp.back()==L'\\'||temp.back()==L'/'))temp.pop_back();
-    if(_wcsicmp(parent.c_str(),temp.c_str())||!std::filesystem::path(work).filename().wstring().starts_with(L"RYJSBackup-"))return;
+    auto root = BackupWorkRoot();
+    if (root.empty() || work.empty()) return;
+    auto parent = std::filesystem::path(work).parent_path().lexically_normal().wstring();
+    auto expected = std::filesystem::path(root).lexically_normal().wstring();
+    if (_wcsicmp(parent.c_str(), expected.c_str()) ||
+        !std::filesystem::path(work).filename().wstring().starts_with(L"RYJSBackup-")) return;
     std::error_code error;
-    std::filesystem::remove_all(work,error);
+    std::filesystem::remove_all(work, error);
 }
 DWORD WINAPI FullBackupWait(void* parameter) {
     auto* job=(FullBackupJob*)parameter;
@@ -13916,25 +14082,28 @@ void StopFullBackupJob() {
 bool StartFullBackupJob(const std::wstring& mode,const std::wstring& archive,const std::wstring& expected=L"") {
     if(g_fullBackupJob)return false;
     auto job=std::make_unique<FullBackupJob>();job->mode=mode;job->archive=archive;
-    WCHAR temporary[32768]{},id[40]{},module[32768]{},storage[32768]{},system[32768]{};
+    WCHAR id[40]{},system[32768]{};
     GUID guid{};if(FAILED(CoCreateGuid(&guid)))return false;
     StringFromGUID2(guid,id,ARRAYSIZE(id));
-    if(!GetTempPathW(ARRAYSIZE(temporary),temporary)||!GetModuleFileNameW((HINSTANCE)&__ImageBase,module,ARRAYSIZE(module))||
-        !Wh_GetModStoragePath(storage,ARRAYSIZE(storage))||!GetSystemDirectoryW(system,ARRAYSIZE(system)))return false;
-    job->work=std::wstring(temporary)+L"RYJSBackup-"+id;
+    auto workRoot=BackupWorkRoot();
+    if(workRoot.empty()||!GetSystemDirectoryW(system,ARRAYSIZE(system)))return false;
+    SHCreateDirectoryExW(nullptr,workRoot.c_str(),nullptr);
+    job->work=workRoot+L"\\RYJSBackup-"+id;
     if(!CreateDirectoryW(job->work.c_str(),nullptr))return false;
-    auto modRoot=std::filesystem::path(storage);
-    auto modId=modRoot.filename().wstring();
-    auto source=modRoot.parent_path().parent_path().parent_path().parent_path()/L"ModsSource"/(modId+L".wh.cpp");
-    std::wstring preview=L"false";
 #ifdef SEAMLESS_PREVIEW
-    preview=L"true";modId=L"ryjs-launchpad";
-    source=std::filesystem::path(module).parent_path().parent_path()/L"ryjs-launchpad.wh.cpp";
+    std::wstring preview=L"true";
+    std::wstring modId=L"ryjs-launchpad";
+#else
+    std::wstring preview=L"false";
+    std::wstring modId=L"ryjs-launchpad";
+    WCHAR storage[32768]{};
+    if (Wh_GetModStoragePath(storage, ARRAYSIZE(storage)))
+        modId = std::filesystem::path(storage).filename().wstring();
 #endif
     std::wstring config=L"{\"mode\":"+BackupJsonString(mode)+L",\"archive\":"+BackupJsonString(archive)+
         L",\"expected_hash\":"+BackupJsonString(expected)+L",\"storage\":"+BackupJsonString(DataRoot())+
         L",\"mod_id\":"+BackupJsonString(modId)+L",\"version\":"+BackupJsonString(WH_MOD_VERSION)+
-        L",\"source\":"+BackupJsonString(source.wstring())+L",\"binary\":"+BackupJsonString(module)+L",\"preview\":"+preview;
+        L",\"preview\":"+preview;
     std::wstring host=L"{";
     bool first=true;
     for(const auto& field:Set_MakeFields()) {
@@ -13947,6 +14116,15 @@ bool StartFullBackupJob(const std::wstring& mode,const std::wstring& archive,con
 #endif
         host+=BackupJsonString(field.key)+L":"+BackupJsonString(baseline);
     }
+    // A legacy density setting the built-in window hides: the backup still
+    // carries it so an imported profile keeps its saved column count.
+    if(!first)host+=L",";
+#ifdef SEAMLESS_PREVIEW
+    std::wstring columns=Preview::Setting(L"gridColumns");
+#else
+    std::wstring columns=WindhawkUtils::StringSetting::make(L"gridColumns").get();
+#endif
+    host+=BackupJsonString(L"gridColumns")+L":"+BackupJsonString(columns);
     config+=L",\"defaults\":"+std::wstring(kFullBackupDefaults)+L",\"host_settings\":"+host+L"}}";
     auto script=job->work+L"\\worker.ps1",jobFile=job->work+L"\\job.json";
     if(!BackupWriteUtf8(script,L"\uFEFF"+std::wstring(kFullBackupScript))||!BackupWriteUtf8(jobFile,config)) {
@@ -14969,7 +15147,12 @@ void StartButtonHooksStop() {
 // Hook the WinRT ABI setter: pThis is an actual COM interface, so identifying
 // the element requires no implementation offsets or foreign memory writes.
 std::atomic<bool> g_nativeStartPassthrough{false};
+// The checked-state latch was diagnosed with this trace. Writing it runs on
+// the taskbar's UI thread on every press, release and pointer move, so it is
+// compiled out of normal builds; set this to true only for that diagnosis.
+constexpr bool kStartStateTrace = false;
 void StartStateTrace(PCWSTR event,int checked=-2,int pressed=-2,int hover=-2,int focus=-2) {
+    if(!kStartStateTrace)return;
     auto path=StoragePath(L"start-state-trace.log");
     HANDLE file=CreateFileW(path.c_str(),FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if(file==INVALID_HANDLE_VALUE)return;
@@ -15147,10 +15330,21 @@ bool HookXamlStartVisibility() {
     auto module=GetModuleHandleW(L"Taskbar.View.dll");
     if(!module)module=GetModuleHandleW(L"ExplorerExtensions.dll");
     if(!module){
-        if(!g_xamlLoadLibraryOriginal)Wh_SetFunctionHook((void*)LoadLibraryExW,(void*)XamlTaskbarLoadHook,(void**)&g_xamlLoadLibraryOriginal);
+        // Hook the kernelbase export, not the kernel32 thunk: a call that goes
+        // straight to kernelbase (WinRT activation of Taskbar.View.dll) never
+        // reaches a hook placed on the kernel32 import.
+        auto kernelbase=GetModuleHandleW(L"kernelbase.dll");
+        auto loadLibrary=kernelbase
+            ?reinterpret_cast<XamlLoadLibrary_t>(GetProcAddress(kernelbase,"LoadLibraryExW"))
+            :nullptr;
+        if(loadLibrary&&!g_xamlLoadLibraryOriginal){
+            WindhawkUtils::SetFunctionHook(loadLibrary,XamlTaskbarLoadHook,
+                                           &g_xamlLoadLibraryOriginal);
+            Wh_ApplyHookOperations();
+        }
         Wh_Log(L"XAML taskbar not loaded; waiting for its module load.");return false;
     }
-    // Taskbar.View.dll
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[]={
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::ExperienceToggleButton,struct winrt::Windows::UI::Xaml::Controls::Primitives::IToggleButtonOverrides>::OnToggle(void))"},
             &g_xamlStartToggleOriginal,XamlStartToggleHook,true},
@@ -15176,23 +15370,17 @@ bool HookXamlStartVisibility() {
 #endif
 
 #ifndef SEAMLESS_PREVIEW
-// The ExperienceToggleButton hooks install either at mod init (module already
-// mapped) or through the LoadLibraryExW watch. A taskbar module loaded through
-// an import table never passes that watch, and then a mouse click latches the
-// button's checked state with no hook in sight and nothing clears it. Poll for
-// the module from the launcher thread instead and install on first sight;
-// a ShowStartView request runs the same check as a last-resort self-heal.
-void EnsureXamlStartHooks(bool viaTimer) {
+// The ExperienceToggleButton hooks install when the taskbar's XAML module is
+// already mapped, or from the kernelbase LoadLibraryExW hook when it loads
+// later. A ShowStartView request runs the same check as a last-resort
+// self-heal, so no polling timer is needed.
+void EnsureXamlStartHooks() {
     static bool attempted = false;
-    if (g_xamlStartVisibleOriginal) {
-        if (viaTimer) KillTimer(g_wnd, kTimerXamlHook);
-        return;
-    }
+    if (g_xamlStartVisibleOriginal) return;
     if (attempted || (!GetModuleHandleW(L"Taskbar.View.dll") &&
                       !GetModuleHandleW(L"ExplorerExtensions.dll")))
         return;
     attempted = true;
-    if (viaTimer) KillTimer(g_wnd, kTimerXamlHook);
     bool ok = HookXamlStartVisibility();
     if (ok) Wh_ApplyHookOperations();
     StartStateTrace(ok ? L"xaml-hook-lazy-ok" : L"xaml-hook-lazy-fail");
@@ -15231,7 +15419,7 @@ HRESULT WINAPI XamlLauncher_ShowStartView_Hook(void* pThis,
     // A mouse click reaches here even when the XAML hooks never installed.
     // Install them now so the latch this click left on the button is the
     // last one; every later click is intercepted inside OnToggle itself.
-    EnsureXamlStartHooks(false);
+    EnsureXamlStartHooks();
 #endif
     HWND wnd = g_wnd;
     if (action == KeyAction::Start || !wnd) {
@@ -15275,6 +15463,7 @@ void OnAppsLoaded(AppList* list, int key) {
     delete list;
     g_appsLoaded = true;
     g_appsKey = key;
+    g_appsNormalized = g_settings.normalizeIcons;
     ApplyEntries(key & 0xFFFF);
     ApplyDisplayNames();
     LoadTiles();
@@ -15502,7 +15691,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (g_shown) {
                 HideNow();
             }
-            if (g_appsKey != AppsKey()) {
+            if (g_appsKey != AppsKey() ||
+                g_appsNormalized != g_settings.normalizeIcons) {
                 StartLoadingApps();
             } else if (g_appsLoaded) {
                 LoadTiles();
@@ -15594,17 +15784,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         }
                     }
                     break;
-#ifndef SEAMLESS_PREVIEW
-                case kTimerXamlHook:
-                    // The taskbar's XAML module may load long after this mod:
-                    // watch for it and install the start-button hooks then.
-                    if (OwnsTaskbar()) {
-                        EnsureXamlStartHooks(true);
-                    } else {
-                        KillTimer(hwnd, kTimerXamlHook);
-                    }
-                    break;
-#endif
             }
             return 0;
 
@@ -16104,7 +16283,6 @@ DWORD WINAPI StartThread(void*) {
         g_wnd = wnd;
 #ifndef SEAMLESS_PREVIEW
         StartButtonHooksStart();
-        SetTimer(wnd, kTimerXamlHook, 1000, nullptr);
 #endif
         g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
         ChangeWindowMessageFilterEx(wnd, g_taskbarCreated, MSGFLT_ALLOW, nullptr);
@@ -16183,6 +16361,11 @@ DWORD WINAPI StartThread(void*) {
     FreeSurface(g_surface);
     g_labelFormat.Reset();
     g_labelCache.clear();
+    g_groupTitleRenders.clear();
+    // The menu keeps its own DirectWrite objects for the life of the module.
+    LaunchpadMenu::g_menu.textFormat.Reset();
+    LaunchpadMenu::g_menu.boldFormat.Reset();
+    LaunchpadMenu::g_menu.hintFormat.Reset();
     g_searchFormat.Reset();
     g_messageFormat.Reset();
     g_iconFormat.Reset();
@@ -16196,6 +16379,7 @@ DWORD WINAPI StartThread(void*) {
     UnregisterClassW(kBackdropClass, instance);
     UnregisterClassW(kGroupNameClass, instance);
     UnregisterClassW(kEntryEditorClass, instance);
+    LaunchpadMenu::UnregisterMenuClass();
     OleUninitialize();
     return 0;
 }
@@ -16259,9 +16443,17 @@ BOOL Wh_ModInit() {
     bool storageReady = false;
     try { storageReady = PrepareStorage(); } catch (...) { }
     if (!storageReady) {
-        Wh_Log(L"RYJS storage migration/validation failed. No hooks installed; existing data retained.");
-        CloseHandle(g_integrationLease); g_integrationLease = nullptr;
-        return FALSE;
+        if (DataRoot().empty()) {
+            Wh_Log(L"RYJS storage path is unavailable; no hooks installed.");
+            CloseHandle(g_integrationLease); g_integrationLease = nullptr;
+            return FALSE;
+        }
+        // A damaged or unsupported data folder must not take Start away for
+        // good: open what can be read and keep every write disabled, so the
+        // user can still restore a backup from the settings window.
+        g_dataReadOnly = true;
+        g_layoutReadOnly = true;
+        Wh_Log(L"RYJS storage is damaged or unsupported; opening read-only.");
     }
     LoadSettings();
     if (!HookShowStartView()) {
@@ -16307,6 +16499,13 @@ void Wh_ModUninit() {
     g_thread = nullptr;
     CloseHandle(g_readyEvent);
     g_readyEvent = nullptr;
+    // Sleep and hibernate return only after the PC wakes; every other action
+    // returns at once, so this join cannot hang a normal unload.
+    if (g_powerThread) {
+        WaitForSingleObject(g_powerThread, INFINITE);
+        CloseHandle(g_powerThread);
+        g_powerThread = nullptr;
+    }
     // Last: until the grid's thread ends, its "..." menu can open the window.
     CloseSettingsWindow();
     if (g_integrationLease) { CloseHandle(g_integrationLease); g_integrationLease = nullptr; }
