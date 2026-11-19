@@ -19,10 +19,16 @@ shows it as the icon of that folder. Nothing else is needed: no `desktop.ini`,
 no registry changes, no folder attributes, and the mod never writes to your
 folders.
 
+Before and after:
+
+![Before](https://i.imgur.com/mQgmUT8.png) ![After](https://i.imgur.com/IfUzLX1.png)
+
 ## How it works
 
 * `folder.ico` takes priority. If it is missing or isn't a valid icon,
   `favicon.ico` is used, and then the original Windows icon.
+* `favicon.ico` can be turned off in the mod settings. This is useful if you
+  have web projects, where many folders contain a `favicon.ico`.
 * Hidden icon files work too.
 * A folder that has an icon file shows the icon instead of a thumbnail preview.
 * Adding, replacing or removing the icon file is picked up within a couple of
@@ -50,6 +56,17 @@ folders.
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- useFavicon: true
+  $name: Use favicon.ico
+  $description: >-
+    Also use favicon.ico as a folder icon when there is no folder.ico. Turn
+    this off if folders of web projects get icons you don't want.
+*/
+// ==/WindhawkModSettings==
+
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -98,6 +115,7 @@ HANDLE g_worker = nullptr;
 std::atomic<bool> g_stopping = false;
 // Set once any folder was given a custom icon.
 std::atomic<bool> g_iconsReplaced = false;
+std::atomic<bool> g_useFavicon = true;
 thread_local bool g_resolving = false;
 // Drive types by letter: (time << 8) | (type + 1), zero if not known yet.
 std::atomic<ULONGLONG> g_driveTypes[26];
@@ -163,7 +181,9 @@ bool IsSupportedFolder(const std::wstring& path) {
 
 // The caller is responsible for checking the folder with IsSupportedFolder.
 IconState ProbeIcon(const std::wstring& folder, const IconState* previous = nullptr) {
+    bool useFavicon = g_useFavicon;
     for (PCWSTR name : {L"folder.ico", L"favicon.ico"}) {
+        if (!useFavicon && name[1] == L'a') { continue; }
         std::wstring path = folder;
         if (path.back() != kSeparator) { path += kSeparator; }
         path += name;
@@ -386,6 +406,7 @@ void PollFolders() {
             found->second.icon = icon;
             found->second.checked = started;
         }
+        if (!icon.path.empty()) { g_iconsReplaced = true; }
         if (changed) { NotifyFolder(folder, entry.icon, icon); }
     }
 }
@@ -421,12 +442,23 @@ bool IsProcessJustStarted() {
     return current.QuadPart - start.QuadPart < tenSeconds;
 }
 
-bool InstallHook(void* target, void* replacement, void** original) {
+// Hooks a method found through a vtable. The method must be inside the
+// expected system module, so that a wrapper or a COM proxy is never hooked.
+template <typename Prototype>
+bool InstallHook(void* target, PCWSTR expectedModule, Prototype* hook, Prototype** original) {
     HMODULE module = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<PCWSTR>(target), &module) ||
+        module != GetModuleHandleW(expectedModule)) {
+        Wh_Log(L"A shell method is not inside %s; it was not hooked", expectedModule);
+        return false;
+    }
+    // Keep the module loaded for as long as the process lives.
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                GET_MODULE_HANDLE_EX_FLAG_PIN,
                            reinterpret_cast<PCWSTR>(target), &module)) { return false; }
-    return Wh_SetFunctionHook(target, replacement, original);
+    return WindhawkUtils::SetFunctionHook(reinterpret_cast<Prototype*>(target), hook, original);
 }
 
 bool InitializeHooks() {
@@ -448,17 +480,18 @@ bool InitializeHooks() {
     if (FAILED(status)) { return false; }
     void** folderTable = *reinterpret_cast<void***>(folder.pointer);
     void** iconTable = *reinterpret_cast<void***>(shellIcon.pointer);
-    if (!InstallHook(folderTable[10], reinterpret_cast<void*>(GetUIObjectOfHook),
-                     reinterpret_cast<void**>(&g_originalGetUIObjectOf)) ||
-        !InstallHook(iconTable[3], reinterpret_cast<void*>(GetIconOfHook),
-                     reinterpret_cast<void**>(&g_originalGetIconOf))) { return false; }
+    constexpr PCWSTR folderModule = L"windows.storage.dll";
+    if (!InstallHook(folderTable[10], folderModule, GetUIObjectOfHook,
+                     &g_originalGetUIObjectOf) ||
+        !InstallHook(iconTable[3], folderModule, GetIconOfHook,
+                     &g_originalGetIconOf)) { return false; }
     ComPointer<IThumbnailCache> thumbnailCache;
     status = CoCreateInstance(kThumbnailCacheClsid, nullptr, CLSCTX_INPROC_SERVER,
                               IID_PPV_ARGS(&thumbnailCache.pointer));
     if (FAILED(status)) { return false; }
     void** thumbnailTable = *reinterpret_cast<void***>(thumbnailCache.pointer);
-    return InstallHook(thumbnailTable[3], reinterpret_cast<void*>(GetThumbnailHook),
-                       reinterpret_cast<void**>(&g_originalGetThumbnail));
+    return InstallHook(thumbnailTable[3], L"thumbcache.dll", GetThumbnailHook,
+                       &g_originalGetThumbnail);
 }
 
 void StopWorker() {
@@ -478,6 +511,7 @@ void StopWorker() {
 }
 
 BOOL Wh_ModInit() {
+    g_useFavicon = Wh_GetIntSetting(L"useFavicon") != 0;
     HRESULT status = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (FAILED(status) && status != RPC_E_CHANGED_MODE) { return FALSE; }
     bool initialized = false;
@@ -506,20 +540,23 @@ void Wh_ModAfterInit() {
     }
 }
 
+void Wh_ModSettingsChanged() {
+    bool useFavicon = Wh_GetIntSetting(L"useFavicon") != 0;
+    if (g_useFavicon.exchange(useFavicon) == useFavicon) { return; }
+    {
+        // Forget the check times, so that every folder is looked at again.
+        std::lock_guard lock(g_cacheMutex);
+        for (auto& [folder, entry] : g_cache) { entry.checked = 0; }
+    }
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+}
+
 void Wh_ModBeforeUninit() { StopWorker(); }
 
 void Wh_ModUninit() {
     StopWorker();
-    std::vector<std::pair<std::wstring, CacheEntry>> snapshot;
-    {
-        std::lock_guard lock(g_cacheMutex);
-        snapshot.assign(g_cache.begin(), g_cache.end());
-        g_cache.clear();
-    }
-    for (const auto& [folder, entry] : snapshot) {
-        if (!entry.icon.path.empty()) { NotifyFolder(folder, entry.icon, {}); }
-    }
-    // Nothing to restore if no folder icon was ever replaced.
+    // One refresh of all icons brings the original folder icons back. Nothing
+    // to restore if no folder icon was ever replaced.
     if (g_iconsReplaced) {
         SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     }
