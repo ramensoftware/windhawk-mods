@@ -471,6 +471,8 @@ Credits: cips, AdmnistratoX, m417z and contributors to the original mods.
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <shobjidl.h>
+#include <shldisp.h>
+#include <servprov.h>
 #include <knownfolders.h>
 #include <sddl.h>
 #include <uiautomation.h>
@@ -1641,11 +1643,41 @@ static bool WriteAtomic(const std::wstring& path, const BYTE* data, size_t size,
 // a very large tile grid stays well below this buffer.
 constexpr size_t kStorageStringMaxChars = 256 * 1024;
 
+static std::wstring ScopedName(const wchar_t* name) {
+    const auto sid=ModStorageFiles::CurrentUserSid();
+    if (sid.empty()) return {};
+    return std::wstring(name)+L"_"+sid;
+}
+static std::wstring RawStorageString(const wchar_t* name) {
+    std::vector<wchar_t> buffer(kStorageStringMaxChars,L'\0');
+    const size_t n=Wh_GetStringValue(name,buffer.data(),buffer.size());
+    return n && n<buffer.size()?std::wstring(buffer.data(),n):std::wstring();
+}
 static std::wstring ReadStorageString(const wchar_t* name) {
-    std::vector<wchar_t> buffer(kStorageStringMaxChars, L'\0');
-    const size_t chars = Wh_GetStringValue(name, buffer.data(), buffer.size());
-    if (chars == 0 || chars >= buffer.size()) return {};
-    return std::wstring(buffer.data(), chars);
+    const auto scoped=ScopedName(name);
+    if (scoped.empty()) return {};
+    std::wstring value=RawStorageString(scoped.c_str());
+    if (!value.empty()) return value;
+    const auto migrated=scoped+L"_migrated";
+    if (!RawStorageString(migrated.c_str()).empty()) return {};
+    value=RawStorageString(name);
+    // A legacy marker is meaningful only if this user owns the referenced file.
+    if (value==L"WHSM_LAYOUT_FILE_V1") {
+        std::wstring contents;
+        if (!ModStorageFiles::ReadText(L"startMenuLayout.v1",contents,16*1024*1024) || contents.empty()) value.clear();
+    }
+    // No SID-scoped value is read through the legacy key once migration has
+    // completed. Never delete or overwrite the old shared value.
+    if (!value.empty() && !Wh_SetStringValue(scoped.c_str(),value.c_str())) return {};
+    if (!Wh_SetStringValue(migrated.c_str(),L"1")) return {};
+    return value;
+}
+static BOOL SetUserStorageString(const wchar_t* name,const wchar_t* value) {
+    const auto scoped=ScopedName(name);
+    if (scoped.empty()) return FALSE;
+    if (!Wh_SetStringValue(scoped.c_str(),value)) return FALSE;
+    const auto migrated=scoped+L"_migrated";
+    return Wh_SetStringValue(migrated.c_str(),L"1");
 }
 
 // Ordinary string storage is kept for small layouts. Larger ones are stored
@@ -1667,13 +1699,13 @@ static std::wstring ReadStoredTileLayout() {
 static bool WriteStoredTileLayout(const std::wstring& layout) {
     if (layout.empty() || layout.size() > kMaxTileLayoutFileChars) return false;
     if (layout.size() <= kPortableLayoutStringMaxChars)
-        return Wh_SetStringValue(L"startMenuLayout", layout.c_str()) != FALSE;
+        return SetUserStorageString(L"startMenuLayout", layout.c_str()) != FALSE;
 
     if (!ModStorageFiles::WriteTextAtomic(L"startMenuLayout.v1", layout, kMaxTileLayoutFileChars))
         return false;
     // Publish the small pointer only after the complete temporary file has
     // been flushed and atomically renamed into place.
-    return Wh_SetStringValue(L"startMenuLayout", kTileLayoutFileMarker) != FALSE;
+    return SetUserStorageString(L"startMenuLayout", kTileLayoutFileMarker) != FALSE;
 }
 
 static std::wstring TileLayoutImportFingerprint(const std::wstring& layout) {
@@ -1694,7 +1726,7 @@ static bool TileLayoutImportWasApplied(const std::wstring& layout) {
 
 static void RememberImportedTileLayout(const std::wstring& layout) {
     const std::wstring fingerprint = TileLayoutImportFingerprint(layout);
-    if (!Wh_SetStringValue(L"tileLayoutImported", fingerprint.c_str()))
+    if (!SetUserStorageString(L"tileLayoutImported", fingerprint.c_str()))
         Wh_Log(L"[TileLayout] failed to record the imported layout fingerprint");
 }
 
@@ -2843,7 +2875,7 @@ private:
             out += std::to_wstring(count);
             out += L'\t';
         }
-        if (!Wh_SetStringValue(L"startMenuLaunchCounts", out.c_str()))
+        if (!SetUserStorageString(L"startMenuLaunchCounts", out.c_str()))
             Wh_Log(L"[Catalog] failed to persist launch counts");
     }
 
@@ -5021,7 +5053,9 @@ public:
             NormalizeTileLayout();
         }
 
-        const size_t savedSizeChars = Wh_GetStringValue(L"startMenuWindowSize", savedWindowSize_, ARRAYSIZE(savedWindowSize_));
+        const std::wstring storedWindowSize=ReadStorageString(L"startMenuWindowSize");
+        const size_t savedSizeChars=storedWindowSize.size();
+        if (savedSizeChars < ARRAYSIZE(savedWindowSize_)) wcscpy_s(savedWindowSize_, storedWindowSize.c_str());
         int savedWidth = 0, savedHeight = 0;
         if (savedSizeChars > 0 && savedSizeChars < ARRAYSIZE(savedWindowSize_) &&
             swscanf_s(savedWindowSize_, L"%d,%d", &savedWidth, &savedHeight) == 2 &&
@@ -5339,7 +5373,7 @@ public:
         if (!hasUserSized_) return;
         wchar_t value[64]{};
         swprintf_s(value, L"%d,%d", savedWidth96_, savedHeight96_);
-        if (!Wh_SetStringValue(L"startMenuWindowSize", value))
+        if (!SetUserStorageString(L"startMenuWindowSize", value))
             Wh_Log(L"[StartMenu] failed to persist custom window size");
     }
 
@@ -11626,11 +11660,41 @@ static bool WriteTextAtomic(const wchar_t* stem, const std::wstring& text, size_
 // are moved to a per-user file instead of relying on backend-specific value limits.
 constexpr size_t kStorageStringMaxChars = 256 * 1024;
 
+static std::wstring ScopedName(const wchar_t* name) {
+    const auto sid=ModStorageFiles::CurrentUserSid();
+    if (sid.empty()) return {};
+    return std::wstring(name)+L"_"+sid;
+}
+static std::wstring RawStorageString(const wchar_t* name) {
+    std::vector<wchar_t> buffer(kStorageStringMaxChars,L'\0');
+    const size_t n=Wh_GetStringValue(name,buffer.data(),buffer.size());
+    return n && n<buffer.size()?std::wstring(buffer.data(),n):std::wstring();
+}
 static std::wstring ReadStorageString(const wchar_t* name) {
-    std::vector<wchar_t> buffer(kStorageStringMaxChars, L'\0');
-    const size_t chars = Wh_GetStringValue(name, buffer.data(), buffer.size());
-    if (chars == 0 || chars >= buffer.size()) return {};
-    return std::wstring(buffer.data(), chars);
+    const auto scoped=ScopedName(name);
+    if (scoped.empty()) return {};
+    std::wstring value=RawStorageString(scoped.c_str());
+    if (!value.empty()) return value;
+    const auto migrated=scoped+L"_migrated";
+    if (!RawStorageString(migrated.c_str()).empty()) return {};
+    value=RawStorageString(name);
+    // A legacy marker is meaningful only if this user owns the referenced file.
+    if (value==L"WHSM_LAYOUT_FILE_V1") {
+        std::wstring contents;
+        if (!ModStorageFiles::ReadText(L"skin81_StartMenuLayout.v1",contents,16*1024*1024) || contents.empty()) value.clear();
+    }
+    // No SID-scoped value is read through the legacy key once migration has
+    // completed. Never delete or overwrite the old shared value.
+    if (!value.empty() && !Wh_SetStringValue(scoped.c_str(),value.c_str())) return {};
+    if (!Wh_SetStringValue(migrated.c_str(),L"1")) return {};
+    return value;
+}
+static BOOL SetUserStorageString(const wchar_t* name,const wchar_t* value) {
+    const auto scoped=ScopedName(name);
+    if (scoped.empty()) return FALSE;
+    if (!Wh_SetStringValue(scoped.c_str(),value)) return FALSE;
+    const auto migrated=scoped+L"_migrated";
+    return Wh_SetStringValue(migrated.c_str(),L"1");
 }
 
 
@@ -11653,13 +11717,13 @@ static std::wstring ReadStoredTileLayout() {
 static bool WriteStoredTileLayout(const std::wstring& layout) {
     if (layout.empty() || layout.size() > kMaxTileLayoutFileChars) return false;
     if (layout.size() <= kPortableLayoutStringMaxChars)
-        return Wh_SetStringValue(L"skin81_startMenuLayout", layout.c_str()) != FALSE;
+        return SetUserStorageString(L"skin81_startMenuLayout", layout.c_str()) != FALSE;
 
     if (!ModStorageFiles::WriteTextAtomic(L"skin81_StartMenuLayout.v1", layout, kMaxTileLayoutFileChars))
         return false;
     // Publish the small pointer only after the complete temporary file has
     // been flushed and atomically renamed into place.
-    return Wh_SetStringValue(L"skin81_startMenuLayout", kTileLayoutFileMarker) != FALSE;
+    return SetUserStorageString(L"skin81_startMenuLayout", kTileLayoutFileMarker) != FALSE;
 }
 
 static std::wstring TileLayoutImportFingerprint(const std::wstring& layout) {
@@ -11680,7 +11744,7 @@ static bool TileLayoutImportWasApplied(const std::wstring& layout) {
 
 static void RememberImportedTileLayout(const std::wstring& layout) {
     const std::wstring fingerprint = TileLayoutImportFingerprint(layout);
-    if (!Wh_SetStringValue(L"skin81_tileLayoutImported", fingerprint.c_str()))
+    if (!SetUserStorageString(L"skin81_tileLayoutImported", fingerprint.c_str()))
         Wh_Log(L"[TileLayout] failed to record the imported layout fingerprint");
 }
 
@@ -12998,6 +13062,29 @@ public:
         return ok;
     }
 
+    // Adopt native Explorer icon copies by stable identity; keep the freshly
+    // scanned entries, Shell display names and registered colors from this scan.
+    void ApplyNativeIcons(const AppCatalog& native) {
+        unsigned copied=0;
+        for (auto& app:apps_) {
+            for (const auto& source:native.apps_) {
+                bool aumid=!app.aumid.empty() && !source.aumid.empty() &&
+                    _wcsicmp(app.aumid.c_str(),source.aumid.c_str())==0;
+                bool path=!app.path.empty() && !source.path.empty() &&
+                    _wcsicmp(app.path.c_str(),source.path.c_str())==0;
+                if ((!aumid && !path) || !source.hIcon) continue;
+                // Don't apply stale native shortcut icons after the shortcut changes.
+                if (path && (app.lastModified.dwLowDateTime || app.lastModified.dwHighDateTime) &&
+                    CompareFileTime(&app.lastModified,&source.lastModified)!=0) break;
+                HICON icon=CopyIcon(source.hIcon);
+                if (icon) { app.hIcon=CacheIcon(L"native:"+std::to_wstring(copied),icon); ++copied; }
+                break;
+            }
+        }
+        BuildSections();
+        Wh_Log(L"[CatalogIcons] applied %u native Explorer icons",copied);
+    }
+
     // Preserve live usage and folder expansion changes made while a refresh ran.
     void InheritUserState(const AppCatalog& previous) {
         // A background Shell provider can fail transiently. Keep a copy of the
@@ -13153,7 +13240,7 @@ private:
             out += std::to_wstring(count);
             out += L'\t';
         }
-        if (!Wh_SetStringValue(L"skin81_startMenuLaunchCounts", out.c_str()))
+        if (!SetUserStorageString(L"skin81_startMenuLaunchCounts", out.c_str()))
             Wh_Log(L"[Catalog] failed to persist launch counts");
     }
 
@@ -14035,6 +14122,96 @@ static std::vector<CachedStartButton> g_startCache; // guarded by g_startCacheLo
 static std::atomic<ULONGLONG> g_startCacheTick{ 0 };
 
 static void RefreshStartRects(bool logIt);
+static const CLSID kCLSID_ShellWindows = {
+    0x9BA05972, 0xF6A8, 0x11CF, {0xA4, 0x42, 0x00, 0xA0, 0xC9, 0x0A, 0x8F, 0x39}};
+static const GUID kSID_STopLevelBrowser = {
+    0x4C96BE40, 0x915C, 0x11CF, {0x99, 0xD3, 0x00, 0xAA, 0x00, 0x4A, 0xE8, 0x37}};
+
+static bool LaunchViaExplorer(const std::wstring& file, const std::wstring& args,
+                              const std::wstring& dir, PCWSTR verb) {
+    IShellWindows* psw = nullptr;
+    if (FAILED(CoCreateInstance(kCLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER,
+                                __uuidof(IShellWindows), (void**)&psw)) ||
+        !psw) {
+        return false;
+    }
+
+    VARIANT vtLoc, vtEmpty;
+    VariantInit(&vtLoc);
+    VariantInit(&vtEmpty);
+    vtLoc.vt = VT_I4;
+    vtLoc.lVal = CSIDL_DESKTOP;
+    long hwnd = 0;
+    IDispatch* pdisp = nullptr;
+    HRESULT hr = psw->FindWindowSW(&vtLoc, &vtEmpty, SWC_DESKTOP, &hwnd, SWFO_NEEDDISPATCH, &pdisp);
+    psw->Release();
+    if (hr != S_OK || !pdisp) return false;
+
+    IServiceProvider* psp = nullptr;
+    hr = pdisp->QueryInterface(__uuidof(IServiceProvider), (void**)&psp);
+    pdisp->Release();
+    if (FAILED(hr) || !psp) return false;
+
+    IShellBrowser* psb = nullptr;
+    hr = psp->QueryService(kSID_STopLevelBrowser, __uuidof(IShellBrowser), (void**)&psb);
+    psp->Release();
+    if (FAILED(hr) || !psb) return false;
+
+    IShellView* psv = nullptr;
+    hr = psb->QueryActiveShellView(&psv);
+    psb->Release();
+    if (FAILED(hr) || !psv) return false;
+
+    IDispatch* pbg = nullptr;
+    hr = psv->GetItemObject(SVGIO_BACKGROUND, __uuidof(IDispatch), (void**)&pbg);
+    psv->Release();
+    if (FAILED(hr) || !pbg) return false;
+
+    IShellFolderViewDual* pfvd = nullptr;
+    hr = pbg->QueryInterface(__uuidof(IShellFolderViewDual), (void**)&pfvd);
+    pbg->Release();
+    if (FAILED(hr) || !pfvd) return false;
+
+    IDispatch* papp = nullptr;
+    hr = pfvd->get_Application(&papp);
+    pfvd->Release();
+    if (FAILED(hr) || !papp) return false;
+
+    IShellDispatch2* psd = nullptr;
+    hr = papp->QueryInterface(__uuidof(IShellDispatch2), (void**)&psd);
+    papp->Release();
+    if (FAILED(hr) || !psd) return false;
+
+    BSTR bFile = SysAllocString(file.c_str());
+    VARIANT vArgs, vDir, vVerb, vShow;
+    VariantInit(&vArgs);
+    VariantInit(&vDir);
+    VariantInit(&vVerb);
+    VariantInit(&vShow);
+    if (!args.empty()) {
+        vArgs.vt = VT_BSTR;
+        vArgs.bstrVal = SysAllocString(args.c_str());
+    }
+    if (!dir.empty()) {
+        vDir.vt = VT_BSTR;
+        vDir.bstrVal = SysAllocString(dir.c_str());
+    }
+    vVerb.vt = VT_BSTR;
+    vVerb.bstrVal = SysAllocString(verb);
+    vShow.vt = VT_I4;
+    vShow.lVal = SW_SHOWNORMAL;
+
+    hr = psd->ShellExecute(bFile, vArgs, vDir, vVerb, vShow);
+
+    SysFreeString(bFile);
+    VariantClear(&vArgs);
+    VariantClear(&vDir);
+    VariantClear(&vVerb);
+    psd->Release();
+    return SUCCEEDED(hr);
+}
+
+
 static bool LaunchApplication(const std::wstring& path, const std::wstring& aumid) {
     if (!aumid.empty()) {
         ComPtr<IApplicationActivationManager> aam;
@@ -14046,6 +14223,7 @@ static bool LaunchApplication(const std::wstring& path, const std::wstring& aumi
         }
     }
     if (!path.empty()) {
+        if (LaunchViaExplorer(path,L"",L"",L"open")) return true;
         HINSTANCE hInst = ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         return ((INT_PTR)hInst > 32);
     }
@@ -14054,6 +14232,7 @@ static bool LaunchApplication(const std::wstring& path, const std::wstring& aumi
 
 static bool LaunchAdmin(const std::wstring& path) {
     if (!path.empty()) {
+        if (LaunchViaExplorer(path,L"",L"",L"runas")) return true;
         HINSTANCE hInst = ShellExecuteW(nullptr, L"runas", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         return ((INT_PTR)hInst > 32);
     }
@@ -14063,6 +14242,7 @@ static bool LaunchAdmin(const std::wstring& path) {
 static bool OpenExplorerLocation(const std::wstring& path) {
     if (!path.empty()) {
         std::wstring param = L"/select,\"" + path + L"\"";
+        if (LaunchViaExplorer(L"explorer.exe",param,L"",L"open")) return true;
         HINSTANCE hInst = ShellExecuteW(nullptr, L"open", L"explorer.exe", param.c_str(), nullptr, SW_SHOWNORMAL);
         return ((INT_PTR)hInst > 32);
     }
@@ -15326,6 +15506,11 @@ static void LaunchSettingEntry(const AppEntry& a) {
     switch (a.launchKind) {
     case SL_PIDL: {
         if (a.pidl.empty()) break;
+        PWSTR parsing=nullptr;
+        if (SUCCEEDED(SHGetNameFromIDList(reinterpret_cast<PCIDLIST_ABSOLUTE>(a.pidl.data()),SIGDN_DESKTOPABSOLUTEPARSING,&parsing)) && parsing) {
+            std::wstring name(parsing); CoTaskMemFree(parsing);
+            if (LaunchViaExplorer(name,L"",L"",L"open")) break;
+        }
         SHELLEXECUTEINFOW sei = {};
         sei.cbSize = sizeof(sei);
         sei.fMask = SEE_MASK_IDLIST | SEE_MASK_FLAG_NO_UI;
@@ -15335,10 +15520,25 @@ static void LaunchSettingEntry(const AppEntry& a) {
         break;
     }
     case SL_SHELLEXEC:
-        ShellExecuteW(NULL, L"open", a.launch.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        if (!LaunchViaExplorer(a.launch,L"",L"",L"open"))
+            ShellExecuteW(NULL, L"open", a.launch.c_str(), NULL, NULL, SW_SHOWNORMAL);
         break;
     case SL_PROCESS: {
         const std::wstring cmd = ExpandEnvW(a.launch);
+        size_t first=cmd.find_first_not_of(L" \t");
+        if (first!=std::wstring::npos) {
+            size_t end=first;
+            std::wstring file;
+            if (cmd[first]==L'"') {
+                end=cmd.find(L'"',first+1);
+                if (end!=std::wstring::npos) { file=cmd.substr(first+1,end-first-1); ++end; }
+            } else {
+                end=cmd.find_first_of(L" \t",first);
+                if (end==std::wstring::npos) end=cmd.size();
+                file=cmd.substr(first,end-first);
+            }
+            if (!file.empty() && LaunchViaExplorer(file,cmd.substr(end),L"",L"open")) break;
+        }
         std::vector<wchar_t> buf(cmd.begin(), cmd.end());
         buf.push_back(0);
         STARTUPINFOW si = {};
@@ -15360,7 +15560,8 @@ static void LaunchSettingEntry(const AppEntry& a) {
             ok = SUCCEEDED(mgr->ActivateApplication(kSettingsAumid, a.launch.c_str(), AO_NONE, &pid));
             mgr->Release();
         }
-        if (!ok) ShellExecuteW(NULL, L"open", a.parse.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        if (!ok && !LaunchViaExplorer(a.parse,L"",L"",L"open"))
+            ShellExecuteW(NULL, L"open", a.parse.c_str(), NULL, NULL, SW_SHOWNORMAL);
         break;
     }
     default:
@@ -15646,7 +15847,9 @@ public:
             RepairTileGridLayout();
         }
 
-        const size_t savedSizeChars = Wh_GetStringValue(L"skin81_startMenuWindowSize", savedWindowSize_, ARRAYSIZE(savedWindowSize_));
+        const std::wstring storedWindowSize=ReadStorageString(L"skin81_startMenuWindowSize");
+        const size_t savedSizeChars=storedWindowSize.size();
+        if (savedSizeChars < ARRAYSIZE(savedWindowSize_)) wcscpy_s(savedWindowSize_, storedWindowSize.c_str());
         int savedWidth = 0, savedHeight = 0;
         if (savedSizeChars > 0 && savedSizeChars < ARRAYSIZE(savedWindowSize_) &&
             swscanf_s(savedWindowSize_, L"%d,%d", &savedWidth, &savedHeight) == 2 &&
@@ -15983,7 +16186,7 @@ public:
         if (!hasUserSized_) return;
         wchar_t value[64]{};
         swprintf_s(value, L"%d,%d", savedWidth96_, savedHeight96_);
-        if (!Wh_SetStringValue(L"skin81_startMenuWindowSize", value))
+        if (!SetUserStorageString(L"skin81_startMenuWindowSize", value))
             Wh_Log(L"[StartMenu] failed to persist custom window size");
     }
 
@@ -16868,24 +17071,20 @@ private:
         ScopedCom com;
         try {
             auto result = std::make_unique<AppCatalog>();
-            bool cached=false;
-            if (self->catalogQuickPhase_) {
-                cached=result->LoadSnapshot();
-            } else {
-                // Explorer uses exactly the 1507 catalog provider in the native
-                // shell process. Never exchange process-local HICON handles.
-                for (int i=0;i<600 && !g_stopRequested.load();++i) {
+            bool cached=self->catalogQuickPhase_ && result->LoadSnapshot();
+            if (!cached && !g_stopRequested.load()) result->Refresh(self->catalogQuickPhase_);
+            if (!self->catalogQuickPhase_ && !g_stopRequested.load()) {
+                AppCatalog native;
+                for (int i=0;i<(self->catalogEnriching_ ? 600 : 1) && !g_stopRequested.load();++i) {
                     UniqueHandle ready(OpenEventW(SYNCHRONIZE,FALSE,L"Local\\windhawk-start81-native-catalog_" WH_MOD_ID));
                     if (ready && WaitForSingleObject(ready.get(),100)==WAIT_OBJECT_0) {
-                        cached=result->LoadSnapshot(L"skin81_native1507_AppSnapshot.v1");
+                        if (native.LoadSnapshot(L"skin81_native1507_AppSnapshot.v1")) result->ApplyNativeIcons(native);
                         break;
                     }
                     if (!ready) Sleep(100);
                 }
-                Wh_Log(L"[CatalogIcons] native Explorer catalog loaded=%d",cached);
             }
-            if (!cached && !g_stopRequested.load()) result->Refresh(self->catalogQuickPhase_);
-            if (!g_stopRequested.load() && !result->SaveSnapshot())
+            if (!g_stopRequested.load() && !cached && !result->SaveSnapshot())
                 Wh_Log(L"[CatalogCache] snapshot unavailable; next start uses live scan");
             Wh_Log(L"[CatalogPerf] worker elapsed=%llu ms quick=%d", GetTickCount64()-started,self->catalogQuickPhase_);
             { std::lock_guard<std::mutex> guard(self->catalogMutex_);
@@ -20362,7 +20561,7 @@ private:
             const StartScreenSearch::AppEntry extra = searchExtraCatalog_[entry.searchExtraIndex];
             Hide();
             if (entry.searchExtra==1) StartScreenSearch::LaunchSettingEntry(extra);
-            else ShellExecuteW(nullptr,L"open",extra.parse.c_str(),nullptr,nullptr,SW_SHOWNORMAL);
+            else (LaunchViaExplorer(extra.parse,L"",L"",L"open") ? (HINSTANCE)33 : ShellExecuteW(nullptr,L"open",extra.parse.c_str(),nullptr,nullptr,SW_SHOWNORMAL));
             return;
         }
         const std::wstring path = entry.path, aumid = entry.aumid;
@@ -20679,7 +20878,7 @@ private:
             if (command == IDM_OPEN_APP && searchExtra) {
                 Hide();
                 if (searchKind == 1) StartScreenSearch::LaunchSettingEntry(*searchExtra);
-                else if (searchKind == 2) ShellExecuteW(nullptr,L"open",searchExtra->parse.c_str(),nullptr,nullptr,SW_SHOWNORMAL);
+                else if (searchKind == 2) (LaunchViaExplorer(searchExtra->parse,L"",L"",L"open") ? (HINSTANCE)33 : ShellExecuteW(nullptr,L"open",searchExtra->parse.c_str(),nullptr,nullptr,SW_SHOWNORMAL));
             }
             return;
         }
@@ -21659,6 +21858,7 @@ static bool WaitForMainExplorerReady() {
 static HANDLE g_toolStopEvent = nullptr;
 static HANDLE g_toolMonitorThread = nullptr;
 static HANDLE g_explorerBridgeThread = nullptr;
+static HANDLE g_explorerBridgeStop = nullptr;
 static HANDLE g_nativeCatalogThread = nullptr;
 static HANDLE g_nativeCatalogReady = nullptr;
 static std::atomic<bool> g_toolStopping{false};
@@ -21727,7 +21927,11 @@ void WhTool_ModUninit() {
     if (g_toolStopEvent) {CloseHandle(g_toolStopEvent);g_toolStopEvent=nullptr;}
 }
 static DWORD WINAPI ExplorerBridgeProc(void*) {
-    if (WaitForMainExplorerReady() && !g_stopRequested.load()) InstallShellMessageHooks();
+    if (WaitForMainExplorerReady() && !g_stopRequested.load()) {
+        InstallShellMessageHooks();
+        WaitForSingleObject(g_explorerBridgeStop,INFINITE);
+        RemoveShellMessageHooks();
+    }
     return 0;
 }
 static DWORD WINAPI NativeCatalogWorker(void*) {
@@ -21760,10 +21964,18 @@ BOOL ExplorerModInit() {
         g_nativeCatalogThread=CreateThread(nullptr,0,NativeCatalogWorker,nullptr,0,nullptr);
         if (!g_nativeCatalogThread) Wh_Log(L"[CatalogIcons] native worker creation failed");
     }
+    g_explorerBridgeStop=CreateEventW(nullptr,TRUE,FALSE,nullptr);
+    if (!g_explorerBridgeStop) {
+        g_stopRequested=true;
+        if (g_nativeCatalogThread) {WaitForSingleObject(g_nativeCatalogThread,INFINITE);CloseHandle(g_nativeCatalogThread);g_nativeCatalogThread=nullptr;}
+        if (g_nativeCatalogReady) {CloseHandle(g_nativeCatalogReady);g_nativeCatalogReady=nullptr;}
+        return FALSE;
+    }
     InstallNativeKeyboardStartHook();
     g_explorerBridgeThread=CreateThread(nullptr,0,ExplorerBridgeProc,nullptr,0,nullptr);
     if (!g_explorerBridgeThread) {
         Wh_Log(L"[Bridge] failed to start shell hook thread: %u",GetLastError());
+        CloseHandle(g_explorerBridgeStop);g_explorerBridgeStop=nullptr;
         g_stopRequested=true;
         if (g_nativeCatalogThread) {WaitForSingleObject(g_nativeCatalogThread,INFINITE);CloseHandle(g_nativeCatalogThread);g_nativeCatalogThread=nullptr;}
         if (g_nativeCatalogReady) {CloseHandle(g_nativeCatalogReady);g_nativeCatalogReady=nullptr;}
@@ -21776,6 +21988,7 @@ void ExplorerModUninit() {
     if (g_explorerRuntimeStopped) return;
     g_explorerRuntimeStopped=true;
     g_stopRequested=true;
+    if (g_explorerBridgeStop) SetEvent(g_explorerBridgeStop);
     if (g_explorerBridgeThread) {
         WaitForSingleObject(g_explorerBridgeThread,INFINITE);
         CloseHandle(g_explorerBridgeThread);g_explorerBridgeThread=nullptr;
@@ -21785,7 +21998,7 @@ void ExplorerModUninit() {
         CloseHandle(g_nativeCatalogThread);g_nativeCatalogThread=nullptr;
     }
     if (g_nativeCatalogReady) {CloseHandle(g_nativeCatalogReady);g_nativeCatalogReady=nullptr;}
-    RemoveShellMessageHooks();
+    if (g_explorerBridgeStop) {CloseHandle(g_explorerBridgeStop);g_explorerBridgeStop=nullptr;}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
