@@ -81,6 +81,12 @@ The padding and the side gaps of the separators follow the display scaling.
 The offset of the expand arrows is a small correction, and is applied in
 physical pixels regardless of the scaling.
 
+The mod was only tested with a single monitor. With several monitors of
+different scaling, the side gaps of the separators can be off on a monitor
+whose scaling differs from the one of the main monitor. A folder window which
+was moved to such a monitor can also keep the adjusted padding after the mod
+is turned off, until it's reopened.
+
 The automatic color of the thin divider is chosen when a folder window is
 opened. Windows which are already open when the theme changes keep the old
 color until they're reopened. The divider is left alone in the high contrast
@@ -134,7 +140,7 @@ light and the dark theme.
 // ==WindhawkModSettings==
 /*
 - navPaneDivider: true
-  $name: Thin divider between the navigation pane and the files
+  $name: Thin divider between the navigation pane and the files area
   $description: >-
     Replaces the strip between the navigation pane and the files area with a
     line of 1 pixel, of the same color as the line below the command bar. The
@@ -186,6 +192,7 @@ light and the dark theme.
 
 #include <commctrl.h>
 
+#include <algorithm>
 #include <atomic>
 #include <map>
 #include <vector>
@@ -694,6 +701,10 @@ static BOOL WINAPI Polyline_Hook(HDC hdc, const POINT* points, int count) {
 
     int inset = MulDiv(g_settings.navSeparatorInset, dpi, 96);
     POINT adjusted[2] = {points[0], points[1]};
+    if (adjusted[0].x > adjusted[1].x) {
+        std::swap(adjusted[0], adjusted[1]);
+    }
+
     adjusted[0].x += inset;
     adjusted[1].x -= inset;
     if (adjusted[0].x >= adjusted[1].x) {
@@ -808,7 +819,7 @@ static HRESULT WINAPI DUIXmlParser_CreateElement_Hook(void* pThis, PCWSTR resid,
 }
 
 // Returns the root element of a DirectUIHWND window.
-static void* GetItemsViewElement(HWND hWnd) {
+static void* GetRootElement(HWND hWnd) {
     // A DirectUIHWND window keeps a pointer to its root element, or null if
     // there's no element. It's read from the thread of the window.
     void* element = (void*)GetWindowLongPtrW(hWnd, 0);
@@ -885,7 +896,7 @@ static void WINAPI ApplyToNavTreeWindow(HWND hWnd, void* param) {
 static void WINAPI ApplyToFrameWindow(HWND hWnd, void* param) {
     const ApplyParam& applyParam = *(const ApplyParam*)param;
     ATOM atom = GetNavPaneSizerAtom();
-    void* element = (applyParam.divider || applyParam.navPadding) && atom ? GetItemsViewElement(hWnd) : nullptr;
+    void* element = (applyParam.divider || applyParam.navPadding) && atom ? GetRootElement(hWnd) : nullptr;
     void* sizer = element ? Element_FindDescendent(element, atom) : nullptr;
     if (!sizer) {
         return;
@@ -964,31 +975,13 @@ static void LoadSettings() {
         g_settings.navPaneDividerColor = 0xFF000000 | ((rgb & 0xFF) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 0xFF);
     }
 
-    g_settings.navPanePadding = Wh_GetIntSetting(L"navPanePadding");
-    if (g_settings.navPanePadding < -1 || g_settings.navPanePadding > 32) {
-        g_settings.navPanePadding = 1;
-    }
-
-    g_settings.navPanePaddingVertical = Wh_GetIntSetting(L"navPanePaddingVertical");
-    if (g_settings.navPanePaddingVertical < 0 || g_settings.navPanePaddingVertical > 64) {
-        g_settings.navPanePaddingVertical = 6;
-    }
-
+    // Values out of the range are brought to the nearest value of the range.
+    g_settings.navPanePadding = std::clamp(Wh_GetIntSetting(L"navPanePadding"), -1, 32);
+    g_settings.navPanePaddingVertical = std::clamp(Wh_GetIntSetting(L"navPanePaddingVertical"), 0, 64);
     g_settings.navPinIconsHide = Wh_GetIntSetting(L"navPinIconsHide");
-    g_settings.navPinIconOpacity = Wh_GetIntSetting(L"navPinIconOpacity");
-    if (g_settings.navPinIconOpacity < 0 || g_settings.navPinIconOpacity > 99) {
-        g_settings.navPinIconOpacity = 0;
-    }
-
-    g_settings.navSeparatorInset = Wh_GetIntSetting(L"navSeparatorInset");
-    if (g_settings.navSeparatorInset < -64 || g_settings.navSeparatorInset > 64) {
-        g_settings.navSeparatorInset = 0;
-    }
-
-    g_settings.navArrowOffset = Wh_GetIntSetting(L"navArrowOffset");
-    if (g_settings.navArrowOffset < -8 || g_settings.navArrowOffset > 8) {
-        g_settings.navArrowOffset = -1;
-    }
+    g_settings.navPinIconOpacity = std::clamp(Wh_GetIntSetting(L"navPinIconOpacity"), 0, 99);
+    g_settings.navSeparatorInset = std::clamp(Wh_GetIntSetting(L"navSeparatorInset"), -64, 64);
+    g_settings.navArrowOffset = std::clamp(Wh_GetIntSetting(L"navArrowOffset"), -8, 8);
 }
 
 template <typename T>
@@ -1153,7 +1146,7 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD f
     HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
     if (module && !g_lateInitStarted) {
         DWORD lastError = GetLastError();
-        if (module == GetModuleHandleW(L"explorerframe.dll")) {
+        if (GetModuleHandleW(L"explorerframe.dll")) {
             LateInit();
         }
 
@@ -1221,9 +1214,9 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    // Don't unload in the middle of setting the hooks. Wait for a limited
-    // time, the symbols might be loading.
-    for (int i = 0; i < 500 && g_lateInitRefCount > 0; i++) {
+    // Don't unload in the middle of setting the hooks. The symbols might be
+    // loading, which can take a while.
+    while (g_lateInitRefCount > 0) {
         Sleep(10);
     }
 
