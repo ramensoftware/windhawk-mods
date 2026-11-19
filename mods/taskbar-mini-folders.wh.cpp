@@ -21,10 +21,15 @@ folder. Click an icon to launch it.
 
 Use it to group apps (Work, Games, Tools) and keep the taskbar short.
 
+![An open mini folder with its apps](https://i.imgur.com/h4lhXaY.png)
+
+![Mini folders in the taskbar and an empty mini folder](https://i.imgur.com/8uHZ4Qf.png)
+
 ## How it works
 
 Every mini folder is a real folder on disk. By default it is
-`%USERPROFILE%\TaskbarFolders\<folder name>`, and the mod creates it for you.
+`%USERPROFILE%\TaskbarFolders\<folder name>`. The mod creates the folder the
+first time you use **+ Add...** or **Open folder** in it, not before.
 Whatever is in that folder shows up in the mini folder: shortcuts, programs,
 files and other folders. Hidden and system files are skipped. Items are sorted
 by name.
@@ -35,12 +40,15 @@ by name.
 |---|---|
 | Click a mini folder | Opens its panel. Click it again, press Esc or click elsewhere to close the panel |
 | Click an icon in the panel | Opens the app, file or folder |
-| Right-click an icon | Open, Open file location, Remove from this folder |
+| Right-click an icon | Open, Open file location, Remove from this folder (Delete for real files and folders) |
 | **+ Add...** | Pick apps or files. A shortcut to each one is created in the folder |
 | **Open folder** | Opens the folder in Explorer, so you can drag items in, rename or delete them |
 
-"Remove from this folder" sends the item to the Recycle Bin. For shortcuts it
-does not ask. For real files and folders Windows may ask you to confirm first.
+"Remove from this folder" sends a shortcut to the Recycle Bin without asking.
+For a real file or folder (not a shortcut) the menu item is called "Delete",
+because it removes the real item: it goes to the Recycle Bin, and Windows may
+ask you to confirm first. On a drive without a Recycle Bin (for example a
+network drive) the item is deleted permanently, and Windows asks first.
 
 The file picker of **+ Add...** starts in the Start menu programs folder, where
 most installed apps have a shortcut.
@@ -57,6 +65,16 @@ most installed apps have a shortcut.
 
 Renaming a mini folder that uses the default path points it to a new, empty
 folder. The old folder and its contents stay on disk.
+
+## Files and folders the mod creates
+
+* The folder of a mini folder (by default inside `%USERPROFILE%\TaskbarFolders`),
+  created when you first use **+ Add...** or **Open folder** in it.
+* The shortcuts that **+ Add...** puts into that folder.
+
+These are your files. The mod never deletes them, so they stay on disk after
+the mod is disabled or removed. Delete the `TaskbarFolders` folder yourself if
+you no longer need it.
 
 ## Performance
 
@@ -75,6 +93,8 @@ folder. The old folder and its contents stay on disk.
   you open that mini folder.
 * Dragging items onto a mini folder is not supported. Use **+ Add...** or
   **Open folder**.
+* The panel does not scroll. A folder with many items gets more icons per row
+  so that the panel fits the screen. Items that still don't fit are not shown.
 
 Tip: unpin the normal taskbar icons and keep everything in mini folders.
 */
@@ -126,7 +146,8 @@ Tip: unpin the normal taskbar icons and keep everything in mini folders.
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.Core.h>
-#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>  // ButtonBase::Click
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -136,6 +157,7 @@ Tip: unpin the normal taskbar icons and keep everything in mini folders.
 #include <algorithm>
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -195,11 +217,8 @@ std::wstring SanitizeFileName(std::wstring s) {
 void LoadSettings() {
     Settings s;
     for (int i = 0; i < 64; i++) {
-        PCWSTR name = Wh_GetStringSetting(L"folders[%d].name", i);
-        PCWSTR path = Wh_GetStringSetting(L"folders[%d].path", i);
-        std::wstring n = name, p = path;
-        Wh_FreeStringSetting(name);
-        Wh_FreeStringSetting(path);
+        std::wstring n = WindhawkUtils::StringSetting::make(L"folders[%d].name", i).get();
+        std::wstring p = WindhawkUtils::StringSetting::make(L"folders[%d].path", i).get();
         if (n.empty() && p.empty()) {
             break;
         }
@@ -214,18 +233,15 @@ void LoadSettings() {
         }
         f.name = n.empty() ? std::wstring(PathFindFileNameW(f.dir.c_str())) : n;
 
-        // Make sure the folder exists so the user can drop shortcuts into it.
-        SHCreateDirectoryExW(nullptr, f.dir.c_str(), nullptr);
-
+        // The folder is not created here: see EnsureFolderExists.
         s.folders.push_back(std::move(f));
     }
 
-    PCWSTR position = Wh_GetStringSetting(L"position");
+    WindhawkUtils::StringSetting position = WindhawkUtils::StringSetting::make(L"position");
     // 0 = next to Start, 1 = after the last app, 2 = far left edge.
-    s.mode = wcscmp(position, L"right") == 0  ? kPosEnd
-             : wcscmp(position, L"edge") == 0 ? kPosEdge
-                                              : kPosStart;
-    Wh_FreeStringSetting(position);
+    s.mode = wcscmp(position.get(), L"right") == 0  ? kPosEnd
+             : wcscmp(position.get(), L"edge") == 0 ? kPosEdge
+                                                    : kPosStart;
 
     s.buttonSize = std::clamp(Wh_GetIntSetting(L"buttonSize"), 28, 56);
     s.columns = std::clamp(Wh_GetIntSetting(L"columns"), 1, 10);
@@ -237,6 +253,13 @@ void LoadSettings() {
 // ============================================================================
 //  Folder contents + icons
 // ============================================================================
+
+// A mini folder's directory is created only when the user acts on it
+// ("+ Add...", "Open folder"), so the mod leaves nothing on disk for folders
+// that are never used.
+void EnsureFolderExists(const std::wstring& dir) {
+    SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);
+}
 
 bool IsShortcutExt(PCWSTR path) {
     PCWSTR ext = PathFindExtensionW(path);
@@ -466,8 +489,18 @@ constexpr double kPanelSideMargin = 4;
 const UINT WM_APP_SHOW_FOLDER = WM_APP + 0x51;
 
 std::atomic<bool> g_unloading;
+std::atomic<HWND> g_popupWnd;
+
+// Counts the queued injection callbacks that still exist, run or not, so
+// Wh_ModUninit can wait until none of them is left in the dispatcher.
 std::atomic<int> g_pendingDispatch;
-HWND g_popupWnd;
+
+struct PendingDispatchGuard {
+    PendingDispatchGuard() { g_pendingDispatch++; }
+    ~PendingDispatchGuard() { g_pendingDispatch--; }
+    PendingDispatchGuard(const PendingDispatchGuard&) = delete;
+    PendingDispatchGuard& operator=(const PendingDispatchGuard&) = delete;
+};
 
 struct FrameState {
     winrt::weak_ref<FrameworkElement> frame;
@@ -569,6 +602,7 @@ wuxc::Button MakeFolderButton(int index, const FolderDef& folder, int size,
     button.HorizontalContentAlignment(HorizontalAlignment::Center);
     button.VerticalContentAlignment(VerticalAlignment::Center);
     wuxc::ToolTipService::SetToolTip(button, winrt::box_value(folder.name));
+    Automation::AutomationProperties::SetName(button, folder.name);
 
     double tile = std::round(size * 0.78);
     double gap = 2;
@@ -627,6 +661,35 @@ wuxc::Button MakeFolderButton(int index, const FolderDef& folder, int size,
     g_clickRegs.push_back({winrt::make_weak(button), token});
 
     return button;
+}
+
+// Are the taskbar icons aligned to the left (Settings > Personalization >
+// Taskbar > Taskbar behaviors)? Asked on every layout pass, so the registry is
+// read at most twice a second.
+bool IsTaskbarLeftAligned() {
+    static ULONGLONG lastRead;
+    static bool leftAligned;
+    ULONGLONG now = GetTickCount64();
+    if (!lastRead || now - lastRead >= 500) {
+        DWORD value = 1, size = sizeof(value);
+        RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                     L"TaskbarAl", RRF_RT_REG_DWORD, nullptr, &value, &size);
+        leftAligned = value == 0;
+        lastRead = now;
+    }
+    return leftAligned;
+}
+
+// How far the app buttons are moved to make room for the mini folders.
+// Centered icons: half the panel width, so folders + apps stay centered.
+// Left-aligned icons: the whole width when the folders come first, nothing
+// when they come last.
+double RepeaterShift(int mode, double width, bool leftAligned) {
+    if (mode == kPosStart) {
+        return leftAligned ? width : width / 2;
+    }
+    return leftAligned ? 0 : -width / 2;
 }
 
 bool InjectIntoFrame(FrameworkElement frame) {
@@ -698,11 +761,12 @@ bool InjectIntoFrame(FrameworkElement frame) {
         inj.changedMargin = true;
     } else {
         // Next to the Start button / after the last app: shift the app
-        // buttons by half the panel width so folders + apps stay centered,
-        // then keep the panel glued to the first/last button.
+        // buttons to make room (see RepeaterShift), then keep the panel
+        // glued to the first/last button.
+        wuxm::TranslateTransform shift = nullptr;
         if (!repeater.RenderTransform()) {
-            wuxm::TranslateTransform shift;
-            shift.X(s.mode == kPosStart ? width / 2 : -width / 2);
+            shift = wuxm::TranslateTransform();
+            shift.X(RepeaterShift(s.mode, width, IsTaskbarLeftAligned()));
             repeater.RenderTransform(shift);
             inj.setTransform = true;
         }
@@ -712,7 +776,8 @@ bool InjectIntoFrame(FrameworkElement frame) {
         auto weakRepeater = winrt::make_weak(repeater);
         auto weakPanel = winrt::make_weak(panel);
         inj.layoutToken = repeater.LayoutUpdated(
-            [weakRoot, weakRepeater, weakPanel, mode, contentWidth](auto const&, auto const&) {
+            [weakRoot, weakRepeater, weakPanel, shift, mode, width, contentWidth](auto const&,
+                                                                                  auto const&) {
                 if (g_unloading) {
                     return;
                 }
@@ -722,6 +787,14 @@ bool InjectIntoFrame(FrameworkElement frame) {
                     auto pnl = weakPanel.get();
                     if (!root || !rep || !pnl) {
                         return;
+                    }
+
+                    // The taskbar alignment can be changed at any time.
+                    if (shift) {
+                        double shiftX = RepeaterShift(mode, width, IsTaskbarLeftAligned());
+                        if (shift.X() != shiftX) {
+                            shift.X(shiftX);
+                        }
                     }
 
                     // Bounds of the visible buttons (Start + apps).
@@ -842,8 +915,11 @@ void QueueInject(FrameworkElement const& frame) {
     state->queued = true;
     state->attempts++;
 
+    // Each copy of the callback holds `pending`, so the counter drops only
+    // when the last copy is gone: after it ran, or if it was dropped unrun.
+    auto pending = std::make_shared<PendingDispatchGuard>();
     auto weak = winrt::make_weak(frame);
-    auto run = [weak]() {
+    auto run = [weak, pending]() {
         if (!g_unloading) {
             try {
                 if (auto f = weak.get()) {
@@ -865,10 +941,8 @@ void QueueInject(FrameworkElement const& frame) {
                 }
             }
         }
-        g_pendingDispatch--;
     };
 
-    g_pendingDispatch++;
     bool queued = false;
     try {
         // XAML islands (the Windows 11 taskbar) use DispatcherQueue.
@@ -888,7 +962,6 @@ void QueueInject(FrameworkElement const& frame) {
         Wh_Log(L"Queue error %08X", winrt::to_hresult());
     }
     if (!queued) {
-        g_pendingDispatch--;
         state->queued = false;
     }
 }
@@ -964,6 +1037,7 @@ void RequestRebuild() {
 // ============================================================================
 
 const UINT WM_APP_REFRESH_PREVIEWS = WM_APP + 0x52;
+const UINT WM_APP_HIDE = WM_APP + 0x53;
 
 std::atomic<bool> g_refreshQueued;
 
@@ -994,6 +1068,9 @@ void RefreshPreviews() {
             p.paths.resize(kPreviewCount);
         }
         for (auto& path : p.paths) {
+            if (g_unloading) {
+                return;
+            }
             IconPixels px;
             if (!GetIconPixels(path, kPreviewIconPx, px)) {
                 px = {};
@@ -1103,6 +1180,12 @@ void PopupHide() {
 }
 
 void PopupShow(int folder, POINT anchor, bool force) {
+    // The window may already be gone when a file picker, a menu or a
+    // confirmation returns while the mod is being unloaded.
+    if (g_unloading || !IsWindow(g_popupWnd)) {
+        return;
+    }
+
     if (!force) {
         if (IsWindowVisible(g_popupWnd) && g_popup.folder == folder) {
             PopupHide();
@@ -1144,10 +1227,22 @@ void PopupShow(int folder, POINT anchor, bool force) {
                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                     CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
 
+    // The panel doesn't scroll: it must fit the work area of the monitor.
+    MONITORINFO mi{sizeof(mi)};
+    GetMonitorInfo(mon, &mi);
+    RECT work = mi.rcWork;
+    int gapPx = Px(10);
+    int pad = Px(12), headerH = Px(44), cellW = Px(84), cellH = Px(82);
+    int maxCols = std::max(1, (int)(work.right - work.left - gapPx * 2 - pad * 2) / cellW);
+    int maxRows = std::max(1, (int)(work.bottom - work.top - gapPx * 2 - headerH - pad) / cellH);
+
     // Items + icons. Opening the same, unchanged folder again reuses them.
     int iconPx = Px(40);
     ULONGLONG stamp = 0;
     auto paths = ListFolder(g_popup.dir, &stamp);
+    if (paths.size() > (size_t)maxCols * maxRows) {
+        paths.resize((size_t)maxCols * maxRows);  // the rest can't be shown
+    }
     bool reuse = g_popup.itemsDir == g_popup.dir && g_popup.itemsStamp == stamp &&
                  g_popup.iconPx == iconPx && g_popup.items.size() == paths.size();
     for (size_t i = 0; reuse && i < paths.size(); i++) {
@@ -1157,6 +1252,9 @@ void PopupShow(int folder, POINT anchor, bool force) {
         PopupFreeItems();
         g_popup.iconPx = iconPx;
         for (auto& p : paths) {
+            if (g_unloading) {
+                return;
+            }
             PopupItem it;
             it.path = p;
             it.label = DisplayNameOf(p);
@@ -1187,11 +1285,14 @@ void PopupShow(int folder, POINT anchor, bool force) {
         }
     }
 
-    // Layout.
-    int pad = Px(12), headerH = Px(44), cellW = Px(84), cellH = Px(82);
+    // Layout. A folder with too many rows for the screen gets more columns.
     int n = (int)g_popup.items.size();
-    int cols = std::max(1, std::min(s.columns, std::max(n, 1)));
+    int cols = std::max(1, std::min({s.columns, maxCols, std::max(n, 1)}));
     int rows = n ? (n + cols - 1) / cols : 1;
+    if (rows > maxRows) {
+        cols = std::min(maxCols, (n + maxRows - 1) / maxRows);
+        rows = (n + cols - 1) / cols;
+    }
     int w = std::max(pad * 2 + cols * cellW, Px(300));
     int h = headerH + rows * cellH + pad;
 
@@ -1218,10 +1319,6 @@ void PopupShow(int folder, POINT anchor, bool force) {
     g_popup.rcEmpty = {pad, headerH, w - pad, headerH + cellH};
 
     // Position above (or below) the taskbar, centered on the click.
-    MONITORINFO mi{sizeof(mi)};
-    GetMonitorInfo(mon, &mi);
-    RECT work = mi.rcWork;
-    int gapPx = Px(10);
     int x = anchor.x - w / 2;
     x = std::max((int)work.left + gapPx, std::min(x, (int)work.right - w - gapPx));
     int y;
@@ -1409,6 +1506,9 @@ void PopupAddFiles() {
         if (SUCCEEDED(dlg->GetResults(results.put()))) {
             DWORD count = 0;
             results->GetCount(&count);
+            if (count) {
+                EnsureFolderExists(dir);
+            }
             for (DWORD i = 0; i < count; i++) {
                 winrt::com_ptr<IShellItem> item;
                 PWSTR path = nullptr;
@@ -1430,12 +1530,15 @@ void PopupItemMenu(int index, POINT screenPt) {
         return;
     }
     std::wstring path = g_popup.items[index].path;
+    // A shortcut is only removed from the mini folder. Anything else is the
+    // real file or folder, so the menu says what happens to it.
+    bool shortcut = IsShortcutExt(path.c_str());
 
     HMENU menu = CreatePopupMenu();
     AppendMenuW(menu, MF_STRING, 1, L"Open");
     AppendMenuW(menu, MF_STRING, 2, L"Open file location");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, 3, L"Remove from this folder");
+    AppendMenuW(menu, MF_STRING, 3, shortcut ? L"Remove from this folder" : L"Delete");
     int cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, screenPt.x, screenPt.y, 0,
                              g_popupWnd, nullptr);
     DestroyMenu(menu);
@@ -1460,20 +1563,23 @@ void PopupItemMenu(int index, POINT screenPt) {
                 }
             }
         }
-        std::wstring args = L"/select,\"" + target + L"\"";
-        ShellExecuteW(nullptr, nullptr, L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
+        if (PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(target.c_str())) {
+            SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
+            ILFree(pidl);
+        }
     } else if (cmd == 3) {
         int folder = g_popup.folder;
         POINT anchor = g_popup.anchor;
-        bool shortcut = IsShortcutExt(path.c_str());
         std::wstring from = path;
         from.push_back(L'\0');  // double null terminated
         SHFILEOPSTRUCTW op{};
         op.hwnd = g_popupWnd;
         op.wFunc = FO_DELETE;
         op.pFrom = from.c_str();
-        // Recycle Bin; ask first unless it's just a shortcut.
-        op.fFlags = FOF_ALLOWUNDO | FOF_SILENT | (shortcut ? FOF_NOCONFIRMATION : 0);
+        // Recycle Bin; ask first unless it's just a shortcut. Always ask when
+        // the item can't be recycled and would be deleted permanently.
+        op.fFlags = FOF_ALLOWUNDO | FOF_SILENT | FOF_WANTNUKEWARNING |
+                    (shortcut ? FOF_NOCONFIRMATION : 0);
         SHFileOperationW(&op);
         PopupShow(folder, anchor, true);
     }
@@ -1487,6 +1593,10 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
         case WM_APP_REFRESH_PREVIEWS:
             RefreshPreviews();
+            return 0;
+
+        case WM_APP_HIDE:
+            PopupHide();
             return 0;
 
         case WM_ACTIVATE:
@@ -1531,6 +1641,7 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             } else if (hit == kHitOpen) {
                 std::wstring dir = g_popup.dir;
                 PopupHide();
+                EnsureFolderExists(dir);
                 ShellExecuteW(nullptr, L"open", dir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             } else if (hit >= 0 && hit < (int)g_popup.items.size()) {
                 std::wstring path = g_popup.items[hit].path;
@@ -1539,7 +1650,8 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
                 sei.lpFile = path.c_str();
                 sei.nShow = SW_SHOWNORMAL;
-                if (!ShellExecuteExW(&sei)) {
+                // No second try when the user cancelled (e.g. a UAC prompt).
+                if (!ShellExecuteExW(&sei) && GetLastError() != ERROR_CANCELLED) {
                     ShellExecuteW(nullptr, nullptr, path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
                 }
             }
@@ -1580,17 +1692,27 @@ DWORD WINAPI PopupThreadProc(LPVOID readyEvent) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
+    // The class belongs to the mod's own module, not to explorer.exe, so it
+    // can never be mixed up with a class left by another instance.
+    HMODULE modModule = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)PopupThreadProc, &modModule);
+
     WNDCLASSEXW wc{sizeof(wc)};
     wc.style = CS_DROPSHADOW;
     wc.lpfnWndProc = PopupWndProc;
-    wc.hInstance = GetModuleHandle(nullptr);
+    wc.hInstance = modModule;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.lpszClassName = L"WhTaskbarMiniFoldersPopup";
-    RegisterClassExW(&wc);
-
-    g_popupWnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, wc.lpszClassName,
-                                 L"Mini folder", WS_POPUP, 0, 0, 100, 100, nullptr, nullptr,
-                                 wc.hInstance, nullptr);
+    bool registered = modModule && RegisterClassExW(&wc);
+    if (registered) {
+        g_popupWnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, wc.lpszClassName,
+                                     L"Mini folder", WS_POPUP, 0, 0, 100, 100, nullptr, nullptr,
+                                     wc.hInstance, nullptr);
+    } else {
+        Wh_Log(L"Popup window class not registered: %u", GetLastError());
+    }
     SetEvent((HANDLE)readyEvent);
 
     if (g_popupWnd) {
@@ -1602,7 +1724,9 @@ DWORD WINAPI PopupThreadProc(LPVOID readyEvent) {
     }
 
     g_popupWnd = nullptr;
-    UnregisterClassW(wc.lpszClassName, wc.hInstance);
+    if (registered) {
+        UnregisterClassW(wc.lpszClassName, wc.hInstance);
+    }
     if (SUCCEEDED(hrCo)) {
         CoUninitialize();
     }
@@ -1624,7 +1748,10 @@ void StopPopupThread() {
         PostMessage(g_popupWnd, WM_CLOSE, 0, 0);
     }
     if (g_popupThread) {
-        WaitForSingleObject(g_popupThread, 5000);
+        // No time limit: the mod must not be unloaded while this thread still
+        // runs its code. The thread never waits for the caller, and its slow
+        // loops stop early once g_unloading is set.
+        WaitForSingleObject(g_popupThread, INFINITE);
         CloseHandle(g_popupThread);
         g_popupThread = nullptr;
     }
@@ -1736,7 +1863,9 @@ void Wh_ModUninit() {
         RunFromWindowThread(ui, [](PVOID) { RemoveAllPanels(); }, nullptr);
     }
 
-    for (int i = 0; i < 100 && g_pendingDispatch > 0; i++) {
+    // No time limit: a callback that is still queued on the taskbar thread
+    // points into this mod. The taskbar thread never waits for this thread.
+    while (g_pendingDispatch > 0) {
         Sleep(20);
     }
 
@@ -1749,7 +1878,7 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
 
     if (g_popupWnd) {
-        PostMessage(g_popupWnd, WM_KEYDOWN, VK_ESCAPE, 0);
+        PostMessage(g_popupWnd, WM_APP_HIDE, 0, 0);
     }
 
     RequestRebuild();
