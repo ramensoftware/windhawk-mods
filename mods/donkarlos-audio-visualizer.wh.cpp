@@ -8,8 +8,7 @@
 // @github https://github.com/Karlos5000
 // @license MIT
 // @include windhawk.exe
-// @architecture x86-64
-// @compilerOptions -lole32 -luuid -lgdi32 -luser32
+// @compilerOptions -lole32 -luuid -lgdi32 -luser32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -62,9 +61,14 @@ Vier Muster zeigen die laufende Audioausgabe auf Desktop und Taskleiste. Bei Sti
 // ==/WindhawkModSettings==
 
 #define NOMINMAX
-#include <complex>
 #include <windows.h>
+#include <complex>
+#if __has_include(<windhawk_tool_mod.h>)
 #include <windhawk_tool_mod.h>
+#else
+#include <shellapi.h>
+#include <windhawk_api.h>
+#endif
 #include <audioclient.h>
 #include <mmdeviceapi.h>
 #include <wrl/client.h>
@@ -82,8 +86,8 @@ constexpr double pi = 3.141592653589793;
 static std::atomic_bool changed{true}, stopping{false};
 static std::wstring pattern, palette, display;
 static int count, gain, transparency;
-static std::array<float,N> samples{};
-static std::array<float,64> levels{};
+static std::array<float, N> samples{};
+static std::array<float, 64> levels{};
 static int head;
 static unsigned rate;
 static HWND panels[2]{};
@@ -95,10 +99,12 @@ static std::wstring setting(PCWSTR name) {
     return result;
 }
 static void settings() {
-    pattern = setting(L"pattern"); palette = setting(L"palette"); display = setting(L"display");
-    count = clamp(Wh_GetIntSetting(L"bars"),8,64);
-    gain = clamp(Wh_GetIntSetting(L"sensitivity"),10,400);
-    transparency = clamp(Wh_GetIntSetting(L"transparency"),0,100);
+    pattern = setting(L"pattern");
+    palette = setting(L"palette");
+    display = setting(L"display");
+    count = clamp(Wh_GetIntSetting(L"bars"), 8, 64);
+    gain = clamp(Wh_GetIntSetting(L"sensitivity"), 10, 400);
+    transparency = clamp(Wh_GetIntSetting(L"transparency"), 0, 100);
 }
 
 struct Capture {
@@ -109,206 +115,513 @@ struct Capture {
     WORD channels{};
     HRESULT connect() {
         if (!devices) {
-            HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
-                                           IID_PPV_ARGS(&devices));
-            if (FAILED(hr)) return hr;
+            HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                          CLSCTX_ALL, IID_PPV_ARGS(&devices));
+            if (FAILED(hr))
+                return hr;
         }
         ComPtr<IMMDevice> endpoint;
-        HRESULT hr = devices->GetDefaultAudioEndpoint(eRender,eMultimedia,&endpoint);
-        if (FAILED(hr)) return hr;
+        HRESULT hr =
+            devices->GetDefaultAudioEndpoint(eRender, eMultimedia, &endpoint);
+        if (FAILED(hr))
+            return hr;
         LPWSTR name{};
-        if (FAILED(hr = endpoint->GetId(&name))) return hr;
+        if (FAILED(hr = endpoint->GetId(&name)))
+            return hr;
         bool same = id == name;
-        id = name; CoTaskMemFree(name);
-        if (reader && same) return S_OK;
+        id = name;
+        CoTaskMemFree(name);
+        if (reader && same)
+            return S_OK;
         close();
-        if (FAILED(hr = endpoint->Activate(__uuidof(IAudioClient),CLSCTX_ALL,nullptr,
-                                           reinterpret_cast<void**>(client.GetAddressOf())))) return hr;
+        if (FAILED(hr = endpoint->Activate(
+                       __uuidof(IAudioClient), CLSCTX_ALL, nullptr,
+                       reinterpret_cast<void**>(client.GetAddressOf()))))
+            return hr;
         WAVEFORMATEX* mix{};
-        if (FAILED(hr = client->GetMixFormat(&mix))) return hr;
-        rate = mix->nSamplesPerSec; channels = mix->nChannels;
-        WAVEFORMATEX fmt{WAVE_FORMAT_IEEE_FLOAT,channels,rate,rate*channels*4,
-                         static_cast<WORD>(channels*4),32,0};
+        if (FAILED(hr = client->GetMixFormat(&mix)))
+            return hr;
+        rate = mix->nSamplesPerSec;
+        channels = mix->nChannels;
+        WAVEFORMATEX fmt{WAVE_FORMAT_IEEE_FLOAT,
+                         channels,
+                         rate,
+                         rate * channels * 4,
+                         static_cast<WORD>(channels * 4),
+                         32,
+                         0};
         CoTaskMemFree(mix);
-        if (FAILED(hr = client->Initialize(AUDCLNT_SHAREMODE_SHARED,
-                AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
-                1000000,0,&fmt,nullptr))) return hr;
-        if (FAILED(hr = client->GetService(IID_PPV_ARGS(&reader)))) return hr;
+        if (FAILED(
+                hr = client->Initialize(AUDCLNT_SHAREMODE_SHARED,
+                                        AUDCLNT_STREAMFLAGS_LOOPBACK |
+                                            AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
+                                        1000000, 0, &fmt, nullptr)))
+            return hr;
+        if (FAILED(hr = client->GetService(IID_PPV_ARGS(&reader))))
+            return hr;
         return client->Start();
     }
     void close() {
-        if (client) client->Stop();
-        reader.Reset(); client.Reset(); samples.fill(0); head = 0;
+        if (client)
+            client->Stop();
+        reader.Reset();
+        client.Reset();
+        samples.fill(0);
+        head = 0;
     }
     HRESULT drain(bool& fresh) {
         UINT32 size{};
         HRESULT hr;
         while (SUCCEEDED(hr = reader->GetNextPacketSize(&size)) && size) {
-            BYTE* bytes{}; DWORD flags{};
-            if (FAILED(hr = reader->GetBuffer(&bytes,&size,&flags,nullptr,nullptr))) break;
+            BYTE* bytes{};
+            DWORD flags{};
+            if (FAILED(hr = reader->GetBuffer(&bytes, &size, &flags, nullptr,
+                                              nullptr)))
+                break;
             const float* data = reinterpret_cast<float*>(bytes);
-            for (UINT32 i=0;i<size;++i) {
-                float sum=0;
+            for (UINT32 i = 0; i < size; ++i) {
+                float sum = 0;
                 if (!(flags & AUDCLNT_BUFFERFLAGS_SILENT))
-                    for (unsigned ch=0;ch<channels;++ch) sum+=data[i*channels+ch];
-                samples[head]=sum/channels; head=(head+1)%N;
+                    for (unsigned ch = 0; ch < channels; ++ch)
+                        sum += data[i * channels + ch];
+                samples[head] = sum / channels;
+                head = (head + 1) % N;
             }
-            if (FAILED(hr=reader->ReleaseBuffer(size))) break;
-            fresh=true;
+            if (FAILED(hr = reader->ReleaseBuffer(size)))
+                break;
+            fresh = true;
         }
         return hr;
     }
 };
 
 static void analyze(bool active) {
-    std::array<std::complex<float>,N> bins{};
+    std::array<std::complex<float>, N> bins{};
     if (active) {
-        static const auto window=[] {
-            std::array<float,N> w{};
-            for(int i=0;i<N;++i) w[i]=0.5f-0.5f*std::cos(2*pi*i/(N-1));
+        static const auto window = [] {
+            std::array<float, N> w{};
+            for (int i = 0; i < N; ++i)
+                w[i] = 0.5f - 0.5f * std::cos(2 * pi * i / (N - 1));
             return w;
         }();
-        for(int i=0,j=0;i<N;++i) {
-            bins[j]=samples[(head+i)%N]*window[i];
-            int bit=N/2;
-            while(bit && (j&bit)) {j^=bit; bit>>=1;}
-            j^=bit;
+        for (int i = 0, j = 0; i < N; ++i) {
+            bins[j] = samples[(head + i) % N] * window[i];
+            int bit = N / 2;
+            while (bit && (j & bit)) {
+                j ^= bit;
+                bit >>= 1;
+            }
+            j ^= bit;
         }
-        for(int len=2;len<=N;len*=2) {
-            auto step=std::polar(1.f,float(-2*pi/len));
-            for(int begin=0;begin<N;begin+=len) {
-                std::complex<float> phase=1.f;
-                for(int j=0;j<len/2;++j,phase*=step) {
-                    auto a=bins[begin+j], b=phase*bins[begin+j+len/2];
-                    bins[begin+j]=a+b; bins[begin+j+len/2]=a-b;
+        for (int len = 2; len <= N; len *= 2) {
+            auto step = std::polar(1.f, float(-2 * pi / len));
+            for (int begin = 0; begin < N; begin += len) {
+                std::complex<float> phase = 1.f;
+                for (int j = 0; j < len / 2; ++j, phase *= step) {
+                    auto a = bins[begin + j],
+                         b = phase * bins[begin + j + len / 2];
+                    bins[begin + j] = a + b;
+                    bins[begin + j + len / 2] = a - b;
                 }
             }
         }
     }
-    int first=1;
-    for(int i=0;i<count;++i) {
-        float peak=0;
-        if(active) {
-            double upper=std::min(18000.,rate*0.5);
-            int end=clamp(int(40*std::pow(upper/40.,double(i+1)/count)*N/rate),
-                          first+1,N/2+1);
-            for(int k=first;k<end;++k) peak=std::max(peak,std::abs(bins[k]));
-            first=end;
+    int first = 1;
+    for (int i = 0; i < count; ++i) {
+        float peak = 0;
+        if (active) {
+            double upper = std::min(18000., rate * 0.5);
+            int end =
+                clamp(int(40 * std::pow(upper / 40., double(i + 1) / count) *
+                          N / rate),
+                      first + 1, N / 2 + 1);
+            for (int k = first; k < end; ++k)
+                peak = std::max(peak, std::abs(bins[k]));
+            first = end;
         }
-        float target=clamp(float((20*std::log10(std::max(1e-8f,peak*4/N*std::max(1.f,gain/100.f)))+60)/60)
-                           *std::min(gain,100)/65,0.f,1.f);
-        levels[i]+=(target-levels[i])*(target>levels[i]?0.58f:0.13f);
+        float target = clamp(
+            float(
+                (20 * std::log10(std::max(
+                          1e-8f, peak * 4 / N * std::max(1.f, gain / 100.f))) +
+                 60) /
+                60) *
+                std::min(gain, 100) / 65,
+            0.f, 1.f);
+        levels[i] +=
+            (target - levels[i]) * (target > levels[i] ? 0.58f : 0.13f);
     }
 }
-static COLORREF color(int i,int total) {
-    if(palette==L"white") return RGB(255,255,255);
-    if(palette==L"blue") return RGB(50,160,255);
-    if(palette==L"green") return RGB(32,245,115);
-    auto component=[&](int offset){return int(255*clamp(std::abs(std::fmod(
-        6.*i/total+offset,6.)-3.)-1.,0.,1.));};
-    return RGB(component(0),component(4),component(2));
+static COLORREF color(int i, int total) {
+    if (palette == L"white")
+        return RGB(255, 255, 255);
+    if (palette == L"blue")
+        return RGB(50, 160, 255);
+    if (palette == L"green")
+        return RGB(32, 245, 115);
+    auto component = [&](int offset) {
+        return int(
+            255 *
+            clamp(std::abs(std::fmod(6. * i / total + offset, 6.) - 3.) - 1.,
+                  0., 1.));
+    };
+    return RGB(component(0), component(4), component(2));
 }
-static LRESULT CALLBACK paint(HWND w,UINT msg,WPARAM wp,LPARAM lp) {
-    if(msg==WM_NCHITTEST) return HTTRANSPARENT;
-    if(msg==WM_ERASEBKGND) return 1;
-    if(msg!=WM_PAINT) return DefWindowProcW(w,msg,wp,lp);
-    PAINTSTRUCT ps; HDC out=BeginPaint(w,&ps);
-    RECT r; GetClientRect(w,&r); int width=r.right,height=r.bottom;
-    HDC dc=CreateCompatibleDC(out); HBITMAP bmp=CreateCompatibleBitmap(out,width,height);
-    auto old=SelectObject(dc,bmp); FillRect(dc,&r,(HBRUSH)GetStockObject(BLACK_BRUSH));
-    if(pattern==L"wave") {
-        SelectObject(dc,GetStockObject(DC_PEN));
-        for(int x=0;x<width;++x) {
-            int pos=(head+N-512+512*x/width)%N;
-            int y=int((1-clamp(samples[pos]*gain/50,-1.f,1.f))*(height-1)/2);
-            SetDCPenColor(dc,color(x,width));
-            if(x==0) MoveToEx(dc,x,y,nullptr); else LineTo(dc,x,y);
+static LRESULT CALLBACK paint(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_NCHITTEST)
+        return HTTRANSPARENT;
+    if (msg == WM_ERASEBKGND)
+        return 1;
+    if (msg != WM_PAINT)
+        return DefWindowProcW(w, msg, wp, lp);
+    PAINTSTRUCT ps;
+    HDC out = BeginPaint(w, &ps);
+    RECT r;
+    GetClientRect(w, &r);
+    int width = r.right, height = r.bottom;
+    HDC dc = CreateCompatibleDC(out);
+    HBITMAP bmp = CreateCompatibleBitmap(out, width, height);
+    auto old = SelectObject(dc, bmp);
+    FillRect(dc, &r, (HBRUSH)GetStockObject(BLACK_BRUSH));
+    if (pattern == L"wave") {
+        SelectObject(dc, GetStockObject(DC_PEN));
+        for (int x = 0; x < width; ++x) {
+            int pos = (head + N - 512 + 512 * x / width) % N;
+            int y = int((1 - clamp(samples[pos] * gain / 50, -1.f, 1.f)) *
+                        (height - 1) / 2);
+            SetDCPenColor(dc, color(x, width));
+            if (x == 0)
+                MoveToEx(dc, x, y, nullptr);
+            else
+                LineTo(dc, x, y);
         }
-    } else for(int i=0;i<count;++i) {
-        const int rest = std::min(height, std::max(2, height/18));
-        int h = rest + int(levels[i]*(height-rest));
-        RECT b{i*width/count,height-h,std::max(i*width/count+1,(i+1)*width/count-1),height};
-        SetDCBrushColor(dc,color(i,count)); auto brush=(HBRUSH)GetStockObject(DC_BRUSH);
-        if(pattern==L"mirror") {b.top=(height-h)/2;b.bottom=b.top+h;}
-        if(pattern==L"led") {
-            for(int y=height;y>b.top;y-=5) {
-                RECT cell{b.left,std::max<LONG>(b.top,y-3),b.right,y}; FillRect(dc,&cell,brush);
+    } else
+        for (int i = 0; i < count; ++i) {
+            const int rest = std::min(height, std::max(2, height / 18));
+            int h = rest + int(levels[i] * (height - rest));
+            RECT b{i * width / count, height - h,
+                   std::max(i * width / count + 1, (i + 1) * width / count - 1),
+                   height};
+            SetDCBrushColor(dc, color(i, count));
+            auto brush = (HBRUSH)GetStockObject(DC_BRUSH);
+            if (pattern == L"mirror") {
+                b.top = (height - h) / 2;
+                b.bottom = b.top + h;
             }
-        } else FillRect(dc,&b,brush);
-    }
-    BitBlt(out,0,0,width,height,dc,0,0,SRCCOPY);
-    SelectObject(dc,old); DeleteObject(bmp); DeleteDC(dc); EndPaint(w,&ps); return 0;
+            if (pattern == L"led") {
+                for (int y = height; y > b.top; y -= 5) {
+                    RECT cell{b.left, std::max<LONG>(b.top, y - 3), b.right, y};
+                    FillRect(dc, &cell, brush);
+                }
+            } else
+                FillRect(dc, &b, brush);
+        }
+    BitBlt(out, 0, 0, width, height, dc, 0, 0, SRCCOPY);
+    SelectObject(dc, old);
+    DeleteObject(bmp);
+    DeleteDC(dc);
+    EndPaint(w, &ps);
+    return 0;
 }
-static BOOL CALLBACK findDesktop(HWND top,LPARAM result) {
-    HWND view=FindWindowExW(top,nullptr,L"SHELLDLL_DefView",nullptr);
-    if(!view) return TRUE;
-    HWND host=FindWindowExW(view,nullptr,L"SysListView32",nullptr);
-    if(!IsWindowVisible(host)) host=view;
-    if(!IsWindowVisible(host)) host=top;
-    if(!IsWindowVisible(host)) return TRUE;
-    *reinterpret_cast<HWND*>(result)=host;
+static BOOL CALLBACK findDesktop(HWND top, LPARAM result) {
+    HWND view = FindWindowExW(top, nullptr, L"SHELLDLL_DefView", nullptr);
+    if (!view)
+        return TRUE;
+    HWND host = FindWindowExW(view, nullptr, L"SysListView32", nullptr);
+    if (!IsWindowVisible(host))
+        host = view;
+    if (!IsWindowVisible(host))
+        host = top;
+    if (!IsWindowVisible(host))
+        return TRUE;
+    *reinterpret_cast<HWND*>(result) = host;
     return !*reinterpret_cast<HWND*>(result);
 }
 static void layout(int index) {
     HWND parent{};
-    if(index==0 && display!=L"taskbar") EnumWindows(findDesktop,reinterpret_cast<LPARAM>(&parent));
-    if(index==1 && display!=L"desktop") parent=FindWindowW(L"Shell_TrayWnd",nullptr);
-    HWND& panel=panels[index];
-    if(panel && (!IsWindow(panel) || GetParent(panel)!=parent)) {
-        if(IsWindow(panel)) DestroyWindow(panel);
-        panel=nullptr;
+    if (index == 0 && display != L"taskbar")
+        EnumWindows(findDesktop, reinterpret_cast<LPARAM>(&parent));
+    if (index == 1 && display != L"desktop")
+        parent = FindWindowW(L"Shell_TrayWnd", nullptr);
+    HWND& panel = panels[index];
+    if (panel && (!IsWindow(panel) || GetParent(panel) != parent)) {
+        if (IsWindow(panel))
+            DestroyWindow(panel);
+        panel = nullptr;
     }
-    if(!parent) return;
-    RECT bounds{}; GetClientRect(parent,&bounds);
-    int width=std::min<int>(index?224:480,bounds.right);
-    int height=std::min<int>(index?28:100,bounds.bottom);
-    int x=index?std::max(0,int(bounds.right/4-width/2)):24;
-    int y=index?(bounds.bottom-height)/2:std::max(0,int(bounds.bottom-height-90));
-    if(!panel) panel=CreateWindowExW(WS_EX_LAYERED|WS_EX_TRANSPARENT|WS_EX_NOACTIVATE,
-        className,L"",WS_CHILD,x,y,width,height,parent,nullptr,GetModuleHandleW(nullptr),nullptr);
-    if(panel) {
-        SetLayeredWindowAttributes(panel,RGB(0,0,0),BYTE(255*(100-transparency)/100),LWA_COLORKEY|LWA_ALPHA);
-        SetWindowPos(panel,HWND_TOP,x,y,width,height,SWP_NOACTIVATE|SWP_SHOWWINDOW);
+    if (!parent)
+        return;
+    RECT bounds{};
+    GetClientRect(parent, &bounds);
+    int width = std::min<int>(index ? 224 : 480, bounds.right);
+    int height = std::min<int>(index ? 28 : 100, bounds.bottom);
+    int x = index ? std::max(0, int(bounds.right / 4 - width / 2)) : 24;
+    int y = index ? (bounds.bottom - height) / 2
+                  : std::max(0, int(bounds.bottom - height - 90));
+    if (!panel)
+        panel = CreateWindowExW(
+            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE, className,
+            L"", WS_CHILD, x, y, width, height, parent, nullptr,
+            GetModuleHandleW(nullptr), nullptr);
+    if (panel) {
+        SetLayeredWindowAttributes(panel, RGB(0, 0, 0),
+                                   BYTE(255 * (100 - transparency) / 100),
+                                   LWA_COLORKEY | LWA_ALPHA);
+        SetWindowPos(panel, HWND_TOP, x, y, width, height,
+                     SWP_NOACTIVATE | SWP_SHOWWINDOW);
     }
 }
-__declspec(dllexport) BOOL WhTool_ModInit() { return TRUE; }
-__declspec(dllexport) void WhTool_ModSettingsChanged() { changed=true; }
-__declspec(dllexport) void WhTool_ModUninit() { stopping=true; }
+__declspec(dllexport) BOOL WhTool_ModInit() {
+    return TRUE;
+}
+__declspec(dllexport) void WhTool_ModSettingsChanged() {
+    changed = true;
+}
+__declspec(dllexport) void WhTool_ModUninit() {
+    stopping = true;
+}
 __declspec(dllexport) void WhTool_ModEntryPoint() {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    HRESULT com=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
-    if(FAILED(com)) return;
-    WNDCLASSW wc{}; wc.hInstance=GetModuleHandleW(nullptr); wc.lpfnWndProc=paint;
-    wc.lpszClassName=className;
-    if(!RegisterClassW(&wc)) {CoUninitialize();return;}
+    HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(com))
+        return;
+    WNDCLASSW wc{};
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpfnWndProc = paint;
+    wc.lpszClassName = className;
+    if (!RegisterClassW(&wc)) {
+        CoUninitialize();
+        return;
+    }
     {
         Capture capture;
-        ULONGLONG nextLayout=0,nextAudio=0,lastPacket=0,nextFrame=0;
-        while(!stopping) {
+        ULONGLONG nextLayout = 0, nextAudio = 0, lastPacket = 0, nextFrame = 0;
+        while (!stopping) {
             MSG msg;
-            while(PeekMessageW(&msg,nullptr,0,0,PM_REMOVE)) DispatchMessageW(&msg);
-            auto now=GetTickCount64();
-            if(changed.exchange(false)) {settings();nextLayout=0;}
-            if(now>=nextLayout) {layout(0);layout(1);nextLayout=now+1000;}
-            if(now>=nextAudio) {
-                HRESULT hr=capture.connect();
-                if(FAILED(hr)) {Wh_Log(L"Loopback unavailable: %08X",unsigned(hr));capture.close();}
-                nextAudio=now+2000;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE))
+                DispatchMessageW(&msg);
+            auto now = GetTickCount64();
+            if (changed.exchange(false)) {
+                settings();
+                nextLayout = 0;
             }
-            if(now>=nextFrame) {
-                bool fresh=false;
-                if(capture.reader && FAILED(capture.drain(fresh))) capture.close();
-                if(fresh) lastPacket=now;
-                bool active=lastPacket && now-lastPacket<100;
-                if(!active) samples.fill(0);
-                if(pattern!=L"wave") analyze(active);
-                for(HWND panel:panels) if(panel) InvalidateRect(panel,nullptr,FALSE);
-                nextFrame=now+16;
+            if (now >= nextLayout) {
+                layout(0);
+                layout(1);
+                nextLayout = now + 1000;
             }
-            MsgWaitForMultipleObjects(0,nullptr,FALSE,16,QS_ALLINPUT);
+            if (now >= nextAudio) {
+                HRESULT hr = capture.connect();
+                if (FAILED(hr)) {
+                    Wh_Log(L"Loopback unavailable: %08X", unsigned(hr));
+                    capture.close();
+                }
+                nextAudio = now + 2000;
+            }
+            if (now >= nextFrame) {
+                bool fresh = false;
+                if (capture.reader && FAILED(capture.drain(fresh)))
+                    capture.close();
+                if (fresh)
+                    lastPacket = now;
+                bool active = lastPacket && now - lastPacket < 100;
+                if (!active)
+                    samples.fill(0);
+                if (pattern != L"wave")
+                    analyze(active);
+                for (HWND panel : panels)
+                    if (panel)
+                        InvalidateRect(panel, nullptr, FALSE);
+                nextFrame = now + 16;
+            }
+            MsgWaitForMultipleObjects(0, nullptr, FALSE, 16, QS_ALLINPUT);
         }
         capture.close();
     }
-    for(HWND panel:panels) if(panel) DestroyWindow(panel);
-    UnregisterClassW(className,wc.hInstance); CoUninitialize();
+    for (HWND panel : panels)
+        if (panel)
+            DestroyWindow(panel);
+    UnregisterClassW(className, wc.hInstance);
+    CoUninitialize();
 }
+
+#if !__has_include(<windhawk_tool_mod.h>)
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    WhTool_ModEntryPoint();
+    ExitProcess(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
+#endif
