@@ -2149,7 +2149,7 @@ static void _sws_WindowSwitcher_UpdateAccessibleText(sws_WindowSwitcher* _this)
                 _this->layout.pWindowList.cbSize - _this->layout.iIndex,
                 _this->layout.pWindowList.cbSize
             );
-            // Wh_Log(L"[sws] Accesible text: %s.\n", wszAccText);
+            //Wh_Log(L"[sws] Accesible text: %s.\n", wszAccText);
             SetWindowTextW(_this->hWndAccessible, wszAccText);
             NotifyWinEvent(
                 EVENT_OBJECT_LIVEREGIONCHANGED,
@@ -3534,7 +3534,6 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                 }
                 if (bContains != -1)
                 {
-                    Wh_Log(L"window destroyed");
                     _sws_WindowSwitcher_Show(_this);
                 }
             }
@@ -3700,7 +3699,6 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                     }
                     if (bShouldShow)
                     {
-                        Wh_Log(L"bShouldShow, %d, %p", wParam, lParam);
                         _sws_WindowSwitcher_Show(_this);
                     }
                     DPA_Destroy(hdpa);
