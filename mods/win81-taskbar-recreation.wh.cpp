@@ -16,7 +16,7 @@
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lgdiplus -lgdi32 -luser32 -ldwmapi -lshell32 -lole32 -luuid -lpropsys -loleaut32 -lshlwapi -lcomctl32 -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lwinhttp -lbcrypt -lwlanapi -lsetupapi -lruntimeobject
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lgdiplus -lgdi32 -luser32 -ldwmapi -lshell32 -lole32 -luuid -lpropsys -loleaut32 -lshlwapi -lcomctl32 -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lwinhttp -lbcrypt -lwlanapi -lsetupapi -lruntimeobject -lpowrprof -luxtheme
 // ==/WindhawkMod==
 //
 // clang-format off
@@ -24,135 +24,97 @@
 /*
 # Windows 7/8/8.1 Taskbar Recreation
 
-This mod recreates taskbars inspired by Windows 7, Windows 8 and Windows 8.1
-on Windows 10 and 11. The taskbar runs in a dedicated Explorer process on a
-best-effort basis. Appearance and behavior can vary with
-the Windows build, DPI, taskbar replacement and other shell mods.
+This mod recreates the look of the Windows 7, 8, 8.1 and 10 taskbars on
+Windows 10 and 11. Choose a preset or customize individual Start options.
 
 ## Features
 
-- Nine skin presets, in this order: Windows 7, Windows 7 Aero Basic, Windows Server 2008 R2, Windows 7 Beta 7000, Windows 7 build 7048, Windows 8.0 Beta 8148, Windows 8 Release Preview, Windows 8.0 and Windows 8.1; Custom keeps individual Start options.
-- Task buttons, window previews, Jump Lists, notification icons and toolbars.
-- An integrated notification area and taskbar, with a fallback to the native bar if the integrated tray cannot start.
-- Horizontal and vertical layouts, Aero Peek and classic flyout options.
-- Change notification area icon visibility using the Control Panel page that the mod attempts to restore, including on Windows 11; availability and behavior can vary.
-- Static taskbar textures and system colors. Optional experimental live blur uses the unsupported per-window accent policy approach from Taskbar Background Helper (m417z, GPL-3.0); enabled by default for Windows 7, Windows 8 Beta and Windows 8 Release Preview (not Aero Basic) and not guaranteed to work with layered windows. Windows 7 skin adds a cursor-following, icon-colored hover glow for running apps.
-- In the Windows 7, Windows 7 Aero Basic, Windows 7 Beta 7000, Windows 7 build 7048, Windows 8.0 Beta and Windows 8.1 skins, the Start button uses its pressed appearance while a recognized Start menu is visible, even when the pointer hovers over it. Visibility tracking is best-effort and updates asynchronously; recognition and monitor placement may vary with Start replacements. The Windows 8.0 hot corner does not use this button state.
-- Local taskbar pins and ordering: the mod does not change Windows pins. Drag to an empty task area to pin; hover a running app to activate its window.
-- An advanced battery flyout option; compatibility may vary between Windows builds.
-- Optional secondary taskbars show pins, windows and the shared private tray. Secondary AppBar registration reserves work area when necessary and allowed by the shell. DPI scaling and flyout positioning are best-effort.
-- Experimental shell minimize-rectangle support supplies reconstructed button coordinates to Windows, without changing Windows 7 Window Animations Restorer. Availability depends on Windows shell-hook delivery and ordering.
-- Optional icon-only horizontal button width: choose the native default or a custom logical width. This does not change icon size or taskbar height.
+- Ten taskbar skins, including Aero Basic and classic beta styles.
+- Task buttons, previews, Jump Lists, toolbars and a notification area.
+- Local pinned apps and ordering, without changing Windows pins.
+- Horizontal and vertical layouts, optional secondary taskbars and Aero Peek.
+- Classic flyouts and an optional Win+X menu.
+- Optional effects, including blur, icon hover glow and app opening and closing fades. Some effects are experimental.
 
-## Themes
+### Windows 10 skin
+
+The Windows 10 skin includes a search box or icon, Task View, Action Center,
+app indicators and the Show desktop strip. Its menus, previews and Jump Lists
+follow the Windows 10 style and adapt to the light or dark Windows mode.
+
+The integrated tray offers Windows 10-style clock, volume, battery, network
+and language flyouts. Search can use the Windows 10 22H2-style panel, a classic
+app list or Windows Search. Search visibility and Task View follow the Windows
+taskbar settings. Action Center opens with Win+A on Windows 10 or Win+N on
+Windows 11.
+
+## Skins
 
 ### Windows 7
-
-![Windows 7 taskbar](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7taskskin.png)
+![Windows 7](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7taskskin.png)
 
 ### Windows 7 Aero Basic
-
-![Windows 7 Aero Basic taskbar](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/aerobasic.png)
+![Windows 7 Aero Basic](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/aerobasic.png)
 
 ### Windows Server 2008 R2
-
-![Windows Server 2008 R2 taskbar](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/server2008.png)
+![Windows Server 2008 R2](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/server2008.png)
 
 ### Windows 7 Beta 7000
-
-![Windows 7 Beta 7000 taskbar](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7beta7000.png)
+![Windows 7 Beta 7000](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7beta7000.png)
 
 ### Windows 7 build 7048
+![Windows 7 build 7048](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/beta7048.png)
 
-![Windows 7 build 7048 taskbar](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/beta7048.png)
+### Windows 8 Beta 8148
+![Windows 8 Beta](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8betatask.png)
 
-### Windows 8.0 Beta 8148
-
-![Windows 8 Beta taskbar](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8betatask.png)
-
-### Windows 8 Release Preview (build 8400)
-
-![Windows 8 Release Preview taskbar](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/8releasepreview.png)
+### Windows 8 Release Preview
+![Windows 8 Release Preview](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/8releasepreview.png)
 
 ### Windows 8.0
-
-![Windows 8.0 taskbar](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8.0task.png)
+![Windows 8.0](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8.0task.png)
 
 ### Windows 8.1
+![Windows 8.1](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81task.png)
 
-![Windows 8.1 taskbar](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81task.png)
+### Windows 10
+![Windows 10](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win10skin.png)
 
-### Custom
-
-Choose individual Start options instead of a preset.
-
-## Installation
+## Getting started
 
 1. Install and enable the mod in Windhawk.
-2. Choose a skin preset in the mod settings.
-3. Restart the mod after changing settings that require it.
+2. Choose a skin and adjust the options in the mod settings.
+3. Reload the mod when an option requires it.
 
-## Recommended companion mods
+The integrated tray is enabled by default. If it conflicts with another
+shell or taskbar mod, try disabling it and reloading. Optional companion mods
+include [Classic Taskbar and Start Menu Properties](https://windhawk.net/mods/classic-taskbar-properties),
+[Windows 7 Network Flyout Recreation](https://windhawk.net/mods/win7-network-flyout-recreation),
+[Windows 7/8.1 Action Center Recreation](https://windhawk.net/mods/win7-action-center-recreation)
+and [Windows 10 legacy flyouts on Win11 24H2 restorer](https://windhawk.net/mods/windows-10-legacy-flyouts-restorer).
 
-For a more complete classic Windows experience, consider these optional Windhawk mods:
+## Notes
 
-- [Windows 7 Network Flyout Recreation](https://windhawk.net/mods/win7-network-flyout-recreation)
-- [Windows 7/8.1 Action Center Recreation](https://windhawk.net/mods/win7-action-center-recreation)
-- [Classic Taskbar and Start Menu Properties](https://windhawk.net/mods/classic-taskbar-properties)
-
-Compatibility with the integrated tray and other shell mods can vary by Windows build and configuration.
-
-## Settings
-
-The mod settings control the skin, Start button, taskbar layout, notification
-area, previews, flyouts and other behavior. Individual descriptions in
-Windhawk explain their scope and any restart requirements.
-
-## Windows symbols and downloads
-
-Windhawk may resolve Windows symbols for taskbarcpl.dll and rpcrt4.dll for the
-Notification Area Icons page safety checks. The optional Explorer Start hook also
-uses symbols for twinui.pcshell.dll. For keyboard Start requests when the foreground
-application is elevated or cannot be identified, it attempts to open Open-Shell
-instead of Windows Start when Open-Shell is detected; availability varies. It can download matching symbols if
-not cached. Some specifically verified builds use a fixed, checked fallback
-instead. Symbol verification for taskbarcpl is prepared in the background;
-if verification is unavailable, safety checks can prevent the private page
-from operating. Symbols help locate functions across builds but do not promise
-compatibility with changes in their behavior. An initial download needs network
-access, can take time, and uses disk cache. Seeing "using symbols" in the log
-confirms resolution, not whether a fresh download occurred.
-
-## Behavior and limitations
-
-- The advanced forced Windows-key recovery option is disabled by default. When enabled, it uses a single global keyboard hook and a delayed recovery request. It may still bypass deliberate Win-key blocking by hooks later in the chain or interfere with shortcuts, and may not work with elevated applications. It does not sample all key states or reorder hooks. A successful request does not guarantee the menu changed.
-- The taskbar runs in a separate `explorer.exe` process on a best-effort basis.
-  Notification-page hooks still run in Explorer, and other Explorer mods can
-  load in the separate process. A watchdog attempts to restore the native taskbar
-  after an unexpected exit; recovery from a hang or other failure is not guaranteed.
-
-- Skins are approximations; Windows 7 popup frames can use the current system's DWM frame when available. The Aero Basic notification overflow uses its own thin border instead; the Basic window list is opaque and does not use DWM thumbnails.
-- The Windows 8 Start corner is illustrated, not a live Start-screen preview.
-- Vertical layout, Aero Peek and classic flyouts may vary between Windows builds.
-- On first use, the mod downloads `pnidui.dll`, `SndVolSSO.dll` and `batmeter.dll`. Windows 7 and Server 2008 R2 presets also download Windows 7 `pnidui.dll` and `batmeter.dll` resources from the Microsoft symbol server. These are pinned, cached separately, and loaded as data only; if unavailable, the existing 8.1 artwork is used. The advanced battery flyout also downloads `stobject.dll` and a Windows 10 1511 x64 language-pack CAB selected from the Windows UI language (Italian, English, Spanish, French, Portuguese Portugal or Portuguese Brazil; other languages use English). Spanish uses es-ES and French uses fr-FR; regional variants are not all available. The CAB is temporary and is deleted after successful extraction of the verified battery MUI. Windows resource fallback may still affect some strings. Downloaded files are checked against pinned SHA-256 hashes. The Windows 10 1511 `stobject.dll` is loaded into the dedicated tool process and stays loaded until that process exits.
-- The integrated tray is enabled by default. It creates a private `Shell_TrayWnd` host and hides the native taskbar. Applications and mods that find the taskbar by class can encounter the private host; tray and AppBar traffic routed to it is processed or forwarded by the mod's UI thread. The host supplies taskbar geometry and forwards wheel input in supported cases, but it does not contain the native taskbar's `ReBarWindow32`, `MSTaskSwWClass`, Start button or XAML content. Mods that depend on those windows or content can fail or conflict. Disable the integrated tray and reload the mod if this compatibility trade-off is unsuitable.
-- The integrated tray keeps “Always show all icons” in memory for the current session. It starts from the Windows preference and does not write that preference to the system registry; it is reset when the mod reloads.
-- The Notification Area Icons page uses a private COM provider. The mod attempts to close its hosting window before unloading the Explorer hooks. Behavior has not been verified on every Windows build; if the window cannot be identified or does not respond, close the page before disabling, updating, or reloading the mod.
-- Keep a way to disable the mod or restart Explorer.
-- Windows 11 Taskbar Styler and its skins are technical references; their authors are not involved in this mod.
-
-The integrated primary taskbar follows the Windows taskbar auto-hide setting using the running Explorer AppBar state, intercepted AppBar requests and setting-change notifications. The `StuckRects3` registry value is a startup fallback only. The registry format is undocumented and compatibility with third-party settings dialogs must be verified on the target system. Secondary bars are unchanged; the native bar or other AppBars may still reserve work area.
+- Appearance and compatibility may vary with the Windows build, display scaling and other shell mods.
+- Some Windows resources and symbols may be downloaded and cached on first use. The advanced battery option downloads additional resources.
+- The integrated tray hides the native taskbar and may not work with mods that rely on its native controls. The mod attempts to restore the native taskbar after an unexpected exit, but recovery is not guaranteed.
+- The Windows 10 network panel can use a compatible native flyout when available; otherwise it uses the recreation. Networks requiring credentials are handed to Windows.
+- Keyboard layout switching, Start-menu detection, secondary taskbars and work-area handling are best-effort and may vary by configuration.
+- The optional advanced Windows-key recovery and live blur use experimental behavior. Keep a way to disable the mod or restart Explorer.
 
 ## Credits
 
-- RetroBar Windows 2000 theme (dremin and contributors, Apache-2.0): classic colors and bevel reference; https://github.com/dremin/RetroBar/blob/master/LICENSE
-- RetroBar and ManagedShell contributors (Apache-2.0): experimental auto-hide behavior adapted from Taskbar.xaml.cs and AppBarWindow.cs; https://github.com/cairoshell/ManagedShell/blob/master/LICENSE
-- WinBoeing777 - Testing on Windows 10 22H2 and Suggestions
-- Cips - Testing on Windows 11 25H2
-- MLC_YT - Suggestions and Providing feedback
-- Kiyaku - Suggestions and Testing
+- **AdmXP8** — Windows 8x Language Flyout, adapted for the language panel.
+- RetroBar and ManagedShell contributors (Apache-2.0) — classic colors, texture reference and auto-hide behavior: https://github.com/dremin/RetroBar/blob/master/LICENSE and https://github.com/cairoshell/ManagedShell/blob/master/LICENSE
+- Aero Basic texture contributors (GPL-3.0-or-later), based on RetroBar; resource revision 3b4d5f408288364e14b01c78287d9c4d08a43fbb.
+- Taskbar Background Helper by m417z (GPL-3.0) — optional blur approach.
+- ExplorerPatcher by valinet — research credited by the Windows 10 legacy flyout restorer.
+- RestoreWin10 by Adaptive-Protocol (MIT) and 10JumpLists by Sand216 — Windows 10 visual references.
+- Windows7 Taskbar Styler theme by Sand216 — desktop button artwork.
+- WinBoeing777, Cips and Kiyaku — testing and suggestions.
 
 ## Disclaimer
+
 
 This is an independent, unofficial project. It is not affiliated with, endorsed, sponsored or approved by Microsoft Corporation. Windows is a trademark of Microsoft Corporation, used here only to describe the style and compatibility of this mod.
 
@@ -171,11 +133,11 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Estilo predefinido de la barra"
   $name:fr: "Thème prédéfini de la barre"
   $name:pt: "Tema predefinido da barra"
-  $description: "This setting selects a taskbar skin. Custom keeps the separate Start and beta settings; the other presets override those two settings without deleting their values. The Windows 7 skin is an approximation and uses the system DWM popup frame when available. Aero Basic uses an opaque window list and a custom overflow border."
-  $description:it: "Questa impostazione seleziona la skin della barra. Personalizzata usa le opzioni separate per Start e beta; gli altri preset le sostituiscono senza cancellarne i valori. La skin Windows 7 è approssimativa e usa la cornice DWM di sistema per i popup quando disponibile. Aero Basic usa un elenco opaco di finestre e un bordo personalizzato per le icone nascoste."
-  $description:es: "Esta configuración selecciona el estilo de la barra. Personalizado usa las opciones separadas de Inicio y beta; los otros estilos las anulan sin borrar sus valores. El estilo Windows 7 es aproximado y usa el marco DWM del sistema para ventanas emergentes cuando está disponible. Aero Basic usa una lista opaca de ventanas y un borde propio para los iconos ocultos."
-  $description:fr: "Ce paramètre sélectionne le thème de la barre. Personnalisé utilise les options distinctes Démarrer et bêta ; les autres thèmes les remplacent sans effacer leurs valeurs. Le thème Windows 7 est approximatif et utilise le cadre DWM système pour les fenêtres contextuelles lorsqu'il est disponible. Aero Basic utilise une liste de fenêtres opaque et une bordure personnalisée pour les icônes masquées."
-  $description:pt: "Esta configuração seleciona o tema da barra. Personalizado usa as opções separadas de Iniciar e beta; os outros temas as substituem sem apagar seus valores. O tema Windows 7 é aproximado e usa a moldura DWM do sistema nos pop-ups quando disponível. Aero Basic usa uma lista opaca de janelas e uma borda própria para os ícones ocultos."
+  $description: "This setting selects a taskbar skin. Custom keeps the separate Start and beta settings; the other presets override those two settings without deleting their values. The Windows 7 skin is an approximation and uses the system DWM popup frame when available. Aero Basic uses an opaque window list and a custom overflow border. The Windows 10 skin adds the search box, Task View and Action Center, which have their own settings below."
+  $description:it: "Questa impostazione seleziona la skin della barra. Personalizzata usa le opzioni separate per Start e beta; gli altri preset le sostituiscono senza cancellarne i valori. La skin Windows 7 è approssimativa e usa la cornice DWM di sistema per i popup quando disponibile. Aero Basic usa un elenco opaco di finestre e un bordo personalizzato per le icone nascoste. La skin Windows 10 aggiunge la casella di ricerca, Visualizzazione attività e Centro notifiche, che hanno impostazioni proprie più sotto."
+  $description:es: "Esta configuración selecciona el estilo de la barra. Personalizado usa las opciones separadas de Inicio y beta; los otros estilos las anulan sin borrar sus valores. El estilo Windows 7 es aproximado y usa el marco DWM del sistema para ventanas emergentes cuando está disponible. Aero Basic usa una lista opaca de ventanas y un borde propio para los iconos ocultos. El estilo Windows 10 añade el cuadro de búsqueda, Vista de tareas y el Centro de actividades, que tienen sus propias opciones más abajo."
+  $description:fr: "Ce paramètre sélectionne le thème de la barre. Personnalisé utilise les options distinctes Démarrer et bêta ; les autres thèmes les remplacent sans effacer leurs valeurs. Le thème Windows 7 est approximatif et utilise le cadre DWM système pour les fenêtres contextuelles lorsqu'il est disponible. Aero Basic utilise une liste de fenêtres opaque et une bordure personnalisée pour les icônes masquées. Le thème Windows 10 ajoute la zone de recherche, la Vue des tâches et le Centre de notifications, qui ont leurs propres paramètres plus bas."
+  $description:pt: "Esta configuração seleciona o tema da barra. Personalizado usa as opções separadas de Iniciar e beta; os outros temas as substituem sem apagar seus valores. O tema Windows 7 é aproximado e usa a moldura DWM do sistema nos pop-ups quando disponível. Aero Basic usa uma lista opaca de janelas e uma borda própria para os ícones ocultos. O tema Windows 10 adiciona a caixa de pesquisa, a Visão de Tarefas e a Central de Ações, que têm configurações próprias mais abaixo."
   $options:
     - win7: "Windows 7"
     - win7basic: "Windows 7 Aero Basic"
@@ -186,6 +148,7 @@ Use at your own risk. You are responsible for how you use the mod and for comply
     - win8releasepreview: "Windows 8 Release Preview (8400)"
     - win8: "Windows 8.0"
     - win81: "Windows 8.1"
+    - win10: "Windows 10"
     - custom: "Custom (individual options)"
   $options:it:
     - win7: "Windows 7"
@@ -197,6 +160,7 @@ Use at your own risk. You are responsible for how you use the mod and for comply
     - win8releasepreview: "Windows 8 Release Preview (8400)"
     - win8: "Windows 8.0"
     - win81: "Windows 8.1"
+    - win10: "Windows 10"
     - custom: "Personalizzata (opzioni singole)"
   $options:es:
     - win7: "Windows 7"
@@ -208,6 +172,7 @@ Use at your own risk. You are responsible for how you use the mod and for comply
     - win8releasepreview: "Windows 8 Release Preview (8400)"
     - win8: "Windows 8.0"
     - win81: "Windows 8.1"
+    - win10: "Windows 10"
     - custom: "Personalizado (opciones individuales)"
   $options:fr:
     - win7: "Windows 7"
@@ -219,6 +184,7 @@ Use at your own risk. You are responsible for how you use the mod and for comply
     - win8releasepreview: "Windows 8 Release Preview (8400)"
     - win8: "Windows 8.0"
     - win81: "Windows 8.1"
+    - win10: "Windows 10"
     - custom: "Personnalisé (options individuelles)"
   $options:pt:
     - win7: "Windows 7"
@@ -230,7 +196,61 @@ Use at your own risk. You are responsible for how you use the mod and for comply
     - win8releasepreview: "Windows 8 Release Preview (8400)"
     - win8: "Windows 8.0"
     - win81: "Windows 8.1"
+    - win10: "Windows 10"
     - custom: "Personalizado (opções individuais)"
+- win10ActionCenterButton: true
+  $name: "Windows 10 skin: Action Center button"
+  $name:it: "Skin Windows 10: pulsante Centro notifiche"
+  $name:es: "Estilo Windows 10: botón Centro de actividades"
+  $name:fr: "Thème Windows 10 : bouton Centre de notifications"
+  $name:pt: "Tema Windows 10: botão Central de Ações"
+  $description: "This setting shows the Action Center button between the clock and Show desktop in the Windows 10 skin with the integrated tray. A click sends Win+A on Windows 10 and Win+N on Windows 11."
+  $description:it: "Questa impostazione mostra il pulsante Centro notifiche tra l'orologio e Mostra desktop nella skin Windows 10 con l'area di notifica integrata. Un clic invia Win+A su Windows 10 e Win+N su Windows 11."
+  $description:es: "Esta configuración muestra el botón Centro de actividades entre el reloj y Mostrar escritorio en el estilo Windows 10 con el área de notificación integrada. Un clic envía Win+A en Windows 10 y Win+N en Windows 11."
+  $description:fr: "Ce paramètre affiche le bouton Centre de notifications entre l'horloge et Afficher le Bureau dans le thème Windows 10 avec la zone de notification intégrée. Un clic envoie Win+A sous Windows 10 et Win+N sous Windows 11."
+  $description:pt: "Esta configuração mostra o botão Central de Ações entre o relógio e Mostrar área de trabalho no tema Windows 10 com a área de notificação integrada. Um clique envia Win+A no Windows 10 e Win+N no Windows 11."
+- win10Flyouts: true
+  $name: "Windows 10 skin: Windows 10 flyouts"
+  $name:it: "Skin Windows 10: flyout di Windows 10"
+  $name:es: "Estilo Windows 10: paneles de Windows 10"
+  $name:fr: "Thème Windows 10 : volets de Windows 10"
+  $name:pt: "Tema Windows 10: painéis do Windows 10"
+  $description: "This setting opens Windows 10-style flyouts for the clock, the volume, the battery, the network and the input language in the Windows 10 skin with the integrated tray. When it is off, the flyouts chosen by the settings further down and the network flyouts of the other skins are used."
+  $description:it: "Questa impostazione apre flyout in stile Windows 10 per orologio, volume, batteria, rete e lingua di input nella skin Windows 10 con l'area di notifica integrata. Se è disattivata, valgono i flyout scelti dalle impostazioni più sotto e i flyout di rete delle altre skin."
+  $description:es: "Esta configuración abre paneles al estilo de Windows 10 para el reloj, el volumen, la batería, la red y el idioma de entrada en el estilo Windows 10 con el área de notificación integrada. Si está desactivada, se usan los paneles elegidos en las opciones de más abajo y los paneles de red de los otros estilos."
+  $description:fr: "Ce paramètre ouvre des volets de style Windows 10 pour l'horloge, le volume, la batterie, le réseau et la langue de saisie dans le thème Windows 10 avec la zone de notification intégrée. S'il est désactivé, les volets choisis par les paramètres plus bas et les volets réseau des autres thèmes sont utilisés."
+  $description:pt: "Esta configuração abre painéis no estilo do Windows 10 para o relógio, o volume, a bateria, a rede e o idioma de entrada no tema Windows 10 com a área de notificação integrada. Se estiver desativada, valem os painéis escolhidos nas configurações mais abaixo e os painéis de rede dos outros temas."
+- win10SearchStyle: "22h2"
+  $name: "Windows 10 skin: search"
+  $name:it: "Skin Windows 10: ricerca"
+  $name:es: "Estilo Windows 10: búsqueda"
+  $name:fr: "Thème Windows 10 : recherche"
+  $name:pt: "Tema Windows 10: pesquisa"
+  $description: "This setting chooses what the search box or icon of the Windows 10 skin opens: the search of Windows 10 22H2 with tabs, a best match and a details pane, the classic narrow list of apps, or the search of the running Windows (Win+S). Whether the bar shows the box, the icon or nothing follows the taskbar setting of Windows and the Search entry of the bar's context menu."
+  $description:it: "Questa impostazione sceglie che cosa apre la casella o l'icona di ricerca della skin Windows 10: la ricerca di Windows 10 22H2 con schede, corrispondenza migliore e riquadro dei dettagli, l'elenco classico stretto delle app, oppure la ricerca del Windows in uso (Win+S). Se la barra mostra la casella, l'icona o niente dipende dall'impostazione della barra di Windows e dalla voce Ricerca del menu contestuale della barra."
+  $description:es: "Esta configuración elige qué abre el cuadro o el icono de búsqueda del estilo Windows 10: la búsqueda de Windows 10 22H2 con pestañas, mejor coincidencia y panel de detalles, la lista clásica estrecha de aplicaciones o la búsqueda del Windows en uso (Win+S). Que la barra muestre el cuadro, el icono o nada depende de la configuración de la barra de Windows y de la entrada Búsqueda del menú contextual de la barra."
+  $description:fr: "Ce paramètre choisit ce qu'ouvre la zone ou l'icône de recherche du thème Windows 10 : la recherche de Windows 10 22H2 avec onglets, meilleur résultat et volet de détails, la liste classique étroite des applications, ou la recherche du Windows en cours (Win+S). L'affichage de la zone, de l'icône ou de rien suit le paramètre de la barre de Windows et l'entrée Rechercher du menu contextuel de la barre."
+  $description:pt: "Esta configuração escolhe o que a caixa ou o ícone de pesquisa do tema Windows 10 abre: a pesquisa do Windows 10 22H2 com guias, melhor correspondência e painel de detalhes, a lista clássica estreita de aplicativos ou a pesquisa do Windows em uso (Win+S). Se a barra mostra a caixa, o ícone ou nada depende da configuração da barra do Windows e da entrada Pesquisar do menu de contexto da barra."
+  $options:
+  - "22h2": "Windows 10 22H2"
+  - "classic": "Classic"
+  - "windows": "Search of Windows (Win+S)"
+  $options:it:
+  - "22h2": "Windows 10 22H2"
+  - "classic": "Classica"
+  - "windows": "Ricerca di Windows (Win+S)"
+  $options:es:
+  - "22h2": "Windows 10 22H2"
+  - "classic": "Clásica"
+  - "windows": "Búsqueda de Windows (Win+S)"
+  $options:fr:
+  - "22h2": "Windows 10 22H2"
+  - "classic": "Classique"
+  - "windows": "Recherche de Windows (Win+S)"
+  $options:pt:
+  - "22h2": "Windows 10 22H2"
+  - "classic": "Clássica"
+  - "windows": "Pesquisa do Windows (Win+S)"
 - buttonWidthMode: "native"
   $name: "Task button width source"
   $name:it: "Larghezza dei pulsanti delle app"
@@ -722,6 +742,28 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $description:es: "Esta configuración muestra el idioma y la región de entrada activos en dos líneas, como ITA sobre IT, junto al reloj y abre el panel de idioma al estilo de Windows 8.1."
   $description:fr: "Ce paramètre affiche la langue et la région d’entrée actives sur deux lignes, par exemple ITA au-dessus de IT, à côté de l’horloge et ouvre le panneau de langue de style Windows 8.1."
   $description:pt: "Esta configuração mostra o idioma e a região de entrada ativos em duas linhas, como ITA sobre IT, ao lado do relógio e abre o painel de idioma no estilo do Windows 8.1."
+- showLanguageIndicatorSingleLayout: false
+  $name: "Show language indicator even with one keyboard layout"
+  $name:it: "Mostra l'indicatore della lingua anche con un solo layout di tastiera"
+  $name:es: "Mostrar el indicador de idioma incluso con una sola distribución de teclado"
+  $name:fr: "Afficher l’indicateur de langue même avec une seule disposition de clavier"
+  $name:pt: "Mostrar o indicador de idioma mesmo com apenas uma disposição de teclado"
+  $description: "This setting shows the language indicator and flyout when Windows reports one keyboard layout. Requires the integrated tray and Show the input language and its flyout."
+  $description:it: "Questa impostazione mostra l'indicatore della lingua e il flyout quando Windows rileva un solo layout di tastiera. Richiede la tray integrata e Mostra la lingua di input e il relativo flyout."
+  $description:es: "Esta configuración muestra el indicador de idioma y su panel cuando Windows detecta una sola distribución de teclado. Requiere la bandeja integrada y la opción de mostrar el idioma de entrada y su panel."
+  $description:fr: "Ce paramètre affiche l’indicateur de langue et son panneau lorsque Windows détecte une seule disposition de clavier. Nécessite la zone de notification intégrée et l’option d’affichage de la langue d’entrée et de son panneau."
+  $description:pt: "Esta configuração mostra o indicador de idioma e o painel quando o Windows deteta apenas uma disposição de teclado. Requer a área de notificação integrada e a opção para mostrar o idioma de entrada e o respetivo painel."
+- languageFlyoutFollowAccent: true
+  $name: "Language flyout follows the Windows accent color"
+  $name:it: "Il flyout della lingua segue il colore principale di Windows"
+  $name:es: "El panel de idioma sigue el color de énfasis de Windows"
+  $name:fr: "Le panneau de langue suit la couleur d’accentuation de Windows"
+  $name:pt: "O painel de idioma segue a cor de destaque do Windows"
+  $description: "This setting colors the Windows 8-style language flyout with the Windows accent; turn it off for purple. Bright colors are darkened for readability. It does not follow a custom taskbar color."
+  $description:it: "Questa impostazione colora il flyout della lingua in stile Windows 8 con il colore principale di Windows; disattivala per il viola. I colori chiari vengono scuriti per la leggibilità. Non segue il colore personalizzato della barra."
+  $description:es: "Esta configuración usa el color de énfasis de Windows para el panel de idioma de estilo Windows 8; desactívala para usar morado. Los colores claros se oscurecen para facilitar la lectura. No sigue el color personalizado de la barra."
+  $description:fr: "Ce paramètre utilise la couleur d’accentuation de Windows pour le panneau de langue de style Windows 8 ; désactivez-le pour utiliser le violet. Les couleurs claires sont assombries pour la lisibilité. Il ne suit pas la couleur personnalisée de la barre."
+  $description:pt: "Esta configuração usa a cor de destaque do Windows no painel de idioma em estilo Windows 8; desative-a para usar roxo. As cores claras são escurecidas para facilitar a leitura. Não segue a cor personalizada da barra."
 */
 // ==/WindhawkModSettings==
 // clang-format on
@@ -775,6 +817,9 @@ Use at your own risk. You are responsible for how you use the mod and for comply
 #include <bcrypt.h>
 #include <setupapi.h>
 #include <wlanapi.h>
+#include <powrprof.h>
+#include <uiautomation.h>
+#include <climits>
 #include <cwctype>
 // clang-format on
 
@@ -1009,10 +1054,85 @@ static const UiTranslation kUiTranslations[] = {
      L"Windhawk.",
      L"Não foi possível alterar o idioma de entrada. Verifique o registro do "
      L"Windhawk."},
+    {L"For easy switching, press Windows key + Space",
+     L"Para cambiar fácilmente, pulsa Windows + Espacio",
+     L"Pour changer de langue, appuyez sur Windows + Espace",
+     L"Para alternar facilmente, prima Windows + Espaço"},
     {L"Select an input language", L"Selecciona un idioma de entrada",
      L"Sélectionnez une langue d’entrée", L"Selecione um idioma de entrada"},
     {L"Show hidden icons", L"Mostrar iconos ocultos",
      L"Afficher les icônes cachées", L"Mostrar ícones ocultos"},
+    {L"Type here to search", L"Escribe aquí para buscar",
+     L"Taper ici pour rechercher", L"Digite aqui para pesquisar"},
+    {L"Date and time settings", L"Configuración de fecha y hora",
+     L"Paramètres de date et d'heure", L"Configurações de data e hora"},
+    {L"Speakers", L"Altavoces", L"Haut-parleurs", L"Alto-falantes"},
+    {L"Fully charged", L"Carga completa", L"Complètement chargée",
+     L"Totalmente carregada"},
+    {L"Charging", L"Cargando", L"En charge", L"Carregando"},
+    {L"Plugged in", L"Conectada", L"Branchée", L"Conectada"},
+    {L"%lu hr %lu min remaining", L"%lu h %lu min restantes",
+     L"%lu h %lu min restantes", L"%lu h %lu min restantes"},
+    {L"%lu min remaining", L"%lu min restantes", L"%lu min restantes",
+     L"%lu min restantes"},
+    {L"Power mode (plugged in): ", L"Modo de energía (conectada): ",
+     L"Mode d'alimentation (sur secteur) : ", L"Modo de energia (conectada): "},
+    {L"Power mode (on battery): ", L"Modo de energía (con batería): ",
+     L"Mode d'alimentation (sur batterie) : ",
+     L"Modo de energia (na bateria): "},
+    {L"Better battery", L"Mejor batería", L"Meilleure autonomie",
+     L"Melhor bateria"},
+    {L"Better performance", L"Mejor rendimiento", L"Meilleures performances",
+     L"Melhor desempenho"},
+    {L"Best performance", L"Máximo rendimiento", L"Performances optimales",
+     L"Desempenho máximo"},
+    {L"Best battery life", L"Máxima duración de la batería",
+     L"Autonomie optimale", L"Maior duração da bateria"},
+    {L"Battery settings", L"Configuración de batería",
+     L"Paramètres de batterie", L"Configurações da bateria"},
+    {L"Type to search your apps", L"Escribe para buscar entre tus aplicaciones",
+     L"Tapez pour rechercher dans vos applications",
+     L"Digite para pesquisar nos aplicativos"},
+    {L"No apps found", L"No se encontraron aplicaciones",
+     L"Aucune application trouvée", L"Nenhum aplicativo encontrado"},
+    {L"Search with Windows", L"Buscar con Windows", L"Rechercher avec Windows",
+     L"Pesquisar com o Windows"},
+    {L"Best match", L"Mejor coincidencia", L"Meilleur résultat",
+     L"Melhor correspondência"},
+    {L"Apps", L"Aplicaciones", L"Applications", L"Aplicativos"},
+    {L">Search\n", L">Búsqueda\n", L">Rechercher\n", L">Pesquisar\n"},
+    {L"Hidden\n", L"Oculta\n", L"Masquée\n", L"Oculta\n"},
+    {L"Show search icon\n", L"Mostrar icono de búsqueda\n",
+     L"Afficher l'icône de recherche\n", L"Mostrar ícone de pesquisa\n"},
+    {L"Show search box\n", L"Mostrar cuadro de búsqueda\n",
+     L"Afficher la zone de recherche\n", L"Mostrar caixa de pesquisa\n"},
+    {L"Show Task View button\n", L"Mostrar botón Vista de tareas\n",
+     L"Afficher le bouton Vue des tâches\n",
+     L"Mostrar botão Visão de Tarefas\n"},
+    {L"All", L"Todo", L"Tout", L"Tudo"},
+    {L"Documents", L"Documentos", L"Documents", L"Documentos"},
+    {L"Document", L"Documento", L"Document", L"Documento"},
+    {L"Top apps", L"Aplicaciones principales", L"Applications principales",
+     L"Principais aplicativos"},
+    {L"Recent", L"Recientes", L"Récents", L"Recentes"},
+    {L"No results", L"Sin resultados", L"Aucun résultat", L"Nenhum resultado"},
+    {L"See web results", L"Ver resultados web", L"Voir les résultats web",
+     L"Ver resultados da Web"},
+    {L" - See web results", L" - Ver resultados web",
+     L" - Voir les résultats web", L" - Ver resultados da Web"},
+    {L"Search the web", L"Buscar en la web", L"Rechercher sur le web",
+     L"Pesquisar na Web"},
+    {L"Open in browser", L"Abrir en el navegador", L"Ouvrir dans le navigateur",
+     L"Abrir no navegador"},
+    {L"Open", L"Abrir", L"Ouvrir", L"Abrir"},
+    {L"Run as administrator", L"Ejecutar como administrador",
+     L"Exécuter en tant qu'administrateur", L"Executar como administrador"},
+    {L"Open file location", L"Abrir ubicación del archivo",
+     L"Ouvrir l'emplacement du fichier", L"Abrir local do arquivo"},
+    {L"Task View", L"Vista de tareas", L"Vue des tâches", L"Visão de Tarefas"},
+    {L"Tasks", L"Tareas", L"Tâches", L"Tarefas"},
+    {L"Action Center", L"Centro de actividades", L"Centre de notifications",
+     L"Central de Ações"},
 };
 static UiLanguage CurrentUiLanguage() {
 #ifdef TASKBAR81_TEST
@@ -1196,6 +1316,11 @@ struct ScopedSelection {
  * explicit owner cleanup and menu anchoring at the given point; CBT menu
  * hook and repeated z-order timer removed to reduce taskbar conflicts.
  */
+// The menus of the Windows 10 skin take the Windows 10 look; the renderer is
+// the one of the Win+X menu near the end of the file. gT81MenuScheme chooses
+// its colours for one menu: -1 the app mode of Windows, 0 dark, 1 light.
+static thread_local int gT81MenuScheme = -1;
+static UINT T81TrackShellMenu(HMENU menu, UINT flags, int x, int y, HWND owner);
 namespace w7t {
 std::atomic<HWND> menuOwnerForShutdown{nullptr};
 namespace raii {
@@ -1944,8 +2069,8 @@ int32_t ShellMenu::ShowContextMenuEx(int32_t x,
         int32_t chosen = 0;
         {
             ForegroundMenuScope scope(menuOwner);
-            chosen = static_cast<int32_t>(toolbarMenuTrack(
-                root.get(), CommonFlags(bottomEdge), x, y, menuOwner, nullptr));
+            chosen = static_cast<int32_t>(T81TrackShellMenu(
+                root.get(), CommonFlags(bottomEdge), x, y, menuOwner));
         }
 
         return chosen;
@@ -2379,12 +2504,14 @@ const UINT_PTR TIMER_BATTERY_SLIDE = 19, TIMER_RESOURCE_RELOAD = 20,
 const UINT_PTR TIMER_ATTENTION = 27, TIMER_BUTTON_TRANSITION = 28,
                TIMER_LANGUAGE_REFRESH = 29, TIMER_WIN7_PREVIEW_CLOSE = 30;
 const UINT_PTR TIMER_OPENSHELL_VERIFY = 31, TIMER_T81_SECONDARY_START = 32;
+const UINT_PTR TIMER_T81_OPEN_FADE = 34;
 static constexpr UINT_PTR TIMER_T81_BLUR_REAPPLY = 59;
 static constexpr UINT_PTR TIMER_T81_AUTOHIDE = 62;
 static constexpr UINT_PTR TIMER_T81_AUTOHIDE_REFRESH = 63;
 const UINT WM_T81_APPBAR = WM_APP + 452;
 const UINT WM_T81_OPEN_CUSTOMIZE = WM_APP + 455;
 const UINT WM_T81_PINS_READY = WM_APP + 456;
+const UINT WM_T81_NET_READY = WM_APP + 457;
 const UINT WM_T81_FULLSCREEN_EVENT = WM_APP + 1004;
 const wchar_t kNativeControlOverlayClass[] =
     L"WH_Taskbar81NativeControlOverlay";
@@ -2395,6 +2522,11 @@ const int HIT_CLOCK = -5, HIT_NETWORK = -6, HIT_VOLUME = -7, HIT_BATTERY = -8,
           HIT_TRAY_MORE = -9, HIT_BAND_LINKS = -10, HIT_BAND_DESKTOP = -11,
           HIT_BAND_ADDRESS = -12, HIT_LANGUAGE = -13,
           HIT_TRAY_ICON_BASE = -1000;
+// Windows 10 skin only: the search box or icon, Task View and Action Center.
+const int HIT_W10_SEARCH = -14, HIT_W10_TASKVIEW = -15, HIT_W10_ACTION = -16;
+static constexpr bool T81IsWin10Hit(int hit) {
+    return hit <= HIT_W10_SEARCH && hit >= HIT_W10_ACTION;
+}
 constexpr size_t MAX_TASKS = 80;
 
 struct Task {
@@ -2460,6 +2592,15 @@ struct ButtonTransition {
     int layers = 0, barWidth = 0, barHeight = 0;
     ULONGLONG start = 0;
     bool ghost = false, vertical = false, reveal = false;
+};
+struct T81OpenFade {
+    std::wstring key;
+    ULONGLONG start = 0;
+    bool pinned = false;
+};
+struct T81PreviousGroup {
+    std::wstring key;
+    bool running = false;
 };
 struct PendingButtonChanges {
     std::vector<ButtonTransition> closed;
@@ -2667,6 +2808,7 @@ struct State {
     bool rectValid = false;
     bool tracking = false;
     bool startPressed = false;
+    int win10Pressed = HIT_NONE;  // Windows 10 skin: the button held down
     unsigned long t81WinFallbackSequence = 0;
     bool t81WinBeganVisible = false;
     HWND t81WinMenuAtDown = nullptr;
@@ -2686,9 +2828,12 @@ struct State {
     int dragGrabOffset = 0;
     std::vector<VisualPosition> visualPositions;
     std::vector<ButtonTransition> buttonTransitions;
+    std::vector<T81OpenFade> openFades;
+    std::vector<ButtonTransition> closeFades;
     ULONGLONG buttonPaintTick = 0;
     std::vector<HoverFade> hoverFades;
     float startFade = 0;
+    ULONGLONG startGleamStarted = 0;
     ULONGLONG fadeTick = 0;
     ULONGLONG animationTick = 0;
     std::vector<ULONGLONG> zRepairs;
@@ -2722,6 +2867,9 @@ struct State {
     HWND languageFlyout = nullptr, languageFlyoutTarget = nullptr;
     DWORD languageFlyoutTargetPid = 0, languageFlyoutTargetThread = 0;
     bool languageFlyoutClass = false, languageFlyoutFooterHover = false;
+    bool languageFlyoutModern = true;
+    int languageFlyoutScroll = 0, languageFlyoutRows = 1;
+    COLORREF languageFlyoutAccent = RGB(70, 23, 181);
     int languageFlyoutHover = -1;
     size_t languageFlyoutSelected = 0;
     std::vector<LanguageFlyoutItem> languageFlyoutItems;
@@ -2738,7 +2886,7 @@ struct State {
     IStream* peekStylerStreams[3]{};
     Gdiplus::Image* taskStateSprite = nullptr;
     IStream* taskStateStream = nullptr;
-    // Win7Taskbar Aero Basic opaque taskbar texture, GPL-3.0-or-later.
+    // Aero Basic opaque taskbar texture, GPL-3.0-or-later.
     Gdiplus::Image* serverStartReference = nullptr;
     IStream* serverStartReferenceStream = nullptr;
     Gdiplus::Image* serverSpriteLarge = nullptr;
@@ -2784,7 +2932,8 @@ struct State {
          appbarFullScreen = false;
     UINT appbarEdge = ABE_BOTTOM;
     RECT appbarDesired{}, appbarApproved{};
-    ULONGLONG appbarRetryAt = 0;
+    bool appbarSameEdgeRecovery = false, autoHideLiveKnown = false;
+    ULONGLONG appbarRetryAt = 0, sameEdgeMissingSince = 0;
     int previewAnimX = 0, previewAnimY = 0, previewAnimOffset = 0,
         previewAnimOffsetX = 0;
     ULONGLONG previewAnimStart = 0;
@@ -2869,9 +3018,18 @@ static constexpr bool T81IsWin7Skin(int skin) {
 static constexpr bool T81IsWin7BetaBar(int skin) {
     return skin == 5 || skin == 9;
 }
+static constexpr bool T81IsWin10Skin(int skin) {
+    return skin == 10;
+}
 static constexpr bool T81SkinHasTrackedStartButton(int skin) {
     return (T81IsWin7Skin(skin) && skin != 8) || skin == 2 || skin == 4 ||
-           skin == 7;
+           skin == 7 || skin == 10;
+}
+// Skins whose original taskbar blurred what lies behind it: the Aero ones and
+// Windows 10 (with transparency effects on). Aero Basic is excluded by the
+// callers.
+static constexpr bool T81SkinWantsLiveBlur(int skin) {
+    return T81IsWin7Skin(skin) || skin == 2 || skin == 10;
 }
 static constexpr UINT WM_T81_START_STATE = WM_APP + 354;
 static constexpr UINT_PTR TIMER_T81_START_RECONCILE = 57;
@@ -3119,6 +3277,13 @@ static void T81StartForcedWinRecovery(HWND target) {
 }
 
 std::atomic<HWND> barWindow{nullptr};
+static std::atomic<bool> t81WinXTrayActive{false};
+namespace EmbeddedWinX {
+static bool Initialize();
+static void Shutdown();
+static bool Request(HWND bar);
+static bool IsMenuOpen();
+}  // namespace EmbeddedWinX
 std::atomic<HWND> nativeWindow{nullptr};
 std::atomic<bool> quitting{false};
 std::atomic<bool> enablePrivateTray{true}, reserveWorkArea{true};
@@ -3132,8 +3297,15 @@ std::atomic<int> taskbarOpacity{220}, taskbarBackgroundOpacity{155};
 std::atomic<bool> perPixelTaskbar{true}, perPixelPreview{true};
 std::atomic<int> previewOpacity{200};
 std::atomic<bool> aeroPeek{true}, useBetaStartLogo{false};
-// 0=custom, 1=7, 2=8 beta, 3=8.0, 4=8.1. Presets are effective values only.
+// 0=custom, 1=7, 2=8 beta, 3=8.0, 4=8.1, 10=Windows 10. Presets are effective
+// values only.
 std::atomic<int> taskbarSkin{0};
+// Windows 10 skin. Search: 0 hidden, 1 icon, 2 box. Its look: 0 follows the
+// app mode of Windows, 1 light, 2 dark.
+// 0 the search of Windows 10 22H2, 1 the classic list, 2 Windows Search.
+std::atomic<int> win10SearchStyle{0};
+std::atomic<bool> win10ActionCenterButton{true};
+std::atomic<bool> win10Flyouts{true};
 std::atomic<bool> startHotCorner{false}, customStartColor{false},
     showRecoverableErrors{true};
 static std::atomic<bool> debugExceptionLog{false};
@@ -3152,7 +3324,9 @@ std::atomic<bool> preferClassicVolume{true};
 std::atomic<bool> useOriginalBatteryFlyout{false},
     networkUse100PercentArtwork{false};
 std::atomic<bool> useAccent{false}, volumeWheel{false};
-std::atomic<bool> showLanguageIndicator{true}, showJumpShowWindow{true};
+std::atomic<bool> showLanguageIndicator{true},
+    showLanguageIndicatorSingleLayout{false}, languageFlyoutFollowAccent{true},
+    showJumpShowWindow{true};
 std::atomic<int> jumpCloseStyle{0};
 HANDLE threadHandle = nullptr;
 HANDLE uiQueueReady = nullptr;
@@ -3263,6 +3437,7 @@ void LoadSettings() {
                    : skin == L"win8beta"         ? 2
                    : skin == L"win8"             ? 3
                    : skin == L"win81"            ? 4
+                   : skin == L"win10"            ? 10
                                                  : 0;
         taskbarSkin.store(mode);
         if (mode) {
@@ -3271,6 +3446,17 @@ void LoadSettings() {
             startHotCorner.store(mode == 3 || mode == 8);
         }
     }
+    {
+        PCWSTR value = Wh_GetStringSetting(L"win10SearchStyle");
+        std::wstring style(value ? value : L"");
+        Wh_FreeStringSetting(value);
+        win10SearchStyle.store(style == L"classic"   ? 1
+                               : style == L"windows" ? 2
+                                                     : 0);
+    }
+    win10Flyouts.store(Wh_GetIntSetting(L"win10Flyouts") != 0);
+    win10ActionCenterButton.store(
+        Wh_GetIntSetting(L"win10ActionCenterButton") != 0);
     customStartColor.store(Wh_GetIntSetting(L"customStartColor") != 0);
     showRecoverableErrors.store(Wh_GetIntSetting(L"showRecoverableErrors") !=
                                 0);
@@ -3300,6 +3486,10 @@ void LoadSettings() {
     volumeWheel.store(Wh_GetIntSetting(L"volumeWheel") != 0);
     showLanguageIndicator.store(Wh_GetIntSetting(L"showLanguageIndicator") !=
                                 0);
+    showLanguageIndicatorSingleLayout.store(
+        Wh_GetIntSetting(L"showLanguageIndicatorSingleLayout") != 0);
+    languageFlyoutFollowAccent.store(
+        Wh_GetIntSetting(L"languageFlyoutFollowAccent") != 0);
     showJumpShowWindow.store(Wh_GetIntSetting(L"showJumpShowWindow") != 0);
 }
 // Three 50 x 41 state frames; preserve alpha and stream lifetime.
@@ -6051,7 +6241,7 @@ static const char* const kBetaTextureBase64[] = {
     "IiYuT840wivF8wemZg56eG8FZO4vbOeVetYaqhiQ1"
     "D1ke/DU5BoGn4fsyBx86zNpZpGePnsc/PzUZ9LqXGnIjnUG/"
     "VeA3lCml9GTco10AAAAASUVORK5CYII=",
-    // Vertical beta Start at rest: pixels cropped from supplied reference.
+    // Vertical beta Start at rest: pixels cropped from the reference.
     "iVBORw0KGgoAAAANSUhEUgAAADsAAAA2CAIAAAD22XY6AAADaklEQVR4nO2YTUzTYBjHn7brNl"
     "gXikQ2FZjhY4sHVjOiDkiAi3DioPGI8WT04oGYeEY5eTIx"
     "mhjxZLyaGIkhfhwgZkBMJGwxwQ4xDKYMFRh2bF27rh4wY9lGa780xP6O3ZP3/fXJ/"
@@ -7258,7 +7448,7 @@ static const char* const kBetaTextureBase64[] = {
     "fLIufv1ksPC7wKVap3nqvXlbSSO+"
     "9GDaXXVtbP7O5APXt7IfMNjH77B6V7IfdkLp5almVO7a3ZnxZO/z0y1s/cVfoemD0l/7+E134t"
     "SQBRRfQERk9gVO+565s8383Lnesb8If/P8w36gI/ExtkAAAAAElFTkSuQmCC"};
-// Only the user-provided seventh frame, cropped losslessly (60 x 40 RGBA).
+// Seventh reference frame, cropped losslessly (60 x 40 RGBA).
 // Windows7 theme for Windows 11 Taskbar Styler, author Sand216.
 // Exact transparent PNG files: desktopNormal, desktopPointerOver,
 // desktopPressed.
@@ -7332,9 +7522,9 @@ static const char kTaskStateSprite[] =
     "HCknmuWECpJABbQu7wkQ1dagJECR1ByaBGUniMAk4CpMgCgyTYJUb3VqP6SQICVB0xq0pCQs8a"
     "miSj3X56KF/c88L+/s4/PvLR5+AVPK3XcCs0iX"
     "AAAAAElFTkSuQmCC";
-// aerobasictaskbar from Win7Taskbar GraphicalResourceBundle.cs, commit
+// Aero Basic texture, resource revision
 // 3b4d5f408288364e14b01c78287d9c4d08a43fbb; GPL-3.0-or-later.
-// Win7Taskbar contributors; based on RetroBar by dremin (Apache-2.0).
+// Texture contributors; based on RetroBar by dremin (Apache-2.0).
 static const char kWin7BasicTexture[] =
     "iVBORw0KGgoAAAANSUhEUgAAAIAAAAAoCAIAAAC5E2UfAAABO0lEQVR42u3WW1rCMBiE4X//"
     "O5KDNFUEbEuTqkCbpAU56DKcXcyF"
@@ -7974,7 +8164,7 @@ static void DrawBetaTexture(Graphics& g, int index, const RECT& rect) {
              (int)(rect.bottom - rect.top)),
         0, 0, (int)image->GetWidth(), (int)image->GetHeight(), UnitPixel);
 }
-// Smooth, neutral alpha relief inspired by the supplied Windows 7 reference.
+// Smooth, neutral alpha relief inspired by a Windows 7 reference.
 // This is a reconstruction, not a recovered Windows theme resource. It blends
 // over the current bar and is drawn in device pixels to keep edges crisp.
 static void DrawWin7PeekRelief(Graphics& g,
@@ -8261,6 +8451,43 @@ static void DrawStartImage(Graphics& g,
     attr.SetColorMatrix(&matrix);
     g.DrawImage(s->startImage, dst, 0.0f, (float)(41 * frame), 50.0f, 41.0f,
                 UnitPixel, &attr);
+}
+
+// A soft highlight is painted through the existing white logo sprite, then the
+// dark cutout frame is composited over it. It is an approximation of the
+// gleam visible during the hover transition, not a native DWM glass effect.
+static void T81DrawWin81LogoGleam(Graphics& g,
+                                  int w,
+                                  int h,
+                                  float fade,
+                                  ULONGLONG started) {
+    if (taskbarSkin.load() != 4 || fade <= 0 || w <= 0 || h <= 0)
+        return;
+    // The reference image shows one short travelling shine after the initial
+    // fade. Duration is an approximation: the image has no timestamps.
+    if (!started)
+        return;
+    ULONGLONG elapsed = GetTickCount64() - started;
+    if (elapsed >= 700)
+        return;
+    const float phase = (float)elapsed / 700.f;
+    const float envelope = std::sin(phase * 3.14159265f);
+    const int strips = 16;
+    const float center = -0.15f + 1.3f * phase;
+    for (int i = 0; i < strips; ++i) {
+        float position = (i + 0.5f) / strips;
+        float weight = std::max(0.f, 1.f - std::abs(position - center) / 0.3f);
+        if (weight <= 0.f)
+            continue;
+        int left = i * w / strips, right = (i + 1) * w / strips;
+        if (right <= left)
+            continue;
+        auto saved = g.Save();
+        g.SetClip(Rect(left, 0, right - left, h), CombineModeIntersect);
+        Color white(255, 255, 255, 255);
+        DrawStartImage(g, w, h, 0, fade * weight * envelope * 0.28f, &white);
+        g.Restore(saved);
+    }
 }
 
 // The antialiased sprite can leave the left and bottom device pixels uncovered.
@@ -10094,6 +10321,21 @@ BOOL CALLBACK EnumTask(HWND hwnd, LPARAM parameter) {
         return FALSE;
     }
 }
+static bool T81OpenFadeEnabled() {
+    BOOL enabled = FALSE;
+    if (!SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &enabled, 0) ||
+        !enabled)
+        return false;
+    DWORD value = 1, size = sizeof(value), type = 0;
+    LSTATUS status = RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+        L"TaskbarAnimations", RRF_RT_REG_DWORD, &type, &value, &size);
+    return status == ERROR_FILE_NOT_FOUND ||
+           (status == ERROR_SUCCESS && value != 0);
+}
+static std::vector<ButtonTransition> T81PrepareCloseFades(
+    const std::vector<Task>& next);
 static PendingButtonChanges PrepareButtonChanges(const std::vector<Task>& next);
 static void CommitButtonChanges(PendingButtonChanges&& pending,
                                 const std::vector<Task>& previous);
@@ -10126,6 +10368,16 @@ void Refresh() {
             }
         return;
     }
+    std::vector<T81PreviousGroup> oldGroups;
+    bool animateOpen = s->ticks > 1 && !s->verticalActive && !s->dragActive &&
+                       !s->barDragCandidate && T81OpenFadeEnabled();
+    if (animateOpen) {
+        oldGroups.reserve(s->groups.size());
+        for (const auto& group : s->groups)
+            oldGroups.push_back({group.key, !group.tasks.empty()});
+    }
+    auto closing = animateOpen ? T81PrepareCloseFades(tasks)
+                               : std::vector<ButtonTransition>{};
     auto changes = PrepareButtonChanges(tasks);
     s->tasks.swap(tasks);
     // Old vectors can reuse owned handles; release only handles not retained
@@ -10145,7 +10397,83 @@ void Refresh() {
     if (s->ticks == 1 || s->ticks % 30 == 0 || HasFavoritesVersionChanged())
         RefreshPins();
     BuildGroups();
+    if (animateOpen) {
+        ULONGLONG now = GetTickCount64();
+        for (const auto& group : s->groups) {
+            if (group.tasks.empty())
+                continue;
+            auto old = std::find_if(oldGroups.begin(), oldGroups.end(),
+                                    [&](const T81PreviousGroup& entry) {
+                                        return entry.key == group.key;
+                                    });
+            if (old != oldGroups.end() && old->running)
+                continue;
+            bool containsNew = false;
+            for (size_t idx : group.tasks) {
+                if (idx >= s->tasks.size())
+                    continue;
+                const Task& task = s->tasks[idx];
+                if (std::none_of(tasks.begin(), tasks.end(),
+                                 [&](const Task& previous) {
+                                     return previous.hwnd == task.hwnd &&
+                                            previous.pid == task.pid;
+                                 })) {
+                    containsNew = true;
+                    break;
+                }
+            }
+            if (!containsNew)
+                continue;
+            s->openFades.erase(
+                std::remove_if(s->openFades.begin(), s->openFades.end(),
+                               [&](const T81OpenFade& fade) {
+                                   return fade.key == group.key;
+                               }),
+                s->openFades.end());
+            if (s->openFades.size() < MAX_TASKS)
+                s->openFades.push_back(
+                    {group.key, now, old != oldGroups.end()});
+        }
+        if (!s->openFades.empty() &&
+            !SetTimer(s->bar, TIMER_T81_OPEN_FADE, 16, nullptr))
+            s->openFades.clear();
+    } else if (!T81OpenFadeEnabled() || s->dragActive || s->verticalActive) {
+        s->openFades.clear();
+        KillTimer(s->bar, TIMER_T81_OPEN_FADE);
+    }
     CommitButtonChanges(std::move(changes), tasks);
+    if (animateOpen) {
+        for (auto& ghost : closing) {
+            auto group = std::find_if(
+                s->groups.begin(), s->groups.end(),
+                [&](const Group& g) { return g.key == ghost.key; });
+            if (group != s->groups.end() && !group->tasks.empty())
+                continue;
+            s->closeFades.erase(
+                std::remove_if(s->closeFades.begin(), s->closeFades.end(),
+                               [&](const ButtonTransition& old) {
+                                   return old.key == ghost.key;
+                               }),
+                s->closeFades.end());
+            s->openFades.erase(
+                std::remove_if(s->openFades.begin(), s->openFades.end(),
+                               [&](const T81OpenFade& old) {
+                                   return old.key == ghost.key;
+                               }),
+                s->openFades.end());
+            if (s->closeFades.size() < MAX_TASKS) {
+                ghost.start = GetTickCount64();
+                s->closeFades.push_back(std::move(ghost));
+            }
+        }
+        if ((!s->openFades.empty() || !s->closeFades.empty()) &&
+            !SetTimer(s->bar, TIMER_T81_OPEN_FADE, 16, nullptr)) {
+            s->openFades.clear();
+            s->closeFades.clear();
+        }
+    } else {
+        s->closeFades.clear();
+    }
     for (const auto& item : s->previews)
         if (!item.more && !IsWindow(item.hwnd)) {
             HidePreview();
@@ -10717,6 +11045,185 @@ void SendWin(WORD extra) {
         Wh_Log(L"[T81-DIAG] SendInput inserted %u/%d events; cause unknown",
                sent, n);
 }
+// Windows 10 skin: what Windows itself is set to. The bar reads the registry
+// values Explorer and the Settings app use, so that they and the bar's own
+// menu agree: the search mode, the Task View button, the light or dark
+// Windows mode, transparency and the accent colour on the taskbar. The search
+// mode semantics follow babamohammed's "Win10 Taskbar Search State Refresh"
+// mod: 0 hidden, 1 icon, 2 box, and 3 (icon and label, Windows 11) is the box.
+struct T81W10System {
+    bool lightSystem = false;  // SystemUsesLightTheme
+    bool lightApps = true;     // AppsUseLightTheme
+    bool transparency = true;  // EnableTransparency
+    bool accentBar = false;    // ColorPrevalence
+    int search = 2;            // SearchboxTaskbarMode
+    bool taskView = true;      // ShowTaskViewButton
+    bool operator==(const T81W10System&) const = default;
+};
+static const wchar_t kW10KeyPersonalize[] =
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
+static const wchar_t kW10KeySearch[] =
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Search";
+static const wchar_t kW10KeyAdvanced[] =
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
+static DWORD T81W10RegRead(const wchar_t* key,
+                           const wchar_t* name,
+                           DWORD fallback) {
+    DWORD value = fallback, size = sizeof(value);
+    return RegGetValueW(HKEY_CURRENT_USER, key, name, RRF_RT_REG_DWORD, nullptr,
+                        &value, &size) == ERROR_SUCCESS
+               ? value
+               : fallback;
+}
+static T81W10System gW10System;
+static ULONGLONG gW10SystemAt = 0;
+static const T81W10System& T81W10Sys() {
+    ULONGLONG now = GetTickCount64();
+    if (!gW10SystemAt || now - gW10SystemAt >= 1000) {
+        T81W10System v;
+        v.lightSystem =
+            T81W10RegRead(kW10KeyPersonalize, L"SystemUsesLightTheme", 0) != 0;
+        v.lightApps =
+            T81W10RegRead(kW10KeyPersonalize, L"AppsUseLightTheme", 1) != 0;
+        v.transparency =
+            T81W10RegRead(kW10KeyPersonalize, L"EnableTransparency", 1) != 0;
+        v.accentBar =
+            T81W10RegRead(kW10KeyPersonalize, L"ColorPrevalence", 0) != 0;
+        DWORD mode = T81W10RegRead(kW10KeySearch, L"SearchboxTaskbarMode", 2);
+        v.search = mode == 0 ? 0 : mode == 1 ? 1 : 2;
+        v.taskView =
+            T81W10RegRead(kW10KeyAdvanced, L"ShowTaskViewButton", 1) != 0;
+        gW10System = v;
+        gW10SystemAt = now ? now : 1;
+    }
+    return gW10System;
+}
+// The Windows 10 skin in the light Windows mode: a light bar with dark
+// pictures and text, light flyouts and menus.
+static bool T81W10Light() {
+    return T81IsWin10Skin(taskbarSkin.load()) && T81W10Sys().lightSystem;
+}
+// Text and pictures on the bar: black on the classic skin 7 and on the light
+// Windows 10 bar, white everywhere else.
+static COLORREF T81BarInkRef() {
+    return taskbarSkin.load() == 7 || T81W10Light() ? RGB(0, 0, 0)
+                                                    : RGB(255, 255, 255);
+}
+static Color T81W10BarInk(BYTE alpha = 255) {
+    return T81W10Light() ? Color(alpha, 0, 0, 0) : Color(alpha, 255, 255, 255);
+}
+// The menu of the bar writes the values Windows uses and tells Explorer and
+// the Settings app, as Windows 10 does.
+static void T81W10WriteSetting(const wchar_t* key,
+                               const wchar_t* name,
+                               DWORD value) {
+    LSTATUS status = RegSetKeyValueW(HKEY_CURRENT_USER, key, name, REG_DWORD,
+                                     &value, sizeof(value));
+    Wh_Log(L"[T81-WIN10] %ls=%lu status=%ld", name, value, (long)status);
+    gW10SystemAt = 0;
+    SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
+                       (LPARAM)L"TraySettings");
+}
+// Windows 10 skin: the flyouts and the search pane (defined further down).
+enum {
+    kW10FlyNone,
+    kW10FlyClock,
+    kW10FlyVolume,
+    kW10FlyBattery,
+    kW10FlyLanguage,
+    kW10FlySearch,
+    kW10FlyNetwork
+};
+struct T81W10Fly {
+    HWND hwnd = nullptr;
+    bool classReady = false;
+    int kind = kW10FlyNone;
+    int hot = 0, down = 0;   // the part under the pointer, the pressed part
+    ULONGLONG closedAt = 0;  // when a press on the bar closed it
+    int closedKind = kW10FlyNone;
+    RECT anchor{};  // the part of the bar it belongs to, on screen
+    RECT rect{};    // where the flyout stands when it is fully open
+    int anim = 0;   // 1 sliding in, 2 sliding out
+    ULONGLONG animAt = 0;
+    bool dirty = false;       // a redraw is on its way
+    int year = 0, month = 0;  // calendar: the month on show
+    bool drag = false;        // a slider follows the pointer
+    std::wstring device;      // volume: the name of the output device
+    bool power = false;       // battery: the power mode slider is available
+    bool powerTwo = false;    // battery: the power mode label takes two lines
+    int powerAt = 1;
+    std::wstring query;   // search: the text typed so far
+    bool ownBox = false;  // search: the pane carries the text box
+    bool caret = true;
+    int selected = 0;
+    std::vector<int> found;
+};
+static T81W10Fly gW10Fly;
+static bool T81Win10FlyoutsOn();
+static void T81Win10ToggleFlyout(int kind);
+static void T81W10NetPrefetch(bool hover);
+static void T81W10NetFollowScan();
+static void T81Win10CloseFlyout(bool animate = true);
+static void T81Win10DestroyFlyout();
+static bool T81Win10SearchShown() {
+    return gW10Fly.kind == kW10FlySearch && gW10Fly.hwnd &&
+           IsWindowVisible(gW10Fly.hwnd);
+}
+// The search box of the bar holds the typed text while the pane is open.
+static bool T81Win10SearchInBar() {
+    return T81Win10SearchShown() && !gW10Fly.ownBox;
+}
+// Windows 10 skin: the search box or icon opens Windows Search, Task View
+// opens the task switcher and Action Center opens the notifications, each with
+// the keyboard shortcut Windows documents for it. Notifications are Win+A on
+// Windows 10 and Win+N on Windows 11, where Win+A is Quick Settings.
+static bool T81RunningOnWindows11() {
+    static int cached = -1;
+    if (cached < 0) {
+        using RtlGetVersionFn = LONG(WINAPI*)(OSVERSIONINFOW*);
+        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        auto rtl = ntdll
+                       ? (RtlGetVersionFn)GetProcAddress(ntdll, "RtlGetVersion")
+                       : nullptr;
+        OSVERSIONINFOW os{};
+        os.dwOSVersionInfoSize = sizeof(os);
+        cached = rtl && rtl(&os) == 0 && os.dwMajorVersion >= 10 &&
+                         os.dwBuildNumber >= 22000
+                     ? 1
+                     : 0;
+    }
+    return cached == 1;
+}
+static DWORD T81OsBuild() {
+    static DWORD build = 0;
+    if (!build) {
+        using RtlGetVersionFn = LONG(WINAPI*)(OSVERSIONINFOW*);
+        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        auto rtl = ntdll
+                       ? (RtlGetVersionFn)GetProcAddress(ntdll, "RtlGetVersion")
+                       : nullptr;
+        OSVERSIONINFOW os{};
+        os.dwOSVersionInfoSize = sizeof(os);
+        build = rtl && rtl(&os) == 0 && os.dwBuildNumber ? os.dwBuildNumber : 1;
+    }
+    return build;
+}
+static void T81Win10Activate(int hit) {
+    if (hit == HIT_W10_SEARCH && win10SearchStyle.load() != 2) {
+        T81Win10ToggleFlyout(kW10FlySearch);
+        return;
+    }
+    T81Win10CloseFlyout();
+    WORD key = hit == HIT_W10_SEARCH     ? 'S'
+               : hit == HIT_W10_TASKVIEW ? VK_TAB
+               : hit == HIT_W10_ACTION   ? (T81RunningOnWindows11() ? 'N' : 'A')
+                                         : 0;
+    if (!key)
+        return;
+    Wh_Log(L"[T81-WIN10] button %d sends Win+%c", hit,
+           key == VK_TAB ? L'T' : (wchar_t)key);
+    SendWin(key);
+}
 int Dpi() {
 #ifdef TASKBAR81_TEST
     if (testDpiOverride > 0)
@@ -10904,13 +11411,19 @@ static ClockTextRows GetClockTextRows(RECT clock, int height, int dpi) {
     ClockTextRows rows{};
     if (height <= 0 || clock.right <= clock.left)
         return rows;
+    // Windows 10 sets the two lines 18 px apart: in a 40 px bar the capitals
+    // of the time stand on row 15 and those of the date on row 33.
     int minimum = MulDiv(32, dpi, 96),
-        stride = std::max(1, MulDiv(17, dpi, 96));
+        stride = std::max(
+            1, MulDiv(T81IsWin10Skin(taskbarSkin.load()) ? 18 : 17, dpi, 96));
     if (height < minimum || height < 2 * stride) {
         rows.time = RECT{clock.left, 0, clock.right, height};
         return rows;
     }
     int top = (height - 2 * stride) / 2;
+    // Windows 10 sets the pair one pixel above the middle.
+    if (T81IsWin10Skin(taskbarSkin.load()))
+        top = std::max(0, top - MulDiv(1, dpi, 96));
     rows.time = RECT{clock.left, top, clock.right, top + stride};
     rows.date = RECT{clock.left, top + stride, clock.right, top + 2 * stride};
     rows.showDate = true;
@@ -11041,7 +11554,8 @@ static bool DrawClockDirectWrite(HDC dc,
                      // DC
         hr = target->BindDC(dc, &bounds);
     }
-    D2D1_COLOR_F white{1.f, 1.f, 1.f, 1.f};
+    const float t81Ink = T81W10Light() ? 0.f : 1.f;
+    D2D1_COLOR_F white{t81Ink, t81Ink, t81Ink, 1.f};
     if (SUCCEEDED(hr))
         hr = target->CreateSolidColorBrush(white, &brush);
     if (SUCCEEDED(hr)) {
@@ -11170,7 +11684,8 @@ static bool DrawWin7ClockDirectWriteMask(
         RECT local{0, 0, w, h};
         hr = target->BindDC(mask, &local);
     }
-    D2D1_COLOR_F white{1.f, 1.f, 1.f, 1.f};
+    const float t81Ink = T81W10Light() ? 0.f : 1.f;
+    D2D1_COLOR_F white{t81Ink, t81Ink, t81Ink, 1.f};
     if (SUCCEEDED(hr))
         hr = target->CreateSolidColorBrush(white, &brush);
     if (SUCCEEDED(hr)) {
@@ -11303,7 +11818,7 @@ static bool DrawClockTextHighQuality(HDC dc,
         return false;
     }
     SetBkMode(dc, TRANSPARENT);
-    SetTextColor(dc, RGB(255, 255, 255));
+    SetTextColor(dc, T81BarInkRef());
     bool ok = true;
     for (const auto& line : lines) {
         if (!line.text || !line.text[0] || line.rect.right <= line.rect.left ||
@@ -11326,6 +11841,11 @@ static int MeasureClockWidth(HDC dc,
                              bool perPixel) {
     int minimum = MulDiv(80, dpi, 96), maximum = MulDiv(240, dpi, 96),
         padding = MulDiv(16, dpi, 96);
+    if (T81IsWin10Skin(taskbarSkin.load())) {
+        // Windows 10: the clock is as wide as its text and 6 px on each side.
+        minimum = MulDiv(40, dpi, 96);
+        padding = MulDiv(12, dpi, 96);
+    }
     if (!dc)
         return minimum;
     HFONT font = CreateTaskbarFont(dpi, perPixel);
@@ -11598,19 +12118,36 @@ void RefreshBattery() {
     }
 }
 
-// Based on the supplied Windows 8.1 screenshot (1440x900, 40 px bar),
+// Based on a Windows 8.1 reference screenshot (1440x900, 40 px bar),
 // assumed to be 96 DPI: first button begins at x=54, its cadence is 61 px,
 // and the notification clock is approximately 80 px wide. Other themes,
 // locales and taskbar sizes can differ. Keep these logical, not physical px.
 static constexpr int kStartLogical = 54, kTaskButtonLogical = 61,
                      kClockLogical = 80;
+// Windows 10 skin, logical pixels measured on Windows 10 screenshots at 96
+// DPI: Start, the search icon and Task View are 48 wide, the search box 344,
+// Action Center 40 with 8 before Show desktop, which is a 1 px line and 4 px.
+// Task buttons are 48 wide and 1 px apart (a pitch of 49); the first one
+// starts 3 px after Task View. Icons are 24 px (16 with small buttons).
+static constexpr int kWin10StartLogical = 48, kWin10SlotLogical = 48,
+                     kWin10SearchBoxLogical = 344, kWin10TaskPitchLogical = 49,
+                     kWin10ActionLogical = 40, kWin10ActionGapLogical = 8,
+                     kWin10DesktopLogical = 5, kWin10TaskLeadLogical = 2;
 static bool T81WidthOverridden() {
     return buttonWidthMode.load() == 1;
 }
 static int T81ButtonLogicalWidth() {
     if (buttonWidthMode.load() == 1)
         return customTaskButtonWidth.load();
+    if (T81IsWin10Skin(taskbarSkin.load()))
+        return s && s->nativeSmallIcons ? 33 : kWin10TaskPitchLogical;
     return s && s->nativeSmallIcons ? 40 : kTaskButtonLogical;
+}
+// Logical size of the app icons on the horizontal bar.
+static int T81TaskIconLogical() {
+    if (s && s->nativeSmallIcons)
+        return 16;
+    return T81IsWin10Skin(taskbarSkin.load()) ? 24 : 32;
 }
 
 // Reference: 70 x 69 x 51 physical px at assumed 125% DPI.
@@ -11723,6 +12260,8 @@ static const wchar_t* EdgeName(BarEdge edge) {
 struct Layout {
     RECT start, clock, language, desktop, overflow, tray, desktopBand,
         linksBand, addressBand;
+    // Windows 10 skin only; empty otherwise.
+    RECT search, taskView, action;
     int first, width, count;
     int rows = 1, columns = 1, rowHeight = 0;
     bool labels = false;
@@ -11977,7 +12516,10 @@ static DWORD g_pendingLanguageFlyoutThread = 0;
 static int g_pendingLanguageFlyoutAttempts = 0;
 static bool LanguageIndicatorVisible() {
     return s && s->privateActive && showLanguageIndicator.load() &&
-           s->languageLayoutCount > 1 && !s->languageText.empty();
+           (s->languageLayoutCount > 1 ||
+            (s->languageLayoutCount == 1 &&
+             showLanguageIndicatorSingleLayout.load())) &&
+           !s->languageText.empty();
 }
 static int LanguageIndicatorWidth() {
     return LanguageIndicatorVisible() ? std::max(Px(34), s->languageWidthPx)
@@ -11989,8 +12531,6 @@ static int LanguageIndicatorHeight() {
 static void RefreshLanguageIndicator() {
     if (!s)
         return;
-    if (!showLanguageIndicator.load())
-        HideLanguageFlyout();
     bool oldVisible = LanguageIndicatorVisible();
     int oldWidth = s->languageWidthPx;
     HKL oldHkl = s->languageHkl;
@@ -12012,6 +12552,8 @@ static void RefreshLanguageIndicator() {
                                   MeasureLanguageWidth(s->languageRegion));
     s->languageMetricsDpi = Dpi();
     bool visible = LanguageIndicatorVisible();
+    if (!visible)
+        HideLanguageFlyout();
     bool geometry =
         visible != oldVisible || (visible && s->languageWidthPx != oldWidth);
     if (geometry && s->bar)
@@ -12031,39 +12573,79 @@ static int PrivateTrayWidth();
 static Layout TaskAreaLayout(int w, int h, int& avail) {
     Layout L{};
     const bool beta8148 = useBetaStartLogo.load() && s->betaStartImage;
+    const bool win10 = T81IsWin10Skin(taskbarSkin.load());
     // Windows 8-style layout: retain a small empty leading margin when Start is
     // hidden.
     int start = std::min(
         w, Px(startHotCorner.load()
                   ? 8
                   : (taskbarSkin.load() == 7 ? (s->nativeSmallIcons ? 40 : 44)
+                     : win10                 ? kWin10StartLogical
                                              : kStartLogical)));
     int desk = s->preservingTray
                    ? 0
                    : std::min(std::max(0, w - start),
                               Px(taskbarSkin.load() == 7                 ? 24
                                  : (beta8148 || taskbarSkin.load() == 8) ? 15
-                                                                         : 8));
-    int desiredClock = std::max(Px(kClockLogical), s->clockWidthPx);
-    int clock = s->preservingTray
-                    ? 0
-                    : std::min(std::max(0, w - start - desk), desiredClock);
-    int language = s->preservingTray
-                       ? 0
-                       : std::min(std::max(0, w - start - desk - clock),
-                                  LanguageIndicatorWidth());
+                                 : win10 ? kWin10DesktopLogical
+                                         : 8));
+    // Windows 10: Action Center stands between the clock and Show desktop.
+    int action =
+        win10 && !s->preservingTray && s->privateActive &&
+                win10ActionCenterButton.load()
+            ? std::min(std::max(0, w - start - desk),
+                       Px(kWin10ActionLogical + kWin10ActionGapLogical))
+            : 0;
+    int desiredClock = win10 && s->clockWidthPx > 0
+                           ? s->clockWidthPx
+                           : std::max(Px(kClockLogical), s->clockWidthPx);
+    int clock =
+        s->preservingTray
+            ? 0
+            : std::min(std::max(0, w - start - desk - action), desiredClock);
+    int language =
+        s->preservingTray
+            ? 0
+            : std::min(std::max(0, w - start - desk - action - clock),
+                       LanguageIndicatorWidth());
     L.start = {0, 0,
                startHotCorner.load() ? std::min(w, std::max(1, Px(2))) : start,
                h};
     L.desktop = {w - desk, 0, w, h};
-    L.clock = {w - desk - clock, 0, w - desk, h};
+    if (action > 0)
+        L.action = {
+            w - desk - action, 0,
+            w - desk - action + std::min(action, Px(kWin10ActionLogical)), h};
+    L.clock = {w - desk - action - clock, 0, w - desk - action, h};
     // 8148 only: leave a small visual gap after Start. L.first is the
     // shared origin for painting, hit testing, thumbnails and drag/drop.
     L.first =
         std::min((int)L.clock.left,
                  start + (beta8148 && !startHotCorner.load() ? Px(4) : 0));
+    int lead = start;
+    if (win10 && !startHotCorner.load()) {
+        // Search and Task View follow Start. The box needs room: when the
+        // notification area and three buttons do not fit beside it, the icon
+        // takes its place; a very narrow bar drops both.
+        int mode = T81W10Sys().search;
+        int search = mode == 2   ? Px(kWin10SearchBoxLogical)
+                     : mode == 1 ? Px(kWin10SlotLogical)
+                                 : 0;
+        int taskView = T81W10Sys().taskView ? Px(kWin10SlotLogical) : 0;
+        int room = (int)L.clock.left - language - PrivateTrayWidth() - start;
+        int pitch = Px(kWin10TaskPitchLogical);
+        if (mode == 2 && room - search - taskView < 3 * pitch)
+            search = Px(kWin10SlotLogical);
+        if (room - search - taskView < 2 * pitch)
+            search = taskView = 0;
+        L.search = {start, 0, start + search, h};
+        L.taskView = {start + search, 0, start + search + taskView, h};
+        lead = std::min((int)L.clock.left,
+                        start + search + taskView + Px(kWin10TaskLeadLogical));
+        L.first = lead;
+    }
     int tw = std::min(PrivateTrayWidth(),
-                      std::max(0, (int)L.clock.left - language - start));
+                      std::max(0, (int)L.clock.left - language - lead));
     int bandRight;
     if (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 7) {
         // Win7: independent language cell on the task side of the tray.
@@ -12128,6 +12710,14 @@ Layout GetLayout(int w, int h) {
     if (taskbarSkin.load() == 7 && !startHotCorner.load())
         L.start.bottom = std::min(
             L.start.bottom, (LONG)(Px(s->nativeSmallIcons ? 30 : 40) + Px(7)));
+    if (T81IsWin10Skin(taskbarSkin.load()) && L.rows > 1) {
+        // Windows 10 keeps Start, search and Task View in the first row.
+        L.start.bottom = L.rowHeight;
+        if (L.search.right > L.search.left)
+            L.search.bottom = L.rowHeight;
+        if (L.taskView.right > L.taskView.left)
+            L.taskView.bottom = L.rowHeight;
+    }
     L.columns = std::max(1, avail / L.width);
     int capacity = (avail / L.width) * L.rows;
     if ((int)s->groups.size() > capacity && avail >= Px(34)) {
@@ -12139,6 +12729,146 @@ Layout GetLayout(int w, int h) {
     L.count = std::min((int)s->groups.size(), capacity);
     return L;
 }
+// ---- Windows 10: pictures of Segoe MDL2 Assets -----------------------------
+// Windows 10 and 11 carry the font from which the Windows 10 shell takes its
+// pictures. GDI draws the glyph white on black into a bitmap four times the
+// size; the averaged brightness is then the coverage, so the picture can go
+// onto every surface, also one with per-pixel opacity. The face name and
+// the glyph are checked, so a substituted font never gives a wrong picture:
+// false means that nothing was drawn and the caller keeps its own drawing.
+static bool T81Win10Mdl2(Graphics& g,
+                         wchar_t glyph,
+                         int x,
+                         int y,
+                         int size,
+                         Color color) {
+    if (size <= 0 || size > 256)
+        return false;
+    // GDI smooths a glyph only where the font allows it, and Segoe MDL2
+    // Assets asks for plain black and white at small sizes: a 16 px picture
+    // came out with jagged edges. The glyph is therefore drawn several times
+    // larger and averaged down, which gives the same smooth picture whatever
+    // the font and the text settings of Windows say.
+    const int over = size <= 40 ? 4 : size <= 96 ? 2 : 1, big = size * over;
+    // A picture is kept once it is drawn: the bar paints the same few many
+    // times a second.
+    struct Kept {
+        wchar_t glyph;
+        int size;
+        ARGB color;
+        std::vector<DWORD> pixels;
+    };
+    static thread_local std::vector<Kept> kept;
+    auto show = [&](std::vector<DWORD>& pixels) {
+        Bitmap image(size, size, size * 4, PixelFormat32bppPARGB,
+                     (BYTE*)pixels.data());
+        if (image.GetLastStatus() != Ok)
+            return false;
+        auto saved = g.Save();
+        g.SetInterpolationMode(InterpolationModeNearestNeighbor);
+        g.SetPixelOffsetMode(PixelOffsetModeHalf);
+        Status status = g.DrawImage(&image, Rect(x, y, size, size), 0, 0, size,
+                                    size, UnitPixel);
+        g.Restore(saved);
+        return status == Ok;
+    };
+    for (auto& entry : kept)
+        if (entry.glyph == glyph && entry.size == size &&
+            entry.color == color.GetValue())
+            return show(entry.pixels);
+    std::unique_ptr<std::remove_pointer<HDC>::type, DeleteMemDC> dc(
+        CreateCompatibleDC(nullptr));
+    if (!dc)
+        return false;
+    BITMAPINFO info{};
+    info.bmiHeader.biSize = sizeof(info.bmiHeader);
+    info.bmiHeader.biWidth = big;
+    info.bmiHeader.biHeight = -big;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    std::unique_ptr<std::remove_pointer<HBITMAP>::type, DeleteBitmapHandle>
+        bitmap(CreateDIBSection(dc.get(), &info, DIB_RGB_COLORS, &bits, nullptr,
+                                0));
+    std::unique_ptr<std::remove_pointer<HFONT>::type, DeleteFontHandle> font(
+        CreateFontW(-big, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                    ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe MDL2 Assets"));
+    if (!bitmap || !bits || !font)
+        return false;
+    std::vector<DWORD> pixels((size_t)size * size);
+    {
+        ScopedSelection bitmapSelection(dc.get(), bitmap.get());
+        ScopedSelection fontSelection(dc.get(), font.get());
+        if (!bitmapSelection.old || bitmapSelection.old == HGDI_ERROR ||
+            !fontSelection.old || fontSelection.old == HGDI_ERROR)
+            return false;
+        wchar_t face[LF_FACESIZE]{};
+        WORD index = 0xffff;
+        if (!GetTextFaceW(dc.get(), LF_FACESIZE, face) ||
+            _wcsicmp(face, L"Segoe MDL2 Assets") ||
+            GetGlyphIndicesW(dc.get(), &glyph, 1, &index,
+                             GGI_MARK_NONEXISTING_GLYPHS) == GDI_ERROR ||
+            index == 0xffff)
+            return false;
+        memset(bits, 0, (size_t)big * big * sizeof(DWORD));
+        SetBkMode(dc.get(), TRANSPARENT);
+        SetTextColor(dc.get(), RGB(255, 255, 255));
+        RECT cell{0, 0, big, big};
+        DrawTextW(
+            dc.get(), &glyph, 1, &cell,
+            DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP);
+        GdiFlush();
+        const DWORD* source = (const DWORD*)bits;
+        const unsigned samples = (unsigned)(over * over);
+        bool any = false;
+        for (int py = 0; py < size; ++py)
+            for (int px = 0; px < size; ++px) {
+                unsigned sum = 0;
+                for (int sy = 0; sy < over; ++sy) {
+                    const DWORD* row =
+                        source + (size_t)(py * over + sy) * big + px * over;
+                    for (int sx = 0; sx < over; ++sx)
+                        sum += std::max({row[sx] & 0xff, (row[sx] >> 8) & 0xff,
+                                         (row[sx] >> 16) & 0xff});
+                }
+                unsigned cover = (sum + samples / 2) / samples;
+                unsigned alpha = (cover * (unsigned)color.GetA() + 127) / 255;
+                any |= alpha != 0;
+                pixels[(size_t)py * size + px] =
+                    (alpha << 24) | ((color.GetR() * alpha + 127) / 255 << 16) |
+                    ((color.GetG() * alpha + 127) / 255 << 8) |
+                    ((color.GetB() * alpha + 127) / 255);
+            }
+        if (!any)
+            return false;
+    }
+    if (kept.size() >= 96)
+        kept.clear();
+    kept.push_back({glyph, size, color.GetValue(), pixels});
+    return show(pixels);
+}
+// A notification area picture of the Windows 10 skin: the first glyph of the
+// list that the font holds, 16 px, centred on (cx, cy).
+static bool T81Win10TrayGlyph(Graphics& g,
+                              float cx,
+                              float cy,
+                              float u,
+                              std::initializer_list<wchar_t> glyphs,
+                              bool dark,
+                              BYTE alpha = 255,
+                              int points = 16) {
+    const int size = std::max(1, (int)std::lround(points * u));
+    const int x = (int)std::lround(cx - size / 2.0f),
+              y = (int)std::lround(cy - size / 2.0f);
+    const Color ink =
+        dark ? Color(alpha, 0, 0, 0) : Color(alpha, 255, 255, 255);
+    for (wchar_t glyph : glyphs)
+        if (T81Win10Mdl2(g, glyph, x, y, size, ink))
+            return true;
+    return false;
+}
 void DrawNetworkGlyph(Graphics& g,
                       float cx,
                       float cy,
@@ -12146,6 +12876,29 @@ void DrawNetworkGlyph(Graphics& g,
                       int kind,
                       bool dark = false) {
     int quality = wifiQuality.load();
+    if (T81IsWin10Skin(taskbarSkin.load())) {
+        dark = dark || T81W10Light();
+        // Windows 10: Ethernet; the Wi-Fi fan with the arcs that are not lit
+        // at 40%; without a connection the globe of version 1903 and later,
+        // or the crossed-out network of the earlier versions.
+        bool drawn = false;
+        if (kind == 1) {
+            drawn = T81Win10TrayGlyph(g, cx, cy, u, {L'\uE839'}, dark);
+        } else if (kind == 2) {
+            const wchar_t lit = quality < 0 || quality >= 75 ? L'\uE701'
+                                : quality >= 50              ? L'\uE874'
+                                : quality >= 25              ? L'\uE873'
+                                                             : L'\uE872';
+            if (lit != L'\uE701')
+                T81Win10TrayGlyph(g, cx, cy, u, {L'\uE701'}, dark, 102);
+            drawn = T81Win10TrayGlyph(g, cx, cy, u, {lit}, dark);
+        } else {
+            drawn =
+                T81Win10TrayGlyph(g, cx, cy, u, {L'\uF384', L'\uEB55'}, dark);
+        }
+        if (drawn)
+            return;
+    }
     int index = kind == 1 ? 1
                 : kind == 2
                     ? (quality >= 0 ? 2 + std::min(5, quality * 6 / 101) : -1)
@@ -12185,6 +12938,14 @@ void DrawVolumeGlyph(Graphics& g,
         muted
             ? 0
             : (vol <= 0.01f ? 1 : (vol <= 0.33f ? 2 : (vol <= 0.66f ? 3 : 4)));
+    if (T81IsWin10Skin(taskbarSkin.load())) {
+        dark = dark || T81W10Light();
+        // Mute, then the speaker with no, one, two or three waves.
+        static constexpr wchar_t kWin10Volume[5] = {
+            L'\uE74F', L'\uE992', L'\uE993', L'\uE994', L'\uE995'};
+        if (T81Win10TrayGlyph(g, cx, cy, u, {kWin10Volume[frame]}, dark))
+            return;
+    }
     if (s && DrawLegacyImage(g, s->volumeImages[frame], cx, cy, u))
         return;
     SolidBrush white(dark ? Color(255, 30, 68, 104)
@@ -12217,6 +12978,30 @@ void DrawBatteryGlyph(Graphics& g,
                       int pct,
                       bool charging,
                       bool dark = false) {
+    if (T81IsWin10Skin(taskbarSkin.load())) {
+        dark = dark || T81W10Light();
+        // Eleven levels each for the battery, the charging battery and the
+        // battery saver; the ninth and tenth lie apart in the font.
+        wchar_t glyph = L'\uE996';  // level unknown
+        if (pct >= 0 && pct <= 100) {
+            const int level = (pct + 5) / 10;
+            if (charging)
+                glyph = level == 10  ? L'\uEA93'
+                        : level == 9 ? L'\uE83E'
+                                     : (wchar_t)(0xE85A + level);
+            else if (s && s->batterySaver)
+                glyph = level == 10  ? L'\uEA95'
+                        : level == 9 ? L'\uEA94'
+                                     : (wchar_t)(0xE863 + level);
+            else
+                glyph = level == 10 ? L'\uE83F' : (wchar_t)(0xE850 + level);
+        }
+        // The battery of the font is small in its square: 13 x 6 px at 16
+        // px, where the battery of Windows 10 is 16 px wide. Drawn at 20 px
+        // it has that width.
+        if (T81Win10TrayGlyph(g, cx, cy, u, {glyph}, dark, 255, 20))
+            return;
+    }
     if (pct >= 0 && pct <= 100) {
         int frame = charging ? 33 + (pct * 9 + 50) / 100 : (pct * 8 + 50) / 100;
         if (DrawLegacyBattery(g, frame, cx, cy, u)) {
@@ -13058,7 +13843,7 @@ static void T81PaintWin7Balloon(HDC dc, const RECT& bounds) {
     RectF close((REAL)t81BalloonClose.left, (REAL)t81BalloonClose.top,
                 (REAL)(t81BalloonClose.right - t81BalloonClose.left),
                 (REAL)(t81BalloonClose.bottom - t81BalloonClose.top));
-    // Coverage masks sampled from the supplied reference at 96 DPI. They
+    // Coverage masks sampled from the reference at 96 DPI. They
     // are color-independent, so the background remains transparent.
     static const BYTE wrenchMask[110] = {
         0,   0,   0,   171, 180, 153, 0,   0,   0,   0,   0,   0,   0,   0,
@@ -13386,7 +14171,7 @@ static void T81BalloonTick() {
             break;
         }
         // The reference Win7 balloon body is approximately 280 x 70 at 96 DPI.
-        t81BalloonWin7 = T81IsWin7Skin(taskbarSkin.load());
+        t81BalloonWin7 = true;
         t81BalloonTailSide =
             t81BalloonWin7 && s->verticalActive ? s->verticalSide : 0;
         int width = std::min(
@@ -14323,6 +15108,7 @@ static bool StartPrivateTray() {
     s->nativeWasTopmost =
         (GetWindowLongPtrW(s->native, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
     s->privateActive = true;
+    t81WinXTrayActive.store(true, std::memory_order_release);
     if (!StartT81RecoveryBridge(s->native)) {
         Wh_Log(
             L"[T81-RECOVERY] recovery bridge unavailable; native taskbar "
@@ -14453,6 +15239,8 @@ static void StopPrivateTray() {
     // tray.
     T81AutoHideRevealNow();
     T81SetAutoHideTimer(0);
+    s->autoHideLiveKnown = false;
+    s->sameEdgeMissingSince = 0;
     // Stop the independent guard before queuing any restoration requests.
     if (g_t81Recovery) {
         InterlockedExchange(&g_t81Recovery->guardEnabled, 0);
@@ -14464,11 +15252,13 @@ static void StopPrivateTray() {
             s->nativeHiddenByUs = true;
     }
     DestroyLanguageFlyout();
+    T81Win10DestroyFlyout();
     // Revoke on the UI thread before icons are destroyed/OleUninitialize.
     StopTrayNotifyServer();
     RemoveAllCniSystemIcons();
     bool active = s->privateActive;
     RemoveWorkAreaAppBar();
+    t81WinXTrayActive.store(false, std::memory_order_release);
     s->privateActive = false;
     if (s->bar)
         KillTimer(s->bar, TIMER_DESKTOP_PEEK);
@@ -14792,8 +15582,9 @@ static std::vector<int> VisiblePrivateIcons();
 static std::vector<int> VisibleTrayEntries();
 static std::wstring TrayEntryKey(int entry);
 struct VerticalLayout {
-    RECT start{}, clock{}, language{}, desktop{}, arrow{}, icons{}, network{},
-        volume{}, battery{}, more{}, desktopBand{}, linksBand{}, addressBand{};
+    RECT start{}, search{}, taskView{}, clock{}, language{}, desktop{}, arrow{},
+        icons{}, network{}, volume{}, battery{}, more{}, desktopBand{},
+        linksBand{}, addressBand{};
     int first = 0, step = 0, count = 0, offset = 0;
 };
 static int VerticalClockHeight() {
@@ -14877,6 +15668,18 @@ static VerticalLayout GetVerticalLayout(int width, int height) {
     v.start =
         RECT{0, 0, width, startHotCorner.load() ? std::max(1, Px(2)) : start};
     v.first = start + (beta8148 && !startHotCorner.load() ? Px(4) : 0);
+    if (T81IsWin10Skin(taskbarSkin.load()) && !startHotCorner.load()) {
+        // Windows 10: the search icon and Task View follow Start, 40 px each.
+        const int slot = Px(40);
+        if (T81W10Sys().search != 0 && v.first + slot + Px(taskStep) < y) {
+            v.search = RECT{0, v.first, width, v.first + slot};
+            v.first += slot;
+        }
+        if (T81W10Sys().taskView && v.first + slot + Px(taskStep) < y) {
+            v.taskView = RECT{0, v.first, width, v.first + slot};
+            v.first += slot;
+        }
+    }
     v.step = std::max(1, Px(taskStep));
     int capacity = std::max(0, (y - v.first) / v.step),
         total = (int)s->groups.size();
@@ -15004,7 +15807,7 @@ static std::vector<int> VisibleTrayEntries() {
     return entries;
 }
 static int OverflowButtonWidth() {
-    return Px(25);
+    return Px(T81IsWin10Skin(taskbarSkin.load()) ? 24 : 25);
 }
 static int PrivateTrayWidth() {
     if (!s || !s->privateActive)
@@ -15013,9 +15816,11 @@ static int PrivateTrayWidth() {
                   (IsSystemVisible(HIT_VOLUME) ? 1 : 0) +
                   (IsSystemVisible(HIT_BATTERY) ? 1 : 0);
     // Four logical pixels separate the last notification cell from the input
-    // indicator or clock. This is layout space, not a hit cell.
+    // indicator or clock. This is layout space, not a hit cell. Windows 10
+    // has no such space: its cells follow one another.
     return ((int)VisiblePrivateIcons().size() + systems) * Px(24) +
-           OverflowButtonWidth() + Px(4);
+           OverflowButtonWidth() +
+           (T81IsWin10Skin(taskbarSkin.load()) ? 0 : Px(4));
 }
 static RECT TrayBarEntryRect(int entry) {
     RECT r{};
@@ -15072,22 +15877,510 @@ static void EnsureTrayHoverImage() {
         }
     }
 }
+// ===== Windows 10 skin (preset 10): drawing ==================================
+// Everything is drawn here; no Microsoft image or font file is embedded. The
+// outlines and positions were measured on Windows 10 screenshots taken at 96
+// DPI (versions 1809/1903, 20H2 and 22H2) and scale with the DPI of the bar:
+//   - Start: a 16 px logo in the middle of a 48 px button;
+//   - search box: 344 x 40 px with a 1 px border, a 16 px magnifier 12 px
+//     inside it and the prompt in 15 px Segoe UI, 40 px inside it, on the
+//     baseline at 26 px. The light box is #F2F2F2 with a #C3C3C3 border and
+//     dark text; the dark box is 20 % white with a 36 % white border;
+//   - search icon, Task View: 16 px glyphs in 48 px buttons;
+//   - a running app: a 2 px line in the light accent, 4 px short of its 48 px
+//     button at each end; the active window: 20 % white behind the icon and
+//     the line at full width; attention: #BF732D;
+//   - Action Center: a 16 px glyph in a 40 px button; Show desktop: a 1 px
+//     line at 40 % white and 4 px.
+// The outlines are given in pixel-edge coordinates (0 is the left edge of
+// the first pixel).
+// The short faint piece that stands for the other windows of an app follows
+// RestoreWin10 (Adaptive-Protocol, MIT License).
+Color Mix(Color a, Color b, int pct);
+static Color TaskbarSystemColor();
+
+// The light accent of the running line and of the hovered Start logo. Windows
+// keeps its accent shades under Explorer\Accent (read only here; the second
+// one is "light 2"). Without that value the colorization color is lightened.
+static Color T81W10Accent(int shade);
+static Color T81Win10AccentLight() {
+    // The light bar takes the accent itself, as Windows 10 does.
+    if (T81W10Light())
+        return T81W10Accent(3);
+    static ULONGLONG readAt = 0;
+    static ARGB cached = 0;
+    ULONGLONG now = GetTickCount64();
+    if (cached && now - readAt < 2000)
+        return Color(cached);
+    BYTE palette[32]{};
+    DWORD size = sizeof(palette);
+    Color result;
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\"
+                     L"Accent",
+                     L"AccentPalette", RRF_RT_REG_BINARY, nullptr, palette,
+                     &size) == ERROR_SUCCESS &&
+        size >= 8 && (palette[4] | palette[5] | palette[6]))
+        result = Color(255, palette[4], palette[5], palette[6]);
+    else
+        result = Mix(TaskbarSystemColor(), Color(255, 255, 255, 255), 47);
+    readAt = now;
+    cached = result.GetValue();
+    return result;
+}
+// The white box goes with light apps and with the light Windows mode, the dark
+// one with dark apps on a dark bar, as in Windows 10.
+static bool T81Win10LightSearch() {
+    const T81W10System& system = T81W10Sys();
+    return system.lightSystem || system.lightApps;
+}
+// White over the bar: 10 % under the pointer, 20 % for the active window and
+// for Start while its menu is open.
+static void T81Win10Wash(Graphics& g, const RECT& r, int alpha) {
+    if (alpha <= 0 || r.right <= r.left || r.bottom <= r.top)
+        return;
+    // On the light bar and in light panels the same steps need more white to
+    // show: 46 %, 60 % and 76 %.
+    if (T81W10Light())
+        alpha = alpha * 3 + 40;
+    SolidBrush wash(Color((BYTE)std::min(255, alpha), 255, 255, 255));
+    g.FillRectangle(&wash, (INT)r.left, (INT)r.top, (INT)(r.right - r.left),
+                    (INT)(r.bottom - r.top));
+}
+// The glyphs are closed outlines given in a 16 px square. They are turned into
+// coverage here, 8 x 8 samples to the pixel, and drawn as one small image, so
+// that the result does not depend on how a GDI+ antialiases a fill. A shape
+// is a set of outlines filled by the even-odd rule (a ring is two circles);
+// the shapes of a glyph are united.
+using T81Win10Outline = std::vector<PointF>;
+using T81Win10Shape = std::vector<T81Win10Outline>;
+static void T81Win10FillShapes(Graphics& g,
+                               const std::vector<T81Win10Shape>& shapes,
+                               Color color) {
+    float minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
+    for (const auto& shape : shapes)
+        for (const auto& outline : shape)
+            for (const auto& p : outline) {
+                minX = std::min(minX, p.X);
+                minY = std::min(minY, p.Y);
+                maxX = std::max(maxX, p.X);
+                maxY = std::max(maxY, p.Y);
+            }
+    if (minX >= maxX || minY >= maxY)
+        return;
+    const int left = (int)std::floor(minX), top = (int)std::floor(minY),
+              width = (int)std::ceil(maxX) - left,
+              height = (int)std::ceil(maxY) - top;
+    if (width <= 0 || height <= 0 || width > 512 || height > 512)
+        return;
+    constexpr int kSamples = 8;
+    const int columns = width * kSamples;
+    std::vector<unsigned short> hits((size_t)width * height, 0);
+    std::vector<unsigned char> row((size_t)columns);
+    std::vector<float> crossings;
+    for (int y = 0; y < height * kSamples; y++) {
+        const float sy = top + (y + 0.5f) / kSamples;
+        std::fill(row.begin(), row.end(), 0);
+        for (const auto& shape : shapes) {
+            crossings.clear();
+            for (const auto& outline : shape) {
+                const size_t n = outline.size();
+                for (size_t i = 0; i < n; i++) {
+                    const PointF& p = outline[i];
+                    const PointF& q = outline[(i + 1) % n];
+                    if ((p.Y <= sy) == (q.Y <= sy))
+                        continue;
+                    crossings.push_back(p.X +
+                                        (sy - p.Y) * (q.X - p.X) / (q.Y - p.Y));
+                }
+            }
+            std::sort(crossings.begin(), crossings.end());
+            for (size_t i = 0; i + 1 < crossings.size(); i += 2) {
+                // Samples stand at left + (x + 0.5) / kSamples.
+                int from =
+                        (int)std::ceil((crossings[i] - left) * kSamples - 0.5f),
+                    to = (int)std::ceil((crossings[i + 1] - left) * kSamples -
+                                        0.5f);
+                from = std::max(0, from);
+                to = std::min(columns, to);
+                for (int x = from; x < to; x++)
+                    row[(size_t)x] = 1;
+            }
+        }
+        unsigned short* line = &hits[(size_t)(y / kSamples) * width];
+        for (int x = 0; x < columns; x++)
+            line[x / kSamples] += row[(size_t)x];
+    }
+    std::vector<DWORD> pixels((size_t)width * height);
+    const unsigned full = kSamples * kSamples;
+    for (size_t i = 0; i < pixels.size(); i++) {
+        unsigned alpha = (hits[i] * (unsigned)color.GetA() + full / 2) / full;
+        pixels[i] = (alpha << 24) | ((color.GetR() * alpha + 127) / 255 << 16) |
+                    ((color.GetG() * alpha + 127) / 255 << 8) |
+                    ((color.GetB() * alpha + 127) / 255);
+    }
+    Bitmap image(width, height, width * 4, PixelFormat32bppPARGB,
+                 (BYTE*)pixels.data());
+    if (image.GetLastStatus() != Ok)
+        return;
+    auto saved = g.Save();
+    g.SetInterpolationMode(InterpolationModeNearestNeighbor);
+    g.SetPixelOffsetMode(PixelOffsetModeHalf);
+    g.DrawImage(&image, Rect(left, top, width, height), 0, 0, width, height,
+                UnitPixel);
+    g.Restore(saved);
+}
+static T81Win10Shape T81Win10Quad(PointF a, PointF b, PointF c, PointF d) {
+    return T81Win10Shape{T81Win10Outline{a, b, c, d}};
+}
+// Bars of a glyph. Whole coordinates are moved onto device pixels so that
+// 1 px lines stay sharp at every scale.
+static void T81Win10AddBars(std::vector<T81Win10Shape>& shapes,
+                            const float (*bars)[4],
+                            size_t count,
+                            float x,
+                            float y,
+                            float unit) {
+    auto edge = [unit](float value, float origin) {
+        float device = origin + value * unit;
+        return value == std::floor(value) ? std::floor(device + 0.5f) : device;
+    };
+    for (size_t i = 0; i < count; i++) {
+        float left = edge(bars[i][0], x), top = edge(bars[i][1], y),
+              right = edge(bars[i][2], x), bottom = edge(bars[i][3], y);
+        if (bars[i][2] - bars[i][0] == 1.f)
+            right = std::max(right, left + 1.f);
+        if (bars[i][3] - bars[i][1] == 1.f)
+            bottom = std::max(bottom, top + 1.f);
+        shapes.push_back(T81Win10Quad({left, top}, {right, top},
+                                      {right, bottom}, {left, bottom}));
+    }
+}
+// A stroke between two points of a 16 px square: `n` is half its width along
+// each axis (the strokes of these glyphs all run at 45 degrees).
+static T81Win10Shape T81Win10Stroke(float x,
+                                    float y,
+                                    float unit,
+                                    float x0,
+                                    float y0,
+                                    float x1,
+                                    float y1,
+                                    float n) {
+    const float s = (x1 - x0) * (y1 - y0) < 0 ? 1.f : -1.f;
+    return T81Win10Quad({x + (x0 + n) * unit, y + (y0 + s * n) * unit},
+                        {x + (x1 + n) * unit, y + (y1 + s * n) * unit},
+                        {x + (x1 - n) * unit, y + (y1 - s * n) * unit},
+                        {x + (x0 - n) * unit, y + (y0 - s * n) * unit});
+}
+// The Windows 10 logo: four panes seen in perspective, the left ones smaller.
+static void T81Win10Logo(Graphics& g,
+                         float x,
+                         float y,
+                         float unit,
+                         Color color) {
+    static constexpr float kPanes[4][10] = {
+        {0, 2.0f, 6, 1.15f, 6, 7, 0, 7, 0, 7},
+        {7, 1.05f, 14.6f, 0, 16, 0, 16, 7, 7, 7},
+        {0, 8, 6, 8, 6, 14.85f, 0, 14.0f, 0, 14.0f},
+        {7, 8, 16, 8, 16, 16, 14.6f, 16, 7, 14.95f}};
+    std::vector<T81Win10Shape> shapes;
+    for (const auto& pane : kPanes) {
+        T81Win10Outline outline;
+        for (int i = 0; i < 5; i++)
+            outline.push_back(
+                PointF(x + pane[2 * i] * unit, y + pane[2 * i + 1] * unit));
+        shapes.push_back(T81Win10Shape{outline});
+    }
+    T81Win10FillShapes(g, shapes, color);
+}
+// The search magnifier: a 1 px ring of radius 5 around (10.5, 5.5) and a
+// handle that leaves it towards the lower left corner.
+static void T81Win10Magnifier(Graphics& g,
+                              float x,
+                              float y,
+                              float unit,
+                              Color color) {
+    T81Win10Shape ring(2);
+    for (int i = 0; i < 64; i++) {
+        float angle = (float)i * 6.2831853f / 64.f, c = std::cos(angle),
+              v = std::sin(angle);
+        ring[0].push_back(PointF(x + (10.5f + 5.5f * c) * unit,
+                                 y + (5.5f + 5.5f * v) * unit));
+        ring[1].push_back(PointF(x + (10.5f + 4.5f * c) * unit,
+                                 y + (5.5f + 4.5f * v) * unit));
+    }
+    std::vector<T81Win10Shape> shapes{
+        ring, T81Win10Stroke(x, y, unit, 6.96f, 9.04f, 0.3f, 15.7f, 0.36f)};
+    T81Win10FillShapes(g, shapes, color);
+}
+// Task View as Windows 10 drew it from version 1803 on: a window between the
+// edges of two others, and the timeline mark on the right.
+static void T81Win10TaskViewGlyph(Graphics& g,
+                                  float x,
+                                  float y,
+                                  float unit,
+                                  Color color) {
+    static constexpr float kBars[][4] = {
+        {0, 0, 1, 2},      {10, 0, 11, 2},   {0, 2, 11, 3},     {0, 4, 11, 5},
+        {0, 10, 11, 11},   {0, 5, 1, 10},    {10, 5, 11, 10},   {0, 12, 11, 13},
+        {0, 13, 1, 15},    {10, 13, 11, 15}, {14, 0, 15, 2.8f}, {13, 4, 16, 7},
+        {14, 8.2f, 15, 15}};
+    std::vector<T81Win10Shape> shapes;
+    T81Win10AddBars(shapes, kBars, std::size(kBars), x, y, unit);
+    T81Win10FillShapes(g, shapes, color);
+}
+// Action Center: a note with a pointed tail under its lower edge, from
+// (5.3, 12.4) and from (10.7, 12.4) down to (8, 15.7).
+static void T81Win10ActionGlyph(Graphics& g,
+                                float x,
+                                float y,
+                                float unit,
+                                Color color) {
+    static constexpr float kBars[][4] = {{0, 0, 16, 1},
+                                         {0, 1, 1, 13},
+                                         {15, 1, 16, 13},
+                                         {1, 12, 5.6f, 13},
+                                         {10.4f, 12, 15, 13}};
+    std::vector<T81Win10Shape> shapes;
+    T81Win10AddBars(shapes, kBars, std::size(kBars), x, y, unit);
+    shapes.push_back(
+        T81Win10Stroke(x, y, unit, 5.3f, 12.4f, 8.0f, 15.7f, 0.36f));
+    shapes.push_back(
+        T81Win10Stroke(x, y, unit, 10.7f, 12.4f, 8.0f, 15.7f, 0.36f));
+    T81Win10FillShapes(g, shapes, color);
+}
+// The arrow of the hidden icons: two strokes that meet at the top, 12 x 7 px,
+// from (6, 1) down to (0.3, 6.7) and to (11.7, 6.7). On a bar at the top edge
+// it points down.
+static void T81Win10Chevron(Graphics& g,
+                            float x,
+                            float y,
+                            float unit,
+                            bool down,
+                            Color color) {
+    auto flip = [down](float value) { return down ? 7.0f - value : value; };
+    std::vector<T81Win10Shape> shapes{
+        T81Win10Stroke(x, y, unit, 6.0f, flip(1.0f), 0.3f, flip(6.7f), 0.44f),
+        T81Win10Stroke(x, y, unit, 6.0f, flip(1.0f), 11.7f, flip(6.7f), 0.44f)};
+    T81Win10FillShapes(g, shapes, color);
+}
+static void T81Win10PaintStart(Graphics& g,
+                               const RECT& cell,
+                               float fade,
+                               bool down,
+                               int dpi = 0) {
+    if (dpi <= 0)
+        dpi = Dpi();
+    fade = std::max(0.f, std::min(1.f, fade));
+    T81Win10Wash(g, cell, down ? 51 : (int)std::lround(26 * fade));
+    Color accent = T81Win10AccentLight();
+    Color logo =
+        down ? accent
+             : Mix(T81W10BarInk(), accent, (int)std::lround(100 * fade));
+    // Whole pixels on purpose: the logo stands on the pixel grid.
+    const int size = MulDiv(16, dpi, 96),
+              left = cell.left + (cell.right - cell.left - size) / 2,
+              top = cell.top + (cell.bottom - cell.top - size) / 2;
+    T81Win10Logo(g, (REAL)left, (REAL)top, dpi / 96.0f, logo);
+}
+static void T81Win10PaintSearch(Graphics& g, const RECT& cell, int state) {
+    const float unit = Dpi() / 96.0f;
+    const int width = cell.right - cell.left, height = cell.bottom - cell.top,
+              glyph = Px(16);
+    if (width <= 0 || height <= 0)
+        return;
+    const int glyphTop = cell.top + (height - glyph) / 2;
+    if (width <= Px(2 * kWin10SlotLogical)) {
+        // The icon alone.
+        const int glyphLeft = cell.left + (width - glyph) / 2;
+        T81Win10Wash(g, cell, state == 2 ? 38 : state == 1 ? 26 : 0);
+        T81Win10Magnifier(g, (REAL)glyphLeft, (REAL)glyphTop, unit,
+                          T81W10BarInk());
+        return;
+    }
+    const bool light = T81Win10LightSearch(), lightBar = T81W10Light();
+    const int edge = std::max(1, Px(1));
+    // On the light bar the box is white inside a grey line.
+    Color fill = lightBar ? Color(255, 255, 255, 255)
+                 : light  ? (state ? Color(255, 255, 255, 255)
+                                   : Color(255, 242, 242, 242))
+                          : Color(state ? 72 : 51, 255, 255, 255);
+    Color border = lightBar ? (state ? Color(255, 102, 102, 102)
+                                     : Color(255, 153, 153, 153))
+                   : light  ? Color(255, 195, 195, 195)
+                            : Color(92, 255, 255, 255);
+    Color ink = light ? Color(255, 0, 0, 0) : Color(255, 255, 255, 255);
+    Color prompt = light ? Color(255, 43, 43, 43) : Color(255, 255, 255, 255);
+    SolidBrush fillBrush(fill), borderBrush(border);
+    g.FillRectangle(&fillBrush, (INT)cell.left + edge, (INT)cell.top + edge,
+                    width - 2 * edge, height - 2 * edge);
+    g.FillRectangle(&borderBrush, (INT)cell.left, (INT)cell.top, width, edge);
+    g.FillRectangle(&borderBrush, (INT)cell.left, (INT)cell.bottom - edge,
+                    width, edge);
+    g.FillRectangle(&borderBrush, (INT)cell.left, (INT)cell.top + edge, edge,
+                    height - 2 * edge);
+    g.FillRectangle(&borderBrush, (INT)cell.right - edge, (INT)cell.top + edge,
+                    edge, height - 2 * edge);
+    T81Win10Magnifier(g, (REAL)(cell.left + Px(12)), (REAL)glyphTop, unit, ink);
+    FontFamily segoe(L"Segoe UI");
+    const FontFamily* family =
+        segoe.GetLastStatus() == Ok && segoe.IsAvailable()
+            ? &segoe
+            : FontFamily::GenericSansSerif();
+    if (!family)
+        return;
+    Gdiplus::Font font(family, 15.0f * unit, FontStyleRegular, UnitPixel);
+    UINT16 em = family->GetEmHeight(FontStyleRegular);
+    if (font.GetLastStatus() != Ok || !em)
+        return;
+    float ascent =
+        font.GetSize() * family->GetCellAscent(FontStyleRegular) / em;
+    StringFormat format(StringFormat::GenericTypographic());
+    format.SetFormatFlags(format.GetFormatFlags() | StringFormatFlagsNoWrap);
+    auto saved = g.Save();
+    g.SetClip(Rect((INT)cell.left + edge, (INT)cell.top + edge,
+                   std::max(0, width - 2 * edge - Px(11)), height - 2 * edge),
+              CombineModeIntersect);
+    g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+    SolidBrush promptBrush(prompt);
+    // The baseline is 26 px down a 40 px box; a taller box keeps that band
+    // in its middle.
+    const int band = cell.top + (height - Px(40)) / 2;
+    // While the search pane is open the box holds the text typed so far.
+    const bool typing = T81Win10SearchInBar(),
+               typed = typing && !gW10Fly.query.empty();
+    const PointF origin(cell.left + 40.0f * unit,
+                        band + std::floor(26.0f * unit + 0.5f) - ascent);
+    SolidBrush typedBrush(ink);
+    g.DrawString(
+        typed
+            ? gW10Fly.query.c_str()
+            : Tr(L"Scrivi qui per eseguire la ricerca", L"Type here to search"),
+        -1, &font, origin, &format, typed ? &typedBrush : &promptBrush);
+    if (typing && gW10Fly.caret) {
+        RectF box;
+        if (typed) {
+            StringFormat measure(&format);
+            measure.SetFormatFlags(measure.GetFormatFlags() |
+                                   StringFormatFlagsMeasureTrailingSpaces);
+            g.MeasureString(gW10Fly.query.c_str(), -1, &font, origin, &measure,
+                            &box);
+        }
+        g.FillRectangle(&typedBrush, (INT)std::lround(origin.X + box.Width),
+                        band + Px(11), std::max(1, Px(1)), Px(19));
+    }
+    g.Restore(saved);
+}
+// Search, Task View, Action Center and Show desktop.
+static void T81Win10PaintShell(Graphics& g, const Layout& L, int h) {
+    const float unit = Dpi() / 96.0f;
+    const Color white = T81W10BarInk();
+    auto state = [](int hit) {
+        return s->hot != hit ? 0 : s->win10Pressed == hit ? 2 : 1;
+    };
+    T81Win10PaintSearch(g, L.search,
+                        T81Win10SearchShown() ? (T81Win10SearchInBar() ? 1 : 2)
+                                              : state(HIT_W10_SEARCH));
+    if (L.taskView.right > L.taskView.left) {
+        int st = state(HIT_W10_TASKVIEW), glyph = Px(16), tall = Px(15);
+        const int left = L.taskView.left +
+                         (L.taskView.right - L.taskView.left - glyph) / 2,
+                  top = L.taskView.top +
+                        (L.taskView.bottom - L.taskView.top - tall) / 2;
+        T81Win10Wash(g, L.taskView, st == 2 ? 38 : st == 1 ? 26 : 0);
+        T81Win10TaskViewGlyph(g, (REAL)left, (REAL)top, unit, white);
+    }
+    if (L.action.right > L.action.left) {
+        int st = state(HIT_W10_ACTION), glyph = Px(16);
+        const int left = L.action.left +
+                         (L.action.right - L.action.left - glyph) / 2,
+                  top = (h - glyph) / 2;
+        T81Win10Wash(g, L.action, st == 2 ? 38 : st == 1 ? 26 : 0);
+        T81Win10ActionGlyph(g, (REAL)left, (REAL)top, unit, white);
+    }
+    if (L.desktop.right > L.desktop.left) {
+        int line = std::max(1, Px(1));
+        RECT rule{L.desktop.left, 0, L.desktop.left + line, h};
+        if (T81W10Light()) {
+            SolidBrush grey(Color(255, 150, 150, 150));
+            g.FillRectangle(&grey, (INT)rule.left, 0, line, h);
+        } else {
+            T81Win10Wash(g, rule, 102);
+        }
+        if (s->hot == HIT_DESKTOP)
+            T81Win10Wash(g, RECT{rule.right, 0, L.desktop.right, h}, 26);
+    }
+}
+// One task button. `x` and `width` are the cell of the layout, whose first
+// pixel is the space between two buttons.
+static void T81Win10PaintTaskTile(Graphics& g,
+                                  int x,
+                                  int width,
+                                  int height,
+                                  int layers,
+                                  bool running,
+                                  bool active,
+                                  float fade) {
+    fade = std::max(0.f, std::min(1.f, fade));
+    int gap = width > Px(24) ? std::max(1, Px(1)) : 0;
+    RECT tile{x + gap, 0, x + width, height};
+    // The other windows of the app show as a short piece at the right end.
+    int rear = running && layers > 1 ? std::max(2, Px(3)) : 0,
+        split = rear ? std::max(1, Px(1)) : 0;
+    RECT front = tile;
+    front.right -= rear + split;
+    if (front.right <= front.left)
+        return;
+    int wash =
+        (int)std::lround((active ? 51.f : 0.f) + (active ? 20.f : 26.f) * fade);
+    T81Win10Wash(g, front, wash);
+    if (rear)
+        T81Win10Wash(g, RECT{tile.right - rear, 0, tile.right, height},
+                     wash * 6 / 10);
+    if (!running)
+        return;
+    int line = std::max(1, Px(2));
+    int top = s && s->nativeEdge == ABE_TOP ? 0 : height - line;
+    float open = active ? 1.f : fade;  // the line grows to the full width
+    int inset = (int)std::lround(Px(4) * (1.f - open));
+    Color accent = T81Win10AccentLight();
+    SolidBrush lineBrush(accent);
+    int left = front.left + inset, right = front.right - (rear ? 0 : inset);
+    g.FillRectangle(&lineBrush, left, top, std::max(1, right - left), line);
+    if (rear) {
+        SolidBrush faint(
+            Color(140, accent.GetR(), accent.GetG(), accent.GetB()));
+        g.FillRectangle(&faint, (INT)tile.right - rear, top, rear, line);
+    }
+}
+static void T81Win10PaintAttention(Graphics& g, int x, int width, int height) {
+    int gap = width > Px(24) ? std::max(1, Px(1)) : 0;
+    SolidBrush orange(Color(255, 191, 115, 45));
+    g.FillRectangle(&orange, x + gap, 0, std::max(1, width - gap), height);
+}
 static void DrawTrayHoverTile(Graphics& g,
                               const RECT& cell,
                               bool onBar = false,
                               float opacity = 1.0f,
-                              UINT dpi = 0) {
+                              UINT dpi = 0,
+                              bool fitCell = false) {
     if (taskbarSkin.load() == 7)
         return;
     opacity = std::max(0.f, std::min(1.f, opacity));
     if (opacity <= 0)
         return;
+    if (T81IsWin10Skin(taskbarSkin.load())) {
+        // On the bar and in the dark panel of the hidden icons alike.
+        T81Win10Wash(g, cell, (int)std::lround(26 * opacity));
+        return;
+    }
     auto scalePx = [dpi](int value) {
         return dpi ? MulDiv(value, (int)dpi, 96) : Px(value);
     };
     int rw = std::max(1, (int)(cell.right - cell.left) - 2 * scalePx(2));
     int rh = std::max(1, (int)(cell.bottom - cell.top) - 2 * scalePx(2));
-    int tw = onBar
+    int tw = fitCell ? std::max(1, (int)(cell.right - cell.left))
+             : onBar
                  ? std::max(1, MulDiv((int)(cell.right - cell.left), 106, 100))
                  : std::max(1, MulDiv(rw, 976, 1000));
     int th = onBar ? std::max(1, (int)(cell.bottom - cell.top))
@@ -15327,7 +16620,17 @@ static void PaintPrivateArea(Graphics& g, HDC dc, const Layout& L, int h) {
     }
     RECT overflowCell{L.tray.left, 0, L.tray.left + OverflowButtonWidth(), h};
     bool win7Arrow = false;
-    if (taskbarSkin.load() == 7) {
+    if (T81IsWin10Skin(taskbarSkin.load())) {
+        if (s->hot == HIT_TRAY_MORE ||
+            (s->overflowPanel && IsWindowVisible(s->overflowPanel)))
+            T81Win10Wash(g, overflowCell, 26);
+        const int wide = Px(12), tall = Px(7),
+                  left = overflowCell.left + (OverflowButtonWidth() - wide) / 2,
+                  top = (h - tall) / 2;
+        T81Win10Chevron(g, (REAL)left, (REAL)top, Dpi() / 96.0f,
+                        s->nativeEdge == ABE_TOP, T81W10BarInk());
+        win7Arrow = true;  // nothing more to draw for the arrow
+    } else if (taskbarSkin.load() == 7) {
         bool hot = s->hot == HIT_TRAY_MORE ||
                    (s->overflowPanel && IsWindowVisible(s->overflowPanel));
         T81DrawClassicChevron(g, overflowCell, Dpi(),
@@ -15393,6 +16696,27 @@ static int HitPrivateArea(POINT p, const Layout& L) {
 }
 // Overflow positioning helper (GPL-3.0-or-later).
 void ComputeOverflowNear(const RECT& btn, int w, int h, int& x, int& y) {
+    if (T81IsWin10Skin(taskbarSkin.load())) {
+        // Windows 10: centred on the arrow, standing on the bar.
+        MONITORINFO mi{sizeof(mi)};
+        if (!GetMonitorInfoW(MonitorFromRect(&btn, MONITOR_DEFAULTTONEAREST),
+                             &mi))
+            mi.rcMonitor = RECT{0, 0, GetSystemMetrics(SM_CXSCREEN),
+                                GetSystemMetrics(SM_CYSCREEN)};
+        const RECT& m = mi.rcMonitor;
+        const int gap = 0;
+        if (s && s->verticalActive) {
+            x = s->verticalSide == 1 ? btn.right + gap : btn.left - w - gap;
+            y = (btn.top + btn.bottom - h) / 2;
+        } else {
+            x = (btn.left + btn.right - w) / 2;
+            y = (s && s->nativeEdge == ABE_TOP) ? btn.bottom + gap
+                                                : btn.top - h - gap;
+        }
+        x = std::clamp(x, (int)m.left, std::max((int)m.left, (int)m.right - w));
+        y = std::clamp(y, (int)m.top, std::max((int)m.top, (int)m.bottom - h));
+        return;
+    }
     if (taskbarSkin.load() == 6 || taskbarSkin.load() == 7) {
         MONITORINFO mi{sizeof(mi)};
         if (!GetMonitorInfoW(MonitorFromRect(&btn, MONITOR_DEFAULTTONEAREST),
@@ -15592,20 +16916,41 @@ static COLORREF PopupChromeColor() {
     }
     return RGB(15, 74, 121);
 }
+// Windows 10 lays the hidden icons out in 40 px cells, in as many columns as
+// make the panel about square (13 icons stand in four columns); the other
+// skins keep three 30 px columns.
+static int OverflowCellPx() {
+    return Px(T81IsWin10Skin(taskbarSkin.load()) ? 40 : 30);
+}
+static int OverflowCols() {
+    if (!T81IsWin10Skin(taskbarSkin.load()))
+        return 3;
+    int count = std::max(1, (int)OverflowPrivateItems().size()), cols = 1;
+    while (cols * cols < count)
+        ++cols;
+    return std::min(cols, 8);
+}
+static int OverflowRowsFor(size_t count) {
+    const int cols = OverflowCols();
+    return std::max(1, (int)((count + cols - 1) / cols));
+}
 static int OverflowRowsShown() {
-    auto count = OverflowPrivateItems().size();
-    int rows = std::max(1, (int)((count + 2) / 3));
+    int rows = OverflowRowsFor(OverflowPrivateItems().size());
     return std::min(rows, 10);
 }
 static int OverflowContentPad() {
+    // Windows 10: the cells stand against the 1 px line around the panel.
+    if (T81IsWin10Skin(taskbarSkin.load()))
+        return 1;
     return Px(taskbarSkin.load() == 7             ? 5
               : T81IsWin7Skin(taskbarSkin.load()) ? 6
                                                   : 12);
 }
 static RECT OverflowCell(int slot) {
-    int cell = Px(30), pad = OverflowContentPad();
-    int x = pad + (slot % 3) * cell;
-    int y = pad + (slot / 3 - s->overflowScroll) * cell;
+    int cell = OverflowCellPx(), cols = OverflowCols(),
+        pad = OverflowContentPad();
+    int x = pad + (slot % cols) * cell;
+    int y = pad + (slot / cols - s->overflowScroll) * cell;
     if (taskbarSkin.load() == 6 || taskbarSkin.load() == 7) {
         int rowStart = (slot / 3) * 3;
         int count =
@@ -15616,6 +16961,9 @@ static RECT OverflowCell(int slot) {
     return RECT{x, y, x + cell, y + cell};
 }
 static RECT OverflowFooter() {
+    // The Windows 10 panel holds the icons only: no "Customize..." row.
+    if (T81IsWin10Skin(taskbarSkin.load()))
+        return RECT{};
     int pad = OverflowContentPad(),
         top = pad + OverflowRowsShown() * Px(30) + Px(1);
     if (taskbarSkin.load() == 6 || taskbarSkin.load() == 7) {
@@ -15634,7 +16982,8 @@ static bool OverflowIconScreenRect(int index, RECT* result) {
     auto it = std::find(entries.begin(), entries.end(), index);
     if (it == entries.end())
         return false;
-    int slot = (int)(it - entries.begin()), row = slot / 3 - s->overflowScroll;
+    int slot = (int)(it - entries.begin()),
+        row = slot / OverflowCols() - s->overflowScroll;
     if (row < 0 || row >= OverflowRowsShown())
         return false;
     *result = OverflowCell(slot);
@@ -15645,7 +16994,7 @@ static bool OverflowIconScreenRect(int index, RECT* result) {
 static int OverflowHit(POINT point) {
     auto entries = OverflowPrivateItems();
     for (size_t i = 0; i < entries.size(); ++i) {
-        int row = (int)i / 3 - s->overflowScroll;
+        int row = (int)i / OverflowCols() - s->overflowScroll;
         if (row < 0 || row >= OverflowRowsShown())
             continue;
         RECT cell = OverflowCell((int)i);
@@ -15889,12 +17238,17 @@ static void HidePrivateOverflow() {
         SendMessageW(s->overflowTooltip, TTM_TRACKACTIVATE, FALSE,
                      (LPARAM)&tool);
     }
+    // Windows 10 skin: a panel that was not open changes nothing on the bar,
+    // and a whole drawing of the bar for nothing delays the flyout a click
+    // opens.
+    const bool idle = T81IsWin10Skin(taskbarSkin.load()) &&
+                      !(s->overflowPanel && IsWindowVisible(s->overflowPanel));
     if (s->overflowPanel)
         ShowWindow(s->overflowPanel, SW_HIDE);
     s->overflowHot = -1;
     s->overflowFooterHot = false;
     // The arrow is drawn "hot" while the panel is open: repaint it right away.
-    if (s->bar && IsWindow(s->bar))
+    if (s->bar && IsWindow(s->bar) && !idle)
         RedrawWindow(s->bar, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
 }
 static std::wstring SystemTooltipText(int hit) {
@@ -16017,10 +17371,13 @@ static DWORD TaskbarPopupStyle() {
 static void ConfigureSystemPopupFrame(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd))
         return;
-    bool basicOverflow = (taskbarSkin.load() == 6 || taskbarSkin.load() == 7) &&
+    bool basicOverflow = (taskbarSkin.load() == 6 || taskbarSkin.load() == 7 ||
+                          T81IsWin10Skin(taskbarSkin.load())) &&
                          s && hwnd == s->overflowPanel;
     bool classicJump = taskbarSkin.load() == 7 && s && hwnd == s->jumpPopup;
-    bool ownFrame = basicOverflow || classicJump;
+    bool win10Jump =
+        T81IsWin10Skin(taskbarSkin.load()) && s && hwnd == s->jumpPopup;
+    bool ownFrame = basicOverflow || classicJump || win10Jump;
     LONG_PTR old = GetWindowLongPtrW(hwnd, GWL_STYLE);
     LONG_PTR wanted =
         (old & ~((LONG_PTR)(WS_THICKFRAME | WS_BORDER))) |
@@ -16049,15 +17406,17 @@ static void ResizePrivateOverflow() {
     if (!s || !s->overflowPanel)
         return;
     auto entries = OverflowPrivateItems();
-    int totalRows = std::max(1, (int)((entries.size() + 2) / 3));
+    int totalRows = OverflowRowsFor(entries.size());
     s->overflowScroll = std::max(
         0, std::min(s->overflowScroll, totalRows - OverflowRowsShown()));
     int pad = OverflowContentPad();
-    int w = 2 * pad + 3 * Px(30),
+    int w = 2 * pad + OverflowCols() * OverflowCellPx(),
         h = 2 * pad + OverflowRowsShown() * Px(30) + Px(26) + Px(1);
     if (taskbarSkin.load() == 6 || taskbarSkin.load() == 7)
         h = pad + OverflowRowsShown() * Px(30) +
             Px(taskbarSkin.load() == 7 ? 9 : 11) + Px(44) + Px(1);
+    if (T81IsWin10Skin(taskbarSkin.load()))
+        h = 2 * pad + OverflowRowsShown() * OverflowCellPx();
     RECT rect{0, 0, w, h};
     using AdjustFn = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
     auto adjust = (AdjustFn)GetProcAddress(GetModuleHandleW(L"user32.dll"),
@@ -16112,14 +17471,16 @@ static void PaintPrivateOverflow(HWND h) {
     ScopedSelection selected(mem, bitmap);
     if (mem && bitmap && selected.old && selected.old != HGDI_ERROR) {
         auto entries = OverflowPrivateItems();
-        int rowsShown =
-            std::min(std::max(1, (int)((entries.size() + 2) / 3)), 10);
+        int rowsShown = std::min(OverflowRowsFor(entries.size()), 10);
         {
             Graphics g(mem);
-            int inset =
-                (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 7)
-                    ? 0
-                    : Px(6);
+            // Windows 10: one dark panel with a 1 px line around it and the
+            // icons only (drawn after the icons, below).
+            const bool win10 = T81IsWin10Skin(taskbarSkin.load());
+            int inset = (T81IsWin7Skin(taskbarSkin.load()) ||
+                         taskbarSkin.load() == 7 || win10)
+                            ? 0
+                            : Px(6);
             if (inset) {
                 COLORREF c = PopupChromeColor();
                 SolidBrush chrome(
@@ -16131,7 +17492,11 @@ static void PaintPrivateOverflow(HWND h) {
             LinearGradientBrush bg(
                 Point(0, 0), Point(0, std::max(1L, r.bottom)),
                 Color(255, 255, 255, 255), Color(255, 244, 244, 244));
-            if (taskbarSkin.load() == 6 || taskbarSkin.load() == 7) {
+            if (win10) {
+                SolidBrush dark(T81W10Light() ? Color(255, 228, 228, 228)
+                                              : Color(255, 32, 32, 32));
+                g.FillRectangle(&dark, paper);
+            } else if (taskbarSkin.load() == 6 || taskbarSkin.load() == 7) {
                 SolidBrush white(Color(255, 255, 255, 255));
                 g.FillRectangle(&white, paper);
             } else
@@ -16142,7 +17507,7 @@ static void PaintPrivateOverflow(HWND h) {
                                 paper.Height - 1);
             }
             for (size_t i = 0; i < entries.size(); ++i) {
-                int row = (int)i / 3 - s->overflowScroll;
+                int row = (int)i / OverflowCols() - s->overflowScroll;
                 if (row < 0 || row >= rowsShown)
                     continue;
                 RECT cell = OverflowCell((int)i);
@@ -16174,7 +17539,9 @@ static void PaintPrivateOverflow(HWND h) {
                 (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 7)
                     ? 0
                     : Px(7);
-            if (taskbarSkin.load() == 7) {
+            if (win10) {
+                // No footer in the Windows 10 panel.
+            } else if (taskbarSkin.load() == 7) {
                 SolidBrush classicFooter(Color(255, 212, 208, 200));
                 g.FillRectangle(&classicFooter, 0, top, (int)r.right,
                                 std::max(0, (int)r.bottom - top));
@@ -16188,7 +17555,7 @@ static void PaintPrivateOverflow(HWND h) {
         }
         int icon = Px(16);
         for (size_t i = 0; i < entries.size(); ++i) {
-            int row = (int)i / 3 - s->overflowScroll;
+            int row = (int)i / OverflowCols() - s->overflowScroll;
             if (row < 0 || row >= rowsShown)
                 continue;
             RECT cell = OverflowCell((int)i);
@@ -16197,13 +17564,17 @@ static void PaintPrivateOverflow(HWND h) {
                 Graphics g(mem);
                 float x = (cell.left + cell.right) / 2.0f,
                       y = (cell.top + cell.bottom) / 2.0f, u = Dpi() / 96.0f;
+                // The dark artwork is for light panels; Windows 10's panel is
+                // dark unless Windows is in its light mode.
+                const bool dark =
+                    !T81IsWin10Skin(taskbarSkin.load()) || T81W10Light();
                 if (system == HIT_NETWORK)
-                    DrawNetworkGlyph(g, x, y, u, s->netKind, true);
+                    DrawNetworkGlyph(g, x, y, u, s->netKind, dark);
                 if (system == HIT_VOLUME)
-                    DrawVolumeGlyph(g, x, y, u, s->volume, s->muted, true);
+                    DrawVolumeGlyph(g, x, y, u, s->volume, s->muted, dark);
                 if (system == HIT_BATTERY)
                     DrawBatteryGlyph(g, x, y, u, s->batteryPct,
-                                     s->batteryCharging, true);
+                                     s->batteryCharging, dark);
             } else if (entries[i] >= 0 &&
                        (size_t)entries[i] < s->trayIcons.size()) {
                 HICON img = s->trayIcons[entries[i]].icon;
@@ -16223,8 +17594,9 @@ static void PaintPrivateOverflow(HWND h) {
                           : s->overflowFooterHot  ? RGB(0, 78, 158)
                                                   : RGB(0, 102, 204));
         RECT footer = OverflowFooter();
-        DrawTextW(mem, Tr(L"Personalizza...", L"Customize..."), -1, &footer,
-                  DT_SINGLELINE | DT_VCENTER | DT_CENTER);
+        if (!T81IsWin10Skin(taskbarSkin.load()))
+            DrawTextW(mem, Tr(L"Personalizza...", L"Customize..."), -1, &footer,
+                      DT_SINGLELINE | DT_VCENTER | DT_CENTER);
         if (previous)
             SelectObject(mem, previous);
         if (font)
@@ -16236,6 +17608,14 @@ static void PaintPrivateOverflow(HWND h) {
                      1);
             border.DrawRectangle(&edge, 0, 0, std::max(0L, r.right - 1),
                                  std::max(0L, r.bottom - 1));
+        }
+        if (T81IsWin10Skin(taskbarSkin.load())) {
+            HBRUSH edge = CreateSolidBrush(T81W10Light() ? RGB(171, 171, 171)
+                                                         : RGB(48, 48, 48));
+            if (edge) {
+                FrameRect(mem, &r, edge);
+                DeleteObject(edge);
+            }
         }
         BitBlt(dc, 0, 0, r.right, r.bottom, mem, 0, 0, SRCCOPY);
     }
@@ -16333,7 +17713,7 @@ static LRESULT CALLBACK PrivateOverflowProc(HWND h,
                     return 0;
                 }
                 auto entries = OverflowPrivateItems();
-                int rows = std::max(1, (int)((entries.size() + 2) / 3));
+                int rows = OverflowRowsFor(entries.size());
                 s->overflowScroll = std::max(
                     0, std::min(rows - OverflowRowsShown(),
                                 s->overflowScroll -
@@ -19006,6 +20386,14 @@ static void EndTrayDrag(HWND capture, POINT client) {
             // Launch while the overflow anchor is still discoverable, then
             // dismiss it; tray drag/drop still keeps the panel open.
             LaunchSystemTrayHit(system, &p);
+            // A flyout of the Windows 10 skin slides open before this
+            // returns. The button-up of this very click is still on its way
+            // and is left out for half a second from now, not from before
+            // the motion: counted as a second click it closed the flyout
+            // again.
+            if (awaitingNativeUp && s && s->suppressTrayRelease &&
+                T81IsWin10Skin(taskbarSkin.load()))
+                s->suppressTrayReleaseUntil = GetTickCount64() + 500;
             HidePrivateOverflow();
         } else {
             SendPrivateIconEvent(index, WM_LBUTTONDOWN, p);
@@ -19920,7 +21308,30 @@ static std::wstring BuildBarMenuText(bool clock) {
                           : Tr(L"Collegamenti\n", L"Links\n");
     lines += s->desktopBand ? Tr(L"*Desktop\n", L"*Desktop\n")
                             : Tr(L"Desktop\n", L"Desktop\n");
-    lines += L"<\n-\n";
+    lines += L"<\n";
+    if (T81IsWin10Skin(taskbarSkin.load())) {
+        // Separate Toolbars from the Windows 10 Search section.
+        lines += L"-\n";
+        // As in Windows 10: the search mode and the Task View button, kept
+        // in the values Windows itself uses.
+        const T81W10System& system = T81W10Sys();
+        lines += Tr(L">Cerca\n", L">Search\n");
+        if (system.search == 0)
+            lines += L"*";
+        lines += Tr(L"Nascosta\n", L"Hidden\n");
+        if (system.search == 1)
+            lines += L"*";
+        lines += Tr(L"Mostra icona di ricerca\n", L"Show search icon\n");
+        if (system.search == 2)
+            lines += L"*";
+        lines += Tr(L"Mostra casella di ricerca\n", L"Show search box\n");
+        lines += L"<\n";
+        if (system.taskView)
+            lines += L"*";
+        lines += Tr(L"Mostra pulsante Visualizzazione attività\n",
+                    L"Show Task View button\n");
+    }
+    lines += L"-\n";
     if (clock)
         lines += Tr(L"Modifica data/ora\nPersonalizza icone di notifica\n-\n",
                     L"Adjust date/time\nCustomize notification icons\n-\n");
@@ -20013,8 +21424,27 @@ static void ShowBarContextMenu(bool clock) {
     POINT p{};
     GetCursorPos(&p);
     std::wstring lines = BuildBarMenuText(clock);
+    const bool win10Menu = T81IsWin10Skin(taskbarSkin.load());
     int cmd =
         w7t::ShellMenu::ShowContextMenuEx(p.x, p.y, true, lines.c_str(), true);
+    if (win10Menu) {
+        // Leaf IDs 4..6 are the search modes and 7 is the Task View button.
+        if (cmd >= 4 && cmd <= 6) {
+            T81W10WriteSetting(kW10KeySearch, L"SearchboxTaskbarMode",
+                               (DWORD)(cmd - 4));
+            T81Win10CloseFlyout();
+            InvalidateRect(s->bar, nullptr, FALSE);
+            return;
+        }
+        if (cmd == 7) {
+            T81W10WriteSetting(kW10KeyAdvanced, L"ShowTaskViewButton",
+                               T81W10Sys().taskView ? 0 : 1);
+            InvalidateRect(s->bar, nullptr, FALSE);
+            return;
+        }
+        if (cmd > 7)
+            cmd -= 4;
+    }
     if (clock) {
         Wh_Log(L"[T81-DIAG] clock/shared context command=%d", cmd);
         if (cmd == 4) {
@@ -22341,8 +23771,12 @@ static void PopulateLanguageFlyoutItems() {
             s->languageFlyoutSelected = i;
     s->languageFlyoutHover = -1;
     s->languageFlyoutFooterHover = false;
+    s->languageFlyoutScroll =
+        std::clamp(s->languageFlyoutScroll, 0,
+                   std::max(0, (int)s->languageFlyoutItems.size() -
+                                   s->languageFlyoutRows));
 }
-// The supplied Windows 8.1 photograph is the visual specification. Interaction
+// A Windows 8.1 reference photograph guides the appearance. Interaction
 // follows win7-language-switcher-restorer v1.1.0, integrated on this UI thread;
 // no upstream hooks or process-local ActivateKeyboardLayout fallback is
 // included.
@@ -22352,6 +23786,116 @@ static COLORREF LanguageFlyoutSystemAccent() {
     if (SUCCEEDED(DwmGetColorizationColor(&color, &opaque)))
         return RGB((BYTE)(color >> 16), (BYTE)(color >> 8), (BYTE)color);
     return GetSysColor(COLOR_HIGHLIGHT);
+}
+// Accent acquisition and luminance cap adapted from AdmXP8's Windows 8x
+// Language Flyout 0.1.1. Cache on the UI thread; never activate WinRT in paint.
+struct LanguageAccentColor {
+    BYTE a, r, g, b;
+};
+static bool LanguageReadWindowsAccent(COLORREF* out) {
+    if (!out)
+        return false;
+    HMODULE lib = LoadLibraryW(L"combase.dll");
+    if (!lib)
+        return false;
+    using Init = HRESULT(WINAPI*)(UINT32);
+    using Uninit = void(WINAPI*)();
+    using CreateString = HRESULT(WINAPI*)(PCWSTR, UINT32, void**);
+    using DeleteString = HRESULT(WINAPI*)(void*);
+    using Activate = HRESULT(WINAPI*)(void*, IUnknown**);
+    auto init = reinterpret_cast<Init>(GetProcAddress(lib, "RoInitialize"));
+    auto uninit =
+        reinterpret_cast<Uninit>(GetProcAddress(lib, "RoUninitialize"));
+    auto create = reinterpret_cast<CreateString>(
+        GetProcAddress(lib, "WindowsCreateString"));
+    auto del = reinterpret_cast<DeleteString>(
+        GetProcAddress(lib, "WindowsDeleteString"));
+    auto activate =
+        reinterpret_cast<Activate>(GetProcAddress(lib, "RoActivateInstance"));
+    if (!init || !uninit || !create || !del || !activate) {
+        FreeLibrary(lib);
+        return false;
+    }
+    HRESULT hr = init(0);
+    bool initialized = SUCCEEDED(hr);
+    if (hr == RPC_E_CHANGED_MODE)
+        hr = S_OK;  // This UI thread already has a different apartment.
+    void* name = nullptr;
+    IUnknown* object = nullptr;
+    IUnknown* settings = nullptr;
+    constexpr wchar_t cls[] = L"Windows.UI.ViewManagement.UISettings";
+    if (SUCCEEDED(hr))
+        hr = create(cls, (UINT32)(std::size(cls) - 1), &name);
+    if (SUCCEEDED(hr))
+        hr = activate(name, &object);
+    const GUID iid = {0x03021be4,
+                      0x5254,
+                      0x4781,
+                      {0x81, 0x94, 0x51, 0x68, 0xf7, 0xd0, 0x6d, 0x7b}};
+    if (SUCCEEDED(hr) && object)
+        hr = object->QueryInterface(iid, reinterpret_cast<void**>(&settings));
+    LanguageAccentColor color{};
+    if (SUCCEEDED(hr) && settings) {
+        using GetColor =
+            HRESULT(STDMETHODCALLTYPE*)(void*, int, LanguageAccentColor*);
+        auto fn = reinterpret_cast<GetColor>(
+            (*reinterpret_cast<void***>(settings))[6]);
+        hr = fn(settings, 5, &color);
+    }
+    bool ok = SUCCEEDED(hr) && settings;
+    if (ok)
+        *out = RGB(color.r, color.g, color.b);
+    if (settings)
+        settings->Release();
+    if (object)
+        object->Release();
+    if (name)
+        del(name);
+    if (initialized)
+        uninit();
+    FreeLibrary(lib);
+    return ok;
+}
+static double LanguageAccentLuminance(COLORREF c) {
+    auto linear = [](int n) {
+        double a = n / 255.0;
+        return a <= .04045 ? a / 12.92 : std::pow((a + .055) / 1.055, 2.4);
+    };
+    return .2126 * linear(GetRValue(c)) + .7152 * linear(GetGValue(c)) +
+           .0722 * linear(GetBValue(c));
+}
+static COLORREF LanguageLimitAccent(COLORREF c) {
+    constexpr double maximum = .175;
+    if (LanguageAccentLuminance(c) <= maximum)
+        return c;
+    double lo = 0, hi = 1;
+    for (int i = 0; i < 20; ++i) {
+        double mid = (lo + hi) / 2;
+        COLORREF v = RGB((int)(GetRValue(c) * mid), (int)(GetGValue(c) * mid),
+                         (int)(GetBValue(c) * mid));
+        if (LanguageAccentLuminance(v) > maximum)
+            hi = mid;
+        else
+            lo = mid;
+    }
+    return RGB((int)(GetRValue(c) * lo), (int)(GetGValue(c) * lo),
+               (int)(GetBValue(c) * lo));
+}
+static void UpdateLanguageFlyoutAccent() {
+    if (!s)
+        return;
+    COLORREF color = RGB(70, 23, 181);
+    if (languageFlyoutFollowAccent.load()) {
+        if (!LanguageReadWindowsAccent(&color)) {
+            DWORD value = 0;
+            BOOL opaque = FALSE;
+            if (SUCCEEDED(DwmGetColorizationColor(&value, &opaque)))
+                color =
+                    RGB((BYTE)(value >> 16), (BYTE)(value >> 8), (BYTE)value);
+        }
+        color = LanguageLimitAccent(color);
+    }
+    s->languageFlyoutAccent = color;
 }
 static void PaintLanguageFlyout(HWND hwnd, HDC hdc) {
     static thread_local bool painting = false;
@@ -22521,6 +24065,126 @@ static void PaintLanguageFlyout(HWND hwnd, HDC hdc) {
     DeleteObject(bitmap);
     DeleteDC(mem);
 }
+// Adapted from Windows 8x Language Flyout 0.1.1 by AdmXP8. It uses the
+// existing taskbar's window, layout list and switching logic rather than
+// installing a second set of system-wide hooks or a separate worker.
+static bool PaintAdmLanguageFlyout(HWND hwnd, HDC dc) {
+    if (!s || !dc)
+        return false;
+    RECT client{};
+    if (!GetClientRect(hwnd, &client) || client.right <= 0 ||
+        client.bottom <= 0)
+        return false;
+    HDC mem = CreateCompatibleDC(dc);
+    if (!mem)
+        return false;
+    HBITMAP bitmap = CreateCompatibleBitmap(dc, client.right, client.bottom);
+    if (!bitmap) {
+        DeleteDC(mem);
+        return false;
+    }
+    HGDIOBJ oldBitmap = SelectObject(mem, bitmap);
+    if (!oldBitmap || oldBitmap == HGDI_ERROR) {
+        DeleteObject(bitmap);
+        DeleteDC(mem);
+        return false;
+    }
+    UINT dpi = LanguageFlyoutDpi(hwnd);
+    auto px = [dpi](int n) { return LanguageFlyoutPx(n, dpi); };
+    auto fill = [mem](const RECT& rect, COLORREF color) {
+        HBRUSH brush = CreateSolidBrush(color);
+        if (brush) {
+            FillRect(mem, &rect, brush);
+            DeleteObject(brush);
+        }
+    };
+    auto font = [dpi](int size, int weight) {
+        return CreateFontW(-LanguageFlyoutPx(size, dpi), 0, 0, 0, weight, FALSE,
+                           FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                           CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                           DEFAULT_PITCH, L"Segoe UI");
+    };
+    HFONT normal = font(15, FW_NORMAL), bold = font(15, FW_SEMIBOLD),
+          small = font(12, FW_NORMAL);
+    if (!normal || !bold || !small) {
+        if (normal)
+            DeleteObject(normal);
+        if (bold)
+            DeleteObject(bold);
+        if (small)
+            DeleteObject(small);
+        SelectObject(mem, oldBitmap);
+        DeleteObject(bitmap);
+        DeleteDC(mem);
+        return false;
+    }
+    SetBkMode(mem, TRANSPARENT);
+    auto text = [mem](HFONT f, COLORREF color, RECT r, const wchar_t* str) {
+        HGDIOBJ old = SelectObject(mem, f);
+        SetTextColor(mem, color);
+        DrawTextW(mem, str, -1, &r,
+                  DT_LEFT | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+        SelectObject(mem, old);
+    };
+    fill(client, RGB(42, 42, 42));
+    RECT inside{px(2), px(2), client.right - px(2), client.bottom - px(2)};
+    fill(inside, GetSysColor(COLOR_WINDOW));
+    COLORREF accent = s->languageFlyoutAccent;
+    int count = (int)s->languageFlyoutItems.size();
+    int rows = std::min(s->languageFlyoutRows, count);
+    for (int row = 0; row < rows; ++row) {
+        int i = row + s->languageFlyoutScroll;
+        if (i >= count)
+            break;
+        const auto& item = s->languageFlyoutItems[i];
+        int y = px(7) + px(60) * row;
+        RECT rect{px(2), y, client.right - px(2), y + px(60)};
+        bool selected = (size_t)i == s->languageFlyoutSelected;
+        if (selected)
+            fill(rect, accent);
+        else if (i == s->languageFlyoutHover)
+            fill(rect, RGB(216, 216, 216));
+        COLORREF color =
+            selected ? RGB(255, 255, 255) : GetSysColor(COLOR_WINDOWTEXT);
+        RECT code{px(16), y + px(10), px(70), y + px(31)};
+        RECT title{px(76), y + px(10), client.right - px(12), y + px(30)};
+        RECT sub{px(76), y + px(30), client.right - px(12), y + px(50)};
+        text(bold, color, code, item.abbreviation.c_str());
+        text(normal, color, title, item.languageName.c_str());
+        text(normal, color, sub, item.layoutName.c_str());
+    }
+    int footer = px(7) + px(60) * rows;
+    RECT sep{px(16), footer + px(10), client.right - px(16), footer + px(11)};
+    fill(sep, RGB(42, 42, 42));
+    RECT link{px(16), footer + px(29), client.right - px(12), footer + px(50)};
+    HFONT linkHover = nullptr;
+    if (s->languageFlyoutFooterHover)
+        linkHover = CreateFontW(-LanguageFlyoutPx(15, dpi), 0, 0, 0, FW_NORMAL,
+                                FALSE, TRUE, FALSE, DEFAULT_CHARSET,
+                                OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+    text(linkHover ? linkHover : normal, accent, link,
+         Tr(L"Preferenze lingua", L"Language preferences"));
+    if (linkHover)
+        DeleteObject(linkHover);
+    RECT hint{px(16), footer + px(53), client.right - px(8), footer + px(71)};
+    text(small, GetSysColor(COLOR_WINDOWTEXT), hint,
+         Tr(L"Per cambiare lingua, premi Windows + Spazio",
+            L"For easy switching, press Windows key + Space"));
+    if (count > rows) {
+        RECT marker{client.right - px(9), px(7), client.right - px(5), footer};
+        fill(marker, RGB(220, 220, 220));
+    }
+    BOOL painted =
+        BitBlt(dc, 0, 0, client.right, client.bottom, mem, 0, 0, SRCCOPY);
+    DeleteObject(normal);
+    DeleteObject(bold);
+    DeleteObject(small);
+    SelectObject(mem, oldBitmap);
+    DeleteObject(bitmap);
+    DeleteDC(mem);
+    return painted != FALSE;
+}
 static int LanguageFlyoutHit(HWND hwnd, POINT point) {
     if (!s)
         return -1;
@@ -22531,13 +24195,17 @@ static int LanguageFlyoutHit(HWND hwnd, POINT point) {
     int itemHeight = LanguageFlyoutPx(60, dpi);
     int count = (int)s->languageFlyoutItems.size(),
         padding = LanguageFlyoutPx(16, dpi);
+    int rows = s->languageFlyoutModern ? std::min(count, s->languageFlyoutRows)
+                                       : count;
     int border = std::max(1, LanguageFlyoutPx(2, dpi)),
         top = LanguageFlyoutPx(7, dpi);
     int width = client.right - client.left;
     if (point.x >= border && point.x < width - border && point.y >= top &&
-        point.y < top + count * itemHeight)
-        return (point.y - top) / itemHeight;
-    int linkY = top + count * itemHeight + LanguageFlyoutPx(32, dpi);
+        point.y < top + rows * itemHeight)
+        return (point.y - top) / itemHeight +
+               (s->languageFlyoutModern ? s->languageFlyoutScroll : 0);
+    int linkY = top + rows * itemHeight +
+                LanguageFlyoutPx(s->languageFlyoutModern ? 29 : 32, dpi);
     if (point.y >= linkY && point.y <= linkY + LanguageFlyoutPx(22, dpi) &&
         point.x >= padding && point.x <= width - padding)
         return count;
@@ -22763,7 +24431,16 @@ static LRESULT CALLBACK LanguageFlyoutProc(HWND hwnd,
                 PAINTSTRUCT ps{};
                 HDC dc = BeginPaint(hwnd, &ps);
                 if (dc) {
-                    PaintLanguageFlyout(hwnd, dc);
+                    if (!s || !s->languageFlyoutModern ||
+                        !PaintAdmLanguageFlyout(hwnd, dc)) {
+                        if (s && s->languageFlyoutModern) {
+                            Wh_Log(
+                                L"[T81-LANGUAGE] new renderer failed; using "
+                                L"previous renderer");
+                            s->languageFlyoutModern = false;
+                        }
+                        PaintLanguageFlyout(hwnd, dc);
+                    }
                     EndPaint(hwnd, &ps);
                 }
                 return 0;
@@ -22785,6 +24462,20 @@ static LRESULT CALLBACK LanguageFlyoutProc(HWND hwnd,
                 TrackMouseEvent(&track);
                 return 0;
             }
+            case WM_MOUSEWHEEL:
+                if (s && s->languageFlyoutModern) {
+                    int maxScroll =
+                        std::max(0, (int)s->languageFlyoutItems.size() -
+                                        s->languageFlyoutRows);
+                    int delta = GET_WHEEL_DELTA_WPARAM(wp);
+                    if (delta)
+                        s->languageFlyoutScroll = std::clamp(
+                            s->languageFlyoutScroll + (delta < 0 ? 1 : -1), 0,
+                            maxScroll);
+                    s->languageFlyoutHover = -1;
+                    RedrawLanguageFlyout(hwnd);
+                }
+                return 0;
             case WM_MOUSELEAVE:
                 if (s) {
                     s->languageFlyoutHover = -1;
@@ -22793,6 +24484,7 @@ static LRESULT CALLBACK LanguageFlyoutProc(HWND hwnd,
                 }
                 return 0;
             case WM_DWMCOLORIZATIONCOLORCHANGED:
+                UpdateLanguageFlyoutAccent();
                 RedrawLanguageFlyout(hwnd);
                 return 0;
             case WM_SETCURSOR:
@@ -22848,12 +24540,30 @@ static LRESULT CALLBACK LanguageFlyoutProc(HWND hwnd,
                 if (wp == VK_DOWN || wp == VK_TAB) {
                     s->languageFlyoutSelected =
                         (s->languageFlyoutSelected + 1) % count;
+                    if (s->languageFlyoutModern) {
+                        int selected = (int)s->languageFlyoutSelected;
+                        if (selected < s->languageFlyoutScroll)
+                            s->languageFlyoutScroll = selected;
+                        else if (selected >= s->languageFlyoutScroll +
+                                                 s->languageFlyoutRows)
+                            s->languageFlyoutScroll =
+                                selected - s->languageFlyoutRows + 1;
+                    }
                     RedrawLanguageFlyout(hwnd);
                     return 0;
                 }
                 if (wp == VK_UP) {
                     s->languageFlyoutSelected =
                         (s->languageFlyoutSelected + count - 1) % count;
+                    if (s->languageFlyoutModern) {
+                        int selected = (int)s->languageFlyoutSelected;
+                        if (selected < s->languageFlyoutScroll)
+                            s->languageFlyoutScroll = selected;
+                        else if (selected >= s->languageFlyoutScroll +
+                                                 s->languageFlyoutRows)
+                            s->languageFlyoutScroll =
+                                selected - s->languageFlyoutRows + 1;
+                    }
                     RedrawLanguageFlyout(hwnd);
                     return 0;
                 }
@@ -23024,6 +24734,4130 @@ static void ShowWin7LanguageMenu(HWND target,
         SetForegroundWindow(target);
     }
 }
+// ===== Windows 10 skin: flyouts and the search pane ==========================
+// The clock, volume, battery and input language flyouts and the search pane
+// are windows of the mod, drawn here. No Microsoft image is embedded; pictures
+// come from the Segoe MDL2 Assets font of the running Windows. Sizes were
+// measured on Windows 10 screenshots at 96 DPI and scale with the DPI of the
+// bar:
+//   - clock: 360 px wide. The time in 48 px Segoe UI Light 24 px from the
+//     left with the AM/PM marker in 20 px, the date in 14 px in the lightest
+//     accent, a line, the month in 15 px with two arrows, the weekday names in
+//     12 px, six 42 px rows of seven 48 px columns from 12 px, today filled
+//     with the accent inside a ring, a line and a settings link;
+//   - volume: 360 x 102 px. The device name in 15 px, a 24 px speaker, a 2 px
+//     track from 65 to 291 px with an 8 x 24 px thumb, the level in 24 px;
+//   - battery: 360 px wide. A 56 px battery, the charge in 48 px Segoe UI
+//     Light, the power mode slider with the same thumb and a settings link;
+//   - input language: 304 px wide with 60 px rows and a 48 px link row;
+//   - search: as wide as the search box, the best match in a 64 px row and
+//     further apps in 36 px rows.
+// The clock, volume and battery flyouts stand in the corner of the screen next
+// to the notification area: above a bar at the bottom, below a bar at the top
+// and beside a vertical bar, as in Windows 10.
+// A redraw of the flyout: posted, so that several changes give one drawing.
+static const UINT kW10MsgRender = WM_APP + 71;
+static void T81W10Invalidate() {
+    T81W10Fly& f = gW10Fly;
+    if (f.hwnd && !f.dirty) {
+        f.dirty = true;
+        PostMessageW(f.hwnd, kW10MsgRender, 0, 0);
+    }
+}
+static void T81W10Render(HWND hwnd);
+static bool T81W10PointerHidden();
+static bool T81W10SearchBoxRect(RECT* box);
+static void T81W10Compose();
+static void T81W10Present(HWND hwnd, float shown, bool uncover = false);
+// The place the open flyout has on the screen: where its last whole picture
+// went.
+static RECT gW10Shown{};
+static void T81W10Slide(HWND hwnd, bool opening);
+static void T81W10DropFrame();
+static void T81W10ApplyAcrylic(HWND hwnd);
+static bool T81W22On();
+static void T81W10FinishClose();
+static void T81W10PaintContent(HDC dc, const RECT& client);
+static Color T81W10BaseColor();
+static bool T81Win10FlyoutsOn() {
+    return s && T81IsWin10Skin(taskbarSkin.load()) && win10Flyouts.load();
+}
+enum {
+    kW10PartToday = 1,
+    kW10PartPrev,
+    kW10PartNext,
+    kW10PartLink,
+    kW10PartGlyph,
+    kW10PartSlider,
+    kW10PartWindows,
+    kW10PartNetButton = 20,
+    kW10PartNetCheck,
+    kW10PartNetProps,
+    kW10PartNetThumb,
+    kW10PartNetPageUp,
+    kW10PartNetPageDown,
+    kW10PartNetTile = 30,  // and the two that follow
+    kW10PartRow = 100
+};
+// Shade 0..6 of the accent palette Windows keeps: light 3, light 2, light 1,
+// the accent, dark 1, dark 2, dark 3. Without it, the default blue.
+static Color T81W10Accent(int shade) {
+    static ULONGLONG readAt = 0;
+    static BYTE palette[32]{};
+    static bool valid = false;
+    ULONGLONG now = GetTickCount64();
+    if (!readAt || now - readAt >= 2000) {
+        BYTE read[32]{};
+        DWORD size = sizeof(read);
+        valid = RegGetValueW(HKEY_CURRENT_USER,
+                             L"Software\\Microsoft\\Windows\\CurrentVersion\\"
+                             L"Explorer\\Accent",
+                             L"AccentPalette", RRF_RT_REG_BINARY, nullptr, read,
+                             &size) == ERROR_SUCCESS &&
+                size >= 28 && (read[12] | read[13] | read[14]);
+        if (valid)
+            memcpy(palette, read, sizeof(palette));
+        readAt = now ? now : 1;
+    }
+    shade = std::clamp(shade, 0, 6);
+    static constexpr BYTE kBlue[7][3] = {
+        {166, 216, 255}, {118, 185, 237}, {66, 156, 227}, {0, 120, 215},
+        {0, 90, 158},    {0, 66, 117},    {0, 38, 66}};
+    return valid
+               ? Color(255, palette[shade * 4], palette[shade * 4 + 1],
+                       palette[shade * 4 + 2])
+               : Color(255, kBlue[shade][0], kBlue[shade][1], kBlue[shade][2]);
+}
+// One line of text in Segoe UI. `weight` is 0 regular, 1 light, 2 semibold;
+// `align` puts x at the left edge (-1), the middle (0) or the right edge (1);
+// `baseline` is the row of the baseline. A positive `limit` ends a longer text
+// with an ellipsis. Returns the width of the text; `draw` false only measures.
+static float T81W10Text(Graphics& g,
+                        const wchar_t* text,
+                        float x,
+                        float baseline,
+                        float size,
+                        int weight,
+                        Color color,
+                        int align = -1,
+                        float limit = 0,
+                        bool draw = true) {
+    if (!text || !*text)
+        return 0;
+    FontFamily wanted(weight == 1   ? L"Segoe UI Light"
+                      : weight == 2 ? L"Segoe UI Semibold"
+                                    : L"Segoe UI"),
+        segoe(L"Segoe UI");
+    const bool exact = wanted.GetLastStatus() == Ok && wanted.IsAvailable();
+    const FontFamily* family =
+        exact ? &wanted
+        : segoe.GetLastStatus() == Ok && segoe.IsAvailable()
+            ? &segoe
+            : FontFamily::GenericSansSerif();
+    if (!family)
+        return 0;
+    const int style = weight == 2 && !exact ? FontStyleBold : FontStyleRegular;
+    Gdiplus::Font font(family, size, style, UnitPixel);
+    UINT16 em = family->GetEmHeight(style);
+    if (font.GetLastStatus() != Ok || !em)
+        return 0;
+    const float ascent = font.GetSize() * family->GetCellAscent(style) / em;
+    StringFormat format(StringFormat::GenericTypographic());
+    format.SetFormatFlags(format.GetFormatFlags() | StringFormatFlagsNoWrap |
+                          StringFormatFlagsMeasureTrailingSpaces);
+    RectF box;
+    g.MeasureString(text, -1, &font, PointF(0, 0), &format, &box);
+    float width = box.Width;
+    if (!draw)
+        return width;
+    SolidBrush brush(color);
+    if (limit > 0 && width > limit) {
+        format.SetTrimming(StringTrimmingEllipsisCharacter);
+        RectF layout(align < 0    ? x
+                     : align == 0 ? x - limit / 2
+                                  : x - limit,
+                     baseline - ascent, limit, font.GetSize() * 1.6f);
+        g.DrawString(text, -1, &font, layout, &format, &brush);
+        return limit;
+    }
+    const float left = align < 0 ? x : align == 0 ? x - width / 2 : x - width;
+    g.DrawString(text, -1, &font,
+                 PointF(std::floor(left + 0.5f), baseline - ascent), &format,
+                 &brush);
+    return width;
+}
+// A Windows 10 slider: a 2 px track, in the accent up to the thumb, and an
+// 8 x 24 px thumb with round ends. `value` runs from 0 to 1.
+static void T81W10Slider(Graphics& g,
+                         int left,
+                         int right,
+                         int middle,
+                         float value,
+                         int state) {
+    const int thumbW = Px(8), thumbH = Px(24), line = std::max(1, Px(2));
+    const int travel = std::max(1, right - left - thumbW);
+    const int at =
+        left + (int)std::lround(travel * std::clamp(value, 0.f, 1.f));
+    SolidBrush rest(Color(255, 138, 138, 138)), fill(T81W10Accent(3));
+    g.FillRectangle(&rest, left, middle - line / 2, right - left, line);
+    g.FillRectangle(&fill, left, middle - line / 2, at - left + thumbW / 2,
+                    line);
+    const bool lightPanel = T81W10Light();
+    SolidBrush thumb(state == 2   ? (lightPanel ? Color(255, 102, 102, 102)
+                                                : Color(255, 204, 204, 204))
+                     : state == 1 ? (lightPanel ? Color(255, 0, 0, 0)
+                                                : Color(255, 255, 255, 255))
+                                  : T81W10Accent(3));
+    const int top = middle - thumbH / 2;
+    GraphicsPath shape;
+    shape.AddArc(at, top, thumbW, thumbW, 180, 180);
+    shape.AddArc(at, top + thumbH - thumbW, thumbW, thumbW, 0, 180);
+    shape.CloseFigure();
+    auto saved = g.Save();
+    g.SetSmoothingMode(SmoothingModeAntiAlias);
+    g.SetPixelOffsetMode(PixelOffsetModeHalf);
+    g.FillPath(&thumb, &shape);
+    g.Restore(saved);
+}
+static float T81W10SliderValue(int left, int right, int x) {
+    const int thumbW = Px(8), travel = std::max(1, right - left - thumbW);
+    return std::clamp((x - left - thumbW / 2.0f) / travel, 0.f, 1.f);
+}
+static void T81W10Repaint() {
+    if (!s)
+        return;
+    if (s->bar)
+        InvalidateRect(s->bar, nullptr, FALSE);
+    if (s->overflowPanel)
+        InvalidateRect(s->overflowPanel, nullptr, FALSE);
+    if (gW10Fly.hwnd)
+        T81W10Invalidate();
+}
+
+// ---- calendar ---------------------------------------------------------------
+static int T81W10DaysIn(int year, int month) {
+    static constexpr int kDays[12] = {31, 28, 31, 30, 31, 30,
+                                      31, 31, 30, 31, 30, 31};
+    return month == 2 && ((year % 4 == 0 && year % 100 != 0) || year % 400 == 0)
+               ? 29
+               : kDays[std::clamp(month, 1, 12) - 1];
+}
+// The day of the week of a date: 0 is Monday.
+static int T81W10Weekday(int year, int month, int day) {
+    SYSTEMTIME date{}, full{};
+    date.wYear = (WORD)year;
+    date.wMonth = (WORD)month;
+    date.wDay = (WORD)day;
+    FILETIME time{};
+    if (!SystemTimeToFileTime(&date, &time) ||
+        !FileTimeToSystemTime(&time, &full))
+        return 0;
+    return (full.wDayOfWeek + 6) % 7;
+}
+// The first day of the week of the user: 0 is Monday.
+static int T81W10FirstDay() {
+    DWORD value = 0;
+    if (!GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT,
+                         LOCALE_IFIRSTDAYOFWEEK | LOCALE_RETURN_NUMBER,
+                         (LPWSTR)&value, sizeof(value) / sizeof(wchar_t)))
+        value = 0;
+    return (int)(value % 7);
+}
+// The date in cell 0..41 of the month on show.
+static void T81W10CellDate(int cell, int* year, int* month, int* day) {
+    const T81W10Fly& f = gW10Fly;
+    int lead = (T81W10Weekday(f.year, f.month, 1) - T81W10FirstDay() + 7) % 7;
+    int d = cell - lead + 1, y = f.year, m = f.month;
+    if (d < 1) {
+        if (--m < 1) {
+            m = 12;
+            --y;
+        }
+        d += T81W10DaysIn(y, m);
+    } else if (d > T81W10DaysIn(y, m)) {
+        d -= T81W10DaysIn(y, m);
+        if (++m > 12) {
+            m = 1;
+            ++y;
+        }
+    }
+    *year = y;
+    *month = m;
+    *day = d;
+}
+static void T81W10MoveMonth(int by) {
+    T81W10Fly& f = gW10Fly;
+    int index = f.year * 12 + (f.month - 1) + by;
+    index = std::clamp(index, 1601 * 12, 9999 * 12 + 11);
+    f.year = index / 12;
+    f.month = index % 12 + 1;
+    if (f.hwnd)
+        T81W10Invalidate();
+}
+static RECT T81W10DayCell(int cell) {
+    const int x = Px(12) + (cell % 7) * Px(48),
+              y = Px(197) + (cell / 7) * Px(42);
+    return RECT{x, y, x + Px(48), y + Px(42)};
+}
+
+// ---- volume -----------------------------------------------------------------
+static std::wstring T81W10DeviceName() {
+    std::wstring name;
+    IMMDeviceEnumerator* enumerator = nullptr;
+    if (FAILED(CoCreateInstance(kClsidMMDeviceEnumerator, nullptr, CLSCTX_ALL,
+                                kIidIMMDeviceEnumerator,
+                                (void**)&enumerator)) ||
+        !enumerator)
+        return name;
+    IMMDevice* device = nullptr;
+    if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia,
+                                                      &device)) &&
+        device) {
+        IPropertyStore* store = nullptr;
+        if (SUCCEEDED(device->OpenPropertyStore(STGM_READ, &store)) && store) {
+            // PKEY_Device_FriendlyName
+            static const PROPERTYKEY kFriendlyName = {
+                {0xa45c254e,
+                 0xdf1c,
+                 0x4efd,
+                 {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}},
+                14};
+            PROPVARIANT value;
+            PropVariantInit(&value);
+            if (SUCCEEDED(store->GetValue(kFriendlyName, &value)) &&
+                value.vt == VT_LPWSTR && value.pwszVal)
+                name = value.pwszVal;
+            PropVariantClear(&value);
+            store->Release();
+        }
+        device->Release();
+    }
+    enumerator->Release();
+    return name;
+}
+static void T81W10SetVolume(float level) {
+    if (!s || !EnsureEndpoint())
+        return;
+    level = std::clamp(level, 0.f, 1.f);
+    if (FAILED(s->endpoint->SetMasterVolumeLevelScalar(level, nullptr))) {
+        s->endpoint->Release();
+        s->endpoint = nullptr;
+        return;
+    }
+    // Moving the slider ends the mute, as in Windows 10.
+    if (s->muted && level > 0)
+        s->endpoint->SetMute(FALSE, nullptr);
+    RefreshVolume();
+}
+static void T81W10ToggleMute() {
+    if (!s || !EnsureEndpoint())
+        return;
+    s->endpoint->SetMute(s->muted ? FALSE : TRUE, nullptr);
+    RefreshVolume();
+}
+
+// ---- battery ----------------------------------------------------------------
+// The power mode slider of Windows 10 1709 and later moves between overlays of
+// the balanced plan: better battery, none (better performance, the default)
+// and best performance. powrprof.dll exports the two functions without
+// documenting them, so the slider appears only when both exist and the
+// reading succeeds.
+static const GUID kW10PowerBattery = {
+    0x961cc777,
+    0x2547,
+    0x4f9d,
+    {0x81, 0x74, 0x7d, 0x86, 0x18, 0x1b, 0x8a, 0x7a}};
+static const GUID kW10PowerBest = {
+    0xded574b5,
+    0x45a0,
+    0x4f42,
+    {0x87, 0x37, 0x46, 0x34, 0x5c, 0x09, 0xc2, 0x38}};
+static bool T81W10PowerRead(int* at) {
+    HMODULE library =
+        LoadLibraryExW(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!library)
+        return false;
+    using ReadFn = DWORD(WINAPI*)(GUID*);
+    auto read =
+        (ReadFn)GetProcAddress(library, "PowerGetEffectiveOverlayScheme");
+    GUID mode{};
+    bool ok = read && GetProcAddress(library, "PowerSetActiveOverlayScheme") &&
+              read(&mode) == ERROR_SUCCESS;
+    if (ok)
+        *at = IsEqualGUID(mode, kW10PowerBattery) ? 0
+              : IsEqualGUID(mode, kW10PowerBest)  ? 2
+                                                  : 1;
+    FreeLibrary(library);
+    return ok;
+}
+static void T81W10PowerSet(int at) {
+    HMODULE library =
+        LoadLibraryExW(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!library)
+        return;
+    using WriteFn = DWORD(WINAPI*)(const GUID*);
+    auto write =
+        (WriteFn)GetProcAddress(library, "PowerSetActiveOverlayScheme");
+    static const GUID kNone{};
+    if (write) {
+        DWORD result = write(at == 0   ? &kW10PowerBattery
+                             : at == 2 ? &kW10PowerBest
+                                       : &kNone);
+        Wh_Log(L"[T81-WIN10] power mode %d result=%lu", at, result);
+    }
+    FreeLibrary(library);
+}
+static bool T81W10PowerStatus(SYSTEM_POWER_STATUS* power) {
+    return GetSystemPowerStatus(power) != FALSE;
+}
+static wchar_t T81W10BatteryGlyph(int percent, bool charging, bool saver) {
+    if (percent < 0 || percent > 100)
+        return L'\uE996';
+    const int level = (percent + 5) / 10;
+    if (charging)
+        return level == 10  ? L'\uEA93'
+               : level == 9 ? L'\uE83E'
+                            : (wchar_t)(0xE85A + level);
+    if (saver)
+        return level == 10  ? L'\uEA95'
+               : level == 9 ? L'\uEA94'
+                            : (wchar_t)(0xE863 + level);
+    return level == 10 ? L'\uE83F' : (wchar_t)(0xE850 + level);
+}
+
+// ---- search -----------------------------------------------------------------
+struct T81W10App {
+    std::wstring name, target;
+    bool shell = false;  // an item of the Applications folder of the shell
+    HICON icon = nullptr;
+    bool iconTried = false;
+};
+static std::vector<T81W10App> gW10Apps;
+static ULONGLONG gW10AppsAt = 0;
+static void T81W10FreeApps() {
+    for (auto& app : gW10Apps)
+        if (app.icon)
+            DestroyIcon(app.icon);
+    gW10Apps.clear();
+    gW10AppsAt = 0;
+}
+static void T81W10ScanShortcuts(const std::wstring& folder, int depth) {
+    WIN32_FIND_DATAW data{};
+    HANDLE find = FindFirstFileW((folder + L"\\*").c_str(), &data);
+    if (find == INVALID_HANDLE_VALUE)
+        return;
+    do {
+        std::wstring name = data.cFileName;
+        if (name == L"." || name == L"..")
+            continue;
+        if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (depth < 4 &&
+                !(data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
+                T81W10ScanShortcuts(folder + L"\\" + name, depth + 1);
+            continue;
+        }
+        if (name.size() <= 4 ||
+            _wcsicmp(name.c_str() + name.size() - 4, L".lnk"))
+            continue;
+        T81W10App app;
+        app.name = name.substr(0, name.size() - 4);
+        app.target = folder + L"\\" + name;
+        gW10Apps.push_back(std::move(app));
+    } while (gW10Apps.size() < 4000 && FindNextFileW(find, &data));
+    FindClose(find);
+}
+// The apps the search looks through: the Applications folder of the shell,
+// which holds desktop and Store apps under the names Start shows; where that
+// folder gives nothing, the shortcuts of the two Programs folders.
+static void T81W10LoadApps() {
+    ULONGLONG now = GetTickCount64();
+    if (!gW10Apps.empty() && now - gW10AppsAt < 60000)
+        return;
+    T81W10FreeApps();
+    static const KNOWNFOLDERID kAppsFolder = {
+        0x1e87508d,
+        0x89c2,
+        0x42f0,
+        {0x8a, 0x7e, 0x64, 0x5a, 0x0f, 0x50, 0xca, 0x58}};
+    IShellItem* folder = nullptr;
+    if (SUCCEEDED(SHGetKnownFolderItem(kAppsFolder, KF_FLAG_DEFAULT, nullptr,
+                                       IID_PPV_ARGS(&folder))) &&
+        folder) {
+        IEnumShellItems* items = nullptr;
+        if (SUCCEEDED(folder->BindToHandler(nullptr, BHID_EnumItems,
+                                            IID_PPV_ARGS(&items))) &&
+            items) {
+            IShellItem* item = nullptr;
+            while (gW10Apps.size() < 4000 &&
+                   items->Next(1, &item, nullptr) == S_OK && item) {
+                PWSTR name = nullptr, parsing = nullptr;
+                if (SUCCEEDED(
+                        item->GetDisplayName(SIGDN_NORMALDISPLAY, &name)) &&
+                    name && *name &&
+                    SUCCEEDED(item->GetDisplayName(SIGDN_PARENTRELATIVEPARSING,
+                                                   &parsing)) &&
+                    parsing && *parsing) {
+                    T81W10App app;
+                    app.name = name;
+                    app.target = parsing;
+                    app.shell = true;
+                    gW10Apps.push_back(std::move(app));
+                }
+                CoTaskMemFree(name);
+                CoTaskMemFree(parsing);
+                item->Release();
+                item = nullptr;
+            }
+            items->Release();
+        }
+        folder->Release();
+    }
+    if (gW10Apps.empty()) {
+        for (const KNOWNFOLDERID* id :
+             {&FOLDERID_Programs, &FOLDERID_CommonPrograms}) {
+            PWSTR path = nullptr;
+            if (SUCCEEDED(SHGetKnownFolderPath(*id, 0, nullptr, &path)) && path)
+                T81W10ScanShortcuts(path, 0);
+            CoTaskMemFree(path);
+        }
+    }
+    std::sort(gW10Apps.begin(), gW10Apps.end(),
+              [](const T81W10App& a, const T81W10App& b) {
+                  return CompareStringEx(LOCALE_NAME_USER_DEFAULT,
+                                         NORM_IGNORECASE, a.name.c_str(), -1,
+                                         b.name.c_str(), -1, nullptr, nullptr,
+                                         0) == CSTR_LESS_THAN;
+              });
+    gW10AppsAt = now ? now : 1;
+    Wh_Log(L"[T81-WIN10] search knows %u apps", (unsigned)gW10Apps.size());
+}
+static HICON T81W10AppIcon(T81W10App& app) {
+    if (app.iconTried)
+        return app.icon;
+    app.iconTried = true;
+    SHFILEINFOW info{};
+    if (app.shell) {
+        PIDLIST_ABSOLUTE item = nullptr;
+        if (SUCCEEDED(
+                SHParseDisplayName((L"shell:AppsFolder\\" + app.target).c_str(),
+                                   nullptr, &item, 0, nullptr)) &&
+            item) {
+            if (SHGetFileInfoW((LPCWSTR)item, 0, &info, sizeof(info),
+                               SHGFI_PIDL | SHGFI_ICON | SHGFI_LARGEICON))
+                app.icon = info.hIcon;
+            CoTaskMemFree(item);
+        }
+    } else if (SHGetFileInfoW(app.target.c_str(), 0, &info, sizeof(info),
+                              SHGFI_ICON | SHGFI_LARGEICON)) {
+        app.icon = info.hIcon;
+    }
+    return app.icon;
+}
+// How well a name answers the text: 0 begins with it, 1 one of its words
+// begins with it, 2 holds it, -1 does not. Case and accents do not count.
+static int T81W10Match(const std::wstring& name, const std::wstring& text) {
+    int rank = -1;
+    for (int from = 0; from < (int)name.size();) {
+        int length = 0;
+        int at = FindNLSStringEx(
+            LOCALE_NAME_USER_DEFAULT,
+            FIND_FROMSTART | NORM_IGNORECASE | NORM_IGNORENONSPACE,
+            name.c_str() + from, (int)name.size() - from, text.c_str(),
+            (int)text.size(), &length, nullptr, nullptr, 0);
+        if (at < 0)
+            break;
+        at += from;
+        if (at == 0)
+            return 0;
+        if (!iswalnum(name[at - 1]))
+            return 1;
+        rank = 2;
+        from = at + 1;
+    }
+    return rank;
+}
+static std::wstring T81W10Query() {
+    std::wstring text = gW10Fly.query;
+    while (!text.empty() && text.back() == L' ')
+        text.pop_back();
+    size_t lead = 0;
+    while (lead < text.size() && text[lead] == L' ')
+        ++lead;
+    return text.substr(lead);
+}
+static void T81W10Find() {
+    T81W10Fly& f = gW10Fly;
+    f.found.clear();
+    f.selected = 0;
+    std::wstring text = T81W10Query();
+    if (text.empty())
+        return;
+    std::vector<std::pair<int, int>> ranked;
+    for (size_t i = 0; i < gW10Apps.size(); ++i) {
+        int rank = T81W10Match(gW10Apps[i].name, text);
+        if (rank >= 0)
+            ranked.push_back({rank, (int)i});
+    }
+    std::stable_sort(
+        ranked.begin(), ranked.end(),
+        [](const std::pair<int, int>& a, const std::pair<int, int>& b) {
+            return a.first < b.first;
+        });
+    for (size_t i = 0; i < ranked.size() && i < 9; ++i)
+        f.found.push_back(ranked[i].second);
+}
+static void T81W10Launch(int index) {
+    if (index < 0 || (size_t)index >= gW10Apps.size())
+        return;
+    const std::wstring target =
+        gW10Apps[index].shell ? L"shell:AppsFolder\\" + gW10Apps[index].target
+                              : gW10Apps[index].target;
+    T81Win10CloseFlyout();
+    SHELLEXECUTEINFOW info{};
+    info.cbSize = sizeof(info);
+    info.fMask = SEE_MASK_FLAG_NO_UI;
+    info.lpFile = target.c_str();
+    info.nShow = SW_SHOWNORMAL;
+    if (!ShellExecuteExW(&info))
+        Wh_Log(L"[T81-WIN10] search could not open the app error=%lu",
+               GetLastError());
+}
+
+// ---- the flyout window ------------------------------------------------------
+// The colours of the flyouts: dark, or light when Windows is in its light
+// mode, as the flyouts of Windows 10 1903 and later. Read anew for every
+// drawing. `hover` is a wash, so that the blur behind the panel stays visible.
+struct T81W10Palette {
+    Color back, edge, text, soft, dim, hover, rule, link;
+};
+static T81W10Palette T81W10Pal() {
+    if (T81W10Light())
+        return {Color(255, 228, 228, 228), Color(255, 171, 171, 171),
+                Color(255, 0, 0, 0),       Color(255, 96, 96, 96),
+                Color(255, 150, 150, 150), Color(26, 0, 0, 0),
+                Color(255, 190, 190, 190), T81W10Accent(4)};
+    return {Color(255, 31, 31, 31),    Color(255, 70, 70, 70),
+            Color(255, 255, 255, 255), Color(255, 166, 166, 166),
+            Color(255, 120, 120, 120), Color(26, 255, 255, 255),
+            Color(255, 71, 71, 71),    T81W10Accent(0)};
+}
+static T81W10Palette gW10Pal = T81W10Palette{};
+static const Color kW10OnAccent(255, 255, 255, 255);
+static int T81W10LanguageRows() {
+    return s ? std::clamp((int)s->languageFlyoutItems.size(), 1, 8) : 1;
+}
+// Battery: a long power mode label takes a second line and moves the rest
+// down by 20 px.
+static int T81W10PowerShift() {
+    return gW10Fly.power && gW10Fly.powerTwo ? Px(20) : 0;
+}
+static int T81W10BatteryLink() {
+    return Px(gW10Fly.power ? 238 : 124) + T81W10PowerShift();
+}
+static const wchar_t* T81W10PowerPrefix(bool plugged) {
+    return plugged ? Tr(L"Modalità risparmio energia (collegata): ",
+                        L"Power mode (plugged in): ")
+                   : Tr(L"Modalità risparmio energia (a batteria): ",
+                        L"Power mode (on battery): ");
+}
+static const wchar_t* T81W10PowerName(int at) {
+    return at <= 0   ? Tr(L"Batteria migliore", L"Better battery")
+           : at == 1 ? Tr(L"Prestazioni migliori", L"Better performance")
+                     : Tr(L"Prestazioni massime", L"Best performance");
+}
+// Search: the text box of the pane, when it has one, lies on the side of the
+// bar; the results fill the rest from the top.
+static void T81W10SearchFrame(const RECT& client,
+                              int* boxTop,
+                              int* top,
+                              int* bottom) {
+    const int box = gW10Fly.ownBox ? Px(40) : 0;
+    const bool below =
+        box && s && !s->verticalActive && s->nativeEdge != ABE_TOP;
+    *boxTop = below ? client.bottom - box : 0;
+    *top = below ? 0 : box;
+    *bottom = below ? client.bottom - box : client.bottom;
+}
+// The row of result 0 (the best match) or of a later one.
+static RECT T81W10ResultRow(const RECT& client, int index) {
+    int boxTop = 0, top = 0, bottom = 0;
+    T81W10SearchFrame(client, &boxTop, &top, &bottom);
+    int y = top + Px(32);
+    if (index == 0)
+        return RECT{0, y, client.right, y + Px(64)};
+    y += Px(64) + Px(32) + (index - 1) * Px(36);
+    return RECT{0, y, client.right, y + Px(36)};
+}
+static RECT T81W10WindowsRow(const RECT& client) {
+    int boxTop = 0, top = 0, bottom = 0;
+    T81W10SearchFrame(client, &boxTop, &top, &bottom);
+    return RECT{0, top + Px(44), client.right, top + Px(80)};
+}
+static SIZE T81W10NetSize();
+static SIZE T81W10FlySize(int kind) {
+    const T81W10Fly& f = gW10Fly;
+    switch (kind) {
+        case kW10FlyClock:
+            return SIZE{Px(360), Px(503)};
+        case kW10FlyVolume:
+            return SIZE{Px(360), Px(102)};
+        case kW10FlyBattery:
+            return SIZE{Px(360), Px(f.power ? 259 : 150) + T81W10PowerShift()};
+        case kW10FlyLanguage:
+            return SIZE{Px(304), T81W10LanguageRows() * Px(60) + Px(49)};
+        case kW10FlyNetwork:
+            return T81W10NetSize();
+        default:
+            if (T81W22On())
+                return SIZE{Px(784), Px(f.ownBox ? 640 : 600)};
+            return SIZE{
+                f.ownBox
+                    ? Px(344)
+                    : std::max(Px(240), (int)(f.anchor.right - f.anchor.left)),
+                Px(f.ownBox ? 520 : 480)};
+    }
+}
+static void T81W10Rule(Graphics& g, int y, int width) {
+    SolidBrush line(gW10Pal.rule);
+    g.FillRectangle(&line, 0, y, width, std::max(1, Px(1)));
+}
+static void T81W10PaintClock(Graphics& g, const RECT& client) {
+    const T81W10Fly& f = gW10Fly;
+    const float u = Dpi() / 96.0f;
+    const int width = client.right;
+    SYSTEMTIME now{};
+    GetLocalTime(&now);
+    wchar_t digits[64]{}, marker[32]{}, date[160]{}, month[96]{}, pattern[96]{};
+    GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOTIMEMARKER, &now, nullptr,
+                    digits, 64);
+    GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STIMEFORMAT, pattern, 96);
+    if (wcschr(pattern, L't'))
+        GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &now, L"tt", marker, 32);
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_LONGDATE, &now, nullptr,
+                    date, 160, nullptr);
+    SYSTEMTIME first{};
+    first.wYear = (WORD)f.year;
+    first.wMonth = (WORD)f.month;
+    first.wDay = 1;
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_YEARMONTH, &first, nullptr,
+                    month, 96, nullptr);
+    float end = Px(24) + T81W10Text(g, digits, (float)Px(24), (float)Px(62),
+                                    48 * u, 1, gW10Pal.text);
+    if (*marker)
+        T81W10Text(g, marker, end + Px(10), (float)Px(62), 20 * u, 0,
+                   gW10Pal.soft);
+    T81W10Text(g, date, (float)Px(24), (float)Px(88), 14 * u, 0,
+               f.hot == kW10PartToday ? gW10Pal.text : gW10Pal.link, -1,
+               (float)(width - Px(48)));
+    T81W10Rule(g, Px(112), width);
+    T81W10Text(g, month, (float)Px(24), (float)Px(145), 15 * u, 0, gW10Pal.text,
+               -1, (float)Px(220));
+    const int arrow = Px(16);
+    T81Win10Mdl2(g, L'\uE70E', Px(277) - arrow / 2, Px(139) - arrow / 2, arrow,
+                 f.hot == kW10PartPrev ? gW10Pal.text : gW10Pal.soft);
+    T81Win10Mdl2(g, L'\uE70D', Px(325) - arrow / 2, Px(139) - arrow / 2, arrow,
+                 f.hot == kW10PartNext ? gW10Pal.text : gW10Pal.soft);
+    const int firstDay = T81W10FirstDay();
+    for (int column = 0; column < 7; ++column) {
+        wchar_t name[32]{};
+        GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT,
+                        LOCALE_SSHORTESTDAYNAME1 + (firstDay + column) % 7,
+                        name, 32);
+        T81W10Text(g, name, (float)(Px(12) + column * Px(48) + Px(24)),
+                   (float)Px(184), 12 * u, 2, gW10Pal.text, 0);
+    }
+    const Color accent = T81W10Accent(3);
+    for (int cell = 0; cell < 42; ++cell) {
+        int year = 0, mon = 0, day = 0;
+        T81W10CellDate(cell, &year, &mon, &day);
+        const RECT r = T81W10DayCell(cell);
+        const bool today =
+            year == now.wYear && mon == now.wMonth && day == now.wDay;
+        const int one = std::max(1, Px(1)), two = std::max(1, Px(2));
+        if (today) {
+            // A ring in the accent, a dark gap, then the fill.
+            SolidBrush ring(accent),
+                gap(T81W10Light() ? Color(255, 255, 255, 255)
+                                  : Color(255, 0, 0, 0));
+            g.FillRectangle(&ring, (INT)r.left + one, (INT)r.top + one,
+                            (INT)(r.right - r.left) - 2 * one,
+                            (INT)(r.bottom - r.top) - 2 * one);
+            g.FillRectangle(&gap, (INT)r.left + one + two,
+                            (INT)r.top + one + two,
+                            (INT)(r.right - r.left) - 2 * (one + two),
+                            (INT)(r.bottom - r.top) - 2 * (one + two));
+            g.FillRectangle(&ring, (INT)r.left + one + 2 * two,
+                            (INT)r.top + one + 2 * two,
+                            (INT)(r.right - r.left) - 2 * (one + 2 * two),
+                            (INT)(r.bottom - r.top) - 2 * (one + 2 * two));
+        } else if (f.hot == kW10PartRow + cell) {
+            SolidBrush frame(Color(255, 128, 128, 128));
+            const int w = r.right - r.left - 2 * one,
+                      h = r.bottom - r.top - 2 * one;
+            g.FillRectangle(&frame, (INT)r.left + one, (INT)r.top + one, w,
+                            two);
+            g.FillRectangle(&frame, (INT)r.left + one,
+                            (INT)r.bottom - one - two, w, two);
+            g.FillRectangle(&frame, (INT)r.left + one, (INT)r.top + one, two,
+                            h);
+            g.FillRectangle(&frame, (INT)r.right - one - two, (INT)r.top + one,
+                            two, h);
+        }
+        wchar_t text[8]{};
+        swprintf(text, 8, L"%d", day);
+        T81W10Text(g, text, (r.left + r.right) / 2.0f, (float)(r.top + Px(25)),
+                   15 * u, today ? 2 : 0,
+                   today            ? kW10OnAccent
+                   : mon == f.month ? gW10Pal.text
+                                    : gW10Pal.dim,
+                   0);
+    }
+    if (client.bottom >= Px(500)) {
+        T81W10Rule(g, Px(454), width);
+        T81W10Text(g, Tr(L"Impostazioni data e ora", L"Date and time settings"),
+                   (float)Px(24), (float)Px(484), 15 * u, 0,
+                   f.hot == kW10PartLink ? gW10Pal.text : gW10Pal.link);
+    }
+}
+static void T81W10PaintVolume(Graphics& g, const RECT& client) {
+    const T81W10Fly& f = gW10Fly;
+    const float u = Dpi() / 96.0f;
+    const float level = std::clamp(s->volume, 0.f, 1.f);
+    T81W10Text(
+        g,
+        f.device.empty() ? Tr(L"Altoparlanti", L"Speakers") : f.device.c_str(),
+        (float)Px(12), (float)Px(32), 15 * u, 0, gW10Pal.text, -1,
+        (float)(client.right - Px(24)));
+    const wchar_t picture = s->muted          ? L'\uE74F'
+                            : level <= 0.005f ? L'\uE992'
+                            : level <= 0.33f  ? L'\uE993'
+                            : level <= 0.66f  ? L'\uE994'
+                                              : L'\uE995';
+    T81Win10Mdl2(g, picture, Px(22), Px(62), Px(24),
+                 f.hot == kW10PartGlyph ? gW10Pal.soft : gW10Pal.text);
+    T81W10Slider(g, Px(65), Px(291), Px(74), level,
+                 f.drag                    ? 2
+                 : f.hot == kW10PartSlider ? 1
+                                           : 0);
+    wchar_t text[8]{};
+    swprintf(text, 8, L"%d", (int)std::lround(level * 100));
+    T81W10Text(g, text, (float)Px(320), (float)Px(82), 24 * u, 0, gW10Pal.text,
+               0);
+}
+static void T81W10PaintBattery(Graphics& g, const RECT& client) {
+    const T81W10Fly& f = gW10Fly;
+    const float u = Dpi() / 96.0f;
+    const int width = client.right;
+    SYSTEM_POWER_STATUS power{};
+    if (!T81W10PowerStatus(&power)) {
+        power.BatteryLifePercent = 255;
+        power.BatteryFlag = 255;
+        power.BatteryLifeTime = (DWORD)-1;
+    }
+    const int percent = power.BatteryLifePercent <= 100
+                            ? power.BatteryLifePercent
+                            : s->batteryPct;
+    const bool plugged = power.ACLineStatus == 1,
+               charging = power.BatteryFlag != 255 && (power.BatteryFlag & 8);
+    T81Win10Mdl2(g, T81W10BatteryGlyph(percent, charging, s->batterySaver),
+                 Px(14), Px(11), Px(56), gW10Pal.text);
+    wchar_t text[96]{};
+    if (percent >= 0 && percent <= 100)
+        swprintf(text, 96, L"%d%%", percent);
+    float end = Px(86) + T81W10Text(g, text, (float)Px(86), (float)Px(56),
+                                    48 * u, 1, gW10Pal.text);
+    std::wstring status;
+    if (plugged && percent >= 100) {
+        status = Tr(L"Carica completa", L"Fully charged");
+    } else if (charging) {
+        status = Tr(L"In carica", L"Charging");
+    } else if (plugged) {
+        status = Tr(L"Collegata", L"Plugged in");
+    } else if (power.BatteryLifeTime != (DWORD)-1) {
+        const DWORD minutes = power.BatteryLifeTime / 60;
+        if (minutes >= 60)
+            swprintf(
+                text, 96,
+                Tr(L"%lu h %lu min rimanenti", L"%lu hr %lu min remaining"),
+                minutes / 60, minutes % 60);
+        else
+            swprintf(text, 96, Tr(L"%lu min rimanenti", L"%lu min remaining"),
+                     minutes);
+        status = text;
+    }
+    T81W10Text(g, status.c_str(), end + Px(16), (float)Px(44), 15 * u, 0,
+               gW10Pal.soft, -1, (float)(width - Px(12)) - (end + Px(16)));
+    if (f.power) {
+        const int at = std::clamp(f.powerAt, 0, 2), down = T81W10PowerShift();
+        std::wstring label = T81W10PowerPrefix(plugged);
+        if (f.powerTwo) {
+            T81W10Text(g, label.c_str(), (float)Px(12), (float)Px(104), 15 * u,
+                       0, gW10Pal.text, -1, (float)(width - Px(24)));
+            T81W10Text(g, T81W10PowerName(at), (float)Px(12), (float)Px(124),
+                       15 * u, 0, gW10Pal.text, -1, (float)(width - Px(24)));
+        } else {
+            // It fits at 100 %: never cut short at another scale.
+            label += T81W10PowerName(at);
+            T81W10Text(g, label.c_str(), (float)Px(12), (float)Px(104), 15 * u,
+                       0, gW10Pal.text, -1, (float)(width - Px(14)));
+        }
+        const int left = Px(12), right = Px(348);
+        SolidBrush tick(Color(255, 138, 138, 138));
+        for (int stop = 0; stop < 3; ++stop)
+            g.FillRectangle(&tick,
+                            left + Px(4) + stop * (right - left - Px(8)) / 2,
+                            Px(133) + down, std::max(1, Px(1)), Px(5));
+        T81W10Slider(g, left, right, Px(127) + down, at / 2.0f,
+                     f.drag                    ? 2
+                     : f.hot == kW10PartSlider ? 1
+                                               : 0);
+        T81Win10Mdl2(g, L'\uE8BE', left, Px(144) + down, Px(16), gW10Pal.soft);
+        T81Win10Mdl2(g, L'\uE945', right - Px(16), Px(144) + down, Px(16),
+                     gW10Pal.soft);
+        T81W10Text(g, Tr(L"Durata massima batteria", L"Best battery life"),
+                   (float)left, (float)(Px(176) + down), 12 * u, 0,
+                   gW10Pal.soft);
+        T81W10Text(g, Tr(L"Prestazioni massime", L"Best performance"),
+                   (float)right, (float)(Px(176) + down), 12 * u, 0,
+                   gW10Pal.soft, 1);
+    }
+    T81W10Text(g, Tr(L"Impostazioni batteria", L"Battery settings"),
+               (float)Px(12), (float)T81W10BatteryLink(), 15 * u, 0,
+               f.hot == kW10PartLink ? gW10Pal.text : gW10Pal.link);
+}
+static void T81W10PaintLanguage(Graphics& g, const RECT& client) {
+    const T81W10Fly& f = gW10Fly;
+    const float u = Dpi() / 96.0f;
+    const int width = client.right, rows = T81W10LanguageRows();
+    for (int i = 0; i < rows && (size_t)i < s->languageFlyoutItems.size();
+         ++i) {
+        const auto& item = s->languageFlyoutItems[i];
+        const int top = i * Px(60);
+        const bool current = (size_t)i == s->languageFlyoutSelected;
+        if (current || f.hot == kW10PartRow + i) {
+            SolidBrush fill(current ? T81W10Accent(3) : gW10Pal.hover);
+            g.FillRectangle(&fill, 0, top, width, Px(60));
+        }
+        const Color rowInk = current ? kW10OnAccent : gW10Pal.text;
+        T81W10Text(g, item.abbreviation.c_str(), (float)Px(16),
+                   (float)(top + Px(36)), 15 * u, 2, rowInk, -1, (float)Px(44));
+        T81W10Text(g, item.languageName.c_str(), (float)Px(68),
+                   (float)(top + Px(27)), 15 * u, 0, rowInk, -1,
+                   (float)(width - Px(84)));
+        T81W10Text(g, item.layoutName.c_str(), (float)Px(68),
+                   (float)(top + Px(46)), 12 * u, 0,
+                   current ? kW10OnAccent : gW10Pal.soft, -1,
+                   (float)(width - Px(84)));
+    }
+    T81W10Rule(g, rows * Px(60), width);
+    if (f.hot == kW10PartLink) {
+        SolidBrush fill(gW10Pal.hover);
+        g.FillRectangle(&fill, 0, rows * Px(60) + Px(1), width, Px(48));
+    }
+    T81W10Text(g, Tr(L"Preferenze lingua", L"Language preferences"),
+               (float)Px(16), (float)(rows * Px(60) + Px(31)), 15 * u, 0,
+               gW10Pal.text);
+}
+struct T81W10IconDraw {
+    HICON icon;
+    int x, y, size;
+    HBITMAP bitmap = nullptr;  // a picture with its own opacity, instead
+};
+static void T81W10PaintSearch(Graphics& g,
+                              const RECT& client,
+                              std::vector<T81W10IconDraw>* icons) {
+    const T81W10Fly& f = gW10Fly;
+    const float u = Dpi() / 96.0f;
+    const int width = client.right;
+    const bool light = T81Win10LightSearch();
+    const Color ink = light ? Color(255, 0, 0, 0) : Color(255, 255, 255, 255),
+                soft =
+                    light ? Color(255, 96, 96, 96) : Color(255, 166, 166, 166),
+                hover = light ? Color(26, 0, 0, 0) : Color(26, 255, 255, 255),
+                pick = T81W10Accent(light ? 0 : 4);
+    int boxTop = 0, top = 0, bottom = 0;
+    T81W10SearchFrame(client, &boxTop, &top, &bottom);
+    auto saved = g.Save();
+    g.SetClip(Rect(0, top, width, bottom - top));
+    const std::wstring text = T81W10Query();
+    if (text.empty()) {
+        T81W10Text(
+            g,
+            Tr(L"Digita per cercare tra le app", L"Type to search your apps"),
+            (float)Px(12), (float)(top + Px(28)), 13 * u, 0, soft, -1,
+            (float)(width - Px(24)));
+    } else if (f.found.empty()) {
+        T81W10Text(g, Tr(L"Nessuna app trovata", L"No apps found"),
+                   (float)Px(12), (float)(top + Px(28)), 13 * u, 0, soft, -1,
+                   (float)(width - Px(24)));
+        const RECT row = T81W10WindowsRow(client);
+        SolidBrush fill(f.hot == kW10PartWindows ? hover : pick);
+        g.FillRectangle(&fill, 0, (INT)row.top, width,
+                        (INT)(row.bottom - row.top));
+        T81Win10Mdl2(g, L'\uE721', Px(14), row.top + Px(10), Px(16), ink);
+        T81W10Text(g, Tr(L"Cerca con Windows", L"Search with Windows"),
+                   (float)Px(46), (float)(row.top + Px(23)), 15 * u, 0, ink, -1,
+                   (float)(width - Px(58)));
+    } else {
+        T81W10Text(g, Tr(L"Corrispondenza migliore", L"Best match"),
+                   (float)Px(12), (float)(top + Px(21)), 13 * u, 2, ink);
+        if (f.found.size() > 1)
+            T81W10Text(g, Tr(L"App", L"Apps"), (float)Px(12),
+                       (float)(top + Px(32) + Px(64) + Px(21)), 13 * u, 2, ink);
+        for (size_t i = 0; i < f.found.size(); ++i) {
+            const RECT row = T81W10ResultRow(client, (int)i);
+            if (row.bottom > bottom)
+                break;
+            T81W10App& app = gW10Apps[f.found[i]];
+            if ((int)i == f.selected || f.hot == kW10PartRow + (int)i) {
+                SolidBrush fill((int)i == f.selected ? pick : hover);
+                g.FillRectangle(&fill, 0, (INT)row.top, width,
+                                (INT)(row.bottom - row.top));
+            }
+            HICON icon = T81W10AppIcon(app);
+            if (i == 0) {
+                if (icon)
+                    icons->push_back(
+                        {icon, Px(12), (int)row.top + Px(16), Px(32)});
+                T81W10Text(g, app.name.c_str(), (float)Px(56),
+                           (float)(row.top + Px(29)), 15 * u, 0, ink, -1,
+                           (float)(width - Px(68)));
+                T81W10Text(g, L"App", (float)Px(56), (float)(row.top + Px(47)),
+                           12 * u, 0, soft);
+            } else {
+                if (icon)
+                    icons->push_back(
+                        {icon, Px(14), (int)row.top + Px(8), Px(20)});
+                T81W10Text(g, app.name.c_str(), (float)Px(46),
+                           (float)(row.top + Px(23)), 15 * u, 0, ink, -1,
+                           (float)(width - Px(58)));
+            }
+        }
+    }
+    g.Restore(saved);
+    if (f.ownBox) {
+        SolidBrush box(light ? Color(255, 242, 242, 242)
+                             : Color(255, 56, 56, 56)),
+            edge(light ? Color(255, 195, 195, 195) : Color(255, 70, 70, 70));
+        g.FillRectangle(&box, 0, boxTop, width, Px(40));
+        g.FillRectangle(&edge, 0, boxTop ? boxTop : Px(40) - std::max(1, Px(1)),
+                        width, std::max(1, Px(1)));
+        T81Win10Magnifier(g, (REAL)Px(12), (REAL)(boxTop + Px(12)), u, ink);
+        float end = Px(40);
+        if (f.query.empty())
+            T81W10Text(g,
+                       Tr(L"Scrivi qui per eseguire la ricerca",
+                          L"Type here to search"),
+                       (float)Px(40), (float)(boxTop + Px(26)), 15 * u, 0, soft,
+                       -1, (float)(width - Px(52)));
+        else
+            end += T81W10Text(g, f.query.c_str(), (float)Px(40),
+                              (float)(boxTop + Px(26)), 15 * u, 0, ink, -1,
+                              (float)(width - Px(52)));
+        if (f.caret) {
+            SolidBrush caret(ink);
+            g.FillRectangle(&caret, (INT)std::lround(end), boxTop + Px(11),
+                            std::max(1, Px(1)), Px(19));
+        }
+    }
+}
+// ---- search of Windows 10 22H2 ----------------------------------------------
+// Sizes from Windows 10 screenshots at 100 %: a 784 px pane at the left edge of
+// the screen; a 52 px header with the tabs in 14 px, 28 px apart, the chosen
+// one bold over a 4 px accent line; results in a 347 px column (a 72 px best
+// match, 36 px rows under 40 px headings) beside a details pane with a 64 px
+// picture and the actions. The header and the details pane are solid, the
+// results column takes the opacity of the panel. Without text the pane shows
+// the pinned apps of the bar and the recently used documents. It searches the
+// apps and, by name, the documents Windows lists as recently used; the web
+// row opens the default browser.
+static bool T81W22On() {
+    return win10SearchStyle.load() == 0;
+}
+enum { kW22App, kW22Doc, kW22Web };
+enum { kW22ActOpen, kW22ActAdmin, kW22ActLocation };
+enum {
+    kW10PartTab = 20,
+    kW10PartAction = 30,
+    kW10PartTile = 40,
+    kW10PartRecent = 60,
+    kW10PartMore = 20000  // + row: the arrow that shows the details of a row
+};
+struct T81W22Doc {
+    std::wstring name, link;
+    ULONGLONG time = 0;
+    HICON icon = nullptr;
+    bool iconTried = false;
+};
+struct T81W22Res {
+    int type;
+    int index;
+};
+static std::vector<T81W22Doc> gW22Docs;
+static ULONGLONG gW22DocsAt = 0;
+static std::vector<T81W22Res> gW22Res;
+static int gW22Tab = 0;  // all, apps, documents, web
+static HBITMAP gW22Big = nullptr;
+static std::wstring gW22BigKey;
+static void T81W22FreeBig() {
+    if (gW22Big)
+        DeleteObject(gW22Big);
+    gW22Big = nullptr;
+    gW22BigKey.clear();
+}
+static void T81W22FreeDocs() {
+    for (auto& doc : gW22Docs)
+        if (doc.icon)
+            DestroyIcon(doc.icon);
+    gW22Docs.clear();
+    gW22DocsAt = 0;
+}
+// The documents Windows lists as recently used: the shortcuts of the Recent
+// folder, newest first.
+static void T81W22LoadDocs() {
+    ULONGLONG now = GetTickCount64();
+    if (gW22DocsAt && now - gW22DocsAt < 30000)
+        return;
+    T81W22FreeDocs();
+    gW22DocsAt = now ? now : 1;
+    PWSTR path = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_Recent, 0, nullptr, &path)) ||
+        !path) {
+        CoTaskMemFree(path);
+        return;
+    }
+    const std::wstring folder = path;
+    CoTaskMemFree(path);
+    WIN32_FIND_DATAW data{};
+    HANDLE find = FindFirstFileW((folder + L"\\*.lnk").c_str(), &data);
+    if (find == INVALID_HANDLE_VALUE)
+        return;
+    int seen = 0;
+    do {
+        if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            continue;
+        std::wstring name = data.cFileName;
+        if (name.size() <= 4)
+            continue;
+        T81W22Doc doc;
+        doc.name = name.substr(0, name.size() - 4);
+        doc.link = folder + L"\\" + name;
+        doc.time = ((ULONGLONG)data.ftLastWriteTime.dwHighDateTime << 32) |
+                   data.ftLastWriteTime.dwLowDateTime;
+        gW22Docs.push_back(std::move(doc));
+    } while (++seen < 3000 && FindNextFileW(find, &data));
+    FindClose(find);
+    std::sort(
+        gW22Docs.begin(), gW22Docs.end(),
+        [](const T81W22Doc& a, const T81W22Doc& b) { return a.time > b.time; });
+    if (gW22Docs.size() > 400)
+        gW22Docs.resize(400);
+}
+static HICON T81W22DocIcon(T81W22Doc& doc) {
+    if (!doc.iconTried) {
+        doc.iconTried = true;
+        SHFILEINFOW info{};
+        if (SHGetFileInfoW(doc.link.c_str(), 0, &info, sizeof(info),
+                           SHGFI_ICON | SHGFI_LARGEICON))
+            doc.icon = info.hIcon;
+    }
+    return doc.icon;
+}
+static void T81W22Find() {
+    T81W10Fly& f = gW10Fly;
+    gW22Res.clear();
+    f.selected = 0;
+    const std::wstring text = T81W10Query();
+    if (text.empty())
+        return;
+    const bool all = gW22Tab == 0;
+    auto rank = [&](size_t count, auto&& name, int type, size_t limit) {
+        std::vector<std::pair<int, int>> ranked;
+        for (size_t i = 0; i < count; ++i) {
+            int r = T81W10Match(name(i), text);
+            if (r >= 0)
+                ranked.push_back({r, (int)i});
+        }
+        std::stable_sort(
+            ranked.begin(), ranked.end(),
+            [](const std::pair<int, int>& a, const std::pair<int, int>& b) {
+                return a.first < b.first;
+            });
+        for (size_t i = 0; i < ranked.size() && i < limit; ++i)
+            gW22Res.push_back({type, ranked[i].second});
+    };
+    if (all || gW22Tab == 1)
+        rank(
+            gW10Apps.size(),
+            [](size_t i) -> const std::wstring& { return gW10Apps[i].name; },
+            kW22App, all ? 5 : 12);
+    if (all || gW22Tab == 2)
+        rank(
+            gW22Docs.size(),
+            [](size_t i) -> const std::wstring& { return gW22Docs[i].name; },
+            kW22Doc, all ? 3 : 12);
+    if (all || gW22Tab == 3)
+        gW22Res.push_back({kW22Web, 0});
+}
+struct T81W22Frame {
+    RECT header, content, left, right, box;
+};
+static T81W22Frame T81W22Layout(const RECT& client) {
+    T81W22Frame frame{};
+    LONG top = client.top, bottom = client.bottom;
+    if (gW10Fly.ownBox) {
+        // The text box of the pane lies on the side of the bar.
+        const bool below = s && !s->verticalActive && s->nativeEdge != ABE_TOP;
+        if (below) {
+            frame.box = RECT{0, bottom - Px(40), client.right, bottom};
+            bottom -= Px(40);
+        } else {
+            frame.box = RECT{0, top, client.right, top + Px(40)};
+            top += Px(40);
+        }
+    }
+    frame.header = RECT{0, top, client.right, top + Px(52)};
+    frame.content = RECT{0, top + Px(52), client.right, bottom};
+    frame.left = frame.content;
+    frame.left.right = std::min(client.right, (LONG)Px(347));
+    frame.right = frame.content;
+    frame.right.left = frame.left.right;
+    return frame;
+}
+static const wchar_t* T81W22TabName(int tab) {
+    return tab == 0   ? Tr(L"Tutti", L"All")
+           : tab == 1 ? Tr(L"App", L"Apps")
+           : tab == 2 ? Tr(L"Documenti", L"Documents")
+                      : L"Web";
+}
+// The text extent of each tab: 28 px between two labels, the first one 25 px
+// from the edge.
+static void T81W22Tabs(Graphics& g, const RECT& header, RECT out[4]) {
+    const float u = Dpi() / 96.0f;
+    float x = (float)Px(25);
+    for (int tab = 0; tab < 4; ++tab) {
+        const float width =
+            T81W10Text(g, T81W22TabName(tab), 0, 0, 14 * u,
+                       tab == gW22Tab ? 2 : 0, Color(), -1, 0, false);
+        out[tab] = RECT{(LONG)std::lround(x), header.top,
+                        (LONG)std::lround(x + width), header.bottom};
+        x += width + Px(28);
+    }
+}
+struct T81W22Row {
+    RECT rect;
+    int res;  // -1: a heading
+    const wchar_t* label;
+};
+static const wchar_t* T81W22GroupName(int type) {
+    return type == kW22App   ? Tr(L"App", L"Apps")
+           : type == kW22Doc ? Tr(L"Documenti", L"Documents")
+                             : Tr(L"Cerca nel Web", L"Search the web");
+}
+static std::vector<T81W22Row> T81W22Rows(const RECT& area) {
+    std::vector<T81W22Row> rows;
+    LONG y = area.top;
+    for (size_t i = 0; i < gW22Res.size(); ++i) {
+        const wchar_t* label =
+            i == 0 ? Tr(L"Corrispondenza migliore", L"Best match")
+            : i == 1 || gW22Res[i].type != gW22Res[i - 1].type
+                ? T81W22GroupName(gW22Res[i].type)
+                : nullptr;
+        const int height = Px(i == 0 ? 72 : 36);
+        if (y + (label ? Px(40) : 0) + height > area.bottom)
+            break;
+        if (label) {
+            rows.push_back(
+                {RECT{area.left, y, area.right, y + Px(40)}, -1, label});
+            y += Px(40);
+        }
+        rows.push_back(
+            {RECT{area.left, y, area.right, y + height}, (int)i, nullptr});
+        y += height;
+    }
+    return rows;
+}
+static std::wstring T81W22ResName(const T81W22Res& res) {
+    if (res.type == kW22App && (size_t)res.index < gW10Apps.size())
+        return gW10Apps[res.index].name;
+    if (res.type == kW22Doc && (size_t)res.index < gW22Docs.size())
+        return gW22Docs[res.index].name;
+    return T81W10Query();
+}
+static HICON T81W22ResIcon(const T81W22Res& res) {
+    if (res.type == kW22App && (size_t)res.index < gW10Apps.size())
+        return T81W10AppIcon(gW10Apps[res.index]);
+    if (res.type == kW22Doc && (size_t)res.index < gW22Docs.size())
+        return T81W22DocIcon(gW22Docs[res.index]);
+    return nullptr;
+}
+// What the shell knows the result as: the app of the Applications folder, or
+// the path of the shortcut.
+static std::wstring T81W22ResTarget(const T81W22Res& res) {
+    if (res.type == kW22App && (size_t)res.index < gW10Apps.size())
+        return gW10Apps[res.index].shell
+                   ? L"shell:AppsFolder\\" + gW10Apps[res.index].target
+                   : gW10Apps[res.index].target;
+    if (res.type == kW22Doc && (size_t)res.index < gW22Docs.size())
+        return gW22Docs[res.index].link;
+    return std::wstring();
+}
+// The 64 px picture of the selected result, from the shell; kept until the
+// selection changes.
+static HBITMAP T81W22BigIcon(const T81W22Res& res) {
+    const std::wstring target = T81W22ResTarget(res);
+    if (target.empty())
+        return nullptr;
+    if (target == gW22BigKey)
+        return gW22Big;
+    T81W22FreeBig();
+    gW22BigKey = target;
+    IShellItemImageFactory* factory = nullptr;
+    if (SUCCEEDED(SHCreateItemFromParsingName(target.c_str(), nullptr,
+                                              IID_PPV_ARGS(&factory))) &&
+        factory) {
+        HBITMAP bitmap = nullptr;
+        const int size = Px(64);
+        if (SUCCEEDED(factory->GetImage(SIZE{size, size},
+                                        SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK,
+                                        &bitmap)) &&
+            bitmap) {
+            // Only a picture that carries its own opacity can be drawn as it
+            // is; otherwise the icon of the row is used.
+            DIBSECTION dib{};
+            bool usable = false;
+            if (GetObjectW(bitmap, sizeof(dib), &dib) == sizeof(dib) &&
+                dib.dsBm.bmBitsPixel == 32 && dib.dsBm.bmBits) {
+                const DWORD* pixels = (const DWORD*)dib.dsBm.bmBits;
+                const size_t count =
+                    (size_t)dib.dsBm.bmWidth * (size_t)abs(dib.dsBm.bmHeight);
+                for (size_t i = 0; i < count && !usable; ++i)
+                    usable = (pixels[i] >> 24) != 0;
+            }
+            if (usable)
+                gW22Big = bitmap;
+            else
+                DeleteObject(bitmap);
+        }
+        factory->Release();
+    }
+    return gW22Big;
+}
+struct T81W22Action {
+    int id;
+    const wchar_t* text;
+    wchar_t glyph;
+};
+static std::vector<T81W22Action> T81W22Actions(const T81W22Res& res) {
+    std::vector<T81W22Action> actions;
+    if (res.type == kW22Web) {
+        actions.push_back({kW22ActOpen,
+                           Tr(L"Apri nel browser", L"Open in browser"),
+                           L'\uE774'});
+        return actions;
+    }
+    actions.push_back({kW22ActOpen, Tr(L"Apri", L"Open"), L'\uE8A7'});
+    if (res.type == kW22App)
+        actions.push_back(
+            {kW22ActAdmin,
+             Tr(L"Esegui come amministratore", L"Run as administrator"),
+             L'\uE7EF'});
+    actions.push_back({kW22ActLocation,
+                       Tr(L"Apri percorso file", L"Open file location"),
+                       L'\uE838'});
+    return actions;
+}
+// The pinned apps of the bar, or the first apps of the list: the tiles of the
+// pane without text.
+struct T81W22Tile {
+    std::wstring title, path;
+    HICON icon;
+};
+static std::vector<T81W22Tile> T81W22Tiles() {
+    std::vector<T81W22Tile> tiles;
+    if (s)
+        for (const auto& pin : s->pins) {
+            if (tiles.size() >= 5)
+                break;
+            if (!pin.path.empty())
+                tiles.push_back({pin.title, pin.path, pin.icon});
+        }
+    for (size_t i = 0; tiles.size() < 5 && i < gW10Apps.size(); ++i) {
+        T81W10App& app = gW10Apps[i];
+        const std::wstring path =
+            app.shell ? L"shell:AppsFolder\\" + app.target : app.target;
+        bool have = false;
+        for (const auto& tile : tiles)
+            have |= !_wcsicmp(tile.title.c_str(), app.name.c_str());
+        if (!have)
+            tiles.push_back({app.name, path, T81W10AppIcon(app)});
+    }
+    return tiles;
+}
+static RECT T81W22TileRect(const RECT& content, int index) {
+    const int gap = Px(8), left = Px(24),
+              width = ((int)content.right - 2 * left - 4 * gap) / 5;
+    const int x = left + index * (width + gap), y = content.top + Px(52);
+    return RECT{x, y, x + width, y + Px(92)};
+}
+static int T81W22RecentCount(const RECT& content) {
+    const int top = content.top + Px(52) + Px(92) + Px(52);
+    return std::clamp(((int)content.bottom - top - Px(8)) / Px(40), 0,
+                      std::min(6, (int)gW22Docs.size()));
+}
+static RECT T81W22RecentRect(const RECT& content, int index) {
+    const int top = content.top + Px(52) + Px(92) + Px(52) + index * Px(40);
+    return RECT{0, top, content.right, top + Px(40)};
+}
+static RECT T81W22ActionRect(const RECT& right, int index) {
+    const int top = right.top + Px(40) + Px(64) + Px(92) + index * Px(36);
+    return RECT{right.left, top, right.right, top + Px(36)};
+}
+static void T81W22Paint(Graphics& g,
+                        const RECT& client,
+                        std::vector<T81W10IconDraw>* icons) {
+    const T81W10Fly& f = gW10Fly;
+    const float u = Dpi() / 96.0f;
+    // The pane goes with the Windows mode, like Start; its text box with the
+    // app mode, like the box of the bar: white on a dark pane by default.
+    const bool light = T81W10Sys().lightSystem,
+               lightBox = T81Win10LightSearch();
+    const Color ink = light ? Color(255, 0, 0, 0) : Color(255, 255, 255, 255),
+                soft =
+                    light ? Color(255, 96, 96, 96) : Color(255, 190, 190, 190),
+                wash = light ? Color(26, 0, 0, 0) : Color(26, 255, 255, 255),
+                headerTone =
+                    light ? Color(255, 214, 214, 214) : Color(255, 35, 35, 35),
+                detailTone =
+                    light ? Color(255, 249, 249, 249) : Color(255, 31, 31, 31),
+                paneTone =
+                    light ? Color(255, 230, 230, 230) : Color(255, 46, 46, 46),
+                accent = T81W10Accent(3),
+                pick = light ? Mix(paneTone, T81W10Accent(1), 75)
+                             : Mix(paneTone, accent, 45),
+                actionInk = T81W10Accent(light ? 4 : 1);
+    const T81W22Frame frame = T81W22Layout(client);
+    const int width = client.right;
+    // The header with the tabs.
+    SolidBrush headerBrush(headerTone);
+    g.FillRectangle(&headerBrush, 0, (INT)frame.header.top, width, Px(52));
+    RECT tabs[4];
+    T81W22Tabs(g, frame.header, tabs);
+    for (int tab = 0; tab < 4; ++tab) {
+        const bool chosen = tab == gW22Tab;
+        T81W10Text(g, T81W22TabName(tab), (float)tabs[tab].left,
+                   (float)(frame.header.top + Px(31)), 14 * u, chosen ? 2 : 0,
+                   chosen || f.hot == kW10PartTab + tab ? ink : soft);
+        if (chosen) {
+            SolidBrush line(accent);
+            g.FillRectangle(&line, (INT)tabs[tab].left - Px(12),
+                            (INT)frame.header.top + Px(47),
+                            (INT)(tabs[tab].right - tabs[tab].left) + Px(24),
+                            Px(4));
+        }
+    }
+    auto saved = g.Save();
+    g.SetClip(Rect(0, (INT)frame.content.top, width,
+                   (INT)(frame.content.bottom - frame.content.top)));
+    const std::wstring text = T81W10Query();
+    if (text.empty()) {
+        // Without text: the pinned apps and the recent documents.
+        T81W10Text(g, Tr(L"App principali", L"Top apps"), (float)Px(24),
+                   (float)(frame.content.top + Px(39)), 14 * u, 2, ink);
+        const auto tiles = T81W22Tiles();
+        SolidBrush tileBrush(light ? Color(255, 255, 255, 255)
+                                   : Color(255, 66, 66, 66)),
+            tileHot(light ? Color(255, 204, 228, 247) : Color(255, 90, 90, 90));
+        for (size_t i = 0; i < tiles.size(); ++i) {
+            const RECT r = T81W22TileRect(frame.content, (int)i);
+            g.FillRectangle(
+                f.hot == kW10PartTile + (int)i ? &tileHot : &tileBrush,
+                (INT)r.left, (INT)r.top, (INT)(r.right - r.left),
+                (INT)(r.bottom - r.top));
+            if (tiles[i].icon)
+                icons->push_back({tiles[i].icon,
+                                  (int)(r.left + r.right) / 2 - Px(16),
+                                  (int)r.top + Px(16), Px(32)});
+            T81W10Text(g, tiles[i].title.c_str(), (r.left + r.right) / 2.0f,
+                       (float)(r.bottom - Px(14)), 13 * u, 0, ink, 0,
+                       (float)(r.right - r.left - Px(12)));
+        }
+        const int recent = T81W22RecentCount(frame.content);
+        if (recent > 0)
+            T81W10Text(g, Tr(L"Recenti", L"Recent"), (float)Px(24),
+                       (float)(frame.content.top + Px(52) + Px(92) + Px(39)),
+                       14 * u, 2, ink);
+        for (int i = 0; i < recent; ++i) {
+            const RECT r = T81W22RecentRect(frame.content, i);
+            if (f.hot == kW10PartRecent + i) {
+                SolidBrush hot(wash);
+                g.FillRectangle(&hot, 0, (INT)r.top, width, Px(40));
+            }
+            if (HICON icon = T81W22DocIcon(gW22Docs[i]))
+                icons->push_back({icon, Px(24), (int)r.top + Px(10), Px(20)});
+            T81W10Text(g, gW22Docs[i].name.c_str(), (float)Px(60),
+                       (float)(r.top + Px(25)), 15 * u, 0, ink, -1,
+                       (float)(width - Px(84)));
+        }
+    } else {
+        // The details pane is solid, as in Windows 10.
+        SolidBrush detailBrush(detailTone);
+        g.FillRectangle(&detailBrush, (INT)frame.right.left,
+                        (INT)frame.right.top,
+                        (INT)(frame.right.right - frame.right.left),
+                        (INT)(frame.right.bottom - frame.right.top));
+        const auto rows = T81W22Rows(frame.left);
+        const int columnWidth = frame.left.right - frame.left.left;
+        for (const auto& row : rows) {
+            if (row.res < 0) {
+                T81W10Text(g, row.label, (float)Px(24),
+                           (float)(row.rect.top + Px(27)), 14 * u, 2, ink);
+                continue;
+            }
+            const T81W22Res& res = gW22Res[row.res];
+            const bool best = row.res == 0, chosen = row.res == f.selected,
+                       hot = f.hot == kW10PartRow + row.res ||
+                             f.hot == kW10PartMore + row.res;
+            if (chosen || hot) {
+                SolidBrush fill(chosen ? pick : wash);
+                g.FillRectangle(&fill, 0, (INT)row.rect.top, columnWidth,
+                                (INT)(row.rect.bottom - row.rect.top));
+            }
+            const int iconSize = Px(best ? 32 : 20),
+                      iconTop = (row.rect.top + row.rect.bottom - iconSize) / 2;
+            if (HICON icon = T81W22ResIcon(res))
+                icons->push_back({icon, Px(24), iconTop, iconSize});
+            else
+                T81Win10Mdl2(g, L'\uE721', Px(24) + (iconSize - Px(16)) / 2,
+                             iconTop + (iconSize - Px(16)) / 2, Px(16), ink);
+            const float textLeft = (float)Px(best ? 72 : 60),
+                        room = (float)(columnWidth - Px(36)) - textLeft;
+            const std::wstring name = T81W22ResName(res);
+            if (best) {
+                T81W10Text(g, name.c_str(), textLeft,
+                           (float)(row.rect.top + Px(32)), 15 * u, 0, ink, -1,
+                           room);
+                T81W10Text(
+                    g,
+                    res.type == kW22App ? L"App"
+                    : res.type == kW22Doc
+                        ? Tr(L"Documento", L"Document")
+                        : Tr(L"Visualizza risultati Web", L"See web results"),
+                    textLeft, (float)(row.rect.top + Px(52)), 13 * u, 0, soft,
+                    -1, room);
+            } else if (res.type == kW22Web) {
+                const float end =
+                    textLeft + T81W10Text(g, name.c_str(), textLeft,
+                                          (float)(row.rect.top + Px(23)),
+                                          15 * u, 0, ink, -1, room * 0.6f);
+                T81W10Text(
+                    g,
+                    Tr(L" - Visualizza risultati Web", L" - See web results"),
+                    end, (float)(row.rect.top + Px(23)), 13 * u, 0, soft, -1,
+                    std::max(1.f, textLeft + room - end));
+            } else {
+                T81W10Text(g, name.c_str(), textLeft,
+                           (float)(row.rect.top + Px(23)), 15 * u, 0, ink, -1,
+                           room);
+            }
+            if (chosen || hot)
+                T81Win10Mdl2(g, L'\uE76C', columnWidth - Px(28),
+                             (row.rect.top + row.rect.bottom - Px(12)) / 2,
+                             Px(12),
+                             f.hot == kW10PartMore + row.res ? ink : soft);
+        }
+        if (rows.empty())
+            T81W10Text(g, Tr(L"Nessun risultato", L"No results"), (float)Px(24),
+                       (float)(frame.left.top + Px(39)), 14 * u, 0, soft);
+        // Details of the selected result.
+        if (!gW22Res.empty()) {
+            const T81W22Res& res =
+                gW22Res[std::clamp(f.selected, 0, (int)gW22Res.size() - 1)];
+            const RECT& pane = frame.right;
+            const int centre = (pane.left + pane.right) / 2,
+                      top = pane.top + Px(40), big = Px(64);
+            if (HBITMAP picture = T81W22BigIcon(res))
+                icons->push_back(
+                    {nullptr, centre - big / 2, top, big, picture});
+            else if (HICON icon = T81W22ResIcon(res))
+                icons->push_back({icon, centre - Px(24), top + Px(8), Px(48)});
+            else
+                T81Win10Mdl2(g, res.type == kW22Web ? L'\uE774' : L'\uE8A5',
+                             centre - Px(24), top + Px(8), Px(48), ink);
+            const float room = (float)(pane.right - pane.left - Px(48));
+            T81W10Text(g, T81W22ResName(res).c_str(), (float)centre,
+                       (float)(top + big + Px(34)), 20 * u, 0, ink, 0, room);
+            T81W10Text(g,
+                       res.type == kW22App ? L"App"
+                       : res.type == kW22Doc
+                           ? Tr(L"Documento", L"Document")
+                           : Tr(L"Cerca nel Web", L"Search the web"),
+                       (float)centre, (float)(top + big + Px(56)), 13 * u, 0,
+                       soft, 0, room);
+            SolidBrush rule(light ? Color(255, 204, 204, 204)
+                                  : Color(255, 70, 70, 70));
+            g.FillRectangle(&rule, (INT)pane.left + Px(24), top + big + Px(78),
+                            (INT)(pane.right - pane.left) - Px(48),
+                            std::max(1, Px(1)));
+            const auto actions = T81W22Actions(res);
+            for (size_t i = 0; i < actions.size(); ++i) {
+                const RECT r = T81W22ActionRect(pane, (int)i);
+                if (r.bottom > pane.bottom)
+                    break;
+                if (f.hot == kW10PartAction + (int)i) {
+                    SolidBrush hot(wash);
+                    g.FillRectangle(&hot, (INT)r.left, (INT)r.top,
+                                    (INT)(r.right - r.left), Px(36));
+                }
+                T81Win10Mdl2(g, actions[i].glyph, r.left + Px(32),
+                             r.top + Px(10), Px(16), actionInk);
+                T81W10Text(g, actions[i].text, (float)(r.left + Px(64)),
+                           (float)(r.top + Px(23)), 14 * u, 0, ink, -1,
+                           (float)(r.right - r.left - Px(88)));
+            }
+        }
+    }
+    g.Restore(saved);
+    if (f.ownBox) {
+        const RECT& box = frame.box;
+        const Color ink = lightBox ? Color(255, 0, 0, 0)
+                                   : Color(255, 255, 255, 255),
+                    soft = lightBox ? Color(255, 96, 96, 96)
+                                    : Color(255, 190, 190, 190);
+        SolidBrush boxBrush(lightBox ? Color(255, 255, 255, 255)
+                                     : Color(255, 56, 56, 56)),
+            edge(accent);
+        g.FillRectangle(&boxBrush, 0, (INT)box.top, width, Px(40));
+        const int line = std::max(1, Px(2));
+        g.FillRectangle(&edge, 0, (INT)box.top, width, line);
+        g.FillRectangle(&edge, 0, (INT)box.bottom - line, width, line);
+        g.FillRectangle(&edge, 0, (INT)box.top, line, Px(40));
+        g.FillRectangle(&edge, width - line, (INT)box.top, line, Px(40));
+        T81Win10Magnifier(g, (REAL)Px(12), (REAL)(box.top + Px(12)), u, ink);
+        float end = (float)Px(40);
+        if (f.query.empty())
+            T81W10Text(g,
+                       Tr(L"Scrivi qui per eseguire la ricerca",
+                          L"Type here to search"),
+                       (float)Px(40), (float)(box.top + Px(26)), 15 * u, 0,
+                       soft, -1, (float)(width - Px(52)));
+        else
+            end += T81W10Text(g, f.query.c_str(), (float)Px(40),
+                              (float)(box.top + Px(26)), 15 * u, 0, ink, -1,
+                              (float)(width - Px(52)));
+        if (f.caret) {
+            SolidBrush caret(ink);
+            g.FillRectangle(&caret, (INT)std::lround(end),
+                            (INT)box.top + Px(11), std::max(1, Px(1)), Px(19));
+        }
+    }
+}
+static int T81W22Hit(const RECT& client, POINT p) {
+    const T81W22Frame frame = T81W22Layout(client);
+    if (PtInRect(&frame.header, p)) {
+        HDC screen = GetDC(nullptr);
+        if (!screen)
+            return 0;
+        RECT tabs[4];
+        {
+            Graphics g(screen);
+            T81W22Tabs(g, frame.header, tabs);
+        }
+        ReleaseDC(nullptr, screen);
+        for (int tab = 0; tab < 4; ++tab)
+            if (p.x >= tabs[tab].left - Px(14) &&
+                p.x < tabs[tab].right + Px(14))
+                return kW10PartTab + tab;
+        return 0;
+    }
+    if (!PtInRect(&frame.content, p))
+        return 0;
+    if (T81W10Query().empty()) {
+        const int tiles = (int)T81W22Tiles().size();
+        for (int i = 0; i < tiles; ++i) {
+            RECT r = T81W22TileRect(frame.content, i);
+            if (PtInRect(&r, p))
+                return kW10PartTile + i;
+        }
+        const int recent = T81W22RecentCount(frame.content);
+        for (int i = 0; i < recent; ++i) {
+            RECT r = T81W22RecentRect(frame.content, i);
+            if (PtInRect(&r, p))
+                return kW10PartRecent + i;
+        }
+        return 0;
+    }
+    if (PtInRect(&frame.left, p)) {
+        for (const auto& row : T81W22Rows(frame.left))
+            if (row.res >= 0 && PtInRect(&row.rect, p))
+                return p.x >= row.rect.right - Px(40) ? kW10PartMore + row.res
+                                                      : kW10PartRow + row.res;
+        return 0;
+    }
+    if (!gW22Res.empty()) {
+        const T81W22Res& res =
+            gW22Res[std::clamp(gW10Fly.selected, 0, (int)gW22Res.size() - 1)];
+        const int actions = (int)T81W22Actions(res).size();
+        for (int i = 0; i < actions; ++i) {
+            RECT r = T81W22ActionRect(frame.right, i);
+            if (r.bottom <= frame.right.bottom && PtInRect(&r, p))
+                return kW10PartAction + i;
+        }
+    }
+    return 0;
+}
+// The folder of a result, with the result selected: the shortcut of a Start
+// menu app, the program of an app of the Applications folder, the target of a
+// recent document.
+static bool T81W22Reveal(const T81W22Res& res) {
+    std::wstring path;
+    if (res.type == kW22App && (size_t)res.index < gW10Apps.size()) {
+        const T81W10App& app = gW10Apps[res.index];
+        if (!app.shell) {
+            path = app.target;
+        } else {
+            IShellItem2* item = nullptr;
+            if (SUCCEEDED(SHCreateItemFromParsingName(
+                    (L"shell:AppsFolder\\" + app.target).c_str(), nullptr,
+                    IID_PPV_ARGS(&item))) &&
+                item) {
+                // System.Link.TargetParsingPath
+                static const PROPERTYKEY kTargetPath = {
+                    {0xb9b4b3fc,
+                     0x2b51,
+                     0x4a42,
+                     {0xb5, 0xd8, 0x32, 0x41, 0x46, 0xaf, 0xcf, 0x25}},
+                    2};
+                PWSTR value = nullptr;
+                if (SUCCEEDED(item->GetString(kTargetPath, &value)) && value)
+                    path = value;
+                CoTaskMemFree(value);
+                item->Release();
+            }
+        }
+    } else if (res.type == kW22Doc && (size_t)res.index < gW22Docs.size()) {
+        IShellLinkW* link = nullptr;
+        if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr,
+                                       CLSCTX_INPROC_SERVER,
+                                       IID_PPV_ARGS(&link))) &&
+            link) {
+            IPersistFile* file = nullptr;
+            if (SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&file))) && file) {
+                wchar_t target[MAX_PATH]{};
+                if (SUCCEEDED(file->Load(gW22Docs[res.index].link.c_str(),
+                                         STGM_READ)) &&
+                    SUCCEEDED(link->GetPath(target, MAX_PATH, nullptr, 0)) &&
+                    target[0])
+                    path = target;
+                file->Release();
+            }
+            link->Release();
+        }
+    }
+    if (path.empty() ||
+        GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES)
+        return false;
+    PIDLIST_ABSOLUTE item = ILCreateFromPathW(path.c_str());
+    if (!item)
+        return false;
+    const HRESULT hr = SHOpenFolderAndSelectItems(item, 0, nullptr, 0);
+    ILFree(item);
+    return SUCCEEDED(hr);
+}
+static std::wstring T81W22WebUrl(const std::wstring& text) {
+    // UTF-8, percent-encoded, in a Bing query as in Windows 10.
+    std::string utf8;
+    int size = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(),
+                                   nullptr, 0, nullptr, nullptr);
+    utf8.resize(std::max(0, size));
+    if (size > 0)
+        WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(),
+                            utf8.data(), size, nullptr, nullptr);
+    std::wstring url = L"https://www.bing.com/search?q=";
+    static const wchar_t kHex[] = L"0123456789ABCDEF";
+    for (unsigned char c : utf8) {
+        if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') ||
+            (c >= 'a' && c <= 'z') || c == '-' || c == '_' || c == '.') {
+            url.push_back((wchar_t)c);
+        } else {
+            url.push_back(L'%');
+            url.push_back(kHex[c >> 4]);
+            url.push_back(kHex[c & 15]);
+        }
+    }
+    return url;
+}
+static void T81W22Run(const T81W22Res& res, int action) {
+    const T81W22Res copy = res;
+    std::wstring target = T81W22ResTarget(copy);
+    if (copy.type == kW22Web)
+        target = T81W22WebUrl(T81W10Query());
+    if (action == kW22ActLocation) {
+        const bool ok = T81W22Reveal(copy);
+        Wh_Log(L"[T81-WIN10] search: open file location ok=%d", ok ? 1 : 0);
+        if (ok)
+            T81Win10CloseFlyout();
+        return;
+    }
+    if (target.empty())
+        return;
+    T81Win10CloseFlyout();
+    SHELLEXECUTEINFOW info{};
+    info.cbSize = sizeof(info);
+    info.fMask = SEE_MASK_FLAG_NO_UI;
+    info.lpVerb = action == kW22ActAdmin ? L"runas" : nullptr;
+    info.lpFile = target.c_str();
+    info.nShow = SW_SHOWNORMAL;
+    if (!ShellExecuteExW(&info))
+        Wh_Log(L"[T81-WIN10] search could not open the result error=%lu",
+               GetLastError());
+}
+static void T81W22Click(int part) {
+    T81W10Fly& f = gW10Fly;
+    if (part >= kW10PartMore) {
+        f.selected = part - kW10PartMore;
+        T81W10Invalidate();
+    } else if (part >= kW10PartRow) {
+        if ((size_t)(part - kW10PartRow) < gW22Res.size())
+            T81W22Run(gW22Res[part - kW10PartRow], kW22ActOpen);
+    } else if (part >= kW10PartRecent) {
+        if ((size_t)(part - kW10PartRecent) < gW22Docs.size())
+            T81W22Run({kW22Doc, part - kW10PartRecent}, kW22ActOpen);
+    } else if (part >= kW10PartTile) {
+        const auto tiles = T81W22Tiles();
+        if ((size_t)(part - kW10PartTile) < tiles.size()) {
+            const std::wstring path = tiles[part - kW10PartTile].path;
+            T81Win10CloseFlyout();
+            ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr,
+                          SW_SHOWNORMAL);
+        }
+    } else if (part >= kW10PartAction) {
+        if (!gW22Res.empty()) {
+            const T81W22Res res =
+                gW22Res[std::clamp(f.selected, 0, (int)gW22Res.size() - 1)];
+            const auto actions = T81W22Actions(res);
+            if ((size_t)(part - kW10PartAction) < actions.size())
+                T81W22Run(res, actions[part - kW10PartAction].id);
+        }
+    } else if (part >= kW10PartTab) {
+        gW22Tab = std::clamp(part - kW10PartTab, 0, 3);
+        T81W22Find();
+        T81W10Invalidate();
+    }
+}
+static bool T81W22Key(WPARAM key) {
+    T81W10Fly& f = gW10Fly;
+    if (key == VK_DOWN || key == VK_UP) {
+        const int count = (int)gW22Res.size();
+        if (count)
+            f.selected = (f.selected + (key == VK_UP ? count - 1 : 1)) % count;
+        T81W10Invalidate();
+        return true;
+    }
+    if (key == VK_TAB) {
+        const bool back = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+        gW22Tab = (gW22Tab + (back ? 3 : 1)) % 4;
+        T81W22Find();
+        T81W10Invalidate();
+        return true;
+    }
+    if (key == VK_RETURN) {
+        if (!gW22Res.empty())
+            T81W22Run(
+                gW22Res[std::clamp(f.selected, 0, (int)gW22Res.size() - 1)],
+                kW22ActOpen);
+        return true;
+    }
+    return false;
+}
+
+// The colour under the content: the panel colour, or the white or dark pane
+// of the search, which follows the app mode.
+static void T81W10OpenSettings(const wchar_t* page);
+static RECT T81W10Client();
+static int T81W10Hit(HWND hwnd, POINT p);
+// ---- Windows 10 flyouts: the network flyout ---------------------------------
+// Recreated from Windows 10 screenshots at 96 DPI; no code, picture or text of
+// the flyout of Windows is used. The flyout is 360 px wide and at most 80 % of
+// the work area tall:
+//   - the networks scroll under a 12 px margin in 66 px rows: a 24 px picture
+//     12 px inside, the name in 15 px from 48 px with its baseline at 26 px
+//     and the status at 60 % with its baseline at 46 px;
+//   - the chosen network is filled with the accent at 60 % and grows to
+//     150 px: a 20 px check box with "Connect automatically" at 67 px, or the
+//     "Properties" link of the connected network, and a 150 x 32 px button
+//     12 px from the right edge at 104 px;
+//   - below the list, in 126 px: the underlined settings link in 15 px, its
+//     explanation in 12 px and the 85 x 64 px tiles with 4 px between them, a
+//     16 px picture in the upper corner and the label in 12 px at the bottom.
+// The networks come from the Native Wifi and Network List Manager interfaces
+// of Windows, read by a worker thread so that the bar never waits for them. A
+// network Windows already knows is connected here, with its saved profile.
+// Everything else that a connection can need (a password, a sign-in page, a
+// certificate, WPS, a hidden name) is left to Windows, which opens its own
+// list for it.
+enum { kW10NetLan, kW10NetWifi, kW10NetNote };
+struct T81W10NetRow {
+    int kind = kW10NetLan;
+    std::wstring name, profile, key;
+    GUID iface{};
+    DOT11_BSS_TYPE bss = dot11_BSS_type_infrastructure;
+    bool connected = false, secured = false, internet = false, known = false,
+         automatic = false, wireless = false, hidden = false;
+    int quality = 0;
+};
+struct T81W10NetData {
+    std::vector<T81W10NetRow> rows;
+    bool wifi = false;      // a Wi-Fi adapter is there
+    bool wifiOn = false;    // and its radio is on
+    bool airplane = false;  // airplane mode is on
+    bool denied = false;    // Windows keeps the list of networks back
+    DWORD actionError = 0;
+};
+// What the worker does before it reads the networks.
+enum {
+    kW10NetRead,
+    kW10NetConnect,
+    kW10NetDisconnect,
+    kW10NetWifiOn,
+    kW10NetWifiOff,
+    kW10NetAirplaneOn,
+    kW10NetAirplaneOff
+};
+struct T81W10NetWork {
+    HWND target = nullptr;
+    int action = kW10NetRead;
+    bool scan = false, done = false;
+    GUID iface{};
+    std::wstring profile;
+    DOT11_BSS_TYPE bss = dot11_BSS_type_infrastructure;
+    bool automatic = true;
+    T81W10NetData data;
+};
+struct T81W10Net {
+    T81W10NetData data;
+    bool have = false;
+    ULONGLONG dataAt = 0;
+    std::wstring selected;  // the key of the chosen network
+    bool automatic = true;  // its "Connect automatically" box
+    bool choose = false;    // the connected network is still to be chosen
+    int scroll = 0;
+    bool inside = false;  // the pointer is over the flyout
+    bool thumbDrag = false;
+    int thumbGrab = 0;
+    bool twoLines = false;  // the explanation of the link takes two lines
+    std::wstring pending;   // the network that is being connected
+    ULONGLONG pendingUntil = 0;
+    bool openPending = false;  // the flyout opens when the networks are read
+    int ticks = 0;
+    ULONGLONG scanAt = 0;     // when Windows was last asked to look around
+    bool scanFollow = false;  // what it found is still to be read
+    HANDLE worker = nullptr;
+    T81W10NetWork* work = nullptr;
+    std::unique_ptr<T81W10NetWork> queued;
+};
+static T81W10Net gW10Net;
+static const UINT_PTR kW10NetOpenTimer = 7102;
+
+// -- the worker thread --------------------------------------------------------
+static std::wstring T81W10SsidName(const DOT11_SSID& ssid) {
+    if (!ssid.uSSIDLength || ssid.uSSIDLength > DOT11_SSID_MAX_LENGTH)
+        return {};
+    wchar_t wide[DOT11_SSID_MAX_LENGTH + 1]{};
+    int count = MultiByteToWideChar(
+        CP_UTF8, MB_ERR_INVALID_CHARS, (const char*)ssid.ucSSID,
+        (int)ssid.uSSIDLength, wide, DOT11_SSID_MAX_LENGTH);
+    if (count <= 0)
+        count = MultiByteToWideChar(CP_ACP, 0, (const char*)ssid.ucSSID,
+                                    (int)ssid.uSSIDLength, wide,
+                                    DOT11_SSID_MAX_LENGTH);
+    std::wstring name(wide, count > 0 ? (size_t)count : 0);
+    for (auto& c : name)
+        if (c < L' ')
+            c = L' ';
+    return name;
+}
+static std::wstring T81W10GuidText(const GUID& guid) {
+    wchar_t text[48]{};
+    StringFromGUID2(guid, text, 48);
+    return text;
+}
+// The radio of a Wi-Fi adapter: on when one of its radios is on, by software
+// and by its switch. An adapter that does not tell counts as on.
+static bool T81W10NetRadioOn(HANDLE wlan, const GUID& iface) {
+    DWORD size = 0;
+    PVOID data = nullptr;
+    WLAN_OPCODE_VALUE_TYPE type{};
+    if (WlanQueryInterface(wlan, &iface, wlan_intf_opcode_radio_state, nullptr,
+                           &size, &data, &type) != ERROR_SUCCESS ||
+        !data)
+        return true;
+    bool on = false;
+    if (size >= sizeof(DWORD)) {
+        const WLAN_RADIO_STATE* state = (const WLAN_RADIO_STATE*)data;
+        const DWORD count = std::min<DWORD>(
+            state->dwNumberOfPhys,
+            (size - sizeof(DWORD)) / sizeof(WLAN_PHY_RADIO_STATE));
+        for (DWORD i = 0; i < count && i < WLAN_MAX_PHY_INDEX; ++i)
+            if (state->PhyRadioState[i].dot11SoftwareRadioState ==
+                    dot11_radio_state_on &&
+                state->PhyRadioState[i].dot11HardwareRadioState ==
+                    dot11_radio_state_on)
+                on = true;
+    }
+    WlanFreeMemory(data);
+    return on;
+}
+static DWORD T81W10NetSetRadio(HANDLE wlan, const GUID& iface, bool on) {
+    DWORD size = 0;
+    PVOID data = nullptr;
+    WLAN_OPCODE_VALUE_TYPE type{};
+    DWORD result =
+        WlanQueryInterface(wlan, &iface, wlan_intf_opcode_radio_state, nullptr,
+                           &size, &data, &type);
+    if (result != ERROR_SUCCESS || !data)
+        return result ? result : ERROR_NOT_SUPPORTED;
+    const WLAN_RADIO_STATE* state = (const WLAN_RADIO_STATE*)data;
+    const DWORD count = size >= sizeof(DWORD)
+                            ? std::min<DWORD>(state->dwNumberOfPhys,
+                                              (size - sizeof(DWORD)) /
+                                                  sizeof(WLAN_PHY_RADIO_STATE))
+                            : 0;
+    result = count ? ERROR_SUCCESS : ERROR_NOT_SUPPORTED;
+    for (DWORD i = 0; i < count && i < WLAN_MAX_PHY_INDEX; ++i) {
+        WLAN_PHY_RADIO_STATE wanted{};
+        wanted.dwPhyIndex = state->PhyRadioState[i].dwPhyIndex;
+        wanted.dot11SoftwareRadioState =
+            on ? dot11_radio_state_on : dot11_radio_state_off;
+        wanted.dot11HardwareRadioState =
+            state->PhyRadioState[i].dot11HardwareRadioState;
+        const DWORD set =
+            WlanSetInterface(wlan, &iface, wlan_intf_opcode_radio_state,
+                             sizeof(wanted), &wanted, nullptr);
+        if (set != ERROR_SUCCESS)
+            result = set;
+    }
+    WlanFreeMemory(data);
+    return result;
+}
+// Reads whether a saved network connects by itself and, with `set`, writes
+// it: only the connection mode of the profile Windows keeps is changed.
+static bool T81W10NetProfileMode(HANDLE wlan,
+                                 const GUID& iface,
+                                 const wchar_t* profile,
+                                 bool* automatic,
+                                 const bool* set = nullptr) {
+    LPWSTR xml = nullptr;
+    DWORD flags = 0, access = 0;
+    if (WlanGetProfile(wlan, &iface, profile, nullptr, &xml, &flags, &access) !=
+            ERROR_SUCCESS ||
+        !xml)
+        return false;
+    std::wstring text(xml);
+    WlanFreeMemory(xml);
+    static const wchar_t kOpen[] = L"<connectionMode>",
+                         kClose[] = L"</connectionMode>";
+    size_t from = text.find(kOpen);
+    const size_t to =
+        from == std::wstring::npos ? from : text.find(kClose, from);
+    if (to == std::wstring::npos)
+        return false;
+    from += wcslen(kOpen);
+    *automatic = text.compare(from, to - from, L"auto") == 0;
+    // A profile set by the organisation is not changed.
+    if (!set || *set == *automatic || (flags & WLAN_PROFILE_GROUP_POLICY))
+        return true;
+    text.replace(from, to - from, *set ? L"auto" : L"manual");
+    DWORD reason = 0;
+    const DWORD result =
+        WlanSetProfile(wlan, &iface, flags & WLAN_PROFILE_USER, text.c_str(),
+                       nullptr, TRUE, nullptr, &reason);
+    if (result != ERROR_SUCCESS) {
+        Wh_Log(
+            L"[T81-WIN10] network: the connection mode of the profile was "
+            L"not changed error=%lu reason=%lu",
+            result, reason);
+        return true;
+    }
+    *automatic = *set;
+    return true;
+}
+// Airplane mode, through the radio management service of Windows: the
+// interface the airplane mode switch of Windows itself goes through. It is not
+// documented by Microsoft; its layout is the published one (IRadioManager).
+// `on` receives the state; with `set` the state is changed first. False when
+// the service does not answer.
+struct T81W10RadioManagerVtbl {
+    HRESULT(STDMETHODCALLTYPE* QueryInterface)(void*, REFIID, void**);
+    ULONG(STDMETHODCALLTYPE* AddRef)(void*);
+    ULONG(STDMETHODCALLTYPE* Release)(void*);
+    HRESULT(STDMETHODCALLTYPE* IsRMSupported)(void*, DWORD*);
+    HRESULT(STDMETHODCALLTYPE* GetUIRadioInstances)(void*, IUnknown**);
+    HRESULT(STDMETHODCALLTYPE* GetSystemRadioState)(void*, int*, int*, DWORD*);
+    HRESULT(STDMETHODCALLTYPE* SetSystemRadioState)(void*, int);
+    HRESULT(STDMETHODCALLTYPE* Refresh)(void*);
+    HRESULT(STDMETHODCALLTYPE* OnHardwareSliderChange)(void*, int, int);
+};
+static bool T81W10NetAirplane(bool* on, const bool* set, HRESULT* setResult) {
+    static const GUID kClass = {
+        0x581333f6,
+        0x28db,
+        0x41be,
+        {0xbc, 0x7a, 0xff, 0x20, 0x1f, 0x12, 0xf3, 0xf6}};
+    static const GUID kInterface = {
+        0xdb3afbfb,
+        0x08e6,
+        0x46c6,
+        {0xaa, 0x70, 0xbf, 0x9a, 0x34, 0xc3, 0x0a, 0xb7}};
+    void* manager = nullptr;
+    HRESULT hr = CoCreateInstance(kClass, nullptr, CLSCTX_LOCAL_SERVER,
+                                  kInterface, &manager);
+    if (setResult)
+        *setResult = hr;
+    if (FAILED(hr) || !manager)
+        return false;
+    auto vtbl = *reinterpret_cast<T81W10RadioManagerVtbl* const*>(manager);
+    bool known = false;
+    if (vtbl && vtbl->GetSystemRadioState && vtbl->SetSystemRadioState) {
+        if (set) {
+            // The service takes "radios enabled": 0 is airplane mode.
+            hr = vtbl->SetSystemRadioState(manager, *set ? 0 : 1);
+            if (setResult)
+                *setResult = hr;
+        }
+        int enabled = 1, second = 0;
+        DWORD reason = 0;
+        if (SUCCEEDED(vtbl->GetSystemRadioState(manager, &enabled, &second,
+                                                &reason))) {
+            *on = enabled == 0;
+            known = true;
+        }
+    }
+    if (vtbl && vtbl->Release)
+        vtbl->Release(manager);
+    return known;
+}
+static void T81W10NetCollect(T81W10NetWork& work) {
+    T81W10NetData& data = work.data;
+    std::vector<GUID> radios;
+    HANDLE wlan = nullptr;
+    DWORD version = 0;
+    if (WlanOpenHandle(2, nullptr, &version, &wlan) == ERROR_SUCCESS && wlan) {
+        PWLAN_INTERFACE_INFO_LIST list = nullptr;
+        if (WlanEnumInterfaces(wlan, nullptr, &list) == ERROR_SUCCESS && list) {
+            for (DWORD i = 0; i < list->dwNumberOfItems; ++i) {
+                const GUID iface = list->InterfaceInfo[i].InterfaceGuid;
+                radios.push_back(iface);
+                data.wifi = true;
+                if (work.action == kW10NetWifiOn ||
+                    work.action == kW10NetWifiOff) {
+                    const DWORD result = T81W10NetSetRadio(
+                        wlan, iface, work.action == kW10NetWifiOn);
+                    if (result != ERROR_SUCCESS)
+                        data.actionError = result;
+                } else if (work.action == kW10NetConnect &&
+                           IsEqualGUID(iface, work.iface)) {
+                    bool automatic = false;
+                    T81W10NetProfileMode(wlan, iface, work.profile.c_str(),
+                                         &automatic, &work.automatic);
+                    WLAN_CONNECTION_PARAMETERS wanted{};
+                    wanted.wlanConnectionMode = wlan_connection_mode_profile;
+                    wanted.strProfile = work.profile.c_str();
+                    wanted.dot11BssType = work.bss;
+                    data.actionError =
+                        WlanConnect(wlan, &iface, &wanted, nullptr);
+                } else if (work.action == kW10NetDisconnect &&
+                           IsEqualGUID(iface, work.iface)) {
+                    data.actionError = WlanDisconnect(wlan, &iface, nullptr);
+                }
+                const bool on = T81W10NetRadioOn(wlan, iface);
+                data.wifiOn |= on;
+                if (!on)
+                    continue;
+                if (work.scan)
+                    WlanScan(wlan, &iface, nullptr, nullptr, nullptr);
+                PWLAN_AVAILABLE_NETWORK_LIST networks = nullptr;
+                const DWORD result = WlanGetAvailableNetworkList(
+                    wlan, &iface, 0, nullptr, &networks);
+                // Windows 11 24H2 and later answer "access denied" while the
+                // location services are off.
+                if (result == ERROR_ACCESS_DENIED)
+                    data.denied = true;
+                if (result != ERROR_SUCCESS || !networks)
+                    continue;
+                const std::wstring adapter = T81W10GuidText(iface);
+                for (DWORD k = 0; k < networks->dwNumberOfItems; ++k) {
+                    const WLAN_AVAILABLE_NETWORK& found = networks->Network[k];
+                    T81W10NetRow row;
+                    row.kind = kW10NetWifi;
+                    row.iface = iface;
+                    row.bss = found.dot11BssType;
+                    row.name = T81W10SsidName(found.dot11Ssid);
+                    row.hidden = row.name.empty();
+                    if (found.dwFlags & WLAN_AVAILABLE_NETWORK_HAS_PROFILE) {
+                        size_t length = 0;
+                        while (length < WLAN_MAX_NAME_LENGTH &&
+                               found.strProfileName[length])
+                            ++length;
+                        row.profile.assign(found.strProfileName, length);
+                    }
+                    row.known = !row.profile.empty();
+                    row.connected =
+                        (found.dwFlags & WLAN_AVAILABLE_NETWORK_CONNECTED) != 0;
+                    row.secured = found.bSecurityEnabled != FALSE;
+                    row.quality =
+                        (int)std::min<ULONG>(100, found.wlanSignalQuality);
+                    row.key = L"1|" + adapter + L"|" +
+                              (found.dot11BssType == dot11_BSS_type_independent
+                                   ? L"a|"
+                                   : L"i|") +
+                              row.name;
+                    // Windows lists a network once for every profile and once
+                    // without: one row for each name.
+                    bool merged = false;
+                    for (auto& have : data.rows)
+                        if (have.key == row.key) {
+                            have.connected |= row.connected;
+                            have.secured |= row.secured;
+                            have.quality = std::max(have.quality, row.quality);
+                            if (row.known && (!have.known || row.connected)) {
+                                have.known = true;
+                                have.profile = row.profile;
+                            }
+                            merged = true;
+                            break;
+                        }
+                    if (!merged && data.rows.size() < 96)
+                        data.rows.push_back(std::move(row));
+                }
+                WlanFreeMemory(networks);
+            }
+            for (auto& row : data.rows)
+                if (row.known)
+                    T81W10NetProfileMode(wlan, row.iface, row.profile.c_str(),
+                                         &row.automatic);
+            WlanFreeMemory(list);
+        }
+        WlanCloseHandle(wlan, nullptr);
+    }
+    // The connections Windows has, with what it thinks of their way to the
+    // Internet. A Wi-Fi connection belongs to its row of the list.
+    INetworkListManager* manager = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_NetworkListManager, nullptr,
+                                   CLSCTX_ALL, IID_INetworkListManager,
+                                   (void**)&manager)) &&
+        manager) {
+        IEnumNetworkConnections* connections = nullptr;
+        if (SUCCEEDED(manager->GetNetworkConnections(&connections)) &&
+            connections) {
+            INetworkConnection* connection = nullptr;
+            ULONG got = 0;
+            for (int count = 0;
+                 count < 16 &&
+                 connections->Next(1, &connection, &got) == S_OK && got &&
+                 connection;
+                 ++count) {
+                GUID adapter{};
+                VARIANT_BOOL live = VARIANT_FALSE;
+                NLM_CONNECTIVITY state = NLM_CONNECTIVITY_DISCONNECTED;
+                connection->GetAdapterId(&adapter);
+                connection->get_IsConnected(&live);
+                connection->GetConnectivity(&state);
+                std::wstring name;
+                INetwork* network = nullptr;
+                if (SUCCEEDED(connection->GetNetwork(&network)) && network) {
+                    BSTR text = nullptr;
+                    if (SUCCEEDED(network->GetName(&text)) && text) {
+                        name.assign(text, SysStringLen(text));
+                        SysFreeString(text);
+                    }
+                    network->Release();
+                }
+                connection->Release();
+                connection = nullptr;
+                if (live != VARIANT_TRUE)
+                    continue;
+                const bool internet =
+                    (state & (NLM_CONNECTIVITY_IPV4_INTERNET |
+                              NLM_CONNECTIVITY_IPV6_INTERNET)) != 0;
+                bool wireless = false;
+                for (const GUID& radio : radios)
+                    wireless |= IsEqualGUID(radio, adapter) != FALSE;
+                bool placed = false;
+                if (wireless)
+                    for (auto& row : data.rows)
+                        if (row.kind == kW10NetWifi && row.connected &&
+                            IsEqualGUID(row.iface, adapter)) {
+                            row.internet = internet;
+                            placed = true;
+                        }
+                if (placed)
+                    continue;
+                T81W10NetRow row;
+                row.kind = kW10NetLan;
+                if (name.size() > 80)
+                    name.resize(80);
+                for (auto& c : name)
+                    if (c < L' ')
+                        c = L' ';
+                row.name = name;
+                row.iface = adapter;
+                row.connected = true;
+                row.internet = internet;
+                row.wireless = wireless;
+                row.key = L"0|" + T81W10GuidText(adapter) + L"|" + name;
+                data.rows.push_back(std::move(row));
+            }
+            connections->Release();
+        }
+        manager->Release();
+    }
+    const bool change = work.action == kW10NetAirplaneOn ||
+                        work.action == kW10NetAirplaneOff,
+               wanted = work.action == kW10NetAirplaneOn;
+    HRESULT changed = S_OK;
+    if (!T81W10NetAirplane(&data.airplane, change ? &wanted : nullptr,
+                           &changed)) {
+        // The service does not answer: the value Windows keeps for it.
+        DWORD value = 0, size = sizeof(value);
+        data.airplane = RegGetValueW(HKEY_LOCAL_MACHINE,
+                                     L"SYSTEM\\CurrentControlSet\\Control\\"
+                                     L"RadioManagement\\SystemRadioState",
+                                     nullptr, RRF_RT_REG_DWORD, nullptr, &value,
+                                     &size) == ERROR_SUCCESS &&
+                        value == 1;
+        if (change)
+            data.actionError = ERROR_NOT_SUPPORTED;
+    } else if (change && FAILED(changed)) {
+        data.actionError = (DWORD)changed;
+    }
+}
+static DWORD WINAPI T81W10NetWorkerProc(void* arg) {
+    T81W10NetWork* work = static_cast<T81W10NetWork*>(arg);
+    const HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    try {
+        T81W10NetCollect(*work);
+        work->done = true;
+    } catch (...) {
+        Wh_Log(L"[T81-WIN10] network: reading the networks failed");
+    }
+    if (SUCCEEDED(hr))
+        CoUninitialize();
+    PostMessageW(work->target, WM_T81_NET_READY, 0, 0);
+    return 0;
+}
+
+// -- the flyout ---------------------------------------------------------------
+static bool T81W10NetShown() {
+    const T81W10Fly& f = gW10Fly;
+    return f.kind == kW10FlyNetwork && f.hwnd && IsWindowVisible(f.hwnd);
+}
+static void T81W10NetFinish();
+static void T81W10NetStart(std::unique_ptr<T81W10NetWork> work) {
+    T81W10Net& n = gW10Net;
+    HANDLE thread =
+        CreateThread(nullptr, 0, T81W10NetWorkerProc, work.get(), 0, nullptr);
+    if (!thread) {
+        Wh_Log(L"[T81-WIN10] network: no worker thread error=%lu",
+               GetLastError());
+        return;
+    }
+    n.work = work.release();
+    n.worker = thread;
+}
+// Asks the worker for an action and a fresh reading. One worker runs at a
+// time: an action waits for it, a second reading is not needed.
+static void T81W10NetRequest(int action,
+                             bool scan,
+                             const T81W10NetRow* row = nullptr,
+                             bool automatic = true) {
+    T81W10Net& n = gW10Net;
+    if (!s || !s->bar)
+        return;
+    // A worker whose message was lost with an earlier bar.
+    if (n.worker && WaitForSingleObject(n.worker, 0) == WAIT_OBJECT_0)
+        T81W10NetFinish();
+    auto work = std::make_unique<T81W10NetWork>();
+    work->target = s->bar;
+    work->action = action;
+    work->scan = scan;
+    work->automatic = automatic;
+    if (scan) {
+        n.scanAt = GetTickCount64();
+        n.scanFollow = true;
+    }
+    if (row) {
+        work->iface = row->iface;
+        work->profile = row->profile;
+        work->bss = row->bss;
+    }
+    if (n.worker) {
+        if (action != kW10NetRead || !n.queued)
+            n.queued = std::move(work);
+        return;
+    }
+    T81W10NetStart(std::move(work));
+}
+static void T81W10NetStop() {
+    T81W10Net& n = gW10Net;
+    if (n.worker) {
+        WaitForSingleObject(n.worker, INFINITE);
+        CloseHandle(n.worker);
+        n.worker = nullptr;
+    }
+    delete n.work;
+    n.work = nullptr;
+    n.queued.reset();
+    n.openPending = false;
+}
+static const T81W10NetRow* T81W10NetSelected() {
+    const T81W10Net& n = gW10Net;
+    if (n.selected.empty())
+        return nullptr;
+    for (const auto& row : n.data.rows)
+        if (row.kind == kW10NetWifi && row.key == n.selected)
+            return &row;
+    return nullptr;
+}
+static int T81W10NetRowHeight(const T81W10NetRow& row) {
+    if (row.kind != kW10NetWifi || row.key != gW10Net.selected)
+        return Px(66);
+    return Px(row.connected || row.known ? 150 : 116);
+}
+static int T81W10NetContent() {
+    int height = Px(12);
+    for (const auto& row : gW10Net.data.rows)
+        height += T81W10NetRowHeight(row);
+    return height;
+}
+static int T81W10NetFoot() {
+    return Px(126) + (gW10Net.twoLines ? Px(16) : 0);
+}
+// The tiles under the list: 0 Wi-Fi, 1 airplane mode, 2 mobile hotspot. A PC
+// without a Wi-Fi adapter has the airplane mode tile only.
+static int T81W10NetTiles(int tiles[3]) {
+    int count = 0;
+    if (gW10Net.data.wifi)
+        tiles[count++] = 0;
+    tiles[count++] = 1;
+    if (gW10Net.data.wifi)
+        tiles[count++] = 2;
+    return count;
+}
+static RECT T81W10NetTileRect(const RECT& client, int index) {
+    const int top = client.bottom - Px(4) - Px(64),
+              left = Px(4) + index * (Px(85) + Px(4));
+    return RECT{left, top, left + Px(85), top + Px(64)};
+}
+// The part of the flyout the list is seen through, and its scroll bar.
+static int T81W10NetView(const RECT& client) {
+    return std::max(0, (int)client.bottom - T81W10NetFoot());
+}
+static int T81W10NetScrollMax(const RECT& client) {
+    return std::max(0, T81W10NetContent() - T81W10NetView(client));
+}
+static bool T81W10NetThumb(const RECT& client, RECT* thumb) {
+    const int view = T81W10NetView(client), most = T81W10NetScrollMax(client),
+              bar = Px(12), track = view - 2 * bar;
+    if (most <= 0 || track < Px(32))
+        return false;
+    const int length =
+        std::max(Px(24), MulDiv(track, view, std::max(1, T81W10NetContent())));
+    const int top = bar + MulDiv(std::max(0, track - length),
+                                 std::clamp(gW10Net.scroll, 0, most), most);
+    *thumb = RECT{client.right - bar, top, client.right, top + length};
+    return true;
+}
+static RECT T81W10NetButtonRect(const RECT& client,
+                                const T81W10NetRow& row,
+                                int top) {
+    const int y = top + Px(row.connected || row.known ? 104 : 70);
+    return RECT{client.right - Px(12) - Px(150), y, client.right - Px(12),
+                y + Px(32)};
+}
+static std::wstring T81W10NetStatus(const T81W10NetRow& row) {
+    const T81W10Net& n = gW10Net;
+    if (row.kind == kW10NetNote)
+        return row.profile;
+    if (row.kind == kW10NetLan)
+        return row.internet
+                   ? Tr(L"Connessa", L"Connected")
+                   : Tr(L"Nessuna connessione a Internet", L"No Internet");
+    if (row.connected) {
+        if (row.internet)
+            return row.secured
+                       ? Tr(L"Connessa, protetta", L"Connected, secured")
+                       : Tr(L"Connessa, aperta", L"Connected, open");
+        return row.secured ? Tr(L"Nessuna connessione a Internet, protetta",
+                                L"No Internet, secured")
+                           : Tr(L"Nessuna connessione a Internet, aperta",
+                                L"No Internet, open");
+    }
+    if (row.key == n.pending && GetTickCount64() < n.pendingUntil)
+        return Tr(L"Connessione in corso", L"Connecting");
+    return row.secured ? Tr(L"Protetta", L"Secured") : Tr(L"Aperta", L"Open");
+}
+// The width a text has at 100 %: what decides where a text breaks, so that it
+// breaks at the same word at every scale of the screen (letters do not grow
+// in exact proportion with the scale).
+static float T81W10WidthAt100(Graphics& g,
+                              const std::wstring& text,
+                              float size,
+                              int weight = 0) {
+    return T81W10Text(g, text.c_str(), 0, 0, size * 96.f / (float)Dpi(), weight,
+                      gW10Pal.text, -1, 0, false);
+}
+// A text in at most two lines no wider than `limit`, split at a space.
+static std::vector<std::wstring> T81W10TwoLines(Graphics& g,
+                                                const std::wstring& text,
+                                                float size,
+                                                float limit) {
+    // The limit at 100 %, with a pixel for what rounding took from it.
+    const float room = limit * 96.f / (float)Dpi() + 1.f;
+    auto wide = [&](const std::wstring& part) {
+        return T81W10WidthAt100(g, part, size);
+    };
+    if (wide(text) <= room)
+        return {text};
+    size_t best = std::wstring::npos;
+    for (size_t i = 0; i < text.size(); ++i)
+        if (text[i] == L' ' && wide(text.substr(0, i)) <= room)
+            best = i;
+    if (best == std::wstring::npos)
+        return {text};
+    return {text.substr(0, best), text.substr(best + 1)};
+}
+static const wchar_t* T81W10NetHint() {
+    return Tr(
+        L"Modifica le impostazioni, ad esempio rendendo una connessione "
+        L"a consumo.",
+        L"Change settings, such as making a connection metered.");
+}
+static void T81W10PaintNetwork(Graphics& g, const RECT& client) {
+    const T81W10Fly& f = gW10Fly;
+    const T81W10Net& n = gW10Net;
+    const float u = Dpi() / 96.0f;
+    const int width = client.right, view = T81W10NetView(client),
+              foot = client.bottom - T81W10NetFoot();
+    const Color ink = gW10Pal.text, accent = T81W10Accent(3);
+    auto wash = [&](int alpha) {
+        return Color((BYTE)alpha, ink.GetR(), ink.GetG(), ink.GetB());
+    };
+    const Color soft = wash(153);
+    const bool overflow = T81W10NetScrollMax(client) > 0;
+    const float limit = (float)(width - Px(48) - Px(overflow ? 24 : 12));
+    g.SetClip(Rect(0, 0, width, view));
+    int y = Px(12) - n.scroll;
+    for (size_t i = 0; i < n.data.rows.size(); ++i) {
+        const T81W10NetRow& row = n.data.rows[i];
+        const int height = T81W10NetRowHeight(row), part = kW10PartRow + (int)i;
+        if (y + height <= 0 || y >= view) {
+            y += height;
+            continue;
+        }
+        const bool chosen = row.kind == kW10NetWifi && row.key == n.selected;
+        if (chosen) {
+            SolidBrush fill(
+                Color(153, accent.GetR(), accent.GetG(), accent.GetB()));
+            g.FillRectangle(&fill, 0, y, width, height);
+        } else if (f.down == part || f.hot == part) {
+            SolidBrush fill(wash(f.down == part ? 51 : 26));
+            g.FillRectangle(&fill, 0, y, width, height);
+        }
+        // The picture: the whole fan faintly, with the signal over it.
+        const int px = Px(12), py = y + Px(12), ps = Px(24);
+        if (row.kind == kW10NetWifi) {
+            const int bars = row.quality > 75   ? 4
+                             : row.quality > 50 ? 3
+                             : row.quality > 25 ? 2
+                                                : 1;
+            T81Win10Mdl2(g, L'\uE701', px, py, ps, bars == 4 ? ink : wash(102));
+            if (bars < 4)
+                T81Win10Mdl2(g,
+                             bars == 3   ? L'\uE874'
+                             : bars == 2 ? L'\uE873'
+                                         : L'\uE872',
+                             px, py, ps, ink);
+        } else if (row.kind == kW10NetLan) {
+            T81Win10Mdl2(g, row.wireless ? L'\uE701' : L'\uE839', px, py, ps,
+                         ink);
+        } else {
+            T81Win10Mdl2(g, n.data.wifi ? L'\uE701' : L'\uE774', px, py, ps,
+                         wash(102));
+        }
+        T81W10Text(g, row.name.c_str(), (float)Px(48), (float)(y + Px(26)),
+                   15 * u, 0, ink, -1, limit);
+        T81W10Text(g, T81W10NetStatus(row).c_str(), (float)Px(48),
+                   (float)(y + Px(46)), 15 * u, 0, soft, -1, limit);
+        if (chosen) {
+            if (row.connected) {
+                const Color link =
+                    f.hot == kW10PartNetProps ? soft : gW10Pal.text;
+                const float wide = T81W10Text(
+                    g, Tr(L"Proprietà", L"Properties"), (float)Px(48),
+                    (float)(y + Px(81)), 15 * u, 0, link);
+                SolidBrush line(link);
+                g.FillRectangle(&line, Px(48), y + Px(83),
+                                (int)std::lround(wide), std::max(1, Px(1)));
+            } else if (row.known) {
+                const Rect box(Px(48), y + Px(67), Px(20), Px(20));
+                if (n.automatic) {
+                    SolidBrush fill(accent);
+                    g.FillRectangle(&fill, box);
+                    T81Win10Mdl2(g, L'\uE73E', box.X, box.Y, box.Width,
+                                 kW10OnAccent);
+                } else {
+                    SolidBrush edge(
+                        wash(f.hot == kW10PartNetCheck ? 255 : 204));
+                    const int t = std::max(1, Px(2));
+                    g.FillRectangle(&edge, box.X, box.Y, box.Width, t);
+                    g.FillRectangle(&edge, box.X, box.GetBottom() - t,
+                                    box.Width, t);
+                    g.FillRectangle(&edge, box.X, box.Y + t, t,
+                                    box.Height - 2 * t);
+                    g.FillRectangle(&edge, box.GetRight() - t, box.Y + t, t,
+                                    box.Height - 2 * t);
+                }
+                T81W10Text(
+                    g,
+                    Tr(L"Connetti automaticamente", L"Connect automatically"),
+                    (float)Px(76), (float)(y + Px(81)), 15 * u, 0, ink, -1,
+                    (float)(width - Px(76) - Px(24)));
+            }
+            const RECT button = T81W10NetButtonRect(client, row, y);
+            const int bw = button.right - button.left,
+                      bh = button.bottom - button.top;
+            SolidBrush fill(wash(f.down == kW10PartNetButton ? 102 : 51));
+            g.FillRectangle(&fill, (int)button.left, (int)button.top, bw, bh);
+            if (f.hot == kW10PartNetButton && f.down != kW10PartNetButton) {
+                SolidBrush edge(wash(102));
+                const int t = std::max(1, Px(2));
+                g.FillRectangle(&edge, (int)button.left, (int)button.top, bw,
+                                t);
+                g.FillRectangle(&edge, (int)button.left, (int)button.bottom - t,
+                                bw, t);
+                g.FillRectangle(&edge, (int)button.left, (int)button.top + t, t,
+                                bh - 2 * t);
+                g.FillRectangle(&edge, (int)button.right - t,
+                                (int)button.top + t, t, bh - 2 * t);
+            }
+            T81W10Text(g,
+                       row.connected ? Tr(L"Disconnetti", L"Disconnect")
+                                     : Tr(L"Connetti", L"Connect"),
+                       (float)(button.left + button.right) / 2,
+                       (float)(button.top + Px(22)), 15 * u, 0, ink, 0,
+                       (float)(bw - Px(8)));
+        }
+        y += height;
+    }
+    // The scroll bar, while the pointer is over the flyout.
+    RECT thumb{};
+    if ((n.inside || n.thumbDrag) && T81W10NetThumb(client, &thumb)) {
+        const int bar = Px(12), arrow = Px(8);
+        SolidBrush track(wash(26));
+        g.FillRectangle(&track, width - bar, 0, bar, view);
+        T81Win10Mdl2(g, L'\uE70E', width - bar + (bar - arrow) / 2,
+                     (bar - arrow) / 2, arrow, soft);
+        T81Win10Mdl2(g, L'\uE70D', width - bar + (bar - arrow) / 2,
+                     view - bar + (bar - arrow) / 2, arrow, soft);
+        SolidBrush grip(wash(n.thumbDrag                 ? 153
+                             : f.hot == kW10PartNetThumb ? 115
+                                                         : 77));
+        g.FillRectangle(&grip, (int)thumb.left, (int)thumb.top,
+                        (int)(thumb.right - thumb.left),
+                        (int)(thumb.bottom - thumb.top));
+    }
+    g.ResetClip();
+    // The link to the settings with its explanation.
+    {
+        const Color link = f.hot == kW10PartLink ? soft : wash(204);
+        const float wide = T81W10Text(
+            g,
+            Tr(L"Impostazioni rete e Internet", L"Network & Internet settings"),
+            (float)Px(12), (float)(foot + Px(25)), 15 * u, 0, link, -1,
+            (float)(width - Px(24)));
+        SolidBrush line(link);
+        g.FillRectangle(&line, Px(12), foot + Px(27), (int)std::lround(wide),
+                        std::max(1, Px(1)));
+        const auto lines =
+            T81W10TwoLines(g, T81W10NetHint(), 12 * u, (float)(width - Px(24)));
+        // A line that fits at 100 % is never cut short at another scale.
+        for (size_t i = 0; i < lines.size() && i < (n.twoLines ? 2u : 1u); ++i)
+            T81W10Text(g, lines[i].c_str(), (float)Px(12),
+                       (float)(foot + Px(43) + (int)i * Px(16)), 12 * u, 0,
+                       soft, -1, (float)(width - Px(14)));
+    }
+    // The tiles.
+    int tiles[3]{};
+    const int count = T81W10NetTiles(tiles);
+    bool online = false;
+    for (const auto& row : n.data.rows)
+        online |= row.connected && row.internet;
+    for (int i = 0; i < count; ++i) {
+        const RECT r = T81W10NetTileRect(client, i);
+        const int id = tiles[i], part = kW10PartNetTile + i;
+        const bool on = id == 0   ? n.data.wifiOn && !n.data.airplane
+                        : id == 1 ? n.data.airplane
+                                  : false,
+                   usable = id != 2 || online;
+        const bool hot = usable && f.hot == part,
+                   down = usable && f.down == part;
+        Color back = on ? (down  ? T81W10Accent(4)
+                           : hot ? T81W10Accent(2)
+                                 : accent)
+                        : wash(down  ? 102
+                               : hot ? 77
+                                     : 51);
+        SolidBrush fill(back);
+        g.FillRectangle(&fill, (int)r.left, (int)r.top, (int)(r.right - r.left),
+                        (int)(r.bottom - r.top));
+        const Color tileInk = on ? kW10OnAccent : usable ? ink : wash(102);
+        T81Win10Mdl2(g,
+                     id == 0   ? L'\uE701'
+                     : id == 1 ? L'\uE709'
+                               : L'\uE88A',
+                     (int)r.left + Px(5), (int)r.top + Px(8), Px(16), tileInk);
+        const std::wstring label =
+            id == 0   ? L"Wi-Fi"
+            : id == 1 ? Tr(L"Modalità aereo", L"Airplane mode")
+                      : Tr(L"Hotspot mobile", L"Mobile hotspot");
+        const auto lines =
+            T81W10TwoLines(g, label, 12 * u, (float)(r.right - r.left - Px(6)));
+        for (size_t k = 0; k < lines.size(); ++k)
+            T81W10Text(g, lines[k].c_str(), (float)(r.left + Px(5)),
+                       (float)(r.bottom - Px(8) -
+                               (int)(lines.size() - 1 - k) * Px(16)),
+                       12 * u, 0, tileInk);
+    }
+}
+// As tall as its networks, up to 80 % of the work area as in Windows 10.
+static SIZE T81W10NetSize() {
+    int most = Px(600);
+    RECT bar{};
+    MONITORINFO monitor{};
+    monitor.cbSize = sizeof(monitor);
+    if (s && s->bar && GetWindowRect(s->bar, &bar) &&
+        GetMonitorInfoW(MonitorFromRect(&bar, MONITOR_DEFAULTTONEAREST),
+                        &monitor)) {
+        int room = monitor.rcMonitor.bottom - monitor.rcMonitor.top;
+        if (!s->verticalActive)
+            room -= bar.bottom - bar.top;
+        most = MulDiv(room, 4, 5);
+    }
+    return SIZE{Px(360),
+                std::max(T81W10NetFoot() + Px(66),
+                         std::min(most, T81W10NetContent() + T81W10NetFoot()))};
+}
+// The part of the network flyout under a point.
+static int T81W10NetHit(const RECT& c, POINT p) {
+    const T81W10Net& n = gW10Net;
+    const int view = T81W10NetView(c), foot = c.bottom - T81W10NetFoot();
+    auto in = [&](const RECT& r) { return PtInRect(&r, p) != FALSE; };
+    if (p.y >= view) {
+        if (in(RECT{Px(12), foot + Px(6), Px(215), foot + Px(32)}))
+            return kW10PartLink;
+        int tiles[3]{};
+        const int count = T81W10NetTiles(tiles);
+        for (int i = 0; i < count; ++i)
+            if (in(T81W10NetTileRect(c, i)))
+                return kW10PartNetTile + i;
+        return 0;
+    }
+    RECT thumb{};
+    if (p.x >= c.right - Px(12) && T81W10NetThumb(c, &thumb))
+        return p.y < thumb.top       ? kW10PartNetPageUp
+               : p.y >= thumb.bottom ? kW10PartNetPageDown
+                                     : kW10PartNetThumb;
+    int y = Px(12) - n.scroll;
+    for (size_t i = 0; i < n.data.rows.size(); ++i) {
+        const T81W10NetRow& row = n.data.rows[i];
+        const int height = T81W10NetRowHeight(row);
+        if (p.y >= y && p.y < y + height) {
+            if (row.kind == kW10NetWifi && row.key == n.selected) {
+                if (in(T81W10NetButtonRect(c, row, y)))
+                    return kW10PartNetButton;
+                if (row.connected &&
+                    in(RECT{Px(48), y + Px(64), Px(200), y + Px(90)}))
+                    return kW10PartNetProps;
+                if (!row.connected && row.known &&
+                    in(RECT{Px(44), y + Px(62), c.right - Px(24), y + Px(92)}))
+                    return kW10PartNetCheck;
+            }
+            return kW10PartRow + (int)i;
+        }
+        y += height;
+    }
+    return 0;
+}
+static bool T81W10PlaceFlyout(int kind, RECT* place);
+// The flyout takes the size of what it shows and keeps the chosen network in
+// sight.
+static void T81W10NetRelayout(bool reveal) {
+    T81W10Fly& f = gW10Fly;
+    T81W10Net& n = gW10Net;
+    if (!T81W10NetShown())
+        return;
+    RECT place{};
+    if (T81W10PlaceFlyout(kW10FlyNetwork, &place))
+        f.rect = place;
+    const RECT c{0, 0, f.rect.right - f.rect.left, f.rect.bottom - f.rect.top};
+    if (reveal) {
+        int y = Px(12);
+        for (const auto& row : n.data.rows) {
+            const int height = T81W10NetRowHeight(row);
+            if (row.kind == kW10NetWifi && row.key == n.selected) {
+                const int view = T81W10NetView(c);
+                if (y - n.scroll < 0)
+                    n.scroll = y - Px(12);
+                else if (y + height - n.scroll > view)
+                    n.scroll = y + height - view;
+                break;
+            }
+            y += height;
+        }
+    }
+    n.scroll = std::clamp(n.scroll, 0, T81W10NetScrollMax(c));
+    T81W10Invalidate();
+}
+// Windows connects the network: its own list of networks, where it asks for
+// what the connection needs. With "Windows 10 legacy flyouts on Win11 24H2
+// restorer" that is the Windows 10 flyout.
+static bool T81W10LegacyNetworkFlyout() {
+    HWND owner = FindWindowW(L"Win10Restorer_NetworkIconWnd", nullptr);
+    if (!owner)
+        return false;
+    static const UINT message =
+        RegisterWindowMessageW(L"Win10ExplorerRestorer.ShowNetworkFlyout");
+    return message && PostMessageW(owner, message, 0, 0);
+}
+static void T81W10NetWindowsList() {
+    T81Win10CloseFlyout();
+    if (T81W10LegacyNetworkFlyout()) {
+        Wh_Log(
+            L"[T81-WIN10] network: connection left to the Windows 10 "
+            L"flyout of the legacy flyouts mod");
+        return;
+    }
+    HINSTANCE opened = ShellExecuteW(nullptr, L"open", L"ms-availablenetworks:",
+                                     nullptr, nullptr, SW_SHOWNORMAL);
+    if ((INT_PTR)opened <= 32)
+        opened = ShellExecuteW(nullptr, L"open", L"ms-settings:network-wifi",
+                               nullptr, nullptr, SW_SHOWNORMAL);
+    Wh_Log(L"[T81-WIN10] network: connection left to Windows code=%Id",
+           (INT_PTR)opened);
+}
+// Takes over what the worker has read: the connected networks first, the
+// others in the order they already have on the screen, new ones by signal.
+static void T81W10NetAdopt(T81W10NetWork& work) {
+    T81W10Net& n = gW10Net;
+    T81W10NetData fresh = std::move(work.data);
+    for (auto& row : fresh.rows)
+        if (row.name.empty())
+            row.name = row.kind == kW10NetWifi
+                           ? Tr(L"Rete nascosta", L"Hidden Network")
+                           : Tr(L"Rete", L"Network");
+    auto before = [&](const std::wstring& key) {
+        for (size_t i = 0; i < n.data.rows.size(); ++i)
+            if (n.data.rows[i].key == key)
+                return (int)i;
+        return INT_MAX;
+    };
+    auto rank = [&](const T81W10NetRow& row) {
+        return row.connected ? (row.kind == kW10NetLan ? 0 : 1)
+               : row.hidden  ? 3
+                             : 2;
+    };
+    std::stable_sort(fresh.rows.begin(), fresh.rows.end(),
+                     [&](const T81W10NetRow& a, const T81W10NetRow& b) {
+                         const int ra = rank(a), rb = rank(b);
+                         if (ra != rb)
+                             return ra < rb;
+                         const int ia = before(a.key), ib = before(b.key);
+                         if (ia != ib)
+                             return ia < ib;
+                         return a.quality > b.quality;
+                     });
+    if (fresh.denied && fresh.wifiOn) {
+        T81W10NetRow note;
+        note.kind = kW10NetNote;
+        note.key = L"2|location";
+        note.name =
+            Tr(L"Reti Wi-Fi non elencate", L"Wi-Fi networks not listed");
+        note.profile = Tr(L"Attiva i servizi di posizione di Windows",
+                          L"Turn on Windows location services");
+        fresh.rows.push_back(std::move(note));
+    } else if (fresh.rows.empty()) {
+        T81W10NetRow note;
+        note.kind = kW10NetNote;
+        note.key = L"2|none";
+        note.name = Tr(L"Non connesso", L"Not connected");
+        note.profile = fresh.airplane ? Tr(L"Modalità aereo attiva",
+                                           L"Airplane mode is on")
+                       : fresh.wifi && !fresh.wifiOn
+                           ? Tr(L"Wi-Fi disattivato", L"Wi-Fi is turned off")
+                           : Tr(L"Nessuna connessione disponibile",
+                                L"No connections are available");
+        fresh.rows.push_back(std::move(note));
+    }
+    n.data = std::move(fresh);
+    n.have = true;
+    n.dataAt = GetTickCount64();
+    if (!n.pending.empty()) {
+        bool over = GetTickCount64() >= n.pendingUntil;
+        for (const auto& row : n.data.rows)
+            over |= row.key == n.pending && row.connected;
+        if (over)
+            n.pending.clear();
+    }
+    if (n.choose && n.selected.empty())
+        for (const auto& row : n.data.rows)
+            if (row.kind == kW10NetWifi && row.connected) {
+                n.selected = row.key;
+                break;
+            }
+    if (n.data.actionError) {
+        Wh_Log(L"[T81-WIN10] network: action %d failed error=%lu", work.action,
+               n.data.actionError);
+        if (work.action == kW10NetConnect) {
+            // The saved profile no longer fits: Windows asks for the rest.
+            n.pending.clear();
+            T81W10NetWindowsList();
+            return;
+        }
+        if (work.action == kW10NetAirplaneOn ||
+            work.action == kW10NetAirplaneOff) {
+            T81W10OpenSettings(L"ms-settings:network-airplanemode");
+            return;
+        }
+        if (work.action == kW10NetWifiOn || work.action == kW10NetWifiOff) {
+            T81W10OpenSettings(L"ms-settings:network-wifi");
+            return;
+        }
+    }
+    if (n.openPending) {
+        n.openPending = false;
+        if (s && s->bar)
+            KillTimer(s->bar, kW10NetOpenTimer);
+        T81Win10ToggleFlyout(kW10FlyNetwork);
+    } else {
+        T81W10NetRelayout(false);
+    }
+}
+static void T81W10NetFinish() {
+    T81W10Net& n = gW10Net;
+    if (!n.worker || !n.work)
+        return;
+    WaitForSingleObject(n.worker, INFINITE);
+    CloseHandle(n.worker);
+    n.worker = nullptr;
+    std::unique_ptr<T81W10NetWork> work(n.work);
+    n.work = nullptr;
+    if (work->done && s && T81Win10FlyoutsOn())
+        T81W10NetAdopt(*work);
+    // What was asked for meanwhile, unless a newer request already runs.
+    if (!n.worker && n.queued && s && s->bar) {
+        n.queued->target = s->bar;
+        T81W10NetStart(std::move(n.queued));
+    }
+}
+static void CALLBACK T81W10NetOpenLate(HWND hwnd, UINT, UINT_PTR id, DWORD) {
+    KillTimer(hwnd, id);
+    if (gW10Net.openPending) {
+        // The networks take their time: the flyout opens and fills later.
+        gW10Net.openPending = false;
+        T81Win10ToggleFlyout(kW10FlyNetwork);
+    }
+}
+// Opens the recreated flyout with what is known of the networks and brings it
+// up to date while it is open. Only when nothing has been read yet are the
+// networks read first, for 700 ms at most, so that it opens at its size.
+static void T81W10NetOpen() {
+    T81W10Net& n = gW10Net;
+    if (!s || !s->bar)
+        return;
+    if (n.openPending) {
+        n.openPending = false;
+        KillTimer(s->bar, kW10NetOpenTimer);
+        return;
+    }
+    if (n.have) {
+        T81Win10ToggleFlyout(kW10FlyNetwork);
+        T81W10NetRequest(kW10NetRead,
+                         !n.scanAt || GetTickCount64() - n.scanAt > 5000);
+        return;
+    }
+    n.openPending = true;
+    T81W10NetRequest(kW10NetRead, true);
+    SetTimer(s->bar, kW10NetOpenTimer, 700, T81W10NetOpenLate);
+}
+static void T81W10NetScrollBy(int delta) {
+    T81W10Net& n = gW10Net;
+    const RECT c = T81W10Client();
+    const int next = std::clamp(n.scroll + delta, 0, T81W10NetScrollMax(c));
+    if (next != n.scroll) {
+        n.scroll = next;
+        // Another row lies under the pointer now.
+        POINT p{};
+        if (gW10Fly.hwnd && GetCursorPos(&p) &&
+            ScreenToClient(gW10Fly.hwnd, &p))
+            gW10Fly.hot = T81W10Hit(gW10Fly.hwnd, p);
+        T81W10Invalidate();
+    }
+}
+static void T81W10NetClick(int part) {
+    T81W10Net& n = gW10Net;
+    const RECT c = T81W10Client();
+    if (part == kW10PartLink) {
+        T81W10OpenSettings(L"ms-settings:network-status");
+    } else if (part >= kW10PartNetTile && part < kW10PartNetTile + 3) {
+        int tiles[3]{};
+        const int count = T81W10NetTiles(tiles), index = part - kW10PartNetTile;
+        if (index >= count)
+            return;
+        if (tiles[index] == 0) {
+            const bool on = n.data.wifiOn && !n.data.airplane;
+            n.data.wifiOn = !on;  // shown at once, read again afterwards
+            T81W10NetRequest(on ? kW10NetWifiOff : kW10NetWifiOn, true);
+            n.ticks = 0;
+        } else if (tiles[index] == 1) {
+            const bool on = n.data.airplane;
+            n.data.airplane = !on;
+            T81W10NetRequest(on ? kW10NetAirplaneOff : kW10NetAirplaneOn,
+                             false);
+            n.ticks = 0;
+        } else {
+            bool online = false;
+            for (const auto& row : n.data.rows)
+                online |= row.connected && row.internet;
+            if (online)
+                T81W10OpenSettings(L"ms-settings:network-mobilehotspot");
+        }
+        T81W10Invalidate();
+    } else if (part == kW10PartNetPageUp || part == kW10PartNetPageDown) {
+        T81W10NetScrollBy(part == kW10PartNetPageUp ? -T81W10NetView(c)
+                                                    : T81W10NetView(c));
+    } else if (part == kW10PartNetCheck) {
+        n.automatic = !n.automatic;
+        T81W10Invalidate();
+    } else if (part == kW10PartNetProps) {
+        T81W10OpenSettings(L"ms-settings:network-wifi");
+    } else if (part == kW10PartNetButton) {
+        const T81W10NetRow* row = T81W10NetSelected();
+        if (!row)
+            return;
+        if (row->connected) {
+            T81W10NetRequest(kW10NetDisconnect, false, row);
+        } else if (row->known) {
+            n.pending = row->key;
+            n.pendingUntil = GetTickCount64() + 20000;
+            T81W10NetRequest(kW10NetConnect, false, row, n.automatic);
+        } else {
+            T81W10NetWindowsList();
+            return;
+        }
+        n.ticks = 0;
+        T81W10Invalidate();
+    } else if (part >= kW10PartRow &&
+               (size_t)(part - kW10PartRow) < n.data.rows.size()) {
+        const T81W10NetRow& row = n.data.rows[part - kW10PartRow];
+        n.choose = false;
+        if (row.kind == kW10NetWifi) {
+            if (n.selected != row.key) {
+                n.selected = row.key;
+                n.automatic = row.known ? row.automatic : true;
+                T81W10NetRelayout(true);
+            }
+        } else if (row.kind == kW10NetLan) {
+            T81W10OpenSettings(row.wireless ? L"ms-settings:network-wifi"
+                                            : L"ms-settings:network-ethernet");
+        } else if (row.key == L"2|location") {
+            T81W10OpenSettings(L"ms-settings:privacy-location");
+        }
+    }
+}
+// Up and Down choose a network, Enter presses its button.
+static bool T81W10NetKey(WPARAM key) {
+    T81W10Net& n = gW10Net;
+    if (key == VK_RETURN || key == VK_SPACE) {
+        if (T81W10NetSelected())
+            T81W10NetClick(kW10PartNetButton);
+        return true;
+    }
+    if (key == VK_PRIOR || key == VK_NEXT) {
+        const RECT c = T81W10Client();
+        T81W10NetScrollBy(key == VK_PRIOR ? -T81W10NetView(c)
+                                          : T81W10NetView(c));
+        return true;
+    }
+    if (key != VK_UP && key != VK_DOWN)
+        return false;
+    int at = -1;
+    std::vector<int> wifi;
+    for (size_t i = 0; i < n.data.rows.size(); ++i)
+        if (n.data.rows[i].kind == kW10NetWifi) {
+            if (n.data.rows[i].key == n.selected)
+                at = (int)wifi.size();
+            wifi.push_back((int)i);
+        }
+    if (wifi.empty())
+        return true;
+    at = at < 0 ? 0
+                : std::clamp(at + (key == VK_UP ? -1 : 1), 0,
+                             (int)wifi.size() - 1);
+    T81W10NetClick(kW10PartRow + wifi[at]);
+    return true;
+}
+// Once a second while the flyout is open: the networks are read again every
+// third second, at once while a connection is on its way, and Windows is
+// asked to look for networks every twelfth.
+static void T81W10NetTick() {
+    T81W10Net& n = gW10Net;
+    ++n.ticks;
+    const bool waiting =
+        !n.pending.empty() && GetTickCount64() < n.pendingUntil;
+    if (!n.pending.empty() && !waiting) {
+        n.pending.clear();
+        T81W10Invalidate();
+    }
+    // Windows needs two to four seconds to look around: the list is read
+    // again after two, three and four seconds, then every three.
+    if (n.ticks >= 4)
+        n.scanFollow = false;
+    if (waiting || n.ticks == 2 || n.ticks == 4 || n.ticks % 3 == 0)
+        T81W10NetRequest(kW10NetRead, n.ticks % 12 == 0);
+}
+static Color T81W10BaseColor() {
+    if (gW10Fly.kind == kW10FlySearch && T81W22On())
+        return T81W10Sys().lightSystem ? Color(255, 230, 230, 230)
+                                       : Color(255, 46, 46, 46);
+    if (gW10Fly.kind == kW10FlySearch)
+        return T81Win10LightSearch() ? Color(255, 255, 255, 255)
+                                     : Color(255, 31, 31, 31);
+    return T81W10Pal().back;
+}
+// Everything but the panel colour. Called twice for one drawing, on black and
+// on white, which gives the opacity of every pixel.
+static void T81W10PaintContent(HDC dc, const RECT& client) {
+    const T81W10Fly& f = gW10Fly;
+    if (!s || client.right <= 0 || client.bottom <= 0)
+        return;
+    std::vector<T81W10IconDraw> icons;
+    bool search = false;
+    {
+        Graphics g(dc);
+        g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+        switch (f.kind) {
+            case kW10FlyClock:
+                T81W10PaintClock(g, client);
+                break;
+            case kW10FlyVolume:
+                T81W10PaintVolume(g, client);
+                break;
+            case kW10FlyBattery:
+                T81W10PaintBattery(g, client);
+                break;
+            case kW10FlyLanguage:
+                T81W10PaintLanguage(g, client);
+                break;
+            case kW10FlyNetwork:
+                T81W10PaintNetwork(g, client);
+                break;
+            case kW10FlySearch:
+                search = true;
+                if (T81W22On())
+                    T81W22Paint(g, client, &icons);
+                else
+                    T81W10PaintSearch(g, client, &icons);
+                break;
+        }
+    }
+    for (const auto& icon : icons) {
+        if (!icon.bitmap) {
+            DrawIconEx(dc, icon.x, icon.y, icon.icon, icon.size, icon.size, 0,
+                       nullptr, DI_NORMAL);
+            continue;
+        }
+        BITMAP bitmap{};
+        HDC source = CreateCompatibleDC(dc);
+        if (source && GetObjectW(icon.bitmap, sizeof(bitmap), &bitmap) &&
+            bitmap.bmWidth > 0 && bitmap.bmHeight != 0) {
+            HGDIOBJ old = SelectObject(source, icon.bitmap);
+            const int height = abs(bitmap.bmHeight);
+            if (bitmap.bmBitsPixel == 32) {
+                BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+                GdiAlphaBlend(dc, icon.x, icon.y, icon.size, icon.size, source,
+                              0, 0, bitmap.bmWidth, height, blend);
+            } else {
+                SetStretchBltMode(dc, HALFTONE);
+                StretchBlt(dc, icon.x, icon.y, icon.size, icon.size, source, 0,
+                           0, bitmap.bmWidth, height, SRCCOPY);
+            }
+            if (old)
+                SelectObject(source, old);
+        }
+        if (source)
+            DeleteDC(source);
+    }
+    {
+        // A 1 px line on every side but the one that meets the bar.
+        Graphics g(dc);
+        const bool lightPane =
+            T81W22On() ? T81W10Sys().lightSystem : T81Win10LightSearch();
+        SolidBrush edge(!search     ? gW10Pal.edge
+                        : lightPane ? Color(255, 171, 171, 171)
+                                    : Color(255, 70, 70, 70));
+        const int one = std::max(1, Px(1)), w = client.right, h = client.bottom;
+        const bool vertical = s->verticalActive, left = s->verticalSide == 1,
+                   above = !vertical && s->nativeEdge == ABE_TOP;
+        if (vertical || !above)
+            g.FillRectangle(&edge, 0, 0, w, one);
+        if (vertical || above)
+            g.FillRectangle(&edge, 0, h - one, w, one);
+        if (!vertical || !left)
+            g.FillRectangle(&edge, 0, 0, one, h);
+        if (!vertical || left)
+            g.FillRectangle(&edge, w - one, 0, one, h);
+    }
+}
+static RECT T81W10Client() {
+    const T81W10Fly& f = gW10Fly;
+    return RECT{0, 0, f.rect.right - f.rect.left, f.rect.bottom - f.rect.top};
+}
+static int T81W10Hit(HWND hwnd, POINT p) {
+    const T81W10Fly& f = gW10Fly;
+    // While the flyout slides, the window is only a part of it.
+    RECT c = T81W10Client();
+    if (!s || !hwnd || f.anim || !PtInRect(&c, p))
+        return 0;
+    auto in = [&](int left, int top, int right, int bottom) {
+        return p.x >= left && p.x < right && p.y >= top && p.y < bottom;
+    };
+    switch (f.kind) {
+        case kW10FlyNetwork:
+            return T81W10NetHit(c, p);
+        case kW10FlyClock:
+            if (in(Px(24), Px(70), (int)c.right - Px(24), Px(96)))
+                return kW10PartToday;
+            if (in(Px(252), Px(119), Px(300), Px(159)))
+                return kW10PartPrev;
+            if (in(Px(300), Px(119), Px(348), Px(159)))
+                return kW10PartNext;
+            if (in(Px(12), Px(197), Px(12) + 7 * Px(48), Px(197) + 6 * Px(42)))
+                return kW10PartRow + ((p.y - Px(197)) / Px(42)) * 7 +
+                       (p.x - Px(12)) / Px(48);
+            if (c.bottom >= Px(500) && in(Px(24), Px(464), Px(260), Px(494)))
+                return kW10PartLink;
+            break;
+        case kW10FlyVolume:
+            if (in(Px(14), Px(54), Px(54), Px(94)))
+                return kW10PartGlyph;
+            if (in(Px(57), Px(54), Px(299), Px(94)))
+                return kW10PartSlider;
+            break;
+        case kW10FlyBattery:
+            if (f.power && in(Px(4), Px(110) + T81W10PowerShift(), Px(356),
+                              Px(144) + T81W10PowerShift()))
+                return kW10PartSlider;
+            if (in(Px(12), T81W10BatteryLink() - Px(18), Px(220),
+                   T81W10BatteryLink() + Px(10)))
+                return kW10PartLink;
+            break;
+        case kW10FlyLanguage: {
+            const int rows = T81W10LanguageRows();
+            if (p.y < rows * Px(60))
+                return (size_t)(p.y / Px(60)) < s->languageFlyoutItems.size()
+                           ? kW10PartRow + p.y / Px(60)
+                           : 0;
+            if (p.y > rows * Px(60))
+                return kW10PartLink;
+            break;
+        }
+        case kW10FlySearch: {
+            if (T81W22On())
+                return T81W22Hit(c, p);
+            int boxTop = 0, top = 0, bottom = 0;
+            T81W10SearchFrame(c, &boxTop, &top, &bottom);
+            if (p.y < top || p.y >= bottom || T81W10Query().empty())
+                break;
+            if (f.found.empty()) {
+                RECT row = T81W10WindowsRow(c);
+                return PtInRect(&row, p) ? kW10PartWindows : 0;
+            }
+            for (size_t i = 0; i < f.found.size(); ++i) {
+                RECT row = T81W10ResultRow(c, (int)i);
+                if (row.bottom <= bottom && PtInRect(&row, p))
+                    return kW10PartRow + (int)i;
+            }
+            break;
+        }
+    }
+    return 0;
+}
+static void T81W10OpenSettings(const wchar_t* page) {
+    T81Win10CloseFlyout();
+    HINSTANCE opened =
+        ShellExecuteW(nullptr, L"open", page, nullptr, nullptr, SW_SHOWNORMAL);
+    if ((INT_PTR)opened <= 32)
+        Wh_Log(L"[T81-WIN10] %ls could not be opened code=%Id", page,
+               (INT_PTR)opened);
+}
+static void T81W10ChooseLanguage(size_t index) {
+    bool requested = RequestLanguageFlyoutLayout(index);
+    T81Win10CloseFlyout();
+    if (!requested) {
+        RECT cell = LanguageIndicatorScreenRect();
+        ShowInfoTooltip(Tr(L"Impossibile cambiare la lingua di input. "
+                           L"Controlla il log Windhawk.",
+                           L"Unable to change the input language. Check "
+                           L"the Windhawk log."),
+                        (cell.left + cell.right) / 2);
+    }
+}
+static void T81W10Click(int part) {
+    T81W10Fly& f = gW10Fly;
+    switch (f.kind) {
+        case kW10FlyNetwork:
+            T81W10NetClick(part);
+            break;
+        case kW10FlyClock:
+            if (part == kW10PartToday) {
+                SYSTEMTIME now{};
+                GetLocalTime(&now);
+                f.year = now.wYear;
+                f.month = now.wMonth;
+            } else if (part == kW10PartPrev || part == kW10PartNext) {
+                T81W10MoveMonth(part == kW10PartPrev ? -1 : 1);
+            } else if (part == kW10PartLink) {
+                T81W10OpenSettings(L"ms-settings:dateandtime");
+            }
+            break;
+        case kW10FlyVolume:
+            if (part == kW10PartGlyph) {
+                T81W10ToggleMute();
+                T81W10Repaint();
+            }
+            break;
+        case kW10FlyBattery:
+            if (part == kW10PartLink)
+                T81W10OpenSettings(L"ms-settings:batterysaver");
+            break;
+        case kW10FlyLanguage:
+            if (part == kW10PartLink)
+                T81W10OpenSettings(L"ms-settings:regionlanguage");
+            else if (part >= kW10PartRow)
+                T81W10ChooseLanguage((size_t)(part - kW10PartRow));
+            break;
+        case kW10FlySearch:
+            if (T81W22On()) {
+                T81W22Click(part);
+                break;
+            }
+            if (part == kW10PartWindows) {
+                T81Win10CloseFlyout();
+                SendWin('S');
+            } else if (part >= kW10PartRow &&
+                       (size_t)(part - kW10PartRow) < f.found.size()) {
+                T81W10Launch(f.found[part - kW10PartRow]);
+            }
+            break;
+    }
+}
+// A slider follows the pointer at client column x.
+static void T81W10DragTo(int x) {
+    T81W10Fly& f = gW10Fly;
+    if (f.kind == kW10FlyVolume) {
+        float level = T81W10SliderValue(Px(65), Px(291), x);
+        T81W10SetVolume(std::round(level * 100) / 100);
+        T81W10Repaint();
+    } else if (f.kind == kW10FlyBattery && f.power) {
+        int at = (int)std::lround(T81W10SliderValue(Px(12), Px(348), x) * 2);
+        if (at != f.powerAt) {
+            f.powerAt = at;
+            T81W10PowerSet(at);
+            T81W10Repaint();
+        }
+    }
+}
+static void T81W10Typed() {
+    T81W10Fly& f = gW10Fly;
+    if (T81W22On())
+        T81W22Find();
+    else
+        T81W10Find();
+    f.caret = true;
+    if (f.hwnd)
+        SetTimer(f.hwnd, 2, 530, nullptr);
+    T81W10Repaint();
+}
+static bool T81W10Key(WPARAM key) {
+    T81W10Fly& f = gW10Fly;
+    if (key == VK_ESCAPE) {
+        T81Win10CloseFlyout();
+        return true;
+    }
+    switch (f.kind) {
+        case kW10FlyNetwork:
+            return T81W10NetKey(key);
+        case kW10FlyClock:
+            if (key == VK_UP || key == VK_PRIOR || key == VK_DOWN ||
+                key == VK_NEXT) {
+                T81W10MoveMonth(key == VK_UP || key == VK_PRIOR ? -1 : 1);
+                return true;
+            }
+            break;
+        case kW10FlyVolume: {
+            const float level = s ? s->volume : 0;
+            float next = key == VK_LEFT || key == VK_DOWN  ? level - 0.01f
+                         : key == VK_RIGHT || key == VK_UP ? level + 0.01f
+                         : key == VK_NEXT                  ? level - 0.10f
+                         : key == VK_PRIOR                 ? level + 0.10f
+                         : key == VK_HOME                  ? 0.f
+                         : key == VK_END                   ? 1.f
+                                                           : -1.f;
+            if (next == -1.f && key != VK_LEFT && key != VK_DOWN)
+                break;
+            T81W10SetVolume(std::round(std::clamp(next, 0.f, 1.f) * 100) / 100);
+            T81W10Repaint();
+            return true;
+        }
+        case kW10FlyLanguage: {
+            const size_t count = s ? s->languageFlyoutItems.size() : 0;
+            if (!count)
+                break;
+            if (key == VK_DOWN || key == VK_TAB || key == VK_UP) {
+                s->languageFlyoutSelected = (s->languageFlyoutSelected +
+                                             (key == VK_UP ? count - 1 : 1)) %
+                                            count;
+                T81W10Invalidate();
+                return true;
+            }
+            if (key == VK_RETURN || key == VK_SPACE) {
+                T81W10ChooseLanguage(s->languageFlyoutSelected);
+                return true;
+            }
+            break;
+        }
+        case kW10FlySearch:
+            if (T81W22On()) {
+                if (T81W22Key(key))
+                    return true;
+                if (key == VK_DELETE) {
+                    f.query.clear();
+                    T81W10Typed();
+                    return true;
+                }
+                break;
+            }
+            if (key == VK_DOWN || key == VK_UP) {
+                const int count = (int)f.found.size();
+                if (count)
+                    f.selected =
+                        (f.selected + (key == VK_UP ? count - 1 : 1)) % count;
+                T81W10Invalidate();
+                return true;
+            }
+            if (key == VK_RETURN) {
+                if (!f.found.empty())
+                    T81W10Launch(f.found[std::clamp(f.selected, 0,
+                                                    (int)f.found.size() - 1)]);
+                else if (!T81W10Query().empty())
+                    T81W10Click(kW10PartWindows);
+                return true;
+            }
+            if (key == VK_DELETE) {
+                f.query.clear();
+                T81W10Typed();
+                return true;
+            }
+            break;
+    }
+    return false;
+}
+static void T81W10HidePointerWhileTyping();
+static void T81W10Char(wchar_t ch) {
+    T81W10Fly& f = gW10Fly;
+    T81W10HidePointerWhileTyping();
+    if (ch == 8) {
+        if (f.query.empty())
+            return;
+        f.query.pop_back();
+        // Keep both halves of a surrogate pair together.
+        if (!f.query.empty() && ch == 8 && f.query.back() >= 0xD800 &&
+            f.query.back() <= 0xDBFF)
+            f.query.pop_back();
+    } else if (ch >= 32 && ch != 127 && f.query.size() < 64) {
+        f.query.push_back(ch);
+    } else {
+        return;
+    }
+    T81W10Typed();
+}
+// Hides the flyout at once and forgets what it showed.
+static void T81W10FinishClose() {
+    T81W10Fly& f = gW10Fly;
+    const bool search = f.kind == kW10FlySearch;
+    f.kind = kW10FlyNone;
+    f.drag = false;
+    f.hot = f.down = 0;
+    f.anim = 0;
+    gW10Shown = RECT{};
+    gW10Net.thumbDrag = gW10Net.inside = false;
+    if (f.hwnd) {
+        KillTimer(f.hwnd, 1);
+        KillTimer(f.hwnd, 2);
+        KillTimer(f.hwnd, 3);
+        KillTimer(f.hwnd, 4);
+        if (GetCapture() == f.hwnd)
+            ReleaseCapture();
+        if (IsWindowVisible(f.hwnd))
+            ShowWindow(f.hwnd, SW_HIDE);
+    }
+    if (search) {
+        f.query.clear();
+        f.found.clear();
+        gW22Res.clear();
+        T81W22FreeBig();
+    }
+    if (s && s->bar)
+        InvalidateRect(s->bar, nullptr, FALSE);
+}
+static LRESULT CALLBACK T81W10FlyProc(HWND hwnd,
+                                      UINT message,
+                                      WPARAM wp,
+                                      LPARAM lp) {
+    T81W10Fly& f = gW10Fly;
+    try {
+        switch (message) {
+            case WM_PAINT: {
+                PAINTSTRUCT ps{};
+                // A layered window: the picture is handed over as a whole.
+                if (BeginPaint(hwnd, &ps))
+                    EndPaint(hwnd, &ps);
+                T81W10Render(hwnd);
+                return 0;
+            }
+            case kW10MsgRender:
+                f.dirty = false;
+                if (f.kind != kW10FlyNone && IsWindowVisible(hwnd))
+                    T81W10Render(hwnd);
+                return 0;
+            case WM_ERASEBKGND:
+                return 1;
+            case WM_SETCURSOR:
+                if (LOWORD(lp) == HTCLIENT) {
+                    // The text box of the search pane shows the text cursor;
+                    // the pointer is away while one types in it.
+                    POINT p{};
+                    RECT box{};
+                    if (T81W10PointerHidden()) {
+                        SetCursor(nullptr);
+                        return TRUE;
+                    }
+                    if (f.kind == kW10FlySearch && f.ownBox && !f.anim &&
+                        GetCursorPos(&p) && T81W10SearchBoxRect(&box) &&
+                        PtInRect(&box, p)) {
+                        SetCursor(LoadCursorW(nullptr, IDC_IBEAM));
+                        return TRUE;
+                    }
+                }
+                break;
+            case WM_MOUSEMOVE: {
+                POINT p{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+                if (f.drag) {
+                    T81W10DragTo(p.x);
+                    return 0;
+                }
+                if (f.kind == kW10FlyNetwork) {
+                    T81W10Net& n = gW10Net;
+                    if (n.thumbDrag) {
+                        // The list follows the grip of the scroll bar.
+                        const RECT c = T81W10Client();
+                        RECT thumb{};
+                        if (T81W10NetThumb(c, &thumb)) {
+                            const int bar = Px(12),
+                                      track = T81W10NetView(c) - 2 * bar -
+                                              (thumb.bottom - thumb.top),
+                                      most = T81W10NetScrollMax(c);
+                            n.scroll =
+                                track > 0
+                                    ? std::clamp(MulDiv(p.y - n.thumbGrab - bar,
+                                                        most, track),
+                                                 0, most)
+                                    : 0;
+                            T81W10Invalidate();
+                        }
+                        return 0;
+                    }
+                    if (!n.inside) {
+                        n.inside = true;
+                        T81W10Invalidate();
+                    }
+                }
+                int hit = T81W10Hit(hwnd, p);
+                if (hit != f.hot) {
+                    f.hot = hit;
+                    T81W10Invalidate();
+                }
+                TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, hwnd, 0};
+                TrackMouseEvent(&track);
+                return 0;
+            }
+            case WM_MOUSELEAVE:
+                if (f.kind == kW10FlyNetwork && gW10Net.inside) {
+                    gW10Net.inside = false;
+                    T81W10Invalidate();
+                }
+                if (f.hot && !f.drag) {
+                    f.hot = 0;
+                    T81W10Invalidate();
+                }
+                return 0;
+            case WM_LBUTTONDOWN: {
+                POINT p{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+                f.down = T81W10Hit(hwnd, p);
+                if (f.down == kW10PartSlider) {
+                    f.drag = true;
+                    SetCapture(hwnd);
+                    T81W10DragTo(p.x);
+                } else if (f.kind == kW10FlyNetwork &&
+                           f.down == kW10PartNetThumb) {
+                    RECT thumb{};
+                    if (T81W10NetThumb(T81W10Client(), &thumb)) {
+                        gW10Net.thumbDrag = true;
+                        gW10Net.thumbGrab = p.y - thumb.top;
+                        SetCapture(hwnd);
+                    }
+                }
+                T81W10Invalidate();
+                return 0;
+            }
+            case WM_LBUTTONUP: {
+                POINT p{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+                const int down = f.down;
+                f.down = 0;
+                if (gW10Net.thumbDrag) {
+                    gW10Net.thumbDrag = false;
+                    if (GetCapture() == hwnd)
+                        ReleaseCapture();
+                } else if (f.drag) {
+                    f.drag = false;
+                    if (GetCapture() == hwnd)
+                        ReleaseCapture();
+                } else if (down && T81W10Hit(hwnd, p) == down) {
+                    T81W10Click(down);
+                }
+                if (IsWindow(hwnd))
+                    T81W10Invalidate();
+                return 0;
+            }
+            case WM_CAPTURECHANGED:
+                if ((f.drag || gW10Net.thumbDrag) && (HWND)lp != hwnd) {
+                    f.drag = false;
+                    gW10Net.thumbDrag = false;
+                    T81W10Invalidate();
+                }
+                return 0;
+            case WM_MOUSEWHEEL: {
+                const int delta = GET_WHEEL_DELTA_WPARAM(wp);
+                if (f.kind == kW10FlyNetwork && delta) {
+                    // Two rows for a notch of the wheel.
+                    T81W10NetScrollBy(-MulDiv(delta, Px(132), WHEEL_DELTA));
+                } else if (f.kind == kW10FlyClock && delta) {
+                    T81W10MoveMonth(delta > 0 ? -1 : 1);
+                } else if (f.kind == kW10FlyVolume && delta && s) {
+                    T81W10SetVolume(
+                        std::round((s->volume + (delta > 0 ? 0.02f : -0.02f)) *
+                                   100) /
+                        100);
+                    T81W10Repaint();
+                }
+                return 0;
+            }
+            case WM_KEYDOWN:
+                if (f.anim != 2 && T81W10Key(wp))
+                    return 0;
+                break;
+            case WM_CHAR:
+                if (f.kind == kW10FlySearch && f.anim != 2) {
+                    T81W10Char((wchar_t)wp);
+                    return 0;
+                }
+                break;
+            case WM_TIMER:
+                if (wp == 1) {
+                    if (f.kind == kW10FlyVolume && !f.drag)
+                        RefreshVolume();
+                    if (f.kind == kW10FlyNetwork)
+                        T81W10NetTick();
+                    T81W10Invalidate();
+                } else if (wp == 3) {
+                    // A press outside the flyout closes it. Windows that
+                    // never take the activation would not tell otherwise; the
+                    // bar deals with its own presses.
+                    POINT p{};
+                    RECT own{}, bar{};
+                    if (f.anim == 2)
+                        return 0;
+                    const bool pressed = ((GetAsyncKeyState(VK_LBUTTON) |
+                                           GetAsyncKeyState(VK_RBUTTON) |
+                                           GetAsyncKeyState(VK_MBUTTON)) &
+                                          0x8000) != 0;
+                    if (!pressed && f.down && !f.drag) {
+                        // The button went up outside the flyout.
+                        f.down = 0;
+                        T81W10Invalidate();
+                    } else if (pressed && !f.down && !f.drag &&
+                               !gW10Net.thumbDrag && GetCursorPos(&p) &&
+                               GetWindowRect(hwnd, &own) &&
+                               !PtInRect(&own, p) &&
+                               !(s && s->bar && GetWindowRect(s->bar, &bar) &&
+                                 PtInRect(&bar, p))) {
+                        T81Win10CloseFlyout();
+                    }
+                } else if (wp == 2 && f.kind == kW10FlySearch) {
+                    f.caret = !f.caret;
+                    if (f.ownBox)
+                        T81W10Invalidate();
+                    else if (s && s->bar)
+                        InvalidateRect(s->bar, nullptr, FALSE);
+                }
+                return 0;
+            case WM_ACTIVATE:
+                if (LOWORD(wp) == WA_INACTIVE && f.kind != kW10FlyNone &&
+                    f.anim != 2) {
+                    // A press on the bar or on the hidden-icons panel closes
+                    // the flyout here; the release that follows must not open
+                    // it again.
+                    POINT p{};
+                    RECT bar{}, panel{};
+                    if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) &&
+                        GetCursorPos(&p) && s &&
+                        ((s->bar && GetWindowRect(s->bar, &bar) &&
+                          PtInRect(&bar, p)) ||
+                         (s->overflowPanel &&
+                          IsWindowVisible(s->overflowPanel) &&
+                          GetWindowRect(s->overflowPanel, &panel) &&
+                          PtInRect(&panel, p)))) {
+                        f.closedKind = f.kind;
+                        f.closedAt = GetTickCount64();
+                    }
+                    T81Win10CloseFlyout();
+                }
+                return 0;
+            case WM_CANCELMODE:
+            case WM_CLOSE:
+                T81Win10CloseFlyout();
+                return 0;
+            case WM_DESTROY:
+                if (f.hwnd == hwnd)
+                    f.hwnd = nullptr;
+                return 0;
+        }
+    } catch (...) {
+        Wh_Log(L"[T81-RECOVERY] Windows 10 flyout C++ exception");
+    }
+    return DefWindowProcW(hwnd, message, wp, lp);
+}
+static void T81Win10CloseFlyout(bool animate) {
+    T81W10Fly& f = gW10Fly;
+    if (f.anim)
+        return;  // already on its way
+    if (animate && f.hwnd && f.kind != kW10FlyNone && IsWindowVisible(f.hwnd)) {
+        f.drag = false;
+        f.hot = f.down = 0;
+        if (GetCapture() == f.hwnd)
+            ReleaseCapture();
+        T81W10Slide(f.hwnd, false);
+    }
+    T81W10FinishClose();
+}
+static void T81Win10DestroyFlyout() {
+    T81W10Fly& f = gW10Fly;
+    T81Win10CloseFlyout(false);
+    T81W10NetStop();
+    if (s && s->bar)
+        KillTimer(s->bar, kW10NetOpenTimer);
+    HWND hwnd = f.hwnd;
+    f.hwnd = nullptr;
+    if (hwnd && IsWindow(hwnd) &&
+        GetWindowThreadProcessId(hwnd, nullptr) == GetCurrentThreadId())
+        DestroyWindow(hwnd);
+    if (f.classReady) {
+        UnregisterClassW(L"WH_Taskbar81Win10Flyout", GetModuleHandleW(nullptr));
+        f.classReady = false;
+    }
+    T81W10FreeApps();
+    T81W22FreeDocs();
+    T81W22FreeBig();
+    T81W10DropFrame();
+}
+// ---- Windows 10 skin: the pointer over a text box
+// ----------------------------- The search box is a text box: it shows the text
+// cursor, and the pointer goes away while one types in it and comes back when
+// the mouse moves, as in the text boxes of Windows ("Hide pointer while typing"
+// in the mouse settings).
+static bool gW10PointerHidden = false;
+static POINT gW10PointerAt{};
+static bool T81W10PointerHidden() {
+    if (!gW10PointerHidden)
+        return false;
+    POINT p{};
+    if (!GetCursorPos(&p) || p.x != gW10PointerAt.x || p.y != gW10PointerAt.y) {
+        gW10PointerHidden = false;
+        return false;
+    }
+    return true;
+}
+// The text box of the open search on the screen: the box of the bar, or the
+// one the pane brings along on the side of the bar.
+static bool T81W10SearchBoxRect(RECT* box) {
+    const T81W10Fly& f = gW10Fly;
+    if (!s || f.kind != kW10FlySearch || !f.hwnd || !IsWindowVisible(f.hwnd))
+        return false;
+    if (!f.ownBox) {
+        *box = f.anchor;
+        return true;
+    }
+    const bool below = !s->verticalActive && s->nativeEdge != ABE_TOP;
+    *box = below ? RECT{f.rect.left, f.rect.bottom - Px(40), f.rect.right,
+                        f.rect.bottom}
+                 : RECT{f.rect.left, f.rect.top, f.rect.right,
+                        f.rect.top + Px(40)};
+    return true;
+}
+static void T81W10HidePointerWhileTyping() {
+    BOOL vanish = FALSE;
+    POINT p{};
+    RECT box{};
+    if (!SystemParametersInfoW(SPI_GETMOUSEVANISH, 0, &vanish, 0) || !vanish ||
+        !GetCursorPos(&p) || !T81W10SearchBoxRect(&box) || !PtInRect(&box, p))
+        return;
+    gW10PointerAt = p;
+    gW10PointerHidden = true;
+    SetCursor(nullptr);
+}
+// The flyout a part of the bar opens.
+static int T81W10KindOfHit(int hit) {
+    return hit == HIT_CLOCK        ? kW10FlyClock
+           : hit == HIT_VOLUME     ? kW10FlyVolume
+           : hit == HIT_BATTERY    ? kW10FlyBattery
+           : hit == HIT_LANGUAGE   ? kW10FlyLanguage
+           : hit == HIT_NETWORK    ? kW10FlyNetwork
+           : hit == HIT_W10_SEARCH ? kW10FlySearch
+                                   : kW10FlyNone;
+}
+// A press on the bar closes an open flyout. The bar never takes the
+// activation, so the flyout would not notice. A press on the part of the bar
+// the flyout belongs to is left to the release, which closes it.
+static void T81Win10BarPressed(int hit) {
+    T81W10Fly& f = gW10Fly;
+    if (!f.hwnd || f.kind == kW10FlyNone || !IsWindowVisible(f.hwnd))
+        return;
+    if (T81W10KindOfHit(hit) != f.kind)
+        T81Win10CloseFlyout();
+}
+// True for the part of the bar the open flyout belongs to. Its tooltip stays
+// away while the flyout is open, as in Windows 10.
+static bool T81Win10FlyoutOwns(int hit) {
+    const T81W10Fly& f = gW10Fly;
+    return f.hwnd && f.kind != kW10FlyNone && IsWindowVisible(f.hwnd) &&
+           T81W10KindOfHit(hit) == f.kind;
+}
+// Called once a second: a change of the Windows settings the skin follows
+// (search mode, Task View, light or dark mode, transparency) repaints the bar
+// and its panels.
+static void T81W10PollSystem() {
+    static T81W10System applied;
+    static bool known = false;
+    static int warm = 0;
+    if (!s || !s->bar || !T81IsWin10Skin(taskbarSkin.load())) {
+        known = false;
+        warm = 0;
+        return;
+    }
+    // The networks, once, three seconds after the bar is up.
+    if (warm < 3 && ++warm == 3)
+        T81W10NetPrefetch(false);
+    T81W10NetFollowScan();
+    const T81W10System now = T81W10Sys();
+    if (known && now == applied)
+        return;
+    const bool first = !known;
+    applied = now;
+    known = true;
+    if (first)
+        return;
+    Wh_Log(
+        L"[T81-WIN10] Windows settings changed: search=%d taskView=%d "
+        L"light=%d apps=%d transparency=%d accent=%d",
+        now.search, now.taskView ? 1 : 0, now.lightSystem ? 1 : 0,
+        now.lightApps ? 1 : 0, now.transparency ? 1 : 0, now.accentBar ? 1 : 0);
+    T81Win10CloseFlyout();
+    HidePrivateOverflow();
+    InvalidateRect(s->bar, nullptr, FALSE);
+}
+// The part of the bar a flyout belongs to, in screen pixels.
+static RECT T81W10Anchor(int kind) {
+    RECT r{};
+    if (!s || !s->bar)
+        return r;
+    if (kind == kW10FlyLanguage)
+        return LanguageIndicatorScreenRect();
+    const int hit = kind == kW10FlyVolume    ? HIT_VOLUME
+                    : kind == kW10FlyBattery ? HIT_BATTERY
+                    : kind == kW10FlyNetwork ? HIT_NETWORK
+                                             : 0;
+    if (hit && OverflowIconScreenRect(SystemEntry(hit), &r))
+        return r;
+    if (kind == kW10FlyNetwork)
+        return PrivateSystemAnchor(HIT_NETWORK);
+    RECT bar{};
+    GetClientRect(s->bar, &bar);
+    if (s->verticalActive) {
+        VerticalLayout v = GetVerticalLayout(bar.right, bar.bottom);
+        r = kind == kW10FlyClock     ? v.clock
+            : kind == kW10FlyVolume  ? v.volume
+            : kind == kW10FlyBattery ? v.battery
+                                     : v.search;
+    } else {
+        Layout layout = GetLayout(bar.right, bar.bottom);
+        r = kind == kW10FlyClock    ? layout.clock
+            : kind == kW10FlySearch ? layout.search
+                                    : SystemCell(hit);
+    }
+    MapWindowPoints(s->bar, nullptr, (POINT*)&r, 2);
+    return r;
+}
+// Where a flyout stands when it is fully open: against the bar, in the corner
+// of the screen next to the notification area, or over the part of the bar it
+// belongs to.
+static bool T81W10PlaceFlyout(int kind, RECT* place) {
+    const T81W10Fly& f = gW10Fly;
+    RECT barRect{};
+    MONITORINFO monitor{};
+    monitor.cbSize = sizeof(monitor);
+    if (!s || !s->bar || !GetWindowRect(s->bar, &barRect) ||
+        !GetMonitorInfoW(MonitorFromRect(&barRect, MONITOR_DEFAULTTONEAREST),
+                         &monitor))
+        return false;
+    const bool vertical = s->verticalActive, leftSide = s->verticalSide == 1,
+               above = !vertical && s->nativeEdge == ABE_TOP;
+    const RECT& m = monitor.rcMonitor;
+    SIZE size = T81W10FlySize(kind);
+    const int room = vertical ? m.bottom - m.top
+                     : above  ? m.bottom - barRect.bottom
+                              : barRect.top - m.top;
+    // A calendar that does not fit drops its settings link before anything is
+    // cut off.
+    if (kind == kW10FlyClock && size.cy > room)
+        size.cy = Px(455);
+    int w = std::min((int)size.cx, (int)(m.right - m.left)),
+        h = std::min((int)size.cy, std::max(Px(80), room));
+    int x = 0, y = 0;
+    if (vertical)
+        x = leftSide ? barRect.right : barRect.left - w;
+    else
+        y = above ? barRect.bottom : barRect.top - h;
+    if (kind == kW10FlySearch) {
+        // Windows 10 22H2 opens its search at the edge of the screen; the
+        // classic list stands over the box.
+        if (vertical)
+            y = f.anchor.top;
+        else
+            x = T81W22On() ? (int)m.left : (int)f.anchor.left;
+    } else if (kind == kW10FlyLanguage) {
+        if (vertical)
+            y = (f.anchor.top + f.anchor.bottom - h) / 2;
+        else
+            x = (f.anchor.left + f.anchor.right - w) / 2;
+    } else if (vertical) {
+        y = m.bottom - h;
+    } else {
+        x = m.right - w;
+    }
+    x = std::max((int)m.left, std::min(x, (int)m.right - w));
+    y = std::max((int)m.top, std::min(y, (int)m.bottom - h));
+    *place = RECT{x, y, x + w, y + h};
+    return true;
+}
+static void T81Win10ToggleFlyout(int kind) {
+    T81W10Fly& f = gW10Fly;
+    if (!s || !s->bar || kind == kW10FlyNone)
+        return;
+    const ULONGLONG began = GetTickCount64();
+    // The press that closed this flyout a moment ago: its release must not
+    // open it again.
+    if (f.closedKind == kind && GetTickCount64() - f.closedAt < 600) {
+        f.closedKind = kW10FlyNone;
+        return;
+    }
+    f.closedKind = kW10FlyNone;
+    if (f.hwnd && IsWindowVisible(f.hwnd)) {
+        const int open = f.kind;
+        if (open == kind) {
+            T81Win10CloseFlyout();
+            return;
+        }
+        // Another flyout: this one makes room at once.
+        T81Win10CloseFlyout(false);
+    }
+    if (!f.classReady) {
+        WNDCLASSW wc{};
+        wc.lpfnWndProc = T81W10FlyProc;
+        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+        wc.lpszClassName = L"WH_Taskbar81Win10Flyout";
+        if (!RegisterClassW(&wc)) {
+            Wh_Log(L"[T81-WIN10] flyout class registration failed error=%lu",
+                   GetLastError());
+            return;
+        }
+        f.classReady = true;
+    }
+    if (!f.hwnd) {
+        f.hwnd = CreateWindowExW(
+            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
+            L"WH_Taskbar81Win10Flyout", L"Windows 10 flyout", WS_POPUP, 0, 0,
+            100, 100, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+        if (!f.hwnd)
+            return;
+        BOOL disabled = TRUE;
+        DwmSetWindowAttribute(f.hwnd, DWMWA_TRANSITIONS_FORCEDISABLED,
+                              &disabled, sizeof(disabled));
+        // DWMWCP_DONOTROUND: Windows 10 flyouts have square corners.
+        DWORD corners = 1;
+        DwmSetWindowAttribute(f.hwnd, 33, &corners, sizeof(corners));
+    }
+    const bool vertical = s->verticalActive;
+    f.kind = kind;
+    f.hot = f.down = 0;
+    f.drag = false;
+    f.anchor = T81W10Anchor(kind);
+    if (kind == kW10FlyClock) {
+        SYSTEMTIME now{};
+        GetLocalTime(&now);
+        f.year = now.wYear;
+        f.month = now.wMonth;
+    } else if (kind == kW10FlyVolume) {
+        f.device = T81W10DeviceName();
+        RefreshVolume();
+    } else if (kind == kW10FlyBattery) {
+        f.power = T81W10PowerRead(&f.powerAt);
+        f.powerTwo = false;
+        if (f.power) {
+            // One line when the longest label fits, else two for all of them,
+            // so that the flyout keeps its height while the slider moves.
+            HDC screen = GetDC(nullptr);
+            if (screen) {
+                {
+                    // Measured as at 100 %: the same answer at every scale.
+                    Graphics g(screen);
+                    g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+                    for (int plugged = 0; plugged < 2; ++plugged)
+                        for (int at = 0; at < 3; ++at) {
+                            std::wstring label =
+                                T81W10PowerPrefix(plugged != 0);
+                            label += T81W10PowerName(at);
+                            if (T81W10WidthAt100(g, label, 15 * Dpi() / 96.0f) >
+                                336.f)
+                                f.powerTwo = true;
+                        }
+                }
+                ReleaseDC(nullptr, screen);
+            }
+        }
+    } else if (kind == kW10FlySearch) {
+        f.query.clear();
+        f.found.clear();
+        f.selected = 0;
+        f.caret = true;
+        // The box of the bar takes the text; an icon or a vertical bar has no
+        // room for it, so the pane brings its own box.
+        f.ownBox = vertical || f.anchor.right - f.anchor.left <
+                                   Px(2 * kWin10SlotLogical) + 1;
+        T81W10LoadApps();
+        if (T81W22On()) {
+            T81W22LoadDocs();
+            gW22Tab = 0;
+            gW22Res.clear();
+        }
+    } else if (kind == kW10FlyNetwork) {
+        T81W10Net& n = gW10Net;
+        n.selected.clear();
+        n.scroll = n.ticks = 0;
+        n.inside = n.thumbDrag = false;
+        // As in Windows 10, the connected Wi-Fi network is the chosen one.
+        n.choose = true;
+        for (const auto& row : n.data.rows)
+            if (row.kind == kW10NetWifi && row.connected) {
+                n.selected = row.key;
+                break;
+            }
+        if (!n.have) {
+            T81W10NetRow note;
+            note.kind = kW10NetNote;
+            note.key = L"2|reading";
+            note.name = Tr(L"Ricerca delle reti", L"Looking for networks");
+            n.data.rows.clear();
+            n.data.rows.push_back(std::move(note));
+        }
+        // The explanation under the link takes a second line when it has to.
+        n.twoLines = false;
+        HDC screen = GetDC(nullptr);
+        if (screen) {
+            {
+                Graphics g(screen);
+                g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+                n.twoLines =
+                    T81W10TwoLines(g, T81W10NetHint(), 12 * Dpi() / 96.0f,
+                                   (float)(Px(360) - Px(24)))
+                        .size() > 1;
+            }
+            ReleaseDC(nullptr, screen);
+        }
+    }
+    RECT place{};
+    if (!T81W10PlaceFlyout(kind, &place)) {
+        f.kind = kW10FlyNone;
+        return;
+    }
+    const int x = place.left, y = place.top, w = place.right - place.left,
+              h = place.bottom - place.top;
+    HidePreview();
+    HidePrivateOverflow();
+    PeekOff(false);
+    f.rect = place;
+    f.dirty = false;
+    gW10Shown = RECT{};
+    T81W10ApplyAcrylic(f.hwnd);
+    SetWindowPos(f.hwnd, HWND_TOPMOST, x, y, w, h,
+                 SWP_NOACTIVATE | SWP_NOREDRAW);
+    T81W10Compose();
+    T81W10Present(f.hwnd, 0.f);
+    ShowWindow(f.hwnd, SW_SHOWNOACTIVATE);
+    // The flyout takes the keyboard before it moves, so that nothing typed
+    // meanwhile is lost, and the bar shows its pressed part at once.
+    if (!SetForegroundWindow(f.hwnd))
+        Wh_Log(L"[T81-WIN10] flyout foreground activation was rejected");
+    SetActiveWindow(f.hwnd);
+    SetFocus(f.hwnd);
+    InvalidateRect(s->bar, nullptr, FALSE);
+    UpdateWindow(s->bar);
+    const ULONGLONG ready = GetTickCount64() - began;
+    T81W10Slide(f.hwnd, true);
+    if (f.kind != kind || !IsWindowVisible(f.hwnd))
+        return;  // closed while it opened
+    if (kind == kW10FlyClock || kind == kW10FlyNetwork)
+        SetTimer(f.hwnd, 1, 1000, nullptr);
+    else if (kind == kW10FlyVolume || kind == kW10FlyBattery)
+        SetTimer(f.hwnd, 1, 500, nullptr);
+    else if (kind == kW10FlySearch)
+        SetTimer(f.hwnd, 2, 530, nullptr);
+    SetTimer(f.hwnd, 3, 40, nullptr);
+    Wh_Log(L"[T81-WIN10] flyout %d at %d,%d %dx%d, drawn in %llu ms", kind, x,
+           y, w, h, ready);
+}
+
 static void ShowLanguageIndicatorMenu() {
     if (!s || !s->bar || !LanguageIndicatorVisible())
         return;
@@ -23041,8 +28875,16 @@ static void ShowLanguageIndicatorMenu() {
     PopulateLanguageFlyoutItems();
     if (s->languageFlyoutItems.empty())
         return;
+    UpdateLanguageFlyoutAccent();
     if (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 7) {
         ShowWin7LanguageMenu(target, targetPid, targetThread);
+        return;
+    }
+    if (T81Win10FlyoutsOn()) {
+        s->languageFlyoutTarget = target;
+        s->languageFlyoutTargetPid = targetPid;
+        s->languageFlyoutTargetThread = targetThread;
+        T81Win10ToggleFlyout(kW10FlyLanguage);
         return;
     }
     if (!s->languageFlyout) {
@@ -23073,7 +28915,7 @@ static void ShowLanguageIndicatorMenu() {
                                   DWMWA_TRANSITIONS_FORCEDISABLED, &disabled,
                                   sizeof(disabled));
         }
-        // DWMWCP_DONOTROUND: the supplied Windows 8.1 window has square
+        // DWMWCP_DONOTROUND: the Windows 8.1 reference window has square
         // corners.
         DWORD corners = 1;
         DwmSetWindowAttribute(s->languageFlyout, 33, &corners, sizeof(corners));
@@ -23088,10 +28930,18 @@ static void ShowLanguageIndicatorMenu() {
                          &monitor))
         return;
     UINT dpi = LanguageFlyoutDpi(s->languageFlyout);
+    int count = (int)s->languageFlyoutItems.size();
+    int rowHeight = std::max(1, LanguageFlyoutPx(60, dpi));
+    int room = std::max(1L, monitor.rcWork.bottom - monitor.rcWork.top);
+    s->languageFlyoutRows =
+        s->languageFlyoutModern
+            ? std::max(1, std::min(count, (room - LanguageFlyoutPx(94, dpi)) /
+                                              rowHeight))
+            : count;
+    s->languageFlyoutScroll =
+        std::max(0, (int)s->languageFlyoutSelected - s->languageFlyoutRows + 1);
     int width = LanguageFlyoutPx(304, dpi),
-        height =
-            (int)s->languageFlyoutItems.size() * LanguageFlyoutPx(60, dpi) +
-            LanguageFlyoutPx(94, dpi),
+        height = s->languageFlyoutRows * rowHeight + LanguageFlyoutPx(94, dpi),
         gap = 0;
     int x = monitor.rcWork.right - width - gap,
         y = monitor.rcWork.bottom - height - gap;
@@ -23119,7 +28969,292 @@ static void ShowLanguageIndicatorMenu() {
     SetFocus(s->languageFlyout);
     RedrawLanguageFlyout(s->languageFlyout);
 }
+// ---- Windows 10 skin: the network flyout of Windows itself
+// ------------------- Windows 10 opens its network flyout by asking the shell
+// for the experience "Windows.Internal.ShellExperience.NetworkFlyout" and
+// calling ShowFlyout on it; ShellExperienceHost.exe draws the flyout. This is
+// the path of babamohammed's "Windows 10 legacy flyouts on Win11 24H2 restorer"
+// (GPL-3.0, credited there to ExplorerPatcher's research), adapted here. The
+// interfaces are private to the shell, so every step is checked. Windows 10 and
+// Windows 11 21H2 draw the flyout; later builds draw it only where that mod or
+// ExplorerPatcher has repaired ShellExperienceHost. The result is therefore
+// verified: when no flyout window is up shortly after the call, the flyouts
+// this mod opened before take over, for the rest of the session too.
+struct T81W10UnknownVtbl {
+    HRESULT(STDMETHODCALLTYPE* QueryInterface)(void*, REFIID, void**);
+    ULONG(STDMETHODCALLTYPE* AddRef)(void*);
+    ULONG(STDMETHODCALLTYPE* Release)(void*);
+};
+struct T81W10ServiceProviderVtbl {
+    T81W10UnknownVtbl unknown;
+    HRESULT(STDMETHODCALLTYPE* QueryService)(void*, REFGUID, REFIID, void**);
+};
+struct T81W10InspectableVtbl {
+    T81W10UnknownVtbl unknown;
+    HRESULT(STDMETHODCALLTYPE* GetIids)(void*, ULONG*, IID**);
+    HRESULT(STDMETHODCALLTYPE* GetRuntimeClassName)(void*, void**);
+    HRESULT(STDMETHODCALLTYPE* GetTrustLevel)(void*, int*);
+};
+struct T81W10ExperienceFactoryVtbl {
+    T81W10InspectableVtbl inspectable;
+    HRESULT(STDMETHODCALLTYPE* GetExperienceManager)(void*, void*, void**);
+};
+struct T81W10ExperienceManagerVtbl {
+    T81W10InspectableVtbl inspectable;
+    HRESULT(STDMETHODCALLTYPE* ShowFlyout)(void*, void*);
+    HRESULT(STDMETHODCALLTYPE* HideFlyout)(void*);
+};
+struct T81W10ComRef {
+    void* pointer = nullptr;
+    ~T81W10ComRef() {
+        if (pointer) {
+            auto vtbl = *reinterpret_cast<T81W10UnknownVtbl* const*>(pointer);
+            if (vtbl && vtbl->Release)
+                vtbl->Release(pointer);
+        }
+    }
+};
+static int gW10NetState = 0;  // 0 not known, 1 Windows draws it, 2 it does not
+static HRESULT T81W10InvokeNetworkFlyout(const RECT& anchor) noexcept {
+    static const GUID kImmersiveShell = {
+        0xc2f03a33,
+        0x21f5,
+        0x47fa,
+        {0xb4, 0xbb, 0x15, 0x63, 0x62, 0xa2, 0xf2, 0x39}};
+    static const GUID kServiceProvider = {
+        0x6d5140c1,
+        0x7436,
+        0x11ce,
+        {0x80, 0x34, 0x00, 0xaa, 0x00, 0x60, 0x09, 0xfa}};
+    static const GUID kExperienceManagerFactory = {
+        0x2e8fcb18,
+        0xa0ee,
+        0x41ad,
+        {0x8e, 0xf8, 0x77, 0xfb, 0x3a, 0x37, 0x0c, 0xa5}};
+    static const GUID kNetworkFlyoutManager = {
+        0xc9ddc674,
+        0xb44b,
+        0x4c67,
+        {0x9d, 0x79, 0x2b, 0x23, 0x7d, 0x9b, 0xe0, 0x5a}};
+    try {
+        const HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        struct Uninit {
+            bool on;
+            ~Uninit() {
+                if (on)
+                    CoUninitialize();
+            }
+        } uninit{SUCCEEDED(init)};
+        T81W10ComRef shell, factory, manager, flyout;
+        HRESULT hr =
+            CoCreateInstance(kImmersiveShell, nullptr,
+                             CLSCTX_NO_CODE_DOWNLOAD | CLSCTX_LOCAL_SERVER,
+                             kServiceProvider, &shell.pointer);
+        if (FAILED(hr) || !shell.pointer)
+            return FAILED(hr) ? hr : E_NOINTERFACE;
+        auto provider =
+            *reinterpret_cast<T81W10ServiceProviderVtbl* const*>(shell.pointer);
+        if (!provider || !provider->QueryService)
+            return E_NOINTERFACE;
+        hr =
+            provider->QueryService(shell.pointer, kExperienceManagerFactory,
+                                   kExperienceManagerFactory, &factory.pointer);
+        if (FAILED(hr) || !factory.pointer)
+            return FAILED(hr) ? hr : E_NOINTERFACE;
+        HMODULE combase = GetModuleHandleW(L"combase.dll");
+        auto createString =
+            combase ? (HRESULT(WINAPI*)(const wchar_t*, UINT32, void**))
+                          GetProcAddress(combase, "WindowsCreateString")
+                    : nullptr;
+        auto deleteString = combase ? (HRESULT(WINAPI*)(void*))GetProcAddress(
+                                          combase, "WindowsDeleteString")
+                                    : nullptr;
+        if (!createString)
+            return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
+        static const wchar_t kExperience[] =
+            L"Windows.Internal.ShellExperience.NetworkFlyout";
+        void* name = nullptr;
+        hr = createString(kExperience, (UINT32)wcslen(kExperience), &name);
+        if (FAILED(hr) || !name)
+            return FAILED(hr) ? hr : E_FAIL;
+        auto factoryVtbl =
+            *reinterpret_cast<T81W10ExperienceFactoryVtbl* const*>(
+                factory.pointer);
+        hr = factoryVtbl && factoryVtbl->GetExperienceManager
+                 ? factoryVtbl->GetExperienceManager(factory.pointer, name,
+                                                     &manager.pointer)
+                 : E_NOINTERFACE;
+        if (deleteString)
+            deleteString(name);
+        if (FAILED(hr) || !manager.pointer)
+            return FAILED(hr) ? hr : E_NOINTERFACE;
+        auto managerVtbl =
+            *reinterpret_cast<T81W10UnknownVtbl* const*>(manager.pointer);
+        if (!managerVtbl || !managerVtbl->QueryInterface)
+            return E_NOINTERFACE;
+        hr = managerVtbl->QueryInterface(manager.pointer, kNetworkFlyoutManager,
+                                         &flyout.pointer);
+        if (FAILED(hr) || !flyout.pointer)
+            return FAILED(hr) ? hr : E_NOINTERFACE;
+        auto flyoutVtbl =
+            *reinterpret_cast<T81W10ExperienceManagerVtbl* const*>(
+                flyout.pointer);
+        if (!flyoutVtbl || !flyoutVtbl->ShowFlyout)
+            return E_NOINTERFACE;
+        // The icon the flyout belongs to: x, y, width and height.
+        float rect[4] = {(float)anchor.left, (float)anchor.top,
+                         (float)(anchor.right - anchor.left),
+                         (float)(anchor.bottom - anchor.top)};
+        return flyoutVtbl->ShowFlyout(flyout.pointer, rect);
+    } catch (...) {
+        return E_FAIL;
+    }
+}
+// A flyout drawn by ShellExperienceHost.exe is on the screen.
+static bool T81W10ShellFlyoutVisible() {
+    bool found = false;
+    EnumWindows(
+        [](HWND hwnd, LPARAM result) -> BOOL {
+            wchar_t name[64]{};
+            if (!IsWindowVisible(hwnd) || !GetClassNameW(hwnd, name, 64) ||
+                wcscmp(name, L"Windows.UI.Core.CoreWindow"))
+                return TRUE;
+            BOOL cloaked = FALSE;
+            // DWMWA_CLOAKED
+            if (SUCCEEDED(DwmGetWindowAttribute(hwnd, 14, &cloaked,
+                                                sizeof(cloaked))) &&
+                cloaked)
+                return TRUE;
+            RECT rect{};
+            if (!GetWindowRect(hwnd, &rect) || rect.right - rect.left < 100 ||
+                rect.bottom - rect.top < 100)
+                return TRUE;
+            DWORD pid = 0;
+            GetWindowThreadProcessId(hwnd, &pid);
+            HANDLE process =
+                OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+            if (!process)
+                return TRUE;
+            wchar_t path[MAX_PATH]{};
+            DWORD size = MAX_PATH;
+            const bool host =
+                QueryFullProcessImageNameW(process, 0, path, &size) &&
+                StrStrIW(path, L"ShellExperienceHost.exe");
+            CloseHandle(process);
+            if (!host)
+                return TRUE;
+            *reinterpret_cast<bool*>(result) = true;
+            return FALSE;
+        },
+        reinterpret_cast<LPARAM>(&found));
+    return found;
+}
+static void T81W10NetworkFallback() {
+    if (!RequestWin7NetworkFlyout() && !RequestWin8NetworkFlyout() &&
+        !RequestNativeWin8NetworkFlyout() && s)
+        OpenNetworkConnectionInterface(s->bar);
+}
+static void CALLBACK T81W10NetworkCheck(HWND hwnd, UINT, UINT_PTR id, DWORD) {
+    KillTimer(hwnd, id);
+    if (T81W10ShellFlyoutVisible()) {
+        gW10NetState = 1;
+        Wh_Log(L"[T81-WIN10] network: Windows drew its flyout");
+        return;
+    }
+    gW10NetState = 2;
+    Wh_Log(
+        L"[T81-WIN10] network: no flyout of Windows came up; the flyout of "
+        L"the mod is used from now on");
+    if (T81Win10FlyoutsOn())
+        T81W10NetOpen();
+}
+// A click on the network icon of the Windows 10 skin. The flyout of Windows 10
+// itself is the first choice wherever there is one: with "Windows 10 legacy
+// flyouts on Win11 24H2 restorer" it is asked from that mod, which draws it
+// in the Windows 10 shell it restores, and on Windows 10 it is asked from
+// Windows. Everywhere else, and whenever no flyout comes up, the flyout
+// recreated here opens.
+static void T81W10NetworkClick() {
+    T81W10Fly& f = gW10Fly;
+    if (!s || !s->bar)
+        return;
+    // The press that closed the flyout a moment ago: its release must not
+    // open it again.
+    if (f.closedKind == kW10FlyNetwork && GetTickCount64() - f.closedAt < 600) {
+        f.closedKind = kW10FlyNone;
+        return;
+    }
+    if (T81W10NetShown()) {
+        T81Win10CloseFlyout();
+        return;
+    }
+    T81Win10CloseFlyout();
+    if (gW10NetState != 2) {
+        bool asked = false;
+        if (T81W10LegacyNetworkFlyout()) {
+            asked = true;
+            Wh_Log(
+                L"[T81-WIN10] network: flyout asked from the legacy "
+                L"flyouts mod");
+        } else if (T81OsBuild() < 22000) {
+            const HRESULT hr =
+                T81W10InvokeNetworkFlyout(PrivateSystemAnchor(HIT_NETWORK));
+            asked = SUCCEEDED(hr);
+            if (!asked) {
+                gW10NetState = 2;
+                Wh_Log(
+                    L"[T81-WIN10] network: the flyout of Windows is not "
+                    L"available (0x%08lx); the flyout of the mod is used",
+                    (unsigned long)hr);
+            }
+        }
+        if (asked) {
+            if (gW10NetState == 0)
+                SetTimer(s->bar, 7101, 900, T81W10NetworkCheck);
+            return;
+        }
+    }
+    T81W10NetOpen();
+}
+// The networks are read before anyone asks for them: once when the bar has
+// started and again when the pointer comes to the network icon. The flyout
+// then opens with its list and at its size. Windows keeps little more than
+// the connected network in its list unless it is asked to look around, which
+// takes it a few seconds; it is asked here too, though not more often than
+// every half minute, and never without the pointer at the icon after the
+// start (looking around takes the radio off its channel for a moment).
+static void T81W10NetPrefetch(bool hover) {
+    T81W10Net& n = gW10Net;
+    if (!s || !s->bar || !T81Win10FlyoutsOn())
+        return;
+    // Only where a click opens the flyout recreated here.
+    if (gW10NetState != 2 &&
+        (T81OsBuild() < 22000 ||
+         FindWindowW(L"Win10Restorer_NetworkIconWnd", nullptr)))
+        return;
+    if (n.worker || n.openPending || T81W10NetShown())
+        return;
+    const ULONGLONG now = GetTickCount64();
+    if (n.have && (!hover || now - n.dataAt < 5000))
+        return;
+    T81W10NetRequest(kW10NetRead, !n.scanAt || now - n.scanAt > 30000);
+}
+// Called once a second: what Windows found when it looked around is read when
+// no open flyout does that already.
+static void T81W10NetFollowScan() {
+    T81W10Net& n = gW10Net;
+    if (!n.scanFollow || !s || !s->bar || T81W10NetShown() || n.worker ||
+        GetTickCount64() - n.scanAt < 4000)
+        return;
+    n.scanFollow = false;
+    if (T81Win10FlyoutsOn())
+        T81W10NetRequest(kW10NetRead, false);
+}
 static void LaunchSystemTrayHit(int hit, const POINT* click) {
+    // The network flyout of the Windows 10 skin closes itself on a second
+    // click.
+    if (hit == HIT_TRAY_MORE || (hit == HIT_NETWORK && !T81Win10FlyoutsOn()))
+        T81Win10CloseFlyout();
     if (hit == HIT_TRAY_MORE) {
         ShowPrivateOverflow();
         return;
@@ -23145,6 +29280,13 @@ static void LaunchSystemTrayHit(int hit, const POINT* click) {
     }
     if (hit != HIT_NETWORK)
         T81DismissOwnCompanionFlyout(L"Win7NetworkFlyoutSafe");
+    if (T81Win10FlyoutsOn() &&
+        (hit == HIT_CLOCK || hit == HIT_VOLUME || hit == HIT_BATTERY)) {
+        T81Win10ToggleFlyout(hit == HIT_CLOCK    ? kW10FlyClock
+                             : hit == HIT_VOLUME ? kW10FlyVolume
+                                                 : kW10FlyBattery);
+        return;
+    }
     if (hit == HIT_CLOCK) {
         if (!preferClassicClock.load() || !OpenClassicClock())
             ShellExecuteW(s->bar, L"open", L"ms-settings:dateandtime", nullptr,
@@ -23159,9 +29301,10 @@ static void LaunchSystemTrayHit(int hit, const POINT* click) {
                 (cell.left + cell.right) / 2);
         }
     } else if (hit == HIT_NETWORK) {
-        if (!RequestWin7NetworkFlyout() && !RequestWin8NetworkFlyout() &&
-            !RequestNativeWin8NetworkFlyout())
-            OpenNetworkConnectionInterface(s->bar);
+        if (T81Win10FlyoutsOn())
+            T81W10NetworkClick();
+        else
+            T81W10NetworkFallback();
     } else if (hit == HIT_BATTERY) {
         if (!TryOriginalBatteryFlyout1511()) {
             RECT cell{};
@@ -23216,6 +29359,12 @@ int Hit(int x, int y) {
     if (PtInRect(&L.start, p) &&
         (!startHotCorner.load() || y >= r.bottom - std::max(1, Px(2))))
         return HIT_START;
+    if (PtInRect(&L.search, p))
+        return HIT_W10_SEARCH;
+    if (PtInRect(&L.taskView, p))
+        return HIT_W10_TASKVIEW;
+    if (s->privateActive && PtInRect(&L.action, p))
+        return HIT_W10_ACTION;
     if (PtInRect(&L.desktop, p))
         return HIT_DESKTOP;
     if (PtInRect(&L.overflow, p))
@@ -23418,6 +29567,9 @@ static void AdvanceHoverFade() {
                                [&](const Group& g) { return g.key == h.key; });
                        }),
         s->hoverFades.end());
+    if (taskbarSkin.load() == 4 && s->hot == HIT_START &&
+        s->startGleamStarted && now - s->startGleamStarted < 700)
+        pending = true;
     if (s->bar) {
         if (pending)
             SetTimer(s->bar, TIMER_FADE, 16, nullptr);
@@ -23610,7 +29762,8 @@ static void T81DrawClassicAppIcon(HDC dc, HICON icon, int x, int y, int size) {
         fallback();
 }
 static void T81DrawAppIcon(HDC dc, HICON icon, int x, int y, int size) {
-    if (taskbarSkin.load() == 7)
+    const int skin = taskbarSkin.load();
+    if (skin == 7 || T81IsWin10Skin(skin))
         T81DrawClassicAppIcon(dc, icon, x, y, size);
     else if (icon && size > 0)
         DrawIconEx(dc, x, y, icon, size, size, 0, nullptr, DI_NORMAL);
@@ -23807,10 +29960,11 @@ static void T81SetExperimentalBlur(HWND h) {
     if (!h || !IsWindow(h))
         return;
     static const wchar_t property[] = L"WH_Taskbar81_OwnBlurEnabled";
-    // Only Aero-era skins: never change the native flat 8/8.1 or custom skin.
+    // Only Aero-era skins and Windows 10: never change the native flat 8/8.1
+    // or custom skin.
     int skin = taskbarSkin.load();
     bool enable = experimentalLiveBlur.load() && skin != 6 &&
-                  (T81IsWin7Skin(skin) || skin == 2) &&
+                  T81SkinWantsLiveBlur(skin) &&
                   !(s && h == s->bar && s->barDragBlurSuspended);
     if (!enable && !GetPropW(h, property))
         return;
@@ -23862,6 +30016,412 @@ static void T81SetExperimentalBlur(HWND h) {
             L"retained",
             h, error);
     }
+}
+// ---- Windows 10 flyouts: per-pixel opacity, blur and motion -----------------
+// The content is drawn twice, on black and on white, and the two pictures
+// give the opacity of every pixel, as for the bar. While Windows has its
+// transparency effects on, the panel colour lies under it at 70 % (85 % for
+// the light panel), about what the flyouts of Windows 10 let through, and the
+// window asks the compositor for the blur behind it with the same call the bar
+// and the previews use. The call is undocumented and can show nothing: the
+// panel is readable either way.
+// A flyout slides out of the bar and back like a panel of Windows 10: the
+// finished picture is kept and only moved, one step for every frame of the
+// compositor, 280 ms in with the curve Windows uses for things that arrive
+// (cubic-bezier 0.1, 0.9, 0.2, 1) and 170 ms out with the one for things that
+// leave (0.7, 0, 1, 0.5).
+static void T81W10ApplyAcrylic(HWND hwnd) {
+    using Fn = BOOL(WINAPI*)(HWND, const T81CompositionAttributeData*);
+    static Fn set = reinterpret_cast<Fn>(GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute"));
+    if (!hwnd || !set)
+        return;
+    const bool on = T81W10Sys().transparency;
+    const Color base = T81W10BaseColor();
+    // A faint tint of the panel colour, as AABBGGRR.
+    const COLORREF tint =
+        (COLORREF)((0x40u << 24) | ((DWORD)base.GetB() << 16) |
+                   ((DWORD)base.GetG() << 8) | base.GetR());
+    T81AccentPolicy policy{on ? 3 : 0, on ? 0x13u : 0u, on ? tint : 0u, 0};
+    T81CompositionAttributeData data{19, &policy, sizeof(policy)};
+    if (!set(hwnd, &data)) {
+        static bool logged = false;
+        if (on && !logged) {
+            logged = true;
+            Wh_Log(
+                L"[T81-WIN10] flyout blur request failed error=%lu; the "
+                L"panel keeps its own colour",
+                GetLastError());
+        }
+    }
+}
+// The finished picture of the open flyout.
+static std::unique_ptr<AlphaSurface> gW10Frame;
+static SIZE gW10FrameSize{};
+// The part of it that is handed over while it moves. It lives as long as the
+// motion, so that a step allocates nothing.
+static std::unique_ptr<AlphaSurface> gW10Part;
+static SIZE gW10PartSize{};
+static void T81W10DropFrame() {
+    gW10Frame.reset();
+    gW10FrameSize = SIZE{};
+    gW10Part.reset();
+    gW10PartSize = SIZE{};
+    gW10Shown = RECT{};
+}
+static void T81W10Compose() {
+    T81W10Fly& f = gW10Fly;
+    const int w = f.rect.right - f.rect.left, h = f.rect.bottom - f.rect.top;
+    if (!s || f.kind == kW10FlyNone || w <= 0 || h <= 0)
+        return;
+    HDC screen = GetDC(nullptr);
+    if (!screen)
+        return;
+    if (!gW10Frame || gW10FrameSize.cx != w || gW10FrameSize.cy != h) {
+        gW10Frame = std::make_unique<AlphaSurface>(screen, w, h);
+        gW10FrameSize = SIZE{w, h};
+    }
+    AlphaSurface black(screen, w, h), white(screen, w, h);
+    if (gW10Frame->ok() && black.ok() && white.ok()) {
+        gW10Pal = T81W10Pal();
+        const RECT client{0, 0, w, h};
+        const Color base = T81W10BaseColor();
+        {
+            Graphics g(gW10Frame->dc);
+            SolidBrush fill(Color(255, base.GetR(), base.GetG(), base.GetB()));
+            g.FillRectangle(&fill, 0, 0, w, h);
+        }
+        PatBlt(black.dc, 0, 0, w, h, BLACKNESS);
+        PatBlt(white.dc, 0, 0, w, h, WHITENESS);
+        T81W10PaintContent(black.dc, client);
+        T81W10PaintContent(white.dc, client);
+        GdiFlush();
+        // A light panel lets less through than a dark one, as in Windows 10.
+        const bool lightPanel =
+            (int)base.GetR() + base.GetG() + base.GetB() > 3 * 128;
+        ComposeForeground(gW10Frame->bits, black.bits, white.bits,
+                          (size_t)w * (size_t)h,
+                          !T81W10Sys().transparency ? 255
+                          : lightPanel              ? 216
+                                                    : 178);
+    } else {
+        gW10Frame.reset();
+    }
+    ReleaseDC(nullptr, screen);
+}
+// Hands the kept picture to the window; `shown` is the part of the flyout
+// that is in sight, 0 to 1, counted from the bar. A flyout that slides shows
+// the end of its picture that is away from the bar first, like a panel pushed
+// out from behind the bar. With `uncover` the picture stays where it is and
+// more of it comes in sight, for a flyout that grows.
+static void T81W10Present(HWND hwnd, float shown, bool uncover) {
+    T81W10Fly& f = gW10Fly;
+    const int w = f.rect.right - f.rect.left, h = f.rect.bottom - f.rect.top;
+    if (!s || !hwnd || !gW10Frame || !gW10Frame->ok() || w <= 0 || h <= 0 ||
+        gW10FrameSize.cx != w || gW10FrameSize.cy != h)
+        return;
+    const bool vertical = s->verticalActive;
+    // The flyout starts at the bar when the bar stands at the left or at the
+    // top; otherwise it ends there.
+    const bool barFirst =
+        vertical ? s->verticalSide == 1 : s->nativeEdge == ABE_TOP;
+    const int extent = vertical ? w : h;
+    const int off =
+        std::clamp((int)std::lround((1.f - shown) * extent), 0, extent - 1);
+    POINT dst{f.rect.left, f.rect.top}, src{0, 0};
+    SIZE size{w, h};
+    if (vertical) {
+        size.cx = w - off;
+        if (!barFirst)
+            dst.x += off;
+        if (barFirst != uncover)
+            src.x = off;
+    } else {
+        size.cy = h - off;
+        if (!barFirst)
+            dst.y += off;
+        if (barFirst != uncover)
+            src.y = off;
+    }
+    BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    HDC from = gW10Frame->dc;
+    // The part in sight is copied to a surface of its own, so that the
+    // picture handed over always starts at its origin.
+    if (off) {
+        if (!gW10Part || gW10PartSize.cx != w || gW10PartSize.cy != h) {
+            gW10Part.reset();
+            gW10PartSize = SIZE{};
+            HDC screen = GetDC(nullptr);
+            if (screen) {
+                gW10Part = std::make_unique<AlphaSurface>(screen, w, h);
+                gW10PartSize = SIZE{w, h};
+                ReleaseDC(nullptr, screen);
+            }
+        }
+        if (gW10Part && gW10Part->ok()) {
+            BitBlt(gW10Part->dc, 0, 0, size.cx, size.cy, gW10Frame->dc, src.x,
+                   src.y, SRCCOPY);
+            GdiFlush();
+            from = gW10Part->dc;
+            src = POINT{0, 0};
+        }
+    } else {
+        gW10Shown = f.rect;
+    }
+    if (!UpdateLayeredWindow(hwnd, nullptr, &dst, &size, from, &src, 0, &blend,
+                             ULW_ALPHA)) {
+        static bool logged = false;
+        if (!logged) {
+            logged = true;
+            Wh_Log(L"[T81-WIN10] flyout drawing failed error=%lu",
+                   GetLastError());
+        }
+    }
+}
+// The y of a cubic Bezier easing curve (0,0) (x1,y1) (x2,y2) (1,1) at x.
+static float T81W10Ease(float x1, float y1, float x2, float y2, float x) {
+    x = std::clamp(x, 0.f, 1.f);
+    float low = 0, high = 1, at = x;
+    for (int i = 0; i < 24; ++i) {
+        at = (low + high) / 2;
+        const float r = 1 - at, bx = 3 * r * r * at * x1 +
+                                     3 * r * at * at * x2 + at * at * at;
+        if (bx < x)
+            low = at;
+        else
+            high = at;
+    }
+    const float r = 1 - at;
+    return 3 * r * r * at * y1 + 3 * r * at * at * y2 + at * at * at;
+}
+// The pace of a motion: one step for every frame of the screen. DwmFlush
+// waits for the compositor and is used as long as it does that. Where it
+// fails, comes back without waiting or stays away far too long (a screen that
+// is off, a remote session, a compositor that paces differently) a timer of
+// Windows with a fine resolution waits for the frame instead, to just after
+// the vertical blank when Windows tells when that is.
+struct T81W10Pace {
+    double tick = 0;           // seconds for one tick of the counter
+    double period = 1.0 / 60;  // seconds between two frames
+    LONGLONG blank = 0;        // the counter at a vertical blank, 0 not known
+    double last = 0;           // when the last wait was over, in seconds
+    bool first = true;         // no wait is over yet
+    HANDLE timer = nullptr;
+    bool flush = true;
+    int idle = 0;  // times DwmFlush came back without waiting
+};
+static double T81W10PaceNow(const T81W10Pace& pace) {
+    LARGE_INTEGER now{};
+    QueryPerformanceCounter(&now);
+    return (double)now.QuadPart * pace.tick;
+}
+static bool T81W10PaceStart(T81W10Pace& pace) {
+    LARGE_INTEGER frequency{};
+    if (!QueryPerformanceFrequency(&frequency) || frequency.QuadPart <= 0)
+        return false;
+    pace.tick = 1.0 / (double)frequency.QuadPart;
+    pace.last = T81W10PaceNow(pace);
+    DWM_TIMING_INFO timing{};
+    timing.cbSize = sizeof(timing);
+    if (SUCCEEDED(DwmGetCompositionTimingInfo(nullptr, &timing)) &&
+        timing.qpcRefreshPeriod > 0) {
+        const double period = (double)timing.qpcRefreshPeriod * pace.tick;
+        // 24 to 500 frames a second; anything else is not a screen.
+        if (period >= 0.002 && period <= 1.0 / 24) {
+            pace.period = period;
+            pace.blank = (LONGLONG)timing.qpcVBlank;
+        }
+    }
+    // CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, Windows 10 1803 and later.
+    pace.timer =
+        CreateWaitableTimerExW(nullptr, nullptr, 0x00000002, TIMER_ALL_ACCESS);
+    if (!pace.timer)
+        pace.timer =
+            CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS);
+    return true;
+}
+static void T81W10PaceStop(T81W10Pace& pace) {
+    if (pace.timer)
+        CloseHandle(pace.timer);
+    pace.timer = nullptr;
+}
+static void T81W10PaceSleep(T81W10Pace& pace, double seconds) {
+    if (seconds < 0.0002)
+        return;
+    seconds = std::min(seconds, 0.1);
+    LARGE_INTEGER due{};
+    due.QuadPart = -(LONGLONG)(seconds * 1e7);
+    if (pace.timer &&
+        SetWaitableTimer(pace.timer, &due, 0, nullptr, nullptr, FALSE)) {
+        WaitForSingleObject(pace.timer, (DWORD)(seconds * 1000) + 50);
+        return;
+    }
+    Sleep((DWORD)std::max(1.0, std::ceil(seconds * 1000)));
+}
+// Waits until the next frame can be handed over.
+static void T81W10PaceWait(T81W10Pace& pace) {
+    // Two tries: a vertical blank that comes right after the last step is
+    // not the one waited for; the next one is.
+    for (int tries = 0; tries < 2 && pace.flush; ++tries) {
+        const double before = T81W10PaceNow(pace);
+        const bool ok = SUCCEEDED(DwmFlush());
+        const double after = T81W10PaceNow(pace);
+        if (!ok || after - before > 4 * pace.period + 0.02) {
+            pace.flush = false;
+            break;
+        }
+        if (after - before < 0.0005) {
+            // It did not wait at all: the timer waits this time, and from
+            // the second time on.
+            if (++pace.idle >= 2)
+                pace.flush = false;
+            break;
+        }
+        if (pace.first || after - pace.last >= pace.period / 2) {
+            pace.last = after;
+            pace.first = false;
+            return;
+        }
+    }
+    const double now = T81W10PaceNow(pace), since = now - pace.last;
+    double wait = pace.period - since;
+    if (!pace.flush && pace.blank) {
+        // Just after the next vertical blank, so that the compositor has the
+        // whole frame to take the step.
+        double phase =
+            std::fmod(now - (double)pace.blank * pace.tick, pace.period);
+        if (phase < 0)
+            phase += pace.period;
+        const double toBlank = pace.period - phase + 0.001;
+        // Never two steps within half a frame.
+        wait = since + toBlank >= pace.period / 2 ? toBlank
+                                                  : toBlank + pace.period;
+    }
+    T81W10PaceSleep(pace, wait);
+    pace.last = T81W10PaceNow(pace);
+    pace.first = false;
+}
+static bool T81W10MotionOn() {
+    // "Animate controls and elements inside windows" of Windows is off:
+    // nothing moves.
+    BOOL animations = TRUE;
+    return !SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animations,
+                                  0) ||
+           animations;
+}
+// One motion of the flyout, a step for every frame of the screen, from the
+// part `from` in sight to the part `to` (see T81W10Present). What arrives
+// takes the curve Windows uses for things that arrive, what leaves the one for
+// things that leave. It returns when the motion is over.
+static void T81W10Motion(HWND hwnd,
+                         float from,
+                         float to,
+                         bool uncover,
+                         double span,
+                         const wchar_t* name) {
+    T81W10Fly& f = gW10Fly;
+    const bool arriving = to > from;
+    T81W10Pace pace;
+    if (!T81W10MotionOn() || !T81W10PaceStart(pace)) {
+        if (arriving)
+            T81W10Present(hwnd, 1.f);
+        gW10Part.reset();
+        gW10PartSize = SIZE{};
+        return;
+    }
+    f.anim = uncover ? 3 : arriving ? 1 : 2;
+    // A flyout that opens is on the screen, at its first step, before the
+    // time starts: what the compositor needs to set the window up is not
+    // taken from the motion.
+    if (arriving && !uncover) {
+        T81W10Present(hwnd, from);
+        T81W10PaceWait(pace);
+    }
+    const double start = T81W10PaceNow(pace);
+    double last = start, longest = 0;
+    int steps = 0;
+    for (int frame = 0; frame < 1000; ++frame) {
+        const double elapsed = T81W10PaceNow(pace) - start;
+        // What is handed over now is on the screen one frame later.
+        const float t = (float)((elapsed + pace.period) / span);
+        if (t >= 1.f || elapsed > span + 0.5)
+            break;
+        const float eased = arriving ? T81W10Ease(0.1f, 0.9f, 0.2f, 1.f, t)
+                                     : T81W10Ease(0.7f, 0.f, 1.f, 0.5f, t);
+        T81W10Present(hwnd, from + (to - from) * eased, uncover);
+        T81W10PaceWait(pace);
+        const double now = T81W10PaceNow(pace);
+        longest = std::max(longest, now - last);
+        last = now;
+        ++steps;
+    }
+    const double total = T81W10PaceNow(pace) - start;
+    T81W10PaceStop(pace);
+    f.anim = 0;
+    if (arriving)
+        T81W10Present(hwnd, 1.f);
+    gW10Part.reset();
+    gW10PartSize = SIZE{};
+    // One line for a motion: how even it was is seen here when it did not
+    // look even on the screen.
+    Wh_Log(
+        L"[T81-WIN10] flyout motion %ls: %d steps in %d ms, longest step "
+        L"%d ms, screen frame %d us, %ls",
+        name, steps, (int)std::lround(total * 1000),
+        (int)std::lround(longest * 1000), (int)std::lround(pace.period * 1e6),
+        pace.flush ? L"paced by the compositor" : L"paced by the timer");
+}
+// Slides the flyout out of the bar, in 280 ms, or back into it, in 170 ms.
+static void T81W10Slide(HWND hwnd, bool opening) {
+    if (!hwnd || !gW10Frame)
+        return;
+    if (opening)
+        T81W10Motion(hwnd, 0.f, 1.f, false, 0.280, L"in");
+    else
+        T81W10Motion(hwnd, 1.f, 0.f, false, 0.170, L"out");
+}
+// The open flyout has become longer (the networks have been read): the new
+// picture stays where it is and comes in sight from the old length on, in
+// 200 ms.
+static void T81W10Grow(HWND hwnd, int from) {
+    const T81W10Fly& f = gW10Fly;
+    const int extent = s && s->verticalActive ? f.rect.right - f.rect.left
+                                              : f.rect.bottom - f.rect.top;
+    if (!hwnd || !gW10Frame || from <= 0 || from >= extent) {
+        T81W10Present(hwnd, 1.f);
+        return;
+    }
+    T81W10Motion(hwnd, (float)from / (float)extent, 1.f, true, 0.200,
+                 L"longer");
+}
+static void T81W10Render(HWND hwnd) {
+    T81W10Fly& f = gW10Fly;
+    const RECT before = gW10Shown;
+    T81W10Compose();
+    // Only the list of networks changes its length while it is open; a search
+    // list that follows the typing must not hold the keys up.
+    if (s && f.kind == kW10FlyNetwork && !f.anim && !IsRectEmpty(&before) &&
+        IsWindowVisible(hwnd)) {
+        const bool vertical = s->verticalActive;
+        const int was = vertical ? before.right - before.left
+                                 : before.bottom - before.top,
+                  now = vertical ? f.rect.right - f.rect.left
+                                 : f.rect.bottom - f.rect.top;
+        const bool sameSide =
+            vertical
+                ? (s->verticalSide == 1 ? before.left == f.rect.left
+                                        : before.right == f.rect.right) &&
+                      before.top == f.rect.top && before.bottom == f.rect.bottom
+                : (s->nativeEdge == ABE_TOP ? before.top == f.rect.top
+                                            : before.bottom == f.rect.bottom) &&
+                      before.left == f.rect.left &&
+                      before.right == f.rect.right;
+        if (sameSide && now >= was + Px(16)) {
+            T81W10Grow(hwnd, was);
+            return;
+        }
+    }
+    T81W10Present(hwnd, 1.f);
 }
 static void ConfigureBarAlpha(HWND h, bool perPixel) {
     if (!s || !h)
@@ -24234,8 +30794,13 @@ static void DrawIconHotGlow(Graphics& g,
         return;
     const float x =
         (float)std::max(cell.left, std::min(cell.right - 1, pointer.x));
+    const int skin = taskbarSkin.load();
+    // In Windows 8/8.1 the glow tracks the pointer horizontally but its
+    // vertical centre stays on the bottom edge of the button.
     const float y =
-        (float)std::max(cell.top, std::min(cell.bottom - 1, pointer.y));
+        (skin == 3 || skin == 4)
+            ? (float)(cell.bottom - 1)
+            : (float)std::max(cell.top, std::min(cell.bottom - 1, pointer.y));
     float w = (float)(cell.right - cell.left),
           h = (float)(cell.bottom - cell.top);
     Color tint = BetaHotTrackColor((size_t)index);
@@ -24245,7 +30810,9 @@ static void DrawIconHotGlow(Graphics& g,
         float halfWidth, halfHeight;
         int alpha;
     };
-    const HotLayer layers[] = {{0.72f, 0.82f, 132}, {0.46f, 0.53f, 120}};
+    const HotLayer win7Layers[] = {{0.72f, 0.82f, 132}, {0.46f, 0.53f, 120}};
+    const HotLayer win8Layers[] = {{0.92f, 1.05f, 130}, {0.54f, 0.60f, 155}};
+    const HotLayer* layers = (skin == 3 || skin == 4) ? win8Layers : win7Layers;
     // Keep the dark and light frame pixels intact as the pointer moves.
     int inset = std::min(std::max(1, Px(2)), std::min((int)w, (int)h) / 4);
     auto saved = g.Save();
@@ -24253,7 +30820,8 @@ static void DrawIconHotGlow(Graphics& g,
         Rect((int)cell.left + inset, (int)cell.top + inset,
              std::max(0, (int)w - 2 * inset), std::max(0, (int)h - 2 * inset)),
         CombineModeIntersect);
-    for (const auto& layer : layers) {
+    for (int i = 0; i < 2; ++i) {
+        const auto& layer = layers[i];
         GraphicsPath path;
         path.AddEllipse(x - w * layer.halfWidth, y - h * layer.halfHeight,
                         w * 2.f * layer.halfWidth, h * 2.f * layer.halfHeight);
@@ -24279,21 +30847,26 @@ static void DrawBetaHotTrack(Graphics& g,
         return;
     DrawIconHotGlow(g, cell, index, fade, p);
 }
+static bool T81UsesWin8TaskGlow() {
+    int skin = taskbarSkin.load();
+    return skin == 3 || skin == 4;
+}
+// Closed pins use the same luminous artwork as the Win7 tray hover. Clip it
+// to the button so its slightly expanded tray geometry cannot overlap a
+// neighboring button. Existing Win8/8.1 running-button frames stay unchanged.
 static void DrawFlatPinnedHover(Graphics& g,
                                 const RECT& cell,
                                 float fade,
                                 UINT dpi = 0) {
-    fade = std::max(0.f, std::min(1.f, fade));
-    int edge = std::max(1, dpi ? MulDiv(1, (int)dpi, 96) : Px(1));
-    int width = std::max(1, (int)(cell.right - cell.left) - edge);
-    int height = (int)(cell.bottom - cell.top);
-    if (height <= 0)
+    if (IsRectEmpty(&cell) || fade <= 0)
         return;
-    SolidBrush fill(Color((int)std::lround(77 * fade), 255, 255, 255));
-    g.FillRectangle(&fill, cell.left, cell.top, width, height);
-    Pen border(Color((int)std::lround(125 * fade), 255, 255, 255), 1);
-    T81DrawExistingTaskBorder(g, border, (int)cell.left, (int)cell.top,
-                              std::max(1, width - 1), std::max(1, height - 1));
+    EnsureTrayHoverImage();
+    auto saved = g.Save();
+    g.SetClip(Rect(cell.left, cell.top, cell.right - cell.left,
+                   cell.bottom - cell.top),
+              CombineModeIntersect);
+    DrawTrayHoverTile(g, cell, true, fade, dpi, true);
+    g.Restore(saved);
 }
 static int TaskTileLayers(size_t windows) {
     return (int)std::min<size_t>(windows, 3);
@@ -24305,6 +30878,10 @@ static void DrawTaskTileStack(Graphics& g,
                               int layers,
                               bool active,
                               float fade) {
+    if (T81IsWin10Skin(taskbarSkin.load())) {
+        T81Win10PaintTaskTile(g, x, width, height, layers, true, active, fade);
+        return;
+    }
     if (taskbarSkin.load() == 7) {
         int count = std::clamp(layers, 1, 3), step = std::max(1, Px(3));
         int frontWidth = std::max(1, width - (count - 1) * step);
@@ -24478,6 +31055,27 @@ static float ButtonTransitionFraction(const ButtonTransition& t);
 static RECT ButtonRevealRect(RECT r, float portion, bool vertical);
 static void ButtonPulse(Graphics& g, const RECT& r, const ButtonTransition* t);
 static bool ValidGhost(const ButtonTransition& t, int w, int h, bool vertical);
+static bool T81CloseFadeVisible(const ButtonTransition& ghost,
+                                const Layout& layout,
+                                int w,
+                                int h,
+                                const std::vector<int>& xs) {
+    if (!s || s->dragActive || layout.rows != 1 || ghost.barWidth != w ||
+        ghost.barHeight != h || s->buttonPaintTick < ghost.start ||
+        s->buttonPaintTick - ghost.start >= 200 ||
+        ghost.rect.left < layout.first || ghost.rect.right > layout.tray.left)
+        return false;
+    for (int i = 0; i < layout.count; ++i) {
+        if (s->groups[i].key == ghost.key) {
+            if (!s->groups[i].tasks.empty() || xs[i] != ghost.rect.left)
+                return false;
+            continue;
+        }
+        if (xs[i] < ghost.rect.right && xs[i] + layout.width > ghost.rect.left)
+            return false;
+    }
+    return true;
+}
 static void DrawBarForeground(HDC mem,
                               const Layout& L,
                               int w,
@@ -24495,7 +31093,11 @@ static void DrawBarForeground(HDC mem,
             (T81SkinHasTrackedStartButton(taskbarSkin.load()) &&
              T81StartMenuOn(s->bar));
         if (!startHotCorner.load()) {
-            if (taskbarSkin.load() == 7) {
+            if (T81IsWin10Skin(taskbarSkin.load())) {
+                T81Win10PaintStart(g, L.start, s->startFade,
+                                   (s->startPressed && s->hot == HIT_START) ||
+                                       T81StartMenuOn(s->bar));
+            } else if (taskbarSkin.load() == 7) {
                 T81ClassicStart(g, L.start, T81StartMenuOn(s->bar),
                                 s->hot == HIT_START, Dpi());
             } else if (T81IsWin7Skin(taskbarSkin.load()) &&
@@ -24522,6 +31124,8 @@ static void DrawBarForeground(HDC mem,
                     // cutout. Tint the white logo below it rather than tinting
                     // the black tile.
                     DrawStartImage(g, L.start.right, h, 0, startHover, &tint);
+                    T81DrawWin81LogoGleam(g, L.start.right, h, startHover,
+                                          s->startGleamStarted);
                     DrawStartImage(g, L.start.right, h, startDown ? 2 : 1,
                                    startHover);
                 }
@@ -24541,7 +31145,17 @@ static void DrawBarForeground(HDC mem,
         }
         HWND fg = foreground;
         EnsureTrayHoverImage();
+        if (T81IsWin10Skin(taskbarSkin.load()))
+            T81Win10PaintShell(g, L, h);
         g.SetClip(Rect(L.first, 0, std::max(0, (int)L.tray.left - L.first), h));
+        for (const auto& ghost : s->closeFades)
+            if (T81CloseFadeVisible(ghost, L, w, h, xs)) {
+                if (!DrawBetaTaskState(g, ghost.rect, true, false, false, false,
+                                       false, false, ghost.layers > 1))
+                    DrawTaskTileStack(g, ghost.rect.left,
+                                      ghost.rect.right - ghost.rect.left, h,
+                                      ghost.layers, false, 0.f);
+            }
         for (const auto& t : s->buttonTransitions)
             if (ValidGhost(t, w, h, false)) {
                 RECT clip = ButtonRevealRect(
@@ -24615,7 +31229,10 @@ static void DrawBarForeground(HDC mem,
                                   active, fade);
             } else if (fade > 0.001f) {
                 RECT tile{x, 0, x + L.width, rowHeight};
-                if (taskbarSkin.load() == 7)
+                if (T81IsWin10Skin(taskbarSkin.load()))
+                    T81Win10PaintTaskTile(g, x, L.width, rowHeight, 1, false,
+                                          false, fade);
+                else if (taskbarSkin.load() == 7)
                     DrawTaskTileStack(g, x, L.width, rowHeight, 1, pressed,
                                       fade);
                 else if (taskbarSkin.load() == 3 || taskbarSkin.load() == 4)
@@ -24624,7 +31241,8 @@ static void DrawBarForeground(HDC mem,
                     DrawTrayHoverTile(g, tile, true, fade);
             }
             if (running && s->hot == i) {
-                if (T81IsWin7Skin(taskbarSkin.load())) {
+                if (T81IsWin7Skin(taskbarSkin.load()) ||
+                    T81UsesWin8TaskGlow()) {
                     POINT cursor{};
                     if (GetCursorPos(&cursor) &&
                         ScreenToClient(s->bar, &cursor)) {
@@ -24637,10 +31255,14 @@ static void DrawBarForeground(HDC mem,
             ButtonPulse(g, cell, transition);
             g.Restore(savedClip);
             if (!betaTask && GroupNeedsAttention((size_t)i)) {
-                SolidBrush attention(Color(125, 255, 140, 20));
-                g.FillRectangle(&attention, x + Px(2), Px(2),
-                                std::max(1, L.width - Px(4)),
-                                std::max(1, rowHeight - Px(4)));
+                if (T81IsWin10Skin(taskbarSkin.load())) {
+                    T81Win10PaintAttention(g, x, L.width, rowHeight);
+                } else {
+                    SolidBrush attention(Color(125, 255, 140, 20));
+                    g.FillRectangle(&attention, x + Px(2), Px(2),
+                                    std::max(1, L.width - Px(4)),
+                                    std::max(1, rowHeight - Px(4)));
+                }
             }
             g.Restore(rowTransform);
         }
@@ -24656,7 +31278,9 @@ static void DrawBarForeground(HDC mem,
             g.FillRectangle(&caret, marker - 1, Px(4), std::max(1, Px(2)),
                             std::max(1, h - Px(8)));
         }
-        if (taskbarSkin.load() == 7 && !IsRectEmpty(&L.desktop)) {
+        if (T81IsWin10Skin(taskbarSkin.load())) {
+            // Drawn with the other Windows 10 buttons.
+        } else if (taskbarSkin.load() == 7 && !IsRectEmpty(&L.desktop)) {
             T81ClassicDesktop(g, L.desktop, s->hot == HIT_DESKTOP,
                               s->betaDesktopPressed, Dpi());
         } else if (T81IsWin7Skin(taskbarSkin.load()) &&
@@ -24699,10 +31323,29 @@ static void DrawBarForeground(HDC mem,
     }
     // GDI is used only for native HICONs and system-font text on the GDI+
     // surface.
-    int icon = std::max(
-        1, std::min(Px(s->nativeSmallIcons ? 16 : 32), L.rowHeight - Px(6)));
+    int icon =
+        std::max(1, std::min(Px(T81TaskIconLogical()), L.rowHeight - Px(6)));
+    // Windows 10: the first pixel of a cell is the space between two buttons.
+    const int cellLead =
+        T81IsWin10Skin(taskbarSkin.load()) && !L.labels && L.width > Px(24)
+            ? std::max(1, Px(1))
+            : 0;
     ScopedSavedDC savedDc(mem);
     IntersectClipRect(mem, L.first, 0, L.tray.left, h);
+    for (const auto& ghost : s->closeFades)
+        if (ghost.icon && T81CloseFadeVisible(ghost, L, w, h, xs)) {
+            bool hasPin = std::any_of(
+                s->groups.begin(), s->groups.end(),
+                [&](const Group& group) { return group.key == ghost.key; });
+            if (!hasPin) {
+                int ix =
+                    L.labels
+                        ? ghost.rect.left + Px(10)
+                        : ghost.rect.left +
+                              (ghost.rect.right - ghost.rect.left - icon) / 2;
+                T81DrawAppIcon(mem, ghost.icon.get(), ix, (h - icon) / 2, icon);
+            }
+        }
     for (const auto& t : s->buttonTransitions)
         if (ValidGhost(t, w, h, false) && t.icon) {
             RECT c = ButtonRevealRect(t.rect, 1.f - ButtonTransitionFraction(t),
@@ -24726,7 +31369,8 @@ static void DrawBarForeground(HDC mem,
             drawIcon = std::max(
                 1, std::min({icon, rowHeight - Px(12), front - Px(10)}));
         }
-        int ix = L.labels ? x + Px(10) : x + (front - drawIcon) / 2;
+        int ix = L.labels ? x + Px(10)
+                          : x + cellLead + (front - cellLead - drawIcon) / 2;
         ScopedSavedDC clip(mem);
         const auto* t = LiveButtonTransition(s->groups[i].key);
         if (t && t->reveal) {
@@ -24742,9 +31386,21 @@ static void DrawBarForeground(HDC mem,
     std::unique_ptr<std::remove_pointer<HFONT>::type, DeleteFontHandle>
         fontGuard(font);
     ScopedSelection fontSelection(mem, font);
-    SetTextColor(mem,
-                 taskbarSkin.load() == 7 ? RGB(0, 0, 0) : RGB(255, 255, 255));
+    SetTextColor(mem, T81BarInkRef());
     SetBkMode(mem, TRANSPARENT);
+    if (L.labels)
+        for (const auto& ghost : s->closeFades)
+            if (T81CloseFadeVisible(ghost, L, w, h, xs) &&
+                std::none_of(s->groups.begin(), s->groups.end(),
+                             [&](const Group& group) {
+                                 return group.key == ghost.key;
+                             })) {
+                RECT label{ghost.rect.left + Px(10) + icon + Px(6), 1,
+                           ghost.rect.right - Px(4), h - 1};
+                DrawTextW(
+                    mem, ghost.title.c_str(), -1, &label,
+                    DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+            }
     if (L.labels)
         for (const auto& ghost : s->buttonTransitions)
             if (ValidGhost(ghost, w, h, false)) {
@@ -24783,8 +31439,7 @@ static void DrawBarForeground(HDC mem,
     // overflow and clock text; the font itself is deleted after painting.
     if (font)
         SelectObject(mem, font);
-    SetTextColor(mem,
-                 taskbarSkin.load() == 7 ? RGB(0, 0, 0) : RGB(255, 255, 255));
+    SetTextColor(mem, T81BarInkRef());
     SetBkMode(mem, TRANSPARENT);
     if (L.overflow.right > L.overflow.left) {
         RECT more = L.overflow;
@@ -24805,7 +31460,7 @@ static void DrawBarForeground(HDC mem,
         format.SetAlignment(StringAlignmentCenter);
         format.SetLineAlignment(StringAlignmentCenter);
         format.SetFormatFlags(StringFormatFlagsNoWrap);
-        SolidBrush white(Color(255, 255, 255, 255));
+        SolidBrush white(T81W10BarInk());
         SolidBrush basicLanguage(Color(255, 26, 41, 58));
         auto clockRow = [&](const wchar_t* text, const RECT& row) {
             RectF rect((REAL)row.left, (REAL)row.top,
@@ -24922,6 +31577,131 @@ struct T81HoverPaintMeasure {
         }
     }
 };
+// Cross-fade the new foreground over the existing taskbar background.
+// Pinned icons remain visible; only their new running frame fades in.
+static void T81ApplyOpenFade(HDC dc,
+                             BYTE* current,
+                             const BYTE* before,
+                             int w,
+                             int h,
+                             const Layout& layout,
+                             const std::vector<int>& xs,
+                             int base) {
+    if (!s || !current || (s->openFades.empty() && s->closeFades.empty()) ||
+        s->dragActive || layout.rows != 1)
+        return;
+    ULONGLONG now = s->buttonPaintTick;
+    GdiFlush();
+    for (int i = 0; i < layout.count; ++i) {
+        auto it = std::find_if(s->openFades.begin(), s->openFades.end(),
+                               [&](const T81OpenFade& fade) {
+                                   return fade.key == s->groups[i].key;
+                               });
+        if (it == s->openFades.end() || now < it->start ||
+            now - it->start >= 200)
+            continue;
+        float t = (float)(now - it->start) / 200.f;
+        float f = t * (2.f - t);
+        int left = std::max(layout.first, std::max(0, xs[i]));
+        int right =
+            std::min((int)layout.tray.left, std::min(w, xs[i] + layout.width));
+        for (int y = 0; y < h; ++y)
+            for (int x = left; x < right; ++x) {
+                size_t offset = ((size_t)y * w + x) * 4;
+                for (int c = 0; c < 3; ++c) {
+                    int original = before ? before[offset + c] : base;
+                    current[offset + c] = (BYTE)std::lround(
+                        original + (current[offset + c] - original) * f);
+                }
+            }
+        if (it->pinned) {
+            int icon = std::max(1, std::min(Px(T81TaskIconLogical()),
+                                            layout.rowHeight - Px(6)));
+            int front = layout.width, drawIcon = icon;
+            if (taskbarSkin.load() == 7) {
+                int layers = TaskTileLayers(s->groups[i].tasks.size());
+                front = std::max(
+                    1, front - std::max(0, layers - 1) * std::max(1, Px(3)));
+                drawIcon =
+                    std::max(1, std::min({icon, h - Px(12), front - Px(10)}));
+            }
+            ScopedSavedDC clip(dc);
+            IntersectClipRect(dc, left, 0, right, h);
+            int ix =
+                layout.labels ? xs[i] + Px(10) : xs[i] + (front - drawIcon) / 2;
+            T81DrawAppIcon(dc, GroupIcon(i), ix, (h - drawIcon) / 2, drawIcon);
+            if (layout.labels) {
+                HFONT font = CreateTaskbarFont(Dpi(), s->perPixelBar);
+                if (font) {
+                    HGDIOBJ old = SelectObject(dc, font);
+                    SetTextColor(dc, T81BarInkRef());
+                    SetBkMode(dc, TRANSPARENT);
+                    RECT label{xs[i] + Px(10) + icon + Px(6), 1,
+                               xs[i] + layout.width - Px(4), h - 1};
+                    DrawTextW(dc, GroupTitle(i).c_str(), -1, &label,
+                              DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS |
+                                  DT_NOPREFIX);
+                    if (old && old != HGDI_ERROR)
+                        SelectObject(dc, old);
+                    DeleteObject(font);
+                }
+            }
+        }
+    }
+    for (const auto& ghost : s->closeFades) {
+        if (!T81CloseFadeVisible(ghost, layout, w, h, xs))
+            continue;
+        float t = (float)(now - ghost.start) / 200.f;
+        float f = 1.f - t * (2.f - t);
+        int left = std::max(layout.first, std::max(0, (int)ghost.rect.left));
+        int right =
+            std::min((int)layout.tray.left, std::min(w, (int)ghost.rect.right));
+        for (int y = 0; y < h; ++y)
+            for (int x = left; x < right; ++x) {
+                size_t offset = ((size_t)y * w + x) * 4;
+                for (int c = 0; c < 3; ++c) {
+                    int original = before ? before[offset + c] : base;
+                    current[offset + c] = (BYTE)std::lround(
+                        original + (current[offset + c] - original) * f);
+                }
+            }
+        auto it = std::find_if(
+            s->groups.begin(), s->groups.end(),
+            [&](const Group& group) { return group.key == ghost.key; });
+        if (it != s->groups.end()) {
+            size_t index = (size_t)(it - s->groups.begin());
+            int icon = std::max(1, std::min(Px(T81TaskIconLogical()),
+                                            layout.rowHeight - Px(6)));
+            int drawIcon = icon;
+            if (taskbarSkin.load() == 7)
+                drawIcon = std::max(
+                    1, std::min({icon, h - Px(12), layout.width - Px(10)}));
+            ScopedSavedDC clip(dc);
+            IntersectClipRect(dc, left, 0, right, h);
+            int ix = layout.labels ? xs[index] + Px(10)
+                                   : xs[index] + (layout.width - drawIcon) / 2;
+            T81DrawAppIcon(dc, GroupIcon((int)index), ix, (h - drawIcon) / 2,
+                           drawIcon);
+            if (layout.labels) {
+                HFONT font = CreateTaskbarFont(Dpi(), s->perPixelBar);
+                if (font) {
+                    HGDIOBJ old = SelectObject(dc, font);
+                    SetTextColor(dc, T81BarInkRef());
+                    SetBkMode(dc, TRANSPARENT);
+                    RECT label{xs[index] + Px(10) + icon + Px(6), 1,
+                               xs[index] + layout.width - Px(4), h - 1};
+                    DrawTextW(dc, GroupTitle((int)index).c_str(), -1, &label,
+                              DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS |
+                                  DT_NOPREFIX);
+                    if (old && old != HGDI_ERROR)
+                        SelectObject(dc, old);
+                    DeleteObject(font);
+                }
+            }
+        }
+    }
+    GdiFlush();
+}
 void Paint(HWND hwnd) {
     T81HoverPaintMeasure hoverMeasure(s && s->hot >= 0, L"horizontal");
     s->buttonPaintTick = GetTickCount64();
@@ -24984,6 +31764,8 @@ void Paint(HWND hwnd) {
                               time, date);
             DrawBarForeground(white.dc, L, w, h, xs, drawOrder, foreground,
                               time, date);
+            T81ApplyOpenFade(black.dc, black.bits, nullptr, w, h, L, xs, 0);
+            T81ApplyOpenFade(white.dc, white.bits, nullptr, w, h, L, xs, 255);
             GdiFlush();
             ComposeForeground(bg.bits, black.bits, white.bits,
                               (size_t)w * (size_t)h,
@@ -25016,22 +31798,30 @@ void Paint(HWND hwnd) {
         }
     }
     if (!rendered) {
-        std::unique_ptr<std::remove_pointer<HDC>::type, DeleteMemDC> mem(
-            CreateCompatibleDC(dc));
-        std::unique_ptr<std::remove_pointer<HBITMAP>::type, DeleteBitmapHandle>
-            bmp(CreateCompatibleBitmap(dc, w, h));
-        ScopedSelection selected(mem.get(), bmp.get());
-        if (mem && bmp && selected.old && selected.old != HGDI_ERROR) {
+        AlphaSurface mem(dc, w, h);
+        if (mem.ok()) {
             {
-                Graphics g(mem.get());
+                Graphics g(mem.dc);
                 PaintTaskbarBackground(g, w, h);
                 T81PaintWin7Ends(g, w, h, (int)L.start.right,
                                  (int)std::min(L.tray.left, L.language.left),
                                  false);
             }
-            DrawBarForeground(mem.get(), L, w, h, xs, drawOrder, foreground,
-                              time, date);
-            BitBlt(dc, 0, 0, w, h, mem.get(), 0, 0, SRCCOPY);
+            std::unique_ptr<AlphaSurface> before;
+            if ((!s->openFades.empty() || !s->closeFades.empty()) &&
+                L.rows == 1) {
+                before = std::make_unique<AlphaSurface>(dc, w, h);
+                if (before->ok())
+                    BitBlt(before->dc, 0, 0, w, h, mem.dc, 0, 0, SRCCOPY);
+                else
+                    before.reset();
+            }
+            DrawBarForeground(mem.dc, L, w, h, xs, drawOrder, foreground, time,
+                              date);
+            if (before)
+                T81ApplyOpenFade(mem.dc, mem.bits, before->bits, w, h, L, xs,
+                                 0);
+            BitBlt(dc, 0, 0, w, h, mem.dc, 0, 0, SRCCOPY);
         }
     }
     paint.end();
@@ -25151,18 +31941,45 @@ static void TickPreviewAnimation() {
             HidePreview();
     }
 }
+// Use the same color source as the taskbar background. The native tray sample
+// only applies when the horizontal background actually paints that sample;
+// never let a stale sample override a custom color or an integrated tray.
+static Color EffectiveTaskbarColor();
+static Color PreviewTaskbarColor() {
+    int skin = taskbarSkin.load();
+    // Windows 10: the tone of its other panels, light in the light mode.
+    if (T81IsWin10Skin(skin) && !customTaskbarColor.load())
+        return T81W10Light() ? Color(255, 228, 228, 228)
+                             : Color(255, 31, 31, 31);
+    RECT client{};
+    bool sampled =
+        s && s->bar && GetClientRect(s->bar, &client) && !s->verticalActive &&
+        !s->privateActive && !customTaskbarColor.load() &&
+        matchNativeTray.load() && !T81IsWin7Skin(skin) && skin != 6 &&
+        skin != 7 && !(useBetaStartLogo.load() && s->betaStartImage) &&
+        client.bottom > 0 && s->trayColors.size() == (size_t)client.bottom;
+    if (sampled) {
+        COLORREF c = s->trayColors[s->trayColors.size() / 2];
+        return Color(255, GetRValue(c), GetGValue(c), GetBValue(c));
+    }
+    return EffectiveTaskbarColor();
+}
 static void DrawPreviewBackground(HDC dc, RECT r) {
     Graphics g(dc);
-    Color base = AccentBase();
-    if (!s->trayColors.empty()) {
-        COLORREF c = s->trayColors[s->trayColors.size() / 2];
-        base = Color(255, GetRValue(c), GetGValue(c), GetBValue(c));
-    }
-    SolidBrush bg(Mix(base, Color(255, 246, 249, 251), 8));
+    Color base = PreviewTaskbarColor();
+    SolidBrush bg(T81IsWin10Skin(taskbarSkin.load())
+                      ? base
+                      : Mix(base, Color(255, 246, 249, 251), 8));
     g.FillRectangle(&bg, 0, 0, r.right, r.bottom);
 }
 // One geometry source for drawing, hover and the enlarged hit target.
 static RECT PreviewCloseButtonRect(const PreviewItem& item) {
+    if (T81IsWin10Skin(taskbarSkin.load()))
+        // Windows 10: the whole corner of the tile, as wide as the title row
+        // is tall. Its 12 px cross stands in the middle, 16 px from both
+        // edges.
+        return RECT{item.cell.right - Px(32), item.cell.top, item.cell.right,
+                    item.cell.top + Px(32)};
     if ((taskbarSkin.load() == 6 || taskbarSkin.load() == 7)) {
         int w = Px(16), h = Px(14);
         LONG x = item.cell.right - Px(7) - w;
@@ -25182,6 +31999,10 @@ static RECT PreviewCloseButtonRect(const PreviewItem& item) {
     return RECT{left, top, left + width, top + height};
 }
 static bool PreviewCloseHit(const PreviewItem& item, POINT p) {
+    if (T81IsWin10Skin(taskbarSkin.load())) {
+        RECT hit = PreviewCloseButtonRect(item);
+        return !item.more && PtInRect(&item.cell, p) && PtInRect(&hit, p);
+    }
     if ((taskbarSkin.load() == 6 || taskbarSkin.load() == 7)) {
         RECT hit = PreviewCloseButtonRect(item);
         return !item.more && PtInRect(&item.cell, p) && PtInRect(&hit, p);
@@ -25231,6 +32052,32 @@ static void DrawPreviewCloseCross(HDC dc, const RECT& r, COLORREF color) {
                 continue;
             brush.SetColor(Color(alpha, GetRValue(color), GetGValue(color),
                                  GetBValue(color)));
+            g.FillRectangle(&brush, left + x, top + y, 1, 1);
+        }
+}
+// Windows 10: two thin lines across a 12 px square in the middle of the
+// button. Every pixel takes the share of it the lines cover, so the cross is
+// the same whatever draws the rest.
+static void DrawPreviewCloseCross10(HDC dc, const RECT& r, COLORREF color) {
+    const int n = std::max(6, Px(12));
+    const int left = (r.left + r.right - n) / 2,
+              top = (r.top + r.bottom - n) / 2;
+    const float reach = 0.5f + 0.565f * Dpi() / 96.f;  // half a line, softened
+    Graphics g(dc);
+    g.SetSmoothingMode(SmoothingModeNone);
+    SolidBrush brush(
+        Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
+    for (int y = 0; y < n; y++)
+        for (int x = 0; x < n; x++) {
+            const float down = std::abs((float)(x - y)) * 0.70710678f,
+                        up = std::abs((float)(x + y + 1 - n)) * 0.70710678f;
+            const float share =
+                std::clamp(reach - std::min(down, up), 0.f, 1.f);
+            const int alpha = (int)std::lround(share * 255.f);
+            if (alpha <= 0)
+                continue;
+            brush.SetColor(Color((BYTE)alpha, GetRValue(color),
+                                 GetGValue(color), GetBValue(color)));
             g.FillRectangle(&brush, left + x, top + y, 1, 1);
         }
 }
@@ -25328,7 +32175,7 @@ static void DrawPreviewForeground(HDC mem, RECT r) {
         Graphics g(mem);
         if (T81IsWin7Skin(taskbarSkin.load()))
             DrawWin7PreviewChrome(g, r);
-        else {
+        else if (!T81IsWin10Skin(taskbarSkin.load())) {
             Pen border(Color(190, 245, 248, 250), 1);
             g.DrawRectangle(&border, 0, 0, r.right - 1, r.bottom - 1);
         }
@@ -25361,7 +32208,8 @@ static void DrawPreviewForeground(HDC mem, RECT r) {
                         g.DrawRectangle(&edge, x, y, w - 1, h - 1);
                     }
                 } else if (!T81IsWin7Skin(taskbarSkin.load())) {
-                    SolidBrush hover(Color(40, 255, 255, 255));
+                    SolidBrush hover(T81W10Light() ? Color(26, 0, 0, 0)
+                                                   : Color(40, 255, 255, 255));
                     g.FillRectangle(&hover, (int)item.cell.left,
                                     (int)item.cell.top,
                                     (int)(item.cell.right - item.cell.left),
@@ -25385,6 +32233,18 @@ static void DrawPreviewForeground(HDC mem, RECT r) {
                               bw * scale, bh * scale);
                     T81DrawWin7PreviewCloseTexture(g, dst, down,
                                                    s->win7PreviewCloseFade);
+                } else if (T81IsWin10Skin(taskbarSkin.load())) {
+                    // Windows 10: the cross alone; under the pointer the
+                    // whole corner of the tile is red.
+                    if (s->previewCloseHot) {
+                        SolidBrush close(down ? Color(255, 241, 112, 122)
+                                              : Color(255, 232, 17, 35));
+                        RECT button = PreviewCloseButtonRect(item);
+                        g.FillRectangle(&close, (int)button.left,
+                                        (int)button.top,
+                                        (int)(button.right - button.left),
+                                        (int)(button.bottom - button.top));
+                    }
                 } else {
                     // The X is already on a red button when the thumbnail
                     // is hot; the X hover uses the brighter reference red.
@@ -25396,7 +32256,7 @@ static void DrawPreviewForeground(HDC mem, RECT r) {
                     g.FillRectangle(&close, (int)button.left, (int)button.top,
                                     (int)(button.right - button.left),
                                     (int)(button.bottom - button.top));
-                    // Dark border from the supplied Windows 8.1 reference.
+                    // Dark border from the Windows 8.1 reference.
                     int width = (int)(button.right - button.left),
                         height = (int)(button.bottom - button.top);
                     Pen closeBorder(s->previewCloseHot
@@ -25420,9 +32280,9 @@ static void DrawPreviewForeground(HDC mem, RECT r) {
     }
     HFONT font = CreateTaskbarFont(Dpi(), s->perPixelPreview);
     HGDIOBJ oldFont = font ? SelectObject(mem, font) : nullptr;
-    COLORREF frame = RGB(15, 74, 121);
-    if (!s->trayColors.empty())
-        frame = s->trayColors[s->trayColors.size() / 2];
+    Color previewColor = PreviewTaskbarColor();
+    COLORREF frame =
+        RGB(previewColor.GetR(), previewColor.GetG(), previewColor.GetB());
     int luminance = (GetRValue(frame) * 299 + GetGValue(frame) * 587 +
                      GetBValue(frame) * 114) /
                     1000;
@@ -25443,15 +32303,31 @@ static void DrawPreviewForeground(HDC mem, RECT r) {
             continue;
         }
         bool win7 = T81IsWin7Skin(taskbarSkin.load());
+        // Windows 10: the icon 8 px inside the tile, the title 32 px inside,
+        // both centred in the 32 px title row.
+        const bool win10 = T81IsWin10Skin(taskbarSkin.load());
         int small = Px(16);
         if (item.icon)
-            DrawIconEx(mem, item.cell.left + Px(win7 ? 9 : 4),
-                       item.cell.top + Px(win7 ? 7 : 3), item.icon, small,
-                       small, 0, nullptr, DI_NORMAL);
-        RECT title{item.cell.left + Px(win7 ? 30 : 25),
-                   item.cell.top + Px(win7 ? 5 : 2),
-                   item.cell.right - Px(win7 ? 28 : 24),
-                   item.cell.top + Px(win7 ? 25 : 22)};
+            DrawIconEx(mem,
+                       item.cell.left + Px(win7    ? 9
+                                           : win10 ? 8
+                                                   : 4),
+                       item.cell.top + Px(win7    ? 7
+                                          : win10 ? 8
+                                                  : 3),
+                       item.icon, small, small, 0, nullptr, DI_NORMAL);
+        RECT title{item.cell.left + Px(win7    ? 30
+                                       : win10 ? 32
+                                               : 25),
+                   item.cell.top + Px(win7    ? 5
+                                      : win10 ? 6
+                                              : 2),
+                   item.cell.right - Px(win7    ? 28
+                                        : win10 ? 36
+                                                : 24),
+                   item.cell.top + Px(win7    ? 25
+                                      : win10 ? 26
+                                              : 22)};
         bool centerTitle = (skin == 3 || skin == 4);
         if (centerTitle) {
             title.left = item.cell.left + Px(25);
@@ -25464,7 +32340,13 @@ static void DrawPreviewForeground(HDC mem, RECT r) {
             !((T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 2) &&
               BetaTextureAvailable(8))) {
             RECT x = PreviewCloseButtonRect(item);
-            DrawPreviewCloseCross(mem, x, RGB(255, 255, 255));
+            const COLORREF cross = T81W10Light() && !s->previewCloseHot
+                                       ? RGB(0, 0, 0)
+                                       : RGB(255, 255, 255);
+            if (T81IsWin10Skin(taskbarSkin.load()))
+                DrawPreviewCloseCross10(mem, x, cross);
+            else
+                DrawPreviewCloseCross(mem, x, cross);
         }
         if (!item.thumbnail) {
             // Keep each failed source individually identifiable and clickable
@@ -25506,16 +32388,15 @@ static void ConfigurePreviewAlpha(HWND h, bool perPixel) {
     // for the preview window. Acceptance is not proof of visible blur, and
     // layered rendering or opaque preview pixels can mask the effect.
     T81SetExperimentalBlur(h);
-    Wh_Log(
-        L"[T81-PREVIEW-BLUR] hwnd=%p layered=%d requested=%d accepted=%d", h,
-        perPixel ? 1 : 0,
-        experimentalLiveBlur.load() && taskbarSkin.load() != 6 &&
-                (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 2)
-            ? 1
-            : 0,
-        GetPropW(h, L"WH_Taskbar81_OwnBlurEnabled") ? 1 : 0);
+    Wh_Log(L"[T81-PREVIEW-BLUR] hwnd=%p layered=%d requested=%d accepted=%d", h,
+           perPixel ? 1 : 0,
+           experimentalLiveBlur.load() && taskbarSkin.load() != 6 &&
+                   T81SkinWantsLiveBlur(taskbarSkin.load())
+               ? 1
+               : 0,
+           GetPropW(h, L"WH_Taskbar81_OwnBlurEnabled") ? 1 : 0);
 }
-// Windows 7 Basic list-mode reconstruction from the supplied screenshots.
+// Windows 7 Basic list-mode reconstruction from reference screenshots.
 // Uses the same PreviewItem and hit/close/activation machinery as thumbnails.
 static void T81DrawBasicPreview(HDC dc, const RECT& bounds) {
     Graphics g(dc);
@@ -26151,6 +33032,9 @@ static LRESULT CALLBACK PinTooltipProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
 static void ShowInfoTooltip(const std::wstring& message, int center) {
     if (!s || !s->bar || s->trayDrag.capture)
         return;
+    // Windows 10 shows no tooltip over the open Win+X menu.
+    if (T81IsWin10Skin(taskbarSkin.load()) && EmbeddedWinX::IsMenuOpen())
+        return;
     s->hotCornerPreview = false;
     s->recoveryTooltipUntil = 0;
     s->tooltipText = message;
@@ -26358,23 +33242,43 @@ static void ShowClockTooltip() {
 }
 
 static void ShowBarButtonTooltip(int hit) {
-    if (!s || !s->bar || (hit != HIT_START && hit != HIT_DESKTOP))
+    if (!s || !s->bar ||
+        (hit != HIT_START && hit != HIT_DESKTOP && !T81IsWin10Hit(hit)))
         return;
     RECT client{}, cell{};
     GetClientRect(s->bar, &client);
     if (s->verticalActive) {
+        if (hit == HIT_W10_ACTION)
+            return;
         auto layout = GetVerticalLayout(client.right, client.bottom);
-        cell = hit == HIT_START ? layout.start : layout.desktop;
+        cell = hit == HIT_START          ? layout.start
+               : hit == HIT_W10_SEARCH   ? layout.search
+               : hit == HIT_W10_TASKVIEW ? layout.taskView
+                                         : layout.desktop;
     } else {
         auto layout = GetLayout(client.right, client.bottom);
-        cell = hit == HIT_START ? layout.start : layout.desktop;
+        cell = hit == HIT_START          ? layout.start
+               : hit == HIT_DESKTOP      ? layout.desktop
+               : hit == HIT_W10_SEARCH   ? layout.search
+               : hit == HIT_W10_TASKVIEW ? layout.taskView
+                                         : layout.action;
+        // The search box already says what it is.
+        if (hit == HIT_W10_SEARCH &&
+            cell.right - cell.left > Px(2 * kWin10SlotLogical))
+            return;
     }
     if (IsRectEmpty(&cell))
         return;
     MapWindowPoints(s->bar, nullptr, (POINT*)&cell, 2);
-    ShowInfoTooltip(hit == HIT_START ? Tr(L"Start", L"Start")
-                                     : Tr(L"Mostra desktop", L"Show desktop"),
-                    (cell.left + cell.right) / 2);
+    const wchar_t* text =
+        hit == HIT_START     ? Tr(L"Start", L"Start")
+        : hit == HIT_DESKTOP ? Tr(L"Mostra desktop", L"Show desktop")
+        : hit == HIT_W10_SEARCH
+            ? Tr(L"Scrivi qui per eseguire la ricerca", L"Type here to search")
+        : hit == HIT_W10_TASKVIEW
+            ? Tr(L"Visualizzazione attività", L"Task View")
+            : Tr(L"Centro notifiche", L"Action Center");
+    ShowInfoTooltip(text, (cell.left + cell.right) / 2);
 }
 // The documented Shell APIs do not specify a stable resource ID for this
 // system tooltip. Use the wording in Microsoft support documentation and the
@@ -26488,8 +33392,17 @@ void ShowPreviewPage(int group, int offset) {
         return;
     // Win7: shrink the previous 228 x 186 DIP single-preview outer size
     // by about 15%, preserving its proportions. Title and icons stay legible.
-    int gap = Px(T81IsWin7Skin(taskbarSkin.load()) ? 6 : 7),
-        cellH = Px(T81IsWin7Skin(taskbarSkin.load()) ? 146 : 132),
+    // Windows 10 (measured on screenshots of versions 1903 to 2004 at
+    // 100 %): tiles 148 px tall stand side by side on the bar, without a
+    // margin around them. A tile holds a thumbnail of at most 200 x 108 px in
+    // the proportions of its window, 8 px from its sides and its bottom, under
+    // a 32 px title row; it is as wide as its thumbnail allows, at least
+    // 110 px.
+    const bool win10Preview = T81IsWin10Skin(taskbarSkin.load());
+    int gap = win10Preview ? 0 : Px(T81IsWin7Skin(taskbarSkin.load()) ? 6 : 7),
+        cellH = Px(win10Preview                        ? 148
+                   : T81IsWin7Skin(taskbarSkin.load()) ? 146
+                                                       : 132),
         available = (int)(mi.rcWork.right - mi.rcWork.left);
     if (s->verticalActive)
         available =
@@ -26504,7 +33417,9 @@ void ShowPreviewPage(int group, int offset) {
         columns = std::min(count, maxCols);
     int rows = (count + columns - 1) / columns;
     int cellW =
-        std::max(1, std::min(Px(T81IsWin7Skin(taskbarSkin.load()) ? 182 : 188),
+        std::max(1, std::min(Px(win10Preview                        ? 216
+                                : T81IsWin7Skin(taskbarSkin.load()) ? 182
+                                                                    : 188),
                              (available - gap - columns * gap) / columns));
     if ((taskbarSkin.load() == 6 || taskbarSkin.load() == 7)) {
         gap = Px(8);
@@ -26519,23 +33434,62 @@ void ShowPreviewPage(int group, int offset) {
         rows = count;
         cellW = std::min(Px(124), std::max(1, available - 2 * gap));
     }
+    // Windows 10, one row: every tile takes the width of its own thumbnail.
+    std::vector<int> win10Widths;
+    if (win10Preview && rows == 1 && count > 0) {
+        int sum = 0;
+        for (int i = 0; i < count; i++) {
+            const Task& task = s->tasks[g.tasks[offset + i]];
+            RECT frame{};
+            bool known = false;
+            if (IsIconic(task.hwnd)) {
+                WINDOWPLACEMENT placement{};
+                placement.length = sizeof(placement);
+                if (GetWindowPlacement(task.hwnd, &placement)) {
+                    frame = placement.rcNormalPosition;
+                    known = true;
+                }
+            } else {
+                known = SUCCEEDED(DwmGetWindowAttribute(
+                            task.hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &frame,
+                            sizeof(frame))) ||
+                        GetWindowRect(task.hwnd, &frame);
+            }
+            int thumb = Px(200);
+            if (known && frame.right > frame.left && frame.bottom > frame.top)
+                thumb =
+                    std::min(Px(200), MulDiv(Px(108), frame.right - frame.left,
+                                             frame.bottom - frame.top));
+            const int tile = std::max(Px(110), thumb + 2 * Px(8));
+            win10Widths.push_back(tile);
+            sum += tile;
+        }
+        if (sum > available)
+            win10Widths.clear();  // too many for the screen: the even grid
+    }
     int width = gap + columns * (cellW + gap),
         height = gap + rows * (cellH + gap);
+    if (!win10Widths.empty()) {
+        width = 0;
+        for (int tile : win10Widths)
+            width += tile;
+    }
     int center = barRect.left + layout.first +
                  (group % layout.columns) * layout.width + layout.width / 2;
     int x =
         std::max((int)mi.rcWork.left,
                  std::min(center - width / 2, (int)mi.rcWork.right - width));
-    int y = s->nativeEdge == ABE_TOP ? barRect.bottom + Px(2)
-                                     : barRect.top - height - Px(2);
+    const int away = win10Preview ? 0 : Px(2);
+    int y = s->nativeEdge == ABE_TOP ? barRect.bottom + away
+                                     : barRect.top - height - away;
     y = std::max((int)mi.rcWork.top,
                  std::min(y, (int)mi.rcWork.bottom - height));
     if (s->verticalActive) {
         auto v = GetVerticalLayout(barClient.right, barClient.bottom);
         if (group < v.offset || group >= v.offset + v.count)
             return;
-        x = s->verticalSide == 1 ? barRect.right + Px(2)
-                                 : barRect.left - width - Px(2);
+        x = s->verticalSide == 1 ? barRect.right + away
+                                 : barRect.left - width - away;
         y = barRect.top + v.first + (group - v.offset) * v.step + v.step / 2 -
             height / 2;
         x = std::max((int)mi.rcWork.left,
@@ -26570,6 +33524,12 @@ void ShowPreviewPage(int group, int offset) {
         item.cell = {gap + col * (cellW + gap), gap + row * (cellH + gap),
                      gap + col * (cellW + gap) + cellW,
                      gap + row * (cellH + gap) + cellH};
+        if (!win10Widths.empty()) {
+            int left = 0;
+            for (int k = 0; k < i; k++)
+                left += win10Widths[k];
+            item.cell = RECT{left, 0, left + win10Widths[i], cellH};
+        }
         item.thumbnail = nullptr;
         BOOL composition = TRUE;
         HRESULT compositionResult = DwmIsCompositionEnabled(&composition);
@@ -26602,10 +33562,18 @@ void ShowPreviewPage(int group, int offset) {
                 RECT sourceCrop{}, windowRect{}, frameRect{};
                 bool crop = false;
                 const bool win7 = T81IsWin7Skin(taskbarSkin.load());
-                RECT dst{item.cell.left + Px(win7 ? 7 : 5),
-                         item.cell.top + Px(win7 ? 33 : 24),
-                         item.cell.right - Px(win7 ? 7 : 5),
-                         item.cell.bottom - Px(win7 ? 7 : 5)};
+                RECT dst{item.cell.left + Px(win7           ? 7
+                                             : win10Preview ? 8
+                                                            : 5),
+                         item.cell.top + Px(win7           ? 33
+                                            : win10Preview ? 32
+                                                           : 24),
+                         item.cell.right - Px(win7           ? 7
+                                              : win10Preview ? 8
+                                                             : 5),
+                         item.cell.bottom - Px(win7           ? 7
+                                               : win10Preview ? 8
+                                                              : 5)};
                 {
                     if (GetWindowRect(task.hwnd, &windowRect) &&
                         SUCCEEDED(DwmGetWindowAttribute(
@@ -26643,10 +33611,18 @@ void ShowPreviewPage(int group, int offset) {
                     // A source rectangle can be rejected on some builds; retry
                     // the complete thumbnail before dropping the live preview.
                     prop.dwFlags &= ~DWM_TNP_RECTSOURCE;
-                    RECT full{item.cell.left + Px(win7 ? 7 : 5),
-                              item.cell.top + Px(win7 ? 33 : 24),
-                              item.cell.right - Px(win7 ? 7 : 5),
-                              item.cell.bottom - Px(win7 ? 7 : 5)};
+                    RECT full{item.cell.left + Px(win7           ? 7
+                                                  : win10Preview ? 8
+                                                                 : 5),
+                              item.cell.top + Px(win7           ? 33
+                                                 : win10Preview ? 32
+                                                                : 24),
+                              item.cell.right - Px(win7           ? 7
+                                                   : win10Preview ? 8
+                                                                  : 5),
+                              item.cell.bottom - Px(win7           ? 7
+                                                    : win10Preview ? 8
+                                                                   : 5)};
                     int maxW = full.right - full.left,
                         maxH = full.bottom - full.top;
                     int tw = maxW, th = MulDiv(src.cy, tw, src.cx);
@@ -27045,11 +34021,18 @@ static void DrawWin7AeroTextures(Graphics& g,
 }
 static BYTE EffectiveBarBackgroundOpacity() {
     // The user's setting remains the actual opacity, including for Win7.
+    // Windows 10: over a white window its #101010 bar measures (71, 71, 71),
+    // an opacity of 196. The setting's initial value, 155, was estimated for
+    // Windows 8.1; while it is left at that value the Windows 10 skin uses
+    // its own.
+    if (T81IsWin10Skin(taskbarSkin.load()) &&
+        taskbarBackgroundOpacity.load() == 155)
+        return T81W10Sys().transparency ? 196 : 255;
     return (taskbarSkin.load() == 6 || taskbarSkin.load() == 7)
                ? 255
                : (BYTE)taskbarBackgroundOpacity.load();
 }
-// Win7Taskbar AeroBasic.xaml: tile the original opaque 128 x 40 texture.
+// Tile the original opaque 128 x 40 Aero Basic texture.
 static void T81PaintBasicTexture(Graphics& g,
                                  int width,
                                  int height,
@@ -27089,6 +34072,22 @@ static void PaintTaskbarBackground(Graphics& g, int width, int height) {
     }
     if (taskbarSkin.load() == 6) {
         T81PaintBasicTexture(g, width, height, false);
+        return;
+    }
+    if (T81IsWin10Skin(taskbarSkin.load())) {
+        // Flat. Windows 10's dark taskbar is #101010 and its light one
+        // #EEEEEE; with the accent colour on the taskbar it is the first dark
+        // shade of the accent. The custom taskbar color replaces them.
+        const T81W10System& system = T81W10Sys();
+        Color base = system.lightSystem ? Color(255, 238, 238, 238)
+                     : system.accentBar ? T81W10Accent(4)
+                                        : Color(255, 16, 16, 16);
+        if (customTaskbarColor.load()) {
+            int c = taskbarColorRgb.load();
+            base = Color(255, (c >> 16) & 255, (c >> 8) & 255, c & 255);
+        }
+        SolidBrush fill(base);
+        g.FillRectangle(&fill, 0, 0, width, height);
         return;
     }
     if (s && T81IsWin7Skin(taskbarSkin.load()) && width > 0 && height > 0) {
@@ -28232,6 +35231,7 @@ static void RemoveWorkAreaAppBar() {
     abd.hWnd = s->bar;
     s->appbarRegistered = false;
     s->appbarDirty = false;
+    s->appbarSameEdgeRecovery = false;
     s->appbarArranging = false;
     s->appbarFullScreen = false;
     s->appbarDesired = RECT{};
@@ -28251,10 +35251,39 @@ static void ReserveWorkAreaAppBar(RECT& desired, const MONITORINFO& mi) {
         return;
     int native = s->sourceNativeEdge;
     UINT edge = s->nativeEdge;
+    const bool horizontal = (native == ABE_TOP || native == ABE_BOTTOM) &&
+                            (edge == ABE_TOP || edge == ABE_BOTTOM);
+    const bool sameEdge = horizontal && native == (int)edge;
+    // Do not interfere with an existing work-area reservation, an active or
+    // unknown auto-hide state, fullscreen, dragging, or an invisible bar.
+    // Require an entirely unreserved edge to persist before trying recovery.
+    const bool wholeEdge =
+        desired.left == mi.rcMonitor.left &&
+        desired.right == mi.rcMonitor.right &&
+        (edge == ABE_TOP ? desired.top == mi.rcMonitor.top
+                         : desired.bottom == mi.rcMonitor.bottom);
+    const bool noEdgeReservation =
+        edge == ABE_TOP ? mi.rcWork.top == mi.rcMonitor.top
+                        : mi.rcWork.bottom == mi.rcMonitor.bottom;
+    const bool eligible = sameEdge && reserveWorkArea.load() &&
+                          s->privateActive && s->autoHideLiveKnown &&
+                          !autoHideIntegratedBar.load() &&
+                          !s->barDragCandidate && wholeEdge;
+    bool recovery =
+        eligible && s->appbarRegistered && s->appbarSameEdgeRecovery;
+    const bool canStart = eligible && !s->appbarArranging &&
+                          !s->appbarFullScreen && IsWindowVisible(s->bar);
+    if (canStart && !recovery && noEdgeReservation) {
+        ULONGLONG now = GetTickCount64();
+        if (!s->sameEdgeMissingSince)
+            s->sameEdgeMissingSince = now;
+        recovery = now - s->sameEdgeMissingSince >= 3000;
+    } else if (!recovery && (!canStart || !noEdgeReservation)) {
+        s->sameEdgeMissingSince = 0;
+    }
     bool needs = reserveWorkArea.load() && s->privateActive &&
-                 !s->barDragCandidate &&
-                 (native == ABE_TOP || native == ABE_BOTTOM) &&
-                 (edge == ABE_TOP || edge == ABE_BOTTOM) && native != (int)edge;
+                 !s->barDragCandidate && horizontal &&
+                 (native != (int)edge || recovery);
     if (!needs) {
         if (!s->barDragCandidate)
             RemoveWorkAreaAppBar();
@@ -28276,7 +35305,9 @@ static void ReserveWorkAreaAppBar(RECT& desired, const MONITORINFO& mi) {
         }
         s->appbarRegistered = true;
         s->appbarDirty = true;
-        Wh_Log(L"[T81-DIAG] work-area AppBar registered");
+        s->appbarSameEdgeRecovery = sameEdge && recovery;
+        Wh_Log(L"[T81-DIAG] work-area AppBar registered same-edge-recovery=%d",
+               s->appbarSameEdgeRecovery ? 1 : 0);
     }
     if (!s->appbarDirty && s->appbarEdge == edge &&
         EqualRect(&desired, &s->appbarDesired)) {
@@ -28296,6 +35327,18 @@ static void ReserveWorkAreaAppBar(RECT& desired, const MONITORINFO& mi) {
         abd.rc.bottom = abd.rc.top + height;
     else
         abd.rc.top = abd.rc.bottom - height;
+    // On the same edge, never let a second AppBar shift the bar or add a gap.
+    // Abort if Explorer offers any rectangle other than our existing visual
+    // bar.
+    if (s->appbarSameEdgeRecovery && !EqualRect(&abd.rc, &desired)) {
+        Wh_Log(
+            L"[T81-APPBAR] same-edge recovery declined: shell proposed a "
+            L"different rectangle");
+        RemoveWorkAreaAppBar();
+        s->appbarRetryAt = GetTickCount64() + 30000;
+        s->sameEdgeMissingSince = 0;
+        return;
+    }
     // A SETPOS notifies appbars, including potentially ourselves. Re-query on
     // notification, but don't send SETPOS again if nothing actually changed.
     if (s->appbarEdge == edge && EqualRect(&desired, &s->appbarDesired) &&
@@ -28306,7 +35349,8 @@ static void ReserveWorkAreaAppBar(RECT& desired, const MONITORINFO& mi) {
     }
     if (!ValidApprovedAppbar(abd.rc, mi.rcMonitor, height) ||
         !t81AppBarMessage(ABM_SETPOS, &abd) ||
-        !ValidApprovedAppbar(abd.rc, mi.rcMonitor, height)) {
+        !ValidApprovedAppbar(abd.rc, mi.rcMonitor, height) ||
+        (s->appbarSameEdgeRecovery && !EqualRect(&abd.rc, &desired))) {
         Wh_Log(
             L"[T81-DIAG] work-area AppBar position rejected; visual placement "
             L"only");
@@ -28476,12 +35520,13 @@ static bool T81AutoHideBlocked() {
     auto visible = [](HWND h) {
         return h && IsWindow(h) && IsWindowVisible(h);
     };
-    return s->startMenuVisible || s->barDragCandidate || s->dragCandidate ||
-           s->dragActive || s->trayDrag.active || s->bandDragHit ||
-           t81BalloonVisible || visible(s->overflowPanel) ||
-           visible(s->desktopPopup) || visible(s->jumpPopup) ||
-           visible(s->preview) || visible(s->languageFlyout) ||
-           visible(s->batteryFrameWindow) || visible(s->clockFlyout) ||
+    return EmbeddedWinX::IsMenuOpen() || s->startMenuVisible ||
+           s->barDragCandidate || s->dragCandidate || s->dragActive ||
+           s->trayDrag.active || s->bandDragHit || t81BalloonVisible ||
+           visible(s->overflowPanel) || visible(s->desktopPopup) ||
+           visible(s->jumpPopup) || visible(s->preview) ||
+           visible(s->languageFlyout) || visible(s->batteryFrameWindow) ||
+           visible(s->clockFlyout) ||
            (s->addressEdit && GetFocus() == s->addressEdit);
 }
 void UpdatePlacement();
@@ -28540,12 +35585,15 @@ static void T81SyncSystemAutoHide() {
         observed >= 0 ? L"ABM-SETSTATE" : L"Explorer-GETSTATE";
     if (state >= 0) {
         liveKnown = true;
+        s->autoHideLiveKnown = true;
         warned = false;
     } else if (!liveKnown && s && s->privateActive) {
         state = T81ReadPersistedAutoHide();
         source = L"registry-fallback";
     }
     if (state < 0) {
+        // A failed live query must not authorize a new same-edge reservation.
+        s->autoHideLiveKnown = false;
         // On takeover/recovery retain the last known state even if the first
         // live query times out, and resume its timer when appropriate.
         if (autoHideIntegratedBar.load() && !t81AutoHide.timerInterval)
@@ -30291,6 +37339,10 @@ struct JumpPopupData {
     bool frequent = true, windowOwns = false;
     int hot = -1, mouseMask = 0, headerHeight = 0, secondHeaderTop = -1,
         secondHeaderBottom = -1;
+    // Windows 10 skin: heading positions, the top of the system rows
+    // (application, pin, close) and the row under a pressed button.
+    std::vector<std::pair<int, std::wstring>> win10Headings;
+    int win10SystemTop = -1, win10Down = -1;
     bool betaCloseHot = false, betaCloseDown = false;
     int animX = 0, animFinalY = 0, animStartOffset = 0, animStartOffsetX = 0;
     ULONGLONG animStart = 0;
@@ -30618,6 +37670,170 @@ static bool BetaJumpCloseHit(JumpPopupData* d, POINT p) {
         }
     return false;
 }
+// ---- Windows 10 jump list ------------------------------------------------
+// The numbers come from the "10JumpLists" theme (author Sand216) of the
+// Windows 11 Notification Center Styler, which gives the Windows 11 jump list
+// its Windows 10 form: 256 wide, 30 high rows, a list padded by 5, headings
+// with the margin 12,10,12,6 around one 12 px line, 16 px pictures at 12 and
+// text at 40, square corners, no frame, pointer washes of 10% and 18% white,
+// Segoe MDL2 Assets pictures. The two tones are those of a Windows 10 jump
+// list: the list on SystemChromeMedium, the application rows on
+// SystemChromeMediumLow.
+constexpr int kWin10JumpWidthLogical = 256;
+constexpr int kWin10JumpRowLogical = 30;
+constexpr int kWin10JumpPadLogical = 5;
+constexpr int kWin10JumpHeadingLogical = 32;
+constexpr int kWin10JumpSystemPadLogical = 7;
+static bool T81Win10JumpListRow(JumpRowKind kind) {
+    return kind == JR_DOCUMENT || kind == JR_SCREEN_SNIP;
+}
+// Places the rows that ShowJumpList collected and returns the client height.
+static int T81Win10LayoutJump(JumpPopupData* d) {
+    d->win10Headings.clear();
+    d->win10SystemTop = -1;
+    const int width = Px(kWin10JumpWidthLogical),
+              rowHeight = Px(kWin10JumpRowLogical);
+    int y = Px(kWin10JumpPadLogical);
+    bool list = false, system = false;
+    auto heading = [&](const wchar_t* text) {
+        d->win10Headings.emplace_back(y, text);
+        y += Px(kWin10JumpHeadingLogical);
+    };
+    for (auto& row : d->rows) {
+        if (T81Win10JumpListRow(row.kind) && !system) {
+            if (row.kind == JR_SCREEN_SNIP) {
+                heading(Tr(L"Attività", L"Tasks"));
+            } else if ((size_t)row.document < d->docs.size()) {
+                const size_t k = (size_t)row.document;
+                const bool frequent = d->docs[k].frequent;
+                if (k == 0)
+                    heading(d->frequent ? Tr(L"Frequenti", L"Frequent")
+                                        : Tr(L"Recenti", L"Recent"));
+                else if (d->docs[k - 1].frequent && !frequent)
+                    heading(Tr(L"Recenti", L"Recent"));
+            }
+            list = true;
+        } else if (!system) {
+            system = true;
+            y = list ? y + Px(kWin10JumpPadLogical) : 0;
+            d->win10SystemTop = y;
+            y += Px(kWin10JumpSystemPadLogical);
+        }
+        row.rect = RECT{0, y, width, y + rowHeight};
+        y += rowHeight;
+    }
+    return y + Px(system ? kWin10JumpSystemPadLogical : kWin10JumpPadLogical);
+}
+static void T81Win10PaintJump(HDC dc, const RECT& client, JumpPopupData* d) {
+    // Dark: the list at tone 31 over the application rows at 43. Light, as
+    // in the light Windows mode of Windows 10: 228 over 210, black text.
+    const bool light = T81W10Light();
+    const int listTone = light ? 228 : 31, systemTone = light ? 210 : 43;
+    auto fill = [&](const RECT& r, int tone) {
+        HBRUSH brush = CreateSolidBrush(RGB(tone, tone, tone));
+        if (brush) {
+            FillRect(dc, &r, brush);
+            DeleteObject(brush);
+        }
+    };
+    fill(client, listTone);
+    if (d->win10SystemTop >= 0)
+        fill(RECT{0, d->win10SystemTop, client.right, client.bottom},
+             systemTone);
+    std::unique_ptr<std::remove_pointer<HFONT>::type, DeleteFontHandle> font(
+        CreateFontW(-MulDiv(9, Dpi(), 72), 0, 0, 0, FW_NORMAL, FALSE, FALSE,
+                    FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                    CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH,
+                    L"Segoe UI"));
+    ScopedSelection fontSelection(dc, font.get());
+    SetBkMode(dc, TRANSPARENT);
+    // Headings: 60% white on the dark list tone, grey on the light one.
+    SetTextColor(dc, light ? RGB(96, 96, 96) : RGB(165, 165, 165));
+    for (const auto& heading : d->win10Headings) {
+        RECT head{Px(12), heading.first + Px(10), client.right - Px(12),
+                  heading.first + Px(26)};
+        DrawTextW(dc, heading.second.c_str(), -1, &head,
+                  DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+    }
+    const int size = Px(16);
+    const COLORREF ink = light ? RGB(0, 0, 0) : RGB(255, 255, 255);
+    Graphics pictures(dc);
+    auto picture = [&](wchar_t glyph, const RECT& cell) {
+        return T81Win10Mdl2(
+            pictures, glyph, cell.left, cell.top, size,
+            light ? Color(255, 0, 0, 0) : Color(255, 255, 255, 255));
+    };
+    for (size_t i = 0; i < d->rows.size(); ++i) {
+        const auto& row = d->rows[i];
+        const RECT rr = row.rect;
+        if ((int)i == d->hot) {
+            const int base =
+                (d->win10SystemTop >= 0 && rr.top >= d->win10SystemTop)
+                    ? systemTone
+                    : listTone;
+            const int wash = (int)i == d->win10Down ? 18 : 10;
+            fill(rr, light ? base - (base * wash + 50) / 100
+                           : base + ((255 - base) * wash + 50) / 100);
+        }
+        const int top = rr.top + ((rr.bottom - rr.top) - size) / 2;
+        const RECT cell{Px(12), top, Px(12) + size, top + size};
+        HICON icon = nullptr;
+        std::wstring text;
+        bool drawn = false;
+        if (row.kind == JR_DOCUMENT) {
+            if ((size_t)row.document < d->docs.size())
+                text = d->docs[row.document].label;
+            if ((size_t)row.document < d->icons.size())
+                icon = d->icons[row.document];
+        } else if (row.kind == JR_APP) {
+            text = (d->docs.empty() ? Tr(L"Apri ", L"Open ") : L"") + d->title;
+            icon = d->appIcon;
+        } else if (row.kind == JR_SCREEN_SNIP) {
+            text = Tr(L"Nuova cattura schermo", L"New screen snip");
+            icon = d->snipIcon;
+            if (!icon)
+                drawn = picture(L'\uE722', cell);
+        } else if (row.kind == JR_ACTIVATE) {
+            text = Tr(L"Mostra finestra", L"Show window");
+            drawn = picture(L'\uE923', cell);
+        } else if (row.kind == JR_PIN) {
+            text = !d->pinnedForMod
+                       ? Tr(L"Aggiungi alla barra delle applicazioni",
+                            L"Pin to taskbar")
+                       : Tr(L"Rimuovi dalla barra delle applicazioni",
+                            L"Unpin from taskbar");
+            drawn = picture(d->pinnedForMod ? L'\uE77A' : L'\uE718', cell);
+            if (!drawn)
+                icon = d->pinIcon;
+        } else {
+            text = d->targets.size() > 1
+                       ? Tr(L"Chiudi tutte le finestre", L"Close all windows")
+                       : Tr(L"Chiudi finestra", L"Close window");
+            drawn = picture(L'\uE711', cell);
+            if (!drawn) {
+                // Without the font: a plain white cross of the same extent.
+                HPEN pen = CreatePen(PS_SOLID, std::max(1, Px(1)), ink);
+                HGDIOBJ old = pen ? SelectObject(dc, pen) : nullptr;
+                const int a = Px(2), b = size - Px(2);
+                MoveToEx(dc, cell.left + a, cell.top + a, nullptr);
+                LineTo(dc, cell.left + b, cell.top + b);
+                MoveToEx(dc, cell.left + b - 1, cell.top + a, nullptr);
+                LineTo(dc, cell.left + a - 1, cell.top + b);
+                if (old)
+                    SelectObject(dc, old);
+                if (pen)
+                    DeleteObject(pen);
+            }
+        }
+        if (icon && !drawn)
+            DrawIconEx(dc, cell.left, cell.top, icon, size, size, 0, nullptr,
+                       DI_NORMAL);
+        RECT tr{Px(40), rr.top, client.right - Px(12), rr.bottom};
+        SetTextColor(dc, ink);
+        DrawTextW(dc, text.c_str(), -1, &tr,
+                  DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+    }
+}
 static void PaintJumpPopup(HWND h, JumpPopupData* d) {
     ScopedPaintDC paint(h);
     HDC screen = paint.dc;
@@ -30640,6 +37856,13 @@ static void PaintJumpPopup(HWND h, JumpPopupData* d) {
             : screen;
     const bool win7 = T81IsWin7Skin(taskbarSkin.load());
     const bool classic = taskbarSkin.load() == 7;
+    if (T81IsWin10Skin(taskbarSkin.load())) {
+        T81Win10PaintJump(dc, client, d);
+        if (dc == mem)
+            BitBlt(screen, 0, 0, client.right, client.bottom, mem, 0, 0,
+                   SRCCOPY);
+        return;
+    }
     const int contentOffset = (win7 || classic) ? Px(8) : 0;
     RECT paper = client;
     if (!win7 && !classic) {
@@ -30964,6 +38187,7 @@ static LRESULT CALLBACK JumpPopupProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             }
             case WM_MOUSELEAVE:
                 d->hot = -1;
+                d->win10Down = -1;
                 d->betaCloseHot = false;
                 InvalidateRect(h, nullptr, FALSE);
                 return 0;
@@ -30975,6 +38199,11 @@ static LRESULT CALLBACK JumpPopupProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                     SetCapture(h);
                     InvalidateRect(h, nullptr, FALSE);
                     return 0;
+                }
+                if (T81IsWin10Skin(taskbarSkin.load())) {
+                    d->win10Down = JumpHit(d, p);
+                    d->hot = d->win10Down;
+                    InvalidateRect(h, nullptr, FALSE);
                 }
                 break;
             }
@@ -31000,6 +38229,7 @@ static LRESULT CALLBACK JumpPopupProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                         InvalidateRect(h, nullptr, FALSE);
                     return 0;
                 }
+                d->win10Down = -1;
                 ActivateJumpRow(h, d, JumpHit(d, p));
                 return 0;
             }
@@ -31330,11 +38560,18 @@ static bool ShowJumpList(size_t index,
     // that cap discarded a row even when the monitor had ample space.
     bool hasBoth = !d->docs.empty() && d->docs.front().frequent &&
                    !d->docs.back().frequent;
-    const int extraHeader =
-        hasBoth ? Px(T81IsWin7Skin(taskbarSkin.load()) ? 25 : 29) : 0;
+    const bool win10Jump = T81IsWin10Skin(taskbarSkin.load());
+    const int extraHeader = hasBoth
+                                ? Px(win10Jump ? kWin10JumpHeadingLogical
+                                     : T81IsWin7Skin(taskbarSkin.load()) ? 25
+                                                                         : 29)
+                                : 0;
     int available =
         (int)(mi.rcMonitor.bottom - mi.rcMonitor.top) - Px(150) - extraHeader;
-    int maxDocs = std::max(0, std::min(10, available / std::max(1, Px(22))));
+    int maxDocs = std::max(
+        0, std::min(
+               10, available /
+                       std::max(1, Px(win10Jump ? kWin10JumpRowLogical : 22))));
     if (d->docs.size() > (size_t)maxDocs)
         d->docs.resize(maxDocs);
     const bool classicJump = taskbarSkin.load() == 7;
@@ -31394,6 +38631,10 @@ static bool ShowJumpList(size_t index,
     if (d->rows.empty())
         return false;
     int width = Px(classicJump ? 242 : 252), height = y + Px(win7Jump ? 6 : 12);
+    if (win10Jump) {
+        width = Px(kWin10JumpWidthLogical);
+        height = T81Win10LayoutJump(d.get());
+    }
     RECT frame{0, 0, width, height};
     // Measure the actual localized pin action in the same Segoe UI font as
     // PaintJumpPopup. GetTextExtentPoint32W uses the font selected into the DC.
@@ -31428,7 +38669,8 @@ static bool ShowJumpList(size_t index,
         }
     }
     DWORD popupEx = WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
-    DWORD jumpStyle = classicJump ? WS_POPUP : TaskbarPopupStyle();
+    DWORD jumpStyle =
+        (classicJump || win10Jump) ? WS_POPUP : TaskbarPopupStyle();
     if (T81IsWin7Skin(taskbarSkin.load())) {
         // Measure and retain the system-provided non-client frame.
         using AdjustFn = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
@@ -31466,20 +38708,24 @@ static bool ShowJumpList(size_t index,
             if (classicJump)
                 row.rect.left = Px(2);
             row.rect.right = std::max(row.rect.left + 1L,
-                                      (LONG)(width - Px(classicJump ? 2 : 10)));
+                                      (LONG)(width - Px(classicJump ? 2
+                                                        : win10Jump ? 0
+                                                                    : 10)));
         }
         frame = RECT{0, 0, width, height};
         AdjustWindowRectEx(&frame, jumpStyle, FALSE, popupEx);
     }
     int w = frame.right - frame.left, h = frame.bottom - frame.top;
+    // The Windows 10 list stands on the bar; the other lists keep their gap.
+    const int jumpGap = win10Jump ? 0 : Px(4);
     int x = button.left + (button.right - button.left - w) / 2,
-        top = button.top - h - (classicJump ? 0 : Px(4));
+        top = button.top - h - (classicJump ? 0 : jumpGap);
     x = std::max((int)mi.rcWork.left + 2,
                  std::min(x, (int)mi.rcWork.right - w - 2));
     if (top < mi.rcMonitor.top)
-        top = button.bottom + Px(4);
+        top = button.bottom + jumpGap;
     if (s->verticalActive) {
-        x = s->verticalSide == 1 ? bar.right + Px(4) : bar.left - w - Px(4);
+        x = s->verticalSide == 1 ? bar.right + jumpGap : bar.left - w - jumpGap;
         top = (button.top + button.bottom - h) / 2;
         x = std::max((int)mi.rcWork.left,
                      std::min(x, (int)mi.rcWork.right - w));
@@ -32417,7 +39663,7 @@ static void UpdateBarEdgeDrag(HWND h, POINT point, bool finalPoint = false) {
         return;
     int previous = s->barEdgeOverride;
     if (!s->barDragBlurSuspended && experimentalLiveBlur.load() &&
-        (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 2)) {
+        T81SkinWantsLiveBlur(taskbarSkin.load())) {
         s->barDragBlurSuspended = true;
         T81SetExperimentalBlur(h);
         Wh_Log(L"[T81-BLUR] requested temporary suspension during bar drag");
@@ -32458,6 +39704,10 @@ static int VerticalHit(int x, int y) {
          (s->verticalSide == 1 ? x < std::max(1, Px(2))
                                : x >= r.right - std::max(1, Px(2)))))
         return HIT_START;
+    if (PtInRect(&v.search, p))
+        return HIT_W10_SEARCH;
+    if (PtInRect(&v.taskView, p))
+        return HIT_W10_TASKVIEW;
     if (PtInRect(&v.desktop, p))
         return HIT_DESKTOP;
     if (PtInRect(&v.language, p))
@@ -32499,8 +39749,11 @@ static void DrawVerticalTrayArrow(Gdiplus::Graphics& g,
                                rotate(4.6f, 2.5f)};
     Gdiplus::PointF inner[] = {rotate(-3.3f, 1.3f), rotate(0, -1.9f),
                                rotate(3.3f, 1.3f)};
-    Gdiplus::SolidBrush shadow(Gdiplus::Color(145, 0, 0, 0));
-    Gdiplus::SolidBrush fill(Gdiplus::Color(255, 245, 253, 255));
+    // Dark on the light Windows 10 bar, without the shade under it.
+    const bool lightBar = T81W10Light();
+    Gdiplus::SolidBrush shadow(Gdiplus::Color(lightBar ? 0 : 145, 0, 0, 0));
+    Gdiplus::SolidBrush fill(lightBar ? Gdiplus::Color(255, 0, 0, 0)
+                                      : Gdiplus::Color(255, 245, 253, 255));
     g.FillPolygon(&shadow, outer, 3);
     g.FillPolygon(&fill, inner, 3);
 }
@@ -32582,6 +39835,48 @@ static RECT ButtonGroupRect(size_t i) {
     return RECT{
         x, top, x + l.width,
         ((int)i / l.columns == l.rows - 1) ? r.bottom : top + l.rowHeight};
+}
+static std::vector<ButtonTransition> T81PrepareCloseFades(
+    const std::vector<Task>& next) {
+    std::vector<ButtonTransition> result;
+    if (!s || !s->bar || s->verticalActive)
+        return result;
+    RECT client{};
+    if (!GetClientRect(s->bar, &client) ||
+        GetLayout(client.right, client.bottom).rows != 1)
+        return result;
+    for (size_t i = 0; i < s->groups.size() && result.size() < MAX_TASKS; ++i) {
+        const Group& group = s->groups[i];
+        if (group.tasks.empty())
+            continue;
+        bool anyRemains = false;
+        for (size_t index : group.tasks)
+            if (index < s->tasks.size() &&
+                TaskIdentityPresent(next, s->tasks[index])) {
+                anyRemains = true;
+                break;
+            }
+        if (anyRemains)
+            continue;
+        RECT rect = ButtonGroupRect(i);
+        if (IsRectEmpty(&rect))
+            continue;
+        ButtonTransition ghost;
+        ghost.key = group.key;
+        ghost.rect = rect;
+        ghost.barWidth = client.right;
+        ghost.barHeight = client.bottom;
+        ghost.layers = (int)std::min<size_t>(group.tasks.size(), 3);
+        ghost.title = GroupTitle(i);
+        HICON icon = GroupIcon(i);
+        if (icon) {
+            HICON copy = CopyIcon(icon);
+            if (copy)
+                ghost.icon = {copy, DestroyIconHandle{}};
+        }
+        result.push_back(std::move(ghost));
+    }
+    return result;
 }
 static PendingButtonChanges PrepareButtonChanges(
     const std::vector<Task>& next) {
@@ -32863,7 +40158,12 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
                 (s->verticalPressed == HIT_START && s->hot == HIT_START) ||
                 (T81SkinHasTrackedStartButton(taskbarSkin.load()) &&
                  T81StartMenuOn(s->bar));
-            if (taskbarSkin.load() == 7) {
+            if (T81IsWin10Skin(taskbarSkin.load())) {
+                g.Restore(startState);
+                T81Win10PaintStart(g, RECT{0, 0, w, (int)v.start.bottom},
+                                   s->startFade, down);
+                startState = g.Save();
+            } else if (taskbarSkin.load() == 7) {
                 g.Restore(startState);
                 T81ClassicStart(g, v.start, T81StartMenuOn(s->bar),
                                 s->hot == HIT_START, Dpi());
@@ -32919,6 +40219,8 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
                             ? StartCustomColor()
                             : StartHoverColor();
                     DrawStartImage(g, sw, sh, 0, fade, &tint);
+                    T81DrawWin81LogoGleam(g, sw, sh, fade,
+                                          s->startGleamStarted);
                     DrawStartImage(g, sw, sh, down ? 2 : 1, fade);
                 }
                 if (down) {
@@ -32932,6 +40234,33 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
                     down ? 1.f : std::max(0.f, std::min(1.f, s->startFade));
                 T81PaintWin81StartEdges(g, w, (int)v.start.bottom, amount,
                                         down);
+            }
+        }
+        if (T81IsWin10Skin(taskbarSkin.load())) {
+            const float unit = Dpi() / 96.0f;
+            const int glyph = Px(16);
+            const Color white = T81W10BarInk();
+            auto wash = [&](const RECT& cell, int hit, bool open) {
+                const int state = open                        ? 2
+                                  : s->hot != hit             ? 0
+                                  : s->verticalPressed == hit ? 2
+                                                              : 1;
+                T81Win10Wash(g, cell, state == 2 ? 38 : state == 1 ? 26 : 0);
+            };
+            const int glyphLeft = (w - glyph) / 2;
+            if (v.search.bottom > v.search.top) {
+                const int top =
+                    v.search.top + (v.search.bottom - v.search.top - glyph) / 2;
+                wash(v.search, HIT_W10_SEARCH, T81Win10SearchShown());
+                T81Win10Magnifier(g, (REAL)glyphLeft, (REAL)top, unit, white);
+            }
+            if (v.taskView.bottom > v.taskView.top) {
+                const int tall = Px(15),
+                          top = v.taskView.top +
+                                (v.taskView.bottom - v.taskView.top - tall) / 2;
+                wash(v.taskView, HIT_W10_TASKVIEW, false);
+                T81Win10TaskViewGlyph(g, (REAL)glyphLeft, (REAL)top, unit,
+                                      white);
             }
         }
         EnsureTrayHoverImage();
@@ -32978,7 +40307,8 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
                                      TaskTileLayers(s->groups[i].tasks.size()),
                                      active, hover);
             if (!s->groups[i].tasks.empty() && s->hot == i) {
-                if (T81IsWin7Skin(taskbarSkin.load())) {
+                if (T81IsWin7Skin(taskbarSkin.load()) ||
+                    T81UsesWin8TaskGlow()) {
                     POINT cursor{};
                     if (GetCursorPos(&cursor) &&
                         ScreenToClient(s->bar, &cursor))
@@ -33137,7 +40467,7 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
     }
     HFONT font = CreateTaskbarFont(Dpi(), s->perPixelBar);
     ScopedSelection sel(dc, font);
-    SetTextColor(dc, RGB(255, 255, 255));
+    SetTextColor(dc, T81BarInkRef());
     SetBkMode(dc, TRANSPARENT);
     if (!IsRectEmpty(&v.more)) {
         RECT r = v.more;
@@ -33227,7 +40557,7 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
         format.SetLineAlignment(StringAlignmentCenter);
         format.SetFormatFlags(StringFormatFlagsNoWrap);
         format.SetTrimming(StringTrimmingEllipsisCharacter);
-        SolidBrush white(Color(255, 255, 255, 255));
+        SolidBrush white(T81W10BarInk());
         SolidBrush basicLanguage(Color(255, 26, 41, 58));
         auto row = [&](const wchar_t* text, RECT rect) {
             if (family.GetLastStatus() == Ok &&
@@ -33441,18 +40771,24 @@ static bool VerticalInput(HWND h,
             s->tracking = true;
         }
         int hit = hitAt();
-        if ((T81IsWin7Skin(taskbarSkin.load()) || BetaTextureAvailable(2)) &&
+        if ((T81IsWin7Skin(taskbarSkin.load()) || T81UsesWin8TaskGlow() ||
+             BetaTextureAvailable(2)) &&
             hit >= 0 && hit == s->hot)
             InvalidateRect(h, nullptr, FALSE);
         if (hit != s->hot) {
+            if (hit == HIT_START && taskbarSkin.load() == 4)
+                s->startGleamStarted = GetTickCount64();
             s->hot = hit;
             s->hover = hit;
+            if (hit == HIT_NETWORK)
+                T81W10NetPrefetch(true);
             KillTimer(h, TIMER_HOVER);
             HidePreview();
             if (hit >= 0 || hit == HIT_START || hit == HIT_DESKTOP ||
                 hit == HIT_NETWORK || hit == HIT_VOLUME || hit == HIT_BATTERY ||
                 hit == HIT_CLOCK || hit == HIT_LANGUAGE ||
-                hit == HIT_TRAY_MORE || hit <= HIT_TRAY_ICON_BASE)
+                hit == HIT_TRAY_MORE || hit <= HIT_TRAY_ICON_BASE ||
+                T81IsWin10Hit(hit))
                 SetTimer(h, TIMER_HOVER, 450, nullptr);
             s->fadeTick = GetTickCount64();
             SetTimer(h, TIMER_FADE, 16, nullptr);
@@ -33576,6 +40912,10 @@ static bool VerticalInput(HWND h,
             SendWin(0);
             return true;
         }
+        if (T81IsWin10Hit(hit)) {
+            T81Win10Activate(hit);
+            return true;
+        }
         if (hit == HIT_DESKTOP) {
             ToggleDesktop();
             return true;
@@ -33667,9 +41007,12 @@ static bool VerticalInput(HWND h,
             HandlePrivateIconEvent(hit, m);
             return true;
         }
-        if (hit == HIT_START)
-            SendWin('X');
-        else if (hit == HIT_LANGUAGE)
+        if (hit == HIT_START) {
+            if (T81IsWin10Skin(taskbarSkin.load()))
+                HideInfoTip();
+            if (!EmbeddedWinX::Request(h))
+                SendWin('X');
+        } else if (hit == HIT_LANGUAGE)
             ShowLanguageIndicatorMenu();
         else if (hit == HIT_CLOCK)
             ShowClockContextMenu();
@@ -33832,7 +41175,7 @@ struct T81Mirror {
     // Hover animation belongs to this monitor, never to the primary bar.
     float startFade = 0.f;
     bool startHot = false;
-    ULONGLONG startFadeTick = 0;
+    ULONGLONG startFadeTick = 0, startGleamStarted = 0;
     // Local input state: keys survive task list refreshes, indices do not.
     bool taskPress = false, taskDragging = false;
     POINT taskPressPoint{};
@@ -34161,7 +41504,10 @@ static void T81DrawSecondaryForeground(
             mirror ? std::max(0.f, std::min(1.f, mirror->startFade)) : 0.f;
         if (!startHotCorner.load()) {
             int sw = start.right, sh = start.bottom;
-            if (taskbarSkin.load() == 7)
+            if (T81IsWin10Skin(taskbarSkin.load()))
+                T81Win10PaintStart(g, RECT{0, 0, sw, sh}, fade, startDown,
+                                   (int)dpi);
+            else if (taskbarSkin.load() == 7)
                 T81ClassicStart(g, start, T81StartMenuOn(window), startHot,
                                 (int)dpi);
             else if (T81IsWin7Skin(taskbarSkin.load()) &&
@@ -34203,6 +41549,9 @@ static void T81DrawSecondaryForeground(
                             ? StartCustomColor()
                             : StartHoverColor();
                     DrawStartImage(g, logoW, logoH, 0, amount, &tint);
+                    T81DrawWin81LogoGleam(
+                        g, logoW, logoH, amount,
+                        mirror ? mirror->startGleamStarted : 0);
                     DrawStartImage(g, logoW, logoH, startDown ? 2 : 1, amount);
                 }
                 if (startDown) {
@@ -34279,7 +41628,7 @@ static void T81DrawSecondaryForeground(
                 }
             }
             if (running && hot) {
-                if (T81IsWin7Skin(taskbarSkin.load()))
+                if (T81IsWin7Skin(taskbarSkin.load()) || T81UsesWin8TaskGlow())
                     DrawIconHotGlow(g, button.rect, (int)button.group, 1.f,
                                     cursor);
                 else if (painted && !vertical)
@@ -34387,7 +41736,7 @@ static void T81DrawSecondaryForeground(
             } else {
                 if (hot)
                     DrawTrayArrowHover(g, tray.arrow);
-                SolidBrush arrow(taskbarSkin.load() == 7
+                SolidBrush arrow(taskbarSkin.load() == 7 || T81W10Light()
                                      ? Color(255, 0, 0, 0)
                                      : Color(255, 245, 253, 255));
                 float x = (tray.arrow.left + tray.arrow.right) * 0.5f,
@@ -34430,7 +41779,7 @@ static void T81DrawSecondaryForeground(
         GetDateFormatW(LOCALE_USER_DEFAULT, DATE_SHORTDATE, nullptr, nullptr,
                        date, (int)std::size(date));
         SetBkMode(dc, TRANSPARENT);
-        SetTextColor(dc, RGB(255, 255, 255));
+        SetTextColor(dc, T81BarInkRef());
         ClockTextRows rows = GetClockTextRows(tray.clock, h, (int)dpi);
         std::vector<ClockPaintLine> clockLines{{rows.time, time}};
         if (rows.showDate)
@@ -34967,6 +42316,8 @@ static void T81SecondaryStartHot(T81Mirror& bar, bool hot) {
         return;
     bar.startHot = hot;
     bar.startFadeTick = GetTickCount64();
+    if (hot && taskbarSkin.load() == 4)
+        bar.startGleamStarted = bar.startFadeTick;
     if (!SetTimer(bar.window, TIMER_T81_SECONDARY_START_FADE, 16, nullptr)) {
         bar.startFade = hot ? 1.f : 0.f;
         InvalidateRect(bar.window, nullptr, FALSE);
@@ -35209,8 +42560,11 @@ static LRESULT CALLBACK T81MirrorProc(HWND hwnd,
             else
                 bar->startFade =
                     std::max(0.f, bar->startFade - elapsed / duration);
-            if ((bar->startHot && bar->startFade >= 1.f) ||
-                (!bar->startHot && bar->startFade <= 0.f))
+            bool gleam = taskbarSkin.load() == 4 && bar->startHot &&
+                         bar->startGleamStarted &&
+                         now - bar->startGleamStarted < 700;
+            if (!gleam && ((bar->startHot && bar->startFade >= 1.f) ||
+                           (!bar->startHot && bar->startFade <= 0.f)))
                 KillTimer(hwnd, TIMER_T81_SECONDARY_START_FADE);
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
@@ -35325,7 +42679,8 @@ static LRESULT CALLBACK T81MirrorProc(HWND hwnd,
             ClientToScreen(hwnd, &screen);
             RECT start = T81SecondaryStartRect(hwnd);
             if (PtInRect(&start, point)) {
-                SendWin('X');
+                if (!EmbeddedWinX::Request(hwnd))
+                    SendWin('X');
                 return 0;
             }
             if (!s->verticalActive && s->privateActive) {
@@ -35657,6 +43012,10 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         FinishPinWorker();
         return 0;
     }
+    if (m == WM_T81_NET_READY && s && h == s->bar) {
+        T81W10NetFinish();
+        return 0;
+    }
     if (m == WM_T81_OPEN_CUSTOMIZE && s && h == s->bar) {
         if (wp)
             ShowTrayCustomize(h);
@@ -35666,6 +43025,28 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     }
     if (T81ResizeMessage(h, m, wp, lp))
         return m == WM_SETCURSOR ? TRUE : 0;
+    // Windows 10: the search box is a text field and shows the text cursor.
+    if (m == WM_SETCURSOR && s && h == s->bar && LOWORD(lp) == HTCLIENT &&
+        T81IsWin10Skin(taskbarSkin.load()) && !s->verticalActive) {
+        POINT p{};
+        RECT client{};
+        if (GetCursorPos(&p) && ScreenToClient(h, &p) &&
+            GetClientRect(h, &client)) {
+            const Layout layout = GetLayout(client.right, client.bottom);
+            if (PtInRect(&layout.search, p) &&
+                layout.search.right - layout.search.left >
+                    Px(2 * kWin10SlotLogical)) {
+                // Away while one types, as in a text box of Windows.
+                SetCursor(T81W10PointerHidden()
+                              ? nullptr
+                              : LoadCursorW(nullptr, IDC_IBEAM));
+                return TRUE;
+            }
+        }
+    }
+    if (s && (m == WM_LBUTTONDOWN || m == WM_RBUTTONDOWN ||
+              m == WM_MBUTTONDOWN || m == WM_LBUTTONDBLCLK))
+        T81Win10BarPressed(Hit(GET_X_LPARAM(lp), GET_Y_LPARAM(lp)));
     if (s && m == WM_LBUTTONDOWN) {
         // New direct input supersedes any pending activation from an older
         // task click. Do not activate another application on empty-bar clicks.
@@ -36059,7 +43440,8 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                         L"known=%d",
                         reserved ? 1 : 0, known ? 1 : 0);
                     if (reserved) {
-                        ReleaseHiddenNativeWorkArea(mi);
+                        if (!s->appbarSameEdgeRecovery)
+                            ReleaseHiddenNativeWorkArea(mi);
                         // Recheck after Explorer or another AppBar changes work
                         // area.
                         SetTimer(h, TIMER_APPBAR_VERIFY, 2000, nullptr);
@@ -36189,6 +43571,34 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                 TickTrayDrag();
                 DismissOverflowOnOutsideClick();
             }
+            if (wp == TIMER_T81_OPEN_FADE) {
+                ULONGLONG now = GetTickCount64();
+                if (!T81OpenFadeEnabled() || s->dragActive ||
+                    s->verticalActive) {
+                    s->openFades.clear();
+                    s->closeFades.clear();
+                } else {
+                    s->openFades.erase(
+                        std::remove_if(s->openFades.begin(), s->openFades.end(),
+                                       [now](const T81OpenFade& fade) {
+                                           return now < fade.start ||
+                                                  now - fade.start >= 200;
+                                       }),
+                        s->openFades.end());
+                    s->closeFades.erase(
+                        std::remove_if(s->closeFades.begin(),
+                                       s->closeFades.end(),
+                                       [now](const ButtonTransition& fade) {
+                                           return now < fade.start ||
+                                                  now - fade.start >= 200;
+                                       }),
+                        s->closeFades.end());
+                }
+                if (s->openFades.empty() && s->closeFades.empty())
+                    KillTimer(h, TIMER_T81_OPEN_FADE);
+                InvalidateRect(h, nullptr, FALSE);
+                return 0;
+            }
             if (wp == TIMER_BUTTON_TRANSITION) {
                 TickButtonTransitions();
                 return 0;
@@ -36202,6 +43612,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                 if (s->peekOn && CompanionStartScreenVisible())
                     PeekOff(false);
                 RefreshNativeLabelPreference();
+                T81W10PollSystem();
                 if (s->privateActive) {
                     // Slow fallback for settings changes that weren't
                     // broadcast. The immediate event paths use
@@ -36318,11 +43729,14 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                 KillTimer(h, TIMER_HOVER);
                 if (s->trayDrag.capture)
                     return 0;
+                if (T81Win10FlyoutOwns(s->hover))
+                    return 0;
                 if (s->hover >= 0)
                     ShowPreview(s->hover);
                 else if (s->hover == HIT_START && startHotCorner.load())
                     ShowHotCornerPreview();
-                else if (s->hover == HIT_START || s->hover == HIT_DESKTOP)
+                else if (s->hover == HIT_START || s->hover == HIT_DESKTOP ||
+                         T81IsWin10Hit(s->hover))
                     ShowBarButtonTooltip(s->hover);
                 else if (s->hover == HIT_NETWORK || s->hover == HIT_VOLUME ||
                          s->hover == HIT_BATTERY)
@@ -36444,6 +43858,10 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             s->languageMetricsDpi = 0;
             if (s->privateActive)
                 RefreshLanguageIndicator();
+            if (s->languageFlyout && IsWindow(s->languageFlyout)) {
+                UpdateLanguageFlyoutAccent();
+                RedrawLanguageFlyout(s->languageFlyout);
+            }
             if (!aeroPeek.load())
                 PeekOff(false);
             ConfigureBarAlpha(h, perPixelTaskbar.load());
@@ -36474,8 +43892,16 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             InvalidateRect(h, nullptr, FALSE);
             return 0;
         case WM_DWMCOLORIZATIONCOLORCHANGED:
+            if (s->languageFlyout && IsWindow(s->languageFlyout)) {
+                UpdateLanguageFlyoutAccent();
+                RedrawLanguageFlyout(s->languageFlyout);
+            }
             SetTimer(h, TIMER_T81_BLUR_REAPPLY, 300, nullptr);
             T81SetExperimentalBlur(h);
+            if (s->preview && IsWindow(s->preview)) {
+                T81SetExperimentalBlur(s->preview);
+                InvalidateRect(s->preview, nullptr, FALSE);
+            }
             for (const auto& mirror : t81Mirrors)
                 if (mirror.window && IsWindow(mirror.window))
                     T81SetExperimentalBlur(mirror.window);
@@ -36607,7 +44033,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                 s->tracking = true;
             }
             int hit = Hit(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
-            if ((T81IsWin7Skin(taskbarSkin.load()) ||
+            if ((T81IsWin7Skin(taskbarSkin.load()) || T81UsesWin8TaskGlow() ||
                  BetaTextureAvailable(2)) &&
                 hit >= 0 && hit == s->hot)
                 InvalidateRect(h, nullptr, FALSE);
@@ -36628,8 +44054,12 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                 InvalidateRect(h, nullptr, FALSE);
             }
             if (hit != s->hot) {
+                if (hit == HIT_START && taskbarSkin.load() == 4)
+                    s->startGleamStarted = GetTickCount64();
                 s->hot = hit;
                 s->hover = hit;
+                if (hit == HIT_NETWORK)
+                    T81W10NetPrefetch(true);
                 s->fadeTick = GetTickCount64();
                 SetTimer(h, TIMER_FADE, 16, nullptr);
                 KillTimer(h, TIMER_HOVER);
@@ -36650,7 +44080,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                         hit == HIT_NETWORK || hit == HIT_VOLUME ||
                         hit == HIT_BATTERY || hit == HIT_CLOCK ||
                         hit == HIT_LANGUAGE || hit == HIT_TRAY_MORE ||
-                        hit <= HIT_TRAY_ICON_BASE)
+                        T81IsWin10Hit(hit) || hit <= HIT_TRAY_ICON_BASE)
                         SetTimer(h, TIMER_HOVER, 450, nullptr);
                 }
                 InvalidateRect(h, nullptr, FALSE);
@@ -36669,12 +44099,14 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                 }
             }
             if ((s->hot == HIT_START || s->hot == HIT_DESKTOP ||
-                 s->hot == HIT_CLOCK || s->hot == HIT_TRAY_MORE) &&
+                 s->hot == HIT_CLOCK || s->hot == HIT_TRAY_MORE ||
+                 T81IsWin10Hit(s->hot)) &&
                 !s->hotCornerPreview)
                 HidePreview();
             s->tracking = false;
             s->hot = HIT_NONE;
             s->hover = HIT_NONE;
+            s->win10Pressed = HIT_NONE;
             s->desktopArrowHot = false;
             s->linksArrowHot = false;
             s->fadeTick = GetTickCount64();
@@ -36776,9 +44208,15 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                 return 0;
             }
             if (hit == HIT_START || hit == HIT_DESKTOP || hit == HIT_CLOCK ||
-                hit == HIT_TRAY_MORE) {
+                hit == HIT_TRAY_MORE || T81IsWin10Hit(hit)) {
                 KillTimer(h, TIMER_HOVER);
                 HidePreview();
+            }
+            if (T81IsWin10Hit(hit)) {
+                // No capture: releasing elsewhere simply forgets the press.
+                s->win10Pressed = hit;
+                InvalidateRect(h, nullptr, FALSE);
+                return 0;
             }
             if (hit == HIT_TRAY_MORE && T81IsWin7Skin(taskbarSkin.load()))
                 InvalidateRect(h, nullptr, FALSE);
@@ -36816,6 +44254,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             if (GetCapture() == h)
                 ReleaseCapture();
             s->startPressed = false;
+            s->win10Pressed = HIT_NONE;
             s->betaDesktopPressed = false;
             s->dragCandidate = false;
             s->dragActive = false;
@@ -36976,6 +44415,11 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             }
             int hit = Hit(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
             bool startClick = s->startPressed && hit == HIT_START;
+            const int win10Pressed = s->win10Pressed;
+            if (win10Pressed != HIT_NONE) {
+                s->win10Pressed = HIT_NONE;
+                InvalidateRect(h, nullptr, FALSE);
+            }
             bool didDrag = s->dragActive;
             int insertion = s->dragInsertion;
             std::wstring dragged = s->dragKey;
@@ -37020,6 +44464,11 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                 LaunchSystemTrayHit(hit);
                 if (hit == HIT_TRAY_MORE)
                     InvalidateRect(h, nullptr, FALSE);
+                return 0;
+            }
+            if (T81IsWin10Hit(hit)) {
+                if (hit == win10Pressed)
+                    T81Win10Activate(hit);
                 return 0;
             }
             if (startClick)
@@ -37337,7 +44786,10 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                 return 0;
             }
             if (hit == HIT_START) {
-                SendWin('X');
+                if (T81IsWin10Skin(taskbarSkin.load()))
+                    HideInfoTip();
+                if (!EmbeddedWinX::Request(h))
+                    SendWin('X');
                 return 0;
             }
             POINT p{};
@@ -37407,6 +44859,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             DestroyAddressBand();
             CloseJumpPopup();
             KillTimer(h, TIMER_REFRESH);
+            KillTimer(h, TIMER_T81_OPEN_FADE);
             KillTimer(h, TIMER_LANGUAGE_REFRESH);
             KillTimer(h, TIMER_HOVER);
             KillTimer(h, TIMER_PREVIEW);
@@ -37708,6 +45161,7 @@ DWORD WINAPI UIThread(LPVOID) {
         UnregisterClassW(kJumpClass, GetModuleHandleW(nullptr));
         DestroyPrivateOverflow();
         DestroyLanguageFlyout();
+        T81Win10DestroyFlyout();
         StopPrivateTray();
         if (local.endpoint) {
             local.endpoint->Release();
@@ -37781,6 +45235,7 @@ DWORD WINAPI UIThread(LPVOID) {
             cleanup([&] { CloseJumpPopup(); });
             cleanup([&] { DestroyPrivateOverflow(); });
             cleanup([&] { DestroyLanguageFlyout(); });
+            cleanup([&] { T81Win10DestroyFlyout(); });
             cleanup([&] {
                 if (local.endpoint) {
                     local.endpoint->Release();
@@ -37976,6 +45431,2665 @@ static void StopTaskbarWorker() {
     threadHandle = nullptr;
     threadId = 0;
 }
+// Win32 Win+X implementation adapted from Windows 10 Win+X Restorer 1.1.0.
+namespace {
+namespace EmbeddedWinX {
+static bool ContainsNoCase(const wchar_t* haystack, const wchar_t* needle) {
+    if (!haystack || !needle || !*needle)
+        return false;
+    size_t n = wcslen(needle);
+    for (const wchar_t* p = haystack; *p; p++) {
+        if (_wcsnicmp(p, needle, n) == 0)
+            return true;
+    }
+    return false;
+}
+
+enum UiLangId {
+    LANG_IT = 0,
+    LANG_EN,
+    LANG_FR,
+    LANG_ES,
+    LANG_DE,
+    LANG_PT,
+    LANG_NL,
+    LANG_RU,
+    LANG_JA,
+    LANG_PL,
+    LANG_DA,
+    LANG_SV,
+    LANG_NO,
+    LANG_FI,
+    LANG_TR,
+    LANG_COUNT
+};
+
+static UiLangId DetectUiLang() {
+    LANGID lid = (LANGID)(GetUserDefaultUILanguage() & 0xFFFF);
+    WORD primary = PRIMARYLANGID(lid);
+    switch (primary) {
+        case LANG_ITALIAN:
+            return LANG_IT;
+        case LANG_ENGLISH:
+            return LANG_EN;
+        case LANG_FRENCH:
+            return LANG_FR;
+        case LANG_SPANISH:
+            return LANG_ES;
+        case LANG_GERMAN:
+            return LANG_DE;
+        case LANG_PORTUGUESE:
+            return LANG_PT;
+        case LANG_DUTCH:
+            return LANG_NL;
+        case LANG_RUSSIAN:
+            return LANG_RU;
+        case LANG_JAPANESE:
+            return LANG_JA;
+        case LANG_POLISH:
+            return LANG_PL;
+        case LANG_DANISH:
+            return LANG_DA;
+        case LANG_SWEDISH:
+            return LANG_SV;
+        case LANG_NORWEGIAN:
+            return LANG_NO;
+        case LANG_FINNISH:
+            return LANG_FI;
+        case LANG_TURKISH:
+            return LANG_TR;
+        default:
+            return LANG_EN;
+    }
+}
+
+// Destroys the popup menu it owns.
+class ScopedMenu {
+   public:
+    explicit ScopedMenu(HMENU menu = nullptr) : m_menu(menu) {}
+    ~ScopedMenu() {
+        if (m_menu)
+            DestroyMenu(m_menu);
+    }
+    ScopedMenu(const ScopedMenu&) = delete;
+    ScopedMenu& operator=(const ScopedMenu&) = delete;
+    HMENU get() const { return m_menu; }
+
+   private:
+    HMENU m_menu;
+};
+
+// ---------------------------------------------------------------------------
+// Menu presentation: the Windows 10 style menu
+//
+// Windows 10 draws its Win+X menu with its own owner-draw code, not with the
+// plain popup of TrackPopupMenuEx. The renderer below ("ImmersiveMenu", ~430
+// lines) takes the ordinary popup menu built further down, reads its items back
+// through GetMenuItemInfoW and draws them with the Windows 10 proportions,
+// colours and font - 32 px rows, the Windows 10 light (F9F9F9) or dark (2B2B2B)
+// scheme, the shell theme when the shell offers it. Entries and commands are
+// untouched: only the look changes, and it is the look of the original menu.
+// ---------------------------------------------------------------------------
+namespace ImmersiveMenu {
+
+using ThemeHandle = void*;
+static constexpr int kPartBackground = 9;  // MENU_POPUPBACKGROUND
+static constexpr int kPartItem = 14;       // MENU_POPUPITEM
+static constexpr int kStateNormal = 1;
+static constexpr int kStateHot = 2;
+static constexpr int kStateDisabled = 3;
+static constexpr int kPropBorderColor = 3801;        // TMT_BORDERCOLOR
+static constexpr int kPropFillColor = 3802;          // TMT_FILLCOLOR
+static constexpr int kPropTextColor = 3803;          // TMT_TEXTCOLOR
+static constexpr int kPropFont = 210;                // TMT_FONT
+static constexpr UINT_PTR kSubclassId = 0x494D4D31;  // "IMM1"
+
+struct Api {
+    ThemeHandle(WINAPI* openTheme)(HWND, LPCWSTR) = nullptr;
+    ThemeHandle(WINAPI* openThemeForDpi)(HWND, LPCWSTR, UINT) = nullptr;
+    HRESULT(WINAPI* closeTheme)(ThemeHandle) = nullptr;
+    HRESULT(WINAPI* drawBackground)(ThemeHandle,
+                                    HDC,
+                                    int,
+                                    int,
+                                    const RECT*,
+                                    const RECT*) = nullptr;
+    HRESULT(WINAPI* getFont)(ThemeHandle, HDC, int, int, int, LOGFONTW*) =
+        nullptr;
+    HRESULT(WINAPI* getColor)(ThemeHandle, int, int, int, COLORREF*) = nullptr;
+    bool ready = false;
+};
+static Api g_api;
+
+static bool LoadApi() noexcept {
+    if (g_api.ready)
+        return true;
+    HMODULE module =
+        LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module)
+        return false;
+    g_api.openTheme = reinterpret_cast<ThemeHandle(WINAPI*)(HWND, LPCWSTR)>(
+        GetProcAddress(module, "OpenThemeData"));
+    g_api.openThemeForDpi =
+        reinterpret_cast<ThemeHandle(WINAPI*)(HWND, LPCWSTR, UINT)>(
+            GetProcAddress(module, "OpenThemeDataForDpi"));
+    g_api.closeTheme = reinterpret_cast<HRESULT(WINAPI*)(ThemeHandle)>(
+        GetProcAddress(module, "CloseThemeData"));
+    g_api.drawBackground = reinterpret_cast<HRESULT(WINAPI*)(
+        ThemeHandle, HDC, int, int, const RECT*, const RECT*)>(
+        GetProcAddress(module, "DrawThemeBackground"));
+    g_api.getFont = reinterpret_cast<HRESULT(WINAPI*)(ThemeHandle, HDC, int,
+                                                      int, int, LOGFONTW*)>(
+        GetProcAddress(module, "GetThemeFont"));
+    g_api.getColor = reinterpret_cast<HRESULT(WINAPI*)(ThemeHandle, int, int,
+                                                       int, COLORREF*)>(
+        GetProcAddress(module, "GetThemeColor"));
+    g_api.ready = g_api.openTheme && g_api.closeTheme && g_api.getColor;
+    return g_api.ready;
+}
+
+struct ItemData {
+    wchar_t text[128];
+    bool separator;
+    bool submenu;
+    // Native profile only: restore the HMENU before releasing drawing metadata.
+    HMENU menu = nullptr;
+    UINT position = 0;
+    UINT originalType = 0;
+    ULONG_PTR originalData = 0;
+};
+
+struct MenuBackground {
+    HMENU menu;
+    HBRUSH original;
+};
+
+struct Session {
+    HWND owner = nullptr;
+    ThemeHandle theme = nullptr;
+    int dpi = 96;
+    LOGFONTW font = {};
+    HFONT hfont = nullptr;
+    HBRUSH brush = nullptr;
+    // Colours of the Windows 10 menu: the light scheme is the one the menu has
+    // always used (F9F9F9 / black text), the dark one is the Windows 10 dark
+    // menu (2B2B2B / white text, 414141 highlight) as in the reference
+    // screenshot. The theme of the shell refines them when it is available, so
+    // the menu follows the Windows app theme, or the scheme forced by the
+    // WinXMenuTheme setting.
+    bool light = true;
+    COLORREF fill = RGB(249, 249, 249);
+    COLORREF textNormal = RGB(0, 0, 0);
+    COLORREF textDisabled = RGB(160, 160, 160);
+    COLORREF separator = RGB(205, 205, 205);
+    COLORREF hotFill = RGB(229, 229, 229);
+    int itemHeight = 0;
+    bool nativeMetrics =
+        false;  // dark Win32 profile: system font/rows, not immersive layout
+    // Proportions measured on the Windows 10 reference screenshot at 100% DPI
+    // and used as they are, so the recreation has the proportions of the
+    // original: 32 px rows, text 32 px inside the item rectangle, the submenu
+    // chevron 6 px from its right edge, the separator line inset by 8 px, and a
+    // menu about 258 px wide - the width of the reference menu, from which the
+    // shell subtracts its own right-hand gutter when the items are measured.
+    int padLeft = 0;
+    int padRight = 0;
+    int chevronInset = 0;
+    int separatorInset = 0;
+    std::vector<ItemData*> items;
+    std::vector<MenuBackground> backgrounds;  // only used by the native profile
+};
+static thread_local Session* g_session = nullptr;
+
+// Which scheme the menu uses. "Auto" follows the Windows app theme (Settings >
+// Personalization > Colors); "Light" / "Dark" force the Windows 10 light or
+// dark menu. Both colour sets are always available: when the shell theme cannot
+// be opened the menu is painted with the Windows 10 constants of the chosen
+// scheme instead of becoming an unstyled popup.
+static int Luma(COLORREF color) noexcept {
+    return (GetRValue(color) * 299 + GetGValue(color) * 587 +
+            GetBValue(color) * 114) /
+           1000;
+}
+static bool IsLightTheme() noexcept {
+    if (gT81MenuScheme >= 0)
+        return gT81MenuScheme == 1;
+    // This integration exposes only the native Win32 style and follows the
+    // Windows app theme, without requiring settings from the separate mod.
+    DWORD value = 1, size = sizeof(value);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Pe"
+                     L"rsonalize",
+                     L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value,
+                     &size) == ERROR_SUCCESS)
+        return value != 0;
+    return true;
+}
+
+// The sequence pnidui itself uses: light/dark variant, then neutral, then
+// "Menu".
+static ThemeHandle OpenMenuTheme(HWND owner, int dpi) noexcept {
+    const wchar_t* candidates[3] = {IsLightTheme()
+                                        ? L"LightMode_ImmersiveStart::Menu"
+                                        : L"DarkMode_ImmersiveStart::Menu",
+                                    L"ImmersiveStart::Menu", L"Menu"};
+    for (const wchar_t* name : candidates) {
+        ThemeHandle theme = nullptr;
+        if (g_api.openThemeForDpi)
+            theme = g_api.openThemeForDpi(owner, name, (UINT)dpi);
+        if (!theme && g_api.openTheme)
+            theme = g_api.openTheme(owner, name);
+        if (theme) {
+            static int logged = 0;
+            if (logged++ < 3)
+                Wh_Log(L"[menu] immersive menu: theme class '%s'", name);
+            return theme;
+        }
+    }
+    return nullptr;
+}
+
+static void End(Session& s) noexcept {
+    if (s.nativeMetrics) {
+        // All popup windows have closed before this cleanup. Detach our
+        // item-data pointers and background brush while they are still alive;
+        // only then release the GDI objects. This also rolls back a failed
+        // native Begin.
+        for (ItemData* d : s.items) {
+            MENUITEMINFOW current = {};
+            current.cbSize = sizeof(current);
+            current.fMask = MIIM_DATA;
+            if (GetMenuItemInfoW(d->menu, d->position, TRUE, &current) &&
+                current.dwItemData == reinterpret_cast<ULONG_PTR>(d)) {
+                MENUITEMINFOW restore = {};
+                restore.cbSize = sizeof(restore);
+                restore.fMask = MIIM_FTYPE | MIIM_DATA;
+                restore.fType = d->originalType;
+                restore.dwItemData = d->originalData;
+                SetMenuItemInfoW(d->menu, d->position, TRUE, &restore);
+            }
+        }
+        for (const MenuBackground& back : s.backgrounds) {
+            MENUINFO restore = {};
+            restore.cbSize = sizeof(restore);
+            restore.fMask = MIM_BACKGROUND;
+            if (GetMenuInfo(back.menu, &restore) &&
+                restore.hbrBack == s.brush) {
+                restore.hbrBack = back.original;
+                SetMenuInfo(back.menu, &restore);
+            }
+        }
+        s.backgrounds.clear();
+    }
+    for (ItemData* d : s.items)
+        delete d;
+    s.items.clear();
+    if (s.brush) {
+        DeleteObject(s.brush);
+        s.brush = nullptr;
+    }
+    if (s.hfont) {
+        DeleteObject(s.hfont);
+        s.hfont = nullptr;
+    }
+    if (s.theme && g_api.closeTheme) {
+        g_api.closeTheme(s.theme);
+        s.theme = nullptr;
+    }
+}
+
+static bool Prepare(Session& s, HMENU menu) noexcept {
+    const int count = GetMenuItemCount(menu);
+    if (s.nativeMetrics && count < 0)
+        return false;
+    for (int i = 0; i < count; ++i) {
+        wchar_t buffer[128] = {};
+        MENUITEMINFOW info = {};
+        info.cbSize = sizeof(info);
+        info.fMask = MIIM_FTYPE | MIIM_STRING | MIIM_SUBMENU |
+                     (s.nativeMetrics ? MIIM_DATA : 0);
+        info.dwTypeData = buffer;
+        info.cch = _countof(buffer) - 1;
+        if (!GetMenuItemInfoW(menu, i, TRUE, &info)) {
+            if (s.nativeMetrics)
+                return false;
+            continue;
+        }
+        ItemData* data = new (std::nothrow) ItemData{};
+        if (!data) {
+            if (s.nativeMetrics)
+                return false;
+            continue;
+        }
+        if (s.nativeMetrics) {
+            data->menu = menu;
+            data->position = static_cast<UINT>(i);
+            data->originalType = info.fType;
+            data->originalData = info.dwItemData;
+        }
+        data->separator = (info.fType & MFT_SEPARATOR) != 0;
+        data->submenu = info.hSubMenu != nullptr;
+        wcsncpy_s(data->text, buffer, _TRUNCATE);
+        s.items.push_back(data);
+
+        MENUITEMINFOW set = {};
+        set.cbSize = sizeof(set);
+        set.fMask = MIIM_FTYPE | MIIM_DATA;
+        set.fType = info.fType | MFT_OWNERDRAW;
+        set.dwItemData = reinterpret_cast<ULONG_PTR>(data);
+        const BOOL changed = SetMenuItemInfoW(menu, i, TRUE, &set);
+        if (s.nativeMetrics && !changed)
+            return false;
+        if (info.hSubMenu && !Prepare(s, info.hSubMenu))
+            return false;
+    }
+    MENUINFO mi = {};
+    mi.cbSize = sizeof(mi);
+    mi.fMask = MIM_BACKGROUND;
+    if (s.nativeMetrics) {
+        if (!GetMenuInfo(menu, &mi))
+            return false;
+        s.backgrounds.push_back({menu, mi.hbrBack});
+    }
+    mi.hbrBack = s.brush;  // theme background, never null
+    const BOOL changed = SetMenuInfo(menu, &mi);
+    return !s.nativeMetrics || changed;
+}
+
+static bool Begin(Session& s,
+                  HMENU menu,
+                  HWND owner,
+                  UINT dpiHint,
+                  bool nativeMetrics = false) noexcept {
+    if (!owner || (!nativeMetrics && !LoadApi()))
+        return false;
+    s.owner = owner;
+    s.nativeMetrics = nativeMetrics;
+    // The menu is measured with the scale of the monitor it opens on. The owner
+    // window is parked off-screen (see GetWinXMenuOwnerWindow), so its own DPI
+    // is that of the primary monitor, which is the wrong one for a secondary
+    // taskbar at a different scale: the caller passes the DPI of that monitor
+    // instead, and zero means that nothing better is known.
+    const UINT dpi = dpiHint ? dpiHint : GetDpiForWindow(owner);
+    s.dpi = dpi >= 96 && dpi <= 480 ? (int)dpi : 96;
+    // Windows 10 constants for the selected scheme: they stay in place if the
+    // theme cannot be opened or does not carry a colour, so both themes are
+    // supported even on builds where the immersive menu theme is missing.
+    s.light = nativeMetrics ? false : IsLightTheme();
+    s.fill = s.light ? RGB(249, 249, 249) : RGB(43, 43, 43);
+    s.textNormal = s.light ? RGB(0, 0, 0) : RGB(255, 255, 255);
+    s.textDisabled = s.light ? RGB(120, 120, 120) : RGB(160, 160, 160);
+    s.separator = s.light ? RGB(205, 205, 205) : RGB(128, 128, 128);
+    s.hotFill = s.light ? RGB(229, 229, 229) : RGB(65, 65, 65);
+    if (nativeMetrics) {
+        // Palette inspired by dark-menus. Deliberately no SetPreferredAppMode,
+        // FlushMenuThemes, uxtheme ordinals, or hooks of global drawing APIs.
+        s.fill = RGB(44, 44, 44);
+        s.textNormal = RGB(255, 255, 255);
+        s.textDisabled = RGB(170, 170, 170);
+        s.hotFill = RGB(69, 69, 69);
+        s.separator = RGB(80, 80, 80);
+    }
+    // The menus of the Windows 10 skin always use the Windows 10 constants,
+    // whatever the visual style of the running Windows draws for a menu.
+    const bool fixedScheme = gT81MenuScheme >= 0;
+    s.theme =
+        nativeMetrics || fixedScheme ? nullptr : OpenMenuTheme(owner, s.dpi);
+    if (!s.theme && !nativeMetrics && !fixedScheme) {
+        // No immersive theme on this build: paint the menu with the Windows 10
+        // colours anyway instead of falling back to a plain popup.
+        Wh_Log(
+            L"[menu] immersive theme unavailable: the menu keeps the Windows "
+            L"10 %s colours",
+            s.light ? L"light" : L"dark");
+    }
+
+    HDC dc = GetDC(owner);
+    if (nativeMetrics) {
+        NONCLIENTMETRICSW metrics = {};
+        metrics.cbSize = sizeof(metrics);
+        if (SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(metrics),
+                                       &metrics, 0, static_cast<UINT>(s.dpi))) {
+            s.font = metrics.lfMenuFont;
+        } else if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS,
+                                         sizeof(metrics), &metrics, 0)) {
+            s.font = metrics.lfMenuFont;
+            const UINT systemDpi = GetDpiForSystem();
+            if (systemDpi)
+                s.font.lfHeight = MulDiv(s.font.lfHeight, s.dpi, systemDpi);
+        }
+        if (!s.font.lfHeight) {
+            s.font.lfHeight = -MulDiv(9, s.dpi, 72);
+            wcscpy_s(s.font.lfFaceName, L"Segoe UI");
+        }
+    } else {
+        if (!s.theme || !g_api.getFont ||
+            FAILED(
+                g_api.getFont(s.theme, dc, kPartItem, 0, kPropFont, &s.font)) ||
+            s.font.lfHeight == 0) {
+            NONCLIENTMETRICSW info = {};
+            info.cbSize = sizeof(info);
+            if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(info),
+                                      &info, 0))
+                s.font = info.lfMenuFont;
+            else
+                s.font.lfHeight = -MulDiv(9, s.dpi, 72);
+            wcscpy_s(s.font.lfFaceName, LF_FACESIZE, L"Segoe UI");
+        }
+    }
+    if (s.theme) {
+        // A theme colour is accepted only when the call succeeded: a failed
+        // GetThemeColor can leave 0 (black) in the output, which would turn the
+        // menu background and its text black.
+        COLORREF themed = 0;
+        if (g_api.getColor(s.theme, kPartBackground, 0, kPropFillColor,
+                           &themed) == S_OK)
+            s.fill = themed;
+        if (g_api.getColor(s.theme, kPartItem, kStateNormal, kPropTextColor,
+                           &themed) == S_OK)
+            s.textNormal = themed;
+        if (g_api.getColor(s.theme, kPartItem, kStateDisabled, kPropTextColor,
+                           &themed) == S_OK)
+            s.textDisabled = themed;
+        COLORREF hot = s.hotFill;
+        if (g_api.getColor(s.theme, kPartItem, kStateHot, kPropFillColor,
+                           &hot) == S_OK)
+            s.hotFill = hot;
+    }
+    // Text close to the colour of the background would be hard or impossible
+    // to read (a theme that answers with the colours of the other scheme):
+    // back to the Windows 10 constants of the scheme.
+    if (abs(Luma(s.fill) - Luma(s.textNormal)) < 96) {
+        s.fill = s.light ? RGB(249, 249, 249) : RGB(43, 43, 43);
+        s.textNormal = s.light ? RGB(0, 0, 0) : RGB(255, 255, 255);
+    }
+    if (abs(Luma(s.fill) - Luma(s.textDisabled)) < 40)
+        s.textDisabled = s.light ? RGB(120, 120, 120) : RGB(160, 160, 160);
+    // Colour of the separator line for the scheme in use. In the light scheme
+    // the border colour the menu theme gives to its own popups is used when it
+    // is available (it is the colour the earlier builds showed); in the dark
+    // scheme the grey measured on the Windows 10 dark reference screenshot is
+    // used, which is clearly visible on the 2B2B2B background.
+    if (s.light && s.theme && g_api.getColor) {
+        COLORREF themed = s.separator;
+        if (g_api.getColor(s.theme, kPartBackground, 0, kPropBorderColor,
+                           &themed) == S_OK &&
+            themed != s.fill)
+            s.separator = themed;
+    }
+    static int themeLogs = 0;
+    if (themeLogs++ < 6)
+        Wh_Log(
+            L"[menu] %s menu: background RGB(%u,%u,%u), highlight "
+            L"RGB(%u,%u,%u), "
+            L"text RGB(%u,%u,%u), separator RGB(%u,%u,%u)",
+            s.light ? L"light" : L"dark", GetRValue(s.fill), GetGValue(s.fill),
+            GetBValue(s.fill), GetRValue(s.hotFill), GetGValue(s.hotFill),
+            GetBValue(s.hotFill), GetRValue(s.textNormal),
+            GetGValue(s.textNormal), GetBValue(s.textNormal),
+            GetRValue(s.separator), GetGValue(s.separator),
+            GetBValue(s.separator));
+    s.hfont = CreateFontIndirectW(&s.font);
+    int textHeight = abs(s.font.lfHeight);
+    if (s.hfont && dc) {
+        HGDIOBJ old = SelectObject(dc, s.hfont);
+        TEXTMETRICW tm = {};
+        if (GetTextMetricsW(dc, &tm))
+            textHeight = tm.tmHeight;
+        if (old)
+            SelectObject(dc, old);
+    }
+    if (dc)
+        ReleaseDC(owner, dc);
+    // Reference proportions (see Session), in device independent pixels so the
+    // menu looks the same at every display scale: rows 32 px tall, text 32 px
+    // in from the item rectangle, chevron 6 px from its right edge, separator
+    // line inset by 8 px. A row never becomes shorter than the text plus 8 px,
+    // so a large font or an East Asian face cannot clip the glyphs.
+    s.itemHeight = MulDiv(32, s.dpi, 96);
+    const int minItemHeight = textHeight + MulDiv(8, s.dpi, 96);
+    if (s.itemHeight < minItemHeight)
+        s.itemHeight = minItemHeight;
+    s.padLeft = MulDiv(32, s.dpi, 96);
+    s.padRight = MulDiv(10, s.dpi, 96);
+    s.chevronInset = MulDiv(4, s.dpi, 96);
+    s.separatorInset = MulDiv(8, s.dpi, 96);
+    if (nativeMetrics) {
+        s.itemHeight =
+            GetSystemMetricsForDpi(SM_CYMENU, static_cast<UINT>(s.dpi));
+        const int nativeMin = textHeight + MulDiv(6, s.dpi, 96);
+        if (s.itemHeight < nativeMin)
+            s.itemHeight = nativeMin;
+        s.padLeft =
+            GetSystemMetricsForDpi(SM_CXMENUCHECK, static_cast<UINT>(s.dpi)) +
+            MulDiv(6, s.dpi, 96);
+        s.padRight = MulDiv(12, s.dpi, 96);
+        s.chevronInset = MulDiv(8, s.dpi, 96);
+        s.separatorInset = MulDiv(3, s.dpi, 96);
+    }
+    s.brush = CreateSolidBrush(s.fill);
+    if (!s.hfont || !s.brush)
+        return false;
+    return Prepare(s, menu);
+}
+
+static bool Owns(const Session* s, const ItemData* d) noexcept {
+    if (!s || !d)
+        return false;
+    for (const ItemData* item : s->items)
+        if (item == d)
+            return true;
+    return false;
+}
+
+static void Measure(Session* s,
+                    HWND hwnd,
+                    MEASUREITEMSTRUCT* m,
+                    const ItemData* d) noexcept {
+    if (d->separator) {
+        m->itemWidth = 1;
+        m->itemHeight = MulDiv(s->nativeMetrics ? 7 : 9, s->dpi, 96);
+        return;
+    }
+    int width = 0;
+    HDC dc = GetDC(hwnd);
+    if (dc) {
+        HGDIOBJ old = SelectObject(dc, s->hfont);
+        RECT rc = {};
+        DrawTextW(dc, d->text, -1, &rc, DT_CALCRECT | DT_SINGLELINE | DT_LEFT);
+        width = rc.right - rc.left;
+        if (old)
+            SelectObject(dc, old);
+        ReleaseDC(hwnd, dc);
+    }
+    width += s->padLeft + s->padRight;
+    if (d->submenu)
+        width += s->chevronInset + MulDiv(14, s->dpi, 96);
+    // 242 px plus the ~16 px gutter the shell keeps on the right of the item
+    // rectangle gives the 258 px wide menu of the Windows 10 reference
+    // screenshot.
+    const int minWidth = s->nativeMetrics ? 0 : MulDiv(242, s->dpi, 96);
+    // Upper bounds, so a wrong measurement can never produce a menu that covers
+    // the screen.
+    const int maxWidth = MulDiv(520, s->dpi, 96);
+    const int maxHeight = MulDiv(64, s->dpi, 96);
+    if (width > maxWidth)
+        width = maxWidth;
+    int height = s->itemHeight;
+    if (height > maxHeight)
+        height = maxHeight;
+    m->itemWidth = static_cast<UINT>(width < minWidth ? minWidth : width);
+    m->itemHeight = static_cast<UINT>(height);
+}
+
+static void Draw(Session* s, DRAWITEMSTRUCT* di, const ItemData* d) noexcept {
+    HDC dc = di->hDC;
+    RECT rc = di->rcItem;
+    // Start every item from a clean clip region: the submenu rows take their
+    // own rectangle out of the clip below (to keep the shell from painting a
+    // second arrow on top of ours), and a clip left over from an earlier paint
+    // of the same row would otherwise erase parts of this one.
+    SelectClipRgn(dc, nullptr);
+    FillRect(dc, &rc, s->brush);
+    if (d->separator) {
+        // One pixel line of the separator colour of the scheme, always painted
+        // here. The menu theme cannot be trusted for this part: on the build
+        // that reported missing separators the themed MENU_POPUPSEPARATOR
+        // answered success without painting anything, so the section is drawn
+        // directly and never depends on the theme. Position and inset are the
+        // ones measured on the Windows 10 reference menu (a 1 px line, 8 px
+        // inside the item rectangle, in the middle of the row).
+        const int y = (rc.top + rc.bottom) / 2;
+        RECT r = {rc.left + s->separatorInset, y, rc.right - s->separatorInset,
+                  y + 1};
+        HBRUSH line = CreateSolidBrush(s->separator);
+        if (line) {
+            FillRect(dc, &r, line);
+            DeleteObject(line);
+        } else {
+            // Only possible when the process is out of GDI objects: the row
+            // keeps the menu background (a null brush would leave a black line
+            // behind).
+            Wh_Log(
+                L"[menu] separator brush not available: the line is skipped");
+        }
+        return;
+    }
+    const bool disabled = (di->itemState & (ODS_GRAYED | ODS_DISABLED)) != 0;
+    const bool selected = (di->itemState & ODS_SELECTED) != 0 && !disabled;
+    COLORREF textColor = disabled ? s->textDisabled : s->textNormal;
+    if (selected) {
+        if (!s->theme || !g_api.drawBackground ||
+            FAILED(g_api.drawBackground(s->theme, dc, kPartItem, kStateHot, &rc,
+                                        nullptr))) {
+            // Fallback of the selected row: the Windows 10 highlight colour of
+            // the scheme in use (light 229,229,229 / dark 65,65,65), never an
+            // inverted background, which used to turn the row black on a light
+            // menu.
+            HBRUSH hot = CreateSolidBrush(s->hotFill);
+            if (hot) {
+                FillRect(dc, &rc, hot);
+                DeleteObject(hot);
+            }
+        }
+        COLORREF hotText = textColor;
+        if (s->theme &&
+            g_api.getColor(s->theme, kPartItem, kStateHot, kPropTextColor,
+                           &hotText) == S_OK &&
+            abs(Luma(hotText) - Luma(s->hotFill)) >= 96)
+            textColor = hotText;
+    }
+    HGDIOBJ old = SelectObject(dc, s->hfont);
+    const int previousBkMode = SetBkMode(dc, TRANSPARENT);
+    const COLORREF previousTextColor = SetTextColor(dc, textColor);
+    RECT tr = rc;
+    tr.left += s->padLeft;
+    tr.right -= s->padRight;
+    DrawTextW(dc, d->text, -1, &tr,
+              DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_HIDEPREFIX);
+    if (!s->nativeMetrics && (di->itemState & ODS_CHECKED)) {
+        // The mark of a chosen option, in the space left of the text, as in
+        // the taskbar menu of Windows 10.
+        RECT mark = rc;
+        mark.right = mark.left + s->padLeft;
+        HFONT markFont = CreateFontW(
+            -MulDiv(12, s->dpi, 96), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe MDL2 Assets");
+        if (markFont) {
+            SelectObject(dc, markFont);
+            DrawTextW(dc, L"\xE73E", -1, &mark,
+                      DT_SINGLELINE | DT_VCENTER | DT_CENTER);
+            SelectObject(dc, s->hfont);
+            DeleteObject(markFont);
+        }
+    }
+    if (d->submenu) {
+        if (s->nativeMetrics) {
+            // A native-sized triangular arrow, using this row's text colour.
+            const int size = MulDiv(4, s->dpi, 96);
+            const int right = static_cast<int>(rc.right) - s->chevronInset;
+            const int centerY = static_cast<int>((rc.top + rc.bottom) / 2);
+            POINT points[3] = {{right - size, centerY - size},
+                               {right, centerY},
+                               {right - size, centerY + size}};
+            HBRUSH arrow = CreateSolidBrush(textColor);
+            if (arrow) {
+                HGDIOBJ previousBrush = SelectObject(dc, arrow);
+                HGDIOBJ previousPen =
+                    SelectObject(dc, GetStockObject(NULL_PEN));
+                Polygon(dc, points, _countof(points));
+                SelectObject(dc, previousPen);
+                SelectObject(dc, previousBrush);
+                DeleteObject(arrow);
+            }
+        } else {
+            // One chevron only: the shell glyph Windows 10 shows for a submenu,
+            // at the same distance from the right edge (see the reference
+            // screenshot).
+            RECT ar = rc;
+            ar.right -= s->chevronInset;
+            HFONT arrowFont =
+                CreateFontW(s->font.lfHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE,
+                            FALSE, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0,
+                            L"Segoe MDL2 Assets");
+            if (arrowFont) {
+                SelectObject(dc, arrowFont);
+                DrawTextW(dc, L"\xE76C", -1, &ar,
+                          DT_SINGLELINE | DT_VCENTER | DT_RIGHT);
+                SelectObject(dc, s->hfont);
+                DeleteObject(arrowFont);
+            }
+        }
+    }
+    if (old)
+        SelectObject(dc, old);
+    if (s->nativeMetrics) {
+        SetBkMode(dc, previousBkMode);
+        SetTextColor(dc, previousTextColor);
+    }
+    if (d->submenu) {
+        // One arrow, not two. The shell paints its own submenu arrow after
+        // WM_DRAWITEM has returned, on top of the chevron drawn just above: the
+        // local workaround is to take this item rectangle out of the clip
+        // region of this DC before returning, so only our chevron survives.
+        ExcludeClipRect(dc, rc.left, rc.top, rc.right, rc.bottom);
+    }
+}
+
+// The entries are owner-drawn, so the system cannot match a pressed letter to
+// an item and sends WM_MENUCHAR to the owner window instead. The Windows 10
+// menu is usable from the keyboard, so the letter is matched here: an entry is
+// executed when exactly one entry of the active menu starts with it. When more
+// than one entry matches, the key is ignored instead of guessing, because
+// executing the wrong entry would be worse than doing nothing (in the power
+// submenu "Sign out", "Sleep" and "Shut down" all start with the same letter in
+// several languages). Separators and entries that open a submenu are not
+// matched.
+//
+// posOut is the zero-based position of the entry in the menu: with MNC_EXECUTE
+// the system chooses the item at that position - the low word of the return
+// value is a position, not a command identifier - and TrackPopupMenuEx with
+// TPM_RETURNCMD then returns the identifier of that item to the caller.
+static bool MatchMenuChar(Session* s, HMENU menu, wchar_t ch, UINT& posOut) {
+    if (!menu || !ch)
+        return false;
+    UINT pos = 0;
+    int matches = 0;
+    const int count = GetMenuItemCount(menu);
+    for (int i = 0; i < count; ++i) {
+        MENUITEMINFOW info = {};
+        info.cbSize = sizeof(info);
+        info.fMask = MIIM_ID | MIIM_FTYPE | MIIM_SUBMENU | MIIM_DATA;
+        if (!GetMenuItemInfoW(menu, i, TRUE, &info))
+            continue;
+        if (info.fType & MFT_SEPARATOR)
+            continue;
+        // An entry that opens a submenu is never executed by a letter: its
+        // identifier is the submenu handle and not a command index, and the
+        // arrows open it.
+        if (info.hSubMenu)
+            continue;
+        const auto* d = reinterpret_cast<const ItemData*>(info.dwItemData);
+        if (!Owns(s, d) || !d->text[0])
+            continue;
+        if (towupper(d->text[0]) != towupper(ch))
+            continue;
+        if (++matches > 1)
+            return false;
+        pos = static_cast<UINT>(i);
+    }
+    if (matches != 1)
+        return false;
+    posOut = pos;
+    return true;
+}
+
+static LRESULT CALLBACK OwnerProc(HWND hwnd,
+                                  UINT msg,
+                                  WPARAM wParam,
+                                  LPARAM lParam,
+                                  UINT_PTR,
+                                  DWORD_PTR) {
+    Session* s = g_session;
+    if (s && s->owner != hwnd)
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
+    if (s && msg == WM_MEASUREITEM && lParam) {
+        auto* m = reinterpret_cast<MEASUREITEMSTRUCT*>(lParam);
+        const auto* d = reinterpret_cast<const ItemData*>(m->itemData);
+        if (m->CtlType == ODT_MENU && Owns(s, d)) {
+            Measure(s, hwnd, m, d);
+            return TRUE;
+        }
+    } else if (s && msg == WM_DRAWITEM && lParam) {
+        auto* di = reinterpret_cast<DRAWITEMSTRUCT*>(lParam);
+        const auto* d = reinterpret_cast<const ItemData*>(di->itemData);
+        if (di->CtlType == ODT_MENU && Owns(s, d)) {
+            Draw(s, di, d);
+            return TRUE;
+        }
+    } else if (s && msg == WM_MENUCHAR) {
+        if (s->nativeMetrics) {
+            bool ownedMenu = false;
+            for (const ItemData* item : s->items)
+                if (item->menu == reinterpret_cast<HMENU>(lParam))
+                    ownedMenu = true;
+            if (!ownedMenu)
+                return DefSubclassProc(hwnd, msg, wParam, lParam);
+        }
+        // LOWORD(wParam) is the character the user pressed, lParam the active
+        // menu. What the system wants back with MNC_EXECUTE is the position of
+        // the entry in that menu, and with TPM_RETURNCMD Track then returns its
+        // identifier.
+        UINT pos = 0;
+        if (MatchMenuChar(s, reinterpret_cast<HMENU>(lParam),
+                          (wchar_t)LOWORD(wParam), pos))
+            return MAKELRESULT(pos, MNC_EXECUTE);
+        return MAKELRESULT(0, MNC_IGNORE);
+    }
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
+}
+
+// Shared owner-draw tracker: immersive by default, native-sized dark profile
+// when nativeMetrics is true. Uses HMENU and TrackPopupMenuEx in both cases.
+// Must be called from the thread that owns "owner". Missing themes use our
+// colour palette; a missing owner subclass falls back to an ordinary menu
+// before items are altered.
+static UINT Track(HMENU menu,
+                  HWND owner,
+                  int x,
+                  int y,
+                  UINT flags,
+                  UINT dpi,
+                  bool nativeMetrics = false) noexcept {
+    flags = (flags & ~TPM_NONOTIFY) | TPM_RETURNCMD;
+    Session session;
+    if (g_session || !SetWindowSubclass(owner, OwnerProc, kSubclassId, 0))
+        return static_cast<UINT>(
+            TrackPopupMenuEx(menu, flags, x, y, owner, nullptr));
+    if (!Begin(session, menu, owner, dpi, nativeMetrics)) {
+        if (nativeMetrics)
+            Wh_Log(
+                L"[menu] native dark setup failed; restoring our menu and "
+                L"using the system palette");
+        RemoveWindowSubclass(owner, OwnerProc, kSubclassId);
+        End(session);
+        return static_cast<UINT>(
+            TrackPopupMenuEx(menu, flags, x, y, owner, nullptr));
+    }
+    g_session = &session;
+    const UINT result =
+        static_cast<UINT>(TrackPopupMenuEx(menu, flags, x, y, owner, nullptr));
+    RemoveWindowSubclass(owner, OwnerProc, kSubclassId);
+    g_session = nullptr;
+    End(session);
+    return result;
+}
+
+}  // namespace ImmersiveMenu
+
+namespace NativeMenu {
+
+// Only the HMENU trees explicitly created and marked by this mod are eligible.
+// Never change menus by class name alone or by globally detouring SetMenuInfo.
+static const int kOwnedMenuTag = 0;
+
+static bool MarkOwnedTree(HMENU menu) noexcept {
+    MENUINFO info = {};
+    info.cbSize = sizeof(info);
+    info.fMask = MIM_MENUDATA;
+    info.dwMenuData = reinterpret_cast<ULONG_PTR>(&kOwnedMenuTag);
+    if (!SetMenuInfo(menu, &info))
+        return false;
+    const int count = GetMenuItemCount(menu);
+    for (int i = 0; i < count; ++i) {
+        HMENU child = GetSubMenu(menu, i);
+        if (child && !MarkOwnedTree(child))
+            return false;
+    }
+    return true;
+}
+
+static bool IsOwnedTree(HMENU menu) noexcept {
+    MENUINFO info = {};
+    info.cbSize = sizeof(info);
+    info.fMask = MIM_MENUDATA;
+    if (!GetMenuInfo(menu, &info) ||
+        info.dwMenuData != reinterpret_cast<ULONG_PTR>(&kOwnedMenuTag))
+        return false;
+    const int count = GetMenuItemCount(menu);
+    if (count < 0)
+        return false;
+    for (int i = 0; i < count; ++i) {
+        HMENU child = GetSubMenu(menu, i);
+        if (child && !IsOwnedTree(child))
+            return false;
+    }
+    return true;
+}
+
+static bool IsHighContrast() noexcept {
+    HIGHCONTRASTW info = {};
+    info.cbSize = sizeof(info);
+    // If the accessibility state cannot be queried, keep the stock palette too.
+    return !SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(info), &info,
+                                  0) ||
+           (info.dwFlags & HCF_HIGHCONTRASTON);
+}
+
+static UINT Track(HMENU menu,
+                  HWND owner,
+                  int x,
+                  int y,
+                  UINT flags,
+                  UINT dpi) noexcept {
+    wchar_t ownerClass[64] = {};
+    const bool ownWindow =
+        owner &&
+        GetWindowThreadProcessId(owner, nullptr) == GetCurrentThreadId() &&
+        GetClassNameW(owner, ownerClass, _countof(ownerClass)) &&
+        !wcscmp(ownerClass, L"WH_Taskbar81.IntegratedWinX.MenuOwner");
+    if (!ownWindow || !IsOwnedTree(menu)) {
+        Wh_Log(L"[menu] win32 scoped theme rejected: owner/menu is not ours");
+        return static_cast<UINT>(
+            TrackPopupMenuEx(menu, flags, x, y, owner, nullptr));
+    }
+    if (IsHighContrast() || ImmersiveMenu::IsLightTheme()) {
+        Wh_Log(L"[menu] win32 palette: system (light/high contrast), root %p",
+               menu);
+        return static_cast<UINT>(
+            TrackPopupMenuEx(menu, flags, x, y, owner, nullptr));
+    }
+    Wh_Log(L"[menu] win32 palette: dark; ONLY owned root %p and its submenus",
+           menu);
+    // Still an HMENU/TrackPopupMenuEx popup with native metrics. Only its own
+    // entries are owner-drawn for colour; the 32-pixel immersive layout is NOT
+    // used. The owner subclass is removed when tracking ends. No app-wide
+    // preference, registry writes, permanent window subclass, or extra API
+    // detour is installed.
+    return ImmersiveMenu::Track(menu, owner, x, y, flags, dpi, true);
+}
+
+}  // namespace NativeMenu
+
+// ---------------------------------------------------------------------------
+// Module settings and the process this mod acts in
+// ---------------------------------------------------------------------------
+static std::atomic<bool> g_winXMenuAnchorCursor{false};
+static std::atomic<int> g_winXMenuOffsetX{0};
+static std::atomic<int> g_winXMenuOffsetY{0};
+static std::atomic<bool> g_winXMenuSkinWin32{false};
+static std::atomic<bool> g_winXHideShutdown{false};
+static std::atomic<bool> g_winXTerminalFallback{true};
+
+// No executable-path or shell-style gate: normal Windows 11 explorer.exe and
+// private legacy explorer.exe copies are both eligible. Only the visible
+// taskbar owner arms input hooks, so ordinary folder processes stay idle. The
+// Shell_TrayWnd of this process, or null. FindWindowW is not enough: the
+// Windows 10 shell is a private copy of explorer.exe and can have sibling
+// processes started from the same folder, and only one of them owns the
+// taskbar. Enumerating sends no message to any window, so it is safe to call
+// from this mod's threads.
+static HWND FindOwnTaskbarWindow() {
+    HWND taskbar = barWindow.load(std::memory_order_acquire);
+    return t81WinXTrayActive.load(std::memory_order_acquire) && taskbar &&
+                   IsWindow(taskbar)
+               ? taskbar
+               : nullptr;
+}
+
+// The hooks of this mod are system-wide, so they are armed only in the process
+// that owns the taskbar: a second explorer.exe started from the same folder as
+// the Windows 10 shell must not install a second pair of hooks answering to the
+// same chord.
+static bool OwnsTaskbarWindow() {
+    return FindOwnTaskbarWindow() != nullptr;
+}
+
+static void LoadSettings() {
+    g_winXMenuAnchorCursor = false;
+    g_winXMenuOffsetX = 0;
+    g_winXMenuOffsetY = 0;
+    g_winXMenuSkinWin32 = true;
+    g_winXHideShutdown = false;
+    g_winXTerminalFallback = true;
+}
+
+// ---------------------------------------------------------------------------
+// State of the Win+X machinery
+// ---------------------------------------------------------------------------
+// Posted by the input hooks to the services thread. It is a registered message
+// rather than a WM_APP value, so it cannot be confused with a message of the
+// shell or of another mod.
+static const wchar_t kWinXRouteMessageName[] = L"Windows10WinXRestorer.Route";
+static UINT g_winXRouteMessage = 0;
+static int g_winXHookModuleAnchor = 0;
+static std::atomic<bool> g_winXKeyboardFallbackEnabled{false};
+static std::atomic<bool> g_winXMouseRouteEnabled{false};
+static bool g_winXRightButtonDownOnStart = false;
+static bool g_winXKeyboardHookInstalled = false;
+// g_winXMenuOpen is set for exactly as long as TrackPopupMenuEx keeps the menu
+// on screen, so the input hooks can tell "the menu of this mod is already open"
+// from "nothing is open" without guessing: while it is set, a second chord - or
+// a right-click on Start - closes the menu instead of stacking another one.
+static std::atomic<bool> g_winXMenuOpen{false};
+// Owner of the open menu, the target of WM_CANCELMODE. It is written by the
+// menu thread and read by the hook thread and by Wh_ModUninit, so it is atomic.
+static std::atomic<HWND> g_winXMenuOwnerWindow{nullptr};
+static bool g_winXSwallowXUp = false;
+static bool g_winXXHeld =
+    false;  // X is physically down: auto-repeat is ignored
+static bool g_winXMouseHookInstalled = false;
+static std::atomic<DWORD> g_servicesThreadId{0};
+// The thread that shows the menu. It is created by the services thread and
+// joined by Wh_ModUninit: the mod image must not be unloaded while the menu is
+// on screen or while the chosen entry is being opened.
+static HANDLE g_menuThread = nullptr;
+// Set when the mod is about to be unloaded, so a menu thread that has just been
+// created does not show a new menu.
+static std::atomic<bool> g_unloading{false};
+
+// ---------------------------------------------------------------------------
+// Menu commands
+//
+// Every entry of the menu ends up here, on the menu thread; the low-level hooks
+// never run any of this. Each target is handed to the shell with ShellExecuteW
+// and every failure is logged.
+// ---------------------------------------------------------------------------
+// Sleep: SetSuspendState is called directly instead of
+// "rundll32.exe powrprof.dll,SetSuspendState 0,1,0". The signature of
+// SetSuspendState is not the one rundll32 expects from an entry point, and that
+// call is known to hibernate instead of sleeping when hibernation is enabled.
+// SE_SHUTDOWN_NAME is enabled for the call, which requires it, and the state
+// the privilege had before is put back afterwards: Explorer's process token is
+// left as it was found instead of keeping a privilege enabled for the rest of
+// the session.
+static void SuspendSystem() {
+    TOKEN_PRIVILEGES enabled{};
+    enabled.PrivilegeCount = 1;
+    enabled.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    // Room for the previous state of one privilege, which is all that is
+    // changed.
+    alignas(TOKEN_PRIVILEGES)
+        BYTE previousBuffer[sizeof(TOKEN_PRIVILEGES) +
+                            sizeof(LUID_AND_ATTRIBUTES)]{};
+    auto* previous = reinterpret_cast<TOKEN_PRIVILEGES*>(previousBuffer);
+    DWORD previousSize = 0;
+
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(),
+                          TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token))
+        token = nullptr;
+    if (token && LookupPrivilegeValueW(nullptr, SE_SHUTDOWN_NAME,
+                                       &enabled.Privileges[0].Luid)) {
+        AdjustTokenPrivileges(token, FALSE, &enabled, sizeof(previousBuffer),
+                              previous, &previousSize);
+        const DWORD adjustError = GetLastError();
+        if (adjustError == ERROR_NOT_ALL_ASSIGNED)
+            Wh_Log(L"[winx] SeShutdownPrivilege could not be enabled (%lu)",
+                   adjustError);
+    }
+
+    if (!SetSuspendState(FALSE, FALSE, FALSE))
+        Wh_Log(L"[winx] SetSuspendState failed (%lu)", GetLastError());
+
+    if (token) {
+        if (previousSize)
+            AdjustTokenPrivileges(token, FALSE, previous, 0, nullptr, nullptr);
+        CloseHandle(token);
+    }
+}
+
+// CLSID of the shell automation object, {13709620-C279-11CE-A49E-444553540000}
+// ("Shell.Application"). shldisp.h only declares CLSID_Shell - it is defined by
+// libuuid, which this mod does not link - so the value is written out here.
+static const CLSID kClsidShell = {
+    0x13709620,
+    0xc279,
+    0x11ce,
+    {0xa4, 0x9e, 0x44, 0x45, 0x53, 0x54, 0x00, 0x00}};
+
+// Show the desktop: IShellDispatch4::ToggleDesktop is called directly instead
+// of injecting a Win+D chord, whose result depends on the modifiers the user is
+// still physically holding when the entry is chosen. COM is initialized on this
+// thread (see WinXMenuThread).
+static void ToggleDesktop() {
+    IShellDispatch4* shell = nullptr;
+    HRESULT hr = CoCreateInstance(kClsidShell, nullptr, CLSCTX_INPROC_SERVER,
+                                  IID_PPV_ARGS(&shell));
+    if (FAILED(hr) || !shell) {
+        Wh_Log(
+            L"[winx] ToggleDesktop: the shell dispatch object could not be "
+            L"created "
+            L"(0x%08X)",
+            (unsigned)hr);
+        return;
+    }
+    hr = shell->ToggleDesktop();
+    shell->Release();
+    if (FAILED(hr))
+        Wh_Log(L"[winx] ToggleDesktop failed (0x%08X)", (unsigned)hr);
+}
+
+static bool OpenShellUri(const wchar_t* uri) {
+    if (!uri || !*uri)
+        return false;
+    HINSTANCE result =
+        ShellExecuteW(nullptr, L"open", uri, nullptr, nullptr, SW_SHOWNORMAL);
+    const bool ok = reinterpret_cast<INT_PTR>(result) > 32;
+    if (!ok)
+        Wh_Log(L"[winx] ShellExecute failed for %s (%Id)", uri,
+               (INT_PTR)result);
+    return ok;
+}
+
+static void RunCommand(const wchar_t* file,
+                       const wchar_t* params,
+                       const wchar_t* verb,
+                       const wchar_t* what) {
+    if (!file || !*file)
+        return;
+    HINSTANCE result = ShellExecuteW(nullptr, verb && *verb ? verb : L"open",
+                                     file, params, nullptr, SW_SHOWNORMAL);
+    if (reinterpret_cast<INT_PTR>(result) <= 32)
+        Wh_Log(L"[winx] %s: opening %s %s failed (%Id)", what ? what : L"entry",
+               file, params ? params : L"", (INT_PTR)result);
+}
+
+static int StartButtonEdgeDistance(HWND hwnd, const RECT& taskbarRect) {
+    RECT buttonRect = {};
+    if (!GetWindowRect(hwnd, &buttonRect))
+        return INT_MAX;
+    const int taskbarWidth = taskbarRect.right - taskbarRect.left;
+    const int taskbarHeight = taskbarRect.bottom - taskbarRect.top;
+    const bool horizontal = taskbarWidth >= taskbarHeight;
+    return horizontal ? abs((int)buttonRect.left - (int)taskbarRect.left)
+                      : abs((int)buttonRect.top - (int)taskbarRect.top);
+}
+
+static bool IsPlausibleStartButton(HWND hwnd,
+                                   HWND taskbar,
+                                   const RECT& taskbarRect,
+                                   bool allowEdgeButton) {
+    if (!hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd) ||
+        !IsWindowEnabled(hwnd) || !IsChild(taskbar, hwnd))
+        return false;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId())
+        return false;
+
+    RECT rect = {};
+    if (!GetWindowRect(hwnd, &rect))
+        return false;
+    const int width = (int)(rect.right - rect.left);
+    const int height = (int)(rect.bottom - rect.top);
+    if (width <= 0 || height <= 0 || width > 240 || height > 240)
+        return false;
+
+    wchar_t cls[128] = {};
+    if (!GetClassNameW(hwnd, cls, _countof(cls)))
+        return false;
+    const int controlId = GetDlgCtrlID(hwnd);
+    // The criterion for the native Windows Start button: control ID 0x130. The
+    // "Start"/"StartButton" class names are not accepted here, because
+    // OpenShell uses exactly those classes for its own button.
+    if (controlId == 0x130)
+        return true;
+
+    // Last resort: only for builds where the ID changed, and only when it
+    // really is a "Button" at the edge of the taskbar.
+    if (!allowEdgeButton || _wcsicmp(cls, L"Button") != 0)
+        return false;
+    const int edgeDistance = StartButtonEdgeDistance(hwnd, taskbarRect);
+    return edgeDistance >= 0 && edgeDistance <= 180;
+}
+
+struct StartButtonSearch {
+    HWND taskbar = nullptr;
+    RECT taskbarRect = {};
+    HWND byId = nullptr;
+    HWND byClass = nullptr;
+    HWND byEdge = nullptr;
+    int edgeDistance = INT_MAX;
+};
+
+static BOOL CALLBACK FindStartButtonChildProc(HWND hwnd, LPARAM param) {
+    auto* search = (StartButtonSearch*)param;
+    if (GetDlgCtrlID(hwnd) == 0x130 &&
+        IsPlausibleStartButton(hwnd, search->taskbar, search->taskbarRect,
+                               false)) {
+        search->byId = hwnd;
+        return FALSE;
+    }
+
+    wchar_t cls[128] = {};
+    if (GetClassNameW(hwnd, cls, _countof(cls)) &&
+        ((_wcsicmp(cls, L"Start") == 0) ||
+         ContainsNoCase(cls, L"StartButton")) &&
+        IsPlausibleStartButton(hwnd, search->taskbar, search->taskbarRect,
+                               false)) {
+        search->byClass = hwnd;
+        return FALSE;
+    }
+
+    if (IsPlausibleStartButton(hwnd, search->taskbar, search->taskbarRect,
+                               true)) {
+        const int distance = StartButtonEdgeDistance(hwnd, search->taskbarRect);
+        if (distance < search->edgeDistance) {
+            search->byEdge = hwnd;
+            search->edgeDistance = distance;
+        }
+    }
+    return TRUE;
+}
+
+// The Start button of a taskbar window (the primary one or a secondary one).
+static HWND FindStartButtonInTaskbar(HWND taskbar) {
+    if (!taskbar)
+        return nullptr;
+
+    RECT taskbarRect = {};
+    if (!GetWindowRect(taskbar, &taskbarRect))
+        return nullptr;
+
+    HWND byId = GetDlgItem(taskbar, 0x130);
+    if (IsPlausibleStartButton(byId, taskbar, taskbarRect, false))
+        return byId;
+
+    StartButtonSearch search = {};
+    search.taskbar = taskbar;
+    search.taskbarRect = taskbarRect;
+    EnumChildWindows(taskbar, FindStartButtonChildProc, (LPARAM)&search);
+    if (search.byId)
+        return search.byId;
+    if (search.byClass)
+        return search.byClass;
+    return search.byEdge;
+}
+
+// The Start button of the primary taskbar: the one the keyboard chord opens the
+// menu on, as Windows 10 does.
+static HWND FindNativeTaskbarStartButton() {
+    return FindStartButtonInTaskbar(FindOwnTaskbarWindow());
+}
+
+// Only the services thread installs/unhooks these handles. There is
+// deliberately no global destructor that can call User32 during
+// DLL_PROCESS_DETACH.
+static HHOOK g_winXKeyboardHook = nullptr;
+static HHOOK g_winXMouseHook = nullptr;
+static DWORD g_winXRouteRefreshMs = 500;
+static ULONGLONG g_servicesStartedAt = 0;
+
+static void ResetWinXInputHooks() {
+    if (g_winXKeyboardHook) {
+        UnhookWindowsHookEx(g_winXKeyboardHook);
+        g_winXKeyboardHook = nullptr;
+    }
+    if (g_winXMouseHook) {
+        UnhookWindowsHookEx(g_winXMouseHook);
+        g_winXMouseHook = nullptr;
+    }
+}
+
+static void ClearWinXInputRoutes() {
+    g_winXKeyboardFallbackEnabled.store(false, std::memory_order_release);
+    g_winXMouseRouteEnabled.store(false, std::memory_order_release);
+    g_winXRightButtonDownOnStart = false;
+}
+
+// startButton is the button the right-click came from, or null for the keyboard
+// chord: the menu opens on the taskbar the request came from.
+enum class WinXRequestSource : WPARAM {
+    KeyboardChord = 1,
+    StartRightClick = 2,
+    ModernMenuEntry = 3,
+};
+
+static bool PostWinXContextRequestFromHook(HWND startButton,
+                                           WinXRequestSource source) {
+    // The menu is not shown from here: this runs inside a low-level hook and
+    // TrackPopupMenuEx blocks the thread. Windows removes a hook that does not
+    // answer within LowLevelHooksTimeout (~300 ms), so the work is handed to
+    // the services thread, which starts the menu thread.
+    const DWORD thread = g_servicesThreadId.load(std::memory_order_acquire);
+    return !g_unloading.load(std::memory_order_acquire) && thread &&
+           PostThreadMessageW(thread, g_winXRouteMessage,
+                              static_cast<WPARAM>(source),
+                              reinterpret_cast<LPARAM>(startButton));
+}
+
+// ---------------------------------------------------------------------------
+// Sets g_winXMenuOpen for exactly as long as the menu is on screen, whatever
+// TrackPopupMenuEx does: a flag that went stale would make
+// CloseWinXMenuIfOpen() swallow the next Win+X, which is the one failure this
+// mod must not have.
+// ---------------------------------------------------------------------------
+class WinXMenuOpenScope {
+   public:
+    explicit WinXMenuOpenScope(HWND owner) {
+        g_winXMenuOwnerWindow.store(owner, std::memory_order_release);
+        g_winXMenuOpen.store(true, std::memory_order_release);
+    }
+    ~WinXMenuOpenScope() {
+        g_winXMenuOpen.store(false, std::memory_order_release);
+        g_winXMenuOwnerWindow.store(nullptr, std::memory_order_release);
+    }
+    WinXMenuOpenScope(const WinXMenuOpenScope&) = delete;
+    WinXMenuOpenScope& operator=(const WinXMenuOpenScope&) = delete;
+};
+
+// ---------------------------------------------------------------------------
+// Closes the mod's menu while it is on screen (a second Win+X, a right-click on
+// Start, or any request that must not stack another menu).
+//
+// TrackPopupMenuEx runs a modal loop on the thread that showed the menu, so the
+// menu cannot be ended from inside the low-level hook itself. WM_CANCELMODE is
+// the documented way to cancel a menu and it is *posted* to the owner window,
+// so that thread's modal loop does the work. The caller must then not forward
+// the request again, otherwise the menu closes and immediately reopens.
+// ---------------------------------------------------------------------------
+static bool CloseWinXMenuIfOpen() {
+    if (!g_winXMenuOpen.load(std::memory_order_acquire))
+        return false;
+    const HWND owner = g_winXMenuOwnerWindow.load(std::memory_order_acquire);
+    if (!owner || !IsWindow(owner))
+        return false;  // stale: let the chord through
+    if (!PostMessageW(owner, WM_CANCELMODE, 0, 0))
+        return false;
+    Wh_Log(
+        L"[winx] the menu is open: this request closes it (as the native menu "
+        L"does)");
+    return true;
+}
+
+// One on-demand lookup for the taskbar whose menu is being opened. This is
+// called by ComputeWinXMenuAnchor on the new menu thread BEFORE that thread
+// initializes its STA and creates any windows. UIA runs in a temporary MTA;
+// only a RECT survives it. No UIA calls run inside input hooks or on shell UI.
+static bool QueryStartButtonRectOnce(HWND taskbar, RECT* result) {
+    if (!taskbar || !result || g_unloading.load(std::memory_order_acquire))
+        return false;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(taskbar, &pid);
+    if (pid != GetCurrentProcessId())
+        return false;
+    const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(com))
+        return false;
+
+    IUIAutomation* automation = nullptr;
+    IUIAutomationCondition* condition = nullptr;
+    IUIAutomationElement* root = nullptr;
+    IUIAutomationElement* start = nullptr;
+    RECT bounds = {};
+    bool haveBounds = false;
+    const CLSID clsid = {0xff48dba4,
+                         0x60ef,
+                         0x4201,
+                         {0xaa, 0x87, 0x54, 0x10, 0x3e, 0xef, 0x59, 0x4e}};
+    if (SUCCEEDED(CoCreateInstance(clsid, nullptr, CLSCTX_INPROC_SERVER,
+                                   IID_PPV_ARGS(&automation))) &&
+        automation) {
+        VARIANT value;
+        VariantInit(&value);
+        value.vt = VT_BSTR;
+        value.bstrVal = SysAllocString(L"StartButton");
+        if (value.bstrVal)
+            automation->CreatePropertyCondition(UIA_AutomationIdPropertyId,
+                                                value, &condition);
+        VariantClear(&value);
+        if (condition &&
+            SUCCEEDED(automation->ElementFromHandle(taskbar, &root)) && root &&
+            SUCCEEDED(
+                root->FindFirst(TreeScope_Descendants, condition, &start)) &&
+            start) {
+            BOOL offscreen = TRUE;
+            haveBounds =
+                SUCCEEDED(start->get_CurrentIsOffscreen(&offscreen)) &&
+                !offscreen &&
+                SUCCEEDED(start->get_CurrentBoundingRectangle(&bounds));
+        }
+    }
+    if (start)
+        start->Release();
+    if (root)
+        root->Release();
+    if (condition)
+        condition->Release();
+    if (automation)
+        automation->Release();
+    CoUninitialize();
+
+    RECT taskbarBounds = {}, clipped = {};
+    GetWindowThreadProcessId(taskbar, &pid);
+    if (haveBounds && !g_unloading.load(std::memory_order_acquire) &&
+        pid == GetCurrentProcessId() && bounds.right > bounds.left &&
+        bounds.bottom > bounds.top && GetWindowRect(taskbar, &taskbarBounds) &&
+        IntersectRect(&clipped, &bounds, &taskbarBounds)) {
+        *result = clipped;
+        return true;
+    }
+    return false;
+}
+
+static LRESULT CALLBACK WinXLowLevelKeyboardProc(int nCode,
+                                                 WPARAM wParam,
+                                                 LPARAM lParam) {
+    // Win+X belongs to the mod: the chord is consumed and the menu is requested
+    // from the services thread. Windows removes a low-level hook that does not
+    // answer within LowLevelHooksTimeout (~300 ms), so nothing slow may happen
+    // in here.
+    if (nCode == HC_ACTION && lParam &&
+        g_winXKeyboardFallbackEnabled.load(std::memory_order_acquire) &&
+        t81WinXTrayActive.load(std::memory_order_acquire)) {
+        const auto* key = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
+        const bool keyDown = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
+        if (!keyDown && key->vkCode == 'X')
+            g_winXXHeld = false;
+        if (!keyDown && g_winXSwallowXUp && key->vkCode == 'X') {
+            g_winXSwallowXUp = false;
+            return 1;  // the release of X is consumed too
+        }
+        if (keyDown && !(key->flags & LLKHF_INJECTED) && key->vkCode == 'X') {
+            const bool winDown = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 ||
+                                 (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+            const bool otherModifierDown =
+                (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 ||
+                (GetAsyncKeyState(VK_MENU) & 0x8000) != 0 ||
+                (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+            if (winDown && !otherModifierDown) {
+                // A second Win+X while the mod menu is on screen closes it (the
+                // native menu behaves the same way) and the request is not
+                // forwarded again: otherwise the queued request would be
+                // handled right after the menu closed and the menu would pop up
+                // again.
+                //
+                // Key auto-repeat is ignored, so holding Win+X a little too
+                // long does not repeat the chord, closing and reopening the
+                // menu over and over (and injecting a key each time).
+                const bool repeat = g_winXXHeld;
+                g_winXXHeld = true;
+                if (repeat)
+                    return 1;
+                // Win+X opens the menu on the primary taskbar, as Windows 10
+                // does, so no Start button is passed: the services thread
+                // resolves it.
+                if (!CloseWinXMenuIfOpen() &&
+                    !PostWinXContextRequestFromHook(
+                        nullptr, WinXRequestSource::KeyboardChord)) {
+                    g_winXXHeld = false;
+                    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+                }
+
+                // The shell must not see the chord. A dummy key (VK 0xE8,
+                // unassigned, injected and therefore ignored by this hook)
+                // keeps the release of Win from opening the Start menu.
+                g_winXSwallowXUp = true;
+                INPUT dummy[2] = {};
+                // VK_F24 is bound by some OEM hotkey utilities; 0xE8 is the
+                // unassigned virtual key used for exactly this purpose.
+                dummy[0].type = INPUT_KEYBOARD;
+                dummy[0].ki.wVk = 0xE8;
+                dummy[1].type = INPUT_KEYBOARD;
+                dummy[1].ki.wVk = 0xE8;
+                dummy[1].ki.dwFlags = KEYEVENTF_KEYUP;
+                SendInput(2, dummy, sizeof(INPUT));
+                return 1;
+            }
+        }
+    }
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+// ---------------------------------------------------------------------------
+// Input-hook installation, retried by the services thread.
+// ---------------------------------------------------------------------------
+static bool EnsureWinXInputHooks() {
+    if (!g_winXKeyboardHook) {
+        HMODULE module = nullptr;
+        const DWORD flags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+        if (GetModuleHandleExW(
+                flags, reinterpret_cast<LPCWSTR>(&g_winXHookModuleAnchor),
+                &module)) {
+            if (!g_winXKeyboardHook) {
+                g_winXKeyboardHook = SetWindowsHookExW(
+                    WH_KEYBOARD_LL, WinXLowLevelKeyboardProc, module, 0);
+                if (g_winXKeyboardHook)
+                    Wh_Log(L"[winx] Win+X keyboard hook installed");
+            }
+            // Reconstructed Start handles its own right click. No global mouse
+            // hook.
+        }
+    }
+    g_winXKeyboardHookInstalled = g_winXKeyboardHook != nullptr;
+    g_winXMouseHookInstalled = g_winXMouseHook != nullptr;
+    return g_winXKeyboardHookInstalled || g_winXMouseHookInstalled;
+}
+
+// ---------------------------------------------------------------------------
+// Owner window of the custom Win+X menu.
+//
+// Two Win32 rules decide whether a popup menu works at all: the owner window
+// must have been created by the thread that calls TrackPopupMenu, and that
+// thread must hold the foreground while the menu is open (with a WM_NULL posted
+// afterwards so the menu also closes when the user clicks elsewhere).
+// Shell_TrayWnd belongs to the shell's taskbar thread, which is why the menu is
+// shown from a thread of the mod, with an owner window of that thread.
+// ---------------------------------------------------------------------------
+static const wchar_t kWinXOwnerClassName[] =
+    L"WH_Taskbar81.IntegratedWinX.MenuOwner";
+static HINSTANCE g_winXOwnerClassModule =
+    nullptr;                               // set once the class is registered
+static HWND g_winXOwnerWindow = nullptr;   // menu thread only
+static DWORD g_winXOwnerWindowThread = 0;  // menu thread only
+
+static LRESULT CALLBACK WinXOwnerWndProc(HWND hwnd,
+                                         UINT msg,
+                                         WPARAM wParam,
+                                         LPARAM lParam) {
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+// Registers the class of the menu owner window once, from Wh_ModInit, and is
+// undone by Wh_ModUninit. Windows does not unregister the classes of a DLL when
+// the DLL is unloaded, and a registration left behind would carry the window
+// procedure of the previous module image, which dangles as soon as a new build
+// is laid out differently. For the same reason a class that is already
+// registered is never reused: if RegisterClassExW fails, the mod stays
+// disabled.
+static bool RegisterWinXOwnerWindowClass() {
+    if (g_winXOwnerClassModule)
+        return true;
+
+    HINSTANCE instance = nullptr;
+    const DWORD flags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+    if (!GetModuleHandleExW(flags, reinterpret_cast<LPCWSTR>(&WinXOwnerWndProc),
+                            &instance)) {
+        Wh_Log(L"[winx] owner window: module handle unavailable (%lu)",
+               GetLastError());
+        return false;
+    }
+
+    WNDCLASSEXW wc = {};
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = WinXOwnerWndProc;
+    wc.hInstance = instance;
+    wc.lpszClassName = kWinXOwnerClassName;
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"[winx] owner window class not registered (%lu)",
+               GetLastError());
+        return false;
+    }
+    g_winXOwnerClassModule = instance;
+    return true;
+}
+
+// Called by Wh_ModUninit, after the menu thread has been joined and has
+// destroyed its own window.
+static void UnregisterWinXOwnerWindowClass() {
+    if (!g_winXOwnerClassModule)
+        return;
+    UnregisterClassW(kWinXOwnerClassName, g_winXOwnerClassModule);
+    g_winXOwnerClassModule = nullptr;
+}
+
+static bool ForceForegroundWindow(HWND hwnd) {
+    if (!hwnd)
+        return false;
+    if (GetForegroundWindow() == hwnd)
+        return true;
+    // A no-op input event is the established Windhawk low-level-hook focus
+    // pattern. No key/button is pressed and no input queues are attached.
+    // UIPI can still reject injection/focus; never bypass it with queue
+    // attachment.
+    INPUT input{};
+    SendInput(1, &input, sizeof(INPUT));
+    return SetForegroundWindow(hwnd) && GetForegroundWindow() == hwnd;
+}
+
+// Creates the window that owns the menu, once per menu thread.
+static HWND GetWinXMenuOwnerWindow() {
+    const DWORD thread = GetCurrentThreadId();
+    if (g_winXOwnerWindow && g_winXOwnerWindowThread == thread &&
+        IsWindow(g_winXOwnerWindow)) {
+        return g_winXOwnerWindow;
+    }
+    g_winXOwnerWindow = nullptr;
+    if (!g_winXOwnerClassModule) {
+        Wh_Log(L"[winx] owner window: the window class is not registered");
+        return nullptr;
+    }
+
+    // 1x1 off-screen popup, never activated by the user: it only anchors the
+    // menu.
+    HWND hwnd = CreateWindowExW(WS_EX_TOOLWINDOW, kWinXOwnerClassName, L"",
+                                WS_POPUP, -32000, -32000, 1, 1, nullptr,
+                                nullptr, g_winXOwnerClassModule, nullptr);
+    if (!hwnd) {
+        Wh_Log(L"[winx] owner window not created (%lu)", GetLastError());
+        return nullptr;
+    }
+    ShowWindow(hwnd,
+               SW_SHOWNOACTIVATE);  // a hidden window cannot own a popup menu
+    g_winXOwnerWindow = hwnd;
+    g_winXOwnerWindowThread = thread;
+    return hwnd;
+}
+
+// Destroys the owner window of the calling thread. Only the menu thread can do
+// it: a window must be destroyed by the thread that created it, which is why
+// this is called at the end of WinXMenuThread and nowhere else.
+static void DestroyWinXMenuOwnerWindow() {
+    if (g_winXOwnerWindow && g_winXOwnerWindowThread == GetCurrentThreadId()) {
+        DestroyWindow(g_winXOwnerWindow);
+        g_winXOwnerWindow = nullptr;
+        g_winXOwnerWindowThread = 0;
+    }
+}
+
+// Re-arms the input hooks. Called by the
+// services thread only: the taskbar can appear after the thread starts and be
+// recreated later, and a hook that failed to install is retried here instead of
+// being given up for the whole session.
+static void UpdateWinXInputRoutes() {
+    static ULONGLONG nextCheck = 0;
+    static bool routeReported = false;
+
+    const ULONGLONG now = GetTickCount64();
+    if (now < nextCheck)
+        return;
+    // Fast retries are bounded to startup; even a folder process which never
+    // owns a taskbar returns to the slow cadence after ten seconds.
+    const bool startupRetry = now - g_servicesStartedAt < 10000;
+    g_winXRouteRefreshMs = startupRetry && !g_winXKeyboardHook ? 500 : 2500;
+    nextCheck = now + g_winXRouteRefreshMs;
+
+    // The hooks are system-wide, so they are armed only in the process that
+    // owns the taskbar. Until a visible taskbar of this explorer.exe is there,
+    // the mod does nothing.
+    if (!OwnsTaskbarWindow()) {
+        ClearWinXInputRoutes();
+        routeReported = false;
+        return;
+    }
+
+    EnsureWinXInputHooks();
+    if (g_winXKeyboardHook) {
+        g_winXRouteRefreshMs = 2500;
+        nextCheck = now + g_winXRouteRefreshMs;
+    }
+
+    // The chord is deliberately NOT registered with RegisterHotKey: Win-key
+    // combinations are reserved to the OS (the registration fails on most
+    // builds). The low-level hooks handle the chord instead. The mouse hook
+    // resolves the Start button from the click itself, so nothing about it has
+    // to be kept up to date here.
+    g_winXKeyboardFallbackEnabled.store(g_winXKeyboardHookInstalled,
+                                        std::memory_order_release);
+    g_winXMouseRouteEnabled.store(g_winXMouseHookInstalled,
+                                  std::memory_order_release);
+
+    if (!routeReported &&
+        (g_winXKeyboardHookInstalled || g_winXMouseHookInstalled)) {
+        routeReported = true;
+        Wh_Log(
+            L"[winx] Win+X routes enabled: input hooks (keyboard %s, mouse %s)",
+            g_winXKeyboardHookInstalled ? L"yes" : L"no",
+            g_winXMouseHookInstalled ? L"yes" : L"no");
+    } else if (!routeReported) {
+        // Installation is retried on the service cadence, so this is a status
+        // note rather than a give-up message.
+        routeReported = true;
+        Wh_Log(
+            L"[winx] no input hook is installed yet: it is retried every few "
+            L"seconds");
+    }
+}
+
+// An entry opens a shell namespace when it is a shell URI: "shell:::{GUID}",
+// "shell:AppsFolder\\...", "ms-settings:...".
+static bool IsShellNamespaceCommand(const wchar_t* command) {
+    if (!command)
+        return false;
+    // "shell:" covers both shell:... and shell:::{GUID}.
+    return _wcsnicmp(command, L"shell:", 6) == 0 ||
+           _wcsnicmp(command, L"ms-settings:", 12) == 0;
+}
+
+// Whether Windows 10 would shut this machine down through Fast Startup: the
+// Fast Startup setting and hibernation itself must both be on, and only then is
+// "shutdown.exe /s /hybrid" a valid command - with either of them off it fails,
+// and ShellExecuteW would only see that shutdown.exe started. The registry is
+// read, never written.
+static bool IsHybridShutdownAvailable() {
+    if (!IsPwrHibernateAllowed())
+        return false;
+    DWORD value = 0, size = sizeof(value);
+    return RegGetValueW(
+               HKEY_LOCAL_MACHINE,
+               L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Power",
+               L"HiberbootEnabled", RRF_RT_REG_DWORD, nullptr, &value,
+               &size) == ERROR_SUCCESS &&
+           value != 0;
+}
+
+// Splits "file parameters" (at the first space) and hands both to
+// ShellExecuteW.
+static void RunWinXCommandSplit(const wchar_t* command,
+                                const wchar_t* verb,
+                                const wchar_t* what) noexcept {
+    if (!command || !*command)
+        return;
+    wchar_t file[MAX_PATH] = {};
+    const wchar_t* params = nullptr;
+    const wchar_t* space = wcschr(command, L' ');
+    if (space) {
+        const size_t n = static_cast<size_t>(space - command);
+        if (n >= _countof(file))
+            return;
+        wmemcpy(file, command, n);
+        file[n] = L'\0';
+        params = space + 1;
+    } else {
+        wcsncpy_s(file, command, _TRUNCATE);
+    }
+    RunCommand(file, params, verb, what);
+}
+
+// Runs the command of a Win+X menu entry, on the menu thread.
+//
+// Accepted formats:
+//   "@sleep"      suspend the system (see SuspendSystem);
+//   "@shutdown"   shut down, through Fast Startup when it is available;
+//   "@desktop"    show the desktop (see ToggleDesktop);
+//   "@admin:exe"  program started with elevation (the "runas" verb);
+//   "shell:...", "shell:::{GUID}", "ms-settings:..."   shell namespaces;
+//   "file parameters"  any other program or applet.
+//
+// The selected command is written to the log before it runs, so a problem with
+// an entry shows up at once. ShellExecuteW requires COM to be initialized on
+// the calling thread: WinXMenuThread does that before showing the menu.
+static void RunWinXCommand(const wchar_t* command) {
+    if (!command || !*command)
+        return;
+    Wh_Log(L"[winx] selected entry: %s", command);
+
+    if (_wcsicmp(command, L"@sleep") == 0) {
+        SuspendSystem();
+        return;
+    }
+    if (_wcsicmp(command, L"@desktop") == 0) {
+        ToggleDesktop();
+        return;
+    }
+    if (_wcsicmp(command, L"@shutdown") == 0) {
+        // The same shutdown the Windows 10 entry performs: a hybrid one when
+        // Fast Startup is available, a full one otherwise (see
+        // IsHybridShutdownAvailable).
+        RunWinXCommandSplit(IsHybridShutdownAvailable()
+                                ? L"shutdown.exe /s /hybrid /t 0"
+                                : L"shutdown.exe /s /t 0",
+                            L"open", L"power entry");
+        return;
+    }
+    // No "@search" branch: the Search entry was removed from the menu (see the
+    // entry table), so nothing in this dispatcher can open the search host.
+    if (wcsncmp(command, L"@admin:", 7) == 0) {
+        RunWinXCommandSplit(command + 7, L"runas", L"administrative entry");
+        return;
+    }
+    if (IsShellNamespaceCommand(command)) {
+        if (OpenShellUri(command))
+            return;
+        // Same target, second documented way of starting it: some private
+        // shells do not answer ShellExecute on the URI but do open the same
+        // namespace when explorer.exe receives it. No substitute target: the
+        // URI is the same, only who opens it changes.
+        wchar_t throughExplorer[MAX_PATH + 96] = {};
+        _snwprintf_s(throughExplorer, _countof(throughExplorer), _TRUNCATE,
+                     L"explorer.exe %s", command);
+        RunWinXCommandSplit(throughExplorer, L"open",
+                            L"winx: shell namespace (explorer.exe)");
+        return;
+    }
+    RunWinXCommandSplit(command, L"open", L"menu entry");
+}
+
+// WIN+X menu with all standard entries
+//
+// This menu is a recreation of the Windows 10 power-user (Win+X) menu drawn
+// from Windows 10 reference screenshots: the same entries in the same order,
+// the same two separators (after "Terminal (Admin)" and before "Shut down or
+// sign out"), the same wording, the Windows 10 light/dark colours, the same row
+// height and the single chevron of the submenu. It is a recreation, not the
+// original component, but it is meant to look and behave like it (see
+// ImmersiveMenu for the measurements).
+//
+// Shows a complete WIN+X menu with all standard Windows 10 entries:
+// Programs and Features, Power Options, Event Viewer, System, Device Manager,
+// Network Connections, Disk Management, Computer Management, Terminal,
+// Terminal (Admin), Task Manager, Settings, File Explorer, Run,
+// Shut down or sign out, Desktop. The Search entry of the original menu is not
+// part of this recreation (see the entry table).
+// The entries are localized for the UI language of the shell (15 languages).
+// ---------------------------------------------------------------------------
+// Win+X anchor - the Windows 10 position.
+//
+// Windows 10 opens the power-user menu glued to the Start button: its
+// bottom-left corner sits on the top edge of the taskbar, at the left edge of
+// the Start button, and it opens there whatever the pointer is doing. Falling
+// back to the raw cursor whenever the Start button cannot be resolved would
+// drop the menu on top of the taskbar instead of on its top edge, so the cursor
+// is used only when there is no taskbar at all.
+//
+// Order of preference: Start button -> taskbar edge -> monitor corner. The
+// pointer is used only when there is no taskbar at all. The WinXMenuOffsetX/Y
+// settings shift the result if another look is wanted (the 2015 Windows 10
+// reference screenshot is X=18, Y=+16: menu bottom edge 16 px below the top
+// edge of the taskbar).
+// ---------------------------------------------------------------------------
+struct WinXMenuAnchor {
+    POINT point{};
+    UINT flags = TPM_LEFTALIGN | TPM_BOTTOMALIGN;
+    const wchar_t* source = L"window corner";
+    bool taskbarOnTop = false;
+    UINT dpi =
+        0;  // scale of the monitor the menu opens on, 0 when it is unknown
+};
+
+static WinXMenuAnchor ComputeWinXMenuAnchor(HWND startButton) {
+    WinXMenuAnchor anchor;
+
+    if (g_winXMenuAnchorCursor) {
+        GetCursorPos(&anchor.point);
+        anchor.source = L"mouse pointer (legacy option)";
+        return anchor;
+    }
+
+    // The services thread can run before the button is enumerable, and the
+    // taskbar thread can rebuild it: resolve it again here, at show time.
+    if (!startButton || !IsWindow(startButton))
+        startButton = FindNativeTaskbarStartButton();
+
+    // The menu opens on the taskbar the request came from: the one that holds
+    // the Start button that was clicked, which is a secondary taskbar on a
+    // multi-monitor setup. The keyboard chord passes no button, so the primary
+    // taskbar is used, as Windows 10 does.
+    RECT taskbarRect = {};
+    HWND taskbar = (startButton && IsWindow(startButton))
+                       ? GetAncestor(startButton, GA_ROOT)
+                       : nullptr;
+    if (!taskbar)
+        taskbar = FindOwnTaskbarWindow();
+    if (taskbar) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(taskbar, &pid);
+        if (pid != GetCurrentProcessId() ||
+            !GetWindowRect(taskbar, &taskbarRect))
+            taskbar = nullptr;
+    }
+
+    RECT buttonRect = {};
+    bool haveButton = startButton && startButton != taskbar &&
+                      IsWindow(startButton) &&
+                      GetWindowRect(startButton, &buttonRect);
+    // The reconstructed Start is painted, not an accessible child HWND.
+    // Its bar rectangle is the anchor; avoid UIA against our own UI thread.
+    if (!haveButton && taskbar && taskbar != barWindow.load()) {
+        wchar_t cls[64]{};
+        GetClassNameW(taskbar, cls, _countof(cls));
+        if (wcscmp(cls, L"WH_Taskbar81Secondary") != 0)
+            haveButton = QueryStartButtonRectOnce(taskbar, &buttonRect);
+    }
+    const bool taskbarVertical =
+        taskbar && (taskbarRect.bottom - taskbarRect.top) >
+                       (taskbarRect.right - taskbarRect.left);
+
+    int x = 0;
+    int y = 0;
+    if (taskbar && taskbarVertical) {
+        // Side-docked taskbar: Windows 10 grows the menu from its inner corner.
+        // A rotated or side-docked taskbar is unsupported by the rest of the
+        // mod; this only keeps the menu on screen instead of in the old cursor
+        // spot.
+        x = static_cast<int>(taskbarRect.right);
+        y = static_cast<int>(taskbarRect.bottom);
+        anchor.source = L"vertical taskbar edge";
+    } else if (taskbar) {
+        MONITORINFO mi = {};
+        mi.cbSize = sizeof(mi);
+        HMONITOR monitor =
+            MonitorFromRect(&taskbarRect, MONITOR_DEFAULTTONEAREST);
+        anchor.taskbarOnTop = monitor && GetMonitorInfoW(monitor, &mi) &&
+                              taskbarRect.top <= mi.rcMonitor.top + 1;
+        if (anchor.taskbarOnTop) {
+            anchor.flags = TPM_LEFTALIGN | TPM_TOPALIGN;
+            y = static_cast<int>(taskbarRect.bottom);
+        } else {
+            y = static_cast<int>(
+                taskbarRect.top);  // bottom edge, Windows 10 look
+        }
+        x = haveButton ? static_cast<int>(buttonRect.left)
+                       : static_cast<int>(taskbarRect.left);
+        anchor.source = haveButton
+                            ? L"Start button, glued to the taskbar top edge"
+                            : L"taskbar top-left edge";
+    } else if (haveButton) {
+        x = static_cast<int>(buttonRect.left);
+        y = static_cast<int>(buttonRect.top);
+        anchor.source = L"Start button only (no taskbar window)";
+    } else {
+        GetCursorPos(&anchor.point);
+        anchor.source = L"mouse pointer (no taskbar found)";
+        return anchor;
+    }
+
+    // Scale of the monitor the menu opens on, taken from a window that is on
+    // it: the owner window of the menu is parked off-screen, so its own DPI
+    // would be that of the primary monitor.
+    if (taskbar)
+        anchor.dpi = GetDpiForWindow(taskbar);
+    else if (haveButton)
+        anchor.dpi = GetDpiForWindow(startButton);
+
+    // The offsets are a deliberate user choice and are applied after the
+    // default anchor has been resolved, never before.
+    anchor.point.x = x + g_winXMenuOffsetX;
+    anchor.point.y = y + g_winXMenuOffsetY;
+    return anchor;
+}
+
+static bool IsTerminalInstalled() {
+    wchar_t path[MAX_PATH] = {};
+    const DWORD n =
+        SearchPathW(nullptr, L"wt.exe", nullptr, _countof(path), path, nullptr);
+    if (!n || n >= _countof(path))
+        return false;
+    const DWORD attrs = GetFileAttributesW(path);
+    return attrs != INVALID_FILE_ATTRIBUTES &&
+           !(attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+static void ShowCustomWinXMenuHere(const WinXMenuAnchor& anchor) {
+    const UiLangId lang = DetectUiLang();
+    const bool usePowerShell =
+        g_winXTerminalFallback.load() && !IsTerminalInstalled();
+    const bool hideShutdown = g_winXHideShutdown.load();
+    // The Windows 10 skin takes the Windows 10 look of this menu: 32 px rows
+    // in the dark or light colours of the Windows mode.
+    const bool win10Skin = T81IsWin10Skin(taskbarSkin.load());
+    const bool win32Skin = g_winXMenuSkinWin32.load() && !win10Skin;
+
+    // Create popup menu with all WIN+X entries
+    ScopedMenu menu(CreatePopupMenu());
+    if (!menu.get()) {
+        Wh_Log(L"[winx] custom menu: CreatePopupMenu failed");
+        return;
+    }
+
+    // WIN+X menu items with localized text and commands
+    struct WinXItem {
+        const wchar_t* text[LANG_COUNT];
+        const wchar_t* command;
+    };
+
+    // clang-format off
+    static const WinXItem items[] = {
+        // Programs and Features: the wording of the Windows 10 menu of the
+        // reference screenshot, not "Installed apps", and the target of that
+        // entry,
+        // appwiz.cpl. ms-settings:appsfeatures would open the Windows 11 "Apps
+        // &
+        // features" page, which is what Windows 10 called "Apps and Features".
+        {{L"Programmi e funzionalit\u00e0", L"Programs and Features",
+          L"Programmes et fonctionnalit\u00e9s",
+          L"Programas y caracter\u00edsticas", L"Programme und Features",
+          L"Programas e Recursos", L"Programma's en onderdelen",
+          L"\u041f\u0440\u043e\u0433\u0440\u0430\u043c\u043c\u044b \u0438 \u043a\u043e\u043c\u043f\u043e\u043d\u0435\u043d\u0442\u044b",
+          L"\u30d7\u30ed\u30b0\u30e9\u30e0\u3068\u6a5f\u80fd",
+          L"Programy i funkcje", L"Programmer og funktioner",
+          L"Program och funktioner", L"Programmer og funksjoner",
+          L"Ohjelmat ja toiminnot", L"Programlar ve Özellikler"},
+         L"control.exe appwiz.cpl"},
+        // Power Options
+        {{L"Opzioni di alimentazione", L"Power Options",
+          L"Options d'alimentation", L"Opciones de energ\u00eda",
+          L"Energieoptionen", L"Op\u00e7\u00f5es de energia", L"Energiebeheer",
+          L"\u041f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u044b \u043f\u0438\u0442\u0430\u043d\u0438\u044f",
+          L"\u96fb\u6e90\u30aa\u30d7\u30b7\u30e7\u30f3", L"Opcje zasilania",
+          L"Strømstyring", L"Energialternativ", L"Strømalternativer",
+          L"Virranhallinta", L"Güç Seçenekleri"},
+         L"control.exe powercfg.cpl"},
+        // Event Viewer
+        {{L"Visualizzatore eventi", L"Event Viewer",
+          L"Observateur d'\u00e9v\u00e9nements", L"Visor de eventos",
+          L"Ereignisanzeige", L"Visualizador de Eventos",
+          L"Gebeurtenisweergave",
+          L"\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0441\u043e\u0431\u044b\u0442\u0438\u0439",
+          L"\u30a4\u30d9\u30f3\u30c8 \u30d3\u30e5\u30fc\u30a2\u30fc",
+          L"Podgl\u0105d zdarze\u0144", L"Hændelsesfremviser", L"Loggboken",
+          L"Hendelsesvisning", L"Tapahtumakatselu", L"Olay Görüntüleyicisi"},
+         L"eventvwr.msc"},
+        // System
+        {{L"Sistema", L"System", L"Syst\u00e8me", L"Sistema", L"System",
+          L"Sistema", L"Systeem", L"\u0421\u0438\u0441\u0442\u0435\u043c\u0430",
+          L"\u30b7\u30b9\u30c6\u30e0", L"System", L"System", L"System",
+          L"System", L"Järjestelmä", L"Sistem"},
+         L"ms-settings:about"},
+        // Device Manager
+        {{L"Gestione dispositivi", L"Device Manager",
+          L"Gestionnaire de p\u00e9riph\u00e9riques",
+          L"Administrador de dispositivos", L"Ger\u00e4temanager",
+          L"Gestor de Dispositivos", L"Apparaatbeheer",
+          L"\u0414\u0438\u0441\u043f\u0435\u0442\u0447\u0435\u0440 \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432",
+          L"\u30c7\u30d0\u30a4\u30b9 \u30de\u30cd\u30fc\u30b8\u30e3\u30fc",
+          L"Mened\u017cer urz\u0105dze\u0144", L"Enhedshåndtering",
+          L"Enhetshanteraren", L"Enhetsbehandling", L"Laitehallinta",
+          L"Aygıt Yöneticisi"},
+         L"devmgmt.msc"},
+        // Network Connections
+        {{L"Connessioni di rete", L"Network Connections",
+          L"Connexions r\u00e9seau", L"Conexiones de red",
+          L"Netzwerkverbindungen", L"Liga\u00e7\u00f5es de Rede",
+          L"Netwerkverbindingen",
+          L"\u0421\u0435\u0442\u0435\u0432\u044b\u0435 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u044f",
+          L"\u30cd\u30c3\u30c8\u30ef\u30fc\u30af\u63a5\u7d9a",
+          L"Po\u0142\u0105czenia sieciowe", L"Netværksforbindelser",
+          L"Nätverksanslutningar", L"Nettverkstilkoblinger", L"Verkkoyhteydet",
+          L"Ağ Bağlantıları"},
+         // ncpa.cpl does nothing on the private shell; the shell namespace
+         // below
+         // is opened like every other shell operation.
+         L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+        // Disk Management
+        {{L"Gestione disco", L"Disk Management", L"Gestion des disques",
+          L"Administraci\u00f3n de discos", L"Datentr\u00e4gerverwaltung",
+          L"Gest\u00e3o de Discos", L"Schijfbeheer",
+          L"\u0423\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0434\u0438\u0441\u043a\u0430\u043c\u0438",
+          L"\u30c7\u30a3\u30b9\u30af\u306e\u7ba1\u7406",
+          L"Zarz\u0105dzanie dyskami", L"Diskhåndtering", L"Diskhantering",
+          L"Diskbehandling", L"Levynhallinta", L"Disk Yönetimi"},
+         L"diskmgmt.msc"},
+        // Computer Management
+        {{L"Gestione computer", L"Computer Management",
+          L"Gestion de l'ordinateur", L"Administraci\u00f3n del equipo",
+          L"Computerverwaltung", L"Gest\u00e3o do Computador",
+          L"Computerbeheer",
+          L"\u0423\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u043a\u043e\u043c\u043f\u044c\u044e\u0442\u0435\u0440\u043e\u043c",
+          L"\u30b3\u30f3\u30d4\u30e5\u30fc\u30bf\u30fc\u306e\u7ba1\u7406",
+          L"Zarz\u0105dzanie komputerem", L"Computerstyring", L"Datorhantering",
+          L"Datamaskinbehandling", L"Tietokoneenhallinta",
+          L"Bilgisayar Yönetimi"},
+         L"compmgmt.msc"},
+        // Terminal
+        {{L"Terminale", L"Terminal", L"Terminal", L"Terminal", L"Terminal",
+          L"Terminal", L"Terminal",
+          L"\u0422\u0435\u0440\u043c\u0438\u043d\u0430\u043b",
+          L"\u30bf\u30fc\u30df\u30ca\u30eb", L"Terminal", L"Terminal",
+          L"Terminal", L"Terminal", L"Pääte", L"Terminal"},
+         L"wt.exe"},
+        // Terminal (Admin)
+        {{L"Terminale (Amministratore)", L"Terminal (Admin)",
+          L"Terminal (Administrateur)", L"Terminal (Administrador)",
+          L"Terminal (Admin)", L"Terminal (Administrador)",
+          L"Terminal (Administrator)",
+          L"\u0422\u0435\u0440\u043c\u0438\u043d\u0430\u043b (\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440)",
+          L"\u30bf\u30fc\u30df\u30ca\u30eb (\u7ba1\u7406\u8005)",
+          L"Terminal (Administrator)", L"Terminal (administrator)",
+          L"Terminal (administratör)", L"Terminal (administrator)",
+          L"Pääte (järjestelmänvalvoja)", L"Terminal (Yönetici)"},
+         L"@admin:wt.exe"},
+        // Task Manager
+        {{L"Gestione attivit\u00e0", L"Task Manager",
+          L"Gestionnaire des t\u00e2ches", L"Administrador de tareas",
+          L"Task-Manager", L"Gestor de Tarefas", L"Taakbeheer",
+          L"\u0414\u0438\u0441\u043f\u0435\u0442\u0447\u0435\u0440 \u0437\u0430\u0434\u0430\u0447",
+          L"\u30bf\u30b9\u30af \u30de\u30cd\u30fc\u30b8\u30e3\u30fc",
+          L"Mened\u017cer zada\u0144", L"Jobliste", L"Aktivitetshanteraren",
+          L"Oppgavebehandling", L"Tehtävienhallinta", L"Görev Yöneticisi"},
+         L"taskmgr.exe"},
+        // Settings
+        {{L"Impostazioni", L"Settings", L"Param\u00e8tres",
+          L"Configuraci\u00f3n", L"Einstellungen", L"Defini\u00e7\u00f5es",
+          L"Instellingen",
+          L"\u041f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u044b",
+          L"\u8a2d\u5b9a", L"Ustawienia", L"Indstillinger", L"Inställningar",
+          L"Innstillinger", L"Asetukset", L"Ayarlar"},
+         L"ms-settings:"},
+        // File Explorer
+        {{L"Esplora file", L"File Explorer", L"Explorateur de fichiers",
+          L"Explorador de archivos", L"Datei-Explorer",
+          L"Explorador de Ficheiros", L"Verkenner",
+          L"\u041f\u0440\u043e\u0432\u043e\u0434\u043d\u0438\u043a \u0444\u0430\u0439\u043b\u043e\u0432",
+          L"\u30a8\u30af\u30b9\u30d7\u30ed\u30fc\u30e9\u30fc",
+          L"Eksplorator plik\u00f3w", L"Stifinder", L"Utforskaren",
+          L"Filutforsker", L"Resurssienhallinta", L"Dosya Gezgini"},
+         L"explorer.exe"},
+        // The Windows 10 menu has a Search entry here. It is deliberately not
+        // part
+        // of this recreation: opening the Windows 11 search host from a shell
+        // menu
+        // was the least reliable entry of the whole menu, so the entry was
+        // removed
+        // and Windows Search is opened with Win+S, the taskbar Search box or
+        // Start.
+        // Run
+        {{L"Esegui", L"Run", L"Ex\u00e9cuter", L"Ejecutar", L"Ausf\u00fchren",
+          L"Executar", L"Uitvoeren",
+          L"\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c",
+          L"\u30d5\u30a1\u30a4\u30eb\u540d\u3092\u6307\u5b9a\u3057\u3066\u5b9f\u884c",
+          L"Uruchom", L"Kør", L"Kör", L"Kjør", L"Suorita", L"Çalıştır"},
+         L"shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}"},
+        // Shut down or sign out
+        {{L"Arresta o disconnetti", L"Shut down or sign out",
+          L"Arr\u00eater ou d\u00e9connecter", L"Cerrar sesi\u00f3n o apagar",
+          L"Herunterfahren oder abmelden", L"Terminar Sess\u00e3o ou Desligar",
+          L"Afsluiten of afmelden",
+          L"\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0438\u0435 \u0440\u0430\u0431\u043e\u0442\u044b \u0438\u043b\u0438 \u0432\u044b\u0445\u043e\u0434 \u0438\u0437 \u0441\u0438\u0441\u0442\u0435\u043c\u044b",
+          L"\u30b7\u30e3\u30c3\u30c8\u30c0\u30a6\u30f3\u307e\u305f\u306f\u30b5\u30a4\u30f3\u30a2\u30a6\u30c8",
+          L"Zamknij lub wyloguj", L"Luk computeren, eller log af",
+          L"Stäng av eller logga ut", L"Slå av eller logg av",
+          L"Sammuta tai kirjaudu ulos", L"Kapat veya oturumu kapat"},
+         L"explorer.exe shell:::{85BBD9B8-4226-101A-A96C-945596089032}"},
+        // Desktop
+        {{L"Desktop", L"Desktop", L"Bureau", L"Escritorio", L"Desktop",
+          L"\u00c1rea de Trabalho", L"Bureaublad",
+          L"\u0420\u0430\u0431\u043e\u0447\u0438\u0439 \u0441\u0442\u043e\u043b",
+          L"\u30c7\u30b9\u30af\u30c8\u30c3\u30d7", L"Pulpit", L"Skrivebord",
+          L"Skrivbord", L"Skrivebord", L"Työpöytä", L"Masaüstü"},
+         L"@desktop"}};
+
+    // clang-format on
+
+    // Shut-down entries of the submenu (as in Windows 10), in every interface
+    // language: the order is the one of UiLangId.
+    static const wchar_t* const kPowerText[4][LANG_COUNT] = {
+        {L"Disconnetti", L"Sign out", L"Se déconnecter", L"Cerrar sesión",
+         L"Abmelden", L"Terminar sessão", L"Afmelden", L"Выход из системы",
+         L"サインアウト", L"Wyloguj", L"Log af", L"Logga ut", L"Logg av",
+         L"Kirjaudu ulos", L"Oturumu kapat"},
+        {L"Sospendi", L"Sleep", L"Mettre en veille", L"Suspender",
+         L"Energiesparmodus", L"Suspender", L"Sluimerstand", L"Спящий режим",
+         L"スリープ", L"Uśpij", L"Slumre", L"Viloläge", L"Dvalemodus",
+         L"Lepotila", L"Uyku"},
+        {L"Arresta il sistema", L"Shut down", L"Arrêter", L"Apagar",
+         L"Herunterfahren", L"Encerrar", L"Afsluiten", L"Завершение работы",
+         L"シャットダウン", L"Zamknij", L"Luk computeren", L"Stäng av",
+         L"Slå av", L"Sammuta", L"Kapat"},
+        {L"Riavvia il sistema", L"Restart", L"Redémarrer", L"Reiniciar",
+         L"Neu starten", L"Reiniciar", L"Opnieuw opstarten", L"Перезагрузка",
+         L"再起動", L"Uruchom ponownie", L"Genstart", L"Starta om",
+         L"Start på nytt", L"Käynnistä uudelleen", L"Yeniden başlat"},
+    };
+    static const wchar_t* const kPowerCmd[4] = {
+        L"shutdown.exe /l",
+        L"@sleep",
+        L"@shutdown",
+        L"shutdown.exe /r /t 0",
+    };
+    // The language index is used by the shut-down submenu as well.
+
+    // Same order as the Windows 10 Win+X menu, with its two separators: after
+    // the administrative terminal and before "Shut down or sign out".
+    for (size_t i = 0; i < _countof(items); i++) {
+        if (hideShutdown && i == 14)
+            continue;
+        if (i == 10 || i == 14)
+            AppendMenuW(menu.get(), MF_SEPARATOR, 0, nullptr);
+        if (i == 14) {
+            HMENU sub = CreatePopupMenu();
+            if (sub) {
+                for (UINT k = 0; k < 4; k++)
+                    AppendMenuW(sub, MF_STRING, 101 + k, kPowerText[k][lang]);
+                if (!AppendMenuW(menu.get(), MF_POPUP | MF_STRING,
+                                 (UINT_PTR)sub, items[i].text[lang]))
+                    DestroyMenu(sub);
+            }
+            // Never turn a failed power submenu into an unrelated executable
+            // item.
+            continue;
+        }
+        if (usePowerShell && (i == 8 || i == 9)) {
+            wchar_t text[192] = {};
+            if (i == 8) {
+                wcscpy_s(text, L"Windows PowerShell");
+            } else {
+                // Keep the localized elevation suffix from Terminal (Admin).
+                const wchar_t* suffix = wcschr(items[i].text[lang], L'(');
+                _snwprintf_s(text, _countof(text), _TRUNCATE,
+                             L"Windows PowerShell %s",
+                             suffix ? suffix : L"(Admin)");
+            }
+            AppendMenuW(menu.get(), MF_STRING, (UINT)(i + 1), text);
+            continue;
+        }
+        AppendMenuW(menu.get(), MF_STRING, (UINT)(i + 1), items[i].text[lang]);
+    }
+
+    if (win32Skin && !NativeMenu::MarkOwnedTree(menu.get()))
+        Wh_Log(L"[menu] could not mark the owned Win+X menu tree (%lu)",
+               GetLastError());
+
+    // The current opening's anchor was resolved on this same thread before STA
+    // initialization / window creation, allowing one safe MTA UIA lookup if
+    // needed.
+    const POINT pt = anchor.point;
+    const UINT alignFlags = anchor.flags;
+    Wh_Log(L"[winx] anchor: %s -> (%ld,%ld)%s, dpi %u", anchor.source, pt.x,
+           pt.y, anchor.taskbarOnTop ? L" [taskbar on top]" : L"", anchor.dpi);
+
+    // Owner: a window of this thread. Shell_TrayWnd is never used as the owner:
+    // the menu must not run its modal loop on the taskbar thread.
+    HWND owner = GetWinXMenuOwnerWindow();
+    if (!owner) {
+        // Without an owner window of this thread the menu could not be
+        // dismissed reliably (there would be no window to receive
+        // WM_CANCELMODE), so the request is dropped instead of showing an
+        // unowned popup.
+        Wh_Log(L"[winx] no owner window for the menu: the request is dropped");
+        return;
+    }
+    if (!ForceForegroundWindow(owner))
+        Wh_Log(
+            L"[winx] foreground activation refused (Windows/UIPI); no input "
+            L"queues attached");
+
+    // The flag is set for exactly as long as the menu is on screen, so a second
+    // chord can tell "already open" from "not open" (see WinXMenuOpenScope).
+    Wh_Log(L"[winx] menu on thread %lu, owner 0x%p", GetCurrentThreadId(),
+           (void*)owner);
+
+    UINT selected = 0;
+    {
+        const WinXMenuOpenScope menuOpen(owner);
+        // Rendering remains independent of input interception. Light Win32 mode
+        // stays system-rendered; dark Win32 mode paints only our owned menu
+        // items.
+        const UINT flags = TPM_RIGHTBUTTON | TPM_RETURNCMD | alignFlags;
+        Wh_Log(L"[winx] skin: %s, PowerShell fallback: %s, hide power: %s",
+               win32Skin ? L"win32" : L"immersive",
+               usePowerShell ? L"yes" : L"no", hideShutdown ? L"yes" : L"no");
+        // This thread reads the Windows mode itself: the kept values belong
+        // to the thread of the bar.
+        if (win10Skin)
+            gT81MenuScheme = T81W10RegRead(kW10KeyPersonalize,
+                                           L"SystemUsesLightTheme", 0) != 0
+                                 ? 1
+                                 : 0;
+        selected = win32Skin ? NativeMenu::Track(menu.get(), owner, pt.x, pt.y,
+                                                 flags, anchor.dpi)
+                             : ImmersiveMenu::Track(menu.get(), owner, pt.x,
+                                                    pt.y, flags, anchor.dpi);
+        gT81MenuScheme = -1;
+        PostMessageW(owner, WM_NULL, 0, 0);
+    }  // A launched command is not an open menu.
+
+    if (selected >= 101 && selected <= 104)
+        RunWinXCommand(kPowerCmd[selected - 101]);
+    else if ((selected == 9 || selected == 10) && usePowerShell) {
+        wchar_t path[MAX_PATH] = {};
+        const UINT n = GetSystemDirectoryW(path, _countof(path));
+        if (n && n < _countof(path) &&
+            wcscat_s(path, L"\\WindowsPowerShell\\v1.0\\powershell.exe") == 0)
+            RunCommand(path, nullptr, selected == 10 ? L"runas" : L"open",
+                       L"PowerShell");
+    } else if (selected > 0 && selected <= _countof(items))
+        RunWinXCommand(items[selected - 1].command);
+}
+
+// ---------------------------------------------------------------------------
+// The thread that shows the menu.
+//
+// TrackPopupMenuEx runs a modal loop on the thread that calls it, so the menu
+// is never shown on a thread of the shell: doing it on the taskbar thread froze
+// the private shell for as long as the menu was on screen (the desktop went
+// black for seconds and the tray flyouts stopped answering). A thread of the
+// mod shows it, with an owner window of its own (GetWinXMenuOwnerWindow is
+// per-thread), and destroys that window before exiting, on the only thread that
+// can destroy it.
+//
+// Placement is resolved first, before a window exists (UIA uses a temporary
+// MTA). Then COM STA is initialized for ShellExecuteW, shell namespaces,
+// ms-settings, and elevated entries. The owner window is destroyed before STA
+// uninitialization.
+// ---------------------------------------------------------------------------
+static DWORD WinXMenuThreadImpl(LPVOID parameter) {
+    const HWND startButton = static_cast<HWND>(parameter);
+    if (g_unloading.load(std::memory_order_acquire))
+        return 0;
+    // UIA must run on a windowless MTA thread. Resolve the value-only anchor
+    // first; QueryStartButtonRectOnce releases its MTA before this thread
+    // becomes an STA.
+    const WinXMenuAnchor anchor = ComputeWinXMenuAnchor(startButton);
+    const HRESULT comResult = CoInitializeEx(
+        nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    if (FAILED(comResult))
+        Wh_Log(L"[winx] menu thread: CoInitializeEx failed (0x%08X)",
+               (unsigned)comResult);
+    // The owner window needs a message queue on this thread.
+    MSG queueInit{};
+    PeekMessageW(&queueInit, nullptr, 0, 0, PM_NOREMOVE);
+
+    struct MenuThreadCleanup {
+        HRESULT comResult;
+        ~MenuThreadCleanup() {
+            DestroyWinXMenuOwnerWindow();
+            if (SUCCEEDED(comResult))
+                CoUninitialize();
+        }
+    } cleanup{comResult};
+    try {
+        if (!g_unloading.load(std::memory_order_acquire))
+            ShowCustomWinXMenuHere(anchor);
+    } catch (...) {
+        Wh_Log(L"[winx] menu thread exception; menu abandoned");
+    }
+    return 0;
+}
+
+static DWORD WINAPI WinXMenuThread(LPVOID parameter) {
+    try {
+        return WinXMenuThreadImpl(parameter);
+    } catch (...) {
+        Wh_Log(L"[winx] unhandled menu thread exception");
+        return 1;
+    }
+}
+
+// Starts the thread that shows the menu. The caller is the services thread,
+// which owns the low-level input hooks and must never block (Windows removes a
+// hook that does not answer within LowLevelHooksTimeout), so this only creates
+// the thread.
+//
+// One menu at a time, and the handle is kept: the menu thread runs code of this
+// module (the owner-draw subclass and the dispatch of the chosen entry), so the
+// module must not be unloaded while it is alive. Wh_ModUninit cancels it and
+// waits for it. When the thread cannot be created the request is dropped:
+// showing the menu on the services thread would run a modal loop on the thread
+// that services the system-wide hooks, which is exactly what this mod must not
+// do.
+static void ShowCustomWinXMenu(HWND startButton) {
+    if (g_menuThread) {
+        if (WaitForSingleObject(g_menuThread, 0) == WAIT_TIMEOUT) {
+            Wh_Log(
+                L"[winx] the previous menu is still open: this request is "
+                L"dropped");
+            return;
+        }
+        CloseHandle(g_menuThread);
+        g_menuThread = nullptr;
+    }
+    g_menuThread =
+        CreateThread(nullptr, 0, WinXMenuThread,
+                     reinterpret_cast<LPVOID>(startButton), 0, nullptr);
+    if (!g_menuThread)
+        Wh_Log(
+            L"[winx] the menu thread could not be created (%lu): the request "
+            L"is dropped",
+            GetLastError());
+}
+
+// Handles a Win+X request posted by the input hooks, with a short debounce so
+// that a burst of requests opens one menu. startButton is the button a
+// right-click came from, or null for the keyboard chord.
+static void HandleWinXRequest(HWND startButton, WinXRequestSource source) {
+    // A call to a deprecated shell stub is NOT a fourth request source.
+    const wchar_t* sourceName = nullptr;
+    switch (source) {
+        case WinXRequestSource::KeyboardChord:
+            sourceName = L"keyboard Win+X";
+            break;
+        case WinXRequestSource::StartRightClick:
+            sourceName = L"Start right-click (HWND)";
+            break;
+        case WinXRequestSource::ModernMenuEntry:
+            sourceName = L"modern menu creation entry";
+            break;
+        default:
+            Wh_Log(L"[winx] unknown request source rejected");
+            return;
+    }
+    Wh_Log(L"[winx] request source: %s", sourceName);
+    static ULONGLONG lastRequest = 0;
+
+    const ULONGLONG now = GetTickCount64();
+    if (lastRequest && now - lastRequest < 400)
+        return;
+    lastRequest = now;
+
+    if (!startButton || !IsWindow(startButton))
+        startButton = FindNativeTaskbarStartButton();
+    ShowCustomWinXMenu(startButton);
+}
+
+// Tears down what the services thread owns, when it exits. The hooks are
+// removed here, on the thread that installed them: Wh_ModBeforeUninit does not
+// touch them, because it runs on a thread of the Windhawk engine while this
+// thread may still be installing or resetting them. The state of the open menu
+// (g_winXMenuOpen and g_winXMenuOwnerWindow) belongs to the menu thread and is
+// left alone: Wh_ModUninit needs it to cancel a menu that is still on screen.
+class ScopedWinXServiceStateReset {
+   public:
+    ScopedWinXServiceStateReset() = default;
+    ~ScopedWinXServiceStateReset() {
+        ClearWinXInputRoutes();
+        ResetWinXInputHooks();
+        g_winXKeyboardHookInstalled = false;
+        g_winXMouseHookInstalled = false;
+        g_servicesThreadId = 0;
+    }
+    ScopedWinXServiceStateReset(const ScopedWinXServiceStateReset&) = delete;
+    ScopedWinXServiceStateReset& operator=(const ScopedWinXServiceStateReset&) =
+        delete;
+};
+
+// ---------------------------------------------------------------------------
+// Services thread: owns the input hooks and pumps messages. Nothing slow and
+// nothing that can block is ever executed here, so the hooks are neither
+// removed by Windows for exceeding LowLevelHooksTimeout nor able to hold up
+// system input: a hook posts g_winXRouteMessage and this thread does the work.
+// ---------------------------------------------------------------------------
+static HANDLE g_stopEvent = nullptr;
+static HANDLE g_servicesThread = nullptr;
+static HANDLE g_servicesReadyEvent = nullptr;
+
+static DWORD ExplorerServicesThreadImpl() {
+    ScopedWinXServiceStateReset stateReset;
+    g_servicesThreadId = GetCurrentThreadId();
+    g_servicesStartedAt = GetTickCount64();
+    MSG queueInit{};
+    PeekMessageW(&queueInit, nullptr, 0, 0, PM_NOREMOVE);
+    // Wh_ModInit waits for an actual queue, not an arbitrary startup sleep. The
+    // PDB detours must have somewhere to post as soon as Windhawk enables them.
+    if (g_servicesReadyEvent)
+        SetEvent(g_servicesReadyEvent);
+
+    // Arms the hooks as soon as this process owns the taskbar, and keeps them
+    // armed from then on.
+    UpdateWinXInputRoutes();
+    Wh_Log(L"[winx] input hooks: keyboard %s, Start right-click %s",
+           g_winXKeyboardHook ? L"ready" : L"unavailable",
+           g_winXMouseHook ? L"ready" : L"unavailable");
+
+    // Requests and shutdown wake this thread immediately. Idle refresh is 2.5 s
+    // once armed, or after bounded startup retries, not a permanent 500 ms
+    // poll.
+    for (;;) {
+        const DWORD waitResult = MsgWaitForMultipleObjectsEx(
+            g_stopEvent ? 1 : 0, g_stopEvent ? &g_stopEvent : nullptr,
+            g_winXRouteRefreshMs, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        if (g_stopEvent && waitResult == WAIT_OBJECT_0)
+            break;
+
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == g_winXRouteMessage) {
+                if (!g_unloading.load())
+                    HandleWinXRequest(
+                        reinterpret_cast<HWND>(msg.lParam),
+                        static_cast<WinXRequestSource>(msg.wParam));
+            } else {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
+
+        // The taskbar can appear after this thread starts (and be recreated
+        // later): the routes are refreshed at every wake-up, so they are in
+        // place as soon as it is, and a hook that failed to install is retried.
+        UpdateWinXInputRoutes();
+    }
+    Wh_Log(L"[winx] services finished");
+    return 0;
+}
+static DWORD WINAPI ExplorerServicesThread(LPVOID) {
+    try {
+        return ExplorerServicesThreadImpl();
+    } catch (...) {
+        Wh_Log(L"[winx] services thread exception");
+        return 1;
+    }
+}
+
+static BOOL EmbeddedInit() {
+    LoadSettings();
+    Wh_Log(L"[winx] init");
+
+    g_unloading.store(false, std::memory_order_release);
+    g_winXRouteMessage = RegisterWindowMessageW(kWinXRouteMessageName);
+    if (!g_winXRouteMessage) {
+        Wh_Log(L"[winx] the route message could not be registered (%lu)",
+               GetLastError());
+        return FALSE;
+    }
+
+    if (!RegisterWinXOwnerWindowClass())
+        return FALSE;
+
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_stopEvent) {
+        Wh_Log(L"[winx] stop event could not be created (%lu)", GetLastError());
+        UnregisterWinXOwnerWindowClass();
+        return FALSE;
+    }
+    g_servicesReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_servicesReadyEvent) {
+        Wh_Log(L"[winx] services-ready event failed (%lu)", GetLastError());
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+        UnregisterWinXOwnerWindowClass();
+        return FALSE;
+    }
+    g_servicesThread =
+        CreateThread(nullptr, 0, ExplorerServicesThread, nullptr, 0, nullptr);
+    if (!g_servicesThread) {
+        Wh_Log(L"[winx] services thread not created (%lu)", GetLastError());
+        SetEvent(g_stopEvent);
+        CloseHandle(g_servicesReadyEvent);
+        g_servicesReadyEvent = nullptr;
+        if (g_stopEvent) {
+            CloseHandle(g_stopEvent);
+            g_stopEvent = nullptr;
+        }
+        UnregisterWinXOwnerWindowClass();
+        return FALSE;
+    }
+    if (WaitForSingleObject(g_servicesReadyEvent, 5000) != WAIT_OBJECT_0) {
+        Wh_Log(
+            L"[winx-native] INIT FAILED: services message queue did not become "
+            L"ready");
+        g_unloading.store(true);
+        SetEvent(g_stopEvent);
+        WaitForSingleObject(g_servicesThread, INFINITE);
+        CloseHandle(g_servicesThread);
+        CloseHandle(g_servicesReadyEvent);
+        CloseHandle(g_stopEvent);
+        g_servicesThread = nullptr;
+        g_servicesReadyEvent = nullptr;
+        g_stopEvent = nullptr;
+        UnregisterWinXOwnerWindowClass();
+        return FALSE;
+    }
+    // The integrated bar owns its input route. Do not hook the real shell.
+    return TRUE;
+}
+
+static void EmbeddedBeforeUninit() {
+    // Stop a menu thread that has just been created from showing a menu, then
+    // wave the services thread off. The hooks are taken down by the services
+    // thread itself, on the thread that installed them (see
+    // ScopedWinXServiceStateReset).
+    g_unloading.store(true, std::memory_order_release);
+    if (g_stopEvent)
+        SetEvent(g_stopEvent);
+}
+
+static void EmbeddedUninit() {
+    // Be safe even if the host did not call BeforeUninit first.
+    g_unloading.store(true, std::memory_order_release);
+    if (g_stopEvent)
+        SetEvent(g_stopEvent);
+    if (g_servicesThread) {
+        // No timeout: the thread is waved off through its event, and it never
+        // waits on anything this thread holds. Joining it first also means that
+        // no new menu thread can be started from here on.
+        WaitForSingleObject(g_servicesThread, INFINITE);
+        CloseHandle(g_servicesThread);
+        g_servicesThread = nullptr;
+    }
+    if (g_menuThread) {
+        // The menu thread can still be inside the modal loop of
+        // TrackPopupMenuEx, or inside ShellExecuteW for the entry that was
+        // chosen. Its return address, the window procedure that draws the items
+        // and the dispatch code are in this module, so the module must not be
+        // unloaded before the thread is gone: an open menu is cancelled first
+        // (WM_CANCELMODE, posted to the window that owns it) and the thread is
+        // then waited for.
+        DWORD waitedMs = 0;
+        while (WaitForSingleObject(g_menuThread, 100) == WAIT_TIMEOUT) {
+            if (const HWND owner =
+                    g_winXMenuOwnerWindow.load(std::memory_order_acquire))
+                PostMessageW(owner, WM_CANCELMODE, 0, 0);
+            waitedMs += 100;
+            if (waitedMs % 5000 == 0)
+                Wh_Log(L"[winx] waiting for the menu thread to finish (%lu ms)",
+                       waitedMs);
+        }
+        CloseHandle(g_menuThread);
+        g_menuThread = nullptr;
+    }
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+    }
+    if (g_servicesReadyEvent) {
+        CloseHandle(g_servicesReadyEvent);
+        g_servicesReadyEvent = nullptr;
+    }
+    UnregisterWinXOwnerWindowClass();
+    g_servicesThreadId = 0;
+    Wh_Log(
+        L"[winx] unloaded: no hook, no thread, no window and no class of this "
+        L"mod is left");
+}
+
+static bool Initialize() {
+    try {
+        return EmbeddedInit() != FALSE;
+    } catch (...) {
+        Wh_Log(L"[winx] initialization exception");
+        return false;
+    }
+}
+static void Shutdown() {
+    try {
+        EmbeddedBeforeUninit();
+        EmbeddedUninit();
+    } catch (...) {
+        Wh_Log(L"[winx] shutdown exception");
+    }
+}
+static bool IsMenuOpen() {
+    return g_winXMenuOpen.load(std::memory_order_acquire);
+}
+static bool Request(HWND bar) {
+    try {
+        if (!t81WinXTrayActive.load(std::memory_order_acquire))
+            return false;
+        if (CloseWinXMenuIfOpen())
+            return true;
+        return PostWinXContextRequestFromHook(
+            bar, WinXRequestSource::StartRightClick);
+    } catch (...) {
+        return false;
+    }
+}
+
+}  // namespace EmbeddedWinX
+}  // namespace
+
+// The menus ShellMenu builds (bar, clock, notification icons, Show desktop):
+// in the Windows 10 skin they are drawn like the taskbar menus of Windows 10,
+// with 32 px rows, a check mark for chosen options and the dark or light
+// colours of the Windows mode. The other skins keep the plain popup.
+static UINT T81TrackShellMenu(HMENU menu,
+                              UINT flags,
+                              int x,
+                              int y,
+                              HWND owner) {
+    if (!T81IsWin10Skin(taskbarSkin.load()))
+        return static_cast<UINT>(
+            TrackPopupMenuEx(menu, flags, x, y, owner, nullptr));
+    gT81MenuScheme = T81W10Sys().lightSystem ? 1 : 0;
+    const UINT chosen = EmbeddedWinX::ImmersiveMenu::Track(menu, owner, x, y,
+                                                           flags, (UINT)Dpi());
+    gT81MenuScheme = -1;
+    return chosen;
+}
+
 BOOL WhTool_ModInit() {
     LoadSettings();
     if (debugExceptionLog.load())
@@ -38004,6 +48118,8 @@ static bool WhTool_StartRuntime() {
         RemoveExceptionLogger();
         return false;
     }
+    if (!EmbeddedWinX::Initialize())
+        Wh_Log(L"[winx] initialization failed; native Win+X remains available");
     toolRuntimeStarted.store(true, std::memory_order_release);
     Wh_Log(
         L"[T81-TOOL] worker started after entrypoint hooks; dedicated PID=%lu "
@@ -38045,6 +48161,7 @@ static void WhTool_ModBeforeUninit() {
     toolShutdown.store(true, std::memory_order_release);
     ToolLifecycleGuard guard;
     toolRuntimeStarted.store(false, std::memory_order_release);
+    EmbeddedWinX::Shutdown();
     StopTaskbarWorker();
     RemoveExceptionLogger();
     batteryStringModule.store(nullptr);
