@@ -11,8 +11,10 @@
 // @compilerOptions -lgdi32 -lgdiplus -luxtheme -lcomctl32 -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
-// ==WindhawkModReadme==x# Taskbar Keyboard Layout Flag
+// ==WindhawkModReadme==
 /*
+# Taskbar Keyboard Layout Flag
+
 Replaces the Windows taskbar input language and keyboard layout indicator with a crisp, minimalist country flag.
 
 ## Overview
