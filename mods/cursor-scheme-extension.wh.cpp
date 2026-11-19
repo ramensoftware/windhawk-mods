@@ -7,7 +7,7 @@
 // @description:de-DE Ersetzt anwendungseigene Mauszeiger durch die Zeiger des ausgewählten Windows-Schemas
 // @description:pt-BR Substitui os ponteiros dos aplicativos pelos do esquema selecionado no Windows
 // @description:zh-CN 将应用内置的鼠标指针替换为所选 Windows 方案中的指针
-// @version         1.0.2
+// @version         1.0.3
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
@@ -15,9 +15,9 @@
 // @include         *
 // @architecture    x86
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -ladvapi32 -lshell32
+// @compilerOptions -lgdi32 -ladvapi32
 // ==/WindhawkMod==
-// Build: 25
+// Build: 26
 
 // ==WindhawkModReadme==
 /*
@@ -56,7 +56,7 @@ The interface is available in English, Russian, Spanish, German, Brazilian Portu
 - Replacement applies to recognized pointers displayed through Windows cursor APIs. The application controls whether autoscroll is available, its speed, and its direction.
 - Excel and Firefox draw their stationary autoscroll markers separately. These markers keep their original appearance.
 - Monochrome pointers that invert the background retain their original pixel rendering without smoothing.
-- Each mod load creates at most 128 replacement instances per process. When full, further requests use the application's original pointer.
+- Each mod load creates at most 128 replacement instances per process. Returning to a previously used scheme or smoothing setting reuses matching instances. When full, requests that need a new instance use the application's original pointer.
 - After disabling, the application restores its pointer at its next cursor update, usually the next mouse move. Replacement cursor handles remain allocated until the process exits so that pointers still used by Windows stay valid.
 
 ## Platforms
@@ -248,7 +248,7 @@ Under **Application exclusions**, below the family switches, add one executable 
       $description:de-DE: "Pfeile für die automatische Scrollrichtung beim Bewegen der Maus vom Startpunkt weg"
       $description:pt-BR: "Setas que indicam a direção da rolagem automática ao afastar o mouse do ponto inicial"
       $description:zh-CN: "鼠标移离起点时指示自动滚动方向的箭头"
-    - downSelection: true
+    - selectionArrows: true
       $name: "Selection arrows"
       $name:ru-RU: "Стрелки выделения"
       $name:es-ES: "Flechas de selección"
@@ -350,7 +350,6 @@ Under **Application exclusions**, below the family switches, add one executable 
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <shellapi.h>
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -597,6 +596,15 @@ struct CursorInstance {
     HCURSOR cursor;
     HCURSOR original;
     uint64_t generation;
+    size_t slot;
+    bool smooth;
+    std::shared_ptr<const CursorSource> source;
+};
+
+struct HostWindow {
+    HWND root = nullptr;
+    DWORD processId = 0;
+    std::wstring path;
 };
 
 struct CursorShape {
@@ -708,8 +716,9 @@ struct CursorMatch {
 
 std::array<CursorShape, kLastAutoscrollId - kFirstAutoscrollId + 1> g_referenceShapes;
 std::array<std::optional<Replacement>, kMappings.size()> g_replacements;
-std::array<std::optional<CursorSource>, kRoleCount> g_sources;
+std::array<std::shared_ptr<const CursorSource>, kRoleCount> g_sources;
 std::array<bool, kRoleCount> g_needsRefresh;
+std::array<ULONGLONG, kRoleCount> g_nextSourceProbe;
 std::vector<HCURSOR> g_retired;
 std::vector<CursorInstance> g_instances;
 std::mutex g_mutex;
@@ -721,15 +730,14 @@ std::atomic<bool> g_isOffice;
 std::atomic<bool> g_processExcluded;
 std::atomic<bool> g_hasExclusions;
 std::vector<std::wstring> g_excludedApplications;
+HostWindow g_hostWindow;
 uint32_t g_smoothingTypes;
 bool g_stopping;
 bool g_watchStarted;
 unsigned g_activeCalls;
 uint64_t g_nextGeneration;
-std::atomic<uint64_t> g_sessionId;
 HKEY g_cursorsKey;
 HANDLE g_changeEvent;
-thread_local Role g_previousRole = Role::Count;
 decltype(&SetCursor) g_setCursorOriginal;
 decltype(&GetCursor) g_getCursorOriginal;
 template <size_t N>
@@ -754,25 +762,55 @@ bool HasModuleName(std::wstring_view path, std::wstring_view module) {
 }
 
 bool IsChromiumChildProcess() {
-    const auto commandLine = GetCommandLineW();
-    if (!std::wstring_view(commandLine).contains(L"--type=")) {
+    std::wstring_view commandLine(GetCommandLineW());
+    if (!commandLine.contains(L"--type=")) {
         return false;
     }
-    int argumentCount = 0;
-    LPWSTR* arguments = CommandLineToArgvW(commandLine, &argumentCount);
-    if (!arguments) {
-        return false;
-    }
+    // Parse argument boundaries instead of matching switches inside quoted paths
+    // or document names. Keep Windows' quote/backslash rules without shell32.
+    std::wstring argument;
+    const auto nextArgument = [&]() {
+        const auto first = commandLine.find_first_not_of(L" \t");
+        if (first == std::wstring_view::npos) return false;
+        commandLine.remove_prefix(first);
+        argument.clear();
+        bool quoted = false;
+        size_t i = 0;
+        while (i < commandLine.size() && (quoted || (commandLine[i] != L' ' && commandLine[i] != L'\t'))) {
+            size_t slashes = 0;
+            while (i < commandLine.size() && commandLine[i] == L'\\') {
+                ++slashes;
+                ++i;
+            }
+            if (i < commandLine.size() && commandLine[i] == L'"') {
+                argument.append(slashes / 2, L'\\');
+                if (slashes % 2) {
+                    argument += L'"';
+                } else if (quoted && i + 1 < commandLine.size() && commandLine[i + 1] == L'"') {
+                    argument += L'"';
+                    ++i;
+                } else {
+                    quoted = !quoted;
+                }
+                ++i;
+            } else {
+                argument.append(slashes, L'\\');
+                if (i == commandLine.size() || (!quoted && (commandLine[i] == L' ' || commandLine[i] == L'\t'))) break;
+                argument += commandLine[i++];
+            }
+        }
+        commandLine.remove_prefix(i);
+        return true;
+    };
+    nextArgument();  // Executable name is not a switch.
     bool type = false;
     bool chromiumHandle = false;
-    for (int i = 1; i < argumentCount; ++i) {
-        const std::wstring_view argument(arguments[i]);
+    while (nextArgument()) {
         type |= argument == L"--type=renderer" || argument == L"--type=gpu-process" ||
                 argument == L"--type=utility";
         chromiumHandle |= argument.starts_with(L"--field-trial-handle=") ||
                           argument.starts_with(L"--mojo-platform-channel-handle=");
     }
-    LocalFree(arguments);
     return type && chromiumHandle;
 }
 
@@ -1088,18 +1126,14 @@ BOOL CALLBACK FindChromiumPanningResource(HMODULE module, LPCWSTR, LPWSTR name, 
 }
 
 bool HasChromiumPanningResources(PCWSTR name) {
-    // Resolve an ambiguous image in a mixed Office/Chromium process once per source.
-    thread_local std::wstring moduleName;
-    thread_local bool matches;
-    if (moduleName != name) {
-        moduleName = name;
-        matches = false;
-        HMODULE module = nullptr;
-        if (*name && GetModuleHandleExW(0, name, &module)) {
-            EnumResourceNamesW(module, MAKEINTRESOURCEW(12), FindChromiumPanningResource,
-                               reinterpret_cast<LONG_PTR>(&matches));
-            FreeLibrary(module);
-        }
+    // IdentifyCursor already caches recognition; no heap-owned TLS may outlive
+    // this DLL on a host UI thread.
+    bool matches = false;
+    HMODULE module = nullptr;
+    if (*name && GetModuleHandleExW(0, name, &module)) {
+        EnumResourceNamesW(module, MAKEINTRESOURCEW(12), FindChromiumPanningResource,
+                           reinterpret_cast<LONG_PTR>(&matches));
+        FreeLibrary(module);
     }
     return matches;
 }
@@ -1559,6 +1593,7 @@ bool RefreshSource(Role role) {
     auto& previous = g_sources[index];
     if (!g_needsRefresh[index] && animated && previous &&
         previous->firstAnimationFrame == firstFrame) {
+        g_nextSourceProbe[index] = GetTickCount64() + 1000;
         return true;
     }
     CursorSource source;
@@ -1598,10 +1633,13 @@ bool RefreshSource(Role role) {
                 entry.reset();
             }
         }
-        previous = std::move(source);
+        previous = std::make_shared<const CursorSource>(std::move(source));
     }
 
     g_needsRefresh[index] = false;
+    // Registry notifications refresh immediately. A bounded fallback also sees
+    // SetSystemCursor changes and works when the registry watch is unavailable.
+    g_nextSourceProbe[index] = GetTickCount64() + 1000;
     return true;
 }
 
@@ -1733,12 +1771,8 @@ bool IsExcludedHostWindow(HWND window) {
         return false;
     }
 
-    struct Host {
-        HWND root;
-        DWORD processId;
-        std::wstring path;
-    };
-    thread_local Host host{};
+    // The caller holds g_mutex; this cache is cleared during unload.
+    auto& host = g_hostWindow;
     if (host.root != root || host.processId != processId) {
         host = {root, processId, {}};
         if (HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId)) {
@@ -1777,6 +1811,16 @@ HCURSOR InstanceFor(Replacement& image, HCURSOR original,
             return instance.cursor;
         }
     }
+    const size_t slot = static_cast<size_t>(&mapping - kMappings.data());
+    for (auto& instance : g_instances) {
+        if (instance.original == original && instance.slot == slot &&
+            instance.smooth == image.smooth && instance.source->frames == source.frames) {
+            // Reuse a previous appearance without invalidating any handle that
+            // an attached or inherited input queue may still be displaying.
+            instance.generation = image.generation;
+            return instance.cursor;
+        }
+    }
     // Keep a pathological application from accumulating unlimited native handles.
     constexpr size_t maxInstances = 128;
     if (g_instances.size() >= maxInstances) {
@@ -1788,7 +1832,8 @@ HCURSOR InstanceFor(Replacement& image, HCURSOR original,
         : static_cast<HCURSOR>(CopyImage(image.cursor, IMAGE_CURSOR, 0, 0, 0));
     if (cursor) {
         try {
-            g_instances.push_back({cursor, original, image.generation});
+            g_instances.push_back({cursor, original, image.generation, slot, image.smooth,
+                                   g_sources[static_cast<size_t>(mapping.role)]});
         } catch (...) {
             DestroyCursor(cursor);
             throw;
@@ -1822,15 +1867,8 @@ HCURSOR WINAPI GetCursorHook() {
 
 HCURSOR SetCursorForMatch(HCURSOR cursor, CursorMatch match) {
     try {
-        thread_local uint64_t roleSession;
-        const auto session = g_sessionId.load();
-        if (roleSession != session) {
-            roleSession = session;
-            g_previousRole = Role::Count;
-        }
         const bool enabled = ReplacementEnabled(match);
         if (!enabled && !g_hasInstances.load()) {
-            g_previousRole = Role::Count;
             return g_setCursorOriginal(cursor);
         }
 
@@ -1871,7 +1909,8 @@ HCURSOR SetCursorForMatch(HCURSOR cursor, CursorMatch match) {
                 const auto& mapping = kMappings[match.slot];
                 const size_t role = static_cast<size_t>(mapping.role);
                 CheckCursorSettings();
-                if ((g_previousRole == mapping.role && !g_needsRefresh[role]) ||
+                if ((!g_needsRefresh[role] && g_sources[role] &&
+                     GetTickCount64() < g_nextSourceProbe[role]) ||
                     RefreshSource(mapping.role)) {
                     const auto& source = *g_sources[role];
                     const bool smooth = (g_smoothingTypes & TypeBit(mapping.type)) != 0;
@@ -1893,12 +1932,7 @@ HCURSOR SetCursorForMatch(HCURSOR cursor, CursorMatch match) {
                         }
                     }
                 }
-                g_previousRole = mapping.role;
-            } else {
-                g_previousRole = Role::Count;
             }
-        } else {
-            g_previousRole = Role::Count;
         }
 
         ActiveCursorCall active;
@@ -1910,7 +1944,6 @@ HCURSOR SetCursorForMatch(HCURSOR cursor, CursorMatch match) {
         lock.unlock();
         return logicalPrevious;
     } catch (...) {
-        g_previousRole = Role::Count;
         return g_setCursorOriginal(cursor);
     }
 }
@@ -1926,7 +1959,6 @@ HCURSOR WINAPI SetCursorHook(HCURSOR cursor) {
             ? CursorMatch{} : IdentifyCursor(cursor);
         return SetCursorForMatch(cursor, match);
     } catch (...) {
-        g_previousRole = Role::Count;
         return g_setCursorOriginal(cursor);
     }
 }
@@ -1957,7 +1989,7 @@ void UpdateSettings() {
         std::pair{CursorType::Move, L"cursors.move"},
         std::pair{CursorType::Resize, L"cursors.resize"},
         std::pair{CursorType::MarginSelection, L"cursors.marginSelection"},
-        std::pair{CursorType::SelectionArrows, L"cursors.downSelection"},
+        std::pair{CursorType::SelectionArrows, L"cursors.selectionArrows"},
         std::pair{CursorType::Cell, L"cursors.cell"},
         std::pair{CursorType::VerticalText, L"cursors.verticalText"},
     };
@@ -1995,22 +2027,11 @@ void UpdateSettings() {
 
 }  // namespace
 
-void BeginCursorSession() {
-    {
-        std::lock_guard lock(g_mutex);
-        g_stopping = false;
-        ++g_sessionId;
-        g_watchStarted = false;
-        g_needsRefresh.fill(true);
-        g_hasInstances.store(!g_instances.empty());
-    }
-}
-
 BOOL Wh_ModInit() {
-    if (!GetModuleHandleW(L"user32.dll") || IsChromiumChildProcess()) {
+    if (IsChromiumChildProcess()) {
         return FALSE;
     }
-    BeginCursorSession();
+    g_needsRefresh.fill(true);
     ObserveOffice();
     UpdateSettings();
 
@@ -2056,4 +2077,5 @@ void Wh_ModUninit() {
     // the application's pointer without running code from an unloaded image.
     g_instances.clear();
     g_hasInstances.store(false);
+    g_hostWindow = {};
 }
