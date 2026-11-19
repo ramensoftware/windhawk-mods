@@ -1,3 +1,14 @@
+## 2.3.1 ([Nov 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/06784190eb860b3f5c5ceea67e9dbde28bd1e7f7/mods/desktop-icon-dock.wh.cpp))
+
+* Add edge dragging: top/bottom edges move the dock vertically, left/right edges horizontally.
+* Add a corner radius setting from square to fully rounded.
+* Add reset-position actions to the dock context menu and settings.
+* Persist the dock position across restarts.
+* Add movement demo GIFs.
+* Fix edge hit zones so edges remain reachable at rest and are disabled while the panel is magnified.
+* Store the dock position per Windows user.
+* Add a configurable default bottom distance and migrate the legacy Bottom offset value.
+
 ## 2.1.2 ([Nov 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/21f35ad6fdb6d5271c7be6f147aeb6a6bd5231df/mods/desktop-icon-dock.wh.cpp))
 
 * Add six background styles and panel tone.

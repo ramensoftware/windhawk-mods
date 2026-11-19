@@ -894,7 +894,7 @@
         "ratingUsers": 10,
         "reviews": 0,
         "trendingSorting": 15.6,
-        "updated": 1794549801000,
+        "updated": 1795129468000,
         "users": 156
       },
       "metadata": {
@@ -903,7 +903,7 @@
         ],
         "author": "Luiz Bizzio",
         "compilerOptions": "-lole32 -loleaut32 -luuid -luser32 -lgdi32 -ladvapi32 -lshell32 -lshlwapi -lcomctl32 -luxtheme -lpropsys -ldwmapi -lwindowscodecs -lmsimg32 -lpsapi -lurlmon",
-        "description": "Browse, open, copy and extract ZIP, RAR, 7z and TAR archives in File Explorer's Preview Pane (Alt+P); additional formats are optional.",
+        "description": "Browse, open, copy and extract archives in File Explorer's Preview Pane, with sortable columns and optional extraction using 7-Zip, NanaZip or WinRAR.",
         "donateUrl": "https://github.com/sponsors/luizbizzio",
         "github": "https://github.com/luizbizzio",
         "homepage": "https://github.com/luizbizzio/archive-preview",
@@ -913,7 +913,7 @@
         ],
         "license": "Apache-2.0",
         "name": "Archive Preview",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "audio-hardware-volume-preset": {
@@ -4746,7 +4746,7 @@
         "ratingUsers": 18,
         "reviews": 0,
         "trendingSorting": 11.524240513465234,
-        "updated": 1794513617000,
+        "updated": 1795129479000,
         "users": 539
       },
       "metadata": {
@@ -4755,13 +4755,13 @@
         ],
         "author": "yizqq0721",
         "compilerOptions": "-lgdiplus -lgdi32 -luser32 -lole32 -loleaut32 -luuid -lshell32 -ladvapi32",
-        "description": "A standalone macOS-style desktop dock. Drag shortcuts, files and folders in, reorder them, or drag them back to the desktop. It keeps its own list and offers six background styles, from Clear to Liquid Glass.",
+        "description": "A standalone macOS-style desktop dock. Drag shortcuts, files and folders in, reorder them, or drag them back to the desktop. It keeps its own list, can be moved by its edges, and offers six background styles.",
         "github": "https://github.com/yizqq0721",
         "include": [
           "explorer.exe"
         ],
         "name": "Desktop Icon Dock",
-        "version": "2.1.2"
+        "version": "2.3.1"
       }
     },
     "desktop-icon-section-autohide": {
@@ -9366,7 +9366,7 @@
         "ratingUsers": 135,
         "reviews": 4,
         "trendingSorting": 9.80306699067349,
-        "updated": 1793937623000,
+        "updated": 1795129462000,
         "users": 2211
       },
       "metadata": {
@@ -9382,7 +9382,7 @@
         ],
         "license": "GPL-2.0",
         "name": "GPU-accelerated explorer.exe list and grid views",
-        "version": "1.0.4"
+        "version": "1.1.1"
       }
     },
     "gradual-night-light": {
@@ -19235,20 +19235,21 @@
         "ratingUsers": 4,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790586289000,
+        "updated": 1795129473000,
         "users": 38
       },
       "metadata": {
         "author": "Ashix",
-        "compilerOptions": "-lshell32 -lole32 -loleaut32 -luuid -lshlwapi -lgdi32 -lmsimg32 -ldwmapi -lwinmm",
-        "description": "A persistent icon dock anchored left of the Start button. Drag any app to pin it. Left-click to launch or focus. Double-right-click to unpin. Drag within the dock to reorder.",
+        "compilerOptions": "-luser32 -lshell32 -lole32 -loleaut32 -luuid -lshlwapi -lgdi32 -lgdiplus -lmsimg32 -ldwmapi -lwinmm",
+        "description": "A persistent icon dock anchored left of the Start button, plus a screen-edge workspace pill. Pin apps or File Explorer workspaces, reorder or unpin by drag, and capture/restore window layouts.",
+        "donateUrl": "https://ko-fi.com/kashix",
         "github": "https://github.com/k-ashix",
         "include": [
           "windhawk.exe"
         ],
         "name": "Left Taskbar Quick Pin Dock",
         "twitter": "https://x.com/k_ashix",
-        "version": "2.5.4"
+        "version": "3.2026.1811"
       }
     },
     "taskbar-rdp-launcher": {

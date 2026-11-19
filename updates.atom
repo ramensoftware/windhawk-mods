@@ -2,12 +2,133 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-19T22:02:55.000Z</updated>
+    <updated>2026-11-19T23:04:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Icon Dock 2.3.1]]></title>
+        <id>https://windhawk.net/mods/desktop-icon-dock#06784190eb860b3f5c5ceea67e9dbde28bd1e7f7</id>
+        <link href="https://windhawk.net/mods/desktop-icon-dock"/>
+        <updated>2026-11-19T23:04:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add edge dragging: top/bottom edges move the dock vertically, left/right edges horizontally.</li>
+<li>Add a corner radius setting from square to fully rounded.</li>
+<li>Add reset-position actions to the dock context menu and settings.</li>
+<li>Persist the dock position across restarts.</li>
+<li>Add movement demo GIFs.</li>
+<li>Fix edge hit zones so edges remain reachable at rest and are disabled while the panel is magnified.</li>
+<li>Store the dock position per Windows user.</li>
+<li>Add a configurable default bottom distance and migrate the legacy Bottom offset value.</li>
+</ul>
+]]></content>
+        <author>
+            <name>yizqq0721</name>
+            <uri>https://github.com/yizqq0721</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Left Taskbar Quick Pin Dock 3.2026.1811]]></title>
+        <id>https://windhawk.net/mods/taskbar-quick-pin#9a3d29d7181c754ff9f84cb57e67325313f7e0cf</id>
+        <link href="https://windhawk.net/mods/taskbar-quick-pin"/>
+        <updated>2026-11-19T23:04:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add  Sticky Workspace Pill with auto-render on startup and a partial-circle Arc Carousel for saved window layouts.</li>
+<li>Add read-only hover Thumbnail Preview for Arc Cards and single/double right-click Customize Mode to add (<code>+</code> / drag-and-drop) or remove (<code>×</code> / double-click) apps and adjust split ratios.</li>
+<li>Add top-right <code>×</code> delete badge on each Arc Card and symmetrical circular <code>+</code> / <code>×</code> badges inside the Thumbnail Preview.</li>
+<li>Prevent duplicate apps when pinning or capturing workspaces on both the Left Taskbar Dock and Edge Pill.</li>
+<li>Add floating animated status toast above the Thumbnail Preview without mutating Edge Pill geometry.</li>
+<li>Fix screenshot-reveal flicker, dual-process Tool Mod mutex handoff, and unnecessary Arc/Pill repaints.</li>
+<li>Update README preview images to raw GitHub links for the Left Taskbar Dock and Edge Pill.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ashix</name>
+            <uri>https://github.com/k-ashix</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Archive Preview 1.1.0]]></title>
+        <id>https://windhawk.net/mods/archive-preview#973ad733fe13aa51435894e6801ecef9a77bc24e</id>
+        <link href="https://windhawk.net/mods/archive-preview"/>
+        <updated>2026-11-19T23:04:28.000Z</updated>
+        <content type="html"><![CDATA[<h3>Extraction and drag and drop</h3>
+<ul>
+<li>Added optional extraction with <strong>7-Zip, NanaZip, or WinRAR</strong>. Windows remains the default. The mod can find an installed program automatically, or you can set its executable path.</li>
+<li>The selected program handles full archives and selected files. External extraction keeps the paths stored in the archive and uses the program's own progress, password, and overwrite dialogs where supported.</li>
+<li><strong>Extract to…</strong> and <strong>Extract selected to…</strong> now start in the folder that contains the archive.</li>
+<li>Added separate shortcuts for all four extraction actions. <strong>Ctrl + Shift + E</strong> still runs <strong>Extract selected here</strong> while the file list has focus.</li>
+<li>Added optional external extraction when dragging files out of the preview. The mod stages the files in its own storage before Explorer copies them. It keeps the folder while the transfer uses it and retries cleanup when the broker starts again if it can confirm the folder is free. Clipboard copy and paste still use Windows.</li>
+<li>Added support for long paths when opening and cleaning up temporary files used by external drag and drop.</li>
+<li>Improved native extraction status and logging. Windows can still show <strong>0%</strong> until extraction finishes for some formats. External programs show their own progress.</li>
+</ul>
+<h3>Sorting, columns, and appearance</h3>
+<ul>
+<li>Click a column header to sort and click again to reverse the order. The list starts sorted by name, keeps folders first, and sorts dates and sizes by their values.</li>
+<li>Drag the header separators to resize columns. Right-click the headers to show or hide <strong>Date modified</strong>, <strong>Type</strong>, and <strong>Size</strong>. The mod saves these choices and gives the <strong>Name</strong> column priority in narrow panes.</li>
+<li>Added an option to hide the horizontal scrollbar. The preview temporarily shows fewer columns when there is too little space.</li>
+<li>Added separate options for reading dates and sizes in archives of <strong>256 MiB or more</strong>. Both are off by default for large archives. ZIP folder dates can use dates from the files they contain when the archive has no date for the folder.</li>
+<li>Limited the ZIP date fallback to direct subfolders of the current folder. It caps stored dates and stops when the preview is canceled.</li>
+<li>Leave the <strong>Date modified</strong> and <strong>Size</strong> cells blank when metadata is unavailable.</li>
+<li>Improved selection highlighting with the Windows accent color and made the main and recovery views more consistent in dark mode.</li>
+</ul>
+<h3>Preview fixes</h3>
+<ul>
+<li>Fixed icons disappearing after switching away from an archive and selecting it again.</li>
+<li>Fixed cases where another preview could cover the archive pane and block clicks, folder navigation, and extraction buttons. This includes the reported case when switching from an FBX file to an archive.</li>
+<li>Fixed preview sessions taking over another preview pane and improved checks before reusing cached data from an archive that may have changed.</li>
+<li>The mod can rebuild a broken file list from data it already loaded and restore the saved selection and scroll position when available. If that fails, it can switch to the Windows recovery view.</li>
+</ul>
+<h3>Language, settings, and updates</h3>
+<ul>
+<li>Added a preview language setting with <strong>Automatic</strong> and <strong>105 language options and variants</strong>. Automatic follows the Windows display language when available. Some detailed messages use English.</li>
+<li>Reorganized Windhawk settings, with <strong>Files and security</strong> and <strong>Extraction</strong> first. If you are updating from a version with ungrouped settings, copy your custom values before updating so you can reapply them.</li>
+<li>Added <strong>Updates and disabling</strong>. If you enable it, Explorer closes windows that still contain an Archive Preview when the mod is updated, recompiled, or disabled. This closes all tabs in each affected window. The option is off by default.</li>
+<li>Fixed broker shutdown when updating or disabling the mod during an external drag or while the broker is still starting. Pending requests and results are cleared before the broker's window closes.</li>
+<li>Added <strong>Diagnostics &gt; Detailed logs</strong> to help investigate preview, extraction, and drag issues. It is off by default. Updated the mod README with setup, settings, and known limitations.</li>
+</ul>
+<h3>Thanks</h3>
+<p>Big thanks to <a href="https://github.com/Dizse">Dizse</a> for <a href="https://github.com/luizbizzio/archive-preview/pull/2">his pull request</a>. His work on preview stability, columns, localization, and external extraction was a big part of getting 1.1.0 ready.</p>
+]]></content>
+        <author>
+            <name>Luiz Bizzio</name>
+            <uri>https://github.com/luizbizzio</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[GPU-accelerated explorer.exe list and grid views 1.1.1]]></title>
+        <id>https://windhawk.net/mods/gpu-accelerated-explorer-view#065be613a1ee59d4b039f1e93a0b8bdaf60808a2</id>
+        <link href="https://windhawk.net/mods/gpu-accelerated-explorer-view"/>
+        <updated>2026-11-19T23:04:22.000Z</updated>
+        <content type="html"><![CDATA[<h3>New</h3>
+<ul>
+<li><strong>Custom themes:</strong> Customize backgrounds, gradients, borders, scrollbars, selection effects, tooltips, and storage bars, with light and dark mode support. Check the guide for details and examples.</li>
+<li><strong>More layouts:</strong> Added Tiles, Content, and Compact views.</li>
+<li><strong>Better renaming:</strong> Batch rename files, click to rename, and automatically rename newly created items.</li>
+<li><strong>Expanded folder support:</strong> Libraries, search results, Applications, and Printers now use the GPU-rendered view.</li>
+<li><strong>Smarter search:</strong> Highlight matching filenames and smoothly update results as you refine searches.</li>
+<li><strong>Edge scrolling:</strong> Automatically scroll when dragging files toward the edge of a folder.</li>
+</ul>
+<h3>Improved</h3>
+<ul>
+<li><strong>Better file interactions:</strong> More natural dragging, keyboard navigation, sorting, and folder-size updates.</li>
+<li><strong>Improved cloud support:</strong> Faster OneDrive status updates and correctly displayed sync icons (PR @dariy-vel)</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li>Fixed blank views, navigation glitches, and an Explorer crash when using Content view across multiple windows.</li>
+<li>Fixed renaming issues, including flickering, batch renaming, and international text input.</li>
+<li>Fixed incorrect file sizes, sorting, and display issues on removable drives and in Libraries.</li>
+<li>Fixed various animation, touch, selection, and display-scaling issues.</li>
+</ul>
+]]></content>
+        <author>
+            <name>DarkionAvey</name>
+            <uri>https://github.com/DarkionAvey</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Details View Columns 1.5]]></title>
         <id>https://windhawk.net/mods/explorer-force-details-columns#8a7c48cc3b4dd6c4ade9ac3a969cd35f36dc7dd8</id>
@@ -759,93 +880,6 @@ scaling.</p>
         <author>
             <name>metanoid18</name>
             <uri>https://github.com/Metanoid18</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Zones 1.0.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-zones#f2e0ed554398b8b91bcb5a9e92e8e8ea2f9ba9d3</id>
-        <link href="https://windhawk.net/mods/taskbar-zones"/>
-        <updated>2026-11-18T18:01:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Made the left and right app zones adapt to the available taskbar space on each monitor.</li>
-<li>Added automatic detection of Taskbar System Info and an advanced setting for additional named widgets.</li>
-<li>Kept icon overlays from other mods out of the widget reservation logic.</li>
-<li>Improved widget spacing and layout updates when the notification area changes size.</li>
-<li>Improved button width checks to avoid unexpected gaps during Windows layout changes.</li>
-<li>Updated drag boundaries when widgets or the notification area move.</li>
-<li>Removed the right-zone icon scaling option and two spacing options that are no longer needed.</li>
-<li>Kept saved app positions and zone assignments unchanged.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Luiz Bizzio</name>
-            <uri>https://github.com/luizbizzio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AltDrag 1.2]]></title>
-        <id>https://windhawk.net/mods/alt-drag#624914d4ab53e3effc884f667821807179a8c8f5</id>
-        <link href="https://windhawk.net/mods/alt-drag"/>
-        <updated>2026-11-18T06:49:39.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Resizing the window from its center now sizes it in all directions at once, keeping its center in place. This new functionality is optional and can be disabled in the mod settings.</li>
-<li>Fixed the cursor not updating or updating incorrectly after the drag in some cases.</li>
-<li>Fixed compatibility with some programs. One notable example is Notepad.</li>
-<li>Other minor fixes and improvements.</li>
-</ul>
-<p>The first two items and some of the fixes were contributed by <a href="https://github.com/Louis047">Lone</a>.</p>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.6.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#f16bd5f3b6a39f11e72878aa0efdbc804c0ffb23</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2026-11-18T05:14:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to always show the program name, not the window title, when combining, even when there's a single item. It was unintentionally the behavior in previous versions, and it turns out that some users preferred it that way.</li>
-</ul>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer: No Help 1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-no-help#80cb448b9b93e1d9af4c234fdfdd9d393d6f555f</id>
-        <link href="https://windhawk.net/mods/explorer-no-help"/>
-        <updated>2026-11-18T03:01:35.000Z</updated>
-        <content type="html"><![CDATA[<h1>Explorer: No Help</h1>
-<p>For Windows 10 File Explorer (the ribbon one).</p>
-<p>Before:
-<img src="https://raw.githubusercontent.com/vt-idiot/windhawk-mods/refs/heads/reeeeeeeee/before.png" alt="Before"></p>
-<p>After:
-<img src="https://raw.githubusercontent.com/vt-idiot/windhawk-mods/refs/heads/reeeeeeeee/after.png" alt="After"></p>
-<ul>
-<li><strong>Hide Help button</strong>: Explorer's ribbon ships pre-compiled inside
-<code>SystemResources\ExplorerFrame.dll.mun</code> (resource <code>UIFILE/EXPLORER_RIBBON</code>).
-When the ribbon framework loads it, this mod hands back a patched copy with
-the <code>tabs_help</code> block (the <code>?</code> button) removed, the same result as if
-Microsoft had compiled the ribbon without a help button. Nothing on disk is
-touched.</li>
-<li><strong>Block F1</strong>: swallows bare F1 inside explorer.exe (folder windows, desktop,
-taskbar). Ctrl/Shift/Alt+F1 still go through, so Ctrl+F1 still collapses
-the ribbon. F1 in every other app is left alone.</li>
-</ul>
-<p>Restart Explorer after enabling the mod or toggling the Help button setting.
-The F1 setting takes effect immediately.</p>
-<p>If anything about the ribbon binary doesn't look exactly as expected, the
-patch bails out and logs why, and Explorer gets the original ribbon.</p>
-<p>Special thanks to d0gkiller87, whose <a href="https://windhawk.net/mods/f1-blocker">F1 Blocker</a>
-the F1 part copies, and to DarkShadow44’s reverse-engineering notes on UIRibbon.</p>
-]]></content>
-        <author>
-            <name>vt-idiot</name>
-            <uri>https://github.com/vt-idiot</uri>
         </author>
     </entry>
 </feed>
