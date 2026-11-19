@@ -1824,7 +1824,7 @@ static const WindhawkUtils::SYMBOL_HOOK uDWMhooks[] {
 	{ { L"private: static class CBitmapSource * __cdecl CTopLevelWindow::GetWindowFramePart(struct CTopLevelWindow::WindowFrame *,unsigned int)" }, &g_GetWindowFramePart },
 	{ { L"public: static unsigned int __cdecl CDesktopManager::MonitorDpiFromPoint(struct tagPOINT)" }, &g_MonitorDpiFromPoint },
 	{ { L"public: class CRenderDataVisual * __cdecl CWindowList::GetRootVisualForDesktop(unsigned __int64)" }, &g_GetRootVisualForDesktop },
-	{ { L"public: class CWindowData * __cdecl CWindowList::FindWindowDataByHwnd(struct HWND__ *)" }, &g_FindWindowDataByHwnd, nullptr, true },
+	{ { L"public: class CWindowData * __cdecl CWindowList::FindWindowDataByHwnd(struct HWND__ *)" }, &g_FindWindowDataByHwnd, nullptr },
 	{ { L"public: long __cdecl CWindowBorder::SetContent(class CVisual *)" }, &g_SetBorderContent },
 	{ { L"public: unsigned long __cdecl CBaseObject::Release(void)" }, &g_ReleaseObject },
 	{ { L"public: static class CDwmCS CDesktopManager::s_csDwmInstance" }, &g_DwmLock },
