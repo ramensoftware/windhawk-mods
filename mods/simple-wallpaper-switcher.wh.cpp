@@ -2,7 +2,7 @@
 // @id              simple-wallpaper-switcher
 // @name            Simple Wallpaper Switcher
 // @description     Browse your wallpaper folders, preview thumbnails, and switch with smooth transitions.
-// @version         0.1.4
+// @version         0.1.3
 // @author          HHeitlager
 // @github          https://github.com/hheitlager
 // @include         windhawk.exe
