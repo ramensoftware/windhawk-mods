@@ -14201,6 +14201,14 @@ static bool LaunchViaExplorer(const std::wstring& file, const std::wstring& args
     vShow.vt = VT_I4;
     vShow.lVal = SW_SHOWNORMAL;
 
+    // Delegate foreground activation only to the desktop shell process that
+    // executes this request. Windows may deny the grant; launching still works.
+    DWORD explorerPid = 0;
+    if (HWND shell = GetShellWindow())
+        GetWindowThreadProcessId(shell, &explorerPid);
+    if (explorerPid)
+        AllowSetForegroundWindow(explorerPid);
+
     hr = psd->ShellExecute(bFile, vArgs, vDir, vVerb, vShow);
 
     SysFreeString(bFile);
