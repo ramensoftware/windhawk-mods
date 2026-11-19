@@ -2,7 +2,7 @@
 // @id              zoomit
 // @name            ZoomIt
 // @description     Zoom, draw and read text bigger under the mouse with a hotkey, like Sysinternals ZoomIt
-// @version         1.2.2
+// @version         1.2.3
 // @author          DavidHiFi
 // @github          https://github.com/DavidHiFi
 // @homepage        https://github.com/DavidHiFi/davids-windhawk-mods
@@ -1254,7 +1254,7 @@ void SetZoom(float target, bool animate) {
 
 float ZoomTarget() { return g.animating && !g.closing ? g.animTo : g.zoom; }
 
-void ReleaseMouseCapture() {
+void FreeScreenCapture() {
     if (g.capBmp) DeleteObject(g.capBmp);
     if (g.blurBmp) DeleteObject(g.blurBmp);
     g.capBmp = g.blurBmp = nullptr;
@@ -1343,7 +1343,7 @@ void EndSession() {
         g.hwndRt.Reset();
         DestroyWindow(wnd);
     }
-    ReleaseMouseCapture();
+    FreeScreenCapture();
 }
 
 void LeaveSession() {
@@ -1374,7 +1374,7 @@ bool StartSession(Mode mode, bool snipOnly, CropAction snipAction) {
                             L"ZoomIt", WS_POPUP, g.mon.left, g.mon.top, g.W, g.H,
                             nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
     if (!g.wnd) {
-        ReleaseMouseCapture();
+        FreeScreenCapture();
         g_sessionOpen = false;
         return false;
     }
@@ -1707,7 +1707,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             Redraw();
             return 0;
         case WM_LBUTTONUP:
-            ReleaseMouseCapture();
+            ReleaseCapture();
             if (g.mode == Mode::Crop && g.cropDragging) {
                 FinishCrop();
             } else {
