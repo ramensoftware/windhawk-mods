@@ -52,7 +52,7 @@ Includes 24 custom-rendered flags in an authentic 3:2 aspect ratio (shown with *
 ## Compatibility
 
 - Supports **Windows 10** taskbar input indicators (`TrayInputIndicatorWClass`), including multi-monitor secondary taskbars and per-monitor DPI scaling.
-- Supports **Windows 11** taskbar XAML input indicators as well as Windows 10-style taskbar implementations.
+- Supports **Windows 11** taskbar XAML input indicators (`SystemTray::IconView`) as well as Windows 10-style taskbar implementations.
 */
 // ==/WindhawkModReadme==
 
@@ -79,23 +79,23 @@ Includes 24 custom-rendered flags in an authentic 3:2 aspect ratio (shown with *
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <shared_mutex>
+#include <mutex>
 #include <cmath>
 #include <cstring>
 #include <cstdint>
 #include <atomic>
 
 // 2. Win32, UxTheme, Direct2D, DirectWrite, GDI+ and WinRT base headers
-#define NOMINMAX
 #include <windows.h>
 #include <unknwn.h>
 #include <commctrl.h>
 #include <uxtheme.h>
 #include <d2d1.h>
-#include <d2d1_1.h>
-#include <d3d11.h>
 #include <dwrite.h>
 #include <gdiplus.h>
 #include <winstring.h>
+#include <robuffer.h>
 
 // 3. C++/WinRT headers
 #undef GetCurrentTime
@@ -105,19 +105,12 @@ Includes 24 custom-rendered flags in an authentic 3:2 aspect ratio (shown with *
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 
 // 4. Windhawk utility library
 #include <windhawk_utils.h>
-
-struct IBufferByteAccess : ::IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE Buffer(uint8_t** value) = 0;
-};
-
-static constexpr GUID IID_IBufferByteAccess = {
-    0x905a0fef, 0xbc53, 0x11df, { 0x8c, 0x49, 0x00, 0x1e, 0x4f, 0xc6, 0x86, 0xda }
-};
 
 namespace wux = winrt::Windows::UI::Xaml;
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
@@ -137,56 +130,30 @@ struct ModSettings {
     bool useUkFlagForUsLayout;  // Default false
 };
 
-struct ModuleRange {
-    std::atomic<uintptr_t> base{ 0 };
-    std::atomic<uintptr_t> end{ 0 };
+struct FlagCacheKey {
+    std::wstring iso;
+    int width;
+    int height;
+    bool roundedCorners;
+    bool darkMode;
 
-    bool Contains(uintptr_t addr) const {
-        uintptr_t b = base.load(std::memory_order_acquire);
-        uintptr_t e = end.load(std::memory_order_acquire);
-        return b != 0 && addr >= b && addr < e;
-    }
-
-    void Set(HMODULE mod) {
-        if (!mod || base.load(std::memory_order_acquire) != 0) return;
-        auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(mod);
-        if (dos->e_magic != IMAGE_DOS_SIGNATURE) return;
-        auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(
-            reinterpret_cast<const BYTE*>(mod) + dos->e_lfanew);
-        if (nt->Signature != IMAGE_NT_SIGNATURE) return;
-        uintptr_t b = reinterpret_cast<uintptr_t>(mod);
-        uintptr_t e = b + nt->OptionalHeader.SizeOfImage;
-        end.store(e, std::memory_order_release);
-        base.store(b, std::memory_order_release);
+    bool operator==(const FlagCacheKey& other) const {
+        return width == other.width &&
+               height == other.height &&
+               roundedCorners == other.roundedCorners &&
+               darkMode == other.darkMode &&
+               iso == other.iso;
     }
 };
 
-class SharedLockGuard {
-public:
-    explicit SharedLockGuard(SRWLOCK& lock) : m_lock(lock) {
-        AcquireSRWLockShared(&m_lock);
+struct FlagCacheKeyHash {
+    size_t operator()(const FlagCacheKey& k) const {
+        size_t h = std::hash<std::wstring>{}(k.iso);
+        h ^= static_cast<size_t>(k.width) * 2654435761u + 0x9e3779b9u + (h << 6) + (h >> 2);
+        h ^= static_cast<size_t>(k.height) * 2246822519u + 0x9e3779b9u + (h << 6) + (h >> 2);
+        h ^= (k.roundedCorners ? 1u : 0u) | (k.darkMode ? 2u : 0u);
+        return h;
     }
-    ~SharedLockGuard() {
-        ReleaseSRWLockShared(&m_lock);
-    }
-    SharedLockGuard(const SharedLockGuard&) = delete;
-    SharedLockGuard& operator=(const SharedLockGuard&) = delete;
-private:
-    SRWLOCK& m_lock;
-};
-
-class ExclusiveLockGuard {
-public:
-    explicit ExclusiveLockGuard(SRWLOCK& lock) : m_lock(lock) {
-        AcquireSRWLockExclusive(&m_lock);
-    }
-    ~ExclusiveLockGuard() {
-        ReleaseSRWLockExclusive(&m_lock);
-    }
-    ExclusiveLockGuard(const ExclusiveLockGuard&) = delete;
-    ExclusiveLockGuard& operator=(const ExclusiveLockGuard&) = delete;
-private:
-    SRWLOCK& m_lock;
 };
 
 // Trivially destructible per-thread tracker for active BeginBufferedPaint memory DCs.
@@ -223,39 +190,111 @@ struct ActivePaintDCSet {
     }
 };
 
-SRWLOCK g_stateLock = SRWLOCK_INIT;
+struct ReentrancyFlagGuard {
+    bool& flag;
+    explicit ReentrancyFlagGuard(bool& f) : flag(f) { flag = true; }
+    ~ReentrancyFlagGuard() { flag = false; }
+    ReentrancyFlagGuard(const ReentrancyFlagGuard&) = delete;
+    ReentrancyFlagGuard& operator=(const ReentrancyFlagGuard&) = delete;
+};
+
+struct ReentrancyCounterGuard {
+    int& counter;
+    explicit ReentrancyCounterGuard(int& c) : counter(c) { ++counter; }
+    ~ReentrancyCounterGuard() { --counter; }
+    ReentrancyCounterGuard(const ReentrancyCounterGuard&) = delete;
+    ReentrancyCounterGuard& operator=(const ReentrancyCounterGuard&) = delete;
+};
+
+std::shared_mutex g_stateLock;
 ModSettings g_settings = { 3, 24, 16, true, false, false };
 ULONG_PTR g_gdiplusToken = 0;
 std::vector<HWND> g_subclassedIndicators;
 std::vector<HMODULE> g_loadedModules;
-HWND g_shellTrayHwnd = nullptr;
-ModuleRange g_inputSwitchRange;
-ModuleRange g_textInputFrameworkRange;
+std::atomic<HWND> g_shellTrayHwnd{ nullptr };
 std::atomic<HKL> g_lastKnownHkl{ nullptr };
+std::atomic<bool> g_modUnloading{ false };
+std::atomic<bool> g_taskbarDllHooked{ false };
+std::atomic<bool> g_win11ExistingScanned{ false };
+
 std::unordered_map<WORD, LANGID> g_deviceLayoutCache;
 std::unordered_map<LANGID, std::wstring> g_countryCodeCache;
+std::unordered_map<FlagCacheKey, std::vector<BYTE>, FlagCacheKeyHash> g_flagPixelCache;
 std::unordered_set<void*> g_hookedD2DVtables;
 
 thread_local bool g_inOurPaint = false;
+thread_local int g_inIndicatorNativePaint = 0;
 thread_local bool g_bufferedPaintHandled = false;
 thread_local ActivePaintDCSet g_activeIndicatorPaintDCs = {};
 
 constexpr UINT_PTR kWatchdogTimerId = 0x464C478;
+UINT g_stopWatchdogMsg = 0;
+UINT g_runFromWindowThreadMsg = 0;
 
 ModSettings GetSettingsSnapshot() {
-    SharedLockGuard lock(g_stateLock);
+    std::shared_lock lock(g_stateLock);
     return g_settings;
 }
 
 HMODULE GetOrLoadSystemModule(const wchar_t* dllName) {
     HMODULE mod = GetModuleHandleW(dllName);
     if (!mod) {
-        mod = LoadLibraryW(dllName);
+        mod = LoadLibraryExW(dllName, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (mod) {
             g_loadedModules.push_back(mod);
         }
     }
     return mod;
+}
+
+// ============================================================================
+// 0. UI THREAD DISPATCH HELPER
+// ============================================================================
+
+using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
+
+bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procParam) {
+    if (!hWnd || !IsWindow(hWnd) || !g_runFromWindowThreadMsg) {
+        return false;
+    }
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        void* procParam;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
+    }
+
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
+                if (cwp->message == g_runFromWindowThreadMsg) {
+                    auto* param = reinterpret_cast<RUN_FROM_WINDOW_THREAD_PARAM*>(cwp->lParam);
+                    param->proc(param->procParam);
+                }
+            }
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr,
+        dwThreadId);
+    if (!hook) {
+        return false;
+    }
+
+    RUN_FROM_WINDOW_THREAD_PARAM param{ proc, procParam };
+    SendMessageW(hWnd, g_runFromWindowThreadMsg, 0, reinterpret_cast<LPARAM>(&param));
+    UnhookWindowsHookEx(hook);
+    return true;
 }
 
 // ============================================================================
@@ -279,6 +318,12 @@ LANGID ResolveLayoutCountryLangId(HKL hkl) {
         return inputLang;
     }
 
+    // Legacy IME HKL (high nibble 0xE, e.g., 0xE00E0804 = Chinese Pinyin, 0xE0010411 = Japanese IME):
+    // HIWORD is the IME device identifier, while LOWORD is the actual target LANGID.
+    if ((layoutWord & 0xF000) == 0xE000) {
+        return inputLang;
+    }
+
     // Standard keyboard layout identifier (e.g., 0x0409 = US, 0x041F = TRQ, 0x0809 = UK)
     if ((layoutWord & 0xF000) != 0xF000) {
         return static_cast<LANGID>(layoutWord);
@@ -287,7 +332,7 @@ LANGID ResolveLayoutCountryLangId(HKL hkl) {
     // Substitute / device keyboard layout identifier (0xF0xx, e.g., Turkish F = 0001041F)
     WORD deviceId = layoutWord & 0x0FFF;
     {
-        SharedLockGuard lock(g_stateLock);
+        std::shared_lock lock(g_stateLock);
         auto it = g_deviceLayoutCache.find(deviceId);
         if (it != g_deviceLayoutCache.end()) {
             return it->second;
@@ -335,7 +380,7 @@ LANGID ResolveLayoutCountryLangId(HKL hkl) {
     }
 
     {
-        ExclusiveLockGuard lock(g_stateLock);
+        std::unique_lock lock(g_stateLock);
         g_deviceLayoutCache[deviceId] = resolved;
     }
     return resolved;
@@ -343,7 +388,7 @@ LANGID ResolveLayoutCountryLangId(HKL hkl) {
 
 std::wstring ResolveIsoCountryCode(LANGID langId) {
     {
-        SharedLockGuard lock(g_stateLock);
+        std::shared_lock lock(g_stateLock);
         auto it = g_countryCodeCache.find(langId);
         if (it != g_countryCodeCache.end()) {
             return it->second;
@@ -381,7 +426,7 @@ std::wstring ResolveIsoCountryCode(LANGID langId) {
     }
 
     {
-        ExclusiveLockGuard lock(g_stateLock);
+        std::unique_lock lock(g_stateLock);
         g_countryCodeCache[langId] = code;
     }
     return code;
@@ -412,12 +457,18 @@ std::wstring ResolveDisplayCountryCode(const KeyboardInfo& kb) {
     return layoutIso;
 }
 
-bool IsTransientPopupWindow(HWND hwnd) {
+bool IsTransientOrTaskbarWindow(HWND hwnd) {
     if (!hwnd) return true;
     wchar_t cls[64] = {};
     if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) > 0) {
+        if (wcscmp(cls, L"Shell_TrayWnd") == 0 ||
+            wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0) {
+            return true;
+        }
         if (wcscmp(cls, L"#32768") == 0 ||
             wcscmp(cls, L"NotifyIconOverflowWindow") == 0 ||
+            wcscmp(cls, L"TopLevelWindowForOverflowXamlIsland") == 0 ||
+            wcscmp(cls, L"XamlExplorerHostIslandWindow") == 0 ||
             wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
             DWORD pid = 0;
             GetWindowThreadProcessId(hwnd, &pid);
@@ -433,7 +484,7 @@ KeyboardInfo GetActiveKeyboardInfo() {
     HWND fg = GetForegroundWindow();
     HKL hkl = nullptr;
 
-    if (fg && !IsTransientPopupWindow(fg)) {
+    if (fg && !IsTransientOrTaskbarWindow(fg)) {
         wchar_t cls[64] = {};
         if (GetClassNameW(fg, cls, ARRAYSIZE(cls)) > 0 &&
             wcscmp(cls, L"ApplicationFrameWindow") == 0) {
@@ -895,12 +946,6 @@ void DrawFlagByIsoCountry(Gdiplus::Graphics& g, std::wstring_view iso, float w, 
         float r = h * 0.30f;
         g.FillEllipse(&rb, w * 0.50f - r, h * 0.50f - r, r * 2.0f, r * 2.0f);
     } else if (iso == L"KR") {
-        // Authentic South Korean Taegeukgi:
-        // In Dark Mode:
-        // - Background: deep dark grey (inverted from white)
-        // - Trigrams:   white (inverted from black)
-        // - Taegeuk blue half: light grey
-        // - Taegeuk red half:  medium-dark slate grey (one shade darker than blue's light grey, distinct from dark grey bg)
         const Gdiplus::Color kKrBg     = darkMode ? kDarkGrey       : kWhite;
         const Gdiplus::Color kKrBar    = darkMode ? kWhite          : kBlack;
         const Gdiplus::Color kKrUpper  = darkMode ? C(84, 90, 100)  : C(205, 46, 58);  // Red replacement
@@ -913,13 +958,11 @@ void DrawFlagByIsoCountry(Gdiplus::Graphics& g, std::wstring_view iso, float w, 
 
         Gdiplus::GraphicsState state = g.Save();
         g.TranslateTransform(cx, cy);
-        g.RotateTransform(33.7f); // Diagonal angle matching 3:2 flag aspect ratio
+        g.RotateTransform(33.7f);
 
         Gdiplus::SolidBrush upperB(kKrUpper), lowerB(kKrLower), barB(kKrBar);
-        // Upper-right half (red / darker grey), lower-left half (blue / light grey)
         g.FillPie(&upperB, -r, -r, r * 2.0f, r * 2.0f, 180.0f, 180.0f);
         g.FillPie(&lowerB, -r, -r, r * 2.0f, r * 2.0f,   0.0f, 180.0f);
-        // S-curve interlocking circles along the TL-BR axis
         g.FillEllipse(&upperB, -r,    -r * 0.5f, r, r);
         g.FillEllipse(&lowerB,  0.0f, -r * 0.5f, r, r);
 
@@ -928,8 +971,6 @@ void DrawFlagByIsoCountry(Gdiplus::Graphics& g, std::wstring_view iso, float w, 
         float barT  = h * 0.042f;
         float barSp = h * 0.066f;
 
-        // Draws 3 parallel bars at distance `dist` along `-Y` rotated by `angleDeg`
-        // Bit 0 = innermost bar, Bit 1 = middle bar, Bit 2 = outermost bar (1 = broken, 0 = solid)
         auto DrawTrigram = [&](float angleDeg, int brokenMask) {
             Gdiplus::GraphicsState ts = g.Save();
             g.RotateTransform(angleDeg);
@@ -1008,6 +1049,21 @@ std::vector<BYTE> RenderFlagBGRA(KeyboardInfo kb, int width, int height) {
 
     ModSettings settings = GetSettingsSnapshot();
 
+    std::wstring isoCountry = ResolveDisplayCountryCode(kb);
+    if (settings.useUkFlagForUsLayout && isoCountry == L"US") {
+        isoCountry = L"GB";
+    }
+    bool applyDarkMode = settings.darkMode && IsDarkModeSupportedCountry(isoCountry);
+
+    FlagCacheKey cacheKey{ isoCountry, width, height, settings.roundedCorners, applyDarkMode };
+    {
+        std::shared_lock lock(g_stateLock);
+        auto it = g_flagPixelCache.find(cacheKey);
+        if (it != g_flagPixelCache.end()) {
+            return it->second;
+        }
+    }
+
     // 1. Render at 4x supersampled resolution for razor-sharp vector details
     constexpr int kSS = 4;
     const int ssW = width * kSS;
@@ -1034,14 +1090,6 @@ std::vector<BYTE> RenderFlagBGRA(KeyboardInfo kb, int width, int height) {
             g.SetClip(&clipPath);
         }
 
-        std::wstring isoCountry = ResolveDisplayCountryCode(kb);
-
-        // Optional exception: display UK flag when English (US) layout is active
-        if (settings.useUkFlagForUsLayout && isoCountry == L"US") {
-            isoCountry = L"GB";
-        }
-
-        bool applyDarkMode = settings.darkMode && IsDarkModeSupportedCountry(isoCountry);
         DrawFlagByIsoCountry(g, isoCountry, w, h, applyDarkMode);
 
         // Crisp neutral inner hairline border (subtle in Dark Mode so solid flags stay full-sized)
@@ -1075,11 +1123,19 @@ std::vector<BYTE> RenderFlagBGRA(KeyboardInfo kb, int width, int height) {
         gOut.DrawImage(&ssBmp, Gdiplus::Rect(0, 0, width, height), 0, 0, ssW, ssH, Gdiplus::UnitPixel);
     }
 
+    {
+        std::unique_lock lock(g_stateLock);
+        if (g_flagPixelCache.size() >= 32) {
+            g_flagPixelCache.clear();
+        }
+        g_flagPixelCache[std::move(cacheKey)] = buffer;
+    }
+
     return buffer;
 }
 
 // ============================================================================
-// 3. WINDOWS 10 SUPPORT: MULTI-LAYER TEXT SUPPRESSION & ALPHA COMPOSITING
+// 3. WINDOWS 10 SUPPORT: INDICATOR-SCOPED TEXT SUPPRESSION & ALPHA COMPOSITING
 // ============================================================================
 
 bool IsTrayInputIndicatorWindow(HWND hwnd) {
@@ -1097,45 +1153,24 @@ bool IsTrayInputIndicatorWindow(HWND hwnd) {
     return false;
 }
 
-bool IsFromInputSwitchModule() {
-    if (g_inputSwitchRange.base.load(std::memory_order_acquire) == 0) {
-        if (HMODULE mod = GetModuleHandleW(L"InputSwitch.dll")) {
-            g_inputSwitchRange.Set(mod);
-        }
-    }
-    if (g_textInputFrameworkRange.base.load(std::memory_order_acquire) == 0) {
-        if (HMODULE mod = GetModuleHandleW(L"TextInputFramework.dll")) {
-            g_textInputFrameworkRange.Set(mod);
-        }
-    }
-
-    void* frames[24] = {};
-    USHORT count = RtlCaptureStackBackTrace(1, ARRAYSIZE(frames), frames, nullptr);
-    for (USHORT i = 0; i < count; ++i) {
-        uintptr_t addr = reinterpret_cast<uintptr_t>(frames[i]);
-        if (g_inputSwitchRange.Contains(addr) || g_textInputFrameworkRange.Contains(addr)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool ShouldSuppressTaskbarIndicatorText(HDC hdc) {
-    if (!hdc || g_inOurPaint) return false;
+    if (!hdc || g_inOurPaint || g_modUnloading.load(std::memory_order_acquire)) {
+        return false;
+    }
 
-    // 1. Direct match against active BeginBufferedPaint memory DCs for TrayInputIndicatorWClass
+    // 1. Active WM_PAINT / WM_PRINTCLIENT of TrayInputIndicatorWClass on this thread
+    if (g_inIndicatorNativePaint > 0) {
+        return true;
+    }
+
+    // 2. Active BeginBufferedPaint memory DC created for TrayInputIndicatorWClass
     if (!g_activeIndicatorPaintDCs.Empty() && g_activeIndicatorPaintDCs.Contains(hdc)) {
         return true;
     }
 
-    // 2. Direct window DC match
+    // 3. Direct window DC match for TrayInputIndicatorWClass
     HWND hwnd = WindowFromDC(hdc);
-    if (hwnd) {
-        return IsTrayInputIndicatorWindow(hwnd);
-    }
-
-    // 3. Offscreen DC drawn by InputSwitch.dll / TextInputFramework.dll
-    if (IsFromInputSwitchModule()) {
+    if (hwnd && IsTrayInputIndicatorWindow(hwnd)) {
         return true;
     }
 
@@ -1143,12 +1178,8 @@ bool ShouldSuppressTaskbarIndicatorText(HDC hdc) {
 }
 
 int GetWindowEffectiveDpi(HWND hwnd, HDC fallbackDC) {
-    using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
-    static auto pGetDpiForWindow = reinterpret_cast<GetDpiForWindow_t>(
-        GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
-
-    if (hwnd && pGetDpiForWindow) {
-        UINT dpi = pGetDpiForWindow(hwnd);
+    if (hwnd) {
+        UINT dpi = GetDpiForWindow(hwnd);
         if (dpi > 0) {
             return static_cast<int>(dpi);
         }
@@ -1246,9 +1277,13 @@ HPAINTBUFFER WINAPI BeginBufferedPaint_Hook(
     HDC hdcTarget, const RECT* prcTarget, BP_BUFFERFORMAT dwFormat,
     BP_PAINTPARAMS* pPaintParams, HDC* phdc) {
     HPAINTBUFFER hpb = BeginBufferedPaint_Orig(hdcTarget, prcTarget, dwFormat, pPaintParams, phdc);
-    if (hpb && phdc && *phdc && hdcTarget) {
-        HWND hwnd = WindowFromDC(hdcTarget);
-        if (hwnd && IsTrayInputIndicatorWindow(hwnd)) {
+    if (hpb && phdc && *phdc && !g_modUnloading.load(std::memory_order_acquire)) {
+        bool isIndicator = (g_inIndicatorNativePaint > 0);
+        if (!isIndicator && hdcTarget) {
+            HWND hwnd = WindowFromDC(hdcTarget);
+            isIndicator = (hwnd && IsTrayInputIndicatorWindow(hwnd));
+        }
+        if (isIndicator) {
             g_activeIndicatorPaintDCs.Insert(*phdc);
         }
     }
@@ -1256,7 +1291,7 @@ HPAINTBUFFER WINAPI BeginBufferedPaint_Hook(
 }
 
 HRESULT WINAPI EndBufferedPaint_Hook(HPAINTBUFFER hBufferedPaint, BOOL fUpdateTarget) {
-    if (hBufferedPaint && !g_inOurPaint) {
+    if (hBufferedPaint && !g_inOurPaint && !g_modUnloading.load(std::memory_order_acquire)) {
         HDC bufDC = GetBufferedPaintDC(hBufferedPaint);
         if (bufDC) {
             g_activeIndicatorPaintDCs.Erase(bufDC);
@@ -1266,12 +1301,10 @@ HRESULT WINAPI EndBufferedPaint_Hook(HPAINTBUFFER hBufferedPaint, BOOL fUpdateTa
         HWND hwnd = targetDC ? WindowFromDC(targetDC) : nullptr;
         if (hwnd && IsTrayInputIndicatorWindow(hwnd)) {
             g_bufferedPaintHandled = true;
+            // Keep g_inOurPaint alive across EndBufferedPaint_Orig so its internal
+            // BitBlt/GdiAlphaBlend to targetDC does not composite the flag a second time.
+            ReentrancyFlagGuard guard(g_inOurPaint);
             if (fUpdateTarget && bufDC) {
-                struct PaintGuard {
-                    PaintGuard() { g_inOurPaint = true; }
-                    ~PaintGuard() { g_inOurPaint = false; }
-                } guard;
-
                 CompositeFlagOntoDC(hwnd, bufDC);
             }
             return EndBufferedPaint_Orig(hBufferedPaint, fUpdateTarget);
@@ -1281,14 +1314,10 @@ HRESULT WINAPI EndBufferedPaint_Hook(HPAINTBUFFER hBufferedPaint, BOOL fUpdateTa
 }
 
 BOOL WINAPI BitBlt_Hook(HDC hdc, int x, int y, int cx, int cy, HDC hdcSrc, int x1, int y1, DWORD rop) {
-    if (!g_inOurPaint && hdc) {
+    if (!g_inOurPaint && !g_modUnloading.load(std::memory_order_acquire) && hdc) {
         HWND hwnd = WindowFromDC(hdc);
         if (hwnd && IsTrayInputIndicatorWindow(hwnd)) {
-            struct PaintGuard {
-                PaintGuard() { g_inOurPaint = true; }
-                ~PaintGuard() { g_inOurPaint = false; }
-            } guard;
-
+            ReentrancyFlagGuard guard(g_inOurPaint);
             g_bufferedPaintHandled = true;
             BOOL res = BitBlt_Orig(hdc, x, y, cx, cy, hdcSrc, x1, y1, rop);
             CompositeFlagOntoDC(hwnd, hdc);
@@ -1300,14 +1329,10 @@ BOOL WINAPI BitBlt_Hook(HDC hdc, int x, int y, int cx, int cy, HDC hdcSrc, int x
 
 BOOL WINAPI StretchBlt_Hook(HDC hdcDest, int xDest, int yDest, int wDest, int hDest,
                             HDC hdcSrc, int xSrc, int ySrc, int wSrc, int hSrc, DWORD rop) {
-    if (!g_inOurPaint && hdcDest) {
+    if (!g_inOurPaint && !g_modUnloading.load(std::memory_order_acquire) && hdcDest) {
         HWND hwnd = WindowFromDC(hdcDest);
         if (hwnd && IsTrayInputIndicatorWindow(hwnd)) {
-            struct PaintGuard {
-                PaintGuard() { g_inOurPaint = true; }
-                ~PaintGuard() { g_inOurPaint = false; }
-            } guard;
-
+            ReentrancyFlagGuard guard(g_inOurPaint);
             g_bufferedPaintHandled = true;
             BOOL res = StretchBlt_Orig(hdcDest, xDest, yDest, wDest, hDest, hdcSrc, xSrc, ySrc, wSrc, hSrc, rop);
             CompositeFlagOntoDC(hwnd, hdcDest);
@@ -1319,14 +1344,10 @@ BOOL WINAPI StretchBlt_Hook(HDC hdcDest, int xDest, int yDest, int wDest, int hD
 
 BOOL WINAPI GdiAlphaBlend_Hook(HDC hdcDest, int xoriginDest, int yoriginDest, int wDest, int hDest,
                                HDC hdcSrc, int xoriginSrc, int yoriginSrc, int wSrc, int hSrc, BLENDFUNCTION ftn) {
-    if (!g_inOurPaint && hdcDest) {
+    if (!g_inOurPaint && !g_modUnloading.load(std::memory_order_acquire) && hdcDest) {
         HWND hwnd = WindowFromDC(hdcDest);
         if (hwnd && IsTrayInputIndicatorWindow(hwnd)) {
-            struct PaintGuard {
-                PaintGuard() { g_inOurPaint = true; }
-                ~PaintGuard() { g_inOurPaint = false; }
-            } guard;
-
+            ReentrancyFlagGuard guard(g_inOurPaint);
             g_bufferedPaintHandled = true;
             BOOL res = GdiAlphaBlend_Orig(hdcDest, xoriginDest, yoriginDest, wDest, hDest, hdcSrc, xoriginSrc, yoriginSrc, wSrc, hSrc, ftn);
             CompositeFlagOntoDC(hwnd, hdcDest);
@@ -1336,7 +1357,13 @@ BOOL WINAPI GdiAlphaBlend_Hook(HDC hdcDest, int xoriginDest, int yoriginDest, in
     return GdiAlphaBlend_Orig(hdcDest, xoriginDest, yoriginDest, wDest, hDest, hdcSrc, xoriginSrc, yoriginSrc, wSrc, hSrc, ftn);
 }
 
-// --- Direct2D & DirectWrite Text Suppression Hooks ---
+// --- Direct2D & DirectWrite Text Suppression Hooks (Windows 10 Indicator Paint Only) ---
+
+inline bool IsIndicatorD2DPaintActive() {
+    return !g_inOurPaint &&
+           !g_modUnloading.load(std::memory_order_acquire) &&
+           (g_inIndicatorNativePaint > 0 || !g_activeIndicatorPaintDCs.Empty());
+}
 
 using D2D_DrawText_t = void(STDMETHODCALLTYPE*)(
     ID2D1RenderTarget* This,
@@ -1358,11 +1385,8 @@ void STDMETHODCALLTYPE D2D_DrawText_Hook(
     ID2D1Brush* defaultFillBrush,
     D2D1_DRAW_TEXT_OPTIONS options,
     DWRITE_MEASURING_MODE measuringMode) {
-    if (!g_activeIndicatorPaintDCs.Empty() || IsFromInputSwitchModule()) {
-        if (!layoutRect || ((layoutRect->right - layoutRect->left) < 140.0f &&
-                            (layoutRect->bottom - layoutRect->top) < 110.0f)) {
-            return;
-        }
+    if (IsIndicatorD2DPaintActive()) {
+        return;
     }
     D2D_DrawText_Orig(This, string, stringLength, textFormat, layoutRect, defaultFillBrush, options, measuringMode);
 }
@@ -1381,19 +1405,8 @@ void STDMETHODCALLTYPE D2D_DrawTextLayout_Hook(
     IDWriteTextLayout* textLayout,
     ID2D1Brush* defaultFillBrush,
     D2D1_DRAW_TEXT_OPTIONS options) {
-    if (!g_activeIndicatorPaintDCs.Empty() || IsFromInputSwitchModule()) {
-        bool isCompactIndicator = true;
-        if (textLayout) {
-            DWRITE_TEXT_METRICS metrics = {};
-            if (SUCCEEDED(textLayout->GetMetrics(&metrics))) {
-                if (metrics.width > 90.0f || metrics.height > 70.0f) {
-                    isCompactIndicator = false;
-                }
-            }
-        }
-        if (isCompactIndicator && origin.x < 120.0f && origin.y < 120.0f) {
-            return;
-        }
+    if (IsIndicatorD2DPaintActive()) {
+        return;
     }
     D2D_DrawTextLayout_Orig(This, origin, textLayout, defaultFillBrush, options);
 }
@@ -1412,10 +1425,8 @@ void STDMETHODCALLTYPE D2D_DrawGlyphRun_Hook(
     const DWRITE_GLYPH_RUN* glyphRun,
     ID2D1Brush* foregroundBrush,
     DWRITE_MEASURING_MODE measuringMode) {
-    if (!g_activeIndicatorPaintDCs.Empty() || IsFromInputSwitchModule()) {
-        if (baselineOrigin.x < 120.0f && baselineOrigin.y < 120.0f) {
-            return;
-        }
+    if (IsIndicatorD2DPaintActive()) {
+        return;
     }
     D2D_DrawGlyphRun_Orig(This, baselineOrigin, glyphRun, foregroundBrush, measuringMode);
 }
@@ -1440,8 +1451,7 @@ HRESULT STDMETHODCALLTYPE DWrite_BitmapDrawGlyphRun_Hook(
     IDWriteRenderingParams* renderingParams,
     COLORREF textColor,
     RECT* blackBoxRect) {
-    if ((!g_activeIndicatorPaintDCs.Empty() || IsFromInputSwitchModule()) &&
-        baselineOriginX < 120.0f && baselineOriginY < 120.0f) {
+    if (IsIndicatorD2DPaintActive()) {
         if (blackBoxRect) {
             SetRectEmpty(blackBoxRect);
         }
@@ -1515,17 +1525,12 @@ void InstallDirect2DAndDWriteHooks() {
     auto pD2D1CreateFactory = reinterpret_cast<D2D1CreateFactory_t>(GetProcAddress(d2dMod, "D2D1CreateFactory"));
     if (!pD2D1CreateFactory) return;
 
-    D2D1_FACTORY_TYPE factoryTypes[] = { D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_FACTORY_TYPE_MULTI_THREADED };
-    for (D2D1_FACTORY_TYPE ft : factoryTypes) {
-        ID2D1Factory1* factory = nullptr;
-        if (FAILED(pD2D1CreateFactory(
-                ft,
-                __uuidof(ID2D1Factory1),
-                nullptr,
-                reinterpret_cast<void**>(&factory))) || !factory) {
-            continue;
-        }
-
+    ID2D1Factory* factory = nullptr;
+    if (SUCCEEDED(pD2D1CreateFactory(
+            D2D1_FACTORY_TYPE_SINGLE_THREADED,
+            __uuidof(ID2D1Factory),
+            nullptr,
+            reinterpret_cast<void**>(&factory))) && factory) {
         D2D1_RENDER_TARGET_PROPERTIES dcProps = D2D1::RenderTargetProperties(
             D2D1_RENDER_TARGET_TYPE_DEFAULT,
             D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
@@ -1534,58 +1539,6 @@ void InstallDirect2DAndDWriteHooks() {
             HookD2DRenderTargetVtable(dcTarget);
             dcTarget->Release();
         }
-
-        HWND dummyHwnd = CreateWindowExW(
-            0, L"STATIC", L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
-        if (dummyHwnd) {
-            D2D1_HWND_RENDER_TARGET_PROPERTIES hwndProps = D2D1::HwndRenderTargetProperties(dummyHwnd, D2D1::SizeU(1, 1));
-            ID2D1HwndRenderTarget* hwndTarget = nullptr;
-            if (SUCCEEDED(factory->CreateHwndRenderTarget(&dcProps, &hwndProps, &hwndTarget)) && hwndTarget) {
-                HookD2DRenderTargetVtable(hwndTarget);
-                hwndTarget->Release();
-            }
-            DestroyWindow(dummyHwnd);
-        }
-
-        HMODULE d3dMod = GetOrLoadSystemModule(L"d3d11.dll");
-        if (d3dMod) {
-            using D3D11CreateDevice_t = HRESULT(WINAPI*)(
-                IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE, UINT,
-                const D3D_FEATURE_LEVEL*, UINT, UINT,
-                ID3D11Device**, D3D_FEATURE_LEVEL*, ID3D11DeviceContext**);
-            auto pD3D11CreateDevice = reinterpret_cast<D3D11CreateDevice_t>(GetProcAddress(d3dMod, "D3D11CreateDevice"));
-            if (pD3D11CreateDevice) {
-                D3D_DRIVER_TYPE driverTypes[] = { D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_WARP };
-                for (D3D_DRIVER_TYPE dt : driverTypes) {
-                    ID3D11Device* d3dDevice = nullptr;
-                    if (SUCCEEDED(pD3D11CreateDevice(
-                            nullptr, dt, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-                            nullptr, 0, D3D11_SDK_VERSION, &d3dDevice, nullptr, nullptr)) && d3dDevice) {
-                        IDXGIDevice* dxgiDevice = nullptr;
-                        if (SUCCEEDED(d3dDevice->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&dxgiDevice))) && dxgiDevice) {
-                            ID2D1Device* d2dDevice = nullptr;
-                            if (SUCCEEDED(factory->CreateDevice(dxgiDevice, &d2dDevice)) && d2dDevice) {
-                                D2D1_DEVICE_CONTEXT_OPTIONS opts[] = {
-                                    D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
-                                    D2D1_DEVICE_CONTEXT_OPTIONS_ENABLE_MULTITHREADED_OPTIMIZATIONS
-                                };
-                                for (D2D1_DEVICE_CONTEXT_OPTIONS opt : opts) {
-                                    ID2D1DeviceContext* d2dContext = nullptr;
-                                    if (SUCCEEDED(d2dDevice->CreateDeviceContext(opt, &d2dContext)) && d2dContext) {
-                                        HookD2DRenderTargetVtable(d2dContext);
-                                        d2dContext->Release();
-                                    }
-                                }
-                                d2dDevice->Release();
-                            }
-                            dxgiDevice->Release();
-                        }
-                        d3dDevice->Release();
-                    }
-                }
-            }
-        }
-
         factory->Release();
     }
 }
@@ -1668,15 +1621,19 @@ LRESULT CALLBACK Win10IndicatorSubclassProc(
             InvalidateRect(hwnd, nullptr, FALSE);
             break;
         }
-        case WM_PAINT: {
+        case WM_PAINT:
+        case WM_PRINTCLIENT: {
             g_bufferedPaintHandled = false;
-            LRESULT res = DefSubclassProc(hwnd, uMsg, wParam, lParam);
-            if (!g_bufferedPaintHandled && !g_inOurPaint) {
+            LRESULT res = 0;
+            {
+                ReentrancyCounterGuard paintCounter(g_inIndicatorNativePaint);
+                res = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+            }
+            if (uMsg == WM_PAINT && !g_bufferedPaintHandled && !g_inOurPaint) {
                 HDC hdc = GetDC(hwnd);
                 if (hdc) {
-                    g_inOurPaint = true;
+                    ReentrancyFlagGuard guard(g_inOurPaint);
                     CompositeFlagOntoDC(hwnd, hdc);
-                    g_inOurPaint = false;
                     ReleaseDC(hwnd, hdc);
                 }
             }
@@ -1688,29 +1645,34 @@ LRESULT CALLBACK Win10IndicatorSubclassProc(
 }
 
 bool IsAlreadySubclassed(HWND hwnd) {
-    SharedLockGuard lock(g_stateLock);
+    std::shared_lock lock(g_stateLock);
     for (HWND h : g_subclassedIndicators) {
         if (h == hwnd) return true;
     }
     return false;
 }
 
-BOOL CALLBACK EnumAndAttachWin10Proc(HWND hwnd, LPARAM lParam) {
-    if (IsTrayInputIndicatorWindow(hwnd) && !IsAlreadySubclassed(hwnd)) {
-        if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, Win10IndicatorSubclassProc, 0)) {
-            {
-                ExclusiveLockGuard lock(g_stateLock);
-                g_subclassedIndicators.push_back(hwnd);
-            }
-            InvalidateRect(hwnd, nullptr, FALSE);
+void AttachWin10IndicatorWindow(HWND hwnd) {
+    if (!hwnd || g_modUnloading.load(std::memory_order_acquire)) return;
+    if (!IsTrayInputIndicatorWindow(hwnd) || IsAlreadySubclassed(hwnd)) return;
+
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, Win10IndicatorSubclassProc, 0)) {
+        {
+            std::unique_lock lock(g_stateLock);
+            g_subclassedIndicators.push_back(hwnd);
         }
+        InvalidateRect(hwnd, nullptr, FALSE);
     }
+}
+
+BOOL CALLBACK EnumAndAttachWin10Proc(HWND hwnd, LPARAM lParam) {
+    AttachWin10IndicatorWindow(hwnd);
     return TRUE;
 }
 
 void ScanAndAttachWin10Indicators() {
     {
-        ExclusiveLockGuard lock(g_stateLock);
+        std::unique_lock lock(g_stateLock);
         for (size_t i = 0; i < g_subclassedIndicators.size();) {
             if (!IsWindow(g_subclassedIndicators[i])) {
                 g_subclassedIndicators.erase(g_subclassedIndicators.begin() + i);
@@ -1734,7 +1696,7 @@ void ScanAndAttachWin10Indicators() {
 void InvalidateAllWin10Indicators(bool triggerD2DRedraw = false) {
     std::vector<HWND> indicators;
     {
-        SharedLockGuard lock(g_stateLock);
+        std::shared_lock lock(g_stateLock);
         indicators = g_subclassedIndicators;
     }
 
@@ -1749,78 +1711,138 @@ void InvalidateAllWin10Indicators(bool triggerD2DRedraw = false) {
 }
 
 // ============================================================================
-// 4. WINDOWS 11 SUPPORT: XAML TextBlock VISUAL TREE REPLACEMENT
+// 4. WINDOWS 11 SUPPORT: SystemTray::IconView VISUAL TREE & CLEAN LIFECYCLE
 // ============================================================================
 
-bool IsWin11LanguageIndicatorString(std::wstring_view raw) {
-    while (!raw.empty() && (raw.front() == L' ' || raw.front() == L'\r' || raw.front() == L'\n')) {
-        raw.remove_prefix(1);
-    }
-    while (!raw.empty() && (raw.back() == L' ' || raw.back() == L'\r' || raw.back() == L'\n')) {
-        raw.remove_suffix(1);
-    }
-    if (raw.empty() || raw.size() > 14) return false;
+struct TrackedWin11TextBlock {
+    winrt::weak_ref<wuxc::TextBlock> weakTb;
+    int64_t textCallbackToken = 0;
+    int64_t visibilityCallbackToken = 0;
+};
 
-    for (wchar_t ch : raw) {
-        if (ch == L'\r' || ch == L'\n' || ch == L' ') continue;
-        if (ch < 0x20) return false;
+struct TrackedWin11Indicator {
+    HWND trayHwnd = nullptr;
+    winrt::weak_ref<wux::FrameworkElement> weakIconView;
+    winrt::weak_ref<wuxc::Panel> weakPanel;
+    winrt::weak_ref<wuxc::Image> weakFlagImage;
+    wux::FrameworkElement::Unloaded_revoker unloadedRevoker;
+    std::vector<TrackedWin11TextBlock> textBlocks;
+    bool isUpdating = false;
+};
+
+struct PendingLoadedEntry {
+    HWND trayHwnd = nullptr;
+    winrt::weak_ref<wux::FrameworkElement> weakElement;
+    wux::FrameworkElement::Loaded_revoker loadedRevoker;
+};
+
+// Accessed strictly on taskbar XAML UI thread(s)
+std::vector<TrackedWin11Indicator> g_win11Indicators;
+std::vector<PendingLoadedEntry> g_pendingLoadedEntries;
+
+HWND FindTaskbarHwndForCurrentThread() {
+    DWORD tid = GetCurrentThreadId();
+    HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (primary && GetWindowThreadProcessId(primary, nullptr) == tid) {
+        return primary;
     }
-    return true;
+    HWND secondary = nullptr;
+    while ((secondary = FindWindowExW(nullptr, secondary, L"Shell_SecondaryTrayWnd", nullptr)) != nullptr) {
+        if (GetWindowThreadProcessId(secondary, nullptr) == tid) {
+            return secondary;
+        }
+    }
+    return primary;
 }
 
-bool ApplyWin11FlagToTextBlock(const wuxc::TextBlock& tb) {
-    if (!tb) return false;
+wux::FrameworkElement FindDescendantByName(const wux::DependencyObject& root, std::wstring_view targetName, int maxDepth = 10) {
+    if (!root || maxDepth <= 0) return nullptr;
 
-    winrt::hstring currentText = tb.Text();
-    if (!IsWin11LanguageIndicatorString(currentText)) {
-        return false;
-    }
+    struct Node {
+        wux::DependencyObject obj;
+        int depth;
+    };
+    std::vector<Node> queue;
+    queue.reserve(32);
+    queue.push_back({ root, 0 });
 
-    wux::DependencyObject current = tb;
-    bool isInputSwitcher = false;
-    wuxc::Panel targetPanel{ nullptr };
+    for (size_t idx = 0; idx < queue.size(); ++idx) {
+        wux::DependencyObject curr = queue[idx].obj;
+        int depth = queue[idx].depth;
 
-    for (int depth = 0; depth < 8 && current; ++depth) {
-        winrt::hstring cls = winrt::get_class_name(current);
-        std::wstring_view clsView(cls);
-        if (clsView.find(L"InputSwitcher") != std::wstring_view::npos ||
-            clsView.find(L"InputIndicator") != std::wstring_view::npos) {
-            isInputSwitcher = true;
-        }
-        if (auto fe = current.try_as<wux::FrameworkElement>()) {
-            winrt::hstring elName = fe.Name();
-            std::wstring_view nameView(elName);
-            if (nameView.find(L"InputIndicator") != std::wstring_view::npos ||
-                nameView.find(L"Language") != std::wstring_view::npos) {
-                isInputSwitcher = true;
+        if (auto fe = curr.try_as<wux::FrameworkElement>()) {
+            if (std::wstring_view(fe.Name()) == targetName) {
+                return fe;
             }
         }
-        if (!targetPanel) {
-            targetPanel = current.try_as<wuxc::Panel>();
-        }
-        if (isInputSwitcher && targetPanel) break;
-        current = wuxm::VisualTreeHelper::GetParent(current);
-    }
 
-    if (!isInputSwitcher || !targetPanel) {
-        return false;
-    }
-
-    for (auto child : targetPanel.Children()) {
-        if (auto childTb = child.try_as<wuxc::TextBlock>()) {
-            childTb.Visibility(wux::Visibility::Collapsed);
+        if (depth < maxDepth) {
+            int count = wuxm::VisualTreeHelper::GetChildrenCount(curr);
+            for (int i = 0; i < count; ++i) {
+                if (auto child = wuxm::VisualTreeHelper::GetChild(curr, i)) {
+                    queue.push_back({ std::move(child), depth + 1 });
+                }
+            }
         }
     }
-    tb.Visibility(wux::Visibility::Collapsed);
+    return nullptr;
+}
+
+void CollectDescendantTextBlocks(const wux::DependencyObject& root, std::vector<wuxc::TextBlock>& out, int maxDepth = 6) {
+    if (!root || maxDepth <= 0) return;
+
+    int count = wuxm::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < count; ++i) {
+        wux::DependencyObject child = wuxm::VisualTreeHelper::GetChild(root, i);
+        if (!child) continue;
+        if (auto tb = child.try_as<wuxc::TextBlock>()) {
+            out.push_back(tb);
+        } else {
+            CollectDescendantTextBlocks(child, out, maxDepth - 1);
+        }
+    }
+}
+
+void UpdateWin11IndicatorFlag(TrackedWin11Indicator& entry) {
+    if (g_modUnloading.load(std::memory_order_acquire) || entry.isUpdating) {
+        return;
+    }
+
+    auto panel = entry.weakPanel.get();
+    if (!panel) return;
+
+    ReentrancyFlagGuard updateGuard(entry.isUpdating);
+
+    // Ensure native language TextBlocks remain collapsed
+    for (auto& ttb : entry.textBlocks) {
+        if (auto tb = ttb.weakTb.get()) {
+            if (tb.Visibility() != wux::Visibility::Collapsed) {
+                tb.Visibility(wux::Visibility::Collapsed);
+            }
+        }
+    }
 
     ModSettings settings = GetSettingsSnapshot();
 
-    wuxc::Image flagImage{ nullptr };
-    for (auto child : targetPanel.Children()) {
-        if (auto fe = child.try_as<wux::FrameworkElement>()) {
-            if (fe.Name() == L"WindhawkFlagImage") {
-                flagImage = child.try_as<wuxc::Image>();
-                break;
+    double rasterScale = 1.0;
+    if (auto iconView = entry.weakIconView.get()) {
+        if (auto xr = iconView.XamlRoot()) {
+            double s = xr.RasterizationScale();
+            if (s > 0.5) rasterScale = s;
+        }
+    } else if (auto xr = panel.XamlRoot()) {
+        double s = xr.RasterizationScale();
+        if (s > 0.5) rasterScale = s;
+    }
+
+    wuxc::Image flagImage = entry.weakFlagImage.get();
+    if (!flagImage) {
+        for (auto child : panel.Children()) {
+            if (auto fe = child.try_as<wux::FrameworkElement>()) {
+                if (fe.Name() == L"WindhawkFlagImage") {
+                    flagImage = child.try_as<wuxc::Image>();
+                    break;
+                }
             }
         }
     }
@@ -1828,27 +1850,29 @@ bool ApplyWin11FlagToTextBlock(const wuxc::TextBlock& tb) {
     if (!flagImage) {
         flagImage = wuxc::Image();
         flagImage.Name(L"WindhawkFlagImage");
-        flagImage.Width(static_cast<double>(settings.flagWidth));
-        flagImage.Height(static_cast<double>(settings.flagHeight));
+        flagImage.Stretch(wuxm::Stretch::Fill);
         flagImage.HorizontalAlignment(wux::HorizontalAlignment::Center);
         flagImage.VerticalAlignment(wux::VerticalAlignment::Center);
-        targetPanel.Children().Append(flagImage);
-    } else {
-        flagImage.Width(static_cast<double>(settings.flagWidth));
-        flagImage.Height(static_cast<double>(settings.flagHeight));
+        panel.Children().Append(flagImage);
     }
 
-    KeyboardInfo kb = GetActiveKeyboardInfo();
-    const int w = settings.flagWidth * 2;
-    const int h = settings.flagHeight * 2;
-    std::vector<BYTE> pixels = RenderFlagBGRA(kb, w, h);
+    flagImage.Width(static_cast<double>(settings.flagWidth));
+    flagImage.Height(static_cast<double>(settings.flagHeight));
+    entry.weakFlagImage = winrt::make_weak(flagImage);
 
-    wuxmi::WriteableBitmap wb(w, h);
+    KeyboardInfo kb = GetActiveKeyboardInfo();
+    const int physW = (std::max)(1, static_cast<int>(std::lround(settings.flagWidth * rasterScale)));
+    const int physH = (std::max)(1, static_cast<int>(std::lround(settings.flagHeight * rasterScale)));
+    std::vector<BYTE> pixels = RenderFlagBGRA(kb, physW, physH);
+    if (pixels.empty()) return;
+
+    wuxmi::WriteableBitmap wb(physW, physH);
     auto pixelBuf = wb.PixelBuffer();
-    winrt::com_ptr<IBufferByteAccess> byteAccess;
+    winrt::com_ptr<::Windows::Storage::Streams::IBufferByteAccess> byteAccess;
     winrt::check_hresult(
         static_cast<::IUnknown*>(winrt::get_abi(pixelBuf))->QueryInterface(
-            IID_IBufferByteAccess, reinterpret_cast<void**>(byteAccess.put())));
+            __uuidof(::Windows::Storage::Streams::IBufferByteAccess),
+            byteAccess.put_void()));
 
     uint8_t* dest = nullptr;
     winrt::check_hresult(byteAccess->Buffer(&dest));
@@ -1857,74 +1881,443 @@ bool ApplyWin11FlagToTextBlock(const wuxc::TextBlock& tb) {
         wb.Invalidate();
         flagImage.Source(wb);
     }
+}
+
+void RemoveTrackedWin11IndicatorByIconView(const wux::FrameworkElement& iconView) {
+    for (size_t i = 0; i < g_win11Indicators.size(); ++i) {
+        auto existing = g_win11Indicators[i].weakIconView.get();
+        if (!existing || existing == iconView) {
+            for (auto& ttb : g_win11Indicators[i].textBlocks) {
+                if (auto tb = ttb.weakTb.get()) {
+                    if (ttb.textCallbackToken != 0) {
+                        tb.UnregisterPropertyChangedCallback(wuxc::TextBlock::TextProperty(), ttb.textCallbackToken);
+                    }
+                    if (ttb.visibilityCallbackToken != 0) {
+                        tb.UnregisterPropertyChangedCallback(wux::UIElement::VisibilityProperty(), ttb.visibilityCallbackToken);
+                    }
+                }
+            }
+            g_win11Indicators[i].unloadedRevoker.revoke();
+            g_win11Indicators.erase(g_win11Indicators.begin() + i);
+            if (existing == iconView) {
+                break;
+            }
+            --i;
+        }
+    }
+}
+
+void TrackLanguageIconView(const wux::FrameworkElement& iconView) {
+    if (!iconView || g_modUnloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    // Check if already tracked
+    for (auto& existing : g_win11Indicators) {
+        if (auto iv = existing.weakIconView.get()) {
+            if (iv == iconView) {
+                UpdateWin11IndicatorFlag(existing);
+                return;
+            }
+        }
+    }
+
+    // Locate Windows 11 system tray language elements by their exact XAML names
+    wux::FrameworkElement contentEl = FindDescendantByName(iconView, L"LanguageTextIconContent", 10);
+    wux::FrameworkElement innerTbEl = FindDescendantByName(iconView, L"LanguageInnerTextBlock", 10);
+    if (!contentEl && !innerTbEl) {
+        return; // Not the language indicator IconView (e.g., clock, Wi-Fi, volume, battery)
+    }
+
+    wuxc::Panel targetPanel{ nullptr };
+    if (contentEl) {
+        targetPanel = contentEl.try_as<wuxc::Panel>();
+    }
+    if (!targetPanel && innerTbEl) {
+        wux::DependencyObject parent = wuxm::VisualTreeHelper::GetParent(innerTbEl);
+        while (parent && parent != iconView) {
+            targetPanel = parent.try_as<wuxc::Panel>();
+            if (targetPanel) break;
+            parent = wuxm::VisualTreeHelper::GetParent(parent);
+        }
+    }
+    if (!targetPanel) {
+        return;
+    }
+
+    std::vector<wuxc::TextBlock> nativeTextBlocks;
+    CollectDescendantTextBlocks(targetPanel, nativeTextBlocks, 4);
+    if (auto innerTb = innerTbEl.try_as<wuxc::TextBlock>()) {
+        bool found = false;
+        for (const auto& tb : nativeTextBlocks) {
+            if (tb == innerTb) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            nativeTextBlocks.push_back(innerTb);
+        }
+    }
+
+    TrackedWin11Indicator entry{};
+    entry.trayHwnd = FindTaskbarHwndForCurrentThread();
+    entry.weakIconView = winrt::make_weak(iconView);
+    entry.weakPanel = winrt::make_weak(targetPanel);
+
+    winrt::weak_ref<wux::FrameworkElement> weakIconViewCopy = entry.weakIconView;
+    entry.unloadedRevoker = iconView.Unloaded(
+        winrt::auto_revoke,
+        [weakIconViewCopy](winrt::Windows::Foundation::IInspectable const&, wux::RoutedEventArgs const&) {
+            if (g_modUnloading.load(std::memory_order_acquire)) return;
+            if (auto iv = weakIconViewCopy.get()) {
+                RemoveTrackedWin11IndicatorByIconView(iv);
+            }
+        });
+
+    for (const auto& tb : nativeTextBlocks) {
+        TrackedWin11TextBlock ttb{};
+        ttb.weakTb = winrt::make_weak(tb);
+
+        ttb.textCallbackToken = tb.RegisterPropertyChangedCallback(
+            wuxc::TextBlock::TextProperty(),
+            [weakIconViewCopy](wux::DependencyObject const&, wux::DependencyProperty const&) {
+                if (g_modUnloading.load(std::memory_order_acquire)) return;
+                auto iv = weakIconViewCopy.get();
+                if (!iv) return;
+                for (auto& item : g_win11Indicators) {
+                    if (auto trackedIv = item.weakIconView.get(); trackedIv && trackedIv == iv) {
+                        UpdateWin11IndicatorFlag(item);
+                        break;
+                    }
+                }
+            });
+
+        ttb.visibilityCallbackToken = tb.RegisterPropertyChangedCallback(
+            wux::UIElement::VisibilityProperty(),
+            [weakIconViewCopy](wux::DependencyObject const& sender, wux::DependencyProperty const&) {
+                if (g_modUnloading.load(std::memory_order_acquire)) return;
+                auto iv = weakIconViewCopy.get();
+                if (!iv) return;
+                for (auto& item : g_win11Indicators) {
+                    if (auto trackedIv = item.weakIconView.get(); trackedIv && trackedIv == iv) {
+                        if (!item.isUpdating) {
+                            if (auto changedTb = sender.try_as<wuxc::TextBlock>()) {
+                                if (changedTb.Visibility() != wux::Visibility::Collapsed) {
+                                    UpdateWin11IndicatorFlag(item);
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            });
+
+        entry.textBlocks.push_back(std::move(ttb));
+    }
+
+    g_win11Indicators.push_back(std::move(entry));
+    UpdateWin11IndicatorFlag(g_win11Indicators.back());
+}
+
+void HandleIconViewInstance(void* pThis) {
+    if (!pThis || g_modUnloading.load(std::memory_order_acquire)) return;
+
+    winrt::Windows::Foundation::IInspectable insp{ nullptr };
+    winrt::copy_from_abi(insp, pThis);
+    auto iconView = insp.try_as<wux::FrameworkElement>();
+    if (!iconView) return;
+
+    if (iconView.IsLoaded()) {
+        TrackLanguageIconView(iconView);
+        return;
+    }
+
+    // Prune dead pending entries first
+    for (size_t i = 0; i < g_pendingLoadedEntries.size();) {
+        if (!g_pendingLoadedEntries[i].weakElement.get()) {
+            g_pendingLoadedEntries[i].loadedRevoker.revoke();
+            g_pendingLoadedEntries.erase(g_pendingLoadedEntries.begin() + i);
+        } else {
+            ++i;
+        }
+    }
+
+    PendingLoadedEntry pending{};
+    pending.trayHwnd = FindTaskbarHwndForCurrentThread();
+    pending.weakElement = winrt::make_weak(iconView);
+
+    winrt::weak_ref<wux::FrameworkElement> weakFe = pending.weakElement;
+    pending.loadedRevoker = iconView.Loaded(
+        winrt::auto_revoke,
+        [weakFe](winrt::Windows::Foundation::IInspectable const& sender, wux::RoutedEventArgs const&) {
+            // Remove this pending entry (auto_revoke already detached the event handler)
+            for (size_t i = 0; i < g_pendingLoadedEntries.size(); ++i) {
+                auto el = g_pendingLoadedEntries[i].weakElement.get();
+                if (!el || el == weakFe.get()) {
+                    g_pendingLoadedEntries.erase(g_pendingLoadedEntries.begin() + i);
+                    break;
+                }
+            }
+            if (g_modUnloading.load(std::memory_order_acquire)) return;
+            if (auto loadedFe = sender.try_as<wux::FrameworkElement>()) {
+                TrackLanguageIconView(loadedFe);
+            }
+        });
+
+    g_pendingLoadedEntries.push_back(std::move(pending));
+}
+
+void ScanVisualTreeForExistingIndicators(const wux::DependencyObject& root) {
+    if (!root) return;
+
+    std::vector<wux::DependencyObject> queue;
+    queue.reserve(64);
+    queue.push_back(root);
+
+    for (size_t idx = 0; idx < queue.size(); ++idx) {
+        wux::DependencyObject curr = queue[idx];
+
+        if (auto fe = curr.try_as<wux::FrameworkElement>()) {
+            std::wstring_view nameView(fe.Name());
+            if (nameView == L"LanguageTextIconContent" || nameView == L"LanguageInnerTextBlock") {
+                // Walk up to the enclosing IconView (UserControl / ContentControl)
+                wux::FrameworkElement candidateIconView = fe;
+                wux::DependencyObject p = wuxm::VisualTreeHelper::GetParent(fe);
+                for (int d = 0; d < 8 && p; ++d) {
+                    winrt::hstring cls = winrt::get_class_name(p);
+                    if (std::wstring_view(cls).find(L"IconView") != std::wstring_view::npos) {
+                        if (auto ivFe = p.try_as<wux::FrameworkElement>()) {
+                            candidateIconView = ivFe;
+                        }
+                        break;
+                    }
+                    p = wuxm::VisualTreeHelper::GetParent(p);
+                }
+                TrackLanguageIconView(candidateIconView);
+                continue;
+            }
+        }
+
+        int count = wuxm::VisualTreeHelper::GetChildrenCount(curr);
+        for (int i = 0; i < count; ++i) {
+            if (auto child = wuxm::VisualTreeHelper::GetChild(curr, i)) {
+                queue.push_back(std::move(child));
+            }
+        }
+    }
+}
+
+void DiscoverExistingIndicatorsFromIconView(void* pThis) {
+    if (!pThis || g_modUnloading.load(std::memory_order_acquire)) return;
+    if (g_win11ExistingScanned.load(std::memory_order_acquire)) return;
+
+    winrt::Windows::Foundation::IInspectable insp{ nullptr };
+    winrt::copy_from_abi(insp, pThis);
+    auto fe = insp.try_as<wux::FrameworkElement>();
+    if (!fe) return;
+
+    auto xamlRoot = fe.XamlRoot();
+    if (!xamlRoot || !xamlRoot.Content()) return;
+
+    ScanVisualTreeForExistingIndicators(xamlRoot.Content());
+    g_win11ExistingScanned.store(true, std::memory_order_release);
+}
+
+using IconView_Init_t = void*(WINAPI*)(void* pThis);
+IconView_Init_t IconView_Init_Orig = nullptr;
+
+void* WINAPI IconView_Init_Hook(void* pThis) {
+    void* ret = IconView_Init_Orig(pThis);
+    try {
+        HandleIconViewInstance(pThis);
+    } catch (...) {
+    }
+    return ret;
+}
+
+using IconView_UpdateIcon_t = void(WINAPI*)(void* pThis);
+IconView_UpdateIcon_t IconView_UpdateIcon_Orig = nullptr;
+
+void WINAPI IconView_UpdateIcon_Hook(void* pThis) {
+    IconView_UpdateIcon_Orig(pThis);
+    if (!g_win11ExistingScanned.load(std::memory_order_acquire)) {
+        try {
+            DiscoverExistingIndicatorsFromIconView(pThis);
+        } catch (...) {
+        }
+    }
+}
+
+using IconView_OnPointerEntered_t = void(WINAPI*)(void* pThis, void* pArgs);
+IconView_OnPointerEntered_t IconView_OnPointerEntered_Orig = nullptr;
+
+void WINAPI IconView_OnPointerEntered_Hook(void* pThis, void* pArgs) {
+    IconView_OnPointerEntered_Orig(pThis, pArgs);
+    if (!g_win11ExistingScanned.load(std::memory_order_acquire)) {
+        try {
+            DiscoverExistingIndicatorsFromIconView(pThis);
+        } catch (...) {
+        }
+    }
+}
+
+bool HookTaskbarDllSymbols(HMODULE taskbarMod) {
+    if (!taskbarMod) return false;
+    bool expected = false;
+    if (!g_taskbarDllHooked.compare_exchange_strong(expected, true)) {
+        return true;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK taskbarHooks[] = {
+        {
+            { L"public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void)" },
+            &IconView_Init_Orig,
+            IconView_Init_Hook,
+            false
+        },
+        {
+            { L"public: void __cdecl winrt::SystemTray::implementation::IconView::UpdateIcon(void)" },
+            &IconView_UpdateIcon_Orig,
+            IconView_UpdateIcon_Hook,
+            true
+        },
+        {
+            { L"public: void __cdecl winrt::SystemTray::implementation::IconView::OnPointerEntered(struct winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const &)" },
+            &IconView_OnPointerEntered_Orig,
+            IconView_OnPointerEntered_Hook,
+            true
+        }
+    };
+
+    if (!WindhawkUtils::HookSymbols(taskbarMod, taskbarHooks, ARRAYSIZE(taskbarHooks))) {
+        Wh_Log(L"Failed to hook required SystemTray::IconView symbols in Taskbar.dll.");
+        g_taskbarDllHooked.store(false, std::memory_order_release);
+        return false;
+    }
 
     return true;
 }
 
-void HandleWin11TextBlockCandidate(const wuxc::TextBlock& tb) {
-    if (!tb) return;
-    if (!ApplyWin11FlagToTextBlock(tb)) {
-        tb.Loaded([](winrt::Windows::Foundation::IInspectable const& sender, wux::RoutedEventArgs const&) {
-            if (auto loadedTb = sender.try_as<wuxc::TextBlock>()) {
-                ApplyWin11FlagToTextBlock(loadedTb);
+void WINAPI RefreshWin11IndicatorsOnUIThread(void*) {
+    if (g_modUnloading.load(std::memory_order_acquire)) return;
+    DWORD tid = GetCurrentThreadId();
+    for (auto& item : g_win11Indicators) {
+        if (!item.trayHwnd || GetWindowThreadProcessId(item.trayHwnd, nullptr) == tid) {
+            UpdateWin11IndicatorFlag(item);
+        }
+    }
+}
+
+void WINAPI CleanupWin11IndicatorsOnUIThread(void*) {
+    DWORD tid = GetCurrentThreadId();
+
+    for (size_t i = 0; i < g_pendingLoadedEntries.size();) {
+        if (!g_pendingLoadedEntries[i].trayHwnd ||
+            GetWindowThreadProcessId(g_pendingLoadedEntries[i].trayHwnd, nullptr) == tid) {
+            g_pendingLoadedEntries[i].loadedRevoker.revoke();
+            g_pendingLoadedEntries.erase(g_pendingLoadedEntries.begin() + i);
+        } else {
+            ++i;
+        }
+    }
+
+    for (size_t i = 0; i < g_win11Indicators.size();) {
+        if (!g_win11Indicators[i].trayHwnd ||
+            GetWindowThreadProcessId(g_win11Indicators[i].trayHwnd, nullptr) == tid) {
+            auto& item = g_win11Indicators[i];
+            item.isUpdating = true;
+            item.unloadedRevoker.revoke();
+
+            for (auto& ttb : item.textBlocks) {
+                if (auto tb = ttb.weakTb.get()) {
+                    if (ttb.textCallbackToken != 0) {
+                        tb.UnregisterPropertyChangedCallback(wuxc::TextBlock::TextProperty(), ttb.textCallbackToken);
+                    }
+                    if (ttb.visibilityCallbackToken != 0) {
+                        tb.UnregisterPropertyChangedCallback(wux::UIElement::VisibilityProperty(), ttb.visibilityCallbackToken);
+                    }
+                    tb.Visibility(wux::Visibility::Visible);
+                }
             }
-        });
+
+            if (auto panel = item.weakPanel.get()) {
+                auto children = panel.Children();
+                for (uint32_t c = children.Size(); c > 0; --c) {
+                    if (auto fe = children.GetAt(c - 1).try_as<wux::FrameworkElement>()) {
+                        if (fe.Name() == L"WindhawkFlagImage") {
+                            children.RemoveAt(c - 1);
+                        }
+                    }
+                }
+            }
+
+            g_win11Indicators.erase(g_win11Indicators.begin() + i);
+        } else {
+            ++i;
+        }
     }
 }
 
-using TextBlock_put_Text_t = HRESULT(STDMETHODCALLTYPE*)(void* pThis, HSTRING value);
-TextBlock_put_Text_t TextBlock_put_Text_Orig = nullptr;
+void DispatchToAllTaskbarUIThreads(RunFromWindowThreadProc_t proc) {
+    std::unordered_set<DWORD> dispatchedThreads;
 
-HRESULT STDMETHODCALLTYPE TextBlock_put_Text_Hook(void* pThis, HSTRING value) {
-    HRESULT hr = TextBlock_put_Text_Orig(pThis, value);
-    try {
-        winrt::Windows::Foundation::IInspectable insp{ nullptr };
-        winrt::copy_from_abi(insp, pThis);
-        if (auto tb = insp.try_as<wuxc::TextBlock>()) {
-            HandleWin11TextBlockCandidate(tb);
+    HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (primary) {
+        DWORD tid = GetWindowThreadProcessId(primary, nullptr);
+        if (tid && dispatchedThreads.insert(tid).second) {
+            RunFromWindowThread(primary, proc, nullptr);
         }
-    } catch (...) {
     }
-    return hr;
-}
 
-using TextBlock_OnPropertyChanged2_t = void(STDMETHODCALLTYPE*)(void* pThis, void* pArgs);
-TextBlock_OnPropertyChanged2_t TextBlock_OnPropertyChanged2_Orig = nullptr;
-
-void STDMETHODCALLTYPE TextBlock_OnPropertyChanged2_Hook(void* pThis, void* pArgs) {
-    TextBlock_OnPropertyChanged2_Orig(pThis, pArgs);
-    try {
-        winrt::Windows::Foundation::IInspectable insp{ nullptr };
-        winrt::copy_from_abi(insp, pThis);
-        if (auto tb = insp.try_as<wuxc::TextBlock>()) {
-            HandleWin11TextBlockCandidate(tb);
+    HWND secondary = nullptr;
+    while ((secondary = FindWindowExW(nullptr, secondary, L"Shell_SecondaryTrayWnd", nullptr)) != nullptr) {
+        DWORD tid = GetWindowThreadProcessId(secondary, nullptr);
+        if (tid && dispatchedThreads.insert(tid).second) {
+            RunFromWindowThread(secondary, proc, nullptr);
         }
-    } catch (...) {
     }
 }
 
 // ============================================================================
-// 5. TASKBAR POLLING SUBCLASS & WINDHAWK LIFECYCLE
+// 5. TASKBAR WINDOW HOOKS, WATCHDOG & WINDHAWK LIFECYCLE
 // ============================================================================
 
 LRESULT CALLBACK ShellTrayWatchdogSubclassProc(
     HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
 
-    if (!GetPropW(hwnd, L"WhFlagWatchdogActive")) {
-        SetTimer(hwnd, kWatchdogTimerId, 120, nullptr);
+    if (uMsg == g_stopWatchdogMsg && g_stopWatchdogMsg != 0) {
+        KillTimer(hwnd, kWatchdogTimerId);
+        RemovePropW(hwnd, L"WhFlagWatchdogActive");
+        return 0;
+    }
+
+    if (!g_modUnloading.load(std::memory_order_acquire) &&
+        !GetPropW(hwnd, L"WhFlagWatchdogActive")) {
+        SetTimer(hwnd, kWatchdogTimerId, 200, nullptr);
         SetPropW(hwnd, L"WhFlagWatchdogActive", reinterpret_cast<HANDLE>(1));
     }
 
     if (uMsg == WM_TIMER && wParam == kWatchdogTimerId) {
+        if (g_modUnloading.load(std::memory_order_acquire)) {
+            KillTimer(hwnd, kWatchdogTimerId);
+            RemovePropW(hwnd, L"WhFlagWatchdogActive");
+            return 0;
+        }
+
+        // Only poll when Windows 10 TrayInputIndicatorWClass windows are active
+        bool hasWin10Indicators = false;
+        {
+            std::shared_lock lock(g_stateLock);
+            hasWin10Indicators = !g_subclassedIndicators.empty();
+        }
+        if (!hasWin10Indicators) {
+            return 0;
+        }
+
         static LANGID s_prevInputLang = 0;
         static LANGID s_prevCountry = 0;
         static WORD s_prevRawLayout = 0;
-        static int s_scanCounter = 0;
-
-        if (++s_scanCounter >= 12) {
-            s_scanCounter = 0;
-            ScanAndAttachWin10Indicators();
-        }
 
         KeyboardInfo kb = GetActiveKeyboardInfo();
         if (kb.inputLangId != s_prevInputLang ||
@@ -1941,9 +2334,72 @@ LRESULT CALLBACK ShellTrayWatchdogSubclassProc(
     if (uMsg == WM_NCDESTROY) {
         KillTimer(hwnd, kWatchdogTimerId);
         RemovePropW(hwnd, L"WhFlagWatchdogActive");
+        HWND expected = hwnd;
+        g_shellTrayHwnd.compare_exchange_strong(expected, nullptr);
     }
 
     return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+void AttachShellTrayWatchdog(HWND shellTray) {
+    if (!shellTray || g_modUnloading.load(std::memory_order_acquire)) return;
+    HWND expected = nullptr;
+    if (!g_shellTrayHwnd.compare_exchange_strong(expected, shellTray)) {
+        return;
+    }
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(shellTray, ShellTrayWatchdogSubclassProc, 0)) {
+        PostMessageW(shellTray, WM_TIMER, kWatchdogTimerId, 0);
+    } else {
+        g_shellTrayHwnd.store(nullptr, std::memory_order_release);
+    }
+}
+
+using CreateWindowExW_t = HWND(WINAPI*)(
+    DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
+CreateWindowExW_t CreateWindowExW_Orig = nullptr;
+
+HWND WINAPI CreateWindowExW_Hook(
+    DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle,
+    int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu,
+    HINSTANCE hInstance, LPVOID lpParam) {
+    HWND hwnd = CreateWindowExW_Orig(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    if (hwnd && !g_modUnloading.load(std::memory_order_acquire)) {
+        wchar_t cls[64] = {};
+        if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) > 0) {
+            if (wcscmp(cls, L"TrayInputIndicatorWClass") == 0) {
+                AttachWin10IndicatorWindow(hwnd);
+                HWND primaryTray = FindWindowW(L"Shell_TrayWnd", nullptr);
+                if (primaryTray) {
+                    AttachShellTrayWatchdog(primaryTray);
+                }
+            } else if (wcscmp(cls, L"Shell_TrayWnd") == 0 ||
+                       wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0) {
+                ScanAndAttachWin10Indicators();
+            }
+        }
+    }
+    return hwnd;
+}
+
+using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags);
+LoadLibraryExW_t LoadLibraryExW_Orig = nullptr;
+
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
+    HMODULE mod = LoadLibraryExW_Orig(lpLibFileName, hFile, dwFlags);
+    if (mod && lpLibFileName && !g_modUnloading.load(std::memory_order_acquire) &&
+        !g_taskbarDllHooked.load(std::memory_order_acquire)) {
+        const wchar_t* baseName = lpLibFileName;
+        for (const wchar_t* p = lpLibFileName; *p; ++p) {
+            if (*p == L'\\' || *p == L'/') {
+                baseName = p + 1;
+            }
+        }
+        if (_wcsicmp(baseName, L"Taskbar.dll") == 0) {
+            HookTaskbarDllSymbols(mod);
+        }
+    }
+    return mod;
 }
 
 void LoadSettings() {
@@ -1961,20 +2417,42 @@ void LoadSettings() {
     next.darkMode = Wh_GetIntSetting(L"DarkMode") != 0;
     next.useUkFlagForUsLayout = Wh_GetIntSetting(L"UseUkFlagForUsLayout") != 0;
 
-    ExclusiveLockGuard lock(g_stateLock);
+    std::unique_lock lock(g_stateLock);
     g_settings = next;
+    g_flagPixelCache.clear();
 }
 
 BOOL Wh_ModInit() {
+    g_modUnloading.store(false, std::memory_order_release);
+    g_stopWatchdogMsg = RegisterWindowMessageW(L"Windhawk_StopWatchdog_" WH_MOD_ID);
+    g_runFromWindowThreadMsg = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
     LoadSettings();
 
     Gdiplus::GdiplusStartupInput gdipInput;
     Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdipInput, nullptr);
 
-    // 1. Install Direct2D & DirectWrite text suppression hooks
-    InstallDirect2DAndDWriteHooks();
+    // 1. Hook Windows 11 SystemTray::IconView in Taskbar.dll (either now or lazily when Taskbar.dll loads)
+    HMODULE taskbarMod = GetModuleHandleW(L"Taskbar.dll");
+    if (taskbarMod) {
+        HookTaskbarDllSymbols(taskbarMod);
+    } else {
+        HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+        auto pLoadLibraryExW = kernelBase
+            ? reinterpret_cast<LoadLibraryExW_t>(GetProcAddress(kernelBase, "LoadLibraryExW"))
+            : LoadLibraryExW;
+        if (pLoadLibraryExW) {
+            WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExW_Hook, &LoadLibraryExW_Orig);
+        }
+    }
 
-    // 2. Install type-safe UxTheme & GDI text / buffered paint / blit hooks
+    // 2. Install Windows 10 indicator text suppression & buffered-paint hooks
+    //    (strictly gated to TrayInputIndicatorWClass paint; skip D2D/DWrite if Windows 11 XAML tray is active)
+    bool hasExistingWin10Tray = (FindWindowExW(FindWindowW(L"Shell_TrayWnd", nullptr), nullptr, L"TrayInputIndicatorWClass", nullptr) != nullptr);
+    if (!taskbarMod || hasExistingWin10Tray) {
+        InstallDirect2DAndDWriteHooks();
+    }
+
     WindhawkUtils::SetFunctionHook(BeginBufferedPaint, BeginBufferedPaint_Hook, &BeginBufferedPaint_Orig);
     WindhawkUtils::SetFunctionHook(EndBufferedPaint, EndBufferedPaint_Hook, &EndBufferedPaint_Orig);
     WindhawkUtils::SetFunctionHook(GdiAlphaBlend, GdiAlphaBlend_Hook, &GdiAlphaBlend_Orig);
@@ -1986,38 +2464,35 @@ BOOL Wh_ModInit() {
     WindhawkUtils::SetFunctionHook(DrawTextExW, DrawTextExW_Hook, &DrawTextExW_Orig);
     WindhawkUtils::SetFunctionHook(ExtTextOutW, ExtTextOutW_Hook, &ExtTextOutW_Orig);
     WindhawkUtils::SetFunctionHook(TextOutW, TextOutW_Hook, &TextOutW_Orig);
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Orig);
 
-    // 3. Subclass Windows 10 taskbar language indicator windows & flush initial D2D layer
+    // 3. Attach to already-existing Windows 10 indicators (when enabled mid-session)
     ScanAndAttachWin10Indicators();
     InvalidateAllWin10Indicators(true);
 
-    HWND shellTray = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (shellTray) {
-        if (WindhawkUtils::SetWindowSubclassFromAnyThread(shellTray, ShellTrayWatchdogSubclassProc, 0)) {
-            g_shellTrayHwnd = shellTray;
-            PostMessageW(shellTray, WM_TIMER, kWatchdogTimerId, 0);
+    bool hasWin10Indicators = false;
+    {
+        std::shared_lock lock(g_stateLock);
+        hasWin10Indicators = !g_subclassedIndicators.empty();
+    }
+    if (hasWin10Indicators) {
+        HWND shellTray = FindWindowW(L"Shell_TrayWnd", nullptr);
+        if (shellTray) {
+            AttachShellTrayWatchdog(shellTray);
         }
     }
 
-    // 4. Hook Windows 11 XAML TextBlock visual tree
-    HMODULE xamlMod = GetOrLoadSystemModule(L"Windows.UI.Xaml.dll");
-    if (xamlMod) {
-      // Windows.UI.Xaml.dll
-        WindhawkUtils::SYMBOL_HOOK xamlHooks[] = {
-            {
-                { L"public: virtual void __cdecl DirectUI::TextBlock::OnPropertyChanged2(struct PropertyChangedParams const &)" },
-                &TextBlock_OnPropertyChanged2_Orig,
-                TextBlock_OnPropertyChanged2_Hook,
-                true
-            },
-            {
-                { L"public: virtual long __cdecl DirectUI::TextBlockGenerated::put_Text(struct HSTRING__ *)" },
-                &TextBlock_put_Text_Orig,
-                TextBlock_put_Text_Hook,
-                true
-            }
-        };
-        WindhawkUtils::HookSymbols(xamlMod, xamlHooks, ARRAYSIZE(xamlHooks));
+    // 4. If enabled mid-session on Windows 11, prompt Taskbar.dll to refresh tray icons so
+    //    IconView::UpdateIcon discovers existing language indicators via XamlRoot immediately.
+    if (g_taskbarDllHooked.load(std::memory_order_acquire)) {
+        HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr);
+        if (primary) {
+            SendNotifyMessageW(primary, WM_SETTINGCHANGE, 0, 0);
+        }
+        HWND secondary = nullptr;
+        while ((secondary = FindWindowExW(nullptr, secondary, L"Shell_SecondaryTrayWnd", nullptr)) != nullptr) {
+            SendNotifyMessageW(secondary, WM_SETTINGCHANGE, 0, 0);
+        }
     }
 
     ModSettings settings = GetSettingsSnapshot();
@@ -2027,16 +2502,26 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    if (g_shellTrayHwnd && IsWindow(g_shellTrayHwnd)) {
-        RemovePropW(g_shellTrayHwnd, L"WhFlagWatchdogActive");
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_shellTrayHwnd, ShellTrayWatchdogSubclassProc);
-        g_shellTrayHwnd = nullptr;
+    g_modUnloading.store(true, std::memory_order_release);
+
+    // 1. Restore Windows 11 XAML indicator TextBlocks and remove injected Image on the UI thread
+    DispatchToAllTaskbarUIThreads(CleanupWin11IndicatorsOnUIThread);
+
+    // 2. Stop watchdog timer on Shell_TrayWnd's thread before removing the subclass
+    HWND shellTray = g_shellTrayHwnd.exchange(nullptr, std::memory_order_acq_rel);
+    if (shellTray && IsWindow(shellTray)) {
+        if (g_stopWatchdogMsg != 0) {
+            SendMessageW(shellTray, g_stopWatchdogMsg, 0, 0);
+        }
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(shellTray, ShellTrayWatchdogSubclassProc);
     }
 
+    // 3. Remove Windows 10 indicator subclasses and trigger native repaint
     std::vector<HWND> indicators;
     {
-        ExclusiveLockGuard lock(g_stateLock);
+        std::unique_lock lock(g_stateLock);
         indicators.swap(g_subclassedIndicators);
+        g_flagPixelCache.clear();
     }
 
     for (HWND hwnd : indicators) {
@@ -2063,4 +2548,5 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     LoadSettings();
     InvalidateAllWin10Indicators(true);
+    DispatchToAllTaskbarUIThreads(RefreshWin11IndicatorsOnUIThread);
 }
