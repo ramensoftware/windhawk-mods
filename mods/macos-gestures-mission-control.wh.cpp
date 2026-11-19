@@ -2048,18 +2048,56 @@ static bool GetAumidForWindow(HWND hwnd, std::wstring& out) {
     return true;
 }
 
+// The AppUserModelID kept in the window's own property store. A packaged app's
+// frame (ApplicationFrameWindow) can have it even when there is no CoreWindow child
+// to ask, which is the case while it is minimized or suspended.
+static bool GetWindowStoreAumid(HWND hwnd, std::wstring& out) {
+    typedef HRESULT(WINAPI * PFN_SHGetPropertyStoreForWindow)(HWND, REFIID, void**);
+    static PFN_SHGetPropertyStoreForWindow pGetStore =
+        reinterpret_cast<PFN_SHGetPropertyStoreForWindow>(
+            GetProcAddress(GetModuleHandleW(L"shell32.dll"), "SHGetPropertyStoreForWindow"));
+    if (!pGetStore) {
+        return false;
+    }
+    IPropertyStore* store = nullptr;
+    if (FAILED(pGetStore(hwnd, __uuidof(IPropertyStore), reinterpret_cast<void**>(&store))) ||
+        !store) {
+        return false;
+    }
+    // PKEY_AppUserModel_ID, spelled out so no extra header or library is needed.
+    static const PROPERTYKEY kAppUserModelId = {
+        { 0x9F4C2855, 0x9F79, 0x4B39, { 0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3 } }, 5 };
+    PROPVARIANT v;
+    PropVariantInit(&v);
+    bool ok = false;
+    if (SUCCEEDED(store->GetValue(kAppUserModelId, &v)) && v.vt == VT_LPWSTR && v.pwszVal &&
+        v.pwszVal[0]) {
+        out = v.pwszVal;
+        ok = true;
+    }
+    PropVariantClear(&v);
+    store->Release();
+    return ok;
+}
+
 // What "the same app" means for App Exposé: the AppUserModelID of a packaged app
 // (all its frames are hosted by ApplicationFrameHost), otherwise the executable.
 static bool GetAppKey(HWND hwnd, std::wstring& key) {
-    if (GetAumidForWindow(hwnd, key)) {
-        return true;
-    }
+    bool haveAumid = GetAumidForWindow(hwnd, key);
     wchar_t cls[64] = {};
     GetClassNameW(hwnd, cls, 64);
-    if (!wcscmp(cls, L"ApplicationFrameWindow")) {
-        // No CoreWindow to ask (a suspended or minimized frame): its executable would be
-        // ApplicationFrameHost, shared by every packaged app, so there's no key at all.
-        return false;
+    if (!haveAumid && !wcscmp(cls, L"ApplicationFrameWindow")) {
+        // No CoreWindow to ask (a suspended or minimized frame): the frame's own property
+        // store may still know. Without it the executable would be ApplicationFrameHost,
+        // shared by every packaged app, so there's no key at all.
+        haveAumid = GetWindowStoreAumid(hwnd, key);
+        if (!haveAumid) {
+            return false;
+        }
+    }
+    if (haveAumid) {
+        CharLowerW(&key[0]);  // the two sources may not agree on case
+        return true;
     }
     wchar_t path[MAX_PATH * 2] = {};
     if (!GetWindowExePath(hwnd, path, static_cast<DWORD>(ARRAYSIZE(path)))) {
@@ -6526,18 +6564,38 @@ static void MinimizeAllWindows() {
 
     // Minimizing from the bottom up keeps Windows from activating (and animating)
     // the next window after each one. The order is kept to bring them back.
-    g_swipeMinimized.clear();
-    int count = 0;
+    std::vector<HWND> minimized;
     for (auto it = list.rbegin(); it != list.rend(); ++it) {
         HWND h = *it;
         if (IsIconic(h) || !(GetWindowLongPtrW(h, GWL_STYLE) & WS_MINIMIZEBOX)) {
             continue;
         }
         ShowWindowAsync(h, SW_MINIMIZE);
-        g_swipeMinimized.push_back(h);
-        count++;
+        minimized.push_back(h);
     }
-    Wh_Log(L"Swipe down: minimizing %d window(s).", count);
+
+    // The undo of an earlier swipe survives while all of it is still minimized on this
+    // desktop: a second swipe down in a row (nothing left to minimize), or after opening
+    // one more window, must not lose it. If it went stale, this swipe starts a new one.
+    if (!minimized.empty()) {
+        IVirtualDesktopManager* vdm = GetVdm();
+        std::vector<HWND> kept;
+        for (HWND h : g_swipeMinimized) {
+            if (!IsWindow(h)) {
+                continue;
+            }
+            BOOL onThis = TRUE;
+            if (!IsIconic(h) ||
+                (vdm && SUCCEEDED(vdm->IsWindowOnCurrentVirtualDesktop(h, &onThis)) && !onThis)) {
+                kept.clear();
+                break;
+            }
+            kept.push_back(h);
+        }
+        kept.insert(kept.end(), minimized.begin(), minimized.end());
+        g_swipeMinimized = std::move(kept);
+    }
+    Wh_Log(L"Swipe down: minimizing %d window(s).", static_cast<int>(minimized.size()));
 }
 
 // The undo of a minimize-all swipe, like Windows' own Show desktop: it only
