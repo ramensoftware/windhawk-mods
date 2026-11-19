@@ -13,7 +13,6 @@
 
 // ==WindhawkModReadme==x# Taskbar Keyboard Layout Flag
 /*
-==WindhawkModReadme==
 Replaces the Windows taskbar input language and keyboard layout indicator with a crisp, minimalist country flag.
 
 ## Overview
