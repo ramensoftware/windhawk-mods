@@ -2,9 +2,15 @@
 // @id              taskbar-independent-per-monitor
 // @name            Independent taskbar per monitor
 // @name:de-DE      Eigenständige Taskleiste pro Monitor
+// @name:ru-RU     Независимая панель задач для каждого монитора
+// @name:fr-FR     Barre des tâches indépendante par écran
+// @name:es-ES     Barra de tareas independiente por monitor
 // @description     Each taskbar shows only the windows of its own monitor and has its own pinned items
 // @description:de-DE Jede Taskleiste zeigt nur die Fenster ihres Monitors und hat eigene angeheftete Apps
-// @version         1.6.0
+// @description:ru-RU Каждая панель задач показывает только окна своего монитора и имеет свои закреплённые приложения
+// @description:fr-FR Chaque barre des tâches affiche uniquement les fenêtres de son écran et a ses propres applications épinglées
+// @description:es-ES Cada barra de tareas muestra solo las ventanas de su monitor y tiene sus propias aplicaciones ancladas
+// @version         1.7.0
 // @author          2ndSky95
 // @github          https://github.com/2ndSky95
 // @license         MIT
@@ -20,6 +26,8 @@
 # Independent taskbar per monitor
 
 Each taskbar behaves like its own main taskbar.
+
+Settings are available in English, German, Russian, French and Spanish.
 
 ![Each taskbar shows only the windows of its own monitor](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ea374053f26cfbfe3865461bdd4adf86dce6b782/images/windows-per-monitor.png) \
 *Each taskbar shows only the windows of its own monitor*
@@ -44,8 +52,11 @@ taskbar*.
 // ==WindhawkModSettings==
 /*
 - windowMode: monitor
-  $name: Windows on each taskbar
-  $name:de-DE: Fenster auf jeder Taskleiste
+  $name: Windows · Which windows each taskbar shows
+  $name:de-DE: Fenster · Welche Fenster jede Leiste zeigt
+  $name:ru-RU: Окна · Какие окна показывает каждая панель
+  $name:fr-FR: Fenêtres · Fenêtres affichées par chaque barre
+  $name:es-ES: Ventanas · Qué ventanas muestra cada barra
   $options:
   - monitor: Only the windows of its own monitor
   - primaryAll: Primary taskbar shows all windows
@@ -54,58 +65,141 @@ taskbar*.
   - monitor: Nur die Fenster des eigenen Monitors
   - primaryAll: Hauptleiste zeigt alle Fenster
   - all: Alle Fenster auf allen Taskleisten
+  $options:ru-RU:
+  - monitor: Только окна своего монитора
+  - primaryAll: Главная панель показывает все окна
+  - all: Все окна на всех панелях задач
+  $options:fr-FR:
+  - monitor: Seulement les fenêtres de son écran
+  - primaryAll: La barre principale affiche toutes les fenêtres
+  - all: Toutes les fenêtres sur toutes les barres
+  $options:es-ES:
+  - monitor: Solo las ventanas de su monitor
+  - primaryAll: La barra principal muestra todas las ventanas
+  - all: Todas las ventanas en todas las barras
 - alwaysOnAllTaskbars: [""]
-  $name: Programs shown on all taskbars
-  $name:de-DE: Programme auf allen Taskleisten
+  $name: Windows · Programs on all taskbars
+  $name:de-DE: Fenster · Programme auf allen Taskleisten
+  $name:ru-RU: Окна · Программы на всех панелях задач
+  $name:fr-FR: Fenêtres · Programmes sur toutes les barres des tâches
+  $name:es-ES: Ventanas · Programas en todas las barras de tareas
   $description: Process name or path, e.g. mspaint.exe
-  $description:de-DE: Prozessname oder Pfad, z.B. mspaint.exe
+  $description:de-DE: Prozessname oder Pfad, z. B. mspaint.exe
+  $description:ru-RU: Имя процесса или путь, например mspaint.exe
+  $description:fr-FR: Nom du processus ou chemin, p. ex. mspaint.exe
+  $description:es-ES: Nombre del proceso o ruta, p. ej. mspaint.exe
 - pinMode: perTaskbar
-  $name: Pinned items
-  $name:de-DE: Angeheftete Apps
+  $name: Pins · Mode
+  $name:de-DE: Pins · Modus
+  $name:ru-RU: Закрепления · Режим
+  $name:fr-FR: Épingles · Mode
+  $name:es-ES: Anclados · Modo
   $options:
   - perTaskbar: Separate for each taskbar
   - everywhere: Same on all taskbars
   $options:de-DE:
   - perTaskbar: Eigene pro Taskleiste
   - everywhere: Überall dieselben
+  $options:ru-RU:
+  - perTaskbar: Отдельные для каждой панели
+  - everywhere: Одинаковые на всех панелях
+  $options:fr-FR:
+  - perTaskbar: Séparées pour chaque barre
+  - everywhere: Identiques sur toutes les barres
+  $options:es-ES:
+  - perTaskbar: Propios en cada barra
+  - everywhere: Iguales en todas las barras
 - unassignedPins: primary
-  $name: Pinned items without an assigned taskbar
-  $name:de-DE: Angeheftete Apps ohne Zuordnung
-  $description: Pinned before the mod was installed, or by Windows or an installer
-  $description:de-DE: Vor der Mod oder von Windows bzw. einem Installer angeheftet
+  $name: Pins · Pins without an assigned taskbar
+  $name:de-DE: Pins · Pins ohne Zuordnung
+  $name:ru-RU: Закрепления · Закрепления без привязки
+  $name:fr-FR: Épingles · Épingles sans barre attribuée
+  $name:es-ES: Anclados · Anclajes sin barra asignada
+  $description: Pinned before the mod, or by Windows or an installer. Only with separate pins.
+  $description:de-DE: Vor der Mod oder von Windows bzw. einem Installer angeheftet. Nur bei eigenen Pins.
+  $description:ru-RU: Закреплены до установки мода, системой или установщиком. Только при отдельных закреплениях.
+  $description:fr-FR: Épinglées avant le mod, par Windows ou par un installateur. Uniquement avec des épingles séparées.
+  $description:es-ES: Ancladas antes del mod, por Windows o por un instalador. Solo con anclajes propios por barra.
   $options:
   - primary: Primary taskbar only
   - all: All taskbars
   $options:de-DE:
   - primary: Nur Hauptleiste
   - all: Alle Taskleisten
+  $options:ru-RU:
+  - primary: Только главная панель
+  - all: Все панели задач
+  $options:fr-FR:
+  - primary: Barre principale uniquement
+  - all: Toutes les barres des tâches
+  $options:es-ES:
+  - primary: Solo la barra principal
+  - all: Todas las barras de tareas
+- showAppsOnAllTaskbars: true
+  $name: Pins · Show apps on all taskbars
+  $name:de-DE: Pins · Apps auf allen Taskleisten anzeigen
+  $name:ru-RU: Закрепления · Показывать приложения на всех панелях
+  $name:fr-FR: Épingles · Afficher les applications sur toutes les barres
+  $name:es-ES: Anclados · Mostrar aplicaciones en todas las barras
+  $description: Needed for separate pins. Applied only while the mod runs; the Windows setting stays unchanged. If off, set it to "All taskbars" manually.
+  $description:de-DE: Nötig für eigene Pins. Gilt nur, solange die Mod läuft; die Windows-Einstellung bleibt unverändert. Wenn aus, von Hand auf „Alle Taskleisten“ stellen.
+  $description:ru-RU: Нужно для отдельных закреплений. Действует, пока работает мод; настройка Windows не меняется. Если выключено, выберите «Все панели задач» вручную.
+  $description:fr-FR: Nécessaire pour des épingles séparées. Actif tant que le mod tourne ; le réglage Windows reste inchangé. Si désactivé, choisissez « Toutes les barres des tâches » à la main.
+  $description:es-ES: Necesario para anclajes propios. Solo mientras el mod está activo; el ajuste de Windows no cambia. Si está desactivado, elija «Todas las barras de tareas» manualmente.
 - foregroundFix: true
-  $name: Bring running apps to the front
-  $name:de-DE: Laufende Apps nach vorn holen
-  $description: Clicking a pin brings the app's window to the front instead of starting it again. Middle-click or Shift+click starts a new window, e.g. a second Firefox window for another monitor
-  $description:de-DE: Klick auf einen Pin holt das Fenster der App nach vorn, statt sie neu zu starten. Mittelklick oder Umschalt+Klick startet ein neues Fenster, z. B. ein zweites Firefox-Fenster für einen anderen Monitor
+  $name: Click · Bring running apps to the front
+  $name:de-DE: Klick · Laufende Apps nach vorn holen
+  $name:ru-RU: Щелчок · Выводить запущенные приложения на передний план
+  $name:fr-FR: Clic · Mettre les applications en cours au premier plan
+  $name:es-ES: Clic · Traer al frente las aplicaciones abiertas
+  $description: Clicking a pin shows the running app instead of starting it again. Middle-click or Shift+click opens a new window.
+  $description:de-DE: Klick auf einen Pin zeigt die laufende App, statt sie neu zu starten. Mittelklick oder Umschalt+Klick öffnet ein neues Fenster.
+  $description:ru-RU: Щелчок по закреплению показывает уже запущенное приложение, а не запускает его снова. Средний щелчок или Shift+щелчок открывает новое окно.
+  $description:fr-FR: Un clic sur une épingle affiche l'application déjà lancée au lieu de la relancer. Un clic central ou Maj+clic ouvre une nouvelle fenêtre.
+  $description:es-ES: Un clic en un anclaje muestra la aplicación ya abierta en lugar de iniciarla de nuevo. Clic central o Mayús+clic abre una ventana nueva.
 - focusScope: anyMonitor
-  $name: Windows that are brought to the front
-  $name:de-DE: Fenster, die nach vorn geholt werden
+  $name: Click · Windows that are brought to the front
+  $name:de-DE: Klick · Fenster, die nach vorn kommen
+  $name:ru-RU: Щелчок · Какие окна выводить на передний план
+  $name:fr-FR: Clic · Fenêtres mises au premier plan
+  $name:es-ES: Clic · Ventanas que se traen al frente
+  $description: Only used if bringing apps to the front is on.
+  $description:de-DE: Nur wirksam, wenn „Laufende Apps nach vorn holen“ an ist.
+  $description:ru-RU: Действует только при включённом выводе на передний план.
+  $description:fr-FR: Uniquement si la mise au premier plan est activée.
+  $description:es-ES: Solo con «traer al frente» activado.
   $options:
   - anyMonitor: Windows on any monitor
   - thisMonitor: Only windows on the clicked taskbar's monitor
   $options:de-DE:
   - anyMonitor: Fenster auf jedem Monitor
   - thisMonitor: Nur Fenster auf dem Monitor der Taskleiste
+  $options:ru-RU:
+  - anyMonitor: Окна на любом мониторе
+  - thisMonitor: Только окна монитора этой панели
+  $options:fr-FR:
+  - anyMonitor: Fenêtres de n'importe quel écran
+  - thisMonitor: Seulement les fenêtres de l'écran de la barre cliquée
+  $options:es-ES:
+  - anyMonitor: Ventanas de cualquier monitor
+  - thisMonitor: Solo ventanas del monitor de la barra pulsada
 - launchOnClickedMonitor: true
-  $name: Open apps on the monitor of the clicked taskbar
-  $name:de-DE: Apps auf dem Monitor der angeklickten Taskleiste öffnen
-  $description: When a pinned app opens its window on another monitor, it is moved to the monitor of the taskbar that was clicked
-  $description:de-DE: Öffnet eine angeheftete App ihr Fenster auf einem anderen Monitor, wird es auf den Monitor der angeklickten Taskleiste verschoben
+  $name: Click · Open apps on the clicked taskbar's monitor
+  $name:de-DE: Klick · Apps auf dem Monitor der angeklickten Taskleiste öffnen
+  $name:ru-RU: Щелчок · Открывать на мониторе нажатой панели
+  $name:fr-FR: Clic · Ouvrir sur l'écran de la barre cliquée
+  $name:es-ES: Clic · Abrir en el monitor de la barra pulsada
+  $description: Moves a new app window to the monitor of the taskbar that was clicked.
+  $description:de-DE: Verschiebt ein neues App-Fenster auf den Monitor der angeklickten Taskleiste.
+  $description:ru-RU: Перемещает новое окно приложения на монитор панели задач, по которой щёлкнули.
+  $description:fr-FR: Déplace la nouvelle fenêtre vers l'écran de la barre des tâches cliquée.
+  $description:es-ES: Mueve la ventana nueva al monitor de la barra de tareas pulsada.
 - slideAnimation: true
-  $name: Slide animation when a window moves to another monitor (Windows 11)
-  $name:de-DE: Gleit-Animation beim Monitorwechsel (Windows 11)
-- showAppsOnAllTaskbars: true
-  $name: Show taskbar apps on all taskbars
-  $name:de-DE: Taskleisten-Apps auf allen Taskleisten anzeigen
-  $description: Required for separate pinned items per taskbar. Applied while the mod runs, the Windows setting isn't changed. If off, set it to "All taskbars" manually
-  $description:de-DE: Nötig für eigene angeheftete Apps pro Taskleiste. Gilt, solange die Mod läuft, die Windows-Einstellung bleibt unverändert. Wenn aus, von Hand auf „Alle Taskleisten“ stellen
+  $name: Animation · Slide when a window moves to another monitor (Windows 11)
+  $name:de-DE: Animation · Gleiten beim Monitorwechsel (Windows 11)
+  $name:ru-RU: Анимация · Скольжение при переносе на другой монитор (Windows 11)
+  $name:fr-FR: Animation · Glissement lors du passage à un autre écran (Windows 11)
+  $name:es-ES: Animación · Deslizar al pasar a otro monitor (Windows 11)
 */
 // ==/WindhawkModSettings==
 
@@ -121,6 +215,7 @@ taskbar*.
 #include <cstdio>
 #include <cwchar>
 #include <cwctype>
+#include <list>
 #include <map>
 #include <atomic>
 #include <mutex>
@@ -481,12 +576,90 @@ static bool PathMatches(FindCtx* c, DWORD pid) {
     return false;
 }
 
+// Monitor of a window. Windows parks minimized windows (and apps park hidden ones) at -32000,-32000:
+// "nearest" would then be the leftmost monitor, so a parked window keeps the monitor it was last seen on.
+// Only tracked windows (those with a taskbar button) are remembered; they are forgotten once the window
+// is destroyed (UntrackWindow/ReleaseWindows). The cache is a LRU list: above kLastMonMax the entries of windows that no
+// longer exist go first, then the least recently used ones. The mutex is a leaf lock: no other lock is
+// taken while it is held (IsWindow doesn't block), so it's safe to call with g_mx held or not.
+static const size_t kLastMonMax = 2000, kLastMonKeep = 1800;
+static std::mutex g_lastMonMx;
+static std::list<HWND> g_lastMonLru;  // most recently used first
+static std::map<HWND, std::pair<HMONITOR, std::list<HWND>::iterator>> g_lastMon;
+
+static void LastMonSet(HWND h, HMONITOR m) {
+    std::lock_guard<std::mutex> l(g_lastMonMx);
+    auto it = g_lastMon.find(h);
+    if (it != g_lastMon.end()) {
+        it->second.first = m;
+        g_lastMonLru.splice(g_lastMonLru.begin(), g_lastMonLru, it->second.second);
+        return;
+    }
+    g_lastMonLru.push_front(h);
+    g_lastMon.emplace(h, std::make_pair(m, g_lastMonLru.begin()));
+    if (g_lastMon.size() <= kLastMonMax) return;
+    for (auto e = g_lastMon.begin(); e != g_lastMon.end();) {
+        if (IsWindow(e->first)) {
+            ++e;
+        } else {
+            g_lastMonLru.erase(e->second.second);
+            e = g_lastMon.erase(e);
+        }
+    }
+    if (g_lastMon.size() <= kLastMonMax) return;
+    while (g_lastMon.size() > kLastMonKeep) {  // all alive: drop the least recently used
+        g_lastMon.erase(g_lastMonLru.back());
+        g_lastMonLru.pop_back();
+    }
+}
+
+static HMONITOR LastMonGet(HWND h) {
+    std::lock_guard<std::mutex> l(g_lastMonMx);
+    auto it = g_lastMon.find(h);
+    if (it == g_lastMon.end()) return nullptr;
+    g_lastMonLru.splice(g_lastMonLru.begin(), g_lastMonLru, it->second.second);
+    return it->second.first;
+}
+
+static void LastMonForget(HWND h) {
+    std::lock_guard<std::mutex> l(g_lastMonMx);
+    auto it = g_lastMon.find(h);
+    if (it == g_lastMon.end()) return;
+    g_lastMonLru.erase(it->second.second);
+    g_lastMon.erase(it);
+}
+
+static void LastMonClear() {
+    std::lock_guard<std::mutex> l(g_lastMonMx);
+    g_lastMon.clear();
+    g_lastMonLru.clear();
+}
+
+// remember: the window is tracked, so its monitor is stored for later (see above)
+static HMONITOR WinMonitor(HWND h, bool remember = false) {
+    if (!h) return nullptr;
+    // Touches a monitor, or minimized (then its restore rectangle counts)
+    HMONITOR m = MonitorFromWindow(h, MONITOR_DEFAULTTONULL);
+    if (m) {
+        if (remember) LastMonSet(h, m);
+        return m;
+    }
+    RECT r;
+    if (GetWindowRect(h, &r) && (r.left <= -30000 || r.top <= -30000)) {
+        HMONITOR last = LastMonGet(h);
+        MONITORINFO mi{.cbSize = sizeof(mi)};
+        if (last && GetMonitorInfoW(last, &mi)) return last;  // still connected
+        return MonitorFromWindow(h, MONITOR_DEFAULTTOPRIMARY);
+    }
+    return MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+}
+
 static BOOL CALLBACK EnumProc(HWND h, LPARAM lp) {
     auto* c = (FindCtx*)lp;
     // Only visible windows: hidden ones (e.g. of tray apps) are left to the app itself, a normal
     // launch of a single-instance app shows them
     if (c->visible || !IsWindowVisible(h) || GetWindow(h, GW_OWNER)) return TRUE;
-    if (c->onlyMon && MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) != c->onlyMon) return TRUE;
+    if (c->onlyMon && WinMonitor(h) != c->onlyMon) return TRUE;
     LONG ex = GetWindowLongW(h, GWL_EXSTYLE);
     LONG st = GetWindowLongW(h, GWL_STYLE);
     if (ex & WS_EX_TOOLWINDOW) return TRUE;
@@ -540,7 +713,7 @@ static bool TryActivateExisting(void* g, HMONITOR onlyMon = nullptr) {
            ctx.tgt.exactPath.c_str(), ctx.tgt.name.c_str(), (void*)h);
     if (!h) return false;
 
-    if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
+    if (IsIconic(h)) ShowWindowAsync(h, SW_RESTORE);
     if (!SetForegroundWindow(h)) SwitchToThisWindow(h, TRUE);
     Wh_Log(L"  -> brought existing window %p to the front", (void*)h);
     return true;
@@ -644,7 +817,7 @@ static HWND ItemWindow(void* item) {
 
 static HMONITOR ItemMonitor(void* item) {
     HWND h = ItemWindow(item);
-    return h ? MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) : nullptr;
+    return WinMonitor(h);
 }
 
 // Windows doesn't report monitor changes of UWP frame windows to the taskbar: while one is
@@ -668,7 +841,7 @@ static void TrackWindow(HWND h, void* g) {
             w.g = g;
             ((IUnknown*)g)->AddRef();
         }
-        w.mon = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+        w.mon = WinMonitor(h, true);
         w.frame = frame;
     }
     if (old) ((IUnknown*)old)->Release();
@@ -685,6 +858,9 @@ static void UntrackWindow(HWND h) {
         if (it == g_wins.end()) return;
         old = it->second.g;
         g_wins.erase(it);
+        // A hidden window (e.g. an app closed to the tray) loses its button but may come back parked
+        // at -32000: keep its monitor until the window is destroyed (the LRU limit covers the rest)
+        if (!IsWindow(h)) LastMonForget(h);
     }
     if (old) ((IUnknown*)old)->Release();
 }
@@ -700,8 +876,10 @@ static void ReleaseWindows(bool all) {
                 continue;
             }
             groups.push_back(it->second.g);
+            LastMonForget(it->first);
             it = g_wins.erase(it);
         }
+        if (all) LastMonClear();
     }
     for (void* g : groups) ((IUnknown*)g)->Release();
 }
@@ -763,7 +941,7 @@ static bool ShouldShow(void* tl, void* g, void* item) {
     HMONITOR bar = GetMonitor_orig(tl);
     if (item) {
         HWND h = ItemWindow(item);
-        return WinAllowed(h, h ? MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) : nullptr, bar);
+        return WinAllowed(h, WinMonitor(h), bar);
     }
     if (!(pGroupGetFlags && (pGroupGetFlags(g) & 0x1))) return true;  // not a pin
     if (g_s.pinsEverywhere) return true;
@@ -956,7 +1134,7 @@ static int PruneForeignItems(void* tl, void* g) {
         for (int k = 0; k < c; k++) {
             void* it = pBtnGetTaskItem(tbg, k);
             HWND h = ItemWindow(it);
-            HMONITOR m = h ? MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) : nullptr;
+            HMONITOR m = WinMonitor(h);
             if (it && m && !WinAllowed(h, m, bar)) foreign.push_back({it, h});
         }
     }
@@ -1163,7 +1341,7 @@ static bool OtherWindowOnBar(void* tl, void* g, HWND exclude) {
             if (w.g == g && h != exclude) wins.push_back(h);
     }
     for (HWND h : wins) {
-        if (IsWindow(h) && WinAllowed(h, MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST), bar)) return true;
+        if (IsWindow(h) && WinAllowed(h, WinMonitor(h), bar)) return true;
     }
     return false;
 }
@@ -1176,7 +1354,7 @@ static void ReevalWindow(HWND h, void* g, const std::set<void*>& bars) {
     void* item = GroupItem(g, h);
     if (!item) return;
     bool pinned = Pinned(g);
-    HMONITOR now = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+    HMONITOR now = WinMonitor(h);
     std::set<HMONITOR> on, allowed;
     bool known = false;
     {
@@ -1257,7 +1435,7 @@ static void FrameTimerProc() {
         for (auto& [h, w] : g_wins) {
             if (!w.frame) continue;
             any = true;
-            HMONITOR now = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+            HMONITOR now = WinMonitor(h, true);
             if (now == w.mon) continue;
             MONITORINFO a{.cbSize = sizeof(a)}, b{.cbSize = sizeof(b)};
             if (w.mon && GetMonitorInfoW(w.mon, &a) && GetMonitorInfoW(now, &b)) {
@@ -1280,7 +1458,12 @@ static void FrameTimerProc() {
 // remember the direction for the sideways slide-in and re-evaluate the window
 // Before the original: remember the new monitor (and the direction). true = the window moved.
 static bool NoteMove(HWND h, HMONITOR& now) {
-    now = h ? MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) : nullptr;
+    bool tracked;
+    {
+        std::lock_guard<std::mutex> l(g_mx);
+        tracked = g_wins.count(h) != 0;
+    }
+    now = WinMonitor(h, tracked);
     HMONITOR old = nullptr;
     bool moved = false;
     if (now) {
@@ -2049,7 +2232,7 @@ static HWND TrayAt(POINT pt, HMONITOR* mon) {
     for (HWND h : TrayWindows()) {
         RECT r;
         if (IsWindowVisible(h) && GetWindowRect(h, &r) && PtInRect(&r, pt)) {
-            if (mon) *mon = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+            if (mon) *mon = WinMonitor(h);
             return h;
         }
     }
@@ -2163,7 +2346,7 @@ static void CreateDragImage(void* g, HMONITOR from) {
     g_dragTrays.clear();
     UINT dpi = 96;
     for (HWND h : TrayWindows()) {
-        DragTray t{h, {}, MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST)};
+        DragTray t{h, {}, WinMonitor(h)};
         if (IsWindowVisible(h) && GetWindowRect(h, &t.r)) g_dragTrays.push_back(t);
         if (t.mon == from) dpi = GetDpiForWindow(h);
     }
@@ -2509,7 +2692,7 @@ static void SyncAll() {
             void* item = GroupItem(g, h);
             if (!item) continue;
             TrackWindow(h, g);
-            HMONITOR now = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+            HMONITOR now = WinMonitor(h);
             std::set<HMONITOR> allowed;
             for (void* tl : bars) {
                 HMONITOR bm = GetMonitor_orig(tl);
@@ -2701,7 +2884,7 @@ struct MoveJob {
 };
 
 static void MoveToMonitor(HWND h, HMONITOR to) {
-    HMONITOR from = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+    HMONITOR from = WinMonitor(h);
     MONITORINFO a{.cbSize = sizeof(a)}, b{.cbSize = sizeof(b)};
     if (from == to || !GetMonitorInfoW(from, &a) || !GetMonitorInfoW(to, &b)) return;
     // A per-monitor DPI aware app scales itself by the ratio of the monitors' scaling when it arrives:
@@ -2752,13 +2935,13 @@ static DWORD WINAPI MoveWindowThread(LPVOID p) {
         if (PrimaryButtonDown()) break;
         if (!IsWindowVisible(job.h)) continue;
         if (IsHungAppWindow(job.h)) break;  // it wouldn't follow anyway
-        if (MonitorFromWindow(job.h, MONITOR_DEFAULTTONEAREST) != job.to) {
+        if (WinMonitor(job.h) != job.to) {
             MoveToMonitor(job.h, job.to);
             moves++;
         }
     }
     Wh_Log(L"-> Launched window %p: moved %d time(s), now on monitor %d", (void*)job.h, moves,
-           MonNumber(MonitorFromWindow(job.h, MONITOR_DEFAULTTONEAREST)));
+           MonNumber(WinMonitor(job.h)));
     return 0;
 }
 
@@ -2767,7 +2950,7 @@ static void CheckLaunched(HWND h, void* g) {
     if (g_launchKey.empty() || GetTickCount() - g_launchTick > 15000 || g_unloading) return;
     if (KeyOf(g) != g_launchKey) return;
     g_launchKey.clear();
-    if (MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) == g_launchMon) return;
+    if (WinMonitor(h) == g_launchMon) return;
     auto* job = new MoveJob{h, g_launchMon};
     if (StartWorker(MoveWindowThread, job)) {
         Wh_Log(L"-> Launched window %p: moving to monitor %d", (void*)h, MonNumber(g_launchMon));
