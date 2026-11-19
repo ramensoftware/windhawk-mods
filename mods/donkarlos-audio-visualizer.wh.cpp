@@ -3,7 +3,7 @@
 // @name DonKarlos Audio Visualizer
 // @description Turn system audio into animated bars or a waveform on the desktop, taskbar, or both
 // @description:de-DE Zeigt Systemaudio als animierte Balken oder Wellenform auf Desktop, Taskleiste oder beiden
-// @version 1.1.1
+// @version 1.1.2
 // @author DonKarlos
 // @github https://github.com/Karlos5000
 // @license MIT
@@ -14,6 +14,8 @@
 // ==WindhawkModReadme==
 /*
 # DonKarlos Audio Visualizer
+
+Both panels share one capture stream and stay in sync. The four controls for style, color, sensitivity and bar count apply to both panels.
 
 See your system audio on the Windows desktop, on the primary taskbar, or in both places at once. Choose frequency bars, mirrored bars, a waveform, or segmented LEDs. Each pattern works with RGB, green, blue, or white.
 
@@ -32,43 +34,59 @@ Vier Muster zeigen die laufende Audioausgabe auf Desktop und Taskleiste. Bei Sti
 // ==WindhawkModSettings==
 /*
 - display: both
-  $name: Anzeige
+  $name: Show on
+  $name:de-DE: Anzeige
   $options:
+    - both: Desktop and taskbar
+    - desktop: Desktop
+    - taskbar: Taskbar
+  $options:de-DE:
     - both: Beide
     - desktop: Desktop
     - taskbar: Taskleiste
 - pattern: bars
-  $name: Muster
+  $name: Pattern
+  $name:de-DE: Muster
   $options:
+    - bars: Frequency bars
+    - mirror: Mirrored
+    - wave: Waveform
+    - led: LED
+  $options:de-DE:
     - bars: Frequenzbalken
     - mirror: Gespiegelt
     - wave: Wellenform
     - led: LED
 - palette: rgb
-  $name: Farbschema
+  $name: Palette
+  $name:de-DE: Farbschema
   $options:
+    - rgb: RGB
+    - green: Green
+    - blue: Blue
+    - white: White
+  $options:de-DE:
     - rgb: RGB
     - green: Grün
     - blue: Blau
     - white: Weiß
 - bars: 32
-  $name: Balkenanzahl (8–64)
+  $name: Bar count (8–64)
+  $name:de-DE: Balkenanzahl (8–64)
 - sensitivity: 150
-  $name: Empfindlichkeit (10–400 Prozent)
+  $name: Sensitivity (10–400 percent)
+  $name:de-DE: Empfindlichkeit (10–400 Prozent)
 - transparency: 20
-  $name: Transparenz (0–100 Prozent)
+  $name: Transparency (0–100 percent)
+  $name:de-DE: Transparenz (0–100 Prozent)
 */
 // ==/WindhawkModSettings==
 
 #define NOMINMAX
 #include <windows.h>
 #include <complex>
-#if __has_include(<windhawk_tool_mod.h>)
-#include <windhawk_tool_mod.h>
-#else
 #include <shellapi.h>
 #include <windhawk_api.h>
-#endif
 #include <audioclient.h>
 #include <mmdeviceapi.h>
 #include <wrl/client.h>
@@ -108,6 +126,9 @@ static void settings() {
 }
 
 struct Capture {
+    std::array<float,N> samples{};
+    int head{};
+    unsigned rate{};
     ComPtr<IMMDeviceEnumerator> devices;
     ComPtr<IAudioClient> client;
     ComPtr<IAudioCaptureClient> reader;
@@ -322,129 +343,237 @@ static LRESULT CALLBACK paint(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
     EndPaint(w, &ps);
     return 0;
 }
-static BOOL CALLBACK findDesktop(HWND top, LPARAM result) {
-    HWND view = FindWindowExW(top, nullptr, L"SHELLDLL_DefView", nullptr);
-    if (!view)
-        return TRUE;
-    HWND host = FindWindowExW(view, nullptr, L"SysListView32", nullptr);
-    if (!IsWindowVisible(host))
-        host = view;
-    if (!IsWindowVisible(host))
-        host = top;
-    if (!IsWindowVisible(host))
-        return TRUE;
-    *reinterpret_cast<HWND*>(result) = host;
-    return !*reinterpret_cast<HWND*>(result);
+
+static HWND desktopHost() {
+    HWND shell = GetShellWindow();
+    if (!shell)
+        return nullptr;
+    DWORD shellPid{};
+    GetWindowThreadProcessId(shell, &shellPid);
+    auto host = [&](HWND window) -> HWND {
+        DWORD pid{};
+        GetWindowThreadProcessId(window, &pid);
+        if (pid != shellPid || !IsWindowVisible(window))
+            return nullptr;
+        HWND view =
+            FindWindowExW(window, nullptr, L"SHELLDLL_DefView", nullptr);
+        if (!view)
+            return nullptr;
+        HWND icons = FindWindowExW(view, nullptr, L"SysListView32", nullptr);
+        if (IsWindowVisible(icons))
+            return icons;
+        return IsWindowVisible(view) ? view : window;
+    };
+    if (HWND h = host(shell))
+        return h;
+    for (HWND w = nullptr;
+         (w = FindWindowExW(nullptr, w, L"WorkerW", nullptr));)
+        if (HWND h = host(w))
+            return h;
+    return nullptr;
 }
 static void layout(int index) {
-    HWND parent{};
-    if (index == 0 && display != L"taskbar")
-        EnumWindows(findDesktop, reinterpret_cast<LPARAM>(&parent));
-    if (index == 1 && display != L"desktop")
-        parent = FindWindowW(L"Shell_TrayWnd", nullptr);
+    bool task = index == 1;
+    HWND host = task ? FindWindowW(L"Shell_TrayWnd", nullptr) : desktopHost();
     HWND& panel = panels[index];
-    if (panel && (!IsWindow(panel) || GetParent(panel) != parent)) {
+    bool enabled =
+        host && (task ? display != L"desktop" : display != L"taskbar");
+    if (panel &&
+        (!enabled || !IsWindow(panel) || (GetParent(panel) != host))) {
         if (IsWindow(panel))
             DestroyWindow(panel);
         panel = nullptr;
     }
-    if (!parent)
+    if (!enabled)
         return;
-    RECT bounds{};
-    GetClientRect(parent, &bounds);
-    int width = std::min<int>(index ? 224 : 480, bounds.right);
-    int height = std::min<int>(index ? 28 : 100, bounds.bottom);
-    int x = index ? std::max(0, int(bounds.right / 4 - width / 2)) : 24;
-    int y = index ? (bounds.bottom - height) / 2
-                  : std::max(0, int(bounds.bottom - height - 90));
+    MONITORINFO mi{sizeof(mi)};
+    if (!GetMonitorInfoW(MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY),
+                         &mi))
+        return;
+    RECT area = mi.rcWork;
+    if (task && !GetWindowRect(host, &area))
+        return;
+    UINT dpi = GetDpiForWindow(host);
+    auto scale = [&](int n) { return MulDiv(n, dpi ? dpi : 96, 96); };
+    int w = std::min<int>(scale(task ? 224 : 480), area.right - area.left);
+    int h = std::min<int>(scale(task ? 28 : 100), area.bottom - area.top);
+    POINT pos{area.left +
+                  (task ? std::max(0, int((area.right - area.left) / 4 - w / 2))
+                        : scale(24)),
+              task ? area.top + (area.bottom - area.top - h) / 2
+                   : area.bottom - h - scale(90)};
+    ScreenToClient(host, &pos);
     if (!panel)
         panel = CreateWindowExW(
-            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE, className,
-            L"", WS_CHILD, x, y, width, height, parent, nullptr,
-            GetModuleHandleW(nullptr), nullptr);
-    if (panel) {
-        SetLayeredWindowAttributes(panel, RGB(0, 0, 0),
-                                   BYTE(255 * (100 - transparency) / 100),
-                                   LWA_COLORKEY | LWA_ALPHA);
-        SetWindowPos(panel, HWND_TOP, x, y, width, height,
-                     SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    }
-}
-__declspec(dllexport) BOOL WhTool_ModInit() {
-    return TRUE;
-}
-__declspec(dllexport) void WhTool_ModSettingsChanged() {
-    changed = true;
-}
-__declspec(dllexport) void WhTool_ModUninit() {
-    stopping = true;
-}
-__declspec(dllexport) void WhTool_ModEntryPoint() {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    if (FAILED(com))
+            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE |
+                WS_EX_NOPARENTNOTIFY,
+            className, L"", WS_CHILD, pos.x, pos.y, w, h,
+            host, nullptr, GetModuleHandleW(nullptr), nullptr);
+    if (!panel)
         return;
+    BYTE alpha = BYTE(255 * (100 - transparency) / 100), oldAlpha{};
+    DWORD flags{};
+    if (!GetLayeredWindowAttributes(panel, nullptr, &oldAlpha, &flags) || flags != (LWA_COLORKEY | LWA_ALPHA) ||
+        oldAlpha != alpha)
+        SetLayeredWindowAttributes(panel, 0, alpha, LWA_COLORKEY | LWA_ALPHA);
+    RECT current{};
+    GetWindowRect(panel, &current);
+    POINT screen = pos;
+    if (!task)
+        ClientToScreen(host, &screen);
+    if ((task && GetTopWindow(host) != panel) || !IsWindowVisible(panel) || current.left != screen.x ||
+        current.top != screen.y || current.right - current.left != w ||
+        current.bottom - current.top != h)
+        SetWindowPos(panel, HWND_TOP, pos.x, pos.y, w, h,
+                     SWP_NOACTIVATE | SWP_SHOWWINDOW);
+}
+
+static HANDLE stopEvent, audioEvent, uiThread, audioThread;
+static SRWLOCK sampleLock = SRWLOCK_INIT;
+static std::array<float, N> published{};
+static int publishedHead;
+static unsigned publishedRate;
+static ULONGLONG publishedAt;
+
+static DWORD WINAPI captureLoop(void*) {
+    if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED)))
+        return 0;
+    {
+        Capture capture;
+        ULONGLONG nextConnect = 0;
+        bool wasActive = false;
+        while (!stopping) {
+            auto now = GetTickCount64();
+            if (now >= nextConnect) {
+                if (FAILED(capture.connect()))
+                    capture.close();
+                nextConnect = now + 2000;
+            }
+            bool fresh = false;
+            if (capture.reader && FAILED(capture.drain(fresh)))
+                capture.close();
+            if (fresh) {
+                bool active = std::any_of(
+                    capture.samples.begin(), capture.samples.end(),
+                    [](float v) { return std::abs(v) > 0.000001f; });
+                if (active || wasActive) {
+                    AcquireSRWLockExclusive(&sampleLock);
+                    published = capture.samples;
+                    publishedHead = capture.head;
+                    publishedRate = capture.rate;
+                    publishedAt = active ? now : 0;
+                    ReleaseSRWLockExclusive(&sampleLock);
+                    SetEvent(audioEvent);
+                }
+                wasActive = active;
+            }
+            if (WaitForSingleObject(stopEvent, fresh ? 16 : 50) ==
+                WAIT_OBJECT_0)
+                break;
+        }
+        capture.close();
+    }
+    CoUninitialize();
+    return 0;
+}
+
+static DWORD WINAPI visualizerLoop(void*) {
+
     WNDCLASSW wc{};
     wc.hInstance = GetModuleHandleW(nullptr);
     wc.lpfnWndProc = paint;
     wc.lpszClassName = className;
-    if (!RegisterClassW(&wc)) {
-        CoUninitialize();
-        return;
-    }
-    {
-        Capture capture;
-        ULONGLONG nextLayout = 0, nextAudio = 0, lastPacket = 0, nextFrame = 0;
-        while (!stopping) {
-            MSG msg;
-            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE))
-                DispatchMessageW(&msg);
-            auto now = GetTickCount64();
-            if (changed.exchange(false)) {
-                settings();
-                nextLayout = 0;
+    if (!RegisterClassW(&wc))
+        return 0;
+    ULONGLONG nextLayout = 0, nextFrame = 0;
+    bool moving = true;
+    HANDLE events[] = {stopEvent, audioEvent};
+    while (!stopping) {
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE))
+            DispatchMessageW(&msg);
+        auto now = GetTickCount64();
+        bool dirty = changed.exchange(false);
+        if (dirty) {
+            settings();
+            nextLayout = 0;
+        }
+        if (now >= nextLayout) {
+            layout(0);
+            layout(1);
+            nextLayout = now + 1000;
+        }
+        if (now >= nextFrame || dirty) {
+            AcquireSRWLockShared(&sampleLock);
+            bool active = publishedAt && now < publishedAt + 120;
+            if (active) {
+                samples = published;
+                head = publishedHead;
+                rate = publishedRate;
             }
-            if (now >= nextLayout) {
-                layout(0);
-                layout(1);
-                nextLayout = now + 1000;
-            }
-            if (now >= nextAudio) {
-                HRESULT hr = capture.connect();
-                if (FAILED(hr)) {
-                    Wh_Log(L"Loopback unavailable: %08X", unsigned(hr));
-                    capture.close();
-                }
-                nextAudio = now + 2000;
-            }
-            if (now >= nextFrame) {
-                bool fresh = false;
-                if (capture.reader && FAILED(capture.drain(fresh)))
-                    capture.close();
-                if (fresh)
-                    lastPacket = now;
-                bool active = lastPacket && now - lastPacket < 100;
-                if (!active)
-                    samples.fill(0);
+            ReleaseSRWLockShared(&sampleLock);
+            if (!active)
+                samples.fill(0);
+            if (active || moving || dirty) {
                 if (pattern != L"wave")
                     analyze(active);
+                moving = active ||
+                         (pattern != L"wave" &&
+                          *std::max_element(levels.begin(),
+                                            levels.begin() + count) > 0.001f);
+                if (!moving)
+                    levels.fill(0);
                 for (HWND panel : panels)
                     if (panel)
                         InvalidateRect(panel, nullptr, FALSE);
-                nextFrame = now + 16;
             }
-            MsgWaitForMultipleObjects(0, nullptr, FALSE, 16, QS_ALLINPUT);
+            nextFrame = now + 16;
         }
-        capture.close();
+        DWORD wait = moving ? DWORD(std::min<ULONGLONG>(
+                                  16, nextFrame > now ? nextFrame - now : 0))
+                            : 200;
+        MsgWaitForMultipleObjects(2, events, FALSE, wait, QS_ALLINPUT);
     }
     for (HWND panel : panels)
         if (panel)
             DestroyWindow(panel);
     UnregisterClassW(className, wc.hInstance);
-    CoUninitialize();
+    return 0;
+}
+void WhTool_ModSettingsChanged() {
+    changed = true;
+    if (audioEvent)
+        SetEvent(audioEvent);
+}
+void WhTool_ModUninit() {
+    stopping = true;
+    if (stopEvent)
+        SetEvent(stopEvent);
+    for (HANDLE thread : {uiThread, audioThread})
+        if (thread) {
+            WaitForSingleObject(thread, INFINITE);
+            CloseHandle(thread);
+        }
+    if (stopEvent)
+        CloseHandle(stopEvent);
+    if (audioEvent)
+        CloseHandle(audioEvent);
+}
+BOOL WhTool_ModInit() {
+    stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    audioEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (stopEvent && audioEvent) {
+        uiThread =
+            CreateThread(nullptr, 0, visualizerLoop, nullptr, 0, nullptr);
+        audioThread =
+            CreateThread(nullptr, 0, captureLoop, nullptr, 0, nullptr);
+    }
+    if (uiThread && audioThread)
+        return TRUE;
+    WhTool_ModUninit();
+    return FALSE;
 }
 
-#if !__has_include(<windhawk_tool_mod.h>)
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
@@ -464,8 +593,7 @@ HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
     Wh_Log(L">");
-    WhTool_ModEntryPoint();
-    ExitProcess(0);
+    ExitThread(0);
 }
 
 BOOL Wh_ModInit() {
@@ -624,4 +752,3 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
-#endif
