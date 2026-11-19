@@ -936,6 +936,7 @@ escrever em português.
 #include <cmath>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -2292,6 +2293,31 @@ std::wstring GetWindowProcessPath(HWND hwnd) {
     return gotPath ? std::wstring(path, size) : std::wstring();
 }
 
+// Windhawk 1.7 runs the switcher as a 32-bit program on 64-bit Windows,
+// where Windows reads its System32 paths from SysWOW64: 64-bit programs'
+// files may be missing there or differ. Their System32 is reached as
+// Sysnative then.
+std::wstring NativeSystemPath(const std::wstring& path) {
+    static const std::wstring windows = [] {
+        BOOL wow64 = FALSE;
+        WCHAR folder[MAX_PATH];
+        if (!IsWow64Process(GetCurrentProcess(), &wow64) || !wow64 ||
+            !GetSystemWindowsDirectoryW(folder, ARRAYSIZE(folder))) {
+            return std::wstring();
+        }
+        return std::wstring(folder) + L"\\";
+    }();
+    constexpr std::wstring_view kSystem32 = L"System32\\";
+    const size_t prefix = windows.size() + kSystem32.size();
+    if (windows.empty() || path.size() <= prefix ||
+        _wcsnicmp(path.c_str(), windows.c_str(), windows.size()) != 0 ||
+        _wcsnicmp(path.c_str() + windows.size(), kSystem32.data(),
+                  kSystem32.size()) != 0) {
+        return path;
+    }
+    return windows + L"Sysnative\\" + path.substr(prefix);
+}
+
 // Whether the window belongs to one of the excluded apps, by process name or
 // window class name.
 bool IsExcludedApp(HWND hwnd, const std::vector<std::wstring>& excluded) {
@@ -2361,7 +2387,7 @@ std::wstring GetAppName(HWND hwnd) {
         }
     }
 
-    const std::wstring path = GetWindowProcessPath(hwnd);
+    const std::wstring path = NativeSystemPath(GetWindowProcessPath(hwnd));
     if (path.empty()) {
         return {};
     }
@@ -7001,12 +7027,13 @@ void Switcher::UpdateRadialStick() {
     }
     float dx = (float)(cursor.x - m_stickCursor.x);
     float dy = (float)(cursor.y - m_stickCursor.y);
-    // The cursor stops at the screen's edges, the mouse doesn't: on each
-    // axis, the larger of the two motions counts.
-    if (std::abs(m_rawX) > std::abs(dx)) {
+    // The cursor stops at the screen's edges, the mouse doesn't: on an axis
+    // the cursor didn't move on, the mouse's own motion counts. Elsewhere the
+    // cursor's does, with the pointer speed and acceleration of Windows.
+    if (dx == 0) {
         dx = m_rawX;
     }
-    if (std::abs(m_rawY) > std::abs(dy)) {
+    if (dy == 0) {
         dy = m_rawY;
     }
     m_rawX = m_rawY = 0;
@@ -8139,31 +8166,6 @@ bool IsHostProgram(const std::wstring& path) {
                        [&](PCWSTR host) { return name == host; });
 }
 
-// Windhawk 1.7 runs the switcher as a 32-bit program on 64-bit Windows,
-// where Windows reads its System32 paths from SysWOW64: 64-bit programs'
-// files may be missing there or differ. Their System32 is reached as
-// Sysnative then.
-std::wstring NativeSystemPath(const std::wstring& path) {
-    static const std::wstring windows = [] {
-        BOOL wow64 = FALSE;
-        WCHAR folder[MAX_PATH];
-        if (!IsWow64Process(GetCurrentProcess(), &wow64) || !wow64 ||
-            !GetSystemWindowsDirectoryW(folder, ARRAYSIZE(folder))) {
-            return std::wstring();
-        }
-        return std::wstring(folder) + L"\\";
-    }();
-    constexpr std::wstring_view kSystem32 = L"System32\\";
-    const size_t prefix = windows.size() + kSystem32.size();
-    if (windows.empty() || path.size() <= prefix ||
-        _wcsnicmp(path.c_str(), windows.c_str(), windows.size()) != 0 ||
-        _wcsnicmp(path.c_str() + windows.size(), kSystem32.data(),
-                  kSystem32.size()) != 0) {
-        return path;
-    }
-    return windows + L"Sysnative\\" + path.substr(prefix);
-}
-
 // The large version of a window's icon, at the size the largest icons are
 // drawn at: the same icon read again from the file it came from, at 256
 // pixels (most apps' largest size), made smaller with care; or, for an icon
@@ -8225,7 +8227,8 @@ int Switcher::LargeIconPixels() const {
 // Window icons are usually 32 pixels at 100% scaling, blurry where they're
 // drawn larger (see ShowsLargeIcons). This looks for the large version of
 // these windows' icons where it wasn't looked for at the session monitor's
-// size yet, until `deadline` (in NowSeconds() time). It reads files, so it's
+// size or a larger one yet (one made larger still looks right smaller), until
+// `deadline` (in NowSeconds() time). It reads files, so it's
 // done after a session (see RefreshIcons), and for a moment when a session
 // opens (see LoadSessionLargeIcons). Returns whether none is left.
 bool Switcher::LoadLargeIcons(const std::vector<HWND>& windows,
@@ -8233,7 +8236,7 @@ bool Switcher::LoadLargeIcons(const std::vector<HWND>& windows,
     const int size = LargeIconPixels();
     for (HWND hwnd : windows) {
         const auto it = m_iconCache.find(hwnd);
-        if (it == m_iconCache.end() || it->second.largeSize == size) {
+        if (it == m_iconCache.end() || it->second.largeSize >= size) {
             continue;
         }
         if (NowSeconds() > deadline) {
