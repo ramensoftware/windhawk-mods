@@ -48,10 +48,11 @@ Changing any setting reloads the mod.
 
 ### Upgrading from flat settings (1.2.x or early 1.3.0)
 
-The settings are now grouped into Content, Appearance, Placement and Data source.
-Grouping changes the setting paths, so Windhawk cannot carry the old flat values
-into the new cards automatically. After updating, re-enter your symbols, entry
-prices, colors, background mode, placement and API settings once.
+Settings are now grouped under Content, Appearance, Placement and Data source.
+Windhawk does not move saved values when setting keys are renamed. After updating,
+re-enter your symbols, entry prices, refresh interval, color/background choices,
+placement and API settings once. Until then the new grouped settings use defaults.
+Old flat values remain in storage but are not read by this version.
 
 ### Example: CoinGecko
 
