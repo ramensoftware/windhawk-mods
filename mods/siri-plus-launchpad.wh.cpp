@@ -223,7 +223,7 @@ All options are in the **⋯** settings panel (in seven languages) and in the mo
 - The mod never goes online.
 - Its own files (icons restored from a backup, the colors found for the gallery's images) are kept in the mod's storage folder, which Windhawk removes together with the mod. The gallery's images are only read from the folder you choose; backups are written only where you choose. **Create desktop shortcut** adds a shortcut to your desktop only when you pick it, and never replaces a file already there.
 - The clipboard history lives in memory only and is never written to disk.
-- **Phone** (off by default): reads Phone Link's Start card and a temporary copy of its notifications list, on this PC only; the copy is deleted right after reading, and nothing is changed or sent. Notifications you clear are remembered (by their id only) until Phone Link drops them.
+- **Phone** (off by default): reads Phone Link's Start card and a temporary copy of its notifications list, on this PC only. The copy is written to the mod's storage folder (`Phone` subfolder) and deleted right after reading (a copy left by an interrupted read is deleted the next time the launcher starts); nothing is changed or sent. Notifications you clear are remembered (by their id only) until Phone Link drops them.
 
 ## Compatibility
 - **Right after a Windows update**: Windhawk may not have the symbols for the new Windows files yet, and the mod can't place its Start hook. It keeps working in a temporary way until they arrive: the Windows key and clicks on the Start button are caught directly and open the launcher as always; only Ctrl+Esc or a touch on the Start button shows Windows' own Start menu for a moment before the launcher takes its place. Nothing needs to be done; the normal way comes back by itself the next time the mod loads with the symbols available.
@@ -1096,7 +1096,7 @@ const ZhTranslation kZhTranslations[] = {
     {L"Light: a white glass with dark text. Dark: a smoky glass with white text", L"浅色：白色玻璃配深色文字。深色：烟灰玻璃配白色文字"},
     {L"Follow the theme, or a glass of its own: light or dark, with the blur and transparency you choose. The same for every theme", L"跟随主题，或使用独立玻璃：浅色或深色，模糊度和透明度可选。所有主题相同"},
     {L"Only with Background blur above 0", L"仅在背景模糊大于 0 时可用"},
-    {L"On: the glass follows videos and animated wallpapers. Off: a still picture, lighter on the PC", L"开启：玻璃跟随视频和动态壁纸。关闭：一张静态图片，更省资源"},
+    {L"On: the glass follows videos and animated wallpapers (the launcher then stays out of screenshots and recordings). Off: a still picture, lighter on the PC", L"开启：玻璃跟随视频和动态壁纸（启动器不会出现在截图和录屏中）。关闭：一张静态图片，更省资源"},
     {L"Background of this window", L"此窗口的背景"},
     {L"Follow the theme, or a glass of its own with the blur you choose. The same for every theme", L"跟随主题，或使用你选择模糊度的独立玻璃。所有主题相同"},
     {L"Follow the theme", L"跟随主题"},
@@ -1641,8 +1641,8 @@ constexpr UINT_PTR kTimerMenuLeave = 7;   // checks where the mouse went after l
 constexpr UINT_PTR kTimerStartRects = 16;    // without the Start hook: finds where the Start buttons are, for the mouse hook
 constexpr UINT_PTR kTimerStartCheck = 15;    // without the Start hook: makes sure Windows' Start menu went away after the launcher opened
 constexpr UINT_PTR kTimerAppsChanged = 14;   // reads the app list again a moment after the last change (installers write many files)
-constexpr UINT_PTR kTimerCaret = 13;
-constexpr UINT_PTR kTimerPhone = 17;       // the Phone category looks for a newer card from Phone Link while it shows       // the text cursor blinks (on, off) while the launcher is open
+constexpr UINT_PTR kTimerCaret = 13;       // the text cursor blinks (on, off) while the launcher is open
+constexpr UINT_PTR kTimerPhone = 17;       // the Phone category looks for a newer card from Phone Link while it shows
 bool g_caretOn = true;
 void CaretRestart();   // (defined with the window, below)
 constexpr UINT kFileSearchDelayMs = 220;
@@ -1726,8 +1726,6 @@ struct Settings {
     int maxFps = 0;               // frame rate limit (0 = the monitor's)
     bool cpuDraw = false;         // draw with the processor (no graphics card)
     bool glassEffect = true;      // Light, Dark and OLED themes: glass optics (sheen, edge thickness, beveled rim)
-    float opacity = 0.6f;
-    D2D1_COLOR_F tint{0.118f, 0.118f, 0.118f, 1.0f};
     int windowWidth = 80;
     int windowHeight = 75;
     int iconSize = 64;
@@ -1738,9 +1736,6 @@ struct Settings {
     int folderRadius = 26;
     int folderBlur = 40;
     float animSpeed = 1.0f;
-    int borderWidth = 1;
-    D2D1_COLOR_F borderColor{1.0f, 1.0f, 1.0f, 1.0f};
-    float borderOpacity = 0.18f;
     bool horizontal = false;
     bool dragToPin = true;
     bool showPower = true;
@@ -1753,8 +1748,6 @@ struct Settings {
     int siriFirstRow = 1;   // 0 off, 1 recently opened/installed, 2 most used
     int siriPillW = 560;
     int siriPillH = 96;
-    D2D1_COLOR_F siriPillColor{0.118f, 0.118f, 0.118f, 1.0f};
-    float siriPillOpacity = 0.72f;
     int siriPillIntroMs = 520;
     int siriPillOutroMs = 420;
     int siriBounce = 50;
@@ -1770,16 +1763,13 @@ struct Settings {
     // Results box per category (Applications use the two above; width 0 = as wide as the bar)
     int filesPanelW = 0, filesRows = 3, actionsPanelW = 680, actionsRows = 3, clipPanelW = 0, clipRows = 3;
     bool siriHorizontal = true;
-    D2D1_COLOR_F siriPanelColor{0.118f, 0.118f, 0.118f, 1.0f};
-    float siriPanelOpacity = 0.60f;
     int siriPanelRadius = 24;
-    bool siriShade = true;
-    int siriShadeStrength = 70;
     bool siriPower = true;
     Anim openAnim = Anim::Zoom, closeAnim = Anim::Zoom;
     bool filesEnabled = true;
     bool clipEnabled = true;
     bool phoneEnabled = false;     // the Phone category (Phone Link), when Phone Link is installed (off until turned on)
+    bool phoneWanted = false;      // the setting itself (Phone Link may be installed later)
     int phoneMax = 10;             // how many notifications it shows (1-10)
     Indexer indexer = Indexer::Auto;
     int maxResults = 50;
@@ -2157,11 +2147,11 @@ const CfgTranslation kCfgTranslations[] = {
      L"Seulement avec un Flou d’arrière-plan supérieur à 0",
      L"Nur mit Hintergrundunschärfe über 0",
      L"Solo con la Sfocatura dello sfondo sopra 0"},
-    {L"On: the glass follows videos and animated wallpapers. Off: a still picture, lighter on the PC",
-     L"Activado: el cristal sigue los vídeos y fondos animados. Desactivado: una imagen fija, más ligera",
-     L"Activé : le verre suit les vidéos et fonds animés. Désactivé : une image fixe, plus légère",
-     L"Ein: Das Glas folgt Videos und animierten Hintergründen. Aus: ein Standbild, schonender für den PC",
-     L"Attivo: il vetro segue video e sfondi animati. Disattivo: un’immagine fissa, più leggera"},
+    {L"On: the glass follows videos and animated wallpapers (the launcher then stays out of screenshots and recordings). Off: a still picture, lighter on the PC",
+     L"Activado: el cristal sigue los vídeos y fondos animados (el menú no aparece en capturas ni grabaciones). Desactivado: una imagen fija, más ligera",
+     L"Activé : le verre suit les vidéos et fonds animés (le menu n’apparaît pas dans les captures ni les enregistrements). Désactivé : une image fixe, plus légère",
+     L"Ein: Das Glas folgt Videos und animierten Hintergründen (das Menü erscheint nicht in Screenshots und Aufnahmen). Aus: ein Standbild, schonender für den PC",
+     L"Attivo: il vetro segue video e sfondi animati (il menu non compare in screenshot e registrazioni). Disattivo: un’immagine fissa, più leggera"},
     {L"Background of this window",
      L"Fondo de esta ventana",
      L"Arrière-plan de cette fenêtre",
@@ -4388,6 +4378,8 @@ bool HitMore(float x, float y);
 extern bool g_moreHover;
 bool MoreFading();
 bool RingSpinning();
+bool HoverRingSpinning();
+bool AmbientSpinning();
 void DrawMoreButton();
 void TrackLeave(HWND hwnd);
 // Icon gallery (defined further down)
@@ -4612,8 +4604,8 @@ std::wstring ThemeDefaultFor(Theme t, PCWSTR key) {
         return t == Theme::Light || t == Theme::Oled ? L"0" : t == Theme::Tinted ? L"100" : L"";
     if (!wcscmp(key, L"appearance.blur")) return t == Theme::Tinted ? L"0" : L"";   // the bent picture stays sharp
     if (!wcscmp(key, L"appearance.liveGlass")) return t == Theme::Frost ? L"1" : L"";   // Glass: the live blur
-    if (!wcscmp(key, L"appearance.chromeBorder")) return t == Theme::Oled ? L"1" : L"";
-    if (!wcscmp(key, L"appearance.menuSelection")) return t == Theme::Oled ? L"gradient" : L"";   // OLED: two colors blended   // OLED: the chrome border on
+    if (!wcscmp(key, L"appearance.chromeBorder")) return t == Theme::Oled ? L"1" : L"";   // OLED: the chrome border on
+    if (!wcscmp(key, L"appearance.menuSelection")) return t == Theme::Oled ? L"gradient" : L"";   // OLED: two colors blended
     return L"";
 }
 // What a theme setting is for a theme: its own value, else its default, else the shared value
@@ -4714,17 +4706,6 @@ void LoadSettings() {
     s.glassEffect = I(L"appearance.glassEffect") != 0;
     s.folderRadius = s.siriPanelRadius = s.cornerRadius;
 
-    // ④ Custom theme: one color/opacity for the window, the Siri bar and the Siri panel
-    s.tint = ParseColor(S(L"custom.color"), s.tint);
-    s.siriPillColor = s.siriPanelColor = s.tint;
-    s.opacity = s.siriPanelOpacity = std::clamp(I(L"custom.opacity"), 0, 100) / 100.0f;
-    s.siriPillOpacity = std::min(1.0f, s.opacity + 0.12f);
-    s.siriShadeStrength = std::clamp(I(L"custom.shading"), 0, 100);
-    s.siriShade = s.siriShadeStrength > 0;
-    s.borderWidth = std::clamp(I(L"custom.borderWidth"), 0, 8);
-    s.borderColor = ParseColor(S(L"custom.borderColor"), s.borderColor);
-    s.borderOpacity = std::clamp(I(L"custom.borderOpacity"), 0, 100) / 100.0f;
-
     // ⑤ Window / Fullscreen
     s.windowWidth = std::clamp(I(L"window.width"), 30, 100);
     s.windowHeight = std::clamp(I(L"window.height"), 30, 100);
@@ -4775,7 +4756,8 @@ void LoadSettings() {
               : ix == L"scan"       ? Indexer::Scan : Indexer::Auto;
     s.maxResults = std::clamp(I(L"files.maxResults"), 10, 500);
     s.clipEnabled = I(L"clipboard.enabled") != 0;
-    s.phoneEnabled = I(L"phone.enabled") != 0 && PhoneLinkInstalled();
+    s.phoneWanted = I(L"phone.enabled") != 0;
+    s.phoneEnabled = s.phoneWanted && PhoneLinkInstalled();
     s.phoneMax = std::clamp(I(L"phone.notifications"), 1, 10);
     s.clipMax = std::clamp(I(L"clipboard.size"), 5, 200);
     {
@@ -4785,13 +4767,10 @@ void LoadSettings() {
     }
 
     Theme active = s.theme;
-    s.darkText = active == Theme::Light ? true : active == Theme::Tinted ? Luma(s.tintColor) > 0.6f
-               : active != Theme::Custom ? false : Luma(s.siri ? s.siriPanelColor : s.tint) > 0.6f;
-    // Text color chosen in the settings (every theme but Custom); automatic: clear glass follows the background
-    if (active != Theme::Custom) {
-        if (s.menuText >= 0) s.darkText = s.menuText == 1;
-        else if ((active == Theme::Glass || active == Theme::Frost) && g_autoDarkText >= 0) s.darkText = g_autoDarkText == 1;
-    }
+    s.darkText = active == Theme::Light ? true : active == Theme::Tinted ? Luma(s.tintColor) > 0.6f : false;
+    // Text color chosen in the settings; automatic: clear glass follows the background
+    if (s.menuText >= 0) s.darkText = s.menuText == 1;
+    else if ((active == Theme::Glass || active == Theme::Frost) && g_autoDarkText >= 0) s.darkText = g_autoDarkText == 1;
     g_settings = s;
     BuildTabs();
     g_winKeyEnabled = I(L"open.winKey") != 0;
@@ -4853,6 +4832,7 @@ constexpr int kPhoneKind = 8;   // App.kind of a Phone row (target: the ms-phone
 [[clang::no_destroy]] AppList g_phoneItems;      // the Phone category's rows (see PhoneRefresh)
 [[clang::no_destroy]] std::wstring g_phoneStatus;
 bool PhoneRefresh(bool force);
+void DeletePhoneLeftovers();
 bool PhoneBoxWheel(LPARAM lParam, int delta);
 int g_phoneBoxFirst, g_phoneBoxTotal;   // the Phone notifications box: the first one shown, and how many there are
 void OpenPhoneLink(const std::wstring& url);
@@ -6601,7 +6581,7 @@ D2D1_COLOR_F ThemeMenuColor() {
         case Theme::Dark: return D2D1::ColorF(0.13f, 0.13f, 0.14f, 0.86f);
         case Theme::Oled: return D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.97f);
         case Theme::Tinted: return Alpha(g_settings.tintColor, 0.90f);
-        default: return Alpha(g_settings.siri ? g_settings.siriPanelColor : g_settings.tint, 0.70f);
+        default: return D2D1::ColorF(0.10f, 0.10f, 0.12f, 0.55f);
     }
 }
 void Fill(const D2D1_RECT_F& r, D2D1_COLOR_F color, float radius = 0) {
@@ -6699,11 +6679,6 @@ void CaptureBackdrop(const RECT& rc, float sigma) {
     g_backdropImage = std::move(picture);
 }
 
-// The still blurred picture, stretched over the window (0, 0, width, height)
-void DrawBackdropPicture(ID2D1Bitmap* picture, float width, float height) {
-    D2D1_RECT_F source = D2D1::RectF(0, 0, g_backdropImage.sourceWidth, g_backdropImage.sourceHeight);
-    g_target->DrawBitmap(picture, D2D1::RectF(0, 0, width, height), 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, source);
-}
 
 ID2D1Bitmap* GetBackdropBitmap() {
     Backdrop& b = g_backdropImage;
@@ -7100,7 +7075,7 @@ float SiriShadowMargin(float s) { return ThemeShadowMargin(s); }
 
 // Window mode with a ready-made theme draws the glass slightly inside the window, leaving room for its shadow
 float WindowInset(float s) {
-    if (g_settings.siri || g_settings.fullscreen || ActiveTheme() == Theme::Custom) return 0.0f;
+    if (g_settings.siri || g_settings.fullscreen) return 0.0f;
     return std::max(std::round(16 * s), ThemeShadowMargin(s) * 0.6f);
 }
 
@@ -7687,13 +7662,7 @@ void DrawBacklightRim(const D2D1_RECT_F& r, float radius, float a) {
 // A chrome edge whose light runs around it: two highlights on opposite sides travelling slowly, with a touch of blue
 // and amber beside each, like light split by a polished metal edge. The settings button gets it under the mouse; with
 // "Animated chrome border", the bar, the results box and the menus have it all the time
-ComPtr<ID2D1RadialGradientBrush> MakeRadial(const D2D1_GRADIENT_STOP* stops, UINT32 count, D2D1_POINT_2F center, float radius) {
-    ComPtr<ID2D1GradientStopCollection> collection;
-    ComPtr<ID2D1RadialGradientBrush> brush;
-    if (FAILED(g_target->CreateGradientStopCollection(stops, count, &collection))) return nullptr;
-    g_target->CreateRadialGradientBrush(D2D1::RadialGradientBrushProperties(center, D2D1::Point2F(0, 0), radius, radius), collection.Get(), &brush);
-    return brush;
-}
+ComPtr<ID2D1RadialGradientBrush> MakeRadial(const D2D1_GRADIENT_STOP* stops, UINT32 count, D2D1_POINT_2F center, float radius);
 // Drawn as whole lines (no pieces, so no dashes where pieces meet): a faint polished edge, then the same edge again
 // painted with a light spot centered where each highlight is, so only the part of the line near it lights up
 void DrawChromeEdge(const D2D1_RECT_F& r, float radius, float a, float turnsPerSecond) {
@@ -7892,12 +7861,8 @@ void DrawCategoryMenu(const D2D1_RECT_F& r, float rad, float e) {
     const Layout& L = g_layout;
     float s = L.scale;
     PushOpacity(e);
-    if (ActiveTheme() != Theme::Custom) {
-        DrawThemedShape(r, rad, BlurStrength() > 0 ? GetBackdropBitmap() : nullptr, true);
-    } else {
-        DrawThemeShadow(r, rad, 0.20f, 10 * s, 4 * s);
-        Fill(r, Alpha(g_settings.siriPanelColor, std::max(0.55f, g_settings.siriPanelOpacity)), rad);
-    }
+    DrawThemedShape(r, rad, BlurStrength() > 0 ? GetBackdropBitmap() : nullptr, true);
+
     for (int i = 0; i < (int)g_menu.items.size(); i++) {
         const MenuItem& it = g_menu.items[i];
         float top = MenuItemTop(i);
@@ -7988,38 +7953,21 @@ void DrawPopupMenu(const D2D1::Matrix3x2F& base) {
     D2D1_RECT_F r = g_menu.rect; float rad = (g_menu.category ? 24 : 14) * s;
     if (g_menu.category) { DrawCategoryMenu(r, rad, e); return; }
     // Same glass, shadow and rim as the selected theme (power menu and context menus, in every mode)
-    bool themed = ActiveTheme() != Theme::Custom;
     DrawMenuBackdropBlur(r, rad, e);   // the icons and window under the menu, blurred (every theme)
     PushOpacity(e);
-    if (themed) {
-        // Context menus: the theme's glass, but solid enough to read over the window at any transparency,
-        // with a fine outline that sets it apart from what is behind
-        g_surfaceMaxTransparency = 35;
-        DrawThemedShape(r, rad, BlurStrength() > 0 ? GetBackdropBitmap() : nullptr, true);
-        g_surfaceMaxTransparency = 100;
-        // A text color against the theme gets a veil on the glass so it reads: light under black text, dark under white
-        bool lightGlass = ActiveTheme() == Theme::Light;
-        if (g_settings.darkText && !lightGlass) Fill(r, D2D1::ColorF(1, 1, 1, 0.55f), rad);
-        if (!g_settings.darkText && lightGlass) Fill(r, D2D1::ColorF(0, 0, 0, 0.55f), rad);
-        float bw = std::max(1.0f, 1.0f * s), half = bw / 2, rr = std::max(0.0f, rad - half);
-        g_brush->SetColor(g_settings.darkText ? D2D1::ColorF(0.45f, 0.47f, 0.52f, 0.35f) : D2D1::ColorF(1, 1, 1, 0.16f));
-        g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half), rr, rr), g_brush.Get(), bw);
-    } else {
-        DrawThemeShadow(r, rad, 0.20f, 10 * s, 4 * s);
-        ComPtr<ID2D1RoundedRectangleGeometry> geo;
-        g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(r, rad, rad), &geo);
-        if (geo) {
-            g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), geo.Get()), nullptr);
-            if (BlurStrength() > 0) {
-                if (ID2D1Bitmap* bmp = GetBackdropBitmap())
-                    g_target->DrawBitmap(bmp, D2D1::RectF(0, 0, (float)L.width, (float)L.height), 1, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
-                        D2D1::RectF(0, 0, g_backdropImage.sourceWidth, g_backdropImage.sourceHeight));
-            }
-            Fill(r, ThemeMenuColor());
-            Fill(r, D2D1::ColorF(1, 1, 1, 0.07f));
-            g_target->PopLayer();
-        }
-    }
+    // Context menus: the theme's glass, but solid enough to read over the window at any transparency,
+    // with a fine outline that sets it apart from what is behind
+    g_surfaceMaxTransparency = 35;
+    DrawThemedShape(r, rad, BlurStrength() > 0 ? GetBackdropBitmap() : nullptr, true);
+    g_surfaceMaxTransparency = 100;
+    // A text color against the theme gets a veil on the glass so it reads: light under black text, dark under white
+    bool lightGlass = ActiveTheme() == Theme::Light;
+    if (g_settings.darkText && !lightGlass) Fill(r, D2D1::ColorF(1, 1, 1, 0.55f), rad);
+    if (!g_settings.darkText && lightGlass) Fill(r, D2D1::ColorF(0, 0, 0, 0.55f), rad);
+    float bw = std::max(1.0f, 1.0f * s), half = bw / 2, rr = std::max(0.0f, rad - half);
+    g_brush->SetColor(g_settings.darkText ? D2D1::ColorF(0.45f, 0.47f, 0.52f, 0.35f) : D2D1::ColorF(1, 1, 1, 0.16f));
+    g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half), rr, rr), g_brush.Get(), bw);
+
     for (int i = 0; i < (int)g_menu.items.size(); i++) {
         const MenuItem& it = g_menu.items[i]; float top = MenuItemTop(i);
         if (it.separator) {
@@ -8053,13 +8001,7 @@ void DrawPopupMenu(const D2D1::Matrix3x2F& base) {
             g_target->DrawText(it.hint, (UINT32)wcslen(it.hint), g_hintFormat.Get(), D2D1::RectF(row.left, row.top, row.right - 12 * s, row.bottom), g_brush.Get());
         }
     }
-    g_target->PopLayer();
-    if (themed) return;   // the themed shape already has its rim
-    D2D1_GRADIENT_STOP rimStops[3] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.55f)}, {0.5f, D2D1::ColorF(1, 1, 1, 0.12f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.35f)}};
-    if (auto rim = MakeGradient(rimStops, 3, D2D1::Point2F(r.left, r.top), D2D1::Point2F(r.right, r.bottom))) {
-        rim->SetOpacity(e);
-        g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + 0.6f, r.top + 0.6f, r.right - 0.6f, r.bottom - 0.6f), rad, rad), rim.Get(), 1.2f * s);
-    }
+    g_target->PopLayer();   // (the themed shape has its own rim)
 }
 
 // ---------- Multi-select ----------
@@ -8223,14 +8165,12 @@ void DrawSearchBar(const Layout& L, float a) {
     bool box = g_settings.searchBox && !siri;
     if (box) {
         float rad = (r.bottom - r.top) / 2;
-        if (ActiveTheme() == Theme::Custom) DrawGlassButton(r, rad, a, g_searchActive ? 1.35f : 1.0f);
-        else {
-            // The same glass as the chosen theme (a field of that glass inside the window), a little brighter while typing
-            PushOpacity(a);
-            DrawThemedShape(r, rad, nullptr, false);
-            if (g_searchActive) Fill(r, Fg(0.06f), rad);
-            g_target->PopLayer();
-        }
+        // The same glass as the chosen theme (a field of that glass inside the window), a little brighter while typing
+        PushOpacity(a);
+        DrawThemedShape(r, rad, nullptr, false);
+        if (g_searchActive) Fill(r, Fg(0.06f), rad);
+        g_target->PopLayer();
+    
     }
     float m = siri ? 1.3f : 1.0f;
     float cx = r.left + (siri ? 30 : (box ? 18 : 12)) * s, cy = (r.top + r.bottom) / 2;
@@ -8809,9 +8749,9 @@ void DrawFolderPanel(float t, const D2D1_RECT_F& from, float fromPad, bool settl
     float radius = Lerp(16 * s, g_settings.folderRadius * s, t);
 
     Fill(rect, D2D1::ColorF(1, 1, 1, Lerp(0.2f, 0.04f, t)), radius);
-    if (g_settings.borderWidth > 0) {
-        g_brush->SetColor(Alpha(g_settings.borderColor, g_settings.borderOpacity * t));
-        g_target->DrawRoundedRectangle(D2D1::RoundedRect(rect, radius, radius), g_brush.Get(), g_settings.borderWidth * s);
+    {   // a fine light edge (1 px, white at 18 %)
+        g_brush->SetColor(D2D1::ColorF(1, 1, 1, 0.18f * t));
+        g_target->DrawRoundedRectangle(D2D1::RoundedRect(rect, radius, radius), g_brush.Get(), 1.0f * s);
     }
 
     D2D1_RECT_F clip = D2D1::RectF(rect.left, Lerp(rect.top, L.viewTop, t), rect.right, Lerp(rect.bottom, L.viewBottom, t));
@@ -8888,48 +8828,6 @@ void DrawFolderPanel(float t, const D2D1_RECT_F& from, float fromPad, bool settl
 
 void StartFrames();
 
-void DrawGlass(const D2D1_RECT_F& r, float radius, float sheenScale = 1.0f) {
-    float s = g_layout.scale;
-    float w = r.right - r.left;
-    ComPtr<ID2D1GradientStopCollection> sheenStops;
-    ComPtr<ID2D1LinearGradientBrush> sheen;
-    D2D1_GRADIENT_STOP sheenData[3] = {
-        {0.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, (g_settings.darkText ? 0.30f : 0.16f) * sheenScale)},
-        {0.45f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.04f * sheenScale)},
-        {1.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.0f)},
-    };
-    if (SUCCEEDED(g_target->CreateGradientStopCollection(sheenData, 3, &sheenStops)) &&
-        SUCCEEDED(g_target->CreateLinearGradientBrush(
-            D2D1::LinearGradientBrushProperties(D2D1::Point2F(r.left, r.top), D2D1::Point2F(r.left + w * 0.4f, r.bottom)),
-            sheenStops.Get(), &sheen))) {
-        g_target->FillRoundedRectangle(D2D1::RoundedRect(r, radius, radius), sheen.Get());
-    }
-    if (g_settings.fullscreen) return;
-
-    ComPtr<ID2D1GradientStopCollection> rimStops;
-    ComPtr<ID2D1LinearGradientBrush> rim;
-    D2D1_GRADIENT_STOP rimData[4] = {
-        {0.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.60f)},
-        {0.30f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.12f)},
-        {0.70f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.10f)},
-        {1.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.45f)},
-    };
-    if (FAILED(g_target->CreateGradientStopCollection(rimData, 4, &rimStops)) ||
-        FAILED(g_target->CreateLinearGradientBrush(
-            D2D1::LinearGradientBrushProperties(D2D1::Point2F(r.left, r.top), D2D1::Point2F(r.right, r.bottom)),
-            rimStops.Get(), &rim))) return;
-    float bw = std::max(1.0f, 1.5f * s), half = bw / 2;
-    float outer = std::max(0.0f, radius - half);
-    g_target->DrawRoundedRectangle(
-        D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half), outer, outer),
-        rim.Get(), bw);
-    float inset = bw + 1.5f * s, inner = std::max(0.0f, radius - inset);
-    rim->SetOpacity(0.35f);
-    g_target->DrawRoundedRectangle(
-        D2D1::RoundedRect(D2D1::RectF(r.left + inset, r.top + inset, r.right - inset, r.bottom - inset), inner, inner),
-        rim.Get(), bw * 0.8f);
-}
-
 void PushOpacity(float a) {
     g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), a), nullptr);
 }
@@ -9002,7 +8900,7 @@ void DrawSiriIntroOrb(const Layout& L) {
     const float cy = (r.top + r.bottom) * 0.5f;
     const float t = (float)Now() * 2.8f;
     const float intro = std::clamp(g_pillIntro / kIntroCircle, 0.0f, 1.0f);
-    const float alpha = (1.0f - Ease(intro)) * g_settings.siriPillOpacity;
+    const float alpha = (1.0f - Ease(intro)) * 0.72f;
     const float radius = size * 0.29f;
 
     struct OrbColor { float r, g, b, phase; };
@@ -9096,6 +8994,16 @@ ComPtr<ID2D1LinearGradientBrush> MakeGradient(const D2D1_GRADIENT_STOP* stops, U
     g_target->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(from, to), collection.Get(), &brush);
     return brush;
 }
+// The same, round (its stop collection kept with the linear ones)
+ComPtr<ID2D1RadialGradientBrush> MakeRadial(const D2D1_GRADIENT_STOP* stops, UINT32 count, D2D1_POINT_2F center, float radius) {
+    ComPtr<ID2D1LinearGradientBrush> linear = MakeGradient(stops, count, center, center);
+    ComPtr<ID2D1GradientStopCollection> collection;
+    if (!linear) return nullptr;
+    linear->GetGradientStopCollection(&collection);
+    ComPtr<ID2D1RadialGradientBrush> brush;
+    g_target->CreateRadialGradientBrush(D2D1::RadialGradientBrushProperties(center, D2D1::Point2F(0, 0), radius, radius), collection.Get(), &brush);
+    return brush;
+}
 
 // ---------- Liquid glass (Glass theme, like macOS 26): the screen behind, refracted at the edges ----------
 // A snapshot of the screen is taken as the launcher opens (before it shows). Each glass shape draws that picture
@@ -9151,7 +9059,9 @@ bool LiquidSetting() {
 }
 bool LiquidActive() { return LiquidWanted() && g_liquid.width > 0; }
 
+void ResetFlatGlass();
 void FreeLiquid() {
+    ResetFlatGlass();   // (its blurred copy of the snapshot too)
     g_liquid.pixels.clear(); g_liquid.pixels.shrink_to_fit();
     g_liquid.width = g_liquid.height = 0; g_liquid.bitmap.Reset(); g_liquid.fresh = false;
     g_liquidMaps.clear();
@@ -9271,6 +9181,7 @@ float GlassSigma(float s) {
 // (a full-screen blur every frame would be heavy in Fullscreen)
 struct FlatCache { ComPtr<ID2D1Effect> source, blur, color; UINT version = 0, generation = 0; float sigma = -1, dx = 0, dy = 0; };
 [[clang::no_destroy]] FlatCache g_lqFlat;
+void ResetFlatGlass() { g_lqFlat = FlatCache{}; }
 ID2D1Effect* FlatGlassImage(ID2D1DeviceContext* dc, ID2D1Bitmap* snap, float sigma, float dx, float dy) {
     FlatCache& c = g_lqFlat;
     if (c.color && c.version == g_liquidVersion && c.generation == g_targetGeneration && c.sigma == sigma && c.dx == dx && c.dy == dy)
@@ -9635,49 +9546,9 @@ void DrawThemedShapeBody(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdr
 }
 
 void DrawSiriShapes(const Layout& L) {
-    float s = L.scale, W = (float)L.width, H = (float)L.height;
+    float s = L.scale;
     ID2D1Bitmap* backdrop = BlurStrength() > 0 ? GetBackdropBitmap() : nullptr;
-    const bool themed = ActiveTheme() != Theme::Custom;
-
-    // One continuous vertical gradient across pill, power pill and panel (macOS style):
-    // darkest at the top of the pill, getting lighter (slightly cool) towards the bottom of the panel
-    const bool shading = !themed && g_settings.siriShade && !g_settings.darkText && g_settings.siriShadeStrength > 0;
-    const float k = g_settings.siriShadeStrength / 100.0f;
-    ComPtr<ID2D1LinearGradientBrush> shade;
-    if (shading) {
-        D2D1_GRADIENT_STOP data[3] = {
-            {0.0f, D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.60f * k)},
-            {0.45f, D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.10f * k)},
-            {1.0f, D2D1::ColorF(0.85f, 0.88f, 1.0f, 0.30f * k)},
-        };
-        float top = L.search.top, bottom = std::max({L.search.bottom, L.siriPanel.bottom, L.siriPower.bottom});
-        ComPtr<ID2D1GradientStopCollection> stops;
-        if (SUCCEEDED(g_target->CreateGradientStopCollection(data, 3, &stops)))
-            g_target->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(D2D1::Point2F(0, top), D2D1::Point2F(0, std::max(top + 1, bottom))),
-                                                stops.Get(), &shade);
-    }
-    auto shape = [&](const D2D1_RECT_F& r, float radius, D2D1_COLOR_F color, float opacity) {
-        if (themed) { DrawThemedShape(r, radius, backdrop, true); return; }
-        if (backdrop) {
-            ComPtr<ID2D1RoundedRectangleGeometry> clip;
-            g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(r, radius, radius), &clip);
-            if (clip) {
-                g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip.Get()), nullptr);
-                DrawBackdropPicture(backdrop, W, H);
-                g_target->PopLayer();
-            }
-        }
-        g_brush->SetColor(Alpha(color, opacity));
-        g_target->FillRoundedRectangle(D2D1::RoundedRect(r, radius, radius), g_brush.Get());
-        if (shade) g_target->FillRoundedRectangle(D2D1::RoundedRect(r, radius, radius), shade.Get());
-        DrawGlass(r, radius, shade ? 0.35f : 1.0f);
-        if (g_settings.borderWidth > 0) {
-            float bw = g_settings.borderWidth * s, half = bw / 2, rr = std::max(0.0f, radius - half);
-            g_brush->SetColor(Alpha(g_settings.borderColor, g_settings.borderOpacity));
-            D2D1_RECT_F edge = D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half);
-            g_target->DrawRoundedRectangle(D2D1::RoundedRect(edge, rr, rr), g_brush.Get(), bw);
-        }
-    };
+    auto shape = [&](const D2D1_RECT_F& r, float radius) { DrawThemedShape(r, radius, backdrop, true); };
 
     float ex = SiriExpandEase();
     float panelW = L.siriPanel.right - L.siriPanel.left, panelH = L.siriPanel.bottom - L.siriPanel.top;
@@ -9686,19 +9557,19 @@ void DrawSiriShapes(const Layout& L) {
         float rad = std::min({Lerp(pillR, g_settings.siriPanelRadius * s, ex), panelH / 2, panelW / 2});
         float pa = std::min(1.0f, g_siriAnim * 4);
         PushOpacity(pa);
-        shape(L.siriPanel, rad, g_settings.siriPanelColor, g_settings.siriPanelOpacity);
+        shape(L.siriPanel, rad);
         g_target->PopLayer();
     }
 
     float powerHeight = L.siriPower.bottom - L.siriPower.top;
-    if (powerHeight > 2) shape(L.siriPower, powerHeight / 2, g_settings.siriPillColor, g_settings.siriPillOpacity);
+    if (powerHeight > 2) shape(L.siriPower, powerHeight / 2);
 
     // Floating power button: drawn before the bar so it comes out from behind it
     if (L.btnPower.right > L.btnPower.left) {
         const D2D1_RECT_F& b = L.btnPower;
         float r = (b.right - b.left) / 2;
         PushOpacity(Ease(g_siriBtnAnim));
-        shape(b, r, g_settings.siriPillColor, g_settings.siriPillOpacity);
+        shape(b, r);
         if (g_powerHover || g_powerPillByButton) Fill(b, Fg(g_powerPillByButton ? 0.18f : 0.12f), r);
         DrawPowerIcon(D2D1::Point2F((b.left + b.right) / 2, (b.top + b.bottom) / 2), s, 1.0f);
         g_target->PopLayer();
@@ -9707,7 +9578,7 @@ void DrawSiriShapes(const Layout& L) {
     if (ia > 0.001f) {
         bool layer = ia < 0.999f;
         if (layer) PushOpacity(ia);
-        shape(L.search, (L.search.bottom - L.search.top) / 2, g_settings.siriPillColor, g_settings.siriPillOpacity);
+        shape(L.search, (L.search.bottom - L.search.top) / 2);
         if (layer) g_target->PopLayer();
     }
     DrawSiriIntroOrb(L);
@@ -10190,32 +10061,10 @@ void Render() {
         else DrawSiriShapes(L);
     }
     const bool windowBg = !g_settings.siri && !g_cfg.active;   // with the settings open the window is folded away
-    const bool themed = windowBg && ActiveTheme() != Theme::Custom;
-    if (themed) {
+    if (windowBg) {
         // Window mode keeps a margin so the theme shadow fits inside the window
         float m = WindowInset(L.scale);
         DrawThemedShape(D2D1::RectF(m, m, W - m, H - m), std::max(0.0f, radius - m * 0.25f), GetBackdropBitmap(), !g_settings.fullscreen);
-    }
-    if (!themed && BlurStrength() > 0 && windowBg) {
-        if (ID2D1Bitmap* bitmap = GetBackdropBitmap()) {
-            ComPtr<ID2D1RoundedRectangleGeometry> clipGeo;
-            g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(D2D1::RectF(0, 0, W, H), radius, radius), &clipGeo);
-            g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clipGeo.Get()), nullptr);
-            DrawBackdropPicture(bitmap, W, H);
-            g_target->PopLayer();
-        }
-    }
-
-    if (windowBg && !themed) {
-        g_brush->SetColor(Alpha(g_settings.tint, g_settings.opacity));
-        g_target->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(0, 0, W, H), radius, radius), g_brush.Get());
-        DrawGlass(D2D1::RectF(0, 0, W, H), radius);
-    }
-
-    if (!g_settings.fullscreen && windowBg && !themed && g_settings.borderWidth > 0) {
-        float bw = g_settings.borderWidth * L.scale, h = bw / 2, rr = std::max(0.0f, radius - h);
-        g_brush->SetColor(Alpha(g_settings.borderColor, g_settings.borderOpacity));
-        g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(h, h, W - h, H - h), rr, rr), g_brush.Get(), bw);
     }
 
     D2D1::Matrix3x2F zoomMatrix = fx.m;
@@ -10623,11 +10472,14 @@ void OnFrame() {
         }
         if (relayout) { ComputeLayout(); FitCategoryMenu(); }
     }
+    // Only the slow ambient animations are running: a frame every 1/30 s is enough
+    bool ambientOnly = !animating && !JiggleActive() && !MoreFading() && !HoverRingSpinning() && AmbientSpinning();
     if (JiggleActive() || MoreFading() || RingSpinning()) animating = true;
     bool done = g_settings.siri ? (g_closing && g_siriClosingPill && g_pillIntro <= 0.0f)
                                 : (g_closing && g_appear <= 0);
+    static double lastAmbient = 0;
     if (done) { HideNow(); animating = false; }
-    else Render();
+    else if (!ambientOnly || Now() - lastAmbient >= 1.0 / 30) { lastAmbient = Now(); Render(); }
     if (!animating) StopFrames();
 }
 ////////////////////////////////////////////////////////////////////////////////
@@ -10823,6 +10675,11 @@ void Open() {
     ForceForeground(g_wnd); PlaceWindows(); Render(); StartFrames();
     // The app list follows installs by itself (WatchApps); as a fallback it is also read again when opening, at most every 5 minutes
     if (!g_appsLoaded || Now() - g_appsTime > 300 || g_appsIconPixels != IconPixels()) StartLoadingApps();
+    if (g_settings.phoneWanted && !g_settings.phoneEnabled && PhoneLinkInstalled()) {   // Phone Link installed since
+        g_settings.phoneEnabled = true;
+        BuildTabs();
+        UpdateCategoryHotkeys();
+    }
     if (g_settings.phoneEnabled) {
         PhoneRefresh(false);
         if (g_siriTab == 6) { RefreshTabItems(false); SetTimer(g_wnd, kTimerPhone, 3000, nullptr); }
@@ -12307,6 +12164,7 @@ void UpdateCategoryHotkeys() {
     for (int tab : kShortcutTabs) UnregisterHotKey(g_wnd, kHotkeyBase + tab);
     if (!g_settings.siriOriginal || !g_shortcutsAnywhere || g_cfg.capture >= 0) return;
     for (int tab : kShortcutTabs) {
+        if (!TabEnabled(tab)) continue;   // a category that is off doesn't take its key from other programs
         const Shortcut& sc = g_shortcuts[tab];
         if (sc.valid && !RegisterHotKey(g_wnd, kHotkeyBase + tab, MOD_CONTROL | (sc.shift ? MOD_SHIFT : 0) | MOD_NOREPEAT, sc.vk))
             Wh_Log(L"RegisterHotKey %s failed (%u)", g_shortcutLabels[tab].c_str(), GetLastError());
@@ -12593,8 +12451,8 @@ bool CfgItemLocked(const CfgItem& it) {
 std::wstring CfgItemDesc(const CfgItem& it) {
     PCWSTR d = CfgT(it.descEn, it.descPt);
     if (!wcscmp(it.key, L"appearance.liveGlass") && CfgNow(L"theme") == L"frost")
-        d = CfgT(L"On: the glass follows videos and animated wallpapers. Off: a still picture, lighter on the PC",
-                 L"Ligado: o vidro acompanha vídeos e papéis de parede animados. Desligado: uma imagem parada, mais leve para o PC");
+        d = CfgT(L"On: the glass follows videos and animated wallpapers (the launcher then stays out of screenshots and recordings). Off: a still picture, lighter on the PC",
+                 L"Ligado: o vidro acompanha vídeos e papéis de parede animados (o menu não aparece em capturas de tela e gravações). Desligado: uma imagem parada, mais leve para o PC");
     std::wstring desc = d ? d : L"", note = CfgItemNote(it);
     if (note.empty()) return desc;
     return desc.empty() ? note : desc + L"\n" + note;
@@ -12800,17 +12658,7 @@ void CfgSurface(const D2D1_RECT_F& r, float rad, float alpha, bool tint) {
         float bw = std::max(1.0f, 1.0f * s), half = bw / 2, rr = std::max(0.0f, rad - half);
         g_brush->SetColor(g_settings.darkText ? D2D1::ColorF(0.45f, 0.47f, 0.52f, 0.30f) : D2D1::ColorF(1, 1, 1, 0.16f));
         g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half), rr, rr), g_brush.Get(), bw);
-    } else if (ActiveTheme() != Theme::Custom) DrawThemedShape(r, rad, nullptr, true);
-    else {
-        DrawThemeShadow(r, rad, 0.22f, 12 * s, 5 * s);
-        Fill(r, Alpha(g_settings.siriPanelColor, std::max(0.6f, g_settings.siriPanelOpacity)), rad);
-        if (g_settings.borderWidth > 0) {
-            float bw = g_settings.borderWidth * s, half = bw / 2;
-            g_brush->SetColor(Alpha(g_settings.borderColor, g_settings.borderOpacity));
-            g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half),
-                                                             std::max(0.0f, rad - half), std::max(0.0f, rad - half)), g_brush.Get(), bw);
-        }
-    }
+    } else DrawThemedShape(r, rad, nullptr, true);
     if (tint) Fill(r, g_settings.darkText ? D2D1::ColorF(1, 1, 1, 0.38f) : D2D1::ColorF(0.05f, 0.05f, 0.07f, 0.34f), rad);
     g_target->PopLayer();
 }
@@ -13101,11 +12949,14 @@ float MoreGearT() {
 }
 bool MoreFading() { return g_moreHoverAt >= 0 && Now() - g_moreHoverAt < 0.22; }
 // The settings button's chrome ring turns while the mouse is on it
-bool RingSpinning() {
-    if (g_settings.chromeRing && ((g_moreHover && MoreShown()) || (g_gear.hover && !g_cfg.active && g_gear.anim > 0))) return true;
-    // The backlight's colors and the chrome border turn all the time the launcher is open
+bool HoverRingSpinning() {
+    return g_settings.chromeRing && ((g_moreHover && MoreShown()) || (g_gear.hover && !g_cfg.active && g_gear.anim > 0));
+}
+// The backlight's colors and the chrome border turn all the time the launcher is open (slowly: 30 frames a second is plenty)
+bool AmbientSpinning() {
     return g_shown && !g_settings.light && ((g_settings.backlight && g_settings.backlightIntensity > 0) || g_settings.chromeBorder);
 }
+bool RingSpinning() { return HoverRingSpinning() || AmbientSpinning(); }
 void DrawMoreButton() {
     if (!MoreShown()) return;
     D2D1_RECT_F g = GearRect();
@@ -13252,8 +13103,7 @@ void DrawCfgWindow() {
     if (a <= 0.001f) return;
     float rad = g_cfg.fullscreen ? 0.0f : g_settings.cornerRadius * g_layout.scale;
     PushOpacity(a);
-    if (ActiveTheme() != Theme::Custom) DrawThemedShape(g_cfg.window, rad, nullptr, !g_cfg.fullscreen);
-    else { Fill(g_cfg.window, Alpha(g_settings.tint, g_settings.opacity), rad); DrawGlass(g_cfg.window, rad); }
+    DrawThemedShape(g_cfg.window, rad, nullptr, !g_cfg.fullscreen);
     g_target->PopLayer();
 }
 
@@ -13467,8 +13317,9 @@ bool B64ToW(const std::string& s, std::wstring& out) { std::string raw; if (!B64
 ////////////////////////////////////////////////////////////////////////////////
 // Phone (Phone Link / "Vincular ao Celular"). Phone Link keeps the card that Windows' Start menu shows beside it
 // (the linked phone: its picture, name, connection and battery, its features and the latest notifications) in an
-// Adaptive Card file it updates by itself. The Phone category reads that same file: no database, no network, nothing
-// leaves the PC, and every link opens Phone Link itself (ms-phone:...).
+// Adaptive Card file it updates by itself. The Phone category reads that file, and the notifications themselves from a
+// temporary copy of Phone Link's notifications database (see PhoneNotifThread). Nothing is written to Phone Link,
+// nothing leaves the PC, and every link opens Phone Link itself (ms-phone:...).
 
 // A small JSON reader (the card is JSON)
 enum class JType { Null, Bool, Num, Str, Arr, Obj };
@@ -13755,7 +13606,12 @@ void BuildPhoneItems(const JVal& card, AppList& out, int px) {
     for (const JVal* img : head.images) {
         std::wstring tip = img->Text(L"tooltip");
         if (tip.empty()) phonePics.push_back(img->Text(L"url"));
-        else if (tip.find(L"Bluetooth") != std::wstring::npos) bluetooth = tip.find(L"desativ") == std::wstring::npos && tip.find(L"off") == std::wstring::npos;
+        else if (tip.find(L"Bluetooth") != std::wstring::npos) {
+            // Only when the tooltip clearly says it is on (in other display languages it stays out of the line)
+            std::wstring t = ToLower(tip);
+            bluetooth = (t.find(L"ativad") != std::wstring::npos && t.find(L"desativ") == std::wstring::npos) ||
+                        (t.find(L" on") != std::wstring::npos && t.find(L" off") == std::wstring::npos) || t.find(L"enabled") != std::wstring::npos;
+        }
     }
     std::wstring status = connection;
     if (bluetooth) status += std::wstring(status.empty() ? L"" : L"   \u00B7   ") + L"Bluetooth";
@@ -13927,12 +13783,8 @@ DWORD WINAPI PhoneNotifThread(LPVOID param) {
     HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     auto* result = new PhoneNotifResult;
     WinSqlite q;
-    WCHAR tmpRoot[MAX_PATH];
-    std::wstring tmp;
-    if (GetTempPathW(MAX_PATH, tmpRoot)) {
-        tmp = std::wstring(tmpRoot) + L"SiriPlusLaunchpad-phone\\";
-        CreateDirectoryW(tmp.c_str(), nullptr);
-    }
+    std::wstring tmp = ModFolder(L"Phone");   // the mod's storage (Windhawk removes it with the mod)
+    if (!tmp.empty()) tmp += L"\\";              // (OpenPhoneDb appends the file name)
     std::vector<std::wstring> made;
     if (!tmp.empty() && q.Load()) {
         if (g_phoneIconCachePx != job->px) { g_phoneIconCache.clear(); g_phoneIconCachePx = job->px; }
@@ -13989,6 +13841,20 @@ DWORD WINAPI PhoneNotifThread(LPVOID param) {
     if (!job->wnd || !PostMessageW(job->wnd, WM_APP_PHONE, 0, (LPARAM)result)) delete result;
     if (SUCCEEDED(co)) CoUninitialize();
     return 0;
+}
+// Copies left by a read that was cut short (Explorer closed or crashed meanwhile): removed when the launcher starts,
+// whether or not the Phone category is on
+void DeletePhoneLeftovers() {
+    WCHAR base[MAX_PATH];
+    if (!Wh_GetModStoragePath(base, ARRAYSIZE(base))) return;
+    std::wstring dir = std::wstring(base) + L"\\Phone\\";
+    WIN32_FIND_DATAW fd;
+    HANDLE find = FindFirstFileW((dir + L"*").c_str(), &fd);
+    if (find == INVALID_HANDLE_VALUE) return;
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) DeleteFileW((dir + fd.cFileName).c_str());
+    } while (FindNextFileW(find, &fd));
+    FindClose(find);
 }
 HANDLE g_phoneThread;
 FILETIME g_phoneNotifStamp{};
@@ -14171,7 +14037,9 @@ void OnPhoneNotifs(PhoneNotifResult* result) {
     if (g_shown && g_siriTab == 6) { RefreshTabItems(false); StartFrames(); }
 }
 void OpenPhoneLink(const std::wstring& url) {
-    ShellExecuteW(nullptr, L"open", url.empty() ? L"ms-phone:" : url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    // Only Phone Link's own links (they come from Phone Link's files)
+    std::wstring link = url.rfind(L"ms-phone:", 0) == 0 ? url : L"ms-phone:";
+    ShellExecuteW(nullptr, L"open", link.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
 bool ReadWholeFile(const std::wstring& path, std::string& out, DWORD maxBytes) {
@@ -16170,6 +16038,7 @@ HANDLE g_readyEvent;
 
 
 DWORD WINAPI StartThread(void*) {
+    DeletePhoneLeftovers();   // (copies of Phone Link's database from a read that was cut short)
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2); OleInitialize(nullptr);
     LoadSettings(); LoadFolders(); LoadCustomTabs(); LoadBuiltinTabs(); LoadCustomIcons();
     LoadSearchHistory(); LoadLaunchCounts();
@@ -16233,8 +16102,11 @@ DWORD WINAPI StartThread(void*) {
     MSG msg;
     while (PeekMessageW(&msg, nullptr, WM_APP_APPS, WM_APP_APPS, PM_REMOVE)) delete (AppList*)msg.lParam;
     while (PeekMessageW(&msg, nullptr, WM_APP_FILES, WM_APP_FILES, PM_REMOVE)) delete (FileResult*)msg.lParam;
+    while (PeekMessageW(&msg, nullptr, WM_APP_PHONE, WM_APP_PHONE, PM_REMOVE)) delete (PhoneNotifResult*)msg.lParam;
     g_selection.clear(); g_menu = PopupMenu{};
     AppList().swap(g_apps); AppList().swap(g_tabItems); AppList().swap(g_fileResults);
+    AppList().swap(g_phoneItems); AppList().swap(g_phoneCard); AppList().swap(g_phoneNotifs);   // (their bitmaps and text layouts)
+    ResetFlatGlass();
     g_clipHistory.clear(); g_clipTimes.clear();
     g_searchHistory.clear();
     g_fileStatus.clear();
