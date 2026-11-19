@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-19T04:05:11.000Z</updated>
+    <updated>2026-11-19T05:01:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar auto-hide speed 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-speed#117a781f71dc5f3cf24815e2cda3a6773dba286c</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-speed"/>
+        <updated>2026-11-19T05:01:44.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added animation options that make the auto-hide feel more smooth and natural.</li>
+<li>The animation now syncs to the display refresh rate, making the animation more smooth. It can be disabled in the settings if a custom refresh rate is desired.</li>
+<li>Improved the accuracy of the custom refresh rate timer.</li>
+<li>Fixed the &quot;Customize the old taskbar on Windows 11&quot; option on Windows 11 24H2 builds before 26100.1301, which still include the old taskbar.</li>
+</ul>
+<p>The first two changes were contributed by <a href="https://github.com/eduard-lt">Eduard Olteanu</a>.</p>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WinTips OSD 1.6.2]]></title>
         <id>https://windhawk.net/mods/wintips-osd#ea836b0306a8f90f3069597d97f3a0da689745de</id>
@@ -818,23 +836,6 @@ the F1 part copies, and to DarkShadow44’s reverse-engineering notes on UIRibbo
         <updated>2026-11-18T02:00:21.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li><strong>Mod Ownership Transfer:</strong> Transferred mod ownership and maintenance from <code>@caotu2k5</code> to <code>@caotu2005</code>.</li>
-</ul>
-]]></content>
-        <author>
-            <name>caotu2005</name>
-            <uri>https://github.com/caotu2005</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Modern Run Dialog UI For Windows 10 & 11 5.0.104]]></title>
-        <id>https://windhawk.net/mods/modern-run-dialog-ui#376de0f3fc56737e6a09c7ef1d8af3d822adbdc6</id>
-        <link href="https://windhawk.net/mods/modern-run-dialog-ui"/>
-        <updated>2026-11-18T02:00:14.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Mod Ownership Transfer:</strong> Transferred mod ownership and maintenance from <code>@caotu2k5</code> to <code>@caotu2005</code> ( supersedes #7422 ).</li>
-<li><strong>Major UI Overhaul — Floating Pill Launcher &amp; Compact Mini-Pill Mode:</strong> Redesigned the Run dialog into a synchronized floating pill command bar with a detached rounded pill card for History, App Suggestions, Math Results, and Translations, complete with smooth open/close animations, smart taskbar-aware centering, and a default <code>340px</code> <strong>Compact Mini-Pill Mode</strong>.</li>
-<li><strong>Instant Math Calculator &amp; Built-in Google Translate (<code>文A</code>):</strong> Added live mathematical expression evaluation directly in the input bar (<code>1+1</code>, <code>sqrt(144)</code>, <code>sin(pi/2)</code>, <code>2^10</code>) and an in-app multi-language <strong>Translate Mode</strong> (<code>文A</code>) with a multi-line expanding input box, 22-language selector pills with one-click swap (<code>⇄</code>), and browser popup translation integration.</li>
-<li><strong>Refined <code>⚙️</code> Quick Settings Menu, Native Vietnamese IME &amp; Memory Optimizations:</strong> Redesigned the <code>⚙️</code> popup menu with 3D Liquid Glass toggle switches, upgraded the input control to <code>RICHEDIT50W</code> (<code>msftedit.dll</code>) for seamless Windows 11 TSF inline Vietnamese IME composition and auto-focus on <code>Win + R</code>, unified web search under <code>google:&lt;keyword&gt;</code>, and optimized Liquid Glass <code>1/4</code>-res backdrop caching &amp; memory cleanup.</li>
 </ul>
 ]]></content>
         <author>
