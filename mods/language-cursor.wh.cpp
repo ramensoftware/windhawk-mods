@@ -33,13 +33,19 @@ follows the layout of the app you are working in.
 * **Only over text fields**: while the pointer is an I-beam.
 * **Briefly after switching language**: for a duration you choose.
 
-While you type, many apps hide the mouse pointer. With **Show at the text
-caret while the pointer is hidden** turned on, the badge then moves next to the
-text caret, in apps that report where their caret is.
+With **Show at the text caret while typing** turned on, the badge moves next to
+the text caret when you start typing, and goes back to the mouse pointer when
+you move the mouse. This works in apps that report where their caret is.
 
 It can also hide when the pointer is hidden and in full-screen apps. You can
 set its position around the pointer, distance, font size, opacity, corner
 roundness and drop shadow.
+
+## Caps Lock and Num Lock
+
+The label can also show a mark while a lock key is on: `⇪` for Caps Lock and
+`#` for Num Lock. Each one has its own setting. The marks are part of the text
+label, so they aren't shown on badges that use an image.
 
 ## Per-language styles
 
@@ -79,8 +85,7 @@ is moving, and slows down to about 8 checks a second when nothing is happening.
   may not appear over some full-screen games.
 * Animated GIF images show only their first frame.
 * Showing the badge at the text caret depends on the app. Some apps don't
-  report the caret position, and the badge stays hidden there while the pointer
-  is hidden.
+  report the caret position, and there the badge stays with the mouse pointer.
 * **Only over text fields** and the text-cursor mode work with the standard
   Windows I-beam pointer. Apps that draw their own text pointer are not
   detected.
@@ -132,10 +137,14 @@ is moving, and slows down to about 8 checks a second when nothing is happening.
   - AfterSwitch: Briefly after switching language
 - afterSwitchMs: 1500
   $name: After-switch duration (500 to 5000 ms)
+- showCapsLock: true
+  $name: Show a mark while Caps Lock is on
+- showNumLock: false
+  $name: Show a mark while Num Lock is on
 - hideWhenPointerHidden: true
   $name: Hide when the pointer is hidden
 - showAtCaret: true
-  $name: Show at the text caret while the pointer is hidden (typing)
+  $name: Show at the text caret while typing
 - hideInFullScreen: true
   $name: Hide in fullscreen apps
 - typingScale: 200
@@ -215,6 +224,7 @@ struct Settings {
     Visibility visibility = Visibility::OverText;
     DWORD afterSwitchMs = 1500;
     bool hideWhenPointerHidden = true, hideInFullScreen = true, showAtCaret = true;
+    bool showCapsLock = true, showNumLock = false;
     double typingScale = 2;
     std::vector<Mapping> mappings;
 };
@@ -298,6 +308,8 @@ Settings LoadSettings() {
     settings.hideWhenPointerHidden = Wh_GetIntSetting(L"hideWhenPointerHidden") != 0;
     settings.hideInFullScreen = Wh_GetIntSetting(L"hideInFullScreen") != 0;
     settings.showAtCaret = Wh_GetIntSetting(L"showAtCaret") != 0;
+    settings.showCapsLock = Wh_GetIntSetting(L"showCapsLock") != 0;
+    settings.showNumLock = Wh_GetIntSetting(L"showNumLock") != 0;
     settings.typingScale = std::clamp(Wh_GetIntSetting(L"typingScale"), 100, 300) / 100.;
     for (int index = 0; index < 256; ++index) {
         std::wstring prefix = L"languages[" + std::to_wstring(index) + L"].";
@@ -441,11 +453,16 @@ Gdiplus::Color ForegroundColor(Gdiplus::Color background) {
         ? Gdiplus::Color(255, 255, 255, 255) : dark;
 }
 
-Style BuildStyle(const Settings& settings, const Language& language, const Mapping* mapping) {
+constexpr int kCapsLock = 1, kNumLock = 2;
+
+Style BuildStyle(const Settings& settings, const Language& language, const Mapping* mapping, int locks) {
     constexpr DWORD palette[] = {0xff0067c0, 0xffc42b1c, 0xff0f7b0f, 0xff8764b8,
         0xffca5010, 0xff038387, 0xffe3008c, 0xff4a5459};
     Style style;
     style.text = mapping && !mapping->label.empty() ? mapping->label : language.label;
+    if (locks) { style.text += L" "; }
+    if (locks & kCapsLock) { style.text += L"\u21EA"; }
+    if (locks & kNumLock) { style.text += L"#"; }
     style.background = Gdiplus::Color(palette[LOWORD(reinterpret_cast<uintptr_t>(language.layout)) % ARRAYSIZE(palette)]);
     if (mapping) {
         style.background = ParseColor(mapping->color, style.background);
@@ -805,8 +822,11 @@ class Runtime {
     BYTE alpha_ = 0;
     POINT location_{LONG_MIN, LONG_MIN};
     POINT lastCursor_{LONG_MIN, LONG_MIN};
-    ULONGLONG movedAt_ = 0, lastCaret_ = 0;
+    ULONGLONG movedAt_ = 0, lastCaret_ = 0, caretSeen_ = 0;
+    DWORD lastInput_ = 0;
+    POINT caretFrom_{};
     bool fading_ = false, atCaret_ = false;
+    int locks_ = 0;
     RECT caret_{};
 
 public:
@@ -859,6 +879,13 @@ public:
                 switched_ = now;
                 dirty = true;
             }
+            int locks = (settings_.showCapsLock && (GetKeyState(VK_CAPITAL) & 1) ? kCapsLock : 0) |
+                (settings_.showNumLock && (GetKeyState(VK_NUMLOCK) & 1) ? kNumLock : 0);
+            if (locks != locks_) {
+                locks_ = locks;
+                switched_ = now;
+                dirty = true;
+            }
             if (dirty) {
                 installed_ = InstalledLayouts();
                 const Mapping* selected = SelectMapping(settings_, language_, installed_);
@@ -868,21 +895,44 @@ public:
         }
         CURSORINFO cursor{sizeof(cursor)};
         bool gotCursor = GetCursorInfo(&cursor) != FALSE;
+        bool mouseMoved = false;
         if (gotCursor && (cursor.ptScreenPos.x != lastCursor_.x ||
                           cursor.ptScreenPos.y != lastCursor_.y)) {
             lastCursor_ = cursor.ptScreenPos;
             movedAt_ = now;
+            mouseMoved = true;
         }
-        // While the pointer is hidden (many apps hide it during typing), the
-        // badge can sit next to the text caret instead.
+        // The badge moves to the text caret when typing starts and returns to
+        // the pointer when the mouse moves. Typing is seen as input that is not
+        // a mouse move or a click, so no keyboard hook is needed. The caret is
+        // only asked for when the badge could be shown there.
         bool pointerVisible = gotCursor && (cursor.flags & CURSOR_SHOWING) != 0;
-        bool wantCaret = gotCursor && !pointerVisible && settings_.enabled && settings_.showAtCaret &&
-            settings_.mode == Mode::FollowPointer;
-        if (!wantCaret) {
+        LASTINPUTINFO input{sizeof(input)};
+        DWORD inputTick = GetLastInputInfo(&input) ? input.dwTime : lastInput_;
+        bool otherInput = inputTick != lastInput_ && !mouseMoved;
+        lastInput_ = inputTick;
+        bool buttons = ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON) |
+                         GetAsyncKeyState(VK_MBUTTON)) & 0x8001) != 0;
+        bool caretAllowed = gotCursor && settings_.enabled && settings_.showAtCaret &&
+            settings_.mode == Mode::FollowPointer && !(settings_.hideInFullScreen && fullscreen_);
+        if (!caretAllowed) {
             atCaret_ = false;
-        } else if (now - lastCaret_ >= 50) {
-            lastCaret_ = now;
-            atCaret_ = CaretRect(caret_);
+        } else {
+            if (atCaret_ && (std::abs(cursor.ptScreenPos.x - caretFrom_.x) > 4 ||
+                             std::abs(cursor.ptScreenPos.y - caretFrom_.y) > 4)) { atCaret_ = false; }
+            bool begin = !atCaret_ && !mouseMoved && ((otherInput && !buttons) || !pointerVisible);
+            if ((atCaret_ || begin) && now - lastCaret_ >= 50) {
+                lastCaret_ = now;
+                RECT found{};
+                if (CaretRect(found)) {
+                    caret_ = found;
+                    caretSeen_ = now;
+                    if (!atCaret_) { atCaret_ = true; caretFrom_ = cursor.ptScreenPos; }
+                } else if (now - caretSeen_ > 700) {
+                    // A short gap in the app's answers must not make the badge flicker.
+                    atCaret_ = false;
+                }
+            }
         }
         POINT anchor = atCaret_ ? POINT{caret_.right, caret_.bottom} : cursor.ptScreenPos;
         bool screenRefresh = dirty || now - lastScreen_ >= 500;
@@ -904,7 +954,7 @@ public:
             }
         }
         if (dirty) {
-            style_ = BuildStyle(settings_, language_, hasMapping_ ? &mapping_ : nullptr);
+            style_ = BuildStyle(settings_, language_, hasMapping_ ? &mapping_ : nullptr, locks_);
             badge_ = settings_.mode == Mode::FollowPointer ? RenderBadge(style_, dpiScale_) : Badge{};
             if (!badge_.pixels.empty() && !surface_.Set(badge_)) { badge_ = {}; }
             cursorPending_ = true;
@@ -915,7 +965,8 @@ public:
                 dpiScale_, GetSystemMetrics(SM_CYCURSOR) / 32.))), 1, 8);
             const Style* text = settings_.enabled && language_.layout && settings_.mode == Mode::TextCursor ? &style_ : nullptr;
             std::wstring arrow = settings_.enabled && hasMapping_ ? mapping_.cursorPath : L"";
-            std::wstring key = language_.id + L"/" + std::to_wstring(revision_) + L"/" + std::to_wstring(factor);
+            std::wstring key = language_.id + L"/" + std::to_wstring(revision_) + L"/" + std::to_wstring(factor) +
+                L"/" + std::to_wstring(locks_);
             bool applied = settings_.enabled ? cursors_.Apply(arrow, text, key, settings_.typingScale, factor) : cursors_.Restore();
             cursorPending_ = !applied;
             if (!applied) {
@@ -948,8 +999,8 @@ public:
                        4 * dpiScale_, 4 * dpiScale_, bounds_, badge_.margin) :
             PlaceBadge(settings_.position, anchor, badgeWidth, badgeHeight,
                        settings_.offsetX * dpiScale_, settings_.offsetY * dpiScale_, bounds_, badge_.margin);
-        // Fade out in place instead of jumping to the hidden pointer.
-        if (!visible && shown_ && !pointerVisible) { destination = location_; }
+        // Fade out in place instead of jumping somewhere else first.
+        if (!visible && shown_) { destination = location_; }
         if (dirty || alphaChanged || !shown_) {
             SIZE size{badge_.width, badge_.height};
             POINT source{};
