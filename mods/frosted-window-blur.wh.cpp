@@ -18,6 +18,10 @@ Give any window a frosted glass look, like the Windows 11 Settings app: what's
 behind the window is blurred, and you choose how strong the blur is for each
 window.
 
+![Notepad with the blur off, at level 1 and at level 3](https://raw.githubusercontent.com/JeremyWayne93/windhawk-mods/readme-assets/frosted-window-blur/frosted-window-blur-levels.png)
+
+*The same Notepad window with the blur off, at level 1 and at level 3.*
+
 ## Usage
 
 - **Ctrl + Shift + mouse wheel down** over any window: more blur
