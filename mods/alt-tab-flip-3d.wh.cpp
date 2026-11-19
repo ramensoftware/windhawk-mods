@@ -1,10 +1,9 @@
 // ==WindhawkMod==
 // @id              alt-tab-flip-3d
-// @name            Alt+Tab Flip 3D (Vista Style)
-// @name:pt-BR      Alt+Tab Flip 3D (estilo Vista)
-// @description     Replaces Alt+Tab with a fluid, Windows Vista-style Flip 3D stack of live windows
-// @description:pt-BR Substitui o Alt+Tab por uma pilha 3D fluida de janelas ao vivo, no estilo Flip 3D do Windows Vista
-// @version         1.7.3
+// @name            Alt+Tab Flip 3D
+// @description     Replaces Alt+Tab with fluid switchers of live windows, from the Windows Vista Flip 3D stack to Cover Flow, a radial wheel and more
+// @description:pt-BR Substitui o Alt+Tab por alternadores fluidos de janelas ao vivo, da pilha Flip 3D do Windows Vista ao Cover Flow, uma roda radial e muito mais
+// @version         1.8.0
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://caliberda.com.br
@@ -17,9 +16,9 @@
 
 // ==WindhawkModReadme==
 /*
-# Alt+Tab Flip 3D (Vista Style)
+# Alt+Tab Flip 3D
 
-![Flip 3D style](https://i.imgur.com/mRzfHq2.gif)
+![The animation styles, one after the other](https://i.imgur.com/C5OVLxA.gif)
 
 **English** | [Português](#português)
 
@@ -31,12 +30,12 @@ stack, one behind the other, showing their **live content**. Keep Alt held and
 flip through them; release Alt and the chosen window flies back into place.
 
 Made in Brazil by **caliberda** · bugs and ideas: [an issue on
-GitHub](https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAlt%2BTab%20Flip%203D%20%28Vista%20Style%29%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) · Instagram [@cesar.kali](https://www.instagram.com/cesar.kali) ·
+GitHub](https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAlt%2BTab%20Flip%203D%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) · Instagram [@cesar.kali](https://www.instagram.com/cesar.kali) ·
 [caliberda.com.br](https://caliberda.com.br)
 
 ## Animation styles
 
-![All animation styles](https://i.imgur.com/CYIiLdx.png)
+![All animation styles](https://i.imgur.com/38YT826.png)
 
 * **Flip 3D**: the Windows Vista stack, receding up and to the left.
 * **Cascade**: a deck of windows tilted backwards, receding upwards.
@@ -72,6 +71,10 @@ Simpler 2D styles, for those who want something closer to the default:
 * **Icons and titles**: a row of large icons with their titles.
 * **Vertical list**: a compact list of icons and titles.
 * **Classic (Windows XP)**: the old icon grid with the title in a box below.
+* **Radial wheel**: the windows' icons around a ring, with the app's name and
+  the title in the middle. Tab goes around it clockwise, and moving the mouse
+  towards a slice picks it, like the weapon wheel of a game. The wheel fits
+  any screen, and grows with the number of windows.
 * **Native Windows Alt+Tab**: the mod leaves Alt+Tab alone.
 
 The switcher opens on the monitor where the mouse cursor is (or, optionally,
@@ -89,6 +92,7 @@ monitor*).
 | Alt+Shift+Tab             | Previous window                               |
 | Ctrl+Alt+Tab              | Open the stack and keep it open (optional)    |
 | Arrow keys, mouse wheel   | Flip forward / backward                       |
+| Move the mouse            | Select the slice it points at (radial wheel)  |
 | Release Alt, Enter, Space | Switch to the window in front                 |
 | Click a window            | Switch to that window                         |
 | Middle-click a window     | Close that window (optional)                  |
@@ -159,12 +163,16 @@ above. Only one of them can take over Alt+Tab.
   (*HDR* setting).
 * With the *Dim only* background, the real windows stay visible behind the
   stack. The wallpaper backgrounds hide them, like the original Flip 3D.
+* The *Mica* and *Mica Alt* backgrounds are the materials of Windows 11 apps,
+  made from the wallpaper in the Windows mode (light or dark). With them, a
+  low *Background dimming* (or 0) looks closest to the apps.
 * If the switcher can't start (e.g. no GPU device), the native Alt+Tab keeps
   working. If the graphics driver is updated or reset, the switcher starts
   over by itself.
 * On laptops with two GPUs, the switcher draws on the one the screen is
   connected to. On slower PCs, the *Frame rate limit* and *Live window
-  content* settings make it lighter.
+  content* settings make it lighter. The limit can also be a number of your
+  own (*Custom*).
 
 ## Contact
 
@@ -173,8 +181,8 @@ new versions bring fixes and what users ask for. Write in English,
 Portuguese or your own language.
 
 * **Bugs and ideas: an issue on GitHub**, the best way: [report a
-  bug](https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-bug&title=%5BAlt%2BTab%20Flip%203D%20%28Vista%20Style%29%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) or [suggest an
-  idea](https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-enhancement&title=%5BAlt%2BTab%20Flip%203D%20%28Vista%20Style%29%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A).
+  bug](https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-bug&title=%5BAlt%2BTab%20Flip%203D%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) or [suggest an
+  idea](https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-enhancement&title=%5BAlt%2BTab%20Flip%203D%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A).
   It mentions me (@cesarkali), so I see it, and GitHub tells you when the
   version with the fix or the idea comes out.
 * **Instagram [@cesar.kali](https://www.instagram.com/cesar.kali)**: to talk to me
@@ -199,12 +207,12 @@ passando por elas; solte o Alt e a janela escolhida volta voando para o lugar.
 
 Feito no Brasil por **caliberda** · pode falar comigo em português · bugs e
 ideias: [uma issue no
-GitHub](https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAlt%2BTab%20Flip%203D%20%28Vista%20Style%29%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) · Instagram
+GitHub](https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAlt%2BTab%20Flip%203D%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) · Instagram
 [@cesar.kali](https://www.instagram.com/cesar.kali) · [caliberda.com.br](https://caliberda.com.br)
 
 ### Estilos de animação
 
-![Todos os estilos de animação](https://i.imgur.com/CYIiLdx.png)
+![Todos os estilos de animação](https://i.imgur.com/38YT826.png)
 
 * **Flip 3D**: a pilha do Windows Vista, indo para cima e para a esquerda.
 * **Cascata**: um baralho de janelas inclinado para trás, subindo.
@@ -239,6 +247,10 @@ Estilos 2D mais simples, para quem quer algo mais perto do padrão:
 * **Lista vertical**: uma lista compacta de ícones e títulos.
 * **Clássico (Windows XP)**: a grade de ícones antiga com o título numa caixa
   embaixo.
+* **Roda radial**: os ícones das janelas em volta de um anel, com o nome do
+  app e o título no meio. O Tab gira no sentido horário, e mexer o mouse na
+  direção de uma fatia escolhe ela, como a roda de armas de um jogo. A roda se
+  ajusta a qualquer tela e cresce com o número de janelas.
 * **Alt+Tab nativo do Windows**: o mod deixa o Alt+Tab em paz.
 
 O alternador abre no monitor onde está o cursor do mouse (ou, se preferir,
@@ -256,6 +268,7 @@ monitores*).
 | Alt+Shift+Tab                | Janela anterior                            |
 | Ctrl+Alt+Tab                 | Abre a pilha e a mantém aberta (opcional)  |
 | Setas, roda do mouse         | Avança / volta na pilha                    |
+| Mexer o mouse                | Escolhe a fatia apontada (roda radial)     |
 | Soltar Alt, Enter, Espaço    | Muda para a janela da frente               |
 | Clicar numa janela           | Muda para essa janela                      |
 | Clique do meio numa janela   | Fecha essa janela (opcional)               |
@@ -331,12 +344,17 @@ acima. Só um deles consegue assumir o Alt+Tab.
   *HDR*).
 * Com o fundo *Apenas escurecer*, as janelas reais continuam visíveis atrás da
   pilha. Os fundos com papel de parede as escondem, como no Flip 3D original.
+* Os fundos *Mica* e *Mica Alt* são os materiais dos apps do Windows 11,
+  feitos a partir do papel de parede no modo do Windows (claro ou escuro).
+  Com eles, um *Escurecimento do fundo* baixo (ou 0) fica mais parecido com os
+  apps.
 * Se o alternador não conseguir iniciar (ex.: sem dispositivo de GPU), o Alt+Tab
   nativo continua funcionando. Se o driver de vídeo for atualizado ou
   reiniciado, o alternador recomeça sozinho.
 * Em notebooks com duas placas de vídeo, o alternador desenha na placa ligada
   à tela. Em PCs mais fracos, as configurações *Limite de quadros por segundo*
-  e *Conteúdo ao vivo das janelas* deixam ele mais leve.
+  e *Conteúdo ao vivo das janelas* deixam ele mais leve. O limite também pode
+  ser um número seu (*Personalizado*).
 
 ### Contato
 
@@ -345,8 +363,8 @@ mod: as novas versões trazem correções e o que os usuários pedem. Pode
 escrever em português.
 
 * **Bugs e ideias: uma issue no GitHub**, o melhor caminho: [relatar um
-  bug](https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-bug&title=%5BAlt%2BTab%20Flip%203D%20%28Vista%20Style%29%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) ou [sugerir uma
-  ideia](https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-enhancement&title=%5BAlt%2BTab%20Flip%203D%20%28Vista%20Style%29%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A).
+  bug](https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-bug&title=%5BAlt%2BTab%20Flip%203D%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) ou [sugerir uma
+  ideia](https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-enhancement&title=%5BAlt%2BTab%20Flip%203D%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A).
   Ela já me marca (@cesarkali), então eu vejo, e o GitHub avisa você quando
   sair a versão com a correção ou a ideia.
 * **Instagram [@cesar.kali](https://www.instagram.com/cesar.kali)**: para conversar
@@ -391,6 +409,7 @@ escrever em português.
   - icons: Icons and titles
   - list: Vertical list
   - classic: Classic (Windows XP)
+  - radial: Radial wheel (icons around a ring)
   - native: Native Windows Alt+Tab
   $options:pt-BR:
   - flip3d: Flip 3D (pilha do Vista)
@@ -416,6 +435,7 @@ escrever em português.
   - icons: Ícones e títulos
   - list: Lista vertical
   - classic: Clássico (Windows XP)
+  - radial: Roda radial (ícones em volta de um anel)
   - native: Alt+Tab nativo do Windows
 - monitor: cursor
   $name: Monitor
@@ -597,6 +617,7 @@ escrever em português.
   - icons: Icons and titles
   - list: Vertical list
   - classic: Classic (Windows XP)
+  - radial: Radial wheel (icons around a ring)
   $options:pt-BR:
   - same: O mesmo do Alt+Tab
   - flip3d: Flip 3D (pilha do Vista)
@@ -622,6 +643,7 @@ escrever em português.
   - icons: Ícones e títulos
   - list: Lista vertical
   - classic: Clássico (Windows XP)
+  - radial: Roda radial (ícones em volta de um anel)
 - stickyShortcut: true
   $name: Ctrl+Alt+Tab keeps the switcher open
   $name:pt-BR: Ctrl+Alt+Tab mantém o alternador aberto
@@ -667,6 +689,7 @@ escrever em português.
       - icons: Icons and titles
       - list: Vertical list
       - classic: Classic (Windows XP)
+      - radial: Radial wheel (icons around a ring)
       $options:pt-BR:
       - same: O mesmo do Alt+Tab ou do Win+Tab (a tecla usada junto)
       - flip3d: Flip 3D (pilha do Vista)
@@ -692,6 +715,7 @@ escrever em português.
       - icons: Ícones e títulos
       - list: Lista vertical
       - classic: Clássico (Windows XP)
+      - radial: Roda radial (ícones em volta de um anel)
   $name: Extra shortcuts
   $name:pt-BR: Atalhos extras
   $description: Shortcuts with an animation style of their own, one per item. Win+Ctrl+Tab stays with Windows until it's added here; adding Ctrl+Alt+Tab also turns it on. Both keep the switcher open after the keys are released
@@ -744,23 +768,27 @@ escrever em português.
 - background: blur
   $name: Background
   $name:pt-BR: Fundo
-  $description: What is shown behind the stack. "Live desktop" shows the real desktop, icons included, with animated wallpapers (Wallpaper Engine, Lively Wallpaper and similar) still playing. It can't be blurred. The iTab styles with a glossy black floor have a background of their own
-  $description:pt-BR: O que aparece atrás da pilha. "Área de trabalho ao vivo" mostra a área de trabalho de verdade, com os ícones, e os papéis de parede animados (Wallpaper Engine, Lively Wallpaper e parecidos) continuam tocando. Ela não pode ser desfocada. Os estilos iTab com chão preto brilhante têm um fundo próprio
+  $description: What is shown behind the stack. Mica and Mica Alt are the materials of Windows 11 apps, made from the wallpaper and following the Windows mode (light or dark); Mica Alt keeps more of the wallpaper's color. "Live desktop" shows the real desktop, icons included, with animated wallpapers (Wallpaper Engine, Lively Wallpaper and similar) still playing. It can't be blurred. The iTab styles with a glossy black floor have a background of their own
+  $description:pt-BR: O que aparece atrás da pilha. Mica e Mica Alt são os materiais dos apps do Windows 11, feitos a partir do papel de parede e seguindo o modo do Windows (claro ou escuro); o Mica Alt mantém mais da cor do papel de parede. "Área de trabalho ao vivo" mostra a área de trabalho de verdade, com os ícones, e os papéis de parede animados (Wallpaper Engine, Lively Wallpaper e parecidos) continuam tocando. Ela não pode ser desfocada. Os estilos iTab com chão preto brilhante têm um fundo próprio
   $options:
   - blur: Blurred wallpaper
   - wallpaper: Wallpaper
+  - mica: Mica
+  - micaAlt: Mica Alt
   - desktop: Live desktop (animated wallpapers)
   - dim: Dim only
   $options:pt-BR:
   - blur: Papel de parede desfocado
   - wallpaper: Papel de parede
+  - mica: Mica
+  - micaAlt: Mica Alt
   - desktop: Área de trabalho ao vivo (papéis de parede animados)
   - dim: Apenas escurecer
 - blurAmount: 20
   $name: Background blur strength
   $name:pt-BR: Intensidade do desfoque do fundo
-  $description: Used by the blurred wallpaper background (1-100, default 20)
-  $description:pt-BR: Usado pelo fundo com papel de parede desfocado (1-100, padrão 20)
+  $description: Used by the blurred wallpaper background (1-100, default 20). Mica and Mica Alt have a blur of their own
+  $description:pt-BR: Usado pelo fundo com papel de parede desfocado (1-100, padrão 20). Mica e Mica Alt têm um desfoque próprio
 - dimOpacity: 25
   $name: Background dimming (%)
   $name:pt-BR: Escurecimento do fundo (%)
@@ -769,8 +797,8 @@ escrever em português.
 - showTitle: true
   $name: Show window title
   $name:pt-BR: Mostrar título da janela
-  $description: Shows the icon and title of the window in front
-  $description:pt-BR: Mostra o ícone e o título da janela da frente
+  $description: Shows the icon and title of the window in front. In the radial wheel, the title under the app's name
+  $description:pt-BR: Mostra o ícone e o título da janela da frente. Na roda radial, o título embaixo do nome do app
 - titlePosition: bottom
   $name: Title position
   $name:pt-BR: Posição do título
@@ -837,12 +865,19 @@ escrever em português.
   - "90": About 90 FPS
   - "60": About 60 FPS
   - "30": About 30 FPS
+  - custom: Custom (the number below)
   $options:pt-BR:
   - screen: Taxa de atualização da tela
   - screenPlus20: Taxa de atualização da tela + 20 FPS
   - "90": Cerca de 90 FPS
   - "60": Cerca de 60 FPS
   - "30": Cerca de 30 FPS
+  - custom: Personalizado (o número abaixo)
+- customFrameRate: 144
+  $name: Custom frame rate (FPS)
+  $name:pt-BR: Quadros por segundo personalizados (FPS)
+  $description: Used when the frame rate limit is "Custom", on every screen (30-720, default 144). Above a screen's refresh rate, it works like "+ 20 FPS"
+  $description:pt-BR: Usado quando o limite de quadros por segundo é "Personalizado", em todas as telas (30-720, padrão 144). Acima da taxa de atualização de uma tela, funciona como o "+ 20 FPS"
 - hdr: true
   $name: HDR
   $name:pt-BR: HDR
@@ -884,6 +919,7 @@ escrever em português.
 #include <inspectable.h>
 #include <propsys.h>
 #include <shellscalingapi.h>
+#include <shlobj.h>
 #include <shobjidl.h>
 #include <tlhelp32.h>
 #include <wincodec.h>
@@ -1027,6 +1063,9 @@ constexpr double kCloseAnimationSeconds = 0.22;
 constexpr double kSlideAnimationSeconds = 0.32;
 // Smaller close buttons (on far-away cards) aren't shown.
 constexpr float kMinCloseButtonRadius = 4;
+// The size of the large icons (see LoadLargeIcons), at 100% scaling: the
+// largest an icon is drawn at (the radial style's selected one).
+constexpr float kLargeIconSize = 64;
 
 // Overlay window timers.
 // Checks that the window switched to is in front and restored (see
@@ -1076,11 +1115,23 @@ enum class AnimationStyle {
     IconRow,
     List,
     Classic,
+    // The windows' icons on the slices of a wheel (see ComputeRadialLayout),
+    // picked with Tab or by moving the mouse (see UpdateRadialStick).
+    Radial,
     // The mod leaves Alt+Tab alone, and keeps no hooks or graphics devices.
     Native,
 };
 enum class MonitorMode { Cursor, ActiveWindow };
-enum class BackgroundMode { BlurredWallpaper, Wallpaper, LiveDesktop, Dim };
+// Mica and Mica Alt: the materials of Windows 11 apps, made from the
+// wallpaper (see UpdateBackground).
+enum class BackgroundMode {
+    BlurredWallpaper,
+    Wallpaper,
+    Mica,
+    MicaAlt,
+    LiveDesktop,
+    Dim,
+};
 enum class TitlePosition { Bottom, BelowWindow };
 enum class LiveContent { All, Selected, None };
 enum class VirtualDesktops { SameAsWindows, Current, All };
@@ -1133,6 +1184,9 @@ struct Settings {
     // 0: the screen's refresh rate, plus fpsAboveScreen.
     int maxFps;
     int fpsAboveScreen;
+    // maxFps is a number of the user's (the "Custom" limit), kept even above
+    // the screen's refresh rate.
+    bool customFps;
     bool hdr;
     bool middleClickClose;
     bool closeButton;
@@ -1178,6 +1232,7 @@ Settings LoadSettings() {
         {L"icons", AnimationStyle::IconRow},
         {L"list", AnimationStyle::List},
         {L"classic", AnimationStyle::Classic},
+        {L"radial", AnimationStyle::Radial},
         {L"native", AnimationStyle::Native},
     };
     // "same", or a style that can't be used for a shortcut (native), is
@@ -1301,6 +1356,10 @@ Settings LoadSettings() {
     const auto background = WindhawkUtils::StringSetting::make(L"background");
     if (wcscmp(background, L"wallpaper") == 0) {
         s.background = BackgroundMode::Wallpaper;
+    } else if (wcscmp(background, L"mica") == 0) {
+        s.background = BackgroundMode::Mica;
+    } else if (wcscmp(background, L"micaAlt") == 0) {
+        s.background = BackgroundMode::MicaAlt;
     } else if (wcscmp(background, L"desktop") == 0) {
         s.background = BackgroundMode::LiveDesktop;
     } else if (wcscmp(background, L"dim") == 0) {
@@ -1333,7 +1392,10 @@ Settings LoadSettings() {
                     : wcscmp(liveContent, L"none") == 0   ? LiveContent::None
                                                           : LiveContent::All;
     const auto frameRate = WindhawkUtils::StringSetting::make(L"frameRate");
-    s.maxFps = std::clamp(_wtoi(frameRate), 0, 240);
+    s.customFps = wcscmp(frameRate, L"custom") == 0;
+    s.maxFps = s.customFps
+                   ? std::clamp(Wh_GetIntSetting(L"customFrameRate"), 30, 720)
+                   : std::clamp(_wtoi(frameRate), 0, 240);
     s.fpsAboveScreen = wcscmp(frameRate, L"screenPlus20") == 0 ? 20 : 0;
     s.hdr = Wh_GetIntSetting(L"hdr") != 0;
     s.middleClickClose = Wh_GetIntSetting(L"middleClickClose") != 0;
@@ -1430,11 +1492,20 @@ HoldKey HoldKeyFor(Shortcut shortcut) {
     }
 }
 
+// The 2D styles. All but the radial one lay out cells in a panel (see
+// ComputePanelLayout).
 bool IsPanelStyle(AnimationStyle style) {
     return style == AnimationStyle::Windows11 ||
            style == AnimationStyle::Thumbnails ||
            style == AnimationStyle::IconRow || style == AnimationStyle::List ||
-           style == AnimationStyle::Classic;
+           style == AnimationStyle::Classic || style == AnimationStyle::Radial;
+}
+
+// 2D styles without thumbnails: the windows are seen only while flying in
+// and out.
+bool IsIconStyle(AnimationStyle style) {
+    return style == AnimationStyle::IconRow || style == AnimationStyle::List ||
+           style == AnimationStyle::Classic || style == AnimationStyle::Radial;
 }
 
 // Styles whose windows form one solid shape (a cube, a ball). The window size
@@ -1459,10 +1530,18 @@ bool HasBlackFloor(AnimationStyle style) {
     return style == AnimationStyle::ITab || style == AnimationStyle::ITabTitle;
 }
 
-// iTab styles whose caption has the app's name under the title.
+// Styles showing the app's name: the iTab styles with it under the title,
+// and the radial style, in the middle of the wheel.
 bool ShowsAppName(AnimationStyle style) {
     return style == AnimationStyle::ITab ||
-           style == AnimationStyle::ITabBackground;
+           style == AnimationStyle::ITabBackground ||
+           style == AnimationStyle::Radial;
+}
+
+// Styles drawing icons larger than window icons usually are (32 pixels at
+// 100% scaling), which need their large version (see LoadLargeIcons).
+bool ShowsLargeIcons(AnimationStyle style) {
+    return style == AnimationStyle::Radial || style == AnimationStyle::IconRow;
 }
 
 double NowSeconds() {
@@ -2520,6 +2599,25 @@ D2D1_COLOR_F GetAccentColor() {
                         ((color >> 8) & 0xff) / 255.0f, (color & 0xff) / 255.0f);
 }
 
+// The accent color, light enough to stand out on the switcher's dark panels
+// and slices: a dark accent is brightened, keeping its hue, and a black or
+// gray one (Windows allows a black accent) becomes a light gray.
+D2D1_COLOR_F VisibleAccent(D2D1_COLOR_F color) {
+    const float luminance =
+        0.2126f * color.r + 0.7152f * color.g + 0.0722f * color.b;
+    if (luminance >= 0.3f) {
+        return color;
+    }
+    const float high = std::max({color.r, color.g, color.b});
+    const float low = std::min({color.r, color.g, color.b});
+    if (high - low < 0.12f) {
+        // Not white: white icons would get lost on it.
+        return D2D1::ColorF(0.74f, 0.74f, 0.76f);
+    }
+    const float scale = 0.85f / high;
+    return D2D1::ColorF(color.r * scale, color.g * scale, color.b * scale);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // The switcher (UI thread).
 
@@ -2793,6 +2891,7 @@ class Switcher {
     int HitTest(D2D1_POINT_2F point, CloseButton* button) const;
     CloseButton CloseButtonForQuad(const Quad& quad) const;
     CloseButton CloseButtonForCell(const D2D1_RECT_F& cell) const;
+    void MoveTargetTo(int index);
     void CloseItem(int index);
     void RemoveClosedItems(double now);
     void UpdateHover();
@@ -2850,6 +2949,17 @@ class Switcher {
     D2D1_RECT_F SelectionCell(float* opacity) const;
     void DrawPanelBack(float t);
     void DrawPanelFront(float t);
+    void ComputeRadialLayout();
+    float RadialAngle(int index) const;
+    float RadialSelection(int index) const;
+    float RingScale() const;
+    D2D1::Matrix3x2F SliceTransform(int index) const;
+    int RadialSliceAt(D2D1_POINT_2F point) const;
+    CloseButton CloseButtonForSlice(int index) const;
+    void UpdateRadialStick();
+    void DrawRadialBack(float t);
+    void DrawRadialFront(float t);
+    bool EnsureRadialTexts(int index);
     bool EnsureLabelFormat();
     void DrawLabel(Item& item,
                    const D2D1_RECT_F& rect,
@@ -2862,6 +2972,10 @@ class Switcher {
     void RefreshIcons();
     com_ptr<IWICBitmap> ReadIconPixels(HICON icon);
     com_ptr<IWICBitmap> ReadAppIconPixels(HWND hwnd);
+    com_ptr<IWICBitmap> ReadIconPixelsAt(HICON icon, int size);
+    com_ptr<IWICBitmap> ReadLargeIconPixels(HWND hwnd, HICON icon);
+    void LoadLargeIcons(const std::vector<HWND>& windows);
+    bool AnyShortcutStyle(bool (*test)(AnimationStyle)) const;
     com_ptr<ID2D1Bitmap1> CreateIconBitmap(IWICBitmap* pixels);
     com_ptr<ID2D1Bitmap1> CreatePlaceholder(const Item& item);
     com_ptr<ID2D1Bitmap1> CreateTargetBitmap(
@@ -2873,6 +2987,10 @@ class Switcher {
                                           UINT height,
                                           DESKTOP_WALLPAPER_POSITION position,
                                           D2D1_RECT_F* rect);
+    com_ptr<ID2D1Bitmap1> CreateMica(ID2D1Bitmap1* wallpaper,
+                                     UINT width,
+                                     UINT height,
+                                     bool light);
     void UpdateBackground();
 
     int SelectedIndex() const;
@@ -2916,6 +3034,10 @@ class Switcher {
     double m_nextFrameAt = 0;
     // Waits for the next frame (see UpdateFrameRate).
     HANDLE m_frameTimer = nullptr;
+    // The refresh rate and frame rate last logged, so a change (another
+    // monitor, new settings) is logged once.
+    double m_loggedRefresh = 0;
+    double m_loggedFrameInterval = 0;
     // The last frame's result, so a repeating error is logged once.
     HRESULT m_lastRenderError = S_OK;
 
@@ -2956,6 +3078,9 @@ class Switcher {
         HICON source = nullptr;  // The window icon it was made from, if any.
         com_ptr<IWICBitmap> pixels;
         com_ptr<ID2D1Bitmap1> bitmap;
+        // Its large version was looked for (see LoadLargeIcons); the pixels
+        // are that version when it was found.
+        bool large = false;
     };
     std::unordered_map<HWND, CachedIcon> m_iconCache;
 
@@ -3035,6 +3160,8 @@ class Switcher {
         int closeRequests;
         int hoverIndex;
         bool hoverOnButton;
+        float stickX;
+        float stickY;
         bool operator==(const FrameKey&) const = default;
     };
     FrameKey m_lastFrameKey{};
@@ -3072,6 +3199,35 @@ class Switcher {
     D2D1_RECT_F m_caption{};
     float m_labelFontSize = 0;
     com_ptr<IDWriteTextFormat> m_labelFormat;
+
+    // Radial style (see ComputeRadialLayout): the wheel's outer and inner
+    // radius, the gap between its slices, the angle of each slice, the size
+    // of their icons, and the radius of the disk in the middle. One slice's
+    // shape, pointing right from the center, is turned into each place; the
+    // pointer runs around the disk to the selected slice.
+    float m_ringOuter = 0, m_ringInner = 0, m_ringGap = 0;
+    float m_ringSpan = 0, m_ringIcon = 0, m_ringDisk = 0;
+    com_ptr<ID2D1PathGeometry> m_sliceShape;
+    com_ptr<ID2D1PathGeometry> m_pointerShape;
+    com_ptr<ID2D1PathGeometry> m_stickShape;
+    com_ptr<ID2D1StrokeStyle> m_roundStroke;
+    com_ptr<ID2D1RadialGradientBrush> m_diskFill;
+    // The opening of the last frame, which turns and grows the wheel.
+    float m_ringOpen = 0;
+    // The mouse stick (see UpdateRadialStick): the cursor's last position,
+    // and the motion since the session opened or Tab was last pressed, as a
+    // direction (limited in length) and as a distance.
+    POINT m_stickCursor{};
+    bool m_stickCursorKnown = false;
+    float m_stickX = 0, m_stickY = 0;
+    float m_stickTravel = 0;
+    // The app's name and the title in the middle of the wheel, laid out for
+    // the item at m_ringTextIndex.
+    int m_ringTextIndex = -1;
+    com_ptr<IDWriteTextFormat> m_ringNameFormat;
+    com_ptr<IDWriteTextFormat> m_ringTitleFormat;
+    com_ptr<IDWriteTextLayout> m_ringNameLayout;
+    com_ptr<IDWriteTextLayout> m_ringTitleLayout;
 };
 
 Switcher* g_switcher;
@@ -3400,6 +3556,17 @@ void Switcher::ReleaseDeviceResources() {
     m_appNameFormat = nullptr;
     m_reflectionFade = nullptr;
     m_floorLight = nullptr;
+    // The shapes belong to the factory, which goes with the device.
+    m_sliceShape = nullptr;
+    m_pointerShape = nullptr;
+    m_stickShape = nullptr;
+    m_roundStroke = nullptr;
+    m_diskFill = nullptr;
+    m_ringTextIndex = -1;
+    m_ringNameLayout = nullptr;
+    m_ringTitleLayout = nullptr;
+    m_ringNameFormat = nullptr;
+    m_ringTitleFormat = nullptr;
     m_background = nullptr;
     m_backgroundKey.clear();
     // The bitmaps belong to the device, the icons' pixels don't.
@@ -3527,13 +3694,22 @@ void Switcher::UpdateFrameRate() {
     // Without a limit, or with one the screen doesn't reach, the limit is the
     // refresh rate itself. Present normally waits for the refresh, and then
     // this never waits. But some drivers (with vertical sync forced off)
-    // return at once, and frames the screen never shows would be drawn.
+    // return at once, and frames the screen never shows would be drawn. A
+    // custom limit is kept as it is, like "+ 20 FPS" above the refresh rate.
     const bool limited =
-        m_settings.maxFps > 0 && m_settings.maxFps < refresh * 0.95;
+        m_settings.maxFps > 0 &&
+        (m_settings.customFps || m_settings.maxFps < refresh * 0.95);
     m_frameInterval =
         1.0 / (limited ? m_settings.maxFps
                        : refresh + m_settings.fpsAboveScreen);
     m_refreshInterval = 1.0 / refresh;
+    if (refresh != m_loggedRefresh ||
+        m_frameInterval != m_loggedFrameInterval) {
+        m_loggedRefresh = refresh;
+        m_loggedFrameInterval = m_frameInterval;
+        Wh_Log(L"Frame rate: up to %.0f FPS, screen at %.0f Hz",
+               1 / m_frameInterval, refresh);
+    }
     // The time to the next frame is waited with a precise timer. Waiting for
     // the compositor instead is uneven with screens of different refresh
     // rates (two frames on one refresh, none on the next), and can't go
@@ -4303,6 +4479,9 @@ void Switcher::OnStep(int step) {
         return;
     }
     m_target += step;
+    // The radial style's mouse stick starts over from here.
+    m_stickX = m_stickY = 0;
+    m_stickTravel = 0;
     if (m_state == State::Pending) {
         m_scroll = (double)m_target;
         // Looking for a window further away: no need to wait (see Run).
@@ -4318,15 +4497,7 @@ void Switcher::OnCommit(int index) {
     }
 
     if (index >= 0 && !m_items.empty()) {
-        // Bring the chosen item to the front the shortest way.
-        const int count = (int)m_items.size();
-        int delta = index - SelectedIndex();
-        if (delta > count / 2) {
-            delta -= count;
-        } else if (delta < -count / 2) {
-            delta += count;
-        }
-        m_target += delta;
+        MoveTargetTo(index);
     }
 
     if (m_state == State::Pending) {
@@ -4341,6 +4512,18 @@ void Switcher::OnCommit(int index) {
     }
 
     BeginClose(true);
+}
+
+// Brings the item at index to the front (selects it), the shortest way.
+void Switcher::MoveTargetTo(int index) {
+    const int count = (int)m_items.size();
+    int delta = index - SelectedIndex();
+    if (delta > count / 2) {
+        delta -= count;
+    } else if (delta < -count / 2) {
+        delta += count;
+    }
+    m_target += delta;
 }
 
 void Switcher::OnCancel() {
@@ -4397,6 +4580,13 @@ void Switcher::OnMiddleClick(POINT pt) {
 // The item under a point (overlay coordinates), or -1. Also returns where that
 // item's close button is.
 int Switcher::HitTest(D2D1_POINT_2F point, CloseButton* button) const {
+    if (m_settings.style == AnimationStyle::Radial) {
+        const int index = RadialSliceAt(point);
+        if (index >= 0) {
+            *button = CloseButtonForSlice(index);
+        }
+        return index;
+    }
     if (IsPanelStyle(m_settings.style)) {
         for (size_t i = 0; i < m_cells.size(); i++) {
             const D2D1_RECT_F& cell = m_cells[i];
@@ -5183,6 +5373,12 @@ void Switcher::Teardown() {
 void Switcher::ShowOverlay() {
     const UINT width = (UINT)(m_monitor.right - m_monitor.left);
     const UINT height = (UINT)(m_monitor.bottom - m_monitor.top);
+    // Moved to the session's monitor while still hidden, so nothing is
+    // presented while it's on the previous session's monitor: that could
+    // keep a session on a faster monitor at the slower one's frame rate
+    // (#6934).
+    SetWindowPos(m_hwnd, HWND_TOPMOST, m_monitor.left, m_monitor.top, width,
+                 height, SWP_NOACTIVATE);
     if (!EnsureSwapChain(width, height)) {
         HandleDeviceLost();
         return;
@@ -5198,6 +5394,26 @@ void Switcher::ShowOverlay() {
     if (!m_capturing) {
         StartCaptures();
     }
+    // App names and large icons, usually found after an earlier session
+    // already. Before the cards below, which show the icons.
+    if (ShowsAppName(m_settings.style) || ShowsLargeIcons(m_settings.style)) {
+        std::vector<HWND> windows;
+        for (const auto& item : m_items) {
+            windows.push_back(item->hwnd);
+        }
+        if (ShowsAppName(m_settings.style)) {
+            LookUpAppNames(windows);
+        }
+        if (ShowsLargeIcons(m_settings.style)) {
+            LoadLargeIcons(windows);
+            for (auto& item : m_items) {
+                const auto it = m_iconCache.find(item->hwnd);
+                if (it != m_iconCache.end() && it->second.bitmap) {
+                    item->icon = it->second.bitmap;
+                }
+            }
+        }
+    }
     // Windows still without a picture show a card with their icon. Made only
     // now, so a quick Alt+Tab, which never shows the stack, doesn't pay for
     // them.
@@ -5206,16 +5422,13 @@ void Switcher::ShowOverlay() {
             item->placeholder = CreatePlaceholder(*item);
         }
     }
-    // Usually found after an earlier session already.
-    if (ShowsAppName(m_settings.style)) {
-        std::vector<HWND> windows;
-        for (const auto& item : m_items) {
-            windows.push_back(item->hwnd);
-        }
-        LookUpAppNames(windows);
-    }
-    m_accent = GetAccentColor();
+    m_accent = VisibleAccent(GetAccentColor());
     m_redraw = true;
+    // The mouse stick counts the motion from here on.
+    m_stickCursorKnown = false;
+    m_stickX = m_stickY = 0;
+    m_stickTravel = 0;
+    m_ringOpen = 0;
 
     m_open = {0, 1, NowSeconds(), m_settings.animationDurationMs / 1000.0,
               false};
@@ -5551,6 +5764,10 @@ void Switcher::ComputeLayout() {
             ComputePanelLayout();
             break;
 
+        case AnimationStyle::Radial:
+            ComputeRadialLayout();
+            break;
+
         case AnimationStyle::Rolodex:
             m_boxWidth = m_width * 0.36f;
             m_boxHeight = m_height * 0.30f;
@@ -5830,6 +6047,18 @@ Pose Switcher::LayoutPose(const Item& item, int index, float rel) const {
             pose = FlatPose(item);
             pose.opacity = 0;
             break;
+
+        case AnimationStyle::Radial: {
+            // The window shrinks into its slice, where its icon shows up.
+            const float angle = RadialAngle(index);
+            const float middle = (m_ringOuter + m_ringInner) / 2;
+            pose.x = middle * std::cos(angle);
+            pose.y = middle * std::sin(angle);
+            pose.scale =
+                m_ringIcon * 1.5f / std::max(item.Width(), item.Height());
+            pose.opacity = 0;
+            break;
+        }
 
         case AnimationStyle::Rolodex: {
             // A wheel around a horizontal axis: earlier windows roll over the
@@ -6325,6 +6554,10 @@ D2D1_RECT_F Switcher::SelectionCell(float* opacity) const {
 
 // Panel and selection background, drawn under the thumbnails.
 void Switcher::DrawPanelBack(float t) {
+    if (m_settings.style == AnimationStyle::Radial) {
+        DrawRadialBack(t);
+        return;
+    }
     if (m_cells.empty()) {
         return;
     }
@@ -6404,6 +6637,10 @@ void Switcher::DrawLabel(Item& item,
 
 // Icons, titles and the selection border, drawn over the thumbnails.
 void Switcher::DrawPanelFront(float t) {
+    if (m_settings.style == AnimationStyle::Radial) {
+        DrawRadialFront(t);
+        return;
+    }
     if (m_cells.empty() || m_items.empty()) {
         return;
     }
@@ -6459,6 +6696,566 @@ void Switcher::DrawPanelFront(float t) {
                   {m_caption.left + pad, m_caption.top, m_caption.right - pad,
                    m_caption.bottom},
                   false, D2D1::ColorF(0, 0, 0, labelOpacity));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Radial style.
+
+constexpr float kPi = 3.14159265f;
+// The wheel turns this much (radians, clockwise) into place while opening,
+// and back while closing.
+constexpr float kRingOpeningTurn = 0.45f;
+// The mouse stick (see UpdateRadialStick), in pixels at 100% scaling: the
+// motion that points at a slice, and the most that's kept, so a turn to
+// another direction answers quickly.
+constexpr float kStickDeadZone = 22;
+constexpr float kStickReach = 80;
+
+// The slot of a wheel with `count` slices of `span` radians, clockwise from
+// the top, in the direction (dx, dy) from its center.
+int RadialSlot(float dx, float dy, float span, int count) {
+    const float turn = std::atan2(dy, dx) + kPi / 2;
+    return PositiveMod((long long)std::floor(turn / span + 0.5f), count);
+}
+
+// Lays out the radial style: a ring with one slice per window, clockwise
+// from the top (the window in front), around a disk with the selected
+// window's app name and title. The ring follows the shorter side of the
+// monitor, so it fits any screen shape, and grows with more windows, with a
+// wider hole, where the slices are narrowest.
+void Switcher::ComputeRadialLayout() {
+    m_cells.clear();
+    m_thumbnails.clear();
+    m_iconRects.clear();
+    m_labelRects.clear();
+    m_caption = {};
+    m_ringTextIndex = -1;
+    m_ringNameLayout = nullptr;
+    m_ringTitleLayout = nullptr;
+    m_ringNameFormat = nullptr;
+    m_ringTitleFormat = nullptr;
+    m_sliceShape = nullptr;
+    m_pointerShape = nullptr;
+    m_stickShape = nullptr;
+    m_diskFill = nullptr;
+
+    const int count = std::max((int)m_items.size(), 1);
+    const float side = std::min(m_width, m_height);
+    const float more = std::clamp((count - 4) / 16.0f, 0.0f, 1.0f);
+    const float outer = std::round(side * Lerp(0.30f, 0.40f, more));
+    const float inner = std::round(outer * Lerp(0.43f, 0.52f, more));
+    m_ringOuter = outer;
+    m_ringInner = inner;
+    m_ringGap = std::max(3.0f, std::round(side * 0.0065f));
+    m_ringDisk = inner - m_ringGap * 2.2f;
+    m_ringSpan = 2 * kPi / count;
+    const float middle = (outer + inner) / 2;
+    m_ringIcon = std::round(
+        std::max(std::min({(outer - inner) * 0.42f,
+                           (middle * m_ringSpan - m_ringGap) * 0.5f,
+                           52 * m_dpiScale}),
+                 10.0f));
+    // With room for the selected slice, which moves out a little.
+    const float reach = outer * 1.05f + m_ringGap * 1.5f;
+    m_panel = {m_width / 2 - reach, m_height / 2 - reach, m_width / 2 + reach,
+               m_height / 2 + reach};
+
+    if (!m_d2dFactory) {
+        return;
+    }
+    if (!m_roundStroke) {
+        const D2D1_STROKE_STYLE_PROPERTIES properties =
+            D2D1::StrokeStyleProperties(
+                D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND,
+                D2D1_CAP_STYLE_ROUND, D2D1_LINE_JOIN_ROUND);
+        m_d2dFactory->CreateStrokeStyle(&properties, nullptr, 0,
+                                        m_roundStroke.put());
+    }
+
+    // One slice, pointing right: two arcs, and two edges, each half a gap
+    // from the line between this slice and the next. Its corners are rounded
+    // by circles touching an edge and an arc.
+    com_ptr<ID2D1GeometrySink> sink;
+    if (FAILED(m_d2dFactory->CreatePathGeometry(m_sliceShape.put())) ||
+        FAILED(m_sliceShape->Open(sink.put()))) {
+        m_sliceShape = nullptr;
+        return;
+    }
+    auto addArc = [&](D2D1_POINT_2F to, float radius,
+                      D2D1_SWEEP_DIRECTION sweep) {
+        const D2D1_ARC_SEGMENT arc{to, {radius, radius}, 0, sweep,
+                                   D2D1_ARC_SIZE_SMALL};
+        sink->AddArc(&arc);
+    };
+    constexpr auto kClockwise = D2D1_SWEEP_DIRECTION_CLOCKWISE;
+    if (count == 1) {
+        // A whole ring.
+        sink->SetFillMode(D2D1_FILL_MODE_ALTERNATE);
+        for (float radius : {outer, inner}) {
+            sink->BeginFigure({radius, 0}, D2D1_FIGURE_BEGIN_FILLED);
+            addArc({-radius, 0}, radius, kClockwise);
+            addArc({radius, 0}, radius, kClockwise);
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        }
+    } else {
+        const float offset = m_ringGap / 2;
+        const float corner =
+            std::max(0.0f, std::min({side * 0.012f, (outer - inner) * 0.18f,
+                                     (inner * m_ringSpan - m_ringGap) * 0.3f}));
+        struct Corners {
+            D2D1_POINT_2F edgeOuter, arcOuter, edgeInner, arcInner;
+        };
+        // The edge at -half a slice (sign -1) or +half (sign 1), with its
+        // inside towards the slice's middle.
+        auto cornersOf = [&](float sign) {
+            const float angle = sign * m_ringSpan / 2;
+            const D2D1_POINT_2F along{std::cos(angle), std::sin(angle)};
+            const D2D1_POINT_2F inside{sign * std::sin(angle),
+                                       -sign * std::cos(angle)};
+            auto at = [&](float a, float b) {
+                return D2D1_POINT_2F{along.x * a + inside.x * b,
+                                     along.y * a + inside.y * b};
+            };
+            const float away = offset + corner;
+            const float outerAlong = std::sqrt(std::max(
+                0.0f, (outer - corner) * (outer - corner) - away * away));
+            const float innerAlong = std::sqrt(std::max(
+                0.0f, (inner + corner) * (inner + corner) - away * away));
+            const D2D1_POINT_2F outerCenter = at(outerAlong, away);
+            const D2D1_POINT_2F innerCenter = at(innerAlong, away);
+            const float toOuter = outer / (outer - corner);
+            const float toInner = inner / (inner + corner);
+            return Corners{at(outerAlong, offset),
+                           {outerCenter.x * toOuter, outerCenter.y * toOuter},
+                           at(innerAlong, offset),
+                           {innerCenter.x * toInner, innerCenter.y * toInner}};
+        };
+        const Corners first = cornersOf(-1);
+        const Corners second = cornersOf(1);
+        sink->BeginFigure(first.edgeOuter, D2D1_FIGURE_BEGIN_FILLED);
+        addArc(first.arcOuter, corner, kClockwise);
+        addArc(second.arcOuter, outer, kClockwise);
+        addArc(second.edgeOuter, corner, kClockwise);
+        sink->AddLine(second.edgeInner);
+        addArc(second.arcInner, corner, kClockwise);
+        addArc(first.arcInner, inner, D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE);
+        addArc(first.edgeInner, corner, kClockwise);
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    }
+    if (FAILED(sink->Close())) {
+        m_sliceShape = nullptr;
+    }
+
+    // Arcs centered on the right: the pointer, in the dark lane around the
+    // disk, and the mouse stick's mark, inside the disk's edge.
+    auto makeArc = [&](com_ptr<ID2D1PathGeometry>& shape, float radius,
+                       float half) {
+        com_ptr<ID2D1GeometrySink> arcSink;
+        if (FAILED(m_d2dFactory->CreatePathGeometry(shape.put())) ||
+            FAILED(shape->Open(arcSink.put()))) {
+            shape = nullptr;
+            return;
+        }
+        arcSink->BeginFigure(
+            {radius * std::cos(half), -radius * std::sin(half)},
+            D2D1_FIGURE_BEGIN_HOLLOW);
+        const D2D1_ARC_SEGMENT arc{{radius * std::cos(half),
+                                    radius * std::sin(half)},
+                                   {radius, radius},
+                                   0,
+                                   kClockwise,
+                                   D2D1_ARC_SIZE_SMALL};
+        arcSink->AddArc(&arc);
+        arcSink->EndFigure(D2D1_FIGURE_END_OPEN);
+        if (FAILED(arcSink->Close())) {
+            shape = nullptr;
+        }
+    };
+    makeArc(m_pointerShape, inner - m_ringGap * 1.55f,
+            std::min(m_ringSpan * 0.38f, 0.6f));
+    makeArc(m_stickShape, m_ringDisk - m_ringGap * 0.8f, 0.28f);
+}
+
+// The direction of the middle of the slice at index, in radians (0 points
+// right, clockwise; the first slice is at the top).
+float Switcher::RadialAngle(int index) const {
+    return -kPi / 2 + index * m_ringSpan;
+}
+
+// How much the item at index is the selected one, from 0 to 1, eased. The
+// selection glides from slice to slice with the flip animation.
+float Switcher::RadialSelection(int index) const {
+    const int count = (int)m_items.size();
+    if (count <= 1) {
+        return count ? 1.0f : 0.0f;
+    }
+    float distance = PositiveMod((float)(index - m_scroll), (float)count);
+    distance = std::min(distance, count - distance);
+    const float s = std::clamp(1 - distance, 0.0f, 1.0f);
+    return s * s * (3 - 2 * s);
+}
+
+// The wheel grows in while it opens, and again a little after a window
+// closed and the slices were made over (see RemoveClosedItems).
+float Switcher::RingScale() const {
+    const float slide = (float)std::clamp(
+        (NowSeconds() - m_slideStart) / kSlideAnimationSeconds, 0.0, 1.0);
+    return Lerp(0.86f, 1.0f, m_ringOpen) *
+           Lerp(0.96f, 1.0f, EaseOutQuart(slide));
+}
+
+// From the slice's shape (pointing right from the center) to the slice at
+// index: turned into its place, with the opening turn, and, if selected,
+// moved out and made a little larger.
+D2D1::Matrix3x2F Switcher::SliceTransform(int index) const {
+    const float selected = RadialSelection(index);
+    const float angle =
+        RadialAngle(index) - (1 - m_ringOpen) * kRingOpeningTurn;
+    const float scale = RingScale() * (1 + 0.035f * selected);
+    // A single window's slice is the whole ring: it stays centered.
+    const float out =
+        m_items.size() > 1 ? m_ringGap * 1.3f * selected : 0.0f;
+    return D2D1::Matrix3x2F::Scale(scale, scale) *
+           D2D1::Matrix3x2F::Rotation(angle * 180 / kPi) *
+           D2D1::Matrix3x2F::Translation(m_width / 2 + out * std::cos(angle),
+                                         m_height / 2 + out * std::sin(angle));
+}
+
+// The slice under a point (overlay coordinates), or -1. A gap belongs to the
+// nearest slice, so the mouse never falls between two.
+int Switcher::RadialSliceAt(D2D1_POINT_2F point) const {
+    const int count = (int)m_items.size();
+    const float dx = point.x - m_width / 2;
+    const float dy = point.y - m_height / 2;
+    const float distance = std::hypot(dx, dy);
+    if (!count || distance < m_ringInner - m_ringGap ||
+        distance > m_ringOuter + m_ringGap * 2) {
+        return -1;
+    }
+    return RadialSlot(dx, dy, m_ringSpan, count);
+}
+
+// In the slice's outer corner on its clockwise side, clear of the icon.
+CloseButton Switcher::CloseButtonForSlice(int index) const {
+    CloseButton button;
+    const float outerArc = m_ringOuter * m_ringSpan - m_ringGap;
+    button.radius =
+        std::min({std::round(11 * m_dpiScale),
+                  (m_ringOuter - m_ringInner) * 0.14f, outerArc * 0.16f});
+    if (button.radius < kMinCloseButtonRadius) {
+        button.radius = 0;
+        return button;
+    }
+    const float radius = m_ringOuter - button.radius * 1.7f;
+    const float angle =
+        m_items.size() > 1
+            ? std::max(0.0f, m_ringSpan / 2 -
+                                 (button.radius * 1.7f + m_ringGap / 2) /
+                                     radius)
+            : 0.5f;
+    button.center = SliceTransform(index).TransformPoint(
+        {radius * std::cos(angle), radius * std::sin(angle)});
+    return button;
+}
+
+// The radial style's mouse stick, like a game's weapon wheel: moving the
+// mouse points at a slice, which gets selected, wherever the cursor is. Only
+// motion counts: a cursor left alone selects nothing, and after Tab the
+// stick starts over (see OnStep). Over a slice, the cursor picks that one.
+void Switcher::UpdateRadialStick() {
+    POINT cursor;
+    if (m_items.size() < 2 || !GetCursorPos(&cursor)) {
+        return;
+    }
+    if (!m_stickCursorKnown) {
+        m_stickCursor = cursor;
+        m_stickCursorKnown = true;
+        return;
+    }
+    const float dx = (float)(cursor.x - m_stickCursor.x);
+    const float dy = (float)(cursor.y - m_stickCursor.y);
+    if (dx == 0 && dy == 0) {
+        return;
+    }
+    m_stickCursor = cursor;
+    m_stickTravel += std::hypot(dx, dy);
+    m_stickX += dx;
+    m_stickY += dy;
+    const float reach = kStickReach * m_dpiScale;
+    const float deadZone = kStickDeadZone * m_dpiScale;
+    const float length = std::hypot(m_stickX, m_stickY);
+    if (length > reach) {
+        m_stickX *= reach / length;
+        m_stickY *= reach / length;
+    }
+
+    int index = -1;
+    if (m_stickTravel >= deadZone * 0.4f && PtInRect(&m_monitor, cursor)) {
+        index = RadialSliceAt({(float)(cursor.x - m_monitor.left),
+                               (float)(cursor.y - m_monitor.top)});
+    }
+    if (index >= 0) {
+        // Moving on from a slice goes on from its direction.
+        const float angle = RadialAngle(index);
+        m_stickX = reach * std::cos(angle);
+        m_stickY = reach * std::sin(angle);
+    } else if (std::hypot(m_stickX, m_stickY) >= deadZone) {
+        index = RadialSlot(m_stickX, m_stickY, m_ringSpan,
+                           (int)m_items.size());
+    }
+    if (index >= 0 && index != SelectedIndex()) {
+        MoveTargetTo(index);
+    }
+}
+
+// The wheel, under the windows flying in and out: the slices, the selected
+// one in the accent color and moved out, and the disk in the middle, with
+// the pointer running around it to the selected slice.
+void Switcher::DrawRadialBack(float t) {
+    const int count = (int)m_items.size();
+    if (!count || !m_sliceShape || t < 0.003f) {
+        return;
+    }
+    const D2D1_COLOR_F accent = m_accent;
+    const D2D1_COLOR_F edge{Lerp(accent.r, 1, 0.45f), Lerp(accent.g, 1, 0.45f),
+                            Lerp(accent.b, 1, 0.45f), 1};
+    const float edgeWidth = std::max(1.0f, m_ringGap * 0.28f);
+    auto drawSlice = [&](int index) {
+        const float s = RadialSelection(index);
+        const D2D1::Matrix3x2F transform = SliceTransform(index);
+        m_ctx->SetTransform(&transform);
+        if (s > 0.01f) {
+            // A soft glow around the selected slice, under it.
+            m_brush->SetColor(
+                D2D1::ColorF(accent.r, accent.g, accent.b, 0.10f * s * t));
+            m_ctx->DrawGeometry(m_sliceShape.get(), m_brush.get(),
+                                m_ringGap * 2.6f, m_roundStroke.get());
+            m_brush->SetColor(
+                D2D1::ColorF(accent.r, accent.g, accent.b, 0.20f * s * t));
+            m_ctx->DrawGeometry(m_sliceShape.get(), m_brush.get(),
+                                m_ringGap * 1.4f, m_roundStroke.get());
+        }
+        // Dimmed while its app is closing it.
+        const float dim = m_items[index]->closeRequestedAt ? 0.6f : 1.0f;
+        m_brush->SetColor(D2D1::ColorF(Lerp(0.20f, accent.r, s) * dim,
+                                       Lerp(0.20f, accent.g, s) * dim,
+                                       Lerp(0.21f, accent.b, s) * dim,
+                                       Lerp(0.9f, 0.96f, s) * t));
+        m_ctx->FillGeometry(m_sliceShape.get(), m_brush.get());
+        m_brush->SetColor(D2D1::ColorF(Lerp(1, edge.r, s), Lerp(1, edge.g, s),
+                                       Lerp(1, edge.b, s),
+                                       Lerp(0.07f, 0.9f, s) * t));
+        m_ctx->DrawGeometry(m_sliceShape.get(), m_brush.get(), edgeWidth,
+                            m_roundStroke.get());
+    };
+    // The selected slices (two while the selection moves) last, over their
+    // neighbors, the more selected one on top.
+    int lit[2] = {-1, -1};
+    int litCount = 0;
+    for (int i = 0; i < count; i++) {
+        if (RadialSelection(i) > 0 && litCount < 2) {
+            lit[litCount++] = i;
+        } else {
+            drawSlice(i);
+        }
+    }
+    if (litCount == 2 && RadialSelection(lit[0]) > RadialSelection(lit[1])) {
+        std::swap(lit[0], lit[1]);
+    }
+    for (int i = 0; i < litCount; i++) {
+        drawSlice(lit[i]);
+    }
+
+    // The dark lane of the pointer, and the disk inside it, lit from above.
+    const float scale = RingScale();
+    const D2D1::Matrix3x2F diskTransform =
+        D2D1::Matrix3x2F::Scale(scale, scale) *
+        D2D1::Matrix3x2F::Translation(m_width / 2, m_height / 2);
+    m_ctx->SetTransform(&diskTransform);
+    const float lane = m_ringInner - m_ringGap * 0.9f;
+    m_brush->SetColor(D2D1::ColorF(0.02f, 0.02f, 0.025f, 0.88f * t));
+    m_ctx->FillEllipse(D2D1::Ellipse({0, 0}, lane, lane), m_brush.get());
+    if (!m_diskFill) {
+        const D2D1_GRADIENT_STOP stops[] = {
+            {0, D2D1::ColorF(0.27f, 0.27f, 0.28f, 1)},
+            {1, D2D1::ColorF(0.14f, 0.14f, 0.15f, 1)},
+        };
+        com_ptr<ID2D1GradientStopCollection> collection;
+        if (SUCCEEDED(m_ctx->CreateGradientStopCollection(
+                stops, ARRAYSIZE(stops), collection.put()))) {
+            m_ctx->CreateRadialGradientBrush(
+                D2D1::RadialGradientBrushProperties(
+                    {0, -m_ringDisk * 0.35f}, {0, 0}, m_ringDisk * 1.3f,
+                    m_ringDisk * 1.3f),
+                D2D1::BrushProperties(), collection.get(), m_diskFill.put());
+        }
+    }
+    const D2D1_ELLIPSE disk = D2D1::Ellipse({0, 0}, m_ringDisk, m_ringDisk);
+    if (m_diskFill) {
+        m_diskFill->SetOpacity(0.96f * t);
+        m_ctx->FillEllipse(disk, m_diskFill.get());
+    }
+    m_brush->SetColor(D2D1::ColorF(1, 1, 1, 0.09f * t));
+    m_ctx->DrawEllipse(disk, m_brush.get(), 1);
+
+    if (count > 1 && m_pointerShape) {
+        // Follows the selection's animation, so it runs between slices.
+        const float angle = -kPi / 2 + (float)m_scroll * m_ringSpan -
+                            (1 - m_ringOpen) * kRingOpeningTurn;
+        const D2D1::Matrix3x2F pointerTransform =
+            D2D1::Matrix3x2F::Rotation(angle * 180 / kPi) * diskTransform;
+        m_ctx->SetTransform(&pointerTransform);
+        m_brush->SetColor(D2D1::ColorF(accent.r, accent.g, accent.b, t));
+        m_ctx->DrawGeometry(m_pointerShape.get(), m_brush.get(),
+                            m_ringGap * 0.8f, m_roundStroke.get());
+    }
+    const D2D1::Matrix3x2F identity = D2D1::Matrix3x2F::Identity();
+    m_ctx->SetTransform(&identity);
+}
+
+// The app's name and the title of the item at index, laid out to fit the
+// disk in the middle of the wheel: up to two lines each, cut with an
+// ellipsis. Without an app name, the title takes its place.
+bool Switcher::EnsureRadialTexts(int index) {
+    if (index == m_ringTextIndex) {
+        return m_ringNameLayout || m_ringTitleLayout;
+    }
+    const float fontSize = std::round(
+        std::clamp(m_ringDisk * 0.15f, 13 * m_dpiScale, 22 * m_dpiScale));
+    const float titleSize = std::round(fontSize * 0.74f);
+    auto makeFormat = [&](com_ptr<IDWriteTextFormat>& format, PCWSTR family,
+                          DWRITE_FONT_WEIGHT weight, float size) {
+        if (format) {
+            return true;
+        }
+        if (FAILED(m_dwriteFactory->CreateTextFormat(
+                family, nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_STRETCH_NORMAL, size, L"", format.put()))) {
+            format = nullptr;
+            return false;
+        }
+        format->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+        format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        const DWRITE_TRIMMING trimming{DWRITE_TRIMMING_GRANULARITY_CHARACTER,
+                                       0, 0};
+        com_ptr<IDWriteInlineObject> ellipsis;
+        m_dwriteFactory->CreateEllipsisTrimmingSign(format.get(),
+                                                    ellipsis.put());
+        format->SetTrimming(&trimming, ellipsis.get());
+        return true;
+    };
+    if (!makeFormat(m_ringNameFormat, L"Segoe UI Variable Display",
+                    DWRITE_FONT_WEIGHT_SEMI_BOLD, fontSize) ||
+        !makeFormat(m_ringTitleFormat, L"Segoe UI Variable Text",
+                    DWRITE_FONT_WEIGHT_NORMAL, titleSize)) {
+        return false;
+    }
+
+    m_ringTextIndex = index;
+    m_ringNameLayout = nullptr;
+    m_ringTitleLayout = nullptr;
+    const Item& item = *m_items[index];
+    // Looked up before the session opened (see LookUpAppNames).
+    const auto it = m_appNames.find(item.hwnd);
+    std::wstring name = it != m_appNames.end() ? it->second : L"";
+    std::wstring title = m_settings.showTitle ? item.title : L"";
+    if (name.empty()) {
+        std::swap(name, title);
+    } else if (title == name) {
+        title.clear();
+    }
+    // A line is about 1.33 times the font size: room for two.
+    const float width = m_ringDisk * 1.5f;
+    if (!name.empty()) {
+        m_dwriteFactory->CreateTextLayout(
+            name.c_str(), (UINT32)name.size(), m_ringNameFormat.get(), width,
+            fontSize * 2.7f, m_ringNameLayout.put());
+    }
+    if (!title.empty()) {
+        m_dwriteFactory->CreateTextLayout(
+            title.c_str(), (UINT32)title.size(), m_ringTitleFormat.get(), width,
+            titleSize * 2.7f, m_ringTitleLayout.put());
+    }
+    return m_ringNameLayout || m_ringTitleLayout;
+}
+
+// Over the windows flying in and out: the icons on the slices, the mouse
+// stick's mark, and the selected window's app name and title in the disk.
+void Switcher::DrawRadialFront(float t) {
+    const int count = (int)m_items.size();
+    if (!count || t < 0.003f) {
+        return;
+    }
+    const float scale = RingScale();
+    const float middle = (m_ringOuter + m_ringInner) / 2;
+    for (int i = 0; i < count; i++) {
+        const Item& item = *m_items[i];
+        if (!item.icon) {
+            continue;
+        }
+        const D2D1_POINT_2F center =
+            SliceTransform(i).TransformPoint({middle, 0});
+        const float half =
+            m_ringIcon * scale * (1 + 0.16f * RadialSelection(i)) / 2;
+        const D2D1_RECT_F icon{center.x - half, center.y - half,
+                               center.x + half, center.y + half};
+        m_ctx->DrawBitmap(item.icon.get(), icon,
+                          t * (item.closeRequestedAt ? 0.5f : 1.0f),
+                          D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+    }
+
+    const float deadZone = kStickDeadZone * m_dpiScale;
+    const float stick = std::hypot(m_stickX, m_stickY);
+    if (m_stickShape && stick > deadZone / 2) {
+        const float strength =
+            std::clamp((stick - deadZone / 2) / deadZone, 0.0f, 1.0f);
+        const D2D1::Matrix3x2F transform =
+            D2D1::Matrix3x2F::Scale(scale, scale) *
+            D2D1::Matrix3x2F::Rotation(std::atan2(m_stickY, m_stickX) * 180 /
+                                       kPi) *
+            D2D1::Matrix3x2F::Translation(m_width / 2, m_height / 2);
+        m_ctx->SetTransform(&transform);
+        m_brush->SetColor(D2D1::ColorF(1, 1, 1, 0.75f * strength * t));
+        m_ctx->DrawGeometry(m_stickShape.get(), m_brush.get(),
+                            std::max(2.0f, m_ringGap * 0.45f),
+                            m_roundStroke.get());
+        const D2D1::Matrix3x2F identity = D2D1::Matrix3x2F::Identity();
+        m_ctx->SetTransform(&identity);
+    }
+
+    // Visible while settled, faded out while the selection moves.
+    const double nearest = std::round(m_scroll);
+    const float settle =
+        1 - std::clamp((float)std::fabs(m_scroll - nearest) * 3, 0.0f, 1.0f);
+    const float opacity = t * t * settle;
+    if (opacity < 0.01f ||
+        !EnsureRadialTexts(PositiveMod((long long)nearest, count))) {
+        return;
+    }
+    DWRITE_TEXT_METRICS name{}, title{};
+    if (m_ringNameLayout) {
+        m_ringNameLayout->GetMetrics(&name);
+    }
+    if (m_ringTitleLayout) {
+        m_ringTitleLayout->GetMetrics(&title);
+    }
+    const float gap = m_ringNameLayout && m_ringTitleLayout
+                          ? std::round(m_ringDisk * 0.05f)
+                          : 0.0f;
+    const float left = std::round(m_width / 2 - m_ringDisk * 0.75f);
+    float top =
+        std::round(m_height / 2 - (name.height + gap + title.height) / 2);
+    if (m_ringNameLayout) {
+        m_brush->SetColor(D2D1::ColorF(1, 1, 1, opacity));
+        m_ctx->DrawTextLayout({left, top - name.top}, m_ringNameLayout.get(),
+                              m_brush.get());
+        top += name.height + gap;
+    }
+    if (m_ringTitleLayout) {
+        m_brush->SetColor(D2D1::ColorF(0.78f, 0.78f, 0.80f, opacity));
+        m_ctx->DrawTextLayout({left, top - title.top}, m_ringTitleLayout.get(),
+                              m_brush.get());
     }
 }
 
@@ -6909,9 +7706,14 @@ void Switcher::RenderFrame() {
         BeginClose(true);
     }
     RemoveClosedItems(now);
+    const bool radial = m_settings.style == AnimationStyle::Radial;
+    if (radial && m_state == State::Open) {
+        UpdateRadialStick();
+    }
 
-    // Critically damped spring towards the target.
-    const double omega = 15.0 * m_settings.flipSpeed;
+    // Critically damped spring towards the target. The wheel's selection,
+    // led by the mouse, answers faster.
+    const double omega = 15.0 * m_settings.flipSpeed * (radial ? 1.6 : 1.0);
     constexpr double kStep = 1.0 / 480;
     for (double remaining = dt; remaining > 0; remaining -= kStep) {
         const double h = std::min(remaining, kStep);
@@ -6938,13 +7740,19 @@ void Switcher::RenderFrame() {
     // Without new frames taken from it, a capture stops producing them, so
     // windows that aren't kept live cost nothing once they have a picture.
     const int selected = SelectedIndex();
+    // Styles without thumbnails show the windows only while they fly in and
+    // out: once open, their frames aren't needed.
+    const bool shown = !IsIconStyle(m_settings.style) || t < 1 ||
+                       m_state != State::Open;
     bool newContent = false;
     int closeRequests = 0;
     for (int i = 0; i < (int)m_items.size(); i++) {
         Item& item = *m_items[i];
         const bool live =
-            m_settings.liveContent == LiveContent::All ||
-            (m_settings.liveContent == LiveContent::Selected && i == selected);
+            shown &&
+            (m_settings.liveContent == LiveContent::All ||
+             (m_settings.liveContent == LiveContent::Selected &&
+              i == selected));
         if (live || !item.content) {
             newContent |= PollFrames(item);
         }
@@ -6952,6 +7760,7 @@ void Switcher::RenderFrame() {
             closeRequests++;
         }
     }
+    m_ringOpen = t;
     BuildDrawList(t);
     UpdateHover();
 
@@ -6967,7 +7776,9 @@ void Switcher::RenderFrame() {
                        m_items.size(),
                        closeRequests,
                        m_hoverIndex,
-                       m_hoverOnButton};
+                       m_hoverOnButton,
+                       m_stickX,
+                       m_stickY};
     if (!m_redraw && !newContent && m_closingItems.empty() &&
         key == m_lastFrameKey) {
         if (FAILED(DwmFlush())) {
@@ -7082,7 +7893,9 @@ com_ptr<ID2D1Bitmap1> Switcher::GetIconBitmap(HWND hwnd) {
         }
     }
     if (!entry.pixels) {
+        // Already at the large size.
         entry.pixels = ReadAppIconPixels(hwnd);
+        entry.large = (bool)entry.pixels;
     }
     if (entry.pixels) {
         entry.bitmap = CreateIconBitmap(entry.pixels.get());
@@ -7109,32 +7922,43 @@ void Switcher::RefreshIcons() {
                   [](const auto& entry) { return !IsWindow(entry.first); });
     std::erase_if(m_appNames,
                   [](const auto& entry) { return !IsWindow(entry.first); });
-    for (int i = 0; i < kShortcutCount; i++) {
-        if (m_settings.shortcutOn[i] &&
-            ShowsAppName(m_settings.shortcutStyle[i])) {
-            std::vector<HWND> windows;
-            for (const auto& [hwnd, entry] : m_iconCache) {
-                windows.push_back(hwnd);
-            }
-            LookUpAppNames(windows);
-            break;
-        }
+    std::vector<HWND> windows;
+    for (const auto& [hwnd, entry] : m_iconCache) {
+        windows.push_back(hwnd);
+    }
+    if (AnyShortcutStyle(ShowsAppName)) {
+        LookUpAppNames(windows);
     }
 
     for (auto& [hwnd, entry] : m_iconCache) {
         HICON icon = GetWindowIcon(hwnd);
         if (icon && icon != entry.source) {
+            // A new icon: its large version is looked for again below.
             if (auto pixels = ReadIconPixels(icon)) {
                 entry = {icon, pixels, CreateIconBitmap(pixels.get())};
             }
         } else if (!icon && !entry.pixels) {
             // Still no window icon; the app may have finished starting.
             entry.pixels = ReadAppIconPixels(hwnd);
+            entry.large = (bool)entry.pixels;
             if (entry.pixels) {
                 entry.bitmap = CreateIconBitmap(entry.pixels.get());
             }
         }
     }
+    if (AnyShortcutStyle(ShowsLargeIcons)) {
+        LoadLargeIcons(windows);
+    }
+}
+
+// Whether a shortcut that's on uses a style passing the test.
+bool Switcher::AnyShortcutStyle(bool (*test)(AnimationStyle)) const {
+    for (int i = 0; i < kShortcutCount; i++) {
+        if (m_settings.shortcutOn[i] && test(m_settings.shortcutStyle[i])) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Copies an image into memory, in the format of the bitmaps. Unlike a bitmap,
@@ -7176,7 +8000,7 @@ com_ptr<IWICBitmap> Switcher::ReadAppIconPixels(HWND hwnd) {
                                          IID_PPV_ARGS(imageFactory.put())))) {
         return nullptr;
     }
-    const int size = (int)std::round(64 * m_dpiScale);
+    const int size = (int)std::round(kLargeIconSize * m_dpiScale);
     HBITMAP hbitmap = nullptr;
     if (FAILED(imageFactory->GetImage({size, size}, SIIGBF_ICONONLY,
                                       &hbitmap))) {
@@ -7192,6 +8016,126 @@ com_ptr<IWICBitmap> Switcher::ReadAppIconPixels(HWND hwnd) {
     }
     DeleteObject(hbitmap);
     return pixels;
+}
+
+// An icon's pixels, made smaller if it's larger than size (in pixels), with
+// a filter that keeps it sharp. Premultiplied first, so the transparent
+// pixels around it don't darken its edges.
+com_ptr<IWICBitmap> Switcher::ReadIconPixelsAt(HICON icon, int size) {
+    com_ptr<IWICBitmap> source;
+    UINT width = 0, height = 0;
+    if (FAILED(m_wicFactory->CreateBitmapFromHICON(icon, source.put())) ||
+        FAILED(source->GetSize(&width, &height)) || !width || !height) {
+        return nullptr;
+    }
+    com_ptr<IWICBitmap> pixels = CopyPixels(m_wicFactory.get(), source.get());
+    const UINT longest = std::max(width, height);
+    if (!pixels || (int)longest <= size) {
+        return pixels;
+    }
+    com_ptr<IWICBitmapScaler> scaler;
+    if (FAILED(m_wicFactory->CreateBitmapScaler(scaler.put())) ||
+        FAILED(scaler->Initialize(pixels.get(),
+                                  std::max(1u, size * width / longest),
+                                  std::max(1u, size * height / longest),
+                                  WICBitmapInterpolationModeFant))) {
+        return pixels;
+    }
+    com_ptr<IWICBitmap> scaled = CopyPixels(m_wicFactory.get(), scaler.get());
+    return scaled ? scaled : pixels;
+}
+
+// Programs that run other programs (scripts, Java, consoles, control panel
+// parts, packaged apps): their own icon isn't their windows'.
+bool IsHostProgram(const std::wstring& path) {
+    static constexpr PCWSTR kHosts[] = {
+        L"rundll32.exe",   L"dllhost.exe",     L"mmc.exe",
+        L"java.exe",       L"javaw.exe",       L"python.exe",
+        L"pythonw.exe",    L"wscript.exe",     L"cscript.exe",
+        L"mshta.exe",      L"powershell.exe",  L"pwsh.exe",
+        L"conhost.exe",    L"openconsole.exe", L"applicationframehost.exe",
+    };
+    const size_t slash = path.find_last_of(L'\\');
+    const std::wstring name =
+        ToLower(slash == std::wstring::npos ? path : path.substr(slash + 1));
+    return std::any_of(std::begin(kHosts), std::end(kHosts),
+                       [&](PCWSTR host) { return name == host; });
+}
+
+// The large version of a window's icon, at the size the largest icons are
+// drawn at: the same icon read again from the file it came from, at 256
+// pixels (most apps' largest size), made smaller with care; or, for an icon
+// the window made itself, its app's icon (by its AppUserModelID, or its
+// program's, unless the program runs other ones).
+com_ptr<IWICBitmap> Switcher::ReadLargeIconPixels(HWND hwnd, HICON icon) {
+    const int size = (int)std::round(kLargeIconSize * m_dpiScale);
+    constexpr int kLargestIcon = 256;
+    HICON large = nullptr;
+    ICONINFOEXW info{};
+    info.cbSize = sizeof(info);
+    if (icon && GetIconInfoExW(icon, &info)) {
+        if (info.hbmColor) {
+            DeleteObject(info.hbmColor);
+        }
+        if (info.hbmMask) {
+            DeleteObject(info.hbmMask);
+        }
+        const PCWSTR resource = info.szResName[0] ? info.szResName
+                                : info.wResID ? MAKEINTRESOURCEW(info.wResID)
+                                              : nullptr;
+        // Only a full path: the file the icon was loaded from.
+        if (resource && wcschr(info.szModName, L'\\')) {
+            if (HMODULE module = LoadLibraryExW(
+                    info.szModName, nullptr,
+                    LOAD_LIBRARY_AS_DATAFILE |
+                        LOAD_LIBRARY_AS_IMAGE_RESOURCE)) {
+                large = (HICON)LoadImageW(module, resource, IMAGE_ICON,
+                                          kLargestIcon, kLargestIcon,
+                                          LR_DEFAULTCOLOR);
+                FreeLibrary(module);
+            }
+        }
+    }
+    if (!large) {
+        if (auto pixels = ReadAppIconPixels(hwnd)) {
+            return pixels;
+        }
+        const std::wstring path = GetWindowProcessPath(hwnd);
+        if (path.empty() || IsHostProgram(path) ||
+            SHDefExtractIconW(path.c_str(), 0, 0, &large, nullptr,
+                              kLargestIcon) != S_OK ||
+            !large) {
+            return nullptr;
+        }
+    }
+    com_ptr<IWICBitmap> pixels = ReadIconPixelsAt(large, size);
+    DestroyIcon(large);
+    return pixels;
+}
+
+// Window icons are usually 32 pixels at 100% scaling, blurry where they're
+// drawn larger (see ShowsLargeIcons). This looks for the large version of
+// the icons of these windows that weren't looked for yet. It reads files,
+// so like the app names, it's done after a session (see RefreshIcons), and
+// before a session opens for new windows (see ShowOverlay).
+void Switcher::LoadLargeIcons(const std::vector<HWND>& windows) {
+    for (HWND hwnd : windows) {
+        const auto it = m_iconCache.find(hwnd);
+        if (it == m_iconCache.end() || it->second.large) {
+            continue;
+        }
+        CachedIcon& entry = it->second;
+        entry.large = true;
+        com_ptr<IWICBitmap> pixels = ReadLargeIconPixels(hwnd, entry.source);
+        com_ptr<ID2D1Bitmap1> bitmap;
+        if (pixels) {
+            bitmap = CreateIconBitmap(pixels.get());
+        }
+        if (bitmap) {
+            entry.pixels = pixels;
+            entry.bitmap = bitmap;
+        }
+    }
 }
 
 com_ptr<ID2D1Bitmap1> Switcher::CreateIconBitmap(IWICBitmap* pixels) {
@@ -7398,6 +8342,19 @@ std::wstring GetTranscodedWallpaperPath() {
     return path;
 }
 
+// Whether Windows is in light mode (Settings > Personalization > Colors),
+// which the system's own parts follow, Alt+Tab included.
+bool SystemUsesLightTheme() {
+    DWORD value = 0;
+    DWORD size = sizeof(value);
+    return RegGetValueW(HKEY_CURRENT_USER,
+                        L"Software\\Microsoft\\Windows\\CurrentVersion\\"
+                        L"Themes\\Personalize",
+                        L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr,
+                        &value, &size) == ERROR_SUCCESS &&
+           value != 0;
+}
+
 // Whether the desktop background is a solid color, with no picture.
 bool IsSolidColorBackground() {
     DWORD type = 0;
@@ -7408,6 +8365,98 @@ bool IsSolidColorBackground() {
                         L"BackgroundType", RRF_RT_REG_DWORD, nullptr, &type,
                         &size) == ERROR_SUCCESS &&
            type == 1;
+}
+
+// Mica or Mica Alt (see BackgroundMode), made like the backdrop of Windows 11
+// apps (WinUI's Mica): the wallpaper blurred until only its colors are left,
+// given the brightness of the theme's tint color (a luminosity blend), then
+// turned partly to the tint's gray (a color blend, which Mica Alt skips in
+// dark mode, keeping more of the wallpaper's color). Made at a quarter of the
+// size, which such a blur can't tell apart.
+com_ptr<ID2D1Bitmap1> Switcher::CreateMica(ID2D1Bitmap1* wallpaper,
+                                           UINT width,
+                                           UINT height,
+                                           bool light) {
+    const bool alt = m_settings.background == BackgroundMode::MicaAlt;
+    // The tint's gray and opacity, as in WinUI (Mica Alt: its base colors).
+    const float tint = alt ? (light ? 0xDA : 0x0A) / 255.0f
+                           : (light ? 0xF3 : 0x20) / 255.0f;
+    const float tintOpacity = light ? 0.5f : (alt ? 0.0f : 0.8f);
+    const UINT smallWidth = std::max(width / 4, 1u);
+    const UINT smallHeight = std::max(height / 4, 1u);
+
+    com_ptr<ID2D1Bitmap1> reduced =
+        CreateTargetBitmap(smallWidth, smallHeight);
+    com_ptr<ID2D1Bitmap1> tinted = CreateTargetBitmap(smallWidth, smallHeight);
+    com_ptr<ID2D1Bitmap1> result = CreateTargetBitmap(width, height);
+    com_ptr<ID2D1Effect> border, blur, luminosityColor, luminosity, tintColor,
+        color;
+    if (!reduced || !tinted || !result ||
+        FAILED(m_ctx->CreateEffect(CLSID_D2D1Border, border.put())) ||
+        FAILED(m_ctx->CreateEffect(CLSID_D2D1GaussianBlur, blur.put())) ||
+        FAILED(m_ctx->CreateEffect(CLSID_D2D1Flood, luminosityColor.put())) ||
+        FAILED(m_ctx->CreateEffect(CLSID_D2D1Blend, luminosity.put())) ||
+        FAILED(m_ctx->CreateEffect(CLSID_D2D1Flood, tintColor.put())) ||
+        FAILED(m_ctx->CreateEffect(CLSID_D2D1Blend, color.put()))) {
+        return nullptr;
+    }
+    // Draws into a bitmap of ours; false if that failed.
+    auto drawInto = [&](ID2D1Bitmap1* target, auto&& draw) {
+        m_ctx->SetTarget(target);
+        m_ctx->BeginDraw();
+        m_ctx->Clear(D2D1::ColorF(0, 0, 0, 1));
+        draw();
+        const HRESULT hr = m_ctx->EndDraw();
+        m_ctx->SetTarget(nullptr);
+        return SUCCEEDED(hr);
+    };
+
+    const D2D1_RECT_F smallRect{0, 0, (float)smallWidth, (float)smallHeight};
+    if (!drawInto(reduced.get(), [&] {
+            m_ctx->DrawBitmap(wallpaper, smallRect, 1,
+                              D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+        })) {
+        return nullptr;
+    }
+
+    // Mirrored edges, so the blur doesn't darken them.
+    border->SetInput(0, reduced.get());
+    border->SetValue(D2D1_BORDER_PROP_EDGE_MODE_X,
+                     (UINT32)D2D1_BORDER_EDGE_MODE_MIRROR);
+    border->SetValue(D2D1_BORDER_PROP_EDGE_MODE_Y,
+                     (UINT32)D2D1_BORDER_EDGE_MODE_MIRROR);
+    blur->SetInputEffect(0, border.get());
+    blur->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION,
+                   std::min(smallWidth, smallHeight) * 0.074f);
+    blur->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE,
+                   (UINT32)D2D1_BORDER_MODE_HARD);
+    blur->SetValue(D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION,
+                   kGaussianBlurOptimizationQuality);
+    // Input 0 is the one below, input 1 the one blended over it.
+    luminosityColor->SetValue(D2D1_FLOOD_PROP_COLOR,
+                              D2D1::Vector4F(tint, tint, tint, 1));
+    luminosity->SetInputEffect(0, blur.get());
+    luminosity->SetInputEffect(1, luminosityColor.get());
+    luminosity->SetValue(D2D1_BLEND_PROP_MODE,
+                         (UINT32)D2D1_BLEND_MODE_LUMINOSITY);
+    tintColor->SetValue(D2D1_FLOOD_PROP_COLOR,
+                        D2D1::Vector4F(tint * tintOpacity, tint * tintOpacity,
+                                       tint * tintOpacity, tintOpacity));
+    color->SetInputEffect(0, luminosity.get());
+    color->SetInputEffect(1, tintColor.get());
+    color->SetValue(D2D1_BLEND_PROP_MODE, (UINT32)D2D1_BLEND_MODE_COLOR);
+    if (!drawInto(tinted.get(), [&] { m_ctx->DrawImage(color.get()); })) {
+        return nullptr;
+    }
+
+    const D2D1_RECT_F rect{0, 0, (float)width, (float)height};
+    if (!drawInto(result.get(), [&] {
+            m_ctx->DrawBitmap(tinted.get(), rect, 1,
+                              D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+        })) {
+        return nullptr;
+    }
+    return result;
 }
 
 void Switcher::UpdateBackground() {
@@ -7476,6 +8525,9 @@ void Switcher::UpdateBackground() {
     const bool solidColor = path.empty() && IsSolidColorBackground();
     const std::wstring transcoded =
         solidColor ? std::wstring() : GetTranscodedWallpaperPath();
+    const bool mica = m_settings.background == BackgroundMode::Mica ||
+                      m_settings.background == BackgroundMode::MicaAlt;
+    const bool light = mica && SystemUsesLightTheme();
 
     // The wallpaper files are often replaced in place, so include their time.
     const std::wstring key =
@@ -7486,7 +8538,8 @@ void Switcher::UpdateBackground() {
         std::to_wstring(m_monitor.top) + L"|" +
         std::to_wstring(color) + L"|" + std::to_wstring((int)position) + L"|" +
         std::to_wstring((int)m_settings.background) + L"|" +
-        std::to_wstring(m_settings.blurAmount);
+        std::to_wstring(m_settings.blurAmount) + L"|" +
+        std::to_wstring((int)light);
     if (key == m_backgroundKey) {
         return;
     }
@@ -7531,6 +8584,12 @@ void Switcher::UpdateBackground() {
         return;
     }
 
+    if (mica) {
+        com_ptr<ID2D1Bitmap1> material =
+            CreateMica(composed.get(), width, height, light);
+        m_background = material ? material : composed;
+        return;
+    }
     if (m_settings.background != BackgroundMode::BlurredWallpaper) {
         m_background = composed;
         return;
