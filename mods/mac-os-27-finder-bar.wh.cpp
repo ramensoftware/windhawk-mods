@@ -1070,6 +1070,7 @@ struct Bar {
     float hVisFrom = 0, hVisTo = 0, hGrowFrom = 0, hGrowTo = 0;
     ULONGLONG hVisTick = 0, hGrowTick = 0;
     bool maxHidden = false;       // escondida por janela maximizada
+    bool reserveAfterSlide = false;  // alça: reservar o espaço (as janelas descem) quando a barra terminar de descer
     HWND peekSrc = nullptr;       // a janela de onde veio peekColor
     ULONGLONG lqShot = 0;         // vidro líquido sem "ao vivo": quando a foto do fundo foi tirada
     bool lqShown = false;         // a barra estava visível na última volta do vidro líquido
@@ -4526,6 +4527,7 @@ static LRESULT CALLBACK TrayClientProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
             // TaskbarCreated (que pode cair na janela em que a barra o ignora).
             static bool firstHello = true;
             if (!firstHello && !g_rebuildScheduled) {
+                Wh_Log(L"Refaz as barras: um Explorer novo se apresentou (o anterior fechou ou travou)");
                 g_rebuildScheduled = true;
                 RequestReload(1);
             }
@@ -6079,7 +6081,13 @@ static bool CcEnsureResources() {
 }
 
 // maxSide > 0: reduz a imagem (se for maior) para no máximo esse lado, antes de virar bitmap.
-static ID2D1Bitmap* DecodeImage(ID2D1RenderTarget* rt, const std::vector<BYTE>& bytes, UINT maxSide = 0) {
+// coverW/coverH > 0: uma capa pequena (o Chrome manda miniaturas de ~150 px) é
+// ampliada aqui, uma vez, em bicúbica de alta qualidade, até cobrir a caixa onde
+// vai ser desenhada: fica bem mais lisa que a ampliação linear a cada quadro.
+// fitWide: uma capa larga (miniatura de vídeo) é ampliada para caber inteira na
+// caixa, em vez de cobri-la (ArtWide / DrawArtFit).
+static ID2D1Bitmap* DecodeImage(ID2D1RenderTarget* rt, const std::vector<BYTE>& bytes, UINT maxSide = 0, float coverW = 0,
+                                float coverH = 0, bool fitWide = false) {
     if (!g_wic || bytes.empty()) return nullptr;
     IWICStream* stream = nullptr;
     IWICBitmapDecoder* dec = nullptr;
@@ -6100,6 +6108,14 @@ static ID2D1Bitmap* DecodeImage(ID2D1RenderTarget* rt, const std::vector<BYTE>& 
             double k = (double)maxSide / std::max(w, h);
             UINT sw = std::max(1u, (UINT)std::lround(w * k)), sh = std::max(1u, (UINT)std::lround(h * k));
             if (SUCCEEDED(scaler->Initialize(conv, sw, sh, WICBitmapInterpolationModeFant))) src = scaler;
+        } else if (coverW > 0 && coverH > 0 && SUCCEEDED(conv->GetSize(&w, &h)) && w && h) {
+            bool wide = fitWide && w > h * 1.15;
+            double k = wide ? std::min(coverW / w, coverH / h) : std::max(coverW / w, coverH / h);
+            if (k > 1.05 && k < 16 && SUCCEEDED(g_wic->CreateBitmapScaler(&scaler))) {
+                UINT sw = (UINT)std::lround(w * k), sh = (UINT)std::lround(h * k);
+                // 4 = WICBitmapInterpolationModeHighQualityCubic (Windows 10+; falta nos cabeçalhos do MinGW).
+                if (SUCCEEDED(scaler->Initialize(conv, sw, sh, (WICBitmapInterpolationMode)4))) src = scaler;
+            }
         }
         rt->CreateBitmapFromWicBitmap(src, nullptr, &bmp);
     }
@@ -7603,7 +7619,7 @@ static void CcRender() {
     g_cc.rt->Clear(D2D1::ColorF(0, 0, 0, 0));
     if (newArt) {
         SafeRelease(g_cc.art);
-        g_cc.art = DecodeImage(g_cc.rt, sh.thumb);
+        g_cc.art = DecodeImage(g_cc.rt, sh.thumb, 0, 44 * g_cc.s, 44 * g_cc.s);  // a caixa da capa no Controle
         g_cc.artSerial = serial;
     }
 
@@ -11966,6 +11982,7 @@ struct NowPlayingWnd {
     HGDIOBJ oldBmp = nullptr;
     IDWriteTextFormat *fTitle = nullptr, *fText = nullptr, *fSmall = nullptr, *fIcon = nullptr;
     ID2D1Bitmap* artBmp = nullptr;
+    ID2D1Bitmap* artBlur = nullptr;  // a capa em poucos pixels, ampliada: o fundo desfocado de uma capa larga
     UINT artSerial = 0;
     int hover = 0;  // 1 anterior, 2 tocar, 3 próxima, 4 saída, 5 barra
     bool dragging = false, tracking = false, menuOpen = false;
@@ -12235,8 +12252,47 @@ static D2D1_COLOR_F NpArtTint(const std::vector<BYTE>& bytes) {
     return out;
 }
 
+// Capa larga (a miniatura 16:9 de um vídeo): o Chrome a manda com ~150 px de
+// largura. Cortada para cobrir a caixa, sobravam ~84 px esticados; inteira, ela
+// usa a largura toda, e o resto da caixa é a própria capa desfocada, como no iOS.
+static bool ArtWide(ID2D1Bitmap* bmp) {
+    if (!bmp) return false;
+    D2D1_SIZE_F bs = bmp->GetSize();
+    return bs.width > bs.height * 1.15f;
+}
+// Desenha a capa na caixa (quem chama recorta por ela) e devolve onde a imagem
+// nítida ficou. midBottom: até onde centralizar na vertical (a capa cheia deixa
+// o texto e os botões embaixo).
+static D2D1_RECT_F DrawArtFit(ID2D1RenderTarget* rt, ID2D1Bitmap* bmp, ID2D1Bitmap* blur, const D2D1_RECT_F& box,
+                              float midBottom = -1) {
+    if (!ArtWide(bmp)) {
+        D2D1_RECT_F dst = CoverFill(bmp, box);
+        rt->DrawBitmap(bmp, dst, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        return dst;
+    }
+    if (blur) {
+        rt->DrawBitmap(blur, CoverFill(blur, box), 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        ID2D1SolidColorBrush* veil = nullptr;
+        if (SUCCEEDED(rt->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 0.18f), &veil))) {
+            rt->FillRectangle(box, veil);
+            veil->Release();
+        }
+    }
+    D2D1_SIZE_F bs = bmp->GetSize();
+    float bw = box.right - box.left, bh = box.bottom - box.top;
+    float sc = std::min(bw / bs.width, bh / bs.height);
+    float dw = bs.width * sc, dh = bs.height * sc;
+    float bottom = midBottom > box.top + dh ? std::min(midBottom, box.bottom) : box.bottom;
+    float top = box.top + std::max(0.0f, (bottom - box.top - dh) / 2);
+    float left = box.left + (bw - dw) / 2;
+    D2D1_RECT_F dst = D2D1::RectF(left, top, left + dw, top + dh);
+    rt->DrawBitmap(bmp, dst, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+    return dst;
+}
+
 static void NpReleaseGraphics() {
     SafeRelease(g_np.artBmp);
+    SafeRelease(g_np.artBlur);
     g_np.artSerial = 0;
     SafeRelease(g_np.brush);
     SafeRelease(g_np.rt);
@@ -12329,7 +12385,10 @@ static void NpRender() {
     sh.posTick = g_ccShared.posTick;
     sh.app = g_ccShared.app;
     UINT serial = g_ccShared.thumbSerial;
-    bool newArt = serial != g_np.artSerial;
+    // (Também quando a caixa da capa muda de tamanho: a capa é ampliada para ela.)
+    static float artBoxW = 0, artBoxH = 0;
+    float boxW = g_np.art.right - g_np.art.left, boxH = g_np.art.bottom - g_np.art.top;
+    bool newArt = serial != g_np.artSerial || std::fabs(boxW - artBoxW) > 0.5f || std::fabs(boxH - artBoxH) > 0.5f;
     if (newArt) sh.thumb = g_ccShared.thumb;
     ReleaseSRWLockShared(&g_ccLock);
     bool playing = sh.playing;
@@ -12383,7 +12442,11 @@ static void NpRender() {
     rt->Clear(D2D1::ColorF(0, 0, 0, 0));
     if (newArt) {
         SafeRelease(g_np.artBmp);
-        g_np.artBmp = DecodeImage(rt, sh.thumb);
+        SafeRelease(g_np.artBlur);
+        g_np.artBmp = DecodeImage(rt, sh.thumb, 0, boxW, boxH, true);
+        g_np.artBlur = DecodeImage(rt, sh.thumb, 8);
+        artBoxW = boxW;
+        artBoxH = boxH;
         g_np.artSerial = serial;
         static UINT tintSerial = (UINT)-1;
         static D2D1_COLOR_F tintCache;
@@ -12406,15 +12469,9 @@ static void NpRender() {
         if (SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(pr, &clip)) && SUCCEEDED(rt->CreateLayer(&cl))) {
             rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip), cl);
             if (g_np.artBmp && sh.mediaHas) {
-                // Preenche sem deformar: a capa é cortada nas laterais.
-                D2D1_SIZE_F bs = g_np.artBmp->GetSize();
-                float pw = P.right - P.left, ph = P.bottom - P.top;
-                float sc = std::max(pw / std::max(1.0f, bs.width), ph / std::max(1.0f, bs.height));
-                float dw = bs.width * sc, dh = bs.height * sc;
-                D2D1_RECT_F dst = D2D1::RectF(P.left + (pw - dw) / 2, P.top + (ph - dh) / 2, P.left + (pw + dw) / 2,
-                                              P.top + (ph + dh) / 2);
-                rt->DrawBitmap(g_np.artBmp, dst, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
-                coverDst = dst;
+                // Preenche sem deformar: a capa é cortada nas laterais; uma capa
+                // larga fica inteira, no alto, sobre ela mesma desfocada.
+                coverDst = DrawArtFit(rt, g_np.artBmp, g_np.artBlur, P, g_np.appR.top - 40 * s * g_np.k);
             } else {
                 D2D1_GRADIENT_STOP gs[] = {{0.0f, Argb(g_settings.ccAccent | 0xFF000000)},
                                            {0.6f, D2D1::ColorF(0.957f, 0.447f, 0.714f, 1)},
@@ -12463,7 +12520,7 @@ static void NpRender() {
         ID2D1Layer* cl = nullptr;
         if (SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(artR, &clip)) && SUCCEEDED(rt->CreateLayer(&cl))) {
             rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip), cl);
-            rt->DrawBitmap(g_np.artBmp, CoverFill(g_np.artBmp, g_np.art), 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+            DrawArtFit(rt, g_np.artBmp, g_np.artBlur, g_np.art);
             rt->PopLayer();
         }
         SafeRelease(cl);
@@ -12636,6 +12693,8 @@ static void NpRender() {
                 D2D1::Matrix3x2F was;
                 rt->GetTransform(&was);
                 rt->SetTransform(D2D1::Matrix3x2F::Scale(1.22f, 1.22f, D2D1::Point2F(mx, my)) * was);
+                if (g_np.artBlur && ArtWide(g_np.artBmp))  // (fora da capa larga, o fundo desfocado)
+                    rt->DrawBitmap(g_np.artBlur, CoverFill(g_np.artBlur, P), 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
                 rt->DrawBitmap(g_np.artBmp, coverDst, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
                 rt->SetTransform(was);
                 br->SetColor(D2D1::ColorF(0, 0, 0, 0.18f));  // um véu, para o ícone branco ler bem
@@ -23857,7 +23916,7 @@ static void BarSetupStyle(Bar* b) {
 
 // ---- Ícones animados da barra (volume, Wi-Fi, brilho) ----
 #define BAR_ANIM_TIMER 78
-#define BAR_SLIDE_TIMER 79  // a barra deslizando ao aparecer ou sumir
+#define BAR_SLIDE_TIMER 1489  // a barra deslizando ao aparecer ou sumir (não pode repetir TIMER_TIP, 79)
 
 
 // Corre `v` atrás de `target` (suave); diz se ainda está se mexendo.
@@ -24663,6 +24722,17 @@ static void SetAppBarPos(Bar* b, bool onlyIfChanged) {
     abd.uEdge = ABE_TOP;
     abd.rc = {b->monRect.left, b->monRect.top, b->monRect.right, b->monRect.top + b->heightPx};
     SHAppBarMessage(ABM_QUERYPOS, &abd);
+    // A barra nunca sai do próprio monitor. Fora dele (acima do topo), o Windows
+    // a passa para o monitor vizinho, que pode ter outra escala: chega um
+    // WM_DPICHANGED e as barras se refaziam sem parar.
+    if (abd.rc.top < b->monRect.top || abd.rc.top > b->monRect.bottom - b->heightPx ||
+        abd.rc.left != b->monRect.left || abd.rc.right != b->monRect.right) {
+        Wh_Log(L"Barra %d,%d: o Windows sugeriu a posição %d,%d-%d,%d; fica no topo do monitor", b->monRect.left,
+               b->monRect.top, abd.rc.left, abd.rc.top, abd.rc.right, abd.rc.bottom);
+        abd.rc.left = b->monRect.left;
+        abd.rc.right = b->monRect.right;
+        abd.rc.top = std::clamp(abd.rc.top, b->monRect.top, b->monRect.bottom - b->heightPx);
+    }
     abd.rc.bottom = abd.rc.top + b->heightPx;
     RECT cur;
     if (onlyIfChanged && GetWindowRect(b->hwnd, &cur) && EqualRect(&cur, &abd.rc)) return;
@@ -24709,11 +24779,20 @@ static BOOL CALLBACK TopOnMonProc(HWND w, LPARAM lp) {
     GetWindowThreadProcessId(w, &pid);
     if (IsShellOrSelf(pid)) return TRUE;  // a barra, os painéis dela e o shell (barra de tarefas)
     if (MonitorFromWindow(w, MONITOR_DEFAULTTONULL) != f->mon) return TRUE;
+    // Sobreposições do tamanho da tela que não são um app em tela cheia: janelas
+    // em camadas (efeitos do cursor, ilhas, papéis de parede animados) e as de
+    // outros mods do Windhawk (que rodam em windhawk.exe ou windhawk-mod.exe). Um
+    // vídeo ou jogo em tela cheia não é janela em camadas.
+    if (GetWindowLongW(w, GWL_EXSTYLE) & WS_EX_LAYERED) return TRUE;
+    if (_wcsnicmp(BaseName(ExeOfPid(pid)), L"windhawk", 8) == 0) return TRUE;
+    if (IsShellOverlayProcess(w)) return TRUE;
     f->found = w;
     return FALSE;
 }
+static HWND g_fsWhy = nullptr;  // a janela que fez a barra se esconder (para o log)
 static bool ForegroundIsFullscreenOn(Bar* b) {
     HWND fg = GetForegroundWindow();
+    g_fsWhy = fg;
     if (!fg || ClassIs(fg, L"Progman") || ClassIs(fg, L"WorkerW")) return false;
     if (MonitorFromWindow(fg, MONITOR_DEFAULTTONULL) != b->monitor) {
         // O app ativo está noutro monitor: vale a janela de cima deste (um vídeo
@@ -24721,6 +24800,7 @@ static bool ForegroundIsFullscreenOn(Bar* b) {
         // antes a barra continuava por cima dele, issue #1).
         TopOnMon t{b->monitor};
         EnumWindows(TopOnMonProc, (LPARAM)&t);
+        g_fsWhy = t.found;
         return t.found && WindowIsFullscreenOn(t.found, b);
     }
     DWORD pid = 0;
@@ -24819,6 +24899,7 @@ static void UpdateFullscreen() {
         // (Com "Ocultar com a alça", só a alça esconde e mostra a barra.)
         if (g_settings.hideOnFullscreen && !(g_settings.autoHide && g_settings.revealHandle))
             hide = ForegroundIsFullscreenOn(b);  // (o shell e a própria barra não contam)
+        HWND why = hide ? g_fsWhy : nullptr;
         if (!hide && g_settings.hideWhenMaximized && !g_settings.autoHide && AnyMaximizedOn(b)) hide = forMax = true;
         // Só esconde se continuar em tela cheia na conferência seguinte (uma janela
         // que pisca do tamanho da tela não derruba a barra); volta na hora.
@@ -24831,8 +24912,11 @@ static void UpdateFullscreen() {
             if (now - b->fsSince < 600) hide = false;
             else {
                 wchar_t cls[96] = L"";
-                GetClassNameW(GetForegroundWindow(), cls, ARRAYSIZE(cls));
-                Wh_Log(L"Tela cheia: barra oculta (janela %s)", cls);
+                if (why) GetClassNameW(why, cls, ARRAYSIZE(cls));
+                DWORD wpid = 0;
+                if (why) GetWindowThreadProcessId(why, &wpid);
+                Wh_Log(L"Tela cheia: barra oculta no monitor %d,%d (janela %s de %s, %s)", b->monRect.left, b->monRect.top, cls,
+                       BaseName(ExeOfPid(wpid)), why == GetForegroundWindow() ? L"em primeiro plano" : L"no topo deste monitor");
             }
         }
         bool wasMaxHidden = b->maxHidden;
@@ -24846,6 +24930,8 @@ static void UpdateFullscreen() {
             }
         }
         if (hide != b->hiddenForFullscreen) {
+            Wh_Log(L"Barra %d,%d: %s (%s)", b->monRect.left, b->monRect.top, hide ? L"oculta" : L"volta",
+                   forMax || wasMaxHidden ? L"janela maximizada" : L"tela cheia");
             b->hiddenForFullscreen = hide;
             // Com a alça, a barra escondida por ela continua escondida ao sair da
             // tela cheia (issue #15): só a alça a mostra.
@@ -25070,18 +25156,30 @@ static void HandleRender(Bar* b) {
 // A alça aparece só quando a barra está escondida por um desses dois modos.
 // A barra desliza de cima para baixo ao aparecer, e de volta ao sumir, como no
 // macOS. Sem as animações dos painéis, é na hora.
+static bool g_barSlideMove = false;  // a própria barra está deslizando para fora do topo
+static constexpr float kSlideInMs = 320, kSlideOutMs = 220;
+static void BarReserveSpace(Bar* b);
 static void BarSlideStep(Bar* b) {
-    float u = std::clamp((float)(GetTickCount64() - b->slideTick) / 220.0f, 0.0f, 1.0f);
-    float e = b->slideIn ? 1 - (1 - u) * (1 - u) * (1 - u) : u * u * u;  // entra freando, sai acelerando
-    float off = b->slideIn ? 1 - e : e;
+    if (!b->slideTick) {  // (não está deslizando)
+        KillTimer(b->hwnd, BAR_SLIDE_TIMER);
+        return;
+    }
+    float u = std::clamp((float)(GetTickCount64() - b->slideTick) / (b->slideIn ? kSlideInMs : kSlideOutMs), 0.0f, 1.0f);
+    // Entra freando devagar (quártica), sai acelerando (cúbica).
+    float v = 1 - u;
+    float off = b->slideIn ? v * v * v * v : u * u * u;
     int y = b->monRect.top - (int)std::lround(b->heightPx * off);
+    g_barSlideMove = true;
     SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+    g_barSlideMove = false;
     if (u < 1) return;
     KillTimer(b->hwnd, BAR_SLIDE_TIMER);
     b->slideTick = 0;
     if (!b->slideIn) {
         ShowWindow(b->hwnd, SW_HIDE);
         SetWindowPos(b->hwnd, nullptr, b->monRect.left, b->monRect.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    } else if (b->reserveAfterSlide) {
+        BarReserveSpace(b);
     }
     BarSyncShadow(b);
 }
@@ -25090,6 +25188,7 @@ static void BarSlide(Bar* b, bool in) {
         if (in) {
             SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, b->monRect.top, 0, 0,
                          SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            if (b->reserveAfterSlide) BarReserveSpace(b);
         } else {
             ShowWindow(b->hwnd, SW_HIDE);
         }
@@ -25107,14 +25206,16 @@ static void BarSlide(Bar* b, bool in) {
         from = in ? 1.0f : 0.0f;
     }
     if (in && !IsWindowVisible(b->hwnd)) {
+        g_barSlideMove = true;
         SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, b->monRect.top - b->heightPx, 0, 0,
                      SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        g_barSlideMove = false;
         from = 1;
     }
     b->slideIn = in;
     // O tempo já andado: entrar a partir de "from" escondida, sair a partir de "from".
-    float doneFrac = in ? 1 - std::cbrt(std::max(0.0f, from)) : std::cbrt(std::max(0.0f, from));
-    b->slideTick = GetTickCount64() - (ULONGLONG)(doneFrac * 220);
+    float doneFrac = in ? 1 - std::sqrt(std::sqrt(std::max(0.0f, from))) : std::cbrt(std::max(0.0f, from));
+    b->slideTick = GetTickCount64() - (ULONGLONG)(doneFrac * (in ? kSlideInMs : kSlideOutMs));
     SetTimer(b->hwnd, BAR_SLIDE_TIMER, 10, nullptr);
     BarSlideStep(b);
 }
@@ -25242,9 +25343,12 @@ static bool AnyBarStyle(int st) {
 // vista, então as janelas (a maximizada também) descem e nada fica por baixo dela.
 // Ela fica até a alça ser clicada de novo (com "Cor da janela", na cor da barra de
 // título da janela ativa).
-static void BarRevealTemp(Bar* b) {
-    b->autoShown = true;
-    b->hideCountdown = 10;
+// O espaço da barra é reservado (as janelas descem) só quando ela termina de
+// descer: reservar antes fazia as janelas pularem de uma vez e o Windows
+// redesenhá-las bem no meio do deslizar, que travava.
+static void BarReserveSpace(Bar* b) {
+    b->reserveAfterSlide = false;
+    if (!b->autoShown) return;
     if (!b->appbar) {
         APPBARDATA abd{};
         abd.cbSize = sizeof(abd);
@@ -25254,13 +25358,18 @@ static void BarRevealTemp(Bar* b) {
         b->peekReserved = b->appbar;
         if (b->appbar) SetAppBarPos(b, false);
     }
+    if (g_owner && BarPeekColors(b)) SetTimer(g_owner, TIMER_PEEKCOLOR, 180, nullptr);  // depois que as janelas descem
+}
+static void BarRevealTemp(Bar* b) {
+    b->autoShown = true;
+    b->hideCountdown = 10;
     SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, b->monRect.top, b->monRect.right - b->monRect.left, b->heightPx,
                  SWP_NOACTIVATE | SWP_NOMOVE);
-    BarSlide(b, true);  // desce do topo
+    b->reserveAfterSlide = true;
+    BarSlide(b, true);  // desce do topo; no fim, reserva o espaço
     HandleSync(b);
     HandleAnimTo(b);  // a alça vai para a borda de baixo da barra (some quando o mouse sai)
     if (b->handle) SetWindowPos(b->handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    if (g_owner && BarPeekColors(b)) SetTimer(g_owner, TIMER_PEEKCOLOR, 180, nullptr);  // depois que as janelas descem
 }
 // A barra mostrada pela alça se escondeu: devolve o espaço (as janelas sobem de novo).
 static void BarPeekEnd(Bar* b) {
@@ -25310,6 +25419,7 @@ static LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             if (b->autoShown) {
                 // Segundo clique: a barra some, as janelas sobem e a alça volta ao alto.
                 b->autoShown = false;
+                b->reserveAfterSlide = false;
                 b->hover = -1;
                 BarSlide(b, false);  // sobe e some
                 BarPeekEnd(b);
@@ -25458,6 +25568,7 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         if (GetTickCount64() < g_ignoreTaskbarCreatedUntil) return 0;  // fomos nós que enviamos
         // Cada barra recebe o aviso: uma reconstrução só, para todas.
         if (!g_rebuildScheduled) {
+            Wh_Log(L"Refaz as barras: aviso TaskbarCreated (o Explorer reiniciou ou um app o enviou)");
             g_rebuildScheduled = true;
             RequestReload(1);
         }
@@ -25467,9 +25578,43 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
-        case WM_WINDOWPOSCHANGED:
+        case WM_WINDOWPOSCHANGED: {
+            // Movida para cima do topo sem passar pelo WM_WINDOWPOSCHANGING (um
+            // SetWindowPos com SWP_NOSENDCHANGING, de outro processo): volta já.
+            static bool fixing = false;
+            auto* wpos = reinterpret_cast<WINDOWPOS*>(lp);
+            if (wpos && !fixing && !g_barSlideMove && !b->slideTick && !(wpos->flags & SWP_NOMOVE) &&
+                (wpos->y < b->monRect.top || wpos->x != b->monRect.left)) {
+                wchar_t fgc[64] = L"";
+                GetClassNameW(GetForegroundWindow(), fgc, ARRAYSIZE(fgc));
+                Wh_Log(L"Barra %d,%d: foi movida para %d,%d sem aviso antes (%s, flags 0x%X, janela ativa %s); volta",
+                       b->monRect.left, b->monRect.top, wpos->x, wpos->y,
+                       (InSendMessageEx(nullptr) & ISMEX_SEND) ? L"outra thread" : L"esta thread", wpos->flags, fgc);
+                fixing = true;
+                SetWindowPos(hwnd, nullptr, b->monRect.left, b->monRect.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                fixing = false;
+            }
             if (!b->slideTick) BarSyncShadow(b);  // (deslizando, a sombra volta no fim)
             break;
+        }
+        case WM_WINDOWPOSCHANGING: {
+            // A barra só sai do topo do monitor quando ela mesma desliza. Qualquer
+            // outro movimento para cima do topo (o Windows, outro programa) é
+            // desfeito aqui, antes de acontecer: fora do monitor, ela passaria
+            // para o vizinho de outra escala.
+            auto* wpos = reinterpret_cast<WINDOWPOS*>(lp);
+            if (wpos && !(wpos->flags & SWP_NOMOVE) && !g_barSlideMove &&
+                (wpos->y < b->monRect.top || wpos->x != b->monRect.left)) {
+                wchar_t fgc[64] = L"";
+                GetClassNameW(GetForegroundWindow(), fgc, ARRAYSIZE(fgc));
+                Wh_Log(L"Barra %d,%d: movimento para %d,%d desfeito (%s, flags 0x%X, janela ativa %s)", b->monRect.left,
+                       b->monRect.top, wpos->x, wpos->y,
+                       (InSendMessageEx(nullptr) & ISMEX_SEND) ? L"outra thread" : L"esta thread", wpos->flags, fgc);
+                wpos->x = b->monRect.left;
+                wpos->y = b->monRect.top;
+            }
+            break;
+        }
 
         case WM_MOUSEMOVE: {
             if (b->pressIdx >= 0) {
@@ -25667,7 +25812,11 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 SetAppBarPos(b, true);
             } else if (wp == ABN_FULLSCREENAPP && g_settings.hideOnFullscreen && !(g_settings.autoHide && g_settings.revealHandle)) {
                 bool hide = lp && ForegroundIsFullscreenOn(b);
-                if (hide != b->hiddenForFullscreen) {
+                // (Escondida por janela maximizada, só a conferência dela a mostra: este
+                // aviso a mostrava por cima da janela, e ela sumia de novo logo depois.)
+                if (hide != b->hiddenForFullscreen && !(b->maxHidden && !hide)) {
+                    Wh_Log(L"Barra %d,%d: %s (aviso de tela cheia do Windows)", b->monRect.left, b->monRect.top,
+                           hide ? L"oculta" : L"volta");
                     b->hiddenForFullscreen = hide;
                     bool handleHidden = g_settings.autoHide && !b->autoShown;  // (issue #15)
                     if (hide || !handleHidden) ShowWindow(hwnd, hide ? SW_HIDE : SW_SHOWNOACTIVATE);
@@ -25710,7 +25859,28 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_DPICHANGED:
             // Só mudanças reais de monitor/escala recriam a barra (nunca
             // SPI_SETWORKAREA, que o próprio AppBar dispara: geraria um loop).
+            if (msg == WM_DPICHANGED) {
+                // A escala do monitor da barra não mudou: foi a janela que passou
+                // (por um instante) para um monitor vizinho de outra escala. Não
+                // refaz; só põe a barra de volta no lugar.
+                UINT mx = 96, my = 96;
+                if (SUCCEEDED(GetDpiForMonitor(b->monitor, MDT_EFFECTIVE_DPI, &mx, &my)) && mx == b->dpi) {
+                    RECT wr{};
+                    GetWindowRect(hwnd, &wr);
+                    Wh_Log(L"Barra %d,%d: WM_DPICHANGED ignorado (janela em %d,%d-%d,%d, a escala do monitor é a mesma)",
+                           b->monRect.left, b->monRect.top, wr.left, wr.top, wr.right, wr.bottom);
+                    if (!b->slideTick && IsWindowVisible(hwnd))
+                        SetWindowPos(hwnd, HWND_TOPMOST, b->monRect.left, b->monRect.top, b->monRect.right - b->monRect.left,
+                                     b->heightPx, SWP_NOACTIVATE);
+                    return 0;
+                }
+            }
             if (!g_rebuildScheduled) {
+                RECT wr{};
+                GetWindowRect(hwnd, &wr);
+                Wh_Log(L"Refaz as barras: %s (barra do monitor %d,%d, janela em %d,%d-%d,%d, wParam %u)",
+                       msg == WM_DPICHANGED ? L"WM_DPICHANGED" : L"WM_DISPLAYCHANGE", b->monRect.left, b->monRect.top,
+                       wr.left, wr.top, wr.right, wr.bottom, (unsigned)wp);
                 g_rebuildScheduled = true;
                 SetTimer(hwnd, TIMER_REBUILD, 800, nullptr);
             }
