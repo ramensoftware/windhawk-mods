@@ -3270,22 +3270,6 @@ float ViceAmount() {
     return std::clamp(g_theme.vice, 0.0f, 1.0f);
 }
 
-// A pill text in capitals while the Vice theme is chosen (like its neon bar's
-// texts), as it is; the same string is measured and drawn.
-std::wstring ViceCaps(const std::wstring& text) {
-    if (!ViceThemeOn() || text.empty()) {
-        return text;
-    }
-    std::wstring result(text.size(), L'\0');
-    if (LCMapStringEx(LOCALE_NAME_USER_DEFAULT,
-                      LCMAP_UPPERCASE | LCMAP_LINGUISTIC_CASING, text.c_str(),
-                      (int)text.size(), result.data(), (int)result.size(),
-                      nullptr, nullptr, 0) != (int)text.size()) {
-        return text;
-    }
-    return result;
-}
-
 // The Vice theme's neon colors (red, green and blue, from 0 to 1): its pink
 // (the highlight too), the sunset's orange and violet, and the sea's teal
 // (the pill's icons).
@@ -35123,35 +35107,25 @@ TextLanguage IslandTextLanguage() {
     return windows;
 }
 
+// The island's languages as locale names, in TextLanguage's order.
+constexpr PCWSTR kTextLocales[kTextLanguages] = {
+    L"en-US", L"pt-BR", L"zh-CN", L"de-DE", L"es-ES", L"ru-RU",
+    L"ja-JP", L"vi-VN", L"fr-FR", L"tr-TR", L"ko-KR"};
+
 // The names in dates (days, months, AM or PM) in the island's language when
 // one is chosen; otherwise, and for the rest (24 hours, the week's first
 // day, units), the Windows regional format.
 PCWSTR DateLocale() {
-    switch (g_textLanguage) {
-        case 1:
-            return L"en-US";
-        case 2:
-            return L"pt-BR";
-        case 3:
-            return L"zh-CN";
-        case 4:
-            return L"de-DE";
-        case 5:
-            return L"es-ES";
-        case 6:
-            return L"ru-RU";
-        case 7:
-            return L"ja-JP";
-        case 8:
-            return L"vi-VN";
-        case 9:
-            return L"fr-FR";
-        case 10:
-            return L"tr-TR";
-        case 11:
-            return L"ko-KR";
-    }
-    return LOCALE_NAME_USER_DEFAULT;
+    return g_textLanguage >= 1 && g_textLanguage <= kTextLanguages
+               ? kTextLocales[g_textLanguage - 1]
+               : LOCALE_NAME_USER_DEFAULT;
+}
+
+// The language the island's texts are written in, as a locale name: their
+// capitals follow it, not the regional format (an English island on a
+// Turkish Windows writes SIGN OUT, a Turkish island writes its dotted I).
+PCWSTR TextLocale() {
+    return kTextLocales[(int)IslandTextLanguage()];
 }
 
 // The day and the month in the order the dates' language writes them
@@ -65297,23 +65271,30 @@ void RunPowerAction(PowerAction action, HWND window) {
     }
 }
 
-// A short text in capitals, as the user's language writes them (the Vice
-// theme's pause menu and its WASTED).
-std::wstring CapitalsOf(PCWSTR text) {
+// A short text in capitals, as the language it is written in writes them:
+// the island's for its own texts (the Vice theme's pause menu and its
+// WASTED), the dates' for the clock (see DateLocale).
+std::wstring CapitalsOf(PCWSTR text, PCWSTR locale = TextLocale()) {
     const int length = (int)wcslen(text);
     const DWORD flags = LCMAP_UPPERCASE | LCMAP_LINGUISTIC_CASING;
-    const int needed = LCMapStringEx(LOCALE_NAME_USER_DEFAULT, flags, text,
-                                     length, nullptr, 0, nullptr, nullptr, 0);
+    const int needed = LCMapStringEx(locale, flags, text, length, nullptr, 0,
+                                     nullptr, nullptr, 0);
     if (needed <= 0) {
         return text;
     }
     std::wstring capitals(needed, L'\0');
-    if (LCMapStringEx(LOCALE_NAME_USER_DEFAULT, flags, text, length,
-                      capitals.data(), needed, nullptr, nullptr,
-                      0) != needed) {
+    if (LCMapStringEx(locale, flags, text, length, capitals.data(), needed,
+                      nullptr, nullptr, 0) != needed) {
         return text;
     }
     return capitals;
+}
+
+// A pill text in capitals while the Vice theme is chosen (like its neon bar's
+// texts), as it is otherwise; the same string is measured and drawn.
+std::wstring ViceCaps(const std::wstring& text,
+                      PCWSTR locale = TextLocale()) {
+    return ViceThemeOn() ? CapitalsOf(text.c_str(), locale) : text;
 }
 
 // The Vice theme's Wasted (kept in English: players know it so).
@@ -96151,7 +96132,9 @@ class Island final : public DropTarget::Receiver {
     HANDLE m_aiUsageThread = nullptr;
     HANDLE m_aiUsageStop = nullptr;
     bool m_aiCodexWatched = false;
-    bool m_aiCustomWatched = false;
+    // The custom files' folders not there when the watch started (see
+    // OnAiUsageMinute).
+    std::vector<std::wstring> m_aiCustomMissing;
     std::wstring m_aiCustomFileWatched;
     int m_aiCustomEntriesWatched = -1;
     std::wstring AiAgentApp(int agent);
@@ -127654,6 +127637,17 @@ void Island::OnNetSpeedTimer() {
     }
 }
 
+// The folder watched for a custom AI usage file: only of a file on a drive
+// of this PC (a share's is never watched), a drive's root as "D:\" (plain
+// "D:" is the current folder on that drive).
+std::wstring AiCustomFolder(const std::wstring& path) {
+    const size_t slash = path.rfind(L'\\');
+    if (slash == std::wstring::npos || !IsLocalDrivePath(path)) {
+        return {};
+    }
+    return path.substr(0, slash == 2 ? 3 : slash);
+}
+
 // The custom AI usage's JSON file chosen (in the settings or its panel):
 // kept, and watched from now on.
 void SetAiCustomFile(const std::wstring& path) {
@@ -127705,6 +127699,7 @@ void Island::UpdateAiUsageWatch() {
         g_aiCustom.clear();
         m_aiCustomFileWatched.clear();
         m_aiCustomEntriesWatched = -1;
+        m_aiCustomMissing.clear();
         return;
     }
     const bool wantCustom = AnyIslandLook([](Island&) {
@@ -127741,20 +127736,18 @@ void Island::UpdateAiUsageWatch() {
     }
     m_aiCustomFileWatched = customFile;
     m_aiCustomEntriesWatched = g_aiCustomEntriesVersion;
-    m_aiCustomWatched = false;
-    // (Only of a file on a drive of this PC: a share's is never watched.)
-    auto folderOf = [](const std::wstring& path) {
-        const size_t slash = path.rfind(L'\\');
-        return slash == std::wstring::npos || !IsLocalDrivePath(path)
-                   ? std::wstring()
-                   : path.substr(0, slash);
+    m_aiCustomMissing.clear();
+    // (A folder not there yet waits for the minute's look.)
+    auto folderThere = [&](const std::wstring& folder) {
+        if (GetFileAttributes(folder.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            return true;
+        }
+        m_aiCustomMissing.push_back(folder);
+        return false;
     };
     if (!customFile.empty()) {
-        const std::wstring folder = folderOf(customFile);
-        m_aiCustomWatched = !folder.empty() &&
-                            GetFileAttributes(folder.c_str()) !=
-                                INVALID_FILE_ATTRIBUTES;
-        if (m_aiCustomWatched) {
+        const std::wstring folder = AiCustomFolder(customFile);
+        if (!folder.empty() && folderThere(folder)) {
             job->folders[kAiAgents] = folder;
         }
         job->customFile = customFile;
@@ -127762,11 +127755,11 @@ void Island::UpdateAiUsageWatch() {
     if (wantCustom) {
         job->customEntries = g_aiCustomEntries;
         for (const auto& entry : g_aiCustomEntries) {
-            const std::wstring folder = folderOf(entry.file);
+            const std::wstring folder = AiCustomFolder(entry.file);
             if (folder.empty() ||
                 _wcsicmp(folder.c_str(),
                          job->folders[kAiAgents].c_str()) == 0 ||
-                GetFileAttributes(folder.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                !folderThere(folder)) {
                 continue;
             }
             const bool seen = std::any_of(
@@ -127813,8 +127806,9 @@ void Island::StopAiUsageWatch() {
 }
 
 // Each minute: the time left goes down (laid out again, nothing read); Codex's
-// sessions and custom file's folder watched once they're there, and the watch
-// started again if its thread ended by itself (a folder it watched gone).
+// sessions and the custom files' folders watched once they're there (a tool
+// makes its folder on its first run), and the watch started again if its
+// thread ended by itself (a folder it watched gone).
 void Island::OnAiUsageMinute() {
     if (m_aiUsageThread &&
         WaitForSingleObject(m_aiUsageThread, 0) == WAIT_OBJECT_0) {
@@ -127831,16 +127825,14 @@ void Island::OnAiUsageMinute() {
             return;
         }
     }
-    if (!m_aiCustomWatched && IsLocalDrivePath(m_aiCustomFileWatched)) {
-        const size_t slash = m_aiCustomFileWatched.rfind(L'\\');
-        if (slash != std::wstring::npos &&
-            GetFileAttributes(
-                m_aiCustomFileWatched.substr(0, slash).c_str()) !=
-                INVALID_FILE_ATTRIBUTES) {
-            StopAiUsageWatch();
-            UpdateAiUsageWatch();
-            return;
-        }
+    if (std::any_of(m_aiCustomMissing.begin(), m_aiCustomMissing.end(),
+                    [](const std::wstring& folder) {
+                        return GetFileAttributes(folder.c_str()) !=
+                               INVALID_FILE_ATTRIBUTES;
+                    })) {
+        StopAiUsageWatch();
+        UpdateAiUsageWatch();
+        return;
     }
     ForEachIsland([](Island& island) {
         if (g_settings.islandAiUsage) {
@@ -134143,7 +134135,7 @@ void Island::Layout() {
     // the same as the time changes.
     // (Measured again only when that or the size changes: this runs with
     // every frame.)
-    std::wstring widest = ViceCaps(m_clock);
+    std::wstring widest = ViceCaps(m_clock, DateLocale());
     for (auto& c : widest) {
         if (c >= L'0' && c <= L'9') {
             c = L'0';
@@ -134527,7 +134519,7 @@ void Island::Layout() {
                     const float shownWidth = (float)m_clockWidth;
                     m_slots.push_back({IslandItem::Clock,
                                        {x, 0, x + shownWidth, height},
-                                       ViceCaps(m_clock),
+                                       ViceCaps(m_clock, DateLocale()),
                                        0});
                     x += shownWidth + spacing;
                 }
@@ -139672,7 +139664,8 @@ void Island::Render(bool force) {
                                            layout.get(), brush.get());
                 };
                 if (swap > 0.004f) {
-                    drawText(ViceCaps(m_clockBefore), swap * swap);
+                    drawText(ViceCaps(m_clockBefore, DateLocale()),
+                             swap * swap);
                 }
                 drawText(slot.text, 1 - swap * swap);
                 if (scaled) {
