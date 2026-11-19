@@ -24,7 +24,7 @@ Move the pointer with more fingers resting on a precision touchpad, as if glidin
 - **Disarm:** after all fingers leave the touchpad. Lifting some keeps the tracking going.
 - **Movement:** each finger influences as much as it moves. Resting fingers fade and don't fight the others. The thumb is completely ignored (unless it is the only touching, when Windows takes control). With one or two fingers moving, the lower speed multiplier applies; with more moving together, the higher one.
 - **Click:** you only need to lift the tapping finger(s). Same as native - finger(s) (double) tap to (double) click, tap-hold to drag, tap-tap-hold to drag-select text by words, etc. **A hold lasts until another tap or the whole hand leaves the pad**. Excludes the thumb.
-- **Scrolling:** Windows touchpad scroll is ignored during more-fingers actions. You can 2-finger tap-slide to scroll while having other fingers on the pad. They will "hold" the scrolling operation until you lift all from the pad. Same in substitution for the system's, when 2-finger tracking is enabled. **Windows' scroll and mod's tracking both get activated if you start with 2 and rest more fingers on the touchpad.** Ideally you'll leave Windows' 2-finger scroll for the mod's. Pressing the **Scroll output switch hotkey** during the action momentarily swaps the output type for instant app adaptation, as the mod is not capable of hybridly scrolling like Windows does.
+- **Scrolling:** Windows touchpad scroll is ignored during more-fingers actions. You can 2-finger tap-slide to scroll while having other fingers on the pad. They will "hold" the scrolling operation until you lift all from the pad. Same in substitution for the system's, when 2-finger tracking is enabled. **Windows' scroll and mod's tracking both get activated if you start with 2 and rest more fingers on the touchpad.** Ideally you'll leave Windows' 2-finger scroll for the mod's. Pressing the **Scroll output switch hotkey** during the action swaps the output type, as the mod can't scroll hybridly like Windows does. Your last choice in each program is remembered, so the next scroll there already starts with it.
 
 ## The thumb
 
@@ -103,13 +103,13 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
   $description: Off, page follows the fingers, like Windows default.
 - scrollOutput: wheel
   $name: Scroll output
-  $description: Mouse wheel has tighter response and compatibility, but some programs (Excel) respond badly. Touch scrolls smoothly in programs that support it, with their own inertia, but rolling a background window brings it to the front.
+  $description: The default for every program, until the switch hotkey picks the other one there. Mouse wheel has tighter response and compatibility, but some programs (Excel) respond badly. Touch scrolls smoothly in programs that support it, with their own inertia, but rolling a background window brings it to the front.
   $options:
   - wheel: Mouse wheel
   - touch: Touch
 - scrollSwitch: "Win"
   $name: Scroll output switch hotkey
-  $description: Pressed during a scroll, momentarily switches output methods, for live adaptability. Win, alone or + Ctrl, Alt, Shift.
+  $description: Pressed during a scroll switches output methods. The mod remembers your last choice in each program, so you don't have to switch there next time. Win, alone or + Ctrl, Alt, Shift.
 - diagHotkey: ""
   $name: Diagnostics overlay hotkey
   $description: Shows how the mod reads each finger. Win + Ctrl, Alt, Shift + key, like Win+Shift+D. The window accepts only native one-finger dragging and resizing. 
@@ -680,6 +680,120 @@ void SaveCurve() {
     LogCurve();
 }
 
+// Scroll output per program.
+
+// The output each program last scrolled with, where the switch key chose it: the next scroll over that program (the
+// window under the pointer, by its executable's name) starts with it. The mod can't tell whether the program
+// responded: the user's next press is the correction.
+constexpr size_t kRememberMax = 200;
+std::unordered_map<std::wstring, bool> g_scrollApps;  // executable name, lower case -> touch output; touchpad thread
+std::wstring g_scrollApp;  // the program this touch's scroll started over, empty if unknown
+bool g_scrollAppRead;      // g_scrollApp was read in this touch
+bool g_scrollBase;         // the output this touch's scroll started with: touch
+
+// Stored as "name:t|name:w": ':' and '|' can't be in a file name.
+void LoadScrollApps() {
+    WCHAR text[8192] = L"";
+    Wh_GetStringValue(L"scrollApps", text, ARRAYSIZE(text));
+    std::wstring all = text;
+    size_t start = 0;
+    while (start < all.size()) {
+        size_t end = all.find(L'|', start);
+        std::wstring item = all.substr(start, end == std::wstring::npos ? std::wstring::npos : end - start);
+        size_t colon = item.rfind(L':');
+        if (colon != std::wstring::npos && colon > 0 && colon + 2 == item.size()) {
+            g_scrollApps[item.substr(0, colon)] = item[colon + 1] == L't';
+        }
+        if (end == std::wstring::npos) {
+            break;
+        }
+        start = end + 1;
+    }
+}
+
+void SaveScrollApps() {
+    std::wstring all;
+    for (const auto& [name, touch] : g_scrollApps) {
+        if (!all.empty()) {
+            all += L'|';
+        }
+        all += name + (touch ? L":t" : L":w");
+    }
+    Wh_SetStringValue(L"scrollApps", all.c_str());
+}
+
+// The executable of a window's process, in lower case; empty if it can't be read.
+std::wstring ProcessName(HWND window) {
+    DWORD pid = 0;
+    if (!window || !GetWindowThreadProcessId(window, &pid) || !pid) {
+        return {};
+    }
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) {
+        return {};
+    }
+    std::wstring name;
+    WCHAR path[MAX_PATH * 2];
+    DWORD size = ARRAYSIZE(path);
+    if (QueryFullProcessImageNameW(process, 0, path, &size)) {
+        name = path;
+        name.erase(0, name.find_last_of(L'\\') + 1);
+        for (auto& ch : name) {
+            ch = towlower(ch);
+        }
+    }
+    CloseHandle(process);
+    return name;
+}
+
+// The program under the pointer, by its main window: a child window can belong to a process many programs share
+// (WebView2's msedgewebview2.exe, in Teams, Outlook and the Widgets). Store apps' main window is
+// ApplicationFrameHost's for all of them: there the child's process is the app.
+std::wstring AppUnderPointer() {
+    POINT pt;
+    HWND window = GetCursorPos(&pt) ? WindowFromPoint(pt) : nullptr;
+    if (!window) {
+        return {};
+    }
+    HWND root = GetAncestor(window, GA_ROOT);
+    std::wstring name = ProcessName(root ? root : window);
+    if (name == L"applicationframehost.exe") {
+        name = ProcessName(window);
+    }
+    return name;
+}
+
+// The output this touch's scroll starts with: the program's last choice, or the setting's.
+bool ScrollBase() {
+    if (!g_scrollAppRead) {
+        g_scrollAppRead = true;
+        g_scrollApp = AppUnderPointer();
+        auto it = g_scrollApps.find(g_scrollApp);
+        g_scrollBase = it != g_scrollApps.end() ? it->second : g_touchScroll.load();
+    }
+    return g_scrollBase;
+}
+
+// At the end of a touch. switched: the scroll ended on the other output than it started with.
+void RememberScrollOutput(bool switched) {
+    if (g_scrollAppRead && switched && !g_scrollApp.empty()) {
+        bool touch = !g_scrollBase;
+        bool changed = false;
+        if (touch == g_touchScroll) {
+            changed = g_scrollApps.erase(g_scrollApp) > 0;
+        } else if (g_scrollApps.count(g_scrollApp) || g_scrollApps.size() < kRememberMax) {
+            changed = !g_scrollApps.count(g_scrollApp) || g_scrollApps[g_scrollApp] != touch;
+            g_scrollApps[g_scrollApp] = touch;
+        }
+        if (changed) {
+            SaveScrollApps();
+            Wh_Log(L"Scroll output for %s: %s", g_scrollApp.c_str(), touch ? L"touch" : L"wheel");
+        }
+    }
+    g_scrollAppRead = false;
+    g_scrollApp.clear();
+}
+
 int NearestBin(double speed) {
     double ls = std::log(std::max(speed, 1e-3));
     int best = 0;
@@ -830,6 +944,7 @@ void EndGlide() {
     }
     g_state.pairScroll = false;
     g_state.scrollSession = false;
+    RememberScrollOutput(g_switchLatched);
     g_switchLatched = false;
     g_switchWasHeld = true;
     TouchEnd();
@@ -1436,8 +1551,9 @@ void TouchPan(double dxMm, double dyMm) {
 }
 
 // The output for this frame: each press of the switch key during a scroll swaps it, until the pad empties
-// (EndGlide) and the setting's comes back. Released mid-scroll, the output stays, and so does its inertia. A key
-// already held when the scroll starts isn't a press: the user only sees which output fails once scrolling.
+// (EndGlide), and the program's last choice or the setting's comes back (see g_scrollApps). Released mid-scroll, the
+// output stays, and so does its inertia. A key already held when the scroll starts isn't a press: the user only sees
+// which output fails once scrolling.
 //
 // Released alone, Win opens Start and Alt the menu bar. Once the key scrolled, a keyboard hook on the hook thread
 // (only until its release) swallows that release and sends it again behind a key that does nothing (0xE8,
@@ -1505,7 +1621,7 @@ bool TouchOutput() {
         }
     }
     g_switchWasHeld = held;
-    return g_touchScroll != g_switchLatched;
+    return ScrollBase() != g_switchLatched;
 }
 
 // Wheel units follow the fingers, without acceleration. Off, the page follows the fingers: down scrolls up.
@@ -3948,6 +4064,7 @@ BOOL WhTool_ModInit() {
 
     LoadSettings();
     LoadCurve();
+    LoadScrollApps();
     g_lastSave = Now();
 
     HANDLE hookReady = CreateEvent(nullptr, TRUE, FALSE, nullptr);
