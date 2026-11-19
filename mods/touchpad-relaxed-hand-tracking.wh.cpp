@@ -686,14 +686,26 @@ void SaveCurve() {
 // window under the pointer, by its executable's name) starts with it. The mod can't tell whether the program
 // responded: the user's next press is the correction.
 constexpr size_t kRememberMax = 200;
+// LoadScrollApps' buffer, terminator included: a stored value which doesn't fit reads back empty, and the whole list
+// was lost. The list is capped by its saved length too.
+constexpr size_t kScrollAppsChars = 8192;
 std::unordered_map<std::wstring, bool> g_scrollApps;  // executable name, lower case -> touch output; touchpad thread
 std::wstring g_scrollApp;  // the program this touch's scroll started over, empty if unknown
 bool g_scrollAppRead;      // g_scrollApp was read in this touch
 bool g_scrollBase;         // the output this touch's scroll started with: touch
 
+// The saved length plus the terminator: "name:t" items joined with '|'.
+size_t ScrollAppsChars() {
+    size_t chars = 0;
+    for (const auto& [name, touch] : g_scrollApps) {
+        chars += name.size() + 3;
+    }
+    return chars;
+}
+
 // Stored as "name:t|name:w": ':' and '|' can't be in a file name.
 void LoadScrollApps() {
-    WCHAR text[8192] = L"";
+    WCHAR text[kScrollAppsChars] = L"";
     Wh_GetStringValue(L"scrollApps", text, ARRAYSIZE(text));
     std::wstring all = text;
     size_t start = 0;
@@ -781,7 +793,9 @@ void RememberScrollOutput(bool switched) {
         bool changed = false;
         if (touch == g_touchScroll) {
             changed = g_scrollApps.erase(g_scrollApp) > 0;
-        } else if (g_scrollApps.count(g_scrollApp) || g_scrollApps.size() < kRememberMax) {
+        } else if (g_scrollApps.count(g_scrollApp) ||
+                   (g_scrollApps.size() < kRememberMax &&
+                    ScrollAppsChars() + g_scrollApp.size() + 3 <= kScrollAppsChars)) {
             changed = !g_scrollApps.count(g_scrollApp) || g_scrollApps[g_scrollApp] != touch;
             g_scrollApps[g_scrollApp] = touch;
         }
