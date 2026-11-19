@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.18.1
+// @version         2.21.2
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -53,7 +53,7 @@ Simplified Chinese (machine-translated), following your Windows display language
 
 ![Details flyout above the taskbar's quota tiles](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/screenshots/overview.png)
 
-![Tile styles in the settings window](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/screenshots/styles.png)
+![Tile styles in the settings window](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/screenshots/styles-2.png)
 
 ## Setup
 
@@ -80,7 +80,8 @@ signed-in local app or CLI session, which must remain running.
 - **Display:** Material of the details flyout and the settings and history windows (Acrylic,
   Mica, Mica Alt, Tinted wallpaper or Solid; needs Windows transparency effects), used or
   remaining, usage colors (default, colorblind or your own) and thresholds, stale marker,
-  provider outages.
+  provider outages, and how the details flyout charts Anthropic extra usage (its month, the
+  weekly window, or a bar).
 - **Behavior:** Choose the language, displays, hover details, polling, and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the
   default) or for a number of days, and choose recording per account independently of taskbar
@@ -770,6 +771,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"Labels omitted; times UTC.",
      L"{rows, plural, one{# Messwertzeile} other{# Messwertzeilen}} (ausgewähltes Konto) nach {path} "
      L"exportiert. Ohne Bezeichnungen; Zeiten in UTC."},
+    {L"", L"Extra usage chart", L"Diagramm der Zusatznutzung"},
     {L"", L"Free to use, modify and share.", L"Frei nutzbar, veränderbar und weitergebbar."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -802,6 +804,11 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"session every minute.",
      L"Wie oft Anthropic, OpenAI, GitHub Copilot und OpenCode Go abgefragt werden. Antigravity fragt seine lokale "
      L"Sitzung jede Minute ab."},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"Wie die Detailansicht die Zusatznutzung von Anthropic darstellt: über ihren Monat, über das Zeitfenster des "
+     L"wöchentlichen Kontingents im selben Maßstab oder als Balken. Kacheln im Stil „Nutzungsdiagramm“ folgen dem, "
+     L"wenn die Zusatznutzung dort ein eigenes Diagramm hat."},
     {L"", L"Identity", L"Identität"},
     {L"", L"Identity gap", L"Identitätsabstand"},
     {L"", L"Identity position", L"Identitätsposition"},
@@ -1432,6 +1439,9 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"duration", L"{minutes}m", L"{minutes}\u00A0Min."},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}\u00A0Min. {seconds}\u00A0Sek."},
     {L"duration", L"{seconds}s", L"{seconds}\u00A0Sek."},
+    {L"extra-usage-chart", L"Month", L"Monat"},
+    {L"extra-usage-chart", L"Off", L"Aus"},
+    {L"extra-usage-chart", L"Week", L"Woche"},
     {L"file-type", L"All files (*.*)", L"Alle Dateien (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"CSV-Dateien (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Noch keine Daten"},
@@ -1452,12 +1462,22 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Anmeldung erforderlich. Klicken Sie auf die Balken, um sich anzumelden."},
     {L"flyout-note", L"extra usage: unlimited", L"Zusatznutzung: unbegrenzt"},
     {L"flyout-note", L"rate limits: none reported", L"Ratenlimits: keine gemeldet"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, one{# Fable-Reset verfügbar} other{# Fable-Resets verfügbar}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, one{# Fünf-Stunden-Reset verfügbar} other{# Fünf-Stunden-Resets verfügbar}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{# kostenloser Reset verfügbar} other{# kostenlose Resets verfügbar}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
                      L"{when}",
      L"{count, plural, one{# kostenloser Reset verfügbar} other{# kostenlose Resets verfügbar}} · nächster läuft "
      L"{when} ab"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, one{# vollständiger Reset verfügbar} other{# vollständige Resets verfügbar}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, one{# Wochen-Reset verfügbar} other{# Wochen-Resets verfügbar}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · läuft {when} ab"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · nächster läuft {when} ab"},
     {L"history-about", L"Axes and units", L"Achsen und Einheiten"},
     {L"history-about", L"Cards", L"Karten"},
     {L"history-about", L"Legend and readout", L"Legende und Werteanzeige"},
@@ -2040,6 +2060,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"Labels omitted; times UTC.",
      L"{rows, plural, one{Se exportó # fila de métricas} many{Se exportaron # de filas de métricas} "
      L"other{Se exportaron # filas de métricas}} (cuenta seleccionada) a {path}. Sin etiquetas; horas en UTC."},
+    {L"", L"Extra usage chart", L"Gráfico del uso adicional"},
     {L"", L"Free to use, modify and share.", L"Libre para usar, modificar y compartir."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -2071,6 +2092,11 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"session every minute.",
      L"Con qué frecuencia se consultan Anthropic, OpenAI, GitHub Copilot y OpenCode Go. Antigravity consulta su sesión "
      L"local cada minuto."},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"Cómo representa el panel de detalles el uso adicional de Anthropic: a lo largo de su mes, a lo largo de la "
+     L"ventana de la cuota semanal con la misma escala, o como una barra. Los mosaicos Gráfico de uso hacen lo mismo "
+     L"cuando el uso adicional tiene en ellos un gráfico propio."},
     {L"", L"Identity", L"Identidad"},
     {L"", L"Identity gap", L"Separación de la identidad"},
     {L"", L"Identity position", L"Posición de la identidad"},
@@ -2687,6 +2713,9 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"duration", L"{minutes}m", L"{minutes}\u00A0min"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}\u00A0min {seconds}\u00A0s"},
     {L"duration", L"{seconds}s", L"{seconds}\u00A0s"},
+    {L"extra-usage-chart", L"Month", L"Mes"},
+    {L"extra-usage-chart", L"Off", L"Desactivado"},
+    {L"extra-usage-chart", L"Week", L"Semana"},
     {L"file-type", L"All files (*.*)", L"Todos los archivos (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"Archivos CSV (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Aún no hay datos"},
@@ -2706,6 +2735,12 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Debes iniciar sesión. Haz clic en las barras para hacerlo."},
     {L"flyout-note", L"extra usage: unlimited", L"uso adicional: ilimitado"},
     {L"flyout-note", L"rate limits: none reported", L"límites de frecuencia: no se informó ninguno"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, one{# reinicio de Fable disponible} many{# reinicios de Fable disponibles} other{# reinicios "
+     L"de Fable disponibles}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, one{# reinicio de cinco horas disponible} many{# reinicios de cinco horas disponibles} "
+     L"other{# reinicios de cinco horas disponibles}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{# reinicio gratuito disponible} many{# reinicios gratuitos disponibles} other{# reinicios "
      L"gratuitos disponibles}}"},
@@ -2713,6 +2748,14 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
                      L"{when}",
      L"{count, plural, one{# reinicio gratuito disponible} many{# reinicios gratuitos disponibles} other{# reinicios "
      L"gratuitos disponibles}} · el próximo caduca {when}"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, one{# reinicio completo disponible} many{# reinicios completos disponibles} other{# "
+     L"reinicios completos disponibles}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, one{# reinicio semanal disponible} many{# reinicios semanales disponibles} other{# reinicios "
+     L"semanales disponibles}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · caduca {when}"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · el próximo caduca {when}"},
     {L"history-about", L"Axes and units", L"Ejes y unidades"},
     {L"history-about", L"Cards", L"Tarjetas"},
     {L"history-about", L"Legend and readout", L"Leyenda y lectura de valores"},
@@ -3307,6 +3350,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"Labels omitted; times UTC.",
      L"{rows, plural, one{# ligne d’indicateur exportée} many{# de lignes d’indicateurs exportées} other{# lignes "
      L"d’indicateurs exportées}} (compte sélectionné) vers {path}. Libellés omis\u202F; heures en UTC."},
+    {L"", L"Extra usage chart", L"Graphique de l’utilisation supplémentaire"},
     {L"", L"Free to use, modify and share.", L"Libre d’utilisation, de modification et de partage."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -3339,6 +3383,11 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"session every minute.",
      L"Fréquence d’interrogation d’Anthropic, OpenAI, GitHub Copilot et OpenCode Go. Antigravity interroge sa session "
      L"locale toutes les minutes."},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"Comment le volet des détails représente l’utilisation supplémentaire Anthropic\u202F: sur son mois, sur la "
+     L"fenêtre du quota hebdomadaire à la même échelle, ou par une barre. Les vignettes Graphique d’utilisation font "
+     L"de même quand l’utilisation supplémentaire y a son propre graphique."},
     {L"", L"Identity", L"Identité"},
     {L"", L"Identity gap", L"Écart de l’identité"},
     {L"", L"Identity position", L"Position de l’identité"},
@@ -3962,6 +4011,9 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"duration", L"{minutes}m", L"{minutes}\u00A0min"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}\u00A0min\u00A0{seconds}\u00A0s"},
     {L"duration", L"{seconds}s", L"{seconds}\u00A0s"},
+    {L"extra-usage-chart", L"Month", L"Mois"},
+    {L"extra-usage-chart", L"Off", L"Désactivé"},
+    {L"extra-usage-chart", L"Week", L"Semaine"},
     {L"file-type", L"All files (*.*)", L"Tous les fichiers (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"Fichiers CSV (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Pas encore de données"},
@@ -3981,6 +4033,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Connexion requise. Cliquez sur les barres pour vous connecter."},
     {L"flyout-note", L"extra usage: unlimited", L"utilisation supplémentaire\u202F: illimitée"},
     {L"flyout-note", L"rate limits: none reported", L"limites de débit\u202F: aucune signalée"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, one{# réinitialisation Fable disponible} many{# de réinitialisations Fable disponibles} "
+     L"other{# réinitialisations Fable disponibles}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, one{# réinitialisation de cinq heures disponible} many{# de réinitialisations de cinq heures "
+     L"disponibles} other{# réinitialisations de cinq heures disponibles}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{# réinitialisation gratuite disponible} many{# de réinitialisations gratuites disponibles} "
      L"other{# réinitialisations gratuites disponibles}}"},
@@ -3988,6 +4046,14 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
                      L"{when}",
      L"{count, plural, one{# réinitialisation gratuite disponible} many{# de réinitialisations gratuites disponibles} "
      L"other{# réinitialisations gratuites disponibles}} · la prochaine expire {when}"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, one{# réinitialisation complète disponible} many{# de réinitialisations complètes "
+     L"disponibles} other{# réinitialisations complètes disponibles}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, one{# réinitialisation hebdomadaire disponible} many{# de réinitialisations hebdomadaires "
+     L"disponibles} other{# réinitialisations hebdomadaires disponibles}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · expire {when}"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · la prochaine expire {when}"},
     {L"history-about", L"Axes and units", L"Axes et unités"},
     {L"history-about", L"Cards", L"Cartes"},
     {L"history-about", L"Legend and readout", L"Légende et lecture des valeurs"},
@@ -4531,6 +4597,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
      L"{rows, plural, other{メーター # 行}} (選択したアカウント) を {path} にエクスポートしました。ラベルは省略、時刻は UTC です。"},
+    {L"", L"Extra usage chart", L"追加使用量のグラフ"},
     {L"", L"Free to use, modify and share.", L"自由に使用、変更、共有できます。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -4558,6 +4625,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"Anthropic、OpenAI、GitHub Copilot、OpenCode Go をポーリングする頻度です。Antigravity はローカル セッションを 1 分ごとにポーリングします。"},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"詳細フライアウトでの Anthropic の追加使用量の表示方法: その月のグラフ、週間クォータの期間に合わせた同じ目盛りのグラフ、またはバー。［使用量グラフ］のタイルで追加使用量に専用のグラフがある場合も、この設定に従います。"},
     {L"", L"Identity", L"識別表示"},
     {L"", L"Identity gap", L"識別表示との間隔"},
     {L"", L"Identity position", L"識別表示の位置"},
@@ -5067,6 +5137,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"duration", L"{minutes}m", L"{minutes}分"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}分{seconds}秒"},
     {L"duration", L"{seconds}s", L"{seconds}秒"},
+    {L"extra-usage-chart", L"Month", L"月"},
+    {L"extra-usage-chart", L"Off", L"オフ"},
+    {L"extra-usage-chart", L"Week", L"週"},
     {L"file-type", L"All files (*.*)", L"すべてのファイル (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"CSV ファイル (*.csv)"},
     {L"flyout-footer", L"No data yet", L"データはまだありません"},
@@ -5085,11 +5158,21 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"サインインが必要です。バーをクリックしてサインインしてください。"},
     {L"flyout-note", L"extra usage: unlimited", L"追加使用量: 無制限"},
     {L"flyout-note", L"rate limits: none reported", L"レート制限: 報告なし"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, other{Fable リセットが # 回利用可能}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, other{5 時間リセットが # 回利用可能}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, other{無料リセットが # 回利用可能}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
                      L"{when}",
      L"{count, plural, other{無料リセットが # 回利用可能}} · 次回の期限: {when}"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, other{完全リセットが # 回利用可能}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, other{週間リセットが # 回利用可能}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · 期限: {when}"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · 次回の期限: {when}"},
     {L"history-about", L"Axes and units", L"軸と単位"},
     {L"history-about", L"Cards", L"カード"},
     {L"history-about", L"Legend and readout", L"凡例と値の表示"},
@@ -5652,6 +5735,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"{rows, plural, one{# linha de medidor exportada} many{# de linhas de medidores exportadas} "
      L"other{# linhas de medidores exportadas}} (conta selecionada) para {path}. Rótulos omitidos; horários em "
      L"UTC."},
+    {L"", L"Extra usage chart", L"Gráfico do uso adicional"},
     {L"", L"Free to use, modify and share.", L"Livre para usar, modificar e compartilhar."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -5683,6 +5767,11 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"session every minute.",
      L"Com que frequência Anthropic, OpenAI, GitHub Copilot e OpenCode Go são consultados. O Antigravity consulta sua "
      L"sessão local a cada minuto."},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"Como o painel de detalhes representa o uso adicional da Anthropic: ao longo do seu mês, ao longo da janela da "
+     L"cota semanal na mesma escala, ou como uma barra. Os blocos Gráfico de uso fazem o mesmo quando o uso "
+     L"adicional tem neles um gráfico próprio."},
     {L"", L"Identity", L"Identidade"},
     {L"", L"Identity gap", L"Espaço da identidade"},
     {L"", L"Identity position", L"Posição da identidade"},
@@ -6283,6 +6372,9 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"duration", L"{minutes}m", L"{minutes}\u00A0min"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}\u00A0min\u00A0{seconds}\u00A0s"},
     {L"duration", L"{seconds}s", L"{seconds}\u00A0s"},
+    {L"extra-usage-chart", L"Month", L"Mês"},
+    {L"extra-usage-chart", L"Off", L"Desativado"},
+    {L"extra-usage-chart", L"Week", L"Semana"},
     {L"file-type", L"All files (*.*)", L"Todos os arquivos (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"Arquivos CSV (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Ainda sem dados"},
@@ -6302,6 +6394,12 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"É necessário entrar. Clique nas barras para entrar."},
     {L"flyout-note", L"extra usage: unlimited", L"uso adicional: ilimitado"},
     {L"flyout-note", L"rate limits: none reported", L"limites de taxa: nenhum informado"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, one{# reinício do Fable disponível} many{# de reinícios do Fable disponíveis} other{# "
+     L"reinícios do Fable disponíveis}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, one{# reinício de cinco horas disponível} many{# de reinícios de cinco horas disponíveis} "
+     L"other{# reinícios de cinco horas disponíveis}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{# reinício gratuito disponível} many{# de reinícios gratuitos disponíveis} other{# "
      L"reinícios gratuitos disponíveis}}"},
@@ -6309,6 +6407,14 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
                      L"{when}",
      L"{count, plural, one{# reinício gratuito disponível} many{# de reinícios gratuitos disponíveis} other{# "
      L"reinícios gratuitos disponíveis}} · o próximo expira {when}"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, one{# reinício completo disponível} many{# de reinícios completos disponíveis} other{# "
+     L"reinícios completos disponíveis}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, one{# reinício semanal disponível} many{# de reinícios semanais disponíveis} other{# "
+     L"reinícios semanais disponíveis}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · expira {when}"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · o próximo expira {when}"},
     {L"history-about", L"Axes and units", L"Eixos e unidades"},
     {L"history-about", L"Cards", L"Cartões"},
     {L"history-about", L"Legend and readout", L"Legenda e leitura"},
@@ -6892,6 +6998,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"{rows, plural, one{Экспортирована # строка показателей} few{Экспортированы # строки показателей} "
      L"many{Экспортировано # строк показателей} other{Экспортировано # строки показателей}} (выбранный "
      L"аккаунт) в {path}. Метки не включены; время в UTC."},
+    {L"", L"Extra usage chart", L"График доп. использования"},
     {L"", L"Free to use, modify and share.", L"Можно свободно использовать, изменять и распространять."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -6923,6 +7030,11 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"session every minute.",
      L"Как часто опрашиваются Anthropic, OpenAI, GitHub Copilot и OpenCode Go. Локальный сеанс Antigravity "
      L"опрашивается каждую минуту."},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"Как панель сведений показывает доп. использование Anthropic: за его месяц, за окно недельной квоты в том же "
+     L"масштабе или полосой. Плитки «График использования» делают так же, когда у доп. использования на них свой "
+     L"график."},
     {L"", L"Identity", L"Идентификация"},
     {L"", L"Identity gap", L"Отступ идентификации"},
     {L"", L"Identity position", L"Положение идентификации"},
@@ -7519,6 +7631,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"duration", L"{minutes}m", L"{minutes}\u00A0мин"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}\u00A0мин {seconds}\u00A0с"},
     {L"duration", L"{seconds}s", L"{seconds}\u00A0с"},
+    {L"extra-usage-chart", L"Month", L"Месяц"},
+    {L"extra-usage-chart", L"Off", L"Откл."},
+    {L"extra-usage-chart", L"Week", L"Неделя"},
     {L"file-type", L"All files (*.*)", L"Все файлы (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"Файлы CSV (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Данных пока нет"},
@@ -7537,6 +7652,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"Требуется вход. Щёлкните полосы, чтобы войти."},
     {L"flyout-note", L"extra usage: unlimited", L"доп. использование: без ограничений"},
     {L"flyout-note", L"rate limits: none reported", L"лимиты запросов: нет данных"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, one{Доступен # сброс Fable} few{Доступно # сброса Fable} many{Доступно # сбросов Fable} "
+     L"other{Доступно # сброса Fable}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, one{Доступен # пятичасовой сброс} few{Доступно # пятичасовых сброса} many{Доступно # "
+     L"пятичасовых сбросов} other{Доступно # пятичасового сброса}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{Доступен # бесплатный сброс} few{Доступно # бесплатных сброса} many{Доступно # бесплатных "
      L"сбросов} other{Доступно # бесплатного сброса}}"},
@@ -7544,6 +7665,14 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
                      L"{when}",
      L"{count, plural, one{Доступен # бесплатный сброс} few{Доступно # бесплатных сброса} many{Доступно # бесплатных "
      L"сбросов} other{Доступно # бесплатного сброса}} · ближайший истекает {when}"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, one{Доступен # полный сброс} few{Доступно # полных сброса} many{Доступно # полных сбросов} "
+     L"other{Доступно # полного сброса}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, one{Доступен # недельный сброс} few{Доступно # недельных сброса} many{Доступно # недельных "
+     L"сбросов} other{Доступно # недельного сброса}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · истекает {when}"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · ближайший истекает {when}"},
     {L"history-about", L"Axes and units", L"Оси и единицы измерения"},
     {L"history-about", L"Cards", L"Карточки"},
     {L"history-about", L"Legend and readout", L"Легенда и подсказка"},
@@ -8082,6 +8211,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
      L"已将 {rows, plural, other{# 行指标数据}}（所选账户）导出到 {path}。已省略标签；时间为 UTC。"},
+    {L"", L"Extra usage chart", L"额外用量图表"},
     {L"", L"Free to use, modify and share.", L"可自由使用、修改和分享。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -8106,6 +8236,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"轮询 Anthropic、OpenAI、GitHub Copilot 和 OpenCode Go 的频率。Antigravity 每分钟轮询其本地会话。"},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"详情浮窗显示 Anthropic 额外用量的方式：按其所在月份绘制图表、按每周配额的时段以相同刻度绘制图表，或显示为条形。“用量图表”磁贴中额外用量有单独图表时，也遵循此设置。"},
     {L"", L"Identity", L"标识"},
     {L"", L"Identity gap", L"标识间距"},
     {L"", L"Identity position", L"标识位置"},
@@ -8595,6 +8728,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"duration", L"{minutes}m", L"{minutes} 分钟"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes} 分钟 {seconds} 秒"},
     {L"duration", L"{seconds}s", L"{seconds} 秒"},
+    {L"extra-usage-chart", L"Month", L"月"},
+    {L"extra-usage-chart", L"Off", L"关闭"},
+    {L"extra-usage-chart", L"Week", L"周"},
     {L"file-type", L"All files (*.*)", L"所有文件 (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"CSV 文件 (*.csv)"},
     {L"flyout-footer", L"No data yet", L"暂无数据"},
@@ -8613,11 +8749,21 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"需要登录。单击条形以登录。"},
     {L"flyout-note", L"extra usage: unlimited", L"额外用量：无限制"},
     {L"flyout-note", L"rate limits: none reported", L"速率限制：未报告"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, other{可用 Fable 重置 # 次}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, other{可用 5 小时重置 # 次}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, other{可用免费重置 # 次}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
                      L"{when}",
      L"{count, plural, other{可用免费重置 # 次}} · 下一次过期：{when}"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, other{可用完整重置 # 次}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, other{可用每周重置 # 次}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · 过期：{when}"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · 下一次过期：{when}"},
     {L"history-about", L"Axes and units", L"坐标轴和单位"},
     {L"history-about", L"Cards", L"卡片"},
     {L"history-about", L"Legend and readout", L"图例和读数"},
@@ -9519,7 +9665,7 @@ enum class BarLayout {
     Vertical,
     SegmentedRing,
     ConcentricRings,
-    Gauge,          // The most-used quota's 270-degree arc around its number, the identity beside.
+    Gauge,          // A 270-degree arc per quota around its number, the identity beside.
     ClockPies,      // A pie per quota with an elapsed-time hand, the identity beside.
     RoundedSquare,  // Segmented-ring arcs along a rounded square around the identity.
     LogoHeadline,
@@ -9575,6 +9721,15 @@ enum class SparklineSpan {
     Hours24,
     Hours36,
     Hours48,
+};
+
+// The details flyout's chart of Anthropic's extra usage, and a sparkline of its own: none (the
+// flyout's bar), over its month, or over the account's weekly window while that runs, on the
+// month's scale.
+enum class ExtraUsageChart {
+    Off,
+    Month,
+    Week,
 };
 // Logo size in percent of each style's standard size; the number badge's text size and offsets
 // in DIPs.
@@ -9767,6 +9922,7 @@ struct Settings {
     bool showExtraBarAmounts = false;
     // additional_rate_limits lines (Codex Spark, gpt-reserve, ...) and the Spark plan name.
     bool showOpenAiExtraLimits = false;
+    ExtraUsageChart extraUsageChart = ExtraUsageChart::Month;
     UsagePalette usagePalette = UsagePalette::Default;
     // The Custom palette's colors, kept while another palette is chosen.
     std::array<COLORREF, 4> customUsageColors = kDefaultUsageColors;
@@ -9793,6 +9949,9 @@ struct WindowUsage {
     ULONGLONG resetUnixMs = 0;
     ULONGLONG windowDurationMs = 0;
     bool notYetStarted = false;  // Anthropic: no usage yet and an explicitly null reset.
+    // Anthropic extra usage: no reported reset, so the window is the calendar month (UTC). History
+    // records none for it and derives the month from each reading's time.
+    bool calendarMonth = false;
 };
 
 // A quota the details flyout lists after its main rows, without a taskbar bar, history or alerts:
@@ -9887,6 +10046,16 @@ enum class AccountNote : uint8_t {
     NoAiCreditAllowance,
 };
 
+// What an Anthropic free reset refills, in the details flyout's order: the 5-hour window, Fable's
+// weekly allowance (giving back what Fable used of the week), the week, or every window.
+enum FreeResetKind {
+    kFiveHourReset,
+    kFableReset,
+    kWeeklyReset,
+    kFullReset,
+    kFreeResetKindCount,
+};
+
 struct AccountData {
     WindowUsage win5h;
     WindowUsage winWeek;
@@ -9901,6 +10070,13 @@ struct AccountData {
     // when unknown or none.
     int freeResets = -1;
     ULONGLONG freeResetsExpiryMs = 0;
+    // Anthropic's free resets by FreeResetKind, adding up to freeResets: each kind's count and
+    // soonest expiry, 0 when unknown or none.
+    struct FreeResetGroup {
+        int count = 0;
+        ULONGLONG expiryMs = 0;
+    };
+    std::array<FreeResetGroup, kFreeResetKindCount> freeResetKinds{};
     // Amounts behind the extra-usage slot, in dollars (Anthropic) or credits (OpenAI, GitHub
     // Copilot); -1 when unknown. Left = limit - used. Used may go negative if a credits balance
     // exceeds the configured max.
@@ -10145,6 +10321,23 @@ static ULONGLONG HistoryRetentionStart(int retentionDays, ULONGLONG now) {
     ULONGLONG age = ULONGLONG(std::clamp(retentionDays, 0, 3650)) * kHistoryDayMs;
     return age && now > age ? now - age : 0;
 }
+// The calendar month (UTC) holding `unixMs`, a time of the clock's or the journal's (the calendar
+// ends with the year 32767): when it ends and how long it is. Anthropic's extra usage runs over
+// it; its usage response names neither.
+struct UtcMonth {
+    ULONGLONG endMs = 0;
+    ULONGLONG durationMs = 0;
+};
+static UtcMonth UtcMonthOf(ULONGLONG unixMs) {
+    using namespace std::chrono;
+    const year_month_day day{floor<days>(sys_time<milliseconds>{milliseconds{(long long)unixMs}})};
+    auto startMs = [](year_month month) {
+        return (ULONGLONG)duration_cast<milliseconds>(sys_days{month / 1}.time_since_epoch()).count();
+    };
+    const year_month month = day.year() / day.month();
+    const ULONGLONG endMs = startMs(month + months{1});
+    return {endMs, endMs - startMs(month)};
+}
 struct HistoryValue {
     double value = -1;
     ULONGLONG resetMs = 0;
@@ -10373,8 +10566,8 @@ struct SparkChartUi {
 // with a logo identity hold only the identity. Headline segment fills use AccountUiRefs::fills.
 struct TileUiRefs {
     BarLayout layout = BarLayout::Stacked;
-    // Face tiles (IsFaceTile): the face, holding the meters, with ring tiles' identity or a
-    // gauge's number and key on top. Sparklines: the face holding the charts, also the meters.
+    // Face tiles (IsFaceTile): the face, holding the meters, with ring tiles' identity or the
+    // gauges' numbers and keys on top. Sparklines: the face holding the charts, also the meters.
     Grid face{nullptr};
     // Meter shapes, regenerated whenever their TileShapeKey changes.
     Panel meters{nullptr};
@@ -10390,11 +10583,17 @@ struct TileUiRefs {
     TextBlock warn{nullptr};
     TextBlock outage{nullptr};
     TextBlock outageHalo{nullptr};
-    // Logo + headline and gauges: the most-used quota's number and window key; headline tiles
-    // with the countdown show it instead of their segments.
+    // Logo + headline: the most-used quota's number and window key; headline tiles with the
+    // countdown show it instead of their segments. Gauges: the number alone, for the dash shown
+    // without a quota.
     TextBlock headline{nullptr};
     TextBlock headlineKey{nullptr};
     TextBlock countdown{nullptr};
+    // Gauges: each quota slot's number and key.
+    std::array<TextBlock, kQuotaBarCount> gaugeNumbers{
+        TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
+    std::array<TextBlock, kQuotaBarCount> gaugeKeys{
+        TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
     // Sparklines: per quota slot, its chart.
     std::array<SparkChartUi, kQuotaBarCount> charts;
     // Quota matrix: each slot's cell, its key and number.
@@ -10500,8 +10699,10 @@ struct FlyoutChartShape {
     std::vector<winrt::Windows::Foundation::Point> dots;                // Isolated readings.
     winrt::Windows::Foundation::Point now{-1.f, -1.f};    // Current point; X is the now line.
     winrt::Windows::Foundation::Point projectionEnd{-1.f, -1.f};  // X < 0 without a projection.
+    // The even-pace line's ends; X < 0 without one.
+    winrt::Windows::Foundation::Point paceFrom{-1.f, -1.f};
+    winrt::Windows::Foundation::Point paceTo{-1.f, -1.f};
     uint32_t color = 0;
-    bool remaining = false;  // Plots % left; the even-pace diagonal falls.
 
     bool operator==(const FlyoutChartShape&) const = default;
 };
@@ -11263,6 +11464,9 @@ static std::wstring FormatShortDuration(const I18nLocale& locale, ULONGLONG seco
 
 // When a reset comes, as running text continues it: "in 3d 4h (Fri 04:59)" (rounded up to the
 // minute; the local time, with its weekday from a day ahead), "now" once due, "?" without one.
+// One a week or more ahead has its date instead, which a weekday no longer tells: "in 18d 3h
+// (December 1)", or the region's short date, with its year, from 300 days ahead. GetDateFormatEx
+// refuses DATE_MONTHDAY, so the month and day take the region's picture.
 static std::wstring FormatReset(const I18nLocale& locale, ULONGLONG unixMs) {
     if (!unixMs) return L"?";
     LONGLONG delta = (LONGLONG)(unixMs - NowUnixMs());
@@ -11273,9 +11477,19 @@ static std::wstring FormatReset(const I18nLocale& locale, ULONGLONG unixMs) {
     if (!UnixMsToLocalSystemTime(unixMs, &local)) {
         return I18nText(locale, TrCtx(L"reset-when", L"in {duration}"), {{L"duration", duration}});
     }
+    constexpr LONGLONG kDayMs = 24LL * 3600 * 1000;
+    std::wstring time = delta < kDayMs ? FormatLocalTime(local) : FormatLocalDayTime(local);
+    if (delta >= 7 * kDayMs) {
+        wchar_t picture[80], date[80];
+        bool monthDay = delta < 300 * kDayMs &&
+                        GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SMONTHDAY, picture, ARRAYSIZE(picture)) > 0;
+        if (GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, monthDay ? 0 : DATE_SHORTDATE, &local,
+                            monthDay ? picture : nullptr, date, ARRAYSIZE(date), nullptr) > 0) {
+            time = date;
+        }
+    }
     return I18nText(locale, TrCtx(L"reset-when", L"in {duration} ({time})"),
-                    {{L"duration", duration},
-                     {L"time", delta < 24LL * 3600 * 1000 ? FormatLocalTime(local) : FormatLocalDayTime(local)}});
+                    {{L"duration", duration}, {L"time", time}});
 }
 
 // The details flyout's last update; an unreadable time shows as "?".
@@ -13340,7 +13554,7 @@ static bool SignOutAccountByIdentity(uint64_t identityHash) {
 
 // Claude Code's user agent: the usage response reports free resets (cedar_ember) only to a recent
 // Claude Code CLI. Keep it at a recent Claude Code release.
-static constexpr PCWSTR kClaudeCliUserAgent = L"claude-cli/2.1.318 (external, cli)";  // i18n-en
+static constexpr PCWSTR kClaudeCliUserAgent = L"claude-cli/2.1.323 (external, cli)";  // i18n-en
 
 static bool ParseAnthropicUsage(const std::string& body, AccountData* d, AccountError* error) {
     try {
@@ -13455,7 +13669,16 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
             double utilization = GetNum(eu, L"utilization");
             bool limitIsNull = eu.HasKey(L"monthly_limit") &&
                                eu.GetNamedValue(L"monthly_limit").ValueType() == JsonValueType::Null;
+            // The reset the response names, back to the same day of the month before; without one,
+            // extra usage runs over the calendar month (UTC).
             d->extraUsage.resetUnixMs = ParseIso8601Ms(GetStr(eu, L"resets_at"));
+            ULONGLONG cycleMs = MonthBeforeMs(d->extraUsage.resetUnixMs);
+            if (!d->extraUsage.resetUnixMs) {
+                const UtcMonth month = UtcMonthOf(NowUnixMs());
+                d->extraUsage.resetUnixMs = month.endMs;
+                d->extraUsage.calendarMonth = true;
+                cycleMs = month.durationMs;
+            }
             if (limitIsNull) {
                 // Reported spending is usable history even without a percentage ceiling.
                 if (std::isfinite(usedCents) && usedCents >= 0) {
@@ -13471,15 +13694,16 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
                 d->extraUsage.pct = utilization;
                 d->extraUsedAmount = std::max(usedCents, 0.0) / 100.0;
                 d->extraLimitAmount = limitCents / 100.0;
-                // The API omits the cycle start: the previous monthly billing boundary, from its
-                // authoritative next-reset timestamp.
-                d->extraUsage.windowDurationMs = MonthBeforeMs(d->extraUsage.resetUnixMs);
+                d->extraUsage.windowDurationMs = cycleMs;
             }
         }
 
         // Free resets, reported with ?cedar_ember=1: {eligible, grants[{id, resets_left, ends_at,
-        // paused, usable_now}], next_grant_id}. As Claude Code counts them: the resets left of the
-        // live grants (unpaused, usable now, not ended), none unless the next grant is live.
+        // paused, usable_now, gives_back_weekly, type, clears[]}], next_grant_id}. As Claude Code
+        // counts them: the resets left of the live grants (unpaused, usable now, not ended), none
+        // unless the next grant is live. And as it names their kinds: a grant that gives back to
+        // the week is a Fable reset; another has its type (session, weekly, full) or, without
+        // one, what it clears (five_hour alone, weekly limits alone, else everything).
         auto cedarEmber = GetObj(usage, L"cedar_ember");
         if (!cedarEmber) cedarEmber = GetObj(root, L"cedar_ember");
         if (cedarEmber && GetBool(cedarEmber, L"eligible")) {
@@ -13488,6 +13712,7 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
             double count = 0;
             bool nextLive = false;
             ULONGLONG nextEndsMs = 0;
+            decltype(d->freeResetKinds) kinds{};
             if (cedarEmber.HasKey(L"grants") &&
                 cedarEmber.GetNamedValue(L"grants").ValueType() == JsonValueType::Array) {
                 for (const auto& value : cedarEmber.GetNamedArray(L"grants")) {
@@ -13510,10 +13735,30 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
                         nextLive = true;
                         nextEndsMs = endsMs;
                     }
+
+                    std::wstring type = GetStr(grant, L"type");
+                    bool fiveHour = type == L"session";
+                    bool week = type == L"weekly";
+                    if (!fiveHour && !week && type != L"full" && grant.HasKey(L"clears") &&
+                        grant.GetNamedValue(L"clears").ValueType() == JsonValueType::Array) {
+                        for (const auto& limit : grant.GetNamedArray(L"clears")) {
+                            if (limit.ValueType() != JsonValueType::String) continue;
+                            auto name = limit.GetString();
+                            fiveHour |= name == L"five_hour";
+                            week |= std::wstring_view(name).starts_with(L"seven_day");
+                        }
+                    }
+                    auto& kind = kinds[GetBool(grant, L"gives_back_weekly") ? kFableReset :
+                                       fiveHour == week                     ? kFullReset :
+                                       fiveHour                             ? kFiveHourReset :
+                                                                              kWeeklyReset];
+                    kind.count = (int)std::min(kind.count + left, 999.0);
+                    if (left > 0 && endsMs && (!kind.expiryMs || endsMs < kind.expiryMs)) kind.expiryMs = endsMs;
                 }
             }
             d->freeResets = nextLive ? (int)std::min(count, 999.0) : 0;
             d->freeResetsExpiryMs = nextLive ? nextEndsMs : 0;
+            if (nextLive) d->freeResetKinds = kinds;
         }
 
         bool parsed = d->win5h.pct >= 0 || d->winWeek.pct >= 0 || d->fableWeek.pct >= 0 ||
@@ -13527,8 +13772,9 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
 }
 
 // The OAuth profile's plan: organization.organization_type ("claude_pro", "claude_max",
-// "claude_team", ...) as "Pro", "Max", "Team", ..., Max with its tier from rate_limit_tier
-// ("default_claude_max_20x"). Empty for a profile without one; nullopt for a malformed body.
+// "claude_team", ...) as "Pro", "Max", "Team", .... Anthropic sells the Max type's 20x
+// rate_limit_tier ("default_claude_max_20x") as Ultra. Empty for a profile without one; nullopt
+// for a malformed body.
 static std::optional<std::wstring> ParseAnthropicPlan(const std::string& body) {
     try {
         auto organization = GetObj(JsonObject::Parse(Utf8ToWide(body)), L"organization");
@@ -13540,11 +13786,8 @@ static std::optional<std::wstring> ParseAnthropicPlan(const std::string& body) {
             plan += ch == L'_' ? L' ' : wordStart ? (wchar_t)towupper(ch) : ch;
             wordStart = ch == L'_';
         }
-        if (plan == L"Max") {  // i18n-en
-            std::wstring tier = GetStr(organization, L"rate_limit_tier");
-            if (tier.find(L"20x") != std::wstring::npos) plan += L" 20x";
-            else if (tier.find(L"5x") != std::wstring::npos) plan += L" 5x";
-        }
+        if (plan == L"Max" && GetStr(organization, L"rate_limit_tier").find(L"20x") != std::wstring::npos)  // i18n-en
+            plan = L"Ultra";  // i18n-en
         return plan;
     } catch (...) {
         return std::nullopt;
@@ -14798,10 +15041,21 @@ static bool HistoryHasValue(const HistorySample& sample, int meter) {
 
 enum class HistoryBreak { None, Gap, Reset, Unavailable };
 
+// Whether a reading's window is the calendar month (UTC) it was taken in (UtcMonthOf): Anthropic
+// (provider 1) reports no window for extra usage, its budget % (meter 3) and dollars (meter 6),
+// which runs over that month, so the journal holds none.
+static bool HistoryCalendarMonth(const HistorySample& sample, int meter) {
+    return sample.provider == 1 && (meter == 3 || meter == 6) && !sample.meters[meter].resetMs;
+}
+
 // Whether two valid readings of a meter, b later than a, belong to one quota window,
 // regardless of how they were sampled.
 static HistoryBreak HistoryWindowConnection(const HistorySample& a, const HistorySample& b,
                                             int meter) {
+    // Calendar months are exact, without a reported reset's jitter.
+    if (HistoryCalendarMonth(a, meter) && HistoryCalendarMonth(b, meter)) {
+        return UtcMonthOf(a.timeMs).endMs == UtcMonthOf(b.timeMs).endMs ? HistoryBreak::None : HistoryBreak::Reset;
+    }
     ULONGLONG gap = b.timeMs - a.timeMs;
     const auto& av = a.meters[meter];
     const auto& bv = b.meters[meter];
@@ -16214,7 +16468,12 @@ static BurnUpCurve BuildBurnUpCurve(const std::deque<HistorySample>& samples, in
     while (newest && !HistoryHasValue(samples[newest - 1], meter)) --newest;
     if (!newest) return curve;
     const HistorySample* later = &samples[--newest];
-    const HistoryValue& window = later->meters[meter];
+    HistoryValue window = later->meters[meter];
+    if (HistoryCalendarMonth(*later, meter)) {
+        const UtcMonth month = UtcMonthOf(later->timeMs);
+        window.resetMs = month.endMs;
+        window.durationMs = month.durationMs;
+    }
     if (!window.resetMs || !window.durationMs || window.durationMs > kBurnUpMaxWindowMs ||
         window.durationMs > window.resetMs) return curve;
     ULONGLONG start = window.resetMs - window.durationMs;
@@ -17905,12 +18164,21 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         if (m == 3 && sample.provider != 1 && sample.provider != 4 && sample.provider != 5) {
                             continue;
                         }
-                        sample.meters[m] = {windows[m]->pct, windows[m]->resetUnixMs,
-                                            windows[m]->windowDurationMs};
+                        // Only a reported window is recorded. Readers place a calendar-month
+                        // reading by the record's time (HistoryCalendarMonth), so one whose month
+                        // ended before that time (a poll across the month's end) is left out.
+                        const bool calendar = windows[m]->calendarMonth;
+                        if (calendar && sample.timeMs >= windows[m]->resetUnixMs) continue;
+                        sample.meters[m] = {windows[m]->pct, calendar ? 0 : windows[m]->resetUnixMs,
+                                            calendar ? 0 : windows[m]->windowDurationMs};
                     }
-                    if (sample.provider == 1) {
-                        sample.meters[6] = {results[i].extraUsedAmount,
-                                           results[i].extraUsage.resetUnixMs, 0};
+                    if (const WindowUsage& extra = results[i].extraUsage; sample.provider == 1) {
+                        // Its dollars, under the same rule.
+                        if (!extra.calendarMonth) {
+                            sample.meters[6] = {results[i].extraUsedAmount, extra.resetUnixMs, 0};
+                        } else if (sample.timeMs < extra.resetUnixMs) {
+                            sample.meters[6].value = results[i].extraUsedAmount;
+                        }
                     } else if (sample.provider == 2 && !results[i].creditsUnlimited) {
                         sample.meters[7].value = results[i].creditsBalance;
                     }
@@ -19246,7 +19514,7 @@ static bool IsRingTile(BarLayout layout) {
            layout == BarLayout::RoundedSquare;
 }
 
-// Tiles whose meters are outline shapes in a face (TileOutline): ring tiles, the gauge and the
+// Tiles whose meters are outline shapes in a face (TileOutline): ring tiles, the gauges and the
 // pies. Gauges and pies show the identity beside the face, as headline tiles do. Sparklines draw
 // outlines in their plots too, a chart per quota rather than a meter.
 static bool IsFaceTile(BarLayout layout) {
@@ -19390,9 +19658,9 @@ static constexpr TileArc kSegmentedArcs[kQuotaBarCount][kQuotaBarCount] = {
 };
 static constexpr TileArc kConcentricArc{270, 360};
 // A gauge's arc: open at the bottom, filling clockwise from its lower left. Its key's smallest
-// font, and its clearance from the arc's ends, in DIPs.
+// font, its clearance from the arc's ends, and the space between a tile's gauges, in DIPs.
 static constexpr TileArc kGaugeArc{135, 270};
-static constexpr double kGaugeKeyFontMin = 6, kGaugeKeyClear = 2;
+static constexpr double kGaugeKeyFontMin = 6, kGaugeKeyClear = 2, kGaugeGap = 4;
 // A rounded square's centreline corner radius, as a share of its size.
 static constexpr double kTileSquareCornerShare = 0.22;
 // Ring, square and pie pace ticks: a core over a halo, square ended, reaching past the meter.
@@ -19461,15 +19729,15 @@ struct TileOutlineFigure {
 
 using TileOutline = std::vector<TileOutlineFigure>;
 
-// The band between radii `inner` and `outer` around (center, center), clockwise from `from` to
+// The band between radii `inner` and `outer` around (centerX, centerY), clockwise from `from` to
 // `to` degrees (0 = right), its corners at either end rounded by `fromCorner` and `toCorner`; a
 // full annulus from 360 degrees on. Corners too wide for the span shrink together.
-static TileOutline TileSectorOutline(double center, double outer, double inner, double from,
+static TileOutline TileSectorOutline(double centerX, double centerY, double outer, double inner, double from,
                                      double to, double fromCorner, double toCorner) {
     constexpr double kDegrees = 180 / std::numbers::pi;
     auto at = [&](double radius, double degrees, double arc = 0, bool clockwise = true) {
-        return TileOutlineSegment{center + radius * std::cos(degrees / kDegrees),
-                                  center + radius * std::sin(degrees / kDegrees), arc, clockwise};
+        return TileOutlineSegment{centerX + radius * std::cos(degrees / kDegrees),
+                                  centerY + radius * std::sin(degrees / kDegrees), arc, clockwise};
     };
     // Edges in two halves, so none turns more than 180 degrees.
     auto edge = [&](std::vector<TileOutlineSegment>& segments, double radius, double start,
@@ -19677,6 +19945,7 @@ struct MeterDisplay {
     double sparklineReadingScale;  // kSparklineReadingScaleMin-kSparklineReadingScaleMax percent, as a fraction.
     // Long windows' charts span this before and after now (AccountMeters); 0: the whole window.
     ULONGLONG sparklineAroundMs;
+    ExtraUsageChart extraUsageChart;
     double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
     LogoBrands logoBrands;
     int badgeSize;            // kBadgeSizeMin-kBadgeSizeMax DIPs.
@@ -19759,6 +20028,8 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& 
         .sparklineRing = settings.sparklineRing,
         .sparklineReadingScale = readingScale,
         .sparklineAroundMs = SparklineAroundMs(settings.sparklineSpan),
+        .extraUsageChart = ExtraUsageChart(std::clamp(int(settings.extraUsageChart), int(ExtraUsageChart::Off),
+                                                      int(ExtraUsageChart::Week))),
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .logoBrands = settings.logoBrands,
         .badgeSize = std::clamp(settings.badgeSize, kBadgeSizeMin, kBadgeSizeMax),
@@ -19873,8 +20144,10 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
                  {yellow, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.45), kWeeklyWindowMs}, kWeeklyWindowMs},
                 {L"Opus", {0, 0, kWeeklyWindowMs, true}, kWeeklyWindowMs},  // i18n-en
             };
-            accountData.freeResets = 2;
+            accountData.freeResets = 3;
             accountData.freeResetsExpiryMs = now + 3 * 24 * 60 * 60000ULL;
+            accountData.freeResetKinds[kFableReset] = {2, now + 40 * 24 * 60 * 60000ULL};
+            accountData.freeResetKinds[kWeeklyReset] = {1, accountData.freeResetsExpiryMs};
         } else if (openAi) {
             accountData.extraQuotas = {
                 {L"Spark",  // i18n-en
@@ -20031,6 +20304,34 @@ static std::optional<UsageProjection> ProjectUsage(const WindowUsage& reading,
         projection.limit = true;
     }
     return projection;
+}
+
+// A trace from `start` on, for a chart whose span starts there: earlier readings drop out, and a
+// run across `start` begins there, at its usage then.
+static std::vector<TileTracePoint> TraceFrom(std::vector<TileTracePoint> trace, ULONGLONG start) {
+    auto first = std::lower_bound(trace.begin(), trace.end(), start,
+                                  [](const TileTracePoint& point, ULONGLONG time) { return point.timeMs < time; });
+    if (first != trace.begin() && first != trace.end() && first->connect && first->timeMs > start) {
+        const TileTracePoint &before = first[-1], &after = *first;
+        first[-1] = {start,
+                     before.used + (after.used - before.used) * double(start - before.timeMs) /
+                                       double(after.timeMs - before.timeMs),
+                     false};
+        --first;
+    }
+    trace.erase(trace.begin(), first);
+    return trace;
+}
+
+// The window whose span the chart of an account's extra usage is drawn over: its own or, for
+// Anthropic's under ExtraUsageChart::Week, the weekly quota's while that runs at `now`. The chart
+// keeps the extra usage's scale, pace and projection either way.
+static const WindowUsage& ExtraUsageChartSpan(ExtraUsageChart chart, const AccountConfig& account,
+                                              const AccountData& data, ULONGLONG now) {
+    const WindowUsage& week = data.winWeek;
+    bool running = week.pct >= 0 && week.windowDurationMs > 0 && week.resetUnixMs > week.windowDurationMs &&
+                   now >= week.resetUnixMs - week.windowDurationMs && now < week.resetUnixMs;
+    return chart == ExtraUsageChart::Week && account.provider == L"anthropic" && running ? week : data.extraUsage;
 }
 
 // Bar layouts' corners, thin rail, pace tick and percent text placement, in DIPs along and across
@@ -20311,7 +20612,7 @@ struct QuotaMeter {
     double textOffset = 0;     // Percent text shift.
     bool darkText = false;     // Black percent text over a light fill (yellow and orange by default).
     // Percent or amount; empty while unavailable. Also the quota matrix's number, "–" while
-    // unavailable.
+    // unavailable, and a gauge's, without "%".
     std::wstring text;
 
     // Tiles. Fill and pace in thousandths of the meter are the update keys; the geometry
@@ -20329,6 +20630,8 @@ struct QuotaMeter {
     TileOutline fill;          // Empty without usage.
     TileOutline paceHalo;      // Empty while the pace mark is hidden.
     TileOutline paceCore;
+    // Gauges: the quota's gauge, `gaugeLeft` DIPs from the face's left and `gaugeTop` from its top.
+    double gaugeLeft = 0, gaugeTop = 0;
     // Quota matrix: the cell, down the first column, then the second from the third quota on (on a
     // side taskbar, all down the first).
     int matrixRow = 0, matrixColumn = 0;
@@ -20360,13 +20663,16 @@ struct AccountMeters {
     double ringTextFont = 0;
     double ringTextWidth = 0;
     double ringWarnTop = 0;
-    // Face tiles (IsFaceTile): the face's size, holding the meter shapes. Gauges also put their
-    // number and key in it: fonts, and cap height centres from the face's top.
+    // Face tiles (IsFaceTile): the face's size, holding the meter shapes. Gauges: one per quota in
+    // the mask, the ring's size each, side by side in slot order, or on a side taskbar one under
+    // another, kGaugeGap apart; without a quota, one gauge's room. Each holds its quota's number
+    // (QuotaMeter::text) and key: their fonts, the key's the largest every shown key fits at, and
+    // their cap height centres from the gauge's top.
     double faceWidth = 0, faceHeight = 0;
     double faceFont = 0, faceKeyFont = 0;
     double faceNumberCenter = 0, faceKeyCenter = 0;
-    // Logo + headline tiles and gauges: the most-used quota's number (gauges: without "%"), window
-    // key and color.
+    // Logo + headline tiles: the most-used quota's number, window key and color. Gauges: only
+    // without a quota, the dash in the number's place.
     std::wstring headline;
     std::wstring headlineKey;
     uint32_t headlineColor = 0;
@@ -20457,23 +20763,24 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     bool circular = concentric || layout == BarLayout::SegmentedRing || gauge;
     bool ring = IsRingTile(layout);
     bool paceMarks = display.showPaceTicks && layout != BarLayout::LogoHeadline && !matrix;
+    // A sparkline's quotas with a window to chart; Anthropic's extra usage only per its chart
+    // setting.
     auto timed = [&](int w) {
-        return usage[w]->windowDurationMs > 0 && usage[w]->resetUnixMs > usage[w]->windowDurationMs;
+        return usage[w]->windowDurationMs > 0 && usage[w]->resetUnixMs > usage[w]->windowDurationMs &&
+               !(w == kExtraUsageBar && account.provider == L"anthropic" &&
+                 display.extraUsageChart == ExtraUsageChart::Off);
     };
-    // The most-used tile quota: the headline's, and the only one a gauge shows.
+    // The most-used tile quota: the headline's.
     int top = -1;
     for (int w = 0; w < kQuotaBarCount; w++) {
         if (!(meters.barMask & (1 << w))) continue;
         if (top < 0 || usage[w]->pct > usage[top]->pct) top = w;
     }
-    if (gauge) {
-        meters.barMask = top >= 0 ? 1 << top : 0;
-        count = meters.barMask ? 1 : 0;
-    }
     if (spark) {
         // A chart per quota with a window; without any, the most-used quota's. Anthropic's extra
         // usage and OpenAI's credits go in the weekly chart's corner, instead of a chart of its
-        // own, while selected and reported; credits have no window, so never get a chart.
+        // own, while selected and reported; credits have no window, so never get a chart, nor
+        // does Anthropic's extra usage with its chart off.
         int charted = 0;
         for (int w = 0; w < kQuotaBarCount; w++) {
             if ((meters.barMask & (1 << w)) && timed(w)) charted |= 1 << w;
@@ -20550,8 +20857,13 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             meters.faceWidth = count ? columns * pieDiameter + (columns - 1) * pieGap : 0;
             meters.faceHeight = count ? rows * pieDiameter + (rows - 1) * pieGap : 0;
         } else {
-            meters.ring = TileRingLayout(concentric, size, display.ringThickness, count, display.logoScale);
+            // Each gauge is a ring of one arc.
+            meters.ring = TileRingLayout(concentric, size, display.ringThickness, gauge ? std::min(count, 1) : count,
+                                         display.logoScale);
             meters.faceWidth = meters.faceHeight = size;
+            if (gauge && count > 1) {
+                (display.sideWidth > 0 ? meters.faceHeight : meters.faceWidth) = count * size + (count - 1) * kGaugeGap;
+            }
         }
     }
     if (square) {
@@ -20568,15 +20880,17 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         meters.faceKeyCenter = g.size / 2 + g.radius * 0.75;
         // A key too wide for the opening shrinks a quarter DIP at a time, measured at each size,
         // down to kGaugeKeyFontMin, until it keeps kGaugeKeyClear DIPs from the arc's ends on
-        // either side. Over the key's line, from an em above its baseline down to it, the opening
-        // is narrowest where the arc's inner edge ends: below that the ends are cut along the
-        // radius, above it the inner edge closes in.
-        if (top >= 0) {
-            const double inner = g.radius - g.stroke / 2, outer = g.radius + g.stroke / 2;
-            const double end = (kGaugeArc.start + kGaugeArc.sweep - 360) * std::numbers::pi / 180;
-            const std::wstring key = QuotaKey(display.locale, account.provider, top);
+        // either side; the tile's gauges share the font its widest key takes. Over the key's line,
+        // from an em above its baseline down to it, the opening is narrowest where the arc's inner
+        // edge ends: below that the ends are cut along the radius, above it the inner edge closes
+        // in.
+        const double inner = g.radius - g.stroke / 2, outer = g.radius + g.stroke / 2;
+        const double end = (kGaugeArc.start + kGaugeArc.sweep - 360) * std::numbers::pi / 180;
+        for (int w = 0; w < kQuotaBarCount; w++) {
+            if (!(meters.barMask & (1 << w))) continue;
+            const std::wstring key = QuotaKey(display.locale, account.provider, w);
             // Whether the key clears the arc's ends at `size`, by half the opening's width over
-            // its line at that size, from the face's middle.
+            // its line at that size, from the gauge's middle.
             auto fits = [&](double size) {
                 double baseline = meters.faceKeyCenter - g.size / 2 + size * kTileCapShare / 2;
                 double y = std::clamp(inner * std::sin(end), baseline - size, baseline);
@@ -20585,9 +20899,9 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                                                            std::sqrt(std::max(inner * inner - y * y, 0.0));
                 return display.measure(key, TileFont::Text, size) / 2 + kGaugeKeyClear <= room;
             };
-            double size = meters.faceKeyFont;
-            while (size > kGaugeKeyFontMin && !fits(size)) size = std::max(size - 0.25, kGaugeKeyFontMin);
-            meters.faceKeyFont = size;
+            while (meters.faceKeyFont > kGaugeKeyFontMin && !fits(meters.faceKeyFont)) {
+                meters.faceKeyFont = std::max(meters.faceKeyFont - 0.25, kGaugeKeyFontMin);
+            }
         }
     }
     if (ring) {
@@ -20791,21 +21105,30 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         } else if (circular) {
             // Annular sectors with stroke / 4 corners at a partial arc's ends; full rings have
             // none. Fills start with the track's corners and end in a radial cut at their value.
-            double center = geometry.size / 2;
+            // A gauge is centred in its own place in the face, around its number.
+            double centerX = geometry.size / 2, centerY = centerX;
+            if (gauge) {
+                (display.sideWidth > 0 ? m.gaugeTop : m.gaugeLeft) = slotPosition * (geometry.size + kGaugeGap);
+                centerX += m.gaugeLeft;
+                centerY += m.gaugeTop;
+                wchar_t text[24];
+                swprintf(text, ARRAYSIZE(text), L"%.0f", shown);
+                m.text = text;
+            }
             double outer = m.radius + geometry.stroke / 2, inner = m.radius - geometry.stroke / 2;
             double corner = fullRing ? 0.0 : geometry.stroke / 4;
             double end = m.arc.start + m.arc.sweep;
             double low = std::min(m.arc.start, end), high = std::max(m.arc.start, end);
-            m.track = TileSectorOutline(center, outer, inner, low, high, corner, corner);
+            m.track = TileSectorOutline(centerX, centerY, outer, inner, low, high, corner, corner);
             m.fillSweep = m.arc.sweep * fill;
             m.fillEndRadius = std::max(0.0, corner - std::abs(m.arc.sweep - m.fillSweep) *
                                                          std::numbers::pi / 180 * m.radius);
             if (m.fillUnits) {
                 double fillEnd = m.arc.start + m.fillSweep;
                 m.fill = m.arc.sweep > 0 ?
-                    TileSectorOutline(center, outer, inner, m.arc.start, fillEnd, corner,
+                    TileSectorOutline(centerX, centerY, outer, inner, m.arc.start, fillEnd, corner,
                                       m.fillEndRadius) :
-                    TileSectorOutline(center, outer, inner, fillEnd, m.arc.start, m.fillEndRadius,
+                    TileSectorOutline(centerX, centerY, outer, inner, fillEnd, m.arc.start, m.fillEndRadius,
                                       corner);
             }
             m.paceAngle = m.arc.start + m.arc.sweep * pace;
@@ -20822,8 +21145,8 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 double inside = concentric && slotPosition < count - 1 ? between : kTilePaceOverhang;
                 double radians = m.paceAngle * std::numbers::pi / 180;
                 double dx = std::cos(radians), dy = std::sin(radians);
-                m.paceHalo = tick(center, center, dx, dy, inner - inside, outer + outside, kTilePaceHalo);
-                m.paceCore = tick(center, center, dx, dy, inner - inside + kTilePaceCoreInset,
+                m.paceHalo = tick(centerX, centerY, dx, dy, inner - inside, outer + outside, kTilePaceHalo);
+                m.paceCore = tick(centerX, centerY, dx, dy, inner - inside + kTilePaceCoreInset,
                                   outer + outside - kTilePaceCoreInset, kTilePaceCore);
             }
         } else if (spark) {
@@ -20841,13 +21164,18 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             // A rolled-back clock can put now before the newest reading: the time, the current
             // reading and the projection take the later of the two.
             ULONGLONG now = trace.empty() ? display.now : std::max(display.now, trace.back().timeMs);
-            // The span drawn: the window, or a long window's day each side of now, kept inside the
-            // window.
+            // The span drawn: the window (extra usage: its chart's, ExtraUsageChartSpan), or a long
+            // one's day each side of now, kept inside it.
             ULONGLONG windowStart = timed(w) ? wu.resetUnixMs - wu.windowDurationMs : 0;
             ULONGLONG start = windowStart, span = wu.windowDurationMs;
+            if (timed(w) && w == kExtraUsageBar) {
+                const WindowUsage& over = ExtraUsageChartSpan(display.extraUsageChart, account, data, now);
+                start = over.resetUnixMs - over.windowDurationMs;
+                span = over.windowDurationMs;
+            }
             const ULONGLONG around = display.sparklineAroundMs;
             if (timed(w) && around && span > 2 * around) {
-                start = std::min(now > windowStart + around ? now - around : windowStart, wu.resetUnixMs - 2 * around);
+                start = std::min(now > start + around ? now - around : start, start + span - 2 * around);
                 span = 2 * around;
             }
             auto xAt = [&](ULONGLONG timeMs) {
@@ -20909,27 +21237,17 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 return {std::move(figure)};
             };
             if (timed(w)) {
-                // The window's even use across the span: 0% to 100% across the whole window.
-                if (display.showPaceTicks) {
-                    double from = 100.0 * double(start - windowStart) / double(wu.windowDurationMs);
-                    double to = 100.0 * double(start + span - windowStart) / double(wu.windowDurationMs);
-                    shapes[kSparkPace] = {{0, yAt(from), {{width, yAt(to)}}}};
+                // The window's even use, 0% to 100% across the whole window, over the part of it in
+                // the span.
+                const ULONGLONG paceFrom = std::max(start, windowStart), paceTo = std::min(start + span, wu.resetUnixMs);
+                if (display.showPaceTicks && paceFrom < paceTo) {
+                    auto even = [&](ULONGLONG time) {
+                        return 100.0 * double(time - windowStart) / double(wu.windowDurationMs);
+                    };
+                    shapes[kSparkPace] = {{xAt(paceFrom), yAt(even(paceFrom)), {{xAt(paceTo), yAt(even(paceTo))}}}};
                 }
-                // Readings before a span around now drop out; a run across its start begins there.
-                std::vector<TileTracePoint> drawn = trace;
-                if (start > windowStart) {
-                    auto first = std::lower_bound(drawn.begin(), drawn.end(), start,
-                                                  [](const TileTracePoint& point, ULONGLONG time) { return point.timeMs < time; });
-                    if (first != drawn.begin() && first != drawn.end() && first->connect && first->timeMs > start) {
-                        const TileTracePoint &before = first[-1], &after = *first;
-                        first[-1] = {start,
-                                     before.used + (after.used - before.used) * double(start - before.timeMs) /
-                                                       double(after.timeMs - before.timeMs),
-                                     false};
-                        --first;
-                    }
-                    drawn.erase(drawn.begin(), first);
-                }
+                // Readings before a span starting inside the window drop out.
+                const std::vector<TileTracePoint> drawn = start > windowStart ? TraceFrom(trace, start) : trace;
                 for (size_t begin = 0, end; begin < drawn.size(); begin = end) {
                     TileOutlineFigure line{xAt(drawn[begin].timeMs), yAt(drawn[begin].used), {}};
                     for (end = begin + 1; end < drawn.size() && drawn[end].connect; end++) {
@@ -21071,14 +21389,15 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         }
     }
 
-    // Headline and gauge: the most-used tile quota, shown per the bar mode in its usage color.
-    if (layout == BarLayout::LogoHeadline || gauge) {
+    // Headline: the most-used tile quota, shown per the bar mode in its usage color. Gauges
+    // without a quota: the dash alone.
+    if (layout == BarLayout::LogoHeadline || (gauge && top < 0)) {
         bool countdown = layout == BarLayout::LogoHeadline && display.headlineCountdown;
         meters.headline = L"\u2013";  // i18n-en: no reading
         if (countdown) meters.headlineCountdown = std::wstring(kHeadlineCountdownArrow) + L"\u2013";  // i18n-en: no reading
         if (top >= 0) {
             wchar_t text[24];
-            swprintf(text, ARRAYSIZE(text), gauge ? L"%.0f" : L"%.0f%%", tileShown(usage[top]->pct));
+            swprintf(text, ARRAYSIZE(text), L"%.0f%%", tileShown(usage[top]->pct));
             meters.headline = text;
             meters.headlineKey = meters.quotas[top].key;
         }
@@ -21170,8 +21489,7 @@ static Grid LoadProviderLogo(std::wstring const& provider, Brush const& fill) {
 // Tile layouts: logo + headline %, the face tiles (rings, rounded square, gauge, clock pies), the
 // burn-up sparkline and the quota matrix. A tile shows the account's identity (provider logo,
 // optionally with a number badge, or short text) and its tile quotas: the meters the bar layouts
-// show, in slot order (a gauge: the most-used one). BuildAccountTile creates a tile;
-// UpdateAccountTile
+// show, in slot order. BuildAccountTile creates a tile; UpdateAccountTile
 // regenerates its meter shapes whenever their inputs change, then applies values in place. Bar
 // columns with a logo identity show the same identity (BuildTileIdentity, UpdateTileIdentity), and
 // every column takes the tiles' hover and open-flyout background. Values, identity text and
@@ -21488,28 +21806,35 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");  // i18n-en
 
     if (IsFaceTile(layout)) {
-        // Gauges and pies: the face beside the identity. A gauge's number and key are centred
-        // across it, moved down from its middle to their model centres (UpdateAccountTile).
+        // Gauges and pies: the face beside the identity. Gauges: each quota slot's number and key,
+        // and the dash shown without a quota, centred in the face and moved from its middle to
+        // their model centres (UpdateAccountTile).
         Grid face;
         face.IsHitTestVisible(false);
         face.VerticalAlignment(VerticalAlignment::Center);
         Grid meters;
         face.Children().Append(meters);
         if (layout == BarLayout::Gauge) {
-            auto centred = [&](TextBlock const& text) {
+            auto centred = [&](bool number) {
+                TextBlock text;
+                if (number) {
+                    text.FontFamily(displayFont);
+                    text.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+                } else {
+                    text.Opacity(0.6);
+                }
                 text.TextLineBounds(TextLineBounds::Tight);
                 text.HorizontalAlignment(HorizontalAlignment::Center);
                 text.VerticalAlignment(VerticalAlignment::Center);
                 text.RenderTransform(TranslateTransform{});
                 face.Children().Append(text);
+                return text;
             };
-            tile.headline = TextBlock{};
-            tile.headline.FontFamily(displayFont);
-            tile.headline.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-            centred(tile.headline);
-            tile.headlineKey = TextBlock{};
-            tile.headlineKey.Opacity(0.6);
-            centred(tile.headlineKey);
+            tile.headline = centred(true);
+            for (int w = 0; w < kQuotaBarCount; w++) {
+                tile.gaugeNumbers[w] = centred(true);
+                tile.gaugeKeys[w] = centred(false);
+            }
         }
         tile.face = face;
         tile.meters = meters;
@@ -21882,16 +22207,28 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                     tile.text.MaxWidth(meters.ringTextWidth);
                 }
                 tile.warn.Margin({0, meters.ringWarnTop, -3, 0});
-            } else if (tile.headline && tile.headlineKey) {
-                // A gauge's number at its font, and both at their centres; the key's font follows
-                // the key (below).
-                tile.headline.FontSize(meters.faceFont);
-                double middle = meters.faceHeight / 2;
-                if (auto shift = tile.headline.RenderTransform().try_as<TranslateTransform>()) {
-                    shift.Y(meters.faceNumberCenter - middle);
-                }
-                if (auto shift = tile.headlineKey.RenderTransform().try_as<TranslateTransform>()) {
-                    shift.Y(meters.faceKeyCenter - middle);
+            } else if (tile.headline) {
+                // Gauges: each shown quota's number and key at their fonts and centres in its
+                // gauge, and the dash in the first one's place.
+                auto place = [&](TextBlock const& text, double size, double x, double y) {
+                    text.FontSize(size);
+                    if (auto shift = text.RenderTransform().try_as<TranslateTransform>()) {
+                        shift.X(x - meters.faceWidth / 2);
+                        shift.Y(y - meters.faceHeight / 2);
+                    }
+                };
+                double middle = geometry.size / 2;
+                place(tile.headline, meters.faceFont, middle, meters.faceNumberCenter);
+                for (int w = 0; w < kQuotaBarCount; w++) {
+                    bool shown = barMask & (1 << w);
+                    for (TextBlock const& text : {tile.gaugeNumbers[w], tile.gaugeKeys[w]}) {
+                        text.Visibility(shown ? Visibility::Visible : Visibility::Collapsed);
+                    }
+                    if (!shown) continue;
+                    QuotaMeter const& m = meters.quotas[w];
+                    place(tile.gaugeNumbers[w], meters.faceFont, m.gaugeLeft + middle, m.gaugeTop + meters.faceNumberCenter);
+                    place(tile.gaugeKeys[w], meters.faceKeyFont, m.gaugeLeft + middle, m.gaugeTop + meters.faceKeyCenter);
+                    tile.gaugeKeys[w].Text(m.key);
                 }
             }
         } else if (!tile.countdown) {
@@ -22001,6 +22338,12 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     for (int w = 0; w < kQuotaBarCount && !matrix && !spark; w++) {
         if (!(barMask & (1 << w))) continue;
         QuotaMeter const& m = meters.quotas[w];
+        // A gauge's number, in its quota's usage color like the fill.
+        if (tile.gaugeNumbers[w] && (m.text != ap.percentTexts[w] || m.color != ap.fillColor[w])) {
+            tile.gaugeNumbers[w].Text(m.text);
+            tile.gaugeNumbers[w].Foreground(SolidColorBrush(ArgbColor(m.color)));
+            ap.percentTexts[w] = m.text;
+        }
         if (m.fillUnits != ap.fillPx[w] || m.color != ap.fillColor[w]) {
             if (face && tile.arcs[w]) {
                 // Face fills are flat.
@@ -22033,17 +22376,12 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         }
     }
 
-    if (tile.headlineKey) {
-        // A gauge's key font fits its key, so it follows the text.
-        std::wstring headline = meters.headline + L"\n" + meters.headlineKey + L"\n" + meters.headlineCountdown + L"\n" +
-                                std::to_wstring(meters.faceKeyFont);
+    if (tile.headline) {
+        std::wstring headline = meters.headline + L"\n" + meters.headlineKey + L"\n" + meters.headlineCountdown;
         if (headline != ap.headline || meters.headlineColor != ap.headlineColor) {
-            if (tile.headline) {
-                tile.headline.Text(meters.headline);
-                tile.headline.Foreground(SolidColorBrush(ArgbColor(meters.headlineColor)));
-            }
-            if (face) tile.headlineKey.FontSize(meters.faceKeyFont);
-            tile.headlineKey.Text(meters.headlineKey);
+            tile.headline.Text(meters.headline);
+            tile.headline.Foreground(SolidColorBrush(ArgbColor(meters.headlineColor)));
+            if (tile.headlineKey) tile.headlineKey.Text(meters.headlineKey);
             if (tile.countdown) tile.countdown.Text(meters.headlineCountdown);
             ap.headline = std::move(headline);
             ap.headlineColor = meters.headlineColor;
@@ -22441,6 +22779,7 @@ struct FlyoutDisplay {
     bool warn = false;
     bool refreshing = false;
     bool visualTestMode = false;
+    ExtraUsageChart extraUsageChart = ExtraUsageChart::Month;  // MeterDisplay::extraUsageChart
     // What the provider's status page shows, and the taskbar mark's color for it (0: none).
     ProviderOutage outage;
     uint32_t outageColor = 0;
@@ -22858,10 +23197,9 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         details.Children().Append(row.visual);
 
         if (charted) {
-            // Usage chart: card-tinted plot and the even-pace diagonal from the window start to
-            // the reset (rising; UpdateAccountFlyout turns it in remaining mode), under the
-            // recorded usage (area, segments, isolated readings), projection, now line and
-            // current point, whose geometry UpdateAccountFlyout sets.
+            // Usage chart: card-tinted plot and the even-pace line, under the recorded usage
+            // (area, segments, isolated readings), projection, now line and current point;
+            // UpdateAccountFlyout sets their geometry.
             Grid chart;
             chart.Width(kFlyoutChartWidth);
             chart.Height(kFlyoutChartHeight);
@@ -22886,10 +23224,6 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
             bounds.Rect({0, 0, (float)kFlyoutChartWidth, (float)kFlyoutChartHeight});
             canvas.Clip(bounds);
             wuxs::Line pace;
-            pace.X1(0);
-            pace.Y1(kFlyoutChartHeight - kFlyoutChartInset);
-            pace.X2(kFlyoutChartWidth);
-            pace.Y2(kFlyoutChartInset);
             paceStroke(pace);
             canvas.Children().Append(pace);
             row.chartPace = pace;
@@ -23346,20 +23680,28 @@ static void UpdateAccountFlyout(
             show(row.projection, !projection.empty());
 
             // Usage chart in place of the bar: used %, or % left in remaining mode, over the
-            // displayed reading's window, with the projection. Shapes are regenerated only when
-            // the drawn geometry changes.
+            // displayed reading's window, with the projection; Anthropic's extra usage per its
+            // chart setting. Shapes are regenerated only when the drawn geometry changes.
             bool charted = row.chart && !trace.empty() && wu.windowDurationMs > 0 &&
-                           wu.resetUnixMs > wu.windowDurationMs;
+                           wu.resetUnixMs > wu.windowDurationMs &&
+                           !(r == kFlyoutExtraRow && account.provider == L"anthropic" &&
+                             display.extraUsageChart == ExtraUsageChart::Off);
             show(row.visual, !charted);
             show(row.chart, charted);
             if (charted) {
                 anyChart = true;
                 using winrt::Windows::Foundation::Point;
-                double start = (double)(wu.resetUnixMs - wu.windowDurationMs);
+                // A rolled-back clock can put now before the newest reading.
+                ULONGLONG now = std::max(display.now, trace.back().timeMs);
+                // The span drawn: the window; extra usage, its chart's (ExtraUsageChartSpan).
+                const ULONGLONG windowStart = wu.resetUnixMs - wu.windowDurationMs;
+                const WindowUsage& over = r == kFlyoutExtraRow ?
+                    ExtraUsageChartSpan(display.extraUsageChart, account, d, now) : wu;
+                const ULONGLONG start = over.resetUnixMs - over.windowDurationMs, span = over.windowDurationMs;
                 auto snap = [](double dip) { return (float)(std::round(dip * 4) / 4); };
                 auto xAt = [&](ULONGLONG timeMs) {
-                    return snap(std::clamp(((double)timeMs - start) / wu.windowDurationMs,
-                                           0.0, 1.0) * kFlyoutChartWidth);
+                    return snap(std::clamp(((double)timeMs - (double)start) / (double)span, 0.0, 1.0) *
+                                kFlyoutChartWidth);
                 };
                 auto yAt = [&](double used) {
                     double shown = std::clamp(remainingMode ? 100.0 - used : used, 0.0, 100.0);
@@ -23367,25 +23709,46 @@ static void UpdateAccountFlyout(
                                 (kFlyoutChartHeight - 2 * kFlyoutChartInset) * shown / 100.0);
                 };
                 FlyoutChartShape shape;
-                for (size_t begin = 0, end; begin < trace.size(); begin = end) {
-                    std::vector<Point> run{{xAt(trace[begin].timeMs), yAt(trace[begin].used)}};
-                    for (end = begin + 1; end < trace.size() && trace[end].connect; end++) {
-                        run.push_back({xAt(trace[end].timeMs), yAt(trace[end].used)});
+                // Readings before a span starting inside the window drop out.
+                const std::vector<TileTracePoint> plotted = start > windowStart ? TraceFrom(trace, start) : trace;
+                for (size_t begin = 0, end; begin < plotted.size(); begin = end) {
+                    std::vector<Point> run{{xAt(plotted[begin].timeMs), yAt(plotted[begin].used)}};
+                    for (end = begin + 1; end < plotted.size() && plotted[end].connect; end++) {
+                        run.push_back({xAt(plotted[end].timeMs), yAt(plotted[end].used)});
                     }
                     if (run.size() == 1) shape.dots.push_back(run.front());
                     else shape.lines.push_back(std::move(run));
                 }
-                // A rolled-back clock can put now before the newest reading.
-                ULONGLONG now = std::max(display.now, trace.back().timeMs);
                 shape.now = {xAt(now), yAt(wu.pct)};
-                if (projected) shape.projectionEnd = {xAt(projected->toMs), yAt(projected->toUsed)};
+                if (projected) {
+                    // Cut at the span's end, before a later reset or limit.
+                    ULONGLONG toMs = std::min(projected->toMs, start + span);
+                    double toUsed = projected->toUsed;
+                    if (toMs < projected->toMs) {
+                        toUsed = wu.pct + (toUsed - wu.pct) * ((double)toMs - (double)projected->fromMs) /
+                                              ((double)projected->toMs - (double)projected->fromMs);
+                    }
+                    shape.projectionEnd = {xAt(toMs), yAt(toUsed)};
+                }
+                // The window's even use, 0% at its start to 100% at its reset, over the part of
+                // it in the span.
+                const ULONGLONG paceFrom = std::max(start, windowStart), paceTo = std::min(start + span, wu.resetUnixMs);
+                if (paceFrom < paceTo) {
+                    auto even = [&](ULONGLONG time) {
+                        return 100.0 * double(time - windowStart) / double(wu.windowDurationMs);
+                    };
+                    shape.paceFrom = {xAt(paceFrom), yAt(even(paceFrom))};
+                    shape.paceTo = {xAt(paceTo), yAt(even(paceTo))};
+                }
                 shape.color = colorValue;
-                shape.remaining = remainingMode;
 
                 FlyoutChartShape& drawn = row.chartShape;
-                if (shape.remaining != drawn.remaining) {
-                    row.chartPace.Y1(yAt(0));
-                    row.chartPace.Y2(yAt(100));
+                if (shape.paceFrom != drawn.paceFrom || shape.paceTo != drawn.paceTo) {
+                    show(row.chartPace, shape.paceFrom.X >= 0);
+                    row.chartPace.X1(shape.paceFrom.X);
+                    row.chartPace.Y1(shape.paceFrom.Y);
+                    row.chartPace.X2(shape.paceTo.X);
+                    row.chartPace.Y2(shape.paceTo.Y);
                 }
                 if (shape.lines != drawn.lines || shape.dots != drawn.dots) {
                     // Each run is a stroked figure over a filled one closed to the plot bottom.
@@ -23532,8 +23895,30 @@ static void UpdateAccountFlyout(
             }
         }
 
+        // Free resets: Anthropic's a line per kind, with that kind's soonest expiry; another
+        // provider's in one line.
+        static constexpr I18nKey kResetKinds[kFreeResetKindCount] = {
+            TrCtx(L"free-resets",
+                  L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}"),
+            TrCtx(L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}"),
+            TrCtx(L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}"),
+            TrCtx(L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}"),
+        };
         std::wstring freeResets;
-        if (d.freeResets > 0) {
+        for (size_t kind = 0; kind < kFreeResetKindCount; kind++) {
+            const auto& resets = d.freeResetKinds[kind];
+            if (resets.count <= 0) continue;
+            std::wstring line = I18nText(locale, kResetKinds[kind], {{L"count", resets.count}});
+            if (resets.expiryMs > display.now) {
+                line = I18nText(locale,
+                                resets.count == 1 ? TrCtx(L"free-resets", L"{resets} \u00B7 expires {when}") :
+                                                    TrCtx(L"free-resets", L"{resets} \u00B7 next expires {when}"),
+                                {{L"resets", line}, {L"when", FormatReset(locale, resets.expiryMs)}});
+            }
+            if (!freeResets.empty()) freeResets += L'\n';
+            freeResets += line;
+        }
+        if (freeResets.empty() && d.freeResets > 0) {
             freeResets =
                 d.freeResetsExpiryMs > display.now ?
                     I18nText(locale,
@@ -23607,7 +23992,7 @@ static constexpr int kFlyoutPollMs = 100;
 // Refreshes countdowns while a flyout is open.
 static constexpr int kFlyoutCountdownSeconds = 30;
 static constexpr float kFlyoutTaskbarGap = 12.f;
-static constexpr double kFlyoutScreenMargin = 12;  // At the screen's far edge.
+static constexpr double kFlyoutScreenMargin = 12;  // At the screen's far edge and the taskbar's ends.
 
 static void ShowAccountFlyout(QuotaUiInstance& state, int index);
 static void OnTilePointerExited(QuotaUiInstance& state, int index);
@@ -23919,35 +24304,50 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
         UpdateQuotaUi(state);
         if (!popup.flyout) return;
 
-        // Centered on the column, just past the taskbar's inner edge: above it at the bottom of the
-        // screen (and wherever Windows doesn't say, as on a taskbar another mod rotates), below it
-        // at the top, beside it on a side. The point is the column's own; a side taskbar's column
-        // may be shrunk to its width, so it is found in the taskbar's space, then mapped back.
+        // Just past the taskbar's inner edge: above it at the bottom of the screen (and wherever
+        // Windows doesn't say, as on a taskbar another mod rotates), below it at the top, beside it
+        // on a side. Along the taskbar it is centered on the column, or where that would pass an
+        // end of the taskbar, a margin from that end. XAML wouldn't keep it there: it takes the
+        // screen holding the flyout's corner, and only moves the flyout its whole size back from
+        // that screen's far edge. The point is the column's own; a side taskbar's column may be
+        // shrunk to its width, so it is found in the taskbar's space, then mapped back.
+        using Mode = wuxcp::FlyoutPlacementMode;
         wuxcp::FlyoutShowOptions options;
         options.ShowMode(wuxcp::FlyoutShowMode::Transient);
-        if (state.edge == TaskbarEdge::Top || state.edge == TaskbarEdge::Left || state.edge == TaskbarEdge::Right) {
-            float width = (float)column.ActualWidth(), height = (float)column.ActualHeight();
-            auto bounds = column.TransformToVisual(rootContent).TransformBounds({0.f, 0.f, width, height});
-            float scaleX = width > 0 && bounds.Width > 0 ? bounds.Width / width : 1.f;
-            float scaleY = height > 0 && bounds.Height > 0 ? bounds.Height / height : 1.f;
-            winrt::Windows::Foundation::Point at{bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2};
-            if (state.edge == TaskbarEdge::Top) {
-                options.Placement(wuxcp::FlyoutPlacementMode::Bottom);
-                at.Y = (float)rootContent.ActualHeight() + kFlyoutTaskbarGap;
-            } else if (state.edge == TaskbarEdge::Left) {
-                options.Placement(wuxcp::FlyoutPlacementMode::Right);
-                at.X = (float)rootContent.ActualWidth() + kFlyoutTaskbarGap;
-            } else {
-                options.Placement(wuxcp::FlyoutPlacementMode::Left);
-                at.X = -kFlyoutTaskbarGap;
-            }
-            options.Position(winrt::Windows::Foundation::Point{(at.X - bounds.X) / scaleX, (at.Y - bounds.Y) / scaleY});
-        } else {
-            auto origin = column.TransformToVisual(rootContent).TransformPoint({0.f, 0.f});
-            options.Placement(wuxcp::FlyoutPlacementMode::Top);
-            options.Position(winrt::Windows::Foundation::Point{
-                (float)column.ActualWidth() / 2.f, -origin.Y - kFlyoutTaskbarGap});
+        const bool side = state.edge == TaskbarEdge::Left || state.edge == TaskbarEdge::Right;
+        float width = (float)column.ActualWidth(), height = (float)column.ActualHeight();
+        auto bounds = column.TransformToVisual(rootContent).TransformBounds({0.f, 0.f, width, height});
+        float scaleX = width > 0 && bounds.Width > 0 ? bounds.Width / width : 1.f;
+        float scaleY = height > 0 && bounds.Height > 0 ? bounds.Height / height : 1.f;
+        winrt::Windows::Foundation::Point at{bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2};
+        // The card's size as it will show: its content is set, and its caps are the screen's room.
+        card.Measure({INFINITY, INFINITY});
+        float size = side ? card.DesiredSize().Height : card.DesiredSize().Width;
+        float start = (float)kFlyoutScreenMargin;
+        float end = (float)(side ? rootContent.ActualHeight() : rootContent.ActualWidth()) - start;
+        float& along = side ? at.Y : at.X;
+        int align = 0;  // The flyout's start (-1) or end (1) at the point, else its middle
+        if (along - size / 2 < start) {
+            align = -1;
+            along = start;
+        } else if (along + size / 2 > end) {
+            align = 1;
+            along = end;
         }
+        if (state.edge == TaskbarEdge::Top) {
+            options.Placement(align < 0 ? Mode::BottomEdgeAlignedLeft : align > 0 ? Mode::BottomEdgeAlignedRight : Mode::Bottom);
+            at.Y = (float)rootContent.ActualHeight() + kFlyoutTaskbarGap;
+        } else if (state.edge == TaskbarEdge::Left) {
+            options.Placement(align < 0 ? Mode::RightEdgeAlignedTop : align > 0 ? Mode::RightEdgeAlignedBottom : Mode::Right);
+            at.X = (float)rootContent.ActualWidth() + kFlyoutTaskbarGap;
+        } else if (state.edge == TaskbarEdge::Right) {
+            options.Placement(align < 0 ? Mode::LeftEdgeAlignedTop : align > 0 ? Mode::LeftEdgeAlignedBottom : Mode::Left);
+            at.X = -kFlyoutTaskbarGap;
+        } else {
+            options.Placement(align < 0 ? Mode::TopEdgeAlignedLeft : align > 0 ? Mode::TopEdgeAlignedRight : Mode::Top);
+            at.Y = -kFlyoutTaskbarGap;
+        }
+        options.Position(winrt::Windows::Foundation::Point{(at.X - bounds.X) / scaleX, (at.Y - bounds.Y) / scaleY});
         EnumThreadWindows(GetCurrentThreadId(),
             [](HWND candidate, LPARAM param) CALLBACK -> BOOL {
                 if (IsWindowVisible(candidate)) {
@@ -25232,6 +25632,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                                 display.usageColors, settings.showOpenAiExtraLimits,
                                                 meters.stale, meters.warn, accountRefreshing,
                                                 visualTestMode};
+                    flyoutDisplay.extraUsageChart = display.extraUsageChart;
                     flyoutDisplay.outage = outage;
                     flyoutDisplay.outageColor = meters.mark == IdentityMark::Outage ? meters.markColor : 0;
                     flyoutDisplay.locale = display.locale;
@@ -26386,6 +26787,35 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     if (g_refreshEvent) SetEvent(g_refreshEvent);
 }
 
+using CTaskListWnd_ComputeJumpViewPosition_t = HRESULT(WINAPI*)(void*, void*, int, winrt::Windows::Foundation::Point*,
+                                                                HorizontalAlignment*, VerticalAlignment*);
+static CTaskListWnd_ComputeJumpViewPosition_t CTaskListWnd_ComputeJumpViewPosition_Original = nullptr;
+
+// A taskbar button's jump list opens at a point (raw desktop pixels) found from the bounds the
+// taskbar's layout reports for the button. Those are the repeater's own, taken for the taskbar's:
+// they leave out the repeater's margin, so Left side's room there moves the buttons and not their
+// menus. The point takes our share of that margin.
+static HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(
+    void* pThis, void* group, int index, winrt::Windows::Foundation::Point* point,
+    HorizontalAlignment* horizontal, VerticalAlignment* vertical) {
+    HRESULT hr = CTaskListWnd_ComputeJumpViewPosition_Original(pThis, group, index, point, horizontal, vertical);
+    if (g_unloading || FAILED(hr) || !point) return hr;
+
+    std::lock_guard<std::mutex> lock(g_placementMutex);
+    for (const PlacementRecord& record : g_placementRecords) {
+        RECT taskbar{};
+        if (record.start || record.lost || record.applied <= 0.5 || !GetWindowRect(record.hWnd, &taskbar)) continue;
+        // Only a button on the taskbar itself, whose point is on the button's edge (the bottom one
+        // under a top taskbar): one in the overflow flyout, off the taskbar, isn't in the repeater.
+        if (point->X >= taskbar.left && point->X <= taskbar.right && point->Y >= taskbar.top &&
+            point->Y <= taskbar.bottom) {
+            point->X += (float)(record.applied * WindowDpi(record.hWnd) / 96.0);
+            break;
+        }
+    }
+    return hr;
+}
+
 static bool HookTaskbarDllSymbols() {
     HMODULE h = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!h) return false;
@@ -26398,6 +26828,9 @@ static bool HookTaskbarDllSymbols() {
         {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"}, &TaskbarHost_FrameHeight_Original},  // i18n-en: symbol names
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &Std_Ref_Decref_Original},  // i18n-en: symbol names
         {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"}, &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},  // i18n-en: symbol names
+        // Optional: on a Windows build without it the bars still show, and Left side's jump lists open
+        // off their buttons. Its symbols must still resolve, like the others'.
+        {{LR"(protected: long __cdecl CTaskListWnd::_ComputeJumpViewPosition(struct ITaskBtnGroup *,int,struct Windows::Foundation::Point &,enum Windows::UI::Xaml::HorizontalAlignment &,enum Windows::UI::Xaml::VerticalAlignment &)const )"}, &CTaskListWnd_ComputeJumpViewPosition_Original, CTaskListWnd_ComputeJumpViewPosition_Hook, true},  // i18n-en: symbol names
     };
     return WindhawkUtils::HookSymbols(h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
@@ -31913,6 +32346,9 @@ static bool NormalizeSettings(Settings* s) {
     if (s->sparklineSpan < SparklineSpan::Window || s->sparklineSpan > SparklineSpan::Hours48) {
         s->sparklineSpan = SparklineSpan::Window;
     }
+    if (s->extraUsageChart < ExtraUsageChart::Off || s->extraUsageChart > ExtraUsageChart::Week) {
+        s->extraUsageChart = ExtraUsageChart::Month;
+    }
     if (s->sparklineHoverSpan &&
         (*s->sparklineHoverSpan < SparklineSpan::Window || *s->sparklineHoverSpan > SparklineSpan::Hours48)) {
         s->sparklineHoverSpan = SparklineSpan::Hours24;
@@ -32106,6 +32542,8 @@ static std::wstring SerializeSettings(const Settings& s) {
         setBool(L"showBarLabels", s.showBarLabels);
         setBool(L"extraBarAmounts", s.showExtraBarAmounts);
         setBool(L"openAiExtraLimits", s.showOpenAiExtraLimits);
+        setString(L"extraUsageChart", s.extraUsageChart == ExtraUsageChart::Off ? L"off" :
+                                      s.extraUsageChart == ExtraUsageChart::Week ? L"week" : L"month");
         setNumber(L"yellowThreshold", s.yellowThreshold);
         setNumber(L"orangeThreshold", s.orangeThreshold);
         setNumber(L"redThreshold", s.redThreshold);
@@ -32363,6 +32801,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         // "showCodexSpark" is the pre-1.6.2 key for the same toggle.
         s.showOpenAiExtraLimits = getBoolDefault(L"openAiExtraLimits",
                                                  getBoolDefault(L"showCodexSpark", false));
+        std::wstring extraUsageChart = GetStr(root, L"extraUsageChart");
+        s.extraUsageChart = extraUsageChart == L"off" ? ExtraUsageChart::Off :
+                            extraUsageChart == L"week" ? ExtraUsageChart::Week : ExtraUsageChart::Month;
         s.yellowThreshold = (int)GetNum(root, L"yellowThreshold", 50);
         s.orangeThreshold = (int)GetNum(root, L"orangeThreshold", 75);
         s.redThreshold = (int)GetNum(root, L"redThreshold", 90);
@@ -32412,15 +32853,64 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
 // storage reads long values back.
 static std::atomic<bool> g_settingsLongValuesRead{false};
 
-// Portable Windhawk's INI storage reads a value back truncated near 32,767 characters, so a longer
-// one would never load whole: it fails before writing, unless a long one already loaded here.
+// Set when the load found no stored settings and nothing has been saved since. Windhawk's storage
+// reads a failed read as a missing value, so the first save looks again before writing.
+static std::atomic<bool> g_settingsMissingAtLoad{false};
+
+// Whether stored settings can be seen now: the value or its length sentinel.
+static bool StoredSettingsFound() {
+    if (Wh_GetIntValue(kSettingsLengthStorageKey, 0) > 0) return true;
+    std::vector<wchar_t> buf(65536);
+    return Wh_GetStringValue(kSettingsStorageKey, buf.data(), buf.size()) && buf[0];
+}
+
+// Before the first save after a load that found no stored settings: absence counts only while no
+// settings show, the storage reads back a value just written to it (this process's probe, deleted
+// after) and still no settings show. Otherwise that load may have failed to read them: they become
+// a load error (kept until a confirmed replacement) and the save doesn't go ahead. A best-effort
+// check: a read failure between these reads and the write can't be told apart. Callers hold
+// g_configEditMutex (or run at init).
+static bool StoredSettingsStillMissing() {
+    if (!g_settingsMissingAtLoad) return true;
+    bool found = StoredSettingsFound(), readable = false;
+    if (!found) {
+        wchar_t probe[48], written[24], read[24] = {};
+        swprintf(probe, std::size(probe), L"settings_v1_probe_%lu", GetCurrentProcessId());
+        swprintf(written, std::size(written), L"%llu", (unsigned long long)GetTickCount64());
+        readable = Wh_SetStringValue(probe, written) && Wh_GetStringValue(probe, read, std::size(read)) &&
+                   wcscmp(read, written) == 0;
+        Wh_DeleteValue(probe);
+        found = StoredSettingsFound();
+    }
+    if (readable && !found) return true;
+    g_settingsMissingAtLoad = false;
+    g_settingsLoadError = true;
+    g_settingsLoadBackup = false;
+    g_settingsReplaceAllowed = false;
+    if (found) {
+        Wh_Log(L"Stored settings appeared after a load that found none; kept until replacing them is confirmed");
+    } else {
+        Wh_Log(L"Settings storage doesn't read back; stored settings are kept until replacing them is confirmed");
+    }
+    return false;
+}
+
+// Never replaces stored settings a load couldn't read unless that was allowed (each load's
+// recovery). Portable Windhawk's INI storage reads a value back truncated near 32,767 characters,
+// so a longer one would never load whole: it fails before writing, unless a long one already
+// loaded here.
 static bool SaveOwnedSettings(const Settings& settings) {
+    if (!StoredSettingsStillMissing() || (g_settingsLoadError && !g_settingsReplaceAllowed)) {
+        Wh_Log(L"Settings not saved: the stored settings couldn't be read and replacing them isn't confirmed");
+        return false;
+    }
     std::wstring json = SerializeSettings(settings);
     if (json.empty() || json.size() >= (g_settingsLongValuesRead.load() ? 65535u : 32767u)) {
         Wh_Log(L"Settings save failed: serialization or size limit");
         return false;
     }
     if (!Wh_SetStringValue(kSettingsStorageKey, json.c_str())) return false;
+    g_settingsMissingAtLoad = false;
     if (!Wh_SetIntValue(kSettingsLengthStorageKey, (int)json.size())) {
         Wh_Log(L"Settings length sentinel save failed");
     }
@@ -32729,6 +33219,8 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity =
     sharedPrevious.language = s.language;
     // Stored settings the load couldn't read: the first shared save replaces them only once that
     // is allowed (each load's recovery), and per-user-only edits save nothing shared until then.
+    // Settings a load found missing that are there now count as unread (StoredSettingsStillMissing).
+    if (s != sharedPrevious || g_historyIdsPendingSave) StoredSettingsStillMissing();
     const bool loadError = g_settingsLoadError, replaceAllowed = g_settingsReplaceAllowed;
     const bool saveShared = s != sharedPrevious || g_historyIdsPendingSave || (loadError && replaceAllowed);
     if (saveShared && loadError && !replaceAllowed) {
@@ -32736,7 +33228,11 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity =
         if (replaceBlocked) *replaceBlocked = true;
         return SettingsApplyResult::Failed;
     }
-    if (saveShared && !SaveOwnedSettings(s)) return SettingsApplyResult::Failed;
+    if (saveShared && !SaveOwnedSettings(s)) {
+        // Its own look again may just have found the stored settings.
+        if (replaceBlocked) *replaceBlocked = g_settingsLoadError && !g_settingsReplaceAllowed;
+        return SettingsApplyResult::Failed;
+    }
     // Save shared changes first, consent last: a failed save before it must never grant consent.
     // Per-user-only edits leave shared JSON untouched; a failed write takes back what this call
     // saved. Preference writes take no history locks; each waits at most 2 s for the per-user
@@ -32790,22 +33286,41 @@ static void LoadSettings() {
     g_settingsLoadError = false;
     g_settingsLoadBackup = false;
     g_settingsReplaceAllowed = false;
+    g_settingsMissingAtLoad = false;
     g_historyIdsPendingSave = false;
     bool historyIdsChanged = false, backedUp = false, readWhole = false;
     OwnedSettingsLoadResult loadResult = LoadOwnedSettings(&s, &historyIdsChanged, &backedUp, &readWhole);
+    // A failed read looks like missing settings: look twice more before taking them as missing.
+    for (DWORD delayMs : {50, 150}) {
+        if (loadResult != OwnedSettingsLoadResult::Missing) break;
+        Sleep(delayMs);
+        loadResult = LoadOwnedSettings(&s, &historyIdsChanged, &backedUp, &readWhole);
+    }
     if (loadResult == OwnedSettingsLoadResult::Missing) {
+        // Defaults need no save: the first edit saves, after looking again. Imported legacy
+        // settings are saved now, also after looking again (SaveOwnedSettings); settings seen then
+        // turn this load into a load error with defaults.
+        g_settingsMissingAtLoad = true;
         bool imported = LoadLegacySettings(&s);
         if (!imported) s = Settings{};
         s.historyEnabled = historyConsent;
         s.language = language;
         NormalizeSettings(&s);
-        if (SaveOwnedSettings(s)) {
-            if (imported) Wh_Log(L"Imported legacy Windhawk settings");
-            else Wh_Log(L"Initialized empty mod-owned settings");
-        } else {
-            s.historyEnabled = false;
-            g_historyIdsPendingSave = !s.accounts.empty();
-            Wh_Log(L"Settings initialization save failed; history disabled");
+        if (imported && SaveOwnedSettings(s)) {
+            Wh_Log(L"Imported legacy Windhawk settings");
+        } else if (imported) {
+            // Accounts are never published unsaved (removing one deletes its sign-in before the
+            // save that would fail). The next load imports again; until then saving needs the
+            // settings window's confirmation, so an edit can't drop the import unasked.
+            if (!g_settingsLoadError) {
+                Wh_Log(L"Saving imported legacy settings failed; defaults until the next load");
+                g_settingsLoadError = true;
+                g_settingsLoadBackup = false;
+                g_settingsReplaceAllowed = false;
+            }
+            s = Settings{};
+            s.historyEnabled = historyConsent;
+            s.language = language;
         }
     } else if (loadResult == OwnedSettingsLoadResult::Loaded && historyIdsChanged) {
         // Other Explorer processes must not race to persist independently generated IDs.
@@ -33052,6 +33567,7 @@ enum class SettingsField : uint8_t {
     ShowStaleWarning,
     ShowProviderOutages,
     ShowOpenAiExtraLimits,
+    ExtraUsageChart,        // An ExtraUsageChart
     // Accounts: fields of the account a draft's key names
     AccountLabel,         // Text, trimmed; unique per provider
     AccountTileIdentity,  // A TileIdentity
@@ -33177,7 +33693,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::UsageColorOrange,    SettingsField::UsageColorRed,
                     SettingsField::YellowThreshold,     SettingsField::OrangeThreshold,
                     SettingsField::RedThreshold,        SettingsField::ShowStaleWarning,
-                    SettingsField::ShowProviderOutages, SettingsField::ShowOpenAiExtraLimits};
+                    SettingsField::ShowProviderOutages, SettingsField::ShowOpenAiExtraLimits,
+                    SettingsField::ExtraUsageChart};
         default: return {};
     }
 }
@@ -33261,6 +33778,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::ShowStaleWarning: return s.showStaleWarning;
         case SettingsField::ShowProviderOutages: return s.showProviderOutages;
         case SettingsField::ShowOpenAiExtraLimits: return s.showOpenAiExtraLimits;
+        case SettingsField::ExtraUsageChart: return int(s.extraUsageChart);
         default: return 0;
     }
 }
@@ -33396,6 +33914,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::ShowStaleWarning: s.showStaleWarning = value != 0; break;
         case SettingsField::ShowProviderOutages: s.showProviderOutages = value != 0; break;
         case SettingsField::ShowOpenAiExtraLimits: s.showOpenAiExtraLimits = value != 0; break;
+        case SettingsField::ExtraUsageChart:
+            s.extraUsageChart = ExtraUsageChart(std::clamp(value, int(ExtraUsageChart::Off), int(ExtraUsageChart::Week)));
+            break;
         case SettingsField::ResetDisplay:
             s.material = defaults.material;
             s.barMode = defaults.barMode;
@@ -33407,6 +33928,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.showStaleWarning = defaults.showStaleWarning;
             s.showProviderOutages = defaults.showProviderOutages;
             s.showOpenAiExtraLimits = defaults.showOpenAiExtraLimits;
+            s.extraUsageChart = defaults.extraUsageChart;
             break;
         case SettingsField::ResetLayout:
             s.barLayout = defaults.barLayout;
@@ -35700,24 +36222,29 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 }
                 markOps(ops, meters, faceLeft + S, faceTop + float(meters.ringWarnTop), opacity, true);
             } else if (IsFaceTile(layout)) {
-                // Gauges and pies: the identity, then 6 DIP after it the face; a gauge's number
-                // and key centred across it, their cap heights on the model's centres.
+                // Gauges and pies: the identity, then 6 DIP after it the face; each gauge's number
+                // and key centred across it, their cap heights on the model's centres, or without
+                // a quota the dash in the number's place.
                 float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
                                             top + T / 2);
                 float faceLeft = x0 + padLeft + idWidth + 6, faceTop = top + (T - faceHeight) / 2;
                 faceShapes(faceLeft, faceTop);
                 if (layout == BarLayout::Gauge) {
-                    auto centred = [&](const std::wstring& s, const UiTextStyle& style, double center, uint32_t color,
+                    const double middle = meters.ring.size / 2;
+                    const UiTextStyle numberStyle{UiFamily::Display, float(meters.faceFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
+                    const UiTextStyle keyStyle{UiFamily::Taskbar, float(meters.faceKeyFont), 0, DWRITE_FONT_WEIGHT_NORMAL};
+                    auto centred = [&](const std::wstring& s, const UiTextStyle& style, double x, double y, uint32_t color,
                                        float alpha) {
                         Measured m = measure(s, style);
-                        label(ops, s, style, faceLeft + (faceWidth - m.width) / 2, faceTop + float(center) - m.cap / 2,
-                              m.width, DWRITE_TEXT_ALIGNMENT_LEADING, color, alpha, true);
+                        label(ops, s, style, faceLeft + float(x) - m.width / 2, faceTop + float(y) - m.cap / 2, m.width,
+                              DWRITE_TEXT_ALIGNMENT_LEADING, color, alpha, true);
                     };
-                    centred(meters.headline, {UiFamily::Display, float(meters.faceFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD},
-                            meters.faceNumberCenter, meters.headlineColor, 1);
-                    if (!meters.headlineKey.empty()) {
-                        centred(meters.headlineKey, {UiFamily::Taskbar, float(meters.faceKeyFont), 0, DWRITE_FONT_WEIGHT_NORMAL},
-                                meters.faceKeyCenter, text, 0.6f);
+                    if (!count) centred(meters.headline, numberStyle, middle, meters.faceNumberCenter, meters.headlineColor, 1);
+                    for (int w = 0; w < kQuotaBarCount; w++) {
+                        if (!(meters.barMask & (1 << w))) continue;
+                        const QuotaMeter& q = meters.quotas[w];
+                        centred(q.text, numberStyle, q.gaugeLeft + middle, q.gaugeTop + meters.faceNumberCenter, q.color, 1);
+                        centred(q.key, keyStyle, q.gaugeLeft + middle, q.gaugeTop + meters.faceKeyCenter, text, 0.6f);
                     }
                 }
                 width = padLeft + idWidth + 6 + faceWidth + padRight;
@@ -37375,9 +37902,9 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
 
 // src/settings/page-display.h
 // Settings > Display: the material of the details flyout and the windows, the bar mode, the
-// meters' usage colors and thresholds, the stale and outage marks and the OpenAI details (approved mockup
-// display.png, Appearance aside). The preview card is in the shell's pinned header
-// (settings/preview.h). Pure builder.
+// meters' usage colors and thresholds, the stale and outage marks, the OpenAI details and the
+// extra usage chart (approved mockup display.png, Appearance aside). The preview card is in the
+// shell's pinned header (settings/preview.h). Pure builder.
 
 // Lays out the page from content y; returns the bottom of the last card.
 static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
@@ -37509,6 +38036,18 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
         spec.description = {{text(Tr(L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in "
                                      L"OpenAI details."))}};
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowOpenAiExtraLimits);
+    }
+    {
+        UiCardSpec spec;
+        spec.title = text(Tr(L"Extra usage chart"));
+        spec.description = {{text(Tr(L"How the details flyout charts Anthropic extra usage: over its month, over the "
+                                     L"weekly quota\u2019s window on the same scale, or as a bar. Usage graph tiles "
+                                     L"follow it for an extra usage chart of their own."))}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ExtraUsageChart, 200,
+                                    {{text(TrCtx(L"extra-usage-chart", L"Off")), int(ExtraUsageChart::Off)},
+                                     {text(TrCtx(L"extra-usage-chart", L"Month")), int(ExtraUsageChart::Month)},
+                                     {text(TrCtx(L"extra-usage-chart", L"Week")), int(ExtraUsageChart::Week)}},
+                                    int(s.extraUsageChart));
     }
 
     UiCardSpec reset;

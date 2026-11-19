@@ -2,7 +2,7 @@
 // @id              taskbar-auto-hide-keyboard-only
 // @name            Taskbar auto-hide fine tuning
 // @description     Fine-tune taskbar auto-hide: keyboard-only unhide, prevent the taskbar from showing at all, hotkeys and mouse events to show or toggle visibility
-// @version         2.3
+// @version         2.3.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -46,6 +46,12 @@ appears.
   interacting with it.
 - **Toggle always-show**: Toggles permanent taskbar visibility. Press again to
   return to auto-hide behavior.
+
+Possible modifier keys: Alt, Ctrl, Shift, Win. Keys can be letters, digits,
+F1-F24, names such as Escape, Home, PageUp, Space, or characters such as
+`` ` ``, `[`, `]`, `;`, `'` (US keyboard layout). VK_ names and numeric
+virtual-key codes are also supported, see [Virtual-Key
+Codes](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes).
 
 On Windows 11, you can also toggle always-show via a mouse event (middle click
 or double click) on the taskbar.
@@ -123,9 +129,11 @@ Optionally override what happens when the Win key is pressed:
 #include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -165,7 +173,6 @@ enum class WinVersion {
     Unsupported,
     Win10,
     Win11,
-    Win11_24H2,
 };
 
 WinVersion g_winVersion;
@@ -537,7 +544,6 @@ bool FromStringHotKey(std::wstring_view hotkeyString,
         {L";", 0xBA},   // VK_OEM_1
         {L":", 0xBA},   // VK_OEM_1
         {L"=", 0xBB},   // VK_OEM_PLUS
-        {L"+", 0xBB},   // VK_OEM_PLUS
         {L",", 0xBC},   // VK_OEM_COMMA
         {L"<", 0xBC},   // VK_OEM_COMMA
         {L"-", 0xBD},   // VK_OEM_MINUS
@@ -1532,6 +1538,25 @@ LRESULT WINAPI CTaskBand_v_WndProc_Hook(void* pThis,
 
 // Double-click state for mouse toggle.
 DWORD g_lastPressTime;
+winrt::Windows::Foundation::Point g_lastPressPoint;  // In pixels.
+
+bool IsInSystemTrayFrame(winrt::Windows::UI::Xaml::DependencyObject element) {
+    while (element) {
+        auto className = winrt::get_class_name(element);
+        if (className == L"SystemTray.SystemTrayFrame") {
+            return true;
+        }
+
+        if (className == L"Taskbar.TaskbarFrame") {
+            break;
+        }
+
+        element = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetParent(
+            element);
+    }
+
+    return false;
+}
 
 using TaskbarFrame_OnPointerPressed_t = int(WINAPI*)(void* pThis, void* pArgs);
 TaskbarFrame_OnPointerPressed_t TaskbarFrame_OnPointerPressed_Original;
@@ -1566,7 +1591,15 @@ int TaskbarFrame_OnPointerPressed_Hook(void* pThis, void* pArgs) {
         return original();
     }
 
-    auto properties = args.GetCurrentPoint(taskbarFrame).Properties();
+    // On newer builds, the tray is inside the taskbar frame.
+    if (IsInSystemTrayFrame(
+            args.OriginalSource()
+                .try_as<winrt::Windows::UI::Xaml::DependencyObject>())) {
+        return original();
+    }
+
+    auto currentPoint = args.GetCurrentPoint(taskbarFrame);
+    auto properties = currentPoint.Properties();
 
     bool shouldToggle = false;
 
@@ -1577,12 +1610,30 @@ int TaskbarFrame_OnPointerPressed_Hook(void* pThis, void* pArgs) {
         }
     } else if (g_settings.toggleAlwaysShowMouseEvent ==
                ToggleAlwaysShowMouseEvent::DoubleClick) {
-        DWORD now = GetTickCount();
-        if (now - g_lastPressTime <= GetDoubleClickTime()) {
+        if (!properties.IsLeftButtonPressed()) {
             g_lastPressTime = 0;
-            shouldToggle = true;
         } else {
-            g_lastPressTime = now;
+            // The pointer position is in DIPs, the double-click rectangle
+            // size is in pixels.
+            auto xamlRoot = taskbarFrame.XamlRoot();
+            double scale = xamlRoot ? xamlRoot.RasterizationScale() : 1.0;
+            auto position = currentPoint.Position();
+            winrt::Windows::Foundation::Point point{
+                static_cast<float>(position.X * scale),
+                static_cast<float>(position.Y * scale)};
+
+            DWORD now = GetTickCount();
+            if (now - g_lastPressTime <= GetDoubleClickTime() &&
+                std::abs(point.X - g_lastPressPoint.X) <=
+                    GetSystemMetrics(SM_CXDOUBLECLK) / 2.0f &&
+                std::abs(point.Y - g_lastPressPoint.Y) <=
+                    GetSystemMetrics(SM_CYDOUBLECLK) / 2.0f) {
+                g_lastPressTime = 0;
+                shouldToggle = true;
+            } else {
+                g_lastPressTime = now;
+                g_lastPressPoint = point;
+            }
         }
     }
 
@@ -1871,7 +1922,9 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
     return (VS_FIXEDFILEINFO*)pFixedFileInfo;
 }
 
-WinVersion GetExplorerVersion() {
+WinVersion GetExplorerVersion(bool* hasWin10Taskbar) {
+    *hasWin10Taskbar = false;
+
     VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(nullptr, nullptr);
     if (!fixedFileInfo) {
         return WinVersion::Unsupported;
@@ -1886,12 +1939,12 @@ WinVersion GetExplorerVersion() {
 
     switch (major) {
         case 10:
+            // explorer.exe includes the Win10 taskbar before this build.
+            *hasWin10Taskbar = build < 26100 || (build == 26100 && qfe < 1301);
             if (build < 22000) {
                 return WinVersion::Win10;
-            } else if (build < 26100) {
-                return WinVersion::Win11;
             } else {
-                return WinVersion::Win11_24H2;
+                return WinVersion::Win11;
             }
             break;
     }
@@ -2101,15 +2154,14 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    g_winVersion = GetExplorerVersion();
+    bool hasWin10Taskbar;
+    g_winVersion = GetExplorerVersion(&hasWin10Taskbar);
     if (g_winVersion == WinVersion::Unsupported) {
         Wh_Log(L"Unsupported Windows version");
         return FALSE;
     }
 
     if (g_settings.oldTaskbarOnWin11) {
-        bool hasWin10Taskbar = g_winVersion < WinVersion::Win11_24H2;
-
         if (g_winVersion >= WinVersion::Win11) {
             g_winVersion = WinVersion::Win10;
         }
