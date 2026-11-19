@@ -1136,15 +1136,13 @@ bool HasNativeGroupVtable(void* group) {
 std::vector<ComPtr<IUnknown>> NativeTaskItems(void* group) {
     void* dpa = nullptr;
     int count = 0;
-    void* entries = nullptr;
     std::vector<ComPtr<IUnknown>> items;
     if (!g_nativeItemsOffset || !g_nativeItemCount || !HasNativeGroupVtable(group) ||
         !TraceRead(group, g_nativeItemsOffset, dpa) || !dpa || !TraceRead(dpa, 0, count) ||
-        count <= 0 || count > 4096 || count != g_nativeItemCount(group) ||
-        !TraceRead(dpa, 8, entries) || !entries) return items;
+        count <= 0 || count > 4096 || count != g_nativeItemCount(group)) return items;
     for (int i = 0; i < count; ++i) {
-        IUnknown* item = nullptr;
-        if (!TraceRead(entries, size_t(i) * sizeof(void*), item) || !item) return {};
+        auto item = static_cast<IUnknown*>(DPA_GetPtr(static_cast<HDPA>(dpa), i));
+        if (!item) return {};
         items.emplace_back(item);
     }
     return items;
