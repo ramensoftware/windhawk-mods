@@ -20,7 +20,7 @@
 Restyles the progress bar shown in the Windows file copy / move / delete dialog, and the
 extraction progress bar of 7-Zip and WinRAR.
 
-Every style is shown below.
+Screenshots of the styles are shown below.
 
 **Accent styles** (use the accent color)
 * **Solid** - flat color
@@ -135,7 +135,7 @@ Paused and error states automatically switch to amber and red.
 - trackColor: "#E6E6E6"
   $name: Track color (hex) - used by styles that have no track of their own
 - cornerRadius: 3
-  $name: Corner radius in pixels at 100% scaling (0 = square)
+  $name: Fill corner radius in pixels at 100% scaling (0 = square)
 - hideOverlay: true
   $name: Hide the default moving glow
 - styleArchivers: true
@@ -149,15 +149,13 @@ Paused and error states automatically switch to amber and red.
 #include <windows.h>
 #include <uxtheme.h>
 
-#include <algorithm>
-#include <cwctype>
-#include <string>
 
 // Progress bar theme parts / states (defined locally to avoid header dependency)
 constexpr int kPP_BAR = 1;
 constexpr int kPP_FILL = 5;
 constexpr int kPP_PULSEOVERLAY = 7;
 constexpr int kPP_MOVEOVERLAY = 8;
+constexpr int kPP_TRANSPARENTBAR = 11;
 constexpr int kPBFS_ERROR = 2;
 constexpr int kPBFS_PAUSED = 3;
 
@@ -205,9 +203,10 @@ struct Config {
 using GetThemeClass_t = HRESULT(WINAPI*)(HTHEME, LPWSTR, int);
 GetThemeClass_t g_getThemeClass;
 
-// False when the mod runs inside another program (7-Zip, WinRAR). In those every themed
-// progress bar belongs to the program the user chose, so all of them are styled.
-bool g_isExplorer = true;
+// True when the mod runs inside 7-Zip or WinRAR. Their progress bars are all styled, which
+// the "Also style 7-Zip and WinRAR" setting controls. In every other process (Explorer
+// included) only the copy dialog is styled unless "styleOtherBars" is on.
+bool g_isArchiver = false;
 
 // ---------------------------------------------------------------- helpers
 
@@ -379,7 +378,7 @@ static bool ThreadHostsCopyDialog() {
 
 // Decides whether this progress bar should be restyled. By default only the copy dialog is.
 static bool ShouldStyle(LPCWSTR themeClass, HDC hdc) {
-    if (!g_isExplorer) return g.styleArchivers;
+    if (g_isArchiver) return g.styleArchivers;
     if (g.styleOtherBars) return true;
 
     // Copy engine theme class (for example "CopyEngine::Progress"), when Windows uses one.
@@ -555,10 +554,19 @@ static void Mosaic(HDC hdc, const RECT& r, COLORREF base, const Tile* tiles, int
 
 // ---------------------------------------------------------------- painting
 
+// In a dark dialog light track colors are darkened; colors the user already set dark stay.
+static COLORREF ShadeForDark(COLORREF c, bool dark) {
+    if (!dark) return c;
+    const int luma = (GetRValue(c) * 299 + GetGValue(c) * 587 + GetBValue(c) * 114) / 1000;
+    return luma > 110 ? Darken(c, 70) : c;
+}
+
 static void DrawTrack(HDC hdc, RECT r, const RECT& clip, bool dark) {
     const int h = r.bottom - r.top;
-    int saved = BeginClip(hdc, clip, r, ScaledRadius(h));
-    auto shade = [&](COLORREF c) { return dark ? Darken(c, 70) : c; };
+    // The track always covers its whole rectangle (square corners). Rounding it would leave
+    // the stock border corners visible as faint marks; only the fill is rounded.
+    int saved = BeginClip(hdc, clip, r, 0);
+    auto shade = [&](COLORREF c) { return ShadeForDark(c, dark); };
 
     switch (g.style) {
         case S_NEON:
@@ -612,7 +620,7 @@ static void DrawTrack(HDC hdc, RECT r, const RECT& clip, bool dark) {
     RestoreDC(hdc, saved);
 }
 
-static void DrawFill(HDC hdc, RECT r, const RECT& clip, int state) {
+static void DrawFill(HDC hdc, RECT r, const RECT& clip, int state, bool dark) {
     const bool normal = (state != kPBFS_ERROR && state != kPBFS_PAUSED);
     COLORREF c = g.accent;
     if (state == kPBFS_ERROR) c = RGB(218, 38, 38);
@@ -699,7 +707,7 @@ static void DrawFill(HDC hdc, RECT r, const RECT& clip, int state) {
         }
 
         case S_SORBET: {
-            Fill(hdc, r, g.track);
+            Fill(hdc, r, ShadeForDark(g.track, dark));
             const COLORREF c1 = normal ? RGB(255, 164, 216) : Darken(c, 12);
             const COLORREF c2 = normal ? RGB(255, 209, 80) : c;
             const COLORREF c3 = normal ? RGB(139, 189, 239) : Lighten(c, 25);
@@ -728,7 +736,7 @@ static void DrawFill(HDC hdc, RECT r, const RECT& clip, int state) {
         case S_AURORA: {
             const int mw = Imax(2, h * 115 / 1000);
             const int gap = Imax(2, h * 20 / 100);
-            Fill(hdc, r, Lighten(g.track, 60));
+            Fill(hdc, r, ShadeForDark(Lighten(g.track, 60), dark));
             RECT gr = r;
             gr.right = r.right - gap - mw;
             gradient(gr, kAurora, 6);
@@ -787,7 +795,8 @@ static bool PaintProgress(HDC hdc, int part, int state, const RECT* prc, const R
     if (r.right <= r.left || r.bottom <= r.top) return false;
 
     const bool overlay = (part == kPP_PULSEOVERLAY || part == kPP_MOVEOVERLAY);
-    const bool handled = (part == kPP_BAR || part == kPP_FILL || (overlay && g.hideOverlay));
+    const bool handled = (part == kPP_BAR || part == kPP_TRANSPARENTBAR || part == kPP_FILL ||
+                          (overlay && g.hideOverlay));
     if (!handled) return false;
 
     // Respect the caller's clip rectangle, like the stock theme does: if it does not
@@ -797,8 +806,8 @@ static bool PaintProgress(HDC hdc, int part, int state, const RECT* prc, const R
 
     if (overlay) return true;  // swallow the stock glow animation
 
-    if (part == kPP_BAR) DrawTrack(hdc, r, clip, dark);
-    else DrawFill(hdc, r, clip, state);
+    if (part == kPP_BAR || part == kPP_TRANSPARENTBAR) DrawTrack(hdc, r, clip, dark);
+    else DrawFill(hdc, r, clip, state, dark);
     return true;
 }
 
@@ -812,8 +821,8 @@ DrawThemeBackgroundEx_t DrawThemeBackgroundEx_Original;
 
 // Only these parts are ever replaced, so every other draw call skips the class lookup.
 static bool IsProgressPart(int part) {
-    return part == kPP_BAR || part == kPP_FILL || part == kPP_PULSEOVERLAY ||
-           part == kPP_MOVEOVERLAY;
+    return part == kPP_BAR || part == kPP_TRANSPARENTBAR || part == kPP_FILL ||
+           part == kPP_PULSEOVERLAY || part == kPP_MOVEOVERLAY;
 }
 
 HRESULT WINAPI DrawThemeBackground_Hook(HTHEME t, HDC hdc, int part, int state, LPCRECT rc,
@@ -822,9 +831,16 @@ HRESULT WINAPI DrawThemeBackground_Hook(HTHEME t, HDC hdc, int part, int state, 
         WCHAR cls[64];
         if (GetProgressClass(t, cls, ARRAYSIZE(cls))) {
             Wh_Log(L"Progress draw: class=%s part=%d state=%d", cls, part, state);
-            if (ShouldStyle(cls, hdc) && PaintProgress(hdc, part, state, rc, clip,
-                                                   wcsstr(cls, L"darkmode") != nullptr)) {
-                return S_OK;
+            if (ShouldStyle(cls, hdc)) {
+                const bool dark = wcsstr(cls, L"darkmode") != nullptr;
+                if (part == kPP_TRANSPARENTBAR) {
+                    // Let Windows paint the background behind the bar first, so the
+                    // rounded corners of our track are not left black.
+                    HRESULT hr = DrawThemeBackground_Original(t, hdc, part, state, rc, clip);
+                    PaintProgress(hdc, part, state, rc, clip, dark);
+                    return hr;
+                }
+                if (PaintProgress(hdc, part, state, rc, clip, dark)) return S_OK;
             }
         }
     }
@@ -845,9 +861,17 @@ HRESULT WINAPI DrawThemeBackgroundEx_Hook(HTHEME t, HDC hdc, int part, int state
         WCHAR cls[64];
         if (!computingRegion && GetProgressClass(t, cls, ARRAYSIZE(cls))) {
             Wh_Log(L"Progress draw (Ex): class=%s part=%d state=%d", cls, part, state);
-            if (ShouldStyle(cls, hdc) && PaintProgress(hdc, part, state, rc, pclip,
-                                                   wcsstr(cls, L"darkmode") != nullptr)) {
-                return S_OK;
+            if (ShouldStyle(cls, hdc)) {
+                const bool dark = wcsstr(cls, L"darkmode") != nullptr;
+                if (part == kPP_TRANSPARENTBAR) {
+                    // Let Windows paint the background behind the bar first, so the
+                    // rounded corners of our track are not left black.
+                    HRESULT hr =
+                        DrawThemeBackgroundEx_Original(t, hdc, part, state, rc, opts);
+                    PaintProgress(hdc, part, state, rc, pclip, dark);
+                    return hr;
+                }
+                if (PaintProgress(hdc, part, state, rc, pclip, dark)) return S_OK;
             }
         }
     }
@@ -863,7 +887,10 @@ BOOL Wh_ModInit() {
     GetModuleFileNameW(nullptr, exePath, MAX_PATH);
     const wchar_t* exeName = wcsrchr(exePath, L'\\');
     exeName = exeName ? exeName + 1 : exePath;
-    g_isExplorer = (_wcsicmp(exeName, L"explorer.exe") == 0);
+    g_isArchiver = (_wcsicmp(exeName, L"7zG.exe") == 0 || _wcsicmp(exeName, L"7zFM.exe") == 0 ||
+                    _wcsicmp(exeName, L"WinRAR.exe") == 0);
+    if (g_isArchiver && !g.styleArchivers) return FALSE;  // nothing to do; the mod reloads
+                                                          // when the setting changes
 
     HMODULE ux = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!ux) {
@@ -898,5 +925,3 @@ BOOL Wh_ModInit() {
 void Wh_ModSettingsChanged() {
     LoadSettings();
 }
-
-void Wh_ModUninit() {}
