@@ -48,14 +48,10 @@ Changing any setting reloads the mod.
 
 ### Upgrading from flat settings (1.2.x or early 1.3.0)
 
-The settings are now grouped and their keys have changed. Windhawk does not
-rename saved keys automatically. **Before updating, copy your current settings
-from Textual mode.** Convert that JSON with the `convert_settings.py` tool in
-[the source repository](https://github.com/jayll1303/coin-stock-monitor), then
-paste the converted JSON into Textual mode after updating and save. The tool
-preserves empty text colors, custom APIs, symbols and placement, and combines
-Background mode and Background sizing into the new Background selector.
-Without importing the converted settings, the grouped settings use defaults.
+The settings are now grouped into Content, Appearance, Placement and Data source.
+Grouping changes the setting paths, so Windhawk cannot carry the old flat values
+into the new cards automatically. After updating, re-enter your symbols, entry
+prices, colors, background mode, placement and API settings once.
 
 ### Example: CoinGecko
 
