@@ -11,6 +11,7 @@
 // @github          https://github.com/babamohammed2022
 // @license         GPL-3.0
 // @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -lole32 -luser32 -lgdi32 -ldwmapi -lshell32 -loleaut32 -luuid -lshcore -lcomctl32 -lshlwapi -ladvapi32 -lgdiplus -lpowrprof -lsecur32 -lmsimg32 -lwinhttp
 // ==/WindhawkMod==
 
@@ -36,7 +37,7 @@ The appearance can vary with display scaling and settings.
 
 ## Process and compatibility
 
-The Windows 10 1507 menu runs in the desktop shell Explorer process. The 8.1 menu uses a second `explorer.exe` helper, which appears as another Windows Explorer in Task Manager. The shell process supervises it and restarts it if it exits. On Windhawk 1.7.3, other enabled Explorer mods that are not tool mods can also load into this helper. Do not run another Start replacement alongside this mod, including Open-Shell or Windows 8.1 Start Screen Recreation.
+The Windows 10 1507 menu runs in the desktop shell Explorer process. The 8.1 menu runs in a dedicated Windhawk tool process while its Start bridge runs in the desktop Explorer process. The standard tool launcher starts the helper once; if the helper exits unexpectedly it is not automatically restarted, and the native Start route remains available until the mod is reloaded. Do not run another Start replacement alongside this mod, including Open-Shell or Windows 8.1 Start Screen Recreation.
 
 The original 1507 implementation was tested on Windows 10 21H2 and Windows 11 24H2/25H2; behavior of this combined version, particularly the 8.1 helper and third-party taskbars, still needs testing on real Windows. Start-button clicks require reliable button identification; the Win key remains available when detection fails. Windhawk must be running with the mod enabled at sign-in; portable installations need a startup shortcut such as `windhawk.exe -tray-only`.
 
@@ -2532,9 +2533,9 @@ static bool Read(std::vector<BYTE>& out) {
     }
     return true;
 }
-static bool Write(const std::vector<BYTE>& bytes) {
+static bool Write(const std::vector<BYTE>& bytes, const wchar_t* stem=L"AppSnapshot.v1") {
     if (bytes.empty() || bytes.size() > kMaxBytes) return false;
-    const std::wstring path = ModStorageFiles::Path(L"AppSnapshot.v1");
+    const std::wstring path = ModStorageFiles::Path(stem);
     if (path.empty()) return false;
     const FileHeader header{kMagic, static_cast<uint32_t>(bytes.size()), Hash(bytes.data(), bytes.size())};
     std::vector<BYTE> file(sizeof(header) + bytes.size());
@@ -2687,7 +2688,7 @@ public:
         Wh_Log(L"[CatalogCache] restored %u app entries",count);
         return true;
     }
-    bool SaveSnapshot() const {
+    bool SaveSnapshot(const wchar_t* stem=L"AppSnapshot.v1") const {
         if (apps_.empty() || apps_.size()>10000) return false;
         std::vector<BYTE> out; out.reserve(1024*1024);
         AppSnapshot::Put32(out,1); AppSnapshot::Put32(out,static_cast<uint32_t>(apps_.size()));
@@ -2703,7 +2704,7 @@ public:
             AppSnapshot::Put32(out,hasIcon ? static_cast<uint32_t>(pixels.size()) : 0);
             if (hasIcon) out.insert(out.end(),pixels.begin(),pixels.end());
         }
-        bool ok=AppSnapshot::Write(out);
+        bool ok=AppSnapshot::Write(out,stem);
         Wh_Log(L"[CatalogCache] saved apps=%u bytes=%u ok=%d",(unsigned)apps_.size(),(unsigned)out.size(),ok);
         return ok;
     }
@@ -10588,6 +10589,8 @@ void Wh_ModUninit() {
 #undef GUARDED
 
 namespace Menu81 {
+static std::atomic<bool> g_stopRequested{ false };
+
 using Microsoft::WRL::ComPtr;
 using namespace Gdiplus;
 
@@ -12731,32 +12734,49 @@ static HICON GetShortcutIconNoOverlay(LPCWSTR shortcut, std::wstring* targetOut 
 // solely on the SHGetFileInfo cache for virtual AppsFolder items.
 static HICON ExtractShellIconFromPidl(PCIDLIST_ABSOLUTE pidl) {
     if (!pidl) return nullptr;
+    // The image factory requests the app's own visual asset (including UWP
+    // package logos), not the often-generic IExtractIcon Shell document icon.
+    ComPtr<IShellItemImageFactory> factory;
+    if (SUCCEEDED(SHCreateItemFromIDList(pidl,IID_PPV_ARGS(&factory))) && factory) {
+        SIZE requested{64,64}; HBITMAP raw=nullptr;
+        if (SUCCEEDED(factory->GetImage(requested, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, &raw)) && raw) {
+            UniqueBitmap bitmap(raw);
+            BITMAP dimensions{};
+            if (GetObjectW(bitmap.get(),sizeof(dimensions),&dimensions) &&
+                dimensions.bmWidth>0 && dimensions.bmHeight>0 &&
+                dimensions.bmWidth<=1024 && dimensions.bmHeight<=1024) {
+                UniqueBitmap mask(CreateBitmap(dimensions.bmWidth,dimensions.bmHeight,1,1,nullptr));
+                if (mask) {
+                    ICONINFO info{}; info.fIcon=TRUE; info.hbmColor=bitmap.get(); info.hbmMask=mask.get();
+                    HICON icon=CreateIconIndirect(&info);
+                    if (icon) return icon;
+                }
+            }
+        }
+    }
     ComPtr<IShellFolder> parent;
     PCUITEMID_CHILD child = nullptr;
-    if (FAILED(SHBindToParent(pidl, IID_PPV_ARGS(&parent), &child)) || !parent || !child)
-        return nullptr;
-
-    ComPtr<IExtractIconW> extractor;
-    if (FAILED(parent->GetUIObjectOf(nullptr, 1, &child, IID_IExtractIconW, nullptr,
-                                    reinterpret_cast<void**>(extractor.GetAddressOf()))) || !extractor)
-        return nullptr;
-
-    wchar_t location[MAX_PATH]{};
-    int iconIndex = 0;
-    UINT flags = 0;
-    if (FAILED(extractor->GetIconLocation(GIL_FORSHELL, location, ARRAYSIZE(location),
-                                          &iconIndex, &flags))) return nullptr;
-
-    HICON largeRaw = nullptr, smallRaw = nullptr;
-    const HRESULT hr = extractor->Extract(location, iconIndex, &largeRaw, &smallRaw,
-                                           MAKELONG(48, 48));
-    UniqueIcon large(largeRaw), small(smallRaw);
-    if (SUCCEEDED(hr) && large) return large.release();
-    if (small) return small.release();
-
+    if (SUCCEEDED(SHBindToParent(pidl, IID_PPV_ARGS(&parent), &child)) && parent && child) {
+        ComPtr<IExtractIconW> extractor;
+        if (SUCCEEDED(parent->GetUIObjectOf(nullptr, 1, &child, IID_IExtractIconW, nullptr,
+                                           reinterpret_cast<void**>(extractor.GetAddressOf()))) && extractor) {
+            wchar_t location[MAX_PATH]{};
+            int iconIndex=0; UINT flags=0;
+            if (SUCCEEDED(extractor->GetIconLocation(GIL_FORSHELL, location, ARRAYSIZE(location),
+                                                     &iconIndex, &flags))) {
+                HICON largeRaw=nullptr,smallRaw=nullptr;
+                const HRESULT hr=extractor->Extract(location,iconIndex,&largeRaw,&smallRaw,MAKELONG(48,48));
+                UniqueIcon large(largeRaw),small(smallRaw);
+                if (SUCCEEDED(hr) && large) return large.release();
+                if (SUCCEEDED(hr) && small) return small.release();
+            }
+        }
+    }
+    // Some packaged apps do not expose IExtractIconW (or GetIconLocation).
+    // The Shell image list can still supply their icon; try it on every failure.
     SHFILEINFOW info{};
-    if (SHGetFileInfoW(reinterpret_cast<LPCWSTR>(pidl), 0, &info, sizeof(info),
-                       SHGFI_PIDL | SHGFI_ICON | SHGFI_LARGEICON | SHGFI_SHELLICONSIZE))
+    if (SHGetFileInfoW(reinterpret_cast<LPCWSTR>(pidl),0,&info,sizeof(info),
+                       SHGFI_PIDL|SHGFI_ICON|SHGFI_LARGEICON|SHGFI_SHELLICONSIZE))
         return info.hIcon;
     return nullptr;
 }
@@ -12784,10 +12804,10 @@ static uint32_t Hash(const BYTE* data, size_t size) {
     for (size_t i = 0; i < size; ++i) hash = (hash ^ data[i]) * 16777619u;
     return hash;
 }
-static bool Read(std::vector<BYTE>& out) {
+static bool Read(std::vector<BYTE>& out, const wchar_t* stem=L"skin81_AppSnapshot.v1") {
     out.clear();
     std::vector<BYTE> file;
-    const std::wstring path = ModStorageFiles::Path(L"skin81_AppSnapshot.v1");
+    const std::wstring path = ModStorageFiles::Path(stem);
     if (!ModStorageFiles::ReadBytes(path, file, kMaxBytes + sizeof(FileHeader)) ||
         file.size() < sizeof(FileHeader)) return false;
     FileHeader header{};
@@ -12901,9 +12921,9 @@ public:
         Wh_Log(L"[Catalog] Refreshed: total %u apps catalogued", (unsigned)apps_.size());
     }
 
-    bool LoadSnapshot() {
+    bool LoadSnapshot(const wchar_t* stem=L"skin81_AppSnapshot.v1") {
         std::vector<BYTE> bytes;
-        if (!AppSnapshot::Read(bytes)) return false;
+        if (!AppSnapshot::Read(bytes,stem)) return false;
         size_t pos=0; uint32_t version=0,count=0;
         if (!AppSnapshot::Get32(bytes,pos,version) || version!=1 ||
             !AppSnapshot::Get32(bytes,pos,count) || !count || count>10000) return false;
@@ -12980,6 +13000,27 @@ public:
 
     // Preserve live usage and folder expansion changes made while a refresh ran.
     void InheritUserState(const AppCatalog& previous) {
+        // A background Shell provider can fail transiently. Keep a copy of the
+        // previous icon only for the same stable app identity; never retain a
+        // borrowed HICON after the old catalog is destroyed.
+        unsigned retained=0;
+        for (auto& app : apps_) {
+            if (app.hIcon) continue;
+            for (const auto& old : previous.apps_) {
+                const bool sameAumid=!app.aumid.empty() && !old.aumid.empty() &&
+                    _wcsicmp(app.aumid.c_str(),old.aumid.c_str())==0;
+                const bool samePath=!app.path.empty() && !old.path.empty() &&
+                    _wcsicmp(app.path.c_str(),old.path.c_str())==0;
+                if ((!sameAumid && !samePath) || !old.hIcon) continue;
+                HICON copy=CopyIcon(old.hIcon);
+                if (copy) {
+                    std::wstring key=L"retained:"+std::to_wstring(retained++);
+                    app.hIcon=CacheIcon(key,copy);
+                }
+                break;
+            }
+        }
+        if (retained) Wh_Log(L"[CatalogIcons] retained %u previous icons after extraction failure",retained);
         launchCounts_ = previous.launchCounts_;
         launchCountsLoaded_ = previous.launchCountsLoaded_;
         expandedFolders_ = previous.expandedFolders_;
@@ -13241,12 +13282,14 @@ private:
                                 std::wstring shellPath = std::wstring(L"shell:AppsFolder\\") + aumidBuf;
 
                                 HICON hIcon = nullptr;
-                                PIDLIST_ABSOLUTE parsedPidl = nullptr;
-                                if (!quickScan_ && SUCCEEDED(SHParseDisplayName(shellPath.c_str(), nullptr, &parsedPidl, 0, nullptr)) && parsedPidl) {
-                                    // SHParseDisplayName returns COM memory; it is released on
-                                    // every path, including intermediate errors and early exits.
-                                    struct PidlScope { PIDLIST_ABSOLUTE p; ~PidlScope(){ if (p) CoTaskMemFree(p); } } pidlScope{parsedPidl};
-                                    hIcon = CacheIcon(shellPath, ExtractShellIconFromPidl(parsedPidl));
+                                if (!quickScan_) {
+                                    PIDLIST_ABSOLUTE absolute=ILCombine(pidlApps,child);
+                                    if (absolute) {
+                                        hIcon=CacheIcon(shellPath,ExtractShellIconFromPidl(absolute));
+                                        ILFree(absolute);
+                                    }
+                                    if (!hIcon)
+                                        Wh_Log(L"[CatalogIcons] Shell could not resolve app icon: %s",aumidBuf);
                                 }
 
                                 AppEntry entry;
@@ -16825,13 +16868,24 @@ private:
         ScopedCom com;
         try {
             auto result = std::make_unique<AppCatalog>();
-            const bool cached=self->catalogQuickPhase_ && result->LoadSnapshot();
-            Wh_Log(L"[CatalogPerf] cache lookup elapsed=%llu ms hit=%d", GetTickCount64()-started,cached);
-            if (!cached) result->Refresh(self->catalogQuickPhase_);
-            // Save after a successful scan rather than only on unload, which is
-            // not guaranteed after a crash or system shutdown. A first quick
-            // scan may be saved without icons until the full scan replaces it.
-            if (!cached && !result->SaveSnapshot())
+            bool cached=false;
+            if (self->catalogQuickPhase_) {
+                cached=result->LoadSnapshot();
+            } else {
+                // Explorer uses exactly the 1507 catalog provider in the native
+                // shell process. Never exchange process-local HICON handles.
+                for (int i=0;i<600 && !g_stopRequested.load();++i) {
+                    UniqueHandle ready(OpenEventW(SYNCHRONIZE,FALSE,L"Local\\windhawk-start81-native-catalog_" WH_MOD_ID));
+                    if (ready && WaitForSingleObject(ready.get(),100)==WAIT_OBJECT_0) {
+                        cached=result->LoadSnapshot(L"skin81_native1507_AppSnapshot.v1");
+                        break;
+                    }
+                    if (!ready) Sleep(100);
+                }
+                Wh_Log(L"[CatalogIcons] native Explorer catalog loaded=%d",cached);
+            }
+            if (!cached && !g_stopRequested.load()) result->Refresh(self->catalogQuickPhase_);
+            if (!g_stopRequested.load() && !result->SaveSnapshot())
                 Wh_Log(L"[CatalogCache] snapshot unavailable; next start uses live scan");
             Wh_Log(L"[CatalogPerf] worker elapsed=%llu ms quick=%d", GetTickCount64()-started,self->catalogQuickPhase_);
             { std::lock_guard<std::mutex> guard(self->catalogMutex_);
@@ -20704,18 +20758,8 @@ static std::atomic<ULONGLONG> g_lastKeyboardTapTick{ 0 };
 static std::atomic<DWORD> g_uiThreadId{ 0 };
 static std::atomic<DWORD> g_hookThreadId{ 0 };
 static std::atomic<HWND> g_menuHwnd{ nullptr };
-static std::atomic<bool> g_stopRequested{ false };
+
 static std::atomic<bool> g_settingsChangedPending{ false };
-static std::atomic<DWORD> g_hybridChildPid{0};
-static SRWLOCK g_hybridChildLock=SRWLOCK_INIT;
-static HANDLE g_hybridStopEvent=nullptr;
-static HANDLE g_hybridLauncherThread=nullptr;
-static std::atomic<HANDLE> g_hybridChildProcess{nullptr};
-static HANDLE g_hybridParentProcess=nullptr;
-static HANDLE g_hybridSupervisor=nullptr;
-static HANDLE g_hybridMutex=nullptr;
-static std::atomic<bool> g_hybridWindhawkUnloading{false};
-static constexpr wchar_t kHybridStopEventName[] = L"Local\\Win81Update3StartMenuTool.Stop.v1";
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;
 static HINSTANCE GetModInstance() { return reinterpret_cast<HINSTANCE>(&__ImageBase); }
@@ -21046,30 +21090,56 @@ static int ForegroundElevationState() {
     CloseHandle(process);
     return ok ? (elevation.TokenIsElevated ? 1 : 0) : -1;
 }
-// Only the shell process may relay. Never intercept if the exact child process
-// and its live window are not available; Windows' original route remains usable.
-static bool BridgeSendToggle() {
-    AcquireSRWLockShared(&g_hybridChildLock);
-    const DWORD expected=g_hybridChildPid.load();
-    HANDLE child=g_hybridChildProcess.load();
-    bool posted=false;
-    if (expected && child && WaitForSingleObject(child,0)==WAIT_TIMEOUT) {
-        HWND menu=FindWindowW(StartMenuWindow::kWindowClassName,nullptr);
-        DWORD pid=0;
-        if (menu && GetWindowThreadProcessId(menu,&pid) && pid==expected &&
-            GetPropW(menu,kHybridReadyProperty)==reinterpret_cast<HANDLE>(1)) {
-            // Best effort: Windows permits delegation only if the shell itself
-            // is eligible to set the foreground. Never use ASFW_ANY, never
-            // synthesize input or attach queues. A denial is not fatal.
-            BOOL permitted=AllowSetForegroundWindow(expected);
-            DWORD permitError=permitted ? ERROR_SUCCESS : GetLastError();
-            posted=PostMessageW(menu,WM_APP_BRIDGE_TOGGLE,0,0)!=FALSE;
-            Wh_Log(L"[HybridBridge] foreground permission for verified helper pid=%u: %s (err=%u); posted=%d",
-                   expected,permitted ? L"granted" : L"denied",permitError,posted ? 1 : 0);
-        }
+// The tool-mod helper is launched by Windhawk, not by the shell. Validate its
+// ready window, process image, user and session before forwarding. This is not
+// an authenticated IPC protocol; a same-user process could spoof a window.
+static bool SameProcessUser(HANDLE process) {
+    HANDLE rawCurrent=nullptr,rawOther=nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&rawCurrent)) return false;
+    UniqueHandle currentToken(rawCurrent);
+    if (!OpenProcessToken(process,TOKEN_QUERY,&rawOther)) return false;
+    UniqueHandle otherToken(rawOther);
+    try {
+        auto getUser=[](HANDLE token,std::vector<BYTE>& buffer) {
+            DWORD bytes=0;GetTokenInformation(token,TokenUser,nullptr,0,&bytes);
+            if (!bytes || bytes>1024*1024) return false;
+            buffer.resize(bytes);
+            return GetTokenInformation(token,TokenUser,buffer.data(),bytes,&bytes)!=FALSE;
+        };
+        std::vector<BYTE> a,b;
+        return getUser(currentToken.get(),a) && getUser(otherToken.get(),b) &&
+            EqualSid(reinterpret_cast<TOKEN_USER*>(a.data())->User.Sid,
+                     reinterpret_cast<TOKEN_USER*>(b.data())->User.Sid);
+    } catch (const std::bad_alloc&) {
+        Wh_Log(L"[Bridge] unable to allocate token information");
+        return false;
     }
-    ReleaseSRWLockShared(&g_hybridChildLock);
-    return posted;
+}
+static bool BridgeFindTool(HWND& menu,DWORD& pid) {
+    menu=FindWindowW(StartMenuWindow::kWindowClassName,nullptr);pid=0;
+    if (!menu || GetPropW(menu,kHybridReadyProperty)!=reinterpret_cast<HANDLE>(1) ||
+        !GetWindowThreadProcessId(menu,&pid) || !pid) return false;
+    UniqueHandle process(OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION,FALSE,pid));
+    if (!process || WaitForSingleObject(process.get(),0)!=WAIT_TIMEOUT) return false;
+    DWORD ownSession=0,toolSession=0;
+    if (!ProcessIdToSessionId(GetCurrentProcessId(),&ownSession) ||
+        !ProcessIdToSessionId(pid,&toolSession) || ownSession!=toolSession) return false;
+    wchar_t image[MAX_PATH]{};DWORD length=ARRAYSIZE(image);
+    if (!QueryFullProcessImageNameW(process.get(),0,image,&length)) return false;
+    const wchar_t* name=wcsrchr(image,L'\\');
+    if (_wcsicmp(name?name+1:image,L"windhawk.exe")!=0 || !SameProcessUser(process.get())) return false;
+    DWORD owner=0;
+    return IsWindow(menu) && GetWindowThreadProcessId(menu,&owner) && owner==pid &&
+        GetPropW(menu,kHybridReadyProperty)==reinterpret_cast<HANDLE>(1);
+}
+static bool BridgeSendToggle() {
+    HWND menu=nullptr;DWORD pid=0;
+    if (!BridgeFindTool(menu,pid)) return false;
+    BOOL permitted=AllowSetForegroundWindow(pid);
+    DWORD error=permitted?ERROR_SUCCESS:GetLastError();
+    const BOOL posted=PostMessageW(menu,WM_APP_BRIDGE_TOGGLE,0,0);
+    Wh_Log(L"[Bridge] foreground permission=%d err=%u post=%d",permitted,error,posted);
+    return posted!=FALSE;
 }
 static HRESULT WINAPI ShowStartViewHook(void* self, int method, int flags) {
     if (!g_stopRequested.load()) {
@@ -21093,7 +21163,9 @@ static HRESULT WINAPI ShowStartViewHook(void* self, int method, int flags) {
             //   hook had handled the click, the native Start would not have
             //   been invoked at all, and the helper debounces (250 ms) any
             //   duplicate toggle.
-            const bool relay = (method!=1) || elevation==1 || (fgPid && fgPid==g_hybridChildPid.load());
+            HWND toolWindow=nullptr; DWORD toolPid=0;
+            const bool ownTool=fgPid && BridgeFindTool(toolWindow,toolPid) && fgPid==toolPid;
+            const bool relay = (method!=1) || elevation==1 || ownTool;
             if (relay && BridgeSendToggle()) {
                 Wh_Log(L"[HybridBridge] native Start relayed, method=%d elevation=%d",method,elevation);
                 return S_OK;
@@ -21582,206 +21654,346 @@ static bool WaitForMainExplorerReady() {
     return false;
 }
 
-// Hybrid launcher: adapted from the Windhawk tool-mod pattern and the taskbar
-// mod. Explorer owns only the native hook and message bridge; the tool owns the
-// window, input hooks, catalog, and graphics. No protected system files changed.
-static bool HybridStartToolRuntime() {
-    g_stopRequested=false; g_settingsChangedPending=false; g_settings.Load();
-    HANDLE thread=CreateThread(nullptr,0,UiThreadProc,nullptr,0,nullptr);
-    if (!thread) return false;
-    g_hUiThread.reset(thread); return true;
+// Tool and Explorer parts use the Windhawk tool-mod lifecycle. Explorer keeps
+// only the native Start bridge; the menu and low-level hooks live in the tool.
+static HANDLE g_toolStopEvent = nullptr;
+static HANDLE g_toolMonitorThread = nullptr;
+static HANDLE g_explorerBridgeThread = nullptr;
+static HANDLE g_nativeCatalogThread = nullptr;
+static HANDLE g_nativeCatalogReady = nullptr;
+static std::atomic<bool> g_toolStopping{false};
+static bool g_toolRuntimeStopped = false;
+static bool g_explorerRuntimeStopped = false;
+static bool g_isExplorer = false;
+
+static bool IsExplorerProcess() {
+    WCHAR path[MAX_PATH]{};
+    DWORD len=GetModuleFileNameW(nullptr,path,ARRAYSIZE(path));
+    if (!len || len>=ARRAYSIZE(path)) return false;
+    const wchar_t* name=wcsrchr(path,L'\\');
+    return _wcsicmp(name?name+1:path,L"explorer.exe")==0;
 }
-static void HybridStopToolRuntime() {
-    g_stopRequested=true;
-    DWORD tid=g_uiThreadId.load();
-    if (tid) PostThreadMessageW(tid,WM_QUIT,0,0);
-    if (g_hUiThread) { WaitForSingleObject(g_hUiThread.get(),INFINITE); g_hUiThread.reset(); }
-    g_uiThreadId=0;
-}
-static DWORD WINAPI HybridSupervisor(void*) {
-    // If UI initialization fails or its message loop exits, notify the parent
-    // by exiting; otherwise a live but unusable child would prevent recovery.
-    HANDLE signals[3]={g_hybridStopEvent,g_hybridParentProcess,g_hUiThread.get()};
-    DWORD wait=WaitForMultipleObjects(3,signals,FALSE,INFINITE);
-    Wh_Log(L"[HybridTool] supervisor wake=%u",wait);
-    HybridStopToolRuntime();
-    if (!g_hybridWindhawkUnloading.load()) ExitProcess(0);
-    return 0;
-}
-static void WINAPI HybridEntryPointHook() {
-    if (!HybridStartToolRuntime()) ExitProcess(1);
-    g_hybridSupervisor=CreateThread(nullptr,0,HybridSupervisor,nullptr,0,nullptr);
-    if (!g_hybridSupervisor) { HybridStopToolRuntime(); ExitProcess(1); }
-    ExitThread(0);
-}
-static bool RetryDelay(DWORD ms) {
-    while (ms && !g_stopRequested.load()) {
-        DWORD step=(std::min<DWORD>)(ms,250);
-        Sleep(step); ms-=step;
-    }
-    return !g_stopRequested.load();
-}
-static DWORD WINAPI HybridLauncher(void*) {
-    if (!WaitForMainExplorerReady() || g_stopRequested.load()) return 0;
-    InstallShellMessageHooks();
-    DWORD delay=1000;
-    while (!g_stopRequested.load()) {
-        // A previous instance may still be cleaning up. Never reset somebody
-        // else's event or start a competing instance; retry after it disappears.
-        HANDLE stop=CreateEventW(nullptr,TRUE,FALSE,kHybridStopEventName);
-        if (!stop) {
-            Wh_Log(L"[HybridBridge] stop event failed %u; retrying",GetLastError());
-            if (!RetryDelay(delay)) break;
-            delay=(std::min<DWORD>)(delay*2,30000); continue;
-        }
-        if (GetLastError()==ERROR_ALREADY_EXISTS) {
-            CloseHandle(stop);
-            Wh_Log(L"[HybridBridge] previous instance still owns event; retrying");
-            if (!RetryDelay(delay)) break;
-            delay=(std::min<DWORD>)(delay*2,30000); continue;
-        }
-        g_hybridStopEvent=stop;
-        if (g_stopRequested.load()) break;
-        WCHAR path[MAX_PATH]{};
-        DWORD len=GetModuleFileNameW(nullptr,path,ARRAYSIZE(path));
-        PROCESS_INFORMATION pi{};
-        BOOL launched=FALSE;
-        if (len && len<ARRAYSIZE(path)) {
-            std::wstring command=L"\""; command+=path; command+=L"\" -tool-mod \""; command+=WH_MOD_ID; command+=L"\"";
-            command+=L" -hybrid-parent "; command+=std::to_wstring(GetCurrentProcessId());
-            std::vector<wchar_t> cmd(command.begin(),command.end()); cmd.push_back(0);
-            HMODULE kernel=GetModuleHandleW(L"kernelbase.dll");
-            if (!kernel) kernel=GetModuleHandleW(L"kernel32.dll");
-            using CreateProcessInternalW_t=BOOL(WINAPI*)(HANDLE,LPCWSTR,LPWSTR,LPSECURITY_ATTRIBUTES,LPSECURITY_ATTRIBUTES,BOOL,DWORD,LPVOID,LPCWSTR,LPSTARTUPINFOW,LPPROCESS_INFORMATION,PHANDLE);
-            auto create=kernel ? reinterpret_cast<CreateProcessInternalW_t>(GetProcAddress(kernel,"CreateProcessInternalW")) : nullptr;
-            STARTUPINFOW si{}; si.cb=sizeof(si); si.dwFlags=STARTF_FORCEOFFFEEDBACK;
-            if (create) launched=create(nullptr,path,cmd.data(),nullptr,nullptr,FALSE,NORMAL_PRIORITY_CLASS,nullptr,nullptr,&si,&pi,nullptr);
-            if (!launched && !g_stopRequested.load()) {
-                Wh_Log(L"[HybridBridge] internal launcher unavailable/failed (%u); trying CreateProcessW",GetLastError());
-                cmd.assign(command.begin(),command.end()); cmd.push_back(0);
-                launched=CreateProcessW(path,cmd.data(),nullptr,nullptr,FALSE,NORMAL_PRIORITY_CLASS,nullptr,nullptr,&si,&pi);
-            }
-        }
-        if (!launched) {
-            Wh_Log(L"[HybridBridge] launch failed %u; retrying",GetLastError());
-            CloseHandle(g_hybridStopEvent); g_hybridStopEvent=nullptr;
-            if (!RetryDelay(delay)) break;
-            delay=(std::min<DWORD>)(delay*2,30000); continue;
-        }
-        CloseHandle(pi.hThread);
-        AcquireSRWLockExclusive(&g_hybridChildLock);
-        g_hybridChildProcess=pi.hProcess; g_hybridChildPid=pi.dwProcessId;
-        ReleaseSRWLockExclusive(&g_hybridChildLock);
-        Wh_Log(L"[HybridBridge] tool process launched pid=%u",pi.dwProcessId);
-        ULONGLONG launchedAt=GetTickCount64(); bool warned=false, ready=false;
-        while (!g_stopRequested.load()) {
-            HANDLE waits[2]={pi.hProcess,stop};
-            DWORD state=WaitForMultipleObjects(2,waits,FALSE,500);
-            if (state==WAIT_OBJECT_0 || state==WAIT_OBJECT_0+1) break;
-            if (state==WAIT_FAILED) {
-                Wh_Log(L"[HybridBridge] child wait failed %u; avoiding duplicate launch",GetLastError());
-                if (!RetryDelay(5000)) break;
-                continue;
-            }
-            HWND menu=FindWindowW(StartMenuWindow::kWindowClassName,nullptr); DWORD owner=0;
-            if (menu) GetWindowThreadProcessId(menu,&owner);
-            if (owner==pi.dwProcessId && GetPropW(menu,kHybridReadyProperty)==reinterpret_cast<HANDLE>(1)) ready=true;
-            if (!ready && !warned && GetTickCount64()-launchedAt>30000) {
-                Wh_Log(L"[HybridBridge] tool still not ready; keeping native route, no duplicate launch"); warned=true;
-            }
-        }
-        if (g_stopRequested.load() || WaitForSingleObject(stop,0)==WAIT_OBJECT_0) break;
-        DWORD exitCode=0; GetExitCodeProcess(pi.hProcess,&exitCode);
-        Wh_Log(L"[HybridBridge] tool ended code=%u; retrying",exitCode);
-        AcquireSRWLockExclusive(&g_hybridChildLock);
-        g_hybridChildPid=0; g_hybridChildProcess=nullptr;
-        ReleaseSRWLockExclusive(&g_hybridChildLock);
-        CloseHandle(pi.hProcess);
-        CloseHandle(g_hybridStopEvent); g_hybridStopEvent=nullptr;
-        if (ready) delay=1000;
-        if (!RetryDelay(delay)) break;
-        delay=(std::min<DWORD>)(delay*2,30000);
+static DWORD WINAPI ToolMonitorProc(void*) {
+    HANDLE handles[]={g_toolStopEvent,g_hUiThread.get()};
+    DWORD result=WaitForMultipleObjects(ARRAYSIZE(handles),handles,FALSE,INFINITE);
+    if (result==WAIT_OBJECT_0+1 && !g_toolStopping.load()) {
+        Wh_Log(L"[Tool] UI thread exited unexpectedly");
+        ExitProcess(1);
     }
     return 0;
 }
-BOOL Wh_ModInit() {
-    DWORD session=0; if (ProcessIdToSessionId(GetCurrentProcessId(),&session) && session==0) return FALSE;
-    int argc=0; LPWSTR* args=CommandLineToArgvW(GetCommandLineW(),&argc);
-    if (!args) return FALSE;
-    bool excluded=false, tool=false, ours=false; DWORD parentPid=0;
-    for (int i=1;i<argc;++i) {
-        if (!wcscmp(args[i],L"-service") || !wcscmp(args[i],L"-service-start") || !wcscmp(args[i],L"-service-stop")) excluded=true;
-        if (!wcscmp(args[i],L"-tool-mod") && i+1<argc) { tool=true; ours=!wcscmp(args[i+1],WH_MOD_ID); }
-        if (!wcscmp(args[i],L"-hybrid-parent") && i+1<argc) parentPid=wcstoul(args[i+1],nullptr,10);
-    }
-    LocalFree(args);
-    if (excluded || (tool && !ours)) return FALSE;
-    if (ours) {
-        g_isHybridTool=true;
-        g_hybridMutex=CreateMutexW(nullptr,TRUE,L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_hybridMutex || GetLastError()==ERROR_ALREADY_EXISTS) ExitProcess(1);
-        g_hybridStopEvent=OpenEventW(SYNCHRONIZE|EVENT_MODIFY_STATE,FALSE,kHybridStopEventName);
-        if (!g_hybridStopEvent || !parentPid) ExitProcess(1);
-        g_hybridParentProcess=OpenProcess(SYNCHRONIZE,FALSE,parentPid);
-        if (!g_hybridParentProcess) ExitProcess(1);
-        IMAGE_DOS_HEADER* dos=reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
-        IMAGE_NT_HEADERS* nt=reinterpret_cast<IMAGE_NT_HEADERS*>(reinterpret_cast<BYTE*>(dos)+dos->e_lfanew);
-        void* entry=reinterpret_cast<BYTE*>(dos)+nt->OptionalHeader.AddressOfEntryPoint;
-        if (!Wh_SetFunctionHook(entry,reinterpret_cast<void*>(HybridEntryPointHook),nullptr)) ExitProcess(1);
-        return TRUE;
-    }
-    const DWORD desktopOwner=DesktopShellOwnerPid();
-    if (desktopOwner && desktopOwner!=GetCurrentProcessId()) return FALSE;
+BOOL WhTool_ModInit() {
+    g_isHybridTool=true;
     g_stopRequested=false;
-    InstallNativeKeyboardStartHook();
+    g_settingsChangedPending=false;
+    g_toolStopping=false;
+    g_toolRuntimeStopped=false;
+    g_settings.Load();
+    g_toolStopEvent=CreateEventW(nullptr,TRUE,FALSE,nullptr);
+    if (!g_toolStopEvent) return FALSE;
+    g_hUiThread.reset(CreateThread(nullptr,0,UiThreadProc,nullptr,0,nullptr));
+    if (!g_hUiThread) {CloseHandle(g_toolStopEvent);g_toolStopEvent=nullptr;return FALSE;}
+    g_toolMonitorThread=CreateThread(nullptr,0,ToolMonitorProc,nullptr,0,nullptr);
+    if (!g_toolMonitorThread) {
+        g_toolStopping=true;g_stopRequested=true;
+        const DWORD tid=g_uiThreadId.load();
+        if (tid) PostThreadMessageW(tid,WM_QUIT,0,0);
+        WaitForSingleObject(g_hUiThread.get(),INFINITE);g_hUiThread.reset();
+        CloseHandle(g_toolStopEvent);g_toolStopEvent=nullptr;
+        return FALSE;
+    }
     return TRUE;
 }
-void Wh_ModAfterInit() {
-    if (g_isHybridTool) return;
-    g_hybridLauncherThread=CreateThread(nullptr,0,HybridLauncher,nullptr,0,nullptr);
-    if (!g_hybridLauncherThread) Wh_Log(L"[HybridBridge] launcher thread creation failed");
-}
-void Wh_ModSettingsChanged() {
-    if (!g_isHybridTool) return;
+void WhTool_ModSettingsChanged() {
     g_settingsChangedPending=true;
-    DWORD tid=g_uiThreadId.load();
-    if (tid) PostThreadMessageW(tid,WM_APP_SETTINGS_CHANGED,0,0);
+    const DWORD tid=g_uiThreadId.load();
+    if (tid && !PostThreadMessageW(tid,WM_APP_SETTINGS_CHANGED,0,0))
+        Wh_Log(L"[Settings] PostThreadMessage failed: %u",GetLastError());
 }
-void Wh_ModBeforeUninit() {
-    if (g_isHybridTool) {
-        g_hybridWindhawkUnloading=true;
-        if (g_hybridStopEvent) SetEvent(g_hybridStopEvent);
-        if (g_hybridSupervisor) { WaitForSingleObject(g_hybridSupervisor,INFINITE); CloseHandle(g_hybridSupervisor); g_hybridSupervisor=nullptr; }
-        else HybridStopToolRuntime();
+void WhTool_ModUninit() {
+    if (g_toolRuntimeStopped) return;
+    g_toolRuntimeStopped=true;
+    g_toolStopping=true;g_stopRequested=true;
+    if (g_toolStopEvent) SetEvent(g_toolStopEvent);
+    if (g_toolMonitorThread) {
+        WaitForSingleObject(g_toolMonitorThread,INFINITE);
+        CloseHandle(g_toolMonitorThread);g_toolMonitorThread=nullptr;
+    }
+    const DWORD tid=g_uiThreadId.load();
+    if (tid && !PostThreadMessageW(tid,WM_QUIT,0,0))
+        Wh_Log(L"[Tool] PostThreadMessage failed: %u",GetLastError());
+    if (g_hUiThread) {WaitForSingleObject(g_hUiThread.get(),INFINITE);g_hUiThread.reset();}
+    g_uiThreadId=0;
+    if (g_toolStopEvent) {CloseHandle(g_toolStopEvent);g_toolStopEvent=nullptr;}
+}
+static DWORD WINAPI ExplorerBridgeProc(void*) {
+    if (WaitForMainExplorerReady() && !g_stopRequested.load()) InstallShellMessageHooks();
+    return 0;
+}
+static DWORD WINAPI NativeCatalogWorker(void*) {
+    Menu1507::ScopedCom com;
+    Gdiplus::GdiplusStartupInput input;
+    ULONG_PTR token=0;
+    if (Gdiplus::GdiplusStartup(&token,&input,nullptr)!=Gdiplus::Ok) {
+        Wh_Log(L"[CatalogIcons] Explorer GDI+ startup failed"); return 1;
+    }
+    bool saved=false;
+    try {
+        Menu1507::AppCatalog catalog;
+        catalog.Refresh(false);
+        if (!g_stopRequested.load())
+            saved=catalog.SaveSnapshot(L"skin81_native1507_AppSnapshot.v1");
+    } catch (...) { Wh_Log(L"[CatalogIcons] native catalog scan failed"); }
+    Gdiplus::GdiplusShutdown(token);
+    if (saved && g_nativeCatalogReady) SetEvent(g_nativeCatalogReady);
+    Wh_Log(L"[CatalogIcons] native Explorer catalog saved=%d",saved);
+    return saved?0:1;
+}
+BOOL ExplorerModInit() {
+    const DWORD shellPid=DesktopShellOwnerPid();
+    if (shellPid && shellPid!=GetCurrentProcessId()) return FALSE;
+    g_stopRequested=false;
+    g_explorerRuntimeStopped=false;
+    g_nativeCatalogReady=CreateEventW(nullptr,TRUE,FALSE,L"Local\\windhawk-start81-native-catalog_" WH_MOD_ID);
+    if (g_nativeCatalogReady) {
+        ResetEvent(g_nativeCatalogReady);
+        g_nativeCatalogThread=CreateThread(nullptr,0,NativeCatalogWorker,nullptr,0,nullptr);
+        if (!g_nativeCatalogThread) Wh_Log(L"[CatalogIcons] native worker creation failed");
+    }
+    InstallNativeKeyboardStartHook();
+    g_explorerBridgeThread=CreateThread(nullptr,0,ExplorerBridgeProc,nullptr,0,nullptr);
+    if (!g_explorerBridgeThread) {
+        Wh_Log(L"[Bridge] failed to start shell hook thread: %u",GetLastError());
+        g_stopRequested=true;
+        if (g_nativeCatalogThread) {WaitForSingleObject(g_nativeCatalogThread,INFINITE);CloseHandle(g_nativeCatalogThread);g_nativeCatalogThread=nullptr;}
+        if (g_nativeCatalogReady) {CloseHandle(g_nativeCatalogReady);g_nativeCatalogReady=nullptr;}
+        return FALSE;
+    }
+    return TRUE;
+}
+void ExplorerModSettingsChanged() {}
+void ExplorerModUninit() {
+    if (g_explorerRuntimeStopped) return;
+    g_explorerRuntimeStopped=true;
+    g_stopRequested=true;
+    if (g_explorerBridgeThread) {
+        WaitForSingleObject(g_explorerBridgeThread,INFINITE);
+        CloseHandle(g_explorerBridgeThread);g_explorerBridgeThread=nullptr;
+    }
+    if (g_nativeCatalogThread) {
+        WaitForSingleObject(g_nativeCatalogThread,INFINITE);
+        CloseHandle(g_nativeCatalogThread);g_nativeCatalogThread=nullptr;
+    }
+    if (g_nativeCatalogReady) {CloseHandle(g_nativeCatalogReady);g_nativeCatalogReady=nullptr;}
+    RemoveShellMessageHooks();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+//
+// This mod also targets explorer.exe: there, each callback calls the explorer
+// part instead (the lines marked "explorer.exe part").
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    // explorer.exe part.
+    if (IsExplorerProcess()) {
+        g_isExplorer = true;
+        return ExplorerModInit();
+    }
+
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        // On a settings reload the old helper may still be exiting. Allow it
+        // time to release its process-owned mutex instead of losing the launch.
+        for (int attempt=0; attempt<100; ++attempt) {
+            g_toolModProcessMutex=CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            if (!g_toolModProcessMutex) {
+                Wh_Log(L"CreateMutex failed");
+                ExitProcess(1);
+            }
+            if (GetLastError()!=ERROR_ALREADY_EXISTS) break;
+            CloseHandle(g_toolModProcessMutex);
+            g_toolModProcessMutex=nullptr;
+            Sleep(100);
+        }
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
         return;
     }
-    g_stopRequested=true;
-    if (g_hybridLauncherThread) {
-        WaitForSingleObject(g_hybridLauncherThread, INFINITE);
-        CloseHandle(g_hybridLauncherThread);
-        g_hybridLauncherThread = nullptr;
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
     }
-    if (g_hybridStopEvent) SetEvent(g_hybridStopEvent);
-    RemoveShellMessageHooks();
-    AcquireSRWLockExclusive(&g_hybridChildLock);
-    g_hybridChildPid=0;
-    HANDLE child=g_hybridChildProcess.exchange(nullptr);
-    ReleaseSRWLockExclusive(&g_hybridChildLock);
-    if (child) {
-        if (WaitForSingleObject(child,20000)==WAIT_TIMEOUT)
-            Wh_Log(L"[HybridBridge] tool still stopping; no forced termination");
-        CloseHandle(child);
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
     }
-    if (g_hybridStopEvent) { CloseHandle(g_hybridStopEvent); g_hybridStopEvent=nullptr; }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
+
+void Wh_ModSettingsChanged() {
+    // explorer.exe part.
+    if (g_isExplorer) {
+        ExplorerModSettingsChanged();
+        return;
+    }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
 void Wh_ModUninit() {
-    if (g_isHybridTool) {
-        if (g_hybridStopEvent) CloseHandle(g_hybridStopEvent);
-        if (g_hybridParentProcess) CloseHandle(g_hybridParentProcess);
-        if (g_hybridMutex) CloseHandle(g_hybridMutex);
-        ExitProcess(0);
+    // explorer.exe part.
+    if (g_isExplorer) {
+        ExplorerModUninit();
+        return;
     }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
+
 
 } // namespace Menu81
 
@@ -21795,6 +22007,7 @@ static bool Is81Selected() {
 BOOL Wh_ModInit() {
     g_selected81=Is81Selected();
     if (g_selected81) return Menu81::Wh_ModInit();
+    if (!Menu81::IsExplorerProcess()) return FALSE;
     int argc=0;
     LPWSTR* args=CommandLineToArgvW(GetCommandLineW(), &argc);
     if (!args) return FALSE;
@@ -21818,7 +22031,7 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
     return TRUE;
 }
 void Wh_ModBeforeUninit() {
-    if (g_selected81) Menu81::Wh_ModBeforeUninit();
+    if (g_selected81 && Menu81::g_isExplorer) Menu81::ExplorerModUninit();
 }
 void Wh_ModUninit() {
     if (g_selected81) Menu81::Wh_ModUninit();
