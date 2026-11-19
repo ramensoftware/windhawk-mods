@@ -1,0 +1,314 @@
+// ==WindhawkMod==
+// @id donkarlos-audio-visualizer
+// @name DonKarlos Audio Visualizer
+// @description Turn system audio into animated bars or a waveform on the desktop, taskbar, or both
+// @description:de-DE Zeigt Systemaudio als animierte Balken oder Wellenform auf Desktop, Taskleiste oder beiden
+// @version 1.1.1
+// @author DonKarlos
+// @github https://github.com/Karlos5000
+// @license MIT
+// @include windhawk.exe
+// @architecture x86-64
+// @compilerOptions -lole32 -luuid -lgdi32 -luser32
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# DonKarlos Audio Visualizer
+
+See your system audio on the Windows desktop, on the primary taskbar, or in both places at once. Choose frequency bars, mirrored bars, a waveform, or segmented LEDs. Each pattern works with RGB, green, blue, or white.
+
+![Four patterns and the resting bars during silence](https://raw.githubusercontent.com/Karlos5000/windhawk-mods/48a79046d3e5157417686fca6b667740ebbf8ab0/previews/donkarlos-audio-visualizer.png)
+
+*Renderer captures with a test signal. The last panel shows silence.*
+
+Set 8–64 bars, sensitivity from 10–400%, and transparency from 0–100%. In silence the bars settle to a short row and the waveform becomes a flat line. Capture follows the default Windows multimedia output via WASAPI loopback. Boom 3D works when its audio reaches that endpoint.
+
+## Deutsch
+
+Vier Muster zeigen die laufende Audioausgabe auf Desktop und Taskleiste. Bei Stille bleiben kurze Balken stehen. Die Wellenform ruht auf der Mittellinie. Farbe, Empfindlichkeit und Transparenz lassen sich in den Mod-Einstellungen ändern.
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- display: both
+  $name: Anzeige
+  $options:
+    - both: Beide
+    - desktop: Desktop
+    - taskbar: Taskleiste
+- pattern: bars
+  $name: Muster
+  $options:
+    - bars: Frequenzbalken
+    - mirror: Gespiegelt
+    - wave: Wellenform
+    - led: LED
+- palette: rgb
+  $name: Farbschema
+  $options:
+    - rgb: RGB
+    - green: Grün
+    - blue: Blau
+    - white: Weiß
+- bars: 32
+  $name: Balkenanzahl (8–64)
+- sensitivity: 150
+  $name: Empfindlichkeit (10–400 Prozent)
+- transparency: 20
+  $name: Transparenz (0–100 Prozent)
+*/
+// ==/WindhawkModSettings==
+
+#define NOMINMAX
+#include <complex>
+#include <windows.h>
+#include <windhawk_tool_mod.h>
+#include <audioclient.h>
+#include <mmdeviceapi.h>
+#include <wrl/client.h>
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <cmath>
+
+#include <string>
+
+using Microsoft::WRL::ComPtr;
+using std::clamp;
+constexpr int N = 4096;
+constexpr double pi = 3.141592653589793;
+static std::atomic_bool changed{true}, stopping{false};
+static std::wstring pattern, palette, display;
+static int count, gain, transparency;
+static std::array<float,N> samples{};
+static std::array<float,64> levels{};
+static int head;
+static unsigned rate;
+static HWND panels[2]{};
+static constexpr wchar_t className[] = L"WindhawkAudioVisualizerPanel";
+static std::wstring setting(PCWSTR name) {
+    PCWSTR value = Wh_GetStringSetting(name);
+    std::wstring result(value);
+    Wh_FreeStringSetting(value);
+    return result;
+}
+static void settings() {
+    pattern = setting(L"pattern"); palette = setting(L"palette"); display = setting(L"display");
+    count = clamp(Wh_GetIntSetting(L"bars"),8,64);
+    gain = clamp(Wh_GetIntSetting(L"sensitivity"),10,400);
+    transparency = clamp(Wh_GetIntSetting(L"transparency"),0,100);
+}
+
+struct Capture {
+    ComPtr<IMMDeviceEnumerator> devices;
+    ComPtr<IAudioClient> client;
+    ComPtr<IAudioCaptureClient> reader;
+    std::wstring id;
+    WORD channels{};
+    HRESULT connect() {
+        if (!devices) {
+            HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                           IID_PPV_ARGS(&devices));
+            if (FAILED(hr)) return hr;
+        }
+        ComPtr<IMMDevice> endpoint;
+        HRESULT hr = devices->GetDefaultAudioEndpoint(eRender,eMultimedia,&endpoint);
+        if (FAILED(hr)) return hr;
+        LPWSTR name{};
+        if (FAILED(hr = endpoint->GetId(&name))) return hr;
+        bool same = id == name;
+        id = name; CoTaskMemFree(name);
+        if (reader && same) return S_OK;
+        close();
+        if (FAILED(hr = endpoint->Activate(__uuidof(IAudioClient),CLSCTX_ALL,nullptr,
+                                           reinterpret_cast<void**>(client.GetAddressOf())))) return hr;
+        WAVEFORMATEX* mix{};
+        if (FAILED(hr = client->GetMixFormat(&mix))) return hr;
+        rate = mix->nSamplesPerSec; channels = mix->nChannels;
+        WAVEFORMATEX fmt{WAVE_FORMAT_IEEE_FLOAT,channels,rate,rate*channels*4,
+                         static_cast<WORD>(channels*4),32,0};
+        CoTaskMemFree(mix);
+        if (FAILED(hr = client->Initialize(AUDCLNT_SHAREMODE_SHARED,
+                AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
+                1000000,0,&fmt,nullptr))) return hr;
+        if (FAILED(hr = client->GetService(IID_PPV_ARGS(&reader)))) return hr;
+        return client->Start();
+    }
+    void close() {
+        if (client) client->Stop();
+        reader.Reset(); client.Reset(); samples.fill(0); head = 0;
+    }
+    HRESULT drain(bool& fresh) {
+        UINT32 size{};
+        HRESULT hr;
+        while (SUCCEEDED(hr = reader->GetNextPacketSize(&size)) && size) {
+            BYTE* bytes{}; DWORD flags{};
+            if (FAILED(hr = reader->GetBuffer(&bytes,&size,&flags,nullptr,nullptr))) break;
+            const float* data = reinterpret_cast<float*>(bytes);
+            for (UINT32 i=0;i<size;++i) {
+                float sum=0;
+                if (!(flags & AUDCLNT_BUFFERFLAGS_SILENT))
+                    for (unsigned ch=0;ch<channels;++ch) sum+=data[i*channels+ch];
+                samples[head]=sum/channels; head=(head+1)%N;
+            }
+            if (FAILED(hr=reader->ReleaseBuffer(size))) break;
+            fresh=true;
+        }
+        return hr;
+    }
+};
+
+static void analyze(bool active) {
+    std::array<std::complex<float>,N> bins{};
+    if (active) {
+        static const auto window=[] {
+            std::array<float,N> w{};
+            for(int i=0;i<N;++i) w[i]=0.5f-0.5f*std::cos(2*pi*i/(N-1));
+            return w;
+        }();
+        for(int i=0,j=0;i<N;++i) {
+            bins[j]=samples[(head+i)%N]*window[i];
+            int bit=N/2;
+            while(bit && (j&bit)) {j^=bit; bit>>=1;}
+            j^=bit;
+        }
+        for(int len=2;len<=N;len*=2) {
+            auto step=std::polar(1.f,float(-2*pi/len));
+            for(int begin=0;begin<N;begin+=len) {
+                std::complex<float> phase=1.f;
+                for(int j=0;j<len/2;++j,phase*=step) {
+                    auto a=bins[begin+j], b=phase*bins[begin+j+len/2];
+                    bins[begin+j]=a+b; bins[begin+j+len/2]=a-b;
+                }
+            }
+        }
+    }
+    int first=1;
+    for(int i=0;i<count;++i) {
+        float peak=0;
+        if(active) {
+            double upper=std::min(18000.,rate*0.5);
+            int end=clamp(int(40*std::pow(upper/40.,double(i+1)/count)*N/rate),
+                          first+1,N/2+1);
+            for(int k=first;k<end;++k) peak=std::max(peak,std::abs(bins[k]));
+            first=end;
+        }
+        float target=clamp(float((20*std::log10(std::max(1e-8f,peak*4/N*std::max(1.f,gain/100.f)))+60)/60)
+                           *std::min(gain,100)/65,0.f,1.f);
+        levels[i]+=(target-levels[i])*(target>levels[i]?0.58f:0.13f);
+    }
+}
+static COLORREF color(int i,int total) {
+    if(palette==L"white") return RGB(255,255,255);
+    if(palette==L"blue") return RGB(50,160,255);
+    if(palette==L"green") return RGB(32,245,115);
+    auto component=[&](int offset){return int(255*clamp(std::abs(std::fmod(
+        6.*i/total+offset,6.)-3.)-1.,0.,1.));};
+    return RGB(component(0),component(4),component(2));
+}
+static LRESULT CALLBACK paint(HWND w,UINT msg,WPARAM wp,LPARAM lp) {
+    if(msg==WM_NCHITTEST) return HTTRANSPARENT;
+    if(msg==WM_ERASEBKGND) return 1;
+    if(msg!=WM_PAINT) return DefWindowProcW(w,msg,wp,lp);
+    PAINTSTRUCT ps; HDC out=BeginPaint(w,&ps);
+    RECT r; GetClientRect(w,&r); int width=r.right,height=r.bottom;
+    HDC dc=CreateCompatibleDC(out); HBITMAP bmp=CreateCompatibleBitmap(out,width,height);
+    auto old=SelectObject(dc,bmp); FillRect(dc,&r,(HBRUSH)GetStockObject(BLACK_BRUSH));
+    if(pattern==L"wave") {
+        SelectObject(dc,GetStockObject(DC_PEN));
+        for(int x=0;x<width;++x) {
+            int pos=(head+N-512+512*x/width)%N;
+            int y=int((1-clamp(samples[pos]*gain/50,-1.f,1.f))*(height-1)/2);
+            SetDCPenColor(dc,color(x,width));
+            if(x==0) MoveToEx(dc,x,y,nullptr); else LineTo(dc,x,y);
+        }
+    } else for(int i=0;i<count;++i) {
+        const int rest = std::min(height, std::max(2, height/18));
+        int h = rest + int(levels[i]*(height-rest));
+        RECT b{i*width/count,height-h,std::max(i*width/count+1,(i+1)*width/count-1),height};
+        SetDCBrushColor(dc,color(i,count)); auto brush=(HBRUSH)GetStockObject(DC_BRUSH);
+        if(pattern==L"mirror") {b.top=(height-h)/2;b.bottom=b.top+h;}
+        if(pattern==L"led") {
+            for(int y=height;y>b.top;y-=5) {
+                RECT cell{b.left,std::max<LONG>(b.top,y-3),b.right,y}; FillRect(dc,&cell,brush);
+            }
+        } else FillRect(dc,&b,brush);
+    }
+    BitBlt(out,0,0,width,height,dc,0,0,SRCCOPY);
+    SelectObject(dc,old); DeleteObject(bmp); DeleteDC(dc); EndPaint(w,&ps); return 0;
+}
+static BOOL CALLBACK findDesktop(HWND top,LPARAM result) {
+    HWND view=FindWindowExW(top,nullptr,L"SHELLDLL_DefView",nullptr);
+    if(!view) return TRUE;
+    HWND host=FindWindowExW(view,nullptr,L"SysListView32",nullptr);
+    if(!IsWindowVisible(host)) host=view;
+    if(!IsWindowVisible(host)) host=top;
+    if(!IsWindowVisible(host)) return TRUE;
+    *reinterpret_cast<HWND*>(result)=host;
+    return !*reinterpret_cast<HWND*>(result);
+}
+static void layout(int index) {
+    HWND parent{};
+    if(index==0 && display!=L"taskbar") EnumWindows(findDesktop,reinterpret_cast<LPARAM>(&parent));
+    if(index==1 && display!=L"desktop") parent=FindWindowW(L"Shell_TrayWnd",nullptr);
+    HWND& panel=panels[index];
+    if(panel && (!IsWindow(panel) || GetParent(panel)!=parent)) {
+        if(IsWindow(panel)) DestroyWindow(panel);
+        panel=nullptr;
+    }
+    if(!parent) return;
+    RECT bounds{}; GetClientRect(parent,&bounds);
+    int width=std::min<int>(index?224:480,bounds.right);
+    int height=std::min<int>(index?28:100,bounds.bottom);
+    int x=index?std::max(0,int(bounds.right/4-width/2)):24;
+    int y=index?(bounds.bottom-height)/2:std::max(0,int(bounds.bottom-height-90));
+    if(!panel) panel=CreateWindowExW(WS_EX_LAYERED|WS_EX_TRANSPARENT|WS_EX_NOACTIVATE,
+        className,L"",WS_CHILD,x,y,width,height,parent,nullptr,GetModuleHandleW(nullptr),nullptr);
+    if(panel) {
+        SetLayeredWindowAttributes(panel,RGB(0,0,0),BYTE(255*(100-transparency)/100),LWA_COLORKEY|LWA_ALPHA);
+        SetWindowPos(panel,HWND_TOP,x,y,width,height,SWP_NOACTIVATE|SWP_SHOWWINDOW);
+    }
+}
+__declspec(dllexport) BOOL WhTool_ModInit() { return TRUE; }
+__declspec(dllexport) void WhTool_ModSettingsChanged() { changed=true; }
+__declspec(dllexport) void WhTool_ModUninit() { stopping=true; }
+__declspec(dllexport) void WhTool_ModEntryPoint() {
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    HRESULT com=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
+    if(FAILED(com)) return;
+    WNDCLASSW wc{}; wc.hInstance=GetModuleHandleW(nullptr); wc.lpfnWndProc=paint;
+    wc.lpszClassName=className;
+    if(!RegisterClassW(&wc)) {CoUninitialize();return;}
+    {
+        Capture capture;
+        ULONGLONG nextLayout=0,nextAudio=0,lastPacket=0,nextFrame=0;
+        while(!stopping) {
+            MSG msg;
+            while(PeekMessageW(&msg,nullptr,0,0,PM_REMOVE)) DispatchMessageW(&msg);
+            auto now=GetTickCount64();
+            if(changed.exchange(false)) {settings();nextLayout=0;}
+            if(now>=nextLayout) {layout(0);layout(1);nextLayout=now+1000;}
+            if(now>=nextAudio) {
+                HRESULT hr=capture.connect();
+                if(FAILED(hr)) {Wh_Log(L"Loopback unavailable: %08X",unsigned(hr));capture.close();}
+                nextAudio=now+2000;
+            }
+            if(now>=nextFrame) {
+                bool fresh=false;
+                if(capture.reader && FAILED(capture.drain(fresh))) capture.close();
+                if(fresh) lastPacket=now;
+                bool active=lastPacket && now-lastPacket<100;
+                if(!active) samples.fill(0);
+                if(pattern!=L"wave") analyze(active);
+                for(HWND panel:panels) if(panel) InvalidateRect(panel,nullptr,FALSE);
+                nextFrame=now+16;
+            }
+            MsgWaitForMultipleObjects(0,nullptr,FALSE,16,QS_ALLINPUT);
+        }
+        capture.close();
+    }
+    for(HWND panel:panels) if(panel) DestroyWindow(panel);
+    UnregisterClassW(className,wc.hInstance); CoUninitialize();
+}
