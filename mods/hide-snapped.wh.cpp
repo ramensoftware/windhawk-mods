@@ -2,11 +2,11 @@
 // @id              hide-snapped
 // @name            Snap Groups: Alt+Tab and taskbar
 // @description     Group-only Alt+Tab and separate taskbar buttons with tiled member icons.
-// @version         0.4.25
+// @version         0.4.26
 // @author          coldfeudal
 // @github          https://github.com/coldfeudal
 // @include         explorer.exe
-// @architecture    x86-64
+// @architecture    amd64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -ladvapi32 -lshell32 -luuid -lgdi32 -lcomctl32
 // @license         MIT
 // ==/WindhawkMod==
@@ -63,15 +63,18 @@ Explorer restart, disable/enable and the support-trace toggle.
 - **Alt+Tab per monitor 1.2.1:** switching during a heavy game and after closing
   it, including disabling both mods without restarting Explorer.
 
-There is no Windows build-number restriction or exact Taskbar.dll/ShellCommon
-revision restriction. Taskbar integration requires its internal symbols and uses
-undocumented object fields and interface slots. A Windows update can change those
-without changing the symbol names, causing incorrect behavior or Explorer crashes.
-Other Windows versions and DLL revisions are unverified; allowing initialization
-on them is not a compatibility guarantee. Native previews and detailed trace
-observers retain separate DLL checks and may be unavailable after an update.
+Core taskbar integration has no Windows build-number or exact Taskbar.dll/
+ShellCommon revision restriction. It requires internal shell symbols. Native
+task-item enumeration additionally requires a recognized count-getter layout
+and matching object type/count; otherwise that presentation step stays native.
+Hidden members use their window icons without reading task-list object fields.
+Native previews require an agile group and separately checked Taskbar.dll and
+DesktopSwitcherDataModel.dll layouts. Unrecognized preview layouts disable only
+previews. Detailed trace observers also retain separate DLL checks.
+Shell interfaces are undocumented; other Windows versions and DLL revisions
+remain unverified, and updates can require changes to the mod.
 Longer sessions and other monitor/DPI/virtual desktop configurations have limited
-coverage. ARM64 is not targeted.
+coverage. The mod targets AMD64; native ARM64 Explorer is not targeted.
 
 Report mod problems in https://github.com/ramensoftware/windhawk-mods/issues.
 Include "hide-snapped" in the title and mention @coldfeudal in the report.
@@ -487,7 +490,7 @@ bool HookTaskbarViewTrace() {
 // Internal, versioned ABI. Only use these slots after QueryInterface succeeds.
 // Slots were checked against twinui.pcshell.dll 10.0.26100.8117 public symbols
 // and call sites. WindowId is a uint32_t containing the low 32 bits of HWND.
-// Native layouts are accepted only for the inspected shell DLL revisions.
+// Selection fields are decoded; unrecognized layouts preserve native selection.
 constexpr GUID kDataModelStatics = {
     0xb9215acb, 0x5441, 0x5728, {0x93, 0x03, 0xed, 0xa3, 0xf4, 0x96, 0x83, 0xe6}};
 constexpr GUID kDataModel = {
@@ -837,7 +840,7 @@ HRESULT WINAPI CreateInstanceHook(const void* args, REFIID iid, void** result) {
     return g_createInstance(args, iid, result);
 }
 
-// Taskbar integration uses documented shell APIs. Real application window
+// Taskbar integration uses shell APIs and internal hooks. Real application window
 // styles and AppUserModelIDs are never changed. Only our proxy buttons have IDs.
 struct TaskbarSettings {
     bool enabled = true;
@@ -885,6 +888,11 @@ using GetTaskIcon = HRESULT(WINAPI*)(void*, IUnknown*, IUnknown*, HICON*);
 using UpdateTaskIcon = void(WINAPI*)(void*, IUnknown*, IUnknown*);
 UpdateTaskIcon g_updateTaskIcon = nullptr;
 GetTaskIcon g_getTaskIcon = nullptr;
+using NativeItemCount = int(WINAPI*)(void*);
+NativeItemCount g_nativeItemCount = nullptr;
+void* g_nativeGroupVtable = nullptr;
+size_t g_nativeItemsOffset = 0;
+std::atomic<bool> g_nativePreviewAvailable = true;
 HICON WindowIcon(HWND window);
 IsTaskAllowed g_isTaskAllowed = nullptr;
 IsTaskAllowed g_listIsTaskAllowed = nullptr;
@@ -910,12 +918,26 @@ struct ProxyMonitorCache {
     void store(std::shared_ptr<const ProxyMonitors> next) { std::atomic_store(&value, std::move(next)); }
 } g_proxyMonitors;
 decltype(&MonitorFromWindow) g_monitorFromWindow = nullptr;
-// Native groups belong to the worker apartment. Process exit kills that
-// worker before CRT teardown; never Release them from a global destructor.
+// Native group references are acquired/released by the worker; UI preview use
+// additionally requires IAgileObject. Process exit kills the worker before CRT
+// teardown; never Release these references from a global destructor.
 // The worker clears all references on controlled shutdown; ModUninit frees
 // the empty container after Windhawk has removed the hooks that read it.
 [[clang::no_destroy]] std::optional<std::map<WindowIdentity, ComPtr<IUnknown>>>
     g_proxyGroups{std::in_place};
+// Caller holds g_hiddenMembersMutex; the returned reference must outlive its
+// lock guard so replacement/removal cannot Release a group inside that lock.
+ComPtr<IUnknown> ExchangeProxyGroupLocked(const WindowIdentity& identity, IUnknown* next) {
+    auto found = g_proxyGroups->find(identity);
+    if (found == g_proxyGroups->end()) {
+        if (next) (*g_proxyGroups)[identity] = next;
+        return {};
+    }
+    auto retired = std::move(found->second);
+    if (next) found->second = next;
+    else g_proxyGroups->erase(found); // moved-from element owns no COM reference
+    return retired;
+}
 WindowIdentity g_lastAppForeground;
 std::atomic<bool> g_taskbarFilterReady = false;
 std::atomic<bool> g_taskbarInitAttempted = false;
@@ -1090,16 +1112,36 @@ HWND NativeGroupPrimaryWindow(IUnknown* item) {
     return AbiMethod<PrimaryWindow>(nativeGroup.Get(), 5)(nativeGroup.Get());
 }
 
-// CTaskGroup's native task-item DPA is at+32, checked against GetNumItems and
-// GetItemFromWindow. Retain local interfaces before any inclusion callback.
-// Unknown/incomplete layouts fail open; never repair native arrays ourselves.
+// Recognize the complete x64 leaf getter: load this->DPA; return its count or
+// zero for null. Both displacement forms must have the exact null/count flow.
+// A changed compiler form fails open; no image identity or fixed field offset.
+size_t DecodeNativeItemsOffset(const void* getter) {
+    std::array<unsigned char, 17> code{};
+    if (!getter || !TraceRead(getter, 0, code) || code[0] != 0x48 || code[1] != 0x8b) return 0;
+    size_t length = 0;
+    int32_t offset = 0;
+    if (code[2] == 0x51) { length = 4; offset = static_cast<int8_t>(code[3]); }
+    else if (code[2] == 0x91) { length = 7; memcpy(&offset, code.data() + 3, 4); }
+    constexpr unsigned char suffix[] = {0x33,0xc0,0x48,0x85,0xd2,0x74,0x02,0x8b,0x02,0xc3};
+    if (!length || memcmp(code.data() + length, suffix, sizeof(suffix)) ||
+        offset < 8 || offset > 4096 || offset % sizeof(void*)) return 0;
+    return size_t(offset);
+}
+bool HasNativeGroupVtable(void* group) {
+    void* table = nullptr;
+    return group && g_nativeGroupVtable && TraceRead(group, 0, table) && table == g_nativeGroupVtable;
+}
+// Retain interfaces only after the native type, decoded field, DPA and native
+// count agree. Unknown/incomplete layouts leave creation/presentation native.
 std::vector<ComPtr<IUnknown>> NativeTaskItems(void* group) {
     void* dpa = nullptr;
     int count = 0;
     void* entries = nullptr;
     std::vector<ComPtr<IUnknown>> items;
-    if (!TraceRead(group, 32, dpa) || !dpa || !TraceRead(dpa, 0, count) ||
-        count <= 0 || count > 4096 || !TraceRead(dpa, 8, entries) || !entries) return items;
+    if (!g_nativeItemsOffset || !g_nativeItemCount || !HasNativeGroupVtable(group) ||
+        !TraceRead(group, g_nativeItemsOffset, dpa) || !dpa || !TraceRead(dpa, 0, count) ||
+        count <= 0 || count > 4096 || count != g_nativeItemCount(group) ||
+        !TraceRead(dpa, 8, entries) || !entries) return items;
     for (int i = 0; i < count; ++i) {
         IUnknown* item = nullptr;
         if (!TraceRead(entries, size_t(i) * sizeof(void*), item) || !item) return {};
@@ -1152,35 +1194,17 @@ bool SuppressTaskbarCreation(void* self, void* group, void* item) {
     TraceWrite(TracePresentation, TracePointer(group), 0, items.size(), 2);
     return true;
 }
-// CTaskListWnd::GetIcon's ITaskListUI-relative layout, pinned to Taskbar.dll.
 // Native GetIcon fail-fasts when a group has no button. Hiding member buttons
 // intentionally violates that precondition; native Snap UI can still ask for
-// their icons while replacing/resizing a group. Do not call that fatal branch.
-struct NativeTaskListIcons {
-    unsigned char prefix[136];
-    HDPA buttons;
-};
-static_assert(offsetof(NativeTaskListIcons, buttons) == 136);
-bool HasNativeIconButton(const NativeTaskListIcons& list, IUnknown* group) {
-    if (!list.buttons || !group) return false;
-    using GetGroup = IUnknown*(WINAPI*)(void*);
-    for (int i = 0; i < DPA_GetPtrCount(list.buttons); ++i) {
-        void* button = DPA_GetPtr(list.buttons, i);
-        if (button && AbiMethod<GetGroup>(static_cast<IUnknown*>(button), 6)(button) == group) return true;
-    }
-    return false;
-}
+// their icons while replacing/resizing a group. Hidden members always use an
+// owned copy of their window icon; no task-list/button object fields are read.
 HRESULT RouteTaskIcon(GetTaskIcon original, void* self, IUnknown* group, IUnknown* item,
                       HICON* icon, HICON (*source)(HWND) = WindowIcon) {
     if (!icon) return E_POINTER;
-    if (self && HasNativeIconButton(*static_cast<NativeTaskListIcons*>(self), group))
-        return original(self, group, item, icon);
-    *icon = nullptr;
-    using GetWindow = HWND(WINAPI*)(IUnknown*);
-    HWND window = item ? AbiMethod<GetWindow>(item, 12)(item) : nullptr;
+    HWND window = TaskItemWindow(item);
     if (!window) window = NativeGroupPrimaryWindow(item);
-    // No fabricated successful null icon. The caller can retry a stale item.
-    if (!window) return E_PENDING;
+    if (!IsHiddenTaskbarMember(IdentifyWindow(window))) return original(self, group, item, icon);
+    *icon = nullptr;
     *icon = source(window); // CopyIcon: caller owns this HICON, as with native GetIcon.
     HRESULT hr = *icon ? S_OK : E_FAIL;
     static std::atomic<unsigned> reports = 0;
@@ -1382,10 +1406,10 @@ HRESULT RefreshTaskWindow(WPARAM action, void* band, void* list, HWND window,
     // completion does not imply that CTaskGroup's AppID is initialized. Our
     // inclusion refresh would create its XAML button early; get_AppId then
     // dereferences the null native ID before it can return an error.
-    // Native ITaskGroup slot19 only reads the field, with no COM/reentrancy.
-    // Defer our request; leave native resolution/creation and failures intact.
-    using GetNativeAppId = PCWSTR(WINAPI*)(IUnknown*);
-    if (!AbiMethod<GetNativeAppId>(group.Get(), 19)(group.Get())) {
+    // Use the resolved native getter after verifying the concrete group type;
+    // never invoke the WinRT string wrapper or assume its vtable slot.
+    if (!HasNativeGroupVtable(group.Get()) || !g_nativeAppId) return E_NOINTERFACE;
+    if (!g_nativeAppId(group.Get())) {
         TraceWrite(TraceNullAppId, TracePointer(group.Get()), TracePointer(window), action, 1);
         return E_PENDING;
     }
@@ -1469,25 +1493,30 @@ bool HookTaskbarFilter() {
         {{L"?ShouldAddWindowToTrayHelper@@YAHPEAUHWND__@@@Z"}, &g_shouldAddWindow, ShouldAddWindowHook},
         {{L"?HandleClick@CTaskListWnd@@UEAAJPEAUITaskGroup@@PEAUITaskItem@@AEBULauncherOptions@System@Windows@winrt@@@Z"}, &g_handleTaskClick, HandleTaskClickHook},
         {{L"?HandleClick@CTaskListWndMulti@@UEAAJPEAUITaskGroup@@PEAUITaskItem@@AEBULauncherOptions@System@Windows@winrt@@@Z"}, &g_multiHandleTaskClick, MultiHandleTaskClickHook},
-        {{L"?_CreateWindowVisual@CTaskThumbnail@@AEAAJPEAUHWND__@@UtagSIZE@@@Z"}, &g_createWindowVisual, CreateWindowVisualHook},
+        {{L"?_CreateWindowVisual@CTaskThumbnail@@AEAAJPEAUHWND__@@UtagSIZE@@@Z"}, &g_createWindowVisual, CreateWindowVisualHook, true},
         {{L"?_HandleClick@CTaskListWnd@@IEAAXPEAUITaskBtnGroup@@HW4eCLICKACTION@1@HH@Z"}, &g_handleButtonClick, HandleButtonClickHook},
-        {{L"?UpdateThumbnailFactory@TaskItemThumbnail@implementation@Shell@UI@WindowsUdk@winrt@@QEAAXXZ"}, &g_updateThumbnailFactory, UpdateThumbnailFactoryHook},
+        {{L"?UpdateThumbnailFactory@TaskItemThumbnail@implementation@Shell@UI@WindowsUdk@winrt@@QEAAXXZ"}, &g_updateThumbnailFactory, UpdateThumbnailFactoryHook, true},
         {{L"?GetIcon@CTaskListWnd@@UEAAJPEAUITaskGroup@@PEAUITaskItem@@PEAPEAUHICON__@@@Z"}, &g_getTaskIcon, GetTaskIconHook},
         {{L"?_UpdateItemIcon@CTaskBand@@IEAAXPEAUITaskGroup@@PEAUITaskItem@@@Z"}, &g_updateTaskIcon},
-        // Optional trace-only hooks must remain the last six entries.
+        {{L"?GetAppID@CTaskGroup@@UEAAPEBGXZ"}, &g_nativeAppId, g_binaryTraceEnabled ? NativeAppIdTraceHook : nullptr},
+        {{L"?GetNumItems@CTaskGroup@@UEAAHXZ"}, &g_nativeItemCount, nullptr, true},
+        {{L"??_7CTaskGroup@@6BITaskGroup@@@"}, &g_nativeGroupVtable},
+        // Optional trace-only hooks must remain the last five entries.
         {{L"?_CreateTBGroup@CTaskListWnd@@IEAAPEAUITaskBtnGroup@@PEAUITaskGroup@@H@Z"}, &g_createButton, CreateButtonTraceHook, true},
         {{L"?NotifyTaskGroupInserted@CTaskListWnd@@IEAAXPEAUITaskGroup@@H@Z"}, &g_notifyInserted, NotifyInsertedTraceHook, true},
         {{L"?InsertGroup@TaskbarAppsList@implementation@Shell@UI@WindowsUdk@winrt@@QEAAXAEBV?$com_ptr_t@UITaskGroup@@Uerr_exception_policy@wil@@@wil@@I@Z"}, &g_insertSourceGroup, InsertSourceTraceHook, true},
         {{L"?RemoveGroup@TaskbarAppsList@implementation@Shell@UI@WindowsUdk@winrt@@QEAAXAEBV?$com_ptr_t@UITaskGroup@@Uerr_exception_policy@wil@@@wil@@@Z"}, &g_removeSourceGroup, RemoveSourceTraceHook, true},
         {{L"?MoveGroup@TaskbarAppsList@implementation@Shell@UI@WindowsUdk@winrt@@QEAAXAEBV?$com_ptr_t@UITaskGroup@@Uerr_exception_policy@wil@@@wil@@I@Z"}, &g_moveSourceGroup, MoveSourceTraceHook, true},
-        {{L"?GetAppID@CTaskGroup@@UEAAPEBGXZ"}, &g_nativeAppId, NativeAppIdTraceHook, true},
     };
     WH_HOOK_SYMBOLS_OPTIONS options{};
     options.optionsSize = sizeof(options);
     options.noUndecoratedSymbols = TRUE;
-    constexpr size_t kTraceHookCount = 6;
+    constexpr size_t kTraceHookCount = 5;
     size_t count = ARRAYSIZE(taskbarHooks) - (g_binaryTraceEnabled ? 0 : kTraceHookCount);
     bool hooked = WindhawkUtils::HookSymbols(module, taskbarHooks, count, &options);
+    g_nativeItemsOffset = DecodeNativeItemsOffset(reinterpret_cast<void*>(g_nativeItemCount));
+    Wh_Log(L"phase=taskbar native-items-layout=%zu", g_nativeItemsOffset);
+    g_nativePreviewAvailable = g_nativePreviewAvailable && g_createWindowVisual && g_updateThumbnailFactory;
     if (hooked) hooked = WindhawkUtils::SetFunctionHook(MonitorFromWindow,
         MonitorFromWindowHook, &g_monitorFromWindow);
     FreeLibrary(module);
@@ -1643,7 +1672,6 @@ std::vector<IconCell> IconLayout(size_t memberCount, const TaskbarSettings& sett
     return cells;
 }
 
-std::atomic<bool> g_nativePreviewAvailable = true;
 struct NativeSize { float width, height; };
 class NativeGroupPreview {
 public:
@@ -1652,6 +1680,10 @@ public:
 
     HRESULT Initialize(IUnknown* group) {
         if (!g_nativePreviewAvailable) return E_NOINTERFACE;
+        // UI hover uses this group on another apartment. Only expose groups
+        // whose COM contract explicitly allows direct cross-apartment use.
+        ComPtr<IAgileObject> agile;
+        if (!group || FAILED(group->QueryInterface(IID_PPV_ARGS(&agile)))) return E_NOINTERFACE;
         constexpr wchar_t className[] = L"Windows.Internal.Shell.Multitasking.Desktop.DesktopThumbnailDevice";
         HSTRING name = nullptr;
         HRESULT hr = WindowsCreateString(className, ARRAYSIZE(className) - 1, &name);
@@ -1720,6 +1752,9 @@ HRESULT CreateGroupPreviewFactory(IUnknown* group, IUnknown** factory) {
 void RouteThumbnailFactory(UpdateThumbnailFactory original, void* self,
                             HRESULT (*create)(IUnknown*, IUnknown**) = CreateGroupPreviewFactory) {
     original(self);
+    if (!g_nativePreviewAvailable) return;
+    { std::lock_guard lock(g_hiddenMembersMutex);
+      if (g_proxyGroups->empty()) return; }
     auto& thumbnail = *static_cast<NativeModernThumbnail*>(self);
     auto group = ProxyPreviewGroup(thumbnail.item);
     if (!group) return;
@@ -1774,6 +1809,7 @@ HRESULT AttachGroupHoverVisual(NativeTaskThumbnail& thumbnail, IUnknown* factory
     return S_OK;
 }
 HRESULT WINAPI CreateWindowVisualHook(void* self, HWND window, SIZE size) {
+    if (!g_nativePreviewAvailable) return g_createWindowVisual(self, window, size);
     ComPtr<IUnknown> group;
     { std::lock_guard lock(g_hiddenMembersMutex);
       auto found = g_proxyGroups->find(IdentifyWindow(window));
@@ -2220,6 +2256,7 @@ public:
         subclassedLists.clear();
     }
     bool Create(GroupButton& button) override {
+        std::vector<ComPtr<IUnknown>> retiredGroups;
         button.window = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOREDIRECTIONBITMAP,
             kProxyClass, button.title.c_str(), WS_POPUP | WS_SYSMENU,
             -32000, -32000, 1, 1, nullptr, nullptr, instance, &button);
@@ -2254,7 +2291,7 @@ public:
         { std::lock_guard lock(g_hiddenMembersMutex);
           auto identity = IdentifyWindow(button.window);
           g_proxyWindows.insert(identity);
-          if (button.preview) (*g_proxyGroups)[identity] = button.nativeGroup; }
+          if (button.preview) retiredGroups.push_back(ExchangeProxyGroupLocked(identity, button.nativeGroup.Get())); }
         ShowWindow(button.window, SW_SHOWNOACTIVATE);
         hr = taskbar->AddTab(button.window);
         button.registrationPending = SUCCEEDED(hr);
@@ -2262,6 +2299,7 @@ public:
         return button.registrationPending;
     }
     void Update(GroupButton& button) override {
+        std::vector<ComPtr<IUnknown>> retiredGroups;
         // Publish before AddTab/confirmation and before any synchronous shell
         // refresh. Per-monitor mods query this HWND, not the group members.
         UpdateProxyMonitor(button);
@@ -2284,8 +2322,8 @@ public:
                 for (const auto& member : button.members) g_groupButtons[member] = button.window;
             auto identity = IdentifyWindow(button.window);
             if (g_proxyWindows.contains(identity)) {
-                if (button.preview) (*g_proxyGroups)[identity] = button.nativeGroup;
-                else g_proxyGroups->erase(identity);
+                retiredGroups.push_back(ExchangeProxyGroupLocked(identity,
+                    button.preview ? button.nativeGroup.Get() : nullptr));
             }
         }
         if (previewChanged) SetWindowPos(button.window, nullptr, -32000, -32000,
@@ -2339,7 +2377,8 @@ public:
         if (button.registered) {
             std::lock_guard lock(g_hiddenMembersMutex);
             for (const auto& member : button.members) g_groupButtons[member] = button.window;
-            if (button.preview) (*g_proxyGroups)[IdentifyWindow(button.window)] = button.nativeGroup;
+            if (button.preview) retiredGroups.push_back(ExchangeProxyGroupLocked(
+                IdentifyWindow(button.window), button.nativeGroup.Get()));
         }
         if (button.registered && button.iconRedrawPending) {
             HRESULT hr = NotifyIconChanged(button.window);
@@ -2381,6 +2420,7 @@ public:
         return hr;
     }
     void Destroy(GroupButton& button) override {
+        ComPtr<IUnknown> retiredGroup;
         auto proxy = IdentifyWindow(button.window);
         TraceWrite(TraceProxyRetire, TracePointer(button.window), button.registered,
                    button.registrationPending, button.members.size());
@@ -2397,7 +2437,7 @@ public:
         { std::lock_guard lock(g_hiddenMembersMutex);
           auto identity = IdentifyWindow(button.window);
           g_proxyWindows.erase(identity);
-          g_proxyGroups->erase(identity); }
+          retiredGroup.Swap(ExchangeProxyGroupLocked(identity, nullptr)); }
         if (button.window) DestroyWindow(button.window);
         // Retain routing through DeleteTab and HWND destruction callbacks.
         PublishProxyMonitor(proxy, nullptr);
@@ -2723,7 +2763,7 @@ DWORD WINAPI TaskbarThread(void*) {
             unsigned currentGeneration;
             { std::lock_guard lock(g_taskbarSettingsMutex);
               settings = g_taskbarSettings; currentGeneration = g_settingsGeneration.load(); }
-            if (!dispatcher) settings.nativePreview = false;
+            if (!dispatcher || !g_nativePreviewAvailable) settings.nativePreview = false;
             if (currentGeneration != generation) {
                 bool rebuilt = state.ApplySettings(settings, operations);
                 Wh_Log(L"phase=taskbar settings-applied rebuild=%d", rebuilt);
@@ -2777,8 +2817,10 @@ DWORD WINAPI TaskbarThread(void*) {
         g_taskbarHost = nullptr;
     } else Wh_Log(L"phase=taskbar window-init-failed code=%lu", GetLastError());
     state.Stop(operations);
+    std::map<WindowIdentity, ComPtr<IUnknown>> retiredGroups;
     { std::lock_guard lock(g_hiddenMembersMutex);
-      g_proxyGroups->clear(); } // release any remaining strong refs on their owning STA
+      retiredGroups.swap(*g_proxyGroups); }
+    retiredGroups.clear(); // release remaining refs on the worker, outside the lock
     operations.DetachLists();
     if (host) DestroyWindow(host);
     if (hostAtom) UnregisterClassW(hostClass.lpszClassName, operations.instance);
@@ -2852,7 +2894,8 @@ bool ActivateTaskbarFilter(bool deferred, bool (*hook)() = HookTaskbarFilter,
 bool InitializeTaskbarIntegration(bool deferred) {
     if (g_taskbarInitAttempted.exchange(true)) return g_taskbarFilterReady.load();
     // Preview ABI failure disables previews independently of taskbar buttons.
-    g_nativePreviewAvailable = CheckedNativeImage(L"DesktopSwitcherDataModel.dll", 0xf9a924c5, 0x56000);
+    g_nativePreviewAvailable = CheckedNativeImage(L"Taskbar.dll", 0x4059c321, 0x30d000) &&
+        CheckedNativeImage(L"DesktopSwitcherDataModel.dll", 0xf9a924c5, 0x56000);
     Wh_Log(L"phase=taskbar preview-abi=%d", g_nativePreviewAvailable.load());
     // The user permits unverified revisions. Required symbols still have to
     // resolve, but matching names do not validate our native fields/slots.
