@@ -9,7 +9,7 @@
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lshell32
+// @compilerOptions -lcomctl32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -113,7 +113,6 @@ If you find this mod useful, you can support its development and maintenance:
 #include <deque>
 #include <memory>
 #include <mutex>
-#include <tuple>
 #include <vector>
 
 // Shared types.
@@ -380,10 +379,6 @@ class BoundedPtrSet {
         return m_count == 0;
     }
 
-    [[nodiscard]] size_t size() const noexcept {
-        return m_count;
-    }
-
   private:
     std::array<void*, Capacity> m_entries{};
     size_t m_count = 0;
@@ -605,12 +600,7 @@ static VOID CALLBACK WorkerCallback(PTP_CALLBACK_INSTANCE, PVOID, PTP_WORK) {
     }
 
     auto res = std::make_unique<Result>();
-    try {
-        InspectStorageMetadata(*job, *res);
-    } catch (...) {
-        Wh_Log(L"[POOL] Metadata inspection raised exception");
-        return;
-    }
+    InspectStorageMetadata(*job, *res);
 
     if (unloading.load(std::memory_order_acquire)) {
         return;
@@ -946,6 +936,11 @@ static void ReportTelemetryIfNeeded(const wchar_t* reason, ULONGLONG fallbackSta
                navMs, target->batchCount, target->isGroupedView ? 1 : 0,
                reason ? reason : L"unknown");
     } else if (fallbackStartTick) {
+        static thread_local ULONGLONG lastReportedFallbackTick = 0;
+        if (lastReportedFallbackTick == fallbackStartTick) {
+            return;
+        }
+        lastReportedFallbackTick = fallbackStartTick;
         const ULONGLONG now = GetTickCount64();
         const ULONGLONG navMs = now >= fallbackStartTick ? (now - fallbackStartTick) : 0;
         Wh_Log(L"[TELEMETRY] Transition complete (navMs=%llu, batchCount=%zu, grouped=%d, "
@@ -1291,14 +1286,6 @@ class TaskQueue {
         }
     }
 
-    void Clear() noexcept {
-        for (size_t i = 0; i < m_count; ++i) {
-            m_buffer[(m_head + i) & (kCapacity - 1)].Reset();
-        }
-        m_head = 0;
-        m_count = 0;
-    }
-
   private:
     std::array<Task, kCapacity> m_buffer{};
     size_t m_head = 0;
@@ -1325,7 +1312,6 @@ static thread_local Queue* queue;
 static thread_local BoundedPtrSet<32> connectedTargets;
 thread_local ULONGLONG started = 0;
 static thread_local bool ready;
-static thread_local bool telemetryReported;
 static WindowLifetime lifetime;
 static HINSTANCE instance;
 static bool registered;
@@ -1337,8 +1323,7 @@ static NavState navStateOriginal;
 
 static void Flush(const wchar_t* reason = L"unknown") {
     WindowLifetime::Callback callback(lifetime);
-    if (started && !telemetryReported) {
-        telemetryReported = true;
+    if (started) {
         FileTransition::ReportTelemetryIfNeeded(reason, started);
     }
     Queue* q = queue;
@@ -1565,7 +1550,6 @@ static void NavigationStarted() {
     Flush(L"preempt");
     started = GetTickCount64();
     ready = false;
-    telemetryReported = false;
 }
 
 static void ViewReady() {
@@ -2354,7 +2338,6 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
-    MetadataWork::Uninit();
     RibbonWork::Uninit();
     ReleaseModules();
 }
