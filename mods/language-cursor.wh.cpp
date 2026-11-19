@@ -7,9 +7,8 @@
 // @version         1.0.0
 // @author          Sanekx Arcs
 // @github          https://github.com/SanekxArcs
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lgdiplus -lgdi32 -lshcore -lole32
+// @include         windhawk.exe
+// @compilerOptions -lgdiplus -lgdi32 -lshcore -loleacc -lole32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -18,7 +17,7 @@
 
 Shows the current keyboard layout as a small badge next to the mouse pointer,
 so you know which language you are about to type in before you press a key. It
-follows the layout of the app you are working in, not of Explorer.
+follows the layout of the app you are working in.
 
 ## Indicator modes
 
@@ -33,6 +32,10 @@ follows the layout of the app you are working in, not of Explorer.
 * **Always**.
 * **Only over text fields**: while the pointer is an I-beam.
 * **Briefly after switching language**: for a duration you choose.
+
+While you type, many apps hide the mouse pointer. With **Show at the text
+caret while the pointer is hidden** turned on, the badge then moves next to the
+text caret, in apps that report where their caret is.
 
 It can also hide when the pointer is hidden and in full-screen apps. You can
 set its position around the pointer, distance, font size, opacity, corner
@@ -56,12 +59,17 @@ as `%USERPROFILE%`, and the files must stay available.
 
 Custom pointers and the text-cursor mode change the Windows system pointers.
 The mod restores the Windows pointer scheme when it is disabled or unloaded,
-and on its next start if Explorer crashed while pointers were changed. To
-restore them by hand, open Windows Mouse settings > Pointers and click Apply.
+and on its next start if it was closed unexpectedly while pointers were
+changed. To restore them by hand, open Windows Mouse settings > Pointers and
+click Apply.
+
+Restoring reloads the whole Windows pointer scheme, so pointers that another
+mod or app changed at run time are reset too.
 
 ## Performance
 
-The mod runs one background thread in Explorer and installs no hooks. It checks
+The mod runs in its own `windhawk.exe` process, not inside Explorer or other
+apps, and installs no hooks. It checks
 the pointer 60 times a second only while the badge is visible and the pointer
 is moving, and slows down to about 8 checks a second when nothing is happening.
 
@@ -70,6 +78,14 @@ is moving, and slows down to about 8 checks a second when nothing is happening.
 * The badge isn't shown over the secure desktop (UAC prompts, lock screen), and
   may not appear over some full-screen games.
 * Animated GIF images show only their first frame.
+* Showing the badge at the text caret depends on the app. Some apps don't
+  report the caret position, and the badge stays hidden there while the pointer
+  is hidden.
+* **Only over text fields** and the text-cursor mode work with the standard
+  Windows I-beam pointer. Apps that draw their own text pointer are not
+  detected.
+* The label I-beam in text-cursor mode is always black and white. It does not
+  follow a custom pointer color or scheme.
 * The **Switching enabled** setting pauses and resumes everything without
   disabling the mod.
 */
@@ -118,6 +134,8 @@ is moving, and slows down to about 8 checks a second when nothing is happening.
   $name: After-switch duration (500 to 5000 ms)
 - hideWhenPointerHidden: true
   $name: Hide when the pointer is hidden
+- showAtCaret: true
+  $name: Show at the text caret while the pointer is hidden (typing)
 - hideInFullScreen: true
   $name: Hide in fullscreen apps
 - typingScale: 200
@@ -163,8 +181,10 @@ is moving, and slows down to about 8 checks a second when nothing is happening.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <gdiplus.h>
+#include <oleacc.h>
 #include <shellscalingapi.h>
 #include <algorithm>
 #include <atomic>
@@ -173,7 +193,6 @@ is moving, and slows down to about 8 checks a second when nothing is happening.
 #include <cwctype>
 #include <memory>
 #include <mutex>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -190,13 +209,13 @@ struct Mapping {
 struct Settings {
     bool enabled = true;
     Mode mode = Mode::FollowPointer;
-    Position position = Position::BottomRight;
-    double offsetX = 14, offsetY = 18, size = 12, opacity = .95, roundness = .45;
-    bool shadow = true;
-    Visibility visibility = Visibility::Always;
+    Position position = Position::TopLeft;
+    double offsetX = -14, offsetY = 12, size = 9, opacity = .6, roundness = 1;
+    bool shadow = false;
+    Visibility visibility = Visibility::OverText;
     DWORD afterSwitchMs = 1500;
-    bool hideWhenPointerHidden = true, hideInFullScreen = true;
-    double typingScale = 1;
+    bool hideWhenPointerHidden = true, hideInFullScreen = true, showAtCaret = true;
+    double typingScale = 2;
     std::vector<Mapping> mappings;
 };
 
@@ -224,12 +243,8 @@ HANDLE g_stop = nullptr, g_wake = nullptr, g_ready = nullptr, g_thread = nullptr
 std::atomic<bool> g_started = false;
 
 std::wstring ReadString(PCWSTR name) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result;
-    try { if (value) { result = value; } }
-    catch (...) { if (value) { Wh_FreeStringSetting(value); } throw; }
-    if (value) { Wh_FreeStringSetting(value); }
-    return result;
+    auto setting = WindhawkUtils::StringSetting::make(name);
+    return setting.get();
 }
 
 double ParseNumber(const std::wstring& text, double fallback, double minimum, double maximum) {
@@ -270,18 +285,19 @@ Settings LoadSettings() {
     for (size_t index = 0; index < ARRAYSIZE(positions); ++index) {
         if (position == positions[index]) { settings.position = static_cast<Position>(index); }
     }
-    settings.offsetX = ParseNumber(ReadString(L"offsetX"), 14, -40, 120);
-    settings.offsetY = ParseNumber(ReadString(L"offsetY"), 18, -40, 120);
-    settings.size = ParseNumber(ReadString(L"size"), 12, 8, 40);
+    settings.offsetX = ParseNumber(ReadString(L"offsetX"), -14, -40, 120);
+    settings.offsetY = ParseNumber(ReadString(L"offsetY"), 12, -40, 120);
+    settings.size = ParseNumber(ReadString(L"size"), 9, 8, 40);
     settings.opacity = std::clamp(Wh_GetIntSetting(L"opacity"), 20, 100) / 100.;
     settings.roundness = std::clamp(Wh_GetIntSetting(L"roundness"), 0, 100) / 100.;
     settings.shadow = Wh_GetIntSetting(L"shadow") != 0;
     auto visibility = ReadString(L"visibility");
-    settings.visibility = visibility == L"OverText" ? Visibility::OverText :
-        visibility == L"AfterSwitch" ? Visibility::AfterSwitch : Visibility::Always;
+    settings.visibility = visibility == L"Always" ? Visibility::Always :
+        visibility == L"AfterSwitch" ? Visibility::AfterSwitch : Visibility::OverText;
     settings.afterSwitchMs = std::clamp(Wh_GetIntSetting(L"afterSwitchMs"), 500, 5000);
     settings.hideWhenPointerHidden = Wh_GetIntSetting(L"hideWhenPointerHidden") != 0;
     settings.hideInFullScreen = Wh_GetIntSetting(L"hideInFullScreen") != 0;
+    settings.showAtCaret = Wh_GetIntSetting(L"showAtCaret") != 0;
     settings.typingScale = std::clamp(Wh_GetIntSetting(L"typingScale"), 100, 300) / 100.;
     for (int index = 0; index < 256; ++index) {
         std::wstring prefix = L"languages[" + std::to_wstring(index) + L"].";
@@ -374,6 +390,33 @@ HKL ForegroundLayout() {
         if (focused) { thread = focused; }
     }
     return thread ? GetKeyboardLayout(thread) : nullptr;
+}
+
+// Screen rectangle of the text caret in the foreground app. Classic controls
+// report it through the GUI thread info, browsers and many other apps through
+// the accessibility caret object. Returns false when the app reports neither.
+bool CaretRect(RECT& result) {
+    GUITHREADINFO information{sizeof(information)};
+    if (!GetGUIThreadInfo(0, &information)) { return false; }
+    if (information.hwndCaret && information.rcCaret.bottom > information.rcCaret.top) {
+        result = information.rcCaret;
+        MapWindowPoints(information.hwndCaret, nullptr, reinterpret_cast<POINT*>(&result), 2);
+        return true;
+    }
+    HWND target = information.hwndFocus ? information.hwndFocus : information.hwndActive;
+    if (!target || IsHungAppWindow(target)) { return false; }
+    IAccessible* caret = nullptr;
+    if (FAILED(AccessibleObjectFromWindow(target, static_cast<DWORD>(OBJID_CARET), IID_IAccessible,
+                                          reinterpret_cast<void**>(&caret))) || !caret) { return false; }
+    VARIANT self{};
+    self.vt = VT_I4;
+    self.lVal = CHILDID_SELF;
+    long left = 0, top = 0, width = 0, height = 0;
+    HRESULT status = caret->accLocation(&left, &top, &width, &height, self);
+    caret->Release();
+    if (status != S_OK || height <= 0) { return false; }
+    result = {left, top, left + std::max(width, 1L), top + height};
+    return true;
 }
 
 Gdiplus::Color ParseColor(const std::wstring& text, Gdiplus::Color fallback) {
@@ -661,10 +704,19 @@ HCURSOR MakeTextCursor(Style style, double scale, int factor) {
     return result;
 }
 
-using CursorWriter = BOOL(WINAPI*)(HCURSOR, DWORD);
-CursorWriter g_writeCursor = SetSystemCursor;
+// OCR_NORMAL and OCR_IBEAM. The names need OEMRESOURCE defined before the
+// first include of windows.h, which is too late in a Windhawk mod.
+constexpr DWORD kArrowCursor = 32512, kTextCursor = 32513;
+
 bool ResetSystemCursors() { return SystemParametersInfoW(SPI_SETCURSORS, 0, nullptr, 0) != FALSE; }
-bool (*g_resetCursors)() = ResetSystemCursors;
+
+// The flag is kept per session: storage is shared by all users of the PC, and
+// each session has its own pointers and its own copy of this process.
+std::wstring AppliedFlag() {
+    DWORD session = 0;
+    ProcessIdToSessionId(GetCurrentProcessId(), &session);
+    return L"cursorsApplied_" + std::to_wstring(session);
+}
 
 bool IsCursorPath(const std::wstring& path) {
     size_t dot = path.find_last_of(L'.');
@@ -676,12 +728,12 @@ class CursorManager {
     std::wstring arrow_, text_;
     bool marked_ = false;
     bool Mark() {
-        if (!marked_) { marked_ = Wh_SetIntValue(L"cursorsApplied", 1) != FALSE; }
+        if (!marked_) { marked_ = Wh_SetIntValue(AppliedFlag().c_str(), 1) != FALSE; }
         return marked_;
     }
     bool Transfer(HCURSOR cursor, DWORD role) {
         if (!cursor) { return false; }
-        if (!Mark() || !g_writeCursor(cursor, role)) {
+        if (!Mark() || !SetSystemCursor(cursor, role)) {
             DestroyCursor(cursor);
             return false;
         }
@@ -692,9 +744,9 @@ public:
     ~CursorManager() { Restore(); }
     bool Restore() {
         if (!marked_ && arrow_.empty() && text_.empty()) { return true; }
-        if (!g_resetCursors()) { Wh_Log(L"Could not restore Windows cursor scheme"); return false; }
+        if (!ResetSystemCursors()) { Wh_Log(L"Could not restore Windows cursor scheme"); return false; }
         arrow_.clear(); text_.clear(); marked_ = false;
-        Wh_SetIntValue(L"cursorsApplied", 0);
+        Wh_SetIntValue(AppliedFlag().c_str(), 0);
         return true;
     }
     bool Apply(const std::wstring& arrow, const Style* textStyle, const std::wstring& key,
@@ -707,13 +759,11 @@ public:
             if (!IsCursorPath(arrow)) { return Failed(); }
             HCURSOR loaded = LoadCursorFromFileW(arrow.c_str());
             if (!loaded) { return Failed(); }
-            HCURSOR copy = static_cast<HCURSOR>(CopyIcon(loaded));
-            DestroyCursor(loaded);
-            if (!Transfer(copy, 32512)) { return Failed(); }
+            if (!Transfer(loaded, kArrowCursor)) { return Failed(); }
             arrow_ = arrow;
         }
         if (textStyle && desiredText != text_) {
-            if (!Transfer(MakeTextCursor(*textStyle, scale, cursorFactor), 32513)) { return Failed(); }
+            if (!Transfer(MakeTextCursor(*textStyle, scale, cursorFactor), kTextCursor)) { return Failed(); }
             text_ = desiredText;
         }
         return true;
@@ -755,8 +805,9 @@ class Runtime {
     BYTE alpha_ = 0;
     POINT location_{LONG_MIN, LONG_MIN};
     POINT lastCursor_{LONG_MIN, LONG_MIN};
-    ULONGLONG movedAt_ = 0;
-    bool fading_ = false;
+    ULONGLONG movedAt_ = 0, lastCaret_ = 0;
+    bool fading_ = false, atCaret_ = false;
+    RECT caret_{};
 
 public:
     ~Runtime() {
@@ -778,13 +829,13 @@ public:
                                   nullptr, nullptr, module_, nullptr);
         return window_ != nullptr;
     }
-    HWND Window() const { return window_; }
     // How long to sleep before the next Tick. The fast rate is only needed
     // while the badge is on screen and has to follow the pointer or fade.
     DWORD PollInterval() const {
         if (!settings_.enabled) { return 500; }
         if (settings_.mode != Mode::FollowPointer) { return 120; }
         if (fading_) { return 16; }
+        if (atCaret_) { return alpha_ ? 50 : 120; }
         bool moving = GetTickCount64() - movedAt_ < 1000;
         if (alpha_) { return moving ? 16 : 50; }
         return moving ? 50 : 120;
@@ -822,13 +873,25 @@ public:
             lastCursor_ = cursor.ptScreenPos;
             movedAt_ = now;
         }
+        // While the pointer is hidden (many apps hide it during typing), the
+        // badge can sit next to the text caret instead.
+        bool pointerVisible = gotCursor && (cursor.flags & CURSOR_SHOWING) != 0;
+        bool wantCaret = gotCursor && !pointerVisible && settings_.enabled && settings_.showAtCaret &&
+            settings_.mode == Mode::FollowPointer;
+        if (!wantCaret) {
+            atCaret_ = false;
+        } else if (now - lastCaret_ >= 50) {
+            lastCaret_ = now;
+            atCaret_ = CaretRect(caret_);
+        }
+        POINT anchor = atCaret_ ? POINT{caret_.right, caret_.bottom} : cursor.ptScreenPos;
         bool screenRefresh = dirty || now - lastScreen_ >= 500;
         if (screenRefresh) {
             lastScreen_ = now;
             fullscreen_ = IsFullscreen();
         }
         if (gotCursor) {
-            HMONITOR monitor = MonitorFromPoint(cursor.ptScreenPos, MONITOR_DEFAULTTONEAREST);
+            HMONITOR monitor = MonitorFromPoint(anchor, MONITOR_DEFAULTTONEAREST);
             if (monitor != monitor_ || screenRefresh) {
                 MONITORINFO information{sizeof(information)};
                 if (GetMonitorInfoW(monitor, &information)) { bounds_ = information.rcMonitor; }
@@ -862,7 +925,7 @@ public:
         }
         bool overText = gotCursor && cursor.hCursor && cursor.hCursor == LoadCursorW(nullptr, IDC_IBEAM);
         bool visible = gotCursor && language_.layout && !badge_.pixels.empty() &&
-            ShouldShow(settings_, (cursor.flags & CURSOR_SHOWING) != 0, overText, fullscreen_, now, switched_);
+            ShouldShow(settings_, pointerVisible || atCaret_, overText || atCaret_, fullscreen_, now, switched_);
         BYTE target = visible ? static_cast<BYTE>(std::lround(settings_.opacity * 255)) : 0;
         BYTE nextAlpha = alpha_ < target ? static_cast<BYTE>(std::min(int(target), alpha_ + 48)) :
             static_cast<BYTE>(std::max(int(target), alpha_ - 32));
@@ -879,9 +942,14 @@ public:
             fading_ = false;
             return;
         }
-        POINT destination = PlaceBadge(settings_.position, cursor.ptScreenPos,
-            badge_.width - 2 * badge_.margin, badge_.height - 2 * badge_.margin,
-            settings_.offsetX * dpiScale_, settings_.offsetY * dpiScale_, bounds_, badge_.margin);
+        int badgeWidth = badge_.width - 2 * badge_.margin, badgeHeight = badge_.height - 2 * badge_.margin;
+        POINT destination = atCaret_ ?
+            PlaceBadge(Position::BottomRight, anchor, badgeWidth, badgeHeight,
+                       4 * dpiScale_, 4 * dpiScale_, bounds_, badge_.margin) :
+            PlaceBadge(settings_.position, anchor, badgeWidth, badgeHeight,
+                       settings_.offsetX * dpiScale_, settings_.offsetY * dpiScale_, bounds_, badge_.margin);
+        // Fade out in place instead of jumping to the hidden pointer.
+        if (!visible && shown_ && !pointerVisible) { destination = location_; }
         if (dirty || alphaChanged || !shown_) {
             SIZE size{badge_.width, badge_.height};
             POINT source{};
@@ -903,25 +971,20 @@ public:
 
 DWORD WINAPI Worker(void*) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    HANDLE singleton = CreateMutexW(nullptr, FALSE, L"Local\\Windhawk.LanguageCursor.Singleton");
-    DWORD ownership = singleton ? WaitForSingleObject(singleton, 0) : WAIT_FAILED;
-    if (ownership != WAIT_OBJECT_0 && ownership != WAIT_ABANDONED) {
-        Wh_Log(L"Another Language Cursor mod instance is already running");
-        if (singleton) { CloseHandle(singleton); }
-        SetEvent(g_ready);
-        return 1;
-    }
+    bool comReady = SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
     Gdiplus::GdiplusStartupInput startup;
     ULONG_PTR token = 0;
     Gdiplus::Status startupStatus = Gdiplus::GdiplusStartup(&token, &startup, nullptr);
     try {
         if (startupStatus == Gdiplus::Ok) {
-            if (Wh_GetIntValue(L"cursorsApplied", 0) != 0) {
-                if (!g_resetCursors()) { throw std::runtime_error("Crash recovery failed"); }
-                Wh_SetIntValue(L"cursorsApplied", 0);
+            bool recovered = true;
+            if (Wh_GetIntValue(AppliedFlag().c_str(), 0) != 0) {
+                recovered = ResetSystemCursors();
+                if (recovered) { Wh_SetIntValue(AppliedFlag().c_str(), 0); }
+                else { Wh_Log(L"Could not restore Windows cursor scheme after an unexpected exit"); }
             }
             Runtime runtime;
-            if (runtime.Initialize()) {
+            if (recovered && runtime.Initialize()) {
                 g_started = true;
                 SetEvent(g_ready);
                 HANDLE events[] = {g_stop, g_wake};
@@ -943,8 +1006,7 @@ DWORD WINAPI Worker(void*) {
     g_started = false;
     SetEvent(g_ready);
     if (startupStatus == Gdiplus::Ok) { Gdiplus::GdiplusShutdown(token); }
-    ReleaseMutex(singleton);
-    CloseHandle(singleton);
+    if (comReady) { CoUninitialize(); }
     return 0;
 }
 
@@ -968,7 +1030,7 @@ void Reload() {
 
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     try { Reload(); }
     catch (...) { Wh_Log(L"Could not load Language Cursor settings"); return FALSE; }
     g_started = false;
@@ -983,10 +1045,188 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     try { Reload(); }
     catch (...) { Wh_Log(L"Invalid settings update; keeping previous settings"); }
 }
 
-void Wh_ModBeforeUninit() { Stop(); }
-void Wh_ModUninit() { Stop(); }
+void WhTool_ModUninit() { Stop(); }
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
