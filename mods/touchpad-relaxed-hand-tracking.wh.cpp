@@ -23,8 +23,8 @@ Move the pointer with more fingers resting on a precision touchpad, as if glidin
 - **Trigger:** with 5, down to 2 fingers touching the pad. When only 1, Windows takes control. To avoid lag, activation has to be inclusive, where 4 contacts (even if deactivated) contains 3 and 2, and those will be triggered when enabled. 
 - **Disarm:** after all fingers leave the touchpad. Lifting some keeps the tracking going.
 - **Movement:** each finger influences as much as it moves. Resting fingers fade and don't fight the others. The thumb is completely ignored (unless it is the only touching, when Windows takes control). With one or two fingers moving, the lower speed multiplier applies; with more moving together, the higher one.
-- **Click:** you only need to lift the tapping finger(s).Same as native - finger(s) (double) tap to (double) click, tap-hold to drag, tap-tap-hold to drag-select text by words, etc. **A hold lasts until another tap or the whole hand leaves the pad**. Excludes the thumb.
-- **Scrolling:** Windows touchpad scroll is ignored during more-fingers actions. You can 2-finger tap-slide to scroll while having other fingers on the pad. They will "hold" the scrolling operation until you lift all from the pad. Same in substitution for the system's, when 2-finger tracking is enabled. **Windows' scroll and mod's tracking both get activated if you start with 2 and rest more fingers on the touchpad.** Ideally you'll leave Window's 2-finger scroll for the mod's. Holding the **Scroll output switch hotkey** before or during the action momentarily swaps the output type for instant app adaptation, as the mod is not capable of hybridly scrolling like Windows does.
+- **Click:** you only need to lift the tapping finger(s). Same as native - finger(s) (double) tap to (double) click, tap-hold to drag, tap-tap-hold to drag-select text by words, etc. **A hold lasts until another tap or the whole hand leaves the pad**. Excludes the thumb.
+- **Scrolling:** Windows touchpad scroll is ignored during more-fingers actions. You can 2-finger tap-slide to scroll while having other fingers on the pad. They will "hold" the scrolling operation until you lift all from the pad. Same in substitution for the system's, when 2-finger tracking is enabled. **Windows' scroll and mod's tracking both get activated if you start with 2 and rest more fingers on the touchpad.** Ideally you'll leave Windows' 2-finger scroll for the mod's. Pressing the **Scroll output switch hotkey** during the action momentarily swaps the output type for instant app adaptation, as the mod is not capable of hybridly scrolling like Windows does.
 
 ## The thumb
 
@@ -65,7 +65,7 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
 /*
 - hand: right
   $name: Hand
-  $description: The hand on the touchpad. Helps filtering thumb contradictory movements.
+  $description: The hand on the touchpad. Helps filter out the thumb's contrary movements.
   $options:
   - right: Right
   - left: Left
@@ -109,7 +109,7 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
   - touch: Touch
 - scrollSwitch: "Win"
   $name: Scroll output switch hotkey
-  $description: Held before or during a scroll, uses the other output method, for live adaptability. Win, alone or + Ctrl, Alt, Shift.
+  $description: Pressed during a scroll, momentarily switches output methods, for live adaptability. Win, alone or + Ctrl, Alt, Shift.
 - diagHotkey: ""
   $name: Diagnostics overlay hotkey
   $description: Shows how the mod reads each finger. Win + Ctrl, Alt, Shift + key, like Win+Shift+D. The window accepts only native one-finger dragging and resizing. 
@@ -349,6 +349,9 @@ std::atomic<int> g_hand{1};  // 1 right hand (thumb left of the fingers), -1 lef
 std::atomic<bool> g_scrollReverse;
 std::atomic<bool> g_touchScroll;
 std::atomic<UINT> g_scrollSwitchMods;  // MOD_* flags, MOD_WIN among them, or 0 for none
+std::atomic<bool> g_switchUsed;  // the switch key is held and scrolled: set by the touchpad thread, cleared by its hook
+bool g_switchLatched;            // the other output is on, until the pad empties: touchpad thread only
+bool g_switchWasHeld = true;     // the switch key was held at the last read, for its presses (true: not read yet)
 std::atomic<bool> g_armThree;
 std::atomic<bool> g_armFour;
 std::atomic<bool> g_armFive{true};
@@ -374,7 +377,7 @@ HANDLE g_hookThread;
 DWORD g_hookThreadId;
 constexpr UINT kWheelBlockMessage = WM_APP + 1;
 constexpr UINT kHotkeySettingMessage = WM_APP + 2;  // posted to g_hWnd: the hotkey setting changed
-constexpr UINT kSwitchUnhookMessage = WM_APP + 3;   // posted to g_hWnd: the switch key's release was masked
+constexpr UINT kSwitchHookMessage = WM_APP + 3;     // posted to the hook thread: 1 hooks the switch key, 0 unhooks
 constexpr int kVizHotkeyId = 1;
 constexpr UINT_PTR kStaleTimerId = 1;
 constexpr UINT_PTR kTwoTapTimerId = 2;
@@ -827,6 +830,8 @@ void EndGlide() {
     }
     g_state.pairScroll = false;
     g_state.scrollSession = false;
+    g_switchLatched = false;
+    g_switchWasHeld = true;
     TouchEnd();
     g_travelLog.clear();
     g_state.refIds.clear();
@@ -850,10 +855,16 @@ void EndGlide() {
 }
 
 void FeedbackRelease();
+UINT HeldMods();
+void SwitchUnhook();
 
 void ResetSession() {
     EndGlide();
     FeedbackRelease();
+    // A switch key released where the hook doesn't run (the lock screen) left the next, unrelated release masked.
+    if (g_switchUsed && !(HeldMods() & g_scrollSwitchMods)) {
+        SwitchUnhook();
+    }
     g_frame.clear();
     g_frameExpected = 0;
 }
@@ -1067,7 +1078,7 @@ DWORD WINAPI BadgeThread(LPVOID param) {
     g_badge.dc = CreateCompatibleDC(nullptr);
     // Loaded at run time: linked, it needed dwmapi in the compiler options.
     using DwmFlushFn = HRESULT(WINAPI*)();
-    HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
+    HMODULE dwm = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     auto dwmFlush = dwm ? (DwmFlushFn)(void*)GetProcAddress(dwm, "DwmFlush") : nullptr;
     POINT last{LONG_MIN, LONG_MIN};
     while (!g_badge.quit) {
@@ -1424,16 +1435,15 @@ void TouchPan(double dxMm, double dyMm) {
     }
 }
 
-// The output for this frame: the setting's, or the other one while the switch key is held. Read on every
-// frame, so that it changes before or during a scroll.
+// The output for this frame: each press of the switch key during a scroll swaps it, until the pad empties
+// (EndGlide) and the setting's comes back. Released mid-scroll, the output stays, and so does its inertia. A key
+// already held when the scroll starts isn't a press: the user only sees which output fails once scrolling.
 //
-// Released alone, Win opens Start and Alt the menu bar. Once the key scrolled, a keyboard hook (only until its
-// release) swallows that release and sends it again behind a key that does nothing (0xE8, unassigned), which
-// makes it a shortcut. Masked while held, the key's own repeats undid it, and Start still opened. The first of
-// the keys released is masked, injected ones included: a key remapped to Win by AutoHotkey or PowerToys arrives
-// injected.
-bool g_switchUsed;  // the switch key is held and scrolled
-HHOOK g_switchHook;
+// Released alone, Win opens Start and Alt the menu bar. Once the key scrolled, a keyboard hook on the hook thread
+// (only until its release) swallows that release and sends it again behind a key that does nothing (0xE8,
+// unassigned), which makes it a shortcut. Masked while held, the key's own repeats undid it, and Start still opened.
+// The first of the keys released is masked, injected ones included: a key remapped to Win by AutoHotkey or PowerToys
+// arrives injected.
 
 bool IsSwitchKey(DWORD vk) {
     UINT mods = g_scrollSwitchMods;
@@ -1469,7 +1479,7 @@ LRESULT CALLBACK SwitchKeyProc(int code, WPARAM wParam, LPARAM lParam) {
         input[2].ki.wScan = (WORD)k->scanCode;
         input[2].ki.dwFlags = KEYEVENTF_KEYUP | ((k->flags & LLKHF_EXTENDED) ? KEYEVENTF_EXTENDEDKEY : 0);
         input[2].ki.dwExtraInfo = k->dwExtraInfo;
-        PostMessage(g_hWnd, kSwitchUnhookMessage, 0, 0);
+        PostThreadMessage(GetCurrentThreadId(), kSwitchHookMessage, 0, 0);
         // Not sent (an elevated window in front), the release goes as it is, so that the key doesn't stay down.
         if (SendInput(ARRAYSIZE(input), input, sizeof(INPUT)) == ARRAYSIZE(input)) {
             return 1;
@@ -1480,22 +1490,22 @@ LRESULT CALLBACK SwitchKeyProc(int code, WPARAM wParam, LPARAM lParam) {
 
 void SwitchUnhook() {
     g_switchUsed = false;
-    if (g_switchHook) {
-        UnhookWindowsHookEx(g_switchHook);
-        g_switchHook = nullptr;
+    if (g_hookThreadId) {
+        PostThreadMessage(g_hookThreadId, kSwitchHookMessage, 0, 0);
     }
 }
 
 bool TouchOutput() {
     UINT mods = g_scrollSwitchMods;
     bool held = mods && HeldMods() == mods;
-    if (held && !g_switchUsed) {
-        if (!g_switchHook) {
-            g_switchHook = SetWindowsHookEx(WH_KEYBOARD_LL, SwitchKeyProc, GetModuleHandle(nullptr), 0);
+    if (held && !g_switchWasHeld) {
+        g_switchLatched = !g_switchLatched;
+        if (g_hookThreadId && !g_switchUsed.exchange(true)) {
+            PostThreadMessage(g_hookThreadId, kSwitchHookMessage, 1, 0);
         }
-        g_switchUsed = g_switchHook != nullptr;
     }
-    return g_touchScroll != held;
+    g_switchWasHeld = held;
+    return g_touchScroll != g_switchLatched;
 }
 
 // Wheel units follow the fingers, without acceleration. Off, the page follows the fingers: down scrolls up.
@@ -2857,6 +2867,15 @@ void VizCreate(HINSTANCE hInstance) {
         x = work.right - width - VizPx(16);
         y = work.bottom - height - VizPx(16);
     }
+    // A size saved on a larger monitor fits this one's work area.
+    MONITORINFO mi{.cbSize = sizeof(mi)};
+    if (GetMonitorInfo(MonitorFromWindow(g_viz.hWnd, MONITOR_DEFAULTTONEAREST), &mi)) {
+        const RECT& r = mi.rcWork;
+        width = std::min(width, (int)(r.right - r.left));
+        height = std::min(height, (int)(r.bottom - r.top));
+        x = std::clamp(x, (int)r.left, (int)r.right - width);
+        y = std::clamp(y, (int)r.top, (int)r.bottom - height);
+    }
     SetWindowPos(g_viz.hWnd, nullptr, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
     SetLayeredWindowAttributes(g_viz.hWnd, 0, 225, LWA_ALPHA);
 }
@@ -3141,6 +3160,11 @@ void ProcessFrame() {
         return;
     }
     FeedbackScroll();
+    // A scroll held by a resting finger, its fingers up, reads the switch key too: never seen there, it didn't switch
+    // the scroll they come back to, and its release opened Start.
+    if (g_two.scrolling || g_state.scrollSession) {
+        TouchOutput();
+    }
 
     // A palm or thumb (Confidence = 0) only counts toward the whole hand's five: with three on, a two-finger
     // scroll with the thumb resting would start a glide. A count which is off doesn't start: its swipe is Windows'.
@@ -3687,9 +3711,9 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-// The hook runs on a thread of its own, which does nothing else: the system waits for it on every mouse
-// event, and on the touchpad thread, busy moving the pointer, it held all input, the touchpad's included,
-// for up to a second.
+// The hooks (the wheel block, and the switch key's) run on a thread of its own, which does nothing else: the system
+// waits for it on every mouse or key event, and on the touchpad thread, busy moving the pointer, the mouse hook held
+// all input, the touchpad's included, for up to a second.
 DWORD WINAPI HookThread(LPVOID readyEvent) {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
@@ -3703,7 +3727,22 @@ DWORD WINAPI HookThread(LPVOID readyEvent) {
     SetEvent((HANDLE)readyEvent);
 
     HHOOK hook = nullptr;
+    HHOOK switchHook = nullptr;
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {
+        // Unhooked only if the key wasn't used again meanwhile.
+        if (msg.message == kSwitchHookMessage) {
+            if (msg.wParam && !switchHook) {
+                switchHook = SetWindowsHookEx(WH_KEYBOARD_LL, SwitchKeyProc, hInstance, 0);
+                if (!switchHook) {
+                    Wh_Log(L"Switch key hook error: %u", GetLastError());
+                    g_switchUsed = false;
+                }
+            } else if (!msg.wParam && switchHook && !g_switchUsed) {
+                UnhookWindowsHookEx(switchHook);
+                switchHook = nullptr;
+            }
+            continue;
+        }
         if (msg.message != kWheelBlockMessage) {
             continue;
         }
@@ -3720,6 +3759,9 @@ DWORD WINAPI HookThread(LPVOID readyEvent) {
 
     if (hook) {
         UnhookWindowsHookEx(hook);
+    }
+    if (switchHook) {
+        UnhookWindowsHookEx(switchHook);
     }
     return 0;
 }
@@ -3739,12 +3781,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         case WM_HOTKEY:
             if (wParam == kVizHotkeyId) {
                 VizShow(!g_vizShown);
-            }
-            return 0;
-
-        case kSwitchUnhookMessage:
-            if (!g_switchUsed) {
-                SwitchUnhook();
             }
             return 0;
 
@@ -3884,6 +3920,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
 
         RunMessageLoop();
 
+        // Disabled mid-gesture: a hold or a tap's press would stay down after the process exits.
+        ResetSession();
         FeedbackListen(false);
         SetWheelBlock(false);
         WTSUnRegisterSessionNotification(g_hWnd);
