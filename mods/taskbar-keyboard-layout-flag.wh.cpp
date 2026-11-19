@@ -2169,7 +2169,7 @@ bool HookTaskbarDllSymbols(HMODULE taskbarMod) {
         return true;
     }
 
-    WindhawkUtils::SYMBOL_HOOK taskbarHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             { L"public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void)" },
             &IconView_Init_Orig,
@@ -2190,7 +2190,7 @@ bool HookTaskbarDllSymbols(HMODULE taskbarMod) {
         }
     };
 
-    if (!WindhawkUtils::HookSymbols(taskbarMod, taskbarHooks, ARRAYSIZE(taskbarHooks))) {
+    if (!WindhawkUtils::HookSymbols(taskbarMod, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(L"Failed to hook required SystemTray::IconView symbols in Taskbar.dll.");
         g_taskbarDllHooked.store(false, std::memory_order_release);
         return false;
