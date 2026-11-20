@@ -380,7 +380,7 @@ struct Wheel {
     bool forceRender = true; // something changed that FrameKey can't see
     std::vector<MSG> pending; // hook events delivered by a nested loop
     POINT center = {};       // screen px
-    int tiltY = 0;           // screen y the dead band is centred on
+    bool tiltArmed = false;  // tilt waits until the cursor is in the band
     float scale = 1.0f;
     int size = 0;            // window is size x size px
     float outerPx = 0.0f;    // current rim radius, px (fits this level)
@@ -957,10 +957,10 @@ static void Render() {
         const D2D1_COLOR_F col = Color(0xFFCC33);
         g.brush->SetColor(&col);
         g.brush->SetOpacity(0.7f);
-        // The band's two edges, on the line the wheel was opened from.
+        // The band's two edges, either side of the centre line.
         const float band =
             g.tiltR * float(std::sin(cfg.deadBandDeg * kPi / 180.0));
-        const float mid = c + float(g.tiltY - g.center.y);
+        const float mid = c;
         for (int sign = -1; sign <= 1; sign += 2) {
             D2D1_POINT_2F a, b;
             a.x = c - g.tiltR; a.y = mid + float(sign) * band;
@@ -1973,7 +1973,7 @@ static void OpenWheel(POINT pt) {
     g.forceRender = true;
     ApplyTheme();
     g.center = pt;
-    g.tiltY = pt.y;
+    g.tiltArmed = false;  // Tick arms it once the cursor is in the band
     g.pressed = false;
     g.dragging = false;
     g.typed.clear();
@@ -1997,8 +1997,10 @@ static void OpenWheel(POINT pt) {
         // the edge. Half the radius is enough: the part still off-screen is
         // the faded, steeply tilted end of the arc, and items turn into view
         // well before they matter. A full shift moves the wheel further from
-        // the cursor than feels right. The dead band stays on the line the
-        // cursor is on (tiltY), so the wheel does not open already spinning.
+        // the cursor than feels right. That leaves the cursor outside the
+        // dead band, so tilt stays off until the cursor has first come to
+        // the band (see Tick). The wheel never opens already spinning, and
+        // moving toward the highlighted item does not spin it away.
         const int keep = int(g.outerPx * cfg.edgeKeep);
         const int top = mi.rcMonitor.top + keep;
         const int bottom = mi.rcMonitor.bottom - keep;
@@ -2165,8 +2167,12 @@ static void Tick(double dt) {
     // Below the band = further down the list, on either side.
     const double R = g.tiltR;
     const double band = R * std::sin(cfg.deadBandDeg * kPi / 180.0);
-    const double dy = double(p.y) - double(g.tiltY);
+    const double dy = double(p.y) - double(g.center.y);
     double v = 0.0;
+    // Normally the wheel opens with the cursor on the centre line, so this
+    // arms at once. Opened off-centre (at a screen edge), it arms when the
+    // cursor first reaches the band.
+    if (!g.tiltArmed && std::fabs(dy) <= band) g.tiltArmed = true;
     const bool dismissing = g.closing && !g.closeCancelable;
     const bool pressing = g.pressed && !g.dragging;  // hold still while aiming
     if (g.tiltHeld) {
@@ -2174,7 +2180,8 @@ static void Tick(double dt) {
         const double mx = p.x - g.holdPos.x, my = p.y - g.holdPos.y;
         if (mx * mx + my * my > hold * hold) g.tiltHeld = false;
     }
-    if (cfg.tilt && inside && !dismissing && !g.tiltHeld && !pressing) {
+    if (cfg.tilt && g.tiltArmed && inside && !dismissing && !g.tiltHeld &&
+        !pressing) {
         const double d = std::fabs(dy) - band;
         if (d > 0.0) {
             const double range = std::max(1.0, (R - band) * cfg.tiltRange);
@@ -2727,6 +2734,14 @@ static bool RunWheel(HMENU hMenu, UINT flags, int x, int y, HWND owner,
                 PostQuitMessage(int(msg.wParam));  // not ours to swallow
                 CloseWheel();
                 break;
+            }
+            // If a nested loop left hook events with the window procedure,
+            // newer ones join that queue so they are all handled in the
+            // order they happened (a button-up must not overtake its down).
+            if (msg.hwnd == g.hwnd && msg.message >= WM_WHEEL_LDOWN &&
+                msg.message <= WM_WHEEL_OUTSIDE && !g.pending.empty()) {
+                g.pending.push_back(msg);
+                continue;
             }
             if (HandleWheelEvent(msg)) continue;
             // Keys are the wheel's while it is open.
