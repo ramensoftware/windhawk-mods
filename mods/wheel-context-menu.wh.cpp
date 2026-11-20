@@ -52,7 +52,8 @@ example with the "Classic context menu on Windows 11" mod).
 Only `explorer.exe` is targeted by default. Any program that shows classic
 menus through `TrackPopupMenu` can be added from the mod's Advanced tab.
 Programs that draw their own menus (browsers, Office, most Electron apps)
-are not affected.
+are not affected. A program that is not per-monitor DPI aware may misjudge
+clicks on a scaled display.
 
 ## Other context menu mods
 
@@ -375,7 +376,9 @@ struct Wheel {
     HMENU resMenu = nullptr;
     UINT resPos = 0;
     bool forceRender = true; // something changed that FrameKey can't see
+    std::vector<MSG> pending; // hook events delivered by a nested loop
     POINT center = {};       // screen px
+    int tiltY = 0;           // screen y the dead band is centred on
     float scale = 1.0f;
     int size = 0;            // window is size x size px
     float outerPx = 0.0f;    // current rim radius, px (fits this level)
@@ -952,16 +955,16 @@ static void Render() {
         const D2D1_COLOR_F col = Color(0xFFCC33);
         g.brush->SetColor(&col);
         g.brush->SetOpacity(0.7f);
+        // The band's two edges, on the line the wheel was opened from.
+        const float band =
+            g.tiltR * float(std::sin(cfg.deadBandDeg * kPi / 180.0));
+        const float mid = c + float(g.tiltY - g.center.y);
         for (int sign = -1; sign <= 1; sign += 2) {
-            const D2D1_MATRIX_3X2_F m =
-                RotationAbout(float(sign) * cfg.deadBandDeg, c, c);
-            g.rt->SetTransform(&m);
             D2D1_POINT_2F a, b;
-            a.x = c - g.tiltR; a.y = c;
-            b.x = c + g.tiltR; b.y = c;
+            a.x = c - g.tiltR; a.y = mid + float(sign) * band;
+            b.x = c + g.tiltR; b.y = a.y;
             g.rt->DrawLine(a, b, g.brush, 1.0f, nullptr);
         }
-        g.rt->SetTransform(&identity);
     }
 
     // Mirrored, labels are right-aligned so they still start at the hub.
@@ -1164,6 +1167,7 @@ static void Render() {
     const HRESULT hr = g.rt->EndDraw(nullptr, nullptr);
     if (hr == HRESULT(D2DERR_RECREATE_TARGET)) {
         DiscardDeviceResources();
+        g.forceRender = true;  // this frame was lost; draw it again
         return;
     }
 
@@ -1967,6 +1971,7 @@ static void OpenWheel(POINT pt) {
     g.forceRender = true;
     ApplyTheme();
     g.center = pt;
+    g.tiltY = pt.y;
     g.pressed = false;
     g.dragging = false;
     g.typed.clear();
@@ -1985,6 +1990,13 @@ static void OpenWheel(POINT pt) {
         const bool fitsLeft = pt.x - reach >= mi.rcWork.left;
         if (g.side > 0 && !fitsRight && fitsLeft) g.side = -1;
         if (g.side < 0 && !fitsLeft && fitsRight) g.side = 1;
+
+        // Near the top or bottom of the screen, slide the wheel along the
+        // edge until the whole arc fits. The dead band stays on the line the
+        // cursor is on (tiltY), so the wheel does not open already spinning.
+        const int top = mi.rcMonitor.top + reach;
+        const int bottom = mi.rcMonitor.bottom - reach;
+        if (top <= bottom) g.center.y = std::clamp(int(pt.y), top, bottom);
     }
 
     g.rot = g.target = double(PreselectIndex(g.stack.back().items));
@@ -2051,8 +2063,9 @@ static void ActivateIndex(int idx) {
         return;
     }
     if (it.id == ID_CUSTOM) {
-        RunCustom(it.command);
+        // Close first, so the wheel is not in the way of whatever opens.
         CloseWheel();
+        RunCustom(it.command);
         return;
     }
     RecordChoice(rootText, it.text);
@@ -2146,7 +2159,7 @@ static void Tick(double dt) {
     // Below the band = further down the list, on either side.
     const double R = g.tiltR;
     const double band = R * std::sin(cfg.deadBandDeg * kPi / 180.0);
-    const double dy = double(p.y) - double(g.center.y);
+    const double dy = double(p.y) - double(g.tiltY);
     double v = 0.0;
     const bool dismissing = g.closing && !g.closeCancelable;
     const bool pressing = g.pressed && !g.dragging;  // hold still while aiming
@@ -2342,12 +2355,15 @@ static bool HandleWheelEvent(const MSG& msg) {
             // Acts on release: a click chooses, a hold or pull on a label
             // picks it up instead.
             const POINT pt = {int(INT_PTR(msg.wParam)), int(msg.lParam)};
-            g.pressTarget = HighlightIndexAt(pt);
+            // A press on a label is for that label, even just after a scroll
+            // or key step has parked the highlight on the centre line.
+            g.pressSlot = HitTestLabel(pt);
+            g.pressTarget =
+                g.pressSlot >= 0 ? g.pressSlot : HighlightIndexAt(pt);
             g.pressMoved = false;
             g.pressed = true;
             g.pressPos = pt;
             g.pressTime = Now();
-            g.pressSlot = HitTestLabel(pt);
             Touch();
             return true;
         }
@@ -2410,6 +2426,19 @@ static void OnKey(UINT vk) {
 }
 
 static LRESULT CALLBACK WheelProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
+    // RunWheel takes the hook's events straight from the queue. If some other
+    // message loop is running inside ours (a message box, a shell extension
+    // that pumps messages) it dispatches them here instead, so keep them for
+    // RunWheel to handle when it is back in control.
+    if (msg >= WM_WHEEL_LDOWN && msg <= WM_WHEEL_OUTSIDE && h == g.hwnd) {
+        MSG held = {};
+        held.hwnd = h;
+        held.message = msg;
+        held.wParam = wp;
+        held.lParam = lp;
+        g.pending.push_back(held);
+        return 0;
+    }
     switch (msg) {
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
@@ -2425,11 +2454,9 @@ static LRESULT CALLBACK WheelProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
 // ---------------------------------------------------------------------------
 
 static std::wstring StrSetting(PCWSTR name, int index = -1) {
-    PCWSTR s = index < 0 ? Wh_GetStringSetting(name)
-                         : Wh_GetStringSetting(name, index);
-    std::wstring out = s;
-    Wh_FreeStringSetting(s);
-    return out;
+    return std::wstring(
+        index < 0 ? WindhawkUtils::StringSetting::make(name).get()
+                  : WindhawkUtils::StringSetting::make(name, index).get());
 }
 
 // "#RRGGBB" or "RRGGBB".
@@ -2570,6 +2597,7 @@ struct FrameKey {
     size_t depth = 0;
     int size = 0, side = 0;
     bool dragging = false;
+    int highlight = -1;
     std::wstring typed;
 };
 
@@ -2584,6 +2612,7 @@ static bool NeedsRender(FrameKey* last) {
     now.size = g.size;
     now.side = g.side;
     now.dragging = g.dragging;
+    now.highlight = g.dragging ? -1 : HighlightIndexAt(g.lastCursor);
     now.typed = g.typed;
     const bool same =
         !g.forceRender && now.rot == last->rot && now.gap == last->gap &&
@@ -2591,6 +2620,7 @@ static bool NeedsRender(FrameKey* last) {
         now.cursor.x == last->cursor.x && now.cursor.y == last->cursor.y &&
         now.depth == last->depth && now.size == last->size &&
         now.side == last->side && now.dragging == last->dragging &&
+        now.highlight == last->highlight &&
         now.typed == last->typed;
     g.forceRender = false;
     *last = now;
@@ -2630,6 +2660,7 @@ static bool RunWheel(HMENU hMenu, UINT flags, int x, int y, HWND owner,
     g.notify = !(flags & TPM_NONOTIFY);
     g.result = R_NONE;
     g.loadedSubs.clear();
+    g.pending.clear();
 
     // The messages a real popup sends before it appears. Owners use them to
     // fill in or enable items, so they have to come before we read anything.
@@ -2694,7 +2725,12 @@ static bool RunWheel(HMENU hMenu, UINT flags, int x, int y, HWND owner,
             if (HandleWheelEvent(msg)) continue;
             // Keys are the wheel's while it is open.
             if (msg.message == WM_KEYDOWN) {
-                TranslateMessage(&msg);  // queues WM_CHAR for type-to-find
+                // Translating queues a WM_CHAR for type-to-find. Not for
+                // the keys that can end the wheel, or their character would
+                // be left behind for the owner to receive afterwards.
+                if (msg.wParam != VK_RETURN && msg.wParam != VK_ESCAPE &&
+                    msg.wParam != VK_BACK)
+                    TranslateMessage(&msg);
                 OnKey(UINT(msg.wParam));
                 continue;
             }
@@ -2711,6 +2747,12 @@ static bool RunWheel(HMENU hMenu, UINT flags, int x, int y, HWND owner,
                 msg.message == WM_SYSDEADCHAR)
                 continue;
             DispatchMessageW(&msg);
+        }
+        // Events a nested loop handed to the window procedure.
+        while (g.open && !g.pending.empty()) {
+            const MSG held = g.pending.front();
+            g.pending.erase(g.pending.begin());
+            HandleWheelEvent(held);
         }
         if (!g.open) break;
 
