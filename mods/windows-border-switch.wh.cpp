@@ -7,7 +7,7 @@
 // @description:de-DE Blendet die vom System gezeichneten Rahmen von Anwendungsfenstern und Shell-Elementen aus
 // @description:pt-BR Oculta as bordas que o sistema desenha nas janelas de aplicativos e nos elementos do shell
 // @description:zh-CN 隐藏由系统为应用窗口和外壳元素绘制的边框
-// @version         1.2.4
+// @version         1.2.5
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
@@ -22,7 +22,7 @@
 // @architecture    x86-64
 // @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -luuid -ladvapi32
 // ==/WindhawkMod==
-// Build: 53
+// Build: 54
 
 // ==WindhawkModReadme==
 /*
@@ -1279,10 +1279,31 @@ using GetXamlType = HRESULT(WINAPI*)(void*, HSTRING, void**);
 GetXamlType g_getXamlType;
 std::mutex g_factoryMutex;
 
+bool IsShellXamlWindow(HWND window);
+
+HWND ShellSourceWindow(ShellSource const& source) {
+    HWND island = nullptr;
+    auto native = source.try_as<IDesktopWindowXamlSourceNative>();
+    return native && SUCCEEDED(native->get_WindowHandle(&island)) && island
+        ? GetAncestor(island, GA_ROOT) : nullptr;
+}
+
+bool CurrentThreadOwnsShellXamlWindow() {
+    bool found = false;
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND window, LPARAM result) -> BOOL {
+        if (!IsShellXamlWindow(window)) {
+            return TRUE;
+        }
+        *reinterpret_cast<bool*>(result) = true;
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&found));
+    return found;
+}
+
 template<class Method, class Interface>
 void HookFactoryMethod(Interface const& instance, size_t slot, Method hook, Method& original) {
     std::lock_guard guard(g_factoryMutex);
-    if (!original) {
+    if (!original && !g_shellXamlStopping) {
         auto table = *reinterpret_cast<void***>(winrt::get_abi(instance));
         if (WindhawkUtils::SetFunctionHook(reinterpret_cast<Method>(table[slot]), hook, &original)) {
             Wh_ApplyHookOperations();
@@ -1296,11 +1317,24 @@ HRESULT WINAPI CaptureShellContent(IUnknown* self, void* content) {
         try {
             ShellSource source{nullptr};
             winrt::copy_from_abi(source, self);
+            bool notify = true;
+            if (g_shellHost == ShellHost::Explorer) {
+                if (const HWND window = ShellSourceWindow(source)) {
+                    if (!IsShellXamlWindow(window)) {
+                        return hr;
+                    }
+                } else {
+                    // Content can be set before the island has a native window.
+                    notify = CurrentThreadOwnsShellXamlWindow();
+                }
+            }
             {
                 std::lock_guard guard(g_sourcesMutex);
                 g_shellSources.Add(source);
             }
-            NotifyShellContentChanged();
+            if (notify) {
+                NotifyShellContentChanged();
+            }
         } catch (...) {
             Wh_Log(L"Unable to track XAML island content: %08X", winrt::to_hresult());
         }
@@ -1773,16 +1807,13 @@ void ScanShellOnUiThread(HWND hwnd, bool refresh) noexcept try {
             }
         }
         for (auto const& source : sources) {
-            if (keyboardWindow) {
-                HWND island = nullptr;
-                auto native = source.try_as<IDesktopWindowXamlSourceNative>();
-                if (native && SUCCEEDED(native->get_WindowHandle(&island)) &&
-                    GetAncestor(island, GA_ROOT) == hwnd) {
-                    ScanShellTree(ShellSourceContent(source), keyboardMask);
-                    continue;
-                }
+            const HWND window = ShellSourceWindow(source);
+            if (window && !IsShellXamlWindow(window)) {
+                continue;
             }
-            if (shellMask) {
+            if (keyboardWindow && window == hwnd) {
+                ScanShellTree(ShellSourceContent(source), keyboardMask);
+            } else if (shellMask) {
                 ScanShellTree(ShellSourceContent(source), shellMask);
             }
         }
@@ -2408,7 +2439,11 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModBeforeUninit() {
-    g_shellXamlStopping = true;
+    {
+        // Close hook registration after any operation already holding the lock.
+        std::lock_guard guard(g_factoryMutex);
+        g_shellXamlStopping = true;
+    }
     g_shellXamlWorker.Stop();
     std::unordered_set<DWORD> editedThreads;
     {
