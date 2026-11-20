@@ -2,13 +2,27 @@
 // @id              pwa-tray-center
 // @name            PWA Tray Center
 // @description     One tray icon for all your Chrome PWAs: hide windows to the PWA Tray Center, control media, see notifications and launch installed apps from a Fluent flyout
-// @version         0.5.610
+// @version         0.5.790
 // @author          Proponent
 // @github          https://github.com/JJProponent
 // @include         chrome.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lole32 -loleaut32 -lshell32 -luser32 -lgdi32 -ladvapi32 -ldwmapi -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject -ld3d11 -ldxgi -ldcomp
 // ==/WindhawkMod==
+
+// ==WindhawkModSettings==
+/*
+- simpleMode: false
+  $name: Simple mode
+  $description: No panel, no shortcut, no media polling. Hidden PWAs go to their own tray icons instead of the PWA Tray Center.
+- simpleStyle: separate
+  $name: Simple mode tray style
+  $description: Works only when Simple mode is on. Separate means each hidden PWA gets its own tray icon (left click shows it, right click gives a menu). Single means one tray icon, right click gives a menu of all PWAs (left click does nothing).
+  $options:
+  - separate: Separate icon per PWA
+  - single: One icon with a menu
+*/
+// ==/WindhawkModSettings==
 
 // ==WindhawkModReadme==
 /*
@@ -30,16 +44,17 @@ Adds a **"Hide to PWA Tray Center"** item to the window menu of installed Chrome
 - **Left click** → opens PWA Tray Center (Fluent flyout, rounded corners, Mica or solid backdrop, chosen in Settings)
 - **Right click** → menu: *Show all* / *Quit all*
 - **Center mode** (Settings → Panel): *Hermes (Quick)* closes on a click outside, *Titan (Pinned)* stays open
+- **Simple mode** (Windhawk settings): no panel and no shortcut. A hidden PWA gets its own tray icon, or with the *single* style one tray icon lists all PWAs in its right-click menu
 
 ### Tabs
 
 | Tab | Description |
 |-----|-------------|
 | **Media** | Cards for each Chrome media session: cover, title, artist, PWA source, prev/play-pause/next, draggable progress bar. Right-click for controls. Cover style (small, full or none) and compact view (3 covers per row) are set in Settings. |
-| **Apps** | Hidden PWAs. Left-click to show, right-click for Show/Quit. Badge shows unread counter. |
+| **PWAs** | All open PWAs. Hidden ones are bright, visible ones are translucent. Left-click a translucent one to hide it to the tray, left-click a hidden one to show it. Right-click for Show or Hide, and Quit. Badge shows unread counter. |
 | **Notifications** | Toast notifications from Windows notification center. Falls back to unread counter from window title (e.g. `(3) Inbox`). |
 | **Library** | All installed Chrome PWAs. Left-click to launch/show. Drag to reorder. Right-click for Open/Quit/categories. Search field + category chips for filtering. |
-| **Settings** | All mod options (Panel, Media, PWAs, Notifications, Advanced). No Windhawk settings needed. |
+| **Settings** | All mod options (Panel, Media, PWAs, Notifications, Advanced). Two settings are in Windhawk (Simple mode and its tray style); everything else is here. |
 
 > Tabs, cards, and tiles are **drag-to-reorder**; order is remembered.
 
@@ -178,11 +193,14 @@ enum class NotifDismiss { Swipe, Click };
 std::atomic<int> g_notifPos{(int)NotifPos::BottomRight};
 std::atomic<int> g_notifDismiss{(int)NotifDismiss::Swipe};
 std::atomic<int> g_showNotes{1};
+bool g_simpleMode = false;   // Windhawk setting: no panel, hidden PWAs go to tray icons
+bool g_simpleSingle = false;  // Windhawk setting (simple mode only): one icon with a menu
 std::atomic<int> g_trayAlways{1};  // 1 = the tray icon stays even with nothing hidden
 
 UINT g_trayMsg = 0;
 UINT g_taskbarCreatedMsg = 0;
 UINT g_restoreMsg = 0;
+UINT g_hideMsg = 0;
 UINT g_quitMsg = 0;
 
 ULONGLONG NowMs() {
@@ -756,6 +774,10 @@ bool IsTargetPwaWindow(HWND hWnd) {
 // Messages for a PWA window. They are handled on the window's own thread.
 void RequestRestore(HWND hWnd) {
     PostMessageW(hWnd, g_restoreMsg, 0, 0);
+}
+
+void RequestHide(HWND hWnd) {
+    PostMessageW(hWnd, g_hideMsg, 0, 0);
 }
 
 void RequestQuit(HWND hWnd) {
@@ -1943,7 +1965,7 @@ struct TabDef {
 
 const TabDef kTabDefs[kTabCount] = {
     {L"Media", L"\xE90B", L"No media playing"},
-    {L"PWAs", L"\xE8F9", L"No hidden apps"},
+    {L"PWAs", L"\xE8F9", L"No PWA windows"},
     {L"Notifications", L"\xE8BD", L"No notifications"},
     {L"Library", L"\xE71D", L"No installed apps found"},
     {L"Settings", L"\xE713", L""},
@@ -1980,6 +2002,7 @@ inline int IndexOf(int id) { return id & 0xFFFF; }
 enum MenuCmd {
     kCmdNone = 0,
     kCmdShow,
+    kCmdHide,
     kCmdQuit,
     kCmdLaunch,
     kCmdToggleCat,
@@ -2041,6 +2064,8 @@ struct TileData {
     int unread = 0;
     bool running = false;
     bool hasMedia = false;  // the app has a media session
+    bool dim = false;       // the PWA is visible (not hidden): drawn translucent
+    std::wstring key;       // identity of the item, for the reorder glide
 };
 
 struct Optim {
@@ -2120,6 +2145,53 @@ struct Settle {
 // Glide duration, Material 3 emphasized decelerate curve.
 constexpr float kSettleMs = 220.0f;
 
+// One edge of the tab indicator. It moves from where it is now to a target, with a
+// start delay: the leading edge goes at once, the trailing edge follows.
+struct Edge {
+    float from = 0.0f;
+    float to = 0.0f;
+    ULONGLONG t0 = 0;
+    int delay = 0;
+    int dur = 0;
+
+    float Value(ULONGLONG now) const {
+        if (dur <= 0) {
+            return to;
+        }
+        if (now < t0 + (ULONGLONG)delay) {
+            return from;
+        }
+        const float x = Clamp01((float)(now - t0 - (ULONGLONG)delay) / (float)dur);
+        return from + (to - from) * (float)CubicBezierY(0, 0, 0, 1, x);
+    }
+    bool Running(ULONGLONG now) const {
+        return dur > 0 && now < t0 + (ULONGLONG)delay + (ULONGLONG)dur;
+    }
+    void Start(ULONGLONG now, float target, int durMs, int delayMs) {
+        from = Value(now);
+        to = target;
+        t0 = now;
+        dur = durMs;
+        delay = delayMs;
+    }
+    void Jump(ULONGLONG now, float target) {
+        from = to = target;
+        t0 = now;
+        dur = 0;
+        delay = 0;
+    }
+};
+
+// Reorder glide of one item: where it was drawn last frame (scroll-free), and how far
+// it still has to slide to its new place.
+struct MoveAnim {
+    bool seen = false;
+    float lastRx = 0.0f;
+    float lastRy = 0.0f;
+    Edge ex;
+    Edge ey;
+};
+
 struct Panel {
     HWND hwnd = nullptr;
     int dpi = 96;
@@ -2164,6 +2236,7 @@ struct Panel {
     // Data.
     std::vector<AppInfo> all;       // matching PWA windows
     std::vector<int> hiddenIdx;     // indexes into `all`, hidden ones
+    std::vector<int> appsIdx;       // every PWA window in the order of the PWAs tab
     std::vector<MediaInfo> media;
     std::vector<ToastInfo> toasts;
     std::vector<NotifRow> rows;
@@ -2176,7 +2249,8 @@ struct Panel {
     Tween slideX, slideA, openDy, openAlpha, menuT, menuDy;
     Tween exitX, exitA;                   // the tab being left: slides out and fades
     int exitTab = -1;
-    Tween indX;                           // centre x of the tab indicator
+    Edge indL, indR;                      // left and right edges of the tab indicator
+    std::unordered_map<std::wstring, MoveAnim> moves;  // reorder glide state, by item key
     Tween barA;                           // alpha of the scrollbar
     ULONGLONG barTick = 0;                // last scroll, or pointer move over the list
     Tween scrollTw[kTabCount];            // drawn scroll of each tab
@@ -2250,6 +2324,7 @@ struct Panel {
     // Title bar.
     bool closeHover = false;
     bool closePressed = false;
+    Tween closeT;                         // hover fade of the close button, 0 to 1
     POINT dragStartPos = {};
     bool titleDragging = false;
 
@@ -2301,6 +2376,7 @@ struct Panel {
     ULONGLONG lastFrame = 0;
     bool animating = false;
     std::vector<HWND> frameHwnds;  // Apps tiles / notification rows
+    std::vector<bool> frameHidden;  // per tile of the PWAs tab: hidden or visible
     std::vector<int> frameLib;     // Library tiles -> g_library index
     std::vector<std::wstring> frameMediaKeys;  // PWAs tiles -> media card key (or empty)
     std::wstring hlKey;            // media card to highlight after a jump
@@ -3405,6 +3481,15 @@ bool RefreshData(Panel& p) {
                          return OrderPos(p.orderApps, AppKey(p.all[x])) <
                                 OrderPos(p.orderApps, AppKey(p.all[y]));
                      });
+    // The PWAs tab lists every PWA window: hidden ones first, the rest translucent.
+    // Saved order is kept, unsaved windows keep the base order.
+    p.appsIdx.resize(p.all.size());
+    for (size_t i = 0; i < p.all.size(); ++i) {
+        p.appsIdx[i] = (int)i;
+    }
+    std::stable_sort(p.appsIdx.begin(), p.appsIdx.end(), [&](int x, int y) {
+        return OrderPos(p.orderApps, AppKey(p.all[x])) < OrderPos(p.orderApps, AppKey(p.all[y]));
+    });
     SetKnownApps(p.all);
 
     // Media: keep the optimistic play/pause state for a moment.
@@ -3501,7 +3586,7 @@ bool RefreshData(Panel& p) {
         }
     }
 
-    return !p.hiddenIdx.empty();
+    return !p.all.empty();
 }
 
 void ClampScroll(Panel& p, int tab) {
@@ -3524,7 +3609,7 @@ constexpr float kReleaseDamping = 0.6f;
 bool IsSpringKind(int kind) {
     return kind == kHitMediaPlay || kind == kHitMediaPrev || kind == kHitMediaNext ||
            kind == kHitMediaCard || kind == kHitTile || kind == kHitTileMedia ||
-           kind == kHitHiddenBadge;
+           kind == kHitHiddenBadge || kind == kHitTab;
 }
 
 // Scale of an element's spring, 1 when it has none.
@@ -3588,6 +3673,34 @@ void ApplyXf(Panel& p) {
     m.dx = p.xf.tx;
     m.dy = p.xf.ty;
     p.rt->SetTransform(&m);
+}
+
+// Reorder glide: an item drawn somewhere new slides there from where it was drawn last
+// frame. Positions are passed scroll-free, so scrolling alone glides nothing. Draws
+// without hits (exit of a tab, overlays) do not count.
+Xf BeginMove(Panel& p, const std::wstring& key, int id, const D2D1_RECT_F& r) {
+    const Xf prev = p.xf;
+    if (!p.hitsOn) {
+        return prev;
+    }
+    MoveAnim& m = p.moves[key];
+    const ULONGLONG now = NowMs();
+    const bool dropped = p.settle.active && id == p.settle.id;  // the dropped item glides by settle
+    if (m.seen && !dropped && (m.lastRx != r.left || m.lastRy != r.top)) {
+        // Start where it is drawn now, so a move during a glide carries on smoothly.
+        const float visX = m.lastRx + m.ex.Value(now);
+        const float visY = m.lastRy + m.ey.Value(now);
+        m.ex.Jump(now, visX - r.left);
+        m.ey.Jump(now, visY - r.top);
+        m.ex.Start(now, 0.0f, 250, 0);
+        m.ey.Start(now, 0.0f, 250, 0);
+    }
+    m.seen = true;
+    m.lastRx = r.left;
+    m.lastRy = r.top;
+    p.xf = {prev.s, prev.tx + m.ex.Value(now), prev.ty + m.ey.Value(now)};
+    ApplyXf(p);
+    return prev;
 }
 
 // Offset (DIP) that is still left for the element `id` drawn in rectangle r. The
@@ -3905,7 +4018,11 @@ bool UpdateAnims(Panel& p, ULONGLONG now) {
     active |= TweenStep(p.menuDy, now);
     active |= TweenStep(p.exitX, now);
     active |= TweenStep(p.exitA, now);
-    active |= TweenStep(p.indX, now);
+    active |= p.indL.Running(now) || p.indR.Running(now);
+    active |= TweenStep(p.closeT, now);
+    for (auto& kv : p.moves) {
+        active |= kv.second.ex.Running(now) || kv.second.ey.Running(now);
+    }
     active |= TweenStep(p.barA, now);
     for (int i = 0; i < kTabCount; ++i) {
         active |= TweenStep(p.tabPos[i], now);
@@ -4018,14 +4135,11 @@ void DrawTitleBar(Panel& p) {
     D2D1_RECT_F closeRect = Rc(kPanelW - kCloseButtonW, 0, kCloseButtonW, kTitleBarH);
     
     // Windows 11 Fluent Design close button colors
-    if (p.closeHover) {
-        D2D1_COLOR_F closeBg = p.closePressed 
-            ? Col(0xFFA02010)  // Pressed: slightly darker red
-            : Col(0xFFC42B1C); // Hover: official Windows 11 critical red
-        FillRect(p, closeRect, closeBg);
-        DrawTxt(p, kGlyphClose, p.fMenuIcon.p, closeRect, Col(0xFFFFFFFF));
-    } else {
-        DrawTxt(p, kGlyphClose, p.fMenuIcon.p, closeRect, WithAlpha(t.text, 0.8f));
+    // Hover fades the red in and out over 150 ms. The button draws no glyph.
+    const float ch = p.closeT.v;
+    if (ch > 0.0f) {
+        D2D1_COLOR_F closeBg = p.closePressed ? Col(0xFFA02010) : Col(0xFFC42B1C);
+        FillRect(p, closeRect, WithAlpha(closeBg, ch));
     }
     
     // Bottom border divider
@@ -4053,6 +4167,7 @@ void DrawTabs(Panel& p) {
         D2D1_RECT_F r = Rc(x, kTabsY, tw, kTabsH);
         int id = MakeId(kHitTab, tab);
         AddHit(p, id, r);
+        const Xf prevTab = BeginSpring(p, id, r);
         if (p.dragTab == tab && p.dragging) {
             FillRR(p, r, kRadiusCtl, t.hover);
         } else {
@@ -4076,11 +4191,14 @@ void DrawTabs(Panel& p) {
         if (dot) {
             FillCircle(p, x + tw / 2 + 10, kTabsY + 10, 3.5f, t.accent);
         }
+        EndSpring(p, prevTab);
     }
 
     // Selected tab indicator.
-    float cx = p.indX.v;
-    FillRR(p, Rc(cx - 10, kTabsY + kTabsH - 4, 20, 3), 1.5f, t.accent);
+    const ULONGLONG nowI = NowMs();
+    const float indLeft = p.indL.Value(nowI);
+    const float indRight = p.indR.Value(nowI);
+    FillRR(p, Rc(indLeft, kTabsY + kTabsH - 4, indRight - indLeft, 3), 1.5f, t.accent);
 }
 
 // Highlight after a jump from the PWAs tab: short wait, 400 ms light up, 100 ms fade out.
@@ -4632,7 +4750,11 @@ void DrawMediaTab(Panel& p, float top, float bottom) {
             if (drag && (int)i == p.libDownIdx) {
                 continue;  // drawn under the pointer instead
             }
+            const Xf prevMove = BeginMove(p, L"m:" + p.media[i].key,
+                                          MakeId(kHitMediaCard, (int)i),
+                                          Rc(x, y + p.scrollC[kTabMedia], cell, cell));
             DrawMediaCover(p, (int)i, p.media[i], cr);
+            EndSpring(p, prevMove);
             if (drag && (int)i == p.libTargetIdx) {
                 FillRR(p, cr, kRadiusCtl, WithAlpha(p.th.accent, 0.25f));
                 StrokeRR(p, cr, kRadiusCtl, p.th.accent);
@@ -4655,7 +4777,11 @@ void DrawMediaTab(Panel& p, float top, float bottom) {
         const bool drag = DragOn(p, kTabMedia);
         for (size_t i = 0; i < p.media.size(); ++i) {
             if (!(drag && (int)i == p.libDownIdx)) {
+                const Xf prevMove = BeginMove(p, L"m:" + p.media[i].key,
+                                              MakeId(kHitMediaCard, (int)i),
+                                              Rc(kPad, y + p.scrollC[kTabMedia], kPanelW - 2 * kPad, kMediaCardH));
                 DrawMediaCard(p, (int)i, p.media[i], y);
+                EndSpring(p, prevMove);
             }
             if (drag && (int)i == p.libTargetIdx) {
                 const D2D1_RECT_F tr = Rc(kPad, y, kPanelW - 2 * kPad, kMediaCardH);
@@ -4684,12 +4810,26 @@ void DrawMediaTab(Panel& p, float top, float bottom) {
 }
 
 // One tile of the Apps / Library grids.
+// Alpha of a visible (not hidden) PWA tile.
+constexpr float kVisibleTileAlpha = 0.45f;
+
+void DrawTileBody(Panel& p, int id, const D2D1_RECT_F& r, const TileData& d, int springId);
+
 void DrawTile(Panel& p, int id, const D2D1_RECT_F& r, const TileData& d, int springId = -1) {
+    const float baseAlpha = p.alpha;
+    if (d.dim) {
+        p.alpha = baseAlpha * kVisibleTileAlpha;
+    }
+    DrawTileBody(p, id, r, d, springId < 0 ? id : springId);
+    p.alpha = baseAlpha;
+}
+
+void DrawTileBody(Panel& p, int id, const D2D1_RECT_F& r, const TileData& d, int springId) {
     const Theme& t = p.th;
     float w = r.right - r.left;
     float h = r.bottom - r.top;
     AddHit(p, id, r);
-    const Xf prevTile = BeginSpring(p, springId < 0 ? id : springId, r);
+    const Xf prevTile = BeginSpring(p, springId, r);
     FillRR(p, r, kRadiusCtl, t.card);
     StrokeRR(p, r, kRadiusCtl, t.cardBorder);
     DrawHoverBg(p, id, r, kRadiusCtl);
@@ -4796,7 +4936,10 @@ float DrawGrid(Panel& p,
         if ((int)i == hideIdx) {
             continue;  // this tile is drawn under the pointer instead
         }
+        const Xf prevMove = BeginMove(p, tiles[i].key, MakeId(kHitTile, (int)i),
+                                      Rc(x, y + p.scrollC[p.selectedTab], tw, th));
         DrawTile(p, MakeId(kHitTile, (int)i), Rc(x, y, tw, th), tiles[i]);
+        EndSpring(p, prevMove);
         if ((int)i == targetIdx) {
             const D2D1_RECT_F tr = Rc(x, y, tw, th);
             FillRR(p, tr, kRadiusCtl, WithAlpha(p.th.accent, 0.15f));
@@ -4837,13 +4980,16 @@ void DrawAppsTab(Panel& p, float top, float bottom) {
     p.viewH[kTabApps] = bottom - top;
     p.frameHwnds.clear();
     p.frameMediaKeys.clear();
+    p.frameHidden.clear();
     std::vector<TileData> tiles;
-    for (int idx : p.hiddenIdx) {
+    for (int idx : p.appsIdx) {
         const AppInfo& a = p.all[idx];
         TileData d;
         d.name = a.name;
         d.bmp = AppBitmap(p, a);
         d.unread = a.unread;
+        d.dim = !a.hidden;
+        d.key = L"a:" + std::to_wstring((uintptr_t)a.hwnd);
         std::wstring key;
         for (const auto& m : p.media) {
             if (!m.matchedCrx.empty() && m.matchedCrx == a.crxId) {
@@ -4855,6 +5001,7 @@ void DrawAppsTab(Panel& p, float top, float bottom) {
         tiles.push_back(d);
         p.frameHwnds.push_back(a.hwnd);
         p.frameMediaKeys.push_back(key);
+        p.frameHidden.push_back(a.hidden);
     }
     if (tiles.empty()) {
         p.contentH[kTabApps] = 0;
@@ -4878,9 +5025,13 @@ void DrawNotifsTab(Panel& p, float top, float bottom) {
         return;
     }
     float y = top - p.scrollC[kTabNotifs];
+    std::unordered_map<std::wstring, int> seenRows;  // keeps keys unique for equal toasts
     const bool drag = DragOn(p, kTabNotifs);
     for (size_t i = 0; i < p.rows.size(); ++i) {
         const NotifRow& row = p.rows[i];
+        const AppInfo& rowApp = p.all[row.appIdx];
+        std::wstring rowKey = AppKey(rowApp) + L"|" + row.title;
+        rowKey += L"#" + std::to_wstring(seenRows[rowKey]++);
         const AppInfo& a = p.all[row.appIdx];
         p.frameHwnds.push_back(a.hwnd);
         D2D1_RECT_F r = Rc(kPad, y, kPanelW - 2 * kPad, 64);
@@ -4893,6 +5044,8 @@ void DrawNotifsTab(Panel& p, float top, float bottom) {
         }
         int id = MakeId(kHitRow, (int)i);
         AddHit(p, id, r);
+        const Xf prevMove = BeginMove(p, rowKey, id,
+                                      Rc(r.left, r.top + p.scrollC[kTabNotifs], r.right - r.left, r.bottom - r.top));
         const Xf prevRow = BeginSpring(p, id, r);
         FillRR(p, r, kRadiusCtl, t.card);
         StrokeRR(p, r, kRadiusCtl, t.cardBorder);
@@ -4914,6 +5067,7 @@ void DrawNotifsTab(Panel& p, float top, float bottom) {
         DrawTxt(p, row.body, p.fBodyWrap.p, Rc(tx, r.top + 27, tw, 34),
                 t.textSecondary);
         EndSpring(p, prevRow);
+        EndSpring(p, prevMove);
     }
     if (drag && p.libDownIdx < (int)p.rows.size()) {
         const NotifRow& row = p.rows[p.libDownIdx];
@@ -4968,6 +5122,8 @@ void DrawChips(Panel& p, float y) {
             continue;  // the dragged chip is drawn under the pointer
         }
         AddHit(p, id, r);
+        const Xf prevMove = BeginMove(p, L"c:" + label, id,
+                                      Rc(r.left + p.chipScroll, r.top, r.right - r.left, r.bottom - r.top));
         const Xf prevChip = BeginSpring(p, id, r);
         bool sel = !isAdd && (int)i == p.chipSel;
         if (sel) {
@@ -4987,6 +5143,7 @@ void DrawChips(Panel& p, float y) {
             StrokeRR(p, r, kRadiusCtl, t.accent);
         }
         EndSpring(p, prevChip);
+        EndSpring(p, prevMove);
         x += w + gap;
     }
     p.chipContentW = (x - gap) - startX + 2 * kPad;
@@ -5045,6 +5202,7 @@ void DrawLibraryTab(Panel& p, float top, float bottom) {
         }
         TileData d;
         d.name = l.name;
+        d.key = L"l:" + LibKey(l);
         d.bmp = LibBitmap(p, l);
         if (const AppInfo* run = FindRunning(p, l)) {
             d.running = true;
@@ -6176,11 +6334,24 @@ void ClosePanelLocal() {
 
 // Moves the tab indicator under the selected tab, animated or at once.
 void SyncIndicator(Panel& p, bool animate) {
-    const float target = SlotX(SlotOf(p, p.selectedTab)) + TabW() / 2;
-    if (animate) {
-        TweenSet(p.indX, target, 167, kEaseOut);
+    const float c = SlotX(SlotOf(p, p.selectedTab)) + TabW() / 2;
+    const float L = c - 10.0f;
+    const float R = c + 10.0f;
+    const ULONGLONG now = NowMs();
+    if (!animate) {
+        p.indL.Jump(now, L);
+        p.indR.Jump(now, R);
+        return;
+    }
+    // The indicator stretches: the leading edge goes at once, the trailing edge follows
+    // 50 ms later, so it grows while it travels and then shortens to its usual 20 px.
+    const float oldC = (p.indL.Value(now) + p.indR.Value(now)) / 2;
+    if (c < oldC - 0.5f) {
+        p.indL.Start(now, L, 250, 0);
+        p.indR.Start(now, R, 250, 50);
     } else {
-        TweenJump(p.indX, target);
+        p.indR.Start(now, R, 250, 0);
+        p.indL.Start(now, L, 250, 50);
     }
 }
 
@@ -6813,6 +6984,9 @@ void ExecMenuCmd(Panel& p, const MenuItem& it, const MenuCtx& ctx) {
         case kCmdSetPref:
             ApplyPref(p, it.arg / 16, it.arg % 16);
             break;
+        case kCmdHide:
+            RequestHide(ctx.hwnd);
+            break;
         case kCmdShow:
         case kCmdShowPWA:
             PushNote(p, NotifSeverity::Info, L"Showing window",
@@ -7010,7 +7184,11 @@ void OnContextMenu(Panel& p, int hit, float x, float y) {
         }
         ctx.hwnd = p.frameHwnds[idx];
         items.push_back(WindowHeader(p, ctx.hwnd));
-        items.push_back(MakeItem(kCmdShow, L"Show", kGlyphOpen));
+        if (p.frameHidden[idx]) {
+            items.push_back(MakeItem(kCmdShow, L"Show", kGlyphOpen));
+        } else {
+            items.push_back(MakeItem(kCmdHide, L"Hide to PWA Tray Center"));
+        }
         items.push_back(MakeSep());
         items.push_back(MakeItem(kCmdQuit, L"Quit", kGlyphClose));
     } else if (kind == kHitTile && p.selectedTab == kTabLibrary) {
@@ -7313,10 +7491,14 @@ void Activate(Panel& p, int hit) {
         case kHitTile:
             if (p.selectedTab == kTabApps && idx < (int)p.frameHwnds.size()) {
                 HWND h = p.frameHwnds[idx];
-                PushNote(p, NotifSeverity::Info, L"Showing window",
-                         PanelAppName(p, h), nullptr, WindowBitmap(p, h));
-                RequestRestore(h);
-                CloseIfHermes();
+                if (!p.frameHidden[idx]) {
+                    RequestHide(h);  // a translucent (visible) PWA goes to the tray
+                } else {
+                    PushNote(p, NotifSeverity::Info, L"Showing window",
+                             PanelAppName(p, h), nullptr, WindowBitmap(p, h));
+                    RequestRestore(h);
+                    CloseIfHermes();
+                }
             } else if (p.selectedTab == kTabLibrary && idx < (int)p.frameLib.size()) {
                 LaunchOrRestore(p, p.frameLib[idx]);
                 CloseIfHermes();
@@ -7535,15 +7717,15 @@ void ReorderDragged(Panel& p, int tab, int from, int to) {
             }
             break;
         case kTabApps: {
-            const int n = (int)p.hiddenIdx.size();
+            const int n = (int)p.appsIdx.size();
             if (from >= n || to >= n) {
                 break;
             }
-            std::vector<int> ord = p.hiddenIdx;
+            std::vector<int> ord = p.appsIdx;
             const int item = ord[from];
             ord.erase(ord.begin() + from);
             ord.insert(ord.begin() + to, item);
-            p.hiddenIdx = ord;
+            p.appsIdx = ord;
             std::vector<std::wstring> keys;
             for (int idx : ord) {
                 keys.push_back(AppKey(p.all[idx]));
@@ -7616,7 +7798,8 @@ void UpdateTabDrag(Panel& p, float fx) {
     nx = (std::max)(kPad, (std::min)(nx, kPanelW - kPad - tw));
     TweenJump(p.tabPos[p.dragTab], nx);
     if (p.dragTab == p.selectedTab) {
-        TweenJump(p.indX, nx + tw / 2);
+        p.indL.Jump(NowMs(), nx + tw / 2 - 10.0f);
+        p.indR.Jump(NowMs(), nx + tw / 2 + 10.0f);
     }
     int slot = (int)std::lround((nx - kPad) / tw);
     slot = (std::max)(0, (std::min)(slot, kTabCount - 1));
@@ -7810,7 +7993,8 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             p->closeHover = InRect(closeRect, fx, fy);
             
             if (p->closeHover != wasCloseHover) {
-                InvalidateRect(hwnd, nullptr, FALSE);
+                TweenSet(p->closeT, p->closeHover ? 1.0f : 0.0f, 150, kEaseOut);
+                StartAnim(*p);
             }
             
             if (p->seekingIdx >= 0) {
@@ -7874,6 +8058,8 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_MOUSELEAVE:
             p->tracking = false;
             p->closeHover = false;
+            TweenSet(p->closeT, 0.0f, 150, kEaseOut);
+            StartAnim(*p);
             p->closePressed = false;
             if (p->seekingIdx < 0 && p->dragTab < 0 && !p->volDrag) {
                 SetHover(*p, kHitNone);
@@ -8141,6 +8327,7 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     StartAnim(*p);
                 } else {
                     SelectTab(*p, tab);
+                    StartAnim(*p);  // the same tab: SelectTab does nothing, the spring must still release
                 }
                 return 0;
             }
@@ -8454,6 +8641,9 @@ void ShowPendingHiddenNotes(Panel& p) {
 }
 
 void ShowPanel(HWND host) {
+    if (g_simpleMode) {
+        return;
+    }
     if (g_panel) {
         ClosePanelLocal();
         if (g_panel) {
@@ -8552,10 +8742,9 @@ void ShowPanel(HWND host) {
     g_panel = p;
     // Overlapped window with no GDI surface: DirectComposition shows the swap chain,
     // and DWM draws the system backdrop (Mica) behind its transparent pixels.
-    // No window menu and no minimize / maximize boxes: a minimized tool window has
-    // no taskbar button and no Alt+Tab entry, so it could not be brought back.
-    // The caption and the thick frame stay, Mica needs them.
-    const DWORD kPanelStyle = WS_CAPTION | WS_THICKFRAME | WS_CLIPCHILDREN;
+    // Overlapped style, as before 0.5.590: Mica is applied to it. The window menu,
+    // minimize, maximize, size and move commands are swallowed in PanelProc.
+    const DWORD kPanelStyle = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN;
     // WS_EX_TOOLWINDOW keeps the panel out of Alt+Tab and the taskbar, as it was when it was a popup.
     HWND hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOREDIRECTIONBITMAP, kPanelClass,
                                 L"", kPanelStyle, x, y, p->pxW, p->pxH, nullptr, nullptr,
@@ -8723,12 +8912,404 @@ void RemoveTrayIcon(HWND host) {
     g_trayTip.clear();
 }
 
+// ---------------------------------------------------------------------------
+// Simple mode: no panel. A hidden PWA gets its own tray icon ("separate"), or the one
+// tray icon lists all PWAs in its menu ("single"). Runs on the center thread, which
+// owns the tray icons.
+// ---------------------------------------------------------------------------
+
+constexpr UINT kSimpleIconBase = 100;   // uID of the first icon of a PWA
+constexpr UINT kSimpleMenuBase = 2000;  // command id of the first item of the PWA menu
+
+struct SimpleIcon {
+    UINT uid = 0;
+    HWND hwnd = nullptr;
+    HICON icon = nullptr;  // our own copy, destroyed when the icon goes
+    bool badge = false;
+    std::wstring tip;
+};
+std::vector<SimpleIcon> g_simpleIcons;  // center thread only
+
+// A copy of the icon, with an accent dot in the corner when there is something unread.
+HICON MakeBadgedIcon(HICON src, bool badge) {
+    if (!src) {
+        return nullptr;
+    }
+    if (!badge) {
+        return CopyIcon(src);
+    }
+    int s = GetSystemMetrics(SM_CXSMICON);
+    if (s < 16) {
+        s = 16;
+    }
+    HDC screen = GetDC(nullptr);
+    HDC dc = CreateCompatibleDC(screen);
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = s;
+    bi.bmiHeader.biHeight = -s;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP dib = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!dib || !bits) {
+        if (dib) {
+            DeleteObject(dib);
+        }
+        DeleteDC(dc);
+        ReleaseDC(nullptr, screen);
+        return CopyIcon(src);
+    }
+    HGDIOBJ oldBmp = SelectObject(dc, dib);
+    memset(bits, 0, (size_t)s * s * 4);
+    DrawIconEx(dc, 0, 0, src, s, s, 0, nullptr, DI_NORMAL);
+    GdiFlush();
+    uint32_t* px = (uint32_t*)bits;
+    for (int i = 0; i < s * s; ++i) {
+        // Drawn pixels become opaque, the rest stays fully transparent.
+        px[i] = (px[i] & 0x00FFFFFFu) ? (px[i] | 0xFF000000u) : 0u;
+    }
+    // Accent dot in the bottom right corner.
+    const uint32_t accent = GetAccentArgb();
+    const float r = s * 0.24f;
+    const float cx = s - r - 0.5f;
+    const float cy = s - r - 0.5f;
+    for (int y = 0; y < s; ++y) {
+        for (int x = 0; x < s; ++x) {
+            const float dx = x + 0.5f - cx;
+            const float dy = y + 0.5f - cy;
+            if (dx * dx + dy * dy <= r * r) {
+                px[y * s + x] = accent;
+            }
+        }
+    }
+    SelectObject(dc, oldBmp);
+    HBITMAP mask = CreateBitmap(s, s, 1, 1, nullptr);
+    ICONINFO ii = {};
+    ii.fIcon = TRUE;
+    ii.hbmMask = mask;
+    ii.hbmColor = dib;
+    HICON icon = CreateIconIndirect(&ii);
+    DeleteObject(mask);
+    DeleteObject(dib);
+    DeleteDC(dc);
+    ReleaseDC(nullptr, screen);
+    return icon ? icon : CopyIcon(src);
+}
+
+// Removes the icons of the PWAs (the single icon goes with RemoveTrayIcon).
+void RemoveSimpleIcons(HWND host) {
+    for (const auto& ic : g_simpleIcons) {
+        NOTIFYICONDATAW nid = {};
+        nid.cbSize = sizeof(nid);
+        nid.hWnd = host;
+        nid.uID = ic.uid;
+        Shell_NotifyIconW(NIM_DELETE, &nid);
+        if (ic.icon) {
+            DestroyIcon(ic.icon);
+        }
+    }
+    g_simpleIcons.clear();
+}
+
+UINT FreeSimpleUid() {
+    for (UINT uid = kSimpleIconBase;; ++uid) {
+        bool used = false;
+        for (const auto& ic : g_simpleIcons) {
+            if (ic.uid == uid) {
+                used = true;
+                break;
+            }
+        }
+        if (!used) {
+            return uid;
+        }
+    }
+}
+
+// Menu text: '&' is doubled, so that it is not taken as an accelerator.
+std::wstring MenuText(const std::wstring& s) {
+    std::wstring out;
+    for (wchar_t c : s) {
+        out += c;
+        if (c == L'&') {
+            out += L'&';
+        }
+    }
+    return out;
+}
+
+// The icon as a 32-bit bitmap for a menu item: transparent where the icon is.
+HBITMAP IconToMenuBitmap(HICON icon, int s) {
+    if (!icon) {
+        return nullptr;
+    }
+    HDC screen = GetDC(nullptr);
+    HDC dc = CreateCompatibleDC(screen);
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = s;
+    bi.bmiHeader.biHeight = -s;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP dib = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (dib && bits) {
+        HGDIOBJ old = SelectObject(dc, dib);
+        memset(bits, 0, (size_t)s * s * 4);
+        DrawIconEx(dc, 0, 0, icon, s, s, 0, nullptr, DI_NORMAL);
+        GdiFlush();
+        uint32_t* px = (uint32_t*)bits;
+        for (int i = 0; i < s * s; ++i) {
+            px[i] = (px[i] & 0x00FFFFFFu) ? (px[i] | 0xFF000000u) : 0u;
+        }
+        SelectObject(dc, old);
+    }
+    DeleteDC(dc);
+    ReleaseDC(nullptr, screen);
+    return dib;
+}
+
+// Right click on the single icon: every PWA window, open ones and hidden ones,
+// each with its own icon on the left.
+void ShowSimpleMenu(HWND host) {
+    std::vector<AppInfo> apps = CollectWindowsRaw();
+    HMENU menu = CreatePopupMenu();
+    if (!menu) {
+        return;
+    }
+    if (apps.empty()) {
+        AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, L"No PWA windows");
+    }
+    int s = GetSystemMetrics(SM_CXSMICON);
+    if (s < 16) {
+        s = 16;
+    }
+    std::vector<HBITMAP> bitmaps;
+    for (size_t i = 0; i < apps.size(); ++i) {
+        std::wstring text = AppDisplayName(apps[i]);
+        text += apps[i].hidden ? L"  (hidden)" : L"  (open)";
+        text = MenuText(text);
+        HBITMAP bmp = IconToMenuBitmap(GetWindowIconSafe(apps[i].hwnd, false), s);
+        bitmaps.push_back(bmp);
+        MENUITEMINFOW mii = {};
+        mii.cbSize = sizeof(mii);
+        mii.fMask = MIIM_ID | MIIM_STRING | MIIM_BITMAP | MIIM_STATE;
+        mii.fState = MFS_ENABLED;
+        mii.wID = (UINT)(kSimpleMenuBase + i);
+        mii.dwTypeData = text.data();
+        mii.cch = (UINT)text.size();
+        mii.hbmpItem = bmp;
+        InsertMenuItemW(menu, (UINT)i, TRUE, &mii);
+    }
+    POINT pt = {};
+    GetCursorPos(&pt);
+    SetForegroundWindow(host);
+    const UINT cmd = TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_RETURNCMD, pt.x, pt.y,
+                                    0, host, nullptr);
+    PostMessageW(host, WM_NULL, 0, 0);
+    DestroyMenu(menu);
+    for (HBITMAP bmp : bitmaps) {
+        if (bmp) {
+            DeleteObject(bmp);
+        }
+    }
+    if (cmd >= kSimpleMenuBase && cmd - kSimpleMenuBase < apps.size()) {
+        const AppInfo& a = apps[cmd - kSimpleMenuBase];
+        if (a.hidden) {
+            RequestRestore(a.hwnd);
+        } else {
+            RequestHide(a.hwnd);
+        }
+    }
+}
+
+// Right click on the icon of one PWA: show it or quit it.
+void ShowSimpleIconMenu(HWND host, HWND target) {
+    HMENU menu = CreatePopupMenu();
+    if (!menu) {
+        return;
+    }
+    AppendMenuW(menu, MF_STRING, 1, L"Show");
+    AppendMenuW(menu, MF_STRING, 2, L"Quit");
+    POINT pt = {};
+    GetCursorPos(&pt);
+    SetForegroundWindow(host);
+    const UINT cmd = TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_RETURNCMD, pt.x, pt.y,
+                                    0, host, nullptr);
+    PostMessageW(host, WM_NULL, 0, 0);
+    DestroyMenu(menu);
+    if (cmd == 1) {
+        RequestRestore(target);
+    } else if (cmd == 2) {
+        RequestQuit(target);
+    }
+}
+
+// Tray messages in simple mode: the uID tells which icon was used.
+void SimpleTrayMessage(HWND host, UINT uid, UINT msg) {
+    if (uid == kTrayIconId) {
+        if (msg == WM_RBUTTONUP) {
+            ShowSimpleMenu(host);  // the single icon: left click does nothing
+        }
+        return;
+    }
+    for (const auto& ic : g_simpleIcons) {
+        if (ic.uid != uid) {
+            continue;
+        }
+        if (msg == WM_LBUTTONUP) {
+            RequestRestore(ic.hwnd);
+        } else if (msg == WM_RBUTTONUP) {
+            ShowSimpleIconMenu(host, ic.hwnd);
+        }
+        return;
+    }
+}
+
+// Brings the tray icons in line with the PWA windows (simple mode).
+void SyncSimpleTray(HWND host) {
+    std::vector<AppInfo> apps = CollectWindowsRaw();
+    if (g_simpleSingle) {
+        RemoveSimpleIcons(host);
+        int unread = 0;
+        for (const auto& a : apps) {
+            unread += a.unread;
+        }
+        const bool dark = IsSystemDark();
+        const bool badge = unread > 0;
+        std::wstring tip = L"PWA Tray Center";
+        if (!apps.empty()) {
+            tip += L" \x00B7 " + std::to_wstring(apps.size()) + (apps.size() == 1 ? L" app" : L" apps");
+        }
+        if (!g_trayAdded || badge != g_trayBadge || dark != g_trayDark || tip != g_trayTip) {
+            HICON icon = MakeTrayIcon(dark, badge);
+            NOTIFYICONDATAW nid = {};
+            nid.cbSize = sizeof(nid);
+            nid.hWnd = host;
+            nid.uID = kTrayIconId;
+            nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+            nid.uCallbackMessage = g_trayMsg;
+            nid.hIcon = icon;
+            wcsncpy(nid.szTip, tip.c_str(), ARRAYSIZE(nid.szTip) - 1);
+            if (Shell_NotifyIconW(g_trayAdded ? NIM_MODIFY : NIM_ADD, &nid)) {
+                if (g_trayIcon) {
+                    DestroyIcon(g_trayIcon);
+                }
+                g_trayIcon = icon;
+                g_trayAdded = true;
+                g_trayBadge = badge;
+                g_trayDark = dark;
+                g_trayTip = tip;
+            } else {
+                DestroyIcon(icon);
+            }
+        }
+    } else {
+        if (g_trayAdded) {
+            RemoveTrayIcon(host);
+        }
+        // Icons of PWAs that are no longer hidden go.
+        for (size_t i = g_simpleIcons.size(); i-- > 0;) {
+            const UINT uid = g_simpleIcons[i].uid;
+            const HWND hwnd = g_simpleIcons[i].hwnd;
+            bool stillHidden = false;
+            for (const auto& a : apps) {
+                if (a.hwnd == hwnd && a.hidden) {
+                    stillHidden = true;
+                }
+            }
+            if (!stillHidden) {
+                NOTIFYICONDATAW nid = {};
+                nid.cbSize = sizeof(nid);
+                nid.hWnd = host;
+                nid.uID = uid;
+                Shell_NotifyIconW(NIM_DELETE, &nid);
+                if (g_simpleIcons[i].icon) {
+                    DestroyIcon(g_simpleIcons[i].icon);
+                }
+                g_simpleIcons.erase(g_simpleIcons.begin() + i);
+            }
+        }
+        // A new icon for each hidden PWA; an icon is updated when its unread or name changes.
+        for (const auto& a : apps) {
+            if (!a.hidden) {
+                continue;
+            }
+            const bool badge = a.unread > 0;
+            std::wstring tip = AppDisplayName(a);
+            if (badge) {
+                tip += L" \x00B7 " + std::to_wstring(a.unread) + L" unread";
+            }
+            SimpleIcon* found = nullptr;
+            for (auto& ic : g_simpleIcons) {
+                if (ic.hwnd == a.hwnd) {
+                    found = &ic;
+                    break;
+                }
+            }
+            if (found && found->badge == badge && found->tip == tip) {
+                continue;
+            }
+            HICON icon = MakeBadgedIcon(GetWindowIconSafe(a.hwnd, false), badge);
+            NOTIFYICONDATAW nid = {};
+            nid.cbSize = sizeof(nid);
+            nid.hWnd = host;
+            nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+            nid.uCallbackMessage = g_trayMsg;
+            nid.hIcon = icon;
+            wcsncpy(nid.szTip, tip.c_str(), ARRAYSIZE(nid.szTip) - 1);
+            if (found) {
+                nid.uID = found->uid;
+                if (Shell_NotifyIconW(NIM_MODIFY, &nid) || Shell_NotifyIconW(NIM_ADD, &nid)) {
+                    if (found->icon) {
+                        DestroyIcon(found->icon);
+                    }
+                    found->icon = icon;
+                    found->badge = badge;
+                    found->tip = tip;
+                } else {
+                    // Neither worked: drop the entry, the next sync adds the icon again.
+                    DestroyIcon(icon);
+                    const UINT deadUid = found->uid;
+                    for (size_t k = 0; k < g_simpleIcons.size(); ++k) {
+                        if (g_simpleIcons[k].uid == deadUid) {
+                            if (g_simpleIcons[k].icon) {
+                                DestroyIcon(g_simpleIcons[k].icon);
+                            }
+                            g_simpleIcons.erase(g_simpleIcons.begin() + k);
+                            break;
+                        }
+                    }
+                }
+            } else {
+                SimpleIcon ic;
+                ic.uid = FreeSimpleUid();
+                ic.hwnd = a.hwnd;
+                nid.uID = ic.uid;
+                if (Shell_NotifyIconW(NIM_ADD, &nid)) {
+                    ic.icon = icon;
+                    ic.badge = badge;
+                    ic.tip = tip;
+                    g_simpleIcons.push_back(ic);
+                } else {
+                    DestroyIcon(icon);
+                }
+            }
+        }
+    }
+    SetTimer(host, kHostTimer, kHostTimerMs, nullptr);
+}
+
 // Adds, updates or removes the tray icon according to the hidden windows.
 void SyncTray(HWND host) {
-    std::vector<HWND> hidden = HiddenSnapshot();
-    if (hidden.empty() && IsHermes()) {
-        ClosePanelLocal();  // Hermes shows nothing without hidden windows
+    if (g_simpleMode) {
+        SyncSimpleTray(host);
+        return;
     }
+    std::vector<HWND> hidden = HiddenSnapshot();
     if (hidden.empty() && !g_trayAlways) {
         RemoveTrayIcon(host);
         KillTimer(host, kHostTimer);
@@ -8818,6 +9399,10 @@ void ShowTrayMenu(HWND host) {
 
 LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (g_trayMsg && msg == g_trayMsg) {
+        if (g_simpleMode) {
+            SimpleTrayMessage(hwnd, (UINT)wParam, (UINT)LOWORD(lParam));
+            return 0;
+        }
         switch (LOWORD(lParam)) {
             case WM_LBUTTONUP:
                 if (g_panel) {
@@ -8848,9 +9433,10 @@ LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 
     if (g_taskbarCreatedMsg && msg == g_taskbarCreatedMsg) {
-        // Explorer was restarted, the tray icon has to be added again.
+        // Explorer was restarted: the new taskbar knows none of our icons.
         g_trayAdded = false;
-        SyncTray(hwnd);
+        RemoveSimpleIcons(hwnd);  // the NIM_DELETE calls fail harmlessly; the icons are freed
+        SyncTray(hwnd);           // every hidden PWA gets its icon again
         return 0;
     }
 
@@ -8921,6 +9507,7 @@ LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             ClosePanelLocal();
             KillTimer(hwnd, kHostTimer);
             RemoveTrayIcon(hwnd);
+            RemoveSimpleIcons(hwnd);
             PostQuitMessage(0);
             return 0;
     }
@@ -9053,7 +9640,9 @@ bool HideToCenter(HWND hWnd) {
     const bool hidden = true;
     const ULONGLONG tick = GetTickCount64();
     SetWindowFlags(hWnd, &hidden, &tick);
-    RequestMediaPoll(4000);
+    if (!g_simpleMode) {
+        RequestMediaPoll(4000);
+    }
     NotifyListChanged();
     {
         std::lock_guard<std::mutex> lock(g_mutex);
@@ -9139,6 +9728,10 @@ LRESULT CALLBACK WindowSubclassProc(HWND hWnd,
     }
     if (g_quitMsg && uMsg == g_quitMsg) {
         QuitWindow(hWnd);
+        return 0;
+    }
+    if (g_hideMsg && uMsg == g_hideMsg) {
+        HideFromMenu(hWnd);
         return 0;
     }
 
@@ -9268,10 +9861,18 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
     g_hotkey = Wh_GetIntValue(L"prefHotkey", 0);
+    g_simpleMode = Wh_GetIntSetting(L"simpleMode") != 0;
+    PCWSTR simpleStyle = Wh_GetStringSetting(L"simpleStyle");
+    g_simpleSingle = simpleStyle && wcscmp(simpleStyle, L"single") == 0;
+    Wh_FreeStringSetting(simpleStyle);
+    if (g_simpleMode) {
+        g_hotkey = 0;  // no panel, so no shortcut
+    }
 
     g_trayMsg = RegisterWindowMessageW(L"Windhawk_PwaCenter_Tray");
     g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
     g_restoreMsg = RegisterWindowMessageW(L"Windhawk_PwaCenter_Restore");
+    g_hideMsg = RegisterWindowMessageW(L"Windhawk_PwaCenter_Hide");
     g_quitMsg = RegisterWindowMessageW(L"Windhawk_PwaCenter_Quit");
 
     if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
@@ -9279,6 +9880,14 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    return TRUE;
+}
+
+// Settings changed in Windhawk: reload the mod, so that the new values (Simple mode and
+// its style) apply at once. Windhawk restarts the mod, which is what happened when the
+// mod was turned off and on again by hand.
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    *bReload = TRUE;
     return TRUE;
 }
 

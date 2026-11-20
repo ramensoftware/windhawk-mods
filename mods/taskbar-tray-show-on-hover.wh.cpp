@@ -2,7 +2,7 @@
 // @id              taskbar-tray-show-on-hover
 // @name            Taskbar tray auto-hide (show on hover)
 // @description     Hide the taskbar tray area when not in use, and show it when hovering the mouse over it
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -55,13 +55,18 @@ over it.
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <functional>
+#include <list>
+#include <memory>
+#include <optional>
 #include <vector>
 
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.Animation.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -76,8 +81,6 @@ struct {
 } g_settings;
 
 std::atomic<bool> g_unloading;
-
-bool g_hoveringOverTrayArea;
 
 HWND FindCurrentProcessTaskbarWnd() {
     HWND hTaskbarWnd = nullptr;
@@ -134,30 +137,6 @@ FrameworkElement FindChildByClassName(FrameworkElement element,
     });
 }
 
-FrameworkElement EnumParentElements(
-    FrameworkElement element,
-    std::function<bool(FrameworkElement)> enumCallback) {
-    auto parent = element;
-    while (true) {
-        parent = Media::VisualTreeHelper::GetParent(parent)
-                     .try_as<FrameworkElement>();
-        if (!parent) {
-            return nullptr;
-        }
-
-        if (enumCallback(parent)) {
-            return parent;
-        }
-    }
-}
-
-FrameworkElement GetParentElementByClassName(FrameworkElement element,
-                                             PCWSTR className) {
-    return EnumParentElements(element, [className](FrameworkElement parent) {
-        return winrt::get_class_name(parent) == className;
-    });
-}
-
 void AnimateOpacity(FrameworkElement element, double to) {
     Media::Animation::DoubleAnimation animation;
     animation.To(to);
@@ -191,70 +170,134 @@ bool IsCursorOnElement(FrameworkElement element, HWND hWnd) {
 
 struct TrayEventSubscription {
     winrt::weak_ref<FrameworkElement> element;
+    std::shared_ptr<bool> pHovering;
     winrt::event_token pointerMovedToken;
     DispatcherTimer timer{nullptr};
     winrt::event_token timerTickToken;
 };
 
-std::vector<TrayEventSubscription> g_traySubscriptions;
+// Only accessed from the taskbar thread, which is also where it's released on
+// unload, rather than by the destructor at process exit.
+[[clang::no_destroy]] std::optional<std::vector<TrayEventSubscription>>
+    g_traySubscriptions{std::in_place};
+
+struct TrayAddedWait {
+    winrt::weak_ref<FrameworkElement> taskbarFrame;
+    FrameworkElement::LayoutUpdated_revoker layoutUpdatedRevoker;
+};
+
+// The pending waits of ApplyStyleWhenTrayAdded, released like
+// g_traySubscriptions.
+[[clang::no_destroy]] std::optional<std::list<TrayAddedWait>> g_trayAddedWaits{
+    std::in_place};
+
+// On newer builds, the XAML root content is the taskbar frame, and the tray
+// frame is an item of its repeater.
+FrameworkElement FindSystemTrayFrame(FrameworkElement xamlRootContent) {
+    if (winrt::get_class_name(xamlRootContent) != L"Taskbar.TaskbarFrame") {
+        return FindChildByClassName(xamlRootContent,
+                                    L"SystemTray.SystemTrayFrame");
+    }
+
+    FrameworkElement child = xamlRootContent;
+    if (!(child = FindChildByName(child, L"RootGrid")) ||
+        !(child = FindChildByName(child, L"TaskbarFrameRepeater"))) {
+        return nullptr;
+    }
+
+    FrameworkElement systemTrayFrame = nullptr;
+    EnumChildElements(child, [&systemTrayFrame](FrameworkElement item) {
+        if (winrt::get_class_name(item) != L"Taskbar.TaskbarExtensionElement") {
+            return false;
+        }
+
+        auto extensionElement = item.try_as<Controls::ContentControl>();
+        auto content =
+            extensionElement
+                ? extensionElement.Content().try_as<FrameworkElement>()
+                : nullptr;
+        if (!content ||
+            winrt::get_class_name(content) != L"SystemTray.SystemTrayFrame") {
+            return false;
+        }
+
+        systemTrayFrame = content;
+        return true;
+    });
+
+    return systemTrayFrame;
+}
 
 bool ApplyStyle(XamlRoot xamlRoot, HWND hWnd) {
+    if (!g_traySubscriptions) {
+        return false;
+    }
+
+    // Drop the subscriptions of destroyed trays. The Tick handler holds the
+    // timer, so it's removed for the two to be released.
+    std::erase_if(*g_traySubscriptions, [](const TrayEventSubscription& sub) {
+        if (sub.element.get()) {
+            return false;
+        }
+
+        sub.timer.Tick(sub.timerTickToken);
+        sub.timer.Stop();
+        return true;
+    });
+
     auto xamlRootContent = xamlRoot.Content().as<FrameworkElement>();
 
-    auto systemTrayFrame =
-        FindChildByClassName(xamlRootContent, L"SystemTray.SystemTrayFrame");
+    auto systemTrayFrame = FindSystemTrayFrame(xamlRootContent);
     if (!systemTrayFrame) {
         Wh_Log(L"Failed to find SystemTrayFrame");
         return false;
     }
 
     auto it =
-        std::find_if(g_traySubscriptions.begin(), g_traySubscriptions.end(),
+        std::find_if(g_traySubscriptions->begin(), g_traySubscriptions->end(),
                      [&](const TrayEventSubscription& sub) {
                          auto element = sub.element.get();
                          return element && element == systemTrayFrame;
                      });
 
-    if (g_unloading) {
-        if (it != g_traySubscriptions.end()) {
-            systemTrayFrame.PointerMoved(it->pointerMovedToken);
-            it->timer.Tick(it->timerTickToken);
-            it->timer.Stop();
-            g_traySubscriptions.erase(it);
-        }
+    winrt::Windows::Foundation::TimeSpan timerInterval{
+        std::chrono::milliseconds(g_settings.hideDelay > 200 ? 100 : 20)};
 
-        g_hoveringOverTrayArea = false;
-        systemTrayFrame.Opacity(1.0);
-    } else if (it == g_traySubscriptions.end()) {
+    if (it != g_traySubscriptions->end()) {
+        it->timer.Interval(timerInterval);
+        if (!*it->pHovering) {
+            AnimateOpacity(systemTrayFrame, g_settings.hiddenOpacity);
+        }
+    } else {
         bool isHovering = IsCursorOnElement(systemTrayFrame, hWnd);
 
-        g_hoveringOverTrayArea = isHovering;
         systemTrayFrame.Opacity(isHovering ? 1.0 : g_settings.hiddenOpacity);
 
         TrayEventSubscription sub;
         sub.element = systemTrayFrame;
+        sub.pHovering = std::make_shared<bool>(isHovering);
 
         sub.timer = DispatcherTimer();
-        sub.timer.Interval(winrt::Windows::Foundation::TimeSpan{
-            std::chrono::milliseconds(g_settings.hideDelay > 200 ? 100 : 20)});
+        sub.timer.Interval(timerInterval);
 
         auto timer = sub.timer;
+        auto pHovering = sub.pHovering;
         auto pMouseLeaveTime = std::make_shared<ULONGLONG>(0);
         sub.pointerMovedToken = systemTrayFrame.PointerMoved(
-            [timer, pMouseLeaveTime](
+            [timer, pHovering, pMouseLeaveTime](
                 winrt::Windows::Foundation::IInspectable const& sender,
                 Input::PointerRoutedEventArgs const&) {
                 auto element = sender.as<FrameworkElement>();
                 *pMouseLeaveTime = 0;
-                if (!g_hoveringOverTrayArea) {
-                    g_hoveringOverTrayArea = true;
+                if (!*pHovering) {
+                    *pHovering = true;
                     AnimateOpacity(element, 1.0);
                 }
                 timer.Start();
             });
 
         sub.timerTickToken = sub.timer.Tick(
-            [timer, pMouseLeaveTime,
+            [timer, pHovering, pMouseLeaveTime,
              weakElement = winrt::make_weak(systemTrayFrame),
              hWnd](winrt::Windows::Foundation::IInspectable const&,
                    winrt::Windows::Foundation::IInspectable const&) {
@@ -270,7 +313,7 @@ bool ApplyStyle(XamlRoot xamlRoot, HWND hWnd) {
                     *pMouseLeaveTime = GetTickCount64();
                 } else if (GetTickCount64() - *pMouseLeaveTime >=
                            (ULONGLONG)g_settings.hideDelay) {
-                    g_hoveringOverTrayArea = false;
+                    *pHovering = false;
                     AnimateOpacity(element, g_settings.hiddenOpacity);
                     timer.Stop();
                 }
@@ -280,10 +323,61 @@ bool ApplyStyle(XamlRoot xamlRoot, HWND hWnd) {
             sub.timer.Start();
         }
 
-        g_traySubscriptions.push_back(std::move(sub));
+        g_traySubscriptions->push_back(std::move(sub));
     }
 
     return true;
+}
+
+// On newer builds, the tray is an item of the taskbar frame repeater, which is
+// added after the taskbar is started.
+void ApplyStyleWhenTrayAdded(XamlRoot xamlRoot, HWND hWnd) {
+    if (g_unloading) {
+        return;
+    }
+
+    auto taskbarFrame = xamlRoot.Content().try_as<FrameworkElement>();
+    if (!taskbarFrame ||
+        winrt::get_class_name(taskbarFrame) != L"Taskbar.TaskbarFrame") {
+        return;
+    }
+
+    std::erase_if(*g_trayAddedWaits, [](const TrayAddedWait& wait) {
+        return !wait.taskbarFrame.get();
+    });
+
+    if (std::any_of(g_trayAddedWaits->begin(), g_trayAddedWaits->end(),
+                    [&](const TrayAddedWait& wait) {
+                        return wait.taskbarFrame.get() == taskbarFrame;
+                    })) {
+        return;
+    }
+
+    auto it = g_trayAddedWaits->emplace(g_trayAddedWaits->end());
+    it->taskbarFrame = taskbarFrame;
+    it->layoutUpdatedRevoker = taskbarFrame.LayoutUpdated(
+        winrt::auto_revoke,
+        [it, hWnd](winrt::Windows::Foundation::IInspectable const&,
+                   winrt::Windows::Foundation::IInspectable const&) {
+            auto taskbarFrame = it->taskbarFrame.get();
+            if (taskbarFrame && !FindSystemTrayFrame(taskbarFrame)) {
+                return;
+            }
+
+            HWND hTaskbarWnd = hWnd;
+            g_trayAddedWaits->erase(it);
+
+            if (!taskbarFrame) {
+                return;
+            }
+
+            try {
+                ApplyStyle(taskbarFrame.XamlRoot(), hTaskbarWnd);
+            } catch (...) {
+                HRESULT hr = winrt::to_hresult();
+                Wh_Log(L"Error %08X", hr);
+            }
+        });
 }
 
 void* CTaskBand_ITaskListWndSite_vftable;
@@ -307,7 +401,7 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
         return nullptr;
     }
 
-    size_t taskbarElementIUnknownOffset = 0x48;
+    size_t taskbarElementIUnknownOffset = 0x10;
 
 #if defined(_M_X64)
     {
@@ -322,7 +416,19 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
         }
     }
 #elif defined(_M_ARM64)
-    // Just use the default offset which will hopefully work in most cases.
+    {
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+        // fd030091 mov     fp, sp
+        // 080c41f8 ldr     x8, [x0, #0x10]!
+        const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
+        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
 #else
 #error "Unsupported architecture"
 #endif
@@ -448,6 +554,24 @@ bool RunFromWindowThread(HWND hWnd,
 void ApplySettingsFromTaskbarThread(bool mainTaskbarOnly = false) {
     Wh_Log(L"Applying settings");
 
+    if (g_unloading) {
+        g_trayAddedWaits.reset();
+
+        if (g_traySubscriptions) {
+            for (auto& sub : *g_traySubscriptions) {
+                if (auto element = sub.element.get()) {
+                    element.PointerMoved(sub.pointerMovedToken);
+                    element.Opacity(1.0);
+                }
+                sub.timer.Tick(sub.timerTickToken);
+                sub.timer.Stop();
+            }
+            g_traySubscriptions.reset();
+        }
+
+        return;
+    }
+
     EnumThreadWindows(
         GetCurrentThreadId(),
         [](HWND hWnd, LPARAM lParam) -> BOOL {
@@ -475,6 +599,7 @@ void ApplySettingsFromTaskbarThread(bool mainTaskbarOnly = false) {
 
             if (!ApplyStyle(xamlRoot, hWnd)) {
                 Wh_Log(L"ApplyStyle failed");
+                ApplyStyleWhenTrayAdded(xamlRoot, hWnd);
                 return TRUE;
             }
 
@@ -513,7 +638,9 @@ void WINAPI CSecondaryTray_InitModelAndHost_Hook(void* pThis,
         return;
     }
 
-    ApplyStyle(xamlRoot, taskbarWnd);
+    if (!ApplyStyle(xamlRoot, taskbarWnd)) {
+        ApplyStyleWhenTrayAdded(xamlRoot, taskbarWnd);
+    }
 }
 
 void ApplySettings(HWND hTaskbarWnd) {

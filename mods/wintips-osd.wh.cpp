@@ -4,13 +4,13 @@
 // @name:zh-CN      WinTips 键盘状态提示
 // @description     Shows a Win11-style floating OSD for Caps/Num/Scroll Lock, Insert and copy/paste/cut
 // @description:zh-CN 按下大写/数字/滚动锁定、Insert 或复制/粘贴/剪切时弹出 Win11 质感的浮窗提示
-// @version         1.5.2
+// @version         1.6.2
 // @author          DoYouNatureQ
 // @github          https://github.com/DoYouNatureQ
 // @homepage        https://github.com/DoYouNatureQ/WinTips
 // @license         GPL-3.0-or-later
 // @include         windhawk.exe
-// @compilerOptions -lgdiplus -lgdi32 -ladvapi32 -lshell32 -lshcore -ldwmapi -limm32
+// @compilerOptions -lgdiplus -lgdi32 -ladvapi32 -lshell32 -lshcore -ldwmapi -limm32 -ldwrite
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -27,94 +27,85 @@ programs and no system functions are hooked.
 of the nearest screen edge — a padlock that rotates and bounces, the state in
 words, an accent bar. **Ctrl+C / V / X**, plus the classic **Ctrl+Insert**,
 **Shift+Insert** and **Shift+Delete**, show a check mark or scissors with a `×N`
-badge counting consecutive actions. **Win+Space**, **Ctrl+Shift**, **Alt+Shift**
-and **Shift** inside an IME show a globe with the input language or the
-Chinese/English mode.
+badge counting consecutive actions. **Win+Space**, **Ctrl+Shift**,
+**Alt+Shift** and **Shift** inside an IME show a globe with the input language
+or the Chinese/English mode; IMEs that never report their mode to the system
+(a good number of third-party builds) can be tracked by the solo-Shift
+gesture instead, behind an optional setting that is off by default.
 
 ![Light theme, frosted card over a wallpaper](https://raw.githubusercontent.com/DoYouNatureQ/WinTips/main/Windhawk/preview/osd-acrylic-light-en.png)
 
 ## Features
 
-- **Blurred backdrop, live.** The card blurs what is behind it, the way the
-  Windows 11 OSD does, and keeps it refreshing (Windows 10 2004 and later) so
-  video and scrolling pages move through as a soft wash instead of a frozen
-  frame. *Card material → Solid* for an opaque card.
+- **Blurred backdrop, live.** The card blurs what is behind it and keeps it
+  refreshing (Windows 10 2004 and later), so video and scrolling pages move
+  through as a soft wash, matching the standalone app's material. *Card
+  material → Solid* for an opaque card.
 - **Windows 11 look, Windows 10 included.** The mod paints the card itself, so
-  it needs neither system acrylic nor system rounded corners. Per-monitor DPI,
-  light/dark theme and the system accent color are followed.
-- **Stays in front.** A fullscreen game, recorder or launcher overlay that covers
-  the card is noticed within 100 ms and the card is re-raised; when nothing
-  covers it, no other window is touched.
+  it needs neither system acrylic nor rounded corners. Per-monitor DPI,
+  light/dark theme and the accent color are followed; labels are drawn by
+  DirectWrite with a GDI+ fallback.
+- **Stays in front.** Anything covering the card is noticed within 100 ms and
+  the card is re-raised; when nothing covers it, no other window is touched.
 - **Hugs the taskbar.** Anchored to the taskbar's live edge, so an auto-hiding
-  bar never covers the card, and the card slides in from the nearest edge.
+  bar never covers the card.
 - **Clipboard aware.** Copy and cut tips wait for the clipboard to actually
-  change, so a `Ctrl+C` that interrupts a console app and a permanent
-  `Shift+Delete` stay quiet. Context-menu copies can be reported too.
-- **Works under elevated windows.** Windows stops calling the keyboard hook while
-  an administrator window has focus; the lock keys and Insert then come from Raw
-  Input, which is delivered per device and ignores both focus and integrity
-  level. A key-state poll stays behind it for anything Raw Input cannot see, such
-  as a remote or a virtual keyboard. See below for what does not work there.
-- **Light on resources.** Nothing runs while the card is hidden. A frame takes
-  about 0.5 ms at 100% size; the live backdrop and the topmost guard only tick
-  while a card is up.
+  change, so a stray `Ctrl+C` in a console app stays quiet. Context-menu copies
+  can be reported too.
+- **Works under elevated windows.** While an administrator window has focus,
+  the lock keys and Insert come from Raw Input, with a key-state poll behind it
+  for anything Raw Input cannot see.
+- **Light on resources.** Nothing runs while the card is hidden.
 
 ![Paste tip with an ×3 badge](https://raw.githubusercontent.com/DoYouNatureQ/WinTips/main/Windhawk/preview/osd-paste-en.png)
 
 ## Settings
 
-- **Tips** — Caps Lock, Num Lock, Scroll Lock, Insert, Copy, Paste and Cut, each
-  on or off. *Also notify non-keyboard copies* adds context-menu and in-app
-  copies.
-- **Input language & Chinese/English tip** — off by default; shows the globe card
-  after a language switch. Set it back to off if it fires more often than it
-  helps.
-- **Behaviour** — *Display duration* 500–10000 ms; *Animation speed* 100 is
-  normal (300 ms), 0 disables it; *Skip while a fullscreen app is in front*.
-- **Placement** — *Vertical* above the taskbar or below the top edge,
-  *Horizontal* left, center or right, *Show on* the active window's display
-  (default), the mouse's display or the primary one, plus pixel offsets. The
-  taskbar edge is tracked live.
-- **Look** — *Theme* follow Windows, dark or light; *Card material* acrylic or
-  solid; *Tint opacity* 20–90% (55% by default, acrylic only); *Blur radius*
-  0–40 px; *Accent color* `#RRGGBB`, empty for the system accent; *Card size*
-  60–200%, gap to the screen edge unchanged.
-- **Language** — language of the text on the card: Follow Windows (eight UI
-  languages built in, English for anything else) or pin one.
+- **Tips** — Caps Lock, Num Lock, Scroll Lock, Insert, Copy, Paste and Cut,
+  each on or off. *Also notify non-keyboard copies*; *Show the ×N count badge*.
+- **Input language & Chinese/English tip** — off by default. *Tip when
+  switching windows* covers Windows' "Let me use a different input method for
+  each app window" option; *Infer Chinese/English from Shift* is an opt-in
+  fallback for IMEs that never report their mode.
+- **Behaviour** — display duration 500–10000 ms; animation speed (100 is
+  normal, 0 disables it); skip while a fullscreen app is in front.
+- **Placement** — vertical and horizontal anchors, which display to show on,
+  and pixel offsets; the taskbar edge is tracked live.
+- **Look** — theme, card material, tint opacity 20–90%, blur radius 0–40 px,
+  accent color `#RRGGBB`, card size 60–200%.
+- **Language** — the text on the card: follow Windows (eight UI languages
+  built in) or pin one.
 
 ## Things to know
 
-- Runs as a **tool mod**: it keeps working when Explorer restarts and never loads
-  into other processes. The standalone **WinTips.exe** does the same job and the
-  mod stays quiet while it runs, so both can be installed — but keep only one of
-  the two startup entries.
-- Insert is event-based: Windows keeps no global Insert state, and only a bare
-  Insert counts (with Ctrl or Shift held it is a copy or a paste).
-- An **exclusive-fullscreen** game covers the card, since that mode owns the
-  display pipeline. Borderless and windowed games are fine.
-- Behind an **elevated window** the backdrop grab comes back black, so that tip
-  falls back to a solid card. The language is still reported there, the IME mode
-  is not. Copy, paste and cut are not either: they need the key the hook is
-  denied, and Raw Input only answers for the lock keys and Insert.
-- The language card needs a keystroke to hang on: switching with the mouse from
-  the language bar or an IME status window shows nothing.
+- Runs as a **tool mod**: never loads into other processes. The standalone
+  **WinTips.exe** does the same job and the mod stays quiet while it runs —
+  but keep only one of the two startup entries.
+- Insert is event-based; only a bare Insert counts (with Ctrl or Shift held it
+  is a copy or a paste).
+- Copy, paste and cut are keyed to Ctrl (+ Shift), never to combos that also
+  hold **Win**.
+- An **exclusive-fullscreen** game covers the card; borderless and windowed
+  games are fine.
+- Behind an **elevated window** the backdrop grab comes back black (solid card
+  fallback) and copy / paste / cut are not reported either.
+- The language card needs a keystroke or a window switch to hang on; switching
+  with the mouse from the language bar shows nothing.
+- The *Infer Chinese/English from Shift* fallback has no way to check itself:
+  when the mode is also changed by other means (Caps Lock, the IME's status
+  bar), the card can stay one toggle out of sync until the system reports a
+  switch again. Leave it off unless your IME never reports its mode.
 - The card is **left out of screen capture** while the live backdrop runs
-  (`WDA_EXCLUDEFROMCAPTURE`): screenshots, recordings, streams and screen sharing
-  don't show it. That is what keeps the live blur from feeding on itself. Pick
-  *Card material → Solid* if you want the card in a recording — it uses the
-  one-shot backdrop, which needs no exclusion.
+  (`WDA_EXCLUDEFROMCAPTURE`); pick *Card material → Solid* if you want it in a
+  recording.
 - Without the live-refresh capability the backdrop is a snapshot taken when the
-  card appeared; sliding in and following the taskbar still work, because the
-  grab includes a margin around the card.
+  card appeared.
 
 ## Compared to Lock Keys Notifier
 
-[Lock Keys Notifier](https://windhawk.net/mods/lock-keys-notifier) reports the
-same lock keys but aims elsewhere: it draws a configurable toast on a solid
-background, while this mod reproduces the native Windows 11 OSD and adds
-clipboard tips. Want to tune every pixel of the card — layouts, fonts, shadows,
-sounds? Lock Keys Notifier fits better. Want the native look or clipboard tips?
-This one.
+[Lock Keys Notifier](https://windhawk.net/mods/lock-keys-notifier) draws a
+configurable toast on a solid background — tune every pixel of it if you like.
+This mod reproduces the native Windows 11 OSD and adds clipboard tips.
 
 ## Links
 
@@ -125,8 +116,7 @@ This one.
 
 GPL-3.0-or-later, as the standalone WinTips app. The look and motion take
 reference from the LockWindow design in FluentFlyout (also GPL-3.0); the code
-here is an independent implementation, and redistributed versions must ship the
-complete corresponding source under the GPL.
+here is an independent implementation.
 */
 // ==/WindhawkModReadme==
 
@@ -208,15 +198,54 @@ complete corresponding source under the GPL.
     右键菜单、应用内“复制”按钮等非键盘复制（剪贴板更新即提示）也会弹出提示。
 
     需要同时开启上面的“复制”选项。
+- countBadge: true
+  $name: Show the ×N count badge
+  $name:zh-CN: 显示 ×N 次数徽章
+  $description: >-
+    Copy, paste and cut cards show a small ×N badge counting consecutive
+    actions. Turn this off to keep just the icon and the label.
+  $description:zh-CN: >-
+    复制、粘贴、剪切卡片右上角的 ×N 次数徽章记录连续操作次数。不需要时可关闭，卡片只保留图标和文字。
 - notifyLanguage: false
   $name: Input language & Chinese/English tip
   $name:zh-CN: 输入法语言与中英文提示
   $description: >-
     Shows the input language after Win+Space, Ctrl+Shift or Alt+Shift, and the
     Chinese/English mode after Shift inside an IME. Off by default: unless you
-    switch often and on purpose, it shows up more often than it helps.
+    switch often and on purpose, it shows up more often than it helps. For IMEs
+    that never report their mode, a separate setting below can infer it from
+    the Shift gesture.
   $description:zh-CN: >-
-    Win+Space、Ctrl+Shift、Alt+Shift 换输入语言，或输入法内按 Shift 切中英文时，浮窗显示当前状态。默认关闭：除非确实经常刻意切换，否则它出现得比帮到你的次数多。
+    Win+Space、Ctrl+Shift、Alt+Shift 换输入语言，或输入法内按 Shift 切中英文时，浮窗显示当前状态。第三方输入法不上报模式时，可在下方开启「由 Shift 推断中英文状态」。默认关闭：除非确实经常刻意切换，否则它出现得比帮到你的次数多。
+- notifyLanguageOnWindowSwitch: true
+  $name: Tip when switching windows
+  $name:zh-CN: 切换窗口时提示输入状态
+  $description: >-
+    With Windows' "Let me use a different input method for each app window"
+    turned on, also show the card when switching to a window whose input
+    language or Chinese/English mode differs from the one before. Without that
+    system option, switching windows does not change the input state, so the
+    card stays quiet anyway. Requires the input language tip above.
+  $description:zh-CN: >-
+    开启系统的「允许我为每个应用窗口使用不同输入法」后，切换到语言或中英文状态与之前不同的窗口时也弹出提示。没开该系统选项时，切换窗口不会改变输入状态，浮窗自然不会出现。
+
+    需要同时开启上面的“输入法语言与中英文提示”。
+- notifyLanguageInferShift: false
+  $name: Infer Chinese/English from Shift
+  $name:zh-CN: 由 Shift 推断中英文状态
+  $description: >-
+    For IMEs that never report their Chinese/English mode to the system
+    (Weasel and a good number of third-party builds), treat a solo Shift
+    press-and-release as a toggle and report the opposite of the tracked
+    state. The guess survives across windows but has no way to self-correct:
+    if the mode is also changed by other means (Caps Lock, the IME's status
+    bar), it can stay backwards until a switch the system does report lands.
+    Turn this on only if your IME toggles on Shift and the card never follows
+    it otherwise. Requires the input language tip above.
+  $description:zh-CN: >-
+    对从不上报中英文模式的输入法（如小狼毫 Weasel 及不少第三方输入法），把「单独按下并抬起 Shift」当作一次中英文切换，按缓存状态的相反面提示（连按两次净变化为零则不提示）。推断无法自我纠正：Caps Lock、输入法状态栏等其他途径切换模式后，推断可能一直反向，直到下一次被系统上报的切换碰巧纠正。仅当你的输入法确实用 Shift 切换、且不开此项时卡片完全不跟随时再开启。
+
+    需要同时开启上面的“输入法语言与中英文提示”。
 - displayMs: 2000
   $name: Display duration (milliseconds)
   $name:zh-CN: 显示时长（毫秒）
@@ -323,14 +352,14 @@ complete corresponding source under the GPL.
     where text stays readable over a light wallpaper.
   $description:zh-CN: >-
     仅亚克力材质有效：模糊背景之上那层底色盖住多少。数值越低越透、背景越清晰，越高越接近实心。20 至 90，55 是"看得见背后"与"文字不失读"的平衡点。
-- blurRadius: 12
+- blurRadius: 16
   $name: Blur radius (pixels)
   $name:zh-CN: 模糊半径（像素）
   $description: >-
     Only used by the Acrylic material. Higher values look softer; 0 keeps the
-    background sharp behind the tint.
+    background sharp behind the tint. 16 matches the WinTips app's default.
   $description:zh-CN: >-
-    仅亚克力材质有效。数值越大越模糊，0 表示背景不模糊、只叠一层色调。
+    仅亚克力材质有效。数值越大越模糊，0 表示背景不模糊、只叠一层色调。16 与 WinTips 应用默认值一致。
 - accentColor: ""
   $name: Accent color
   $name:zh-CN: 强调色
@@ -354,6 +383,7 @@ complete corresponding source under the GPL.
 #include <shellscalingapi.h>
 #include <dwmapi.h>
 #include <imm.h>
+#include <dwrite.h>
 
 #include <algorithm>
 #include <cmath>
@@ -422,10 +452,19 @@ constexpr int kFollowMs = 140;        // shorter than the entrance, so it keeps 
 // and the blur is re-aligned to wherever the card is now. A grab costs about
 // 7 ms of a core (it waits for the compositor), so this is not a frame rate to
 // chase - the smoothness comes from the blend below rather than from more
-// frames. The WinTips app refreshes every 22 ms; the mod is a guest in
-// windhawk.exe, where other mods' hooks run on the same CPU, so it settles for
-// 30 Hz and lets the blend do the rest.
-constexpr int kLiveRefreshMs = 33;
+// frames. 22 ms matches the WinTips app; the blend is what hides the beat.
+constexpr int kLiveRefreshMs = 22;
+
+// Box-blur passes. The one-shot snapshot runs three and approaches a Gaussian;
+// the live path runs two and widens the radius instead (see kLiveRadiusScale) -
+// same softness per frame for a third less convolution. Same split the
+// WinTips app makes.
+constexpr int kStaticBlurPasses = 3;
+constexpr int kLiveBlurPasses = 2;
+
+// The live path blurs with two passes, whose sigma is only radius * 0.82; the
+// radius grows by a quarter (16 -> 20) to match the three-pass snapshot.
+constexpr float kLiveRadiusScale = 1.25f;
 
 // How far the card may wander inside one grab, in DIPs. The snapshot is taken
 // around the card instead of exactly behind it, and the drawing code samples
@@ -436,7 +475,8 @@ constexpr int kStaticPaddingDip = 72; // one grab per tip: cover the whole slide
 
 // New frame's weight in the blend (256 = new frame only). Around 150 the image
 // catches up in about three frames - fast enough to read as "live", slow enough
-// that a 30 Hz capture of a busy desktop doesn't flicker.
+// that a ~45 Hz capture of a busy desktop doesn't flicker. Same value the
+// WinTips app uses.
 constexpr int kLiveBlendWeight = 150;
 
 // The topmost guard: check this often whether something else landed on top of
@@ -469,13 +509,20 @@ constexpr UINT WM_APP_QUIT = WM_APP + 2;
 // so the sampling it starts reads another process's IME window without holding
 // up the hook. Window message, handled on the UI thread.
 constexpr UINT WM_APP_LANGUAGE_WATCH = WM_APP + 7;
+constexpr UINT WM_APP_LANGUAGE_FOCUS = WM_APP + 8;  // a foreground change, per-window IME
+// Posted by the hook when Shift went down and up with no other key involved.
+// That gesture is the classic Chinese/English toggle of third-party IMEs, and
+// the IMEs that never answer WM_IME_CONTROL can only be tracked by watching
+// for it. Window message, handled on the UI thread.
+constexpr UINT WM_APP_SOLO_SHIFT = WM_APP + 9;
 
 constexpr UINT_PTR kTimerAnim = 1;
 constexpr UINT_PTR kTimerHold = 2;
 constexpr UINT_PTR kTimerFollow = 3;
 constexpr UINT_PTR kTimerLiveBackdrop = 6;
 constexpr UINT_PTR kTimerTopmost = 7;
-constexpr UINT_PTR kTimerInput = 8;  // the language watch, on the UI thread
+constexpr UINT_PTR kTimerInput = 8;       // the language watch, on the UI thread
+constexpr UINT_PTR kTimerFocusInput = 9;  // the per-window focus watch, same thread
 
 // Thread timers on the hook thread (window timers would need the card window).
 constexpr UINT_PTR kThreadTimerPoll = 1;
@@ -484,6 +531,15 @@ constexpr UINT_PTR kThreadTimerProbe = 2;
 // The language watch: poll this often for this long after a switch key.
 constexpr int kInputPollMs = 50;
 constexpr int kInputWindowMs = 2000;
+
+// After a solo Shift release, how long the system read gets to reflect the
+// toggle before the inference below concludes the IME never reports it.
+constexpr int kInferGraceMs = 350;
+
+// The per-window focus watch is shorter: the restored language lands within the
+// first few samples after the switch, and the focus event already knows where
+// to look, unlike a switch key that may be mid-combination.
+constexpr int kFocusWindowMs = 1000;
 
 // =============================================================================
 // Settings
@@ -517,7 +573,12 @@ struct Settings {
     int language = kLangAuto;
     bool notify[kKindCount] = {true, true, true, true,
                                true, true, true, false}; // language tip off
+    bool notifyLanguageOnWindowSwitch = true;
+    // Solo-Shift inference for IMEs that never report their mode. Off: the
+    // guess can drift backwards with no way to notice, so it is opt-in.
+    bool notifyLanguageInferShift = false;
     bool notifyAnyCopy = true;
+    bool countBadge = true; // ×N badge on copy/paste/cut cards (issue #7304)
     int displayMs = 2000;
     int animationPercent = 100;
     int tipScalePercent = 100;
@@ -532,7 +593,9 @@ struct Settings {
     // 55 is the same balance point the WinTips app settled on: below ~40 the
     // text starts fighting a busy wallpaper, above ~75 the blur is invisible.
     int tintOpacity = 55;
-    int blurRadius = 12;
+    // Same default the WinTips app uses: soft enough to read as frosted glass,
+    // sharp enough that the desktop behind stays recognizable.
+    int blurRadius = 16;
     std::wstring accentColor;
     bool suppressFullscreen = false;
 
@@ -625,7 +688,12 @@ void LoadSettings() {
     s.notify[kPaste] = Wh_GetIntSetting(L"notifyPaste") != 0;
     s.notify[kCut] = Wh_GetIntSetting(L"notifyCut") != 0;
     s.notifyAnyCopy = Wh_GetIntSetting(L"notifyAnyCopy") != 0;
+    s.countBadge = Wh_GetIntSetting(L"countBadge") != 0;
     s.notify[kLanguage] = Wh_GetIntSetting(L"notifyLanguage") != 0;
+    s.notifyLanguageOnWindowSwitch =
+        Wh_GetIntSetting(L"notifyLanguageOnWindowSwitch") != 0;
+    s.notifyLanguageInferShift =
+        Wh_GetIntSetting(L"notifyLanguageInferShift") != 0;
 
     s.displayMs = Clamp(Wh_GetIntSetting(L"displayMs"), 500, 10000);
     s.animationPercent = Clamp(Wh_GetIntSetting(L"animationPercent"), 0, 300);
@@ -804,6 +872,11 @@ const wchar_t* KeyName(TipKind kind) {
 // tip is raised and read while it is drawn, both on the UI thread.
 std::wstring g_languageText;
 
+// The text and time of the previous language card, for the two-watch dedup
+// (see LanguageTipRepeated). UI thread only, like everything else here.
+std::wstring g_lastLanguageTipText;
+ULONGLONG g_lastLanguageTipTick = 0;
+
 void FormatTip(TipKind kind, bool on, std::wstring& out) {
     switch (kind) {
         case kCapsLock:
@@ -925,11 +998,9 @@ Theme CurrentTheme() {
         return t;
     }
 
-    // Slightly translucent so the card reads as a floating layer even though it
-    // is drawn by us rather than by the DWM backdrop material.
-    const BYTE alpha = 238;
-    t.surface = t.dark ? Color(alpha, 0x2B, 0x2B, 0x2B)
-                       : Color(alpha, 0xFB, 0xFB, 0xFB);
+    // Fully opaque, matching the standalone app's solid card (OsdSurface).
+    t.surface = t.dark ? Color(255, 0x2B, 0x2B, 0x2B)
+                       : Color(255, 0xFB, 0xFB, 0xFB);
     // Acrylic is a tint over the blurred backdrop. The alpha comes from the
     // tint opacity setting (20-90%, default 55), which is the same knob the
     // WinTips app exposes: low values keep the wallpaper visible through the
@@ -943,8 +1014,7 @@ Theme CurrentTheme() {
     t.accent = ParseHexColor(g_settings.accentColor, t.accent) ? t.accent
                                                                : SystemAccent();
     t.onAccent = Color(255, 255, 255, 255);
-    t.border = t.dark ? Color(0x14, 0xFF, 0xFF, 0xFF)
-                      : Color(0x1A, 0x00, 0x00, 0x00);
+    // t.border is only drawn in high contrast, where it is set above.
     return t;
 }
 
@@ -1694,6 +1764,17 @@ float MeasureTextWidth(HDC dc, const LOGFONTW& logFont, const std::wstring& text
     return (float)size.cx;
 }
 
+// DirectWrite text, defined with the surface code below: it rasterises the
+// glyphs and blends them straight into the card's DIB, which is only known
+// there - the same forward-declaration split PaintCardBackground uses above.
+// DWrite is what the native Windows 11 OSD draws its labels with; GDI+'s
+// grid-fit aliasing is what issue #6977 reported as pixelated text.
+bool DWriteAvailable();
+float MeasureTextWidthDWrite(const std::wstring& text, float size, int weight);
+float DrawTextDWrite(const std::wstring& text, float size, int weight,
+                     const Color& color, float alphaScale, float x,
+                     float centerY, bool centerAlign);
+
 // =============================================================================
 // Frame rendering
 // =============================================================================
@@ -1756,26 +1837,51 @@ void RenderCard(Graphics& g, float scale, float width, float height,
     FormatTip(f.kind, f.on, label);
 
     // --- fonts -------------------------------------------------------------
+    // DirectWrite draws the label when it can be reached; the GDI+ path below
+    // is the fallback, and it keeps the font objects only then.
+    bool useDWrite = DWriteAvailable();
     HDC screenDc = GetDC(nullptr);
     LOGFONTW textLogFont = MakeUiLogFont(14.0f * scale, 500);
     LOGFONTW badgeLogFont = MakeUiLogFont(12.5f * scale, 600);
 
+    // `clip` marks the card family (icon, vertical rhythm); `badge` only says
+    // whether the ×N pill is drawn and reserves width (issue #7304).
     bool clip = IsClipKind(f.kind);
+    bool badge = clip && g_settings.countBadge;
     bool lang = IsLanguageKind(f.kind);
     float textWidth = MeasureTextWidth(screenDc, textLogFont, label);
-    float badgeWidth = clip ? MeasureTextWidth(screenDc, badgeLogFont,
-                                               CountText(f.count)) +
-                                  14.0f * scale
-                            : 0.0f;
+    if (useDWrite) {
+        float width = MeasureTextWidthDWrite(label, 14.0f * scale, 500);
+        if (width > 0.0f) {
+            textWidth = width;
+        }
+    }
+    float badgeWidth = 0.0f;
+    if (badge) {
+        badgeWidth =
+            MeasureTextWidth(screenDc, badgeLogFont, CountText(f.count)) +
+            14.0f * scale;
+        if (useDWrite) {
+            float width = MeasureTextWidthDWrite(CountText(f.count),
+                                                 12.5f * scale, 600);
+            if (width > 0.0f) {
+                badgeWidth = width + 14.0f * scale;
+            }
+        }
+    }
 
-    Font textFont(screenDc, &textLogFont);
-    Font badgeFont(screenDc, &badgeLogFont);
+    Font* textFont = nullptr;
+    Font* badgeFont = nullptr;
+    if (!useDWrite) {
+        textFont = new Font(screenDc, &textLogFont);
+        badgeFont = new Font(screenDc, &badgeLogFont);
+    }
     ReleaseDC(nullptr, screenDc);
 
     // --- card --------------------------------------------------------------
     g.SetSmoothingMode(SmoothingModeAntiAlias);
     g.SetPixelOffsetMode(PixelOffsetModeHalf);
-    g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+    g.SetTextRenderingHint(TextRenderingHintAntiAlias);
 
     GraphicsPath card;
     AddRoundRect(card, RectF(0.0f, 0.0f, width, height), 8.0f * scale);
@@ -1813,7 +1919,9 @@ void RenderCard(Graphics& g, float scale, float width, float height,
     }
 
     // --- text --------------------------------------------------------------
-    g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+    // The hint matters only for the GDI+ fallback now, and AntiAlias (without
+    // the grid fit) is the best it can do - see the DirectWrite section below.
+    g.SetTextRenderingHint(TextRenderingHintAntiAlias);
     SolidBrush textBrush(theme.text);
     StringFormat textFormat;
     textFormat.SetFormatFlags(StringFormatFlagsNoWrap | StringFormatFlagsNoClip);
@@ -1821,13 +1929,19 @@ void RenderCard(Graphics& g, float scale, float width, float height,
     textFormat.SetLineAlignment(StringAlignmentCenter);
 
     float textX;
-    if (clip) {
+    if (badge) {
         const float gridLeft = 16.0f * scale;
         const float iconEnd = 22.0f * scale;
         float badgeStart = width - gridLeft - 8.0f * scale - badgeWidth;
         float mid = (iconEnd + badgeStart) / 2.0f;
         textX = std::max(iconEnd + 8.0f * scale, mid - textWidth / 2.0f);
         textX += gridLeft;
+    } else if (clip) {
+        // Badge hidden (issue #7304): center the label on the card itself, the
+        // way the badge-on layout lands, instead of the icon-gutter offset the
+        // lock cards use. The max keeps a gap when a label runs long.
+        textX = std::max((16.0f + 22.0f + 8.0f) * scale,
+                         width / 2.0f - textWidth / 2.0f);
     } else {
         // Centered in the content grid, offset by the icon gutter.
         float contentLeft = 16.0f * scale;
@@ -1836,20 +1950,38 @@ void RenderCard(Graphics& g, float scale, float width, float height,
                 18.0f * scale / 2.0f;
     }
 
+    // Vertical: the exe's XAML maths puts the label centre at ~22, but that
+    // reads as high on the rendered card (ink sits 3 px above centre), so the
+    // mod keeps the visually centred positions users are used to.
     float textY = (clip ? height / 2.0f - 1.0f * scale
                         : height / 2.0f - 2.0f * scale + gridShift);
     // NoWrap keeps a slightly narrower GDI+ measure from breaking the label
     // into two lines, so the rect only needs to be tall enough for one line.
     RectF textRect(textX, textY - 14.0f * scale, width - textX + 8.0f * scale,
                    28.0f * scale);
-    g.DrawString(label.c_str(), (INT)label.size(), &textFont, textRect,
-                 &textFormat, &textBrush);
+    if (useDWrite) {
+        // DirectWrite writes straight into the surface pixels, so everything
+        // GDI+ has queued must land in the DIB first.
+        g.Flush();
+        DrawTextDWrite(label, 14.0f * scale, 500, theme.text, 1.0f,
+                       textX + textWidth / 2.0f, textY, true);
+    } else {
+        g.DrawString(label.c_str(), (INT)label.size(), textFont, textRect,
+                     &textFormat, &textBrush);
+    }
 
     // --- clipboard badge ---------------------------------------------------
-    if (clip) {
-        float badgeHeight = 18.0f * scale;
-        float badgeX = width - 16.0f * scale - 8.0f * scale - badgeWidth;
-        float badgeY = (height - badgeHeight) / 2.0f;
+    if (badge) {
+        // Geometry copied from the exe's OsdWindow.xaml: the pill is right
+        // aligned inside the content grid (right inset 12, no extra margin),
+        // vertically centred in the grid band [6, 40] -> centre 23 DIP, and
+        // sized like the Border there: 12.5 px text line + 2 px padding on
+        // each side (~20.5 DIP tall, corner radius 9).
+        float badgeHeight = 20.5f * scale;
+        float badgeX = width - 12.0f * scale - badgeWidth;
+        // badgeHeight is already in pixels; scaling the whole expression again
+        // pushed the pill off the top of the card at scale 2+.
+        float badgeY = 23.0f * scale - badgeHeight / 2.0f;
 
         GraphicsState badgeState = g.Save();
         g.TranslateTransform(badgeX + badgeWidth / 2.0f, badgeY + badgeHeight / 2.0f);
@@ -1875,9 +2007,20 @@ void RenderCard(Graphics& g, float scale, float width, float height,
         badgeFormat.SetAlignment(StringAlignmentCenter);
         badgeFormat.SetLineAlignment(StringAlignmentCenter);
         std::wstring countText = CountText(f.count);
-        g.DrawString(countText.c_str(), (INT)countText.size(), &badgeFont,
-                     RectF(badgeX, badgeY, badgeWidth, badgeHeight),
-                     &badgeFormat, &badgeText);
+        if (useDWrite) {
+            g.Flush();
+            // The scale transform around the badge centre is reproduced by
+            // growing the font itself: scaling about the badge's centre keeps
+            // the midpoint, and the alpha follows the same animation value.
+            DrawTextDWrite(countText, 12.5f * scale * Clamp01(f.badgeScale),
+                           600, theme.onAccent, Clamp01(f.badgeAlpha),
+                           badgeX + badgeWidth / 2.0f,
+                           badgeY + badgeHeight / 2.0f, true);
+        } else {
+            g.DrawString(countText.c_str(), (INT)countText.size(), badgeFont,
+                         RectF(badgeX, badgeY, badgeWidth, badgeHeight),
+                         &badgeFormat, &badgeText);
+        }
 
         g.Restore(badgeState);
     }
@@ -1904,6 +2047,9 @@ void RenderCard(Graphics& g, float scale, float width, float height,
                      indicatorHeight / 2.0f);
         g.FillPath(&indicator, &bar);
     }
+
+    delete textFont;
+    delete badgeFont;
 }
 
 // Measures the card size for the current tip, in physical pixels.
@@ -1916,16 +2062,36 @@ void MeasureCard(float scale, const FrameState& f, int& outWidth,
     LOGFONTW textLogFont = MakeUiLogFont(14.0f * scale, 500);
     LOGFONTW badgeLogFont = MakeUiLogFont(12.5f * scale, 600);
 
+    // Width reserves room for the pill only when the badge setting shows it.
     bool clip = IsClipKind(f.kind);
+    bool badge = clip && g_settings.countBadge;
     float textWidth = MeasureTextWidth(screenDc, textLogFont, label);
-    float badgeWidth = clip ? MeasureTextWidth(screenDc, badgeLogFont,
-                                               CountText(f.count)) +
-                                  14.0f * scale
-                            : 0.0f;
+    if (DWriteAvailable()) {
+        float width = MeasureTextWidthDWrite(label, 14.0f * scale, 500);
+        if (width > 0.0f) {
+            textWidth = width;
+        }
+    }
+    float badgeWidth = 0.0f;
+    if (badge) {
+        badgeWidth =
+            MeasureTextWidth(screenDc, badgeLogFont, CountText(f.count)) +
+            14.0f * scale;
+        if (DWriteAvailable()) {
+            float width =
+                MeasureTextWidthDWrite(CountText(f.count), 12.5f * scale, 600);
+            if (width > 0.0f) {
+                badgeWidth = width + 14.0f * scale;
+            }
+        }
+    }
 
     float widthDip =
         16.0f + 22.0f + 18.0f + textWidth / scale + 12.0f +
-        (clip ? badgeWidth / scale + 22.0f : 0.0f);
+        // The exe reserves MeasureText(count) + 22 for the pill zone; the
+        // mod's badgeWidth already includes the pill's 14 px padding, so the
+        // equivalent here is badgeWidth + 8.
+        (badge ? badgeWidth / scale + 8.0f : 0.0f);
     outWidth = (int)std::lround(std::max(kBaseWidth * scale,
                                          std::ceil(widthDip) * scale));
     outHeight = (int)std::lround(kBaseHeight * scale);
@@ -2064,8 +2230,10 @@ struct Backdrop {
 
 Backdrop g_backdrop;
 
-// Separable box blur. Running it twice per axis is close enough to a Gaussian
-// at this size and stays well under a millisecond for a card-sized region.
+// Separable box blur, `passes` rounds of horizontal + vertical. Three passes
+// approach a Gaussian closely enough for the one-shot snapshot; the live path
+// runs two and widens the radius to pay for it - see kLiveRadiusScale. Stays
+// well under a millisecond for a card-sized region either way.
 void BlurAxis(BYTE* bits, int width, int height, int radius, bool horizontal) {
     if (!bits || radius <= 0) {
         return;
@@ -2117,11 +2285,16 @@ void BlurAxis(BYTE* bits, int width, int height, int radius, bool horizontal) {
     }
 }
 
-void BlurBackdrop(Surface& image, int radius) {
+// No saturation lift on purpose: the standalone WinTips app paints the same
+// blur without one, and the two editions are meant to look alike. A 1.25x
+// lift was tried here and dropped - over dark wallpapers it brightened the
+// backdrop (grey 30 read as 37) and the card read thinner than the app's.
+
+void BlurBackdrop(Surface& image, int radius, int passes) {
     if (!image.bits || radius <= 0) {
         return;
     }
-    for (int pass = 0; pass < 2; pass++) {
+    for (int pass = 0; pass < passes; pass++) {
         BlurAxis((BYTE*)image.bits, image.width, image.height, radius, true);
         BlurAxis((BYTE*)image.bits, image.width, image.height, radius, false);
     }
@@ -2173,7 +2346,7 @@ bool CaptureBackdrop(HDC source, int x, int y, int w, int h, int radius,
         return false;
     }
 
-    BlurBackdrop(g_backdrop.image, radius);
+    BlurBackdrop(g_backdrop.image, radius, kStaticBlurPasses);
     g_backdrop.x = grabX;
     g_backdrop.y = grabY;
     g_backdrop.valid = true;
@@ -2236,8 +2409,10 @@ void PaintCardBackground(Graphics& g, const GraphicsPath& card, float width,
 
     // The glass edge is lit from above and fades out towards the bottom: the
     // eye decides "this is a pane of glass" mostly from the boundary, and a
-    // border at one flat alpha reads like a sticker instead. Solid keeps the
-    // original flat border - there is no glass to catch the light.
+    // border at one flat alpha reads like a sticker instead. Solid matches the
+    // app's solid card: a plain filled surface with no outline at all - except
+    // in high contrast, where the COLOR_WINDOW fill can blend into the desktop
+    // and the outline is what shows the card's shape.
     if (acrylic && !theme.highContrast) {
         LinearGradientBrush lit(
             PointF(0.0f, 0.0f), PointF(0.0f, height),
@@ -2247,7 +2422,7 @@ void PaintCardBackground(Graphics& g, const GraphicsPath& card, float width,
                        : Color(0x14, 0x00, 0x00, 0x00));
         Pen border(&lit, 1.0f);
         g.DrawPath(&border, &card);
-    } else {
+    } else if (theme.highContrast) {
         Pen border(theme.border, 1.0f);
         g.DrawPath(&border, &card);
     }
@@ -2271,6 +2446,7 @@ struct InputState {
     HKL hkl = nullptr;
     HWND imeWnd = nullptr;
     int conversionMode = -1; // -1 = no IME window, or it refused to answer
+    int openStatus = -1;     // -1 = not read (no IME window, or timeout)
 
     bool Usable() const {
         return hkl != nullptr;
@@ -2278,8 +2454,22 @@ struct InputState {
     bool HasIme() const {
         return imeWnd != nullptr && conversionMode >= 0;
     }
+    // Whether the IME is in a native (Chinese) input mode. Conversion mode alone
+    // can't tell: pure-TSF IMEs like WeType (微信输入法) keep
+    // IMC_GETCONVERSIONMODE constant across the Chinese/English toggle (issue
+    // #14) and flip IMC_GETOPENSTATUS instead (Chinese=1, English=0). Composite
+    // rule: when the open status can't be read, fall back to the legacy NATIVE
+    // bit; when it can, closed means English, and an open IME is native only if
+    // the NATIVE bit is set. Microsoft Pinyin (open always 1, cmode 0<->1) keeps
+    // walking the NATIVE bit; WeType (cmode always 1, open 0<->1) walks the open
+    // status. Don't trust the open status whenever cmode is 0: Microsoft
+    // Pinyin's English state is exactly cmode=0 with open still 1, and that
+    // would misread it as Chinese.
     bool IsNative() const {
-        return (conversionMode & IME_CMODE_NATIVE) != 0;
+        if (openStatus < 0) {
+            return (conversionMode & IME_CMODE_NATIVE) != 0;
+        }
+        return openStatus > 0 && (conversionMode & IME_CMODE_NATIVE) != 0;
     }
 };
 
@@ -2298,9 +2488,17 @@ HWND FocusWindow() {
     return GetForegroundWindow();
 }
 
-// WM_IME_CONTROL's "get conversion mode" sub-command: IMEs all implement it,
-// but the SDK headers only ship the neighbouring values, so spell it out.
+// WM_IME_CONTROL's "get conversion mode" sub-command. The system IMEs answer
+// it reliably; a good number of third-party builds never do, and a few have
+// no default IME window to ask at all - that gap is what the solo-Shift
+// inference in the language watch is for. The SDK headers only ship the
+// neighbouring values, so spell it out.
 constexpr WPARAM kImeGetConversionMode = 0x0001;
+
+// WM_IME_CONTROL's "get open status" sub-command. The default IME window answers
+// it itself, so IMEs whose conversion mode never moves (WeType) still expose
+// their Chinese/English state through it.
+constexpr WPARAM kImeGetOpenStatus = 0x0005;
 
 // Synchronous message with a short timeout: the target thread can be busy
 // loading a level, and a language tip is never worth stalling the hook for.
@@ -2313,12 +2511,30 @@ int ReadConversionMode(HWND imeWnd) {
     return (int)result;
 }
 
+int ReadOpenStatus(HWND imeWnd) {
+    DWORD_PTR result = 0;
+    if (!SendMessageTimeoutW(imeWnd, WM_IME_CONTROL, kImeGetOpenStatus, 0,
+                             SMTO_ABORTIFHUNG, 40, &result)) {
+        return -1;
+    }
+    return (int)result;
+}
+
 // The IME mode labels ("Chinese input" / "English input") are Chinese-only, and
 // every GUI thread has a default IME window whatever its layout, so a Japanese
 // or Korean IME's mode toggle would be described with the wrong words. Ask for
 // the mode only where the label makes sense.
 bool ChineseLayout(HKL hkl) {
     return PRIMARYLANGID(LOWORD((ULONG_PTR)hkl)) == LANG_CHINESE;
+}
+
+// The solo-Shift inference only applies to Chinese IME layouts: on the plain
+// "Chinese - US keyboard" Shift is just typing, and other IME families label
+// their modes with different words. ImmIsIME filters the IME-less layout out;
+// TSF-only IMEs answer ImmIsIME imperfectly, so any HKL carrying a device
+// number in the high word is let through as well.
+bool ChineseImeLayout(HKL hkl) {
+    return ChineseLayout(hkl) && (HIWORD((ULONG_PTR)hkl) != 0 || ImmIsIME(hkl));
 }
 
 InputState CurrentInputState() {
@@ -2343,6 +2559,18 @@ InputState CurrentInputState() {
         state.imeWnd = ImmGetDefaultIMEWnd(hwnd);
         if (state.imeWnd) {
             state.conversionMode = ReadConversionMode(state.imeWnd);
+            if (state.conversionMode >= 0) {
+                state.openStatus = ReadOpenStatus(state.imeWnd);
+                if (state.openStatus < 0) {
+                    // Half a reading: the two reads share one default IME
+                    // window procedure, so a sample with only one of the two
+                    // values is a timing artifact, not a different kind of
+                    // IME. Don't let IsNative() mix the two rules - with the
+                    // open status missing it would fall back to the NATIVE
+                    // bit, which WeType keeps set in both modes.
+                    state.conversionMode = -1;
+                }
+            }
         }
     }
     return state;
@@ -2394,11 +2622,24 @@ ULONGLONG g_lastShowTick;
 bool g_clipIntentActive;
 TipKind g_clipIntentKind = kCopy;
 
+// The clipboard sequence number at the last update seen. MMC hosts - Device
+// Manager, services.msc, any mmc.exe console - broadcast WM_CLIPBOARDUPDATE at
+// startup without changing the clipboard at all, and only when the clipboard
+// already holds content. The message is a phantom: the sequence number does
+// not move, so comparing it here filters the phantom out without touching the
+// intent path below, which only real updates can satisfy anyway.
+DWORD g_clipboardSeq;
+
 // Hook thread only, and only as an auto-repeat filter: a key-down for a key
 // that is already in here is the keyboard repeating, not a new press. It is
 // deliberately not used to answer "is Ctrl down" - a key-up the hook never sees
 // (the secure desktop, an elevated window) would stay in here forever.
 bool g_vkDown[256];
+// Hook thread only: whether Shift was pressed with no other key already down
+// and nothing else pressed while it was held - the shape of a third-party
+// IME's Chinese/English toggle. Cleared by any other new key-down, completed
+// on the Shift key-up.
+bool g_shiftSolo;
 
 // The lock state itself, and the one place it is allowed to change.
 //
@@ -2450,6 +2691,13 @@ ULONGLONG g_lastFired[kPollKeyCount];
 bool g_rawDown[kPollKeyCount];
 ULONGLONG g_rawDownAt[kPollKeyCount];
 
+// Whether the Raw Input registration succeeded. The polling fallback has no way
+// to tell numpad 0 from Insert - GetAsyncKeyState only knows virtual keys, and
+// with Num Lock off numpad 0 reports VK_INSERT - so while this is true the poll
+// leaves Insert to Raw Input entirely. Raw Input is not blocked by UIPI, so it
+// covers exactly the elevated-foreground cases the poll exists for.
+bool g_rawInputOk;
+
 // The language watch. A language or IME-mode change has no notification of its
 // own: it is a property of the thread that owns the input, and the only reliable
 // trigger is "a key that switches it was just pressed". So a switch key starts a
@@ -2462,13 +2710,404 @@ ULONGLONG g_rawDownAt[kPollKeyCount];
 // the session waits behind it. The hook only posts a message; the sampling runs
 // on the thread that draws the card, where a slow answer costs a frame.
 volatile LONG g_languageEnabled;  // mirrors the setting, read by the hook
+volatile LONG g_focusLanguageEnabled;  // same, for the per-window focus watch
 bool g_inputWatching;             // UI thread only, here and below
 int g_inputTicks;
 bool g_inputHasLast;
 InputState g_inputLast;
 
+// Inference fallback for the IMEs that never answer WM_IME_CONTROL (a good
+// number of third-party builds don't): their Chinese/English state is tracked
+// by flipping this on every solo Shift release, behind the (default-off)
+// notifyLanguageInferShift setting. Such IMEs sync the state globally across
+// windows, so the cache survives thread and window changes. A read that
+// actually moves re-seeds the cache; a read that merely answers without
+// moving never does, for re-seeding from a silent read would undo every
+// inferred flip on the next sample. There is no self-correction: once the
+// cache drifts (Caps Lock, the IME's status bar, a wrong first guess), it
+// stays backwards until a read change or an odd/even accident lands it on
+// the truth again - which is why the whole gesture is opt-in.
+// UI thread only, here and below.
+bool g_inferNative = true;
+HKL g_readMovedHkl = nullptr; // the layout whose read was seen to actually follow a toggle
+int g_hintCount;          // solo Shift releases inside the running watch
+ULONGLONG g_hintAt;       // when the last one landed, 0 = none pending
+bool g_loggedReadLost = false; // logged "mode read lost" once for the running watch
+
+// The last usable input state seen by either watch. The focus watch needs it as
+// its baseline: by the time the foreground event arrives, the window that just
+// lost focus is gone and its state can no longer be read. The language only
+// ever changes through a key press (the switch watch feeds this) or a focus
+// switch (the focus watch samples its own), so it stays fresh.
+InputState g_inputObserved;
+bool g_inputHasObserved;
+
+// The per-window focus watch. Windows' "Let me use a different input method
+// for each app window" restores the language as focus lands, with no keystroke
+// behind it - the switch-key watch never runs for that change (issue #12).
+bool g_focusWatching;
+int g_focusTicks;
+bool g_focusHasBase;
+InputState g_focusBase;
+
 void StartInputWatch();
 void InputTick();
+void StartFocusWatch();
+void FocusInputTick();
+bool ModeTick(const InputState& now);
+bool InferTick();
+bool InferFlip();
+void OnSoloShift();
+
+// =============================================================================
+// DirectWrite text
+//
+// GDI+'s AntiAliasGridFit snaps every glyph to the pixel grid, which is what
+// makes the label look pixelated at 100% scaling - windhawk-mods issue #6977.
+// The native Windows 11 OSD draws its labels with DirectWrite, and so does the
+// card now: each glyph run is rasterised into a grayscale coverage texture and
+// blended over the card's premultiplied pixels by hand. Doing the blend
+// directly is what keeps the per-pixel alpha the layered window needs - a
+// Direct2D render target bound to the DC would flatten it.
+//
+// NATURAL_SYMMETRIC is the WPF-style symmetric grayscale smoothing, which is
+// what the standalone WinTips app (WPF) shows as well, so both editions draw
+// the label the same way. Subpixel positioning stays on (pixel snapping off),
+// which is what keeps the glyphs smooth while the card slides in. If dwrite.dll
+// cannot be reached the GDI+ path remains, now without the grid fit.
+// =============================================================================
+
+IDWriteFactory* g_dwriteFactory = nullptr;
+bool g_dwriteTried = false;
+
+bool DWriteAvailable() {
+    if (!g_dwriteTried) {
+        g_dwriteTried = true;
+        HRESULT hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
+                                         __uuidof(IDWriteFactory),
+                                         (IUnknown**)&g_dwriteFactory);
+        if (FAILED(hr)) {
+            g_dwriteFactory = nullptr;
+            Wh_Log(L"DWriteCreateFactory failed: 0x%08lX", hr);
+        }
+    }
+    return g_dwriteFactory != nullptr;
+}
+
+// Text formats are cached: the size only changes when the card moves to a
+// display with another DPI scale or the card size setting changes, and a font
+// match on every frame would spend exactly the milliseconds the animation
+// needs. Four slots hold the two sizes of the card plus a little churn.
+struct CachedTextFormat {
+    float size;
+    int weight;
+    IDWriteTextFormat* format;
+};
+
+CachedTextFormat g_textFormatCache[4] = {};
+
+void DWriteShutdown() {
+    for (CachedTextFormat& entry : g_textFormatCache) {
+        if (entry.format) {
+            entry.format->Release();
+        }
+        entry.size = 0.0f;
+        entry.weight = 0;
+        entry.format = nullptr;
+    }
+    if (g_dwriteFactory) {
+        g_dwriteFactory->Release();
+        g_dwriteFactory = nullptr;
+    }
+    g_dwriteTried = false;
+}
+
+IDWriteTextFormat* GetTextFormat(float size, int weight) {
+    if (!DWriteAvailable()) {
+        return nullptr;
+    }
+    for (CachedTextFormat& entry : g_textFormatCache) {
+        if (entry.format && entry.size == size && entry.weight == weight) {
+            return entry.format;
+        }
+    }
+
+    IDWriteTextFormat* format = nullptr;
+    HRESULT hr = g_dwriteFactory->CreateTextFormat(
+        UiFaceName(), nullptr, (DWRITE_FONT_WEIGHT)weight,
+        DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size, L"",
+        &format);
+    if (FAILED(hr)) {
+        Wh_Log(L"CreateTextFormat(%s, %g) failed: 0x%08lX", UiFaceName(), size,
+               hr);
+        return nullptr;
+    }
+    format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+
+    CachedTextFormat* slot = nullptr;
+    for (CachedTextFormat& entry : g_textFormatCache) {
+        if (!entry.format) {
+            slot = &entry;
+            break;
+        }
+    }
+    if (!slot) {
+        slot = &g_textFormatCache[0]; // rare overflow: evict the oldest
+        if (slot->format) {
+            slot->format->Release();
+        }
+    }
+    slot->size = size;
+    slot->weight = weight;
+    slot->format = format;
+    return format;
+}
+
+float MeasureTextWidthDWrite(const std::wstring& text, float size,
+                             int weight) {
+    if (text.empty()) {
+        return 0.0f;
+    }
+    IDWriteTextFormat* format = GetTextFormat(size, weight);
+    if (!format) {
+        return 0.0f;
+    }
+    IDWriteTextLayout* layout = nullptr;
+    if (FAILED(g_dwriteFactory->CreateTextLayout(text.c_str(),
+                                                 (UINT32)text.size(), format,
+                                                 10000.0f, 1000.0f, &layout))) {
+        return 0.0f;
+    }
+    DWRITE_TEXT_METRICS metrics{};
+    layout->GetMetrics(&metrics);
+    layout->Release();
+    return metrics.widthIncludingTrailingWhitespace;
+}
+
+// Blends DirectWrite's coverage texture straight into the card's premultiplied
+// pixels. A process-lifetime object: the refcount is pinned at one and the
+// draw parameters travel through the members rather than the client context.
+class CardTextRenderer : public IDWriteTextRenderer {
+public:
+    BYTE* bits = nullptr;
+    int width = 0;
+    int height = 0;
+    int stride = 0;
+    int coverageScale = 256; // extra multiplier on the coverage (badge fade)
+    BYTE premul[256][3];     // premultiplied text color per coverage level
+
+    void Begin(BYTE* surfaceBits, int surfaceWidth, int surfaceHeight,
+               int surfaceStride, const Color& color, float alphaScale) {
+        bits = surfaceBits;
+        width = surfaceWidth;
+        height = surfaceHeight;
+        stride = surfaceStride;
+        coverageScale =
+            (int)std::lround(Clamp01(alphaScale) * 256.0f);
+        for (int i = 0; i < 256; i++) {
+            premul[i][0] = (BYTE)((color.GetB() * i + 127) / 255);
+            premul[i][1] = (BYTE)((color.GetG() * i + 127) / 255);
+            premul[i][2] = (BYTE)((color.GetR() * i + 127) / 255);
+        }
+    }
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** object) {
+        if (!object) {
+            return E_POINTER;
+        }
+        *object = nullptr;
+        if (riid == __uuidof(IUnknown) ||
+            riid == __uuidof(IDWritePixelSnapping) ||
+            riid == __uuidof(IDWriteTextRenderer)) {
+            *object = (IDWriteTextRenderer*)this;
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() {
+        return 1;
+    }
+
+    ULONG STDMETHODCALLTYPE Release() {
+        return 1;
+    }
+
+    // Subpixel positioning on: positions are not rounded to the pixel grid,
+    // which is what keeps the text smooth while the card slides.
+    HRESULT STDMETHODCALLTYPE IsPixelSnappingDisabled(void*, BOOL* isDisabled) {
+        if (isDisabled) {
+            *isDisabled = TRUE;
+        }
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetCurrentTransform(void*, DWRITE_MATRIX* matrix) {
+        if (matrix) {
+            *matrix = DWRITE_MATRIX{1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
+        }
+        return S_OK;
+    }
+
+    // The em sizes handed to CreateTextFormat are pixels already, so one DIP
+    // is one pixel here.
+    HRESULT STDMETHODCALLTYPE GetPixelsPerDip(void*, FLOAT* pixelsPerDip) {
+        if (pixelsPerDip) {
+            *pixelsPerDip = 1.0f;
+        }
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE
+    DrawGlyphRun(void*, FLOAT originX, FLOAT originY,
+                 DWRITE_MEASURING_MODE measuringMode,
+                 const DWRITE_GLYPH_RUN* glyphRun,
+                 const DWRITE_GLYPH_RUN_DESCRIPTION*, IUnknown*) {
+        return BlendGlyphRun(originX, originY, measuringMode, glyphRun);
+    }
+
+    HRESULT STDMETHODCALLTYPE DrawUnderline(void*, FLOAT, FLOAT,
+                                            const DWRITE_UNDERLINE*, IUnknown*) {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE DrawStrikethrough(void*, FLOAT, FLOAT,
+                                                const DWRITE_STRIKETHROUGH*,
+                                                IUnknown*) {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE DrawInlineObject(void*, FLOAT, FLOAT,
+                                               IDWriteInlineObject*, BOOL, BOOL,
+                                               IUnknown*) {
+        return S_OK;
+    }
+
+private:
+    HRESULT BlendGlyphRun(FLOAT originX, FLOAT originY,
+                          DWRITE_MEASURING_MODE measuringMode,
+                          const DWRITE_GLYPH_RUN* glyphRun) {
+        if (!bits || !g_dwriteFactory || !glyphRun ||
+            glyphRun->glyphCount == 0) {
+            return S_OK;
+        }
+
+        IDWriteGlyphRunAnalysis* analysis = nullptr;
+        if (FAILED(g_dwriteFactory->CreateGlyphRunAnalysis(
+                glyphRun, 1.0f, nullptr, DWRITE_RENDERING_MODE_NATURAL_SYMMETRIC,
+                measuringMode, originX, originY, &analysis))) {
+            // A missing label for one frame beats a failed card for the tip.
+            return S_OK;
+        }
+
+        RECT bounds{};
+        if (SUCCEEDED(analysis->GetAlphaTextureBounds(
+                DWRITE_TEXTURE_CLEARTYPE_3x1, &bounds)) &&
+            bounds.right > bounds.left && bounds.bottom > bounds.top) {
+            const int left = std::max((int)bounds.left, 0);
+            const int top = std::max((int)bounds.top, 0);
+            const int right = std::min((int)bounds.right, width);
+            const int bottom = std::min((int)bounds.bottom, height);
+            if (right > left && bottom > top) {
+                // The CLEARTYPE_3x1 texture is three bytes per pixel - one
+                // coverage value per subpixel column - whatever the rendering
+                // mode. Averaging the three columns turns it into the
+                // grayscale coverage the card's surface needs.
+                const int textureWidth = bounds.right - bounds.left;
+                const int textureHeight = bounds.bottom - bounds.top;
+                std::vector<BYTE> texture((size_t)textureWidth * 3 *
+                                          textureHeight);
+                HRESULT texHr = analysis->CreateAlphaTexture(
+                        DWRITE_TEXTURE_CLEARTYPE_3x1, &bounds, texture.data(),
+                        (UINT32)texture.size());
+                if (SUCCEEDED(texHr)) {
+                    for (int y = top; y < bottom; y++) {
+                        const BYTE* source =
+                            texture.data() +
+                            (size_t)(y - bounds.top) * textureWidth * 3;
+                        BYTE* row = bits + (size_t)y * stride;
+                        for (int x = left; x < right; x++) {
+                            const BYTE* tex =
+                                source + (size_t)(x - bounds.left) * 3;
+                            const unsigned gray =
+                                ((unsigned)tex[0] + tex[1] + tex[2] + 1) / 3;
+                            const unsigned coverage =
+                                (gray * coverageScale + 128) >> 8;
+                            if (!coverage) {
+                                continue;
+                            }
+                            const unsigned inverse = 255 - coverage;
+                            BYTE* pixel = row + (size_t)x * 4;
+                            // Premultiplied "over": out = src + dst*(1-srcA).
+                            pixel[0] = (BYTE)(premul[coverage][0] +
+                                              (pixel[0] * inverse + 127) / 255);
+                            pixel[1] = (BYTE)(premul[coverage][1] +
+                                              (pixel[1] * inverse + 127) / 255);
+                            pixel[2] = (BYTE)(premul[coverage][2] +
+                                              (pixel[2] * inverse + 127) / 255);
+                            pixel[3] = (BYTE)(coverage +
+                                              (pixel[3] * inverse + 127) / 255);
+                        }
+                    }
+                }
+            }
+        }
+
+        analysis->Release();
+        return S_OK;
+    }
+};
+
+CardTextRenderer g_textRenderer;
+
+// Draws one line of text into the card surface. `x`/`centerY` name the point
+// the line is centred on - the same point the GDI+ path centred its rect
+// around - unless `centerAlign` is false, when `x` is the left edge instead.
+// Returns the measured line width, or 0 when DirectWrite is unavailable and
+// the caller must draw with GDI+.
+float DrawTextDWrite(const std::wstring& text, float size, int weight,
+                     const Color& color, float alphaScale, float x,
+                     float centerY, bool centerAlign) {
+    if (text.empty() || !DWriteAvailable() || !g_surface.bits) {
+        return 0.0f;
+    }
+    IDWriteTextFormat* format = GetTextFormat(size, weight);
+    if (!format) {
+        return 0.0f;
+    }
+    IDWriteTextLayout* layout = nullptr;
+    if (FAILED(g_dwriteFactory->CreateTextLayout(text.c_str(),
+                                                 (UINT32)text.size(), format,
+                                                 10000.0f, 1000.0f, &layout))) {
+        return 0.0f;
+    }
+
+    // One line, always: the labels are single strings and wrapping is off.
+    DWRITE_TEXT_METRICS metrics{};
+    layout->GetMetrics(&metrics);
+    UINT32 lineCount = 0;
+    layout->GetLineMetrics(nullptr, 0, &lineCount);
+    float lineHeight = size * 1.3f;
+    if (lineCount > 0) {
+        DWRITE_LINE_METRICS line{};
+        UINT32 fetched = 1;
+        if (SUCCEEDED(layout->GetLineMetrics(&line, 1, &fetched))) {
+            lineHeight = (float)line.height;
+        }
+    }
+
+    const float lineWidth = metrics.widthIncludingTrailingWhitespace;
+    const float originX = centerAlign ? x - lineWidth / 2.0f : x;
+    const float originY = centerY - lineHeight / 2.0f;
+
+    g_textRenderer.Begin((BYTE*)g_surface.bits, g_surface.width,
+                         g_surface.height, g_surface.stride, color, alphaScale);
+    layout->Draw(nullptr, &g_textRenderer, originX, originY);
+    layout->Release();
+    return lineWidth;
+}
+
 
 // =============================================================================
 // Live backdrop
@@ -2687,7 +3326,7 @@ DWORD WINAPI LiveCaptureThread(LPVOID param) {
                 }
             } else {
                 misses = 0;
-                BlurBackdrop(work, radius);
+                BlurBackdrop(work, radius, kLiveBlurPasses);
 
                 const int bytes = grabW * grabH * 4;
                 const int movedX = grabX - previousX;
@@ -2752,8 +3391,12 @@ void StartLiveCapture() {
 
     g_livePad = (int)std::lround((float)kLivePaddingDip *
                                  std::max(1.0f, g_scale));
+    // Two blur passes need a wider radius to match the three-pass snapshot;
+    // 16 * 1.25 = 20, the same split the WinTips app makes. The radius stays
+    // in screen pixels like the app's - it does not grow with display
+    // scaling, so both editions blur by the same physical amount.
     g_liveRadius = (int)std::lround((float)g_settings.blurRadius *
-                                    std::max(1.0f, g_scale));
+                                    kLiveRadiusScale);
 
     g_liveWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_liveWake) {
@@ -2774,8 +3417,8 @@ void StartLiveCapture() {
     }
     SetThreadPriority(g_liveThread, THREAD_PRIORITY_BELOW_NORMAL);
 
-    // The loop waits 33 ms at a time, and the default 15.6 ms timer granularity
-    // would round that up to 47 ms - the capture rate would drop to about 20 Hz
+    // The loop waits 22 ms at a time, and the default 15.6 ms timer granularity
+    // would round that up to 38 ms - the capture rate would drop to about 26 Hz
     // and the blur would visibly beat against the animation. Raised only while
     // the card is up; a tray app must not hold the system out of idle.
     TimePeriod_t beginPeriod = TimePeriodFn("timeBeginPeriod");
@@ -2966,6 +3609,22 @@ bool ShiftDown() {
     return KeyDownNow(VK_LSHIFT) || KeyDownNow(VK_RSHIFT);
 }
 
+bool IsShiftVk(DWORD vk) {
+    return vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT;
+}
+
+// Hook thread only. g_vkDown is an auto-repeat filter, not a held-key table -
+// a key-up the hook never sees leaves a stale entry in it - but for the
+// solo-Shift gesture a stale entry can only suppress a hint, never fake one.
+bool AnyOtherKeyDown(DWORD vk) {
+    for (int i = 0; i < 256; i++) {
+        if (i != (int)vk && g_vkDown[i]) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool AltDown() {
     return KeyDownNow(VK_LMENU) || KeyDownNow(VK_RMENU);
 }
@@ -2995,6 +3654,11 @@ bool SwitchCandidate(DWORD vk) {
         case VK_RMENU:
         case VK_LWIN:
         case VK_RWIN:
+        // Caps Lock: several third-party IMEs (Weasel by default, Sogou as an
+        // option) toggle Chinese/English with it, so it opens the watch too -
+        // IMEs that report the mode get it read, the rest ride the Shift
+        // inference.
+        case VK_CAPITAL:
             return true;
         default:
             return false;
@@ -3002,16 +3666,31 @@ bool SwitchCandidate(DWORD vk) {
 }
 
 // A key press resolved to the tip it should raise, or -1 for "not ours".
-int TipKindForVk(DWORD vk, bool ctrl, bool shift) {
+// `extended` is the hook's LLKHF_EXTENDED bit. With Num Lock off, numpad 0
+// reports VK_INSERT too, and the E0 prefix is the only thing marking the real
+// Insert key: without this check, every 0 on the numpad would raise an Insert
+// card - or a copied/pasted one under Ctrl/Shift.
+//
+// A Win held alongside Ctrl never means the clipboard: Win+Ctrl+V opens the
+// Volume Mixer and Win+Ctrl+C toggles color filters, so with Win down every
+// clipboard answer becomes -1. The early return on the legacy branch matters:
+// falling through would let Shift+Insert land on the bare-Insert answer and
+// raise the wrong card. Ctrl+Shift+V (paste without formatting) stays a paste
+// - Shift is still allowed, Win is not.
+int TipKindForVk(DWORD vk, bool extended, bool ctrl, bool shift) {
+    if (vk == VK_INSERT && !extended) {
+        return -1;
+    }
+    const bool win = WinDown();
     int kind = LegacyClipKindFromVk(vk, ctrl, shift);
     if (kind >= 0) {
-        return kind;
+        return win ? -1 : kind;
     }
     kind = KindFromVk(vk);
     if (kind >= 0) {
         return kind;
     }
-    return ctrl ? ClipKindFromVk(vk) : -1;
+    return ctrl && !win ? ClipKindFromVk(vk) : -1;
 }
 
 // Which capture path is reporting. Two paths can see the same press; one path
@@ -3146,8 +3825,8 @@ bool ClipboardHasContent() {
 
 // Two scales: the display's DPI decides how many physical pixels a DIP is, the
 // card size setting scales the card itself. Everything inside the card uses
-// their product; margins, the slide distance and the blur radius stay on the
-// DPI scale, so a bigger card still keeps the same 16 DIP gap to the edge.
+// their product; margins and the slide distance stay on the DPI scale, so a
+// bigger card still keeps the same 16 DIP gap to the edge.
 void UpdateScales() {
     g_scale = g_monitor.valid ? g_monitor.scale : 1.0f;
     g_cardScale = g_scale * g_settings.TipScale();
@@ -3242,7 +3921,10 @@ void RefreshBackdrop() {
         DwmFlush();
     }
 
-    int radius = (int)std::lround((float)g_settings.blurRadius * g_scale);
+    // Screen pixels, like the app's GlassBlurRadius: no display-scaling
+    // factor, so the blur depth matches the standalone edition on every
+    // monitor regardless of DPI.
+    int radius = g_settings.blurRadius;
     int pad = (int)std::lround((float)kStaticPaddingDip * std::max(1.0f, g_scale));
     HDC screen = GetDC(nullptr);
     CaptureBackdrop(screen, g_posX, g_posY, g_cardWidth, g_cardHeight, radius,
@@ -3795,6 +4477,20 @@ std::wstring LanguageDisplayName(HKL hkl) {
     return fallback;
 }
 
+// The switch-key watch and the focus watch can both land on one change (their
+// windows overlap, and the Win+Space input indicator raises foreground events
+// on its own). Showing the same words twice in quick succession reads as a
+// glitch, so keep the last card's text and tick; the two paths are written to
+// produce identical words for identical states so this can catch them.
+bool LanguageTipRepeated(const std::wstring& text) {
+    ULONGLONG tick = GetTickCount64();
+    bool repeated = text == g_lastLanguageTipText &&
+                    tick - g_lastLanguageTipTick < 700;
+    g_lastLanguageTipText = text;
+    g_lastLanguageTipTick = tick;
+    return repeated;
+}
+
 // A language or IME-mode change reported by the hook thread.
 void HandleLanguageTip(int mode, HKL hkl) {
     if (!g_settings.notify[kLanguage]) {
@@ -3817,6 +4513,41 @@ void HandleLanguageTip(int mode, HKL hkl) {
     if (g_languageText.empty()) {
         return;
     }
+    if (LanguageTipRepeated(g_languageText)) {
+        return;
+    }
+    ShowTip(kLanguage, true);
+}
+
+// The per-window focus watch: the state the window being switched to carries.
+// Same words as the switch watch would pick - the language name for a layout
+// change, the Chinese/English label for a conversion-mode change - so the
+// dedup above sees one change reported by both watches as one.
+void HandleFocusLanguageTip(const InputState& now, const InputState& before) {
+    if (!g_settings.notify[kLanguage]) {
+        return;
+    }
+    if (ShouldSkip(true)) {
+        return;
+    }
+    if (now.hkl != before.hkl) {
+        g_languageText = LanguageDisplayName(now.hkl);
+    } else {
+        // Same layout, a restored conversion mode. CurrentInputState only asks
+        // for the mode where the label makes sense (Chinese layouts), so a
+        // mode-only change reaching here implies the label fits.
+        if (!now.HasIme()) {
+            return;
+        }
+        g_languageText = now.IsNative() ? Strings().imeChinese
+                                        : Strings().imeEnglish;
+    }
+    if (g_languageText.empty()) {
+        return;
+    }
+    if (LanguageTipRepeated(g_languageText)) {
+        return;
+    }
     ShowTip(kLanguage, true);
 }
 
@@ -3836,6 +4567,13 @@ void HandlePoll(TipKind kind, bool state) {
 }
 
 void HandleClipboardUpdate() {
+    DWORD seq = GetClipboardSequenceNumber();
+    if (seq == g_clipboardSeq) {
+        // Content did not change - a phantom update, see g_clipboardSeq.
+        return;
+    }
+    g_clipboardSeq = seq;
+
     if (g_clipIntentActive) {
         g_clipIntentActive = false;
         if (g_hwnd) {
@@ -3894,8 +4632,17 @@ bool RegisterRawInputKeys(HWND hwnd, bool enable) {
 }
 
 int RawKeyIndex(const RAWKEYBOARD& key) {
+    // Real Insert and numpad 0 share the scan code 0x52; only the E0 prefix
+    // tells them apart. With Num Lock off, numpad 0 reports VK_INSERT as its
+    // virtual key, so even the VKey match below must check that flag - a
+    // numpad 0 press must never come back as kInsert.
+    const bool e0 = (key.Flags & RI_KEY_E0) != 0;
+
     for (int i = 0; i < kPollKeyCount; i++) {
         if (KindToVk((TipKind)i) == key.VKey) {
+            if ((TipKind)i == kInsert && !e0) {
+                return -1;  // numpad 0 with Num Lock off
+            }
             return i;
         }
     }
@@ -3909,7 +4656,6 @@ int RawKeyIndex(const RAWKEYBOARD& key) {
     if (key.VKey != 0xFF) {
         return -1;
     }
-    const bool e0 = (key.Flags & RI_KEY_E0) != 0;
     switch (key.MakeCode) {
         case 0x3A:
             return kCapsLock;
@@ -4010,6 +4756,11 @@ void ApplySettings() {
     DetectLanguage();
     InterlockedExchange(&g_languageEnabled,
                         g_settings.notify[kLanguage] ? 1 : 0);
+    InterlockedExchange(&g_focusLanguageEnabled,
+                        g_settings.notify[kLanguage] &&
+                                g_settings.notifyLanguageOnWindowSwitch
+                            ? 1
+                            : 0);
     g_theme = CurrentTheme();
     g_backdrop.Invalidate();
     if (g_phase != kPhaseHidden) {
@@ -4046,6 +4797,9 @@ void OnTimer(UINT_PTR id) {
             break;
         case kTimerInput:
             InputTick();
+            break;
+        case kTimerFocusInput:
+            FocusInputTick();
             break;
         case kTimerClip:
             if (g_hwnd) {
@@ -4085,6 +4839,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         case WM_APP_LANGUAGE_WATCH:
             StartInputWatch();
+            return 0;
+        case WM_APP_SOLO_SHIFT:
+            OnSoloShift();
+            return 0;
+        case WM_APP_LANGUAGE_FOCUS:
+            StartFocusWatch();
             return 0;
         case WM_APP_SETTINGS:
             ApplySettings();
@@ -4169,12 +4929,16 @@ DWORD WINAPI UiThreadProc(LPVOID) {
     }
 
     AddClipboardFormatListener(g_hwnd);
+    // Baseline for the phantom-update filter: everything the listener reports
+    // is judged against the sequence number as of registration.
+    g_clipboardSeq = GetClipboardSequenceNumber();
 
     // Session-wide keyboard capture that does not go through the hook. It has
     // to be undone on the way out as well: Windhawk unloads a mod inside the
     // live process, so a leftover registration would keep posting WM_INPUT to a
     // window that no longer exists.
-    if (!RegisterRawInputKeys(g_hwnd, true)) {
+    g_rawInputOk = RegisterRawInputKeys(g_hwnd, true);
+    if (!g_rawInputOk) {
         Wh_Log(L"RegisterRawInputDevices failed: %lu", GetLastError());
     } else {
         Wh_Log(L"raw input keyboard sink registered");
@@ -4200,6 +4964,7 @@ DWORD WINAPI UiThreadProc(LPVOID) {
     g_backdrop.image.Release();
     DestroyWindow(g_hwnd);
     g_hwnd = nullptr;
+    DWriteShutdown();
     GdiplusShutdown(g_gdiplusToken);
     return 0;
 }
@@ -4356,6 +5121,14 @@ void CALLBACK ForegroundChangedProc(HWINEVENTHOOK, DWORD event, HWND, LONG, LONG
         return;
     }
     RefreshFallbackPoll();
+    // The per-window input method restores the language as focus lands, with
+    // no keystroke behind it, so the switch-key watch alone can't see it.
+    // Posted rather than sampled: CurrentInputState asks the foreground app's
+    // IME window a question that can block for tens of milliseconds, and every
+    // keystroke in the session waits behind this hook thread.
+    if (InterlockedCompareExchange(&g_focusLanguageEnabled, 1, 1) != 0 && g_hwnd) {
+        PostMessageW(g_hwnd, WM_APP_LANGUAGE_FOCUS, 0, 0);
+    }
 }
 
 // Reads the real lock state and adopts it.
@@ -4467,6 +5240,13 @@ void StopInputWatch() {
         KillTimer(g_hwnd, kTimerInput);
     }
     g_inputHasLast = false;
+    g_hintCount = 0;
+    g_hintAt = 0;
+    g_loggedReadLost = false;
+    // g_readMovedHkl stays: once a layout's read has proven itself, it stays
+    // trusted for the session - an IME's answering habits don't change
+    // mid-session. Trusting per layout keeps a second IME whose read never
+    // moves eligible for the Shift inference.
 }
 
 void StartInputWatch() {
@@ -4483,6 +5263,8 @@ void StartInputWatch() {
         if (baseline.Usable()) {
             g_inputLast = baseline;
             g_inputHasLast = true;
+            g_inputObserved = baseline;
+            g_inputHasObserved = true;
         } else {
             // Unreadable in the middle of a switch (fullscreen transition,
             // desktop recomposition): a baseline from some other app would
@@ -4498,8 +5280,39 @@ void StartInputWatch() {
     SetTimer(g_hwnd, kTimerInput, kInputPollMs, nullptr);
 }
 
+// A solo Shift landed (the hook saw Shift go down alone and come up alone):
+// the classic third-party IME toggle, happening right now. Arm the same watch
+// the switch keys use - it was probably already running from the Shift key-
+// down, which makes its baseline pre-toggle - and remember the release so
+// ModeTick can infer the flip when the system read stays silent about it.
+void OnSoloShift() {
+    if (!g_settings.notify[kLanguage] ||
+        !g_settings.notifyLanguageInferShift) {
+        return;
+    }
+    InputState now = CurrentInputState();
+    if (!now.Usable() || !ChineseImeLayout(now.hkl)) {
+        return;
+    }
+    g_hintCount++;
+    StartInputWatch();
+    g_hintAt = GetTickCount64();
+    Wh_Log(L"solo shift hint #%d", g_hintCount);
+}
+
 void InputTick() {
     if (++g_inputTicks * kInputPollMs > kInputWindowMs) {
+        // Expiring with hints pending means this round can never report
+        // anything - the silent drop from GitHub issue #13. Leave one line
+        // showing the readout at expiry so the next such case is diagnosable.
+        if (g_hintCount > 0) {
+            Wh_Log(L"input watch timed out, drop %d shift hint(s), "
+                   L"last[hkl=%08llX tid=%u ime=%p cmode=%d open=%d]",
+                   g_hintCount,
+                   (unsigned long long)g_inputLast.hkl, g_inputLast.threadId,
+                   (void*)g_inputLast.imeWnd, g_inputLast.conversionMode,
+                   g_inputLast.openStatus);
+        }
         StopInputWatch();
         return;
     }
@@ -4511,6 +5324,8 @@ void InputTick() {
     if (!now.Usable()) {
         return;
     }
+    g_inputObserved = now;
+    g_inputHasObserved = true;
     if (!g_inputHasLast) {
         g_inputLast = now;
         g_inputHasLast = true;
@@ -4539,26 +5354,225 @@ void InputTick() {
         return;
     }
 
-    if (now.HasIme() && g_inputLast.HasIme()) {
-        if (now.IsNative() == g_inputLast.IsNative()) {
-            g_inputLast = now;
-            return;
-        }
-        bool native = now.IsNative();
-        g_inputLast = now;
-        HandleLanguageTip(native ? 1 : 2, nullptr);
-        StopInputWatch();
+    if (ModeTick(now)) {
+        // Settled: reported, still waiting on the inference grace, or nothing
+        // to do. The baseline was updated by whoever settled it.
         return;
+    }
+
+    g_inputLast = now;
+}
+
+// The IME-mode half of the switch watch, split out once it grew a second
+// signal source: the system read (IMM32 conversion mode) first, and - for the
+// third-party IMEs that never answer that question, and only when the
+// notifyLanguageInferShift setting is on - the solo-Shift gesture second.
+// Returns true when this sample is settled.
+bool ModeTick(const InputState& now) {
+    if (now.HasIme()) {
+        if (g_inputLast.HasIme()) {
+            if (now.IsNative() == g_inputLast.IsNative()) {
+                if (g_readMovedHkl == now.hkl) {
+                    // The read has actually followed a toggle at least once:
+                    // trust it. Silence now means no change, so the Shift
+                    // gesture is worth nothing here - reporting the opposite
+                    // of a read this reliable would be wrong every time an
+                    // IME uses Ctrl (or nothing) for the mode toggle.
+                    return true;
+                }
+                // The read lives but has never been seen to move: this IME
+                // keeps its mode to itself. The Shift gesture gets its turn
+                // below, and the cache is left alone - re-seeding it from a
+                // read that cannot change would undo every inferred flip on
+                // the very next sample and pin the card to one wrong label.
+                return InferTick();
+            }
+            bool native = now.IsNative();
+            g_inputLast = now;
+            g_inferNative = native;
+            g_readMovedHkl = now.hkl;
+            HandleLanguageTip(native ? 1 : 2, nullptr);
+            StopInputWatch();
+            return true;
+        }
+
+        // The baseline never read a mode (the thread was busy at the switch
+        // key) but this sample did. Once the read has proven itself, a read
+        // that disagrees with the cache means the toggle happened during the
+        // unreadable stretch - report by the read. Before that proof the
+        // cache stays with the inference, and the Shift gesture decides.
+        if (g_hintCount > 0 && g_readMovedHkl == now.hkl &&
+            now.IsNative() != g_inferNative) {
+            bool native = now.IsNative();
+            g_inputLast = now;
+            g_inferNative = native;
+            HandleLanguageTip(native ? 1 : 2, nullptr);
+            StopInputWatch();
+            return true;
+        }
+
+        if (g_readMovedHkl == now.hkl) {
+            g_inputLast = now;
+            g_inferNative = now.IsNative();
+        }
+        return InferTick();
     }
 
     if (g_inputLast.HasIme()) {
         // The baseline had an IME mode and this sample has none: the target
         // thread was probably busy and the 40 ms message timed out. Keep the
-        // baseline - overwriting it with "no IME" would silence Shift for good.
+        // baseline - overwriting it with "no IME" would silence Shift for
+        // good. An IME that answered once will answer again, so no inference
+        // here either - but not forever: GitHub issue #13 showed a TSF-only
+        // IME (WeChat IME) answering at the Shift moment and going silent
+        // right after, and the old code then sat out the full 2 s window and
+        // dropped the switch silently. With an unproven read, the pending
+        // Shift gesture wins once the grace is over; with a proven one, keep
+        // waiting - a reliable read going dark is most likely transient
+        // busy-ness, and a wrong flip costs more than another beat of wait.
+        if (!g_loggedReadLost) {
+            g_loggedReadLost = true;
+            Wh_Log(L"mode read lost: last[hkl=%08llX tid=%u ime=%p cmode=%d open=%d] "
+                   L"now[hkl=%08llX tid=%u ime=%p cmode=%d open=%d] hint=%d provenRead=%d",
+                   (unsigned long long)g_inputLast.hkl, g_inputLast.threadId,
+                   (void*)g_inputLast.imeWnd, g_inputLast.conversionMode,
+                   g_inputLast.openStatus,
+                   (unsigned long long)now.hkl, now.threadId,
+                   (void*)now.imeWnd, now.conversionMode, now.openStatus,
+                   g_hintCount,
+                   (int)(g_readMovedHkl == now.hkl));
+        }
+
+        if (g_hintCount > 0 && g_readMovedHkl != now.hkl && g_hintAt &&
+            GetTickCount64() - g_hintAt > kInferGraceMs) {
+            Wh_Log(L"mode read not restored %lu ms after shift, infer fallback",
+                   (unsigned long)(GetTickCount64() - g_hintAt));
+            return InferFlip();
+        }
+        return true;
+    }
+
+    // Neither the baseline nor this sample can read a mode: this IME does not
+    // answer WM_IME_CONTROL at all. A solo Shift has already flipped its
+    // state by now, so infer directly - there is no read to wait for. Hints
+    // only ever get armed when the inference setting is on.
+    if (g_hintCount > 0 && g_settings.notifyLanguageInferShift) {
+        return InferFlip();
+    }
+    return false;
+}
+
+// The read lives but did not move within the grace after a solo Shift: this
+// IME keeps its Chinese/English state to itself, so flip the tracked cache.
+bool InferTick() {
+    if (g_hintCount == 0) {
+        return false;
+    }
+    if (g_hintAt && GetTickCount64() - g_hintAt < kInferGraceMs) {
+        return true;
+    }
+    return InferFlip();
+}
+
+// Apply the pending solo-Shift releases to the cache and report the result.
+// Two releases net out to no change: settle silently.
+bool InferFlip() {
+    if (!g_settings.notifyLanguageInferShift) {
+        // The setting went off mid-watch: settle silently, no flip, no card.
+        StopInputWatch();
+        return true;
+    }
+    bool native = g_inferNative;
+    if (g_hintCount % 2 == 1) {
+        native = !native;
+    }
+    g_inferNative = native;
+    StopInputWatch();
+    if (g_hintCount % 2 == 1) {
+        Wh_Log(L"ime mode change (inferred from shift) native=%d", (int)native);
+        HandleLanguageTip(native ? 1 : 2, nullptr);
+    }
+    return true;
+}
+
+// =============================================================================
+// Per-window focus watch
+// =============================================================================
+
+// Windows' "Let me use a different input method for each app window" gives
+// every window its own language and IME mode, restored silently as focus
+// lands. There is no keystroke behind that change, so the switch-key watch
+// never starts; a foreground change is the event to hang on instead. The
+// baseline is the last state observed before the switch - fed by the
+// switch-key watch on every usable sample, and refreshed here - so a language
+// that changed in the old window right before the switch still compares
+// correctly. With the system option off, switching windows does not change
+// the input state and this watch stays quiet on its own; no need to read that
+// setting's (undocumented) registry state.
+
+// Same rule the switch watch follows, plus the IME mode: per-window input
+// methods restore the conversion mode too, so a window sitting in the other
+// half of Chinese/English is worth a card even with the same layout.
+bool FocusStateDiffers(const InputState& now, const InputState& base) {
+    if (now.hkl != base.hkl) {
+        return true;
+    }
+    return now.HasIme() && base.HasIme() && now.IsNative() != base.IsNative();
+}
+
+void StopFocusWatch() {
+    if (!g_focusWatching) {
+        return;
+    }
+    g_focusWatching = false;
+    if (g_hwnd) {
+        KillTimer(g_hwnd, kTimerFocusInput);
+    }
+}
+
+void StartFocusWatch() {
+    if (!g_hwnd) {
+        return;
+    }
+    // The baseline must predate the switch: the window that just lost focus
+    // cannot be read anymore. Whatever the switch-key watch observed last is
+    // the freshest known state; without one (first change after load, or
+    // nothing readable so far) the first good sample becomes the baseline and
+    // says nothing.
+    g_focusBase = g_inputObserved;
+    g_focusHasBase = g_inputHasObserved;
+    g_focusTicks = 0;
+    g_focusWatching = true;
+    SetTimer(g_hwnd, kTimerFocusInput, kInputPollMs, nullptr);
+}
+
+void FocusInputTick() {
+    if (++g_focusTicks * kInputPollMs > kFocusWindowMs) {
+        StopFocusWatch();
         return;
     }
 
-    g_inputLast = now;
+    InputState now = CurrentInputState();
+    if (!now.Usable()) {
+        // Same as the switch watch: wait out the fullscreen transition instead
+        // of giving up, the restore may land a few samples late.
+        return;
+    }
+    g_inputObserved = now;
+    g_inputHasObserved = true;
+
+    if (!g_focusHasBase) {
+        g_focusBase = now;
+        g_focusHasBase = true;
+        return;
+    }
+
+    if (!FocusStateDiffers(now, g_focusBase)) {
+        return;
+    }
+
+    StopFocusWatch();
+    HandleFocusLanguageTip(now, g_focusBase);
 }
 
 void PollTick() {
@@ -4585,7 +5599,13 @@ void PollTick() {
         g_pollDown[i] = down;
 
         if (i == kInsert) {
-            if (pressed && !insertModified && g_hwnd &&
+            // GetAsyncKeyState sees only the virtual key: with Num Lock off,
+            // numpad 0 presses read as VK_INSERT here, and there is no scan
+            // code to disprove it. Raw Input, which can see the E0 prefix,
+            // reports Insert on its own when registered - so the poll stays
+            // out of its way and only covers the registration-failed case,
+            // where the rare numpad-0 misreport beats losing Insert entirely.
+            if (pressed && !insertModified && !g_rawInputOk && g_hwnd &&
                 AllowTip((TipKind)kInsert, GetTickCount64(), kSourcePoll)) {
                 // Same path as a hooked Insert: notify switch, fullscreen
                 // check and the tip itself all live in HandleTip.
@@ -4622,6 +5642,13 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             if (!g_vkDown[vk]) {
                 g_vkDown[vk] = true;
 
+                // Track the solo-Shift gesture: Shift pressed with nothing
+                // else already held, and no other key pressed while held.
+                // Any new key-down re-evaluates this, so a non-Shift press
+                // clears it and Shift+letter, Alt+Shift, Ctrl+Shift all drop
+                // out on their own.
+                g_shiftSolo = IsShiftVk(vk) && !AnyOtherKeyDown(vk);
+
                 // Start the language watch before anything else: a switch key
                 // is the only hint that the language may be about to change.
                 // Posted rather than called: finding the input state means
@@ -4635,7 +5662,11 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
                 // ClipCtrlDown, not CtrlDown: with Right Alt held this is AltGr
                 // and the letter is a character, not a clipboard shortcut.
-                int kind = TipKindForVk(vk, ClipCtrlDown(), ShiftDown());
+                // The extended flag is what marks the real Insert key: with
+                // Num Lock off, numpad 0 also arrives as VK_INSERT, and only
+                // the E0-prefixed (extended) copy is Insert.
+                const bool extended = (info->flags & LLKHF_EXTENDED) != 0;
+                int kind = TipKindForVk(vk, extended, ClipCtrlDown(), ShiftDown());
 
                 if (kind >= 0 &&
                     AllowTip((TipKind)kind, GetTickCount64(), kSourceHook)) {
@@ -4657,6 +5688,18 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             }
         } else if (up) {
             g_vkDown[vk] = false;
+            if (IsShiftVk(vk)) {
+                // Shift released with nothing else held: a third-party IME
+                // flips Chinese/English at this exact moment. The IMEs whose
+                // read works get it from the watch; the rest are inferred.
+                bool solo = g_shiftSolo && !AnyOtherKeyDown(vk);
+                g_shiftSolo = false;
+                if (solo &&
+                    InterlockedCompareExchange(&g_languageEnabled, 1, 1) != 0 &&
+                    g_hwnd) {
+                    PostMessageW(g_hwnd, WM_APP_SOLO_SHIFT, 0, 0);
+                }
+            }
         }
     }
 
@@ -4771,6 +5814,11 @@ BOOL WhTool_ModInit() {
     DetectLanguage();
     InterlockedExchange(&g_languageEnabled,
                         g_settings.notify[kLanguage] ? 1 : 0);
+    InterlockedExchange(&g_focusLanguageEnabled,
+                        g_settings.notify[kLanguage] &&
+                                g_settings.notifyLanguageOnWindowSwitch
+                            ? 1
+                            : 0);
 
     g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_uiThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, nullptr);
