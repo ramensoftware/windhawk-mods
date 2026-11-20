@@ -5591,6 +5591,7 @@ std::atomic<bool> g_glassFramePosted = false;
 
 std::wstring UserValueName(PCWSTR name);
 void StartHotkeys();
+void StopHotkeys();
 
 bool GlassWanted() {
     return g_settings.glassStyle != GlassStyle::Off &&
@@ -5675,10 +5676,13 @@ winrt::com_ptr<ID2D1Image> ColorScale(ID2D1DeviceContext* ctx, ID2D1Image* input
 }
 
 // A function from a system DLL, looked up as the mod's headers or libraries
-// may lack it.
+// may lack it. The DLL is one the mod imports, so it's already loaded and no
+// reference is added; failing that, it's loaded from System32 only.
 template <typename F>
 F LoadSystemFunction(PCWSTR dll, PCSTR name) {
-    auto f = (F)GetProcAddress(LoadLibraryW(dll), name);
+    HMODULE module = GetModuleHandleW(dll);
+    if (!module) module = LoadLibraryExW(dll, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    auto f = module ? (F)GetProcAddress(module, name) : nullptr;
     if (!f) winrt::throw_hresult(E_NOINTERFACE);
     return f;
 }
@@ -6620,7 +6624,8 @@ void StartHotkeys() {
     CloseHandle(ready);
 }
 
-// Before unloading: the thread runs the mod's code.
+// When Liquid Glass is turned off, and before unloading, as the thread runs the
+// mod's code.
 void StopHotkeys() {
     if (!g_hotkeyThread) return;
     PostThreadMessage(g_hotkeyThreadId, WM_QUIT, 0, 0);
@@ -7857,7 +7862,9 @@ void GlassFailed() {
 // On or off, as the settings and the emergency stop say. Its hotkeys are only
 // taken once it's been turned on.
 void UpdateGlass() {
+    // The shortcuts are taken from every other program, so only while it's on.
     if (g_settings.glassStyle != GlassStyle::Off) StartHotkeys();
+    else StopHotkeys();
     if (!GlassWanted()) return GlassShutdown();
     if (!EnsureModWindow()) return;
     if (!g_glassActive) {
