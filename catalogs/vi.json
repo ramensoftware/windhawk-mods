@@ -4047,6 +4047,34 @@
         "version": "1.4.1"
       }
     },
+    "copy-progress-styles": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795205094000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795205094000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Pixeliota",
+        "compilerOptions": "-lgdi32 -lmsimg32",
+        "description": "Restyles the progress bar in the Windows copy/move/delete dialog and in 7-Zip / WinRAR extraction (16 styles)",
+        "github": "https://github.com/Pixeliota",
+        "include": [
+          "explorer.exe",
+          "7zG.exe",
+          "7zFM.exe",
+          "WinRAR.exe"
+        ],
+        "license": "MIT",
+        "name": "File Copy Progress Bar Styles",
+        "version": "1.0.0"
+      }
+    },
     "copy-queue": {
       "details": {
         "defaultSorting": 3320,
@@ -9262,6 +9290,31 @@
         ],
         "name": "Force thick frames",
         "version": "2"
+      }
+    },
+    "frosted-window-blur": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795205099000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795205099000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "JeremyWayne93",
+        "compilerOptions": "-ldwmapi -lgdi32 -luser32 -lshell32 -ladvapi32",
+        "description": "Frosted glass blur behind any window, with adjustable strength per window: hold Ctrl+Shift and scroll over it",
+        "github": "https://github.com/JeremyWayne93",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Frosted Window Blur",
+        "version": "1.0.0"
       }
     },
     "fullscreen-start": {
@@ -20392,20 +20445,24 @@
         "ratingUsers": 55,
         "reviews": 0,
         "trendingSorting": 3.362087315663248,
-        "updated": 1782764769000,
+        "updated": 1795205105000,
         "users": 4974
       },
       "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
         "author": "Abdullah Masood",
         "compilerOptions": "-ldwmapi -lgdi32 -lole32 -lmsimg32",
         "description": "Smooth animated transition (crossfade or slide) when switching tabs (Processes, Performance, ...) in Task Manager.",
+        "donateUrl": "https://buy.polar.sh/polar_cl_iccBChKQyqil3EgBBtV6qM3lfDpLk4sVu1OpK1j0jQ4",
         "github": "https://github.com/Abdullah-Masood-05",
         "include": [
           "Taskmgr.exe"
         ],
         "license": "MIT",
         "name": "Task Manager Tab Slide Animation",
-        "version": "0.4.1"
+        "version": "0.4.2"
       }
     },
     "taskmgr-taller-tab": {
@@ -24375,6 +24432,41 @@
         "license": "MIT",
         "name": "Windows Animations",
         "version": "1.3.7"
+      }
+    },
+    "windows-border-switch": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795205088000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795205088000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "CTravkin",
+        "compilerOptions": "-ldwmapi -lole32 -loleaut32 -lruntimeobject -luuid -ladvapi32",
+        "description": "Hide system-drawn borders on app windows and shell elements",
+        "github": "https://github.com/CTravkin",
+        "homepage": "https://ctravkin.ru",
+        "include": [
+          "explorer.exe",
+          "StartMenuExperienceHost.exe",
+          "SearchHost.exe",
+          "SearchApp.exe",
+          "ShellExperienceHost.exe",
+          "ShellHost.exe",
+          "WidgetBoard.exe"
+        ],
+        "license": "MIT",
+        "name": "Windows Border Switch",
+        "version": "1.2.1"
       }
     },
     "windows-key-to-search": {

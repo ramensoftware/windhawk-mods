@@ -33,38 +33,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4da7f69797cfa500e72d037cb55a9c2ae8f6d873/mods/batteryhub-custom-taskbar-integration.wh.cpp"
       }
     },
-    "copy-progress-styles": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795125999736,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795125999736,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Pixeliota",
-        "compilerOptions": "-lgdi32 -lmsimg32",
-        "description": "Restyles the progress bar in the Windows copy/move/delete dialog and in 7-Zip / WinRAR extraction (16 styles)",
-        "github": "https://github.com/Pixeliota",
-        "include": [
-          "explorer.exe",
-          "7zG.exe",
-          "7zFM.exe",
-          "WinRAR.exe"
-        ],
-        "license": "MIT",
-        "name": "File Copy Progress Bar Styles",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7543",
-      "source": {
-        "sha256": "ee4e5d83bd250c6a79d39925abdd711a7e7c29e9195130bdfc60e174203f96c0",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3f4ab56669bfba9a62083d609df878425195142d/mods/copy-progress-styles.wh.cpp"
-      }
-    },
     "desktop-app-groups": {
       "details": {
         "defaultSorting": 0,
@@ -315,35 +283,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/721a9137674f8c731562f377925c9027c7af0a6d/mods/explorer-tabs-session-saver-revamped.wh.cpp"
       }
     },
-    "frosted-window-blur": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795043328083,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795125999736,
-        "users": 0
-      },
-      "metadata": {
-        "author": "JeremyWayne93",
-        "compilerOptions": "-ldwmapi -lgdi32 -luser32 -lshell32 -ladvapi32",
-        "description": "Frosted glass blur behind any window, with adjustable strength per window: hold Ctrl+Shift and scroll over it",
-        "github": "https://github.com/JeremyWayne93",
-        "include": [
-          "windhawk.exe"
-        ],
-        "license": "MIT",
-        "name": "Frosted Window Blur",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7557",
-      "source": {
-        "sha256": "e27fc3e55ade671eb6dab9e0a4c5d0577d5199cdef2914d39062f44bd54d72db",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/dde984adc382a397a87ef51864a6152c5711d3f6/mods/frosted-window-blur.wh.cpp"
-      }
-    },
     "hide-snapped": {
       "details": {
         "defaultSorting": 0,
@@ -525,48 +464,6 @@
       "source": {
         "sha256": "012569f93597643a5f639085f478b85fc0406b1863fa32aa2b8833ff857b3b2a",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c2226cdb15a3684219163cfcf0dbeeb4c02ab62a/mods/windows-11-lock-screen-styler.wh.cpp"
-      }
-    },
-    "windows-border-switch": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794796718242,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795125999736,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "CTravkin",
-        "compilerOptions": "-ldwmapi -lole32 -loleaut32 -lruntimeobject -luuid -ladvapi32",
-        "description": "Oculta as bordas que o sistema desenha nas janelas de aplicativos e nos elementos do shell",
-        "github": "https://github.com/CTravkin",
-        "homepage": "https://ctravkin.ru",
-        "include": [
-          "explorer.exe",
-          "StartMenuExperienceHost.exe",
-          "SearchHost.exe",
-          "SearchApp.exe",
-          "ShellExperienceHost.exe",
-          "ShellHost.exe",
-          "WidgetBoard.exe"
-        ],
-        "license": "MIT",
-        "name": "Windows Border Switch",
-        "version": "1.2.1"
-      },
-      "metadataEnglish": {
-        "description": "Hide system-drawn borders on app windows and shell elements"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7408",
-      "source": {
-        "sha256": "1b864f3700c4a0ca7bfcfbda69c0a31129cdf17d797a51513e0398534aade9ba",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/cf59db87d6f3fc309afb7f39794cb20d62f4e29c/mods/windows-border-switch.wh.cpp"
       }
     },
     "windows-hello-auto-ok": {

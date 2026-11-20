@@ -2,12 +2,304 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-20T19:02:34.000Z</updated>
+    <updated>2026-11-20T20:05:05.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Task Manager Tab Slide Animation 0.4.2]]></title>
+        <id>https://windhawk.net/mods/taskmgr-tab-slide-animation#a647741d2df3b5f92c1c87dd6d342474a8ca3855</id>
+        <link href="https://windhawk.net/mods/taskmgr-tab-slide-animation"/>
+        <updated>2026-11-20T20:05:05.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a donate link.</li>
+<li>The top inset and tab detection now scale with display scaling, so the animation works at 125%, 150% and 200%. The Top inset setting is now a value at 100% scaling.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Frosted Window Blur 1.0.0]]></title>
+        <id>https://windhawk.net/mods/frosted-window-blur#141d0f925046d4754460e14329212156629ca63c</id>
+        <link href="https://windhawk.net/mods/frosted-window-blur"/>
+        <updated>2026-11-20T20:04:59.000Z</updated>
+        <content type="html"><![CDATA[<h1>Frosted Window Blur</h1>
+<p>Give any window a frosted glass look, like the Windows 11 Settings app: what's
+behind the window is blurred, and you choose how strong the blur is for each
+window.</p>
+<p><img src="https://raw.githubusercontent.com/JeremyWayne93/windhawk-mods/readme-assets/frosted-window-blur/frosted-window-blur-levels.png" alt="Notepad with the blur off, at level 1 and at level 3"></p>
+<p><em>The same Notepad window with the blur off, at level 1 and at level 3.</em></p>
+<h2>Usage</h2>
+<ul>
+<li><strong>Ctrl + Shift + mouse wheel down</strong> over any window: more blur</li>
+<li><strong>Ctrl + Shift + mouse wheel up</strong>: less blur (the lowest step turns it off)</li>
+<li><strong>Ctrl + Shift + middle-click</strong> over a window: blur off</li>
+</ul>
+<p>Every window keeps its own blur level, and the blur stays the same when you
+click into another window. A small &quot;Blur 2/3&quot; indicator shows up briefly after
+every change.</p>
+<p>The key combination can be changed in the settings. The default doesn't use Alt,
+so it doesn't clash with mods that use Alt + wheel or Ctrl + Alt + wheel (for
+example to change opacity).</p>
+<p>There's also an optional small button next to the <strong>minimize</strong> button of the
+active window (off by default): left-click = next blur level (wraps back to
+off), right-click = blur off.</p>
+<p>The maximum level, the window's own opacity while blurred, the indicator, the
+button and excluded programs can all be changed in the mod settings, and the
+changes apply instantly. When the mod is disabled or unloaded, the blur is
+removed from every window and their opacity is restored.</p>
+<h2>How it works</h2>
+<ul>
+<li>The window itself isn't changed, except that it's made a bit see-through
+(75% by default) so the blur behind it shows. Windows that are already
+see-through (for example made so by another mod) keep their own opacity.</li>
+<li>The blur is drawn by helper windows of the mod that have no content of their
+own and only the DWM blur-behind effect. They sit directly behind the window
+in the z-order and follow it when it's moved, resized, minimized, restored,
+hidden or brought to the front. They never take focus and can't be clicked,
+so the blur doesn't turn off when the window loses focus.</li>
+<li>Windows' blur has a fixed radius, so every level stacks one more blur pass
+behind the window, which makes it noticeably stronger.</li>
+<li>It's fully event driven (<code>SetWinEventHook</code>, no polling timer), so it uses no
+CPU while nothing moves. Higher levels on large windows cost a bit more GPU.</li>
+<li>The wheel shortcut uses a keyboard hook that only arms a mouse hook while the
+modifier keys are held down. Both hooks run on their own thread that only
+forwards events. Over excluded programs, the taskbar and the desktop, the
+shortcut is passed through as usual.</li>
+<li>The mod runs in its own dedicated <code>windhawk.exe</code> process (a &quot;tool mod&quot;), so it
+doesn't inject into Explorer or any other program.</li>
+</ul>
+<h2>Limitations</h2>
+<ul>
+<li>Windows of programs running as administrator (for example Task Manager or
+Windhawk's own window) can't be changed, because Windows blocks a normal
+program from modifying them (UIPI). Windows that draw their own transparency
+are left alone too.</li>
+<li>While a window is dragged, the blur can trail a frame behind it.</li>
+<li>If another mod also blurs the same window, the effects add up.</li>
+</ul>
+]]></content>
+        <author>
+            <name>JeremyWayne93</name>
+            <uri>https://github.com/JeremyWayne93</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[File Copy Progress Bar Styles 1.0.0]]></title>
+        <id>https://windhawk.net/mods/copy-progress-styles#5f2d87ca50d9c4d0a3c8075bd81ae2bff4605f71</id>
+        <link href="https://windhawk.net/mods/copy-progress-styles"/>
+        <updated>2026-11-20T20:04:54.000Z</updated>
+        <content type="html"><![CDATA[<h1>File Copy Progress Bar Styles</h1>
+<p>Restyles the progress bar shown in the Windows file copy / move / delete dialog, and the
+extraction progress bar of 7-Zip and WinRAR.</p>
+<p>Screenshots of the styles are shown below.</p>
+<p><strong>Accent styles</strong> (use the accent color)</p>
+<ul>
+<li>
+<p><strong>Solid</strong> - flat color</p>
+<p><img src="https://i.imgur.com/vdd9Uv5.png" alt="Solid style"></p>
+</li>
+<li>
+<p><strong>Satin</strong> - gradient with a top highlight</p>
+</li>
+<li>
+<p><strong>Candy Cane</strong> - diagonal stripes</p>
+<p><img src="https://i.imgur.com/FzzmGxh.png" alt="Candy Cane style"></p>
+</li>
+<li>
+<p><strong>Neon Tube</strong> - dark track with a glowing core</p>
+<p><img src="https://i.imgur.com/fLQqUQt.png" alt="Neon Tube style"></p>
+</li>
+<li>
+<p><strong>Arcade</strong> - retro blocks</p>
+<p><img src="https://i.imgur.com/kTFi3jM.png" alt="Arcade style"></p>
+</li>
+</ul>
+<p><strong>Designer styles</strong> (fixed colors, some with their own track)</p>
+<ul>
+<li>
+<p><strong>Evergreen</strong> - dark green timeline with stepped bands and a diamond knob</p>
+<p><img src="https://i.imgur.com/G2zPbsh.png" alt="Evergreen style"></p>
+</li>
+<li>
+<p><strong>Sorbet</strong> - pink, yellow and blue segments</p>
+<p><img src="https://i.imgur.com/nx5igz7.png" alt="Sorbet style"></p>
+</li>
+<li>
+<p><strong>Polka</strong> - blue gradient with dot markers</p>
+<p><img src="https://i.imgur.com/VmmfywN.png" alt="Polka style"></p>
+</li>
+<li>
+<p><strong>Aurora</strong> - cyan-to-lilac gradient with an end marker and tick track</p>
+<p><img src="https://i.imgur.com/ZOjlvY1.png" alt="Aurora style"></p>
+</li>
+<li>
+<p><strong>Ember</strong> - orange diagonal stripes on a striped gray track</p>
+<p><img src="https://i.imgur.com/wf7WwLz.png" alt="Ember style"></p>
+</li>
+<li>
+<p><strong>Mint</strong> - soft green bar with a subtle bottom shade</p>
+<p><img src="https://i.imgur.com/fvcFM5f.png" alt="Mint style"></p>
+</li>
+<li>
+<p><strong>Fire &amp; Ice</strong> - red-to-icy-blue gradient</p>
+<p><img src="https://i.imgur.com/URI28xU.png" alt="Fire &amp; Ice style"></p>
+</li>
+<li>
+<p><strong>Prism</strong> - full-spectrum gradient</p>
+<p><img src="https://i.imgur.com/OZzUoOu.png" alt="Prism style"></p>
+</li>
+<li>
+<p><strong>Confetti</strong> - colorful mosaic</p>
+<p><img src="https://i.imgur.com/J7TYCcC.png" alt="Confetti style"></p>
+</li>
+<li>
+<p><strong>Carbon</strong> - dark mosaic on a dark track</p>
+<p><img src="https://i.imgur.com/RQL1wxd.png" alt="Carbon style"></p>
+</li>
+<li>
+<p><strong>Dusk</strong> - navy-to-orange-to-lilac gradient</p>
+<p><img src="https://i.imgur.com/o1m91bm.png" alt="Dusk style"></p>
+</li>
+</ul>
+<p>Paused and error states automatically switch to amber and red.</p>
+<p><strong>Notes</strong></p>
+<ul>
+<li>Only the copy dialog is restyled by default. The drive usage bars in This PC keep the
+standard Windows look. Turn on &quot;Also restyle other progress bars in Explorer&quot; to
+restyle those too.</li>
+<li>The mod also loads into 7-Zip (7zG.exe, 7zFM.exe) and WinRAR (WinRAR.exe) and restyles
+their extraction progress bars. To turn that off, switch off &quot;Also style 7-Zip and
+WinRAR&quot; in the settings (or add those processes to the mod's custom process exclusion
+list in the Advanced tab). Extracting a ZIP with Explorer's built-in &quot;Extract All&quot; uses
+the normal copy dialog.</li>
+<li>Tested on Windows 11. The theme lookup uses an undocumented uxtheme function (ordinal
+74), so other Windows versions have not been verified.</li>
+<li>In a dark copy dialog the tracks of the styles are darkened to match.</li>
+<li>Windows itself turns a drive bar red when the drive has under 10% free.</li>
+<li>Copy dialogs shown by other processes (for example inside an app's Open/Save dialog)
+are not styled. Add those processes in the mod's custom process inclusion list.</li>
+<li>Setting changes show up the next time the bar repaints.</li>
+<li>To troubleshoot, enable logging in the mod's Advanced tab and watch the log during a copy.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Pixeliota</name>
+            <uri>https://github.com/Pixeliota</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows Border Switch 1.2.1]]></title>
+        <id>https://windhawk.net/mods/windows-border-switch#9f2ceff99e7031e99407c854368b55bd4f248acb</id>
+        <link href="https://windhawk.net/mods/windows-border-switch"/>
+        <updated>2026-11-20T20:04:48.000Z</updated>
+        <content type="html"><![CDATA[<h1>Windows Border Switch</h1>
+<p><strong>English</strong> · <a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/Windows_Border_Switch/README.ru.md">Русский</a></p>
+<p>Windows Border Switch hides system-drawn borders around windows and panels in Windows 11.</p>
+<h2>Features</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:center"><img src="https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Windows_Border_Switch/Assets/Screenshots/Dark_Border_Comparison.png" alt="Dark theme comparison, with default borders on the left and hidden borders on the right"></th>
+<th style="text-align:center"><img src="https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Windows_Border_Switch/Assets/Screenshots/Light_Border_Comparison.png" alt="Light theme comparison, with default borders on the left and hidden borders on the right"></th>
+</tr>
+</thead>
+</table>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Controls</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Active window</td>
+<td>The focused window's system border or its title bar accent color</td>
+</tr>
+<tr>
+<td>Inactive windows</td>
+<td>System borders of windows without focus</td>
+</tr>
+<tr>
+<td>Dialogs</td>
+<td>System borders of classic Win32 dialogs, with or without focus</td>
+</tr>
+<tr>
+<td>Taskbar</td>
+<td>The taskbar edge and the virtual desktops strip at the bottom of Task View</td>
+</tr>
+<tr>
+<td>Start menu</td>
+<td>The Start menu and its Phone Link panel</td>
+</tr>
+<tr>
+<td>Search</td>
+<td>The Windows Search panel</td>
+</tr>
+<tr>
+<td>Notifications</td>
+<td>The notification center, calendar, and notification banners on the desktop</td>
+</tr>
+<tr>
+<td>Quick Settings</td>
+<td>Quick Settings and the media controls above them</td>
+</tr>
+<tr>
+<td>Keyboard layout</td>
+<td>The outer border of the keyboard layout selector</td>
+</tr>
+<tr>
+<td>Widgets</td>
+<td>The outer border of the Widgets board</td>
+</tr>
+<tr>
+<td>Exceptions</td>
+<td>Keep the usual border and title bar for active, inactive, or all windows of selected apps</td>
+</tr>
+</tbody>
+</table>
+<p>The interface is available in English, Russian, Spanish, German, Brazilian Portuguese, and Simplified Chinese.</p>
+<h3>Limitations</h3>
+<ul>
+<li>Shell borders depend on the Windows build and Windows Web Experience Pack. After enabling or updating the mod, some panels may require restarting Windows Explorer or signing out and back in.</li>
+<li>Apps running as administrator, including Windhawk, may retain their borders. Apps that draw their own frames control their appearance.</li>
+</ul>
+<h2>Platforms</h2>
+<p>Requires Windows 11 x64 or ARM64.</p>
+<h3>Compatibility</h3>
+<p>The following mods overlap with Windows Border Switch for application window borders:</p>
+<ul>
+<li><a href="https://windhawk.net/mods/invisible-borders">Invisible Window Borders</a> — also hides system-drawn window borders.</li>
+<li><a href="https://windhawk.net/mods/win11-accent-border">Windows 11 Accent Window Border</a> — sets window border colors, which can conflict with hiding those borders.</li>
+</ul>
+<p>Do not use multiple mods to control the same window border or title bar: they can override each other's settings and exceptions. To use either mod for window borders and Windows Border Switch only for shell panels, set <strong>Active window</strong>, <strong>Inactive windows</strong>, and <strong>Dialogs</strong> to <strong>Windows-defined</strong> in Windows Border Switch.</p>
+<p>The following Styler mods customize shell panels. Their themes and custom rules may also change borders:</p>
+<ul>
+<li><a href="https://windhawk.net/mods/windows-11-start-menu-styler">Windows 11 Start Menu Styler</a> — styles the Start menu and Search panel (<a href="https://github.com/ramensoftware/windows-11-start-menu-styling-guide">styling guide</a>).</li>
+<li><a href="https://windhawk.net/mods/windows-11-taskbar-styler">Windows 11 Taskbar Styler</a> — styles the taskbar, including its edge (<a href="https://github.com/ramensoftware/windows-11-taskbar-styling-guide">styling guide</a>).</li>
+<li><a href="https://windhawk.net/mods/windows-11-notification-center-styler">Windows 11 Notification Center Styler</a> — styles notifications, the calendar, Quick Settings, and media controls (<a href="https://github.com/ramensoftware/windows-11-notification-center-styling-guide">styling guide</a>).</li>
+</ul>
+<p>If a theme or rule controls the same border, set the corresponding Windows Border Switch option to <strong>Windows-defined</strong>, or remove the overlapping Styler rules.</p>
+<h2>Usage</h2>
+<p>Open the mod's <strong>Settings</strong> to change each setting independently. Initially, the mod keeps the active window border, removes its title bar accent color, and hides the other listed borders. Choose <strong>Windows-defined</strong> to restore Windows styling for a setting.</p>
+<p>Under <strong>Exceptions</strong>, add an executable name such as <code>steam.exe</code> and select which windows to exempt under <strong>Do not hide border</strong>.</p>
+<h2>Links</h2>
+<ul>
+<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/tree/main/Windows_Border_Switch">Windows Border Switch on GitHub</a></li>
+<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/README.md">DSN Windhawk Mods</a></li>
+</ul>
+]]></content>
+        <author>
+            <name>CTravkin</name>
+            <uri>https://github.com/CTravkin</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove Shortcut Arrow Icons 2.0.0]]></title>
         <id>https://windhawk.net/mods/remove-shortcut-arrows#b158ee856a1be9d1cbfa930b45068ab3463242ba</id>
@@ -611,85 +903,6 @@ you search for the browser itself, but it is still listed when you type its name
         <author>
             <name>igoredm</name>
             <uri>https://github.com/igoredm</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Weather 1.2]]></title>
-        <id>https://windhawk.net/mods/desktop-snowfall#21ab62591ab5ab1f5a1fea30751db35e97370152</id>
-        <link href="https://windhawk.net/mods/desktop-snowfall"/>
-        <updated>2026-11-20T00:01:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The mod is now called Desktop Weather. It's the same mod, and your settings are kept.</li>
-<li>New &quot;What falls&quot; setting: snow, rain, autumn leaves or cherry blossom petals. Rain splashes on top of the windows. Leaves and petals rest on top of the windows for a while and then fade away. They ride along when you move a window, and fly off when you yank or close it or sweep them with the cursor.</li>
-<li>&quot;Hide in fullscreen apps&quot; now works on every monitor, not only the one with the focus: a fullscreen video on one monitor hides the snow there while you work on another one. It also recognizes more fullscreen players and games.</li>
-<li>New &quot;Also hide over maximized windows&quot; setting (off by default), handy with an auto-hidden taskbar, where a maximized window fills the whole screen.</li>
-<li>Choose the monitors: all, only the primary one, or a list of monitor numbers. Each monitor can have its own settings (what falls, how much, and where).</li>
-<li>Choose the color of the snow and rain (presets or a custom color code), and the opacity of everything that falls.</li>
-<li>New hotkey to turn it off and on, Win+Alt+S by default.</li>
-<li>New &quot;Hide for these apps&quot; setting: hide it on a monitor while a window of one of the listed apps is open there.</li>
-<li>It can come only for a season (for example from December to February) or only at certain hours. While it's off, it frees its video memory.</li>
-<li>A new demo shows all four kinds of weather.</li>
-</ul>
-]]></content>
-        <author>
-            <name>mikybuilds</name>
-            <uri>https://github.com/mikybuilds</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Compact RDP connection bar 3.3.5]]></title>
-        <id>https://windhawk.net/mods/compact-rdp-connection-bar#c6b80fbad32a3106c7098e557bb672a2319cde87</id>
-        <link href="https://windhawk.net/mods/compact-rdp-connection-bar"/>
-        <updated>2026-11-20T00:01:39.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>RDP-in-RDP mod</li>
-<li>Add 2 button settings</li>
-</ul>
-]]></content>
-        <author>
-            <name>hsb5</name>
-            <uri>https://github.com/hsb5</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Icon Dock 2.3.1]]></title>
-        <id>https://windhawk.net/mods/desktop-icon-dock#06784190eb860b3f5c5ceea67e9dbde28bd1e7f7</id>
-        <link href="https://windhawk.net/mods/desktop-icon-dock"/>
-        <updated>2026-11-19T23:04:39.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add edge dragging: top/bottom edges move the dock vertically, left/right edges horizontally.</li>
-<li>Add a corner radius setting from square to fully rounded.</li>
-<li>Add reset-position actions to the dock context menu and settings.</li>
-<li>Persist the dock position across restarts.</li>
-<li>Add movement demo GIFs.</li>
-<li>Fix edge hit zones so edges remain reachable at rest and are disabled while the panel is magnified.</li>
-<li>Store the dock position per Windows user.</li>
-<li>Add a configurable default bottom distance and migrate the legacy Bottom offset value.</li>
-</ul>
-]]></content>
-        <author>
-            <name>yizqq0721</name>
-            <uri>https://github.com/yizqq0721</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Left Taskbar Quick Pin Dock 3.2026.1811]]></title>
-        <id>https://windhawk.net/mods/taskbar-quick-pin#9a3d29d7181c754ff9f84cb57e67325313f7e0cf</id>
-        <link href="https://windhawk.net/mods/taskbar-quick-pin"/>
-        <updated>2026-11-19T23:04:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add  Sticky Workspace Pill with auto-render on startup and a partial-circle Arc Carousel for saved window layouts.</li>
-<li>Add read-only hover Thumbnail Preview for Arc Cards and single/double right-click Customize Mode to add (<code>+</code> / drag-and-drop) or remove (<code>×</code> / double-click) apps and adjust split ratios.</li>
-<li>Add top-right <code>×</code> delete badge on each Arc Card and symmetrical circular <code>+</code> / <code>×</code> badges inside the Thumbnail Preview.</li>
-<li>Prevent duplicate apps when pinning or capturing workspaces on both the Left Taskbar Dock and Edge Pill.</li>
-<li>Add floating animated status toast above the Thumbnail Preview without mutating Edge Pill geometry.</li>
-<li>Fix screenshot-reveal flicker, dual-process Tool Mod mutex handoff, and unnecessary Arc/Pill repaints.</li>
-<li>Update README preview images to raw GitHub links for the Left Taskbar Dock and Edge Pill.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Ashix</name>
-            <uri>https://github.com/k-ashix</uri>
         </author>
     </entry>
 </feed>

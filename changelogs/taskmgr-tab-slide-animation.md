@@ -1,3 +1,8 @@
+## 0.4.2 ([Nov 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a647741d2df3b5f92c1c87dd6d342474a8ca3855/mods/taskmgr-tab-slide-animation.wh.cpp))
+
+* Added a donate link.
+* The top inset and tab detection now scale with display scaling, so the animation works at 125%, 150% and 200%. The Top inset setting is now a value at 100% scaling.
+
 ## 0.4.1 ([Jun 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1e8d5224d6c438602744da41174e6c0427d2f3da/mods/taskmgr-tab-slide-animation.wh.cpp))
 
 Documentation-only fix: the two readme demo GIFs (crossfade and slide) were pointing at filenames whose cached copies on the image proxy showed the wrong animation. This points them at fresh `-v2` filenames so the correct crossfade and slide demos are shown. No code changes.
