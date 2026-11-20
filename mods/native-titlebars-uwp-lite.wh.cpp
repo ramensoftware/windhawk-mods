@@ -2,12 +2,13 @@
 // @id              native-titlebars-uwp-lite
 // @name            Remove UWP titlebars
 // @description     Enables native titlebars in UWP apps
-// @version         2.0.1
+// @version         2.2.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         ApplicationFrameHost.exe
+// @include         dwm.exe
 // @architecture    x86-64
-// @compilerOptions -luser32 -lcomctl32 -ldwmapi -lshell32 -lole32 -lgdiplus
+// @compilerOptions -luser32 -lcomctl32 -ldwmapi -lshell32 -lole32 -lgdiplus -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -15,10 +16,25 @@
 
 Replaces the UWP titlebars with native Win32 titlebars.
 
+Also runs in dwm.exe: DWM normally gives "immersive" windows (UWP frames) only
+a close button. The DWM part adds minimize/maximize back for frames that this
+mod gave a native titlebar, so DWM (and OpenGlass) draw all three buttons.
+
 ![Screenshot](https://i.imgur.com/w5OqyJJ.png)
 
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- showTitle: true
+  $name: Show title text
+  $description: Draw the window title in the native titlebar
+- showIcon: true
+  $name: Show icon
+  $description: Draw the app icon in the native titlebar
+*/
+// ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 #include <CommCtrl.h>
@@ -26,6 +42,7 @@ Replaces the UWP titlebars with native Win32 titlebars.
 #include <shellapi.h>
 #include <propsys.h>
 #include <shlobj.h>
+#include <uxtheme.h>
 #include <gdiplus.h>
 #include <vector>
 
@@ -347,6 +364,44 @@ LRESULT CALLBACK SubclassProc(
         return DefWindowProcW(hWnd, uMsg, wParam, lParam);
     }
 
+    // Caption buttons are drawn by DWM (and OpenGlass), so their geometry is
+    // DWM's, not the UWP title bar's. Let DefWindowProc hit-test them and
+    // drive hover/press/click; everything else keeps ApplicationFrameHost's
+    // own handling.
+    // AFH's window procedure keeps WM_SETICON to itself, so the native frame
+    // (drawn by DefWindowProc) never learns the icon. Store it there too.
+    if (uMsg == WM_SETICON)
+    {
+        DefWindowProcW(hWnd, uMsg, wParam, lParam);
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    if (uMsg == WM_NCHITTEST)
+    {
+        LRESULT ht = DefWindowProcW(hWnd, uMsg, wParam, lParam);
+        if (ht == HTMINBUTTON || ht == HTMAXBUTTON || ht == HTCLOSE)
+            return ht;
+        LRESULT res = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        // Don't let AFH claim button codes where DWM has no button.
+        if (res == HTMINBUTTON || res == HTMAXBUTTON || res == HTCLOSE)
+            return HTCAPTION;
+        return res;
+    }
+
+    if ((uMsg == WM_NCLBUTTONDOWN || uMsg == WM_NCLBUTTONUP ||
+         uMsg == WM_NCLBUTTONDBLCLK || uMsg == WM_NCMOUSEMOVE ||
+         uMsg == WM_NCMOUSEHOVER) &&
+        (wParam == HTMINBUTTON || wParam == HTMAXBUTTON || wParam == HTCLOSE))
+    {
+        return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+    }
+
+    if (uMsg == WM_NCMOUSELEAVE)
+    {
+        DefWindowProcW(hWnd, uMsg, wParam, lParam);
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
     if (uMsg == WM_NCACTIVATE || uMsg == WM_ACTIVATE)
     {
         if (!GetPropW(hWnd, L"NativeTitlebarIconSet"))
@@ -390,6 +445,10 @@ HWND WINAPI CreateWindowInBandEx_hook(
     dwExStyle &= ~WS_EX_NOREDIRECTIONBITMAP;
     dwStyle = WS_OVERLAPPEDWINDOW;
 
+    // Note: AFH passes dwTypeFlags=0x3. Bit 0x1 makes DWM show only the
+    // close button, but both bits are required for the app's CoreWindow to
+    // be hosted inside the frame, so they must be left unchanged.
+
     HWND res = CreateWindowInBandEx_orig(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         x, y, nWidth, nHeight,
@@ -423,10 +482,210 @@ HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(
     return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
 }
 
+// ApplicationFrameHost calls SetWindowThemeAttribute(WTA_NONCLIENT) on the
+// frame with flags 0x10007 / mask 0x1000F. Bit 0x10000 is undocumented and
+// makes DWM drop the min/max/close caption buttons (the UWP title bar draws
+// its own). With the UWP title bar stubbed out, nothing draws them at all,
+// so strip that bit for frame windows. The documented bits 0x7
+// (NODRAWCAPTION | NODRAWICON | NOSYSMENU) are stripped too, otherwise stock
+// DWM draws the native titlebar without title text and icon.
+#define WTNCA_NOCAPTIONBUTTONS_UNDOC 0x10000
+
+static struct
+{
+    bool showTitle;
+    bool showIcon;
+} g_settings;
+
+static void LoadSettings()
+{
+    g_settings.showTitle = Wh_GetIntSetting(L"showTitle");
+    g_settings.showIcon = Wh_GetIntSetting(L"showIcon");
+}
+
+// NC flags to keep set according to the settings.
+static DWORD HiddenNcFlags()
+{
+    DWORD f = 0;
+    if (!g_settings.showTitle) f |= WTNCA_NODRAWCAPTION;
+    if (!g_settings.showIcon) f |= WTNCA_NODRAWICON;
+    return f;
+}
+#define WTNCA_STRIP_FLAGS (WTNCA_NOCAPTIONBUTTONS_UNDOC | WTNCA_NODRAWCAPTION | \
+                           WTNCA_NODRAWICON | WTNCA_NOSYSMENU)
+
+// Frames converted by this mod have a redirection bitmap; stock UWP frames
+// (e.g. created before the mod loaded) don't, and are left alone.
+static bool IsConvertedFrame(HWND hWnd)
+{
+    return !(GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_NOREDIRECTIONBITMAP);
+}
+
+static bool IsApplicationFrameWindow(HWND hWnd)
+{
+    WCHAR wszClassName[32] = {0};
+    return hWnd && GetClassNameW(hWnd, wszClassName, ARRAYSIZE(wszClassName)) &&
+           wcscmp(wszClassName, L"ApplicationFrameWindow") == 0;
+}
+
+typedef HRESULT(WINAPI *SetWindowThemeAttribute_t)(HWND, enum WINDOWTHEMEATTRIBUTETYPE, PVOID, DWORD);
+SetWindowThemeAttribute_t SetWindowThemeAttribute_orig;
+HRESULT WINAPI SetWindowThemeAttribute_hook(
+    HWND hWnd,
+    enum WINDOWTHEMEATTRIBUTETYPE eAttribute,
+    PVOID pvAttribute,
+    DWORD cbAttribute)
+{
+    if (eAttribute == WTA_NONCLIENT &&
+        pvAttribute && cbAttribute >= sizeof(WTA_OPTIONS) &&
+        IsApplicationFrameWindow(hWnd) && IsConvertedFrame(hWnd))
+    {
+        WTA_OPTIONS opts = *(const WTA_OPTIONS *)pvAttribute;
+        opts.dwFlags = (opts.dwFlags & ~WTNCA_STRIP_FLAGS) | HiddenNcFlags();
+        return SetWindowThemeAttribute_orig(hWnd, eAttribute, &opts, sizeof(opts));
+    }
+
+    return SetWindowThemeAttribute_orig(hWnd, eAttribute, pvAttribute, cbAttribute);
+}
+
+// Restore caption buttons on frames that already exist when the mod (re)loads,
+// e.g. after editing/recompiling. Only touches frames that already carry the
+// native titlebar (no WS_EX_NOREDIRECTIONBITMAP), i.e. ones this mod created.
+static BOOL CALLBACK RestoreCaptionButtonsEnumProc(HWND hWnd, LPARAM)
+{
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid == GetCurrentProcessId() &&
+        IsApplicationFrameWindow(hWnd) &&
+        IsConvertedFrame(hWnd))
+    {
+        WTA_OPTIONS opts = {HiddenNcFlags(), WTNCA_STRIP_FLAGS};
+        SetWindowThemeAttribute(hWnd, WTA_NONCLIENT, &opts, sizeof(opts));
+        SetWindowPos(hWnd, NULL, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
+    return TRUE;
+}
+
+// ---------------------------------------------------------------------------
+// dwm.exe part
+// ---------------------------------------------------------------------------
+// uDWM decides which caption buttons a window gets in
+// CTopLevelWindow::GetCurrentStyle. For immersive windows (UWP frames are
+// created with CreateWindowInBandEx type flag 0x1) it adds close but skips
+// minimize/maximize. That flag can't be changed in ApplicationFrameHost without
+// breaking app hosting, so add the bits here. Only windows that already got a
+// close button qualify; stock UWP frames don't (AFH hides it with theme flag
+// 0x10000, which the AFH part strips only for frames it converted).
+
+constexpr UINT NCF_MIN_VISIBLE   = 0x0100;
+constexpr UINT NCF_MAX_VISIBLE   = 0x0200;
+constexpr UINT NCF_CLOSE_VISIBLE = 0x0400;
+constexpr UINT NCF_MIN_ENABLED   = 0x1000;
+constexpr UINT NCF_MAX_ENABLED   = 0x2000;
+// Also skipped for immersive windows: caption icon and system-menu area
+// (set by the non-immersive path unless WTNCA_NODRAWICON / WTNCA_NOSYSMENU,
+// which the AFH part strips for converted frames).
+constexpr UINT NCF_ICON          = 0x10000;
+constexpr UINT NCF_SYSMENU       = 0x0080;
+
+// CWindowData style copy as read by GetCurrentStyle on uDWM 10.0.26100.x.
+// Sanity-checked below, so a wrong offset on another build is a no-op.
+constexpr size_t kWindowDataStyleOffset = 0x74;
+
+using IsImmersiveWindow_t = bool(*)(const void *pWindowData);
+IsImmersiveWindow_t CWindowData_IsImmersiveWindow;
+
+using GetCurrentStyle_t = UINT(*)(const void *pWindowData, bool);
+GetCurrentStyle_t GetCurrentStyle_orig;
+UINT GetCurrentStyle_hook(const void *pWindowData, bool b)
+{
+    UINT flags = GetCurrentStyle_orig(pWindowData, b);
+
+    if (!pWindowData || !(flags & NCF_CLOSE_VISIBLE) ||
+        (flags & (NCF_MIN_VISIBLE | NCF_MAX_VISIBLE)))
+        return flags;
+
+    DWORD style = *(const DWORD *)((const BYTE *)pWindowData + kWindowDataStyleOffset);
+    if ((style & (WS_CAPTION | WS_SYSMENU)) != (WS_CAPTION | WS_SYSMENU) ||
+        !(style & (WS_MINIMIZEBOX | WS_MAXIMIZEBOX)) ||
+        !CWindowData_IsImmersiveWindow(pWindowData))
+        return flags;
+
+    // Same bits the non-immersive path sets.
+    flags |= NCF_SYSMENU;
+    if (g_settings.showIcon)
+        flags |= NCF_ICON;
+    if (style & WS_MINIMIZEBOX) flags |= NCF_MIN_VISIBLE | NCF_MAX_VISIBLE | NCF_MIN_ENABLED;
+    if (style & WS_MAXIMIZEBOX) flags |= NCF_MIN_VISIBLE | NCF_MAX_VISIBLE | NCF_MAX_ENABLED;
+    return flags;
+}
+
+static bool g_isDwm = false;
+
+static BOOL DwmModInit()
+{
+    HMODULE uDWM = GetModuleHandleW(L"uDWM.dll");
+    if (!uDWM)
+    {
+        Wh_Log(L"uDWM.dll not loaded");
+        return FALSE;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK uDWM_dll_hooks[] = {
+        {
+            {
+                L"public: static enum NCAREA_FLAGS __cdecl CTopLevelWindow::GetCurrentStyle(class CWindowData const *,bool)",
+                L"?GetCurrentStyle@CTopLevelWindow@@SA?AW4NCAREA_FLAGS@@PEBVCWindowData@@_N@Z",
+            },
+            (void **)&GetCurrentStyle_orig,
+            (void *)GetCurrentStyle_hook,
+        },
+        {
+            {
+                L"public: bool __cdecl CWindowData::IsImmersiveWindow(void)const ",
+                L"public: bool __cdecl CWindowData::IsImmersiveWindow(void)const",
+                L"?IsImmersiveWindow@CWindowData@@QEBA_NXZ",
+            },
+            (void **)&CWindowData_IsImmersiveWindow,
+            nullptr,
+        },
+    };
+
+    if (!WindhawkUtils::HookSymbols(uDWM, uDWM_dll_hooks, ARRAYSIZE(uDWM_dll_hooks)))
+    {
+        Wh_Log(L"uDWM symbol hooks failed");
+        return FALSE;
+    }
+    return TRUE;
+}
+
+// ---------------------------------------------------------------------------
+
 BOOL Wh_ModInit()
 {
+    WCHAR exe[MAX_PATH];
+    GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    const WCHAR *name = wcsrchr(exe, L'\\');
+    if (name && _wcsicmp(name + 1, L"dwm.exe") == 0)
+    {
+        g_isDwm = true;
+        LoadSettings();
+        return DwmModInit();
+    }
+
+    LoadSettings();
     InitializeCriticalSection(&g_csSubclassedWindows);
     InitializeCriticalSection(&g_csGdiplus);
+
+    if (HMODULE hUxTheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32))
+    {
+        if (void *p = (void *)GetProcAddress(hUxTheme, "SetWindowThemeAttribute"))
+        {
+            Wh_SetFunctionHook(p, (void *)SetWindowThemeAttribute_hook,
+                               (void **)&SetWindowThemeAttribute_orig);
+        }
+    }
 
     Wh_SetFunctionHook(
         (void *)GetProcAddress(GetModuleHandle(L"user32.dll"), "CreateWindowInBandEx"),
@@ -486,8 +745,23 @@ BOOL Wh_ModInit()
         ARRAYSIZE(ApplicationFrame_dll_hooks));
 }
 
+BOOL Wh_ModSettingsChanged(BOOL *bReload)
+{
+    // Reload so both processes pick up the new values; on reload the AFH part
+    // re-applies the titlebar flags to open frames.
+    *bReload = TRUE;
+    return TRUE;
+}
+
+void Wh_ModAfterInit()
+{
+    if (g_isDwm) return;
+    EnumWindows(RestoreCaptionButtonsEnumProc, 0);
+}
+
 void Wh_ModUninit()
 {
+    if (g_isDwm) return;
     EnterCriticalSection(&g_csSubclassedWindows);
     std::vector<HWND> windowsCopy = g_subclassedWindows;
     g_subclassedWindows.clear();
