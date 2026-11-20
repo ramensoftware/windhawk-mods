@@ -2,7 +2,7 @@
 // @id            adobe-dark-menus
 // @name          Adobe Dark Menus
 // @description   Enables dark mode and custom colors for the menus, dropdown lists and title bars in Adobe apps.
-// @version       1.1.0
+// @version       1.2.0
 // @author        Saber Naeemi
 // @github        https://github.com/sabergraphics
 // @twitter       https://x.com/SaberNaeemi
@@ -25,7 +25,7 @@
 // @include       Adobe Bridge.exe
 // @include       Lightroom.exe
 // @include       Acrobat.exe
-// @compilerOptions -lgdi32 -lcomctl32 -ldwmapi
+// @compilerOptions -lgdi32 -lcomctl32 -ldwmapi -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -34,7 +34,8 @@
 
 This Windhawk mod gives Adobe apps on Windows dark menus: real menu bars, top-bar
 dropdowns, context menus and dropdown lists. It also colors their standard title
-bars to match.
+bars to match, darkens Photoshop's message boxes, and lets the mouse wheel scroll
+menus too long for the screen.
 
 Everything happens inside each app's own process. No system colors are changed
 and no other application is affected.
@@ -108,12 +109,14 @@ tested, so use one or the other for the apps above.
 - **Separator Line Color**: Color for separator lines. Set to match the background color to hide them completely (Default: `#383838`).
 - **Disabled Text Color**: Text color for disabled menu items (Default: `#808080`).
 - **Border Color**: Color of the frame around menus an app draws itself and around dropdown lists. Leave empty to keep the system frame on those menus and to use the background color on lists (Default: `#2D2D2D`).
+- **Title Bar Color**: Leave empty to match Menu Background Color. Windows 11 only: Windows 10 keeps its own dark color (Default: empty).
+- **Title Bar Text Color**: Leave empty to let Windows choose, which dims the text on a window that is not active. Windows 11 only (Default: empty).
 - **Theme Dropdown Lists**: Darken the dropdown lists an app draws itself, using the colors above (Default: on).
 - **Darken Menus Windows Draws**: Use Windows' dark menu theme, and paint real menu bars dark (Default: on).
 - **Scroll Long Menus Instead of Columns**: Open a menu that an app splits into columns as one dark column that scrolls, since Windows cannot darken a menu with columns. After Effects splits its Effect menu this way once it holds more than the screen fits. Turn it off to keep the columns, which stay light (Default: on).
+- **Scroll Long Menus with the Mouse Wheel**: Windows scrolls a menu taller than the screen only with its arrows and the keyboard. With this on, the mouse wheel scrolls it too (Default: on).
+- **Darken Photoshop Message Boxes**: Darken Photoshop's message boxes, such as the prompt to save changes before closing, using the colors above. Their buttons take Windows' own dark style (Default: on).
 - **Dark Title Bars**: Color standard title bars to match the menus (Default: on).
-- **Title Bar Color**: Leave empty to match Menu Background Color (Default: empty).
-- **Title Bar Text Color**: Leave empty to let Windows choose, which dims the text on a window that is not active (Default: empty).
 
 Colors can be given as `#RRGGBB` or the short `#RGB` form.
 
@@ -218,6 +221,28 @@ If the app writes a break back while the menu is open, the mod holds that write
 until the menu closes. Windows would otherwise lay the open menu out in columns
 again, light and scrolled back to the top.
 
+### The mouse wheel on long menus
+
+Windows scrolls a menu taller than the screen only with its arrows and the
+keyboard, and while a menu is open it takes a wheel turn out of the input before
+the app or any hook in it sees it. So while a menu with scroll arrows is on screen,
+the mod puts up a low-level mouse hook on that menu's thread, takes a wheel turn
+made over the menu, and turns it into the menu's own arrow steps, as many rows a
+notch as Windows' wheel setting says. Every other mouse event passes straight
+through, and the hook comes down as soon as the menu closes.
+
+### Photoshop's message boxes
+
+Photoshop's alerts, such as the prompt to save changes before closing, are its own
+window holding only stock Windows controls: an icon, a line of text and push
+buttons. Photoshop paints the white background itself, and it builds the box while
+the box is already showing. So the window is subclassed, the background is painted
+in the menu color in place of Photoshop's, the text is answered in the menu colors,
+and what the box holds is checked again each time it paints, giving each push
+button Windows' own dark button theme as it appears. Only a box that holds nothing
+but those controls is changed. The other Adobe apps paint their message boxes dark
+already.
+
 ### Title bars
 
 Windows 11 lets a process color a standard title bar through
@@ -239,6 +264,11 @@ character cells. Recoloring those would mean matching color values rather than
 intercepting a system one, in windows where a light fill can be the content.
 
 A dropdown list Windows draws itself keeps its normal colors, as described above.
+
+A Photoshop message box holding anything beyond an icon, text and push buttons,
+such as a "Don't show again" check box, stays light. The buttons of a darkened one
+take Windows' own dark colors rather than the colors set here, and need Windows 10
+1809 or later.
 
 With **Scroll Long Menus Instead of Columns** turned off, a menu that an app
 splits into columns stays light, because Windows turns its theme off for any menu
@@ -280,6 +310,16 @@ a description does.
     Color of the frame around menus an app draws itself and around dropdown lists.
     Leave empty to keep the system frame on those menus and to use the background
     color on lists.
+- TitleBarColor: ""
+  $name: "Title Bar Color"
+  $description: >-
+    Leave empty to match Menu Background Color. Windows 11 only: Windows 10 keeps
+    its own dark color.
+- TitleBarTextColor: ""
+  $name: "Title Bar Text Color"
+  $description: >-
+    Leave empty to let Windows choose, which dims the text on a window that is
+    not active. Windows 11 only.
 - ThemeDropdowns: true
   $name: "Theme Dropdown Lists"
   $description: >-
@@ -296,25 +336,28 @@ a description does.
     Effects does with its Effect menu once it holds more than the screen fits.
     With this on, such a menu opens as one dark column that scrolls. Turn it off
     to keep the columns, which stay light.
+- WheelScrollMenus: true
+  $name: "Scroll Long Menus with the Mouse Wheel"
+  $description: >-
+    Windows scrolls a menu taller than the screen only with its arrows and the
+    keyboard. With this on, the mouse wheel scrolls it too.
+- DarkMessageBoxes: true
+  $name: "Darken Photoshop Message Boxes"
+  $description: >-
+    Darken Photoshop's message boxes, such as the prompt to save changes before
+    closing, using the colors above. Their buttons take Windows' own dark style.
 - ThemeTitleBars: true
   $name: "Dark Title Bars"
   $description: >-
     Color standard title bars to match the menus, dialogs included. A window that
     draws its own title bar is left alone.
-- TitleBarColor: ""
-  $name: "Title Bar Color"
-  $description: Leave empty to match Menu Background Color.
-- TitleBarTextColor: ""
-  $name: "Title Bar Text Color"
-  $description: >-
-    Leave empty to let Windows choose, which dims the text on a window that is
-    not active.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <commctrl.h>
 #include <dwmapi.h>
+#include <uxtheme.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 #include <stddef.h>
@@ -350,7 +393,13 @@ std::atomic<COLORREF> g_colTitleBarText{kDwmColorDefault};
 std::atomic<bool> g_themeDropdowns{true};
 std::atomic<bool> g_themeWindowsMenus{true};
 std::atomic<bool> g_scrollColumnMenus{true};
+std::atomic<bool> g_wheelScrollMenus{true};
 std::atomic<bool> g_themeTitleBars{true};
+std::atomic<bool> g_darkMessageBoxes{true};
+
+// Set once in Wh_ModInit.
+std::atomic<DWORD> g_windowsBuild{0};
+bool g_isPhotoshop = false;
 
 // Whether the process is actually in dark menu mode. Stays false with the setting
 // on before Windows 10 1903.
@@ -476,7 +525,9 @@ void LoadSettings() {
     g_themeDropdowns.store(Wh_GetIntSetting(L"ThemeDropdowns") != 0, std::memory_order_relaxed);
     g_themeWindowsMenus.store(Wh_GetIntSetting(L"ThemeWindowsMenus") != 0, std::memory_order_relaxed);
     g_scrollColumnMenus.store(Wh_GetIntSetting(L"ScrollColumnMenus") != 0, std::memory_order_relaxed);
+    g_wheelScrollMenus.store(Wh_GetIntSetting(L"WheelScrollMenus") != 0, std::memory_order_relaxed);
     g_themeTitleBars.store(Wh_GetIntSetting(L"ThemeTitleBars") != 0, std::memory_order_relaxed);
+    g_darkMessageBoxes.store(Wh_GetIntSetting(L"DarkMessageBoxes") != 0, std::memory_order_relaxed);
 
     PublishColor(&g_colMenu, &g_hMenuBrush,
                  ParseHexColorOr(WindhawkUtils::StringSetting::make(L"MenuBgColor").get(), RGB(45, 45, 45)));
@@ -1128,6 +1179,193 @@ constexpr UINT kMenuDownArrow = 0xFFFFFFFC;
 // the pointer moves onto it and again when it moves off, with no paint message either time.
 thread_local HWND tl_arrowPopup = nullptr;
 
+// ---------------------------------------------------------------------------
+// The mouse wheel on long menus
+// ---------------------------------------------------------------------------
+
+// Windows scrolls a menu taller than the screen only from its arrows and the keyboard.
+// While a menu is open, its modal loop takes a wheel turn out of the input before any hook
+// of the app's thread, the popup or its owner sees it: measured with no mod, a turn that
+// reaches all of them with no menu up reaches none of them with one up. Only a low-level
+// mouse hook sees it first. So one goes up on the menu's thread while a popup with scroll
+// arrows is on screen, and comes down as soon as the menu ends, since a low-level hook makes
+// every mouse event on the desktop wait for that thread.
+//
+// A turn over such a popup is taken and turned into the popup's own arrow steps.
+// MN_BUTTONDOWN, undocumented, with an arrow in place of an item position is what pressing
+// that arrow sends: the popup scrolls one row and the selection is cleared. MN_BUTTONUP
+// stops it repeating. Measured: one step a row, nothing past either end, about a
+// millisecond for a three row turn.
+constexpr UINT kMenuButtonDown = 0x01ED;
+constexpr UINT kMenuButtonUp = 0x01EF;
+
+// More rows than one turn should ever move, whatever the wheel setting says.
+constexpr int kMaxWheelRows = 64;
+
+// The hook of each thread that has one up, so that Wh_ModUninit can take it down: its
+// procedure lives in this image.
+std::unordered_map<DWORD, HHOOK> g_wheelHooks;
+std::mutex g_wheelHooksMutex;
+
+thread_local HHOOK tl_wheelHook = nullptr;
+
+// A high resolution wheel or a touchpad turns in steps smaller than a notch. What has not
+// made a whole row yet is kept for the next turn over the same popup.
+thread_local HWND tl_wheelPopup = nullptr;
+thread_local int tl_wheelRemainder = 0;
+
+// The same measurement as PaintOverScrollArrows: without arrows the non-client area is
+// only the frame.
+bool PopupHasScrollArrows(HWND hWnd) {
+    RECT window;
+    POINT origin = { 0, 0 };
+    if (!GetWindowRect(hWnd, &window) || !ClientToScreen(hWnd, &origin)) return false;
+
+    int frame = origin.x - window.left;
+    return origin.y - window.top > frame + kMaxBandWithoutArrow;
+}
+
+// Rows for one screen, for a wheel set to scroll a screen at a time.
+int PopupPageRows(HWND hWnd) {
+    RECT client;
+    if (!GetClientRect(hWnd, &client)) return 1;
+
+    int rowHeight = GetSystemMetrics(SM_CYMENU);
+    HMENU hMenu = (HMENU)SendMessageW(hWnd, MN_GETHMENU, 0, 0);
+    RECT item;
+    if (hMenu && GetMenuItemRect(hWnd, hMenu, 0, &item) && item.bottom > item.top) {
+        rowHeight = item.bottom - item.top;
+    }
+    int rows = rowHeight > 0 ? client.bottom / rowHeight - 1 : 1;
+    return rows > 0 ? rows : 1;
+}
+
+// Returns false when the wheel is set to scroll nothing, so the turn is passed on.
+bool ScrollPopupByWheel(HWND hPopup, int delta) {
+    UINT lines = 3;
+    SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0);
+    if (lines == 0) return false;
+
+    int perNotch = lines == WHEEL_PAGESCROLL ? PopupPageRows(hPopup) : (int)lines;
+    if (perNotch > kMaxWheelRows) perNotch = kMaxWheelRows;
+
+    if (hPopup != tl_wheelPopup) {
+        tl_wheelPopup = hPopup;
+        tl_wheelRemainder = 0;
+    }
+    tl_wheelRemainder += delta;
+    int rows = tl_wheelRemainder * perNotch / WHEEL_DELTA;
+    tl_wheelRemainder -= rows * WHEEL_DELTA / perNotch;
+
+    // Away from the user is up, toward the first item.
+    UINT arrow = rows > 0 ? kMenuUpArrow : kMenuDownArrow;
+    int steps = rows < 0 ? -rows : rows;
+    if (steps > kMaxWheelRows) steps = kMaxWheelRows;
+    for (int i = 0; i < steps; i++) {
+        SendMessageW(hPopup, kMenuButtonDown, arrow, 0);
+        SendMessageW(hPopup, kMenuButtonUp, arrow, 0);
+    }
+    return true;
+}
+
+// Called on the thread that put the hook up, for every mouse event on the desktop while it
+// is up, so anything but a wheel turn leaves at once.
+LRESULT CALLBACK WheelHookProc(int code, WPARAM wParam, LPARAM lParam) {
+    if (code == HC_ACTION && wParam == WM_MOUSEWHEEL && lParam && !ProcessIsExiting() &&
+        !g_unloading.load(std::memory_order_relaxed) && g_wheelScrollMenus.load(std::memory_order_relaxed)) {
+        const auto* info = (const MSLLHOOKSTRUCT*)lParam;
+        HWND hPopup = WindowFromPoint(info->pt);
+        if (hPopup && GetWindowThreadProcessId(hPopup, nullptr) == GetCurrentThreadId() &&
+            ClassifyWindow(hPopup) == WindowKind::MenuPopup && PopupHasScrollArrows(hPopup) &&
+            ScrollPopupByWheel(hPopup, (short)HIWORD(info->mouseData))) {
+            return 1;
+        }
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+// Called from the popup's own paint, so on the menu's thread.
+void EnsureWheelHook() {
+    if (tl_wheelHook || !g_wheelScrollMenus.load(std::memory_order_relaxed) || ProcessIsExiting() ||
+        g_unloading.load(std::memory_order_relaxed)) {
+        return;
+    }
+
+    HMODULE hModule = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)(void*)&WheelHookProc, &hModule);
+    HHOOK hHook = SetWindowsHookExW(WH_MOUSE_LL, WheelHookProc, hModule, 0);
+    if (!hHook) {
+        Wh_Log(L"SetWindowsHookEx(WH_MOUSE_LL) failed (%u); the wheel will not scroll this menu.",
+               GetLastError());
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_wheelHooksMutex);
+        // Wh_ModUninit may already have been through the table.
+        if (!g_unloading.load(std::memory_order_relaxed)) {
+            g_wheelHooks[GetCurrentThreadId()] = hHook;
+            tl_wheelHook = hHook;
+        }
+    }
+    if (!tl_wheelHook) UnhookWindowsHookEx(hHook);
+}
+
+void RemoveWheelHook() {
+    HHOOK hHook = tl_wheelHook;
+    if (!hHook) return;
+
+    tl_wheelHook = nullptr;
+    tl_wheelPopup = nullptr;
+    tl_wheelRemainder = 0;
+    if (ProcessIsExiting()) return;
+
+    // Gone from the table if Wh_ModUninit has taken it down already.
+    bool mine = false;
+    {
+        std::lock_guard<std::mutex> lock(g_wheelHooksMutex);
+        auto it = g_wheelHooks.find(GetCurrentThreadId());
+        if (it != g_wheelHooks.end() && it->second == hHook) {
+            g_wheelHooks.erase(it);
+            mine = true;
+        }
+    }
+    if (mine) UnhookWindowsHookEx(hHook);
+}
+
+// For a popup going away: the hook stays while another popup of this thread is showing, a
+// long menu whose submenu has just closed for one.
+void RemoveWheelHookUnlessMenuShows(HWND hLeaving) {
+    if (!tl_wheelHook) return;
+
+    struct Search {
+        HWND hLeaving;
+        bool found;
+    } search = { hLeaving, false };
+
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+        auto* pSearch = (Search*)lParam;
+        if (hWnd != pSearch->hLeaving && IsWindowVisible(hWnd) &&
+            ClassifyWindow(hWnd) == WindowKind::MenuPopup) {
+            pSearch->found = true;
+            return FALSE;
+        }
+        return TRUE;
+    }, (LPARAM)&search);
+
+    if (!search.found) RemoveWheelHook();
+}
+
+void RemoveAllWheelHooks() {
+    std::unordered_map<DWORD, HHOOK> hooks;
+    {
+        std::lock_guard<std::mutex> lock(g_wheelHooksMutex);
+        hooks.swap(g_wheelHooks);
+    }
+    for (const auto& entry : hooks) UnhookWindowsHookEx(entry.second);
+}
+
 // A subclass rather than a message hook, because WM_PAINT is posted and a
 // WH_CALLWNDPROCRET hook never sees it.
 LRESULT CALLBACK MenuPopupSubclassProc(HWND hWnd,
@@ -1137,6 +1375,7 @@ LRESULT CALLBACK MenuPopupSubclassProc(HWND hWnd,
                                        [[maybe_unused]] DWORD_PTR dwRefData) {
     if (uMsg == WM_NCDESTROY) {
         if (tl_arrowPopup == hWnd) tl_arrowPopup = nullptr;
+        RemoveWheelHookUnlessMenuShows(hWnd);
 
         if (!ProcessIsExiting()) {
             std::lock_guard<std::mutex> lock(g_subclassedPopupsMutex);
@@ -1167,6 +1406,23 @@ LRESULT CALLBACK MenuPopupSubclassProc(HWND hWnd,
         case WM_ERASEBKGND:
             PaintPopupBorder(hWnd, nullptr);
             break;
+
+        case WM_WINDOWPOSCHANGED:
+            if (lParam && (((const WINDOWPOS*)lParam)->flags & SWP_HIDEWINDOW)) {
+                RemoveWheelHookUnlessMenuShows(hWnd);
+            }
+            break;
+    }
+
+    // The popup is sized before it shows, so its arrows are known by then. A menu that fades
+    // in is drawn through WM_PRINT and may not get a WM_PAINT at all, hence the show itself.
+    if (!tl_wheelHook) {
+        bool shown = uMsg == WM_WINDOWPOSCHANGED && lParam &&
+                     (((const WINDOWPOS*)lParam)->flags & SWP_SHOWWINDOW);
+        if ((shown || uMsg == WM_PRINT || uMsg == WM_PAINT || uMsg == WM_NCPAINT) &&
+            PopupHasScrollArrows(hWnd)) {
+            EnsureWheelHook();
+        }
     }
 
     // The arrows have no paint message of their own: the kernel redraws one in the middle
@@ -1349,6 +1605,290 @@ LRESULT CALLBACK CbtProcHook(int code, WPARAM wParam, LPARAM lParam) {
 }
 
 // ---------------------------------------------------------------------------
+// Photoshop's message boxes
+// ---------------------------------------------------------------------------
+
+// Photoshop's alerts, such as "Save changes to the Adobe Photoshop document before
+// closing?", are its own PSDialogBox window holding nothing but stock controls: an icon, a
+// line of text and push buttons. Photoshop paints the white background itself, in its own
+// WM_PAINT, and it builds the box while the box is already showing: when the mod first
+// sees one, only its first button exists. Photoshop's other dialogs are dark already,
+// because it paints their controls itself. Measured in Photoshop for Photoshop Dark Menus
+// 1.3.0, which this is taken from.
+constexpr PCWSTR kPsDialogClass = L"PSDialogBox";
+
+// Windows' dark push button theme arrived in Windows 10 1809.
+constexpr DWORD kFirstBuildWithDarkButtons = 17763;
+
+// More children than any alert has. It only bounds the walk.
+constexpr int kMaxAlertChildren = 32;
+
+// PSDialogBox is Photoshop's own class, so the other apps skip even the class lookup.
+bool ProcessIsPhotoshop() {
+    WCHAR path[MAX_PATH];
+    DWORD len = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    if (!len || len == ARRAYSIZE(path)) return false;
+
+    PCWSTR name = wcsrchr(path, L'\\');
+    return _wcsicmp(name ? name + 1 : path, L"Photoshop.exe") == 0;
+}
+
+enum class AlertPart { Text, Button, Other };
+
+// A static that Windows draws, text or icon, or a push button. Anything else means a
+// dialog the mod has not been measured against, a check box for one, or a control
+// Photoshop paints itself.
+AlertPart ClassifyAlertPart(HWND hWnd) {
+    WCHAR cls[16];
+    if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) return AlertPart::Other;
+
+    LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
+    if (_wcsicmp(cls, L"Static") == 0) {
+        switch (style & SS_TYPEMASK) {
+            case SS_LEFT:
+            case SS_CENTER:
+            case SS_RIGHT:
+            case SS_ICON:
+            case SS_SIMPLE:
+            case SS_LEFTNOWORDWRAP:
+                return AlertPart::Text;
+        }
+        return AlertPart::Other;
+    }
+    if (_wcsicmp(cls, L"Button") == 0) {
+        LONG_PTR type = style & BS_TYPEMASK;
+        if (type == BS_PUSHBUTTON || type == BS_DEFPUSHBUTTON) return AlertPart::Button;
+    }
+    return AlertPart::Other;
+}
+
+inline bool IsPsDialog(HWND hWnd) {
+    WCHAR cls[16];
+    return GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) && wcscmp(cls, kPsDialogClass) == 0 &&
+           !(GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_CHILD);
+}
+
+bool HoldsOnlyAlertParts(HWND hWnd) {
+    int buttons = 0, children = 0;
+    for (HWND hChild = GetWindow(hWnd, GW_CHILD); hChild; hChild = GetWindow(hChild, GW_HWNDNEXT)) {
+        if (++children > kMaxAlertChildren) return false;
+        switch (ClassifyAlertPart(hChild)) {
+            case AlertPart::Button: buttons++; break;
+            case AlertPart::Text:   break;
+            case AlertPart::Other:  return false;
+        }
+    }
+    return buttons > 0;
+}
+
+inline bool WantDarkAlert(HWND hWnd) {
+    return g_darkMessageBoxes.load(std::memory_order_relaxed) &&
+           !g_unloading.load(std::memory_order_relaxed) && HoldsOnlyAlertParts(hWnd);
+}
+
+// The PSDialogBox windows the mod watches, and the buttons it has given the dark theme,
+// each with the box it belongs to.
+std::unordered_set<HWND> g_psDialogs;
+std::unordered_map<HWND, HWND> g_darkButtons;
+std::mutex g_alertsMutex;
+
+// The buttons take Windows' own dark theme, so their colors are Windows' rather than the
+// settings. Setting a theme makes a button repaint, so each one is themed once, and
+// passing null puts back the theme it had.
+void SyncAlertButtons(HWND hDlg, bool dark) {
+    std::vector<HWND> change;
+    {
+        std::lock_guard<std::mutex> lock(g_alertsMutex);
+        if (dark) {
+            int children = 0;
+            for (HWND hChild = GetWindow(hDlg, GW_CHILD); hChild && ++children <= kMaxAlertChildren;
+                 hChild = GetWindow(hChild, GW_HWNDNEXT)) {
+                if (ClassifyAlertPart(hChild) == AlertPart::Button &&
+                    g_darkButtons.try_emplace(hChild, hDlg).second) {
+                    change.push_back(hChild);
+                }
+            }
+        } else {
+            for (auto it = g_darkButtons.begin(); it != g_darkButtons.end();) {
+                if (it->second == hDlg) {
+                    change.push_back(it->first);
+                    it = g_darkButtons.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+    }
+
+    // Outside the lock, since this sends the button a message.
+    for (HWND hButton : change) {
+        SetWindowTheme(hButton, dark ? L"DarkMode_Explorer" : nullptr, nullptr);
+        InvalidateRect(hButton, nullptr, TRUE);
+    }
+}
+
+// Decided again at each paint rather than once, since the box can still be gaining
+// controls after the mod first sees it.
+bool PrepareAlert(HWND hDlg) {
+    bool dark = WantDarkAlert(hDlg);
+    SyncAlertButtons(hDlg, dark);
+    return dark;
+}
+
+// Posted to a box by a button that paints before it has been themed, so that it is themed
+// once that paint is over rather than in the middle of it.
+UINT PrepareAlertMessage() {
+    static const UINT message = RegisterWindowMessageW(L"AdobeDarkMenus.PrepareAlert");
+    return message;
+}
+
+void FillAlert(HWND hWnd, HDC hdc, const RECT* prc, HBRUSH hBrush) {
+    RECT rc;
+    if (!prc) {
+        if (!GetClientRect(hWnd, &rc)) return;
+        prc = &rc;
+    }
+    DepthGuard guard(&tl_ourPaintDepth);
+    FillRect(hdc, prc, hBrush);
+}
+
+// The background is answered here in full, Photoshop's own paint included, and the
+// statics after Photoshop has had its say. Anything else, or a box that does not qualify,
+// goes straight through.
+LRESULT CALLBACK AlertSubclassProc(HWND hWnd,
+                                   UINT uMsg,
+                                   WPARAM wParam,
+                                   LPARAM lParam,
+                                   [[maybe_unused]] DWORD_PTR dwRefData) {
+    HBRUSH hBrush = g_hMenuBrush.load(std::memory_order_acquire);
+
+    switch (uMsg) {
+        case WM_NCDESTROY:
+            if (!ProcessIsExiting()) {
+                std::lock_guard<std::mutex> lock(g_alertsMutex);
+                g_psDialogs.erase(hWnd);
+                std::erase_if(g_darkButtons, [hWnd](const auto& entry) { return entry.second == hWnd; });
+            }
+            break;
+
+        case WM_PAINT: {
+            if (!hBrush || !PrepareAlert(hWnd)) break;
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hWnd, &ps);
+            if (hdc) FillAlert(hWnd, hdc, &ps.rcPaint, hBrush);
+            EndPaint(hWnd, &ps);
+            return 0;
+        }
+
+        case WM_ERASEBKGND:
+        case WM_PRINTCLIENT:
+            if (!hBrush || !wParam || !PrepareAlert(hWnd)) break;
+            FillAlert(hWnd, (HDC)wParam, nullptr, hBrush);
+            return uMsg == WM_ERASEBKGND ? TRUE : 0;
+
+        case WM_CTLCOLORDLG:
+        case WM_CTLCOLORSTATIC:
+        case WM_CTLCOLORBTN: {
+            LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            if (!hBrush || !wParam || !WantDarkAlert(hWnd)) return result;
+
+            if (uMsg == WM_CTLCOLORBTN && lParam) {
+                bool themed;
+                {
+                    std::lock_guard<std::mutex> lock(g_alertsMutex);
+                    themed = g_darkButtons.contains((HWND)lParam);
+                }
+                if (!themed) PostMessageW(hWnd, PrepareAlertMessage(), 0, 0);
+            }
+
+            SetTextColor((HDC)wParam, g_colText.load(std::memory_order_relaxed));
+            SetBkColor((HDC)wParam, g_colMenu.load(std::memory_order_relaxed));
+            return (LRESULT)hBrush;
+        }
+
+        default:
+            if (uMsg == PrepareAlertMessage()) {
+                PrepareAlert(hWnd);
+                return 0;
+            }
+            break;
+    }
+
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+void RedrawAlert(HWND hWnd) {
+    RedrawWindow(hWnd, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE | RDW_ALLCHILDREN);
+}
+
+// Called as a window is shown and, as a catch-all, at every frame paint. Every PSDialogBox
+// is watched, since what it holds is only known once it paints.
+void WatchPsDialog(HWND hWnd) {
+    if (!g_isPhotoshop || !g_darkMessageBoxes.load(std::memory_order_relaxed) ||
+        ProcessIsExiting() || g_unloading.load(std::memory_order_relaxed) ||
+        g_windowsBuild.load(std::memory_order_relaxed) < kFirstBuildWithDarkButtons ||
+        !IsPsDialog(hWnd)) {
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_alertsMutex);
+        if (g_psDialogs.contains(hWnd)) return;
+    }
+
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, AlertSubclassProc, 0)) {
+        Wh_Log(L"Failed to subclass Photoshop dialog %p; it stays light.", hWnd);
+        return;
+    }
+
+    if (!RecordSubclassed(g_psDialogs, g_alertsMutex, hWnd)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, AlertSubclassProc);
+        return;
+    }
+
+    RedrawAlert(hWnd);
+}
+
+void RestoreAlerts() {
+    std::vector<HWND> dialogs, buttons;
+    {
+        std::lock_guard<std::mutex> lock(g_alertsMutex);
+        dialogs.assign(g_psDialogs.begin(), g_psDialogs.end());
+        g_psDialogs.clear();
+        for (const auto& entry : g_darkButtons) buttons.push_back(entry.first);
+        g_darkButtons.clear();
+    }
+
+    for (HWND hWnd : dialogs) WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, AlertSubclassProc);
+    for (HWND hButton : buttons) SetWindowTheme(hButton, nullptr, nullptr);
+    for (HWND hWnd : dialogs) RedrawAlert(hWnd);
+}
+
+// On a settings change: the boxes already watched repaint in the new colors, and one that
+// is open picks the setting up.
+void SyncAlerts() {
+    if (!g_darkMessageBoxes.load(std::memory_order_relaxed)) {
+        RestoreAlerts();
+        return;
+    }
+    if (!g_isPhotoshop) return;
+
+    std::vector<HWND> known;
+    {
+        std::lock_guard<std::mutex> lock(g_alertsMutex);
+        known.assign(g_psDialogs.begin(), g_psDialogs.end());
+    }
+    for (HWND hWnd : known) RedrawAlert(hWnd);
+
+    EnumWindows([](HWND hWnd, LPARAM) WINAPI -> BOOL {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hWnd, &pid);
+        if (pid == GetCurrentProcessId() && IsWindowVisible(hWnd)) WatchPsDialog(hWnd);
+        return TRUE;
+    }, 0);
+}
+
+// ---------------------------------------------------------------------------
 // Menus an app splits into columns
 // ---------------------------------------------------------------------------
 
@@ -1372,6 +1912,9 @@ constexpr int kMaxHeldBreaks = 32;
 struct HeldMenu {
     HMENU hMenu;
     DWORD threadId;
+    // 0 for a menu given back once it closes. Otherwise the depth of the TrackPopupMenu
+    // call it belongs to, which gives it back when it returns. See HoldColumnMenuTree.
+    int trackDepth;
     int itemCount;
     int breakCount;
     UINT positions[kMaxHeldBreaks];
@@ -1436,14 +1979,25 @@ bool SetItemType(HMENU hMenu, UINT pos, UINT type) {
     return SetMenuItemInfoW(hMenu, pos, TRUE, &mii) != FALSE;
 }
 
-// Takes the breaks off a menu that is about to be shown. Called again for a menu that is
-// already held, it picks up the breaks that have appeared since.
-void HoldColumnMenu(HMENU hMenu) {
-    if (!hMenu || !g_scrollColumnMenus.load(std::memory_order_relaxed) ||
-        !g_darkMenusActive.load(std::memory_order_relaxed) || ProcessIsExiting() ||
-        g_unloading.load(std::memory_order_relaxed)) {
-        return;
+bool HoldingColumnMenus() {
+    return g_scrollColumnMenus.load(std::memory_order_relaxed) &&
+           g_darkMenusActive.load(std::memory_order_relaxed) && !ProcessIsExiting() &&
+           !g_unloading.load(std::memory_order_relaxed);
+}
+
+// Called with g_heldMenusMutex held. A menu held for a TrackPopupMenu call stays held until
+// the outermost call that wants it returns.
+void KeepHeldForTrack(HeldMenu* held, int trackDepth) {
+    if (trackDepth && (!held->trackDepth || trackDepth < held->trackDepth)) {
+        held->trackDepth = trackDepth;
     }
+}
+
+// Takes the breaks off a menu that is about to be shown. Called again for a menu that is
+// already held, it picks up the breaks that have appeared since. trackDepth is 0, or the
+// depth of the TrackPopupMenu call the menu is held for.
+void HoldColumnMenu(HMENU hMenu, int trackDepth = 0) {
+    if (!hMenu || !HoldingColumnMenus()) return;
 
     int itemCount = GetMenuItemCount(hMenu);
     int found = 0;
@@ -1465,7 +2019,14 @@ void HoldColumnMenu(HMENU hMenu) {
             found++;
         }
     }
-    if (found == 0) return;
+    if (found == 0) {
+        // A menu held already has its breaks off, but may now have to stay held for longer.
+        if (trackDepth && g_heldMenuCount.load(std::memory_order_relaxed) > 0) {
+            std::lock_guard<std::mutex> lock(g_heldMenusMutex);
+            if (HeldMenu* held = FindHeldMenu(hMenu)) KeepHeldForTrack(held, trackDepth);
+        }
+        return;
+    }
 
     bool recorded[kMaxHeldBreaks] = {};
     {
@@ -1499,6 +2060,7 @@ void HoldColumnMenu(HMENU hMenu) {
 
         held->threadId = GetCurrentThreadId();
         held->itemCount = itemCount;
+        KeepHeldForTrack(held, trackDepth);
         for (int i = 0; i < found; i++) {
             recorded[i] = AddHeldBreak(held, positions[i], types[i] & kColumnBreaks);
         }
@@ -1507,6 +2069,29 @@ void HoldColumnMenu(HMENU hMenu) {
     // A break that could not be recorded stays on, since nothing would put it back.
     for (int i = 0; i < found; i++) {
         if (recorded[i]) SetItemType(hMenu, positions[i], types[i] & ~kColumnBreaks);
+    }
+}
+
+// How many levels of submenus HoldColumnMenuTree goes down. Deeper ones are left as the app
+// made them.
+constexpr int kMaxHeldLevels = 4;
+
+// A popup tracked with TPM_NONOTIFY opens its submenus without telling the owner, so no
+// WM_INITMENUPOPUP comes for them. After Effects tracks its right-click menus that way, and
+// the one on a layer has the Effect submenu, which the app splits into columns. So every
+// submenu of such a popup is held before it goes up, until the call returns. Closing a submenu still sends WM_UNINITMENUPOPUP, and opening it again sends
+// nothing, so giving it back as it closes would bring the columns back the next time.
+void HoldColumnMenuTree(HMENU hMenu, int trackDepth, int level = 0) {
+    if (!hMenu || !HoldingColumnMenus()) return;
+
+    HoldColumnMenu(hMenu, trackDepth);
+    if (level == kMaxHeldLevels) return;
+
+    int itemCount = GetMenuItemCount(hMenu);
+    for (int i = 0; i < itemCount; i++) {
+        if (HMENU hSubMenu = GetSubMenu(hMenu, i)) {
+            HoldColumnMenuTree(hSubMenu, trackDepth, level + 1);
+        }
     }
 }
 
@@ -1548,7 +2133,11 @@ bool MenuIsOnScreen(HMENU hMenu) {
 // a popup that closes without that message. A menu that is still open is left held:
 // changing an item's type on an open menu leaves Windows hit-testing a layout it has not
 // made yet, and the pointer stops finding the items.
-void ReleaseClosedColumnMenus() {
+//
+// leavingDepth is 0 when a menu has closed, which leaves the menus held for a
+// TrackPopupMenu call alone, or the depth of a call that is returning, which also gives
+// back the ones held for it.
+void ReleaseClosedColumnMenus(int leavingDepth = 0) {
     if (g_heldMenuCount.load(std::memory_order_relaxed) == 0 || ProcessIsExiting()) return;
 
     DWORD tid = GetCurrentThreadId();
@@ -1557,7 +2146,10 @@ void ReleaseClosedColumnMenus() {
     {
         std::lock_guard<std::mutex> lock(g_heldMenusMutex);
         for (const HeldMenu& held : g_heldMenus) {
-            if (held.hMenu && held.threadId == tid) mine[count++] = held.hMenu;
+            if (held.hMenu && held.threadId == tid &&
+                (!held.trackDepth || (leavingDepth && held.trackDepth >= leavingDepth))) {
+                mine[count++] = held.hMenu;
+            }
         }
     }
 
@@ -1917,6 +2509,7 @@ LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) {
     } else if (cwp->message == WM_UNINITMENUPOPUP || cwp->message == WM_EXITMENULOOP) {
         // Ahead of the app's own handler, which then finds its menu as it left it.
         ReleaseClosedColumnMenus();
+        if (cwp->message == WM_EXITMENULOOP) RemoveWheelHook();
     }
 
     return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -1936,6 +2529,7 @@ LRESULT CALLBACK CallWndRetProcHook(int code, WPARAM wParam, LPARAM lParam) {
     if (ret->message == WM_WINDOWPOSCHANGING || ret->message == WM_WINDOWPOSCHANGED) {
         if (ret->lParam && (((const WINDOWPOS*)ret->lParam)->flags & SWP_SHOWWINDOW)) {
             ApplyTitleBar(ret->hwnd);
+            WatchPsDialog(ret->hwnd);
         }
     } else if (ret->message == WM_NCDESTROY) {
         ForgetTitleBar(ret->hwnd);
@@ -1971,24 +2565,31 @@ LRESULT CALLBACK CallWndRetProcHook(int code, WPARAM wParam, LPARAM lParam) {
 }
 
 // Nested TrackPopupMenu calls share the outermost entry.
-void EnterMenu(HMENU hMenu) {
+void EnterMenu(HMENU hMenu, UINT flags) {
     tl_menuDepth++;
     EnsureThreadHooks();
 
     // From here as well, for a popup tracked with TPM_NONOTIFY, whose owner is sent no
-    // WM_INITMENUPOPUP.
-    HoldColumnMenu(hMenu);
+    // WM_INITMENUPOPUP, for the popup or for its submenus.
+    if (flags & TPM_NONOTIFY) {
+        HoldColumnMenuTree(hMenu, tl_menuDepth);
+    } else {
+        HoldColumnMenu(hMenu);
+    }
     ApplyMenuBackground(hMenu);
 }
 
 void LeaveMenu() {
     // And no WM_UNINITMENUPOPUP either.
-    ReleaseClosedColumnMenus();
+    ReleaseClosedColumnMenus(tl_menuDepth);
 
     if (--tl_menuDepth > 0) return;
 
     // A menu dismissed mid-draw would otherwise leave the overrides stuck on.
     tl_menuDrawDepth = 0;
+
+    // TPM_NONOTIFY sends no WM_EXITMENULOOP.
+    RemoveWheelHook();
 }
 
 // ---------------------------------------------------------------------------
@@ -2019,8 +2620,10 @@ void ResolveDarkMenuApis() {
 
     RTL_OSVERSIONINFOW version = {};
     version.dwOSVersionInfoSize = sizeof(version);
-    if (!pRtlGetVersion || pRtlGetVersion(&version) != 0 ||
-        version.dwBuildNumber < kFirstBuildWithPreferredAppMode) {
+    if (pRtlGetVersion && pRtlGetVersion(&version) == 0) {
+        g_windowsBuild.store(version.dwBuildNumber, std::memory_order_relaxed);
+    }
+    if (version.dwBuildNumber < kFirstBuildWithPreferredAppMode) {
         Wh_Log(L"Windows build too old for dark menus; Windows-drawn menus stay light.");
         return;
     }
@@ -2191,6 +2794,7 @@ inline bool IsFramePaint(UINT uMsg) {
 inline void OnFramePaint(HWND hWnd) {
     PaintMenuBarBottomLine(hWnd);
     ApplyTitleBar(hWnd);
+    WatchPsDialog(hWnd);
 }
 
 // ---------------------------------------------------------------------------
@@ -2200,7 +2804,7 @@ inline void OnFramePaint(HWND hWnd) {
 decltype(&TrackPopupMenu) TrackPopupMenu_Original;
 BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y,
                                 int nReserved, HWND hWnd, const RECT* prcRect) {
-    EnterMenu(hMenu);
+    EnterMenu(hMenu, uFlags);
     BOOL bRes = TrackPopupMenu_Original(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
     LeaveMenu();
     return bRes;
@@ -2209,7 +2813,7 @@ BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y,
 decltype(&TrackPopupMenuEx) TrackPopupMenuEx_Original;
 BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y,
                                   HWND hWnd, LPTPMPARAMS lptpm) {
-    EnterMenu(hMenu);
+    EnterMenu(hMenu, uFlags);
     BOOL bRes = TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
     LeaveMenu();
     return bRes;
@@ -2405,6 +3009,7 @@ void Wh_ModSettingsChanged() {
 
     RedrawMenuBars();
     SyncTitleBars();
+    SyncAlerts();
 }
 
 BOOL Wh_ModInit() {
@@ -2413,6 +3018,7 @@ BOOL Wh_ModInit() {
         GetModuleHandleW(L"ntdll.dll"), "RtlDllShutdownInProgress");
 
     LoadSettings();
+    g_isPhotoshop = ProcessIsPhotoshop();
 
     // A failure here only costs part of the result, since the dark theme below needs no
     // hook at all.
@@ -2451,6 +3057,7 @@ void Wh_ModAfterInit() {
 
     RedrawMenuBars();
     SyncTitleBars();
+    SyncAlerts();
 }
 
 void Wh_ModUninit() {
@@ -2467,6 +3074,14 @@ void Wh_ModUninit() {
     // ApplyTitleBar and be left dark.
     g_themeTitleBars.store(false, std::memory_order_relaxed);
     RestoreTitleBars();
+
+    // The subclass procedure lives in this image, so a message box left open must lose it
+    // before the image goes.
+    g_darkMessageBoxes.store(false, std::memory_order_relaxed);
+    RestoreAlerts();
+
+    // See g_wheelHooks.
+    RemoveAllWheelHooks();
 
     // See HookedThread.
     {
