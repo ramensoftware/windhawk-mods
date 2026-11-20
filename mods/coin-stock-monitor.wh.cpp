@@ -33,69 +33,87 @@ stop all requests, disable the mod.
 
 ## Settings
 
-* **Content** - symbols (up to 4, separated by `|`), optional entry prices
-  (`SYMBOL=PRICE` pairs separated by `|`) and refresh interval (minimum 15 s).
-  Use `.` for decimals; commas are thousands separators, e.g. `12,005`.
-* **Appearance** - color preset and one Background selector: Transparent,
-  Solid - full area, or Solid - fit text. Fit text hugs both lines with padding.
-  **Custom colors** contains text, gain, loss and solid background colors;
-  these apply only to the Custom preset. New installs use Slate colors.
-* **Placement** - alignment, left offset and width at 100% scaling. Fit text
-  retains the configured left/right anchor within the width.
-* **Data source (advanced)** - API URL and JSON key. Leave unchanged for Yahoo.
+* **Symbols** - up to 4, separated by `|`, shown 2 per line. Optional **Entry
+  prices** use `SYMBOL=PRICE` pairs separated by `|`; use `.` for decimals and
+  commas as thousands separators, e.g. `12,005`.
+* **Color preset** - coordinated text, gain, loss and Solid background colors.
+  Custom uses the custom color settings; new installs use Slate defaults.
+* **Background** - Transparent, Solid - full area, or Solid - fit text. Fit text
+  hugs both lines with padding. **Text alignment**, **Left offset** and **Monitor
+  width** position the monitor; Fit text retains its left/right anchor within the
+  width. Dimensions are at 100% scaling.
+* **Refresh interval** - seconds between requests (minimum 15).
+* **Price API URL** and **Price JSON key** - advanced settings; leave unchanged
+  for Yahoo Finance.
 
 Changing any setting reloads the mod.
 
-### Upgrading from flat settings (1.2.x or early 1.3.0)
+### Upgrading from 1.2.x
 
-Settings are now grouped under Content, Appearance, Placement and Data source.
-Windhawk does not move saved values when setting keys are renamed. After updating,
-re-enter your symbols, entry prices, refresh interval, color/background choices,
-placement and API settings once. Until then the new grouped settings use defaults.
-Old flat values remain in storage but are not read by this version.
+The existing settings keep their saved keys, so your symbols, entry prices, colors,
+refresh interval, placement and API settings remain active after updating. New
+installations use the Custom preset with Slate color defaults. The new Background
+setting defaults to Transparent.
 
 ### Example: CoinGecko
 
-* DataSource.ApiUrl: `https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd`
-* DataSource.PriceKey: `usd`
-* Content.Symbols: `bitcoin|ethereum` (CoinGecko coin ids, not ticker symbols)
-* Content.EntryPrices: `bitcoin=60000` (use the same ids as Symbols)
+* **Price API URL**: `https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd`
+* **Price JSON key**: `usd`
+* **Symbols**: `bitcoin|ethereum` (CoinGecko coin ids, not ticker symbols)
+* **Entry prices**: `bitcoin=60000` (use the same ids as Symbols)
 
 ## Limitations
 
 * Horizontal taskbar on the primary monitor only.
 * The monitor is placed by pixel offset, so it assumes the Start button is centered.
   With a left-aligned Start button, the monitor overlaps Start.
-* If the taskbar has many apps or a wide Start area, reduce **Placement > Width** so
+* If the taskbar has many apps or a wide Start area, reduce **Monitor width** so
   the monitor does not cover the task list.
 * A solid background improves readability but does not reserve taskbar layout
-  space. The monitor still uses **Placement > Left offset** and **Width**.
+  space. The monitor still uses **Left offset** and **Monitor width**.
 * Pixel values are for 100% display scaling.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- Content:
-  - Symbols: BTC-USD|ETH-USD|AAPL
-    $name: Symbols
-    $description: Up to 4 symbols separated by |, shown 2 per line.
-  - EntryPrices: ""
-    $name: Entry prices (optional)
-    $description: >-
-      SYMBOL=PRICE pairs separated by |, e.g. BTC-USD=60000|AAPL=300.
-      Use . for decimals. Commas are thousands separators, e.g. 12,005.
-  - RefreshSeconds: 60
-    $name: Refresh interval (seconds)
-    $description: Minimum 15 seconds. One request per symbol each refresh.
-  $name: Content
-  $description: Choose symbols, entry prices and refresh frequency.
+- Symbols: BTC-USD|ETH-USD|AAPL
+  $name: Symbols
+  $description: Up to 4 symbols separated by |, shown 2 per line.
+- EntryPrices: ""
+  $name: Entry prices (optional)
+  $description: >-
+    SYMBOL=PRICE pairs separated by |, e.g. BTC-USD=60000|AAPL=300.
+    Use . for decimals. Commas are thousands separators, e.g. 12,005.
+- TextAlign: left
+  $name: Text alignment
+  $description: Align text within Width; Fit text keeps the same left or right anchor.
+  $options:
+  - left: Left
+  - right: Right
+- TextColor: "#DEE5EF"
+  $name: Custom text color
+  $description: >-
+    #RRGGBB for neutral text; new installs use the Slate default. Leave empty to
+    follow the taskbar theme in Transparent mode or automatically contrast with
+    the Solid background.
+    Avoid #FF00FF in Transparent mode; it is the transparency color key.
+- UpColor: "#70DCC0"
+  $name: Custom gain color
+  $description: >-
+    #RRGGBB for prices at or above entry. Used with the Custom preset.
+    Avoid #FF00FF in Transparent mode; it is the transparency color key.
+- DownColor: "#FFA0AD"
+  $name: Custom loss color
+  $description: >-
+    #RRGGBB for prices below entry. Used with the Custom preset.
+    Avoid #FF00FF in Transparent mode; it is the transparency color key.
 - Appearance:
   - Preset: custom
     $name: Color preset
     $description: >-
-      Custom uses the colors below (Slate defaults). Slate, Charcoal, Warm
-      Graphite and Blue / Amber suit dark taskbars; Porcelain suits light.
+      Custom uses the custom colors above. Slate,
+      Charcoal, Warm Graphite and Blue / Amber suit dark taskbars; Porcelain suits light.
     $options:
     - custom: Custom (Slate defaults)
     - slate: Slate
@@ -107,62 +125,35 @@ Old flat values remain in storage but are not read by this version.
     $name: Background
     $description: >-
       Solid backgrounds help with transparent dock themes. Fit text grows and
-      shrinks around the text with padding. Full area uses Placement > Width.
+      shrinks around the text with padding. Full area uses Width.
     $options:
     - transparent: Transparent
     - solid: Solid - full area
     - text: Solid - fit text
-  - CustomColors:
-    - Text: "#DEE5EF"
-      $name: Text
-      $description: >-
-        #RRGGBB, used only with Custom. Empty follows the Windows taskbar theme.
-        Avoid #FF00FF in Transparent mode; it is the transparency color key.
-    - Gain: "#70DCC0"
-      $name: Gain
-      $description: >-
-        #RRGGBB for prices at or above entry, used only with Custom.
-        Avoid #FF00FF in Transparent mode; it is the transparency color key.
-    - Loss: "#FFA0AD"
-      $name: Loss
-      $description: >-
-        #RRGGBB for prices below entry, used only with Custom.
-        Avoid #FF00FF in Transparent mode; it is the transparency color key.
-    - Background: "#1E2633"
-      $name: Solid background
-      $description: '#RRGGBB, used only with Custom and a Solid background mode.'
-    $name: Custom colors
-    $description: Used only when Color preset is Custom; named presets include a background.
+  - BackgroundColor: "#1E2633"
+    $name: Custom solid background
+    $description: '#RRGGBB, used only with the Custom preset and a Solid background.'
   $name: Appearance
-  $description: Pick a palette and background. Edit Custom colors only if needed.
-- Placement:
-  - TextAlign: left
-    $name: Text alignment
-    $description: Align text within Width; Fit text keeps the same left or right anchor.
-    $options:
-    - left: Left
-    - right: Right
-  - LeftOffset: 8
-    $name: Left offset
-    $description: Distance from the taskbar left edge, in pixels at 100% scaling.
-  - Width: 480
-    $name: Width
-    $description: >-
-      Alignment area in pixels at 100% scaling. Expands if text is wider.
-      Keep Left offset + Width before Start to avoid covering task buttons.
-  $name: Placement
-  $description: Position and align the monitor; dimensions scale with Windows DPI.
-- DataSource:
-  - ApiUrl: "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1d"
-    $name: Price API URL
-    $description: >-
-      Advanced. Leave unchanged for Yahoo Finance. {symbol} is URL-encoded and
-      replaced for each symbol. Requests are sent from explorer.exe.
-  - PriceKey: regularMarketPrice
-    $name: Price JSON key
-    $description: 'Advanced. Numeric JSON key: regularMarketPrice for Yahoo, usd for CoinGecko.'
-  $name: Data source (advanced)
-  $description: Default Yahoo Finance works without an API key; change only for another API.
+  $description: Pick a palette and background. Custom text, gain and loss colors are above.
+- RefreshSeconds: 60
+  $name: Refresh interval (seconds)
+  $description: Minimum 15 seconds. One request per symbol each refresh.
+- LeftOffset: 8
+  $name: Left offset
+  $description: Distance from the taskbar left edge, in pixels at 100% scaling.
+- Width: 480
+  $name: Monitor width
+  $description: >-
+    Alignment area in pixels at 100% scaling. Expands if text is wider.
+    Keep Left offset + Width before Start to avoid covering task buttons.
+- ApiUrl: "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1d"
+  $name: Price API URL (advanced)
+  $description: >-
+    Leave unchanged for Yahoo Finance. {symbol} is URL-encoded and replaced for
+    each symbol. Requests are sent from explorer.exe.
+- PriceKey: regularMarketPrice
+  $name: Price JSON key (advanced)
+  $description: 'Numeric JSON key: regularMarketPrice for Yahoo, usd for CoinGecko.'
 */
 // ==/WindhawkModSettings==
 
@@ -718,6 +709,20 @@ bool IsLightTaskbarTheme() {
     return value != 0;
 }
 
+double SrgbChannelToLinear(BYTE channel) {
+    const double value = channel / 255.0;
+    return value <= 0.04045 ? value / 12.92
+                            : std::pow((value + 0.055) / 1.055, 2.4);
+}
+
+COLORREF ContrastingTextColor(COLORREF background) {
+    const double luminance =
+        0.2126 * SrgbChannelToLinear(GetRValue(background)) +
+        0.7152 * SrgbChannelToLinear(GetGValue(background)) +
+        0.0722 * SrgbChannelToLinear(GetBValue(background));
+    return luminance > 0.179 ? RGB(0, 0, 0) : RGB(255, 255, 255);
+}
+
 COLORREF ResolveColor(Tone tone) {
     switch (tone) {
         case Tone::gain:
@@ -727,6 +732,9 @@ COLORREF ResolveColor(Tone tone) {
         default:
             if (g_settings.hasTextColor) {
                 return g_settings.textColor;
+            }
+            if (g_settings.solidBackground) {
+                return ContrastingTextColor(g_settings.backgroundColor);
             }
             return IsLightTaskbarTheme() ? RGB(0, 0, 0) : RGB(255, 255, 255);
     }
@@ -995,23 +1003,23 @@ COLORREF ColorSetting(PCWSTR name, COLORREF fallback) {
 }
 
 void LoadSettings() {
-    g_settings.apiUrl = StringSetting::make(L"DataSource.ApiUrl").get();
-    g_settings.priceKey = ToUtf8(StringSetting::make(L"DataSource.PriceKey").get());
+    g_settings.apiUrl = StringSetting::make(L"ApiUrl").get();
+    g_settings.priceKey = ToUtf8(StringSetting::make(L"PriceKey").get());
     // Symbols never contain commas, so lists saved by older versions still work.
     g_settings.symbols =
-        SplitList(StringSetting::make(L"Content.Symbols").get(), L"|,");
+        SplitList(StringSetting::make(L"Symbols").get(), L"|,");
     if (g_settings.symbols.size() > kMaxSymbols) {
         Wh_Log(L"Only the first %u symbols are shown", static_cast<unsigned>(kMaxSymbols));
         g_settings.symbols.resize(kMaxSymbols);
     }
     g_settings.entryPrices =
-        ParseEntryPrices(StringSetting::make(L"Content.EntryPrices").get());
+        ParseEntryPrices(StringSetting::make(L"EntryPrices").get());
     g_settings.refreshSeconds =
-        std::max(Wh_GetIntSetting(L"Content.RefreshSeconds"), kMinRefreshSeconds);
-    g_settings.leftOffset = std::max(Wh_GetIntSetting(L"Placement.LeftOffset"), 0);
-    g_settings.width = std::max(Wh_GetIntSetting(L"Placement.Width"), 0);
+        std::max(Wh_GetIntSetting(L"RefreshSeconds"), kMinRefreshSeconds);
+    g_settings.leftOffset = std::max(Wh_GetIntSetting(L"LeftOffset"), 0);
+    g_settings.width = std::max(Wh_GetIntSetting(L"Width"), 0);
     g_settings.alignRight =
-        wcscmp(StringSetting::make(L"Placement.TextAlign").get(), L"left") != 0;
+        wcscmp(StringSetting::make(L"TextAlign").get(), L"left") != 0;
 
     std::wstring preset = StringSetting::make(L"Appearance.Preset").get();
     if (preset.empty()) {
@@ -1029,14 +1037,12 @@ void LoadSettings() {
             Wh_Log(L"Unknown color preset %s, using custom colors", preset.c_str());
         }
         std::wstring textColor =
-            StringSetting::make(L"Appearance.CustomColors.Text").get();
+            StringSetting::make(L"TextColor").get();
         g_settings.hasTextColor = ParseColor(textColor, g_settings.textColor);
-        g_settings.upColor =
-            ColorSetting(L"Appearance.CustomColors.Gain", RGB(0x70, 0xDC, 0xC0));
-        g_settings.downColor =
-            ColorSetting(L"Appearance.CustomColors.Loss", RGB(0xFF, 0xA0, 0xAD));
+        g_settings.upColor = ColorSetting(L"UpColor", RGB(0x70, 0xDC, 0xC0));
+        g_settings.downColor = ColorSetting(L"DownColor", RGB(0xFF, 0xA0, 0xAD));
         g_settings.backgroundColor =
-            ColorSetting(L"Appearance.CustomColors.Background", RGB(0x1E, 0x26, 0x33));
+            ColorSetting(L"Appearance.BackgroundColor", RGB(0x1E, 0x26, 0x33));
     }
     std::wstring background = StringSetting::make(L"Appearance.Background").get();
     g_settings.solidBackground = background == L"solid" || background == L"text";
