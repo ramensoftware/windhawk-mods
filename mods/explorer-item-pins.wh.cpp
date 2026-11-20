@@ -7,7 +7,7 @@
 // @description:de-DE Heftet Dateien und Ordner im Datei-Explorer in ihrem übergeordneten Ordner an
 // @description:pt-BR Fixa arquivos e pastas na pasta que os contém no Explorador de Arquivos
 // @description:zh-CN 在文件资源管理器中将文件和文件夹固定在各自的上级文件夹内
-// @version         1.1.5
+// @version         1.1.6
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
@@ -16,7 +16,7 @@
 // @architecture    x86-64
 // @compilerOptions -lruntimeobject -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lgdi32 -lcomctl32 -ladvapi32
 // ==/WindhawkMod==
-// Build: 31
+// Build: 32
 
 // ==WindhawkModReadme==
 /*
@@ -46,8 +46,8 @@ Pins are stored separately for each Windows account. Uninstalling the mod remove
 
 ## Usage
 
-1. Select a file or folder and choose **Pin in item pane** in its context menu, or click the pin on the command bar.
-2. To remove the pin, select the item and choose **Unpin from item pane** or click the crossed-out pin on the command bar. The item returns to its usual position in the folder.
+1. Select a file or folder and choose **Pin to top** in its context menu, or click the pin on the command bar.
+2. To remove the pin, select the item and choose **Unpin from top** or click the crossed-out pin on the command bar. The item returns to its usual position in the folder.
 
 In Windhawk, open the mod's **Settings** to control these options independently. All three are enabled by default.
 
@@ -68,27 +68,34 @@ If the pin commands are missing from a File Explorer window that was already ope
 
 // ==WindhawkModSettings==
 /*
-- contextMenu: true
-  $name: Context menu command
-  $name:ru-RU: Команда контекстного меню
-  $name:es-ES: Comando del menú contextual
-  $name:de-DE: Befehl im Kontextmenü
-  $name:pt-BR: Comando do menu de contexto
-  $name:zh-CN: 上下文菜单命令
-- commandBar: true
-  $name: Command bar button
-  $name:ru-RU: Кнопка на панели команд
-  $name:es-ES: Botón de la barra de comandos
-  $name:de-DE: Schaltfläche in der Befehlsleiste
-  $name:pt-BR: Botão na barra de comandos
-  $name:zh-CN: 命令栏按钮
-- pinIndicator: true
-  $name: Pinned item indicator
-  $name:ru-RU: Индикатор закрепленного объекта
-  $name:es-ES: Indicador de elemento anclado
-  $name:de-DE: Symbol für angeheftete Elemente
-  $name:pt-BR: Indicador de item fixado
-  $name:zh-CN: 固定项标记
+- display:
+    - contextMenu: true
+      $name: Context menu command
+      $name:ru-RU: Команда контекстного меню
+      $name:es-ES: Comando del menú contextual
+      $name:de-DE: Befehl im Kontextmenü
+      $name:pt-BR: Comando do menu de contexto
+      $name:zh-CN: 上下文菜单命令
+    - commandBar: true
+      $name: Command bar button
+      $name:ru-RU: Кнопка на панели команд
+      $name:es-ES: Botón de la barra de comandos
+      $name:de-DE: Schaltfläche in der Befehlsleiste
+      $name:pt-BR: Botão na barra de comandos
+      $name:zh-CN: 命令栏按钮
+    - pinIndicator: true
+      $name: Pinned item indicator
+      $name:ru-RU: Индикатор закрепленного объекта
+      $name:es-ES: Indicador de elemento anclado
+      $name:de-DE: Symbol für angeheftete Elemente
+      $name:pt-BR: Indicador de item fixado
+      $name:zh-CN: 固定项标记
+  $name: Show elements
+  $name:ru-RU: Отображение элементов
+  $name:es-ES: Mostrar elementos
+  $name:de-DE: Elemente anzeigen
+  $name:pt-BR: Exibir elementos
+  $name:zh-CN: 显示元素
 */
 // ==/WindhawkModSettings==
 
@@ -735,10 +742,13 @@ bool ReadDirectoryIdentities(const fs::path& folder, std::span<const Item> pins,
     return GetLastError() == ERROR_NO_MORE_FILES;
 }
 
-bool HasExactName(const fs::path& folder, const std::wstring& name) {
+bool HasExactName(const fs::path& folder, const std::wstring& name, bool* confirmedMissing = nullptr) {
     WIN32_FIND_DATAW found{};
     HANDLE search = FindFirstFileW((folder / name).c_str(), &found);
-    if (search == INVALID_HANDLE_VALUE) return false;
+    if (search == INVALID_HANDLE_VALUE) {
+        if (confirmedMissing) *confirmedMissing = GetLastError() == ERROR_FILE_NOT_FOUND;
+        return false;
+    }
     FindClose(search);
     return name == found.cFileName;
 }
@@ -949,23 +959,23 @@ struct PinText {
 PinText LocalizedPinText(LANGID language) {
     switch (PRIMARYLANGID(language)) {
         case LANG_RUSSIAN:
-            return {L"Закрепить в области объектов", L"Открепить в области объектов", L"Закрепленные"};
+            return {L"Закрепить объект сверху", L"Открепить из верхней области", L"Закрепленные"};
         case LANG_SPANISH:
-            return {L"Anclar en el panel de elementos", L"Desanclar del panel de elementos", L"Anclados"};
+            return {L"Anclar arriba", L"Desanclar de la parte superior", L"Anclados"};
         case LANG_GERMAN:
-            return {L"Im Elementbereich anheften", L"Vom Elementbereich lösen", L"Angeheftet"};
+            return {L"Oben anheften", L"Anheftung oben lösen", L"Angeheftet"};
         case LANG_PORTUGUESE:
             if (SUBLANGID(language) == SUBLANG_PORTUGUESE_BRAZILIAN) {
-                return {L"Fixar no painel de itens", L"Desafixar do painel de itens", L"Fixados"};
+                return {L"Fixar no topo", L"Desafixar do topo", L"Fixados"};
             }
             break;
         case LANG_CHINESE:
             if (SUBLANGID(language) == SUBLANG_CHINESE_SIMPLIFIED) {
-                return {L"固定到项目窗格", L"从项目窗格取消固定", L"已固定"};
+                return {L"置顶", L"取消置顶", L"已固定"};
             }
             break;
     }
-    return {L"Pin in item pane", L"Unpin from item pane", L"Pinned"};
+    return {L"Pin to top", L"Unpin from top", L"Pinned"};
 }
 
 // A grouping worker runs synchronously inside its batch. Each view gets its
@@ -1340,10 +1350,15 @@ public:
         if (request) {
             bool submitted = false;
             try {
-                submitted = QueueModuleWork([this, store, parent, folder, request, previous = std::move(previous)] {
+                submitted = QueueModuleWork([this, store, parent, folder, request, names, previous = std::move(previous)] {
                     std::shared_ptr<const Resolution> resolved;
                     try { resolved = ResolveFolder(store, parent, previous); } catch (...) {}
-                    const auto completion = Complete(folder, request, std::move(resolved));
+                    bool onlyMissingNamesRemoved = false;
+                    try {
+                        onlyMissingNamesRemoved = resolved && !previous && names &&
+                            IsMissingNamesOnly(parent, *names, *resolved->names);
+                    } catch (...) {}
+                    const auto completion = Complete(folder, request, std::move(resolved), onlyMissingNamesRemoved);
                     if (completion.changed) {
                         SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATHW | SHCNF_FLUSHNOWAIT, parent.c_str(), nullptr);
                     }
@@ -1371,6 +1386,18 @@ public:
     }
 
 private:
+    // A provisional name can also disappear because another process unpinned
+    // an existing file, or because a name lookup failed. Refresh in both cases.
+    static bool IsMissingNamesOnly(const fs::path& parent, const PinNames& before, const PinNames& after) {
+        if (after.size() >= before.size() || !std::ranges::includes(before, after)) return false;
+        return std::ranges::all_of(before, [&](const auto& name) {
+            if (after.contains(name)) return true;
+            bool missing = false;
+            HasExactName(parent, name, &missing);
+            return missing;
+        });
+    }
+
     using DirectoryVersion = std::array<DWORD, 4>;
 
     struct Resolution {
@@ -1378,6 +1405,7 @@ private:
         PinNames exactNames;
         std::optional<DirectoryVersion> scannedVersion;
         ULONGLONG scannedAt;
+        unsigned scansWithoutProgress;
         PinNamesSnapshot names;
     };
 
@@ -1398,18 +1426,24 @@ private:
             if (sameInputs) return previous;
             auto names = std::make_shared<const PinNames>(exactNames);
             return std::make_shared<const Resolution>(Resolution{std::move(records), std::move(exactNames),
-                                                                 std::nullopt, 0, std::move(names)});
+                                                                 std::nullopt, 0, 0, std::move(names)});
         }
 
-        constexpr ULONGLONG unchangedFolderRetryMs = 5000;
+        // Allow a prompt scan after the first miss. Repeated misses back off
+        // even in busy folders, while exact names are still checked each time.
+        constexpr ULONGLONG retryMs[] = {5000, 5000, 10000, 20000, 40000, 60000};
+        const unsigned misses = sameInputs ? previous->scansWithoutProgress : 0;
         const auto version = ReadDirectoryVersion(parent);
-        if (!sameInputs || version != previous->scannedVersion ||
-            GetTickCount64() - previous->scannedAt >= unchangedFolderRetryMs) {
+        if (!sameInputs || (misses < 2 && version != previous->scannedVersion) ||
+            GetTickCount64() - previous->scannedAt >= retryMs[misses]) {
             auto names = ResolvePinAliases(records, parent, exactNames);
+            const auto& priorNames = sameInputs ? *previous->names : exactNames;
+            const bool noProgress = names.size() < records.size() && names == priorNames;
+            const unsigned nextMisses = noProgress ? std::min(misses + 1, static_cast<unsigned>(std::size(retryMs) - 1)) : 0;
             auto snapshot = previous && *previous->names == names ? previous->names
                 : std::make_shared<const PinNames>(std::move(names));
             return std::make_shared<const Resolution>(Resolution{std::move(records), std::move(exactNames),
-                                                                 version, GetTickCount64(), std::move(snapshot)});
+                                                                 version, GetTickCount64(), nextMisses, std::move(snapshot)});
         }
 
         // Recheck the already resolved aliases while waiting for the next full scan.
@@ -1419,7 +1453,8 @@ private:
         }
         if (*previous->names == names) return previous;
         return std::make_shared<const Resolution>(Resolution{std::move(records), std::move(exactNames),
-            previous->scannedVersion, previous->scannedAt, std::make_shared<const PinNames>(std::move(names))});
+            previous->scannedVersion, previous->scannedAt, previous->scansWithoutProgress,
+            std::make_shared<const PinNames>(std::move(names))});
     }
 
     struct Entry {
@@ -1459,7 +1494,8 @@ private:
         bool retryWaiting = false;
     };
 
-    Completion Complete(const std::wstring& folder, uint64_t request, std::shared_ptr<const Resolution> resolved) {
+    Completion Complete(const std::wstring& folder, uint64_t request, std::shared_ptr<const Resolution> resolved,
+                        bool onlyMissingNamesRemoved = false) {
         const std::scoped_lock lock(mutex_);
         --pending_;
         const bool retryWaiting = std::exchange(waitingForCapacity_, false);
@@ -1467,8 +1503,9 @@ private:
         if (found == folders_.end() || found->second.request != request) return {false, retryWaiting};
         auto& entry = found->second;
         if (resolved) {
+            const bool changed = SetNames(entry, resolved->names);
             entry.resolved = std::move(resolved);
-            return {SetNames(entry, entry.resolved->names), retryWaiting};
+            return {changed && !onlyMissingNamesRemoved, retryWaiting};
         }
         entry.request = 0;
         entry.expires = GetTickCount64() + 1000;
@@ -2605,9 +2642,9 @@ HMODULE WINAPI CommandLoadLibraryExHook(PCWSTR path, HANDLE file, DWORD flags) {
     return module;
 }
 
-void PrepareNativeCommands() noexcept {
-    contextCommandEnabled = Wh_GetIntSetting(L"contextMenu") != 0;
-    toolbarCommandEnabled = Wh_GetIntSetting(L"commandBar") != 0;
+void PrepareNativeCommands(bool contextMenu, bool commandBar) noexcept {
+    contextCommandEnabled = contextMenu;
+    toolbarCommandEnabled = commandBar;
     if ((!contextCommandEnabled && !toolbarCommandEnabled) || !CommandUiMessage()) return;
     commandSymbolsRetry = CreateThreadpoolTimer([](PTP_CALLBACK_INSTANCE, void*, PTP_TIMER) {
         HookCommandSymbols(true);
@@ -2763,8 +2800,8 @@ struct ModSettings {
 ModSettings settings{};
 
 ModSettings ReadSettings() {
-    return {Wh_GetIntSetting(L"contextMenu") != 0, Wh_GetIntSetting(L"commandBar") != 0,
-            Wh_GetIntSetting(L"pinIndicator") != 0};
+    return {Wh_GetIntSetting(L"display.contextMenu") != 0, Wh_GetIntSetting(L"display.commandBar") != 0,
+            Wh_GetIntSetting(L"display.pinIndicator") != 0};
 }
 
 PinNamesSnapshot NativeFolderPins(const fs::path& folder) {
@@ -2940,7 +2977,7 @@ BOOL Wh_ModInit() {
     ownedShell = shell.release();
     indicatorHooksReady = HookNativeIndicator(*native);
     indicatorEnabled.store(settings.indicator, std::memory_order_relaxed);
-    PrepareNativeCommands();
+    PrepareNativeCommands(settings.contextMenu, settings.commandBar);
     return TRUE;
 }
 #endif
