@@ -184,7 +184,6 @@ takes the menu, so use one at a time.
 #include <algorithm>
 #include <atomic>
 #include <climits>
-#include <iterator>
 #include <cmath>
 #include <cstdint>
 #include <cwchar>
