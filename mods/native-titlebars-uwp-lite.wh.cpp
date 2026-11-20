@@ -2,7 +2,7 @@
 // @id              native-titlebars-uwp-lite
 // @name            Remove UWP titlebars
 // @description     Enables native titlebars in UWP apps
-// @version         2.1.1
+// @version         2.2.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         ApplicationFrameHost.exe
@@ -24,6 +24,17 @@ mod gave a native titlebar, so DWM (and OpenGlass) draw all three buttons.
 
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- showTitle: true
+  $name: Show title text
+  $description: Draw the window title in the native titlebar
+- showIcon: true
+  $name: Show icon
+  $description: Draw the app icon in the native titlebar
+*/
+// ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 #include <CommCtrl.h>
@@ -479,6 +490,27 @@ HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(
 // (NODRAWCAPTION | NODRAWICON | NOSYSMENU) are stripped too, otherwise stock
 // DWM draws the native titlebar without title text and icon.
 #define WTNCA_NOCAPTIONBUTTONS_UNDOC 0x10000
+
+static struct
+{
+    bool showTitle;
+    bool showIcon;
+} g_settings;
+
+static void LoadSettings()
+{
+    g_settings.showTitle = Wh_GetIntSetting(L"showTitle");
+    g_settings.showIcon = Wh_GetIntSetting(L"showIcon");
+}
+
+// NC flags to keep set according to the settings.
+static DWORD HiddenNcFlags()
+{
+    DWORD f = 0;
+    if (!g_settings.showTitle) f |= WTNCA_NODRAWCAPTION;
+    if (!g_settings.showIcon) f |= WTNCA_NODRAWICON;
+    return f;
+}
 #define WTNCA_STRIP_FLAGS (WTNCA_NOCAPTIONBUTTONS_UNDOC | WTNCA_NODRAWCAPTION | \
                            WTNCA_NODRAWICON | WTNCA_NOSYSMENU)
 
@@ -509,7 +541,7 @@ HRESULT WINAPI SetWindowThemeAttribute_hook(
         IsApplicationFrameWindow(hWnd) && IsConvertedFrame(hWnd))
     {
         WTA_OPTIONS opts = *(const WTA_OPTIONS *)pvAttribute;
-        opts.dwFlags &= ~WTNCA_STRIP_FLAGS;
+        opts.dwFlags = (opts.dwFlags & ~WTNCA_STRIP_FLAGS) | HiddenNcFlags();
         return SetWindowThemeAttribute_orig(hWnd, eAttribute, &opts, sizeof(opts));
     }
 
@@ -527,7 +559,7 @@ static BOOL CALLBACK RestoreCaptionButtonsEnumProc(HWND hWnd, LPARAM)
         IsApplicationFrameWindow(hWnd) &&
         IsConvertedFrame(hWnd))
     {
-        WTA_OPTIONS opts = {0, WTNCA_STRIP_FLAGS};
+        WTA_OPTIONS opts = {HiddenNcFlags(), WTNCA_STRIP_FLAGS};
         SetWindowThemeAttribute(hWnd, WTA_NONCLIENT, &opts, sizeof(opts));
         SetWindowPos(hWnd, NULL, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
@@ -581,7 +613,9 @@ UINT GetCurrentStyle_hook(const void *pWindowData, bool b)
         return flags;
 
     // Same bits the non-immersive path sets.
-    flags |= NCF_ICON | NCF_SYSMENU;
+    flags |= NCF_SYSMENU;
+    if (g_settings.showIcon)
+        flags |= NCF_ICON;
     if (style & WS_MINIMIZEBOX) flags |= NCF_MIN_VISIBLE | NCF_MAX_VISIBLE | NCF_MIN_ENABLED;
     if (style & WS_MAXIMIZEBOX) flags |= NCF_MIN_VISIBLE | NCF_MAX_VISIBLE | NCF_MAX_ENABLED;
     return flags;
@@ -636,9 +670,11 @@ BOOL Wh_ModInit()
     if (name && _wcsicmp(name + 1, L"dwm.exe") == 0)
     {
         g_isDwm = true;
+        LoadSettings();
         return DwmModInit();
     }
 
+    LoadSettings();
     InitializeCriticalSection(&g_csSubclassedWindows);
     InitializeCriticalSection(&g_csGdiplus);
 
@@ -707,6 +743,14 @@ BOOL Wh_ModInit()
         LoadLibraryExW(L"ApplicationFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32),
         ApplicationFrame_dll_hooks,
         ARRAYSIZE(ApplicationFrame_dll_hooks));
+}
+
+BOOL Wh_ModSettingsChanged(BOOL *bReload)
+{
+    // Reload so both processes pick up the new values; on reload the AFH part
+    // re-applies the titlebar flags to open frames.
+    *bReload = TRUE;
+    return TRUE;
 }
 
 void Wh_ModAfterInit()
