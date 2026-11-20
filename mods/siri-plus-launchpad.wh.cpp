@@ -16568,6 +16568,7 @@ DWORD WINAPI StartThread(void*) {
     g_fileStatus.clear();
     std::vector<Folder>().swap(g_folders); g_customIcons.clear(); g_mainItems.clear(); g_backdropImage = {}; FreeSurface(g_surface);
     g_labelFormat.Reset(); g_searchFormat.Reset(); g_siriFormat.Reset(); g_messageFormat.Reset();
+    g_alertTitleFmt.Reset(); g_alertBodyFmt.Reset(); g_alertButtonFmt.Reset();   // (the alerts' own formats)
     g_titleFormat.Reset(); g_menuFormat.Reset(); g_tabFormat.Reset(); g_listFormat.Reset();
     g_listSubFormat.Reset(); g_glyphFormat.Reset(); g_hintFormat.Reset();
     g_glyphLargeFormat.Reset(); g_categoryFormat.Reset(); g_keyFormat.Reset();
