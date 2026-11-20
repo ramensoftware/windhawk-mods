@@ -2,12 +2,12 @@
 // @id              macos-style-dock
 // @name            MacOS Style Dock
 // @description     Turns the Windows 11 taskbar into a macOS-style dock with magnifying icons
-// @version         1.1.3
+// @version         1.2.0
 // @author          Zach Vaughn
 // @github          https://github.com/zachvdev
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -lgdi32 -lshell32 -lshcore -ladvapi32 -ldwmapi -lgdiplus -ld2d1
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -lgdi32 -lshell32 -lshcore -ladvapi32 -ldwmapi -lgdiplus -ld2d1 -ld3d11 -ldxgi
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -15,10 +15,10 @@
 /*
 # MacOS Style Dock
 
-Turns the Windows 11 taskbar into a macOS-style dock: frosted glass, icons
-that magnify under the pointer, running dots, app name labels, File Explorer
-first and the Recycle Bin last, and hot corners for Task View, Start and the
-system tray.
+Turns the Windows 11 taskbar into a macOS-style dock: frosted glass (or real
+Liquid Glass), icons that magnify under the pointer, running dots, app name
+labels, File Explorer first and the Recycle Bin last, and hot corners for Task
+View, Start and the system tray.
 
 It restyles the real taskbar instead of replacing it, so everything you're
 used to keeps working: pinned apps, right-click menus, dropping files onto
@@ -39,6 +39,30 @@ To use an icon, see "Custom icons" below.
 ![The dock](https://i.imgur.com/E1NqVoz.png)
 
 ![The dock in action](https://i.imgur.com/eJXsof7.gif)
+
+## Liquid Glass (new)
+
+Not just a frosted blur: the dock's rim actually bends whatever is behind it,
+like the edge of a pane of glass, and keeps bending it as things move
+underneath. It's on by default, but it has two downsides:
+
+1. **It's slightly delayed.** Windows doesn't let anything bend what's behind
+   the taskbar, so the dock takes a picture of the screen behind it whenever
+   Windows shows something new there, and bends that picture. The glass
+   trails the screen by a frame or two, which you may notice when something
+   moves fast behind the dock, like scrolling or a video. The dock's own
+   movement (magnifying, sliding) isn't delayed.
+2. **It doesn't work with screen captures.** The picture can't include the
+   dock, or it would bend itself, so while Liquid Glass is on, the taskbar
+   (dock and tray) disappears from screenshots, screen recordings and screen
+   sharing. To capture the dock, press **Win+Ctrl+Shift+G** first: the glass
+   freezes and the dock shows up again. Press it again to go back.
+
+**If either downside is a problem for you, turn Liquid Glass off:** set "Edge
+Style" to Off, in the Liquid Glass settings, and the dock goes back to the
+plain frosted glass, which has neither. If anything goes wrong,
+**Win+Ctrl+Shift+K** turns it off at once. See "More on Liquid Glass" below
+for the styles and details.
 
 ## Will it work on my PC?
 
@@ -111,10 +135,56 @@ Turning the mod off puts the taskbar back to normal.
   another after File Explorer (and Start or Task View, if they're in the
   dock). "Custom Index Dividers" adds up to 5 more: a divider at 3 goes after
   the third icon from the left.
-- **A brightness limit** (off by default). Turn on "Cap Dock Per-Pixel
-  Brightness" to hold whatever shows through the dock under "Dock Brightness
-  Limit", pixel by pixel, as the tray does (see below): a white window behind
-  the dock turns gray there, and anything darker passes through untouched.
+- **A brightness limit** (on by default). With "Cap Dock Per-Pixel
+  Brightness" on, whatever shows through the dock is held under "Dock
+  Brightness Limit" (80% by default), pixel by pixel, as the tray does (see
+  below): a white window behind the dock turns gray there, and anything
+  darker passes through untouched.
+- **Liquid Glass edges** (on by default). The dock's rim bends what's
+  behind it, as in the MacOS-Style-LiquidGlass mod. See "Liquid Glass" near
+  the top, including its downsides and how to turn it off.
+
+## More on Liquid Glass
+
+Liquid Glass is on by default, in the Lens style; "Edge Style" picks one of
+three styles, or Off (see "Liquid Glass" near the top for when you might want
+that). The middle of the dock stays clear, and its rim bends what's just
+inside it out to the edge:
+
+- **Lens**: a mirror image of the band inside the rim, squeezed toward the
+  edge, meeting the clear middle in a soft curve.
+- **Reflection**: a true, unsqueezed mirror image, turning over tightly where
+  it meets the middle, without a hard line.
+- **Stretch**: no mirror image; the inside of the rim is stretched out to the
+  edge, more and more toward it, like looking through a thick lens.
+
+The whole of it is then blurred by "Dock Background Blur", under the dock's
+own color and border. The default blur, 3, keeps the bend crisp; raise it for
+frostier glass. Set "Edge Style" back to Off for the plain frosted glass. The
+tray gets the same glass while it matches the dock (see "The system tray"); it
+slides in and out by its hot corner with the glass it last showed, which is
+right again once it's in place. Once the dock has been hidden for a couple of
+seconds, the screen behind it stops being captured until it's back.
+
+While Liquid Glass is on, the dock's labels are left out of screen captures
+along with the taskbar.
+
+- **To take a screenshot of the dock**, press **Win+Ctrl+Shift+G** to freeze
+  the glass: it stops following the screen and keeps bending the last picture
+  of it, and the dock shows in screenshots. Press it again to go back.
+  Anything that moves behind the dock won't move in the glass while it's
+  frozen.
+- **Emergency stop: Win+Ctrl+Shift+K.** It turns Liquid Glass off at once,
+  even if the taskbar has stopped responding, and puts the frosted glass back.
+  It stays off, even after restarting Explorer or the PC, until you next save
+  this mod's settings. If the taskbar had frozen, restart Explorer from Task
+  Manager afterwards. (Ctrl+Shift+K alone isn't used, as apps like VS Code
+  and Firefox need it.)
+
+Screens turned to portrait, and screens on another graphics card than the
+main one, keep the frosted glass. With several screens of the same size, a
+dock may keep the frosted glass until the pointer first passes over it. The
+mod's log says why, whenever the frosted glass is used instead.
 
 ## The icons
 
@@ -134,7 +204,11 @@ Turning the mod off puts the taskbar back to normal.
   - Each tile gets a soft shadow.
 
   Tiles appear a few seconds after the mod starts, once the taskbar has
-  finished loading its icons.
+  finished loading its icons. If the taskbar never lets an icon be drawn,
+  its tile is made from the app's icon as Start shows it.
+- **Still icons** (off by default). Windows bounces an app's icon as its
+  windows open, close, minimize or are restored. Turn on "Keep Icons Still"
+  to stop that.
 
 ## File Explorer, Start and the Recycle Bin
 
@@ -235,14 +309,15 @@ button is held or a full screen app is running.
 The tray's clock and icons sit over whatever's behind them, so "Tray Color"
 has a few ways to keep them readable. Use any of them, or all:
 
-- **A background.** By default the tray matches the dock: the same frosted
-  glass and border, as a smaller pill. Turn off "Match Dock Style" to give
-  it its own color, opacity, blur and border. "Tray Padding" sets the room
+- **A background.** By default the tray matches the dock: the same glass
+  (Liquid Glass too, when it's on), border and glow, as a smaller pill, with
+  its own brightness limit and shadow (below). Turn off "Match Dock Style" to
+  give it its own color, opacity, blur and border. "Tray Padding" sets the room
   around the icons and clock; the tray moves up and left to keep its
   background 4 pixels from the screen's edges.
 - **A brightness limit** (on by default). With "Cap Tray Per-Pixel
   Brightness" on, whatever shows through the tray's background is held under
-  "Brightness Limit" (70% by default), pixel by pixel, across the whole
+  "Brightness Limit" (80% by default), pixel by pixel, across the whole
   background: a white window behind the tray turns gray there, and anything
   darker passes through untouched. Under dark text (Windows' light mode),
   it's a minimum brightness instead.
@@ -280,12 +355,15 @@ apply right away.
 - **Dock Color:** the background's color, opacity and blur, an optional
   brightness limit behind it, and the border's style, opacity, width and
   color.
+- **Liquid Glass** (on by default): whether the dock's rim bends what's
+  behind it and in which style, and how deep and strong the bend is. Its blur
+  and color are the dock's own.
 - **Tray Color:** the tray's background (matching the dock, or its own), its
   padding, the brightness limit behind it, and a shadow under its text and
   icons.
 - **Dock Items:** hiding Start, keeping File Explorer first, the Recycle Bin,
-  high resolution icons, tooltips, activity indicators, window previews,
-  dividers, and squircle icons and their tile color.
+  high resolution icons, tooltips, activity indicators, keeping icons still,
+  window previews, dividers, and squircle icons and their tile color.
 - **Custom Icons:** your own File Explorer, Start and Recycle Bin icons, and
   their margins.
 - **Hot Corners:** what each bottom corner does.
@@ -311,7 +389,9 @@ Thumbnails", and placing them follows his "Taskbar on top for Windows 11"
 (all GPL-3.0). Hybrid dots follow notdominicc's way of reshaping Windows' own
 indicators, and moving Task View's row of desktops follows Asteski's "Task
 View Customizer". The squircle corners use PaintCode's measurements of
-Apple's curve.
+Apple's curve. Liquid Glass's edges come from the author's own
+MacOS-Style-LiquidGlass mod; DreY85's Open Fluid Glass (a fork of ALTaleX's
+OpenGlass) showed how a taskbar can be given real refraction.
 */
 // ==/WindhawkModReadme==
 
@@ -360,18 +440,18 @@ Apple's curve.
   - opacity: 15
     $name: Dock Background Opacity (0-100)
     $description: (Default = 15)
-  - blur: 10
+  - blur: 3
     $name: Dock Background Blur (0-100)
-    $description: (Default = 10)
+    $description: Also blurs Liquid Glass, when it's on. (Default = 3)
   - customColor: "#333333"
     $name: Dock Custom Background Color (#HEX)
     $description: Used when "Background Color" is "Custom."
-  - capBrightness: false
+  - capBrightness: true
     $name: Cap Dock Per-Pixel Brightness
-    $description: Caps the brightness that shines through the dock on a per-pixel basis. This effect may cause lag. (Default = Disabled)
-  - brightnessLimit: 70
+    $description: Caps the brightness that shines through the dock on a per-pixel basis. This effect may cause lag. (Default = Enabled)
+  - brightnessLimit: 80
     $name: Dock Brightness Limit (0-100)
-    $description: Used when "Cap Dock Per-Pixel Brightness" is on. (Default = 70)
+    $description: Used when "Cap Dock Per-Pixel Brightness" is on. (Default = 80)
   - border: mac
     $name: Dock Border Style
     $description: (Default = MacOS Style)
@@ -390,16 +470,32 @@ Apple's curve.
     $name: Dock Custom Border Color (#HEX)
     $description: Used when "Border Style" is "Custom."
   $name: Dock Color
+- liquidGlass:
+  - edgeStyle: lens
+    $name: Edge Style
+    $description: "Liquid Glass makes the dock's rim bend what's behind it like real glass. Two downsides: 1) It's slightly delayed, trailing what's behind the dock by a frame or two, as it bends a picture of the screen. 2) It doesn't work with screen captures: while it's on, the taskbar disappears from screenshots, recordings and screen sharing (Win+Ctrl+Shift+G freezes the glass so the dock shows up; Win+Ctrl+Shift+K turns it off in an emergency). If either is a problem for you, set this to Off for the plain frosted glass. Lens mirrors the rim, squeezed toward the edge; Reflection is a true mirror; Stretch stretches the rim outward. (Default = Lens)"
+    $options:
+    - lens: Lens
+    - reflection: Reflection
+    - stretch: Stretch
+    - "off": "Off"
+  - edgeDepth: 17
+    $name: Edge Depth (2-100)
+    $description: How deep the bent rim is, in pixels at 100% scaling, and never past a quarter of the dock's height. (Default = 17)
+  - edgeStrength: 120
+    $name: Edge Strength (0-150)
+    $description: How far the rim reaches in for what it shows; lower bends less. Above 100, Stretch starts to mirror at the very edge. (Default = 120)
+  $name: Liquid Glass
 - trayColor:
   - matchDock: true
     $name: Match Dock Style
-    $description: Uses the dock's background and border. (Default = Enabled)
+    $description: Uses the dock's background, border, glow and Liquid Glass. The brightness limit and shadow stay the tray's own. (Default = Enabled)
   - capBrightness: true
     $name: Cap Tray Per-Pixel Brightness
     $description: Caps the brightness that shines through the tray on a per-pixel basis. This effect may cause lag. (Default = Enabled)
-  - brightnessLimit: 70
+  - brightnessLimit: 80
     $name: Brightness Limit (0-100)
-    $description: Caps the brightness to make tray items more visible. (Default = 70)
+    $description: Caps the brightness to make tray items more visible. (Default = 80)
   - padding: 9
     $name: Tray Padding (0-20)
     $description: Space around the tray's icons. (Default = 9)
@@ -481,6 +577,9 @@ Apple's curve.
     - hybrid: Hybrid Dots
     - windows: Windows 11 Style
     - none: None
+  - keepIconsStill: false
+    $name: Keep Icons Still
+    $description: Turns off the bounce Windows gives an app's icon as it opens, closes, minimizes or is restored. (Default = Disabled)
   - previews: false
     $name: See Window Previews
     $description: Shows window previews on hover. (Default = Disabled)
@@ -560,12 +659,12 @@ Apple's curve.
     - vertical: Vertical
     - horizontal: Horizontal
     - both: Both
-  - glowSpread: 6
+  - glowSpread: 8
     $name: Dock Glow Spread (0-20)
-    $description: Adjusts how large the glow is. (Default = 6)
-  - glowOpacity: 60
+    $description: Adjusts how large the glow is. (Default = 8)
+  - glowOpacity: 63
     $name: Dock Glow Opacity (0-100)
-    $description: Adjusts how opaque the glow is. (Default = 60)
+    $description: Adjusts how opaque the glow is. (Default = 63)
   - glowColor: ""
     $name: Dock Glow Custom Color (#HEX)
     $description: Leave blank for a lighter shade of the background color.
@@ -581,11 +680,14 @@ Apple's curve.
 #include <shellapi.h>
 #include <shellscalingapi.h>
 #include <sddl.h>
-#include <d2d1.h>
+#include <d2d1_1.h>
+#include <d3d11.h>
 #include <dwmapi.h>
+#include <dxgi1_2.h>
 #include <gdiplus.h>
 #include <shcore.h>
 #include <shlobj.h>
+#include <shobjidl.h>
 #include <wincodec.h>
 
 #include <algorithm>
@@ -617,6 +719,7 @@ Apple's curve.
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.Numerics.h>
 #include <winrt/Windows.Graphics.h>
+#include <winrt/Windows.Graphics.DirectX.h>
 #include <winrt/Windows.Graphics.Effects.h>
 #include <winrt/Windows.ApplicationModel.DataTransfer.h>
 #include <winrt/Windows.Storage.h>
@@ -648,6 +751,7 @@ namespace wuxh = winrt::Windows::UI::Xaml::Hosting;
 namespace wuxi = winrt::Windows::UI::Xaml::Input;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
 namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
+namespace wgdx = winrt::Windows::Graphics::DirectX;
 
 using winrt::Windows::UI::Color;
 using wux::Visibility;
@@ -665,6 +769,7 @@ enum class GlowEdges { TopBottom, Sides, All };
 // Behind squircle icons' shapes.
 enum class TileColor { AlwaysLight, PreferLight, Auto, PreferDark, AlwaysDark, Custom };
 enum class Indicators { Dots, HybridDots, Windows, None };  // running apps
+enum class GlassStyle { Lens, Reflection, Stretch, Off };  // how Liquid Glass bends the rim
 
 constexpr float kMacIconScale = 1024.0f / 824;  // macOS icons fill 824 of 1024px, for shadows
 constexpr size_t kMaxCustomDividers = 5;
@@ -700,6 +805,9 @@ struct Settings {
     bool trayMatchDock;
     int dockBrightnessLimit;  // percent; 100 for none (Cap Per-Pixel Brightness off)
     int trayBrightnessLimit;  // the same, for the tray
+    GlassStyle glassStyle;    // Liquid Glass, blurred by dockLook.blur
+    float glassDepth;         // the bent rim, in pixels at 100% scaling
+    float glassStrength;      // 1 for full strength
     int trayPadding;          // pixels, past kTrayPlateInsetX and Y
     bool trayShadow;          // under the tray's text and icons
     bool trayShadowAuto;      // its color follows the text's
@@ -718,6 +826,7 @@ struct Settings {
     bool dividerBeforeTrash;
     std::vector<int> customDividers;  // after these icons, counted from 1; sorted
     bool squircleIcons;
+    bool keepIconsStill;  // no bounce as apps open, close, minimize or are restored
     TileColor tileColor;
     uint8_t tileCustomColor[3];
     CustomIcon customFinder, customStart, customTrash;
@@ -862,6 +971,10 @@ void LoadSettings() {
         Wh_GetIntSetting(L"dockColor.capBrightness") ? percent(L"dockColor.brightnessLimit") : 100;
     s.trayBrightnessLimit =
         Wh_GetIntSetting(L"trayColor.capBrightness") ? percent(L"trayColor.brightnessLimit") : 100;
+    s.glassStyle = (GlassStyle)ChoiceSetting(L"liquidGlass.edgeStyle",
+                                             {L"lens", L"reflection", L"stretch", L"off"}, 0);
+    s.glassDepth = (float)std::clamp(Wh_GetIntSetting(L"liquidGlass.edgeDepth"), 2, 100);
+    s.glassStrength = std::clamp(Wh_GetIntSetting(L"liquidGlass.edgeStrength"), 0, 150) / 100.0f;
     s.trayPadding = std::clamp(Wh_GetIntSetting(L"trayColor.padding"), 0, 20);
     s.trayShadow = Wh_GetIntSetting(L"trayColor.shadow");
     s.trayShadowAuto = !HexSetting(L"trayColor.shadowColor", s.trayShadowColor);
@@ -889,6 +1002,7 @@ void LoadSettings() {
     s.customDividers.erase(std::unique(s.customDividers.begin(), s.customDividers.end()),
                            s.customDividers.end());
     s.squircleIcons = Wh_GetIntSetting(L"dockItems.squircleIcons");
+    s.keepIconsStill = Wh_GetIntSetting(L"dockItems.keepIconsStill");
     s.tileColor = (TileColor)ChoiceSetting(
         L"dockItems.squircleColor",
         {L"alwaysLight", L"preferLight", L"auto", L"preferDark", L"alwaysDark", L"custom"}, 2);
@@ -1167,12 +1281,16 @@ constexpr UINT kUpdateOverWindowsMessage = WM_APP + 1;
 constexpr UINT kTrashChangedMessage = WM_APP + 2;
 constexpr UINT kTrashCheckedMessage = WM_APP + 3;
 constexpr UINT kMoveExplorerMessage = WM_APP + 4;
+constexpr UINT kGlassStopMessage = WM_APP + 5;    // Liquid Glass's emergency stop
+constexpr UINT kGlassFreezeMessage = WM_APP + 6;  // freezing or thawing it
+constexpr UINT kGlassFrameMessage = WM_APP + 7;   // a new picture of the screen behind it
 constexpr UINT_PTR kReapplyTimer = 1;
 constexpr UINT_PTR kPollTimer = 3;
 constexpr UINT_PTR kTrayClipTimer = 4;
 constexpr UINT_PTR kSquircleRetryTimer = 5;
 constexpr UINT_PTR kMaximizedCheckTimer = 6;
 constexpr UINT_PTR kIconsMovingTimer = 7;
+constexpr UINT_PTR kGlassTimer = 8;
 constexpr UINT kSquircleRetryMs = 50;
 
 std::atomic<HWND> g_modWindow = nullptr;
@@ -2065,14 +2183,11 @@ struct GeometrySource
     }
 };
 
-// The same outline for composition, which takes it through Direct2D.
-wuc::CompositionPath SquirclePath(std::vector<wf::Point> const& points) {
-    if (!g_d2d) {
-        winrt::check_hresult(D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED,
-                                               __uuidof(ID2D1Factory), nullptr, g_d2d.put_void()));
-    }
+// A Squircle outline as a Direct2D path, from `factory`.
+winrt::com_ptr<ID2D1PathGeometry> SquircleD2D(ID2D1Factory* factory,
+                                             std::vector<wf::Point> const& points) {
     winrt::com_ptr<ID2D1PathGeometry> path;
-    winrt::check_hresult(g_d2d->CreatePathGeometry(path.put()));
+    winrt::check_hresult(factory->CreatePathGeometry(path.put()));
     winrt::com_ptr<ID2D1GeometrySink> sink;
     winrt::check_hresult(path->Open(sink.put()));
     auto at = [&](size_t i) { return D2D1_POINT_2F{points[i].X, points[i].Y}; };
@@ -2080,8 +2195,17 @@ wuc::CompositionPath SquirclePath(std::vector<wf::Point> const& points) {
     for (size_t i = 1; i + 2 < points.size(); i += 3) sink->AddBezier({at(i), at(i + 1), at(i + 2)});
     sink->EndFigure(D2D1_FIGURE_END_CLOSED);
     winrt::check_hresult(sink->Close());
+    return path;
+}
+
+// The same outline for composition, which takes it through Direct2D.
+wuc::CompositionPath SquirclePath(std::vector<wf::Point> const& points) {
+    if (!g_d2d) {
+        winrt::check_hresult(D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED,
+                                               __uuidof(ID2D1Factory), nullptr, g_d2d.put_void()));
+    }
     auto source = winrt::make_self<GeometrySource>();
-    source->geometry = path;
+    source->geometry = SquircleD2D(g_d2d.get(), points);
     return wuc::CompositionPath(source.as<wg::IGeometrySource2D>());
 }
 
@@ -2166,6 +2290,10 @@ struct Surface {
     wuc::CompositionPathGeometry blurShape{nullptr};
     float appliedBlur = -1;
     ToneLimit appliedTone;
+    // Liquid Glass, drawn in blurHost in place of the blur (the dock's only;
+    // see LIQUID GLASS).
+    bool glassShown = false;
+    wuc::CompositionPathGeometry glassShape{nullptr};  // its clip
 };
 
 // Its layers in drawing order, in a new grid, unrounded so the right edge
@@ -2194,6 +2322,7 @@ void RemoveSurfaceBlur(Surface& s) {
     s.blurShape = nullptr;
     s.appliedBlur = -1;
     s.appliedTone = {};
+    s.glassShown = false;  // its visual went with the blur's
 }
 
 // The color behind `look`'s icons, and whether it's light. With System, or no
@@ -2286,6 +2415,7 @@ void ApplySurfaceLook(Surface& s, Look const& look, Color fill, bool light,
     s.sideGlow.Fill(s.sideGlowBrush);
 
     float blur = none ? 0 : look.blur * kMaxBlur / 100;
+    if (s.glassShown) return;  // Liquid Glass is in its place
     if (blur != s.appliedBlur || !(tone == s.appliedTone)) {
         s.appliedBlur = blur;
         s.appliedTone = tone;
@@ -2333,6 +2463,7 @@ void ShapeSurface(Surface& s, Look const& look, float w, float h, float r, float
                                            Squircle(0, 1, w, h, r, r)}));
     }
     if (s.blurShape) Try([&] { s.blurShape.Path(SquirclePath(outline)); }, L"Blur shape");
+    if (s.glassShape) Try([&] { s.glassShape.Path(SquirclePath(outline)); }, L"Glass shape");
 
     // The same depth in pixels from every glowing edge.
     for (auto [brush, extent] : {std::pair{s.topGlowBrush, h}, std::pair{s.sideGlowBrush, w}}) {
@@ -2352,6 +2483,26 @@ struct Divider {
     wuxc::Border element{nullptr};
     winrt::weak_ref<wux::FrameworkElement> after;
     float shift = 0;  // magnification's, as applied
+};
+
+// A dock's Liquid Glass (see LIQUID GLASS): where it's drawn, and from what.
+struct GlassPlate {
+    HWND window = nullptr;          // the taskbar it's in, once known
+    ULONGLONG lookedAt = 0;         // when that was last looked for
+    HMONITOR monitor = nullptr;     // the screen under it
+    wuc::CompositionDrawingSurface surface{nullptr};  // in blurHost, in place of the blur
+    wuc::SpriteVisual sprite{nullptr};
+    SIZE surfaceSize{};
+    winrt::com_ptr<ID3D11Texture2D> behind;  // the screen behind it and a margin, at least
+    winrt::com_ptr<ID2D1Bitmap1> behindBitmap;
+    winrt::com_ptr<ID2D1Bitmap1> map;        // where each pixel takes its color from
+    SIZE mapCapacity{};
+    std::vector<float> mapPixels;
+    float mapScale = 0;
+    std::array<float, 8> mapFor{};           // the shape it was built for
+    std::array<float, 4> drawnAt{};          // on screen, as last drawn: x, y, width, height
+    uint64_t drawnFrame = 0;                 // the picture it was last drawn from
+    bool dirty = true;                       // to be drawn again, even where it is
 };
 
 struct Plate {
@@ -2391,6 +2542,8 @@ struct Plate {
     Color dividerColor{};
 
     float hideY = 0;     // auto-hide's slide, applied to the panel
+
+    GlassPlate glass;
 };
 
 [[clang::no_destroy]] std::optional<std::list<Plate>> g_plates{std::in_place};
@@ -2490,6 +2643,61 @@ wuxc::Border AddDivider(wuxc::Panel const& panel, wux::UIElement const& row) {
 
 enum class IconLook { Stock, Finder, Squircle };
 
+// What a bitmap loaded from, if it's a file or an address; empty otherwise.
+std::wstring UriText(wuxm::ImageSource const& source) {
+    auto bitmap = source ? source.try_as<wuxm::Imaging::BitmapImage>() : nullptr;
+    auto uri = bitmap ? bitmap.UriSource() : nullptr;
+    return uri ? std::wstring(uri.AbsoluteUri()) : std::wstring();
+}
+
+// Calls `changed` when the taskbar loads another icon into a bitmap it already
+// has, as it can when an app's windows open or close, without setting it on
+// the Image again: as it opens (decoded), or as its file or address changes.
+class StockWatch {
+public:
+    StockWatch() = default;
+    StockWatch(StockWatch const&) = delete;
+    StockWatch& operator=(StockWatch const&) = delete;
+    ~StockWatch() { Stop(); }
+
+    void Watch(wuxm::ImageSource const& source, std::function<void(wf::IInspectable const&)> changed) {
+        Stop();
+        auto bitmap = source ? source.try_as<wuxm::Imaging::BitmapImage>() : nullptr;
+        if (!bitmap) return;
+        bitmap_ = winrt::make_weak(bitmap);
+        opened_ = bitmap.ImageOpened(
+            winrt::auto_revoke,
+            [changed](wf::IInspectable const& sender, wux::RoutedEventArgs const&) {
+                if (!g_unloading) changed(sender);
+            });
+        uriToken_ = bitmap.RegisterPropertyChangedCallback(
+            wuxm::Imaging::BitmapImage::UriSourceProperty(),
+            [changed](wux::DependencyObject const& sender, wux::DependencyProperty const&) {
+                if (!g_unloading) changed(sender);
+            });
+    }
+
+    void Stop() {
+        opened_.revoke();
+        if (uriToken_) {
+            if (auto bitmap = bitmap_.get()) {
+                try {
+                    bitmap.UnregisterPropertyChangedCallback(
+                        wuxm::Imaging::BitmapImage::UriSourceProperty(), uriToken_);
+                } catch (...) {
+                }
+            }
+        }
+        uriToken_ = 0;
+        bitmap_ = nullptr;
+    }
+
+private:
+    winrt::weak_ref<wuxm::Imaging::BitmapImage> bitmap_;
+    wuxm::Imaging::BitmapImage::ImageOpened_revoker opened_;
+    int64_t uriToken_ = 0;
+};
+
 struct IconSwap {
     winrt::weak_ref<wuxc::Image> image;
     winrt::weak_ref<wux::FrameworkElement> button;
@@ -2499,8 +2707,13 @@ struct IconSwap {
     wuxm::ScaleTransform transform{nullptr};  // the mod's, while a replacement shows
     wf::IAsyncInfo render{nullptr};           // drawing the icon to make a tile from
     bool rendering = false;
-    bool retry = false;  // drawn again on the retry timer
+    int generation = 0;  // up when a drawing in progress is of an icon since replaced
+    bool retry = false;  // drawn again on the retry timer, at `retryAt`
+    std::chrono::steady_clock::time_point retryAt{};
     int retries = 0;
+    bool renderParent = false;  // drawing the icon alone was refused: what holds it is drawn
+    std::wstring tileUri;       // what the taskbar's icon loaded from, as its tile was made
+    StockWatch watch;           // the taskbar's icon, loading anew
 };
 
 [[clang::no_destroy]] std::list<IconSwap> g_iconSwaps;
@@ -2553,6 +2766,16 @@ void ApplyIconScale(wux::FrameworkElement const& el) {
 void RequestSquircle(IconSwap& s, wuxc::Image const& image);
 wuxm::ImageSource CachedSquircle(wuxm::ImageSource const& stock);
 void NoteIconChange();
+void OnStockChanged(wf::IInspectable const& sender);
+
+// Only tiles are made from the taskbar's icon, so only they need to know when
+// it changes in place.
+void WatchStock(IconSwap& s) {
+    if (s.look != IconLook::Squircle) return s.watch.Stop();
+    s.watch.Watch(s.stock, [](wf::IInspectable const& sender) {
+        Try([&] { OnStockChanged(sender); }, L"Squircle icon");
+    });
+}
 
 void ShowSwap(IconSwap& s, wuxc::Image const& image) {
     auto source = s.shown ? s.shown : s.stock;
@@ -2563,7 +2786,10 @@ void ShowSwap(IconSwap& s, wuxc::Image const& image) {
 
 void UpdateSwap(IconSwap& s, wuxc::Image const& image) {
     if (s.look == IconLook::Finder) s.shown = FinderIconSource(image);
-    if (s.look == IconLook::Squircle && !s.shown) s.shown = CachedSquircle(s.stock);
+    if (s.look == IconLook::Squircle && !s.shown) {
+        s.shown = CachedSquircle(s.stock);
+        if (s.shown) s.tileUri = UriText(s.stock);
+    }
     ShowSwap(s, image);
     if (s.look == IconLook::Squircle && !s.shown) RequestSquircle(s, image);
 }
@@ -2583,6 +2809,8 @@ void OnIconSourceChanged(wux::FrameworkElement const& el) {
     s->look = button ? LookFor(button) : IconLook::Stock;
     s->shown = nullptr;
     s->retries = 0;
+    s->renderParent = false;
+    WatchStock(*s);
     UpdateSwap(*s, image);
 }
 
@@ -2617,6 +2845,8 @@ void UpdateAppIcon(wux::FrameworkElement const& el, wux::FrameworkElement const&
         s->look = look;
         s->shown = nullptr;
         s->retries = 0;
+        s->renderParent = false;
+        WatchStock(*s);
     }
     UpdateSwap(*s, image);
 }
@@ -2804,7 +3034,9 @@ constexpr float kTileShadowOpacity = 0.3f;
 constexpr std::array<Color, 2> kLightTile{{{255, 0xFF, 0xFF, 0xFF}, {255, 0xE9, 0xE9, 0xEE}}};
 constexpr std::array<Color, 2> kDarkTile{{{255, 0x4A, 0x4A, 0x4E}, {255, 0x1F, 0x1F, 0x22}}};
 constexpr float kCustomTileShade = 0.08f;    // a custom tile's bottom, darker than its top
-constexpr int kSquircleRetries = 30;         // while the icon isn't laid out or drawn yet
+constexpr int kSquircleRetries = 30;         // while the icon isn't laid out or drawn yet,
+constexpr int kSquircleSlowRetries = 30;     // then these, as with a button that arrives late
+constexpr auto kSquircleSlowRetryDelay = std::chrono::milliseconds(1000);
 constexpr size_t kSquircleCacheSize = 64;
 
 ULONG_PTR g_gdiplus = 0;
@@ -3002,13 +3234,46 @@ IconPixels MakeSquircleIcon(std::vector<BYTE> source, int w, int h) {
     return out;
 }
 
-[[clang::no_destroy]] std::list<std::pair<wuxm::ImageSource, wuxm::ImageSource>> g_squircleCache;
+// Tiles by the taskbar's icon they were made from. The taskbar can load another
+// icon into one it has, so each is also by what it loaded from, and forgotten
+// when it loads anew (see StockWatch).
+struct CachedTile {
+    wuxm::ImageSource icon{nullptr};
+    std::wstring uri;
+    wuxm::ImageSource tile{nullptr};
+    bool stale = false;
+    StockWatch watch;
+};
+
+[[clang::no_destroy]] std::list<CachedTile> g_squircleCache;
+
+// `icon` loaded anew, from `uri`: its tiles are out of date, unless it's the
+// same file again.
+void ForgetCachedSquircle(wf::IInspectable const& icon, std::wstring const& uri) {
+    for (auto& c : g_squircleCache) {
+        if (c.icon == icon && (uri.empty() || uri != c.uri)) c.stale = true;
+    }
+}
 
 wuxm::ImageSource CachedSquircle(wuxm::ImageSource const& stock) {
-    for (auto& [icon, tile] : g_squircleCache) {
-        if (icon == stock) return tile;
+    if (!stock) return nullptr;
+    auto uri = UriText(stock);
+    for (auto& c : g_squircleCache) {
+        if (!c.stale && c.icon == stock && c.uri == uri) return c.tile;
     }
     return nullptr;
+}
+
+void CacheSquircle(wuxm::ImageSource const& stock, wuxm::ImageSource const& tile) {
+    g_squircleCache.remove_if([&](CachedTile const& c) { return c.stale || c.icon == stock; });
+    auto& c = g_squircleCache.emplace_front();
+    c.icon = stock;
+    c.uri = UriText(stock);
+    c.tile = tile;
+    c.watch.Watch(stock, [](wf::IInspectable const& sender) {
+        ForgetCachedSquircle(sender, UriText(sender.try_as<wuxm::ImageSource>()));
+    });
+    while (g_squircleCache.size() > kSquircleCacheSize) g_squircleCache.pop_back();
 }
 
 // Tiles are forgotten when their color or the size they're drawn at changes
@@ -3106,38 +3371,218 @@ void CancelSquircleRenders() {
     }
 }
 
-// Icons not drawn yet, tried again shortly.
-void RetrySquircles() {
+// The taskbar loaded another icon into a bitmap it already had, without setting
+// it on the Image again: a tile made from what it held is out of date, unless
+// it's loaded from the same file again. Any drawing in progress is of the old
+// icon, so it's dropped.
+void OnStockChanged(wf::IInspectable const& sender) {
+    auto uri = UriText(sender.try_as<wuxm::ImageSource>());
+    ForgetCachedSquircle(sender, uri);
     for (auto& s : g_iconSwaps) {
-        if (!s.retry) continue;
+        if (s.look != IconLook::Squircle || !s.stock || s.stock != sender) continue;
+        if (s.shown && !uri.empty() && uri == s.tileUri) continue;  // the same icon again
+        NoteIconChange();
+        if (s.render) Try([&] { s.render.Cancel(); });
+        s.render = nullptr;
+        s.rendering = false;
+        s.generation++;
+        s.shown = nullptr;
+        s.tileUri.clear();
         s.retry = false;
-        if (auto image = s.image.get()) Try([&] { UpdateSwap(s, image); }, L"Squircle icon");
+        s.retries = 0;
+        s.renderParent = false;
+        if (auto image = s.image.get()) UpdateSwap(s, image);
     }
 }
 
-// Not laid out or drawn yet, as with a button still sliding in: tried again
-// shortly, a limited number of times.
-void RetrySquircleSoon(IconSwap& s) {
-    if (++s.retries > kSquircleRetries) return;
+// The retry timer, set for the soonest retry due, if any.
+void ArmSquircleRetry() {
     HWND window = EnsureModWindow();
-    if (window && SetTimer(window, kSquircleRetryTimer, kSquircleRetryMs, nullptr)) s.retry = true;
+    if (!window) return;
+    auto next = std::chrono::steady_clock::time_point::max();
+    for (auto& s : g_iconSwaps) {
+        if (s.retry) next = std::min(next, s.retryAt);
+    }
+    if (next == std::chrono::steady_clock::time_point::max()) {
+        KillTimer(window, kSquircleRetryTimer);
+        return;
+    }
+    auto wait = std::chrono::duration_cast<std::chrono::milliseconds>(
+        next - std::chrono::steady_clock::now());
+    SetTimer(window, kSquircleRetryTimer, (UINT)std::max<long long>(10, wait.count()), nullptr);
 }
 
+// Icons not drawn yet, tried again when due.
+void RetrySquircles() {
+    auto now = std::chrono::steady_clock::now();
+    for (auto& s : g_iconSwaps) {
+        if (!s.retry || s.retryAt > now) continue;
+        s.retry = false;
+        if (auto image = s.image.get()) Try([&] { UpdateSwap(s, image); }, L"Squircle icon");
+    }
+    ArmSquircleRetry();
+}
+
+// The app id of a taskbar button, from its automation id ("Appid: ...").
+std::wstring ButtonAppId(wux::FrameworkElement const& button) {
+    std::wstring id{wux::Automation::AutomationProperties::GetAutomationId(button)};
+    constexpr std::wstring_view prefix = L"Appid: ";
+    if (id.size() <= prefix.size() || id.compare(0, prefix.size(), prefix) != 0) return {};
+    return id.substr(prefix.size());
+}
+
+// IShellItemImageFactory, without linking uuid.lib.
+constexpr GUID kIShellItemImageFactoryId = {
+    0xbcc18b79, 0xba16, 0x442f, {0x80, 0xc4, 0x8a, 0x59, 0xc3, 0x0c, 0x46, 0x3b}};
+
+// An `px` pixel icon of `name` (a shell path) from the shell, as premultiplied
+// BGRA, top row first; empty if there's none.
+std::vector<BYTE> ShellIconPixels(std::wstring const& name, int px, int& w, int& h) {
+    winrt::com_ptr<IShellItemImageFactory> factory;
+    if (FAILED(SHCreateItemFromParsingName(name.c_str(), nullptr, kIShellItemImageFactoryId,
+                                           factory.put_void()))) {
+        return {};
+    }
+    HBITMAP bitmap = nullptr;
+    if (FAILED(factory->GetImage({px, px}, (SIIGBF)(SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK), &bitmap)) ||
+        !bitmap) {
+        return {};
+    }
+    std::vector<BYTE> pixels;
+    BITMAP bm{};
+    if (GetObject(bitmap, sizeof(bm), &bm) && bm.bmWidth > 0 && bm.bmHeight > 0) {
+        BITMAPINFO bi{};
+        bi.bmiHeader = {sizeof(BITMAPINFOHEADER), bm.bmWidth, -bm.bmHeight, 1, 32, BI_RGB};
+        pixels.resize((size_t)bm.bmWidth * bm.bmHeight * 4);
+        HDC dc = GetDC(nullptr);
+        if (GetDIBits(dc, bitmap, 0, bm.bmHeight, pixels.data(), &bi, DIB_RGB_COLORS) !=
+            bm.bmHeight) {
+            pixels.clear();
+        }
+        ReleaseDC(nullptr, dc);
+    }
+    DeleteObject(bitmap);
+    if (pixels.empty()) return {};
+
+    // Usually premultiplied already; with no alpha at all, it's opaque.
+    bool anyAlpha = false, straight = false;
+    for (size_t i = 0; i < pixels.size(); i += 4) {
+        BYTE a = pixels[i + 3];
+        anyAlpha |= a != 0;
+        straight |= pixels[i] > a || pixels[i + 1] > a || pixels[i + 2] > a;
+    }
+    for (size_t i = 0; i < pixels.size(); i += 4) {
+        if (!anyAlpha) {
+            pixels[i + 3] = 255;
+        } else if (straight) {
+            BYTE a = pixels[i + 3];
+            for (int c = 0; c < 3; c++) pixels[i + c] = (BYTE)(pixels[i + c] * a / 255);
+        }
+    }
+    w = bm.bmWidth;
+    h = bm.bmHeight;
+    return pixels;
+}
+
+// Whether `path` is on a local drive (fixed, removable or a RAM disk), so its
+// icon can be read without waiting on the network: not a UNC share, a mapped
+// network drive, or anything else.
+bool IsLocalPath(std::wstring const& path) {
+    if (path.size() < 3 || !iswalpha(path[0]) || path[1] != L':' || path[2] != L'\\') {
+        return false;
+    }
+    WCHAR root[] = {path[0], L':', L'\\', L'\0'};
+    UINT type = GetDriveTypeW(root);
+    return type == DRIVE_FIXED || type == DRIVE_REMOVABLE || type == DRIVE_RAMDISK;
+}
+
+// An app's icon as Start shows it, by its app id; or, for an app without an id
+// of its own, from its program file: its id is then the file's path, or a known
+// folder's id and the path within it. This runs on the taskbar's thread, and
+// the shell blocks while it reads an icon, so a program that isn't on a local
+// drive is skipped: a slow or offline share would freeze the taskbar.
+std::vector<BYTE> AppIconPixels(std::wstring const& appId, int px, int& w, int& h) {
+    std::wstring path;
+    if (appId.size() > 38 && appId[0] == L'{' && appId[37] == L'}') {
+        GUID folder;
+        PWSTR folderPath = nullptr;
+        // Not verified: that would check a redirected folder on its server.
+        if (SUCCEEDED(CLSIDFromString(appId.substr(0, 38).c_str(), &folder)) &&
+            SUCCEEDED(SHGetKnownFolderPath(folder, KF_FLAG_DONT_VERIFY, nullptr, &folderPath))) {
+            path = folderPath + appId.substr(38);
+        }
+        CoTaskMemFree(folderPath);
+    } else if (appId.find(L":\\") != std::wstring::npos || appId.rfind(L"\\\\", 0) == 0) {
+        path = appId;
+    }
+    if (!path.empty() && !IsLocalPath(path)) {
+        Wh_Log(L"Not reading Start's icon for %s: not on a local drive", appId.c_str());
+        return {};
+    }
+    auto pixels = ShellIconPixels(L"shell:AppsFolder\\" + appId, px, w, h);
+    if (!pixels.empty() || path.empty()) return pixels;
+    return ShellIconPixels(path, px, w, h);
+}
+
+// A tile from the app's icon as Start shows it, for an icon the taskbar's never
+// let the mod draw. Not cached: it isn't the taskbar's icon.
+bool SquircleFromShell(IconSwap& s, wuxc::Image const& image) {
+    auto button = s.button.get();
+    std::wstring appId = button ? ButtonAppId(button) : std::wstring();
+    if (appId.empty()) return false;
+    int w = 0, h = 0;
+    auto pixels = AppIconPixels(appId, MagnifiedPixels(image, 1), w, h);
+    if (pixels.empty()) return false;
+    IconPixels tile = MakeSquircleIcon(std::move(pixels), w, h);
+    if (!tile.size) return false;
+    s.shown = BitmapFromPixels(tile.size, tile.size, tile.pixels);
+    s.tileUri = UriText(s.stock);
+    ShowSwap(s, image);
+    Wh_Log(L"Squircle icon for %s made from Start's icon", appId.c_str());
+    return true;
+}
+
+// Not laid out or drawn yet, as with a button still sliding in: tried again
+// shortly, a limited number of times, then each second for a while. Once the
+// quick tries are used up, the tile's made from Start's icon for the app if it
+// can be.
+void RetrySquircleSoon(IconSwap& s) {
+    ++s.retries;
+    if (s.retries == kSquircleRetries + 1) {
+        auto image = s.image.get();
+        if (image && SquircleFromShell(s, image)) return;
+    }
+    if (s.retries > kSquircleRetries + kSquircleSlowRetries) return;
+    auto delay = s.retries > kSquircleRetries
+                     ? std::chrono::steady_clock::duration(kSquircleSlowRetryDelay)
+                     : std::chrono::steady_clock::duration(
+                           std::chrono::milliseconds(kSquircleRetryMs));
+    s.retryAt = std::chrono::steady_clock::now() + delay;
+    s.retry = true;
+    ArmSquircleRetry();
+}
+
+// `refused` if drawing it failed outright, as it can for an icon on its own:
+// next time, what holds it is drawn instead.
 void OnStockPixels(winrt::weak_ref<wuxc::Image> const& weak, wuxm::ImageSource const& stock,
-                   std::vector<BYTE> pixels, int w, int h) {
+                   int generation, bool refused, std::vector<BYTE> pixels, int w, int h) {
     auto image = weak.get();
     IconSwap* s = image ? FindSwap(image) : nullptr;
-    if (!s) return;
+    if (!s || s->generation != generation) return;  // gone, or its icon changed since
     s->rendering = false;
     s->render = nullptr;
     if (s->stock != stock || s->look != IconLook::Squircle) return UpdateSwap(*s, image);
+    if (refused && !s->renderParent) {
+        s->renderParent = true;
+        return RetrySquircleSoon(*s);
+    }
 
     IconPixels tile;
     if (!pixels.empty() && w > 0 && h > 0) tile = MakeSquircleIcon(std::move(pixels), w, h);
     if (!tile.size) return RetrySquircleSoon(*s);
     s->shown = BitmapFromPixels(tile.size, tile.size, tile.pixels);
-    g_squircleCache.emplace_front(stock, s->shown);
-    if (g_squircleCache.size() > kSquircleCacheSize) g_squircleCache.pop_back();
+    s->tileUri = UriText(stock);
+    CacheSquircle(stock, s->shown);
     ShowSwap(*s, image);
 }
 
@@ -3147,26 +3592,73 @@ std::vector<BYTE> BufferBytes(wss::IBuffer const& buffer) {
     return std::vector<BYTE>(data, data + buffer.Length());
 }
 
+// Of `w` x `h` pixels drawn from something `whole` big, the part `rect` covers
+// (both in its own units). `w` and `h` become the part's size.
+std::vector<BYTE> CropPixels(std::vector<BYTE> const& pixels, int& w, int& h, wf::Rect rect,
+                             wf::Size whole) {
+    if (whole.Width <= 0 || whole.Height <= 0 || pixels.size() < (size_t)w * h * 4) {
+        w = h = 0;
+        return {};
+    }
+    float fx = w / whole.Width, fy = h / whole.Height;
+    int x0 = std::clamp((int)std::floor(rect.X * fx), 0, w);
+    int y0 = std::clamp((int)std::floor(rect.Y * fy), 0, h);
+    int x1 = std::clamp((int)std::ceil((rect.X + rect.Width) * fx), 0, w);
+    int y1 = std::clamp((int)std::ceil((rect.Y + rect.Height) * fy), 0, h);
+    if (x1 <= x0 || y1 <= y0) {
+        w = h = 0;
+        return {};
+    }
+    int cw = x1 - x0, ch = y1 - y0;
+    std::vector<BYTE> out((size_t)cw * ch * 4);
+    for (int y = 0; y < ch; y++) {
+        memcpy(&out[(size_t)y * cw * 4], &pixels[((size_t)(y0 + y) * w + x0) * 4], (size_t)cw * 4);
+    }
+    w = cw;
+    h = ch;
+    return out;
+}
+
 // Its own pixels if it's a bitmap the mod can read, or else the icon as drawn,
-// at its fully magnified size.
+// at its fully magnified size: on its own, or if that's been refused, what
+// holds it, cut down to the icon.
 void RequestSquircle(IconSwap& s, wuxc::Image const& image) {
-    if (s.rendering || !s.stock || s.retries > kSquircleRetries) return;
+    if (s.rendering || !s.stock || s.retries > kSquircleRetries + kSquircleSlowRetries) return;
     if (g_iconsSettling) return WaitForIconsToSettle();
     if (image.Source() != s.stock) return;
-    if (image.ActualWidth() <= 0) return RetrySquircleSoon(s);
+    if (image.ActualWidth() <= 0 || image.ActualHeight() <= 0) return RetrySquircleSoon(s);
     auto weak = winrt::make_weak(image);
     auto stock = s.stock;
+    int generation = s.generation;
     if (auto bitmap = stock.try_as<wuxm::Imaging::WriteableBitmap>()) {
         s.rendering = true;
-        return OnStockPixels(weak, stock, BufferBytes(bitmap.PixelBuffer()), bitmap.PixelWidth(),
-                             bitmap.PixelHeight());
+        return OnStockPixels(weak, stock, generation, false, BufferBytes(bitmap.PixelBuffer()),
+                             bitmap.PixelWidth(), bitmap.PixelHeight());
     }
     auto queue = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
     if (!queue) return;
-    s.rendering = true;
+
     int px = (int)std::ceil(g_size.icon * g_settings.scale);
+    wux::UIElement drawn = image;
+    int drawnW = px, drawnH = px;
+    wf::Rect crop{0, 0, 0, 0};  // the icon in what's drawn; empty for the icon alone
+    wf::Size whole{0, 0};       // what's drawn, in the same units
+    if (s.renderParent) {
+        auto parent = wuxm::VisualTreeHelper::GetParent(image).try_as<wux::FrameworkElement>();
+        if (parent && parent.ActualWidth() > 0 && parent.ActualHeight() > 0) {
+            crop = image.TransformToVisual(parent).TransformBounds(
+                {0, 0, (float)image.ActualWidth(), (float)image.ActualHeight()});
+            whole = {(float)parent.ActualWidth(), (float)parent.ActualHeight()};
+            float k = px / std::max(1.0f, std::max(crop.Width, crop.Height));
+            drawnW = std::max(1, (int)std::ceil(whole.Width * k));
+            drawnH = std::max(1, (int)std::ceil(whole.Height * k));
+            drawn = parent;
+        }
+    }
+
+    s.rendering = true;
     wuxm::Imaging::RenderTargetBitmap target;
-    auto render = target.RenderAsync(image, px, px);
+    auto render = target.RenderAsync(drawn, drawnW, drawnH);
     s.render = render;
     // Each callback holds the count till it's done, the next one included.
     render.Completed([=, pending = TrackPendingCallback()](wf::IAsyncAction const&,
@@ -3175,11 +3667,13 @@ void RequestSquircle(IconSwap& s, wuxc::Image const& image) {
             if (g_unloading) return;
             Try([&] {
                 if (status != wf::AsyncStatus::Completed) {
-                    return OnStockPixels(weak, stock, {}, 0, 0);
+                    return OnStockPixels(weak, stock, generation,
+                                         status == wf::AsyncStatus::Error, {}, 0, 0);
                 }
                 auto read = target.GetPixelsAsync();
                 if (auto image = weak.get()) {
-                    if (IconSwap* swap = FindSwap(image)) swap->render = read;
+                    IconSwap* swap = FindSwap(image);
+                    if (swap && swap->generation == generation) swap->render = read;
                 }
                 read.Completed([=, pending = pending](auto const& op, wf::AsyncStatus status) {
                     queue.TryEnqueue([=, pending = pending] {
@@ -3189,8 +3683,12 @@ void RequestSquircle(IconSwap& s, wuxc::Image const& image) {
                             if (status == wf::AsyncStatus::Completed) {
                                 pixels = BufferBytes(op.GetResults());
                             }
-                            OnStockPixels(weak, stock, std::move(pixels), target.PixelWidth(),
-                                          target.PixelHeight());
+                            int w = target.PixelWidth(), h = target.PixelHeight();
+                            if (crop.Width > 0 && !pixels.empty()) {
+                                pixels = CropPixels(pixels, w, h, crop, whole);
+                            }
+                            OnStockPixels(weak, stock, generation, false, std::move(pixels), w,
+                                          h);
                         }, L"Squircle icon");
                     });
                 });
@@ -4773,12 +5271,16 @@ void SuppressLabel() {
     HideLabel();
 }
 
+void MatchGlassCaptureVisibility(HWND hwnd);
+
 HWND EnsureLabelWindow() {
     if (g_label.hwnd) return g_label.hwnd;
     if (!EnsureGdiplus() || !RegisterWindowClass()) return nullptr;
     g_label.hwnd = CreateWindowEx(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
         kWindowClass, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, ModuleInstance(), nullptr);
+    // Its arrow reaches into the margin of screen Liquid Glass bends.
+    if (g_label.hwnd) MatchGlassCaptureVisibility(g_label.hwnd);
     return g_label.hwnd;
 }
 
@@ -5004,6 +5506,1122 @@ void UpdateLabel(Plate* p) {
 }
 
 // =============================================================================
+// LIQUID GLASS
+// =============================================================================
+// The dock's rim bends what's behind it, as in MacOS-Style-LiquidGlass. The
+// blur above is a composition effect, and composition has no effect that moves
+// pixels around; only DWM sees what's behind a window (Open Fluid Glass bends
+// it there, in DWM's own shader, which a mod in Explorer can't reach). So the
+// dock bends a picture of the screen instead: the bottom of it, through the
+// Desktop Duplication API, bent and blurred by Direct2D into a composition
+// surface that takes the blur's place. The taskbars and the labels are left out
+// of that picture, and so out of screenshots, or the dock would bend itself.
+//
+// Win+Ctrl+Shift+G freezes it, so the dock shows in screenshots. Win+Ctrl+Shift+K
+// stops it until the settings are next saved, from a thread of its own, so it
+// works even if the taskbar's thread is stuck. Everything else is on the
+// taskbar's thread. If anything fails, the frosted blur comes back.
+
+MIDL_INTERFACE("25297D5C-3AD4-4C9C-B5CF-E36A38512330")
+IDockCompositorInterop : public IUnknown {
+public:
+    virtual HRESULT STDMETHODCALLTYPE CreateCompositionSurfaceForHandle(HANDLE swapChain,
+                                                                        void** result) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateCompositionSurfaceForSwapChain(IUnknown* swapChain,
+                                                                           void** result) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateGraphicsDevice(IUnknown* renderingDevice,
+                                                           void** result) = 0;
+};
+__CRT_UUID_DECL(IDockCompositorInterop, 0x25297d5c, 0x3ad4, 0x4c9c, 0xb5, 0xcf, 0xe3, 0x6a, 0x38,
+                0x51, 0x23, 0x30)
+
+MIDL_INTERFACE("FD04E6E3-FE0C-4C3C-AB19-A07601A576EE")
+IDockDrawingSurfaceInterop : public IUnknown {
+public:
+    virtual HRESULT STDMETHODCALLTYPE BeginDraw(const RECT* updateRect, REFIID iid,
+                                                void** updateObject, POINT* updateOffset) = 0;
+    virtual HRESULT STDMETHODCALLTYPE EndDraw() = 0;
+    virtual HRESULT STDMETHODCALLTYPE Resize(SIZE sizePixels) = 0;
+    virtual HRESULT STDMETHODCALLTYPE Scroll(const RECT* scrollRect, const RECT* clipRect,
+                                             int offsetX, int offsetY) = 0;
+    virtual HRESULT STDMETHODCALLTYPE ResumeDraw() = 0;
+    virtual HRESULT STDMETHODCALLTYPE SuspendDraw() = 0;
+};
+__CRT_UUID_DECL(IDockDrawingSurfaceInterop, 0xfd04e6e3, 0xfe0c, 0x4c3c, 0xab, 0x19, 0xa0, 0x76,
+                0x01, 0xa5, 0x76, 0xee)
+
+constexpr GUID kDisplacementMapId = {  // CLSID_D2D1DisplacementMap
+    0xedc48364, 0x0417, 0x4111, {0x94, 0x50, 0x43, 0x84, 0x5f, 0xa9, 0xf8, 0x90}};
+constexpr GUID kCropId = {  // CLSID_D2D1Crop
+    0xe23f7110, 0x0e9a, 0x4324, {0xaf, 0x47, 0x6a, 0x2c, 0x0c, 0x46, 0xf3, 0x5b}};
+constexpr GUID kBorderId = {  // CLSID_D2D1Border
+    0x2a2d49c0, 0x4acf, 0x43c7, {0x8c, 0x6a, 0x7c, 0x4a, 0x27, 0x87, 0x4d, 0x27}};
+
+constexpr DWORD kExcludeFromCapture = 0x11;  // WDA_EXCLUDEFROMCAPTURE
+constexpr UINT kGlassTickMs = 50;            // upkeep: new pictures are drawn as they come
+constexpr DWORD kCaptureWaitMs = 100;        // a capture thread's longest wait, to stop
+constexpr ULONGLONG kGlassUnseenMs = 2000;   // out of sight this long, the screens are let go
+constexpr ULONGLONG kCaptureSettleMs = 150;  // after the taskbars leave the picture
+constexpr ULONGLONG kCaptureRetryMs = 2000;
+constexpr int kGlassMaxFailures = 5;         // then it's off until the settings change
+constexpr float kGlassStripMargin = 8;       // above the dock, in the picture kept
+
+std::atomic<bool> g_glassStopped = false;  // by the emergency stop; saved
+bool g_glassFailed = false;                // too often, this session
+bool g_glassActive = false;                // capturing, the taskbars out of the picture
+bool g_glassFrozen = false;                // capture paused, the taskbars shown to it
+ULONGLONG g_glassExcludedAt = 0;           // when the taskbars last left the picture
+ULONGLONG g_glassRetryAt = 0;              // after a failure
+int g_glassFailures = 0;
+UINT g_glassTickInterval = 0;              // the timer's, as set
+uint64_t g_glassFrames = 0;                // pictures taken from the captures, numbering them
+ULONGLONG g_glassUnseenSince = 0;          // when no dock or tray was last shown
+// A dock or tray is shown, so the capture threads ask for their pictures to be
+// drawn; and one has, not yet handled (only one asks at a time).
+std::atomic<bool> g_glassWatching = false;
+std::atomic<bool> g_glassFramePosted = false;
+
+std::wstring UserValueName(PCWSTR name);
+void StartHotkeys();
+
+bool GlassWanted() {
+    return g_settings.glassStyle != GlassStyle::Off &&
+           g_settings.dockLook.background != Background::None && !g_glassStopped &&
+           !g_glassFailed && !g_unloading;
+}
+
+// ---- Screenshots ----
+
+// Whether screenshots and recordings leave out the taskbars and the dock's
+// labels (the mod's layered windows). Any of Explorer's threads can call it.
+void SetCaptureExcluded(bool excluded) {
+    DWORD affinity = excluded ? kExcludeFromCapture : WDA_NONE;
+    ForEachTaskbarWindow([affinity](HWND tb, bool) {
+        if (!SetWindowDisplayAffinity(tb, affinity)) {
+            Wh_Log(L"Liquid Glass: can't change whether screenshots show the taskbar: %u",
+                   GetLastError());
+        }
+    });
+    EnumWindows(
+        [](HWND w, LPARAM l) -> BOOL {
+            DWORD pid = 0;
+            WCHAR cls[64];
+            if (GetWindowThreadProcessId(w, &pid) && pid == GetCurrentProcessId() &&
+                GetClassName(w, cls, ARRAYSIZE(cls)) && !wcscmp(cls, kWindowClass) &&
+                (GetWindowLongPtr(w, GWL_EXSTYLE) & WS_EX_LAYERED)) {
+                SetWindowDisplayAffinity(w, (DWORD)l);
+            }
+            return TRUE;
+        },
+        (LPARAM)affinity);
+}
+
+// A new label window, out of the picture while the taskbars are.
+void MatchGlassCaptureVisibility(HWND hwnd) {
+    if (g_glassActive && !g_glassFrozen) SetWindowDisplayAffinity(hwnd, kExcludeFromCapture);
+}
+
+// ---- Direct2D ----
+
+template <typename T>
+void SetEffectValue(ID2D1Effect* effect, UINT32 index, T const& value) {
+    winrt::check_hresult(effect->SetValue(index, D2D1_PROPERTY_TYPE_UNKNOWN, (const BYTE*)&value,
+                                          sizeof(value)));
+}
+
+winrt::com_ptr<ID2D1Effect> GlassEffect(ID2D1DeviceContext* ctx, GUID const& id,
+                                        ID2D1Image* input) {
+    winrt::com_ptr<ID2D1Effect> effect;
+    winrt::check_hresult(ctx->CreateEffect(id, effect.put()));
+    effect->SetInput(0, input, TRUE);
+    return effect;
+}
+
+winrt::com_ptr<ID2D1Image> EffectOutput(ID2D1Effect* effect) {
+    winrt::com_ptr<ID2D1Image> image;
+    effect->GetOutput(image.put());
+    return image;
+}
+
+D2D1_MATRIX_3X2_F D2DTranslation(float x, float y) {
+    D2D1_MATRIX_3X2_F m{};
+    m._11 = m._22 = 1;
+    m._31 = x;
+    m._32 = y;
+    return m;
+}
+
+// Each color channel times `scale`, plus `offset`; with `clamp`, held within
+// 0 to 1 (see SetBlurVisual).
+winrt::com_ptr<ID2D1Image> ColorScale(ID2D1DeviceContext* ctx, ID2D1Image* input, float scale,
+                                      float offset, bool clamp,
+                                      std::vector<winrt::com_ptr<ID2D1Effect>>& keep) {
+    auto& effect = keep.emplace_back(GlassEffect(ctx, kColorMatrixId, input));
+    D2D1_MATRIX_5X4_F matrix{};
+    matrix.m[0][0] = matrix.m[1][1] = matrix.m[2][2] = scale;
+    matrix.m[3][3] = 1;
+    matrix.m[4][0] = matrix.m[4][1] = matrix.m[4][2] = offset;
+    SetEffectValue(effect.get(), 0, matrix);
+    SetEffectValue(effect.get(), 2, (BOOL)clamp);
+    return EffectOutput(effect.get());
+}
+
+// A function from a system DLL, looked up as the mod's headers or libraries
+// may lack it.
+template <typename F>
+F LoadSystemFunction(PCWSTR dll, PCSTR name) {
+    auto f = (F)GetProcAddress(LoadLibraryW(dll), name);
+    if (!f) winrt::throw_hresult(E_NOINTERFACE);
+    return f;
+}
+
+// Direct3D calls made outside Direct2D take its lock, as composition shares the
+// device.
+struct GlassLock {
+    ID2D1Multithread* lock;
+    explicit GlassLock(ID2D1Multithread* l) : lock(l) {
+        if (lock) lock->Enter();
+    }
+    ~GlassLock() {
+        if (lock) lock->Leave();
+    }
+};
+
+// ---- Device and captures ----
+
+struct GlassDevice {
+    winrt::com_ptr<ID3D11Device> d3d;
+    winrt::com_ptr<ID3D11DeviceContext> context;
+    winrt::com_ptr<ID2D1Device> d2d;
+    winrt::com_ptr<ID2D1Multithread> lock;
+    std::vector<std::pair<wuc::Compositor, wuc::CompositionGraphicsDevice>> graphics;
+};
+
+// One screen captured on a thread of its own (CaptureThread), which waits for
+// each new picture and copies the bottom out of it into `strip`. It has its own
+// Direct3D device, as waiting for pictures mustn't hold up the glass's drawing;
+// `strip` is shared with the drawing's device, the two taking turns with it by
+// its keyed mutex (key 0).
+struct CaptureWorker {
+    winrt::com_ptr<ID3D11Device> device;
+    winrt::com_ptr<ID3D11DeviceContext> context;
+    winrt::com_ptr<IDXGIOutputDuplication> duplication;
+    winrt::com_ptr<ID3D11Texture2D> strip;
+    winrt::com_ptr<IDXGIKeyedMutex> stripLock;
+    RECT screen{};     // the screen on the desktop
+    RECT stripRect{};  // where the strip is on the desktop
+    enum State { Running, Lost, Failed };
+    std::atomic<State> state = Running;  // Lost: started again shortly
+    HRESULT error = S_OK;                // when Failed
+    std::atomic<bool> stop = false;
+    std::atomic<uint64_t> copied = 0;  // pictures copied into the strip
+};
+
+// Every capture thread not yet ended and closed, with its worker, which it has
+// a pointer to until then.
+std::mutex g_workersLock;
+[[clang::no_destroy]] std::list<std::pair<std::shared_ptr<CaptureWorker>, HANDLE>> g_workers;
+
+// A capture's thread, while it runs: its strip opened on the drawing's device,
+// and how many of its pictures were taken from there.
+struct WorkerThread {
+    std::shared_ptr<CaptureWorker> worker;
+    winrt::com_ptr<ID3D11Texture2D> strip;
+    winrt::com_ptr<IDXGIKeyedMutex> stripLock;
+    uint64_t taken = 0;
+
+    WorkerThread() = default;
+    WorkerThread(WorkerThread const&) = delete;
+    WorkerThread& operator=(WorkerThread const&) = delete;
+    ~WorkerThread() { Stop(); }
+    explicit operator bool() const { return worker != nullptr; }
+
+    // Told to stop, not waited for: it ends within kCaptureWaitMs or so, and is
+    // closed then (ReapWorkers), or waited for when unloading (JoinWorkers).
+    void Stop() {
+        if (worker) worker->stop = true;
+        worker = nullptr;
+        strip = nullptr;
+        stripLock = nullptr;
+        taken = 0;
+    }
+};
+
+// The bottom of one screen, where its dock is, as last captured.
+struct GlassCapture {
+    HMONITOR monitor = nullptr;
+    WorkerThread worker;                    // capturing it, while it runs
+    RECT screen{};                          // the screen on the desktop
+    winrt::com_ptr<ID3D11Texture2D> strip;  // its bottom, taken from the worker
+    RECT stripRect{};                       // where that is on the desktop
+    LONG stripWant = 0;                     // how tall it should be, in pixels
+    uint64_t frame = 0;                     // which picture the strip is (g_glassFrames)
+    bool used = false;                      // by a dock, on this tick
+    bool unsupported = false;               // never captured: the dock keeps the blur
+    bool loggedFailure = false;
+    ULONGLONG retryAt = 0;
+};
+
+[[clang::no_destroy]] GlassDevice g_glassDevice;
+[[clang::no_destroy]] std::list<GlassCapture> g_captures;
+
+// Closes the capture threads that have ended.
+void ReapWorkers() {
+    std::lock_guard guard(g_workersLock);
+    g_workers.remove_if([](auto const& entry) {
+        if (WaitForSingleObject(entry.second, 0) != WAIT_OBJECT_0) return false;
+        CloseHandle(entry.second);
+        return true;
+    });
+}
+
+// Stops every capture thread and waits for it: before unloading, as they run
+// the mod's code. From any thread.
+void JoinWorkers() {
+    decltype(g_workers) workers;
+    {
+        std::lock_guard guard(g_workersLock);
+        workers.swap(g_workers);
+    }
+    for (auto& [worker, thread] : workers) worker->stop = true;
+    for (auto& [worker, thread] : workers) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
+}
+
+// The graphics card `monitor` is on: the screen can only be captured from there.
+winrt::com_ptr<IDXGIAdapter1> AdapterFor(HMONITOR monitor) {
+    winrt::com_ptr<IDXGIFactory1> factory;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), factory.put_void()))) return nullptr;
+    winrt::com_ptr<IDXGIAdapter1> adapter;
+    for (UINT i = 0; SUCCEEDED(factory->EnumAdapters1(i, adapter.put())); i++, adapter = nullptr) {
+        winrt::com_ptr<IDXGIOutput> output;
+        for (UINT j = 0; SUCCEEDED(adapter->EnumOutputs(j, output.put())); j++, output = nullptr) {
+            DXGI_OUTPUT_DESC desc;
+            if (SUCCEEDED(output->GetDesc(&desc)) && desc.Monitor == monitor) return adapter;
+        }
+    }
+    return nullptr;
+}
+
+// Direct2D on the graphics card of the first dock's screen.
+void EnsureGlassDevice(HMONITOR monitor) {
+    auto& d = g_glassDevice;
+    if (d.d2d) return;
+    auto adapter = AdapterFor(monitor);
+    winrt::check_hresult(D3D11CreateDevice(
+        adapter.get(), adapter ? D3D_DRIVER_TYPE_UNKNOWN : D3D_DRIVER_TYPE_HARDWARE, nullptr,
+        D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0, D3D11_SDK_VERSION, d.d3d.put(), nullptr,
+        d.context.put()));
+    using CreateD2D_t =
+        HRESULT(WINAPI*)(IDXGIDevice*, const D2D1_CREATION_PROPERTIES*, ID2D1Device**);
+    D2D1_CREATION_PROPERTIES props{D2D1_THREADING_MODE_MULTI_THREADED, D2D1_DEBUG_LEVEL_NONE,
+                                   D2D1_DEVICE_CONTEXT_OPTIONS_NONE};
+    winrt::check_hresult(LoadSystemFunction<CreateD2D_t>(L"d2d1.dll", "D2D1CreateDevice")(
+        d.d3d.as<IDXGIDevice>().get(), &props, d.d2d.put()));
+    winrt::com_ptr<ID2D1Factory> factory;
+    d.d2d->GetFactory(factory.put());
+    d.lock = factory.try_as<ID2D1Multithread>();
+}
+
+// Composition's way to draw with it, for the compositor `compositor`.
+wuc::CompositionGraphicsDevice GraphicsDeviceFor(wuc::Compositor const& compositor) {
+    auto& d = g_glassDevice;
+    for (auto& [c, device] : d.graphics) {
+        if (c == compositor) return device;
+    }
+    wuc::CompositionGraphicsDevice device{nullptr};
+    winrt::check_hresult(compositor.as<IDockCompositorInterop>()->CreateGraphicsDevice(
+        d.d2d.get(), winrt::put_abi(device)));
+    d.graphics.emplace_back(compositor, device);
+    return device;
+}
+
+// The glass's blur, as a standard deviation in DIPs: the frosted glass's own,
+// from "Dock Background Blur" (see ApplySurfaceLook).
+float GlassBlur() {
+    return g_settings.dockLook.blur * kMaxBlur / 100;
+}
+
+// How far the glass's blur reaches, at `k` pixels per DIP: three standard
+// deviations, so it has the real screen to draw on at the dock's edges.
+int GlassPad(float k) {
+    return (int)std::ceil(3 * GlassBlur() * k);
+}
+
+// How tall a picture of the screen's bottom holds the dock, at `k` pixels per DIP.
+LONG StripNeed(float k) {
+    return (LONG)std::ceil((g_size.bottomGap + g_size.dockHeight + kGlassStripMargin) * k) +
+           GlassPad(k);
+}
+
+RECT StripRect(GlassCapture const& c) {
+    RECT r = c.screen;
+    r.top = std::max(r.top, r.bottom - c.stripWant);
+    return r;
+}
+
+// Whether the picture just acquired from `duplication` changed anything in
+// `area` (on the desktop), `screen` being where its screen is. True if it can't
+// tell. `buffer` is reused between pictures.
+bool ChangedNear(IDXGIOutputDuplication* duplication, RECT const& screen,
+                 DXGI_OUTDUPL_FRAME_INFO const& info, RECT area, std::vector<BYTE>& buffer) {
+    if (!info.TotalMetadataBufferSize) return true;
+    OffsetRect(&area, -screen.left, -screen.top);
+    buffer.resize(info.TotalMetadataBufferSize);
+    UINT size = 0;
+    RECT hit;
+    auto* moves = (DXGI_OUTDUPL_MOVE_RECT*)buffer.data();
+    if (FAILED(duplication->GetFrameMoveRects((UINT)buffer.size(), moves, &size))) return true;
+    for (UINT i = 0; i < size / sizeof(*moves); i++) {
+        if (IntersectRect(&hit, &moves[i].DestinationRect, &area)) return true;
+    }
+    auto* dirty = (RECT*)buffer.data();
+    if (FAILED(duplication->GetFrameDirtyRects((UINT)buffer.size(), dirty, &size))) return true;
+    for (UINT i = 0; i < size / sizeof(*dirty); i++) {
+        if (IntersectRect(&hit, &dirty[i], &area)) return true;
+    }
+    return false;
+}
+
+// GlassTick soon, ahead of its timer, unless that's already been asked for.
+// From any thread.
+void RequestGlassTick() {
+    HWND window = g_modWindow;
+    if (window && !g_glassFramePosted.exchange(true) &&
+        !PostMessage(window, kGlassFrameMessage, 0, 0)) {
+        g_glassFramePosted = false;
+    }
+}
+
+// A capture's thread. It sleeps until Windows has a new picture of the screen,
+// copies the bottom out of it if that changed (and the first picture always,
+// as it can be marked as the pointer's alone on a quiet screen), and has the
+// taskbar's thread draw the glass from it at once (kGlassFrameMessage), rather
+// than when a timer next comes round. Lets go of the screen when it ends.
+DWORD WINAPI CaptureThread(void* param) {
+    auto& w = *(CaptureWorker*)param;
+    bool first = true;
+    bool missed = false;  // a change not copied, the strip being busy
+    std::vector<BYTE> buffer;
+    try {
+        while (!w.stop) {
+            DXGI_OUTDUPL_FRAME_INFO info{};
+            winrt::com_ptr<IDXGIResource> resource;
+            HRESULT hr = w.duplication->AcquireNextFrame(kCaptureWaitMs, &info, resource.put());
+            if (hr == DXGI_ERROR_WAIT_TIMEOUT) continue;
+            if (FAILED(hr)) {  // lost, as when a UAC prompt shows
+                w.state = CaptureWorker::Lost;
+                break;
+            }
+            struct Release {
+                IDXGIOutputDuplication* duplication;
+                ~Release() { duplication->ReleaseFrame(); }
+            } release{w.duplication.get()};
+
+            bool keep = std::exchange(first, false) || std::exchange(missed, false) ||
+                        (info.LastPresentTime.QuadPart != 0 &&
+                         ChangedNear(w.duplication.get(), w.screen, info, w.stripRect, buffer));
+            if (!keep || w.stop) continue;
+            auto texture = resource.as<ID3D11Texture2D>();
+            D3D11_TEXTURE2D_DESC desc, stripDesc;
+            texture->GetDesc(&desc);
+            w.strip->GetDesc(&stripDesc);
+            if (desc.Format != stripDesc.Format) winrt::throw_hresult(DXGI_ERROR_UNSUPPORTED);
+
+            HRESULT sync = w.stripLock->AcquireSync(0, kCaptureWaitMs);
+            if (sync == (HRESULT)WAIT_TIMEOUT) {
+                missed = true;
+                continue;
+            }
+            if (sync != S_OK) {
+                w.state = CaptureWorker::Lost;
+                break;
+            }
+            RECT const& s = w.stripRect;
+            D3D11_BOX box{(UINT)(s.left - w.screen.left), (UINT)(s.top - w.screen.top), 0,
+                          (UINT)(s.right - w.screen.left), (UINT)(s.bottom - w.screen.top), 1};
+            w.context->CopySubresourceRegion(w.strip.get(), 0, 0, 0, 0, texture.get(), 0, &box);
+            w.stripLock->ReleaseSync(0);
+            w.copied++;
+            if (g_glassWatching) RequestGlassTick();
+        }
+    } catch (...) {
+        w.error = winrt::to_hresult();
+        w.state = CaptureWorker::Failed;
+    }
+    w.stripLock = nullptr;
+    w.strip = nullptr;
+    w.duplication = nullptr;
+    w.context = nullptr;
+    w.device = nullptr;
+    return 0;
+}
+
+// Desktop Duplication of `c`'s screen, if it's on the device's graphics card,
+// on a thread of its own.
+bool StartCapture(GlassCapture& c) {
+    auto& d = g_glassDevice;
+    winrt::com_ptr<IDXGIAdapter> adapter;
+    winrt::check_hresult(d.d3d.as<IDXGIDevice>()->GetAdapter(adapter.put()));
+    winrt::com_ptr<IDXGIOutput> output;
+    for (UINT i = 0; SUCCEEDED(adapter->EnumOutputs(i, output.put())); i++, output = nullptr) {
+        DXGI_OUTPUT_DESC desc;
+        if (FAILED(output->GetDesc(&desc)) || desc.Monitor != c.monitor) continue;
+        auto w = std::make_shared<CaptureWorker>();
+        winrt::check_hresult(D3D11CreateDevice(adapter.get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, 0,
+                                               nullptr, 0, D3D11_SDK_VERSION, w->device.put(),
+                                               nullptr, w->context.put()));
+        HRESULT hr = output.as<IDXGIOutput1>()->DuplicateOutput(w->device.get(),
+                                                                w->duplication.put());
+        if (FAILED(hr)) {
+            if (!std::exchange(c.loggedFailure, true)) {
+                Wh_Log(L"Liquid Glass: can't capture the screen (0x%08X): frosted glass until it "
+                       L"can, tried every few seconds",
+                       hr);
+            }
+            return false;
+        }
+        // A turned screen's frames come unturned; not handled.
+        DXGI_OUTDUPL_DESC duplicated;
+        w->duplication->GetDesc(&duplicated);
+        if (duplicated.Rotation != DXGI_MODE_ROTATION_IDENTITY &&
+            duplicated.Rotation != DXGI_MODE_ROTATION_UNSPECIFIED) {
+            Wh_Log(L"Liquid Glass: a dock's screen is turned, which isn't supported: frosted glass");
+            c.unsupported = true;
+            return false;
+        }
+        c.screen = w->screen = desc.DesktopCoordinates;
+        RECT strip = w->stripRect = StripRect(c);
+
+        // The strip, shared with the drawing's device. Desktop Duplication's
+        // pictures always come in this format.
+        D3D11_TEXTURE2D_DESC stripDesc{};
+        stripDesc.Width = strip.right - strip.left;
+        stripDesc.Height = strip.bottom - strip.top;
+        stripDesc.MipLevels = stripDesc.ArraySize = 1;
+        stripDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        stripDesc.SampleDesc = {1, 0};
+        stripDesc.Usage = D3D11_USAGE_DEFAULT;
+        stripDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        stripDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX;
+        winrt::check_hresult(w->device->CreateTexture2D(&stripDesc, nullptr, w->strip.put()));
+        w->stripLock = w->strip.as<IDXGIKeyedMutex>();
+        HANDLE shared = nullptr;
+        winrt::check_hresult(w->strip.as<IDXGIResource>()->GetSharedHandle(&shared));
+        winrt::com_ptr<ID3D11Texture2D> opened;
+        winrt::check_hresult(
+            d.d3d->OpenSharedResource(shared, __uuidof(ID3D11Texture2D), opened.put_void()));
+        auto openedLock = opened.as<IDXGIKeyedMutex>();
+
+        {
+            std::lock_guard guard(g_workersLock);
+            if (g_unloading) return false;  // JoinWorkers may have run already
+            HANDLE thread = CreateThread(nullptr, 0, CaptureThread, w.get(), 0, nullptr);
+            if (!thread) winrt::throw_last_error();
+            g_workers.emplace_back(w, thread);
+        }
+        c.worker.Stop();
+        c.worker.worker = w;
+        c.worker.strip = opened;
+        c.worker.stripLock = openedLock;
+        return true;
+    }
+    Wh_Log(L"Liquid Glass: a dock's screen is on another graphics card: frosted glass");
+    c.unsupported = true;
+    return false;
+}
+
+// The capture thread's newest picture of the screen's bottom copied into `c`,
+// if there's one not yet taken: whether there was. Starts over shortly if the
+// thread lost the screen; throws if it failed.
+bool TakeStrip(GlassCapture& c) {
+    auto& t = c.worker;
+    if (!t) return false;
+    auto& w = *t.worker;
+    switch (w.state.load()) {
+        case CaptureWorker::Lost:
+            t.Stop();
+            c.retryAt = GetTickCount64() + 500;
+            return false;
+        case CaptureWorker::Failed: {
+            HRESULT error = w.error;
+            t.Stop();
+            winrt::throw_hresult(FAILED(error) ? error : E_FAIL);
+        }
+        default:
+            break;
+    }
+    uint64_t copied = w.copied;
+    if (copied == t.taken) return false;
+
+    auto& d = g_glassDevice;
+    D3D11_TEXTURE2D_DESC desc, have{};
+    t.strip->GetDesc(&desc);
+    if (c.strip) c.strip->GetDesc(&have);
+    winrt::com_ptr<ID3D11Texture2D> target = c.strip;
+    if (!target || have.Width != desc.Width || have.Height != desc.Height ||
+        have.Format != desc.Format) {
+        desc.BindFlags = desc.CPUAccessFlags = desc.MiscFlags = 0;
+        target = nullptr;
+        winrt::check_hresult(d.d3d->CreateTexture2D(&desc, nullptr, target.put()));
+    }
+    {
+        GlassLock lock(d.lock.get());
+        // Being copied into: the thread asks again when it's done.
+        if (t.stripLock->AcquireSync(0, 0) != S_OK) return false;
+        d.context->CopyResource(target.get(), t.strip.get());
+        t.stripLock->ReleaseSync(0);
+    }
+    c.strip = target;
+    c.stripRect = w.stripRect;
+    c.frame = ++g_glassFrames;
+    t.taken = copied;
+    return true;
+}
+
+// ---- Which screen it's on ----
+
+bool IsTaskbarWindow(HWND w) {
+    DWORD pid = 0;
+    WCHAR cls[32];
+    return w && GetWindowThreadProcessId(w, &pid) && pid == GetCurrentProcessId() &&
+           GetClassName(w, cls, ARRAYSIZE(cls)) &&
+           (!_wcsicmp(cls, L"Shell_TrayWnd") || !_wcsicmp(cls, L"Shell_SecondaryTrayWnd"));
+}
+
+// The taskbar window a dock is in: the only one, the only one as big as the
+// dock's XAML, or the one the pointer was last over it in (NoteGlassWindow).
+// Looked for at most once a second.
+HWND PlateWindow(Plate& p) {
+    auto& g = p.glass;
+    if (IsTaskbarWindow(g.window)) return g.window;
+    g.window = nullptr;
+    ULONGLONG now = GetTickCount64();
+    if (g.lookedAt && now - g.lookedAt < 1000) return nullptr;
+    g.lookedAt = now;
+    auto panel = p.panel.get();
+    auto root = panel ? panel.XamlRoot() : nullptr;
+    if (!root) return nullptr;
+    double scale = root.RasterizationScale();
+    auto size = root.Size();
+    LONG w = std::lround(size.Width * scale), h = std::lround(size.Height * scale);
+    int count = 0, matches = 0;
+    HWND any = nullptr, match = nullptr;
+    ForEachTaskbarWindow([&](HWND tb, bool) {
+        count++;
+        any = tb;
+        RECT r;
+        if (GetWindowRect(tb, &r) && std::abs(r.right - r.left - w) <= 2 &&
+            std::abs(r.bottom - r.top - h) <= 2) {
+            matches++;
+            match = tb;
+        }
+    });
+    g.window = count == 1 ? any : matches == 1 ? match : nullptr;
+    static bool logged = false;
+    if (!g.window && count > 1 && !std::exchange(logged, true)) {
+        Wh_Log(L"Liquid Glass: can't tell a dock's screen yet: frosted glass until the pointer "
+               L"passes over it");
+    }
+    return g.window;
+}
+
+// The pointer's over `p`: it's in the taskbar on the pointer's screen.
+void NoteGlassWindow(Plate& p) {
+    POINT cursor;
+    if (!g_glassActive || !GetCursorPos(&cursor)) return;
+    if (HWND tb = TaskbarOnMonitor(MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST))) {
+        p.glass.window = tb;
+    }
+}
+
+// The capture of the screen the taskbar `window` is on, for `g`, started if
+// it's due. Null if there can't be one.
+GlassCapture* CaptureFor(HWND window, GlassPlate& g, ULONGLONG now) {
+    HMONITOR monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+    g.monitor = monitor;
+    GlassCapture* c = nullptr;
+    for (auto& capture : g_captures) {
+        if (capture.monitor == monitor) c = &capture;
+    }
+    if (!c) {
+        c = &g_captures.emplace_back();
+        c->monitor = monitor;
+        UINT dpiX = 96, dpiY = 96;
+        GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+        c->stripWant = StripNeed(dpiY / 96.0f);
+    }
+    c->used = true;
+    if (c->unsupported) return nullptr;
+    if (g_glassFrozen) return c;  // the last picture, kept
+    // Never while its taskbar might be in the picture.
+    DWORD affinity = 0;
+    if (!GetWindowDisplayAffinity(window, &affinity) || affinity != kExcludeFromCapture) {
+        if (!SetWindowDisplayAffinity(window, kExcludeFromCapture)) {
+            static bool logged = false;
+            if (!std::exchange(logged, true)) {
+                Wh_Log(L"Liquid Glass: Windows won't leave the taskbar out of the picture (%u): "
+                       L"frosted glass",
+                       GetLastError());
+            }
+        }
+        c->worker.Stop();
+        c->strip = nullptr;
+        c->retryAt = now + kCaptureSettleMs;
+        return c;
+    }
+    if (!c->worker && now >= c->retryAt && now >= g_glassExcludedAt + kCaptureSettleMs &&
+        now >= g_glassRetryAt) {
+        EnsureGlassDevice(monitor);
+        if (!StartCapture(*c)) c->retryAt = now + kCaptureRetryMs;
+    }
+    return c;
+}
+
+// ---- The bent rim ----
+
+// How much further in than itself a rim pixel takes its color from, in rim
+// depths, at full strength. `u` is 1 at the outline and 0 at the rim's inner
+// edge. Each is 0 and level at u = 0, so the rim meets the clear middle
+// without a line; none is over 2, the map's limit.
+float RimShift(float u) {
+    switch (g_settings.glassStyle) {
+        case GlassStyle::Reflection: {
+            // A true mirror (shift growing twice as fast as the pixel moves
+            // out), turning in a curve over the inner quarter.
+            constexpr float kTurn = 0.25f;
+            return u < kTurn ? u * u / kTurn : 2 * u - kTurn;
+        }
+        case GlassStyle::Stretch:
+            // The most that never turns back: what's half the rim in reaches
+            // the edge, magnified more and more toward it.
+            return 0.5f * u * u;
+        default:
+            // A mirror squeezed toward the edge, turning in a wide curve.
+            return 2 * u * u;
+    }
+}
+
+// For each pixel of a `w` x `h` map, where it takes its color from, as 0.5 +
+// offset / scale in red (across) and green (down); the scale is returned. In
+// the rim of the rounded rectangle at (`sx`, `sy`), `sw` x `sh`, with corners
+// `radius`, all in pixels: from further in, by RimShift; elsewhere, from
+// itself. A squircle's outline lies inside that rounded rectangle's, so no
+// pixel of the dock is left out of the rim. In floats, so "itself" is exact.
+float BuildGlassMap(std::vector<float>& pixels, int w, int h, float sx, float sy, float sw,
+                    float sh, float radius, float k) {
+    auto& s = g_settings;
+    float scale = std::max(4 * s.glassDepth * k * s.glassStrength, 1.0f);  // twice the most
+    pixels.assign((size_t)w * h * 4, 0.5f);
+    for (size_t i = 3; i < pixels.size(); i += 4) pixels[i] = 1;
+
+    float halfW = sw / 2, halfH = sh / 2;
+    float cx = sx + halfW, cy = sy + halfH;
+    radius = std::min({radius, halfW, halfH});
+    float rim = std::min(s.glassDepth * k, std::min(halfW, halfH) / 2);  // not past the middle
+    if (rim <= 0) return scale;
+    // Which way is out is taken from corners at least as round as the rim is
+    // deep, so the rim's inner edge has no sharp corner to crease along.
+    float round = std::max(radius, rim);
+    auto bend = [&](int x, int y) {
+        float px = x + 0.5f - cx, py = y + 0.5f - cy;
+        float ax = std::fabs(px), ay = std::fabs(py);
+        // How far in from the outline.
+        float qx = ax - (halfW - radius), qy = ay - (halfH - radius);
+        float ox = std::max(qx, 0.0f), oy = std::max(qy, 0.0f);
+        float depth = radius - std::min(std::max(qx, qy), 0.0f) - std::sqrt(ox * ox + oy * oy);
+        if (depth < 0 || depth >= rim) return;
+        // Which way is out (not yet of unit length).
+        float nx = std::max(ax - (halfW - round), 0.0f);
+        float ny = std::max(ay - (halfH - round), 0.0f);
+        float length = std::sqrt(nx * nx + ny * ny);
+        if (length <= 0) return;
+        float u = 1 - depth / rim;  // 1 at the outline, 0 at the rim's inner edge
+        float offset = rim * RimShift(u) * s.glassStrength / scale / length;
+        float* p = &pixels[((size_t)y * w + x) * 4];
+        p[0] = 0.5f - std::copysign(nx, px) * offset;  // inward
+        p[1] = 0.5f - std::copysign(ny, py) * offset;
+    };
+    int x0 = std::max(0, (int)sx), x1 = std::min(w, (int)std::ceil(sx + sw));
+    int y0 = std::max(0, (int)sy), y1 = std::min(h, (int)std::ceil(sy + sh));
+    // Away from the top and bottom, only the ends are within the rim: the rest
+    // of a row is deeper.
+    float ends = halfW - radius - rim;
+    // Skipped: pixels whose middle is less than `ends` from the dock's.
+    int innerLeft = std::clamp((int)std::floor(cx - ends - 0.5f) + 1, x0, x1);
+    int innerRight = std::clamp((int)std::ceil(cx + ends - 0.5f), innerLeft, x1);
+    for (int y = y0; y < y1; y++) {
+        bool edge = std::fabs(y + 0.5f - cy) >= halfH - rim;
+        for (int x = x0; x < x1; x++) {
+            if (!edge && x == innerLeft) x = innerRight;
+            if (x >= x1) break;
+            bend(x, y);
+        }
+    }
+    return scale;
+}
+
+// ---- Drawing ----
+
+LONG RoundUp(LONG value, LONG step) {
+    return (value + step - 1) / step * step;
+}
+
+// Where a background's glass goes at the moment: a dock's, or a tray's while it
+// matches the dock.
+struct GlassSpot {
+    HWND window = nullptr;             // the taskbar it's in
+    float x = 0, y = 0, w = 0, h = 0;  // on screen, in pixels
+    float k = 1;                       // pixels per DIP
+    float radius = 0;                  // its corners, in pixels
+    ToneLimit tone;                    // its brightness limit
+};
+
+// `g`'s surface, `size` pixels, in a visual in `s`'s blurHost as big at
+// `spot.k` pixels per DIP, and clipped to `spot`'s outline (which ShapeSurface
+// then keeps up to date). Made the first time.
+void EnsureGlassSurface(Surface& s, GlassPlate& g, SIZE size, GlassSpot const& spot) {
+    if (!g.surface) {
+        auto compositor = wuxh::ElementCompositionPreview::GetElementVisual(s.blurHost).Compositor();
+        auto device = GraphicsDeviceFor(compositor);
+        g.surface = device.CreateDrawingSurface({(float)size.cx, (float)size.cy},
+                                                wgdx::DirectXPixelFormat::B8G8R8A8UIntNormalized,
+                                                wgdx::DirectXAlphaMode::Premultiplied);
+        g.surfaceSize = size;
+        auto brush = compositor.CreateSurfaceBrush(g.surface);
+        brush.Stretch(wuc::CompositionStretch::Fill);
+        g.sprite = compositor.CreateSpriteVisual();
+        g.sprite.Brush(brush);
+        s.glassShape = compositor.CreatePathGeometry();
+        float k = spot.k, r = spot.radius / k;
+        s.glassShape.Path(SquirclePath(Squircle(0, 0, spot.w / k, spot.h / k, r, r)));
+        g.sprite.Clip(compositor.CreateGeometricClip(s.glassShape));
+    } else if (size.cx != g.surfaceSize.cx || size.cy != g.surfaceSize.cy) {
+        winrt::check_hresult(g.surface.as<IDockDrawingSurfaceInterop>()->Resize(size));
+        g.surfaceSize = size;
+    }
+    // One pixel of the surface to one on screen.
+    g.sprite.Size({size.cx / spot.k, size.cy / spot.k});
+}
+
+// The glass in place of the blur.
+void ShowGlass(Surface& s, GlassPlate& g) {
+    wuxh::ElementCompositionPreview::SetElementChildVisual(s.blurHost, g.sprite);
+    s.blurShape = nullptr;
+    s.appliedBlur = -1;  // made again when it's back
+    s.glassShown = true;
+}
+
+// `g` let go, its taskbar still known. Whether its glass was shown, so the
+// blur can be put back.
+bool ForgetGlass(Surface& s, GlassPlate& g) {
+    bool shown = s.glassShown;
+    s.glassShown = false;
+    s.glassShape = nullptr;
+    HWND window = g.window;
+    g = GlassPlate{};
+    g.window = window;
+    return shown;
+}
+
+// Draws `g`'s glass into `s` from `c`'s picture of the screen, at `spot`, if
+// either changed since it was last drawn. False if it can't be drawn yet.
+bool DrawGlass(Surface& s, GlassPlate& g, GlassSpot const& spot, GlassCapture& c) {
+    if (!s.blurHost || !c.strip || spot.w <= 0 || spot.h <= 0) return false;
+    float x = spot.x, y = spot.y, w = spot.w, h = spot.h, k = spot.k;
+    std::array<float, 4> where{x, y, w, h};
+    if (!g.dirty && s.glassShown && where == g.drawnAt && g.drawnFrame == c.frame) return true;
+
+    // What's behind it and a margin, from (left - pad, top - pad); its corner
+    // is (fx, fy) into the pixel at (left, top).
+    int pad = GlassPad(k);
+    LONG left = (LONG)std::floor(x), top = (LONG)std::floor(y);
+    float fx = x - left, fy = y - top;
+    SIZE size{std::max(1L, (LONG)std::ceil(w)), std::max(1L, (LONG)std::ceil(h))};
+    SIZE area{size.cx + 1 + 2 * pad, size.cy + 1 + 2 * pad};
+    RECT around{left - pad, top - pad, left - pad + area.cx, top - pad + area.cy};
+
+    // The picture must reach up to it: if not, it's taken again, taller.
+    if (around.top < c.stripRect.top && c.stripRect.top > c.screen.top && !g_glassFrozen) {
+        LONG want = std::min(c.screen.bottom - around.top + (LONG)kGlassStripMargin,
+                             c.screen.bottom - c.screen.top);
+        if (want > c.stripWant) {
+            c.stripWant = want;
+            c.worker.Stop();
+            c.retryAt = 0;
+            return false;
+        }
+    }
+    RECT valid;
+    if (!IntersectRect(&valid, &around, &c.stripRect)) return false;
+
+    auto& d = g_glassDevice;
+    D3D11_TEXTURE2D_DESC stripDesc, have{};
+    c.strip->GetDesc(&stripDesc);
+    if (g.behind) g.behind->GetDesc(&have);
+    if (!g.behind || have.Format != stripDesc.Format || (LONG)have.Width < area.cx ||
+        (LONG)have.Height < area.cy) {
+        D3D11_TEXTURE2D_DESC desc{};
+        desc.Width = RoundUp(area.cx, 256);
+        desc.Height = RoundUp(area.cy, 64);
+        desc.MipLevels = desc.ArraySize = 1;
+        desc.Format = stripDesc.Format;
+        desc.SampleDesc.Count = 1;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        g.behind = nullptr;
+        g.behindBitmap = nullptr;
+        winrt::check_hresult(d.d3d->CreateTexture2D(&desc, nullptr, g.behind.put()));
+    }
+    {
+        GlassLock lock(d.lock.get());
+        D3D11_BOX box{(UINT)(valid.left - c.stripRect.left), (UINT)(valid.top - c.stripRect.top), 0,
+                      (UINT)(valid.right - c.stripRect.left), (UINT)(valid.bottom - c.stripRect.top),
+                      1};
+        d.context->CopySubresourceRegion(g.behind.get(), 0, valid.left - around.left,
+                                         valid.top - around.top, 0, c.strip.get(), 0, &box);
+    }
+    OffsetRect(&valid, -around.left, -around.top);
+
+    EnsureGlassSurface(s, g, size, spot);
+    auto interop = g.surface.as<IDockDrawingSurfaceInterop>();
+    winrt::com_ptr<ID2D1DeviceContext> ctx;
+    POINT offset{};
+    winrt::check_hresult(
+        interop->BeginDraw(nullptr, __uuidof(ID2D1DeviceContext), ctx.put_void(), &offset));
+    try {
+        ctx->SetDpi(96, 96);
+        if (!g.behindBitmap) {
+            D2D1_BITMAP_PROPERTIES1 props{{stripDesc.Format, D2D1_ALPHA_MODE_IGNORE}, 96, 96,
+                                          D2D1_BITMAP_OPTIONS_NONE, nullptr};
+            winrt::check_hresult(ctx->CreateBitmapFromDxgiSurface(
+                g.behind.as<IDXGISurface>().get(), &props, g.behindBitmap.put()));
+        }
+
+        // The map of the rim, made again when the glass has moved or resized.
+        float radius = spot.radius;
+        std::array<float, 8> mapFor{(float)area.cx, (float)area.cy, pad + fx, pad + fy,
+                                    w,              h,              radius,   k};
+        if (!g.map || mapFor != g.mapFor) {
+            g.mapScale = BuildGlassMap(g.mapPixels, area.cx, area.cy, pad + fx, pad + fy, w, h,
+                                       radius, k);
+            if (!g.map || g.mapCapacity.cx < area.cx || g.mapCapacity.cy < area.cy) {
+                g.map = nullptr;
+                g.mapCapacity = {RoundUp(area.cx, 256), RoundUp(area.cy, 64)};
+                D2D1_BITMAP_PROPERTIES1 props{
+                    {DXGI_FORMAT_R32G32B32A32_FLOAT, D2D1_ALPHA_MODE_PREMULTIPLIED}, 96, 96,
+                    D2D1_BITMAP_OPTIONS_NONE, nullptr};
+                winrt::check_hresult(ctx->CreateBitmap(
+                    D2D1_SIZE_U{(UINT32)g.mapCapacity.cx, (UINT32)g.mapCapacity.cy}, nullptr, 0,
+                    &props, g.map.put()));
+            }
+            D2D1_RECT_U rect{0, 0, (UINT32)area.cx, (UINT32)area.cy};
+            winrt::check_hresult(
+                g.map->CopyFromMemory(&rect, g.mapPixels.data(), (UINT32)area.cx * 16));
+            g.mapFor = mapFor;
+        }
+
+        std::vector<winrt::com_ptr<ID2D1Effect>> keep;
+        keep.reserve(12);  // so the references below stay valid
+
+        // Only the part that's really on the screen; past it, its edge pixels.
+        auto& crop = keep.emplace_back(GlassEffect(ctx.get(), kCropId, g.behindBitmap.get()));
+        struct {
+            float left, top, right, bottom;
+        } cropRect{(float)valid.left, (float)valid.top, (float)valid.right, (float)valid.bottom};
+        SetEffectValue(crop.get(), 0, cropRect);
+        SetEffectValue(crop.get(), 1, (UINT32)1);  // hard edges
+        auto& border = keep.emplace_back(
+            GlassEffect(ctx.get(), kBorderId, EffectOutput(crop.get()).get()));  // clamps
+
+        auto& displace = keep.emplace_back(
+            GlassEffect(ctx.get(), kDisplacementMapId, EffectOutput(border.get()).get()));
+        // Full precision, so the offsets aren't rounded to 8 bits.
+        constexpr UINT32 kPrecision = 0x80000007, k32BitFloat = 5;
+        SetEffectValue(displace.get(), kPrecision, k32BitFloat);
+        displace->SetInput(1, g.map.get(), TRUE);
+        SetEffectValue(displace.get(), 0, g.mapScale);  // scale
+        SetEffectValue(displace.get(), 1, (UINT32)0);   // across from red
+        SetEffectValue(displace.get(), 2, (UINT32)1);   // down from green
+        auto glass = EffectOutput(displace.get());
+
+        // Over the whole of it, bent rim included, so its fold is soft too.
+        if (float deviation = GlassBlur() * k; deviation > 0) {
+            auto& blur = keep.emplace_back(GlassEffect(ctx.get(), kGaussianBlurId, glass.get()));
+            SetEffectValue(blur.get(), 0, deviation);  // standard deviation
+            SetEffectValue(blur.get(), 2, (UINT32)1);  // hard edges
+            glass = EffectOutput(blur.get());
+        }
+
+        // The brightness limit, held as the blur holds it (see SetBlurVisual).
+        if (spot.tone.ceiling < 1) {
+            float ceiling = std::max(spot.tone.ceiling, 0.01f);
+            glass = ColorScale(ctx.get(), glass.get(), 1 / ceiling, 0, true, keep);
+            glass = ColorScale(ctx.get(), glass.get(), ceiling, 0, false, keep);
+        }
+        if (spot.tone.floor > 0) {
+            float room = std::max(1 - spot.tone.floor, 0.01f);  // from the floor up to white
+            glass = ColorScale(ctx.get(), glass.get(), -1 / room, 1 / room, true, keep);
+            glass = ColorScale(ctx.get(), glass.get(), -room, 1, false, keep);
+        }
+
+        // The surface is a part of a texture composition shares, at `offset`.
+        // Clipped to it, as drawing with SOURCE_COPY clears all the way to the
+        // clip.
+        D2D1_MATRIX_3X2_F atSurface = D2DTranslation((float)offset.x, (float)offset.y);
+        ctx->SetTransform(&atSurface);
+        D2D1_RECT_F bounds{0, 0, (float)size.cx, (float)size.cy};
+        ctx->PushAxisAlignedClip(&bounds, D2D1_ANTIALIAS_MODE_ALIASED);
+        struct PopClip {
+            ID2D1DeviceContext* ctx;
+            ~PopClip() { ctx->PopAxisAlignedClip(); }
+        } popClip{ctx.get()};
+        // The glass's corner, (pad + fx, pad + fy) in the picture, at the
+        // surface's: DrawImage puts the source's corner at the origin itself.
+        D2D1_RECT_F source{pad + fx, pad + fy, pad + fx + size.cx, pad + fy + size.cy};
+        ctx->DrawImage(glass.get(), nullptr, &source, D2D1_INTERPOLATION_MODE_LINEAR,
+                       D2D1_COMPOSITE_MODE_SOURCE_COPY);
+    } catch (...) {
+        interop->EndDraw();
+        throw;
+    }
+    winrt::check_hresult(interop->EndDraw());
+
+    if (!s.glassShown) {
+        ShowGlass(s, g);
+        static bool logged = false;
+        if (!std::exchange(logged, true)) Wh_Log(L"Liquid Glass: bending what's behind the dock");
+    }
+    g.drawnAt = where;
+    g.drawnFrame = c.frame;
+    g.dirty = false;
+    return true;
+}
+
+// Whether it was drawn without an error (drawn at all or not).
+bool DrawGlassSafely(Surface& s, GlassPlate& g, GlassSpot const& spot, GlassCapture& c) {
+    try {
+        DrawGlass(s, g, spot, c);
+        return true;
+    } catch (...) {
+        Wh_Log(L"Liquid Glass: drawing failed (0x%08X): frosted glass for now", winrt::to_hresult());
+        return false;
+    }
+}
+
+// ---- The dock ----
+
+// Where `p`'s plate is on screen: from what the frame loop set (layout catches
+// up later), and the slide of auto-hide. False while it isn't shown.
+bool PlateSpot(Plate& p, GlassSpot& spot) {
+    auto panel = p.panel.get();
+    auto root = panel ? panel.XamlRoot() : nullptr;
+    auto content = root ? root.Content() : nullptr;
+    auto& plate = p.surface.root;
+    if (!content || !plate || p.width <= 0 || plate.Visibility() != Visibility::Visible) {
+        return false;
+    }
+    HWND window = PlateWindow(p);
+    RECT screen;
+    if (!window || !GetWindowRect(window, &screen)) return false;
+    float k = (float)root.RasterizationScale();
+    auto at = panel.TransformToVisual(content).TransformPoint({0, 0});
+    spot.window = window;
+    spot.x = screen.left + (at.X + p.left) * k;
+    spot.y = screen.top + (at.Y + p.top + p.hideY) * k;
+    spot.w = p.width * k;
+    spot.h = g_size.dockHeight * k;
+    spot.k = k;
+    spot.radius = SquircleRadius(spot.w, spot.h, g_size.dockRadius * k);
+    spot.tone = ToneFor(g_settings.dockBrightnessLimit, true);  // as ApplyPlateLook
+    return true;
+}
+
+// `p`'s glass let go, and with `blur`, the frosted blur back if it was shown.
+void ReleaseGlass(Plate& p, bool blur) {
+    if (ForgetGlass(p.surface, p.glass) && blur && !g_unloading) {
+        Try([&] { ApplyPlateLook(p); }, L"Frosted glass");
+    }
+}
+
+void SetGlassTimer(UINT ms) {
+    HWND w = g_modWindow;
+    if (!w || ms == g_glassTickInterval) return;
+    if (SetTimer(w, kGlassTimer, ms, nullptr)) g_glassTickInterval = ms;
+}
+
+// In LIQUID GLASS: DOCKS AND TRAYS, after the tray's background, which it
+// draws into too.
+void UpdateGlass();
+void FollowGlass();
+void GlassTrayRevealed();
+
+// ---- Hotkeys ----
+// Win+Ctrl+Shift, as Windows' own Win+Ctrl+Shift+B: Ctrl+Shift+K alone is used
+// by apps (VS Code, Firefox), and a hotkey takes it from all of them.
+
+constexpr int kStopHotkey = 1, kFreezeHotkey = 2;
+HANDLE g_hotkeyThread = nullptr;
+DWORD g_hotkeyThreadId = 0;
+
+// Win+Ctrl+Shift+K, on the hotkeys' thread. The taskbar's back in screenshots
+// right away, and the glass is off until the settings are next saved, even if
+// the taskbar's thread is stuck (it's put away there once it's free).
+void StopGlassNow() {
+    bool already = g_glassStopped.exchange(true);
+    Wh_SetIntValue(UserValueName(L"glassStopped").c_str(), 1);
+    SetCaptureExcluded(false);
+    if (HWND w = g_modWindow) PostMessage(w, kGlassStopMessage, 0, 0);
+    MessageBeep(MB_ICONEXCLAMATION);
+    if (!already) {
+        Wh_Log(L"Emergency stop (Win+Ctrl+Shift+K): Liquid Glass is off until this mod's "
+               L"settings are next saved");
+    }
+}
+
+DWORD WINAPI HotkeyThread(void* ready) {
+    MSG msg;
+    PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // its queue, for WM_QUIT
+    SetEvent((HANDLE)ready);
+    constexpr UINT kModifiers = MOD_WIN | MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT;
+    bool stop = RegisterHotKey(nullptr, kStopHotkey, kModifiers, 'K');
+    bool freeze = RegisterHotKey(nullptr, kFreezeHotkey, kModifiers, 'G');
+    if (!stop) Wh_Log(L"Win+Ctrl+Shift+K is taken by another program: no emergency stop");
+    if (!freeze) Wh_Log(L"Win+Ctrl+Shift+G is taken by another program: no freezing the glass");
+    while (GetMessage(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message != WM_HOTKEY) continue;
+        if (msg.wParam == kStopHotkey) {
+            StopGlassNow();
+        } else if (msg.wParam == kFreezeHotkey) {
+            if (HWND w = g_modWindow) PostMessage(w, kGlassFreezeMessage, 0, 0);
+        }
+    }
+    if (stop) UnregisterHotKey(nullptr, kStopHotkey);
+    if (freeze) UnregisterHotKey(nullptr, kFreezeHotkey);
+    return 0;
+}
+
+// Once the taskbar's found: only the Explorer process that runs it listens.
+void StartHotkeys() {
+    if (g_hotkeyThread || g_unloading) return;
+    HANDLE ready = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!ready) return;
+    g_hotkeyThread = CreateThread(nullptr, 0, HotkeyThread, ready, 0, &g_hotkeyThreadId);
+    if (g_hotkeyThread) WaitForSingleObject(ready, INFINITE);
+    CloseHandle(ready);
+}
+
+// Before unloading: the thread runs the mod's code.
+void StopHotkeys() {
+    if (!g_hotkeyThread) return;
+    PostThreadMessage(g_hotkeyThreadId, WM_QUIT, 0, 0);
+    WaitForSingleObject(g_hotkeyThread, INFINITE);
+    CloseHandle(g_hotkeyThread);
+    g_hotkeyThread = nullptr;
+}
+
+// =============================================================================
 // FRAME LOOP
 // =============================================================================
 // Runs once per screen refresh, only while something is moving.
@@ -5187,7 +6805,10 @@ void OnFrame() {
         p.hideY = hideY;
     }
 
-    // ---- 5. Label ----
+    // ---- 5. Liquid Glass follows the plate ----
+    FollowGlass();
+
+    // ---- 6. Label ----
     UpdateLabel(plate);
 
     if (settled) StopFrames();
@@ -5202,16 +6823,63 @@ void OnFrame() {
 constexpr int kTraySlideInMs = 280;
 constexpr int kTraySlideOutMs = 320;
 
+// One per taskbar. Measured whenever its size changes, as the tray fills in
+// after the mod's loaded, or grows with more icons: each taskbar window is cut
+// to its tray's width (see TaskbarRegion), and a stale width cuts the tray off.
 struct TrayFrame {
     winrt::weak_ref<wux::FrameworkElement> element;
     bool hidden = false;        // collapsed for Hidden
     bool corner = false;        // set up for its hot corner
     bool cornerHidden = false;  // slid out of view
+    int width = 0;              // in pixels, as last measured
+    SIZE island{};              // its taskbar's content, in pixels: to match it to its window
+    wux::FrameworkElement::SizeChanged_revoker sizeChanged;
 };
 
-std::list<TrayFrame> g_trayFrames;
+// no_destroy, like the other lists of XAML objects: its revokers would run XAML
+// code after XAML has shut down when Explorer exits. ResetAll destroys it.
+[[clang::no_destroy]] std::optional<std::list<TrayFrame>> g_trayFrames{std::in_place};
 bool g_trayRevealed = false;
-int g_trayWidth = 0;  // in pixels, for the hot corner
+
+// Whether its width or its taskbar's size changed.
+bool MeasureTrayFrame(wux::FrameworkElement const& el, TrayFrame& t) {
+    if (g_settings.tray == Show::Hidden || el.ActualWidth() <= 0) return false;
+    auto root = el.XamlRoot();
+    double scale = root ? root.RasterizationScale() : 1;
+    int width = (int)std::lround(el.ActualWidth() * scale);
+    SIZE island{};
+    if (root) {
+        auto size = root.Size();
+        island = {(LONG)std::lround(size.Width * scale), (LONG)std::lround(size.Height * scale)};
+    }
+    bool changed = width != t.width || island.cx != t.island.cx || island.cy != t.island.cy;
+    t.width = width;
+    t.island = island;
+    return changed;
+}
+
+// The widest tray, in pixels: 0 if none's been measured.
+int WidestTray() {
+    int widest = 0;
+    if (!g_trayFrames) return widest;
+    for (auto& t : *g_trayFrames) widest = std::max(widest, t.width);
+    return widest;
+}
+
+// The width of the tray on a `width` x `height` taskbar window, in pixels: the
+// tray whose taskbar is that size. Taskbars the same size can't be told apart,
+// so it's the widest of those, as too wide only leaves a little more of the
+// window showing, while too narrow cuts the tray off; with none, the widest.
+int TrayWidthFor(int width, int height) {
+    int matched = 0;
+    if (!g_trayFrames) return matched;
+    for (auto& t : *g_trayFrames) {
+        if (std::abs(t.island.cx - width) <= 2 && std::abs(t.island.cy - height) <= 2) {
+            matched = std::max(matched, t.width);
+        }
+    }
+    return matched ? matched : WidestTray();
+}
 
 bool TrayShown() {
     return g_settings.tray == Show::Visible || (g_settings.tray == Show::HotCorner && g_trayRevealed);
@@ -5252,32 +6920,30 @@ void FixTrayRow(wux::FrameworkElement const& row) {
     }
 }
 
-// In: eases to a stop. Out: picks up speed, fading in the second half.
+// How far past the tray's own left edge its background and shadows reach, so a
+// hidden tray is slid wholly past the screen's edge.
+constexpr float kTrayOffscreenMargin = 48;
+
+// A plain slide over the screen's edge, with no fade. In: eases to a stop.
+// Out: picks up speed.
 void SlideTray(wux::FrameworkElement const& el, bool hidden, bool animate) {
     auto visual = wuxh::ElementCompositionPreview::GetElementVisual(el);
     wuxh::ElementCompositionPreview::SetIsTranslationEnabled(el, true);
-    float x = hidden ? (float)el.ActualWidth() + 24 : 0;
-    float opacity = hidden ? 0.0f : 1.0f;
+    float x = hidden ? (float)el.ActualWidth() + TrayPlateLeft() + kTrayOffscreenMargin : 0;
+    visual.StopAnimation(L"Opacity");  // as faded by earlier versions
+    if (visual.Opacity() != 1) visual.Opacity(1);
     if (!animate) {
         visual.StopAnimation(L"Translation.X");
-        visual.StopAnimation(L"Opacity");
         SetTranslation(el, x);
-        visual.Opacity(opacity);
         return;
     }
     auto compositor = visual.Compositor();
     auto slide = compositor.CreateScalarKeyFrameAnimation();
-    auto fade = compositor.CreateScalarKeyFrameAnimation();
     auto ease = hidden ? compositor.CreateCubicBezierEasingFunction({0.45f, 0.0f}, {0.6f, 1.0f})
                        : compositor.CreateCubicBezierEasingFunction({0.2f, 0.9f}, {0.3f, 1.0f});
-    if (hidden) fade.InsertKeyFrame(0.5f, 1.0f);
     slide.InsertKeyFrame(1.0f, x, ease);
-    fade.InsertKeyFrame(1.0f, opacity, ease);
-    auto duration = std::chrono::milliseconds(hidden ? kTraySlideOutMs : kTraySlideInMs);
-    slide.Duration(duration);
-    fade.Duration(duration);
+    slide.Duration(std::chrono::milliseconds(hidden ? kTraySlideOutMs : kTraySlideInMs));
     visual.StartAnimation(L"Translation.X", slide);
-    visual.StartAnimation(L"Opacity", fade);
 }
 
 void ResetTraySlide(wux::FrameworkElement const& el) {
@@ -5312,30 +6978,43 @@ void ApplyTrayVisibility(wux::FrameworkElement const& el, TrayFrame& t) {
         PutBack(el, hitTest);
     }
 
-    if (show != Show::Hidden && el.ActualWidth() > 0) {
-        auto root = el.XamlRoot();
-        double scale = root ? root.RasterizationScale() : 1;
-        g_trayWidth = (int)std::lround(el.ActualWidth() * scale);
-    }
+    if (!g_unloading && MeasureTrayFrame(el, t)) ScheduleOverWindows(false);  // the clip
 }
 
 void ApplyTrayFrame(wux::FrameworkElement const& el) {
-    for (auto& t : g_trayFrames) {
+    if (!g_trayFrames) return;
+    for (auto& t : *g_trayFrames) {
         if (t.element.get() == el) return ApplyTrayVisibility(el, t);
     }
 }
 
 void ApplyTrayFrames() {
-    for (auto& t : g_trayFrames) {
+    if (!g_trayFrames) return;
+    for (auto& t : *g_trayFrames) {
         if (auto el = t.element.get()) Try([&] { ApplyTrayVisibility(el, t); });
     }
 }
 
 void FixTrayFrame(wux::FrameworkElement const& el) {
-    g_trayFrames.remove_if([](TrayFrame const& t) { return !t.element.get(); });
-    if (std::none_of(g_trayFrames.begin(), g_trayFrames.end(),
+    if (!g_trayFrames) return;
+    g_trayFrames->remove_if([](TrayFrame const& t) { return !t.element.get(); });
+    if (std::none_of(g_trayFrames->begin(), g_trayFrames->end(),
                      [&](TrayFrame const& t) { return t.element.get() == el; })) {
-        g_trayFrames.push_back({winrt::make_weak(el)});
+        auto& t = g_trayFrames->emplace_back();
+        t.element = winrt::make_weak(el);
+        t.sizeChanged = el.SizeChanged(
+            winrt::auto_revoke,
+            [](wf::IInspectable const& sender, wux::SizeChangedEventArgs const&) {
+                if (g_unloading || !g_trayFrames) return;
+                Try([&] {
+                    auto el = sender.try_as<wux::FrameworkElement>();
+                    for (auto& t : *g_trayFrames) {
+                        if (!el || t.element.get() != el) continue;
+                        if (MeasureTrayFrame(el, t)) ScheduleOverWindows(false);  // the clip
+                        return;
+                    }
+                }, L"Tray size");
+            });
         Track(el, wux::UIElement::VisibilityProperty(), ApplyTrayFrame);
         Track(el, wux::UIElement::IsHitTestVisibleProperty());
     }
@@ -5455,6 +7134,28 @@ void OpenTaskView() {
                   nullptr, SW_SHOWNORMAL);
 }
 
+// Whether an app is full screen on `monitor`, whose bounds are `m`, as games
+// and videos are. Windows' own answer (SHQueryUserNotificationState) can stay
+// "full screen" after an exclusive full screen game is minimized or switched
+// away from, which left the corners and the hidden dock blocked over the
+// desktop until the game closed. So it's trusted only for presentation mode;
+// otherwise it's the window in front, without a title bar (unlike a maximized
+// one), covering the whole screen.
+bool FullScreenAppOn(HMONITOR monitor, RECT const& m) {
+    QUERY_USER_NOTIFICATION_STATE state;
+    if (SUCCEEDED(SHQueryUserNotificationState(&state)) && state == QUNS_PRESENTATION_MODE) {
+        return true;
+    }
+    HWND w = GetForegroundWindow();
+    if (!w || !IsAppWindow(w) || MonitorFromWindow(w, MONITOR_DEFAULTTONULL) != monitor) {
+        return false;  // none, minimized, the desktop or the shell's, or on another screen
+    }
+    if ((GetWindowLongPtr(w, GWL_STYLE) & WS_CAPTION) == WS_CAPTION) return false;
+    RECT r;
+    return GetWindowRect(w, &r) && r.left <= m.left && r.top <= m.top && r.right >= m.right &&
+           r.bottom >= m.bottom;
+}
+
 void OnPollTimer() {
     POINT p;
     if (g_unloading || !GetCursorPos(&p)) return;
@@ -5473,10 +7174,7 @@ void OnPollTimer() {
     bool held = (GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000;
     // Only asked at the bottom edge, the only place the answer is used (the
     // corners, and revealing a hidden dock), rather than on every poll.
-    QUERY_USER_NOTIFICATION_STATE state;
-    bool fullscreen = bottom && SUCCEEDED(SHQueryUserNotificationState(&state)) &&
-                      (state == QUNS_RUNNING_D3D_FULL_SCREEN || state == QUNS_BUSY ||
-                       state == QUNS_PRESENTATION_MODE);
+    bool fullscreen = bottom && FullScreenAppOn(monitor, m);
     bool blocked = held || fullscreen;
 
     if (g_settings.leftCorner != LeftCorner::Off) {
@@ -5491,7 +7189,7 @@ void OnPollTimer() {
     }
 
     if (g_settings.tray == Show::HotCorner) {
-        int zoneW = std::max(g_trayWidth, (int)(200 * scale)) +
+        int zoneW = std::max(WidestTray(), (int)(200 * scale)) +
                     (int)((TrayPlateLeft() + 16) * scale);
         int zoneH = (int)((TrayRowSpan() + 8) * scale);
         bool overTray = p.x >= m.right - zoneW && p.y >= m.bottom - zoneH;
@@ -5506,6 +7204,7 @@ void OnPollTimer() {
         if (reveal != g_trayRevealed) {
             g_trayRevealed = reveal;
             ApplyTrayFrames();
+            if (reveal) GlassTrayRevealed();  // its glass, fresh, before it slides in
             // The window's clip follows the tray, once it's slid out of view.
             if (reveal) ScheduleOverWindows(false);
             else if (HWND w = g_modWindow) SetTimer(w, kTrayClipTimer, kTraySlideOutMs, nullptr);
@@ -5523,6 +7222,109 @@ void OnPollTimer() {
 std::vector<winrt::weak_ref<wux::FrameworkElement>> g_frames;
 int g_reapplyCount = 0;
 
+// ---- Keeping icons still ----
+// Windows bounces an app's icon as its windows open, close, minimize or are
+// restored, moving it by its Translation (as noted in "Vertical Taskbar for
+// Windows 11"). With "Keep Icons Still", the icon's Translation animation is
+// taken away, and for a moment after each change to a button, every app icon
+// is held in place each frame: any animation of its Translation stopped, and
+// its Translation put back to none.
+
+constexpr auto kHoldIconsFor = std::chrono::milliseconds(1500);
+
+struct StillIcon {
+    winrt::weak_ref<wux::UIElement> icon;
+    wux::Vector3Transition original{nullptr};  // its Translation animation, to put back
+    bool cleared = false;
+};
+
+[[clang::no_destroy]] std::optional<std::list<StillIcon>> g_stillIcons{std::in_place};
+winrt::event_token g_holdToken{};
+bool g_holdingIcons = false;
+std::chrono::steady_clock::time_point g_holdIconsUntil;
+// Each way of holding an icon is given up for good once Windows refuses it, so
+// a refusal isn't repeated (and logged) every frame.
+bool g_iconTranslationUsable = true;
+bool g_iconVisualsUsable = true;
+
+void HoldIcon(StillIcon& s, wux::UIElement const& icon) {
+    if (!g_iconTranslationUsable) return;
+    try {
+        if (auto transition = icon.TranslationTransition()) {
+            if (!s.cleared) {
+                s.original = transition;
+                s.cleared = true;
+            }
+            icon.TranslationTransition(nullptr);
+        }
+    } catch (...) {
+        g_iconTranslationUsable = false;
+        Wh_Log(L"Keep Icons Still: the icon's Translation can't be used");
+        return;
+    }
+    if (g_iconVisualsUsable) {
+        try {
+            wuxh::ElementCompositionPreview::GetElementVisual(icon).StopAnimation(L"Translation");
+        } catch (...) {
+            g_iconVisualsUsable = false;
+        }
+    }
+    // Set even when it reads as none, as a stopped animation can leave the icon
+    // where it was: a different value first makes sure none is applied.
+    try {
+        icon.Translation({0, 0.01f, 0});
+        icon.Translation({0, 0, 0});
+    } catch (...) {
+        g_iconTranslationUsable = false;
+        Wh_Log(L"Keep Icons Still: the icon's Translation can't be set");
+    }
+}
+
+void StopHoldingIcons() {
+    if (!g_holdingIcons) return;
+    wuxm::CompositionTarget::Rendering(g_holdToken);
+    g_holdingIcons = false;
+}
+
+// Each frame for a moment, from now.
+void HoldIconsAWhile() {
+    if (!g_settings.keepIconsStill || g_unloading || g_stillIcons->empty()) return;
+    g_holdIconsUntil = std::chrono::steady_clock::now() + kHoldIconsFor;
+    if (g_holdingIcons) return;
+    g_holdToken = wuxm::CompositionTarget::Rendering([](wf::IInspectable const&,
+                                                        wf::IInspectable const&) {
+        if (g_unloading || std::chrono::steady_clock::now() > g_holdIconsUntil) {
+            return StopHoldingIcons();
+        }
+        for (auto& s : *g_stillIcons) {
+            if (auto icon = s.icon.get()) Try([&] { HoldIcon(s, icon); }, L"Keep icons still");
+        }
+    });
+    g_holdingIcons = true;
+}
+
+// An app's icon (Icon, or DefaultIcon for some apps).
+void KeepIconStill(wux::FrameworkElement const& el, wux::FrameworkElement const& button) {
+    if (!g_settings.keepIconsStill || !IsAppButton(button)) return;
+    g_stillIcons->remove_if([](StillIcon const& s) { return !s.icon.get(); });
+    for (auto& s : *g_stillIcons) {
+        if (s.icon.get() == el) return HoldIcon(s, el);
+    }
+    auto& s = g_stillIcons->emplace_back();
+    s.icon = winrt::make_weak<wux::UIElement>(el);
+    HoldIcon(s, el);
+}
+
+// Their Translation animations back.
+void ReleaseStillIcons() {
+    StopHoldingIcons();
+    for (auto& s : *g_stillIcons) {
+        auto icon = s.icon.get();
+        if (icon && s.cleared) Try([&] { icon.TranslationTransition(s.original); });
+    }
+    g_stillIcons->clear();
+}
+
 // Everything the mod changes in one button. Safe to call again.
 void ProcessButton(wux::FrameworkElement const& button) {
     UpdateStartHidden(button);
@@ -5538,8 +7340,10 @@ void ProcessButton(wux::FrameworkElement const& button) {
             TrackIconImage(el);
             UpdateAppIcon(el, button);
             UpdateStartLogo(el, button);
+            KeepIconStill(el, button);
         } else if (name == L"DefaultIcon") {
             TrackIconImage(el);  // shown in place of Icon for some apps
+            KeepIconStill(el, button);
         } else if (name == L"OverlayIcon") {
             TrackOverlayIcon(el);
         } else if (name == L"RunningIndicator") {
@@ -5566,6 +7370,7 @@ void NoteTaskbarFrame(wux::FrameworkElement const& frame) {
     ScheduleOverWindows(true);
     UpdatePolling();
     HookTaskView();
+    UpdateGlass();
 
     // While Windows starts, Explorer can leave the taskbar behind windows.
     // Applying auto-hide and the app bars again over the next seconds fixes it.
@@ -5618,6 +7423,8 @@ struct TrayDecor {
     wuc::ContainerVisual shadows{nullptr};
     std::vector<TrayItemShadow> itemShadows;
     wf::Rect shadowBounds{0, 0, -1, -1};           // the host on the layer, as last placed
+
+    GlassPlate glass;  // while it matches the dock (see LIQUID GLASS: DOCKS AND TRAYS)
 };
 
 [[clang::no_destroy]] std::optional<std::list<TrayDecor>> g_trayDecor{std::in_place};
@@ -5748,8 +7555,11 @@ void PlaceTrayShadows(TrayDecor& t, std::vector<TrayItem> const& items, wf::Rect
 void ShapeTraySurface(TrayDecor& t) {
     float w = t.surfaceRect.Width, h = t.surfaceRect.Height;
     if (!t.surface.root || w <= 0 || h <= 0) return;
-    ShapeSurface(t.surface, TrayLook(), w, h, h * kTrayPlateRadius,
-                 g_settings.glowSize * h / kDefaultDockHeight);
+    // Matching the dock, its glow is as deep as the dock's; otherwise it's in
+    // proportion to its own height.
+    float glow = g_settings.trayMatchDock ? g_settings.glowSize * g_size.icon / kDefaultIconSize
+                                          : g_settings.glowSize * h / kDefaultDockHeight;
+    ShapeSurface(t.surface, TrayLook(), w, h, h * kTrayPlateRadius, glow);
 }
 
 // Around the tray's items, inset from its row's top and bottom. Placed again
@@ -5805,6 +7615,7 @@ void PlaceTraySurface(TrayDecor& t, wuxc::Panel const& grid) {
 
 void ApplyTrayLook(TrayDecor& t) {
     if (!t.surface.root) return;
+    t.glass.dirty = true;  // its brightness limit may have changed with the theme
     auto& look = TrayLook();
     bool light;
     Color fill = LookFill(look, SystemIsLight(t.frame.get()), light);
@@ -5929,6 +7740,245 @@ void ScanTaskbars() {
 }
 
 // =============================================================================
+// LIQUID GLASS: DOCKS AND TRAYS
+// =============================================================================
+// Which backgrounds get the glass, and when: each dock, and each tray while
+// "Match Dock Style" is on (the rest is in LIQUID GLASS). A tray keeps its own
+// brightness limit, which suits the text on it. It slides in and out by its hot
+// corner with the glass it last drew, right once it's in place.
+
+// The taskbar window the tray in `root` is in: its dock's.
+HWND TrayWindow(wux::XamlRoot const& root) {
+    if (!g_plates) return nullptr;
+    for (auto& p : *g_plates) {
+        auto panel = p.panel.get();
+        if (panel && panel.XamlRoot() == root) return PlateWindow(p);
+    }
+    return nullptr;
+}
+
+// Where `t`'s background is on screen, at rest (not slid away). False while it
+// can't have the glass.
+bool TraySpot(TrayDecor& t, GlassSpot& spot) {
+    auto grid = t.grid.get();
+    auto& r = t.surfaceRect;
+    auto& background = t.surface.root;
+    if (!g_settings.trayMatchDock || !grid || !t.layer || !background ||
+        background.Visibility() != Visibility::Visible || r.Width <= 0 || r.Height <= 0) {
+        return false;
+    }
+    auto root = grid.XamlRoot();
+    auto content = root ? root.Content() : nullptr;
+    HWND window = content ? TrayWindow(root) : nullptr;
+    RECT screen;
+    if (!window || !GetWindowRect(window, &screen)) return false;
+    float k = (float)root.RasterizationScale();
+    auto at = t.layer.TransformToVisual(content).TransformPoint({r.X, r.Y});
+    spot.window = window;
+    spot.x = screen.left + at.X * k;
+    spot.y = screen.top + at.Y * k;
+    spot.w = r.Width * k;
+    spot.h = r.Height * k;
+    spot.k = k;
+    spot.radius = SquircleRadius(spot.w, spot.h, r.Height * kTrayPlateRadius * k);
+    spot.tone = TrayTone(t);  // as ApplyTrayLook
+    return true;
+}
+
+// `t`'s glass let go, and with `blur`, the frosted blur back if it was shown.
+void ReleaseTrayGlass(TrayDecor& t, bool blur) {
+    if (ForgetGlass(t.surface, t.glass) && blur && !g_unloading) {
+        Try([&] { ApplyTrayLook(t); }, L"Frosted glass");
+    }
+}
+
+void ReleaseAllGlass(bool blur) {
+    if (g_plates) {
+        for (auto& p : *g_plates) ReleaseGlass(p, blur);
+    }
+    if (g_trayDecor) {
+        for (auto& t : *g_trayDecor) ReleaseTrayGlass(t, blur);
+    }
+}
+
+void MarkAllGlassDirty() {
+    if (g_plates) {
+        for (auto& p : *g_plates) p.glass.dirty = true;
+    }
+    if (g_trayDecor) {
+        for (auto& t : *g_trayDecor) t.glass.dirty = true;
+    }
+}
+
+// ---- On and off ----
+
+// Liquid Glass off: the blur back, the captures stopped, and the taskbars back
+// in screenshots.
+void GlassShutdown() {
+    if (HWND w = g_modWindow) KillTimer(w, kGlassTimer);
+    g_glassTickInterval = 0;
+    g_glassWatching = false;
+    g_glassUnseenSince = 0;
+    ReleaseAllGlass(true);
+    g_captures.clear();  // their threads told to stop
+    if (g_unloading) JoinWorkers();
+    else ReapWorkers();
+    g_glassDevice = GlassDevice{};
+    g_glassFrozen = false;
+    if (std::exchange(g_glassActive, false)) {
+        SetCaptureExcluded(false);
+        Wh_Log(L"Liquid Glass off: frosted glass, and the taskbar shows in screenshots");
+    }
+}
+
+// Something failed: everything's let go and made again in a moment, unless it
+// keeps failing.
+void GlassFailed() {
+    if (++g_glassFailures >= kGlassMaxFailures) {
+        g_glassFailed = true;
+        Wh_Log(L"Liquid Glass failed %d times: off until the settings are next saved",
+               g_glassFailures);
+        return GlassShutdown();
+    }
+    ReleaseAllGlass(true);
+    g_captures.clear();
+    g_glassDevice = GlassDevice{};
+    g_glassRetryAt = GetTickCount64() + kCaptureRetryMs;
+}
+
+// On or off, as the settings and the emergency stop say. Its hotkeys are only
+// taken once it's been turned on.
+void UpdateGlass() {
+    if (g_settings.glassStyle != GlassStyle::Off) StartHotkeys();
+    if (!GlassWanted()) return GlassShutdown();
+    if (!EnsureModWindow()) return;
+    if (!g_glassActive) {
+        g_glassActive = true;
+        g_glassExcludedAt = GetTickCount64();
+        if (!g_glassFrozen) SetCaptureExcluded(true);
+        Wh_Log(L"Liquid Glass on: the taskbar is left out of screenshots (Win+Ctrl+Shift+G "
+               L"freezes the glass to show it)");
+    }
+    SetGlassTimer(kGlassTickMs);
+}
+
+bool DocksShown() { return g_plates && !DockFullyHidden(); }
+bool TraysShown() { return g_trayDecor && g_settings.trayMatchDock && TrayShown(); }
+
+// The captures looked after, and the glass drawn again wherever it moved or
+// there's a new picture behind it: on a timer, and as soon as a capture's
+// thread has a new picture (kGlassFrameMessage). A dock slid away or a tray
+// slid out keeps what it last drew, to come back with.
+void GlassTick() {
+    if (!GlassWanted()) return GlassShutdown();
+    ReapWorkers();
+    g_glassWatching = DocksShown() || TraysShown();
+    if (!g_glassWatching) {  // nothing to bend; it catches up after
+        // A while out of sight (auto-hide, a fullscreen game), the screens are
+        // let go. The last pictures are kept, to come back with.
+        ULONGLONG now = GetTickCount64();
+        if (!g_glassUnseenSince) g_glassUnseenSince = now;
+        if (now - g_glassUnseenSince >= kGlassUnseenMs) {
+            for (auto& c : g_captures) c.worker.Stop();
+        }
+        return;
+    }
+    g_glassUnseenSince = 0;
+    struct Job {
+        Surface* surface;
+        GlassPlate* glass;
+        GlassSpot spot;
+        GlassCapture* capture;
+    };
+    bool failed = false;
+    try {
+        ULONGLONG now = GetTickCount64();
+        for (auto& c : g_captures) c.used = false;
+        std::vector<Job> jobs;
+        if (DocksShown()) {
+            for (auto& p : *g_plates) {
+                Job job{&p.surface, &p.glass};
+                if (PlateSpot(p, job.spot)) job.capture = CaptureFor(job.spot.window, p.glass, now);
+                if (job.capture) jobs.push_back(job);
+                else if (p.surface.glassShown) ReleaseGlass(p, true);
+            }
+        }
+        if (TraysShown()) {
+            for (auto& t : *g_trayDecor) {
+                Job job{&t.surface, &t.glass};
+                if (TraySpot(t, job.spot)) job.capture = CaptureFor(job.spot.window, t.glass, now);
+                if (job.capture) jobs.push_back(job);
+                else if (t.surface.glassShown) ReleaseTrayGlass(t, true);
+            }
+        }
+        g_captures.remove_if([](GlassCapture const& c) { return !c.used; });
+        if (!g_glassFrozen) {
+            for (auto& c : g_captures) TakeStrip(c);
+        }
+        for (auto& job : jobs) {
+            if (!job.capture->strip) continue;  // its first picture's still to come
+            if (!DrawGlassSafely(*job.surface, *job.glass, job.spot, *job.capture)) {
+                failed = true;
+                break;
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"Liquid Glass failed (0x%08X): frosted glass for now", winrt::to_hresult());
+        failed = true;
+    }
+    if (failed) return GlassFailed();
+}
+
+// While the dock moves (magnifying, sliding), its glass is redrawn where it is
+// now, from the newest picture. From the frame loop.
+void FollowGlass() {
+    if (!g_glassActive || !DocksShown()) return;
+    if (!g_glassWatching.exchange(true)) RequestGlassTick();  // coming back: captures restarted
+    try {
+        for (auto& p : *g_plates) {
+            GlassSpot spot;
+            if (!p.surface.glassShown || !PlateSpot(p, spot)) continue;
+            for (auto& c : g_captures) {
+                if (c.monitor != p.glass.monitor) continue;
+                if (!g_glassFrozen) TakeStrip(c);
+                if (c.strip && !DrawGlassSafely(p.surface, p.glass, spot, c)) return GlassFailed();
+                break;
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"Liquid Glass failed (0x%08X): frosted glass for now", winrt::to_hresult());
+        GlassFailed();
+    }
+}
+
+// The tray's about to slide in, carrying its glass: drawn first, from a fresh
+// picture of the screen.
+void GlassTrayRevealed() {
+    if (!g_glassActive || !TraysShown()) return;
+    for (auto& t : *g_trayDecor) t.glass.dirty = true;
+    GlassTick();
+}
+
+// Win+Ctrl+Shift+G. Frozen, the glass keeps bending the last picture of the
+// screen (still right as the dock moves over it) and the taskbar shows in
+// screenshots. Thawed, the capture starts again once it's out of them.
+void ToggleGlassFrozen() {
+    if (!g_glassActive) return;
+    g_glassFrozen = !g_glassFrozen;
+    if (g_glassFrozen) {
+        for (auto& c : g_captures) c.worker.Stop();  // its pictures would hold the taskbar
+        SetCaptureExcluded(false);
+        Wh_Log(L"Liquid Glass frozen: the taskbar shows in screenshots");
+    } else {
+        SetCaptureExcluded(true);
+        g_glassExcludedAt = GetTickCount64();
+        MarkAllGlassDirty();
+        Wh_Log(L"Liquid Glass thawed: following the screen again");
+    }
+    MessageBeep(MB_OK);
+}
+
+// =============================================================================
 // POINTER
 // =============================================================================
 
@@ -5976,6 +8026,7 @@ void OnTaskbarPointerMoved(wux::FrameworkElement const& frame,
     NoteTaskbarFrame(frame);
     for (auto& p : *g_plates) {
         if (p.frame.get() != frame) continue;
+        NoteGlassWindow(p);  // the pointer's screen is the plate's
         return OnDockPointer(&p, [&](wux::UIElement const& el) {
             return e.GetCurrentPoint(el).Position();
         });
@@ -6039,6 +8090,7 @@ void ClipTaskbars();
 
 void ResetAll() {
     StopFrames();
+    Try(GlassShutdown);  // the taskbar back in screenshots
     WatchWindows(false);
     WatchWindowDrops(false);
     WatchTaskView(false);
@@ -6055,12 +8107,16 @@ void ResetAll() {
             wuxh::ElementCompositionPreview::SetIsTranslationEnabled(el, false);
         });
     }
-    for (auto& t : g_trayFrames) {
-        auto el = t.element.get();
-        if (el && t.corner) Try([&] { ResetTraySlide(el); });
+    if (g_trayFrames) {
+        for (auto& t : *g_trayFrames) {
+            t.sizeChanged.revoke();
+            auto el = t.element.get();
+            if (el && t.corner) Try([&] { ResetTraySlide(el); });
+        }
     }
     Try([] { RemoveTrayDecor(true); });
     Try(RemoveStartIcons);
+    Try(ReleaseStillIcons);
     Try(UndimDragged);
     Try(StopSettlingIcons);
     RestoreIndicators();
@@ -6077,7 +8133,7 @@ void ResetAll() {
     g_row.clear();
     g_rowParent = nullptr;
     g_frames.clear();
-    g_trayFrames.clear();
+    g_trayFrames.reset();
     // Last, as everything above reads them, and nothing does after.
     g_buttons.reset();
     g_plates.reset();
@@ -6109,6 +8165,7 @@ void OnTaskListButtonUpdated(void* pThis) {
             ProcessButton(button);
             if (Button* b = FindButton(button)) b->impl = pThis;
             NoteTaskbarFrame(FindTaskbarFrame(button));
+            HoldIconsAWhile();  // as its state changes, Windows may bounce its icon
         }
     }, L"Button update");
 }
@@ -7458,7 +9515,8 @@ HRGN TaskbarRegion(HWND tb) {
                       : CreateRectRgn(0, std::max(0, height - StripHeight(dpi)), width, height);
     if (!trayShown) return region;
     // The tray, with its background reaching past its left and top.
-    int trayWidth = g_trayWidth > 0 ? g_trayWidth : MulDiv(200, dpi, 96);
+    int trayWidth = TrayWidthFor(width, height);
+    if (trayWidth <= 0) trayWidth = MulDiv(200, dpi, 96);
     trayWidth += MulDiv((int)std::ceil(TrayPlateLeft()), dpi, 96);
     int trayHeight = MulDiv((int)std::ceil(TrayRowSpan()), dpi, 96);
     HRGN tray = CreateRectRgn(std::max(0, width - trayWidth), std::max(0, height - trayHeight),
@@ -7587,9 +9645,24 @@ LRESULT CALLBACK ModWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
         case kMoveExplorerMessage:
             if (!g_unloading) MoveExplorerNow();
             return 0;
+        case kGlassStopMessage:
+            Try(GlassShutdown, L"Liquid Glass stop");
+            return 0;
+        case kGlassFreezeMessage:
+            if (!g_unloading) Try(ToggleGlassFrozen, L"Liquid Glass freeze");
+            return 0;
+        case kGlassFrameMessage:
+            g_glassFramePosted = false;  // the next picture asks again
+            if (!g_unloading && g_glassActive) Try(GlassTick, L"Liquid Glass");
+            return 0;
         case WM_TIMER:
             if (wParam == kPollTimer) {
                 Try(OnPollTimer);
+                return 0;
+            }
+            if (wParam == kGlassTimer) {
+                if (g_unloading) KillTimer(hWnd, kGlassTimer);
+                else Try(GlassTick, L"Liquid Glass");
                 return 0;
             }
             if (wParam == kTrayClipTimer) {
@@ -7868,6 +9941,11 @@ BOOL Wh_ModInit() {
     LoadSettings();
     g_managingAutoHide = Wh_GetIntValue(UserValueName(L"managingAutoHide").c_str(), 0);
     g_autoHideBefore = Wh_GetIntValue(UserValueName(L"autoHideBefore").c_str(), 0);
+    g_glassStopped = Wh_GetIntValue(UserValueName(L"glassStopped").c_str(), 0) != 0;
+    if (g_glassStopped) {
+        Wh_Log(L"Liquid Glass is off after an emergency stop; save this mod's settings to turn "
+               L"it back on");
+    }
     g_shellJobWork = CreateThreadpoolWork(RunShellJob, nullptr, nullptr);
 
     if (!HookTaskbarDllSymbols()) Wh_Log(L"taskbar.dll hooks failed; height won't change");
@@ -7912,6 +9990,11 @@ void Wh_ModBeforeUninit() {
     // The elements first, so the taskbar sizes its icons itself below. Then any
     // cancelled async work's callbacks, which the taskbar's thread runs meanwhile.
     if (HWND tb = FindTaskbar()) RunFromWindowThread(tb, [](void*) { ResetAll(); }, nullptr);
+    StopHotkeys();
+    // In case the taskbar's thread couldn't run ResetAll: the capture threads
+    // stopped, and the taskbar back in screenshots.
+    JoinWorkers();
+    if (g_glassActive) SetCaptureExcluded(false);
     for (int i = 0; i < 100 && g_pendingCallbacks > 0; i++) Sleep(20);
     ApplyAutoHide();
     UnregisterClass(kWindowClass, ModuleInstance());
@@ -7942,12 +10025,23 @@ void Wh_ModSettingsChanged() {
     int oldTaskbarHeight = g_taskbarHeight;
     float oldIconLoadSize = g_size.iconLoadSize;
 
+    // Saving the settings undoes Liquid Glass's emergency stop.
+    if (g_glassStopped.exchange(false)) {
+        Wh_SetIntValue(UserValueName(L"glassStopped").c_str(), 0);
+        Wh_Log(L"Liquid Glass may run again: the settings were saved after an emergency stop");
+    }
+
     HWND tb = FindTaskbar();
     bool ran = tb && RunFromWindowThread(tb, [](void*) {
         Settings old = g_settings;
         LoadSettings();
         RecolorSquircles(old);
         Try(HideLabel);  // redrawn in the new color
+        // Liquid Glass starts over, at the new sizes, below.
+        g_glassFailed = false;
+        g_glassFailures = 0;
+        g_glassRetryAt = 0;
+        g_captures.clear();
         Try(RemovePlates);
         Try(StopTrash);
         Try([] { RemoveTrayDecor(false); });  // added again as the trays are found
@@ -7955,12 +10049,14 @@ void Wh_ModSettingsChanged() {
         Try(UpdatePolling);
         g_finderIconSource.reset();  // reloaded at the new size and image
         SettleIconsAgain();
+        Try(ReleaseStillIcons);  // held again below, if still on
         for (auto& b : *g_buttons) {
             if (auto el = b.element.get()) Try([&] { ProcessButton(el); });
         }
         g_row.clear();
         g_rowParent = nullptr;
         MarkPlatesDirty();
+        Try(UpdateGlass, L"Liquid Glass");  // on or off, as now set
     }, nullptr);
     if (!ran) LoadSettings();
 
