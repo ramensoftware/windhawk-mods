@@ -1,7 +1,8 @@
 // ==WindhawkMod==
 // @id              explorer-mouse-actions-plus
 // @name            Explorer Mouse Actions Plus
-// @description     在文件资源管理器中为文件项目和空白处分别设置鼠标手势，可返回上一级、复制标签页或在当前目录打开命令提示符。
+// @description     Assign mouse gestures on empty space or items in File Explorer to navigation, tab actions, or opening a shell in the current folder.
+// @description:zh-CN 在文件资源管理器中为文件项目和空白处分别设置鼠标手势，可返回上一级、复制标签页或在当前目录打开命令提示符。
 // @version         0.1.0
 // @author          momoca
 // @github          https://github.com/momoca
@@ -23,19 +24,27 @@
 /*
 # Explorer Mouse Actions Plus
 
-在 Windhawk 设置中添加鼠标规则。每条规则指定点击位置（空白处或文件项目）、修饰键、手势和动作。文件项目包括文件夹。动作作用于点击所在的标签页；现代 Explorer 仍会处理项目的原生点击。
+Double-click empty space to go to the parent folder. Ctrl + double-click empty space to open CMD in the current tab's folder. Both defaults are editable entries under **Mouse rules**.
 
-默认双击空白处返回上一级，Ctrl + 双击空白处在当前目录打开 CMD。可以修改或关闭这两条规则，也可以添加 Shift + 双击打开 PowerShell、中键复制标签页等组合。相同条件取第一条启用的规则；如果同一位置和修饰键同时配置了单击、双击或三击，等待系统双击时间后执行匹配的最长手势。
+Each rule combines a gesture, a modifier and a target with an action. For example, assign Shift + double-click on empty space to Windows PowerShell, and the same gesture on an item to Refresh. The first enabled rule with matching conditions wins. When several click counts share a binding, the mod waits up to the system double-click interval for the longer gesture.
 
-“动作参数”可填写自定义快捷键（如 Ctrl+Shift+N）或文件夹背景菜单的名称或动词。CMD 和 PowerShell 需要文件系统目录；CMD 跳过 UNC 路径。
+**Why a separate mod?** This GPL-3.0 fork reuses Explorer integration and actions from LiHua81's [Click on Empty Explorer](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/click-on-empty-explorer.wh.cpp). Its settings are an ordered list that users can extend, including modifier combinations with double, triple and middle clicks. Maintaining this schema separately lets users choose it while existing upstream configurations keep their meaning.
 
-在 Windhawk 的“创建新模组”编辑器中导入 `explorer-mouse-actions-plus.wh.cpp` 并编译。使用支持 CLI 的 Windhawk 也可运行：
+**Choosing a target.** An item rule matches a file or folder under the pointer. Folder actions use the tab's directory when the action runs. In modern Explorer a folder double-click can also navigate, so the directory may already have changed. Use an empty-space rule when the directory matters. Classic list views can consume matched double or middle clicks. New, duplicate and close tab require Windows 11. CMD and PowerShell skip virtual locations; CMD also skips UNC paths.
 
-```powershell
-D:\Windhawk\windhawk-cli.exe mod install --file .\explorer-mouse-actions-plus.wh.cpp
-```
+**Action argument.** Enter a key combination such as Ctrl+Shift+N for Custom hotkey, or a menu label or verb for Folder background menu entry. Open in VS Code also accepts a menu label or verb. Set it explicitly if the default match for “Code” selects another entry.
 
-本项目由 momoca 维护，采用 GPL-3.0，沿用了 LiHua81 的 Explorer 钩子、命中检测及部分动作实现。[上游源码](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/click-on-empty-explorer.wh.cpp)
+## 简体中文
+
+默认双击空白处返回上一级，Ctrl + 双击空白处在当前标签页目录打开 CMD。这两项都可以在“鼠标规则”里修改、禁用或删除。
+
+每条规则可指定手势、修饰键、点击位置和动作。例如，同样是 Shift + 双击，点空白处可以打开 PowerShell，点文件项目可以刷新。条件相同时，第一条启用的规则生效。若同一组合配置了不同连击次数，模组会按系统双击间隔等待更长的手势。
+
+本项目沿用 LiHua81 的 Explorer 集成和部分动作，以 GPL-3.0 发布。独立维护可增删、可排序的规则列表，让用户按位置和组合键扩展手势，也保留上游已有配置的含义。
+
+文件项目包括文件和文件夹。目录动作使用执行时的标签页路径。现代 Explorer 双击文件夹时也会导航，动作可能读取到进入后的目录；需要准确使用当前目录时，请绑定空白处。经典列表视图可能接管匹配的双击或中键操作。新建、复制和关闭标签页需要 Windows 11。CMD 和 PowerShell 会跳过虚拟目录，CMD 还会跳过 UNC 路径。
+
+“动作参数”可填写自定义快捷键（如 Ctrl+Shift+N），或文件夹背景菜单项的名称或动词。“在 VS Code 中打开”也支持指定菜单项，避免默认的 Code 匹配到其他条目。
 */
 // ==/WindhawkModReadme==
 
@@ -43,30 +52,68 @@ D:\Windhawk\windhawk-cli.exe mod install --file .\explorer-mouse-actions-plus.wh
 /*
 - rules:
   - - enabled: true
-      $name: 启用
+      $name: Enabled
+      $name:zh-CN: 启用
     - gesture: double
-      $name: 手势
+      $name: Gesture
+      $name:zh-CN: 手势
       $options:
+        - single: Left click
+        - triple: Left triple-click
+        - doubleMiddle: Middle double-click
+        - double: Left double-click
+        - middle: Middle click
+      $options:zh-CN:
         - single: 左键单击
         - triple: 左键三击
         - doubleMiddle: 中键双击
         - double: 左键双击
         - middle: 中键单击
     - modifier: ctrl
-      $name: 修饰键
+      $name: Modifier
+      $name:zh-CN: 修饰键
       $options:
+        - ctrl: Ctrl
+        - shift: Shift
+        - alt: Alt
+        - plain: None
+      $options:zh-CN:
         - ctrl: Ctrl
         - shift: Shift
         - alt: Alt
         - plain: 无
     - target: background
-      $name: 点击位置
+      $name: Click target
+      $name:zh-CN: 点击位置
       $options:
+        - background: Empty space
+        - item: File or folder
+      $options:zh-CN:
         - background: 空白处
         - item: 文件或文件夹
     - action: cmd
-      $name: 动作
+      $name: Action
+      $name:zh-CN: 动作
       $options:
+        - cmd: Open CMD
+        - powershell: Open Windows PowerShell
+        - copyPath: Copy current folder path
+        - goUp: Go to parent folder
+        - duplicateTab: Duplicate tab
+        - openInVSCode: Open in VS Code
+        - goBack: Go back
+        - goForward: Go forward
+        - refresh: Refresh
+        - newTab: New tab
+        - closeTab: Close tab
+        - newFolder: New folder
+        - paste: Paste
+        - customHotkey: Custom hotkey
+        - goToDesktop: Go to Desktop
+        - goToHome: Go to Home
+        - openInTerminal: Open Windows Terminal
+        - openWithContextMenu: Folder background menu entry
+      $options:zh-CN:
         - cmd: 打开 CMD
         - powershell: 打开 Windows PowerShell
         - copyPath: 复制当前目录
@@ -86,14 +133,18 @@ D:\Windhawk\windhawk-cli.exe mod install --file .\explorer-mouse-actions-plus.wh
         - openInTerminal: Windows Terminal
         - openWithContextMenu: 文件夹背景菜单
     - argument: ""
-      $name: 动作参数
+      $name: Action argument
+      $name:zh-CN: 动作参数
+      $description: Enter a key combination for Custom hotkey, or a menu label or verb for Folder background menu entry or Open in VS Code.
+      $description:zh-CN: 自定义快捷键填写组合键；文件夹背景菜单和 VS Code 动作可填写菜单名称或动词。
   - - enabled: true
     - gesture: double
     - modifier: plain
     - target: background
     - action: goUp
     - argument: ""
-  $name: 鼠标规则
+  $name: Mouse rules
+  $name:zh-CN: 鼠标规则
 */
 // ==/WindhawkModSettings==
 
