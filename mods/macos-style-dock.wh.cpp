@@ -44,7 +44,8 @@ To use an icon, see "Custom icons" below.
 
 Not just a frosted blur: the dock's rim actually bends whatever is behind it,
 like the edge of a pane of glass, and keeps bending it as things move
-underneath. It's on by default, but it has two downsides:
+underneath. It's off by default, as it has two downsides to know about before
+you turn it on:
 
 1. **It's slightly delayed.** Windows doesn't let anything bend what's behind
    the taskbar, so the dock takes a picture of the screen behind it whenever
@@ -58,11 +59,11 @@ underneath. It's on by default, but it has two downsides:
    sharing. To capture the dock, press **Win+Ctrl+Shift+G** first: the glass
    freezes and the dock shows up again. Press it again to go back.
 
-**If either downside is a problem for you, turn Liquid Glass off:** set "Edge
-Style" to Off, in the Liquid Glass settings, and the dock goes back to the
-plain frosted glass, which has neither. If anything goes wrong,
-**Win+Ctrl+Shift+K** turns it off at once. See "More on Liquid Glass" below
-for the styles and details.
+**To turn it on,** pick a style in "Edge Style", in the Liquid Glass
+settings. If either downside turns out to be a problem for you, set it back
+to Off, and the dock goes back to the plain frosted glass, which has neither.
+If anything goes wrong, **Win+Ctrl+Shift+K** turns it off at once. See "More
+on Liquid Glass" below for the styles and details.
 
 ## Will it work on my PC?
 
@@ -140,16 +141,16 @@ Turning the mod off puts the taskbar back to normal.
   Brightness Limit" (80% by default), pixel by pixel, as the tray does (see
   below): a white window behind the dock turns gray there, and anything
   darker passes through untouched.
-- **Liquid Glass edges** (on by default). The dock's rim bends what's
+- **Liquid Glass edges** (off by default). The dock's rim bends what's
   behind it, as in the MacOS-Style-LiquidGlass mod. See "Liquid Glass" near
-  the top, including its downsides and how to turn it off.
+  the top for its downsides and how to turn it on.
 
 ## More on Liquid Glass
 
-Liquid Glass is on by default, in the Lens style; "Edge Style" picks one of
-three styles, or Off (see "Liquid Glass" near the top for when you might want
-that). The middle of the dock stays clear, and its rim bends what's just
-inside it out to the edge:
+Liquid Glass is off by default. To turn it on, pick one of three styles in
+"Edge Style" (see "Liquid Glass" near the top for its downsides first). The
+middle of the dock stays clear, and its rim bends what's just inside it out to
+the edge:
 
 - **Lens**: a mirror image of the band inside the rim, squeezed toward the
   edge, meeting the clear middle in a soft curve.
@@ -158,13 +159,15 @@ inside it out to the edge:
 - **Stretch**: no mirror image; the inside of the rim is stretched out to the
   edge, more and more toward it, like looking through a thick lens.
 
-The whole of it is then blurred by "Dock Background Blur", under the dock's
-own color and border. The default blur, 3, keeps the bend crisp; raise it for
-frostier glass. Set "Edge Style" back to Off for the plain frosted glass. The
-tray gets the same glass while it matches the dock (see "The system tray"); it
-slides in and out by its hot corner with the glass it last showed, which is
-right again once it's in place. Once the dock has been hidden for a couple of
-seconds, the screen behind it stops being captured until it's back.
+The whole of it is then blurred by "Liquid Glass Blur", under the dock's own
+color and border. It has its own blur, used instead of "Dock Background
+Blur": its default, 3, keeps the bend crisp, while the frosted glass looks
+best a little blurrier, at 10. Raise it for frostier glass. Set "Edge Style"
+back to Off for the plain frosted glass. The tray gets the same glass while it
+matches the dock (see "The system tray"); it slides in and out by its hot
+corner with the glass it last showed, which is right again once it's in
+place. Once the dock has been hidden for a couple of seconds, the screen
+behind it stops being captured until it's back.
 
 While Liquid Glass is on, the dock's labels are left out of screen captures
 along with the taskbar.
@@ -355,9 +358,9 @@ apply right away.
 - **Dock Color:** the background's color, opacity and blur, an optional
   brightness limit behind it, and the border's style, opacity, width and
   color.
-- **Liquid Glass** (on by default): whether the dock's rim bends what's
-  behind it and in which style, and how deep and strong the bend is. Its blur
-  and color are the dock's own.
+- **Liquid Glass** (off by default): whether the dock's rim bends what's
+  behind it and in which style, how deep and strong the bend is, and its own
+  blur. Its color is the dock's own.
 - **Tray Color:** the tray's background (matching the dock, or its own), its
   padding, the brightness limit behind it, and a shadow under its text and
   icons.
@@ -440,9 +443,9 @@ OpenGlass) showed how a taskbar can be given real refraction.
   - opacity: 15
     $name: Dock Background Opacity (0-100)
     $description: (Default = 15)
-  - blur: 3
+  - blur: 10
     $name: Dock Background Blur (0-100)
-    $description: Also blurs Liquid Glass, when it's on. (Default = 3)
+    $description: While Liquid Glass is on, "Liquid Glass Blur" is used instead. (Default = 10)
   - customColor: "#333333"
     $name: Dock Custom Background Color (#HEX)
     $description: Used when "Background Color" is "Custom."
@@ -471,20 +474,23 @@ OpenGlass) showed how a taskbar can be given real refraction.
     $description: Used when "Border Style" is "Custom."
   $name: Dock Color
 - liquidGlass:
-  - edgeStyle: lens
+  - edgeStyle: "off"
     $name: Edge Style
-    $description: "Liquid Glass makes the dock's rim bend what's behind it like real glass. Two downsides: 1) It's slightly delayed, trailing what's behind the dock by a frame or two, as it bends a picture of the screen. 2) It doesn't work with screen captures: while it's on, the taskbar disappears from screenshots, recordings and screen sharing (Win+Ctrl+Shift+G freezes the glass so the dock shows up; Win+Ctrl+Shift+K turns it off in an emergency). If either is a problem for you, set this to Off for the plain frosted glass. Lens mirrors the rim, squeezed toward the edge; Reflection is a true mirror; Stretch stretches the rim outward. (Default = Lens)"
+    $description: "Pick a style to turn on Liquid Glass, which makes the dock's rim bend what's behind it like real glass. Two downsides: 1) It's slightly delayed, trailing what's behind the dock by a frame or two, as it bends a picture of the screen. 2) It doesn't work with screen captures: while it's on, the taskbar disappears from screenshots, recordings and screen sharing (Win+Ctrl+Shift+G freezes the glass so the dock shows up; Win+Ctrl+Shift+K turns it off in an emergency). If either is a problem for you, leave this Off for the plain frosted glass. Lens mirrors the rim, squeezed toward the edge; Reflection is a true mirror; Stretch stretches the rim outward. (Default = Off)"
     $options:
+    - "off": "Off"
     - lens: Lens
     - reflection: Reflection
     - stretch: Stretch
-    - "off": "Off"
   - edgeDepth: 17
     $name: Edge Depth (2-100)
     $description: How deep the bent rim is, in pixels at 100% scaling, and never past a quarter of the dock's height. (Default = 17)
   - edgeStrength: 120
     $name: Edge Strength (0-150)
     $description: How far the rim reaches in for what it shows; lower bends less. Above 100, Stretch starts to mirror at the very edge. (Default = 120)
+  - blur: 3
+    $name: Liquid Glass Blur (0-100)
+    $description: Used instead of "Dock Background Blur" while Liquid Glass is on, and for the tray when it matches the dock. Low keeps the bend crisp. (Default = 3)
   $name: Liquid Glass
 - trayColor:
   - matchDock: true
@@ -805,9 +811,10 @@ struct Settings {
     bool trayMatchDock;
     int dockBrightnessLimit;  // percent; 100 for none (Cap Per-Pixel Brightness off)
     int trayBrightnessLimit;  // the same, for the tray
-    GlassStyle glassStyle;    // Liquid Glass, blurred by dockLook.blur
+    GlassStyle glassStyle;    // Liquid Glass
     float glassDepth;         // the bent rim, in pixels at 100% scaling
     float glassStrength;      // 1 for full strength
+    int glassBlur;            // 0-100, like Look::blur, in its place
     int trayPadding;          // pixels, past kTrayPlateInsetX and Y
     bool trayShadow;          // under the tray's text and icons
     bool trayShadowAuto;      // its color follows the text's
@@ -972,9 +979,10 @@ void LoadSettings() {
     s.trayBrightnessLimit =
         Wh_GetIntSetting(L"trayColor.capBrightness") ? percent(L"trayColor.brightnessLimit") : 100;
     s.glassStyle = (GlassStyle)ChoiceSetting(L"liquidGlass.edgeStyle",
-                                             {L"lens", L"reflection", L"stretch", L"off"}, 0);
+                                             {L"lens", L"reflection", L"stretch", L"off"}, 3);
     s.glassDepth = (float)std::clamp(Wh_GetIntSetting(L"liquidGlass.edgeDepth"), 2, 100);
     s.glassStrength = std::clamp(Wh_GetIntSetting(L"liquidGlass.edgeStrength"), 0, 150) / 100.0f;
+    s.glassBlur = std::clamp(Wh_GetIntSetting(L"liquidGlass.blur"), 0, 100);
     s.trayPadding = std::clamp(Wh_GetIntSetting(L"trayColor.padding"), 0, 20);
     s.trayShadow = Wh_GetIntSetting(L"trayColor.shadow");
     s.trayShadowAuto = !HexSetting(L"trayColor.shadowColor", s.trayShadowColor);
@@ -5838,10 +5846,10 @@ wuc::CompositionGraphicsDevice GraphicsDeviceFor(wuc::Compositor const& composit
     return device;
 }
 
-// The glass's blur, as a standard deviation in DIPs: the frosted glass's own,
-// from "Dock Background Blur" (see ApplySurfaceLook).
+// The glass's blur, as a standard deviation in DIPs: from "Liquid Glass Blur",
+// on the frosted glass's scale (see ApplySurfaceLook), whose blur it replaces.
 float GlassBlur() {
-    return g_settings.dockLook.blur * kMaxBlur / 100;
+    return g_settings.glassBlur * kMaxBlur / 100;
 }
 
 // How far the glass's blur reaches, at `k` pixels per DIP: three standard
