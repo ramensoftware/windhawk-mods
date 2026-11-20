@@ -2,12 +2,193 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-20T02:05:01.000Z</updated>
+    <updated>2026-11-20T03:02:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mac Island & Dock 3.3.0]]></title>
+        <id>https://windhawk.net/mods/mac-island-dock#96629f718616de86448082e4741cbc253392e46e</id>
+        <link href="https://windhawk.net/mods/mac-island-dock"/>
+        <updated>2026-11-20T03:02:06.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>New</strong></p>
+<ul>
+<li>Vice, a new theme in Colors (Look tab): a neon sunset over a dark night, like the city status bars made for desktops. Teal icons, pink highlights, Windows' Bahnschrift condensed font with the pill's texts in capitals, and a neon line along the island in every style. The power menu becomes a game's pause menu: Resume, the usual actions, and Wasted, which turns the screen gray before the PC shuts down (Esc cancels). <code>ThemeId::Vice</code> is added last, so the stored theme numbers keep their meaning; its colors blend in and out like the other themes (<code>IslandTheme::vice</code>, <code>StepTheme</code>). The font is <code>UiFont</code>'s for the texts only while no font of your own is chosen, condensed through <code>UiStretch</code>, and <code>FontsKey</code> includes the theme so every text format is made again. The capitals use <code>LCMapStringEx</code> (the user's locale) for the same string that is measured and drawn. The neon line (<code>DrawViceNeon</code>) is drawn inside the island's shape: along its edge facing the screen's middle (round corners), and on a notch along the notch's whole outline away from the screen's edges (<code>m_notchLine</code>, the stroke's inner half kept by a layer masked with the notch's shape), with its two gradient brushes and the layer made once per render target and let go when the target changes. It draws only when the island draws anyway: no timer or frame of its own. Wasted is shown only with Shut down on and asks for confirmation like it; it is two windows of the island's thread (a gray <code>LWA_ALPHA</code> veil over the virtual screen that takes the keyboard and the mouse, and the word drawn while it moves, about 1.6 s), both destroyed before the same <code>RunPowerAction(PowerAction::ShutDown, ...)</code> the menu's Shut down uses. Esc, any key, a click or another window coming to the front stop it.</li>
+<li>AI usage can also show other services' limits, read from a JSON file on this PC that another tool of yours keeps up to date, each with its name and icon on the pill and in the panel; &quot;+ Add provider&quot; in the panel adds more files (Apps and tools tab, off by default, #7307, made by Pedro). Code by Pedro (pedrospeckv), made on 3.2.0 and merged here. <code>ReadCustomAiUsage</code> reads one file on a local drive only (never a network path, up to 256 KB): one object, an array or <code>{&quot;providers&quot;: [...]}</code>, up to <code>kMaxCustomAi</code> services with <code>kMaxCustomWindows</code> limits each, <code>resets_at</code> in seconds or milliseconds, an optional <code>pill_name</code>, <code>updated_at</code> and <code>icon</code> (a picture, <code>.ico</code>, <code>.exe</code> or an app's AppUserModelID, loaded with the existing local-drive check). It is read on the thread that already watches the Codex and Claude Code files (<code>AiUsageThreadProc</code>), a moment after the first change and not sooner than a few seconds after the last read, and the result is given to the main island (<code>g_aiCustom</code>). &quot;+ Add provider&quot; keeps more files in <code>aiCustomList</code> (<code>AiCustomEntry</code>: name, short name, file, icon); the panel's form switches animate like the Commands panel's. No network, login or token: the island only reads the file. The format is documented in the README's technical notes.</li>
+</ul>
+<p><strong>Fixes</strong></p>
+<ul>
+<li>Apps (launcher) opens its apps again when Windhawk doesn't run as administrator. Chrome, Brave, Office and other apps whose Start menu shortcut points into Program Files gave &quot;The specified path does not exist&quot; (#7521, #7360). The same goes for opening them from a notification, a command or Folders and places. The island runs in the 32-bit windhawk.exe, where <code>%ProgramFiles%</code> in a shortcut's path becomes &quot;Program Files (x86)&quot;; Explorer is 64-bit and reads it as Start does. <code>OpensThroughExplorer</code> (shell:AppsFolder and <code>.lnk</code> targets while <code>IsWow64()</code>) sends <code>OpenApp</code>, <code>CommandOpenThreadProc</code>, the notification's open fallback and <code>OpenPath</code> through <code>ShellExecuteAsUser</code> first, now passing the arguments and calling <code>AllowSetForegroundWindow</code> for Explorer's process, with the old way as the fallback. With Windhawk running as administrator, commands and Folders and places items that are a shortcut (.lnk) or a Start app now open through Explorer, unelevated, like the launcher already did; before, they inherited Windhawk's elevation.</li>
+<li>Choosing a power mode in the control center no longer closes the island (#7539). <code>PowerSetActiveOverlayScheme</code> takes the GUID's address (<code>const GUID*</code>): passed by value, the 32-bit island pushed 16 bytes that the function, popping 4, left on the stack. Also reported in #7585.</li>
+<li>Folders and places shows the own icons of shortcuts and programs, not the plain icon of their type (#7575). <code>HasOwnFileIcon</code> (<code>.lnk</code>, <code>.exe</code>, <code>.url</code>, <code>.ico</code>, <code>.appref-ms</code>) makes the shelf's and the folders' pictures ask for the icon (<code>SIIGBF_ICONONLY</code>) instead of a thumbnail, which these files don't have, with the thumbnails' option on or off.</li>
+<li>On the minimized line, the timer's ring and its time stay together, with the clock after them (#7483). <code>HiddenPillText</code> puts the timer first, so its ring and its time stay together, and the clock goes after.</li>
+<li>The timer filling the pill with color grows smoothly, also across the notches and on an upright Bar, and with the notches the minimized line shows the timer's real progress instead of filling too early. <code>DrawFill</code> has an <code>asLine</code> mode, so the minimized line shows the timer's real progress with the notches instead of a fill over the whole pill. <code>TimerFillStep</code> moves the fill by a quarter of a pixel of the bar's real length, not whole pixels, which made it creep (#7585).</li>
+<li>Two separator lines no longer show side by side when the items between them have nothing to show, like what's playing with nothing playing (#7330). In <code>Layout</code>, a group that is on but has nothing laid out takes its line back (the slot is removed and the line's amount goes on to the next group that shows something), so two lines don't meet around nothing. Not done for the Bar's corners (<code>linesSplit</code>), where each line splits a side.</li>
+<li>Faísca's games run at the screen's pace (up to 60 frames a second) and at the same speed whatever the frame rate, a Cloud jump that reaches a cloud lands on it, and her panel stays smooth while she sleeps (#7559). A panel's paced frames take <code>kIdleFrameSeconds</code> (a 30th minus 4 ms) and the window's <code>kWindowFrameSeconds</code> while a game plays: a frame exactly on a 60th was skipped when it came a hair early on a 60 Hz screen, so it ended near 30. The falling games (Fruit, Cloud jump) step in fixed <code>kPetGameStep</code> (1/240 s) pieces of real time (<code>m_steppedAt</code>, <code>m_stepLeft</code>, capped at 0.1 s a frame) so a late frame doesn't slow them. <code>PetCloudLands</code> lets a jump that tops out up to <code>kPetCloudLedge</code> short of the cloud land. The pet panel is paced while she sleeps too.</li>
+<li>The Recycle Bin is watched and counted again a few times in the first minutes after the island starts or the PC wakes, and when a drive is plugged in, so it no longer keeps a wrong count after startup. <code>kRecycleWarmupMs</code> ({20, 60, 180} s after the island starts or the PC wakes, not the PC's uptime: Fast startup keeps it going) watches and counts again, and <code>DBT_DEVICEARRIVAL</code> does too (<code>OnRecycleCounted</code>).</li>
+<li>Faísca's &quot;Her size&quot; goes up to 160%, for big screens at a small scale. <code>kPetSizeMax</code> goes from 130 to 160.</li>
+<li>The visualizer's bars and the panels' animations keep their pace on a 60 Hz screen (they dropped to 30 or 20 frames a second). <code>kVizFrameSeconds</code> (0.0125 s) and <code>kIdleFrameSeconds</code> are a hair under a 60th and a 30th, so every frame of a 60 Hz screen, a little early, passes (exactly 1/60 kept every second frame, 30 a second; 1/30 gave 20).</li>
+<li>With the pill upright (the Bar or the Island on a side), a count or a percentage beside an icon, like the Shelf's files, the battery, the volume, the Recycle Bin or AI usage, no longer draws a second clock over it (#7605). In <code>Island::Render</code>, the upright two-line clock branch ran for any slot with font 0; it now needs <code>slot.item == IslandItem::Clock</code> too. The same bug drew the second clock in #7577.</li>
+<li>In What's playing's panel, the names of shuffle and repeat open above the button when the panel's bottom would cut them. <code>MediaPanel::DrawButtonTip</code> opens the tip above the button when the viewport's bottom would cut it.</li>
+<li>The pill filling with color (a download, the battery charging or the timer) also fills a notch's curve down the screen's side. A notch at a screen's side (<code>edgeLeft</code> / <code>edgeRight</code> in <code>NotchGeometry</code>) curves down that side below its body; <code>DrawFill</code>'s stretches stopped at the body's bottom, so that curve stayed empty. They now go down to the shape's bottom (<code>GetBounds</code>, already used for the shoulders at the ends), and the liquid front's wave spans that height. On a notch the fill's solid line (also the band sliding when how far isn't known, as with a copy or move) goes along the notch's outline (<code>m_notchLine</code>, the stroke's inner half kept by the fill's shape layer, clipped to the filled stretch) instead of a straight bar along the bottom.</li>
+<li>In AI usage's panel, the day a limit starts over shows in the island's language, not in Windows'. <code>AiResetTime</code> named the weekday with <code>LOCALE_NAME_USER_DEFAULT</code>; it now uses <code>DateLocale()</code> like every other day or month name in the island (times keep the regional format, as before). It also showed for Claude Code and Codex.</li>
+</ul>
+]]></content>
+        <author>
+            <name>caliberda</name>
+            <uri>https://github.com/cesarkali</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[WinRAR Tweaks 1.1.1]]></title>
+        <id>https://windhawk.net/mods/winrar-tweaks#69f6ccec6e3207fdfc7d0d9dbaea5bf13a08e2cf</id>
+        <link href="https://windhawk.net/mods/winrar-tweaks"/>
+        <updated>2026-11-20T03:02:00.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Readable Status Bar Sizes:</strong> The bottom status bar now displays selected and total file sizes in clean units (<code>KB</code>, <code>MB</code>, <code>GB</code>) instead of long byte numbers.</li>
+<li><strong><code>Ctrl+Backspace</code> in Search Bar:</strong> Fixed <code>Ctrl+Backspace</code> in the quick filter box so it deletes the previous word instead of typing a square box character.</li>
+</ul>
+]]></content>
+        <author>
+            <name>ArvindSaini978</name>
+            <uri>https://github.com/ArvindSaini978</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Mini Folders 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-mini-folders#eaa9c4896ccdf27e00645fbdc9ef8dcc2958b9aa</id>
+        <link href="https://windhawk.net/mods/taskbar-mini-folders"/>
+        <updated>2026-11-20T03:01:54.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Mini Folders</h1>
+<p>Adds mini folders to the Windows 11 taskbar, like the app folders on a phone.
+Each mini folder is a small tile that shows the first four icons inside it.
+Click the tile and a panel opens above the taskbar with everything in the
+folder. Click an icon to launch it.</p>
+<p>Use it to group apps (Work, Games, Tools) and keep the taskbar short.</p>
+<p><img src="https://i.imgur.com/h4lhXaY.png" alt="An open mini folder with its apps"></p>
+<p><img src="https://i.imgur.com/8uHZ4Qf.png" alt="Mini folders in the taskbar and an empty mini folder"></p>
+<h2>How it works</h2>
+<p>Every mini folder is a real folder on disk. By default it is
+<code>%USERPROFILE%\TaskbarFolders\&lt;folder name&gt;</code>. The mod creates the folder the
+first time you use <strong>+ Add...</strong> or <strong>Open folder</strong> in it, not before.
+Whatever is in that folder shows up in the mini folder: shortcuts, programs,
+files and other folders. Hidden and system files are skipped. Items are sorted
+by name.</p>
+<h2>Using it</h2>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Click a mini folder</td>
+<td>Opens its panel. Click it again, press Esc or click elsewhere to close the panel</td>
+</tr>
+<tr>
+<td>Click an icon in the panel</td>
+<td>Opens the app, file or folder</td>
+</tr>
+<tr>
+<td>Right-click an icon</td>
+<td>Open, Open file location, Remove from this folder (Delete for real files and folders)</td>
+</tr>
+<tr>
+<td><strong>+ Add...</strong></td>
+<td>Pick apps or files. A shortcut to each one is created in the folder</td>
+</tr>
+<tr>
+<td><strong>Open folder</strong></td>
+<td>Opens the folder in Explorer, so you can drag items in, rename or delete them</td>
+</tr>
+</tbody>
+</table>
+<p>&quot;Remove from this folder&quot; sends a shortcut to the Recycle Bin without asking.
+For a real file or folder (not a shortcut) the menu item is called &quot;Delete&quot;,
+because it removes the real item: it goes to the Recycle Bin, and Windows may
+ask you to confirm first. On a drive without a Recycle Bin (for example a
+network drive) the item is deleted permanently, and Windows asks first.</p>
+<p>The file picker of <strong>+ Add...</strong> starts in the Start menu programs folder, where
+most installed apps have a shortcut.</p>
+<h2>Settings</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mini folders</td>
+<td>Apps, Work, Games</td>
+<td>The list of mini folders. Each has a name and an optional path</td>
+</tr>
+<tr>
+<td>Folder path</td>
+<td>empty</td>
+<td>Leave empty to use <code>%USERPROFILE%\TaskbarFolders\&lt;name&gt;</code>. Any existing folder works, and environment variables are expanded</td>
+</tr>
+<tr>
+<td>Position in the taskbar</td>
+<td>Next to the Start button</td>
+<td>Can also be after the last taskbar app, or at the far left edge of the taskbar</td>
+</tr>
+<tr>
+<td>Mini folder button size</td>
+<td>40</td>
+<td>Size of the tile, from 28 to 56</td>
+</tr>
+<tr>
+<td>Icons per row in the opened folder</td>
+<td>4</td>
+<td>Width of the panel, from 1 to 10 icons</td>
+</tr>
+</tbody>
+</table>
+<p>Renaming a mini folder that uses the default path points it to a new, empty
+folder. The old folder and its contents stay on disk.</p>
+<h2>Files and folders the mod creates</h2>
+<ul>
+<li>The folder of a mini folder (by default inside <code>%USERPROFILE%\TaskbarFolders</code>),
+created when you first use <strong>+ Add...</strong> or <strong>Open folder</strong> in it.</li>
+<li>The shortcuts that <strong>+ Add...</strong> puts into that folder.</li>
+</ul>
+<p>These are your files. The mod never deletes them, so they stay on disk after
+the mod is disabled or removed. Delete the <code>TaskbarFolders</code> folder yourself if
+you no longer need it.</p>
+<h2>Performance</h2>
+<ul>
+<li>Folder contents and icons are read on a background thread, never on the
+taskbar thread, so a slow disk or a network folder can't freeze the taskbar.</li>
+<li>Nothing runs in the background: no timers and no folder watching. The tile
+preview is refreshed when you open the mini folder or change it from the
+panel.</li>
+<li>Opening the same mini folder again reuses the icons that are already loaded.</li>
+</ul>
+<h2>Limitations</h2>
+<ul>
+<li>Windows 11 with the new taskbar only. It doesn't work with the old taskbar
+restored by ExplorerPatcher or similar tools.</li>
+<li>If you change a folder in Explorer, the tile preview updates the next time
+you open that mini folder.</li>
+<li>Dragging items onto a mini folder is not supported. Use <strong>+ Add...</strong> or
+<strong>Open folder</strong>.</li>
+<li>The panel does not scroll. A folder with many items gets more icons per row
+so that the panel fits the screen. Items that still don't fit are not shown.</li>
+</ul>
+<p>Tip: unpin the normal taskbar icons and keep everything in mini folders.</p>
+]]></content>
+        <author>
+            <name>Sanekx Arcs</name>
+            <uri>https://github.com/SanekxArcs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Alt+Tab Flip 3D 1.8.0]]></title>
         <id>https://windhawk.net/mods/alt-tab-flip-3d#6a307cd7030bc08eb97439377b135a529439e66e</id>
@@ -388,362 +569,6 @@ you search for the browser itself, but it is still listed when you type its name
         <author>
             <name>NIKTO</name>
             <uri>https://github.com/NIKTO-2</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WindowPilot 1.2.0]]></title>
-        <id>https://windhawk.net/mods/windowpilot#0ec737dcbc499f06130908d2cb62fdbd537ac152</id>
-        <link href="https://windhawk.net/mods/windowpilot"/>
-        <updated>2026-11-19T00:01:43.000Z</updated>
-        <content type="html"><![CDATA[<h1>WindowPilot</h1>
-<h2>English</h2>
-<p>Control the foreground window with configurable shortcuts:</p>
-<table>
-<thead>
-<tr>
-<th>Default shortcut</th>
-<th>Action</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Win + Q</td>
-<td>Close normally, preserving the application's save prompts</td>
-</tr>
-<tr>
-<td>Win + Z</td>
-<td>Minimize</td>
-</tr>
-<tr>
-<td>Win + N</td>
-<td>Maximize; optionally restore when already maximized</td>
-</tr>
-<tr>
-<td>Win + Shift + N</td>
-<td>Open the native Windows Notification Center</td>
-</tr>
-<tr>
-<td>Win + S</td>
-<td>Original Windows Search, unchanged</td>
-</tr>
-</tbody>
-</table>
-<p>Each window action has independent enable, shortcut, game protection and
-double-press confirmation settings. Game protection is enabled by default;
-double-press confirmation is disabled by default. Shortcuts support Win, Ctrl,
-Alt, Shift, A–Z, 0–9, F1–F24 and common named keys. Examples: <code>Win+Q</code>,
-<code>Ctrl+Alt+F10</code>, <code>Win+Shift+N</code>. Only the exact configured combination is consumed.
-Changing or disabling a shortcut immediately releases its old combination.
-Win+S and Win+L are reserved; duplicate or invalid bindings show a warning.</p>
-<p>With confirmation enabled, press and release the shortcut twice in <strong>less than
-3 seconds</strong>. The hint disappears after 1.5 seconds by default; its disappearance
-does not shorten the confirmation deadline. Holding a key never confirms.
-Switching windows, choosing another action, pressing Esc or saving settings
-cancels a pending confirmation. Timings are configurable for each action.</p>
-<p><strong>Hint appearance:</strong> automatically follows the Windows display language in
-English, Portuguese or Spanish, with English fallback for other languages.
-You can also select a language manually. Dark and light themes can follow
-Windows or be selected explicitly. <strong>Always on top</strong> is configurable and
-enabled by default. The hint never steals keyboard focus or intercepts clicks.
-Settings labels follow the language selected in the Windhawk interface.</p>
-<p><strong>Compatibility:</strong> Windows 11 x64 and Windhawk 1.7.3 or later. WindowPilot
-runs in a dedicated Windhawk tool process for standard desktop windows.
-Elevated apps and secure-desktop prompts are outside the supported scope.</p>
-<p><strong>Games:</strong> detection uses editable executable/path patterns, Unity/Unreal
-window classes and optional fullscreen geometry. It is conservative: browser
-F11 fullscreen can be protected too; ordinary maximized windows are excluded
-from the fullscreen heuristic. Add unrecognized windowed games to the list.
-When game protection applies, the original Windows shortcut receives the key.
-The same applies on the desktop, taskbar, menus and windows that cannot perform
-the requested action. On eligible windows, the defaults take over Windows
-Search (Win+Q), Snap layouts (Win+Z) and Notification Center (Win+N).
-Use Win+S for Search, Win+Shift+N for notifications, or change the assignments
-to use the original combinations.</p>
-<p>Notifications use the original Win+N after the alternate shortcut's modifiers
-are released. Tagged synthetic input prevents recursive maximization. If an
-existing Windows policy disables Notification Center, the hint explains the
-restriction. Closing a window sends a normal close request to the application.</p>
-<h2>Português</h2>
-<p>Atalhos padrão: <strong>Win+Q</strong> fecha, <strong>Win+Z</strong> minimiza, <strong>Win+N</strong> maximiza/restaura,
-<strong>Win+Shift+N</strong> abre notificações e <strong>Win+S</strong> continua sendo a pesquisa nativa.
-Cada ação tem opções independentes de ativação, atalho, proteção para jogos e
-duas pressões. A proteção para jogos vem ativada e a confirmação desativada.</p>
-<p>Com a confirmação ligada, solte a tecla e pressione novamente em menos de
-3 segundos. O aviso some após 1,5 segundo, mas o prazo continua válido.
-Trocar de janela, usar outra ação, pressionar Esc ou salvar configurações cancela.</p>
-<p>Em <strong>Aparência do aviso</strong>, escolha idioma automático/inglês/português/espanhol,
-tema automático/escuro/claro e <strong>Sempre no topo</strong>. O modo automático acompanha
-o idioma de exibição e o tema do Windows; o aviso não captura foco nem cliques.
-Os rótulos das configurações seguem o idioma da interface do Windhawk.</p>
-<p>Compatível com Windows 11 x64 e Windhawk 1.7.3 ou posterior. O mod roda em um
-processo dedicado do Windhawk para janelas comuns. Aplicativos elevados e a
-área de trabalho segura ficam fora da cobertura. Use o botão do Windhawk para
-desativar o mod inteiro.</p>
-<p>Para jogos protegidos, área de trabalho, barra de tarefas, menus ou janelas que
-não aceitam a ação, vale o atalho original do Windows. Em janelas compatíveis,
-os padrões substituem Pesquisa (Win+Q), layouts de encaixe (Win+Z) e Central
-de Notificações (Win+N). Use Win+S para pesquisar, Win+Shift+N para notificações
-ou mude as combinações para recuperar os atalhos originais. Se uma política do
-Windows bloquear a Central de Notificações, o aviso indica a restrição.</p>
-<h2>Español</h2>
-<p>Atajos predeterminados: <strong>Win+Q</strong> cierra, <strong>Win+Z</strong> minimiza, <strong>Win+N</strong> maximiza/restaura,
-<strong>Win+Shift+N</strong> abre notificaciones y <strong>Win+S</strong> conserva la búsqueda de Windows.
-Cada acción tiene controles independientes para activar, cambiar el atajo,
-ignorar juegos y exigir dos pulsaciones. La protección para juegos está activada;
-la confirmación está desactivada de forma predeterminada.</p>
-<p>Con la confirmación activada, suelta la tecla y pulsa de nuevo en menos de
-3 segundos. El aviso desaparece después de 1,5 segundos, pero el plazo sigue
-vigente. Cambiar de ventana, usar otra acción, pulsar Esc o guardar ajustes cancela.</p>
-<p>En <strong>Apariencia del aviso</strong>, elige idioma automático/inglés/portugués/español,
-tema automático/oscuro/claro y <strong>Siempre visible</strong>. El modo automático sigue el
-idioma de visualización y el tema de Windows. El aviso no roba foco ni clics.
-Los ajustes siguen el idioma elegido en la interfaz de Windhawk.</p>
-<p>Compatible con Windows 11 x64 y Windhawk 1.7.3 o posterior. El mod se ejecuta
-en un proceso dedicado de Windhawk para ventanas normales. Las aplicaciones
-elevadas y el escritorio seguro quedan fuera del alcance. Usa el interruptor
-de Windhawk para desactivar todo el mod.</p>
-<p>En juegos protegidos, el escritorio, la barra de tareas, los menús o ventanas
-que no admiten la acción, se conserva el atajo original de Windows. En ventanas
-compatibles, los valores predeterminados sustituyen Búsqueda (Win+Q), diseños
-de acoplamiento (Win+Z) y Centro de notificaciones (Win+N). Usa Win+S para
-buscar, Win+Shift+N para las notificaciones o cambia las combinaciones para
-recuperar los atajos originales. Un aviso indica si una directiva de Windows
-bloquea el Centro de notificaciones.</p>
-]]></content>
-        <author>
-            <name>ghostzpy</name>
-            <uri>https://github.com/ghostzpy</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tray Ghost Icon Cleaner 1.0]]></title>
-        <id>https://windhawk.net/mods/tray-ghost-cleaner#b4af9e5deb45f2750f14949ef4ee4de379043274</id>
-        <link href="https://windhawk.net/mods/tray-ghost-cleaner"/>
-        <updated>2026-11-19T00:01:38.000Z</updated>
-        <content type="html"><![CDATA[<h1>Tray Ghost Icon Cleaner</h1>
-<p><strong>For Windows 10 and older Windows 11 versions.</strong> Newer Windows 11 versions with the
-new (XAML) notification area already track the owner processes and remove these icons
-themselves, so the mod isn't needed there. See <a href="#compatibility">Compatibility</a>.</p>
-<p>When a program crashes or is terminated, it never removes its notification area (tray)
-icon. Explorer only notices that the owner is gone when the mouse passes over the icon,
-so &quot;ghost&quot; icons and duplicates pile up until you hover over the tray.</p>
-<p><img src="https://raw.githubusercontent.com/Solomag/windhawk-assets/main/tray-ghost-cleaner/demo.gif" alt="Demo"></p>
-<h2>How it works</h2>
-<p>Programs add and remove tray icons with <code>Shell_NotifyIcon</code>, which delivers each request
-to the taskbar window as a <code>WM_COPYDATA</code> message. The mod watches those messages inside
-Explorer, together with Explorer's answer to each of them, so it knows exactly which icon
-belongs to which process — including icons identified by GUID — without reading any
-internal Explorer data.</p>
-<ul>
-<li>For every process that owns an icon, the mod registers a wait on the process handle
-(no polling).</li>
-<li>When the process exits, the mod waits 1.5 s and then removes the icons that are still
-there with a regular <code>Shell_NotifyIcon(NIM_DELETE)</code>, using the same identity (window +
-ID, or GUID) the program registered them with. An icon is only removed when the window
-it belongs to is gone as well.</li>
-<li>A light 30 s check catches owners the mod couldn't open or wait on: it only looks at
-its own list, not at the tray.</li>
-<li>When the mod is loaded together with Explorer (the usual case), it sees every icon
-from the start. When it is enabled while Explorer is already running, it learns the
-existing icons the next time their program updates them (tooltip, image or state).
-Optionally, it can send the documented <code>TaskbarCreated</code> notification once so that
-running programs re-register their icons right away. Every program receives it as if
-Explorer had restarted, so it's off by default.</li>
-<li>Every removed ghost is logged — program path, PID and tooltip — to the Windhawk log
-and, optionally, to <code>ghosts.log</code> in the mod's storage folder (its full path is written
-to the Windhawk log), so you can find out which program keeps leaving them.</li>
-</ul>
-<h2>Compared to other approaches</h2>
-<table>
-<thead>
-<tr>
-<th></th>
-<th>This mod</th>
-<th>Tray refresh utilities</th>
-<th>Tray reset tools</th>
-<th>Restarting Explorer</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Runs as</td>
-<td>part of Explorer, no extra process</td>
-<td>separate background program</td>
-<td>one-off program</td>
-<td>manual</td>
-</tr>
-<tr>
-<td>Trigger</td>
-<td>the owner process exiting</td>
-<td>timer or on demand</td>
-<td>when you run it</td>
-<td>when you do it</td>
-</tr>
-<tr>
-<td>Method</td>
-<td><code>NIM_DELETE</code> with the icon's own identity</td>
-<td>simulated mouse moves over the tray, or reading Explorer's toolbar memory from another process</td>
-<td>resets the tray settings in the registry</td>
-<td>full restart</td>
-</tr>
-<tr>
-<td>Icons registered by GUID</td>
-<td>removed (if the mod was enabled while Explorer was running: once their program has updated them)</td>
-<td>depends on the tool</td>
-<td>—</td>
-<td>removed</td>
-</tr>
-<tr>
-<td>Tells you who left the icon</td>
-<td>yes, program and PID</td>
-<td>no</td>
-<td>no</td>
-<td>no</td>
-</tr>
-<tr>
-<td>Side effects</td>
-<td>none by default; the optional <code>TaskbarCreated</code> on load reaches every program, as if Explorer had restarted</td>
-<td>depends on the tool; may lag behind</td>
-<td>clears your icon visibility settings</td>
-<td>taskbar flickers, open Explorer windows close</td>
-</tr>
-</tbody>
-</table>
-<h2>Compatibility</h2>
-<ul>
-<li>Windows 10 — tested on 22H2.</li>
-<li>Older Windows 11 versions whose notification area still behaves like Windows 10's,
-and Windows 11 with the Windows 10 taskbar restored.</li>
-<li>Not needed on newer Windows 11 versions with the XAML notification area: Explorer
-there tracks the processes that own tray icons and removes the icons itself.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Solo_mag</name>
-            <uri>https://github.com/Solomag</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Change More Fonts 1.0.0]]></title>
-        <id>https://windhawk.net/mods/change-more-fonts#6c8d723b7e8dfef68d6b706de29dcf9a933cea70</id>
-        <link href="https://windhawk.net/mods/change-more-fonts"/>
-        <updated>2026-11-19T00:01:32.000Z</updated>
-        <content type="html"><![CDATA[<h1>Change More Fonts</h1>
-<p>Pick an installed font under <strong>Settings &gt; Font &gt; Font family</strong>. The default is
-Tahoma. The mod keeps the size requested by Windows. You can keep the requested
-weight or set your own. Some fonts take up more room, so labels may wrap or
-cut off sooner.</p>
-<h2>Where it applies</h2>
-<table>
-<thead>
-<tr>
-<th>Area</th>
-<th>Text the mod can change</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>File Explorer</td>
-<td>File names, details, navigation pane, address bar, and context menus</td>
-</tr>
-<tr>
-<td>Desktop</td>
-<td>Icon labels and menus</td>
-</tr>
-<tr>
-<td>Taskbar</td>
-<td>Labels, tooltips, and menus</td>
-</tr>
-<tr>
-<td>Start and Search</td>
-<td>Menu text, app labels, and the search box</td>
-</tr>
-<tr>
-<td>Quick Settings and notification center</td>
-<td>Labels and buttons</td>
-</tr>
-<tr>
-<td>Windows Settings</td>
-<td>Page headings, row labels, and descriptions</td>
-</tr>
-<tr>
-<td>Touch keyboard and input UI</td>
-<td>Labels drawn by the Windows input host</td>
-</tr>
-<tr>
-<td>Classic controls in these processes</td>
-<td>Menus, tooltips, status bars, and dialogs</td>
-</tr>
-</tbody>
-</table>
-<p>Coverage depends on how each control draws text. DWM title bars, web content,
-and text rendered as images are outside the supported paths. The mod skips icon
-fonts, emoji, and some fonts used for specific scripts. With classic controls,
-pick a font that has the characters you need, since GDI fallback is limited.</p>
-<h2>Screenshots</h2>
-<h3>Windows Settings</h3>
-<table>
-<thead>
-<tr>
-<th>Mod off</th>
-<th>Zen Maru Gothic</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/xh1le/windhawk-mods/b44a0888305a411b432af67fb948b54ea8408cc8/screenshots/change-more-fonts/settings-before.png" alt="Windows Settings with the mod off"></td>
-<td><img src="https://raw.githubusercontent.com/xh1le/windhawk-mods/b44a0888305a411b432af67fb948b54ea8408cc8/screenshots/change-more-fonts/settings-after.png" alt="Windows Settings with Zen Maru Gothic"></td>
-</tr>
-</tbody>
-</table>
-<h3>Explorer details view</h3>
-<table>
-<thead>
-<tr>
-<th>Mod off</th>
-<th>Tahoma</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/xh1le/windhawk-mods/b44a0888305a411b432af67fb948b54ea8408cc8/screenshots/change-more-fonts/explorer-before.png" alt="Explorer details with the mod off"></td>
-<td><img src="https://raw.githubusercontent.com/xh1le/windhawk-mods/b44a0888305a411b432af67fb948b54ea8408cc8/screenshots/change-more-fonts/explorer-after.png" alt="Explorer details with Tahoma"></td>
-</tr>
-</tbody>
-</table>
-<h2>Changing more fonts</h2>
-<p>The default list covers the usual Windows UI families. Add specific families
-under <strong>Also replace these fonts</strong> or turn on <strong>Replace all eligible fonts</strong>
-to include document fonts such as Arial and Calibri. Turn on <strong>Include
-monospace fonts</strong> if you want the same rules to apply to fonts such as Consolas.
-The <strong>Keep these fonts</strong> list takes priority.</p>
-<p>To try a different app, add its executable under this mod's <strong>Advanced &gt;
-Process inclusion list</strong>. The app needs to use GDI or system DirectWrite for
-its text. Use the per-mod exclusion list to skip apps.</p>
-<h2>Compatibility</h2>
-<p>Run one font replacement mod at a time. If you use Explorer Font Changer,
-disable it before enabling Change More Fonts.</p>
-<p>Taskbar, Start menu, and notification center stylers can assign fonts to
-individual controls. If a theme's font should stay, add its family to
-<strong>Keep these fonts</strong>. To use your chosen family on that control, update the
-theme's font rule or add its family to <strong>Also replace these fonts</strong>.</p>
-<p>Explorer Translucent Menus and Translucent Windows also hook classic text
-drawing. If menu text looks wrong with either mod enabled, try <strong>Rendering &gt;
-Keep cached GDI fonts</strong>. Font creation and DirectWrite changes
-still work with that option on.</p>
-<p>Windows font substitutions you set separately can still affect GDI text
-with Change More Fonts paused.</p>
-<h2>Refresh the text</h2>
-<p>Restart the affected app if it still shows the old font. Signing out and back
-in refreshes Start and other shell processes. Restarting also helps if text
-is clipped because the app measured it with a cached font. Turning the mod
-off and restarting the affected app restores its usual font.</p>
-<p>The mod runs in 64-bit processes on Windows 11 and changes fonts in memory.
-Optional apps added through the inclusion list also need to be 64-bit.</p>
-]]></content>
-        <author>
-            <name>xh1le</name>
-            <uri>https://github.com/xh1le</uri>
         </author>
     </entry>
 </feed>

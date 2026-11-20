@@ -2,12 +2,145 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-19T04:05:06.000Z</updated>
+    <updated>2026-11-20T03:01:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Mini Folders 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-mini-folders#eaa9c4896ccdf27e00645fbdc9ef8dcc2958b9aa</id>
+        <link href="https://windhawk.net/mods/taskbar-mini-folders"/>
+        <updated>2026-11-20T03:01:54.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Mini Folders</h1>
+<p>Adds mini folders to the Windows 11 taskbar, like the app folders on a phone.
+Each mini folder is a small tile that shows the first four icons inside it.
+Click the tile and a panel opens above the taskbar with everything in the
+folder. Click an icon to launch it.</p>
+<p>Use it to group apps (Work, Games, Tools) and keep the taskbar short.</p>
+<p><img src="https://i.imgur.com/h4lhXaY.png" alt="An open mini folder with its apps"></p>
+<p><img src="https://i.imgur.com/8uHZ4Qf.png" alt="Mini folders in the taskbar and an empty mini folder"></p>
+<h2>How it works</h2>
+<p>Every mini folder is a real folder on disk. By default it is
+<code>%USERPROFILE%\TaskbarFolders\&lt;folder name&gt;</code>. The mod creates the folder the
+first time you use <strong>+ Add...</strong> or <strong>Open folder</strong> in it, not before.
+Whatever is in that folder shows up in the mini folder: shortcuts, programs,
+files and other folders. Hidden and system files are skipped. Items are sorted
+by name.</p>
+<h2>Using it</h2>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Click a mini folder</td>
+<td>Opens its panel. Click it again, press Esc or click elsewhere to close the panel</td>
+</tr>
+<tr>
+<td>Click an icon in the panel</td>
+<td>Opens the app, file or folder</td>
+</tr>
+<tr>
+<td>Right-click an icon</td>
+<td>Open, Open file location, Remove from this folder (Delete for real files and folders)</td>
+</tr>
+<tr>
+<td><strong>+ Add...</strong></td>
+<td>Pick apps or files. A shortcut to each one is created in the folder</td>
+</tr>
+<tr>
+<td><strong>Open folder</strong></td>
+<td>Opens the folder in Explorer, so you can drag items in, rename or delete them</td>
+</tr>
+</tbody>
+</table>
+<p>&quot;Remove from this folder&quot; sends a shortcut to the Recycle Bin without asking.
+For a real file or folder (not a shortcut) the menu item is called &quot;Delete&quot;,
+because it removes the real item: it goes to the Recycle Bin, and Windows may
+ask you to confirm first. On a drive without a Recycle Bin (for example a
+network drive) the item is deleted permanently, and Windows asks first.</p>
+<p>The file picker of <strong>+ Add...</strong> starts in the Start menu programs folder, where
+most installed apps have a shortcut.</p>
+<h2>Settings</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mini folders</td>
+<td>Apps, Work, Games</td>
+<td>The list of mini folders. Each has a name and an optional path</td>
+</tr>
+<tr>
+<td>Folder path</td>
+<td>empty</td>
+<td>Leave empty to use <code>%USERPROFILE%\TaskbarFolders\&lt;name&gt;</code>. Any existing folder works, and environment variables are expanded</td>
+</tr>
+<tr>
+<td>Position in the taskbar</td>
+<td>Next to the Start button</td>
+<td>Can also be after the last taskbar app, or at the far left edge of the taskbar</td>
+</tr>
+<tr>
+<td>Mini folder button size</td>
+<td>40</td>
+<td>Size of the tile, from 28 to 56</td>
+</tr>
+<tr>
+<td>Icons per row in the opened folder</td>
+<td>4</td>
+<td>Width of the panel, from 1 to 10 icons</td>
+</tr>
+</tbody>
+</table>
+<p>Renaming a mini folder that uses the default path points it to a new, empty
+folder. The old folder and its contents stay on disk.</p>
+<h2>Files and folders the mod creates</h2>
+<ul>
+<li>The folder of a mini folder (by default inside <code>%USERPROFILE%\TaskbarFolders</code>),
+created when you first use <strong>+ Add...</strong> or <strong>Open folder</strong> in it.</li>
+<li>The shortcuts that <strong>+ Add...</strong> puts into that folder.</li>
+</ul>
+<p>These are your files. The mod never deletes them, so they stay on disk after
+the mod is disabled or removed. Delete the <code>TaskbarFolders</code> folder yourself if
+you no longer need it.</p>
+<h2>Performance</h2>
+<ul>
+<li>Folder contents and icons are read on a background thread, never on the
+taskbar thread, so a slow disk or a network folder can't freeze the taskbar.</li>
+<li>Nothing runs in the background: no timers and no folder watching. The tile
+preview is refreshed when you open the mini folder or change it from the
+panel.</li>
+<li>Opening the same mini folder again reuses the icons that are already loaded.</li>
+</ul>
+<h2>Limitations</h2>
+<ul>
+<li>Windows 11 with the new taskbar only. It doesn't work with the old taskbar
+restored by ExplorerPatcher or similar tools.</li>
+<li>If you change a folder in Explorer, the tile preview updates the next time
+you open that mini folder.</li>
+<li>Dragging items onto a mini folder is not supported. Use <strong>+ Add...</strong> or
+<strong>Open folder</strong>.</li>
+<li>The panel does not scroll. A folder with many items gets more icons per row
+so that the panel fits the screen. Items that still don't fit are not shown.</li>
+</ul>
+<p>Tip: unpin the normal taskbar icons and keep everything in mini folders.</p>
+]]></content>
+        <author>
+            <name>Sanekx Arcs</name>
+            <uri>https://github.com/SanekxArcs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Yandex Music Transparency 1.1]]></title>
         <id>https://windhawk.net/mods/yandex-music-transparency#8f4eaeef62ea9804e81a529e792d7423b45d5c04</id>
@@ -1270,77 +1403,6 @@ Ported from my repository <a href="https://github.com/milestprower92/Flip3DComp"
         <author>
             <name>Tails (milestprower92)</name>
             <uri>https://github.com/milestprower92</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Glass Widget Bar 0.3.0]]></title>
-        <id>https://windhawk.net/mods/glass-widget-bar#e15fbd5849181300898fa85c39f855e0e977562c</id>
-        <link href="https://windhawk.net/mods/glass-widget-bar"/>
-        <updated>2026-11-16T19:05:21.000Z</updated>
-        <content type="html"><![CDATA[<h1>Glass Widget Bar</h1>
-<p>A desktop widget bar that sits in a frosted-glass frame: the blurred wallpaper
-shows through a soft, dark-tinted rounded panel with thin light edges. The
-widgets have no glass of their own; they are drawn straight onto the frame and
-separated by thin dividers.</p>
-<p><img src="https://raw.githubusercontent.com/TheRealAlperN/glass-widget-bar/main/screenshots/glass-widget-bar.gif" alt="Glass Widget Bar in English, Turkish, German and Japanese"></p>
-<table>
-<thead>
-<tr>
-<th>Widget</th>
-<th>What it does</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Clock</strong></td>
-<td>Analog clock with an orange second hand</td>
-</tr>
-<tr>
-<td><strong>Calendar</strong></td>
-<td>Weekday, large day number, month grid; today is highlighted in red</td>
-</tr>
-<tr>
-<td><strong>Music</strong></td>
-<td>The track that is playing right now (Spotify, browser, Media Player...), cover art, progress and ⏮ ⏯ ⏭ buttons</td>
-</tr>
-</tbody>
-</table>
-<h2>Languages</h2>
-<p>Labels, day names and month names follow your <strong>Windows display language</strong>
-automatically. You can also pick a language in the settings.</p>
-<p>English, Türkçe, Deutsch, Français, Español, Italiano, Português (Brasil),
-Nederlands, Polski, Русский, Українська, Čeština, Svenska, Dansk, Norsk bokmål,
-Suomi, Ελληνικά, Magyar, Română, Български, Bahasa Indonesia, Tiếng Việt, ไทย,
-हिन्दी, 日本語, 한국어, 简体中文, 繁體中文.</p>
-<p>Other display languages fall back to English. The first day of the week in
-the calendar follows your Windows regional format (or the chosen language).
-Right-to-left languages are not supported yet. The translations are
-machine-assisted, corrections are welcome.</p>
-<h2>Notes</h2>
-<ul>
-<li>The default layer is the <strong>desktop</strong>: windows cover the bar. Press the
-hotkey (default <strong>Ctrl+Alt+W</strong>) to bring it to the front (press again to
-send it back), or set &quot;Always on top&quot; in the settings.</li>
-<li>The hotkey, its modifier keys and its key can be changed or turned off in
-the settings. Windows reports AltGr as Ctrl+Alt, so if your keyboard layout
-types characters with AltGr, pick a combination without Alt. If another app
-already owns the combination it cannot be registered; the Windhawk log then
-says so.</li>
-<li>Works on the primary monitor only. A picture wallpaper is expected.</li>
-<li>The defaults of the frame (opacity 15, blur 10) match the dock mod this
-frame comes from. If your wallpaper is very bright, raise the opacity.</li>
-<li>The music widget reads the Windows media session, so every app that
-publishes one is shown.</li>
-<li>Developed on Windows 11 (64-bit).</li>
-</ul>
-<h2>Credits and license</h2>
-<p>The frame (rounded &quot;squircle&quot; corners, edge glow and edge lines) is ported
-from <strong>MacOS Style Dock</strong> by Zach Vaughn (GPL-3.0). This mod is therefore
-released under <strong>GPL-3.0</strong> as well.</p>
-]]></content>
-        <author>
-            <name>TheRealAlperN</name>
-            <uri>https://github.com/TheRealAlperN</uri>
         </author>
     </entry>
 </feed>

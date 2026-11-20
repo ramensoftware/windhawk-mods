@@ -1,3 +1,8 @@
+## 1.1.1 ([Nov 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/69f6ccec6e3207fdfc7d0d9dbaea5bf13a08e2cf/mods/winrar-tweaks.wh.cpp))
+
+* **Readable Status Bar Sizes:** The bottom status bar now displays selected and total file sizes in clean units (`KB`, `MB`, `GB`) instead of long byte numbers.
+* **`Ctrl+Backspace` in Search Bar:** Fixed `Ctrl+Backspace` in the quick filter box so it deletes the previous word instead of typing a square box character.
+
 ## 1.1.0 ([Nov 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d70192267c179a459be7217c1f56d3cc96f94736/mods/winrar-tweaks.wh.cpp))
 
 ### ✨ New Features
