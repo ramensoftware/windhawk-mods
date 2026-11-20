@@ -2,7 +2,7 @@
 // @id              batteryhub-custom-taskbar-integration
 // @name            BatteryHub Integration to Custom Taskbar
 // @description     Places the BatteryHub mouse/keyboard battery widget next to the tray arrow on custom-styled taskbars, without its background box
-// @version         1.4
+// @version         1.5
 // @author          jaysix06
 // @github          https://github.com/jaysix06
 // @homepage        https://github.com/jaysix06/batteryhub-custom-taskbar-integration
@@ -141,6 +141,7 @@ struct TrayState {
     // Worker thread only:
     IUIAutomationElement* button = nullptr;
     int pollsSinceSearch = 0;
+    bool lastSearchFailed = false;
 };
 
 static TrayState g_trays[8];
@@ -148,6 +149,8 @@ static TrayState g_trays[8];
 // Re-search the tray button now and then, so that e.g. a "show hidden icons"
 // arrow that appears later replaces a fallback element.
 constexpr int kResearchEveryPolls = 8;
+// How often to retry when no tray button was found.
+constexpr int kRetryFailedSearchEveryPolls = 4;
 
 static TrayState* FindTrayState(HWND tray) {
     for (auto& s : g_trays) {
@@ -171,6 +174,7 @@ static TrayState* GetOrCreateTrayState(HWND tray) {
             }
             s.anchor.store(kNoAnchor);
             s.pollsSinceSearch = 0;
+            s.lastSearchFailed = false;
             s.tray.store(tray);
             return &s;
         }
@@ -252,10 +256,17 @@ static bool GetTrayButtonRect(IUIAutomation* uia, TrayState* s, RECT* out) {
         s->button->Release();
         s->button = nullptr;
     }
+    // After a failed search (e.g. a taskbar without a notification area),
+    // wait a few polls before searching Explorer's UI tree again.
+    if (!s->button && s->lastSearchFailed &&
+        ++s->pollsSinceSearch < kRetryFailedSearchEveryPolls) {
+        return false;
+    }
     for (int attempt = 0; attempt < 2; attempt++) {
         if (!s->button) {
             s->button = FindTrayButton(uia, s->tray.load());
             s->pollsSinceSearch = 0;
+            s->lastSearchFailed = !s->button;
         }
         if (!s->button) {
             return false;
@@ -411,7 +422,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         }
         DWORD w = WaitForMultipleObjects(2, events, FALSE,
                                          g_settings.pollIntervalMs);
-        if (w == WAIT_OBJECT_0) {
+        if (w == WAIT_OBJECT_0 || w == WAIT_FAILED) {
             break;
         }
     }
@@ -732,6 +743,17 @@ BOOL Wh_ModInit() {
     LoadSettings();
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_wakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_stopEvent || !g_wakeEvent) {
+        Wh_Log(L"Failed to create events");
+        if (g_stopEvent) {
+            CloseHandle(g_stopEvent);
+        }
+        if (g_wakeEvent) {
+            CloseHandle(g_wakeEvent);
+        }
+        g_stopEvent = g_wakeEvent = nullptr;
+        return FALSE;
+    }
     WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook,
                                    &SetWindowPos_Original);
     WindhawkUtils::SetFunctionHook(MoveWindow, MoveWindow_Hook,
