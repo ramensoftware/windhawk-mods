@@ -20,7 +20,7 @@ A [Windhawk](https://windhawk.net) mod that replaces the Windows 11 Start menu w
 
 Press the **Windows key** (or click **Start**) and type, or pick what you want to search from the menu that drops down from the bar.
 
-![Original Siri mode](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/siri-plus-launchpad-1.3.webp)
+![Original Siri mode](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/siri-plus-launchpad-1.3.0.webp)
 
 ---
 
@@ -1022,6 +1022,9 @@ const UiTranslation kUiTranslations[] = {
     {L"Everything is still indexing...", L"O Everything ainda está indexando...", L"Everything todavía está indexando...", L"Everything est encore en cours d’indexation...", L"Everything indiziert noch...", L"Everything sta ancora indicizzando..."},
     {L"All", L"Todos", L"Todas", L"Toutes", L"Alle", L"Tutte"},
     {L"Cancel", L"Cancelar", L"Cancelar", L"Annuler", L"Abbrechen", L"Annulla"},
+    {L"Yes", L"Sim", L"Sí", L"Oui", L"Ja", L"Sì"},
+    {L"No", L"Não", L"No", L"Non", L"Nein", L"No"},
+    {L"OK", L"OK", L"Aceptar", L"OK", L"OK", L"OK"},
     {L"Done (%d)", L"Concluir (%d)", L"Listo (%d)", L"Terminé (%d)", L"Fertig (%d)", L"Fine (%d)"},
     {L"New tab", L"Nova aba", L"Nueva pestaña", L"Nouvel onglet", L"Neuer Tab", L"Nuova scheda"},
     {L"New tab with this app", L"Nova aba com este aplicativo", L"Nueva pestaña con esta aplicación", L"Nouvel onglet avec cette application", L"Neuer Tab mit dieser App", L"Nuova scheda con questa app"},
@@ -1207,6 +1210,9 @@ const ZhTranslation kZhTranslations[] = {
     {L"Everything is still indexing...", L"Everything 仍在建立索引..."},
     {L"All", L"全部"},
     {L"Cancel", L"取消"},
+    {L"Yes", L"是"},
+    {L"No", L"否"},
+    {L"OK", L"确定"},
     {L"Done (%d)", L"完成（%d）"},
     {L"New tab", L"新建标签"},
     {L"New tab with this app", L"用此应用新建标签"},
@@ -10127,6 +10133,238 @@ void HideGlass() {
     g_glassPlaced = RECT{};
 }
 
+// ---------- Alerts in the launcher (macOS style) ----------
+void Render();
+void StartFrames();
+void OnFrame();
+void CfgSurface(const D2D1_RECT_F& r, float rad, float alpha, bool tint);
+extern bool g_cfgWinLight;
+extern HANDLE g_frameWaitTimer;
+extern bool g_frameTimer;
+// Messages (backup saved, restore this backup?...) are drawn inside the launcher with the chosen theme, like a macOS
+// alert: the glass of the theme, a symbol on top, a bold title, the text under it and rounded buttons side by side
+// (the main one in the selection color). MacAlert waits for the answer like MessageBox, with a message loop of its own.
+struct AlertButton { std::wstring label; int id; bool primary; D2D1_RECT_F r; };
+struct AlertState {
+    bool active = false;
+    std::wstring title, body;
+    PCWSTR glyph = L"";
+    std::vector<AlertButton> buttons;
+    int hover = -1, pressed = -1, focus = -1, result = 0, cancelId = IDCANCEL;
+    double start = 0;
+    D2D1_RECT_F rect{};
+};
+AlertState g_alert;
+[[clang::no_destroy]] ComPtr<IDWriteTextFormat> g_alertTitleFmt, g_alertBodyFmt, g_alertButtonFmt;
+float g_alertFmtScale;
+
+float AlertTextHeight(const std::wstring& text, IDWriteTextFormat* fmt, float width) {
+    if (text.empty() || !fmt) return 0;
+    ComPtr<IDWriteTextLayout> layout;
+    DWRITE_TEXT_METRICS tm{};
+    if (FAILED(g_dwrite->CreateTextLayout(text.c_str(), (UINT32)text.size(), fmt, width, 4000, &layout)) || FAILED(layout->GetMetrics(&tm))) return 0;
+    return std::ceil(tm.height);
+}
+
+void DrawMacAlert(const Layout& L) {
+    if (!g_alert.active) return;
+    float s = L.scale, W = (float)L.width, H = (float)L.height;
+    if (!g_alertTitleFmt || g_alertFmtScale != s) {
+        g_alertFmtScale = s;
+        auto make = [&](float px, DWRITE_FONT_WEIGHT w, ComPtr<IDWriteTextFormat>& f) {
+            f.Reset();
+            if (SUCCEEDED(g_dwrite->CreateTextFormat(L"Segoe UI Variable Text", nullptr, w, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, px * s, L"", &f))) {
+                f->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                f->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+                f->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+            }
+        };
+        make(14.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD, g_alertTitleFmt);
+        make(12.5f, DWRITE_FONT_WEIGHT_NORMAL, g_alertBodyFmt);
+        make(13.0f, DWRITE_FONT_WEIGHT_MEDIUM, g_alertButtonFmt);
+        if (g_alertButtonFmt) g_alertButtonFmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    }
+    // Size: as wide as a macOS alert, as tall as its text
+    float w = std::min(std::round(300 * s), W - 24 * s), pad = std::round(20 * s), inner = w - 2 * pad;
+    float iconD = std::round(52 * s), btnH = std::round(32 * s), gap = std::round(10 * s);
+    float titleH = AlertTextHeight(g_alert.title, g_alertTitleFmt.Get(), inner);
+    float bodyH = AlertTextHeight(g_alert.body, g_alertBodyFmt.Get(), inner);
+    float h = pad + iconD + gap + titleH + (bodyH > 0 ? std::round(6 * s) + bodyH : 0) + std::round(18 * s) + btnH + pad;
+    // Where: on the settings window, on the results box, or under the bar
+    float cx = W / 2, cy = H / 2;
+    if (g_cfg.active) { cx = (g_cfg.window.left + g_cfg.window.right) / 2; cy = (g_cfg.window.top + g_cfg.window.bottom) / 2; }
+    else if (g_settings.siri) {
+        cx = (L.search.left + L.search.right) / 2;
+        bool panel = L.siriPanel.bottom - L.siriPanel.top > h * 0.6f;
+        cy = panel ? (L.siriPanel.top + L.siriPanel.bottom) / 2 : (g_siriFlip ? L.search.top - 16 * s - h / 2 : L.search.bottom + 16 * s + h / 2);
+    }
+    float left = std::clamp(std::round(cx - w / 2), 8 * s, std::max(8 * s, W - w - 8 * s));
+    float top = std::clamp(std::round(cy - h / 2), 8 * s, std::max(8 * s, H - h - 8 * s));
+    D2D1_RECT_F r = D2D1::RectF(left, top, left + w, top + h);
+    g_alert.rect = r;
+    // Opening: a quick fade with a small zoom, as on macOS
+    float t = (float)std::clamp((Now() - g_alert.start) / 0.2, 0.0, 1.0), e = Ease(t);
+    float k = 0.92f + 0.08f * BackOutK(t, 1.4f);
+    D2D1::Matrix3x2F base;
+    g_target->GetTransform(&base);
+    g_target->SetTransform(D2D1::Matrix3x2F::Scale(k, k, D2D1::Point2F(cx, (r.top + r.bottom) / 2)) * base);
+    PushOpacity(e);
+    float rad = std::round(22 * s);
+    // Over the settings window it looks like that window (its own glass, blur, transparency and tone when it has them,
+    // no backlight); elsewhere like the theme
+    const bool cfgLook = g_cfg.active;
+    const bool savedDark = g_settings.darkText, savedNoBacklight = g_noBacklight;
+    if (cfgLook) { if (CfgWindowOwnBackground()) g_settings.darkText = g_cfgWinLight; g_noBacklight = true; }
+    if (cfgLook) CfgSurface(r, rad, 1.0f, false);
+    else DrawThemedShape(r, rad, BlurStrength() > 0 ? GetBackdropBitmap() : nullptr, true);
+    // The symbol on a round glass
+    D2D1_RECT_F icon = D2D1::RectF(cx - iconD / 2, r.top + pad, cx + iconD / 2, r.top + pad + iconD);
+    icon.left = r.left + (w - iconD) / 2; icon.right = icon.left + iconD;
+    DrawGlassButton(icon, iconD / 2, 1.0f, 1.3f, false);
+    if (g_glyphLargeFormat) {
+        g_brush->SetColor(Fg(0.92f));
+        D2D1::Matrix3x2F m2;
+        g_target->GetTransform(&m2);
+        D2D1_POINT_2F ic = D2D1::Point2F((icon.left + icon.right) / 2, (icon.top + icon.bottom) / 2);
+        g_target->SetTransform(D2D1::Matrix3x2F::Scale(1.35f, 1.35f, ic) * m2);
+        g_target->DrawText(g_alert.glyph, (UINT32)wcslen(g_alert.glyph), g_glyphLargeFormat.Get(), icon, g_brush.Get());
+        g_target->SetTransform(m2);
+    }
+    float y = icon.bottom + gap;
+    if (g_alertTitleFmt) {
+        g_brush->SetColor(Fg(0.96f));
+        g_target->DrawText(g_alert.title.c_str(), (UINT32)g_alert.title.size(), g_alertTitleFmt.Get(), D2D1::RectF(r.left + pad, y, r.right - pad, y + titleH + 2), g_brush.Get());
+        y += titleH;
+    }
+    if (bodyH > 0 && g_alertBodyFmt) {
+        y += std::round(6 * s);
+        g_brush->SetColor(Fg(0.72f));
+        g_target->DrawText(g_alert.body.c_str(), (UINT32)g_alert.body.size(), g_alertBodyFmt.Get(), D2D1::RectF(r.left + pad, y, r.right - pad, y + bodyH + 2), g_brush.Get());
+    }
+    // Buttons side by side (one button: the whole width); the main one on the right, in the selection color
+    int n = (int)g_alert.buttons.size();
+    float bTop = r.bottom - pad - btnH, bw = n > 0 ? (inner - gap * (n - 1)) / n : inner;
+    for (int i = 0; i < n; i++) {
+        AlertButton& b = g_alert.buttons[i];
+        b.r = D2D1::RectF(r.left + pad + i * (bw + gap), bTop, r.left + pad + i * (bw + gap) + bw, bTop + btnH);
+        bool hot = i == g_alert.hover, down = i == g_alert.pressed && hot;
+        if (b.primary) {
+            D2D1_COLOR_F c = cfgLook ? D2D1::ColorF(g_settings.darkText ? 0x007AFF : 0x0A84FF) : g_settings.menuSelectionColor;   // the settings' blue
+            if (down) { c.r *= 0.85f; c.g *= 0.85f; c.b *= 0.85f; }
+            Fill(b.r, Alpha(c, 1.0f), btnH / 2);
+            D2D1_GRADIENT_STOP sheen[2] = {{0.0f, D2D1::ColorF(1, 1, 1, hot ? 0.24f : 0.16f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.0f)}};
+            if (auto top = MakeGradient(sheen, 2, D2D1::Point2F(0, b.r.top), D2D1::Point2F(0, b.r.bottom)))
+                g_target->FillRoundedRectangle(D2D1::RoundedRect(b.r, btnH / 2, btnH / 2), top.Get());
+        } else {
+            DrawGlassButton(b.r, btnH / 2, 1.0f, down ? 2.0f : hot ? 1.6f : 1.1f, false);
+        }
+        if (i == g_alert.focus) {   // the keyboard's button
+            g_brush->SetColor(b.primary ? D2D1::ColorF(1, 1, 1, 0.8f) : Fg(0.6f));
+            D2D1_RECT_F f = D2D1::RectF(b.r.left - 2.5f * s, b.r.top - 2.5f * s, b.r.right + 2.5f * s, b.r.bottom + 2.5f * s);
+            g_target->DrawRoundedRectangle(D2D1::RoundedRect(f, btnH / 2 + 2.5f * s, btnH / 2 + 2.5f * s), g_brush.Get(), 1.5f * s);
+        }
+        if (g_alertButtonFmt) {
+            g_brush->SetColor(b.primary ? D2D1::ColorF(1, 1, 1, 0.98f) : Fg(0.92f));
+            g_target->DrawText(b.label.c_str(), (UINT32)b.label.size(), g_alertButtonFmt.Get(), b.r, g_brush.Get());
+        }
+    }
+    g_target->PopLayer();
+    g_target->SetTransform(base);
+    g_settings.darkText = savedDark; g_noBacklight = savedNoBacklight;
+}
+
+int AlertButtonAt(float x, float y) {
+    for (int i = 0; i < (int)g_alert.buttons.size(); i++) if (InRect(g_alert.buttons[i].r, x, y)) return i;
+    return -1;
+}
+
+// The input of the launcher's window while an alert is up: the buttons answer, everything else is ignored
+bool AlertInput(const MSG& msg) {
+    switch (msg.message) {
+        case WM_MOUSEMOVE: {
+            int h = AlertButtonAt((float)GET_X_LPARAM(msg.lParam), (float)GET_Y_LPARAM(msg.lParam));
+            if (h != g_alert.hover) { g_alert.hover = h; Render(); }
+            return true;
+        }
+        case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK:
+            g_alert.pressed = AlertButtonAt((float)GET_X_LPARAM(msg.lParam), (float)GET_Y_LPARAM(msg.lParam));
+            Render();
+            return true;
+        case WM_LBUTTONUP: {
+            int b = AlertButtonAt((float)GET_X_LPARAM(msg.lParam), (float)GET_Y_LPARAM(msg.lParam));
+            if (b >= 0 && b == g_alert.pressed) { g_alert.result = g_alert.buttons[b].id; g_alert.active = false; }
+            g_alert.pressed = -1;
+            Render();
+            return true;
+        }
+        case WM_KEYDOWN: {
+            int n = (int)g_alert.buttons.size();
+            if (msg.wParam == VK_RETURN || msg.wParam == VK_SPACE) {
+                if (g_alert.focus >= 0 && g_alert.focus < n) { g_alert.result = g_alert.buttons[g_alert.focus].id; g_alert.active = false; }
+            } else if (msg.wParam == VK_ESCAPE) {
+                g_alert.result = g_alert.cancelId; g_alert.active = false;
+            } else if (n > 1 && (msg.wParam == VK_TAB || msg.wParam == VK_LEFT || msg.wParam == VK_RIGHT)) {
+                bool back = msg.wParam == VK_LEFT || (msg.wParam == VK_TAB && (GetKeyState(VK_SHIFT) & 0x8000));
+                g_alert.focus = ((g_alert.focus + (back ? -1 : 1)) % n + n) % n;
+                Render();
+            }
+            return true;
+        }
+        case WM_RBUTTONDOWN: case WM_RBUTTONUP: case WM_RBUTTONDBLCLK: case WM_MBUTTONDOWN: case WM_MBUTTONUP:
+        case WM_MOUSEWHEEL: case WM_MOUSEHWHEEL: case WM_CHAR: case WM_KEYUP: case WM_SYSKEYDOWN: case WM_SYSKEYUP: case WM_CONTEXTMENU:
+            return true;
+    }
+    return false;
+}
+
+void ForceForeground(HWND);
+// Like MessageBoxW (MB_OK, MB_OKCANCEL or MB_YESNO, with MB_ICONINFORMATION / MB_ICONWARNING / MB_ICONQUESTION), but drawn in the
+// launcher with its theme. The first paragraph is the title; the rest is the text under it
+int MacAlert(PCWSTR text, UINT flags) {
+    if (!g_wnd || !g_shown || g_alert.active) return MessageBoxW(g_wnd, text, L"Siri Plus Launchpad", flags);
+    std::wstring all = text;
+    size_t cut = all.find(L"\n\n");
+    AlertState a;
+    a.title = cut == std::wstring::npos ? all : all.substr(0, cut);
+    a.body = cut == std::wstring::npos ? std::wstring() : all.substr(cut + 2);
+    UINT icon = flags & MB_ICONMASK, kind = flags & MB_TYPEMASK;
+    a.glyph = icon == MB_ICONWARNING ? L"" : icon == MB_ICONQUESTION ? L"" : icon == MB_ICONERROR ? L"" : L"";
+    if (kind == MB_YESNO) { a.buttons = {{Tr(L"No"), IDNO, false, {}}, {Tr(L"Yes"), IDYES, true, {}}}; a.cancelId = IDNO; }
+    else if (kind == MB_OKCANCEL) { a.buttons = {{Tr(L"Cancel"), IDCANCEL, false, {}}, {Tr(L"OK"), IDOK, true, {}}}; a.cancelId = IDCANCEL; }
+    else { a.buttons = {{Tr(L"OK"), IDOK, true, {}}}; a.cancelId = IDOK; }
+    a.focus = (int)a.buttons.size() - 1;   // Enter: the main button
+    a.result = a.cancelId;
+    a.active = true;
+    a.start = Now();
+    g_alert = std::move(a);
+    if (g_menu.open) { g_menu.open = false; }
+    if (GetCapture() == g_wnd) ReleaseCapture();
+    ForceForeground(g_wnd);
+    Render();
+    MSG msg;
+    bool quit = false;
+    while (g_alert.active && !quit) {
+        if (!g_shown) { g_alert.result = g_alert.cancelId; break; }   // the launcher was closed meanwhile (Win key...)
+        // As the launcher's own loop: the frame timer keeps the animations (backlight, chrome) going under the alert
+        bool opening = Now() - g_alert.start < 0.25;
+        if (opening) Render();
+        DWORD handles = g_frameWaitTimer ? 1 : 0;
+        DWORD wait = MsgWaitForMultipleObjectsEx(handles, handles ? &g_frameWaitTimer : nullptr, opening ? 15 : INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        if (handles && wait == WAIT_OBJECT_0 && g_frameTimer) OnFrame();
+        while (g_alert.active && PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) { PostQuitMessage((int)msg.wParam); quit = true; g_alert.result = g_alert.cancelId; break; }
+            if (msg.hwnd == g_wnd && AlertInput(msg)) continue;
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+    int result = g_alert.result;
+    g_alert.active = false;
+    g_alert.buttons.clear();
+    if (g_shown) { Render(); StartFrames(); }
+    return result;
+}
+
 struct GlassPiece { D2D1_RECT_F r; float radius; };
 
 // The shapes the live blur goes under (window coordinates, after the opening animation transform)
@@ -10135,7 +10373,7 @@ void CollectGlassPieces(const Layout& L, const D2D1::Matrix3x2F& m, std::vector<
     alpha = 1.0f;
     if (g_settings.siri) {
         float ia = PillIntroAlpha(), pa = std::min(1.0f, g_siriAnim * 4);
-        if (g_cfg.active) { CfgCollectGlass(out); alpha = 1.0f; return; }
+        if (g_cfg.active) { CfgCollectGlass(out); alpha = 1.0f; if (g_alert.active) out.push_back({g_alert.rect, 22 * s}); return; }
         if (ia > 0.02f) out.push_back({L.search, (L.search.bottom - L.search.top) / 2});
         if (L.btnPower.right > L.btnPower.left && g_siriBtnAnim > 0.3f) out.push_back({L.btnPower, (L.btnPower.right - L.btnPower.left) / 2});
         float powerH = L.siriPower.bottom - L.siriPower.top;
@@ -10157,6 +10395,7 @@ void CollectGlassPieces(const Layout& L, const D2D1::Matrix3x2F& m, std::vector<
         out.push_back({D2D1::RectF(std::min(a.x, b.x), std::min(a.y, b.y), std::max(a.x, b.x), std::max(a.y, b.y)), radius * std::fabs(m._11)});
     }
     if (g_menu.open) out.push_back({g_menu.rect, (g_menu.category ? 24 : 14) * s});
+    if (g_alert.active) out.push_back({g_alert.rect, 22 * s});
 }
 
 // Cuts the live blur to the shapes and keeps the glass window right under ours
@@ -10333,6 +10572,7 @@ void Render() {
     g_target->SetTransform(D2D1::Matrix3x2F::Identity());
 
 present:
+    if (g_alert.active) { g_target->SetTransform(D2D1::Matrix3x2F::Identity()); DrawMacAlert(L); }   // over everything, in the theme
     HRESULT drawn = g_target->EndDraw();
     if (drawn == D2DERR_RECREATE_TARGET) { ResetTarget(); return; }   // the next frame makes a new target
     const float windowAlpha = std::clamp(fx.alpha, 0.0f, 1.0f);
@@ -12268,10 +12508,7 @@ void ExecuteMenu(int id) {
                 for (App* a : AllApps()) if (g_selection.count(a)) ok = CreateDesktopShortcut(*a) && ok;   // (folder apps too: Floating)
             } else if (app) ok = CreateDesktopShortcut(*app);
             if (!ok) {
-                DialogBegin(false);
-                MessageBoxW(g_wnd, Tr(L"Could not create the shortcut."), L"Siri Plus Launchpad", MB_ICONWARNING);
-                DialogEnd();
-                if (g_shown) ForceForeground(g_wnd);
+                MacAlert(Tr(L"Could not create the shortcut."), MB_ICONWARNING);
             }
             break;
         }
@@ -14282,13 +14519,8 @@ std::wstring StorageString(PCWSTR key) {
 }
 
 // A message over the launcher (it stays open while the box is up)
-int BackupMessage(PCWSTR text, UINT flags) {
-    DialogBegin(false);
-    int r = MessageBoxW(g_wnd, text, L"Siri Plus Launchpad", flags);
-    DialogEnd();
-    if (g_shown) ForceForeground(g_wnd);
-    return r;
-}
+int MacAlert(PCWSTR text, UINT flags);
+int BackupMessage(PCWSTR text, UINT flags) { return MacAlert(text, flags); }   // drawn in the launcher, in the theme
 
 bool PickBackupFile(bool save, std::wstring& out) {
     ComPtr<IFileDialog> dlg;
@@ -14304,6 +14536,11 @@ bool PickBackupFile(bool save, std::wstring& out) {
         swprintf_s(name, L"SiriPlusLaunchpad %04d-%02d-%02d.siribackup", st.wYear, st.wMonth, st.wDay);
         dlg->SetFileName(name);
     }
+    if (save) {   // "already exists, replace it?" is asked by the launcher (in its look), not by Windows' dialog
+        DWORD options = 0;
+        dlg->GetOptions(&options);
+        dlg->SetOptions(options & ~FOS_OVERWRITEPROMPT);
+    }
     DialogBegin(true);
     HRESULT hr = dlg->Show(g_wnd);
     DialogEnd();
@@ -14311,6 +14548,12 @@ bool PickBackupFile(bool save, std::wstring& out) {
     ComPtr<IShellItem> res; PWSTR path = nullptr;
     if (FAILED(hr) || FAILED(dlg->GetResult(&res)) || FAILED(res->GetDisplayName(SIGDN_FILESYSPATH, &path))) return false;
     out = path; CoTaskMemFree(path);
+    if (save && GetFileAttributesW(out.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        std::wstring name = out.substr(out.find_last_of(L"\\/") + 1);
+        wchar_t text[600];
+        swprintf(text, 600, CfgT(L"\u201C%ls\u201D already exists.\n\nDo you want to replace it?", L"\u201C%ls\u201D j\u00E1 existe.\n\nDeseja substitu\u00ED-lo?"), name.c_str());
+        if (MacAlert(text, MB_YESNO | MB_ICONWARNING) != IDYES) return false;
+    }
     return true;
 }
 
@@ -15323,10 +15566,7 @@ void OnGhColorTimer() {
 void GhApply(const std::wstring& path) {
     std::wstring file;
     if (!GhEnsureFile(g_gh.key, path, file)) {
-        DialogBegin(false);
-        MessageBoxW(g_wnd, CfgT(L"This image is no longer in the folder.", L"Esta imagem não está mais na pasta."), L"Siri Plus Launchpad", MB_ICONWARNING);
-        DialogEnd();
-        if (g_shown) ForceForeground(g_wnd);
+        MacAlert(CfgT(L"This image is no longer in the folder.", L"Esta imagem não está mais na pasta."), MB_ICONWARNING);
         return;
     }
     std::wstring target = g_gh.target;
@@ -15337,10 +15577,7 @@ void GhApply(const std::wstring& path) {
     for (auto& a : g_apps) apply(*a);
     for (auto& f : g_folders) for (auto& a : f.apps) apply(*a);
     if (!applied) {
-        DialogBegin(false);
-        MessageBoxW(g_wnd, CfgT(L"Could not load this image.", L"Não foi possível carregar esta imagem."), L"Siri Plus Launchpad", MB_ICONWARNING);
-        DialogEnd();
-        if (g_shown) ForceForeground(g_wnd);
+        MacAlert(CfgT(L"Could not load this image.", L"Não foi possível carregar esta imagem."), MB_ICONWARNING);
         return;
     }
     g_customIcons[target] = file;
@@ -15682,7 +15919,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             return 0;
         case WM_ACTIVATE:
-            if (LOWORD(wParam) == WA_INACTIVE && g_shown && !g_closing && !g_dialogOpen) {
+            if (LOWORD(wParam) == WA_INACTIVE && g_shown && !g_closing && !g_dialogOpen && !g_alert.active) {
                 g_lastClosed = Now();
                 if (g_cfg.active) CfgExit();   // clicking outside the settings: they close with their animation
                 else Close();
@@ -15690,6 +15927,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         case WM_SETCURSOR:
             if (g_barDrag.active) { SetCursor(LoadCursorW(nullptr, IDC_SIZEALL)); return TRUE; }
+            if (g_alert.active && LOWORD(lParam) == HTCLIENT) { SetCursor(LoadCursorW(nullptr, IDC_ARROW)); return TRUE; }
             if (LOWORD(lParam) == HTCLIENT) {
                 POINT p; GetCursorPos(&p); ScreenToClient(hwnd, &p);
                 bool hand = TabAt((float)p.x, (float)p.y) >= 0 || FilterAt((float)p.x, (float)p.y) != kNoChip ||
