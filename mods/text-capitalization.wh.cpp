@@ -1880,7 +1880,7 @@ BOOL WhTool_ModInit() {
     g_modInstance = GetModuleHandleW(nullptr);
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                       reinterpret_cast<LPCWSTR>(&Wh_ModInit), &g_modModule);
+                       reinterpret_cast<LPCWSTR>(&WhTool_ModInit), &g_modModule);
 
     int storedMode = Wh_GetIntValue(L"ActiveMode", static_cast<int>(CaseMode::Title));
     if (!IsValidMode(storedMode)) {
