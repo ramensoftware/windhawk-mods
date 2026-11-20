@@ -28,7 +28,7 @@ Explorer Item Pins keeps selected files and folders at the top of their parent f
 
 ## Features
 
-| ![Dark theme with large icons and the Pin command](https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Explorer_Item_Pins/Assets/Screenshots/Dark_Large_Icons.png) | ![Light theme with the Unpin command and its toolbar tooltip](https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Explorer_Item_Pins/Assets/Screenshots/Light_Small_Icons.png) |
+| ![Dark theme with large icons and the Pin command](https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/716454d4deebcc0180353c60e481a0b68aee37c0/Explorer_Item_Pins/Assets/Screenshots/Dark_Large_Icons.png) | ![Light theme with the Unpin command and its toolbar tooltip](https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/716454d4deebcc0180353c60e481a0b68aee37c0/Explorer_Item_Pins/Assets/Screenshots/Light_Small_Icons.png) |
 | :---: | :---: |
 
 - **Two ways to pin.** Use the modern context menu or the pin button between **Share** and **Delete** on the command bar.
