@@ -3,7 +3,7 @@
 // @name            Wheel Context Menu
 // @description     Replaces classic context menus with a fading, rotating wheel you can spin, scroll, type into and rearrange
 // @version         0.1
-// @author          JohhannasReyn
+// @author          Johhannas Reyn
 // @github          https://github.com/JohhannasReyn
 // @homepage        https://thegnosys.com
 // @include         explorer.exe
