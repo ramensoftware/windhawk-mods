@@ -9,7 +9,7 @@
 // @github              https://github.com/QCQ171-C
 // @include             dwm.exe
 // @architecture        x86-64
-// @compilerOptions     -lgdi32
+// @compilerOptions     -lgdi32 -lwevtapi 
 // @license             MPL-2.0
 // ==/WindhawkMod==
 
@@ -74,6 +74,7 @@ Feel free to test the mod and you can submit an issue when you meet problems.
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <winevt.h>
 
 // from Windows 10 uDWM
 constexpr float g_RectDuration = 0.2f;
@@ -1854,9 +1855,45 @@ static const WindhawkUtils::SYMBOL_HOOK uDWMhooks[] {
 	{ { L"public: static double __cdecl CDesktopManager::GetGlobalTime(void)" }, &g_GetGlobalTime, nullptr, true },
 };
 
+bool HasDwminitWarningRecently()
+{
+    const WCHAR* query =
+        L"*[System[Provider[@Name='Dwminit'] and (Level=3) and "
+        L"TimeCreated[timediff(@SystemTime) <= 10000]]]";
 
+    EVT_HANDLE queryHandle = EvtQuery(nullptr, L"Application", query, EvtQueryChannelPath);
+    if (!queryHandle)
+    {
+        Wh_Log(L"EvtQuery failed with error: %u", GetLastError());
+        return false;
+    }
+
+    bool found = false;
+    EVT_HANDLE eventHandle = nullptr;
+    DWORD dwReturned = 0;
+
+    if (EvtNext(queryHandle, 1, &eventHandle, 1000, 0, &dwReturned))
+    {
+        found = true;
+        EvtClose(eventHandle);
+    }
+    else if (GetLastError() != ERROR_NO_MORE_ITEMS)
+    {
+        Wh_Log(L"EvtNext failed with error: %u", GetLastError());
+    }
+
+    EvtClose(queryHandle);
+    return found;
+}
 
 BOOL Wh_ModInit() {
+    // Skip the event log query unless the previous init is recent. 
+    if (HasDwminitWarningRecently())
+    {
+        Wh_Log(L"Refusing to load: multiple recent Dwminit warnings");
+        return FALSE;
+    }
+
 	OSVERSIONINFOW version{};
 	version.dwOSVersionInfoSize = sizeof(version);
 	auto rtlGetVersion = RtlGetVersionFunction(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion"));
