@@ -2,7 +2,7 @@
 // @id              yandex-music-transparency
 // @name            Yandex Music Transparency
 // @description     Automatically applies and enforces custom transparency for Yandex Music
-// @version         1.1
+// @version         1.27
 // @author          NIKTO
 // @github          https://github.com/NIKTO-2
 // @include         Яндекс Музыка.exe
@@ -11,37 +11,70 @@
 
 // ==WindhawkModReadme==
 /*
+
 # Yandex Music Transparency
 
-Automatically makes the **Yandex Music** (`Яндекс Музыка.exe`) desktop window transparent on startup and continuously prevents the Electron application from resetting its opacity or removing `WS_EX_LAYERED`.
+Adds configurable transparency for the Yandex Music desktop application.
 
-Unlike one-shot rule-based or hotkey-based opacity mods, this mod injects into the process to actively preserve your chosen transparency level across window state changes and redraws.
+## Features
 
-## Settings
+- Custom opacity for active and inactive windows
+- Optional full opacity while the mouse hovers over the window
+- Smooth animated transitions between opacity levels (can be disabled)
+- Automatically enforces transparency even if the app tries to remove `WS_EX_LAYERED`
 
-* **Window Opacity (`Alpha`)**: Controls the opacity level from `50` (more transparent) to `255` (fully opaque). Default is `220`.
+## Notes
 
-## Using with other applications
+- Only the main application window (class `Chrome_WidgetWin_1`) is modified
+- Auxiliary Electron processes (`--type=*`) are ignored
+- Windows that already use `LWA_COLORKEY` are not modified
 
-Although tailored for Yandex Music by default, you can apply the same persistent transparency to other Chromium/Electron applications by adding their executable names in the mod's **Advanced** tab under **Custom process inclusion list**.
-
-## Limitations
-
-* Only affects top-level windows with the `Chrome_WidgetWin_1` window class.
-* Windows that already use color-key transparency (`LWA_COLORKEY`) are skipped to avoid visual artifacts.
-* Disabling or unloading the mod restores the window's original opacity and layered style.
-
-## Credits
-
-Created with assistance from ChatGPT.
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModChangelog==
+/*
+## 1.27
+
+- Fixed transparency being broken: the function that applies the target alpha
+  now ensures `WS_EX_LAYERED` is set first (and skips `LWA_COLORKEY`
+  windows). Previously the layered style was never applied, so
+  `SetLayeredWindowAttributes` failed and the window stayed opaque.
+
+## 1.26
+
+- Removed the `PlaybackAlpha` feature (title-based playback detection) — it
+  could interfere with normal transparency. Smooth transitions remain.
+
+## 1.25
+
+- Added smooth animated transitions between opacity levels (toggleable).
+- Added `PlaybackAlpha` — when a track is playing (title-based detection), a
+  separate opacity value is used. `0` disables this feature.
+
+## 1.24
+
+- Removed all background blur effects (Blur / Acrylic / Mica). The mod now
+  only provides window transparency.
+*/
+// ==/WindhawkModChangelog==
+
 // ==WindhawkModSettings==
 /*
-- Alpha: 220
-  $name: Window Opacity
-  $description: Transparency level from 50 (more transparent) to 255 (opaque).
+
+- Alpha: 180
+  $name: Active window opacity
+  $description: Opacity level of the active window (50-255)
+- InactiveAlpha: 0
+  $name: Inactive window opacity
+  $description: Opacity level of the inactive window. Set to 0 to use the active alpha value (50-255)
+- OpaqueOnHover: false
+  $name: Fully opaque on hover
+  $description: Make the window fully opaque while the mouse hovers over it
+- SmoothTransitions: true
+  $name: Smooth transitions
+  $description: Animate opacity changes instead of applying them instantly.
+
 */
 // ==/WindhawkModSettings==
 
@@ -55,12 +88,20 @@ Created with assistance from ChatGPT.
 
 struct Settings {
     int alpha;
+    int inactiveAlpha;
+    bool opaqueOnHover;
+    bool smoothTransitions;
 };
 
 struct OriginalWindowState {
     bool hadLayeredStyle;
     BYTE originalAlpha;
     bool hasOriginalAlpha;
+    bool isActive;
+    bool isHovered;
+    BYTE currentAlpha;      // currently applied alpha (0 = not initialized)
+    BYTE targetAlpha;       // desired alpha
+    bool alphaInitialized;
 };
 
 Settings g_settings;
@@ -68,10 +109,25 @@ std::mutex g_windowsMutex;
 std::unordered_map<HWND, OriginalWindowState> g_trackedWindows;
 bool g_unloading = false;
 
+constexpr UINT_PTR kHoverTimerId = 0x4D545248;  // 'MTRH'
+constexpr UINT kHoverTimerIntervalMs = 25;
+constexpr int kAnimStep = 10;  // alpha units per tick (25 ms)
+HWND g_timerOwner = nullptr;
+
 void LoadSettings() {
     g_settings.alpha = Wh_GetIntSetting(L"Alpha");
     if (g_settings.alpha < 50) g_settings.alpha = 50;
     if (g_settings.alpha > 255) g_settings.alpha = 255;
+
+    g_settings.inactiveAlpha = Wh_GetIntSetting(L"InactiveAlpha");
+    if (g_settings.inactiveAlpha != 0) {
+        if (g_settings.inactiveAlpha < 50) g_settings.inactiveAlpha = 50;
+        if (g_settings.inactiveAlpha > 255) g_settings.inactiveAlpha = 255;
+    }
+
+    g_settings.opaqueOnHover = Wh_GetIntSetting(L"OpaqueOnHover") != 0;
+
+    g_settings.smoothTransitions = Wh_GetIntSetting(L"SmoothTransitions") != 0;
 }
 
 bool IsTargetWindow(HWND hwnd) {
@@ -99,37 +155,131 @@ bool UsesColorKey(HWND hwnd) {
     return false;
 }
 
+BYTE ComputeTargetAlpha(const OriginalWindowState& state) {
+    if (g_settings.opaqueOnHover && state.isHovered) {
+        return 255;
+    }
+    if (!state.isActive && g_settings.inactiveAlpha > 0) {
+        return (BYTE)g_settings.inactiveAlpha;
+    }
+    return (BYTE)g_settings.alpha;
+}
+
 using SetLayeredWindowAttributes_t = decltype(&SetLayeredWindowAttributes);
 SetLayeredWindowAttributes_t SetLayeredWindowAttributes_Original;
 
 BOOL WINAPI SetLayeredWindowAttributes_Hook(HWND hwnd, COLORREF crKey, BYTE bAlpha, DWORD dwFlags) {
-    if (!g_unloading && IsTargetWindow(hwnd) && (dwFlags & LWA_ALPHA) && !(dwFlags & LWA_COLORKEY)) {
+    BYTE newAlpha = bAlpha;
+    if (!g_unloading && (dwFlags & LWA_ALPHA) && !(dwFlags & LWA_COLORKEY)) {
+        bool shouldReplace = false;
+        int computedAlpha = g_settings.alpha;
         {
             std::lock_guard<std::mutex> lock(g_windowsMutex);
             auto it = g_trackedWindows.find(hwnd);
             if (it != g_trackedWindows.end()) {
-                it->second.originalAlpha = bAlpha;
-                it->second.hasOriginalAlpha = true;
+                if (!it->second.hasOriginalAlpha) {
+                    it->second.originalAlpha = bAlpha;
+                    it->second.hasOriginalAlpha = true;
+                }
+                shouldReplace = true;
+                computedAlpha = ComputeTargetAlpha(it->second);
             }
         }
-        bAlpha = (BYTE)g_settings.alpha;
+        if (shouldReplace) {
+            newAlpha = (BYTE)computedAlpha;
+        }
     }
-    return SetLayeredWindowAttributes_Original(hwnd, crKey, bAlpha, dwFlags);
+    return SetLayeredWindowAttributes_Original(hwnd, crKey, newAlpha, dwFlags);
 }
 
-void ApplyTransparency(HWND hwnd) {
+// Applies the target alpha. When smooth transitions are enabled, the actual
+// value is only stored as target and approached gradually in the timer.
+void ApplyTargetAlpha(HWND hwnd) {
     if (!IsWindow(hwnd)) return;
 
+    // Ensure the window is layered first; otherwise SetLayeredWindowAttributes
+    // fails and transparency never applies.
     LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
     if (exStyle & WS_EX_LAYERED) {
-        if (UsesColorKey(hwnd)) {
-            return;
-        }
+        if (UsesColorKey(hwnd)) return;
     } else {
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
     }
 
-    SetLayeredWindowAttributes_Original(hwnd, 0, (BYTE)g_settings.alpha, LWA_ALPHA);
+    std::lock_guard<std::mutex> lock(g_windowsMutex);
+    auto it = g_trackedWindows.find(hwnd);
+    if (it == g_trackedWindows.end()) return;
+
+    BYTE target = ComputeTargetAlpha(it->second);
+
+    if (!it->second.alphaInitialized || !g_settings.smoothTransitions) {
+        it->second.currentAlpha = target;
+        it->second.targetAlpha = target;
+        it->second.alphaInitialized = true;
+        SetLayeredWindowAttributes_Original(hwnd, 0, target, LWA_ALPHA);
+    } else {
+        it->second.targetAlpha = target;
+    }
+}
+
+// Advances the animated alpha toward the target for all tracked windows.
+void AnimateAllWindows() {
+    std::vector<HWND> toSet;
+    {
+        std::lock_guard<std::mutex> lock(g_windowsMutex);
+        for (auto& pair : g_trackedWindows) {
+            auto& st = pair.second;
+            if (!st.alphaInitialized) continue;
+            if (st.currentAlpha == st.targetAlpha) continue;
+
+            int delta = (int)st.targetAlpha - (int)st.currentAlpha;
+            int step = kAnimStep;
+            BYTE newAlpha;
+            if (delta > step) {
+                newAlpha = (BYTE)(st.currentAlpha + step);
+            } else if (delta < -step) {
+                newAlpha = (BYTE)(st.currentAlpha - step);
+            } else {
+                newAlpha = st.targetAlpha;
+            }
+            st.currentAlpha = newAlpha;
+            toSet.push_back(pair.first);
+        }
+    }
+
+    for (HWND hwnd : toSet) {
+        BYTE alpha = 0;
+        {
+            std::lock_guard<std::mutex> lock(g_windowsMutex);
+            auto it = g_trackedWindows.find(hwnd);
+            if (it == g_trackedWindows.end()) continue;
+            alpha = it->second.currentAlpha;
+        }
+        SetLayeredWindowAttributes_Original(hwnd, 0, alpha, LWA_ALPHA);
+    }
+}
+
+void UpdateHoverStateFromCursor() {
+    POINT pt;
+    if (!GetCursorPos(&pt)) return;
+
+    HWND under = WindowFromPoint(pt);
+    HWND topLevel = under ? GetAncestor(under, GA_ROOT) : nullptr;
+
+    std::vector<HWND> toApply;
+    {
+        std::lock_guard<std::mutex> lock(g_windowsMutex);
+        for (auto& pair : g_trackedWindows) {
+            bool nowHovered = (pair.first == topLevel);
+            if (pair.second.isHovered != nowHovered) {
+                pair.second.isHovered = nowHovered;
+                toApply.push_back(pair.first);
+            }
+        }
+    }
+    for (HWND hwnd : toApply) {
+        ApplyTargetAlpha(hwnd);
+    }
 }
 
 void RestoreWindow(HWND hwnd, const OriginalWindowState& state) {
@@ -152,13 +302,6 @@ LRESULT CALLBACK WindowSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             if (!g_unloading && wParam == GWL_EXSTYLE) {
                 STYLESTRUCT* ss = (STYLESTRUCT*)lParam;
                 if (ss && !(ss->styleNew & WS_EX_LAYERED) && !UsesColorKey(hwnd)) {
-                    {
-                        std::lock_guard<std::mutex> lock(g_windowsMutex);
-                        auto it = g_trackedWindows.find(hwnd);
-                        if (it != g_trackedWindows.end()) {
-                            it->second.hadLayeredStyle = false;
-                        }
-                    }
                     ss->styleNew |= WS_EX_LAYERED;
                 }
             }
@@ -166,13 +309,53 @@ LRESULT CALLBACK WindowSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         }
         case WM_STYLECHANGED: {
             if (!g_unloading && wParam == GWL_EXSTYLE) {
-                ApplyTransparency(hwnd);
+                ApplyTargetAlpha(hwnd);
+            }
+            break;
+        }
+        case WM_ACTIVATE: {
+            if (!g_unloading) {
+                bool isActive = (LOWORD(wParam) != WA_INACTIVE);
+                bool changed = false;
+                {
+                    std::lock_guard<std::mutex> lock(g_windowsMutex);
+                    auto it = g_trackedWindows.find(hwnd);
+                    if (it != g_trackedWindows.end() && it->second.isActive != isActive) {
+                        it->second.isActive = isActive;
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    ApplyTargetAlpha(hwnd);
+                }
+            }
+            break;
+        }
+        case WM_TIMER: {
+            if (!g_unloading && wParam == kHoverTimerId && hwnd == g_timerOwner) {
+                UpdateHoverStateFromCursor();
+                AnimateAllWindows();
+                return 0;
             }
             break;
         }
         case WM_NCDESTROY: {
-            std::lock_guard<std::mutex> lock(g_windowsMutex);
-            g_trackedWindows.erase(hwnd);
+            HWND newOwner = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(g_windowsMutex);
+                g_trackedWindows.erase(hwnd);
+                if (g_timerOwner == hwnd) {
+                    g_timerOwner = nullptr;
+                    for (auto& pair : g_trackedWindows) {
+                        g_timerOwner = pair.first;
+                        newOwner = pair.first;
+                        break;
+                    }
+                }
+            }
+            if (newOwner && IsWindow(newOwner)) {
+                SetTimer(newOwner, kHoverTimerId, kHoverTimerIntervalMs, nullptr);
+            }
             break;
         }
     }
@@ -196,6 +379,8 @@ void AttachToWindow(HWND hwnd) {
         } else {
             OriginalWindowState state{};
             state.hadLayeredStyle = (exStyle & WS_EX_LAYERED) != 0;
+            state.isActive = (GetForegroundWindow() == hwnd);
+            state.isHovered = false;
             if (state.hadLayeredStyle) {
                 BYTE alpha = 255;
                 DWORD flags = 0;
@@ -209,7 +394,7 @@ void AttachToWindow(HWND hwnd) {
     }
 
     if (alreadyTracked) {
-        ApplyTransparency(hwnd);
+        ApplyTargetAlpha(hwnd);
         return;
     }
 
@@ -219,7 +404,21 @@ void AttachToWindow(HWND hwnd) {
         return;
     }
 
-    ApplyTransparency(hwnd);
+    bool needTimer = false;
+    {
+        std::lock_guard<std::mutex> lock(g_windowsMutex);
+        if (!g_timerOwner) {
+            g_timerOwner = hwnd;
+            needTimer = true;
+        }
+    }
+    if (needTimer) {
+        if (!SetTimer(hwnd, kHoverTimerId, kHoverTimerIntervalMs, nullptr)) {
+            Wh_Log(L"SetTimer failed, error %d", (int)GetLastError());
+        }
+    }
+
+    ApplyTargetAlpha(hwnd);
 }
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
@@ -264,8 +463,13 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original);
-    Wh_SetFunctionHook((void*)SetLayeredWindowAttributes, (void*)SetLayeredWindowAttributes_Hook, (void**)&SetLayeredWindowAttributes_Original);
+    if (!Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original)) {
+        return FALSE;
+    }
+
+    if (!Wh_SetFunctionHook((void*)SetLayeredWindowAttributes, (void*)SetLayeredWindowAttributes_Hook, (void**)&SetLayeredWindowAttributes_Original)) {
+        return FALSE;
+    }
 
     return TRUE;
 }
@@ -287,12 +491,22 @@ void Wh_ModSettingsChanged() {
     }
 
     for (HWND hwnd : windows) {
-        ApplyTransparency(hwnd);
+        ApplyTargetAlpha(hwnd);
     }
 }
 
 void Wh_ModUninit() {
     g_unloading = true;
+
+    HWND timerOwner = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_windowsMutex);
+        timerOwner = g_timerOwner;
+        g_timerOwner = nullptr;
+    }
+    if (timerOwner && IsWindow(timerOwner)) {
+        KillTimer(timerOwner, kHoverTimerId);
+    }
 
     std::vector<std::pair<HWND, OriginalWindowState>> windows;
     {
