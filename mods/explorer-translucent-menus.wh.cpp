@@ -4,7 +4,7 @@
 // @name:zh-CN      Explorer 上下文菜单半透明
 // @description     Translucent materials and optional borderless classic context menus for File Explorer
 // @description:zh-CN 对 Explorer 经典上下文菜单应用半透明材质和可选无边框
-// @version         1.1.0
+// @version         1.2.0
 // @author          alkali210
 // @github          https://github.com/alkali210
 // @include         explorer.exe
@@ -19,7 +19,7 @@
 // https://github.com/ramensoftware/windhawk-mods/issues
 //
 // For pull requests, development takes place here:
-// https://github.com/alkali210/windhawk-mods
+// https://github.com/alkali210/my-windhawk-mods
 
 // clang-format off
 // ==WindhawkModReadme==
@@ -74,11 +74,13 @@ a menu.
 | Mica / Mica Alt | Fixed Windows recipes |
 
 Tint opacity changes the material, not text or icons. Theme selection controls
-the light or dark palette. Hover highlight opacity can be adjusted separately.
+the light or dark palette.
 
-The custom hover highlight's corner radius and inset are adjustable in
-device-independent pixels (DIP), scaled for the display DPI. 
-These settings have no effect when highlight opacity is 0 (use native highlight instead).
+**Hover highlight color** accepts `#RRGGBB` (for example, `#FF6A00`).
+The default `auto` keeps the existing light and dark colors; invalid values
+also use those colors. Opacity is adjustable separately.
+The corner radius and inset are measured in device-independent pixels (DIP).
+These settings have no effect when highlight opacity is 0 (native highlight).
 
 ## Appearance
 
@@ -88,9 +90,15 @@ mode and Ctrl bypass retain the complete Windows appearance.
 The option also protects the outline setting from later Shell/UxTheme updates
 while the modified menu is being tracked.
 
+Enable **Apply material to title bar menu** to also style File Explorer's
+window menu, opened by right-clicking the title bar or pressing `Alt+Space`.
+This option is off by default. It uses the same material, theme, border,
+corner, highlight, and mouse click animation settings as context menus.
+Opening animations and keyboard command activation remain native.
+
 ### Menu item click animation
 
-**Menu item click animation** offers three choices for modified menus:
+**Menu item click animation** offers three choices after mouse selection:
 
 | Choice | Behavior after clicking a command |
 | --- | --- |
@@ -100,7 +108,8 @@ while the modified menu is being tracked.
 
 Replay captures the visible hover appearance before the pressed-state paint,
 including the material, text, and icons. Its non-interactive overlay runs on a
-separate thread, so executing the command does not wait for the animation.
+separate thread. Menu command delivery does not wait for it to show the
+overlay or finish the fade.
 It respects Windows' selection-fade and UI-effects settings and never changes
 global animation preferences.
 
@@ -120,9 +129,9 @@ This mod keeps the Shell's immersive owner-draw enabled and preserves native
 menu layout, commands, and shell extensions. Effects are scoped to supported
 classic popups while a menu is tracked. Preparation validates resources before
 applying effects and exposes the popup to drawing hooks only after commit.
-Only successful state changes are recorded for cleanup. Unassociated memory
-DCs are left to Windows; owner-draw memory DCs require an exact synchronous
-WM_DRAWITEM match.
+Only successful state changes are recorded for cleanup. Memory DCs are left
+to Windows unless they match the exact target of a synchronous Shell
+`WM_DRAWITEM` or window menu draw message.
 GDI and UxTheme hooks are installed in Explorer, but forward to Windows outside
 a tracked menu. The scope is the popup effect, rather than a replacement for
 Explorer's overall interface rendering.
@@ -159,12 +168,12 @@ Compatible with WinUI Context Menu Animation (disable Fade-in and enable
 Translucent Windows compatibility mode).
 
 Including other processes (such as `taskmgr.exe`) can also apply the effects of this
-mod to the Win32 menus of those processes.However, this mod is designed for
+mod to the Win32 menus of those processes. However, this mod is designed for
 `explorer.exe` and has not been extensively tested with other processes.
 
 The implementation uses version-dependent Windows interfaces: the composition
-attribute exports, UxTheme ordinal 74, the DarkMode::Menu theme, menu layout
-message 0x1e2, menu activation messages, and Shell window properties. It does not
+attribute exports, UxTheme ordinal 74, the DarkMode::Menu theme, native menu
+layout, activation and drawing messages, and Shell window properties. It does not
 read private Shell item structures, patch instructions, download symbols, or
 replace the menu loop.
 
@@ -174,6 +183,11 @@ Enable log output in Windhawk's Advanced tab to record menu preparation,
 material and border application results, native fallback reasons, and cleanup.
 There is no separate logging setting in this mod. Native mode registers no
 menu hooks, so it reports initialization rather than individual menu openings.
+
+For the title bar option, the initialization line reports `titleBarMenu=1`
+when enabled. Look for `Title bar menu` owner, entry, and system-menu lines,
+followed by the material result. With Windhawk logging disabled, these lines
+are not emitted even if the mod is loaded.
 
 ## Credits and license
 
@@ -218,6 +232,9 @@ This implementation is distributed under GPL-3.0-or-later.
 - highlightOpacity: 28
   $name: Hover highlight opacity
   $description: 1-100 for the custom highlight. Set to 0 to use the native highlight.
+- highlightColor: auto
+  $name: Hover highlight color
+  $description: "#RRGGBB for both themes, or auto for the default light and dark colors. Applies only to the custom highlight."
 - highlightRadius: 4
   $name: Hover highlight corner radius
   $description: Non-negative DIP, scaled with display DPI. Set to 0 for square corners.
@@ -234,9 +251,12 @@ This implementation is distributed under GPL-3.0-or-later.
 - roundedCorners: true
   $name: Rounded corners
   $description: Request small rounded corners for modified menus.
-- hideMenuBorder: false
+- hideMenuBorder: true
   $name: Hide menu border
   $description: Suppress the outline on modified menus without changing their size.
+- styleWindowMenu: false
+  $name: Apply material to title bar menu
+  $description: Apply the same appearance and mouse click animation settings to File Explorer's title bar menu (right-click or Alt+Space).
 - repairIcons: true
   $name: Repair legacy icon transparency
   $description: Convert copied legacy RGB icons to premultiplied alpha without modifying the source bitmaps.
@@ -333,7 +353,7 @@ bool IsSystemMaterial(Material value) {
 int ClampPercent(int value) {
     return value < 0 ? 0 : value > 100 ? 100 : value;
 }
-COLORREF ParseTint(PCWSTR value, COLORREF fallback) {
+COLORREF ParseRgbColor(PCWSTR value, COLORREF fallback) {
     if (!value)
         return fallback;
     if (*value == L'#')
@@ -358,11 +378,13 @@ struct Settings {
     COLORREF darkTint = RGB(32, 32, 32);
     int theme = 0;  // 0=auto, 1=light, 2=dark
     int highlightOpacity = 28;
+    COLORREF highlightColor = CLR_INVALID;  // Default color for the popup theme.
     int highlightRadius = 4;
     int highlightInset = 0;
     bool repairIcons = true;
     bool removeIconBackground = true;
     bool hideMenuBorder = false;
+    bool styleWindowMenu = false;
     SelectionFade selectionFade = SelectionFade::Replay;
 };
 Settings
@@ -377,6 +399,8 @@ using GetThemeClass_t = HRESULT(WINAPI*)(HTHEME, LPWSTR, int);
 GetThemeClass_t g_getThemeClass = nullptr;
 decltype(&TrackPopupMenu) g_trackPopupMenu = nullptr;
 decltype(&TrackPopupMenuEx) g_trackPopupMenuEx = nullptr;
+decltype(&CreateWindowExW) g_createWindowEx = nullptr;
+SRWLOCK g_windowMenuSubclassLock = SRWLOCK_INIT;
 decltype(&DrawThemeBackground) g_drawThemeBackground = nullptr;
 decltype(&DrawThemeBackgroundEx) g_drawThemeBackgroundEx = nullptr;
 decltype(&DrawThemeText) g_drawThemeText = nullptr;
@@ -405,7 +429,13 @@ struct CompositionData {
 using CompositionAttribute_t = BOOL(WINAPI*)(HWND, CompositionData*);
 CompositionAttribute_t g_setComposition = nullptr;
 CompositionAttribute_t g_getComposition = nullptr;
+constexpr UINT kUahDrawMenu = 0x0091;
+constexpr UINT kUahDrawMenuItem = 0x0092;
+constexpr UINT kUahNcPaintMenuPopup = 0x0095;
+constexpr UINT kMenuGetHandle = 0x01e1;  // MN_GETHMENU
 constexpr UINT kMenuSizeWindow = 0x01e2;
+constexpr UINT kMenuButtonDown = 0x01ed;  // MN_BUTTONDOWN
+constexpr UINT kMenuButtonUp = 0x01ef;    // MN_BUTTONUP
 thread_local unsigned t_textDepth = 0;
 thread_local unsigned t_observerDepth = 0;
 thread_local unsigned t_bitmapDepth = 0;
@@ -509,15 +539,15 @@ struct Popup {
     RECT replayHighlightRect;
     UINT replayHighlightItemId;
     ReplayHighlightSpace replayHighlightSpace;
+    RECT windowMenuRow;  // Selected UAH item in popup client coordinates.
+    UINT windowMenuRowId;
     SelectionReplay* clickReplay;
     UINT replayPosition;
 };
 
-// Capture/Start/Discard preserve the caller's last-error value. Capture must run
-// on popup's owning thread, with physical screen coordinates and an already
-// painted selected row. Only the caller decides whether this is a supported,
-// active, enabled command row. Start immediately before native dismissal and
-// command dispatch; it waits for presentation, never for the fade's duration.
+// Replay helpers preserve last error. Capture runs on the popup's owning
+// thread in physical screen coordinates. Submit takes ownership after native
+// dismissal, without waiting for the worker to present the bitmap.
 // Stop is terminal and must run outside the replay worker, before mod unload.
 struct SelectionReplay {
     RECT screenRect;
@@ -531,10 +561,8 @@ SRWLOCK g_selectionReplayLock = SRWLOCK_INIT;
 HANDLE g_selectionReplayThread = nullptr;
 HANDLE g_selectionReplayStop = nullptr;
 HANDLE g_selectionReplayRequest = nullptr;
-HANDLE g_selectionReplayComplete = nullptr;
 bool g_selectionReplayStopping = false;  // Protected by the SRW lock.
 std::atomic<SelectionReplay*> g_selectionReplayPending{nullptr};
-std::atomic<bool> g_selectionReplayAccepted{false};
 
 struct SelectionReplayErrorGuard {
     DWORD error = GetLastError();
@@ -616,13 +644,13 @@ bool PresentSelectionReplay(const SelectionReplaySurface& surface,
 
 bool CreateSelectionReplaySurface(HINSTANCE instance, SelectionReplay* replay,
                                   SelectionReplaySurface& surface) {
+    surface.replay = replay;
     surface.dc = CreateCompatibleDC(nullptr);
     if (!surface.dc)
         return false;
     surface.oldBitmap = SelectObject(surface.dc, replay->bitmap);
     if (!surface.oldBitmap || surface.oldBitmap == HGDI_ERROR) {
         surface.oldBitmap = nullptr;
-        ClearSelectionReplaySurface(surface);
         return false;
     }
     surface.hwnd = CreateWindowExW(
@@ -636,15 +664,10 @@ bool CreateSelectionReplaySurface(HINSTANCE instance, SelectionReplay* replay,
     if (!surface.hwnd || !PresentSelectionReplay(surface, replay, 255) ||
         !SetWindowPos(surface.hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                       SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                          SWP_SHOWWINDOW) ||
-        FAILED(DwmFlush())) {
-        // replay remains caller-owned until every presentation step succeeds.
-        ClearSelectionReplaySurface(surface);
+                          SWP_SHOWWINDOW))
         return false;
-    }
     surface.started = GetTickCount64();
     surface.alpha = 255;
-    surface.replay = replay;
     return true;
 }
 
@@ -697,15 +720,12 @@ DWORD WINAPI SelectionReplayThreadProc(void*) {
         if (result == WAIT_OBJECT_0 || result == WAIT_FAILED)
             break;
         if (result == WAIT_OBJECT_0 + 1) {
-            ClearSelectionReplaySurface(surface);
-            SelectionReplay* replay =
-                g_selectionReplayPending.load(std::memory_order_acquire);
-            bool accepted = !replay ||
-                            CreateSelectionReplaySurface(instance, replay,
-                                                         surface);
-            g_selectionReplayAccepted.store(accepted, std::memory_order_release);
-            if (!SetEvent(g_selectionReplayComplete))
-                break;
+            if (SelectionReplay* replay = g_selectionReplayPending.exchange(
+                    nullptr, std::memory_order_acq_rel)) {
+                ClearSelectionReplaySurface(surface);
+                if (!CreateSelectionReplaySurface(instance, replay, surface))
+                    ClearSelectionReplaySurface(surface);
+            }
         } else if (result == WAIT_OBJECT_0 + ARRAYSIZE(events)) {
             // Bound each batch so message traffic cannot starve stop or fade.
             MSG message;
@@ -734,13 +754,11 @@ void CloseSelectionReplayWorkerHandles() {
         CloseHandle(g_selectionReplayStop);
     if (g_selectionReplayRequest)
         CloseHandle(g_selectionReplayRequest);
-    if (g_selectionReplayComplete)
-        CloseHandle(g_selectionReplayComplete);
     g_selectionReplayThread = nullptr;
     g_selectionReplayStop = nullptr;
     g_selectionReplayRequest = nullptr;
-    g_selectionReplayComplete = nullptr;
-    g_selectionReplayPending.store(nullptr, std::memory_order_relaxed);
+    DiscardSelectionReplay(g_selectionReplayPending.exchange(
+        nullptr, std::memory_order_acq_rel));
 }
 
 bool EnsureSelectionReplayWorker() {
@@ -754,9 +772,7 @@ bool EnsureSelectionReplayWorker() {
     }
     g_selectionReplayStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_selectionReplayRequest = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    g_selectionReplayComplete = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!g_selectionReplayStop || !g_selectionReplayRequest ||
-        !g_selectionReplayComplete) {
+    if (!g_selectionReplayStop || !g_selectionReplayRequest) {
         CloseSelectionReplayWorkerHandles();
         return false;
     }
@@ -769,29 +785,26 @@ bool EnsureSelectionReplayWorker() {
     return true;
 }
 
-// A null request cancels the preceding replay without creating another one.
-// The lock serializes callers through the acknowledgement. In particular, Stop
-// cannot close events while Start/Capture is using them. No animation wait here.
+// The newest queued replay replaces any unclaimed request. The worker takes
+// ownership with exchange, so a superseded bitmap can only be freed once.
 bool SubmitSelectionReplay(SelectionReplay* replay) {
-    g_selectionReplayAccepted.store(false, std::memory_order_relaxed);
-    g_selectionReplayPending.store(replay, std::memory_order_release);
-    if (!SetEvent(g_selectionReplayRequest)) {
-        g_selectionReplayPending.store(nullptr, std::memory_order_relaxed);
+    SelectionReplayErrorGuard errorGuard;
+    if (!replay)
         return false;
+    bool queued = false;
+    {
+        SelectionReplayLockGuard lockGuard;
+        if (!g_selectionReplayStopping && EnsureSelectionReplayWorker()) {
+            replay = g_selectionReplayPending.exchange(
+                replay, std::memory_order_acq_rel);
+            queued = SetEvent(g_selectionReplayRequest) != FALSE;
+            if (!queued)
+                DiscardSelectionReplay(g_selectionReplayPending.exchange(
+                    nullptr, std::memory_order_acq_rel));
+        }
     }
-    HANDLE events[] = {g_selectionReplayComplete, g_selectionReplayThread};
-    DWORD result = WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE,
-                                          INFINITE);
-    if (result != WAIT_OBJECT_0 && result != WAIT_OBJECT_0 + 1) {
-        // Valid owned handles should not fail a wait. If they do, drain the
-        // worker before deciding whether it ever accepted the incoming bitmap.
-        SetEvent(g_selectionReplayStop);
-        WaitForSingleObject(g_selectionReplayThread, INFINITE);
-    }
-    bool accepted =
-        g_selectionReplayAccepted.load(std::memory_order_acquire);
-    g_selectionReplayPending.store(nullptr, std::memory_order_relaxed);
-    return accepted;
+    DiscardSelectionReplay(replay);
+    return queued;
 }
 
 bool SelectionReplayContains(const RECT& outer, const RECT& inner) {
@@ -862,8 +875,7 @@ void ApplyReplayHighlightMask(DWORD* pixels, const HighlightGeometry& geometry) 
 SelectionReplay* CaptureSelectionReplay(HWND popup, const RECT& screenRect,
                                         bool maskHighlight) {
     SelectionReplayErrorGuard errorGuard;
-    SelectionReplayLockGuard lockGuard;
-    if (g_selectionReplayStopping ||
+    if (g_stopping.load(std::memory_order_relaxed) ||
         GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext()) !=
             DPI_AWARENESS_PER_MONITOR_AWARE)
         return nullptr;
@@ -890,15 +902,9 @@ SelectionReplay* CaptureSelectionReplay(HWND popup, const RECT& screenRect,
         !SelectionReplayContains(monitor.rcMonitor, screenRect) ||
         FAILED(DwmIsCompositionEnabled(&composition)) || !composition)
         return nullptr;
-    if (g_selectionReplayThread) {
-        DWORD result = WaitForSingleObject(g_selectionReplayThread, 0);
-        if (result == WAIT_OBJECT_0)
-            CloseSelectionReplayWorkerHandles();
-        else if (result != WAIT_TIMEOUT || !SubmitSelectionReplay(nullptr))
-            return nullptr;
-    }
-    // Flush this UI thread's GDI work and wait for its composed screen image,
-    // also removing the preceding replay from the next desktop capture.
+    // An earlier overlay may still be visible. Reject overlapping windows
+    // rather than waiting for the worker to cancel it before capture.
+    // Flush this UI thread's GDI work and wait for its composed screen image.
     if (!GdiFlush() || FAILED(DwmFlush()) ||
         !SelectionReplayCaptureVisible(popup, screenRect))
         return nullptr;
@@ -954,26 +960,22 @@ SelectionReplay* CaptureSelectionReplay(HWND popup, const RECT& screenRect,
     return replay;
 }
 
-bool StartSelectionReplay(SelectionReplay* replay) {
-    SelectionReplayErrorGuard errorGuard;
-    if (!replay || !replay->bitmap)
-        return false;
-    SelectionReplayLockGuard lockGuard;
-    if (g_selectionReplayStopping || !EnsureSelectionReplayWorker())
-        return false;
-    return SubmitSelectionReplay(replay);
-}
-
 void StopSelectionReplays() {
     SelectionReplayErrorGuard errorGuard;
-    SelectionReplayLockGuard lockGuard;
-    g_selectionReplayStopping = true;
-    if (g_selectionReplayThread) {
-        SetEvent(g_selectionReplayStop);
-        // No owner HWND, SendMessage, UI callback or owner-thread cleanup is
-        // involved. Commands may block Explorer's UI without blocking this join.
-        WaitForSingleObject(g_selectionReplayThread, INFINITE);
+    HANDLE thread;
+    {
+        SelectionReplayLockGuard lockGuard;
+        if (g_selectionReplayStopping)
+            return;
+        g_selectionReplayStopping = true;
+        thread = g_selectionReplayThread;
+        if (thread)
+            SetEvent(g_selectionReplayStop);
     }
+    // Join on unload only, with no lock held across the wait.
+    if (thread)
+        WaitForSingleObject(thread, INFINITE);
+    SelectionReplayLockGuard lockGuard;
     CloseSelectionReplayWorkerHandles();
 }
 
@@ -1364,20 +1366,26 @@ struct MenuScope {
     bool ownerSubclass = false;
     HWND owner = nullptr;
     HMENU rootMenu = nullptr;
+    const bool windowMenu;
     Popup popups[32]{};
     unsigned count = 0;
     HWND paintingWindow = nullptr;
     const DRAWITEMSTRUCT* drawingItem = nullptr;
+    HDC windowMenuDC = nullptr;
+    const DRAWITEMSTRUCT* windowMenuItem = nullptr;
     bool allowed = false;
     bool clickCommand = false;
     UINT commandId = 0;
+    LPARAM commandPoint = 0;
     UINT commandPosition = 0;
     HMENU commandMenu = nullptr;
     DWORD commandStyle = 0;
     SelectionReplay* commandReplay = nullptr;
 
-    explicit MenuScope(HMENU menu, HWND menuOwner, bool requestEffects)
-        : previous(t_scope), owner(menuOwner), rootMenu(menu) {
+    explicit MenuScope(HMENU menu, HWND menuOwner, bool requestEffects,
+                       bool windowMenu = false)
+        : previous(t_scope), owner(menuOwner), rootMenu(menu),
+          windowMenu(windowMenu) {
         // Even a bypassed nested call must hide the outer call's drawing scope.
         t_scope = this;
         AcquireSRWLockExclusive(&g_scopesLock);
@@ -1393,6 +1401,8 @@ struct MenuScope {
             ETM_LOG(L"Could not observe this menu thread: %lu", error);
             return;
         }
+        if (windowMenu)
+            return;  // Native window menu items do not need owner subclassing.
         // The owner is on this UI thread while its menu is tracked. A real
         // subclass gives WM_DRAWITEM a synchronous, valid parameter lifetime;
         // menu-window CWP/return notifications are not guaranteed to be paired.
@@ -1413,7 +1423,7 @@ struct MenuScope {
         // only after buffered painting and its final bypass check succeed.
     }
 
-    bool Ready() const { return messageHook && ownerSubclass; }
+    bool Ready() const { return messageHook && (windowMenu || ownerSubclass); }
 
     void DetachCallbacks() {
         allowed = false;
@@ -1456,7 +1466,8 @@ struct MenuScope {
     }
 
     Popup* Watch(HWND hwnd) {
-        if (!allowed || g_stopping.load(std::memory_order_relaxed))
+        if (!allowed || (windowMenu && !rootMenu) ||
+            g_stopping.load(std::memory_order_relaxed))
             return nullptr;
         Popup* popup = Find(hwnd);
         if (!popup) {
@@ -1500,37 +1511,49 @@ struct MenuScope {
             }
             ~Preparation() { popup->preparing = false; }
         } preparation(reusable);
-        MENUBARINFO bar{sizeof(bar)};
+        HMENU menu = nullptr;
+        if (windowMenu) {
+            // GetMenuBarInfo(OBJID_CLIENT) fails on native system popups.
+            // Accept only the handle reported by this owner's notification.
+            menu = reinterpret_cast<HMENU>(
+                SendMessageW(hwnd, kMenuGetHandle, 0, 0));
+            if (menu != rootMenu)
+                return;
+        } else {
+            MENUBARINFO bar{sizeof(bar)};
+            if (GetMenuBarInfo(hwnd, OBJID_CLIENT, 0, &bar))
+                menu = bar.hMenu;
+        }
         bool shellOwnerDraw = false;
         // During early layout the HWND can exist before it has a valid HMENU.
         // Do not cache that transient failure as a permanently skipped popup.
-        if (!GetMenuBarInfo(hwnd, OBJID_CLIENT, 0, &bar) || !bar.hMenu ||
-            GetMenuItemCount(bar.hMenu) <= 0) {
+        if (!menu || GetMenuItemCount(menu) <= 0) {
             ETM_LOG(L"Preparation pending hwnd=%p: menu handle/items not ready",
                     hwnd);
             return;
         }
-        if (!IsSupportedMenu(bar.hMenu, owner, &shellOwnerDraw)) {
+        if (!IsSupportedMenu(menu, owner, &shellOwnerDraw) ||
+            (windowMenu && shellOwnerDraw)) {
             ETM_LOG(
                 L"Native fallback hwnd=%p menu=%p: unsupported menu/owner-draw",
-                hwnd, bar.hMenu);
+                hwnd, menu);
             return;
         }
         MENUINFO info{sizeof(info)};
         info.fMask = MIM_BACKGROUND;
-        if (!GetMenuInfo(bar.hMenu, &info)) {
+        if (!GetMenuInfo(menu, &info)) {
             DWORD error = GetLastError();
             ETM_LOG(
                 L"Preparation failed hwnd=%p menu=%p stage=GetMenuInfo "
                 L"lastError=%lu",
-                hwnd, bar.hMenu, error);
+                hwnd, menu, error);
             return;
         }
         if (!shellOwnerDraw && info.hbrBack &&
             info.hbrBack != GetSysColorBrush(COLOR_MENU) &&
             info.hbrBack != reinterpret_cast<HBRUSH>(COLOR_MENU + 1)) {
             ETM_LOG(L"Native fallback hwnd=%p menu=%p: custom background brush",
-                    hwnd, bar.hMenu);
+                    hwnd, menu);
             return;
         }
         Popup& popup = *reusable;
@@ -1539,7 +1562,7 @@ struct MenuScope {
         popup.subclassed = subclassed;
         popup.preparing = true;
         popup.hwnd = hwnd;
-        popup.menu = bar.hMenu;
+        popup.menu = menu;
         popup.oldBrush = info.hbrBack;
         popup.dark = UsesDarkMenus();
         ETM_LOG(
@@ -1587,17 +1610,21 @@ struct MenuScope {
             RestorePopup(popup);
             return;
         }
-        info.hbrBack = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
-        if (!SetMenuInfo(popup.menu, &info)) {
-            DWORD error = GetLastError();
-            ETM_LOG(
-                L"Preparation failed hwnd=%p stage=SetMenuInfo lastError=%lu",
-                hwnd, error);
-            DeleteObject(region);
-            RestorePopup(popup);
-            return;
+        // System menus can use the default menu. Change only the popup HWND
+        // and its painting, never the system menu's shared brush.
+        if (!windowMenu) {
+            info.hbrBack = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+            if (!SetMenuInfo(popup.menu, &info)) {
+                DWORD error = GetLastError();
+                ETM_LOG(
+                    L"Preparation failed hwnd=%p stage=SetMenuInfo lastError=%lu",
+                    hwnd, error);
+                DeleteObject(region);
+                RestorePopup(popup);
+                return;
+            }
+            popup.brushChanged = true;
         }
-        popup.brushChanged = true;
         DWM_BLURBEHIND blur{DWM_BB_ENABLE | DWM_BB_BLURREGION, TRUE, region,
                             FALSE};
         HRESULT result = DwmEnableBlurBehindWindow(hwnd, &blur);
@@ -1663,6 +1690,13 @@ LRESULT CALLBACK MenuMessages(int code, WPARAM wParam, LPARAM lParam) {
     MenuScope* scope = t_scope;
     if (code >= 0 && scope && scope->allowed) {
         const auto& message = *reinterpret_cast<const CWPSTRUCT*>(lParam);
+        if (scope->windowMenu && !scope->rootMenu &&
+            message.hwnd == scope->owner && message.message == WM_INITMENUPOPUP &&
+            HIWORD(message.lParam)) {
+            scope->rootMenu = reinterpret_cast<HMENU>(message.wParam);
+            ETM_LOG(L"Title bar system menu owner=%p menu=%p", scope->owner,
+                    scope->rootMenu);
+        }
         if (IsClassicPopup(message.hwnd)) {
             if (message.message == kMenuSizeWindow ||
                 message.message == WM_WINDOWPOSCHANGING)
@@ -1793,6 +1827,25 @@ bool ResolveReplayHighlight(const Popup& popup, const RECT& itemRect,
            SelectionReplayContains(itemRect, highlightRect);
 }
 
+bool GetReplayItemRect(const MenuScope& scope, const Popup& popup,
+                       UINT position, UINT itemId, RECT& rect) {
+    if (!scope.windowMenu)
+        return GetMenuItemRect(scope.owner, popup.menu, position, &rect);
+    // GetMenuItemRect can't locate the native system popup. UAH supplies its
+    // selected row before painting, even when the opening frame uses a DIB.
+    if (popup.windowMenuRowId != itemId || IsRectEmpty(&popup.windowMenuRow))
+        return false;
+    RECT client{};
+    if (!GetClientRect(popup.hwnd, &client) ||
+        !SelectionReplayContains(client, popup.windowMenuRow))
+        return false;
+    rect = popup.windowMenuRow;
+    SetLastError(ERROR_SUCCESS);
+    return MapWindowPoints(popup.hwnd, HWND_DESKTOP,
+                           reinterpret_cast<POINT*>(&rect), 2) ||
+           GetLastError() == ERROR_SUCCESS;
+}
+
 void CaptureMenuClick(MenuScope& scope, Popup& popup, WPARAM position) {
     SelectionReplayErrorGuard errorGuard;
     DiscardSelectionReplay(popup.clickReplay);
@@ -1812,8 +1865,8 @@ void CaptureMenuClick(MenuScope& scope, Popup& popup, WPARAM position) {
         !(item.fState & (MFS_DISABLED | MFS_GRAYED)) &&
         SystemParametersInfoW(SPI_GETSELECTIONFADE, 0, &enabled, 0) && enabled &&
         SystemParametersInfoW(SPI_GETUIEFFECTS, 0, &effects, 0) && effects &&
-        GetMenuItemRect(scope.owner, popup.menu,
-                        static_cast<UINT>(position), &rect)) {
+        GetReplayItemRect(scope, popup, static_cast<UINT>(position), item.wID,
+                          rect)) {
         bool maskHighlight = g_settings.highlightOpacity != 0;
         RECT captureRect = rect;
         if (maskHighlight &&
@@ -1825,7 +1878,8 @@ void CaptureMenuClick(MenuScope& scope, Popup& popup, WPARAM position) {
     }
 }
 
-bool HandleMenuClick(MenuScope& scope, Popup& popup, WPARAM position) {
+bool HandleMenuClick(MenuScope& scope, Popup& popup, WPARAM position,
+                     LPARAM clickPoint) {
     SelectionReplayErrorGuard errorGuard;
     if (!popup.active || g_settings.selectionFade == SelectionFade::Native)
         return false;
@@ -1840,7 +1894,8 @@ bool HandleMenuClick(MenuScope& scope, Popup& popup, WPARAM position) {
     MENUINFO info{sizeof(info)};
     info.fMask = MIM_STYLE;
     if (!GetMenuItemInfoW(popup.menu, static_cast<UINT>(position), TRUE, &item) ||
-        !GetMenuInfo(scope.rootMenu, &info) || item.hSubMenu ||
+        (!scope.windowMenu && !GetMenuInfo(scope.rootMenu, &info)) ||
+        item.hSubMenu ||
         (item.fType & MFT_SEPARATOR) ||
         (item.fState & (MFS_DISABLED | MFS_GRAYED)))
         return false;
@@ -1858,11 +1913,33 @@ bool HandleMenuClick(MenuScope& scope, Popup& popup, WPARAM position) {
     }
     scope.clickCommand = true;
     scope.commandId = item.wID;
+    scope.commandPoint = clickPoint;
     scope.commandPosition = static_cast<UINT>(position);
     scope.commandMenu = popup.menu;
     scope.commandStyle = info.dwStyle;
     scope.commandReplay = replay;
     return true;
+}
+
+HDC WindowMenuDrawDC(HMENU menu, UINT message, LPARAM lParam) {
+    if (!lParam)
+        return nullptr;
+    if (message == kUahDrawMenuItem) {
+        // UAHDRAWMENUITEM starts with a DRAWITEMSTRUCT.
+        const auto& item = *reinterpret_cast<const DRAWITEMSTRUCT*>(lParam);
+        if (item.CtlType == ODT_MENU &&
+            reinterpret_cast<HMENU>(item.hwndItem) == menu)
+            return item.hDC;
+    } else if (message == kUahDrawMenu || message == kUahNcPaintMenuPopup) {
+        struct UahMenuPrefix {
+            HMENU menu;
+            HDC dc;
+        };
+        const auto& draw = *reinterpret_cast<const UahMenuPrefix*>(lParam);
+        if (draw.menu == menu)
+            return draw.dc;
+    }
+    return nullptr;
 }
 
 LRESULT CALLBACK MenuPopupSubclass(HWND hwnd,
@@ -1886,12 +1963,41 @@ LRESULT CALLBACK MenuPopupSubclass(HWND hwnd,
         g_stopping.load(std::memory_order_relaxed))
         return DefSubclassProc(hwnd, message, wParam, lParam);
     // Freeze the hover appearance before Windows paints a pressed item.
-    if (message == 0x01ed)
+    if (message == kMenuButtonDown)
         CaptureMenuClick(*scope, *popup, wParam);
-    // MN_BUTTONUP is the native menu-item activation notification, not a raw
-    // mouse-up. Its item position is validated before changing dismissal.
-    if (message == 0x01ef && HandleMenuClick(*scope, *popup, wParam))
+    // MN_BUTTONUP is native menu-item activation, not a raw mouse-up.
+    if (message == kMenuButtonUp && HandleMenuClick(*scope, *popup, wParam, lParam))
         return 0;
+    if (scope->windowMenu && popup->active) {
+        if (HDC dc = WindowMenuDrawDC(popup->menu, message, lParam)) {
+            // UAH paints the system menu's outline into the opening frame
+            // independently of the DWM border attribute.
+            if (message == kUahNcPaintMenuPopup && g_settings.hideMenuBorder)
+                return TRUE;
+            // Bind only the exact target of this synchronous draw.
+            HWND previousWindow = scope->paintingWindow;
+            HDC previousDC = scope->windowMenuDC;
+            const auto* previousItem = scope->windowMenuItem;
+            scope->paintingWindow = hwnd;
+            scope->windowMenuDC = dc;
+            scope->windowMenuItem = message == kUahDrawMenuItem
+                ? reinterpret_cast<const DRAWITEMSTRUCT*>(lParam) : nullptr;
+            if (const auto* item = scope->windowMenuItem;
+                item && g_settings.selectionFade == SelectionFade::Replay) {
+                if (item->itemState & ODS_SELECTED) {
+                    popup->windowMenuRow = item->rcItem;
+                    popup->windowMenuRowId = item->itemID;
+                } else if (popup->windowMenuRowId == item->itemID) {
+                    popup->windowMenuRow = {};
+                }
+            }
+            LRESULT result = DefSubclassProc(hwnd, message, wParam, lParam);
+            scope->windowMenuItem = previousItem;
+            scope->windowMenuDC = previousDC;
+            scope->paintingWindow = previousWindow;
+            return result;
+        }
+    }
     if (message == WM_NCPAINT && popup->active && g_settings.hideMenuBorder &&
         PaintBorderlessFrame(hwnd, wParam))
         return 0;
@@ -1961,16 +2067,14 @@ LRESULT CALLBACK MenuOwnerSubclass(HWND hwnd,
 }
 
 // Require a positive DC association, never the last observed popup. A memory
-// DC is accepted only as the exact synchronous WM_DRAWITEM target.
+// DC must match the exact synchronous Shell or window menu drawing target.
 Popup* DrawingPopupForDC(HDC dc) {
     MenuScope* scope = t_scope;
     if (!scope || !scope->allowed || g_stopping.load(std::memory_order_relaxed))
         return nullptr;
-    // Shell may paint an owner-drawn item using a DC associated with its owner.
-    // Accept that DC only when it is exactly the verified WM_DRAWITEM DC.
-    HWND hwnd = scope->drawingItem && dc == scope->drawingItem->hDC
-                    ? scope->paintingWindow
-                    : WindowFromDC(dc);
+    bool scopedDC = (scope->drawingItem && dc == scope->drawingItem->hDC) ||
+                    (scope->windowMenuDC && dc == scope->windowMenuDC);
+    HWND hwnd = scopedDC ? scope->paintingWindow : WindowFromDC(dc);
     if (!hwnd || !IsClassicPopup(hwnd))
         return nullptr;
     Popup* popup = scope->Find(hwnd);
@@ -2025,9 +2129,11 @@ void RememberReplayHighlight(Popup& popup, HDC dc, const RECT& rect) {
         popup.replayHighlightSpace = ReplayHighlightSpace::Screen;
         return;
     }
-    // A verified owner-draw DC may belong to the owner or be a memory DC.
+    // A verified drawing DC may belong to the owner or be a memory DC.
     // Remember its bounds relative to the item until its screen rect is known.
-    const DRAWITEMSTRUCT* item = t_scope ? t_scope->drawingItem : nullptr;
+    const DRAWITEMSTRUCT* item = t_scope
+        ? (t_scope->windowMenu ? t_scope->windowMenuItem : t_scope->drawingItem)
+        : nullptr;
     if (!item || t_scope->paintingWindow != popup.hwnd || item->hDC != dc ||
         item->CtlType != ODT_MENU || !(item->itemState & ODS_SELECTED) ||
         reinterpret_cast<HMENU>(item->hwndItem) != popup.menu)
@@ -2081,7 +2187,9 @@ bool DrawHighlight(Popup& popup, HDC dc, const RECT* rect, const RECT* clip) {
         HighlightGeometry geometry =
             GetHighlightGeometry(width, height, GetDpiForWindow(popup.hwnd));
         int opacity = ClampPercent(g_settings.highlightOpacity);
-        COLORREF color = popup.dark ? RGB(128, 192, 255) : RGB(0, 105, 190);
+        COLORREF color = g_settings.highlightColor;
+        if (color == CLR_INVALID)
+            color = popup.dark ? RGB(128, 192, 255) : RGB(0, 105, 190);
         for (int y = 0; y < height; ++y)
             for (int x = 0; x < width; ++x) {
                 float coverage = geometry.Coverage(x, y);
@@ -2758,16 +2866,13 @@ BOOL TrackMenu(HMENU menu, HWND owner, UINT flags, Invoke invoke) {
             result = invoke(flags);
             resultError = GetLastError();
             if (scope.clickCommand) {
-                // Present only after the native popup is gone: its saved-bits
+                // Queue only after the native popup is gone: its saved-bits
                 // teardown must not overwrite a newly shown replay surface.
-                bool started = scope.commandReplay &&
-                               StartSelectionReplay(scope.commandReplay);
-                if (!started)
-                    DiscardSelectionReplay(scope.commandReplay);
+                bool queued = SubmitSelectionReplay(scope.commandReplay);
                 scope.commandReplay = nullptr;
-                ETM_LOG(L"Click owner=%p command=%u mode=%u replay=%d", owner,
-                        scope.commandId,
-                        static_cast<unsigned>(g_settings.selectionFade), started);
+                ETM_LOG(L"Click owner=%p command=%u mode=%u replayQueued=%d",
+                        owner, scope.commandId,
+                        static_cast<unsigned>(g_settings.selectionFade), queued);
                 // Position-based menus do not return a command ID, even with
                 // TPM_RETURNCMD; that flag still suppresses notifications.
                 result = flags & TPM_RETURNCMD
@@ -2834,6 +2939,121 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU menu,
     });
 }
 
+bool OpensWindowMenu(UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_SYSCOMMAND) {
+        UINT command = static_cast<UINT>(wParam) & 0xfff0;
+        return command == SC_MOUSEMENU || command == SC_KEYMENU;
+    }
+    if (message == WM_NCRBUTTONUP)
+        return wParam == HTCAPTION || wParam == HTSYSMENU;
+    return message == WM_CONTEXTMENU && lParam != -1;
+}
+
+LRESULT CALLBACK WindowMenuOwnerSubclass(HWND hwnd, UINT message, WPARAM wParam,
+                                          LPARAM lParam, DWORD_PTR) {
+    if (t_scope || !OpensWindowMenu(message, wParam, lParam))
+        return DefSubclassProc(hwnd, message, wParam, lParam);
+
+    DWORD incomingError = GetLastError();
+    PCWSTR reason;
+    if (!EffectsAllowed(&reason)) {
+        ETM_LOG(L"Title bar menu bypass owner=%p reason=%s", hwnd, reason);
+        SetLastError(incomingError);
+        return DefSubclassProc(hwnd, message, wParam, lParam);
+    }
+
+    CallGuard call;
+    bool buffered;
+    LRESULT result;
+    DWORD resultError;
+    {
+        // Explorer can enter the menu loop without calling the exported
+        // DefWindowProcW. Observe the owner before forwarding its message;
+        // only a system WM_INITMENUPOPUP authorizes rendering.
+        MenuScope scope(nullptr, hwnd, true, true);
+        HRESULT paint = scope.Ready() ? BufferedPaintInit() : E_FAIL;
+        buffered = SUCCEEDED(paint);
+        if (!buffered)
+            reason = L"menu callbacks or buffered painting unavailable";
+        scope.allowed = buffered && EffectsAllowed(&reason);
+        ETM_LOG(L"Title bar menu entry owner=%p message=0x%x effects=%d reason=%s",
+                hwnd, message, scope.allowed, reason);
+        if (!scope.allowed)
+            scope.DetachCallbacks();
+        SetLastError(incomingError);
+        result = DefSubclassProc(hwnd, message, wParam, lParam);
+        resultError = GetLastError();
+        if (scope.clickCommand) {
+            // The native loop has dismissed the popup. Preserve synchronous
+            // WM_SYSCOMMAND and its original mouse coordinates.
+            scope.DetachCallbacks();
+            bool queued = SubmitSelectionReplay(scope.commandReplay);
+            scope.commandReplay = nullptr;
+            ETM_LOG(L"Title bar click owner=%p command=0x%x replayQueued=%d",
+                    hwnd, scope.commandId, queued);
+            SendMessageW(hwnd, WM_SYSCOMMAND, scope.commandId, scope.commandPoint);
+        }
+    }
+    if (buffered)
+        BufferedPaintUnInit();
+    SetLastError(resultError);
+    return result;
+}
+
+constexpr PCWSTR kExplorerWindowClass = L"CabinetWClass";
+
+bool IsWindowMenuOwner(HWND hwnd) {
+    DWORD pid = 0;
+    if (!GetWindowThreadProcessId(hwnd, &pid) || pid != GetCurrentProcessId())
+        return false;
+    wchar_t name[32];
+    return GetClassNameW(hwnd, name, ARRAYSIZE(name)) &&
+           wcscmp(name, kExplorerWindowClass) == 0;
+}
+
+void AttachWindowMenuOwner(HWND hwnd) {
+    BOOL attached = WindhawkUtils::SetWindowSubclassFromAnyThread(
+        hwnd, WindowMenuOwnerSubclass, 0);
+    ETM_LOG(L"Title bar menu owner=%p subclassed=%d", hwnd, attached);
+}
+
+BOOL CALLBACK VisitWindowMenuOwner(HWND hwnd, LPARAM attach) {
+    if (IsWindowMenuOwner(hwnd)) {
+        if (attach)
+            AttachWindowMenuOwner(hwnd);
+        else
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                hwnd, WindowMenuOwnerSubclass);
+    }
+    return TRUE;
+}
+
+HWND WINAPI CreateWindowExWHook(DWORD exStyle, PCWSTR className,
+                                PCWSTR windowName, DWORD style, int x, int y,
+                                int width, int height, HWND parent, HMENU menu,
+                                HINSTANCE instance, LPVOID param) {
+    if ((style & WS_CHILD) || !className ||
+        (!IS_INTRESOURCE(className) &&
+         _wcsicmp(className, kExplorerWindowClass) != 0)) {
+        [[clang::musttail]] return g_createWindowEx(
+            exStyle, className, windowName, style, x, y, width, height, parent,
+            menu, instance, param);
+    }
+    CallGuard call;
+    HWND hwnd = g_createWindowEx(exStyle, className, windowName, style, x, y,
+                                width, height, parent, menu, instance, param);
+    DWORD error = GetLastError();
+    if (hwnd && IsWindowMenuOwner(hwnd)) {
+        // The new window is on this thread; no cross-thread send under the lock.
+        AcquireSRWLockShared(&g_windowMenuSubclassLock);
+        if (!g_stopping.load(std::memory_order_relaxed))
+            AttachWindowMenuOwner(hwnd);
+        ReleaseSRWLockShared(&g_windowMenuSubclassLock);
+    }
+    SetLastError(error);
+    return hwnd;
+}
+
 }  // namespace etm
 
 BOOL Wh_ModInit() {
@@ -2884,9 +3104,9 @@ BOOL Wh_ModInit() {
         ETM_LOG(L"Adjustable Acrylic is unavailable; choose System Acrylic");
         return FALSE;
     }
-    g_settings.lightTint = ParseTint(
+    g_settings.lightTint = ParseRgbColor(
         WindhawkUtils::StringSetting::make(L"lightTint"), RGB(245, 245, 245));
-    g_settings.darkTint = ParseTint(
+    g_settings.darkTint = ParseRgbColor(
         WindhawkUtils::StringSetting::make(L"darkTint"), RGB(32, 32, 32));
     auto themeSetting = WindhawkUtils::StringSetting::make(L"theme");
     g_settings.theme = !_wcsicmp(themeSetting, L"dark")    ? 2
@@ -2894,6 +3114,8 @@ BOOL Wh_ModInit() {
                                                            : 0;
     g_settings.highlightOpacity =
         ClampPercent(Wh_GetIntSetting(L"highlightOpacity"));
+    g_settings.highlightColor = ParseRgbColor(
+        WindhawkUtils::StringSetting::make(L"highlightColor"), CLR_INVALID);
     int highlightRadius = Wh_GetIntSetting(L"highlightRadius");
     int highlightInset = Wh_GetIntSetting(L"highlightInset");
     g_settings.highlightRadius = highlightRadius < 0 ? 0 : highlightRadius;
@@ -2905,6 +3127,7 @@ BOOL Wh_ModInit() {
         Wh_GetIntSetting(L"removeIconBackground") != 0;
     g_settings.roundedCorners = Wh_GetIntSetting(L"roundedCorners") != 0;
     g_settings.hideMenuBorder = Wh_GetIntSetting(L"hideMenuBorder") != 0;
+    g_settings.styleWindowMenu = Wh_GetIntSetting(L"styleWindowMenu") != 0;
     g_settings.ctrlBypass = Wh_GetIntSetting(L"ctrlBypass") != 0;
     g_stopping.store(false, std::memory_order_relaxed);
 
@@ -2935,16 +3158,28 @@ BOOL Wh_ModInit() {
                                         DwmSetWindowAttributeHook,
                                         &g_dwmSetWindowAttribute))
         return FALSE;
-    ETM_LOG(L"Initialized on Windows build %lu; only Explorer Win32 popups",
-            version.dwBuildNumber);
+    if (g_settings.styleWindowMenu &&
+        !WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExWHook,
+                                        &g_createWindowEx))
+        return FALSE;
+    ETM_LOG(L"Initialized on Windows build %lu material=%s titleBarMenu=%d",
+            version.dwBuildNumber, MaterialName(g_settings.material),
+            g_settings.styleWindowMenu);
     return TRUE;
 }
 
+void Wh_ModAfterInit() {
+    if (etm::g_createWindowEx)
+        EnumWindows(etm::VisitWindowMenuOwner, TRUE);
+}
+
 void Wh_ModBeforeUninit() {
+    AcquireSRWLockExclusive(&etm::g_windowMenuSubclassLock);
     etm::g_stopping.store(true, std::memory_order_relaxed);
+    ReleaseSRWLockExclusive(&etm::g_windowMenuSubclassLock);
     etm::StopSelectionReplays();
-    // Cancel active loops on their owning UI threads. Do not synchronously send
-    // across threads or hold a lock while waiting for shell extensions.
+    // Cancel active loops on their owning UI threads before removing the
+    // owner observers. Do not hold the scope lock across subclass removal.
     AcquireSRWLockShared(&etm::g_scopesLock);
     for (etm::MenuScope* scope = etm::g_scopes; scope; scope = scope->next) {
         if (scope->owner)
@@ -2952,6 +3187,8 @@ void Wh_ModBeforeUninit() {
         PostThreadMessageW(scope->threadId, WM_CANCELMODE, 0, 0);
     }
     ReleaseSRWLockShared(&etm::g_scopesLock);
+    if (etm::g_createWindowEx)
+        EnumWindows(etm::VisitWindowMenuOwner, FALSE);
 }
 
 void Wh_ModUninit() {
