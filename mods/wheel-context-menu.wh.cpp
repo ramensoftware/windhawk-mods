@@ -36,6 +36,10 @@ fade out toward the top and bottom of the arc.
 - Type a name to jump to it. Up / Down step, Left / Right jump to the ends.
 - Enter chooses, Backspace goes back, Esc closes.
 
+**Last choice note** (off by default) shows what you last chose from a
+wheel, and how long ago, as a greyed entry at the top or bottom of the list
+or in the centre of the wheel. Handy after an accidental click.
+
 **Wheel options** (last entry in the wheel) changes most settings on the
 spot. A change made there holds until you next change the mod's settings in
 Windhawk, which then take over again.
@@ -146,6 +150,14 @@ takes the menu, so use one at a time.
   - choose: Choose the highlighted item
   - nothing: Do nothing
   - close: Close the wheel
+- showLast: none
+  $name: Show the last choice
+  $description: Shows a greyed, non-selectable note of the last item chosen from a wheel and how long ago, so an accidental click can be identified at a glance. Choices made in the standard menu are not recorded.
+  $options:
+  - none: "Off"
+  - top: Top of the list
+  - bottom: Bottom of the list
+  - center: Centre of the wheel
 - showDefaultEntry: true
   $name: Show "Default context options"
   $description: Adds an entry that opens the standard menu. A right-click inside the wheel always does the same.
@@ -265,6 +277,10 @@ struct Config {
     // highlighted item, 1 does nothing, 2 closes the wheel.
     int emptyClick = 0;
 
+    // A greyed note of the last choice: 0 off, 1 top of the list, 2 bottom
+    // of the list, 3 centre of the wheel.
+    int lastNote = 0;
+
     // Placement. The arc flips to the other side when it would not fit.
     bool preferLeft = false;
     float edgeKeep = 0.5f;       // share of the radius kept on screen at the
@@ -312,6 +328,7 @@ enum : int {
     ID_OPTIONS = -3,      // the "Wheel options" entry
     ID_OPT_SETTING = -4,  // one setting inside it
     ID_CUSTOM = -5,       // a user-defined entry that runs a command
+    ID_INFO = -6,         // the greyed "Last: ..." note; never selectable
     ID_REAL = 1,           // a real menu item; see cmd / hOwner / pos
     ID_OPT_BASE = 1000,   // radio choices: base + setting * 32 + choice
 };
@@ -404,6 +421,7 @@ struct Wheel {
     double gapPos = 0.0;     // eased position of the empty slot
 
     std::wstring typed;      // type-to-find buffer
+    std::wstring lastNote;   // "Last: Copy, 5 s ago", worked out on open
     double typedTime = 0.0;
 
     std::vector<Level> stack;
@@ -987,6 +1005,7 @@ static void Render() {
 
         auto drawSlot = [&](int idx, double pos, bool selected, bool seam) {
             const Item& it = items[size_t(idx)];
+            if (it.id == ID_INFO) selected = false;  // it is only a note
             const float phi = float(pos - rot) * step;
             const float theta = 90.0f + phi;
             if (theta <= -step || theta >= 180.0f + step) return;
@@ -1130,6 +1149,40 @@ static void Render() {
                        DWRITE_MEASURING_MODE_NATURAL);
     }
 
+    // The note of the last choice, greyed, in the middle of the wheel just
+    // below the centre line. Top level only.
+    if (cfg.lastNote == 3 && g.stack.size() == 1 && !g.lastNote.empty()) {
+        g.rt->SetTransform(&identity);
+        const float maxW = cfg.hubRadius * s * 1.7f;
+        float tw = maxW;
+        IDWriteTextLayout* layout = nullptr;
+        if (SUCCEEDED(g.dw->CreateTextLayout(
+                g.lastNote.c_str(), UINT32(g.lastNote.size()), g.fmt, maxW,
+                halfH * 2, &layout))) {
+            DWRITE_TEXT_METRICS tm = {};
+            if (SUCCEEDED(layout->GetMetrics(&tm)))
+                tw = std::min(maxW, tm.widthIncludingTrailingWhitespace);
+            layout->Release();
+        }
+        const float ty = c + 40 * s;
+        D2D1_ROUNDED_RECT rr;
+        rr.rect = RectF(c - tw * 0.5f - pad, ty - pillHalf,
+                        c + tw * 0.5f + pad, ty + pillHalf);
+        rr.radiusX = rr.radiusY = 5 * s;
+        const D2D1_COLOR_F bgc = Color(cfg.bgColor);
+        g.brush->SetColor(&bgc);
+        g.brush->SetOpacity(cfg.labelBgOpacity * 0.8f);
+        g.rt->FillRoundedRectangle(&rr, g.brush);
+        const D2D1_COLOR_F col = Color(cfg.textColor);
+        g.brush->SetColor(&col);
+        g.brush->SetOpacity(0.5f);
+        const D2D1_RECT_F tr = RectF(c - tw * 0.5f, ty - halfH,
+                                     c + tw * 0.5f + 2 * s, ty + halfH);
+        g.rt->DrawText(g.lastNote.c_str(), UINT32(g.lastNote.size()), g.fmt,
+                       &tr, g.brush, D2D1_DRAW_TEXT_OPTIONS_CLIP,
+                       DWRITE_MEASURING_MODE_NATURAL);
+    }
+
     // What has been typed so far, shown just above the cursor.
     if (!g.typed.empty()) {
         g.rt->SetTransform(&identity);
@@ -1194,6 +1247,7 @@ static void Render() {
 
 static std::vector<std::wstring> g_history;  // top-level labels, newest first
 static std::wstring g_lastText;              // the last item actually chosen
+static int g_lastTime = 0;                   // when, see NowSecs; 0 = unknown
 static bool g_historyLoaded = false;
 static DWORD g_clipSeq = 0;                  // clipboard sequence at that time
 
@@ -1246,7 +1300,38 @@ static void LoadHistory() {
     g_historyLoaded = true;
     g_history = Split(ReadStored(L"history"), L'\t');
     g_lastText = ReadStored(L"last");
+    g_lastTime = Wh_GetIntValue(L"lastTime", 0);
     g_clipSeq = GetClipboardSequenceNumber();
+}
+
+// Seconds since the start of 2025, which fits an int for decades.
+static int NowSecs() {
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    const ULONGLONG ticks =
+        (ULONGLONG(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+    return int(ticks / 10000000ULL - 13380163200ULL);
+}
+
+// "Last: Copy, 5 s ago": what was last chosen from a wheel and how long ago,
+// for anyone wondering what they just clicked. Empty if nothing is on record.
+static std::wstring LastNote() {
+    if (g_lastText.empty()) return L"";
+    std::wstring note = L"Last: " + g_lastText;
+    const int age = g_lastTime > 0 ? NowSecs() - g_lastTime : -1;
+    wchar_t when[40] = L"";
+    if (age >= 0 && age < 5)
+        swprintf(when, 40, L"just now");
+    else if (age >= 5 && age < 90)
+        swprintf(when, 40, L"%d s ago", age);
+    else if (age >= 90 && age < 5400)
+        swprintf(when, 40, L"%d min ago", (age + 30) / 60);
+    else if (age >= 5400 && age < 129600)
+        swprintf(when, 40, L"%d h ago", (age + 1800) / 3600);
+    else if (age >= 129600)
+        swprintf(when, 40, L"%d d ago", (age + 43200) / 86400);
+    if (when[0]) note += std::wstring(L", ") + when;
+    return note;
 }
 
 static Item* FindText(std::vector<Item>& v, const std::wstring& text) {
@@ -1280,9 +1365,11 @@ static void RecordChoice(const std::wstring& rootText,
     g_clipSeq = GetClipboardSequenceNumber();
     Wh_SetStringValue(L"history", Join(g_history, L'\t').c_str());
     Wh_SetStringValue(L"last", g_lastText.c_str());
+    g_lastTime = NowSecs();
+    Wh_SetIntValue(L"lastTime", g_lastTime);
 }
 
-static int PreselectIndex(const std::vector<Item>& items) {
+static int PreselectChoice(const std::vector<Item>& items) {
     if (cfg.preselect == 0) return 0;
     if (cfg.preselect == 2) {
         // Paste follows a Cut or Copy, whether it was chosen here or done
@@ -1320,7 +1407,35 @@ static Level BuildRootLevel() {
             taken = lvl.items[size_t(i)].text == it.text;
         if (!taken) lvl.items.push_back(it);
     }
+
+    // The note of the last choice, as a greyed entry at either end.
+    if (cfg.lastNote == 1 || cfg.lastNote == 2) {
+        const std::wstring note = LastNote();
+        if (!note.empty()) {
+            Item info;
+            info.text = note;
+            info.id = ID_INFO;
+            info.disabled = true;
+            if (cfg.lastNote == 1) {
+                info.hoisted = true;  // sits with any recent choices on top
+                lvl.items.insert(lvl.items.begin(), info);
+                if (lvl.hoisted > 0) lvl.hoisted++;
+            } else {
+                info.groupStart = true;
+                lvl.items.push_back(info);
+            }
+        }
+    }
     return lvl;
+}
+
+// The item to open on. Never the note.
+static int PreselectIndex(const std::vector<Item>& items) {
+    int i = PreselectChoice(items);
+    if (i >= 0 && i < int(items.size()) && items[size_t(i)].id == ID_INFO &&
+        i + 1 < int(items.size()))
+        i++;
+    return i;
 }
 
 // A rearranged menu is remembered under a key made from the set of names in
@@ -1458,6 +1573,11 @@ static const std::vector<Setting>& Settings() {
          [] { return float(cfg.emptyClick); },
          [](float x) { cfg.emptyClick = int(x); },
          {{L"Chooses", 0}, {L"Does nothing", 1}, {L"Closes the wheel", 2}}},
+        {L"Last choice note",
+         [] { return float(cfg.lastNote); },
+         [](float x) { cfg.lastNote = int(x); },
+         {{L"Off", 0}, {L"Top of the list", 1}, {L"Bottom of the list", 2},
+          {L"Centre", 3}}},
     };
     return v;
 }
@@ -1786,6 +1906,7 @@ static void BeginDrag(int idx) {
     if (lvl.items.size() < 2 || idx < 0 || idx >= int(lvl.items.size()) ||
         lvl.widths.size() != lvl.items.size() ||
         lvl.items[size_t(idx)].id == ID_BACK ||
+        lvl.items[size_t(idx)].id == ID_INFO ||
         lvl.items[size_t(idx)].id == ID_OPT_SETTING ||
         lvl.items[size_t(idx)].radio)  // these stay put
         return;
@@ -1815,7 +1936,7 @@ static void EndDrag(int at, bool commit) {
         lvl.hoisted = 0;
         std::vector<Item> out;
         for (const Item& it : lvl.items)
-            if (it.id != ID_BACK) out.push_back(it);
+            if (it.id != ID_BACK && it.id != ID_INFO) out.push_back(it);
         *lvl.src = std::move(out);
         if (g.stack.size() == 1) RefreshOptionsItem();
         SaveOrder(*lvl.src);
@@ -1973,6 +2094,7 @@ static void OpenWheel(POINT pt) {
     g.forceRender = true;
     ApplyTheme();
     g.center = pt;
+    g.lastNote = LastNote();
     g.tiltArmed = false;  // Tick arms it once the cursor is in the band
     g.pressed = false;
     g.dragging = false;
@@ -2158,7 +2280,10 @@ static void Tick(double dt) {
         Touch();
         const Level& lvl = g.stack.back();
         const int n = int(lvl.items.size());
-        const int minIns = (n > 0 && lvl.items[0].id == ID_BACK) ? 1 : 0;
+        const int minIns = (n > 0 && (lvl.items[0].id == ID_BACK ||
+                                      lvl.items[0].id == ID_INFO))
+                               ? 1
+                               : 0;
         g.dragIns = std::clamp(int(std::llround(CursorSlot(p))), minIns, n);
         g.gapPos += (double(g.dragIns) - g.gapPos) * (1.0 - std::exp(-dt * 22.0));
     }
@@ -2525,6 +2650,9 @@ static void LoadConfig() {
     cfg.hasLabelColor = ParseColor(StrSetting(L"labelColor"), &cfg.userLabel);
     cfg.hasHighlight =
         ParseColor(StrSetting(L"highlightColor"), &cfg.userHighlight);
+    const std::wstring showLast = StrSetting(L"showLast");
+    cfg.lastNote = showLast == L"top" ? 1 : showLast == L"bottom" ? 2
+                 : showLast == L"center" ? 3 : 0;
     const std::wstring emptyClick = StrSetting(L"emptyClick");
     cfg.emptyClick = emptyClick == L"nothing" ? 1 : emptyClick == L"close" ? 2 : 0;
     cfg.showNativeEntry = Wh_GetIntSetting(L"showDefaultEntry") != 0;
