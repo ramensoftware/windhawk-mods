@@ -2,13 +2,12 @@
 // @id              explorer-tab-memory
 // @name            Explorer Tab Memory Saver
 // @description     Restores your tabs and active folder when you reopen File Explorer.
-// @version         0.2.1
+// @version         0.3.0
 // @author          Maxxwell Quinn
 // @github          https://github.com/MXXQN
 // @license         MIT
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lshell32 -luuid -ladvapi32
+// @include         windhawk.exe
+// @compilerOptions -lole32 -loleaut32 -lshell32 -luuid -ladvapi32 -lcrypt32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -23,7 +22,12 @@ that folder stays selected alongside the restored tabs.
 Windows supplies the tab order, which can differ from an order you set by
 dragging tabs. Each Windows user has a separate saved session.
 
-Tested on Windows 11 x64, build 26300.9974, with native File Explorer tabs.
+This mod restores the last window with Explorer's own tab commands. The
+similarly named [Explorer Tabs Session Saver](https://windhawk.net/mods/explorer-tabs-session-saver)
+uses shell launches and recommends a companion utility for grouping tabs.
+Enable only one session-restoration mod at a time.
+
+Requires Windows 11 File Explorer with native tabs. Tested on x64 build 26300.9974.
 */
 // ==/WindhawkModReadme==
 
@@ -31,12 +35,14 @@ Tested on Windows 11 x64, build 26300.9974, with native File Explorer tabs.
 /*
 - accountSid: ""
   $name: Windows account SID
-  $description: Leave empty for all accounts, or enter the SID of one user.
+  $description: Leave empty for all accounts. To limit the mod to one account, enter the SID shown by whoami /user.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <sddl.h>
+#include <wincrypt.h>
+#include <wil/resource.h>
 #include <shlobj.h>
 #include <exdisp.h>
 #include <wrl/client.h>
@@ -133,25 +139,126 @@ static bool equalPath(const std::wstring& a, const std::wstring& b) {
     return CompareStringOrdinal(a.c_str(), -1, b.c_str(), -1, TRUE) == CSTR_EQUAL;
 }
 
-static Locations loadSession(PCWSTR key) {
-    DWORD bytes = 0;
-    if (RegGetValueW(HKEY_CURRENT_USER, key, L"Folders", RRF_RT_REG_MULTI_SZ,
-            nullptr, nullptr, &bytes) || bytes > 4 * 1024 * 1024) return {};
-    std::vector<wchar_t> data(bytes / sizeof(wchar_t) + 2);
-    if (RegGetValueW(HKEY_CURRENT_USER, key, L"Folders", RRF_RT_REG_MULTI_SZ,
-            nullptr, data.data(), &bytes)) return {};
-    Locations result;
-    for (PCWSTR item = data.data(); *item; item += wcslen(item) + 1) result.emplace_back(item);
-    return result;
+constexpr size_t maxSessionBytes = 4 * 1024 * 1024;
+constexpr size_t maxEncryptedBytes = maxSessionBytes + 64 * 1024;
+constexpr size_t maxTabs = 4096;
+constexpr size_t maxParsingName = 32767;
+
+static std::wstring sessionFilePath() {
+    alignas(TOKEN_USER) BYTE user[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE]{};
+    DWORD length = 0;
+    if (!GetTokenInformation(GetCurrentProcessToken(), TokenUser, user, sizeof(user), &length)) return {};
+    wil::unique_hlocal_string sid;
+    if (!ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(user)->User.Sid, &sid)) return {};
+    std::vector<wchar_t> directory(32768);
+    if (!Wh_GetModStoragePath(directory.data(), directory.size())) return {};
+    return std::wstring(directory.data()) + L"\\session-" + sid.get() + L".bin";
 }
 
-static bool saveSession(PCWSTR key, const Locations& paths) {
-    if (paths.empty()) return false;
-    std::vector<wchar_t> data;
-    for (const auto& path : paths) data.insert(data.end(), path.c_str(), path.c_str() + path.size() + 1);
+// Both the old registry format and the new payload end with a MULTI_SZ.
+// Bound every scan by the size of the input, including its final empty string.
+static Locations parseFolders(PCWSTR text, size_t chars) {
+    Locations paths;
+    while (chars > 1) {
+        const auto end = std::find(text, text + chars, L'\0');
+        size_t length = static_cast<size_t>(end - text);
+        if (!length || length == chars || length > maxParsingName || paths.size() == maxTabs) return {};
+        paths.emplace_back(text, length);
+        chars -= length + 1;
+        text = end + 1;
+    }
+    if (chars != 1 || *text != L'\0') return {};
+    return paths;
+}
+
+static Locations readSnapshot(HANDLE file, DWORD& activeIndex) {
+    LARGE_INTEGER size;
+    if (!GetFileSizeEx(file, &size) || size.QuadPart <= 0 || size.QuadPart > maxEncryptedBytes) return {};
+    std::vector<BYTE> encrypted(static_cast<size_t>(size.QuadPart));
+    DWORD read = 0;
+    if (!ReadFile(file, encrypted.data(), static_cast<DWORD>(encrypted.size()), &read, nullptr) ||
+        read != encrypted.size()) return {};
+    DATA_BLOB input{read, encrypted.data()}, plain{};
+    if (!CryptUnprotectData(&input, nullptr, nullptr, nullptr, nullptr, CRYPTPROTECT_UI_FORBIDDEN, &plain)) return {};
+    wil::unique_hlocal_ptr<BYTE> cleanup(plain.pbData);
+    // Version 1: four UTF-16 characters, a 16-bit tab index, and the folders.
+    if (plain.cbData < 8 * sizeof(wchar_t) || plain.cbData > maxSessionBytes ||
+        plain.cbData % sizeof(wchar_t)) return {};
+    PCWSTR text = reinterpret_cast<PCWSTR>(plain.pbData);
+    if (wmemcmp(text, L"ETM1", 4)) return {};
+    auto paths = parseFolders(text + 5, plain.cbData / sizeof(wchar_t) - 5);
+    if (text[4] >= paths.size()) return {};
+    activeIndex = text[4];
+    return paths;
+}
+
+static Locations loadSession(PCWSTR path, DWORD& activeIndex) {
+    wil::unique_hfile file(CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+    return file ? readSnapshot(file.get(), activeIndex) : Locations{};
+}
+
+static bool saveSession(PCWSTR path, const Locations& paths, DWORD activeIndex) {
+    if (!*path || paths.empty() || paths.size() > maxTabs || activeIndex >= paths.size()) return false;
+    std::vector<wchar_t> data{L'E', L'T', L'M', L'1', static_cast<wchar_t>(activeIndex)};
+    for (const auto& folder : paths) {
+        if (folder.empty() || folder.size() > maxParsingName || folder.find(L'\0') != folder.npos ||
+            data.size() + folder.size() + 2 > maxSessionBytes / sizeof(wchar_t)) return false;
+        data.insert(data.end(), folder.c_str(), folder.c_str() + folder.size() + 1);
+    }
     data.push_back(0);
-    return RegSetKeyValueW(HKEY_CURRENT_USER, key, L"Folders", REG_MULTI_SZ,
-        data.data(), static_cast<DWORD>(data.size() * sizeof(wchar_t))) == ERROR_SUCCESS;
+    DATA_BLOB plain{static_cast<DWORD>(data.size() * sizeof(wchar_t)), reinterpret_cast<BYTE*>(data.data())};
+    DATA_BLOB encrypted{};
+    // Windhawk can share its mod directory between Windows accounts.
+    if (!CryptProtectData(&plain, nullptr, nullptr, nullptr, nullptr, CRYPTPROTECT_UI_FORBIDDEN, &encrypted)) return false;
+    wil::unique_hlocal_ptr<BYTE> cleanup(encrypted.pbData);
+    if (encrypted.cbData > maxEncryptedBytes) return false;
+
+    GUID guid;
+    wchar_t suffix[40];
+    if (FAILED(CoCreateGuid(&guid)) || !StringFromGUID2(guid, suffix, ARRAYSIZE(suffix))) return false;
+    auto temporary = std::wstring(path) + suffix;
+    wil::unique_hfile file(CreateFileW(temporary.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+        FILE_ATTRIBUTE_NORMAL, nullptr));
+    if (!file) return false;
+    DWORD written = 0;
+    bool complete = WriteFile(file.get(), encrypted.pbData, encrypted.cbData, &written, nullptr) &&
+                    written == encrypted.cbData && FlushFileBuffers(file.get());
+    file.reset();
+    if (complete && MoveFileExW(temporary.c_str(), path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) return true;
+    DeleteFileW(temporary.c_str());
+    return false;
+}
+
+static void consumeSession(PCWSTR path, const Locations& expected, DWORD activeIndex) {
+    // Delete only the snapshot we consumed, even if this user has two logons.
+    wil::unique_hfile file(CreateFileW(path, GENERIC_READ | DELETE, FILE_SHARE_READ, nullptr,
+        OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+    DWORD index = 0;
+    if (!file || readSnapshot(file.get(), index) != expected || index != activeIndex) return;
+    FILE_DISPOSITION_INFO remove{TRUE};
+    SetFileInformationByHandle(file.get(), FileDispositionInfo, &remove, sizeof(remove));
+}
+
+static Locations loadLegacySession(PCWSTR key, DWORD& index) {
+    DWORD bytes = 0;
+    if (RegGetValueW(HKEY_CURRENT_USER, key, L"Folders", RRF_RT_REG_MULTI_SZ, nullptr, nullptr, &bytes) ||
+        bytes < 3 * sizeof(wchar_t) || bytes > maxSessionBytes || bytes % sizeof(wchar_t)) return {};
+    std::vector<wchar_t> data(bytes / sizeof(wchar_t));
+    if (RegGetValueW(HKEY_CURRENT_USER, key, L"Folders", RRF_RT_REG_MULTI_SZ, nullptr, data.data(), &bytes) ||
+        bytes % sizeof(wchar_t)) return {};
+    auto paths = parseFolders(data.data(), bytes / sizeof(wchar_t));
+    DWORD size = sizeof(index);
+    if (RegGetValueW(HKEY_CURRENT_USER, key, L"ActiveTab", RRF_RT_REG_DWORD, nullptr, &index, &size) ||
+        index >= paths.size()) index = 0;
+    return paths;
+}
+
+static void clearMatchingLegacySession(PCWSTR key, const Locations& expected, DWORD activeIndex) {
+    DWORD index = 0;
+    if (expected.empty() || loadLegacySession(key, index) != expected || activeIndex != index) return;
+    if (RegDeleteKeyValueW(HKEY_CURRENT_USER, key, L"Folders") == ERROR_SUCCESS)
+        RegDeleteKeyValueW(HKEY_CURRENT_USER, key, L"ActiveTab");
 }
 
 static bool isLandingPage(const std::wstring& path) {
@@ -267,17 +374,24 @@ static void selectRestoredTab(HWND frame, size_t index) {
 }
 
 struct Session {
-    PCWSTR key;
+    std::wstring filePath;
+    PCWSTR legacyKey;
     HWND lastFrame = nullptr;
     ULONGLONG openedAt = 0;
     Locations snapshot, pending, partialRestore;
     DWORD activeIndex = 0, savedIndex = 0;
     bool preservePending = false;
     bool restoreOnOpen;
-    Session(PCWSTR storage, bool startEmpty) : key(storage), pending(loadSession(storage)), restoreOnOpen(startEmpty) {
-        DWORD bytes = sizeof(savedIndex);
-        RegGetValueW(HKEY_CURRENT_USER, key, L"ActiveTab", RRF_RT_REG_DWORD,
-                     nullptr, &savedIndex, &bytes);
+    Session(std::wstring storage, bool startEmpty, PCWSTR legacy = sessionKey)
+        : filePath(std::move(storage)), legacyKey(legacy), restoreOnOpen(startEmpty) {
+        pending = loadSession(filePath.c_str(), savedIndex);
+        if (pending.empty()) {
+            pending = loadLegacySession(legacyKey, savedIndex);
+            if (pending.empty() || !saveSession(filePath.c_str(), pending, savedIndex)) return;
+            DWORD index = 0;
+            if (loadSession(filePath.c_str(), index) != pending || index != savedIndex) return;
+        }
+        clearMatchingLegacySession(legacyKey, pending, savedIndex);
     }
 
     void tick(IShellWindows* windows, const std::vector<HWND>& frames) {
@@ -286,9 +400,7 @@ struct Session {
             if (!preservePending && !snapshot.empty()) {
                 pending = snapshot;
                 savedIndex = activeIndex;
-                if (saveSession(key, pending))
-                    RegSetKeyValueW(HKEY_CURRENT_USER, key, L"ActiveTab", REG_DWORD,
-                                    &savedIndex, sizeof(savedIndex));
+                saveSession(filePath.c_str(), pending, savedIndex);
             }
             lastFrame = nullptr;
             snapshot.clear();
@@ -348,8 +460,8 @@ struct Session {
             if (!preservePending) {
                 // A quick second close must still retain the restored session.
                 snapshot = result.empty() ? pending : std::move(result);
-                RegDeleteKeyValueW(HKEY_CURRENT_USER, key, L"Folders");
-                RegDeleteKeyValueW(HKEY_CURRENT_USER, key, L"ActiveTab");
+                consumeSession(filePath.c_str(), pending, savedIndex);
+                clearMatchingLegacySession(legacyKey, pending, savedIndex);
                 pending.clear();
             } else partialRestore = std::move(result);
             return;
@@ -367,13 +479,15 @@ struct Session {
     }
 };
 
+static BOOL CALLBACK collectExplorerFrame(HWND window, LPARAM context) {
+    if (hasClass(window, L"CabinetWClass"))
+        reinterpret_cast<std::vector<HWND>*>(context)->push_back(window);
+    return TRUE;
+}
+
 static std::vector<HWND> explorerFrames() {
     std::vector<HWND> frames;
-    EnumWindows([](HWND window, LPARAM context) -> BOOL {
-        if (hasClass(window, L"CabinetWClass"))
-            reinterpret_cast<std::vector<HWND>*>(context)->push_back(window);
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(&frames));
+    EnumWindows(collectExplorerFrame, reinterpret_cast<LPARAM>(&frames));
     return frames;
 }
 
@@ -418,7 +532,8 @@ struct ProcessEvents {
 // another window in the background is also detected.
 static bool watchExplorerProcesses(std::vector<ProcessEvents>& hooks, DWORD shellPid,
                                    const std::vector<HWND>& frames) {
-    std::vector<DWORD> owners{shellPid};
+    std::vector<DWORD> owners;
+    if (shellPid) owners.push_back(shellPid);
     for (HWND frame : frames) {
         DWORD pid = 0;
         GetWindowThreadProcessId(frame, &pid);
@@ -447,11 +562,7 @@ static bool watchExplorerProcesses(std::vector<ProcessEvents>& hooks, DWORD shel
 }
 
 static DWORD WINAPI run(void*) {
-    // At sign-in Windhawk may initialize before the desktop HWND exists.
     DWORD shellPid = 0;
-    while (!shellPid && !stopped(100))
-        GetWindowThreadProcessId(GetShellWindow(), &shellPid);
-    if (shellPid != GetCurrentProcessId()) return 0;
     if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) return 0;
     {
         ExplorerEvents events;
@@ -461,7 +572,7 @@ static DWORD WINAPI run(void*) {
         auto foreground = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
                                           explorerEvent, 0, 0, WINEVENT_OUTOFCONTEXT);
         events.frames = explorerFrames();
-        Session session(sessionKey, events.frames.empty());
+        Session session(sessionFilePath(), events.frames.empty());
         ComPtr<IShellWindows> windows;
         ULONGLONG due = 0;
         ULONGLONG settleUntil = GetTickCount64() + 1100;
@@ -476,9 +587,17 @@ static DWORD WINAPI run(void*) {
                 due = (std::min)(due, now + 65);
             }
             if (now >= due) {
+                DWORD currentShellPid = 0;
+                GetWindowThreadProcessId(GetShellWindow(), &currentShellPid);
+                if (currentShellPid != shellPid) {
+                    // The tool can outlive Explorer and its COM server.
+                    windows.Reset();
+                    shellPid = currentShellPid;
+                }
                 events.frames = explorerFrames();
                 bool hooksReady = watchExplorerProcesses(hooks, shellPid, events.frames);
-                if (!windows) CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&windows));
+                if (!windows && shellPid)
+                    CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&windows));
                 if (windows) session.tick(windows.Get(), events.frames);
                 DWORD interval = events.frames.empty() ? 5000 : 3000;
                 if (!windows || !hooksReady || !foreground) interval = 350;
@@ -498,11 +617,7 @@ static DWORD WINAPI run(void*) {
     return 0;
 }
 
-BOOL Wh_ModInit() {
-    // Run one observer in the desktop shell for each interactive user.
-    DWORD shellPid = 0;
-    GetWindowThreadProcessId(GetShellWindow(), &shellPid);
-    if (shellPid && shellPid != GetCurrentProcessId()) return FALSE;
+static bool accountAllowed() {
     PCWSTR configuredSid = Wh_GetStringSetting(L"accountSid");
     bool allowed = configuredSid && !*configuredSid;
     PSID sid = nullptr;
@@ -512,17 +627,213 @@ BOOL Wh_ModInit() {
         LocalFree(sid);
     }
     if (configuredSid) Wh_FreeStringSetting(configuredSid);
-    if (!allowed) return FALSE;
+    return allowed;
+}
+
+static DWORD WINAPI waitForAccountChange(void*) {
+    WaitForSingleObject(stopEvent, INFINITE);
+    return 0;
+}
+
+static bool observing;
+
+BOOL WhTool_ModInit() {
     stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!stopEvent) return FALSE;
-    worker = CreateThread(nullptr, 0, run, nullptr, 0, nullptr);
+    observing = accountAllowed();
+    worker = CreateThread(nullptr, 0, observing ? run : waitForAccountChange, nullptr, 0, nullptr);
     if (!worker) CloseHandle(stopEvent);
     return worker != nullptr;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     SetEvent(stopEvent);
     WaitForSingleObject(worker, INFINITE);
     CloseHandle(worker);
     CloseHandle(stopEvent);
+}
+
+void WhTool_ModSettingsChanged() {
+    if (accountAllowed() == observing) return;
+    WhTool_ModUninit();
+    if (!WhTool_ModInit()) ExitProcess(1);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
