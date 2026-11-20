@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-20T01:03:34.000Z</updated>
+    <updated>2026-11-20T02:05:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Alt+Tab Flip 3D 1.8.0]]></title>
+        <id>https://windhawk.net/mods/alt-tab-flip-3d#6a307cd7030bc08eb97439377b135a529439e66e</id>
+        <link href="https://windhawk.net/mods/alt-tab-flip-3d"/>
+        <updated>2026-11-20T02:05:01.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Renamed from &quot;Alt+Tab Flip 3D (Vista Style)&quot; to &quot;Alt+Tab Flip 3D&quot;: the Vista stack is now one of many styles. The mod's id and settings stay the same.</li>
+<li>New &quot;Radial wheel&quot; style: the windows' icons on the slices of a ring, around a disk with the app's name and the window title. Tab goes around it clockwise, moving the mouse points at a slice and selects it, like the weapon wheel of a game, and clicking a slice switches to it. The wheel fits any screen size and shape, grows with the number of windows, and the windows fly into their slices when it opens.</li>
+<li>New Mica and Mica Alt backgrounds, made from the wallpaper like the material of Windows 11 apps, in the Windows light or dark mode (#7578).</li>
+<li>New &quot;Custom&quot; frame rate limit, with a number of your own from 30 to 720 FPS (#6934).</li>
+<li>The switcher moves to its monitor before drawing its first frame, so opening it on a faster monitor right after a slower one no longer runs at the slower monitor's frame rate (#6934).</li>
+<li>The Icons and titles and Radial wheel styles show sharp app icons: the window's icon is read again from its app in a large size, instead of being enlarged from its small one.</li>
+<li>The selection of the 2D styles stays visible with a black or very dark Windows accent color: a lighter shade of it is used.</li>
+<li>Styles without thumbnails (Icons and titles, Vertical list, Classic, Radial wheel) stop updating the pictures of the windows once they're open, since they're hidden then, which saves GPU work.</li>
+</ul>
+]]></content>
+        <author>
+            <name>caliberda</name>
+            <uri>https://github.com/cesarkali</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Translucent Menus 1.2.0]]></title>
         <id>https://windhawk.net/mods/explorer-translucent-menus#ad6603ecaaede48bcbed7f93cbcb1725ccd7f3ab</id>
@@ -723,74 +744,6 @@ Optional apps added through the inclusion list also need to be 64-bit.</p>
         <author>
             <name>xh1le</name>
             <uri>https://github.com/xh1le</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fluent Radial Menu 0.9.0]]></title>
-        <id>https://windhawk.net/mods/fluent-radial-menu#f214aa6b6da1e0c23cfe21d161701fddc96acbe7</id>
-        <link href="https://windhawk.net/mods/fluent-radial-menu"/>
-        <updated>2026-11-19T00:01:27.000Z</updated>
-        <content type="html"><![CDATA[<h1>Fluent Radial Menu</h1>
-<p>Fluent Radial Menu adds a circular launcher to Windows 11. It comes with
-three pages of apps, folders, Windows shortcuts, and screen capture tools.</p>
-<p><img src="https://i.imgur.com/fj0r5vV.gif" alt="Fluent Radial Menu in action"></p>
-<h2>Getting started</h2>
-<ol>
-<li>Enable the mod in Windhawk and press <strong>Ctrl+Alt+Space</strong> to open the wheel
-at the pointer. To change the shortcut, set <strong>Activation shortcut</strong> in the
-mod's Windhawk settings and click <strong>Save settings</strong>.</li>
-<li>Click a wedge to run its action. Scroll to switch pages or press <strong>Esc</strong>
-to dismiss the wheel. You can also use the arrow keys, <strong>Enter</strong>, and
-<strong>Page Up</strong> or <strong>Page Down</strong>.</li>
-<li>Press <strong>F2</strong> while the wheel is open, or right-click it and choose
-<strong>Edit radial menu</strong>, to open the built-in editor.</li>
-</ol>
-<p>The wheel stays closed while the foreground app is fullscreen.</p>
-<h2>Screen capture tools</h2>
-<p>Choose <strong>Color picker</strong> on the first page to open the capture toolbar at the
-top center of the display under the pointer. Use the toolbar to switch to
-<strong>Copy text from screen</strong>. In the color picker, the magnifier shows the exact pixel
-under the pointer, its <strong>#RRGGBB</strong> value, and its screen coordinates. Click
-to copy that color, or drag around text in the text tool. A confirmation
-appears after copying. Press <strong>Esc</strong> to cancel. Text recognition runs locally
-using Windows OCR and the recognition languages installed for your account.</p>
-<p>To add either tool to an existing layout, select a wedge in <strong>Actions</strong> and
-choose it from <strong>Action type</strong>.</p>
-<h2>Make it yours</h2>
-<ul>
-<li><strong>Actions</strong> lets you choose an installed app, folder, file, website,
-Windows settings page, keyboard shortcut, command, or capture tool. Select <strong>Custom…</strong>
-to browse for a local target. Choose the original app icon, a built-in
-symbol, or an icon file. Drag a wedge in the preview to move or swap it.</li>
-<li><strong>Pages</strong> lets you add, rename, reorder, or duplicate up to eight pages
-with eight slots each.</li>
-<li><strong>Appearance</strong> controls the theme, accent, size, transparency, blur, and
-labels. <strong>Motion &amp; activation</strong> controls the profile shortcut, positioning,
-and animation. It can follow Windows' reduced motion setting.</li>
-<li><strong>Apply</strong> saves your changes. <strong>Test on desktop</strong> opens the applied wheel
-with actions disabled.</li>
-</ul>
-<h2>Share or back up a layout</h2>
-<p><strong>Export profile</strong> saves the current editor layout and settings as JSON.
-<strong>Import profile</strong> opens a profile in the editor. Review its actions and
-select <strong>Apply</strong> when you are ready to use it. Shared profiles reference apps,
-folders, and custom icon files by path, so those may need to be updated on
-another PC. The built-in icons travel with the profile.</p>
-<p>A shortcut set in Windhawk takes priority over the profile shortcut. Clear
-the Windhawk field to use the profile shortcut again. In <strong>Motion &amp; activation</strong>,
-focus <strong>Profile shortcut</strong> and press the middle button or either side button
-to record it. Hold any modifiers you want to include, then click <strong>Apply</strong>.
-A mouse shortcut toggles the wheel. <strong>Hold keyboard shortcut to select</strong> applies
-to keyboard activation. Check the Windhawk mod log if Windows cannot register
-a new shortcut.</p>
-<p>On 64-bit Windows, the menu opens native system apps from either Windhawk
-host. In the 32-bit file picker, enter <strong>%WINDIR%\Sysnative</strong> in the address
-bar to browse the native System32 folder. The editor saves those selections
-as System32 paths so the same profile works in the 64-bit host.</p>
-]]></content>
-        <author>
-            <name>Fenryr</name>
-            <uri>https://github.com/soldier93HUN</uri>
         </author>
     </entry>
 </feed>

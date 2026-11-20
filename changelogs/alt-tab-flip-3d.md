@@ -1,3 +1,14 @@
+## 1.8.0 ([Nov 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6a307cd7030bc08eb97439377b135a529439e66e/mods/alt-tab-flip-3d.wh.cpp))
+
+* Renamed from "Alt+Tab Flip 3D (Vista Style)" to "Alt+Tab Flip 3D": the Vista stack is now one of many styles. The mod's id and settings stay the same.
+* New "Radial wheel" style: the windows' icons on the slices of a ring, around a disk with the app's name and the window title. Tab goes around it clockwise, moving the mouse points at a slice and selects it, like the weapon wheel of a game, and clicking a slice switches to it. The wheel fits any screen size and shape, grows with the number of windows, and the windows fly into their slices when it opens.
+* New Mica and Mica Alt backgrounds, made from the wallpaper like the material of Windows 11 apps, in the Windows light or dark mode (#7578).
+* New "Custom" frame rate limit, with a number of your own from 30 to 720 FPS (#6934).
+* The switcher moves to its monitor before drawing its first frame, so opening it on a faster monitor right after a slower one no longer runs at the slower monitor's frame rate (#6934).
+* The Icons and titles and Radial wheel styles show sharp app icons: the window's icon is read again from its app in a large size, instead of being enlarged from its small one.
+* The selection of the 2D styles stays visible with a black or very dark Windows accent color: a lighter shade of it is used.
+* Styles without thumbnails (Icons and titles, Vertical list, Classic, Radial wheel) stop updating the pictures of the windows once they're open, since they're hidden then, which saves GPU work.
+
 ## 1.7.3 ([Nov 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f77e18a3799ee9e4850f462144b08902bbab4530/mods/alt-tab-flip-3d.wh.cpp))
 
 * HDR: on a monitor with HDR turned on, windows with HDR content (videos, games, photos) keep their full brightness in the switcher, like in the native Alt+Tab (#6721). New "HDR" setting, on by default; monitors without HDR aren't affected.

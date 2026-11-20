@@ -534,13 +534,13 @@
         "ratingUsers": 377,
         "reviews": 1,
         "trendingSorting": 19.236419258554665,
-        "updated": 1793714609000,
+        "updated": 1795140301000,
         "users": 16595
       },
       "metadata": {
         "author": "caliberda",
         "compilerOptions": "-ld3d11 -ldxgi -ld2d1 -ldcomp -ldwrite -ldwmapi -lole32 -loleaut32 -luuid -lruntimeobject -lwindowscodecs -lshcore -lshell32 -lgdi32 -ladvapi32",
-        "description": "Replaces Alt+Tab with a fluid, Windows Vista-style Flip 3D stack of live windows",
+        "description": "Replaces Alt+Tab with fluid switchers of live windows, from the Windows Vista Flip 3D stack to Cover Flow, a radial wheel and more",
         "donateUrl": "https://github.com/sponsors/cesarkali",
         "github": "https://github.com/cesarkali",
         "homepage": "https://caliberda.com.br",
@@ -549,8 +549,8 @@
           "explorer.exe"
         ],
         "license": "MIT",
-        "name": "Alt+Tab Flip 3D (Vista Style)",
-        "version": "1.7.3"
+        "name": "Alt+Tab Flip 3D",
+        "version": "1.8.0"
       }
     },
     "alt-tab-hide-ghost-windows": {
@@ -6014,7 +6014,7 @@
         "rating": 8,
         "ratingBreakdown": [1, 0, 1, 4, 7],
         "ratingUsers": 13,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 11.5,
         "updated": 1794873862000,
         "users": 115
