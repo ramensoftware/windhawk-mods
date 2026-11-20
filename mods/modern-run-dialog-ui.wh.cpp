@@ -2,8 +2,8 @@
 // @id              modern-run-dialog-ui
 // @name            Modern Run Dialog UI For Windows 10 & 11
 // @name:vi-VN      Giao diện Hộp thoại Run Hiện đại cho Windows 10 & 11
-// @description     Modernizes Win + R and Task Manager "Run new task" with 13 themes (Windows 11 Blur, Liquid Glass, Mica, OLED, Catppuccin, Custom), a dedicated WinUI 3 Settings app in windhawk.exe, custom colors/radius/animated GIF backgrounds, Classic-Friendly & Mini-Pill modes, pinning, aliases, calculator, and app suggestions.
-// @description:vi-VN Làm mới hộp thoại Run (Win + R và Tạo tác vụ mới trong Task Manager) với 13 chủ đề (Windows 11 Blur, Liquid Glass, Mica, OLED, Catppuccin, Tự tùy chỉnh), cửa sổ Cài đặt WinUI 3 riêng trong windhawk.exe, tùy chỉnh màu/bo góc/hình nền GIF động, chế độ Classic-Friendly & Viên thuốc nhỏ, ghim lệnh, bí danh, tính toán nhanh và gợi ý ứng dụng.
+// @description     Modernizes Win + R and Task Manager "Run new task" with 13 themes, a WinUI 3 Settings app, custom colors/radius/GIF backgrounds, Classic-Friendly & Mini-Pill modes, pinning, aliases, calculator, and app suggestions.
+// @description:vi-VN Làm mới hộp thoại Run (Win + R & Task Manager) với 13 chủ đề, cửa sổ Cài đặt WinUI 3, tùy chỉnh màu/bo góc/nền GIF, chế độ Classic-Friendly & Viên thuốc nhỏ, ghim lệnh, bí danh, máy tính nhanh và gợi ý ứng dụng.
 // @version         6.0.1.0
 // @author          caotu2005
 // @github          https://github.com/caotu2005
