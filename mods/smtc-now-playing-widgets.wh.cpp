@@ -16,7 +16,7 @@
 
 Displays up to 5 customizable, multi-monitor Now Playing widgets on your Windows 11 desktop using the native Windows System Media Transport Controls (SMTC) API.
 
-![SMTC Now Playing Desktop Widgets Preview](https://raw.githubusercontent.com/minster586/windhawk-assets/main/Screenshot%202026-11-16%20170854.png)
+![SMTC Now Playing Desktop Widgets Preview](https://raw.githubusercontent.com/minster586/windhawk-assets/main/img.webp)
 
 When album art is unavailable, the widgets display an embedded default image.
 
