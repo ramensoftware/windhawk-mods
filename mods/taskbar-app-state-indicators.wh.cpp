@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-app-state-indicators
 // @name            Taskbar App State Indicators
-// @description     Marks taskbar buttons by window state on a frame around the icon: corner marks for open and maximized windows, an underline for minimized apps, dots for apps with several windows or a badge, and progress shown on the marks themselves, all animated along the frame.
+// @description     Marks taskbar buttons by window state on a frame around the icon: corner marks for open and maximized windows, an underline for minimized apps, dots for several windows or a badge, and progress, all animated along the frame.
 // @version         1.0.0
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
@@ -167,9 +167,6 @@ How it works:
 **Troubleshooting.** With **Debug logging** on, the log shows a line per
 button whenever what it shows changes, and a summary of what triggered
 refreshes every 10 seconds or so. Leave it off otherwise.
-
-Companion of **Taskbar Buttons Pills**, which draws the background pills
-these indicators were first built for.
 */
 // ==/WindhawkModReadme==
 
