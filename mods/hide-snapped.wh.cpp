@@ -2,7 +2,7 @@
 // @id              hide-snapped
 // @name            Snap Groups: Alt+Tab and taskbar
 // @description     Group-only Alt+Tab and separate taskbar buttons with tiled member icons.
-// @version         0.4.26
+// @version         0.4.27
 // @author          coldfeudal
 // @github          https://github.com/coldfeudal
 // @include         explorer.exe
@@ -69,7 +69,8 @@ Core taskbar integration has no Windows build-number or exact Taskbar.dll/
 ShellCommon revision restriction. It requires internal shell symbols. Native
 task-item enumeration additionally requires a recognized count-getter layout
 and matching object type/count; otherwise that presentation step stays native.
-Hidden members use their window icons without reading task-list object fields.
+Hidden members and pending button restores use window icons without reading
+task-list object fields; each task list resumes native icons after its restore.
 Native previews require an agile group and separately checked Taskbar.dll and
 DesktopSwitcherDataModel.dll layouts. Unrecognized preview layouts disable only
 previews. Detailed trace observers also retain separate DLL checks.
@@ -909,6 +910,14 @@ void* g_taskListVtable = nullptr;
 void* g_multiTaskListVtable = nullptr;
 std::mutex g_hiddenMembersMutex;
 std::set<WindowIdentity> g_hiddenMembers;
+// A failed/partial restore can outlive hiding. Each task-list UI thread confirms
+// its own successful inclusion; other monitors remain protected until theirs
+// succeeds too. Erase the entry only after all lists acknowledge restoration.
+std::map<WindowIdentity, std::set<void*>> g_pendingButtonRestore;
+void InvalidateRestoredTaskLists() {
+    std::lock_guard lock(g_hiddenMembersMutex);
+    for (auto& [identity, lists] : g_pendingButtonRestore) lists.clear();
+}
 std::map<WindowIdentity, HWND> g_groupButtons;
 std::set<WindowIdentity> g_proxyWindows;
 // Worker-published immutable routing. Monitor queries can occur while shell
@@ -1196,14 +1205,22 @@ bool SuppressTaskbarCreation(void* self, void* group, void* item) {
 }
 // Native GetIcon fail-fasts when a group has no button. Hiding member buttons
 // intentionally violates that precondition; native Snap UI can still ask for
-// their icons while replacing/resizing a group. Hidden members always use an
+// their icons while replacing/resizing a group. Hidden or pending members use an
 // owned copy of their window icon; no task-list/button object fields are read.
 HRESULT RouteTaskIcon(GetTaskIcon original, void* self, IUnknown* group, IUnknown* item,
                       HICON* icon, HICON (*source)(HWND) = WindowIcon) {
     if (!icon) return E_POINTER;
     HWND window = TaskItemWindow(item);
     if (!window) window = NativeGroupPrimaryWindow(item);
-    if (!IsHiddenTaskbarMember(IdentifyWindow(window))) return original(self, group, item, icon);
+    bool needsWindowIcon;
+    {
+        std::lock_guard lock(g_hiddenMembersMutex);
+        auto identity = IdentifyWindow(window);
+        auto pending = g_pendingButtonRestore.find(identity);
+        needsWindowIcon = g_hiddenMembers.contains(identity) ||
+            (pending != g_pendingButtonRestore.end() && !pending->second.contains(self));
+    }
+    if (!needsWindowIcon) return original(self, group, item, icon);
     *icon = nullptr;
     *icon = source(window); // CopyIcon: caller owns this HICON, as with native GetIcon.
     HRESULT hr = *icon ? S_OK : E_FAIL;
@@ -1414,6 +1431,12 @@ HRESULT RefreshTaskWindow(WPARAM action, void* band, void* list, HWND window,
         return E_PENDING;
     }
     TaskbarMutationScope mutation;
+    auto identity = IdentifyWindow(window);
+    if (action != kRefreshTaskIcon) {
+        std::lock_guard lock(g_hiddenMembersMutex);
+        auto pending = g_pendingButtonRestore.find(identity);
+        if (pending != g_pendingButtonRestore.end()) pending->second.erase(list);
+    }
     auto nativeItems = action == kRefreshTaskIcon ? std::vector<ComPtr<IUnknown>>{} : NativeTaskItems(group.Get());
     hr = S_OK;
     for (const auto& task : nativeItems) {
@@ -1437,6 +1460,14 @@ HRESULT RefreshTaskWindow(WPARAM action, void* band, void* list, HWND window,
     // a no-op for the group item, leaving its separate XAML representation.
     if (SUCCEEDED(hr)) hr = RefreshMatchedTask(action == kRestoreTask ? 0 : action,
         band, list, window, group.Get(), item.Get(), inclusion, activate, updateIcon);
+    if (action != kRefreshTaskIcon && SUCCEEDED(hr)) {
+        // Keep protection during reentrant GetIcon inside inclusion. Only this
+        // UI thread's completed restore permits native icons on this task list.
+        std::lock_guard lock(g_hiddenMembersMutex);
+        auto pending = g_pendingButtonRestore.find(identity);
+        if (!g_hiddenMembers.contains(identity) && pending != g_pendingButtonRestore.end())
+            pending->second.insert(list);
+    }
     if (action == kRestoreTask && FAILED(hr)) {
         static std::atomic<unsigned> reports = 0;
         if (reports.fetch_add(1) < 16)
@@ -1447,6 +1478,9 @@ HRESULT RefreshTaskWindow(WPARAM action, void* band, void* list, HWND window,
 
 LRESULT CALLBACK TaskListSubclass(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
                                    DWORD_PTR) {
+    // A recreated task list may reuse an interface address. Old confirmations
+    // cannot certify buttons in the new native container.
+    if (message == WM_NCDESTROY) InvalidateRestoredTaskLists();
     if (g_refreshTask && message == g_refreshTask) {
         HWND member = reinterpret_cast<HWND>(lParam);
         HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
@@ -1978,6 +2012,7 @@ public:
         std::erase_if(hidden, [destroyed](const auto& item) { return item.window == destroyed; });
         std::lock_guard lock(g_hiddenMembersMutex);
         std::erase_if(g_hiddenMembers, [destroyed](const auto& item) { return item.window == destroyed; });
+        std::erase_if(g_pendingButtonRestore, [destroyed](const auto& item) { return item.first.window == destroyed; });
         std::erase_if(g_groupButtons, [destroyed](const auto& item) { return item.first.window == destroyed; });
         if (g_lastAppForeground.window == destroyed) g_lastAppForeground = {};
     }
@@ -2400,13 +2435,17 @@ public:
             std::lock_guard lock(g_hiddenMembersMutex);
             if (g_hiddenMembers.contains(member)) return S_OK;
             g_hiddenMembers.insert(member);
+            g_pendingButtonRestore[member].clear();
         }
         TraceWrite(TraceHide, TracePointer(member.window), member.process, member.thread, 1);
         HRESULT hr = RefreshMember(member.window);
         if (FAILED(hr)) {
             { std::lock_guard lock(g_hiddenMembersMutex); g_hiddenMembers.erase(member); }
             TraceWrite(TraceHide, TracePointer(member.window), member.process, member.thread, 0);
-            RefreshMember(member.window);
+            if (SUCCEEDED(RefreshMember(member.window))) {
+                std::lock_guard lock(g_hiddenMembersMutex);
+                g_pendingButtonRestore.erase(member);
+            }
         }
         if (FAILED(hr) && reportedHideErrors.insert(hr).second)
             Wh_Log(L"phase=taskbar hide-failed hr=%08X", hr);
@@ -2417,6 +2456,10 @@ public:
         TraceWrite(TraceRestore, TracePointer(member.window), member.process, member.thread);
         if (!MemberExists(member)) return S_FALSE;
         HRESULT hr = RefreshMember(member.window, kRestoreTask);
+        if (SUCCEEDED(hr)) {
+            std::lock_guard lock(g_hiddenMembersMutex);
+            g_pendingButtonRestore.erase(member);
+        }
         return hr;
     }
     void Destroy(GroupButton& button) override {
