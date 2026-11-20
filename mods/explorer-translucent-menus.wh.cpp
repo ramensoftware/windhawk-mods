@@ -48,7 +48,7 @@ Tint and transparency adjustments
 
 Borders, submenus, hover highlights, and file tooltips
 
-![Borders, submenus, custom hover highlight colors and corner radii, and a translucent file tooltip](https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/03-border-submenus.png)
+![Borders, submenus, custom hover highlight colors and corner radii, and a translucent file tooltip](https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/03-border-highlight.png)
 
 ## Requirements
 
