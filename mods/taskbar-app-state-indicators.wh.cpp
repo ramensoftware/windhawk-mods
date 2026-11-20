@@ -125,44 +125,19 @@ the same way. Both are hidden through their composition visuals, which the
 taskbar's own state animations don't touch, and restored when the option is
 turned off or the mod is disabled. While the native progress bar is hidden,
 its own looping animation is paused too, so a hidden indeterminate bar
-costs nothing.
+costs nothing. If another mod hides the running indicator too (Taskbar Open
+Window Underline has the same option), turn it on in one of them only: both
+use the same switch, so disabling one mod shows the indicator again until
+the other's next refresh of that button.
 
-How it works:
-
-* The taskbar's buttons live in an `ItemsRepeater`; each button's item is
-  its view model (`TaskListWindowViewModel` for one window,
-  `TaskListGroupViewModel` for a group), and the view model knows its
-  windows through the shell's `TaskItem` / `TaskGroup` objects. The mod
-  resolves every button's windows that way and judges them with `IsIconic`
-  and `IsZoomed` (plus DWM cloaking). A button whose view model has no
-  window at all (a pinned app that isn't running) gets no mark.
-* A WinEvent hook (minimize, restore, show, hide, cloak, foreground;
-  maximize/restore when a setting needs them) re-evaluates every button on
-  every taskbar, coalesced, with a follow-up pass for transitions still in
-  flight. Windows on other virtual desktops are recognized through the
-  shell's `IVirtualDesktopManager`, since a window minimized there isn't
-  cloaked.
-* Progress, attention and badges are read from the button's own XAML: the
-  native progress bar's properties (watched with property-changed
-  callbacks), the button's current visual states, and the badge and
-  overlay-icon elements of its icon panel (watched for elements coming and
-  going). Bursts of changes are coalesced into one refresh.
-* The frame is one closed Direct2D path (clockwise from the top center),
-  handed to composition. Each indicator is a composition sprite shape that
-  strokes that path, trimmed to its own piece of it, so moving a piece means
-  animating its trim along the path — around the corners, on the render
-  thread. The shapes live in one shape visual per button, the child visual
-  of a small XAML host in the icon's own panel (the button's `IconPanel`)
-  above the icon and its badge. The host is glued to the icon with a
-  composition expression, so it never touches the taskbar's layout and
-  follows the icon on the render thread. On unload the host is retired in
-  place (hidden and inert, its composition content closed) rather than
-  removed, since removing children from that panel made XAML reorder the
-  icon above its badge; it is adopted again when the mod is re-enabled.
-* Buttons that exist before the mod loads are found through the taskbar's
-  XAML root (taskbar.dll); later ones through the `TaskListButton` hook.
-  On builds where the view-model symbols can't be resolved, the mod stays
-  inactive and the log says so.
+How it works, in short: each button's windows are found through the
+taskbar's view models and judged with `IsIconic`, `IsZoomed`, DWM cloaking
+and the virtual desktop manager, refreshed on window events. Progress,
+attention and badges are read from the button's own XAML. The indicators
+are composition shapes on one Direct2D path around the icon, moved by
+animating their trims along it on the render thread; the taskbar's layout
+is never touched. On builds where the needed symbols can't be resolved, the
+mod stays inactive and the log says so.
 
 **Troubleshooting.** With **Debug logging** on, the log shows a line per
 button whenever what it shows changes, and a summary of what triggered
@@ -316,7 +291,6 @@ refreshes every 10 seconds or so. Leave it off otherwise.
 #include <winrt/Windows.UI.Xaml.Data.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Media.Animation.h>
-#include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.Foundation.Numerics.h>
@@ -645,9 +619,11 @@ std::atomic<bool> g_unloading{false};
 
 // Every RunAsync post whose lambda lives in this DLL takes a ticket here
 // under g_entriesMutex, next to the same g_unloading check the uninit
-// snapshot uses, and releases it when the lambda finishes.
-// Wh_ModBeforeUninit waits for the count to drain. The rule: nothing from
-// the mod image may be running or scheduled once Wh_ModUninit returns.
+// snapshot uses. The ticket is an object the lambda owns, so it is released
+// when the lambda is destroyed - after it ran, or when the dispatcher drops
+// it without running it. Wh_ModBeforeUninit waits for the count to drain,
+// without a timeout. The rule: nothing from the mod image may be running or
+// scheduled once Wh_ModUninit returns.
 std::atomic<int> g_pendingPosts{0};
 HANDLE g_postsDrained = nullptr; // manual-reset, created in Wh_ModInit
 
@@ -658,19 +634,17 @@ bool PostToUiThread(winrt::Windows::UI::Core::CoreDispatcher const& dispatcher,
         if (g_unloading) return false; // no new posts after the uninit snapshot
         g_pendingPosts.fetch_add(1);
     }
-    auto release = []() {
+    auto ticket = std::shared_ptr<void>(nullptr, [](void*) {
         if (g_pendingPosts.fetch_sub(1) == 1 && g_postsDrained) SetEvent(g_postsDrained);
-    };
+    });
     try {
         dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High,
-                            [fn = std::move(fn), release]() {
+                            [fn = std::move(fn), ticket]() {
                                 try { fn(); } catch (...) {}
-                                release();
                             });
         return true;
     } catch (...) {
-        release(); // a failed post must not leak a count
-        return false;
+        return false;  // the ticket goes with the lambda that wasn't posted
     }
 }
 
@@ -961,27 +935,6 @@ std::vector<winrt::Windows::UI::Color> GetIndicatorColors(const Settings& localS
                               localSettings.AccentShading);
 }
 
-winrt::Windows::UI::Xaml::Media::Brush CreateBrush(const std::vector<winrt::Windows::UI::Color>& colors) {
-    if (colors.empty()) return nullptr;
-    if (colors.size() == 1) {
-        return winrt::Windows::UI::Xaml::Media::SolidColorBrush(colors[0]);
-    }
-
-    // Multi-color values render as a horizontal gradient.
-    winrt::Windows::UI::Xaml::Media::LinearGradientBrush brush;
-    brush.StartPoint({0.0, 0.5});
-    brush.EndPoint({1.0, 0.5});
-
-    auto stops = brush.GradientStops();
-    for (size_t i = 0; i < colors.size(); i++) {
-        winrt::Windows::UI::Xaml::Media::GradientStop stop;
-        stop.Color(colors[i]);
-        stop.Offset(static_cast<double>(i) / (colors.size() - 1));
-        stops.Append(stop);
-    }
-    return brush;
-}
-
 bool SameColors(const std::vector<winrt::Windows::UI::Color>& a, const std::vector<winrt::Windows::UI::Color>& b) {
     if (a.size() != b.size()) return false;
     for (size_t i = 0; i < a.size(); i++) {
@@ -1140,7 +1093,9 @@ private:
 };
 
 std::mutex g_d2dFactoryMutex;
-winrt::com_ptr<ID2D1Factory> g_d2dFactory;
+// Released by Wh_ModUninit; kept out of the CRT's destructors, which run at
+// Explorer's own exit under the loader lock, with Wh_ModUninit not called.
+[[clang::no_destroy]] winrt::com_ptr<ID2D1Factory> g_d2dFactory;
 
 winrt::com_ptr<ID2D1Factory> GetD2DFactory() {
     std::lock_guard<std::mutex> lock(g_d2dFactoryMutex);
@@ -1266,22 +1221,13 @@ FrameworkElement FindChildByName(FrameworkElement const& parent, std::wstring_vi
     return nullptr;
 }
 
-void RemoveFromParentPanel(winrt::Windows::UI::Xaml::UIElement const& element) {
-    try {
-        if (auto parent = VisualTreeHelper::GetParent(element)) {
-            if (auto panel = parent.try_as<Panel>()) {
-                uint32_t index;
-                if (panel.Children().IndexOf(element, index)) {
-                    panel.Children().RemoveAt(index);
-                }
-            }
-        }
-    } catch (...) {}
-}
+// The name of the XAML element each button's indicators live under.
+constexpr wchar_t kHostName[] = L"ButtonStateIndicatorHost";
 
-// Retires an element of ours in place: hidden, inert and unbound, but left
-// in its panel (removing children from that panel made XAML reorder the icon
-// above its badge). A retired element is adopted again later.
+// Retires an element of ours in place while the mod runs: hidden, inert and
+// unbound, but left in its panel, to be adopted again by the next pass (a
+// recycled button, an icon that moved panels). On unload every host is
+// removed instead (RemoveHostsFromTaskbarThread).
 void RetireElement(FrameworkElement const& element) {
     try {
         ElementCompositionPreview::GetElementVisual(element).Properties().StopAnimation(L"Translation");
@@ -1342,8 +1288,9 @@ bool IsWindowMinimized(HWND hwnd) {
 // Virtual desktops, through the documented IVirtualDesktopManager. Windows
 // cloaks the windows of other desktops that would be on screen, but not
 // the minimized ones, so cloaking alone can't tell a window minimized on
-// another desktop from one minimized here. The manager is created per
-// thread (COM), once; windows shown on all desktops count as on this one.
+// another desktop from one minimized here. The manager is created once, on
+// the taskbar thread where every refresh runs, and released there by the
+// unload cleanup; windows shown on all desktops count as on this one.
 struct IVirtualDesktopManagerAbi : public IUnknown {
     virtual HRESULT STDMETHODCALLTYPE IsWindowOnCurrentVirtualDesktop(HWND topLevelWindow, BOOL* onCurrentDesktop) = 0;
     virtual HRESULT STDMETHODCALLTYPE GetWindowDesktopId(HWND topLevelWindow, GUID* desktopId) = 0;
@@ -1353,21 +1300,23 @@ struct IVirtualDesktopManagerAbi : public IUnknown {
 constexpr GUID kCLSID_VirtualDesktopManager = {0xAA509086, 0x5CA9, 0x4C25, {0x8F, 0x95, 0x58, 0x9D, 0x3C, 0x07, 0xB4, 0x8A}};
 constexpr GUID kIID_IVirtualDesktopManager = {0xA5CD92FF, 0x29BE, 0x454C, {0x8D, 0x04, 0xD8, 0x28, 0x79, 0xFB, 0x3F, 0x1B}};
 
+// Created and released on the taskbar thread, where every refresh runs.
+[[clang::no_destroy]] winrt::com_ptr<IVirtualDesktopManagerAbi> g_virtualDesktopManager;
+bool g_virtualDesktopManagerTried = false;
+
 bool IsWindowOnOtherDesktop(HWND hwnd) {
-    thread_local winrt::com_ptr<IVirtualDesktopManagerAbi> manager;
-    thread_local bool tried = false;
-    if (!tried) {
-        tried = true;
+    if (!g_virtualDesktopManagerTried) {
+        g_virtualDesktopManagerTried = true;
         HRESULT hr = CoCreateInstance(kCLSID_VirtualDesktopManager, nullptr, CLSCTX_ALL, kIID_IVirtualDesktopManager,
-                                      manager.put_void());
+                                      g_virtualDesktopManager.put_void());
         if (FAILED(hr)) {
-            manager = nullptr;
+            g_virtualDesktopManager = nullptr;
             Wh_Log(L"VirtualDesktopManager unavailable: %08X", (unsigned)hr);
         }
     }
-    if (!manager) return false;
+    if (!g_virtualDesktopManager) return false;
     BOOL onCurrent = TRUE;
-    if (FAILED(manager->IsWindowOnCurrentVirtualDesktop(hwnd, &onCurrent))) return false;
+    if (FAILED(g_virtualDesktopManager->IsWindowOnCurrentVirtualDesktop(hwnd, &onCurrent))) return false;
     return !onCurrent;
 }
 
@@ -1975,10 +1924,7 @@ void CollectBadgeElements(FrameworkElement const& root, std::vector<FrameworkEle
         auto child = VisualTreeHelper::GetChild(root, i).try_as<FrameworkElement>();
         if (!child) continue;
         auto name = child.Name();
-        if (name == L"ButtonCornerIndicator" || name == L"ButtonMultiWindowIndicator" ||
-            name == L"ButtonBadgeIndicator") {
-            continue; // ours
-        }
+        if (name == kHostName) continue;  // ours
         if (name == L"OverlayIcon" || ContainsNoCase(name, L"Badge") ||
             ContainsNoCase(winrt::get_class_name(child), L"Badge")) {
             out.push_back(child);
@@ -2517,7 +2463,6 @@ std::shared_ptr<ButtonEntry> FindOrCreateEntry(FrameworkElement const& button, b
 // Loaded, theme change).
 // ---------------------------------------------------------------------------
 
-constexpr wchar_t kHostName[] = L"ButtonStateIndicatorHost";
 
 // Drops the composition content: the host's child visual first, then every
 // object closed, so the frame paths (and the geometry sources of this mod
@@ -4380,6 +4325,66 @@ void SweepAllTaskbars() {
     RunFromWindowThread(hTaskbarWnd, [](void*) { SweepAllTaskbarsFromTaskbarThread(); }, nullptr);
 }
 
+// Unload: takes this mod's host out of every button's icon panel, the ones
+// retired in place earlier included, so nothing of the mod stays in the
+// taskbar's tree. Its ZIndex is reset first: the host is raised to 1000
+// while in use, and removing it with that value is what made XAML reorder
+// the icon above its badge. Runs on the taskbar thread.
+void RemoveHostsFromTaskbarThread() {
+    ForEachTaskListButtonFromTaskbarThread([&](FrameworkElement const& button) {
+        auto iconPanel = FindChildByName(button, L"IconPanel");
+        auto panel = iconPanel ? iconPanel.try_as<Panel>() : nullptr;
+        if (!panel) return;
+        auto children = panel.Children();
+        for (int32_t i = (int32_t)children.Size() - 1; i >= 0; i--) {
+            auto element = children.GetAt(i).try_as<FrameworkElement>();
+            if (!element || element.Name() != kHostName) continue;
+            try {
+                ElementCompositionPreview::SetElementChildVisual(element, nullptr);
+                Canvas::SetZIndex(element, 0);
+                children.RemoveAt(i);
+            } catch (...) {}
+        }
+    });
+}
+
+struct UnloadCleanup {
+    std::vector<std::shared_ptr<ButtonEntry>>* entries = nullptr;
+    NativeRestore restore;
+};
+
+// Unload, on the taskbar thread (every button and every composition object
+// of the mod lives there), synchronously: every entry is retired - entries
+// whose button is gone included, so their composition objects are closed
+// too and the frame paths release this mod's geometry sources - its
+// subscriptions revoked, the native elements shown again, the hosts
+// removed and the virtual desktop manager released.
+void WINAPI UnloadCleanupOnTaskbarThread(void* param) {
+    auto& cleanup = *static_cast<UnloadCleanup*>(param);
+    for (auto& entry : *cleanup.entries) {
+        try {
+            RetireEntryPaths(entry);
+            if (auto btn = entry->button.get()) {
+                if (entry->unloadAttached) { try { btn.Unloaded(entry->unloadToken); } catch (...) {} }
+                if (entry->loadedAttached) { try { btn.Loaded(entry->loadedToken); } catch (...) {} }
+                if (entry->themeAttached) { try { btn.ActualThemeChanged(entry->themeToken); } catch (...) {} }
+            }
+        } catch (...) {
+            Wh_Log(L"Exception during cleanup");
+        }
+    }
+    if (g_taskbarDllSymbolsResolved && g_taskbarViewDllLoaded) {
+        try {
+            if (cleanup.restore.Any()) RestoreNativeElementsFromTaskbarThread(cleanup.restore);
+            RemoveHostsFromTaskbarThread();
+        } catch (...) {
+            Wh_Log(L"Exception while restoring the taskbars");
+        }
+    }
+    g_virtualDesktopManager = nullptr;
+    g_virtualDesktopManagerTried = false;
+}
+
 void RestoreNativeElements(NativeRestore what) {
     if (!what.Any()) return;
     if (!g_taskbarDllSymbolsResolved || !g_taskbarViewDllLoaded) {
@@ -4445,17 +4450,29 @@ void WINAPI RefreshIndicatorsProc(void*) {
     }
 }
 
-bool RunOnTaskbarThread(RunFromWindowThreadProc_t proc, void* procParam) {
-    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (!hTaskbarWnd) return false;
-    return RunFromWindowThread(hTaskbarWnd, proc, procParam);
+// Posts a refresh pass to the taskbar thread through a known button's
+// dispatcher (every taskbar lives on that thread). With no button known yet
+// there is nothing to refresh: the first one is found by the hooks.
+void PostRefreshPass() {
+    winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
+    {
+        std::lock_guard<std::mutex> lock(g_entriesMutex);
+        if (g_unloading || !g_entries) return;
+        for (auto& e : *g_entries) {
+            if (auto btn = e->button.get()) {
+                try { dispatcher = btn.Dispatcher(); } catch (...) {}
+                if (dispatcher) break;
+            }
+        }
+    }
+    if (dispatcher) PostToUiThread(dispatcher, [] { RefreshIndicatorsProc(nullptr); });
 }
 
 void CALLBACK IndicatorRefreshTimerProc(HWND, UINT, UINT_PTR id, DWORD) {
     KillTimer(nullptr, id);
     if (id == g_refreshTimer) {
         g_refreshTimer = 0;
-        RunOnTaskbarThread(RefreshIndicatorsProc, nullptr);
+        PostRefreshPass();
         // Second pass a bit later: minimize/restore state can still be
         // changing during the first one.
         if (!g_followUpTimer) {
@@ -4463,7 +4480,7 @@ void CALLBACK IndicatorRefreshTimerProc(HWND, UINT, UINT_PTR id, DWORD) {
         }
     } else if (id == g_followUpTimer) {
         g_followUpTimer = 0;
-        RunOnTaskbarThread(RefreshIndicatorsProc, nullptr);
+        PostRefreshPass();
     }
 }
 
@@ -4526,9 +4543,9 @@ void UnhookWinEvents() {
 }
 
 // Registers the WinEvent ranges the current settings need: none with the
-// indicators off; otherwise minimize, restore, show, hide and cloaking
-// always, foreground changes only when the foreground window is treated
-// specially, location changes only when maximized windows are marked.
+// indicators off; otherwise minimize, restore, show, hide, cloaking and
+// foreground changes always (the foreground picks the active color),
+// location changes only when maximized windows are marked.
 void HookWinEvents() {
     UnhookWinEvents();
 
@@ -4672,7 +4689,9 @@ bool RefreshAllEntries(bool rebind = true) {
 // and waits for any run in flight.
 // ---------------------------------------------------------------------------
 
-winrt::Windows::UI::ViewManagement::UISettings g_uiSettings{nullptr};
+// Released by UnsubscribeColorChanges; kept out of the CRT's destructors
+// (see g_d2dFactory).
+[[clang::no_destroy]] winrt::Windows::UI::ViewManagement::UISettings g_uiSettings{nullptr};
 winrt::event_token g_colorValuesToken{};
 std::atomic<int> g_colorHandlersInFlight{0};
 // Windows reports one color change several times in a row: the first queues
@@ -4713,7 +4732,9 @@ void UnsubscribeColorChanges() {
     if (g_uiSettings) {
         try { g_uiSettings.ColorValuesChanged(g_colorValuesToken); } catch (...) {}
     }
-    for (int i = 0; i < 200 && g_colorHandlersInFlight.load() > 0; i++) Sleep(10);
+    // A handler in flight runs this DLL's code (at most a 150 ms pause and a
+    // refresh post): wait for it, without a timeout.
+    while (g_colorHandlersInFlight.load() > 0) Sleep(10);
     g_uiSettings = nullptr;
 }
 
@@ -4794,87 +4815,42 @@ void Wh_ModBeforeUninit() {
     // monotonically non-increasing.
     if (g_postsDrained) ResetEvent(g_postsDrained);
 
-    std::shared_ptr<void> eventLifetime(CreateEvent(nullptr, TRUE, FALSE, nullptr), [](HANDLE h) { if (h) CloseHandle(h); });
-    auto pending = std::make_shared<std::atomic<int>>((int)localEntries.size());
-    auto signalOne = [pending, eventLifetime]() {
-        if (pending->fetch_sub(1) == 1 && eventLifetime.get()) SetEvent(eventLifetime.get());
-    };
-
-    for (auto& entry : localEntries) {
-        FrameworkElement btn{nullptr};
-        {
-            std::lock_guard<std::mutex> lock(g_entriesMutex);
-            btn = entry->button.get();
-        }
-        auto cleanup = [entry]() {
-            try {
-                // Re-resolved on the UI thread: a refresh in flight when the
-                // snapshot was taken can still have created a path since.
-                RetireEntryPaths(entry);
-                if (auto btn = entry->button.get()) {
-                    if (entry->unloadAttached) { try { btn.Unloaded(entry->unloadToken); } catch (...) {} }
-                    if (entry->loadedAttached) { try { btn.Loaded(entry->loadedToken); } catch (...) {} }
-                    if (entry->themeAttached) { try { btn.ActualThemeChanged(entry->themeToken); } catch (...) {} }
-                }
-            } catch (...) { Wh_Log(L"Exception during cleanup"); }
-        };
-        auto dispatcher = btn ? btn.Dispatcher() : nullptr;
-        if (dispatcher) {
-            if (dispatcher.HasThreadAccess()) {
-                cleanup();
-                signalOne();
-            } else {
-                bool posted = false;
-                try {
-                    dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [cleanup, signalOne]() {
-                        cleanup();
-                        signalOne();
-                    });
-                    posted = true;
-                } catch (...) {}
-                if (!posted) signalOne();
-            }
-        } else {
-            signalOne();
-        }
-    }
-
-    if (pending->load() > 0 && eventLifetime.get()) {
-        if (WaitForSingleObject(eventLifetime.get(), 2000) == WAIT_TIMEOUT) {
-            Wh_Log(L"Timed out waiting for cleanup");
-        }
-    }
-
-    // Second barrier: refreshes posted from the hooks. Their tickets were
-    // taken before g_unloading was set; wait for the in-flight ones.
-    if (g_pendingPosts.load() > 0) {
-        if (g_postsDrained) {
-            if (WaitForSingleObject(g_postsDrained, 2000) == WAIT_TIMEOUT) {
-                Wh_Log(L"Timed out waiting for posted refreshes to drain");
-            }
-        } else {
-            for (int i = 0; i < 200 && g_pendingPosts.load() > 0; i++) Sleep(10);
-            if (g_pendingPosts.load() > 0) Wh_Log(L"Timed out waiting for posted refreshes to drain");
-        }
-    }
-
-    // Third barrier: the frame paths' geometry sources are objects of this
-    // DLL that composition may hold for as long as a path lives. The cleanup
-    // above closed every path; give the last references time to go.
-    for (int i = 0; i < 100 && g_liveGeometrySources.load() > 0; i++) Sleep(10);
-    if (g_liveGeometrySources.load() > 0) {
-        Wh_Log(L"%d frame geometry sources still alive at unload", g_liveGeometrySources.load());
-    }
-
-    // Native elements left hidden on buttons that no entry tracks any more
-    // (closed, reused) are shown again here.
+    // The cleanup runs synchronously on the taskbar thread. Without a
+    // taskbar window (Explorer's taskbar gone) it runs here: the XAML parts
+    // then fail harmlessly, and the composition objects are closed anyway.
+    UnloadCleanup cleanup;
+    cleanup.entries = &localEntries;
     {
-        NativeRestore all;
-        {
-            std::lock_guard<std::mutex> lock(g_settingsMutex);
-            all = {g_settings.HideNativeIndicator, g_settings.HideNativeProgress, g_settings.BadgeEnabled};
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        cleanup.restore = {g_settings.HideNativeIndicator, g_settings.HideNativeProgress,
+                           g_settings.BadgeEnabled};
+    }
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (!hTaskbarWnd || !RunFromWindowThread(hTaskbarWnd, UnloadCleanupOnTaskbarThread, &cleanup)) {
+        UnloadCleanupOnTaskbarThread(&cleanup);
+    }
+    localEntries.clear();
+
+    // Refreshes posted before g_unloading was set: each holds a ticket that
+    // is released when its lambda is destroyed, whether the dispatcher ran
+    // it (it returns at once now) or dropped it. Wait for all of them.
+    if (g_pendingPosts.load() > 0 && g_postsDrained) {
+        WaitForSingleObject(g_postsDrained, INFINITE);
+    }
+
+    // The frame paths' geometry sources are objects of this DLL that
+    // composition holds for as long as a path lives. The cleanup above
+    // closed every geometry using a path on the taskbar thread, which
+    // releases them; wait until the last one is gone.
+    ULONGLONG waitStart = GetTickCount64(), lastLog = waitStart;
+    while (g_liveGeometrySources.load() > 0) {
+        Sleep(10);
+        ULONGLONG now = GetTickCount64();
+        if (now - lastLog >= 2000) {
+            lastLog = now;
+            Wh_Log(L"Still waiting for %d frame geometry sources (%llu ms)", g_liveGeometrySources.load(),
+                   now - waitStart);
         }
-        RestoreNativeElements(all);
     }
 }
 
