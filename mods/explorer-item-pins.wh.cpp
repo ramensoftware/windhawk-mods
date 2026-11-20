@@ -7,7 +7,7 @@
 // @description:de-DE Heftet Dateien und Ordner im Datei-Explorer in ihrem übergeordneten Ordner an
 // @description:pt-BR Fixa arquivos e pastas na pasta que os contém no Explorador de Arquivos
 // @description:zh-CN 在文件资源管理器中将文件和文件夹固定在各自的上级文件夹内
-// @version         1.1.6
+// @version         1.1.7
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
@@ -16,7 +16,7 @@
 // @architecture    x86-64
 // @compilerOptions -lruntimeobject -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lgdi32 -lcomctl32 -ladvapi32
 // ==/WindhawkMod==
-// Build: 32
+// Build: 33
 
 // ==WindhawkModReadme==
 /*
@@ -49,7 +49,9 @@ Pins are stored separately for each Windows account. Uninstalling the mod remove
 1. Select a file or folder and choose **Pin to top** in its context menu, or click the pin on the command bar.
 2. To remove the pin, select the item and choose **Unpin from top** or click the crossed-out pin on the command bar. The item returns to its usual position in the folder.
 
-In Windhawk, open the mod's **Settings** to control these options independently. All three are enabled by default.
+In Windhawk, open the mod's **Settings** and find **Show elements** to control these options independently. All three are enabled by default.
+
+**After updating from 1.1.5**, display settings are reset to their defaults. Check them again if you had changed any.
 
 If the pin commands are missing from a File Explorer window that was already open when the mod was enabled or updated, reopen that window.
 
@@ -742,21 +744,22 @@ bool ReadDirectoryIdentities(const fs::path& folder, std::span<const Item> pins,
     return GetLastError() == ERROR_NO_MORE_FILES;
 }
 
-bool HasExactName(const fs::path& folder, const std::wstring& name, bool* confirmedMissing = nullptr) {
+enum class NameLookup { Exact, Missing, Different, Unavailable };
+
+NameLookup CheckExactName(const fs::path& folder, const std::wstring& name) {
     WIN32_FIND_DATAW found{};
     HANDLE search = FindFirstFileW((folder / name).c_str(), &found);
     if (search == INVALID_HANDLE_VALUE) {
-        if (confirmedMissing) *confirmedMissing = GetLastError() == ERROR_FILE_NOT_FOUND;
-        return false;
+        return GetLastError() == ERROR_FILE_NOT_FOUND ? NameLookup::Missing : NameLookup::Unavailable;
     }
     FindClose(search);
-    return name == found.cFileName;
+    return name == found.cFileName ? NameLookup::Exact : NameLookup::Different;
 }
 
 PinNames ReadExactPinNames(std::span<const Item> pins, const fs::path& folder) {
     PinNames names;
     for (const auto& pin : pins) {
-        if (HasExactName(folder, pin.name)) names.insert(pin.name);
+        if (CheckExactName(folder, pin.name) == NameLookup::Exact) names.insert(pin.name);
     }
     return names;
 }
@@ -1392,9 +1395,7 @@ private:
         if (after.size() >= before.size() || !std::ranges::includes(before, after)) return false;
         return std::ranges::all_of(before, [&](const auto& name) {
             if (after.contains(name)) return true;
-            bool missing = false;
-            HasExactName(parent, name, &missing);
-            return missing;
+            return CheckExactName(parent, name) == NameLookup::Missing;
         });
     }
 
@@ -1434,27 +1435,37 @@ private:
         constexpr ULONGLONG retryMs[] = {5000, 5000, 10000, 20000, 40000, 60000};
         const unsigned misses = sameInputs ? previous->scansWithoutProgress : 0;
         const auto version = ReadDirectoryVersion(parent);
-        if (!sameInputs || (misses < 2 && version != previous->scannedVersion) ||
-            GetTickCount64() - previous->scannedAt >= retryMs[misses]) {
-            auto names = ResolvePinAliases(records, parent, exactNames);
-            const auto& priorNames = sameInputs ? *previous->names : exactNames;
-            const bool noProgress = names.size() < records.size() && names == priorNames;
-            const unsigned nextMisses = noProgress ? std::min(misses + 1, static_cast<unsigned>(std::size(retryMs) - 1)) : 0;
-            auto snapshot = previous && *previous->names == names ? previous->names
-                : std::make_shared<const PinNames>(std::move(names));
-            return std::make_shared<const Resolution>(Resolution{std::move(records), std::move(exactNames),
-                                                                 version, GetTickCount64(), nextMisses, std::move(snapshot)});
+        const bool scanDue = !sameInputs || (misses < 2 && version != previous->scannedVersion) ||
+            GetTickCount64() - previous->scannedAt >= retryMs[misses];
+        if (!scanDue) {
+            // A previously resolved alias that disappears needs a new identity lookup now.
+            auto names = exactNames;
+            bool lostAlias = false;
+            for (const auto& name : *previous->names) {
+                if (exactNames.contains(name)) continue;
+                const auto lookup = CheckExactName(parent, name);
+                if (lookup == NameLookup::Missing || lookup == NameLookup::Different) {
+                    lostAlias = true;
+                    break;
+                }
+                if (lookup == NameLookup::Exact) names.insert(name);
+            }
+            if (!lostAlias) {
+                if (*previous->names == names) return previous;
+                return std::make_shared<const Resolution>(Resolution{std::move(records), std::move(exactNames),
+                    previous->scannedVersion, previous->scannedAt, previous->scansWithoutProgress,
+                    std::make_shared<const PinNames>(std::move(names))});
+            }
         }
 
-        // Recheck the already resolved aliases while waiting for the next full scan.
-        auto names = exactNames;
-        for (const auto& name : *previous->names) {
-            if (!names.contains(name) && HasExactName(parent, name)) names.insert(name);
-        }
-        if (*previous->names == names) return previous;
+        auto names = ResolvePinAliases(records, parent, exactNames);
+        const auto& priorNames = sameInputs ? *previous->names : exactNames;
+        const bool noProgress = names.size() < records.size() && names == priorNames;
+        const unsigned nextMisses = noProgress ? std::min(misses + 1, static_cast<unsigned>(std::size(retryMs) - 1)) : 0;
+        auto snapshot = previous && *previous->names == names ? previous->names
+            : std::make_shared<const PinNames>(std::move(names));
         return std::make_shared<const Resolution>(Resolution{std::move(records), std::move(exactNames),
-            previous->scannedVersion, previous->scannedAt, previous->scansWithoutProgress,
-            std::make_shared<const PinNames>(std::move(names))});
+                                                             version, GetTickCount64(), nextMisses, std::move(snapshot)});
     }
 
     struct Entry {
