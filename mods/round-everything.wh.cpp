@@ -189,6 +189,7 @@ Peek, to learn which window is being peeked.
   each monitor shows its frame only while a window is maximized on it;
   otherwise the taskbar is transparent (or looks as it does without the
   mod) and the frame is off, the two changing in the same rendering pass.
+  The monitor corners and the one-pixel bezel line stay up all the while.
   While Aero Peek shows a window from a thumbnail, that window alone
   decides: maximized (or minimized from maximized) on a monitor, that
   monitor keeps its frame; every other monitor rests. The work area stays
@@ -427,7 +428,7 @@ same license.
     $description: Some apps draw their whole frame themselves and Windows leaves their corners square (Autodesk AutoCAD 2013, Design Review). With this on their windows get the window corner radius too, maximized included. Turn it off if an app looks wrong rounded.
   - hideWithoutMaximized: false
     $name: Hide the frame without a maximized window
-    $description: Each monitor shows its frame only while a window is maximized on it. Otherwise the frame, its shadow and the screen corners are off; they come back together with the taskbar's look when a window is maximized there. The work area stays reserved either way, so a maximized window fills the same space.
+    $description: Each monitor shows its frame only while a window is maximized on it. Otherwise the frame, its shadow and the rounded screen corners are off; they come back together with the taskbar's look when a window is maximized there. The monitor corners and the bezel line stay up (only Task View and full-screen apps take them off), and the work area stays reserved, so a maximized window fills the same space.
   - transparentWithoutMaximized: true
     $name: Transparent taskbar when nothing is maximized
     $description: With the option above on, hide the taskbar's own background and border line, so the wallpaper shows through whenever no frame is showing (no maximized window). Off, the taskbar looks as it does without the mod then.
@@ -866,8 +867,6 @@ struct FrameSurface {
 // backdrop (the acrylic fills) or the frame color (the solid fill).
 struct CompositionFrame {
     HWND owner = nullptr;  // hidden; an owned window may be topmost while (almost) covering a monitor
-    HWND strips[4] = {};   // the one-pixel bezel ring the frame leaves uncovered
-    RECT ringRect{};       // the monitor rectangle the ring was made for
     wucd::DesktopWindowTarget target{nullptr};
     wuc::ContainerVisual root{nullptr};
     wuc::CompositionEffectBrush effectBrush{nullptr};    // backdrop -> blur -> ... -> tint
@@ -918,9 +917,27 @@ struct ShadowSlice {
 };
 constexpr int kShadowSlices = 4;
 
+// The monitor's bezel: the one-pixel ring along its edges and its rounded
+// outer corners (the ones away from the taskbar; the two on the taskbar's
+// edge are ears inside the taskbar), as small click-through windows of
+// their own. Separate from the frame so they stay up while the frame rests
+// ("Hide the frame without a maximized window"); they go only for
+// full-screen apps and while the frame waits for its taskbar, and Task
+// View covers them like the frame.
+struct Bezel {
+    HWND owner = nullptr;  // hidden; owns the strips and ears
+    HWND strips[4] = {};   // top, bottom, left, right rows of the ring
+    RECT ringRect{};       // the monitor rectangle the ring was made for
+    HWND ears[4] = {};     // per corner (kCornerTL...), null where none
+    RECT earRects[4] = {};
+    std::wstring earSignature;  // what the ears were made for
+    bool shown = false;    // uncloaked and shown (see UpdateVisibility)
+};
+
 struct Overlay {
     Layout layout;
     HWND hwnd = nullptr;
+    Bezel bezel;
     // Set for an acrylic frame (either fill): hwnd is then a composition
     // window (owned, one pixel short of the monitor, under the taskbar) and
     // the shadow windows sit above it rather than below. Null for the
@@ -1263,10 +1280,13 @@ struct Reveal {
         int width = 0;
         int height = 0;
     } shadow[kShadowSlices];
-    // An acrylic frame is revealed by uncloaking it (and its bezel ring)
-    // instead of a layered-window update.
+    // An acrylic frame is revealed by uncloaking it instead of a
+    // layered-window update.
     bool composition = false;
-    HWND strips[4] = {};
+    // The bezel windows (ring and corners), uncloaked with the frame either
+    // way: hidden while the frame waited for its taskbar, they come back
+    // with it.
+    HWND bezel[8] = {};
 };
 std::mutex g_revealMutex;
 std::unordered_map<HWND, Reveal> g_reveals;
@@ -2718,12 +2738,16 @@ struct TaskbarWants {
     // the frame. So the taskbar never colors ahead of the frame.
     bool fillSuspended = true;
     // The taskbar looks as it does without the mod - its own background and
-    // border line, no ears - while its frame rests (see RestOnTaskbarThread);
-    // our fill and stroke come back with a recolor.
+    // border line, with the monitor-corner ears - while its frame rests (see
+    // RestOnTaskbarThread); our fill and stroke come back with a recolor.
     bool fillResting = false;
     // Task View is open: Windows gives the taskbar its Task View look, and
     // the monitor-corner ears are off with it (see TaskViewOnTaskbarThread).
     bool taskView = false;
+    // The frame rests (RestOnTaskbarThread until the recolor that ends it):
+    // the ears and bezel lines stay up then, unlike while the fill is held
+    // back for a move.
+    bool resting = false;
     // The ears have nowhere to go in this tree (no host found though the
     // taskbar's background is there): skipped, and not waited for, until the
     // content is replaced.
@@ -3284,12 +3308,13 @@ void WINAPI ApplyXamlCornersOnTaskbarThread(void* param) try {
         }
         it = corners.insert_or_assign(op->taskbar, state).first;
         op->changed = true;
-        // Made while the taskbar's fill is held back (a rest, a move) or
-        // Task View is open: off, like the ones they replace - the recolor
-        // that ends it (or Task View closing) shows them.
+        // Made while the taskbar's fill is held back for a move or Task
+        // View is open: off, like the ones they replace - the recolor that
+        // ends it (or Task View closing) shows them. A rest keeps them up.
         if (auto wants = g_wants->find(op->taskbar);
-            wants != g_wants->end() && (wants->second.fillSuspended ||
-                                        wants->second.fillResting || wants->second.taskView)) {
+            wants != g_wants->end() &&
+            ((wants->second.fillSuspended && !wants->second.resting) ||
+             wants->second.taskView)) {
             for (auto const& ear : state.ear) {
                 ear.Opacity(0.0);
             }
@@ -3950,9 +3975,9 @@ void DrawStaticLayer(Gdiplus::Graphics& graphics, const Layout& layout) {
         }
     }
 
-    // Monitor corners that coincide with this window's corners (the two
-    // away from the taskbar; all four without one), and the bezel ring.
-    DrawMonitorEars(graphics, layout.overlayRect, layout);
+    // The bezel ring (the layered frame reaches the monitor's edges and
+    // covers the ring's own windows). The monitor corners are windows of
+    // their own (see Bezel), above the frame, so they stay while it rests.
     if (!layout.composition) {
         DrawBezelRing(graphics, layout.overlayRect, layout);
     }
@@ -3987,8 +4012,9 @@ void RoundedRectDistance(double px, double py, double hx, double hy, double r, d
 // from the other side lights the rest): a Blinn-Phong highlight per light,
 // a Fresnel rim as white over the frame, an edge line in its own color on
 // top, an edge shade as black under them, blended into the static layer
-// under the ears. Geometry only, so it is rasterized once with the frame:
-// the lighting doesn't move with the screen content. The bevel is a dome
+// (the monitor corners are windows above it). Geometry only, so it is
+// rasterized once with the frame: the lighting doesn't move with the screen
+// content. The bevel is a dome
 // along the edge (`curve` is 1 at the edge and falls to 0 where the acrylic
 // glass goes flat). Under the taskbar the frame's inner edge is the
 // taskbar's inner edge, so the bevel runs along it there as well, seen
@@ -4963,6 +4989,7 @@ struct FollowEntry {
     HWND frame = nullptr;
     HWND shadow[kShadowSlices] = {};
     HWND strips[4] = {};
+    HWND ears[4] = {};
 };
 
 bool IsTopmost(HWND hwnd) {
@@ -4989,14 +5016,15 @@ bool TaskbarDemoted(HWND taskbar) {
     return taskbar && IsWindowVisible(taskbar) && !IsTopmost(taskbar);
 }
 
-// UI thread. Frame topmost, the shadow right above it, the bezel ring right
-// below it, and the taskbar - when it is topmost; it is never made so here
-// - on top of them all. The mod's own windows are placed synchronously; the
-// taskbar, which belongs to another thread, asynchronously and last, so
-// this thread never waits on the taskbar thread and the order still ends
-// with the taskbar on top. With the taskbar demoted (see TaskbarDemoted)
-// the same stack is built right under it instead, off the top as well: a
-// window inserted after a non-topmost one loses the topmost bit.
+// UI thread. Frame topmost, the shadow right above it, the monitor corners
+// above both, the bezel ring right below the frame, and the taskbar - when
+// it is topmost; it is never made so here - on top of them all. The mod's
+// own windows are placed synchronously; the taskbar, which belongs to
+// another thread, asynchronously and last, so this thread never waits on
+// the taskbar thread and the order still ends with the taskbar on top. With
+// the taskbar demoted (see TaskbarDemoted) the same stack is built right
+// under it instead, off the top as well: a window inserted after a
+// non-topmost one loses the topmost bit.
 void PlaceAcrylicOrder(const FollowEntry& e, UINT flags) {
     if (TaskbarDemoted(e.taskbar)) {
         SetWindowPos(e.frame, e.taskbar, 0, 0, 0, 0, flags);
@@ -5010,6 +5038,11 @@ void PlaceAcrylicOrder(const FollowEntry& e, UINT flags) {
                 SetWindowPos(strip, e.frame, 0, 0, 0, 0, flags);
             }
         }
+        for (HWND ear : e.ears) {
+            if (ear) {
+                SetWindowPos(ear, e.taskbar, 0, 0, 0, 0, flags);  // over the frame and shadow
+            }
+        }
         return;
     }
     SetWindowPos(e.frame, HWND_TOPMOST, 0, 0, 0, 0, flags);
@@ -5021,6 +5054,11 @@ void PlaceAcrylicOrder(const FollowEntry& e, UINT flags) {
     for (HWND strip : e.strips) {
         if (strip) {
             SetWindowPos(strip, e.frame, 0, 0, 0, 0, flags);
+        }
+    }
+    for (HWND ear : e.ears) {
+        if (ear) {
+            SetWindowPos(ear, HWND_TOPMOST, 0, 0, 0, 0, flags);  // over the frame and shadow
         }
     }
     if (e.taskbar && IsTopmost(e.taskbar)) {
@@ -5043,10 +5081,20 @@ bool AcrylicOrderBroken(const FollowEntry& e) {
                 return true;
             }
         }
+        for (HWND ear : e.ears) {
+            if (ear && IsWindowVisible(ear) && !WindowAbove(ear, e.frame)) {
+                return true;
+            }
+        }
         return false;
     }
     if (!IsTopmost(e.frame)) {
         return true;
+    }
+    for (HWND ear : e.ears) {
+        if (ear && IsWindowVisible(ear) && !WindowAbove(ear, e.frame)) {
+            return true;
+        }
     }
     if (e.taskbar && IsTopmost(e.taskbar) && WindowAbove(e.frame, e.taskbar)) {
         return true;
@@ -5066,10 +5114,9 @@ FollowEntry FollowEntryFor(const Overlay& overlay) {
     for (int i = 0; i < kShadowSlices; i++) {
         e.shadow[i] = overlay.shadow[i].hwnd;
     }
-    if (overlay.comp) {
-        for (int i = 0; i < 4; i++) {
-            e.strips[i] = overlay.comp->strips[i];
-        }
+    for (int i = 0; i < 4; i++) {
+        e.strips[i] = overlay.bezel.strips[i];
+        e.ears[i] = overlay.bezel.ears[i];
     }
     return e;
 }
@@ -5118,34 +5165,54 @@ HWND CreateBezelStrip(HWND owner, const RECT& rc, COLORREF color) {
     return hwnd;
 }
 
-void DestroyBezelStrips(CompositionFrame& ac) {
-    for (HWND& strip : ac.strips) {
+void DestroyBezelStrips(Bezel& bezel) {
+    for (HWND& strip : bezel.strips) {
         if (strip) {
             DestroyWindow(strip);
             strip = nullptr;
         }
     }
+    SetRectEmpty(&bezel.ringRect);
+}
+
+void DestroyBezelEars(Bezel& bezel) {
+    for (HWND& ear : bezel.ears) {
+        if (ear) {
+            DestroyWindow(ear);
+            ear = nullptr;
+        }
+    }
+    bezel.earSignature.clear();
+}
+
+void DestroyBezel(Bezel& bezel) {
+    DestroyBezelStrips(bezel);
+    DestroyBezelEars(bezel);
+    if (bezel.owner) {
+        DestroyWindow(bezel.owner);
+        bezel.owner = nullptr;
+    }
+    bezel.shown = false;
 }
 
 // The ring: top and bottom rows across the whole monitor, left and right
 // columns between them. One window per side - a single ring-shaped window
 // would have a monitor-sized rectangle and count as full-screen. It depends
 // on the monitor's rectangle alone (its color is fixed), so a re-shaped frame
-// (a settings change, the taskbar moving) keeps the ring it has: new strips
-// start cloaked and only show once the frame is raised again, and in between
-// the screen's outermost pixels would show whatever lies under them.
-void CreateBezelStrips(Overlay& overlay) {
-    CompositionFrame& ac = *overlay.comp;
+// (a settings change, the taskbar moving) keeps the ring it has. Returns
+// whether windows were made (cloaked and hidden until shown).
+bool CreateBezelStrips(Overlay& overlay) {
+    Bezel& bezel = overlay.bezel;
     const RECT& m = overlay.layout.monitorRect;
     bool complete = true;
-    for (HWND strip : ac.strips) {
+    for (HWND strip : bezel.strips) {
         complete = complete && strip && IsWindow(strip);
     }
-    if (complete && EqualRect(&ac.ringRect, &m)) {
-        return;
+    if (complete && EqualRect(&bezel.ringRect, &m)) {
+        return false;
     }
-    DestroyBezelStrips(ac);
-    ac.ringRect = m;
+    DestroyBezelStrips(bezel);
+    bezel.ringRect = m;
     RECT rows[4] = {
         {m.left, m.top, m.right, m.top + 1},
         {m.left, m.bottom - 1, m.right, m.bottom},
@@ -5153,14 +5220,153 @@ void CreateBezelStrips(Overlay& overlay) {
         {m.right - 1, m.top + 1, m.right, m.bottom - 1},
     };
     for (int i = 0; i < 4; i++) {
-        ac.strips[i] = CreateBezelStrip(ac.owner, rows[i], kMonitorCornerColor);
+        bezel.strips[i] = CreateBezelStrip(bezel.owner, rows[i], kMonitorCornerColor);
     }
+    return true;
+}
+
+// One monitor corner: the sliver outside a quarter circle, black, in a
+// click-through layered window of the corner's size, a pixel in from the
+// monitor's edges (inside the ring, which the arc is tangent to). Drawn by
+// DrawMonitorEars for a window whose one corner is that monitor corner.
+void DrawEarWindow(Gdiplus::Graphics& graphics, const Layout& layout) {
+    DrawMonitorEars(graphics, layout.overlayRect, layout);
+}
+
+HWND CreateBezelEar(HWND owner, const Layout& layout, const RECT& rc) {
+    int width = rc.right - rc.left, height = rc.bottom - rc.top;
+    if (width <= 0 || height <= 0) {
+        return nullptr;
+    }
+    Layout earLayout = layout;
+    earLayout.overlayRect = rc;
+    earLayout.composition = true;  // the arc starts at the window's edge (inside the ring)
+    std::vector<DWORD> pixels;
+    if (!RenderToPixels(width, height, pixels, DrawEarWindow, earLayout)) {
+        return nullptr;
+    }
+    HWND hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW |
+                                    WS_EX_NOACTIVATE,
+                                kFrameClassName, L"Round Everything Corner", WS_POPUP, rc.left,
+                                rc.top, width, height, owner, nullptr, g_module, nullptr);
+    if (!hwnd) {
+        Wh_Log(L"CreateWindowExW (corner) failed: %u", GetLastError());
+        return nullptr;
+    }
+    BOOL excludedFromPeek = TRUE;
+    DwmSetWindowAttribute(hwnd, DWMWA_EXCLUDED_FROM_PEEK, &excludedFromPeek,
+                          sizeof(excludedFromPeek));
+    BOOL noTransitions = TRUE;
+    DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, &noTransitions,
+                          sizeof(noTransitions));
+    CloakWindow(hwnd, true);
+    FrameSurface surface;
+    surface.width = width;
+    surface.height = height;
+    if (AllocateSurfaceBitmap(surface)) {
+        memcpy(surface.pixels, pixels.data(), pixels.size() * sizeof(DWORD));
+        PresentFrame(hwnd, surface.memDc, width, height, &rc, 255);
+    }
+    return hwnd;
+}
+
+// The corners away from the taskbar (all four without one), rebuilt when
+// the radius, the monitor or the taskbar's edge changes. Returns whether
+// windows were made (cloaked and hidden until shown).
+bool CreateBezelEars(Overlay& overlay) {
+    Bezel& bezel = overlay.bezel;
+    const Layout& layout = overlay.layout;
+    int cr = layout.monitorCornerRadius;
+    const RECT& m = layout.monitorRect;
+    int taskbarCorners[2] = {-1, -1};
+    if (layout.edge != kEdgeNone && !IsRectEmpty(&layout.taskbarRect) && !layout.autoHide) {
+        TaskbarEdgeCorners(layout.edge, taskbarCorners);
+    }
+    std::wstring signature = std::to_wstring(cr) + L"|" + std::to_wstring(m.left) + L"," +
+                             std::to_wstring(m.top) + L"," + std::to_wstring(m.right) + L"," +
+                             std::to_wstring(m.bottom) + L"|" +
+                             std::to_wstring(taskbarCorners[0]) + L"," +
+                             std::to_wstring(taskbarCorners[1]);
+    bool complete = true;
+    for (HWND ear : bezel.ears) {
+        complete = complete && (!ear || IsWindow(ear));
+    }
+    if (complete && bezel.earSignature == signature) {
+        return false;
+    }
+    DestroyBezelEars(bezel);
+    bezel.earSignature = signature;
+    if (cr <= 0) {
+        return false;
+    }
+    bool created = false;
+    for (int corner = 0; corner < 4; corner++) {
+        SetRectEmpty(&bezel.earRects[corner]);
+        if (corner == taskbarCorners[0] || corner == taskbarCorners[1]) {
+            continue;
+        }
+        bool left = corner == kCornerTL || corner == kCornerBL;
+        bool top = corner == kCornerTL || corner == kCornerTR;
+        RECT rc;
+        rc.left = left ? m.left + 1 : m.right - 1 - cr;
+        rc.top = top ? m.top + 1 : m.bottom - 1 - cr;
+        rc.right = rc.left + cr;
+        rc.bottom = rc.top + cr;
+        bezel.earRects[corner] = rc;
+        bezel.ears[corner] = CreateBezelEar(bezel.owner, layout, rc);
+        created = created || bezel.ears[corner] != nullptr;
+    }
+    return created;
+}
+
+// Makes the bezel's windows match the overlay's layout. New windows start
+// cloaked and hidden; the bezel is then shown again by UpdateVisibility (or
+// with the frame).
+void SyncBezelWindows(Overlay& overlay) {
+    Bezel& bezel = overlay.bezel;
+    if (!bezel.owner) {
+        bezel.owner = CreateWindowExW(WS_EX_TOOLWINDOW, kFrameClassName, L"", WS_POPUP, 0, 0, 0, 0,
+                                      nullptr, nullptr, g_module, nullptr);
+        if (!bezel.owner) {
+            Wh_Log(L"CreateWindowExW (bezel owner) failed: %u", GetLastError());
+            return;
+        }
+    }
+    bool created = CreateBezelStrips(overlay);
+    created = CreateBezelEars(overlay) || created;
+    if (created) {
+        bezel.shown = false;  // the new windows are shown by the next pass
+    }
+}
+
+template <typename F>
+void ForEachBezelWindow(const Bezel& bezel, F f) {
+    for (HWND strip : bezel.strips) {
+        if (strip) {
+            f(strip);
+        }
+    }
+    for (HWND ear : bezel.ears) {
+        if (ear) {
+            f(ear);
+        }
+    }
+}
+
+void SetBezelCloaked(const Overlay& overlay, bool cloak) {
+    ForEachBezelWindow(overlay.bezel, [cloak](HWND hwnd) { CloakWindow(hwnd, cloak); });
+}
+
+// The bezel stays on the screen while the frame rests (and isn't hidden for
+// a full-screen app): only the frame and its shadow go then.
+bool BezelStays(const Overlay& overlay) {
+    return overlay.resting && !overlay.fullscreen;
 }
 
 // Hit-test (and DWM clip) region from the frame's rasterized shape: every
 // pixel the layered frame would paint - its anti-aliased coverage plus the
-// static layer (ears, the hit-testable work-area inset strip) - so the mouse
-// meets the acrylic frame exactly where it meets the layered one.
+// static layer (the bezel ring, the hit-testable work-area inset strip) - so
+// the mouse meets the acrylic frame exactly where it meets the layered one.
 HRGN RegionFromSurface(const FrameSurface& surface) {
     int width = surface.width, height = surface.height;
     std::vector<RECT> rects;
@@ -5265,21 +5471,18 @@ bool CreateAcrylicFrame(Overlay& overlay) {
     }
     overlay.hwnd = hwnd;
     overlay.comp = std::move(ac);
-    CreateBezelStrips(overlay);
     Wh_Log(L"monitor %p: acrylic frame %p (%ld,%ld,%ld,%ld), owner %p", overlay.layout.monitor,
            hwnd, rc.left, rc.top, rc.right, rc.bottom, overlay.comp->owner);
     return true;
 }
 
 // Moves a re-shaped acrylic frame to its new rectangle (the content is
-// rebuilt by the next PaintOverlay); the bezel ring is rebuilt only if the
-// monitor's rectangle changed.
+// rebuilt by the next PaintOverlay).
 void PlaceAcrylicFrame(Overlay& overlay) {
     const RECT& rc = overlay.layout.overlayRect;
     SetWindowPos(overlay.hwnd, nullptr, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
                  SWP_NOZORDER | SWP_NOACTIVATE);
     overlay.comp->built = false;  // the refreshers follow the rebuilt bands
-    CreateBezelStrips(overlay);
 }
 
 void DestroyAcrylic(Overlay& overlay) {
@@ -5301,7 +5504,6 @@ void DestroyAcrylic(Overlay& overlay) {
     ac.overlaySurface = nullptr;
     ac.root = nullptr;
     ac.target = nullptr;
-    DestroyBezelStrips(ac);
     for (HWND& refresher : ac.refreshers) {
         if (refresher) {
             DestroyWindow(refresher);
@@ -5320,23 +5522,15 @@ void DestroyAcrylic(Overlay& overlay) {
 }
 
 // Cloaked = off the screen (alpha 0's counterpart for the composition
-// window and its ring). Uncloaking from the taskbar thread is what reveals
-// the frame in the handshake.
+// window and the bezel, which stays while the frame rests). Uncloaking from
+// the taskbar thread is what reveals the frame in the handshake.
 void SetAcrylicCloaked(const Overlay& overlay, bool cloak) {
     if (!cloak) {
-        for (HWND strip : overlay.comp->strips) {
-            if (strip) {
-                CloakWindow(strip, false);
-            }
-        }
+        SetBezelCloaked(overlay, false);
     }
     CloakWindow(overlay.hwnd, cloak);
-    if (cloak) {
-        for (HWND strip : overlay.comp->strips) {
-            if (strip) {
-                CloakWindow(strip, true);
-            }
-        }
+    if (cloak && !BezelStays(overlay)) {
+        SetBezelCloaked(overlay, true);
     }
 }
 
@@ -5852,6 +6046,11 @@ bool PresentOverlayLocked(Overlay& overlay) {
         const FrameSurface& surface = *overlay.surface;
         ok = PresentFrame(overlay.hwnd, surface.memDc, surface.width, surface.height,
                           &overlay.layout.overlayRect, overlay.presentAlpha);
+        if (overlay.presentAlpha != 0) {
+            SetBezelCloaked(overlay, false);
+        } else if (!BezelStays(overlay)) {
+            SetBezelCloaked(overlay, true);
+        }
     }
     for (const ShadowSlice& slice : overlay.shadow) {
         if (slice.hwnd && slice.surface) {
@@ -6231,10 +6430,18 @@ void WithdrawReveal(Overlay& overlay) {
     overlay.revealPending = false;
 }
 
+// Takes the bezel (ring and corners) off the screen: cloaked and hidden.
+void HideBezel(Overlay& overlay) {
+    SetBezelCloaked(overlay, true);
+    ForEachBezelWindow(overlay.bezel, [](HWND hwnd) { ShowWindow(hwnd, SW_HIDE); });
+    overlay.bezel.shown = false;
+}
+
 // Takes a frame off the screen on the spot: blanked (alpha 0) and hidden, so
 // nothing that might animate a window's disappearance has anything visible
 // to animate. Also ends a pending reveal (whose window is visible at alpha
-// 0, or already revealed by the taskbar thread).
+// 0, or already revealed by the taskbar thread). The bezel goes with it,
+// unless the frame is going for a rest (see BezelStays).
 void HideFrame(Overlay& overlay) {
     bool visible = overlay.shown || overlay.revealPending;
     WithdrawReveal(overlay);
@@ -6247,19 +6454,17 @@ void HideFrame(Overlay& overlay) {
                 ShowWindow(slice.hwnd, SW_HIDE);
             }
         }
-        if (overlay.comp) {
-            for (HWND strip : overlay.comp->strips) {
-                if (strip) {
-                    ShowWindow(strip, SW_HIDE);
-                }
-            }
-        }
+    }
+    if (!BezelStays(overlay)) {
+        HideBezel(overlay);
     }
     overlay.shown = false;
 }
 
 // Removes a frame (and its shadow) on the spot.
 void DestroyOverlay(Overlay& overlay) {
+    HideBezel(overlay);
+    DestroyBezel(overlay.bezel);
     if (overlay.hwnd) {
         HideFrame(overlay);
         if (overlay.comp) {
@@ -6284,6 +6489,7 @@ void DestroyOverlay(Overlay& overlay) {
 void HideOverlays(std::vector<Overlay>& overlays) {
     for (Overlay& overlay : overlays) {
         HideFrame(overlay);
+        HideBezel(overlay);
     }
 }
 
@@ -6446,6 +6652,7 @@ void SyncOverlays(const std::vector<Layout>& layouts) {
             existing->layout = layout;
             existing->surface.reset();  // rebuilt by the paint below
             bool shadowCreated = SyncShadowWindows(*existing);  // moved to the new layout
+            SyncBezelWindows(*existing);  // shown again by UpdateVisibility
             ApplyFrameMouseStyle(existing->hwnd);
             if (existing->comp) {
                 PlaceAcrylicFrame(*existing);  // moved now; content rebuilt by the paint
@@ -6493,6 +6700,7 @@ void SyncOverlays(const std::vector<Layout>& layouts) {
             }
         }
         SyncShadowWindows(overlay);
+        SyncBezelWindows(overlay);
         if (layout.taskbar) {
             overlay.waiting = true;  // appears together with the taskbar
             overlay.waitSince = GetTickCount64();
@@ -6552,6 +6760,57 @@ void RaiseFrame(Overlay& overlay, bool show) {
             SetWindowPos(slice.hwnd, overlay.hwnd, 0, 0, 0, 0, flags);
         }
     }
+    for (HWND strip : overlay.bezel.strips) {
+        if (strip) {
+            SetWindowPos(strip, overlay.hwnd, 0, 0, 0, 0, flags);
+        }
+    }
+    for (HWND ear : overlay.bezel.ears) {
+        if (ear) {
+            SetWindowPos(ear, HWND_TOPMOST, 0, 0, 0, 0, flags);  // over the frame
+        }
+    }
+}
+
+// The bezel on its own, while the frame rests: topmost (right under a
+// demoted taskbar), with a topmost taskbar put back on top of it.
+void PlaceBezelAlone(const Overlay& overlay, UINT flags) {
+    HWND taskbar = overlay.layout.taskbar;
+    bool demoted = TaskbarDemoted(taskbar);
+    ForEachBezelWindow(overlay.bezel, [&](HWND hwnd) {
+        SetWindowPos(hwnd, demoted ? taskbar : HWND_TOPMOST, 0, 0, 0, 0, flags);
+    });
+    if (!demoted && taskbar && IsTopmost(taskbar)) {
+        SetWindowPos(taskbar, HWND_TOP, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOSENDCHANGING |
+                         SWP_ASYNCWINDOWPOS);
+    }
+}
+
+bool BezelAloneOrderBroken(const Overlay& overlay) {
+    HWND taskbar = overlay.layout.taskbar;
+    bool demoted = TaskbarDemoted(taskbar);
+    bool broken = false;
+    ForEachBezelWindow(overlay.bezel, [&](HWND hwnd) {
+        if (broken || !IsWindowVisible(hwnd)) {
+            return;
+        }
+        broken = demoted ? (IsTopmost(hwnd) || !WindowAbove(taskbar, hwnd)) : !IsTopmost(hwnd);
+    });
+    return broken;
+}
+
+// Shows the bezel (uncloaked, in its place in the z-order): with the frame
+// when that is shown, on its own otherwise.
+void ShowBezel(Overlay& overlay) {
+    SetBezelCloaked(overlay, false);
+    UINT flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW;
+    if (overlay.shown) {
+        RaiseFrame(overlay, true);
+    } else {
+        PlaceBezelAlone(overlay, flags);
+    }
+    overlay.bezel.shown = true;
 }
 
 // Takes a frame off the screen on the spot and starts waiting for its
@@ -6632,12 +6891,13 @@ UINT BeginReveal(Overlay& overlay) {
         std::lock_guard<std::mutex> lock(g_revealMutex);
         const FrameSurface& surface = *overlay.surface;
         Reveal reveal{serial, overlay.hwnd, surface.memDc, surface.width, surface.height};
-        if (overlay.comp) {
-            reveal.composition = true;
-            for (int i = 0; i < 4; i++) {
-                reveal.strips[i] = overlay.comp->strips[i];
+        reveal.composition = overlay.comp != nullptr;
+        int n = 0;
+        ForEachBezelWindow(overlay.bezel, [&](HWND hwnd) {
+            if (n < 8) {
+                reveal.bezel[n++] = hwnd;
             }
-        }
+        });
         for (int i = 0; i < kShadowSlices; i++) {
             const ShadowSlice& slice = overlay.shadow[i];
             if (slice.hwnd && slice.surface) {
@@ -6740,10 +7000,11 @@ void RestTaskbarAndFrame(Overlay& overlay, ULONGLONG now) {
     }
 }
 
-// Whether a window is maximized on the monitor: visible, not minimized or
-// cloaked (another virtual desktop), not a tool window. What keeps the frame
-// on with "Hide the frame without a maximized window".
-bool HasMaximizedWindow(const Layout& layout) {
+// The topmost window maximized on a monitor: visible, not minimized or
+// cloaked (another virtual desktop), not a tool window. The one filter for
+// both what keeps the frame on ("Hide the frame without a maximized
+// window") and whose title bar gives it its color.
+HWND MaximizedWindowOn(HMONITOR monitor) {
     for (HWND hwnd = GetTopWindow(nullptr); hwnd; hwnd = GetWindow(hwnd, GW_HWNDNEXT)) {
         if (!IsZoomed(hwnd) || !IsWindowVisible(hwnd) || IsIconic(hwnd)) {
             continue;
@@ -6751,13 +7012,16 @@ bool HasMaximizedWindow(const Layout& layout) {
         if (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) {
             continue;
         }
-        if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL) != layout.monitor ||
-            IsWindowCloaked(hwnd)) {
+        if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL) != monitor || IsWindowCloaked(hwnd)) {
             continue;
         }
-        return true;
+        return hwnd;
     }
-    return false;
+    return nullptr;
+}
+
+bool HasMaximizedWindow(const Layout& layout) {
+    return MaximizedWindowOn(layout.monitor) != nullptr;
 }
 
 // Task View (Win+Tab) is a visible, monitor-sized island window that holds
@@ -6783,6 +7047,24 @@ bool SpansItsMonitor(HWND hwnd) {
            RectContains(rect, mi.rcMonitor);
 }
 
+// A window's title without sending it WM_GETTEXT: GetWindowTextW on a window
+// of this process sends the message to its thread and waits with no
+// timeout, so the UI thread would stall whenever the thread behind
+// Explorer's island windows is busy. InternalGetWindowText reads the title
+// the window has stored.
+int ReadWindowTitle(HWND hwnd, WCHAR* buffer, int size) {
+    using InternalGetWindowText_t = int(WINAPI*)(HWND, LPWSTR, int);
+    static auto internalGetWindowText = reinterpret_cast<InternalGetWindowText_t>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "InternalGetWindowText"));
+    if (size > 0) {
+        buffer[0] = L'\0';
+    }
+    if (!internalGetWindowText) {
+        return 0;  // never: user32 has exported it since Windows NT
+    }
+    return internalGetWindowText(hwnd, buffer, size);
+}
+
 // The title the taskbar's thumbnail flyout takes once it is opened by a
 // click (a grouped button, or any button with thumbnails set to show on
 // click): the same window class as Task View, monitor-sized and in the
@@ -6801,7 +7083,7 @@ bool IsTaskViewWindow(HWND hwnd) {
         return false;
     }
     WCHAR title[64];
-    if (GetWindowTextW(hwnd, title, ARRAYSIZE(title)) <= 0 ||
+    if (ReadWindowTitle(hwnd, title, ARRAYSIZE(title)) <= 0 ||
         wcscmp(title, kThumbnailFlyoutTitle) == 0) {
         return false;
     }
@@ -6852,7 +7134,7 @@ void TrackTaskView(ULONGLONG now) {
         return;
     }
     WCHAR title[64] = L"";
-    GetWindowTextW(taskViewWnd, title, ARRAYSIZE(title));
+    ReadWindowTitle(taskViewWnd, title, ARRAYSIZE(title));
     Wh_Log(L"Task View open (%p \"%s\"%s) - frame and taskbar left under it", taskViewWnd,
            title, taskViewWnd == GetForegroundWindow() ? L", foreground" : L"");
 }
@@ -6881,6 +7163,13 @@ void OnTaskbarZOrder() {
         return;
     }
     for (Overlay& overlay : *g_overlays) {
+        if (overlay.bezel.shown && !overlay.shown) {
+            // Resting: the bezel alone.
+            if (BezelAloneOrderBroken(overlay)) {
+                PlaceBezelAlone(overlay, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+            continue;
+        }
         if (!overlay.comp || !overlay.hwnd || !IsWindowVisible(overlay.hwnd)) {
             continue;
         }
@@ -7078,6 +7367,23 @@ void UpdateVisibility() {
                     Wh_Log(L"monitor %p: frame re-ordered", overlay.layout.monitor);
                 }
             }
+        }
+
+        // The bezel (ring and monitor corners): up with the frame and while
+        // it rests; off for a full-screen app and while the frame waits for
+        // its taskbar (it comes back with the frame then, in the same
+        // rendering pass). Task View covers it like the frame.
+        bool bezelWanted = !overlay.fullscreen && (overlay.shown || overlay.resting);
+        if (bezelWanted && !overlay.bezel.shown) {
+            ShowBezel(overlay);
+            if (!overlay.shown) {
+                Wh_Log(L"monitor %p: monitor corners and bezel line shown without the frame",
+                       overlay.layout.monitor);
+            }
+        } else if (!bezelWanted && overlay.bezel.shown) {
+            HideBezel(overlay);
+        } else if (bezelWanted && !overlay.shown && BezelAloneOrderBroken(overlay)) {
+            PlaceBezelAlone(overlay, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
     }
 }
@@ -7643,8 +7949,9 @@ void DropRests(HWND taskbar) {
                          g_restsWaiting.end());
 }
 
-// The monitor-corner ears inside the taskbar go with the background: both
-// off while resting, both back together.
+// The monitor-corner ears inside the taskbar (and the bezel lines along its
+// outer edge): off while Task View is open and while the taskbar's fill is
+// held back for a move, up otherwise - a rest included.
 void SetEarsHidden(HWND taskbar, bool hidden) {
     auto corner = g_xamlCorners->find(taskbar);
     if (corner == g_xamlCorners->end()) {
@@ -7697,7 +8004,14 @@ void NudgeRender(HWND taskbar) {
     }
     if (auto corner = g_xamlCorners->find(taskbar);
         corner != g_xamlCorners->end() && corner->second.ear[0]) {
-        corner->second.ear[0].Opacity(value);
+        // By a millionth from where the ear is, so a hidden ear (Task View)
+        // stays hidden.
+        auto& ear = corner->second.ear[0];
+        if (ear.Opacity() < 0.5) {
+            ear.Opacity(flip ? 0.000001 : 0.0);
+        } else {
+            ear.Opacity(value);
+        }
     }
 }
 
@@ -7721,6 +8035,7 @@ void ApplyRecolorsInRenderingTick() {
                 HideStrokeOnTaskbarThread(&op);  // the border line goes with the stock look
             }
             wants.fillResting = false;
+            wants.resting = false;
             if (wants.fill) {
                 FillOp op{recolor.taskbar, wants.fillArgb, false, false};
                 ApplyFillOnTaskbarThread(&op);
@@ -7736,23 +8051,29 @@ void ApplyRecolorsInRenderingTick() {
                 // resized under us, say): the UI thread then presents it
                 // itself instead of counting it as revealed.
                 const Reveal& r = reveal->second;
+                // Uncloaked here as well as presented: a rest's rendering
+                // tick that ran after BeginReveal uncloaked them on the UI
+                // thread cloaked them again, and alpha alone wouldn't show
+                // them.
+                BOOL off = FALSE;
                 for (auto const& shadow : r.shadow) {
                     if (shadow.hwnd) {
+                        DwmSetWindowAttribute(shadow.hwnd, DWMWA_CLOAK, &off, sizeof(off));
                         PresentFrame(shadow.hwnd, shadow.memDc, shadow.width, shadow.height, nullptr,
                                      255);
                     }
                 }
+                for (HWND hwnd : r.bezel) {
+                    if (hwnd) {
+                        DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, &off, sizeof(off));
+                    }
+                }
                 bool presented;
                 if (r.composition) {
-                    BOOL off = FALSE;
-                    for (HWND strip : r.strips) {
-                        if (strip) {
-                            DwmSetWindowAttribute(strip, DWMWA_CLOAK, &off, sizeof(off));
-                        }
-                    }
                     presented =
                         SUCCEEDED(DwmSetWindowAttribute(r.frame, DWMWA_CLOAK, &off, sizeof(off)));
                 } else {
+                    DwmSetWindowAttribute(r.frame, DWMWA_CLOAK, &off, sizeof(off));
                     presented = PresentFrame(r.frame, r.memDc, r.width, r.height, nullptr, 255);
                 }
                 if (presented) {
@@ -7786,8 +8107,9 @@ void RequestTaskbarRecolor(HWND taskbar, UINT serial) {
 // Taskbar thread: the frame rests (no maximized window on its monitor).
 // Transparent: our fill at alpha 0 and the border line hidden. Stock: the
 // taskbar's own background and border line back (our brush and the stroke's
-// opacity stay recorded, for the recolor that ends the rest). The ears go
-// off either way, and nothing re-applies the fill or the stroke until that
+// opacity stay recorded, for the recolor that ends the rest). The ears and
+// bezel lines stay up either way (the monitor stays rounded; Task View alone
+// takes them off), and nothing re-applies the fill or the stroke until that
 // recolor.
 void RestOnTaskbarThread(HWND taskbar, bool transparent) try {
     if (g_unloading || !g_wants) {
@@ -7801,6 +8123,7 @@ void RestOnTaskbarThread(HWND taskbar, bool transparent) try {
     DropRecolors(taskbar);
     wants.fillSuspended = true;
     wants.fillResting = !transparent;
+    wants.resting = true;
     if (transparent) {
         if (wants.fill) {
             FillOp op{taskbar, wants.fillArgb & 0x00FFFFFF, false, false};
@@ -7822,7 +8145,7 @@ void RestOnTaskbarThread(HWND taskbar, bool transparent) try {
             stroke->second.hidden = false;
         }
     }
-    SetEarsHidden(taskbar, true);
+    SetEarsHidden(taskbar, wants.taskView);
 } catch (...) {
     Wh_Log(L"RestOnTaskbarThread: exception %08X", winrt::to_hresult().value);
 }
@@ -7854,8 +8177,8 @@ void RequestTaskbarRest(HWND taskbar) {
 // Taskbar thread: Task View opened or closed. Windows turns the taskbar's
 // background see-through over Task View by itself; the monitor-corner ears
 // (and bezel lines) go with it, and come back when it closes unless the
-// taskbar is held back or resting then (the recolor that ends that shows
-// them).
+// taskbar's fill is held back for a move then (the recolor that ends that
+// shows them). A rest keeps them up.
 void TaskViewOnTaskbarThread(HWND taskbar, bool open) try {
     if (g_unloading || !g_wants) {
         return;
@@ -7866,7 +8189,7 @@ void TaskViewOnTaskbarThread(HWND taskbar, bool open) try {
     }
     TaskbarWants& wants = it->second;
     wants.taskView = open;
-    SetEarsHidden(taskbar, open || wants.fillSuspended || wants.fillResting);
+    SetEarsHidden(taskbar, open || (wants.fillSuspended && !wants.resting));
 } catch (...) {
     Wh_Log(L"TaskViewOnTaskbarThread: exception %08X", winrt::to_hresult().value);
 }
@@ -7925,13 +8248,7 @@ void RequestTaskbarRestWithFrame(const Overlay& overlay, UINT serial) {
     if (overlay.hwnd) {
         cloak.push_back(overlay.hwnd);
     }
-    if (overlay.comp) {
-        for (HWND strip : overlay.comp->strips) {
-            if (strip) {
-                cloak.push_back(strip);
-            }
-        }
-    }
+    // The bezel (ring and monitor corners) stays up while the frame rests.
     for (const ShadowSlice& slice : overlay.shadow) {
         if (slice.hwnd) {
             cloak.push_back(slice.hwnd);
@@ -9064,20 +9381,7 @@ AdaptiveMonitor& AdaptiveFor(HMONITOR monitor) {
     return g_adaptive.back();
 }
 
-// The topmost maximized window on a monitor (not minimized, not cloaked).
-HWND MaximizedWindowOn(HMONITOR monitor) {
-    for (HWND hwnd = GetTopWindow(nullptr); hwnd; hwnd = GetWindow(hwnd, GW_HWNDNEXT)) {
-        if (!IsWindowVisible(hwnd) || IsIconic(hwnd) || !IsZoomed(hwnd) ||
-            IsCloakedWindow(hwnd)) {
-            continue;
-        }
-        if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL) != monitor) {
-            continue;
-        }
-        return hwnd;
-    }
-    return nullptr;
-}
+// MaximizedWindowOn is defined with the visibility code.
 
 // The row sampled: the fourth row of the window that shows - the window
 // clipped to the work area (the maximized frame extends under it by the
@@ -9241,7 +9545,7 @@ bool ThumbnailPreviewShowing() {
             continue;
         }
         WCHAR title[64];
-        if (GetWindowTextW(hwnd, title, ARRAYSIZE(title)) <= 0 ||
+        if (ReadWindowTitle(hwnd, title, ARRAYSIZE(title)) <= 0 ||
             wcscmp(title, kThumbnailFlyoutTitle) == 0) {
             return true;
         }
@@ -9513,7 +9817,11 @@ void UpdateAdaptiveColors(ULONGLONG now, bool fast) {
     for (Overlay& overlay : *g_overlays) {
         AdaptiveMonitor& a = AdaptiveFor(overlay.layout.monitor);
         HWND window = nullptr;
-        if (overlay.shown && !overlay.fullscreen) {
+        // Resting too: with nothing maximized there is no window (the frame
+        // color), and the moment one is maximized its remembered color is
+        // committed in this tick, before UpdateVisibility starts the reveal
+        // - so the frame and the taskbar's theme come back in it.
+        if ((overlay.shown || overlay.resting) && !overlay.fullscreen) {
             window = PeekedWindowOn(a.monitor);
             if (!window) {
                 window = MaximizedWindowOn(a.monitor);
@@ -9930,10 +10238,13 @@ void Tick(bool forceRebuild) {
     // frame of the taskbar being uncloaked), at the regular rate otherwise.
     bool anyWaiting = false;
     for (const Overlay& overlay : *g_overlays) {
-        // A frame hidden for full-screen can't show until that ends, and
-        // the event that ends it ticks right away - no need to spin at 60 Hz
-        // for as long as a game runs.
-        anyWaiting = anyWaiting || (overlay.waiting && !overlay.fullscreen);
+        // A frame hidden for full-screen, or resting (no maximized window),
+        // can't show until that ends, and the event that ends it ticks right
+        // away (foreground, location, minimize and Aero Peek events, the
+        // taskbar's answer to the reveal) - no need to spin at 60 Hz for as
+        // long as a game runs or nothing is maximized. A wait left pending
+        // by a rest goes back to the fast tick once the rest ends.
+        anyWaiting = anyWaiting || (overlay.waiting && !overlay.fullscreen && !overlay.resting);
     }
     if (anyWaiting != g_fastTick) {
         if (HWND ctrl = g_ctrlWnd.load()) {
