@@ -7,7 +7,7 @@
 // @github          https://github.com/JohhannasReyn
 // @homepage        https://thegnosys.com
 // @include         explorer.exe
-// @compilerOptions -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -ladvapi32 -lshell32
+// @compilerOptions -ld2d1 -ldwrite -ldwmapi -lgdi32 -ladvapi32 -lshell32 -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -52,9 +52,17 @@ menus through `TrackPopupMenu` can be added from the mod's Advanced tab.
 Programs that draw their own menus (browsers, Office, most Electron apps)
 are not affected.
 
+## Other context menu mods
+
+Mods that replace the same menus, such as Custom Cached Context Menu, hook
+the same functions. With two of them enabled, whichever hook runs first
+takes the menu, so use one at a time.
+
 ## Known limits
 
-- Owner-drawn items that carry no text show as "Item N".
+- A menu whose top level has owner-drawn items with no readable text is
+  shown as the standard menu instead. Inside a submenu such items show as
+  "Item N".
 - Menu icons are not shown.
 - Stacked submenus can run past the screen edge when a menu is deep.
 */
@@ -156,32 +164,13 @@ are not affected.
 */
 // ==/WindhawkModSettings==
 
-// The wheel itself (Config, layout, rendering, input handling) was developed
-// as a standalone prototype; the code from "Mod glue" down is what hosts it
-// inside a hooked TrackPopupMenu call.
+#include <windhawk_utils.h>
 
-#ifndef UNICODE
-#define UNICODE
-#endif
-#ifndef _UNICODE
-#define _UNICODE
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0A00
-#endif
-
-#include <windows.h>
 #include <d2d1.h>
 #include <dwrite.h>
 #include <dwmapi.h>
 #include <shellapi.h>
-
-#ifdef _MSC_VER
-#pragma comment(lib, "advapi32.lib")
-#endif
+#include <shellscalingapi.h>
 
 #include <algorithm>
 #include <atomic>
@@ -373,8 +362,7 @@ struct Wheel {
     UINT resCmd = 0;
     HMENU resMenu = nullptr;
     UINT resPos = 0;
-    bool evLeftUp = false;   // set by the mouse hook, handled by the loop
-    bool evRight = false;
+    bool forceRender = true; // something changed that FrameKey can't see
     POINT center = {};       // screen px
     float scale = 1.0f;
     int size = 0;            // window is size x size px
@@ -438,11 +426,22 @@ struct Wheel {
 };
 
 static Wheel g;
-static HHOOK g_mouseHook = nullptr;
-static HHOOK g_keyHook = nullptr;
-static bool g_swallowLUp = false;
-static bool g_swallowRUp = false;
-static bool g_swallowedKeys[256] = {};
+
+// Shared with the mouse hook's thread (see "Input"). g_hookTarget is the
+// wheel window while a wheel is taking input, null otherwise.
+static std::atomic<HWND> g_hookTarget{nullptr};
+static std::atomic<int> g_snapCx{0}, g_snapCy{0}, g_snapSide{1};
+static std::atomic<int> g_snapOuter{0}, g_snapHub{0};
+
+// Mouse events the hook thread posts to the wheel window.
+enum : UINT {
+    WM_WHEEL_LDOWN = WM_APP + 1,  // wParam, lParam: screen x, y
+    WM_WHEEL_LUP,
+    WM_WHEEL_RUP,
+    WM_WHEEL_SCROLL,              // lParam: wheel delta
+    WM_WHEEL_OUTSIDE,             // a click or scroll outside the wheel
+};
+
 static std::vector<Item> g_menu;  // the open menu's top level
 static HINSTANCE g_inst = nullptr;
 static bool g_classRegistered = false;
@@ -473,6 +472,7 @@ static double Now() {
 }
 
 static int Mod(long long a, int n) {
+    if (n <= 0) return 0;
     long long m = a % n;
     return int(m < 0 ? m + n : m);
 }
@@ -1226,7 +1226,7 @@ static std::wstring ReadStored(PCWSTR key) {
 static void LoadHistory() {
     if (g_historyLoaded) return;
     g_historyLoaded = true;
-    g_history = Split(ReadStored(L"history"), L'\n');
+    g_history = Split(ReadStored(L"history"), L'\t');
     g_lastText = ReadStored(L"last");
     g_clipSeq = GetClipboardSequenceNumber();
 }
@@ -1247,6 +1247,10 @@ static Item* FindSame(std::vector<Item>& v, const Item& like) {
     return nullptr;
 }
 
+// Stored lists are tab-separated: labels never contain a tab (CleanMenuText
+// cuts them at the first one), and unlike a line break a tab survives every
+// storage backend.
+
 // Remembers a choice by the top-level entry it was reached through.
 static void RecordChoice(const std::wstring& rootText,
                          const std::wstring& leafText) {
@@ -1256,7 +1260,7 @@ static void RecordChoice(const std::wstring& rootText,
     g_history.insert(g_history.begin(), rootText);
     if (g_history.size() > 8) g_history.resize(8);
     g_clipSeq = GetClipboardSequenceNumber();
-    Wh_SetStringValue(L"history", Join(g_history, L'\n').c_str());
+    Wh_SetStringValue(L"history", Join(g_history, L'\t').c_str());
     Wh_SetStringValue(L"last", g_lastText.c_str());
 }
 
@@ -1328,12 +1332,12 @@ static void SaveOrder(const std::vector<Item>& items) {
     std::vector<std::wstring> names;
     for (const Item& it : items)
         if (it.id != ID_BACK) names.push_back(it.text);
-    Wh_SetStringValue(OrderKey(items).c_str(), Join(names, L'\n').c_str());
+    Wh_SetStringValue(OrderKey(items).c_str(), Join(names, L'\t').c_str());
 }
 
 static void ApplyStoredOrder(std::vector<Item>& items) {
     const std::vector<std::wstring> order =
-        Split(ReadStored(OrderKey(items).c_str()), L'\n');
+        Split(ReadStored(OrderKey(items).c_str()), L'\t');
     if (order.empty()) return;
     std::vector<Item> out;
     std::vector<bool> used(items.size(), false);
@@ -1492,6 +1496,7 @@ static void ApplyOption(int id) {
     if (k >= all.size() || c >= all[k].choices.size()) return;
     all[k].set(all[k].choices[c].value);
     if (k == 0) g.side = cfg.preferLeft ? -1 : 1;  // show a side change now
+    g.forceRender = true;
     ApplyTheme();
 
     Item* opt = RefreshOptionsItem();
@@ -1567,6 +1572,9 @@ static bool IsHidden(const std::wstring& text) {
     return false;
 }
 
+// Set by ReadMenu when an item had no readable text.
+static bool g_sawUnreadable = false;
+
 // One level of a menu as wheel items. Submenus are not read here: their
 // owners often fill them only when they are about to open, so they are
 // marked lazy and read on the way in (LoadSubmenu).
@@ -1592,6 +1600,7 @@ static std::vector<Item> ReadMenu(HMENU hMenu) {
         it.text = CleanMenuText(buf);
         if (it.text.empty()) {
             // Owner-drawn with no text we can read.
+            g_sawUnreadable = true;
             wchar_t name[32];
             swprintf(name, 32, L"Item %d", pos + 1);
             it.text = name;
@@ -1643,7 +1652,11 @@ static void LoadSubmenu(Item& item) {
 
 // The top level: the real items, then custom entries and our own two.
 static std::vector<Item> BuildRootModel(HMENU hMenu) {
+    g_sawUnreadable = false;
     std::vector<Item> items = ReadMenu(hMenu);
+    // A top level with entries we cannot label is better left to the real
+    // menu than chosen from blind.
+    if (g_sawUnreadable) items.clear();
     if (items.empty()) return items;
     bool first = true;
     for (const CustomItem& ci : cfg.customItems) {
@@ -1747,7 +1760,8 @@ static int HighlightIndexAt(POINT pt) {
 
 static void BeginDrag(int idx) {
     Level& lvl = g.stack.back();
-    if (idx < 0 || idx >= int(lvl.items.size()) ||
+    // A lone item has nowhere to go, and lifting it would empty the list.
+    if (lvl.items.size() < 2 || idx < 0 || idx >= int(lvl.items.size()) ||
         lvl.widths.size() != lvl.items.size() ||
         lvl.items[size_t(idx)].id == ID_BACK ||
         lvl.items[size_t(idx)].id == ID_OPT_SETTING ||
@@ -1793,6 +1807,7 @@ static void CloseWheel() {
     g.pressed = false;
     g.open = false;
     g.closing = false;
+    g_hookTarget = nullptr;  // the hook stops taking events
     ShowWindow(g.hwnd, SW_HIDE);
 }
 
@@ -1926,8 +1941,14 @@ static void OnBackspace() {
 }
 
 static void OpenWheel(POINT pt) {
-    const UINT dpi = g.owner ? GetDpiForWindow(g.owner) : 0;
+    // Scale for the monitor the wheel opens on, which is not always the
+    // owner window's.
+    UINT dpi = 0, dpiY = 0;
+    if (FAILED(GetDpiForMonitor(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST),
+                                MDT_EFFECTIVE_DPI, &dpi, &dpiY)))
+        dpi = g.owner ? GetDpiForWindow(g.owner) : 0;
     g.scale = float(dpi ? dpi : 96) / 96.0f;
+    g.forceRender = true;
     ApplyTheme();
     g.center = pt;
     g.pressed = false;
@@ -2153,74 +2174,205 @@ static void Tick(double dt) {
 // Input
 // ---------------------------------------------------------------------------
 
-// The wheel never takes focus or capture, so a low-level hook is what lets it
-// see scrolls and clicks that land outside it. Keep this fast: it only flips
-// state or posts a message.
+// The wheel never takes focus or capture, so a low-level mouse hook is what
+// lets it see scrolls and clicks. A low-level hook holds up the mouse for the
+// whole system until its callback returns, and it runs on the thread that
+// installed it, so it lives on a small thread of its own that never blocks.
+// The callback only decides whether an event belongs to the wheel and posts
+// it to the wheel window; the wheel's thread does the work.
+//
+// What the callback needs to know is published in these atomics.
+
+static bool SnapInside(POINT pt) {
+    const double dx = double(g_snapSide.load()) * (pt.x - g_snapCx.load());
+    const double dy = double(pt.y - g_snapCy.load());
+    const double R = double(g_snapOuter.load());
+    if (dx * dx + dy * dy > R * R) return false;
+    return dx > -double(g_snapHub.load());  // see InsideWheel
+}
+
+// Called by the wheel's thread whenever the geometry may have changed.
+static void PublishGeometry() {
+    g_snapCx = g.center.x;
+    g_snapCy = g.center.y;
+    g_snapSide = g.side;
+    g_snapOuter = int(g.outerPx);
+    g_snapHub = int(cfg.hubRadius * g.scale);
+}
+
+// Only touched by the hook thread.
+static bool s_swallowLUp = false;
+static bool s_swallowRUp = false;
+
 static LRESULT CALLBACK MouseHook(int code, WPARAM wp, LPARAM lp) {
     if (code == HC_ACTION) {
         const MSLLHOOKSTRUCT* m = reinterpret_cast<const MSLLHOOKSTRUCT*>(lp);
-        // Button-ups are matched to swallowed downs even after the wheel has
-        // closed, so no app ever sees half a click.
-        if (wp == WM_LBUTTONUP && g_swallowLUp) {
-            g_swallowLUp = false;
-            g.evLeftUp = true;
+        const HWND wheel = g_hookTarget.load();
+        // Button-ups are matched to the downs we took, so nothing ever sees
+        // half a click.
+        if (wp == WM_LBUTTONUP && s_swallowLUp) {
+            s_swallowLUp = false;
+            if (wheel) PostMessageW(wheel, WM_WHEEL_LUP, 0, 0);
             return 1;
         }
-        if (wp == WM_RBUTTONUP && g_swallowRUp) {
-            g_swallowRUp = false;
-            g.evRight = true;
+        if (wp == WM_RBUTTONUP && s_swallowRUp) {
+            s_swallowRUp = false;
+            if (wheel) PostMessageW(wheel, WM_WHEEL_RUP, 0, 0);
             return 1;
         }
-        if (g.open) {
-            const bool inside = InsideWheel(m->pt);
+        if (wheel) {
+            const bool inside = SnapInside(m->pt);
+            bool outside = false;
             switch (wp) {
                 case WM_MOUSEWHEEL:
                     if (inside) {
-                        g.wheelAccum += short(HIWORD(m->mouseData));
-                        const int notches = g.wheelAccum / WHEEL_DELTA;
-                        g.wheelAccum -= notches * WHEEL_DELTA;
-                        if (notches) StepBy(-notches);  // scroll down = next
+                        PostMessageW(wheel, WM_WHEEL_SCROLL, 0,
+                                     LPARAM(short(HIWORD(m->mouseData))));
                         return 1;
                     }
-                    StartClose(cfg.dismissSec, false);  // and let it scroll
+                    outside = true;
                     break;
                 case WM_LBUTTONDOWN:
                     if (inside) {
-                        // Acts on release: a click chooses, a hold or
-                        // pull on a label picks it up instead.
-                        g_swallowLUp = true;
-                        g.pressTarget = HighlightIndexAt(m->pt);
-                        g.pressMoved = false;
-                        g.pressed = true;
-                        g.pressPos = m->pt;
-                        g.pressTime = Now();
-                        g.pressSlot = HitTestLabel(m->pt);
-                        Touch();
+                        s_swallowLUp = true;
+                        PostMessageW(wheel, WM_WHEEL_LDOWN,
+                                     WPARAM(INT_PTR(m->pt.x)),
+                                     LPARAM(m->pt.y));
                         return 1;
                     }
-                    StartClose(cfg.dismissSec, false);
+                    outside = true;
                     break;
                 case WM_RBUTTONDOWN:
-                    // A right-click inside the wheel asks for the standard
-                    // menu, acted on at release. Outside, it dismisses and
-                    // carries on to whatever was clicked.
+                    // Inside: asks for the standard menu, acted on at
+                    // release. Outside: dismisses, like any other click.
                     if (inside) {
-                        g_swallowRUp = true;
+                        s_swallowRUp = true;
                         return 1;
                     }
-                    StartClose(cfg.dismissSec, false);
+                    outside = true;
                     break;
                 case WM_MBUTTONDOWN:
                 case WM_XBUTTONDOWN:
-                    if (!inside) StartClose(cfg.dismissSec, false);
+                    outside = !inside;
                     break;
+            }
+            if (outside) {
+                // The wheel is over. Stop taking events right away, tell the
+                // wheel, and let this one through to whatever it was aimed at.
+                g_hookTarget = nullptr;
+                PostMessageW(wheel, WM_WHEEL_OUTSIDE, 0, 0);
             }
         }
     }
-    return CallNextHookEx(g_mouseHook, code, wp, lp);
+    return CallNextHookEx(nullptr, code, wp, lp);
 }
 
-// What is typed while the wheel is open. The app underneath never sees it.
+struct HookThread {
+    HANDLE thread = nullptr;
+    DWORD id = 0;
+    HANDLE ready = nullptr;
+    bool installed = false;
+};
+
+static DWORD WINAPI HookThreadProc(LPVOID param) {
+    HookThread* ht = static_cast<HookThread*>(param);
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // make a queue
+    s_swallowLUp = s_swallowRUp = false;
+    HHOOK hook = SetWindowsHookExW(WH_MOUSE_LL, MouseHook, g_inst, 0);
+    ht->installed = hook != nullptr;
+    SetEvent(ht->ready);
+    if (!hook) return 0;
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) DispatchMessageW(&msg);
+    UnhookWindowsHookEx(hook);
+    return 0;
+}
+
+static bool StartHookThread(HookThread* ht) {
+    ht->ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!ht->ready) return false;
+    ht->thread = CreateThread(nullptr, 0, HookThreadProc, ht, 0, &ht->id);
+    if (ht->thread) WaitForSingleObject(ht->ready, INFINITE);
+    CloseHandle(ht->ready);
+    ht->ready = nullptr;
+    if (ht->thread && !ht->installed) {
+        WaitForSingleObject(ht->thread, INFINITE);
+        CloseHandle(ht->thread);
+        ht->thread = nullptr;
+    }
+    return ht->thread != nullptr;
+}
+
+static void StopHookThread(HookThread* ht) {
+    if (!ht->thread) return;
+    PostThreadMessageW(ht->id, WM_QUIT, 0, 0);
+    WaitForSingleObject(ht->thread, INFINITE);
+    CloseHandle(ht->thread);
+    ht->thread = nullptr;
+}
+
+// Mouse events the hook thread passed on, handled on the wheel's thread.
+// Returns true if the message was one of ours.
+static bool HandleWheelEvent(const MSG& msg) {
+    if (msg.hwnd != g.hwnd || !g.hwnd) return false;
+    switch (msg.message) {
+        case WM_WHEEL_LDOWN: {
+            if (!g.open) return true;
+            // Acts on release: a click chooses, a hold or pull on a label
+            // picks it up instead.
+            const POINT pt = {int(INT_PTR(msg.wParam)), int(msg.lParam)};
+            g.pressTarget = HighlightIndexAt(pt);
+            g.pressMoved = false;
+            g.pressed = true;
+            g.pressPos = pt;
+            g.pressTime = Now();
+            g.pressSlot = HitTestLabel(pt);
+            Touch();
+            return true;
+        }
+        case WM_WHEEL_LUP:
+            OnLeftUp();
+            return true;
+        case WM_WHEEL_RUP:
+            if (!g.open) return true;
+            if (g.dragging) {
+                OnEscape();  // put the carried item back
+            } else {
+                g.result = R_NATIVE;
+                CloseWheel();
+            }
+            return true;
+        case WM_WHEEL_SCROLL: {
+            g.wheelAccum += int(msg.lParam);
+            const int notches = g.wheelAccum / WHEEL_DELTA;
+            g.wheelAccum -= notches * WHEEL_DELTA;
+            if (notches) StepBy(-notches);  // scroll down = next
+            return true;
+        }
+        case WM_WHEEL_OUTSIDE:
+            CloseWheel();  // at once; the click itself is still on its way
+            return true;
+    }
+    return false;
+}
+
+// A button press aimed at some other window. Clicks inside the wheel never
+// reach a queue (the hook takes them), so any that shows up is outside.
+static bool IsMouseDown(UINT message) {
+    switch (message) {
+        case WM_LBUTTONDOWN: case WM_RBUTTONDOWN: case WM_MBUTTONDOWN:
+        case WM_XBUTTONDOWN: case WM_LBUTTONDBLCLK: case WM_RBUTTONDBLCLK:
+        case WM_NCLBUTTONDOWN: case WM_NCRBUTTONDOWN: case WM_NCMBUTTONDOWN:
+        case WM_NCXBUTTONDOWN:
+            return true;
+    }
+    return false;
+}
+
+// Keys reach us through the thread's own queue: the wheel never activates, so
+// the menu's owner keeps the focus, and RunWheel takes key messages before
+// they are dispatched, as a menu loop does. Typed characters arrive
+// separately as WM_CHAR.
 static void OnKey(UINT vk) {
     switch (vk) {
         case VK_ESCAPE: OnEscape(); break;
@@ -2232,48 +2384,8 @@ static void OnKey(UINT vk) {
         case VK_RIGHT:  KeyJumpEnd(true); break;
         case VK_RETURN: Activate(); break;
         case VK_BACK:   OnBackspace(); break;
-        default: {
-            const UINT ch = MapVirtualKeyW(vk, MAPVK_VK_TO_CHAR) & 0x7FFF;
-            if (ch >= 32) OnChar(wchar_t(std::towlower(wchar_t(ch))));
-            break;
-        }
     }
     if (g.open) ClampPosition();
-}
-
-static LRESULT CALLBACK KeyHook(int code, WPARAM wp, LPARAM lp) {
-    if (code == HC_ACTION) {
-        const KBDLLHOOKSTRUCT* k = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lp);
-        const UINT vk = k->vkCode & 0xFF;
-        const bool down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
-        if (!down && g_swallowedKeys[vk]) {
-            // Pair every key-down we took with its key-up.
-            g_swallowedKeys[vk] = false;
-            return 1;
-        }
-        if (g.open && down) {
-            switch (vk) {
-                case VK_SHIFT: case VK_LSHIFT: case VK_RSHIFT:
-                case VK_CONTROL: case VK_LCONTROL: case VK_RCONTROL:
-                case VK_MENU: case VK_LMENU: case VK_RMENU:
-                case VK_LWIN: case VK_RWIN: case VK_CAPITAL:
-                    return CallNextHookEx(g_keyHook, code, wp, lp);
-            }
-            // A shortcut (Alt+Tab, Win+D, Ctrl+something) is not for us:
-            // let it through and get out of the way.
-            if ((k->flags & LLKHF_ALTDOWN) ||
-                (GetAsyncKeyState(VK_CONTROL) & 0x8000) ||
-                (GetAsyncKeyState(VK_LWIN) & 0x8000) ||
-                (GetAsyncKeyState(VK_RWIN) & 0x8000)) {
-                StartClose(cfg.dismissSec, false);
-                return CallNextHookEx(g_keyHook, code, wp, lp);
-            }
-            g_swallowedKeys[vk] = true;
-            OnKey(vk);
-            return 1;
-        }
-    }
-    return CallNextHookEx(g_keyHook, code, wp, lp);
 }
 
 static LRESULT CALLBACK WheelProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
@@ -2294,7 +2406,7 @@ static LRESULT CALLBACK WheelProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
 static std::wstring StrSetting(PCWSTR name, int index = -1) {
     PCWSTR s = index < 0 ? Wh_GetStringSetting(name)
                          : Wh_GetStringSetting(name, index);
-    std::wstring out = s ? s : L"";
+    std::wstring out = s;
     Wh_FreeStringSetting(s);
     return out;
 }
@@ -2399,11 +2511,67 @@ static bool EnsureWindowClass() {
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpfnWndProc = WheelProc;
     wc.lpszClassName = kWheelClass;
-    if (!RegisterClassExW(&wc) &&
-        GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
-        return false;
+    // If the class is somehow already there, it was left by code that is no
+    // longer loaded and its window procedure is gone, so don't reuse it. The
+    // caller falls back to the real menu.
+    if (!RegisterClassExW(&wc)) return false;
     g_classRegistered = true;
     return true;
+}
+
+// Direct2D, DirectWrite and GDI objects. Only ever called with no wheel on
+// screen: by the wheel's own thread on its way out, or after it has finished.
+static void ReleaseGraphics() {
+    DiscardDeviceResources();
+    SafeRelease(g.fmt);
+    SafeRelease(g.fmtRight);
+    SafeRelease(g.dw);
+    SafeRelease(g.d2d);
+    if (g.dib) {
+        SelectObject(g.memDC, g.oldBmp);
+        DeleteObject(g.dib);
+        g.dib = nullptr;
+        g.dibSize = 0;
+    }
+    if (g.memDC) {
+        DeleteDC(g.memDC);
+        g.memDC = nullptr;
+    }
+}
+
+// What a frame depends on. An idle wheel redraws nothing.
+struct FrameKey {
+    double rot = 0, gap = 0;
+    float opacity = -1, outer = 0;
+    POINT cursor = {};
+    size_t depth = 0;
+    int size = 0, side = 0;
+    bool dragging = false;
+    std::wstring typed;
+};
+
+static bool NeedsRender(FrameKey* last) {
+    FrameKey now;
+    now.rot = g.rot;
+    now.gap = g.gapPos;
+    now.opacity = g.opacity;
+    now.outer = g.outerPx;
+    now.cursor = g.lastCursor;
+    now.depth = g.stack.size();
+    now.size = g.size;
+    now.side = g.side;
+    now.dragging = g.dragging;
+    now.typed = g.typed;
+    const bool same =
+        !g.forceRender && now.rot == last->rot && now.gap == last->gap &&
+        now.opacity == last->opacity && now.outer == last->outer &&
+        now.cursor.x == last->cursor.x && now.cursor.y == last->cursor.y &&
+        now.depth == last->depth && now.size == last->size &&
+        now.side == last->side && now.dragging == last->dragging &&
+        now.typed == last->typed;
+    g.forceRender = false;
+    *last = now;
+    return !same;
 }
 
 struct WheelResult {
@@ -2413,6 +2581,9 @@ struct WheelResult {
     UINT pos = 0;
 };
 
+// True on the thread that is currently running a wheel.
+static thread_local bool t_inWheel = false;
+
 // Shows the wheel for this menu and runs it to completion on the calling
 // thread, like TrackPopupMenu does. Returns false if the wheel could not
 // take the menu, in which case the caller falls back to the real one.
@@ -2421,8 +2592,13 @@ static bool RunWheel(HMENU hMenu, UINT flags, int x, int y, HWND owner,
     bool expected = false;
     if (!g_busy.compare_exchange_strong(expected, true)) return false;
     struct Release {
-        ~Release() { g_busy = false; }
+        ~Release() {
+            t_inWheel = false;
+            g_busy = false;
+        }
     } release;
+    if (g_unloading) return false;
+    t_inWheel = true;
 
     if (g_cfgDirty.exchange(false)) LoadConfig();
     LoadHistory();
@@ -2430,10 +2606,7 @@ static bool RunWheel(HMENU hMenu, UINT flags, int x, int y, HWND owner,
     g.owner = owner;
     g.notify = !(flags & TPM_NONOTIFY);
     g.result = R_NONE;
-    g.evLeftUp = g.evRight = false;
     g.loadedSubs.clear();
-    g_swallowLUp = g_swallowRUp = false;
-    std::fill(std::begin(g_swallowedKeys), std::end(g_swallowedKeys), false);
 
     // The messages a real popup sends before it appears. Owners use them to
     // fill in or enable items, so they have to come before we read anything.
@@ -2454,49 +2627,67 @@ static bool RunWheel(HMENU hMenu, UINT flags, int x, int y, HWND owner,
     g_menu = BuildRootModel(hMenu);
     if (g_menu.empty() || !EnsureWindowClass()) {
         endNotifications();
+        g_menu.clear();
         return false;
     }
     g.hwnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         kWheelClass, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, g_inst,
         nullptr);
-    if (!g.hwnd) {
+    HookThread hookThread;
+    if (!g.hwnd || !StartHookThread(&hookThread)) {
+        // Without the hook the wheel could not be clicked: use the real menu.
+        if (g.hwnd) DestroyWindow(g.hwnd);
+        g.hwnd = nullptr;
         endNotifications();
+        g_menu.clear();
         return false;
     }
-    g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseHook, g_inst, 0);
-    g_keyHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyHook, g_inst, 0);
     g.fg = GetForegroundWindow();
 
     POINT pt = {x, y};
     OpenWheel(pt);
+    PublishGeometry();
+    g_hookTarget = g.hwnd;
 
+    FrameKey lastFrame;
+    NeedsRender(&lastFrame);  // OpenWheel drew the first frame
     while (g.open && !g_unloading) {
         MSG msg;
-        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+        while (g.open && PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE)) {
+            // A click on something else ends the wheel, and stays in the
+            // queue so its target handles it after this call has returned,
+            // not from inside it.
+            if (msg.hwnd != g.hwnd && IsMouseDown(msg.message)) {
+                CloseWheel();
+                break;
+            }
+            if (!PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) break;
             if (msg.message == WM_QUIT) {
                 PostQuitMessage(int(msg.wParam));  // not ours to swallow
                 CloseWheel();
                 break;
             }
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-        if (!g.open) break;
-
-        // Input the hooks flagged for us.
-        if (g.evLeftUp) {
-            g.evLeftUp = false;
-            OnLeftUp();
-        }
-        if (g.evRight) {
-            g.evRight = false;
-            if (g.dragging) {
-                OnEscape();  // put the carried item back
-            } else {
-                g.result = R_NATIVE;
-                CloseWheel();
+            if (HandleWheelEvent(msg)) continue;
+            // Keys are the wheel's while it is open.
+            if (msg.message == WM_KEYDOWN) {
+                TranslateMessage(&msg);  // queues WM_CHAR for type-to-find
+                OnKey(UINT(msg.wParam));
+                continue;
             }
+            if (msg.message == WM_CHAR) {
+                OnChar(wchar_t(std::towlower(wchar_t(msg.wParam))));
+                continue;
+            }
+            if (msg.message == WM_SYSKEYDOWN) {
+                StartClose(cfg.dismissSec, false);  // Alt or F10: step aside
+                continue;
+            }
+            if (msg.message == WM_KEYUP || msg.message == WM_SYSKEYUP ||
+                msg.message == WM_SYSCHAR || msg.message == WM_DEADCHAR ||
+                msg.message == WM_SYSDEADCHAR)
+                continue;
+            DispatchMessageW(&msg);
         }
         if (!g.open) break;
 
@@ -2504,14 +2695,14 @@ static bool RunWheel(HMENU hMenu, UINT flags, int x, int y, HWND owner,
         const double dt = std::min(t - g.lastTick, 0.05);
         g.lastTick = t;
         Tick(dt);
-        if (g.open) Render();
+        if (!g.open) break;
+        PublishGeometry();
+        if (NeedsRender(&lastFrame)) Render();
         if (FAILED(DwmFlush())) Sleep(8);  // pace to the compositor
     }
     if (g.open) CloseWheel();
 
-    if (g_mouseHook) UnhookWindowsHookEx(g_mouseHook);
-    if (g_keyHook) UnhookWindowsHookEx(g_keyHook);
-    g_mouseHook = g_keyHook = nullptr;
+    StopHookThread(&hookThread);
     DestroyWindow(g.hwnd);
     g.hwnd = nullptr;
     endNotifications();
@@ -2522,6 +2713,8 @@ static bool RunWheel(HMENU hMenu, UINT flags, int x, int y, HWND owner,
     result->pos = g.resPos;
     g.stack.clear();
     g_menu.clear();
+    // On unload, let go of everything here, on the thread that was using it.
+    if (g_unloading) ReleaseGraphics();
     return true;
 }
 
@@ -2535,6 +2728,12 @@ static TrackPopupMenu_t TrackPopupMenu_Original;
 static thread_local int t_passThrough = 0;
 
 static bool ShouldTake(HMENU hMenu, HWND hWnd) {
+    if (t_inWheel) {
+        // Something asked for another menu from inside the wheel's own loop.
+        // The wheel gets out of the way and the real menu shows.
+        if (g.open) CloseWheel();
+        return false;
+    }
     return !t_passThrough && !g_unloading && hMenu && IsMenu(hMenu) &&
            GetMenuItemCount(hMenu) > 0 && hWnd && IsWindow(hWnd);
 }
@@ -2603,12 +2802,10 @@ BOOL Wh_ModInit() {
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        reinterpret_cast<LPCWSTR>(&WheelProc), &g_inst);
-    Wh_SetFunctionHook(reinterpret_cast<void*>(TrackPopupMenuEx),
-                       reinterpret_cast<void*>(TrackPopupMenuEx_Hook),
-                       reinterpret_cast<void**>(&TrackPopupMenuEx_Original));
-    Wh_SetFunctionHook(reinterpret_cast<void*>(TrackPopupMenu),
-                       reinterpret_cast<void*>(TrackPopupMenu_Hook),
-                       reinterpret_cast<void**>(&TrackPopupMenu_Original));
+    WindhawkUtils::SetFunctionHook(TrackPopupMenuEx, TrackPopupMenuEx_Hook,
+                                   &TrackPopupMenuEx_Original);
+    WindhawkUtils::SetFunctionHook(TrackPopupMenu, TrackPopupMenu_Hook,
+                                   &TrackPopupMenu_Original);
     return TRUE;
 }
 
@@ -2626,21 +2823,10 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
-    // Our code must not be running when the mod is unloaded.
-    for (int i = 0; i < 500 && g_busy; i++) Sleep(10);
-    DiscardDeviceResources();
-    SafeRelease(g.fmt);
-    SafeRelease(g.fmtRight);
-    SafeRelease(g.dw);
-    SafeRelease(g.d2d);
-    if (g.dib) {
-        SelectObject(g.memDC, g.oldBmp);
-        DeleteObject(g.dib);
-        g.dib = nullptr;
-    }
-    if (g.memDC) {
-        DeleteDC(g.memDC);
-        g.memDC = nullptr;
-    }
+    // Our code must not be running when the mod is unloaded, however long a
+    // wheel takes to notice (a slow submenu handler, a message box). A wheel
+    // that was open releases its own graphics as it leaves.
+    while (g_busy) Sleep(10);
+    ReleaseGraphics();
     if (g_classRegistered) UnregisterClassW(kWheelClass, g_inst);
 }
