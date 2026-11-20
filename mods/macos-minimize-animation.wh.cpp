@@ -2,12 +2,13 @@
 // @id              macos-minimize-animation
 // @name            MacOS Minimize Animation
 // @description     Smooth macOS-style genie minimize, restore (open) and optional close animations for every window.
-// @version         3.2.1
+// @version         3.2.2
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         *
 // @compilerOptions -ldwmapi -lgdi32 -ld2d1 -lole32 -loleaut32 -luuid -lshell32
 // @license         MIT
+// @donateUrl       https://buy.polar.sh/polar_cl_iccBChKQyqil3EgBBtV6qM3lfDpLk4sVu1OpK1j0jQ4
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==

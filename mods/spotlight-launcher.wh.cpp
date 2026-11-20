@@ -2,7 +2,7 @@
 // @id              spotlight-launcher
 // @name            Spotlight Launcher
 // @description     Application launcher. Alt+Space opens a floating search bar that finds your programs instantly.
-// @version         1.1.1
+// @version         1.2.0
 // @author          David Ravelo
 // @github          https://github.com/DavidRaveloU
 // @include         windhawk.exe
@@ -18,8 +18,8 @@ A fast, keyboard-driven launcher for Windows, packaged as a [Windhawk](https://w
 
 Press **Alt + Space**, type a few letters, press **Enter**. That is the whole idea.
 
-Spotlight Launcher indexes the same applications you see in the Start menu — classic programs and
-Microsoft Store apps — and filters them as you type. From there it reaches further: files and folders,
+Spotlight Launcher indexes the same applications you see in the Start menu - classic programs and
+Microsoft Store apps - and filters them as you type. From there it reaches further: files and folders,
 the clipboard, browser bookmarks, Windows' recent files, open windows, a calculator and a set of
 built-in commands. It runs as its own Windhawk **tool** mod, so it never runs inside File Explorer and
 cannot affect the way Windows works.
@@ -47,7 +47,7 @@ cannot affect the way Windows works.
   Windows account, copies an app marks as private are skipped, and turning the feature off erases what
   it saved.
 - **Browser bookmarks, off by default.** Chrome, Edge, Brave, Vivaldi, Chromium, Opera, Firefox,
-  Waterfox, LibreWolf, Zen and Floorp, read locally from the bookmark files — `bm:` searches only
+  Waterfox, LibreWolf, Zen and Floorp, read locally from the bookmark files - `bm:` searches only
   bookmarks.
 - **Recent files.** The empty bar shows the files and folders from Windows' Recent list, and `recent:`
   searches them.
@@ -137,7 +137,7 @@ Copyright (c) 2026-present David Ravelo.
     $description: Live background blur tracks the desktop in real time for Acrylic, Glass, Frosted, and Aurora. It is off by default because Windows renders it via a separate layer, which can cause minor edge seams during animations and impacts performance. Enabling it on Windows 11 keeps the blur live but causes Windows to override manual blur strength settings. On Windows 10, the live option is ignored and always uses a single snapshot to prevent compositor trails.
   - BlurAmount: 50
     $name: Blur strength (0 to 100)
-    $description: How strong the blur is. 50 is the normal amount, lower values give a subtler blur and higher values a heavier one. The blur is seen through the colour, so it shows best with a Panel opacity below 100. Applies to Mica, and to the other effects while Live acrylic is off — on Windows 11, with it on, Windows sets their blur strength. Ignored with "Solid".
+    $description: How strong the blur is. 50 is the normal amount, lower values give a subtler blur and higher values a heavier one. The blur is seen through the colour, so it shows best with a Panel opacity below 100. Applies to Mica, and to the other effects while Live acrylic is off - on Windows 11, with it on, Windows sets their blur strength. Ignored with "Solid".
   - Color: midnight
     $name: Color
     $description: Colour scheme of the bar. Each colour sets the background colour, the selection highlight and the colour of the matching letters.
@@ -235,6 +235,9 @@ Copyright (c) 2026-present David Ravelo.
   - LearnFromChoices: true
     $name: Learn from your choices
     $description: When you pick an app after typing a few words, the launcher remembers that choice for those words and offers the app first the next time you type them. It only reorders apps that already match equally well, the pairs are stored locally per user, and one you stop picking is forgotten after 90 days.
+  - SearchDescriptions: false
+    $name: Match app descriptions
+    $description: Also matches the description a program carries, so a word that only appears there still brings the app up, and shows that description beside the app name. The text is the one its shortcut declares when it has one, and the program's own description otherwise. Off by default because a description is read from every program while indexing, which makes the first index slower, and because it can surface apps whose name never matched. Only classic programs are read; Microsoft Store apps are matched by name.
   - Bookmarks: false
     $name: Browser bookmarks
     $description: Searches your bookmarks from Chrome, Edge, Brave, Vivaldi, Chromium, Opera, Firefox (and its Waterfox, LibreWolf, Zen and Floorp forks) next to your apps, and adds a "bm:" prefix that searches only bookmarks. Only the browsers' local bookmark files and profile names are read; the mod never touches history, cookies, passwords or the network. Bookmark changes are picked up the next time the bar opens, and Firefox bookmarks follow Firefox's own automatic backups.
@@ -1272,7 +1275,7 @@ inline std::wstring GroupInt(const std::wstring& digits, const Locale& loc) {
 // Formats a value for display: no trailing zeros, thousands grouped and the decimal separator
 // taken from the user's Windows locale.
 inline std::wstring Format(double v, const Locale& loc) {
-    if (!std::isfinite(v)) return L"—";
+    if (!std::isfinite(v)) return L"-";
 
     bool integral =
         std::fabs(v) < 1e15 && std::fabs(v - std::round(v)) < 1e-9 * std::max(1.0, std::fabs(v));
@@ -1378,6 +1381,7 @@ static const wchar_t* const kReindexKeys[2] = {L"Ctrl", L"R"};
 static const wchar_t kTxtHelp[] = L"Help";
 static const wchar_t* const kHelpKeys[1] = {L"F1"};
 static const wchar_t kTxtTypeApp[] = L"Application";
+static const wchar_t kTxtTypeCommand[] = L"Run command";
 static const wchar_t kTxtTypeStore[] = L"Store app";
 static const wchar_t kTxtKindWeb[] = L"Web";
 static const wchar_t kTxtKindUrl[] = L"Website";
@@ -1529,6 +1533,7 @@ struct LauncherSettings {
     bool webSearch = true;   // offer a "search the web" result for the query
     WebEngine webEngine = WebEngine::Google;
     bool learnFromChoices = true;  // remember the app picked for a query and offer it first
+    bool searchDescriptions = false;  // also match the program's FileDescription (slower index)
     FileSearchEngine fileSearchEngine = FileSearchEngine::Builtin;  // "find:" backend
     bool filesEnabled = true;  // show the file browser mode (Tab and the folder button)
     FileSort fileSort = FileSort::NameAsc;  // Files order; restored at startup when remembered
@@ -1545,6 +1550,10 @@ struct LauncherSettings {
 struct AppEntry {
     std::wstring name;
     std::wstring folded;  // same length as name (folded 1:1)
+    // The description the program carries in its version resource, read only when "Match app
+    // descriptions" is on. It is a fallback for a word the name does not contain.
+    std::wstring description;
+    std::wstring foldedDesc;
     std::wstring id;      // AppsFolder parsing name, or the full path of a desktop shortcut
     // What the entry really starts. Empty for packaged apps and for shortcuts whose target the
     // shell cannot resolve. `launch` holds the .lnk/.exe itself for entries found on the Desktop,
@@ -1556,6 +1565,15 @@ struct AppEntry {
     int uses = 0;
     int lastUsed = 0;  // seconds since 2020-01-01 (0 = never); see NowStamp()
     bool pinned = false;  // kept at the top of the home list and slightly boosted in search
+    // A "run command" (an executable found on PATH) is offered only when the query names it
+    // exactly, the way PowerToys gates them, so hundreds of tools never flood a search.
+    bool exactOnly = false;
+    // Its file name, folded, precomputed: the exact-name test compares two strings per keystroke
+    // instead of folding a path for every command on the machine.
+    std::wstring foldedFile;
+    // A PATH command's lazy icon is looked for once: a tool with no usable icon must not repeat
+    // the attempt on every frame its row is drawn.
+    bool iconTried = false;
     int iconW = 0;
     int iconH = 0;
     std::vector<uint32_t> iconPx;  // BGRA premultiplied
@@ -1684,6 +1702,8 @@ struct RawApp {
     std::wstring target;  // program the entry really starts (empty when unknown)
     std::wstring args;
     std::wstring launch;  // open this file directly (desktop shortcuts); empty = AppsFolder
+    std::wstring description;  // FileDescription, filled only when that matching is enabled
+    bool exactOnly = false;
 };
 
 struct IndexResult {
@@ -1703,6 +1723,7 @@ struct IndexJob {
     HWND hwnd;
     UINT gen;
     bool hideUtility;
+    bool searchDescriptions;  // copied at StartIndex: the UI thread owns g_cfg
     std::unordered_set<std::wstring> haveIcons;
 };
 
@@ -1864,6 +1885,7 @@ static void ReleaseWindowIcons();
 static std::vector<float> g_rowOff;  // y (DIP) of each row relative to the top of the list, n+1 entries
 static int g_headerCount = 0;        // section headers present (only with the search bar empty)
 static std::vector<std::wstring> g_tokens;
+static std::wstring g_queryFold;  // the folded query, for the app matcher and its highlighting
 static std::wstring g_text;
 static int g_caret = 0;
 static int g_anchor = 0;
@@ -2150,6 +2172,7 @@ static const wchar_t* LegacyLeaf(const wchar_t* name) {
 static bool IntSettingExistedBeforeGrouping(const wchar_t* leaf) {
     static const wchar_t* const kNewer[] = {
         L"FilesEnabled", L"WebSearch", L"RecentFiles", L"LearnFromChoices", L"ClipRetentionDays",
+        L"SearchDescriptions",
     };
     for (const wchar_t* n : kNewer) {
         if (wcscmp(leaf, n) == 0) return false;
@@ -2185,7 +2208,7 @@ static bool IsQueryFieldKey(const std::wstring& key) {
     return CustomKeyId(key) == L"query";
 }
 
-// True when the entry has a field the form would ask the user to fill — any placeholder other than
+// True when the entry has a field the form would ask the user to fill - any placeholder other than
 // {query}, which is filled from the words typed after the entry's name. This is what decides
 // whether Enter opens the form (fields to fill) or launches straight away (search-only/fieldless).
 static bool CustomHasFormFields(const CustomEntry& e) {
@@ -2467,6 +2490,7 @@ static void LoadSettings() {
                              : FileSearchEngine::Builtin;
     c.rememberFileSort = GetIntSetting(L"Files.RememberFileSort") != 0;
     c.learnFromChoices = GetIntSetting(L"Search.LearnFromChoices") != 0;
+    c.searchDescriptions = GetIntSetting(L"Search.SearchDescriptions") != 0;  // off unless enabled
     c.bookmarks = GetIntSetting(L"Search.Bookmarks") != 0;  // off unless enabled
     c.clipboardHistory = GetIntSetting(L"Clipboard.ClipboardHistory") != 0;  // off unless enabled
     c.clipRetentionDays =
@@ -2916,6 +2940,165 @@ static void LoadPalette() {
     }
 }
 // ===== Search =====
+
+// ---- Wox's fuzzy matcher ---------------------------------------------------------------
+// Direct port of StringMatcher.FuzzyMatch and CalculateSearchScore from PowerToys'
+// Wox.Infrastructure, used to rank apps so their order matches PowerToys Run. The score favours
+// a match that spans a large part of the text and starts near a word boundary, which is why a
+// short exact name beats a longer name that merely contains the query.
+//
+// The query is matched as a whole: every space-separated word must appear in order. Both strings
+// arrive folded (lower case, no accents) from FoldString, which keeps the matched indices valid
+// for highlighting.
+
+struct WoxMatch {
+    int score = 0;
+    std::vector<unsigned> indices;
+};
+
+// query.Split(' ', RemoveEmptyEntries)
+static std::vector<std::wstring> SplitWords(const std::wstring& s) {
+    std::vector<std::wstring> out;
+    size_t i = 0;
+    while (i < s.size()) {
+        while (i < s.size() && s[i] == L' ') ++i;
+        const size_t start = i;
+        while (i < s.size() && s[i] != L' ') ++i;
+        if (i > start) out.push_back(s.substr(start, i - start));
+    }
+    return out;
+}
+
+static bool AllPreviousCharsMatched(size_t from, size_t count, const std::wstring& hay,
+                                    const std::wstring& needle) {
+    for (size_t k = 0; k < count; ++k) {
+        if (hay[from + k] != needle[k]) return false;
+    }
+    return true;
+}
+
+// Index of the space closest before `first`, or -1 (CalculateClosestSpaceIndex).
+static long ClosestSpaceBefore(const std::vector<size_t>& spaces, size_t first) {
+    long best = -1;
+    for (const size_t s : spaces) {
+        if (s < first && (long)s > best) best = (long)s;
+    }
+    return best;
+}
+
+// CalculateSearchScore
+static int WoxScore(const std::wstring& query, const std::wstring& text, size_t firstIndex,
+                    size_t matchLen, bool allContained) {
+    constexpr int kWeight = 2;
+    int score = (int)(100 * (query.size() + 1) * kWeight /
+                      ((1 + firstIndex) + kWeight * (matchLen + 1)));
+
+    const long diff = (long)text.size() - (long)query.size();
+    if (diff < 5) {
+        score += 20;
+    } else if (diff < 10) {
+        score += 10;
+    }
+
+    if (allContained) {
+        size_t count = 0;
+        for (const wchar_t c : query) {
+            if (c != L' ') ++count;
+        }
+        constexpr size_t kThreshold = 4;
+        if (count <= kThreshold) {
+            score += (int)count * 10;
+        } else {
+            score += (int)(kThreshold * 10 + (count - kThreshold) * 5);
+        }
+    }
+
+    if (query.size() == text.size() && query == text) {
+        score += 10;  // bonusForExactMatch
+    }
+    return score;
+}
+
+// One pass of FuzzyMatch from `from`. Stop words are pre-split by the caller.
+static WoxMatch WoxFuzzyFrom(const std::vector<std::wstring>& words, const std::wstring& query,
+                             const std::wstring& text, size_t from) {
+    WoxMatch out;
+    if (words.empty() || from >= text.size()) return out;
+
+    size_t wordIndex = 0;
+    size_t charIndex = 0;
+    long first = -1;
+    long firstInWord = -1;
+    size_t last = 0;
+    bool matchedInPreviousLoop = false;
+    bool allContained = true;
+    bool matched = false;
+    std::vector<unsigned> indices;
+    std::vector<size_t> spaces;
+
+    for (size_t i = from; i < text.size(); ++i) {
+        if (text[i] == L' ' && wordIndex == 0) spaces.push_back(i);
+
+        if (text[i] != words[wordIndex][charIndex]) {
+            matchedInPreviousLoop = false;
+            continue;
+        }
+
+        if (first < 0) first = (long)i;
+
+        if (charIndex == 0) {
+            matchedInPreviousLoop = true;
+            firstInWord = (long)i;
+        } else if (!matchedInPreviousLoop) {
+            const long checkFrom = (long)i - (long)charIndex;
+            if (checkFrom >= 0 &&
+                AllPreviousCharsMatched((size_t)checkFrom, charIndex, text, words[wordIndex])) {
+                matchedInPreviousLoop = true;
+                if (wordIndex == 0) first = checkFrom;
+                // GetUpdatedIndexList: drop what this word already claimed, then re-add it.
+                std::vector<unsigned> kept;
+                for (const unsigned v : indices) {
+                    if ((long)v < firstInWord) kept.push_back(v);
+                }
+                for (size_t k = 0; k < charIndex; ++k) kept.push_back((unsigned)(checkFrom + k));
+                indices = std::move(kept);
+            }
+        }
+
+        last = i + 1;
+        indices.push_back((unsigned)i);
+
+        if (++charIndex == words[wordIndex].size()) {
+            allContained = matchedInPreviousLoop && allContained;
+            if (++wordIndex >= words.size()) {
+                matched = true;
+                break;
+            }
+            charIndex = 0;
+        }
+    }
+
+    if (!matched) return out;
+
+    const long space = ClosestSpaceBefore(spaces, (size_t)first);
+    out.score = WoxScore(query, text, (size_t)(first - space - 1), last - (size_t)first,
+                         allContained);
+    out.indices = std::move(indices);
+    return out;
+}
+
+// Best match over every starting position, like the outer FuzzyMatch loop.
+static WoxMatch WoxFuzzyMatch(const std::wstring& query, const std::wstring& text) {
+    WoxMatch best;
+    if (query.empty() || text.empty()) return best;
+    const std::vector<std::wstring> words = SplitWords(query);
+    if (words.empty()) return best;
+    for (size_t start = 0; start < text.size(); ++start) {
+        const WoxMatch m = WoxFuzzyFrom(words, query, text, start);
+        if (m.score > best.score) best = m;
+    }
+    return best;
+}
 
 static bool IsWordStart(const std::wstring& name, size_t p) {
     if (p == 0) {
@@ -4492,6 +4675,7 @@ static void BuildHome() {
 
     std::vector<int> pinned;
     for (size_t i = 0; i < g_apps.size(); ++i) {
+        if (g_apps[i].exactOnly) continue;  // PATH commands never fill the home list
         if (g_apps[i].pinned) pinned.push_back((int)i);
     }
     std::sort(pinned.begin(), pinned.end(), [](int a, int b) {
@@ -4507,6 +4691,7 @@ static void BuildHome() {
 
     std::vector<SearchResult> rec;
     for (size_t i = 0; i < g_apps.size(); ++i) {
+        if (g_apps[i].exactOnly) continue;
         if (g_apps[i].lastUsed > 0 && !taken.count((int)i)) {
             SearchResult r;
             r.app = (int)i;
@@ -4535,6 +4720,7 @@ static void BuildHome() {
     {
         std::vector<SearchResult> byRank;
         for (size_t i = 0; i < g_apps.size(); ++i) {
+            if (g_apps[i].exactOnly) continue;
             if (g_apps[i].uses > 0 && !taken.count((int)i)) {
                 SearchResult r;
                 r.app = (int)i;
@@ -4555,6 +4741,7 @@ static void BuildHome() {
         for (size_t i = 0; i < g_apps.size(); ++i) lowIds[i] = LowerAscii(g_apps[i].id);
         for (const wchar_t* frag : kDefaultSuggestions) {
             for (size_t i = 0; i < g_apps.size(); ++i) {
+                if (g_apps[i].exactOnly) continue;  // PATH commands never fill the home list
                 if (!taken.count((int)i) && lowIds[i].find(frag) != std::wstring::npos) {
                     pool.push_back((int)i);
                     taken.insert((int)i);
@@ -4801,8 +4988,8 @@ static std::wstring g_clipImageDir;
 static BOOL CALLBACK ClipImageDirInit(PINIT_ONCE, PVOID, PVOID*) {
     wchar_t buf[MAX_PATH] = L"";
     if (Wh_GetModStoragePath(buf, ARRAYSIZE(buf)) == 0 || !buf[0]) return TRUE;
-    // The path only. The folder is created when an image is actually saved, so a read — the thumbnail
-    // worker asking IsClipImagePath for every preview — never creates it, and a disabled feature
+    // The path only. The folder is created when an image is actually saved, so a read - the thumbnail
+    // worker asking IsClipImagePath for every preview - never creates it, and a disabled feature
     // leaves nothing on disk.
     g_clipImageDir = std::wstring(buf) + L"\\clips\\" + CurrentUserSid();
     return TRUE;
@@ -6149,6 +6336,35 @@ static const wchar_t* CustomTypeLabel(const std::wstring& type) {
     return L"Website";
 }
 
+// ---- Chromium web apps ------------------------------------------------------------------
+// "Install as app" in Chrome or Edge creates an entry whose target is "<browser>_proxy.exe" and
+// whose arguments carry "--app-id". PowerToys keeps such an entry out of the results while the
+// query points at the browser it came from, and keeps it whenever the query names the web app
+// itself, so searching "chrome" does not list every installed PWA.
+static bool IsWebApp(const AppEntry& a) {
+    if (a.target.empty() || a.args.empty()) return false;
+    return FoldString(a.target).find(L"_proxy.exe") != std::wstring::npos &&
+           FoldString(a.args).find(L"--app-id") != std::wstring::npos;
+}
+
+static bool FilterWebApp(const AppEntry& a, const std::wstring& foldedQuery) {
+    if (!IsWebApp(a)) return false;
+    const std::wstring path = FoldString(a.target);
+    bool pathHit = false;
+    bool nameHit = false;
+    size_t i = 0;
+    while (i < foldedQuery.size()) {
+        while (i < foldedQuery.size() && foldedQuery[i] == L' ') ++i;
+        const size_t start = i;
+        while (i < foldedQuery.size() && foldedQuery[i] != L' ') ++i;
+        if (i == start) break;
+        const std::wstring word = foldedQuery.substr(start, i - start);
+        if (path.find(word) != std::wstring::npos) pathHit = true;
+        if (a.folded.find(word) != std::wstring::npos) nameHit = true;
+    }
+    return pathHit && !nameHit;
+}
+
 static void RunSearch() {
     ReleaseResultLayouts();
     g_results.clear();
@@ -6300,24 +6516,40 @@ static void RunSearch() {
         }
     }
 
+    // A command from PATH answers only to its own name, exactly as PowerToys gates them. Both
+    // sides are precomputed, so the test is two string comparisons per command per keystroke.
+    const std::wstring exactQueryFold = FoldString(query);
+    g_queryFold = exactQueryFold;  // the title layout highlights with the same matcher
+
     for (size_t i = 0; i < g_apps.size(); ++i) {
         const AppEntry& a = g_apps[i];
-        int total = 0;
-        bool ok = true;
-        for (const auto& t : g_tokens) {
-            int s = ScoreToken(a.name, a.folded, t, nullptr);
-            if (s <= 0) {
-                ok = false;
-                break;
+        if (a.exactOnly) {
+            if (exactQueryFold != a.folded && exactQueryFold != a.foldedFile) {
+                continue;
             }
-            total += s;
         }
-        if (!ok) {
+        // A Chromium web app hides while the query points at its browser, and stays when the
+        // query names the web app. Measured against PowerToys' own predicate.
+        if (FilterWebApp(a, exactQueryFold)) {
             continue;
         }
-        total /= (int)g_tokens.size();
-        // Usage and pins only break ties inside the same match tier: together they stay below the
-        // 100-point gap between a name, a prefix, a word start and a substring.
+        // PowerToys ranks apps with Wox's matcher and takes the best of the name and the
+        // description at half weight. The description is only a fallback: it never makes an app
+        // outrank one whose own name matched.
+        WoxMatch m = WoxFuzzyMatch(exactQueryFold, a.folded);
+        int total = m.score;
+        if (!a.foldedDesc.empty()) {
+            const int fromDescription = WoxFuzzyMatch(exactQueryFold, a.foldedDesc).score / 2;
+            if (fromDescription > total) total = fromDescription;
+        }
+        if (total <= 0) {
+            continue;
+        }
+        // Wox scores sit around 50-160 while this list used to be scored on a 1000-point scale.
+        // Multiplying keeps the usage and pin bonus below at the same relative weight.
+        total *= 10;
+        // Usage and pins break ties: the bonus is capped at 99, about a tenth of a typical Wox
+        // score, so it only reorders apps whose match quality is already close.
         int extra = FrecencyScore(a) + (a.pinned ? 30 : 0);
         total += std::min(extra, 99);
         // An explicit pick for these words wins outright (2000 clears any match plus its extras), so
@@ -6334,8 +6566,15 @@ static void RunSearch() {
         g_results.push_back(r);
     }
 
+    // Order results the way PowerToys does: its score is PluginMetadata.WeightBoost + match score,
+    // so a source can rank below another without depending on how well a name matched. Apps keep
+    // their tier and the commands found on PATH rank below them, which is why "git" lists Git Bash
+    // first and the git executable last.
     std::sort(g_results.begin(), g_results.end(),
               [](const SearchResult& a, const SearchResult& b) {
+                  const bool commandA = g_apps[a.app].exactOnly;
+                  const bool commandB = g_apps[b.app].exactOnly;
+                  if (commandA != commandB) return !commandA;
                   if (a.score != b.score) return a.score > b.score;
                   return g_apps[a.app].folded < g_apps[b.app].folded;
               });
@@ -6715,30 +6954,53 @@ static std::wstring FolderNameOf(const std::wstring& p) {
     return dir.empty() ? std::wstring() : FileNameOf(dir);
 }
 
-static bool ReadShellLink(const std::wstring& lnkPath, std::wstring& target, std::wstring& args) {
+// Everything the app list needs from one shortcut file.
+struct ShellLinkInfo {
+    std::wstring target;
+    std::wstring args;
+    std::wstring description;  // the shortcut's own comment, the text Explorer shows in the tooltip
+    std::wstring iconPath;     // as the shortcut declares it: may still hold "%variables%"
+    int iconIndex = 0;
+    bool ok = false;
+};
+
+static ShellLinkInfo ReadShellLinkInfo(const std::wstring& lnkPath) {
+    ShellLinkInfo info;
     IShellLinkW* link = nullptr;
     if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link))) ||
         !link) {
-        return false;
+        return info;
     }
-    bool ok = false;
     IPersistFile* pf = nullptr;
     if (SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&pf))) && pf) {
         if (SUCCEEDED(pf->Load(lnkPath.c_str(), STGM_READ))) {
             wchar_t buf[32768];
             WIN32_FIND_DATAW fd = {};
             if (SUCCEEDED(link->GetPath(buf, (int)ARRAYSIZE(buf), &fd, SLGP_RAWPATH)) && buf[0]) {
-                target = CanonicalAppPath(buf);
-                ok = !target.empty();
+                info.target = CanonicalAppPath(buf);
+                info.ok = !info.target.empty();
             }
             if (SUCCEEDED(link->GetArguments(buf, (int)ARRAYSIZE(buf))) && buf[0]) {
-                args = buf;
+                info.args = buf;
+            }
+            if (SUCCEEDED(link->GetDescription(buf, (int)ARRAYSIZE(buf))) && buf[0]) {
+                info.description = buf;
+            }
+            if (SUCCEEDED(link->GetIconLocation(buf, (int)ARRAYSIZE(buf), &info.iconIndex)) && buf[0]) {
+                info.iconPath = buf;
             }
         }
         pf->Release();
     }
     link->Release();
-    return ok;
+    return info;
+}
+
+static bool ReadShellLink(const std::wstring& lnkPath, std::wstring& target, std::wstring& args) {
+    const ShellLinkInfo info = ReadShellLinkInfo(lnkPath);
+    target = info.target;
+    args = info.args;
+    return info.ok;
 }
 
 // ---- Windows Recent list ---------------------------------------------------------------
@@ -7642,6 +7904,24 @@ static bool IsProgramTarget(const std::wstring& target) {
     return false;
 }
 
+// Defined with the WOW64 helpers below; needed here so the existence check sees 64-bit tools.
+static std::wstring NativeSystemPath(const std::wstring& path);
+
+// Whether a resolved shortcut target still leads somewhere. A link whose program was uninstalled
+// is not an app: it cannot run, and it has no icon left to show. A plain web address is not an app
+// either, while a protocol launch ("steam://rungameid/...") is one, because it starts a program.
+// Shell namespace targets (Control Panel, This PC) are resolved by the shell and always count.
+static bool TargetIsLaunchable(const std::wstring& target) {
+    if (target.empty()) return true;
+    if (target.rfind(L"::", 0) == 0) return true;
+    if (StartsWithNoCase(target, L"shell:")) return true;
+    if (StartsWithNoCase(target, L"http://") || StartsWithNoCase(target, L"https://")) return false;
+    if (target.find(L"://") != std::wstring::npos) return true;
+    // This process is 32-bit: "C:\Windows\System32" is redirected to SysWOW64, where 64-bit-only
+    // tools do not exist, so the check has to look through the Sysnative alias.
+    return GetFileAttributesW(NativeSystemPath(target).c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
 // %LOCALAPPDATA%\Microsoft\WindowsApps holds the execution aliases of packaged apps. A Desktop
 // shortcut to one of them would duplicate the app that the Start menu already lists under its
 // AUMID.
@@ -7772,6 +8052,17 @@ struct Pix {
     uint64_t hash = 0;
 };
 
+// Every icon the app list consumes is normalised to this edge, whatever size its source
+// produced: the shell can hand back a jumbo render, a package can ship 16 px artwork.
+static constexpr int kAppIconPx = 64;
+
+// The edge requested from the shell. Asking for the largest useful render and downscaling
+// afterwards keeps small resources from being stretched, and gives the shell enough room to
+// answer with a real tile instead of its 16 px generic.
+static constexpr UINT kShellIconRequestPx = 256;
+
+static void DownscalePix(Pix& p, int factor);
+
 static uint64_t HashPixels(const std::vector<uint32_t>& px, int w, int h) {
     uint64_t hsh = 1469598103934665603ULL ^ ((uint64_t)(uint32_t)w << 32) ^ (uint64_t)(uint32_t)h;
     for (uint32_t p : px) {
@@ -7800,6 +8091,11 @@ static bool GetShellItemPixels(IShellItem* item, SIIGBF flags, int size, Pix& ou
         DeleteObject(hbm);
     }
     fac->Release();
+    // The shell is free to answer with a larger bitmap than requested (SIIGBF_BIGGERSIZEOK),
+    // so the result is brought back to the size the app list draws before it is hashed.
+    if (ok && out.w > kAppIconPx && out.w % kAppIconPx == 0) {
+        DownscalePix(out, out.w / kAppIconPx);
+    }
     out.ok = ok;
     if (ok) {
         out.hash = HashPixels(out.px, out.w, out.h);
@@ -7971,20 +8267,26 @@ static bool HasVisiblePixels(const Pix& p) {
     return vis * 50 >= p.px.size();  // at least 2% of the pixels
 }
 
-// Icon straight from the resource of an exe/dll/ico (hi-res, bypasses the shell cache).
-static bool GetFileIconPix(const std::wstring& path, Pix& out) {
+// Icon at `index` from the resource of an exe/dll/ico (hi-res, bypasses the shell cache). A
+// negative index addresses an icon by resource id, which is how shortcuts spell ".dll,-14".
+static bool GetFileIconPixAt(const std::wstring& path, int index, Pix& out) {
     if (path.empty()) return false;
     const std::wstring real = NativeSystemPath(path);
     HICON hi = nullptr;
     UINT id = 0;
-    UINT n = PrivateExtractIconsW(real.c_str(), 0, 64, 64, &hi, &id, 1, 0);
-    bool ok = n >= 1 && n != 0xFFFFFFFFu && hi && HIconToPix(hi, out);
+    const UINT n = PrivateExtractIconsW(real.c_str(), index, kAppIconPx, kAppIconPx, &hi, &id, 1, 0);
+    const bool ok = n >= 1 && n != 0xFFFFFFFFu && hi && HIconToPix(hi, out);
     if (hi) DestroyIcon(hi);
     if (ok) {
         out.ok = true;
         out.hash = HashPixels(out.px, out.w, out.h);
     }
     return ok;
+}
+
+// Icon at index 0 of the file's own resource.
+static bool GetFileIconPix(const std::wstring& path, Pix& out) {
+    return GetFileIconPixAt(path, 0, out);
 }
 
 // Tries every alternative source for a desktop app. Each result must have visible pixels.
@@ -8009,24 +8311,85 @@ static bool GetClassicIconFallback(IShellItem* item, const std::wstring& target,
     return false;
 }
 
-// Path of the small logo PNG for a packaged app (property System.Tile.SmallLogoPath)
-static std::wstring GetTileLogoPath(IShellItem* item) {
-    PROPERTYKEY key = {};
-    if (FAILED(PSGetPropertyKeyFromName(L"System.Tile.SmallLogoPath", &key))) {
-        return L"";
+// ---- Icons a shortcut declares -------------------------------------------------------------
+// A Start menu shortcut can name the exact artwork Windows draws for it
+// ("%systemroot%\system32\pmcsnap.dll,-14"). For some programs that declaration is the only icon
+// in existence: an MMC console (.msc) and an iconless launcher carry no resource of their own, so
+// the shell can only answer with a generic page. The shortcuts already sitting in the Start menu
+// and on the Desktop are read once per index and consulted before the shell is asked.
+struct ShortcutInfo {
+    std::wstring iconPath;
+    std::wstring description;  // the shortcut comment, which is what PowerToys shows as subtitle
+    int iconIndex = 0;
+};
+static std::unordered_map<std::wstring, ShortcutInfo> g_shortcutInfo;
+static bool g_shortcutInfoBuilt = false;
+
+static const KNOWNFOLDERID kShortcutFolders[] = {FOLDERID_CommonPrograms, FOLDERID_Programs,
+                                                 FOLDERID_Desktop, FOLDERID_PublicDesktop};
+
+// A shortcut is identified by what it starts and how: every Chromium web app shares
+// "chrome_proxy.exe" and differs only in its --app-id argument, so keying by the target alone
+// would give them all the same icon and description.
+static std::wstring ShortcutKey(const std::wstring& target, const std::wstring& args) {
+    return FoldString(target) + L"|" + FoldString(TrimBlanks(args));
+}
+
+static void ScanShortcutIcons(const std::wstring& dir, int depth) {
+    if (dir.empty() || depth > 4) return;
+    WIN32_FIND_DATAW fd = {};
+    HANDLE h = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        const std::wstring name = fd.cFileName;
+        if (name == L"." || name == L"..") continue;
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            ScanShortcutIcons(dir + L"\\" + name, depth + 1);
+            continue;
+        }
+        if (!EndsWith(FoldString(name), L".lnk")) continue;
+        const ShellLinkInfo info = ReadShellLinkInfo(dir + L"\\" + name);
+        if (!info.ok || (info.iconPath.empty() && info.description.empty())) continue;
+        // The first declaration wins: shortcuts to the same program normally agree.
+        ShortcutInfo entry;
+        entry.iconPath = info.iconPath;
+        entry.iconIndex = info.iconIndex;
+        entry.description = info.description;
+        g_shortcutInfo.emplace(ShortcutKey(info.target, info.args), std::move(entry));
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
+
+static void BuildShortcutIconIndex() {
+    g_shortcutInfo.clear();
+    for (const KNOWNFOLDERID& id : kShortcutFolders) {
+        ScanShortcutIcons(KnownFolderPath(id), 0);
     }
-    IShellItem2* item2 = nullptr;
-    if (FAILED(item->QueryInterface(IID_PPV_ARGS(&item2))) || !item2) {
-        return L"";
-    }
-    std::wstring r;
-    PWSTR str = nullptr;
-    if (SUCCEEDED(item2->GetString(key, &str)) && str) {
-        r = str;
-        CoTaskMemFree(str);
-    }
-    item2->Release();
-    return r;
+    g_shortcutInfoBuilt = true;
+}
+
+// Description the shortcut gives its program, or an empty string. Builds the scan on demand so
+// an index that needs neither icons nor descriptions does no shortcut I/O.
+static std::wstring ShortcutDescription(const std::wstring& target, const std::wstring& args) {
+    if (target.empty()) return std::wstring();
+    if (!g_shortcutInfoBuilt) BuildShortcutIconIndex();
+    const auto it = g_shortcutInfo.find(ShortcutKey(target, args));
+    return it == g_shortcutInfo.end() ? std::wstring() : it->second.description;
+}
+
+// Icon the shortcut declared for this target and argument set, expanded and pulled from its own
+// resource. The scan is deferred to the first miss so an index that reuses every cached icon does
+// no shortcut I/O.
+static bool DeclaredShortcutIcon(const std::wstring& target, const std::wstring& args, Pix& out) {
+    if (target.empty()) return false;
+    if (!g_shortcutInfoBuilt) BuildShortcutIconIndex();
+    const auto it = g_shortcutInfo.find(ShortcutKey(target, args));
+    if (it == g_shortcutInfo.end() || it->second.iconPath.empty()) return false;
+    std::wstring path = it->second.iconPath;
+    wchar_t expanded[32768];
+    const DWORD n = ExpandEnvironmentStringsW(path.c_str(), expanded, (DWORD)ARRAYSIZE(expanded));
+    if (n > 0 && n < ARRAYSIZE(expanded)) path.assign(expanded, n - 1);
+    return GetFileIconPixAt(path, it->second.iconIndex, out) && HasVisiblePixels(out);
 }
 
 // Scales a decoded frame down to `maxSide` (cover-cropped to a square when `centerSquare`) and copies
@@ -8117,6 +8480,325 @@ static bool LoadImageFilePixels(IWICImagingFactory* wic,
     return ok;
 }
 
+static std::string ReadSmallFile(const std::wstring& path);              // defined with the manifest reader
+static std::wstring PackagedExecutableFromXml(const std::string& xml,
+                                              const std::wstring& installPath,
+                                              const std::wstring& aumid);  // defined with the details panel
+
+// ---- Packaged app logos: read from the package, not from the shell -------------------------
+// The shell is not a dependable source for a packaged (MSIX) app's icon. What it answers
+// depends on the tile cache, on the session DPI, on whether the app was ever launched and on
+// how the AppsFolder handler happens to resolve the package. The package, in contrast, ships
+// its own artwork and AppxManifest.xml names it, so the logo can be read straight from the
+// package folder: install drive, shell state and screen scaling stop mattering.
+//
+// A manifest reference such as "Images\Square44x44Logo.png" names a *resource*, not a file.
+// What sits on disk carries MRT qualifiers - "Square44x44Logo.targetsize-256_altform-unplated.png",
+// "Square44x44Logo.scale-400.png" - and the bare name frequently does not exist at all. The
+// qualifier set is therefore browsed and scored, never guessed from a fixed list, so a package
+// that ships only targetsize-24, a language-qualified variant, or an unexpected combination
+// still resolves.
+
+// Value of `name="..."` inside one XML chunk, or an empty string. The name must start a token:
+// without that check "Logo" would also match inside "Square44x44Logo" and pick a sibling asset.
+static std::string XmlAttr(const std::string& chunk, const char* name) {
+    const std::string key = std::string(name) + "=\"";
+    size_t p = 0;
+    while ((p = chunk.find(key, p)) != std::string::npos) {
+        const char prev = p == 0 ? ' ' : chunk[p - 1];
+        if (prev == ' ' || prev == '\t' || prev == '\n' || prev == '\r' || prev == '<' ||
+            prev == ':' || prev == '"' || prev == '/') {
+            const size_t b = p + key.size();
+            const size_t e = chunk.find('"', b);
+            return e == std::string::npos ? std::string() : chunk.substr(b, e - b);
+        }
+        p += 1;
+    }
+    return std::string();
+}
+
+// Manifests are ASCII for the attributes read here: resource paths, application ids, targets.
+static std::wstring WidenAscii(const std::string& s) {
+    std::wstring w;
+    w.reserve(s.size());
+    for (const char c : s) {
+        w.push_back((wchar_t)(unsigned char)c);
+    }
+    return w;
+}
+
+// Logo resource references for one AUMID's application, in priority order.
+static std::vector<std::wstring> ManifestLogoRefs(const std::string& xml, const std::wstring& aumid) {
+    std::vector<std::wstring> refs;
+    if (xml.empty()) {
+        return refs;
+    }
+
+    std::string wantId;
+    const size_t bang = aumid.find(L'!');
+    if (bang != std::wstring::npos) {
+        for (const wchar_t c : aumid.substr(bang + 1)) {
+            wantId.push_back((char)c);
+        }
+    }
+
+    auto collect = [&refs](const std::string& block) {
+        // The logo lives on the VisualElements child, whose namespace prefix varies with the
+        // manifest schema (uap:, uap5:, m3:, or none), so only the local name is matched.
+        const size_t v = block.find("VisualElements");
+        const std::string scope = v == std::string::npos ? block : block.substr(v);
+        static const char* kKeys[] = {"Square44x44Logo", "Square150x150Logo", "SmallLogo", "Logo"};
+        for (const char* key : kKeys) {
+            const std::string value = XmlAttr(scope, key);
+            if (!value.empty()) {
+                refs.push_back(WidenAscii(value));
+            }
+        }
+    };
+
+    std::string firstBlock;
+    size_t pos = 0;
+    while ((pos = xml.find("<Application", pos)) != std::string::npos) {
+        // "<Applications>" is the container element and matches the same prefix: only a real
+        // application element, followed by whitespace or '>', can carry an Id and a logo.
+        const size_t after = pos + 12;  // strlen("<Application")
+        if (after < xml.size() && xml[after] != ' ' && xml[after] != '>' && xml[after] != '\t' &&
+            xml[after] != '\r' && xml[after] != '\n') {
+            pos = after;
+            continue;
+        }
+        size_t end = xml.find("</Application>", pos);
+        if (end == std::string::npos) {
+            end = xml.size();
+        }
+        const std::string block = xml.substr(pos, end - pos);
+        if (firstBlock.empty()) {
+            firstBlock = block;
+        }
+        if (!wantId.empty() && XmlAttr(block.substr(0, block.find('>')), "Id") == wantId) {
+            // The AUMID names this application: another component's artwork would be wrong.
+            refs.clear();
+            collect(block);
+            return refs;
+        }
+        pos = end + 1;
+    }
+    if (!firstBlock.empty()) {
+        collect(firstBlock);
+    }
+    return refs;
+}
+
+// Whether a directory entry can carry a logo.
+static bool IsLogoImageName(const std::wstring& name) {
+    const std::wstring folded = FoldString(name);
+    return EndsWith(folded, L".png") || EndsWith(folded, L".jpg") || EndsWith(folded, L".jpeg");
+}
+
+// Ranking of one qualified asset file for a launcher row:
+//   unplated       the glyph alone, which is what Start and every launcher draw
+//   plain          the glyph on the package's tile plate
+//   lightunplated  artwork meant for a light background
+//   contrast-*     accessibility artwork, usable only when nothing else exists
+static int LogoNameScore(const std::wstring& name) {
+    const std::wstring n = FoldString(name);
+    int score = 0;
+    if (n.find(L"altform-unplated") != std::wstring::npos) {
+        score += 400;
+    } else if (n.find(L"altform-lightunplated") != std::wstring::npos) {
+        score += 300;
+    } else {
+        score += 350;
+    }
+    if (const size_t t = n.find(L"targetsize-"); t != std::wstring::npos) {
+        int px = 0;
+        for (size_t i = t + 11; i < n.size() && iswdigit(n[i]); ++i) {
+            px = px * 10 + (n[i] - L'0');
+        }
+        score += std::min(px, 256) / 8;
+        if (px < kAppIconPx) {
+            score -= 20;  // it would have to be upscaled
+        }
+    } else if (const size_t s = n.find(L"scale-"); s != std::wstring::npos) {
+        int sc = 0;
+        for (size_t i = s + 6; i < n.size() && iswdigit(n[i]); ++i) {
+            sc = sc * 10 + (n[i] - L'0');
+        }
+        score += std::min(sc, 400) / 25;
+    }
+    if (n.find(L"contrast-") != std::wstring::npos) {
+        score -= 1000;
+    }
+    return score;
+}
+
+// Exact file for one candidate path, else its best qualified sibling, else empty.
+static std::wstring ResolveAssetAt(const std::wstring& full) {
+    if (GetFileAttributesW(full.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        return full;
+    }
+
+    // The exact name is missing, so its qualified siblings are browsed. One directory pass is
+    // far cheaper than the icon work it saves, and it copes with any qualifier a packager used.
+    const size_t sep = full.find_last_of(L'\\');
+    const size_t dot = full.find_last_of(L'.');
+    const std::wstring stem =
+        (dot != std::wstring::npos && (sep == std::wstring::npos || dot > sep)) ? full.substr(0, dot)
+                                                                               : full;
+    const std::wstring dir = stem.substr(0, stem.find_last_of(L'\\') + 1);
+
+    std::wstring best;
+    int bestScore = -1000000;
+    WIN32_FIND_DATAW fd = {};
+    HANDLE h = FindFirstFileW((stem + L"*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) {
+        return std::wstring();
+    }
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            continue;
+        }
+        const std::wstring name = fd.cFileName;
+        if (!IsLogoImageName(name)) {
+            continue;
+        }
+        const int score = LogoNameScore(name);
+        // Ties break on the name, so the pick is stable across runs and machines.
+        if (score > bestScore ||
+            (score == bestScore && (best.empty() || name < best.substr(dir.size())))) {
+            bestScore = score;
+            best = dir + name;
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return best;
+}
+
+// Physical file for one manifest reference, or an empty string when the package carries none.
+static std::wstring ResolveManifestAsset(const std::wstring& installPath, const std::wstring& ref) {
+    if (installPath.empty() || ref.empty()) {
+        return std::wstring();
+    }
+
+    std::wstring rel = ref;
+    for (wchar_t& c : rel) {
+        if (c == L'/') {
+            c = L'\\';
+        }
+    }
+    // The reference must stay inside its own package.
+    if (rel.find(L"..") != std::wstring::npos || rel.find(L':') != std::wstring::npos) {
+        return std::wstring();
+    }
+
+    std::wstring base = installPath;
+    if (base.back() != L'\\') {
+        base += L'\\';
+    }
+
+    // A reference with no folder is written both ways in the wild: some packages keep the file
+    // at the package root (Notepad++, Minecraft, the Windows App Runtime), others under Assets
+    // (PowerToys resolves only the latter and misses the former). Both are tried.
+    std::wstring found;
+    if (rel.find(L'\\') != std::wstring::npos) {
+        found = ResolveAssetAt(base + rel);
+    } else {
+        found = ResolveAssetAt(base + rel);
+        if (found.empty()) {
+            found = ResolveAssetAt(base + L"Assets\\" + rel);
+        }
+    }
+    if (!found.empty()) {
+        return found;
+    }
+
+    // Last resort: sparse and repackaged MSIX builds keep the artwork under a different folder
+    // than the manifest claims (PowerToys' own sparse package declares Images\ while shipping
+    // the PNGs at the root), so the bare file name is tried in the two usual places.
+    const size_t slash = rel.find_last_of(L'\\');
+    const std::wstring leaf = slash == std::wstring::npos ? rel : rel.substr(slash + 1);
+    found = ResolveAssetAt(base + leaf);
+    if (found.empty()) {
+        found = ResolveAssetAt(base + L"Assets\\" + leaf);
+    }
+    return found;
+}
+
+// Install folder of a package addressed by full name. Resolved dynamically so the mod keeps
+// working on a build that does not export it; the caller then falls back to the shell.
+static std::wstring PackageInstallPathFromFullName(const std::wstring& fullName) {
+    if (fullName.empty()) {
+        return std::wstring();
+    }
+    using GetPathFn = LONG(WINAPI*)(PCWSTR, UINT32*, PWSTR);
+    static const GetPathFn fn = [] {
+        HMODULE k = GetModuleHandleW(L"kernel32.dll");
+        return k ? reinterpret_cast<GetPathFn>(GetProcAddress(k, "GetPackagePathByFullName"))
+                 : static_cast<GetPathFn>(nullptr);
+    }();
+    if (!fn) {
+        return std::wstring();
+    }
+    UINT32 len = 0;
+    if (fn(fullName.c_str(), &len, nullptr) != ERROR_INSUFFICIENT_BUFFER || len == 0) {
+        return std::wstring();
+    }
+    std::wstring buf(len, L'\0');
+    if (fn(fullName.c_str(), &len, &buf[0]) != ERROR_SUCCESS) {
+        return std::wstring();
+    }
+    buf.resize(wcslen(buf.c_str()));
+    return buf;
+}
+
+// Logo of a packaged app, decoded from the package that owns it.
+static bool GetPackagedLogoPixels(IShellItem* item, const std::wstring& aumid,
+                                  IWICImagingFactory* wic, Pix& out) {
+    if (!item || aumid.empty() || !wic) {
+        return false;
+    }
+
+    std::wstring installPath;
+    std::wstring fullName;
+    IShellItem2* item2 = nullptr;
+    if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(&item2))) && item2) {
+        installPath = ItemString(item2, L"System.AppUserModel.PackageInstallPath");
+        fullName = ItemString(item2, L"System.AppUserModel.PackageFullName");
+        item2->Release();
+    }
+    if (installPath.empty()) {
+        installPath = PackageInstallPathFromFullName(fullName);
+    }
+    if (installPath.empty()) {
+        return false;
+    }
+
+    const std::string xml = ReadSmallFile(installPath + L"\\AppxManifest.xml");
+    for (const std::wstring& ref : ManifestLogoRefs(xml, aumid)) {
+        const std::wstring asset = ResolveManifestAsset(installPath, ref);
+        if (asset.empty()) {
+            continue;
+        }
+        if (LoadImageFilePixels(wic, asset, out.px, out.w, out.h, false, kAppIconPx)) {
+            out.ok = true;
+            out.hash = HashPixels(out.px, out.w, out.h);
+            if (HasVisiblePixels(out)) {
+                return true;
+            }
+        }
+        out = Pix();
+    }
+
+    // A full-trust MSIX also ships a real executable, and its resource carries the icon. That
+    // covers packages that declare only a splash-screen logo, or none at all.
+    const std::wstring exe = PackagedExecutableFromXml(xml, installPath, aumid);
+    if (!exe.empty() && GetFileIconPix(exe, out) && HasVisiblePixels(out)) {
+        return true;
+    }
+    out = Pix();
+    return false;
+}
+
 static std::wstring KnownFolderPath(REFKNOWNFOLDERID id);  // defined with the folder watcher
 
 // Reads a file and decrypts it; our clipboard images are DPAPI-protected on disk.
@@ -8199,9 +8881,126 @@ static bool LoadClipThumbPixels(IWICImagingFactory* wic,
     return ScaleFrameToPixels(wic, img.frame, fw, fh, /*centerSquare=*/true, 64, px, w, h);
 }
 
+// The description Windows stores for a program ("Node.js JavaScript Runtime"), used only when
+// matching against descriptions is enabled. Empty when the file carries none.
+static std::wstring ReadFileDescription(const std::wstring& path) {
+    if (path.empty()) return std::wstring();
+    DWORD handle = 0;
+    const DWORD size = GetFileVersionInfoSizeW(path.c_str(), &handle);
+    if (size == 0) return std::wstring();
+    std::vector<BYTE> buf(size);
+    if (!GetFileVersionInfoW(path.c_str(), 0, size, buf.data())) return std::wstring();
+
+    struct LangCp {
+        WORD lang;
+        WORD cp;
+    };
+    LangCp* tr = nullptr;
+    UINT trLen = 0;
+    if (!VerQueryValueW(buf.data(), L"\\VarFileInfo\\Translation", (LPVOID*)&tr, &trLen) || !tr ||
+        trLen < sizeof(LangCp)) {
+        return std::wstring();
+    }
+    wchar_t sub[96];
+    swprintf_s(sub, L"\\StringFileInfo\\%04x%04x\\FileDescription", (unsigned)tr[0].lang,
+               (unsigned)tr[0].cp);
+    LPVOID value = nullptr;
+    UINT valueLen = 0;
+    if (!VerQueryValueW(buf.data(), sub, &value, &valueLen) || !value || valueLen <= 1) {
+        return std::wstring();
+    }
+    return TrimBlanks((const wchar_t*)value);
+}
+
+// ---- Run commands from PATH -----------------------------------------------------------------
+// PowerToys' last source: every executable reachable through PATH becomes a command, offered only
+// when the query names it exactly. That single rule is what keeps a machine with hundreds of
+// development tools from drowning every search, while still answering "python" or "java".
+static std::vector<std::wstring> PathCommandFiles() {
+    static const wchar_t* const kSuffix[] = {L".exe",  L".bat",  L".cmd", L".ps1", L".cpl",
+                                             L".msc",  L".appref-ms", L".lnk", L".url"};
+    std::vector<std::wstring> out;
+    std::unordered_set<std::wstring> seen;  // one command per base name
+
+    const DWORD size = GetEnvironmentVariableW(L"PATH", nullptr, 0);
+    if (size == 0) return out;
+    std::wstring value(size, L'\0');
+    const DWORD got = GetEnvironmentVariableW(L"PATH", value.data(), size);
+    if (got == 0 || got >= size) return out;
+    value.resize(got);
+
+    size_t start = 0;
+    while (start <= value.size()) {
+        size_t end = value.find(L';', start);
+        if (end == std::wstring::npos) end = value.size();
+        std::wstring dir = value.substr(start, end - start);
+        start = end + 1;
+
+        if (dir.size() >= 2 && dir.front() == L'"' && dir.back() == L'"') {
+            dir = dir.substr(1, dir.size() - 2);
+        }
+        dir = ExpandedPath(dir);
+        // PATH entries are written by hand and arrive with a trailing separator or a doubled one
+        // ("Maven\\bin"). The file APIs tolerate both, the shell icon lookup does not, so the
+        // folder is normalised before any path is built from it.
+        while (!dir.empty() && dir.back() == L'\\') {
+            dir.pop_back();
+        }
+        {
+            std::wstring clean;
+            clean.reserve(dir.size());
+            for (const wchar_t c : dir) {
+                if (c == L'\\' && !clean.empty() && clean.back() == L'\\') {
+                    continue;
+                }
+                clean.push_back(c);
+            }
+            dir = std::move(clean);
+        }
+        if (dir.empty()) continue;
+
+        // Enumerate through the Sysnative alias: from this 32-bit process a plain "System32" is
+        // redirected to SysWOW64, so tools with no 32-bit copy (wsl) would never be found. The
+        // alias only covers paths that end with a separator, so it goes on before the conversion:
+        // without it the system folder itself, the first and largest entry on every PATH, was
+        // still scanned through the redirector and every 64-bit-only tool in it stayed hidden. The
+        // redirected view is then scanned as well, so tools that only exist as 32-bit (regedit,
+        // hh) are not dropped, and the stored path is always the plain System32 form.
+        std::wstring views[2];
+        int viewCount = 0;
+        const std::wstring nativeDir = NativeSystemPath(dir + L"\\");
+        if (nativeDir != dir + L"\\") views[viewCount++] = nativeDir;
+        views[viewCount++] = dir + L"\\";
+        for (int v = 0; v < viewCount; v++) {
+            WIN32_FIND_DATAW fd = {};
+            HANDLE h = FindFirstFileW((views[v] + L"*").c_str(), &fd);
+            if (h == INVALID_HANDLE_VALUE) continue;
+            do {
+                if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+                const std::wstring name = fd.cFileName;
+                const std::wstring folded = FoldString(name);
+                bool matches = false;
+                for (const wchar_t* suffix : kSuffix) {
+                    if (EndsWith(folded, suffix)) {
+                        matches = true;
+                        break;
+                    }
+                }
+                if (!matches) continue;
+                const std::wstring stem = name.substr(0, name.find_last_of(L'.'));
+                if (stem.empty() || !seen.insert(FoldString(stem)).second) continue;
+                out.push_back(dir + L"\\" + name);
+            } while (FindNextFileW(h, &fd));
+            FindClose(h);
+        }
+    }
+    return out;
+}
+
 static DWORD WINAPI IndexThreadProc(LPVOID param) {
     std::unique_ptr<IndexJob> job((IndexJob*)param);
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    g_shortcutInfoBuilt = false;  // shortcuts may have changed since the last index
 
     struct Tmp {
         std::wstring folded;
@@ -8284,6 +9083,13 @@ static DWORD WINAPI IndexThreadProc(LPVOID param) {
                             }
                         }
                     }
+                }
+
+                // The Desktop scan below has always required the shortcut to lead somewhere; the
+                // shell's own app list did not, so uninstalled programs kept their row and showed
+                // a blank icon.
+                if (keep && !IsPackagedId(ra.id) && !TargetIsLaunchable(ra.target)) {
+                    keep = false;
                 }
 
                 if (keep) {
@@ -8410,6 +9216,40 @@ static DWORD WINAPI IndexThreadProc(LPVOID param) {
     std::sort(tmp.begin(), tmp.end(),
               [](const Tmp& a, const Tmp& b) { return a.folded < b.folded; });
 
+    // ---- Executables on PATH (PowerToys' run commands) ----
+    // Added after the "Readable names" pass on purpose: a command keeps its bare name, never
+    // renames an app that happens to share it, and stays reachable by its exact name. The rows
+    // are ordered by score at search time, so appending them here does not affect the display.
+    for (const std::wstring& file : PathCommandFiles()) {
+        const std::wstring leaf = FileNameOf(file);
+        const std::wstring stem = leaf.substr(0, leaf.find_last_of(L'.'));
+        if (stem.empty()) continue;
+        Tmp t;
+        t.folded = FoldString(stem);
+        t.priority = 0;
+        t.app.name = stem;
+        t.app.id = file;
+        t.app.target = CanonicalAppPath(file);
+        t.app.launch = file;
+        t.app.exactOnly = true;
+        t.item = nullptr;  // never asked for a shell icon: the row loads its own on demand
+        tmp.push_back(std::move(t));
+    }
+
+    // Descriptions, only when that matching is enabled: one version-resource read per program.
+    // Commands from PATH are skipped, since they only ever match their own name.
+    if (job->searchDescriptions) {
+        for (Tmp& t : tmp) {
+            if (t.app.exactOnly || t.app.target.empty()) continue;
+            const std::wstring target = CanonicalAppPath(t.app.target);
+            // The shortcut's own comment comes first, the way PowerToys reads it; the version
+            // resource is the fallback ("Unleash your repo" is GitKraken's shortcut comment,
+            // while gitkraken.exe only calls itself "GitKraken").
+            t.app.description = ShortcutDescription(target, t.app.args);
+            if (t.app.description.empty()) t.app.description = ReadFileDescription(target);
+        }
+    }
+
     // 1) Send the app list (without icons) to the UI
     {
         auto* res = new IndexResult();
@@ -8421,40 +9261,47 @@ static DWORD WINAPI IndexThreadProc(LPVOID param) {
         }
     }
 
-    // 2) Load icons. Classic apps use the shell icon (ICONONLY). Packaged apps try, in order,
-    //    ICONONLY, the normal shell tile and the app logo PNG; an image repeated across 2+
-    //    packaged apps is the generic icon and is discarded.
+    // 2) Load icons. Classic apps use the shell icon (ICONONLY). Packaged apps read the logo
+    //    out of their own package and only fall back to the shell when the package carries no
+    //    usable asset, so a cold tile cache, an unusual install drive or a different shell
+    //    build cannot leave them blank.
     struct Shot {
         Pix a;  // ICONONLY
         Pix b;  // normal shell image
     };
     std::vector<Shot> shots(tmp.size());
-    std::unordered_map<uint64_t, int> countA;
-    std::unordered_map<uint64_t, int> countB;
     std::unordered_map<uint64_t, int> countC;  // classic apps: repeated image = generic icon
     for (size_t i = 0; i < tmp.size(); ++i) {
         if (job->haveIcons.count(tmp[i].app.id)) {
             continue;
         }
+        if (tmp[i].app.exactOnly || !tmp[i].item) {
+            continue;  // PATH commands load their icon when the row is drawn
+        }
         if (!IsPackagedId(tmp[i].app.id)) {
-            if (GetShellItemPixels(tmp[i].item, SIIGBF_ICONONLY, 64, shots[i].a)) {
+            if (GetShellItemPixels(tmp[i].item, SIIGBF_ICONONLY, kAppIconPx, shots[i].a)) {
                 ++countC[shots[i].a.hash];
             }
             continue;
         }
-        if (GetShellItemPixels(tmp[i].item, SIIGBF_ICONONLY, 64, shots[i].a)) {
-            ++countA[shots[i].a.hash];
-        }
-        if (GetShellItemPixels(tmp[i].item, SIIGBF_RESIZETOFIT, 64, shots[i].b)) {
-            ++countB[shots[i].b.hash];
-        }
+        // SIIGBF_BIGGERSIZEOK is what lets the shell enlarge a small resource. Without it the
+        // tile arrives at its native size, anchored in the corner of an otherwise blank bitmap.
+        const SIIGBF packaged = (SIIGBF)(SIIGBF_RESIZETOFIT | SIIGBF_BIGGERSIZEOK);
+        GetShellItemPixels(tmp[i].item, packaged, (int)kShellIconRequestPx, shots[i].b);
+        GetShellItemPixels(tmp[i].item, (SIIGBF)(SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK),
+                           (int)kShellIconRequestPx, shots[i].a);
     }
 
     IWICImagingFactory* wic = nullptr;
+    CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic));
+
     for (size_t i = 0; i < tmp.size(); ++i) {
         const std::wstring& id = tmp[i].app.id;
         if (job->haveIcons.count(id)) {
             continue;
+        }
+        if (tmp[i].app.exactOnly || !tmp[i].item) {
+            continue;  // drawn on demand, never preloaded
         }
         auto* ir = new IconResult();
         ir->gen = job->gen;
@@ -8472,59 +9319,53 @@ static DWORD WINAPI IndexThreadProc(LPVOID param) {
 
         if (!IsPackagedId(id)) {
             Pix& a = shots[i].a;
-            // The shell may return a blank or generic icon, so only trust the result
-            // when it is visible and not repeated across 3+ apps.
-            const bool suspicious = a.ok && (!HasVisiblePixels(a) || countC[a.hash] >= 3);
-            if (a.ok && !suspicious) {
-                take(a);
+            std::wstring target = tmp[i].app.target;
+            if (target.empty()) {
+                const std::wstring p = PathFromAppId(id);
+                // A .lnk has no icon of its own that we want; the shell item path below
+                // resolves the shortcut's icon correctly.
+                if (!EndsWith(FoldString(p), L".lnk")) target = p;
+            }
+            // A shortcut that names its icon is authoritative: it is what Explorer and the Start
+            // menu draw, and for an iconless target (.msc, bundled launchers) it is the only
+            // artwork that exists at all.
+            Pix declared;
+            if (DeclaredShortcutIcon(target, tmp[i].app.args, declared)) {
+                take(declared);
             } else {
-                std::wstring target = tmp[i].app.target;
-                if (target.empty()) {
-                    const std::wstring p = PathFromAppId(id);
-                    // A .lnk has no icon of its own that we want; the shell item path below
-                    // resolves the shortcut's icon correctly.
-                    if (!EndsWith(FoldString(p), L".lnk")) target = p;
-                }
-                Pix f;
-                if (GetClassicIconFallback(tmp[i].item, target, f)) {
-                    take(f);
-                } else if (a.ok) {
-                    take(a);  // nothing better found: keep what the shell gave
+                // The shell may return a blank or generic icon, so only trust the result
+                // when it is visible and not repeated across 3+ apps.
+                const bool suspicious = a.ok && (!HasVisiblePixels(a) || countC[a.hash] >= 3);
+                if (a.ok && !suspicious) {
+                    take(a);
+                } else {
+                    Pix f;
+                    if (GetClassicIconFallback(tmp[i].item, target, f)) {
+                        take(f);
+                    } else if (a.ok) {
+                        take(a);  // nothing better found: keep what the shell gave
+                    }
                 }
             }
         } else {
             Shot& s = shots[i];
-            // Packaged apps: ICONONLY hands back the generic item icon (a blank page), while the
-            // RESIZETOFIT render is the tile image the Start menu shows. So the order is reversed
-            // here compared to desktop apps.
-            if (s.b.ok && countB[s.b.hash] < 2) {
+            Pix logo;
+            if (GetPackagedLogoPixels(tmp[i].item, id, wic, logo)) {
+                take(logo);
+            } else if (s.b.ok && HasVisiblePixels(s.b)) {
                 take(s.b);
-            } else if (s.a.ok && countA[s.a.hash] < 2) {
+            } else if (s.a.ok && HasVisiblePixels(s.a)) {
                 take(s.a);
             } else {
-                std::wstring logo = GetTileLogoPath(tmp[i].item);
-                // The property is often relative to the package ("Assets\Logo.png"), which cannot be
-                // opened from here: only an absolute path is worth trying.
-                const bool absolute = logo.size() > 2 &&
-                                      (logo[1] == L':' || (logo[0] == L'\\' && logo[1] == L'\\'));
-                if (absolute && GetFileAttributesW(logo.c_str()) != INVALID_FILE_ATTRIBUTES) {
-                    if (!wic) {
-                        CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
-                                         IID_PPV_ARGS(&wic));
+                // Last resort: the shell's own image list for the package id. It usually holds
+                // the generic page, but a page still beats an empty slot.
+                Pix f;
+                PIDLIST_ABSOLUTE pidl = nullptr;
+                if (SUCCEEDED(SHGetIDListFromObject(tmp[i].item, &pidl)) && pidl) {
+                    if (GetSystemImageListIcon(pidl, true, f)) {
+                        take(f);
                     }
-                    if (LoadImageFilePixels(wic, logo, ir->px, ir->w, ir->h)) {
-                        have = true;
-                    }
-                }
-                if (!have) {
-                    Pix f;
-                    PIDLIST_ABSOLUTE pidl = nullptr;
-                    if (SUCCEEDED(SHGetIDListFromObject(tmp[i].item, &pidl)) && pidl) {
-                        if (GetSystemImageListIcon(pidl, true, f)) {
-                            take(f);
-                        }
-                        CoTaskMemFree(pidl);
-                    }
+                    CoTaskMemFree(pidl);
                 }
             }
         }
@@ -8536,7 +9377,7 @@ static DWORD WINAPI IndexThreadProc(LPVOID param) {
     SafeRelease(wic);
 
     for (auto& t : tmp) {
-        t.item->Release();
+        if (t.item) t.item->Release();  // PATH commands never had one
     }
 
     PostMessageW(job->hwnd, WM_APP_INDEX_DONE, job->gen, 0);
@@ -8558,6 +9399,7 @@ static void StartIndex(bool refreshIcons = false) {
     job->hwnd = g_hwnd;
     job->gen = g_gen;
     job->hideUtility = g_cfg.hideUtility;
+    job->searchDescriptions = g_cfg.searchDescriptions;
     for (const auto& a : g_apps) {
         if (!refreshIcons && !a.iconPx.empty()) job->haveIcons.insert(a.id);
     }
@@ -8768,10 +9610,20 @@ static void ApplyIndex(IndexResult& r) {
         a.args = ra.args;
         a.launch = ra.launch;
         a.folded = FoldString(a.name);
+        a.description = ra.description;
+        a.foldedDesc = FoldString(a.description);
         a.usageKey = UsageKey(a.id);
-        a.uses = Wh_GetIntValue(a.usageKey.c_str(), 0);
-        a.lastUsed = Wh_GetIntValue((a.usageKey + L"t").c_str(), 0);
-        a.pinned = Wh_GetIntValue((a.usageKey + L"p").c_str(), 0) != 0;
+        a.exactOnly = ra.exactOnly;
+        if (a.exactOnly) {
+            a.foldedFile = FoldString(FileNameOf(a.id));
+        }
+        if (!a.exactOnly) {
+            // A PATH command is never pinned or suggested, so its stored counters are not read:
+            // a machine with a thousand tools would otherwise pay a thousand lookups per index.
+            a.uses = Wh_GetIntValue(a.usageKey.c_str(), 0);
+            a.lastUsed = Wh_GetIntValue((a.usageKey + L"t").c_str(), 0);
+            a.pinned = Wh_GetIntValue((a.usageKey + L"p").c_str(), 0) != 0;
+        }
         auto it = old.find(a.id);
         if (it != old.end()) {
             AppEntry& o = g_apps[it->second];
@@ -9681,6 +10533,25 @@ static void FillRR(float x0, float y0, float x1, float y1, float radius, const D
 
 static ID2D1Bitmap* EnsureIcon(AppEntry& a) {
     if (a.bmp) return a.bmp;
+    // A PATH command only reaches the screen after an exact match, so its icon is decoded here
+    // instead of during indexing: a machine with a thousand tools would otherwise pay for a
+    // thousand bitmaps nobody looks at. The attempt is made once: a tool with no usable icon must
+    // not repeat file and shell I/O on the UI thread for every frame its row is drawn.
+    if (a.iconPx.empty() && a.exactOnly && !a.target.empty() && !a.iconTried) {
+        a.iconTried = true;
+        Pix p;
+        // Its own resource first; an iconless tool like git.exe then gets the generic application
+        // icon Explorer shows for any executable, never an empty slot.
+        if (GetFileIconPix(a.target, p) && HasVisiblePixels(p)) {
+            a.iconPx = std::move(p.px);
+            a.iconW = p.w;
+            a.iconH = p.h;
+        } else if (GetSystemImageListIcon(a.target.c_str(), false, p) && HasVisiblePixels(p)) {
+            a.iconPx = std::move(p.px);
+            a.iconW = p.w;
+            a.iconH = p.h;
+        }
+    }
     if (a.iconPx.empty() || a.iconW <= 0 || a.iconH <= 0) return nullptr;
     D2D1_BITMAP_PROPERTIES bp = D2D1::BitmapProperties(
         D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), 96.f, 96.f);
@@ -9744,18 +10615,8 @@ static bool IsPathResult(ResultKind k) {
 
 // Title layout for any result text, with the matching letters set in the accent colour and
 // semibold (used by the app rows and by results from other providers).
-static IDWriteTextLayout* BuildMatchLayout(const std::wstring& name, const std::wstring& folded,
-                                           float widthPx, float heightPx) {
-    IDWriteTextLayout* l = nullptr;
-    if (FAILED(g_dw->CreateTextLayout(name.c_str(), (UINT32)name.size(), g_fmtTitle, widthPx,
-                                      heightPx, &l)) ||
-        !l) {
-        return nullptr;
-    }
-    std::vector<char> mask(folded.size(), 0);
-    for (const auto& t : g_tokens) {
-        ScoreToken(name, folded, t, &mask);
-    }
+// Marks every run of matched characters: semibold plus the match colour.
+static void ApplyMatchMask(IDWriteTextLayout* l, const std::vector<char>& mask) {
     size_t i = 0;
     while (i < mask.size()) {
         if (mask[i]) {
@@ -9769,11 +10630,38 @@ static IDWriteTextLayout* BuildMatchLayout(const std::wstring& name, const std::
             ++i;
         }
     }
+}
+
+static IDWriteTextLayout* BuildMatchLayout(const std::wstring& name, const std::wstring& folded,
+                                           float widthPx, float heightPx) {
+    IDWriteTextLayout* l = nullptr;
+    if (FAILED(g_dw->CreateTextLayout(name.c_str(), (UINT32)name.size(), g_fmtTitle, widthPx,
+                                      heightPx, &l)) ||
+        !l) {
+        return nullptr;
+    }
+    std::vector<char> mask(folded.size(), 0);
+    for (const auto& t : g_tokens) {
+        ScoreToken(name, folded, t, &mask);
+    }
+    ApplyMatchMask(l, mask);
     return l;
 }
 
 static IDWriteTextLayout* BuildTitleLayout(const AppEntry& a, float widthPx, float heightPx) {
-    return BuildMatchLayout(a.name, a.folded, widthPx, heightPx);
+    IDWriteTextLayout* l = nullptr;
+    if (FAILED(g_dw->CreateTextLayout(a.name.c_str(), (UINT32)a.name.size(), g_fmtTitle, widthPx,
+                                      heightPx, &l)) ||
+        !l) {
+        return nullptr;
+    }
+    // The same matcher that ranked the row, so the highlight always shows what actually matched.
+    std::vector<char> mask(a.folded.size(), 0);
+    for (const unsigned idx : WoxFuzzyMatch(g_queryFold, a.folded).indices) {
+        if (idx < mask.size()) mask[idx] = 1;
+    }
+    ApplyMatchMask(l, mask);
+    return l;
 }
 
 static void DrawMagnifier(float cx, float cy) {
@@ -10096,7 +10984,7 @@ static void DrawCommandGlyph(CmdGlyph g, float x, float y, float size, const D2D
             ln(16.f, 8.f, 8.f, 16.f);
             break;
         case CmdGlyph::ExternalLink: {
-            // Arrow ↗ with baseline — clean "open externally" symbol used by
+            // Arrow ↗ with baseline - clean "open externally" symbol used by
             // Raycast/Spotlight. Just the arrow head + shaft, no box.
             // Diagonal shaft bottom-left → top-right
             ln(7.f, 17.f, 17.f, 7.f);
@@ -10497,10 +11385,9 @@ static std::string ReadSmallFile(const std::wstring& path) {
 
 // A full-trust MSIX app (Notepad, Terminal, …) names a real .exe in its manifest: that is what
 // Windows itself starts when the user picks "Run as administrator" in the Start menu.
-static std::wstring PackagedExecutable(const std::wstring& installPath, const std::wstring& aumid) {
-    if (installPath.empty()) return std::wstring();
-    const std::string xml = ReadSmallFile(installPath + L"\\AppxManifest.xml");
-    if (xml.empty()) return std::wstring();
+static std::wstring PackagedExecutableFromXml(const std::string& xml, const std::wstring& installPath,
+                                              const std::wstring& aumid) {
+    if (xml.empty() || installPath.empty()) return std::wstring();
 
     auto attr = [](const std::string& chunk, const char* name) {
         const std::string key = std::string(name) + "=\"";
@@ -10552,6 +11439,13 @@ static std::wstring PackagedExecutable(const std::wstring& installPath, const st
         pos = end == std::string::npos ? xml.size() : end + 1;
     }
     return fallback.empty() ? std::wstring() : existing(installPath + L"\\" + widen(fallback));
+}
+
+// Reads the manifest for callers that do not already have it.
+static std::wstring PackagedExecutable(const std::wstring& installPath, const std::wstring& aumid) {
+    if (installPath.empty()) return std::wstring();
+    const std::string xml = ReadSmallFile(installPath + L"\\AppxManifest.xml");
+    return PackagedExecutableFromXml(xml, installPath, aumid);
 }
 
 static AppDetails ComputeDetails(const AppEntry& a) {
@@ -10659,7 +11553,7 @@ static AppDetails ComputeDetails(const AppEntry& a) {
     add(L"Size", sizeText, false);
     add(L"Modified", modified, false);
     add(L"Uses", std::to_wstring(a.uses), false);
-    add(L"Last used", a.lastUsed > 0 ? FormatStamp(a.lastUsed) : (a.uses > 0 ? L"—" : L"Never"), false);
+    add(L"Last used", a.lastUsed > 0 ? FormatStamp(a.lastUsed) : (a.uses > 0 ? L"-" : L"Never"), false);
     return d;
 }
 
@@ -11650,8 +12544,8 @@ static void DrawDetailsPanel(AppEntry& app, const AppDetails& d) {
     const float s = (float)g_scale;
     const float prog = (float)std::clamp(g_detailPos, 0.0, 1.0);  // position and width
     // Live acrylic cannot fade: DWM paints its blur at full opacity and has no alpha to animate. In
-    // that mode the panel wipes instead — position and width follow the animation, everything drawn
-    // stays opaque — so the card and the DWM window are the same opaque shape at every frame.
+    // that mode the panel wipes instead - position and width follow the animation, everything drawn
+    // stays opaque - so the card and the DWM window are the same opaque shape at every frame.
     const float a = UseLive() ? 1.f : prog;
     float mainX = 0, mainY = 0;
     MainOrigin(mainX, mainY);
@@ -11840,11 +12734,11 @@ static void DrawWindowPanel(const WinPanelInfo& w) {
 
     InfoRow rows[3];
     rows[0].label = L"Process";
-    rows[0].value = w.process.empty() ? L"—" : w.process;
+    rows[0].value = w.process.empty() ? L"-" : w.process;
     rows[1].label = L"State";
     rows[1].value = w.state;
     rows[2].label = L"Path";
-    rows[2].value = w.path.empty() ? L"—" : w.path;
+    rows[2].value = w.path.empty() ? L"-" : w.path;
     rows[2].middle = true;
 
     const float labelW = 84 * s;
@@ -12668,7 +13562,7 @@ static void DrawPreviewPanel(const SearchResult& res) {
 
     PreviewTextGeom tg = {};
     if (!g_preview.loaded || g_preview.path != res.payload) {
-        // Still loading or path mismatch — show spinner placeholder
+        // Still loading or path mismatch - show spinner placeholder
         SetBrush(g_pal.textDim, a);
         D2D1_RECT_F r = D2D1::RectF(ox + pad, contentTop + 12 * s, ox + pw - pad, contentBot);
         g_rt->DrawText(L"Loading…", 8, g_fmtPanelRow, &r, g_brush);
@@ -13375,6 +14269,18 @@ static void Render() {
                     SetBrush(g_pal.text);
                     g_rt->DrawTextLayout(D2D1::Point2F(textX, y), res.layout, g_brush);
                 }
+                // The description sits beside the name on the same line, the way PowerToys shows
+                // it. Its left edge comes from the measured title width, so the two never collide.
+                if (app && !app->description.empty() && res.layout) {
+                    DWRITE_TEXT_METRICS tm = {};
+                    if (SUCCEEDED(res.layout->GetMetrics(&tm))) {
+                        const float descX = textX + tm.width + 10 * s;
+                        if (descX < textX + textW) {
+                            DrawLabel(app->description, g_fmtMeta, descX, y, textX + textW,
+                                      y + rowH, g_pal.textDim, 0.9f);
+                        }
+                    }
+                }
             }
 
             // Right-hand label: an "open externally" icon for files, a type label otherwise.
@@ -13387,7 +14293,9 @@ static void Render() {
             } else {
                 const wchar_t* typeTxt;
                 if (app) {
-                    typeTxt = IsPackagedId(app->id) ? kTxtTypeStore : kTxtTypeApp;
+                    typeTxt = IsPackagedId(app->id) ? kTxtTypeStore
+                              : app->exactOnly    ? kTxtTypeCommand
+                                                  : kTxtTypeApp;
                 } else if (res.kind == ResultKind::Bookmark) {
                     typeTxt = kTxtKindBookmark;  // the subtitle already shows folder and browser
                 } else if (IsPathResult(res.kind)) {
@@ -13818,8 +14726,12 @@ static void OnFrame() {
 static void RecordUse(AppEntry& a) {
     a.uses++;
     a.lastUsed = NowStamp();
-    Wh_SetIntValue(a.usageKey.c_str(), a.uses);
-    Wh_SetIntValue((a.usageKey + L"t").c_str(), a.lastUsed);
+    // A PATH command never appears in the home list or the suggestions, and ApplyIndex does not
+    // read its counters, so storing them would only leave dead values in the configuration.
+    if (!a.exactOnly) {
+        Wh_SetIntValue(a.usageKey.c_str(), a.uses);
+        Wh_SetIntValue((a.usageKey + L"t").c_str(), a.lastUsed);
+    }
     g_detailsCache.erase(a.id);  // "Uses" / "Last used" change
 }
 
@@ -13940,7 +14852,7 @@ enum WinAction {
     WA_COPY_PATH
 };
 
-// The target window belongs to another thread, which may be busy or hung — and a switcher is exactly
+// The target window belongs to another thread, which may be busy or hung - and a switcher is exactly
 // what people reach for when a window stopped responding. Every call below is asynchronous and returns
 // at once; the effect is verified later by CheckWindowAction, on a timer.
 static void WinMinimize(HWND hwnd) {
@@ -14097,8 +15009,23 @@ static void LaunchApp(int appIdx) {
     // arguments, working folder and elevation prompt exactly as when it is double-clicked.
     if (!a.launch.empty()) {
         const std::wstring dir = ParentDir(a.launch);
-        ShellExecuteW(nullptr, L"open", a.launch.c_str(), nullptr,
-                      dir.empty() ? nullptr : dir.c_str(), SW_SHOWNORMAL);
+        // A file this process starts itself has to come from the 64-bit System32: from this 32-bit
+        // process the plain path resolves through the WOW64 redirector to SysWOW64, where "cmd" and
+        // "powershell" are the 32-bit tools and cannot reach wsl or ssh. Every other type is handed
+        // to a file association handler instead, and that handler may run as a 64-bit process, for
+        // which "Sysnative" does not exist: services.msc or ncpa.cpl would reach the 64-bit MMC and
+        // control.exe as a path they cannot open. Those keep their plain path.
+        const std::wstring folded = FoldString(a.launch);
+        const bool startsDirectly = EndsWith(folded, L".exe") || EndsWith(folded, L".com");
+        const std::wstring exe = startsDirectly ? NativeSystemPath(a.launch) : a.launch;
+        const HINSTANCE launched = ShellExecuteW(nullptr, L"open", exe.c_str(), nullptr,
+                                                 dir.empty() ? nullptr : dir.c_str(),
+                                                 SW_SHOWNORMAL);
+        if (reinterpret_cast<INT_PTR>(launched) <= 32 && exe != a.launch) {
+            // The alias was refused: fall back to the redirected copy rather than doing nothing.
+            ShellExecuteW(nullptr, L"open", a.launch.c_str(), nullptr,
+                          dir.empty() ? nullptr : dir.c_str(), SW_SHOWNORMAL);
+        }
         RecordUse(a);
         HideLauncher();
         return;
@@ -14708,8 +15635,8 @@ static bool HandleCustomFormKey(WPARAM vk, bool ctrl, bool shift) {
     return true;  // the form is modal: nothing reaches the search bar behind it
 }
 
-// Enter on a custom entry opens the form whenever the entry has fields to fill in — any
-// placeholder other than {query} — so the values can be reviewed or edited before it launches. A
+// Enter on a custom entry opens the form whenever the entry has fields to fill in - any
+// placeholder other than {query} - so the values can be reviewed or edited before it launches. A
 // pure search entry ({query} only) or a fieldless entry launches straight away. Shift+Enter skips
 // the form and launches with the current values; if a required field is still empty (or the target
 // is broken) the form opens regardless, so nothing ever launches with a missing value.
@@ -15821,7 +16748,7 @@ static void DrawManagerEditor(float cx, float cy, float cw, float s) {
             ph += L"{" + f.key + L"}";
         }
         const std::wstring line =
-            ph.empty() ? std::wstring(L"No fields — launches directly.")
+            ph.empty() ? std::wstring(L"No fields - launches directly.")
                        : std::wstring(L"Fields: ") + ph;
         DrawLabel(FitEnd(line, g_fmtMeta, x1 - x0), g_fmtMeta, x0 + 2 * s, py, x1, py + 26 * s,
                   g_pal.textDim, 0.85f);
@@ -16408,7 +17335,7 @@ static std::wstring ClipKey(const std::wstring& suffix) {
 }
 
 // True when a previous run left clipboard data behind: the count value, or a saved image. The folder
-// itself is not enough — an empty leftover must not make the cleanup run at every start.
+// itself is not enough - an empty leftover must not make the cleanup run at every start.
 static bool ClipHistoryOnDisk() {
     if (Wh_GetIntValue(ClipKey(L"count").c_str(), 0) > 0) return true;
     const std::wstring dir = ClipImageDir();
@@ -17530,7 +18457,7 @@ static void ToggleFileMode() {
     if (!g_fileMode && !g_cfg.filesEnabled) return;  // the file browser is turned off
     g_fileMode = !g_fileMode;
     // The preview belongs to the file that was open: leaving the browser closes it, or it would come
-    // back later showing whatever row is selected then — a folder, which has nothing to preview.
+    // back later showing whatever row is selected then - a folder, which has nothing to preview.
     if (!g_fileMode && g_panelMode == PanelMode::Preview) SetPreviewOpen(false);
     g_bandEdit = BandEdit::None;
     g_fileMenuOpen = false;
@@ -17975,7 +18902,7 @@ static void SetPreviewOpen(bool open) {
     // Path is in res.payload for File results; LoadPreview will be called from Render.
 
     if (!g_detailsOpen) {
-        // Panel is closed — open directly in Preview mode
+        // Panel is closed - open directly in Preview mode
         g_panelMode    = PanelMode::Preview;
         g_panelSwitching = false;
         g_detailsOpen  = true;
@@ -17983,7 +18910,7 @@ static void SetPreviewOpen(bool open) {
         UpdateTargets(false, false);
         MarkDirty();
     } else if (g_panelMode == PanelMode::Actions) {
-        // Panel is open in Actions mode — animate close, then reopen as Preview
+        // Panel is open in Actions mode - animate close, then reopen as Preview
         g_panelSwitching   = true;
         g_panelPendingMode = PanelMode::Preview;
         g_detailsOpen      = false;   // starts closing animation
@@ -17991,7 +18918,7 @@ static void SetPreviewOpen(bool open) {
         UpdateTargets(false, false);
         MarkDirty();
     } else {
-        // Already in Preview mode — just keep it open (or toggle off if same file)
+        // Already in Preview mode - just keep it open (or toggle off if same file)
         // No-op for now
     }
 }
@@ -19314,6 +20241,7 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
 
         case WM_APP_SETTINGS: {
             const bool oldHideUtility = g_cfg.hideUtility;
+            const bool oldDescriptions = g_cfg.searchDescriptions;
             const bool hadRememberSort = g_cfg.rememberFileSort;
             const bool hadClipboard = g_cfg.clipboardHistory;
             const FileSort liveSort = g_cfg.fileSort;
@@ -19332,7 +20260,8 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             g_fileStartUsed = false;  // re-arm the start drive so a freshly set value takes effect
             Sound::Configure();
             Sound::ApplyVolume();
-            if (g_cfg.hideUtility != oldHideUtility) {
+            if (g_cfg.hideUtility != oldHideUtility ||
+                g_cfg.searchDescriptions != oldDescriptions) {
                 g_menuDirty = true;  // the index must be rebuilt to apply this
             }
             RegisterHotkeyOrWarn();

@@ -1,3 +1,9 @@
+## 1.2.0 ([Nov 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ad6603ecaaede48bcbed7f93cbcb1725ccd7f3ab/mods/explorer-translucent-menus.wh.cpp))
+
+* Add an option to customize hover highlight color.
+* Add an option to apply materials to title bar menu.
+* Make selection replay asynchronous.
+
 ## 1.1.0 ([Nov 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/98a3b62f2339b3207bb5de681fab897e9efb8dcc/mods/explorer-translucent-menus.wh.cpp))
 
 * Add a recreated fade animation after selecting a menu command to avoid the black background that can appear during the native Windows fade. Options are available to keep the native animation or close the menu immediately.

@@ -1,3 +1,7 @@
+## 3.2.2 ([Nov 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/69655c3819623b5b6f1dd6e4a98566d3a7c2b8d1/mods/macos-minimize-animation.wh.cpp))
+
+* Added a donate link.
+
 ## 3.2.1 ([Nov 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fc87ba19584f668f8708b877574eb71b68fea503/mods/macos-minimize-animation.wh.cpp))
 
 * Fixed a crash (seen mostly in Firefox) when Windows couldn't allocate the animation's bitmap. If an allocation fails, the animation is now skipped and the window still minimizes, restores or closes normally.

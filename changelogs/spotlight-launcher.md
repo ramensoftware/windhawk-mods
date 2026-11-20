@@ -1,3 +1,32 @@
+## 1.2.0 ([Nov 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5326f7de9026c3f96e05533c51e1ab382eff70ea/mods/spotlight-launcher.wh.cpp))
+
+* **Run the tools on your PATH.** Type a program's exact name - `git`, `python`, `cargo`, `code` - and
+  it appears below your apps, ready to run, with no Start menu shortcut to create. A partial name never
+  lists them, so hundreds of tools stay out of the way. A tool installed later shows up after a
+  reindex, and one whose executable carries no icon of its own uses the same generic application icon
+  Windows draws for it.
+* **Match app descriptions** (Settings > Search, off by default). A search option that also matches the
+  description Windows stores for a program, and shows it beside the app name, so a word that only
+  appears there still finds the app. The text is the one its shortcut declares when it has one, and the
+  program's own description otherwise. Off by default because a description is read from every program
+  while indexing, which makes the first index slower.
+* **Apps are ranked the way PowerToys Run ranks them.** A match that covers a large part of the name,
+  starting near its beginning, now ranks above one that merely contains the query. Frequency, pins and
+  an app you pick after typing a few words still apply on top, so the list keeps learning from you.
+* **Tools found on the PATH sit below the apps.** A command never pushes the application you meant down
+  the list.
+* **Shortcuts that no longer lead anywhere are gone.** A Start menu entry whose program was uninstalled,
+  and a saved web link, no longer appear as a row with an empty icon. Game launchers such as `steam://`
+  are kept, and Microsoft Store apps are unaffected.
+* **Microsoft Store apps always show their icon.** The logo is now read from the installed package
+  instead of asking the shell, so an app on another drive, an app that was never opened, or a cold icon
+  cache no longer leaves a blank page. A small icon is no longer drawn tiny in the corner of the slot.
+* **Classic apps show the icon their shortcut declares.** Shortcuts that point at a console, an iconless
+  launcher or a `.cmd` now use the artwork the shortcut names. A program with no icon of its own falls
+  back to the generic application icon Windows uses, never to an empty slot.
+* **Chromium web apps stay out of the way.** An app installed from Chrome or Edge no longer appears while
+  you search for the browser itself, but it is still listed when you type its name.
+
 ## 1.1.1 ([Nov 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/89c1a71fccf3768d9e5d5b5b6da2c2701bf684a1/mods/spotlight-launcher.wh.cpp))
 
 * **Panel position.** A new Appearance option decides what stays centered while the details panel is

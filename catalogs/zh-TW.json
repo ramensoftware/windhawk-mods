@@ -3884,7 +3884,7 @@
         "ratingUsers": 8,
         "reviews": 0,
         "trendingSorting": -0.01236088874398915,
-        "updated": 1780142746000,
+        "updated": 1795136604000,
         "users": 226
       },
       "metadata": {
@@ -3898,7 +3898,7 @@
           "OpenConsole.exe"
         ],
         "name": "Console Quick Paste",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "context-menu-preloader": {
@@ -7864,7 +7864,7 @@
         "ratingUsers": 19,
         "reviews": 0,
         "trendingSorting": 23.638255492692966,
-        "updated": 1794474119000,
+        "updated": 1795136614000,
         "users": 575
       },
       "metadata": {
@@ -7880,7 +7880,7 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "Explorer 上下文菜单半透明",
-        "version": "1.1.0"
+        "version": "1.2.0"
       },
       "metadataEnglish": {
         "description": "Translucent materials and optional borderless classic context menus for File Explorer",
@@ -11235,20 +11235,21 @@
         "ratingUsers": 1532,
         "reviews": 0,
         "trendingSorting": 4.715557073388569,
-        "updated": 1794340986000,
+        "updated": 1795136609000,
         "users": 101583
       },
       "metadata": {
         "author": "Abdullah Masood",
         "compilerOptions": "-ldwmapi -lgdi32 -ld2d1 -lole32 -loleaut32 -luuid -lshell32",
         "description": "Smooth macOS-style genie minimize, restore (open) and optional close animations for every window.",
+        "donateUrl": "https://buy.polar.sh/polar_cl_iccBChKQyqil3EgBBtV6qM3lfDpLk4sVu1OpK1j0jQ4",
         "github": "https://github.com/Abdullah-Masood-05",
         "include": [
           "*"
         ],
         "license": "MIT",
         "name": "MacOS Minimize Animation",
-        "version": "3.2.1"
+        "version": "3.2.2"
       }
     },
     "macos-style-dock": {
@@ -16687,7 +16688,7 @@
         "ratingUsers": 84,
         "reviews": 2,
         "trendingSorting": 16.480710754984187,
-        "updated": 1793851234000,
+        "updated": 1795136599000,
         "users": 1813
       },
       "metadata": {
@@ -16700,7 +16701,7 @@
         ],
         "license": "MIT",
         "name": "Spotlight Launcher",
-        "version": "1.1.1"
+        "version": "1.2.0"
       }
     },
     "standard-title-bar-colors": {
