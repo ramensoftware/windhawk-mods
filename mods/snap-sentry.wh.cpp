@@ -3182,18 +3182,42 @@ static std::wstring PreviewFolder(bool create) {
 static std::wstring WritePreviewFile(const std::wstring& path,
                                      const Settings& s, ULONGLONG toastId) {
     if (WaitStop(0)) return {};
+    // Each way out says why, so a log explains a notification without a
+    // picture. No paths, matching the rest of the quiet logging.
     std::shared_ptr<BitmapBuffer> image;
     {
+        // The popup is queued the moment the file appears, so the program
+        // saving it usually still has it open. Wait up to three seconds for
+        // it to finish; that also keeps a half-written picture from being read.
         LockedCapture capture;
-        if (!capture.Open(path, s.folder)) return {};
+        DWORD error = 0;
+        for (int attempt = 0;; ++attempt) {
+            if (capture.Open(path, s.folder)) break;
+            error = GetLastError();
+            if ((error != ERROR_SHARING_VIOLATION && error != ERROR_LOCK_VIOLATION) ||
+                attempt >= 30 || WaitStop(100)) {
+                Wh_Log(L"Preview skipped: the screenshot could not be opened (%lu)",
+                       error);
+                return {};
+            }
+        }
         image = DecodeThumbnail(capture.file, 728.0, 410.0);
     }
+    if (!image) {
+        Wh_Log(L"Preview skipped: the image could not be read");
+        return {};
+    }
     const std::wstring folder = PreviewFolder(true);
-    if (!image || folder.empty()) return {};
+    if (folder.empty()) {
+        Wh_Log(L"Preview skipped: SnapSentry's storage folder is unavailable");
+        return {};
+    }
     const std::wstring target =
         folder + L"\\" + kPreviewPrefix + std::to_wstring(toastId) + L".png";
     DeleteFileW(target.c_str());  // A leftover of the same name blocks a new file.
     if (!EncodeContactSheet(target, *image)) {
+        Wh_Log(L"Preview skipped: the picture could not be saved (%lu)",
+               GetLastError());
         DeleteFileW(target.c_str());
         return {};
     }
