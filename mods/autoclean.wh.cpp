@@ -3,7 +3,7 @@
 // @name            AutoClean
 // @description     Zero-UI event-driven background temp cleaner with AI agent temp protection, KB/MB/GB/TB thresholds, oldest-first pruning, and OLED toasts
 // @version         2.2026.1811
-// @author          Ashish
+// @author          Ashix
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
 // @donateUrl       https://ko-fi.com/kashix
