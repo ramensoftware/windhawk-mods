@@ -2,12 +2,72 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-19T23:04:39.000Z</updated>
+    <updated>2026-11-20T00:01:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Nimbus Menu 1.1.0]]></title>
+        <id>https://windhawk.net/mods/nimbus-menu#e8a0e11d5ea622bf5b9be550aaae98502fec3a35</id>
+        <link href="https://windhawk.net/mods/nimbus-menu"/>
+        <updated>2026-11-20T00:01:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New &quot;Downloads&quot; tab in Start: the newest files in the Downloads folder, plus files downloaded from the internet into any other folder (found with Everything).</li>
+<li>Search box: select text with the mouse or Shift + arrows, and use Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+V, Home, End and Delete.</li>
+<li>Right-click on a file (search results and Downloads): open, open file location, copy path. &quot;Open file location&quot; for desktop apps in All apps too.</li>
+<li>&quot;End task&quot; in the dock's app menu, following the Windows option (Settings &gt; System &gt; For developers), with a new setting to always or never show it.</li>
+<li>Windows key: typing right after it now always goes to Nimbus' Start, also when the keyboard used to go back to the previous window. Pressing it again with Start open only closes it.</li>
+<li>Apps whose window belongs to a helper process, like Steam, are now pinned with the right program and icon.</li>
+<li>With Windows' transparency effects off, or battery saver on, the glass becomes a solid color instead of black.</li>
+<li>Smoother rounded glass corners, and no more stutter when scrolling through all apps.</li>
+<li>New homepage for help and suggestions: https://github.com/igoredm/nimbus-menu</li>
+</ul>
+]]></content>
+        <author>
+            <name>igoredm</name>
+            <uri>https://github.com/igoredm</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Desktop Weather 1.2]]></title>
+        <id>https://windhawk.net/mods/desktop-snowfall#21ab62591ab5ab1f5a1fea30751db35e97370152</id>
+        <link href="https://windhawk.net/mods/desktop-snowfall"/>
+        <updated>2026-11-20T00:01:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The mod is now called Desktop Weather. It's the same mod, and your settings are kept.</li>
+<li>New &quot;What falls&quot; setting: snow, rain, autumn leaves or cherry blossom petals. Rain splashes on top of the windows. Leaves and petals rest on top of the windows for a while and then fade away. They ride along when you move a window, and fly off when you yank or close it or sweep them with the cursor.</li>
+<li>&quot;Hide in fullscreen apps&quot; now works on every monitor, not only the one with the focus: a fullscreen video on one monitor hides the snow there while you work on another one. It also recognizes more fullscreen players and games.</li>
+<li>New &quot;Also hide over maximized windows&quot; setting (off by default), handy with an auto-hidden taskbar, where a maximized window fills the whole screen.</li>
+<li>Choose the monitors: all, only the primary one, or a list of monitor numbers. Each monitor can have its own settings (what falls, how much, and where).</li>
+<li>Choose the color of the snow and rain (presets or a custom color code), and the opacity of everything that falls.</li>
+<li>New hotkey to turn it off and on, Win+Alt+S by default.</li>
+<li>New &quot;Hide for these apps&quot; setting: hide it on a monitor while a window of one of the listed apps is open there.</li>
+<li>It can come only for a season (for example from December to February) or only at certain hours. While it's off, it frees its video memory.</li>
+<li>A new demo shows all four kinds of weather.</li>
+</ul>
+]]></content>
+        <author>
+            <name>mikybuilds</name>
+            <uri>https://github.com/mikybuilds</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Compact RDP connection bar 3.3.5]]></title>
+        <id>https://windhawk.net/mods/compact-rdp-connection-bar#c6b80fbad32a3106c7098e557bb672a2319cde87</id>
+        <link href="https://windhawk.net/mods/compact-rdp-connection-bar"/>
+        <updated>2026-11-20T00:01:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>RDP-in-RDP mod</li>
+<li>Add 2 button settings</li>
+</ul>
+]]></content>
+        <author>
+            <name>hsb5</name>
+            <uri>https://github.com/hsb5</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Icon Dock 2.3.1]]></title>
         <id>https://windhawk.net/mods/desktop-icon-dock#06784190eb860b3f5c5ceea67e9dbde28bd1e7f7</id>
@@ -825,61 +885,6 @@ scaling.</p>
         <author>
             <name>NDruce</name>
             <uri>https://github.com/NDruce</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better Volume Mixer 1.6.3]]></title>
-        <id>https://windhawk.net/mods/better-volume-mixer#3c964427620c63c6fe2613822c6482ac4bd62ffc</id>
-        <link href="https://windhawk.net/mods/better-volume-mixer"/>
-        <updated>2026-11-18T19:03:18.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added option to hide the close button</li>
-<li>Added option to show the volume percentage as the tray icon</li>
-<li>The tray icon's tooltip now shows the output device and volume</li>
-</ul>
-]]></content>
-        <author>
-            <name>0Allu</name>
-            <uri>https://github.com/0Allu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinRAR Tweaks 1.1.0]]></title>
-        <id>https://windhawk.net/mods/winrar-tweaks#d70192267c179a459be7217c1f56d3cc96f94736</id>
-        <link href="https://windhawk.net/mods/winrar-tweaks"/>
-        <updated>2026-11-18T18:01:36.000Z</updated>
-        <content type="html"><![CDATA[<h3>✨ New Features</h3>
-<ul>
-<li><strong>VS Code-Style Quick Filter Bar (<code>Ctrl+F</code>):</strong> Added a native bottom filter bar (<code>quick_search_bar</code>) with a live match counter, <code>↑</code> / <code>↓</code> / <code>✕</code> buttons, <code>Enter</code> / <code>Shift+Enter</code> navigation, and automatic Light/Dark theme adaptation. Includes optional settings for <strong>Always Visible</strong> (<code>always_visible</code>), <strong>Type to Search</strong> (<code>type_to_search</code>), and <strong>Alt+Enter Selects All Matches</strong> (<code>alt_enter_select_all</code>).</li>
-<li><strong>Auto-Dismiss Trial Popup:</strong> Added <code>auto_dismiss_eval_dialog</code> to automatically block <em>&quot;Please purchase WinRAR license&quot;</em> and <em>&quot;Trial Expired&quot;</em> reminder popups on startup before they appear on screen.</li>
-<li><strong>Optional IEC Binary Units (<code>KiB</code> / <code>MiB</code>):</strong> Added <code>use_iec_terms</code> to switch file size labels between standard (<code>KB</code>, <code>MB</code>, <code>GB</code>, <code>TB</code>) and IEC (<code>KiB</code>, <code>MiB</code>, <code>GiB</code>, <code>TiB</code>) units on the fly.</li>
-</ul>
-<h3>🛠️ Improvements &amp; Fixes</h3>
-<ul>
-<li><strong>Universal Language Support for File Sizes:</strong> Replaced hardcoded column header keywords with semantic column and byte-format detection (excluding <code>Name</code> and <code>CRC</code> columns), making human-readable file sizes work automatically across all WinRAR display languages.</li>
-<li><strong>Search-Aware <code>Esc</code> Handling:</strong> Updated <code>Close on Esc</code> so pressing <code>Escape</code> clears or closes the Quick Filter Bar first (while preserving multi-selections) before closing the main WinRAR window.</li>
-<li><strong>Live Settings Sync &amp; Thread Safety:</strong> Added custom UI-thread messaging and <code>std::atomic</code> settings so toggling options (<code>KB</code>/<code>KiB</code>, <code>Always Visible</code>, etc.) or unloading the mod updates open WinRAR windows immediately without freezing.</li>
-</ul>
-]]></content>
-        <author>
-            <name>ArvindSaini978</name>
-            <uri>https://github.com/ArvindSaini978</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Window Rules 1.1]]></title>
-        <id>https://windhawk.net/mods/window-rules#bfdca3ffc98a8775535679b5776de91d451f5554</id>
-        <link href="https://windhawk.net/mods/window-rules"/>
-        <updated>2026-11-18T18:01:30.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add an opt-in setting for matching owned dialogs.</li>
-<li>Add an opt-in setting for matching hosted app executables.</li>
-<li>Reconsider recently created hosted windows when their title or visibility changes.</li>
-</ul>
-]]></content>
-        <author>
-            <name>metanoid18</name>
-            <uri>https://github.com/Metanoid18</uri>
         </author>
     </entry>
 </feed>
