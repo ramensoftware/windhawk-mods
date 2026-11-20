@@ -1199,6 +1199,15 @@ thread_local HWND tl_arrowPopup = nullptr;
 constexpr UINT kMenuButtonDown = 0x01ED;
 constexpr UINT kMenuButtonUp = 0x01EF;
 
+// The hook only decides that a turn is the menu's and posts it to the popup, with the turn
+// in wParam, and the popup's subclass scrolls. A turn can be dozens of rows, each a scroll
+// of the popup, and every mouse event on the desktop waits for the hook while it runs. One
+// that runs past LowLevelHooksTimeout is dropped by Windows without a word.
+UINT WheelScrollMessage() {
+    static const UINT message = RegisterWindowMessageW(L"AdobeDarkMenus.WheelScroll");
+    return message;
+}
+
 // More rows than one turn should ever move, whatever the wheel setting says.
 constexpr int kMaxWheelRows = 64;
 
@@ -1240,11 +1249,16 @@ int PopupPageRows(HWND hWnd) {
     return rows > 0 ? rows : 1;
 }
 
-// Returns false when the wheel is set to scroll nothing, so the turn is passed on.
-bool ScrollPopupByWheel(HWND hPopup, int delta) {
+UINT WheelScrollLines() {
     UINT lines = 3;
     SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0);
-    if (lines == 0) return false;
+    return lines;
+}
+
+// On the menu's thread, from the popup's subclass.
+void ScrollPopupByWheel(HWND hPopup, int delta) {
+    UINT lines = WheelScrollLines();
+    if (lines == 0) return;
 
     int perNotch = lines == WHEEL_PAGESCROLL ? PopupPageRows(hPopup) : (int)lines;
     if (perNotch > kMaxWheelRows) perNotch = kMaxWheelRows;
@@ -1265,19 +1279,23 @@ bool ScrollPopupByWheel(HWND hPopup, int delta) {
         SendMessageW(hPopup, kMenuButtonDown, arrow, 0);
         SendMessageW(hPopup, kMenuButtonUp, arrow, 0);
     }
-    return true;
 }
 
 // Called on the thread that put the hook up, for every mouse event on the desktop while it
-// is up, so anything but a wheel turn leaves at once.
+// is up, so anything but a wheel turn leaves at once. A wheel set to scroll nothing passes
+// the turn on.
 LRESULT CALLBACK WheelHookProc(int code, WPARAM wParam, LPARAM lParam) {
     if (code == HC_ACTION && wParam == WM_MOUSEWHEEL && lParam && !ProcessIsExiting() &&
         !g_unloading.load(std::memory_order_relaxed) && g_wheelScrollMenus.load(std::memory_order_relaxed)) {
         const auto* info = (const MSLLHOOKSTRUCT*)lParam;
-        HWND hPopup = WindowFromPoint(info->pt);
+        // The point is in physical pixels. WindowFromPoint would read it in this thread's
+        // own coordinates, which in an app that is not per-monitor DPI aware, on a monitor
+        // scaled differently from it, puts it beside the menu.
+        HWND hPopup = WindowFromPhysicalPoint(info->pt);
         if (hPopup && GetWindowThreadProcessId(hPopup, nullptr) == GetCurrentThreadId() &&
             ClassifyWindow(hPopup) == WindowKind::MenuPopup && PopupHasScrollArrows(hPopup) &&
-            ScrollPopupByWheel(hPopup, (short)HIWORD(info->mouseData))) {
+            WheelScrollLines() != 0 &&
+            PostMessageW(hPopup, WheelScrollMessage(), (WPARAM)(INT_PTR)(short)HIWORD(info->mouseData), 0)) {
             return 1;
         }
     }
@@ -1381,6 +1399,14 @@ LRESULT CALLBACK MenuPopupSubclassProc(HWND hWnd,
             std::lock_guard<std::mutex> lock(g_subclassedPopupsMutex);
             g_subclassedPopups.erase(hWnd);
         }
+    }
+
+    // Posted by WheelHookProc. Not a message the popup itself knows.
+    if (uMsg == WheelScrollMessage()) {
+        if (g_wheelScrollMenus.load(std::memory_order_relaxed)) {
+            ScrollPopupByWheel(hWnd, (short)(INT_PTR)wParam);
+        }
+        return 0;
     }
 
     // A scroll redraws the arrows and then repaints the rows, and it is the rows that take
@@ -2079,8 +2105,9 @@ constexpr int kMaxHeldLevels = 4;
 // A popup tracked with TPM_NONOTIFY opens its submenus without telling the owner, so no
 // WM_INITMENUPOPUP comes for them. After Effects tracks its right-click menus that way, and
 // the one on a layer has the Effect submenu, which the app splits into columns. So every
-// submenu of such a popup is held before it goes up, until the call returns. Closing a submenu still sends WM_UNINITMENUPOPUP, and opening it again sends
-// nothing, so giving it back as it closes would bring the columns back the next time.
+// submenu of such a popup is held before it goes up, until the call returns. Closing a
+// submenu still sends WM_UNINITMENUPOPUP, and opening it again sends nothing, so giving it
+// back as it closes would bring the columns back the next time.
 void HoldColumnMenuTree(HMENU hMenu, int trackDepth, int level = 0) {
     if (!hMenu || !HoldingColumnMenus()) return;
 
