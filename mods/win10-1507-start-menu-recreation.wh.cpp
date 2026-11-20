@@ -1037,21 +1037,87 @@ static const unsigned char kIconCalculator[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x93, 0xf3, 0xff, 0xf9, 0x6c, 0x18, 0x50, 0xcf, 0x1d, 0x7e, 0xd5, 0x00, 0x00, 0x00, 0x00,
     0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
 };
-static bool DrawEmbeddedTileIcon(Gdiplus::Graphics& g, const unsigned char* data,
+using EmbeddedIconCache = std::unordered_map<const unsigned char*, std::unique_ptr<Gdiplus::Bitmap>>;
+
+// Each menu UI thread owns its own decoded icons; no stream outlives decoding.
+static bool DrawEmbeddedTileIcon(std::optional<EmbeddedIconCache>& cache,
+                                 Gdiplus::Graphics& g, const unsigned char* data,
                                  size_t length, float x, float y, float size) {
-    if (size <= 0) return false;
-    IStream* stream = SHCreateMemStream(data, static_cast<UINT>(length));
-    if (!stream) return false;
-    bool ok = false;
-    {
-        Gdiplus::Bitmap image(stream, FALSE);
-        if (image.GetLastStatus() == Gdiplus::Ok) {
-            g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-            ok = g.DrawImage(&image, Gdiplus::RectF(x, y, size, size)) == Gdiplus::Ok;
+    if (!cache || size <= 0) return false;
+    auto it = cache->find(data);
+    if (it == cache->end()) {
+        std::unique_ptr<Gdiplus::Bitmap> copy;
+        IStream* stream = SHCreateMemStream(data, static_cast<UINT>(length));
+        if (stream) {
+            {
+                Gdiplus::Bitmap decoded(stream, FALSE);
+                if (decoded.GetLastStatus() == Gdiplus::Ok && decoded.GetWidth() && decoded.GetHeight()) {
+                    auto bitmap = std::make_unique<Gdiplus::Bitmap>(
+                        decoded.GetWidth(), decoded.GetHeight(), PixelFormat32bppPARGB);
+                    if (bitmap->GetLastStatus() == Gdiplus::Ok) {
+                        Gdiplus::Graphics target(bitmap.get());
+                        if (target.GetLastStatus() == Gdiplus::Ok &&
+                            target.DrawImage(&decoded, 0, 0, decoded.GetWidth(), decoded.GetHeight()) == Gdiplus::Ok)
+                            copy = std::move(bitmap);
+                    }
+                }
+            }
+            stream->Release();
+        }
+        // A null entry also avoids repeatedly decoding an invalid embedded asset.
+        it = cache->emplace(data, std::move(copy)).first;
+    }
+    if (!it->second) return false;
+    g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+    return g.DrawImage(it->second.get(), Gdiplus::RectF(x, y, size, size)) == Gdiplus::Ok;
+}
+
+// Generate native-view alternatives only for 32-bit processes on 64-bit Windows.
+// Preserve the ordinary path as a fallback for genuinely 32-bit applications.
+static bool RunningUnderWow64() {
+    BOOL wow64 = FALSE;
+    return IsWow64Process(GetCurrentProcess(), &wow64) && wow64;
+}
+static std::wstring ExpandTilePath(const std::wstring& input) {
+    DWORD n = ExpandEnvironmentStringsW(input.c_str(), nullptr, 0);
+    if (!n || n > 32768) return input;
+    std::vector<wchar_t> buffer(n);
+    DWORD written = ExpandEnvironmentStringsW(input.c_str(), buffer.data(), n);
+    return written && written <= n ? std::wstring(buffer.data()) : input;
+}
+static std::wstring NativeTilePath(const std::wstring& raw) {
+    if (!RunningUnderWow64()) return std::wstring();
+    std::wstring adjusted = raw;
+    // Only replace the exact environment-variable token, case-insensitively.
+    for (size_t pos = 0; pos + 14 <= adjusted.size(); ++pos) {
+        if (_wcsnicmp(adjusted.c_str() + pos, L"%ProgramFiles%", 14) == 0) {
+            wchar_t nativeDir[32768]{};
+            DWORD n = GetEnvironmentVariableW(L"ProgramW6432", nativeDir, ARRAYSIZE(nativeDir));
+            if (n && n < ARRAYSIZE(nativeDir)) adjusted.replace(pos, 14, nativeDir);
+            break;
         }
     }
-    stream->Release();
-    return ok;
+    adjusted = ExpandTilePath(adjusted);
+    wchar_t winDir[MAX_PATH]{};
+    UINT n = GetWindowsDirectoryW(winDir, ARRAYSIZE(winDir));
+    if (n && n < ARRAYSIZE(winDir)) {
+        std::wstring system32 = std::wstring(winDir) + L"\\System32";
+        if (adjusted.size() > system32.size() &&
+            _wcsnicmp(adjusted.c_str(), system32.c_str(), system32.size()) == 0 &&
+            (adjusted[system32.size()] == L'\\' || adjusted[system32.size()] == L'/'))
+            adjusted.replace(0, system32.size(), std::wstring(winDir) + L"\\Sysnative");
+    }
+    return adjusted;
+}
+static std::wstring ExistingTilePath(const std::wstring& raw) {
+    const std::wstring ordinary = ExpandTilePath(raw);
+    const std::wstring native = NativeTilePath(raw);
+    // System32 explicitly refers to the native OS folder; Sysnative avoids redirection.
+    if (!native.empty() && native.find(L"Sysnative") != std::wstring::npos &&
+        GetFileAttributesW(native.c_str()) != INVALID_FILE_ATTRIBUTES) return native;
+    if (GetFileAttributesW(ordinary.c_str()) != INVALID_FILE_ATTRIBUTES) return ordinary;
+    if (!native.empty() && GetFileAttributesW(native.c_str()) != INVALID_FILE_ATTRIBUTES) return native;
+    return ordinary;
 }
 
 
@@ -1070,6 +1136,9 @@ static HICON g_stockAppIcon = nullptr;
 [[clang::no_destroy]] static std::optional<
     std::unordered_map<HICON, std::unique_ptr<Gdiplus::Bitmap>>>
     g_iconBitmapCache{std::in_place};
+// UI-thread-owned and explicitly released before this menu's GDI+ shutdown.
+[[clang::no_destroy]] static std::optional<EmbeddedIconCache>
+    g_embeddedIconCache{std::in_place};
 static void DrawAppIconOrFallback(HDC dc, HICON icon, int x, int y, int size);
 
 constexpr UINT WM_APP_WEATHER_READY = WM_APP + 111;
@@ -2355,7 +2424,7 @@ static bool DrawMetroTileIcon(HDC dc, const Tile& tile, int x, int y, int size) 
     case Icon::Calculator: embedded = kIconCalculator; embeddedSize = sizeof(kIconCalculator); break;
     default: break;
     }
-    if (embedded && DrawEmbeddedTileIcon(g, embedded, embeddedSize,
+    if (embedded && DrawEmbeddedTileIcon(g_embeddedIconCache, g, embedded, embeddedSize,
                                         (float)x, (float)y, (float)size)) return true;
     g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     g.TranslateTransform(static_cast<Gdiplus::REAL>(x), static_cast<Gdiplus::REAL>(y));
@@ -4526,7 +4595,7 @@ static void DrawWeatherLogo(HDC dc, const RECT& rc) {
     const float side = (float)(std::min)(rc.right - rc.left, rc.bottom - rc.top);
     const float x = (float)rc.left + ((rc.right - rc.left) - side) * 0.5f;
     const float y = (float)rc.top + ((rc.bottom - rc.top) - side) * 0.5f;
-    if (DrawEmbeddedTileIcon(g, kIconWeather, sizeof(kIconWeather), x, y, side)) return;
+    if (DrawEmbeddedTileIcon(g_embeddedIconCache, g, kIconWeather, sizeof(kIconWeather), x, y, side)) return;
     g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     g.TranslateTransform((Gdiplus::REAL)rc.left,(Gdiplus::REAL)rc.top);
     g.ScaleTransform((rc.right-rc.left)/64.0f,(rc.bottom-rc.top)/64.0f);
@@ -10918,6 +10987,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     })
     Wh_Log(L"[UI] teardown: releasing icon bitmap cache (%u entries)",
            g_iconBitmapCache ? (unsigned)g_iconBitmapCache->size() : 0u);
+    g_embeddedIconCache.reset();
     g_iconBitmapCache.reset(); // GDI+ bitmaps destroyed before GdiplusShutdown
     Wh_Log(L"[UI] teardown: releasing stock icons");
     if (g_stockFolderIcon) { DestroyIcon(g_stockFolderIcon); g_stockFolderIcon=nullptr; }
@@ -11070,6 +11140,9 @@ static HICON g_stockAppIcon = nullptr;
 [[clang::no_destroy]] static std::optional<
     std::unordered_map<HICON, std::unique_ptr<Gdiplus::Bitmap>>>
     g_iconBitmapCache{std::in_place};
+// UI-thread-owned and explicitly released before this menu's GDI+ shutdown.
+[[clang::no_destroy]] static std::optional<EmbeddedIconCache>
+    g_embeddedIconCache{std::in_place};
 static void DrawAppIconOrFallback(HDC dc, HICON icon, int x, int y, int size);
 
 constexpr UINT WM_APP_WEATHER_READY = WM_APP + 111;
@@ -12574,16 +12647,16 @@ static bool HasLocalLiveContent(const Tile& tile) {
 
 static bool IsKnownOneDriveTarget(const std::wstring& target) {
     if (target.empty()) return false;
-    wchar_t expanded[MAX_PATH]{};
-    DWORD n=ExpandEnvironmentStringsW(target.c_str(),expanded,ARRAYSIZE(expanded));
-    if (!n || n>ARRAYSIZE(expanded)) return false;
+    const std::wstring ordinary = ExpandTilePath(target);
+    const std::wstring native = NativeTilePath(target);
     const wchar_t* locations[]={L"%LOCALAPPDATA%\\Microsoft\\OneDrive\\OneDrive.exe",
         L"%ProgramFiles%\\Microsoft OneDrive\\OneDrive.exe",
+        L"%ProgramW6432%\\Microsoft OneDrive\\OneDrive.exe",
         L"%ProgramFiles(x86)%\\Microsoft OneDrive\\OneDrive.exe"};
     for (const wchar_t* location : locations) {
-        wchar_t expected[MAX_PATH]{};
-        DWORD count=ExpandEnvironmentStringsW(location,expected,ARRAYSIZE(expected));
-        if (count && count<=ARRAYSIZE(expected) && _wcsicmp(expanded,expected)==0) return true;
+        const std::wstring expected = ExpandTilePath(location);
+        if (_wcsicmp(ordinary.c_str(), expected.c_str()) == 0 ||
+            (!native.empty() && _wcsicmp(native.c_str(), expected.c_str()) == 0)) return true;
     }
     return false;
 }
@@ -12628,7 +12701,7 @@ static bool DrawMetroTileIcon(HDC dc, const Tile& tile, int x, int y, int size) 
     case Icon::Calculator: embedded = kIconCalculator; embeddedSize = sizeof(kIconCalculator); break;
     default: break;
     }
-    if (embedded && DrawEmbeddedTileIcon(g, embedded, embeddedSize,
+    if (embedded && DrawEmbeddedTileIcon(g_embeddedIconCache, g, embedded, embeddedSize,
                                         (float)x, (float)y, (float)size)) return true;
     g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     g.TranslateTransform(static_cast<Gdiplus::REAL>(x), static_cast<Gdiplus::REAL>(y));
@@ -13192,8 +13265,8 @@ static HICON GetShortcutIconNoOverlay(LPCWSTR shortcut, std::wstring* targetOut 
     }
     wchar_t iconPath[MAX_PATH]={}; int iconIndex=0;
     if (SUCCEEDED(link->GetIconLocation(iconPath,ARRAYSIZE(iconPath),&iconIndex))&&iconPath[0]) {
-        wchar_t expanded[MAX_PATH]={}; DWORD n=ExpandEnvironmentStringsW(iconPath,expanded,ARRAYSIZE(expanded));
-        LPCWSTR path=(n&&n<=ARRAYSIZE(expanded))?expanded:iconPath;
+        const std::wstring expandedPath = ExistingTilePath(iconPath);
+        LPCWSTR path = expandedPath.c_str();
         HICON large=nullptr,small=nullptr;
         if (ExtractIconExW(path,iconIndex,&large,&small,1)>0) {
             if (small) DestroyIcon(small);
@@ -13202,8 +13275,8 @@ static HICON GetShortcutIconNoOverlay(LPCWSTR shortcut, std::wstring* targetOut 
     }
     wchar_t target[MAX_PATH]={}; WIN32_FIND_DATAW fd{};
     if (SUCCEEDED(link->GetPath(target,ARRAYSIZE(target),&fd,SLGP_RAWPATH))&&target[0]) {
-        wchar_t expanded[MAX_PATH]={}; DWORD n=ExpandEnvironmentStringsW(target,expanded,ARRAYSIZE(expanded));
-        LPCWSTR path=(n&&n<=ARRAYSIZE(expanded))?expanded:target;
+        const std::wstring expandedPath = ExistingTilePath(target);
+        LPCWSTR path = expandedPath.c_str();
         SHFILEINFOW sfi{};
         if (SHGetFileInfoW(path,0,&sfi,sizeof(sfi),SHGFI_ICON|SHGFI_SHELLICONSIZE)&&sfi.hIcon)
             return sfi.hIcon;
@@ -13932,16 +14005,24 @@ static bool IsUsableTileFileTarget(const std::wstring& path) {
                                 IID_PPV_ARGS(&link))) || !link) return false;
     ComPtr<IPersistFile> persist;
     if (FAILED(link.As(&persist)) || !persist || FAILED(persist->Load(path.c_str(), STGM_READ))) return false;
+    // Resolve can fail in a 32-bit process before it returns a native System32
+    // target. Accept only a verified existing native-view path in that case.
+    if (RunningUnderWow64()) {
+        wchar_t raw[32768]{};
+        if (SUCCEEDED(link->GetPath(raw, ARRAYSIZE(raw), nullptr, SLGP_RAWPATH)) && raw[0]) {
+            std::wstring native = NativeTilePath(raw);
+            if (!native.empty() && native != ExpandTilePath(raw) &&
+                GetFileAttributesW(native.c_str()) != INVALID_FILE_ATTRIBUTES) return true;
+        }
+    }
     const DWORD resolveFlags = SLR_NO_UI | SLR_NOUPDATE | SLR_NOSEARCH | SLR_NOTRACK | (400u << 16);
     if (FAILED(link->Resolve(nullptr, resolveFlags))) return false;
 
     wchar_t target[32768]{};
     WIN32_FIND_DATAW findData{};
     if (SUCCEEDED(link->GetPath(target, ARRAYSIZE(target), &findData, SLGP_RAWPATH)) && target[0]) {
-        wchar_t expanded[32768]{};
-        const DWORD n = ExpandEnvironmentStringsW(target, expanded, ARRAYSIZE(expanded));
-        const wchar_t* resolved = (n && n <= ARRAYSIZE(expanded)) ? expanded : target;
-        return GetFileAttributesW(resolved) != INVALID_FILE_ATTRIBUTES;
+        const std::wstring resolved = ExistingTilePath(target);
+        return GetFileAttributesW(resolved.c_str()) != INVALID_FILE_ATTRIBUTES;
     }
 
     PIDLIST_ABSOLUTE pidl = nullptr;
@@ -15315,7 +15396,7 @@ static void DrawWeatherLogo(HDC dc, const RECT& rc) {
     const float side = (float)(std::min)(rc.right - rc.left, rc.bottom - rc.top);
     const float x = (float)rc.left + ((rc.right - rc.left) - side) * 0.5f;
     const float y = (float)rc.top + ((rc.bottom - rc.top) - side) * 0.5f;
-    if (DrawEmbeddedTileIcon(g, kIconWeather, sizeof(kIconWeather), x, y, side)) return;
+    if (DrawEmbeddedTileIcon(g_embeddedIconCache, g, kIconWeather, sizeof(kIconWeather), x, y, side)) return;
     g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     g.TranslateTransform((Gdiplus::REAL)rc.left,(Gdiplus::REAL)rc.top);
     g.ScaleTransform((rc.right-rc.left)/64.0f,(rc.bottom-rc.top)/64.0f);
@@ -17659,6 +17740,11 @@ private:
     POINT dragPointer_{};        // last pointer position while a tile is lifted.
     bool tileAnimActive_ = false;      // TIMER_TILE_ANIM currently running
     ULONGLONG tileAnimLastTick_ = 0;   // tick of the previous animation frame
+    // Aggregated only during a drag; no per-frame logging on the UI thread.
+    unsigned dragPaintFrames_ = 0, dragTilesPainted_ = 0, dragReflows_ = 0;
+    LONGLONG dragPaintTicks_ = 0, dragPaintMaxTicks_ = 0;
+    LONGLONG dragTilesTicks_ = 0, dragTilesMaxTicks_ = 0, dragReflowMaxTicks_ = 0;
+    LARGE_INTEGER dragFrequency_{};
 
     UniqueFont fontNormal_;
     UniqueFont fontLight_;
@@ -18107,6 +18193,13 @@ private:
                 }
                 if (tileDragCandidate_) {
                     bool dragged=tileDragging_; int grp=dragGroup_, idx=dragTile_;
+                    if (dragged && dragFrequency_.QuadPart > 0 && dragPaintFrames_) {
+                        const double ms = 1000.0 / static_cast<double>(dragFrequency_.QuadPart);
+                        Wh_Log(L"[TileDragPerf] frames=%u render_avg=%.2f render_max=%.2f tile_avg=%.2f tile_max=%.2f ms tiles_avg=%.1f reflows=%u reflow_max=%.2f ms",
+                               dragPaintFrames_, dragPaintTicks_ * ms / dragPaintFrames_, dragPaintMaxTicks_ * ms,
+                               dragTilesTicks_ * ms / dragPaintFrames_, dragTilesMaxTicks_ * ms,
+                               static_cast<double>(dragTilesPainted_) / dragPaintFrames_, dragReflows_, dragReflowMaxTicks_ * ms);
+                    }
                     // Captured while the tile is still lifted: once the drag
                     // state is cleared it glides from the pointer into its slot
                     // instead of snapping there.
@@ -18439,8 +18532,12 @@ private:
             dragTile_ >= 0 && dragTile_ < static_cast<int>(layout_.groups[dragGroup_].tiles.size())) {
             const int dragThreshold = metrics_.Scale(6);
             if (!tileDragging_ &&
-                (std::abs(x - dragStart_.x) > dragThreshold || std::abs(y - dragStart_.y) > dragThreshold))
+                (std::abs(x - dragStart_.x) > dragThreshold || std::abs(y - dragStart_.y) > dragThreshold)) {
                 tileDragging_ = true;
+                dragPaintFrames_ = dragTilesPainted_ = dragReflows_ = 0;
+                dragPaintTicks_ = dragPaintMaxTicks_ = dragTilesTicks_ = dragTilesMaxTicks_ = dragReflowMaxTicks_ = 0;
+                QueryPerformanceFrequency(&dragFrequency_);
+            }
             if (tileDragging_) {
                 // The lifted tile follows the pointer: repaint the area it is
                 // leaving and the one it now covers, not the whole grid.
@@ -18490,12 +18587,19 @@ private:
                         // neighbours pushed aside by the drop glide to their new
                         // slot instead of appearing there.
                         const std::vector<POINT> beforeReflow = CaptureTileRenderPositions(dragGroup_);
-                        if (ApplyDraggedTilePlacement(dragGroup_, dragTile_, wantedCol, wantedRow))
-                            StartTileGlide(dragGroup_, beforeReflow);
-                        RECT client{};
-                        if (GetClientRect(hwnd_.get(), &client)) {
-                            RECT tileViewport{leftW, 0, client.right, client.bottom};
-                            InvalidateRect(hwnd_.get(), &tileViewport, FALSE);
+                        LARGE_INTEGER reflowStart{}, reflowEnd{};
+                        QueryPerformanceCounter(&reflowStart);
+                        const bool placed = ApplyDraggedTilePlacement(dragGroup_, dragTile_, wantedCol, wantedRow);
+                        if (placed) StartTileGlide(dragGroup_, beforeReflow);
+                        QueryPerformanceCounter(&reflowEnd);
+                        ++dragReflows_;
+                        dragReflowMaxTicks_ = (std::max)(dragReflowMaxTicks_, reflowEnd.QuadPart - reflowStart.QuadPart);
+                        if (placed) {
+                            RECT client{};
+                            if (GetClientRect(hwnd_.get(), &client)) {
+                                RECT tileViewport{leftW, 0, client.right, client.bottom};
+                                InvalidateRect(hwnd_.get(), &tileViewport, FALSE);
+                            }
                         }
                     }
                 }
@@ -19720,6 +19824,9 @@ private:
         std::rotate(searchResults_.begin(),searchResults_.begin()+ordinaryResults,searchResults_.end());
     }
     void Render(HDC hdc, const RECT& rcPaint) {
+        LARGE_INTEGER renderStart{}, tilesStart{}, tilesEnd{}, renderEnd{};
+        const bool measureDrag = tileDragging_ && dragFrequency_.QuadPart > 0;
+        if (measureDrag) QueryPerformanceCounter(&renderStart);
         RECT rcClient{};
         GetClientRect(hwnd_.get(), &rcClient);
 
@@ -19757,16 +19864,29 @@ private:
         FrameRect(renderDc_.get(), &rcClient, borderBrush.get());
 
         ScopedBkMode sBk(renderDc_.get(), TRANSPARENT);
-        DrawLeftColumn(renderDc_.get(), rcLeft);
+        RECT dirtyLeft{};
+        if (IntersectRect(&dirtyLeft, &rcLeft, &rcPaint)) DrawLeftColumn(renderDc_.get(), rcLeft);
 
         RECT rcRight = { leftW, 0, rcClient.right, rcClient.bottom };
+        if (measureDrag) QueryPerformanceCounter(&tilesStart);
         DrawTiles(renderDc_.get(), rcRight);
+        if (measureDrag) QueryPerformanceCounter(&tilesEnd);
         DrawDragPreview(renderDc_.get());
         if (!savedDc) SelectClipRgn(renderDc_.get(), nullptr);
 
         BitBlt(hdc, rcPaint.left, rcPaint.top,
                rcPaint.right - rcPaint.left, rcPaint.bottom - rcPaint.top,
                renderDc_.get(), rcPaint.left, rcPaint.top, SRCCOPY);
+        if (measureDrag) {
+            QueryPerformanceCounter(&renderEnd);
+            const LONGLONG renderTicks = renderEnd.QuadPart - renderStart.QuadPart;
+            const LONGLONG tilesTicks = tilesEnd.QuadPart - tilesStart.QuadPart;
+            ++dragPaintFrames_;
+            dragPaintTicks_ += renderTicks;
+            dragTilesTicks_ += tilesTicks;
+            dragPaintMaxTicks_ = (std::max)(dragPaintMaxTicks_, renderTicks);
+            dragTilesMaxTicks_ = (std::max)(dragTilesMaxTicks_, tilesTicks);
+        }
     }
 
     bool DrawCircularProfilePhoto(HDC hdc, Gdiplus::Bitmap* source,
@@ -20510,7 +20630,7 @@ private:
 
             RECT rcHead{ gx, gy, gx + groupW, gy + headerH };
             RECT visibleHeader{};
-            if (headerH > 0 && IntersectRect(&visibleHeader, &rcHead, &rcRight)) {
+            if (headerH > 0 && IntersectRect(&visibleHeader, &rcHead, &rcRight) && RectVisible(hdc, &rcHead)) {
                 ScopedSelectObject sFont(hdc, fontTitle_.get());
                 ScopedTextColor sCol(hdc, (hoverArea_ == 4 && hoverGroup_ == static_cast<int>(gi))
                     ? RGB(255, 255, 255) : RGB(215, 215, 215));
@@ -20529,6 +20649,13 @@ private:
                 OffsetRect(&rcTile, TileAnimOffset(tile.animOffsetX), TileAnimOffset(tile.animOffsetY));
                 RECT visibleTile{};
                 if (!IntersectRect(&visibleTile, &rcTile, &rcRight)) continue;
+                RECT paintBounds = rcTile;
+                // Include possible enlargement and antialiasing beyond the slot.
+                const int inflateX = (std::max)(metrics_.Scale(8), (int)((rcTile.right - rcTile.left) * 0.12f));
+                const int inflateY = (std::max)(metrics_.Scale(8), (int)((rcTile.bottom - rcTile.top) * 0.12f));
+                InflateRect(&paintBounds, inflateX, inflateY);
+                if (!RectVisible(hdc, &paintBounds)) continue;
+                if (tileDragging_) ++dragTilesPainted_;
                 const bool isHovered = hoverArea_ == 3 && hoverGroup_ == static_cast<int>(gi) &&
                                        hoverIndex_ == static_cast<int>(ti);
                 const TileColors colors = tile.available
@@ -20552,6 +20679,10 @@ private:
         if (!GetTileDrawRect(dragGroup_, dragTile_, rcTile)) return;
         RECT visibleTile{};
         if (!IntersectRect(&visibleTile, &rcTile, &rcRight)) return;
+        RECT paintBounds = rcTile;
+        InflateRect(&paintBounds, metrics_.Scale(12), metrics_.Scale(12));
+        if (!RectVisible(hdc, &paintBounds)) return;
+        ++dragTilesPainted_;
 
         Tile& tile = tiles[dragTile_];
         const TileColors colors = tile.available
@@ -22217,6 +22348,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     })
     Wh_Log(L"[UI] teardown: releasing icon bitmap cache (%u entries)",
            g_iconBitmapCache ? (unsigned)g_iconBitmapCache->size() : 0u);
+    g_embeddedIconCache.reset();
     g_iconBitmapCache.reset(); // GDI+ bitmaps destroyed before GdiplusShutdown
     Wh_Log(L"[UI] teardown: releasing stock icons");
     if (g_stockFolderIcon) { DestroyIcon(g_stockFolderIcon); g_stockFolderIcon=nullptr; }
