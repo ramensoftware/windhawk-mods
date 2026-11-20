@@ -7,7 +7,7 @@
 // @github          https://github.com/Dev-StudioCode
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lshlwapi
+// @compilerOptions -lole32 -loleaut32 -lshlwapi -luuid
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -114,6 +114,20 @@ static const CLSID CLSID_VirtualDesktopNotificationService = {
     0x4A09,
     0x464C,
     {0xAE, 0x4E, 0x1B, 0x9C, 0x21, 0xB8, 0x49, 0x18}};
+
+// IID_IUnknown: {00000000-0000-0000-C000-000000000046}
+static const IID IID_IUnknown_Local = {
+    0x00000000,
+    0x0000,
+    0x0000,
+    {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
+
+// IID_IServiceProvider: {6D5140C1-7436-11CE-8034-00AA006009FA}
+static const IID IID_IServiceProvider_Local = {
+    0x6D5140C1,
+    0x7436,
+    0x11CE,
+    {0x80, 0x34, 0x00, 0xAA, 0x00, 0x60, 0x09, 0xFA}};
 
 // IID_IVirtualDesktopNotificationService:
 // {0CD45E71-D927-4F15-8B0A-8FEF525337BF}
@@ -567,7 +581,7 @@ public:
                                            void **ppvObject) override {
     if (!ppvObject)
       return E_POINTER;
-    if (riid == IID_IUnknown || riid == IID_IVirtualDesktopNotification) {
+    if (riid == IID_IUnknown_Local || riid == IID_IVirtualDesktopNotification) {
       *ppvObject = static_cast<IVirtualDesktopNotification *>(this);
       AddRef();
       return S_OK;
@@ -736,7 +750,7 @@ BOOL Wh_ModInit() {
   IServiceProvider *pServiceProvider = nullptr;
   HRESULT hr = CoCreateInstance(
       CLSID_ImmersiveShell, nullptr, CLSCTX_LOCAL_SERVER | CLSCTX_INPROC_SERVER,
-      IID_IServiceProvider, (void **)&pServiceProvider);
+      IID_IServiceProvider_Local, (void **)&pServiceProvider);
 
   if (FAILED(hr) || !pServiceProvider) {
     Wh_Log(L"Failed to obtain ImmersiveShell IServiceProvider: 0x%08X", hr);
