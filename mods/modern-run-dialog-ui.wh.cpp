@@ -2,8 +2,8 @@
 // @id              modern-run-dialog-ui
 // @name            Modern Run Dialog UI For Windows 10 & 11
 // @name:vi-VN      Giao diện Hộp thoại Run Hiện đại cho Windows 10 & 11
-// @description     Replaces the classic Win + R dialog with a floating Liquid Glass / Fluent pill launcher, Compact Mini-Pill mode, instant calculator, multi-language Google Translate, and smart app suggestions.
-// @description:vi-VN Làm mới hộp thoại Run (Win + R) với giao diện viên thuốc nổi Liquid Glass / Fluent hiện đại, chế độ thu nhỏ siêu gọn, tính toán nhanh, dịch đa ngôn ngữ (Google Dịch) và gợi ý ứng dụng.
+// @description     Replaces the Win + R and Task Manager "Run new task" dialogs with a modern launcher: 13 themes, a Settings window, custom colors and GIF backgrounds, Compact mode, pinning, aliases, a calculator and app suggestions.
+// @description:vi-VN Thay hộp thoại Win + R và Tạo tác vụ mới trong Task Manager bằng giao diện hiện đại: 13 chủ đề, cửa sổ Cài đặt, tùy chỉnh màu và hình nền GIF, chế độ thu nhỏ, ghim lệnh, bí danh, máy tính nhanh và gợi ý ứng dụng.
 // @version         6.0.1.0
 // @author          caotu2005
 // @github          https://github.com/caotu2005
@@ -21,27 +21,27 @@
 > - **🌐 English:** Like all Windhawk mods, this mod is compiled locally into an unsigned `.dll` file and loaded into `explorer.exe`. If Windows **Smart App Control** is active on your PC, Windows will block the compiled `.dll` and the mod will not load. See [Windhawk's documentation and guidance on Smart App Control](https://github.com/ramensoftware/windhawk/issues/696) for details.
 > - **🇻🇳 Tiếng Việt:** Giống như mọi bản mod trên Windhawk, mod này được biên dịch cục bộ thành tệp `.dll` không có chữ ký số để nạp vào `explorer.exe`. Nếu máy đang bật **Smart App Control (Kiểm soát Ứng dụng Thông minh)**, Windows sẽ chặn tệp `.dll` này khiến mod không thể hoạt động. Xem thêm [hướng dẫn và thảo luận chính thức của Windhawk về Smart App Control](https://github.com/ramensoftware/windhawk/issues/696).
 
-![Modern Run Dialog UI Preview (Minimal Mode)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/modernrun/6010compact.png)
+![Modern Run Dialog UI Preview (Minimal Mode)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/5.0.104/50104minimalmode.png)
 
 *Compact Mini-Pill Mode*
 
-![Modern Run Dialog UI Preview (Liquid Glass)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/modernrun/6010liquidglass.png)
+![Modern Run Dialog UI Preview (Liquid Glass)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/5.0.104/50104liquidglass.png)
 
 *Liquid Glass mode*
 
-![Modern Run Dialog UI Preview (Windows Blur)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/modernrun/6010windowsblur.png)
+![Modern Run Dialog UI Preview (Windows Blur)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/5.0.104/50104windowsblur.png)
 
 *Windows 11 Blur mode*
 
-![Modern Run Dialog UI Preview (App Suggestions)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/modernrun/6010appsuggestion.png)
+![Modern Run Dialog UI Preview (App Suggestions)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/5.0.104/50104recommendprogram.png)
 
 *App & command suggestions*
 
-![Modern Run Dialog UI Preview (Google Search)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/modernrun/6010googlesearch.png)
+![Modern Run Dialog UI Preview (Google Search)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/5.0.104/50104googlesearch.png)
 
 *Google Search (`google:`)*
 
-![Modern Run Dialog UI Preview (Menu Mod)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/modernrun/6010appsettings.png)
+![Modern Run Dialog UI Preview (Menu Mod)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/5.0.104/50104menumod.png)
 
 *In-App Settings*
 
