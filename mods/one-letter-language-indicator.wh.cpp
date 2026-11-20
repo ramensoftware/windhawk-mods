@@ -2,7 +2,7 @@
 // @id              one-letter-language-indicator
 // @name            1 Letter Language Indicator
 // @description     Shortens the taskbar language indicator ("ENG", "ENG (US)") to a single letter ("E")
-// @version         1.0
+// @version         1.1
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
@@ -32,6 +32,10 @@ text is restored when the mod is disabled.
 
 - **Letter size**: the font size of the letter. Set it to 0 to keep the
   Windows size (12).
+- **Letter weight**: the font weight of the letter, from 1 to 999, e.g. 300
+  (Light), 400 (Normal), 600 (Semi Bold) or 700 (Bold). Set it to 0 to keep the
+  Windows weight (400). The taskbar font, Segoe UI Variable, renders weights
+  from 300 to 700, so values outside that range look like 300 or 700.
 - **Letter color**: separate colors for light mode and dark mode, chosen by the
   taskbar's theme (the Windows mode). Each one can be:
   - A hex color (`#RRGGBB` or `#AARRGGBB`) or a color name (`Red`, `White`).
@@ -53,8 +57,8 @@ text is restored when the mod is disabled.
 - Other mods may set the same properties. "Taskbar tray icon spacing and grid"
   sets the width of the language indicator: while **Indicator width** is set,
   this mod's width wins. Windows 11 Taskbar Styler themes which change the font
-  size or color of the indicator conflict with **Letter size** and **Letter
-  color**, and whichever mod applies last wins. To let the other mod control a
+  size, weight or color of the indicator conflict with **Letter size**,
+  **Letter weight** and **Letter color**, and whichever mod applies last wins. To let the other mod control a
   property, set the matching setting to 0 (or leave the color empty).
 
 ## Target
@@ -74,6 +78,12 @@ Only Windows 11 is supported.
   $name: Letter size
   $description: >-
     Font size of the letter. Set to 0 to keep the Windows default size (12).
+- fontWeight: 0
+  $name: Letter weight
+  $description: >-
+    Font weight of the letter, from 1 to 999: 100 Thin, 200 Extra Light,
+    300 Light, 400 Normal, 500 Medium, 600 Semi Bold, 700 Bold, 800 Extra Bold,
+    900 Black. Set to 0 to keep the Windows default weight (400).
 - textColor:
   - light: ""
     $name: Light mode
@@ -101,6 +111,7 @@ Only Windows 11 is supported.
 
 #include <windhawk_utils.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cwctype>
 #include <functional>
@@ -114,6 +125,7 @@ Only Windows 11 is supported.
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Data.h>
@@ -133,6 +145,7 @@ using winrt::Windows::UI::ViewManagement::UISettings;
 
 struct {
     int fontSize;
+    int fontWeight;
     std::wstring textColorLight;
     std::wstring textColorDark;
     int verticalOffset;
@@ -697,6 +710,23 @@ ComputeOverride_t MakeDoubleOverride(double desiredValue) {
     };
 }
 
+ComputeOverride_t MakeFontWeightOverride(uint16_t desiredWeight) {
+    return [desiredWeight](const DependencyObject&,
+                           const WinrtInspectable& value) -> WinrtInspectable {
+        // A null or unexpected value unboxes to weight 0, which never equals a
+        // desired weight (1-999).
+        auto currentWeight =
+            winrt::unbox_value_or<winrt::Windows::UI::Text::FontWeight>(value,
+                                                                         {});
+        if (currentWeight.Weight == desiredWeight) {
+            return nullptr;
+        }
+
+        return winrt::box_value(
+            winrt::Windows::UI::Text::FontWeight{desiredWeight});
+    };
+}
+
 // Picks the light or dark mode color by the TextBlock's theme, which follows
 // the taskbar (the Windows mode), not the apps mode.
 WinrtInspectable ComputeForeground(const DependencyObject& element,
@@ -785,6 +815,12 @@ void TrackLanguageIndicator(FrameworkElement languageTextIconContent) {
     if (g_settings.fontSize > 0) {
         TrackProperty(innerTextBlock, Controls::TextBlock::FontSizeProperty(),
                       MakeDoubleOverride(g_settings.fontSize));
+    }
+
+    if (g_settings.fontWeight > 0) {
+        TrackProperty(innerTextBlock, Controls::TextBlock::FontWeightProperty(),
+                      MakeFontWeightOverride(
+                          static_cast<uint16_t>(g_settings.fontWeight)));
     }
 
     if (!g_settings.textColorLight.empty() ||
@@ -967,6 +1003,9 @@ void LoadSettings() {
     if (g_settings.fontSize < 0) {
         g_settings.fontSize = 0;
     }
+
+    // XAML accepts weights from 1 to 999.
+    g_settings.fontWeight = std::clamp(Wh_GetIntSetting(L"fontWeight"), 0, 999);
 
     g_settings.textColorLight = GetTrimmedStringSetting(L"textColor.light");
     g_settings.textColorDark = GetTrimmedStringSetting(L"textColor.dark");
