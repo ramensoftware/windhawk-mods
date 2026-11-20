@@ -10,7 +10,7 @@
 // @include         StartMenuExperienceHost.exe
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -ladvapi32 -ldwmapi -lpsapi -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -luser32
+// @compilerOptions -ladvapi32 -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -luser32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -69,7 +69,7 @@ Right‑click the groups in Start → **Customize Start Groups** (also added to 
 
 Start apps are picked by name with suggestions from the apps in Start; programs have a file picker. Groups and items can be duplicated, and an app can be added on its own, without a group. **Import** / **Export** at the bottom of the navigation pane save all settings to, or load them from, a JSON file.
 
-The window is hosted by File Explorer — the mod also loads into `explorer.exe` for this, and does nothing else there — because the Start menu process can't host one. It edits the same settings as Windhawk; since Windhawk keeps them in a protected registry key, **Save** shows an administrator (UAC) prompt, and Start updates right after. The portable version of Windhawk isn't supported by the window.
+The window is hosted by File Explorer — the mod also loads into `explorer.exe` for this, and does nothing else there — because the Start menu process can't host one. It edits the same settings as Windhawk. Windhawk keeps them in a protected registry key, so **Save** shows an administrator (UAC) prompt for Windows PowerShell, which imports the new settings, and Start updates right after. The import checks that the settings file is exactly the one the window wrote, so no other program can change what gets saved. If the settings were changed in Windhawk while the window was open, **Save** asks before replacing them. The portable version of Windhawk isn't supported by the window.
 
 ## Tile size and apps in the tile
 
@@ -84,9 +84,19 @@ A group can also hide its app names, its group name, or its tile background (no 
 
 Colors are `#RRGGBB` or `#AARRGGBB`. Leave a color empty to follow the Windows theme and match Start.
 
+## Network access
+
+The mod doesn't connect to the internet by itself, and the default settings don't contact any server: the default websites show a globe icon.
+
+An icon set to an image link (`http://` or `https://`, such as a website's favicon) is downloaded from that address by Windows' XAML image loader: a normal web request for the image, which sends your IP address and a user agent to that server. It happens when Start builds the tiles (when the mod loads, on a theme or settings change, and when a group is opened), and when the settings window shows the item. To avoid it, leave the icon empty or use a local file, a Fluent icon code or an emoji.
+
+## Compatibility
+
+The mod reaches Start's UI directly, without XAML diagnostics, so it works alongside mods and tools that use them, such as Windows 11 Start Menu Styler.
+
 ## Language
 
-The mod finds Start's sections by their English titles (*Pinned*, *Recommended* / *Recent*, *All*) and adds *Customize Start Groups* after *Start settings* in Start's right‑click menu, so it's designed for Windows in English.
+The groups are placed next to Start's pinned list, found by its element name, so they show in any display language. Two things go by Start's English titles: hiding Start's sections (*Pinned*, *Recommended* / *Recent*, *All*), and adding *Customize Start Groups* after *Start settings* in Start's own right‑click menu. In other languages, open the settings window by right‑clicking the groups instead.
 
 ## Default configuration
 
@@ -266,22 +276,18 @@ Empty groups are hidden. None of Start's own sections are hidden by default. Eve
       - - type: website
         - label: "YouTube"
         - path: "https://youtube.com/"
-        - icon: "https://www.youtube.com/s/desktop/cb518cf3/img/favicon_144x144.png"
       - - type: website
         - label: "ChatGPT"
         - path: "https://chatgpt.com/"
-        - icon: "https://chatgpt.com/cdn/assets/favicon-180x180.9e0103ce69.png"
       - - type: website
         - label: "Example"
         - path: "https://example.com/"
       - - type: website
         - label: "Google"
         - path: "https://google.com/"
-        - icon: "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3c/Google_Favicon_2025.svg/1280px-Google_Favicon_2025.svg.png"
       - - type: website
         - label: "Reddit"
         - path: "https://reddit.com/"
-        - icon: "https://www.redditstatic.com/shreddit/assets/favicon/180x180.png"
       - - type: website
         - label: "dan13.me"
         - path: "https://dan13.me/?utm_source=start-menu-groups-link"
@@ -382,11 +388,10 @@ Empty groups are hidden. None of Start's own sections are hidden by default. Eve
 #include <windhawk_utils.h>
 
 #include <dwmapi.h>
-#include <psapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <shobjidl.h>
-#include <xamlOM.h>
+#include <wincrypt.h>
 
 #include <algorithm>
 #include <deque>
@@ -540,8 +545,6 @@ struct GroupSetting {
 struct ModSettings {
     LayoutConfig layout;
     std::vector<GroupSetting> groups;
-    std::vector<std::wstring> targets;
-    bool replaceCategoryView = false;  // no longer offered; always false
     // Where the groups go among Start's sections: afterPinned, beforePinned,
     // afterRecent or afterAll.
     std::wstring placement = L"beforePinned";
@@ -553,7 +556,6 @@ struct ModSettings {
     bool showPinned = true;
     bool showRecommended = true;
     bool showAllApps = true;
-    bool logElements = false;
 };
 std::mutex g_settingsMutex;
 ModSettings g_settings;
@@ -768,7 +770,6 @@ struct IconPixels {
 };
 
 struct Model {
-    bool enabled = true;
     LayoutConfig layout;
     std::vector<Group> groups;
     std::vector<AppEntry> allApps;  // every Start app (settings window picker)
@@ -784,36 +785,25 @@ std::map<std::pair<std::wstring, int>, std::shared_ptr<IconPixels>>
 // ---------------------------------------------------------------------------
 
 std::atomic<bool> g_unloading{false};
-// Which XAML framework hosts the Start UI. The redesigned Start menu may use
-// WinUI 3 (Microsoft.UI.Xaml.dll) instead of system XAML (Windows.UI.Xaml.dll).
-std::atomic<bool> g_isWinUI3{false};
-std::atomic<int> g_pendingThreads{0};
-wuc::CoreDispatcher g_dispatcher{nullptr};
-std::shared_ptr<Model> g_model;  // UI thread
+// The model of the groups in Start. Not XAML, but released on the UI thread
+// with everything else (Detach / UninstallStartUi), never at process exit.
+[[clang::no_destroy]] std::shared_ptr<Model> g_model;  // UI thread
 
+// Everything below holds XAML objects of Start's UI thread. They're released
+// there, by Detach and UninstallStartUi; [[clang::no_destroy]] keeps the
+// CRT from releasing them again at process exit, off the UI thread and after
+// XAML has shut down (Wh_ModUninit doesn't run then).
 struct Attachment {
+    // The pinned list's row in Start's header grid: the groups go around it.
     winrt::weak_ref<FrameworkElement> target;
     winrt::weak_ref<xc::Panel> parent;
     FrameworkElement host{nullptr};
-    double oldOpacity = 1;
-    double oldMaxHeight = 0;
-    bool oldHitTest = true;
-    bool replace = false;  // true: hide target; false: insert after it
-    // Manual layout, used when the parent is a React Native panel, which
-    // positions children itself and ignores ones it didn't create.
-    bool manual = false;
-    std::vector<std::pair<winrt::weak_ref<UIElement>, xm::Transform>> shifted;
-    winrt::weak_ref<FrameworkElement> scrollContent;
-    Thickness oldContentMargin{};
-    double appliedContentExtra = 0;
-    winrt::event_token layoutToken{};
     // Row inserted into Start's "TopLevelHeader" grid, or (afterAll) the
     // All list whose footer holds the groups, below that grid's rows.
     winrt::weak_ref<xc::Grid> rowGrid;
     int insertedRow = -1;
     winrt::weak_ref<xc::ListViewBase> footerList;
     winrt::weak_ref<xc::TextBlock> pinnedHeader;  // style source for heading
-    int64_t visibilityToken = 0;
     winrt::event_token themeToken{};
     // Start's own sections hidden by the "Show the ... section" settings,
     // with the visibility to restore.
@@ -834,11 +824,8 @@ struct Attachment {
     // fallback), to move the groups when it changes.
     std::wstring placement;
     winrt::event_token sizeToken{};
-} g_attach;
-
-// The most recently seen "Pinned" header, to re-attach after Start rebuilds
-// its tree (UI thread only).
-winrt::weak_ref<xc::TextBlock> g_lastPinnedHeader;
+};
+[[clang::no_destroy]] Attachment g_attach;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1003,21 +990,110 @@ std::shared_ptr<IconPixels> ExtractAppIcon(const std::wstring& source,
     return result;
 }
 
-void RunDetached(std::function<void()> fn) {
-    g_pendingThreads++;
-    std::thread([fn = std::move(fn)] {
-        HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED |
-                                                 COINIT_DISABLE_OLE1DDE);
-        try {
-            fn();
-        } catch (...) {
-            Wh_Log(L"Worker failed: %08X", winrt::to_hresult());
+// --- Worker threads -----------------------------------------------------------
+// Slow work (launching, the shell, icons, saving) runs on worker threads. Each
+// one's handle is kept, and Wh_ModUninit waits for all of them, with no time
+// limit, so no code of the mod is still running when it's unloaded. Long
+// waits in a worker also wait on g_stopEvent, set when the mod unloads.
+
+std::mutex g_workersMutex;
+std::vector<HANDLE> g_workers;  // under g_workersMutex
+HANDLE g_stopEvent = nullptr;   // manual reset; set by Wh_ModBeforeUninit
+
+// Waits up to `ms`; false if the mod is unloading.
+bool WaitOrStop(DWORD ms) {
+    return WaitForSingleObject(g_stopEvent, ms) == WAIT_TIMEOUT;
+}
+
+DWORD WINAPI WorkerThread(LPVOID param) {
+    std::unique_ptr<std::function<void()>> fn(
+        static_cast<std::function<void()>*>(param));
+    HRESULT hr =
+        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    try {
+        (*fn)();
+    } catch (...) {
+        Wh_Log(L"Worker failed: %08X", winrt::to_hresult());
+    }
+    fn.reset();
+    if (SUCCEEDED(hr)) {
+        CoUninitialize();
+    }
+    return 0;
+}
+
+void RunWorker(std::function<void()> fn) {
+    std::lock_guard lock(g_workersMutex);
+    if (g_unloading) {
+        return;
+    }
+    // Forget the ones that are done.
+    std::erase_if(g_workers, [](HANDLE h) {
+        if (WaitForSingleObject(h, 0) == WAIT_OBJECT_0) {
+            CloseHandle(h);
+            return true;
         }
-        if (SUCCEEDED(hr)) {
-            CoUninitialize();
+        return false;
+    });
+    auto* param = new std::function<void()>(std::move(fn));
+    HANDLE h = CreateThread(nullptr, 0, WorkerThread, param, 0, nullptr);
+    if (!h) {
+        delete param;
+        return;
+    }
+    g_workers.push_back(h);
+}
+
+// Waits for every worker to finish (Wh_ModUninit, after g_unloading is set,
+// so no new ones start).
+void JoinWorkers() {
+    for (;;) {
+        std::vector<HANDLE> handles;
+        {
+            std::lock_guard lock(g_workersMutex);
+            handles.swap(g_workers);
         }
-        g_pendingThreads--;
-    }).detach();
+        if (handles.empty()) {
+            return;
+        }
+        for (HANDLE h : handles) {
+            WaitForSingleObject(h, INFINITE);
+            CloseHandle(h);
+        }
+    }
+}
+
+// --- Running code on Start's UI thread ----------------------------------------
+// A message-only window of the mod on Start's UI thread (see InstallStartUi):
+// workers post to it, and its timer looks for Start's sections. Destroying it
+// (UninstallStartUi) drops whatever is still queued, so nothing of the mod
+// runs on that thread after the mod unloads.
+
+constexpr UINT kRunOnUiMsg = WM_APP + 30;  // lParam: std::function<void()>*
+constexpr UINT kUninstallMsg = WM_APP + 31;  // sent by Wh_ModUninit
+std::atomic<HWND> g_uiWnd{nullptr};
+
+// The mod's own flyouts in Start (opened groups, menus), to close them when
+// the mod unloads (UI thread).
+[[clang::no_destroy]] std::vector<winrt::weak_ref<xcp::FlyoutBase>> g_flyouts;
+
+void TrackFlyout(xcp::FlyoutBase const& fly) {
+    if (g_flyouts.size() > 64) {
+        std::erase_if(g_flyouts, [](auto& w) { return !w.get(); });
+    }
+    g_flyouts.push_back(winrt::make_weak(fly));
+}
+
+// Runs `fn` on Start's UI thread, later. Dropped if the mod is unloading.
+void PostToUi(std::function<void()> fn) {
+    HWND wnd = g_uiWnd;
+    if (!wnd || g_unloading) {
+        return;
+    }
+    auto* param = new std::function<void()>(std::move(fn));
+    if (!PostMessageW(wnd, kRunOnUiMsg, 0, (LPARAM)param)) {
+        delete param;
+    }
 }
 
 // A web address (http, https): a website's address or icon link.
@@ -1134,6 +1210,16 @@ bool IsStartOpen(HWND start) {
     return !cloaked;  // Start is cloaked while closed
 }
 
+// Whether a key or mouse button is held down.
+bool AnyKeyDown() {
+    for (int vk = 1; vk < 256; vk++) {
+        if (GetAsyncKeyState(vk) & 0x8000) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Start doesn't always close after launching an app: it stays open when
 // the app doesn't come to the front (e.g. Notepad, already running, opening
 // another window). So if it's still open a moment after a launch, close it
@@ -1141,7 +1227,7 @@ bool IsStartOpen(HWND start) {
 // prompt), and only while the normal desktop is in front (not the secure
 // desktop of the prompt).
 void CloseStartAfterLaunch(int seconds = 2) {
-    RunDetached([seconds] {
+    RunWorker([seconds] {
         HWND start = FindStartWindow();
         if (!start) {
             return;
@@ -1149,12 +1235,26 @@ void CloseStartAfterLaunch(int seconds = 2) {
         // Not sooner: Start closing by itself (its animation) can take a
         // moment, and the Start key would then open it again.
         for (int waited = 0; waited < seconds * 1000; waited += 250) {
-            Sleep(250);
+            if (!WaitOrStop(250)) {
+                return;  // the mod is unloading
+            }
             if (!IsStartOpen(start)) {
                 return;  // closed by itself
             }
-            if (waited < 500 || !GetForegroundWindow()) {
-                continue;  // give the app a moment; or a prompt is up
+            HWND fg = GetForegroundWindow();
+            DWORD fgPid = 0;
+            if (fg) {
+                GetWindowThreadProcessId(fg, &fgPid);
+            }
+            // Only while Start itself is in front (else it's closing on its
+            // own, or a prompt is up), and no key is held down, which the
+            // Win key press would turn into a Win+key shortcut.
+            if (waited < 500 || fgPid != GetCurrentProcessId() ||
+                AnyKeyDown()) {
+                continue;
+            }
+            if (!IsStartOpen(start)) {
+                return;
             }
             INPUT in[2] = {};
             in[0].type = in[1].type = INPUT_KEYBOARD;
@@ -1168,7 +1268,7 @@ void CloseStartAfterLaunch(int seconds = 2) {
 
 void ShellOpen(std::wstring target, std::wstring args = L"") {
     AllowLaunchedAppToFront();
-    RunDetached([target = ExpandEnv(target), args = ExpandEnv(args)] {
+    RunWorker([target = ExpandEnv(target), args = ExpandEnv(args)] {
         // Programs start in their own folder, like a shortcut would (not
         // web addresses).
         std::wstring dir;
@@ -1201,7 +1301,7 @@ void LaunchApp(const AppEntry& app) {
         // A Store app: activated like Explorer does, which also brings an
         // already running one to the front.
         AllowLaunchedAppToFront();
-        RunDetached([id = app.id, args = ExpandEnv(app.args)] {
+        RunWorker([id = app.id, args = ExpandEnv(app.args)] {
             winrt::com_ptr<IApplicationActivationManager> mgr;
             DWORD pid = 0;
             HRESULT hr = CoCreateInstance(CLSID_ApplicationActivationManager,
@@ -1294,7 +1394,7 @@ std::vector<std::wstring> AppShellVerbs(std::wstring const& id) {
 
 void InvokeAppShellVerb(std::wstring id, std::string verb) {
     AllowLaunchedAppToFront();
-    RunDetached([id, verb] {
+    RunWorker([id, verb] {
         HMENU menu = CreatePopupMenu();
         if (auto cm = AppsFolderContextMenu(id, menu)) {
             std::wstring verbW(verb.begin(), verb.end());
@@ -1323,7 +1423,7 @@ bool IsTaskbarVerb(std::string const& verb) {
 }
 
 void InvokeTaskbarVerb(std::wstring id, std::string verb) {
-    RunDetached([id, verb] {
+    RunWorker([id, verb] {
         HWND host =
             FindWindowExW(HWND_MESSAGE, nullptr, HostClassName(), nullptr);
         if (!host) {
@@ -1368,7 +1468,7 @@ xc::MenuFlyout BuildAppMenu(AppEntry const& app) {
     auto runAs = add(L"\uE7EF", L"Run as administrator", [app, program] {
         CloseStartAfterLaunch(15);  // after the administrator prompt
         if (program) {
-            RunDetached([path = ExpandEnv(app.path), args = ExpandEnv(app.args)] {
+            RunWorker([path = ExpandEnv(app.path), args = ExpandEnv(app.args)] {
                 SHELLEXECUTEINFOW sei{sizeof(sei)};
                 sei.fMask = SEE_MASK_NOASYNC;
                 sei.lpVerb = L"runas";
@@ -1384,7 +1484,7 @@ xc::MenuFlyout BuildAppMenu(AppEntry const& app) {
     auto location = add(L"\uE838", L"Open file location", [app, program] {
         CloseStartAfterLaunch();
         if (program) {
-            RunDetached([path = ExpandEnv(app.path)] {
+            RunWorker([path = ExpandEnv(app.path)] {
                 if (PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str())) {
                     SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
                     ILFree(pidl);
@@ -1451,6 +1551,7 @@ xc::MenuFlyout BuildAppMenu(AppEntry const& app) {
             g_appVerbs.erase(id);
         });
     }
+    TrackFlyout(menu);
     return menu;
 }
 
@@ -1589,7 +1690,8 @@ std::shared_ptr<Model> LoadModel() {
 
 void RebuildHostContent();
 
-std::unordered_map<std::wstring, xm::ImageSource> g_imageSources;
+[[clang::no_destroy]] std::unordered_map<std::wstring, xm::ImageSource>
+    g_imageSources;  // UI thread
 
 xm::ImageSource GetImageSource(const Model& model, const std::wstring& id) {
     auto cached = g_imageSources.find(id);
@@ -1788,6 +1890,7 @@ xc::Flyout BuildGroupFlyout(const Model& model, const Group& cat, int cols) {
         xc::Control::PaddingProperty(),
         winrt::box_value(ThicknessHelper::FromUniformLength(kFlyoutPad))));
     fly.FlyoutPresenterStyle(presenterStyle);
+    TrackFlyout(fly);
 
     xc::StackPanel root;
     root.Spacing(12);
@@ -2082,52 +2185,6 @@ FrameworkElement BuildTile(const Model& model,
 void ReloadAsync();
 void RequestSettingsWindow(int group = -1, int item = -1);
 
-std::wstring WindhawkExeFromUninstallKey() {
-    WCHAR dir[MAX_PATH];
-    DWORD size = sizeof(dir);
-    for (HKEY root : {HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER}) {
-        size = sizeof(dir);
-        if (RegGetValueW(
-                root,
-                L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\"
-                L"Windhawk",
-                L"InstallLocation", RRF_RT_REG_SZ, nullptr, dir,
-                &size) == ERROR_SUCCESS) {
-            std::wstring p = dir;
-            if (!p.empty() && p.back() == L'\\') {
-                p.pop_back();
-            }
-            p += L"\\windhawk.exe";
-            if (GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES) {
-                return p;
-            }
-        }
-    }
-    return L"";
-}
-
-// Windhawk's UI executable, derived from the engine DLL loaded into this
-// process: <install>\Engine\<version>\64\windhawk.dll -> <install>\windhawk.exe
-std::wstring GetWindhawkExePath() {
-    HMODULE engine = GetModuleHandleW(L"windhawk.dll");
-    WCHAR path[MAX_PATH];
-    if (!engine || !GetModuleFileNameW(engine, path, ARRAYSIZE(path))) {
-        return L"";
-    }
-    std::wstring p = path;
-    for (int i = 0; i < 4; i++) {  // strip file name + 3 directories
-        size_t slash = p.find_last_of(L'\\');
-        if (slash == std::wstring::npos) {
-            return L"";
-        }
-        p.resize(slash);
-    }
-    p += L"\\windhawk.exe";
-    return GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES
-               ? p
-               : WindhawkExeFromUninstallKey();
-}
-
 xc::MenuFlyoutItem MakeCustomizeMenuItem();
 
 // The menu of the groups area (right-click between the tiles): the same as
@@ -2149,6 +2206,7 @@ xc::MenuFlyout BuildContextMenu() {
     // The same item as added to Start's menu, with its tag: the code that
     // adds it there (AddToStartMenu) sees this menu has it already.
     menu.Items().Append(MakeCustomizeMenuItem());
+    TrackFlyout(menu);
     return menu;
 }
 
@@ -2363,10 +2421,8 @@ void ApplyColumns() {
         if (AnyWiderThan(*g_model, halves) ||
             AnyWiderThan(*g_model, g_attach.builtHalves)) {
             g_attach.builtHalves = halves;  // once per change
-            if (g_dispatcher) {
-                g_dispatcher.RunAsync(wuc::CoreDispatcherPriority::Normal,
-                                      [] { RebuildHostContent(); });
-            }
+            // Not from inside this layout pass.
+            PostToUi([] { RebuildHostContent(); });
             return;
         }
         g_attach.builtHalves = halves;
@@ -2484,149 +2540,9 @@ void RebuildHostContent() {
     ApplySectionVisibility();
 }
 
-void ApplyHiddenState(bool hide) {
-    auto target = g_attach.target.get();
-    if (!target || !g_attach.replace) {
-        return;
-    }
-    if (hide) {
-        target.Opacity(0);
-        target.IsHitTestVisible(false);
-        target.MaxHeight(0);
-    } else {
-        target.Opacity(g_attach.oldOpacity);
-        target.IsHitTestVisible(g_attach.oldHitTest);
-        target.MaxHeight(g_attach.oldMaxHeight);
-    }
-}
-
-// --- Manual layout inside React Native panels -------------------------------
-
+// Space above and below the groups, like between Start's own sections.
 constexpr double kGapTop = 24;
 constexpr double kGapBottom = 8;
-
-void RestoreShift(std::pair<winrt::weak_ref<UIElement>, xm::Transform>& s) {
-    if (auto el = s.first.get()) {
-        el.RenderTransform(s.second);
-    }
-}
-
-void RestoreManualLayout() {
-    for (auto& s : g_attach.shifted) {
-        RestoreShift(s);
-    }
-    g_attach.shifted.clear();
-    if (auto content = g_attach.scrollContent.get();
-        content && g_attach.appliedContentExtra != 0) {
-        content.Margin(g_attach.oldContentMargin);
-    }
-    g_attach.appliedContentExtra = 0;
-}
-
-// Positions the host under the Pinned section and pushes every section below
-// it down by the host's height. Idempotent; called on every layout pass.
-void Relayout() {
-    if (!g_attach.manual || !g_attach.host) {
-        return;
-    }
-    auto section = g_attach.target.get();
-    auto host = g_attach.host;
-    if (!section) {
-        return;
-    }
-
-    auto slot = xcp::LayoutInformation::GetLayoutSlot(section);
-    double hostX = slot.X + section.Margin().Left;
-    double hostY =
-        slot.Y + section.Margin().Top + section.ActualHeight() + kGapTop;
-    if (host.Width() != section.ActualWidth() && section.ActualWidth() > 0) {
-        host.Width(section.ActualWidth());
-    }
-    auto tt = host.RenderTransform().try_as<xm::TranslateTransform>();
-    if (!tt) {
-        tt = xm::TranslateTransform();
-        host.RenderTransform(tt);
-    }
-    if (tt.X() != hostX) {
-        tt.X(hostX);
-    }
-    if (tt.Y() != hostY) {
-        tt.Y(hostY);
-    }
-
-    double shift = host.Visibility() == Visibility::Visible
-                       ? host.ActualHeight() + kGapTop + kGapBottom
-                       : 0;
-
-    // Walk up to the scroll content; at each level, shift the siblings that
-    // start at or below the bottom of the branch containing the section.
-    auto content = g_attach.scrollContent.get();
-    std::vector<UIElement> wanted;
-    FrameworkElement node = section;
-    double within = section.ActualHeight();
-    for (int depth = 0; node && depth < 24 && node != content; depth++) {
-        auto p = xm::VisualTreeHelper::GetParent(node)
-                     .try_as<FrameworkElement>();
-        if (!p || p.try_as<xc::ScrollViewer>()) {
-            break;
-        }
-        auto s = xcp::LayoutInformation::GetLayoutSlot(node);
-        double bottomInP = s.Y + node.Margin().Top + within;
-        if (auto panel = p.try_as<xc::Panel>()) {
-            for (auto c : panel.Children()) {
-                if (c == node || c == host) {
-                    continue;
-                }
-                auto cfe = c.try_as<FrameworkElement>();
-                if (!cfe) {
-                    continue;
-                }
-                auto cs = xcp::LayoutInformation::GetLayoutSlot(cfe);
-                if (cs.Y + cfe.Margin().Top >= bottomInP - 1) {
-                    wanted.push_back(c);
-                }
-            }
-        }
-        within = bottomInP;
-        node = p;
-    }
-
-    // Drop shifts that are no longer wanted.
-    std::erase_if(g_attach.shifted, [&](auto& s) {
-        auto el = s.first.get();
-        bool keep = el && std::find(wanted.begin(), wanted.end(), el) !=
-                              wanted.end();
-        if (!keep) {
-            RestoreShift(s);
-        }
-        return !keep;
-    });
-    // Apply / update the wanted ones.
-    for (auto& el : wanted) {
-        auto it = std::find_if(
-            g_attach.shifted.begin(), g_attach.shifted.end(),
-            [&](auto& s) { return s.first.get() == el; });
-        if (it == g_attach.shifted.end()) {
-            g_attach.shifted.emplace_back(winrt::make_weak(el),
-                                          el.RenderTransform());
-            xm::TranslateTransform t;
-            t.Y(shift);
-            el.RenderTransform(t);
-        } else if (auto t = el.RenderTransform()
-                                .try_as<xm::TranslateTransform>();
-                   t && t.Y() != shift) {
-            t.Y(shift);
-        }
-    }
-
-    // Grow the scrollable area so the shifted content stays reachable.
-    if (content && std::abs(g_attach.appliedContentExtra - shift) > 0.5) {
-        auto m = g_attach.oldContentMargin;
-        m.Bottom += shift;
-        content.Margin(m);
-        g_attach.appliedContentExtra = shift;
-    }
-}
 
 void Detach() {
     auto target = g_attach.target.get();
@@ -2640,19 +2556,8 @@ void Detach() {
     if (g_attach.host && g_attach.sizeToken) {
         g_attach.host.LayoutUpdated(g_attach.sizeToken);
     }
-    if (g_attach.host && g_attach.layoutToken) {
-        g_attach.host.LayoutUpdated(g_attach.layoutToken);
-    }
-    RestoreManualLayout();
-    if (target) {
-        if (g_attach.visibilityToken) {
-            target.UnregisterPropertyChangedCallback(
-                UIElement::VisibilityProperty(), g_attach.visibilityToken);
-        }
-        if (g_attach.themeToken) {
-            target.ActualThemeChanged(g_attach.themeToken);
-        }
-        ApplyHiddenState(false);
+    if (target && g_attach.themeToken) {
+        target.ActualThemeChanged(g_attach.themeToken);
     }
     if (auto parent = g_attach.parent.get(); parent && g_attach.host) {
         uint32_t idx;
@@ -2688,30 +2593,16 @@ void Detach() {
     g_imageSources.clear();
 }
 
-void UpdateEnabledState() {
-    if (!g_attach.host) {
-        return;
-    }
-    bool enabled = g_model ? g_model->enabled : true;
-    auto target = g_attach.target.get();
-    ApplyHiddenState(enabled);
-    bool show = enabled && target &&
-                (!g_attach.replace ||
-                 target.Visibility() == Visibility::Visible);
-    g_attach.host.Visibility(show ? Visibility::Visible
-                                  : Visibility::Collapsed);
-}
-
 void ReloadAsync();
-void TryAttachAfterHeader(xc::TextBlock tb);
+void RequestScan();
 
 // --- Keeping the attachment valid ---------------------------------------------
 // Start rebuilds parts of its tree at runtime, e.g. when the "All" view is
-// switched between Grid / List / Group. The tree must never be changed from
-// inside the XAML diagnostics callback that reports such a change (XAML is in
-// the middle of changing it, and changing it again from there hangs and then
-// crashes Start), so every reaction is posted to the dispatcher, coalesced,
-// and checks what is actually there by then.
+// switched between Grid / List / Group. The elements the groups are attached
+// to then get Unloaded; the check runs later (posted, coalesced), once Start
+// is done changing its tree, and looks at what's actually there by then. If
+// the groups' place is gone, they're removed, and the next scan of Start's
+// tree (RequestScan) attaches them to the new one.
 
 bool g_validateQueued = false;  // UI thread only
 
@@ -2728,21 +2619,12 @@ void ValidateAttachment() {
             stale = !grid || xm::VisualTreeHelper::GetParent(target) != grid ||
                     !grid.Children().IndexOf(g_attach.host, idx) ||
                     !grid.IsLoaded();
-        } else if (auto list = g_attach.footerList.get();
-                   g_attach.rowGrid.get()) {
+        } else {
+            auto list = g_attach.footerList.get();
             stale = !list || list.Footer() != g_attach.host ||
                     !xm::VisualTreeHelper::GetParent(target) ||
                     !target.IsLoaded();
-        } else {
-            stale = !xm::VisualTreeHelper::GetParent(target) ||
-                    !target.IsLoaded();
         }
-    }
-    // A new "Pinned" header means Start built a new section list.
-    auto latest = g_lastPinnedHeader.get();
-    if (!stale && !g_attach.replace && latest &&
-        latest != g_attach.pinnedHeader.get() && latest.IsLoaded()) {
-        stale = true;
     }
     if (!stale) {
         // Start may have re-created the app list's panel; hide it again.
@@ -2750,26 +2632,18 @@ void ValidateAttachment() {
         return;
     }
     Wh_Log(L"Start's layout changed, attaching again");
-    bool replace = g_attach.replace;
     Detach();
-    if (!replace) {
-        if (auto header = g_lastPinnedHeader.get()) {
-            TryAttachAfterHeader(header);
-        }
-    }
+    RequestScan();
 }
 
 void ScheduleValidate() {
-    auto dispatcher = g_dispatcher;
-    if (g_validateQueued || !dispatcher || !g_attach.host) {
+    if (g_validateQueued || !g_attach.host) {
         return;
     }
     g_validateQueued = true;
-    dispatcher.RunAsync(wuc::CoreDispatcherPriority::Low, [] {
+    PostToUi([] {
         g_validateQueued = false;
-        if (!g_unloading) {
-            ValidateAttachment();
-        }
+        ValidateAttachment();
     });
 }
 
@@ -2781,200 +2655,28 @@ void WatchUnloaded(FrameworkElement const& el) {
     g_attach.unloadedTokens.emplace_back(winrt::make_weak(el), token);
 }
 
-void Attach(FrameworkElement target, bool replace) {
-    // Find the nearest ancestor (or self) whose parent is a Panel so we can
-    // insert our host next to it.
-    FrameworkElement node = target;
-    xc::Panel parent{nullptr};
-    while (node) {
-        auto p = xm::VisualTreeHelper::GetParent(node);
-        if (!p) {
-            break;
-        }
-        parent = p.try_as<xc::Panel>();
-        if (parent) {
-            break;
-        }
-        node = p.try_as<FrameworkElement>();
-    }
-    if (!parent || !node) {
-        Wh_Log(L"Target has no Panel ancestor, can't attach");
-        return;
-    }
-
-    bool insideScroller = false;
-    for (auto p = xm::VisualTreeHelper::GetParent(parent); p;
-         p = xm::VisualTreeHelper::GetParent(p)) {
-        if (p.try_as<xc::ScrollViewer>()) {
-            insideScroller = true;
-            break;
-        }
-    }
-
-    if (g_attach.host) {
-        Detach();
-    }
-
-    g_dispatcher = node.Dispatcher();
-    g_attach.replace = replace;
-    g_attach.target = node;
-    g_attach.parent = parent;
-    g_attach.oldOpacity = node.Opacity();
-    g_attach.oldHitTest = node.IsHitTestVisible();
-    g_attach.oldMaxHeight = node.MaxHeight();
-
-    FrameworkElement host{nullptr};
-    if (insideScroller) {
-        xc::Border b;
-        host = b;
-    } else {
-        xc::ScrollViewer sv;
-        sv.VerticalScrollBarVisibility(xc::ScrollBarVisibility::Auto);
-        sv.HorizontalScrollBarVisibility(xc::ScrollBarVisibility::Disabled);
-        host = sv;
-    }
-    host.Name(L"WindhawkStartMenuGroups");
-    auto m = node.Margin();
-    if (!replace) {
-        // Separate from the Pinned section like Start's own sections.
-        m.Top += 24;
-        m.Bottom += 8;
-    }
-    host.Margin(m);
-    host.HorizontalAlignment(HorizontalAlignment::Stretch);
-    host.VerticalAlignment(VerticalAlignment::Stretch);
-    xc::Grid::SetRow(host, xc::Grid::GetRow(node));
-    xc::Grid::SetColumn(host, xc::Grid::GetColumn(node));
-    xc::Grid::SetRowSpan(host, xc::Grid::GetRowSpan(node));
-    xc::Grid::SetColumnSpan(host, xc::Grid::GetColumnSpan(node));
-    g_attach.host = host;
-
-    // Built-in XAML panels lay our host out like any other child. Anything
-    // else (React Native's ViewPanel in Start) gets manual positioning.
-    std::wstring parentClass(winrt::get_class_name(parent));
-    g_attach.manual =
-        !replace && parentClass.rfind(L"Windows.UI.Xaml.", 0) != 0;
-    if (g_attach.manual) {
-        host.Margin({0, 0, 0, 0});
-        host.HorizontalAlignment(HorizontalAlignment::Left);
-        host.VerticalAlignment(VerticalAlignment::Top);
-        host.RenderTransform(xm::TranslateTransform());
-        for (auto p = xm::VisualTreeHelper::GetParent(parent); p;
-             p = xm::VisualTreeHelper::GetParent(p)) {
-            if (auto sv = p.try_as<xc::ScrollViewer>()) {
-                if (auto content = sv.Content().try_as<FrameworkElement>()) {
-                    g_attach.scrollContent = content;
-                    g_attach.oldContentMargin = content.Margin();
-                }
-                break;
-            }
-        }
-        g_attach.layoutToken =
-            host.LayoutUpdated([](auto&&, auto&&) { Relayout(); });
-    }
-
-    uint32_t idx = 0;
-    parent.Children().IndexOf(node, idx);
-    parent.Children().InsertAt(idx + 1, host);
-
-    if (replace) {
-        g_attach.visibilityToken = node.RegisterPropertyChangedCallback(
-            UIElement::VisibilityProperty(),
-            [](DependencyObject const&, DependencyProperty const&) {
-                UpdateEnabledState();
-            });
-    }
-    g_attach.themeToken = node.ActualThemeChanged(
-        [](auto&&, auto&&) { RebuildHostContent(); });
-    WatchUnloaded(node);
-
-    UpdateEnabledState();
-    if (g_model) {
-        RebuildHostContent();
-    } else {
-        ReloadAsync();
-    }
-    Wh_Log(L"Attached %s %s (parent %s, index %u)",
-           replace ? L"in place of" : L"after",
-           winrt::get_class_name(node).c_str(),
-           winrt::get_class_name(parent).c_str(), idx);
-}
-
 // Loads config + icons off the UI thread, then swaps the model in.
 std::atomic<int> g_reloadGeneration{0};
 
 void ReloadAsync() {
     int gen = ++g_reloadGeneration;
-    RunDetached([gen] {
+    RunWorker([gen] {
         auto model = LoadModel();
         if (!model || g_unloading || gen != g_reloadGeneration) {
             return;
         }
-        auto dispatcher = g_dispatcher;
-        if (!dispatcher) {
-            return;
-        }
-        dispatcher.RunAsync(wuc::CoreDispatcherPriority::Normal, [model] {
-            if (g_unloading) {
-                return;
-            }
+        PostToUi([model] {
             g_model = model;
-            UpdateEnabledState();
             RebuildHostContent();
         });
     });
 }
 
-// ---------------------------------------------------------------------------
-// XAML diagnostics (TAP) plumbing
-// ---------------------------------------------------------------------------
-
-bool MatchesTarget(const VisualElement& element) {
-    std::wstring_view name = element.Name ? element.Name : L"";
-    std::wstring_view type = element.Type ? element.Type : L"";
-    if (name == L"WindhawkStartMenuGroups") {
-        return false;
-    }
-    std::lock_guard lock(g_settingsMutex);
-    for (const auto& t : g_settings.targets) {
-        if (!t.empty() && (t == name || t == type)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-void OnTargetElement(FrameworkElement fe) {
-    if (g_attach.host && g_attach.target.get() == fe) {
-        return;
-    }
-    if (xm::VisualTreeHelper::GetParent(fe)) {
-        // Called from the diagnostics callback: change the tree only once
-        // XAML is done with the change that's being reported.
-        winrt::weak_ref<FrameworkElement> weak = fe;
-        fe.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Normal, [weak] {
-            auto el = weak.get();
-            if (el && !g_unloading && xm::VisualTreeHelper::GetParent(el) &&
-                !(g_attach.host && g_attach.target.get() == el)) {
-                Attach(el, true);
-            }
-        });
-        return;
-    }
-    auto token = std::make_shared<winrt::event_token>();
-    *token = fe.Loaded([token](wf::IInspectable const& sender, auto&&) {
-        auto el = sender.as<FrameworkElement>();
-        el.Loaded(*token);
-        if (!g_unloading) {
-            Attach(el, true);
-        }
-    });
-}
-
-// --- "After Pinned" placement ----------------------------------------------
-// Start's sections have no stable names, so the Pinned section is found from
-// its visible header text, then the section container is the nearest ancestor
-// that sits in a multi-child Panel and is taller than the header alone.
+// --- Placing the groups -------------------------------------------------------
+// Start's Pinned / Recommended / All headers and lists are rows of one Grid
+// ("TopLevelHeader"). It's found from the "Pinned" header text, or else from
+// the names of Start's pinned header and list (in any display language), see
+// FindPinnedHeader. The groups go in a row of their own there.
 
 bool IsPinnedHeaderText(std::wstring_view text) {
     std::lock_guard lock(g_settingsMutex);
@@ -3004,48 +2706,6 @@ void LogAncestors(FrameworkElement el) {
     }
 }
 
-// The scroll content (direct child of Start's main ScrollViewer) containing
-// the header, or null if the header isn't in a ScrollViewer.
-FrameworkElement FindScrollContent(FrameworkElement header) {
-    FrameworkElement node = header;
-    for (int depth = 0; node && depth < 40; depth++) {
-        auto p = xm::VisualTreeHelper::GetParent(node);
-        if (!p) {
-            break;
-        }
-        if (auto sv = p.try_as<xc::ScrollViewer>()) {
-            return sv.Content().try_as<FrameworkElement>();
-        }
-        node = p.try_as<FrameworkElement>();
-    }
-    return nullptr;
-}
-
-// The Pinned section: the highest ancestor of the header that sits inside
-// the scroll content, is in a multi-child Panel, and is clearly shorter than
-// the whole scrollable list (so it doesn't also contain Recent / All).
-// Never climbs out of the ScrollViewer, so the result scrolls with Start.
-FrameworkElement FindPinnedSection(FrameworkElement header,
-                                   FrameworkElement content) {
-    double total = content.ActualHeight();
-    FrameworkElement best{nullptr};
-    FrameworkElement node = header;
-    for (int depth = 0; node && node != content && depth < 40; depth++) {
-        auto parentObj = xm::VisualTreeHelper::GetParent(node);
-        if (!parentObj) {
-            break;
-        }
-        auto panel = parentObj.try_as<xc::Panel>();
-        if (panel && panel.Children().Size() >= 2 && node != header &&
-            node.ActualHeight() > header.ActualHeight() * 2 &&
-            node.ActualHeight() < total - 100) {
-            best = node;
-        }
-        node = parentObj.try_as<FrameworkElement>();
-    }
-    return best;
-}
-
 bool SubtreeHasName(DependencyObject root, std::wstring_view name, int depth) {
     if (auto fe = root.try_as<FrameworkElement>(); fe && fe.Name() == name) {
         return true;
@@ -3063,6 +2723,8 @@ bool SubtreeHasName(DependencyObject root, std::wstring_view name, int depth) {
     return false;
 }
 
+xc::Grid FindHeaderGrid(FrameworkElement el, FrameworkElement* branchOut);
+
 // Start's Pinned / Recent / All headers are rows of one Grid
 // ("TopLevelHeader", the header of the AllAppsGrid GridView). Insert a new
 // Auto row where the "Where to show the groups" setting says (before or
@@ -3070,21 +2732,8 @@ bool SubtreeHasName(DependencyObject root, std::wstring_view name, int depth) {
 // pushes everything below down and it all scrolls together. After All, the
 // groups go in the GridView's footer instead, below the whole app list.
 bool AttachInHeaderGrid(FrameworkElement header) {
-    xc::Grid grid{nullptr};
-    FrameworkElement branch = header;  // child of `grid` containing header
-    for (int depth = 0; branch && depth < 10; depth++) {
-        auto p = xm::VisualTreeHelper::GetParent(branch);
-        if (!p) {
-            break;
-        }
-        if (auto g = p.try_as<xc::Grid>();
-            g && (g.Name() == L"TopLevelHeader" ||
-                  g.RowDefinitions().Size() >= 3)) {
-            grid = g;
-            break;
-        }
-        branch = p.try_as<FrameworkElement>();
-    }
+    FrameworkElement branch{nullptr};  // child of `grid` containing header
+    auto grid = FindHeaderGrid(header, &branch);
     if (!grid) {
         Wh_Log(L"No header grid found above the Pinned header");
         return false;
@@ -3093,7 +2742,8 @@ bool AttachInHeaderGrid(FrameworkElement header) {
     // The row to insert after: the one holding the pinned list itself.
     FrameworkElement pinned{nullptr};
     for (auto c : grid.Children()) {
-        if (SubtreeHasName(c, L"PinnedList", 6)) {
+        if (SubtreeHasName(c, L"StartMenuPinnedList", 6) ||
+            SubtreeHasName(c, L"PinnedList", 6)) {
             pinned = c.try_as<FrameworkElement>();
             break;
         }
@@ -3175,9 +2825,6 @@ bool AttachInHeaderGrid(FrameworkElement header) {
 
     if (footerList) {
         footerList.Footer(host);
-        g_dispatcher = grid.Dispatcher();
-        g_attach.replace = false;
-        g_attach.manual = false;
         g_attach.target = pinned;
         g_attach.host = host;
         g_attach.rowGrid = grid;
@@ -3191,7 +2838,6 @@ bool AttachInHeaderGrid(FrameworkElement header) {
             [](auto&&, auto&&) { RebuildHostContent(); });
         WatchUnloaded(grid);
         WatchUnloaded(pinned);
-        UpdateEnabledState();
         if (g_model) {
             RebuildHostContent();
         } else {
@@ -3224,9 +2870,6 @@ bool AttachInHeaderGrid(FrameworkElement header) {
         host, std::max<int>(1, grid.ColumnDefinitions().Size()));
     grid.Children().Append(host);
 
-    g_dispatcher = grid.Dispatcher();
-    g_attach.replace = false;
-    g_attach.manual = false;
     g_attach.target = pinned;
     g_attach.parent = grid.as<xc::Panel>();
     g_attach.host = host;
@@ -3241,7 +2884,6 @@ bool AttachInHeaderGrid(FrameworkElement header) {
     WatchUnloaded(grid);
     WatchUnloaded(pinned);
 
-    UpdateEnabledState();
     if (g_model) {
         RebuildHostContent();
     } else {
@@ -3252,83 +2894,124 @@ bool AttachInHeaderGrid(FrameworkElement header) {
     return true;
 }
 
-bool IsInsideOurHost(DependencyObject el) {
-    for (int depth = 0; el && depth < 60;
-         el = xm::VisualTreeHelper::GetParent(el), depth++) {
-        if (auto fe = el.try_as<FrameworkElement>();
-            fe && fe.Name() == L"WindhawkStartMenuGroups") {
-            return true;
+// The header grid above `el` ("TopLevelHeader"), and its child that
+// contains `el`.
+xc::Grid FindHeaderGrid(FrameworkElement el, FrameworkElement* branchOut) {
+    FrameworkElement branch = el;
+    for (int depth = 0; branch && depth < 10; depth++) {
+        auto p = xm::VisualTreeHelper::GetParent(branch);
+        if (!p) {
+            break;
         }
+        if (auto g = p.try_as<xc::Grid>();
+            g && (g.Name() == L"TopLevelHeader" ||
+                  g.RowDefinitions().Size() >= 3)) {
+            if (branchOut) {
+                *branchOut = branch;
+            }
+            return g;
+        }
+        branch = p.try_as<FrameworkElement>();
     }
-    return false;
+    return nullptr;
 }
 
-void TryAttachAfterHeader(xc::TextBlock tb) {
-    if (!IsPinnedHeaderText(tb.Text())) {
-        return;
+// The first TextBlock with text in `root` (depth-limited).
+xc::TextBlock FindTextBlock(DependencyObject const& root, int depth) {
+    if (auto tb = root.try_as<xc::TextBlock>(); tb && !tb.Text().empty()) {
+        return tb;
     }
-    // Not a group of ours that happens to be named like the header.
-    if (xm::VisualTreeHelper::GetParent(tb) && IsInsideOurHost(tb)) {
-        return;
+    if (depth <= 0) {
+        return nullptr;
     }
-    g_lastPinnedHeader = tb;
-    if (g_attach.host) {
-        // Already attached: if this is a new header, Start rebuilt its
-        // sections, so check (later) whether we're still in the live tree.
-        if (g_attach.pinnedHeader.get() != tb) {
-            ScheduleValidate();
+    int n = xm::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < n; i++) {
+        if (auto tb =
+                FindTextBlock(xm::VisualTreeHelper::GetChild(root, i), depth - 1)) {
+            return tb;
         }
-        return;
     }
-    Wh_Log(L"Found Pinned header");
-    // Wait until Start has laid out its sections so the heights used to pick
-    // the section are real; poll briefly since React Native lays out late.
-    winrt::weak_ref<xc::TextBlock> weak = tb;
-    auto timer = DispatcherTimer();
-    timer.Interval(std::chrono::milliseconds(200));
-    auto tries = std::make_shared<int>(0);
-    timer.Tick([weak, tries](wf::IInspectable const& sender, auto&&) {
-        auto t = sender.as<DispatcherTimer>();
-        auto tb = weak.get();
-        if (!tb || g_unloading || g_attach.host || ++*tries > 50) {
-            t.Stop();
-            return;
-        }
-        if (!xm::VisualTreeHelper::GetParent(tb) || !tb.IsLoaded()) {
-            return;  // Not in the (live) tree yet.
-        }
-        t.Stop();
-        if (!AttachInHeaderGrid(tb)) {
-            LogAncestors(tb);
-        }
-    });
-    timer.Start();
+    return nullptr;
 }
 
-void OnTextBlockAdded(xc::TextBlock tb) {
-    if (!tb.Text().empty()) {
-        TryAttachAfterHeader(tb);
-        return;
+// The Pinned header from the pinned list, without its text (so in any
+// display language): the text in the header grid's row just above the list.
+xc::TextBlock PinnedHeaderAbove(FrameworkElement pinnedList) {
+    FrameworkElement branch{nullptr};
+    auto grid = FindHeaderGrid(pinnedList, &branch);
+    if (!grid || !branch) {
+        return nullptr;
     }
-    if (g_attach.host) {
-        return;  // Don't hook every text Start creates while attached.
-    }
-    // React Native may set the text after the element is added.
-    auto token = std::make_shared<winrt::event_token>();
-    *token = tb.Loaded([token](wf::IInspectable const& sender, auto&&) {
-        auto el = sender.as<xc::TextBlock>();
-        el.Loaded(*token);
-        if (!g_unloading) {
-            TryAttachAfterHeader(el);
+    int listRow = xc::Grid::GetRow(branch);
+    UIElement best{nullptr};
+    int bestRow = -1;
+    for (auto c : grid.Children()) {
+        auto fe = c.try_as<FrameworkElement>();
+        if (!fe || fe.Name() == L"WindhawkStartMenuGroups") {
+            continue;
         }
-    });
+        int r = xc::Grid::GetRow(fe);
+        if (r < listRow && r > bestRow) {
+            bestRow = r;
+            best = c;
+        }
+    }
+    return best ? FindTextBlock(best, 10) : nullptr;
+}
+
+// Looks through Start's tree for the Pinned header: its "Pinned" text, or
+// else by the names of Start's elements, which aren't translated: the header
+// row ("PinnedListHeaderGrid"), or the pinned list ("StartMenuPinnedList")
+// and the header above it. Our own groups are skipped (a group may be named
+// "Pinned").
+xc::TextBlock FindPinnedHeader(DependencyObject const& root) {
+    xc::TextBlock byText{nullptr};
+    FrameworkElement headerGrid{nullptr};
+    FrameworkElement pinnedList{nullptr};
+    std::vector<DependencyObject> stack{root};
+    for (int visited = 0; !stack.empty() && visited < 50000; visited++) {
+        auto node = stack.back();
+        stack.pop_back();
+        if (auto fe = node.try_as<FrameworkElement>()) {
+            auto name = fe.Name();
+            if (name == L"WindhawkStartMenuGroups") {
+                continue;
+            }
+            if (!headerGrid && name == L"PinnedListHeaderGrid") {
+                headerGrid = fe;
+            }
+            if (!pinnedList &&
+                (name == L"StartMenuPinnedList" || name == L"PinnedList")) {
+                pinnedList = fe;
+            }
+        }
+        if (auto tb = node.try_as<xc::TextBlock>()) {
+            if (!byText && IsPinnedHeaderText(tb.Text())) {
+                byText = tb;
+            }
+            continue;
+        }
+        int n = xm::VisualTreeHelper::GetChildrenCount(node);
+        for (int i = n - 1; i >= 0; i--) {
+            stack.push_back(xm::VisualTreeHelper::GetChild(node, i));
+        }
+    }
+    // The first one that's in Start's header grid.
+    xc::TextBlock candidates[] = {
+        byText, headerGrid ? FindTextBlock(headerGrid, 6) : nullptr,
+        pinnedList ? PinnedHeaderAbove(pinnedList) : nullptr};
+    for (auto const& tb : candidates) {
+        if (tb && FindHeaderGrid(tb, nullptr)) {
+            return tb;
+        }
+    }
+    return nullptr;
 }
 
 // --- "Customize Start Groups" in Start's own right-click menu ----------
-// Start's menu (with "Start settings") is a MenuFlyout. When its presenter is
-// added to the tree, our item is inserted after "Start settings" (later, not
-// from the diagnostics callback). The menu is reused, so the item is added
-// once; it's removed when the mod unloads.
+// Start's menu (with "Start settings") is a MenuFlyout. When it's open (see
+// CheckOpenMenus), our item is inserted after "Start settings". The menu is
+// reused, so the item is added once; it's removed when the mod unloads.
 
 constexpr PCWSTR kMenuItemTag = L"WindhawkStartMenuGroups";
 
@@ -3337,7 +3020,7 @@ struct AddedMenuItem {
     wf::Collections::IVector<wf::IInspectable> objects{nullptr};
     xc::MenuFlyoutItem item{nullptr};
 };
-std::vector<AddedMenuItem> g_addedMenuItems;  // UI thread
+[[clang::no_destroy]] std::vector<AddedMenuItem> g_addedMenuItems;  // UI thread
 
 bool IsOurMenuItem(wf::IInspectable const& obj) {
     auto mi = obj.try_as<xc::MenuFlyoutItem>();
@@ -3403,9 +3086,6 @@ void AddToStartMenu(xc::MenuFlyoutPresenter const& presenter) {
         }
     }
     if (added.item) {
-        if (!g_dispatcher) {
-            g_dispatcher = presenter.Dispatcher();
-        }
         g_addedMenuItems.push_back(std::move(added));
         Wh_Log(L"Added Customize Start Groups to Start's menu");
     }
@@ -3426,406 +3106,438 @@ void RemoveFromStartMenus() {
     g_addedMenuItems.clear();
 }
 
-struct VisualTreeWatcher
-    : winrt::implements<VisualTreeWatcher,
-                        IVisualTreeServiceCallback2,
-                        winrt::non_agile> {
-    explicit VisualTreeWatcher(winrt::com_ptr<IUnknown> site)
-        : m_diag(site.as<IXamlDiagnostics>()) {}
+// ---------------------------------------------------------------------------
+// Start's UI thread
+// ---------------------------------------------------------------------------
+// Start's UI is a CoreWindow ("Windows.UI.Core.CoreWindow") with system XAML.
+// The mod gets on its thread when that window is created (the
+// CreateWindowInBand hooks) or, if Start is already running, through a
+// thread hook (RunFromWindowThread), and creates a message-only window there
+// (InstallStartUi). Its timer looks through Start's tree for the Pinned header
+// until the groups are attached, and checks for Start's right-click menu
+// while Start is open. (No XAML diagnostics: a process allows one
+// diagnostics client, which other mods and tools need.)
 
-    // AdviseVisualTreeChange must not be called on the UI thread, and must not
-    // be waited for from it either: it replays the tree through the UI thread,
-    // so blocking SetSite (which runs on the UI thread) deadlocks Start.
-    static void StartAdvising(winrt::com_ptr<VisualTreeWatcher> watcher) {
-        auto* ref = watcher.detach();  // Owned by the thread below.
-        HANDLE thread = CreateThread(
-            nullptr, 0,
-            [](LPVOID param) -> DWORD {
-                winrt::com_ptr<VisualTreeWatcher> self;
-                self.attach(static_cast<VisualTreeWatcher*>(param));
-                if (g_unloading) {
-                    return 0;
-                }
-                HRESULT hr = self->m_diag.as<IVisualTreeService3>()
-                                 ->AdviseVisualTreeChange(self.get());
-                Wh_Log(L"AdviseVisualTreeChange: %08X", hr);
-                if (SUCCEEDED(hr)) {
-                    self->m_advised = true;
-                }
-                return 0;
-            },
-            ref, 0, nullptr);
-        if (thread) {
-            CloseHandle(thread);
-        } else {
-            winrt::com_ptr<VisualTreeWatcher> drop;
-            drop.attach(ref);
-        }
+constexpr UINT_PTR kScanTimerId = 1;
+constexpr UINT_PTR kMenuTimerId = 2;
+constexpr UINT kScanIntervalMs = 200;
+
+// UI thread only:
+HWND g_coreWnd = nullptr;
+bool g_startWasOpen = false;
+DWORD g_lastScanTick = 0;
+int g_failedScans = 0;
+int g_menuChecks = 0;
+
+// Right-click handlers on Start's root element, to look for its menu as soon
+// as it opens.
+struct RootHandlers {
+    winrt::weak_ref<UIElement> root;
+    wf::IInspectable rightTapped{nullptr};
+    wf::IInspectable contextRequested{nullptr};
+};
+[[clang::no_destroy]] RootHandlers g_rootHandlers;
+
+void RequestScan() {
+    g_lastScanTick = 0;
+    g_failedScans = 0;
+}
+
+std::vector<xcp::Popup> OpenPopups() {
+    std::vector<xcp::Popup> out;
+    auto window = Window::Current();
+    if (!window) {
+        return out;
     }
-
-    std::atomic<bool> m_advised{false};
-
-    void Unadvise() {
-        m_diag.as<IVisualTreeService3>()->UnadviseVisualTreeChange(this);
+    for (auto p : xm::VisualTreeHelper::GetOpenPopups(window)) {
+        out.push_back(p);
     }
-
-    HRESULT STDMETHODCALLTYPE
-    OnVisualTreeChange(ParentChildRelation,
-                       VisualElement element,
-                       VisualMutationType mutationType) override try {
-        if (g_unloading) {
-            return S_OK;
-        }
-        bool logElements;
-        {
-            std::lock_guard lock(g_settingsMutex);
-            logElements = g_settings.logElements;
-        }
-        // Until we find the category view, log candidates automatically
-        // (capped) so a failed match is diagnosable from the log alone.
-        static int autoLogged = 0;
-        bool autoLog = !g_attach.host && autoLogged < 400;
-        if ((logElements || autoLog) && mutationType == Add) {
-            std::wstring_view n = element.Name ? element.Name : L"";
-            std::wstring_view t = element.Type ? element.Type : L"";
-            auto has = [&](std::wstring_view s) {
-                return s.find(L"ategor") != s.npos ||
-                       s.find(L"AllApps") != s.npos ||
-                       s.find(L"Folder") != s.npos ||
-                       s.find(L"ItemsRepeater") != s.npos ||
-                       s.find(L"GridView") != s.npos;
-            };
-            if (has(n) || has(t)) {
-                autoLogged++;
-                Wh_Log(L"[candidate] name=%s type=%s",
-                       element.Name ? element.Name : L"",
-                       element.Type ? element.Type : L"");
-            }
-        }
-        // Start's right-click menu: add our item once it's built.
-        if (mutationType == Add && element.Type &&
-            wcsstr(element.Type, L"MenuFlyoutPresenter")) {
-            winrt::com_ptr<IInspectable> insp;
-            if (SUCCEEDED(m_diag->GetIInspectableFromHandle(
-                    element.Handle,
-                    reinterpret_cast<::IInspectable**>(insp.put())))) {
-                if (auto presenter = insp.try_as<xc::MenuFlyoutPresenter>()) {
-                    winrt::weak_ref<xc::MenuFlyoutPresenter> weak = presenter;
-                    presenter.Dispatcher().RunAsync(
-                        wuc::CoreDispatcherPriority::Normal, [weak] {
-                            auto p = weak.get();
-                            if (!p || g_unloading) {
-                                return;
-                            }
-                            try {
-                                AddToStartMenu(p);
-                            } catch (...) {
-                                Wh_Log(L"Adding to Start's menu failed: %08X",
-                                       winrt::to_hresult());
-                            }
-                        });
-                }
-            }
-        }
-        bool replaceMode;
-        {
-            std::lock_guard lock(g_settingsMutex);
-            replaceMode = g_settings.replaceCategoryView;
-        }
-        if (!replaceMode) {
-            if (mutationType == Add && element.Type &&
-                wcscmp(element.Type, L"Windows.UI.Xaml.Controls.TextBlock") ==
-                    0) {
-                // Also while attached: a new "Pinned" header means Start
-                // rebuilt its sections (e.g. the "All" view was switched).
-                winrt::com_ptr<IInspectable> insp;
-                if (SUCCEEDED(m_diag->GetIInspectableFromHandle(
-                        element.Handle,
-                        reinterpret_cast<::IInspectable**>(insp.put())))) {
-                    if (auto tb = insp.try_as<xc::TextBlock>()) {
-                        OnTextBlockAdded(tb);
-                    }
-                }
-            } else if (mutationType == Remove && g_attach.host) {
-                // Never Detach() here: XAML is in the middle of removing
-                // the element, and changing the tree from this callback
-                // hangs and crashes Start. Check again once it's done.
-                winrt::com_ptr<IInspectable> insp;
-                if (SUCCEEDED(m_diag->GetIInspectableFromHandle(
-                        element.Handle,
-                        reinterpret_cast<::IInspectable**>(insp.put())))) {
-                    auto fe = insp.try_as<FrameworkElement>();
-                    if (fe && (fe == g_attach.target.get() ||
-                               fe == g_attach.rowGrid.get())) {
-                        ScheduleValidate();
+    if (auto content = window.Content()) {
+        try {
+            if (auto root = content.XamlRoot()) {
+                for (auto p :
+                     xm::VisualTreeHelper::GetOpenPopupsForXamlRoot(root)) {
+                    if (std::find(out.begin(), out.end(), p) == out.end()) {
+                        out.push_back(p);
                     }
                 }
             }
-            return S_OK;
+        } catch (...) {
         }
-        if (!MatchesTarget(element)) {
-            return S_OK;
-        }
-        winrt::com_ptr<IInspectable> insp;
-        if (FAILED(m_diag->GetIInspectableFromHandle(
-                element.Handle, reinterpret_cast<::IInspectable**>(
-                                    insp.put())))) {
-            return S_OK;
-        }
-        auto fe = insp.try_as<FrameworkElement>();
-        if (!fe) {
-            Wh_Log(L"Matched %s but it isn't a system XAML element%s",
-                   element.Type ? element.Type : L"",
-                   g_isWinUI3 ? L" (Start uses WinUI 3)" : L"");
-            return S_OK;
-        }
-        if (mutationType == Add) {
-            OnTargetElement(fe);
-        } else if (mutationType == Remove && g_attach.target.get() == fe) {
-            ScheduleValidate();  // Not Detach(): see above.
-        }
-        return S_OK;
-    } catch (...) {
-        Wh_Log(L"OnVisualTreeChange error %08X", winrt::to_hresult());
-        return S_OK;
     }
-
-    HRESULT STDMETHODCALLTYPE OnElementStateChanged(InstanceHandle,
-                                                    VisualElementState,
-                                                    LPCWSTR) noexcept override {
-        return S_OK;
-    }
-
-    winrt::com_ptr<IXamlDiagnostics> m_diag;
-};
-
-winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
-
-// {5C8B6E9A-3D41-4F7B-9E2C-7A1D53C4B8F2}
-static constexpr CLSID CLSID_WindhawkTAP = {
-    0x5c8b6e9a,
-    0x3d41,
-    0x4f7b,
-    {0x9e, 0x2c, 0x7a, 0x1d, 0x53, 0xc4, 0xb8, 0xf2}};
-
-struct WindhawkTAP
-    : winrt::implements<WindhawkTAP, IObjectWithSite, winrt::non_agile> {
-    HRESULT STDMETHODCALLTYPE SetSite(IUnknown* pUnkSite) override try {
-        if (g_visualTreeWatcher) {
-            g_visualTreeWatcher->Unadvise();
-            g_visualTreeWatcher = nullptr;
-        }
-        m_site.copy_from(pUnkSite);
-        if (m_site) {
-            g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(m_site);
-            VisualTreeWatcher::StartAdvising(g_visualTreeWatcher);
-        }
-        return S_OK;
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-
-    HRESULT STDMETHODCALLTYPE GetSite(REFIID riid,
-                                      void** ppvSite) noexcept override {
-        if (!m_site) {
-            *ppvSite = nullptr;
-            return E_FAIL;
-        }
-        return m_site->QueryInterface(riid, ppvSite);
-    }
-
-   private:
-    winrt::com_ptr<IUnknown> m_site;
-};
-
-struct TapFactory
-    : winrt::implements<TapFactory, IClassFactory, winrt::non_agile> {
-    HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown* outer,
-                                             REFIID riid,
-                                             void** ppv) override try {
-        *ppv = nullptr;
-        if (outer) {
-            return CLASS_E_NOAGGREGATION;
-        }
-        auto tap = winrt::make_self<WindhawkTAP>();
-        return static_cast<IObjectWithSite*>(tap.get())
-            ->QueryInterface(riid, ppv);
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override {
-        return S_OK;
-    }
-};
-
-// XAML diagnostics loads this DLL as the TAP and needs these exports. They are
-// already declared (without dllexport) in combaseapi.h, hence the pragma.
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
-
-extern "C" __declspec(dllexport) HRESULT WINAPI
-DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) try {
-    if (rclsid != CLSID_WindhawkTAP) {
-        return CLASS_E_CLASSNOTAVAILABLE;
-    }
-    auto factory = winrt::make_self<TapFactory>();
-    return static_cast<IClassFactory*>(factory.get())
-        ->QueryInterface(riid, ppv);
-} catch (...) {
-    return winrt::to_hresult();
+    return out;
 }
 
-extern "C" __declspec(dllexport) HRESULT WINAPI DllCanUnloadNow() {
-    return S_FALSE;
-}
-
-#pragma clang diagnostic pop
-
-using PFN_INITIALIZE_XAML_DIAGNOSTICS_EX = HRESULT(WINAPI*)(LPCWSTR,
-                                                             DWORD,
-                                                             LPCWSTR,
-                                                             LPCWSTR,
-                                                             CLSID,
-                                                             LPCWSTR);
-
-HRESULT InjectWindhawkTAP(HMODULE xamlModule) {
-    HMODULE module;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                            (LPCWSTR)&InjectWindhawkTAP, &module)) {
-        return HRESULT_FROM_WIN32(GetLastError());
+xc::MenuFlyoutPresenter FindMenuPresenter(DependencyObject const& el,
+                                          int depth) {
+    if (!el) {
+        return nullptr;
     }
-    WCHAR location[MAX_PATH];
-    DWORD len = GetModuleFileNameW(module, location, ARRAYSIZE(location));
-    if (!len || len == ARRAYSIZE(location)) {
-        return E_FAIL;
+    if (auto p = el.try_as<xc::MenuFlyoutPresenter>()) {
+        return p;
     }
-    auto ixde = reinterpret_cast<PFN_INITIALIZE_XAML_DIAGNOSTICS_EX>(
-        GetProcAddress(xamlModule, "InitializeXamlDiagnosticsEx"));
-    if (!ixde) {
-        return HRESULT_FROM_WIN32(GetLastError());
+    if (depth <= 0) {
+        return nullptr;
     }
-    HRESULT hr = E_FAIL;
-    // XAML only accepts its well-known "VisualDiagConnectionN" endpoint names;
-    // anything else fails with ERROR_NOT_FOUND. N is bumped in case another
-    // diagnostics client (e.g. a styler mod) already uses a lower number.
-    for (int i = 1; i <= 100; i++) {
-        WCHAR connection[64];
-        wsprintfW(connection, L"VisualDiagConnection%d", i);
-        hr = ixde(connection, GetCurrentProcessId(), L"", location,
-                  CLSID_WindhawkTAP, nullptr);
-        if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
-            break;
+    int n = xm::VisualTreeHelper::GetChildrenCount(el);
+    for (int i = 0; i < n; i++) {
+        if (auto p = FindMenuPresenter(xm::VisualTreeHelper::GetChild(el, i),
+                                       depth - 1)) {
+            return p;
         }
     }
-    return hr;
+    return nullptr;
 }
 
-// ---------------------------------------------------------------------------
-// Waiting for Windows.UI.Xaml.dll
-// ---------------------------------------------------------------------------
+// Adds our item to Start's right-click menu if it's open.
+void CheckOpenMenus() {
+    for (auto const& popup : OpenPopups()) {
+        if (!popup.IsOpen()) {
+            continue;
+        }
+        if (auto presenter = FindMenuPresenter(popup.Child(), 3)) {
+            AddToStartMenu(presenter);
+        }
+    }
+}
 
-std::atomic<bool> g_tapInjected{false};
+void OnRootRightClick() {
+    // The menu opens right after this event: look a few times, quickly.
+    g_menuChecks = 10;
+    if (HWND wnd = g_uiWnd) {
+        SetTimer(wnd, kMenuTimerId, 30, nullptr);
+    }
+}
 
-HANDLE g_injectThread = nullptr;
-HANDLE g_injectStopEvent = nullptr;
+void RemoveRootHandlers() {
+    if (auto root = g_rootHandlers.root.get()) {
+        try {
+            if (g_rootHandlers.rightTapped) {
+                root.RemoveHandler(UIElement::RightTappedEvent(),
+                                   g_rootHandlers.rightTapped);
+            }
+            if (g_rootHandlers.contextRequested) {
+                root.RemoveHandler(UIElement::ContextRequestedEvent(),
+                                   g_rootHandlers.contextRequested);
+            }
+        } catch (...) {
+        }
+    }
+    g_rootHandlers = RootHandlers{};
+}
 
-// When the mod loads together with a freshly started StartMenuExperienceHost,
-// Windows.UI.Xaml.dll is loaded but no XAML core exists yet, and
-// InitializeXamlDiagnosticsEx fails with ERROR_NOT_FOUND. Keep retrying in
-// the background until the Start UI has been created.
-void LogXamlModules() {
-    HMODULE modules[1024];
-    DWORD needed = 0;
-    if (!EnumProcessModules(GetCurrentProcess(), modules, sizeof(modules),
-                            &needed)) {
+void WatchRootForMenus(UIElement const& root) {
+    if (!root || g_rootHandlers.root.get() == root) {
         return;
     }
-    for (DWORD i = 0; i < needed / sizeof(HMODULE) && i < 1024; i++) {
-        WCHAR path[MAX_PATH];
-        if (GetModuleFileNameW(modules[i], path, ARRAYSIZE(path)) &&
-            (StrStrIW(path, L"xaml") || StrStrIW(path, L"winui") ||
-             StrStrIW(path, L"AppRuntime") || StrStrIW(path, L"StartMenu"))) {
-            Wh_Log(L"[module] %s", path);
-        }
+    RemoveRootHandlers();
+    g_rootHandlers.root = root;
+    g_rootHandlers.rightTapped = winrt::box_value(
+        winrt::Windows::UI::Xaml::Input::RightTappedEventHandler(
+            [](auto&&, auto&&) { OnRootRightClick(); }));
+    g_rootHandlers.contextRequested = winrt::box_value(
+        wf::TypedEventHandler<
+            UIElement,
+            winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs>(
+            [](auto&&, auto&&) { OnRootRightClick(); }));
+    // Also when Start has handled the event itself (it opens its menu).
+    root.AddHandler(UIElement::RightTappedEvent(), g_rootHandlers.rightTapped,
+                    true);
+    root.AddHandler(UIElement::ContextRequestedEvent(),
+                    g_rootHandlers.contextRequested, true);
+}
+
+// Looks for the Pinned header and attaches the groups there.
+void ScanStartTree() {
+    auto window = Window::Current();
+    auto root = window ? window.Content() : nullptr;
+    if (!root) {
+        return;
+    }
+    WatchRootForMenus(root);
+    auto header = FindPinnedHeader(root);
+    if (!header || !header.IsLoaded()) {
+        g_failedScans++;
+        return;
+    }
+    if (AttachInHeaderGrid(header)) {
+        g_failedScans = 0;
+        return;
+    }
+    // Start may still be building its sections: tried again later.
+    if (g_failedScans++ == 0) {
+        LogAncestors(header);
     }
 }
 
-DWORD WINAPI InjectRetryThread(LPVOID) {
-    static const struct {
-        PCWSTR dll;
-        bool winui3;
-    } frameworks[] = {
-        // Start (React Native for Windows + WinUI 2) runs on system XAML.
-        // Microsoft.UI.Xaml.dll there is WinUI 2's control library and has no
-        // diagnostics entry point; a WinUI 3 build would export one.
-        {L"Windows.UI.Xaml.dll", false},
-        {L"Microsoft.UI.Xaml.dll", true},
+void OnScanTimer() {
+    if (g_unloading) {
+        return;
+    }
+    try {
+        bool open = IsStartOpen(g_coreWnd);
+        if (open) {
+            CheckOpenMenus();
+            if (!g_startWasOpen && g_attach.host) {
+                ValidateAttachment();  // each time Start opens
+            }
+        }
+        g_startWasOpen = open;
+        if (!g_attach.host) {
+            // Every tick while Start is open, else once a second; slower
+            // after many tries (e.g. a Start layout the mod doesn't know).
+            DWORD now = GetTickCount();
+            DWORD every = g_failedScans > 50 ? (open ? 2000 : 10000)
+                                             : (open ? 0 : 1000);
+            if (g_lastScanTick == 0 || now - g_lastScanTick >= every) {
+                g_lastScanTick = now ? now : 1;
+                ScanStartTree();
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"Scan failed: %08X", winrt::to_hresult());
+    }
+}
+
+PCWSTR UiWindowClassName() {
+    static std::wstring name = std::wstring(L"WindhawkStartUi_") + WH_MOD_ID;
+    return name.c_str();
+}
+
+void UninstallStartUi();
+
+LRESULT CALLBACK UiWndProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == kRunOnUiMsg) {
+        std::unique_ptr<std::function<void()>> fn(
+            reinterpret_cast<std::function<void()>*>(lp));
+        if (!g_unloading) {
+            try {
+                (*fn)();
+            } catch (...) {
+                Wh_Log(L"UI task failed: %08X", winrt::to_hresult());
+            }
+        }
+        return 0;
+    }
+    if (msg == kUninstallMsg) {
+        UninstallStartUi();
+        return 0;
+    }
+    if (msg == WM_TIMER && wp == kScanTimerId) {
+        OnScanTimer();
+        return 0;
+    }
+    if (msg == WM_TIMER && wp == kMenuTimerId) {
+        if (--g_menuChecks <= 0) {
+            KillTimer(hWnd, kMenuTimerId);
+        }
+        try {
+            if (!g_unloading) {
+                CheckOpenMenus();
+            }
+        } catch (...) {
+        }
+        return 0;
+    }
+    return DefWindowProcW(hWnd, msg, wp, lp);
+}
+
+HMODULE ThisModule() {
+    HMODULE self = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&ThisModule, &self);
+    return self;
+}
+
+// On Start's UI thread (`coreWnd`'s): the message window and its timer.
+void InstallStartUi(HWND coreWnd) {
+    if (g_uiWnd || g_unloading) {
+        return;
+    }
+    WNDCLASSEXW wc{sizeof(wc)};
+    wc.lpfnWndProc = UiWndProc;
+    wc.hInstance = ThisModule();
+    wc.lpszClassName = UiWindowClassName();
+    RegisterClassExW(&wc);
+    HWND wnd = CreateWindowExW(0, UiWindowClassName(), L"", 0, 0, 0, 0, 0,
+                               HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
+    if (!wnd) {
+        Wh_Log(L"Creating the UI window failed: %u", GetLastError());
+        return;
+    }
+    g_coreWnd = coreWnd;
+    g_uiWnd = wnd;
+    RequestScan();
+    SetTimer(wnd, kScanTimerId, kScanIntervalMs, nullptr);
+    Wh_Log(L"Watching Start's UI");
+}
+
+// On Start's UI thread: removes everything the mod added to Start, and the
+// message window, dropping whatever is still queued for it.
+void UninstallStartUi() {
+    HWND wnd = g_uiWnd.exchange(nullptr);
+    if (!wnd) {
+        return;
+    }
+    KillTimer(wnd, kScanTimerId);
+    KillTimer(wnd, kMenuTimerId);
+    try {
+        for (auto& weak : g_flyouts) {
+            if (auto fly = weak.get()) {
+                fly.Hide();
+            }
+        }
+    } catch (...) {
+    }
+    g_flyouts.clear();
+    try {
+        RemoveRootHandlers();
+        RemoveFromStartMenus();
+        Detach();
+    } catch (...) {
+        Wh_Log(L"Cleanup failed: %08X", winrt::to_hresult());
+    }
+    g_model = nullptr;
+    g_imageSources.clear();
+    MSG msg;
+    while (PeekMessageW(&msg, wnd, kRunOnUiMsg, kRunOnUiMsg, PM_REMOVE)) {
+        delete reinterpret_cast<std::function<void()>*>(msg.lParam);
+    }
+    DestroyWindow(wnd);
+    UnregisterClassW(UiWindowClassName(), ThisModule());
+    g_coreWnd = nullptr;
+}
+
+// Runs `proc` on `hWnd`'s thread and waits for it.
+using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
+
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         PVOID procParam) {
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
     };
-    for (int attempt = 0; !g_unloading; attempt++) {
-        if (attempt == 0 || attempt == 80) {
-            LogXamlModules();
-        }
-        for (const auto& fw : frameworks) {
-            HMODULE m = GetModuleHandleW(fw.dll);
-            if (!m) {
-                continue;
-            }
-            HRESULT hr = InjectWindhawkTAP(m);
-            if (SUCCEEDED(hr)) {
-                g_isWinUI3 = fw.winui3;
-                Wh_Log(L"Connected via %s (attempt %d)", fw.dll, attempt + 1);
-                g_tapInjected = true;
-                return 0;
-            }
-            if (attempt == 0 || attempt % 60 == 0) {
-                Wh_Log(L"InjectWindhawkTAP via %s: %08X, retrying", fw.dll,
-                       hr);
-            }
-        }
-        // Quick retries at first, then settle at once per second.
-        DWORD delay = attempt < 20 ? 250 : 1000;
-        if (WaitForSingleObject(g_injectStopEvent, delay) == WAIT_OBJECT_0) {
-            break;
-        }
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
     }
-    return 0;
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == runFromWindowThreadRegisteredMsg) {
+                    auto* param = (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+                    param->proc(param->procParam);
+                }
+            }
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+    RUN_FROM_WINDOW_THREAD_PARAM param{proc, procParam};
+    SendMessageW(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+    UnhookWindowsHookEx(hook);
+    return true;
 }
 
-void TryInject() {
-    if (g_tapInjected || g_injectThread) {
+void OnWindowCreated(HWND hWnd, LPCWSTR className) {
+    bool textual = ((ULONG_PTR)className & ~(ULONG_PTR)0xFFFF) != 0;
+    if (g_unloading || !textual ||
+        _wcsicmp(className, L"Windows.UI.Core.CoreWindow") != 0) {
         return;
     }
-    g_injectStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_injectThread =
-        CreateThread(nullptr, 0, InjectRetryThread, nullptr, 0, nullptr);
+    // Created on its own thread, so this runs right here.
+    RunFromWindowThread(
+        hWnd, [](PVOID p) { InstallStartUi((HWND)p); }, hWnd);
 }
 
-void StopInjectThread() {
-    if (g_injectStopEvent) {
-        SetEvent(g_injectStopEvent);
+using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle,
+                                           LPCWSTR lpClassName,
+                                           LPCWSTR lpWindowName,
+                                           DWORD dwStyle,
+                                           int X,
+                                           int Y,
+                                           int nWidth,
+                                           int nHeight,
+                                           HWND hWndParent,
+                                           HMENU hMenu,
+                                           HINSTANCE hInstance,
+                                           PVOID lpParam,
+                                           DWORD dwBand);
+CreateWindowInBand_t CreateWindowInBand_Original;
+
+HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
+                                    LPCWSTR lpClassName,
+                                    LPCWSTR lpWindowName,
+                                    DWORD dwStyle,
+                                    int X,
+                                    int Y,
+                                    int nWidth,
+                                    int nHeight,
+                                    HWND hWndParent,
+                                    HMENU hMenu,
+                                    HINSTANCE hInstance,
+                                    PVOID lpParam,
+                                    DWORD dwBand) {
+    HWND hWnd = CreateWindowInBand_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam, dwBand);
+    if (hWnd) {
+        OnWindowCreated(hWnd, lpClassName);
     }
-    if (g_injectThread) {
-        WaitForSingleObject(g_injectThread, 10000);
-        CloseHandle(g_injectThread);
-        g_injectThread = nullptr;
-    }
-    if (g_injectStopEvent) {
-        CloseHandle(g_injectStopEvent);
-        g_injectStopEvent = nullptr;
-    }
+    return hWnd;
 }
 
-using LoadLibraryExW_t = decltype(&LoadLibraryExW);
-LoadLibraryExW_t LoadLibraryExW_Original;
-HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
-    HMODULE m = LoadLibraryExW_Original(name, file, flags);
-    if (m && !g_tapInjected && !g_unloading &&
-        GetModuleHandleW(L"Windows.UI.Xaml.dll") == m) {
-        TryInject();
+using CreateWindowInBandEx_t = HWND(WINAPI*)(DWORD dwExStyle,
+                                             LPCWSTR lpClassName,
+                                             LPCWSTR lpWindowName,
+                                             DWORD dwStyle,
+                                             int X,
+                                             int Y,
+                                             int nWidth,
+                                             int nHeight,
+                                             HWND hWndParent,
+                                             HMENU hMenu,
+                                             HINSTANCE hInstance,
+                                             PVOID lpParam,
+                                             DWORD dwBand,
+                                             DWORD dwTypeFlags);
+CreateWindowInBandEx_t CreateWindowInBandEx_Original;
+
+HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
+                                      LPCWSTR lpClassName,
+                                      LPCWSTR lpWindowName,
+                                      DWORD dwStyle,
+                                      int X,
+                                      int Y,
+                                      int nWidth,
+                                      int nHeight,
+                                      HWND hWndParent,
+                                      HMENU hMenu,
+                                      HINSTANCE hInstance,
+                                      PVOID lpParam,
+                                      DWORD dwBand,
+                                      DWORD dwTypeFlags) {
+    HWND hWnd = CreateWindowInBandEx_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam, dwBand, dwTypeFlags);
+    if (hWnd) {
+        OnWindowCreated(hWnd, lpClassName);
     }
-    return m;
+    return hWnd;
 }
 
 // ---------------------------------------------------------------------------
@@ -3833,9 +3545,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
 // ---------------------------------------------------------------------------
 
 std::wstring GetString(PCWSTR name, int i = -1, int j = -1) {
-    PCWSTR v = Wh_GetStringSetting(name, i, j);
-    std::wstring s = v;
-    Wh_FreeStringSetting(v);
+    std::wstring s =
+        WindhawkUtils::StringSetting(Wh_GetStringSetting(name, i, j)).get();
     // Trim surrounding whitespace.
     size_t b = s.find_first_not_of(L" \t");
     size_t e = s.find_last_not_of(L" \t");
@@ -3881,8 +3592,7 @@ void LoadSettings() {
     s.placement = GetString(L"behavior.placement");
     if (s.placement != L"afterPinned" && s.placement != L"afterRecent" &&
         s.placement != L"afterAll") {
-        // The default; also for the old "replaceCategoryView".
-        s.placement = L"beforePinned";
+        s.placement = L"beforePinned";  // the default
     }
     // "hide" settings, so a missing value (0) keeps Start as it is.
     s.showPinned = Wh_GetIntSetting(L"behavior.hidePinned") == 0;
@@ -3926,12 +3636,13 @@ void LoadSettings() {
     }
 
     // Start's section titles and menu item, as Start shows them in English.
-    // (These were "Advanced" settings; stored values of them are ignored.)
+    // (The groups are placed without them too, from the pinned list; see
+    // FindPinnedHeader.)
     s.pinnedHeaders = {L"Pinned"};
     s.recommendedHeaders = {L"Recommended", L"Recent"};
     s.allHeaders = {L"All"};
     s.startSettingsTexts = {L"Start settings"};
-    s.logElements = false;
+
 
     std::lock_guard lock(g_settingsMutex);
     g_settings = std::move(s);
@@ -3944,12 +3655,12 @@ void LoadSettings() {
 // island, with a navigation pane, card-style settings pages and a
 // Save / Discard footer. It edits this mod's Windhawk settings directly
 // (HKLM\SOFTWARE\Windhawk\Engine\Mods\<id>\Settings); since that key is
-// protected, saving goes through an elevated `reg import` (one UAC prompt).
-// Windhawk then calls Wh_ModSettingsChanged, so Start updates right away.
+// protected, saving goes through an elevated import (one UAC prompt, see
+// WriteModSettings). Windhawk then calls Wh_ModSettingsChanged, so Start
+// updates right away.
 //
-// Start runs on system XAML with WinUI 2, not WinUI 3, so the island is a
-// Windows.UI.Xaml island on Start's own UI thread, where WinUI 2's Windows 11
-// control styles are already loaded.
+// The window is a Windows.UI.Xaml island on the mod's own thread in File
+// Explorer (Start's process can't host one), see StartSettingsHost.
 // ===========================================================================
 
 struct EditItem {
@@ -3987,14 +3698,11 @@ std::wstring NewGroupName(std::vector<EditGroup> const& groups) {
 }
 
 std::wstring ItemTitle(EditItem const& item);
-inline std::wstring ItemTitleOf(EditItem const& item) {
-    return ItemTitle(item);
-}
 
 // An app on its own (see IsSingleApp).
 EditGroup MakeSingleApp(EditItem item) {
     EditGroup g;
-    g.name = ItemTitleOf(item);
+    g.name = ItemTitle(item);
     g.tileSize = L"1x1";
     g.appGrid = kAutoGrid;
     g.showLabel = false;
@@ -4056,30 +3764,7 @@ struct EditSettings {
     std::wstring labelColor;
     std::wstring sectionTitle = L"Apps";
     bool showAppLabels = true;
-    // Advanced
-    std::wstring pinnedHeaders = L"Pinned";  // one per line
-    std::wstring recommendedHeaders = L"Recommended\r\nRecent";
-    std::wstring allHeaders = L"All";
-    std::wstring startSettingsTexts = L"Start settings";
-    // One per line; default matches the Windhawk settings default.
-    std::wstring targets = L"CategoryView\r\nStartMenu.CategoryView";
-    bool logElements = false;
 };
-
-std::wstring JoinLines(PCWSTR keyFormat) {
-    std::wstring out;
-    for (int i = 0;; i++) {
-        std::wstring v = GetString(keyFormat, i);
-        if (v.empty()) {
-            break;
-        }
-        if (!out.empty()) {
-            out += L"\r\n";
-        }
-        out += v;
-    }
-    return out;
-}
 
 std::vector<std::wstring> SplitLines(const std::wstring& text) {
     std::vector<std::wstring> lines;
@@ -4173,21 +3858,6 @@ EditSettings ReadEditSettings() {
     s.labelColor = GetString(L"labels.color");
     s.sectionTitle = GetString(L"behavior.sectionTitle");
     s.showAppLabels = Wh_GetIntSetting(L"behavior.showAppLabels") != 0;
-    s.pinnedHeaders = JoinLines(L"advanced.pinnedHeaderText[%d]");
-    s.recommendedHeaders = JoinLines(L"advanced.recommendedHeaderText[%d]");
-    if (s.recommendedHeaders.empty()) {
-        s.recommendedHeaders = L"Recommended\r\nRecent";
-    }
-    s.allHeaders = JoinLines(L"advanced.allHeaderText[%d]");
-    if (s.allHeaders.empty()) {
-        s.allHeaders = L"All";
-    }
-    s.startSettingsTexts = JoinLines(L"advanced.startSettingsText[%d]");
-    if (s.startSettingsTexts.empty()) {
-        s.startSettingsTexts = L"Start settings";
-    }
-    s.targets = JoinLines(L"advanced.targetElements[%d]");
-    s.logElements = Wh_GetIntSetting(L"advanced.logElements") != 0;
     return s;
 }
 
@@ -4195,7 +3865,7 @@ EditSettings ReadEditSettings() {
 
 // Preset: the tile size presets, not a setting of its own (value points to
 // the EditSettings; the preset shown is the one matching the values).
-enum class FieldKind { Bool, Int, String, Choice, Lines, Preset };
+enum class FieldKind { Bool, Int, String, Choice, Preset };
 
 struct Field {
     PCWSTR key;
@@ -4249,11 +3919,6 @@ Field ChoiceF(PCWSTR key, PCWSTR glyph, PCWSTR title, PCWSTR desc,
     f.options = std::move(options);
     return f;
 }
-Field LinesF(PCWSTR key, PCWSTR glyph, PCWSTR title, PCWSTR desc,
-             std::wstring* v) {
-    return {key, glyph, title, desc, FieldKind::Lines, v};
-}
-
 // Dimension presets offered at the top of the Customization page.
 struct SizePreset {
     PCWSTR name;
@@ -4530,15 +4195,6 @@ std::vector<RegEntry> BuildRegEntries(EditSettings& s) {
                 case FieldKind::Choice:
                     out.push_back(StrEntry(f.key, *(std::wstring*)f.value));
                     break;
-                case FieldKind::Lines: {
-                    int k = 0;
-                    for (auto& line : SplitLines(*(std::wstring*)f.value)) {
-                        out.push_back(StrEntry(std::wstring(f.key) + L"[" +
-                                                   std::to_wstring(k++) + L"]",
-                                               line));
-                    }
-                    break;
-                }
             }
         }
     }
@@ -4559,21 +4215,84 @@ std::wstring EscapeRegString(std::wstring const& v) {
     return r;
 }
 
+// The engine's SettingsChangeTime of this mod (0 if not found): Windhawk
+// bumps it whenever the settings are saved, there or here.
+DWORD ReadSettingsChangeTime() {
+    DWORD changeTime = 0, size = sizeof(changeTime);
+    RegGetValueW(HKEY_LOCAL_MACHINE, kModRegistryPath, L"SettingsChangeTime",
+                 RRF_RT_REG_DWORD, nullptr, &changeTime, &size);
+    return changeTime;
+}
+
+// A settings value this mod declares (or used to), so one the window may
+// delete when it's no longer used (a removed group or item).
+bool IsOwnSettingName(std::wstring_view name) {
+    for (std::wstring_view prefix :
+         {L"groups[", L"behavior.", L"tiles.", L"icons.", L"labels.",
+          L"advanced."}) {
+        if (name.size() > prefix.size() &&
+            _wcsnicmp(name.data(), prefix.data(), prefix.size()) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// SHA-256 of `data`, as uppercase hex; empty on failure.
+std::wstring Sha256Hex(void const* data, DWORD size) {
+    std::wstring hex;
+    HCRYPTPROV prov = 0;
+    HCRYPTHASH hash = 0;
+    if (CryptAcquireContextW(&prov, nullptr, nullptr, PROV_RSA_AES,
+                             CRYPT_VERIFYCONTEXT)) {
+        if (CryptCreateHash(prov, CALG_SHA_256, 0, 0, &hash)) {
+            BYTE digest[32];
+            DWORD len = sizeof(digest);
+            if (CryptHashData(hash, (BYTE const*)data, size, 0) &&
+                CryptGetHashParam(hash, HP_HASHVAL, digest, &len, 0)) {
+                static constexpr WCHAR kHex[] = L"0123456789ABCDEF";
+                for (DWORD i = 0; i < len; i++) {
+                    hex += kHex[digest[i] >> 4];
+                    hex += kHex[digest[i] & 0xF];
+                }
+            }
+            CryptDestroyHash(hash);
+        }
+        CryptReleaseContext(prov, 0);
+    }
+    return hex;
+}
+
+struct SaveResult {
+    std::wstring error;  // empty: saved
+    DWORD changeTime = 0;
+};
+
 // Windhawk keeps mod settings in a protected HKLM key, so the new values are
-// imported with an elevated reg.exe. Bumping SettingsChangeTime makes the
-// engine call Wh_ModSettingsChanged, exactly like a change made in Windhawk.
-std::wstring WriteModSettings(std::vector<RegEntry> const& entries,
-                              HWND owner) {
+// imported elevated. Bumping SettingsChangeTime makes the engine call
+// Wh_ModSettingsChanged, exactly like a change made in Windhawk.
+//
+// The .reg file is written to the user's temp folder, where any process of
+// the user could change it before the elevated import. So the elevated step
+// (PowerShell, one UAC prompt) reads the file once, checks its SHA-256
+// against the one computed here (passed on its command line, visible in the
+// prompt's details), writes those same bytes to a new file in
+// %SystemRoot%\Temp, which standard users can't change, and imports that.
+SaveResult WriteModSettings(std::vector<RegEntry> const& entries, HWND owner) {
+    SaveResult result;
     HKEY modKey;
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, kModRegistryPath, 0, KEY_READ,
                       &modKey) != ERROR_SUCCESS) {
-        return L"This mod's settings weren't found in the registry. Saving "
-               L"from this window needs the installed (not portable) version "
-               L"of Windhawk.";
+        result.error =
+            L"This mod's settings weren't found in the registry. Saving "
+            L"from this window needs the installed (not portable) version "
+            L"of Windhawk.";
+        return result;
     }
     DWORD changeTime = 0, size = sizeof(changeTime);
     RegGetValueW(modKey, nullptr, L"SettingsChangeTime", RRF_RT_REG_DWORD,
                  nullptr, &changeTime, &size);
+    // Values of removed groups and items. Only the mod's own settings.
     std::vector<std::wstring> stale;
     HKEY settingsKey;
     if (RegOpenKeyExW(modKey, L"Settings", 0, KEY_READ, &settingsKey) ==
@@ -4593,7 +4312,7 @@ std::wstring WriteModSettings(std::vector<RegEntry> const& entries,
                 entries.begin(), entries.end(), [&](RegEntry const& e) {
                     return _wcsicmp(e.name.c_str(), name) == 0;
                 });
-            if (!used) {
+            if (!used && IsOwnSettingName(name)) {
                 stale.push_back(name);
             }
         }
@@ -4624,57 +4343,115 @@ std::wstring WriteModSettings(std::vector<RegEntry> const& entries,
     text += L"\r\n[" + key + L"]\r\n\"SettingsChangeTime\"=" + timeText +
             L"\r\n";
 
+    // The file's bytes: UTF-16 with a byte order mark, as reg.exe expects.
+    std::vector<BYTE> bytes(2 + text.size() * sizeof(WCHAR));
+    bytes[0] = 0xFF;
+    bytes[1] = 0xFE;
+    memcpy(bytes.data() + 2, text.data(), text.size() * sizeof(WCHAR));
+    std::wstring hash = Sha256Hex(bytes.data(), (DWORD)bytes.size());
+    if (hash.empty()) {
+        result.error = L"Preparing the settings failed.";
+        return result;
+    }
+
     WCHAR tempDir[MAX_PATH];
-    if (!GetTempPathW(ARRAYSIZE(tempDir), tempDir)) {
-        return L"The temporary folder wasn't found.";
+    GUID guid;
+    WCHAR guidText[64];
+    if (!GetTempPathW(ARRAYSIZE(tempDir), tempDir) ||
+        FAILED(CoCreateGuid(&guid)) ||
+        !StringFromGUID2(guid, guidText, ARRAYSIZE(guidText))) {
+        result.error = L"The temporary folder wasn't found.";
+        return result;
     }
     std::wstring regFile = std::wstring(tempDir) +
-                           L"windhawk-start-menu-groups-" +
-                           std::to_wstring(GetTickCount64()) + L".reg";
-    HANDLE f = CreateFileW(regFile.c_str(), GENERIC_WRITE, 0, nullptr,
-                           CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, nullptr);
+                           L"windhawk-start-menu-groups-" + guidText + L".reg";
+    HANDLE f = CreateFileW(regFile.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
+                           nullptr, CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY,
+                           nullptr);
     if (f == INVALID_HANDLE_VALUE) {
-        return L"Couldn't write " + regFile + L".";
+        result.error = L"Couldn't write " + regFile + L".";
+        return result;
     }
-    WCHAR bom = 0xFEFF;
-    DWORD written;
-    WriteFile(f, &bom, sizeof(bom), &written, nullptr);
-    WriteFile(f, text.data(), (DWORD)(text.size() * sizeof(WCHAR)), &written,
-              nullptr);
+    DWORD written = 0;
+    BOOL ok = WriteFile(f, bytes.data(), (DWORD)bytes.size(), &written,
+                        nullptr) &&
+              written == bytes.size();
     CloseHandle(f);
+    if (!ok) {
+        DeleteFileW(regFile.c_str());
+        result.error = L"Couldn't write " + regFile + L".";
+        return result;
+    }
 
+    // In a single-quoted PowerShell string, ' is written ''.
+    std::wstring quoted;
+    for (WCHAR c : regFile) {
+        quoted += c;
+        if (c == L'\'') {
+            quoted += L'\'';
+        }
+    }
+    std::wstring script =
+        L"try{$b=[IO.File]::ReadAllBytes('" + quoted + L"')}catch{exit 4};"
+        L"$h=[BitConverter]::ToString([Security.Cryptography.SHA256]::"
+        L"Create().ComputeHash($b)).Replace('-','');"
+        L"if($h -ne '" + hash + L"'){exit 3};"
+        L"$t=Join-Path $env:SystemRoot ('Temp\\windhawk-start-menu-groups-'+"
+        L"[guid]::NewGuid().ToString()+'.reg');"
+        L"try{[IO.File]::WriteAllBytes($t,$b)}catch{exit 5};"
+        L"& (Join-Path $env:SystemRoot 'System32\\reg.exe') import $t *>$null;"
+        L"$c=$LASTEXITCODE;"
+        L"Remove-Item -LiteralPath $t -Force -ErrorAction SilentlyContinue;"
+        L"exit $c";
     WCHAR sysDir[MAX_PATH];
     GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir));
-    std::wstring regExe = std::wstring(sysDir) + L"\\reg.exe";
-    std::wstring params = L"import \"" + regFile + L"\"";
+    std::wstring powershell =
+        std::wstring(sysDir) + L"\\WindowsPowerShell\\v1.0\\powershell.exe";
+    std::wstring params =
+        L"-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle "
+        L"Hidden -Command \"" +
+        script + L"\"";
     SHELLEXECUTEINFOW sei{sizeof(sei)};
     sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
     sei.hwnd = owner;
     sei.lpVerb = L"runas";
-    sei.lpFile = regExe.c_str();
+    sei.lpFile = powershell.c_str();
     sei.lpParameters = params.c_str();
     sei.nShow = SW_HIDE;
-    std::wstring error;
+    // Blocks while the UAC prompt is up.
     if (!ShellExecuteExW(&sei)) {
         DWORD e = GetLastError();
-        error = e == ERROR_CANCELLED
-                    ? L"The administrator prompt was canceled. Windhawk keeps "
-                      L"mod settings in a protected registry key, so saving "
-                      L"needs administrator approval."
-                    : L"Starting reg.exe failed (error " + std::to_wstring(e) +
-                          L").";
+        result.error =
+            e == ERROR_CANCELLED
+                ? L"The administrator prompt was canceled. Windhawk keeps mod "
+                  L"settings in a protected registry key, so saving needs "
+                  L"administrator approval."
+                : L"Starting the import failed (error " + std::to_wstring(e) +
+                      L").";
     } else if (sei.hProcess) {
-        WaitForSingleObject(sei.hProcess, INFINITE);
+        HANDLE waits[] = {sei.hProcess, g_stopEvent};
+        DWORD w = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
         DWORD exitCode = 1;
-        GetExitCodeProcess(sei.hProcess, &exitCode);
+        if (w == WAIT_OBJECT_0) {
+            GetExitCodeProcess(sei.hProcess, &exitCode);
+        }
         CloseHandle(sei.hProcess);
-        if (exitCode != 0) {
-            error = L"Importing the settings failed (reg.exe exit code " +
-                    std::to_wstring(exitCode) + L").";
+        if (w != WAIT_OBJECT_0) {
+            result.error = L"The mod was unloaded while saving.";
+        } else if (exitCode == 3) {
+            result.error =
+                L"The settings file was changed by another program before "
+                L"it could be imported, so nothing was saved.";
+        } else if (exitCode != 0) {
+            result.error = L"Importing the settings failed (exit code " +
+                           std::to_wstring(exitCode) + L").";
         }
     }
     DeleteFileW(regFile.c_str());
-    return error;
+    if (result.error.empty()) {
+        result.changeTime = newTime;
+    }
+    return result;
 }
 
 // --- The window -------------------------------------------------------------
@@ -4705,7 +4482,10 @@ constexpr IID IID_IDesktopWindowXamlSourceNative2 = {
 // The settings window lives in File Explorer (Start can't host XAML islands,
 // InitializeForCurrentThread / DesktopWindowXamlSource fail there with
 // ERROR_NOT_SUPPORTED). These run on the mod's settings thread in Explorer.
-winrt::Windows::UI::Xaml::Hosting::WindowsXamlManager g_xamlManager{nullptr};
+// XAML objects of the settings thread: released there when it ends
+// (SettingsHostThread), never by the CRT at process exit.
+[[clang::no_destroy]] winrt::Windows::UI::Xaml::Hosting::WindowsXamlManager
+    g_xamlManager{nullptr};
 std::vector<AppEntry> g_pickerApps;  // Start apps for the app picker
 bool g_isExplorer = false;
 
@@ -4745,6 +4525,21 @@ HICON SettingsLogoIcon(int px) {
     return icon;
 }
 
+// The settings window's icons (settings thread).
+bool g_windowIconsMade = false;
+HICON g_iconBig = nullptr;
+HICON g_iconSmall = nullptr;
+
+void DestroyWindowIcons() {
+    for (HICON* icon : {&g_iconBig, &g_iconSmall}) {
+        if (*icon) {
+            DestroyIcon(*icon);
+            *icon = nullptr;
+        }
+    }
+    g_windowIconsMade = false;
+}
+
 // The settings window's taskbar identity: its own app ID (so it isn't one
 // of File Explorer's windows on the taskbar) and the Settings gear icon.
 void SetSettingsWindowIdentity(HWND hwnd) {
@@ -4762,25 +4557,37 @@ void SetSettingsWindowIdentity(HWND hwnd) {
         store->SetValue(kAppIdKey, pv);
         store->Commit();
     }
-    static HICON big = SettingsLogoIcon(GetSystemMetrics(SM_CXICON));
-    static HICON small = SettingsLogoIcon(GetSystemMetrics(SM_CXSMICON));
-    if (!big || !small) {
-        // Fallback: the Settings app's icon from its executable.
-        WCHAR exe[MAX_PATH];
-        if (GetWindowsDirectoryW(exe, MAX_PATH)) {
-            wcscat_s(exe, L"\\ImmersiveControlPanel\\SystemSettings.exe");
-            HICON b = nullptr, sm = nullptr;
-            if (ExtractIconExW(exe, 0, &b, &sm, 1)) {
-                big = big ? big : b;
-                small = small ? small : sm;
+    // Made once, destroyed when the settings thread ends (DestroyWindowIcons).
+    if (!g_windowIconsMade) {
+        g_windowIconsMade = true;
+        g_iconBig = SettingsLogoIcon(GetSystemMetrics(SM_CXICON));
+        g_iconSmall = SettingsLogoIcon(GetSystemMetrics(SM_CXSMICON));
+        if (!g_iconBig || !g_iconSmall) {
+            // Fallback: the Settings app's icon from its executable.
+            WCHAR exe[MAX_PATH];
+            if (GetWindowsDirectoryW(exe, MAX_PATH)) {
+                wcscat_s(exe, L"\\ImmersiveControlPanel\\SystemSettings.exe");
+                HICON b = nullptr, sm = nullptr;
+                if (ExtractIconExW(exe, 0, &b, &sm, 1)) {
+                    if (!g_iconBig) {
+                        g_iconBig = b;
+                    } else if (b) {
+                        DestroyIcon(b);
+                    }
+                    if (!g_iconSmall) {
+                        g_iconSmall = sm;
+                    } else if (sm) {
+                        DestroyIcon(sm);
+                    }
+                }
             }
         }
     }
-    if (big) {
-        SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)big);
+    if (g_iconBig) {
+        SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)g_iconBig);
     }
-    if (small) {
-        SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)small);
+    if (g_iconSmall) {
+        SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)g_iconSmall);
     }
 }
 
@@ -4805,7 +4612,7 @@ wf::IInspectable Box(std::wstring_view s) {
 constexpr PCWSTR kDonateUrl = L"https://buymeacoffee.com/widget/page/danrotaru";
 
 void OpenUrl(std::wstring url) {
-    RunDetached([url = std::move(url)] {
+    RunWorker([url = std::move(url)] {
         ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr,
                       SW_SHOWNORMAL);
     });
@@ -4986,7 +4793,7 @@ class SettingsWindow {
     void ExportSettings();
     void ImportSettings();
     std::wstring Browse(PCWSTR title, bool icons);
-    void Save(bool closeAfter);
+    void Save(bool closeAfter, bool overwrite = false);
     void Discard();
     void RequestClose();
     // The App settings card, scrolled to when an app is clicked or edited.
@@ -5118,6 +4925,9 @@ class SettingsWindow {
 
     EditSettings m_model;
     std::vector<RegEntry> m_savedEntries;
+    // Windhawk's SettingsChangeTime when the settings were read: a newer one
+    // at Save means they were changed in Windhawk meanwhile.
+    DWORD m_loadedChangeTime = 0;
     std::vector<std::wstring> m_pageTags;
     std::wstring m_page;
     bool m_dirty = false;
@@ -5125,7 +4935,7 @@ class SettingsWindow {
     bool m_closeAfterSave = false;
 };
 
-SettingsWindow* g_settingsWindow = nullptr;  // Start's UI thread only
+SettingsWindow* g_settingsWindow = nullptr;  // settings thread only
 bool g_settingsClassRegistered = false;
 
 PCWSTR SettingsClassName() {
@@ -5159,6 +4969,7 @@ LRESULT CALLBACK SettingsWndProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 bool SettingsWindow::Create() {
+    m_loadedChangeTime = ReadSettingsChangeTime();
     m_model = ReadEditSettings();
     m_savedEntries = BuildRegEntries(m_model);
     // Known before the pages are built, so they're built once, in the right
@@ -5320,9 +5131,11 @@ LRESULT SettingsWindow::HandleMessage(HWND hWnd,
             return 0;
         }
         case kSaveDoneMsg: {
-            std::unique_ptr<std::wstring> error((std::wstring*)lp);
+            std::unique_ptr<SaveResult> result((SaveResult*)lp);
+            auto const& error = result->error;
             m_saving = false;
-            if (error->empty()) {
+            if (error.empty()) {
+                m_loadedChangeTime = result->changeTime;
                 m_savedEntries = BuildRegEntries(m_model);
                 OnChanged();
                 m_status.Text(L"Saved. Start has been updated.");
@@ -5331,7 +5144,7 @@ LRESULT SettingsWindow::HandleMessage(HWND hWnd,
                     return 0;
                 }
             } else {
-                m_status.Text(*error);
+                m_status.Text(error);
                 UpdateFooter();
             }
             return 0;
@@ -5607,21 +5420,6 @@ FrameworkElement SettingsWindow::FieldControl(Field const& f,
             });
             *refresh = sync;
             return combo;
-        }
-        case FieldKind::Lines: {
-            auto* v = (std::wstring*)f.value;
-            xc::TextBox box;
-            box.Width(240);
-            box.AcceptsReturn(true);
-            box.TextWrapping(TextWrapping::Wrap);
-            box.MinHeight(64);
-            box.Text(*v);
-            box.TextChanged([this, v, box](auto&&, auto&&) {
-                *v = box.Text();
-                OnChanged();
-            });
-            *refresh = [v, box] { box.Text(*v); };
-            return box;
         }
     }
     *refresh = [] {};
@@ -6004,7 +5802,8 @@ EditItem* SettingsWindow::SelectedItem() {
 }
 
 // Icons in the settings window (settings thread only).
-std::unordered_map<std::wstring, xm::ImageSource> g_settingsIcons;
+[[clang::no_destroy]] std::unordered_map<std::wstring, xm::ImageSource>
+    g_settingsIcons;  // settings thread
 
 xm::ImageSource SettingsIcon(std::wstring const& source,
                              HWND hwnd,
@@ -6181,7 +5980,6 @@ void SettingsWindow::BuildItemEditor() {
 
     // The app's fields have no reset buttons (an empty field is the
     // default: the app's own name, icon, and so on).
-    auto withReset = [](auto box) -> FrameworkElement { return box; };
     // A text box bound to a field of the item.
     auto textBox = [edit](std::wstring const& value, PCWSTR placeholder,
                           std::function<void(EditItem&, std::wstring)> setter) {
@@ -6195,7 +5993,7 @@ void SettingsWindow::BuildItemEditor() {
         return box;
     };
     // A text box with Browse… after it.
-    auto withBrowse = [this, &withReset](xc::TextBox box, PCWSTR title,
+    auto withBrowse = [this](xc::TextBox box, PCWSTR title,
                                          bool icons) -> FrameworkElement {
         xc::Grid row;
         row.ColumnSpacing(8);
@@ -6204,7 +6002,7 @@ void SettingsWindow::BuildItemEditor() {
         b.Width(GridLengthHelper::Auto());
         row.ColumnDefinitions().Append(a);
         row.ColumnDefinitions().Append(b);
-        row.Children().Append(withReset(box));
+        row.Children().Append(box);
         auto browse = TextButton(L"\uE8DA", L"Browse\u2026",
                                  [this, box, icons, title] {
                                      std::wstring p = Browse(title, icons);
@@ -6227,7 +6025,7 @@ void SettingsWindow::BuildItemEditor() {
             [](EditItem& it, std::wstring v) { it.label = v; });
         card(L"\uE8D2", L"Name",
              L"Shown under the icon, in the tooltip and in the opened group.",
-             nullptr, withReset(label));
+             nullptr, label);
     };
 
     // Type
@@ -6316,7 +6114,7 @@ void SettingsWindow::BuildItemEditor() {
                            [](EditItem& it, std::wstring v) { it.path = v; });
         card(L"\uE774", L"Website",
              L"The address to open in the default browser.", nullptr,
-             withReset(url));
+             url);
     }
 
     if (!website) {
@@ -6332,7 +6130,7 @@ void SettingsWindow::BuildItemEditor() {
                        L"it's launched."
                      : L"Arguments passed to the app when it's launched, if "
                        L"it accepts any.",
-             nullptr, withReset(args));
+             nullptr, args);
     }
 
     // Icon
@@ -9239,22 +9037,6 @@ bool ImportSettingsJson(std::wstring const& text,
                 continue;
             }
             std::wstring key = field.key;
-            if (field.kind == FieldKind::Lines) {
-                if (!f.count(key + L"[0]")) {
-                    continue;
-                }
-                std::wstring lines;
-                for (int k = 0; f.count(key + L"[" + std::to_wstring(k) + L"]");
-                     k++) {
-                    if (!lines.empty()) {
-                        lines += L"\r\n";
-                    }
-                    lines += f[key + L"[" + std::to_wstring(k) + L"]"];
-                }
-                *(std::wstring*)field.value = lines;
-                recognized++;
-                continue;
-            }
             if (!f.count(key)) {
                 continue;
             }
@@ -9485,8 +9267,20 @@ void SettingsWindow::UpdateFooter() {
     }
 }
 
-void SettingsWindow::Save(bool closeAfter) {
+void SettingsWindow::Save(bool closeAfter, bool overwrite) {
     if (m_saving) {
+        return;
+    }
+    // Changed in Windhawk since this window read them: saving would replace
+    // those changes, so ask first.
+    if (!overwrite && ReadSettingsChangeTime() != m_loadedChangeTime) {
+        ShowConfirmDialog(
+            L"Settings changed in Windhawk",
+            L"The mod's settings were changed in Windhawk after this window "
+            L"opened. Saving replaces those changes with the ones made here. "
+            L"To keep them instead, cancel and use Discard to load them.",
+            L"Save anyway",
+            [this, closeAfter] { Save(closeAfter, true); });
         return;
     }
     m_saving = true;
@@ -9494,16 +9288,17 @@ void SettingsWindow::Save(bool closeAfter) {
     UpdateFooter();
     auto entries = BuildRegEntries(m_model);
     HWND hwnd = m_hwnd;
-    // reg.exe and the UAC prompt block; keep Start's UI thread free.
-    RunDetached([entries = std::move(entries), hwnd] {
-        auto* error = new std::wstring(WriteModSettings(entries, hwnd));
-        if (!PostMessageW(hwnd, kSaveDoneMsg, 0, (LPARAM)error)) {
-            delete error;
+    // The UAC prompt and the import block; keep the window's thread free.
+    RunWorker([entries = std::move(entries), hwnd] {
+        auto* result = new SaveResult(WriteModSettings(entries, hwnd));
+        if (!PostMessageW(hwnd, kSaveDoneMsg, 0, (LPARAM)result)) {
+            delete result;
         }
     });
 }
 
 void SettingsWindow::Discard() {
+    m_loadedChangeTime = ReadSettingsChangeTime();
     m_model = ReadEditSettings();
     m_savedEntries = BuildRegEntries(m_model);
     m_selCat = m_model.groups.empty() ? -1 : 0;
@@ -9712,7 +9507,7 @@ void OpenSettingsWindow(int group, int item) {
     if (g_pickerApps.empty() && !g_pickerAppsLoading) {
         g_pickerAppsLoading = true;
         HWND hwnd = w->Hwnd();
-        RunDetached([hwnd] {
+        RunWorker([hwnd] {
             auto apps =
                 std::make_unique<std::vector<AppEntry>>(EnumerateStartApps());
             std::sort(apps->begin(), apps->end(), [](auto& a, auto& b) {
@@ -9742,6 +9537,7 @@ void CloseSettingsWindow() {
 
 constexpr UINT kOpenSettingsMsg = WM_APP + 20;
 HANDLE g_hostThread = nullptr;
+HANDLE g_hostReady = nullptr;  // set once the thread has its message queue
 DWORD g_hostThreadId = 0;
 
 PCWSTR HostClassName() {
@@ -9750,12 +9546,46 @@ PCWSTR HostClassName() {
     return name.c_str();
 }
 
+// Whether `id` (an app ID) is one of the Start apps in the user's groups,
+// given by app ID or by name. Pin / unpin requests are only done for those:
+// the host window takes messages from Start (a lower integrity level), so it
+// takes them from other programs too, and Windows doesn't let programs pin
+// apps by themselves.
+bool IsAppInGroups(std::wstring const& id) {
+    std::vector<std::wstring> apps;
+    {
+        std::lock_guard lock(g_settingsMutex);
+        for (auto const& g : g_settings.groups) {
+            for (auto const& item : g.items) {
+                if (item.type == L"app" && !item.app.empty()) {
+                    apps.push_back(item.app);
+                }
+            }
+        }
+    }
+    auto listed = [&](std::wstring const& s) {
+        return std::any_of(apps.begin(), apps.end(), [&](auto const& a) {
+            return _wcsicmp(a.c_str(), s.c_str()) == 0;
+        });
+    };
+    if (listed(id)) {
+        return true;
+    }
+    for (auto const& app : EnumerateStartApps()) {
+        if (_wcsicmp(app.id.c_str(), id.c_str()) == 0) {
+            return listed(app.name);
+        }
+    }
+    return false;
+}
+
 LRESULT CALLBACK HostWndProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp) {
     // Pin / unpin an app on the taskbar, for Start (see InvokeTaskbarVerb).
-    // Only these two verbs.
+    // Only these two verbs, and only for apps in the user's groups.
     if (msg == WM_COPYDATA) {
         auto* cds = (COPYDATASTRUCT const*)lp;
-        if (!cds || cds->dwData != kTaskbarVerbData || !cds->lpData) {
+        if (!cds || cds->dwData != kTaskbarVerbData || !cds->lpData ||
+            cds->cbData > 4096) {
             return FALSE;
         }
         std::wstring payload((PCWSTR)cds->lpData,
@@ -9769,7 +9599,14 @@ LRESULT CALLBACK HostWndProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp) {
         if (!IsTaskbarVerb(verb) || id.empty()) {
             return FALSE;
         }
-        InvokeAppShellVerb(id, verb);
+        RunWorker([id, verb] {
+            if (IsAppInGroups(id)) {
+                InvokeAppShellVerb(id, verb);
+            } else {
+                Wh_Log(L"Ignored %S for %s: not in the groups", verb.c_str(),
+                       id.c_str());
+            }
+        });
         return TRUE;
     }
     if (msg == kOpenSettingsMsg) {
@@ -9787,10 +9624,12 @@ LRESULT CALLBACK HostWndProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp) {
 DWORD WINAPI SettingsHostThread(LPVOID) {
     winrt::init_apartment(winrt::apartment_type::single_threaded);
 
-    HMODULE self;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                       (LPCWSTR)&HostWndProc, &self);
+    // The thread's message queue, so StopSettingsHost can post WM_QUIT.
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    SetEvent(g_hostReady);
+
+    HMODULE self = ThisModule();
     RegisterSettingsWindowClass();
     WNDCLASSEXW wc{sizeof(wc)};
     wc.lpfnWndProc = HostWndProc;
@@ -9800,19 +9639,19 @@ DWORD WINAPI SettingsHostThread(LPVOID) {
 
     // Only one File Explorer process hosts the window.
     HWND host = nullptr;
-    if (!FindWindowExW(HWND_MESSAGE, nullptr, HostClassName(), nullptr)) {
+    if (!g_unloading &&
+        !FindWindowExW(HWND_MESSAGE, nullptr, HostClassName(), nullptr)) {
         host = CreateWindowExW(0, HostClassName(), L"", 0, 0, 0, 0, 0,
                                HWND_MESSAGE, nullptr, self, nullptr);
     }
     if (host) {
-        // Start runs at a lower integrity level; let its request through.
+        // Start runs at a lower integrity level; let its requests through.
         ChangeWindowMessageFilterEx(host, kOpenSettingsMsg, MSGFLT_ALLOW,
                                     nullptr);
         ChangeWindowMessageFilterEx(host, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
         Wh_Log(L"Settings host ready");
     }
 
-    MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         if (g_settingsWindow && g_settingsWindow->PreTranslate(&msg)) {
             continue;
@@ -9827,6 +9666,7 @@ DWORD WINAPI SettingsHostThread(LPVOID) {
     }
     UnregisterClassW(HostClassName(), self);
     UnregisterSettingsWindowClass();
+    DestroyWindowIcons();
     g_settingsIcons.clear();
     if (g_xamlManager) {
         try {
@@ -9841,21 +9681,43 @@ DWORD WINAPI SettingsHostThread(LPVOID) {
 }
 
 void StartSettingsHost() {
+    g_hostReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hostThread = CreateThread(nullptr, 0, SettingsHostThread, nullptr, 0,
                                 &g_hostThreadId);
 }
 
+// Ends the settings thread and waits for it (no time limit).
 void StopSettingsHost() {
-    if (!g_hostThread) {
-        return;
+    if (g_hostThread) {
+        // Its queue must exist for WM_QUIT to be posted.
+        HANDLE waits[] = {g_hostReady, g_hostThread};
+        WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+        PostThreadMessageW(g_hostThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_hostThread, INFINITE);
+        CloseHandle(g_hostThread);
+        g_hostThread = nullptr;
+        g_hostThreadId = 0;
     }
-    PostThreadMessageW(g_hostThreadId, WM_QUIT, 0, 0);
-    if (WaitForSingleObject(g_hostThread, 10000) != WAIT_OBJECT_0) {
-        Wh_Log(L"The settings thread didn't exit in time");
+    if (g_hostReady) {
+        CloseHandle(g_hostReady);
+        g_hostReady = nullptr;
     }
-    CloseHandle(g_hostThread);
-    g_hostThread = nullptr;
-    g_hostThreadId = 0;
+}
+
+// The thread showing the "settings window isn't available" message, to close
+// it if the mod unloads meanwhile.
+std::atomic<DWORD> g_infoBoxThreadId{0};
+
+void CloseInfoBox() {
+    if (DWORD tid = g_infoBoxThreadId) {
+        EnumThreadWindows(
+            tid,
+            [](HWND hwnd, LPARAM) -> BOOL {
+                PostMessageW(hwnd, WM_CLOSE, 0, 0);
+                return TRUE;
+            },
+            0);
+    }
 }
 
 // Called in Start (context menu): ask File Explorer to show the window.
@@ -9863,13 +9725,21 @@ void RequestSettingsWindow(int group, int item) {
     HWND host = FindWindowExW(HWND_MESSAGE, nullptr, HostClassName(), nullptr);
     if (!host) {
         Wh_Log(L"Settings host not found in File Explorer");
-        MessageBoxW(nullptr,
-                    L"The settings window is provided by this mod's File "
-                    L"Explorer part, which isn't running.\n\nMake sure the "
-                    L"mod is enabled and explorer.exe isn't excluded in its "
-                    L"Advanced settings in Windhawk.",
-                    L"Start Menu Groups",
-                    MB_ICONINFORMATION | MB_SETFOREGROUND);
+        // Not on Start's UI thread, which a message box would block.
+        RunWorker([] {
+            g_infoBoxThreadId = GetCurrentThreadId();
+            if (!g_unloading) {
+                MessageBoxW(nullptr,
+                            L"The settings window is provided by this mod's "
+                            L"File Explorer part, which isn't running.\n\n"
+                            L"Make sure the mod is enabled and explorer.exe "
+                            L"isn't excluded in its Advanced settings in "
+                            L"Windhawk.",
+                            L"Start Menu Groups",
+                            MB_ICONINFORMATION | MB_SETFOREGROUND);
+            }
+            g_infoBoxThreadId = 0;
+        });
         return;
     }
     DWORD pid = 0;
@@ -9881,50 +9751,10 @@ void RequestSettingsWindow(int group, int item) {
                  (LPARAM)(item + 1));
 }
 
-void RunOnUiThreadAndWait(std::function<void()> fn) {
-    auto dispatcher = g_dispatcher;
-    if (!dispatcher) {
-        return;
-    }
-    if (dispatcher.HasThreadAccess()) {
-        fn();
-        return;
-    }
-    HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    try {
-        dispatcher.RunAsync(wuc::CoreDispatcherPriority::High, [fn, done] {
-            try {
-                fn();
-            } catch (...) {
-            }
-            SetEvent(done);
-        });
-        WaitForSingleObject(done, 3000);
-    } catch (...) {
-    }
-    CloseHandle(done);
-}
-
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
-    // XAML diagnostics keeps this DLL loaded after Windhawk unloads the mod
-    // (it holds the TAP), so a reload can get the same DLL instance back with
-    // the previous session's globals. Start from a clean state.
-    g_unloading = false;
-    g_tapInjected = false;
-    g_injectThread = nullptr;
-    g_injectStopEvent = nullptr;
-    g_visualTreeWatcher = nullptr;
-    g_dispatcher = nullptr;
-    g_model = nullptr;
-    // Normally already empty (Detach ran on Start's UI thread at unload). If
-    // that timed out, the old XAML references must not be released from this
-    // thread: overwrite without destroying, i.e. leak them deliberately.
-    new (&g_attach) Attachment{};
-    new (&g_addedMenuItems) std::vector<AddedMenuItem>{};
-    g_reloadGeneration = 0;
-
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     LoadSettings();
 
     WCHAR exe[MAX_PATH];
@@ -9936,11 +9766,20 @@ BOOL Wh_ModInit() {
         return TRUE;
     }
 
-    if (!GetModuleHandleW(L"Windows.UI.Xaml.dll")) {
-        HMODULE kb = GetModuleHandleW(L"kernelbase.dll");
-        auto p = (LoadLibraryExW_t)GetProcAddress(kb, "LoadLibraryExW");
-        Wh_SetFunctionHook((void*)p, (void*)LoadLibraryExW_Hook,
-                           (void**)&LoadLibraryExW_Original);
+    // Start's window, when Start (re)creates it.
+    HMODULE user32 =
+        LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (user32) {
+        if (auto p = (CreateWindowInBand_t)GetProcAddress(
+                user32, "CreateWindowInBand")) {
+            WindhawkUtils::SetFunctionHook(p, CreateWindowInBand_Hook,
+                                           &CreateWindowInBand_Original);
+        }
+        if (auto p = (CreateWindowInBandEx_t)GetProcAddress(
+                user32, "CreateWindowInBandEx")) {
+            WindhawkUtils::SetFunctionHook(p, CreateWindowInBandEx_Hook,
+                                           &CreateWindowInBandEx_Original);
+        }
     }
     return TRUE;
 }
@@ -9949,65 +9788,56 @@ void Wh_ModAfterInit() {
     if (g_isExplorer) {
         return;
     }
-    // The retry thread waits for whichever XAML framework Start uses.
-    TryInject();
+    // Start is already running: get on its UI thread now.
+    if (HWND coreWnd = FindStartWindow()) {
+        RunFromWindowThread(
+            coreWnd, [](PVOID p) { InstallStartUi((HWND)p); }, coreWnd);
+    }
 }
 
 void Wh_ModBeforeUninit() {
     g_unloading = true;
+    SetEvent(g_stopEvent);
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
     g_unloading = true;
+    SetEvent(g_stopEvent);
+    CloseInfoBox();
     if (g_isExplorer) {
         StopSettingsHost();
-        for (int i = 0; i < 100 && g_pendingThreads > 0; i++) {
-            Sleep(50);
-        }
-        return;
     }
-    StopInjectThread();
-
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->Unadvise();
-        g_visualTreeWatcher = nullptr;
+    // No worker posts to Start's UI thread any more (g_unloading), and none
+    // is left running mod code.
+    JoinWorkers();
+    if (HWND wnd = g_uiWnd) {
+        // On Start's UI thread, synchronously: everything the mod added to
+        // Start is removed, and nothing of it stays queued there.
+        SendMessageW(wnd, kUninstallMsg, 0, 0);
     }
-    RunOnUiThreadAndWait([] {
-        RemoveFromStartMenus();
-        Detach();
-        g_model = nullptr;
-        g_imageSources.clear();
-    });
-
-    for (int i = 0; i < 100 && g_pendingThreads > 0; i++) {
-        Sleep(50);
-    }
+    CloseHandle(g_stopEvent);
+    g_stopEvent = nullptr;
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
     LoadSettings();
-    if (g_dispatcher) {
+    if (g_isExplorer) {
+        return;  // the settings window reads them when it opens
+    }
+    PostToUi([] {
+        std::wstring placement;
+        {
+            std::lock_guard lock(g_settingsMutex);
+            placement = g_settings.placement;
+        }
         // A new "Where to show the groups": attached again, there.
-        g_dispatcher.RunAsync(wuc::CoreDispatcherPriority::Normal, [] {
-            std::wstring placement;
-            {
-                std::lock_guard lock(g_settingsMutex);
-                placement = g_settings.placement;
-            }
-            if (g_unloading || !g_attach.host ||
-                g_attach.placement == placement) {
-                return;
-            }
-            auto header = g_lastPinnedHeader.get();
-            if (!header) {
-                return;
-            }
+        if (g_attach.host && g_attach.placement != placement) {
             Wh_Log(L"Moving the groups: %s", placement.c_str());
             Detach();
-            TryAttachAfterHeader(header);
-        });
+            RequestScan();
+        }
         ReloadAsync();
-    }
+    });
 }
