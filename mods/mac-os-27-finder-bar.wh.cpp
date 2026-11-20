@@ -807,6 +807,11 @@ static float MarqueeOffset(float textW, float gap, float s, ULONGLONG start) {
     return ph < pause ? 0.0f : (float)((ph - pause) * speed);
 }
 
+// Importar ou restaurar os ajustes: os valores guardados fora de LoadSettings (a
+// ordem dos ícones, o vidro desta janela, a previsão) são lidos de novo na
+// próxima recarga (CfgReloadCached).
+static bool g_cfgRecache = false;
+static std::vector<int> g_barOrder;  // a ordem dos ícones da direita (BarOrder)
 static void LoadSettings() {
     FlushSaves();  // o que ainda não foi gravado não pode ser lido por cima
     // "Restaurar os ajustes da barra" (no Windhawk): ao ser ligado, apaga uma vez
@@ -822,6 +827,7 @@ static void LoadSettings() {
             for (PCWSTR k : {L"glass", L"settingsLook", L"barOrder", L"weatherGlass", L"weatherOpts", L"weatherStyle", L"weatherAnim"})
                 Wh_SetStringValue(k, L"");
             Wh_SetIntValue(L"resetDone", 1);
+            g_cfgRecache = true;
             Wh_Log(L"Ajustes da barra restaurados ao padrão");
         } else if (!reset && done) {
             Wh_SetIntValue(L"resetDone", 0);
@@ -21443,7 +21449,6 @@ struct NotifPanel {
     float cardsListEnd = 0;
     ULONGLONG clearTick = 0;  // "Limpar": os cartões saem para a direita, um depois do outro
     std::vector<ULONGLONG> clearIds;  // as notificações que estavam no painel no clique (só elas são apagadas)
-    bool refreshAfterClear = false;   // chegou notificação durante a cascata: monta o painel no fim
     bool dragScroll = false;
     float dragY0 = 0, dragScroll0 = 0;
     std::set<std::wstring> expanded;
@@ -22605,7 +22610,6 @@ static bool NtfClearing() { return g_ntf.clearTick != 0; }
 // virou um cartão novo, com outro id).
 static void NtfClearDone() {
     g_ntf.clearTick = 0;
-    g_ntf.refreshAfterClear = false;
     const std::vector<ULONGLONG>& ids = g_ntf.clearIds;
     g_islHist.erase(std::remove_if(g_islHist.begin(), g_islHist.end(),
                                    [&](const IslandHist& h) { return std::find(ids.begin(), ids.end(), h.id) != ids.end(); }),
@@ -22617,10 +22621,7 @@ static void NtfClearDone() {
 }
 static void NtfRefresh() {
     if (!g_ntf.hwnd || g_ntf.closing) return;
-    if (g_ntf.clearTick) {  // (a cascata continua com os blocos do clique)
-        g_ntf.refreshAfterClear = true;
-        return;
-    }
+    if (g_ntf.clearTick) return;  // (a cascata continua com os blocos do clique; o fim monta o painel)
     NtfBuildGroups();
     NtfLayout();
     // O painel não passa do tamanho da janela criada.
@@ -22935,7 +22936,6 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 }
                 g_ntf.clearIds.clear();
                 for (const IslandHist& ih : g_islHist) g_ntf.clearIds.push_back(ih.id);
-                g_ntf.refreshAfterClear = false;
                 g_ntf.clearTick = GetTickCount64();
                 g_ntf.hover = -1;
                 NtfGlassShapes();
@@ -23244,6 +23244,7 @@ static void CfgImport() {
     // Substitui: os ajustes que não estão no arquivo (estavam no padrão quando
     // ele foi exportado) voltam ao padrão, como na restauração.
     for (const std::wstring& k : keys) Wh_SetStringValue(k.c_str(), L"");
+    g_cfgRecache = true;
     int n = 0;
     size_t pos = 0;
     while (pos < text.size()) {
@@ -23261,6 +23262,40 @@ static void CfgImport() {
     }
     IslandShow(0xE74E, 0x30D158, L"Ajustes importados", TF(L"%s ajustes aplicados", {std::to_wstring(n)}), L"", false, true);
     RequestReload(1);  // recarrega tudo com os ajustes novos
+}
+
+// Lê de novo o que fica guardado em memória depois da primeira leitura: sem isso,
+// a barra continuava com a ordem dos ícones, o vidro desta janela e o lugar da
+// previsão de antes, até reiniciar o mod (e uma mudança depois gravava o valor
+// antigo por cima do importado).
+static void CfgReloadCached() {
+    g_barOrder.clear();
+    int st = g_bsStyle, tr = g_bsTransp;
+    BsLoadLook();
+    if (g_bs.hwnd && (st != g_bsStyle || tr != g_bsTransp)) {
+        g_bsReopen = true;  // o vidro é criado com a janela: reabre no mesmo lugar
+        BsReopenIfNeeded();
+    }
+    // A previsão: volta ao padrão e lê o que estiver guardado (WxLoad só troca o que acha).
+    bool had = g_wx.hasPlace;
+    double lat = g_wx.lat, lon = g_wx.lon;
+    int prov = g_wx.provider, iv = g_wx.interval;
+    WxState fresh;
+    fresh.data = g_wx.data;
+    fresh.fetched = g_wx.fetched;
+    fresh.loading = g_wx.loading;
+    fresh.failed = g_wx.failed;
+    g_wx = fresh;
+    g_wxGlassT = 55;
+    WxLoad();
+    if (had != g_wx.hasPlace || lat != g_wx.lat || lon != g_wx.lon || prov != g_wx.provider) {
+        g_wx.data = WxData{};
+        g_wx.fetched = 0;
+        g_wx.failed = false;
+        WxRefresh();
+    }
+    if (iv != g_wx.interval && g_owner) SetTimer(g_owner, TIMER_WEATHER, WxIntervalMs(), nullptr);
+    if (g_wxw.hwnd) DestroyWindow(g_wxw.hwnd);
 }
 
 static void BsAction(int val) {
@@ -24002,8 +24037,8 @@ static bool BarAnimStep(Bar* b) {
     return moving;
 }
 
-// Ordem dos ícones da direita (da esquerda para a direita), guardada pelo mod.
-static std::vector<int> g_barOrder;
+// Ordem dos ícones da direita (da esquerda para a direita), guardada pelo mod
+// (g_barOrder, declarada junto de LoadSettings).
 static const std::vector<int>& BarOrder() {
     static const int kDefault[] = {K_WEATHER, K_NOW, K_TRAY, K_DISK, K_DISPLAY, K_KBD, K_BATTERY, K_NET,
                                    K_BT,      K_VOL, K_FOCUS, K_SEARCH, K_PRIV, K_NOTIF, K_CC};
@@ -26567,6 +26602,10 @@ static DWORD WINAPI BarThread(LPVOID) {
                 g_rebuildScheduled = false;
                 Settings before = g_settings;
                 LoadSettings();
+                if (g_cfgRecache) {
+                    g_cfgRecache = false;
+                    CfgReloadCached();
+                }
                 // Aparência, ícones, fonte, idioma...: valem na barra que já existe,
                 // sem ela sumir e voltar.
                 if (msg.wParam == 0 && !g_bars.empty() && before.allMonitors == g_settings.allMonitors &&
