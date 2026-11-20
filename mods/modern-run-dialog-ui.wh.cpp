@@ -2,12 +2,13 @@
 // @id              modern-run-dialog-ui
 // @name            Modern Run Dialog UI For Windows 10 & 11
 // @name:vi-VN      Giao diện Hộp thoại Run Hiện đại cho Windows 10 & 11
-// @description     Replaces the classic Win + R dialog with a floating Liquid Glass / Fluent pill launcher, Compact Mini-Pill mode, instant calculator, multi-language Google Translate, and smart app suggestions.
-// @description:vi-VN Làm mới hộp thoại Run (Win + R) với giao diện viên thuốc nổi Liquid Glass / Fluent hiện đại, chế độ thu nhỏ siêu gọn, tính toán nhanh, dịch đa ngôn ngữ (Google Dịch) và gợi ý ứng dụng.
-// @version         5.0.104
+// @description     Replaces the classic Win + R and Task Manager "Run new task" dialogs with a floating Liquid Glass / Fluent pill launcher, Run-as-Admin toggle (plus Ctrl+Shift+Enter), Remember Last Position, Compact Mini-Pill mode, calculator, and app suggestions.
+// @description:vi-VN Làm mới hộp thoại Run (Win + R và Tạo tác vụ mới trong Task Manager) với giao diện viên thuốc nổi Liquid Glass / Fluent, công tắc Chạy với quyền quản trị (hỗ trợ Ctrl+Shift+Enter), nhớ vị trí cuối, chế độ thu nhỏ, tính toán nhanh và gợi ý ứng dụng.
+// @version         5.0.501
 // @author          caotu2005
 // @github          https://github.com/caotu2005
 // @include         explorer.exe
+// @include         Taskmgr.exe
 // @architecture    x86-64
 // @compilerOptions -ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lcomctl32 -lversion -limm32 -lcomdlg32 -ld2d1 -ldwrite -ladvapi32 -lole32 -luuid -lwindowscodecs
 // ==/WindhawkMod==
@@ -44,10 +45,6 @@
 
 *Menu Mod*
 
-![Modern Run Dialog UI Preview (Translate Mode)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/5.0.104/50104translatemode.png)
-
-*Translate Mode*
-
 ---
 
 ## 🌐 English
@@ -63,15 +60,16 @@ Replaces the classic Win32 **Run (`Win + R`)** dialog with a floating, borderles
   * Three surface styles: **Liquid Glass** (3D Snell's-law optical edge refraction, chromatic dispersion, refractive rim highlights, `1/4`-res text-dissolving Gaussian blur, and adjustable tint from `-100` Max Transparent default to `100` High Contrast), **Windows Blur** (translucent Windows 11 context-menu Acrylic styling with default `255` opacity, adjustable `0`–`255`), and **Opaque**, with automatic Light/Dark mode and real-time desktop backdrop luminance detection.
   * **Smart Taskbar-Aware Centering:** Automatically centers horizontally right above a bottom taskbar (expanding history/suggestions upward), or anchors at the top-center of the screen when the taskbar is on the left, right, or top (keeping the input bar fixed at the top while history, suggestions, translations, and menus expand downward).
 
-- **Compact Mini-Pill Mode (`300px` – `360px`):**
-  * Enabled by default and toggleable via the 3D Liquid Glass switch in the `⚙️` menu (or Windhawk settings): transforms the dialog into a sleek `340px` mini-pill containing the Run logo, compact input field, and circular icon-only **Run (`↵`)**, **Google Translate (`文A`)**, and **Settings (`⚙️`)** buttons.
+- **Compact Mini-Pill Mode (`360px`):**
+  * Enabled by default and toggleable via the 3D Liquid Glass switch in the `⚙️` menu (or Windhawk settings): transforms the dialog into a sleek `360px` mini-pill containing the Run logo, compact input field, and circular icon-only **Run (`↵`)**, **Exit (`✕`)**, and **Settings (`⚙️`)** buttons.
   * Hides initial command history when idle for an ultra-clean floating pill look, while automatically keeping **App Suggestions** and **Instant Math Calculator** active as soon as you type.
+
+- **Remember Last Position & `Ctrl + Shift + Enter` Elevation:**
+  * Enable **Remember Last Window Position** in settings to reopen new `Win + R` instances exactly where you last dragged the pill (safely clamped across multi-monitor and resolution changes).
+  * Supports classic **`Ctrl + Shift + Enter`** to run any single command elevated as Administrator without toggling permanent Admin mode.
 
 - **Instant Math Calculator:**
   * Type any mathematical expression directly into the Run input bar (e.g., `1+1`, `(25*4)/2`, `sqrt(144)`, `sin(pi/2)`, `2^10`) to evaluate and display the live result at the top of the suggestion card; press `Enter` or click the result row to copy/insert it immediately.
-
-- **Built-in Multi-Language Google Translate (`文A`):**
-  * Click the dedicated **Google Translate (`文A`)** icon button on the input bar (between Run and Settings) to toggle **Translate Mode** with a dynamically expanding multi-line input field, source/target language selector pills (22 languages + Auto Detect) with a one-click swap (`⇄`) button, and press `Enter` to open the translation in a compact Google Translate popup window positioned right above (or below) the input bar.
 
 - **Synchronized In-App Quick Settings Menu (`⚙️`):**
   * Pill-styled Liquid Glass / Fluent popup menu featuring 3D **Liquid Glass Toggle Switches** for boolean features (**Compact Mini-Pill Mode** and **Show Command History**, which automatically locks ON and dims when Compact Mode is active) and crisp checkmarks (`✓`) for single-choice submenu options.
@@ -88,7 +86,7 @@ Replaces the classic Win32 **Run (`Win + R`)** dialog with a floating, borderles
   * Uses `RICHEDIT50W` (`msftedit.dll`) for native Windows 11 TSF inline composition—eliminating character jumping, popup boxes, and Space-bar delay on the built-in Windows Vietnamese keyboard (Telex/VNI) as well as third-party IMEs—and automatically focuses the input box on `Win + R` so you can type immediately without clicking.
 
 - **Multi-Language Support (21 Languages Across Dialog, Menu & Grouped Settings):**
-  * Auto-detects your Windows UI language or lets you choose from 21 built-in languages across the Run dialog, Compact Mode, Translate Mode, and `⚙️` menu (English, Vietnamese, Japanese, Korean, Simplified/Traditional Chinese, Thai, Indonesian, Malay, French, German, Spanish, Portuguese, Italian, Russian, Ukrainian, Polish, Dutch, Turkish, Hindi, and Arabic), with cleanly organized settings groups in Windhawk.
+  * Auto-detects your Windows UI language or lets you choose from 21 built-in languages across the Run dialog, Compact Mode, and `⚙️` menu (English, Vietnamese, Japanese, Korean, Simplified/Traditional Chinese, Thai, Indonesian, Malay, French, German, Spanish, Portuguese, Italian, Russian, Ukrainian, Polish, Dutch, Turkish, Hindi, and Arabic), with cleanly organized settings groups in Windhawk.
 
 ---
 
@@ -105,15 +103,16 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
   * Hỗ trợ 3 chế độ bề mặt: **Liquid Glass** (khúc xạ ánh sáng vát cạnh 3D, tán sắc lăng kính, viền phản quang, làm mờ nền xóa nhòa chữ phía sau và chỉnh độ đậm từ `-100` Trong suốt tối đa mặc định đến `100` Tương phản cao), **Làm mờ Windows – Windows Blur** (trong trẻo như menu chuột phải của Windows 11 với độ đậm mặc định `255`, chỉnh từ `0` – `255`) và **Nền đặc (Opaque)**, tự động chuyển đổi Sáng / Tối theo hệ thống và độ sáng màn hình nền.
   * **Tự động căn giữa sát Taskbar thông minh:** Tự động đặt hộp thoại nằm sát phía trên Taskbar ở chính giữa màn hình (mở rộng hộp lịch sử/đề xuất lên trên); nếu Taskbar đặt ở bên trái, bên phải hoặc phía trên thì thanh nhập sẽ cố định ở chính giữa đỉnh màn hình và tự động xổ ngược hộp lịch sử, gợi ý ứng dụng, kết quả dịch cũng như menu cài đặt xuống phía dưới.
 
-- **Chế độ thu nhỏ – Compact Mini-Pill Mode (`300px` – `360px`):**
-  * Mặc định bật sẵn (có thể bật/tắt bằng cần gạt Liquid Glass trong menu `⚙️` hoặc cài đặt Windhawk): thu gọn hộp thoại thành một viên thuốc nhỏ xinh (`340px`) chỉ gồm logo Run, ô nhập ngắn gọn và 3 nút tròn chỉ hiện biểu tượng: **Chạy (`↵`)**, **Google Dịch (`文A`)** và **Cài đặt (`⚙️`)**.
+- **Chế độ thu nhỏ – Compact Mini-Pill Mode (`360px`):**
+  * Mặc định bật sẵn (có thể bật/tắt bằng cần gạt Liquid Glass trong menu `⚙️` hoặc cài đặt Windhawk): thu gọn hộp thoại thành viên thuốc nhỏ gọn (`360px`) gồm logo Run, ô nhập thoáng rộng và 3 nút tròn biểu tượng: **Chạy (`↵`)**, **Thoát (`✕`)** và **Cài đặt (`⚙️`)**.
   * Tự động ẩn danh sách lịch sử ban đầu khi chưa gõ phím để giữ giao diện tối giản, nhưng vẫn giữ nguyên tính năng **Gợi ý ứng dụng** và **Tính toán nhanh** ngay khi bạn bắt đầu nhập.
+
+- **Nhớ vị trí cửa sổ lần cuối & Chạy Admin nhanh (`Ctrl + Shift + Enter`):**
+  * Bật **Nhớ vị trí cửa sổ lần cuối** trong Cài đặt để mọi lần mở `Win + R` tiếp theo giữ nguyên đúng vị trí bạn vừa kéo thả (tự động giới hạn an toàn khi đổi độ phân giải hoặc rút màn hình phụ).
+  * Hỗ trợ tổ hợp quen thuộc **`Ctrl + Shift + Enter`** để chạy quyền Quản trị viên cho lệnh hiện tại mà không cần bật cố định chế độ Admin.
 
 - **Máy tính toán học tức thì (Instant Math Calculator):**
   * Gõ trực tiếp phép tính vào ô nhập Run (ví dụ `1+1`, `(25*4)/2`, `sqrt(144)`, `sin(pi/2)`, `2^10`) để xem ngay kết quả tính toán ở đầu hộp gợi ý; nhấn `Enter` hoặc nhấp chuột vào dòng kết quả để sao chép và điền ngay vào ô nhập.
-
-- **Dịch đa ngôn ngữ nhanh bằng Google Dịch (`文A`):**
-  * Nhấn vào nút biểu tượng **Google Dịch (`文A`)** trên thanh nhập (nằm giữa nút Chạy và nút Cài đặt) để chuyển sang **Chế độ Dịch** với ô nhập tự động giãn chiều cao nhiều dòng, thanh chọn ngôn ngữ nguồn/đích (22 ngôn ngữ + Tự động phát hiện) kèm nút đảo chiều (`⇄`), và nhấn `Enter` để mở bản dịch trong cửa sổ popup Google Dịch nhỏ gọn nằm ngay phía trên (hoặc phía dưới) thanh nhập.
 
 - **Menu Cài đặt nhanh đồng bộ (`⚙️`) với Công tắc Liquid Glass:**
   * Menu cài đặt nhanh bo tròn đồng bộ với thanh nhập, sử dụng **cần gạt bật/tắt (Toggle Switch) hiệu ứng Liquid Glass 3D** cho các tính năng bật/tắt (**Chế độ thu nhỏ** và **Hiển thị lịch sử lệnh** – tự động bật sẵn và làm mờ khóa lại khi đang ở Chế độ thu nhỏ) cùng dấu tích `✓` chuẩn xác cho các mục chọn đơn trong menu con.
@@ -229,10 +228,15 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
 
 - layoutGroup:
   - minimalMode: true
-    $name: Compact Mini-Pill Mode (340px Mini Pill)
-    $name:vi-VN: Chế độ thu nhỏ (Viên thuốc nhỏ 340px)
-    $description: Compact 340px mini-pill bar with icon-only Run, Translate, and Gear buttons and short placeholder, keeping live App Suggestions & Calculator.
-    $description:vi-VN: Thu gọn thành viên thuốc nhỏ (340px) gồm logo Run, ô nhập ngắn gọn, nút Chạy/Dịch/Cài đặt dạng icon, vẫn giữ gợi ý ứng dụng và tính toán.
+    $name: Compact Mini-Pill Mode (360px Mini Pill)
+    $name:vi-VN: Chế độ thu nhỏ (Viên thuốc nhỏ 360px)
+    $description: Compact 360px mini-pill bar with icon-only Run, Exit, and Gear buttons and short placeholder, keeping live App Suggestions & Calculator.
+    $description:vi-VN: Thu gọn thành viên thuốc nhỏ (360px) gồm logo Run, ô nhập thoáng rộng, nút Chạy/Thoát/Cài đặt dạng icon, vẫn giữ gợi ý ứng dụng và tính toán.
+  - rememberPosition: false
+    $name: Remember Last Window Position
+    $name:vi-VN: Nhớ vị trí cửa sổ lần cuối
+    $description: Remember where you dragged the Run pill and open new Win + R dialogs at that saved position.
+    $description:vi-VN: Ghi nhớ vị trí bạn đã kéo thả hộp thoại Run và tự động mở lại ở đúng vị trí đó cho các lần Win + R tiếp theo.
   - uiScalePercent: "100"
     $name: UI Size / Scale Preset (85% – 120%)
     $name:vi-VN: Tỷ lệ kích thước giao diện có sẵn (85% – 120%)
@@ -305,6 +309,11 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
     $options:
     - minimize: Minimize – Restore
     - close: Close Window
+  - runAsAdmin: false
+    $name: Run Commands with Administrative Privileges
+    $name:vi-VN: Cho phép chạy với quyền quản trị
+    $description: Run commands as Administrator by default (can also be toggled anytime from the Gear menu with confirmation).
+    $description:vi-VN: Chạy lệnh với quyền Quản trị viên (có thể bật/tắt trực tiếp kèm xác nhận trong menu Bánh răng).
   - closeOnClickOutside: false
     $name: Close on Click Outside
     $name:vi-VN: Tự động đóng khi bấm ra ngoài cửa sổ
@@ -312,6 +321,21 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
     $description:vi-VN: Tự động đóng hộp thoại Run khi click chuột ra ngoài cửa sổ.
   $name: 3. History & Behavior
   $name:vi-VN: 3. Lịch sử lệnh & Hành vi cửa sổ
+
+- customAliases:
+  - - alias: "hosts"
+      $name: Short Alias
+      $name:vi-VN: Lệnh tắt (Alias)
+    - command: 'notepad C:\Windows\System32\drivers\etc\hosts'
+      $name: Target Command or Path
+      $name:vi-VN: Lệnh hoặc đường dẫn đích
+    - runAsAdmin: true
+      $name: Run as Administrator
+      $name:vi-VN: Chạy với quyền Quản trị
+  $name: 4. Custom Command Aliases
+  $name:vi-VN: 4. Bí danh lệnh tùy chỉnh (Custom Aliases)
+  $description: Define short aliases (e.g. hosts, env, ws) that expand into full commands, folders, or Admin actions.
+  $description:vi-VN: Khai báo các lệnh gõ tắt (ví dụ hosts, env, ws) để mở nhanh file, thư mục hoặc chạy lệnh với quyền Quản trị.
 */
 // ==/WindhawkModSettings==
 
@@ -342,6 +366,12 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
 #include <mutex>
 
 #include <cstdint>
+#ifndef DWMWA_TRANSITIONS_FORCEDISABLED
+#define DWMWA_TRANSITIONS_FORCEDISABLED 3
+#endif
+#ifndef DWMWA_CLOAK
+#define DWMWA_CLOAK 13
+#endif
 #ifndef DWMWA_CLOAKED
 #define DWMWA_CLOAKED 14
 #endif
@@ -518,11 +548,18 @@ struct LocalizedStrings {
     const wchar_t* appTag;
 };
 
+struct CommandAlias {
+    std::wstring alias;
+    std::wstring command;
+    bool runAsAdmin = false;
+};
+
 struct ModSettings {
     std::wstring language = L"auto";
     SurfaceTheme surfaceTheme = SurfaceTheme::Glass;
     ColorMode colorMode = ColorMode::Auto;
     bool minimalMode = true;
+    bool rememberPosition = false;
     int uiScalePercent = 100;
     int customDialogWidth = 0;
     int customBarHeight = 0;
@@ -539,8 +576,15 @@ struct ModSettings {
     bool showTimestamp = true;
     bool clearInitialInput = true;
     bool closeOnClickOutside = false;
+    bool runAsAdmin = false;
+    std::vector<CommandAlias> customAliases;
 };
 
+bool IsClassicFriendlyModeActive(const ModSettings& s) {
+    return !s.minimalMode && !s.clearInitialInput && s.maxHistoryItems > 0;
+}
+
+bool g_isTaskManagerProcess = false;
 std::mutex g_settingsMutex;
 ModSettings g_settings;
 LocalizedStrings g_i18n = {
@@ -566,18 +610,19 @@ enum ToggleAction : WPARAM {
 };
 
 // Base dimensions at 96 DPI
-constexpr int kBaseDlgWidth         = 616;
-constexpr int kBaseCompactDlgWidth  = 340;
+constexpr int kBaseDlgWidth = 636;
+constexpr int kBaseCompactDlgWidth  = 360;
 constexpr int kBaseRowHeight        = 38;
 constexpr int kBaseListPadTop       = 10;
 constexpr int kBaseListPadBottom    = 10;
 constexpr int kBaseDetachedGap      = 12;
+constexpr int kBaseAdminBannerHeight = 32;
+constexpr int kBaseAdminBannerGap   = 8;
 constexpr int kBaseInputBarHeight   = 54;
 constexpr UINT_PTR kTimerCaret              = 9010;
 constexpr UINT_PTR kTimerLuminance          = 9011;
 constexpr UINT_PTR kTimerOpenAnim           = 9014;
 constexpr UINT_PTR kTimerBgMedia            = 9012;
-constexpr UINT_PTR kTimerSnapTranslatePopup = 9015;
 constexpr int kModernEditId         = 9901;
 constexpr size_t kMaxMruEntries     = 20;
 
@@ -660,6 +705,8 @@ struct OpticalLensGeometryLUT {
     int h = 0;
     int topAreaH = 0;
     int gapH = 0;
+    int adminBannerH = 0;
+    int adminGapH = 0;
     UINT dpi = 0;
     int glassPct = -9999;
     bool isLight = false;
@@ -704,6 +751,8 @@ struct OpticalGlassCache {
     int h = 0;
     int topAreaH = -1;
     int gapH = -1;
+    int adminBannerH = -1;
+    int adminGapH = -1;
     int glassPct = -9999;
     bool isLight = false;
     bool isMenu = false;
@@ -717,6 +766,7 @@ static PreblurredMonitorCache g_menuMonitorBlurCache;
 static OpticalGlassCache g_dlgOpticalCache;
 static OpticalGlassCache g_menuMainOpticalCache;
 static OpticalGlassCache g_menuSubOpticalCache;
+static OpticalGlassCache g_adminWarnOpticalCache;
 
 extern std::atomic<HWND> g_hActiveGearMenu;
 extern std::atomic<HWND> g_hActiveCustomSizeWnd;
@@ -740,9 +790,43 @@ void ReleaseBackdropSnapshot() {
     ReleaseOpticalCacheBitmap(g_dlgOpticalCache);
     ReleaseOpticalCacheBitmap(g_menuMainOpticalCache);
     ReleaseOpticalCacheBitmap(g_menuSubOpticalCache);
+    ReleaseOpticalCacheBitmap(g_adminWarnOpticalCache);
     g_dlgOpticalCache = {};
     g_menuMainOpticalCache = {};
     g_menuSubOpticalCache = {};
+    g_adminWarnOpticalCache = {};
+}
+
+bool IsWdaExcludeFromCaptureSupported() {
+    static int s_supported = -1;
+    if (s_supported == -1) {
+        s_supported = 0;
+        if (HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll")) {
+            using RtlGetVersion_t = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
+            if (auto pRtlGetVersion = reinterpret_cast<RtlGetVersion_t>(GetProcAddress(hNtdll, "RtlGetVersion"))) {
+                RTL_OSVERSIONINFOW rovi = { sizeof(rovi) };
+                if (pRtlGetVersion(&rovi) == 0) {
+                    if (rovi.dwMajorVersion > 10 ||
+                        (rovi.dwMajorVersion == 10 && rovi.dwBuildNumber >= 19041)) {
+                        s_supported = 1;
+                    }
+                }
+            }
+        }
+    }
+    return s_supported == 1;
+}
+
+void DisableWindowDwmTransitions(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) return;
+    BOOL disable = TRUE;
+    DwmSetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &disable, sizeof(disable));
+}
+
+void SetWindowDwmCloak(HWND hWnd, bool cloak) {
+    if (!hWnd || !IsWindow(hWnd)) return;
+    BOOL val = cloak ? TRUE : FALSE;
+    DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &val, sizeof(val));
 }
 
 void CaptureCleanMonitorBackdrop(HWND hRefWnd, bool forceExcludeVisible = false) {
@@ -759,10 +843,19 @@ void CaptureCleanMonitorBackdrop(HWND hRefWnd, bool forceExcludeVisible = false)
     }
     if (monW <= 0 || monH <= 0 || monW > 7680 || monH > 4320) return;
 
+    const bool useWdaAffinity = IsWdaExcludeFromCaptureSupported();
     std::vector<HWND> excludedHwnds;
     auto excludeWndIfVisible = [&](HWND w) {
         if (w && IsWindow(w) && IsWindowVisible(w)) {
-            SetWindowDisplayAffinity(w, 0x00000011 /*WDA_EXCLUDEFROMCAPTURE*/);
+            DWORD cloaked = 0;
+            if (SUCCEEDED(DwmGetWindowAttribute(w, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked != 0) {
+                return;
+            }
+            if (useWdaAffinity) {
+                SetWindowDisplayAffinity(w, 0x00000011 /*WDA_EXCLUDEFROMCAPTURE*/);
+            } else {
+                SetWindowDwmCloak(w, true);
+            }
             excludedHwnds.push_back(w);
         }
     };
@@ -772,7 +865,7 @@ void CaptureCleanMonitorBackdrop(HWND hRefWnd, bool forceExcludeVisible = false)
         excludeWndIfVisible(g_hActiveGearMenu.load());
         excludeWndIfVisible(g_hActiveCustomSizeWnd.load());
         if (!excludedHwnds.empty()) {
-            // Double DwmFlush guarantees DWM has committed WDA_EXCLUDEFROMCAPTURE to the desktop surface
+            // Double DwmFlush guarantees DWM has committed WDA_EXCLUDEFROMCAPTURE / DWMWA_CLOAK
             // before BitBlt reads hScreenDC, preventing any self-capture saturation feedback loop.
             DwmFlush();
             DwmFlush();
@@ -814,7 +907,11 @@ void CaptureCleanMonitorBackdrop(HWND hRefWnd, bool forceExcludeVisible = false)
 
     for (HWND w : excludedHwnds) {
         if (IsWindow(w)) {
-            SetWindowDisplayAffinity(w, 0x00000000 /*WDA_NONE*/);
+            if (useWdaAffinity) {
+                SetWindowDisplayAffinity(w, 0x00000000 /*WDA_NONE*/);
+            } else {
+                SetWindowDwmCloak(w, false);
+            }
         }
     }
 }
@@ -884,11 +981,14 @@ void BlurBufferSeparableRGB(std::vector<DWORD>& buf, std::vector<DWORD>& tmp, in
 }
 
 void BuildOpticalLensGeometryLUT(OpticalLensGeometryLUT& lut, int w, int h, int topAreaH, int gapH,
-                                 UINT dpi, int glassPct, bool isLight, bool isMenuPanel, bool anchoredTop = false) {
+                                 UINT dpi, int glassPct, bool isLight, bool isMenuPanel, bool anchoredTop = false,
+                                 int adminBannerH = 0, int adminGapH = 0) {
     lut.w = w;
     lut.h = h;
     lut.topAreaH = topAreaH;
     lut.gapH = gapH;
+    lut.adminBannerH = adminBannerH;
+    lut.adminGapH = adminGapH;
     lut.dpi = dpi;
     lut.glassPct = glassPct;
     lut.isLight = isLight;
@@ -916,7 +1016,9 @@ void BuildOpticalLensGeometryLUT(OpticalLensGeometryLUT& lut, int w, int h, int 
     lut.bevelPixels.clear();
     lut.bevelPixels.reserve((size_t)(w + h) * 56);
 
-    int histCardH = (!isMenuPanel && topAreaH > gapH) ? (topAreaH - gapH) : 0;
+    int adminExtra = (!isMenuPanel && adminBannerH > 0) ? (adminBannerH + adminGapH) : 0;
+    int remTopH = topAreaH - adminExtra;
+    int histCardH = (!isMenuPanel && remTopH > gapH) ? (remTopH - gapH) : 0;
 
     for (int y = 0; y < h; ++y) {
         float panelTop = 0.0f;
@@ -932,32 +1034,42 @@ void BuildOpticalLensGeometryLUT(OpticalLensGeometryLUT& lut, int w, int h, int 
             int barH = (std::max)(2, h - topAreaH);
             float barPillRadius = (std::min)(maxPillCorner, (std::max)(8.0f, (float)barH * 0.5f));
             if (!anchoredTop) {
+                int adminTop = (histCardH > 0) ? (histCardH + gapH) : 0;
                 if (histCardH > 0 && y < histCardH) {
-                    // Panel 1 (Top): Detached History / Suggestions / Translation Card
+                    // Panel 1 (Top): Detached History / Suggestions Card
                     panelTop = 0.0f;
                     panelBot = (float)histCardH;
                     cornerR  = (std::min)(maxPillCorner, (panelBot - panelTop) * 0.5f);
-                } else if (histCardH > 0 && y < topAreaH) {
-                    // Transparent separation gap between History Card and Pill Input Bar
-                    continue;
-                } else {
-                    // Panel 2 (Bottom): Pill Command Input Bar
+                } else if (adminBannerH > 0 && y >= adminTop && y < adminTop + adminBannerH) {
+                    // Panel 2 (Above Input Bar): Amber-Orange Admin Status Pill Box
+                    panelTop = (float)adminTop;
+                    panelBot = (float)(adminTop + adminBannerH);
+                    cornerR  = (std::min)(maxPillCorner, (panelBot - panelTop) * 0.5f);
+                } else if (y >= topAreaH) {
+                    // Panel 3 (Bottom): Pill Command Input Bar
                     panelTop = (float)topAreaH;
                     panelBot = (float)h;
                     cornerR  = barPillRadius;
+                } else {
+                    // Transparent separation gaps
+                    continue;
                 }
             } else {
+                int adminTop = barH + adminGapH;
+                int cardTop = barH + adminExtra + gapH;
                 if (y < barH) {
                     // Panel 1 (Top): Pill Command Input Bar stays fixed at the top when anchoredTop is true!
                     panelTop = 0.0f;
                     panelBot = (float)barH;
                     cornerR  = barPillRadius;
-                } else if (histCardH > 0 && y < barH + gapH) {
-                    // Transparent separation gap between Top Pill Input Bar and Bottom Detached Card
-                    continue;
-                } else if (histCardH > 0) {
-                    // Panel 2 (Bottom): Detached History / Suggestions / Translation Card expands downward!
-                    panelTop = (float)(barH + gapH);
+                } else if (adminBannerH > 0 && y >= adminTop && y < adminTop + adminBannerH) {
+                    // Panel 2 (Below Input Bar): Amber-Orange Admin Status Pill Box
+                    panelTop = (float)adminTop;
+                    panelBot = (float)(adminTop + adminBannerH);
+                    cornerR  = (std::min)(maxPillCorner, (panelBot - panelTop) * 0.5f);
+                } else if (histCardH > 0 && y >= cardTop) {
+                    // Panel 3 (Bottom): Detached History / Suggestions Card expands downward!
+                    panelTop = (float)cardTop;
                     panelBot = (float)h;
                     cornerR  = (std::min)(maxPillCorner, (panelBot - panelTop) * 0.5f);
                 } else {
@@ -1247,7 +1359,8 @@ void DrawOpticalLiquidGlassBackdrop(ID2D1RenderTarget* pRT, HWND hWnd, int w, in
                                     int topAreaH, int gapH,
                                     UINT dpi, int glassPct, bool isLight, bool isMenuPanel, int cacheSlot,
                                     int overrideWndX = -999999, int overrideWndY = -999999,
-                                    bool anchoredTop = false) {
+                                    bool anchoredTop = false,
+                                    int adminBannerH = 0, int adminGapH = 0) {
     if (!pRT || !hWnd || w <= 0 || h <= 0) return;
 
     int wndX = overrideWndX;
@@ -1274,12 +1387,14 @@ void DrawOpticalLiquidGlassBackdrop(ID2D1RenderTarget* pRT, HWND hWnd, int w, in
     }
 
     OpticalGlassCache* cache = (cacheSlot == 0) ? &g_dlgOpticalCache
-                             : ((cacheSlot == 1) ? &g_menuMainOpticalCache : &g_menuSubOpticalCache);
+                             : ((cacheSlot == 1) ? &g_menuMainOpticalCache
+                             : ((cacheSlot == 2) ? &g_menuSubOpticalCache : &g_adminWarnOpticalCache));
     PreblurredMonitorCache& mcache = isMenuPanel ? g_menuMonitorBlurCache : g_dlgMonitorBlurCache;
 
     std::lock_guard<std::mutex> cacheLock(g_opticalCacheMutex);
     bool needRebuildPixels =
         (cache->w != w || cache->h != h || cache->topAreaH != topAreaH || cache->gapH != gapH ||
+         cache->adminBannerH != adminBannerH || cache->adminGapH != adminGapH ||
          cache->wndX != wndX || cache->wndY != wndY ||
          cache->glassPct != glassPct || cache->isLight != isLight || cache->isMenu != isMenuPanel ||
          cache->anchoredTop != anchoredTop ||
@@ -1288,11 +1403,13 @@ void DrawOpticalLiquidGlassBackdrop(ID2D1RenderTarget* pRT, HWND hWnd, int w, in
     if (needRebuildPixels) {
         bool shapeOrStyleChanged = (cache->lut.w != w || cache->lut.h != h ||
                                     cache->lut.topAreaH != topAreaH || cache->lut.gapH != gapH ||
+                                    cache->lut.adminBannerH != adminBannerH || cache->lut.adminGapH != adminGapH ||
                                     cache->lut.dpi != dpi || cache->lut.glassPct != glassPct ||
                                     cache->lut.isLight != isLight || cache->lut.isMenu != isMenuPanel ||
                                     cache->lut.anchoredTop != anchoredTop);
         if (shapeOrStyleChanged) {
-            BuildOpticalLensGeometryLUT(cache->lut, w, h, topAreaH, gapH, dpi, glassPct, isLight, isMenuPanel, anchoredTop);
+            BuildOpticalLensGeometryLUT(cache->lut, w, h, topAreaH, gapH, dpi, glassPct, isLight, isMenuPanel, anchoredTop,
+                                        adminBannerH, adminGapH);
         }
 
         // At 1/4-res, softRad = 9..13 equals 36px..52px full-res Gaussian blur -> 100% blurs out any background text!
@@ -1309,6 +1426,8 @@ void DrawOpticalLiquidGlassBackdrop(ID2D1RenderTarget* pRT, HWND hWnd, int w, in
         cache->h = h;
         cache->topAreaH = topAreaH;
         cache->gapH = gapH;
+        cache->adminBannerH = adminBannerH;
+        cache->adminGapH = adminGapH;
         cache->wndX = wndX;
         cache->wndY = wndY;
         cache->glassPct = glassPct;
@@ -1615,7 +1734,172 @@ struct ExtraLocalizedStrings {
     const wchar_t* clickToCopyHint;
     const wchar_t* fromPrefix;
     const wchar_t* toPrefix;
+    const wchar_t* runAsAdminMenu;
+    const wchar_t* adminActiveBanner;
+    const wchar_t* adminWarnTitle;
+    const wchar_t* adminWarnMessage;
+    const wchar_t* adminWarnAllowBtn;
+    const wchar_t* adminWarnCancelBtn;
 };
+
+struct V53LocalizedStrings {
+    const wchar_t* classicFriendlyMenu;
+    const wchar_t* rememberPosMenu;
+    const wchar_t* pinToTopMenu;
+    const wchar_t* unpinFromTopMenu;
+    const wchar_t* openFileLocationMenu;
+};
+
+V53LocalizedStrings GetV53LocalizedStrings(std::wstring lang) {
+    lang = ResolveEffectiveLanguageCode(std::move(lang));
+    if (lang == L"vi") return {
+        L"Chế độ Classic-Friendly (Giữ giao diện)",
+        L"Ghi nhớ vị trí cửa sổ lần cuối",
+        L"Ghim cố định lên đầu",
+        L"Bỏ ghim khỏi đầu danh sách",
+        L"Mở thư mục chứa file"
+    };
+    if (lang == L"zh_tw") return {
+        L"經典友善模式（保留主題）",
+        L"記住上次視窗位置",
+        L"釘選到頂部",
+        L"從頂部取消釘選",
+        L"開啟檔案位置"
+    };
+    if (lang == L"zh_cn") return {
+        L"经典友好模式（保留主题）",
+        L"记住上次窗口位置",
+        L"置顶固定",
+        L"取消置顶固定",
+        L"打开文件所在位置"
+    };
+    if (lang == L"ja") return {
+        L"クラシック風モード（テーマ維持）",
+        L"前回のウィンドウ位置を記憶",
+        L"先頭にピン留め",
+        L"ピン留めを解除",
+        L"ファイルの場所を開く"
+    };
+    if (lang == L"ko") return {
+        L"클래식 친화 모드 (테마 유지)",
+        L"마지막 창 위치 기억",
+        L"상단에 고정",
+        L"상단 고정 해제",
+        L"파일 위치 열기"
+    };
+    if (lang == L"th") return {
+        L"โหมดคลาสสิก (คงธีมเดิม)",
+        L"จำตำแหน่งหน้าต่างล่าสุด",
+        L"ปักหมุดไว้ด้านบน",
+        L"เลิกปักหมุดจากด้านบน",
+        L"เปิดตำแหน่งไฟล์"
+    };
+    if (lang == L"id") return {
+        L"Mode Klasik (Pertahankan Tema)",
+        L"Ingat Posisi Jendela Terakhir",
+        L"Sematkan ke atas",
+        L"Lepas sematan dari atas",
+        L"Buka lokasi file"
+    };
+    if (lang == L"ms") return {
+        L"Mod Klasik (Kekalkan Tema)",
+        L"Ingat Kedudukan Tetingkap Terakhir",
+        L"Sematkan ke atas",
+        L"Nyahsemat dari atas",
+        L"Buka lokasi fail"
+    };
+    if (lang == L"fr") return {
+        L"Mode Classique (Garder le thème)",
+        L"Mémoriser la dernière position",
+        L"Épingler en haut",
+        L"Détacher du haut",
+        L"Ouvrir l'emplacement du fichier"
+    };
+    if (lang == L"de") return {
+        L"Klassik-Modus (Design behalten)",
+        L"Letzte Fensterposition merken",
+        L"Oben anheften",
+        L"Von oben lösen",
+        L"Dateispeicherort öffnen"
+    };
+    if (lang == L"es") return {
+        L"Modo Clásico (Mantener tema)",
+        L"Recordar última posición",
+        L"Fijar arriba",
+        L"Desfijar de arriba",
+        L"Abrir ubicación del archivo"
+    };
+    if (lang == L"pt") return {
+        L"Modo Clássico (Manter tema)",
+        L"Lembrar última posição da janela",
+        L"Fixar no topo",
+        L"Desafixar do topo",
+        L"Abrir local do arquivo"
+    };
+    if (lang == L"it") return {
+        L"Modalità Classica (Mantieni tema)",
+        L"Ricorda ultima posizione finestra",
+        L"Fissa in alto",
+        L"Rimuovi da in alto",
+        L"Apri percorso file"
+    };
+    if (lang == L"ru") return {
+        L"Классический режим (сохранить тему)",
+        L"Запоминать позицию окна",
+        L"Закрепить сверху",
+        L"Открепить сверху",
+        L"Открыть расположение файла"
+    };
+    if (lang == L"uk") return {
+        L"Класичний режим (зберегти тему)",
+        L"Запам'ятовувати позицію вікна",
+        L"Закріпити зверху",
+        L"Відкріпити зверху",
+        L"Відкрити розташування файлу"
+    };
+    if (lang == L"pl") return {
+        L"Tryb klasyczny (zachowaj motyw)",
+        L"Zapamiętaj ostatnią pozycję okna",
+        L"Przypnij na górze",
+        L"Odepnij z góry",
+        L"Otwórz lokalizację pliku"
+    };
+    if (lang == L"nl") return {
+        L"Klassieke modus (thema behouden)",
+        L"Laatste vensterpositie onthouden",
+        L"Bovenaan vastmaken",
+        L"Losmaken van boven",
+        L"Bestandslocatie openen"
+    };
+    if (lang == L"tr") return {
+        L"Klasik Mod (Temayı Koru)",
+        L"Son Pencere Konumunu Hatırla",
+        L"Üste sabitle",
+        L"Üstten sabitlemeyi kaldır",
+        L"Dosya konumunu aç"
+    };
+    if (lang == L"hi") return {
+        L"क्लासिक मोड (थीम बनाए रखें)",
+        L"अंतिम विंडो स्थिति याद रखें",
+        L"शीर्ष पर पिन करें",
+        L"शीर्ष से अनपिन करें",
+        L"फ़ाइल स्थान खोलें"
+    };
+    if (lang == L"ar") return {
+        L"الوضع الكلاسيكي (الاحتفاظ بالسمة)",
+        L"تذكّر آخر موضع للنافذة",
+        L"تثبيت في الأعلى",
+        L"إلغاء التثبيت من الأعلى",
+        L"فتح موقع الملف"
+    };
+    return {
+        L"Classic-Friendly Mode (Keep Theme)",
+        L"Remember Last Window Position",
+        L"Pin to top",
+        L"Unpin from top",
+        L"Open file location"
+    };
+}
 
 ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
     lang = ResolveEffectiveLanguageCode(std::move(lang));
@@ -1632,7 +1916,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ Đã sao chép",
             L"   (Nhấn để sao chép)",
             L"Từ: ",
-            L"Sang: "
+            L"Sang: ",
+            L"Cho phép chạy với quyền quản trị",
+            L"Đang được cho phép chạy với quyền quản trị",
+            L"Cảnh báo quyền quản trị",
+            L"Khi bật tùy chọn này, các lệnh thực thi sẽ chạy với quyền Quản trị viên (Administrator) và có thể thay đổi hệ thống. Bạn có cho phép bật tính năng này không?",
+            L"Cho phép",
+            L"Không"
         };
     }
     if (lang == L"zh_tw") {
@@ -1648,7 +1938,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ 已複製",
             L"   (點擊複製)",
             L"從: ",
-            L"譯為: "
+            L"譯為: ",
+            L"允許以系統管理員身分執行",
+            L"目前已允許以系統管理員權限執行",
+            L"系統管理員權限警告",
+            L"啟用後，所有執行的指令將以系統管理員權限執行並可變更系統設定。是否允許啟用此功能？",
+            L"允許",
+            L"不允許"
         };
     }
     if (lang == L"zh_cn") {
@@ -1664,7 +1960,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ 已复制",
             L"   (点击复制)",
             L"从: ",
-            L"译为: "
+            L"译为: ",
+            L"允许以管理员身份运行",
+            L"当前已允许以管理员权限运行",
+            L"管理员权限警告",
+            L"开启后，执行的命令将以管理员权限运行并可能更改系统设置。是否允许开启此功能？",
+            L"允许",
+            L"不允许"
         };
     }
     if (lang == L"ja") {
@@ -1680,7 +1982,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ コピー完了",
             L"   (クリックでコピー)",
             L"元: ",
-            L"先: "
+            L"先: ",
+            L"管理者権限での実行を許可",
+            L"管理者権限での実行が許可されています",
+            L"管理者権限の警告",
+            L"有効にすると、コマンドは管理者権限で実行され、システムに変更を加えることができます。有効にしますか？",
+            L"許可する",
+            L"許可しない"
         };
     }
     if (lang == L"ko") {
@@ -1696,7 +2004,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ 복사됨",
             L"   (클릭하여 복사)",
             L"원본: ",
-            L"대상: "
+            L"대상: ",
+            L"관리자 권한으로 실행 허용",
+            L"관리자 권한으로 실행이 허용되어 있습니다",
+            L"관리자 권한 경고",
+            L"이 옵션을 켜면 실행되는 명령이 관리자 권한으로 작동하여 시스템을 변경할 수 있습니다. 허용하시겠습니까?",
+            L"허용",
+            L"허용 안 함"
         };
     }
     if (lang == L"th") {
@@ -1712,7 +2026,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ คัดลอกแล้ว",
             L"   (คลิกเพื่อคัดลอก)",
             L"จาก: ",
-            L"เป็น: "
+            L"เป็น: ",
+            L"อนุญาตให้รันด้วยสิทธิ์ผู้ดูแลระบบ",
+            L"กำลังได้รับอนุญาตให้รันด้วยสิทธิ์ผู้ดูแลระบบ",
+            L"คำเตือนสิทธิ์ผู้ดูแลระบบ",
+            L"เมื่อเปิดใช้งาน คำสั่งจะถูกรันด้วยสิทธิ์ผู้ดูแลระบบและสามารถเปลี่ยนแปลงระบบได้ คุณต้องการอนุญาตหรือไม่?",
+            L"อนุญาต",
+            L"ไม่อนุญาต"
         };
     }
     if (lang == L"id") {
@@ -1728,7 +2048,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ Disalin",
             L"   (Klik untuk menyalin)",
             L"Dari: ",
-            L"Ke: "
+            L"Ke: ",
+            L"Izinkan jalankan sebagai administrator",
+            L"Diizinkan berjalan dengan hak administrator",
+            L"Peringatan Hak Administrator",
+            L"Saat diaktifkan, perintah akan dijalankan dengan hak Administrator dan dapat mengubah sistem. Izinkan fitur ini?",
+            L"Izinkan",
+            L"Tidak"
         };
     }
     if (lang == L"ms") {
@@ -1744,7 +2070,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ Disalin",
             L"   (Klik untuk salin)",
             L"Dari: ",
-            L"Ke: "
+            L"Ke: ",
+            L"Benarkan jalankan sebagai pentadbir",
+            L"Dibenarkan berjalan dengan hak pentadbir",
+            L"Amaran Hak Pentadbir",
+            L"Apabila diaktifkan, arahan akan dijalankan dengan hak Pentadbir dan boleh mengubah sistem. Benarkan ciri ini?",
+            L"Benarkan",
+            L"Tidak"
         };
     }
     if (lang == L"fr") {
@@ -1760,7 +2092,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ Copié",
             L"   (Cliquer pour copier)",
             L"De : ",
-            L"Vers : "
+            L"Vers : ",
+            L"Autoriser l'exécution en tant qu'administrateur",
+            L"Exécution avec privilèges d'administrateur activée",
+            L"Avertissement privilèges d'administrateur",
+            L"Une fois activé, les commandes seront exécutées avec les droits d'administrateur et pourront modifier le système. Autoriser ?",
+            L"Autoriser",
+            L"Refuser"
         };
     }
     if (lang == L"de") {
@@ -1776,7 +2114,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ Kopiert",
             L"   (Klicken zum Kopieren)",
             L"Von: ",
-            L"Nach: "
+            L"Nach: ",
+            L"Ausführung als Administrator erlauben",
+            L"Ausführung mit Administratorrechten ist aktiviert",
+            L"Warnung zu Administratorrechten",
+            L"Wenn aktiviert, werden Befehle mit Administratorrechten ausgeführt und können das System ändern. Aktivierung erlauben?",
+            L"Erlauben",
+            L"Nicht erlauben"
         };
     }
     if (lang == L"es") {
@@ -1792,7 +2136,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ Copiado",
             L"   (Clic para copiar)",
             L"De: ",
-            L"A: "
+            L"A: ",
+            L"Permitir ejecutar como administrador",
+            L"Ejecución con privilegios de administrador habilitada",
+            L"Advertencia de privilegios de administrador",
+            L"Al activarlo, los comandos se ejecutarán con permisos de Administrador y podrán modificar el sistema. ¿Permitir?",
+            L"Permitir",
+            L"No permitir"
         };
     }
     if (lang == L"pt") {
@@ -1808,7 +2158,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ Copiado",
             L"   (Clique para copiar)",
             L"De: ",
-            L"Para: "
+            L"Para: ",
+            L"Permitir executar como administrador",
+            L"Execução com privilégios de administrador ativada",
+            L"Aviso de privilégios de administrador",
+            L"Quando ativado, os comandos serão executados como Administrador e poderão alterar o sistema. Deseja permitir?",
+            L"Permitir",
+            L"Não permitir"
         };
     }
     if (lang == L"it") {
@@ -1824,7 +2180,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ Copiato",
             L"   (Clicca per copiare)",
             L"Da: ",
-            L"A: "
+            L"A: ",
+            L"Consenti esecuzione come amministratore",
+            L"Esecuzione con privilegi di amministratore attiva",
+            L"Avviso privilegi di amministratore",
+            L"Se attivo, i comandi verranno eseguiti come Amministratore e potranno modificare il sistema. Consentire l'attivazione?",
+            L"Consenti",
+            L"Non consentire"
         };
     }
     if (lang == L"ru") {
@@ -1840,7 +2202,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ Скопировано",
             L"   (Нажмите для копирования)",
             L"С: ",
-            L"На: "
+            L"На: ",
+            L"Разрешить запуск от имени администратора",
+            L"Разрешён запуск с правами администратора",
+            L"Предупреждение о правах администратора",
+            L"При включении команды будут выполняться с правами администратора и смогут изменять систему. Разрешить включение?",
+            L"Разрешить",
+            L"Запретить"
         };
     }
     if (lang == L"uk") {
@@ -1856,7 +2224,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ Скопійовано",
             L"   (Натисніть для копіювання)",
             L"З: ",
-            L"На: "
+            L"На: ",
+            L"Дозволити запуск від імені адміністратора",
+            L"Дозволено запуск із правами адміністратора",
+            L"Попередження про права адміністратора",
+            L"Після ввімкнення команди виконуватимуться з правами адміністратора та зможуть змінювати систему. Дозволити?",
+            L"Дозволити",
+            L"Заборонити"
         };
     }
     if (lang == L"pl") {
@@ -1872,7 +2246,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ Skopiowano",
             L"   (Kliknij, aby skopiować)",
             L"Z: ",
-            L"Na: "
+            L"Na: ",
+            L"Zezwalaj na uruchamianie jako administrator",
+            L"Uruchamianie z uprawnieniami administratora włączone",
+            L"Ostrzeżenie o uprawnieniach administratora",
+            L"Po włączeniu polecenia będą uruchamiane jako Administrator i mogą zmieniać system. Czy zezwolić na włączenie?",
+            L"Zezwól",
+            L"Nie zezwalaj"
         };
     }
     if (lang == L"nl") {
@@ -1888,7 +2268,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ Gekopieerd",
             L"   (Klik om te kopiëren)",
             L"Van: ",
-            L"Naar: "
+            L"Naar: ",
+            L"Uitvoeren als administrator toestaan",
+            L"Uitvoeren met administratorrechten is ingeschakeld",
+            L"Waarschuwing administratorrechten",
+            L"Wanneer ingeschakeld, worden opdrachten als Administrator uitgevoerd en kunnen ze het systeem wijzigen. Toestaan?",
+            L"Toestaan",
+            L"Niet toestaan"
         };
     }
     if (lang == L"tr") {
@@ -1904,7 +2290,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ Kopyalandı",
             L"   (Kopyalamak için tıklayın)",
             L"Kimden: ",
-            L"Kime: "
+            L"Kime: ",
+            L"Yönetici olarak çalıştırmaya izin ver",
+            L"Yönetici ayrıcalıklarıyla çalıştırma etkin",
+            L"Yönetici Ayrıcalıkları Uyarısı",
+            L"Etkinleştirildiğinde komutlar Yönetici yetkisiyle çalışır ve sistemde değişiklik yapabilir. İzin veriyor musunuz?",
+            L"İzin Ver",
+            L"İzin Verme"
         };
     }
     if (lang == L"hi") {
@@ -1920,7 +2312,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ कॉपी किया गया",
             L"   (कॉपी करने के लिए क्लिक करें)",
             L"से: ",
-            L"में: "
+            L"में: ",
+            L"व्यवस्थापक के रूप में चलाने की अनुमति दें",
+            L"व्यवस्थापक विशेषाधिकारों के साथ चलने की अनुमति है",
+            L"व्यवस्थापक विशेषाधिकार चेतावनी",
+            L"सक्षम करने पर कमांड एडमिनिस्ट्रेटर अधिकारों के साथ चलेंगे और सिस्टम में बदलाव कर सकते हैं। क्या आप अनुमति देते हैं?",
+            L"अनुमति दें",
+            L"नहीं"
         };
     }
     if (lang == L"ar") {
@@ -1936,7 +2334,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
             L"   ✓ تم النسخ",
             L"   (انقر للنسخ)",
             L"من: ",
-            L"إلى: "
+            L"إلى: ",
+            L"السماح بالتشغيل كمسؤول",
+            L"مسموح حالياً بالتشغيل بصلاحيات المسؤول",
+            L"تحذير صلاحيات المسؤول",
+            L"عند التفعيل، سيتم تشغيل الأوامر بصلاحيات المسؤول وقد تُجري تغييرات على النظام. هل تسمح بتفعيل هذه الميزة؟",
+            L"سماح",
+            L"عدم السماح"
         };
     }
     return {
@@ -1951,7 +2355,13 @@ ExtraLocalizedStrings GetExtraLocalizedStrings(std::wstring lang) {
         L"   ✓ Copied to Clipboard",
         L"   (Click to copy)",
         L"From: ",
-        L"To: "
+        L"To: ",
+        L"Allow running as administrator",
+        L"Running with administrative privileges enabled",
+        L"Administrator Privileges Warning",
+        L"When enabled, commands will run with Administrator privileges and can make system-wide changes. Do you allow enabling this feature?",
+        L"Allow",
+        L"Don't Allow"
     };
 }
 
@@ -3832,7 +4242,7 @@ void ClearAllInAppOverrides() {
     const wchar_t* keys[] = {
         L"language", L"surfaceTheme", L"colorMode", L"uiScalePercent",
         L"customDialogWidth", L"customBarHeight", L"customFontSize",
-        L"glassOpacity", L"blurOpacity", L"maxHistoryItems", L"minimalModeV3"
+        L"glassOpacity", L"blurOpacity", L"maxHistoryItems", L"minimalModeV3", L"clearInitialInput", L"rememberPosition", L"runAsAdmin"
     };
     for (const wchar_t* k : keys) {
         Wh_DeleteValue(GetUserOverrideKey(k).c_str());
@@ -3973,13 +4383,50 @@ void LoadSettings(bool fromSettingsChanged = false) {
     if (visRowsSetting <= 0) visRowsSetting = 5;
     newSettings.visibleHistoryRows = std::clamp(visRowsSetting, 3, 10);
 
-    newSettings.showTimestamp = (Wh_GetIntSetting(L"historyBehaviorGroup.showTimestamp") != 0) ||
-                                (Wh_GetIntSetting(L"showTimestamp") != 0);
+    int rememberPosOverride = Wh_GetIntValue(GetUserOverrideKey(L"rememberPosition").c_str(), -1);
+    if (rememberPosOverride >= 0) {
+        newSettings.rememberPosition = (rememberPosOverride != 0);
+    } else {
+        newSettings.rememberPosition = (Wh_GetIntSetting(L"layoutGroup.rememberPosition") != 0);
+    }
 
-    newSettings.clearInitialInput = (Wh_GetIntSetting(L"historyBehaviorGroup.clearInitialInput") != 0) ||
-                                    (Wh_GetIntSetting(L"clearInitialInput") != 0);
-    newSettings.closeOnClickOutside = (Wh_GetIntSetting(L"historyBehaviorGroup.closeOnClickOutside") != 0) ||
-                                      (Wh_GetIntSetting(L"closeOnClickOutside") != 0);
+    newSettings.showTimestamp       = (Wh_GetIntSetting(L"historyBehaviorGroup.showTimestamp") != 0);
+    int clearInitOverride = Wh_GetIntValue(GetUserOverrideKey(L"clearInitialInput").c_str(), -1);
+    if (clearInitOverride >= 0) {
+        newSettings.clearInitialInput = (clearInitOverride != 0);
+    } else {
+        newSettings.clearInitialInput = (Wh_GetIntSetting(L"historyBehaviorGroup.clearInitialInput") != 0);
+    }
+    newSettings.closeOnClickOutside = (Wh_GetIntSetting(L"historyBehaviorGroup.closeOnClickOutside") != 0);
+
+    int adminOverride = Wh_GetIntValue(GetUserOverrideKey(L"runAsAdmin").c_str(), -1);
+    if (adminOverride >= 0) {
+        newSettings.runAsAdmin = (adminOverride != 0);
+    } else {
+        newSettings.runAsAdmin = (Wh_GetIntSetting(L"historyBehaviorGroup.runAsAdmin") != 0);
+    }
+
+    newSettings.customAliases.clear();
+    for (int i = 0; i < 64; ++i) {
+        auto aliasStr = WindhawkUtils::StringSetting::make(L"customAliases[%d].alias", i);
+        auto cmdStr   = WindhawkUtils::StringSetting::make(L"customAliases[%d].command", i);
+        if ((!aliasStr.get() || !aliasStr.get()[0]) && (!cmdStr.get() || !cmdStr.get()[0])) {
+            break;
+        }
+        std::wstring a = aliasStr.get() ? aliasStr.get() : L"";
+        std::wstring c = cmdStr.get() ? cmdStr.get() : L"";
+        while (!a.empty() && iswspace(a.front())) a.erase(a.begin());
+        while (!a.empty() && iswspace(a.back())) a.pop_back();
+        while (!c.empty() && iswspace(c.front())) c.erase(c.begin());
+        while (!c.empty() && iswspace(c.back())) c.pop_back();
+        if (!a.empty() && !c.empty()) {
+            CommandAlias ca;
+            ca.alias = std::move(a);
+            ca.command = std::move(c);
+            ca.runAsAdmin = (Wh_GetIntSetting(L"customAliases[%d].runAsAdmin", i) != 0);
+            newSettings.customAliases.push_back(std::move(ca));
+        }
+    }
 
     bool clearRequested = (Wh_GetIntSetting(L"historyBehaviorGroup.clearStoredHistory") != 0) ||
                           (Wh_GetIntSetting(L"clearStoredHistory") != 0);
@@ -5284,18 +5731,17 @@ struct HistoryItem {
     std::wstring webSearchQuery;
     bool isMathResult = false;
     std::wstring mathResultValue;
+    bool isPinned = false;
+    bool isAlias = false;
+    bool aliasRunAsAdmin = false;
 };
 
 struct ActionButtonsLayout {
     RECT rcBrowse;
-    RECT rcTranslate;
     RECT rcRun;
     RECT rcClose;
     RECT rcGear;
     RECT rcEdit;
-    RECT rcSrcLang;
-    RECT rcSwapLang;
-    RECT rcDstLang;
 };
 
 struct RunDialogState {
@@ -5304,6 +5750,7 @@ struct RunDialogState {
     HWND hOrigEdit = nullptr;
     HWND hModernEdit = nullptr;
     HWND hOkBtn = nullptr;
+    HWND hAdminCheck = nullptr;
 
     HFONT hFontEditCtl = nullptr;
     HICON hRunIcon = nullptr;
@@ -5329,10 +5776,15 @@ struct RunDialogState {
 
     UINT dpi = 96;
     int topAreaHeight = 0;
+    int historyCardHeight = 0;
     int totalHeight = kBaseInputBarHeight;
     int normalX = 100;
     int normalY = 100;
+    int renderX = 100;
+    int renderY = 100;
     bool anchoredTop = false;
+    bool useLayeredPresentation = true;
+    bool isPresenting = false;
     float animAlpha = 1.0f;
     bool openAnimActive = false;
     bool closingAnimActive = false;
@@ -5357,22 +5809,6 @@ struct RunDialogState {
     bool gearPressed = false;
     bool caretVisible = true;
 
-    // Multi-Language Translate Mode State
-    bool translateMode = false;
-    bool translateBtnHovered = false;
-    bool translateBtnPressed = false;
-    std::wstring translateSourceLang = L"auto";
-    std::wstring translateTargetLang = L"vi";
-    bool srcLangHovered = false;
-    bool srcLangPressed = false;
-    bool swapLangHovered = false;
-    bool swapLangPressed = false;
-    bool dstLangHovered = false;
-    bool dstLangPressed = false;
-    HWND hTranslatePopup = nullptr;
-    ULONGLONG translatePopupLaunchTick = 0;
-    ULONGLONG translatePopupFirstSeenTick = 0;
-    std::vector<HWND> preLaunchBrowserWindows;
     bool isTriggeringRun = false;
     bool isBrowsingFile = false;
     bool suppressSuggestionUpdate = false;
@@ -5386,6 +5822,11 @@ struct RunDialogState {
     POINT windowDragStartCursor = { 0, 0 };
     int windowDragStartX = 0;
     int windowDragStartY = 0;
+    ULONGLONG lastRunIconClickTick = 0;
+
+    // Tab path & %Env% autocomplete state
+    std::vector<std::wstring> tabCompMatches;
+    int tabCompIndex = -1;
 
     // Real-time background window topology tracking (immune to mouse hover / menu popups)
     uint64_t lastTopologySig = 0;
@@ -5437,16 +5878,26 @@ bool IsPointOnTaskbar(POINT pt) {
            _wcsicmp(cls, L"SecondaryTrayWnd") == 0;
 }
 
+bool IsWinKeyCurrentlyDown() {
+    return (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 ||
+           (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+}
+
 bool ShouldMinimizeOnTaskbarClick(HWND hWnd, ULONGLONG now) {
+    if (g_isTaskManagerProcess) {
+        return false;
+    }
     if (IsIconic(hWnd) || !IsWindowVisible(hWnd)) {
         return false;
     }
-    POINT pt = {};
-    GetCursorPos(&pt);
-    RECT rcDlg = {};
-    GetWindowRect(hWnd, &rcDlg);
-    if (PtInRect(&rcDlg, pt)) {
-        return false;
+    if (!IsWinKeyCurrentlyDown()) {
+        POINT pt = {};
+        GetCursorPos(&pt);
+        RECT rcDlg = {};
+        GetWindowRect(hWnd, &rcDlg);
+        if (PtInRect(&rcDlg, pt)) {
+            return false;
+        }
     }
     if (g_dlgIsForeground.load() && GetForegroundWindow() == hWnd) {
         return true;
@@ -5470,10 +5921,14 @@ void StopKeyHookThread() {
 
 bool ResolveDialogLightContrast(const RunDialogState* state);
 void ApplyWindowAppearance(HWND hDlg, RunDialogState* state);
+bool RenderDialogToCachedBitmap(HWND hWnd, RunDialogState* state, int w, int h);
+void PresentDialogWindow(HWND hWnd, RunDialogState* state, bool redrawContents = true,
+                         int overrideX = -999999, int overrideY = -999999);
+void RefreshDialogVisual(HWND hWnd, RunDialogState* state, bool redrawContents = true);
 void CloseActiveGearMenu();
 void CloseRunDialog(HWND hDlg);
 void SyncInputToNativeCombo(RunDialogState* state, const wchar_t* textOverride = nullptr);
-void ExecuteCommandImmediate(RunDialogState* state, const std::wstring& rawCommand);
+void ExecuteCommandImmediate(RunDialogState* state, const std::wstring& rawCommand, bool forceElevateOnce = false, bool runInTerminal = false);
 void PerformDialogUninit(HWND hWnd, RunDialogState* state);
 void RecomputeDialogMetrics(RunDialogState* state);
 void UpdateDialogEditFont(RunDialogState* state);
@@ -5520,53 +5975,7 @@ int GetDlgWidth(const RunDialogState* state) {
 
 std::wstring GetEffectiveInputText(HWND hEdit, DWORD* outSelStart = nullptr, DWORD* outSelEnd = nullptr);
 
-int MeasureWrappedTextHeightPx(const RunDialogState* state, const std::wstring& text, float availWidth, float baseFontDip) {
-    int minLineH = DpiScaleS(24, state);
-    if (!g_pDWriteFactory) return minLineH;
-    std::wstring sample = text.empty() ? L"Ag" : text;
-    if (!sample.empty() && (sample.back() == L'\n' || sample.back() == L'\r')) {
-        sample.push_back(L' ');
-    }
-    IDWriteTextFormat* pFmt = nullptr;
-    int measuredH = minLineH;
-    if (SUCCEEDED(g_pDWriteFactory->CreateTextFormat(
-            GetPreferredFluentFontFamily(), nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL, GetFontSizeSF(baseFontDip, state), L"", &pFmt)) && pFmt) {
-        pFmt->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
-        IDWriteTextLayout* pLayout = nullptr;
-        float safeW = (std::max)(80.0f, availWidth);
-        if (SUCCEEDED(g_pDWriteFactory->CreateTextLayout(
-                sample.c_str(), (UINT32)sample.size(), pFmt, safeW, 8000.0f, &pLayout)) && pLayout) {
-            DWRITE_TEXT_METRICS tm = {};
-            if (SUCCEEDED(pLayout->GetMetrics(&tm))) {
-                measuredH = (std::max)(minLineH, (int)std::ceil(tm.height));
-            }
-            pLayout->Release();
-        }
-        pFmt->Release();
-    }
-    return measuredH;
-}
-
 int GetInputBarHeight(const RunDialogState* state) {
-    if (state && state->translateMode) {
-        int dlgW = GetDlgWidth(state);
-        bool isCompact = state->settings.minimalMode;
-        int rightButtonsReserve = isCompact ? DpiScaleS(108, state) : DpiScaleS(210, state);
-        int leftReserve = isCompact ? DpiScaleS(46, state) : DpiScaleS(50, state);
-        float availEditW = (float)(std::max)(DpiScaleS(110, state), dlgW - leftReserve - rightButtonsReserve);
-        std::wstring curText = (state->hModernEdit && IsWindow(state->hModernEdit))
-            ? GetEffectiveInputText(state->hModernEdit)
-            : L"";
-        int textH = MeasureWrappedTextHeightPx(state, curText, availEditW, 13.5f);
-        int minEditH = DpiScaleS(isCompact ? 28 : 32, state);
-        int editZoneH = std::clamp(textH + DpiScaleS(4, state), minEditH, DpiScaleS(260, state));
-        int langBarH = DpiScaleS(isCompact ? 23 : 26, state);
-        int topPad   = DpiScaleS(isCompact ? 8 : 10, state);
-        int midGap   = DpiScaleS(isCompact ? 6 : 8, state);
-        int botPad   = DpiScaleS(isCompact ? 8 : 10, state);
-        return topPad + langBarH + midGap + editZoneH + botPad;
-    }
     if (state && state->settings.customBarHeight > 0) {
         int barDip = std::clamp(state->settings.customBarHeight, 36, 96);
         return DpiScale(barDip, state->dpi, 100);
@@ -5679,46 +6088,204 @@ UINT DetectMonitorTaskbarEdge(HMONITOR, const MONITORINFO& mi) {
     return ABE_BOTTOM;
 }
 
-void GetDefaultTaskbarAnchoredPosition(HWND hDlg, int width, int height, UINT dpi,
-                                       int* outX, int* outY, bool* outAnchoredTop = nullptr) {
-    HMONITOR hMon = MonitorFromWindow(hDlg, MONITOR_DEFAULTTONEAREST);
+// Computes the effective taskbar-safe work area on hMon, accounting for Auto-Hide taskbars,
+// multi-monitor SecondaryTrayWnd bars, and transparent/dock/Windhawk-styled taskbars where
+// mi.rcWork equals mi.rcMonitor even though the taskbar occupies screen space at the monitor edge.
+void GetEffectiveMonitorWorkArea(HMONITOR hMon, UINT dpi, RECT* outWork, UINT* outEdge = nullptr) {
     MONITORINFO mi = { sizeof(mi) };
+    RECT rcMon = {};
     RECT rcWork = {};
     if (hMon && GetMonitorInfoW(hMon, &mi)) {
+        rcMon = mi.rcMonitor;
         rcWork = mi.rcWork;
     } else {
         SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
-        mi.rcMonitor = rcWork;
+        rcMon = rcWork;
+        mi.rcMonitor = rcMon;
         mi.rcWork = rcWork;
     }
 
-    UINT edge = DetectMonitorTaskbarEdge(hMon, mi);
+    UINT detectedEdge = DetectMonitorTaskbarEdge(hMon, mi);
+    const int monW = rcMon.right - rcMon.left;
+    const int monH = rcMon.bottom - rcMon.top;
+    const int minSlice = DpiScale(4, dpi);
+
+    auto applyTaskbarRect = [&](const RECT& rcBar, bool isVisibleWnd) {
+        int bw = rcBar.right - rcBar.left;
+        int bh = rcBar.bottom - rcBar.top;
+        if (bw <= 0 || bh <= 0 || monW <= 0 || monH <= 0) return;
+
+        RECT rcInter = {};
+        bool intersects = IntersectRect(&rcInter, &rcBar, &rcMon) != FALSE;
+
+        if (bh > bw && bw <= monW / 3) {
+            int thickness = std::clamp(bw, DpiScale(32, dpi), DpiScale(120, dpi));
+            int centerX = (rcBar.left + rcBar.right) / 2;
+            if (centerX < rcMon.left + monW / 2) {
+                detectedEdge = ABE_LEFT;
+                if (isVisibleWnd) {
+                    int safeLeft = (intersects && (rcInter.right - rcMon.left) > minSlice)
+                        ? (int)rcInter.right
+                        : ((int)rcMon.left + thickness);
+                    rcWork.left = (std::max)(rcWork.left, (LONG)safeLeft);
+                }
+            } else {
+                detectedEdge = ABE_RIGHT;
+                if (isVisibleWnd) {
+                    int safeRight = (intersects && (rcMon.right - rcInter.left) > minSlice)
+                        ? (int)rcInter.left
+                        : ((int)rcMon.right - thickness);
+                    rcWork.right = (std::min)(rcWork.right, (LONG)safeRight);
+                }
+            }
+        } else if (bw >= bh && bh <= monH / 3) {
+            int thickness = std::clamp(bh, DpiScale(36, dpi), DpiScale(120, dpi));
+            int centerY = (rcBar.top + rcBar.bottom) / 2;
+            if (centerY < rcMon.top + monH / 2) {
+                detectedEdge = ABE_TOP;
+                if (isVisibleWnd) {
+                    int safeTop = (intersects && (rcInter.bottom - rcMon.top) > minSlice)
+                        ? (int)rcInter.bottom
+                        : ((int)rcMon.top + thickness);
+                    rcWork.top = (std::max)(rcWork.top, (LONG)safeTop);
+                }
+            } else {
+                detectedEdge = ABE_BOTTOM;
+                if (isVisibleWnd) {
+                    int safeBottom = (intersects && (rcMon.bottom - rcInter.top) > minSlice)
+                        ? (int)rcInter.top
+                        : ((int)rcMon.bottom - thickness);
+                    rcWork.bottom = (std::min)(rcWork.bottom, (LONG)safeBottom);
+                }
+            }
+        }
+    };
+
+    auto applyTrayWindow = [&](HWND hTray) {
+        if (!hTray || !IsWindow(hTray)) return;
+        RECT rcTray = {};
+        if (!GetWindowRect(hTray, &rcTray)) return;
+        RECT rcExt = {};
+        if (SUCCEEDED(DwmGetWindowAttribute(hTray, DWMWA_EXTENDED_FRAME_BOUNDS, &rcExt, sizeof(rcExt)))) {
+            if ((rcExt.right - rcExt.left) > 0 && (rcExt.bottom - rcExt.top) > 0) {
+                UnionRect(&rcTray, &rcTray, &rcExt);
+            }
+        }
+        RECT rcInter = {};
+        bool onThisMon = !hMon ||
+                         MonitorFromWindow(hTray, MONITOR_DEFAULTTONEAREST) == hMon ||
+                         IntersectRect(&rcInter, &rcTray, &rcMon) != FALSE;
+        if (onThisMon) {
+            applyTaskbarRect(rcTray, true);
+        }
+    };
+
+    if (HWND hPrimaryTray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+        applyTrayWindow(hPrimaryTray);
+    }
+
+    for (HWND hSecTray = FindWindowExW(nullptr, nullptr, L"SecondaryTrayWnd", nullptr);
+         hSecTray != nullptr;
+         hSecTray = FindWindowExW(nullptr, hSecTray, L"SecondaryTrayWnd", nullptr)) {
+        applyTrayWindow(hSecTray);
+    }
+
+    APPBARDATA abd = { sizeof(abd) };
+    if (SHAppBarMessage(ABM_GETTASKBARPOS, &abd)) {
+        RECT rcInter = {};
+        if (!hMon || MonitorFromRect(&abd.rc, MONITOR_DEFAULTTONEAREST) == hMon ||
+            IntersectRect(&rcInter, &abd.rc, &rcMon) != FALSE) {
+            applyTaskbarRect(abd.rc, true);
+        }
+    }
+
+    // Final safety floor for transparent/auto-hide/Windhawk-styled taskbars where mi.rcWork == mi.rcMonitor:
+    // ensure the Run dialog never overlaps the taskbar Z-order band and gets rendered behind it.
+    int minBarReserve = DpiScale(52, dpi);
+    int edgeTol = DpiScale(8, dpi);
+    if (detectedEdge == ABE_BOTTOM && rcWork.bottom >= rcMon.bottom - edgeTol) {
+        rcWork.bottom = rcMon.bottom - minBarReserve;
+    } else if (detectedEdge == ABE_TOP && rcWork.top <= rcMon.top + edgeTol) {
+        rcWork.top = rcMon.top + minBarReserve;
+    } else if (detectedEdge == ABE_LEFT && rcWork.left <= rcMon.left + edgeTol) {
+        rcWork.left = rcMon.left + minBarReserve;
+    } else if (detectedEdge == ABE_RIGHT && rcWork.right >= rcMon.right - edgeTol) {
+        rcWork.right = rcMon.right - minBarReserve;
+    }
+
+    if (rcWork.right - rcWork.left < DpiScale(200, dpi) ||
+        rcWork.bottom - rcWork.top < DpiScale(160, dpi)) {
+        rcWork = mi.rcWork;
+    }
+
+    if (outWork) *outWork = rcWork;
+    if (outEdge) *outEdge = detectedEdge;
+}
+
+void GetDefaultTaskbarAnchoredPosition(HWND hDlg, int width, int height, UINT dpi,
+                                       int* outX, int* outY, bool* outAnchoredTop = nullptr,
+                                       bool classicCorner = false) {
+    HWND hOwner = hDlg ? GetWindow(hDlg, GW_OWNER) : nullptr;
+    HWND hRefWnd = (g_isTaskManagerProcess && hOwner && IsWindow(hOwner)) ? hOwner : hDlg;
+    HMONITOR hMon = MonitorFromWindow(hRefWnd, MONITOR_DEFAULTTONEAREST);
+    RECT rcWork = {};
+    UINT edge = ABE_BOTTOM;
+    GetEffectiveMonitorWorkArea(hMon, dpi, &rcWork, &edge);
+
     int gap = DpiScale(12, dpi);
     int workW = rcWork.right - rcWork.left;
 
-    // Always center horizontally on the monitor work area
-    *outX = rcWork.left + (workW - width) / 2;
-
-    // If taskbar is on the Left, Right, or Top -> place at Top-Center;
-    // If taskbar is at the Bottom -> place at Bottom-Center right above the taskbar!
-    if (edge == ABE_LEFT || edge == ABE_RIGHT || edge == ABE_TOP) {
-        *outY = rcWork.top + gap;
-        if (outAnchoredTop) *outAnchoredTop = true;
-    } else {
-        *outY = rcWork.bottom - height - gap;
-        if (outAnchoredTop) *outAnchoredTop = false;
+    if (classicCorner) {
+        // Windows Classic Run positioning per taskbar edge:
+        // - Top taskbar    -> Top-Left
+        // - Right taskbar  -> Bottom-Right (to the left of the right taskbar)
+        // - Left / Bottom  -> Bottom-Left (to the right of the left taskbar / above bottom taskbar)
+        if (edge == ABE_TOP) {
+            *outX = rcWork.left + gap;
+            *outY = rcWork.top + gap;
+            if (outAnchoredTop) *outAnchoredTop = true;
+        } else if (edge == ABE_RIGHT) {
+            *outX = rcWork.right - width - gap;
+            *outY = rcWork.bottom - height - gap;
+            if (outAnchoredTop) *outAnchoredTop = false;
+        } else {
+            *outX = rcWork.left + gap;
+            *outY = rcWork.bottom - height - gap;
+            if (outAnchoredTop) *outAnchoredTop = false;
+        }
+        return;
     }
+
+    // Modern Pill Mode: always anchored cleanly at Bottom-Center of the effective work area
+    *outX = rcWork.left + (workW - width) / 2;
+    *outY = rcWork.bottom - height - gap;
+    if (outAnchoredTop) *outAnchoredTop = false;
 }
 
-void ClampDialogToMonitorWorkArea(HWND hDlg, int* inOutX, int* inOutY, int width, int height, UINT dpi) {
-    HMONITOR hMon = MonitorFromWindow(hDlg, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi = { sizeof(mi) };
-    RECT rcWork = {};
-    if (hMon && GetMonitorInfoW(hMon, &mi)) {
-        rcWork = mi.rcWork;
-    } else {
-        SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+void SaveDialogAnchorPosition(const RunDialogState* state) {
+    if (!state || !state->settings.rememberPosition) return;
+    if (state->normalX <= -10000 || state->normalY <= -10000) return;
+    int anchorY = state->anchoredTop ? state->normalY : (state->normalY + state->totalHeight);
+    Wh_SetIntValue(GetUserOverrideKey(L"savedPosX").c_str(), state->normalX);
+    Wh_SetIntValue(GetUserOverrideKey(L"savedAnchorY").c_str(), anchorY);
+    Wh_SetIntValue(GetUserOverrideKey(L"savedAnchoredTop").c_str(), state->anchoredTop ? 1 : 0);
+    Wh_SetIntValue(GetUserOverrideKey(L"hasSavedPos").c_str(), 1);
+}
+
+void ClampDialogToMonitorWorkArea(HWND hDlg, int* inOutX, int* inOutY, int width, int height, UINT dpi,
+                                  bool useTargetPointMonitor = false) {
+    HMONITOR hMon = nullptr;
+    if (useTargetPointMonitor && inOutX && inOutY) {
+        POINT ptCenter = { *inOutX + width / 2, *inOutY + height / 2 };
+        hMon = MonitorFromPoint(ptCenter, MONITOR_DEFAULTTONEAREST);
     }
+    if (!hMon) {
+        HWND hOwner = hDlg ? GetWindow(hDlg, GW_OWNER) : nullptr;
+        HWND hRefWnd = (g_isTaskManagerProcess && hOwner && IsWindow(hOwner)) ? hOwner : hDlg;
+        hMon = MonitorFromWindow(hRefWnd, MONITOR_DEFAULTTONEAREST);
+    }
+    RECT rcWork = {};
+    GetEffectiveMonitorWorkArea(hMon, dpi, &rcWork, nullptr);
 
     int margin = DpiScale(12, dpi);
 
@@ -5754,20 +6321,20 @@ void PlayDialogCloseAnimationSync(HWND hDlg, RunDialogState* state) {
     state->openAnimActive = false;
     state->closingAnimActive = true;
 
+    // Ensure the cached premultiplied bitmap is up-to-date before sliding/fading via UpdateLayeredWindow
+    PresentDialogWindow(hDlg, state, true, state->normalX, state->normalY);
+
     ULONGLONG startTick = GetTickCount64();
     constexpr float kCloseDurationMs = 90.0f;
-    int maxSlide = DpiScaleS(12, state) * (state->anchoredTop ? -1 : 1);
+    int maxSlide = DpiScaleS(10, state) * (state->anchoredTop ? -1 : 1);
 
     while (IsWindow(hDlg)) {
         float t = std::clamp((float)(GetTickCount64() - startTick) / kCloseDurationMs, 0.0f, 1.0f);
         float ease = 1.0f - t * t;
-        state->animAlpha = ease * 0.90f;
+        state->animAlpha = ease * 0.92f;
         int curY = state->normalY + (int)std::round((1.0f - ease) * maxSlide);
 
-        SetWindowPos(hDlg, nullptr, state->normalX, curY, 0, 0,
-                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-        InvalidateRect(hDlg, nullptr, FALSE);
-        UpdateWindow(hDlg);
+        PresentDialogWindow(hDlg, state, false, state->normalX, curY);
         if (t >= 1.0f) break;
         if (FAILED(DwmFlush())) {
             Sleep(12);
@@ -5795,12 +6362,15 @@ void ResizeDialogPreservingBottomAnchor(RunDialogState* state, int oldHeight) {
     if (!IsIconic(state->hDlg)) {
         int targetY = state->normalY;
         if (state->openAnimActive) {
-            float t = std::clamp((float)(GetTickCount64() - state->openAnimStartTick) / 150.0f, 0.0f, 1.0f);
+            float t = std::clamp((float)(GetTickCount64() - state->openAnimStartTick) / 155.0f, 0.0f, 1.0f);
             float ease = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
-            targetY += (int)std::round((1.0f - ease) * DpiScaleS(14, state) * (state->anchoredTop ? -1.0f : 1.0f));
+            targetY += (int)std::round((1.0f - ease) * DpiScaleS(10, state) * (state->anchoredTop ? -1.0f : 1.0f));
         }
-        SetWindowPos(state->hDlg, nullptr, state->normalX, targetY, dlgW, state->totalHeight,
-                     SWP_NOZORDER | SWP_NOACTIVATE);
+        state->renderX = state->normalX;
+        state->renderY = targetY;
+        SetWindowPos(state->hDlg, HWND_TOPMOST, state->normalX, targetY, dlgW, state->totalHeight,
+                     SWP_NOACTIVATE);
+        PresentDialogWindow(state->hDlg, state, true, state->normalX, targetY);
     }
 }
 
@@ -5854,6 +6424,9 @@ void MinimizeRunDialog(RunDialogState* state) {
 
     PlayDialogCloseAnimationSync(state->hDlg, state);
 
+    DisableWindowDwmTransitions(state->hDlg);
+    SetWindowDwmCloak(state->hDlg, true);
+
     g_internalActivation = true;
     if (ShowWindow_Orig) {
         ShowWindow_Orig(state->hDlg, SW_MINIMIZE);
@@ -5862,6 +6435,8 @@ void MinimizeRunDialog(RunDialogState* state) {
     }
     g_internalActivation = false;
     state->animAlpha = 1.0f;
+    state->renderX = state->normalX;
+    state->renderY = state->normalY;
 }
 
 void RestoreRunDialog(RunDialogState* state) {
@@ -5870,17 +6445,11 @@ void RestoreRunDialog(RunDialogState* state) {
     if (now - g_lastToggleTick.load() < 250) return;
     g_lastToggleTick.store(now);
 
-    int dlgW = GetDlgWidth(state);
-    if (NeedsBackdropSnapshot(state)) {
-        CaptureCleanMonitorBackdrop(state->hDlg, false);
-        state->backdropLightSample = SampleBackdropLuminanceFromSnap(
-            state->normalX, state->normalY, dlgW, state->totalHeight, state->backdropLightSample);
-        state->lastTopologySig = GetBackdropWindowTopologySignature(state->hDlg);
-    }
-    state->pendingTopologyRecapture = false;
+    DisableWindowDwmTransitions(state->hDlg);
+    SetWindowDwmCloak(state->hDlg, true);
 
-    StartDialogOpenAnimation(state);
-    int startSlideOff = DpiScaleS(14, state) * (state->anchoredTop ? -1 : 1);
+    int dlgW = GetDlgWidth(state);
+    ClampDialogToMonitorWorkArea(state->hDlg, &state->normalX, &state->normalY, dlgW, state->totalHeight, state->dpi);
 
     g_internalActivation = true;
     if (IsIconic(state->hDlg)) {
@@ -5891,21 +6460,34 @@ void RestoreRunDialog(RunDialogState* state) {
         }
     }
 
+    if (NeedsBackdropSnapshot(state)) {
+        CaptureCleanMonitorBackdrop(state->hDlg, false);
+        state->backdropLightSample = SampleBackdropLuminanceFromSnap(
+            state->normalX, state->normalY, dlgW, state->totalHeight, state->backdropLightSample);
+        state->lastTopologySig = GetBackdropWindowTopologySignature(state->hDlg);
+    }
+    state->pendingTopologyRecapture = false;
+
     LONG_PTR style = GetWindowLongPtrW(state->hDlg, GWL_STYLE);
     style &= ~(WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZEBOX | WS_CLIPCHILDREN | WS_DLGFRAME | WS_BORDER);
     style |= (WS_SYSMENU | WS_MINIMIZEBOX);
     SetWindowLongPtrW(state->hDlg, GWL_STYLE, style);
 
+    ApplyWindowAppearance(state->hDlg, state);
+
+    StartDialogOpenAnimation(state);
+    int startSlideOff = DpiScaleS(10, state) * (state->anchoredTop ? -1 : 1);
+    state->renderX = state->normalX;
+    state->renderY = state->normalY + startSlideOff;
+
     SetWindowPos(state->hDlg, HWND_TOPMOST,
-                 state->normalX, state->normalY + startSlideOff,
+                 state->renderX, state->renderY,
                  dlgW, state->totalHeight,
                  SWP_SHOWWINDOW | SWP_FRAMECHANGED);
-    SetWindowPos(state->hDlg, HWND_NOTOPMOST,
-                 state->normalX, state->normalY + startSlideOff,
-                 dlgW, state->totalHeight,
-                 SWP_SHOWWINDOW);
 
-    ApplyWindowAppearance(state->hDlg, state);
+    state->caretVisible = true;
+    PresentDialogWindow(state->hDlg, state, true, state->renderX, state->renderY);
+    SetWindowDwmCloak(state->hDlg, false);
 
     if (SwitchToThisWindow_Orig) {
         SwitchToThisWindow_Orig(state->hDlg, TRUE);
@@ -5924,8 +6506,7 @@ void RestoreRunDialog(RunDialogState* state) {
         SetFocus(state->hModernEdit);
         SendMessageW(state->hModernEdit, EM_SETSEL, 0, -1);
     }
-    state->caretVisible = true;
-    InvalidateRect(state->hDlg, nullptr, FALSE);
+    RefreshDialogVisual(state->hDlg, state);
 }
 
 void OpenBrowseExecutableDialog(RunDialogState* state, bool autoExecute = false) {
@@ -5989,7 +6570,7 @@ void OpenBrowseExecutableDialog(RunDialogState* state, bool autoExecute = false)
             SetFocus(state->hModernEdit);
         }
         state->caretVisible = true;
-        InvalidateRect(hDlg, nullptr, FALSE);
+        RefreshDialogVisual(hDlg, state);
     }
 }
 
@@ -6162,11 +6743,26 @@ std::wstring LookupOrInitTimestamp(const std::wstring& cmd,
 void CloseRunDialog(HWND hDlg) {
     CloseActiveGearMenu();
     if (!hDlg || !IsWindow(hDlg)) return;
+    DisableWindowDwmTransitions(hDlg);
     if (GetWindowThreadProcessId(hDlg, nullptr) == GetCurrentThreadId()) {
         auto* state = reinterpret_cast<RunDialogState*>(GetPropW(hDlg, L"WindhawkModernRunState"));
         if (state && !state->pendingUninit && !g_unloading.load()) {
+            SaveDialogAnchorPosition(state);
             PlayDialogCloseAnimationSync(hDlg, state);
+            state->animAlpha = 0.0f;
+            PresentDialogWindow(hDlg, state, false, state->renderX, state->renderY);
         }
+        SetWindowDwmCloak(hDlg, true);
+        DwmFlush();
+        g_internalActivation = true;
+        if (ShowWindow_Orig) {
+            ShowWindow_Orig(hDlg, SW_HIDE);
+        } else {
+            ShowWindow(hDlg, SW_HIDE);
+        }
+        g_internalActivation = false;
+    } else {
+        SetWindowDwmCloak(hDlg, true);
     }
     HWND expected = hDlg;
     g_hActiveRunDlg.compare_exchange_strong(expected, nullptr);
@@ -6257,305 +6853,6 @@ std::wstring UrlEncodeUtf8(std::wstring_view input) {
         }
     }
     return encoded;
-}
-
-// --- Multi-Language Translate Mode Engine (22 Languages + Compact Browser Popup) ---
-
-struct TranslateLangEntry {
-    UINT menuId;
-    const wchar_t* code;
-    const wchar_t* labelVi;
-    const wchar_t* labelEn;
-};
-
-static constexpr TranslateLangEntry kTranslateLangs[] = {
-    { 800, L"auto",  L"Phát hiện ngôn ngữ",       L"Auto Detect" },
-    { 801, L"vi",    L"Tiếng Việt",               L"Vietnamese (Tiếng Việt)" },
-    { 802, L"en",    L"Tiếng Anh (English)",      L"English" },
-    { 803, L"zh-CN", L"Tiếng Trung (Giản thể)",   L"Chinese Simplified (简体中文)" },
-    { 804, L"zh-TW", L"Tiếng Trung (Phồn thể)",   L"Chinese Traditional (繁體中文)" },
-    { 805, L"ja",    L"Tiếng Nhật (日本語)",       L"Japanese (日本語)" },
-    { 806, L"ko",    L"Tiếng Hàn (한국어)",        L"Korean (한국어)" },
-    { 807, L"fr",    L"Tiếng Pháp (Français)",    L"French (Français)" },
-    { 808, L"de",    L"Tiếng Đức (Deutsch)",      L"German (Deutsch)" },
-    { 809, L"es",    L"Tiếng Tây Ban Nha",        L"Spanish (Español)" },
-    { 810, L"ru",    L"Tiếng Nga (Русский)",      L"Russian (Русский)" },
-    { 811, L"th",    L"Tiếng Thái (ไทย)",         L"Thai (ไทย)" },
-    { 812, L"id",    L"Tiếng Indonesia",          L"Indonesian (Bahasa Indonesia)" },
-    { 813, L"ms",    L"Tiếng Mã Lai",             L"Malay (Bahasa Melayu)" },
-    { 814, L"pt",    L"Tiếng Bồ Đào Nha",         L"Portuguese (Português)" },
-    { 815, L"it",    L"Tiếng Ý (Italiano)",       L"Italian (Italiano)" },
-    { 816, L"uk",    L"Tiếng Ukraina",            L"Ukrainian (Українська)" },
-    { 817, L"pl",    L"Tiếng Ba Lan (Polski)",    L"Polish (Polski)" },
-    { 818, L"nl",    L"Tiếng Hà Lan",             L"Dutch (Nederlands)" },
-    { 819, L"tr",    L"Tiếng Thổ Nhĩ Kỳ",         L"Turkish (Türkçe)" },
-    { 820, L"hi",    L"Tiếng Hindi (हिन्दी)",       L"Hindi (हिन्दी)" },
-    { 821, L"ar",    L"Tiếng Ả Rập (العربية)",     L"Arabic (العربية)" }
-};
-
-bool IsDialogVietnameseUI(const RunDialogState* state) {
-    if (!state) return false;
-    if (state->settings.language == L"vi") return true;
-    if (state->settings.language == L"auto") {
-        return PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_VIETNAMESE;
-    }
-    return false;
-}
-
-const wchar_t* GetTranslateLangDisplayName(const std::wstring& code, bool isVi) {
-    for (const auto& entry : kTranslateLangs) {
-        if (_wcsicmp(code.c_str(), entry.code) == 0) {
-            return isVi ? entry.labelVi : entry.labelEn;
-        }
-    }
-    return isVi ? L"Tiếng Việt" : L"English";
-}
-
-std::wstring GetCompactTranslateLangDisplayName(const std::wstring& code, bool isVi) {
-    if (_wcsicmp(code.c_str(), L"auto") == 0) {
-        return isVi ? L"Tự động" : L"Auto";
-    }
-    std::wstring full = GetTranslateLangDisplayName(code, isVi);
-    size_t parenPos = full.find(L" (");
-    if (parenPos != std::wstring::npos && parenPos > 0) {
-        return full.substr(0, parenPos);
-    }
-    return full;
-}
-
-std::wstring GetDefaultBrowserExecutablePath();
-
-bool IsChromiumAppModeBrowser(const std::wstring& exePath) {
-    if (exePath.empty()) return false;
-    std::wstring fileName = ToLowerString(PathFindFileNameW(exePath.c_str()));
-    static constexpr const wchar_t* kChromiumBrowsers[] = {
-        L"msedge.exe", L"chrome.exe", L"brave.exe", L"vivaldi.exe",
-        L"opera.exe", L"chromium.exe", L"coccoc.exe", L"browser.exe",
-        L"thorium.exe", L"whale.exe", L"arc.exe", L"centbrowser.exe"
-    };
-    for (const wchar_t* name : kChromiumBrowsers) {
-        if (fileName == name) return true;
-    }
-    return false;
-}
-
-void ComputeTranslatePopupTargetBounds(const RunDialogState* state, int reqVisW, int reqVisH,
-                                       int* outVisX, int* outVisY, int* outVisW, int* outVisH) {
-    UINT dpi = state ? state->dpi : 96;
-    int scalePct = GetDlgScale(state);
-    auto scaleDip = [&](int v) -> int {
-        return DpiScale(v, dpi, scalePct);
-    };
-
-    HMONITOR hMon = (state && state->hDlg && IsWindow(state->hDlg))
-        ? MonitorFromWindow(state->hDlg, MONITOR_DEFAULTTONEAREST)
-        : MonitorFromPoint({ 0, 0 }, MONITOR_DEFAULTTOPRIMARY);
-    MONITORINFO mi = { sizeof(mi) };
-    RECT rcWork = { 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
-    if (hMon && GetMonitorInfoW(hMon, &mi)) {
-        rcWork = mi.rcWork;
-    } else {
-        SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
-    }
-
-    int margin = scaleDip(12);
-    int gap    = scaleDip(18);
-    int visW   = (reqVisW > 0) ? reqVisW : scaleDip(500);
-    int visH   = (reqVisH > 0) ? reqVisH : scaleDip(450);
-
-    int maxWorkW = (rcWork.right - rcWork.left) - margin * 2;
-    if (visW > maxWorkW) visW = (std::max)(scaleDip(320), maxWorkW);
-
-    int visX = rcWork.left + ((rcWork.right - rcWork.left) - visW) / 2;
-    int visY = rcWork.bottom - visH - scaleDip(90);
-
-    if (state && state->hDlg && IsWindow(state->hDlg)) {
-        RECT rcDlg = {};
-        if (GetWindowRect(state->hDlg, &rcDlg)) {
-            int dlgW = rcDlg.right - rcDlg.left;
-            visX = rcDlg.left + (dlgW - visW) / 2;
-            visX = std::clamp(visX, (int)rcWork.left + margin,
-                              (std::max)((int)rcWork.left + margin, (int)rcWork.right - visW - margin));
-
-            int spaceAbove = (rcDlg.top - gap) - (rcWork.top + margin);
-            int spaceBelow = (rcWork.bottom - margin) - (rcDlg.bottom + gap);
-            bool placeBelow = state->anchoredTop || (spaceAbove < scaleDip(240) && spaceBelow > spaceAbove);
-
-            if (!placeBelow) {
-                visH = std::clamp(visH, scaleDip(240), (std::max)(scaleDip(240), spaceAbove));
-                visY = rcDlg.top - gap - visH;
-            } else {
-                visH = std::clamp(visH, scaleDip(240), (std::max)(scaleDip(240), spaceBelow));
-                visY = rcDlg.bottom + gap;
-            }
-        }
-    }
-
-    visX = std::clamp(visX, (int)rcWork.left + margin,
-                      (std::max)((int)rcWork.left + margin, (int)rcWork.right - visW - margin));
-    visY = std::clamp(visY, (int)rcWork.top + margin,
-                      (std::max)((int)rcWork.top + margin, (int)rcWork.bottom - visH - margin));
-
-    if (outVisX) *outVisX = visX;
-    if (outVisY) *outVisY = visY;
-    if (outVisW) *outVisW = visW;
-    if (outVisH) *outVisH = visH;
-}
-
-void PositionTranslatePopupRelativeToDialog(RunDialogState* state) {
-    if (!state || !state->hTranslatePopup || !IsWindow(state->hTranslatePopup)) return;
-    HWND hPopup = state->hTranslatePopup;
-
-    if (IsIconic(hPopup) || IsZoomed(hPopup)) {
-        ShowWindow(hPopup, SW_RESTORE);
-    }
-
-    int visX = 0, visY = 0, visW = 0, visH = 0;
-    ComputeTranslatePopupTargetBounds(state, 0, 0, &visX, &visY, &visW, &visH);
-
-    RECT rcWin = {}, rcExt = {};
-    int padL = 0, padT = 0, padR = 0, padB = 0;
-    if (GetWindowRect(hPopup, &rcWin) &&
-        SUCCEEDED(DwmGetWindowAttribute(hPopup, DWMWA_EXTENDED_FRAME_BOUNDS, &rcExt, sizeof(rcExt)))) {
-        padL = (std::max)(0, (int)(rcExt.left - rcWin.left));
-        padT = (std::max)(0, (int)(rcExt.top - rcWin.top));
-        padR = (std::max)(0, (int)(rcWin.right - rcExt.right));
-        padB = (std::max)(0, (int)(rcWin.bottom - rcExt.bottom));
-    }
-
-    int winX = visX - padL;
-    int winY = visY - padT;
-    int winW = visW + padL + padR;
-    int winH = visH + padT + padB;
-    SetWindowPos(hPopup, HWND_TOP, winX, winY, winW, winH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
-
-    if (GetWindowRect(hPopup, &rcWin) &&
-        SUCCEEDED(DwmGetWindowAttribute(hPopup, DWMWA_EXTENDED_FRAME_BOUNDS, &rcExt, sizeof(rcExt)))) {
-        padL = (std::max)(0, (int)(rcExt.left - rcWin.left));
-        padT = (std::max)(0, (int)(rcExt.top - rcWin.top));
-        int actualVisW = rcExt.right - rcExt.left;
-        int actualVisH = rcExt.bottom - rcExt.top;
-        if (actualVisW > 0 && actualVisH > 0) {
-            int centeredVisX = 0, centeredVisY = 0;
-            ComputeTranslatePopupTargetBounds(state, actualVisW, actualVisH, &centeredVisX, &centeredVisY, nullptr, nullptr);
-            int finalWinX = centeredVisX - padL;
-            int finalWinY = centeredVisY - padT;
-            if (finalWinX != rcWin.left || finalWinY != rcWin.top) {
-                SetWindowPos(hPopup, HWND_TOP, finalWinX, finalWinY, 0, 0,
-                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-            }
-        }
-    }
-}
-
-bool IsCandidateTranslatePopupWindow(HWND hWnd, const RunDialogState* state) {
-    if (!hWnd || !IsWindow(hWnd) || !IsWindowVisible(hWnd)) return false;
-    if (state && (hWnd == state->hDlg || hWnd == state->hTranslatePopup)) return false;
-    if (hWnd == g_hActiveGearMenu.load() || hWnd == g_hActiveCustomSizeWnd.load()) return false;
-    if (GetWindow(hWnd, GW_OWNER) != nullptr) return false;
-
-    LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
-    if ((style & WS_CHILD) != 0 || (style & WS_CAPTION) == 0 ||
-        (style & WS_SYSMENU) == 0 || (style & WS_THICKFRAME) == 0) {
-        return false;
-    }
-    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
-    if ((exStyle & WS_EX_TOOLWINDOW) != 0 || (exStyle & WS_EX_NOACTIVATE) != 0) {
-        return false;
-    }
-
-    DWORD cloaked = 0;
-    if (SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked != 0) {
-        return false;
-    }
-
-    if (state) {
-        for (HWND oldW : state->preLaunchBrowserWindows) {
-            if (oldW == hWnd) return false;
-        }
-    }
-
-    wchar_t cls[64] = {};
-    if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) return false;
-    if (_wcsicmp(cls, L"Chrome_WidgetWin_1") != 0) {
-        return false;
-    }
-
-    wchar_t title[256] = {};
-    if (GetWindowTextW(hWnd, title, ARRAYSIZE(title)) > 0) {
-        std::wstring lowTitle = ToLowerString(title);
-        if (lowTitle.find(L"google dịch") != std::wstring::npos ||
-            lowTitle.find(L"google translate") != std::wstring::npos ||
-            lowTitle.find(L"translate.google") != std::wstring::npos) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool OpenTranslationInBrowser(const std::wstring& text, const std::wstring& src, const std::wstring& dst,
-                              RunDialogState* state = nullptr) {
-    std::wstring url = L"https://translate.google.com/?sl=" + src + L"&tl=" + dst +
-                       L"&op=translate&text=" + UrlEncodeUtf8(text);
-
-    int popupX = 100, popupY = 100, popupW = 500, popupH = 450;
-    ComputeTranslatePopupTargetBounds(state, 0, 0, &popupX, &popupY, &popupW, &popupH);
-
-    if (state) {
-        if (state->hDlg && IsWindow(state->hDlg)) {
-            KillTimer(state->hDlg, kTimerSnapTranslatePopup);
-        }
-        state->hTranslatePopup = nullptr;
-        state->preLaunchBrowserWindows.clear();
-        EnumWindows([](HWND w, LPARAM lParam) -> BOOL {
-            if (IsWindowVisible(w)) {
-                reinterpret_cast<std::vector<HWND>*>(lParam)->push_back(w);
-            }
-            return TRUE;
-        }, reinterpret_cast<LPARAM>(&state->preLaunchBrowserWindows));
-    }
-
-    bool launched = false;
-    bool launchedAppWindow = false;
-    std::wstring defBrowser = GetDefaultBrowserExecutablePath();
-    if (IsChromiumAppModeBrowser(defBrowser) && PathFileExistsW(defBrowser.c_str())) {
-        std::wstring params = L"--app=\"" + url + L"\" --window-size=" +
-                              std::to_wstring(popupW) + L"," + std::to_wstring(popupH) +
-                              L" --window-position=" + std::to_wstring(popupX) + L"," + std::to_wstring(popupY);
-
-        SHELLEXECUTEINFOW seiApp = { sizeof(seiApp) };
-        seiApp.fMask = SEE_MASK_DOENVSUBST;
-        seiApp.lpVerb = L"open";
-        seiApp.lpFile = defBrowser.c_str();
-        seiApp.lpParameters = params.c_str();
-        seiApp.nShow = SW_SHOWNORMAL;
-        if (ShellExecuteExW(&seiApp)) {
-            launched = true;
-            launchedAppWindow = true;
-        }
-    }
-
-    if (!launched) {
-        SHELLEXECUTEINFOW sei = { sizeof(sei) };
-        sei.lpVerb = L"open";
-        sei.lpFile = url.c_str();
-        sei.nShow = SW_SHOWNORMAL;
-        launched = (ShellExecuteExW(&sei) != FALSE);
-    }
-
-    if (launchedAppWindow && state && state->hDlg && IsWindow(state->hDlg)) {
-        state->translatePopupLaunchTick = GetTickCount64();
-        state->translatePopupFirstSeenTick = 0;
-        SetTimer(state->hDlg, kTimerSnapTranslatePopup, 25, nullptr);
-    }
-    return launched;
-}
-
-void TriggerTranslationRequest(RunDialogState* state) {
-    if (!state || !state->hDlg || !IsWindow(state->hDlg) || g_unloading.load()) return;
-    std::wstring rawText = TrimCommandString(GetEffectiveInputText(state->hModernEdit));
-    if (rawText.empty()) return;
-    OpenTranslationInBrowser(rawText, state->translateSourceLang, state->translateTargetLang, state);
 }
 
 // --- Experimental Instant Math Calculator in Run Dialog ---
@@ -6742,6 +7039,25 @@ struct MathExprParser {
                 error = true;
                 return 0.0;
             }
+            // Support trailing percentage (e.g. "250000 * 85%" or "= 15%") when '%' is not binary modulo
+            size_t savePos = pos;
+            skipSpaces();
+            if (pos < src.size() && src[pos] == L'%') {
+                size_t nextPos = pos + 1;
+                while (nextPos < src.size() && iswspace(src[nextPos])) ++nextPos;
+                bool followedByOperand = (nextPos < src.size()) &&
+                    ((src[nextPos] >= L'0' && src[nextPos] <= L'9') ||
+                     src[nextPos] == L'.' || src[nextPos] == L'(' || iswalpha(src[nextPos]));
+                if (!followedByOperand) {
+                    pos = pos + 1;
+                    hasOperatorOrFunc = true;
+                    val *= 0.01;
+                } else {
+                    pos = savePos;
+                }
+            } else {
+                pos = savePos;
+            }
             return val;
         }
 
@@ -6789,7 +7105,7 @@ bool TryEvaluateMathExpression(std::wstring_view rawInput, std::wstring* outResu
             }
         }
     }
-    if (!parser.hasOperatorOrFunc) {
+    if (!parser.hasOperatorOrFunc && !hadExplicitEquals) {
         return false;
     }
 
@@ -6837,7 +7153,7 @@ void ApplyMathResultToDialog(RunDialogState* state, const std::wstring& resultVa
     SyncInputToNativeCombo(state, resultValue.c_str());
     UpdateAppSuggestionsForQuery(state, resultValue);
     if (state->hDlg) {
-        InvalidateRect(state->hDlg, nullptr, FALSE);
+        RefreshDialogVisual(state->hDlg, state);
     }
 }
 
@@ -6898,7 +7214,368 @@ bool LaunchWebSearchCommand(HWND, int, const std::wstring& query) {
     return ShellExecuteExW(&sei) != FALSE;
 }
 
-void ExecuteHistoryOrSuggestionItem(RunDialogState* state, const HistoryItem& item) {
+void SyncNativeAdminCheckbox(RunDialogState* state) {
+    if (!state || !state->hDlg || !state->hAdminCheck || !IsWindow(state->hAdminCheck)) return;
+    EnableWindow(state->hAdminCheck, TRUE);
+    WPARAM targetCheck = state->settings.runAsAdmin ? BST_CHECKED : BST_UNCHECKED;
+    if ((WPARAM)SendMessageW(state->hAdminCheck, BM_GETCHECK, 0, 0) != targetCheck) {
+        SendMessageW(state->hAdminCheck, BM_SETCHECK, targetCheck, 0);
+        int chkId = GetDlgCtrlID(state->hAdminCheck);
+        SendMessageW(state->hDlg, WM_COMMAND, MAKEWPARAM(chkId, BN_CLICKED), (LPARAM)state->hAdminCheck);
+    }
+}
+
+std::wstring ResolveRunExecutablePath(const std::wstring& exeToken) {
+    if (exeToken.empty()) return L"";
+    if (PathFileExistsW(exeToken.c_str()) && !PathIsDirectoryW(exeToken.c_str())) {
+        return exeToken;
+    }
+    const wchar_t* exts[] = { nullptr, L".exe", L".bat", L".cmd", L".com", L".msc", L".cpl" };
+    bool hasExt = (PathFindExtensionW(exeToken.c_str())[0] != L'\0');
+    for (const wchar_t* ext : exts) {
+        if (hasExt && ext != nullptr) continue;
+        wchar_t found[MAX_PATH] = {};
+        if (SearchPathW(nullptr, exeToken.c_str(), ext, ARRAYSIZE(found), found, nullptr) > 0 &&
+            found[0] != L'\0' && !PathIsDirectoryW(found)) {
+            return found;
+        }
+    }
+    std::wstring appKeyName = exeToken;
+    if (!hasExt) appKeyName += L".exe";
+    std::wstring subKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\" + appKeyName;
+    const HKEY roots[] = { HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE };
+    for (HKEY root : roots) {
+        wchar_t regVal[MAX_PATH] = {};
+        DWORD cb = sizeof(regVal);
+        if (RegGetValueW(root, subKey.c_str(), nullptr, RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ, nullptr, regVal, &cb) == ERROR_SUCCESS &&
+            regVal[0] != L'\0') {
+            PathUnquoteSpacesW(regVal);
+            if (PathFileExistsW(regVal) && !PathIsDirectoryW(regVal)) {
+                return regVal;
+            }
+        }
+    }
+    return L"";
+}
+
+bool LaunchCommandElevated(HWND hDlg, const std::wstring& rawCmd, bool* outCancelledByUser) {
+    if (outCancelledByUser) *outCancelledByUser = false;
+    std::wstring trimmed = TrimCommandString(rawCmd);
+    if (trimmed.empty()) return false;
+
+    wchar_t expandedBuf[2048] = {};
+    DWORD expLen = ExpandEnvironmentStringsW(trimmed.c_str(), expandedBuf, ARRAYSIZE(expandedBuf));
+    std::wstring cmdLine = (expLen > 0 && expLen < ARRAYSIZE(expandedBuf)) ? expandedBuf : trimmed;
+
+    std::wstring lowerCmd = ToLowerString(cmdLine);
+    if (lowerCmd.rfind(L"http://", 0) == 0 || lowerCmd.rfind(L"https://", 0) == 0 ||
+        lowerCmd.rfind(L"mailto:", 0) == 0 || lowerCmd.rfind(L"shell:", 0) == 0 ||
+        lowerCmd.rfind(L"ms-settings:", 0) == 0) {
+        return false;
+    }
+
+    std::wstring unquotedWhole = cmdLine;
+    if (unquotedWhole.size() >= 2 && unquotedWhole.front() == L'"' && unquotedWhole.back() == L'"') {
+        unquotedWhole = unquotedWhole.substr(1, unquotedWhole.size() - 2);
+    }
+    if (PathIsDirectoryW(unquotedWhole.c_str())) {
+        return false;
+    }
+
+    std::wstring exePart;
+    std::wstring argsPart;
+    if (cmdLine.front() == L'"') {
+        size_t closeQuote = cmdLine.find(L'"', 1);
+        if (closeQuote != std::wstring::npos) {
+            exePart = cmdLine.substr(1, closeQuote - 1);
+            argsPart = TrimCommandString(cmdLine.substr(closeQuote + 1));
+        } else {
+            exePart = cmdLine.substr(1);
+        }
+    } else {
+        std::wstring wholeResolved = ResolveRunExecutablePath(cmdLine);
+        if (!wholeResolved.empty()) {
+            exePart = wholeResolved;
+        } else {
+            size_t sp = cmdLine.find_first_of(L" \t");
+            if (sp != std::wstring::npos) {
+                exePart = cmdLine.substr(0, sp);
+                argsPart = TrimCommandString(cmdLine.substr(sp + 1));
+            } else {
+                exePart = cmdLine;
+            }
+        }
+    }
+
+    std::wstring resolved = ResolveRunExecutablePath(exePart);
+    std::wstring finalFile = !resolved.empty() ? resolved : exePart;
+    std::wstring finalArgs = argsPart;
+
+    std::wstring extLower = ToLowerString(PathFindExtensionW(finalFile.c_str()));
+    if (extLower == L".msc") {
+        finalArgs = L"\"" + finalFile + L"\"" + (argsPart.empty() ? L"" : (L" " + argsPart));
+        finalFile = L"mmc.exe";
+    } else if (extLower == L".cpl") {
+        finalArgs = L"\"" + finalFile + L"\"" + (argsPart.empty() ? L"" : (L" " + argsPart));
+        finalFile = L"control.exe";
+    } else if (extLower == L".msi") {
+        finalArgs = L"/i \"" + finalFile + L"\"" + (argsPart.empty() ? L"" : (L" " + argsPart));
+        finalFile = L"msiexec.exe";
+    } else if (extLower == L".ps1") {
+        finalArgs = L"-ExecutionPolicy Bypass -File \"" + finalFile + L"\"" + (argsPart.empty() ? L"" : (L" " + argsPart));
+        finalFile = L"powershell.exe";
+    }
+
+    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+    sei.fMask = SEE_MASK_DOENVSUBST;
+    sei.hwnd = hDlg;
+    sei.lpVerb = L"runas";
+    sei.lpFile = finalFile.c_str();
+    sei.lpParameters = finalArgs.empty() ? nullptr : finalArgs.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+
+    SetLastError(0);
+    if (ShellExecuteExW(&sei)) {
+        return true;
+    }
+    DWORD err = GetLastError();
+    if (err == ERROR_CANCELLED) {
+        if (outCancelledByUser) *outCancelledByUser = true;
+    }
+    return false;
+}
+
+bool ResolveCustomAlias(const ModSettings& settings, const std::wstring& rawCmd,
+                        std::wstring* outExpandedCmd, bool* outRunAsAdmin) {
+    std::wstring trimmed = TrimCommandString(rawCmd);
+    if (trimmed.empty() || settings.customAliases.empty()) return false;
+
+    std::wstring firstTok = trimmed;
+    std::wstring restArgs;
+    size_t sp = trimmed.find_first_of(L" \t");
+    if (sp != std::wstring::npos) {
+        firstTok = trimmed.substr(0, sp);
+        restArgs = TrimCommandString(trimmed.substr(sp + 1));
+    }
+
+    for (const auto& ca : settings.customAliases) {
+        if (_wcsicmp(trimmed.c_str(), ca.alias.c_str()) == 0) {
+            if (outExpandedCmd) *outExpandedCmd = ca.command;
+            if (outRunAsAdmin) *outRunAsAdmin = ca.runAsAdmin;
+            return true;
+        }
+        if (!restArgs.empty() && _wcsicmp(firstTok.c_str(), ca.alias.c_str()) == 0) {
+            if (outExpandedCmd) *outExpandedCmd = ca.command + L" " + restArgs;
+            if (outRunAsAdmin) *outRunAsAdmin = ca.runAsAdmin;
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<std::wstring> LoadPinnedCommands() {
+    std::vector<std::wstring> out;
+    wchar_t buf[4096] = {};
+    if (Wh_GetStringValue(GetUserOverrideKey(L"pinnedCommands").c_str(), buf, ARRAYSIZE(buf)) == 0) {
+        return out;
+    }
+    std::wstring all(buf);
+    size_t start = 0;
+    while (start < all.size()) {
+        size_t nl = all.find(L'\n', start);
+        std::wstring line = (nl == std::wstring::npos) ? all.substr(start) : all.substr(start, nl - start);
+        line = TrimCommandString(line);
+        if (!line.empty()) {
+            bool dup = false;
+            std::wstring key = NormalizeCmdKey(line);
+            for (const auto& e : out) {
+                if (NormalizeCmdKey(e) == key) { dup = true; break; }
+            }
+            if (!dup) out.push_back(std::move(line));
+        }
+        if (nl == std::wstring::npos) break;
+        start = nl + 1;
+    }
+    return out;
+}
+
+void SavePinnedCommands(const std::vector<std::wstring>& pinned) {
+    std::wstring joined;
+    for (size_t i = 0; i < pinned.size(); ++i) {
+        if (i > 0) joined.push_back(L'\n');
+        joined += pinned[i];
+    }
+    Wh_SetStringValue(GetUserOverrideKey(L"pinnedCommands").c_str(), joined.c_str());
+}
+
+bool IsCommandPinned(const std::wstring& cmd) {
+    std::wstring key = NormalizeCmdKey(TrimCommandString(cmd));
+    if (key.empty()) return false;
+    auto pinned = LoadPinnedCommands();
+    for (const auto& p : pinned) {
+        if (NormalizeCmdKey(p) == key) return true;
+    }
+    return false;
+}
+
+void TogglePinCommand(const std::wstring& cmd) {
+    std::wstring clean = TrimCommandString(cmd);
+    std::wstring key = NormalizeCmdKey(clean);
+    if (key.empty()) return;
+    auto pinned = LoadPinnedCommands();
+    bool removed = false;
+    for (auto it = pinned.begin(); it != pinned.end(); ) {
+        if (NormalizeCmdKey(*it) == key) {
+            it = pinned.erase(it);
+            removed = true;
+        } else {
+            ++it;
+        }
+    }
+    if (!removed) {
+        pinned.insert(pinned.begin(), clean);
+        if (pinned.size() > 15) pinned.resize(15);
+    }
+    SavePinnedCommands(pinned);
+}
+
+void RemovePinnedCommand(const std::wstring& cmd) {
+    std::wstring key = NormalizeCmdKey(TrimCommandString(cmd));
+    if (key.empty()) return;
+    auto pinned = LoadPinnedCommands();
+    size_t before = pinned.size();
+    for (auto it = pinned.begin(); it != pinned.end(); ) {
+        if (NormalizeCmdKey(*it) == key) it = pinned.erase(it);
+        else ++it;
+    }
+    if (pinned.size() != before) {
+        SavePinnedCommands(pinned);
+    }
+}
+
+bool TryResolveCommandFilePath(const std::wstring& rawCmd, std::wstring* outPath, bool* outIsDir) {
+    std::wstring trimmed = TrimCommandString(rawCmd);
+    if (trimmed.empty()) return false;
+
+    auto tryPath = [&](std::wstring candidate) -> bool {
+        candidate = TrimCommandString(candidate);
+        if (candidate.size() >= 2 && candidate.front() == L'"' && candidate.back() == L'"') {
+            candidate = candidate.substr(1, candidate.size() - 2);
+        }
+        if (candidate.empty()) return false;
+        if (candidate.front() == L'~' && (candidate.size() == 1 || candidate[1] == L'\\' || candidate[1] == L'/')) {
+            wchar_t prof[MAX_PATH] = {};
+            if (GetEnvironmentVariableW(L"USERPROFILE", prof, ARRAYSIZE(prof)) > 0) {
+                candidate = std::wstring(prof) + candidate.substr(1);
+            }
+        }
+        if (candidate.find(L'%') != std::wstring::npos) {
+            wchar_t expBuf[1024] = {};
+            DWORD n = ExpandEnvironmentStringsW(candidate.c_str(), expBuf, ARRAYSIZE(expBuf));
+            if (n > 0 && n < ARRAYSIZE(expBuf)) candidate = expBuf;
+        }
+        for (wchar_t& ch : candidate) {
+            if (ch == L'/') ch = L'\\';
+        }
+        DWORD attrs = GetFileAttributesW(candidate.c_str());
+        if (attrs != INVALID_FILE_ATTRIBUTES) {
+            if (outPath) *outPath = candidate;
+            if (outIsDir) *outIsDir = (attrs & FILE_ATTRIBUTE_DIRECTORY) != 0;
+            return true;
+        }
+        // Try SearchPathW (e.g. "notepad", "cmd", "wt.exe")
+        if (candidate.find(L'\\') == std::wstring::npos && candidate.find(L':') == std::wstring::npos) {
+            wchar_t found[MAX_PATH] = {};
+            if (SearchPathW(nullptr, candidate.c_str(), L".exe", ARRAYSIZE(found), found, nullptr) > 0) {
+                if (outPath) *outPath = found;
+                if (outIsDir) *outIsDir = false;
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // 1. Try full string as a path (handles paths with spaces)
+    if (tryPath(trimmed)) return true;
+
+    // 2. Try first token (quoted or space-delimited executable)
+    std::wstring firstTok;
+    if (trimmed.front() == L'"') {
+        size_t closeQ = trimmed.find(L'"', 1);
+        if (closeQ != std::wstring::npos) firstTok = trimmed.substr(1, closeQ - 1);
+    } else {
+        size_t sp = trimmed.find_first_of(L" \t");
+        if (sp != std::wstring::npos) firstTok = trimmed.substr(0, sp);
+    }
+    if (!firstTok.empty() && tryPath(firstTok)) return true;
+
+    return false;
+}
+
+void OpenFileLocationInExplorer(const std::wstring& path, bool isDir) {
+    if (path.empty()) return;
+    if (isDir) {
+        ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    } else {
+        std::wstring args = L"/select,\"" + path + L"\"";
+        ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
+    }
+}
+
+bool LaunchCommandInTerminal(HWND hOwner, const std::wstring& rawCmd, bool runAsAdmin) {
+    std::wstring trimmed = TrimCommandString(rawCmd);
+    if (trimmed.empty()) return false;
+
+    std::wstring lower = ToLowerString(trimmed);
+    bool isPowerShell =
+        lower.rfind(L"powershell", 0) == 0 ||
+        lower.rfind(L"pwsh", 0) == 0 ||
+        lower.rfind(L"get-", 0) == 0 ||
+        lower.rfind(L"set-", 0) == 0 ||
+        lower.rfind(L"new-", 0) == 0 ||
+        lower.rfind(L"remove-", 0) == 0 ||
+        lower.rfind(L"test-", 0) == 0 ||
+        lower.rfind(L"invoke-", 0) == 0 ||
+        lower.rfind(L"start-", 0) == 0 ||
+        lower.rfind(L"stop-", 0) == 0 ||
+        lower.rfind(L"restart-", 0) == 0 ||
+        lower.rfind(L"resolve-", 0) == 0 ||
+        lower.rfind(L"select-", 0) == 0 ||
+        lower.rfind(L"where-", 0) == 0 ||
+        lower.rfind(L"foreach-", 0) == 0 ||
+        (!trimmed.empty() && trimmed.front() == L'$');
+
+    wchar_t wtPath[MAX_PATH] = {};
+    bool hasWt = (SearchPathW(nullptr, L"wt.exe", nullptr, ARRAYSIZE(wtPath), wtPath, nullptr) > 0);
+
+    std::wstring fileToRun;
+    std::wstring params;
+    if (hasWt) {
+        fileToRun = wtPath;
+        if (isPowerShell) {
+            params = L"powershell.exe -NoExit -Command " + trimmed;
+        } else {
+            params = L"cmd.exe /k " + trimmed;
+        }
+    } else if (isPowerShell) {
+        fileToRun = L"powershell.exe";
+        params = L"-NoExit -Command " + trimmed;
+    } else {
+        fileToRun = L"cmd.exe";
+        params = L"/k " + trimmed;
+    }
+
+    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+    sei.fMask = SEE_MASK_DOENVSUBST;
+    sei.hwnd = hOwner;
+    sei.lpVerb = runAsAdmin ? L"runas" : nullptr;
+    sei.lpFile = fileToRun.c_str();
+    sei.lpParameters = params.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    return ShellExecuteExW(&sei) != FALSE;
+}
+
+void ExecuteHistoryOrSuggestionItem(RunDialogState* state, const HistoryItem& item, bool forceElevateOnce = false, bool runInTerminal = false) {
     if (!state || !state->hDlg || state->isTriggeringRun) return;
     CloseActiveGearMenu();
 
@@ -6921,20 +7598,80 @@ void ExecuteHistoryOrSuggestionItem(RunDialogState* state, const HistoryItem& it
     if (searchKind != 0) {
         std::wstring recordCmd = !item.cmd.empty() ? item.cmd : item.execTarget;
         SaveCommandTimestamp(recordCmd);
-        if (LaunchWebSearchCommand( nullptr, searchKind, parsedSearchQuery)) {
+        if (LaunchWebSearchCommand(nullptr, searchKind, parsedSearchQuery)) {
             CloseRunDialog(state->hDlg);
             return;
         }
     }
 
+    bool hasNativeAdminCheckbox = (g_isTaskManagerProcess && state->hAdminCheck && IsWindow(state->hAdminCheck));
+
+    // Expand user-defined Custom Command Aliases (e.g. hosts, env, ws)
+    HistoryItem resolvedItem = item;
+    if (!item.isShortcutFile) {
+        std::wstring expandedAliasCmd;
+        bool aliasAdmin = false;
+        const std::wstring& rawAliasCheck = !item.execTarget.empty() ? item.execTarget : item.cmd;
+        if (ResolveCustomAlias(state->settings, rawAliasCheck, &expandedAliasCmd, &aliasAdmin)) {
+            resolvedItem.execTarget = expandedAliasCmd;
+            if (aliasAdmin) forceElevateOnce = true;
+        }
+    }
+    if (item.isAlias && item.aliasRunAsAdmin) {
+        forceElevateOnce = true;
+    }
+
+    bool wantAdmin = state->settings.runAsAdmin || forceElevateOnce;
+
+    // Shift+Enter: Run command inside Windows Terminal (wt.exe) or CMD/PowerShell keeping window open for logs
+    if (runInTerminal) {
+        const std::wstring& termTarget = !resolvedItem.execTarget.empty() ? resolvedItem.execTarget : resolvedItem.cmd;
+        std::wstring trimmedTerm = TrimCommandString(termTarget);
+        if (trimmedTerm.empty()) return;
+        SaveCommandTimestamp(item.cmd.empty() ? trimmedTerm : item.cmd);
+        if (LaunchCommandInTerminal(state->hDlg, trimmedTerm, wantAdmin)) {
+            CloseRunDialog(state->hDlg);
+            return;
+        }
+    }
+
+    // When Run-as-Admin (or Ctrl+Shift+Enter) is active and not delegating to Task Manager's native checkbox,
+    // elevate directly via ShellExecuteExW("runas")
+    if (wantAdmin && !hasNativeAdminCheckbox) {
+        const std::wstring& elevTarget = !resolvedItem.execTarget.empty() ? resolvedItem.execTarget : resolvedItem.cmd;
+        std::wstring trimmedElev = TrimCommandString(elevTarget);
+        if (trimmedElev.empty()) return;
+
+        state->isBrowsingFile = true;
+        g_isBrowsingFile.store(true);
+        bool cancelledUac = false;
+        bool launchedElevated = LaunchCommandElevated(state->hDlg, trimmedElev, &cancelledUac);
+        g_isBrowsingFile.store(false);
+        if (!IsWindow(state->hDlg)) return;
+        state->isBrowsingFile = false;
+
+        if (launchedElevated) {
+            SaveCommandTimestamp(item.cmd.empty() ? trimmedElev : item.cmd);
+            CloseRunDialog(state->hDlg);
+            return;
+        }
+        if (cancelledUac) {
+            if (state->hModernEdit && IsWindow(state->hModernEdit)) {
+                SetFocus(state->hModernEdit);
+            }
+            RefreshDialogVisual(state->hDlg, state);
+            return;
+        }
+    }
+
     // For Start Menu shortcut files (.lnk / .appref-ms), launch directly via ShellExecuteExW
-    // with hwnd = nullptr so the launched process is never owned by or tied to the closing Run dialog.
-    if (item.isShortcutFile && !item.execTarget.empty()) {
+    // ONLY when not de-elevating inside an elevated Task Manager process.
+    if (item.isShortcutFile && !item.execTarget.empty() && !(g_isTaskManagerProcess && !wantAdmin)) {
         SaveCommandTimestamp(item.cmd);
         SHELLEXECUTEINFOW sei = { sizeof(sei) };
         sei.fMask = SEE_MASK_DOENVSUBST;
         sei.hwnd = nullptr;
-        sei.lpVerb = nullptr;
+        sei.lpVerb = wantAdmin ? L"runas" : nullptr;
         sei.lpFile = item.execTarget.c_str();
         sei.nShow = SW_SHOWNORMAL;
         if (ShellExecuteExW(&sei)) {
@@ -6943,7 +7680,7 @@ void ExecuteHistoryOrSuggestionItem(RunDialogState* state, const HistoryItem& it
         }
     }
 
-    const std::wstring& targetCmd = !item.execTarget.empty() ? item.execTarget : item.cmd;
+    const std::wstring& targetCmd = !resolvedItem.execTarget.empty() ? resolvedItem.execTarget : resolvedItem.cmd;
     state->isTriggeringRun = true;
 
     wchar_t rawBuf[MAX_PATH] = {};
@@ -6957,6 +7694,7 @@ void ExecuteHistoryOrSuggestionItem(RunDialogState* state, const HistoryItem& it
 
     SaveCommandTimestamp(item.cmd.empty() ? rawBuf : item.cmd);
 
+    SyncNativeAdminCheckbox(state);
     if (state->hCombo) EnableWindow(state->hCombo, TRUE);
     if (state->hOrigEdit) EnableWindow(state->hOrigEdit, TRUE);
     SyncInputToNativeCombo(state, rawBuf);
@@ -6988,14 +7726,14 @@ void ExecuteHistoryOrSuggestionItem(RunDialogState* state, const HistoryItem& it
     }
 }
 
-void ExecuteCommandImmediate(RunDialogState* state, const std::wstring& rawCommand) {
+void ExecuteCommandImmediate(RunDialogState* state, const std::wstring& rawCommand, bool forceElevateOnce, bool runInTerminal) {
     HistoryItem tempItem;
     tempItem.cmd = rawCommand;
     tempItem.execTarget = rawCommand;
-    ExecuteHistoryOrSuggestionItem(state, tempItem);
+    ExecuteHistoryOrSuggestionItem(state, tempItem, forceElevateOnce, runInTerminal);
 }
 
-void TriggerRunCommand(RunDialogState* state) {
+void TriggerRunCommand(RunDialogState* state, bool forceElevateOnce = false, bool runInTerminal = false) {
     if (!state || !state->hDlg || state->isTriggeringRun) return;
 
     if (state->hModernEdit) {
@@ -7006,20 +7744,15 @@ void TriggerRunCommand(RunDialogState* state) {
         }
     }
 
-    if (state->translateMode) {
-        TriggerTranslationRequest(state);
-        return;
-    }
-
     const auto& activeRows = GetActiveRowItems(state);
     if (state->showingSuggestions && state->selectedRow >= 0 && state->selectedRow < (int)activeRows.size()) {
         HistoryItem chosen = activeRows[state->selectedRow];
-        ExecuteHistoryOrSuggestionItem(state, chosen);
+        ExecuteHistoryOrSuggestionItem(state, chosen, forceElevateOnce, runInTerminal);
         return;
     }
 
     std::wstring effectiveText = GetEffectiveInputText(state->hModernEdit);
-    ExecuteCommandImmediate(state, effectiveText);
+    ExecuteCommandImmediate(state, effectiveText, forceElevateOnce, runInTerminal);
 }
 
 bool ResolveDialogLightContrast(const RunDialogState* state) {
@@ -7050,49 +7783,26 @@ void ApplyWindowAppearance(HWND hDlg, RunDialogState* state) {
     }
     state->isLightMode = ResolveDialogLightContrast(state);
 
+    DisableWindowDwmTransitions(hDlg);
+
     BOOL dark = state->isLightMode ? FALSE : TRUE;
     DwmSetWindowAttribute(hDlg, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
 
-    // Disable Windows 11 rectangular DWM frame/shadow so our Pill Input Bar (Image 1) and
-    // Detached Squircle Card (Image 2) have 100% transparent outer corners and separation gap!
+    // Disable Windows 11 rectangular DWM frame/shadow so our Pill Input Bar and
+    // Detached Squircle Card have 100% transparent per-pixel outer corners and separation gap!
     DWORD corner = 1; // DWMWCP_DONOTROUND
     DwmSetWindowAttribute(hDlg, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
 
     COLORREF borderCol = 0xFFFFFFFE; // DWMWA_COLOR_NONE
     DwmSetWindowAttribute(hDlg, DWMWA_BORDER_COLOR, &borderCol, sizeof(borderCol));
 
-    MARGINS margins = { -1, -1, -1, -1 };
-    DwmExtendFrameIntoClientArea(hDlg, &margins);
-
-    HRGN hEmptyRgn = CreateRectRgn(0, 0, -1, -1);
-    DWM_BLURBEHIND bb = {};
-    bb.dwFlags = DWM_BB_ENABLE | DWM_BB_BLURREGION;
-    bb.fEnable = TRUE;
-    bb.hRgnBlur = hEmptyRgn;
-    DwmEnableBlurBehindWindow(hDlg, &bb);
-    if (hEmptyRgn) DeleteObject(hEmptyRgn);
-
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    if (!hUser32) return;
-
-    auto pSetWCA = reinterpret_cast<SetWindowCompositionAttribute_t>(
-        GetProcAddress(hUser32, "SetWindowCompositionAttribute"));
-    if (!pSetWCA) return;
-
-    ACCENT_POLICY policy = {};
-    policy.AccentState = ACCENT_DISABLED;
-
     LONG_PTR exStyle = GetWindowLongPtrW(hDlg, GWL_EXSTYLE);
-    if (exStyle & WS_EX_LAYERED) {
-        SetLayeredWindowAttributes(hDlg, 0, 255, LWA_ALPHA);
-        SetWindowLongPtrW(hDlg, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
+    exStyle &= ~(WS_EX_DLGMODALFRAME | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE | WS_EX_COMPOSITED);
+    exStyle |= (WS_EX_APPWINDOW | WS_EX_TOPMOST);
+    if (state->useLayeredPresentation) {
+        exStyle |= WS_EX_LAYERED;
     }
-
-    WINDOWCOMPOSITIONATTRIBDATA data = {};
-    data.Attrib = 19;
-    data.pvData = &policy;
-    data.cbData = sizeof(policy);
-    pSetWCA(hDlg, &data);
+    SetWindowLongPtrW(hDlg, GWL_EXSTYLE, exStyle);
 }
 
 void CheckAndUpdateBackdropInRealtime(HWND hWnd, RunDialogState* state, bool forceImmediate) {
@@ -7149,7 +7859,7 @@ void CheckAndUpdateBackdropInRealtime(HWND hWnd, RunDialogState* state, bool for
     if (changed || state->isLightMode != prevMode) {
         ApplyWindowAppearance(hWnd, state);
     }
-    InvalidateRect(hWnd, nullptr, FALSE);
+    RefreshDialogVisual(hWnd, state);
 }
 
 
@@ -7759,6 +8469,26 @@ void UpdateAppSuggestionsForQuery(RunDialogState* state, const std::wstring& raw
         matches.push_back({ 2500, std::move(webItem) });
     }
 
+    // 0b. Score user-defined Custom Command Aliases (highest priority after math/web)
+    for (const auto& ca : state->settings.customAliases) {
+        std::wstring aliasLower = ToLowerString(ca.alias);
+        std::wstring cmdLower   = ToLowerString(ca.command);
+        int score = ScoreCandidateAgainstQuery(aliasLower, cmdLower, queryLower, 1200);
+        if (score > 0) {
+            HistoryItem aliasItem;
+            aliasItem.cmd = ca.alias;
+            aliasItem.execTarget = ca.command;
+            aliasItem.appName = ca.runAsAdmin ? (L"[Admin] " + ca.command) : ca.command;
+            aliasItem.isSuggestion = true;
+            aliasItem.isAlias = true;
+            aliasItem.aliasRunAsAdmin = ca.runAsAdmin;
+            aliasItem.ownsIcon = true;
+            std::wstring dummyName;
+            ResolveCommandMetadata(ca.command, &aliasItem.hIcon, &dummyName);
+            matches.push_back({ score, std::move(aliasItem) });
+        }
+    }
+
     // 1. Score recent history items first (giving them a slight recency bonus and keeping their timestamp)
     for (size_t i = 0; i < state->history.size(); ++i) {
         const auto& h = state->history[i];
@@ -7880,8 +8610,8 @@ void LoadHistoryItems(RunDialogState* state) {
         return std::find(hiddenMruKeys.begin(), hiddenMruKeys.end(), normKey) != hiddenMruKeys.end();
     };
 
-    auto addUniqueCommand = [&](const std::wstring& rawText, bool checkHiddenList) {
-        if ((int)state->history.size() >= maxItems) return;
+    auto addUniqueCommand = [&](const std::wstring& rawText, bool checkHiddenList, bool pinnedFlag = false) {
+        if (!pinnedFlag && (int)state->history.size() >= maxItems) return;
         std::wstring cleanText = TrimCommandString(rawText);
         std::wstring normKey = NormalizeCmdKey(cleanText);
         if (normKey.empty()) return;
@@ -7902,10 +8632,17 @@ void LoadHistoryItems(RunDialogState* state) {
         ResolveCommandMetadata(cleanText, &item.hIcon, &item.appName);
         item.ownsIcon = true;
         item.isSuggestion = false;
+        item.isPinned = pinnedFlag;
         item.timeStr = LookupOrInitTimestamp(
             cleanText, ftRunMruWrite, state->i18n.todayPrefix, storedTimestamps, &timestampsModified);
         state->history.push_back(std::move(item));
     };
+
+    // 0. Always load Pinned Commands at the very top (never evicted by MRU limit)
+    auto pinnedCommands = LoadPinnedCommands();
+    for (const auto& pCmd : pinnedCommands) {
+        addUniqueCommand(pCmd, false, true);
+    }
 
     for (const auto& entry : storedTimestamps) {
         if ((int)state->history.size() >= maxItems) break;
@@ -7985,23 +8722,45 @@ int GetDetachedGap(const RunDialogState* state) {
     return DpiScaleS(kBaseDetachedGap, state);
 }
 
-int GetHistoryCardHeight(const RunDialogState* state) {
-    if (!state || state->topAreaHeight <= 0) return 0;
-    return (std::max)(0, state->topAreaHeight - GetDetachedGap(state));
+int GetAdminBannerHeight(const RunDialogState* state) {
+    if (!state || !state->settings.runAsAdmin) return 0;
+    return DpiScaleS(kBaseAdminBannerHeight, state);
 }
 
-// When anchoredTop == true (taskbar on Left, Right, or Top), the Pill Input Bar stays fixed at the TOP (y = 0)
-// and the Detached Card (History / Suggestions / Translation Result) expands BELOW it (y = barH + gapH).
-// When anchoredTop == false (taskbar at Bottom), the Pill Input Bar stays fixed at the BOTTOM (y = topAreaHeight)
-// and the Detached Card expands ABOVE it (y = 0).
+int GetAdminBannerGap(const RunDialogState* state) {
+    if (GetAdminBannerHeight(state) <= 0) return 0;
+    return DpiScaleS(kBaseAdminBannerGap, state);
+}
+
+int GetHistoryCardHeight(const RunDialogState* state) {
+    if (!state) return 0;
+    return (std::max)(0, state->historyCardHeight);
+}
+
+int GetAdminBannerTopY(const RunDialogState* state) {
+    int adminH = GetAdminBannerHeight(state);
+    if (!state || adminH <= 0) return 0;
+    if (!state->anchoredTop) {
+        int cardH = GetHistoryCardHeight(state);
+        return (cardH > 0) ? (cardH + GetDetachedGap(state)) : 0;
+    }
+    return GetInputBarHeight(state) + GetAdminBannerGap(state);
+}
+
+// When anchoredTop == true (taskbar on Left, Right, or Top), the Pill Input Bar stays fixed at the TOP (y = 0),
+// the Admin Status Pill Box sits right BELOW it, and the Detached Card expands BELOW that.
+// When anchoredTop == false (taskbar at Bottom), the Pill Input Bar stays fixed at the BOTTOM (y = topAreaHeight),
+// the Admin Status Pill Box sits right ABOVE it, and the Detached Card expands ABOVE that (y = 0).
 int GetInputBarTopY(const RunDialogState* state) {
     if (!state) return 0;
     return state->anchoredTop ? 0 : state->topAreaHeight;
 }
 
 int GetDetachedCardTopY(const RunDialogState* state) {
-    if (!state || state->topAreaHeight <= 0) return 0;
-    return state->anchoredTop ? (GetInputBarHeight(state) + GetDetachedGap(state)) : 0;
+    if (!state || state->historyCardHeight <= 0) return 0;
+    if (!state->anchoredTop) return 0;
+    int adminExtra = GetAdminBannerHeight(state) + GetAdminBannerGap(state);
+    return GetInputBarHeight(state) + adminExtra + GetDetachedGap(state);
 }
 
 ActionButtonsLayout GetActionButtonsLayout(const RunDialogState* state) {
@@ -8009,7 +8768,7 @@ ActionButtonsLayout GetActionButtonsLayout(const RunDialogState* state) {
     int barH = GetInputBarHeight(state);
     UINT dpi = state ? state->dpi : 96;
     int btnH = DpiScaleS(32, state);
-    if (state && !state->translateMode && state->settings.customBarHeight > 0) {
+    if (state && state->settings.customBarHeight > 0) {
         btnH = std::clamp(barH - DpiScale(18, dpi, 100), DpiScale(24, dpi, 100), DpiScale(46, dpi, 100));
     }
 
@@ -8025,80 +8784,32 @@ ActionButtonsLayout GetActionButtonsLayout(const RunDialogState* state) {
     };
 
     const wchar_t* runLabel = state ? state->i18n.runBtn : L"Run";
+    bool isCompact = (state && state->settings.minimalMode);
 
     int wGear   = btnH;
-    int wTrans  = btnH; // Icon-only circular Translate button!
     int wBrowse = scaleBtnW(MeasureButtonWidthAt96Dpi(state->i18n.browseBtn, 86));
-    int wRun    = (state && state->settings.minimalMode && !state->translateMode)
-                  ? btnH // Icon-only circular Run button in Compact Mini-Pill mode!
-                  : scaleBtnW(MeasureButtonWidthAt96Dpi(runLabel, 80));
-    int wClose  = scaleBtnW(MeasureButtonWidthAt96Dpi(state->i18n.exitBtn,   76));
+    int wRun    = isCompact ? btnH : scaleBtnW(MeasureButtonWidthAt96Dpi(runLabel, 80));
+    int wClose  = isCompact ? btnH : scaleBtnW(MeasureButtonWidthAt96Dpi(state->i18n.exitBtn, 76));
 
     int barTop = GetInputBarTopY(state);
-    ActionButtonsLayout layout = {};
-    if (state && state->translateMode) {
-        bool isCompact = state->settings.minimalMode;
-        int topPad  = DpiScaleS(isCompact ? 8 : 10, state);
-        int langTop = barTop + topPad;
-        int langH   = DpiScaleS(isCompact ? 23 : 26, state);
-        int sidePad = DpiScaleS(isCompact ? 14 : 18, state);
-        int swapW   = DpiScaleS(isCompact ? 28 : 36, state);
-        int langGap = DpiScaleS(isCompact ? 5 : 6, state);
-        int pillW   = (std::min)(DpiScaleS(isCompact ? 145 : 210, state),
-                                 (dlgW - sidePad * 2 - swapW - langGap * 2) / 2);
-        layout.rcSrcLang  = { sidePad, langTop, sidePad + pillW, langTop + langH };
-        layout.rcSwapLang = { layout.rcSrcLang.right + langGap, langTop,
-                              layout.rcSrcLang.right + langGap + swapW, langTop + langH };
-        layout.rcDstLang  = { layout.rcSwapLang.right + langGap, langTop,
-                              layout.rcSwapLang.right + langGap + pillW, langTop + langH };
-
-        int inputZoneTop = langTop + langH + DpiScaleS(isCompact ? 6 : 8, state);
-        int inputZoneBot = barTop + barH - DpiScaleS(isCompact ? 8 : 10, state);
-        int zoneH  = (std::max)(1, inputZoneBot - inputZoneTop);
-        int tBtnH  = isCompact ? DpiScaleS(28, state) : btnH;
-        int tGap   = isCompact ? DpiScaleS(5, state) : gap;
-        int tRight = isCompact ? DpiScaleS(10, state) : rightMargin;
-        ExtraLocalizedStrings ex = GetExtraLocalizedStrings(state->settings.language);
-        int tWRun  = isCompact ? tBtnH : scaleBtnW(MeasureButtonWidthAt96Dpi(ex.translateBtnLabel, 80));
-        int btnTop = inputZoneTop + (zoneH - tBtnH) / 2;
-
-        // Order from right to left: [Gear] <- [Translate Icon] <- [Run]
-        layout.rcGear      = { dlgW - tRight - tBtnH, btnTop, dlgW - tRight, btnTop + tBtnH };
-        layout.rcTranslate = { layout.rcGear.left - tGap - tBtnH, btnTop, layout.rcGear.left - tGap, btnTop + tBtnH };
-        layout.rcRun       = { layout.rcTranslate.left - tGap - tWRun, btnTop, layout.rcTranslate.left - tGap, btnTop + tBtnH };
-        layout.rcClose     = { 0, 0, 0, 0 };
-        layout.rcBrowse    = { 0, 0, 0, 0 };
-
-        int editLeft = isCompact ? DpiScaleS(46, state) : DpiScaleS(50, state);
-        layout.rcEdit = {
-            editLeft,
-            inputZoneTop,
-            layout.rcRun.left - DpiScaleS(isCompact ? 6 : 10, state),
-            inputZoneBot
-        };
-        return layout;
-    }
-
     int top = barTop + (barH - btnH) / 2;
-    // Order from right to left: [Gear] <- [Translate Icon] <- [Run]
-    layout.rcGear      = { dlgW - rightMargin - wGear, top, dlgW - rightMargin, top + btnH };
-    layout.rcTranslate = { layout.rcGear.left - gap - wTrans, top, layout.rcGear.left - gap, top + btnH };
+    ActionButtonsLayout layout = {};
 
-    if (state && state->settings.minimalMode) {
-        layout.rcClose  = { 0, 0, 0, 0 };
+    // Order from right to left: [Gear] <- [Close] <- [Run] (<- [Browse] in full mode)
+    layout.rcGear  = { dlgW - rightMargin - wGear, top, dlgW - rightMargin, top + btnH };
+    layout.rcClose = { layout.rcGear.left - gap - wClose, top, layout.rcGear.left - gap, top + btnH };
+    layout.rcRun   = { layout.rcClose.left - gap - wRun, top, layout.rcClose.left - gap, top + btnH };
+    if (isCompact) {
         layout.rcBrowse = { 0, 0, 0, 0 };
-        layout.rcRun    = { layout.rcTranslate.left - gap - wRun, top, layout.rcTranslate.left - gap, top + btnH };
     } else {
-        layout.rcClose  = { layout.rcTranslate.left - gap - wClose, top, layout.rcTranslate.left - gap, top + btnH };
-        layout.rcRun    = { layout.rcClose.left - gap - wRun, top, layout.rcClose.left - gap, top + btnH };
         layout.rcBrowse = { layout.rcRun.left - gap - wBrowse, top, layout.rcRun.left - gap, top + btnH };
     }
 
-    int editRightAnchor = (state && state->settings.minimalMode) ? layout.rcRun.left : layout.rcBrowse.left;
+    int editRightAnchor = isCompact ? layout.rcRun.left : layout.rcBrowse.left;
     int editH = (std::max)(DpiScaleS(24, state), (int)std::ceil(GetFontSizeSF(13.5f, state) * 1.6f));
     editH = (std::min)(editH, barH - DpiScale(6, dpi, 100));
     int editTop = barTop + (barH - editH) / 2;
-    int editLeft = (state && state->settings.minimalMode) ? DpiScaleS(46, state) : DpiScaleS(50, state);
+    int editLeft = isCompact ? DpiScaleS(46, state) : DpiScaleS(50, state);
     layout.rcEdit = {
         editLeft,
         editTop,
@@ -8406,6 +9117,18 @@ void DrawD2DPointerSpecularGlow(ID2D1RenderTarget* pRT, POINT mousePt, bool hasM
     }
 }
 
+void DrawD2DPinVector(ID2D1RenderTarget* pRT, ID2D1Brush* pBr, ID2D1StrokeStyle* pStroke,
+                      float cx, float cy, UINT dpi) {
+    float s = (float)dpi / 96.0f;
+    float sw = 1.45f * s;
+    // Tilted pushpin head + needle
+    pRT->DrawLine(D2D1::Point2F(cx - 2.2f * s, cy - 4.4f * s), D2D1::Point2F(cx + 4.4f * s, cy + 2.2f * s), pBr, sw, pStroke);
+    pRT->DrawLine(D2D1::Point2F(cx - 0.8f * s, cy - 3.0f * s), D2D1::Point2F(cx - 3.2f * s, cy + 0.2f * s), pBr, sw, pStroke);
+    pRT->DrawLine(D2D1::Point2F(cx + 3.0f * s, cy + 0.8f * s), D2D1::Point2F(cx - 0.2f * s, cy + 3.2f * s), pBr, sw, pStroke);
+    pRT->DrawLine(D2D1::Point2F(cx - 3.2f * s, cy + 0.2f * s), D2D1::Point2F(cx - 0.2f * s, cy + 3.2f * s), pBr, sw, pStroke);
+    pRT->DrawLine(D2D1::Point2F(cx - 1.7f * s, cy + 1.7f * s), D2D1::Point2F(cx - 4.6f * s, cy + 4.6f * s), pBr, sw, pStroke);
+}
+
 void DrawD2DClockVector(ID2D1RenderTarget* pRT, ID2D1Brush* pBrush, ID2D1StrokeStyle* pStroke,
                         float cx, float cy, UINT dpi) {
     float r = DpiScaleF(5.8f, dpi);
@@ -8486,56 +9209,37 @@ void DrawD2DGearVector(ID2D1RenderTarget* pRT, ID2D1Brush* pBrush, ID2D1StrokeSt
     pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), innerR, innerR), pBrush, DpiScaleF(1.2f, dpi), pStroke);
 }
 
-// Official Google Translate ("文A") vector icon for the Translate button on the Input Bar
-// (distinct from the Globe icon used for Display Language in the Settings menu)
-void DrawD2DGoogleTranslateVector(ID2D1RenderTarget* pRT, ID2D1Brush* pBrush, ID2D1StrokeStyle* pStroke,
-                                  float cx, float cy, UINT dpi) {
+// Crisp Windows Security / Administrator Shield vector icon
+void DrawD2DShieldVector(ID2D1RenderTarget* pRT, ID2D1Brush* pBrush, ID2D1StrokeStyle* pStroke,
+                         float cx, float cy, UINT dpi, float scale = 1.0f) {
     if (!pRT || !pBrush) return;
-    float sw = DpiScaleF(1.32f, dpi);
+    float sw = DpiScaleF(1.32f * scale, dpi);
     auto pt = [&](float dxDip, float dyDip) -> D2D1_POINT_2F {
-        return D2D1::Point2F(cx + DpiScaleF(dxDip, dpi), cy + DpiScaleF(dyDip, dpi));
+        return D2D1::Point2F(cx + DpiScaleF(dxDip * scale, dpi), cy + DpiScaleF(dyDip * scale, dpi));
     };
-
-    // 1. Top-left Google Translate '文' glyph (top stem + horizontal bar + curved strokes)
-    pRT->DrawLine(pt(-2.6f, -6.0f), pt(-2.6f, -4.2f), pBrush, sw, pStroke);
-    pRT->DrawLine(pt(-6.2f, -4.2f), pt( 1.0f, -4.2f), pBrush, sw, pStroke);
 
     if (g_pD2DFactory) {
         ID2D1PathGeometry* pPath = nullptr;
         if (SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&pPath)) && pPath) {
             ID2D1GeometrySink* pSink = nullptr;
             if (SUCCEEDED(pPath->Open(&pSink)) && pSink) {
-                // Left-sweeping curve of '文'
-                pSink->BeginFigure(pt(-0.6f, -4.2f), D2D1_FIGURE_BEGIN_HOLLOW);
-                pSink->AddQuadraticBezier(D2D1::QuadraticBezierSegment(pt(-1.9f, -0.3f), pt(-5.8f, 1.8f)));
-                pSink->EndFigure(D2D1_FIGURE_END_OPEN);
-
-                // Right-sweeping curve of '文'
-                pSink->BeginFigure(pt(-4.7f, -2.4f), D2D1_FIGURE_BEGIN_HOLLOW);
-                pSink->AddQuadraticBezier(D2D1::QuadraticBezierSegment(pt(-2.9f, -0.1f), pt(-0.2f, 1.4f)));
-                pSink->EndFigure(D2D1_FIGURE_END_OPEN);
-
-                // Bottom-right 'A' arch (left foot -> apex -> right foot)
-                pSink->BeginFigure(pt(0.6f, 5.9f), D2D1_FIGURE_BEGIN_HOLLOW);
-                pSink->AddLine(pt(3.3f, -0.8f));
-                pSink->AddLine(pt(6.0f, 5.9f));
-                pSink->EndFigure(D2D1_FIGURE_END_OPEN);
-
+                pSink->BeginFigure(pt(0.0f, -6.1f), D2D1_FIGURE_BEGIN_HOLLOW);
+                pSink->AddLine(pt(5.2f, -4.1f));
+                pSink->AddLine(pt(5.0f, 0.3f));
+                pSink->AddQuadraticBezier(D2D1::QuadraticBezierSegment(pt(4.5f, 3.9f), pt(0.0f, 6.2f)));
+                pSink->AddQuadraticBezier(D2D1::QuadraticBezierSegment(pt(-4.5f, 3.9f), pt(-5.0f, 0.3f)));
+                pSink->AddLine(pt(-5.2f, -4.1f));
+                pSink->EndFigure(D2D1_FIGURE_END_CLOSED);
                 pSink->Close();
                 pSink->Release();
                 pRT->DrawGeometry(pPath, pBrush, sw, pStroke);
             }
             pPath->Release();
         }
-    } else {
-        pRT->DrawLine(pt(-0.6f, -4.2f), pt(-5.8f, 1.8f), pBrush, sw, pStroke);
-        pRT->DrawLine(pt(-4.7f, -2.4f), pt(-0.2f, 1.4f), pBrush, sw, pStroke);
-        pRT->DrawLine(pt(0.6f, 5.9f),   pt(3.3f, -0.8f), pBrush, sw, pStroke);
-        pRT->DrawLine(pt(3.3f, -0.8f),  pt(6.0f, 5.9f),  pBrush, sw, pStroke);
     }
-
-    // Crossbar of 'A'
-    pRT->DrawLine(pt(1.45f, 3.7f), pt(5.15f, 3.7f), pBrush, sw, pStroke);
+    // Checkmark emblem inside the shield
+    pRT->DrawLine(pt(-2.1f, 0.2f), pt(-0.5f, 1.8f), pBrush, DpiScaleF(1.25f * scale, dpi), pStroke);
+    pRT->DrawLine(pt(-0.5f, 1.8f), pt(2.4f, -1.4f), pBrush, DpiScaleF(1.25f * scale, dpi), pStroke);
 }
 
 // --- Modern Windows 11 Fluent Acrylic / Liquid Glass Popup Menu Engine ---
@@ -8551,7 +9255,8 @@ enum class FluentMenuIcon {
     ClearTrash,
     FolderPick,
     RemoveBg,
-    MinimalLayout
+    MinimalLayout,
+    AdminShield
 };
 
 void DrawD2DMenuChevronRight(ID2D1RenderTarget* pRT, ID2D1Brush* pBrush, ID2D1StrokeStyle* pStroke,
@@ -8576,7 +9281,8 @@ void DrawD2DMenuCheckmark(ID2D1RenderTarget* pRT, ID2D1Brush* pBrush, ID2D1Strok
 
 // Renders a 3D Refractive Liquid Glass ToggleSwitch for boolean on/off feature rows (e.g. Compact Mode & Command History)
 void DrawD2DWin11ToggleSwitch(ID2D1RenderTarget* pRT, float rightEdgeX, float centerY,
-                              UINT dpi, bool isOn, bool isLight, bool isDisabled, bool isHovered) {
+                              UINT dpi, bool isOn, bool isLight, bool isDisabled, bool isHovered,
+                              bool isAmberStyle = false) {
     if (!pRT) return;
     float trackW = DpiScaleF(38.0f, dpi);
     float trackH = DpiScaleF(19.0f, dpi);
@@ -8589,12 +9295,16 @@ void DrawD2DWin11ToggleSwitch(ID2D1RenderTarget* pRT, float rightEdgeX, float ce
 
     // 1. Liquid Glass Capsule Track Fill
     if (isOn) {
-        // Luminous cyan-azure-to-violet refractive Liquid Glass fill when ON
-        D2D1_GRADIENT_STOP onStops[3] = {
-            { 0.00f, D2D1::ColorF(0.28f, 0.84f, 1.00f, (activeHov ? 0.72f : 0.60f) * alphaMul) },
-            { 0.52f, D2D1::ColorF(0.14f, 0.58f, 0.98f, (activeHov ? 0.62f : 0.50f) * alphaMul) },
-            { 1.00f, D2D1::ColorF(0.42f, 0.40f, 0.98f, (activeHov ? 0.68f : 0.56f) * alphaMul) }
-        };
+        D2D1_GRADIENT_STOP onStops[3] = {};
+        if (isAmberStyle) {
+            onStops[0] = { 0.00f, D2D1::ColorF(1.00f, 0.74f, 0.18f, (activeHov ? 0.82f : 0.70f) * alphaMul) };
+            onStops[1] = { 0.52f, D2D1::ColorF(0.98f, 0.54f, 0.06f, (activeHov ? 0.76f : 0.64f) * alphaMul) };
+            onStops[2] = { 1.00f, D2D1::ColorF(0.92f, 0.38f, 0.04f, (activeHov ? 0.80f : 0.68f) * alphaMul) };
+        } else {
+            onStops[0] = { 0.00f, D2D1::ColorF(0.28f, 0.84f, 1.00f, (activeHov ? 0.72f : 0.60f) * alphaMul) };
+            onStops[1] = { 0.52f, D2D1::ColorF(0.14f, 0.58f, 0.98f, (activeHov ? 0.62f : 0.50f) * alphaMul) };
+            onStops[2] = { 1.00f, D2D1::ColorF(0.42f, 0.40f, 0.98f, (activeHov ? 0.68f : 0.56f) * alphaMul) };
+        }
         ID2D1GradientStopCollection* pOnStops = nullptr;
         if (SUCCEEDED(pRT->CreateGradientStopCollection(onStops, 3, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pOnStops)) && pOnStops) {
             ID2D1LinearGradientBrush* pOnBr = nullptr;
@@ -8846,6 +9556,10 @@ void DrawD2DFluentMenuIcon(ID2D1RenderTarget* pRT, ID2D1Brush* pBrush, ID2D1Stro
             pRT->FillRoundedRectangle(D2D1::RoundedRect(rcBtn, DpiScaleF(1.0f, dpi), DpiScaleF(1.0f, dpi)), pBrush);
             break;
         }
+        case FluentMenuIcon::AdminShield: {
+            DrawD2DShieldVector(pRT, pBrush, pStroke, cx, cy, dpi, 1.0f);
+            break;
+        }
         default:
             break;
     }
@@ -8939,6 +9653,9 @@ std::atomic<HWND> g_hActiveCustomSizeWnd{nullptr};
 constexpr UINT_PTR kTimerMenuSubHover = 9501;
 constexpr UINT_PTR kTimerMenuWatchdog = 9502;
 constexpr wchar_t kFluentMenuClassName[] = L"WindhawkModernRunFluentMenuWnd";
+constexpr wchar_t kAdminWarnClassName[] = L"WindhawkModernRunAdminWarnWnd";
+static bool g_adminWarnClassRegistered = false;
+LRESULT CALLBACK AdminWarningDialogWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 void CloseActiveGearMenu() {
     if (HWND hGearMenu = g_hActiveGearMenu.load()) {
@@ -9032,7 +9749,7 @@ void ApplyInlineMenuFieldValue(FluentMenuSession* s, int kind, int val) {
         val = std::clamp(val, 20, 255);
         Wh_SetIntValue(GetUserOverrideKey(L"customBackgroundOpacity").c_str(), val);
     } else if (kind == 7) {
-        val = std::clamp(val, 0, 50);
+        val = std::clamp(val, 0, 20);
         Wh_SetIntValue(GetUserOverrideKey(L"maxHistoryItems").c_str(), val);
     } else if (kind == 8) {
         val = std::clamp(val, 3, 10);
@@ -9057,8 +9774,7 @@ void ApplyInlineMenuFieldValue(FluentMenuSession* s, int kind, int val) {
     RecomputeDialogMetrics(st);
     ResizeDialogPreservingBottomAnchor(st, oldHeight);
     ApplyWindowAppearance(st->hDlg, st);
-    InvalidateRect(st->hDlg, nullptr, FALSE);
-    UpdateWindow(st->hDlg);
+    RefreshDialogVisual(st->hDlg, st);
 
     if (kind == 4 || kind == 5) {
         s->surface = st->effectiveSurface;
@@ -9170,7 +9886,7 @@ void ComputeFluentPanelMetrics(FluentMenuSession* s, FluentMenuPanelState* p) {
     }
     bool hasToggleSwitches = false;
     for (const auto& item : p->items) {
-        if (item.id == 350 || item.id == 400) {
+        if (item.id == 350 || item.id == 355 || item.id == 400 || item.id == 450 || item.id == 460) {
             hasToggleSwitches = true;
             break;
         }
@@ -9237,6 +9953,8 @@ int GetRowTopYInPanel(const FluentMenuSession* s, const FluentMenuPanelState* p,
 void ApplyFluentMenuWindowBackdrop(HWND hWnd, const FluentMenuSession* s) {
     if (!hWnd || !s) return;
 
+    DisableWindowDwmTransitions(hWnd);
+
     BOOL dark = s->isLight ? FALSE : TRUE;
     DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
 
@@ -9257,27 +9975,6 @@ void ApplyFluentMenuWindowBackdrop(HWND hWnd, const FluentMenuSession* s) {
     bb.hRgnBlur = hEmptyRgn;
     DwmEnableBlurBehindWindow(hWnd, &bb);
     if (hEmptyRgn) DeleteObject(hEmptyRgn);
-
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    if (!hUser32) return;
-    auto pSetWCA = reinterpret_cast<SetWindowCompositionAttribute_t>(
-        GetProcAddress(hUser32, "SetWindowCompositionAttribute"));
-    if (!pSetWCA) return;
-
-    ACCENT_POLICY policy = {};
-    policy.AccentState = ACCENT_DISABLED;
-
-    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
-    if (exStyle & WS_EX_LAYERED) {
-        SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
-        SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
-    }
-
-    WINDOWCOMPOSITIONATTRIBDATA data = {};
-    data.Attrib = 19;
-    data.pvData = &policy;
-    data.cbData = sizeof(policy);
-    pSetWCA(hWnd, &data);
 }
 
 void ShowSubMenuForParentRow(FluentMenuSession* s, int parentIdx) {
@@ -9325,13 +10022,8 @@ void ShowSubMenuForParentRow(FluentMenuSession* s, int parentIdx) {
     GetWindowRect(s->mainPanel.hWnd, &rcMain);
 
     HMONITOR hMon = MonitorFromWindow(s->mainPanel.hWnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi = { sizeof(mi) };
     RECT rcWork = {};
-    if (hMon && GetMonitorInfoW(hMon, &mi)) {
-        rcWork = mi.rcWork;
-    } else {
-        SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
-    }
+    GetEffectiveMonitorWorkArea(hMon, s->effectiveDpi, &rcWork, nullptr);
 
     int rowTopOffset = GetRowTopYInPanel(s, &s->mainPanel, parentIdx);
     int subX = rcMain.right - DpiScale(2, s->effectiveDpi);
@@ -9452,17 +10144,20 @@ void PaintFluentMenuPanel(HWND hWnd, FluentMenuPanelState* p) {
                 D2D1_COLOR_F colSub    = isLight ? D2D1::ColorF(0.22f, 0.25f, 0.32f, 0.72f) : D2D1::ColorF(0.82f, 0.86f, 0.94f, 0.72f);
                 D2D1_COLOR_F colMuted  = isLight ? D2D1::ColorF(0.40f, 0.42f, 0.46f, 0.42f) : D2D1::ColorF(0.60f, 0.63f, 0.70f, 0.38f);
                 D2D1_COLOR_F colAccent = isLight ? D2D1::ColorF(0.07f, 0.43f, 0.80f, 1.0f) : D2D1::ColorF(0.38f, 0.72f, 1.00f, 1.0f);
+                D2D1_COLOR_F colAmber  = isLight ? D2D1::ColorF(0.82f, 0.38f, 0.02f, 1.0f) : D2D1::ColorF(1.00f, 0.70f, 0.16f, 1.0f);
 
                 ID2D1SolidColorBrush* pBrText = nullptr;
                 ID2D1SolidColorBrush* pBrIcon = nullptr;
                 ID2D1SolidColorBrush* pBrSub = nullptr;
                 ID2D1SolidColorBrush* pBrMuted = nullptr;
                 ID2D1SolidColorBrush* pBrAccent = nullptr;
+                ID2D1SolidColorBrush* pBrAmber = nullptr;
                 pRT->CreateSolidColorBrush(colText, &pBrText);
                 pRT->CreateSolidColorBrush(colIcon, &pBrIcon);
                 pRT->CreateSolidColorBrush(colSub, &pBrSub);
                 pRT->CreateSolidColorBrush(colMuted, &pBrMuted);
                 pRT->CreateSolidColorBrush(colAccent, &pBrAccent);
+                pRT->CreateSolidColorBrush(colAmber, &pBrAmber);
 
                 ID2D1StrokeStyle* pRoundStroke = nullptr;
                 D2D1_STROKE_STYLE_PROPERTIES strokeProps = D2D1::StrokeStyleProperties(
@@ -9547,7 +10242,8 @@ void PaintFluentMenuPanel(HWND hWnd, FluentMenuPanelState* p) {
                     float iconCx = DpiScaleF(22.0f, dpi);
                     float iconCy = curY + rowH * 0.5f;
                     ID2D1Brush* pItemTextBr = item.disabled ? pBrMuted : pBrText;
-                    ID2D1Brush* pItemIconBr = item.disabled ? pBrMuted : (item.checked && pBrAccent ? pBrAccent : pBrIcon);
+                    ID2D1Brush* pCheckedBr  = (item.id == 450 && pBrAmber) ? pBrAmber : pBrAccent;
+                    ID2D1Brush* pItemIconBr = item.disabled ? pBrMuted : (item.checked && pCheckedBr ? pCheckedBr : pBrIcon);
 
                     if (item.icon != FluentMenuIcon::None && pItemIconBr && pRoundStroke) {
                         DrawD2DFluentMenuIcon(pRT, pItemIconBr, pRoundStroke, item.icon, iconCx, iconCy, dpi);
@@ -9635,9 +10331,9 @@ void PaintFluentMenuPanel(HWND hWnd, FluentMenuPanelState* p) {
                             pFmtCtl->Release();
                         }
                     } else {
-                        // Only boolean on/off switches (Compact Mode = 350, Command History = 400) use a Toggle Switch;
+                        // Boolean on/off switches (Compact Mode = 350, Command History = 400, Run as Admin = 450) use a Toggle Switch;
                         // single-choice selection options in submenus/popups use a Checkmark (✓).
-                        bool isToggleRow = (item.id == 350 || item.id == 400);
+                        bool isToggleRow = (item.id == 350 || item.id == 355 || item.id == 400 || item.id == 450 || item.id == 460);
                         float leftTextX = (item.icon == FluentMenuIcon::None)
                             ? DpiScaleF(18.0f, dpi)
                             : DpiScaleF(42.0f, dpi);
@@ -9659,7 +10355,7 @@ void PaintFluentMenuPanel(HWND hWnd, FluentMenuPanelState* p) {
                         } else if (isToggleRow) {
                             float swRightX = (float)w - DpiScaleF(12.0f, dpi) - sbReserve;
                             DrawD2DWin11ToggleSwitch(pRT, swRightX, iconCy, dpi,
-                                                     item.checked, isLight, item.disabled, isHovered);
+                                                     item.checked, isLight, item.disabled, isHovered, item.id == 450);
                         } else if (item.checked && pRoundStroke && (pBrAccent || pBrText)) {
                             float checkX = (float)w - DpiScaleF(18.0f, dpi) - sbReserve;
                             DrawD2DMenuCheckmark(pRT, pBrAccent ? pBrAccent : pBrText, pRoundStroke, checkX, iconCy, dpi);
@@ -9701,6 +10397,7 @@ void PaintFluentMenuPanel(HWND hWnd, FluentMenuPanelState* p) {
 
                 if (pFmtItem)     pFmtItem->Release();
                 if (pRoundStroke) pRoundStroke->Release();
+                if (pBrAmber)  pBrAmber->Release();
                 if (pBrAccent)    pBrAccent->Release();
                 if (pBrMuted)     pBrMuted->Release();
                 if (pBrSub)       pBrSub->Release();
@@ -9823,9 +10520,13 @@ LRESULT CALLBACK FluentMenuWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
                 bool anyMouseDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 ||
                                     (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0 ||
                                     (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
+                bool menuPressActive = (s->mainPanel.pressedIdx != -1) ||
+                                       (s->subPanel.pressedIdx != -1) ||
+                                       (GetCapture() == s->mainPanel.hWnd) ||
+                                       (s->subPanel.hWnd && GetCapture() == s->subPanel.hWnd);
                 if (!anyMouseDown) {
                     s->mouseReleasedSinceOpen = true;
-                } else if (s->mouseReleasedSinceOpen) {
+                } else if (s->mouseReleasedSinceOpen && !menuPressActive) {
                     POINT ptCursor = {};
                     GetCursorPos(&ptCursor);
                     RECT rcMain = {}, rcSub = {};
@@ -9847,7 +10548,9 @@ LRESULT CALLBACK FluentMenuWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
         case WM_MOUSELEAVE: {
             if (!p || !p->session) return 0;
             p->hasMousePt = false;
-            p->pressedIdx = -1;
+            if (GetCapture() != hWnd) {
+                p->pressedIdx = -1;
+            }
             if (p->isSubMenu) {
                 p->hoveredIdx = -1;
             } else {
@@ -9887,12 +10590,15 @@ LRESULT CALLBACK FluentMenuWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
         case WM_LBUTTONDOWN: {
             if (!p || !p->session) return 0;
             FluentMenuSession* s = p->session;
+            KillTimer(hWnd, kTimerMenuSubHover);
             POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
             RECT rcRow = {};
             int row = HitTestFluentMenuRow(s, p, pt, &rcRow);
             s->pressedInlinePart = 0;
             if (row >= 0 && row < (int)p->items.size() && !p->items[row].disabled) {
                 p->pressedIdx = row;
+                p->hoveredIdx = row;
+                SetCapture(hWnd);
                 const auto& item = p->items[row];
                 if (item.inlineEditKind != 0) {
                     D2D1_RECT_F rcMinus = {}, rcBox = {}, rcPlus = {};
@@ -9915,9 +10621,26 @@ LRESULT CALLBACK FluentMenuWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
             POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
             RECT rcRow = {};
             int row = HitTestFluentMenuRow(s, p, pt, &rcRow);
+            int pressedRow = p->pressedIdx;
             int pressedPart = s->pressedInlinePart;
             s->pressedInlinePart = 0;
             p->pressedIdx = -1;
+            if (GetCapture() == hWnd) {
+                ReleaseCapture();
+            }
+            if (row < 0 && pressedRow >= 0 && pressedRow < (int)p->items.size() && !p->items[pressedRow].disabled) {
+                UINT pid = p->items[pressedRow].id;
+                if (pid == 350 || pid == 355 || pid == 400 || pid == 450 || pid == 460) {
+                    int rTop = GetRowTopYInPanel(s, p, pressedRow);
+                    int rH   = GetMenuRowHeight(s);
+                    int tol  = DpiScale(10, s->effectiveDpi);
+                    if (pt.x >= -tol && pt.x <= p->width + tol &&
+                        pt.y >= rTop - tol && pt.y <= rTop + rH + tol) {
+                        row = pressedRow;
+                        rcRow = { 0, rTop, p->width, rTop + rH };
+                    }
+                }
+            }
             InvalidateRect(hWnd, nullptr, FALSE);
 
             if (row >= 0 && row < (int)p->items.size() && !p->items[row].disabled) {
@@ -9986,6 +10709,7 @@ LRESULT CALLBACK FluentMenuWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
                 } else if (item.id != 0) {
                     s->selectedCmd = item.id;
                     s->running = false;
+                    PostMessageW(hWnd, WM_NULL, 0, 0);
                 }
             }
             return 0;
@@ -10043,13 +10767,8 @@ UINT RunFluentPopupMenu(RunDialogState* state, std::vector<FluentMenuItem>&& men
     ComputeFluentPanelMetrics(&session, &session.mainPanel);
 
     HMONITOR hMon = MonitorFromWindow(state->hDlg, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi = { sizeof(mi) };
     RECT rcWork = {};
-    if (hMon && GetMonitorInfoW(hMon, &mi)) {
-        rcWork = mi.rcWork;
-    } else {
-        SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
-    }
+    GetEffectiveMonitorWorkArea(hMon, session.effectiveDpi, &rcWork, nullptr);
 
     int mainX = ptAnchorRightBottom.x - session.mainPanel.width;
     int mainY = (state && state->anchoredTop)
@@ -10887,10 +11606,8 @@ void OpenCustomSizeDialog(RunDialogState* state) {
     RECT rcDlg = {};
     GetWindowRect(hDlg, &rcDlg);
     HMONITOR hMon = MonitorFromWindow(hDlg, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi = { sizeof(mi) };
     RECT rcWork = {};
-    if (hMon && GetMonitorInfoW(hMon, &mi)) rcWork = mi.rcWork;
-    else SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+    GetEffectiveMonitorWorkArea(hMon, session.dpi, &rcWork, nullptr);
 
     int posX = rcDlg.right - wndW;
     int posY = rcDlg.top - wndH - DpiScale(8, session.dpi);
@@ -10953,12 +11670,584 @@ void OpenCustomSizeDialog(RunDialogState* state) {
     }
 
     if (IsWindow(hDlg) && IsWindowVisible(hDlg) && !IsIconic(hDlg) && !state->pendingUninit && !g_unloading.load()) {
-        SetForegroundWindow(hDlg);
-        if (state->hModernEdit && IsWindow(state->hModernEdit)) {
-            SetFocus(state->hModernEdit);
-        }
-        InvalidateRect(hDlg, nullptr, FALSE);
+        ForceFocusModernEdit(hDlg, state);
+        RefreshDialogVisual(hDlg, state);
     }
+}
+
+struct AdminWarningDialogSession {
+    HWND hWnd = nullptr;
+    RunDialogState* dlgState = nullptr;
+    UINT dpi = 96;
+    bool isLight = false;
+    SurfaceTheme surface = SurfaceTheme::Glass;
+    int posX = 0;
+    int posY = 0;
+    int wndW = 0;
+    int wndH = 0;
+    int hoveredBtn = 0; // 1 = Allow, 2 = Cancel
+    int pressedBtn = 0;
+    bool hasMouseTrack = false;
+    bool running = true;
+    bool confirmed = false;
+
+    // Persistent 32-bit premultiplied ARGB DIB + Direct2D RenderTarget for zero-flicker UpdateLayeredWindow
+    HDC hCachedMemDC = nullptr;
+    HBITMAP hCachedBmp = nullptr;
+    HGDIOBJ hOldCachedBmp = nullptr;
+    DWORD* cachedDibPixels = nullptr;
+    int cachedDibW = 0;
+    int cachedDibH = 0;
+    ID2D1DCRenderTarget* pCachedRT = nullptr;
+};
+
+void ReleaseAdminWarningRenderCache(AdminWarningDialogSession* s) {
+    if (!s) return;
+    if (s->pCachedRT) {
+        {
+            std::lock_guard<std::mutex> lock(g_opticalCacheMutex);
+            ReleaseOpticalCacheBitmap(g_adminWarnOpticalCache);
+        }
+        s->pCachedRT->Release();
+        s->pCachedRT = nullptr;
+    }
+    if (s->hCachedMemDC) {
+        if (s->hOldCachedBmp) {
+            SelectObject(s->hCachedMemDC, s->hOldCachedBmp);
+            s->hOldCachedBmp = nullptr;
+        }
+        if (s->hCachedBmp) {
+            DeleteObject(s->hCachedBmp);
+            s->hCachedBmp = nullptr;
+        }
+        DeleteDC(s->hCachedMemDC);
+        s->hCachedMemDC = nullptr;
+    }
+    s->cachedDibPixels = nullptr;
+    s->cachedDibW = 0;
+    s->cachedDibH = 0;
+}
+
+void GetAdminWarningButtonRects(int w, int h, UINT dpi, D2D1_RECT_F* outCancel, D2D1_RECT_F* outAllow) {
+    float padX   = DpiScaleF(20.0f, dpi);
+    float padBot = DpiScaleF(18.0f, dpi);
+    float btnH   = DpiScaleF(34.0f, dpi);
+    float btnW   = DpiScaleF(114.0f, dpi);
+    float gap    = DpiScaleF(10.0f, dpi);
+
+    D2D1_RECT_F rcAllow  = D2D1::RectF((float)w - padX - btnW, (float)h - padBot - btnH,
+                                       (float)w - padX, (float)h - padBot);
+    D2D1_RECT_F rcCancel = D2D1::RectF(rcAllow.left - gap - btnW, (float)h - padBot - btnH,
+                                       rcAllow.left - gap, (float)h - padBot);
+    if (outAllow)  *outAllow  = rcAllow;
+    if (outCancel) *outCancel = rcCancel;
+}
+
+int HitTestAdminWarningBtn(POINT pt, int w, int h, UINT dpi) {
+    D2D1_RECT_F rcCancel = {}, rcAllow = {};
+    GetAdminWarningButtonRects(w, h, dpi, &rcCancel, &rcAllow);
+    if (pt.x >= rcAllow.left && pt.x <= rcAllow.right && pt.y >= rcAllow.top && pt.y <= rcAllow.bottom) {
+        return 1;
+    }
+    if (pt.x >= rcCancel.left && pt.x <= rcCancel.right && pt.y >= rcCancel.top && pt.y <= rcCancel.bottom) {
+        return 2;
+    }
+    return 0;
+}
+
+bool RenderAdminWarningToBitmap(HWND hWnd, AdminWarningDialogSession* s) {
+    if (!hWnd || !s || !s->dlgState || !g_pD2DFactory || !g_pDWriteFactory) return false;
+    int w = s->wndW;
+    int h = s->wndH;
+    if (w <= 0 || h <= 0) return false;
+
+    RECT rcClient = { 0, 0, w, h };
+    if (!s->hCachedMemDC || !s->hCachedBmp || !s->pCachedRT ||
+        s->cachedDibW != w || s->cachedDibH != h) {
+        ReleaseAdminWarningRenderCache(s);
+
+        s->hCachedMemDC = CreateCompatibleDC(nullptr);
+        if (s->hCachedMemDC) {
+            BITMAPINFO bmi = {};
+            bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+            bmi.bmiHeader.biWidth = w;
+            bmi.bmiHeader.biHeight = -h;
+            bmi.bmiHeader.biPlanes = 1;
+            bmi.bmiHeader.biBitCount = 32;
+            bmi.bmiHeader.biCompression = BI_RGB;
+
+            s->hCachedBmp = CreateDIBSection(s->hCachedMemDC, &bmi, DIB_RGB_COLORS,
+                                             (void**)&s->cachedDibPixels, nullptr, 0);
+            if (s->hCachedBmp && s->cachedDibPixels) {
+                s->hOldCachedBmp = SelectObject(s->hCachedMemDC, s->hCachedBmp);
+                D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
+                    D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                    D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                    96.0f, 96.0f);
+                if (SUCCEEDED(g_pD2DFactory->CreateDCRenderTarget(&rtProps, &s->pCachedRT)) && s->pCachedRT) {
+                    s->pCachedRT->BindDC(s->hCachedMemDC, &rcClient);
+                    s->cachedDibW = w;
+                    s->cachedDibH = h;
+                }
+            }
+        }
+    }
+
+    if (!s->hCachedMemDC || !s->hCachedBmp || !s->cachedDibPixels || !s->pCachedRT) {
+        return false;
+    }
+
+    UINT dpi = s->dpi;
+    bool isLight = s->isLight;
+    bool highContrast = IsHighContrastActive();
+    ExtraLocalizedStrings ex = GetExtraLocalizedStrings(s->dlgState->settings.language);
+    ID2D1DCRenderTarget* pRT = s->pCachedRT;
+
+    pRT->BindDC(s->hCachedMemDC, &rcClient);
+    pRT->BeginDraw();
+    pRT->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    ApplyFluentTextRenderingToRT(pRT);
+
+    float rimInset = DpiScaleF(0.75f, dpi);
+    D2D1_RECT_F rcCard = D2D1::RectF(rimInset, rimInset, (float)w - rimInset, (float)h - rimInset);
+    float cardR = (std::min)(DpiScaleF(20.0f, dpi), (rcCard.bottom - rcCard.top) * 0.5f);
+
+    pRT->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
+
+    if (highContrast) {
+        COLORREF winBg = GetSysColor(COLOR_WINDOW);
+        ID2D1SolidColorBrush* pHcBr = nullptr;
+        if (SUCCEEDED(pRT->CreateSolidColorBrush(
+                D2D1::ColorF(GetRValue(winBg) / 255.0f, GetGValue(winBg) / 255.0f, GetBValue(winBg) / 255.0f, 1.0f), &pHcBr))) {
+            pRT->FillRoundedRectangle(D2D1::RoundedRect(rcCard, cardR, cardR), pHcBr);
+            pHcBr->Release();
+        }
+    } else if (s->surface == SurfaceTheme::Solid) {
+        ID2D1SolidColorBrush* pSolBr = nullptr;
+        if (SUCCEEDED(pRT->CreateSolidColorBrush(
+                isLight ? D2D1::ColorF(0.96f, 0.96f, 0.98f, 1.0f)
+                        : D2D1::ColorF(0.11f, 0.12f, 0.16f, 1.0f), &pSolBr))) {
+            pRT->FillRoundedRectangle(D2D1::RoundedRect(rcCard, cardR, cardR), pSolBr);
+            pSolBr->Release();
+        }
+    } else if (s->surface == SurfaceTheme::Glass) {
+        int glassPct = std::clamp(s->dlgState->settings.glassOpacity, -100, 100);
+        DrawOpticalLiquidGlassBackdrop(pRT, hWnd, w, h, 0, 0, dpi, glassPct, isLight, true, 3, s->posX, s->posY);
+    } else {
+        int blurOp = std::clamp(s->dlgState->settings.blurOpacity, 0, 255);
+        DrawOpticalLiquidGlassBackdrop(pRT, hWnd, w, h, 0, 0, dpi, -(1000 + blurOp), isLight, true, 3, s->posX, s->posY);
+    }
+
+    if (!highContrast) {
+        D2D1_GRADIENT_STOP wStops[2] = {
+            { 0.0f, D2D1::ColorF(1.00f, 0.60f, 0.08f, isLight ? 0.14f : 0.18f) },
+            { 1.0f, D2D1::ColorF(1.00f, 0.55f, 0.06f, 0.00f) }
+        };
+        ID2D1GradientStopCollection* pWStops = nullptr;
+        if (SUCCEEDED(pRT->CreateGradientStopCollection(wStops, 2, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pWStops)) && pWStops) {
+            ID2D1LinearGradientBrush* pWBr = nullptr;
+            D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES gp = D2D1::LinearGradientBrushProperties(
+                D2D1::Point2F(0.0f, 0.0f), D2D1::Point2F(0.0f, DpiScaleF(74.0f, dpi)));
+            if (SUCCEEDED(pRT->CreateLinearGradientBrush(gp, pWStops, &pWBr)) && pWBr) {
+                pRT->FillRoundedRectangle(D2D1::RoundedRect(rcCard, cardR, cardR), pWBr);
+                pWBr->Release();
+            }
+            pWStops->Release();
+        }
+    }
+
+    D2D1_COLOR_F colAmber = isLight ? D2D1::ColorF(0.80f, 0.36f, 0.01f, 1.0f) : D2D1::ColorF(1.00f, 0.71f, 0.18f, 1.0f);
+    D2D1_COLOR_F colBody  = isLight ? D2D1::ColorF(0.10f, 0.11f, 0.15f, 0.94f) : D2D1::ColorF(0.93f, 0.95f, 0.98f, 0.94f);
+    D2D1_COLOR_F colBadge = isLight ? D2D1::ColorF(0.96f, 0.52f, 0.06f, 0.16f) : D2D1::ColorF(1.00f, 0.65f, 0.12f, 0.22f);
+
+    ID2D1SolidColorBrush* pBrAmber = nullptr;
+    ID2D1SolidColorBrush* pBrBody  = nullptr;
+    ID2D1SolidColorBrush* pBrBadge = nullptr;
+    pRT->CreateSolidColorBrush(colAmber, &pBrAmber);
+    pRT->CreateSolidColorBrush(colBody,  &pBrBody);
+    pRT->CreateSolidColorBrush(colBadge, &pBrBadge);
+
+    ID2D1StrokeStyle* pRoundStroke = nullptr;
+    D2D1_STROKE_STYLE_PROPERTIES sp = D2D1::StrokeStyleProperties(
+        D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_LINE_JOIN_ROUND);
+    g_pD2DFactory->CreateStrokeStyle(sp, nullptr, 0, &pRoundStroke);
+
+    float badgeCx = DpiScaleF(32.0f, dpi);
+    float badgeCy = DpiScaleF(31.0f, dpi);
+    float badgeR  = DpiScaleF(13.0f, dpi);
+    if (pBrBadge) {
+        pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(badgeCx, badgeCy), badgeR, badgeR), pBrBadge);
+    }
+    if (pBrAmber) {
+        DrawD2DShieldVector(pRT, pBrAmber, pRoundStroke, badgeCx, badgeCy, dpi, 1.08f);
+    }
+
+    const wchar_t* fontFam = GetPreferredFluentFontFamily();
+    IDWriteTextFormat* pFmtTitle = nullptr;
+    IDWriteTextFormat* pFmtMsg   = nullptr;
+    IDWriteTextFormat* pFmtBtn   = nullptr;
+    g_pDWriteFactory->CreateTextFormat(fontFam, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+        DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, DpiScaleF(14.5f, dpi), L"", &pFmtTitle);
+    g_pDWriteFactory->CreateTextFormat(fontFam, nullptr, DWRITE_FONT_WEIGHT_REGULAR,
+        DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, DpiScaleF(12.8f, dpi), L"", &pFmtMsg);
+    g_pDWriteFactory->CreateTextFormat(fontFam, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+        DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, DpiScaleF(12.8f, dpi), L"", &pFmtBtn);
+
+    if (pFmtTitle && pBrAmber && ex.adminWarnTitle) {
+        pFmtTitle->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        pFmtTitle->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+        D2D1_RECT_F rcTitle = D2D1::RectF(DpiScaleF(52.0f, dpi), DpiScaleF(16.0f, dpi),
+                                          (float)w - DpiScaleF(20.0f, dpi), DpiScaleF(46.0f, dpi));
+        pRT->DrawText(ex.adminWarnTitle, (UINT32)wcslen(ex.adminWarnTitle), pFmtTitle, rcTitle, pBrAmber);
+    }
+
+    D2D1_RECT_F rcCancel = {}, rcAllow = {};
+    GetAdminWarningButtonRects(w, h, dpi, &rcCancel, &rcAllow);
+
+    if (pFmtMsg && pBrBody && ex.adminWarnMessage) {
+        pFmtMsg->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+        pFmtMsg->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+        D2D1_RECT_F rcMsg = D2D1::RectF(DpiScaleF(20.0f, dpi), DpiScaleF(52.0f, dpi),
+                                        (float)w - DpiScaleF(20.0f, dpi), rcAllow.top - DpiScaleF(10.0f, dpi));
+        pRT->DrawText(ex.adminWarnMessage, (UINT32)wcslen(ex.adminWarnMessage), pFmtMsg, rcMsg, pBrBody,
+                      D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
+
+    if (pFmtBtn) {
+        pFmtBtn->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        pFmtBtn->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        pFmtBtn->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    }
+
+    auto drawDialogBtn = [&](const D2D1_RECT_F& rcB, const wchar_t* text, bool isPrimaryAmber, bool hov, bool prs) {
+        float rad = (rcB.bottom - rcB.top) * 0.5f;
+        D2D1_COLOR_F txtCol = {};
+        if ((s->surface == SurfaceTheme::Glass || s->surface == SurfaceTheme::Blur) && !highContrast) {
+            D2D1_COLOR_F tint = isPrimaryAmber
+                ? (isLight ? D2D1::ColorF(0.94f, 0.46f, 0.04f, prs ? 0.46f : (hov ? 0.36f : 0.25f))
+                           : D2D1::ColorF(1.00f, 0.56f, 0.08f, prs ? 0.50f : (hov ? 0.40f : 0.28f)))
+                : (isLight ? D2D1::ColorF(0.06f, 0.08f, 0.14f, prs ? 0.16f : (hov ? 0.10f : 0.06f))
+                           : D2D1::ColorF(0.85f, 0.92f, 1.00f, prs ? 0.20f : (hov ? 0.14f : 0.08f)));
+            DrawD2DGlassButton(pRT, rcB, rad, dpi, tint, hov, prs, isLight);
+            txtCol = isPrimaryAmber
+                ? (isLight ? D2D1::ColorF(0.56f, 0.22f, 0.00f, 1.0f) : D2D1::ColorF(1.00f, 0.86f, 0.52f, 1.0f))
+                : (isLight ? D2D1::ColorF(0.08f, 0.09f, 0.12f, 1.0f) : D2D1::ColorF(0.96f, 0.97f, 0.99f, 1.0f));
+        } else {
+            D2D1_COLOR_F fillC = isPrimaryAmber
+                ? D2D1::ColorF(0.88f, 0.45f, 0.06f, prs ? 0.98f : (hov ? 0.94f : 0.88f))
+                : (isLight ? D2D1::ColorF(0.86f, 0.87f, 0.90f, 1.0f) : D2D1::ColorF(0.20f, 0.21f, 0.26f, 1.0f));
+            ID2D1SolidColorBrush* pF = nullptr;
+            if (SUCCEEDED(pRT->CreateSolidColorBrush(fillC, &pF)) && pF) {
+                pRT->FillRoundedRectangle(D2D1::RoundedRect(rcB, rad, rad), pF);
+                pF->Release();
+            }
+            txtCol = isPrimaryAmber
+                ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f)
+                : (isLight ? D2D1::ColorF(0.08f, 0.09f, 0.12f, 1.0f) : D2D1::ColorF(0.96f, 0.97f, 0.99f, 1.0f));
+        }
+        if (pFmtBtn && text) {
+            ID2D1SolidColorBrush* pT = nullptr;
+            if (SUCCEEDED(pRT->CreateSolidColorBrush(txtCol, &pT)) && pT) {
+                pRT->DrawText(text, (UINT32)wcslen(text), pFmtBtn, rcB, pT);
+                pT->Release();
+            }
+        }
+    };
+
+    drawDialogBtn(rcCancel, ex.adminWarnCancelBtn, false, s->hoveredBtn == 2, s->pressedBtn == 2);
+    drawDialogBtn(rcAllow,  ex.adminWarnAllowBtn,  true,  s->hoveredBtn == 1, s->pressedBtn == 1);
+
+    if (!highContrast) {
+        DrawD2DGlassRim(pRT, rcCard, cardR, dpi, isLight, 1.30f);
+        ID2D1SolidColorBrush* pAmberRim = nullptr;
+        if (SUCCEEDED(pRT->CreateSolidColorBrush(
+                D2D1::ColorF(1.00f, 0.65f, 0.14f, isLight ? 0.48f : 0.58f), &pAmberRim)) && pAmberRim) {
+            pRT->DrawRoundedRectangle(D2D1::RoundedRect(rcCard, cardR, cardR), pAmberRim, DpiScaleF(1.1f, dpi));
+            pAmberRim->Release();
+        }
+    }
+
+    pRT->EndDraw();
+    GdiFlush();
+
+    if (pFmtBtn)      pFmtBtn->Release();
+    if (pFmtMsg)      pFmtMsg->Release();
+    if (pFmtTitle)    pFmtTitle->Release();
+    if (pRoundStroke) pRoundStroke->Release();
+    if (pBrBadge)     pBrBadge->Release();
+    if (pBrBody)      pBrBody->Release();
+    if (pBrAmber)     pBrAmber->Release();
+    return true;
+}
+
+void PresentAdminWarningDialog(HWND hWnd, AdminWarningDialogSession* s, bool redraw = true) {
+    if (!hWnd || !IsWindow(hWnd) || !s) return;
+    if (redraw || !s->hCachedMemDC || !s->hCachedBmp || !s->cachedDibPixels) {
+        if (!RenderAdminWarningToBitmap(hWnd, s)) return;
+    }
+    POINT ptDst = { s->posX, s->posY };
+    SIZE szWnd  = { s->wndW, s->wndH };
+    POINT ptSrc = { 0, 0 };
+    BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+    UpdateLayeredWindow(hWnd, nullptr, &ptDst, &szWnd, s->hCachedMemDC, &ptSrc, 0, &bf, ULW_ALPHA);
+}
+
+LRESULT CALLBACK AdminWarningDialogWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    auto* s = reinterpret_cast<AdminWarningDialogSession*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
+    switch (uMsg) {
+        case WM_NCCREATE: {
+            auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
+            SetWindowLongPtrW(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(cs->lpCreateParams));
+            return TRUE;
+        }
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
+        case WM_NCHITTEST:
+            return HTCLIENT;
+        case WM_ERASEBKGND:
+            return 1;
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            BeginPaint(hWnd, &ps);
+            EndPaint(hWnd, &ps);
+            return 0;
+        }
+        case WM_MOUSEMOVE: {
+            if (!s) return 0;
+            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+            if (!s->hasMouseTrack) {
+                s->hasMouseTrack = true;
+                TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, hWnd, 0 };
+                TrackMouseEvent(&tme);
+            }
+            int hit = HitTestAdminWarningBtn(pt, s->wndW, s->wndH, s->dpi);
+            if (hit != s->hoveredBtn) {
+                s->hoveredBtn = hit;
+                PresentAdminWarningDialog(hWnd, s, true);
+            }
+            return 0;
+        }
+        case WM_MOUSELEAVE: {
+            if (!s) return 0;
+            s->hasMouseTrack = false;
+            if (GetCapture() != hWnd && (s->hoveredBtn != 0 || s->pressedBtn != 0)) {
+                s->hoveredBtn = 0;
+                s->pressedBtn = 0;
+                PresentAdminWarningDialog(hWnd, s, true);
+            }
+            return 0;
+        }
+        case WM_LBUTTONDOWN: {
+            if (!s) return 0;
+            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+            int hit = HitTestAdminWarningBtn(pt, s->wndW, s->wndH, s->dpi);
+            if (hit != 0) {
+                s->pressedBtn = hit;
+                s->hoveredBtn = hit;
+                SetCapture(hWnd);
+                PresentAdminWarningDialog(hWnd, s, true);
+            }
+            return 0;
+        }
+        case WM_LBUTTONUP: {
+            if (!s) return 0;
+            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+            int hit = HitTestAdminWarningBtn(pt, s->wndW, s->wndH, s->dpi);
+            int pressed = s->pressedBtn;
+            s->pressedBtn = 0;
+            if (GetCapture() == hWnd) {
+                ReleaseCapture();
+            }
+            if (hit != 0 && hit == pressed) {
+                s->confirmed = (hit == 1);
+                s->running = false;
+                PostMessageW(hWnd, WM_NULL, 0, 0);
+            } else {
+                s->hoveredBtn = hit;
+                PresentAdminWarningDialog(hWnd, s, true);
+            }
+            return 0;
+        }
+        case WM_TIMER: {
+            if (wParam == kTimerMenuWatchdog && s) {
+                HWND hDlg = s->dlgState ? s->dlgState->hDlg : nullptr;
+                if (!hDlg || !IsWindow(hDlg) || !IsWindowVisible(hDlg) || IsIconic(hDlg) ||
+                    s->dlgState->pendingUninit || g_unloading.load()) {
+                    s->confirmed = false;
+                    s->running = false;
+                    PostMessageW(hWnd, WM_NULL, 0, 0);
+                }
+                return 0;
+            }
+            break;
+        }
+        case WM_CLOSE: {
+            if (s) {
+                s->confirmed = false;
+                s->running = false;
+                PostMessageW(hWnd, WM_NULL, 0, 0);
+            }
+            return 0;
+        }
+    }
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
+
+bool ShowAdminWarningConfirmDialog(RunDialogState* state) {
+    if (!state || !state->hDlg || !IsWindow(state->hDlg) || state->pendingUninit || g_unloading.load()) {
+        g_isBrowsingFile.store(false);
+        if (state) state->isBrowsingFile = false;
+        return false;
+    }
+    HWND hDlg = state->hDlg;
+    state->isBrowsingFile = true;
+    g_isBrowsingFile.store(true);
+
+    if (!g_adminWarnClassRegistered) {
+        WNDCLASSEXW wc = { sizeof(wc) };
+        wc.style = 0;
+        wc.lpfnWndProc = AdminWarningDialogWndProc;
+        wc.hInstance = GetModInstanceHandle();
+        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+        wc.lpszClassName = kAdminWarnClassName;
+        if (RegisterClassExW(&wc) || GetLastError() == ERROR_CLASS_ALREADY_EXISTS) {
+            g_adminWarnClassRegistered = true;
+        }
+    }
+
+    AdminWarningDialogSession session;
+    session.dlgState = state;
+    session.dpi = state->dpi;
+    session.isLight = state->isLightMode;
+    session.surface = state->effectiveSurface;
+    session.wndW = DpiScale(432, session.dpi);
+    session.wndH = DpiScale(198, session.dpi);
+
+    RECT rcDlg = {};
+    GetWindowRect(hDlg, &rcDlg);
+    HMONITOR hMon = MonitorFromWindow(hDlg, MONITOR_DEFAULTTONEAREST);
+    RECT rcWork = {};
+    GetEffectiveMonitorWorkArea(hMon, session.dpi, &rcWork, nullptr);
+
+    int posX = rcDlg.left + ((rcDlg.right - rcDlg.left) - session.wndW) / 2;
+    int posY = state->anchoredTop
+        ? (rcDlg.bottom + DpiScale(10, session.dpi))
+        : (rcDlg.top - session.wndH - DpiScale(10, session.dpi));
+    if (posY < rcWork.top + DpiScale(8, session.dpi)) {
+        posY = rcDlg.bottom + DpiScale(10, session.dpi);
+    }
+    posX = std::clamp(posX, (int)rcWork.left + DpiScale(8, session.dpi), (int)rcWork.right - session.wndW - DpiScale(8, session.dpi));
+    posY = std::clamp(posY, (int)rcWork.top + DpiScale(8, session.dpi), (int)rcWork.bottom - session.wndH - DpiScale(8, session.dpi));
+    session.posX = posX;
+    session.posY = posY;
+
+    // Pre-highlight button under initial cursor if mouse is already over Allow / Cancel
+    {
+        POINT ptInit = {};
+        if (GetCursorPos(&ptInit)) {
+            POINT ptLocal = { ptInit.x - posX, ptInit.y - posY };
+            session.hoveredBtn = HitTestAdminWarningBtn(ptLocal, session.wndW, session.wndH, session.dpi);
+        }
+    }
+
+    HWND hWnd = CreateWindowExW(
+        WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+        kAdminWarnClassName, L"",
+        WS_POPUP,
+        posX, posY, session.wndW, session.wndH,
+        hDlg, nullptr, GetModInstanceHandle(), &session);
+
+    if (hWnd) {
+        session.hWnd = hWnd;
+        g_hActiveCustomSizeWnd.store(hWnd);
+
+        DisableWindowDwmTransitions(hWnd);
+        PresentAdminWarningDialog(hWnd, &session, true);
+        SetWindowPos(hWnd, HWND_TOPMOST, posX, posY, session.wndW, session.wndH,
+                     SWP_NOACTIVATE | SWP_SHOWWINDOW);
+
+        if (IsWindow(hDlg)) {
+            g_internalActivation = true;
+            if (GetForegroundWindow() != hDlg) {
+                if (SetForegroundWindow_Orig) {
+                    SetForegroundWindow_Orig(hDlg);
+                } else {
+                    SetForegroundWindow(hDlg);
+                }
+            }
+            if (state->hModernEdit && IsWindow(state->hModernEdit)) {
+                SetFocus(state->hModernEdit);
+            }
+            g_internalActivation = false;
+        }
+
+        SetTimer(hWnd, kTimerMenuWatchdog, 50, nullptr);
+
+        MSG msg = {};
+        while (session.running && !g_unloading.load() && !state->pendingUninit &&
+               IsWindow(hDlg) && IsWindowVisible(hDlg) && !IsIconic(hDlg) &&
+               GetMessageW(&msg, nullptr, 0, 0) > 0) {
+            if ((msg.message == g_msgUninit && g_msgUninit != 0) ||
+                (msg.message == g_msgToggle && g_msgToggle != 0 && msg.wParam != kActionReloadSettings)) {
+                session.confirmed = false;
+                session.running = false;
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+                break;
+            }
+
+            if (msg.message == WM_KEYDOWN || msg.message == WM_SYSKEYDOWN) {
+                if (msg.wParam == VK_ESCAPE) {
+                    session.confirmed = false;
+                    session.running = false;
+                    break;
+                }
+                if (msg.wParam == VK_RETURN) {
+                    session.confirmed = (session.hoveredBtn == 2) ? false : true;
+                    session.running = false;
+                    break;
+                }
+                if (msg.wParam == VK_LEFT || msg.wParam == VK_RIGHT || msg.wParam == VK_TAB) {
+                    session.hoveredBtn = (session.hoveredBtn == 1) ? 2 : 1;
+                    PresentAdminWarningDialog(hWnd, &session, true);
+                }
+                continue;
+            }
+            if (msg.message == WM_CHAR || msg.message == WM_IME_CHAR) {
+                continue;
+            }
+
+            // Modal input shield: swallow mouse interactions targeted at hDlg while confirmation is open
+            if (msg.hwnd != hWnd &&
+                (msg.message == WM_MOUSEMOVE || msg.message == WM_MOUSELEAVE ||
+                 msg.message == WM_LBUTTONDOWN || msg.message == WM_LBUTTONUP ||
+                 msg.message == WM_LBUTTONDBLCLK || msg.message == WM_RBUTTONDOWN ||
+                 msg.message == WM_RBUTTONUP || msg.message == WM_MBUTTONDOWN ||
+                 msg.message == WM_NCLBUTTONDOWN || msg.message == WM_MOUSEWHEEL)) {
+                continue;
+            }
+
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+
+        g_hActiveCustomSizeWnd.store(nullptr);
+        if (IsWindow(hWnd)) {
+            KillTimer(hWnd, kTimerMenuWatchdog);
+            ShowWindow(hWnd, SW_HIDE);
+            DestroyWindow(hWnd);
+        }
+        ReleaseAdminWarningRenderCache(&session);
+    } else {
+        ExtraLocalizedStrings ex = GetExtraLocalizedStrings(state->settings.language);
+        int mb = MessageBoxW(hDlg, ex.adminWarnMessage, ex.adminWarnTitle,
+                             MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2 | MB_TOPMOST);
+        session.confirmed = (mb == IDYES);
+    }
+
+    g_isBrowsingFile.store(false);
+    state->isBrowsingFile = false;
+    return session.confirmed;
 }
 
 void OpenGearSettingsMenu(RunDialogState* state) {
@@ -11077,6 +12366,19 @@ void OpenGearSettingsMenu(RunDialogState* state) {
         menuItems.push_back(std::move(compactItem));
     }
 
+    V53LocalizedStrings v53 = GetV53LocalizedStrings(state->settings.language);
+
+    // 3c. Classic-Friendly Preset (Full layout + Browse + Keep last command + History ON, preserves current theme)
+    {
+        bool isClassicFriendly = IsClassicFriendlyModeActive(state->settings);
+        FluentMenuItem classicItem;
+        classicItem.id      = 355;
+        classicItem.label   = v53.classicFriendlyMenu;
+        classicItem.icon    = FluentMenuIcon::History;
+        classicItem.checked = isClassicFriendly;
+        menuItems.push_back(std::move(classicItem));
+    }
+
     // 4. History / Suggestions toggle (dimmed & locked ON when Compact Mini-Pill Mode is active!)
     {
         FluentMenuItem histToggle;
@@ -11086,6 +12388,26 @@ void OpenGearSettingsMenu(RunDialogState* state) {
         histToggle.checked  = state->settings.minimalMode ? true : (state->settings.maxHistoryItems > 0);
         histToggle.disabled = state->settings.minimalMode;
         menuItems.push_back(std::move(histToggle));
+    }
+
+    // 4b. Run with Administrative Privileges toggle switch
+    {
+        FluentMenuItem adminToggle;
+        adminToggle.id      = 450;
+        adminToggle.label   = ex.runAsAdminMenu;
+        adminToggle.icon    = FluentMenuIcon::AdminShield;
+        adminToggle.checked = state->settings.runAsAdmin;
+        menuItems.push_back(std::move(adminToggle));
+    }
+
+    // 4c. Remember Last Window Position toggle switch
+    {
+        FluentMenuItem remPosToggle;
+        remPosToggle.id      = 460;
+        remPosToggle.label   = v53.rememberPosMenu;
+        remPosToggle.icon    = FluentMenuIcon::MinimalLayout;
+        remPosToggle.checked = state->settings.rememberPosition;
+        menuItems.push_back(std::move(remPosToggle));
     }
 
     // 6. Display Language Submenu
@@ -11177,6 +12499,38 @@ void OpenGearSettingsMenu(RunDialogState* state) {
         return;
     }
 
+    if (cmd == 450) {
+        if (!state->settings.runAsAdmin) {
+            bool allowed = ShowAdminWarningConfirmDialog(state);
+            if (!IsWindow(hDlg) || g_hActiveRunDlg.load() != hDlg) return;
+            if (state->pendingUninit || g_unloading.load()) {
+                PerformDialogUninit(hDlg, state);
+                return;
+            }
+            if (allowed) {
+                Wh_SetIntValue(GetUserOverrideKey(L"runAsAdmin").c_str(), 1);
+                LoadSettings(false);
+                ApplyReloadedSettingsToDialog(state);
+            }
+        } else {
+            g_isBrowsingFile.store(false);
+            state->isBrowsingFile = false;
+            Wh_SetIntValue(GetUserOverrideKey(L"runAsAdmin").c_str(), 0);
+            LoadSettings(false);
+            ApplyReloadedSettingsToDialog(state);
+        }
+        g_isBrowsingFile.store(false);
+        state->isBrowsingFile = false;
+        state->gearHovered = false;
+        state->gearPressed = false;
+        if (IsWindow(hDlg) && IsWindowVisible(hDlg) && !IsIconic(hDlg)) {
+            ForceFocusModernEdit(hDlg, state);
+            state->caretVisible = true;
+            RefreshDialogVisual(hDlg, state);
+        }
+        return;
+    }
+
     g_isBrowsingFile.store(false);
     state->isBrowsingFile = false;
 
@@ -11221,6 +12575,27 @@ void OpenGearSettingsMenu(RunDialogState* state) {
         else if (cmd == 311) { clearManualDimensions(); }
         else if (cmd == 350) {
             Wh_SetIntValue(GetUserOverrideKey(L"minimalModeV3").c_str(), state->settings.minimalMode ? 0 : 1);
+        } else if (cmd == 355) {
+            bool isClassicFriendly = (!state->settings.minimalMode &&
+                                      !state->settings.clearInitialInput &&
+                                      state->settings.maxHistoryItems > 0);
+            if (!isClassicFriendly) {
+                Wh_SetIntValue(GetUserOverrideKey(L"minimalModeV3").c_str(), 0);
+                Wh_SetIntValue(GetUserOverrideKey(L"clearInitialInput").c_str(), 0);
+                if (state->settings.maxHistoryItems <= 0) {
+                    Wh_SetIntValue(GetUserOverrideKey(L"maxHistoryItems").c_str(), 20);
+                }
+            } else {
+                Wh_SetIntValue(GetUserOverrideKey(L"minimalModeV3").c_str(), 1);
+                Wh_SetIntValue(GetUserOverrideKey(L"clearInitialInput").c_str(), 1);
+            }
+        } else if (cmd == 460) {
+            bool nextRem = !state->settings.rememberPosition;
+            Wh_SetIntValue(GetUserOverrideKey(L"rememberPosition").c_str(), nextRem ? 1 : 0);
+            if (nextRem) {
+                state->settings.rememberPosition = true;
+                SaveDialogAnchorPosition(state);
+            }
         } else if (cmd == 400) {
             int nextMax = (state->settings.maxHistoryItems > 0) ? 0 : 20;
             Wh_SetIntValue(GetUserOverrideKey(L"maxHistoryItems").c_str(), nextMax);
@@ -11237,6 +12612,48 @@ void OpenGearSettingsMenu(RunDialogState* state) {
 
         LoadSettings(false);
         ApplyReloadedSettingsToDialog(state);
+
+        // When toggling Classic-Friendly (355) or Compact Pill Mode (350):
+        // - Classic-Friendly ON -> move immediately to Windows classic corner for the current taskbar edge
+        // - Pill / Modern Mode  -> move immediately to Bottom-Center
+        if (cmd == 350 || cmd == 355) {
+            int dlgW = GetDlgWidth(state);
+            int newX = state->normalX;
+            int newY = state->normalY;
+            bool anchoredTop = state->anchoredTop;
+            bool useClassicCorner = IsClassicFriendlyModeActive(state->settings);
+            GetDefaultTaskbarAnchoredPosition(hDlg, dlgW, state->totalHeight, state->dpi,
+                                              &newX, &newY, &anchoredTop, useClassicCorner);
+            ClampDialogToMonitorWorkArea(hDlg, &newX, &newY, dlgW, state->totalHeight, state->dpi, false);
+            state->normalX = newX;
+            state->normalY = newY;
+            state->renderX = newX;
+            state->renderY = newY;
+            state->anchoredTop = anchoredTop;
+            SetWindowPos(hDlg, HWND_TOPMOST, newX, newY, dlgW, state->totalHeight, SWP_NOACTIVATE);
+            if (state->settings.rememberPosition) {
+                SaveDialogAnchorPosition(state);
+            } else {
+                Wh_SetIntValue(GetUserOverrideKey(L"hasSavedPos").c_str(), 0);
+            }
+            if (NeedsBackdropSnapshot(state)) {
+                CaptureCleanMonitorBackdrop(hDlg, false);
+                state->backdropLightSample = SampleBackdropLuminanceFromSnap(
+                    state->normalX, state->normalY, dlgW, state->totalHeight, state->backdropLightSample);
+                state->isLightMode = ResolveDialogLightContrast(state);
+            }
+            if (cmd == 355 && !state->settings.clearInitialInput &&
+                state->hModernEdit && IsWindow(state->hModernEdit) &&
+                GetWindowTextLengthW(state->hModernEdit) == 0 && !state->history.empty()) {
+                const std::wstring& lastCmd = state->history[0].cmd;
+                state->suppressSuggestionUpdate = true;
+                SetWindowTextW(state->hModernEdit, lastCmd.c_str());
+                SendMessageW(state->hModernEdit, EM_SETSEL, 0, -1);
+                state->suppressSuggestionUpdate = false;
+            }
+            RefreshDialogVisual(hDlg, state);
+            PresentDialogWindow(hDlg, state, true, newX, newY);
+        }
     }
 
     if (IsWindow(hDlg) && IsWindowVisible(hDlg) && !IsIconic(hDlg)) {
@@ -11245,60 +12662,7 @@ void OpenGearSettingsMenu(RunDialogState* state) {
             SetFocus(state->hModernEdit);
         }
         state->caretVisible = true;
-        InvalidateRect(hDlg, nullptr, FALSE);
-    }
-}
-
-void OpenTranslateLanguagePopup(RunDialogState* state, bool isSourceLang) {
-    if (!state || !state->hDlg || !IsWindow(state->hDlg)) return;
-    HWND hDlg = state->hDlg;
-    bool isVi = IsDialogVietnameseUI(state);
-
-    std::vector<FluentMenuItem> items;
-    const std::wstring& curCode = isSourceLang ? state->translateSourceLang : state->translateTargetLang;
-    for (const auto& entry : kTranslateLangs) {
-        if (!isSourceLang && wcscmp(entry.code, L"auto") == 0) continue;
-        FluentMenuItem it;
-        it.id = entry.menuId;
-        it.label = isVi ? entry.labelVi : entry.labelEn;
-        it.icon = FluentMenuIcon::None;
-        it.checked = (_wcsicmp(curCode.c_str(), entry.code) == 0);
-        items.push_back(std::move(it));
-    }
-
-    ActionButtonsLayout layout = GetActionButtonsLayout(state);
-    RECT rcBtn = isSourceLang ? layout.rcSrcLang : layout.rcDstLang;
-    POINT ptMenu = { rcBtn.right, state->anchoredTop ? rcBtn.bottom : rcBtn.top };
-    ClientToScreen(hDlg, &ptMenu);
-
-    state->isBrowsingFile = true;
-    g_isBrowsingFile.store(true);
-    UINT cmd = RunFluentPopupMenu(state, std::move(items), ptMenu);
-    g_isBrowsingFile.store(false);
-    if (!IsWindow(hDlg) || g_hActiveRunDlg.load() != hDlg) return;
-    state->isBrowsingFile = false;
-    if (state->pendingUninit || g_unloading.load()) {
-        PerformDialogUninit(hDlg, state);
-        return;
-    }
-
-    if (cmd >= 800 && cmd <= 821) {
-        for (const auto& entry : kTranslateLangs) {
-            if (entry.menuId == cmd) {
-                if (isSourceLang) {
-                    state->translateSourceLang = entry.code;
-                    Wh_SetStringValue(GetUserOverrideKey(L"translateSourceLang").c_str(), entry.code);
-                } else {
-                    state->translateTargetLang = entry.code;
-                    Wh_SetStringValue(GetUserOverrideKey(L"translateTargetLang").c_str(), entry.code);
-                }
-                break;
-            }
-        }
-        InvalidateRect(hDlg, nullptr, FALSE);
-    }
-    if (state->hModernEdit && IsWindow(state->hModernEdit)) {
-        SetFocus(state->hModernEdit);
+        RefreshDialogVisual(hDlg, state);
     }
 }
 
@@ -11310,6 +12674,7 @@ void ApplyReloadedSettingsToDialog(RunDialogState* state) {
         state->settings = g_settings;
         state->i18n = g_i18n;
     }
+    SyncNativeAdminCheckbox(state);
     UpdateDialogEditFont(state);
     RefreshDialogRunIcons(state);
     ReloadCustomBackgroundMedia(state, false);
@@ -11319,8 +12684,7 @@ void ApplyReloadedSettingsToDialog(RunDialogState* state) {
     RecomputeDialogMetrics(state);
     ResizeDialogPreservingBottomAnchor(state, oldHeight);
     ApplyWindowAppearance(state->hDlg, state);
-    InvalidateRect(state->hDlg, nullptr, FALSE);
-    UpdateWindow(state->hDlg);
+    RefreshDialogVisual(state->hDlg, state);
 }
 
 void UpdateDialogEditFont(RunDialogState* state) {
@@ -11392,33 +12756,191 @@ void RecomputeDialogMetrics(RunDialogState* state) {
     int barH = GetInputBarHeight(state);
     int gapH = GetDetachedGap(state);
 
-    if (state->translateMode) {
-        state->topAreaHeight = 0;
-        state->totalHeight = barH;
-        return;
-    }
-
     ClampScrollOffset(state);
     int visRowCount = GetVisibleRowCount(state);
     int padTop = GetListPadTop(state);
     int padBot = GetListPadBottom(state);
     int rowH   = GetRowHeight(state);
 
-    state->topAreaHeight = (visRowCount > 0) ? (padTop + visRowCount * rowH + padBot + gapH) : 0;
+    state->historyCardHeight = (visRowCount > 0) ? (padTop + visRowCount * rowH + padBot) : 0;
+    int histExtra  = (state->historyCardHeight > 0) ? (state->historyCardHeight + gapH) : 0;
+    int adminH     = GetAdminBannerHeight(state);
+    int adminExtra = (adminH > 0) ? (adminH + GetAdminBannerGap(state)) : 0;
+
+    state->topAreaHeight = histExtra + adminExtra;
     state->totalHeight   = state->topAreaHeight + barH;
 }
 
 void ScheduleDeferredInputUpdate(RunDialogState* state) {
     if (!state || !state->hDlg || !IsWindow(state->hDlg)) return;
+    if (!state->suppressSuggestionUpdate) {
+        state->tabCompMatches.clear();
+        state->tabCompIndex = -1;
+    }
     state->caretVisible = true;
-    int barTop = GetInputBarTopY(state);
-    RECT rcBar = { 0, barTop, GetDlgWidth(state), barTop + GetInputBarHeight(state) };
-    InvalidateRect(state->hDlg, &rcBar, FALSE);
-    UpdateWindow(state->hDlg);
+    RefreshDialogVisual(state->hDlg, state);
     if (!state->inputUpdateQueued) {
         state->inputUpdateQueued = true;
         PostMessageW(state->hDlg, g_msgToggle, kActionDeferredInputUpdate, 0);
     }
+}
+
+void ResetDialogToDefaultPosition(HWND hWnd, RunDialogState* state) {
+    if (!hWnd || !state || !IsWindow(hWnd)) return;
+    Wh_SetIntValue(GetUserOverrideKey(L"hasSavedPos").c_str(), 0);
+    int dlgW = GetDlgWidth(state);
+    int newX = state->normalX;
+    int newY = state->normalY;
+    bool anchoredTop = state->anchoredTop;
+    GetDefaultTaskbarAnchoredPosition(hWnd, dlgW, state->totalHeight, state->dpi, &newX, &newY, &anchoredTop, IsClassicFriendlyModeActive(state->settings));
+    ClampDialogToMonitorWorkArea(hWnd, &newX, &newY, dlgW, state->totalHeight, state->dpi, false);
+    state->normalX = newX;
+    state->normalY = newY;
+    state->renderX = newX;
+    state->renderY = newY;
+    state->anchoredTop = anchoredTop;
+    SetWindowPos(hWnd, HWND_TOPMOST, newX, newY, dlgW, state->totalHeight, SWP_NOACTIVATE);
+    if (NeedsBackdropSnapshot(state)) {
+        CaptureCleanMonitorBackdrop(hWnd, false);
+        state->backdropLightSample = SampleBackdropLuminanceFromSnap(
+            state->normalX, state->normalY, dlgW, state->totalHeight, state->backdropLightSample);
+        state->isLightMode = ResolveDialogLightContrast(state);
+    }
+    RefreshDialogVisual(hWnd, state);
+    PresentDialogWindow(hWnd, state, true, newX, newY);
+}
+
+bool TryTabCompletePathOrEnv(HWND hEdit, RunDialogState* state, bool reverse) {
+    if (!hEdit || !state) return false;
+    std::wstring curText = GetEffectiveInputText(hEdit);
+    if (curText.empty()) return false;
+
+    auto applyMatch = [&](const std::wstring& match) {
+        state->suppressSuggestionUpdate = true;
+        SetWindowTextW(hEdit, match.c_str());
+        SendMessageW(hEdit, EM_SETSEL, match.size(), match.size());
+        state->suppressSuggestionUpdate = false;
+        RefreshDialogVisual(state->hDlg, state);
+    };
+
+    // Cycle through existing Tab-completion candidates if user pressed Tab repeatedly
+    if (!state->tabCompMatches.empty() && state->tabCompIndex >= 0 &&
+        state->tabCompIndex < (int)state->tabCompMatches.size() &&
+        curText == state->tabCompMatches[state->tabCompIndex]) {
+        int n = (int)state->tabCompMatches.size();
+        state->tabCompIndex = (state->tabCompIndex + (reverse ? -1 : 1) + n) % n;
+        applyMatch(state->tabCompMatches[state->tabCompIndex]);
+        return true;
+    }
+
+    state->tabCompMatches.clear();
+    state->tabCompIndex = -1;
+
+    std::wstring trimmed = curText;
+    // Strip leading whitespace only (preserve quotes/trailing spaces in path)
+    while (!trimmed.empty() && iswspace(trimmed.front())) trimmed.erase(trimmed.begin());
+    if (trimmed.empty()) return false;
+
+    bool hadLeadingQuote = (trimmed.front() == L'"');
+    std::wstring work = hadLeadingQuote ? trimmed.substr(1) : trimmed;
+    if (work.empty()) return false;
+
+    // Case A: Environment variable name completion (e.g. "%appd" -> "%APPDATA%\")
+    if (work.front() == L'%' && work.find(L'%', 1) == std::wstring::npos &&
+        work.find(L'\\') == std::wstring::npos && work.find(L'/') == std::wstring::npos) {
+        std::wstring prefixLower = ToLowerString(work.substr(1));
+        std::vector<std::wstring> envMatches;
+        if (LPWCH envBlock = GetEnvironmentStringsW()) {
+            for (const wchar_t* p = envBlock; *p; p += wcslen(p) + 1) {
+                if (*p == L'=') continue; // skip internal "=C:" entries
+                const wchar_t* eq = wcschr(p, L'=');
+                if (!eq || eq == p) continue;
+                std::wstring varName(p, eq - p);
+                std::wstring varLower = ToLowerString(varName);
+                if (prefixLower.empty() || varLower.rfind(prefixLower, 0) == 0) {
+                    envMatches.push_back((hadLeadingQuote ? L"\"%" : L"%") + varName + L"%\\");
+                }
+            }
+            FreeEnvironmentStringsW(envBlock);
+        }
+        if (envMatches.empty()) return false;
+        std::sort(envMatches.begin(), envMatches.end(), [](const std::wstring& a, const std::wstring& b) {
+            return _wcsicmp(a.c_str(), b.c_str()) < 0;
+        });
+        state->tabCompMatches = std::move(envMatches);
+        state->tabCompIndex = reverse ? ((int)state->tabCompMatches.size() - 1) : 0;
+        applyMatch(state->tabCompMatches[state->tabCompIndex]);
+        return true;
+    }
+
+    // Case B: Filesystem path completion (e.g. "C:\Use", "%APPDATA%\Mic", "~\Doc", "\\server\share\")
+    bool looksLikePath =
+        (work.size() >= 3 && iswalpha(work[0]) && work[1] == L':' && (work[2] == L'\\' || work[2] == L'/')) ||
+        (work.size() >= 2 && work[0] == L'\\' && work[1] == L'\\') ||
+        (work.size() >= 2 && work[0] == L'~' && (work[1] == L'\\' || work[1] == L'/')) ||
+        (work.front() == L'%' && work.find(L'%', 1) != std::wstring::npos &&
+         (work.find(L'\\') != std::wstring::npos || work.find(L'/') != std::wstring::npos));
+
+    if (!looksLikePath) return false;
+
+    size_t lastSep = work.find_last_of(L"\\/");
+    if (lastSep == std::wstring::npos) return false;
+
+    std::wstring displayDir = work.substr(0, lastSep + 1);
+    std::wstring namePrefix = work.substr(lastSep + 1);
+
+    // Expand leading "~" or "%ENV%" for directory enumeration while preserving displayDir in output
+    std::wstring expandedDir = displayDir;
+    if (!expandedDir.empty() && expandedDir.front() == L'~') {
+        wchar_t prof[MAX_PATH] = {};
+        if (GetEnvironmentVariableW(L"USERPROFILE", prof, ARRAYSIZE(prof)) > 0) {
+            expandedDir = std::wstring(prof) + expandedDir.substr(1);
+        }
+    }
+    if (expandedDir.find(L'%') != std::wstring::npos) {
+        wchar_t expBuf[1024] = {};
+        DWORD nExp = ExpandEnvironmentStringsW(expandedDir.c_str(), expBuf, ARRAYSIZE(expBuf));
+        if (nExp > 0 && nExp < ARRAYSIZE(expBuf)) {
+            expandedDir = expBuf;
+        }
+    }
+    for (wchar_t& ch : expandedDir) {
+        if (ch == L'/') ch = L'\\';
+    }
+
+    std::wstring searchPattern = expandedDir + namePrefix + L"*";
+    WIN32_FIND_DATAW fd = {};
+    HANDLE hFind = FindFirstFileW(searchPattern.c_str(), &fd);
+    if (hFind == INVALID_HANDLE_VALUE) return false;
+
+    struct PathCand {
+        std::wstring text;
+        bool isDir;
+    };
+    std::vector<PathCand> cands;
+    do {
+        if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) continue;
+        bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        std::wstring full = (hadLeadingQuote ? L"\"" : L"") + displayDir + fd.cFileName + (isDir ? L"\\" : L"");
+        cands.push_back({ std::move(full), isDir });
+        if (cands.size() >= 128) break;
+    } while (FindNextFileW(hFind, &fd));
+    FindClose(hFind);
+
+    if (cands.empty()) return false;
+
+    std::sort(cands.begin(), cands.end(), [](const PathCand& a, const PathCand& b) {
+        if (a.isDir != b.isDir) return a.isDir > b.isDir; // Directories first
+        return _wcsicmp(a.text.c_str(), b.text.c_str()) < 0;
+    });
+
+    state->tabCompMatches.reserve(cands.size());
+    for (auto& c : cands) {
+        state->tabCompMatches.push_back(std::move(c.text));
+    }
+    state->tabCompIndex = reverse ? ((int)state->tabCompMatches.size() - 1) : 0;
+    applyMatch(state->tabCompMatches[state->tabCompIndex]);
+    return true;
 }
 
 LRESULT CALLBACK ModernEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
@@ -11444,11 +12966,21 @@ LRESULT CALLBACK ModernEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             CloseRunDialog(state->hDlg);
             return 0;
         }
+        if ((wParam == '0' || wParam == VK_NUMPAD0) && (GetKeyState(VK_CONTROL) & 0x8000) != 0) {
+            ResetDialogToDefaultPosition(state->hDlg, state);
+            return 0;
+        }
         if (wParam == VK_RETURN) {
-            TriggerRunCommand(state);
+            bool ctrlDown  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            bool shiftDown = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+            TriggerRunCommand(state, ctrlDown && shiftDown, !ctrlDown && shiftDown);
             return 0;
         }
         if (wParam == VK_TAB) {
+            bool shiftDown = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+            if (TryTabCompletePathOrEnv(hWnd, state, shiftDown)) {
+                return 0;
+            }
             const auto& activeRows = GetActiveRowItems(state);
             if (!activeRows.empty()) {
                 int idx = (state->selectedRow >= 0 && state->selectedRow < (int)activeRows.size())
@@ -11459,7 +12991,7 @@ LRESULT CALLBACK ModernEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 SetWindowTextW(hWnd, fillCmd.c_str());
                 SendMessageW(hWnd, EM_SETSEL, fillCmd.size(), fillCmd.size());
                 state->suppressSuggestionUpdate = false;
-                InvalidateRect(state->hDlg, nullptr, FALSE);
+                RefreshDialogVisual(state->hDlg, state);
                 return 0;
             }
         }
@@ -11475,7 +13007,7 @@ LRESULT CALLBACK ModernEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 LoadHistoryItems(state);
                 RecomputeDialogMetrics(state);
                 ResizeDialogPreservingBottomAnchor(state, oldHeight);
-                InvalidateRect(state->hDlg, nullptr, FALSE);
+                RefreshDialogVisual(state->hDlg, state);
                 return 0;
             }
         }
@@ -11508,7 +13040,7 @@ LRESULT CALLBACK ModernEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     SendMessageW(hWnd, EM_SETSEL, cmd.size(), cmd.size());
                     state->suppressSuggestionUpdate = false;
                 }
-                InvalidateRect(state->hDlg, nullptr, FALSE);
+                RefreshDialogVisual(state->hDlg, state);
                 return 0;
             }
         }
@@ -11527,9 +13059,7 @@ LRESULT CALLBACK ModernEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             ScheduleDeferredInputUpdate(state);
         } else if (uMsg == WM_KEYUP || uMsg == WM_KEYDOWN || uMsg == EM_SETSEL) {
             state->caretVisible = true;
-            int barTop = GetInputBarTopY(state);
-            RECT rcBar = { 0, barTop, GetDlgWidth(state), barTop + GetInputBarHeight(state) };
-            InvalidateRect(state->hDlg, &rcBar, FALSE);
+            RefreshDialogVisual(state->hDlg, state);
         }
     }
 
@@ -11548,7 +13078,6 @@ void CleanupDialogState(HWND hWnd, RunDialogState* state) {
     KillTimer(hWnd, kTimerCaret);
     KillTimer(hWnd, kTimerLuminance);
     KillTimer(hWnd, kTimerBgMedia);
-    KillTimer(hWnd, kTimerSnapTranslatePopup);
     HWND expectedActive = hWnd;
     g_hActiveRunDlg.compare_exchange_strong(expectedActive, nullptr);
     HWND expectedTracked = hWnd;
@@ -11624,6 +13153,8 @@ void CleanupDialogState(HWND hWnd, RunDialogState* state) {
 }
 
 void PerformDialogUninit(HWND hWnd, RunDialogState* state) {
+    DisableWindowDwmTransitions(hWnd);
+    SetWindowDwmCloak(hWnd, true);
     RemoveWindowSubclass(hWnd, RunDlgSubclassProc, 1);
     auto origProc = reinterpret_cast<DLGPROC>(GetPropW(hWnd, L"WindhawkOrigShellDlgProc"));
     if (origProc) {
@@ -11637,845 +13168,12 @@ void PerformDialogUninit(HWND hWnd, RunDialogState* state) {
     }
 }
 
-LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
-                                    UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-    auto* state = reinterpret_cast<RunDialogState*>(dwRefData);
-
-    if (uMsg == g_msgUninit && g_msgUninit != 0) {
-        if (!state) {
-            g_dialogSubclassInstalled.store(false, std::memory_order_release);
-            return 1;
-        }
-        if (state->isBrowsingFile || state->isTriggeringRun) {
-            state->pendingUninit = true;
-            CloseActiveGearMenu();
-            HWND hPopup = GetWindow(hWnd, GW_ENABLEDPOPUP);
-            if (hPopup && hPopup != hWnd && IsWindow(hPopup)) {
-                PostMessageW(hPopup, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), 0);
-                PostMessageW(hPopup, WM_CLOSE, 0, 0);
-            }
-            return 0;
-        }
-        PerformDialogUninit(hWnd, state);
-        return 1;
-    }
-
-    if (uMsg == g_msgToggle && g_msgToggle != 0) {
-        if (!state) return 0;
-        switch (wParam) {
-            case kActionMinimize:
-                MinimizeRunDialog(state);
-                break;
-            case kActionRestore:
-                RestoreRunDialog(state);
-                break;
-            case kActionToggleWinR:
-                if (IsIconic(hWnd) || !g_dlgIsForeground.load() || GetForegroundWindow() != hWnd) {
-                    RestoreRunDialog(state);
-                } else {
-                    CloseRunDialog(hWnd);
-                }
-                break;
-            case kActionReloadSettings:
-                ApplyReloadedSettingsToDialog(state);
-                break;
-            case kActionDeferredInputUpdate: {
-                state->inputUpdateQueued = false;
-                if (!state->hModernEdit || !IsWindow(state->hModernEdit)) break;
-                state->caretVisible = true;
-                std::wstring curText = GetEffectiveInputText(state->hModernEdit);
-                if (state->translateMode) {
-                    int oldH = state->totalHeight;
-                    RecomputeDialogMetrics(state);
-                    ResizeDialogPreservingBottomAnchor(state, oldH);
-                    if (oldH != state->totalHeight) {
-                        PositionTranslatePopupRelativeToDialog(state);
-                    }
-                    InvalidateRect(hWnd, nullptr, FALSE);
-                } else if (!state->suppressSuggestionUpdate) {
-                    state->scrollOffset = 0;
-                    UpdateAppSuggestionsForQuery(state, curText);
-                    InvalidateRect(hWnd, nullptr, FALSE);
-                } else {
-                    InvalidateRect(hWnd, nullptr, FALSE);
-                }
-                if (GetForegroundWindow() == hWnd && !state->isBrowsingFile && GetFocus() != state->hModernEdit) {
-                    SetFocus(state->hModernEdit);
-                }
-                break;
-            }
-        }
-        return 0;
-    }
-
-    switch (uMsg) {
-        case WM_NCCALCSIZE:
-            return 0;
-
-        case WM_NCACTIVATE:
-            return TRUE;
-
-        case WM_NCPAINT:
-        case 0x00AE: // WM_NCUAHDRAWCAPTION (blocks uxtheme Aero Basic caption bar painting)
-        case 0x00AF: // WM_NCUAHDRAWFRAME   (blocks uxtheme non-client frame painting)
-            return 0;
-
-        case WM_GETICON: {
-            if (state) {
-                if (wParam == ICON_BIG && state->hTaskbarIconBig) {
-                    return reinterpret_cast<LRESULT>(state->hTaskbarIconBig);
-                }
-                if ((wParam == ICON_SMALL || wParam == ICON_SMALL2) && state->hTaskbarIconSmall) {
-                    return reinterpret_cast<LRESULT>(state->hTaskbarIconSmall);
-                }
-            }
-            break;
-        }
-
-        case WM_SETICON: {
-            if (state && !g_internalIconChange) {
-                if (wParam == ICON_BIG && state->hTaskbarIconBig) {
-                    lParam = reinterpret_cast<LPARAM>(state->hTaskbarIconBig);
-                } else if ((wParam == ICON_SMALL || wParam == ICON_SMALL2) && state->hTaskbarIconSmall) {
-                    lParam = reinterpret_cast<LPARAM>(state->hTaskbarIconSmall);
-                }
-            }
-            break;
-        }
-
-        case WM_STYLECHANGING: {
-            if (wParam == GWL_STYLE && lParam && !g_internalIconChange) {
-                auto* ss = reinterpret_cast<STYLESTRUCT*>(lParam);
-                ss->styleNew &= ~(WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZEBOX | WS_CLIPCHILDREN | WS_DLGFRAME | WS_BORDER);
-                ss->styleNew |= (WS_SYSMENU | WS_MINIMIZEBOX);
-            }
-            break;
-        }
-
-        case WM_SETTINGCHANGE:
-        case WM_THEMECHANGED: {
-            if (state) {
-                ApplyWindowAppearance(hWnd, state);
-                InvalidateRect(hWnd, nullptr, TRUE);
-            }
-            break;
-        }
-
-        case WM_DPICHANGED: {
-            if (state) {
-                state->dpi = HIWORD(wParam);
-                UpdateDialogEditFont(state);
-                RefreshDialogRunIcons(state);
-                RecomputeDialogMetrics(state);
-                const RECT* prcSuggested = reinterpret_cast<const RECT*>(lParam);
-                int dlgW = GetDlgWidth(state);
-                int newX = prcSuggested ? prcSuggested->left : state->normalX;
-                int newY = prcSuggested ? prcSuggested->top  : state->normalY;
-                ClampDialogToMonitorWorkArea(hWnd, &newX, &newY, dlgW, state->totalHeight, state->dpi);
-                state->normalX = newX;
-                state->normalY = newY;
-                SetWindowPos(hWnd, nullptr, newX, newY, dlgW, state->totalHeight,
-                             SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-                InvalidateRect(hWnd, nullptr, TRUE);
-            }
-            return 0;
-        }
-
-        case WM_SYSCOMMAND: {
-            UINT cmd = (wParam & 0xFFF0);
-            if (cmd == SC_MINIMIZE) {
-                MinimizeRunDialog(state);
-                return 0;
-            }
-            if (cmd == SC_RESTORE) {
-                RestoreRunDialog(state);
-                return 0;
-            }
-            break;
-        }
-
-        case WM_WINDOWPOSCHANGING: {
-            auto* wp = reinterpret_cast<WINDOWPOS*>(lParam);
-            if (wp && state && !(wp->flags & SWP_NOSIZE)) {
-                if (!IsIconic(hWnd) && wp->x > -10000 && wp->y > -10000) {
-                    wp->cx = GetDlgWidth(state);
-                    wp->cy = state->totalHeight;
-                }
-            }
-            break;
-        }
-
-        case WM_EXITSIZEMOVE: {
-            if (state && !IsIconic(hWnd) && state->effectiveSurface == SurfaceTheme::Glass &&
-                state->settings.colorMode == ColorMode::Auto) {
-                bool newSample = SampleBackdropLuminanceFromSnap(
-                    state->normalX, state->normalY, GetDlgWidth(state), state->totalHeight, state->backdropLightSample);
-                if (newSample != state->backdropLightSample) {
-                    state->backdropLightSample = newSample;
-                    ApplyWindowAppearance(hWnd, state);
-                    InvalidateRect(hWnd, nullptr, FALSE);
-                }
-            }
-            break;
-        }
-
-        case WM_WINDOWPOSCHANGED: {
-            auto* wp = reinterpret_cast<WINDOWPOS*>(lParam);
-            if (wp && state && !IsIconic(hWnd) && !(wp->flags & SWP_NOMOVE)) {
-                if (wp->x > -10000 && wp->y > -10000 && !state->openAnimActive && !state->closingAnimActive) {
-                    state->normalX = wp->x;
-                    state->normalY = wp->y;
-                    if (state->effectiveSurface == SurfaceTheme::Glass) {
-                        InvalidateRect(hWnd, nullptr, FALSE);
-                        UpdateWindow(hWnd);
-                    }
-                }
-            }
-            break;
-        }
-
-        case WM_KEYDOWN:
-        case WM_CHAR:
-        case WM_IME_STARTCOMPOSITION: {
-            if (state && state->hModernEdit && IsWindow(state->hModernEdit) && GetFocus() != state->hModernEdit) {
-                SetFocus(state->hModernEdit);
-                return SendMessageW(state->hModernEdit, uMsg, wParam, lParam);
-            }
-            break;
-        }
-
-        case WM_SHOWWINDOW:
-            if (wParam == TRUE && state) {
-                ApplyWindowTaskbarIconIdentity(hWnd, false);
-                NotifyTaskbarRedrawWindowIcon(hWnd);
-                ForceFocusModernEdit(hWnd, state);
-            } else if (wParam == FALSE) {
-                CloseActiveGearMenu();
-                if (!IsIconic(hWnd)) {
-                    HWND expected = hWnd;
-                    if (g_hActiveRunDlg.compare_exchange_strong(expected, nullptr)) {
-                        StopKeyHookThread();
-                    }
-                }
-            }
-            break;
-
-        case WM_CLOSE:
-            CloseRunDialog(hWnd);
-            return 0;
-
-        case WM_TIMER: {
-            if (wParam == kTimerCaret && state) {
-                if (!IsIconic(hWnd)) {
-                    state->caretVisible = !state->caretVisible;
-                    int barTop = GetInputBarTopY(state);
-                    RECT rcBar = { 0, barTop, GetDlgWidth(state), barTop + GetInputBarHeight(state) };
-                    InvalidateRect(hWnd, &rcBar, FALSE);
-                }
-                return 0;
-            }
-            if (wParam == kTimerLuminance && state) {
-                if (!IsIconic(hWnd) && state->effectiveSurface == SurfaceTheme::Glass) {
-                    CheckAndUpdateBackdropInRealtime(hWnd, state, false);
-                }
-                return 0;
-            }
-            if (wParam == kTimerBgMedia && state) {
-                StepCustomBackgroundAnimation(state);
-                return 0;
-            }
-            if (wParam == kTimerSnapTranslatePopup && state) {
-                ULONGLONG now = GetTickCount64();
-                if (state->hTranslatePopup && !IsWindow(state->hTranslatePopup)) {
-                    state->hTranslatePopup = nullptr;
-                }
-                if (!state->hTranslatePopup) {
-                    struct FindCtx {
-                        RunDialogState* st;
-                        HWND found;
-                    } ctx = { state, nullptr };
-                    EnumWindows([](HWND w, LPARAM lP) -> BOOL {
-                        auto* c = reinterpret_cast<FindCtx*>(lP);
-                        if (IsCandidateTranslatePopupWindow(w, c->st)) {
-                            c->found = w;
-                            return FALSE;
-                        }
-                        return TRUE;
-                    }, reinterpret_cast<LPARAM>(&ctx));
-                    if (ctx.found) {
-                        state->hTranslatePopup = ctx.found;
-                        state->translatePopupFirstSeenTick = now;
-                    }
-                }
-                if (state->hTranslatePopup && IsWindow(state->hTranslatePopup)) {
-                    PositionTranslatePopupRelativeToDialog(state);
-                    if (now - state->translatePopupFirstSeenTick >= 500) {
-                        KillTimer(hWnd, kTimerSnapTranslatePopup);
-                    }
-                } else if (now - state->translatePopupLaunchTick >= 3000) {
-                    KillTimer(hWnd, kTimerSnapTranslatePopup);
-                }
-                return 0;
-            }
-            if (wParam == kTimerOpenAnim && state) {
-                if (IsIconic(hWnd)) {
-                    KillTimer(hWnd, kTimerOpenAnim);
-                    state->openAnimActive = false;
-                    state->animAlpha = 1.0f;
-                    return 0;
-                }
-                float t = std::clamp((float)(GetTickCount64() - state->openAnimStartTick) / 155.0f, 0.0f, 1.0f);
-                float ease = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
-                state->animAlpha = 0.08f + 0.92f * ease;
-                int slideOff = (int)std::round((1.0f - ease) * DpiScaleS(14, state) * (state->anchoredTop ? -1.0f : 1.0f));
-                int targetY = state->normalY + slideOff;
-                if (t >= 1.0f) {
-                    KillTimer(hWnd, kTimerOpenAnim);
-                    state->openAnimActive = false;
-                    state->animAlpha = 1.0f;
-                    targetY = state->normalY;
-                }
-                SetWindowPos(hWnd, nullptr, state->normalX, targetY, 0, 0,
-                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-                if (state->hModernEdit && GetFocus() != state->hModernEdit && !state->isBrowsingFile) {
-                    SetFocus(state->hModernEdit);
-                }
-                InvalidateRect(hWnd, nullptr, FALSE);
-                UpdateWindow(hWnd);
-                return 0;
-            }
-            break;
-        }
-
-        case WM_MOUSEWHEEL: {
-            if (state && HasVerticalScrollbar(state)) {
-                short zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
-                int step = (zDelta > 0) ? -1 : 1;
-                if (std::abs(zDelta) >= WHEEL_DELTA * 2) {
-                    step *= 2;
-                }
-                int oldOffset = state->scrollOffset;
-                state->scrollOffset += step;
-                ClampScrollOffset(state);
-                if (state->scrollOffset != oldOffset) {
-                    if (state->hasMousePt) {
-                        state->hoveredRow = HitTestHistoryRow(state, state->mousePt);
-                    }
-                    InvalidateRect(hWnd, nullptr, FALSE);
-                }
-            }
-            return 0;
-        }
-
-        case WM_COMMAND: {
-            if (LOWORD(wParam) == kModernEditId) {
-                if (state && (HIWORD(wParam) == EN_CHANGE || HIWORD(wParam) == EN_UPDATE)) {
-                    ScheduleDeferredInputUpdate(state);
-                } else if (state && HIWORD(wParam) == EN_KILLFOCUS) {
-                    if (GetForegroundWindow() == hWnd && !state->isBrowsingFile &&
-                        g_hActiveGearMenu.load() == nullptr && g_hActiveCustomSizeWnd.load() == nullptr) {
-                        PostMessageW(hWnd, WM_NEXTDLGCTL, reinterpret_cast<WPARAM>(state->hModernEdit), TRUE);
-                    }
-                }
-                return 0;
-            }
-            if (LOWORD(wParam) == IDOK && state && !state->isTriggeringRun) {
-                TriggerRunCommand(state);
-                return 0;
-            }
-            break;
-        }
-
-        case WM_ACTIVATEAPP: {
-            if (wParam == FALSE) {
-                CloseActiveGearMenu();
-            }
-            break;
-        }
-
-        case WM_ACTIVATE: {
-            if (LOWORD(wParam) == WA_INACTIVE) {
-                POINT pt = {};
-                GetCursorPos(&pt);
-                if (g_dlgIsForeground.load() && IsPointOnTaskbar(pt)) {
-                    g_deactivatedByTaskbarTick.store(GetTickCount64());
-                } else {
-                    g_deactivatedByTaskbarTick.store(0);
-                }
-                g_dlgIsForeground.store(false);
-                CloseActiveGearMenu();
-                if (state && state->settings.closeOnClickOutside &&
-                    IsWindowVisible(hWnd) && !IsIconic(hWnd) && !state->isTriggeringRun &&
-                    (!state->isBrowsingFile || g_hActiveGearMenu.load() != nullptr)) {
-                    if (GetTickCount64() - g_openTick.load() > 300) {
-                        CloseRunDialog(hWnd);
-                        return 0;
-                    }
-                }
-            } else {
-                g_dlgIsForeground.store(true);
-                g_deactivatedByTaskbarTick.store(0);
-                if (!IsIconic(hWnd) && IsWindowVisible(hWnd) && state && state->hModernEdit && !state->isBrowsingFile) {
-                    SetFocus(state->hModernEdit);
-                }
-            }
-            if (LOWORD(wParam) == WA_INACTIVE && state) {
-                state->windowDragging = false;
-            }
-            if (state && state->effectiveSurface == SurfaceTheme::Glass && IsWindowVisible(hWnd) && !IsIconic(hWnd)) {
-                CheckAndUpdateBackdropInRealtime(hWnd, state, false);
-            }
-            if (IsWindowVisible(hWnd) && !IsIconic(hWnd)) {
-                InvalidateRect(hWnd, nullptr, FALSE);
-            }
-            return 0;
-        }
-
-        case WM_ERASEBKGND:
-            return 1;
-
-        case WM_CAPTURECHANGED: {
-            if (state && (HWND)lParam != hWnd) {
-                if (state->windowDragging) {
-                    state->windowDragging = false;
-                    if (state->effectiveSurface == SurfaceTheme::Glass && state->settings.colorMode == ColorMode::Auto) {
-                        bool newSample = SampleBackdropLuminanceFromSnap(
-                            state->normalX, state->normalY, GetDlgWidth(state), state->totalHeight, state->backdropLightSample);
-                        if (newSample != state->backdropLightSample) {
-                            state->backdropLightSample = newSample;
-                            ApplyWindowAppearance(hWnd, state);
-                            InvalidateRect(hWnd, nullptr, FALSE);
-                        }
-                    }
-                }
-                state->scrollbarDragging = false;
-            }
-            break;
-        }
-
-        case WM_MOUSEMOVE: {
-            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
-
-            if (state->windowDragging) {
-                if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0) {
-                    state->windowDragging = false;
-                    ReleaseCapture();
-                    return 0;
-                }
-                POINT ptScreen = {};
-                GetCursorPos(&ptScreen);
-                int newX = state->windowDragStartX + (ptScreen.x - state->windowDragStartCursor.x);
-                int newY = state->windowDragStartY + (ptScreen.y - state->windowDragStartCursor.y);
-                if (newX != state->normalX || newY != state->normalY) {
-                    state->normalX = newX;
-                    state->normalY = newY;
-                    SetWindowPos(hWnd, nullptr, newX, newY, 0, 0,
-                                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
-                    InvalidateRect(hWnd, nullptr, FALSE);
-                    UpdateWindow(hWnd);
-                }
-                return 0;
+bool RenderDialogToCachedBitmap(HWND hWnd, RunDialogState* state, int w, int h) {
+            if (!hWnd || !state || !g_pD2DFactory || !g_pDWriteFactory || w <= 0 || h <= 0) {
+                return false;
             }
 
-            if (state->scrollbarDragging && HasVerticalScrollbar(state)) {
-                RECT rcTrack = GetScrollbarTrackRect(state);
-                RECT rcThumb = GetScrollbarThumbRect(state);
-                int thumbH = rcThumb.bottom - rcThumb.top;
-                int availSlide = (std::max)(1, static_cast<int>((rcTrack.bottom - rcTrack.top) - thumbH));
-                int totalRows = (int)GetActiveRowItems(state).size();
-                int visRows = GetVisibleRowCount(state);
-                int maxScroll = (std::max)(1, totalRows - visRows);
-                int deltaY = pt.y - state->scrollbarDragStartY;
-                int newOffset = state->scrollbarDragStartOffset + MulDiv(deltaY, maxScroll, availSlide);
-                state->scrollOffset = std::clamp(newOffset, 0, maxScroll);
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-
-            int newHoverRow = state->translateMode ? -1 : HitTestHistoryRow(state, pt);
-            ActionButtonsLayout layout = GetActionButtonsLayout(state);
-            RECT rcTrack = GetScrollbarTrackRect(state);
-            bool newSbHover     = !state->translateMode && HasVerticalScrollbar(state) && PtInRect(&rcTrack, pt);
-            bool newBrowseHover = PtInRect(&layout.rcBrowse, pt);
-            bool newTransHover  = PtInRect(&layout.rcTranslate, pt);
-            bool newBtnHover    = PtInRect(&layout.rcRun, pt);
-            bool newCloseHover  = PtInRect(&layout.rcClose, pt);
-            bool newGearHover   = PtInRect(&layout.rcGear, pt);
-            bool newSrcHover    = state->translateMode && PtInRect(&layout.rcSrcLang, pt);
-            bool newSwapHover   = state->translateMode && PtInRect(&layout.rcSwapLang, pt);
-            bool newDstHover    = state->translateMode && PtInRect(&layout.rcDstLang, pt);
-
-            state->mousePt = pt;
-            state->hasMousePt = true;
-
-            if (newHoverRow != state->hoveredRow ||
-                newSbHover != state->scrollbarHovered ||
-                newBrowseHover != state->browseHovered ||
-                newTransHover != state->translateBtnHovered ||
-                newBtnHover != state->btnHovered ||
-                newCloseHover != state->closeHovered ||
-                newGearHover != state->gearHovered ||
-                newSrcHover != state->srcLangHovered ||
-                newSwapHover != state->swapLangHovered ||
-                newDstHover != state->dstLangHovered) {
-                state->hoveredRow       = newHoverRow;
-                state->scrollbarHovered = newSbHover;
-                state->browseHovered       = newBrowseHover;
-                state->translateBtnHovered = newTransHover;
-                state->btnHovered          = newBtnHover;
-                state->closeHovered     = newCloseHover;
-                state->gearHovered      = newGearHover;
-                state->srcLangHovered   = newSrcHover;
-                state->swapLangHovered  = newSwapHover;
-                state->dstLangHovered   = newDstHover;
-
-                TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, hWnd, 0 };
-                TrackMouseEvent(&tme);
-                InvalidateRect(hWnd, nullptr, FALSE);
-            }
-            return 0;
-        }
-
-        case WM_MOUSELEAVE: {
-            if (state->hoveredRow != -1 || state->pressedRow != -1 || state->hasMousePt ||
-                state->scrollbarHovered ||
-                state->browseHovered || state->browsePressed ||
-                state->translateBtnHovered || state->translateBtnPressed ||
-                state->btnHovered || state->btnPressed ||
-                state->closeHovered || state->closePressed ||
-                state->gearHovered || state->gearPressed ||
-                state->srcLangHovered || state->srcLangPressed ||
-                state->swapLangHovered || state->swapLangPressed ||
-                state->dstLangHovered || state->dstLangPressed) {
-                state->hoveredRow       = -1;
-                state->pressedRow       = -1;
-                state->hasMousePt       = false;
-                state->scrollbarHovered = false;
-                state->browseHovered       = false;
-                state->browsePressed       = false;
-                state->translateBtnHovered = false;
-                state->translateBtnPressed = false;
-                state->btnHovered       = false;
-                state->btnPressed       = false;
-                state->closeHovered     = false;
-                state->closePressed     = false;
-                state->gearHovered      = false;
-                state->gearPressed      = false;
-                state->srcLangHovered   = false;
-                state->srcLangPressed   = false;
-                state->swapLangHovered  = false;
-                state->swapLangPressed  = false;
-                state->dstLangHovered   = false;
-                state->dstLangPressed   = false;
-                InvalidateRect(hWnd, nullptr, FALSE);
-            }
-            return 0;
-        }
-
-        case WM_LBUTTONDOWN: {
-            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
-            ActionButtonsLayout layout = GetActionButtonsLayout(state);
-
-            if (HasVerticalScrollbar(state)) {
-                RECT rcTrack = GetScrollbarTrackRect(state);
-                RECT rcThumb = GetScrollbarThumbRect(state);
-                RECT rcHitTrack = { rcTrack.left - DpiScaleS(4, state), rcTrack.top, rcTrack.right + DpiScaleS(2, state), rcTrack.bottom };
-                if (PtInRect(&rcHitTrack, pt)) {
-                    if (PtInRect(&rcThumb, pt)) {
-                        state->scrollbarDragging = true;
-                        state->scrollbarDragStartY = pt.y;
-                        state->scrollbarDragStartOffset = state->scrollOffset;
-                        SetCapture(hWnd);
-                    } else {
-                        int visRows = GetVisibleRowCount(state);
-                        if (pt.y < rcThumb.top) {
-                            state->scrollOffset -= (std::max)(1, visRows - 1);
-                        } else {
-                            state->scrollOffset += (std::max)(1, visRows - 1);
-                        }
-                        ClampScrollOffset(state);
-                    }
-                    InvalidateRect(hWnd, nullptr, FALSE);
-                    return 0;
-                }
-            }
-
-            if (state->translateMode) {
-                if (PtInRect(&layout.rcSrcLang, pt)) {
-                    state->srcLangPressed = true;
-                    SetCapture(hWnd);
-                    InvalidateRect(hWnd, nullptr, FALSE);
-                    return 0;
-                }
-                if (PtInRect(&layout.rcSwapLang, pt)) {
-                    state->swapLangPressed = true;
-                    SetCapture(hWnd);
-                    InvalidateRect(hWnd, nullptr, FALSE);
-                    return 0;
-                }
-                if (PtInRect(&layout.rcDstLang, pt)) {
-                    state->dstLangPressed = true;
-                    SetCapture(hWnd);
-                    InvalidateRect(hWnd, nullptr, FALSE);
-                    return 0;
-                }
-            }
-            if (PtInRect(&layout.rcBrowse, pt)) {
-                state->browsePressed = true;
-                SetCapture(hWnd);
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-            if (PtInRect(&layout.rcTranslate, pt)) {
-                state->translateBtnPressed = true;
-                SetCapture(hWnd);
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-            if (PtInRect(&layout.rcRun, pt)) {
-                state->btnPressed = true;
-                SetCapture(hWnd);
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-            if (PtInRect(&layout.rcClose, pt)) {
-                state->closePressed = true;
-                SetCapture(hWnd);
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-            if (PtInRect(&layout.rcGear, pt)) {
-                state->gearPressed = true;
-                SetCapture(hWnd);
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-            if (PtInRect(&layout.rcEdit, pt) && state->hModernEdit) {
-                SetFocus(state->hModernEdit);
-                int len = GetWindowTextLengthW(state->hModernEdit);
-                SendMessageW(state->hModernEdit, EM_SETSEL, len, len);
-                state->caretVisible = true;
-                InvalidateRect(hWnd, &layout.rcEdit, FALSE);
-                return 0;
-            }
-
-            int row = HitTestHistoryRow(state, pt);
-            if (row != -1) {
-                state->pressedRow = row;
-                SetCapture(hWnd);
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-
-            state->windowDragging = true;
-            GetCursorPos(&state->windowDragStartCursor);
-            state->windowDragStartX = state->normalX;
-            state->windowDragStartY = state->normalY;
-            SetCapture(hWnd);
-            return 0;
-        }
-
-        case WM_LBUTTONUP: {
-            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
-            ActionButtonsLayout layout = GetActionButtonsLayout(state);
-
-            if (state->windowDragging) {
-                state->windowDragging = false;
-                ReleaseCapture();
-                if (state->effectiveSurface == SurfaceTheme::Glass && state->settings.colorMode == ColorMode::Auto) {
-                    bool newSample = SampleBackdropLuminanceFromSnap(
-                        state->normalX, state->normalY, GetDlgWidth(state), state->totalHeight, state->backdropLightSample);
-                    if (newSample != state->backdropLightSample) {
-                        state->backdropLightSample = newSample;
-                        ApplyWindowAppearance(hWnd, state);
-                        InvalidateRect(hWnd, nullptr, FALSE);
-                    }
-                }
-                return 0;
-            }
-
-            if (state->scrollbarDragging) {
-                state->scrollbarDragging = false;
-                ReleaseCapture();
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-
-            if (state->srcLangPressed) {
-                state->srcLangPressed = false;
-                ReleaseCapture();
-                InvalidateRect(hWnd, nullptr, FALSE);
-                if (PtInRect(&layout.rcSrcLang, pt)) {
-                    OpenTranslateLanguagePopup(state, true);
-                }
-                return 0;
-            }
-            if (state->swapLangPressed) {
-                state->swapLangPressed = false;
-                ReleaseCapture();
-                InvalidateRect(hWnd, nullptr, FALSE);
-                if (PtInRect(&layout.rcSwapLang, pt)) {
-                    std::wstring oldSrc = state->translateSourceLang;
-                    std::wstring oldDst = state->translateTargetLang;
-                    state->translateSourceLang = oldDst;
-                    state->translateTargetLang = (_wcsicmp(oldSrc.c_str(), L"auto") == 0)
-                        ? (_wcsicmp(oldDst.c_str(), L"vi") == 0 ? L"en" : L"vi")
-                        : oldSrc;
-                    Wh_SetStringValue(GetUserOverrideKey(L"translateSourceLang").c_str(), state->translateSourceLang.c_str());
-                    Wh_SetStringValue(GetUserOverrideKey(L"translateTargetLang").c_str(), state->translateTargetLang.c_str());
-                    InvalidateRect(hWnd, nullptr, FALSE);
-                }
-                return 0;
-            }
-            if (state->dstLangPressed) {
-                state->dstLangPressed = false;
-                ReleaseCapture();
-                InvalidateRect(hWnd, nullptr, FALSE);
-                if (PtInRect(&layout.rcDstLang, pt)) {
-                    OpenTranslateLanguagePopup(state, false);
-                }
-                return 0;
-            }
-            if (state->pressedRow != -1) {
-                int targetRow = state->pressedRow;
-                state->pressedRow = -1;
-                ReleaseCapture();
-                InvalidateRect(hWnd, nullptr, FALSE);
-                int releasedRow = HitTestHistoryRow(state, pt);
-                const auto& activeRows = GetActiveRowItems(state);
-                if (releasedRow == targetRow && targetRow >= 0 && targetRow < (int)activeRows.size()) {
-                    HistoryItem chosen = activeRows[targetRow];
-                    ExecuteHistoryOrSuggestionItem(state, chosen);
-                }
-                return 0;
-            }
-            if (state->browsePressed) {
-                state->browsePressed = false;
-                ReleaseCapture();
-                InvalidateRect(hWnd, nullptr, FALSE);
-                if (PtInRect(&layout.rcBrowse, pt)) {
-                    OpenBrowseExecutableDialog(state);
-                }
-                return 0;
-            }
-            if (state->translateBtnPressed) {
-                state->translateBtnPressed = false;
-                ReleaseCapture();
-                if (PtInRect(&layout.rcTranslate, pt)) {
-                    int oldH = state->totalHeight;
-                    state->translateMode = !state->translateMode;
-                    state->selectedRow = -1;
-                    state->hoveredRow = -1;
-                    std::wstring curText = GetEffectiveInputText(state->hModernEdit);
-                    if (!state->translateMode) {
-                        UpdateAppSuggestionsForQuery(state, curText);
-                    } else {
-                        state->showingSuggestions = false;
-                    }
-                    RecomputeDialogMetrics(state);
-                    ResizeDialogPreservingBottomAnchor(state, oldH);
-                    if (state->hModernEdit && IsWindow(state->hModernEdit)) {
-                        SetFocus(state->hModernEdit);
-                    }
-                }
-                InvalidateRect(hWnd, nullptr, TRUE);
-                return 0;
-            }
-            if (state->btnPressed) {
-                state->btnPressed = false;
-                ReleaseCapture();
-                InvalidateRect(hWnd, nullptr, FALSE);
-                if (PtInRect(&layout.rcRun, pt)) TriggerRunCommand(state);
-                return 0;
-            }
-            if (state->closePressed) {
-                state->closePressed = false;
-                ReleaseCapture();
-                InvalidateRect(hWnd, nullptr, FALSE);
-                if (PtInRect(&layout.rcClose, pt)) CloseRunDialog(hWnd);
-                return 0;
-            }
-            if (state->gearPressed) {
-                state->gearPressed = false;
-                ReleaseCapture();
-                InvalidateRect(hWnd, nullptr, FALSE);
-                if (PtInRect(&layout.rcGear, pt)) {
-                    OpenGearSettingsMenu(state);
-                }
-                return 0;
-            }
-            break;
-        }
-
-        case WM_RBUTTONDOWN: {
-            if (!state || state->translateMode || state->showingSuggestions) return 0;
-            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
-            int row = HitTestHistoryRow(state, pt);
-            if (row >= 0 && row < (int)state->history.size()) {
-                state->selectedRow = row;
-                InvalidateRect(hWnd, nullptr, FALSE);
-            }
-            return 0;
-        }
-
-        case WM_RBUTTONUP: {
-            if (!state || state->translateMode || state->showingSuggestions) return 0;
-            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
-            int row = HitTestHistoryRow(state, pt);
-            if (row >= 0 && row < (int)state->history.size()) {
-                state->selectedRow = row;
-                InvalidateRect(hWnd, nullptr, FALSE);
-                std::wstring targetCmd = state->history[row].cmd;
-                ExtraLocalizedStrings ex = GetExtraLocalizedStrings(state->settings.language);
-
-                std::vector<FluentMenuItem> ctxItems;
-                FluentMenuItem delItem;
-                delItem.id    = 799;
-                delItem.label = ex.deleteHistoryItem;
-                delItem.icon  = FluentMenuIcon::ClearTrash;
-                ctxItems.push_back(std::move(delItem));
-
-                POINT ptScreen = pt;
-                ClientToScreen(hWnd, &ptScreen);
-                state->isBrowsingFile = true;
-                g_isBrowsingFile.store(true);
-                UINT cmd = RunFluentPopupMenu(state, std::move(ctxItems), ptScreen);
-                g_isBrowsingFile.store(false);
-                if (!IsWindow(hWnd) || g_hActiveRunDlg.load() != hWnd) return 0;
-                state->isBrowsingFile = false;
-                if (state->pendingUninit || g_unloading.load()) {
-                    PerformDialogUninit(hWnd, state);
-                    return 0;
-                }
-
-                if (cmd == 799) {
-                    int oldH = state->totalHeight;
-                    RemoveCommandFromHistoryStorage(targetCmd);
-                    state->hoveredRow = -1;
-                    state->selectedRow = -1;
-                    LoadHistoryItems(state);
-                    RecomputeDialogMetrics(state);
-                    ResizeDialogPreservingBottomAnchor(state, oldH);
-                    InvalidateRect(hWnd, nullptr, TRUE);
-                }
-                ForceFocusModernEdit(hWnd, state);
-            }
-            return 0;
-        }
-
-        case WM_PAINT: {
-            PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hWnd, &ps);
-
-            if (IsIconic(hWnd) || !state || !g_pD2DFactory || !g_pDWriteFactory) {
-                EndPaint(hWnd, &ps);
-                return 0;
-            }
-
-            RECT rcClient;
-            GetClientRect(hWnd, &rcClient);
-            int w = rcClient.right;
-            int h = rcClient.bottom;
+            RECT rcClient = { 0, 0, w, h };
             UINT dpi = state->dpi;
             int scalePct = GetDlgScale(state);
             UINT effectiveDpi = MulDiv(dpi, scalePct, 100);
@@ -12511,7 +13209,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                     }
                     state->cachedDibPixels = nullptr;
 
-                    state->hCachedMemDC = CreateCompatibleDC(hdc);
+                    state->hCachedMemDC = CreateCompatibleDC(nullptr);
                     if (state->hCachedMemDC) {
                         BITMAPINFO bmi = {};
                         bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -12549,19 +13247,27 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 
                         ApplyFluentTextRenderingToRT(pRT);
 
-                        int gapH    = GetDetachedGap(state);
-                        int cardH   = GetHistoryCardHeight(state);
-                        int barH    = GetInputBarHeight(state);
-                        int cardTop = GetDetachedCardTopY(state);
-                        int barTop  = GetInputBarTopY(state);
+                        int gapH      = GetDetachedGap(state);
+                        int cardH     = GetHistoryCardHeight(state);
+                        int adminH    = GetAdminBannerHeight(state);
+                        int adminGapH = GetAdminBannerGap(state);
+                        int barH      = GetInputBarHeight(state);
+                        int cardTop   = GetDetachedCardTopY(state);
+                        int adminTop  = GetAdminBannerTopY(state);
+                        int barTop    = GetInputBarTopY(state);
                         float rimInset = DpiScaleSF(0.75f, state);
-                        D2D1_RECT_F rcHistCard = D2D1::RectF(rimInset, (float)cardTop + rimInset,
-                                                             (float)w - rimInset, (float)(cardTop + cardH) - rimInset);
-                        D2D1_RECT_F rcBarPill  = D2D1::RectF(rimInset, (float)barTop + rimInset,
-                                                             (float)w - rimInset, (float)(barTop + barH) - rimInset);
+                        D2D1_RECT_F rcHistCard  = D2D1::RectF(rimInset, (float)cardTop + rimInset,
+                                                              (float)w - rimInset, (float)(cardTop + cardH) - rimInset);
+                        D2D1_RECT_F rcAdminPill = D2D1::RectF(rimInset, (float)adminTop + rimInset,
+                                                              (float)w - rimInset, (float)(adminTop + adminH) - rimInset);
+                        D2D1_RECT_F rcBarPill   = D2D1::RectF(rimInset, (float)barTop + rimInset,
+                                                              (float)w - rimInset, (float)(barTop + barH) - rimInset);
                         float maxPillCorner = DpiScaleSF(27.0f, state);
-                        float barCornerR  = (std::min)(maxPillCorner, (rcBarPill.bottom - rcBarPill.top) * 0.5f);
-                        float histCornerR = (cardH > 0)
+                        float barCornerR   = (std::min)(maxPillCorner, (rcBarPill.bottom - rcBarPill.top) * 0.5f);
+                        float adminCornerR = (adminH > 0)
+                            ? (std::min)(maxPillCorner, (rcAdminPill.bottom - rcAdminPill.top) * 0.5f)
+                            : 0.0f;
+                        float histCornerR  = (cardH > 0)
                             ? (std::min)(maxPillCorner, (rcHistCard.bottom - rcHistCard.top) * 0.5f)
                             : 0.0f;
 
@@ -12573,10 +13279,13 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             if (cardH > 0) {
                                 pRT->FillRoundedRectangle(D2D1::RoundedRect(rcHistCard, histCornerR, histCornerR), pBrush);
                             }
+                            if (adminH > 0) {
+                                pRT->FillRoundedRectangle(D2D1::RoundedRect(rcAdminPill, adminCornerR, adminCornerR), pBrush);
+                            }
                             pRT->FillRoundedRectangle(D2D1::RoundedRect(rcBarPill, barCornerR, barCornerR), pBrush);
                         };
 
-                        // 1. Paint Surface Backdrop strictly inside the Detached Card and Pill Input Bar
+                        // 1. Paint Surface Backdrop strictly inside the Detached Card, Admin Pill Box, and Pill Input Bar
                         if (highContrast) {
                             COLORREF winBg = GetSysColor(COLOR_WINDOW);
                             ID2D1SolidColorBrush* pHcBr = nullptr;
@@ -12589,13 +13298,15 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             int glassPct = std::clamp(state->settings.glassOpacity, -100, 100);
                             DrawOpticalLiquidGlassBackdrop(pRT, hWnd, w, h, state->topAreaHeight, gapH,
                                                            effectiveDpi, glassPct, isLight, false, 0,
-                                                           state->normalX, state->normalY, state->anchoredTop);
+                                                           state->normalX, state->normalY, state->anchoredTop,
+                                                           adminH, adminGapH);
                         } else if (surface == SurfaceTheme::Blur) {
                             // Translucent, vibrant Windows 11 Acrylic Blur matching the desktop right-click menu (Image 2)!
                             int blurOp = std::clamp(state->settings.blurOpacity, 0, 255);
                             DrawOpticalLiquidGlassBackdrop(pRT, hWnd, w, h, state->topAreaHeight, gapH,
                                                            effectiveDpi, -(1000 + blurOp), isLight, false, 0,
-                                                           state->normalX, state->normalY, state->anchoredTop);
+                                                           state->normalX, state->normalY, state->anchoredTop,
+                                                           adminH, adminGapH);
                         } else {
                             ID2D1SolidColorBrush* pSolidBr = nullptr;
                             if (SUCCEEDED(pRT->CreateSolidColorBrush(
@@ -12671,8 +13382,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                         }
                         if (pFmtInput) {
                             pFmtInput->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-                            pFmtInput->SetWordWrapping(
-                                state->translateMode ? DWRITE_WORD_WRAPPING_WRAP : DWRITE_WORD_WRAPPING_NO_WRAP);
+                            pFmtInput->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
                         }
                         if (pFmtBtn) {
                             pFmtBtn->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
@@ -12683,13 +13393,13 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                         int padTop = GetListPadTop(state);
                         int rowHInt = GetRowHeight(state);
                         float textLeftX = DpiScaleSF(50.0f, state);
-                        bool hasScrollbar = !state->translateMode && HasVerticalScrollbar(state);
+                        bool hasScrollbar = HasVerticalScrollbar(state);
                         float sbReserve = hasScrollbar ? DpiScaleSF(12.0f, state) : 0.0f;
 
                         ExtraLocalizedStrings ex = GetExtraLocalizedStrings(state->settings.language);
 
-                        // 4. Draw History / App Suggestion Rows (when not in Translate Mode)
-                        if (!state->translateMode) {
+                        // 4. Draw History / App Suggestion Rows
+                        {
                             for (int visIdx = 0; visIdx < visRows; ++visIdx) {
                                 int i = state->scrollOffset + visIdx;
                                 if (i < 0 || i >= (int)activeRows.size()) break;
@@ -12739,8 +13449,31 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                                         rightLimit = timeRight - tm.widthIncludingTrailingWhitespace - DpiScaleSF(12.0f, state);
                                         pTimeLayout->Release();
                                     }
-                                    DrawD2DClockVector(pRT, pBrTime, pRoundStroke,
-                                                       (float)w - DpiScaleSF(28.0f, state) - sbReserve, rowTop + rowH * 0.5f, effectiveDpi);
+                                    if (rowItem.isPinned) {
+                                        ID2D1SolidColorBrush* pPinBr = nullptr;
+                                        D2D1_COLOR_F pinCol = isLight
+                                            ? D2D1::ColorF(0.82f, 0.45f, 0.05f, 0.95f)
+                                            : D2D1::ColorF(1.00f, 0.78f, 0.28f, 0.95f);
+                                        if (SUCCEEDED(pRT->CreateSolidColorBrush(pinCol, &pPinBr))) {
+                                            DrawD2DPinVector(pRT, pPinBr, pRoundStroke,
+                                                             (float)w - DpiScaleSF(28.0f, state) - sbReserve, rowTop + rowH * 0.5f, effectiveDpi);
+                                            pPinBr->Release();
+                                        }
+                                    } else {
+                                        DrawD2DClockVector(pRT, pBrTime, pRoundStroke,
+                                                           (float)w - DpiScaleSF(28.0f, state) - sbReserve, rowTop + rowH * 0.5f, effectiveDpi);
+                                    }
+                                } else if (!rowItem.isSuggestion && rowItem.isPinned && pRoundStroke) {
+                                    rightLimit = (float)w - DpiScaleSF(40.0f, state) - sbReserve;
+                                    ID2D1SolidColorBrush* pPinBr = nullptr;
+                                    D2D1_COLOR_F pinCol = isLight
+                                        ? D2D1::ColorF(0.82f, 0.45f, 0.05f, 0.95f)
+                                        : D2D1::ColorF(1.00f, 0.78f, 0.28f, 0.95f);
+                                    if (SUCCEEDED(pRT->CreateSolidColorBrush(pinCol, &pPinBr))) {
+                                        DrawD2DPinVector(pRT, pPinBr, pRoundStroke,
+                                                         (float)w - DpiScaleSF(28.0f, state) - sbReserve, rowTop + rowH * 0.5f, effectiveDpi);
+                                        pPinBr->Release();
+                                    }
                                 } else if (rowItem.isSuggestion && pBrTime && pRoundStroke) {
                                     rightLimit = (float)w - DpiScaleSF(40.0f, state) - sbReserve;
                                     DrawD2DReturnArrowVector(pRT, pBrTime, pRoundStroke,
@@ -12808,48 +13541,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             }
                         }
 
-                        // 4c. Draw Language Selector Bar when Translate Mode is active
-                        if (state->translateMode) {
-                            bool isVi = IsDialogVietnameseUI(state);
-                            bool isCompact = state->settings.minimalMode;
-                            auto drawLangPill = [&](RECT rWin, const std::wstring& text, bool hov, bool prs, bool isCenterIcon) {
-                                D2D1_RECT_F rcP = D2D1::RectF((float)rWin.left, (float)rWin.top, (float)rWin.right, (float)rWin.bottom);
-                                float rad = (rcP.bottom - rcP.top) * 0.5f;
-                                D2D1_COLOR_F tint = isLight
-                                    ? D2D1::ColorF(0.05f, 0.08f, 0.14f, prs ? 0.16f : (hov ? 0.10f : 0.05f))
-                                    : D2D1::ColorF(0.88f, 0.94f, 1.00f, prs ? 0.20f : (hov ? 0.14f : 0.07f));
-                                DrawD2DGlassButton(pRT, rcP, rad, effectiveDpi, tint, hov, prs, isLight);
-
-                                IDWriteTextFormat* pFmtLang = nullptr;
-                                if (SUCCEEDED(g_pDWriteFactory->CreateTextFormat(
-                                        fluentFont, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
-                                        DWRITE_FONT_STRETCH_NORMAL, GetFontSizeSF(isCompact ? 11.2f : 12.0f, state), L"", &pFmtLang)) && pFmtLang) {
-                                    pFmtLang->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-                                    pFmtLang->SetTextAlignment((isCenterIcon || isCompact) ? DWRITE_TEXT_ALIGNMENT_CENTER : DWRITE_TEXT_ALIGNMENT_LEADING);
-                                    pFmtLang->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
-                                    D2D1_RECT_F rcTxt = isCenterIcon
-                                        ? rcP
-                                        : D2D1::RectF(rcP.left + DpiScaleSF(isCompact ? 6.0f : 11.0f, state), rcP.top,
-                                                      rcP.right - DpiScaleSF(isCompact ? 6.0f : 8.0f, state), rcP.bottom);
-                                    if (pBrPrimary) {
-                                        pRT->DrawText(text.c_str(), (UINT32)text.size(), pFmtLang, rcTxt, pBrPrimary, D2D1_DRAW_TEXT_OPTIONS_CLIP);
-                                    }
-                                    pFmtLang->Release();
-                                }
-                            };
-
-                            std::wstring srcLabel = isCompact
-                                ? (GetCompactTranslateLangDisplayName(state->translateSourceLang, isVi) + L" ▾")
-                                : (std::wstring(ex.fromPrefix) + GetTranslateLangDisplayName(state->translateSourceLang, isVi) + L" ▾");
-                            std::wstring dstLabel = isCompact
-                                ? (GetCompactTranslateLangDisplayName(state->translateTargetLang, isVi) + L" ▾")
-                                : (std::wstring(ex.toPrefix) + GetTranslateLangDisplayName(state->translateTargetLang, isVi) + L" ▾");
-
-                            drawLangPill(layout.rcSrcLang,  srcLabel, state->srcLangHovered,  state->srcLangPressed,  false);
-                            drawLangPill(layout.rcSwapLang, L"⇄",     state->swapLangHovered, state->swapLangPressed, true);
-                            drawLangPill(layout.rcDstLang,  dstLabel, state->dstLangHovered,  state->dstLangPressed,  false);
-                        }
-
                         // 5. Draw Input Text inside the Pill Input Bar (supports multi-line wrap in Translate Mode)
                         RECT rcEditWin = layout.rcEdit;
                         D2D1_RECT_F rcEdit = D2D1::RectF((float)rcEditWin.left, (float)rcEditWin.top,
@@ -12870,39 +13561,27 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                         float caretH    = editH;
                         float scrollOffsetX = 0.0f;
 
-                        const wchar_t* placeholderStr = state->translateMode
-                            ? (state->settings.minimalMode ? ex.compactTranslatePlaceholder : ex.translatePlaceholder)
-                            : (state->settings.minimalMode ? ex.compactPlaceholder : state->i18n.placeholder);
+                        const wchar_t* placeholderStr = state->settings.minimalMode
+                            ? ex.compactPlaceholder
+                            : state->i18n.placeholder;
 
                         if (textLen == 0) {
                             if (pFmtInput && pBrHint) {
                                 pRT->DrawText(placeholderStr, (UINT32)wcslen(placeholderStr),
                                               pFmtInput, rcEdit, pBrHint);
                             }
-                            if (state->translateMode) {
-                                caretH = (std::min)(editH, DpiScaleSF(24.0f, state));
-                                caretYPos = rcEdit.top + (editH - caretH) * 0.5f;
-                            }
                         } else if (pFmtInput && pBrPrimary) {
-                            float layoutMaxW = state->translateMode ? (std::max)(80.0f, editW) : 10000.0f;
-                            float layoutMaxH = editH;
                             IDWriteTextLayout* pInputLayout = nullptr;
                             if (SUCCEEDED(g_pDWriteFactory->CreateTextLayout(
-                                    displayStr.c_str(), textLen, pFmtInput, layoutMaxW, layoutMaxH, &pInputLayout))) {
+                                    displayStr.c_str(), textLen, pFmtInput, 10000.0f, editH, &pInputLayout))) {
                                 FLOAT hitX = 0.0f, hitY = 0.0f;
                                 DWRITE_HIT_TEST_METRICS htm = {};
                                 pInputLayout->HitTestTextPosition(selEnd, FALSE, &hitX, &hitY, &htm);
                                 caretXPos = hitX;
-                                if (state->translateMode) {
-                                    caretYPos = rcEdit.top + hitY;
-                                    caretH    = (htm.height > 0.0f) ? htm.height : DpiScaleSF(20.0f, state);
-                                }
 
-                                if (!state->translateMode) {
-                                    float scrollPad = DpiScaleSF(6.0f, state);
-                                    if (caretXPos > editW - scrollPad) {
-                                        scrollOffsetX = caretXPos - (editW - scrollPad);
-                                    }
+                                float scrollPad = DpiScaleSF(6.0f, state);
+                                if (caretXPos > editW - scrollPad) {
+                                    scrollOffsetX = caretXPos - (editW - scrollPad);
                                 }
 
                                 if (selStart != selEnd) {
@@ -12917,17 +13596,11 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                                     accent.a = 0.45f;
                                     ID2D1SolidColorBrush* pSelBr = nullptr;
                                     if (SUCCEEDED(pRT->CreateSolidColorBrush(accent, &pSelBr))) {
-                                        if (!state->translateMode || std::fabs(y1 - y0) < 2.0f) {
-                                            float padY = state->translateMode ? 0.0f : DpiScaleSF(2.0f, state);
-                                            float topSel = state->translateMode ? (rcEdit.top + y0) : (rcEdit.top + padY);
-                                            float botSel = state->translateMode ? (rcEdit.top + y0 + m0.height) : (rcEdit.bottom - padY);
-                                            pRT->FillRectangle(
-                                                D2D1::RectF(rcEdit.left + x0 - scrollOffsetX, topSel,
-                                                            rcEdit.left + x1 - scrollOffsetX, botSel),
-                                                pSelBr);
-                                        } else {
-                                            pRT->FillRectangle(rcEdit, pSelBr);
-                                        }
+                                        float padY = DpiScaleSF(2.0f, state);
+                                        pRT->FillRectangle(
+                                            D2D1::RectF(rcEdit.left + x0 - scrollOffsetX, rcEdit.top + padY,
+                                                        rcEdit.left + x1 - scrollOffsetX, rcEdit.bottom - padY),
+                                            pSelBr);
                                         pSelBr->Release();
                                     }
                                 }
@@ -12943,7 +13616,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                         if (editFocused && state->caretVisible && pBrPrimary) {
                             float cx = rcEdit.left + caretXPos - scrollOffsetX + DpiScaleSF(0.8f, state);
                             cx = std::clamp(cx, rcEdit.left + DpiScaleSF(0.8f, state), rcEdit.right - DpiScaleSF(1.5f, state));
-                            float padY = (state->translateMode && textLen > 0) ? DpiScaleSF(1.5f, state) : DpiScaleSF(3.5f, state);
+                            float padY = DpiScaleSF(3.5f, state);
                             pRT->DrawLine(D2D1::Point2F(cx, caretYPos + padY),
                                           D2D1::Point2F(cx, caretYPos + caretH - padY),
                                           pBrPrimary, DpiScaleSF(1.25f, state));
@@ -12952,7 +13625,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                         pRT->PopAxisAlignedClip();
 
                         // 6. Draw Action Buttons as Capsule Pills inside the Pill Input Bar
-                        enum class ActionBtnKind { Browse, Translate, Run, Exit, Gear };
+                        enum class ActionBtnKind { Browse, Run, Exit, Gear };
                         auto drawActionButton = [&](RECT rWin, const wchar_t* label, ActionBtnKind kind,
                                                     bool hovered, bool pressed) {
                             if (rWin.right <= rWin.left || rWin.bottom <= rWin.top) return;
@@ -12965,15 +13638,10 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 
                             if ((surface == SurfaceTheme::Glass || surface == SurfaceTheme::Blur) && !highContrast) {
                                 D2D1_COLOR_F glassTint = {};
-                                if (kind == ActionBtnKind::Browse || kind == ActionBtnKind::Gear ||
-                                    (kind == ActionBtnKind::Translate && !state->translateMode)) {
+                                if (kind == ActionBtnKind::Browse || kind == ActionBtnKind::Gear) {
                                     glassTint = isLight
                                         ? D2D1::ColorF(0.06f, 0.08f, 0.14f, pressed ? 0.16f : (hovered ? 0.10f : 0.05f))
                                         : D2D1::ColorF(0.85f, 0.92f, 1.00f, pressed ? 0.20f : (hovered ? 0.13f : 0.07f));
-                                } else if (kind == ActionBtnKind::Translate && state->translateMode) {
-                                    glassTint = isLight
-                                        ? D2D1::ColorF(0.08f, 0.52f, 0.78f, pressed ? 0.36f : (hovered ? 0.28f : 0.20f))
-                                        : D2D1::ColorF(0.16f, 0.62f, 0.94f, pressed ? 0.42f : (hovered ? 0.34f : 0.24f));
                                 } else if (kind == ActionBtnKind::Run) {
                                     glassTint = isLight
                                         ? D2D1::ColorF(0.06f, 0.45f, 0.90f, pressed ? 0.34f : (hovered ? 0.24f : 0.14f))
@@ -13046,8 +13714,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 
                                 if (kind == ActionBtnKind::Gear) {
                                     DrawD2DGearVector(pRT, pContentBr, pRoundStroke, iconCx, iconCy, effectiveDpi);
-                                } else if (kind == ActionBtnKind::Translate) {
-                                    DrawD2DGoogleTranslateVector(pRT, pContentBr, pRoundStroke, iconCx, iconCy, effectiveDpi);
                                 } else if (kind == ActionBtnKind::Browse) {
                                     DrawD2DFolderVector(pRT, pContentBr, pRoundStroke, iconCx, iconCy, effectiveDpi);
                                 } else if (kind == ActionBtnKind::Run) {
@@ -13060,29 +13726,125 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             }
                         };
 
-                        if (!state->translateMode && !state->settings.minimalMode) {
+                        if (!state->settings.minimalMode) {
                             drawActionButton(layout.rcBrowse, state->i18n.browseBtn, ActionBtnKind::Browse,
                                              state->browseHovered, state->browsePressed);
                         }
-                        const wchar_t* runBtnLabel = state->settings.minimalMode
-                            ? nullptr
-                            : (state->translateMode ? ex.translateBtnLabel : state->i18n.runBtn);
-                        drawActionButton(layout.rcRun, runBtnLabel, ActionBtnKind::Run,
-                                         state->btnHovered, state->btnPressed);
-                        if (!state->translateMode && !state->settings.minimalMode) {
-                            drawActionButton(layout.rcClose, state->i18n.exitBtn, ActionBtnKind::Exit,
-                                             state->closeHovered, state->closePressed);
-                        }
-                        // Translate button is always icon-only and sits to the right of Run and left of Gear!
-                        drawActionButton(layout.rcTranslate, nullptr, ActionBtnKind::Translate,
-                                         state->translateBtnHovered, state->translateBtnPressed);
-                        drawActionButton(layout.rcGear, nullptr, ActionBtnKind::Gear,
-                                         state->gearHovered, state->gearPressed);
+                        const wchar_t* runBtnLabel   = state->settings.minimalMode ? nullptr : state->i18n.runBtn;
+                        const wchar_t* closeBtnLabel = state->settings.minimalMode ? nullptr : state->i18n.exitBtn;
+                        drawActionButton(layout.rcRun,   runBtnLabel,   ActionBtnKind::Run,  state->btnHovered,   state->btnPressed);
+                        drawActionButton(layout.rcClose, closeBtnLabel, ActionBtnKind::Exit, state->closeHovered, state->closePressed);
+                        drawActionButton(layout.rcGear,  nullptr,       ActionBtnKind::Gear, state->gearHovered,  state->gearPressed);
 
-                        // 7. Draw Synchronized Pill Glass Rim on both History/Suggestions Card and Pill Input Bar
+                        // 6b. Draw Dedicated Amber-Orange Admin Status Pill Box (above or below the Input Bar)
+                        if (adminH > 0 && ex.adminActiveBanner && ex.adminActiveBanner[0] != L'\0') {
+                            D2D1_ROUNDED_RECT rrAdmin = D2D1::RoundedRect(rcAdminPill, adminCornerR, adminCornerR);
+                            if (!highContrast) {
+                                D2D1_GRADIENT_STOP ambStops[2] = {
+                                    { 0.0f, D2D1::ColorF(1.00f, 0.58f, 0.08f, isLight ? 0.17f : 0.22f) },
+                                    { 1.0f, D2D1::ColorF(0.96f, 0.42f, 0.04f, isLight ? 0.11f : 0.15f) }
+                                };
+                                ID2D1GradientStopCollection* pAmbStops = nullptr;
+                                if (SUCCEEDED(pRT->CreateGradientStopCollection(ambStops, 2, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pAmbStops)) && pAmbStops) {
+                                    ID2D1LinearGradientBrush* pAmbWash = nullptr;
+                                    D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES gp = D2D1::LinearGradientBrushProperties(
+                                        D2D1::Point2F(rcAdminPill.left, rcAdminPill.top),
+                                        D2D1::Point2F(rcAdminPill.right, rcAdminPill.bottom));
+                                    if (SUCCEEDED(pRT->CreateLinearGradientBrush(gp, pAmbStops, &pAmbWash)) && pAmbWash) {
+                                        pRT->FillRoundedRectangle(rrAdmin, pAmbWash);
+                                        pAmbWash->Release();
+                                    }
+                                    pAmbStops->Release();
+                                }
+                            }
+
+                            D2D1_COLOR_F colAmberBanner = highContrast
+                                ? colPrimary
+                                : (isLight ? D2D1::ColorF(0.80f, 0.36f, 0.01f, 1.00f)
+                                           : D2D1::ColorF(1.00f, 0.71f, 0.18f, 1.00f));
+                            ID2D1SolidColorBrush* pBrAmberBanner = nullptr;
+                            if (SUCCEEDED(pRT->CreateSolidColorBrush(colAmberBanner, &pBrAmberBanner)) && pBrAmberBanner) {
+                                float pillInnerPadX = DpiScaleSF(14.0f, state);
+                                float iconSlotW     = DpiScaleSF(19.0f, state);
+                                float availBannerW  = (std::max)(DpiScaleSF(60.0f, state),
+                                                                 (rcAdminPill.right - rcAdminPill.left) - pillInnerPadX * 2.0f - iconSlotW);
+                                float targetFontPx  = DpiScaleSF(12.2f, state);
+                                UINT32 bannerLen    = (UINT32)wcslen(ex.adminActiveBanner);
+                                float measuredTextW = availBannerW;
+
+                                IDWriteTextFormat* pFmtMeasure = nullptr;
+                                if (SUCCEEDED(g_pDWriteFactory->CreateTextFormat(
+                                        fluentFont, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
+                                        DWRITE_FONT_STRETCH_NORMAL, targetFontPx, L"", &pFmtMeasure)) && pFmtMeasure) {
+                                    pFmtMeasure->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+                                    IDWriteTextLayout* pMeasureLayout = nullptr;
+                                    if (SUCCEEDED(g_pDWriteFactory->CreateTextLayout(
+                                            ex.adminActiveBanner, bannerLen, pFmtMeasure, 2000.0f, (float)adminH, &pMeasureLayout)) && pMeasureLayout) {
+                                        DWRITE_TEXT_METRICS tm = {};
+                                        if (SUCCEEDED(pMeasureLayout->GetMetrics(&tm))) {
+                                            measuredTextW = tm.widthIncludingTrailingWhitespace;
+                                            if (measuredTextW > availBannerW && measuredTextW > 1.0f) {
+                                                float ratio = availBannerW / measuredTextW;
+                                                targetFontPx = (std::max)(DpiScaleF(9.4f, state->dpi), targetFontPx * ratio);
+                                                measuredTextW = availBannerW;
+                                            }
+                                        }
+                                        pMeasureLayout->Release();
+                                    }
+                                    pFmtMeasure->Release();
+                                }
+
+                                IDWriteTextFormat* pFmtAdmin = nullptr;
+                                if (SUCCEEDED(g_pDWriteFactory->CreateTextFormat(
+                                        fluentFont, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
+                                        DWRITE_FONT_STRETCH_NORMAL, targetFontPx, L"", &pFmtAdmin)) && pFmtAdmin) {
+                                    pFmtAdmin->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                                    pFmtAdmin->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+                                    IDWriteInlineObject* pAdminEllipsis = nullptr;
+                                    if (SUCCEEDED(g_pDWriteFactory->CreateEllipsisTrimmingSign(pFmtAdmin, &pAdminEllipsis)) && pAdminEllipsis) {
+                                        DWRITE_TRIMMING trim = { DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0 };
+                                        pFmtAdmin->SetTrimming(&trim, pAdminEllipsis);
+                                        pAdminEllipsis->Release();
+                                    }
+
+                                    IDWriteTextLayout* pFinalLayout = nullptr;
+                                    if (SUCCEEDED(g_pDWriteFactory->CreateTextLayout(
+                                            ex.adminActiveBanner, bannerLen, pFmtAdmin, availBannerW, (float)adminH, &pFinalLayout)) && pFinalLayout) {
+                                        DWRITE_TEXT_METRICS tmFinal = {};
+                                        if (SUCCEEDED(pFinalLayout->GetMetrics(&tmFinal))) {
+                                            measuredTextW = (std::min)(availBannerW, tmFinal.widthIncludingTrailingWhitespace + DpiScaleSF(2.0f, state));
+                                        }
+                                        float groupW = iconSlotW + measuredTextW;
+                                        float groupStartX = (rcAdminPill.left + rcAdminPill.right - groupW) * 0.5f;
+                                        groupStartX = (std::max)(rcAdminPill.left + pillInnerPadX, groupStartX);
+                                        float centerY = (rcAdminPill.top + rcAdminPill.bottom) * 0.5f;
+
+                                        DrawD2DShieldVector(pRT, pBrAmberBanner, pRoundStroke,
+                                                            groupStartX + DpiScaleSF(6.0f, state), centerY, effectiveDpi, 0.90f);
+                                        pRT->DrawTextLayout(D2D1::Point2F(groupStartX + iconSlotW, rcAdminPill.top),
+                                                            pFinalLayout, pBrAmberBanner, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                                        pFinalLayout->Release();
+                                    }
+                                    pFmtAdmin->Release();
+                                }
+                                pBrAmberBanner->Release();
+                            }
+                        }
+
+                        // 7. Draw Synchronized Pill Glass Rim on History Card, Admin Status Pill, and Pill Input Bar
                         if (!highContrast) {
                             if (cardH > 0) {
                                 DrawD2DGlassRim(pRT, rcHistCard, histCornerR, effectiveDpi, isLight, 1.35f);
+                            }
+                            if (adminH > 0) {
+                                DrawD2DGlassRim(pRT, rcAdminPill, adminCornerR, effectiveDpi, isLight, 1.15f);
+                                ID2D1SolidColorBrush* pBrAdminRim = nullptr;
+                                if (SUCCEEDED(pRT->CreateSolidColorBrush(
+                                        D2D1::ColorF(1.00f, 0.65f, 0.14f, isLight ? 0.60f : 0.72f), &pBrAdminRim)) && pBrAdminRim) {
+                                    pRT->DrawRoundedRectangle(D2D1::RoundedRect(rcAdminPill, adminCornerR, adminCornerR),
+                                                              pBrAdminRim, DpiScaleSF(1.15f, state));
+                                    pBrAdminRim->Release();
+                                }
                             }
                             DrawD2DGlassRim(pRT, rcBarPill, barCornerR, effectiveDpi, isLight, 1.35f);
                         }
@@ -13125,7 +13887,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                     int rowHInt  = GetRowHeight(state);
                     int barH     = GetInputBarHeight(state);
 
-                    if (!state->translateMode) {
+                    {
                         for (int visIdx = 0; visIdx < visRows; ++visIdx) {
                             int i = state->scrollOffset + visIdx;
                             if (i >= 0 && i < (int)activeRows.size()) {
@@ -13152,31 +13914,827 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                         int runIconSz = state->runIconLoadedSize > 0 ? state->runIconLoadedSize : DpiScaleS(20, state);
                         int singleBarH = DpiScaleS(kBaseInputBarHeight, state);
                         int runIconX  = (singleBarH - runIconSz) / 2 + DpiScaleS(4, state);
-                        int runIconY  = state->translateMode
-                            ? ((layout.rcEdit.top + layout.rcEdit.bottom - runIconSz) / 2)
-                            : (barTop + (barH - runIconSz) / 2);
+                        int runIconY  = barTop + (barH - runIconSz) / 2;
                         drawIconPreservingDestAlpha(runIconX, runIconY, state->hRunIcon, runIconSz);
                     }
 
-                    if (state->animAlpha < 0.999f) {
-                        uint32_t aScale = (uint32_t)std::clamp((int)std::round(state->animAlpha * 256.0f), 0, 256);
-                        size_t totalPx = (size_t)w * (size_t)h;
-                        DWORD* px = state->cachedDibPixels;
-                        for (size_t idx = 0; idx < totalPx; ++idx) {
-                            DWORD p = px[idx];
-                            if (p == 0) continue;
-                            uint32_t a = (((p >> 24) & 0xFF) * aScale) >> 8;
-                            uint32_t r = (((p >> 16) & 0xFF) * aScale) >> 8;
-                            uint32_t g = (((p >> 8)  & 0xFF) * aScale) >> 8;
-                            uint32_t b = ((p         & 0xFF) * aScale) >> 8;
-                            px[idx] = (a << 24) | (r << 16) | (g << 8) | b;
+                    return true;
+                }
+            }
+            return false;
+}
+
+void PresentDialogWindow(HWND hWnd, RunDialogState* state, bool redrawContents, int overrideX, int overrideY) {
+    if (!state || !hWnd || !IsWindow(hWnd) || IsIconic(hWnd) || state->isPresenting) return;
+
+    int w = GetDlgWidth(state);
+    int h = state->totalHeight;
+    if (w <= 0 || h <= 0) return;
+
+    state->isPresenting = true;
+    struct PresentScopeReset {
+        bool* flag;
+        ~PresentScopeReset() { *flag = false; }
+    } scopeReset{ &state->isPresenting };
+
+    if (overrideX != -999999 && overrideY != -999999) {
+        state->renderX = overrideX;
+        state->renderY = overrideY;
+    }
+
+    bool needRender = redrawContents || !state->hCachedMemDC || !state->hCachedBmp ||
+                      !state->cachedDibPixels || state->cachedDibW != w || state->cachedDibH != h;
+    if (needRender) {
+        if (!RenderDialogToCachedBitmap(hWnd, state, w, h)) {
+            return;
+        }
+    }
+
+    if (state->useLayeredPresentation) {
+        LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+        if ((exStyle & WS_EX_LAYERED) == 0) {
+            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+        }
+
+        BYTE alphaByte = (BYTE)std::clamp((int)std::round(state->animAlpha * 255.0f), 0, 255);
+        POINT ptDst = { state->renderX, state->renderY };
+        SIZE szWnd = { w, h };
+        POINT ptSrc = { 0, 0 };
+        BLENDFUNCTION bf = { AC_SRC_OVER, 0, alphaByte, AC_SRC_ALPHA };
+        UpdateLayeredWindow(hWnd, nullptr, &ptDst, &szWnd, state->hCachedMemDC, &ptSrc, 0, &bf, ULW_ALPHA);
+        // Never fall back to BitBlt on a layered window: blitting premultiplied transparent black (0x00000000)
+        // directly to a window DC flashes a solid black rectangle on open/close!
+        return;
+    }
+
+    // Defensive fallback if layered presentation is disabled
+    HDC hdc = GetDC(hWnd);
+    if (hdc) {
+        BitBlt(hdc, 0, 0, w, h, state->hCachedMemDC, 0, 0, SRCCOPY);
+        ReleaseDC(hWnd, hdc);
+    }
+}
+
+void RefreshDialogVisual(HWND hWnd, RunDialogState* state, bool redrawContents) {
+    if (!hWnd || !IsWindow(hWnd) || IsIconic(hWnd)) return;
+    if (state && state->useLayeredPresentation) {
+        PresentDialogWindow(hWnd, state, redrawContents);
+    } else {
+        InvalidateRect(hWnd, nullptr, FALSE);
+    }
+}
+
+LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+                                    UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    auto* state = reinterpret_cast<RunDialogState*>(dwRefData);
+
+    if (uMsg == g_msgUninit && g_msgUninit != 0) {
+        if (!state) {
+            g_dialogSubclassInstalled.store(false, std::memory_order_release);
+            return 1;
+        }
+        if (state->isBrowsingFile || state->isTriggeringRun) {
+            state->pendingUninit = true;
+            CloseActiveGearMenu();
+            HWND hPopup = GetWindow(hWnd, GW_ENABLEDPOPUP);
+            if (hPopup && hPopup != hWnd && IsWindow(hPopup)) {
+                PostMessageW(hPopup, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), 0);
+                PostMessageW(hPopup, WM_CLOSE, 0, 0);
+            }
+            return 0;
+        }
+        PerformDialogUninit(hWnd, state);
+        return 1;
+    }
+
+    if (uMsg == g_msgToggle && g_msgToggle != 0) {
+        if (!state) return 0;
+        switch (wParam) {
+            case kActionMinimize:
+                MinimizeRunDialog(state);
+                break;
+            case kActionRestore:
+                RestoreRunDialog(state);
+                break;
+            case kActionToggleWinR:
+                if (IsIconic(hWnd) || !g_dlgIsForeground.load() || GetForegroundWindow() != hWnd) {
+                    RestoreRunDialog(state);
+                } else {
+                    CloseRunDialog(hWnd);
+                }
+                break;
+            case kActionReloadSettings:
+                ApplyReloadedSettingsToDialog(state);
+                break;
+            case kActionDeferredInputUpdate: {
+                state->inputUpdateQueued = false;
+                if (!state->hModernEdit || !IsWindow(state->hModernEdit)) break;
+                state->caretVisible = true;
+                std::wstring curText = GetEffectiveInputText(state->hModernEdit);
+                if (!state->suppressSuggestionUpdate) {
+                    state->scrollOffset = 0;
+                    UpdateAppSuggestionsForQuery(state, curText);
+                    RefreshDialogVisual(hWnd, state);
+                } else {
+                    RefreshDialogVisual(hWnd, state);
+                }
+                if (GetForegroundWindow() == hWnd && !state->isBrowsingFile && GetFocus() != state->hModernEdit) {
+                    SetFocus(state->hModernEdit);
+                }
+                break;
+            }
+        }
+        return 0;
+    }
+
+    switch (uMsg) {
+        case WM_NCCALCSIZE:
+            return 0;
+
+        case WM_NCACTIVATE:
+            return TRUE;
+
+        case WM_NCPAINT:
+        case 0x00AE: // WM_NCUAHDRAWCAPTION (blocks uxtheme Aero Basic caption bar painting)
+        case 0x00AF: // WM_NCUAHDRAWFRAME   (blocks uxtheme non-client frame painting)
+            return 0;
+
+        case WM_GETICON: {
+            if (state) {
+                if (wParam == ICON_BIG && state->hTaskbarIconBig) {
+                    return reinterpret_cast<LRESULT>(state->hTaskbarIconBig);
+                }
+                if ((wParam == ICON_SMALL || wParam == ICON_SMALL2) && state->hTaskbarIconSmall) {
+                    return reinterpret_cast<LRESULT>(state->hTaskbarIconSmall);
+                }
+            }
+            break;
+        }
+
+        case WM_SETICON: {
+            if (state && !g_internalIconChange) {
+                if (wParam == ICON_BIG && state->hTaskbarIconBig) {
+                    lParam = reinterpret_cast<LPARAM>(state->hTaskbarIconBig);
+                } else if ((wParam == ICON_SMALL || wParam == ICON_SMALL2) && state->hTaskbarIconSmall) {
+                    lParam = reinterpret_cast<LPARAM>(state->hTaskbarIconSmall);
+                }
+            }
+            break;
+        }
+
+        case WM_STYLECHANGING: {
+            if (wParam == GWL_STYLE && lParam && !g_internalIconChange) {
+                auto* ss = reinterpret_cast<STYLESTRUCT*>(lParam);
+                ss->styleNew &= ~(WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZEBOX | WS_CLIPCHILDREN | WS_DLGFRAME | WS_BORDER);
+                ss->styleNew |= (WS_SYSMENU | WS_MINIMIZEBOX);
+            }
+            if (wParam == GWL_EXSTYLE && lParam && state && state->useLayeredPresentation &&
+                !state->pendingUninit && !g_unloading.load()) {
+                auto* ss = reinterpret_cast<STYLESTRUCT*>(lParam);
+                ss->styleNew |= (WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_APPWINDOW);
+            }
+            break;
+        }
+
+        case WM_SETTINGCHANGE:
+        case WM_THEMECHANGED: {
+            if (state) {
+                ApplyWindowAppearance(hWnd, state);
+                RefreshDialogVisual(hWnd, state);
+            }
+            break;
+        }
+
+        case WM_DPICHANGED: {
+            if (state) {
+                state->dpi = HIWORD(wParam);
+                UpdateDialogEditFont(state);
+                RefreshDialogRunIcons(state);
+                RecomputeDialogMetrics(state);
+                const RECT* prcSuggested = reinterpret_cast<const RECT*>(lParam);
+                int dlgW = GetDlgWidth(state);
+                int newX = prcSuggested ? prcSuggested->left : state->normalX;
+                int newY = prcSuggested ? prcSuggested->top  : state->normalY;
+                ClampDialogToMonitorWorkArea(hWnd, &newX, &newY, dlgW, state->totalHeight, state->dpi);
+                state->normalX = newX;
+                state->normalY = newY;
+                state->renderX = newX;
+                state->renderY = newY;
+                SetWindowPos(hWnd, HWND_TOPMOST, newX, newY, dlgW, state->totalHeight,
+                             SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                RefreshDialogVisual(hWnd, state);
+            }
+            return 0;
+        }
+
+        case WM_SYSCOMMAND: {
+            UINT cmd = (wParam & 0xFFF0);
+            if (cmd == SC_MINIMIZE) {
+                MinimizeRunDialog(state);
+                return 0;
+            }
+            if (cmd == SC_RESTORE) {
+                RestoreRunDialog(state);
+                return 0;
+            }
+            break;
+        }
+
+        case WM_WINDOWPOSCHANGING: {
+            auto* wp = reinterpret_cast<WINDOWPOS*>(lParam);
+            if (wp && state && !(wp->flags & SWP_NOSIZE)) {
+                if (!IsIconic(hWnd) && wp->x > -10000 && wp->y > -10000) {
+                    wp->cx = GetDlgWidth(state);
+                    wp->cy = state->totalHeight;
+                }
+            }
+            break;
+        }
+
+        case WM_EXITSIZEMOVE: {
+            if (state && !IsIconic(hWnd) && state->effectiveSurface == SurfaceTheme::Glass &&
+                state->settings.colorMode == ColorMode::Auto) {
+                bool newSample = SampleBackdropLuminanceFromSnap(
+                    state->normalX, state->normalY, GetDlgWidth(state), state->totalHeight, state->backdropLightSample);
+                if (newSample != state->backdropLightSample) {
+                    state->backdropLightSample = newSample;
+                    ApplyWindowAppearance(hWnd, state);
+                    RefreshDialogVisual(hWnd, state);
+                }
+            }
+            break;
+        }
+
+        case WM_WINDOWPOSCHANGED: {
+            auto* wp = reinterpret_cast<WINDOWPOS*>(lParam);
+            if (wp && state && !state->isPresenting && !IsIconic(hWnd) && !(wp->flags & SWP_NOMOVE)) {
+                if (wp->x > -10000 && wp->y > -10000 && !state->openAnimActive && !state->closingAnimActive) {
+                    state->normalX = wp->x;
+                    state->normalY = wp->y;
+                    state->renderX = wp->x;
+                    state->renderY = wp->y;
+                    if (state->effectiveSurface == SurfaceTheme::Glass) {
+                        RefreshDialogVisual(hWnd, state);
+                    }
+                }
+            }
+            break;
+        }
+
+        case WM_KEYDOWN:
+        case WM_CHAR:
+        case WM_IME_STARTCOMPOSITION: {
+            if (state && state->hModernEdit && IsWindow(state->hModernEdit) && GetFocus() != state->hModernEdit) {
+                SetFocus(state->hModernEdit);
+                return SendMessageW(state->hModernEdit, uMsg, wParam, lParam);
+            }
+            break;
+        }
+
+        case WM_SHOWWINDOW:
+            if (wParam == TRUE && state) {
+                ApplyWindowTaskbarIconIdentity(hWnd, false);
+                NotifyTaskbarRedrawWindowIcon(hWnd);
+                SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                ForceFocusModernEdit(hWnd, state);
+            } else if (wParam == FALSE) {
+                CloseActiveGearMenu();
+                if (!IsIconic(hWnd)) {
+                    HWND expected = hWnd;
+                    if (g_hActiveRunDlg.compare_exchange_strong(expected, nullptr)) {
+                        StopKeyHookThread();
+                    }
+                }
+            }
+            break;
+
+        case WM_CLOSE:
+            CloseRunDialog(hWnd);
+            return 0;
+
+        case WM_TIMER: {
+            if (wParam == kTimerCaret && state) {
+                if (!IsIconic(hWnd)) {
+                    state->caretVisible = !state->caretVisible;
+                    RefreshDialogVisual(hWnd, state);
+                }
+                return 0;
+            }
+            if (wParam == kTimerLuminance && state) {
+                if (!IsIconic(hWnd) && state->effectiveSurface == SurfaceTheme::Glass) {
+                    CheckAndUpdateBackdropInRealtime(hWnd, state, false);
+                }
+                return 0;
+            }
+            if (wParam == kTimerBgMedia && state) {
+                StepCustomBackgroundAnimation(state);
+                return 0;
+            }
+            if (wParam == kTimerOpenAnim && state) {
+                if (IsIconic(hWnd)) {
+                    KillTimer(hWnd, kTimerOpenAnim);
+                    state->openAnimActive = false;
+                    state->animAlpha = 1.0f;
+                    return 0;
+                }
+                float t = std::clamp((float)(GetTickCount64() - state->openAnimStartTick) / 155.0f, 0.0f, 1.0f);
+                float ease = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
+                state->animAlpha = 0.08f + 0.92f * ease;
+                int slideOff = (int)std::round((1.0f - ease) * DpiScaleS(10, state) * (state->anchoredTop ? -1.0f : 1.0f));
+                int targetY = state->normalY + slideOff;
+                if (t >= 1.0f) {
+                    KillTimer(hWnd, kTimerOpenAnim);
+                    state->openAnimActive = false;
+                    state->animAlpha = 1.0f;
+                    targetY = state->normalY;
+                }
+                PresentDialogWindow(hWnd, state, false, state->normalX, targetY);
+                if (state->hModernEdit && GetFocus() != state->hModernEdit && !state->isBrowsingFile) {
+                    SetFocus(state->hModernEdit);
+                }
+                return 0;
+            }
+            break;
+        }
+
+        case WM_MOUSEWHEEL: {
+            if (state && HasVerticalScrollbar(state)) {
+                short zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
+                int step = (zDelta > 0) ? -1 : 1;
+                if (std::abs(zDelta) >= WHEEL_DELTA * 2) {
+                    step *= 2;
+                }
+                int oldOffset = state->scrollOffset;
+                state->scrollOffset += step;
+                ClampScrollOffset(state);
+                if (state->scrollOffset != oldOffset) {
+                    if (state->hasMousePt) {
+                        state->hoveredRow = HitTestHistoryRow(state, state->mousePt);
+                    }
+                    RefreshDialogVisual(hWnd, state);
+                }
+            }
+            return 0;
+        }
+
+        case WM_COMMAND: {
+            if (LOWORD(wParam) == kModernEditId) {
+                if (state && (HIWORD(wParam) == EN_CHANGE || HIWORD(wParam) == EN_UPDATE)) {
+                    ScheduleDeferredInputUpdate(state);
+                } else if (state && HIWORD(wParam) == EN_KILLFOCUS) {
+                    if (GetForegroundWindow() == hWnd && !state->isBrowsingFile &&
+                        g_hActiveGearMenu.load() == nullptr && g_hActiveCustomSizeWnd.load() == nullptr) {
+                        PostMessageW(hWnd, WM_NEXTDLGCTL, reinterpret_cast<WPARAM>(state->hModernEdit), TRUE);
+                    }
+                }
+                return 0;
+            }
+            if (LOWORD(wParam) == IDOK && state && !state->isTriggeringRun) {
+                TriggerRunCommand(state);
+                return 0;
+            }
+            break;
+        }
+
+        case WM_ACTIVATEAPP: {
+            if (wParam == FALSE) {
+                CloseActiveGearMenu();
+            }
+            break;
+        }
+
+        case WM_ACTIVATE: {
+            if (LOWORD(wParam) == WA_INACTIVE) {
+                POINT pt = {};
+                GetCursorPos(&pt);
+                if (g_dlgIsForeground.load() && IsPointOnTaskbar(pt)) {
+                    g_deactivatedByTaskbarTick.store(GetTickCount64());
+                } else {
+                    g_deactivatedByTaskbarTick.store(0);
+                }
+                g_dlgIsForeground.store(false);
+                CloseActiveGearMenu();
+                if (state && state->settings.closeOnClickOutside &&
+                    IsWindowVisible(hWnd) && !IsIconic(hWnd) && !state->isTriggeringRun &&
+                    (!state->isBrowsingFile || g_hActiveGearMenu.load() != nullptr)) {
+                    if (GetTickCount64() - g_openTick.load() > 300) {
+                        CloseRunDialog(hWnd);
+                        return 0;
+                    }
+                }
+            } else {
+                g_dlgIsForeground.store(true);
+                g_deactivatedByTaskbarTick.store(0);
+                if (!IsIconic(hWnd) && IsWindowVisible(hWnd) && state) {
+                    if (!state->isBrowsingFile && g_hActiveGearMenu.load() == nullptr && g_hActiveCustomSizeWnd.load() == nullptr) {
+                        SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    }
+                    if (state->hModernEdit && !state->isBrowsingFile) {
+                        SetFocus(state->hModernEdit);
+                    }
+                }
+            }
+            if (LOWORD(wParam) == WA_INACTIVE && state) {
+                state->windowDragging = false;
+            }
+            if (state && state->effectiveSurface == SurfaceTheme::Glass && IsWindowVisible(hWnd) && !IsIconic(hWnd)) {
+                CheckAndUpdateBackdropInRealtime(hWnd, state, false);
+            }
+            if (IsWindowVisible(hWnd) && !IsIconic(hWnd)) {
+                RefreshDialogVisual(hWnd, state);
+            }
+            return 0;
+        }
+
+        case WM_ERASEBKGND:
+            return 1;
+
+        case WM_CAPTURECHANGED: {
+            if (state && (HWND)lParam != hWnd) {
+                if (state->windowDragging) {
+                    state->windowDragging = false;
+                    SaveDialogAnchorPosition(state);
+                    if (state->effectiveSurface == SurfaceTheme::Glass && state->settings.colorMode == ColorMode::Auto) {
+                        bool newSample = SampleBackdropLuminanceFromSnap(
+                            state->normalX, state->normalY, GetDlgWidth(state), state->totalHeight, state->backdropLightSample);
+                        if (newSample != state->backdropLightSample) {
+                            state->backdropLightSample = newSample;
+                            ApplyWindowAppearance(hWnd, state);
+                            RefreshDialogVisual(hWnd, state);
                         }
                     }
+                }
+                state->scrollbarDragging = false;
+            }
+            break;
+        }
 
-                    BitBlt(hdc, 0, 0, w, h, hMemDC, 0, 0, SRCCOPY);
+        case WM_MOUSEMOVE: {
+            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+
+            if (state->windowDragging) {
+                if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0) {
+                    state->windowDragging = false;
+                    SaveDialogAnchorPosition(state);
+                    ReleaseCapture();
+                    return 0;
+                }
+                POINT ptScreen = {};
+                GetCursorPos(&ptScreen);
+                int newX = state->windowDragStartX + (ptScreen.x - state->windowDragStartCursor.x);
+                int newY = state->windowDragStartY + (ptScreen.y - state->windowDragStartCursor.y);
+                if (newX != state->normalX || newY != state->normalY) {
+                    state->normalX = newX;
+                    state->normalY = newY;
+                    PresentDialogWindow(hWnd, state, state->effectiveSurface != SurfaceTheme::Solid, newX, newY);
+                }
+                return 0;
+            }
+
+            if (state->scrollbarDragging && HasVerticalScrollbar(state)) {
+                RECT rcTrack = GetScrollbarTrackRect(state);
+                RECT rcThumb = GetScrollbarThumbRect(state);
+                int thumbH = rcThumb.bottom - rcThumb.top;
+                int availSlide = (std::max)(1, static_cast<int>((rcTrack.bottom - rcTrack.top) - thumbH));
+                int totalRows = (int)GetActiveRowItems(state).size();
+                int visRows = GetVisibleRowCount(state);
+                int maxScroll = (std::max)(1, totalRows - visRows);
+                int deltaY = pt.y - state->scrollbarDragStartY;
+                int newOffset = state->scrollbarDragStartOffset + MulDiv(deltaY, maxScroll, availSlide);
+                state->scrollOffset = std::clamp(newOffset, 0, maxScroll);
+                RefreshDialogVisual(hWnd, state);
+                return 0;
+            }
+
+            int newHoverRow = HitTestHistoryRow(state, pt);
+            ActionButtonsLayout layout = GetActionButtonsLayout(state);
+            RECT rcTrack = GetScrollbarTrackRect(state);
+            bool newSbHover     = HasVerticalScrollbar(state) && PtInRect(&rcTrack, pt);
+            bool newBrowseHover = PtInRect(&layout.rcBrowse, pt);
+            bool newBtnHover    = PtInRect(&layout.rcRun, pt);
+            bool newCloseHover  = PtInRect(&layout.rcClose, pt);
+            bool newGearHover   = PtInRect(&layout.rcGear, pt);
+
+            state->mousePt = pt;
+            state->hasMousePt = true;
+
+            if (newHoverRow != state->hoveredRow ||
+                newSbHover != state->scrollbarHovered ||
+                newBrowseHover != state->browseHovered ||
+                newBtnHover != state->btnHovered ||
+                newCloseHover != state->closeHovered ||
+                newGearHover != state->gearHovered) {
+                state->hoveredRow       = newHoverRow;
+                state->scrollbarHovered = newSbHover;
+                state->browseHovered    = newBrowseHover;
+                state->btnHovered       = newBtnHover;
+                state->closeHovered     = newCloseHover;
+                state->gearHovered      = newGearHover;
+
+                TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, hWnd, 0 };
+                TrackMouseEvent(&tme);
+                RefreshDialogVisual(hWnd, state);
+            }
+            return 0;
+        }
+
+        case WM_MOUSELEAVE: {
+            if (state->hoveredRow != -1 || state->pressedRow != -1 || state->hasMousePt ||
+                state->scrollbarHovered ||
+                state->browseHovered || state->browsePressed ||
+                state->btnHovered || state->btnPressed ||
+                state->closeHovered || state->closePressed ||
+                state->gearHovered || state->gearPressed) {
+                state->hoveredRow       = -1;
+                state->pressedRow       = -1;
+                state->hasMousePt       = false;
+                state->scrollbarHovered = false;
+                state->browseHovered    = false;
+                state->browsePressed    = false;
+                state->btnHovered       = false;
+                state->btnPressed       = false;
+                state->closeHovered     = false;
+                state->closePressed     = false;
+                state->gearHovered      = false;
+                state->gearPressed      = false;
+                RefreshDialogVisual(hWnd, state);
+            }
+            return 0;
+        }
+
+        case WM_LBUTTONDOWN: {
+            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+            ActionButtonsLayout layout = GetActionButtonsLayout(state);
+
+            if (HasVerticalScrollbar(state)) {
+                RECT rcTrack = GetScrollbarTrackRect(state);
+                RECT rcThumb = GetScrollbarThumbRect(state);
+                RECT rcHitTrack = { rcTrack.left - DpiScaleS(4, state), rcTrack.top, rcTrack.right + DpiScaleS(2, state), rcTrack.bottom };
+                if (PtInRect(&rcHitTrack, pt)) {
+                    if (PtInRect(&rcThumb, pt)) {
+                        state->scrollbarDragging = true;
+                        state->scrollbarDragStartY = pt.y;
+                        state->scrollbarDragStartOffset = state->scrollOffset;
+                        SetCapture(hWnd);
+                    } else {
+                        int visRows = GetVisibleRowCount(state);
+                        if (pt.y < rcThumb.top) {
+                            state->scrollOffset -= (std::max)(1, visRows - 1);
+                        } else {
+                            state->scrollOffset += (std::max)(1, visRows - 1);
+                        }
+                        ClampScrollOffset(state);
+                    }
+                    RefreshDialogVisual(hWnd, state);
+                    return 0;
                 }
             }
 
+            if (PtInRect(&layout.rcBrowse, pt)) {
+                state->browsePressed = true;
+                SetCapture(hWnd);
+                RefreshDialogVisual(hWnd, state);
+                return 0;
+            }
+            if (PtInRect(&layout.rcRun, pt)) {
+                state->btnPressed = true;
+                SetCapture(hWnd);
+                RefreshDialogVisual(hWnd, state);
+                return 0;
+            }
+            if (PtInRect(&layout.rcClose, pt)) {
+                state->closePressed = true;
+                SetCapture(hWnd);
+                RefreshDialogVisual(hWnd, state);
+                return 0;
+            }
+            if (PtInRect(&layout.rcGear, pt)) {
+                state->gearPressed = true;
+                SetCapture(hWnd);
+                RefreshDialogVisual(hWnd, state);
+                return 0;
+            }
+            if (PtInRect(&layout.rcEdit, pt) && state->hModernEdit) {
+                SetFocus(state->hModernEdit);
+                int len = GetWindowTextLengthW(state->hModernEdit);
+                SendMessageW(state->hModernEdit, EM_SETSEL, len, len);
+                state->caretVisible = true;
+                RefreshDialogVisual(hWnd, state);
+                return 0;
+            }
+
+            int row = HitTestHistoryRow(state, pt);
+            if (row != -1) {
+                state->pressedRow = row;
+                SetCapture(hWnd);
+                RefreshDialogVisual(hWnd, state);
+                return 0;
+            }
+
+            // Double-click on the left Run icon resets the dialog back to its default centered position
+            if (pt.x < layout.rcEdit.left && pt.y >= layout.rcEdit.top - DpiScaleS(12, state) &&
+                pt.y <= layout.rcEdit.bottom + DpiScaleS(12, state)) {
+                ULONGLONG nowTick = GetTickCount64();
+                if (state->lastRunIconClickTick != 0 &&
+                    (nowTick - state->lastRunIconClickTick) <= GetDoubleClickTime()) {
+                    state->lastRunIconClickTick = 0;
+                    ResetDialogToDefaultPosition(hWnd, state);
+                    return 0;
+                }
+                state->lastRunIconClickTick = nowTick;
+            } else {
+                state->lastRunIconClickTick = 0;
+            }
+
+            state->windowDragging = true;
+            GetCursorPos(&state->windowDragStartCursor);
+            state->windowDragStartX = state->normalX;
+            state->windowDragStartY = state->normalY;
+            SetCapture(hWnd);
+            return 0;
+        }
+
+        case WM_LBUTTONUP: {
+            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+            ActionButtonsLayout layout = GetActionButtonsLayout(state);
+
+            if (state->windowDragging) {
+                state->windowDragging = false;
+                ReleaseCapture();
+                SaveDialogAnchorPosition(state);
+                if (state->effectiveSurface == SurfaceTheme::Glass && state->settings.colorMode == ColorMode::Auto) {
+                    bool newSample = SampleBackdropLuminanceFromSnap(
+                        state->normalX, state->normalY, GetDlgWidth(state), state->totalHeight, state->backdropLightSample);
+                    if (newSample != state->backdropLightSample) {
+                        state->backdropLightSample = newSample;
+                        ApplyWindowAppearance(hWnd, state);
+                        RefreshDialogVisual(hWnd, state);
+                    }
+                }
+                return 0;
+            }
+
+            if (state->scrollbarDragging) {
+                state->scrollbarDragging = false;
+                ReleaseCapture();
+                RefreshDialogVisual(hWnd, state);
+                return 0;
+            }
+            if (state->pressedRow != -1) {
+                int targetRow = state->pressedRow;
+                state->pressedRow = -1;
+                ReleaseCapture();
+                RefreshDialogVisual(hWnd, state);
+                int releasedRow = HitTestHistoryRow(state, pt);
+                const auto& activeRows = GetActiveRowItems(state);
+                if (releasedRow == targetRow && targetRow >= 0 && targetRow < (int)activeRows.size()) {
+                    HistoryItem chosen = activeRows[targetRow];
+                    ExecuteHistoryOrSuggestionItem(state, chosen);
+                }
+                return 0;
+            }
+            if (state->browsePressed) {
+                state->browsePressed = false;
+                ReleaseCapture();
+                RefreshDialogVisual(hWnd, state);
+                if (PtInRect(&layout.rcBrowse, pt)) {
+                    OpenBrowseExecutableDialog(state);
+                }
+                return 0;
+            }
+            if (state->btnPressed) {
+                state->btnPressed = false;
+                ReleaseCapture();
+                RefreshDialogVisual(hWnd, state);
+                if (PtInRect(&layout.rcRun, pt)) TriggerRunCommand(state);
+                return 0;
+            }
+            if (state->closePressed) {
+                state->closePressed = false;
+                ReleaseCapture();
+                RefreshDialogVisual(hWnd, state);
+                if (PtInRect(&layout.rcClose, pt)) CloseRunDialog(hWnd);
+                return 0;
+            }
+            if (state->gearPressed) {
+                state->gearPressed = false;
+                ReleaseCapture();
+                RefreshDialogVisual(hWnd, state);
+                if (PtInRect(&layout.rcGear, pt)) {
+                    OpenGearSettingsMenu(state);
+                }
+                return 0;
+            }
+            break;
+        }
+
+        case WM_RBUTTONDOWN: {
+            if (!state || state->showingSuggestions) return 0;
+            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+            int row = HitTestHistoryRow(state, pt);
+            if (row >= 0 && row < (int)state->history.size()) {
+                state->selectedRow = row;
+                RefreshDialogVisual(hWnd, state);
+            }
+            return 0;
+        }
+
+        case WM_RBUTTONUP: {
+            if (!state || state->showingSuggestions) return 0;
+            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+            int row = HitTestHistoryRow(state, pt);
+            if (row >= 0 && row < (int)state->history.size()) {
+                state->selectedRow = row;
+                RefreshDialogVisual(hWnd, state);
+                std::wstring targetCmd = state->history[row].cmd;
+                bool currentlyPinned   = state->history[row].isPinned || IsCommandPinned(targetCmd);
+                std::wstring resolvedFilePath;
+                bool resolvedIsDir = false;
+                bool hasFileLoc = TryResolveCommandFilePath(targetCmd, &resolvedFilePath, &resolvedIsDir);
+                ExtraLocalizedStrings ex = GetExtraLocalizedStrings(state->settings.language);
+                V53LocalizedStrings v53 = GetV53LocalizedStrings(state->settings.language);
+
+                std::vector<FluentMenuItem> ctxItems;
+                {
+                    FluentMenuItem pinItem;
+                    pinItem.id    = 797;
+                    pinItem.label = currentlyPinned ? v53.unpinFromTopMenu : v53.pinToTopMenu;
+                    pinItem.icon  = FluentMenuIcon::History;
+                    ctxItems.push_back(std::move(pinItem));
+                }
+                if (hasFileLoc) {
+                    FluentMenuItem openLocItem;
+                    openLocItem.id    = 798;
+                    openLocItem.label = v53.openFileLocationMenu;
+                    openLocItem.icon  = FluentMenuIcon::FolderPick;
+                    ctxItems.push_back(std::move(openLocItem));
+                }
+                {
+                    FluentMenuItem sep;
+                    sep.isSeparator = true;
+                    ctxItems.push_back(std::move(sep));
+
+                    FluentMenuItem delItem;
+                    delItem.id    = 799;
+                    delItem.label = ex.deleteHistoryItem;
+                    delItem.icon  = FluentMenuIcon::ClearTrash;
+                    ctxItems.push_back(std::move(delItem));
+                }
+
+                POINT ptScreen = pt;
+                ClientToScreen(hWnd, &ptScreen);
+                state->isBrowsingFile = true;
+                g_isBrowsingFile.store(true);
+                UINT cmd = RunFluentPopupMenu(state, std::move(ctxItems), ptScreen);
+                g_isBrowsingFile.store(false);
+                if (!IsWindow(hWnd) || g_hActiveRunDlg.load() != hWnd) return 0;
+                state->isBrowsingFile = false;
+                if (state->pendingUninit || g_unloading.load()) {
+                    PerformDialogUninit(hWnd, state);
+                    return 0;
+                }
+
+                if (cmd == 797) {
+                    int oldH = state->totalHeight;
+                    TogglePinCommand(targetCmd);
+                    state->hoveredRow = -1;
+                    state->selectedRow = -1;
+                    LoadHistoryItems(state);
+                    RecomputeDialogMetrics(state);
+                    ResizeDialogPreservingBottomAnchor(state, oldH);
+                    RefreshDialogVisual(hWnd, state);
+                } else if (cmd == 798 && hasFileLoc) {
+                    OpenFileLocationInExplorer(resolvedFilePath, resolvedIsDir);
+                } else if (cmd == 799) {
+                    int oldH = state->totalHeight;
+                    RemovePinnedCommand(targetCmd);
+                    RemoveCommandFromHistoryStorage(targetCmd);
+                    state->hoveredRow = -1;
+                    state->selectedRow = -1;
+                    LoadHistoryItems(state);
+                    RecomputeDialogMetrics(state);
+                    ResizeDialogPreservingBottomAnchor(state, oldH);
+                    RefreshDialogVisual(hWnd, state);
+                }
+                ForceFocusModernEdit(hWnd, state);
+            }
+            return 0;
+        }
+
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hWnd, &ps);
+            if (!IsIconic(hWnd) && state) {
+                if (state->useLayeredPresentation) {
+                    PresentDialogWindow(hWnd, state, true);
+                } else {
+                    int w = GetDlgWidth(state);
+                    int h = state->totalHeight;
+                    if (RenderDialogToCachedBitmap(hWnd, state, w, h) && state->hCachedMemDC) {
+                        BitBlt(hdc, 0, 0, w, h, state->hCachedMemDC, 0, 0, SRCCOPY);
+                    }
+                }
+            }
             EndPaint(hWnd, &ps);
             return 0;
         }
@@ -13237,10 +14795,25 @@ void TransformRunDialog(HWND hDlg) {
     state->dpi  = GetDpiForWindow(hDlg);
     if (state->dpi == 0) state->dpi = 96;
 
+    // Reload latest cross-process in-app settings so explorer.exe and Taskmgr.exe stay synchronized
+    LoadSettings(false);
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
         state->settings = g_settings;
         state->i18n = g_i18n;
+    }
+
+    DisableWindowDwmTransitions(hDlg);
+    SetWindowDwmCloak(hDlg, true);
+
+    if (IsWindowVisible(hDlg)) {
+        g_internalActivation = true;
+        if (ShowWindow_Orig) {
+            ShowWindow_Orig(hDlg, SW_HIDE);
+        } else {
+            ShowWindow(hDlg, SW_HIDE);
+        }
+        g_internalActivation = false;
     }
 
     LONG_PTR style = GetWindowLongPtrW(hDlg, GWL_STYLE);
@@ -13248,10 +14821,12 @@ void TransformRunDialog(HWND hDlg) {
     style |= (WS_SYSMENU | WS_MINIMIZEBOX);
     SetWindowLongPtrW(hDlg, GWL_STYLE, style);
 
+    // Clear WS_EX_LAYERED first to reset any prior LWA state, then enable true ULW WS_EX_LAYERED + WS_EX_TOPMOST
     LONG_PTR exStyle = GetWindowLongPtrW(hDlg, GWL_EXSTYLE);
-    exStyle &= ~(WS_EX_DLGMODALFRAME | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE | WS_EX_COMPOSITED);
-    exStyle |= WS_EX_APPWINDOW;
+    exStyle &= ~(WS_EX_DLGMODALFRAME | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE | WS_EX_COMPOSITED | WS_EX_LAYERED);
+    exStyle |= (WS_EX_APPWINDOW | WS_EX_TOPMOST);
     SetWindowLongPtrW(hDlg, GWL_EXSTYLE, exStyle);
+    SetWindowLongPtrW(hDlg, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
 
     for (HWND hChild = GetWindow(hDlg, GW_CHILD); hChild != nullptr; hChild = GetWindow(hChild, GW_HWNDNEXT)) {
         wchar_t cls[64] = {};
@@ -13267,8 +14842,14 @@ void TransformRunDialog(HWND hDlg) {
             ShowWindow(hChild, SW_HIDE);
             EnableWindow(hChild, FALSE);
         } else if (_wcsicmp(cls, L"Button") == 0) {
+            DWORD btnType = (DWORD)(cStyle & BS_TYPEMASK);
             if (id == IDOK) {
                 state->hOkBtn = hChild;
+            } else if (btnType == BS_AUTOCHECKBOX || btnType == BS_CHECKBOX) {
+                state->hAdminCheck = hChild;
+                if (SendMessageW(hChild, BM_GETCHECK, 0, 0) == BST_CHECKED) {
+                    state->settings.runAsAdmin = true;
+                }
             }
             SetWindowPos(hChild, nullptr, -32000, -32000, 1, 1, SWP_NOZORDER | SWP_NOACTIVATE);
             ShowWindow(hChild, SW_HIDE);
@@ -13331,8 +14912,21 @@ void TransformRunDialog(HWND hDlg) {
     int newX = 100;
     int newY = 100;
     bool anchoredTop = false;
-    GetDefaultTaskbarAnchoredPosition(hDlg, dlgW, state->totalHeight, state->dpi, &newX, &newY, &anchoredTop);
-    ClampDialogToMonitorWorkArea(hDlg, &newX, &newY, dlgW, state->totalHeight, state->dpi);
+    GetDefaultTaskbarAnchoredPosition(hDlg, dlgW, state->totalHeight, state->dpi, &newX, &newY, &anchoredTop, IsClassicFriendlyModeActive(state->settings));
+
+    bool restoredSavedPos = false;
+    if (state->settings.rememberPosition &&
+        Wh_GetIntValue(GetUserOverrideKey(L"hasSavedPos").c_str(), 0) == 1) {
+        int savedX       = Wh_GetIntValue(GetUserOverrideKey(L"savedPosX").c_str(), newX);
+        int savedAnchorY = Wh_GetIntValue(GetUserOverrideKey(L"savedAnchorY").c_str(),
+                                          anchoredTop ? newY : (newY + state->totalHeight));
+        bool savedTop    = Wh_GetIntValue(GetUserOverrideKey(L"savedAnchoredTop").c_str(), anchoredTop ? 1 : 0) != 0;
+        anchoredTop = savedTop;
+        newX = savedX;
+        newY = anchoredTop ? savedAnchorY : (savedAnchorY - state->totalHeight);
+        restoredSavedPos = true;
+    }
+    ClampDialogToMonitorWorkArea(hDlg, &newX, &newY, dlgW, state->totalHeight, state->dpi, restoredSavedPos);
 
     state->normalX = newX;
     state->normalY = newY;
@@ -13375,18 +14969,6 @@ void TransformRunDialog(HWND hDlg) {
 
     // App catalog is populated lazily on first keystroke under g_catalogMutex (no detached warmup thread)
 
-    {
-        wchar_t srcBuf[32] = {}, dstBuf[32] = {};
-        if (Wh_GetStringValue(GetUserOverrideKey(L"translateSourceLang").c_str(), srcBuf, ARRAYSIZE(srcBuf)) > 0 && srcBuf[0]) {
-            state->translateSourceLang = srcBuf;
-        }
-        if (Wh_GetStringValue(GetUserOverrideKey(L"translateTargetLang").c_str(), dstBuf, ARRAYSIZE(dstBuf)) > 0 && dstBuf[0]) {
-            state->translateTargetLang = dstBuf;
-        } else {
-            state->translateTargetLang = IsDialogVietnameseUI(state) ? L"vi" : L"en";
-        }
-    }
-
     if (state->hModernEdit) {
         SendMessageW(state->hModernEdit, EM_SETLIMITTEXT, 65535, 0);
         SendMessageW(state->hModernEdit, WM_SETFONT, (WPARAM)state->hFontEditCtl, FALSE);
@@ -13411,10 +14993,27 @@ void TransformRunDialog(HWND hDlg) {
     SetTimer(hDlg, kTimerCaret, 530, nullptr);
     SetTimer(hDlg, kTimerLuminance, 150, nullptr);
     StartDialogOpenAnimation(state);
-    int initSlideOff = DpiScaleS(14, state) * (state->anchoredTop ? -1 : 1);
+    int initSlideOff = DpiScaleS(10, state) * (state->anchoredTop ? -1 : 1);
+    state->renderX = newX;
+    state->renderY = newY + initSlideOff;
 
-    SetWindowPos(hDlg, nullptr, newX, newY + initSlideOff, dlgW, state->totalHeight,
-                 SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    // 1. Commit final window geometry & frame changes while STILL hidden and DWM-cloaked (prevents black bar flash)
+    SetWindowPos(hDlg, HWND_TOPMOST, state->renderX, state->renderY, dlgW, state->totalHeight,
+                 SWP_FRAMECHANGED | SWP_NOACTIVATE);
+
+    // 2. Upload the per-pixel alpha surface to the finalized geometry BEFORE showing
+    PresentDialogWindow(hDlg, state, true, state->renderX, state->renderY);
+
+    // 3. Show while still cloaked, re-commit layered surface so DWM has a valid frame, then uncloak cleanly
+    g_internalActivation = true;
+    if (ShowWindow_Orig) {
+        ShowWindow_Orig(hDlg, SW_SHOW);
+    } else {
+        ShowWindow(hDlg, SW_SHOW);
+    }
+    g_internalActivation = false;
+    PresentDialogWindow(hDlg, state, false, state->renderX, state->renderY);
+    SetWindowDwmCloak(hDlg, false);
     NotifyTaskbarRedrawWindowIcon(hDlg);
 
     ULONGLONG now = GetTickCount64();
@@ -13431,7 +15030,7 @@ void TransformRunDialog(HWND hDlg) {
     if (state->hModernEdit) {
         PostMessageW(hDlg, WM_NEXTDLGCTL, reinterpret_cast<WPARAM>(state->hModernEdit), TRUE);
     }
-    InvalidateRect(hDlg, nullptr, FALSE);
+    RefreshDialogVisual(hDlg, state);
 }
 
 // --- Zero-Hang Non-Blocking Run Dialog Interception (Safe for Mod Update / Reload / Uninit) ---
@@ -13444,10 +15043,38 @@ bool IsRunDialogWindow(HWND hDlg) {
         return false;
     }
 
-    return GetDlgItem(hDlg, kRunDlgComboId) != nullptr &&
-           GetDlgItem(hDlg, kRunDlgBrowseId) != nullptr &&
-           GetDlgItem(hDlg, IDOK) != nullptr &&
-           GetDlgItem(hDlg, IDCANCEL) != nullptr;
+    if (GetDlgItem(hDlg, kRunDlgComboId) != nullptr &&
+        GetDlgItem(hDlg, kRunDlgBrowseId) != nullptr &&
+        GetDlgItem(hDlg, IDOK) != nullptr &&
+        GetDlgItem(hDlg, IDCANCEL) != nullptr) {
+        return true;
+    }
+
+    // Fallback detection for Task Manager's "Create new task" (#32770) dialog across all Windows 10/11 builds
+    if (g_isTaskManagerProcess &&
+        GetDlgItem(hDlg, IDOK) != nullptr &&
+        GetDlgItem(hDlg, IDCANCEL) != nullptr) {
+        bool hasCombo = false;
+        bool hasFileDialogView = false;
+        for (HWND hChild = GetWindow(hDlg, GW_CHILD); hChild != nullptr; hChild = GetWindow(hChild, GW_HWNDNEXT)) {
+            wchar_t cCls[64] = {};
+            if (!GetClassNameW(hChild, cCls, ARRAYSIZE(cCls))) continue;
+            if (_wcsicmp(cCls, L"ComboBox") == 0 || _wcsicmp(cCls, L"ComboBoxEx32") == 0) {
+                hasCombo = true;
+            } else if (_wcsicmp(cCls, L"DUIViewWndClassName") == 0 ||
+                       _wcsicmp(cCls, L"SHELLDLL_DefView") == 0 ||
+                       _wcsicmp(cCls, L"SysListView32") == 0 ||
+                       _wcsicmp(cCls, L"SysTreeView32") == 0) {
+                hasFileDialogView = true;
+                break;
+            }
+        }
+        if (hasCombo && !hasFileDialogView) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
@@ -13484,7 +15111,7 @@ void WINAPI SwitchToThisWindow_Hook(HWND hWnd, BOOL fUnknown) {
             GetCursorPos(&pt);
             RECT rcDlg = {};
             GetWindowRect(hWnd, &rcDlg);
-            if (!PtInRect(&rcDlg, pt)) {
+            if (IsWinKeyCurrentlyDown() || !PtInRect(&rcDlg, pt)) {
                 if (ShouldMinimizeOnTaskbarClick(hWnd, now)) {
                     PostMessageW(hActive, g_msgToggle, kActionMinimize, 0);
                 } else {
@@ -13508,7 +15135,7 @@ BOOL WINAPI SetForegroundWindow_Hook(HWND hWnd) {
             GetCursorPos(&pt);
             RECT rcDlg = {};
             GetWindowRect(hWnd, &rcDlg);
-            if (!PtInRect(&rcDlg, pt)) {
+            if (IsWinKeyCurrentlyDown() || !PtInRect(&rcDlg, pt)) {
                 if (ShouldMinimizeOnTaskbarClick(hWnd, now)) {
                     PostMessageW(hActive, g_msgToggle, kActionMinimize, 0);
                 } else {
@@ -13553,10 +15180,19 @@ void ReleaseGlobalResources() {
         UnregisterClassW(kFluentMenuClassName, GetModInstanceHandle());
         g_fluentMenuClassRegistered = false;
     }
+    if (g_adminWarnClassRegistered) {
+        UnregisterClassW(kAdminWarnClassName, GetModInstanceHandle());
+        g_adminWarnClassRegistered = false;
+    }
 }
 
 BOOL Wh_ModInit() {
     g_unloading.store(false);
+    wchar_t exePath[MAX_PATH] = {};
+    if (GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath)) > 0) {
+        const wchar_t* exeName = PathFindFileNameW(exePath);
+        g_isTaskManagerProcess = (exeName && _wcsicmp(exeName, L"Taskmgr.exe") == 0);
+    }
     g_glassCpuSupported = DetectGlassCpuSupport();
 
     WNDCLASSEXW wc = { sizeof(wc) };
@@ -13570,6 +15206,16 @@ BOOL Wh_ModInit() {
     } else {
         Wh_Log(L"Warning: RegisterClassExW failed with error %lu", GetLastError());
         g_fluentMenuClassRegistered = false;
+    }
+
+    WNDCLASSEXW wcWarn = { sizeof(wcWarn) };
+    wcWarn.style = 0;
+    wcWarn.lpfnWndProc = AdminWarningDialogWndProc;
+    wcWarn.hInstance = GetModInstanceHandle();
+    wcWarn.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wcWarn.lpszClassName = kAdminWarnClassName;
+    if (RegisterClassExW(&wcWarn) || GetLastError() == ERROR_CLASS_ALREADY_EXISTS) {
+        g_adminWarnClassRegistered = true;
     }
 
     LoadSettings(false);
