@@ -19,6 +19,8 @@ Keep native Snap Groups in Alt+Tab and give each group a separate taskbar button
 with a grid of its application icons. Individual member buttons can be hidden;
 windows outside groups remain accessible.
 
+![Snap Groups demonstration](https://raw.githubusercontent.com/coldfeudal/public/main/images/hide-snapped-poster.webp)
+
 ## Usage
 
 Enable Snap windows and the option to show snapped groups in Alt+Tab under
