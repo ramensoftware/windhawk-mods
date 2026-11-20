@@ -99,7 +99,8 @@ corner, highlight, and mouse click animation settings as context menus.
 Opening animations and keyboard command activation remain native.
 
 Enable **Apply material to file information tooltips** to give File Explorer's
-file-list InfoTips the same material, tint, theme, corners, and border setting.
+file-list and desktop icon InfoTips the same material, tint, theme, corners,
+and border setting.
 The option is off by default. Windows still supplies the text, layout, hover
 delay, and animations. A tooltip keeps its material through the native fade-out.
 Navigation, toolbar, and taskbar tooltips are unchanged.
@@ -201,8 +202,10 @@ when enabled. Look for `Title bar menu` owner, entry, and system-menu lines,
 followed by the material result. With Windhawk logging disabled, these lines
 are not emitted even if the mod is loaded.
 
-For file-list InfoTips, look for `fileInfoTips=1` at initialization and a
-`File InfoTip` line when a tooltip receives the material.
+For file-list and desktop icon InfoTips, look for `fileInfoTips=1` at
+initialization and a `File InfoTip` line when a tooltip receives the material.
+The `Material ... applied=1` log means DWM accepted the backdrop settings;
+it does not confirm that the native tooltip background was cleared.
 
 ## Credits and license
 
@@ -274,7 +277,7 @@ This implementation is distributed under GPL-3.0-or-later.
   $description: Apply the same appearance and mouse click animation settings to File Explorer's title bar menu (right-click or Alt+Space).
 - styleFileInfoTips: false
   $name: Apply material to file information tooltips
-  $description: Use the menu material, tint, theme, corners and border setting for file information tooltips in File Explorer. Other tooltips are unchanged.
+  $description: Use the menu material, tint, theme, corners and border setting for file-list and desktop icon tooltips. Other tooltips are unchanged.
 - repairIcons: true
   $name: Repair legacy icon transparency
   $description: Convert copied legacy RGB icons to premultiplied alpha without modifying the source bitmaps.
@@ -2371,8 +2374,16 @@ bool PaintInfoTipBackground(HTHEME theme, HDC dc, int part, int state,
     if (!rect || IsRectEmpty(rect) || part != TTP_STANDARD)
         return false;
     const auto* paint = InfoTipPaintForDC(dc);
-    if (!paint || theme != paint->theme)
+    if (!paint)
         return false;
+    // The list-view tooltip can draw with a different Tooltip theme handle
+    // from GetWindowTheme(hwnd). The scoped DC still identifies the surface.
+    if (theme != paint->theme) {
+        wchar_t themeClass[32];
+        if (FAILED(g_getThemeClass(theme, themeClass, ARRAYSIZE(themeClass))) ||
+            _wcsicmp(themeClass, L"Tooltip") != 0)
+            return false;
+    }
     RECT area = *rect;
     if (!g_settings.hideMenuBorder) {
         // The standard tooltip theme is an image with a one-pixel outline.
@@ -3146,12 +3157,17 @@ bool IsWindowMenuOwner(HWND hwnd) {
     return IsLocalWindow(hwnd) && WindowClassIs(hwnd, kExplorerWindowClass);
 }
 
+bool IsDesktopHost(HWND hwnd) {
+    return IsLocalWindow(hwnd) &&
+        (WindowClassIs(hwnd, L"Progman") || WindowClassIs(hwnd, L"WorkerW"));
+}
+
 constexpr PCWSTR kInfoTipStateProperty = L"ExplorerTranslucentMenus.InfoTipState";
 UINT g_detachInfoTipMessage;
 
 HWND InfoTipFileView(HWND hwnd, bool& noCurrentTool) {
     HWND owner = GetWindow(hwnd, GW_OWNER);
-    if (!IsWindowMenuOwner(owner) || (GetWindowLongPtrW(hwnd, GWL_STYLE) & TTS_BALLOON))
+    if (GetWindowLongPtrW(hwnd, GWL_STYLE) & TTS_BALLOON)
         return nullptr;
     TOOLINFOW tool{sizeof(tool)};
     if (!SendMessageW(hwnd, TTM_GETCURRENTTOOLW, 0, reinterpret_cast<LPARAM>(&tool))) {
@@ -3160,12 +3176,22 @@ HWND InfoTipFileView(HWND hwnd, bool& noCurrentTool) {
     }
     HWND target = (tool.uFlags & TTF_IDISHWND)
         ? reinterpret_cast<HWND>(tool.uId) : tool.hwnd;
-    if (!WindowClassIs(target, L"DirectUIHWND") ||
-        !WindowClassIs(GetAncestor(target, GA_PARENT), L"SHELLDLL_DefView") ||
-        GetAncestor(target, GA_ROOT) != owner ||
-        GetWindowThreadProcessId(target, nullptr) != GetCurrentThreadId())
+    if (GetWindowThreadProcessId(target, nullptr) != GetCurrentThreadId() ||
+        !WindowClassIs(GetAncestor(target, GA_PARENT), L"SHELLDLL_DefView"))
         return nullptr;
-    return target;
+
+    HWND root = GetAncestor(target, GA_ROOT);
+    if (owner && owner != root)
+        return nullptr;
+    if (owner && IsWindowMenuOwner(owner) && WindowClassIs(target, L"DirectUIHWND"))
+        return target;
+
+    // The desktop list view's tooltip can be ownerless. Match the control
+    // it actually uses rather than accepting all tooltips on the desktop thread.
+    if (IsDesktopHost(root) && WindowClassIs(target, WC_LISTVIEWW) &&
+        ListView_GetToolTips(target) == hwnd)
+        return target;
+    return nullptr;
 }
 
 struct InfoTipState {
@@ -3306,7 +3332,8 @@ LRESULT CALLBACK InfoTipSubclass(HWND hwnd, UINT message, WPARAM wp, LPARAM lp,
 }
 
 void AttachInfoTip(HWND hwnd) {
-    if (IsWindowMenuOwner(GetWindow(hwnd, GW_OWNER)))
+    HWND owner = GetWindow(hwnd, GW_OWNER);
+    if (!owner || IsWindowMenuOwner(owner) || IsDesktopHost(owner))
         WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, InfoTipSubclass, 0);
 }
 
