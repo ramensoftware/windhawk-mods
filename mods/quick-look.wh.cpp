@@ -6549,7 +6549,9 @@ static void TickBrowserCover(PanelState* state) {
     bool ready = false;
     if (state->browserViewWnd && IsWindow(state->browserViewWnd)) {
         EnsureBrowserListSubclass(state);
-        bool themed = state->browserThemed;
+        // Only a results view is themed by the panel; Explorer themes its own
+        // folder and archive views, so those never wait for it.
+        bool themed = !state->resultsMode || state->browserThemed;
         if (themed && state->coverTicks >= 3) {
             if (state->browserListWnd && IsWindow(state->browserListWnd) &&
                 _wcsicmp(ClassNameOf(state->browserListWnd).c_str(),
