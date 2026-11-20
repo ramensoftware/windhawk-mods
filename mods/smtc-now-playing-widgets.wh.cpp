@@ -2,7 +2,7 @@
 // @id              smtc-now-playing-widgets
 // @name            SMTC Now Playing Desktop Widgets
 // @description     Multi-instance, multi-monitor Windows 11 Acrylic Now Playing widgets powered natively by SMTC with Standard, Album, Cardstock, and Simplified themes.
-// @version         1.0.10
+// @version         1.0.11
 // @author          minster586
 // @github          https://github.com/minster586
 // @homepage        https://links.smartcraft.me/@minster586
