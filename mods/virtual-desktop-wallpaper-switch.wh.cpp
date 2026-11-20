@@ -7,7 +7,7 @@
 // @github          https://github.com/Dev-StudioCode
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -luuid -lruntimeobject -lshlwapi -lshell32
+// @compilerOptions -lole32 -lruntimeobject -lshlwapi -lshell32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -19,9 +19,13 @@ Assigns, preloads, and coordinates distinct background wallpapers across virtual
 
 ### Key Features
 * **Per-Desktop Wallpapers**: Assigns individual background images per virtual workspace from a folder or specific overrides.
-* **Touchpad Preloading**: Direct assignment through Windows 11's internal virtual desktop manager ensures textures are pre-cached for smooth trackpad swipe transitions.
-* **Original Wallpaper Restoration**: Automatically saves your original desktop wallpapers and restores them when the mod is disabled or unloaded.
-* **Safe In-Process Design**: Runs on a dedicated internal thread inside `explorer.exe` with zero vtable patching, avoiding system instability.
+* **Touchpad Preloading**: Direct assignment through Windows 11 internal virtual desktop manager ensures backgrounds are preloaded for smooth trackpad swipe transitions.
+* **Persistent Wallpaper Backup**: Safely saves original desktop wallpaper paths to Windhawk mod storage before any assignment is applied, ensuring your original backgrounds can be restored even across Explorer restarts or reboots.
+* **Safe In-Process Design**: Runs on a dedicated asynchronous worker thread inside `explorer.exe` with zero vtable patching, avoiding system instability.
+
+### System Changes and Persistence
+* **What Windows Stores**: The mod assigns backgrounds using `IVirtualDesktopManagerInternal::SetDesktopWallpaper`. Windows persists per-desktop wallpapers in the user registry under `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops\Desktops\{GUID}`.
+* **Restoration on Exit**: When `restoreOriginalOnUnload` is enabled (default), unloading or disabling the mod restores your original desktop wallpapers from Windhawk storage and clears the saved backup entries. If disabled, the assigned wallpapers remain active in Windows settings.
 
 ### Compatibility Note
 * Designed specifically for Windows 11 Version 24H2 and newer (Build 26100+).
@@ -33,29 +37,28 @@ Assigns, preloads, and coordinates distinct background wallpapers across virtual
 /*
 - wallpaperFolder: ""
   $name: Wallpaper Folder Path
-  $description: Full path to a folder containing images to distribute across virtual desktops.
+  $description: 'Full path to a folder containing images to distribute across virtual desktops.'
 - desktop1Wallpaper: ""
   $name: Desktop 1 Wallpaper (Optional)
-  $description: Specific image path to assign to virtual desktop 1.
+  $description: 'Specific image path to assign to virtual desktop 1.'
 - desktop2Wallpaper: ""
   $name: Desktop 2 Wallpaper (Optional)
-  $description: Specific image path to assign to virtual desktop 2.
+  $description: 'Specific image path to assign to virtual desktop 2.'
 - desktop3Wallpaper: ""
   $name: Desktop 3 Wallpaper (Optional)
-  $description: Specific image path to assign to virtual desktop 3.
+  $description: 'Specific image path to assign to virtual desktop 3.'
 - desktop4Wallpaper: ""
   $name: Desktop 4 Wallpaper (Optional)
-  $description: Specific image path to assign to virtual desktop 4.
+  $description: 'Specific image path to assign to virtual desktop 4.'
 - shuffle: true
   $name: Shuffle Folder Wallpapers
-  $description: Randomize wallpaper assignments across desktops from the folder.
+  $description: 'Randomize wallpaper assignments across desktops from the folder on load or changes.'
 - restoreOriginalOnUnload: true
   $name: Restore Original Wallpapers on Exit
-  $description: Restore original desktop wallpapers when the mod is disabled or unloaded.
+  $description: 'Restore original desktop wallpapers when the mod is disabled or unloaded.'
 */
 // ==/WindhawkModSettings==
 
-#include <windhawk_api.h>
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <servprov.h>
@@ -82,11 +85,6 @@ constexpr GUID SID_VirtualDesktopManagerInternal = {
 constexpr GUID SID_VirtualDesktopNotificationService = {
     0xA501FDEC, 0x4A09, 0x464C, {0xAE, 0x4E, 0x1B, 0x9C, 0x21, 0xB8, 0x49, 0x18}};
 
-constexpr IID IID_IUnknown_Local = {
-    0x00000000, 0x0000, 0x0000, {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
-constexpr IID IID_IServiceProvider_Local = {
-    0x6D5140C1, 0x7436, 0x11CE, {0x80, 0x34, 0x00, 0xAA, 0x00, 0x60, 0x09, 0xFA}};
-
 constexpr IID IID_IVirtualDesktop = {
     0x3F07F4BE, 0xB107, 0x441A, {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}};
 constexpr IID IID_IVirtualDesktopManagerInternal = {
@@ -98,6 +96,8 @@ constexpr IID IID_IVirtualDesktopNotificationService = {
 
 constexpr UINT WM_APP_RELOAD_SETTINGS = WM_APP + 101;
 constexpr UINT WM_APP_DESKTOPS_CHANGED = WM_APP + 102;
+
+constexpr PCWSTR SYSTEM_DEFAULT_WALLPAPER_TAG = L"__SYSTEM_DEFAULT__";
 
 struct IApplicationView : IUnknown {};
 
@@ -155,7 +155,7 @@ struct IVirtualDesktopNotificationService : IUnknown {
 
 struct ScopedHString {
     HSTRING hstr = nullptr;
-    ScopedHString(const std::wstring& str) {
+    explicit ScopedHString(const std::wstring& str) {
         WindowsCreateString(str.c_str(), static_cast<UINT32>(str.length()), &hstr);
     }
     ~ScopedHString() {
@@ -180,17 +180,11 @@ struct Settings {
     bool restoreOriginalOnUnload = true;
 } g_settings;
 
-struct OriginalWallpaperEntry {
-    GUID desktopId;
-    std::wstring path;
-};
-
-std::vector<OriginalWallpaperEntry> g_originalWallpapers;
 std::vector<std::wstring> g_folderWallpapers;
 
+HANDLE g_hStopEvent = nullptr;
 HANDLE g_hWorkerThread = nullptr;
 DWORD g_workerThreadId = 0;
-HANDLE g_hWorkerReadyEvent = nullptr;
 
 // ---------------------------------------------------------------------------
 // Settings Loader
@@ -248,61 +242,20 @@ void LoadSettings() {
 }
 
 // ---------------------------------------------------------------------------
-// Wallpaper Backup, Resolution & Application
+// Wallpaper Resolution, Application & Restoration
 // ---------------------------------------------------------------------------
 
-void BackupOriginalWallpapers(IVirtualDesktopManagerInternal* pMgr) {
-    if (!g_originalWallpapers.empty()) {
-        return; // Only capture initial state before any mod changes
-    }
-
-    IObjectArray* pDesktops = nullptr;
-    if (FAILED(pMgr->GetDesktops(&pDesktops)) || !pDesktops) {
-        return;
-    }
-
-    UINT count = 0;
-    pDesktops->GetCount(&count);
-
-    for (UINT i = 0; i < count; i++) {
-        IVirtualDesktop* pDesktop = nullptr;
-        if (SUCCEEDED(pDesktops->GetAt(i, IID_IVirtualDesktop, (void**)&pDesktop)) && pDesktop) {
-            GUID id{};
-            pDesktop->GetId(&id);
-
-            HSTRING hPath = nullptr;
-            std::wstring pathStr;
-            if (SUCCEEDED(pDesktop->GetWallpaperPath(&hPath)) && hPath) {
-                PCWSTR raw = WindowsGetStringRawBuffer(hPath, nullptr);
-                if (raw) {
-                    pathStr = raw;
-                }
-                WindowsDeleteString(hPath);
-            }
-
-            g_originalWallpapers.push_back({id, pathStr});
-            pDesktop->Release();
+std::wstring GetDesktopWallpaperPath(IVirtualDesktop* pDesktop) {
+    HSTRING hPath = nullptr;
+    std::wstring path;
+    if (SUCCEEDED(pDesktop->GetWallpaperPath(&hPath)) && hPath) {
+        PCWSTR raw = WindowsGetStringRawBuffer(hPath, nullptr);
+        if (raw) {
+            path = raw;
         }
+        WindowsDeleteString(hPath);
     }
-
-    pDesktops->Release();
-}
-
-void RestoreOriginalWallpapers(IVirtualDesktopManagerInternal* pMgr) {
-    if (!g_settings.restoreOriginalOnUnload || g_originalWallpapers.empty()) {
-        return;
-    }
-
-    Wh_Log(L"Restoring original virtual desktop wallpapers...");
-    for (const auto& entry : g_originalWallpapers) {
-        IVirtualDesktop* pDesktop = nullptr;
-        if (SUCCEEDED(pMgr->FindDesktop(&entry.desktopId, &pDesktop)) && pDesktop) {
-            ScopedHString hPath(entry.path);
-            pMgr->SetDesktopWallpaper(pDesktop, hPath);
-            pDesktop->Release();
-        }
-    }
-    g_originalWallpapers.clear();
+    return path;
 }
 
 std::wstring GetConfiguredWallpaperForDesktop(UINT index) {
@@ -340,10 +293,88 @@ void ApplyAllWallpapers(IVirtualDesktopManagerInternal* pMgr) {
     for (UINT i = 0; i < count; i++) {
         IVirtualDesktop* pDesktop = nullptr;
         if (SUCCEEDED(pDesktops->GetAt(i, IID_IVirtualDesktop, (void**)&pDesktop)) && pDesktop) {
+            GUID id{};
+            pDesktop->GetId(&id);
+            WCHAR guidStr[40] = {0};
+            StringFromGUID2(id, guidStr, ARRAYSIZE(guidStr));
+
             std::wstring targetWallpaper = GetConfiguredWallpaperForDesktop(i);
+            std::wstring currentWallpaper = GetDesktopWallpaperPath(pDesktop);
+
             if (!targetWallpaper.empty()) {
-                ScopedHString hPath(targetWallpaper);
-                pMgr->SetDesktopWallpaper(pDesktop, hPath);
+                // Ensure initial wallpaper is preserved in Windhawk storage before any override
+                if (guidStr[0] != L'\0') {
+                    WCHAR storedVal[MAX_PATH] = {0};
+                    size_t storedLen = Wh_GetStringValue(guidStr, storedVal, ARRAYSIZE(storedVal));
+                    if (storedLen == 0) {
+                        Wh_SetStringValue(
+                            guidStr,
+                            currentWallpaper.empty() ? SYSTEM_DEFAULT_WALLPAPER_TAG : currentWallpaper.c_str());
+                    }
+                }
+
+                // Avoid redundant writes if already applied
+                if (_wcsicmp(currentWallpaper.c_str(), targetWallpaper.c_str()) != 0) {
+                    ScopedHString hPath(targetWallpaper);
+                    pMgr->SetDesktopWallpaper(pDesktop, hPath);
+                }
+            } else {
+                // When an assignment is cleared, restore original background from Windhawk storage
+                if (guidStr[0] != L'\0') {
+                    WCHAR storedVal[MAX_PATH] = {0};
+                    size_t storedLen = Wh_GetStringValue(guidStr, storedVal, ARRAYSIZE(storedVal));
+                    if (storedLen > 0) {
+                        if (wcscmp(storedVal, SYSTEM_DEFAULT_WALLPAPER_TAG) == 0) {
+                            ScopedHString hEmpty(L"");
+                            pMgr->SetDesktopWallpaper(pDesktop, hEmpty);
+                        } else {
+                            ScopedHString hOrig(storedVal);
+                            pMgr->SetDesktopWallpaper(pDesktop, hOrig);
+                        }
+                        Wh_DeleteValue(guidStr);
+                    }
+                }
+            }
+            pDesktop->Release();
+        }
+    }
+
+    pDesktops->Release();
+}
+
+void RestoreOriginalWallpapers(IVirtualDesktopManagerInternal* pMgr) {
+    if (!g_settings.restoreOriginalOnUnload) {
+        return;
+    }
+
+    IObjectArray* pDesktops = nullptr;
+    if (FAILED(pMgr->GetDesktops(&pDesktops)) || !pDesktops) {
+        return;
+    }
+
+    Wh_Log(L"Restoring original virtual desktop wallpapers from Windhawk storage");
+    UINT count = 0;
+    pDesktops->GetCount(&count);
+
+    for (UINT i = 0; i < count; i++) {
+        IVirtualDesktop* pDesktop = nullptr;
+        if (SUCCEEDED(pDesktops->GetAt(i, IID_IVirtualDesktop, (void**)&pDesktop)) && pDesktop) {
+            GUID id{};
+            pDesktop->GetId(&id);
+            WCHAR guidStr[40] = {0};
+            if (StringFromGUID2(id, guidStr, ARRAYSIZE(guidStr)) > 0) {
+                WCHAR storedVal[MAX_PATH] = {0};
+                size_t storedLen = Wh_GetStringValue(guidStr, storedVal, ARRAYSIZE(storedVal));
+                if (storedLen > 0) {
+                    if (wcscmp(storedVal, SYSTEM_DEFAULT_WALLPAPER_TAG) == 0) {
+                        ScopedHString hEmpty(L"");
+                        pMgr->SetDesktopWallpaper(pDesktop, hEmpty);
+                    } else {
+                        ScopedHString hOrig(storedVal);
+                        pMgr->SetDesktopWallpaper(pDesktop, hOrig);
+                    }
+                    Wh_DeleteValue(guidStr);
+                }
             }
             pDesktop->Release();
         }
@@ -362,11 +393,11 @@ private:
     DWORD m_targetThreadId = 0;
 
 public:
-    NotificationSink(DWORD targetThreadId) : m_targetThreadId(targetThreadId) {}
+    explicit NotificationSink(DWORD targetThreadId) : m_targetThreadId(targetThreadId) {}
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppvObject) override {
         if (!ppvObject) return E_POINTER;
-        if (riid == IID_IUnknown_Local || riid == IID_IVirtualDesktopNotification) {
+        if (riid == IID_IUnknown || riid == IID_IVirtualDesktopNotification) {
             *ppvObject = static_cast<IVirtualDesktopNotification*>(this);
             AddRef();
             return S_OK;
@@ -429,7 +460,7 @@ public:
 DWORD WINAPI WorkerThreadProc(LPVOID) {
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-    // Initialize thread message queue before signaling readiness
+    // Initialize thread message queue before any messages can be posted
     MSG msgDummy;
     PeekMessageW(&msgDummy, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
@@ -439,11 +470,16 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     NotificationSink* pSink = nullptr;
     DWORD dwCookie = 0;
 
-    // Retry connection while shell initializes
-    for (int attempts = 0; attempts < 40; attempts++) {
+    // Retry connection without fixed deadline until immersive shell is ready or stop is requested
+    while (true) {
+        if (WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0) {
+            if (SUCCEEDED(hrCo)) CoUninitialize();
+            return 0;
+        }
+
         HRESULT hr = CoCreateInstance(
             CLSID_ImmersiveShell, nullptr, CLSCTX_LOCAL_SERVER,
-            IID_IServiceProvider_Local,
+            IID_IServiceProvider,
             (void**)&pServiceProvider);
 
         if (SUCCEEDED(hr) && pServiceProvider) {
@@ -460,40 +496,43 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
             if (pDesktopManager && pNotificationService) {
                 break;
             }
+
+            // Release partial interfaces to prevent leaks across retry iterations
+            if (pDesktopManager) {
+                pDesktopManager->Release();
+                pDesktopManager = nullptr;
+            }
+            if (pNotificationService) {
+                pNotificationService->Release();
+                pNotificationService = nullptr;
+            }
+            pServiceProvider->Release();
+            pServiceProvider = nullptr;
         }
-        Sleep(250);
+
+        if (WaitForSingleObject(g_hStopEvent, 500) == WAIT_OBJECT_0) {
+            if (SUCCEEDED(hrCo)) CoUninitialize();
+            return 0;
+        }
     }
 
-    if (!pDesktopManager || !pNotificationService) {
-        Wh_Log(L"Could not connect to Windows Virtual Desktop services");
-        if (g_hWorkerReadyEvent) SetEvent(g_hWorkerReadyEvent);
-        if (pServiceProvider) pServiceProvider->Release();
-        if (SUCCEEDED(hrCo)) CoUninitialize();
-        return 1;
-    }
-
-    // 1. Initial backup of unmodified user wallpapers
-    BackupOriginalWallpapers(pDesktopManager);
-
-    // 2. Load settings and preload wallpapers
+    // Initial settings load and wallpaper application
     LoadSettings();
     ApplyAllWallpapers(pDesktopManager);
 
-    // 3. Register notification sink
+    // Register notification sink
     pSink = new NotificationSink(GetCurrentThreadId());
     HRESULT hrReg = pNotificationService->Register(pSink, &dwCookie);
     if (FAILED(hrReg)) {
         Wh_Log(L"Notification register failed: 0x%08X", hrReg);
     }
 
-    // Signal initialization completion to Wh_ModInit
-    if (g_hWorkerReadyEvent) {
-        SetEvent(g_hWorkerReadyEvent);
-    }
-
     // Message loop for thread-safe asynchronous notifications and settings updates
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0) {
+            break;
+        }
         if (msg.message == WM_APP_RELOAD_SETTINGS) {
             LoadSettings();
             ApplyAllWallpapers(pDesktopManager);
@@ -539,19 +578,19 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
 }
 
 bool IsPrimaryExplorerProcess() {
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (argv) {
-        for (int i = 1; i < argc; i++) {
-            if (_wcsicmp(argv[i], L"/factory") == 0 ||
-                _wcsicmp(argv[i], L"/separate") == 0) {
-                LocalFree(argv);
-                return false;
-            }
-        }
-        LocalFree(argv);
+    HWND shell = GetShellWindow();
+    DWORD ownerPid = 0;
+    if (shell) {
+        GetWindowThreadProcessId(shell, &ownerPid);
     }
-    return true;
+    if (ownerPid) {
+        return ownerPid == GetCurrentProcessId();
+    }
+    PCWSTR commandLine = GetCommandLineW();
+    if (!commandLine) {
+        return true;
+    }
+    return !wcsstr(commandLine, L"/factory,") && !wcsstr(commandLine, L"-Embedding");
 }
 
 }  // namespace
@@ -568,24 +607,19 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    g_hWorkerReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_hWorkerReadyEvent) {
-        Wh_Log(L"Failed to create worker ready event");
+    g_hStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hStopEvent) {
+        Wh_Log(L"Failed to create stop event");
         return FALSE;
     }
 
     g_hWorkerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, &g_workerThreadId);
     if (!g_hWorkerThread) {
         Wh_Log(L"Failed to create worker thread: %lu", GetLastError());
-        CloseHandle(g_hWorkerReadyEvent);
-        g_hWorkerReadyEvent = nullptr;
+        CloseHandle(g_hStopEvent);
+        g_hStopEvent = nullptr;
         return FALSE;
     }
-
-    // Wait up to 10 seconds for worker thread initialization
-    WaitForSingleObject(g_hWorkerReadyEvent, 10000);
-    CloseHandle(g_hWorkerReadyEvent);
-    g_hWorkerReadyEvent = nullptr;
 
     return TRUE;
 }
@@ -599,11 +633,20 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing Virtual Desktop Wallpaper Switch");
 
+    if (g_hStopEvent) {
+        SetEvent(g_hStopEvent);
+    }
+
     if (g_hWorkerThread && g_workerThreadId) {
         PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_hWorkerThread, 7000);
+        WaitForSingleObject(g_hWorkerThread, INFINITE);
         CloseHandle(g_hWorkerThread);
         g_hWorkerThread = nullptr;
         g_workerThreadId = 0;
+    }
+
+    if (g_hStopEvent) {
+        CloseHandle(g_hStopEvent);
+        g_hStopEvent = nullptr;
     }
 }
