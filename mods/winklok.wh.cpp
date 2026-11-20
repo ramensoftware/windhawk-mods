@@ -80,7 +80,7 @@ live stopwatch and timer previews right next to the taskbar clock.
 
 ### Notification panel
 * The taskbar bell opens WinKlok's own notification panel instead of the Windows one: notifications grouped by app, relative times, dismiss one, dismiss a whole app, clear all, click to open the app.
-* The icon can be left or right of the date and time, and can be always on, off, or shown only while there are notifications. It shows the number of waiting notifications. A **Do not disturb** button (a bell with a strike through it) next to the settings gear switches Windows' own Do not disturb on and off, in the same *Priority only* mode as Windows: apps on your Windows priority list can still notify you, every other app is silenced. Your priority list is never changed, and the button follows what Windows is really applying (including automatic rules and focus sessions). Notifications slide out when dismissed and the panel scrolls with the same momentum as the main panel.
+* The icon can be left or right of the date and time, and can be always on, off, or shown only while there are notifications. It shows the number of waiting notifications. A **Do not disturb** button (a bell with a strike through it) next to the settings gear switches Windows' own Do not disturb on and off, in the same *Priority only* mode as Windows: apps on your Windows priority list can still notify you, every other app is silenced. Your priority list is never changed, and the button follows what Windows is really applying (including automatic rules and focus sessions). **Important:** this button changes the real Windows *Do not disturb* setting, not a WinKlok-only state. WinKlok does not undo it: if Do not disturb is on when you disable, update or uninstall the mod, it stays on until you switch it off in Windows (*Settings > System > Notifications*) or with this button. This is intentional, so updating the mod never silently turns off a Do not disturb that you asked for. Notifications slide out when dismissed and the panel scrolls with the same momentum as the main panel.
 * In Settings > Notification settings choose **Separate panel** (the bell opens it on its own) or **Above WinKlok**: then the clock opens the WinKlok panel with the notifications stacked above it, sliding in from the right like the native flyout. A chevron in the tab bar folds the WinKlok panel into a slim strip so the notifications extend, and back (remembered).
 * Notifications are read locally from the Windows notification database (read-only copy, nothing leaves your PC). If Windows ever blocks that, the panel says so and offers the native one.
 
@@ -8993,7 +8993,7 @@ namespace cal
             // end
             if (r.hasEnd && r.endT.allDay == e.allDay)
                 e.e = r.endT.v;
-            else if (r.hasEnd)                                                                                                       // mixed date / date-time: trust the end instant
+            else if (r.hasEnd) // mixed date / date-time: trust the end instant
                 e.e = r.endT.allDay ? (e.allDay ? r.endT.v : e.s) : (e.allDay ? FloorDiv(r.endT.v + kDayMs - 1, kDayMs) : r.endT.v); // all-day start: the end is counted in days
             else if (r.hasDur)
                 e.e = e.allDay ? e.s + std::max<long long>(1, r.durMs / kDayMs) : e.s + r.durMs;
@@ -11634,7 +11634,7 @@ namespace cal
             const bool series = !n.rrule.empty();
             const int kind = (google || ed.repeat < 0 || ed.repeat > 4) ? -1 : ed.repeat; // -1: the repetition is left alone
             const int curKind = RepeatKindOf(n.rrule);
-            bool dropOverrides = false; // edited single occurrences of a series whose pattern changed no longer mean anything
+            bool dropOverrides = false;  // edited single occurrences of a series whose pattern changed no longer mean anything
             std::vector<Event> added;
             if (!google && ed.thisOnly && series)
             { // only this occurrence: it leaves the series (the series skips it) and becomes an event of its own
@@ -15162,11 +15162,11 @@ namespace ui
         // panelScrollStarted != 0 marks "gliding".
         float panelScroll = 0.f, panelScrollFrom = 0.f, panelScrollTarget = 0.f;
         ULONGLONG panelScrollStarted = 0;
-        Smooth lapSm;          // stopwatch laps, in pixels
-        Smooth prevSm;         // notes preview, in pixels
-        Smooth edSm;           // notes body / event description, in text lines
+        Smooth lapSm;  // stopwatch laps, in pixels
+        Smooth prevSm; // notes preview, in pixels
+        Smooth edSm;   // notes body / event description, in text lines
         int edScrollSlot = -1; // which edit control currently owns edSm; prevents a stale glide crossing editors
-        Smooth calSm;          // calendar: vertical offset of the visible grid from the committed month/year/decade
+        Smooth calSm;  // calendar: vertical offset of the visible grid from the committed month/year/decade
         ULONGLONG calLastInput = 0, lastStep = 0;
         bool calDiscrete = false;
         float panVelocity = 0.f; // px/ms, for touch and pen momentum
@@ -17159,8 +17159,7 @@ namespace ui
         static const wchar_t *RepeatName(int k)
         {
             static const wchar_t *n[] = {L"None", L"Daily", L"Weekly", L"Monthly", L"Yearly", L"Custom"};
-            return n[k < 0 ? 0 : k > 5 ? 5
-                                       : k];
+            return n[k < 0 ? 0 : k > 5 ? 5 : k];
         }
         static bool EvLocal() { return cal::g_mode.load() != 1; }
         ULONGLONG evDelArmedUntil = 0, evErrUntil = 0;
@@ -18237,7 +18236,7 @@ namespace ui
                 // ---- details of the opened calendar
                 float h = 44.f + 34.f; // swatches + first button row
                 const bool def = c.id == cal::kDefaultId, regular = !google && !def;
-                const bool repRow = !google && !c.imported;       // local calendars that can receive events
+                const bool repRow = !google && !c.imported; // local calendars that can receive events
                 const bool gOwner = google && c.role == L"owner"; // Google calendars you own can be deleted (the primary one cleared)
                 if (!google)
                     h += 34.f + (regular || c.imported ? 40.f : 0.f) + (repRow ? 52.f : 0.f);
@@ -19035,7 +19034,7 @@ namespace ui
             Text(std::to_wstring(noteZoom) + L"%", RF(204, 50, 42, 32), 11.5f, 600, pal.sub, 1, 1);
             FlatIcon(RF(246, 51, 26, 30), ID_NOTE_ZOOM, 1, L"\uE76C", 11.f);
             FlatIcon(RF(272, 51, 22, 30), ID_NOTE_EXPORT, 0, L"\uE74E", 12.f); // export as .md
-            FlatIcon(RF(294, 51, 30, 30), ID_NOTE_COPY, 0, L"\uE8C8", 13.f);   // copy the body text (not the title)
+            FlatIcon(RF(294, 51, 30, 30), ID_NOTE_COPY, 0, L"\uE8C8", 13.f); // copy the body text (not the title)
             FlatIcon(RF(334, 51, 30, 30), ID_NOTE_EDIT, 0, L"\uE70F", 13.f);
 
             const float cardH = panelH - 96.f;
@@ -19732,7 +19731,10 @@ namespace ui
                 for (const Note &n : nn)
                     kept = kept || n.id == o.id;
                 if (!kept)
+                {
                     td::PutBig(NoteKey(o.id).c_str(), L"");
+                    Wh_DeleteValue((NoteKey(o.id) + L"_n").c_str());
+                }
             }
             notes = std::move(nn);
             nextNoteId = std::max(nextNoteId, maxN + 1);
