@@ -15,7 +15,7 @@
 /*
 # Coin & Stock Monitor
 
-![Taskbar screenshot](https://raw.githubusercontent.com/jayll1303/coin-stock-monitor/main/docs/screenshot.png)
+![Taskbar screenshot](https://raw.githubusercontent.com/jayll1303/coin-stock-monitor/5f24a58683a10b0ae59f77063e4406158b037102/docs/screenshot.png)
 
 Shows live stock and crypto prices on the left side of the taskbar.
 
