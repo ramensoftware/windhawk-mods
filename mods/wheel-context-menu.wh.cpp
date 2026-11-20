@@ -18,6 +18,8 @@ Shows classic (Win32) context menus as a half wheel around the cursor. The
 item on the centre line, or the one under the cursor, is highlighted; items
 fade out toward the top and bottom of the arc.
 
+![Wheel Context Menu in use](https://raw.githubusercontent.com/JohhannasReyn/Wheel-Context-Menu/main/images/demo.gif)
+
 ## Using it
 
 **Mouse**
