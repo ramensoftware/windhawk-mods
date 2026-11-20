@@ -194,9 +194,12 @@ Peek, to learn which window is being peeked.
   decides: maximized (or minimized from maximized) on a monitor, that
   monitor keeps its frame; every other monitor rests. The work area stays
   reserved either way.
-* **Task View** (Win+Tab) opens over the frame, and the taskbar takes the
-  look Windows gives it there; the frame is left in place underneath, so
-  nothing has to come back when it closes.
+* **Task View** (Win+Tab) opens over the frame, which is left in place
+  underneath, so it has nothing to come back from when Task View closes.
+  The taskbar keeps its look over Task View, without its monitor corners -
+  or, with *Hide the frame without a maximized window* on and *Transparent
+  taskbar when nothing is maximized* off, takes its own look, as on a
+  monitor where nothing is maximized.
 * **Full-screen apps** – the frame hides on a monitor while a full-screen
   window (game, video, F11 browser) is showing there, and comes back
   afterwards. When the shell takes the taskbar off the top of the z-order
@@ -2741,9 +2744,14 @@ struct TaskbarWants {
     // border line, with the monitor-corner ears - while its frame rests (see
     // RestOnTaskbarThread); our fill and stroke come back with a recolor.
     bool fillResting = false;
-    // Task View is open: Windows gives the taskbar its Task View look, and
-    // the monitor-corner ears are off with it (see TaskViewOnTaskbarThread).
+    // Task View is open: the monitor-corner ears are off (see
+    // TaskViewOnTaskbarThread).
     bool taskView = false;
+    // Task View gave the taskbar its stock look (fillResting) - "Hide the
+    // frame without a maximized window" on, "Transparent taskbar when
+    // nothing is maximized" off, the frame not resting: our look comes back
+    // when Task View closes.
+    bool taskViewStock = false;
     // The frame rests (RestOnTaskbarThread until the recolor that ends it):
     // the ears and bezel lines stay up then, unlike while the fill is held
     // back for a move.
@@ -7108,14 +7116,14 @@ HWND FindTaskViewWindow() {
 // taskbar's monitor-corner ears.
 void RequestTaskbarTaskView(HWND taskbar, bool open);
 
-// Task View lies above the frame and covers it, and Windows turns the
-// taskbar's background see-through over it by itself: the frame is left as
-// it is while it is open, and so is the taskbar but for its corner ears, so
-// there is nothing to put back - nothing to show late - when it closes. It
-// also keeps "Hide the frame without a maximized window" from acting (it
-// hides the real windows, showing copies) and holds the adaptive color,
-// while it is open and for a moment after (TaskViewHoldsWindows). Called
-// by both before they look.
+// Task View lies above the frame and covers it: the frame is left as it is
+// while it is open, so it has nothing to come back from - nothing to show
+// late - when it closes. The taskbar loses its corner ears meanwhile, and
+// takes its own look where the frame would rest with that look (see
+// TaskViewOnTaskbarThread). Task View also keeps "Hide the frame without a
+// maximized window" from acting (it hides the real windows, showing copies)
+// and holds the adaptive color, while it is open and for a moment after
+// (TaskViewHoldsWindows). Called by both before they look.
 void TrackTaskView(ULONGLONG now) {
     HWND taskViewWnd = FindTaskViewWindow();
     bool open = taskViewWnd != nullptr;
@@ -8030,15 +8038,19 @@ void ApplyRecolorsInRenderingTick() {
         if (it != g_wants->end()) {
             TaskbarWants& wants = it->second;
             wants.fillSuspended = false;
-            if (wants.fillResting && wants.strokeHidden) {
-                StrokeOp op{recolor.taskbar, false, false};
-                HideStrokeOnTaskbarThread(&op);  // the border line goes with the stock look
-            }
-            wants.fillResting = false;
             wants.resting = false;
-            if (wants.fill) {
-                FillOp op{recolor.taskbar, wants.fillArgb, false, false};
-                ApplyFillOnTaskbarThread(&op);
+            // Task View's stock look stays until it closes (which puts ours
+            // back, the color included).
+            if (!wants.taskViewStock) {
+                if (wants.fillResting && wants.strokeHidden) {
+                    StrokeOp op{recolor.taskbar, false, false};
+                    HideStrokeOnTaskbarThread(&op);  // the border line goes with the stock look
+                }
+                wants.fillResting = false;
+                if (wants.fill) {
+                    FillOp op{recolor.taskbar, wants.fillArgb, false, false};
+                    ApplyFillOnTaskbarThread(&op);
+                }
             }
             SetEarsHidden(recolor.taskbar, wants.taskView);
         }
@@ -8104,6 +8116,22 @@ void RequestTaskbarRecolor(HWND taskbar, UINT serial) {
     });
 }
 
+// Taskbar thread: the taskbar's own background and border line back (our
+// brush and the stroke's opacity stay recorded, for whatever brings our look
+// back). The caller sets fillResting, so nothing re-applies them meanwhile.
+void StockLookOnTaskbarThread(HWND taskbar) {
+    if (auto fill = g_fills->find(taskbar); fill != g_fills->end()) {
+        RestoreFillOnTaskbarThread(taskbar, fill->second, false);  // logged by the UI thread
+    }
+    if (auto stroke = g_strokes->find(taskbar);
+        stroke != g_strokes->end() && stroke->second.hidden) {
+        if (auto element = stroke->second.element.get()) {
+            element.Opacity(stroke->second.originalOpacity);
+        }
+        stroke->second.hidden = false;
+    }
+}
+
 // Taskbar thread: the frame rests (no maximized window on its monitor).
 // Transparent: our fill at alpha 0 and the border line hidden. Stock: the
 // taskbar's own background and border line back (our brush and the stroke's
@@ -8134,16 +8162,7 @@ void RestOnTaskbarThread(HWND taskbar, bool transparent) try {
             HideStrokeOnTaskbarThread(&op);
         }
     } else {
-        if (auto fill = g_fills->find(taskbar); fill != g_fills->end()) {
-            RestoreFillOnTaskbarThread(taskbar, fill->second, false);  // logged by the UI thread
-        }
-        if (auto stroke = g_strokes->find(taskbar);
-            stroke != g_strokes->end() && stroke->second.hidden) {
-            if (auto element = stroke->second.element.get()) {
-                element.Opacity(stroke->second.originalOpacity);
-            }
-            stroke->second.hidden = false;
-        }
+        StockLookOnTaskbarThread(taskbar);
     }
     SetEarsHidden(taskbar, wants.taskView);
 } catch (...) {
@@ -8174,12 +8193,15 @@ void RequestTaskbarRest(HWND taskbar) {
                        [taskbar, transparent] { RestOnTaskbarThread(taskbar, transparent); });
 }
 
-// Taskbar thread: Task View opened or closed. Windows turns the taskbar's
-// background see-through over Task View by itself; the monitor-corner ears
-// (and bezel lines) go with it, and come back when it closes unless the
-// taskbar's fill is held back for a move then (the recolor that ends that
-// shows them). A rest keeps them up.
-void TaskViewOnTaskbarThread(HWND taskbar, bool open) try {
+// Taskbar thread: Task View opened or closed. The frame stays under Task
+// View, and the taskbar keeps its look over it - but for `stock` ("Hide the
+// frame without a maximized window" on, "Transparent taskbar when nothing
+// is maximized" off), where it takes its own look, as on a monitor whose
+// frame rests, and gets ours back when Task View closes. The monitor-corner
+// ears (and bezel lines) are off while it is open, and come back when it
+// closes unless the taskbar's fill is held back for a move then (the
+// recolor that ends that shows them). A rest keeps them up.
+void TaskViewOnTaskbarThread(HWND taskbar, bool open, bool stock) try {
     if (g_unloading || !g_wants) {
         return;
     }
@@ -8189,29 +8211,53 @@ void TaskViewOnTaskbarThread(HWND taskbar, bool open) try {
     }
     TaskbarWants& wants = it->second;
     wants.taskView = open;
+    if (open && stock && !wants.fillResting) {
+        wants.taskViewStock = true;
+        wants.fillResting = true;
+        StockLookOnTaskbarThread(taskbar);
+    } else if (!open && wants.taskViewStock) {
+        wants.taskViewStock = false;
+        wants.fillResting = false;
+        if (wants.strokeHidden) {
+            StrokeOp op{taskbar, false, false};
+            HideStrokeOnTaskbarThread(&op);
+        }
+        if (wants.fill) {
+            FillOp op{taskbar, wants.fillSuspended ? (wants.fillArgb & 0x00FFFFFF) : wants.fillArgb,
+                      false, false};
+            ApplyFillOnTaskbarThread(&op);
+        }
+    }
     SetEarsHidden(taskbar, open || (wants.fillSuspended && !wants.resting));
 } catch (...) {
     Wh_Log(L"TaskViewOnTaskbarThread: exception %08X", winrt::to_hresult().value);
 }
 void WINAPI TaskViewOpenOnTaskbarThread(void* param) {
-    TaskViewOnTaskbarThread(static_cast<HWND>(param), true);
+    TaskViewOnTaskbarThread(static_cast<HWND>(param), true, false);
+}
+void WINAPI TaskViewOpenStockOnTaskbarThread(void* param) {
+    TaskViewOnTaskbarThread(static_cast<HWND>(param), true, true);
 }
 void WINAPI TaskViewClosedOnTaskbarThread(void* param) {
-    TaskViewOnTaskbarThread(static_cast<HWND>(param), false);
+    TaskViewOnTaskbarThread(static_cast<HWND>(param), false, false);
 }
 
 // UI thread: tells a taskbar Task View opened or closed - sent with a short
-// wait, like RequestTaskbarRest, so the ears change as Task View does.
+// wait, like RequestTaskbarRest, so its look changes as Task View does.
 void RequestTaskbarTaskView(HWND taskbar, bool open) {
     if (!g_taskbarXamlAvailable) {
         return;
     }
-    if (RunFromWindowThreadTimeout(
-            taskbar, open ? TaskViewOpenOnTaskbarThread : TaskViewClosedOnTaskbarThread, taskbar,
-            30)) {
+    bool stock =
+        open && g_settings.hideWithoutMaximized && !g_settings.transparentWithoutMaximized;
+    RunFromWindowThreadProc_t proc = !open  ? TaskViewClosedOnTaskbarThread
+                                     : stock ? TaskViewOpenStockOnTaskbarThread
+                                             : TaskViewOpenOnTaskbarThread;
+    if (RunFromWindowThreadTimeout(taskbar, proc, taskbar, 30)) {
         return;
     }
-    PostToWindowThread(taskbar, [taskbar, open] { TaskViewOnTaskbarThread(taskbar, open); });
+    PostToWindowThread(taskbar,
+                       [taskbar, open, stock] { TaskViewOnTaskbarThread(taskbar, open, stock); });
 }
 
 // Rendering tick: for every taskbar with a rest waiting, its resting look and
