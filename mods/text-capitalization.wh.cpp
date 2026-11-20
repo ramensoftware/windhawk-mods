@@ -1507,6 +1507,7 @@ void DrawPicker(HWND hwnd) {
             RECT checkRect = {row.right - DpiScale(37), row.top + DpiScale(3), row.right - DpiScale(10), row.bottom - DpiScale(3)};
             DrawTextW(memory, L"\u2713", -1, &checkRect,
                       DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        }
     }
 
     BitBlt(target, 0, 0, width, height, memory, 0, 0, SRCCOPY);
