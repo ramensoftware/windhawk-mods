@@ -2,7 +2,7 @@
 // @id              winklok
 // @name            WinKlok
 // @description     A multifunctional notification center replacement mod for Windows 11. Bringing your calendar (Local + Google calendar support), tasks, notes (Rich text & LaTeX support), and essential time utilities together in one place.
-// @version         1.2.0
+// @version         1.3.0
 // @author          Shifting Whistler
 // @github          https://github.com/shifting-whistler
 // @homepage        https://github.com/shifting-whistler
@@ -23,7 +23,7 @@ live stopwatch and timer previews right next to the taskbar clock.
 
 ---
 
-![Desktop](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/desktopv1.2.0.png)
+![Desktop](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/desktopv1.3.0.png)
 
 ---
 
@@ -43,9 +43,9 @@ live stopwatch and timer previews right next to the taskbar clock.
 
 ---
 
-![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowfirst.png)
+![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowone.png)
 ![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowtwo.png)
-![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowthree.png)
+![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowthird.png)
 ---
 
 ## Features
@@ -53,9 +53,10 @@ live stopwatch and timer previews right next to the taskbar clock.
 ### Calendar
 * Month, year and decade views, with smooth vertical month scrolling like the Windows calendar.
 * Today and the selected date are marked with your accent colour.
-* **Events**: a thin ring of coloured segments around every date that has events, a hover card (up to five events, then "+N more"), and a double-click editor with all-day, start/end, title, description, location and colour.
+* **Events**: a thin ring of coloured segments around every date that has events, a hover card (up to five events, then "+N more"), and a double-click editor with all-day, start/end, title, description, location, colour and **Repeat** (in Local mode: none, daily, weekly, monthly or yearly, kept at the same wall-clock time across daylight saving). When you edit a repeating event, choose **This event** (only that occurrence, which can get a repetition of its own) or **All events** (the whole series; set Repeat to None to stop repeating) at the top of the editor. Each local calendar (Settings > Calendar settings) can make new events repeat yearly by default, handy for birthdays and anniversaries.
 * **Local mode**: any number of local calendars (with a protected *WinKlok (default)* calendar), import of Google Takeout ZIPs, `.ics` files and iCalendar links (duplicate-safe, edits are kept), and `.ics` export.
 * **Google Calendar Sync mode** (Settings > Calendar settings): two-way sync with your own Google Cloud OAuth Desktop client. Local and Google data are kept completely separate. Calendars you own can be deleted (the primary one can be emptied) from the same page; this needs the full `calendar` scope, see the Help section there.
+* A **+** button on the date row adds an event for the selected day, a target button next to the month arrows jumps to today, and an optional clock with seconds can be shown at the top (Settings > General).
 * Week numbers sit in a narrow column on the left and can be switched off in Calendar settings. The first day of the week and the first week of the year follow your Windows regional settings (no hard-coded ISO or Sunday rules).
 
 ### Stopwatch
@@ -64,7 +65,7 @@ live stopwatch and timer previews right next to the taskbar clock.
 
 ### Timer
 * Hours / minutes / seconds pickers, optional timer names and one-click presets you can save and remove.
-* Run several timers at once. The most recently touched timer is shown beside the clock.
+* Run several timers at once. The most recently touched timer is shown beside the clock. When a timer ends, its popup offers **+1m** / **+5m** to keep going.
 
 ### Alarm
 * Repeat on any days, custom label, snooze length and one of nine built-in sounds with live audition.
@@ -79,7 +80,7 @@ live stopwatch and timer previews right next to the taskbar clock.
 
 ### Notification panel
 * The taskbar bell opens WinKlok's own notification panel instead of the Windows one: notifications grouped by app, relative times, dismiss one, dismiss a whole app, clear all, click to open the app.
-* The icon can be left or right of the date and time, and can be always on, off, or shown only while there are notifications.
+* The icon can be left or right of the date and time, and can be always on, off, or shown only while there are notifications. It shows the number of waiting notifications. A **Do not disturb** button (a bell with a strike through it) next to the settings gear switches Windows' own Do not disturb on and off, in the same *Priority only* mode as Windows: apps on your Windows priority list can still notify you, every other app is silenced. Your priority list is never changed, and the button follows what Windows is really applying (including automatic rules and focus sessions). Notifications slide out when dismissed and the panel scrolls with the same momentum as the main panel.
 * In Settings > Notification settings choose **Separate panel** (the bell opens it on its own) or **Above WinKlok**: then the clock opens the WinKlok panel with the notifications stacked above it, sliding in from the right like the native flyout. A chevron in the tab bar folds the WinKlok panel into a slim strip so the notifications extend, and back (remembered).
 * Notifications are read locally from the Windows notification database (read-only copy, nothing leaves your PC). If Windows ever blocks that, the panel says so and offers the native one.
 
@@ -88,12 +89,13 @@ live stopwatch and timer previews right next to the taskbar clock.
 * **Paste from ChatGPT, Gemini, Google and the web and keep the structure**: headings, lists,
   tables, block quotes, code blocks, links and equations are converted to Markdown as you paste.
 * Links in the preview are clickable (only the link itself), plain URLs are detected automatically.
-* One-tap **Copy** button for the whole note body (the title is not included), adjustable text size.
+* One-tap **Copy** button for the whole note body (the title is not included), adjustable text size, **search** (Ctrl+F) over the note list and **Export** of a note as a .md file.
 
 ### Settings
 * Settings is split into **General**, **Notification** and **Calendar** pages.
-* General: taskbar previews, which tabs are shown (drag them to reorder), preview layout, 12/24-hour time (applied everywhere), panel material (acrylic or simple), default timer / alarm sounds and the **panel horizontal position**.
+* General: taskbar previews, which tabs are shown (drag them to reorder), preview layout, 12/24-hour time (applied everywhere), clock with seconds, panel material (acrylic or simple), default timer / alarm sounds and the **panel horizontal position**.
 * The panel opens in the corner next to the clock (below the taskbar when the taskbar is at the top). The position slider moves it along the screen in single-pixel steps, up to the left edge (useful on ultrawide screens); the notification stack then rises from the taskbar instead of sliding in from the edge.
+* **Backup and restore** of your notes, tasks, alarms, timer presets and local calendars in one file (Settings > General). Google data and sign-in details are never included.
 * **Sync time now** (Windows asks for administrator permission whenever it is needed).
 * A compact **About** card with the version, developer, project links and a bug / feature request button.
 
@@ -215,7 +217,7 @@ WinKlok is free and open source software released under the **GNU General Public
 
 // ---- product information ---------------------------------------------------
 #define WK_NAME L"WinKlok"
-#define WK_VERSION L"1.2.0"
+#define WK_VERSION L"1.3.0"
 #define WK_DEVELOPER L"Shifting Whistler"
 #define WK_COPYRIGHT L"\u00A9 2026 Shifting Whistler"
 #define WK_LICENSE L"GPL-3.0-or-later"
@@ -273,6 +275,7 @@ namespace td
         std::atomic<int> bellSide{0};                    // 0 = left of the date and time, 1 = right of it
         std::atomic<int> panelX{0};                      // screen pixels from the right edge (0 = default corner)
         std::atomic<int> showWeeks{1};                   // calendar week-number column
+        std::atomic<int> showSeconds{0};                 // clock with seconds at the top of the Calendar page
         std::atomic<bool> bellUnset{false};              // never chosen yet: the first run copies the state of the Windows bell
         std::atomic<int> hour24{-1};                     // -1 = follow Windows (default), 0 = 12 h, 1 = 24 h
         std::atomic<int> acrylic{1};                     // 1 = acrylic blur when Windows transparency is on, 0 = simple transparency
@@ -300,6 +303,7 @@ namespace td
             bellSide = Wh_GetIntValue(L"bellSide", 0) != 0 ? 1 : 0;
             panelX = std::min(20000, std::max(0, Wh_GetIntValue(L"panelX", 0)));
             showWeeks = Wh_GetIntValue(L"showWeeks", 1) != 0 ? 1 : 0;
+            showSeconds = Wh_GetIntValue(L"showSeconds", 0) != 0 ? 1 : 0;
             hour24 = Wh_GetIntValue(L"hour24", -1);
             acrylic = Wh_GetIntValue(L"acrylic", 1);
             timerSound = std::min(kSoundCount - 1, std::max(0, Wh_GetIntValue(L"timerSound", kTimerSound)));
@@ -318,6 +322,7 @@ namespace td
             Wh_SetIntValue(L"bellSide", bellSide);
             Wh_SetIntValue(L"panelX", panelX);
             Wh_SetIntValue(L"showWeeks", showWeeks);
+            Wh_SetIntValue(L"showSeconds", showSeconds);
             Wh_SetIntValue(L"hour24", hour24);
             Wh_SetIntValue(L"acrylic", acrylic);
             Wh_SetIntValue(L"timerSound", timerSound);
@@ -552,8 +557,8 @@ namespace td
         for (size_t s = 0; s < v.size(); ++n)
         {
             size_t e = std::min(v.size(), s + kChunk);
-            while (e < v.size() && e > s + 1 && (iswspace(v[e - 1]) || iswspace(v[e])))
-                --e; // INI may trim edge spaces
+            while (e < v.size() && e > s + kChunk / 2 && (iswspace(v[e - 1]) || iswspace(v[e])))
+                --e; // INI may trim edge spaces (a whitespace run longer than half a chunk is cut where it is)
             Wh_SetStringValue((k + L"_" + std::to_wstring(n)).c_str(), v.substr(s, e - s).c_str());
             s = e;
         }
@@ -648,6 +653,15 @@ namespace td
         return b;
     }
 
+    // Same with seconds (the optional clock at the top of the Calendar page).
+    static std::wstring FmtTimeSec(const SYSTEMTIME &t)
+    {
+        wchar_t b[48] = {};
+        if (!GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &t, g_set.Use24() ? L"HH:mm:ss" : L"h:mm:ss tt", b, 48))
+            return Fmt(L"%02d:%02d:%02d", t.wHour, t.wMinute, t.wSecond);
+        return b;
+    }
+
     // ---- data -------------------------------------------------------------------
     struct TimerItem
     {
@@ -686,6 +700,7 @@ namespace td
         std::wstring title, sub;
         int snoozeMin = 10;
         int sound = kTimerSound;
+        std::wstring name; // a timer's own name (empty when it had none), for the +1 / +5 minute buttons of its popup
     };
 
     // An alarm or timer that came due while the device (or WinKlok) was off or asleep.
@@ -1006,6 +1021,53 @@ namespace td
             SaveL();
         }
 
+        // ---------------- backup / restore (alarms and timer presets, in the same line format as the saved state) ----------------
+        std::wstring BackupLines()
+        {
+            std::lock_guard<std::mutex> g(m);
+            std::wstring o;
+            for (auto &p : presets)
+                o += L"TP|" + Esc(p.name) + L"|" + std::to_wstring(p.secs) + L"\n";
+            for (auto &a : alarms)
+                o += L"AL|" + std::to_wstring(a.id) + L"|" + std::to_wstring(a.hh) + L"|" + std::to_wstring(a.mm) + L"|" +
+                     std::to_wstring(a.days) + L"|" + (a.enabled ? L"1" : L"0") + L"|" + Esc(a.label) + L"|" +
+                     std::to_wstring(a.snoozeMin) + L"|" + std::to_wstring(a.sound) + L"\n";
+            return o;
+        }
+        void RestoreLines(const std::vector<std::wstring> &lines)
+        {
+            std::lock_guard<std::mutex> g(m);
+            presets.clear();
+            alarms.clear();
+            const long long wall = WallMs();
+            int maxId = 0;
+            for (const std::wstring &ln : lines)
+            {
+                auto f = Split(ln, L'|');
+                if (f.size() >= 3 && f[0] == L"TP" && presets.size() < 40)
+                    presets.push_back({ClampName(Unesc(f[1])), std::max(1LL, ToLL(f[2]))});
+                else if (f.size() >= 9 && f[0] == L"AL" && alarms.size() < 40)
+                {
+                    AlarmItem a;
+                    a.id = (int)ToLL(f[1]);
+                    a.hh = (int)std::min(23LL, std::max(0LL, ToLL(f[2])));
+                    a.mm = (int)std::min(59LL, std::max(0LL, ToLL(f[3])));
+                    a.days = (unsigned)(ToLL(f[4]) & 0x7F);
+                    a.enabled = f[5] == L"1";
+                    a.label = ClampName(Unesc(f[6]));
+                    a.snoozeMin = (int)std::min(60LL, std::max(1LL, ToLL(f[7], 10)));
+                    a.sound = (int)std::min((long long)kSoundCount - 1, std::max(0LL, ToLL(f[8], kDefaultAlarmSound)));
+                    a.nextFire = a.enabled ? NextFire(a.hh, a.mm, a.days, wall) : 0;
+                    maxId = std::max(maxId, a.id);
+                    alarms.push_back(a);
+                }
+            }
+            nextId = std::max(nextId, maxId + 1);
+            if (presets.empty())
+                SeedPresetsL();
+            SaveL();
+        }
+
         // ---------------- alarms ----------------
         int AlarmSave(AlarmItem a)
         {
@@ -1153,6 +1215,7 @@ namespace td
                     RingEvent e;
                     e.id = t.id;
                     e.title = t.name.empty() ? L"Timer" : t.name;
+                    e.name = t.name;
                     e.sub = L"Time's up  (" + FmtDuration(t.totalMs) + L")";
                     e.sound = g_set.timerSound.load();
                     ev.push_back(e);
@@ -1358,7 +1421,7 @@ namespace tb
         // Every tooltip attached to the native clock (and its ancestors) is removed and remembered here.
         std::vector<std::pair<wux::DependencyObject, wf::IInspectable>> tooltips;
         bool injected = false, bellHidden = false, seenLoaded = false;
-        int injectFailures = 0, layoutKey = -1;
+        int injectFailures = 0, layoutKey = -1, badgeShown = -1;
         // Time stamps (ms, GetTickCount64) so the periodic jobs keep their cadence whatever the tick interval is.
         ULONGLONG unloadedSinceMs = 0, lastTipMs = 0, lastMeasureMs = 0, lastBrushMs = 0;
         double shift = 0, nativeH = 0, nativeDy = 0;
@@ -1390,6 +1453,7 @@ namespace tb
             grid = nullptr;
             injected = false;
             layoutKey = -1;
+            badgeShown = -1;
             nativeH = nativeDy = 0;
         }
     };
@@ -1902,8 +1966,12 @@ namespace tb
       </StackPanel>
       <Border x:Name="WinklokBell" Width="26" Height="36" CornerRadius="5" Background="Transparent"
               VerticalAlignment="Center" Visibility="Collapsed">
-        <TextBlock x:Name="WinklokBellGlyph" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="15"
-                   Text="&#xEA8F;" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        <Grid>
+          <TextBlock x:Name="WinklokBellGlyph" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="15"
+                     Text="&#xEA8F;" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          <TextBlock x:Name="WinklokBellBadge" FontSize="9" FontWeight="Bold" Foreground="#FFFF6B6B" Visibility="Collapsed"
+                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,0,0"/>
+        </Grid>
       </Border>
     </StackPanel>
   </Viewbox>
@@ -1924,8 +1992,12 @@ namespace tb
          x:Name="WinklokBellRScale" Grid.RowSpan="99" Grid.ColumnSpan="99" Stretch="Uniform" Height="32"
          HorizontalAlignment="Right" VerticalAlignment="Center" Visibility="Collapsed">
   <Border x:Name="WinklokBellRBtn" Width="26" Height="36" CornerRadius="5" Background="Transparent">
-    <TextBlock x:Name="WinklokBellRGlyph" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="15"
-               Text="&#xEA8F;" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+    <Grid>
+      <TextBlock x:Name="WinklokBellRGlyph" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="15"
+                 Text="&#xEA8F;" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+      <TextBlock x:Name="WinklokBellBadge" FontSize="9" FontWeight="Bold" Foreground="#FFFF6B6B" Visibility="Collapsed"
+                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,0,0"/>
+    </Grid>
   </Border>
 </Viewbox>
 )XAML";
@@ -2166,6 +2238,19 @@ namespace tb
                 en.tmCGlyph.Text(tmG);
             }
 
+            const int nfc = std::min(99, td::g_nfCount.load()); // number of waiting notifications on the bell
+            if (nfc != en.badgeShown || key != en.layoutKey)
+            {
+                en.badgeShown = nfc;
+                const wux::FrameworkElement roots[2] = {en.bell, en.bellR};
+                for (const wux::FrameworkElement &root : roots)
+                    if (root)
+                    {
+                        const auto badge = root.FindName(L"WinklokBellBadge").as<wuxc::TextBlock>();
+                        badge.Text(nfc > 0 ? winrt::hstring(std::to_wstring(nfc)) : winrt::hstring());
+                        badge.Visibility(nfc > 0 ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+                    }
+            }
             if (key != en.layoutKey)
             {
                 en.layoutKey = key;
@@ -2853,6 +2938,16 @@ namespace ui
     static ULONGLONG MonoMs() { return (ULONGLONG)MonoMsD(); }
 
     static ID2D1Factory *g_d2d = nullptr;
+    // Segment arcs of the date rings: one set per segment count, built once around the origin and drawn translated.
+    static std::map<int, std::vector<ID2D1PathGeometry *>> g_ringGeo;
+    static void ReleaseRingGeo()
+    {
+        for (auto &kv : g_ringGeo)
+            for (ID2D1PathGeometry *g : kv.second)
+                if (g)
+                    g->Release();
+        g_ringGeo.clear();
+    }
     static IDWriteFactory *g_dw = nullptr;
     static std::wstring g_uiFont = L"Segoe UI";
     static std::wstring g_iconFont = L"Segoe MDL2 Assets";
@@ -3362,8 +3457,8 @@ namespace ui
                 else if (g_waitClock)
                     stable = stable < 8 ? 0 : stable;
                 HWND h = g_panelWnd.load();
-                if (h && !g_pending.exchange(true))
-                    PostMessageW(h, WM_UI_FRAME, 0, 0);
+                if (h && !g_pending.exchange(true) && !PostMessageW(h, WM_UI_FRAME, 0, 0))
+                    g_pending.store(false); // a failed post must not leave the clock waiting for a frame that never comes
             }
             return 0;
         }
@@ -3515,6 +3610,15 @@ namespace ui
         const RECT edge{mi.rcMonitor.right, mi.rcMonitor.top, mi.rcMonitor.right + 1, mi.rcMonitor.bottom};
         return MonitorFromRect(&edge, MONITOR_DEFAULTTONULL) != nullptr;
     }
+    // A bar belongs to the monitor when it overlaps it vertically and Windows places it there: a bar of a monitor that sits
+    // above or below (stacked layouts) must not count. A fully hidden auto-hide bar has no monitor and passes on its rectangle.
+    static bool BarOnMonitor(HWND t, const RECT &r, HMONITOR mon, const MONITORINFO &mi)
+    {
+        if (r.bottom <= mi.rcMonitor.top || r.top >= mi.rcMonitor.bottom)
+            return false;
+        const HMONITOR bm = MonitorFromWindow(t, MONITOR_DEFAULTTONULL);
+        return !bm || !mon || bm == mon;
+    }
     static int TaskbarBandTop(HMONITOR mon, const MONITORINFO &mi, float scale)
     {
         const int monW = mi.rcMonitor.right - mi.rcMonitor.left, monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
@@ -3526,7 +3630,7 @@ namespace ui
                 return;
             const int th = r.bottom - r.top;
             const int overlap = std::min<int>(r.right, mi.rcMonitor.right) - std::max<int>(r.left, mi.rcMonitor.left);
-            if (th < 24 || th > monH / 3 || overlap < monW / 2) // not a bar of this monitor
+            if (th < 24 || th > monH / 3 || overlap < monW / 2 || !BarOnMonitor(t, r, mon, mi)) // not a bar of this monitor
                 return;
             if (r.bottom < mi.rcMonitor.bottom - 2 || r.top < mi.rcMonitor.top + monH / 2) // not bottom-docked
                 return;
@@ -3542,13 +3646,12 @@ namespace ui
             if ((SHAppBarMessage(ABM_GETSTATE, &abd) & ABS_AUTOHIDE) != 0 && mi.rcWork.bottom >= mi.rcMonitor.bottom - 2)
                 bandH = (int)std::lround(48.f * scale);
         }
-        (void)mon;
         const int top = bandH > 0 ? mi.rcMonitor.bottom - bandH : mi.rcWork.bottom;
         return std::min<int>(top, mi.rcWork.bottom);
     }
 
     // True when the taskbar of this monitor is docked at the top; lineBelow is then the screen y flyouts rest below.
-    static bool TaskbarOnTop(const MONITORINFO &mi, int &lineBelow)
+    static bool TaskbarOnTop(HMONITOR mon, const MONITORINFO &mi, int &lineBelow)
     {
         const int monW = mi.rcMonitor.right - mi.rcMonitor.left, monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
         bool top = false;
@@ -3559,7 +3662,8 @@ namespace ui
                 return;
             const int th = r.bottom - r.top;
             const int overlap = std::min<int>(r.right, mi.rcMonitor.right) - std::max<int>(r.left, mi.rcMonitor.left);
-            if (th < 24 || th > monH / 3 || overlap < monW / 2 || r.top > mi.rcMonitor.top + 2 || r.bottom > mi.rcMonitor.top + monH / 2)
+            if (th < 24 || th > monH / 3 || overlap < monW / 2 || r.top > mi.rcMonitor.top + 2 || r.bottom > mi.rcMonitor.top + monH / 2 ||
+                !BarOnMonitor(t, r, mon, mi))
                 return;
             top = true; // an auto-hidden bar keeps its full height, only a sliver is on screen
             lineBelow = std::max<int>(mi.rcWork.top, mi.rcMonitor.top + th);
@@ -3954,9 +4058,13 @@ namespace ui
                 retarget(id, param, 1.f, 0.f);
             hoverId = id;
             hoverParam = param;
+            // No Invalidate here: the frame clock steps the hover animation and repaints on its next tick. An extra WM_PAINT would render and
+            // present a second, unpaced frame inside the same refresh (the mouse message arrives at an arbitrary moment), and that
+            // un-synchronised present is what the immediate-present target can show half-composed.
             if (hwnd)
                 StartFrames(hwnd, TIMER_INTERACTION_ANIM);
-            Invalidate();
+            else
+                Invalidate();
         }
 
         float HoverAmount(int id, int param = 0) const
@@ -4226,6 +4334,7 @@ namespace ui
                     GetClientRect(hwnd, &rc);
                     D2D1_SIZE_U sz{(UINT32)std::max<LONG>(1, rc.right), (UINT32)std::max<LONG>(1, rc.bottom)};
                     rt->Resize(&sz);
+                    InvalidateRect(hwnd, nullptr, FALSE); // a resized target comes back empty: always repaint it
                 }
                 return 0;
             case WM_DPICHANGED:
@@ -4378,6 +4487,13 @@ namespace ui
                 activePointerId = 0;
                 pointerDownHitId = pointerDownHitParam = 0;
                 return 0;
+            case WM_CAPTURECHANGED:
+                if (lp && (HWND)lp != hwnd) // another window took the mouse in the middle of a press: nothing is held any more
+                    downId = downParam = 0;
+                return 0;
+            case WM_CANCELMODE:
+                downId = downParam = 0;
+                break;
             case WM_LBUTTONDOWN:
             {
                 SetCapture(hwnd);
@@ -7544,7 +7660,7 @@ namespace ui
                         for (int k = 0; k < q; ++k)
                             prefix += L"> ";
                         lines[j] = prefix + rem;
-                        i = j - 1; // the loop's ++i lands on the remainder (it is shorter than the line it came from)
+                        i = j ? j - 1 : (size_t)-1; // the loop's ++i lands on the remainder (it is shorter than the line it came from)
                         continue;
                     }
                     i = std::min(j, N - 1);
@@ -8411,6 +8527,7 @@ namespace cal
         // Google
         std::wstring acct, gid, role; // account (e-mail), Google calendar id, accessRole
         bool primary = false;
+        int repeatDefault = 0; // local calendars: what a NEW event in it repeats by (0 = never, 4 = yearly)
         bool ReadOnly() const { return role == L"reader" || role == L"freeBusyReader"; }
     };
 
@@ -8877,7 +8994,7 @@ namespace cal
             if (r.hasEnd && r.endT.allDay == e.allDay)
                 e.e = r.endT.v;
             else if (r.hasEnd) // mixed date / date-time: trust the end instant
-                e.e = r.endT.allDay ? (e.allDay ? r.endT.v : e.s) : r.endT.v;
+                e.e = r.endT.allDay ? (e.allDay ? r.endT.v : e.s) : (e.allDay ? FloorDiv(r.endT.v + kDayMs - 1, kDayMs) : r.endT.v); // all-day start: the end is counted in days
             else if (r.hasDur)
                 e.e = e.allDay ? e.s + std::max<long long>(1, r.durMs / kDayMs) : e.s + r.durMs;
             else
@@ -9021,10 +9138,15 @@ namespace cal
             L("UID:" + ToUtf8(e.uid.empty() ? GenUid(e) : e.uid));
             L("DTSTAMP:" + IcsDateTime(nowMs, true));
             const bool zoned = !e.allDay && !e.rrule.empty() && LooksIana(e.tz);
+            // A repeating (or changed-occurrence) event in the PC's own zone is written as floating local time: an external calendar
+            // then keeps it at the same wall-clock time across daylight-saving changes, as WinKlok does, instead of at a fixed UTC hour.
+            const bool floating = !e.allDay && e.tz == L"*" && (!e.rrule.empty() || !e.rid.empty());
+            const auto Tm = [&](long long x)
+            { return floating ? IcsDateTime(UtcToWall(L"*", x), false) : IcsDateTime(x, true); };
             if (!e.rid.empty())
             {
                 const long long rv = td::ToLL(e.rid, 0);
-                L(e.allDay ? "RECURRENCE-ID;VALUE=DATE:" + IcsDate(rv) : "RECURRENCE-ID:" + IcsDateTime(rv, true));
+                L(e.allDay ? "RECURRENCE-ID;VALUE=DATE:" + IcsDate(rv) : "RECURRENCE-ID:" + Tm(rv));
             }
             if (e.allDay)
             {
@@ -9038,8 +9160,8 @@ namespace cal
             }
             else
             {
-                L("DTSTART:" + IcsDateTime(e.s, true));
-                L("DTEND:" + IcsDateTime(e.e, true));
+                L("DTSTART:" + Tm(e.s));
+                L("DTEND:" + Tm(e.e));
             }
             L("SUMMARY:" + EscText(ToUtf8(e.title)));
             if (!e.desc.empty())
@@ -9056,7 +9178,7 @@ namespace cal
                     else if (zoned)
                         L("EXDATE;TZID=" + ToUtf8(e.tz) + ":" + IcsDateTime(UtcToWall(e.tz, x), false));
                     else
-                        L("EXDATE:" + IcsDateTime(x, true));
+                        L("EXDATE:" + Tm(x));
                 }
             }
             if (e.color >= 0)
@@ -9304,6 +9426,8 @@ namespace cal
             else
                 s = WallToUtc(ev.tz, day * kDayMs + tod);
             if (r.hasUntil && !r.untilIsDate && !ad && s > r.until)
+                return false;
+            if (r.hasUntil && !r.untilIsDate && ad && day > FloorDiv(r.until, kDayMs)) // all-day series ended by a date-time UNTIL
                 return false;
             if (r.count && emitted >= r.count)
                 return false;
@@ -10591,7 +10715,7 @@ namespace cal
         std::string o = std::string(magic) + " 1\n";
         o += "M\t" + std::to_string(st.nextId) + "\t" + Esc8(st.lastCal) + "\n";
         for (const Calendar &c : st.cals)
-            o += "C\t" + Esc8(c.id) + "\t" + Esc8(c.name) + "\t" + std::to_string(c.color) + "\t" + (c.visible ? "1" : "0") + "\t" + (c.imported ? "1" : "0") + "\t" + Esc8(c.srcKind) + "\t" + Esc8(c.srcUrl) + "\t" + std::to_string(c.lastImport) + "\t" + Esc8(c.acct) + "\t" + Esc8(c.gid) + "\t" + Esc8(c.role) + "\t" + (c.primary ? "1" : "0") + "\n";
+            o += "C\t" + Esc8(c.id) + "\t" + Esc8(c.name) + "\t" + std::to_string(c.color) + "\t" + (c.visible ? "1" : "0") + "\t" + (c.imported ? "1" : "0") + "\t" + Esc8(c.srcKind) + "\t" + Esc8(c.srcUrl) + "\t" + std::to_string(c.lastImport) + "\t" + Esc8(c.acct) + "\t" + Esc8(c.gid) + "\t" + Esc8(c.role) + "\t" + (c.primary ? "1" : "0") + "\t" + std::to_string(c.repeatDefault) + "\n";
         for (const Event &e : st.evs)
             o += "E\t" + Esc8(e.id) + "\t" + Esc8(e.cal) + "\t" + Esc8(e.uid) + "\t" + Esc8(e.rid) + "\t" + Esc8(e.title) + "\t" + Esc8(e.desc) + "\t" + Esc8(e.loc) + "\t" + Esc8(e.tz) + "\t" + (e.allDay ? "1" : "0") + "\t" + std::to_string(e.s) + "\t" + std::to_string(e.e) + "\t" + std::to_string(e.color) + "\t" + (e.edited ? "1" : "0") + "\t" + Esc8(e.rrule) + "\t" + JoinLL(e.ex) + "\t" + JoinLL(e.rd) + "\t" + (e.readOnly ? "1" : "0") + "\t" + Esc8(e.etag) + "\n";
         return o;
@@ -10642,6 +10766,7 @@ namespace cal
                 c.gid = Unesc8(F(10));
                 c.role = Unesc8(F(11));
                 c.primary = F(12) == "1";
+                c.repeatDefault = atoi(F(13).c_str()) == 4 ? 4 : 0; // (older files have no such field)
                 if (c.id.empty())
                     ++bad;
                 else
@@ -10734,6 +10859,8 @@ namespace cal
     // the user's SID with owner-only access: that storage folder is shared by every Windows user of the PC.
     static std::wstring DataDir()
     {
+        static std::mutex mu; // first use can come from the UI thread and the sync thread at once
+        std::lock_guard<std::mutex> lk(mu);
         static std::wstring dir;
         if (!dir.empty())
             return dir;
@@ -11051,8 +11178,8 @@ namespace cal
             std::lock_guard<std::mutex> l(g_hMu);
             v.swap(g_handles);
         }
-        for (HINTERNET h : v)
-            WinHttpCloseHandle(h);
+        for (auto it = v.rbegin(); it != v.rend(); ++it) // request, connection, session: children first
+            WinHttpCloseHandle(*it);
     }
 
     static HttpResp Http(const std::wstring &method, const std::wstring &url, const std::string &body = std::string(), const std::wstring &headers = std::wstring(), size_t maxBody = 64u << 20)
@@ -11161,7 +11288,7 @@ namespace cal
                 SetCurrentDirectoryW(dir.c_str());
         }
     };
-    static bool PickOpenFile(HWND owner, std::wstring &path)
+    static bool PickOpenFile(HWND owner, std::wstring &path, const wchar_t *filter = L"Calendar files (*.zip;*.ics)\0*.zip;*.ics\0All files\0*.*\0", const wchar_t *title = L"Import calendar")
     {
         ModalGuard g;
         KeepCwd cwd;
@@ -11169,17 +11296,18 @@ namespace cal
         OPENFILENAMEW o{};
         o.lStructSize = sizeof(o);
         o.hwndOwner = owner;
-        o.lpstrFilter = L"Calendar files (*.zip;*.ics)\0*.zip;*.ics\0All files\0*.*\0";
+        o.lpstrFilter = filter;
         o.lpstrFile = buf;
         o.nMaxFile = MAX_PATH * 2;
-        o.lpstrTitle = L"Import calendar";
+        o.lpstrTitle = title;
         o.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_EXPLORER;
         if (!GetOpenFileNameW(&o))
             return false;
         path = buf;
         return true;
     }
-    static bool PickSaveFile(HWND owner, const std::wstring &suggested, std::wstring &path)
+    static bool PickSaveFile(HWND owner, const std::wstring &suggested, std::wstring &path, const wchar_t *filter = L"iCalendar (*.ics)\0*.ics\0",
+                             const wchar_t *ext = L"ics", const wchar_t *title = L"Export calendar")
     {
         ModalGuard g;
         KeepCwd cwd;
@@ -11188,11 +11316,11 @@ namespace cal
         OPENFILENAMEW o{};
         o.lStructSize = sizeof(o);
         o.hwndOwner = owner;
-        o.lpstrFilter = L"iCalendar (*.ics)\0*.ics\0";
+        o.lpstrFilter = filter;
         o.lpstrFile = buf;
         o.nMaxFile = MAX_PATH * 2;
-        o.lpstrDefExt = L"ics";
-        o.lpstrTitle = L"Export calendar";
+        o.lpstrDefExt = ext;
+        o.lpstrTitle = title;
         o.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_EXPLORER;
         if (!GetSaveFileNameW(&o))
             return false;
@@ -11252,6 +11380,24 @@ namespace cal
                 c.visible = false;
         g_mode = Wh_GetIntValue(L"calMode", 0) == 1 ? 1 : 0;
         ++g_version;
+    }
+    // Backup / restore of the local calendars (Google data is never part of a backup).
+    static std::string BackupLocal()
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        return SerializeStore(g_local, kLocalMagic);
+    }
+    static bool RestoreLocal(const std::string &data)
+    {
+        Store st;
+        if (!ParseStore(data, st, kLocalMagic))
+            return false;
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        g_local = std::move(st);
+        EnsureDefault(g_local);
+        SaveLocal();
+        ++g_version;
+        return true;
     }
     static void SaveActive()
     {
@@ -11399,9 +11545,29 @@ namespace cal
     static void GoogleRequestRange(long long lo, long long hi);
     static std::wstring NewGoogleEventId();
 
+    // The editor's repeat choices: 0 never, 1 daily, 2 weekly, 3 monthly, 4 yearly; 5 = a rule the editor cannot build (kept as it is).
+    static std::wstring RepeatRule(int kind)
+    {
+        static const wchar_t *k[] = {L"", L"FREQ=DAILY", L"FREQ=WEEKLY", L"FREQ=MONTHLY", L"FREQ=YEARLY"};
+        return kind >= 1 && kind <= 4 ? k[kind] : L"";
+    }
+    static int RepeatKindOf(const std::wstring &rrule)
+    {
+        if (rrule.empty())
+            return 0;
+        const Rule r = ParseRule(rrule);
+        if (r.freq >= 1 && r.freq <= 4 && r.interval == 1 && !r.count && !r.hasUntil && r.byday.empty() && r.bymonthday.empty() && r.bymonth.empty() &&
+            r.bysetpos.empty() && (r.freq != 2 || r.wkst == 1))
+            return r.freq;
+        return 5;
+    }
+
     struct EventEdit
     {
         std::wstring calId, evId; // evId empty = new event
+        int repeat = -1;          // local mode: -1 = leave the repetition as it is, 0..4 = RepeatRule()
+        bool thisOnly = false;    // local mode, repeating event: the change is for the edited occurrence only
+        long long occOrig = 0;    // start of the edited occurrence as the series itself counts it (never changed by the edit)
         std::wstring title, desc, loc;
         bool allDay = false;
         long long s = 0, e = 0; // timed: UTC ms; all-day: first day / last day + 1
@@ -11438,6 +11604,8 @@ namespace cal
             ev.e = ed.e;
             ev.color = ed.color;
             ev.tz = L"*";
+            if (!google && ed.repeat >= 1 && ed.repeat <= 4)
+                ev.rrule = RepeatRule(ed.repeat);
             if (google)
             {
                 const std::wstring err = GoogleSaveEvent(ev, true);
@@ -11463,24 +11631,94 @@ namespace cal
             n.desc = ed.desc;
             n.loc = ed.loc;
             n.color = ed.color;
-            if (!n.rrule.empty() && n.allDay == ed.allDay)
-            { // a series: the edit moves / resizes the whole series by what changed on this occurrence
-                const long long shift = ed.s - ed.occS;
-                n.s += shift;
-                n.e = n.s + (ed.e - ed.s);
-                for (auto &x : n.ex)
-                    x += shift;
-                for (auto &x : n.rd)
-                    x += shift;
+            const bool series = !n.rrule.empty();
+            const int kind = (google || ed.repeat < 0 || ed.repeat > 4) ? -1 : ed.repeat; // -1: the repetition is left alone
+            const int curKind = RepeatKindOf(n.rrule);
+            bool dropOverrides = false;  // edited single occurrences of a series whose pattern changed no longer mean anything
+            std::vector<Event> added;
+            if (!google && ed.thisOnly && series)
+            { // only this occurrence: it leaves the series (the series skips it) and becomes an event of its own
+                Event o = n;
+                o.id = st.NewEventId();
+                o.allDay = ed.allDay;
+                o.s = ed.s;
+                o.e = ed.e;
+                o.tz = L"*";
+                o.edited = true;
+                o.ex.clear();
+                o.rd.clear();
+                if (kind >= 1)
+                { // given a repetition of its own: the start of a new series
+                    o.uid = o.id + L"@winklok.local";
+                    o.rid.clear();
+                    o.rrule = RepeatRule(kind);
+                }
+                else
+                { // a single changed occurrence of the same series (what iCalendar calls an override)
+                    o.rrule.clear();
+                    o.rid = std::to_wstring(ed.occOrig);
+                }
+                n = *ev;
+                if (std::find(n.ex.begin(), n.ex.end(), ed.occOrig) == n.ex.end())
+                    n.ex.push_back(ed.occOrig);
+                added.push_back(std::move(o));
             }
             else
             {
-                if (n.allDay != ed.allDay)
-                    n.rrule.clear(), n.ex.clear(), n.rd.clear();
-                n.allDay = ed.allDay;
-                n.s = ed.s;
-                n.e = ed.e;
-                n.tz = L"*";
+                if (series && n.allDay == ed.allDay)
+                { // a series: the edit moves / resizes the whole series by what changed on this occurrence
+                    if (n.allDay)
+                    {
+                        const long long shift = ed.s - ed.occS;
+                        n.s += shift;
+                        for (auto &x : n.ex)
+                            x += shift;
+                        for (auto &x : n.rd)
+                            x += shift;
+                    }
+                    else
+                    { // shifted on the wall clock of the series' zone, so a daylight-saving change in between cannot move the others by an hour
+                        const long long dW = UtcToWall(n.tz, ed.s) - UtcToWall(n.tz, ed.occS);
+                        const auto mv = [&](long long x)
+                        { return WallToUtc(n.tz, UtcToWall(n.tz, x) + dW); };
+                        n.s = mv(n.s);
+                        for (auto &x : n.ex)
+                            x = mv(x);
+                        for (auto &x : n.rd)
+                            x = mv(x);
+                    }
+                    n.e = n.s + (ed.e - ed.s);
+                }
+                else
+                {
+                    if (n.allDay != ed.allDay)
+                    {
+                        n.ex.clear();
+                        n.rd.clear();
+                        if (series)
+                        {
+                            dropOverrides = true;
+                            if (google)
+                                n.rrule.clear(); // (Google: unchanged behaviour)
+                        }
+                    }
+                    n.allDay = ed.allDay;
+                    n.s = ed.s;
+                    n.e = ed.e;
+                    n.tz = L"*";
+                }
+                if (kind >= 0 && kind != curKind)
+                { // the repetition itself was changed (0 = it no longer repeats: the event stays on its first day)
+                    n.rrule = RepeatRule(kind);
+                    n.ex.clear();
+                    n.rd.clear();
+                    dropOverrides |= series;
+                    if (kind >= 1 && !n.rid.empty())
+                    { // a changed occurrence given a repetition becomes a series of its own
+                        n.rid.clear();
+                        n.uid = n.id + L"@winklok.local";
+                    }
+                }
             }
             n.edited = true;
             if (google)
@@ -11491,7 +11729,14 @@ namespace cal
             }
             else
             {
-                *ev = n;
+                const std::wstring uid = n.uid, calId = n.cal, id = n.id;
+                *ev = n; // (ev is not used after the list below changes)
+                if (dropOverrides)
+                    st.evs.erase(std::remove_if(st.evs.begin(), st.evs.end(), [&](const Event &x)
+                                                { return x.cal == calId && x.uid == uid && !x.rid.empty() && x.id != id; }),
+                                 st.evs.end());
+                for (Event &a : added)
+                    st.evs.push_back(std::move(a));
                 if (!c->imported)
                     st.lastCal = c->id;
                 SaveLocal();
@@ -11500,7 +11745,8 @@ namespace cal
         ++g_version;
         return L"";
     }
-    static std::wstring DeleteEventById(const std::wstring &calId, const std::wstring &evId)
+    // thisOnly (local mode, repeating event): only the occurrence that starts at occOrig goes, the series carries on without it.
+    static std::wstring DeleteEventById(const std::wstring &calId, const std::wstring &evId, bool thisOnly = false, long long occOrig = 0)
     {
         std::lock_guard<std::recursive_mutex> l(g_mu);
         Store &st = Active();
@@ -11516,11 +11762,20 @@ namespace cal
             if (!err.empty())
                 return err;
         }
+        else if (thisOnly && !ev->rrule.empty())
+        {
+            if (std::find(ev->ex.begin(), ev->ex.end(), occOrig) == ev->ex.end())
+                ev->ex.push_back(occOrig);
+            ev->edited = true;
+            SaveLocal();
+        }
         else
         {
+            const std::wstring uid = ev->uid;
+            const bool series = !ev->rrule.empty();
             st.evs.erase(std::remove_if(st.evs.begin(), st.evs.end(), [&](const Event &e)
-                                        { return e.cal == calId && e.id == evId; }),
-                         st.evs.end());
+                                        { return e.cal == calId && (e.id == evId || (series && e.uid == uid && !e.rid.empty())); }),
+                         st.evs.end()); // a whole series takes its changed occurrences with it
             SaveLocal();
         }
         ++g_version;
@@ -11577,6 +11832,19 @@ namespace cal
         SaveLocal();
         ++g_version;
         return n;
+    }
+    // What a new event in a local calendar repeats by: 0 = never, 4 = yearly (weekly / monthly are chosen per event).
+    static void CalSetRepeat(const std::wstring &id, int kind)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        if (g_mode.load() == 1)
+            return;
+        Calendar *c = g_local.FindCal(id);
+        if (!c || c->imported)
+            return;
+        c->repeatDefault = kind == 4 ? 4 : 0;
+        SaveLocal();
+        ++g_version;
     }
     static void CalSetColor(const std::wstring &id, int color)
     {
@@ -11669,6 +11937,7 @@ namespace cal
             if (!ZipList(bytes, es))
                 return L"This ZIP file could not be read (it may be damaged).";
             kind = L"zip";
+            size_t zipBudget = 96u << 20; // all entries together, so a ZIP bomb of many small-looking entries cannot exhaust memory
             for (const ZipEntry &e : es)
             {
                 if (g_stop.load())
@@ -11676,11 +11945,12 @@ namespace cal
                 if (!EndsWithNoCase(e.name, ".ics"))
                     continue;
                 std::string data;
-                if (!ZipRead(bytes, e, data, 96u << 20))
+                if (!ZipRead(bytes, e, data, zipBudget))
                 {
                     ++badEntries;
                     continue;
                 }
+                zipBudget -= std::min(zipBudget, data.size());
                 std::wstring n = FromUtf8(e.name);
                 parseOne(data, BaseNoExt(n));
             }
@@ -11837,6 +12107,7 @@ namespace cal
     {
         char type = 'u'; // i insert, u update, d delete, c calendar colour
         std::wstring calId, evId;
+        unsigned seq = 0; // bumped when the same change is queued again, so a push that is in flight does not swallow it
     };
     static std::string g_clientId, g_clientSecret;
     static std::vector<Account> g_accts;
@@ -11947,7 +12218,10 @@ namespace cal
     {
         for (auto &o : g_ops)
             if (o.type == type && o.calId == calId && o.evId == evId)
+            {
+                ++o.seq;
                 return;
+            }
         Op p;
         p.type = type;
         p.calId = calId;
@@ -12207,7 +12481,18 @@ namespace cal
             bool fatal;
             a.access.clear();
             if (RefreshToken(a, err, fatal))
+            {
+                {
+                    std::lock_guard<std::recursive_mutex> l(g_mu);
+                    for (auto &x : g_accts)
+                        if (x.email == a.email)
+                        {
+                            x.access = a.access; // the refreshed token also reaches the stored account
+                            x.accessExp = a.accessExp;
+                        }
+                }
                 r = Http(method, url, body, Hdr(a), 32u << 20);
+            }
         }
         return r;
     }
@@ -12218,9 +12503,19 @@ namespace cal
     static void DropOp(const Op &p)
     {
         std::lock_guard<std::recursive_mutex> l(g_mu);
-        g_ops.erase(std::remove_if(g_ops.begin(), g_ops.end(), [&](const Op &o)
-                                   { return o.type == p.type && o.calId == p.calId && o.evId == p.evId; }),
-                    g_ops.end());
+        for (auto it = g_ops.begin(); it != g_ops.end();)
+        {
+            if (it->type != p.type || it->calId != p.calId || it->evId != p.evId)
+                ++it;
+            else if (it->seq != p.seq)
+            { // edited again while this push was running: keep it (an insert that went through is now an update)
+                if (it->type == 'i')
+                    it->type = 'u';
+                ++it;
+            }
+            else
+                it = g_ops.erase(it);
+        }
         SaveOps();
     }
     // false = stop (offline / server trouble): the queue is kept for the next attempt.
@@ -12547,7 +12842,7 @@ namespace cal
         {
             SYSTEMTIME t = td::WallToLocal(td::WallMs());
             wchar_t b[64];
-            _snwprintf(b, 64, L"Last synced at %02d:%02d.", t.wHour, t.wMinute);
+            _snwprintf(b, 64, L"Last synced at %ls.", td::FmtTimeOfDay(t.wHour, t.wMinute).c_str());
             SetGMsg(emails.empty() ? L"No account connected." : b);
         }
         else if (!lastErr.empty())
@@ -12636,8 +12931,7 @@ namespace cal
         for (auto &o : g_ops)
             if (o.type == 'i' && o.calId == ev.cal && o.evId == ev.id)
                 pendingInsert = true;
-        if (!pendingInsert)
-            QueueOp(isNew ? 'i' : 'u', ev.cal, ev.id);
+        QueueOp(isNew || pendingInsert ? 'i' : 'u', ev.cal, ev.id);
         SaveGoogle();
         SaveOps();
         GoogleWake();
@@ -13164,6 +13458,7 @@ namespace ui
         ID_TD_ROW,
         ID_NF_CLEARALL,
         ID_NF_SETTINGS,
+        ID_NF_DND,
         ID_NF_GROUP_CLEAR,
         ID_NF_GROUP_MORE,
         ID_NF_DISMISS,
@@ -13179,6 +13474,8 @@ namespace ui
         ID_EV_ALLDAY,
         ID_EV_COLOR,
         ID_EV_CAL,
+        ID_EV_REPEAT,
+        ID_EV_SCOPE,
         ID_ST_CALSET,
         ID_CS_BACK,
         ID_CS_MODE,
@@ -13188,6 +13485,7 @@ namespace ui
         ID_CS_ROW,
         ID_CS_COLOR,
         ID_CS_RENAME,
+        ID_CS_REPEAT,
         ID_CS_DELETE,
         ID_CS_CLEAR,
         ID_CS_EXPORT,
@@ -13206,7 +13504,14 @@ namespace ui
         ID_ST_POSX,
         ID_ST_WEEKS,
         ID_ST_GENSET,
-        ID_ST_NOTSET
+        ID_ST_NOTSET,
+        ID_CAL_NEW,
+        ID_ST_SECS,
+        ID_ST_BACKUP,
+        ID_ST_RESTORE,
+        ID_ALERT_ADD,
+        ID_NOTE_SEARCH,
+        ID_NOTE_EXPORT
     };
     enum EditSlot
     {
@@ -13232,6 +13537,7 @@ namespace ui
         E_CS_URL,
         E_CS_CID,
         E_CS_SEC,
+        E_NSEARCH,
         E_COUNT
     };
 
@@ -13241,7 +13547,7 @@ namespace ui
     static const float kCalClockRowH = 22.f; // one Windows-style secondary-clock row
     // Calendar month grid: a narrow week-number column, then seven equal day cells, inside the 16 px side margins.
     static const float kCalWeekX = 16.f, kCalWeekW = 32.f, kCalGridX = 48.f, kCalCell = 44.f;
-    static const float kPanelH = 488.f;                                                             // calendar: last row ends 418, button 436-470, 18 above and below
+    static const float kPanelH = 488.f;                                                             // calendar: the page fills it (see CalLay), with or without the seconds clock
     static const float kTabH = 46.f, kCollapsedH = 46.f;                                            // kCollapsedH: the slim strip the WinKlok panel folds into beside the notifications
     static const float kTodoDropH = 46.f, kTodoRow = 40.f, kTodoPitch = 44.f, kTodoSectionH = 34.f; // tasks geometry
     static const float kLapRegionTop = 258.f, kLapTop = 292.f, kLapRow = 36.f;
@@ -14539,6 +14845,11 @@ namespace ui
         }
 
         int SlideHiddenX() const { return slideClipX - std::max(2, (int)std::lround(3.f * Scale())); }
+        // A horizontal slide that passes another monitor never lets the window itself reach it: the window is only as wide as the part
+        // that is on this monitor (its left edge leads, so the content simply fills that part). A region alone leaves the window frame
+        // and its shadow, which Windows draws around the whole rectangle, on the neighbouring screen as a trail.
+        bool SlideClamped() const { return slideHorizontal && slideUseClip && slideClipX > 0; }
+        int SlideW(int left, int w) const { return SlideClamped() ? std::max(2, std::min(w, slideClipX - left)) : w; }
 
         // A visible-but-nearly-fully-clipped window is the resting line of the slide: a few pixels stay visible so DWM
         // keeps the window (and its acrylic) alive.
@@ -14621,7 +14932,8 @@ namespace ui
                 const BOOL on = TRUE; // DWMWA_CLOAK
                 cloaked = SUCCEEDED(DwmSetWindowAttribute(hwnd, 13, &on, sizeof(on)));
             }
-            SetWindowPos(hwnd, SlideZ(), slideHorizontal ? startX : x, slideHorizontal ? y : startY, w, h, SWP_SHOWWINDOW | SWP_NOACTIVATE);
+            SetWindowPos(hwnd, SlideZ(), slideHorizontal ? startX : x, slideHorizontal ? y : startY, slideHorizontal ? SlideW(startX, w) : w, h,
+                         SWP_SHOWWINDOW | SWP_NOACTIVATE);
             if (warm)
                 WarmUpMaterial();
             if (cloaked && hold)
@@ -14675,7 +14987,8 @@ namespace ui
             panelAnimation = PanelAnimationState::Closing;
             panelAnimationStarted = MonoMs();
             panelAnimationX = r.left;
-            panelAnimationWidth = r.right - r.left;
+            if (!(SlideClamped() && r.right >= slideClipX && panelAnimationWidth > r.right - r.left)) // (a window cut short by the slide keeps its full width)
+                panelAnimationWidth = r.right - r.left;
             panelAnimationHeight = r.bottom - r.top;
             panelAnimationStartY = r.top;
             panelAnimationEndY = dockTop ? std::min(SlideHiddenY(panelAnimationHeight), (int)r.top) : std::max(SlideHiddenY(), (int)r.top);
@@ -14729,7 +15042,7 @@ namespace ui
             HWND z = SlideZ();
             if (opening)
             { // moving in: widen the visible part after the move, never before it
-                MoveFlyout(z, x, y, panelAnimationWidth, panelAnimationHeight);
+                MoveFlyout(z, x, y, SlideW(x, panelAnimationWidth), panelAnimationHeight);
                 if (g_moveBatch)
                 {
                     pendingClip = along;
@@ -14741,7 +15054,7 @@ namespace ui
             else
             { // moving away: shrink the visible part before the move
                 ApplySlideClip(along);
-                MoveFlyout(z, x, y, panelAnimationWidth, panelAnimationHeight);
+                MoveFlyout(z, x, y, SlideW(x, panelAnimationWidth), panelAnimationHeight);
             }
             if (t >= 1.f)
             {
@@ -14810,6 +15123,38 @@ namespace ui
         std::vector<AdditionalClock> additionalClocks; // read-only snapshot of the two Windows secondary clocks
         float panelH = kPanelH;                        // fixed for a given monitor; never follows the selected tab
         float CalendarClockOffset() const { return (float)additionalClocks.size() * kCalClockRowH; }
+        // Calendar page: top y of every block. The room the panel has left over is shared evenly between the blocks
+        // (date row, optional seconds clock, additional clocks, month header, weekday row, grid, bottom margin).
+        struct CalLayout
+        {
+            float date, sec, clk, hdr, wd, grid;
+        };
+        CalLayout CalLay() const
+        {
+            const bool sec = td::g_set.showSeconds.load() != 0;
+            const bool clk = !additionalClocks.empty();
+            const float dateH = 32.f, secH = 36.f, hdrH = 34.f, wdH = 22.f, gridH = 264.f;
+            const float spare = std::max(0.f, panelH - CalendarClockOffset() - 56.f - (dateH + (sec ? secH : 0.f) + hdrH + wdH + gridH));
+            // Every gap is `g` times a weight plus a small correction: the text sits at different heights inside its row, so
+            // the corrections make the gaps *look* alike (date -> clock tighter, clock -> month row a little tighter still).
+            const float w = 3.f + (sec ? 1.f : 0.f) + (clk ? 1.f : 0.f), c = sec ? -5.f : 0.f;
+            const float g = std::min(14.f, std::max(0.f, (spare - c) / w));
+            const float extra = std::max(0.f, spare - (g * w + c)); // room beyond the largest gap: a little above, the rest below
+            CalLayout cl{};
+            cl.date = 56.f + extra * 0.4f;
+            float y = cl.date + dateH + g - 3.f;
+            cl.sec = y;
+            if (sec)
+                y += secH + g - 5.f;
+            cl.clk = y;
+            if (clk)
+                y += CalendarClockOffset() + g;
+            cl.hdr = y;
+            cl.wd = cl.hdr + hdrH + g * 0.5f;
+            cl.grid = cl.wd + wdH + g * 0.5f + 3.f;
+            return cl;
+        }
+        WORD lastSecShown = 61;
         // Height of the strip the panel folds into beside the notifications: the date row, plus the Windows additional
         // clocks under it (as the native flyout keeps them when its calendar is collapsed).
         float CollapsedH() const { return kCollapsedH + (additionalClocks.empty() ? 0.f : CalendarClockOffset() + 4.f); }
@@ -14819,7 +15164,8 @@ namespace ui
         ULONGLONG panelScrollStarted = 0;
         Smooth lapSm;  // stopwatch laps, in pixels
         Smooth prevSm; // notes preview, in pixels
-        Smooth edSm;   // notes editor, in text lines
+        Smooth edSm;   // notes body / event description, in text lines
+        int edScrollSlot = -1; // which edit control currently owns edSm; prevents a stale glide crossing editors
         Smooth calSm;  // calendar: vertical offset of the visible grid from the committed month/year/decade
         ULONGLONG calLastInput = 0, lastStep = 0;
         bool calDiscrete = false;
@@ -14854,7 +15200,7 @@ namespace ui
         bool noteDirty = false, suppressChange = false, docValid = false;
         unsigned noteVersion = 0, docVersion = 0;
         int docNote = 0;
-        float docBase = 0.f, bodyLineH = 18.f;
+        float docBase = 0.f, bodyLineH = 18.f, descLineH = 16.f;
         ULONGLONG noteDelArmedUntil = 0;
         rich::Doc doc;
 
@@ -14866,14 +15212,14 @@ namespace ui
         D2D1_RECT_F editRect[E_COUNT] = {};
         bool editWant[E_COUNT] = {};
         RECT editLast[E_COUNT] = {};
-        HFONT fontBig = nullptr, fontNorm = nullptr, fontTitle = nullptr, fontBody = nullptr;
+        HFONT fontBig = nullptr, fontNorm = nullptr, fontTitle = nullptr, fontBody = nullptr, fontDesc = nullptr;
         HBRUSH editBrush = nullptr;
         int tickCount = 0;
 
         ~PanelWindow() override
         {
             EndTimerPeriod();
-            for (HFONT f : {fontBig, fontNorm, fontTitle, fontBody})
+            for (HFONT f : {fontBig, fontNorm, fontTitle, fontBody, fontDesc})
                 if (f)
                     DeleteObject(f);
             if (editBrush)
@@ -15015,7 +15361,7 @@ namespace ui
 
         void RebuildGdi()
         {
-            for (HFONT f : {fontBig, fontNorm, fontTitle, fontBody})
+            for (HFONT f : {fontBig, fontNorm, fontTitle, fontBody, fontDesc})
                 if (f)
                     DeleteObject(f);
             if (editBrush)
@@ -15030,12 +15376,14 @@ namespace ui
             fontNorm = mk(15.f, FW_NORMAL);
             fontTitle = mk(18.f, FW_SEMIBOLD);
             fontBody = mk(15.f, FW_NORMAL);
+            fontDesc = mk(13.f, FW_NORMAL); // the event description is a little smaller
             editBrush = CreateSolidBrush(RGB((int)(pal.field.r * 255), (int)(pal.field.g * 255), (int)(pal.field.b * 255)));
             for (int i = 0; i < E_COUNT; ++i)
             {
                 HFONT f = (i == E_TH || i == E_TM || i == E_TS || i == E_AH || i == E_AM) ? fontBig
                           : i == E_NTITLE                                                 ? fontTitle
                           : i == E_NBODY                                                  ? fontBody
+                          : i == E_EV_DESC                                                ? fontDesc
                           : i == E_EV_TITLE                                               ? fontTitle
                                                                                           : fontNorm;
                 if (edits[i])
@@ -15047,8 +15395,12 @@ namespace ui
             TEXTMETRICW tm{};
             GetTextMetricsW(dc, &tm);
             SelectObject(dc, old);
-            ReleaseDC(hwnd, dc);
             bodyLineH = std::max(8.f, (float)tm.tmHeight / Scale());
+            old = SelectObject(dc, fontDesc);
+            GetTextMetricsW(dc, &tm);
+            SelectObject(dc, old);
+            ReleaseDC(hwnd, dc);
+            descLineH = std::max(8.f, (float)tm.tmHeight / Scale());
         }
 
         void OnDpiChanged() override { RebuildGdi(); }
@@ -15077,6 +15429,73 @@ namespace ui
             w.resize((size_t)n);
             return w;
         }
+        bool noteSearchOpen = false;
+        static std::wstring LowerW(std::wstring s)
+        {
+            for (wchar_t &c : s)
+                c = (wchar_t)towlower(c);
+            return s;
+        }
+        // Indices of the notes the list shows: all of them, or the ones whose title or text holds the search text.
+        std::vector<int> NoteShown()
+        {
+            std::vector<int> v;
+            const std::wstring q = noteSearchOpen && edits[E_NSEARCH] ? LowerW(rich::Trim(EditText(E_NSEARCH))) : std::wstring();
+            for (size_t i = 0; i < notes.size(); ++i)
+                if (q.empty() || LowerW(notes[i].title).find(q) != std::wstring::npos || LowerW(notes[i].body).find(q) != std::wstring::npos)
+                    v.push_back((int)i);
+            return v;
+        }
+        float nsK = 0.f, nsFrom = 0.f; // how far the search box has dropped (0 closed .. 1 open), animated like the Tasks input
+        ULONGLONG nsStart = 0;
+        float NoteSearchK()
+        {
+            if (nsStart)
+            {
+                const float t = Clamp01((float)(MonoMs() - nsStart) / 220.f);
+                const float to = noteSearchOpen ? 1.f : 0.f;
+                nsK = nsFrom + (to - nsFrom) * EaseInOutCubic(t);
+                if (t >= 1.f)
+                {
+                    nsK = to;
+                    nsStart = 0;
+                    if (!todoDropStart)
+                        StopFrames(hwnd, TIMER_TODO_ANIM);
+                }
+            }
+            return nsK;
+        }
+        void ToggleNoteSearch()
+        {
+            noteSearchOpen = !noteSearchOpen;
+            nsFrom = nsK;
+            nsStart = MonoMs();
+            StartFrames(hwnd, TIMER_TODO_ANIM);
+            if (noteSearchOpen)
+                pendingFocus = E_NSEARCH;
+            else if (edits[E_NSEARCH])
+            {
+                SetWindowTextW(edits[E_NSEARCH], L"");
+                if (GetFocus() == edits[E_NSEARCH])
+                    SetFocus(hwnd);
+            }
+            ResizePanelToContent();
+            Invalidate();
+        }
+        void ExportNoteMd(const Note &n)
+        {
+            std::wstring name = n.title.empty() ? std::wstring(L"Untitled") : n.title;
+            for (wchar_t &c : name)
+                if (c < 32 || wcschr(L"\\/:*?\"<>|", c))
+                    c = L'_';
+            if (name.size() > 60)
+                name.resize(60);
+            std::wstring path;
+            if (!cal::PickSaveFile(hwnd, name + L".md", path, L"Markdown (*.md)\0*.md\0", L"md", L"Export note"))
+                return;
+            const std::wstring text = (n.title.empty() ? std::wstring() : L"# " + n.title + L"\n\n") + n.body + L"\n";
+            SetStatus(cal::WriteFileAtomic(path, cal::ToUtf8(text), false) ? L"Note exported" : L"Could not write the file");
+        }
         Note *FindNote(int id)
         {
             for (auto &n : notes)
@@ -15104,6 +15523,16 @@ namespace ui
             return true;
         }
         void EditorWheelFromEdit(int delta) { EditorWheel(delta); }
+        // The multi-line editor that has the wheel / touchpad on the current page: the note body or the event description.
+        int ScrollSlot() const { return tab == 4 && noteView == 2 ? E_NBODY : (tab == 0 && evView == 2 ? E_EV_DESC : -1); }
+        void SelectEditorScrollSlot(int slot)
+        {
+            if (slot == edScrollSlot)
+                return;
+            edScrollSlot = slot;
+            edSm.Jump(slot >= 0 && edits[slot] ? (float)SendMessageW(edits[slot], EM_GETFIRSTVISIBLELINE, 0, 0) : 0.f);
+        }
+        bool IsScrollEdit(HWND h) const { return h && (h == edits[E_NBODY] || h == edits[E_EV_DESC]); }
 
         void SaveIndex()
         {
@@ -15189,6 +15618,7 @@ namespace ui
             panelScrollStarted = 0;
             StopFrames(hwnd, TIMER_SCROLL_ANIM);
             edSm.Jump(0.f);
+            edScrollSlot = -1;
             prevSm.Jump(0.f);
             StartContentTransition();
             ResizePanelToContent();
@@ -15392,6 +15822,7 @@ namespace ui
             if (!changed)
                 return;
             StopTouchpadFling(); // a previous page's inertia must not scroll the newly selected page
+            pendingFocus = -1;   // a focus request of the page being left must not grab the next one
             alarmEditing = false;
             evView = 0;
             settingsSub = 0;
@@ -15449,7 +15880,7 @@ namespace ui
                     return std::max(panelH, 100.f + (float)dayOccs.size() * 58.f + 16.f);
                 if (evView == 2)
                     return panelH;
-                return 470.f + 16.f + CalendarClockOffset(); // calendar: Today button + secondary-clock rows + bottom padding
+                return panelH - 2.f; // CalLay keeps the calendar grid inside the fixed panel, with a small bottom margin
             case 2:
             {
                 float y = LayoutPresets(nullptr, nullptr, 228.f) + 32.f + 40.f + 18.f;
@@ -15463,7 +15894,7 @@ namespace ui
                 return snap.alarms.empty() ? 190.f : 102.f + (float)snap.alarms.size() * 70.f + 8.f;
             case 4:
                 if (noteView == 0)
-                    return notes.empty() ? panelH : 92.f + (float)notes.size() * 60.f + 8.f;
+                    return notes.empty() ? panelH : (92.f + 40.f * nsK) + (float)notes.size() * 60.f + 8.f;
                 return panelH;
             case TAB_TODO:
                 return std::max(panelH, TodoBottom() + 10.f);
@@ -15624,13 +16055,15 @@ namespace ui
         // Scrolls the notes editor by lines (a native EDIT can only move whole lines; the glide animates them).
         void EditorWheel(float delta)
         {
-            HWND e = edits[E_NBODY];
+            const int slot = ScrollSlot();
+            SelectEditorScrollSlot(slot);
+            HWND e = slot >= 0 ? edits[slot] : nullptr;
             if (!e)
                 return;
             if (!edSm.Active())
                 edSm.Jump((float)SendMessageW(e, EM_GETFIRSTVISIBLELINE, 0, 0));
             const int total = (int)SendMessageW(e, EM_GETLINECOUNT, 0, 0);
-            const int vis = std::max(1, (int)(RH(editRect[E_NBODY]) / bodyLineH));
+            const int vis = std::max(1, (int)(RH(editRect[slot]) / (slot == E_NBODY ? bodyLineH : descLineH)));
             const float maxFirst = (float)std::max(0, total - vis);
             edSm.target = std::min(maxFirst, std::max(0.f, edSm.target - delta / (float)WHEEL_DELTA * 3.f));
             KickScroll();
@@ -15673,13 +16106,15 @@ namespace ui
                 any |= prevSm.Step(dt, tau);
                 prevSm.pos = std::min(PreviewMax(), std::max(0.f, prevSm.pos));
             }
-            if (tab == 4 && noteView == 2 && edits[E_NBODY] && edSm.Active())
+            const int scrollSlot = ScrollSlot();
+            SelectEditorScrollSlot(scrollSlot);
+            if (scrollSlot >= 0 && edits[scrollSlot] && edSm.Active())
             {
                 any |= edSm.Step(dt, tau * 0.8f);
                 const int want = (int)std::lround(edSm.pos);
-                const int cur = (int)SendMessageW(edits[E_NBODY], EM_GETFIRSTVISIBLELINE, 0, 0);
+                const int cur = (int)SendMessageW(edits[scrollSlot], EM_GETFIRSTVISIBLELINE, 0, 0);
                 if (want != cur)
-                    SendMessageW(edits[E_NBODY], EM_LINESCROLL, 0, want - cur);
+                    SendMessageW(edits[scrollSlot], EM_LINESCROLL, 0, want - cur);
             }
             if (tab == 0 && (calSm.Active() || calSm.pos != 0.f))
             {
@@ -15936,6 +16371,10 @@ namespace ui
             todoDropStart = 0;
             todoEditId = 0;
             SetWindowTextW(edits[E_TODO], L"");
+            noteSearchOpen = false; // the note list starts without its search box
+            nsK = 0.f;
+            nsStart = 0;
+            SetWindowTextW(edits[E_NSEARCH], L"");
             StopFrames(hwnd, TIMER_TODO_ANIM);
             stackMode = withNotif; // stacked: collapse chevron in the tab bar, slides in from the right
             collapsed = withNotif && Wh_GetIntValue(L"stackCollapsed", 0) != 0;
@@ -15956,6 +16395,7 @@ namespace ui
             lapSm.Jump(0.f);
             prevSm.Jump(0.f);
             edSm.Jump(0.f);
+            edScrollSlot = -1;
             CalResetSlide();
             panVelocity = 0.f;
             panLastTick = 0;
@@ -15978,7 +16418,7 @@ namespace ui
                 SetTimer(hwnd, TIMER_TICK, 100, nullptr);
             }
             int topLine = 0;
-            dockTop = TaskbarOnTop(mi, topLine);
+            dockTop = TaskbarOnTop(mon, mi, topLine);
             panelWorkBottom = dockTop ? topLine : TaskbarBandTop(mon, mi, Scale()); // never below the area a (possibly auto-hidden) taskbar occupies
             if (!timerPeriodActive)
             { // finer timer resolution while the panel is open keeps scrolling and sliding even
@@ -16015,6 +16455,7 @@ namespace ui
 
         void HidePanel()
         {
+            CancelDrags();
             FlushNote();
             StopPreviewSound();
             BeginCloseAnimation();
@@ -16087,7 +16528,7 @@ namespace ui
                 if (GetCursorPos(&cp))
                 {
                     HWND at = WindowFromPoint(cp);
-                    if (at && edits[E_NBODY] && at == edits[E_NBODY] && IsWindowVisible(at))
+                    if (at && IsScrollEdit(at) && IsWindowVisible(at))
                         RouteTouchpadTo(at);
                     else if (at == hwnd)
                         RouteTouchpadTo(hwnd);
@@ -16137,6 +16578,16 @@ namespace ui
                 if (todoClearArmedUntil && now >= todoClearArmedUntil)
                     todoClearArmedUntil = 0;
                 Invalidate();
+            }
+            if (tab == TAB_CAL && evView == 0 && td::g_set.showSeconds.load())
+            { // the seconds clock repaints exactly when the second changes
+                SYSTEMTIME st{};
+                GetLocalTime(&st);
+                if (st.wSecond != lastSecShown)
+                {
+                    lastSecShown = st.wSecond;
+                    Invalidate();
+                }
             }
             if (tab == 1 || tab == 2 || tab == 3 || !statusMsg.empty() || tickCount % 10 == 0)
                 Invalidate();
@@ -16228,7 +16679,8 @@ namespace ui
 
         void Paint() override
         {
-            snap = td::g_eng.Snapshot();
+            if (tab == TAB_SW || tab == TAB_TIMER || tab == TAB_ALARM) // only these pages read the engine state
+                snap = td::g_eng.Snapshot();
             StepScrollers();
             for (int i = 0; i < E_COUNT; ++i)
                 editWant[i] = false;
@@ -16333,9 +16785,9 @@ namespace ui
         }
 
         // ---- calendar --------------------------------------------------------------------------
-        // Month view: continuous weeks. Row r (0 = the week holding the 1st of the committed month) is drawn at
-        // 158 + 44 r - offset, so the grid moves one week at a time and the next month simply continues below.
-        void PaintCalRows(float offset, const SYSTEMTIME &now, float clipTop, float clipBottom, float layoutOffset)
+        // Month view: continuous weeks. Row r (0 = the week holding the 1st of the committed month) is drawn relative
+        // to the clipped grid top, so the grid moves one week at a time and the next month continues below.
+        void PaintCalRows(float offset, const SYSTEMTIME &now, float clipTop, float clipBottom)
         {
             const int fdow = FirstDayOfWeekSun(), weekRule = FirstWeekRule();
             const long long base = CalBaseDays(calYear, calMonth);
@@ -16343,7 +16795,7 @@ namespace ui
             EnsureOcc(base + 7LL * r0, base + 7LL * (r0 + 10));
             for (int r = r0; r <= r0 + 9; ++r)
             {
-                const float cy = 158.f + layoutOffset + (float)r * kCalRow + 22.f - offset;
+                const float cy = clipTop + 2.f + (float)r * kCalRow + 22.f - offset;
                 if (cy < clipTop - 22.f || cy > clipBottom + 22.f)
                     continue; // outside the visible window
                 const long long rowStart = base + 7LL * r;
@@ -16391,14 +16843,14 @@ namespace ui
         // One page of the year / decade views, drawn `shift` px below its resting place so pages can slide.
         // view 1: the months of `year`; view 2: the 12 years starting at ybase - 1.
         void PaintCalPage(int view, int year, int month, int ybase, float shift, const SYSTEMTIME &now,
-                          float clipTop, float clipBottom, float layoutOffset)
+                          float clipTop, float clipBottom)
         {
             (void)month; // the month view is painted by PaintCalRows; this draws the 4 x 3 year / decade pages
             // 4 x 3 grid: 79-wide cells with 8 gaps fill the 340 content width exactly.
             for (int i = 0; i < 12; ++i)
             {
                 const int c = i % 4, r = i / 4;
-                D2D1_RECT_F cell = RF(16.f + c * 87, 150.f + layoutOffset + r * 84 + shift, 79, 76);
+                D2D1_RECT_F cell = RF(16.f + c * 87, clipTop + 4.f + r * 84 + shift, 79, 76);
                 if (cell.bottom < clipTop || cell.top > clipBottom)
                     continue;
                 std::wstring label;
@@ -16467,13 +16919,15 @@ namespace ui
             SYSTEMTIME now{}, utc{};
             GetLocalTime(&now);
             GetSystemTime(&utc);
-            const float clockOffset = CalendarClockOffset();
+            const CalLayout cl = CalLay();
             hoverCellSeen = false;
             const bool gSync = cal::g_mode.load() == 1;
+            // Date row: the date on the left, then (Google mode) the sync button and the new-event "+" flush with the right margin.
+            Text(FitText(DateStr(now, L"dddd, MMMM d"), 20.f, 600, gSync ? 270.f : 300.f), RF(16, cl.date, gSync ? 276.f : 306.f, 32), 20.f, 600, pal.text, 0, 1);
+            FlatIcon(RF(322, cl.date - 1.f, 34, 34), ID_CAL_NEW, 0, L"\uE710");
             if (gSync)
-            { // manual sync, Google mode only: a quiet round button flush with the right margin (same edge as the month arrows)
-                Text(FitText(DateStr(now, L"dddd, MMMM d"), 20.f, 600, 300.f), RF(16, 56, 306, 32), 20.f, 600, pal.text, 0, 1);
-                const float cx = 342.f, cy = 72.f, d = 28.f, hov = HoverAmount(ID_CAL_SYNC);
+            { // manual sync, Google mode only: a quiet round button
+                const float cx = 306.f, cy = cl.date + 16.f, d = 28.f, hov = HoverAmount(ID_CAL_SYNC);
                 const D2D1_RECT_F sb = RF(cx - d / 2, cy - d / 2, d, d);
                 Circle(cx, cy, d / 2, Mix(pal.card, pal.cardHover, hov));
                 CircleStroke(cx, cy, d / 2 - 0.5f, Mix(pal.border, pal.accent, 0.45f * hov), 1.f);
@@ -16492,13 +16946,13 @@ namespace ui
                 rt->SetTransform(&m0);
                 AddHit(sb, ID_CAL_SYNC);
             }
-            else
-                Text(DateStr(now, L"dddd, MMMM d"), RF(16, 56, 340, 32), 20.f, 600, pal.text, 0, 1);
+            if (td::g_set.showSeconds.load())
+                Text(td::FmtTimeSec(now), RF(16, cl.sec, 340, 36), 26.f, 600, pal.text, 0, 1); // like the Windows 11 flyout; OnTick repaints it every second
 
             // Same hierarchy as the Windows 11 flyout: date, additional clocks, then the month calendar.
             for (size_t i = 0; i < additionalClocks.size(); ++i)
             {
-                const float y = 88.f + (float)i * kCalClockRowH;
+                const float y = cl.clk + (float)i * kCalClockRowH;
                 const std::wstring value = FormatAdditionalClock(additionalClocks[i], utc, now);
                 Text(FitText(additionalClocks[i].label, 12.5f, 400, 136.f),
                      RF(16.f, y, 136.f, kCalClockRowH), 12.5f, 400, pal.text, 0, 1);
@@ -16519,14 +16973,27 @@ namespace ui
                 title = std::to_wstring(calYear);
             else
                 title = std::to_wstring(yearBase) + L" \u2013 " + std::to_wstring(yearBase + 9);
-            D2D1_RECT_F hdr = RF(10, 94.f + clockOffset, 230, 34);
+            D2D1_RECT_F hdr = RF(10, cl.hdr, 230, 34);
             const float hh = HoverAmount(ID_CAL_HDR);
             if (hh > 0.001f)
                 RoundFill(hdr, 6.f, Fade(pal.cardHover, hh));
             Text(title, Inset(hdr, 8, 0), 15.f, 600, pal.text, 0, 1);
             AddHit(hdr, ID_CAL_HDR);
-            FlatIcon(RF(286, 94.f + clockOffset, 34, 34), ID_CAL_PREV, 0, L"\uE70E");
-            FlatIcon(RF(322, 94.f + clockOffset, 34, 34), ID_CAL_NEXT, 0, L"\uE70D");
+            { // "today": a small target left of the month arrows
+                const D2D1_RECT_F tr = RF(250, cl.hdr, 34, 34);
+                const float th = HoverAmount(ID_CAL_TODAY), tx = 267.f, ty = cl.hdr + 17.f;
+                if (th > 0.001f)
+                    RoundFill(tr, 6.f, Fade(pal.cardHover, th));
+                CircleStroke(tx, ty, 5.5f, pal.text, 1.3f);
+                Circle(tx, ty, 1.8f, pal.text);
+                Line(tx, ty - 9.f, tx, ty - 6.f, pal.text, 1.3f);
+                Line(tx, ty + 6.f, tx, ty + 9.f, pal.text, 1.3f);
+                Line(tx - 9.f, ty, tx - 6.f, ty, pal.text, 1.3f);
+                Line(tx + 6.f, ty, tx + 9.f, ty, pal.text, 1.3f);
+                AddHit(tr, ID_CAL_TODAY);
+            }
+            FlatIcon(RF(286, cl.hdr, 34, 34), ID_CAL_PREV, 0, L"\uE70E");
+            FlatIcon(RF(322, cl.hdr, 34, 34), ID_CAL_NEXT, 0, L"\uE70D");
 
             if (calView == 0)
             {
@@ -16536,20 +17003,20 @@ namespace ui
                     std::wstring n = WeekdayName((fdow + c) % 7, L"ddd");
                     if (n.size() > 2)
                         n.resize(2);
-                    Text(n, RF(CalGridX() + c * CalCell(), 132.f + clockOffset, CalCell(), 22), 12.f, 400, Fade(pal.accent, 0.8f), 1, 1);
+                    Text(n, RF(CalGridX() + c * CalCell(), cl.wd, CalCell(), 22), 12.f, 400, Fade(pal.accent, 0.8f), 1, 1);
                 }
                 if (td::g_set.showWeeks.load())
-                    Text(L"Wk", RF(kCalWeekX, 132.f + clockOffset, kCalWeekW, 22), 12.f, 400, Fade(pal.accent, 0.8f), 1, 1);
+                    Text(L"Wk", RF(kCalWeekX, cl.wd, kCalWeekW, 22), 12.f, 400, Fade(pal.accent, 0.8f), 1, 1);
             }
 
             // Pages above / below the committed one slide through a clipped window, like the Windows calendar.
             const float H = CalGridH();
-            const float clipTop = (calView == 0 ? 156.f : 146.f) + clockOffset;
+            const float clipTop = calView == 0 ? cl.grid : cl.wd + 14.f; // (the year and decade pages have no weekday row)
             const float clipBottom = clipTop + H + (calView == 0 ? 2.f : 8.f);
             const float off = SnapPx(calSm.pos);
             rt->PushAxisAlignedClip(RF(0, clipTop, kPanelW, clipBottom - clipTop), D2D1_ANTIALIAS_MODE_ALIASED);
             if (calView == 0)
-                PaintCalRows(off, now, clipTop, clipBottom, clockOffset);
+                PaintCalRows(off, now, clipTop, clipBottom);
             for (int k = -1; k <= 1 && calView != 0; ++k)
             {
                 int y = calYear, m = calMonth, yb = yearBase;
@@ -16565,10 +17032,9 @@ namespace ui
                     if (yb < 1600 || yb > 9990)
                         continue;
                 }
-                PaintCalPage(calView, y, m, yb, (float)k * H - off, now, clipTop, clipBottom, clockOffset);
+                PaintCalPage(calView, y, m, yb, (float)k * H - off, now, clipTop, clipBottom);
             }
             rt->PopAxisAlignedClip();
-            Btn(RF(116, 436.f + clockOffset, 140, 34), ID_CAL_TODAY, 0, L"Go to today", 0, 13.f);
             PaintHoverCard();
         }
 
@@ -16648,6 +17114,18 @@ namespace ui
                 SyncSpinAngle();
                 return;
             }
+            else if (id == ID_CAL_NEW)
+            { // a new event on the selected date
+                const long long d = td::DaysFromCivil(calSelY, calSelM, calSelD);
+                evDay = d;
+                cal::QueryOccurrences(d, d + 1, dayOccs);
+                evView = 1;
+                evDelArmedUntil = 0;
+                NewEventForm(d, true); // (reports itself when no calendar can take events: the day list is then shown)
+                if (evView == 1)
+                    EvTransition();
+                return;
+            }
             else if (id == ID_CAL_TODAY)
             {
                 CalResetSlide();
@@ -16674,6 +17152,16 @@ namespace ui
         int evChoice = 0, evColor = -1;
         bool evAllDay = false, evReadOnly = false, evRecurring = false, evFromList = false;
         long long evOccS = 0, evPrevWall = 0;
+        // Repeat (local mode): evRepeat is what the selector shows (0 none, 1 daily, 2 weekly, 3 monthly, 4 yearly, 5 a custom rule that is kept);
+        // evRepeatSeries what the event had when it was opened; evScope 0 = the whole series, 1 = only the opened occurrence.
+        int evRepeat = 0, evRepeatSeries = 0, evRepeatAll = 0, evScope = 0;
+        bool evRepeatCustom = false, evRepeatTouched = false;
+        static const wchar_t *RepeatName(int k)
+        {
+            static const wchar_t *n[] = {L"None", L"Daily", L"Weekly", L"Monthly", L"Yearly", L"Custom"};
+            return n[k < 0 ? 0 : k > 5 ? 5 : k];
+        }
+        static bool EvLocal() { return cal::g_mode.load() != 1; }
         ULONGLONG evDelArmedUntil = 0, evErrUntil = 0;
         long long lastClkDay = 0;
         ULONGLONG lastClkTick = 0;
@@ -16713,28 +17201,48 @@ namespace ui
                 CircleStroke(cx, cy, r, Hex((unsigned)cols[0]), w);
                 return;
             }
-            const float PI = 3.14159265f, seg = 2.f * PI / (float)n, gap = n <= 8 ? 0.17f : 0.07f;
-            for (int i = 0; i < n; ++i)
+            std::vector<ID2D1PathGeometry *> &geo = g_ringGeo[n * 1000 + (int)(r * 10.f)];
+            if (geo.empty() && g_d2d)
             {
-                const float a0 = -PI / 2.f + (float)i * seg + gap / 2.f, a1 = a0 + seg - gap;
-                ID2D1PathGeometry *g = nullptr;
-                if (!g_d2d || FAILED(g_d2d->CreatePathGeometry(&g)) || !g)
-                    continue;
-                ID2D1GeometrySink *sk = nullptr;
-                if (SUCCEEDED(g->Open(&sk)) && sk)
+                const float PI = 3.14159265f, seg = 2.f * PI / (float)n, gap = n <= 8 ? 0.17f : 0.07f;
+                for (int i = 0; i < n; ++i)
                 {
-                    sk->BeginFigure(D2D1_POINT_2F{cx + r * std::cos(a0), cy + r * std::sin(a0)}, D2D1_FIGURE_BEGIN_HOLLOW);
-                    D2D1_ARC_SEGMENT arc{D2D1_POINT_2F{cx + r * std::cos(a1), cy + r * std::sin(a1)}, D2D1_SIZE_F{r, r}, 0.f,
-                                         D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL};
-                    sk->AddArc(&arc);
-                    sk->EndFigure(D2D1_FIGURE_END_OPEN);
-                    sk->Close();
-                    sk->Release();
-                    Color(Hex((unsigned)cols[(size_t)i]));
-                    rt->DrawGeometry(g, br, w, nullptr);
+                    const float a0 = -PI / 2.f + (float)i * seg + gap / 2.f, a1 = a0 + seg - gap;
+                    ID2D1PathGeometry *g = nullptr;
+                    if (FAILED(g_d2d->CreatePathGeometry(&g)) || !g)
+                        g = nullptr;
+                    ID2D1GeometrySink *sk = nullptr;
+                    if (g && SUCCEEDED(g->Open(&sk)) && sk)
+                    {
+                        sk->BeginFigure(D2D1_POINT_2F{r * std::cos(a0), r * std::sin(a0)}, D2D1_FIGURE_BEGIN_HOLLOW);
+                        D2D1_ARC_SEGMENT arc{D2D1_POINT_2F{r * std::cos(a1), r * std::sin(a1)}, D2D1_SIZE_F{r, r}, 0.f,
+                                             D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL};
+                        sk->AddArc(&arc);
+                        sk->EndFigure(D2D1_FIGURE_END_OPEN);
+                        sk->Close();
+                        sk->Release();
+                    }
+                    else if (g)
+                    {
+                        g->Release();
+                        g = nullptr;
+                    }
+                    geo.push_back(g); // (a null entry is simply skipped when drawing)
                 }
-                g->Release();
             }
+            D2D1_MATRIX_3X2_F m0{}, m;
+            rt->GetTransform(&m0);
+            m = m0;
+            m._31 += cx * m0._11 + cy * m0._21; // translate to the date, through the page transform
+            m._32 += cx * m0._12 + cy * m0._22;
+            rt->SetTransform(&m);
+            for (int i = 0; i < n && i < (int)geo.size(); ++i)
+                if (geo[(size_t)i])
+                {
+                    Color(Hex((unsigned)cols[(size_t)i]));
+                    rt->DrawGeometry(geo[(size_t)i], br, w, nullptr);
+                }
+            rt->SetTransform(&m0);
         }
         void DayRing(long long day, float cx, float cy)
         {
@@ -16793,7 +17301,7 @@ namespace ui
             {
                 hoverCardCode = hoverParam;
                 hoverCardSince = MonoMs();
-                SetTimer(hwnd, TIMER_CAL_HOVER, 230, nullptr);
+                SetTimer(hwnd, TIMER_CAL_HOVER, 250, nullptr); // a little over the 220 ms below, so the tick never lands early
             }
             if (MonoMs() - hoverCardSince < 220 || calSm.Active() || !hoverCellSeen)
                 return;
@@ -17082,6 +17590,9 @@ namespace ui
             evRecurring = false;
             evColor = -1;
             evOccS = 0;
+            evScope = evRepeatAll = evRepeatSeries = 0;
+            evRepeatCustom = evRepeatTouched = false;
+            evRepeat = evChoices[(size_t)evChoice].repeatDefault; // the calendar's own default (Settings > Calendar settings)
             evFromList = fromList;
             SetEvEditsReadOnly(false);
             SetWindowTextW(edits[E_EV_TITLE], L"");
@@ -17124,6 +17635,10 @@ namespace ui
             evRecurring = !ev.rrule.empty();
             evReadOnly = ev.readOnly || c.ReadOnly();
             evOccS = o.s;
+            evScope = evRepeatAll = 0;
+            evRepeatTouched = false;
+            evRepeat = evRepeatSeries = cal::RepeatKindOf(ev.rrule);
+            evRepeatCustom = evRepeat == 5;
             evFromList = true;
             SetEvEditsReadOnly(evReadOnly);
             SetWindowTextW(edits[E_EV_TITLE], ev.title.c_str());
@@ -17186,7 +17701,13 @@ namespace ui
                 return;
             }
             ed.occS = evOccS;
+            ed.occOrig = evOccS;
             ed.occAllDay = evAllDay;
+            if (EvLocal())
+            {
+                ed.thisOnly = evRecurring && evScope == 1;
+                ed.repeat = (evId.empty() || ed.thisOnly || evRepeat != evRepeatSeries) ? std::min(evRepeat, 4) : -1; // -1: the repetition stays as it was
+            }
             if (!evId.empty())
             { // the occurrence being edited: for an all-day series its first day
                 cal::Event cur;
@@ -17219,7 +17740,7 @@ namespace ui
                 return;
             if (now < evDelArmedUntil)
             {
-                const std::wstring err = cal::DeleteEventById(evCalId, evId);
+                const std::wstring err = cal::DeleteEventById(evCalId, evId, EvLocal() && evRecurring && evScope == 1, evOccS);
                 if (!err.empty())
                 {
                     EvError(err);
@@ -17276,8 +17797,11 @@ namespace ui
                 RoundFill(r, 8.f, Mix(pal.card, pal.cardHover, HoverAmount(ID_EV_ROW, (int)i)));
                 RoundStroke(r, 8.f, pal.border, 1.f);
                 RoundFill(RF(24, y + 9, 4, 34), 2.f, Hex((unsigned)o.color));
-                Text(FitText(o.title.empty() ? L"(No title)" : o.title, 13.5f, 600, 262.f), RF(38, y + 6, 270, 22), 13.5f, 600, pal.text, 0, 1);
-                Text(FitText(TimeLabel(o, evDay) + L"  \u00B7  " + o.calName, 11.5f, 400, 262.f), RF(38, y + 27, 270, 20), 11.5f, 400, pal.sub, 0, 1);
+                const float tw = o.recurring ? 250.f : 262.f; // room for the repeat mark
+                Text(FitText(o.title.empty() ? L"(No title)" : o.title, 13.5f, 600, tw), RF(38, y + 6, tw + 8.f, 22), 13.5f, 600, pal.text, 0, 1);
+                Text(FitText(TimeLabel(o, evDay) + L"  \u00B7  " + o.calName, 11.5f, 400, tw), RF(38, y + 27, tw + 8.f, 20), 11.5f, 400, pal.sub, 0, 1);
+                if (o.recurring)
+                    Text(L"\uE8EE", RF(294, y, 24, 52), 10.f, 400, pal.sub, 1, 1, true);
                 Text(o.readOnly ? L"\uE72E" : L"\uE76C", RF(318, y, 30, 52), 11.f, 400, pal.sub, 1, 1, true);
                 AddHit(r, ID_EV_ROW, (int)i);
                 y += 58.f;
@@ -17295,11 +17819,32 @@ namespace ui
                 Text(evErr, RF(150, 50, 206, 34), 11.f, 400, pal.danger, 2, 1, false, true);
             else if (evReadOnly)
                 Text(L"Read-only", RF(150, 50, 206, 34), 11.5f, 400, pal.sub, 2, 1);
+            else if (evRecurring && EvLocal())
+            { // which occurrences a change or a delete is for
+                Chip(RF(166, 54, 90, 26), ID_EV_SCOPE, 1, L"This event", evScope == 1);
+                Chip(RF(266, 54, 90, 26), ID_EV_SCOPE, 0, L"All events", evScope == 0);
+            }
             else if (evRecurring)
                 Text(L"Repeats \u00B7 edits change the whole series", RF(150, 50, 206, 34), 11.f, 400, pal.sub, 2, 1, false, true);
             UseEdit(E_EV_TITLE, RF(16, 90, 340, 38), 10, 7);
-            Text(L"All day", RF(18, 134, 200, 26), 13.f, 400, pal.text, 0, 1);
-            if (!evReadOnly)
+            Text(L"All day", RF(18, 134, 52, 26), 13.f, 400, pal.text, 0, 1);
+            if (EvLocal())
+            { // All day on the left, Repeat < Weekly > on the right
+                if (!evReadOnly)
+                    UiWindow::Toggle(76, 137, ID_EV_ALLDAY, evAllDay);
+                else
+                    Text(evAllDay ? L"Yes" : L"No", RF(72, 134, 50, 26), 12.5f, 400, pal.sub, 0, 1);
+                Text(L"Repeat", RF(188, 134, 48, 26), 12.5f, 400, pal.sub, 0, 1);
+                if (!evReadOnly)
+                {
+                    FlatIcon(RF(236, 134, 30, 26), ID_EV_REPEAT, 0, L"\uE76B", 12.f);
+                    Text(RepeatName(evRepeat), RF(266, 134, 60, 26), 13.f, 600, pal.text, 1, 1);
+                    FlatIcon(RF(326, 134, 30, 26), ID_EV_REPEAT, 1, L"\uE76C", 12.f);
+                }
+                else
+                    Text(RepeatName(evRepeat), RF(266, 134, 90, 26), 12.5f, 400, pal.sub, 2, 1);
+            }
+            else if (!evReadOnly)
                 UiWindow::Toggle(316, 137, ID_EV_ALLDAY, evAllDay);
             else
                 Text(evAllDay ? L"Yes" : L"No", RF(256, 134, 100, 26), 12.5f, 400, pal.sub, 2, 1);
@@ -17346,6 +17891,18 @@ namespace ui
             UseEdit(E_EV_LOC, RF(16, 316, 340, 34), 10, 7);
             Text(L"Description", RF(18, 354, 200, 14), 10.5f, 400, pal.sub, 0, 1);
             UseEdit(E_EV_DESC, RF(16, 370, 340, 56), 10, 6);
+            editRect[E_EV_DESC].right -= 6.f; // room for the thin scroll indicator
+            {
+                const int total = (int)SendMessageW(edits[E_EV_DESC], EM_GETLINECOUNT, 0, 0);
+                const int first = (int)SendMessageW(edits[E_EV_DESC], EM_GETFIRSTVISIBLELINE, 0, 0);
+                const int vis = std::max(1, (int)(RH(editRect[E_EV_DESC]) / descLineH));
+                if (total > vis)
+                {
+                    const float trackH = 56.f - 12.f, thumbH = std::max(14.f, trackH * (float)vis / (float)total);
+                    const float f = Clamp01((float)first / (float)std::max(1, total - vis));
+                    RoundFill(RF(16.f + 340.f - 7.f, 376.f + (trackH - thumbH) * f, 2.f, thumbH), 1.f, Fade(pal.sub, 0.8f));
+                }
+            }
             // buttons
             if (evReadOnly)
                 Btn(RF(16, 436, 340, 38), ID_EV_CANCEL, 0, L"Close", 0, 13.5f);
@@ -17359,7 +17916,8 @@ namespace ui
                 const bool armed = MonoMs() < evDelArmedUntil;
                 Btn(RF(16, 436, 104, 38), ID_EV_SAVE, 0, L"Save", 1, 13.5f);
                 Btn(RF(128, 436, 104, 38), ID_EV_CANCEL, 0, L"Cancel", 0, 13.5f);
-                Btn(RF(240, 436, 116, 38), ID_EV_DELETE, 0, armed ? L"Confirm?" : L"Delete", armed ? 3 : 0, 13.5f);
+                const bool wholeSeries = evRecurring && EvLocal() && evScope == 0;
+                Btn(RF(240, 436, 116, 38), ID_EV_DELETE, 0, armed ? L"Confirm?" : (wholeSeries ? L"Delete all" : L"Delete"), armed ? 3 : 0, 13.5f);
             }
         }
 
@@ -17419,12 +17977,35 @@ namespace ui
             case ID_EV_COLOR:
                 evColor = param == 0 ? -1 : cal::kPalette[param - 1];
                 break;
+            case ID_EV_REPEAT:
+            {
+                const int n = (evRepeatCustom && evScope == 0) ? 6 : 5; // "Custom" only while the event has such a rule
+                evRepeat = (evRepeat + (param ? 1 : -1) + n) % n;
+                evRepeatTouched = true;
+                break;
+            }
+            case ID_EV_SCOPE:
+                if (param != evScope && evRecurring)
+                { // "This event" starts from no repetition of its own; going back restores the series' choice
+                    if (param == 1)
+                    {
+                        evRepeatAll = evRepeat;
+                        evRepeat = 0;
+                    }
+                    else
+                        evRepeat = evRepeatAll;
+                    evScope = param;
+                    evDelArmedUntil = 0;
+                }
+                break;
             case ID_EV_CAL:
                 if (!evChoices.empty())
                 {
                     evChoice = (evChoice + (param ? 1 : -1) + (int)evChoices.size()) % (int)evChoices.size();
                     evCalId = evChoices[(size_t)evChoice].id;
                     evCalName = evChoices[(size_t)evChoice].name;
+                    if (evId.empty() && !evRepeatTouched)
+                        evRepeat = evChoices[(size_t)evChoice].repeatDefault;
                 }
                 break;
             }
@@ -17494,6 +18075,7 @@ namespace ui
         void OpenCalSettings(int sub = 1)
         {
             settingsSub = sub;
+            calSetBottom = panelH; // the previous sub-page's height must not size this one until it has been painted
             csOpen.clear();
             csNewOpen = false;
             csRowMsg.clear();
@@ -17543,7 +18125,10 @@ namespace ui
             auto step = [&](const wchar_t *t, bool hasLink)
             {
                 ++n;
-                const float ph = std::max(18.f, WrapH(t, 12.f, tw));
+                auto it = helpWrapH.find(t); // the guide is fixed text: measure each step once
+                if (it == helpWrapH.end())
+                    it = helpWrapH.emplace(t, WrapH(t, 12.f, tw)).first;
+                const float ph = std::max(18.f, it->second);
                 if (draw)
                 {
                     Circle(x0 + 9.f, yy + 9.f, 9.f, Mix(pal.cardHover, pal.accent, 0.3f));
@@ -17586,7 +18171,14 @@ namespace ui
             yy += nh;
             return yy - by;
         }
-        float HelpFullH() { return 66.f + HelpBody(0.f, false) + 14.f; }
+        std::map<const wchar_t *, float> helpWrapH;
+        float helpFullH = -1.f;
+        float HelpFullH()
+        {
+            if (helpFullH < 0.f)
+                helpFullH = 66.f + HelpBody(0.f, false) + 14.f;
+            return helpFullH;
+        }
 
         void PaintCalSettings()
         {
@@ -17644,9 +18236,10 @@ namespace ui
                 // ---- details of the opened calendar
                 float h = 44.f + 34.f; // swatches + first button row
                 const bool def = c.id == cal::kDefaultId, regular = !google && !def;
+                const bool repRow = !google && !c.imported; // local calendars that can receive events
                 const bool gOwner = google && c.role == L"owner"; // Google calendars you own can be deleted (the primary one cleared)
                 if (!google)
-                    h += 34.f + (regular || c.imported ? 40.f : 0.f);
+                    h += 34.f + (regular || c.imported ? 40.f : 0.f) + (repRow ? 52.f : 0.f);
                 else if (gOwner)
                     h += 36.f;
                 const D2D1_RECT_F det = RF(16, y, 340, h);
@@ -17663,6 +18256,15 @@ namespace ui
                 float by = y + 44.f;
                 if (!google)
                 {
+                    if (repRow)
+                    { // what a new event in this calendar repeats by: only yearly is offered (weekly / monthly are chosen on each event)
+                        Text(L"Repeat new events", RF(26, by, 190, 30), 12.5f, 400, pal.sub, 0, 1);
+                        FlatIcon(RF(216, by, 30, 30), ID_CS_REPEAT, (int)i, L"\uE76B", 12.f);
+                        Text(RepeatName(c.repeatDefault), RF(246, by, 70, 30), 13.f, 600, pal.text, 1, 1);
+                        FlatIcon(RF(316, by, 30, 30), ID_CS_REPEAT, (int)i, L"\uE76C", 12.f);
+                        Text(L"Weekly and monthly repeats are set on each event.", RF(26, by + 28.f, 320, 16), 10.5f, 400, pal.sub, 0, 1);
+                        by += 52.f;
+                    }
                     if (regular || c.imported)
                     {
                         UseEdit(E_CS_NAME, RF(26, by, 230, 32), 8, 6);
@@ -17840,6 +18442,10 @@ namespace ui
                 if (auto *c = calAt(param / 16))
                     if (param % 16 < 11)
                         cal::CalSetColor(c->id, cal::kPalette[param % 16]);
+                break;
+            case ID_CS_REPEAT:
+                if (auto *c = calAt(param))
+                    cal::CalSetRepeat(c->id, c->repeatDefault == 4 ? 0 : 4);
                 break;
             case ID_CS_RENAME:
                 if (auto *c = calAt(param))
@@ -18386,15 +18992,26 @@ namespace ui
         {
             Text(L"Notes", RF(14, 52, 150, 30), 17.f, 600, pal.text, 0, 1);
             IconBtn(349, 67, 28, ID_NOTE_ADD, 0, L"\uE710", 1, 13.f);
+            FlatIcon(RF(304, 52, 30, 30), ID_NOTE_SEARCH, 0, L"\uE721", 13.f); // search (Ctrl+F)
+            const float sk = NoteSearchK();
+            if (sk > 0.002f)
+                UseEdit(E_NSEARCH, RF(16, 88, 340, 30.f * sk), 10.f, std::min(6.f, 30.f * sk * 0.18f));
             if (notes.empty())
             {
                 Text(L"No notes yet. Press + to add one.", RF(24, 130, 324, 30), 13.f, 400, pal.sub, 1, 1);
                 return;
             }
-            for (size_t i = 0; i < notes.size(); ++i)
+            const std::vector<int> shown = NoteShown();
+            const float top0 = 92.f + 40.f * sk;
+            if (shown.empty())
             {
-                const Note &n = notes[i];
-                D2D1_RECT_F r = RF(8, 92.f + (float)i * 60.f, 356, 54);
+                Text(L"No matching notes", RF(24, top0 + 24.f, 324, 30), 13.f, 400, pal.sub, 1, 1);
+                return;
+            }
+            for (size_t k = 0; k < shown.size(); ++k)
+            {
+                const Note &n = notes[(size_t)shown[k]];
+                D2D1_RECT_F r = RF(8, top0 + (float)k * 60.f, 356, 54);
                 RoundFill(r, 8.f, Mix(pal.card, pal.cardHover, HoverAmount(ID_NOTE_OPEN, n.id)));
                 RoundStroke(r, 8.f, pal.border, 1.f);
                 AddHit(r, ID_NOTE_OPEN, n.id);
@@ -18416,6 +19033,7 @@ namespace ui
             FlatIcon(RF(178, 51, 26, 30), ID_NOTE_ZOOM, 0, L"\uE76B", 11.f);
             Text(std::to_wstring(noteZoom) + L"%", RF(204, 50, 42, 32), 11.5f, 600, pal.sub, 1, 1);
             FlatIcon(RF(246, 51, 26, 30), ID_NOTE_ZOOM, 1, L"\uE76C", 11.f);
+            FlatIcon(RF(272, 51, 22, 30), ID_NOTE_EXPORT, 0, L"\uE74E", 12.f); // export as .md
             FlatIcon(RF(294, 51, 30, 30), ID_NOTE_COPY, 0, L"\uE8C8", 13.f); // copy the body text (not the title)
             FlatIcon(RF(334, 51, 30, 30), ID_NOTE_EDIT, 0, L"\uE70F", 13.f);
 
@@ -18983,6 +19601,19 @@ namespace ui
         // ---- General settings: tabs can be dragged into a new order, the panel position is a slider ----
         int tabDragId = -1, tabDragSlot = 0;
         bool tabDragging = false, posDrag = false;
+        void CancelDrags()
+        { // the mouse was taken away mid-drag (another window, a menu, Alt+Tab, the panel closing): nothing stays held or hidden
+            if (posDrag)
+            {
+                posDrag = false;
+                td::g_set.Save();
+            }
+            const bool was = tabDragging;
+            tabDragId = -1;
+            tabDragging = false;
+            if (was)
+                Invalidate();
+        }
         float tabDragDownX = 0.f, tabDragDownY = 0.f, tabDragX = 0.f, tabDragY = 0.f, tabChipsTop = 0.f;
         int PosMax() const
         { // screen pixels between the right and the left position of the panel on this monitor
@@ -19018,6 +19649,110 @@ namespace ui
             InitTabAnim();
         }
 
+        // One file with the notes, tasks, alarms, timer presets and local calendars (nothing from Google mode).
+        void BackupExport()
+        {
+            std::wstring path;
+            if (!cal::PickSaveFile(hwnd, L"WinKlok backup.wkbak", path, L"WinKlok backup (*.wkbak)\0*.wkbak\0", L"wkbak", L"Export WinKlok data"))
+                return;
+            FlushNote();
+            std::wstring o = L"WKBACKUP1\n";
+            for (const Note &n : notes)
+                o += L"NOTE|" + std::to_wstring(n.id) + L"|" + std::to_wstring(n.modified) + L"|" + td::Esc(n.title) + L"|" + td::Esc(n.body) + L"\n";
+            for (const Todo &t : todos)
+                o += L"TODO|" + std::to_wstring(t.id) + L"|" + (t.done ? L"1" : L"0") + L"|" + std::to_wstring(t.created) + L"|" + td::Esc(t.text) + L"\n";
+            o += td::g_eng.BackupLines();
+            o += L"CAL\n"; // everything after this line is the local calendar store
+            std::string data = cal::ToUtf8(o);
+            data += cal::BackupLocal();
+            SetStatus(cal::WriteFileAtomic(path, data, false) ? L"Backup saved" : L"Could not write the file");
+        }
+        void BackupRestore()
+        {
+            std::wstring path;
+            if (!cal::PickOpenFile(hwnd, path, L"WinKlok backup (*.wkbak)\0*.wkbak\0All files\0*.*\0", L"Restore WinKlok data"))
+                return;
+            std::string raw;
+            const size_t cut = cal::ReadFileAll(path, raw, 64u << 20) ? raw.find("\nCAL\n") : std::string::npos;
+            if (cut == std::string::npos || raw.compare(0, 10, "WKBACKUP1\n") != 0)
+            {
+                SetStatus(L"This is not a WinKlok backup");
+                return;
+            }
+            {
+                cal::ModalGuard mg;
+                if (MessageBoxW(hwnd, L"Replace your notes, tasks, alarms, timer presets and local calendars with this backup?", L"WinKlok",
+                                MB_YESNO | MB_ICONQUESTION) != IDYES)
+                    return;
+            }
+            const std::vector<std::wstring> lines = td::Split(cal::FromUtf8(raw.substr(0, cut + 1)), L'\n');
+            std::vector<Note> nn;
+            std::vector<Todo> tt;
+            int maxN = 0, maxT = 0;
+            for (size_t i = 1; i < lines.size(); ++i)
+            {
+                const auto f = td::Split(lines[i], L'|');
+                if (f.size() < 5)
+                    continue;
+                if (f[0] == L"NOTE")
+                {
+                    Note n;
+                    n.id = (int)td::ToLL(f[1]);
+                    if (n.id <= 0)
+                        continue;
+                    n.modified = td::ToLL(f[2]);
+                    n.title = td::Unesc(f[3]);
+                    n.body = td::Unesc(f[4]);
+                    maxN = std::max(maxN, n.id);
+                    nn.push_back(std::move(n));
+                }
+                else if (f[0] == L"TODO" && tt.size() < kMaxTodos)
+                {
+                    Todo t;
+                    t.id = (int)td::ToLL(f[1]);
+                    if (t.id <= 0)
+                        continue;
+                    t.done = f[2] == L"1";
+                    t.created = td::ToLL(f[3]);
+                    t.text = td::ClampName(td::Unesc(f[4]), 200);
+                    maxT = std::max(maxT, t.id);
+                    tt.push_back(std::move(t));
+                }
+            }
+            if (!cal::RestoreLocal(raw.substr(cut + 5)))
+            {
+                SetStatus(L"The calendars in this backup could not be read");
+                return;
+            }
+            FlushNote();
+            for (const Note &o : notes) // notes that are not in the backup disappear from storage as well
+            {
+                bool kept = false;
+                for (const Note &n : nn)
+                    kept = kept || n.id == o.id;
+                if (!kept)
+                    td::PutBig(NoteKey(o.id).c_str(), L"");
+            }
+            notes = std::move(nn);
+            nextNoteId = std::max(nextNoteId, maxN + 1);
+            for (const Note &n : notes)
+                SaveNoteData(n);
+            SortNotes();
+            SaveIndex();
+            curNote = 0;
+            noteView = 0;
+            docValid = false;
+            ++noteVersion;
+            todos = std::move(tt);
+            nextTodoId = std::max(nextTodoId, maxT + 1);
+            SaveTodos();
+            td::g_eng.RestoreLines(lines);
+            tb::PostRefreshAll();
+            ResizePanelToContent();
+            Invalidate();
+            SetStatus(L"Backup restored");
+        }
+
         void PaintGeneralSettings()
         {
             auto &S = td::g_set;
@@ -19051,6 +19786,9 @@ namespace ui
             Chip(RF(30, y + 36, 150, 26), ID_ST_FORMAT, 0, L"12-hour", !S.Use24());
             Chip(RF(192, y + 36, 150, 26), ID_ST_FORMAT, 1, L"24-hour", S.Use24());
             y += 78;
+            SettingRow(y, 56, L"Clock with seconds", L"At the top of the Calendar page");
+            UiWindow::Toggle(302, y + 18, ID_ST_SECS, S.showSeconds.load() != 0);
+            y += 64;
             SettingRow(y, 70, L"Panel material", L""); // only visible effect when Windows transparency effects are on
             Chip(RF(30, y + 36, 150, 26), ID_ST_ACRYLIC, 1, L"Acrylic blur", S.acrylic.load() != 0);
             Chip(RF(192, y + 36, 150, 26), ID_ST_ACRYLIC, 0, L"Simple", S.acrylic.load() == 0);
@@ -19078,6 +19816,10 @@ namespace ui
             y += 86;
             SoundRow(y, L"Default alarm sound", S.alarmSound.load(), ID_ST_ASOUND, ID_ST_ASOUND_PLAY);
             y += 86;
+            SettingRow(y, 88, L"Backup", L"Notes, tasks, alarms, presets, local calendars");
+            Chip(RF(30, y + 52, 150, 26), ID_ST_BACKUP, 0, L"Export\u2026", false);
+            Chip(RF(192, y + 52, 150, 26), ID_ST_RESTORE, 0, L"Restore\u2026", false);
+            y += 96;
             calSetBottom = y + 12.f;
         }
 
@@ -19129,6 +19871,16 @@ namespace ui
                     EditorWheel(delta);
                 return;
             }
+            if (tab == 0 && evView == 2 && edits[E_EV_DESC])
+            { // the event description scrolls like the note editor (smooth glide, three lines per notch) while the pointer is over it
+                POINT cp{};
+                RECT er{};
+                if (IsWindowVisible(edits[E_EV_DESC]) && GetCursorPos(&cp) && GetWindowRect(edits[E_EV_DESC], &er) && PtInRect(&er, cp))
+                {
+                    EditorWheel(delta);
+                    return;
+                }
+            }
             if (PanelScrollMax() > 0.5f)
             { // continuous: precision touchpads deliver many small deltas
                 ScrollTo(panelScrollTarget - delta * (kWheelPx / (float)WHEEL_DELTA));
@@ -19163,6 +19915,8 @@ namespace ui
             case ID_EV_ALLDAY:
             case ID_EV_COLOR:
             case ID_EV_CAL:
+            case ID_EV_REPEAT:
+            case ID_EV_SCOPE:
                 EvClick(id, param);
                 return;
             case ID_ST_CALSET:
@@ -19182,6 +19936,7 @@ namespace ui
             case ID_CS_ROW:
             case ID_CS_COLOR:
             case ID_CS_RENAME:
+            case ID_CS_REPEAT:
             case ID_CS_DELETE:
             case ID_CS_CLEAR:
             case ID_CS_EXPORT:
@@ -19203,6 +19958,7 @@ namespace ui
             case ID_CAL_HDR:
             case ID_CAL_CELL:
             case ID_CAL_TODAY:
+            case ID_CAL_NEW:
             case ID_CAL_SYNC:
                 CalClick(id, param);
                 return;
@@ -19440,6 +20196,13 @@ namespace ui
             case ID_NOTE_ADD:
                 NewNote();
                 return;
+            case ID_NOTE_SEARCH:
+                ToggleNoteSearch();
+                return;
+            case ID_NOTE_EXPORT:
+                if (Note *n = FindNote(curNote))
+                    ExportNoteMd(*n);
+                break;
             case ID_NOTE_OPEN:
                 OpenNote(param);
                 return;
@@ -19501,6 +20264,16 @@ namespace ui
                 break;
             case ID_ST_WEEKS:
                 td::g_set.showWeeks = !td::g_set.showWeeks.load();
+                td::g_set.Save();
+                break;
+            case ID_ST_BACKUP:
+                BackupExport();
+                break;
+            case ID_ST_RESTORE:
+                BackupRestore();
+                break;
+            case ID_ST_SECS:
+                td::g_set.showSeconds = !td::g_set.showSeconds.load();
                 td::g_set.Save();
                 break;
             case ID_ST_POSX:
@@ -19578,6 +20351,9 @@ namespace ui
                     return 0;
                 case TIMER_TODO_ANIM:
                     TodoDrop(); // advances (and ends) the drop-down even when the Tasks page is not the one being painted
+                    NoteSearchK();
+                    if (nsStart)
+                        StartFrames(hwnd, TIMER_TODO_ANIM);
                     if (IsWindowVisible(hwnd))
                         Invalidate();
                     else
@@ -19698,6 +20474,8 @@ namespace ui
                 }
                 break;
             case WM_MOUSEMOVE:
+                if (!(wp & MK_LBUTTON) && (tabDragId >= 0 || posDrag))
+                    CancelDrags(); // the button was released without us noticing
                 if ((wp & MK_LBUTTON) && tab == TAB_SETTINGS && settingsSub == 3)
                 {
                     const float x = GET_X_LPARAM(lp) * 96.f / dpi, y = HitTestY(GET_Y_LPARAM(lp) * 96.f / dpi);
@@ -19716,6 +20494,30 @@ namespace ui
                         }
                     }
                 }
+                break;
+            case WM_KEYDOWN:
+            { // shortcuts while the panel itself has the keyboard: Space / L on the Stopwatch, Ctrl+F on the note list
+                const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+                if (tab == TAB_SW && !ctrl && (wp == VK_SPACE || wp == 'L'))
+                {
+                    if (wp == VK_SPACE)
+                        td::g_eng.SwToggle();
+                    else
+                        td::g_eng.SwLap();
+                    tb::PostRefreshAll();
+                    Invalidate();
+                    return 0;
+                }
+                if (ctrl && wp == 'F' && tab == TAB_NOTES && noteView == 0)
+                {
+                    ToggleNoteSearch();
+                    return 0;
+                }
+                break;
+            }
+            case WM_CAPTURECHANGED: // (a finished drag has already cleared its state before it lets go of the mouse)
+            case WM_CANCELMODE:
+                CancelDrags();
                 break;
             case WM_LBUTTONUP:
                 if (posDrag)
@@ -19804,12 +20606,16 @@ namespace ui
                     }
                     else if (tab == TAB_SETTINGS && settingsSub)
                         CloseCalSettings();
+                    else if (tab == TAB_NOTES && noteView == 0 && noteSearchOpen)
+                        ToggleNoteSearch();
                     else
                         HidePanel();
                     return 0;
                 }
                 if (HIWORD(wp) == EN_CHANGE && (LOWORD(wp) == 100 + E_NTITLE || LOWORD(wp) == 100 + E_NBODY))
                     OnNoteTextChanged();
+                if (HIWORD(wp) == EN_CHANGE && LOWORD(wp) == 100 + E_NSEARCH)
+                    Invalidate(); // the note list follows the search text
                 if (HIWORD(wp) == EN_VSCROLL)
                     Invalidate(); // keeps the editor's thin scroll indicator in sync
                 if (HIWORD(wp) == EN_KILLFOCUS && LOWORD(wp) >= 100 + E_EV_SD && LOWORD(wp) <= 100 + E_EV_ET && evView == 2)
@@ -19855,10 +20661,10 @@ namespace ui
                 p->NudgeWhen(whenSlot, w == VK_UP ? 1 : -1); // date: a day, time: a quarter of an hour
                 return 0;
             }
-            const bool isBody = h == p->edits[E_NBODY];
+            const bool isBody = p->IsScrollEdit(h); // the note body and the event description take touchpad / wheel themselves
             if (m == WM_MOUSEMOVE || m == WM_SETCURSOR || m == WM_NCHITTEST)
                 RouteTouchpadTo(isBody ? h : p->hwnd); // touchpad pointers go to the body editor only while it is under the cursor
-            if (isBody && m == WM_PASTE && p->PasteIntoBody(h))
+            if (h == p->edits[E_NBODY] && m == WM_PASTE && p->PasteIntoBody(h))
                 return 0;
             if (isBody && (m == WM_MOUSEWHEEL || m == WM_POINTERWHEEL))
             {
@@ -20093,8 +20899,8 @@ namespace ui
         // Background read state (see "background reading" below). g_cancel is checked inside the long loops.
         static std::atomic<bool> g_cancel{false}, g_busy{false};
 
-        using usr::UserSid; // shared with the calendar files (defined before namespace cal)
         using usr::OwnerOnly;
+        using usr::UserSid; // shared with the calendar files (defined before namespace cal)
 
         // The database is in use by Windows, so it is read with every sharing mode allowed.
         static bool CopyShared(const std::wstring &src, const std::wstring &dst)
@@ -20183,12 +20989,9 @@ namespace ui
         // The private copy lives in the mod's own storage folder (removed together with the mod), under a fixed name: only
         // one read runs at a time. Anything left from an interrupted read is deleted before the next one and at start-up.
         static std::wstring CopyBase()
-        {
-            wchar_t dir[MAX_PATH] = {};
-            if (!Wh_GetModStoragePath(dir, ARRAYSIZE(dir)) || !dir[0])
-                return L"";
-            CreateDirectoryW(dir, nullptr); // (already there in most cases)
-            return UserSid().empty() ? L"" : std::wstring(dir) + L"\\wpndatabase-" + UserSid() + L".db";
+        { // inside the owner-only data folder (cal::DataDir is named after the user's SID and carries the restricted ACL)
+            const std::wstring d = cal::DataDir();
+            return d.empty() ? L"" : d + L"\\wpndatabase.db";
         }
         static void DeleteCopy(const std::wstring &dst)
         {
@@ -20202,6 +21005,16 @@ namespace ui
         static void CleanupLeftovers()
         {
             DeleteCopy(CopyBase());
+            // v1.2.0 and earlier kept this private snapshot in the shared mod-storage root.
+            // Remove it on upgrade as well, including SQLite sidecars, so notification history
+            // is not left behind in a folder shared by Windows users.
+            const std::wstring sid = usr::UserSid();
+            if (!sid.empty())
+            {
+                wchar_t dir[MAX_PATH] = {};
+                if (Wh_GetModStoragePath(dir, ARRAYSIZE(dir)) && dir[0])
+                    DeleteCopy(std::wstring(dir) + L"\\wpndatabase-" + sid + L".db");
+            }
         }
 
         // Reads the toast notifications currently held by Windows, newest first. False: they could not be read.
@@ -20481,6 +21294,68 @@ namespace ui
         }
     } // namespace wpn
 
+    // Windows' own Do not disturb, through the (undocumented) QuietHours service that the notification centre itself talks to.
+    // If Windows changes or removes that interface the calls simply fail and the button does nothing.
+    namespace dnd
+    {
+        struct IQuietHoursSettings : public IUnknown
+        {
+            // IQuietHoursSettings (undocumented). The slots up to get_ActiveProfile must all be declared so its vtable slot is right;
+            // only the ones named below are ever called.
+            virtual HRESULT STDMETHODCALLTYPE get_UserSelectedProfile(LPWSTR *profileId) = 0;
+            virtual HRESULT STDMETHODCALLTYPE put_UserSelectedProfile(LPWSTR profileId) = 0;
+            virtual HRESULT STDMETHODCALLTYPE GetProfile(LPWSTR profileId, void **profile) = 0;
+            virtual HRESULT STDMETHODCALLTYPE GetAllProfileData(UINT32 *count, void *data) = 0;
+            virtual HRESULT STDMETHODCALLTYPE GetDisplayNameForProfile(LPWSTR profileId, LPWSTR *name) = 0;
+            virtual HRESULT STDMETHODCALLTYPE get_QuietMomentsManager(void **manager) = 0;
+            virtual HRESULT STDMETHODCALLTYPE get_OffProfileId(LPWSTR *profileId) = 0;
+            virtual HRESULT STDMETHODCALLTYPE get_ActiveQuietMomentProfile(LPWSTR *profileId) = 0;
+            virtual HRESULT STDMETHODCALLTYPE put_ActiveQuietMomentProfile(LPWSTR profileId) = 0;
+            virtual HRESULT STDMETHODCALLTYPE get_ActiveProfile(LPWSTR *profileId) = 0; // the profile Windows is really applying right now
+        };
+        static const GUID kClsid = {0xF53321FA, 0x34F8, 0x4B7F, {0xB9, 0xA3, 0x36, 0x18, 0x77, 0xCB, 0x94, 0xCF}};
+        static const GUID kIid = {0x6BFF4732, 0x81EC, 0x4FFB, {0xAE, 0x67, 0xB6, 0xC1, 0xBC, 0x29, 0x63, 0x1F}};
+        static const wchar_t kOff[] = L"Microsoft.QuietHoursProfile.Unrestricted";
+        static const wchar_t kOn[] = L"Microsoft.QuietHoursProfile.PriorityOnly";
+        static IQuietHoursSettings *Open()
+        {
+            IQuietHoursSettings *q = nullptr;
+            if (FAILED(CoCreateInstance(kClsid, nullptr, CLSCTX_LOCAL_SERVER, kIid, (void **)&q)))
+                return nullptr;
+            return q;
+        }
+        // On Windows 11 the profile the user selected stays "Unrestricted" while Do not disturb is applied by a focus session or an
+        // automatic rule, so it alone cannot say whether notifications are really being held back. The profile Windows is applying
+        // (get_ActiveProfile) is the effective state; the most restrictive of the two is reported.
+        static bool Get(bool &on)
+        {
+            IQuietHoursSettings *q = Open();
+            if (!q)
+                return false;
+            LPWSTR sel = nullptr, act = nullptr;
+            const bool okSel = SUCCEEDED(q->get_UserSelectedProfile(&sel)) && sel;
+            const bool okAct = SUCCEEDED(q->get_ActiveProfile(&act)) && act;
+            if (okSel || okAct)
+                on = (okSel && wcscmp(sel, kOff) != 0) || (okAct && wcscmp(act, kOff) != 0);
+            if (sel)
+                CoTaskMemFree(sel);
+            if (act)
+                CoTaskMemFree(act);
+            q->Release();
+            return okSel || okAct;
+        }
+        static bool Set(bool on)
+        {
+            IQuietHoursSettings *q = Open();
+            if (!q)
+                return false;
+            std::wstring profile = on ? kOn : kOff;
+            const bool ok = SUCCEEDED(q->put_UserSelectedProfile(profile.data()));
+            q->Release();
+            return ok;
+        }
+    } // namespace dnd
+
     class NotifWindow : public FlyoutWindow
     {
     public:
@@ -20511,6 +21386,53 @@ namespace ui
         };
         std::vector<Row> rows;
         float contentH = 0.f;
+        bool dndOn = false; // Windows' Do not disturb, as the system reports it
+        // The Do not disturb icon: the notification bell crossed out by a diagonal stroke (same glyph and stroke weight as the other icons).
+        void SilentBell(const D2D1_RECT_F &r, float size, const Col &c)
+        {
+            Text(L"\uEA8F", r, size, 400, c, 1, 1, true);
+            const float cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2, h = size * 0.5f;
+            Line(cx - h, cy - h, cx + h, cy + h, c, 1.5f);
+        }
+        void RefreshDnd()
+        {
+            bool on = false;
+            if (dnd::Get(on) && on != dndOn)
+            {
+                dndOn = on;
+                BuildRows();
+                Invalidate();
+            }
+        }
+        // Notifications that are being dismissed: they slide out and fade, then the rows below close the gap.
+        std::vector<int> leaving; // indices into `items`
+        ULONGLONG leaveT0 = 0;
+        static constexpr float kLeaveMs = 300.f;
+        bool Leaving(int item) const { return std::find(leaving.begin(), leaving.end(), item) != leaving.end(); }
+        void FinishLeave()
+        {
+            bool changed = false;
+            for (int i : leaving)
+                if (i >= 0 && i < (int)items.size())
+                    changed |= wpn::HideNoSave(items[i]);
+            if (changed)
+                wpn::SaveHidden(); // one write for all of them
+            leaving.clear();
+            leaveT0 = 0;
+            BuildRows();
+            UpdateBadge();
+            Invalidate();
+        }
+        void StartLeave(std::vector<int> idx)
+        {
+            if (!leaving.empty())
+                FinishLeave(); // an earlier one is completed at once
+            if (idx.empty())
+                return;
+            leaving = idx;
+            leaveT0 = MonoMs();
+            Kick();
+        }
 
         Smooth sm; // scroll position in px
         ULONGLONG lastStep = 0;
@@ -20611,6 +21533,13 @@ namespace ui
                 HDC dc = GetDC(nullptr);
                 if (dc && GetDIBits(dc, hb, 0, (UINT)bm.bmHeight, px.data(), &bi, DIB_RGB_COLORS) == bm.bmHeight)
                 {
+                    bool anyAlpha = false;
+                    for (size_t i = 3; i < px.size() && !anyAlpha; i += 4)
+                        anyAlpha = px[i] != 0;
+                    if (!anyAlpha) // a legacy icon without an alpha channel: every coloured pixel is opaque
+                        for (size_t i = 0; i + 3 < px.size(); i += 4)
+                            if (px[i] | px[i + 1] | px[i + 2])
+                                px[i + 3] = 255;
                     bool straight = false; // colour above alpha: not premultiplied yet
                     for (size_t i = 0; i + 3 < px.size() && !straight; i += 4)
                         straight = px[i] > px[i + 3] || px[i + 1] > px[i + 3] || px[i + 2] > px[i + 3];
@@ -20671,6 +21600,8 @@ namespace ui
             wpn::ReadResult r;
             if (!wpn::TakeResult(r))
                 return;
+            if (!leaving.empty())
+                FinishLeave(); // the list is about to be replaced: settle the dismissals first
             loaded = true;
             if (r.ok)
             {
@@ -20750,7 +21681,7 @@ namespace ui
                 }
                 g->idx.push_back((int)i);
             }
-            float y = 8.f;
+            float y = 8.f + (dndOn ? 52.f : 0.f); // (the Do not disturb note sits above the first app)
             for (size_t gi = 0; gi < groups.size(); ++gi)
             {
                 const Group &g = groups[gi];
@@ -20807,9 +21738,11 @@ namespace ui
             ApplyComposition();
             Reload(false); // only reads again when the database changed since the list was built
             sm.Jump(0.f);
+            StopFling();
             hoverId = hoverParam = 0;
             hoverTracks.clear();
             InstallWheelHook();
+            RefreshDnd();
             SetTimer(hwnd, TIMER_NOTIF_REFRESH, 3000, nullptr);
         }
         void ShowStandalone()
@@ -20827,7 +21760,7 @@ namespace ui
             slideUseClip = true;
             Prepare(mi);
             int topLine = 0;
-            dockTop = TaskbarOnTop(mi, topLine);
+            dockTop = TaskbarOnTop(mon, mi, topLine);
             panelWorkBottom = dockTop ? topLine : TaskbarBandTop(mon, mi, Scale());
             const float scale = Scale();
             panelH = std::min(kMaxH, std::max(kMinH, (float)(dockTop ? mi.rcWork.bottom - panelWorkBottom : panelWorkBottom - mi.rcWork.top) / scale - 24.f));
@@ -20925,32 +21858,63 @@ namespace ui
             const ULONGLONG now = MonoMs();
             const float dt = lastStep ? std::min(50.f, (float)(now - lastStep)) : fclk::PeriodMs();
             lastStep = now;
+            bool any = AdvanceFling(dt);
             sm.target = std::min(MaxScroll(), std::max(0.f, sm.target));
-            const bool any = sm.Step(dt, now - lastTouchpadTick < kTouchpadDirectMs ? 1.f : kGlideMs); // fingers down: 1:1
+            // fingers down: 1:1; after release a light glide; otherwise the usual glide (the same rules as the main panel)
+            any |= sm.Step(dt, tpFlingActive ? 30.f : (now - lastTouchpadTick < kTouchpadDirectMs ? 1.f : kGlideMs));
             sm.pos = std::min(MaxScroll(), std::max(0.f, sm.pos));
-            if (!any)
+            if (!any && leaving.empty())
             {
                 lastStep = 0;
                 if (hwnd)
                     StopFrames(hwnd, TIMER_SCROLL_ANIM);
             }
         }
+        // Release velocity is integrated over real frame time and decays exponentially, exactly like the main panel's coasting.
+        bool tpFlingActive = false;
+        float tpFlingVelocity = 0.f; // DIP / ms
+        ULONGLONG tpFlingStarted = 0, tpFlingLastTick = 0;
+        void StopFling()
+        {
+            tpFlingActive = false;
+            tpFlingVelocity = 0.f;
+            tpFlingStarted = tpFlingLastTick = 0;
+        }
+        bool AdvanceFling(float frameDt)
+        {
+            if (!tpFlingActive)
+                return false;
+            const ULONGLONG now = MonoMs();
+            const float dt = tpFlingLastTick ? std::min(32.f, std::max(1.f, (float)(now - tpFlingLastTick))) : std::min(32.f, std::max(1.f, frameDt));
+            tpFlingLastTick = now;
+            sm.target = std::min(MaxScroll(), std::max(0.f, sm.target - tpFlingVelocity * dt));
+            tpFlingVelocity *= std::exp(-dt / 320.f);
+            if (now - tpFlingStarted >= 2200 || std::fabs(tpFlingVelocity) < 0.012f)
+                StopFling();
+            return true;
+        }
         void OnWheel(int delta, float, float y, bool horizontal) override
         {
             if (horizontal || delta == 0 || y < kHeaderH)
                 return;
+            StopFling();
             ScrollBy(-(float)delta * (kWheelPx / (float)WHEEL_DELTA));
         }
         void OnTouchpadScroll(float, float dy, float, float y) override
         {
+            StopFling(); // a new finger movement takes control from the old coasting
             if (y >= kHeaderH)
                 ScrollBy(-dy);
         }
         void OnTouchpadScrollEnd(float, float vy, float, float) override
         {
-            const float fling = std::min(560.f, std::max(-560.f, -vy * 320.f)); // coasts about velocity x 320 ms
-            if (std::fabs(fling) >= 8.f)
-                ScrollBy(fling);
+            StopFling();
+            if (std::fabs(vy) < 0.03f) // a slow release just stops where the fingers left it
+                return;
+            tpFlingActive = true;
+            tpFlingVelocity = std::min(1.6f, std::max(-1.6f, vy));
+            tpFlingStarted = tpFlingLastTick = MonoMs();
+            Kick();
         }
         int PointerPanAxisAt(float, float y) const override { return (y >= kHeaderH && MaxScroll() > 0.5f) ? 1 : 0; }
         void OnPointerPan(float, float dy, float, float) override
@@ -21007,8 +21971,18 @@ namespace ui
             // Settings gear on the right margin, "Clear all" beside it; both vertically centred in the header.
             const float by = (kHeaderH - 32.f) / 2;
             FlatIcon(RF(kPanelW - 16 - 32, by, 32, 32), ID_NF_SETTINGS, 0, L"\uE713", 15.f);
+            { // Do not disturb: the real Windows switch, highlighted while it is on
+                const D2D1_RECT_F db = RF(kPanelW - 16 - 32 - 34, by, 32, 32);
+                const float dh = HoverAmount(ID_NF_DND, 0);
+                if (dndOn)
+                    RoundFill(db, 6.f, Fade(pal.accent, 0.22f));
+                else if (dh > 0.001f)
+                    RoundFill(db, 6.f, Fade(pal.cardHover, dh));
+                SilentBell(db, 15.f, dndOn ? pal.accent : pal.text);
+                AddHit(db, ID_NF_DND, 0);
+            }
             if (anyVisible)
-                Btn(RF(kPanelW - 16 - 32 - 6 - 84, by, 84, 32), ID_NF_CLEARALL, 0, L"Clear all", 2, 12.5f);
+                Btn(RF(kPanelW - 16 - 32 - 34 - 6 - 84, by, 84, 32), ID_NF_CLEARALL, 0, L"Clear all", 2, 12.5f);
             Line(0, kHeaderH + 0.5f, kPanelW, kHeaderH + 0.5f, pal.border, 1.f);
 
             if (!loaded)
@@ -21024,18 +21998,62 @@ namespace ui
                     Btn(RF(kPanelW / 2 - 100, cy + 80, 200, 34), ID_NF_OPENWIN, 0, L"Open Windows notifications", 0, 12.5f);
                 }
                 else
+                {
                     Text(L"No new notifications", RF(16, cy + 10, kPanelW - 32, 24), 14.f, 400, pal.sub, 1, 1);
+                    if (dndOn)
+                        Text(L"Do not disturb is on", RF(16, cy + 36, kPanelW - 32, 20), 12.f, 400, pal.accent, 1, 1);
+                }
                 return;
             }
 
             rt->PushAxisAlignedClip(RF(0, kHeaderH + 1.f, kPanelW, panelH - kHeaderH - 1.f), D2D1_ANTIALIAS_MODE_ALIASED);
             const float off = kHeaderH + 1.f - std::round(sm.pos * Scale()) / Scale();
+            if (leaveT0 && MonoMs() - leaveT0 >= (ULONGLONG)kLeaveMs)
+                FinishLeave(); // the slide-out is over: really hide them and rebuild the rows
+            if (dndOn)
+            { // like the Windows notification centre: a note that Do not disturb is on
+                const D2D1_RECT_F bn = RF(16, off + 8.f, 340, 44);
+                RoundFill(bn, 8.f, pal.card);
+                RoundStroke(bn, 8.f, pal.border, 1.f);
+                SilentBell(RF(24, off + 8.f, 32, 44), 16.f, pal.accent);
+                Text(L"Do not disturb is on", RF(62, off + 11.f, 285, 20), 13.f, 600, pal.text, 0, 1);
+                Text(L"Priority apps only; the rest arrive here silently", RF(62, off + 29.f, 285, 16), 11.f, 400, pal.sub, 0, 1);
+            }
+            const float leaveT = leaving.empty() ? 0.f : Clamp01((float)(MonoMs() - leaveT0) / kLeaveMs);
+            const float slideP = Clamp01(leaveT / 0.55f), foldP = EaseInOutCubic(Clamp01((leaveT - 0.45f) / 0.55f));
+            const float baseOpacity = drawOpacity;
+            float folded = 0.f; // height already given back by the rows that are leaving above
             for (const Row &r : rows)
             {
-                const float y = r.y + off;
+                const Group &g = groups[r.group];
+                bool lv = false; // this row is on its way out
+                if (!leaving.empty())
+                {
+                    if (r.kind == 1)
+                        lv = Leaving(r.item);
+                    else
+                    {
+                        lv = true; // a header / "show more" row leaves with its last notification
+                        for (int i : g.idx)
+                            lv = lv && Leaving(i);
+                    }
+                }
+                const float y = r.y + off - folded;
+                if (lv)
+                    folded += (r.h + (r.kind == 0 ? 8.f : 6.f)) * foldP;
                 if (y + r.h < kHeaderH || y > panelH)
                     continue;
-                const Group &g = groups[r.group];
+                D2D1_MATRIX_3X2_F m0{};
+                if (lv)
+                { // slide to the right while fading
+                    rt->GetTransform(&m0);
+                    D2D1_MATRIX_3X2_F m = m0;
+                    const float dx = EaseInCubic(slideP) * kPanelW * 0.5f;
+                    m._31 += dx * m0._11;
+                    m._32 += dx * m0._12;
+                    rt->SetTransform(&m);
+                    drawOpacity = baseOpacity * (1.f - slideP);
+                }
                 if (r.kind == 0)
                 {
                     DrawIcon(g.aumid, g.name, 20.f, y + 7.f, 20.f);
@@ -21045,7 +22063,7 @@ namespace ui
                     if (hov > 0.001f)
                         RoundFill(b, 6.f, Fade(pal.cardHover, hov));
                     Text(L"\uE711", b, 11.f, 400, pal.sub, 1, 1, true);
-                    if (Visible(b))
+                    if (!lv && Visible(b))
                         AddHit(b, ID_NF_GROUP_CLEAR, r.group);
                 }
                 else if (r.kind == 1)
@@ -21056,7 +22074,7 @@ namespace ui
                     RoundFill(card, 8.f, Mix(pal.card, pal.cardHover, hov));
                     RoundStroke(card, 8.f, pal.border, 1.f);
                     D2D1_RECT_F hit = card;
-                    if (Visible(hit))
+                    if (!lv && Visible(hit))
                         AddHit(hit, ID_NF_OPEN, r.item);
                     Text(FitText(it.title.empty() ? g.name : it.title, 13.5f, 600, 226.f), RF(30, y + 12, 236, 20), 13.5f, 600, pal.text, 0, 1);
                     Text(RelTime(it.arrival), RF(card.right - 40 - 62, y + 12, 62, 20), 11.f, 400, pal.sub, 2, 1);
@@ -21067,7 +22085,7 @@ namespace ui
                     if (xh > 0.001f)
                         RoundFill(x, 6.f, Fade(pal.cardHover, xh));
                     Text(L"\uE711", x, 10.5f, 400, pal.sub, 1, 1, true);
-                    if (Visible(x))
+                    if (!lv && Visible(x))
                         AddHit(x, ID_NF_DISMISS, r.item);
                 }
                 else
@@ -21079,8 +22097,13 @@ namespace ui
                     const size_t more = g.idx.size() - 3;
                     Text(g.expanded ? std::wstring(L"Show less") : L"Show " + std::to_wstring(more) + (more == 1 ? L" more notification" : L" more notifications"),
                          b, 12.f, 600, pal.accent, 1, 1);
-                    if (Visible(b))
+                    if (!lv && Visible(b))
                         AddHit(b, ID_NF_GROUP_MORE, r.group);
+                }
+                if (lv)
+                {
+                    rt->SetTransform(&m0);
+                    drawOpacity = baseOpacity;
                 }
             }
             rt->PopAxisAlignedClip();
@@ -21100,23 +22123,27 @@ namespace ui
             {
             case ID_NF_CLEARALL:
             {
-                bool changed = false;
-                for (const wpn::Item &it : items)
-                    changed |= wpn::HideNoSave(it);
-                if (changed)
-                    wpn::SaveHidden(); // one write for all of them
-                break;
+                std::vector<int> all;
+                for (const Group &g : groups)
+                    all.insert(all.end(), g.idx.begin(), g.idx.end());
+                StartLeave(all); // they slide out, then they are hidden
+                return;
+            }
+            case ID_NF_DND:
+            { // flip the real Windows switch; the state shown is then the one Windows reports (re-read a moment later too)
+                bool on = false;
+                if (dnd::Get(on) && dnd::Set(!on))
+                {
+                    dndOn = !on; // (the next re-read shows what Windows really applies, e.g. when an automatic rule keeps it on)
+                    BuildRows();
+                }
+                Invalidate();
+                return;
             }
             case ID_NF_GROUP_CLEAR:
                 if (param >= 0 && param < (int)groups.size())
-                {
-                    bool changed = false;
-                    for (int i : groups[param].idx)
-                        changed |= wpn::HideNoSave(items[i]);
-                    if (changed)
-                        wpn::SaveHidden();
-                }
-                break;
+                    StartLeave(groups[param].idx);
+                return;
             case ID_NF_GROUP_MORE:
                 if (param >= 0 && param < (int)groups.size())
                 {
@@ -21130,8 +22157,8 @@ namespace ui
                 break;
             case ID_NF_DISMISS:
                 if (param >= 0 && param < (int)items.size())
-                    wpn::Hide(items[param]);
-                break;
+                    StartLeave({param});
+                return;
             case ID_NF_OPEN:
                 if (param >= 0 && param < (int)items.size())
                 {
@@ -21183,6 +22210,7 @@ namespace ui
                     if (IsWindowVisible(hwnd) && panelAnimation != PanelAnimationState::Closing)
                     {
                         Reload(false);
+                        RefreshDnd(); // it can also be switched from Windows itself
                         Invalidate(); // relative times
                     }
                     return 0;
@@ -21280,7 +22308,11 @@ namespace ui
         }
         panel.FlushSlideClip(); // widen the visible part only after both windows have moved
         if (follower)
+        {
             g_notif->FlushSlideClip();
+            if (g_notif->SlideClamped() && g_notif->hwnd)
+                UpdateWindow(g_notif->hwnd); // its width changed: repaint it in this same frame (the panel is painted by its own tick)
+        }
         if (panel.finishPending)
             panel.FinishAnimation();
         if (follower && g_notif->finishPending)
@@ -21496,7 +22528,7 @@ namespace ui
             Text(ev.isAlarm ? L"\uEA8F" : L"\uE916", RF(20, 22, 44, 44), 20.f, 400, pal.onAccent, 1, 1, true);
             Text(ev.title, RF(78, 16, W - 94, 28), 17.f, 600, pal.text, 0, 1);
             Text(ev.sub, RF(78, 44, W - 94, 22), 12.5f, 400, pal.sub, 0, 1);
-            const float by = H - 46;
+            const float by = height - 46;
             if (ev.isAlarm)
             {
                 const float bw = (W - 40) / 2;
@@ -21504,7 +22536,10 @@ namespace ui
                 Btn(RF(24 + bw, by, bw, 34), ID_ALERT_DISMISS, 0, L"Dismiss", 1, 13.f);
             }
             else
-            {
+            { // a finished timer: two quiet buttons to keep going, then Dismiss (same width and rhythm as the alarm popup)
+                const float bw = (W - 40) / 2;
+                Btn(RF(16, by - 42, bw, 34), ID_ALERT_ADD, 1, L"+1 min", 0, 13.f);
+                Btn(RF(24 + bw, by - 42, bw, 34), ID_ALERT_ADD, 5, L"+5 min", 0, 13.f);
                 Btn(RF(16, by, W - 32, 34), ID_ALERT_DISMISS, 0, L"Dismiss", 1, 13.f);
             }
         }
@@ -21681,7 +22716,7 @@ namespace ui
         }
     }
 
-    void AlertWindow::OnClick(int id, int, bool right)
+    void AlertWindow::OnClick(int id, int param, bool right)
     {
         if (right)
             return;
@@ -21693,6 +22728,11 @@ namespace ui
         else if (id == ID_ALERT_SNOOZE)
         {
             td::g_eng.AlarmSnooze(ev.id);
+        }
+        else if (id == ID_ALERT_ADD)
+        { // the finished timer runs again for 1 or 5 minutes
+            td::g_eng.TimerStart(ev.name, (long long)param * 60000LL);
+            tb::PostRefreshAll();
         }
         else
             return;
@@ -21713,6 +22753,8 @@ namespace ui
             return;
         auto *a = new AlertWindow();
         a->ev = e;
+        if (!e.isAlarm)
+            a->height = 124.f + 42.f; // room for the +1 / +5 minute row
         HWND h = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED, kUiClass, L"WinKlok alert",
                                  WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, ModInst(), a);
         if (!h)
@@ -21867,6 +22909,7 @@ namespace ui
         }
         rich::Release();
         ReleaseFormats();
+        ReleaseRingGeo();
         if (g_dw)
         {
             g_dw->Release();
