@@ -267,6 +267,8 @@ struct Config {
 
     // Placement. The arc flips to the other side when it would not fit.
     bool preferLeft = false;
+    float edgeKeep = 0.5f;       // share of the radius kept on screen at the
+                                 // top and bottom edges
 
     // Rearranging: press a label and hold, or press and pull.
     float holdSec = 0.30f;
@@ -1991,11 +1993,15 @@ static void OpenWheel(POINT pt) {
         if (g.side > 0 && !fitsRight && fitsLeft) g.side = -1;
         if (g.side < 0 && !fitsLeft && fitsRight) g.side = 1;
 
-        // Near the top or bottom of the screen, slide the wheel along the
-        // edge until the whole arc fits. The dead band stays on the line the
+        // Near the top or bottom of the screen, slide the wheel away from
+        // the edge. Half the radius is enough: the part still off-screen is
+        // the faded, steeply tilted end of the arc, and items turn into view
+        // well before they matter. A full shift moves the wheel further from
+        // the cursor than feels right. The dead band stays on the line the
         // cursor is on (tiltY), so the wheel does not open already spinning.
-        const int top = mi.rcMonitor.top + reach;
-        const int bottom = mi.rcMonitor.bottom - reach;
+        const int keep = int(g.outerPx * cfg.edgeKeep);
+        const int top = mi.rcMonitor.top + keep;
+        const int bottom = mi.rcMonitor.bottom - keep;
         if (top <= bottom) g.center.y = std::clamp(int(pt.y), top, bottom);
     }
 
