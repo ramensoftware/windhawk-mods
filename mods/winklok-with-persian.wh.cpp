@@ -2,7 +2,7 @@
 // @id              winklok-with-persian
 // @name            WinKlok with Persian
 // @description     A fork of WinKlok, customized for the Persian (Jalali / Solar Hijri) calendar. Adds a Persian tab next to Calendar, with RTL layout, Iranian occasions/holidays, and Vazirmatn font when installed.
-// @version         1.2.0-persian.4
+// @version         1.2.4
 // @author          Mehrdad Amini
 // @github          https://github.com/pcmehrdad
 // @twitter         https://twitter.com/pcmehrdad
