@@ -158,7 +158,9 @@ preview on, a small copy of each screenshot is kept in SnapSentry's storage fold
 only while its notification is up, and is deleted when it closes. That folder is in
 Windhawk's data folder, outside your user profile, and is shared by every account
 on the PC. If a copy can't be deleted right away, it goes when the next
-notification appears or SnapSentry next starts.
+notification appears or SnapSentry next starts. A copy left by a SnapSentry that
+closed without cleaning up is removed by the next one to start, on any account,
+once it is two hours old.
 
 ## Issues
 
@@ -1547,6 +1549,7 @@ static std::wstring FolderOf(const std::wstring& path) {
 static std::wstring WritePreviewFile(const std::wstring& path,
                                      const Settings& s, ULONGLONG toastId);
 static void RemovePreviewFiles();
+static void PumpPromptMessages();
 
 // Builds and shows the toast, then waits up to s.delaySeconds for a button
 // click (via ToastActivator::Activate, dispatched by the prompt thread's message
@@ -1779,12 +1782,7 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
             continue;  // Settings reloaded: handled at the top of the loop.
         }
         if (result == WAIT_OBJECT_0 + ARRAYSIZE(waits)) {
-            MSG msg;
-            for (unsigned count = 0; count < 32 &&
-                 PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE); ++count) {
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
+            PumpPromptMessages();
             continue;
         }
         Wh_Log(L"Toast wait failed %lu", GetLastError());
@@ -3221,13 +3219,19 @@ static std::wstring PreviewFolder(bool create) {
     return storage;
 }
 
-// Writes a scaled copy of the capture for the notification to show, sized for
-// the notification's full width on a high-DPI screen. The notification reads
-// this copy, never the screenshot itself, so it holds no handle on the capture
-// and the copy can go the moment the notification closes. Opening goes
-// through LockedCapture, so only a plain file directly in the watched folder is
-// read. Returns an empty path on any failure, and the notification is then
-// shown without a picture.
+// Handles up to 32 waiting messages for the prompt thread's windows, the same
+// way its main loop does, so the review window keeps Tab, Enter and Esc.
+static void PumpPromptMessages() {
+    MSG msg;
+    for (unsigned count = 0; count < 32 &&
+         PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE); ++count) {
+        HWND review = g_sessionWindow.load();
+        if (review && IsDialogMessageW(review, &msg)) continue;
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+}
+
 // WaitStop for the prompt thread: it also runs the tray icon, the session
 // hotkey and the review window, so it keeps handling their messages while it
 // waits instead of freezing them.
@@ -3241,12 +3245,7 @@ static bool WaitStopPumping(DWORD ms) {
             MWMO_INPUTAVAILABLE | MWMO_ALERTABLE);
         if (result == WAIT_OBJECT_0) return true;
         if (result == WAIT_OBJECT_0 + 1) {
-            MSG msg;
-            for (unsigned count = 0; count < 32 &&
-                 PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE); ++count) {
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
+            PumpPromptMessages();
             continue;
         }
         if (result == WAIT_IO_COMPLETION || result == WAIT_TIMEOUT) continue;
@@ -3254,6 +3253,13 @@ static bool WaitStopPumping(DWORD ms) {
     }
 }
 
+// Writes a scaled copy of the capture for the notification to show, sized for
+// the notification's full width on a high-DPI screen. The notification reads
+// this copy, never the screenshot itself, so it holds no handle on the capture
+// and the copy can go the moment the notification closes. Opening goes
+// through LockedCapture, so only a plain file directly in the watched folder is
+// read. Returns an empty path on any failure, and the notification is then
+// shown without a picture.
 static std::wstring WritePreviewFile(const std::wstring& path,
                                      const Settings& s, ULONGLONG toastId) {
     if (WaitStop(0)) return {};
@@ -3313,6 +3319,33 @@ static void RemovePreviewFiles() {
     if (find == INVALID_HANDLE_VALUE) return;
     do {
         if (!(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+            DeleteFileW((folder + L"\\" + data.cFileName).c_str());
+    } while (FindNextFileW(find, &data));
+    FindClose(find);
+}
+
+// Removes previews from any session that are older than any notification can
+// stay up (the longest countdown is an hour), so one left by a SnapSentry that
+// ended without cleaning up, at sign-out or after a crash, doesn't wait for a
+// later process with the same session number. A live preview is never that old.
+static void RemoveStalePreviewFiles() {
+    const std::wstring folder = PreviewFolder(false);
+    if (folder.empty()) return;
+    FILETIME nowFile;
+    GetSystemTimeAsFileTime(&nowFile);
+    const ULONGLONG now =
+        (ULONGLONG(nowFile.dwHighDateTime) << 32) | nowFile.dwLowDateTime;
+    const ULONGLONG maxAge = 2ULL * 60 * 60 * 10000000;  // Two hours, in 100 ns.
+    WIN32_FIND_DATAW data;
+    HANDLE find = FindFirstFileW(
+        (folder + L"\\popup-preview-*.png").c_str(), &data);
+    if (find == INVALID_HANDLE_VALUE) return;
+    do {
+        if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        const ULONGLONG written =
+            (ULONGLONG(data.ftLastWriteTime.dwHighDateTime) << 32) |
+            data.ftLastWriteTime.dwLowDateTime;
+        if (now > written && now - written > maxAge)
             DeleteFileW((folder + L"\\" + data.cFileName).c_str());
     } while (FindNextFileW(find, &data));
     FindClose(find);
@@ -4321,8 +4354,10 @@ static DWORD WINAPI PromptThread(LPVOID) {
                                   0, 0, 0, 0, 0, nullptr, nullptr,
                                   GetModuleHandleW(nullptr), nullptr);
     g_promptWindow.store(window);
-    // A preview an earlier run left behind, if it ended without cleaning up.
+    // A preview an earlier run left behind, if it ended without cleaning up:
+    // this session's right away, any session's once it is too old to be live.
     RemovePreviewFiles();
+    RemoveStalePreviewFiles();
     HANDLE events[] = {g_stopEvent, g_promptEvent};
     // The loop wakes for every batch of window messages (tray mouse moves,
     // review window input, COM), so registration and the hotkey are synced only
