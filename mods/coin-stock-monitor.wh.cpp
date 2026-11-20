@@ -775,7 +775,7 @@ bool FitBackgroundToText() {
 }
 
 int TextPaddingX(int dpi) {
-    return FitBackgroundToText() ? MulDiv(kTextPaddingX, dpi, 96) : kTextPaddingX;
+    return MulDiv(kTextPaddingX, dpi, 96);
 }
 
 RECT CalculateOverlayRect(int taskbarHeight, int dpi, SIZE textSize) {
