@@ -816,8 +816,7 @@ static float MarqueeOffset(float textW, float gap, float s, ULONGLONG start) {
 static bool g_cfgRecache = false;
 static std::vector<int> g_barOrder;  // a ordem dos ícones da direita (BarOrder)
 static void LoadSettings() {
-    FlushSaves();  // (uma gravação adiada não pode vir depois e desfazer a leitura ou a restauração)
-    FlushSaves();  // o que ainda não foi gravado não pode ser lido por cima
+    FlushSaves();  // o que ainda não foi gravado não pode ser lido por cima (nem desfazer a restauração depois)
     // "Restaurar os ajustes da barra" (no Windhawk): ao ser ligado, apaga uma vez
     // os valores da janela de ajustes; volta a valer ao ser desligado e religado.
     {
@@ -23245,7 +23244,12 @@ static std::wstring CfgPickFile(bool save) {
         if (GlassConfirm(0xE74E, L"Este arquivo já existe", TF(L"Substituir “%s” pelos ajustes de agora?", {name}).c_str(),
                          L"Substituir"))
             break;
-        // Não: o Explorador abre de novo, para escolher outro nome.
+        // Não: o Explorador abre de novo, para escolher outro nome (a não ser que o
+        // mod esteja fechando: o diálogo também devolve "não" nesse caso).
+        if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+            path.clear();
+            break;
+        }
     }
     if (g_bs.hwnd) SetForegroundWindow(g_bs.hwnd);
     return path;
