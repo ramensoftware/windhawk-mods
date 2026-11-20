@@ -575,7 +575,7 @@ static BOOL DwmModInit()
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK uDWMdll_hooks[] = {
         {
             {
                 L"public: static enum NCAREA_FLAGS __cdecl CTopLevelWindow::GetCurrentStyle(class CWindowData const *,bool)",
@@ -595,7 +595,7 @@ static BOOL DwmModInit()
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(uDWM, hooks, ARRAYSIZE(hooks)))
+    if (!WindhawkUtils::HookSymbols(uDWM, uDWMdll_hooks, ARRAYSIZE(uDWMdll_hooks)))
     {
         Wh_Log(L"uDWM symbol hooks failed");
         return FALSE;
