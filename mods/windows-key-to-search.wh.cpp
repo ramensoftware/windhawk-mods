@@ -74,11 +74,6 @@ constexpr UINT kOpenSearchMessage = WM_APP + 1;
 // Posted when a Win key goes down or up, so the hook thread installs the
 // mouse hook only while a Win key is held.
 constexpr UINT kSyncMouseHookMessage = WM_APP + 2;
-// Pressed before a Win release to keep Start from opening. A modifier, so
-// browsers don't treat it as keyboard use and show focus rings (an unassigned
-// key such as 0xE8 does). Shift, because a Ctrl tap triggers "Show location of
-// pointer when I press the CTRL key" and an Alt tap activates menu bars.
-constexpr WORD kMenuMaskKey = VK_RSHIFT;
 HANDLE g_thread;
 HANDLE g_ready;
 DWORD g_threadId;
@@ -259,14 +254,38 @@ INPUT KeyboardInput(WORD vk, DWORD flags = 0, WORD scan = 0) {
     return input;
 }
 
+// Pressed before a Win release to keep Start from opening. Chosen per release:
+// - Sticky Keys on: 0xE8, an unassigned key. A modifier tap would latch under
+//   Sticky Keys. Being no modifier, Sticky Keys ignores it, but browsers treat
+//   it as keyboard use and show focus rings.
+// - Pointer location on: RShift. A Ctrl tap would trigger "Show location of
+//   pointer when I press the CTRL key".
+// - Otherwise RCtrl. A bare Shift tap toggles Chinese IME (e.g. Microsoft
+//   Pinyin) mode by default, and an Alt tap activates menu bars.
+WORD MenuMaskKey() {
+    STICKYKEYS sticky = {};
+    sticky.cbSize = sizeof(sticky);
+    if (SystemParametersInfoW(SPI_GETSTICKYKEYS, sizeof(sticky), &sticky, 0) &&
+        (sticky.dwFlags & SKF_STICKYKEYSON)) {
+        return 0xE8;
+    }
+    BOOL pointerLocation = FALSE;
+    if (SystemParametersInfoW(SPI_GETMOUSESONAR, 0, &pointerLocation, 0) &&
+        pointerLocation) {
+        return VK_RSHIFT;
+    }
+    return VK_RCONTROL;
+}
+
 // Builds the swallowed Win release. The mask key goes down before it so Start
 // doesn't open. If the mask key is already physically held, only its down is
 // sent (it reads as an autorepeat) and no up, so the held key isn't released.
 UINT MaskedWinRelease(INPUT* out, WORD vk) {
     UINT count = 0;
-    out[count++] = KeyboardInput(kMenuMaskKey);
-    if (!g_keys[kMenuMaskKey]) {
-        out[count++] = KeyboardInput(kMenuMaskKey, KEYEVENTF_KEYUP);
+    const WORD mask = MenuMaskKey();
+    out[count++] = KeyboardInput(mask);
+    if (!g_keys[mask]) {
+        out[count++] = KeyboardInput(mask, KEYEVENTF_KEYUP);
     }
     out[count++] = KeyboardInput(vk, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP);
     return count;
@@ -283,8 +302,9 @@ bool Inject(INPUT* inputs, UINT count) {
     for (UINT i = 0; i < sent; ++i) {
         if (!(inputs[i].ki.dwFlags & KEYEVENTF_KEYUP)) {
             if (IsWindowsKey(inputs[i].ki.wVk)) {
-                releases[releaseCount++] = KeyboardInput(kMenuMaskKey);
-                releases[releaseCount++] = KeyboardInput(kMenuMaskKey, KEYEVENTF_KEYUP);
+                const WORD mask = MenuMaskKey();
+                releases[releaseCount++] = KeyboardInput(mask);
+                releases[releaseCount++] = KeyboardInput(mask, KEYEVENTF_KEYUP);
             }
             releases[releaseCount] = inputs[i];
             releases[releaseCount++].ki.dwFlags |= KEYEVENTF_KEYUP;
