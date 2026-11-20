@@ -7278,6 +7278,33 @@
         "version": "1.2.6"
       }
     },
+    "explorer-navigation-pane-spacing-fixes": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795208543000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795208543000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "NDruce",
+        "compilerOptions": "-lcomctl32 -lgdi32",
+        "description": "Tidies up the navigation pane of File Explorer: a thin divider next to the files area, even padding on all sides, faded or hidden pin icons, longer or shorter separators and a vertical offset of the expand arrows",
+        "github": "https://github.com/NDruce",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "File Explorer navigation pane: thin divider, even padding",
+        "version": "1.0"
+      }
+    },
     "explorer-navigation-pane-tweaks": {
       "details": {
         "defaultSorting": 5742,
