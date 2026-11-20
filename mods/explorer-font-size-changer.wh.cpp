@@ -6,6 +6,7 @@
 // @description:zh-CN 修改 Windows 11 资源管理器中 GDI 文字的字体与字号，自动处理放大后的间距、对齐与列宽内的省略显示。
 // @version         1.0
 // @author          wodenwhel
+// @github          https://github.com/wodenwhel
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lgdi32 -luser32
