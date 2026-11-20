@@ -18,16 +18,21 @@
 
 ## Languagh: English - [Arabic](https://github.com/AhmedAwad7/Always-On-Top-Windows-Windhawk-Mod-/blob/main/README-AR.md)
 
-Press **`Ctrl+Alt+T`** (Deafult) to pin/unpin the active window on top of all other windows.
-
 This mod helps you multitask by pinning important windows so they always remain visible.
 
-**Features:**
+**Keys used in the mod**
+- `Ctrl+Alt+T` Pin/Unpin Window
+- `Ctrl+Alt+I` Increase transparent window
+- `Ctrl+Alt+D` Decrease transparent window
+> ⚠️Important Note on AltGr:
+> - Windows reports `AltGr` as `Ctrl+Alt`. On some keyboard layout (e.g., US-International, German, French), these shortcuts might block typing specific characters (like `AltGr+T` typing `þ`) You can change the hotkeys in the mod settings if you encounter this.
+
+## Features:
 - 🔊 Audio notifications to indicate pinning/unpinning, with the ability to customize or disable them.
 - 🖥️ A floating text displayed at the bottom center of the screen, above the taskbar, to indicate pinning/unpinning.
 - 🟦 A highlight border around each pinned window. It follows the window when it moves, resizes or is minimised, and uses your Windows accent color, one color of your choice or a gradient. Corners can be rounded to match the window.
 ![windowDemo](https://raw.githubusercontent.com/AhmedAwad7/Always-On-Top-Windows-Windhawk-Mod-/main/Screenrecord/window.jpg)
-- 👁️ Opacity shortcuts: `Ctrl+Alt+I` and `Ctrl+Alt+D` make a pinned window more or less see-through, in steps.
+- 👁️ Opacity shortcuts: make a pinned window more or less see-through, in steps.
 - ⌨️ The shortcut can be changed in the settings (Win, Ctrl, Alt, Shift and any key).
 - 🚫 An excluded apps list, and an option to not react while a full-screen game runs.
 - 📌 If Windows drops the always-on-top state, the mod puts it back.
@@ -39,7 +44,7 @@ This mod helps you multitask by pinning important windows so they always remain 
 - 🧹 Lightweight: Runs in a dedicated `windhawk.exe` process.
 - ℹ️ Windows of apps that run as administrator cannot be pinned, unless portable Windhawk runs as administrator.
 
-**System Requirements:**
+## System Requirements:
 - 📀 Windows 8 \ 8.1 \ 10 \ 11
 - 📊 Windhawk application (latest version preferred)
 
