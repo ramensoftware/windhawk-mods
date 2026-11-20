@@ -502,6 +502,9 @@ static void SaveThemeGlass() {
     Wh_SetStringValue(L"glassLive", live);
 }
 static void LoadGlassPrefs() {
+    // Sem nada guardado (restauração, ou importação de um arquivo sem o vidro),
+    // volta ao padrão, e não aos valores que já estavam na memória.
+    g_glass = GlassPrefs();
     wchar_t buf[128] = {};
     Wh_GetStringValue(L"glass", buf, ARRAYSIZE(buf));
     int t, c, l, r, b, v, k = 0;
@@ -813,6 +816,7 @@ static float MarqueeOffset(float textW, float gap, float s, ULONGLONG start) {
 static bool g_cfgRecache = false;
 static std::vector<int> g_barOrder;  // a ordem dos ícones da direita (BarOrder)
 static void LoadSettings() {
+    FlushSaves();  // (uma gravação adiada não pode vir depois e desfazer a leitura ou a restauração)
     FlushSaves();  // o que ainda não foi gravado não pode ser lido por cima
     // "Restaurar os ajustes da barra" (no Windhawk): ao ser ligado, apaga uma vez
     // os valores da janela de ajustes; volta a valer ao ser desligado e religado.
@@ -821,10 +825,11 @@ static void LoadSettings() {
         int done = Wh_GetIntValue(L"resetDone", 0);
         if (reset && !done) {
             for (const auto& d : kUiDefaults) OvrSetStr(d.key, L"");
-            // Também o vidro, a ordem dos ícones, o vidro desta janela e as opções
+            // Também o vidro (o geral e o de cada tema), a ordem dos ícones, o vidro desta janela e as opções
             // da previsão. Ficam: o lugar da previsão, os calendários importados e
             // os blocos da Central (são dados do usuário, não aparência).
-            for (PCWSTR k : {L"glass", L"settingsLook", L"barOrder", L"weatherGlass", L"weatherOpts", L"weatherStyle", L"weatherAnim"})
+            for (PCWSTR k : {L"glass", L"glassTheme", L"glassLive", L"settingsLook", L"barOrder", L"weatherGlass", L"weatherOpts",
+                             L"weatherStyle", L"weatherAnim"})
                 Wh_SetStringValue(k, L"");
             Wh_SetIntValue(L"resetDone", 1);
             g_cfgRecache = true;
@@ -13258,7 +13263,7 @@ static const BsRowDef kBsRows[] = {
     {BR_HEADER, BV_NONE, L"Calendário", 0xE787, 0xFF453A, L"A agenda que aparece ao clicar no relógio"},
     {BR_ACTION, BV_ICSADD, L"Importar arquivo .ics", 0, 0, L"O arquivo fica onde está; mudanças nele aparecem na agenda"},
     {BR_ACTION, BV_ICSCLEAR, L"Remover os calendários importados", 0, 0},
-    {BR_HEADER, BV_NONE, L"Esta janela", 0xE713, 0x8E8E93, L"O vidro desta janela de Ajustes"},
+    {BR_HEADER, BV_NONE, L"Ajustes e backup", 0xE713, 0x8E8E93, L"O vidro desta janela e a cópia dos ajustes"},
     {BR_CHOICE, BV_BSSTYLE, L"Vidro", 0, 0},
     {BR_SLIDER, BV_BSTRANSP, L"Transparência", 0, 0},
     {BR_GROUP, BV_NONE, L"Cópia dos ajustes", 0, 0},
@@ -14979,7 +14984,7 @@ static void BsDrawWindow() {
     SafeRelease(clipGeo);
 }
 
-// O vidro escolhido em "Esta janela" vale para a janela de Ajustes e para as
+// O vidro escolhido em "Ajustes e backup" vale para a janela de Ajustes e para as
 // caixas de seleção dela (desfoque, líquido ou transparente, com a sua
 // transparência), não o tema da barra.
 struct BsLookScope {
@@ -15612,7 +15617,7 @@ static void BsOpenAt(const POINT* at, float scroll) {
     g_bs.hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST, kBsClass, L"Ajustes", WS_POPUP,
                                 g_bs.pos.x, g_bs.pos.y, g_bs.W, g_bs.H, nullptr, nullptr, g_hInst, nullptr);
     if (!g_bs.hwnd) return;
-    // O vidro desta janela é escolhido nela mesma ("Esta janela"): desfoque do
+    // O vidro desta janela é escolhido nela mesma ("Ajustes e backup"): desfoque do
     // Windows, líquido (sempre ao vivo, porque a janela pode ser arrastada) ou
     // transparente (sem desfoque; só a tinta, que a transparência controla).
     BsLookScope look;  // o vidro desta janela, e não o tema da barra (sólido não cria o desfoque)
@@ -19375,14 +19380,19 @@ static void GcRender() {
         }
         DrawLiquidGlass(rt, br, P, 18 * s, s, false, false, g.glass.ok, true);
         float cx = (P.left + P.right) / 2, y = P.top + 22 * s, w = P.right - P.left - 36 * s;
-        auto text = [&](const std::wstring& t, IDWriteTextFormat* f, D2D1_COLOR_F c, float top, float hgt) {
+        auto text = [&](const std::wstring& t, IDWriteTextFormat* f, D2D1_COLOR_F c, float top, float hgt, bool draw = true) {
             IDWriteTextLayout* l = nullptr;
             if (SUCCEEDED(g_dwrite->CreateTextLayout(t.c_str(), (UINT32)t.size(), f, w, hgt, &l))) {
+                // Quebra as linhas (um nome de arquivo longo) dentro da janela.
+                l->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);
+                l->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
                 l->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
                 DWRITE_TEXT_METRICS m{};
                 l->GetMetrics(&m);
-                br->SetColor(c);
-                rt->DrawTextLayout(D2D1::Point2F(cx - w / 2, top), l, br);
+                if (draw) {
+                    br->SetColor(c);
+                    rt->DrawTextLayout(D2D1::Point2F(cx - w / 2, top), l, br);
+                }
                 l->Release();
                 return m.height;
             }
@@ -19408,8 +19418,15 @@ static void GcRender() {
             }
         }
         y += 2 * ir + 14 * s;
-        y += text(T(g.title.c_str()), fT, fg, y, 60 * s) + 6 * s;
-        text(T(g.text.c_str()), fS, sub, y, 60 * s);
+        {
+            // O título e o texto, centrados entre o ícone e os botões.
+            std::wstring ti = T(g.title.c_str()), tx = T(g.text.c_str());
+            float hT = text(ti, fT, fg, 0, 400 * s, false), hX = text(tx, fS, sub, 0, 400 * s, false);
+            float room = g.btnOk.top - 8 * s - y, block = hT + 6 * s + hX;
+            y += std::max(0.0f, (room - block) / 2);
+            y += text(ti, fT, fg, y, 400 * s) + 6 * s;
+            text(tx, fS, sub, y, 400 * s);
+        }
         // Os botões: confirmar (na cor de destaque) em cima, Cancelar embaixo.
         auto button = [&](const D2D1_RECT_F& rr, const std::wstring& label, bool primary, bool hot) {
             D2D1_ROUNDED_RECT rd = D2D1::RoundedRect(rr, (rr.bottom - rr.top) / 2, (rr.bottom - rr.top) / 2);
@@ -19501,6 +19518,28 @@ static bool GlassConfirm(wchar_t glyph, PCWSTR title, PCWSTR text, PCWSTR okLabe
     g.text = text;
     g.ok = okLabel;
     float s = g.s, pw = 272 * s, ph = 262 * s;
+    {
+        // A altura acompanha o texto: o ícone, o título e o texto (com as linhas
+        // quebradas) e, embaixo, os dois botões.
+        float tw = pw - 36 * s, th = 0;
+        auto measure = [&](const std::wstring& t, DWRITE_FONT_WEIGHT wt, float px) {
+            float h = 0;
+            IDWriteTextFormat* f = MakeFormat(g_settings.fontFamily.c_str(), wt, px);
+            IDWriteTextLayout* l = nullptr;
+            if (f && SUCCEEDED(g_dwrite->CreateTextLayout(t.c_str(), (UINT32)t.size(), f, tw, 400 * s, &l))) {
+                l->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);
+                DWRITE_TEXT_METRICS m{};
+                l->GetMetrics(&m);
+                h = m.height;
+                l->Release();
+            }
+            if (f) f->Release();
+            return h;
+        };
+        th = measure(T(g.title.c_str()), DWRITE_FONT_WEIGHT_SEMI_BOLD, 14 * s) + 6 * s +
+             measure(T(g.text.c_str()), DWRITE_FONT_WEIGHT_NORMAL, 12 * s);
+        ph = std::max(ph, 22 * s + 52 * s + 14 * s + th + 18 * s + 82 * s);
+    }
     g.W = (int)std::ceil(pw + 2 * g.M);
     g.H = (int)std::ceil(ph + 2 * g.M);
     g.panel = D2D1::RectF(g.M, g.M, g.M + pw, g.M + ph);
@@ -23166,7 +23205,7 @@ static std::wstring CfgUnescape(const std::wstring& v) {
     }
     return o;
 }
-static std::wstring CfgPickFile(bool save) {
+static std::wstring CfgPickFileOnce(bool save) {
     IFileDialog* dlg = nullptr;
     if (FAILED(CoCreateInstance(save ? CLSID_FileSaveDialog : CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
                                 save ? IID_IFileSaveDialog : IID_IFileOpenDialog, (void**)&dlg)))
@@ -23178,7 +23217,9 @@ static std::wstring CfgPickFile(bool save) {
     dlg->SetTitle(T(save ? L"Exportar os ajustes" : L"Importar os ajustes"));
     DWORD opt = 0;
     dlg->GetOptions(&opt);
-    dlg->SetOptions(opt | FOS_FORCEFILESYSTEM | (save ? FOS_OVERWRITEPROMPT : FOS_FILEMUSTEXIST));
+    // (Substituir um arquivo que já existe é perguntado no diálogo de vidro, em
+    // CfgPickFile, e não na caixa do Windows.)
+    dlg->SetOptions((opt & ~FOS_OVERWRITEPROMPT) | FOS_FORCEFILESYSTEM | (save ? 0 : FOS_FILEMUSTEXIST));
     std::wstring path;
     if (SUCCEEDED(dlg->Show(g_bs.hwnd))) {
         IShellItem* it = nullptr;
@@ -23192,6 +23233,20 @@ static std::wstring CfgPickFile(bool save) {
         }
     }
     dlg->Release();
+    return path;
+}
+static std::wstring CfgPickFile(bool save) {
+    std::wstring path;
+    for (;;) {
+        path = CfgPickFileOnce(save);
+        if (!save || path.empty() || GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) break;
+        const wchar_t* name = wcsrchr(path.c_str(), L'\\');
+        name = name ? name + 1 : path.c_str();
+        if (GlassConfirm(0xE74E, L"Este arquivo já existe", TF(L"Substituir “%s” pelos ajustes de agora?", {name}).c_str(),
+                         L"Substituir"))
+            break;
+        // Não: o Explorador abre de novo, para escolher outro nome.
+    }
     if (g_bs.hwnd) SetForegroundWindow(g_bs.hwnd);
     return path;
 }
@@ -23243,6 +23298,7 @@ static void CfgImport() {
     std::vector<std::wstring> keys = CfgKeys();
     // Substitui: os ajustes que não estão no arquivo (estavam no padrão quando
     // ele foi exportado) voltam ao padrão, como na restauração.
+    FlushSaves();  // (antes: uma gravação adiada escreveria por cima do arquivo)
     for (const std::wstring& k : keys) Wh_SetStringValue(k.c_str(), L"");
     g_cfgRecache = true;
     int n = 0;
@@ -26569,6 +26625,7 @@ static DWORD WINAPI BarThread(LPVOID) {
 
     g_msgTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     LoadSettings();
+    g_cfgRecache = false;  // (aqui o que fica em memória ainda vai ser lido pela primeira vez)
     PollStatus(true);
     CreateBars();
     KbdNavApply();
@@ -27216,8 +27273,10 @@ const UiTr kUiTr[] = {
     {L"Aparência do widget", L"Widget look", L"Aspecto del widget", L"Apparence du widget", L"Aussehen des Widgets", L"Aspetto del widget", L"小组件外观"},
     {L"Transparência do widget de vidro", L"Glass widget transparency", L"Transparencia del widget de vidrio", L"Transparence du widget en verre", L"Transparenz des Glas-Widgets", L"Trasparenza del widget di vetro", L"玻璃小组件透明度"},
     {L"Open-Meteo: 7 dias, por hora. MET Norway (Yr): 7 dias, do instituto meteorológico norueguês. wttr.in: 3 dias, de 3 em 3 horas.", L"Open-Meteo: 7 days, hourly. MET Norway (Yr): 7 days, from the Norwegian Meteorological Institute. wttr.in: 3 days, every 3 hours.", L"Open-Meteo: 7 días, por hora. MET Norway (Yr): 7 días, del instituto meteorológico noruego. wttr.in: 3 días, cada 3 horas.", L"Open-Meteo : 7 jours, heure par heure. MET Norway (Yr) : 7 jours, de l’institut météorologique norvégien. wttr.in : 3 jours, toutes les 3 heures.", L"Open-Meteo: 7 Tage, stündlich. MET Norway (Yr): 7 Tage, vom Norwegischen Meteorologischen Institut. wttr.in: 3 Tage, alle 3 Stunden.", L"Open-Meteo: 7 giorni, ora per ora. MET Norway (Yr): 7 giorni, dall’istituto meteorologico norvegese. wttr.in: 3 giorni, ogni 3 ore.", L"Open-Meteo: 7 天, 逐小时。MET Norway (Yr): 7 天, 来自挪威气象研究所。wttr.in: 3 天, 每 3 小时。"},
-    {L"Esta janela", L"This Window", L"Esta ventana", L"Cette fenêtre", L"Dieses Fenster", L"Questa finestra", L"此窗口"},
-    {L"O vidro desta janela de Ajustes", L"The glass of this Settings window", L"El vidrio de esta ventana de Ajustes", L"Le verre de cette fenêtre de réglages", L"Das Glas dieses Einstellungsfensters", L"Il vetro di questa finestra Impostazioni", L"此设置窗口的玻璃效果"},
+    {L"Ajustes e backup", L"Settings & Backup", L"Ajustes y copia de seguridad", L"Réglages et sauvegarde", L"Einstellungen & Backup", L"Impostazioni e backup", L"设置与备份"},
+    {L"Este arquivo já existe", L"This file already exists", L"Este archivo ya existe", L"Ce fichier existe déjà", L"Diese Datei ist bereits vorhanden", L"Questo file esiste già", L"此文件已存在"},
+    {L"Substituir “%s” pelos ajustes de agora?", L"Replace “%s” with the current settings?", L"¿Reemplazar «%s» con los ajustes actuales?", L"Remplacer « %s » par les réglages actuels ?", L"„%s“ durch die aktuellen Einstellungen ersetzen?", L"Sostituire «%s» con le impostazioni attuali?", L"用当前设置替换“%s”?"},
+    {L"O vidro desta janela e a cópia dos ajustes", L"The glass of this window and the settings backup", L"El vidrio de esta ventana y la copia de los ajustes", L"Le verre de cette fenêtre et la sauvegarde des réglages", L"Das Glas dieses Fensters und die Sicherung der Einstellungen", L"Il vetro di questa finestra e il backup delle impostazioni", L"此窗口的玻璃效果与设置备份"},
     {L"Vidro", L"Glass", L"Vidrio", L"Verre", L"Glas", L"Vetro", L"玻璃"},
     {L"Transparência", L"Transparency", L"Transparencia", L"Transparence", L"Transparenz", L"Trasparenza", L"透明度"},
     {L"O vidro líquido vale a partir do próximo painel aberto. Ao vivo (e no fundo Líquido da barra), a barra e os painéis não aparecem em capturas de tela.", L"Liquid glass applies from the next panel opened. With Live (and the bar’s Liquid background), the bar and panels don’t show up in screenshots.", L"El vidrio líquido se aplica desde el siguiente panel que se abra. En vivo (y con el fondo Líquido de la barra), la barra y los paneles no aparecen en las capturas de pantalla.", L"Le verre liquide s’applique à partir du prochain panneau ouvert. En direct (et avec l’arrière-plan Liquide de la barre), la barre et les panneaux n’apparaissent pas dans les captures d’écran.", L"Flüssiges Glas gilt ab dem nächsten geöffneten Bereich. Live (und mit dem Hintergrund „Flüssig“ der Leiste) erscheinen Leiste und Bereiche nicht auf Bildschirmfotos.", L"Il vetro liquido vale dal prossimo pannello aperto. In tempo reale (e con lo sfondo Liquido della barra), la barra e i pannelli non compaiono negli screenshot.", L"液态玻璃从下一个打开的面板开始生效。实时模式 (以及菜单栏的液态背景) 下, 菜单栏和面板不会出现在截图中。"},
