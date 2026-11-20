@@ -26,7 +26,9 @@ fade out toward the top and bottom of the arc.
 - Move above or below the centre band to spin the wheel. The further you go,
   the faster it spins.
 - Scroll inside the wheel to step one item. Scroll outside it to dismiss.
-- Click to choose the highlighted item. Click outside to dismiss.
+- Click a label to choose it. A click on empty space inside the wheel
+  chooses the highlighted item by default; that can be changed to do
+  nothing or to close the wheel. Click outside to dismiss.
 - Press and pull a label to rearrange. The order is remembered for that menu.
 - Right-click inside the wheel for the standard menu.
 
@@ -136,6 +138,13 @@ takes the menu, so use one at a time.
 - highlightColor: ""
   $name: Highlight color
   $description: Hex color such as #3D7EFF. Leave empty to follow the theme or accent.
+- emptyClick: choose
+  $name: Click on empty space
+  $description: What a click inside the wheel does when it is not on a label, for example at the centre where the wheel opened. Choosing the highlighted item makes "right-click, click" repeat your last choice.
+  $options:
+  - choose: Choose the highlighted item
+  - nothing: Do nothing
+  - close: Close the wheel
 - showDefaultEntry: true
   $name: Show "Default context options"
   $description: Adds an entry that opens the standard menu. A right-click inside the wheel always does the same.
@@ -251,6 +260,10 @@ struct Config {
     float ringGap = 16.0f;       // rim of one ring to the labels of the next
     float minStepDeg = 3.5f;     // finest label spacing on outer rings
     float parentDim = 0.55f;     // opacity of the rings behind the active one
+
+    // A click inside the wheel that is not on a label: 0 chooses the
+    // highlighted item, 1 does nothing, 2 closes the wheel.
+    int emptyClick = 0;
 
     // Placement. The arc flips to the other side when it would not fit.
     bool preferLeft = false;
@@ -1436,6 +1449,10 @@ static const std::vector<Setting>& Settings() {
          [](float x) { cfg.menuMode = int(x); },
          {{L"Replace the wheel", 0}, {L"Stack outward", 1},
           {L"Alternate", 2}}},
+        {L"Empty click",
+         [] { return float(cfg.emptyClick); },
+         [](float x) { cfg.emptyClick = int(x); },
+         {{L"Chooses", 0}, {L"Does nothing", 1}, {L"Closes the wheel", 2}}},
     };
     return v;
 }
@@ -2063,7 +2080,12 @@ static void OnLeftUp() {
         ActivateIndex(target);
     } else if (g.pressed) {
         g.pressed = false;
-        ActivateIndex(target);
+        // A click on a label always chooses it. A click on empty space (the
+        // hub, or between labels) does what the user has set.
+        if (g.pressSlot >= 0 || cfg.emptyClick == 0)
+            ActivateIndex(target);
+        else if (cfg.emptyClick == 2)
+            CloseWheel();
     }
     g.pressed = false;
 }
@@ -2464,6 +2486,8 @@ static void LoadConfig() {
     cfg.hasLabelColor = ParseColor(StrSetting(L"labelColor"), &cfg.userLabel);
     cfg.hasHighlight =
         ParseColor(StrSetting(L"highlightColor"), &cfg.userHighlight);
+    const std::wstring emptyClick = StrSetting(L"emptyClick");
+    cfg.emptyClick = emptyClick == L"nothing" ? 1 : emptyClick == L"close" ? 2 : 0;
     cfg.showNativeEntry = Wh_GetIntSetting(L"showDefaultEntry") != 0;
     cfg.showOptionsEntry = Wh_GetIntSetting(L"showOptionsEntry") != 0;
 
