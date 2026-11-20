@@ -25,7 +25,7 @@ you point it at, and handles new screenshots as they are saved. Copy the image,
 rename the file, delete it after a delay, or choose what to do from a
 notification.
 
-![The SnapSentry notification](https://raw.githubusercontent.com/mario0318/SnapSentry/9f28c82bb5b901c399d6773ea8a2e09195bc3f1a/assets/notification-rename.png)
+![The SnapSentry notification with a preview and Keep highlighted](https://raw.githubusercontent.com/mario0318/SnapSentry/c2520855dbd03371637d30c0d9a6067520fc02d8/assets/notification-preview.png)
 
 ## Clipboard modes
 
