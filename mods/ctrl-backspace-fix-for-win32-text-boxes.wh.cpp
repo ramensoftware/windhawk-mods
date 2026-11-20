@@ -2,7 +2,7 @@
 // @id              ctrl-backspace-fix-for-win32-text-boxes
 // @name            Ctrl+Backspace Fix for Win32 Text Boxes
 // @description     Makes Ctrl+Backspace delete the previous word in Win32 text boxes instead of inserting a control character
-// @version         1.0.1
+// @version         1.0.2
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         *
@@ -29,7 +29,7 @@ applications.
 | :---- |
 | ![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/ctrl-backspace-fix-for-win32-text-boxes_after.gif) |
 
-## Notes
+## Notes & limitations
 * In hotkey text boxes, pressing `Ctrl+Backspace` deletes the text instead of
   assigning the hotkey.
 * In masked text boxes, pressing `Ctrl+Backspace` deletes the placeholder
@@ -43,6 +43,7 @@ applications.
 
 #include <windhawk_utils.h>
 #include <windows.h>
+#include <algorithm>
 #include <cwctype>
 #include <string>
 
@@ -65,7 +66,7 @@ CharClass GetCharClass(WCHAR wch)
     // VS Code's default word separators
     constexpr const WCHAR* szWordSeparators =
         L"`~!@#$%^&*()-=+[{]}\\|;:'\",.<>/?";
-    if (wcschr(szWordSeparators, wch) != nullptr)
+    if (wcschr(szWordSeparators, wch))
     {
         return CharClass::Punctuation;
     }
@@ -78,27 +79,40 @@ CharClass GetCharClass(WCHAR wch)
 void DeletePreviousWord(HWND hWnd)
 {
     // Retrieve the starting and ending positions of the current text selection
-    DWORD dwSelectionStart, dwSelectionEnd;
-    SendMessageW(hWnd, EM_GETSEL, reinterpret_cast<WPARAM>(&dwSelectionStart),
-        reinterpret_cast<LPARAM>(&dwSelectionEnd));
+    DWORD dwSelStart = 0;
+    DWORD dwSelEnd = 0;
+    SendMessageW(hWnd, EM_GETSEL, reinterpret_cast<WPARAM>(&dwSelStart),
+        reinterpret_cast<LPARAM>(&dwSelEnd));
 
     // Replace any active text selection with an empty string
-    if (dwSelectionStart != dwSelectionEnd)
+    if (dwSelStart != dwSelEnd)
     {
         SendMessageW(hWnd, EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(L""));
         return;
     }
 
+    if (dwSelStart == 0)
+    {
+        return;
+    }
+
     // Allocate a string buffer and retrieve the text to calculate the boundary
     int cchTextLen = GetWindowTextLengthW(hWnd);
-    if (cchTextLen == 0 || dwSelectionStart == 0)
+    if (cchTextLen <= 0)
     {
         return;
     }
 
     std::wstring windowText(cchTextLen, L'\0');
-    GetWindowTextW(hWnd, windowText.data(), cchTextLen + 1);
-    int iPos = dwSelectionStart - 1;
+    int cchTextCopied = GetWindowTextW(hWnd, windowText.data(), cchTextLen + 1);
+    if (cchTextCopied <= 0)
+    {
+        return;
+    }
+
+    auto dwClampedSelStart =
+        std::min<DWORD>(dwSelStart, static_cast<DWORD>(cchTextCopied));
+    auto iPos = static_cast<int>(dwClampedSelStart) - 1;
 
     // Step back through all whitespace characters
     while (iPos >= 0 && GetCharClass(windowText[iPos]) == CharClass::Whitespace)
@@ -119,13 +133,13 @@ void DeletePreviousWord(HWND hWnd)
     }
 
     // Calculate the final text selection boundary
-    DWORD dwNewSelStart = iPos + 1;
+    auto dwNewSelStart = static_cast<DWORD>(iPos + 1);
 
     // Pause re-drawing to hide the text selection flicker
     SendMessageW(hWnd, WM_SETREDRAW, FALSE, 0);
 
     // Select the calculated word bounds and replace with an empty string
-    SendMessageW(hWnd, EM_SETSEL, dwNewSelStart, dwSelectionEnd);
+    SendMessageW(hWnd, EM_SETSEL, dwNewSelStart, dwSelEnd);
     SendMessageW(hWnd, EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(L""));
 
     // Resume re-drawing and force a re-paint to display the updated text
@@ -174,7 +188,7 @@ bool IsCtrlBackspaceOnEditControl(HWND hWnd, UINT uMsg, WPARAM wParam)
         LONG_PTR lStyle = GetWindowLongPtrW(hWnd, GWL_STYLE);
 
         // Ensure it is a valid, writable Edit control
-        return ((lStyle & WS_CHILD) != 0 &&
+        return ((lStyle & WS_CHILD) &&
             IsEditControl(hWnd) &&
             (lStyle & ES_READONLY) == 0);
     }
