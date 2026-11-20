@@ -7061,16 +7061,10 @@ bool SpansItsMonitor(HWND hwnd) {
 // Explorer's island windows is busy. InternalGetWindowText reads the title
 // the window has stored.
 int ReadWindowTitle(HWND hwnd, WCHAR* buffer, int size) {
-    using InternalGetWindowText_t = int(WINAPI*)(HWND, LPWSTR, int);
-    static auto internalGetWindowText = reinterpret_cast<InternalGetWindowText_t>(
-        GetProcAddress(GetModuleHandleW(L"user32.dll"), "InternalGetWindowText"));
     if (size > 0) {
         buffer[0] = L'\0';
     }
-    if (!internalGetWindowText) {
-        return 0;  // never: user32 has exported it since Windows NT
-    }
-    return internalGetWindowText(hwnd, buffer, size);
+    return InternalGetWindowText(hwnd, buffer, size);
 }
 
 // The title the taskbar's thumbnail flyout takes once it is opened by a
