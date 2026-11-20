@@ -3,8 +3,8 @@
 // @name            Same-App Window Cycler (Alt+`)
 // @description     macOS-style Cmd+` for Windows: cycle through the windows of the current app with Alt+` (Alt+Shift+` goes backwards)
 // @version         0.1.0
-// @author          YOUR_GITHUB_USERNAME
-// @github          https://github.com/YOUR_GITHUB_USERNAME
+// @author          mdozkanji
+// @github          https://github.com/mdozkanji
 // @include         explorer.exe
 // @compilerOptions -ldwmapi
 // @license         MIT
@@ -14,8 +14,8 @@
 /*
 # Same-App Window Cycler
 
-Brings the macOS **Cmd+`** behavior to Windows. While an app has several
-windows open, press **Alt+`** to jump to its next window, or **Alt+Shift+`**
+Brings the macOS **Cmd+`` ` ``** behavior to Windows. While an app has several
+windows open, press **Alt+`` ` ``** to jump to its next window, or **Alt+Shift+`` ` ``**
 to go to the previous one. Alt+Tab is unchanged.
 
 The shortcut uses the physical key left of `1`, so it works on non-US keyboard
