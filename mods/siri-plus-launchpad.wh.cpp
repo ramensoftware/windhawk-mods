@@ -12082,36 +12082,37 @@ void RestoreBuiltinTabs() {
     ComputeLayout(); Render();
 }
 
-void AddToChip(int chip, const App& app) {
+// save: false while several apps are added or removed in a row (the caller saves and refreshes once at the end)
+void AddToChip(int chip, const App& app, bool save = true) {
     std::wstring t = ToLower(app.target);
     if (chip >= kChipCustom) {
         int tab = chip - kChipCustom;
         if (tab >= (int)g_customTabs.size() || TabHas(tab, app)) return;
         g_customTabs[tab].targets.push_back(t);
-        SaveCustomTabs();
+        if (save) SaveCustomTabs();
     } else if (chip >= 0 && chip < kFilterCount) {
         auto& b = g_builtinTabs[chip];
         b.removed.erase(std::remove(b.removed.begin(), b.removed.end(), t), b.removed.end());
         if (AppCategory(app) != chip && !ListHas(b.added, t)) b.added.push_back(t);
-        SaveBuiltinTabs();
+        if (save) SaveBuiltinTabs();
     }
 }
 
-void RemoveFromChip(int chip, const App& app) {
+void RemoveFromChip(int chip, const App& app, bool save = true) {
     std::wstring t = ToLower(app.target);
     if (chip >= kChipCustom) {
         int tab = chip - kChipCustom;
         if (tab >= (int)g_customTabs.size()) return;
         auto& v = g_customTabs[tab].targets;
         v.erase(std::remove(v.begin(), v.end(), t), v.end());
-        SaveCustomTabs();
+        if (save) SaveCustomTabs();
     } else if (chip >= 0 && chip < kFilterCount) {
         auto& b = g_builtinTabs[chip];
         b.added.erase(std::remove(b.added.begin(), b.added.end(), t), b.added.end());
         if (AppCategory(app) == chip && !ListHas(b.removed, t)) b.removed.push_back(t);
-        SaveBuiltinTabs();
+        if (save) SaveBuiltinTabs();
     } else return;
-    RefreshAppsView();
+    if (save) RefreshAppsView();
 }
 
 std::vector<App*> AllApps() {
@@ -12201,7 +12202,8 @@ void ExecuteMenu(int id) {
     CloseMenu();
     if (id >= kMenuCfgBase && id < kMenuCfgBase + kCfgItemCount * 32) { CfgChoose(id - kMenuCfgBase); return; }
     if (id >= kMenuAddToTab && id < kMenuAddToTab + kMaxCustomTabs) {
-        for (App* a : MenuTargets(app)) AddToChip(kChipCustom + id - kMenuAddToTab, *a);
+        for (App* a : MenuTargets(app)) AddToChip(kChipCustom + id - kMenuAddToTab, *a, false);
+        SaveCustomTabs();   // once for all the apps
         g_selection.clear();
         RefreshAppsView();
         Render();
@@ -12215,7 +12217,9 @@ void ExecuteMenu(int id) {
         case kMenuRemoveFromTab: {
             auto apps = MenuTargets(app);
             g_selection.clear();
-            for (App* a : apps) RemoveFromChip(g_menuChip, *a);
+            for (App* a : apps) RemoveFromChip(g_menuChip, *a, false);
+            if (g_menuChip >= kChipCustom) SaveCustomTabs(); else if (g_menuChip >= 0 && g_menuChip < kFilterCount) SaveBuiltinTabs();   // once
+            RefreshAppsView();
             break;
         }
         case kMenuRestoreTabs: RestoreBuiltinTabs(); break;
@@ -14400,7 +14404,7 @@ void BackupImport() {
             for (PCWSTR k : kBackupStrings) if (key == k) {
                 if (key == kThemeValuesKey) themeValuesInFile = true;
                 for (WCHAR& c : value) if (c == L'\n') c = kRecSep;   // backups made by earlier versions
-                value.erase(std::remove_if(value.begin(), value.end(), [](WCHAR c) { return c < 0x20 && c != L'\t'; }), value.end());
+                value.erase(std::remove_if(value.begin(), value.end(), [](WCHAR c) { return c < 0x20 && c != L'\t' && c != kRecSep; }), value.end());
                 if (IsLongValue(k)) SaveLongValue(k, value);   // in parts, as the mod keeps it
                 else Wh_SetStringValue(k, value.c_str());
             }
