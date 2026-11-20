@@ -2,7 +2,7 @@
 // @id              classic-window-switcher
 // @name            ClassicWindowSwitcher
 // @description     Bring back the classic Alt+Tab dialog
-// @version         1.3
+// @version         1.4
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -179,6 +179,7 @@ DEFINE_GUID(LiveSetting_Property_GUID, 0xc12bcd8e, 0x2a8e, 0x4950, 0x8a, 0xe7, 0
 
 #define SWS_WINDOWSWITCHER_PAINT_MSG (WM_APP + 1)
 #define SWS_WINDOWSWITCHER_RELOAD_CONFIG_MSG (WM_APP + 2)
+#define SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG (WM_APP + 4)
 
 #define SWS_WINDOWSWITCHER_PAINTFLAGS_NONE 0b000
 #define SWS_WINDOWSWITCHER_PAINTFLAGS_REDRAWENTIRE 0b001
@@ -362,12 +363,31 @@ typedef long long sws_error_t;
 // sws_IconPainter.h
 typedef struct _sws_IconPainter_CallbackParams
 {
-    long long timestamp;
+    long long layoutId;
     HWND hWnd;
     int index;
     BOOL bIsDesktop;
     BOOL bUseApplicationIcon;
 } sws_IconPainter_CallbackParams;
+
+typedef struct _sws_getIconQueueItem
+{
+    sws_IconPainter_CallbackParams params;
+    HWND hWnd;
+    DWORD dwProcessId;
+    UINT szIcon;
+    DWORD dwWindowFlags;
+    struct _sws_getIconQueueItem* next;
+} sws_getIconQueueItem;
+
+typedef struct _sws_getIconQueue
+{
+    BOOL csInited;
+    CRITICAL_SECTION cs;
+    CONDITION_VARIABLE cv;
+    sws_getIconQueueItem* rear;
+    BOOL isExiting;
+} sws_getIconQueue;
 
 // sws_tshwnd.h
 typedef struct _sws_tshwnd
@@ -519,28 +539,12 @@ pSHWindowsPolicy sws_SHWindowsPolicy;
 
 extern "C" WINUSERAPI BOOL WINAPI EndTask(HWND, BOOL, BOOL);
 
-typedef HWND(WINAPI* pCreateWindowInBand)(
-    _In_ DWORD dwExStyle,
-    _In_opt_ LPCWSTR lpClassName,
-    _In_opt_ LPCWSTR lpWindowName,
-    _In_ DWORD dwStyle,
-    _In_ int X,
-    _In_ int Y,
-    _In_ int nWidth,
-    _In_ int nHeight,
-    _In_opt_ HWND hWndParent,
-    _In_opt_ HMENU hMenu,
-    _In_opt_ HINSTANCE hInstance,
-    _In_opt_ LPVOID lpParam,
-    DWORD band
-    );
-pCreateWindowInBand _sws_CreateWindowInBand;
-
 FILETIME sws_start_ft;
 FILETIME sws_ancient_ft;
 
 HICON sws_DefAppIcon;
 HICON sws_LegacyDefAppIcon;
+HICON sws_DesktopIcon;
 
 IAppResolver_8* sws_AppResolver;
 
@@ -559,29 +563,6 @@ inline FILETIME sws_WindowHelpers_GetAncientTime()
     sws_ancient_ft.dwLowDateTime = uli.LowPart;
     return sws_ancient_ft;
 }
-
-enum ZBID
-{
-    ZBID_DEFAULT = 0,
-    ZBID_DESKTOP = 1,
-    ZBID_UIACCESS = 2,
-    ZBID_IMMERSIVE_IHM = 3,
-    ZBID_IMMERSIVE_NOTIFICATION = 4,
-    ZBID_IMMERSIVE_APPCHROME = 5,
-    ZBID_IMMERSIVE_MOGO = 6,
-    ZBID_IMMERSIVE_EDGY = 7,
-    ZBID_IMMERSIVE_INACTIVEMOBODY = 8,
-    ZBID_IMMERSIVE_INACTIVEDOCK = 9,
-    ZBID_IMMERSIVE_ACTIVEMOBODY = 10,
-    ZBID_IMMERSIVE_ACTIVEDOCK = 11,
-    ZBID_IMMERSIVE_BACKGROUND = 12,
-    ZBID_IMMERSIVE_SEARCH = 13,
-    ZBID_GENUINE_WINDOWS = 14,
-    ZBID_IMMERSIVE_RESTRICTED = 15,
-    ZBID_SYSTEM_TOOLS = 16,
-    ZBID_LOCK = 17,
-    ZBID_ABOVELOCK_UX = 18,
-};
 
 wchar_t* sws_WindowHelpers_GetAUMIDForHWND(HWND hWnd);
 
@@ -621,6 +602,7 @@ typedef struct _sws_WindowSwitcherLayout
     unsigned int cbFontHeight;
     unsigned int cbBorderSize;
     long long timestamp;
+    long long layoutId;
 } sws_WindowSwitcherLayout;
 
 // sws_WindowSwitcher.h
@@ -686,6 +668,9 @@ typedef struct _sws_WindowSwitcher
     BOOL bIsCursorOnSwitcher;
     BOOL bSkipIfOneWindow;
     BOOL bRegisterHotKey;
+    HANDLE hAsyncGetAppIconThread;
+    sws_getIconQueue pGetIconQueue;
+    long long lastLayoutId;
 
     sws_WindowSwitcherSettings settings;
 } sws_WindowSwitcher;
@@ -710,7 +695,6 @@ typedef struct _sws_WindowSwitcherLayoutWindow
     HICON hIcon;
     UINT dwIconSource;
     UINT szIcon;
-    RECT rcIcon;
     WCHAR wszPath[MAX_PATH];
     sws_tshwnd* tshWnd;
     sws_tshwnd* last_flashing_tshwnd;
@@ -896,6 +880,8 @@ void sws_IconPainter_DrawIcon(HICON hIcon, HDC hDC, HBRUSH hBrush, Gdiplus::GpGr
     }
 }
 
+
+
 static void __stdcall _sws_IconPainter_Callback(
     HWND hWnd,
     UINT uMsg,
@@ -907,17 +893,17 @@ static void __stdcall _sws_IconPainter_Callback(
     LONG_PTR ptr = GetWindowLongPtr(params->hWnd, GWLP_USERDATA);
     sws_WindowSwitcher* _this = (sws_WindowSwitcher*)(ptr);
 
-    if (_this->layout.timestamp == params->timestamp)
+    if (_this && _this->layout.layoutId == params->layoutId && params->index >= 0 && params->index < _this->layout.pWindowList.cbSize)
     {
         DWORD dwProcessId;
         GetWindowThreadProcessId(hWnd, &dwProcessId);
         sws_WindowSwitcherLayoutWindow* pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->layout.pWindowList.pList;
-
-        if (!hIcon || (params->bUseApplicationIcon && !pWindowList[params->index].dwIconSource))
+        //if (uMsg == SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG) Wh_Log(L"aaa2 dwSrc %p idx %d", pWindowList[params->index].dwIconSource, params->index);
+        if ((!hIcon || (params->bUseApplicationIcon && !pWindowList[params->index].dwIconSource)) && uMsg != SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG)
         {
             if (params->bUseApplicationIcon && !pWindowList[params->index].dwIconSource)
             {
-                if (hIcon && dwProcessId != GetCurrentProcessId())
+                if (hIcon)
                 {
                     DestroyIcon((HICON)hIcon);
                 }
@@ -925,7 +911,7 @@ static void __stdcall _sws_IconPainter_Callback(
             }
             switch (pWindowList[params->index].dwIconSource)
             {
-            case 0:
+            case 0: // Retry WM_GETICON with ICON_SMALL2
             {
                 pWindowList[params->index].dwIconSource++;
                 if (SendMessageCallbackW(hWnd, WM_GETICON, ICON_SMALL2, 0, _sws_IconPainter_Callback, (ULONG_PTR)params))
@@ -938,142 +924,53 @@ static void __stdcall _sws_IconPainter_Callback(
                 }
                 break;
             }
-            case 1:
+            case 1: // Get application icon from EXE or UWP info
             {
                 pWindowList[params->index].dwIconSource++;
                 wchar_t wszPath[MAX_PATH];
                 ZeroMemory(wszPath, MAX_PATH * sizeof(wchar_t));
                 if (!params->bIsDesktop)
                 {
-                    if (!sws_WindowHelpers_IsWindowUWP(hWnd))
+                    if (_this->pGetIconQueue.csInited)
                     {
-                        HANDLE hProcess;
-                        hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, dwProcessId);
-                        if (hProcess)
-                        {
-                            GetModuleFileNameExW((HMODULE)hProcess, NULL, wszPath, MAX_PATH);
-                            CharLowerW(wszPath);
-                            SHFILEINFOW shinfo;
-                            ZeroMemory(&shinfo, sizeof(SHFILEINFOW));
-                            SHGetFileInfoW(
-                                wszPath,
-                                FILE_ATTRIBUTE_NORMAL,
-                                &shinfo,
-                                sizeof(SHFILEINFOW),
-                                SHGFI_ICON
-                            );
-                            if (shinfo.hIcon)
+                        CRITICAL_SECTION* cs = &_this->pGetIconQueue.cs;
+                        EnterCriticalSection(cs);
+                        if (_this->hAsyncGetAppIconThread && !_this->pGetIconQueue.isExiting) {
+                            DWORD dwExitCode = 0;
+                            if (GetExitCodeThread(_this->hAsyncGetAppIconThread, &dwExitCode) && dwExitCode == STILL_ACTIVE)
                             {
-                                _sws_IconPainter_Callback(hWnd, uMsg, _params, (LRESULT)shinfo.hIcon);
-                                CloseHandle(hProcess);
-                                return;
-                            }
-                        }
-                        CloseHandle(hProcess);
-                    }
-                    else
-                    {
-                        HRESULT hr = S_OK;
-                        IShellItemImageFactory* imageFactory = NULL;
-                        SIIGBF flags = SIIGBF_RESIZETOFIT | SIIGBF_ICONBACKGROUND;
-
-                        IPropertyStore* propStore = NULL;
-                        hr = SHGetPropertyStoreForWindow(
-                            hWnd,
-                            __uuidof_IPropertyStore,
-                            (void**)&propStore
-                        );
-                        if (SUCCEEDED(hr))
-                        {
-                            PROPERTYKEY pKey;
-                            pKey.fmtid = __uuidof_AppUserModelIdProperty;
-                            pKey.pid = 5;
-                            PROPVARIANT prop;
-                            ZeroMemory(&prop, sizeof(PROPVARIANT));
-                            if (SUCCEEDED(propStore->GetValue(pKey, &prop)))
-                            {
-                                if (prop.bstrVal)
+                                sws_getIconQueueItem* item = (sws_getIconQueueItem*)malloc(sizeof(sws_getIconQueueItem));
+                                if (item)
                                 {
-                                    SHCreateItemInKnownFolder(
-                                        FOLDERID_AppsFolder,
-                                        KF_FLAG_DONT_VERIFY,
-                                        prop.bstrVal,
-                                        __uuidof_IShellItemImageFactory,
-                                        (void**)&imageFactory
-                                    );
-                                    if (imageFactory)
+                                    item->hWnd = hWnd;
+                                    item->dwProcessId = dwProcessId;
+                                    item->szIcon = pWindowList[params->index].szIcon;
+                                    item->params = *params;
+                                    item->dwWindowFlags = NULL;
+                                    if (_this->pGetIconQueue.rear)
                                     {
-                                        double factor = SWS_UWP_ICON_SCALE_FACTOR;
-                                        int szIcon = pWindowList[params->index].szIcon / factor;
-
-                                        SIZE size;
-                                        size.cx = szIcon;
-                                        size.cy = szIcon;
-                                        HBITMAP hBitmap;
-                                        hr = imageFactory->GetImage(
-                                            size,
-                                            flags,
-                                            &hBitmap
-                                        );
-                                        if (SUCCEEDED(hr))
-                                        {
-                                            // Easiest way to get an HICON from an HBITMAP
-                                            // I have turned the Internet upside down and was unable to find this
-                                            // Only a convoluted example using GDI+
-                                            // This is from the disassembly of StartIsBack/StartAllBack
-                                            HIMAGELIST hImageList = ImageList_Create(size.cx, size.cy, ILC_COLOR32, 1, 0);
-                                            if (ImageList_Add(hImageList, hBitmap, NULL) != -1)
-                                            {
-                                                HICON hExIcon = ImageList_GetIcon(hImageList, 0, 0);
-                                                ImageList_Destroy(hImageList);
-
-                                                DeleteObject(hBitmap);
-                                                imageFactory->Release();
-
-                                                pWindowList[params->index].dwWindowFlags |= SWS_WINDOWSWITCHERLAYOUT_WINDOWFLAGS_ISUWP;
-                                                szIcon = pWindowList[params->index].rcIcon.right;
-                                                szIcon = szIcon * factor;
-                                                szIcon = pWindowList[params->index].rcIcon.right - szIcon;
-                                                pWindowList[params->index].rcIcon.left = szIcon / 2;
-                                                pWindowList[params->index].rcIcon.top = szIcon / 2;
-                                                pWindowList[params->index].rcIcon.right = pWindowList[params->index].rcIcon.right + szIcon;
-                                                pWindowList[params->index].rcIcon.bottom = pWindowList[params->index].rcIcon.bottom + szIcon;
-
-                                                _sws_IconPainter_Callback(hWnd, uMsg, _params, (LRESULT)hExIcon);
-
-                                                PropVariantClear(&prop);
-                                                propStore->Release();
-                                                return;
-                                            } else {
-                                                ImageList_Destroy(hImageList);
-                                            }
-                                            DeleteObject(hBitmap);
-                                        }
-                                        imageFactory->Release();
+                                        item->next = _this->pGetIconQueue.rear->next;
+                                        _this->pGetIconQueue.rear->next = item;
                                     }
+                                    else
+                                    {
+                                        item->next = item;
+                                    }
+                                    _this->pGetIconQueue.rear = item;
+                                    LeaveCriticalSection(cs);
+                                    WakeAllConditionVariable(&_this->pGetIconQueue.cv);
+                                    free(params);
+                                    return;
                                 }
-                                PropVariantClear(&prop);
                             }
-                            propStore->Release();
                         }
+                        LeaveCriticalSection(cs);
                     }
                 }
-                else
+                else if (sws_DesktopIcon)
                 {
-                    if (GetSystemDirectoryW(wszPath, MAX_PATH))
-                    {
-                        wcscat_s(wszPath, MAX_PATH, L"\\imageres.dll");
-                        HICON hExIcon = ExtractIconW(
-                            HINST_THISCOMPONENT,
-                            wszPath,
-                            -110
-                        );
-                        if (hExIcon)
-                        {
-                            _sws_IconPainter_Callback(hWnd, uMsg, _params, (LRESULT)hExIcon);
-                            return;
-                        }
-                    }
+                    _sws_IconPainter_Callback(hWnd, uMsg, _params, (LRESULT)sws_DesktopIcon);
+                    return;
                 }
                 pWindowList[params->index].hIcon = sws_LegacyDefAppIcon;
             }
@@ -1081,18 +978,25 @@ static void __stdcall _sws_IconPainter_Callback(
         }
         else
         {
-            if (pWindowList[params->index].hIcon && sws_DefAppIcon && pWindowList[params->index].hIcon != sws_DefAppIcon && sws_LegacyDefAppIcon && pWindowList[params->index].hIcon != sws_LegacyDefAppIcon)
+            if (pWindowList[params->index].hIcon &&
+                sws_DefAppIcon && pWindowList[params->index].hIcon != sws_DefAppIcon &&
+                sws_LegacyDefAppIcon && pWindowList[params->index].hIcon != sws_LegacyDefAppIcon &&
+                sws_DesktopIcon && pWindowList[params->index].hIcon != sws_DesktopIcon
+                )
             {
                 DestroyIcon(pWindowList[params->index].hIcon);
                 pWindowList[params->index].hIcon = NULL;
             }
-            if (dwProcessId == GetCurrentProcessId() && pWindowList[params->index].dwIconSource <= 1)
+            pWindowList[params->index].hIcon = (HICON)hIcon;
+            if (uMsg == SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG)
             {
-                pWindowList[params->index].hIcon = CopyIcon((HICON)hIcon);
-            }
-            else
-            {
-                pWindowList[params->index].hIcon = (HICON)hIcon;
+                sws_getIconQueueItem* item = (sws_getIconQueueItem*)params;
+                pWindowList[params->index].dwWindowFlags = item->dwWindowFlags;
+                pWindowList[params->index].szIcon = item->szIcon;
+                if (!hIcon)
+                {
+                    pWindowList[params->index].hIcon = sws_LegacyDefAppIcon;
+                }
             }
         }
 
@@ -1107,13 +1011,20 @@ static void __stdcall _sws_IconPainter_Callback(
         }
         if (bShouldPaint)
         {
-            //Wh_Log(L"[sws] Asynchronously obtained application icons in %lld ms.\n", sws_milliseconds_now() - _this->layout.timestamp);
+            Wh_Log(L"[sws] Asynchronously obtained application icons in %lld ms.\n", sws_milliseconds_now() - _this->layout.timestamp);
             KillTimer(_this->hWnd, SWS_WINDOWSWITCHER_TIMER_PAINT);
             SendMessageW(_this->hWnd, SWS_WINDOWSWITCHER_PAINT_MSG, SWS_WINDOWSWITCHER_PAINTFLAGS_REDRAWENTIRE, 0);
         }
     }
+    else if (uMsg == SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG && hIcon)
+    {
+        DestroyIcon((HICON)hIcon);
+    }
 
-    free(params);
+    if (uMsg != SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG)
+    {
+        free(params);
+    }
 }
 
 BOOL sws_IconPainter_ExtractAndDrawIconAsync(HWND hWnd, sws_IconPainter_CallbackParams* params)
@@ -1470,13 +1381,11 @@ void sws_WindowHelpers_GetDesktopText(wchar_t* wszTitle)
         if (LoadStringW(_sws_ExplorerFrame, 13140, wszTitle, MAX_PATH))
         {
             // Strip CJK "(D)" from it
-            auto titleText = std::wstring(wszTitle);
-            size_t pos = titleText.find(L"(&D)");
-            if (pos != std::wstring::npos)
-            {
-                titleText.replace(pos, 4, L"");
-            }
-            wcsncpy_s(wszTitle, MAX_PATH, titleText.c_str(), _TRUNCATE);
+			wchar_t* pos = wcsstr(wszTitle, L"(&D)");
+			if (pos != NULL)
+			{
+				*pos = L'\0';
+			}
             return;
         }
     }
@@ -1528,9 +1437,9 @@ void sws_WindowHelpers_GetWindowText(HWND hWnd, LPWSTR lpWStr, DWORD dwLength)
     InternalGetWindowText(hWndReal, lpWStr, dwLength);
 }
 
-void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_WindowSwitcherLayoutWindow& window, LPWSTR wszTitle)
+void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_WindowSwitcherLayoutWindow* window, LPWSTR wszTitle)
 {
-    if (_this->layout.bIncludeWallpaper && window.hWnd == GetShellWindow())
+    if (_this->layout.bIncludeWallpaper && window->hWnd == GetShellWindow())
     {
         sws_WindowHelpers_GetDesktopText(wszTitle);
     }
@@ -1539,20 +1448,21 @@ void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_Windo
         WCHAR wszRundll32Path[MAX_PATH];
         GetSystemDirectoryW(wszRundll32Path, MAX_PATH);
         wcscat_s(wszRundll32Path, MAX_PATH, L"\\rundll32.exe");
-        if (_this->settings.bAlwaysUseWindowTitleAndIcon || _this->mode != SWS_WINDOWSWITCHER_LAYOUTMODE_FULL || !_this->settings.bSwitcherIsPerApplication || !_wcsicmp(window.wszPath, wszRundll32Path))
+        if (_this->settings.bAlwaysUseWindowTitleAndIcon || _this->mode != SWS_WINDOWSWITCHER_LAYOUTMODE_FULL || !_this->settings.bSwitcherIsPerApplication || !_wcsicmp(window->wszPath, wszRundll32Path))
         {
-            sws_WindowHelpers_GetWindowText(window.hWnd, wszTitle, MAX_PATH);
+            sws_WindowHelpers_GetWindowText(window->hWnd, wszTitle, MAX_PATH);
         }
         else
         {
-            if (window.dwCount > 1)
+            if (window->dwCount > 1)
             {
+                long long a1 = sws_milliseconds_now();
                 DWORD dwPrefixLen = 0;
                 BOOL bAUMIDOk = FALSE;
-                if (window.wszAUMID)
+                if (window->wszAUMID)
                 {
                     IShellItem2* pItem = NULL;
-                    if (SUCCEEDED(SHCreateItemInKnownFolder(FOLDERID_AppsFolder, KF_FLAG_DONT_VERIFY, window.wszAUMID, IID_IShellItem2, (void**)&pItem)) && pItem)
+                    if (SUCCEEDED(SHCreateItemInKnownFolder(FOLDERID_AppsFolder, KF_FLAG_DONT_VERIFY, window->wszAUMID, IID_IShellItem2, (void**)&pItem)) && pItem)
                     {
                         LPWSTR pDisplayName = NULL;
                         if (SUCCEEDED(pItem->GetDisplayName(SIGDN_NORMALDISPLAY, &pDisplayName)) && pDisplayName)
@@ -1567,7 +1477,7 @@ void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_Windo
                 if (!bAUMIDOk)
                 {
                     IShellItem2* pIShellItem2 = NULL;
-                    if (SUCCEEDED(SHCreateItemFromParsingName(window.wszPath, NULL, IID_IShellItem2, (void**)&pIShellItem2)))
+                    if (SUCCEEDED(SHCreateItemFromParsingName(window->wszPath, NULL, IID_IShellItem2, (void**)&pIShellItem2)))
                     {
                         LPWSTR wszOutText = NULL;
                         if (SUCCEEDED(pIShellItem2->GetString(PKEY_FileDescription, &wszOutText)))
@@ -1583,7 +1493,7 @@ void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_Windo
                                 }
                                 else
                                 {
-                                    sws_WindowHelpers_GetWindowText(window.hWnd, wszTitle + dwPrefixLen, MAX_PATH - dwPrefixLen);
+                                    sws_WindowHelpers_GetWindowText(window->hWnd, wszTitle + dwPrefixLen, MAX_PATH - dwPrefixLen);
                                 }
                             }
                             else
@@ -1594,7 +1504,7 @@ void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_Windo
                         }
                         else
                         {
-                            sws_WindowHelpers_GetWindowText(window.hWnd, wszTitle + dwPrefixLen, MAX_PATH - dwPrefixLen);
+                            sws_WindowHelpers_GetWindowText(window->hWnd, wszTitle + dwPrefixLen, MAX_PATH - dwPrefixLen);
                         }
                         pIShellItem2->Release();
                     }
@@ -1605,30 +1515,31 @@ void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_Windo
 
                 if (_sws_Explorer)
                 {
-                    WCHAR wszFormat[MAX_PATH] = {};
+                    WCHAR wszFormat[MAX_PATH] = {0};
                     if (LoadStringW(_sws_Explorer, 11115, wszFormat, MAX_PATH))
                     {
                         auto titleText = std::wstring(wszFormat);
                         size_t pos = titleText.find(L"%d");
                         if (pos != std::wstring::npos)
                         {
-                            titleText.replace(pos, 2, std::to_wstring(window.dwCount));
+                            titleText.replace(pos, 2, std::to_wstring(window->dwCount));
                             pos = titleText.find(L"%s");
                             if (pos != std::wstring::npos)
                             {
                                 titleText.replace(pos, 2, wszTitle2);
                                 wcsncpy_s(wszTitle, MAX_PATH, titleText.c_str(), _TRUNCATE);
+                                Wh_Log(L"Perf-SHCreateItemInKnownFolder %d", sws_milliseconds_now() - a1);
                                 return;
                             }
                         }
                     }
                 }
 
-                _snwprintf_s(wszTitle, MAX_PATH, _TRUNCATE, L"%s - %u running windows", wszTitle2, window.dwCount);
+                _snwprintf_s(wszTitle, MAX_PATH, _TRUNCATE, L"%s - %u running windows", wszTitle2, window->dwCount);
             }
             else
             {
-                sws_WindowHelpers_GetWindowText(window.hWnd, wszTitle, MAX_PATH);
+                sws_WindowHelpers_GetWindowText(window->hWnd, wszTitle, MAX_PATH);
             }
         }
     }
@@ -1648,6 +1559,16 @@ void sws_WindowHelpers_Clear()
     {
         DestroyIcon(sws_DefAppIcon);
         sws_DefAppIcon = NULL;
+    }
+    if (sws_LegacyDefAppIcon)
+    {
+        DestroyIcon(sws_LegacyDefAppIcon);
+        sws_LegacyDefAppIcon = NULL;
+    }
+    if (sws_DesktopIcon)
+    {
+        DestroyIcon(sws_DesktopIcon);
+        sws_DesktopIcon = NULL;
     }
     if (_sws_hUser32)
     {
@@ -1702,6 +1623,17 @@ sws_error_t sws_WindowHelpers_Initialize()
             (int)32,
             (HICON*)(&(sws_LegacyDefAppIcon))
         );
+        wchar_t wszPath[MAX_PATH];
+        ZeroMemory(wszPath, MAX_PATH * sizeof(wchar_t));
+        if (GetSystemDirectoryW(wszPath, MAX_PATH))
+        {
+            wcscat_s(wszPath, MAX_PATH, L"\\imageres.dll");
+            sws_DesktopIcon = ExtractIconW(
+                HINST_THISCOMPONENT,
+                wszPath,
+                -110
+            );
+        }
     }
     if (!rv)
     {
@@ -1736,10 +1668,6 @@ sws_error_t sws_WindowHelpers_Initialize()
             {
                 sws_IsShellFrameWindow = (pIsShellManagedWindow)GetProcAddress(_sws_hUser32, (LPCSTR)2573);
             }
-            if (!_sws_CreateWindowInBand)
-            {
-                _sws_CreateWindowInBand = (pCreateWindowInBand)GetProcAddress(_sws_hUser32, "CreateWindowInBand");
-            }
         }
     
         if (!_sws_hShcore)
@@ -1766,7 +1694,7 @@ sws_error_t sws_WindowHelpers_Initialize()
     }
     if (!_sws_Explorer)
     {
-        wchar_t explorerPath[MAX_PATH] = {};
+        wchar_t explorerPath[MAX_PATH] = {0};
         GetWindowsDirectoryW(explorerPath, MAX_PATH);
         wcscat_s(explorerPath, L"\\explorer.exe");
         _sws_Explorer = LoadLibraryExW(explorerPath, NULL, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
@@ -1800,7 +1728,7 @@ void sws_WindowSwitcherLayoutWindow_Erase(sws_WindowSwitcherLayoutWindow* _this)
 void sws_WindowSwitcherLayoutWindow_Clear(sws_WindowSwitcherLayoutWindow* _this)
 {
     //if (_this->hIcon && !_this->bOwnProcess)
-    if (_this->hIcon && sws_DefAppIcon && _this->hIcon != sws_DefAppIcon && sws_LegacyDefAppIcon && _this->hIcon != sws_LegacyDefAppIcon)
+    if (_this->hIcon && sws_DefAppIcon && _this->hIcon != sws_DefAppIcon && sws_LegacyDefAppIcon && _this->hIcon != sws_LegacyDefAppIcon && sws_DesktopIcon && _this->hIcon != sws_DesktopIcon)
     {
         DestroyIcon(_this->hIcon);
     }
@@ -2111,6 +2039,7 @@ sws_error_t sws_WindowSwitcherLayout_Initialize(
                                 (windowList[i].dwProcessId == windowList[j].dwProcessId || !_wcsicmp(windowList[i].wszPath, windowList[j].wszPath)) &&
                                 (settings.bPerMonitor ? MonitorFromWindow(windowList[i].hWnd, MONITOR_DEFAULTTONULL) == MonitorFromWindow(windowList[j].hWnd, MONITOR_DEFAULTTONULL) : TRUE))
                             {
+                                windowList[j].pNextWindow = windowList + i;
                                 bShouldContinue = TRUE;
                                 break;
                             }
@@ -2154,11 +2083,7 @@ sws_error_t sws_WindowSwitcherLayout_Initialize(
         {
             if (!pWindowList[iCurrentWindow].hIcon)
             {
-                pWindowList[iCurrentWindow].rcIcon.left = 0;
-                pWindowList[iCurrentWindow].rcIcon.top = 0;
-                pWindowList[iCurrentWindow].rcIcon.right = SWS_WINDOWSWITCHERLAYOUT_ICONSIZE * (_this->cbDpiX / DEFAULT_DPI_X);
-                pWindowList[iCurrentWindow].rcIcon.bottom = pWindowList[iCurrentWindow].rcIcon.right;
-                pWindowList[iCurrentWindow].szIcon = pWindowList[iCurrentWindow].rcIcon.right;
+                pWindowList[iCurrentWindow].szIcon = SWS_WINDOWSWITCHERLAYOUT_ICONSIZE * (_this->cbDpiX / DEFAULT_DPI_X);
                 pWindowList[iCurrentWindow].hIcon = sws_DefAppIcon;
             }
         }
@@ -2215,7 +2140,7 @@ static void _sws_WindowSwitcher_UpdateAccessibleText(sws_WindowSwitcher* _this)
             WCHAR wszAccText[MAX_PATH * 2], wszTitle[MAX_PATH];
             ZeroMemory(wszAccText, MAX_PATH * 2 * sizeof(WCHAR));
             ZeroMemory(wszTitle, MAX_PATH * sizeof(WCHAR));
-            sws_WindowHelpers_GetDesiredWindowText(_this, pWindowList[_this->layout.iIndex], wszTitle);
+            sws_WindowHelpers_GetDesiredWindowText(_this, &pWindowList[_this->layout.iIndex], wszTitle);
             swprintf_s(
                 wszAccText,
                 MAX_PATH * 2,
@@ -3049,7 +2974,7 @@ void sws_WindowSwitcher_Paint(sws_WindowSwitcher* _this, DWORD dwFlags)
             {
                 WCHAR wszTitle[MAX_PATH];
                 memset(wszTitle, 0, MAX_PATH * sizeof(wchar_t));
-                sws_WindowHelpers_GetDesiredWindowText(_this, pWindowList[i], wszTitle);
+                sws_WindowHelpers_GetDesiredWindowText(_this, &pWindowList[i], wszTitle);
                 SetBkMode(hdcPaint, OPAQUE);
                 SetBkColor(hdcPaint, GetSysColor(COLOR_BTNFACE));
                 DrawTextW(
@@ -3075,8 +3000,8 @@ void sws_WindowSwitcher_Paint(sws_WindowSwitcher* _this, DWORD dwFlags)
                 rc = pWindowList[i].rcWindow;
                 INT x = rc.left + 5 * (_this->layout.cbDpiX / DEFAULT_DPI_X);
                 INT y = rc.top + 5 * (_this->layout.cbDpiY / DEFAULT_DPI_Y);
-                INT w = pWindowList[i].rcIcon.right;
-                INT h = pWindowList[i].rcIcon.bottom;
+                INT w = pWindowList[i].szIcon;
+                INT h = w;
                 if (pWindowList[i].dwWindowFlags & SWS_WINDOWSWITCHERLAYOUT_WINDOWFLAGS_ISUWP)
                 {
                     x = rc.left + 4 * (_this->layout.cbDpiX / DEFAULT_DPI_X);
@@ -3149,6 +3074,36 @@ void sws_WindowSwitcher_Paint(sws_WindowSwitcher* _this, DWORD dwFlags)
 }
 
 std::vector<HANDLE> g_endTaskThreads;
+
+static void _sws_WindowSwitcher_AsyncGetAppIconThread_Clear(sws_WindowSwitcher* _this)
+{
+    if (_this->hAsyncGetAppIconThread)
+    {
+        sws_getIconQueue* queue = &_this->pGetIconQueue;
+        EnterCriticalSection(&queue->cs);
+        queue->isExiting = TRUE;
+        LeaveCriticalSection(&queue->cs);
+        WakeAllConditionVariable(&queue->cv);
+        WaitForSingleObject(_this->hAsyncGetAppIconThread, INFINITE);
+        CloseHandle(_this->hAsyncGetAppIconThread);
+        _this->hAsyncGetAppIconThread = NULL;
+    }
+    if (_this->hWnd && IsWindow(_this->hWnd))
+    {
+        MSG msg;
+        while (PeekMessageW(&msg, _this->hWnd, SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG, SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG, PM_REMOVE))
+        {
+            if (msg.wParam)
+            {
+                free((void*)msg.wParam);
+            }
+            if (msg.lParam)
+            {
+                DestroyIcon((HICON)msg.lParam);
+            }
+        }
+    }
+}
 
 static void WINAPI _sws_WindowSwitcher_Show(sws_WindowSwitcher* _this)
 {
@@ -3353,7 +3308,11 @@ static void WINAPI _sws_WindowSwitcher_Show(sws_WindowSwitcher* _this)
                 {
                     _this->layout.timestamp = sws_milliseconds_now();
                 }
-                params->timestamp = _this->layout.timestamp;
+                if (!_this->layout.layoutId)
+                {
+                    _this->layout.layoutId = ++_this->lastLayoutId;
+                }
+                params->layoutId = _this->layout.layoutId;
                 params->bIsDesktop = (_this->layout.bIncludeWallpaper && pWindowList[iCurrentWindow].hWnd == GetShellWindow());
                 if (!sws_IconPainter_ExtractAndDrawIconAsync(pWindowList[iCurrentWindow].hWnd, params))
                 {
@@ -3425,6 +3384,12 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
         sws_WindowSwitcher_LoadSettings(_this);
         sws_WindowSwitcher_UnregisterHotkeys(_this);
         sws_WindowSwitcher_RegisterHotkeys(_this);
+    }
+    else if (uMsg == SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG)
+    {
+        sws_getIconQueueItem* item = (sws_getIconQueueItem*)wParam;
+        _sws_IconPainter_Callback(item->hWnd, uMsg, (ULONG_PTR)item, lParam);
+        free(item);
     }
     else if (uMsg == WM_ERASEBKGND)
     {
@@ -3676,7 +3641,11 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                                         {
                                             _this->layout.timestamp = sws_milliseconds_now();
                                         }
-                                        params->timestamp = _this->layout.timestamp;
+                                        if (!_this->layout.layoutId)
+                                        {
+                                            _this->layout.layoutId = ++_this->lastLayoutId;
+                                        }
+                                        params->layoutId = _this->layout.layoutId;
                                         params->bIsDesktop = (_this->layout.bIncludeWallpaper && pWindowList[i].hWnd == GetShellWindow());
                                         if (!sws_IconPainter_ExtractAndDrawIconAsync(pWindowList[i].hWnd, params))
                                         {
@@ -3739,6 +3708,7 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
     }
     else if (uMsg == WM_CLOSE)
     {
+        _sws_WindowSwitcher_AsyncGetAppIconThread_Clear(_this);
         DestroyWindow(hWnd);
         return 0;
     }
@@ -4191,6 +4161,184 @@ static DWORD CALLBACK _sws_WindowSwitcher_ShowAsyncProcedure(sws_WindowSwitcher*
     return 0;
 }
 
+static DWORD CALLBACK _sws_WindowSwitcher_AsyncGetAppIconProcedure(sws_WindowSwitcher* _this)
+{
+    HRESULT hrCo = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    if (FAILED(hrCo))
+    {
+        sws_error_t rv = sws_error_Report(hrCo);
+    }
+
+    while (TRUE)
+    {
+        CRITICAL_SECTION* cs = &_this->pGetIconQueue.cs;
+        EnterCriticalSection(cs);
+        while (!_this->pGetIconQueue.rear && !_this->pGetIconQueue.isExiting)
+        {
+            SleepConditionVariableCS(&_this->pGetIconQueue.cv, cs, INFINITE);
+        }
+        if (!_this->hWnd || _this->pGetIconQueue.isExiting)
+        {
+            Wh_Log(L"Exiting due to one of %d %d", !_this->hWnd, _this->pGetIconQueue.isExiting);
+            LeaveCriticalSection(cs);
+            break;
+        }
+        sws_getIconQueueItem* pItem = _this->pGetIconQueue.rear->next;
+        if (pItem == _this->pGetIconQueue.rear)
+        {
+            _this->pGetIconQueue.rear = NULL;
+        }
+        else
+        {
+            _this->pGetIconQueue.rear->next = pItem->next;
+        }
+        LeaveCriticalSection(cs);
+
+        Wh_Log(L"Getting app icon for idx %d / hWnd %p / pid %d asynchronously...", pItem->params.index, pItem->hWnd, pItem->dwProcessId);
+
+        long long a1 = sws_milliseconds_now();
+        BOOL ok = FALSE;
+        if (SUCCEEDED(hrCo))
+        {
+            if (!sws_WindowHelpers_IsWindowUWP(pItem->hWnd))
+            {
+                HANDLE hProcess;
+                hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pItem->dwProcessId);
+                if (hProcess)
+                {
+                    wchar_t wszPath[MAX_PATH];
+                    ZeroMemory(wszPath, MAX_PATH * sizeof(wchar_t));
+                    GetModuleFileNameExW((HMODULE)hProcess, NULL, wszPath, MAX_PATH);
+                    CharLowerW(wszPath);
+                    SHFILEINFOW shinfo;
+                    ZeroMemory(&shinfo, sizeof(SHFILEINFOW));
+                    SHGetFileInfoW(
+                        wszPath,
+                        FILE_ATTRIBUTE_NORMAL,
+                        &shinfo,
+                        sizeof(SHFILEINFOW),
+                        SHGFI_ICON
+                    );
+                    Wh_Log(L"Perf-SHGetFileInfoW %d", sws_milliseconds_now() - a1);
+                    if (shinfo.hIcon)
+                    {
+                        ok = PostMessageW(_this->hWnd, SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG, (ULONG_PTR)pItem, (LRESULT)shinfo.hIcon);
+                        if (!ok)
+                        {
+                            DestroyIcon(shinfo.hIcon);
+                        }
+                    }
+                }
+                CloseHandle(hProcess);
+            }
+            else
+            {
+                HRESULT hr = S_OK;
+                IShellItemImageFactory* imageFactory = NULL;
+                SIIGBF flags = SIIGBF_RESIZETOFIT | SIIGBF_ICONBACKGROUND;
+
+                IPropertyStore* propStore = NULL;
+                hr = SHGetPropertyStoreForWindow(
+                    pItem->hWnd,
+                    __uuidof_IPropertyStore,
+                    (void**)&propStore
+                );
+                if (SUCCEEDED(hr))
+                {
+                    PROPERTYKEY pKey;
+                    pKey.fmtid = __uuidof_AppUserModelIdProperty;
+                    pKey.pid = 5;
+                    PROPVARIANT prop;
+                    ZeroMemory(&prop, sizeof(PROPVARIANT));
+                    if (SUCCEEDED(propStore->GetValue(pKey, &prop)))
+                    {
+                        if (prop.bstrVal)
+                        {
+                            SHCreateItemInKnownFolder(
+                                FOLDERID_AppsFolder,
+                                KF_FLAG_DONT_VERIFY,
+                                prop.bstrVal,
+                                __uuidof_IShellItemImageFactory,
+                                (void**)&imageFactory
+                            );
+                            if (imageFactory)
+                            {
+                                double factor = SWS_UWP_ICON_SCALE_FACTOR;
+                                int szIcon = pItem->szIcon / factor;
+
+                                SIZE size = { szIcon, szIcon };
+                                HBITMAP hBitmap;
+                                Wh_Log(L"Perf-GetImage %d", sws_milliseconds_now() - a1);
+                                hr = imageFactory->GetImage(
+                                    size,
+                                    flags,
+                                    &hBitmap
+                                );
+                                if (SUCCEEDED(hr))
+                                {
+                                    // Easiest way to get an HICON from an HBITMAP
+                                    // I have turned the Internet upside down and was unable to find this
+                                    // Only a convoluted example using GDI+
+                                    // This is from the disassembly of StartIsBack/StartAllBack
+                                    HIMAGELIST hImageList = ImageList_Create(size.cx, size.cy, ILC_COLOR32, 1, 0);
+                                    if (ImageList_Add(hImageList, hBitmap, NULL) != -1)
+                                    {
+                                        HICON hExIcon = ImageList_GetIcon(hImageList, 0, 0);
+                                        ImageList_Destroy(hImageList);
+
+                                        pItem->dwWindowFlags = SWS_WINDOWSWITCHERLAYOUT_WINDOWFLAGS_ISUWP;
+                                        szIcon = pItem->szIcon;
+                                        szIcon -= (int)(szIcon * factor);
+                                        pItem->szIcon += szIcon;
+
+                                        ok = PostMessageW(_this->hWnd, SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG, (ULONG_PTR)pItem, (LRESULT)hExIcon);
+                                        if (!ok)
+                                        {
+                                            DestroyIcon(hExIcon);
+                                        }
+                                    } else {
+                                        ImageList_Destroy(hImageList);
+                                    }
+                                    DeleteObject(hBitmap);
+                                }
+                                imageFactory->Release();
+                            }
+                        }
+                        PropVariantClear(&prop);
+                    }
+                    propStore->Release();
+                }
+            }
+        }
+        if (!ok)
+        {
+            ok = PostMessageW(_this->hWnd, SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG, (ULONG_PTR)pItem, NULL);
+            if (!ok)
+            {
+                free(pItem);
+            }
+        }
+    }
+
+    if (_this->pGetIconQueue.rear)
+    {
+        sws_getIconQueueItem* pItem = _this->pGetIconQueue.rear->next;
+        _this->pGetIconQueue.rear = _this->pGetIconQueue.rear->next = NULL;
+        while (pItem)
+        {
+            sws_getIconQueueItem* next = pItem->next;
+            free(pItem);
+            pItem = next;
+        }
+    }
+
+    if (SUCCEEDED(hrCo))
+    {
+        CoUninitialize();
+    }
+    return 0;
+}
+
 static sws_error_t _sws_WindowSwitcher_RegisterWindowClass(sws_WindowSwitcher* _this)
 {
     WNDCLASSEXW wc = { 0 };
@@ -4280,6 +4428,7 @@ void sws_WindowSwitcher_Clear(sws_WindowSwitcher* _this)
 {
     if (_this)
     {
+        _sws_WindowSwitcher_AsyncGetAppIconThread_Clear(_this);
         if (_this->hWndAccessible)
         {
             if (_this->pAccPropServices != NULL)
@@ -4371,6 +4520,11 @@ void sws_WindowSwitcher_Clear(sws_WindowSwitcher* _this)
         {
             CoUninitialize();
         }
+        if (_this->pGetIconQueue.csInited)
+        {
+            DeleteCriticalSection(&_this->pGetIconQueue.cs);
+            _this->pGetIconQueue.csInited = FALSE;
+        }
         if (_this->bIsDynamic)
         {
             free(_this);
@@ -4423,6 +4577,13 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
     }
     if (!rv)
     {
+        _this->lastLayoutId = 0;
+        _this->pGetIconQueue.csInited = FALSE;
+        _this->pGetIconQueue.rear = NULL;
+        _this->pGetIconQueue.isExiting = FALSE;
+    }
+    if (!rv)
+    {
         _this->hShowSignal = CreateEventW(NULL, FALSE, FALSE, NULL);
         if (!_this->hShowSignal)
         {
@@ -4449,6 +4610,17 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
     {
         _this->hFlashAnimationThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)_sws_WindowSwitcher_FlashAnimationProcedure, _this, 0, NULL);
         if (!_this->hFlashAnimationThread)
+        {
+            rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
+        }
+    }
+    if (!rv)
+    {
+        InitializeCriticalSection(&_this->pGetIconQueue.cs);
+        _this->pGetIconQueue.csInited = TRUE;
+        InitializeConditionVariable(&_this->pGetIconQueue.cv);
+        _this->hAsyncGetAppIconThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)_sws_WindowSwitcher_AsyncGetAppIconProcedure, _this, 0, NULL);
+        if (!_this->hAsyncGetAppIconThread)
         {
             rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
         }
@@ -4489,30 +4661,14 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
     if (!rv)
     {
         BufferedPaintInit();
-        if (_sws_CreateWindowInBand)
-        {
-            _this->hWnd = _sws_CreateWindowInBand(
-                WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
-                SWS_WINDOWSWITCHER_CLASSNAME,
-                L"",
-                WS_POPUP | WS_DLGFRAME,
-                0, 0, 0, 0,
-                NULL, NULL, HINST_THISCOMPONENT, _this,
-                ZBID_UIACCESS // Only works in UIAccess process (or in privileged MSFT binary)
-            );
-        }
-        if (!_this->hWnd)
-        {
-            // Try again without CWIB
-            _this->hWnd = CreateWindowExW(
-                WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
-                SWS_WINDOWSWITCHER_CLASSNAME,
-                L"",
-                WS_POPUP | WS_DLGFRAME,
-                0, 0, 0, 0,
-                NULL, NULL, HINST_THISCOMPONENT, _this
-            );
-        }
+        _this->hWnd = CreateWindowExW(
+            WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+            SWS_WINDOWSWITCHER_CLASSNAME,
+            L"",
+            WS_POPUP | WS_DLGFRAME,
+            0, 0, 0, 0,
+            NULL, NULL, HINST_THISCOMPONENT, _this
+        );
         if (!_this->hWnd)
         {
             rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
