@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              explorer-mouse-actions-plus
 // @name            Explorer Mouse Actions Plus
-// @description     使用自定义鼠标规则操作资源管理器文件视图。
+// @description     在文件资源管理器中为文件项目和空白处分别设置鼠标手势，可返回上一级、复制标签页或在当前目录打开命令提示符。
 // @version         0.1.0
 // @author          momoca
 // @github          https://github.com/momoca
