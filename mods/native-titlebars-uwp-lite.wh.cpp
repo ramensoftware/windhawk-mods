@@ -373,10 +373,8 @@ LRESULT CALLBACK SubclassProc(
         return res;
     }
 
-    if ((uMsg == WM_NCLBUTTONDOWN || uMsg == WM_NCLBUTTONUP ||
-         uMsg == WM_NCLBUTTONDBLCLK || uMsg == WM_NCMOUSEMOVE ||
-         uMsg == WM_NCMOUSEHOVER) &&
-        (wParam == HTMINBUTTON || wParam == HTMAXBUTTON || wParam == HTCLOSE))
+    if ((uMsg == WM_NCLBUTTONDOWN || uMsg == WM_NCLBUTTONUP || uMsg == WM_NCMOUSEMOVE ||
+         uMsg == WM_NCMOUSEHOVER) &&  (wParam == HTMINBUTTON || wParam == HTMAXBUTTON || wParam == HTCLOSE))
     {
         return DefWindowProcW(hWnd, uMsg, wParam, lParam);
     }
@@ -622,14 +620,9 @@ BOOL Wh_ModInit()
     InitializeCriticalSection(&g_csSubclassedWindows);
     InitializeCriticalSection(&g_csGdiplus);
 
-    if (HMODULE hUxTheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32))
-    {
-        if (void *p = (void *)GetProcAddress(hUxTheme, "SetWindowThemeAttribute"))
-        {
-            Wh_SetFunctionHook(p, (void *)SetWindowThemeAttribute_hook,
-                               (void **)&SetWindowThemeAttribute_orig);
-        }
-    }
+    WindhawkUtils::SetFunctionHook(SetWindowThemeAttribute,
+        SetWindowThemeAttribute_hook,
+        &SetWindowThemeAttribute_orig);
 
     Wh_SetFunctionHook(
         (void *)GetProcAddress(GetModuleHandle(L"user32.dll"), "CreateWindowInBandEx"),
