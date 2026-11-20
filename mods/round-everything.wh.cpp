@@ -2,7 +2,7 @@
 // @id              round-everything
 // @name            Round Everything Interface
 // @description     Turns the taskbar into an acrylic or solid frame around a rounded screen, in the active window's color, rounds the monitor corners, and gives every window - maximized included - one corner radius, a border color and a shadow
-// @version         2.0.1
+// @version         2.1.0
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
@@ -87,7 +87,7 @@ corners, borders and shadows inside `dwm.exe`.
 The few values worth changing on a theme without leaving it are under
 **Overrides** - frame thickness, screen corner radius, monitor corner radius, frame color and its
 source, fill, work-area inset, window corner radius - each applying only when
-set. **General** (DPI scaling, monitors, battery saver, rounding apps Windows leaves square) applies with every theme.
+set. **General** (DPI scaling, monitors, battery saver, rounding apps Windows leaves square, hiding the frame while no window is maximized) applies with every theme.
 Everything else - the sections named "Custom theme" - belongs to the
 **Custom** theme, which uses those settings as you set them. To start a Custom theme from a ready-made one, apply
 that theme: the mod logs its values, with the General and Overrides groups,
@@ -185,9 +185,17 @@ Peek, to learn which window is being peeked.
   the frame disappears as the taskbar is handed back.
 * The frame stays visible during Aero Peek (hovering a taskbar thumbnail or
   the show-desktop corner), like the taskbar itself.
-* **Task View** (Win+Tab) – the frame goes away and the taskbar's background
-  and monitor corners turn transparent while it is open; everything comes
-  back together when it closes.
+* **Hide the frame without a maximized window** (General, off by default) –
+  each monitor shows its frame only while a window is maximized on it;
+  otherwise the taskbar is transparent (or looks as it does without the
+  mod) and the frame is off, the two changing in the same rendering pass.
+  While Aero Peek shows a window from a thumbnail, that window alone
+  decides: maximized (or minimized from maximized) on a monitor, that
+  monitor keeps its frame; every other monitor rests. The work area stays
+  reserved either way.
+* **Task View** (Win+Tab) opens over the frame, and the taskbar takes the
+  look Windows gives it there; the frame is left in place underneath, so
+  nothing has to come back when it closes.
 * **Full-screen apps** – the frame hides on a monitor while a full-screen
   window (game, video, F11 browser) is showing there, and comes back
   afterwards. When the shell takes the taskbar off the top of the z-order
@@ -417,6 +425,12 @@ same license.
   - roundSquareApps: true
     $name: Round apps Windows leaves square
     $description: Some apps draw their whole frame themselves and Windows leaves their corners square (Autodesk AutoCAD 2013, Design Review). With this on their windows get the window corner radius too, maximized included. Turn it off if an app looks wrong rounded.
+  - hideWithoutMaximized: false
+    $name: Hide the frame without a maximized window
+    $description: Each monitor shows its frame only while a window is maximized on it. Otherwise the frame, its shadow and the screen corners are off; they come back together with the taskbar's look when a window is maximized there. The work area stays reserved either way, so a maximized window fills the same space.
+  - transparentWithoutMaximized: true
+    $name: Transparent taskbar when nothing is maximized
+    $description: With the option above on, hide the taskbar's own background and border line, so the wallpaper shows through whenever no frame is showing (no maximized window). Off, the taskbar looks as it does without the mod then.
   $name: General
   $description: Applies with every theme.
 - frame:
@@ -743,6 +757,8 @@ struct Settings {
     int noiseOpacity = 0;        // %
     int noiseDensity = 0;        // %
     bool batterySaverSolid = true;  // batterySaverSolid
+    bool hideWithoutMaximized = false;  // general.hideWithoutMaximized
+    bool transparentWithoutMaximized = true;  // general.transparentWithoutMaximized
     bool bevel = false;          // bevel.*
     int bevelWidth = 8;          // px at 100%
     int bevelCurvature = 20;     // x0.1
@@ -931,11 +947,17 @@ struct Overlay {
     // The frame window is visible at alpha 0 and registered in g_reveals: the
     // taskbar thread presents it together with the recolor (see BeginReveal).
     bool revealPending = false;
-    // Task View: frame hidden and taskbar background transparent while it
-    // is open; both come back together when it closes.
-    bool taskViewHidden = false;
-    ULONGLONG taskViewRecolorTick = 0;
-    UINT taskViewRecolorSerial = 0;
+    // "Hide the frame without a maximized window": the frame is off and the
+    // taskbar has its own background back while no window is maximized on
+    // the monitor; both come back together (BeginReveal's handshake).
+    bool resting = false;
+    bool restTransparent = false;  // the taskbar look the rest was given
+    // The frame goes with the taskbar's rest (RequestTaskbarRestWithFrame):
+    // hidden for good once the taskbar has rendered it (or after a while).
+    UINT hideSerial = 0;
+    ULONGLONG hideTick = 0;
+    ULONGLONG restRecolorTick = 0;
+    UINT restRecolorSerial = 0;
     bool fullscreen = false;
     HWND fullscreenWnd = nullptr;  // the window the frame is hidden for
     int fullscreenTicks = 0;  // consecutive ticks the monitor looked full-screen
@@ -1218,7 +1240,7 @@ struct TaskbarReady {
 };
 std::unordered_map<HWND, TaskbarReady> g_taskbarReady;
 // Recolor requests are numbered, so the answer to an earlier request (a
-// Task View closing right before a layout change, say) can't pass for the
+// rest ending right before a layout change, say) can't pass for the
 // answer to a later one. The last serial each taskbar reported rendered:
 std::unordered_map<HWND, UINT> g_taskbarRecolored;
 UINT g_recolorSerial = 0;
@@ -1249,6 +1271,15 @@ struct Reveal {
 std::mutex g_revealMutex;
 std::unordered_map<HWND, Reveal> g_reveals;
 bool g_fastTick = false;  // the tick timer runs at kWaitTickIntervalMs
+// Task View open (as last seen by TrackTaskView), and when it last closed:
+// it hides the real windows while open, and they are back a moment after
+// (TaskViewHoldsWindows).
+bool g_taskViewOpen = false;
+ULONGLONG g_taskViewClosedTick = 0;
+constexpr ULONGLONG kTaskViewSettleMs = 1000;
+bool TaskViewHoldsWindows(ULONGLONG now, ULONGLONG settleMs = kTaskViewSettleMs) {
+    return g_taskViewOpen || (g_taskViewClosedTick && now - g_taskViewClosedTick < settleMs);
+}
 
 // A taskbar window the shell has cloaked stays part of the layout (at its
 // current rect, so the frame follows a move at once) for this long; one that
@@ -1776,6 +1807,8 @@ void LogThemeAsJson(const ThemeDef& theme, const Settings& s, int fill) {
     text(L"general.monitors", s.primaryOnly ? L"primary" : L"all");
     flag(L"general.batterySaverSolid", s.batterySaverSolid);
     flag(L"general.roundSquareApps", Wh_GetIntSetting(L"general.roundSquareApps") != 0);
+    flag(L"general.hideWithoutMaximized", s.hideWithoutMaximized);
+    flag(L"general.transparentWithoutMaximized", s.transparentWithoutMaximized);
     // The theme's own values.
     num(L"frame.offset", s.offset);
     text(L"frame.edgeOffsetsClockwise",
@@ -1926,6 +1959,9 @@ void LoadSettings() {
     s.shadowOffsetY = std::clamp(Wh_GetIntSetting(L"innerShadow.offsetY"), -60, 60);
 
     s.batterySaverSolid = Wh_GetIntSetting(L"general.batterySaverSolid") != 0;
+    s.hideWithoutMaximized = Wh_GetIntSetting(L"general.hideWithoutMaximized") != 0;
+    s.transparentWithoutMaximized =
+        Wh_GetIntSetting(L"general.transparentWithoutMaximized") != 0;
     s.workAreaInset = std::max(0, Wh_GetIntSetting(L"frame.workAreaInset"));
 
     auto monitors = WindhawkUtils::StringSetting::make(L"general.monitors");
@@ -2681,6 +2717,21 @@ struct TaskbarWants {
     // asks for the color once everything has settled, together with showing
     // the frame. So the taskbar never colors ahead of the frame.
     bool fillSuspended = true;
+    // The taskbar looks as it does without the mod - its own background and
+    // border line, no ears - while its frame rests (see RestOnTaskbarThread);
+    // our fill and stroke come back with a recolor.
+    bool fillResting = false;
+    // Task View is open: Windows gives the taskbar its Task View look, and
+    // the monitor-corner ears are off with it (see TaskViewOnTaskbarThread).
+    bool taskView = false;
+    // The ears have nowhere to go in this tree (no host found though the
+    // taskbar's background is there): skipped, and not waited for, until the
+    // content is replaced.
+    bool earsUnavailable = false;
+    // The veil ran out without the tree becoming whole: not raised again
+    // for the corners until the tree has been whole once (or the window
+    // moves), so no state the mod can't reach makes the taskbar blink.
+    bool veilGaveUp = false;
     // XAML-level veil: the root content is kept at opacity 0 from the moment
     // the window moves to another edge (or the tree is found not whole) until
     // the tree has been whole across two rendered frames, so the first frame
@@ -2935,7 +2986,7 @@ void WINAPI ApplyFillOnTaskbarThread(void* param) try {
 }
 
 // Puts one taskbar's background back, if we painted it.
-void RestoreFillOnTaskbarThread(HWND taskbar, FillState& state) {
+void RestoreFillOnTaskbarThread(HWND taskbar, FillState& state, bool log = true) {
     if (!state.applied) {
         return;
     }
@@ -2952,7 +3003,9 @@ void RestoreFillOnTaskbarThread(HWND taskbar, FillState& state) {
     } else {
         target.ClearValue(TargetBrushProperty(state.isRectangle));
     }
-    Wh_Log(L"taskbar %p: background restored", taskbar);
+    if (log) {
+        Wh_Log(L"taskbar %p: background restored", taskbar);
+    }
 }
 
 // Puts every taskbar background we painted back and forgets them.
@@ -3032,25 +3085,47 @@ int LiveTaskbarEdge(HWND taskbar, int fallback) {
     return DetectEdge(rect, mi.rcMonitor);
 }
 
-// A Grid that spans the whole taskbar window: the parent of
-// Taskbar.TaskbarFrame (Styler themes shrink the frame, not its parent), or
-// the frame's RootGrid as a fallback.
-wuxc::Grid FindCornerHost(HWND taskbar) {
+// A Grid that spans the whole taskbar window: the nearest Grid above
+// Taskbar.TaskbarFrame (Styler themes shrink the frame, not its parent),
+// else the frame's RootGrid, else the nearest Grid above
+// Taskbar.TaskbarBackground (inside the frame) - Windows updates rearrange
+// the panels between them. `how` says which, for the log.
+wuxc::Grid FindCornerHost(HWND taskbar, PCWSTR* how = nullptr) {
     auto content = TaskbarXamlContent(taskbar);
     if (!content) {
         return nullptr;
     }
-    auto frame = FindDescendantByClassName(content, L"Taskbar.TaskbarFrame", 12);
-    if (!frame) {
+    auto gridAbove = [](wux::DependencyObject node) -> wuxc::Grid {
+        for (node = node ? wuxm::VisualTreeHelper::GetParent(node) : nullptr; node;
+             node = wuxm::VisualTreeHelper::GetParent(node)) {
+            if (auto grid = node.try_as<wuxc::Grid>()) {
+                return grid;
+            }
+        }
         return nullptr;
+    };
+    auto frame = FindDescendantByClassName(content, L"Taskbar.TaskbarFrame", 12);
+    if (auto grid = gridAbove(frame)) {
+        if (how) {
+            *how = L"a Grid above Taskbar.TaskbarFrame";
+        }
+        return grid;
     }
-    if (auto parent = wuxm::VisualTreeHelper::GetParent(frame)) {
-        if (auto grid = parent.try_as<wuxc::Grid>()) {
-            return grid;
+    if (frame) {
+        if (auto rootGrid = FindDescendantByName(frame, L"RootGrid", 2)) {
+            if (auto grid = rootGrid.try_as<wuxc::Grid>()) {
+                if (how) {
+                    *how = L"the frame's RootGrid";
+                }
+                return grid;
+            }
         }
     }
-    if (auto rootGrid = FindDescendantByName(frame, L"RootGrid", 2)) {
-        return rootGrid.try_as<wuxc::Grid>();
+    if (auto grid = gridAbove(FindTaskbarBackground(taskbar))) {
+        if (how) {
+            *how = L"a Grid above Taskbar.TaskbarBackground";
+        }
+        return grid;
     }
     return nullptr;
 }
@@ -3186,7 +3261,8 @@ void WINAPI ApplyXamlCornersOnTaskbarThread(void* param) try {
             RemoveEars(it->second);
             corners.erase(it);
         }
-        host = FindCornerHost(op->taskbar);
+        PCWSTR how = L"";
+        host = FindCornerHost(op->taskbar, &how);
         if (!host) {
             return;
         }
@@ -3208,8 +3284,21 @@ void WINAPI ApplyXamlCornersOnTaskbarThread(void* param) try {
         }
         it = corners.insert_or_assign(op->taskbar, state).first;
         op->changed = true;
-        Wh_Log(L"taskbar %p: corner ears added to %s", op->taskbar,
-               host.Name().empty() ? L"(unnamed grid)" : host.Name().c_str());
+        // Made while the taskbar's fill is held back (a rest, a move) or
+        // Task View is open: off, like the ones they replace - the recolor
+        // that ends it (or Task View closing) shows them.
+        if (auto wants = g_wants->find(op->taskbar);
+            wants != g_wants->end() && (wants->second.fillSuspended ||
+                                        wants->second.fillResting || wants->second.taskView)) {
+            for (auto const& ear : state.ear) {
+                ear.Opacity(0.0);
+            }
+            for (auto const& line : state.line) {
+                line.Opacity(0.0);
+            }
+        }
+        Wh_Log(L"taskbar %p: corner ears added to %s (%s)", op->taskbar,
+               host.Name().empty() ? L"(unnamed grid)" : host.Name().c_str(), how);
     }
 
     // Geometry and color are only touched when something changed; this runs
@@ -6506,6 +6595,20 @@ bool UsesHandshake() {
     return g_taskbarXamlAvailable;
 }
 
+// The windows a rest with the frame cloaks that are otherwise shown and
+// hidden by their alpha (the shadow slices, a layered frame): uncloaked once
+// hidden, and before the frame shows again, which their alpha alone wouldn't.
+void UncloakAlphaWindows(const Overlay& overlay) {
+    if (!overlay.comp && overlay.hwnd) {
+        CloakWindow(overlay.hwnd, false);
+    }
+    for (const ShadowSlice& slice : overlay.shadow) {
+        if (slice.hwnd) {
+            CloakWindow(slice.hwnd, false);
+        }
+    }
+}
+
 // The handshake: the frame is made ready (painted, its window visible but at
 // alpha 0, so there is nothing to see yet) and handed to the taskbar thread,
 // which presents it at full alpha in the rendering pass that also paints the
@@ -6514,6 +6617,8 @@ bool UsesHandshake() {
 // the frame has been presented.
 UINT BeginReveal(Overlay& overlay) {
     HWND taskbar = overlay.layout.taskbar;
+    overlay.hideTick = 0;  // a rest with the frame still pending: superseded
+    UncloakAlphaWindows(overlay);
     overlay.presentAlpha = 0;
     EnsureShadowSurfaces(overlay);  // the taskbar thread presents them from the registration
     if (!overlay.painted) {
@@ -6605,9 +6710,55 @@ bool TaskbarReadyFor(Overlay& overlay, ULONGLONG now) {
     return false;
 }
 
-// Defined with the taskbar-side code: makes the taskbar's background
-// transparent right away (the color comes back with RequestTaskbarRecolor).
-void RequestTaskbarTransparent(HWND taskbar);
+// Defined with the taskbar-side code: gives the taskbar its resting look
+// (transparent, or as without the mod) and hides its ears, before its frame
+// rests (the frame's look comes back with RequestTaskbarRecolor).
+void RequestTaskbarRest(HWND taskbar);
+
+// The window Aero Peek shows from a thumbnail, if any (set by the
+// DwmpActivateLivePreview hook, defined with the color code), and that
+// window if it is maximized on a monitor or minimized from maximized there.
+std::atomic<HWND> g_peekWindow{nullptr};
+HWND PeekedWindowOn(HMONITOR monitor);
+// Likewise, with the frame cloaked in the same rendering pass of the
+// taskbar; answered like a recolor (TaskbarRecolored with the serial).
+void RequestTaskbarRestWithFrame(const Overlay& overlay, UINT serial);
+
+// A visible frame goes with its taskbar's rest; a hidden one needs only the
+// taskbar's look.
+void RestTaskbarAndFrame(Overlay& overlay, ULONGLONG now) {
+    HWND taskbar = overlay.layout.taskbar;
+    if (!taskbar) {
+        return;
+    }
+    if (UsesHandshake() && (overlay.shown || overlay.revealPending)) {
+        overlay.hideSerial = ++g_recolorSerial;
+        overlay.hideTick = now;
+        RequestTaskbarRestWithFrame(overlay, overlay.hideSerial);
+    } else {
+        RequestTaskbarRest(taskbar);
+    }
+}
+
+// Whether a window is maximized on the monitor: visible, not minimized or
+// cloaked (another virtual desktop), not a tool window. What keeps the frame
+// on with "Hide the frame without a maximized window".
+bool HasMaximizedWindow(const Layout& layout) {
+    for (HWND hwnd = GetTopWindow(nullptr); hwnd; hwnd = GetWindow(hwnd, GW_HWNDNEXT)) {
+        if (!IsZoomed(hwnd) || !IsWindowVisible(hwnd) || IsIconic(hwnd)) {
+            continue;
+        }
+        if (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) {
+            continue;
+        }
+        if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL) != layout.monitor ||
+            IsWindowCloaked(hwnd)) {
+            continue;
+        }
+        return true;
+    }
+    return false;
+}
 
 // Task View (Win+Tab) is a visible, monitor-sized island window that holds
 // the foreground (it is driven by the keyboard). The same window class also
@@ -6632,18 +6783,26 @@ bool SpansItsMonitor(HWND hwnd) {
            RectContains(rect, mi.rcMonitor);
 }
 
+// The title the taskbar's thumbnail flyout takes once it is opened by a
+// click (a grouped button, or any button with thumbnails set to show on
+// click): the same window class as Task View, monitor-sized and in the
+// foreground then. Shown on hover, it has no title. Not localized.
+constexpr WCHAR kThumbnailFlyoutTitle[] = L"TaskbarExtendedUIFlyout";
+
 // A visible, monitor-sized window of the Task View classes that carries a
 // title - "Task View" (localized elsewhere), there from the moment the
 // window shows, before the foreground has moved to it - and is either
 // titled exactly that or in the foreground. The taskbar's thumbnail flyout
-// is the same kind of window and is activated by a click on a grouped
-// button, but it has no title, so it never passes.
+// is the same kind of window: untitled on hover, titled
+// kThumbnailFlyoutTitle and in the foreground when opened by a click, so
+// it is told apart by that title.
 bool IsTaskViewWindow(HWND hwnd) {
     if (!IsWindowVisible(hwnd) || IsWindowCloaked(hwnd) || !SpansItsMonitor(hwnd)) {
         return false;
     }
     WCHAR title[64];
-    if (GetWindowTextW(hwnd, title, ARRAYSIZE(title)) <= 0) {
+    if (GetWindowTextW(hwnd, title, ARRAYSIZE(title)) <= 0 ||
+        wcscmp(title, kThumbnailFlyoutTitle) == 0) {
         return false;
     }
     return wcscmp(title, L"Task View") == 0 || hwnd == GetForegroundWindow();
@@ -6661,6 +6820,41 @@ HWND FindTaskViewWindow() {
         }
     }
     return nullptr;
+}
+
+// Defined with the taskbar-side code: Task View opened or closed, for the
+// taskbar's monitor-corner ears.
+void RequestTaskbarTaskView(HWND taskbar, bool open);
+
+// Task View lies above the frame and covers it, and Windows turns the
+// taskbar's background see-through over it by itself: the frame is left as
+// it is while it is open, and so is the taskbar but for its corner ears, so
+// there is nothing to put back - nothing to show late - when it closes. It
+// also keeps "Hide the frame without a maximized window" from acting (it
+// hides the real windows, showing copies) and holds the adaptive color,
+// while it is open and for a moment after (TaskViewHoldsWindows). Called
+// by both before they look.
+void TrackTaskView(ULONGLONG now) {
+    HWND taskViewWnd = FindTaskViewWindow();
+    bool open = taskViewWnd != nullptr;
+    if (open == g_taskViewOpen) {
+        return;
+    }
+    g_taskViewOpen = open;
+    for (const Overlay& overlay : *g_overlays) {
+        if (overlay.layout.taskbar) {
+            RequestTaskbarTaskView(overlay.layout.taskbar, open);
+        }
+    }
+    if (!open) {
+        g_taskViewClosedTick = now;
+        Wh_Log(L"Task View closed");
+        return;
+    }
+    WCHAR title[64] = L"";
+    GetWindowTextW(taskViewWnd, title, ARRAYSIZE(title));
+    Wh_Log(L"Task View open (%p \"%s\"%s) - frame and taskbar left under it", taskViewWnd,
+           title, taskViewWnd == GetForegroundWindow() ? L", foreground" : L"");
 }
 
 // kMsgTaskbarMoving (from the taskbar thread's hook): the window just moved
@@ -6706,8 +6900,7 @@ void OnTaskbarZOrder() {
 void UpdateVisibility() {
     static ULONGLONG lastRaiseLogTick = 0;
     ULONGLONG now = GetTickCount64();
-    HWND taskViewWnd = FindTaskViewWindow();
-    bool taskView = taskViewWnd != nullptr;
+    TrackTaskView(now);
 
     for (Overlay& overlay : *g_overlays) {
         HWND fullscreenWnd = nullptr;
@@ -6741,49 +6934,96 @@ void UpdateVisibility() {
             WaitForTaskbar(overlay, now, L"taskbar cloaked");
         }
 
-        // Task View: taskbar transparent and frame gone the moment it opens;
-        // when it closes, the taskbar is asked to color again and to reveal
-        // the frame with it (the same handshake as after a layout change).
-        if (taskView && !overlay.taskViewHidden) {
-            overlay.taskViewHidden = true;
-            overlay.taskViewRecolorTick = 0;
-            overlay.taskViewRecolorSerial = 0;
-            if (taskbar) {
-                RequestTaskbarTransparent(taskbar);
-            }
-            WCHAR title[64] = L"";
-            GetWindowTextW(taskViewWnd, title, ARRAYSIZE(title));
-            Wh_Log(L"monitor %p: Task View open (%p \"%s\"%s), frame off and taskbar transparent",
-                   overlay.layout.monitor, taskViewWnd, title,
-                   taskViewWnd == GetForegroundWindow() ? L", foreground" : L"");
-        }
-        bool taskViewHolds = false;
-        if (!taskView && overlay.taskViewHidden) {
-            if (!taskbar) {
-                overlay.taskViewHidden = false;
-            } else if (overlay.waiting) {
-                overlay.taskViewHidden = false;  // the wait recolors it, with the frame
-            } else if (overlay.fullscreen || !UsesHandshake()) {
-                // The frame stays off (or shows on its own); the taskbar just
-                // gets its color and ears back.
-                overlay.taskViewHidden = false;
-                RequestTaskbarRecolor(taskbar, ++g_recolorSerial);
-            } else if (!overlay.taskViewRecolorTick) {
-                overlay.taskViewRecolorTick = now;
-                overlay.taskViewRecolorSerial = BeginReveal(overlay);
-                taskViewHolds = true;
-            } else if (TaskbarRecolored(taskbar, overlay.taskViewRecolorSerial) ||
-                       now - overlay.taskViewRecolorTick >= kRecolorWaitMaxMs) {
-                overlay.taskViewHidden = false;
-                Wh_Log(L"monitor %p: Task View closed, frame back with the taskbar's color",
-                       overlay.layout.monitor);
-            } else {
-                taskViewHolds = true;
+        // Whether a maximized window keeps the frame on. While Aero Peek
+        // shows a window from a thumbnail, every other window is faded out
+        // on every monitor: that window alone decides (maximized, or
+        // minimized from maximized, on this monitor).
+        bool restWanted = false;
+        bool peeking = false;
+        if (g_settings.hideWithoutMaximized) {
+            HWND peek = g_peekWindow.load();
+            peeking = peek && IsWindow(peek);
+            bool maximized = peeking
+                                 ? PeekedWindowOn(overlay.layout.monitor) != nullptr
+                                 : HasMaximizedWindow(overlay.layout);
+            restWanted = !maximized;
+            // Task View hides the real windows (it shows copies) while it is
+            // open and for a moment after it closes: no rest starts then,
+            // or the frame would go and come back as Task View closes.
+            if (restWanted && !overlay.resting && TaskViewHoldsWindows(now)) {
+                restWanted = false;
             }
         }
 
-        bool show = !overlay.fullscreen && !taskView && !taskViewHolds &&
+        // "Hide the frame without a maximized window": the taskbar takes its
+        // resting look and the frame goes in one rendering pass of the
+        // taskbar; when a window is maximized again, the two come back
+        // together (the same handshake as after a layout change). A wait for
+        // the taskbar (a layout change) is left pending while resting and
+        // goes on once the frame is wanted again.
+        if (restWanted && !overlay.resting) {
+            overlay.resting = true;
+            overlay.restTransparent = g_settings.transparentWithoutMaximized;
+            overlay.restRecolorTick = 0;
+            overlay.restRecolorSerial = 0;
+            RestTaskbarAndFrame(overlay, now);
+            Wh_Log(L"monitor %p: %s - frame off, taskbar %s", overlay.layout.monitor,
+                   peeking ? L"peeked window not maximized here" : L"no maximized window",
+                   overlay.restTransparent ? L"transparent" : L"as without the mod");
+        } else if (restWanted && overlay.resting &&
+                   overlay.restTransparent != g_settings.transparentWithoutMaximized) {
+            // "Transparent taskbar when nothing is maximized" changed while
+            // resting: the taskbar takes the other look right away.
+            overlay.restTransparent = g_settings.transparentWithoutMaximized;
+            if (taskbar) {
+                RequestTaskbarRest(taskbar);
+            }
+            Wh_Log(L"monitor %p: resting taskbar now %s", overlay.layout.monitor,
+                   overlay.restTransparent ? L"transparent" : L"as without the mod");
+        }
+        bool restHolds = false;
+        if (!restWanted && overlay.resting) {
+            if (!taskbar || overlay.waiting) {
+                // The wait recolors it, with the frame - asked again: a
+                // recolor asked before the rest was dropped by it.
+                overlay.resting = false;
+                overlay.recolorRequestTick = 0;
+            } else if (overlay.fullscreen || !UsesHandshake()) {
+                overlay.resting = false;
+                RequestTaskbarRecolor(taskbar, ++g_recolorSerial);
+            } else if (!overlay.restRecolorTick) {
+                overlay.restRecolorTick = now;
+                overlay.restRecolorSerial = BeginReveal(overlay);
+                restHolds = true;
+            } else if (TaskbarRecolored(taskbar, overlay.restRecolorSerial) ||
+                       now - overlay.restRecolorTick >= kRecolorWaitMaxMs) {
+                overlay.resting = false;
+                Wh_Log(L"monitor %p: %s - frame back with the taskbar's color",
+                       overlay.layout.monitor,
+                       peeking ? L"peeked window maximized here" : L"a window is maximized");
+            } else {
+                restHolds = true;
+            }
+        }
+
+        bool show = !overlay.fullscreen && !overlay.resting &&
                     TaskbarReadyFor(overlay, now);
+        // A reveal handed to the taskbar thread (BeginReveal) that is still
+        // being waited for stays: the taskbar presents the frame in the
+        // rendering pass that paints its background.
+        bool revealAwaited = overlay.revealPending && !overlay.fullscreen &&
+                             (restHolds ||
+                              (overlay.waiting && overlay.recolorRequestTick && !overlay.resting));
+        // A frame going with its taskbar's rest stays until the taskbar has
+        // rendered the rest (the frame was cloaked in that pass).
+        bool hideHeld = false;
+        if (overlay.hideTick) {
+            hideHeld = taskbar && !TaskbarRecolored(taskbar, overlay.hideSerial) &&
+                       now - overlay.hideTick < kRecolorWaitMaxMs;
+            if (!hideHeld) {
+                overlay.hideTick = 0;
+            }
+        }
 
         if (show && !overlay.shown) {
             // Revealed by the taskbar thread already (the usual case: the
@@ -6797,7 +7037,9 @@ void UpdateVisibility() {
             }
             WithdrawReveal(overlay);
             overlay.presentAlpha = 255;
+            overlay.hideTick = 0;
             if (!revealed) {
+                UncloakAlphaWindows(overlay);
                 if (!overlay.painted) {
                     PaintOverlay(overlay, FrameColorFor(overlay));
                 } else {
@@ -6814,10 +7056,14 @@ void UpdateVisibility() {
                 Wh_Log(L"monitor %p: frame shown%s", overlay.layout.monitor,
                        revealed ? L" by the taskbar with its color" : L"");
             }
-        } else if (!show && (overlay.shown || overlay.revealPending)) {
+        } else if (!show && !hideHeld &&
+                   (overlay.shown || (overlay.revealPending && !revealAwaited))) {
             Wh_Log(L"monitor %p: frame hidden (%s)", overlay.layout.monitor,
-                   overlay.fullscreen ? L"full-screen" : taskView ? L"Task View" : L"waiting");
+                   overlay.fullscreen ? L"full-screen"
+                   : overlay.resting  ? L"no maximized window"
+                                      : L"waiting");
             HideFrame(overlay);
+            UncloakAlphaWindows(overlay);  // hidden now; a rest may have cloaked them
         } else if (show) {
             if (!IsWindowVisible(overlay.hwnd) || IsIconic(overlay.hwnd)) {
                 Wh_Log(L"monitor %p: frame not visible although shown, re-showing",
@@ -7365,7 +7611,7 @@ void ReportReadyAfterRender(HWND taskbar, int edge) try {
 }
 
 // Recolors (the UI thread asks for one once everything has settled, or when
-// Task View closes). A request waits for the next CompositionTarget.Rendering
+// a rest ends). A request waits for the next CompositionTarget.Rendering
 // tick: the brush change made there is part of the frame that tick builds,
 // and the frame window registered for it is presented in the same tick,
 // right after the change - before the tick commits its frame to DWM. Both
@@ -7377,9 +7623,28 @@ struct PendingRecolor {
     UINT serial;
 };
 std::vector<PendingRecolor> g_recolorsWaiting;  // for the next Rendering tick
+// A rest that takes the frame with it (see RequestTaskbarRestWithFrame): the
+// taskbar's resting look and the frame windows cloaked in one rendering pass.
+struct PendingRest {
+    HWND taskbar;
+    UINT serial;
+    bool transparent;
+    std::vector<HWND> cloak;
+};
+std::vector<PendingRest> g_restsWaiting;  // for the next Rendering tick
+
+// Forgets a rest asked for before the frame was wanted back (a recolor asked
+// for after it covers it).
+void DropRests(HWND taskbar) {
+    g_restsWaiting.erase(std::remove_if(g_restsWaiting.begin(), g_restsWaiting.end(),
+                                        [taskbar](const PendingRest& r) {
+                                            return r.taskbar == taskbar;
+                                        }),
+                         g_restsWaiting.end());
+}
 
 // The monitor-corner ears inside the taskbar go with the background: both
-// off in Task View, both back together.
+// off while resting, both back together.
 void SetEarsHidden(HWND taskbar, bool hidden) {
     auto corner = g_xamlCorners->find(taskbar);
     if (corner == g_xamlCorners->end()) {
@@ -7408,7 +7673,7 @@ void QueueRecolor(std::vector<PendingRecolor>& list, HWND taskbar, UINT serial) 
 }
 
 // Forgets recolors asked for before a taskbar went transparent again (a
-// move, Task View): they must not color it behind the UI thread's back.
+// move, a rest): they must not color it behind the UI thread's back.
 void DropRecolors(HWND taskbar) {
     auto drop = [taskbar](std::vector<PendingRecolor>& list) {
         list.erase(std::remove_if(list.begin(), list.end(),
@@ -7451,11 +7716,16 @@ void ApplyRecolorsInRenderingTick() {
         if (it != g_wants->end()) {
             TaskbarWants& wants = it->second;
             wants.fillSuspended = false;
+            if (wants.fillResting && wants.strokeHidden) {
+                StrokeOp op{recolor.taskbar, false, false};
+                HideStrokeOnTaskbarThread(&op);  // the border line goes with the stock look
+            }
+            wants.fillResting = false;
             if (wants.fill) {
                 FillOp op{recolor.taskbar, wants.fillArgb, false, false};
                 ApplyFillOnTaskbarThread(&op);
             }
-            SetEarsHidden(recolor.taskbar, false);
+            SetEarsHidden(recolor.taskbar, wants.taskView);
         }
         NudgeRender(recolor.taskbar);
         {
@@ -7507,13 +7777,19 @@ void RequestTaskbarRecolor(HWND taskbar, UINT serial) {
         if (g_unloading) {
             return;
         }
+        DropRests(taskbar);
         QueueRecolor(g_recolorsWaiting, taskbar, serial);
         EnsureRenderingSubscribed();
     });
 }
 
-void WINAPI TransparentOnTaskbarThread(void* param) try {
-    HWND taskbar = static_cast<HWND>(param);
+// Taskbar thread: the frame rests (no maximized window on its monitor).
+// Transparent: our fill at alpha 0 and the border line hidden. Stock: the
+// taskbar's own background and border line back (our brush and the stroke's
+// opacity stay recorded, for the recolor that ends the rest). The ears go
+// off either way, and nothing re-applies the fill or the stroke until that
+// recolor.
+void RestOnTaskbarThread(HWND taskbar, bool transparent) try {
     if (g_unloading || !g_wants) {
         return;
     }
@@ -7524,26 +7800,153 @@ void WINAPI TransparentOnTaskbarThread(void* param) try {
     TaskbarWants& wants = it->second;
     DropRecolors(taskbar);
     wants.fillSuspended = true;
-    if (wants.fill) {
-        FillOp op{taskbar, wants.fillArgb & 0x00FFFFFF, false, false};
-        ApplyFillOnTaskbarThread(&op);
+    wants.fillResting = !transparent;
+    if (transparent) {
+        if (wants.fill) {
+            FillOp op{taskbar, wants.fillArgb & 0x00FFFFFF, false, false};
+            ApplyFillOnTaskbarThread(&op);  // also puts our brush back after a stock rest
+        }
+        if (wants.strokeHidden) {
+            StrokeOp op{taskbar, false, false};
+            HideStrokeOnTaskbarThread(&op);
+        }
+    } else {
+        if (auto fill = g_fills->find(taskbar); fill != g_fills->end()) {
+            RestoreFillOnTaskbarThread(taskbar, fill->second, false);  // logged by the UI thread
+        }
+        if (auto stroke = g_strokes->find(taskbar);
+            stroke != g_strokes->end() && stroke->second.hidden) {
+            if (auto element = stroke->second.element.get()) {
+                element.Opacity(stroke->second.originalOpacity);
+            }
+            stroke->second.hidden = false;
+        }
     }
     SetEarsHidden(taskbar, true);
 } catch (...) {
-    Wh_Log(L"TransparentOnTaskbarThread: exception %08X", winrt::to_hresult().value);
+    Wh_Log(L"RestOnTaskbarThread: exception %08X", winrt::to_hresult().value);
+}
+void WINAPI RestTransparentOnTaskbarThread(void* param) {
+    RestOnTaskbarThread(static_cast<HWND>(param), true);
+}
+void WINAPI RestStockOnTaskbarThread(void* param) {
+    RestOnTaskbarThread(static_cast<HWND>(param), false);
 }
 
-// UI thread: "background and ears transparent now" on the taskbar's thread.
-// Sent (sent messages go ahead of everything queued) with a short wait, so
-// an idle taskbar thread does it within the call; if it is busy, posted.
-void RequestTaskbarTransparent(HWND taskbar) {
+// UI thread: the taskbar's resting look, before its frame goes. Sent (sent
+// messages go ahead of everything queued) with a short wait, so an idle
+// taskbar thread does it within the call and the taskbar never shows its
+// transparent background over nothing in between; if it is busy, posted.
+void RequestTaskbarRest(HWND taskbar) {
     if (!g_taskbarXamlAvailable) {
         return;
     }
-    if (RunFromWindowThreadTimeout(taskbar, TransparentOnTaskbarThread, taskbar, 30)) {
+    bool transparent = g_settings.transparentWithoutMaximized;
+    if (RunFromWindowThreadTimeout(
+            taskbar, transparent ? RestTransparentOnTaskbarThread : RestStockOnTaskbarThread,
+            taskbar, 30)) {
         return;
     }
-    PostToWindowThread(taskbar, [taskbar] { TransparentOnTaskbarThread(taskbar); });
+    PostToWindowThread(taskbar,
+                       [taskbar, transparent] { RestOnTaskbarThread(taskbar, transparent); });
+}
+
+// Taskbar thread: Task View opened or closed. Windows turns the taskbar's
+// background see-through over Task View by itself; the monitor-corner ears
+// (and bezel lines) go with it, and come back when it closes unless the
+// taskbar is held back or resting then (the recolor that ends that shows
+// them).
+void TaskViewOnTaskbarThread(HWND taskbar, bool open) try {
+    if (g_unloading || !g_wants) {
+        return;
+    }
+    auto it = g_wants->find(taskbar);
+    if (it == g_wants->end()) {
+        return;
+    }
+    TaskbarWants& wants = it->second;
+    wants.taskView = open;
+    SetEarsHidden(taskbar, open || wants.fillSuspended || wants.fillResting);
+} catch (...) {
+    Wh_Log(L"TaskViewOnTaskbarThread: exception %08X", winrt::to_hresult().value);
+}
+void WINAPI TaskViewOpenOnTaskbarThread(void* param) {
+    TaskViewOnTaskbarThread(static_cast<HWND>(param), true);
+}
+void WINAPI TaskViewClosedOnTaskbarThread(void* param) {
+    TaskViewOnTaskbarThread(static_cast<HWND>(param), false);
+}
+
+// UI thread: tells a taskbar Task View opened or closed - sent with a short
+// wait, like RequestTaskbarRest, so the ears change as Task View does.
+void RequestTaskbarTaskView(HWND taskbar, bool open) {
+    if (!g_taskbarXamlAvailable) {
+        return;
+    }
+    if (RunFromWindowThreadTimeout(
+            taskbar, open ? TaskViewOpenOnTaskbarThread : TaskViewClosedOnTaskbarThread, taskbar,
+            30)) {
+        return;
+    }
+    PostToWindowThread(taskbar, [taskbar, open] { TaskViewOnTaskbarThread(taskbar, open); });
+}
+
+// Rendering tick: for every taskbar with a rest waiting, its resting look and
+// the frame windows cloaked - both part of the frame this tick builds, so
+// the frame doesn't leave a transparent taskbar over nothing for a frame or
+// two - then the UI thread is told (kMsgTaskbarRecolored, with the serial)
+// and hides the frame for good.
+void ApplyRestsInRenderingTick() {
+    if (g_restsWaiting.empty() || g_unloading || !g_wants) {
+        return;
+    }
+    auto waiting = std::move(g_restsWaiting);
+    g_restsWaiting.clear();
+    HWND ctrl = g_ctrlWnd.load();
+    for (const PendingRest& rest : waiting) {
+        RestOnTaskbarThread(rest.taskbar, rest.transparent);
+        NudgeRender(rest.taskbar);
+        for (HWND hwnd : rest.cloak) {
+            CloakWindow(hwnd, true);
+        }
+        if (ctrl) {
+            PostMessageW(ctrl, kMsgTaskbarRecolored, rest.serial,
+                         reinterpret_cast<LPARAM>(rest.taskbar));
+        }
+    }
+}
+
+// UI thread: the taskbar's resting look and the frame off the screen in one
+// rendering pass of the taskbar; answered like a recolor (TaskbarRecolored
+// with the serial), after which the UI thread hides the frame's windows.
+void RequestTaskbarRestWithFrame(const Overlay& overlay, UINT serial) {
+    HWND taskbar = overlay.layout.taskbar;
+    std::vector<HWND> cloak;
+    if (overlay.hwnd) {
+        cloak.push_back(overlay.hwnd);
+    }
+    if (overlay.comp) {
+        for (HWND strip : overlay.comp->strips) {
+            if (strip) {
+                cloak.push_back(strip);
+            }
+        }
+    }
+    for (const ShadowSlice& slice : overlay.shadow) {
+        if (slice.hwnd) {
+            cloak.push_back(slice.hwnd);
+        }
+    }
+    bool transparent = g_settings.transparentWithoutMaximized;
+    PostToWindowThread(taskbar, [taskbar, serial, transparent, cloak = std::move(cloak)] {
+        if (g_unloading) {
+            return;
+        }
+        DropRecolors(taskbar);
+        DropRests(taskbar);
+        g_restsWaiting.push_back({taskbar, serial, transparent, cloak});
+        EnsureRenderingSubscribed();
+    });
 }
 
 // Re-applies what is wanted on one taskbar; a no-op (a few cheap checks)
@@ -7661,13 +8064,13 @@ bool ReapplyWants(HWND taskbar, bool requested) try {
     bool placed = true;
     bool earsRight = true;  // what the XAML-level veil is about: the corners
     int edge = kEdgeNone;
-    if (wants.strokeHidden) {
+    if (wants.strokeHidden && !wants.fillResting) {
         StrokeOp op{taskbar, false, false};
         HideStrokeOnTaskbarThread(&op);
         found = found && op.found;
         clean = clean && !op.changed;
     }
-    if (wants.fill) {
+    if (wants.fill && !wants.fillResting) {
         FillOp op{taskbar, wants.fillSuspended ? (wants.fillArgb & 0x00FFFFFF) : wants.fillArgb,
                   false, false};
         ApplyFillOnTaskbarThread(&op);
@@ -7677,10 +8080,25 @@ bool ReapplyWants(HWND taskbar, bool requested) try {
     if (wants.theme != kThemeNone) {
         ApplyThemeOnTaskbarThread(taskbar, wants.theme);
     }
-    if (wants.ears) {
+    if (wants.ears && !wants.earsUnavailable) {
         XamlCornerOp op{taskbar,      wants.edge, wants.radiusDips, wants.earInsetDips,
                         wants.earRgb, false,      false,            false};
         ApplyXamlCornersOnTaskbarThread(&op);
+        if (auto background = !op.found ? FindTaskbarBackground(taskbar) : nullptr) {
+            // The tree is there, the ears' host isn't: this build's layout.
+            // What lies above the background, for the next look at it.
+            std::wstring above;
+            auto node = wuxm::VisualTreeHelper::GetParent(background);
+            for (int i = 0; node && i < 8; i++, node = wuxm::VisualTreeHelper::GetParent(node)) {
+                above += (i ? L" < " : L"") + std::wstring(winrt::get_class_name(node));
+            }
+            wants.earsUnavailable = true;
+            Wh_Log(L"taskbar %p: no host for the corner ears in this taskbar's tree - its "
+                   L"corners stay square (above the background: %s)",
+                   taskbar, above.c_str());
+            op.found = true;
+            op.placed = true;
+        }
         found = found && op.found;
         clean = clean && !op.changed;
         placed = op.placed;
@@ -7697,10 +8115,13 @@ bool ReapplyWants(HWND taskbar, bool requested) try {
     // the window's corners). It comes down in OnRendering, once the tree has
     // been whole and untouched across two rendered frames: a change made
     // during a layout pass is not in that pass's frame yet.
-    if (!earsRight) {
+    if (!earsRight && !wants.veilGaveUp) {
         if (!wants.hidden || wants.changedAtRender != g_renderCounter) {
             SetContentHidden(taskbar, wants, true);
         }
+    }
+    if (whole) {
+        wants.veilGaveUp = false;
     }
     wants.lastWhole = whole;
 
@@ -7726,7 +8147,8 @@ void OnRendering(winrt::Windows::Foundation::IInspectable const&,
                  winrt::Windows::Foundation::IInspectable const&) try {
     g_renderCounter++;
     ApplyRecolorsInRenderingTick();
-    bool anyHidden = !g_recolorsWaiting.empty();
+    ApplyRestsInRenderingTick();
+    bool anyHidden = !g_recolorsWaiting.empty() || !g_restsWaiting.empty();
     for (auto& entry : *g_wants) {
         HWND taskbar = entry.first;
         TaskbarWants& wants = entry.second;
@@ -7746,6 +8168,7 @@ void OnRendering(winrt::Windows::Foundation::IInspectable const&,
             if (overdue && !settled) {
                 Wh_Log(L"taskbar %p: shown anyway (whole %d, renders since change %u)", taskbar,
                        wants.lastWhole ? 1 : 0, g_renderCounter - wants.changedAtRender);
+                wants.veilGaveUp = true;  // not again until whole (see ReapplyWants)
             }
             SetContentHidden(taskbar, wants, false);
         } else {
@@ -7822,6 +8245,7 @@ void OnTaskbarWindowPosChanged(HWND hwnd, const WINDOWPOS* pos) {
     if (HWND ctrl = g_ctrlWnd.load()) {
         PostMessageW(ctrl, kMsgTaskbarMoving, 0, reinterpret_cast<LPARAM>(hwnd));
     }
+    it->second.veilGaveUp = false;  // a new place: the veil may go up again
     if (it->second.ears && corner != g_xamlCorners->end()) {
         SetContentHidden(hwnd, it->second, true);
     }
@@ -7864,6 +8288,7 @@ void WatchTaskbarLayout(HWND taskbar) try {
                   winrt::Windows::Foundation::IInspectable const&) { ReapplyWants(taskbar, false); });
     wants.watched = element;
     wants.lastReady = false;  // a new tree: report again once it is whole
+    wants.earsUnavailable = false;  // and look for the ears' host in it
     Wh_Log(L"taskbar %p: watching its layout (%s content)", taskbar,
            watched ? L"replaced" : L"first");
 } catch (...) {
@@ -8158,9 +8583,13 @@ void HideStrokes(ULONGLONG now) {
             continue;
         }
         RequestPass(kPassStroke, taskbar, now, false, [taskbar] {
-            (*g_wants)[taskbar].strokeHidden = true;
+            TaskbarWants& wants = (*g_wants)[taskbar];
+            wants.strokeHidden = true;
             WatchTaskbarRoot(taskbar);
             WatchTaskbarLayout(taskbar);
+            if (wants.fillResting) {
+                return true;  // the taskbar's own border line while its frame rests
+            }
             StrokeOp op{taskbar, false, false};
             HideStrokeOnTaskbarThread(&op);
             ReapplyWants(taskbar, true);
@@ -8180,9 +8609,7 @@ DWORD CustomColorArgb(const Overlay& overlay) {
 
 // What the taskbar on a monitor is painted with: transparent, so that the
 // acrylic frame under it shows through (with either fill), or the frame
-// color over a layered frame, which stops at the taskbar. (Whenever the
-// frame is off - Task View, a full-screen window - the taskbar is
-// transparent as well, as it is in Task View anyway.)
+// color over a layered frame, which stops at the taskbar.
 DWORD FillArgbFor(const Overlay& overlay) {
     DWORD argb = CustomColorArgb(overlay);
     if (overlay.comp && !IsRectEmpty(&overlay.layout.taskbarRect)) {
@@ -8210,6 +8637,9 @@ void ApplyFills(ULONGLONG now) {
             wants.fillArgb = argb;
             WatchTaskbarRoot(taskbar);
             WatchTaskbarLayout(taskbar);
+            if (wants.fillResting) {
+                return true;  // the taskbar's own background while its frame rests
+            }
             FillOp op{taskbar, wants.fillSuspended ? (argb & 0x00FFFFFF) : argb, false, false};
             ApplyFillOnTaskbarThread(&op);
             ReapplyWants(taskbar, true);
@@ -8255,6 +8685,10 @@ void ApplyXamlCorners(ULONGLONG now) {
             wants.earRgb = rgb;
             WatchTaskbarRoot(taskbar);
             WatchTaskbarLayout(taskbar);
+            if (wants.earsUnavailable) {
+                ReapplyWants(taskbar, true);
+                return true;  // nowhere to put them in this tree (logged once)
+            }
             XamlCornerOp op{taskbar, edge, radius, inset, rgb, false, false, false};
             ApplyXamlCornersOnTaskbarThread(&op);
             ReapplyWants(taskbar, true);
@@ -8794,8 +9228,9 @@ bool CaptureStrip(const RECT& strip, std::vector<uint32_t>& px) {
 }
 
 // Whether a taskbar thumbnail preview is showing: on these builds it is a
-// visible, monitor-sized XamlExplorerHostIslandWindow without a title (Task
-// View's carries one), drawing the flyout in a small part of its rectangle
+// visible, monitor-sized XamlExplorerHostIslandWindow without a title, or
+// titled kThumbnailFlyoutTitle when opened by a click (Task View's carries
+// its own), drawing the flyout in a small part of its rectangle
 // - which the mask can't tell from the rest, so no row is read while one
 // shows (the same window hosts snap assist, untitled too, which also hangs
 // over title bars); on older builds, a TaskListThumbnailWnd.
@@ -8806,7 +9241,8 @@ bool ThumbnailPreviewShowing() {
             continue;
         }
         WCHAR title[64];
-        if (GetWindowTextW(hwnd, title, ARRAYSIZE(title)) <= 0) {
+        if (GetWindowTextW(hwnd, title, ARRAYSIZE(title)) <= 0 ||
+            wcscmp(title, kThumbnailFlyoutTitle) == 0) {
             return true;
         }
     }
@@ -8903,19 +9339,39 @@ bool CaptureWindowRow(HWND window, const RECT& strip, std::vector<uint32_t>& px,
     return ok;
 }
 
+// Whether a window is maximized, or minimized from maximized (a thumbnail
+// peeks at those too; they come back maximized).
+bool MaximizedOrWasMaximized(HWND hwnd) {
+    if (IsZoomed(hwnd)) {
+        return true;
+    }
+    WINDOWPLACEMENT wp{sizeof(wp)};
+    return IsIconic(hwnd) && GetWindowPlacement(hwnd, &wp) && (wp.flags & WPF_RESTORETOMAXIMIZED);
+}
+
 // Aero Peek from a taskbar thumbnail: the taskbar asks DWM to show the
 // hovered window alone (DwmpActivateLivePreview, dwmapi.dll ordinal 113,
 // called from the taskbar's own XAML in this process), and the frame takes
 // that window's color while it shows, as if it had been brought to the
 // front. The hook keeps the window peeked, if any; the color code picks it
 // over the monitor's maximized window when it is a maximized one.
-std::atomic<HWND> g_peekWindow{nullptr};
+// (g_peekWindow is declared with the visibility code, which reads it too.)
 using DwmpActivateLivePreview_t = HRESULT(WINAPI*)(BOOL activate, HWND exclude, HWND insertBefore,
                                                    UINT trigger, void* finalRect);
 DwmpActivateLivePreview_t DwmpActivateLivePreview_Original;
 HRESULT WINAPI DwmpActivateLivePreview_Hook(BOOL activate, HWND exclude, HWND insertBefore,
                                             UINT trigger, void* finalRect) {
-    g_peekWindow = activate ? exclude : nullptr;
+    HWND peeked = activate ? exclude : nullptr;
+    if (peeked != g_peekWindow.load()) {
+        // Logged when the peeked window changes (a person's pace, not a flood).
+        WCHAR cls[64] = L"";
+        if (peeked) {
+            GetClassNameW(peeked, cls, ARRAYSIZE(cls));
+        }
+        Wh_Log(L"Aero Peek %s: window %p (%s)%s, trigger %u", peeked ? L"on" : L"off", peeked,
+               cls, peeked && MaximizedOrWasMaximized(peeked) ? L", maximized" : L"", trigger);
+    }
+    g_peekWindow = peeked;
     g_titleEventPending = true;  // no zoom to wait for: the peeked window is read from its surface
     if (HWND ctrl = g_ctrlWnd.load()) {
         PostMessageW(ctrl, kMsgTaskbarEvent, 0, 0);  // a tick, fast readings
@@ -8932,16 +9388,6 @@ void HookLivePreview() {
     }
     WindhawkUtils::SetFunctionHook(reinterpret_cast<DwmpActivateLivePreview_t>(proc),
                                    DwmpActivateLivePreview_Hook, &DwmpActivateLivePreview_Original);
-}
-
-// Whether a window is maximized, or minimized from maximized (a thumbnail
-// peeks at those too; they come back maximized).
-bool MaximizedOrWasMaximized(HWND hwnd) {
-    if (IsZoomed(hwnd)) {
-        return true;
-    }
-    WINDOWPLACEMENT wp{sizeof(wp)};
-    return IsIconic(hwnd) && GetWindowPlacement(hwnd, &wp) && (wp.flags & WPF_RESTORETOMAXIMIZED);
 }
 
 // The window peeked from a thumbnail, for this monitor: a maximized window
@@ -9050,6 +9496,17 @@ void UpdateAdaptiveColors(ULONGLONG now, bool fast) {
     if (!AdaptiveSource()) {
         g_adaptive.clear();
         g_titleColors.clear();
+        return;
+    }
+    // Task View hides the real windows and covers the frame: the color the
+    // frame had stays, rather than going to the plain frame color and coming
+    // back as Task View closes. Read again once the windows are back.
+    constexpr ULONGLONG kTaskViewColorSettleMs = 400;
+    TrackTaskView(now);
+    if (TaskViewHoldsWindows(now, kTaskViewColorSettleMs)) {
+        if (HWND ctrl = g_ctrlWnd.load()) {
+            KillTimer(ctrl, kSampleTimerId);  // the next tick starts the readings again
+        }
         return;
     }
     bool anySettling = false;
@@ -9473,11 +9930,10 @@ void Tick(bool forceRebuild) {
     // frame of the taskbar being uncloaked), at the regular rate otherwise.
     bool anyWaiting = false;
     for (const Overlay& overlay : *g_overlays) {
-        // A frame hidden for full-screen or Task View can't show until that
-        // ends, and the event that ends it ticks right away - no need to
-        // spin at 60 Hz for as long as a game runs.
-        anyWaiting = anyWaiting ||
-                     (overlay.waiting && !overlay.fullscreen && !overlay.taskViewHidden);
+        // A frame hidden for full-screen can't show until that ends, and
+        // the event that ends it ticks right away - no need to spin at 60 Hz
+        // for as long as a game runs.
+        anyWaiting = anyWaiting || (overlay.waiting && !overlay.fullscreen);
     }
     if (anyWaiting != g_fastTick) {
         if (HWND ctrl = g_ctrlWnd.load()) {
