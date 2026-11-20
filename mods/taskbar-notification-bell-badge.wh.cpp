@@ -44,10 +44,11 @@ Vertical Taskbar Preview
 - **Runs safely as a dedicated tool mod**: Executes in an isolated
   `windhawk.exe` tool process (no injection into `explorer.exe`), preventing
   duplicate overlays or shell instability.
-- **Custom hover tooltip**: Hovering over the bell or badge when notifications
-  are present shows the active notification count (e.g., `5 active notifications`
-  or `5 thông báo hiện có` on Vietnamese Windows) and temporarily hides Windows'
-  `"No new notifications"` tooltip.
+- **Optional custom hover tooltip (disabled by default)**: Can be enabled in
+  Settings to show the active notification count on hover (e.g., `5 active
+  notifications` or `5 thông báo hiện có` on Vietnamese Windows) while verifying
+  via UI Automation (`UIA_ToolTipControlTypeId`) before hiding Windows' native
+  tooltip.
 - **Crisp Fluent styling & smart visibility**: Renders a DPI-aware,
   anti-aliased, click-through GDI+ badge (`PixelFormat32bppPARGB`) that adapts
   to your Windows accent color, stays visible next to maximized windows, and
@@ -90,9 +91,9 @@ Taskbar Windows 11 mà không che khuất biểu tượng chuông.
 - **Chạy độc lập dạng tool mod an toàn**: Chạy trong tiến trình `windhawk.exe`
   riêng biệt, không tiêm vào `explorer.exe` nên tránh hoàn toàn lỗi chồng badge
   hoặc ảnh hưởng độ ổn định của Windows Shell.
-- **Chú thích khi rê chuột**: Khi rê chuột vào chuông hoặc vòng tròn số lúc
-  đang có thông báo, tự động hiển thị `<N> thông báo hiện có` và tạm ẩn chú
-  thích `"Không có thông báo mới"` của Windows.
+- **Chú thích tùy chọn khi rê chuột (tắt mặc định)**: Có thể bật trong Cài đặt
+  để hiển thị `<N> thông báo hiện có` khi rê chuột vào chuông/vòng tròn và chỉ
+  ẩn đúng cửa sổ tooltip đã xác minh qua UI Automation (`UIA_ToolTipControlTypeId`).
 - **Tự động ẩn thông minh**: Vẫn hiển thị khi phóng to cửa sổ và tự ẩn khi chạy
   ứng dụng toàn màn hình (fullscreen), khi ẩn taskbar hoặc khi không có thông
   báo nào.
@@ -192,7 +193,7 @@ chỉnh **Dịch ngang/dọc (DIP)** hoặc **Đường kính vòng tròn**, sau
   $name:vi-VN: Màu viền ngoài (#RRGGBB)
   $description: Color of the badge outline when Outline thickness > 0.
   $description:vi-VN: Màu của viền ngoài khi Độ dày viền ngoài > 0.
-- customTooltip: true
+- customTooltip: false
   $name: Show custom hover tooltip
   $name:vi-VN: Hiện chú thích khi rê chuột
   $description: When hovering over the bell or badge with active notifications, show "<N> active notifications" and temporarily hide Windows' "No new notifications" tooltip.
@@ -230,6 +231,7 @@ chỉnh **Dịch ngang/dọc (DIP)** hoặc **Đường kính vòng tròn**, sau
 #include <cwchar>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 // ============================================================================
@@ -349,7 +351,7 @@ struct ModSettings {
     COLORREF textColor = RGB(0xFF, 0xFF, 0xFF);
     int borderWidth = 1;
     COLORREF borderColor = RGB(0x1A, 0x1A, 0x1A);
-    bool customTooltip = true;
+    bool customTooltip = false;
     TooltipTheme tooltipTheme = TooltipTheme::Auto;
     int previewCount = 0;
 };
@@ -845,6 +847,8 @@ struct TaskbarBellTracker {
     IUIAutomationCondition* condNotificationCenter = nullptr;
     IUIAutomationCondition* condButton = nullptr;
     IUIAutomationCondition* condText = nullptr;
+    IUIAutomationCondition* condToolTip = nullptr;
+    std::unordered_map<HWND, bool> tooltipPopupCache;
     IUIAutomationElement* cachedButton = nullptr;
     HWND cachedTrayHwnd = nullptr;
     int lastIsVertical = -1;
@@ -892,6 +896,13 @@ struct TaskbarBellTracker {
         uia->CreatePropertyCondition(UIA_ControlTypePropertyId, varTxt, &condText);
         VariantClear(&varTxt);
 
+        VARIANT varTip;
+        VariantInit(&varTip);
+        varTip.vt = VT_I4;
+        varTip.lVal = UIA_ToolTipControlTypeId;
+        uia->CreatePropertyCondition(UIA_ControlTypePropertyId, varTip, &condToolTip);
+        VariantClear(&varTip);
+
         return true;
     }
 
@@ -925,10 +936,52 @@ struct TaskbarBellTracker {
             condText->Release();
             condText = nullptr;
         }
+        if (condToolTip) {
+            condToolTip->Release();
+            condToolTip = nullptr;
+        }
+        tooltipPopupCache.clear();
         if (uia) {
             uia->Release();
             uia = nullptr;
         }
+    }
+
+    bool IsPopupHostingToolTip(HWND popupHwnd) {
+        if (!popupHwnd || !IsWindow(popupHwnd)) {
+            return false;
+        }
+        auto it = tooltipPopupCache.find(popupHwnd);
+        if (it != tooltipPopupCache.end()) {
+            return it->second;
+        }
+
+        // Prune destroyed HWNDs occasionally to keep the cache bounded.
+        if (tooltipPopupCache.size() > 64) {
+            for (auto iter = tooltipPopupCache.begin(); iter != tooltipPopupCache.end(); ) {
+                if (!IsWindow(iter->first)) {
+                    iter = tooltipPopupCache.erase(iter);
+                } else {
+                    ++iter;
+                }
+            }
+        }
+
+        bool isTooltip = false;
+        if (uia && condToolTip) {
+            IUIAutomationElement* rootElem = nullptr;
+            if (SUCCEEDED(uia->ElementFromHandle(popupHwnd, &rootElem)) && rootElem) {
+                IUIAutomationElement* tipElem = nullptr;
+                if (SUCCEEDED(rootElem->FindFirst(TreeScope_Subtree, condToolTip, &tipElem)) && tipElem) {
+                    isTooltip = true;
+                    tipElem->Release();
+                }
+                rootElem->Release();
+            }
+        }
+
+        tooltipPopupCache[popupHwnd] = isTooltip;
+        return isTooltip;
     }
 
     static BOOL CALLBACK CollectChildHwndsProc(HWND hwnd, LPARAM lParam) {
@@ -1627,6 +1680,7 @@ static std::wstring FormatHoverTooltipText(int count) {
 }
 
 struct NativeTooltipSearchCtx {
+    TaskbarBellTracker* tracker = nullptr;
     DWORD trayPid = 0;
     HWND trayHwnd = nullptr;
     RECT anchorRect{};
@@ -1639,7 +1693,7 @@ struct NativeTooltipSearchCtx {
 
 static BOOL CALLBACK SuppressNativeTooltipEnumProc(HWND hwnd, LPARAM lParam) {
     auto* ctx = reinterpret_cast<NativeTooltipSearchCtx*>(lParam);
-    if (!ctx || !hwnd || hwnd == ctx->trayHwnd || !IsWindowVisible(hwnd)) {
+    if (!ctx || !ctx->tracker || !hwnd || hwnd == ctx->trayHwnd || !IsWindowVisible(hwnd)) {
         return TRUE;
     }
 
@@ -1668,8 +1722,6 @@ static BOOL CALLBACK SuppressNativeTooltipEnumProc(HWND hwnd, LPARAM lParam) {
         return TRUE;
     }
 
-    // Check proximity to the notification bell / button rect so we only suppress
-    // the notification bell's tooltip and never unrelated Explorer popups.
     int dx = 0;
     if (r.right < ctx->anchorRect.left) {
         dx = ctx->anchorRect.left - r.right;
@@ -1684,14 +1736,22 @@ static BOOL CALLBACK SuppressNativeTooltipEnumProc(HWND hwnd, LPARAM lParam) {
     }
 
     if (dx <= ctx->maxDistX && dy <= ctx->maxDistY) {
-        ShowWindowAsync(hwnd, SW_HIDE);
-        ctx->hidAny = true;
+        // Confirm via cached UIA check that this popup actually hosts a ToolTip
+        // (never hide context menus or other Explorer popups).
+        if (ctx->tracker->IsPopupHostingToolTip(hwnd)) {
+            ShowWindowAsync(hwnd, SW_HIDE);
+            ctx->hidAny = true;
+        }
     }
     return TRUE;
 }
 
-static bool SuppressNativeTaskbarTooltip(HWND hTray, const RECT& anchorRect, float dpiScale) {
-    if (!hTray || !IsWindow(hTray)) {
+static bool SuppressNativeTaskbarTooltip(
+    TaskbarBellTracker* tracker,
+    HWND hTray,
+    const RECT& anchorRect,
+    float dpiScale) {
+    if (!tracker || !hTray || !IsWindow(hTray)) {
         return false;
     }
     DWORD trayPid = 0;
@@ -1701,6 +1761,7 @@ static bool SuppressNativeTaskbarTooltip(HWND hTray, const RECT& anchorRect, flo
     }
 
     NativeTooltipSearchCtx ctx;
+    ctx.tracker = tracker;
     ctx.trayPid = trayPid;
     ctx.trayHwnd = hTray;
     ctx.anchorRect = anchorRect;
@@ -1961,7 +2022,7 @@ static void UpdateHoverTooltip(OverlayState* state) {
 
     // Temporarily hide Windows' native "No new notifications" tooltip while hovering the bell.
     bool hidNative = SuppressNativeTaskbarTooltip(
-        state->lastTrayHwnd, state->lastBtnRect, state->lastDpiScale);
+        &state->tracker, state->lastTrayHwnd, state->lastBtnRect, state->lastDpiScale);
 
     ULONGLONG now = GetTickCount64();
     if (!state->hoveringBell) {
@@ -2380,7 +2441,7 @@ static DWORD WINAPI WorkerThreadProc(LPVOID /*param*/) {
 // ============================================================================
 
 BOOL WhTool_ModInit() {
-    Wh_Log(L"Initializing Taskbar Notification Bell Count Badge v1.0.23 (tool mod)");
+    Wh_Log(L"Initializing Taskbar Notification Bell Count Badge v1.0.24 (tool mod)");
     g_stopping.store(false);
     g_forceDbRefresh.store(true);
     LoadSettings();
