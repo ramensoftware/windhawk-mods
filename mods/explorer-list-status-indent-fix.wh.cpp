@@ -2,7 +2,7 @@
 // @id              explorer-list-status-indent-fix
 // @name            File Explorer List view indent fix and files area spacing
 // @description     Removes the empty space before every item in the List, Small icons and Content views of File Explorer, and evens out the gaps around the items, icons and names of the files area
-// @version         1.0
+// @version         1.1
 // @author          NDruce
 // @github          https://github.com/NDruce
 // @include         explorer.exe
@@ -127,7 +127,11 @@ which usually happens when a file dialog is opened for the first time.
 The indent comes from `UIProperty::HasVisibleContent` in `explorerframe.dll`,
 which reports the status icons area as having content in the List, Small icons
 and Content views regardless of the actual content. The mod makes it report the
-actual state.
+actual state. That relies on the debug symbols of `explorerframe.dll`, which
+Windhawk downloads from Microsoft. Right after a Windows update, the symbols of
+the new build might not be published yet. Until they are, the status area is
+left as is, and the rest of the adjustments still work. Windhawk tries to load
+the symbols again after it's restarted, or after a restart of the computer.
 
 Everything else is done by changing properties of DirectUI elements: of the
 items and of the items area. The elements are adjusted when they're created,
@@ -1599,24 +1603,29 @@ static BOOL SetupHooksImpl() {
         return FALSE;
     }
 
-    // explorerframe.dll
-    WindhawkUtils::SYMBOL_HOOK explorerFrameHooks[] = {
+    // explorerframe.dll. Only the addresses are looked up here, and the hook
+    // is set below if all of them are found. Without the symbols, for example
+    // right after a Windows update when they aren't published yet, the status
+    // area stays as is, and the rest of the adjustments still work.
+    BOOL(WINAPI* hasVisibleContent)(void*) = nullptr;
+    PropertyProc_t visibleMinSizeProp = nullptr;
+    WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] = {
         {
             {LR"(public: virtual int __cdecl UIProperty::HasVisibleContent(void))"},
-            &UIProperty_HasVisibleContent_Original,
-            UIProperty_HasVisibleContent_Hook,
+            &hasVisibleContent,
         },
         {
             {LR"(public: static struct DirectUI::PropertyInfo const * __cdecl UIBase::VisibleMinSizeProp(void))"},
-            &UIBase_VisibleMinSizeProp,
+            &visibleMinSizeProp,
             nullptr,
             true,
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(g_explorerFrameModule, explorerFrameHooks, ARRAYSIZE(explorerFrameHooks))) {
-        Wh_Log(L"HookSymbols failed");
-        return FALSE;
+    bool symbolsFound = WindhawkUtils::HookSymbols(g_explorerFrameModule, explorerframe_dll_hooks, ARRAYSIZE(explorerframe_dll_hooks)) &&
+                        hasVisibleContent;
+    if (!symbolsFound) {
+        Wh_Log(L"The symbols of explorerframe.dll weren't found, the status area is left as is");
     }
 
     // Nothing fails from here on.
@@ -1625,7 +1634,12 @@ static BOOL SetupHooksImpl() {
     g_applyWork = work;
     ReleaseSRWLockExclusive(&g_originalsLock);
 
-    WindhawkUtils::SetFunctionHook(getTopLevel, Element_GetTopLevel_Hook, &Element_GetTopLevel_Original);
+    if (symbolsFound) {
+        UIBase_VisibleMinSizeProp = visibleMinSizeProp;
+        WindhawkUtils::SetFunctionHook(hasVisibleContent, UIProperty_HasVisibleContent_Hook, &UIProperty_HasVisibleContent_Original);
+        WindhawkUtils::SetFunctionHook(getTopLevel, Element_GetTopLevel_Hook, &Element_GetTopLevel_Original);
+    }
+
     WindhawkUtils::SetFunctionHook(createElement, DUIXmlParser_CreateElement_Hook, &DUIXmlParser_CreateElement_Original);
 
     return TRUE;
