@@ -145,8 +145,10 @@ volatile LONG g_popupOpen = 0;
 volatile LONG g_applyInProgress = 0;
 volatile LONG g_captureInProgress = 0;
 volatile LONG g_consumedVk = 0;
-// Updated by the low-level hook from modifier key down/up events.
-LONG g_heldModifierFlags = 0;
+// AltGr arrives as a fake Left Ctrl (scan code 0x21D) followed by Right Alt.
+// Tracked here (namespace scope) so CurrentModifiers() can ignore it.
+bool g_altGr = false;
+DWORD g_lctrlDownTime = 0;
 volatile LONG g_activeMode = static_cast<LONG>(CaseMode::Title);
 PVOID volatile g_originForeground = nullptr;
 PVOID volatile g_originFocus = nullptr;
@@ -655,71 +657,24 @@ LONG ModifierFlagForVk(UINT vk) {
     }
 }
 
-void UpdateHeldModifierState(UINT vk, bool down, bool up,
-                             const KBDLLHOOKSTRUCT* key) {
-    // AltGr arrives as a fake Left Ctrl (scan code 0x21D) followed by Right
-    // Alt. On layouts with AltGr it types characters, so it must never count
-    // as Ctrl+Alt (otherwise the default shortcuts swallow those characters).
-    static DWORD s_lctrlDownTime = 0;
-    static bool s_altGr = false;
+// AltGr state is tracked at namespace scope (g_altGr / g_lctrlDownTime) so
+// CurrentModifiers() can ignore it. It is set/cleared in LowLevelKeyboardProc.
 
-    if (down) {
-        if (vk == VK_LCONTROL) {
-            s_lctrlDownTime = key ? key->time : 0;
-            if (key && key->scanCode == 0x21D) {
-                s_altGr = true;
-            }
-        } else if (vk == VK_RMENU && key && key->time == s_lctrlDownTime) {
-            s_altGr = true;
-        }
-    } else if (up) {
-        if (vk == VK_LCONTROL || vk == VK_RMENU) {
-            s_altGr = false;
-        }
-    }
-
-    const bool altGr = s_altGr && (GetAsyncKeyState(VK_RMENU) & 0x8000) != 0;
-    if (altGr && (vk == VK_LCONTROL || vk == VK_RMENU)) {
-        // Don't let the AltGr components register as Ctrl/Alt modifiers.
-        return;
-    }
-
-    LONG flag = ModifierFlagForVk(vk);
-    if (!flag) {
-        return;
-    }
-    if (down) {
-        g_heldModifierFlags |= flag;
-    } else if (up) {
-        // Preserve the modifier if the other side of the same modifier is held.
-        bool otherSideDown = false;
-        if (flag == MOD_CONTROL) {
-            otherSideDown = (vk == VK_LCONTROL || vk == VK_CONTROL)
-                ? (GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0
-                : (GetAsyncKeyState(VK_LCONTROL) & 0x8000) != 0;
-        } else if (flag == MOD_ALT) {
-            otherSideDown = (vk == VK_LMENU || vk == VK_MENU)
-                ? (GetAsyncKeyState(VK_RMENU) & 0x8000) != 0
-                : (GetAsyncKeyState(VK_LMENU) & 0x8000) != 0;
-        } else if (flag == MOD_SHIFT) {
-            otherSideDown = (vk == VK_LSHIFT || vk == VK_SHIFT)
-                ? (GetAsyncKeyState(VK_RSHIFT) & 0x8000) != 0
-                : (GetAsyncKeyState(VK_LSHIFT) & 0x8000) != 0;
-        }
-        if (!otherSideDown) {
-            g_heldModifierFlags &= ~flag;
-        }
-    }
+UINT CurrentModifiers() {
+    const bool altGr = g_altGr && (GetAsyncKeyState(VK_RMENU) & 0x8000);
+    const bool ctrl = altGr ? (GetAsyncKeyState(VK_RCONTROL) & 0x8000)
+                            : (GetAsyncKeyState(VK_CONTROL) & 0x8000);
+    const bool alt = altGr ? (GetAsyncKeyState(VK_LMENU) & 0x8000)
+                           : (GetAsyncKeyState(VK_MENU) & 0x8000);
+    const bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    const bool win = (GetAsyncKeyState(VK_LWIN) & 0x8000) ||
+                     (GetAsyncKeyState(VK_RWIN) & 0x8000);
+    return (ctrl ? MOD_CONTROL : 0) | (alt ? MOD_ALT : 0) |
+           (shift ? MOD_SHIFT : 0) | (win ? MOD_WIN : 0);
 }
 
 bool HotkeyMatches(const HotkeyBinding& hotkey, UINT vk) {
-    if (!hotkey.vk || hotkey.vk != vk) {
-        return false;
-    }
-    return (g_heldModifierFlags & MOD_CONTROL) == (hotkey.modifiers & MOD_CONTROL) &&
-           (g_heldModifierFlags & MOD_ALT) == (hotkey.modifiers & MOD_ALT) &&
-           (g_heldModifierFlags & MOD_SHIFT) == (hotkey.modifiers & MOD_SHIFT) &&
-           (g_heldModifierFlags & MOD_WIN) == (hotkey.modifiers & MOD_WIN);
+    return hotkey.vk && hotkey.vk == vk && CurrentModifiers() == hotkey.modifiers;
 }
 
 bool TryDirectEditReplacement(const ApplyRequest& request, bool* handled) {
@@ -1669,7 +1624,22 @@ LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
     const bool down = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
     const bool up = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
     const UINT vk = key->vkCode;
-    UpdateHeldModifierState(vk, down, up, key);
+
+    // Track AltGr (fake left Ctrl with scan code 0x21D, then right Alt).
+    if (down) {
+        if (vk == VK_LCONTROL) {
+            g_lctrlDownTime = key->time;
+            if (key->scanCode == 0x21D) {
+                g_altGr = true;
+            }
+        } else if (vk == VK_RMENU && key->time == g_lctrlDownTime) {
+            g_altGr = true;
+        }
+    } else if (up) {
+        if (vk == VK_LCONTROL || vk == VK_RMENU) {
+            g_altGr = false;
+        }
+    }
 
     LONG consumedVk = InterlockedCompareExchange(&g_consumedVk, 0, 0);
     if (consumedVk == static_cast<LONG>(vk)) {
