@@ -1,856 +1,609 @@
 // ==WindhawkMod==
 // @id              virtual-desktop-wallpaper-switch
 // @name            Virtual Desktop Wallpaper Switch
-// @description     A Windhawk mod to set unique backgrounds for each virtual desktop. (Project FluxDesk)
+// @description     Set unique background wallpapers for each Windows 11 (24H2+) virtual desktop.
 // @version         1.0.0
 // @author          Dev-StudioCode
 // @github          https://github.com/Dev-StudioCode
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lshlwapi -luuid
+// @compilerOptions -lole32 -luuid -lruntimeobject -lshlwapi -lshell32
 // @license         MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# ⚡ Virtual Desktop Wallpaper Switch (Project FluxDesk)
+# Virtual Desktop Wallpaper Switch
 
-A high-performance Windhawk mod injected directly into **`explorer.exe`** that assigns, preloads, and transitions distinct wallpapers across all Windows 11 virtual desktops.
+Assigns, preloads, and coordinates distinct background wallpapers across virtual desktops on Windows 11 Version 24H2 and newer (Build 26100+).
 
-### 🌟 Key Benefits Over External Desktop Apps
-- **Zero-Latency In-Process Execution**: Runs inside Windows Explorer itself; no background `.exe` process polling or running separate message loops.
-- **Instant Touchpad Gesture Preloading**: Uses undocumented internal COM interfaces (`IVirtualDesktopManagerInternal::SetDesktopWallpaper`) to register wallpapers directly into Desktop Window Manager (DWM). When performing a **4-finger swipe**, transitions are buttery-smooth with **zero black flicker**.
-- **Native Event Sinks**: Hooks into shell notifications (`IVirtualDesktopNotificationService`) and intercepts virtual desktop switch calls without requiring external global hooks or polling timers.
-- **Configurable**: Define custom wallpaper folders or assign explicit wallpapers per virtual desktop directly from the Windhawk settings panel.
+### Key Features
+* **Per-Desktop Wallpapers**: Assigns individual background images per virtual workspace from a folder or specific overrides.
+* **Touchpad Preloading**: Direct assignment through Windows 11's internal virtual desktop manager ensures textures are pre-cached for smooth trackpad swipe transitions.
+* **Original Wallpaper Restoration**: Automatically saves your original desktop wallpapers and restores them when the mod is disabled or unloaded.
+* **Safe In-Process Design**: Runs on a dedicated internal thread inside `explorer.exe` with zero vtable patching, avoiding system instability.
 
-### ⚙️ How It Works
-1. When loaded into `explorer.exe`, `Wh_ModInit` locates the Windows Immersive Shell service provider.
-2. It queries `IVirtualDesktopManagerInternal` and `IVirtualDesktopNotificationService`.
-3. It preloads each virtual desktop with its designated wallpaper in DWM.
-4. When you switch desktops (via 4-finger trackpad swipe, `Win+Ctrl+Left/Right`, or Task View), the notification callback and hooked switch methods automatically guarantee the correct wallpaper is active.
+### Compatibility Note
+* Designed specifically for Windows 11 Version 24H2 and newer (Build 26100+).
+* If using **Wallpaper Engine**: Open Wallpaper Engine Settings -> General -> uncheck "Override wallpaper image" so Windows native per-desktop backgrounds remain active.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - wallpaperFolder: ""
-  $name: Wallpaper Folder
-  $description: Path to a folder containing wallpapers (.jpg, .png, .bmp, .webp). Images will be assigned across your virtual desktops.
+  $name: Wallpaper Folder Path
+  $description: Full path to a folder containing images to distribute across virtual desktops.
 - desktop1Wallpaper: ""
-  $name: Desktop 1 Wallpaper
-  $description: Specific wallpaper path for Virtual Desktop 1 (overrides folder mode if set).
+  $name: Desktop 1 Wallpaper (Optional)
+  $description: Specific image path to assign to virtual desktop 1.
 - desktop2Wallpaper: ""
-  $name: Desktop 2 Wallpaper
-  $description: Specific wallpaper path for Virtual Desktop 2.
+  $name: Desktop 2 Wallpaper (Optional)
+  $description: Specific image path to assign to virtual desktop 2.
 - desktop3Wallpaper: ""
-  $name: Desktop 3 Wallpaper
-  $description: Specific wallpaper path for Virtual Desktop 3.
+  $name: Desktop 3 Wallpaper (Optional)
+  $description: Specific image path to assign to virtual desktop 3.
 - desktop4Wallpaper: ""
-  $name: Desktop 4 Wallpaper
-  $description: Specific wallpaper path for Virtual Desktop 4.
+  $name: Desktop 4 Wallpaper (Optional)
+  $description: Specific image path to assign to virtual desktop 4.
 - shuffle: true
-  $name: Shuffle Wallpapers
-  $description: Randomize the order of wallpapers assigned from the folder.
-- enablePreloading: true
-  $name: Preload Wallpapers in DWM
-  $description: Pre-registers wallpapers for all desktops so 4-finger touchpad swipes have zero black/blank frame latency.
-- fallbackDesktopWallpaperAPI: true
-  $name: Shell Wallpaper Fallback
-  $description: Also updates active wallpaper via IDesktopWallpaper and SystemParametersInfo on desktop switch.
+  $name: Shuffle Folder Wallpapers
+  $description: Randomize wallpaper assignments across desktops from the folder.
+- restoreOriginalOnUnload: true
+  $name: Restore Original Wallpapers on Exit
+  $description: Restore original desktop wallpapers when the mod is disabled or unloaded.
 */
 // ==/WindhawkModSettings==
 
-#include <initguid.h>
-#include <objbase.h>
-#include <shlobj.h>
-#include <shobjidl.h>
-#include <windows.h>
-
-#if __has_include(<windhawk_api.h>)
 #include <windhawk_api.h>
-#elif __has_include("windhawk_api.h")
-#include "windhawk_api.h"
-#endif
+#include <windhawk_utils.h>
+#include <windows.h>
+#include <servprov.h>
+#include <objectarray.h>
+#include <shlwapi.h>
+#include <winstring.h>
 
 #include <algorithm>
+#include <atomic>
 #include <random>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
-// Ensure MIDL_INTERFACE is available on all compilers
-#ifndef MIDL_INTERFACE
-#define MIDL_INTERFACE(x) struct
-#endif
+// ---------------------------------------------------------------------------
+// Shell COM Interface Declarations (Windows 11 24H2+ / Build 26100+)
+// ---------------------------------------------------------------------------
 
-// ============================================================================
-// Undocumented Windows Shell COM Definitions & GUIDs
-// ============================================================================
+namespace {
 
-// Forward declarations
-struct IVirtualDesktop;
-struct IVirtualDesktopManagerInternal;
-struct IVirtualDesktopNotification;
-struct IVirtualDesktopNotificationService;
+constexpr CLSID CLSID_ImmersiveShell = {
+    0xC2F03A33, 0x21F5, 0x47FA, {0xB4, 0xBB, 0x15, 0x63, 0x62, 0xA2, 0xF2, 0x39}};
+constexpr GUID SID_VirtualDesktopManagerInternal = {
+    0xC5E0CDCA, 0x7B6E, 0x41B2, {0x9F, 0xC4, 0xD9, 0x39, 0x75, 0xCC, 0x46, 0x7B}};
+constexpr GUID SID_VirtualDesktopNotificationService = {
+    0xA501FDEC, 0x4A09, 0x464C, {0xAE, 0x4E, 0x1B, 0x9C, 0x21, 0xB8, 0x49, 0x18}};
 
-// CLSID_ImmersiveShell: {C2F03A33-21F5-47FA-B4BB-156362A2F239}
-static const CLSID CLSID_ImmersiveShell = {
-    0xC2F03A33,
-    0x21F5,
-    0x47FA,
-    {0xB4, 0xBB, 0x15, 0x63, 0x62, 0xA2, 0xF2, 0x39}};
+constexpr IID IID_IUnknown_Local = {
+    0x00000000, 0x0000, 0x0000, {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
+constexpr IID IID_IServiceProvider_Local = {
+    0x6D5140C1, 0x7436, 0x11CE, {0x80, 0x34, 0x00, 0xAA, 0x00, 0x60, 0x09, 0xFA}};
 
-// CLSID_VirtualDesktopManagerInternal: {C5E0CDCA-7B6E-41B2-9FC4-D93975CC467B}
-static const CLSID CLSID_VirtualDesktopManagerInternal = {
-    0xC5E0CDCA,
-    0x7B6E,
-    0x41B2,
-    {0x9F, 0xC4, 0xD9, 0x39, 0x75, 0xCC, 0x46, 0x7B}};
+constexpr IID IID_IVirtualDesktop = {
+    0x3F07F4BE, 0xB107, 0x441A, {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}};
+constexpr IID IID_IVirtualDesktopManagerInternal = {
+    0x53F5CA0B, 0x158F, 0x4124, {0x90, 0x0C, 0x05, 0x71, 0x58, 0x06, 0x0B, 0x27}};
+constexpr IID IID_IVirtualDesktopNotification = {
+    0xB9E5E94D, 0x233E, 0x49AB, {0xAF, 0x5C, 0x2B, 0x45, 0x41, 0xC3, 0xAA, 0xDE}};
+constexpr IID IID_IVirtualDesktopNotificationService = {
+    0x0CD45E71, 0xD927, 0x4F15, {0x8B, 0x0A, 0x8F, 0xEF, 0x52, 0x53, 0x37, 0xBF}};
 
-// CLSID_VirtualDesktopNotificationService:
-// {A501FDEC-4A09-464C-AE4E-1B9C21B84918}
-static const CLSID CLSID_VirtualDesktopNotificationService = {
-    0xA501FDEC,
-    0x4A09,
-    0x464C,
-    {0xAE, 0x4E, 0x1B, 0x9C, 0x21, 0xB8, 0x49, 0x18}};
+constexpr UINT WM_APP_RELOAD_SETTINGS = WM_APP + 101;
+constexpr UINT WM_APP_DESKTOPS_CHANGED = WM_APP + 102;
 
-// IID_IUnknown: {00000000-0000-0000-C000-000000000046}
-static const IID IID_IUnknown_Local = {
-    0x00000000,
-    0x0000,
-    0x0000,
-    {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
+struct IApplicationView : IUnknown {};
 
-// IID_IServiceProvider: {6D5140C1-7436-11CE-8034-00AA006009FA}
-static const IID IID_IServiceProvider_Local = {
-    0x6D5140C1,
-    0x7436,
-    0x11CE,
-    {0x80, 0x34, 0x00, 0xAA, 0x00, 0x60, 0x09, 0xFA}};
+struct IVirtualDesktop : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE IsViewVisible(IApplicationView*, BOOL*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetId(GUID*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetName(HSTRING*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetWallpaperPath(HSTRING*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE IsRemote(BOOL*) = 0;
+};
 
-// IID_IVirtualDesktopNotificationService:
-// {0CD45E71-D927-4F15-8B0A-8FEF525337BF}
-static const IID IID_IVirtualDesktopNotificationService = {
-    0x0CD45E71,
-    0xD927,
-    0x4F15,
-    {0x8B, 0x0A, 0x8F, 0xEF, 0x52, 0x53, 0x37, 0xBF}};
+struct IVirtualDesktopManagerInternal : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetCount(UINT*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE MoveViewToDesktop(IApplicationView*, IVirtualDesktop*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CanViewMoveDesktops(IApplicationView*, BOOL*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetCurrentDesktop(IVirtualDesktop**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetDesktops(IObjectArray**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetAdjacentDesktop(IVirtualDesktop*, UINT, IVirtualDesktop**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SwitchDesktop(IVirtualDesktop*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SwitchDesktopAndMoveForegroundView(IVirtualDesktop*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateDesktop(IVirtualDesktop**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE MoveDesktop(IVirtualDesktop*, UINT) = 0;
+    virtual HRESULT STDMETHODCALLTYPE RemoveDesktop(IVirtualDesktop*, IVirtualDesktop*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE FindDesktop(const GUID*, IVirtualDesktop**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetDesktopSwitchIncludeExcludeViews(IVirtualDesktop*, IObjectArray**, IObjectArray**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetDesktopName(IVirtualDesktop*, HSTRING) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetDesktopWallpaper(IVirtualDesktop*, HSTRING) = 0;
+    virtual HRESULT STDMETHODCALLTYPE UpdateWallpaperPathForAllDesktops(HSTRING) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CopyDesktopState(IApplicationView*, IApplicationView*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateRemoteDesktop(HSTRING, IVirtualDesktop**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SwitchRemoteDesktop(IVirtualDesktop*, void*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SwitchDesktopWithAnimation(IVirtualDesktop*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetLastActiveDesktop(IVirtualDesktop**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE WaitForAnimationToComplete() = 0;
+};
 
-// IID_IVirtualDesktopNotification: {C179334C-4295-40D3-BEA1-C654D965605A}
-static const IID IID_IVirtualDesktopNotification = {
-    0xC179334C,
-    0x4295,
-    0x40D3,
-    {0xBE, 0xA1, 0xC6, 0x54, 0xD9, 0x65, 0x60, 0x5A}};
+struct IVirtualDesktopNotification : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE VirtualDesktopCreated(IVirtualDesktop*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE VirtualDesktopDestroyBegin(IVirtualDesktop*, IVirtualDesktop*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE VirtualDesktopDestroyFailed(IVirtualDesktop*, IVirtualDesktop*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE VirtualDesktopDestroyed(IVirtualDesktop*, IVirtualDesktop*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE VirtualDesktopMoved(IVirtualDesktop*, INT64, INT64) = 0;
+    virtual HRESULT STDMETHODCALLTYPE VirtualDesktopNameChanged(IVirtualDesktop*, HSTRING) = 0;
+    virtual HRESULT STDMETHODCALLTYPE ViewVirtualDesktopChanged(IApplicationView*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CurrentVirtualDesktopChanged(IVirtualDesktop*, IVirtualDesktop*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE VirtualDesktopWallpaperChanged(IVirtualDesktop*, HSTRING) = 0;
+    virtual HRESULT STDMETHODCALLTYPE VirtualDesktopSwitched(IVirtualDesktop*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE RemoteVirtualDesktopConnected(IVirtualDesktop*) = 0;
+};
 
-// IID_IVirtualDesktopManagerInternal (Windows 11 22H2 / 23H2 / 24H2):
-// {53F5CA0B-158F-4124-900C-057158060B27}
-static const IID IID_IVirtualDesktopManagerInternal_Win11 = {
-    0x53F5CA0B,
-    0x158F,
-    0x4124,
-    {0x90, 0x0C, 0x05, 0x71, 0x58, 0x06, 0x0B, 0x27}};
+struct IVirtualDesktopNotificationService : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE Register(IVirtualDesktopNotification*, DWORD*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE Unregister(DWORD) = 0;
+};
 
-// IID_IVirtualDesktopManagerInternal (Windows 11 21H2 Fallback):
-// {B2F925B9-5A0F-4D12-BE43-08B7E470D461}
-static const IID IID_IVirtualDesktopManagerInternal_Win11_21H2 = {
-    0xB2F925B9,
-    0x5A0F,
-    0x4D12,
-    {0xBE, 0x43, 0x08, 0xB7, 0xE4, 0x70, 0xD4, 0x61}};
-
-// IID_IVirtualDesktop (Windows 11): {3F07F4BE-B107-441A-AF0F-39D82529072C}
-static const IID IID_IVirtualDesktop_Win11 = {
-    0x3F07F4BE,
-    0xB107,
-    0x441A,
-    {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}};
-
-// IID_IObjectArray: {92CA9DCD-5622-4BBA-A805-5E9F541BD8C9}
-static const IID IID_IObjectArray_Local = {
-    0x92CA9DCD,
-    0x5622,
-    0x4BBA,
-    {0xA8, 0x05, 0x5E, 0x9F, 0x54, 0x1B, 0xD8, 0xC9}};
-
-// CLSID_DesktopWallpaper: {C2CF03AC-5759-460B-8848-822D425CE796}
-static const CLSID CLSID_DesktopWallpaper_Local = {
-    0xC2CF03AC,
-    0x5759,
-    0x460B,
-    {0x88, 0x48, 0x82, 0x2D, 0x42, 0x5C, 0xE7, 0x96}};
-
-// IID_IDesktopWallpaper: {B92CA5F7-3480-4E4A-A9FB-4F5572429DE7}
-static const IID IID_IDesktopWallpaper_Local = {
-    0xB92CA5F7,
-    0x3480,
-    0x4E4A,
-    {0xA9, 0xFB, 0x4F, 0x55, 0x72, 0x42, 0x9D, 0xE7}};
-
-// ============================================================================
-// WinRT String Function Types (Dynamic binding to prevent linking hurdles)
-// ============================================================================
-typedef struct HSTRING__ *HSTRING;
-typedef HRESULT(WINAPI *WindowsCreateString_t)(PCWSTR sourceString, UINT length,
-                                               HSTRING *string);
-typedef HRESULT(WINAPI *WindowsDeleteString_t)(HSTRING string);
-typedef PCWSTR(WINAPI *WindowsGetStringRawBuffer_t)(HSTRING string,
-                                                    UINT *length);
-
-static WindowsCreateString_t g_pfnWindowsCreateString = nullptr;
-static WindowsDeleteString_t g_pfnWindowsDeleteString = nullptr;
-static WindowsGetStringRawBuffer_t g_pfnWindowsGetStringRawBuffer = nullptr;
-
-static void InitWinRTStringFunctions() {
-  HMODULE hComBase = GetModuleHandleW(L"combase.dll");
-  if (!hComBase)
-    hComBase = LoadLibraryW(L"combase.dll");
-  if (hComBase) {
-    g_pfnWindowsCreateString =
-        (WindowsCreateString_t)GetProcAddress(hComBase, "WindowsCreateString");
-    g_pfnWindowsDeleteString =
-        (WindowsDeleteString_t)GetProcAddress(hComBase, "WindowsDeleteString");
-    g_pfnWindowsGetStringRawBuffer =
-        (WindowsGetStringRawBuffer_t)GetProcAddress(
-            hComBase, "WindowsGetStringRawBuffer");
-  }
-}
-
-// Scoped HSTRING RAII wrapper
-class ScopedHString {
-private:
-  HSTRING m_hstring = nullptr;
-
-public:
-  ScopedHString(PCWSTR str) {
-    if (str && g_pfnWindowsCreateString) {
-      g_pfnWindowsCreateString(str, (UINT)wcslen(str), &m_hstring);
+struct ScopedHString {
+    HSTRING hstr = nullptr;
+    ScopedHString(const std::wstring& str) {
+        WindowsCreateString(str.c_str(), static_cast<UINT32>(str.length()), &hstr);
     }
-  }
-  ~ScopedHString() {
-    if (m_hstring && g_pfnWindowsDeleteString) {
-      g_pfnWindowsDeleteString(m_hstring);
-    }
-  }
-  HSTRING Get() const { return m_hstring; }
-};
-
-// ============================================================================
-// COM Interface Declarations
-// ============================================================================
-
-MIDL_INTERFACE("3F07F4BE-B107-441A-AF0F-39D82529072C")
-IVirtualDesktop : public IUnknown {
-public:
-  virtual HRESULT STDMETHODCALLTYPE IsViewVisible(IUnknown * pView,
-                                                  BOOL * pfVisible) = 0;
-  virtual HRESULT STDMETHODCALLTYPE GetId(GUID * pGuid) = 0;
-  virtual HRESULT STDMETHODCALLTYPE GetName(HSTRING * pName) = 0;
-  virtual HRESULT STDMETHODCALLTYPE GetWallpaperPath(HSTRING * pPath) = 0;
-  virtual HRESULT STDMETHODCALLTYPE IsRemote(BOOL * pfRemote) = 0;
-};
-
-MIDL_INTERFACE("53F5CA0B-158F-4124-900C-057158060B27")
-IVirtualDesktopManagerInternal : public IUnknown {
-public:
-  virtual HRESULT STDMETHODCALLTYPE GetCount(UINT * pCount) = 0;
-  virtual HRESULT STDMETHODCALLTYPE MoveViewToDesktop(
-      IUnknown * pView, IVirtualDesktop * pDesktop) = 0;
-  virtual HRESULT STDMETHODCALLTYPE CanViewMoveDesktops(IUnknown * pView,
-                                                        BOOL * pfCanMove) = 0;
-  virtual HRESULT STDMETHODCALLTYPE GetCurrentDesktop(IVirtualDesktop *
-                                                      *ppDesktop) = 0;
-  virtual HRESULT STDMETHODCALLTYPE GetDesktops(IObjectArray * *ppDesktops) = 0;
-  virtual HRESULT STDMETHODCALLTYPE GetAdjacentDesktop(
-      IVirtualDesktop * pFrom, int direction, IVirtualDesktop **ppDesktop) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SwitchDesktop(IVirtualDesktop *
-                                                  pDesktop) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SwitchDesktopAndMoveForegroundView(
-      IVirtualDesktop * pDesktop) = 0;
-  virtual HRESULT STDMETHODCALLTYPE CreateDesktop(IVirtualDesktop *
-                                                  *ppDesktop) = 0;
-  virtual HRESULT STDMETHODCALLTYPE MoveDesktop(IVirtualDesktop * pDesktop,
-                                                int nIndex) = 0;
-  virtual HRESULT STDMETHODCALLTYPE RemoveDesktop(
-      IVirtualDesktop * pDesktop, IVirtualDesktop * pFallback) = 0;
-  virtual HRESULT STDMETHODCALLTYPE FindDesktop(
-      const GUID *pDesktopId, IVirtualDesktop **ppDesktop) = 0;
-  virtual HRESULT STDMETHODCALLTYPE GetDesktopSwitchIncludeExcludeViews(
-      IVirtualDesktop * pDesktop, IObjectArray * *ppViews1,
-      IObjectArray * *ppViews2) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SetDesktopName(IVirtualDesktop * pDesktop,
-                                                   HSTRING hstrName) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SetDesktopWallpaper(
-      IVirtualDesktop * pDesktop, HSTRING hstrPath) = 0;
-  virtual HRESULT STDMETHODCALLTYPE UpdateWallpaperPathForAllDesktops(
-      HSTRING hstrPath) = 0;
-  virtual HRESULT STDMETHODCALLTYPE CopyDesktopState(IUnknown * pView0,
-                                                     IUnknown * pView1) = 0;
-  virtual HRESULT STDMETHODCALLTYPE CreateRemoteDesktop(
-      HSTRING hstrPath, IVirtualDesktop * *ppDesktop) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SwitchRemoteDesktop(
-      IVirtualDesktop * pDesktop, void *pSwitchType) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SwitchDesktopWithAnimation(IVirtualDesktop *
-                                                               pDesktop) = 0;
-  virtual HRESULT STDMETHODCALLTYPE GetLastActiveDesktop(IVirtualDesktop *
-                                                         *ppDesktop) = 0;
-  virtual HRESULT STDMETHODCALLTYPE WaitForAnimationToComplete() = 0;
-};
-
-MIDL_INTERFACE("C179334C-4295-40D3-BEA1-C654D965605A")
-IVirtualDesktopNotification : public IUnknown {
-public:
-  virtual HRESULT STDMETHODCALLTYPE VirtualDesktopCreated(IVirtualDesktop *
-                                                          pDesktop) = 0;
-  virtual HRESULT STDMETHODCALLTYPE VirtualDesktopDestroyBegin(
-      IVirtualDesktop * pDesktopDestroyed,
-      IVirtualDesktop * pDesktopFallback) = 0;
-  virtual HRESULT STDMETHODCALLTYPE VirtualDesktopDestroyFailed(
-      IVirtualDesktop * pDesktopDestroyed,
-      IVirtualDesktop * pDesktopFallback) = 0;
-  virtual HRESULT STDMETHODCALLTYPE VirtualDesktopDestroyed(
-      IVirtualDesktop * pDesktopDestroyed,
-      IVirtualDesktop * pDesktopFallback) = 0;
-  virtual HRESULT STDMETHODCALLTYPE ViewVirtualDesktopChanged(IUnknown *
-                                                              pView) = 0;
-  // On Windows 11 22H2+ this receives (IObjectArray* pMonitors,
-  // IVirtualDesktop* pDesktopOld, IVirtualDesktop* pDesktopNew) On Windows 11
-  // 21H2 / Windows 10 it receives (IVirtualDesktop* pDesktopOld,
-  // IVirtualDesktop* pDesktopNew)
-  virtual HRESULT STDMETHODCALLTYPE CurrentVirtualDesktopChanged(
-      void *arg1, void *arg2, void *arg3) = 0;
-};
-
-MIDL_INTERFACE("0CD45E71-D927-4F15-8B0A-8FEF525337BF")
-IVirtualDesktopNotificationService : public IUnknown {
-public:
-  virtual HRESULT STDMETHODCALLTYPE Register(
-      IVirtualDesktopNotification * pNotification, DWORD * pdwCookie) = 0;
-  virtual HRESULT STDMETHODCALLTYPE Unregister(DWORD dwCookie) = 0;
-};
-
-// ============================================================================
-// Mod Configuration & State Management
-// ============================================================================
-
-struct ModSettings {
-  std::wstring wallpaperFolder;
-  std::wstring desktop1Wallpaper;
-  std::wstring desktop2Wallpaper;
-  std::wstring desktop3Wallpaper;
-  std::wstring desktop4Wallpaper;
-  bool shuffle = true;
-  bool enablePreloading = true;
-  bool fallbackDesktopWallpaperAPI = true;
-};
-
-static ModSettings g_settings;
-static std::vector<std::wstring> g_folderWallpapers;
-static std::unordered_map<std::wstring, std::wstring>
-    g_desktopWallpaperMap; // GUID String -> Wallpaper Path
-static IVirtualDesktopManagerInternal *g_pDesktopManager = nullptr;
-static IVirtualDesktopNotificationService *g_pNotificationService = nullptr;
-static DWORD g_dwNotificationCookie = 0;
-static DWORD g_osBuildNumber = 0;
-
-// Forward function declarations
-void ScanWallpaperFolder();
-void PreloadAllDesktops();
-void ApplyWallpaperForDesktop(IVirtualDesktop *pDesktop);
-void SetActiveWallpaper(const std::wstring &path);
-
-// Convert GUID to std::wstring
-static std::wstring GuidToString(const GUID &guid) {
-  WCHAR szGuid[64] = {0};
-  StringFromGUID2(guid, szGuid, 64);
-  return std::wstring(szGuid);
-}
-
-// Detect Windows OS build
-static DWORD DetectWindowsBuildNumber() {
-  typedef LONG(NTAPI * RtlGetVersion_t)(PRTL_OSVERSIONINFOW);
-  HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
-  if (hNtdll) {
-    RtlGetVersion_t pRtl =
-        (RtlGetVersion_t)GetProcAddress(hNtdll, "RtlGetVersion");
-    if (pRtl) {
-      RTL_OSVERSIONINFOW osvi = {sizeof(osvi)};
-      if (pRtl(&osvi) == 0) {
-        return osvi.dwBuildNumber;
-      }
-    }
-  }
-  return 22621; // Default to Win 11 22H2
-}
-
-// ============================================================================
-// Wallpaper Resolution & Application Engine
-// ============================================================================
-
-void ScanWallpaperFolder() {
-  g_folderWallpapers.clear();
-  if (g_settings.wallpaperFolder.empty())
-    return;
-
-  std::wstring searchPattern = g_settings.wallpaperFolder;
-  if (searchPattern.back() != L'\\' && searchPattern.back() != L'/') {
-    searchPattern += L"\\";
-  }
-
-  const std::vector<std::wstring> extensions = {L"*.jpg", L"*.jpeg", L"*.png",
-                                                L"*.bmp", L"*.webp"};
-  for (const auto &ext : extensions) {
-    WIN32_FIND_DATAW findData;
-    HANDLE hFind = FindFirstFileW((searchPattern + ext).c_str(), &findData);
-    if (hFind != INVALID_HANDLE_VALUE) {
-      do {
-        if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-          g_folderWallpapers.push_back(searchPattern + findData.cFileName);
+    ~ScopedHString() {
+        if (hstr) {
+            WindowsDeleteString(hstr);
         }
-      } while (FindNextFileW(hFind, &findData));
-      FindClose(hFind);
     }
-  }
+    operator HSTRING() const { return hstr; }
+};
 
-  if (g_settings.shuffle && g_folderWallpapers.size() > 1) {
-    std::random_device rd;
-    std::mt19937 g(rd());
-    std::shuffle(g_folderWallpapers.begin(), g_folderWallpapers.end(), g);
-  }
+// ---------------------------------------------------------------------------
+// Mod Settings & State
+// ---------------------------------------------------------------------------
 
-  Wh_Log(L"Scanned %zu wallpapers from folder: %s", g_folderWallpapers.size(),
-         g_settings.wallpaperFolder.c_str());
-}
+struct Settings {
+    std::wstring wallpaperFolder;
+    std::wstring desktop1Wallpaper;
+    std::wstring desktop2Wallpaper;
+    std::wstring desktop3Wallpaper;
+    std::wstring desktop4Wallpaper;
+    bool shuffle = true;
+    bool restoreOriginalOnUnload = true;
+} g_settings;
 
-// Determines the designated wallpaper for desktop index (0-based)
-std::wstring GetWallpaperForIndex(size_t index) {
-  if (index == 0 && !g_settings.desktop1Wallpaper.empty())
-    return g_settings.desktop1Wallpaper;
-  if (index == 1 && !g_settings.desktop2Wallpaper.empty())
-    return g_settings.desktop2Wallpaper;
-  if (index == 2 && !g_settings.desktop3Wallpaper.empty())
-    return g_settings.desktop3Wallpaper;
-  if (index == 3 && !g_settings.desktop4Wallpaper.empty())
-    return g_settings.desktop4Wallpaper;
+struct OriginalWallpaperEntry {
+    GUID desktopId;
+    std::wstring path;
+};
 
-  if (!g_folderWallpapers.empty()) {
-    return g_folderWallpapers[index % g_folderWallpapers.size()];
-  }
-  return L"";
-}
+std::vector<OriginalWallpaperEntry> g_originalWallpapers;
+std::vector<std::wstring> g_folderWallpapers;
 
-// Active wallpaper application using IDesktopWallpaper & SystemParametersInfo
-void SetActiveWallpaper(const std::wstring &path) {
-  if (path.empty())
-    return;
+HANDLE g_hWorkerThread = nullptr;
+DWORD g_workerThreadId = 0;
+HANDLE g_hWorkerReadyEvent = nullptr;
 
-  // 1. Official Windows Shell IDesktopWallpaper COM interface
-  IDesktopWallpaper *pWallpaper = nullptr;
-  HRESULT hr =
-      CoCreateInstance(CLSID_DesktopWallpaper_Local, nullptr,
-                       CLSCTX_LOCAL_SERVER | CLSCTX_INPROC_SERVER,
-                       IID_IDesktopWallpaper_Local, (void **)&pWallpaper);
+// ---------------------------------------------------------------------------
+// Settings Loader
+// ---------------------------------------------------------------------------
 
-  if (SUCCEEDED(hr) && pWallpaper) {
-    pWallpaper->SetWallpaper(nullptr, path.c_str());
-    pWallpaper->Release();
-  } else {
-    // 2. Win32 fallback to broadcast desktop refresh
-    SystemParametersInfoW(SPI_SETDESKWALLPAPER, 0, (PVOID)path.c_str(),
-                          SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
-  }
-}
+void LoadSettings() {
+    g_settings.wallpaperFolder =
+        WindhawkUtils::StringSetting(Wh_GetStringSetting(L"wallpaperFolder")).get();
+    g_settings.desktop1Wallpaper =
+        WindhawkUtils::StringSetting(Wh_GetStringSetting(L"desktop1Wallpaper")).get();
+    g_settings.desktop2Wallpaper =
+        WindhawkUtils::StringSetting(Wh_GetStringSetting(L"desktop2Wallpaper")).get();
+    g_settings.desktop3Wallpaper =
+        WindhawkUtils::StringSetting(Wh_GetStringSetting(L"desktop3Wallpaper")).get();
+    g_settings.desktop4Wallpaper =
+        WindhawkUtils::StringSetting(Wh_GetStringSetting(L"desktop4Wallpaper")).get();
 
-// Preload wallpapers across all virtual desktops into Windows DWM
-void PreloadAllDesktops() {
-  if (!g_pDesktopManager)
-    return;
+    g_settings.shuffle = Wh_GetIntSetting(L"shuffle") != 0;
+    g_settings.restoreOriginalOnUnload = Wh_GetIntSetting(L"restoreOriginalOnUnload") != 0;
 
-  IObjectArray *pDesktopsArray = nullptr;
-  HRESULT hr = g_pDesktopManager->GetDesktops(&pDesktopsArray);
-  if (FAILED(hr) || !pDesktopsArray) {
-    Wh_Log(L"Failed to query desktops array: 0x%08X", hr);
-    return;
-  }
+    g_folderWallpapers.clear();
 
-  UINT count = 0;
-  pDesktopsArray->GetCount(&count);
-  Wh_Log(L"Preloading wallpapers for %u virtual desktops into DWM...", count);
-
-  for (UINT i = 0; i < count; i++) {
-    IVirtualDesktop *pVd = nullptr;
-    if (SUCCEEDED(pDesktopsArray->GetAt(i, IID_IVirtualDesktop_Win11,
-                                        (void **)&pVd)) &&
-        pVd) {
-      GUID desktopId = {0};
-      pVd->GetId(&desktopId);
-      std::wstring strGuid = GuidToString(desktopId);
-
-      std::wstring assignedPath = GetWallpaperForIndex(i);
-      if (!assignedPath.empty()) {
-        g_desktopWallpaperMap[strGuid] = assignedPath;
-
-        // Core Windows 11 API: Assign wallpaper directly to the IVirtualDesktop
-        // COM object
-        ScopedHString hstrPath(assignedPath.c_str());
-        if (hstrPath.Get()) {
-          g_pDesktopManager->SetDesktopWallpaper(pVd, hstrPath.Get());
-          Wh_Log(L"Desktop [%u] {%s} -> Preloaded '%s'", i + 1, strGuid.c_str(),
-                 assignedPath.c_str());
+    if (!g_settings.wallpaperFolder.empty()) {
+        std::wstring searchPattern = g_settings.wallpaperFolder;
+        if (searchPattern.back() != L'\\' && searchPattern.back() != L'/') {
+            searchPattern += L'\\';
         }
-      }
-      pVd->Release();
-    }
-  }
+        std::wstring basePath = searchPattern;
+        searchPattern += L"*.*";
 
-  pDesktopsArray->Release();
+        WIN32_FIND_DATAW fd;
+        HANDLE hFind = FindFirstFileW(searchPattern.c_str(), &fd);
+        if (hFind != INVALID_HANDLE_VALUE) {
+            do {
+                if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                    LPCWSTR ext = PathFindExtensionW(fd.cFileName);
+                    if (ext && (_wcsicmp(ext, L".jpg") == 0 ||
+                               _wcsicmp(ext, L".jpeg") == 0 ||
+                               _wcsicmp(ext, L".png") == 0 ||
+                               _wcsicmp(ext, L".bmp") == 0 ||
+                               _wcsicmp(ext, L".webp") == 0)) {
+                        g_folderWallpapers.push_back(basePath + fd.cFileName);
+                    }
+                }
+            } while (FindNextFileW(hFind, &fd));
+            FindClose(hFind);
+        }
+
+        if (g_settings.shuffle && g_folderWallpapers.size() > 1) {
+            std::random_device rd;
+            std::mt19937 g(rd());
+            std::shuffle(g_folderWallpapers.begin(), g_folderWallpapers.end(), g);
+        }
+    }
 }
 
-// React to desktop switch and apply assigned wallpaper
-void ApplyWallpaperForDesktop(IVirtualDesktop *pDesktop) {
-  if (!pDesktop)
-    return;
+// ---------------------------------------------------------------------------
+// Wallpaper Backup, Resolution & Application
+// ---------------------------------------------------------------------------
 
-  GUID desktopId = {0};
-  pDesktop->GetId(&desktopId);
-  std::wstring strGuid = GuidToString(desktopId);
+void BackupOriginalWallpapers(IVirtualDesktopManagerInternal* pMgr) {
+    if (!g_originalWallpapers.empty()) {
+        return; // Only capture initial state before any mod changes
+    }
 
-  std::wstring wallpaperPath;
-  auto it = g_desktopWallpaperMap.find(strGuid);
-  if (it != g_desktopWallpaperMap.end()) {
-    wallpaperPath = it->second;
-  } else {
-    // Find index if not cached yet
-    if (g_pDesktopManager) {
-      IObjectArray *pDesktops = nullptr;
-      if (SUCCEEDED(g_pDesktopManager->GetDesktops(&pDesktops)) && pDesktops) {
-        UINT count = 0;
-        pDesktops->GetCount(&count);
-        for (UINT i = 0; i < count; i++) {
-          IVirtualDesktop *pTest = nullptr;
-          if (SUCCEEDED(pDesktops->GetAt(i, IID_IVirtualDesktop_Win11,
-                                         (void **)&pTest)) &&
-              pTest) {
-            GUID testId = {0};
-            pTest->GetId(&testId);
-            if (IsEqualGUID(testId, desktopId)) {
-              wallpaperPath = GetWallpaperForIndex(i);
-              g_desktopWallpaperMap[strGuid] = wallpaperPath;
-              pTest->Release();
-              break;
+    IObjectArray* pDesktops = nullptr;
+    if (FAILED(pMgr->GetDesktops(&pDesktops)) || !pDesktops) {
+        return;
+    }
+
+    UINT count = 0;
+    pDesktops->GetCount(&count);
+
+    for (UINT i = 0; i < count; i++) {
+        IVirtualDesktop* pDesktop = nullptr;
+        if (SUCCEEDED(pDesktops->GetAt(i, IID_IVirtualDesktop, (void**)&pDesktop)) && pDesktop) {
+            GUID id{};
+            pDesktop->GetId(&id);
+
+            HSTRING hPath = nullptr;
+            std::wstring pathStr;
+            if (SUCCEEDED(pDesktop->GetWallpaperPath(&hPath)) && hPath) {
+                PCWSTR raw = WindowsGetStringRawBuffer(hPath, nullptr);
+                if (raw) {
+                    pathStr = raw;
+                }
+                WindowsDeleteString(hPath);
             }
-            pTest->Release();
-          }
+
+            g_originalWallpapers.push_back({id, pathStr});
+            pDesktop->Release();
         }
-        pDesktops->Release();
-      }
-    }
-  }
-
-  if (!wallpaperPath.empty()) {
-    Wh_Log(L"Desktop switch event -> Active Desktop {%s} applying '%s'",
-           strGuid.c_str(), wallpaperPath.c_str());
-
-    // Update via internal manager
-    if (g_pDesktopManager) {
-      ScopedHString hstr(wallpaperPath.c_str());
-      if (hstr.Get()) {
-        g_pDesktopManager->SetDesktopWallpaper(pDesktop, hstr.Get());
-      }
     }
 
-    // Apply via shell fallback for immediate refresh
-    if (g_settings.fallbackDesktopWallpaperAPI) {
-      SetActiveWallpaper(wallpaperPath);
-    }
-  }
+    pDesktops->Release();
 }
 
-// ============================================================================
-// IVirtualDesktopNotification Implementation
-// ============================================================================
+void RestoreOriginalWallpapers(IVirtualDesktopManagerInternal* pMgr) {
+    if (!g_settings.restoreOriginalOnUnload || g_originalWallpapers.empty()) {
+        return;
+    }
 
-class FluxDeskNotificationListener : public IVirtualDesktopNotification {
+    Wh_Log(L"Restoring original virtual desktop wallpapers...");
+    for (const auto& entry : g_originalWallpapers) {
+        IVirtualDesktop* pDesktop = nullptr;
+        if (SUCCEEDED(pMgr->FindDesktop(&entry.desktopId, &pDesktop)) && pDesktop) {
+            ScopedHString hPath(entry.path);
+            pMgr->SetDesktopWallpaper(pDesktop, hPath);
+            pDesktop->Release();
+        }
+    }
+    g_originalWallpapers.clear();
+}
+
+std::wstring GetConfiguredWallpaperForDesktop(UINT index) {
+    switch (index) {
+        case 0:
+            if (!g_settings.desktop1Wallpaper.empty()) return g_settings.desktop1Wallpaper;
+            break;
+        case 1:
+            if (!g_settings.desktop2Wallpaper.empty()) return g_settings.desktop2Wallpaper;
+            break;
+        case 2:
+            if (!g_settings.desktop3Wallpaper.empty()) return g_settings.desktop3Wallpaper;
+            break;
+        case 3:
+            if (!g_settings.desktop4Wallpaper.empty()) return g_settings.desktop4Wallpaper;
+            break;
+    }
+
+    if (!g_folderWallpapers.empty()) {
+        return g_folderWallpapers[index % g_folderWallpapers.size()];
+    }
+
+    return L"";
+}
+
+void ApplyAllWallpapers(IVirtualDesktopManagerInternal* pMgr) {
+    IObjectArray* pDesktops = nullptr;
+    if (FAILED(pMgr->GetDesktops(&pDesktops)) || !pDesktops) {
+        return;
+    }
+
+    UINT count = 0;
+    pDesktops->GetCount(&count);
+
+    for (UINT i = 0; i < count; i++) {
+        IVirtualDesktop* pDesktop = nullptr;
+        if (SUCCEEDED(pDesktops->GetAt(i, IID_IVirtualDesktop, (void**)&pDesktop)) && pDesktop) {
+            std::wstring targetWallpaper = GetConfiguredWallpaperForDesktop(i);
+            if (!targetWallpaper.empty()) {
+                ScopedHString hPath(targetWallpaper);
+                pMgr->SetDesktopWallpaper(pDesktop, hPath);
+            }
+            pDesktop->Release();
+        }
+    }
+
+    pDesktops->Release();
+}
+
+// ---------------------------------------------------------------------------
+// Shell Notification Sink (Async Message Dispatcher)
+// ---------------------------------------------------------------------------
+
+class NotificationSink final : public IVirtualDesktopNotification {
 private:
-  LONG m_refCount = 1;
+    std::atomic<ULONG> m_refCount{1};
+    DWORD m_targetThreadId = 0;
 
 public:
-  // IUnknown implementation
-  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid,
-                                           void **ppvObject) override {
-    if (!ppvObject)
-      return E_POINTER;
-    if (riid == IID_IUnknown_Local || riid == IID_IVirtualDesktopNotification) {
-      *ppvObject = static_cast<IVirtualDesktopNotification *>(this);
-      AddRef();
-      return S_OK;
-    }
-    *ppvObject = nullptr;
-    return E_NOINTERFACE;
-  }
+    NotificationSink(DWORD targetThreadId) : m_targetThreadId(targetThreadId) {}
 
-  ULONG STDMETHODCALLTYPE AddRef() override {
-    return InterlockedIncrement(&m_refCount);
-  }
-
-  ULONG STDMETHODCALLTYPE Release() override {
-    ULONG ref = InterlockedDecrement(&m_refCount);
-    if (ref == 0)
-      delete this;
-    return ref;
-  }
-
-  // IVirtualDesktopNotification callbacks
-  HRESULT STDMETHODCALLTYPE
-  VirtualDesktopCreated(IVirtualDesktop *pDesktop) override {
-    Wh_Log(L"Notification: Virtual Desktop Created");
-    if (g_settings.enablePreloading) {
-      PreloadAllDesktops();
-    }
-    return S_OK;
-  }
-
-  HRESULT STDMETHODCALLTYPE
-  VirtualDesktopDestroyBegin(IVirtualDesktop *pDesktopDestroyed,
-                             IVirtualDesktop *pDesktopFallback) override {
-    return S_OK;
-  }
-
-  HRESULT STDMETHODCALLTYPE
-  VirtualDesktopDestroyFailed(IVirtualDesktop *pDesktopDestroyed,
-                              IVirtualDesktop *pDesktopFallback) override {
-    return S_OK;
-  }
-
-  HRESULT STDMETHODCALLTYPE
-  VirtualDesktopDestroyed(IVirtualDesktop *pDesktopDestroyed,
-                          IVirtualDesktop *pDesktopFallback) override {
-    Wh_Log(L"Notification: Virtual Desktop Destroyed");
-    if (g_settings.enablePreloading) {
-      PreloadAllDesktops();
-    }
-    return S_OK;
-  }
-
-  HRESULT STDMETHODCALLTYPE
-  ViewVirtualDesktopChanged(IUnknown *pView) override {
-    return S_OK;
-  }
-
-  // Triggered on desktop switch!
-  HRESULT STDMETHODCALLTYPE CurrentVirtualDesktopChanged(void *arg1, void *arg2,
-                                                         void *arg3) override {
-    Wh_Log(L"Notification: CurrentVirtualDesktopChanged fired!");
-
-    IVirtualDesktop *pNewDesktop = nullptr;
-
-    // Windows 11 Build >= 22621 (22H2+): (IObjectArray* pMonitors,
-    // IVirtualDesktop* pOld, IVirtualDesktop* pNew)
-    if (g_osBuildNumber >= 22621) {
-      pNewDesktop = static_cast<IVirtualDesktop *>(arg3);
-    } else {
-      // Windows 11 21H2 / Windows 10: (IVirtualDesktop* pOld, IVirtualDesktop*
-      // pNew)
-      pNewDesktop = static_cast<IVirtualDesktop *>(arg2);
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppvObject) override {
+        if (!ppvObject) return E_POINTER;
+        if (riid == IID_IUnknown_Local || riid == IID_IVirtualDesktopNotification) {
+            *ppvObject = static_cast<IVirtualDesktopNotification*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppvObject = nullptr;
+        return E_NOINTERFACE;
     }
 
-    // Safe fallback: Query current desktop directly from manager if pointer was
-    // not resolved
-    if (!pNewDesktop && g_pDesktopManager) {
-      g_pDesktopManager->GetCurrentDesktop(&pNewDesktop);
-      if (pNewDesktop) {
-        ApplyWallpaperForDesktop(pNewDesktop);
-        pNewDesktop->Release();
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return ++m_refCount;
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG r = --m_refCount;
+        if (!r) delete this;
+        return r;
+    }
+
+    HRESULT STDMETHODCALLTYPE VirtualDesktopCreated(IVirtualDesktop*) override {
+        PostThreadMessageW(m_targetThreadId, WM_APP_DESKTOPS_CHANGED, 0, 0);
         return S_OK;
-      }
     }
-
-    if (pNewDesktop) {
-      ApplyWallpaperForDesktop(pNewDesktop);
+    HRESULT STDMETHODCALLTYPE VirtualDesktopDestroyBegin(IVirtualDesktop*, IVirtualDesktop*) override {
+        return S_OK;
     }
-
-    return S_OK;
-  }
+    HRESULT STDMETHODCALLTYPE VirtualDesktopDestroyFailed(IVirtualDesktop*, IVirtualDesktop*) override {
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE VirtualDesktopDestroyed(IVirtualDesktop*, IVirtualDesktop*) override {
+        PostThreadMessageW(m_targetThreadId, WM_APP_DESKTOPS_CHANGED, 0, 0);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE VirtualDesktopMoved(IVirtualDesktop*, INT64, INT64) override {
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE VirtualDesktopNameChanged(IVirtualDesktop*, HSTRING) override {
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE ViewVirtualDesktopChanged(IApplicationView*) override {
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE CurrentVirtualDesktopChanged(IVirtualDesktop*, IVirtualDesktop*) override {
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE VirtualDesktopWallpaperChanged(IVirtualDesktop*, HSTRING) override {
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE VirtualDesktopSwitched(IVirtualDesktop*) override {
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE RemoteVirtualDesktopConnected(IVirtualDesktop*) override {
+        return S_OK;
+    }
 };
 
-static FluxDeskNotificationListener *g_pNotificationListener = nullptr;
+// ---------------------------------------------------------------------------
+// Worker Thread Procedure
+// ---------------------------------------------------------------------------
 
-// ============================================================================
-// Direct In-Process Hook for IVirtualDesktopManagerInternal::SwitchDesktop
-// ============================================================================
+DWORD WINAPI WorkerThreadProc(LPVOID) {
+    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-typedef HRESULT(STDMETHODCALLTYPE *SwitchDesktopWithAnimation_t)(
-    IVirtualDesktopManagerInternal *pThis, IVirtualDesktop *pDesktop);
+    // Initialize thread message queue before signaling readiness
+    MSG msgDummy;
+    PeekMessageW(&msgDummy, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
-static SwitchDesktopWithAnimation_t g_pfnOriginalSwitchDesktopWithAnimation =
-    nullptr;
+    IServiceProvider* pServiceProvider = nullptr;
+    IVirtualDesktopManagerInternal* pDesktopManager = nullptr;
+    IVirtualDesktopNotificationService* pNotificationService = nullptr;
+    NotificationSink* pSink = nullptr;
+    DWORD dwCookie = 0;
 
-HRESULT STDMETHODCALLTYPE Hook_SwitchDesktopWithAnimation(
-    IVirtualDesktopManagerInternal *pThis, IVirtualDesktop *pDesktop) {
-  Wh_Log(L"Hook: SwitchDesktopWithAnimation intercepted!");
-  if (pDesktop) {
-    ApplyWallpaperForDesktop(pDesktop);
-  }
-  return g_pfnOriginalSwitchDesktopWithAnimation(pThis, pDesktop);
+    // Retry connection while shell initializes
+    for (int attempts = 0; attempts < 40; attempts++) {
+        HRESULT hr = CoCreateInstance(
+            CLSID_ImmersiveShell, nullptr, CLSCTX_LOCAL_SERVER,
+            IID_IServiceProvider_Local,
+            (void**)&pServiceProvider);
+
+        if (SUCCEEDED(hr) && pServiceProvider) {
+            pServiceProvider->QueryService(
+                SID_VirtualDesktopManagerInternal,
+                IID_IVirtualDesktopManagerInternal,
+                (void**)&pDesktopManager);
+
+            pServiceProvider->QueryService(
+                SID_VirtualDesktopNotificationService,
+                IID_IVirtualDesktopNotificationService,
+                (void**)&pNotificationService);
+
+            if (pDesktopManager && pNotificationService) {
+                break;
+            }
+        }
+        Sleep(250);
+    }
+
+    if (!pDesktopManager || !pNotificationService) {
+        Wh_Log(L"Could not connect to Windows Virtual Desktop services");
+        if (g_hWorkerReadyEvent) SetEvent(g_hWorkerReadyEvent);
+        if (pServiceProvider) pServiceProvider->Release();
+        if (SUCCEEDED(hrCo)) CoUninitialize();
+        return 1;
+    }
+
+    // 1. Initial backup of unmodified user wallpapers
+    BackupOriginalWallpapers(pDesktopManager);
+
+    // 2. Load settings and preload wallpapers
+    LoadSettings();
+    ApplyAllWallpapers(pDesktopManager);
+
+    // 3. Register notification sink
+    pSink = new NotificationSink(GetCurrentThreadId());
+    HRESULT hrReg = pNotificationService->Register(pSink, &dwCookie);
+    if (FAILED(hrReg)) {
+        Wh_Log(L"Notification register failed: 0x%08X", hrReg);
+    }
+
+    // Signal initialization completion to Wh_ModInit
+    if (g_hWorkerReadyEvent) {
+        SetEvent(g_hWorkerReadyEvent);
+    }
+
+    // Message loop for thread-safe asynchronous notifications and settings updates
+    MSG msg;
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message == WM_APP_RELOAD_SETTINGS) {
+            LoadSettings();
+            ApplyAllWallpapers(pDesktopManager);
+        } else if (msg.message == WM_APP_DESKTOPS_CHANGED) {
+            ApplyAllWallpapers(pDesktopManager);
+        }
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    // Unregister notification sink
+    if (pNotificationService && dwCookie) {
+        pNotificationService->Unregister(dwCookie);
+        dwCookie = 0;
+    }
+
+    if (pSink) {
+        CoDisconnectObject(static_cast<IUnknown*>(pSink), 0);
+        pSink->Release();
+        pSink = nullptr;
+    }
+
+    // Restore original wallpapers
+    RestoreOriginalWallpapers(pDesktopManager);
+
+    if (pDesktopManager) {
+        pDesktopManager->Release();
+        pDesktopManager = nullptr;
+    }
+    if (pNotificationService) {
+        pNotificationService->Release();
+        pNotificationService = nullptr;
+    }
+    if (pServiceProvider) {
+        pServiceProvider->Release();
+        pServiceProvider = nullptr;
+    }
+
+    if (SUCCEEDED(hrCo)) {
+        CoUninitialize();
+    }
+    return 0;
 }
 
-// ============================================================================
-// Windhawk Settings Loader
-// ============================================================================
-
-static void LoadSettings() {
-  PCWSTR strFolder = Wh_GetStringSetting(L"wallpaperFolder");
-  g_settings.wallpaperFolder = strFolder ? strFolder : L"";
-  Wh_FreeStringSetting(strFolder);
-
-  PCWSTR strWp1 = Wh_GetStringSetting(L"desktop1Wallpaper");
-  g_settings.desktop1Wallpaper = strWp1 ? strWp1 : L"";
-  Wh_FreeStringSetting(strWp1);
-
-  PCWSTR strWp2 = Wh_GetStringSetting(L"desktop2Wallpaper");
-  g_settings.desktop2Wallpaper = strWp2 ? strWp2 : L"";
-  Wh_FreeStringSetting(strWp2);
-
-  PCWSTR strWp3 = Wh_GetStringSetting(L"desktop3Wallpaper");
-  g_settings.desktop3Wallpaper = strWp3 ? strWp3 : L"";
-  Wh_FreeStringSetting(strWp3);
-
-  PCWSTR strWp4 = Wh_GetStringSetting(L"desktop4Wallpaper");
-  g_settings.desktop4Wallpaper = strWp4 ? strWp4 : L"";
-  Wh_FreeStringSetting(strWp4);
-
-  g_settings.shuffle = Wh_GetIntSetting(L"shuffle");
-  g_settings.enablePreloading = Wh_GetIntSetting(L"enablePreloading");
-  g_settings.fallbackDesktopWallpaperAPI =
-      Wh_GetIntSetting(L"fallbackDesktopWallpaperAPI");
-
-  Wh_Log(L"Settings loaded. Folder: '%s', Preload: %d",
-         g_settings.wallpaperFolder.c_str(), g_settings.enablePreloading);
-
-  ScanWallpaperFolder();
-  if (g_settings.enablePreloading && g_pDesktopManager) {
-    PreloadAllDesktops();
-  }
+bool IsPrimaryExplorerProcess() {
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argv) {
+        for (int i = 1; i < argc; i++) {
+            if (_wcsicmp(argv[i], L"/factory") == 0 ||
+                _wcsicmp(argv[i], L"/separate") == 0) {
+                LocalFree(argv);
+                return false;
+            }
+        }
+        LocalFree(argv);
+    }
+    return true;
 }
 
-// ============================================================================
-// Windhawk Mod Lifecycle Entry Points
-// ============================================================================
+}  // namespace
+
+// ---------------------------------------------------------------------------
+// Windhawk Lifecycle Entry Points
+// ---------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-  Wh_Log(L"Initializing Virtual Desktop Wallpaper Switch (FluxDesk)...");
+    Wh_Log(L"Initializing Virtual Desktop Wallpaper Switch (24H2+)");
 
-  g_osBuildNumber = DetectWindowsBuildNumber();
-  Wh_Log(L"Detected Windows Build: %u", g_osBuildNumber);
-
-  InitWinRTStringFunctions();
-
-  // Explorer hosts the Immersive Shell Service Provider in-process
-  IServiceProvider *pServiceProvider = nullptr;
-  HRESULT hr = CoCreateInstance(
-      CLSID_ImmersiveShell, nullptr, CLSCTX_LOCAL_SERVER | CLSCTX_INPROC_SERVER,
-      IID_IServiceProvider_Local, (void **)&pServiceProvider);
-
-  if (FAILED(hr) || !pServiceProvider) {
-    Wh_Log(L"Failed to obtain ImmersiveShell IServiceProvider: 0x%08X", hr);
-    return FALSE;
-  }
-
-  // 1. Query IVirtualDesktopManagerInternal
-  hr = pServiceProvider->QueryService(CLSID_VirtualDesktopManagerInternal,
-                                      IID_IVirtualDesktopManagerInternal_Win11,
-                                      (void **)&g_pDesktopManager);
-
-  if (FAILED(hr) || !g_pDesktopManager) {
-    // Fallback for Windows 11 21H2 GUID
-    pServiceProvider->QueryService(
-        CLSID_VirtualDesktopManagerInternal,
-        IID_IVirtualDesktopManagerInternal_Win11_21H2,
-        (void **)&g_pDesktopManager);
-  }
-
-  if (g_pDesktopManager) {
-    Wh_Log(L"Successfully connected to IVirtualDesktopManagerInternal!");
-
-    // Optional: Install vtable hook on SwitchDesktopWithAnimation
-    void **vtable = *(void ***)g_pDesktopManager;
-    // Index 19 is SwitchDesktopWithAnimation in Windows 11 22H2/23H2 vtable
-    if (vtable && vtable[19]) {
-      Wh_SetFunctionHook(vtable[19], (void *)Hook_SwitchDesktopWithAnimation,
-                         (void **)&g_pfnOriginalSwitchDesktopWithAnimation);
-      Wh_Log(L"Hooked SwitchDesktopWithAnimation at vtable[19]");
+    if (!IsPrimaryExplorerProcess()) {
+        Wh_Log(L"Skipping non-primary Explorer process");
+        return FALSE;
     }
-  } else {
-    Wh_Log(L"Warning: Could not bind IVirtualDesktopManagerInternal");
-  }
 
-  // 2. Query IVirtualDesktopNotificationService and register listener
-  hr = pServiceProvider->QueryService(CLSID_VirtualDesktopNotificationService,
-                                      IID_IVirtualDesktopNotificationService,
-                                      (void **)&g_pNotificationService);
-
-  if (SUCCEEDED(hr) && g_pNotificationService) {
-    g_pNotificationListener = new FluxDeskNotificationListener();
-    hr = g_pNotificationService->Register(g_pNotificationListener,
-                                          &g_dwNotificationCookie);
-    if (SUCCEEDED(hr)) {
-      Wh_Log(L"Registered IVirtualDesktopNotification listener (Cookie: %u)",
-             g_dwNotificationCookie);
-    } else {
-      Wh_Log(L"Failed to register IVirtualDesktopNotification: 0x%08X", hr);
+    g_hWorkerReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hWorkerReadyEvent) {
+        Wh_Log(L"Failed to create worker ready event");
+        return FALSE;
     }
-  } else {
-    Wh_Log(L"Failed to query IVirtualDesktopNotificationService: 0x%08X", hr);
-  }
 
-  pServiceProvider->Release();
+    g_hWorkerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, &g_workerThreadId);
+    if (!g_hWorkerThread) {
+        Wh_Log(L"Failed to create worker thread: %lu", GetLastError());
+        CloseHandle(g_hWorkerReadyEvent);
+        g_hWorkerReadyEvent = nullptr;
+        return FALSE;
+    }
 
-  // 3. Load settings and perform initial preloading
-  LoadSettings();
+    // Wait up to 10 seconds for worker thread initialization
+    WaitForSingleObject(g_hWorkerReadyEvent, 10000);
+    CloseHandle(g_hWorkerReadyEvent);
+    g_hWorkerReadyEvent = nullptr;
 
-  Wh_Log(
-      L"Virtual Desktop Wallpaper Switch (FluxDesk) successfully initialized!");
-  return TRUE;
+    return TRUE;
 }
 
-void Wh_ModAfterInit() {
-  Wh_Log(L"Wh_ModAfterInit: Mod loaded and active in explorer.exe");
-}
-
-BOOL Wh_ModSettingsChanged(BOOL *bReload) {
-  Wh_Log(L"Mod settings changed callback received.");
-  LoadSettings();
-  if (bReload) {
-    *bReload = FALSE;
-  }
-  return TRUE;
+void Wh_ModSettingsChanged() {
+    if (g_workerThreadId) {
+        PostThreadMessageW(g_workerThreadId, WM_APP_RELOAD_SETTINGS, 0, 0);
+    }
 }
 
 void Wh_ModUninit() {
-  Wh_Log(L"Unloading Virtual Desktop Wallpaper Switch (FluxDesk)...");
+    Wh_Log(L"Uninitializing Virtual Desktop Wallpaper Switch");
 
-  // Unregister notification listener
-  if (g_pNotificationService && g_dwNotificationCookie != 0) {
-    g_pNotificationService->Unregister(g_dwNotificationCookie);
-    g_dwNotificationCookie = 0;
-    Wh_Log(L"Unregistered IVirtualDesktopNotification listener.");
-  }
-
-  if (g_pNotificationListener) {
-    g_pNotificationListener->Release();
-    g_pNotificationListener = nullptr;
-  }
-
-  if (g_pNotificationService) {
-    g_pNotificationService->Release();
-    g_pNotificationService = nullptr;
-  }
-
-  if (g_pDesktopManager) {
-    g_pDesktopManager->Release();
-    g_pDesktopManager = nullptr;
-  }
-
-  Wh_Log(L"Virtual Desktop Wallpaper Switch unloaded cleanly.");
+    if (g_hWorkerThread && g_workerThreadId) {
+        PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_hWorkerThread, 7000);
+        CloseHandle(g_hWorkerThread);
+        g_hWorkerThread = nullptr;
+        g_workerThreadId = 0;
+    }
 }
