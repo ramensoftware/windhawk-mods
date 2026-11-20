@@ -47,6 +47,10 @@ discarded. The originals are kept in the mod's storage folder (`dl`). From them 
 copy of the page for the selected language (see *How it works*). Nothing is downloaded again while `dl` is present,
 so after the first run the mod works offline.
 
+The download cannot be turned off, and the mod cannot work without it. With *Keep downloaded files when the mod is
+disabled* off, the files are deleted at every unload, so the download is repeated after every disable or update. The
+only thing sent is the HTTPS request for the four fixed URLs, with the user agent `Microsoft-Symbol-Server/10.0.0.0`.
+
 **Offline at first run:** the Windows 10/11 page simply stays, and the reason is written to the mod's log. Connect
 to the internet and restart `explorer.exe` (or toggle the mod).
 
@@ -91,8 +95,10 @@ to the internet and restart `explorer.exe` (or toggle the mod).
   "Manage your fingerprint data" and, unless a Family Safety applet is present, "Parental Controls".
 - "Change your picture" lists the pictures of `ProgramData\Microsoft\User Account Pictures\Default Pictures`,
   which Windows 10/11 do not ship; "Browse for more pictures..." works.
-- The Windows 7 components stay loaded in `explorer.exe` until it restarts. If you disable the mod while a User
-  Accounts window is open, close that window.
+- When the mod is disabled or updated, it closes the open User Accounts windows itself and waits until they are gone,
+  and the three links of the page that the mod hides come back. The page and its DirectUI file (private copies in the
+  mod's storage folder) stay loaded in `explorer.exe` until it restarts, but nothing in them points into the mod.
+- If the Windows 7 page cannot be loaded for any reason, the Windows 10/11 User Accounts page is used.
 - After changing a setting, close open User Accounts windows.
 
 ## Credits
@@ -1727,7 +1733,6 @@ HANDLE g_setupThread = nullptr;
 std::atomic<HINTERNET> g_request{nullptr};
 std::atomic<bool> g_keepFiles{true};
 std::atomic<int> g_languageSetting{0};      // 0 automatic, 1 English, 2 Italian, 3 French, 4 Spanish, 5 Portuguese
-std::atomic<bool> g_pinned{false};
 std::atomic<bool> g_hideUserName{false};
 std::atomic<const wchar_t*> g_genericName{L"User"};
 
@@ -1842,14 +1847,81 @@ struct ComDeleter {
     }
 };
 
-void Pin() {
-    // Objects created by this mod (see the adapters) are kept by the Windows 7 page for as long as one of its windows
-    // is open, and their code is in this module. Once the first one exists the module must stay in memory, also if
-    // the mod is disabled meanwhile.
-    if (g_pinned.exchange(true)) return;
-    HMODULE self = nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-                       reinterpret_cast<LPCWSTR>(&Pin), &self);
+// ---- what must be gone before the mod's code is unloaded -----------------------------------------------------------------
+// Windhawk unloads the mod right after Wh_ModUninit returns. Two things outside the mod point into its code: the three
+// imports of the Windows 7 page that are patched (restored by RestorePageImports) and the adapter objects that the page
+// keeps while its window is open (closed and waited for by RundownLiveObjects). Nothing pins the module.
+
+std::atomic<LONG> g_liveObjects{0};
+SRWLOCK g_threadsLock = SRWLOCK_INIT;
+std::vector<DWORD> g_objectThreads;      // threads that created an adapter: one per Explorer window
+
+struct LiveObject {
+    LiveObject() {
+        g_liveObjects.fetch_add(1);
+        try {
+            const DWORD tid = GetCurrentThreadId();
+            ExclusiveLock lock(g_threadsLock);
+            if (std::find(g_objectThreads.begin(), g_objectThreads.end(), tid) == g_objectThreads.end())
+                g_objectThreads.push_back(tid);
+        } catch (...) {
+        }
+    }
+    LiveObject(const LiveObject&) = delete;
+    LiveObject& operator=(const LiveObject&) = delete;
+    ~LiveObject() { g_liveObjects.fetch_sub(1); }
+};
+
+struct SavedImport {
+    void** slot;
+    void* original;
+    void* replacement;
+};
+SRWLOCK g_importsLock = SRWLOCK_INIT;
+std::vector<SavedImport> g_savedImports;
+
+void RestorePageImports() {
+    ExclusiveLock lock(g_importsLock);
+    for (const SavedImport& saved : g_savedImports) {
+        if (*saved.slot != saved.replacement) continue;      // not ours any more
+        DWORD old = 0;
+        if (VirtualProtect(saved.slot, sizeof(void*), PAGE_READWRITE, &old)) {
+            *saved.slot = saved.original;
+            VirtualProtect(saved.slot, sizeof(void*), old, &old);
+        }
+    }
+    g_savedImports.clear();
+}
+
+BOOL CALLBACK CloseCabinetWindow(HWND hwnd, LPARAM) {
+    wchar_t cls[32];
+    if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) && wcscmp(cls, L"CabinetWClass") == 0)
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+    return TRUE;
+}
+
+// Closes the Explorer windows that hold adapters and waits, with no time limit, until the last adapter is released.
+void RundownLiveObjects() {
+    if (g_liveObjects.load() <= 0) return;
+    std::vector<DWORD> threads;
+    try {
+        SharedLock lock(g_threadsLock);
+        threads = g_objectThreads;
+    } catch (...) {
+    }
+    Wh_Log(L"Unload: closing the User Accounts windows (%ld object(s) alive)", long(g_liveObjects.load()));
+    for (DWORD tid : threads) EnumThreadWindows(tid, CloseCabinetWindow, 0);
+    const bool ownWindows = std::find(threads.begin(), threads.end(), GetCurrentThreadId()) != threads.end();
+    while (g_liveObjects.load() > 0) {
+        if (ownWindows) {      // a window of this very thread can only close if its messages are processed
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
+        Sleep(20);
+    }
 }
 
 // ---- files ----------------------------------------------------------------------------------------------------------
@@ -2116,14 +2188,20 @@ void RunSetup() {
     }
     const std::string sha = Sha256Hex(page);
 
-    // Pages of other languages or generator revisions: removed unless an Explorer still has them loaded.
+    // Pages of older generator revisions are removed (unless an Explorer has them loaded). Pages of the current revision
+    // stay, whatever their language: another Explorer, or another user's, may have built one it has not opened yet.
     {
         WIN32_FIND_DATAW fd;
         FindHandle h(FindFirstFileW((binDir + L"\\usercpl7.*.dll").c_str(), &fd));
         if (h.valid()) {
             do {
                 const std::wstring other = binDir + L"\\" + fd.cFileName;
-                if (_wcsicmp(other.c_str(), pagePath.c_str()) != 0) DeleteFileW(other.c_str());
+                const std::wstring name = fd.cFileName;
+                const std::wstring current = std::wstring(L".") + kGeneratorRevision + L".dll";
+                const bool isCurrent =
+                    name.size() >= current.size() &&
+                    _wcsicmp(name.c_str() + name.size() - current.size(), current.c_str()) == 0;
+                if (!isCurrent) DeleteFileW(other.c_str());
             } while (FindNextFileW(h.get(), &fd));
         }
     }
@@ -2252,8 +2330,19 @@ bool PatchImport(HMODULE module, const char* dll, const char* name, WORD ordinal
                 match = name && strcmp(reinterpret_cast<const char*>(byName->Name), name) == 0;
             }
             if (!match) continue;
+            // The original value is saved first: Wh_ModUninit writes it back (RestorePageImports).
+            try {
+                ExclusiveLock lock(g_importsLock);
+                g_savedImports.push_back({&slots[i], slots[i], replacement});
+            } catch (...) {
+                return false;
+            }
             DWORD old = 0;
-            if (!VirtualProtect(&slots[i], sizeof(void*), PAGE_READWRITE, &old)) return false;
+            if (!VirtualProtect(&slots[i], sizeof(void*), PAGE_READWRITE, &old)) {
+                ExclusiveLock lock(g_importsLock);
+                g_savedImports.pop_back();
+                return false;
+            }
             slots[i] = replacement;
             VirtualProtect(&slots[i], sizeof(void*), old, &old);
             return true;
@@ -2298,7 +2387,6 @@ DllGetClassObject_t EnsurePageLoaded() {
             if (!dui) dui = LoadVerified(duiPath, kFiles[kFileDui].sha256);
             if (dui) page = LoadVerified(pagePath, pageSha);
             if (page) {
-                Pin();      // the page's import table points into this module from now on
                 PatchPageImports(page);
                 Wh_Log(L"Windows 7 page loaded");
             } else {
@@ -2397,7 +2485,7 @@ bool Same(REFGUID a, const GUID& b) { return memcmp(&a, &b, sizeof(GUID)) == 0; 
 // IUnknown and the empty IDispatch shared by the two adapters. The page calls the methods directly; scripting, the
 // only user of IDispatch, never sees these objects.
 template <class Interface, const GUID* Iid>
-struct AdapterBase : Interface {
+struct AdapterBase : Interface, LiveObject {
     std::atomic<LONG> refs{1};
     virtual ~AdapterBase() = default;
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override {
@@ -2584,7 +2672,6 @@ HRESULT WrapEnum(IEnum10* e, REFIID iid, void** object) {
         e->Release();
         return E_OUTOFMEMORY;
     }
-    Pin();
     const HRESULT hr = adapter->QueryInterface(iid, object);
     adapter->Release();
     return hr;
@@ -2592,7 +2679,7 @@ HRESULT WrapEnum(IEnum10* e, REFIID iid, void** object) {
 
 // The elevation factory: the Windows 7 page asks it for the two inner objects when a page needs administrator
 // rights. The system's factory (and its prompt) is used; only the account enumerator it returns is wrapped.
-struct FactoryAdapter final : IFactory7 {
+struct FactoryAdapter final : IFactory7, LiveObject {
     std::atomic<LONG> refs{1};
     IFactory10* inner;      // owned
     explicit FactoryAdapter(IFactory10* f) : inner(f) {}
@@ -2656,13 +2743,18 @@ HRESULT WINAPI PSPropertyBag_ReadStr_Hook(IPropertyBag* bag, LPCWSTR name, LPWST
     try {
         if (SUCCEEDED(hr) && name && value && count > 0 && !g_stopping.load() && _wcsicmp(name, L"ResourceDLL") == 0 &&
             IsSystemUserCpl(value)) {
-            std::wstring page;
-            {
-                SharedLock lock(g_stateLock);
-                page = g_pagePath;
+            // The same test as CoCreateInstance: the private page is handed out only once it is loaded. If it cannot
+            // be loaded, Windows' own page is used.
+            if (EnsurePageLoaded()) {
+                std::wstring page;
+                {
+                    SharedLock lock(g_stateLock);
+                    page = g_pagePath;
+                }
+                if (!page.empty() && page.size() < size_t(count) &&
+                    GetFileAttributesW(page.c_str()) != INVALID_FILE_ATTRIBUTES)
+                    wcscpy(value, page.c_str());
             }
-            if (!page.empty() && page.size() < size_t(count) && GetFileAttributesW(page.c_str()) != INVALID_FILE_ATTRIBUTES)
-                wcscpy(value, page.c_str());
         }
     } catch (...) {
     }
@@ -2690,12 +2782,13 @@ HRESULT CoCreateInstance_Impl(REFCLSID clsid, LPUNKNOWN outer, DWORD context, RE
         // The two classes of the page definition: from the private copy, but only once it is ready (the same moment
         // PSPropertyBag_ReadStr starts to hand out its path); before that the system's page and classes are in use.
         if (Same(clsid, kClsidProviderSys) || Same(clsid, kClsidInitSys)) {
-            bool ready;
-            {
-                SharedLock lock(g_stateLock);
-                ready = !g_pagePath.empty();
+            // The same test as PSPropertyBag_ReadStr: redirected only once the private page is loaded. Otherwise, or
+            // if the class cannot be created from it, Windows' own class (the same CLSIDs) is used.
+            if (EnsurePageLoaded()) {
+                const HRESULT hr = CreatePageObject(clsid, outer, iid, object);
+                if (SUCCEEDED(hr)) return hr;
+                Wh_Log(L"The page class could not be created (0x%08lX); Windows' own class is used", hr);
             }
-            if (ready) return CreatePageObject(clsid, outer, iid, object);
             return CoCreateInstance_Orig(clsid, outer, context, iid, object);
         }
         // The Windows 7 interface ids are asked for by the Windows 7 page only.
@@ -2716,7 +2809,6 @@ HRESULT CoCreateInstance_Impl(REFCLSID clsid, LPUNKNOWN outer, DWORD context, RE
                 f->Release();
                 return E_OUTOFMEMORY;
             }
-            Pin();
             *object = static_cast<IFactory7*>(adapter);
             return S_OK;
         }
@@ -2836,10 +2928,15 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     if (g_setupThread) {
         CancelDownload();
-        if (WaitForSingleObject(g_setupThread, 10000) != WAIT_OBJECT_0) Pin();      // never unmap code under a thread
+        // No time limit: every wait in the thread is on g_stopEvent, a download is cancelled and the loops check
+        // g_stopping, so it ends promptly, and the mod's code must not be unmapped under it.
+        WaitForSingleObject(g_setupThread, INFINITE);
         CloseHandle(g_setupThread);
         g_setupThread = nullptr;
     }
+    // Nothing outside the mod may point into it when this function returns.
+    RestorePageImports();
+    RundownLiveObjects();
     try {
         std::wstring storage;
         {
