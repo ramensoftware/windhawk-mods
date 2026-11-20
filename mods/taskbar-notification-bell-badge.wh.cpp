@@ -7,18 +7,18 @@
 // @version         1.0.19
 // @author          caotu2005
 // @github          https://github.com/caotu2005
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lgdi32 -lgdiplus -lole32 -loleaut32 -luuid -ldwmapi -luser32
+// @include         windhawk.exe
+// @compilerOptions -lgdi32 -lgdiplus -lole32 -loleaut32 -luuid -ldwmapi -luser32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Taskbar Notification Bell Count Badge
 
-Displays the current number of active Windows notifications inside a small
-circular (or pill-shaped for 2+ digits) badge anchored to the Windows 11
-taskbar notification bell icon.
+Displays the current number of active Windows notifications inside a compact,
+Fluent-style circular (or pill-shaped for 2+ digits) badge positioned **next to
+or below** the Windows 11 taskbar notification bell icon—keeping the bell icon
+itself completely unobstructed and legible.
 
 ![Horizontal Taskbar Preview](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/taskbarbell/v1horizontal.png)
 
@@ -35,18 +35,34 @@ Vertical Taskbar Preview
     below in Settings).
   - **Left / Right (vertical taskbar)**: positioned directly **below** the bell
     clapper.
-- **Accurate Notification Center count**: Reads active toast notifications
-  directly from Windows' per-user notification database (`wpndatabase.db` via
-  the built-in `winsqlite3.dll`, read-only) and subscribes to
-  `WNF_SHEL_NOTIFICATIONS` for instant updates when notifications arrive or are
-  cleared.
-- **Theme & Taskbar Styler friendly**: Uses UI Automation (`IUIAutomation`) and
-  a DPI-aware, anti-aliased, click-through GDI+ layered overlay
-  (`PixelFormat32bppPARGB`)—no `Taskbar.View.dll` symbol hooks and no
-  `IXamlDiagnostics` conflict with **Windows 11 Taskbar Styler**.
-- **Smart visibility**: Stays visible next to maximized windows and
+- **Language-independent Notification Center count**: Reads active toast
+  notifications directly from Windows' per-user notification database
+  (`wpndatabase.db` via the built-in `winsqlite3.dll`, read-only) and subscribes
+  to `WNF_SHEL_NOTIFICATIONS` for instant updates—works on **any Windows display
+  language** and continues reflecting remaining notifications even after opening
+  Notification Center (with optional `0` display).
+- **Runs safely as a dedicated tool mod**: Executes in an isolated
+  `windhawk.exe` tool process (no injection into `explorer.exe`), preventing
+  duplicate overlays or shell instability.
+- **Custom hover tooltip**: Hovering over the bell or badge when notifications
+  are present shows the active notification count (e.g., `5 active notifications`
+  or `5 thông báo hiện có` on Vietnamese Windows) and temporarily hides Windows'
+  `"No new notifications"` tooltip.
+- **Crisp Fluent styling & smart visibility**: Renders a DPI-aware,
+  anti-aliased, click-through GDI+ badge (`PixelFormat32bppPARGB`) that adapts
+  to your Windows accent color, stays visible next to maximized windows, and
   automatically hides for true fullscreen apps, auto-hidden taskbars, or when
-  there are 0 notifications.
+  the count is 0.
+
+## Why a separate mod from Notification Bell Highlighter?
+[Notification Bell Highlighter](https://windhawk.net/mods/notification-bell-highlighter)
+is designed as a bright, pulsing attention overlay drawn **on top of** the bell
+icon and parses the English accessible name (`"N new notification"`), so it only
+counts newly arrived notifications (from 1+) on English Windows. This mod takes
+a different, minimal Fluent-badge approach: a static, unobstructed count pill
+placed beside/below the bell, full multi-language support via `wpndatabase.db` +
+WNF, all-edge (Bottom/Top/Left/Right) layout support, and fullscreen/auto-hide
+awareness.
 
 ## Positioning tip
 Set **Preview count** to a number like `5` in Settings to fine-tune **Offset X**,
@@ -57,25 +73,29 @@ Set **Preview count** to a number like `5` in Settings to fine-tune **Offset X**
 # Số lượng thông báo trên chuông Taskbar (Tiếng Việt)
 
 Hiển thị số lượng thông báo đang có trong Windows Notification Center bên trong
-một vòng tròn nhỏ (tự mở rộng thành dạng viên thuốc khi có từ 2 chữ số trở lên)
-gắn ngay cạnh hoặc bên dưới biểu tượng quả chuông trên thanh Taskbar Windows 11.
+một vòng tròn nhỏ gọn theo phong cách Fluent (tự mở rộng thành dạng viên thuốc
+khi có từ 2 chữ số trở lên) đặt **bên cạnh hoặc bên dưới** quả chuông trên thanh
+Taskbar Windows 11 mà không che khuất biểu tượng chuông.
 
 ## Tính năng chính
 - **Hỗ trợ đầy đủ 4 cạnh Taskbar (Dưới, Trên, Trái, Phải)**:
   - **Taskbar Trên / Dưới (ngang)**: tự động đặt gọn **bên phải** quả chuông,
     tách khỏi vạch Show Desktop (có thể đổi sang bên dưới trong Cài đặt).
   - **Taskbar Trái / Phải (dọc)**: tự động đặt sát **bên dưới** quả chuông.
-- **Đếm thông báo chính xác & tức thì**: Đọc trực tiếp số thông báo đang hiện
-  trong Notification Center từ `wpndatabase.db` (chỉ đọc qua `winsqlite3.dll` có
-  sẵn của Windows) kết hợp đăng ký sự kiện `WNF_SHEL_NOTIFICATIONS` để cập nhật
-  ngay lập tức khi có thông báo mới hoặc khi xóa thông báo.
-- **Tương thích tốt với Windows 11 Taskbar Styler**: Định vị nút chuông qua
-  UI Automation và vẽ bằng lớp phủ GDI+ trong suốt click-through sắc nét ở mọi
-  mức DPI, không hook symbol `Taskbar.View.dll` và không xung đột
-  `IXamlDiagnostics`.
-- **Tự động ẩn thông minh**: Vẫn hiển thị bình thường khi phóng to cửa sổ và tự
-  ẩn khi chạy ứng dụng toàn màn hình (fullscreen), khi ẩn taskbar hoặc khi không
-  có thông báo nào.
+- **Đếm thông báo chính xác trên mọi ngôn ngữ Windows**: Đọc trực tiếp số thông
+  báo đang có trong Notification Center từ `wpndatabase.db` (chỉ đọc qua
+  `winsqlite3.dll` có sẵn) kết hợp sự kiện `WNF_SHEL_NOTIFICATIONS` để cập nhật
+  tức thì, không bị phụ thuộc ngôn ngữ tiếng Anh và vẫn giữ số đếm chính xác kể
+  cả sau khi mở xem Notification Center.
+- **Chạy độc lập dạng tool mod an toàn**: Chạy trong tiến trình `windhawk.exe`
+  riêng biệt, không tiêm vào `explorer.exe` nên tránh hoàn toàn lỗi chồng badge
+  hoặc ảnh hưởng độ ổn định của Windows Shell.
+- **Chú thích khi rê chuột**: Khi rê chuột vào chuông hoặc vòng tròn số lúc
+  đang có thông báo, tự động hiển thị `<N> thông báo hiện có` và tạm ẩn chú
+  thích `"Không có thông báo mới"` của Windows.
+- **Tự động ẩn thông minh**: Vẫn hiển thị khi phóng to cửa sổ và tự ẩn khi chạy
+  ứng dụng toàn màn hình (fullscreen), khi ẩn taskbar hoặc khi không có thông
+  báo nào.
 
 ## Mẹo căn chỉnh nhanh
 Đặt tạm **Số đếm xem trước** thành `5` trong mục Cài đặt để xem trước và căn
@@ -172,6 +192,20 @@ chỉnh **Dịch ngang/dọc (DIP)** hoặc **Đường kính vòng tròn**, sau
   $name:vi-VN: Màu viền ngoài (#RRGGBB)
   $description: Color of the badge outline when Outline thickness > 0.
   $description:vi-VN: Màu của viền ngoài khi Độ dày viền ngoài > 0.
+- customTooltip: true
+  $name: Show custom hover tooltip
+  $name:vi-VN: Hiện chú thích khi rê chuột
+  $description: When hovering over the bell or badge with active notifications, show "<N> active notifications" and temporarily hide Windows' "No new notifications" tooltip.
+  $description:vi-VN: Khi rê chuột vào chuông hoặc vòng tròn lúc đang có thông báo, hiển thị "<N> thông báo hiện có" và tạm ẩn chú thích "Không có thông báo mới" của Windows.
+- tooltipTheme: auto
+  $name: Hover tooltip theme
+  $name:vi-VN: Giao diện chú thích khi rê chuột
+  $description: Color theme for the custom hover tooltip (Auto follows Windows taskbar Light/Dark mode).
+  $description:vi-VN: Màu nền của chú thích khi rê chuột (Tự động theo chế độ Sáng/Tối của Windows).
+  $options:
+  - auto: Auto (follow Windows Light/Dark mode)
+  - dark: Dark
+  - light: Light
 - previewCount: 0
   $name: Preview count (0 = live)
   $name:vi-VN: Số đếm xem trước (0 = thực tế)
@@ -185,6 +219,7 @@ chỉnh **Dịch ngang/dọc (DIP)** hoặc **Đường kính vòng tròn**, sau
 #include <gdiplus.h>
 #include <objbase.h>
 #include <oleauto.h>
+#include <shellapi.h>
 #include <uiautomation.h>
 
 #include <algorithm>
@@ -238,6 +273,7 @@ using PFN_RtlUnsubscribeWnfNotificationWaitForCompletion = NTSTATUS(NTAPI*)(
 
 // ============================================================================
 // Built-in Windows SQLite (winsqlite3.dll) minimal definitions
+// Note: Windows' winsqlite3.dll uses __stdcall (WINAPI) on 32-bit x86.
 // ============================================================================
 
 struct sqlite3;
@@ -247,14 +283,14 @@ static constexpr int kSqliteOk = 0;
 static constexpr int kSqliteRow = 100;
 static constexpr int kSqliteOpenReadonly = 0x00000001;
 
-using PFN_sqlite3_open_v2 = int (*)(const char* filename, sqlite3** ppDb, int flags, const char* zVfs);
-using PFN_sqlite3_close = int (*)(sqlite3* db);
-using PFN_sqlite3_busy_timeout = int (*)(sqlite3* db, int ms);
-using PFN_sqlite3_prepare_v2 = int (*)(sqlite3* db, const char* zSql, int nByte, sqlite3_stmt** ppStmt, const char** pzTail);
-using PFN_sqlite3_bind_int64 = int (*)(sqlite3_stmt* pStmt, int idx, int64_t val);
-using PFN_sqlite3_step = int (*)(sqlite3_stmt* pStmt);
-using PFN_sqlite3_column_int = int (*)(sqlite3_stmt* pStmt, int iCol);
-using PFN_sqlite3_finalize = int (*)(sqlite3_stmt* pStmt);
+using PFN_sqlite3_open_v2 = int(WINAPI*)(const char* filename, sqlite3** ppDb, int flags, const char* zVfs);
+using PFN_sqlite3_close = int(WINAPI*)(sqlite3* db);
+using PFN_sqlite3_busy_timeout = int(WINAPI*)(sqlite3* db, int ms);
+using PFN_sqlite3_prepare_v2 = int(WINAPI*)(sqlite3* db, const char* zSql, int nByte, sqlite3_stmt** ppStmt, const char** pzTail);
+using PFN_sqlite3_bind_int64 = int(WINAPI*)(sqlite3_stmt* pStmt, int idx, int64_t val);
+using PFN_sqlite3_step = int(WINAPI*)(sqlite3_stmt* pStmt);
+using PFN_sqlite3_column_int = int(WINAPI*)(sqlite3_stmt* pStmt, int iCol);
+using PFN_sqlite3_finalize = int(WINAPI*)(sqlite3_stmt* pStmt);
 
 // ============================================================================
 // Constants & Messages
@@ -265,6 +301,10 @@ static constexpr UINT WM_APP_UPDATE_BADGE = WM_APP + 1;
 static constexpr UINT WM_APP_RELOAD_SETTINGS = WM_APP + 2;
 static constexpr UINT_PTR kSyncTimerId = 1;
 static constexpr UINT kSyncIntervalMs = 250;
+static constexpr UINT_PTR kHoverTimerId = 2;
+static constexpr UINT kHoverIntervalMs = 80;
+static constexpr ULONGLONG kHoverShowDelayMs = 250;
+static constexpr ULONGLONG kUiaFullSearchCooldownMs = 3000;
 
 // ============================================================================
 // Settings & Global State
@@ -287,6 +327,12 @@ enum class AnchorMode {
     Right,
 };
 
+enum class TooltipTheme {
+    Auto,
+    Dark,
+    Light,
+};
+
 struct ModSettings {
     CountSource countSource = CountSource::Auto;
     HorizontalPlacement horizontalPlacement = HorizontalPlacement::Right;
@@ -303,6 +349,8 @@ struct ModSettings {
     COLORREF textColor = RGB(0xFF, 0xFF, 0xFF);
     int borderWidth = 1;
     COLORREF borderColor = RGB(0x1A, 0x1A, 0x1A);
+    bool customTooltip = true;
+    TooltipTheme tooltipTheme = TooltipTheme::Auto;
     int previewCount = 0;
 };
 
@@ -339,6 +387,10 @@ static std::wstring ToLowerW(const wchar_t* src) {
 
 static bool ContainsI(const std::wstring& lowerHaystack, const wchar_t* lowerNeedle) {
     return !lowerHaystack.empty() && lowerNeedle && lowerHaystack.find(lowerNeedle) != std::wstring::npos;
+}
+
+static bool RectsEqual(const RECT& a, const RECT& b) {
+    return a.left == b.left && a.top == b.top && a.right == b.right && a.bottom == b.bottom;
 }
 
 static COLORREF ParseHexColor(const wchar_t* hex, COLORREF fallback) {
@@ -488,6 +540,19 @@ static void LoadSettings() {
         Wh_FreeStringSetting(borderColorStr);
     }
 
+    s.customTooltip = Wh_GetIntSetting(L"customTooltip") != 0;
+
+    PCWSTR tipThemeStr = Wh_GetStringSetting(L"tooltipTheme");
+    if (tipThemeStr) {
+        if (wcscmp(tipThemeStr, L"dark") == 0) {
+            s.tooltipTheme = TooltipTheme::Dark;
+        } else if (wcscmp(tipThemeStr, L"light") == 0) {
+            s.tooltipTheme = TooltipTheme::Light;
+        } else {
+            s.tooltipTheme = TooltipTheme::Auto;
+        }
+        Wh_FreeStringSetting(tipThemeStr);
+    }
     s.previewCount = std::clamp(Wh_GetIntSetting(L"previewCount"), 0, 9999);
 
     std::lock_guard<std::mutex> lock(g_settingsMutex);
@@ -785,6 +850,15 @@ struct TaskbarBellTracker {
     int lastIsVertical = -1;
     bool loggedFallback = false;
 
+    // Rate-limit full UIA tree scans to at most once every 3 seconds.
+    ULONGLONG lastFullSearchTick = 0;
+
+    // Cache the inner bell glyph rect so FindAll is only run when the button rect changes.
+    bool glyphCacheValid = false;
+    bool cachedHasGlyphRect = false;
+    RECT cachedGlyphRect = {};
+    RECT cachedGlyphButtonRect = {};
+
     bool Init() {
         HRESULT hr = CoCreateInstance(
             CLSID_CUIAutomation,
@@ -821,12 +895,20 @@ struct TaskbarBellTracker {
         return true;
     }
 
+    void InvalidateGlyphCache() {
+        glyphCacheValid = false;
+        cachedHasGlyphRect = false;
+        cachedGlyphRect = {};
+        cachedGlyphButtonRect = {};
+    }
+
     void ClearCache() {
         if (cachedButton) {
             cachedButton->Release();
             cachedButton = nullptr;
         }
         cachedTrayHwnd = nullptr;
+        InvalidateGlyphCache();
     }
 
     void Cleanup() {
@@ -1093,14 +1175,20 @@ struct TaskbarBellTracker {
         float scale = dpi / 96.0f;
 
         int orientVal = isVertical ? 1 : 0;
-        if (hTray != cachedTrayHwnd || lastIsVertical != orientVal) {
+        bool trayOrOrientChanged = (hTray != cachedTrayHwnd || lastIsVertical != orientVal);
+        if (trayOrOrientChanged) {
             ClearCache();
             cachedTrayHwnd = hTray;
             lastIsVertical = orientVal;
+            lastFullSearchTick = 0;
             loggedFallback = false;
         }
 
-        if (!cachedButton && uia) {
+        ULONGLONG nowTick = GetTickCount64();
+        if (!cachedButton && uia &&
+            (lastFullSearchTick == 0 || (nowTick - lastFullSearchTick) >= kUiaFullSearchCooldownMs)) {
+            lastFullSearchTick = nowTick;
+
             std::vector<HWND> roots;
             EnumChildWindows(hTray, CollectChildHwndsProc, reinterpret_cast<LPARAM>(&roots));
             roots.push_back(hTray);
@@ -1111,6 +1199,7 @@ struct TaskbarBellTracker {
                     cachedButton = FindButtonInRoot(rootElem, isVertical, scale);
                     rootElem->Release();
                     if (cachedButton) {
+                        InvalidateGlyphCache();
                         loggedFallback = false;
                         break;
                     }
@@ -1130,9 +1219,15 @@ struct TaskbarBellTracker {
                 if (outUsedFallback) *outUsedFallback = false;
 
                 if (!isVertical && outGlyphRect && outHasGlyphRect) {
-                    RECT glyphRc{};
-                    if (FindBellGlyphRect(cachedButton, scale, &glyphRc)) {
-                        *outGlyphRect = glyphRc;
+                    if (!glyphCacheValid || !RectsEqual(rc, cachedGlyphButtonRect)) {
+                        RECT glyphRc{};
+                        cachedHasGlyphRect = FindBellGlyphRect(cachedButton, scale, &glyphRc);
+                        cachedGlyphRect = glyphRc;
+                        cachedGlyphButtonRect = rc;
+                        glyphCacheValid = true;
+                    }
+                    if (cachedHasGlyphRect) {
+                        *outGlyphRect = cachedGlyphRect;
                         *outHasGlyphRect = true;
                     }
                 }
@@ -1384,16 +1479,530 @@ static bool RenderBadgeToLayeredWindow(
 // Overlay Window & Sync Loop
 // ============================================================================
 
+
+static bool SampleTaskbarIsLight(HWND hTray, const RECT& btnRect, bool* outIsLight) {
+    if (!hTray || !IsWindow(hTray) || !outIsLight) {
+        return false;
+    }
+
+    RECT rcTray{};
+    if (!GetWindowRect(hTray, &rcTray)) {
+        return false;
+    }
+    int trayW = rcTray.right - rcTray.left;
+    int trayH = rcTray.bottom - rcTray.top;
+    if (trayW <= 8 || trayH <= 8) {
+        return false;
+    }
+
+    // Sample a small 16x4 strip near the top/inner margin of the taskbar around btnRect
+    // (avoids white clock/bell glyphs and captures the actual rendered taskbar background).
+    int sampleW = 16;
+    int sampleH = 4;
+    int sx = (btnRect.left + btnRect.right) / 2 - sampleW / 2;
+    sx = std::clamp(sx, static_cast<int>(rcTray.left + 2), static_cast<int>(rcTray.right - sampleW - 2));
+    int sy = rcTray.top + 3;
+    if (trayH > trayW) {
+        // Vertical taskbar: sample near left interior margin around btnRect.top
+        sx = rcTray.left + 3;
+        sy = std::clamp(static_cast<int>(btnRect.top + 2),
+                        static_cast<int>(rcTray.top + 2),
+                        static_cast<int>(rcTray.bottom - sampleH - 2));
+    }
+
+    HDC screenDc = GetDC(nullptr);
+    if (!screenDc) {
+        return false;
+    }
+
+    BITMAPINFO bmi{};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = sampleW;
+    bmi.bmiHeader.biHeight = -sampleH;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HBITMAP hBmp = CreateDIBSection(screenDc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!hBmp || !bits) {
+        ReleaseDC(nullptr, screenDc);
+        return false;
+    }
+
+    HDC memDc = CreateCompatibleDC(screenDc);
+    HGDIOBJ oldBmp = SelectObject(memDc, hBmp);
+    BOOL ok = BitBlt(memDc, 0, 0, sampleW, sampleH, screenDc, sx, sy, SRCCOPY);
+    SelectObject(memDc, oldBmp);
+    DeleteDC(memDc);
+    ReleaseDC(nullptr, screenDc);
+
+    if (!ok) {
+        DeleteObject(hBmp);
+        return false;
+    }
+
+    std::vector<int> lums;
+    lums.reserve(static_cast<size_t>(sampleW * sampleH));
+    const BYTE* px = static_cast<const BYTE*>(bits);
+    for (int i = 0; i < sampleW * sampleH; ++i) {
+        int b = px[i * 4 + 0];
+        int g = px[i * 4 + 1];
+        int r = px[i * 4 + 2];
+        int lum = (r * 2126 + g * 7152 + b * 722) / 10000;
+        lums.push_back(lum);
+    }
+    DeleteObject(hBmp);
+
+    if (lums.empty()) {
+        return false;
+    }
+    std::nth_element(lums.begin(), lums.begin() + lums.size() / 2, lums.end());
+    int medianLum = lums[lums.size() / 2];
+    *outIsLight = (medianLum >= 145);
+    return true;
+}
+
+static bool ResolveTooltipLightTheme(TooltipTheme mode, HWND hTray, const RECT& btnRect) {
+    if (mode == TooltipTheme::Dark) {
+        return false;
+    }
+    if (mode == TooltipTheme::Light) {
+        return true;
+    }
+
+    // 1. Prefer sampling the actual rendered taskbar background so custom themes
+    //    and taskbar styling mods match Windows' visible taskbar tooltip 100%.
+    bool sampledLight = false;
+    if (SampleTaskbarIsLight(hTray, btnRect, &sampledLight)) {
+        return sampledLight;
+    }
+
+    // 2. Fallback to Windows registry (64-bit view).
+    HKEY hKey = nullptr;
+    DWORD sysLight = 0;
+    DWORD colorPrevalence = 0;
+    bool hasSys = false;
+    bool hasColorPrev = false;
+
+    if (RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+            0,
+            KEY_READ | KEY_WOW64_64KEY,
+            &hKey) == ERROR_SUCCESS &&
+        hKey) {
+        DWORD type = 0;
+        DWORD size = sizeof(DWORD);
+        if (RegQueryValueExW(hKey, L"SystemUsesLightTheme", nullptr, &type,
+                             reinterpret_cast<LPBYTE>(&sysLight), &size) == ERROR_SUCCESS &&
+            type == REG_DWORD) {
+            hasSys = true;
+        }
+        type = 0;
+        size = sizeof(DWORD);
+        if (RegQueryValueExW(hKey, L"ColorPrevalence", nullptr, &type,
+                             reinterpret_cast<LPBYTE>(&colorPrevalence), &size) == ERROR_SUCCESS &&
+            type == REG_DWORD) {
+            hasColorPrev = true;
+        }
+        RegCloseKey(hKey);
+    }
+
+    if (hasColorPrev && colorPrevalence != 0) {
+        return false;
+    }
+    return hasSys && (sysLight != 0);
+}
+
+static std::wstring FormatHoverTooltipText(int count) {
+    LANGID langId = GetUserDefaultUILanguage();
+    if (PRIMARYLANGID(langId) == LANG_VIETNAMESE) {
+        return std::to_wstring(count) + L" th\x00F4ng b\x00E1o hi\x1EC7n c\x00F3";
+    }
+    if (count == 1) {
+        return L"1 active notification";
+    }
+    return std::to_wstring(count) + L" active notifications";
+}
+
+struct NativeTooltipSearchCtx {
+    DWORD trayPid = 0;
+    HWND trayHwnd = nullptr;
+    RECT anchorRect{};
+    int maxW = 0;
+    int maxH = 0;
+    int maxDistX = 0;
+    int maxDistY = 0;
+    bool hidAny = false;
+};
+
+static BOOL CALLBACK SuppressNativeTooltipEnumProc(HWND hwnd, LPARAM lParam) {
+    auto* ctx = reinterpret_cast<NativeTooltipSearchCtx*>(lParam);
+    if (!ctx || !hwnd || hwnd == ctx->trayHwnd || !IsWindowVisible(hwnd)) {
+        return TRUE;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != ctx->trayPid) {
+        return TRUE;
+    }
+
+    wchar_t cls[64] = {};
+    if (GetClassNameW(hwnd, cls, 64) == 0) {
+        return TRUE;
+    }
+    if (wcscmp(cls, L"Xaml_WindowedPopupClass") != 0 &&
+        wcscmp(cls, L"tooltips_class32") != 0) {
+        return TRUE;
+    }
+
+    RECT r{};
+    if (!GetWindowRect(hwnd, &r)) {
+        return TRUE;
+    }
+    int w = r.right - r.left;
+    int h = r.bottom - r.top;
+    if (w < 30 || w > ctx->maxW || h < 16 || h > ctx->maxH) {
+        return TRUE;
+    }
+
+    // Check proximity to the notification bell / button rect so we only suppress
+    // the notification bell's tooltip and never unrelated Explorer popups.
+    int dx = 0;
+    if (r.right < ctx->anchorRect.left) {
+        dx = ctx->anchorRect.left - r.right;
+    } else if (r.left > ctx->anchorRect.right) {
+        dx = r.left - ctx->anchorRect.right;
+    }
+    int dy = 0;
+    if (r.bottom < ctx->anchorRect.top) {
+        dy = ctx->anchorRect.top - r.bottom;
+    } else if (r.top > ctx->anchorRect.bottom) {
+        dy = r.top - ctx->anchorRect.bottom;
+    }
+
+    if (dx <= ctx->maxDistX && dy <= ctx->maxDistY) {
+        ShowWindowAsync(hwnd, SW_HIDE);
+        ctx->hidAny = true;
+    }
+    return TRUE;
+}
+
+static bool SuppressNativeTaskbarTooltip(HWND hTray, const RECT& anchorRect, float dpiScale) {
+    if (!hTray || !IsWindow(hTray)) {
+        return false;
+    }
+    DWORD trayPid = 0;
+    GetWindowThreadProcessId(hTray, &trayPid);
+    if (trayPid == 0) {
+        return false;
+    }
+
+    NativeTooltipSearchCtx ctx;
+    ctx.trayPid = trayPid;
+    ctx.trayHwnd = hTray;
+    ctx.anchorRect = anchorRect;
+    ctx.maxW = static_cast<int>(std::lround(460.0f * dpiScale));
+    ctx.maxH = static_cast<int>(std::lround(96.0f * dpiScale));
+    ctx.maxDistX = static_cast<int>(std::lround(180.0f * dpiScale));
+    ctx.maxDistY = static_cast<int>(std::lround(140.0f * dpiScale));
+
+    EnumWindows(SuppressNativeTooltipEnumProc, reinterpret_cast<LPARAM>(&ctx));
+    return ctx.hidAny;
+}
+
+static bool RenderTooltipToLayeredWindow(
+    HWND tooltipHwnd,
+    HWND hTray,
+    const RECT& hoverRect,
+    int count,
+    float dpiScale,
+    bool lightTheme) {
+    if (!tooltipHwnd || !IsWindow(tooltipHwnd) || !hTray || !IsWindow(hTray)) {
+        return false;
+    }
+
+    std::wstring text = FormatHoverTooltipText(count);
+
+    HDC screenDc = GetDC(nullptr);
+    if (!screenDc) {
+        return false;
+    }
+
+    Gdiplus::FontFamily family(L"Segoe UI Variable Text");
+    const Gdiplus::FontFamily* activeFamily = &family;
+    Gdiplus::FontFamily fallbackFamily(L"Segoe UI");
+    if (family.GetLastStatus() != Gdiplus::Ok) {
+        activeFamily = &fallbackFamily;
+    }
+
+    float fontPx = 12.0f * dpiScale;
+    Gdiplus::Font font(activeFamily, fontPx, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+
+    Gdiplus::RectF textBounds(0, 0, 0, 0);
+    {
+        Gdiplus::Graphics measureG(screenDc);
+        measureG.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+        Gdiplus::StringFormat measureFmt(Gdiplus::StringFormat::GenericTypographic());
+        measureFmt.SetFormatFlags(Gdiplus::StringFormatFlagsMeasureTrailingSpaces);
+        measureG.MeasureString(text.c_str(), -1, &font, Gdiplus::PointF(0, 0), &measureFmt, &textBounds);
+    }
+
+    float padX = 10.0f * dpiScale;
+    float padY = 6.0f * dpiScale;
+    float boxW = std::ceil(textBounds.Width + padX * 2.0f);
+    float boxH = std::ceil(std::max(textBounds.Height + padY * 2.0f, 30.0f * dpiScale));
+    int margin = static_cast<int>(std::ceil(5.0f * dpiScale));
+    int bmpW = static_cast<int>(boxW) + margin * 2;
+    int bmpH = static_cast<int>(boxH) + margin * 2;
+
+    BITMAPINFO bmi{};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = bmpW;
+    bmi.bmiHeader.biHeight = -bmpH;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HBITMAP hBmp = CreateDIBSection(screenDc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!hBmp || !bits) {
+        ReleaseDC(nullptr, screenDc);
+        return false;
+    }
+
+    std::memset(bits, 0, static_cast<size_t>(bmpW) * static_cast<size_t>(bmpH) * 4);
+
+    {
+        Gdiplus::Bitmap targetBmp(
+            bmpW,
+            bmpH,
+            bmpW * 4,
+            PixelFormat32bppPARGB,
+            static_cast<BYTE*>(bits));
+        Gdiplus::Graphics g(&targetBmp);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+        g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+        g.Clear(Gdiplus::Color(0, 0, 0, 0));
+
+        float x = static_cast<float>(margin);
+        float y = static_cast<float>(margin);
+        float radius = 4.5f * dpiScale;
+
+        // Soft Windows 11 flyout drop shadow
+        Gdiplus::GraphicsPath shadowPath;
+        AddRoundedRectPath(shadowPath, x, y + 2.0f * dpiScale, boxW, boxH, radius);
+        Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(lightTheme ? 34 : 96, 0, 0, 0));
+        g.FillPath(&shadowBrush, &shadowPath);
+
+        Gdiplus::GraphicsPath boxPath;
+        AddRoundedRectPath(boxPath, x, y, boxW, boxH, radius);
+
+        Gdiplus::SolidBrush fillBrush(lightTheme
+            ? Gdiplus::Color(252, 249, 249, 249)
+            : Gdiplus::Color(252, 44, 44, 44));
+        g.FillPath(&fillBrush, &boxPath);
+
+        Gdiplus::Pen borderPen(
+            lightTheme
+                ? Gdiplus::Color(215, 204, 204, 204)
+                : Gdiplus::Color(220, 66, 66, 66),
+            std::max(1.0f, dpiScale));
+        g.DrawPath(&borderPen, &boxPath);
+
+        Gdiplus::SolidBrush textBrush(lightTheme
+            ? Gdiplus::Color(255, 26, 26, 26)
+            : Gdiplus::Color(255, 243, 243, 243));
+        Gdiplus::StringFormat fmt(Gdiplus::StringFormat::GenericTypographic());
+        fmt.SetAlignment(Gdiplus::StringAlignmentCenter);
+        fmt.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+        Gdiplus::RectF textRect(x, y - 0.35f * dpiScale, boxW, boxH);
+        g.DrawString(text.c_str(), -1, &font, textRect, &fmt, &textBrush);
+    }
+
+    RECT rcTray{};
+    GetWindowRect(hTray, &rcTray);
+
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    HMONITOR hMon = MonitorFromWindow(hTray, MONITOR_DEFAULTTONEAREST);
+    if (!GetMonitorInfoW(hMon, &mi)) {
+        mi.rcMonitor = {0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)};
+    }
+
+    int trayW = rcTray.right - rcTray.left;
+    int trayH = rcTray.bottom - rcTray.top;
+    int gap = static_cast<int>(std::lround(8.0f * dpiScale));
+    int edgePad = static_cast<int>(std::lround(8.0f * dpiScale));
+
+    int dstX = (hoverRect.left + hoverRect.right - bmpW) / 2;
+    int dstY = rcTray.top - bmpH - gap + margin;
+
+    if (trayH > trayW) {
+        // Vertical taskbar (Left or Right)
+        int monMidX = (mi.rcMonitor.left + mi.rcMonitor.right) / 2;
+        int trayMidX = (rcTray.left + rcTray.right) / 2;
+        dstY = (hoverRect.top + hoverRect.bottom - bmpH) / 2;
+        if (trayMidX < monMidX) {
+            dstX = rcTray.right + gap - margin;
+        } else {
+            dstX = rcTray.left - bmpW - gap + margin;
+        }
+    } else {
+        // Horizontal taskbar (Top or Bottom)
+        int monMidY = (mi.rcMonitor.top + mi.rcMonitor.bottom) / 2;
+        int trayMidY = (rcTray.top + rcTray.bottom) / 2;
+        if (trayMidY < monMidY) {
+            dstY = rcTray.bottom + gap - margin;
+        } else {
+            dstY = rcTray.top - bmpH - gap + margin;
+        }
+    }
+
+    int minX = mi.rcMonitor.left + edgePad - margin;
+    int maxX = mi.rcMonitor.right - edgePad - bmpW + margin;
+    int minY = mi.rcMonitor.top + edgePad - margin;
+    int maxY = mi.rcMonitor.bottom - edgePad - bmpH + margin;
+    if (maxX >= minX) {
+        dstX = std::clamp(dstX, minX, maxX);
+    }
+    if (maxY >= minY) {
+        dstY = std::clamp(dstY, minY, maxY);
+    }
+
+    HDC memDc = CreateCompatibleDC(screenDc);
+    HGDIOBJ oldBmp = SelectObject(memDc, hBmp);
+
+    POINT ptDst = {dstX, dstY};
+    SIZE szWnd = {bmpW, bmpH};
+    POINT ptSrc = {0, 0};
+
+    BLENDFUNCTION bf{};
+    bf.BlendOp = AC_SRC_OVER;
+    bf.BlendFlags = 0;
+    bf.SourceConstantAlpha = 255;
+    bf.AlphaFormat = AC_SRC_ALPHA;
+
+    BOOL ok = UpdateLayeredWindow(tooltipHwnd, screenDc, &ptDst, &szWnd, memDc, &ptSrc, 0, &bf, ULW_ALPHA);
+
+    SelectObject(memDc, oldBmp);
+    DeleteDC(memDc);
+    DeleteObject(hBmp);
+    ReleaseDC(nullptr, screenDc);
+
+    if (ok) {
+        SetWindowPos(
+            tooltipHwnd,
+            HWND_TOPMOST,
+            ptDst.x,
+            ptDst.y,
+            bmpW,
+            bmpH,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
+    return ok != FALSE;
+}
+
 struct OverlayState {
     TaskbarBellTracker tracker;
     WpnDbReader dbReader;
+    HWND tooltipHwnd = nullptr;
     bool visible = false;
     int lastRenderedCount = -1;
     int lastCenterX = 0;
     int lastCenterY = 0;
     UINT lastDpi = 0;
     bool forceRedraw = true;
+
+    // Custom hover tooltip state (updated via lightweight cursor check, no UIA).
+    HWND lastTrayHwnd = nullptr;
+    RECT lastBtnRect = {};
+    RECT bellHoverRect = {};
+    float lastDpiScale = 1.0f;
+    bool hoveringBell = false;
+    ULONGLONG hoverStartTick = 0;
+    bool tooltipVisible = false;
+    int lastTooltipCount = -1;
+    bool lastTooltipLightTheme = false;
 };
+
+static void HideCustomTooltip(OverlayState* state) {
+    if (!state) {
+        return;
+    }
+    state->hoveringBell = false;
+    state->hoverStartTick = 0;
+    if (state->tooltipVisible && state->tooltipHwnd && IsWindow(state->tooltipHwnd)) {
+        ShowWindow(state->tooltipHwnd, SW_HIDE);
+    }
+    state->tooltipVisible = false;
+}
+
+static void UpdateHoverTooltip(OverlayState* state) {
+    if (!state || g_stopping.load() || !state->tooltipHwnd || !IsWindow(state->tooltipHwnd)) {
+        return;
+    }
+
+    ModSettings s = GetSettingsSnapshot();
+    if (!s.customTooltip || !state->visible || state->lastRenderedCount <= 0 ||
+        IsRectEmpty(&state->bellHoverRect) || !state->lastTrayHwnd || !IsWindow(state->lastTrayHwnd)) {
+        HideCustomTooltip(state);
+        return;
+    }
+
+    POINT pt{};
+    if (!GetCursorPos(&pt) || !PtInRect(&state->bellHoverRect, pt)) {
+        HideCustomTooltip(state);
+        return;
+    }
+
+    // Temporarily hide Windows' native "No new notifications" tooltip while hovering the bell.
+    bool hidNative = SuppressNativeTaskbarTooltip(
+        state->lastTrayHwnd, state->lastBtnRect, state->lastDpiScale);
+
+    ULONGLONG now = GetTickCount64();
+    if (!state->hoveringBell) {
+        state->hoveringBell = true;
+        state->hoverStartTick = now;
+    }
+
+    if (!hidNative && (now - state->hoverStartTick) < kHoverShowDelayMs) {
+        return;
+    }
+
+    bool lightTheme = ResolveTooltipLightTheme(s.tooltipTheme, state->lastTrayHwnd, state->lastBtnRect);
+    bool needRender =
+        !state->tooltipVisible ||
+        state->lastTooltipCount != state->lastRenderedCount ||
+        state->lastTooltipLightTheme != lightTheme;
+
+    if (needRender) {
+        if (RenderTooltipToLayeredWindow(
+                state->tooltipHwnd,
+                state->lastTrayHwnd,
+                state->bellHoverRect,
+                state->lastRenderedCount,
+                state->lastDpiScale,
+                lightTheme)) {
+            state->tooltipVisible = true;
+            state->lastTooltipCount = state->lastRenderedCount;
+            state->lastTooltipLightTheme = lightTheme;
+        }
+    } else if (hidNative) {
+        // Keep custom tooltip cleanly on top if Windows tried to re-show its native tooltip.
+        SetWindowPos(
+            state->tooltipHwnd,
+            HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
+}
 
 static int ResolveNotificationCount(OverlayState* state, const ModSettings& s) {
     if (s.previewCount > 0) {
@@ -1437,6 +2046,7 @@ static void UpdateOverlay(HWND hwnd, OverlayState* state) {
             ShowWindow(hwnd, SW_HIDE);
             state->visible = false;
         }
+        HideCustomTooltip(state);
         return;
     }
 
@@ -1453,6 +2063,7 @@ static void UpdateOverlay(HWND hwnd, OverlayState* state) {
             ShowWindow(hwnd, SW_HIDE);
             state->visible = false;
         }
+        HideCustomTooltip(state);
         return;
     }
 
@@ -1481,7 +2092,7 @@ static void UpdateOverlay(HWND hwnd, OverlayState* state) {
                             static_cast<int>(std::lround(s.offsetY * dpiScale));
         }
     } else if (hasGlyphRect && s.anchorMode == AnchorMode::Auto) {
-        // Top / Bottom horizontal taskbar with exact UIA bell glyph rect.
+        // Top / Bottom horizontal taskbar with cached UIA bell glyph rect.
         if (s.horizontalPlacement == HorizontalPlacement::Right) {
             targetCenterX = glyphRect.right + badgeRadius -
                             static_cast<int>(std::lround(3.0f * dpiScale)) +
@@ -1568,16 +2179,54 @@ static void UpdateOverlay(HWND hwnd, OverlayState* state) {
         state->lastCenterX = targetCenterX;
         state->lastCenterY = targetCenterY;
         state->lastDpi = dpi;
-    } else if (state->visible) {
-        SetWindowPos(
-            hwnd,
-            HWND_TOPMOST,
-            0,
-            0,
-            0,
-            0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    } else {
+        // Re-raise badge only if Shell_TrayWnd moved above it (e.g., on taskbar click/hover).
+        bool trayAboveBadge = false;
+        for (HWND prev = GetWindow(hwnd, GW_HWNDPREV); prev; prev = GetWindow(prev, GW_HWNDPREV)) {
+            if (prev == hTray) {
+                trayAboveBadge = true;
+                break;
+            }
+        }
+        if (trayAboveBadge) {
+            SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
     }
+
+    // Update cached hover hit-test rect (bell glyph + badge area, excluding the clock).
+    RECT bellArea{};
+    int pad = static_cast<int>(std::lround(6.0f * dpiScale));
+    if (hasGlyphRect) {
+        bellArea.left = glyphRect.left - pad;
+        bellArea.right = glyphRect.right + pad;
+        bellArea.top = std::min(btnRect.top, glyphRect.top - pad);
+        bellArea.bottom = std::max(btnRect.bottom, glyphRect.bottom + pad);
+    } else if (isVertical) {
+        bellArea = btnRect;
+    } else {
+        bellArea = btnRect;
+        int maxBellW = static_cast<int>(std::lround(38.0f * dpiScale));
+        if (bellArea.right - bellArea.left > maxBellW) {
+            bellArea.left = bellArea.right - maxBellW;
+        }
+    }
+    RECT badgeRect{};
+    if (GetWindowRect(hwnd, &badgeRect)) {
+        UnionRect(&state->bellHoverRect, &bellArea, &badgeRect);
+    } else {
+        state->bellHoverRect = bellArea;
+    }
+    state->lastTrayHwnd = hTray;
+    state->lastBtnRect = btnRect;
+    state->lastDpiScale = dpiScale;
+    UpdateHoverTooltip(state);
 }
 
 static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -1594,6 +2243,8 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         case WM_TIMER:
             if (wParam == kSyncTimerId) {
                 UpdateOverlay(hwnd, state);
+            } else if (wParam == kHoverTimerId) {
+                UpdateHoverTooltip(state);
             }
             return 0;
         case WM_APP_UPDATE_BADGE:
@@ -1610,12 +2261,16 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         case WM_DWMCOLORIZATIONCOLORCHANGED:
             if (state) {
                 state->forceRedraw = true;
+                state->lastTooltipCount = -1;
             }
             UpdateOverlay(hwnd, state);
             return 0;
         case WM_DESTROY:
-            KillTimer(hwnd, kSyncTimerId);
-            PostQuitMessage(0);
+            if (state) {
+                KillTimer(hwnd, kSyncTimerId);
+                KillTimer(hwnd, kHoverTimerId);
+                PostQuitMessage(0);
+            }
             return 0;
         default:
             return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -1641,6 +2296,19 @@ static DWORD WINAPI WorkerThreadProc(LPVOID /*param*/) {
     wc.lpszClassName = kOverlayClassName;
     ATOM clsAtom = RegisterClassExW(&wc);
 
+    if (clsAtom == 0) {
+        Wh_Log(L"RegisterClassExW failed: %lu", GetLastError());
+        state.dbReader.Cleanup();
+        state.tracker.Cleanup();
+        if (gdipInit) {
+            Gdiplus::GdiplusShutdown(gdipToken);
+        }
+        if (coInit) {
+            CoUninitialize();
+        }
+        return 0;
+    }
+
     HWND hwnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
         kOverlayClassName,
@@ -1656,8 +2324,23 @@ static DWORD WINAPI WorkerThreadProc(LPVOID /*param*/) {
         &state);
 
     if (hwnd) {
+        state.tooltipHwnd = CreateWindowExW(
+            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+            kOverlayClassName,
+            L"",
+            WS_POPUP,
+            0,
+            0,
+            1,
+            1,
+            nullptr,
+            nullptr,
+            wc.hInstance,
+            nullptr);
+
         g_overlayHwnd.store(hwnd);
         SetTimer(hwnd, kSyncTimerId, kSyncIntervalMs, nullptr);
+        SetTimer(hwnd, kHoverTimerId, kHoverIntervalMs, nullptr);
         UpdateOverlay(hwnd, &state);
 
         MSG msg;
@@ -1667,6 +2350,10 @@ static DWORD WINAPI WorkerThreadProc(LPVOID /*param*/) {
         }
 
         g_overlayHwnd.store(nullptr);
+        if (state.tooltipHwnd && IsWindow(state.tooltipHwnd)) {
+            DestroyWindow(state.tooltipHwnd);
+            state.tooltipHwnd = nullptr;
+        }
         if (IsWindow(hwnd)) {
             DestroyWindow(hwnd);
         }
@@ -1674,9 +2361,7 @@ static DWORD WINAPI WorkerThreadProc(LPVOID /*param*/) {
         Wh_Log(L"Failed to create overlay window: %lu", GetLastError());
     }
 
-    if (clsAtom != 0) {
-        UnregisterClassW(kOverlayClassName, wc.hInstance);
-    }
+    UnregisterClassW(kOverlayClassName, wc.hInstance);
 
     state.dbReader.Cleanup();
     state.tracker.Cleanup();
@@ -1691,11 +2376,11 @@ static DWORD WINAPI WorkerThreadProc(LPVOID /*param*/) {
 }
 
 // ============================================================================
-// Windhawk Mod Entry Points
+// Windhawk Tool Mod Entry Points
 // ============================================================================
 
-BOOL Wh_ModInit() {
-    Wh_Log(L"Initializing Taskbar Notification Bell Count Badge v1.0.19");
+BOOL WhTool_ModInit() {
+    Wh_Log(L"Initializing Taskbar Notification Bell Count Badge v1.0.23 (tool mod)");
     g_stopping.store(false);
     g_forceDbRefresh.store(true);
     LoadSettings();
@@ -1711,7 +2396,7 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Uninitializing Taskbar Notification Bell Count Badge");
     g_stopping.store(true);
     CleanupWnf();
@@ -1725,17 +2410,195 @@ void Wh_ModUninit() {
     }
 
     if (g_workerThread) {
-        WaitForSingleObject(g_workerThread, 3000);
+        WaitForSingleObject(g_workerThread, INFINITE);
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
         g_workerThreadId = 0;
     }
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     LoadSettings();
     HWND hwnd = g_overlayHwnd.load();
     if (hwnd) {
         PostMessageW(hwnd, WM_APP_RELOAD_SETTINGS, 0, 0);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment,
+        LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
