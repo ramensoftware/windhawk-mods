@@ -31,6 +31,39 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c1cf573ce429f7672526c9b2083e468bdbb87e01/mods/auto-folder-icons.wh.cpp"
       }
     },
+    "batteryhub-custom-taskbar-integration": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795198139947,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795198139947,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "jaysix06",
+        "compilerOptions": "-lole32 -loleaut32 -lgdi32",
+        "description": "Places the BatteryHub mouse/keyboard battery widget next to the tray arrow on custom-styled taskbars, without its background box",
+        "github": "https://github.com/jaysix06",
+        "homepage": "https://github.com/jaysix06/batteryhub-custom-taskbar-integration",
+        "include": [
+          "BatteryHub.exe"
+        ],
+        "license": "MIT",
+        "name": "BatteryHub Integration to Custom Taskbar",
+        "version": "1.5"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7694",
+      "source": {
+        "sha256": "86caa39e143e1ee16169439c9a601d8e30cf054d3513dbacb228eefc921cac76",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4da7f69797cfa500e72d037cb55a9c2ae8f6d873/mods/batteryhub-custom-taskbar-integration.wh.cpp"
+      }
+    },
     "copy-progress-styles": {
       "details": {
         "defaultSorting": 0,
@@ -61,40 +94,6 @@
       "source": {
         "sha256": "ee4e5d83bd250c6a79d39925abdd711a7e7c29e9195130bdfc60e174203f96c0",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3f4ab56669bfba9a62083d609df878425195142d/mods/copy-progress-styles.wh.cpp"
-      }
-    },
-    "cursor-scheme-extension": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795025098004,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795125999736,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86",
-          "x86-64"
-        ],
-        "author": "CTravkin",
-        "compilerOptions": "-lgdi32 -ladvapi32",
-        "description": "Replaces built-in application pointers with pointers from the selected Windows scheme",
-        "github": "https://github.com/CTravkin",
-        "homepage": "https://ctravkin.ru",
-        "include": [
-          "*"
-        ],
-        "license": "MIT",
-        "name": "Cursor Scheme Extension",
-        "version": "1.0.3"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7594",
-      "source": {
-        "sha256": "3a6a360f9d6174505a2b155e61c756342387a5cd237784a7f9e3c0c2e4ed02b9",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/9adb8d4fc8e694e9f88842cc1057dea2eb5dafc3/mods/cursor-scheme-extension.wh.cpp"
       }
     },
     "desktop-app-groups": {
@@ -159,6 +158,38 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4b23515094a8a13273ebccf7a9399aec126cbb9c/mods/desktop-weather-overlay.wh.cpp"
       }
     },
+    "disable-acrylic-snap-preview": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795198139947,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795198139947,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "QCQ171-C",
+        "compilerOptions": "-lgdi32 -lwevtapi",
+        "description": "Restore Aero Style Snap Animation on Windows 11",
+        "github": "https://github.com/QCQ171-C",
+        "include": [
+          "dwm.exe"
+        ],
+        "license": "MPL-2.0",
+        "name": "Disable acrylic Snap preview",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7653",
+      "source": {
+        "sha256": "a0edbc68b747a79a3a14cd8f33e46896d157370a518100d6972f5f0f9d0d1b3c",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/db8708f101abb60054e20a02d6a65934ff618f06/mods/disable-acrylic-snap-preview.wh.cpp"
+      }
+    },
     "explorer-default-folder": {
       "details": {
         "defaultSorting": 0,
@@ -193,6 +224,37 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6b19ead230c08403dab28d1d30bcfd28e2abb0e2/mods/explorer-default-folder.wh.cpp"
       }
     },
+    "explorer-mouse-actions-plus": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795198139947,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795198139947,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "momoca",
+        "compilerOptions": "-lcomctl32 -loleaut32 -lole32 -lshlwapi",
+        "description": "Assign mouse gestures on empty space or items in File Explorer to navigation, tab actions, or opening a shell in the current folder.",
+        "github": "https://github.com/momoca",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Explorer Mouse Actions Plus",
+        "version": "0.1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7700",
+      "source": {
+        "sha256": "d74c36ed835d1263befe2cf77bc9c83a7c2a787fd41b119005237bd6b1af8192",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d773c379780967b3cda18da5a2f6c996f5b054dd/mods/explorer-mouse-actions-plus.wh.cpp"
+      }
+    },
     "explorer-navigation-pane-spacing-fixes": {
       "details": {
         "defaultSorting": 0,
@@ -222,6 +284,35 @@
       "source": {
         "sha256": "e93dc86ff3cf3c748435416a26826f68ac892e1c681d25c10074fd45b836dd91",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/dda118b24150aa37202cd56e0158a87de825e8a1/mods/explorer-navigation-pane-spacing-fixes.wh.cpp"
+      }
+    },
+    "explorer-tab-memory": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795198139947,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795198139947,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Maxxwell Quinn",
+        "compilerOptions": "-fms-extensions -lole32 -loleaut32 -lshell32 -luuid -ladvapi32 -lcrypt32",
+        "description": "Restores your tabs and active folder when you reopen File Explorer.",
+        "github": "https://github.com/MXXQN",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer Tab Memory Saver",
+        "version": "0.3.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7713",
+      "source": {
+        "sha256": "d832f666a0299ff805d50180bad1fcb12d3304da1545b000c8d0c969b3eac5e7",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/54e6d828af78702136c1aec003528aa1fcc136b8/mods/explorer-tab-memory.wh.cpp"
       }
     },
     "explorer-tabs-session-saver-revamped": {
@@ -315,33 +406,61 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/760b91ecf9f50687cd4b2ed315b32d32ad8372ea/mods/lockscreen-background.wh.cpp"
       }
     },
-    "simple-wallpaper-switcher": {
+    "taskbar-notification-bell-badge": {
       "details": {
         "defaultSorting": 0,
-        "published": 1795025098004,
+        "published": 1795198139947,
         "rating": 0,
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795125999736,
+        "updated": 1795198139947,
         "users": 0
       },
       "metadata": {
-        "author": "HHeitlager",
-        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -lcomctl32 -lshlwapi -luuid -ldwmapi -luxtheme -lgdi32 -lmsimg32 -ld2d1 -lwindowscodecs -lgdiplus -ladvapi32 -lshcore",
-        "description": "Browse your wallpaper folders, preview thumbnails, and switch with smooth transitions.",
-        "github": "https://github.com/hheitlager",
+        "author": "caotu2005",
+        "compilerOptions": "-lgdi32 -lgdiplus -lole32 -loleaut32 -luuid -ldwmapi -luser32 -lshell32",
+        "description": "Displays the unread notification count inside a small circular badge next to or below the Windows 11 taskbar notification bell icon",
+        "github": "https://github.com/caotu2005",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Taskbar Notification Bell Count Badge",
+        "version": "1.0.19"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7691",
+      "source": {
+        "sha256": "e376e9096379b889de64c62ba7004a6a80e8bed4791ab7a57812773547f03dde",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/a86034e6042bc1337a5c10f3a596ff06d346027a/mods/taskbar-notification-bell-badge.wh.cpp"
+      }
+    },
+    "text-capitalization": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795198139947,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795198139947,
+        "users": 0
+      },
+      "metadata": {
+        "author": "rockinggreninja-bot",
+        "compilerOptions": "-lole32 -loleaut32 -lgdi32 -luser32 -luiautomationcore -lshcore",
+        "description": "Change selected text with five case modes and customizable keyboard shortcuts.",
+        "github": "https://github.com/rockinggreninja-bot",
         "include": [
           "windhawk.exe"
         ],
         "license": "MIT",
-        "name": "Simple Wallpaper Switcher",
-        "version": "0.1.3"
+        "name": "Text Capitalization",
+        "version": "0.3.1"
       },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7616",
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7657",
       "source": {
-        "sha256": "c00234e5ec1ec70e3150a26ceedfacb0665bd3c2a0fd5abae0970c7d70edf399",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/de5f05d8fa967fbf84c062e2301948725005fb83/mods/simple-wallpaper-switcher.wh.cpp"
+        "sha256": "6f771ed025acf97b3d0bb37358c937ba605ef2a919221bb4b61cb90b99e878e8",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/77f823706af1031477bcd7caac23a924199bc6fb/mods/text-capitalization.wh.cpp"
       }
     },
     "titlebar-opacity-button": {

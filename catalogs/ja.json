@@ -4296,6 +4296,36 @@
         "version": "1.1.1"
       }
     },
+    "cursor-scheme-extension": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795197893000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795197893000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86",
+          "x86-64"
+        ],
+        "author": "CTravkin",
+        "compilerOptions": "-lgdi32 -ladvapi32",
+        "description": "Replaces built-in application pointers with pointers from the selected Windows scheme",
+        "github": "https://github.com/CTravkin",
+        "homepage": "https://ctravkin.ru",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "Cursor Scheme Extension",
+        "version": "1.0.3"
+      }
+    },
     "cursor-trail": {
       "details": {
         "defaultSorting": 3740,
