@@ -7,7 +7,7 @@
 // @github          https://github.com/MXXQN
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -lshell32 -luuid -ladvapi32 -lcrypt32
+// @compilerOptions -fms-extensions -lole32 -loleaut32 -lshell32 -luuid -ladvapi32 -lcrypt32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
