@@ -2,8 +2,8 @@
 // @id              modern-run-dialog-ui
 // @name            Modern Run Dialog UI For Windows 10 & 11
 // @name:vi-VN      Giao diện Hộp thoại Run Hiện đại cho Windows 10 & 11
-// @description     Modernizes Win + R and Task Manager "Run new task" with 13 themes, a WinUI 3 Settings app, custom colors/radius/GIF backgrounds, Classic-Friendly & Mini-Pill modes, pinning, aliases, calculator, and app suggestions.
-// @description:vi-VN Làm mới hộp thoại Run (Win + R & Task Manager) với 13 chủ đề, cửa sổ Cài đặt WinUI 3, tùy chỉnh màu/bo góc/nền GIF, chế độ Classic-Friendly & Viên thuốc nhỏ, ghim lệnh, bí danh, máy tính nhanh và gợi ý ứng dụng.
+// @description     Modernizes Win + R and Task Manager "Run new task" with 13 themes (Windows 11 Blur, Liquid Glass, Mica, OLED, Catppuccin, Custom), a dedicated WinUI 3 Settings app in windhawk.exe, custom colors/radius/animated GIF backgrounds, Classic-Friendly & Mini-Pill modes, pinning, aliases, calculator, and app suggestions.
+// @description:vi-VN Làm mới hộp thoại Run (Win + R và Tạo tác vụ mới trong Task Manager) với 13 chủ đề (Windows 11 Blur, Liquid Glass, Mica, OLED, Catppuccin, Tự tùy chỉnh), cửa sổ Cài đặt WinUI 3 riêng trong windhawk.exe, tùy chỉnh màu/bo góc/hình nền GIF động, chế độ Classic-Friendly & Viên thuốc nhỏ, ghim lệnh, bí danh, tính toán nhanh và gợi ý ứng dụng.
 // @version         6.0.1.0
 // @author          caotu2005
 // @github          https://github.com/caotu2005
@@ -55,7 +55,8 @@ Replaces the classic Win32 **Run (`Win + R`)** and **Task Manager "Create new ta
 
 - **Dedicated WinUI 3 Settings Window (Hosted in `windhawk.exe`):**
   - Clicking the `⚙️` button automatically closes the Run dialog (zero overlap) and opens a standalone **Windows 11 Settings–style** window hosted in a dedicated `windhawk.exe -tool-mod` process rather than `explorer.exe`.
-  - Built end-to-end with Direct2D WinUI 3 controls: grouped SettingsExpander cards, WinUI 3 ComboBox flyouts with vertical accent indicators, and a native-style WinUI 3 ColorPicker (2D Hue-Saturation spectrum, vertical brightness slider, live Hex/RGB readout, and 16 curated Fluent swatches).
+  - Built end-to-end with Direct2D WinUI 3 controls: grouped SettingsExpander cards, WinUI 3 ComboBox flyouts with vertical accent indicators, a native-style WinUI 3 ColorPicker, and a dedicated **Aliases** manager.
+  - **Settings Precedence:** You can configure options from either the in-app WinUI 3 Settings window or Windhawk's Mod Settings page. Changes from either source take effect immediately; per setting, whichever source you modified most recently wins without resetting your other in-app choices.
 
 - **13 Built-In Themes & Full Visual Customization:**
   - Defaults to **Windows 11 Blur** (authentic frosted Fluent Acrylic with balanced opacity, crisp `14px` corners, and subtle hairline border for clean readability on any wallpaper), with **Liquid Glass** (refractive 3D glass pill) and 11 more curated themes (**Windows 11 Mica**, **Fluent Solid**, **Classic Win11**, **Midnight OLED**, **Nord Frost**, **Catppuccin Mocha**, **Dracula Velvet**, **Rosé Pine**, **Emerald Slate**, **Warm Paper**, and **Custom**) one click away.
@@ -89,7 +90,8 @@ Thay thế hộp thoại **Run (`Win + R`)** và **Tạo tác vụ mới trong T
 
 - **Cửa sổ Cài đặt WinUI 3 độc lập (chạy trong tiến trình `windhawk.exe`):**
   - Khi bấm biểu tượng `⚙️`, hộp thoại Run tự đóng ngay (không chồng lấn) và mở cửa sổ **Cài đặt Modern Run** phong cách Windows 11 chạy riêng trong tiến trình `windhawk.exe -tool-mod` thay vì `explorer.exe`.
-  - Đồng bộ hoàn toàn theo phong cách WinUI 3: thẻ nhóm SettingsExpander, menu thả xuống ComboBox Flyout có thanh nhấn dọc, và hộp thoại chọn màu WinUI 3 (bảng phổ màu 2D kéo thả, thanh độ sáng dọc, mã Hex/RGB trực tiếp và 16 ô màu nhanh Fluent).
+  - Đồng bộ hoàn toàn theo phong cách WinUI 3: thẻ nhóm SettingsExpander, menu thả xuống ComboBox Flyout có thanh nhấn dọc, hộp thoại chọn màu WinUI 3 và mục quản lý **Bí danh (Aliases)** riêng.
+  - **Ưu tiên cài đặt:** Bạn có thể chỉnh tùy chọn từ cả cửa sổ Cài đặt WinUI 3 lẫn trang Cài đặt của Windhawk. Thay đổi ở đâu có hiệu lực ngay lập tức; với từng mục riêng lẻ, nơi bạn vừa chỉnh gần nhất sẽ được ưu tiên mà không làm mất các tùy chỉnh khác.
 
 - **13 Chủ đề giao diện có sẵn & Tùy chỉnh cá nhân hóa toàn diện:**
   - Mặc định sử dụng **Windows 11 Blur** (hiệu ứng Acrylic mờ đục dịu mắt, bo góc `14px` và viền mảnh chuẩn Windows 11 giúp chữ luôn rõ trên mọi hình nền), đồng thời giữ **Liquid Glass** (viên thuốc kính khúc xạ 3D) cùng 11 chủ đề khác (**Windows 11 Mica**, **Fluent Solid**, **Classic Win11**, **Midnight OLED**, **Nord Frost**, **Catppuccin Mocha**, **Dracula Velvet**, **Rosé Pine**, **Emerald Slate**, **Warm Paper** và **Tự tùy chỉnh**).
@@ -403,6 +405,7 @@ Thay thế hộp thoại **Run (`Win + R`)** và **Tạo tác vụ mới trong T
 #include <algorithm>
 #include <atomic>
 #include <mutex>
+#include <memory>
 
 #include <cstdint>
 #ifndef DWMWA_TRANSITIONS_FORCEDISABLED
@@ -4448,16 +4451,76 @@ std::wstring GetUserOverrideKey(const wchar_t* name) {
     return std::wstring(L"InAppCfg_") + name + L"_" + GetCachedUserSidString();
 }
 
-void ClearAllInAppOverrides() {
-    const wchar_t* keys[] = {
-        L"language", L"surfaceTheme", L"colorMode", L"uiScalePercent",
-        L"customDialogWidth", L"customBarHeight", L"customFontSize",
-        L"themePreset", L"customBgColor", L"customBorderColor", L"customCornerRadius", L"customBackgroundPath", L"customBackgroundOpacity", L"dialogPosition",
-        L"glassOpacity", L"blurOpacity", L"maxHistoryItems", L"minimalModeV3", L"clearInitialInput", L"rememberPosition", L"runAsAdmin"
-    };
-    for (const wchar_t* k : keys) {
-        Wh_DeleteValue(GetUserOverrideKey(k).c_str());
+static std::wstring TrimWsLocal(const wchar_t* raw) {
+    std::wstring r = raw ? raw : L"";
+    while (!r.empty() && iswspace(r.front())) r.erase(r.begin());
+    while (!r.empty() && iswspace(r.back())) r.pop_back();
+    return r;
+}
+
+struct WindhawkRawSnapshot {
+    bool valid = false;
+    std::wstring language;
+    std::wstring themePreset;
+    std::wstring customBgColor;
+    std::wstring customBorderColor;
+    int customCornerRadius = -1;
+    std::wstring customBackgroundPath;
+    int customBackgroundOpacity = 215;
+    std::wstring dialogPosition;
+    std::wstring colorMode;
+    int minimalMode = 0;
+    std::wstring uiScalePercent;
+    int customDialogWidth = 0;
+    int customBarHeight = 0;
+    int customFontSize = 0;
+    std::wstring taskbarClickAction;
+    int maxHistoryItems = 20;
+    int rememberPosition = 0;
+    int showTimestamp = 1;
+    int clearInitialInput = 0;
+    int closeOnClickOutside = 0;
+    int runAsAdmin = 0;
+    std::vector<CommandAlias> customAliases;
+};
+
+static WindhawkRawSnapshot g_lastWhSnapshot;
+static std::mutex g_whSnapshotMutex;
+
+static bool AliasesEqual(const std::vector<CommandAlias>& a, const std::vector<CommandAlias>& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (a[i].alias != b[i].alias || a[i].command != b[i].command || a[i].runAsAdmin != b[i].runAsAdmin) {
+            return false;
+        }
     }
+    return true;
+}
+
+static void SaveInAppAliasesOverride(const std::vector<CommandAlias>& aliases) {
+    int prevCount = std::clamp(Wh_GetIntValue(GetUserOverrideKey(L"aliasCount").c_str(), -1), -1, 64);
+    int newCount = static_cast<int>((std::min)(aliases.size(), static_cast<size_t>(64)));
+    for (int i = 0; i < newCount; ++i) {
+        Wh_SetStringValue(GetUserOverrideKey((L"aliasName_" + std::to_wstring(i)).c_str()).c_str(), aliases[i].alias.c_str());
+        Wh_SetStringValue(GetUserOverrideKey((L"aliasCmd_" + std::to_wstring(i)).c_str()).c_str(), aliases[i].command.c_str());
+        Wh_SetIntValue(GetUserOverrideKey((L"aliasAdmin_" + std::to_wstring(i)).c_str()).c_str(), aliases[i].runAsAdmin ? 1 : 0);
+    }
+    for (int i = newCount; i < prevCount; ++i) {
+        Wh_DeleteValue(GetUserOverrideKey((L"aliasName_" + std::to_wstring(i)).c_str()).c_str());
+        Wh_DeleteValue(GetUserOverrideKey((L"aliasCmd_" + std::to_wstring(i)).c_str()).c_str());
+        Wh_DeleteValue(GetUserOverrideKey((L"aliasAdmin_" + std::to_wstring(i)).c_str()).c_str());
+    }
+    Wh_SetIntValue(GetUserOverrideKey(L"aliasCount").c_str(), newCount);
+}
+
+static void ClearInAppAliasesOverride() {
+    int prevCount = std::clamp(Wh_GetIntValue(GetUserOverrideKey(L"aliasCount").c_str(), -1), -1, 64);
+    for (int i = 0; i < prevCount; ++i) {
+        Wh_DeleteValue(GetUserOverrideKey((L"aliasName_" + std::to_wstring(i)).c_str()).c_str());
+        Wh_DeleteValue(GetUserOverrideKey((L"aliasCmd_" + std::to_wstring(i)).c_str()).c_str());
+        Wh_DeleteValue(GetUserOverrideKey((L"aliasAdmin_" + std::to_wstring(i)).c_str()).c_str());
+    }
+    Wh_DeleteValue(GetUserOverrideKey(L"aliasCount").c_str());
 }
 
 std::wstring ReadGroupedStringSetting(const wchar_t* groupedKey, const wchar_t* flatKey, const wchar_t* defaultVal) {
@@ -4481,8 +4544,73 @@ int ReadGroupedIntSetting(const wchar_t* groupedKey, const wchar_t* flatKey, int
 }
 
 void LoadSettings(bool fromSettingsChanged = false) {
-    if (fromSettingsChanged) {
-        ClearAllInAppOverrides();
+    // Capture current raw Windhawk settings to selectively drop overrides ONLY for settings that actually changed
+    WindhawkRawSnapshot curWh;
+    curWh.valid                   = true;
+    curWh.language                = ReadGroupedStringSetting(L"appearanceGroup.language", L"language", L"auto");
+    curWh.themePreset             = ReadGroupedStringSetting(L"appearanceGroup.themePreset", L"themePreset", L"windows_blur");
+    curWh.customBgColor           = ReadGroupedStringSetting(L"appearanceGroup.customBgColor", L"customBgColor", L"");
+    curWh.customBorderColor       = ReadGroupedStringSetting(L"appearanceGroup.customBorderColor", L"customBorderColor", L"");
+    curWh.customCornerRadius      = Wh_GetIntSetting(L"appearanceGroup.customCornerRadius");
+    curWh.customBackgroundPath    = ReadGroupedStringSetting(L"appearanceGroup.customBackgroundPath", L"customBackgroundPath", L"");
+    curWh.customBackgroundOpacity = ReadGroupedIntSetting(L"appearanceGroup.customBackgroundOpacity", L"customBackgroundOpacity", 215);
+    curWh.dialogPosition          = ReadGroupedStringSetting(L"layoutGroup.dialogPosition", L"dialogPosition", L"auto");
+    curWh.colorMode               = ReadGroupedStringSetting(L"appearanceGroup.colorMode", L"colorMode", L"auto");
+    curWh.minimalMode             = (Wh_GetIntSetting(L"layoutGroup.minimalMode") != 0) ? 1 : 0;
+    curWh.uiScalePercent          = ReadGroupedStringSetting(L"layoutGroup.uiScalePercent", L"uiScalePercent", L"100");
+    curWh.customDialogWidth       = ReadGroupedIntSetting(L"layoutGroup.customDialogWidth", L"customDialogWidth", 0);
+    curWh.customBarHeight         = ReadGroupedIntSetting(L"layoutGroup.customBarHeight", L"customBarHeight", 0);
+    curWh.customFontSize          = ReadGroupedIntSetting(L"layoutGroup.customFontSize", L"customFontSize", 0);
+    curWh.taskbarClickAction      = ReadGroupedStringSetting(L"historyBehaviorGroup.taskbarClickAction", L"taskbarClickAction", L"minimize");
+    curWh.maxHistoryItems         = Wh_GetIntSetting(L"historyBehaviorGroup.maxHistoryItems");
+    curWh.rememberPosition        = (Wh_GetIntSetting(L"layoutGroup.rememberPosition") != 0) ? 1 : 0;
+    curWh.showTimestamp           = (Wh_GetIntSetting(L"historyBehaviorGroup.showTimestamp") != 0) ? 1 : 0;
+    curWh.clearInitialInput       = (Wh_GetIntSetting(L"historyBehaviorGroup.clearInitialInput") != 0) ? 1 : 0;
+    curWh.closeOnClickOutside     = (Wh_GetIntSetting(L"historyBehaviorGroup.closeOnClickOutside") != 0) ? 1 : 0;
+    curWh.runAsAdmin              = (Wh_GetIntSetting(L"historyBehaviorGroup.runAsAdmin") != 0) ? 1 : 0;
+    for (int i = 0; i < 64; ++i) {
+        auto aStr = WindhawkUtils::StringSetting::make(L"customAliases[%d].alias", i);
+        auto cStr = WindhawkUtils::StringSetting::make(L"customAliases[%d].command", i);
+        if ((!aStr.get() || !aStr.get()[0]) && (!cStr.get() || !cStr.get()[0])) break;
+        std::wstring a = TrimWsLocal(aStr.get() ? aStr.get() : L"");
+        std::wstring c = TrimWsLocal(cStr.get() ? cStr.get() : L"");
+        if (!a.empty() && !c.empty()) {
+            curWh.customAliases.push_back({ a, c, Wh_GetIntSetting(L"customAliases[%d].runAsAdmin", i) != 0 });
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> slock(g_whSnapshotMutex);
+        if (fromSettingsChanged && g_lastWhSnapshot.valid) {
+            auto dropIfChanged = [](bool changed, const wchar_t* key) {
+                if (changed) Wh_DeleteValue(GetUserOverrideKey(key).c_str());
+            };
+            dropIfChanged(curWh.language != g_lastWhSnapshot.language, L"language");
+            dropIfChanged(curWh.themePreset != g_lastWhSnapshot.themePreset, L"themePreset");
+            dropIfChanged(curWh.customBgColor != g_lastWhSnapshot.customBgColor, L"customBgColor");
+            dropIfChanged(curWh.customBorderColor != g_lastWhSnapshot.customBorderColor, L"customBorderColor");
+            dropIfChanged(curWh.customCornerRadius != g_lastWhSnapshot.customCornerRadius, L"customCornerRadius");
+            dropIfChanged(curWh.customBackgroundPath != g_lastWhSnapshot.customBackgroundPath, L"customBackgroundPath");
+            dropIfChanged(curWh.customBackgroundOpacity != g_lastWhSnapshot.customBackgroundOpacity, L"customBackgroundOpacity");
+            dropIfChanged(curWh.dialogPosition != g_lastWhSnapshot.dialogPosition, L"dialogPosition");
+            dropIfChanged(curWh.colorMode != g_lastWhSnapshot.colorMode, L"colorMode");
+            dropIfChanged(curWh.minimalMode != g_lastWhSnapshot.minimalMode, L"minimalModeV3");
+            dropIfChanged(curWh.uiScalePercent != g_lastWhSnapshot.uiScalePercent, L"uiScalePercent");
+            dropIfChanged(curWh.customDialogWidth != g_lastWhSnapshot.customDialogWidth, L"customDialogWidth");
+            dropIfChanged(curWh.customBarHeight != g_lastWhSnapshot.customBarHeight, L"customBarHeight");
+            dropIfChanged(curWh.customFontSize != g_lastWhSnapshot.customFontSize, L"customFontSize");
+            dropIfChanged(curWh.taskbarClickAction != g_lastWhSnapshot.taskbarClickAction, L"taskbarClickAction");
+            dropIfChanged(curWh.maxHistoryItems != g_lastWhSnapshot.maxHistoryItems, L"maxHistoryItems");
+            dropIfChanged(curWh.rememberPosition != g_lastWhSnapshot.rememberPosition, L"rememberPosition");
+            dropIfChanged(curWh.showTimestamp != g_lastWhSnapshot.showTimestamp, L"showTimestamp");
+            dropIfChanged(curWh.clearInitialInput != g_lastWhSnapshot.clearInitialInput, L"clearInitialInput");
+            dropIfChanged(curWh.closeOnClickOutside != g_lastWhSnapshot.closeOnClickOutside, L"closeOnClickOutside");
+            dropIfChanged(curWh.runAsAdmin != g_lastWhSnapshot.runAsAdmin, L"runAsAdmin");
+            if (!AliasesEqual(curWh.customAliases, g_lastWhSnapshot.customAliases)) {
+                ClearInAppAliasesOverride();
+            }
+        }
+        g_lastWhSnapshot = curWh;
     }
 
     ModSettings newSettings;
@@ -4598,6 +4726,9 @@ void LoadSettings(bool fromSettingsChanged = false) {
     newSettings.customFontSize = (rawFont > 0) ? std::clamp(rawFont, 9, 24) : 0;
 
     std::wstring tbAct = ReadGroupedStringSetting(L"historyBehaviorGroup.taskbarClickAction", L"taskbarClickAction", L"minimize");
+    if (Wh_GetStringValue(GetUserOverrideKey(L"taskbarClickAction").c_str(), strOverride, MAX_PATH) > 0 && strOverride[0]) {
+        tbAct = strOverride;
+    }
     newSettings.taskbarCloseInsteadOfMinimize = (tbAct == L"close");
 
     // Liquid Glass & Windows Blur optical parameters are locked to their tuned defaults
@@ -4626,14 +4757,16 @@ void LoadSettings(bool fromSettingsChanged = false) {
         newSettings.rememberPosition = (Wh_GetIntSetting(L"layoutGroup.rememberPosition") != 0);
     }
 
-    newSettings.showTimestamp       = (Wh_GetIntSetting(L"historyBehaviorGroup.showTimestamp") != 0);
+    int showTsOverride = Wh_GetIntValue(GetUserOverrideKey(L"showTimestamp").c_str(), -1);
+    newSettings.showTimestamp = (showTsOverride >= 0) ? (showTsOverride != 0) : (Wh_GetIntSetting(L"historyBehaviorGroup.showTimestamp") != 0);
     int clearInitOverride = Wh_GetIntValue(GetUserOverrideKey(L"clearInitialInput").c_str(), -1);
     if (clearInitOverride >= 0) {
         newSettings.clearInitialInput = (clearInitOverride != 0);
     } else {
         newSettings.clearInitialInput = (Wh_GetIntSetting(L"historyBehaviorGroup.clearInitialInput") != 0);
     }
-    newSettings.closeOnClickOutside = (Wh_GetIntSetting(L"historyBehaviorGroup.closeOnClickOutside") != 0);
+    int closeOutOverride = Wh_GetIntValue(GetUserOverrideKey(L"closeOnClickOutside").c_str(), -1);
+    newSettings.closeOnClickOutside = (closeOutOverride >= 0) ? (closeOutOverride != 0) : (Wh_GetIntSetting(L"historyBehaviorGroup.closeOnClickOutside") != 0);
 
     int adminOverride = Wh_GetIntValue(GetUserOverrideKey(L"runAsAdmin").c_str(), -1);
     if (adminOverride >= 0) {
@@ -4643,25 +4776,25 @@ void LoadSettings(bool fromSettingsChanged = false) {
     }
 
     newSettings.customAliases.clear();
-    for (int i = 0; i < 64; ++i) {
-        auto aliasStr = WindhawkUtils::StringSetting::make(L"customAliases[%d].alias", i);
-        auto cmdStr   = WindhawkUtils::StringSetting::make(L"customAliases[%d].command", i);
-        if ((!aliasStr.get() || !aliasStr.get()[0]) && (!cmdStr.get() || !cmdStr.get()[0])) {
-            break;
+    int aliasCountOv = Wh_GetIntValue(GetUserOverrideKey(L"aliasCount").c_str(), -1);
+    if (aliasCountOv >= 0) {
+        int lim = std::clamp(aliasCountOv, 0, 64);
+        for (int i = 0; i < lim; ++i) {
+            wchar_t aBuf[128] = {}, cBuf[MAX_PATH * 2] = {};
+            Wh_GetStringValue(GetUserOverrideKey((L"aliasName_" + std::to_wstring(i)).c_str()).c_str(), aBuf, ARRAYSIZE(aBuf));
+            Wh_GetStringValue(GetUserOverrideKey((L"aliasCmd_" + std::to_wstring(i)).c_str()).c_str(), cBuf, ARRAYSIZE(cBuf));
+            std::wstring a = TrimWsLocal(aBuf);
+            std::wstring c = TrimWsLocal(cBuf);
+            if (!a.empty() && !c.empty()) {
+                CommandAlias ca;
+                ca.alias = a;
+                ca.command = c;
+                ca.runAsAdmin = (Wh_GetIntValue(GetUserOverrideKey((L"aliasAdmin_" + std::to_wstring(i)).c_str()).c_str(), 0) != 0);
+                newSettings.customAliases.push_back(std::move(ca));
+            }
         }
-        std::wstring a = aliasStr.get() ? aliasStr.get() : L"";
-        std::wstring c = cmdStr.get() ? cmdStr.get() : L"";
-        while (!a.empty() && iswspace(a.front())) a.erase(a.begin());
-        while (!a.empty() && iswspace(a.back())) a.pop_back();
-        while (!c.empty() && iswspace(c.front())) c.erase(c.begin());
-        while (!c.empty() && iswspace(c.back())) c.pop_back();
-        if (!a.empty() && !c.empty()) {
-            CommandAlias ca;
-            ca.alias = std::move(a);
-            ca.command = std::move(c);
-            ca.runAsAdmin = (Wh_GetIntSetting(L"customAliases[%d].runAsAdmin", i) != 0);
-            newSettings.customAliases.push_back(std::move(ca));
-        }
+    } else {
+        newSettings.customAliases = curWh.customAliases;
     }
 
     bool clearRequested = (Wh_GetIntSetting(L"historyBehaviorGroup.clearStoredHistory") != 0) ||
@@ -6014,9 +6147,19 @@ struct RunDialogState {
         UINT delayMs = 80;
         std::vector<uint32_t> pixelsBGRA;
     };
-    std::wstring loadedBgPath;
-    std::vector<BgMediaFrame> bgFrames;
+    struct DecodedBgMedia {
+        std::wstring path;
+        ULONGLONG fileSize = 0;
+        FILETIME lastWrite = {};
+        uint64_t generation = 0;
+        std::vector<BgMediaFrame> frames;
+    };
+    std::shared_ptr<const DecodedBgMedia> bgMedia;
     size_t bgFrameIndex = 0;
+    ID2D1Bitmap* pCachedBgBmp = nullptr;
+    ID2D1RenderTarget* pCachedBgRT = nullptr;
+    uint64_t cachedBgGen = 0;
+    size_t cachedBgFrameIdx = static_cast<size_t>(-1);
 
     UINT dpi = 96;
     int topAreaHeight = 0;
@@ -6285,15 +6428,29 @@ void EnsureRowVisible(RunDialogState* state, int rowIdx) {
     ClampScrollOffset(state);
 }
 
+static std::mutex g_bgMediaCacheMutex;
+static std::shared_ptr<const RunDialogState::DecodedBgMedia> g_bgMediaCache;
+static std::atomic<uint64_t> g_bgMediaGenCounter{1};
+
+void ClearGlobalCustomBackgroundCache() {
+    std::lock_guard<std::mutex> lock(g_bgMediaCacheMutex);
+    g_bgMediaCache.reset();
+}
+
 void ReleaseCustomBackgroundMedia(RunDialogState* state) {
     if (!state) return;
     if (state->hDlg && IsWindow(state->hDlg)) {
         KillTimer(state->hDlg, kTimerBgMedia);
     }
-    state->bgFrames.clear();
-    state->bgFrames.shrink_to_fit();
+    if (state->pCachedBgBmp) {
+        state->pCachedBgBmp->Release();
+        state->pCachedBgBmp = nullptr;
+    }
+    state->pCachedBgRT = nullptr;
+    state->cachedBgGen = 0;
+    state->cachedBgFrameIdx = static_cast<size_t>(-1);
+    state->bgMedia.reset();
     state->bgFrameIndex = 0;
-    state->loadedBgPath.clear();
 }
 
 void ReloadCustomBackgroundMedia(RunDialogState* state, bool) {
@@ -6303,31 +6460,56 @@ void ReloadCustomBackgroundMedia(RunDialogState* state, bool) {
         ReleaseCustomBackgroundMedia(state);
         return;
     }
-    if (path == state->loadedBgPath && !state->bgFrames.empty()) {
-        if (state->bgFrames.size() > 1 && state->hDlg && IsWindow(state->hDlg)) {
-            UINT delay = std::clamp(state->bgFrames[state->bgFrameIndex % state->bgFrames.size()].delayMs, 25u, 2000u);
-            SetTimer(state->hDlg, kTimerBgMedia, delay, nullptr);
-        }
-        return;
-    }
-
-    ReleaseCustomBackgroundMedia(state);
 
     WIN32_FILE_ATTRIBUTE_DATA fad = {};
     if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fad) ||
         (fad.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+        ReleaseCustomBackgroundMedia(state);
         return;
     }
     ULONGLONG fileSize = (static_cast<ULONGLONG>(fad.nFileSizeHigh) << 32) | fad.nFileSizeLow;
     if (fileSize == 0 || fileSize > 25ULL * 1024ULL * 1024ULL) {
         Wh_Log(L"Custom background skipped (size=%llu bytes)", fileSize);
+        ReleaseCustomBackgroundMedia(state);
         return;
     }
+
+    // Fast path: reuse globally cached decoded frames if path, size, and last-write time match
+    {
+        std::lock_guard<std::mutex> lock(g_bgMediaCacheMutex);
+        if (g_bgMediaCache && g_bgMediaCache->path == path &&
+            g_bgMediaCache->fileSize == fileSize &&
+            CompareFileTime(&g_bgMediaCache->lastWrite, &fad.ftLastWriteTime) == 0 &&
+            !g_bgMediaCache->frames.empty()) {
+            if (state->bgMedia != g_bgMediaCache) {
+                ReleaseCustomBackgroundMedia(state);
+                state->bgMedia = g_bgMediaCache;
+                state->bgFrameIndex = 0;
+            }
+            if (state->bgMedia->frames.size() > 1 && state->hDlg && IsWindow(state->hDlg)) {
+                UINT delay = std::clamp(state->bgMedia->frames[state->bgFrameIndex % state->bgMedia->frames.size()].delayMs, 25u, 2000u);
+                SetTimer(state->hDlg, kTimerBgMedia, delay, nullptr);
+            }
+            return;
+        }
+    }
+
+    ReleaseCustomBackgroundMedia(state);
 
     IWICImagingFactory* pWic = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
                                   IID_PPV_ARGS(&pWic));
     if (FAILED(hr) || !pWic) return;
+
+    auto decoded = std::make_shared<RunDialogState::DecodedBgMedia>();
+    decoded->path = path;
+    decoded->fileSize = fileSize;
+    decoded->lastWrite = fad.ftLastWriteTime;
+    decoded->generation = g_bgMediaGenCounter.fetch_add(1);
+
+    constexpr UINT kMaxCanvasDim = 4096u;
+    constexpr uint64_t kMaxCanvasPixels = 16ULL * 1024ULL * 1024ULL;
+    constexpr size_t kMaxDecodedBgBytes = 32ULL * 1024ULL * 1024ULL; // 32 MB hard memory budget
 
     IWICBitmapDecoder* pDec = nullptr;
     hr = pWic->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ,
@@ -6338,7 +6520,6 @@ void ReloadCustomBackgroundMedia(RunDialogState* state, bool) {
         if (frameCount > 0) {
             UINT maxFrames = (std::min)(frameCount, 120u);
 
-            // Determine logical canvas dimensions (for animated GIFs with sub-frame rects)
             UINT canvasW = 0, canvasH = 0;
             IWICMetadataQueryReader* pGlobalMeta = nullptr;
             if (SUCCEEDED(pDec->GetMetadataQueryReader(&pGlobalMeta)) && pGlobalMeta) {
@@ -6363,25 +6544,43 @@ void ReloadCustomBackgroundMedia(RunDialogState* state, bool) {
                 }
             }
 
-            if (canvasW > 0 && canvasH > 0) {
-                // Downscale large images to max 1024px wide to keep Explorer memory lean
-                double scale = 1.0;
-                if (canvasW > 1024u) {
-                    scale = 1024.0 / static_cast<double>(canvasW);
-                }
+            // Reject oversized canvases BEFORE allocating any compositing buffer
+            if (canvasW > 0 && canvasH > 0 &&
+                canvasW <= kMaxCanvasDim && canvasH <= kMaxCanvasDim &&
+                static_cast<uint64_t>(canvasW) * static_cast<uint64_t>(canvasH) <= kMaxCanvasPixels) {
+                // Scale by the LARGER side (768px max for animated GIFs, 1024px max for static images)
+                UINT maxSideLimit = (maxFrames > 1) ? 768u : 1024u;
+                UINT largerSide = (std::max)(canvasW, canvasH);
+                double scale = (largerSide > maxSideLimit)
+                    ? (static_cast<double>(maxSideLimit) / static_cast<double>(largerSide))
+                    : 1.0;
                 UINT outW = (std::max)(1u, static_cast<UINT>(std::lround(canvasW * scale)));
                 UINT outH = (std::max)(1u, static_cast<UINT>(std::lround(canvasH * scale)));
+                size_t frameBytes = static_cast<size_t>(outW) * static_cast<size_t>(outH) * 4ULL;
+                size_t totalBytes = 0;
 
-                // Working canvas for GIF frame compositing
-                std::vector<uint32_t> compCanvas(static_cast<size_t>(canvasW) * canvasH, 0u);
+                std::vector<uint32_t> compCanvas;
                 std::vector<uint32_t> prevCanvas;
+                if (maxFrames > 1) {
+                    compCanvas.assign(static_cast<size_t>(canvasW) * canvasH, 0u);
+                }
 
                 for (UINT fi = 0; fi < maxFrames; ++fi) {
+                    if (totalBytes + frameBytes > kMaxDecodedBgBytes) {
+                        Wh_Log(L"Custom background frame budget (32 MB) reached at frame %u/%u", fi, maxFrames);
+                        break;
+                    }
+
                     IWICBitmapFrameDecode* pFrame = nullptr;
                     if (FAILED(pDec->GetFrame(fi, &pFrame)) || !pFrame) continue;
 
                     UINT fw = 0, fh = 0;
                     pFrame->GetSize(&fw, &fh);
+                    if (fw == 0 || fh == 0 || fw > kMaxCanvasDim || fh > kMaxCanvasDim) {
+                        pFrame->Release();
+                        continue;
+                    }
+
                     UINT fLeft = 0, fTop = 0, delayMs = 80, disposal = 0;
                     IWICMetadataQueryReader* pMeta = nullptr;
                     if (SUCCEEDED(pFrame->GetMetadataQueryReader(&pMeta)) && pMeta) {
@@ -6408,7 +6607,6 @@ void ReloadCustomBackgroundMedia(RunDialogState* state, bool) {
                                                         WICBitmapDitherTypeNone, nullptr, 0.0,
                                                         WICBitmapPaletteTypeCustom))) {
                             if (maxFrames == 1) {
-                                // Fast single-frame path with optional high-quality scaler
                                 IWICBitmapSource* pSrc = pConv;
                                 IWICBitmapScaler* pScaler = nullptr;
                                 if (outW != fw || outH != fh) {
@@ -6425,11 +6623,11 @@ void ReloadCustomBackgroundMedia(RunDialogState* state, bool) {
                                 mf.pixelsBGRA.resize(static_cast<size_t>(outW) * outH);
                                 if (SUCCEEDED(pSrc->CopyPixels(nullptr, outW * 4, outW * outH * 4,
                                                                reinterpret_cast<BYTE*>(mf.pixelsBGRA.data())))) {
-                                    state->bgFrames.push_back(std::move(mf));
+                                    totalBytes += frameBytes;
+                                    decoded->frames.push_back(std::move(mf));
                                 }
                                 if (pScaler) pScaler->Release();
                             } else {
-                                // Multi-frame animated GIF compositing onto full logical canvas
                                 if (disposal == 3) prevCanvas = compCanvas;
                                 std::vector<uint32_t> framePx(static_cast<size_t>(fw) * fh);
                                 if (SUCCEEDED(pConv->CopyPixels(nullptr, fw * 4, fw * fh * 4,
@@ -6474,9 +6672,9 @@ void ReloadCustomBackgroundMedia(RunDialogState* state, bool) {
                                             }
                                         }
                                     }
-                                    state->bgFrames.push_back(std::move(mf));
+                                    totalBytes += frameBytes;
+                                    decoded->frames.push_back(std::move(mf));
 
-                                    // Apply GIF disposal method for next frame
                                     if (disposal == 2) {
                                         for (UINT y = 0; y < fh && (fTop + y) < canvasH; ++y) {
                                             uint32_t* dRow = &compCanvas[static_cast<size_t>(fTop + y) * canvasW + fLeft];
@@ -6492,30 +6690,35 @@ void ReloadCustomBackgroundMedia(RunDialogState* state, bool) {
                     }
                     pFrame->Release();
                 }
+            } else {
+                Wh_Log(L"Custom background rejected due to oversized canvas (%ux%u)", canvasW, canvasH);
             }
         }
         pDec->Release();
     }
     pWic->Release();
 
-    if (!state->bgFrames.empty()) {
-        state->loadedBgPath = path;
+    if (!decoded->frames.empty()) {
+        {
+            std::lock_guard<std::mutex> lock(g_bgMediaCacheMutex);
+            g_bgMediaCache = decoded;
+        }
+        state->bgMedia = std::move(decoded);
         state->bgFrameIndex = 0;
-        if (state->bgFrames.size() > 1 && state->hDlg && IsWindow(state->hDlg)) {
-            SetTimer(state->hDlg, kTimerBgMedia, std::clamp(state->bgFrames[0].delayMs, 25u, 2000u), nullptr);
+        if (state->bgMedia->frames.size() > 1 && state->hDlg && IsWindow(state->hDlg)) {
+            SetTimer(state->hDlg, kTimerBgMedia, std::clamp(state->bgMedia->frames[0].delayMs, 25u, 2000u), nullptr);
         }
     }
 }
 
 void StepCustomBackgroundAnimation(RunDialogState* state) {
-    if (!state || state->bgFrames.size() <= 1 || !state->hDlg || !IsWindow(state->hDlg)) return;
+    if (!state || !state->bgMedia || state->bgMedia->frames.size() <= 1 || !state->hDlg || !IsWindow(state->hDlg)) return;
     if (!IsWindowVisible(state->hDlg) || IsIconic(state->hDlg)) return;
-    state->bgFrameIndex = (state->bgFrameIndex + 1) % state->bgFrames.size();
-    UINT nextDelay = std::clamp(state->bgFrames[state->bgFrameIndex].delayMs, 25u, 2000u);
+    state->bgFrameIndex = (state->bgFrameIndex + 1) % state->bgMedia->frames.size();
+    UINT nextDelay = std::clamp(state->bgMedia->frames[state->bgFrameIndex].delayMs, 25u, 2000u);
     SetTimer(state->hDlg, kTimerBgMedia, nextDelay, nullptr);
     RefreshDialogVisual(state->hDlg, state, true);
 }
-
 UINT DetectMonitorTaskbarEdge(HMONITOR, const MONITORINFO& mi) {
     int leftInset   = mi.rcWork.left - mi.rcMonitor.left;
     int rightInset  = mi.rcMonitor.right - mi.rcWork.right;
@@ -8167,7 +8370,7 @@ void ExecuteHistoryOrSuggestionItem(RunDialogState* state, const HistoryItem& it
             std::wstring termFile, termParams;
             if (BuildTerminalLaunchSpec(trimmedTerm, &termFile, &termParams)) {
                 if (termFile.find(L' ') != std::wstring::npos && termFile.front() != L'"') {
-                    termFile = L""" + termFile + L""";
+                    termFile = L"\"" + termFile + L"\"";
                 }
                 resolvedItem.execTarget = termFile + L" " + termParams;
             }
@@ -12532,11 +12735,13 @@ void PaintWin11SettingsWindow(HWND hWnd, Win11SettingsState* st) {
         }
 
         struct NavDef { int tab; const wchar_t* glyph; const wchar_t* label; };
+        bool isViNav = (ResolveEffectiveLanguageCode(st->settings.language) == L"vi");
         NavDef kNavs[] = {
             { 0, L"\uE790", ls.nav0 },
             { 1, L"\uE740", ls.nav1 },
             { 2, L"\uE81C", ls.nav2 },
-            { 3, L"\uE774", ls.nav3 }
+            { 3, L"\uE8AC", isViNav ? L"Bí danh (Aliases)" : L"Aliases" },
+            { 4, L"\uE774", ls.nav3 }
         };
         float navY = S(76.0f);
         for (const auto& nv : kNavs) {
@@ -12838,34 +13043,95 @@ void PaintWin11SettingsWindow(HWND hWnd, Win11SettingsState* st) {
             auto [g1, y1] = beginGroupCard(
                 ls.gHistTitle,
                 ls.gHistSub,
-                4, rH);
+                7, rH);
             drawToggleRowInGroup(g1, y1, rH, 2501, L"\uE81C",
                 ls.showHistTitle,
                 ls.showHistSub,
                 st->settings.maxHistoryItems > 0);
-            drawToggleRowInGroup(g1, y1 + rH, rH, 2502, L"\uE750",
+            drawToggleRowInGroup(g1, y1 + rH, rH, 2504, L"\uE823",
+                isViNav ? L"Hiển thị thời gian chạy lệnh" : L"Show Command Timestamps",
+                isViNav ? L"Hiện mốc giờ thực thi ở bên phải mỗi dòng lịch sử" : L"Show execution timestamp on each history row",
+                st->settings.showTimestamp);
+            drawToggleRowInGroup(g1, y1 + rH * 2, rH, 2502, L"\uE750",
                 ls.clearInitTitle,
                 ls.clearInitSub,
                 st->settings.clearInitialInput);
-            drawToggleRowInGroup(g1, y1 + rH * 2, rH, 2503, L"\uE72E",
+            drawToggleRowInGroup(g1, y1 + rH * 3, rH, 2505, L"\uE711",
+                isViNav ? L"Tự động đóng khi bấm ra ngoài cửa sổ" : L"Auto-Close on Click Outside",
+                isViNav ? L"Tự ẩn hộp thoại Run khi click chuột ra ngoài vùng cửa sổ" : L"Automatically dismiss Run when clicking outside",
+                st->settings.closeOnClickOutside);
+            drawToggleRowInGroup(g1, y1 + rH * 4, rH, 2506, L"\uE75C",
+                isViNav ? L"Bấm icon Taskbar để đóng hẳn (thay vì thu nhỏ)" : L"Taskbar Click Closes Dialog",
+                isViNav ? L"Tắt = thu nhỏ bình thường, Bật = đóng hẳn hộp thoại Run" : L"Off = minimize normally, On = close Run dialog",
+                st->settings.taskbarCloseInsteadOfMinimize);
+            drawToggleRowInGroup(g1, y1 + rH * 5, rH, 2503, L"\uE72E",
                 ls.adminTitle,
                 ls.adminSub,
                 st->settings.runAsAdmin, true);
 
             // Clear history row
-            float clrY = y1 + rH * 3;
+            float clrY = y1 + rH * 6;
             pRT->DrawLine(D2D1::Point2F(g1.left + 1.0f, clrY), D2D1::Point2F(g1.right - 1.0f, clrY), pBrDiv, 1.0f);
             if (pFmtGlyph) pRT->DrawText(L"\uE74D", 1, pFmtGlyph, D2D1::RectF(g1.left + S(26), clrY, g1.left + S(56), clrY + rH), pBrSub);
             const wchar_t* clrT = ls.clearHistTitle;
             const wchar_t* clrD = ls.clearHistSub;
             if (pFmtTitle) pRT->DrawText(clrT, (UINT32)wcslen(clrT), pFmtTitle, D2D1::RectF(g1.left + S(64), clrY + S(11), g1.right - S(130), clrY + S(31)), pBrText);
             if (pFmtSub)   pRT->DrawText(clrD, (UINT32)wcslen(clrD), pFmtSub,   D2D1::RectF(g1.left + S(64), clrY + S(32), g1.right - S(130), clrY + rH - S(6)), pBrSub);
-            D2D1_RECT_F rcBtn = D2D1::RectF(g1.right - S(110), clrY + S(15), g1.right - S(18), clrY + rH - S(15));
-            pRT->FillRoundedRectangle(D2D1::RoundedRect(rcBtn, S(4), S(4)), st->hoveredId == 2510 ? pBrCardHov : pBrCtlBg);
-            pRT->DrawRoundedRectangle(D2D1::RoundedRect(rcBtn, S(4), S(4)), pBrBorder, 1.0f);
+            D2D1_RECT_F rcClr = D2D1::RectF(g1.right - S(118), clrY + S(14), g1.right - S(18), clrY + rH - S(14));
+            pRT->FillRoundedRectangle(D2D1::RoundedRect(rcClr, S(4), S(4)), (st->hoveredId == 2510) ? pBrCardHov : pBrCtlBg);
+            pRT->DrawRoundedRectangle(D2D1::RoundedRect(rcClr, S(4), S(4)), pBrBorder, 1.0f);
             const wchar_t* btnTxt = ls.clearNow;
-            if (pFmtCtl) pRT->DrawText(btnTxt, (UINT32)wcslen(btnTxt), pFmtCtl, rcBtn, pBrText);
-            addHit(2510, rcBtn);
+            if (pFmtCtl) pRT->DrawText(btnTxt, (UINT32)wcslen(btnTxt), pFmtCtl, rcClr, pBrText);
+            addHit(2510, rcClr);
+        } else if (st->activeTab == 3) {
+            // Tab 3: Custom Command Aliases (Bí danh lệnh tùy chỉnh)
+            float rH = S(58.0f);
+            int aliasCnt = static_cast<int>(st->settings.customAliases.size());
+            auto [g1, y1] = beginGroupCard(
+                isViNav ? L"Bí danh lệnh tùy chỉnh (Custom Aliases)" : L"Custom Command Aliases",
+                isViNav ? L"Khai báo từ khóa gõ tắt (ví dụ hosts, ws) để mở nhanh tệp hoặc chạy quyền Admin" : L"Create shorthand keywords (e.g. hosts, ws) to launch commands or elevated tools",
+                aliasCnt + 1, rH);
+            // Top action row: + Add Alias
+            {
+                pRT->DrawLine(D2D1::Point2F(g1.left + 1.0f, y1), D2D1::Point2F(g1.right - 1.0f, y1), pBrDiv, 1.0f);
+                if (pFmtGlyph) pRT->DrawText(L"\uE710", 1, pFmtGlyph, D2D1::RectF(g1.left + S(26), y1, g1.left + S(56), y1 + rH), pBrAccent);
+                const wchar_t* addT = isViNav ? L"Thêm bí danh mới" : L"Add New Alias";
+                const wchar_t* addD = isViNav ? L"Gõ tên tắt, lệnh đích và chọn chạy quyền Quản trị nếu cần" : L"Enter a keyword, target command, and optional Admin flag";
+                if (pFmtTitle) pRT->DrawText(addT, (UINT32)wcslen(addT), pFmtTitle, D2D1::RectF(g1.left + S(64), y1 + S(11), g1.right - S(146), y1 + S(31)), pBrText);
+                if (pFmtSub)   pRT->DrawText(addD, (UINT32)wcslen(addD), pFmtSub,   D2D1::RectF(g1.left + S(64), y1 + S(32), g1.right - S(146), y1 + rH - S(6)), pBrSub);
+                D2D1_RECT_F rcAdd = D2D1::RectF(g1.right - S(132), y1 + S(13), g1.right - S(18), y1 + rH - S(13));
+                pRT->FillRoundedRectangle(D2D1::RoundedRect(rcAdd, S(4), S(4)), (st->hoveredId == 2700) ? pBrCardHov : pBrChipSel);
+                pRT->DrawRoundedRectangle(D2D1::RoundedRect(rcAdd, S(4), S(4)), pBrAccent, 1.0f);
+                const wchar_t* addLbl = isViNav ? L"+ Thêm mới" : L"+ Add Alias";
+                if (pFmtCtl) pRT->DrawText(addLbl, (UINT32)wcslen(addLbl), pFmtCtl, rcAdd, pBrAccent);
+                addHit(2700, rcAdd);
+            }
+            for (int i = 0; i < aliasCnt && i < 32; ++i) {
+                const auto& ca = st->settings.customAliases[i];
+                float ry = y1 + rH * (i + 1);
+                pRT->DrawLine(D2D1::Point2F(g1.left + 1.0f, ry), D2D1::Point2F(g1.right - 1.0f, ry), pBrDiv, 1.0f);
+                if (pFmtGlyph) pRT->DrawText(ca.runAsAdmin ? L"\uE72E" : L"\uE8AC", 1, pFmtGlyph,
+                    D2D1::RectF(g1.left + S(26), ry, g1.left + S(56), ry + rH), ca.runAsAdmin ? pBrAccent : pBrSub);
+                std::wstring titleLine = ca.alias + (ca.runAsAdmin ? L"  [Admin]" : L"");
+                if (pFmtTitle) pRT->DrawText(titleLine.c_str(), (UINT32)titleLine.size(), pFmtTitle,
+                    D2D1::RectF(g1.left + S(64), ry + S(10), g1.right - S(168), ry + S(30)), pBrText);
+                if (pFmtSub)   pRT->DrawText(ca.command.c_str(), (UINT32)ca.command.size(), pFmtSub,
+                    D2D1::RectF(g1.left + S(64), ry + S(31), g1.right - S(168), ry + rH - S(6)), pBrSub);
+
+                // Toggle Admin button for alias i (id 2800 + i)
+                D2D1_RECT_F rcAdm = D2D1::RectF(g1.right - S(156), ry + S(14), g1.right - S(84), ry + rH - S(14));
+                pRT->FillRoundedRectangle(D2D1::RoundedRect(rcAdm, S(4), S(4)), ca.runAsAdmin ? pBrChipSel : ((st->hoveredId == 2800 + i) ? pBrCardHov : pBrCtlBg));
+                pRT->DrawRoundedRectangle(D2D1::RoundedRect(rcAdm, S(4), S(4)), ca.runAsAdmin ? pBrAccent : pBrBorder, 1.0f);
+                if (pFmtCtl) pRT->DrawText(L"Admin", 5, pFmtCtl, rcAdm, ca.runAsAdmin ? pBrAccent : pBrText);
+                addHit(2800 + i, rcAdm, L"", i);
+
+                // Delete button for alias i (id 2900 + i)
+                D2D1_RECT_F rcDel = D2D1::RectF(g1.right - S(76), ry + S(14), g1.right - S(18), ry + rH - S(14));
+                pRT->FillRoundedRectangle(D2D1::RoundedRect(rcDel, S(4), S(4)), (st->hoveredId == 2900 + i) ? pBrCardHov : pBrCtlBg);
+                pRT->DrawRoundedRectangle(D2D1::RoundedRect(rcDel, S(4), S(4)), pBrBorder, 1.0f);
+                if (pFmtCtl) pRT->DrawText(ls.clear, (UINT32)wcslen(ls.clear), pFmtCtl, rcDel, pBrText);
+                addHit(2900 + i, rcDel, L"", i);
+            }
         } else {
             // TAB 3: Language dropdown + quick grid
             struct LangItem { int id; const wchar_t* code; const wchar_t* label; };
@@ -13233,6 +13499,155 @@ int ShowWinUI3ComboFlyout(HWND hOwner, const RECT& rcCombo, const std::vector<st
     return session.chosenId;
 }
 
+struct AddAliasDialogSession {
+    HWND hWnd = nullptr;
+    HWND hEditAlias = nullptr;
+    HWND hEditCmd = nullptr;
+    HWND hChkAdmin = nullptr;
+    bool confirmed = false;
+    bool done = false;
+    CommandAlias result;
+};
+
+static LRESULT CALLBACK AddAliasDialogWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    auto* s = reinterpret_cast<AddAliasDialogSession*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
+    switch (uMsg) {
+        case WM_CREATE: {
+            auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
+            s = reinterpret_cast<AddAliasDialogSession*>(cs->lpCreateParams);
+            SetWindowLongPtrW(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(s));
+            if (s) s->hWnd = hWnd;
+            return 0;
+        }
+        case WM_COMMAND: {
+            if (!s) break;
+            int id = LOWORD(wParam);
+            if (id == IDOK) {
+                wchar_t aBuf[128] = {}, cBuf[MAX_PATH * 2] = {};
+                if (s->hEditAlias) GetWindowTextW(s->hEditAlias, aBuf, ARRAYSIZE(aBuf));
+                if (s->hEditCmd)   GetWindowTextW(s->hEditCmd, cBuf, ARRAYSIZE(cBuf));
+                std::wstring a = TrimWsLocal(aBuf);
+                std::wstring c = TrimWsLocal(cBuf);
+                if (!a.empty() && !c.empty()) {
+                    s->result.alias = a;
+                    s->result.command = c;
+                    s->result.runAsAdmin = (s->hChkAdmin && SendMessageW(s->hChkAdmin, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                    s->confirmed = true;
+                    s->done = true;
+                    DestroyWindow(hWnd);
+                }
+                return 0;
+            }
+            if (id == IDCANCEL) {
+                s->confirmed = false;
+                s->done = true;
+                DestroyWindow(hWnd);
+                return 0;
+            }
+            break;
+        }
+        case WM_CLOSE:
+            if (s) { s->confirmed = false; s->done = true; }
+            DestroyWindow(hWnd);
+            return 0;
+        case WM_NCDESTROY:
+            if (s) s->done = true;
+            SetWindowLongPtrW(hWnd, GWLP_USERDATA, 0);
+            return 0;
+    }
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
+
+static bool ShowAddAliasDialog(HWND hOwner, bool isLight, bool isViUI, UINT dpi, CommandAlias* outAlias) {
+    static constexpr const wchar_t* kAliasDlgClass = L"WindhawkModernRunAddAlias_v6";
+    WNDCLASSEXW wc = { sizeof(wc) };
+    wc.lpfnWndProc = AddAliasDialogWndProc;
+    wc.hInstance = GetModInstanceHandle();
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+    wc.lpszClassName = kAliasDlgClass;
+    RegisterClassExW(&wc);
+
+    AddAliasDialogSession sess;
+    int cw = DpiScale(420, dpi), ch = DpiScale(210, dpi);
+    DWORD style = WS_POPUP | WS_CAPTION | WS_SYSMENU;
+    RECT rcAdj = { 0, 0, cw, ch };
+    AdjustWindowRectEx(&rcAdj, style, FALSE, WS_EX_DLGMODALFRAME);
+    int ww = rcAdj.right - rcAdj.left, wh = rcAdj.bottom - rcAdj.top;
+    RECT rcOwn = {};
+    int px = 180, py = 140;
+    if (hOwner && GetWindowRect(hOwner, &rcOwn)) {
+        px = rcOwn.left + ((rcOwn.right - rcOwn.left) - ww) / 2;
+        py = rcOwn.top + ((rcOwn.bottom - rcOwn.top) - wh) / 2;
+    }
+
+    HWND hDlg = CreateWindowExW(WS_EX_DLGMODALFRAME, kAliasDlgClass,
+        isViUI ? L"Thêm bí danh lệnh (Custom Alias)" : L"Add Custom Command Alias",
+        style, px, py, ww, wh, hOwner, nullptr, GetModInstanceHandle(), &sess);
+    if (!hDlg) return false;
+
+    BOOL dark = isLight ? FALSE : TRUE;
+    DwmSetWindowAttribute(hDlg, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+    DWORD corner = 2;
+    DwmSetWindowAttribute(hDlg, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+
+    HFONT hFont = CreateFontW(-DpiScale(14, dpi), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                              DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                              DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+    auto addCtrl = [&](const wchar_t* cls, const wchar_t* txt, DWORD st, DWORD ex, int x, int y, int w, int h, int id) -> HWND {
+        HWND hc = CreateWindowExW(ex, cls, txt, WS_CHILD | WS_VISIBLE | st,
+                                  DpiScale(x, dpi), DpiScale(y, dpi), DpiScale(w, dpi), DpiScale(h, dpi),
+                                  hDlg, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), GetModInstanceHandle(), nullptr);
+        if (hc && hFont) SendMessageW(hc, WM_SETFONT, reinterpret_cast<WPARAM>(hFont), TRUE);
+        return hc;
+    };
+
+    addCtrl(L"STATIC", isViUI ? L"Lệnh tắt (ví dụ: hosts, ws):" : L"Alias keyword (e.g. hosts, ws):", 0, 0, 16, 14, 388, 20, 0);
+    sess.hEditAlias = addCtrl(L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, WS_EX_CLIENTEDGE, 16, 36, 388, 26, 101);
+    addCtrl(L"STATIC", isViUI ? L"Lệnh hoặc đường dẫn đích:" : L"Target command or path:", 0, 0, 16, 72, 388, 20, 0);
+    sess.hEditCmd = addCtrl(L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, WS_EX_CLIENTEDGE, 16, 94, 388, 26, 102);
+    sess.hChkAdmin = addCtrl(L"BUTTON", isViUI ? L"Chạy với quyền Quản trị viên (Admin)" : L"Run as Administrator",
+                             WS_TABSTOP | BS_AUTOCHECKBOX, 0, 16, 130, 300, 22, 103);
+    addCtrl(L"BUTTON", isViUI ? L"Thêm" : L"Add", WS_TABSTOP | BS_DEFPUSHBUTTON, 0, 232, 164, 82, 30, IDOK);
+    addCtrl(L"BUTTON", isViUI ? L"Hủy" : L"Cancel", WS_TABSTOP, 0, 322, 164, 82, 30, IDCANCEL);
+
+    if (hOwner) EnableWindow(hOwner, FALSE);
+    ShowWindow(hDlg, SW_SHOWNORMAL);
+    UpdateWindow(hDlg);
+    SetFocus(sess.hEditAlias);
+
+    MSG msg = {};
+    while (!sess.done && GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message == WM_QUIT) {
+            PostQuitMessage(static_cast<int>(msg.wParam));
+            break;
+        }
+        if (msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE) {
+            DestroyWindow(hDlg);
+            continue;
+        }
+        if (msg.message == WM_KEYDOWN && msg.wParam == VK_RETURN) {
+            SendMessageW(hDlg, WM_COMMAND, IDOK, 0);
+            continue;
+        }
+        if (!IsDialogMessageW(hDlg, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+
+    if (hFont) DeleteObject(hFont);
+    if (hOwner && IsWindow(hOwner)) {
+        EnableWindow(hOwner, TRUE);
+        SetForegroundWindow(hOwner);
+    }
+    if (sess.confirmed && outAlias) {
+        *outAlias = sess.result;
+        return true;
+    }
+    return false;
+}
+
 LRESULT CALLBACK Win11SettingsWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     auto* st = reinterpret_cast<Win11SettingsState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
     if (uMsg == g_msgToggle && g_msgToggle != 0 && wParam == kActionReloadSettings && st) {
@@ -13310,7 +13725,7 @@ LRESULT CALLBACK Win11SettingsWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
                 int id = hit.id;
                 bool changed = false;
 
-                if (id >= 1000 && id <= 1003) {
+                if (id >= 1000 && id <= 1004) {
                     st->activeTab = hit.intVal;
                     st->scrollY = 0;
                     InvalidateRect(hWnd, nullptr, FALSE);
@@ -13489,9 +13904,52 @@ LRESULT CALLBACK Win11SettingsWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
                     }
                     Wh_SetIntValue(GetUserOverrideKey(L"runAsAdmin").c_str(), nextAdmin ? 1 : 0);
                     changed = true;
+                } else if (id == 2504) {
+                    Wh_SetIntValue(GetUserOverrideKey(L"showTimestamp").c_str(), st->settings.showTimestamp ? 0 : 1);
+                    changed = true;
+                } else if (id == 2505) {
+                    Wh_SetIntValue(GetUserOverrideKey(L"closeOnClickOutside").c_str(), st->settings.closeOnClickOutside ? 0 : 1);
+                    changed = true;
+                } else if (id == 2506) {
+                    Wh_SetStringValue(GetUserOverrideKey(L"taskbarClickAction").c_str(),
+                                      st->settings.taskbarCloseInsteadOfMinimize ? L"minimize" : L"close");
+                    changed = true;
                 } else if (id == 2510) {
                     ClearCurrentUserStoredHistory();
                     changed = true;
+                } else if (id == 2700) {
+                    CommandAlias ca;
+                    bool isViDlg = (ResolveEffectiveLanguageCode(st->settings.language) == L"vi");
+                    if (ShowAddAliasDialog(hWnd, st->isLight, isViDlg, st->dpi, &ca)) {
+                        auto list = st->settings.customAliases;
+                        bool replaced = false;
+                        for (auto& existing : list) {
+                            if (_wcsicmp(existing.alias.c_str(), ca.alias.c_str()) == 0) {
+                                existing = ca;
+                                replaced = true;
+                                break;
+                            }
+                        }
+                        if (!replaced && list.size() < 64) list.push_back(std::move(ca));
+                        SaveInAppAliasesOverride(list);
+                        changed = true;
+                    }
+                } else if (id >= 2800 && id < 2900) {
+                    int idx = hit.intVal;
+                    if (idx >= 0 && idx < (int)st->settings.customAliases.size()) {
+                        auto list = st->settings.customAliases;
+                        list[idx].runAsAdmin = !list[idx].runAsAdmin;
+                        SaveInAppAliasesOverride(list);
+                        changed = true;
+                    }
+                } else if (id >= 2900 && id < 3000) {
+                    int idx = hit.intVal;
+                    if (idx >= 0 && idx < (int)st->settings.customAliases.size()) {
+                        auto list = st->settings.customAliases;
+                        list.erase(list.begin() + idx);
+                        SaveInAppAliasesOverride(list);
+                        changed = true;
+                    }
                 } else if (id >= 2600 && id <= 2621) {
                     Wh_SetStringValue(GetUserOverrideKey(L"language").c_str(), hit.strVal.c_str());
                     changed = true;
@@ -13657,12 +14115,6 @@ DWORD WINAPI SettingsHostThreadProc(LPVOID param) {
     }
 
     if (hHost) {
-        // Allow Medium-integrity explorer.exe to send g_msgOpenSettings across UIPI into elevated windhawk.exe -tool-mod
-        if (g_msgOpenSettings != 0) {
-            ChangeWindowMessageFilter(g_msgOpenSettings, MSGFLT_ADD);
-            ChangeWindowMessageFilterEx(hHost, g_msgOpenSettings, MSGFLT_ALLOW, nullptr);
-        }
-        ChangeWindowMessageFilterEx(hHost, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
         g_hSettingsHostWnd.store(hHost);
         Wh_Log(L"Modern Run Settings IPC host window ready (HWND=%p, PID=%lu)", hHost, GetCurrentProcessId());
     } else {
@@ -13687,128 +14139,27 @@ DWORD WINAPI SettingsHostThreadProc(LPVOID param) {
     return 0;
 }
 
-static bool ResolveWindhawkExePath(wchar_t* outPath, size_t outCap) {
-    if (!outPath || outCap == 0) return false;
-    outPath[0] = L'\0';
-
-    auto tryCandidate = [&](const wchar_t* candidate) -> bool {
-        if (!candidate || !candidate[0]) return false;
-        DWORD attr = GetFileAttributesW(candidate);
-        if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
-            wcsncpy_s(outPath, outCap, candidate, _TRUNCATE);
-            return true;
-        }
-        return false;
-    };
-
-    // 1. Check Windhawk registry keys (HKLM / HKCU)
-    const HKEY roots[] = { HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER };
-    const wchar_t* valNames[] = { L"AppPath", L"InstallDir", L"Path" };
-    for (HKEY root : roots) {
-        for (const wchar_t* valName : valNames) {
-            wchar_t regBuf[MAX_PATH] = {};
-            DWORD cb = sizeof(regBuf);
-            if (RegGetValueW(root, L"SOFTWARE\\Windhawk", valName, RRF_RT_REG_SZ, nullptr, regBuf, &cb) == ERROR_SUCCESS && regBuf[0]) {
-                std::wstring p = regBuf;
-                if (p.size() >= 12 && _wcsicmp(p.c_str() + p.size() - 12, L"windhawk.exe") == 0) {
-                    if (tryCandidate(p.c_str())) return true;
-                } else {
-                    if (!p.empty() && p.back() != L'\\') p += L'\\';
-                    p += L"windhawk.exe";
-                    if (tryCandidate(p.c_str())) return true;
-                }
-            }
-        }
-    }
-
-    // 2. Check standard Program Files / LocalAppData locations
-    wchar_t envBuf[MAX_PATH] = {};
-    if (GetEnvironmentVariableW(L"ProgramW6432", envBuf, ARRAYSIZE(envBuf)) > 0) {
-        std::wstring p = std::wstring(envBuf) + L"\\Windhawk\\windhawk.exe";
-        if (tryCandidate(p.c_str())) return true;
-    }
-    if (GetEnvironmentVariableW(L"ProgramFiles", envBuf, ARRAYSIZE(envBuf)) > 0) {
-        std::wstring p = std::wstring(envBuf) + L"\\Windhawk\\windhawk.exe";
-        if (tryCandidate(p.c_str())) return true;
-    }
-    if (GetEnvironmentVariableW(L"LOCALAPPDATA", envBuf, ARRAYSIZE(envBuf)) > 0) {
-        std::wstring p = std::wstring(envBuf) + L"\\Programs\\Windhawk\\windhawk.exe";
-        if (tryCandidate(p.c_str())) return true;
-    }
-    return tryCandidate(L"C:\\Program Files\\Windhawk\\windhawk.exe");
-}
-
-static DWORD WINAPI AsyncLaunchSettingsHostThread(LPVOID) {
-    if (g_unloading.load()) return 0;
-    HWND hHost = FindWindowW(kSettingsHostClassName, nullptr);
-    if (!hHost || !IsWindow(hHost)) {
-        wchar_t whExe[MAX_PATH] = {};
-        if (ResolveWindhawkExePath(whExe, ARRAYSIZE(whExe))) {
-            wchar_t cmdLine[MAX_PATH + 256] = {};
-            swprintf_s(cmdLine, L"\"%s\" -tool-mod \"%s\"", whExe, WH_MOD_ID);
-            STARTUPINFOW si = { sizeof(si) };
-            si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-            PROCESS_INFORMATION pi = {};
-            if (CreateProcessW(whExe, cmdLine, nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi)) {
-                Wh_Log(L"Auto-launched windhawk.exe -tool-mod for Modern Run Settings (PID=%lu)", pi.dwProcessId);
-                CloseHandle(pi.hProcess);
-                CloseHandle(pi.hThread);
-                for (int attempt = 0; attempt < 60 && !g_unloading.load(); ++attempt) {
-                    Sleep(50);
-                    hHost = FindWindowW(kSettingsHostClassName, nullptr);
-                    if (hHost && IsWindow(hHost)) break;
-                }
-            } else {
-                Wh_Log(L"Auto-launch windhawk.exe -tool-mod failed (err=%lu)", GetLastError());
-            }
-        } else {
-            Wh_Log(L"Could not locate windhawk.exe to auto-launch Modern Run Settings host.");
-        }
-    }
-
-    if (hHost && IsWindow(hHost) && g_msgOpenSettings != 0 && !g_unloading.load()) {
-        DWORD hostPid = 0;
-        GetWindowThreadProcessId(hHost, &hostPid);
-        AllowSetForegroundWindow(hostPid != 0 ? hostPid : ASFW_ANY);
-        BOOL posted = PostMessageW(hHost, g_msgOpenSettings, 0, 0);
-        Wh_Log(L"Async posted g_msgOpenSettings (%u) to windhawk.exe host HWND=%p (PID=%lu, ok=%d, err=%lu)",
-               g_msgOpenSettings, hHost, hostPid, (int)posted, posted ? 0UL : GetLastError());
-    } else {
-        Wh_Log(L"Modern Run Settings host still not found in windhawk.exe (class=%s, msg=%u).",
-               kSettingsHostClassName, g_msgOpenSettings);
-    }
-    return 0;
-}
-
 void OpenModernSettingsApp(RunDialogState* state) {
     if (g_unloading.load()) return;
 
     HWND hRunToClose = (state && state->hDlg && IsWindow(state->hDlg)) ? state->hDlg : nullptr;
 
-    // Fast path: dedicated windhawk.exe -tool-mod host is already running (<1ms, zero UI freeze)
     HWND hHost = FindWindowW(kSettingsHostClassName, nullptr);
-    if (hHost && IsWindow(hHost) && g_msgOpenSettings != 0) {
+    if (!hHost || !IsWindow(hHost) || g_msgOpenSettings == 0) {
+        Wh_Log(L"Settings host not running");
+    } else {
         DWORD hostPid = 0;
         GetWindowThreadProcessId(hHost, &hostPid);
-        AllowSetForegroundWindow(hostPid != 0 ? hostPid : ASFW_ANY);
-        BOOL posted = PostMessageW(hHost, g_msgOpenSettings, 0, 0);
-        Wh_Log(L"Posted g_msgOpenSettings (%u) to windhawk.exe host HWND=%p (PID=%lu, ok=%d, err=%lu)",
-               g_msgOpenSettings, hHost, hostPid, (int)posted, posted ? 0UL : GetLastError());
-    } else {
-        // Non-blocking fallback: launch windhawk.exe -tool-mod on a background thread
-        AllowSetForegroundWindow(ASFW_ANY);
-        HANDLE hThread = CreateThread(nullptr, 0, AsyncLaunchSettingsHostThread, nullptr, 0, nullptr);
-        if (hThread) {
-            CloseHandle(hThread);
+        if (hostPid != 0) {
+            AllowSetForegroundWindow(hostPid);
         }
+        PostMessageW(hHost, g_msgOpenSettings, 0, 0);
     }
 
-    // Always close the Run dialog immediately so it never overlaps the Settings window
     if (hRunToClose) {
         CloseRunDialog(hRunToClose);
     }
 }
-
 void ApplyReloadedSettingsToDialog(RunDialogState* state) {
     if (!state || !state->hDlg || !IsWindow(state->hDlg)) return;
     int oldHeight = state->totalHeight;
@@ -14486,15 +14837,37 @@ bool RenderDialogToCachedBitmap(HWND hWnd, RunDialogState* state, int w, int h) 
                         }
 
                         // 1b. Overlay Custom Static Image / Animated GIF clipped cleanly inside each rounded panel
-                        if (!highContrast && !state->bgFrames.empty() && g_pD2DFactory) {
-                            const auto& fr = state->bgFrames[state->bgFrameIndex % state->bgFrames.size()];
+                        if (!highContrast && state->bgMedia && !state->bgMedia->frames.empty() && g_pD2DFactory) {
+                            size_t frameIdx = state->bgFrameIndex % state->bgMedia->frames.size();
+                            const auto& fr = state->bgMedia->frames[frameIdx];
                             if (fr.width > 0 && fr.height > 0 && !fr.pixelsBGRA.empty()) {
-                                D2D1_BITMAP_PROPERTIES bmpProps = D2D1::BitmapProperties(
-                                    D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
-                                ID2D1Bitmap* pBgBmp = nullptr;
-                                if (SUCCEEDED(pRT->CreateBitmap(D2D1::SizeU(fr.width, fr.height),
-                                                                fr.pixelsBGRA.data(), fr.width * 4,
-                                                                bmpProps, &pBgBmp)) && pBgBmp) {
+                                bool needCreate = (!state->pCachedBgBmp || state->pCachedBgRT != pRT ||
+                                                   state->cachedBgGen != state->bgMedia->generation);
+                                if (!needCreate) {
+                                    D2D1_SIZE_U curBmpSz = state->pCachedBgBmp->GetPixelSize();
+                                    if (curBmpSz.width != fr.width || curBmpSz.height != fr.height) needCreate = true;
+                                }
+                                if (needCreate) {
+                                    if (state->pCachedBgBmp) {
+                                        state->pCachedBgBmp->Release();
+                                        state->pCachedBgBmp = nullptr;
+                                    }
+                                    D2D1_BITMAP_PROPERTIES bmpProps = D2D1::BitmapProperties(
+                                        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+                                    if (SUCCEEDED(pRT->CreateBitmap(D2D1::SizeU(fr.width, fr.height),
+                                                                    fr.pixelsBGRA.data(), fr.width * 4,
+                                                                    bmpProps, &state->pCachedBgBmp)) && state->pCachedBgBmp) {
+                                        state->pCachedBgRT = pRT;
+                                        state->cachedBgGen = state->bgMedia->generation;
+                                        state->cachedBgFrameIdx = frameIdx;
+                                    }
+                                } else if (state->cachedBgFrameIdx != frameIdx) {
+                                    D2D1_RECT_U dstU = D2D1::RectU(0, 0, fr.width, fr.height);
+                                    state->pCachedBgBmp->CopyFromMemory(&dstU, fr.pixelsBGRA.data(), fr.width * 4);
+                                    state->cachedBgFrameIdx = frameIdx;
+                                }
+                                ID2D1Bitmap* pBgBmp = state->pCachedBgBmp;
+                                if (pBgBmp) {
                                     float bgOp = std::clamp(state->settings.customBackgroundOpacity, 30, 255) / 255.0f;
                                     ID2D1SolidColorBrush* pScrimBr = nullptr;
                                     pRT->CreateSolidColorBrush(
@@ -14544,7 +14917,6 @@ bool RenderDialogToCachedBitmap(HWND hWnd, RunDialogState* state, int w, int h) 
                                     if (cardH > 0) drawBgInRoundedRect(rcHistCard, histCornerR);
                                     drawBgInRoundedRect(rcBarPill, barCornerR);
                                     if (pScrimBr) pScrimBr->Release();
-                                    pBgBmp->Release();
                                 }
                             }
                         }
@@ -15872,10 +16244,11 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
         }
 
         case WM_RBUTTONDOWN: {
-            if (!state || state->showingSuggestions) return 0;
+            if (!state) return 0;
+            const auto& activeList = state->showingSuggestions ? state->suggestions : state->history;
             POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
             int row = HitTestHistoryRow(state, pt);
-            if (row >= 0 && row < (int)state->history.size()) {
+            if (row >= 0 && row < (int)activeList.size()) {
                 state->selectedRow = row;
                 RefreshDialogVisual(hWnd, state);
             }
@@ -15883,14 +16256,20 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
         }
 
         case WM_RBUTTONUP: {
-            if (!state || state->showingSuggestions) return 0;
+            if (!state) return 0;
+            const auto& activeList = state->showingSuggestions ? state->suggestions : state->history;
             POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
             int row = HitTestHistoryRow(state, pt);
-            if (row >= 0 && row < (int)state->history.size()) {
+            if (row >= 0 && row < (int)activeList.size()) {
+                const HistoryItem& hitItem = activeList[row];
+                if (hitItem.isMathResult || hitItem.webSearchKind != 0) {
+                    return 0;
+                }
                 state->selectedRow = row;
                 RefreshDialogVisual(hWnd, state);
-                std::wstring targetCmd = state->history[row].cmd;
-                bool currentlyPinned   = state->history[row].isPinned || IsCommandPinned(targetCmd);
+                std::wstring targetCmd = hitItem.cmd;
+                bool currentlyPinned   = hitItem.isPinned || IsCommandPinned(targetCmd);
+                bool canDeleteFromHistory = (!state->showingSuggestions || !hitItem.isSuggestion || !hitItem.timeStr.empty());
                 std::wstring resolvedFilePath;
                 bool resolvedIsDir = false;
                 bool hasFileLoc = TryResolveCommandFilePath(targetCmd, &resolvedFilePath, &resolvedIsDir);
@@ -15912,7 +16291,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                     openLocItem.icon  = FluentMenuIcon::FolderPick;
                     ctxItems.push_back(std::move(openLocItem));
                 }
-                {
+                if (canDeleteFromHistory) {
                     FluentMenuItem sep;
                     sep.isSeparator = true;
                     ctxItems.push_back(std::move(sep));
@@ -15942,6 +16321,9 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                     state->hoveredRow = -1;
                     state->selectedRow = -1;
                     LoadHistoryItems(state);
+                    if (state->showingSuggestions) {
+                        UpdateAppSuggestionsForQuery(state, GetEffectiveInputText(state->hModernEdit));
+                    }
                     RecomputeDialogMetrics(state);
                     ResizeDialogPreservingBottomAnchor(state, oldH);
                     RefreshDialogVisual(hWnd, state);
@@ -15954,6 +16336,9 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                     state->hoveredRow = -1;
                     state->selectedRow = -1;
                     LoadHistoryItems(state);
+                    if (state->showingSuggestions) {
+                        UpdateAppSuggestionsForQuery(state, GetEffectiveInputText(state->hModernEdit));
+                    }
                     RecomputeDialogMetrics(state);
                     ResizeDialogPreservingBottomAnchor(state, oldH);
                     RefreshDialogVisual(hWnd, state);
@@ -16416,6 +16801,7 @@ void ReleaseGlobalResources() {
             g_pD2DFactory = nullptr;
         }
     }
+    ClearGlobalCustomBackgroundCache();
     if (g_fluentMenuClassRegistered) {
         UnregisterClassW(kFluentMenuClassName, GetModInstanceHandle());
         g_fluentMenuClassRegistered = false;
@@ -16586,11 +16972,6 @@ void WhTool_ModSettingsChanged() {
 
 void WhTool_ModUninit() {
     g_unloading.store(true);
-    // Release mutex first so a restarted/recompiled version can start immediately
-    if (g_toolModProcessMutex) {
-        CloseHandle(g_toolModProcessMutex);
-        g_toolModProcessMutex = nullptr;
-    }
     StopSettingsHostCleanly();
     ReleaseGlobalResources();
 }
@@ -16629,8 +17010,7 @@ BOOL Wh_ModInit() {
     for (int i = 1; i < argc; i++) {
         if (wcscmp(argv[i], L"-service") == 0 ||
             wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0 ||
-            wcsncmp(argv[i], L"--type=", 7) == 0) {
+            wcscmp(argv[i], L"-service-stop") == 0) {
             isExcluded = true;
             break;
         }
@@ -16660,12 +17040,8 @@ BOOL Wh_ModInit() {
         }
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            // Give a previous unloading instance up to 3s to release the mutex during recompile/restart
-            DWORD waitRes = WaitForSingleObject(g_toolModProcessMutex, 3000);
-            if (waitRes != WAIT_OBJECT_0 && waitRes != WAIT_ABANDONED) {
-                Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-                ExitProcess(1);
-            }
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
         }
 
         if (!WhTool_ModInit()) {
@@ -16754,10 +17130,6 @@ void Wh_ModAfterInit() {
 void Wh_ModBeforeUninit() {
     if (g_isExplorerOrTaskmgr) {
         RunDialogModBeforeUninit();
-        return;
-    }
-    if (!g_isToolModProcessLauncher) {
-        g_unloading.store(true);
     }
 }
 
