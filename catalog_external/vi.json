@@ -1,36 +1,5 @@
 {
   "mods": {
-    "auto-folder-icons": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795125999736,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795125999736,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "Sanekx Arcs",
-        "compilerOptions": "-lole32 -luuid -lshell32 -lshlwapi",
-        "description": "Uses folder.ico or favicon.ico inside local folders without desktop.ini.",
-        "github": "https://github.com/SanekxArcs",
-        "include": [
-          "explorer.exe"
-        ],
-        "name": "Automatic Folder Icons",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7641",
-      "source": {
-        "sha256": "0cd0a595b079f67f5a1bf18c4564b852e722248479cb9838e9b1cfe2619804b8",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c1cf573ce429f7672526c9b2083e468bdbb87e01/mods/auto-folder-icons.wh.cpp"
-      }
-    },
     "batteryhub-custom-taskbar-integration": {
       "details": {
         "defaultSorting": 0,
@@ -372,6 +341,38 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/dde984adc382a397a87ef51864a6152c5711d3f6/mods/frosted-window-blur.wh.cpp"
       }
     },
+    "hide-snapped": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795201559344,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795201559344,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "amd64"
+        ],
+        "author": "coldfeudal",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ladvapi32 -lshell32 -luuid -lgdi32 -lcomctl32",
+        "description": "Group-only Alt+Tab and separate taskbar buttons with tiled member icons.",
+        "github": "https://github.com/coldfeudal",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Snap Groups: Alt+Tab and taskbar",
+        "version": "0.4.27"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7609",
+      "source": {
+        "sha256": "35eac90d076f10abf9c4015b9d0829551e6a85b00dbcdfcd12a783032fdd1d9a",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4f8a674f9d2c5c4886bbce44bcf4b2be67222a01/mods/hide-snapped.wh.cpp"
+      }
+    },
     "lockscreen-background": {
       "details": {
         "defaultSorting": 0,
@@ -564,6 +565,35 @@
       "source": {
         "sha256": "1b864f3700c4a0ca7bfcfbda69c0a31129cdf17d797a51513e0398534aade9ba",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/cf59db87d6f3fc309afb7f39794cb20d62f4e29c/mods/windows-border-switch.wh.cpp"
+      }
+    },
+    "windows-hello-auto-ok": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795201559344,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795201559344,
+        "users": 0
+      },
+      "metadata": {
+        "author": "hermanzamula",
+        "compilerOptions": "-lole32 -loleaut32 -luuid -luiautomationcore",
+        "description": "Language-independent confirmation of ready Windows Hello biometric dialogs across applications.",
+        "github": "https://github.com/hermanzamula",
+        "include": [
+          "CredentialUIBroker.exe"
+        ],
+        "license": "MIT",
+        "name": "Windows Hello Auto OK",
+        "version": "0.1.3"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/6929",
+      "source": {
+        "sha256": "bcb94ae75a1ebdae9968703816380d7eb067fa5934fdd26e8230276c12df0f5f",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/97280142169461b31c4604085dbd4f59112e5e98/mods/windows-hello-auto-ok.wh.cpp"
       }
     }
   }

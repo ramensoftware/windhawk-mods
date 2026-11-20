@@ -1,3 +1,10 @@
+## 0.7.0 ([Nov 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ed8c3d55fbc5176147fbf0dcd155757337628d73/mods/outlook-refined.wh.cpp))
+
+* Shift+right-click any folder, then Color..., to give it one of Outlook's own 15 folder colors. This works in Favorites and in the account trees, including shared mailboxes, where Outlook offers no color. Each color uses its light or dark shade to match the theme, and Automatic gives back Outlook's color.
+* Account labels also apply to shared mailboxes, matched by their address.
+* The Favorites heading is no longer replaced by the primary account's label.
+* American spelling in a setting label ("gray").
+
 ## 0.6.5 ([Nov 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/63b4770b5de06f02844e2d0e9cb283d281dd8819/mods/outlook-refined.wh.cpp))
 
 * A changed setting now reaches open Outlook windows the next time you switch to them, with no restart.

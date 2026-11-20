@@ -1024,6 +1024,33 @@
         "version": "1.2.0"
       }
     },
+    "auto-folder-icons": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795201342000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795201342000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Sanekx Arcs",
+        "compilerOptions": "-lole32 -luuid -lshell32 -lshlwapi",
+        "description": "Uses folder.ico or favicon.ico inside local folders without desktop.ini.",
+        "github": "https://github.com/SanekxArcs",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Automatic Folder Icons",
+        "version": "1.0.0"
+      }
+    },
     "auto-pause-on-disconnect": {
       "details": {
         "defaultSorting": 1590,
@@ -13729,7 +13756,7 @@
         "ratingUsers": 3,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794546100000,
+        "updated": 1795201348000,
         "users": 50
       },
       "metadata": {
@@ -13738,14 +13765,14 @@
         ],
         "author": "Analytic Endeavors",
         "compilerOptions": "-lole32 -loleaut32 -lurlmon -lbcrypt",
-        "description": "Restyles new Outlook: favorites groups, per-account compose buttons, a resizable folder pane, an agenda with a month grid, the Other inbox under Focused, a tidier calendar and reading pane, and a print layout",
+        "description": "Restyles new Outlook: favorites groups, per-account compose buttons, folder colors, a resizable folder pane, an agenda with a month grid, the Other inbox under Focused, a tidier calendar and reading pane, and a print layout",
         "github": "https://github.com/ae-reid-havens",
         "include": [
           "olk.exe"
         ],
         "license": "MIT",
         "name": "Outlook Refined",
-        "version": "0.6.5"
+        "version": "0.7.0"
       }
     },
     "overhaulded-alt-tab": {
@@ -15213,19 +15240,19 @@
         "ratingUsers": 16,
         "reviews": 0,
         "trendingSorting": 3.469583103562407,
-        "updated": 1792951318000,
+        "updated": 1795201354000,
         "users": 452
       },
       "metadata": {
         "author": "Dev-StudioCode",
-        "compilerOptions": "-lgdi32",
-        "description": "Removes shortcut arrow overlays from desktop and File Explorer icons cleanly in memory.",
+        "compilerOptions": "-lgdi32 -lcomctl32",
+        "description": "Removes shortcut arrow icons from desktop and File Explorer cleanly in memory.",
         "github": "https://github.com/Dev-StudioCode",
         "include": [
           "explorer.exe"
         ],
-        "name": "Remove Shortcut Arrow Overlays",
-        "version": "1.0.0"
+        "name": "Remove Shortcut Arrow Icons",
+        "version": "2.0.0"
       }
     },
     "remove-spotlight-shortcut": {

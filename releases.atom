@@ -2,12 +2,61 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-20T18:04:59.000Z</updated>
+    <updated>2026-11-20T19:02:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Automatic Folder Icons 1.0.0]]></title>
+        <id>https://windhawk.net/mods/auto-folder-icons#9bd932407ef64a7883ca4add937ede92251f8cc2</id>
+        <link href="https://windhawk.net/mods/auto-folder-icons"/>
+        <updated>2026-11-20T19:02:22.000Z</updated>
+        <content type="html"><![CDATA[<h1>Automatic Folder Icons</h1>
+<p>Put a <code>folder.ico</code> or <code>favicon.ico</code> file directly inside a folder, and Explorer
+shows it as the icon of that folder. Nothing else is needed: no <code>desktop.ini</code>,
+no registry changes, no folder attributes, and the mod never writes to your
+folders.</p>
+<p>Before and after:</p>
+<p><img src="https://i.imgur.com/mQgmUT8.png" alt="Before"> <img src="https://i.imgur.com/IfUzLX1.png" alt="After"></p>
+<h2>How it works</h2>
+<ul>
+<li><code>folder.ico</code> takes priority. If it is missing or isn't a valid icon,
+<code>favicon.ico</code> is used, and then the original Windows icon.</li>
+<li><code>favicon.ico</code> can be turned off in the mod settings. This is useful if you
+have web projects, where many folders contain a <code>favicon.ico</code>.</li>
+<li>Hidden icon files work too.</li>
+<li>A folder that has an icon file shows the icon instead of a thumbnail preview.</li>
+<li>Adding, replacing or removing the icon file is picked up within a couple of
+seconds while an Explorer window or the desktop is in use. If Windows keeps a
+cached icon, press F5 or reopen the parent folder.</li>
+</ul>
+<h2>Performance</h2>
+<ul>
+<li>Files, including ZIP and CAB archives, are skipped without touching the
+disk. Only folders are checked, with two small file lookups per folder.</li>
+<li>Up to 256 recently shown folders are remembered and rechecked every two
+seconds, and only while Explorer is the active app and you are using the
+PC. Nothing is checked while you work in another app or are away, and the
+disk tree is never scanned.</li>
+</ul>
+<h2>Limitations</h2>
+<ul>
+<li>Only <code>explorer.exe</code> is affected. Other apps, including their open and save
+dialogs, show the original icons.</li>
+<li>Only local fixed and removable drives are supported. Network paths, virtual
+folders, reparse points, cloud placeholders, paths longer than about 245
+characters and icon files larger than 4 MiB are skipped.</li>
+<li>After enabling or disabling the mod, some icons may stay cached until
+Explorer is restarted. The mod never restarts Explorer by itself.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Sanekx Arcs</name>
+            <uri>https://github.com/SanekxArcs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Simple Wallpaper Switcher 0.1.3]]></title>
         <id>https://windhawk.net/mods/simple-wallpaper-switcher#05bfdedf882180fc609ad099c2d7ba21d3f56464</id>
@@ -1439,52 +1488,6 @@ requested browser process.</p>
         <author>
             <name>Alessandro-Vecchio</name>
             <uri>https://github.com/Alessandro-Vecchio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Bluetooth No Sleep 1.0.0]]></title>
-        <id>https://windhawk.net/mods/bluetooth-no-sleep#a65505e2ac99347a28412b14eaa6e53bdd53266a</id>
-        <link href="https://windhawk.net/mods/bluetooth-no-sleep"/>
-        <updated>2026-11-16T21:04:42.000Z</updated>
-        <content type="html"><![CDATA[<h1>Bluetooth No Sleep (Bluetooth Audio Keep-Alive)</h1>
-<p>A lightweight Windows background utility and Windhawk tool mod that prevents
-Bluetooth audio devices (headphones, wireless earbuds, soundbars, DACs, and
-speakers) from falling asleep, dropping initial playback, or disconnecting
-during silence.</p>
-<h3>Why this mod?</h3>
-<p>Modern Bluetooth audio peripherals employ aggressive power-saving timers:</p>
-<ol>
-<li><strong>Initial Audio Truncation:</strong> When no audio plays for a few seconds, the
-device enters a low-power state and shuts off its internal DAC/amplifier.
-When audio resumes, waking up takes 1-2 seconds, dropping the beginning of
-system notifications, speech, or media playback.</li>
-<li><strong>Pops and Static Bursts:</strong> Rapid DAC wakeups often create audible transients,
-clicks, or static bursts (&quot;pink noise&quot;).</li>
-<li><strong>Unsolicited Idle Disconnections:</strong> Many wireless devices shut down
-completely after 5 to 10 minutes of silence, forcing manual power cycling.</li>
-</ol>
-<h3>How it works</h3>
-<p>This mod uses Windows Audio Session API (WASAPI) Shared Mode to continuously
-stream an inaudible digital silence buffer (<code>0x00</code> PCM or sub-audible dither)
-to the active audio endpoint:</p>
-<ul>
-<li><strong>Non-Intrusive Shared Mode:</strong> Runs alongside your normal applications
-without monopolizing or locking audio devices.</li>
-<li><strong>Event-Driven Endpoint Tracking:</strong> Uses <code>IMMNotificationClient</code> to monitor
-device transitions. When your default audio device switches or a Bluetooth
-headset reconnects, it rebinds automatically without crashes.</li>
-<li><strong>Near-Zero CPU Overhead:</strong> Uses buffer-synchronized wait events and sleep
-cycles to keep CPU usage below 0.1%.</li>
-<li><strong>Optional Inactivity Gate:</strong> Can automatically pause the keep-alive stream
-after prolonged user inactivity to allow intentional battery conservation
-and permit normal Windows system sleep (<code>powercfg /requests</code>).</li>
-<li><strong>Dedicated Tool Mod:</strong> Runs inside <code>windhawk.exe</code> as a dedicated background
-tool without injecting into or hooking any system processes.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Dev-StudioCode</name>
-            <uri>https://github.com/Dev-StudioCode</uri>
         </author>
     </entry>
 </feed>

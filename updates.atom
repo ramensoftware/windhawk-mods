@@ -2,12 +2,95 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-20T18:05:05.000Z</updated>
+    <updated>2026-11-20T19:02:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Shortcut Arrow Icons 2.0.0]]></title>
+        <id>https://windhawk.net/mods/remove-shortcut-arrows#b158ee856a1be9d1cbfa930b45068ab3463242ba</id>
+        <link href="https://windhawk.net/mods/remove-shortcut-arrows"/>
+        <updated>2026-11-20T19:02:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Improved Desktop Stability:</strong> Shortcut arrows now stay hidden reliably when Explorer recreates the desktop at startup and after system setting or theme changes.</li>
+<li><strong>Process &amp; Subclass Isolation:</strong> Restricted window hooks strictly to the primary desktop list view, preventing conflicts with other File Explorer windows or separate Explorer processes.</li>
+<li><strong>Visual Preview:</strong> Added a side-by-side before-and-after preview to the mod description.</li>
+<li><strong>SEO &amp; Title Polish:</strong> Renamed to &quot;Remove Shortcut Arrow Icons&quot; for better searchability.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Dev-StudioCode</name>
+            <uri>https://github.com/Dev-StudioCode</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Outlook Refined 0.7.0]]></title>
+        <id>https://windhawk.net/mods/outlook-refined#ed8c3d55fbc5176147fbf0dcd155757337628d73</id>
+        <link href="https://windhawk.net/mods/outlook-refined"/>
+        <updated>2026-11-20T19:02:28.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Shift+right-click any folder, then Color..., to give it one of Outlook's own 15 folder colors. This works in Favorites and in the account trees, including shared mailboxes, where Outlook offers no color. Each color uses its light or dark shade to match the theme, and Automatic gives back Outlook's color.</li>
+<li>Account labels also apply to shared mailboxes, matched by their address.</li>
+<li>The Favorites heading is no longer replaced by the primary account's label.</li>
+<li>American spelling in a setting label (&quot;gray&quot;).</li>
+</ul>
+]]></content>
+        <author>
+            <name>Analytic Endeavors</name>
+            <uri>https://github.com/ae-reid-havens</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Automatic Folder Icons 1.0.0]]></title>
+        <id>https://windhawk.net/mods/auto-folder-icons#9bd932407ef64a7883ca4add937ede92251f8cc2</id>
+        <link href="https://windhawk.net/mods/auto-folder-icons"/>
+        <updated>2026-11-20T19:02:22.000Z</updated>
+        <content type="html"><![CDATA[<h1>Automatic Folder Icons</h1>
+<p>Put a <code>folder.ico</code> or <code>favicon.ico</code> file directly inside a folder, and Explorer
+shows it as the icon of that folder. Nothing else is needed: no <code>desktop.ini</code>,
+no registry changes, no folder attributes, and the mod never writes to your
+folders.</p>
+<p>Before and after:</p>
+<p><img src="https://i.imgur.com/mQgmUT8.png" alt="Before"> <img src="https://i.imgur.com/IfUzLX1.png" alt="After"></p>
+<h2>How it works</h2>
+<ul>
+<li><code>folder.ico</code> takes priority. If it is missing or isn't a valid icon,
+<code>favicon.ico</code> is used, and then the original Windows icon.</li>
+<li><code>favicon.ico</code> can be turned off in the mod settings. This is useful if you
+have web projects, where many folders contain a <code>favicon.ico</code>.</li>
+<li>Hidden icon files work too.</li>
+<li>A folder that has an icon file shows the icon instead of a thumbnail preview.</li>
+<li>Adding, replacing or removing the icon file is picked up within a couple of
+seconds while an Explorer window or the desktop is in use. If Windows keeps a
+cached icon, press F5 or reopen the parent folder.</li>
+</ul>
+<h2>Performance</h2>
+<ul>
+<li>Files, including ZIP and CAB archives, are skipped without touching the
+disk. Only folders are checked, with two small file lookups per folder.</li>
+<li>Up to 256 recently shown folders are remembered and rechecked every two
+seconds, and only while Explorer is the active app and you are using the
+PC. Nothing is checked while you work in another app or are away, and the
+disk tree is never scanned.</li>
+</ul>
+<h2>Limitations</h2>
+<ul>
+<li>Only <code>explorer.exe</code> is affected. Other apps, including their open and save
+dialogs, show the original icons.</li>
+<li>Only local fixed and removable drives are supported. Network paths, virtual
+folders, reparse points, cloud placeholders, paths longer than about 245
+characters and icon files larger than 4 MiB are skipped.</li>
+<li>After enabling or disabling the mod, some icons may stay cached until
+Explorer is restarted. The mod never restarts Explorer by itself.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Sanekx Arcs</name>
+            <uri>https://github.com/SanekxArcs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Fast Navigation 1.1.0]]></title>
         <id>https://windhawk.net/mods/explorer-fast-navigation#814cfdde194e6e74c8f4e97df85af01693fb2284</id>
@@ -607,105 +690,6 @@ you search for the browser itself, but it is still listed when you type its name
         <author>
             <name>Ashix</name>
             <uri>https://github.com/k-ashix</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Archive Preview 1.1.0]]></title>
-        <id>https://windhawk.net/mods/archive-preview#973ad733fe13aa51435894e6801ecef9a77bc24e</id>
-        <link href="https://windhawk.net/mods/archive-preview"/>
-        <updated>2026-11-19T23:04:28.000Z</updated>
-        <content type="html"><![CDATA[<h3>Extraction and drag and drop</h3>
-<ul>
-<li>Added optional extraction with <strong>7-Zip, NanaZip, or WinRAR</strong>. Windows remains the default. The mod can find an installed program automatically, or you can set its executable path.</li>
-<li>The selected program handles full archives and selected files. External extraction keeps the paths stored in the archive and uses the program's own progress, password, and overwrite dialogs where supported.</li>
-<li><strong>Extract to…</strong> and <strong>Extract selected to…</strong> now start in the folder that contains the archive.</li>
-<li>Added separate shortcuts for all four extraction actions. <strong>Ctrl + Shift + E</strong> still runs <strong>Extract selected here</strong> while the file list has focus.</li>
-<li>Added optional external extraction when dragging files out of the preview. The mod stages the files in its own storage before Explorer copies them. It keeps the folder while the transfer uses it and retries cleanup when the broker starts again if it can confirm the folder is free. Clipboard copy and paste still use Windows.</li>
-<li>Added support for long paths when opening and cleaning up temporary files used by external drag and drop.</li>
-<li>Improved native extraction status and logging. Windows can still show <strong>0%</strong> until extraction finishes for some formats. External programs show their own progress.</li>
-</ul>
-<h3>Sorting, columns, and appearance</h3>
-<ul>
-<li>Click a column header to sort and click again to reverse the order. The list starts sorted by name, keeps folders first, and sorts dates and sizes by their values.</li>
-<li>Drag the header separators to resize columns. Right-click the headers to show or hide <strong>Date modified</strong>, <strong>Type</strong>, and <strong>Size</strong>. The mod saves these choices and gives the <strong>Name</strong> column priority in narrow panes.</li>
-<li>Added an option to hide the horizontal scrollbar. The preview temporarily shows fewer columns when there is too little space.</li>
-<li>Added separate options for reading dates and sizes in archives of <strong>256 MiB or more</strong>. Both are off by default for large archives. ZIP folder dates can use dates from the files they contain when the archive has no date for the folder.</li>
-<li>Limited the ZIP date fallback to direct subfolders of the current folder. It caps stored dates and stops when the preview is canceled.</li>
-<li>Leave the <strong>Date modified</strong> and <strong>Size</strong> cells blank when metadata is unavailable.</li>
-<li>Improved selection highlighting with the Windows accent color and made the main and recovery views more consistent in dark mode.</li>
-</ul>
-<h3>Preview fixes</h3>
-<ul>
-<li>Fixed icons disappearing after switching away from an archive and selecting it again.</li>
-<li>Fixed cases where another preview could cover the archive pane and block clicks, folder navigation, and extraction buttons. This includes the reported case when switching from an FBX file to an archive.</li>
-<li>Fixed preview sessions taking over another preview pane and improved checks before reusing cached data from an archive that may have changed.</li>
-<li>The mod can rebuild a broken file list from data it already loaded and restore the saved selection and scroll position when available. If that fails, it can switch to the Windows recovery view.</li>
-</ul>
-<h3>Language, settings, and updates</h3>
-<ul>
-<li>Added a preview language setting with <strong>Automatic</strong> and <strong>105 language options and variants</strong>. Automatic follows the Windows display language when available. Some detailed messages use English.</li>
-<li>Reorganized Windhawk settings, with <strong>Files and security</strong> and <strong>Extraction</strong> first. If you are updating from a version with ungrouped settings, copy your custom values before updating so you can reapply them.</li>
-<li>Added <strong>Updates and disabling</strong>. If you enable it, Explorer closes windows that still contain an Archive Preview when the mod is updated, recompiled, or disabled. This closes all tabs in each affected window. The option is off by default.</li>
-<li>Fixed broker shutdown when updating or disabling the mod during an external drag or while the broker is still starting. Pending requests and results are cleared before the broker's window closes.</li>
-<li>Added <strong>Diagnostics &gt; Detailed logs</strong> to help investigate preview, extraction, and drag issues. It is off by default. Updated the mod README with setup, settings, and known limitations.</li>
-</ul>
-<h3>Thanks</h3>
-<p>Big thanks to <a href="https://github.com/Dizse">Dizse</a> for <a href="https://github.com/luizbizzio/archive-preview/pull/2">his pull request</a>. His work on preview stability, columns, localization, and external extraction was a big part of getting 1.1.0 ready.</p>
-]]></content>
-        <author>
-            <name>Luiz Bizzio</name>
-            <uri>https://github.com/luizbizzio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[GPU-accelerated explorer.exe list and grid views 1.1.1]]></title>
-        <id>https://windhawk.net/mods/gpu-accelerated-explorer-view#065be613a1ee59d4b039f1e93a0b8bdaf60808a2</id>
-        <link href="https://windhawk.net/mods/gpu-accelerated-explorer-view"/>
-        <updated>2026-11-19T23:04:22.000Z</updated>
-        <content type="html"><![CDATA[<h3>New</h3>
-<ul>
-<li><strong>Custom themes:</strong> Customize backgrounds, gradients, borders, scrollbars, selection effects, tooltips, and storage bars, with light and dark mode support. Check the guide for details and examples.</li>
-<li><strong>More layouts:</strong> Added Tiles, Content, and Compact views.</li>
-<li><strong>Better renaming:</strong> Batch rename files, click to rename, and automatically rename newly created items.</li>
-<li><strong>Expanded folder support:</strong> Libraries, search results, Applications, and Printers now use the GPU-rendered view.</li>
-<li><strong>Smarter search:</strong> Highlight matching filenames and smoothly update results as you refine searches.</li>
-<li><strong>Edge scrolling:</strong> Automatically scroll when dragging files toward the edge of a folder.</li>
-</ul>
-<h3>Improved</h3>
-<ul>
-<li><strong>Better file interactions:</strong> More natural dragging, keyboard navigation, sorting, and folder-size updates.</li>
-<li><strong>Improved cloud support:</strong> Faster OneDrive status updates and correctly displayed sync icons (PR @dariy-vel)</li>
-</ul>
-<h3>Fixed</h3>
-<ul>
-<li>Fixed blank views, navigation glitches, and an Explorer crash when using Content view across multiple windows.</li>
-<li>Fixed renaming issues, including flickering, batch renaming, and international text input.</li>
-<li>Fixed incorrect file sizes, sorting, and display issues on removable drives and in Libraries.</li>
-<li>Fixed various animation, touch, selection, and display-scaling issues.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DarkionAvey</name>
-            <uri>https://github.com/DarkionAvey</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Details View Columns 1.5]]></title>
-        <id>https://windhawk.net/mods/explorer-force-details-columns#8a7c48cc3b4dd6c4ade9ac3a969cd35f36dc7dd8</id>
-        <link href="https://windhawk.net/mods/explorer-force-details-columns"/>
-        <updated>2026-11-19T22:02:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the &quot;Minimum Column Width&quot; setting, which lowers the minimum column width enforced by Windows (about 90 logical pixels), so that smaller forced widths take effect and columns can be dragged narrower.</li>
-<li>Fixed columns with width -1 being auto-sized before the folder's items were displayed, which made them only as wide as their header, or as narrow as the minimum width.</li>
-<li>Fixed a possible Explorer crash when settings are changed while a folder is opening.</li>
-<li>Changing settings no longer refreshes open folders, which reset their scroll position and selection, unless their columns or sorting change.</li>
-<li>Removed the note about the minimum column width known issue.</li>
-<li>Added a note that Explorer keeps the forced columns, widths and sorting of folders after the mod is disabled.</li>
-</ul>
-]]></content>
-        <author>
-            <name>ernisn</name>
-            <uri>https://github.com/ernisn</uri>
         </author>
     </entry>
 </feed>
