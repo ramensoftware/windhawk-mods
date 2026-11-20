@@ -48,7 +48,7 @@ Brightness and contrast set the two pattern tones as *brightness ± contrast / 2
 ## Behavior
 
 - Whatever window has focus stays lit; everything behind it is dimmed.
-- Dialogs (windows with title bar) and menus (without) can be toggled for parent-window background dimming. Some apps, like web-based ones, draw their own elements, which can't be detected.
+- Dialogs (windows with title bar) and menus (without) can be toggled for parent-window dimming. Some apps, like web-based ones, draw their own elements, which can't be detected.
 - The taskbar can be dimmed too, lighting up whenever it, Start or Alt+Tab has focus.
 - When the desktop has focus, the layer can either hide or cover everything.
 - By default, the layer is left out of screenshots, recordings and screen sharing while it stays visible on your screen (Windows 10 version 2004 or later).
