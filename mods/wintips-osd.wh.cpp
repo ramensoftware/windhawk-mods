@@ -4,7 +4,7 @@
 // @name:zh-CN      WinTips 键盘状态提示
 // @description     Shows a Win11-style floating OSD for Caps/Num/Scroll Lock, Insert and copy/paste/cut
 // @description:zh-CN 按下大写/数字/滚动锁定、Insert 或复制/粘贴/剪切时弹出 Win11 质感的浮窗提示
-// @version         1.6.1
+// @version         1.6.2
 // @author          DoYouNatureQ
 // @github          https://github.com/DoYouNatureQ
 // @homepage        https://github.com/DoYouNatureQ/WinTips
@@ -39,8 +39,8 @@ gesture instead, behind an optional setting that is off by default.
 
 - **Blurred backdrop, live.** The card blurs what is behind it and keeps it
   refreshing (Windows 10 2004 and later), so video and scrolling pages move
-  through as a soft wash, with the same saturation lift the system acrylic
-  applies. *Card material → Solid* for an opaque card.
+  through as a soft wash, matching the standalone app's material. *Card
+  material → Solid* for an opaque card.
 - **Windows 11 look, Windows 10 included.** The mod paints the card itself, so
   it needs neither system acrylic nor rounded corners. Per-monitor DPI,
   light/dark theme and the accent color are followed; labels are drawn by
@@ -998,11 +998,9 @@ Theme CurrentTheme() {
         return t;
     }
 
-    // Slightly translucent so the card reads as a floating layer even though it
-    // is drawn by us rather than by the DWM backdrop material.
-    const BYTE alpha = 238;
-    t.surface = t.dark ? Color(alpha, 0x2B, 0x2B, 0x2B)
-                       : Color(alpha, 0xFB, 0xFB, 0xFB);
+    // Fully opaque, matching the standalone app's solid card (OsdSurface).
+    t.surface = t.dark ? Color(255, 0x2B, 0x2B, 0x2B)
+                       : Color(255, 0xFB, 0xFB, 0xFB);
     // Acrylic is a tint over the blurred backdrop. The alpha comes from the
     // tint opacity setting (20-90%, default 55), which is the same knob the
     // WinTips app exposes: low values keep the wallpaper visible through the
@@ -1016,8 +1014,7 @@ Theme CurrentTheme() {
     t.accent = ParseHexColor(g_settings.accentColor, t.accent) ? t.accent
                                                                : SystemAccent();
     t.onAccent = Color(255, 255, 255, 255);
-    t.border = t.dark ? Color(0x14, 0xFF, 0xFF, 0xFF)
-                      : Color(0x1A, 0x00, 0x00, 0x00);
+    // t.border is only drawn in high contrast, where it is set above.
     return t;
 }
 
@@ -2288,28 +2285,10 @@ void BlurAxis(BYTE* bits, int width, int height, int radius, bool horizontal) {
     }
 }
 
-// DWM's acrylic lifts background saturation by about 1.25x on top of the blur
-// - that is most of why the system material reads "vivid" where a plain blurred
-// wash reads dull. Applied after blurring so the static grab, the live refresh
-// and the --shot harness all land on the same look. Fixed point: with
-// sat = 1.25 the per-channel result is (C*320 - lum) >> 8, where lum is 0.25 of
-// the luma times 256 (5/39/20 for B/G/R; they sum to exactly 64).
-void SaturateBackdrop(Surface& image) {
-    if (!image.bits) {
-        return;
-    }
-    for (int y = 0; y < image.height; y++) {
-        BYTE* row = (BYTE*)image.bits + (size_t)y * image.stride;
-        for (int x = 0; x < image.width; x++) {
-            BYTE* px = row + x * 4;
-            const int lum = px[0] * 5 + px[1] * 39 + px[2] * 20;
-            for (int c = 0; c < 3; c++) {
-                const int v = (px[c] * 320 - lum) >> 8;
-                px[c] = (BYTE)Clamp(v, 0, 255);
-            }
-        }
-    }
-}
+// No saturation lift on purpose: the standalone WinTips app paints the same
+// blur without one, and the two editions are meant to look alike. A 1.25x
+// lift was tried here and dropped - over dark wallpapers it brightened the
+// backdrop (grey 30 read as 37) and the card read thinner than the app's.
 
 void BlurBackdrop(Surface& image, int radius, int passes) {
     if (!image.bits || radius <= 0) {
@@ -2319,7 +2298,6 @@ void BlurBackdrop(Surface& image, int radius, int passes) {
         BlurAxis((BYTE*)image.bits, image.width, image.height, radius, true);
         BlurAxis((BYTE*)image.bits, image.width, image.height, radius, false);
     }
-    SaturateBackdrop(image);
 }
 
 // A screen copy of an elevated window comes back black without an error code,
@@ -2431,8 +2409,10 @@ void PaintCardBackground(Graphics& g, const GraphicsPath& card, float width,
 
     // The glass edge is lit from above and fades out towards the bottom: the
     // eye decides "this is a pane of glass" mostly from the boundary, and a
-    // border at one flat alpha reads like a sticker instead. Solid keeps the
-    // original flat border - there is no glass to catch the light.
+    // border at one flat alpha reads like a sticker instead. Solid matches the
+    // app's solid card: a plain filled surface with no outline at all - except
+    // in high contrast, where the COLOR_WINDOW fill can blend into the desktop
+    // and the outline is what shows the card's shape.
     if (acrylic && !theme.highContrast) {
         LinearGradientBrush lit(
             PointF(0.0f, 0.0f), PointF(0.0f, height),
@@ -2442,7 +2422,7 @@ void PaintCardBackground(Graphics& g, const GraphicsPath& card, float width,
                        : Color(0x14, 0x00, 0x00, 0x00));
         Pen border(&lit, 1.0f);
         g.DrawPath(&border, &card);
-    } else {
+    } else if (theme.highContrast) {
         Pen border(theme.border, 1.0f);
         g.DrawPath(&border, &card);
     }
@@ -2466,6 +2446,7 @@ struct InputState {
     HKL hkl = nullptr;
     HWND imeWnd = nullptr;
     int conversionMode = -1; // -1 = no IME window, or it refused to answer
+    int openStatus = -1;     // -1 = not read (no IME window, or timeout)
 
     bool Usable() const {
         return hkl != nullptr;
@@ -2473,8 +2454,22 @@ struct InputState {
     bool HasIme() const {
         return imeWnd != nullptr && conversionMode >= 0;
     }
+    // Whether the IME is in a native (Chinese) input mode. Conversion mode alone
+    // can't tell: pure-TSF IMEs like WeType (微信输入法) keep
+    // IMC_GETCONVERSIONMODE constant across the Chinese/English toggle (issue
+    // #14) and flip IMC_GETOPENSTATUS instead (Chinese=1, English=0). Composite
+    // rule: when the open status can't be read, fall back to the legacy NATIVE
+    // bit; when it can, closed means English, and an open IME is native only if
+    // the NATIVE bit is set. Microsoft Pinyin (open always 1, cmode 0<->1) keeps
+    // walking the NATIVE bit; WeType (cmode always 1, open 0<->1) walks the open
+    // status. Don't trust the open status whenever cmode is 0: Microsoft
+    // Pinyin's English state is exactly cmode=0 with open still 1, and that
+    // would misread it as Chinese.
     bool IsNative() const {
-        return (conversionMode & IME_CMODE_NATIVE) != 0;
+        if (openStatus < 0) {
+            return (conversionMode & IME_CMODE_NATIVE) != 0;
+        }
+        return openStatus > 0 && (conversionMode & IME_CMODE_NATIVE) != 0;
     }
 };
 
@@ -2500,11 +2495,25 @@ HWND FocusWindow() {
 // neighbouring values, so spell it out.
 constexpr WPARAM kImeGetConversionMode = 0x0001;
 
+// WM_IME_CONTROL's "get open status" sub-command. The default IME window answers
+// it itself, so IMEs whose conversion mode never moves (WeType) still expose
+// their Chinese/English state through it.
+constexpr WPARAM kImeGetOpenStatus = 0x0005;
+
 // Synchronous message with a short timeout: the target thread can be busy
 // loading a level, and a language tip is never worth stalling the hook for.
 int ReadConversionMode(HWND imeWnd) {
     DWORD_PTR result = 0;
     if (!SendMessageTimeoutW(imeWnd, WM_IME_CONTROL, kImeGetConversionMode, 0,
+                             SMTO_ABORTIFHUNG, 40, &result)) {
+        return -1;
+    }
+    return (int)result;
+}
+
+int ReadOpenStatus(HWND imeWnd) {
+    DWORD_PTR result = 0;
+    if (!SendMessageTimeoutW(imeWnd, WM_IME_CONTROL, kImeGetOpenStatus, 0,
                              SMTO_ABORTIFHUNG, 40, &result)) {
         return -1;
     }
@@ -2550,6 +2559,18 @@ InputState CurrentInputState() {
         state.imeWnd = ImmGetDefaultIMEWnd(hwnd);
         if (state.imeWnd) {
             state.conversionMode = ReadConversionMode(state.imeWnd);
+            if (state.conversionMode >= 0) {
+                state.openStatus = ReadOpenStatus(state.imeWnd);
+                if (state.openStatus < 0) {
+                    // Half a reading: the two reads share one default IME
+                    // window procedure, so a sample with only one of the two
+                    // values is a timing artifact, not a different kind of
+                    // IME. Don't let IsNative() mix the two rules - with the
+                    // open status missing it would fall back to the NATIVE
+                    // bit, which WeType keeps set in both modes.
+                    state.conversionMode = -1;
+                }
+            }
         }
     }
     return state;
@@ -2708,9 +2729,10 @@ InputState g_inputLast;
 // the truth again - which is why the whole gesture is opt-in.
 // UI thread only, here and below.
 bool g_inferNative = true;
-bool g_readMoved = false; // the system read was seen to actually follow a toggle
-int g_hintCount;         // solo Shift releases inside the running watch
-ULONGLONG g_hintAt;      // when the last one landed, 0 = none pending
+HKL g_readMovedHkl = nullptr; // the layout whose read was seen to actually follow a toggle
+int g_hintCount;          // solo Shift releases inside the running watch
+ULONGLONG g_hintAt;       // when the last one landed, 0 = none pending
+bool g_loggedReadLost = false; // logged "mode read lost" once for the running watch
 
 // The last usable input state seen by either watch. The focus watch needs it as
 // its baseline: by the time the foreground event arrives, the window that just
@@ -3370,9 +3392,11 @@ void StartLiveCapture() {
     g_livePad = (int)std::lround((float)kLivePaddingDip *
                                  std::max(1.0f, g_scale));
     // Two blur passes need a wider radius to match the three-pass snapshot;
-    // 16 * 1.25 = 20, the same split the WinTips app makes.
+    // 16 * 1.25 = 20, the same split the WinTips app makes. The radius stays
+    // in screen pixels like the app's - it does not grow with display
+    // scaling, so both editions blur by the same physical amount.
     g_liveRadius = (int)std::lround((float)g_settings.blurRadius *
-                                    kLiveRadiusScale * std::max(1.0f, g_scale));
+                                    kLiveRadiusScale);
 
     g_liveWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_liveWake) {
@@ -3801,8 +3825,8 @@ bool ClipboardHasContent() {
 
 // Two scales: the display's DPI decides how many physical pixels a DIP is, the
 // card size setting scales the card itself. Everything inside the card uses
-// their product; margins, the slide distance and the blur radius stay on the
-// DPI scale, so a bigger card still keeps the same 16 DIP gap to the edge.
+// their product; margins and the slide distance stay on the DPI scale, so a
+// bigger card still keeps the same 16 DIP gap to the edge.
 void UpdateScales() {
     g_scale = g_monitor.valid ? g_monitor.scale : 1.0f;
     g_cardScale = g_scale * g_settings.TipScale();
@@ -3897,7 +3921,10 @@ void RefreshBackdrop() {
         DwmFlush();
     }
 
-    int radius = (int)std::lround((float)g_settings.blurRadius * g_scale);
+    // Screen pixels, like the app's GlassBlurRadius: no display-scaling
+    // factor, so the blur depth matches the standalone edition on every
+    // monitor regardless of DPI.
+    int radius = g_settings.blurRadius;
     int pad = (int)std::lround((float)kStaticPaddingDip * std::max(1.0f, g_scale));
     HDC screen = GetDC(nullptr);
     CaptureBackdrop(screen, g_posX, g_posY, g_cardWidth, g_cardHeight, radius,
@@ -5215,6 +5242,11 @@ void StopInputWatch() {
     g_inputHasLast = false;
     g_hintCount = 0;
     g_hintAt = 0;
+    g_loggedReadLost = false;
+    // g_readMovedHkl stays: once a layout's read has proven itself, it stays
+    // trusted for the session - an IME's answering habits don't change
+    // mid-session. Trusting per layout keeps a second IME whose read never
+    // moves eligible for the Shift inference.
 }
 
 void StartInputWatch() {
@@ -5270,6 +5302,17 @@ void OnSoloShift() {
 
 void InputTick() {
     if (++g_inputTicks * kInputPollMs > kInputWindowMs) {
+        // Expiring with hints pending means this round can never report
+        // anything - the silent drop from GitHub issue #13. Leave one line
+        // showing the readout at expiry so the next such case is diagnosable.
+        if (g_hintCount > 0) {
+            Wh_Log(L"input watch timed out, drop %d shift hint(s), "
+                   L"last[hkl=%08llX tid=%u ime=%p cmode=%d open=%d]",
+                   g_hintCount,
+                   (unsigned long long)g_inputLast.hkl, g_inputLast.threadId,
+                   (void*)g_inputLast.imeWnd, g_inputLast.conversionMode,
+                   g_inputLast.openStatus);
+        }
         StopInputWatch();
         return;
     }
@@ -5329,7 +5372,7 @@ bool ModeTick(const InputState& now) {
     if (now.HasIme()) {
         if (g_inputLast.HasIme()) {
             if (now.IsNative() == g_inputLast.IsNative()) {
-                if (g_readMoved) {
+                if (g_readMovedHkl == now.hkl) {
                     // The read has actually followed a toggle at least once:
                     // trust it. Silence now means no change, so the Shift
                     // gesture is worth nothing here - reporting the opposite
@@ -5347,7 +5390,7 @@ bool ModeTick(const InputState& now) {
             bool native = now.IsNative();
             g_inputLast = now;
             g_inferNative = native;
-            g_readMoved = true;
+            g_readMovedHkl = now.hkl;
             HandleLanguageTip(native ? 1 : 2, nullptr);
             StopInputWatch();
             return true;
@@ -5358,7 +5401,7 @@ bool ModeTick(const InputState& now) {
         // that disagrees with the cache means the toggle happened during the
         // unreadable stretch - report by the read. Before that proof the
         // cache stays with the inference, and the Shift gesture decides.
-        if (g_hintCount > 0 && g_readMoved &&
+        if (g_hintCount > 0 && g_readMovedHkl == now.hkl &&
             now.IsNative() != g_inferNative) {
             bool native = now.IsNative();
             g_inputLast = now;
@@ -5368,7 +5411,7 @@ bool ModeTick(const InputState& now) {
             return true;
         }
 
-        if (g_readMoved) {
+        if (g_readMovedHkl == now.hkl) {
             g_inputLast = now;
             g_inferNative = now.IsNative();
         }
@@ -5380,7 +5423,32 @@ bool ModeTick(const InputState& now) {
         // thread was probably busy and the 40 ms message timed out. Keep the
         // baseline - overwriting it with "no IME" would silence Shift for
         // good. An IME that answered once will answer again, so no inference
-        // here either.
+        // here either - but not forever: GitHub issue #13 showed a TSF-only
+        // IME (WeChat IME) answering at the Shift moment and going silent
+        // right after, and the old code then sat out the full 2 s window and
+        // dropped the switch silently. With an unproven read, the pending
+        // Shift gesture wins once the grace is over; with a proven one, keep
+        // waiting - a reliable read going dark is most likely transient
+        // busy-ness, and a wrong flip costs more than another beat of wait.
+        if (!g_loggedReadLost) {
+            g_loggedReadLost = true;
+            Wh_Log(L"mode read lost: last[hkl=%08llX tid=%u ime=%p cmode=%d open=%d] "
+                   L"now[hkl=%08llX tid=%u ime=%p cmode=%d open=%d] hint=%d provenRead=%d",
+                   (unsigned long long)g_inputLast.hkl, g_inputLast.threadId,
+                   (void*)g_inputLast.imeWnd, g_inputLast.conversionMode,
+                   g_inputLast.openStatus,
+                   (unsigned long long)now.hkl, now.threadId,
+                   (void*)now.imeWnd, now.conversionMode, now.openStatus,
+                   g_hintCount,
+                   (int)(g_readMovedHkl == now.hkl));
+        }
+
+        if (g_hintCount > 0 && g_readMovedHkl != now.hkl && g_hintAt &&
+            GetTickCount64() - g_hintAt > kInferGraceMs) {
+            Wh_Log(L"mode read not restored %lu ms after shift, infer fallback",
+                   (unsigned long)(GetTickCount64() - g_hintAt));
+            return InferFlip();
+        }
         return true;
     }
 
