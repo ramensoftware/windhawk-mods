@@ -2,7 +2,7 @@
 // @id              cursor-idle-fade
 // @name            Cursor Idle Fade
 // @description     Fades the mouse cursor out after a period of inactivity and brings it back the instant the mouse moves
-// @version         1.0.0
+// @version         1.1.0
 // @author          Nuzza
 // @github          https://github.com/Nuzza
 // @include         windhawk.exe
@@ -17,7 +17,7 @@ When the mouse hasn't moved (or been clicked / scrolled) for the configured
 number of seconds, the system cursors are smoothly faded out. The moment any
 mouse activity happens, the cursors are restored immediately.
 
-![Cursor Idle Fade Demo](https://i.imgur.com/g5EWkMU.gif)
+![Cursor Idle Fade Demo](https://i.imgur.com/lBusMBL.gif)
 
 ## How it works
 Windows has no "cursor opacity" setting, so the mod captures the current
@@ -52,6 +52,23 @@ mod").
 
   Both mods swap the same system cursors and reload the cursor scheme when
   they restore, so they aren't meant to be enabled together. Pick one.
+
+## Excluded programs
+
+Some apps, remote desktop clients such as RustDesk for example, take their
+own copy of a system cursor instead of using the live one. If that copy is
+made while the cursor is faded, the app keeps an invisible cursor; if it is
+made while the cursor is visible, the app's cursor never fades. The mod can't
+update copies other apps have made, so it doesn't fade the cursor at all
+while a program from the *Excluded programs* setting has focus, and it brings
+the cursor back as soon as such a program gets focus. `rustdesk.exe` is
+excluded by default. If you see the same problem in another app, add its
+executable name to the list.
+
+The program is identified by the process that owns the focused window.
+Windows Store (UWP) apps are hosted by `ApplicationFrameHost.exe`, so they
+can't be excluded by their own name, and excluding `ApplicationFrameHost.exe`
+would exclude all of them.
 
 ## Limitations
 * Only the standard system cursors are faded (arrow, I-beam, hand, resize,
@@ -93,6 +110,12 @@ Pointers*.
   $name: Fade duration (milliseconds)
 - minOpacity: 0
   $name: Final opacity (percent, 0 = fully invisible)
+- excludedPrograms: [rustdesk.exe]
+  $name: Excluded programs
+  $description: >-
+    The cursor is never faded while one of these programs has focus (use the
+    executable file name, e.g. rustdesk.exe). Useful for apps that take their
+    own copy of the system cursor, such as remote desktop clients.
 */
 // ==/WindhawkModSettings==
 
@@ -103,7 +126,10 @@ Pointers*.
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <string>
 #include <vector>
+
+#include <windhawk_utils.h>
 
 // ---------------------------------------------------------------------------
 // Settings (written by the Windhawk thread, read by the worker thread)
@@ -387,6 +413,10 @@ static bool g_rawMissing = false;
 // True while the foreground app is probably more privileged than this
 // process (Windows then doesn't deliver raw input to us).
 static bool g_fgBlocked = false;
+// True while the foreground program is in the excluded list. The list is
+// only touched on the worker thread.
+static bool g_fgExcluded = false;
+static std::vector<std::wstring> g_excluded;
 static HWINEVENTHOOK g_fgHook = nullptr;
 
 // While either is true, the idle check runs every kPolledIdleIntervalMs
@@ -423,41 +453,99 @@ static void ArmWatchTimer(HWND hwnd) {
              PolledMode() ? kWatchPolledIntervalMs : kWatchIntervalMs, nullptr);
 }
 
-// Raw input is not delivered to a process while a window of a more
-// privileged process (e.g. an elevated Task Manager) has focus. A normal
-// process can't open the token of an elevated one, which is used as the
-// signal. Failing to inspect the process counts as "blocked": that only
-// makes the mod check the mouse more often.
-static bool ForegroundMayBlockRawInput() {
+// Reads the excluded-program list (worker thread only).
+static void LoadExcludedPrograms() {
+    g_excluded.clear();
+    for (int i = 0; i < 64; i++) {
+        auto value =
+            WindhawkUtils::StringSetting::make(L"excludedPrograms[%d]", i);
+        if (!*value.get()) break;  // unset values are returned as ""
+        g_excluded.push_back(value.get());
+    }
+}
+
+// Inspects the foreground program: *blocked is true if raw input is
+// probably not delivered to us while it has focus, *excluded is true if it's
+// in the excluded list.
+static void QueryForeground(bool* blocked, bool* excluded) {
+    *blocked = false;
+    *excluded = false;
+
     HWND fg = GetForegroundWindow();
-    if (!fg) return false;
+    if (!fg) return;
 
     DWORD pid = 0;
     GetWindowThreadProcessId(fg, &pid);
-    if (!pid || pid == GetCurrentProcessId()) return false;
+    if (!pid || pid == GetCurrentProcessId()) return;
 
     HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!proc) return true;
+    if (!proc) {
+        *blocked = true;
+        return;
+    }
 
+    if (!g_excluded.empty()) {
+        WCHAR path[MAX_PATH * 2];
+        DWORD len = ARRAYSIZE(path);
+        if (QueryFullProcessImageNameW(proc, 0, path, &len)) {
+            const wchar_t* base = wcsrchr(path, L'\\');
+            const wchar_t* name = base ? base + 1 : path;
+            for (const std::wstring& e : g_excluded) {
+                // Compares file names the way the file system does.
+                if (CompareStringOrdinal(e.c_str(), -1, name, -1, TRUE) ==
+                    CSTR_EQUAL) {
+                    *excluded = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Raw input is not delivered to a process while a window of a more
+    // privileged process (e.g. an elevated Task Manager) has focus. A normal
+    // process can't open the token of an elevated one, which is used as the
+    // signal. Failing to inspect the process counts as "blocked": that only
+    // makes the mod check the mouse more often.
     HANDLE token = nullptr;
-    bool blocked = false;
     if (OpenProcessToken(proc, TOKEN_QUERY, &token)) {
         CloseHandle(token);
     } else {
-        blocked = true;
+        *blocked = true;
     }
     CloseHandle(proc);
-    return blocked;
+}
+
+static void Restore(HWND hwnd);
+
+// Mouse activity isn't tracked while an excluded program has focus (the idle
+// check returns early, and raw input doesn't reach us if that program is
+// elevated). When it loses focus, restart the idle countdown from now so the
+// cursor doesn't fade immediately.
+static void ResetActivityTracking() {
+    g_lastActivity = GetTickCount64();
+    GetCursorPos(&g_lastPt);
+    g_rawSeqAtLastPoll = g_rawSeq;
 }
 
 static void CALLBACK ForegroundChanged(HWINEVENTHOOK, DWORD, HWND, LONG, LONG,
                                        DWORD, DWORD) {
-    bool blocked = ForegroundMayBlockRawInput();
-    if (blocked == g_fgBlocked) return;
+    bool blocked, excluded;
+    QueryForeground(&blocked, &excluded);
+    bool changed = blocked != g_fgBlocked || excluded != g_fgExcluded;
+    if (g_fgExcluded && !excluded) ResetActivityTracking();
     g_fgBlocked = blocked;
+    g_fgExcluded = excluded;
 
     HWND hwnd = g_hwnd.load();
     if (!hwnd) return;
+
+    // Bring the cursor back right away when an excluded program gets focus.
+    if (excluded && g_state != State::Visible) {
+        Restore(hwnd);
+        return;
+    }
+    if (!changed) return;
+
     if (g_state == State::Visible) {
         RearmIdle(hwnd);
     } else if (g_state == State::Faded) {
@@ -589,6 +677,13 @@ static void OnIdleTimer(HWND hwnd) {
 
     ULONGLONG timeout = IdleTimeoutMs();
 
+    if (g_fgExcluded) {
+        // Check again after a full period; a focus change re-arms it sooner.
+        SetTimer(hwnd, TIMER_IDLE, (UINT)std::min<ULONGLONG>(timeout, 0x7FFFFFFFULL),
+                 nullptr);
+        return;
+    }
+
     bool active = false;
     if (!PollMouse(&active)) {
         // Input desktop isn't ours (UAC, lock screen): don't fade now.
@@ -651,6 +746,15 @@ static void OnRawInput(HWND hwnd, HRAWINPUT hri) {
 }
 
 static void OnSettingsMessage(HWND hwnd) {
+    bool wasExcluded = g_fgExcluded;
+    LoadExcludedPrograms();
+    QueryForeground(&g_fgBlocked, &g_fgExcluded);
+    if (wasExcluded && !g_fgExcluded) ResetActivityTracking();
+    if (g_fgExcluded && g_state != State::Visible) {
+        Restore(hwnd);
+        return;
+    }
+
     switch (g_state) {
         case State::Visible:
             RearmIdle(hwnd);
@@ -733,7 +837,8 @@ static DWORD WINAPI WorkerThread(LPVOID) {
 
     g_lastActivity = GetTickCount64();
     GetCursorPos(&g_lastPt);
-    g_fgBlocked = ForegroundMayBlockRawInput();
+    LoadExcludedPrograms();
+    QueryForeground(&g_fgBlocked, &g_fgExcluded);
     g_fgHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
                                nullptr, ForegroundChanged, 0, 0,
                                WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);

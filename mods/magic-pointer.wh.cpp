@@ -1,8 +1,38 @@
 // ==WindhawkMod==
 // @id              magic-pointer
 // @name            Magic Pointer
-// @description     Shake the mouse cursor to summon a Googlebook-style Magic Pointer, then point at or select anything on screen and ask Gemini AI about it
-// @version         1.0.2
+// @description     Shake the mouse cursor to summon a Googlebook-style Magic Pointer, then point at or select anything on screen and ask Gemini, ChatGPT or Claude about it
+// @description:ar  حرك مؤشر الماوس لاستدعاء Magic Pointer بأسلوب Googlebook، ثم أشر إلى أي شيء على الشاشة أو حدده واسأل Gemini أو ChatGPT أو Claude عنه
+// @description:bn  মাউস কার্সার ঝাঁকিয়ে Googlebook ধাঁচের Magic Pointer ডাকুন, তারপর পর্দার যেকোনো কিছুর দিকে নির্দেশ করুন বা সেটি বেছে নিন এবং Gemini, ChatGPT বা Claude-কে সে সম্পর্কে জিজ্ঞাসা করুন
+// @description:cs  Zatřeste kurzorem myši a vyvolejte Magic Pointer ve stylu Googlebooku, pak na cokoli na obrazovce ukažte nebo to vyberte a zeptejte se na to AI (Gemini, ChatGPT nebo Claude)
+// @description:da  Ryst musemarkøren for at fremkalde en Magic Pointer i Googlebook-stil, peg derefter på noget på skærmen eller vælg det, og spørg Gemini, ChatGPT eller Claude om det
+// @description:de  Schüttle den Mauszeiger, um einen Magic Pointer im Googlebook-Stil aufzurufen, zeige dann auf etwas auf dem Bildschirm oder wähle es aus und frage Gemini, ChatGPT oder Claude dazu
+// @description:el  Κουνήστε τον δείκτη του ποντικιού για να καλέσετε ένα Magic Pointer στυλ Googlebook, και μετά δείξτε ή επιλέξτε οτιδήποτε στην οθόνη και ρωτήστε γι' αυτό το Gemini, το ChatGPT ή το Claude
+// @description:es  Agita el cursor del mouse para invocar un Magic Pointer al estilo Googlebook, luego señala o selecciona cualquier cosa en pantalla y pregúntale a Gemini, ChatGPT o Claude sobre ello
+// @description:fa  نشانگر ماوس را تکان دهید تا Magic Pointer به سبک Googlebook ظاهر شود، سپس به هر چیزی روی صفحه اشاره کنید یا آن را انتخاب کنید و درباره آن از Gemini، ChatGPT یا Claude بپرسید
+// @description:fr  Secouez le curseur de la souris pour faire apparaître un Magic Pointer façon Googlebook, puis pointez ou sélectionnez n'importe quoi à l'écran et interrogez Gemini, ChatGPT ou Claude à ce sujet
+// @description:hi  माउस कर्सर को हिलाकर Googlebook जैसा Magic Pointer बुलाएँ, फिर स्क्रीन पर किसी भी चीज़ की ओर इशारा करें या उसे चुनें और Gemini, ChatGPT या Claude से उसके बारे में पूछें
+// @description:hr  Protresi pokazivač miša da prizoveš Magic Pointer u stilu Googlebooka, zatim pokaži na bilo što na zaslonu ili to odaberi i pitaj o tome umjetnu inteligenciju (Gemini, ChatGPT ili Claude)
+// @description:hu  Rázd meg az egérkurzort, hogy előhívj egy Googlebook-stílusú Magic Pointert, majd mutass rá bármire a képernyőn, vagy jelöld ki, és kérdezd meg róla az MI-t (Gemini, ChatGPT vagy Claude)
+// @description:id  Goyangkan kursor mouse untuk memunculkan Magic Pointer ala Googlebook, lalu tunjuk atau pilih apa saja di layar dan tanyakan kepada Gemini, ChatGPT, atau Claude tentangnya
+// @description:it  Scuoti il cursore del mouse per richiamare un Magic Pointer in stile Googlebook, poi punta o seleziona qualsiasi cosa sullo schermo e fai una domanda a Gemini, ChatGPT o Claude
+// @description:ja  マウス カーソルを振って Googlebook 風の Magic Pointer を呼び出し、画面上の任意の場所を指すか選択して、Gemini、ChatGPT、Claude に質問できます
+// @description:ko  마우스 커서를 흔들어 Googlebook 스타일의 Magic Pointer를 불러낸 다음, 화면의 아무 곳이나 가리키거나 선택하여 Gemini, ChatGPT 또는 Claude에게 질문하세요
+// @description:nb  Rist musepekeren for å hente fram en Magic Pointer i Googlebook-stil, pek deretter på noe på skjermen eller velg det, og spør Gemini, ChatGPT eller Claude om det
+// @description:nl  Schud de muisaanwijzer om een Magic Pointer in Googlebook-stijl op te roepen, wijs dan iets op het scherm aan of selecteer het en stel Gemini, ChatGPT of Claude er vragen over
+// @description:pl  Potrząśnij kursorem myszy, aby przywołać Magic Pointer w stylu Googlebooka, a potem wskaż coś na ekranie lub to zaznacz i zapytaj o to AI (Gemini, ChatGPT lub Claude)
+// @description:pt-BR Balance o cursor do mouse para chamar um Magic Pointer no estilo Googlebook, depois aponte ou selecione qualquer coisa na tela e pergunte ao Gemini, ao ChatGPT ou ao Claude sobre isso
+// @description:ro  Scutură cursorul mouse-ului ca să invoci un Magic Pointer în stil Googlebook, apoi indică sau selectează orice de pe ecran și întreabă Gemini, ChatGPT sau Claude despre el
+// @description:ru  Потрясите курсором мыши, чтобы вызвать Magic Pointer в стиле Googlebook, затем укажите на что угодно на экране или выделите это и спросите об этом Gemini, ChatGPT или Claude
+// @description:sv  Skaka muspekaren för att kalla fram en Magic Pointer i Googlebook-stil, peka sedan på eller markera något på skärmen och fråga Gemini, ChatGPT eller Claude om det
+// @description:ta  Googlebook பாணி Magic Pointer-ஐ அழைக்க மவுஸ் கர்சரை குலுக்குங்கள், பின்னர் திரையில் எதையும் சுட்டிக்காட்டவும் அல்லது தேர்ந்தெடுக்கவும், அதைப் பற்றி Gemini, ChatGPT அல்லது Claude-இடம் கேளுங்கள்
+// @description:th  เขย่าเคอร์เซอร์เมาส์เพื่อเรียก Magic Pointer สไตล์ Googlebook จากนั้นชี้หรือเลือกอะไรก็ได้บนหน้าจอแล้วถาม Gemini, ChatGPT หรือ Claude เกี่ยวกับสิ่งนั้น
+// @description:tr  Googlebook tarzı bir Magic Pointer'ı çağırmak için fare imlecini sallayın, sonra ekrandaki herhangi bir şeyi işaret edin veya seçin ve Gemini, ChatGPT veya Claude'a sorun
+// @description:uk  Потрусіть курсором миші, щоб викликати Magic Pointer у стилі Googlebook, потім вкажіть на будь-що на екрані або виділіть це й запитайте про це Gemini, ChatGPT або Claude
+// @description:vi  Lắc con trỏ chuột để gọi Magic Pointer kiểu Googlebook, sau đó trỏ vào hoặc chọn bất kỳ thứ gì trên màn hình rồi hỏi Gemini, ChatGPT hoặc Claude về nó
+// @description:zh-CN 摇动鼠标指针，唤出 Googlebook 风格的 Magic Pointer，然后指向或选择屏幕上的任意内容，并向 Gemini、ChatGPT 或 Claude 提问
+// @description:zh-TW 搖動滑鼠游標，叫出 Googlebook 風格的 Magic Pointer，然後指向或選取螢幕上的任何內容，並向 Gemini、ChatGPT 或 Claude 提問
+// @version         1.0.4
 // @author          Rono
 // @github          https://github.com/rono-zeroseven
 // @include         windhawk.exe
@@ -14,8 +44,9 @@
 # Magic Pointer
 
 The Magic Pointer from Google's Googlebooks, on Windows: an AI mouse cursor.
-Wiggle the mouse, then point at anything on screen, select it, and ask Gemini
-about it, search it with Google Lens, copy its text or translate it.
+Wiggle the mouse, then point at anything on screen, select it, and ask Gemini,
+ChatGPT or Claude about it, search it with Google Lens, copy its text or
+translate it.
 
 [GitHub](https://github.com/rono-zeroseven) · Discord: **rono007**
 
@@ -30,21 +61,48 @@ about it, search it with Google Lens, copy its text or translate it.
 2. **Point and select.** Hover over a button, image, link or paragraph to
    outline it, then click to select it. Or click and drag to select any area.
 3. **Ask.** A card opens next to your selection. Type a question and press
-   Enter, or pick a suggestion. With a Gemini API key, the **Translate** button
-   on the card translates the text in your selection into your Windows
-   language, or into the language you pick in the settings.
+   Enter, or pick a suggestion. With an API key, the **Translate** button on
+   the card translates the text in your selection into your Windows language,
+   or into the language you pick in the settings.
+
+**No selection needed.** While the pointer is on screen, just start typing: the
+card opens at the pointer with your text and no image, and Enter asks. Its **+**
+button adds a selection later. Magic Pointer only takes your typing while the
+pointer is showing; to keep typing in the app you were using, turn off **Start
+typing to ask** in the settings.
 
 Press **Esc** or **right-click** to put the Magic Pointer away. It also leaves
 on its own when the mouse stays still for a while.
 
-## Gemini
+## Gemini, ChatGPT and Claude
 
-Add an API key from [Google AI Studio](https://aistudio.google.com/apikey) in the
-mod's Windhawk settings to receive answers directly in the card. You can ask
-follow-up questions.
+Paste an API key in the mod's Windhawk settings to receive answers directly in
+the card. You can ask follow-up questions. There is just one **API key**
+setting: the mod recognizes which service a key belongs to.
+
+* **Gemini**: get a free key from
+  [Google AI Studio](https://aistudio.google.com/apikey).
+* **ChatGPT**: create a key on the
+  [OpenAI platform](https://platform.openai.com/api-keys). OpenAI bills API
+  usage to your account.
+* **Claude**: create a key in the
+  [Claude Console](https://platform.claude.com/settings/keys). Anthropic bills
+  API usage to your account.
+
+With a key, that assistant handles everything that needs one: answers,
+follow-up questions, **Smart suggestions** and **Translate**. The **Model**
+setting chooses how it answers. **Fast**, the default, starts in a second or
+two. **Balanced** and **Smartest** think longer, so their answers are better
+but start later and cost more. They use Gemini Flash-Lite, 3.6 Flash and Pro
+(Pro usually needs a paid plan); ChatGPT gpt-6-luna, gpt-6.1-terra and
+gpt-6.1-sol; Claude Haiku 5.5, Sonnet 5.5 and Opus 5.5. If the chosen model
+isn't available, for example because it is busy or needs a paid plan, a faster
+one answers instead. Without any key, Magic Pointer works through Gemini in
+your browser, as described below.
 
 **Smart suggestions** are optional and disabled by default. When enabled,
-Gemini suggests up to three things to do with each selection.
+the assistant suggests up to three things to do with each selection, always
+with its fastest model so that the suggestions appear quickly.
 Drag over an answer to select text, then press Ctrl+C or right-click to copy.
 The **Copy** button copies the whole answer, including while it is streaming.
 
@@ -75,20 +133,22 @@ when it's used.
 ## Text recognition
 
 Every selection is read with the OCR built into Windows 10 and 11, entirely
-on your PC. Copy the text with the **Aa** button, and Gemini gets it as extra
-context. OCR uses the languages installed in Windows.
+on your PC. Copy the text with the **Aa** button, and the assistant gets it as
+extra context. OCR uses the languages installed in Windows.
 
 ## Privacy and temporary files
 
 Summoning the pointer, selecting an area and copying its image or text stay
-on your PC with the default settings. The mod contacts Google's services
-when you use these features:
+on your PC with the default settings. The mod contacts the services of
+Google, OpenAI or Anthropic when you use these features:
 
 * With an API key, **Send**, a suggestion chip or **Translate** sends your
   selected regions as JPEG images (up to 1536 pixels on the longest side),
   their UI Automation names and recognized text, your question and the card's
-  conversation to `generativelanguage.googleapis.com` over HTTPS. Follow-up
-  questions include the selections and conversation again.
+  conversation over HTTPS to the assistant whose key is in use:
+  `generativelanguage.googleapis.com` for Gemini, `api.openai.com` for
+  ChatGPT or `api.anthropic.com` for Claude. Only that service receives
+  them. Follow-up questions include the selections and conversation again.
 * **Smart suggestions** is off by default. If you enable it with an API key,
   every selection is uploaded as soon as you make or add it, even if you only
   intend to copy its text or search it with Lens. The suggestion request sends
@@ -108,6 +168,15 @@ most regions. The terms describe regional exceptions and different treatment
 for paid services. Avoid sending sensitive, confidential or personal content
 through the free tier.
 
+[OpenAI's data controls](https://developers.openai.com/api/docs/guides/your-data)
+say that API data isn't used to train its models by default, and that
+abuse-monitoring logs are kept for up to 30 days. Magic Pointer sends ChatGPT
+requests with `store` set to `false`, so they are not kept as application
+state. Anthropic's
+[Commercial Terms](https://www.anthropic.com/legal/commercial-terms) say it
+may not train models on customer content from its services. Check each
+provider's current terms before you send sensitive content.
+
 Browser handoff PNGs (`gemini-selection-*.png`) and Lens HTML pages are written
 temporarily to the mod's Windhawk storage folder, normally under
 `%ProgramData%\Windhawk`. This folder is shared across Windows accounts.
@@ -125,9 +194,38 @@ Windows clipboard; clipboard history follows your Windows settings.
   switches them to solid colors, as does a Windows older than 10 version 1803.
 * Pick any **glow color**: `#4285F4`, `66,133,244`, a name like `purple`,
   `accent` for your Windows accent color, or `rainbow` for Google's colors.
+* Use your own pointer: set **Custom pointer file** to a `.cur` or `.ani` file,
+  animated ones included. It only replaces the pointer while the Magic Pointer
+  is on screen, with the same glow, and never changes your normal cursors.
+  **Pointer size** scales it. If the file can't be loaded, the default pointer
+  is used and Windhawk's log says why.
 * **Dim outside the selection** darkens the surrounding screen only while you
   drag a rectangle. The area inside stays clear.
 
+
+## Languages
+
+The hint, the card, its buttons and its messages are shown in your **Windows
+display language**, or in the one you pick with the **Language** setting.
+Magic Pointer is translated into Arabic, Bengali, Chinese (Simplified and
+Traditional), Croatian, Czech, Danish, Dutch, Finnish, French, German, Greek,
+Hebrew, Hindi, Hungarian, Indonesian, Italian, Japanese, Korean, Norwegian,
+Persian, Polish, Portuguese (Brazil), Romanian, Russian, Spanish, Swedish,
+Tamil, Thai, Turkish, Ukrainian and Vietnamese. Any other language shows
+English. Arabic, Hebrew and Persian read from right to left, but the layout of
+the card is not mirrored.
+
+This settings page is translated as well, in the languages Windhawk itself
+offers, and follows Windhawk's own language. The suggestions that Magic Pointer
+makes, including **Smart suggestions**, are written in the Magic Pointer's
+language, and the assistant answers in the language your question is written in.
+With **Translate to** set to Auto, the Translate button uses the **Language**
+setting.
+
+The translations were written with the help of AI, and not every one has been
+checked by a native speaker. If a text reads wrong, please
+[open an issue](https://github.com/rono-zeroseven/magic-pointer/issues) with the
+language and a better wording.
 
 ## Games and other apps
 
@@ -164,64 +262,1259 @@ the problem. Include screenshots when useful and remove private content.
 - shake: true
   $name: Shake to activate
   $description: Wiggle the mouse to summon the Magic Pointer
+  $name:ar: "الهز للتفعيل"
+  $name:bn: "ঝাঁকিয়ে চালু করুন"
+  $name:cs: "Aktivace zatřesením"
+  $name:da: "Ryst for at aktivere"
+  $name:de: "Zum Aktivieren schütteln"
+  $name:el: "Κούνημα για ενεργοποίηση"
+  $name:es: "Agitar para activar"
+  $name:fa: "تکان دادن برای فعال\u200cسازی"
+  $name:fr: "Secouer pour activer"
+  $name:hi: "हिलाकर चालू करें"
+  $name:hr: "Protresi za aktiviranje"
+  $name:hu: "Rázás az aktiváláshoz"
+  $name:id: "Goyangkan untuk mengaktifkan"
+  $name:it: "Scuoti per attivare"
+  $name:ja: "シェイクで起動"
+  $name:ko: "흔들어서 활성화"
+  $name:nb: "Rist for å aktivere"
+  $name:nl: "Schudden om te activeren"
+  $name:pl: "Potrząśnij, aby aktywować"
+  $name:pt-BR: "Sacudir para ativar"
+  $name:ro: "Scutură pentru a activa"
+  $name:ru: "Встряхнуть для активации"
+  $name:sv: "Skaka för att aktivera"
+  $name:ta: "குலுக்கி செயல்படுத்து"
+  $name:th: "เขย่าเพื่อเปิดใช้งาน"
+  $name:tr: "Etkinleştirmek için salla"
+  $name:uk: "Струснути для активації"
+  $name:vi: "Lắc để kích hoạt"
+  $name:zh-CN: "摇动以激活"
+  $name:zh-TW: "搖動以啟用"
+  $description:ar: "حرك الماوس يمينا ويسارا لاستدعاء Magic Pointer"
+  $description:bn: "Magic Pointer ডাকতে মাউস ঝাঁকান"
+  $description:cs: "Zatřesením myší vyvoláte Magic Pointer"
+  $description:da: "Ryst musen for at fremkalde Magic Pointer"
+  $description:de: "Bewege die Maus hin und her, um den Magic Pointer aufzurufen"
+  $description:el: "Κουνήστε το ποντίκι για να καλέσετε το Magic Pointer"
+  $description:es: "Agita el mouse para invocar el Magic Pointer"
+  $description:fa: "ماوس را تکان دهید تا Magic Pointer ظاهر شود"
+  $description:fr: "Secouez la souris pour faire apparaître le Magic Pointer"
+  $description:hi: "Magic Pointer को बुलाने के लिए माउस को हिलाएँ"
+  $description:hr: "Protresi miš kako bi prizvao Magic Pointer"
+  $description:hu: "Rázd meg az egeret a Magic Pointer előhívásához"
+  $description:id: "Goyangkan mouse untuk memunculkan Magic Pointer"
+  $description:it: "Muovi il mouse avanti e indietro per richiamare il Magic Pointer"
+  $description:ja: "マウスを振って Magic Pointer を呼び出します"
+  $description:ko: "마우스를 흔들어 Magic Pointer를 불러옵니다"
+  $description:nb: "Rist musen for å hente fram Magic Pointer"
+  $description:nl: "Beweeg de muis heen en weer om de Magic Pointer op te roepen"
+  $description:pl: "Poruszaj myszą w tę i z powrotem, aby przywołać Magic Pointer"
+  $description:pt-BR: "Balance o mouse para chamar o Magic Pointer"
+  $description:ro: "Mișcă mouse-ul în stânga și în dreapta pentru a invoca Magic Pointer"
+  $description:ru: "Потрясите мышью, чтобы вызвать Magic Pointer"
+  $description:sv: "Skaka musen för att kalla fram Magic Pointer"
+  $description:ta: "Magic Pointer-ஐ அழைக்க மவுஸை குலுக்குங்கள்"
+  $description:th: "เขย่าเมาส์เพื่อเรียก Magic Pointer"
+  $description:tr: "Magic Pointer'ı çağırmak için fareyi sallayın"
+  $description:uk: "Потрусіть мишею, щоб викликати Magic Pointer"
+  $description:vi: "Lắc chuột để gọi Magic Pointer"
+  $description:zh-CN: "摇动鼠标即可唤出 Magic Pointer"
+  $description:zh-TW: "搖動滑鼠即可叫出 Magic Pointer"
 - sensitivity: 5
   $name: Shake sensitivity (1-10)
   $description: >-
     1 needs a large, fast shake. 10 activates with a small, gentle wiggle.
+  $name:ar: "حساسية الهز (1-10)"
+  $name:bn: "ঝাঁকানোর সংবেদনশীলতা (1-10)"
+  $name:cs: "Citlivost zatřesení (1-10)"
+  $name:da: "Rystefølsomhed (1-10)"
+  $name:de: "Schüttelempfindlichkeit (1-10)"
+  $name:el: "Ευαισθησία κουνήματος (1-10)"
+  $name:es: "Sensibilidad de la sacudida (1-10)"
+  $name:fa: "حساسیت تکان دادن (1-10)"
+  $name:fr: "Sensibilité de la secousse (1-10)"
+  $name:hi: "हिलाने की संवेदनशीलता (1-10)"
+  $name:hr: "Osjetljivost potresanja (1-10)"
+  $name:hu: "Rázás érzékenysége (1-10)"
+  $name:id: "Sensitivitas goyangan (1-10)"
+  $name:it: "Sensibilità dello scuotimento (1-10)"
+  $name:ja: "シェイクの感度 (1-10)"
+  $name:ko: "흔들기 민감도(1-10)"
+  $name:nb: "Ristefølsomhet (1-10)"
+  $name:nl: "Schudgevoeligheid (1-10)"
+  $name:pl: "Czułość potrząsania (1-10)"
+  $name:pt-BR: "Sensibilidade da sacudida (1-10)"
+  $name:ro: "Sensibilitatea scuturării (1-10)"
+  $name:ru: "Чувствительность встряхивания (1-10)"
+  $name:sv: "Skakkänslighet (1-10)"
+  $name:ta: "குலுக்கல் உணர்திறன் (1-10)"
+  $name:th: "ความไวในการเขย่า (1-10)"
+  $name:tr: "Sallama hassasiyeti (1-10)"
+  $name:uk: "Чутливість струшування (1-10)"
+  $name:vi: "Độ nhạy khi lắc (1-10)"
+  $name:zh-CN: "摇动灵敏度 (1-10)"
+  $name:zh-TW: "搖動靈敏度 (1-10)"
+  $description:ar: "تتطلب القيمة 1 هزة كبيرة وسريعة. وتُفعَّل القيمة 10 بحركة صغيرة ولطيفة."
+  $description:bn: "1 হলে জোরে ও দ্রুত ঝাঁকাতে হয়। 10 হলে সামান্য আলতো নাড়াতেই চালু হয়ে যায়।"
+  $description:cs: "1 vyžaduje velké, rychlé zatřesení. 10 se aktivuje malým, jemným pohybem."
+  $description:da: "1 kræver en stor, hurtig rysten. 10 aktiveres med en lille, blid bevægelse."
+  $description:de: "1 erfordert ein großes, schnelles Schütteln. 10 aktiviert sich schon bei einer kleinen, sanften Bewegung."
+  $description:el: "Το 1 απαιτεί μεγάλο, γρήγορο κούνημα. Το 10 ενεργοποιείται με μια μικρή, απαλή κίνηση."
+  $description:es: "1 requiere una sacudida grande y rápida. 10 se activa con un movimiento pequeño y suave."
+  $description:fa: "عدد 1 به تکان بزرگ و سریع نیاز دارد. عدد 10 با حرکتی کوچک و ملایم فعال می\u200cشود."
+  $description:fr: "1 demande une secousse ample et rapide. 10 s'active avec un petit mouvement léger."
+  $description:hi: "1 पर माउस को ज़ोर से और तेज़ी से हिलाना पड़ता है। 10 पर हल्की-सी हलचल से भी यह चालू हो जाता है।"
+  $description:hr: "1 zahtijeva veliko, brzo potresanje. 10 se aktivira malim, nježnim pokretom."
+  $description:hu: "Az 1 nagy, gyors rázást igényel. A 10 már kis, finom mozdulatra aktiválódik."
+  $description:id: "1 membutuhkan goyangan besar dan cepat. 10 aktif hanya dengan gerakan kecil yang lembut."
+  $description:it: "1 richiede uno scuotimento ampio e veloce. 10 si attiva con un piccolo movimento delicato."
+  $description:ja: "1 は大きく素早く振る必要があります。10 は小さくやさしく動かすだけで起動します。"
+  $description:ko: "1은 크고 빠르게 흔들어야 합니다. 10은 작고 부드럽게 움직여도 활성화됩니다."
+  $description:nb: "1 krever en stor, rask risting. 10 aktiveres med en liten, forsiktig bevegelse."
+  $description:nl: "1 vraagt om een grote, snelle schudbeweging. 10 activeert al bij een kleine, zachte beweging."
+  $description:pl: "1 wymaga dużego, szybkiego potrząśnięcia. 10 aktywuje się przy małym, delikatnym ruchu."
+  $description:pt-BR: "1 exige uma sacudida grande e rápida. 10 ativa com um movimento pequeno e suave."
+  $description:ro: "1 necesită o scuturare mare și rapidă. 10 se activează la o mișcare mică și blândă."
+  $description:ru: "1 требует широкого быстрого движения. 10 срабатывает от небольшого мягкого покачивания."
+  $description:sv: "1 kräver en stor, snabb skakning. 10 aktiveras av en liten, försiktig rörelse."
+  $description:ta: "1 க்குப் பெரிய, வேகமான குலுக்கல் தேவை. 10 சிறிய, மென்மையான அசைவிலேயே செயல்படும்."
+  $description:th: "1 ต้องเขย่าแรงและเร็ว 10 เปิดใช้งานด้วยการขยับเบา ๆ เพียงเล็กน้อย"
+  $description:tr: "1, büyük ve hızlı bir sallama gerektirir. 10, küçük ve yumuşak bir hareketle etkinleşir."
+  $description:uk: "1 вимагає широкого швидкого руху. 10 спрацьовує від невеликого м'якого погойдування."
+  $description:vi: "1 cần lắc mạnh và nhanh. 10 kích hoạt chỉ với một cái lắc nhẹ, nhỏ."
+  $description:zh-CN: "1 需要幅度大、速度快的摇动。10 只需轻微、柔和的晃动即可激活。"
+  $description:zh-TW: "1 需要幅度大、速度快的搖動。10 只需輕微、柔和的晃動即可啟用。"
 - hotkey: Win+Shift+G
   $name: Keyboard shortcut
   $description: >-
     Also summons the Magic Pointer, for example Win+Shift+G or Ctrl+Alt+Space.
     Leave empty to disable
+  $name:ar: "اختصار لوحة المفاتيح"
+  $name:bn: "কীবোর্ড শর্টকাট"
+  $name:cs: "Klávesová zkratka"
+  $name:da: "Tastaturgenvej"
+  $name:de: "Tastenkombination"
+  $name:el: "Συντόμευση πληκτρολογίου"
+  $name:es: "Atajo de teclado"
+  $name:fa: "میان\u200cبر صفحه\u200cکلید"
+  $name:fr: "Raccourci clavier"
+  $name:hi: "कीबोर्ड शॉर्टकट"
+  $name:hr: "Tipkovnički prečac"
+  $name:hu: "Billentyűparancs"
+  $name:id: "Pintasan keyboard"
+  $name:it: "Scorciatoia da tastiera"
+  $name:ja: "キーボード ショートカット"
+  $name:ko: "키보드 단축키"
+  $name:nb: "Hurtigtast"
+  $name:nl: "Sneltoets"
+  $name:pl: "Skrót klawiszowy"
+  $name:pt-BR: "Atalho de teclado"
+  $name:ro: "Comandă rapidă de la tastatură"
+  $name:ru: "Сочетание клавиш"
+  $name:sv: "Kortkommando"
+  $name:ta: "விசைப்பலகை குறுக்குவழி"
+  $name:th: "แป้นพิมพ์ลัด"
+  $name:tr: "Klavye kısayolu"
+  $name:uk: "Комбінація клавіш"
+  $name:vi: "Phím tắt"
+  $name:zh-CN: "键盘快捷方式"
+  $name:zh-TW: "鍵盤快速鍵"
+  $description:ar: "يستدعي Magic Pointer أيضا، مثل Win+Shift+G أو Ctrl+Alt+Space. اتركه فارغا لتعطيله"
+  $description:bn: "এটি দিয়েও Magic Pointer ডাকা যায়, যেমন Win+Shift+G বা Ctrl+Alt+Space। বন্ধ করতে ফাঁকা রাখুন"
+  $description:cs: "Také vyvolá Magic Pointer, například Win+Shift+G nebo Ctrl+Alt+Space. Nechte prázdné pro vypnutí"
+  $description:da: "Fremkalder også Magic Pointer, for eksempel Win+Shift+G eller Ctrl+Alt+Space. Lad feltet stå tomt for at deaktivere"
+  $description:de: "Ruft den Magic Pointer ebenfalls auf, zum Beispiel Win+Shift+G oder Ctrl+Alt+Space. Leer lassen, um sie zu deaktivieren"
+  $description:el: "Καλεί επίσης το Magic Pointer, για παράδειγμα Win+Shift+G ή Ctrl+Alt+Space. Αφήστε το κενό για απενεργοποίηση"
+  $description:es: "También invoca el Magic Pointer, por ejemplo Win+Shift+G o Ctrl+Alt+Space. Déjalo vacío para desactivarlo"
+  $description:fa: "Magic Pointer را نیز ظاهر می\u200cکند، مثلاً Win+Shift+G یا Ctrl+Alt+Space. برای غیرفعال کردن، خالی بگذارید"
+  $description:fr: "Fait aussi apparaître le Magic Pointer, par exemple Win+Shift+G ou Ctrl+Alt+Space. Laissez vide pour le désactiver"
+  $description:hi: "इससे भी Magic Pointer बुलाया जा सकता है, जैसे Win+Shift+G या Ctrl+Alt+Space। बंद करने के लिए खाली छोड़ें"
+  $description:hr: "Također priziva Magic Pointer, na primjer Win+Shift+G ili Ctrl+Alt+Space. Ostavi prazno za onemogućavanje"
+  $description:hu: "Szintén előhívja a Magic Pointert, például Win+Shift+G vagy Ctrl+Alt+Space. Hagyd üresen a kikapcsoláshoz"
+  $description:id: "Juga memunculkan Magic Pointer, misalnya Win+Shift+G atau Ctrl+Alt+Space. Kosongkan untuk menonaktifkan"
+  $description:it: "Richiama il Magic Pointer anche con una combinazione di tasti, ad esempio Win+Shift+G o Ctrl+Alt+Space. Lascia vuoto per disattivarla"
+  $description:ja: "Magic Pointer を呼び出すこともできます。例: Win+Shift+G、Ctrl+Alt+Space。空にすると無効になります"
+  $description:ko: "Magic Pointer를 불러오는 또 다른 방법입니다. 예: Win+Shift+G 또는 Ctrl+Alt+Space. 비워 두면 사용하지 않습니다"
+  $description:nb: "Henter også fram Magic Pointer, for eksempel Win+Shift+G eller Ctrl+Alt+Space. La stå tomt for å deaktivere"
+  $description:nl: "Roept de Magic Pointer ook op, bijvoorbeeld Win+Shift+G of Ctrl+Alt+Space. Laat leeg om uit te schakelen"
+  $description:pl: "Również przywołuje Magic Pointer, na przykład Win+Shift+G lub Ctrl+Alt+Space. Pozostaw puste, aby wyłączyć"
+  $description:pt-BR: "Também chama o Magic Pointer, por exemplo Win+Shift+G ou Ctrl+Alt+Space. Deixe vazio para desativar"
+  $description:ro: "Invocă și el Magic Pointer, de exemplu Win+Shift+G sau Ctrl+Alt+Space. Lasă gol pentru a dezactiva"
+  $description:ru: "Тоже вызывает Magic Pointer, например Win+Shift+G или Ctrl+Alt+Space. Оставьте пустым, чтобы отключить"
+  $description:sv: "Kallar också fram Magic Pointer, till exempel Win+Shift+G eller Ctrl+Alt+Space. Lämna tomt för att inaktivera"
+  $description:ta: "இதுவும் Magic Pointer-ஐ அழைக்கும், எடுத்துக்காட்டாக Win+Shift+G அல்லது Ctrl+Alt+Space. முடக்க காலியாக விடுங்கள்"
+  $description:th: "เรียก Magic Pointer ได้เช่นกัน เช่น Win+Shift+G หรือ Ctrl+Alt+Space เว้นว่างไว้เพื่อปิดใช้งาน"
+  $description:tr: "Magic Pointer'ı bununla da çağırabilirsiniz, örneğin Win+Shift+G veya Ctrl+Alt+Space. Devre dışı bırakmak için boş bırakın"
+  $description:uk: "Теж викликає Magic Pointer, наприклад Win+Shift+G або Ctrl+Alt+Space. Залиште порожнім, щоб вимкнути"
+  $description:vi: "Cũng gọi Magic Pointer, ví dụ Win+Shift+G hoặc Ctrl+Alt+Space. Để trống để tắt"
+  $description:zh-CN: "同样可以唤出 Magic Pointer，例如 Win+Shift+G 或 Ctrl+Alt+Space。留空则禁用"
+  $description:zh-TW: "同樣可以叫出 Magic Pointer，例如 Win+Shift+G 或 Ctrl+Alt+Space。留空則停用"
+- typeToAsk: true
+  $name: Start typing to ask
+  $description: >-
+    After summoning the pointer, just start typing to ask a question without
+    selecting anything. The card opens with your text and no image. Turn
+    this off to keep your typing in the app you were using
+  $name:ar: "ابدأ الكتابة للسؤال"
+  $name:bn: "জিজ্ঞাসা করতে টাইপ শুরু করুন"
+  $name:cs: "Dotaz psaním"
+  $name:da: "Begynd at skrive for at spørge"
+  $name:de: "Tippen zum Fragen"
+  $name:el: "Πληκτρολόγηση για ερώτηση"
+  $name:es: "Escribir para preguntar"
+  $name:fa: "شروع تایپ برای پرسیدن"
+  $name:fr: "Écrire pour demander"
+  $name:hi: "पूछने के लिए टाइप करना शुरू करें"
+  $name:hr: "Tipkaj za pitanje"
+  $name:hu: "Gépelés a kérdezéshez"
+  $name:id: "Mulai mengetik untuk bertanya"
+  $name:it: "Scrivi per chiedere"
+  $name:ja: "入力して質問"
+  $name:ko: "입력하여 질문"
+  $name:nb: "Skriv for å spørre"
+  $name:nl: "Typ om te vragen"
+  $name:pl: "Pisanie, aby zapytać"
+  $name:pt-BR: "Digitar para perguntar"
+  $name:ro: "Scrie pentru a întreba"
+  $name:ru: "Ввод для вопроса"
+  $name:sv: "Skriv för att fråga"
+  $name:ta: "கேட்க தட்டச்சு செய்யத் தொடங்கு"
+  $name:th: "เริ่มพิมพ์เพื่อถาม"
+  $name:tr: "Sormak için yazmaya başla"
+  $name:uk: "Введення для запитання"
+  $name:vi: "Bắt đầu nhập để hỏi"
+  $name:zh-CN: "输入即提问"
+  $name:zh-TW: "輸入即提問"
+  $description:ar: "بعد استدعاء المؤشر، ابدأ الكتابة مباشرة لطرح سؤال دون تحديد أي شيء. تفتح البطاقة بنصك ودون صورة. عطّل هذا الخيار لتبقى كتابتك في التطبيق الذي كنت تستخدمه"
+  $description:bn: "পয়েন্টার ডাকার পর কিছু বেছে না নিয়েই সরাসরি টাইপ শুরু করে প্রশ্ন করুন। কার্ডটি আপনার লেখা নিয়ে ছবি ছাড়াই খোলে। আপনার টাইপ করা লেখা যে অ্যাপে ছিলেন সেখানেই রাখতে চাইলে এটি বন্ধ করুন"
+  $description:cs: "Po vyvolání ukazatele stačí začít psát a položit otázku, aniž byste cokoli vybírali. Karta se otevře s vaším textem a bez obrázku. Vypněte, pokud má psaní zůstat v aplikaci, kterou jste používali"
+  $description:da: "Når du har fremkaldt markøren, kan du bare begynde at skrive for at stille et spørgsmål uden at vælge noget. Kortet åbner med din tekst og uden billede. Slå det fra, hvis din indtastning skal blive i det program, du brugte"
+  $description:de: "Nach dem Aufrufen des Zeigers einfach lostippen, um eine Frage zu stellen, ohne etwas auszuwählen. Die Karte öffnet sich mit deinem Text und ohne Bild. Schalte das aus, damit deine Eingabe in der verwendeten App bleibt"
+  $description:el: "Αφού καλέσετε τον δείκτη, απλώς αρχίστε να πληκτρολογείτε για να κάνετε μια ερώτηση χωρίς να επιλέξετε τίποτα. Η κάρτα ανοίγει με το κείμενό σας και χωρίς εικόνα. Απενεργοποιήστε το για να μένει η πληκτρολόγησή σας στην εφαρμογή που χρησιμοποιούσατε"
+  $description:es: "Después de invocar el puntero, empieza a escribir para hacer una pregunta sin seleccionar nada. La tarjeta se abre con tu texto y sin imagen. Desactívalo para que lo que escribes se quede en la aplicación que estabas usando"
+  $description:fa: "پس از احضار نشانگر، بدون انتخاب چیزی فقط شروع به تایپ کنید تا سؤال بپرسید. کارت با متن شما و بدون تصویر باز می\u200cشود. برای اینکه تایپ شما در برنامه\u200cای که استفاده می\u200cکردید بماند، این گزینه را خاموش کنید"
+  $description:fr: "Après avoir fait apparaître le pointeur, commencez simplement à écrire pour poser une question sans rien sélectionner. La carte s'ouvre avec votre texte et sans image. Désactivez cette option pour que votre saisie reste dans l'application utilisée"
+  $description:hi: "पॉइंटर बुलाने के बाद कुछ चुने बिना सीधे टाइप करना शुरू करके सवाल पूछें। कार्ड आपके टेक्स्ट के साथ बिना इमेज के खुलता है। अगर आप चाहते हैं कि आपका टाइप किया हुआ उसी ऐप में रहे जिसे आप इस्तेमाल कर रहे थे, तो इसे बंद करें"
+  $description:hr: "Nakon što prizoveš pokazivač, samo počni tipkati da postaviš pitanje bez odabira bilo čega. Kartica se otvara s tvojim tekstom i bez slike. Isključi ako želiš da tvoje tipkanje ostane u aplikaciji koju si koristio"
+  $description:hu: "A mutató előhívása után egyszerűen kezdj el gépelni, hogy kérdezz valamit anélkül, hogy bármit kijelölnél. A kártya a szöveggel és kép nélkül nyílik meg. Kapcsold ki, ha azt szeretnéd, hogy a gépelés abban az alkalmazásban maradjon, amelyet használtál"
+  $description:id: "Setelah memunculkan penunjuk, cukup mulai mengetik untuk bertanya tanpa memilih apa pun. Kartu terbuka dengan teks Anda tanpa gambar. Matikan agar ketikan Anda tetap di aplikasi yang sedang Anda gunakan"
+  $description:it: "Dopo aver richiamato il puntatore, inizia semplicemente a scrivere per fare una domanda senza selezionare nulla. La scheda si apre con il tuo testo e senza immagine. Disattiva se preferisci che ciò che scrivi resti nell'app che stavi usando"
+  $description:ja: "ポインターを呼び出したあと、何も選択せずに入力を始めるだけで質問できます。カードは入力したテキストと共に画像なしで開きます。入力を使用中のアプリに残したい場合は、オフにしてください"
+  $description:ko: "포인터를 불러낸 후 아무것도 선택하지 않고 바로 입력을 시작하여 질문할 수 있습니다. 카드는 입력한 텍스트와 함께 이미지 없이 열립니다. 입력이 사용 중이던 앱에 남아 있기를 원하면 끄세요"
+  $description:nb: "Etter at du har hentet fram pekeren, kan du bare begynne å skrive for å stille et spørsmål uten å velge noe. Kortet åpnes med teksten din og uten bilde. Slå av hvis du vil at skrivingen skal bli i appen du brukte"
+  $description:nl: "Begin na het oproepen van de aanwijzer gewoon te typen om een vraag te stellen zonder iets te selecteren. De kaart opent met je tekst en zonder afbeelding. Zet dit uit als je getypte tekst in de app moet blijven die je gebruikte"
+  $description:pl: "Po przywołaniu wskaźnika wystarczy zacząć pisać, aby zadać pytanie bez zaznaczania czegokolwiek. Karta otwiera się z Twoim tekstem i bez obrazu. Wyłącz, jeśli wpisywany tekst ma trafiać do używanej aplikacji"
+  $description:pt-BR: "Depois de chamar o ponteiro, basta começar a digitar para fazer uma pergunta sem selecionar nada. O cartão abre com o seu texto e sem imagem. Desative para que o que você digita fique no aplicativo que estava usando"
+  $description:ro: "După ce ai invocat cursorul, începe pur și simplu să scrii pentru a pune o întrebare fără să selectezi nimic. Cardul se deschide cu textul tău și fără imagine. Dezactivează dacă vrei ca ceea ce scrii să rămână în aplicația pe care o foloseai"
+  $description:ru: "После вызова указателя просто начните вводить текст, чтобы задать вопрос, ничего не выделяя. Карточка откроется с вашим текстом и без изображения. Отключите, чтобы набранный текст оставался в используемом приложении"
+  $description:sv: "När du har kallat fram pekaren kan du bara börja skriva för att ställa en fråga utan att markera något. Kortet öppnas med din text och utan bild. Stäng av om det du skriver ska stanna i appen du använde"
+  $description:ta: "பாயிண்டரை அழைத்த பிறகு எதையும் தேர்ந்தெடுக்காமலேயே தட்டச்சு செய்யத் தொடங்கி கேள்வி கேட்கலாம். அட்டை உங்கள் உரையுடன் படம் இல்லாமல் திறக்கும். நீங்கள் தட்டச்சு செய்வது பயன்படுத்திய பயன்பாட்டிலேயே இருக்க வேண்டுமென்றால் இதை அணைக்கவும்"
+  $description:th: "หลังจากเรียกตัวชี้แล้ว เริ่มพิมพ์ได้ทันทีเพื่อถามคำถามโดยไม่ต้องเลือกอะไร การ์ดจะเปิดพร้อมข้อความของคุณโดยไม่มีรูปภาพ ปิดตัวเลือกนี้หากต้องการให้สิ่งที่พิมพ์อยู่ในแอปที่ใช้งานอยู่"
+  $description:tr: "İşaretçiyi çağırdıktan sonra hiçbir şey seçmeden yazmaya başlayarak soru sorabilirsiniz. Kart, metninizle ve görüntüsüz açılır. Yazdıklarınızın kullandığınız uygulamada kalmasını istiyorsanız bunu kapatın"
+  $description:uk: "Після виклику вказівника просто почніть вводити текст, щоб поставити запитання, нічого не виділяючи. Картка відкриється з вашим текстом і без зображення. Вимкніть, щоб набраний текст залишався в застосунку, яким ви користувалися"
+  $description:vi: "Sau khi gọi con trỏ, chỉ cần bắt đầu nhập để đặt câu hỏi mà không cần chọn gì. Thẻ mở ra với văn bản của bạn và không có ảnh. Hãy tắt nếu bạn muốn nội dung gõ ở lại ứng dụng bạn đang dùng"
+  $description:zh-CN: "唤出指针后，无需选择任何内容，直接开始输入即可提问。卡片会带着你输入的文字打开，不含图片。如果希望输入的内容留在你正在使用的应用中，请关闭此项"
+  $description:zh-TW: "叫出指標後，無需選取任何內容，直接開始輸入即可提問。卡片會帶著您輸入的文字開啟，不含圖片。若希望輸入的內容留在您正在使用的應用程式中，請關閉此項"
 - excludedApps: [""]
   $name: Excluded apps
   $description: >-
     Shaking never summons the Magic Pointer while one of these is in the
     foreground or under the pointer. Use a program name (game.exe), a path
     with wildcards (C:\Games\*) or a window title
+  $name:ar: "التطبيقات المستبعدة"
+  $name:bn: "বাদ দেওয়া অ্যাপ"
+  $name:cs: "Vyloučené aplikace"
+  $name:da: "Udelukkede apps"
+  $name:de: "Ausgeschlossene Apps"
+  $name:el: "Εξαιρούμενες εφαρμογές"
+  $name:es: "Aplicaciones excluidas"
+  $name:fa: "برنامه\u200cهای مستثنا"
+  $name:fr: "Applications exclues"
+  $name:hi: "बाहर रखे गए ऐप"
+  $name:hr: "Izuzete aplikacije"
+  $name:hu: "Kizárt alkalmazások"
+  $name:id: "Aplikasi yang dikecualikan"
+  $name:it: "App escluse"
+  $name:ja: "除外するアプリ"
+  $name:ko: "제외할 앱"
+  $name:nb: "Ekskluderte apper"
+  $name:nl: "Uitgesloten apps"
+  $name:pl: "Wykluczone aplikacje"
+  $name:pt-BR: "Aplicativos excluídos"
+  $name:ro: "Aplicații excluse"
+  $name:ru: "Исключённые приложения"
+  $name:sv: "Undantagna appar"
+  $name:ta: "விலக்கப்பட்ட பயன்பாடுகள்"
+  $name:th: "แอปที่ยกเว้น"
+  $name:tr: "Hariç tutulan uygulamalar"
+  $name:uk: "Виключені програми"
+  $name:vi: "Ứng dụng bị loại trừ"
+  $name:zh-CN: "排除的应用"
+  $name:zh-TW: "排除的應用程式"
+  $description:ar: "لا يستدعي الهز Magic Pointer أبدا أثناء وجود أحد هذه التطبيقات في المقدمة أو تحت المؤشر. استخدم اسم برنامج (game.exe) أو مسارا يحتوي على أحرف بدل (C:\\Games\\*) أو عنوان نافذة"
+  $description:bn: "এগুলোর কোনোটি সামনে থাকলে বা পয়েন্টারের নিচে থাকলে ঝাঁকালেও Magic Pointer আসবে না। প্রোগ্রামের নাম (game.exe), ওয়াইল্ডকার্ডসহ পাথ (C:\\Games\\*) বা উইন্ডোর শিরোনাম লিখুন"
+  $description:cs: "Zatřesení nikdy nevyvolá Magic Pointer, pokud je některá z nich v popředí nebo pod ukazatelem. Použijte název programu (game.exe), cestu se zástupnými znaky (C:\\Games\\*) nebo název okna"
+  $description:da: "Rysten fremkalder aldrig Magic Pointer, mens en af disse er i forgrunden eller under markøren. Brug et programnavn (game.exe), en sti med jokertegn (C:\\Games\\*) eller en vinduestitel"
+  $description:de: "Das Schütteln ruft den Magic Pointer nie auf, solange eine dieser Apps im Vordergrund oder unter dem Zeiger ist. Verwende einen Programmnamen (game.exe), einen Pfad mit Platzhaltern (C:\\Games\\*) oder einen Fenstertitel"
+  $description:el: "Το κούνημα δεν καλεί ποτέ το Magic Pointer όσο μία από αυτές βρίσκεται σε πρώτο πλάνο ή κάτω από τον δείκτη. Χρησιμοποιήστε όνομα προγράμματος (game.exe), διαδρομή με μπαλαντέρ (C:\\Games\\*) ή τίτλο παραθύρου"
+  $description:es: "Agitar el mouse nunca invoca el Magic Pointer mientras una de estas esté en primer plano o bajo el puntero. Usa el nombre de un programa (game.exe), una ruta con comodines (C:\\Games\\*) o el título de una ventana"
+  $description:fa: "تا وقتی یکی از این برنامه\u200cها در پیش\u200cزمینه یا زیر نشانگر باشد، تکان دادن هرگز Magic Pointer را ظاهر نمی\u200cکند. از نام برنامه (game.exe)، مسیر دارای نویسه\u200cهای جایگزین (C:\\Games\\*) یا عنوان پنجره استفاده کنید"
+  $description:fr: "Secouer la souris ne fait jamais apparaître le Magic Pointer tant que l'une d'elles est au premier plan ou sous le pointeur. Utilisez un nom de programme (game.exe), un chemin avec des caractères génériques (C:\\Games\\*) ou un titre de fenêtre"
+  $description:hi: "इनमें से कोई ऐप सामने (फ़ोरग्राउंड में) हो या पॉइंटर के नीचे हो, तब माउस हिलाने पर Magic Pointer नहीं बुलाया जाएगा। प्रोग्राम का नाम (game.exe), वाइल्डकार्ड वाला पाथ (C:\\Games\\*) या विंडो का टाइटल लिखें"
+  $description:hr: "Potresanje nikad ne prizove Magic Pointer dok je jedna od njih u prvom planu ili ispod pokazivača. Upotrijebi naziv programa (game.exe), putanju s džokerima (C:\\Games\\*) ili naslov prozora"
+  $description:hu: "A rázás soha nem hívja elő a Magic Pointert, amíg ezek egyike előtérben van vagy a mutató alatt van. Használj programnevet (game.exe), helyettesítő karaktereket tartalmazó elérési utat (C:\\Games\\*) vagy ablakcímet"
+  $description:id: "Goyangan tidak pernah memunculkan Magic Pointer saat salah satunya berada di latar depan atau di bawah penunjuk. Gunakan nama program (game.exe), jalur dengan wildcard (C:\\Games\\*), atau judul jendela"
+  $description:it: "Scuotere il mouse non richiama il Magic Pointer quando una di queste app è in primo piano o sotto il puntatore. Inserisci il nome di un programma (game.exe), un percorso con caratteri jolly (C:\\Games\\*) o il titolo di una finestra"
+  $description:ja: "これらのいずれかが前面にある間、またはポインターの下にある間は、シェイクしても Magic Pointer は呼び出されません。プログラム名 (game.exe)、ワイルドカード付きのパス (C:\\Games\\*)、またはウィンドウのタイトルを指定します"
+  $description:ko: "이 중 하나가 포그라운드에 있거나 포인터 아래에 있는 동안에는 흔들어도 Magic Pointer가 나타나지 않습니다. 프로그램 이름(game.exe), 와일드카드가 포함된 경로(C:\\Games\\*) 또는 창 제목을 사용하세요"
+  $description:nb: "Risting henter aldri fram Magic Pointer mens en av disse er i forgrunnen eller under pekeren. Bruk et programnavn (game.exe), en bane med jokertegn (C:\\Games\\*) eller en vindustittel"
+  $description:nl: "Schudden roept de Magic Pointer nooit op zolang een van deze op de voorgrond staat of onder de aanwijzer ligt. Gebruik een programmanaam (game.exe), een pad met jokertekens (C:\\Games\\*) of een venstertitel"
+  $description:pl: "Potrząsanie nigdy nie przywołuje Magic Pointer, gdy jedna z nich jest na pierwszym planie lub pod wskaźnikiem. Użyj nazwy programu (game.exe), ścieżki z symbolami wieloznacznymi (C:\\Games\\*) lub tytułu okna"
+  $description:pt-BR: "Sacudir o mouse nunca chama o Magic Pointer enquanto um destes estiver em primeiro plano ou sob o ponteiro. Use o nome de um programa (game.exe), um caminho com curingas (C:\\Games\\*) ou o título de uma janela"
+  $description:ro: "Scuturarea nu invocă niciodată Magic Pointer cât timp una dintre acestea este în prim-plan sau sub cursor. Folosește numele unui program (game.exe), o cale cu metacaractere (C:\\Games\\*) sau titlul unei ferestre"
+  $description:ru: "Встряхивание никогда не вызывает Magic Pointer, пока одно из этих приложений на переднем плане или под указателем. Укажите имя программы (game.exe), путь с подстановочными знаками (C:\\Games\\*) или заголовок окна"
+  $description:sv: "Att skaka kallar aldrig fram Magic Pointer när en av dessa är i förgrunden eller under pekaren. Använd ett programnamn (game.exe), en sökväg med jokertecken (C:\\Games\\*) eller en fönstertitel"
+  $description:ta: "இவற்றில் ஒன்று முன்புலத்தில் அல்லது சுட்டியின் கீழ் இருக்கும்போது குலுக்கினால் Magic Pointer ஒருபோதும் அழைக்கப்படாது. நிரலின் பெயர் (game.exe), வைல்டுகார்டு உள்ள பாதை (C:\\Games\\*) அல்லது சாளரத் தலைப்பைப் பயன்படுத்துங்கள்"
+  $description:th: "การเขย่าจะไม่เรียก Magic Pointer ขณะที่หนึ่งในแอปเหล่านี้อยู่เบื้องหน้าหรืออยู่ใต้ตัวชี้ ใช้ชื่อโปรแกรม (game.exe) พาธที่มีอักขระตัวแทน (C:\\Games\\*) หรือชื่อหน้าต่าง"
+  $description:tr: "Bunlardan biri ön planda veya işaretçinin altındayken sallama Magic Pointer'ı asla çağırmaz. Bir program adı (game.exe), joker karakterli bir yol (C:\\Games\\*) veya bir pencere başlığı kullanın"
+  $description:uk: "Струшування ніколи не викликає Magic Pointer, поки одна з цих програм на передньому плані або під вказівником. Укажіть назву програми (game.exe), шлях із символами підстановки (C:\\Games\\*) або заголовок вікна"
+  $description:vi: "Việc lắc sẽ không bao giờ gọi Magic Pointer khi một trong số này đang ở nền trước hoặc nằm dưới con trỏ. Hãy dùng tên chương trình (game.exe), đường dẫn có ký tự đại diện (C:\\Games\\*) hoặc tiêu đề cửa sổ"
+  $description:zh-CN: "当其中之一位于前台或指针下方时，摇动不会唤出 Magic Pointer。可使用程序名称 (game.exe)、带通配符的路径 (C:\\Games\\*) 或窗口标题"
+  $description:zh-TW: "當其中之一位於前景或指標下方時，搖動不會叫出 Magic Pointer。可使用程式名稱 (game.exe)、含萬用字元的路徑 (C:\\Games\\*) 或視窗標題"
 - fullscreen: true
   $name: Ignore shakes in fullscreen apps and games
   $description: Includes borderless fullscreen games, videos and presentations
+  $name:ar: "تجاهل الهز في التطبيقات والألعاب بملء الشاشة"
+  $name:bn: "ফুলস্ক্রিন অ্যাপ ও গেমে ঝাঁকানো উপেক্ষা করুন"
+  $name:cs: "Ignorovat zatřesení v celoobrazovkových aplikacích a hrách"
+  $name:da: "Ignorer rysten i fuldskærmsapps og spil"
+  $name:de: "Schütteln in Vollbild-Apps und Spielen ignorieren"
+  $name:el: "Παράβλεψη κουνημάτων σε εφαρμογές και παιχνίδια πλήρους οθόνης"
+  $name:es: "Ignorar sacudidas en aplicaciones y juegos a pantalla completa"
+  $name:fa: "نادیده گرفتن تکان دادن در برنامه\u200cها و بازی\u200cهای تمام\u200cصفحه"
+  $name:fr: "Ignorer les secousses dans les applications et jeux en plein écran"
+  $name:hi: "फ़ुलस्क्रीन ऐप और गेम में हिलाना अनदेखा करें"
+  $name:hr: "Zanemari potresanje u aplikacijama i igrama preko cijelog zaslona"
+  $name:hu: "Rázás figyelmen kívül hagyása teljes képernyős alkalmazásokban és játékokban"
+  $name:id: "Abaikan goyangan di aplikasi dan game layar penuh"
+  $name:it: "Ignora lo scuotimento nelle app e nei giochi a schermo intero"
+  $name:ja: "全画面表示のアプリとゲームでシェイクを無視"
+  $name:ko: "전체 화면 앱과 게임에서 흔들기 무시"
+  $name:nb: "Ignorer risting i fullskjermapper og spill"
+  $name:nl: "Schudden negeren in apps en games op volledig scherm"
+  $name:pl: "Ignoruj potrząsanie w aplikacjach i grach pełnoekranowych"
+  $name:pt-BR: "Ignorar sacudidas em aplicativos e jogos em tela cheia"
+  $name:ro: "Ignoră scuturările în aplicațiile și jocurile pe ecran complet"
+  $name:ru: "Игнорировать встряхивание в полноэкранных приложениях и играх"
+  $name:sv: "Ignorera skakningar i helskärmsappar och spel"
+  $name:ta: "முழுத்திரை பயன்பாடுகள் மற்றும் விளையாட்டுகளில் குலுக்கலைப் புறக்கணி"
+  $name:th: "ไม่สนใจการเขย่าในแอปและเกมแบบเต็มหน้าจอ"
+  $name:tr: "Tam ekran uygulamalarda ve oyunlarda sallamayı yoksay"
+  $name:uk: "Ігнорувати струшування в повноекранних програмах і іграх"
+  $name:vi: "Bỏ qua việc lắc trong ứng dụng và trò chơi toàn màn hình"
+  $name:zh-CN: "在全屏应用和游戏中忽略摇动"
+  $name:zh-TW: "在全螢幕應用程式和遊戲中忽略搖動"
+  $description:ar: "يشمل الألعاب بملء الشاشة بلا حدود ومقاطع الفيديو والعروض التقديمية"
+  $description:bn: "বর্ডারবিহীন ফুলস্ক্রিন গেম, ভিডিও ও প্রেজেন্টেশনও এর মধ্যে পড়ে"
+  $description:cs: "Zahrnuje celoobrazovkové hry bez okrajů, videa a prezentace"
+  $description:da: "Omfatter kantløse fuldskærmsspil, videoer og præsentationer"
+  $description:de: "Gilt auch für randlose Vollbildspiele, Videos und Präsentationen"
+  $description:el: "Περιλαμβάνει παιχνίδια πλήρους οθόνης χωρίς περίγραμμα, βίντεο και παρουσιάσεις"
+  $description:es: "Incluye juegos a pantalla completa sin bordes, videos y presentaciones"
+  $description:fa: "شامل بازی\u200cهای تمام\u200cصفحه بدون حاشیه، ویدیوها و ارائه\u200cها می\u200cشود"
+  $description:fr: "Inclut les jeux en plein écran sans bordure, les vidéos et les présentations"
+  $description:hi: "इसमें बिना बॉर्डर वाले फ़ुलस्क्रीन गेम, वीडियो और प्रेज़ेंटेशन भी शामिल हैं"
+  $description:hr: "Uključuje igre preko cijelog zaslona bez okvira, videozapise i prezentacije"
+  $description:hu: "Ide tartoznak a keret nélküli teljes képernyős játékok, a videók és a prezentációk is"
+  $description:id: "Termasuk game layar penuh tanpa bingkai, video, dan presentasi"
+  $description:it: "Include giochi a schermo intero senza bordi, video e presentazioni"
+  $description:ja: "ボーダーレスの全画面ゲーム、動画、プレゼンテーションも含まれます"
+  $description:ko: "테두리 없는 전체 화면 게임, 동영상, 프레젠테이션을 포함합니다"
+  $description:nb: "Gjelder også kantløse fullskjermspill, videoer og presentasjoner"
+  $description:nl: "Omvat randloze volledig-schermgames, video's en presentaties"
+  $description:pl: "Obejmuje gry pełnoekranowe bez ramki, filmy i prezentacje"
+  $description:pt-BR: "Inclui jogos em tela cheia sem bordas, vídeos e apresentações"
+  $description:ro: "Include jocurile pe ecran complet fără margini, videoclipurile și prezentările"
+  $description:ru: "Включает полноэкранные игры без рамки, видео и презентации"
+  $description:sv: "Gäller även kantlösa helskärmsspel, videor och presentationer"
+  $description:ta: "எல்லைகளற்ற முழுத்திரை விளையாட்டுகள், வீடியோக்கள், விளக்கக்காட்சிகள் ஆகியவையும் இதில் அடங்கும்"
+  $description:th: "รวมถึงเกมเต็มหน้าจอแบบไร้ขอบ วิดีโอ และงานนำเสนอ"
+  $description:tr: "Kenarlıksız tam ekran oyunları, videoları ve sunumları içerir"
+  $description:uk: "Охоплює повноекранні ігри без рамки, відео та презентації"
+  $description:vi: "Bao gồm trò chơi toàn màn hình không viền, video và bản trình chiếu"
+  $description:zh-CN: "包括无边框全屏游戏、视频和演示文稿"
+  $description:zh-TW: "包括無邊框全螢幕遊戲、影片和簡報"
 - glowColor: "#4285F4"
   $name: Glow color
   $description: >-
     Any color, like #4285F4, 66,133,244 or purple. Use "accent" for your
     Windows accent color or "rainbow" for Google's colors
+  $name:ar: "لون التوهج"
+  $name:bn: "গ্লো-এর রঙ"
+  $name:cs: "Barva záře"
+  $name:da: "Glødefarve"
+  $name:de: "Leuchtfarbe"
+  $name:el: "Χρώμα λάμψης"
+  $name:es: "Color del resplandor"
+  $name:fa: "رنگ درخشش"
+  $name:fr: "Couleur de la lueur"
+  $name:hi: "ग्लो का रंग"
+  $name:hr: "Boja sjaja"
+  $name:hu: "Fény színe"
+  $name:id: "Warna cahaya"
+  $name:it: "Colore del bagliore"
+  $name:ja: "光の色"
+  $name:ko: "광채 색"
+  $name:nb: "Glødefarge"
+  $name:nl: "Gloedkleur"
+  $name:pl: "Kolor poświaty"
+  $name:pt-BR: "Cor do brilho"
+  $name:ro: "Culoarea strălucirii"
+  $name:ru: "Цвет свечения"
+  $name:sv: "Glödfärg"
+  $name:ta: "ஒளிரும் நிறம்"
+  $name:th: "สีของแสงเรือง"
+  $name:tr: "Parlama rengi"
+  $name:uk: "Колір сяйва"
+  $name:vi: "Màu phát sáng"
+  $name:zh-CN: "发光颜色"
+  $name:zh-TW: "光暈色彩"
+  $description:ar: "أي لون، مثل #4285F4 أو 66,133,244 أو purple. استخدم \"accent\" للون التمييز في Windows أو \"rainbow\" لألوان Google"
+  $description:bn: "যেকোনো রঙ, যেমন #4285F4, 66,133,244 বা purple। Windows-এর অ্যাকসেন্ট রঙের জন্য \"accent\" এবং Google-এর রঙের জন্য \"rainbow\" লিখুন"
+  $description:cs: "Libovolná barva, například #4285F4, 66,133,244 nebo purple. Použijte \"accent\" pro barvu zvýraznění Windows nebo \"rainbow\" pro barvy Googlu"
+  $description:da: "Enhver farve, f.eks. #4285F4, 66,133,244 eller purple. Brug \"accent\" til Windows' accentfarve eller \"rainbow\" til Googles farver"
+  $description:de: "Eine beliebige Farbe, etwa #4285F4, 66,133,244 oder purple. Verwende \"accent\" für die Windows-Akzentfarbe oder \"rainbow\" für die Farben von Google"
+  $description:el: "Οποιοδήποτε χρώμα, όπως #4285F4, 66,133,244 ή purple. Χρησιμοποιήστε \"accent\" για το χρώμα έμφασης των Windows ή \"rainbow\" για τα χρώματα της Google"
+  $description:es: "Cualquier color, como #4285F4, 66,133,244 o purple. Usa \"accent\" para el color de énfasis de Windows o \"rainbow\" para los colores de Google"
+  $description:fa: "هر رنگی، مانند #4285F4، 66,133,244 یا purple. برای رنگ تأکیدی Windows از \"accent\" و برای رنگ\u200cهای Google از \"rainbow\" استفاده کنید"
+  $description:fr: "N'importe quelle couleur, comme #4285F4, 66,133,244 ou purple. Utilisez \"accent\" pour la couleur d'accentuation de Windows ou \"rainbow\" pour les couleurs de Google"
+  $description:hi: "कोई भी रंग, जैसे #4285F4, 66,133,244 या purple। Windows के एक्सेंट रंग के लिए \"accent\" और Google के रंगों के लिए \"rainbow\" लिखें"
+  $description:hr: "Bilo koja boja, na primjer #4285F4, 66,133,244 ili purple. Upotrijebi \"accent\" za Windowsovu boju isticanja ili \"rainbow\" za Googleove boje"
+  $description:hu: "Bármilyen szín, például #4285F4, 66,133,244 vagy purple. Használd az \"accent\" értéket a Windows kiemelőszínéhez vagy a \"rainbow\" értéket a Google színeihez"
+  $description:id: "Warna apa saja, seperti #4285F4, 66,133,244, atau purple. Gunakan \"accent\" untuk warna aksen Windows atau \"rainbow\" untuk warna Google"
+  $description:it: "Qualsiasi colore, come #4285F4, 66,133,244 o purple. Usa \"accent\" per il colore di accento di Windows o \"rainbow\" per i colori di Google"
+  $description:ja: "#4285F4、66,133,244、purple など、任意の色を指定できます。Windows のアクセント カラーには \"accent\"、Google の色には \"rainbow\" を使用します"
+  $description:ko: "#4285F4, 66,133,244, purple 등 원하는 색을 입력하세요. Windows 강조 색에는 \"accent\", Google 색에는 \"rainbow\"를 사용합니다"
+  $description:nb: "Hvilken som helst farge, for eksempel #4285F4, 66,133,244 eller purple. Bruk \"accent\" for Windows-aksentfargen eller \"rainbow\" for Googles farger"
+  $description:nl: "Elke kleur, zoals #4285F4, 66,133,244 of purple. Gebruik \"accent\" voor je Windows-accentkleur of \"rainbow\" voor de kleuren van Google"
+  $description:pl: "Dowolny kolor, np. #4285F4, 66,133,244 lub purple. Użyj \"accent\" dla koloru akcentu systemu Windows lub \"rainbow\" dla kolorów Google"
+  $description:pt-BR: "Qualquer cor, como #4285F4, 66,133,244 ou purple. Use \"accent\" para a cor de destaque do Windows ou \"rainbow\" para as cores do Google"
+  $description:ro: "Orice culoare, de exemplu #4285F4, 66,133,244 sau purple. Folosește \"accent\" pentru culoarea de accent din Windows sau \"rainbow\" pentru culorile Google"
+  $description:ru: "Любой цвет, например #4285F4, 66,133,244 или purple. Используйте \"accent\" для акцентного цвета Windows или \"rainbow\" для цветов Google"
+  $description:sv: "Valfri färg, till exempel #4285F4, 66,133,244 eller purple. Använd \"accent\" för Windows accentfärg eller \"rainbow\" för Googles färger"
+  $description:ta: "#4285F4, 66,133,244 அல்லது purple போன்ற எந்த நிறமும். Windows உச்சரிப்பு நிறத்திற்கு \"accent\" அல்லது Google நிறங்களுக்கு \"rainbow\" பயன்படுத்துங்கள்"
+  $description:th: "สีใดก็ได้ เช่น #4285F4, 66,133,244 หรือ purple ใช้ \"accent\" สำหรับสีเน้นของ Windows หรือ \"rainbow\" สำหรับสีของ Google"
+  $description:tr: "Herhangi bir renk, örneğin #4285F4, 66,133,244 veya purple. Windows vurgu rengi için \"accent\", Google'ın renkleri için \"rainbow\" kullanın"
+  $description:uk: "Будь-який колір, наприклад #4285F4, 66,133,244 або purple. Використовуйте \"accent\" для акцентного кольору Windows або \"rainbow\" для кольорів Google"
+  $description:vi: "Bất kỳ màu nào, như #4285F4, 66,133,244 hoặc purple. Dùng \"accent\" cho màu nhấn của Windows hoặc \"rainbow\" cho các màu của Google"
+  $description:zh-CN: "任意颜色，例如 #4285F4、66,133,244 或 purple。使用 \"accent\" 表示 Windows 强调色，使用 \"rainbow\" 表示 Google 的配色"
+  $description:zh-TW: "任何色彩，例如 #4285F4、66,133,244 或 purple。使用 \"accent\" 代表 Windows 輔色，使用 \"rainbow\" 代表 Google 的配色"
 - glass: true
   $name: Glass effect
   $description: >-
     Give the card and hint Windows' live frosted glass, which follows what is
     behind them. Turn it off for solid colors
+  $name:ar: "تأثير الزجاج"
+  $name:bn: "গ্লাস ইফেক্ট"
+  $name:cs: "Efekt skla"
+  $name:da: "Glaseffekt"
+  $name:de: "Glaseffekt"
+  $name:el: "Εφέ γυαλιού"
+  $name:es: "Efecto de cristal"
+  $name:fa: "جلوه شیشه"
+  $name:fr: "Effet de verre"
+  $name:hi: "ग्लास इफ़ेक्ट"
+  $name:hr: "Efekt stakla"
+  $name:hu: "Üveghatás"
+  $name:id: "Efek kaca"
+  $name:it: "Effetto vetro"
+  $name:ja: "ガラス効果"
+  $name:ko: "유리 효과"
+  $name:nb: "Glasseffekt"
+  $name:nl: "Glaseffect"
+  $name:pl: "Efekt szkła"
+  $name:pt-BR: "Efeito de vidro"
+  $name:ro: "Efect de sticlă"
+  $name:ru: "Эффект стекла"
+  $name:sv: "Glaseffekt"
+  $name:ta: "கண்ணாடி விளைவு"
+  $name:th: "เอฟเฟกต์กระจก"
+  $name:tr: "Cam efekti"
+  $name:uk: "Ефект скла"
+  $name:vi: "Hiệu ứng kính"
+  $name:zh-CN: "玻璃效果"
+  $name:zh-TW: "玻璃效果"
+  $description:ar: "يمنح البطاقة والتلميح الزجاج المصنفر الحي في Windows الذي يتبع ما خلفهما. أوقفه للحصول على ألوان ثابتة"
+  $description:bn: "কার্ড ও ইঙ্গিতে Windows-এর ফ্রস্টেড গ্লাস ইফেক্ট দেয়, যা তাদের পেছনের জিনিস অনুযায়ী বদলায়। সাদামাটা রঙ চাইলে এটি বন্ধ করুন"
+  $description:cs: "Dodá kartě a nápovědě živé matné sklo Windows, které sleduje, co je za nimi. Vypnutím získáte jednolité barvy"
+  $description:da: "Giver kortet og tippet Windows' levende matterede glas, som følger det, der er bagved. Slå fra for ensfarvede flader"
+  $description:de: "Gibt der Karte und dem Hinweis das lebendige Milchglas von Windows, das dem folgt, was dahinter liegt. Deaktiviere ihn für einfarbige Flächen"
+  $description:el: "Δίνει στην κάρτα και στην υπόδειξη το ζωντανό παγωμένο γυαλί των Windows, που ακολουθεί ό,τι βρίσκεται πίσω τους. Απενεργοποιήστε το για συμπαγή χρώματα"
+  $description:es: "Aplica a la tarjeta y a la sugerencia el cristal esmerilado dinámico de Windows, que sigue lo que hay detrás. Desactívalo para usar colores sólidos"
+  $description:fa: "به کارت و راهنما شیشه مات زنده Windows را می\u200cدهد که از آنچه پشت آن\u200cهاست پیروی می\u200cکند. برای رنگ\u200cهای ساده آن را خاموش کنید"
+  $description:fr: "Donne à la carte et à l'indication le verre dépoli dynamique de Windows, qui suit ce qui se trouve derrière. Désactivez-le pour des couleurs unies"
+  $description:hi: "कार्ड और संकेत को Windows का फ़्रॉस्टेड ग्लास इफ़ेक्ट देता है, जो उनके पीछे की चीज़ों के हिसाब से बदलता रहता है। एक ही रंग चाहिए तो इसे बंद करें"
+  $description:hr: "Daje kartici i savjetu Windowsovo živo mliječno staklo koje prati ono što je iza njih. Isključi za pune boje"
+  $description:hu: "A kártyának és a súgónak a Windows élő, matt üveghatását adja, amely követi a mögöttük lévő tartalmat. Kapcsold ki az egyszínű felületekhez"
+  $description:id: "Memberi kartu dan petunjuk efek kaca buram dinamis Windows yang mengikuti apa yang ada di belakangnya. Matikan untuk warna solid"
+  $description:it: "Dona alla scheda e al suggerimento il vetro smerigliato dinamico di Windows, che segue ciò che c'è dietro. Disattivalo per colori pieni"
+  $description:ja: "カードとヒントに、背後の内容に追従する Windows のリアルタイム すりガラスを適用します。無効にすると単色になります"
+  $description:ko: "카드와 힌트에 뒤쪽 내용을 따라가는 Windows의 실시간 반투명 유리 효과를 적용합니다. 끄면 단색으로 표시됩니다"
+  $description:nb: "Gir kortet og hintet Windows' levende frostede glass, som følger det som ligger bak. Slå av for ensfargede flater"
+  $description:nl: "Geeft de kaart en de hint het levende matglas van Windows, dat meebeweegt met wat erachter zit. Schakel het uit voor effen kleuren"
+  $description:pl: "Nadaje karcie i podpowiedzi żywe, matowe szkło Windows, które podąża za tym, co jest za nimi. Wyłącz, aby uzyskać jednolite kolory"
+  $description:pt-BR: "Dá ao cartão e à dica o vidro fosco dinâmico do Windows, que acompanha o que está atrás deles. Desative para usar cores sólidas"
+  $description:ro: "Dă cardului și indiciului sticla mată dinamică din Windows, care urmărește ce se află în spatele lor. Dezactivează pentru culori pline"
+  $description:ru: "Придаёт карточке и подсказке живое матовое стекло Windows, которое следует за тем, что находится позади. Отключите для сплошных цветов"
+  $description:sv: "Ger kortet och tipset Windows levande frostade glas, som följer det som finns bakom. Stäng av för enfärgade ytor"
+  $description:ta: "அட்டைக்கும் குறிப்புக்கும் Windows-இன் உயிருள்ள பனிக்கண்ணாடியைத் தருகிறது; அது அவற்றுக்குப் பின்னால் உள்ளதைப் பின்தொடரும். திட நிறங்களுக்கு இதை முடக்குங்கள்"
+  $description:th: "ทำให้การ์ดและคำแนะนำมีกระจกฝ้าแบบสดของ Windows ซึ่งเปลี่ยนไปตามสิ่งที่อยู่ด้านหลัง ปิดเพื่อใช้สีทึบ"
+  $description:tr: "Karta ve ipucuna, arkasındakini izleyen Windows'un canlı buzlu camını verir. Düz renkler için kapatın"
+  $description:uk: "Надає картці й підказці живе матове скло Windows, яке слідує за тим, що позаду. Вимкніть для суцільних кольорів"
+  $description:vi: "Mang đến cho thẻ và gợi ý lớp kính mờ động của Windows, vốn thay đổi theo những gì ở phía sau. Tắt để dùng màu đặc"
+  $description:zh-CN: "为卡片和提示提供 Windows 的实时磨砂玻璃效果，它会跟随后方的内容变化。关闭后使用纯色"
+  $description:zh-TW: "為卡片和提示套用 Windows 的即時毛玻璃效果，它會隨後方的內容變化。關閉後使用純色"
 - ripple: true
   $name: Ripple animation
   $description: Gently bulge and ripple the screen when the Magic Pointer appears
+  $name:ar: "حركة التموج"
+  $name:bn: "ঢেউ অ্যানিমেশন"
+  $name:cs: "Animace vlnění"
+  $name:da: "Krusningsanimation"
+  $name:de: "Wellenanimation"
+  $name:el: "Κινούμενη κυματοειδής παραμόρφωση"
+  $name:es: "Animación de ondas"
+  $name:fa: "پویانمایی موج"
+  $name:fr: "Animation d'ondulation"
+  $name:hi: "लहर एनिमेशन"
+  $name:hr: "Animacija valova"
+  $name:hu: "Hullámanimáció"
+  $name:id: "Animasi riak"
+  $name:it: "Animazione a onda"
+  $name:ja: "波紋アニメーション"
+  $name:ko: "물결 애니메이션"
+  $name:nb: "Krusningsanimasjon"
+  $name:nl: "Rimpelanimatie"
+  $name:pl: "Animacja fal"
+  $name:pt-BR: "Animação de ondulação"
+  $name:ro: "Animație de ondulare"
+  $name:ru: "Анимация ряби"
+  $name:sv: "Krusningsanimation"
+  $name:ta: "அலை அனிமேஷன்"
+  $name:th: "แอนิเมชันระลอกคลื่น"
+  $name:tr: "Dalgalanma animasyonu"
+  $name:uk: "Анімація брижів"
+  $name:vi: "Hiệu ứng gợn sóng"
+  $name:zh-CN: "涟漪动画"
+  $name:zh-TW: "漣漪動畫"
+  $description:ar: "ينفخ الشاشة ويموجها برفق عند ظهور Magic Pointer"
+  $description:bn: "Magic Pointer আসার সময় পর্দা হালকা ফুলে উঠে ঢেউ খেলে"
+  $description:cs: "Jemně vyboulí a rozvlní obrazovku, když se objeví Magic Pointer"
+  $description:da: "Buler og kruser skærmen blidt, når Magic Pointer vises"
+  $description:de: "Wölbt und kräuselt den Bildschirm sanft, wenn der Magic Pointer erscheint"
+  $description:el: "Φουσκώνει και κυματίζει απαλά την οθόνη όταν εμφανίζεται το Magic Pointer"
+  $description:es: "Abomba y ondula suavemente la pantalla cuando aparece el Magic Pointer"
+  $description:fa: "هنگام ظاهر شدن Magic Pointer صفحه را به آرامی برجسته و موج\u200cدار می\u200cکند"
+  $description:fr: "Bombe et ondule doucement l'écran quand le Magic Pointer apparaît"
+  $description:hi: "Magic Pointer के आने पर स्क्रीन हल्की-सी उभरती और लहराती है"
+  $description:hr: "Nježno izbočuje i valovito mreška zaslon kad se pojavi Magic Pointer"
+  $description:hu: "Finoman kidomborítja és meghullámoztatja a képernyőt, amikor a Magic Pointer megjelenik"
+  $description:id: "Menggembungkan dan meriakkan layar dengan lembut saat Magic Pointer muncul"
+  $description:it: "Increspa e gonfia delicatamente lo schermo quando compare il Magic Pointer"
+  $description:ja: "Magic Pointer が表示されるときに、画面をやさしく膨らませて波紋を広げます"
+  $description:ko: "Magic Pointer가 나타날 때 화면을 부드럽게 부풀리고 물결치게 합니다"
+  $description:nb: "Buler og kruser skjermen forsiktig når Magic Pointer vises"
+  $description:nl: "Laat het scherm zachtjes bollen en rimpelen wanneer de Magic Pointer verschijnt"
+  $description:pl: "Delikatnie wybrzusza i faluje ekran, gdy pojawia się Magic Pointer"
+  $description:pt-BR: "Estufa e ondula suavemente a tela quando o Magic Pointer aparece"
+  $description:ro: "Bombează și ondulează ușor ecranul când apare Magic Pointer"
+  $description:ru: "Слегка выпячивает и рябит экран при появлении Magic Pointer"
+  $description:sv: "Buktar och krusar skärmen försiktigt när Magic Pointer visas"
+  $description:ta: "Magic Pointer தோன்றும்போது திரையை மெல்ல வீங்கச்செய்து அலையாடச் செய்யும்"
+  $description:th: "ทำให้หน้าจอนูนและเป็นระลอกอย่างนุ่มนวลเมื่อ Magic Pointer ปรากฏ"
+  $description:tr: "Magic Pointer göründüğünde ekranı hafifçe şişirir ve dalgalandırır"
+  $description:uk: "Злегка випинає та хвилює екран, коли з'являється Magic Pointer"
+  $description:vi: "Làm màn hình phồng lên và gợn sóng nhẹ khi Magic Pointer xuất hiện"
+  $description:zh-CN: "Magic Pointer 出现时让屏幕轻柔地凸起并泛起涟漪"
+  $description:zh-TW: "Magic Pointer 出現時，讓螢幕輕柔地隆起並泛起漣漪"
 - theme: auto
   $name: Theme
   $options:
   - auto: Follow Windows
   - light: Light
   - dark: Dark
+  $name:ar: "المظهر"
+  $name:bn: "থিম"
+  $name:cs: "Motiv"
+  $name:da: "Tema"
+  $name:de: "Design"
+  $name:el: "Θέμα"
+  $name:es: "Tema"
+  $name:fa: "زمینه"
+  $name:fr: "Thème"
+  $name:hi: "थीम"
+  $name:hr: "Tema"
+  $name:hu: "Téma"
+  $name:id: "Tema"
+  $name:it: "Tema"
+  $name:ja: "テーマ"
+  $name:ko: "테마"
+  $name:nb: "Tema"
+  $name:nl: "Thema"
+  $name:pl: "Motyw"
+  $name:pt-BR: "Tema"
+  $name:ro: "Temă"
+  $name:ru: "Тема"
+  $name:sv: "Tema"
+  $name:ta: "தீம்"
+  $name:th: "ธีม"
+  $name:tr: "Tema"
+  $name:uk: "Тема"
+  $name:vi: "Giao diện"
+  $name:zh-CN: "主题"
+  $name:zh-TW: "主題"
+  $options:ar:
+  - auto: "اتباع Windows"
+  - light: "فاتح"
+  - dark: "داكن"
+  $options:bn:
+  - auto: "Windows অনুযায়ী"
+  - light: "হালকা"
+  - dark: "গাঢ়"
+  $options:cs:
+  - auto: "Podle Windows"
+  - light: "Světlý"
+  - dark: "Tmavý"
+  $options:da:
+  - auto: "Følg Windows"
+  - light: "Lyst"
+  - dark: "Mørkt"
+  $options:de:
+  - auto: "Windows folgen"
+  - light: "Hell"
+  - dark: "Dunkel"
+  $options:el:
+  - auto: "Ακολούθηση Windows"
+  - light: "Φωτεινό"
+  - dark: "Σκούρο"
+  $options:es:
+  - auto: "Seguir Windows"
+  - light: "Claro"
+  - dark: "Oscuro"
+  $options:fa:
+  - auto: "پیروی از Windows"
+  - light: "روشن"
+  - dark: "تیره"
+  $options:fr:
+  - auto: "Suivre Windows"
+  - light: "Clair"
+  - dark: "Sombre"
+  $options:hi:
+  - auto: "Windows के अनुसार"
+  - light: "हल्का"
+  - dark: "गहरा"
+  $options:hr:
+  - auto: "Prati Windows"
+  - light: "Svijetla"
+  - dark: "Tamna"
+  $options:hu:
+  - auto: "A Windowst követi"
+  - light: "Világos"
+  - dark: "Sötét"
+  $options:id:
+  - auto: "Ikuti Windows"
+  - light: "Terang"
+  - dark: "Gelap"
+  $options:it:
+  - auto: "Segui Windows"
+  - light: "Chiaro"
+  - dark: "Scuro"
+  $options:ja:
+  - auto: "Windows に従う"
+  - light: "ライト"
+  - dark: "ダーク"
+  $options:ko:
+  - auto: "Windows 따르기"
+  - light: "밝게"
+  - dark: "어둡게"
+  $options:nb:
+  - auto: "Følg Windows"
+  - light: "Lyst"
+  - dark: "Mørkt"
+  $options:nl:
+  - auto: "Windows volgen"
+  - light: "Licht"
+  - dark: "Donker"
+  $options:pl:
+  - auto: "Zgodny z Windows"
+  - light: "Jasny"
+  - dark: "Ciemny"
+  $options:pt-BR:
+  - auto: "Seguir o Windows"
+  - light: "Claro"
+  - dark: "Escuro"
+  $options:ro:
+  - auto: "Urmează Windows"
+  - light: "Luminos"
+  - dark: "Întunecat"
+  $options:ru:
+  - auto: "Как в Windows"
+  - light: "Светлая"
+  - dark: "Тёмная"
+  $options:sv:
+  - auto: "Följ Windows"
+  - light: "Ljust"
+  - dark: "Mörkt"
+  $options:ta:
+  - auto: "Windows-ஐப் பின்பற்று"
+  - light: "வெளிர்"
+  - dark: "கருமை"
+  $options:th:
+  - auto: "ตาม Windows"
+  - light: "สว่าง"
+  - dark: "มืด"
+  $options:tr:
+  - auto: "Windows'u izle"
+  - light: "Açık"
+  - dark: "Koyu"
+  $options:uk:
+  - auto: "Як у Windows"
+  - light: "Світла"
+  - dark: "Темна"
+  $options:vi:
+  - auto: "Theo Windows"
+  - light: "Sáng"
+  - dark: "Tối"
+  $options:zh-CN:
+  - auto: "跟随 Windows"
+  - light: "浅色"
+  - dark: "深色"
+  $options:zh-TW:
+  - auto: "跟隨 Windows"
+  - light: "淺色"
+  - dark: "深色"
+- language: auto
+  $name: Language
+  $description: >-
+    The language of Magic Pointer's on-screen text: the hint, the card, its
+    buttons and its messages. Auto follows your Windows display language.
+    This settings page follows the language of Windhawk itself
+  $options:
+  - auto: Auto (Windows display language)
+  - ar: العربية (Arabic)
+  - bn: বাংলা (Bengali)
+  - zh-CN: 简体中文 (Chinese (Simplified))
+  - zh-TW: 繁體中文 (Chinese (Traditional))
+  - hr: Hrvatski (Croatian)
+  - cs: Čeština (Czech)
+  - da: Dansk (Danish)
+  - nl: Nederlands (Dutch)
+  - en: English
+  - fi: Suomi (Finnish)
+  - fr: Français (French)
+  - de: Deutsch (German)
+  - el: Ελληνικά (Greek)
+  - he: עברית (Hebrew)
+  - hi: हिन्दी (Hindi)
+  - hu: Magyar (Hungarian)
+  - id: Bahasa Indonesia (Indonesian)
+  - it: Italiano (Italian)
+  - ja: 日本語 (Japanese)
+  - ko: 한국어 (Korean)
+  - nb: Norsk bokmål (Norwegian)
+  - fa: فارسی (Persian)
+  - pl: Polski (Polish)
+  - pt-BR: Português do Brasil (Portuguese)
+  - ro: Română (Romanian)
+  - ru: Русский (Russian)
+  - es: Español (Spanish)
+  - sv: Svenska (Swedish)
+  - ta: தமிழ் (Tamil)
+  - th: ไทย (Thai)
+  - tr: Türkçe (Turkish)
+  - uk: Українська (Ukrainian)
+  - vi: Tiếng Việt (Vietnamese)
+  $name:ar: "اللغة"
+  $name:bn: "ভাষা"
+  $name:cs: "Jazyk"
+  $name:da: "Sprog"
+  $name:de: "Sprache"
+  $name:el: "Γλώσσα"
+  $name:es: "Idioma"
+  $name:fa: "زبان"
+  $name:fr: "Langue"
+  $name:hi: "भाषा"
+  $name:hr: "Jezik"
+  $name:hu: "Nyelv"
+  $name:id: "Bahasa"
+  $name:it: "Lingua"
+  $name:ja: "言語"
+  $name:ko: "언어"
+  $name:nb: "Språk"
+  $name:nl: "Taal"
+  $name:pl: "Język"
+  $name:pt-BR: "Idioma"
+  $name:ro: "Limbă"
+  $name:ru: "Язык"
+  $name:sv: "Språk"
+  $name:ta: "மொழி"
+  $name:th: "ภาษา"
+  $name:tr: "Dil"
+  $name:uk: "Мова"
+  $name:vi: "Ngôn ngữ"
+  $name:zh-CN: "语言"
+  $name:zh-TW: "語言"
+  $description:ar: "لغة النصوص التي يعرضها Magic Pointer على الشاشة: التلميح والبطاقة وأزرارها ورسائلها. يتبع الخيار Auto لغة عرض Windows. تتبع صفحة الإعدادات هذه لغة Windhawk نفسها"
+  $description:bn: "Magic Pointer পর্দায় যে লেখা দেখায় তার ভাষা: ইঙ্গিত, কার্ড, বোতাম ও বার্তা। Auto বেছে নিলে Windows-এর ডিসপ্লে ভাষা ব্যবহার হয়। এই সেটিংস পাতা Windhawk-এর নিজের ভাষায় দেখায়"
+  $description:cs: "Jazyk textů, které Magic Pointer zobrazuje na obrazovce: nápověda, karta, tlačítka a zprávy. Auto sleduje jazyk zobrazení Windows. Tato stránka nastavení sleduje jazyk samotného Windhawku"
+  $description:da: "Sproget for Magic Pointers tekster på skærmen: tippet, kortet, knapperne og beskederne. Auto følger Windows' visningssprog. Denne indstillingsside følger Windhawks eget sprog"
+  $description:de: "Die Sprache der Bildschirmtexte des Magic Pointers: Hinweis, Karte, Schaltflächen und Meldungen. Auto folgt der Anzeigesprache von Windows. Diese Einstellungsseite folgt der Sprache von Windhawk"
+  $description:el: "Η γλώσσα των κειμένων που εμφανίζει το Magic Pointer στην οθόνη: η υπόδειξη, η κάρτα, τα κουμπιά και τα μηνύματά της. Το Auto ακολουθεί τη γλώσσα εμφάνισης των Windows. Αυτή η σελίδα ρυθμίσεων ακολουθεί τη γλώσσα του ίδιου του Windhawk"
+  $description:es: "El idioma de los textos en pantalla del Magic Pointer: la sugerencia, la tarjeta, sus botones y sus mensajes. Auto sigue el idioma de visualización de Windows. Esta página de configuración sigue el idioma de Windhawk"
+  $description:fa: "زبان متن\u200cهای روی صفحه Magic Pointer: راهنما، کارت، دکمه\u200cها و پیام\u200cهای آن. گزینه Auto از زبان نمایش Windows پیروی می\u200cکند. این صفحه تنظیمات از زبان خود Windhawk پیروی می\u200cکند"
+  $description:fr: "La langue des textes affichés par le Magic Pointer : l'indication, la carte, ses boutons et ses messages. Auto suit la langue d'affichage de Windows. Cette page de paramètres suit la langue de Windhawk"
+  $description:hi: "Magic Pointer के स्क्रीन पर दिखने वाले टेक्स्ट की भाषा: संकेत, कार्ड, उसके बटन और संदेश। Auto चुनने पर Windows की डिसप्ले भाषा इस्तेमाल होती है। यह सेटिंग पेज Windhawk की अपनी भाषा में दिखता है"
+  $description:hr: "Jezik tekstova koje Magic Pointer prikazuje na zaslonu: savjet, kartica, njezini gumbi i poruke. Auto prati jezik prikaza sustava Windows. Ova stranica postavki prati jezik samog Windhawka"
+  $description:hu: "A Magic Pointer képernyőn megjelenő szövegeinek nyelve: a súgó, a kártya, a gombok és az üzenetek. Az Auto a Windows megjelenítési nyelvét követi. Ez a beállítási oldal magának a Windhawknak a nyelvét követi"
+  $description:id: "Bahasa teks di layar Magic Pointer: petunjuk, kartu, tombol, dan pesannya. Auto mengikuti bahasa tampilan Windows. Halaman pengaturan ini mengikuti bahasa Windhawk sendiri"
+  $description:it: "La lingua dei testi a schermo del Magic Pointer: il suggerimento, la scheda, i pulsanti e i messaggi. Auto segue la lingua di visualizzazione di Windows. Questa pagina delle impostazioni segue la lingua di Windhawk"
+  $description:ja: "Magic Pointer が画面に表示するテキスト (ヒント、カード、ボタン、メッセージ) の言語です。Auto は Windows の表示言語に従います。この設定ページは Windhawk 自体の言語に従います"
+  $description:ko: "Magic Pointer가 화면에 표시하는 텍스트(힌트, 카드, 단추, 메시지)의 언어입니다. Auto는 Windows 표시 언어를 따릅니다. 이 설정 페이지는 Windhawk 자체의 언어를 따릅니다"
+  $description:nb: "Språket for Magic Pointers tekster på skjermen: hintet, kortet, knappene og meldingene. Auto følger visningsspråket i Windows. Denne innstillingssiden følger språket i Windhawk selv"
+  $description:nl: "De taal van de teksten die Magic Pointer op het scherm toont: de hint, de kaart, de knoppen en de meldingen. Auto volgt de weergavetaal van Windows. Deze instellingenpagina volgt de taal van Windhawk zelf"
+  $description:pl: "Język tekstów wyświetlanych przez Magic Pointer: podpowiedzi, karty, jej przycisków i komunikatów. Auto podąża za językiem wyświetlania systemu Windows. Ta strona ustawień podąża za językiem samego Windhawk"
+  $description:pt-BR: "O idioma dos textos na tela do Magic Pointer: a dica, o cartão, seus botões e suas mensagens. Auto segue o idioma de exibição do Windows. Esta página de configurações segue o idioma do próprio Windhawk"
+  $description:ro: "Limba textelor afișate pe ecran de Magic Pointer: indiciul, cardul, butoanele și mesajele. Auto urmează limba de afișare din Windows. Această pagină de setări urmează limba Windhawk"
+  $description:ru: "Язык экранных надписей Magic Pointer: подсказки, карточки, её кнопок и сообщений. Значение Auto следует языку интерфейса Windows. Эта страница настроек следует языку самого Windhawk"
+  $description:sv: "Språket för Magic Pointers texter på skärmen: tipset, kortet, knapparna och meddelandena. Auto följer Windows visningsspråk. Den här inställningssidan följer Windhawks eget språk"
+  $description:ta: "Magic Pointer திரையில் காட்டும் உரையின் மொழி: குறிப்பு, அட்டை, அதன் பொத்தான்கள், செய்திகள். Auto என்பது Windows காட்சி மொழியைப் பின்பற்றும். இந்த அமைப்புகள் பக்கம் Windhawk-இன் சொந்த மொழியைப் பின்பற்றும்"
+  $description:th: "ภาษาของข้อความบนหน้าจอที่ Magic Pointer แสดง: คำแนะนำ การ์ด ปุ่ม และข้อความ Auto จะใช้ภาษาที่แสดงของ Windows หน้าการตั้งค่านี้ใช้ภาษาของ Windhawk เอง"
+  $description:tr: "Magic Pointer'ın ekran metinlerinin dili: ipucu, kart, düğmeleri ve iletileri. Auto, Windows görüntüleme dilini izler. Bu ayarlar sayfası Windhawk'ın kendi dilini izler"
+  $description:uk: "Мова екранних написів Magic Pointer: підказки, картки, її кнопок і повідомлень. Значення Auto слідує мові інтерфейсу Windows. Ця сторінка налаштувань слідує мові самого Windhawk"
+  $description:vi: "Ngôn ngữ của văn bản Magic Pointer hiển thị trên màn hình: gợi ý, thẻ, các nút và thông báo. Auto theo ngôn ngữ hiển thị của Windows. Trang cài đặt này theo ngôn ngữ của chính Windhawk"
+  $description:zh-CN: "Magic Pointer 屏幕文字的语言：提示、卡片、按钮和消息。Auto 跟随 Windows 显示语言。此设置页面跟随 Windhawk 自身的语言"
+  $description:zh-TW: "Magic Pointer 螢幕文字的語言：提示、卡片、按鈕和訊息。Auto 會跟隨 Windows 顯示語言。此設定頁面會跟隨 Windhawk 本身的語言"
 - pointerSize: 100
   $name: Pointer size (%)
+  $name:ar: "حجم المؤشر (%)"
+  $name:bn: "পয়েন্টারের আকার (%)"
+  $name:cs: "Velikost ukazatele (%)"
+  $name:da: "Markørstørrelse (%)"
+  $name:de: "Zeigergröße (%)"
+  $name:el: "Μέγεθος δείκτη (%)"
+  $name:es: "Tamaño del puntero (%)"
+  $name:fa: "اندازه نشانگر (%)"
+  $name:fr: "Taille du pointeur (%)"
+  $name:hi: "पॉइंटर का आकार (%)"
+  $name:hr: "Veličina pokazivača (%)"
+  $name:hu: "Mutató mérete (%)"
+  $name:id: "Ukuran penunjuk (%)"
+  $name:it: "Dimensione del puntatore (%)"
+  $name:ja: "ポインターのサイズ (%)"
+  $name:ko: "포인터 크기(%)"
+  $name:nb: "Pekerstørrelse (%)"
+  $name:nl: "Grootte van de aanwijzer (%)"
+  $name:pl: "Rozmiar wskaźnika (%)"
+  $name:pt-BR: "Tamanho do ponteiro (%)"
+  $name:ro: "Dimensiunea cursorului (%)"
+  $name:ru: "Размер указателя (%)"
+  $name:sv: "Pekarstorlek (%)"
+  $name:ta: "சுட்டியின் அளவு (%)"
+  $name:th: "ขนาดตัวชี้ (%)"
+  $name:tr: "İşaretçi boyutu (%)"
+  $name:uk: "Розмір вказівника (%)"
+  $name:vi: "Kích thước con trỏ (%)"
+  $name:zh-CN: "指针大小 (%)"
+  $name:zh-TW: "指標大小 (%)"
+- customCursor: ""
+  $name: Custom pointer file
+  $description: >-
+    Optional. The full path of a .cur or .ani file (animated cursors work
+    too), such as C:\Cursors\arrow.ani, to show instead of the Magic Pointer
+    arrow. It appears only while the Magic Pointer is on screen, with the
+    same glow, and never changes your normal cursors. Pointer size scales
+    it. Leave empty for the default
+  $name:ar: "ملف المؤشر المخصص"
+  $name:bn: "কাস্টম পয়েন্টার ফাইল"
+  $name:cs: "Soubor vlastního ukazatele"
+  $name:da: "Fil med egen markør"
+  $name:de: "Eigene Zeigerdatei"
+  $name:el: "Αρχείο προσαρμοσμένου δείκτη"
+  $name:es: "Archivo de puntero personalizado"
+  $name:fa: "فایل نشانگر سفارشی"
+  $name:fr: "Fichier de pointeur personnalisé"
+  $name:hi: "कस्टम पॉइंटर फ़ाइल"
+  $name:hr: "Datoteka prilagođenog pokazivača"
+  $name:hu: "Egyéni mutatófájl"
+  $name:id: "File penunjuk kustom"
+  $name:it: "File puntatore personalizzato"
+  $name:ja: "カスタム ポインター ファイル"
+  $name:ko: "사용자 지정 포인터 파일"
+  $name:nb: "Fil for egendefinert peker"
+  $name:nl: "Bestand met eigen aanwijzer"
+  $name:pl: "Plik niestandardowego wskaźnika"
+  $name:pt-BR: "Arquivo de ponteiro personalizado"
+  $name:ro: "Fișier cu cursor personalizat"
+  $name:ru: "Файл пользовательского указателя"
+  $name:sv: "Fil för egen pekare"
+  $name:ta: "தனிப்பயன் சுட்டி கோப்பு"
+  $name:th: "ไฟล์ตัวชี้แบบกำหนดเอง"
+  $name:tr: "Özel işaretçi dosyası"
+  $name:uk: "Файл власного вказівника"
+  $name:vi: "Tệp con trỏ tùy chỉnh"
+  $name:zh-CN: "自定义指针文件"
+  $name:zh-TW: "自訂指標檔案"
+  $description:ar: "اختياري. المسار الكامل لملف .cur أو .ani (تعمل المؤشرات المتحركة أيضا)، مثل C:\\Cursors\\arrow.ani، ليظهر بدلا من سهم Magic Pointer. يظهر فقط أثناء وجود Magic Pointer على الشاشة، بالتوهج نفسه، ولا يغيّر مؤشراتك المعتادة أبدا. يغيّر إعداد حجم المؤشر حجمه. اتركه فارغا لاستخدام الافتراضي"
+  $description:bn: "ঐচ্ছিক। Magic Pointer-এর তিরের বদলে দেখানোর জন্য একটি .cur বা .ani ফাইলের পূর্ণ পাথ (অ্যানিমেটেড কার্সরও চলে), যেমন C:\\Cursors\\arrow.ani। এটি শুধু Magic Pointer পর্দায় থাকার সময় একই গ্লো-সহ দেখা যায় এবং আপনার সাধারণ কার্সর কখনো বদলায় না। পয়েন্টারের আকার সেটিং এর আকার বদলায়। ডিফল্টের জন্য ফাঁকা রাখুন"
+  $description:cs: "Volitelné. Úplná cesta k souboru .cur nebo .ani (fungují i animované kurzory), například C:\\Cursors\\arrow.ani, který se zobrazí místo šipky Magic Pointer. Zobrazuje se jen tehdy, když je Magic Pointer na obrazovce, se stejnou září, a vaše běžné kurzory nikdy nemění. Velikost ukazatele ho zvětšuje nebo zmenšuje. Nechte prázdné pro výchozí vzhled"
+  $description:da: "Valgfrit. Den fulde sti til en .cur- eller .ani-fil (animerede markører virker også), f.eks. C:\\Cursors\\arrow.ani, som vises i stedet for Magic Pointers pil. Den vises kun, mens Magic Pointer er på skærmen, med samme glød, og ændrer aldrig dine almindelige markører. Markørstørrelse skalerer den. Lad feltet stå tomt for standarden"
+  $description:de: "Optional. Der vollständige Pfad zu einer .cur- oder .ani-Datei (animierte Zeiger funktionieren auch), zum Beispiel C:\\Cursors\\arrow.ani, die statt des Pfeils des Magic Pointers angezeigt wird. Sie erscheint nur, solange der Magic Pointer auf dem Bildschirm ist, mit demselben Leuchten, und ändert deine normalen Zeiger nie. Die Zeigergröße skaliert sie. Leer lassen für die Standardeinstellung"
+  $description:el: "Προαιρετικό. Η πλήρης διαδρομή ενός αρχείου .cur ή .ani (λειτουργούν και κινούμενοι δείκτες), όπως C:\\Cursors\\arrow.ani, που εμφανίζεται αντί για το βέλος του Magic Pointer. Εμφανίζεται μόνο όσο το Magic Pointer είναι στην οθόνη, με την ίδια λάμψη, και δεν αλλάζει ποτέ τους κανονικούς δείκτες σας. Το Μέγεθος δείκτη το κλιμακώνει. Αφήστε το κενό για την προεπιλογή"
+  $description:es: "Opcional. La ruta completa de un archivo .cur o .ani (también funcionan los punteros animados), como C:\\Cursors\\arrow.ani, que se mostrará en lugar de la flecha del Magic Pointer. Solo aparece mientras el Magic Pointer está en pantalla, con el mismo resplandor, y nunca cambia tus punteros habituales. El tamaño del puntero lo escala. Déjalo vacío para usar el predeterminado"
+  $description:fa: "اختیاری. مسیر کامل یک فایل .cur یا .ani (نشانگرهای متحرک هم کار می\u200cکنند)، مانند C:\\Cursors\\arrow.ani، که به جای پیکان Magic Pointer نمایش داده می\u200cشود. فقط تا زمانی دیده می\u200cشود که Magic Pointer روی صفحه است، با همان درخشش، و هرگز نشانگرهای معمولی شما را تغییر نمی\u200cدهد. اندازه نشانگر آن را تغییر مقیاس می\u200cدهد. برای حالت پیش\u200cفرض خالی بگذارید"
+  $description:fr: "Facultatif. Le chemin complet d'un fichier .cur ou .ani (les curseurs animés fonctionnent aussi), par exemple C:\\Cursors\\arrow.ani, à afficher à la place de la flèche de Magic Pointer. Il n'apparaît que lorsque Magic Pointer est à l'écran, avec la même lueur, et ne modifie jamais vos curseurs habituels. La taille du pointeur le met à l'échelle. Laissez vide pour la valeur par défaut"
+  $description:hi: "वैकल्पिक। Magic Pointer के तीर की जगह दिखाने के लिए किसी .cur या .ani फ़ाइल का पूरा पाथ (एनिमेटेड कर्सर भी चलते हैं), जैसे C:\\Cursors\\arrow.ani। यह सिर्फ़ तब दिखता है जब Magic Pointer स्क्रीन पर हो, उसी ग्लो के साथ, और आपके सामान्य कर्सर कभी नहीं बदलता। पॉइंटर का आकार सेटिंग इसका आकार बदलती है। डिफ़ॉल्ट के लिए खाली छोड़ें"
+  $description:hr: "Neobavezno. Puna putanja do datoteke .cur ili .ani (rade i animirani pokazivači), na primjer C:\\Cursors\\arrow.ani, koja se prikazuje umjesto strelice Magic Pointera. Prikazuje se samo dok je Magic Pointer na zaslonu, s istim sjajem, i nikada ne mijenja tvoje uobičajene pokazivače. Veličina pokazivača je skalira. Ostavi prazno za zadano"
+  $description:hu: "Nem kötelező. Egy .cur vagy .ani fájl teljes elérési útja (az animált kurzorok is működnek), például C:\\Cursors\\arrow.ani, amelyet a Magic Pointer nyila helyett mutat. Csak akkor jelenik meg, amikor a Magic Pointer a képernyőn van, ugyanazzal a fénnyel, és soha nem változtatja meg a megszokott kurzoraidat. A Mutató mérete beállítás skálázza. Hagyd üresen az alapértelmezéshez"
+  $description:id: "Opsional. Jalur lengkap file .cur atau .ani (kursor animasi juga bisa), seperti C:\\Cursors\\arrow.ani, untuk ditampilkan menggantikan panah Magic Pointer. Hanya muncul saat Magic Pointer ada di layar, dengan cahaya yang sama, dan tidak pernah mengubah kursor biasa Anda. Ukuran penunjuk menskalakannya. Kosongkan untuk default"
+  $description:it: "Facoltativo. Il percorso completo di un file .cur o .ani (funzionano anche i cursori animati), ad esempio C:\\Cursors\\arrow.ani, da mostrare al posto della freccia di Magic Pointer. Compare solo mentre Magic Pointer è sullo schermo, con lo stesso bagliore, e non modifica mai i tuoi cursori abituali. La dimensione del puntatore lo ridimensiona. Lascia vuoto per usare quello predefinito"
+  $description:ja: "省略可能。Magic Pointer の矢印の代わりに表示する .cur または .ani ファイル (アニメーション カーソルも使用可能) のフル パス。例: C:\\Cursors\\arrow.ani。Magic Pointer が画面に表示されている間だけ、同じ光彩付きで表示され、通常のカーソルは変更されません。「ポインターのサイズ」で拡大縮小されます。空にすると既定の矢印を使います"
+  $description:ko: "선택 사항입니다. Magic Pointer의 화살표 대신 표시할 .cur 또는 .ani 파일의 전체 경로입니다(애니메이션 커서도 사용할 수 있습니다). 예: C:\\Cursors\\arrow.ani. Magic Pointer가 화면에 있는 동안에만 같은 광채와 함께 표시되며 일반 커서는 바뀌지 않습니다. 포인터 크기 설정에 따라 크기가 조절됩니다. 비워 두면 기본 화살표를 사용합니다"
+  $description:nb: "Valgfritt. Hele banen til en .cur- eller .ani-fil (animerte pekere fungerer også), for eksempel C:\\Cursors\\arrow.ani, som vises i stedet for pilen til Magic Pointer. Den vises bare mens Magic Pointer er på skjermen, med samme glød, og endrer aldri de vanlige pekerne dine. Pekerstørrelse skalerer den. La feltet stå tomt for standard"
+  $description:nl: "Optioneel. Het volledige pad naar een .cur- of .ani-bestand (ook geanimeerde cursors werken), bijvoorbeeld C:\\Cursors\\arrow.ani, dat in plaats van de pijl van Magic Pointer wordt getoond. Het verschijnt alleen zolang Magic Pointer op het scherm staat, met dezelfde gloed, en verandert nooit je gewone cursors. De grootte van de aanwijzer schaalt het. Laat leeg voor de standaardaanwijzer"
+  $description:pl: "Opcjonalne. Pełna ścieżka do pliku .cur lub .ani (animowane kursory też działają), na przykład C:\\Cursors\\arrow.ani, wyświetlanego zamiast strzałki Magic Pointer. Pojawia się tylko wtedy, gdy Magic Pointer jest na ekranie, z tą samą poświatą, i nigdy nie zmienia zwykłych kursorów. Rozmiar wskaźnika skaluje go. Pozostaw puste, aby użyć domyślnego"
+  $description:pt-BR: "Opcional. O caminho completo de um arquivo .cur ou .ani (cursores animados também funcionam), como C:\\Cursors\\arrow.ani, para exibir no lugar da seta do Magic Pointer. Ele aparece somente enquanto o Magic Pointer está na tela, com o mesmo brilho, e nunca altera seus cursores normais. O tamanho do ponteiro o dimensiona. Deixe vazio para usar o padrão"
+  $description:ro: "Opțional. Calea completă a unui fișier .cur sau .ani (funcționează și cursoarele animate), de exemplu C:\\Cursors\\arrow.ani, afișat în locul săgeții Magic Pointer. Apare doar cât timp Magic Pointer este pe ecran, cu aceeași strălucire, și nu schimbă niciodată cursoarele tale obișnuite. Dimensiunea cursorului îl scalează. Lasă gol pentru cel implicit"
+  $description:ru: "Необязательно. Полный путь к файлу .cur или .ani (анимированные указатели тоже работают), например C:\\Cursors\\arrow.ani, который показывается вместо стрелки Magic Pointer. Он появляется только пока Magic Pointer на экране, с тем же свечением, и никогда не меняет ваши обычные указатели. Размер указателя масштабирует его. Оставьте пустым, чтобы использовать стандартный"
+  $description:sv: "Valfritt. Den fullständiga sökvägen till en .cur- eller .ani-fil (animerade pekare fungerar också), till exempel C:\\Cursors\\arrow.ani, som visas i stället för Magic Pointers pil. Den visas bara medan Magic Pointer är på skärmen, med samma glöd, och ändrar aldrig dina vanliga pekare. Pekarstorlek skalar den. Lämna tomt för standard"
+  $description:ta: "விருப்பத்திற்குரியது. Magic Pointer-இன் அம்புக்குறிக்குப் பதிலாகக் காட்ட ஒரு .cur அல்லது .ani கோப்பின் முழுப் பாதை (அனிமேஷன் சுட்டிகளும் செயல்படும்), எடுத்துக்காட்டாக C:\\Cursors\\arrow.ani. Magic Pointer திரையில் இருக்கும்போது மட்டும் அதே ஒளிர்வுடன் இது தோன்றும்; உங்கள் வழக்கமான சுட்டிகளை ஒருபோதும் மாற்றாது. சுட்டியின் அளவு அமைப்பு இதன் அளவை மாற்றும். இயல்புநிலைக்குக் காலியாக விடுங்கள்"
+  $description:th: "ไม่บังคับ พาธเต็มของไฟล์ .cur หรือ .ani (ตัวชี้แบบเคลื่อนไหวก็ใช้ได้) เช่น C:\\Cursors\\arrow.ani เพื่อแสดงแทนลูกศรของ Magic Pointer จะปรากฏเฉพาะขณะที่ Magic Pointer อยู่บนหน้าจอ พร้อมแสงเรืองแบบเดียวกัน และไม่เปลี่ยนตัวชี้ปกติของคุณเลย ขนาดตัวชี้จะปรับขนาดของมัน เว้นว่างไว้เพื่อใช้ค่าเริ่มต้น"
+  $description:tr: "İsteğe bağlı. Magic Pointer okunun yerine gösterilecek bir .cur veya .ani dosyasının tam yolu (animasyonlu imleçler de çalışır), örneğin C:\\Cursors\\arrow.ani. Yalnızca Magic Pointer ekrandayken, aynı parlamayla görünür ve normal imleçlerinizi hiçbir zaman değiştirmez. İşaretçi boyutu onu ölçekler. Varsayılan için boş bırakın"
+  $description:uk: "Необов'язково. Повний шлях до файлу .cur або .ani (анімовані вказівники теж працюють), наприклад C:\\Cursors\\arrow.ani, який показується замість стрілки Magic Pointer. Він з'являється лише поки Magic Pointer на екрані, з таким самим сяйвом, і ніколи не змінює ваші звичайні вказівники. Розмір вказівника масштабує його. Залиште порожнім, щоб використовувати стандартний"
+  $description:vi: "Không bắt buộc. Đường dẫn đầy đủ tới tệp .cur hoặc .ani (con trỏ hoạt hình cũng dùng được), chẳng hạn C:\\Cursors\\arrow.ani, để hiển thị thay cho mũi tên của Magic Pointer. Chỉ xuất hiện khi Magic Pointer đang ở trên màn hình, với cùng hiệu ứng phát sáng, và không bao giờ thay đổi các con trỏ thông thường của bạn. Kích thước con trỏ sẽ điều chỉnh tỷ lệ của nó. Để trống để dùng mặc định"
+  $description:zh-CN: "可选。.cur 或 .ani 文件的完整路径（动画光标也可使用），例如 C:\\Cursors\\arrow.ani，用于替换 Magic Pointer 的箭头。它仅在 Magic Pointer 显示在屏幕上时出现，并带有相同的发光效果，不会更改你平时使用的光标。“指针大小”设置会缩放它。留空则使用默认箭头"
+  $description:zh-TW: "選用。.cur 或 .ani 檔案的完整路徑（動畫游標也可使用），例如 C:\\Cursors\\arrow.ani，用於取代 Magic Pointer 的箭頭。它僅在 Magic Pointer 顯示於螢幕上時出現，並帶有相同的光暈，不會變更您平常使用的游標。「指標大小」設定會縮放它。留空則使用預設箭頭"
 - dim: 50
   $name: Dim outside the selection (%)
   $description: >-
     Darken the area outside your rectangle while you drag. The selected area
     stays clear. 0 turns dimming off
+  $name:ar: "تعتيم خارج التحديد (%)"
+  $name:bn: "নির্বাচনের বাইরে অন্ধকার করুন (%)"
+  $name:cs: "Ztlumit mimo výběr (%)"
+  $name:da: "Dæmp uden for markeringen (%)"
+  $name:de: "Außerhalb der Auswahl abdunkeln (%)"
+  $name:el: "Σκίαση εκτός επιλογής (%)"
+  $name:es: "Atenuar fuera de la selección (%)"
+  $name:fa: "تیره کردن بیرون از انتخاب (%)"
+  $name:fr: "Assombrir hors de la sélection (%)"
+  $name:hi: "चयन के बाहर का हिस्सा धुँधला करें (%)"
+  $name:hr: "Zatamni izvan odabira (%)"
+  $name:hu: "Elsötétítés a kijelölésen kívül (%)"
+  $name:id: "Gelapkan di luar pilihan (%)"
+  $name:it: "Oscura fuori dalla selezione (%)"
+  $name:ja: "選択範囲の外を暗くする (%)"
+  $name:ko: "선택 영역 밖 어둡게(%)"
+  $name:nb: "Mørkne utenfor utvalget (%)"
+  $name:nl: "Buiten de selectie dimmen (%)"
+  $name:pl: "Przyciemnij poza zaznaczeniem (%)"
+  $name:pt-BR: "Escurecer fora da seleção (%)"
+  $name:ro: "Întunecă în afara selecției (%)"
+  $name:ru: "Затемнять вне выделения (%)"
+  $name:sv: "Tona ned utanför markeringen (%)"
+  $name:ta: "தேர்வுக்கு வெளியே மங்கலாக்கு (%)"
+  $name:th: "ทำให้มืดนอกส่วนที่เลือก (%)"
+  $name:tr: "Seçim dışını karart (%)"
+  $name:uk: "Затемнювати поза виділенням (%)"
+  $name:vi: "Làm tối bên ngoài vùng chọn (%)"
+  $name:zh-CN: "选区外变暗 (%)"
+  $name:zh-TW: "選取範圍外變暗 (%)"
+  $description:ar: "يعتم المنطقة خارج المستطيل أثناء السحب. تبقى المنطقة المحددة واضحة. تؤدي القيمة 0 إلى إيقاف التعتيم"
+  $description:bn: "টানার সময় আপনার আয়তক্ষেত্রের বাইরের অংশ গাঢ় হয়, আর নির্বাচিত অংশ পরিষ্কার থাকে। 0 দিলে অন্ধকার করা বন্ধ থাকবে"
+  $description:cs: "Ztmaví oblast mimo váš obdélník při tažení. Vybraná oblast zůstane jasná. 0 ztmavení vypne"
+  $description:da: "Gør området uden for dit rektangel mørkere, mens du trækker. Det valgte område forbliver lyst. 0 slår dæmpningen fra"
+  $description:de: "Dunkelt den Bereich außerhalb deines Rechtecks ab, während du ziehst. Der ausgewählte Bereich bleibt hell. 0 schaltet das Abdunkeln aus"
+  $description:el: "Σκουραίνει την περιοχή έξω από το ορθογώνιό σας ενώ σύρετε. Η επιλεγμένη περιοχή παραμένει καθαρή. Το 0 απενεργοποιεί τη σκίαση"
+  $description:es: "Oscurece el área fuera de tu rectángulo mientras arrastras. El área seleccionada permanece clara. 0 desactiva la atenuación"
+  $description:fa: "هنگام کشیدن، ناحیه بیرون از مستطیل را تیره می\u200cکند. ناحیه انتخاب\u200cشده روشن می\u200cماند. عدد 0 تیره کردن را خاموش می\u200cکند"
+  $description:fr: "Assombrit la zone en dehors de votre rectangle pendant que vous faites glisser. La zone sélectionnée reste claire. 0 désactive l'assombrissement"
+  $description:hi: "खींचते समय आपके आयत के बाहर का हिस्सा गहरा हो जाता है, जबकि चुना हुआ हिस्सा साफ़ दिखता है। 0 रखने पर कुछ नहीं बदलेगा"
+  $description:hr: "Zatamnjuje područje izvan tvog pravokutnika dok povlačiš. Odabrano područje ostaje svijetlo. 0 isključuje zatamnjivanje"
+  $description:hu: "Elsötétíti a téglalapodon kívüli területet húzás közben. A kijelölt terület világos marad. A 0 kikapcsolja az elsötétítést"
+  $description:id: "Menggelapkan area di luar persegi panjang Anda saat Anda menyeret. Area yang dipilih tetap terang. 0 mematikan peredupan"
+  $description:it: "Oscura l'area fuori dal rettangolo mentre trascini. L'area selezionata resta chiara. 0 disattiva l'oscuramento"
+  $description:ja: "ドラッグ中に、選択した四角形の外側を暗くします。選択範囲は明るいままです。0 にすると暗くしません"
+  $description:ko: "끌어서 선택하는 동안 사각형 바깥 영역을 어둡게 합니다. 선택한 영역은 밝게 유지됩니다. 0이면 어둡게 하지 않습니다"
+  $description:nb: "Mørkner området utenfor rektangelet ditt mens du drar. Det valgte området forblir lyst. 0 slår av mørkningen"
+  $description:nl: "Verduistert het gebied buiten je rechthoek terwijl je sleept. Het geselecteerde gebied blijft helder. 0 schakelt dimmen uit"
+  $description:pl: "Przyciemnia obszar poza prostokątem podczas przeciągania. Zaznaczony obszar pozostaje jasny. 0 wyłącza przyciemnianie"
+  $description:pt-BR: "Escurece a área fora do seu retângulo enquanto você arrasta. A área selecionada continua clara. 0 desativa o escurecimento"
+  $description:ro: "Întunecă zona din afara dreptunghiului tău cât timp tragi. Zona selectată rămâne luminoasă. 0 dezactivează întunecarea"
+  $description:ru: "Затемняет область за пределами прямоугольника при перетаскивании. Выделенная область остаётся светлой. 0 отключает затемнение"
+  $description:sv: "Mörkar området utanför din rektangel medan du drar. Det markerade området förblir klart. 0 stänger av nedtoningen"
+  $description:ta: "இழுக்கும்போது உங்கள் செவ்வகத்துக்கு வெளியே உள்ள பகுதியை இருளாக்கும். தேர்ந்தெடுத்த பகுதி தெளிவாக இருக்கும். 0 மங்கலாக்கலை நிறுத்தும்"
+  $description:th: "ทำให้พื้นที่นอกสี่เหลี่ยมของคุณมืดลงขณะลาก พื้นที่ที่เลือกจะยังสว่าง 0 คือปิดการทำให้มืด"
+  $description:tr: "Sürüklerken dikdörtgeninizin dışındaki alanı karartır. Seçilen alan açık kalır. 0, karartmayı kapatır"
+  $description:uk: "Затемнює область за межами прямокутника під час перетягування. Виділена область залишається світлою. 0 вимикає затемнення"
+  $description:vi: "Làm tối vùng bên ngoài hình chữ nhật của bạn khi bạn kéo. Vùng được chọn vẫn sáng. 0 tắt việc làm tối"
+  $description:zh-CN: "拖动时将矩形之外的区域调暗，所选区域保持明亮。0 表示不变暗"
+  $description:zh-TW: "拖曳時將矩形以外的區域調暗，所選區域保持明亮。0 表示不變暗"
 - hint: true
   $name: Show hint
   $description: Show the "Select anything to ask Gemini" bubble when the Magic Pointer appears
+  $name:ar: "إظهار التلميح"
+  $name:bn: "ইঙ্গিত দেখান"
+  $name:cs: "Zobrazit nápovědu"
+  $name:da: "Vis tip"
+  $name:de: "Hinweis anzeigen"
+  $name:el: "Εμφάνιση υπόδειξης"
+  $name:es: "Mostrar sugerencia"
+  $name:fa: "نمایش راهنما"
+  $name:fr: "Afficher l'indication"
+  $name:hi: "संकेत दिखाएँ"
+  $name:hr: "Prikaži savjet"
+  $name:hu: "Súgó megjelenítése"
+  $name:id: "Tampilkan petunjuk"
+  $name:it: "Mostra suggerimento"
+  $name:ja: "ヒントを表示"
+  $name:ko: "힌트 표시"
+  $name:nb: "Vis hint"
+  $name:nl: "Hint tonen"
+  $name:pl: "Pokaż podpowiedź"
+  $name:pt-BR: "Mostrar dica"
+  $name:ro: "Afișează indiciul"
+  $name:ru: "Показывать подсказку"
+  $name:sv: "Visa tips"
+  $name:ta: "குறிப்பைக் காட்டு"
+  $name:th: "แสดงคำแนะนำ"
+  $name:tr: "İpucunu göster"
+  $name:uk: "Показувати підказку"
+  $name:vi: "Hiển thị gợi ý"
+  $name:zh-CN: "显示提示"
+  $name:zh-TW: "顯示提示"
+  $description:ar: "يعرض فقاعة «حدد أي شيء لتسأل Gemini عنه» عند ظهور Magic Pointer"
+  $description:bn: "Magic Pointer আসার সময় \"Gemini-কে জিজ্ঞাসা করতে যেকোনো কিছু বেছে নিন\" বুদবুদটি দেখান"
+  $description:cs: "Zobrazí bublinu „Vyberte cokoli a zeptejte se Gemini“, když se objeví Magic Pointer"
+  $description:da: "Viser taleboblen \"Vælg noget for at spørge Gemini\", når Magic Pointer vises"
+  $description:de: "Zeigt die Sprechblase \"Wähle etwas aus, um Gemini zu fragen\" an, wenn der Magic Pointer erscheint"
+  $description:el: "Εμφανίζει το συννεφάκι «Επιλέξτε οτιδήποτε για να ρωτήσετε το Gemini» όταν εμφανίζεται το Magic Pointer"
+  $description:es: "Muestra el globo \"Selecciona algo para preguntarle a Gemini\" cuando aparece el Magic Pointer"
+  $description:fa: "هنگام ظاهر شدن Magic Pointer، حباب «هر چیزی را انتخاب کنید تا از Gemini بپرسید» را نشان می\u200cدهد"
+  $description:fr: "Affiche la bulle « Sélectionnez un élément pour interroger Gemini » quand le Magic Pointer apparaît"
+  $description:hi: "Magic Pointer के आने पर \"Gemini से पूछने के लिए कुछ भी चुनें\" वाला बुलबुला दिखाएँ"
+  $description:hr: "Prikazuje oblačić „Odaberi bilo što da pitaš Gemini” kad se pojavi Magic Pointer"
+  $description:hu: "Megjeleníti a „Válassz ki bármit, és kérdezd meg a Geminit” buborékot, amikor a Magic Pointer megjelenik"
+  $description:id: "Menampilkan balon \"Pilih apa saja untuk bertanya kepada Gemini\" saat Magic Pointer muncul"
+  $description:it: "Mostra il fumetto \"Seleziona qualcosa per chiedere a Gemini\" quando compare il Magic Pointer"
+  $description:ja: "Magic Pointer が表示されるときに「何かを選択して Gemini に質問」の吹き出しを表示します"
+  $description:ko: "Magic Pointer가 나타날 때 \"무엇이든 선택하여 Gemini에게 질문하세요\" 말풍선을 표시합니다"
+  $description:nb: "Viser snakkeboblen \"Velg noe for å spørre Gemini\" når Magic Pointer vises"
+  $description:nl: "Toont de ballon \"Selecteer iets om het aan Gemini te vragen\" wanneer de Magic Pointer verschijnt"
+  $description:pl: "Pokazuje dymek „Zaznacz cokolwiek, aby zapytać Gemini” po pojawieniu się Magic Pointer"
+  $description:pt-BR: "Mostra o balão \"Selecione qualquer coisa para perguntar ao Gemini\" quando o Magic Pointer aparece"
+  $description:ro: "Afișează balonul „Selectează orice ca să întrebi Gemini” când apare Magic Pointer"
+  $description:ru: "Показывает облачко «Выберите что угодно, чтобы спросить Gemini» при появлении Magic Pointer"
+  $description:sv: "Visar pratbubblan \"Markera något för att fråga Gemini\" när Magic Pointer visas"
+  $description:ta: "Magic Pointer தோன்றும்போது \"Gemini-யிடம் கேட்க எதையாவது தேர்ந்தெடுக்கவும்\" குமிழியைக் காட்டும்"
+  $description:th: "แสดงบอลลูน \"เลือกอะไรก็ได้เพื่อถาม Gemini\" เมื่อ Magic Pointer ปรากฏ"
+  $description:tr: "Magic Pointer göründüğünde \"Gemini'ye sormak için herhangi bir şey seçin\" balonunu gösterir"
+  $description:uk: "Показує хмаринку «Виберіть будь-що, щоб запитати Gemini», коли з'являється Magic Pointer"
+  $description:vi: "Hiển thị bong bóng \"Chọn bất kỳ thứ gì để hỏi Gemini\" khi Magic Pointer xuất hiện"
+  $description:zh-CN: "Magic Pointer 出现时显示“选择任意内容，向 Gemini 提问”气泡"
+  $description:zh-TW: "Magic Pointer 出現時顯示「選取任何內容即可詢問 Gemini」泡泡"
 - timeout: 15
   $name: Put away after (seconds)
   $description: Put the Magic Pointer away when the mouse stays still this long (0 = never)
+  $name:ar: "الإخفاء بعد (ثوانٍ)"
+  $name:bn: "এত সময় পরে সরিয়ে নিন (সেকেন্ড)"
+  $name:cs: "Skrýt po (sekundách)"
+  $name:da: "Skjul efter (sekunder)"
+  $name:de: "Ausblenden nach (Sekunden)"
+  $name:el: "Απόκρυψη μετά από (δευτερόλεπτα)"
+  $name:es: "Ocultar después de (segundos)"
+  $name:fa: "پنهان کردن پس از (ثانیه)"
+  $name:fr: "Masquer après (secondes)"
+  $name:hi: "इतनी देर बाद हटाएँ (सेकंड)"
+  $name:hr: "Sakrij nakon (sekundi)"
+  $name:hu: "Elrejtés ennyi idő után (másodperc)"
+  $name:id: "Sembunyikan setelah (detik)"
+  $name:it: "Nascondi dopo (secondi)"
+  $name:ja: "非表示にするまでの時間 (秒)"
+  $name:ko: "숨기기까지의 시간(초)"
+  $name:nb: "Skjul etter (sekunder)"
+  $name:nl: "Verbergen na (seconden)"
+  $name:pl: "Ukryj po (sekundach)"
+  $name:pt-BR: "Ocultar após (segundos)"
+  $name:ro: "Ascunde după (secunde)"
+  $name:ru: "Скрывать через (секунд)"
+  $name:sv: "Dölj efter (sekunder)"
+  $name:ta: "இவ்வளவு நேரத்துக்குப் பின் மறை (வினாடிகள்)"
+  $name:th: "ซ่อนหลังจาก (วินาที)"
+  $name:tr: "Şu süre sonra gizle (saniye)"
+  $name:uk: "Приховувати через (секунд)"
+  $name:vi: "Ẩn sau (giây)"
+  $name:zh-CN: "多久后收起（秒）"
+  $name:zh-TW: "多久後收起（秒）"
+  $description:ar: "يخفي Magic Pointer عندما يبقى الماوس ساكنا لهذه المدة (0 = أبدا)"
+  $description:bn: "মাউস এতক্ষণ স্থির থাকলে Magic Pointer সরে যায় (0 = কখনো না)"
+  $description:cs: "Skryje Magic Pointer, když myš zůstane nehybná po tuto dobu (0 = nikdy)"
+  $description:da: "Skjuler Magic Pointer, når musen holder stille så længe (0 = aldrig)"
+  $description:de: "Blendet den Magic Pointer aus, wenn die Maus so lange stillsteht (0 = nie)"
+  $description:el: "Αποκρύπτει το Magic Pointer όταν το ποντίκι μένει ακίνητο για τόσο χρόνο (0 = ποτέ)"
+  $description:es: "Oculta el Magic Pointer cuando el mouse permanece quieto durante este tiempo (0 = nunca)"
+  $description:fa: "وقتی ماوس به این مدت بی\u200cحرکت بماند، Magic Pointer پنهان می\u200cشود (0 = هرگز)"
+  $description:fr: "Masque le Magic Pointer quand la souris reste immobile aussi longtemps (0 = jamais)"
+  $description:hi: "माउस इतनी देर तक स्थिर रहे तो Magic Pointer हट जाता है (0 = कभी नहीं)"
+  $description:hr: "Sakriva Magic Pointer kad miš miruje toliko dugo (0 = nikad)"
+  $description:hu: "Elrejti a Magic Pointert, ha az egér ennyi ideig mozdulatlan (0 = soha)"
+  $description:id: "Menyembunyikan Magic Pointer saat mouse diam selama waktu ini (0 = tidak pernah)"
+  $description:it: "Nasconde il Magic Pointer quando il mouse resta fermo per questo tempo (0 = mai)"
+  $description:ja: "マウスがこの時間静止したら Magic Pointer を非表示にします (0 = 非表示にしない)"
+  $description:ko: "마우스가 이 시간 동안 멈춰 있으면 Magic Pointer를 숨깁니다(0 = 숨기지 않음)"
+  $description:nb: "Skjuler Magic Pointer når musen står stille så lenge (0 = aldri)"
+  $description:nl: "Verbergt de Magic Pointer wanneer de muis zo lang stilstaat (0 = nooit)"
+  $description:pl: "Ukrywa Magic Pointer, gdy mysz pozostaje nieruchoma przez tak długi czas (0 = nigdy)"
+  $description:pt-BR: "Oculta o Magic Pointer quando o mouse fica parado por este tempo (0 = nunca)"
+  $description:ro: "Ascunde Magic Pointer când mouse-ul stă nemișcat atât de mult (0 = niciodată)"
+  $description:ru: "Скрывает Magic Pointer, когда мышь неподвижна указанное время (0 = никогда)"
+  $description:sv: "Döljer Magic Pointer när musen står stilla så här länge (0 = aldrig)"
+  $description:ta: "மவுஸ் இவ்வளவு நேரம் அசையாமல் இருந்தால் Magic Pointer-ஐ மறைக்கும் (0 = ஒருபோதும் இல்லை)"
+  $description:th: "ซ่อน Magic Pointer เมื่อเมาส์อยู่นิ่งนานเท่านี้ (0 = ไม่ซ่อน)"
+  $description:tr: "Fare bu süre boyunca hareketsiz kalırsa Magic Pointer'ı gizler (0 = hiçbir zaman)"
+  $description:uk: "Приховує Magic Pointer, коли миша нерухома вказаний час (0 = ніколи)"
+  $description:vi: "Ẩn Magic Pointer khi chuột đứng yên trong khoảng thời gian này (0 = không bao giờ)"
+  $description:zh-CN: "鼠标静止达到该时长后收起 Magic Pointer（0 = 不收起）"
+  $description:zh-TW: "當滑鼠靜止達到此時間長度後收起 Magic Pointer（0 = 不收起）"
 - highlight: true
   $name: Highlight what you point at
   $description: Outline the button, image or text under the pointer so that one click selects it
+  $name:ar: "تمييز ما تشير إليه"
+  $name:bn: "যেটিতে নির্দেশ করছেন সেটি হাইলাইট করুন"
+  $name:cs: "Zvýraznit, na co ukazujete"
+  $name:da: "Fremhæv det, du peger på"
+  $name:de: "Hervorheben, worauf du zeigst"
+  $name:el: "Επισήμανση αυτού που δείχνετε"
+  $name:es: "Resaltar lo que señalas"
+  $name:fa: "برجسته کردن چیزی که به آن اشاره می\u200cکنید"
+  $name:fr: "Surligner ce que vous pointez"
+  $name:hi: "जिस पर इशारा करें उसे हाइलाइट करें"
+  $name:hr: "Istakni ono na što pokazuješ"
+  $name:hu: "Kiemelés arra, amire mutatsz"
+  $name:id: "Sorot yang Anda tunjuk"
+  $name:it: "Evidenzia ciò che indichi"
+  $name:ja: "指している対象を強調表示"
+  $name:ko: "가리키는 대상 강조"
+  $name:nb: "Uthev det du peker på"
+  $name:nl: "Markeren waar je naar wijst"
+  $name:pl: "Podświetlaj to, na co wskazujesz"
+  $name:pt-BR: "Destacar o que você aponta"
+  $name:ro: "Evidențiază ce indici"
+  $name:ru: "Подсвечивать то, на что вы указываете"
+  $name:sv: "Markera det du pekar på"
+  $name:ta: "நீங்கள் சுட்டுவதை ஒளிரச்செய்"
+  $name:th: "ไฮไลต์สิ่งที่คุณชี้"
+  $name:tr: "İşaret ettiğini vurgula"
+  $name:uk: "Підсвічувати те, на що ви вказуєте"
+  $name:vi: "Làm nổi bật thứ bạn trỏ vào"
+  $name:zh-CN: "高亮指向的内容"
+  $name:zh-TW: "醒目提示指向的內容"
+  $description:ar: "يرسم إطارا حول الزر أو الصورة أو النص تحت المؤشر بحيث تحدده نقرة واحدة"
+  $description:bn: "পয়েন্টারের নিচের বোতাম, ছবি বা টেক্সটের চারপাশে আউটলাইন দেখায়, যাতে এক ক্লিকেই সেটি বেছে নেওয়া যায়"
+  $description:cs: "Orámuje tlačítko, obrázek nebo text pod ukazatelem, aby jedno kliknutí vybralo"
+  $description:da: "Tegner en kontur omkring knappen, billedet eller teksten under markøren, så ét klik vælger det"
+  $description:de: "Umrandet die Schaltfläche, das Bild oder den Text unter dem Zeiger, sodass ein Klick es auswählt"
+  $description:el: "Περιγράφει το κουμπί, την εικόνα ή το κείμενο κάτω από τον δείκτη, ώστε ένα κλικ να το επιλέγει"
+  $description:es: "Resalta el botón, la imagen o el texto bajo el puntero para que un clic lo seleccione"
+  $description:fa: "دور دکمه، تصویر یا متن زیر نشانگر خط می\u200cکشد تا با یک کلیک انتخاب شود"
+  $description:fr: "Entoure le bouton, l'image ou le texte sous le pointeur pour qu'un clic le sélectionne"
+  $description:hi: "पॉइंटर के नीचे के बटन, इमेज या टेक्स्ट के चारों ओर आउटलाइन बनती है, ताकि एक क्लिक से वह चुना जा सके"
+  $description:hr: "Obrubljuje gumb, sliku ili tekst ispod pokazivača kako bi ga jedan klik odabrao"
+  $description:hu: "Körvonalazza a mutató alatti gombot, képet vagy szöveget, hogy egyetlen kattintás kijelölje"
+  $description:id: "Memberi garis tepi pada tombol, gambar, atau teks di bawah penunjuk agar satu klik memilihnya"
+  $description:it: "Mette in risalto il pulsante, l'immagine o il testo sotto il puntatore, così che un clic lo selezioni"
+  $description:ja: "ポインターの下にあるボタン、画像、テキストを枠線で囲み、1 回のクリックで選択できるようにします"
+  $description:ko: "포인터 아래의 단추, 이미지 또는 텍스트에 윤곽선을 그려 한 번의 클릭으로 선택할 수 있게 합니다"
+  $description:nb: "Tegner en kontur rundt knappen, bildet eller teksten under pekeren slik at ett klikk velger det"
+  $description:nl: "Omlijnt de knop, afbeelding of tekst onder de aanwijzer zodat één klik die selecteert"
+  $description:pl: "Obrysowuje przycisk, obraz lub tekst pod wskaźnikiem, aby jedno kliknięcie go zaznaczyło"
+  $description:pt-BR: "Contorna o botão, a imagem ou o texto sob o ponteiro para que um clique o selecione"
+  $description:ro: "Conturează butonul, imaginea sau textul de sub cursor, astfel încât un singur clic să îl selecteze"
+  $description:ru: "Обводит кнопку, изображение или текст под указателем, чтобы один щелчок выделил его"
+  $description:sv: "Ritar en kontur kring knappen, bilden eller texten under pekaren så att ett klick markerar den"
+  $description:ta: "சுட்டியின் கீழுள்ள பொத்தான், படம் அல்லது உரையைச் சுற்றி வெளிக்கோடு வரையும்; ஒரு கிளிக்கிலேயே அது தேர்வாகும்"
+  $description:th: "วาดเส้นขอบรอบปุ่ม รูปภาพ หรือข้อความใต้ตัวชี้ เพื่อให้คลิกเดียวก็เลือกได้"
+  $description:tr: "İşaretçinin altındaki düğmeyi, görüntüyü veya metni çerçeveler; böylece tek tıklama onu seçer"
+  $description:uk: "Обводить кнопку, зображення чи текст під вказівником, щоб один клік виділяв його"
+  $description:vi: "Viền quanh nút, ảnh hoặc văn bản dưới con trỏ để một cú nhấp là chọn được nó"
+  $description:zh-CN: "为指针下方的按钮、图片或文本绘制轮廓，一次单击即可选中它"
+  $description:zh-TW: "為指標下方的按鈕、圖片或文字繪製外框，只需按一下即可選取"
 - ocr: true
   $name: Recognize text (OCR)
   $description: >-
-    Read the text in every selection with the OCR built into Windows, to copy
-    it and to give Gemini more context
+    Read the text in every selection with the OCR built into Windows, to
+    copy it and to give the AI more context
+  $name:ar: "التعرف على النص (OCR)"
+  $name:bn: "টেক্সট শনাক্ত করুন (OCR)"
+  $name:cs: "Rozpoznávat text (OCR)"
+  $name:da: "Genkend tekst (OCR)"
+  $name:de: "Text erkennen (OCR)"
+  $name:el: "Αναγνώριση κειμένου (OCR)"
+  $name:es: "Reconocer texto (OCR)"
+  $name:fa: "تشخیص متن (OCR)"
+  $name:fr: "Reconnaître le texte (OCR)"
+  $name:hi: "टेक्स्ट पहचानें (OCR)"
+  $name:hr: "Prepoznaj tekst (OCR)"
+  $name:hu: "Szövegfelismerés (OCR)"
+  $name:id: "Kenali teks (OCR)"
+  $name:it: "Riconosci il testo (OCR)"
+  $name:ja: "テキストを認識 (OCR)"
+  $name:ko: "텍스트 인식(OCR)"
+  $name:nb: "Gjenkjenn tekst (OCR)"
+  $name:nl: "Tekst herkennen (OCR)"
+  $name:pl: "Rozpoznawaj tekst (OCR)"
+  $name:pt-BR: "Reconhecer texto (OCR)"
+  $name:ro: "Recunoaște textul (OCR)"
+  $name:ru: "Распознавать текст (OCR)"
+  $name:sv: "Känn igen text (OCR)"
+  $name:ta: "உரையை அடையாளம் காண் (OCR)"
+  $name:th: "จดจำข้อความ (OCR)"
+  $name:tr: "Metni tanı (OCR)"
+  $name:uk: "Розпізнавати текст (OCR)"
+  $name:vi: "Nhận dạng văn bản (OCR)"
+  $name:zh-CN: "识别文本 (OCR)"
+  $name:zh-TW: "辨識文字 (OCR)"
+  $description:ar: "يقرأ النص في كل تحديد باستخدام OCR المدمج في Windows، لنسخه ولمنح الذكاء الاصطناعي سياقا أكبر"
+  $description:bn: "Windows-এর বিল্ট-ইন OCR দিয়ে প্রতিটি নির্বাচনের টেক্সট পড়ে, যাতে তা কপি করা যায় এবং এআই বেশি প্রসঙ্গ পায়"
+  $description:cs: "Čte text v každém výběru pomocí OCR zabudovaného ve Windows, aby šel zkopírovat a aby AI dostala více kontextu"
+  $description:da: "Læser teksten i hvert valg med den OCR, der er indbygget i Windows, så du kan kopiere den og give AI mere kontekst"
+  $description:de: "Liest den Text jeder Auswahl mit der in Windows integrierten OCR, um ihn zu kopieren und der KI mehr Kontext zu geben"
+  $description:el: "Διαβάζει το κείμενο κάθε επιλογής με το OCR που είναι ενσωματωμένο στα Windows, για να μπορείτε να το αντιγράψετε και για να δώσει στο AI περισσότερο πλαίσιο"
+  $description:es: "Lee el texto de cada selección con el OCR integrado en Windows, para copiarlo y dar más contexto a la IA"
+  $description:fa: "متن هر انتخاب را با OCR داخلی Windows می\u200cخواند تا بتوان آن را کپی کرد و هوش مصنوعی زمینه بیشتری داشته باشد"
+  $description:fr: "Lit le texte de chaque sélection avec l'OCR intégré à Windows, pour le copier et donner plus de contexte à l'IA"
+  $description:hi: "Windows के बिल्ट-इन OCR से हर चयन का टेक्स्ट पढ़ा जाता है, ताकि उसे कॉपी किया जा सके और AI को ज़्यादा संदर्भ मिले"
+  $description:hr: "Čita tekst u svakom odabiru pomoću OCR-a ugrađenog u Windows kako bi se mogao kopirati i kako bi umjetna inteligencija dobila više konteksta"
+  $description:hu: "Minden kijelölés szövegét beolvassa a Windowsba épített OCR-rel, hogy másolható legyen, és hogy több környezetet adjon az MI-nek"
+  $description:id: "Membaca teks di setiap pilihan dengan OCR bawaan Windows, agar dapat disalin dan agar AI mendapat lebih banyak konteks"
+  $description:it: "Legge il testo di ogni selezione con l'OCR integrato in Windows, per copiarlo e dare all'IA più contesto"
+  $description:ja: "Windows 組み込みの OCR で各選択範囲のテキストを読み取り、コピーできるようにし、AI にも追加の文脈として渡します"
+  $description:ko: "Windows에 내장된 OCR로 각 선택 영역의 텍스트를 읽어 복사할 수 있게 하고 AI에 더 많은 컨텍스트를 제공합니다"
+  $description:nb: "Leser teksten i hvert utvalg med OCR-en som er innebygd i Windows, for å kopiere den og gi KI-en mer kontekst"
+  $description:nl: "Leest de tekst in elke selectie met de in Windows ingebouwde OCR, om hem te kopiëren en de AI meer context te geven"
+  $description:pl: "Odczytuje tekst w każdym zaznaczeniu za pomocą OCR wbudowanego w system Windows, aby można go było skopiować i aby dać AI więcej kontekstu"
+  $description:pt-BR: "Lê o texto de cada seleção com o OCR integrado ao Windows, para copiá-lo e dar mais contexto à IA"
+  $description:ro: "Citește textul din fiecare selecție cu OCR-ul integrat în Windows, pentru a-l copia și pentru a oferi mai mult context inteligenței artificiale"
+  $description:ru: "Считывает текст в каждом выделении с помощью OCR, встроенного в Windows, чтобы его можно было скопировать и чтобы дать ИИ больше контекста"
+  $description:sv: "Läser texten i varje markering med den OCR som finns i Windows, för att kopiera den och ge AI mer sammanhang"
+  $description:ta: "Windows-இல் உள்ளமைந்த OCR மூலம் ஒவ்வொரு தேர்விலும் உள்ள உரையைப் படிக்கும்; அதை நகலெடுக்கவும், AI-க்கு கூடுதல் சூழல் தரவும் பயன்படும்"
+  $description:th: "อ่านข้อความในแต่ละส่วนที่เลือกด้วย OCR ที่มีใน Windows เพื่อคัดลอกได้ และเพื่อให้ AI มีบริบทมากขึ้น"
+  $description:tr: "Her seçimdeki metni Windows'a yerleşik OCR ile okur; böylece kopyalayabilir ve yapay zekâya daha fazla bağlam verebilirsiniz"
+  $description:uk: "Зчитує текст у кожному виділенні за допомогою OCR, вбудованого в Windows, щоб його можна було скопіювати та щоб дати ШІ більше контексту"
+  $description:vi: "Đọc văn bản trong mỗi vùng chọn bằng OCR tích hợp sẵn trong Windows, để bạn sao chép và để cung cấp thêm ngữ cảnh cho AI"
+  $description:zh-CN: "使用 Windows 内置的 OCR 读取每个选区中的文本，以便复制，并为 AI 提供更多上下文"
+  $description:zh-TW: "使用 Windows 內建的 OCR 讀取每個選取範圍中的文字，以便複製，並為 AI 提供更多內容資訊"
 - browser: default
   $name: Browser
   $description: >-
@@ -240,84 +1533,946 @@ the problem. Include screenshots when useful and remove private content.
   - waterfox: Waterfox
   - floorp: Floorp
   - custom: Other (set its program below)
+  $name:ar: "المتصفح"
+  $name:bn: "ব্রাউজার"
+  $name:cs: "Prohlížeč"
+  $name:da: "Browser"
+  $name:de: "Browser"
+  $name:el: "Πρόγραμμα περιήγησης"
+  $name:es: "Navegador"
+  $name:fa: "مرورگر"
+  $name:fr: "Navigateur"
+  $name:hi: "ब्राउज़र"
+  $name:hr: "Preglednik"
+  $name:hu: "Böngésző"
+  $name:id: "Browser"
+  $name:it: "Browser"
+  $name:ja: "ブラウザー"
+  $name:ko: "브라우저"
+  $name:nb: "Nettleser"
+  $name:nl: "Browser"
+  $name:pl: "Przeglądarka"
+  $name:pt-BR: "Navegador"
+  $name:ro: "Browser"
+  $name:ru: "Браузер"
+  $name:sv: "Webbläsare"
+  $name:ta: "உலாவி"
+  $name:th: "เบราว์เซอร์"
+  $name:tr: "Tarayıcı"
+  $name:uk: "Браузер"
+  $name:vi: "Trình duyệt"
+  $name:zh-CN: "浏览器"
+  $name:zh-TW: "瀏覽器"
+  $description:ar: "المتصفح الذي يفتح Gemini وGoogle Lens. إذا لم يكن المتصفح الذي تختاره مثبتا، يُستخدم متصفح Windows الافتراضي"
+  $description:bn: "যে ব্রাউজারে Gemini ও Google Lens খুলবে। বেছে নেওয়াটি ইনস্টল করা না থাকলে Windows-এর ডিফল্ট ব্রাউজার ব্যবহার হবে"
+  $description:cs: "Prohlížeč, který otevírá Gemini a Google Lens. Pokud vybraný není nainstalován, použije se výchozí prohlížeč Windows"
+  $description:da: "Den browser, der åbner Gemini og Google Lens. Hvis den valgte ikke er installeret, bruges Windows' standardbrowser"
+  $description:de: "Der Browser, der Gemini und Google Lens öffnet. Ist der gewählte nicht installiert, wird der Standardbrowser von Windows verwendet"
+  $description:el: "Το πρόγραμμα περιήγησης που ανοίγει το Gemini και το Google Lens. Αν αυτό που επιλέξετε δεν είναι εγκατεστημένο, χρησιμοποιείται το προεπιλεγμένο πρόγραμμα περιήγησης των Windows"
+  $description:es: "El navegador que abre Gemini y Google Lens. Si el que elijas no está instalado, se usa el navegador predeterminado de Windows"
+  $description:fa: "مرورگری که Gemini و Google Lens را باز می\u200cکند. اگر مرورگر انتخاب\u200cشده نصب نباشد، مرورگر پیش\u200cفرض Windows استفاده می\u200cشود"
+  $description:fr: "Le navigateur qui ouvre Gemini et Google Lens. Si celui que vous choisissez n'est pas installé, le navigateur par défaut de Windows est utilisé"
+  $description:hi: "Gemini और Google Lens खोलने वाला ब्राउज़र। चुना हुआ ब्राउज़र इंस्टॉल न हो, तो Windows का डिफ़ॉल्ट ब्राउज़र इस्तेमाल होता है"
+  $description:hr: "Preglednik koji otvara Gemini i Google Lens. Ako odabrani nije instaliran, koristi se zadani preglednik sustava Windows"
+  $description:hu: "A böngésző, amely megnyitja a Geminit és a Google Lenst. Ha a kiválasztott nincs telepítve, a Windows alapértelmezett böngészője lesz használva"
+  $description:id: "Browser yang membuka Gemini dan Google Lens. Jika yang Anda pilih tidak terpasang, browser default Windows akan digunakan"
+  $description:it: "Il browser che apre Gemini e Google Lens. Se quello scelto non è installato, viene usato il browser predefinito di Windows"
+  $description:ja: "Gemini と Google レンズを開くブラウザーです。選択したブラウザーがインストールされていない場合は、Windows の既定のブラウザーが使用されます"
+  $description:ko: "Gemini와 Google 렌즈를 여는 브라우저입니다. 선택한 브라우저가 설치되어 있지 않으면 Windows 기본 브라우저가 사용됩니다"
+  $description:nb: "Nettleseren som åpner Gemini og Google Lens. Hvis den du velger ikke er installert, brukes standardnettleseren i Windows"
+  $description:nl: "De browser die Gemini en Google Lens opent. Als de gekozen browser niet is geïnstalleerd, wordt de standaardbrowser van Windows gebruikt"
+  $description:pl: "Przeglądarka, która otwiera Gemini i Google Lens. Jeśli wybrana nie jest zainstalowana, używana jest domyślna przeglądarka systemu Windows"
+  $description:pt-BR: "O navegador que abre o Gemini e o Google Lens. Se o escolhido não estiver instalado, o navegador padrão do Windows será usado"
+  $description:ro: "Browserul care deschide Gemini și Google Lens. Dacă cel ales nu este instalat, se folosește browserul implicit din Windows"
+  $description:ru: "Браузер, который открывает Gemini и Google Lens. Если выбранный не установлен, используется браузер Windows по умолчанию"
+  $description:sv: "Webbläsaren som öppnar Gemini och Google Lens. Om den du väljer inte är installerad används Windows standardwebbläsare"
+  $description:ta: "Gemini மற்றும் Google Lens-ஐத் திறக்கும் உலாவி. நீங்கள் தேர்ந்தெடுத்தது நிறுவப்படவில்லை என்றால் Windows இயல்புநிலை உலாவி பயன்படுத்தப்படும்"
+  $description:th: "เบราว์เซอร์ที่เปิด Gemini และ Google Lens หากเบราว์เซอร์ที่เลือกไม่ได้ติดตั้งไว้ จะใช้เบราว์เซอร์เริ่มต้นของ Windows"
+  $description:tr: "Gemini'yi ve Google Lens'i açan tarayıcı. Seçtiğiniz yüklü değilse Windows varsayılan tarayıcınız kullanılır"
+  $description:uk: "Браузер, який відкриває Gemini і Google Lens. Якщо вибраний не встановлено, використовується браузер Windows за замовчуванням"
+  $description:vi: "Trình duyệt mở Gemini và Google Lens. Nếu trình duyệt bạn chọn chưa được cài đặt, trình duyệt mặc định của Windows sẽ được dùng"
+  $description:zh-CN: "用于打开 Gemini 和 Google Lens 的浏览器。如果所选浏览器未安装，则使用 Windows 默认浏览器"
+  $description:zh-TW: "用於開啟 Gemini 和 Google Lens 的瀏覽器。如果所選的瀏覽器未安裝，則會使用 Windows 預設瀏覽器"
+  $options:ar:
+  - default: "متصفح Windows الافتراضي"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "آخر (حدد البرنامج أدناه)"
+  $options:bn:
+  - default: "Windows-এর ডিফল্ট ব্রাউজার"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "অন্য (প্রোগ্রাম নিচে সেট করুন)"
+  $options:cs:
+  - default: "Výchozí prohlížeč Windows"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Jiný (program nastavte níže)"
+  $options:da:
+  - default: "Windows' standardbrowser"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Anden (angiv programmet nedenfor)"
+  $options:de:
+  - default: "Standardbrowser von Windows"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Anderer (Programm unten festlegen)"
+  $options:el:
+  - default: "Προεπιλεγμένο πρόγραμμα περιήγησης των Windows"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Άλλο (ορίστε το πρόγραμμα παρακάτω)"
+  $options:es:
+  - default: "Navegador predeterminado de Windows"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Otro (indica su programa abajo)"
+  $options:fa:
+  - default: "مرورگر پیش\u200cفرض Windows"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "دیگر (برنامه را در پایین تنظیم کنید)"
+  $options:fr:
+  - default: "Navigateur par défaut de Windows"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Autre (indiquez son programme ci-dessous)"
+  $options:hi:
+  - default: "Windows का डिफ़ॉल्ट ब्राउज़र"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "अन्य (प्रोग्राम नीचे सेट करें)"
+  $options:hr:
+  - default: "Zadani preglednik sustava Windows"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Drugi (postavi program u nastavku)"
+  $options:hu:
+  - default: "A Windows alapértelmezett böngészője"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Egyéb (add meg a programját lent)"
+  $options:id:
+  - default: "Browser default Windows"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Lainnya (atur programnya di bawah)"
+  $options:it:
+  - default: "Browser predefinito di Windows"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Altro (imposta il programma qui sotto)"
+  $options:ja:
+  - default: "Windows の既定のブラウザー"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "その他 (下でプログラムを指定)"
+  $options:ko:
+  - default: "Windows 기본 브라우저"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "기타(아래에서 프로그램 지정)"
+  $options:nb:
+  - default: "Standardnettleser i Windows"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Annen (angi programmet nedenfor)"
+  $options:nl:
+  - default: "Standaardbrowser van Windows"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Andere (stel het programma hieronder in)"
+  $options:pl:
+  - default: "Domyślna przeglądarka systemu Windows"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Inna (ustaw jej program poniżej)"
+  $options:pt-BR:
+  - default: "Navegador padrão do Windows"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Outro (defina o programa abaixo)"
+  $options:ro:
+  - default: "Browserul implicit din Windows"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Altul (setează programul mai jos)"
+  $options:ru:
+  - default: "Браузер Windows по умолчанию"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Другой (укажите программу ниже)"
+  $options:sv:
+  - default: "Windows standardwebbläsare"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Annan (ange programmet nedan)"
+  $options:ta:
+  - default: "Windows இயல்புநிலை உலாவி"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "பிற (நிரலை கீழே அமைக்கவும்)"
+  $options:th:
+  - default: "เบราว์เซอร์เริ่มต้นของ Windows"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "อื่น ๆ (ตั้งโปรแกรมด้านล่าง)"
+  $options:tr:
+  - default: "Windows varsayılan tarayıcısı"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Diğer (programı aşağıda ayarlayın)"
+  $options:uk:
+  - default: "Браузер Windows за замовчуванням"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Інший (укажіть програму нижче)"
+  $options:vi:
+  - default: "Trình duyệt mặc định của Windows"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "Khác (đặt chương trình bên dưới)"
+  $options:zh-CN:
+  - default: "Windows 默认浏览器"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "其他（在下方设置其程序）"
+  $options:zh-TW:
+  - default: "Windows 預設瀏覽器"
+  - chrome: "Google Chrome"
+  - edge: "Microsoft Edge"
+  - firefox: "Mozilla Firefox"
+  - brave: "Brave"
+  - zen: "Zen Browser"
+  - opera: "Opera"
+  - vivaldi: "Vivaldi"
+  - librewolf: "LibreWolf"
+  - waterfox: "Waterfox"
+  - floorp: "Floorp"
+  - custom: "其他（在下方設定其程式）"
 - browserPath: ""
   $name: Other browser program
   $description: >-
     Only used when Browser is set to Other: the full path of the browser's
     program, such as C:\Apps\MyBrowser\browser.exe
+  $name:ar: "برنامج متصفح آخر"
+  $name:bn: "অন্য ব্রাউজার প্রোগ্রাম"
+  $name:cs: "Jiný program prohlížeče"
+  $name:da: "Andet browserprogram"
+  $name:de: "Anderes Browserprogramm"
+  $name:el: "Άλλο πρόγραμμα περιήγησης"
+  $name:es: "Otro programa de navegador"
+  $name:fa: "برنامه مرورگر دیگر"
+  $name:fr: "Autre programme de navigateur"
+  $name:hi: "दूसरा ब्राउज़र प्रोग्राम"
+  $name:hr: "Drugi program preglednika"
+  $name:hu: "Egyéb böngészőprogram"
+  $name:id: "Program browser lain"
+  $name:it: "Altro programma browser"
+  $name:ja: "その他のブラウザー プログラム"
+  $name:ko: "기타 브라우저 프로그램"
+  $name:nb: "Annet nettleserprogram"
+  $name:nl: "Ander browserprogramma"
+  $name:pl: "Inny program przeglądarki"
+  $name:pt-BR: "Outro programa de navegador"
+  $name:ro: "Alt program de browser"
+  $name:ru: "Другая программа браузера"
+  $name:sv: "Annat webbläsarprogram"
+  $name:ta: "பிற உலாவி நிரல்"
+  $name:th: "โปรแกรมเบราว์เซอร์อื่น"
+  $name:tr: "Diğer tarayıcı programı"
+  $name:uk: "Інша програма браузера"
+  $name:vi: "Chương trình trình duyệt khác"
+  $name:zh-CN: "其他浏览器程序"
+  $name:zh-TW: "其他瀏覽器程式"
+  $description:ar: "يُستخدم فقط عند ضبط المتصفح على آخر: المسار الكامل لبرنامج المتصفح، مثل C:\\Apps\\MyBrowser\\browser.exe"
+  $description:bn: "শুধু তখনই কাজ করে যখন ব্রাউজার অন্য-এ সেট করা থাকে: ব্রাউজারের প্রোগ্রামের পূর্ণ পাথ, যেমন C:\\Apps\\MyBrowser\\browser.exe"
+  $description:cs: "Používá se pouze tehdy, když je Prohlížeč nastaven na Jiný: úplná cesta k programu prohlížeče, například C:\\Apps\\MyBrowser\\browser.exe"
+  $description:da: "Bruges kun, når Browser er sat til Anden: den fulde sti til browserens program, f.eks. C:\\Apps\\MyBrowser\\browser.exe"
+  $description:de: "Wird nur verwendet, wenn Browser auf Anderer steht: der vollständige Pfad zum Programm des Browsers, etwa C:\\Apps\\MyBrowser\\browser.exe"
+  $description:el: "Χρησιμοποιείται μόνο όταν το Πρόγραμμα περιήγησης έχει οριστεί σε Άλλο: η πλήρης διαδρομή του προγράμματος του προγράμματος περιήγησης, όπως C:\\Apps\\MyBrowser\\browser.exe"
+  $description:es: "Solo se usa cuando Navegador está en Otro: la ruta completa del programa del navegador, como C:\\Apps\\MyBrowser\\browser.exe"
+  $description:fa: "فقط وقتی استفاده می\u200cشود که مرورگر روی دیگر تنظیم شده باشد: مسیر کامل برنامه مرورگر، مانند C:\\Apps\\MyBrowser\\browser.exe"
+  $description:fr: "Utilisé uniquement quand Navigateur est réglé sur Autre : le chemin complet du programme du navigateur, par exemple C:\\Apps\\MyBrowser\\browser.exe"
+  $description:hi: "यह तभी काम करता है जब ब्राउज़र को अन्य पर सेट किया गया हो: ब्राउज़र के प्रोग्राम का पूरा पाथ, जैसे C:\\Apps\\MyBrowser\\browser.exe"
+  $description:hr: "Koristi se samo kad je Preglednik postavljen na Drugi: puna putanja programa preglednika, na primjer C:\\Apps\\MyBrowser\\browser.exe"
+  $description:hu: "Csak akkor használt, ha a Böngésző értéke Egyéb: a böngésző programjának teljes elérési útja, például C:\\Apps\\MyBrowser\\browser.exe"
+  $description:id: "Hanya digunakan saat Browser diatur ke Lainnya: jalur lengkap program browser, seperti C:\\Apps\\MyBrowser\\browser.exe"
+  $description:it: "Usato solo quando Browser è impostato su Altro: il percorso completo del programma del browser, ad esempio C:\\Apps\\MyBrowser\\browser.exe"
+  $description:ja: "「ブラウザー」が「その他」のときだけ使用されます。ブラウザーのプログラムへのフル パス (例: C:\\Apps\\MyBrowser\\browser.exe)"
+  $description:ko: "브라우저를 기타로 설정한 경우에만 사용됩니다. 브라우저 프로그램의 전체 경로입니다(예: C:\\Apps\\MyBrowser\\browser.exe)"
+  $description:nb: "Brukes bare når Nettleser er satt til Annen: den fullstendige banen til nettleserens program, for eksempel C:\\Apps\\MyBrowser\\browser.exe"
+  $description:nl: "Alleen gebruikt wanneer Browser op Andere staat: het volledige pad naar het programma van de browser, zoals C:\\Apps\\MyBrowser\\browser.exe"
+  $description:pl: "Używane tylko wtedy, gdy Przeglądarka jest ustawiona na Inna: pełna ścieżka do programu przeglądarki, na przykład C:\\Apps\\MyBrowser\\browser.exe"
+  $description:pt-BR: "Usado apenas quando Navegador está definido como Outro: o caminho completo do programa do navegador, como C:\\Apps\\MyBrowser\\browser.exe"
+  $description:ro: "Folosit doar când Browser este setat pe Altul: calea completă a programului browserului, de exemplu C:\\Apps\\MyBrowser\\browser.exe"
+  $description:ru: "Используется только если для параметра Браузер выбрано Другой: полный путь к программе браузера, например C:\\Apps\\MyBrowser\\browser.exe"
+  $description:sv: "Används bara när Webbläsare är satt till Annan: den fullständiga sökvägen till webbläsarens program, till exempel C:\\Apps\\MyBrowser\\browser.exe"
+  $description:ta: "உலாவி பிற என அமைக்கப்பட்டிருக்கும்போது மட்டும் பயன்படும்: உலாவியின் நிரலுக்கான முழுப் பாதை, எ.கா. C:\\Apps\\MyBrowser\\browser.exe"
+  $description:th: "ใช้เฉพาะเมื่อตั้งค่าเบราว์เซอร์เป็นอื่น ๆ: พาธเต็มของโปรแกรมเบราว์เซอร์ เช่น C:\\Apps\\MyBrowser\\browser.exe"
+  $description:tr: "Yalnızca Tarayıcı Diğer olarak ayarlandığında kullanılır: tarayıcının programının tam yolu, örneğin C:\\Apps\\MyBrowser\\browser.exe"
+  $description:uk: "Використовується лише тоді, коли для параметра Браузер вибрано Інший: повний шлях до програми браузера, наприклад C:\\Apps\\MyBrowser\\browser.exe"
+  $description:vi: "Chỉ dùng khi Trình duyệt được đặt là Khác: đường dẫn đầy đủ tới chương trình của trình duyệt, chẳng hạn C:\\Apps\\MyBrowser\\browser.exe"
+  $description:zh-CN: "仅当“浏览器”设置为“其他”时使用：浏览器程序的完整路径，例如 C:\\Apps\\MyBrowser\\browser.exe"
+  $description:zh-TW: "僅當「瀏覽器」設定為「其他」時使用：瀏覽器程式的完整路徑，例如 C:\\Apps\\MyBrowser\\browser.exe"
 - apiKey: ""
-  $name: Gemini API key
+  $name: API key
   $description: >-
-    Optional. Get a free key at https://aistudio.google.com/apikey to see
-    answers and suggestions right in the card
-- model: gemini-flash-lite-latest
-  $name: Gemini model
+    Optional. A Gemini, ChatGPT or Claude API key; the mod recognizes which
+    one it is. Get one at https://aistudio.google.com/apikey (Gemini, free),
+    https://platform.openai.com/api-keys (ChatGPT) or
+    https://platform.claude.com/settings/keys (Claude)
+  $name:ar: "مفتاح API"
+  $name:bn: "API কী"
+  $name:cs: "Klíč API"
+  $name:da: "API-nøgle"
+  $name:de: "API-Schlüssel"
+  $name:el: "Κλειδί API"
+  $name:es: "Clave de API"
+  $name:fa: "کلید API"
+  $name:fr: "Clé API"
+  $name:hi: "API कुंजी"
+  $name:hr: "API ključ"
+  $name:hu: "API-kulcs"
+  $name:id: "Kunci API"
+  $name:it: "Chiave API"
+  $name:ja: "API キー"
+  $name:ko: "API 키"
+  $name:nb: "API-nøkkel"
+  $name:nl: "API-sleutel"
+  $name:pl: "Klucz API"
+  $name:pt-BR: "Chave de API"
+  $name:ro: "Cheie API"
+  $name:ru: "Ключ API"
+  $name:sv: "API-nyckel"
+  $name:ta: "API விசை"
+  $name:th: "คีย์ API"
+  $name:tr: "API anahtarı"
+  $name:uk: "Ключ API"
+  $name:vi: "Khóa API"
+  $name:zh-CN: "API 密钥"
+  $name:zh-TW: "API 金鑰"
+  $description:ar: "اختياري. مفتاح API لـ Gemini أو ChatGPT أو Claude؛ يتعرف المود على نوعه تلقائيا. احصل على مفتاح من https://aistudio.google.com/apikey (Gemini، مجاني) أو https://platform.openai.com/api-keys (ChatGPT) أو https://platform.claude.com/settings/keys (Claude)"
+  $description:bn: "ঐচ্ছিক। Gemini, ChatGPT বা Claude-এর একটি API কী; কোনটি তা মড নিজেই চিনে নেয়। কী নিন এখান থেকে: https://aistudio.google.com/apikey (Gemini, বিনামূল্যে), https://platform.openai.com/api-keys (ChatGPT) বা https://platform.claude.com/settings/keys (Claude)"
+  $description:cs: "Volitelné. Klíč API služby Gemini, ChatGPT nebo Claude; úprava sama pozná, o který jde. Získáte jej na https://aistudio.google.com/apikey (Gemini, zdarma), https://platform.openai.com/api-keys (ChatGPT) nebo https://platform.claude.com/settings/keys (Claude)"
+  $description:da: "Valgfrit. En API-nøgle til Gemini, ChatGPT eller Claude; modifikationen genkender selv, hvilken det er. Hent en på https://aistudio.google.com/apikey (Gemini, gratis), https://platform.openai.com/api-keys (ChatGPT) eller https://platform.claude.com/settings/keys (Claude)"
+  $description:de: "Optional. Ein API-Schlüssel für Gemini, ChatGPT oder Claude; der Mod erkennt selbst, welcher es ist. Du bekommst einen unter https://aistudio.google.com/apikey (Gemini, kostenlos), https://platform.openai.com/api-keys (ChatGPT) oder https://platform.claude.com/settings/keys (Claude)"
+  $description:el: "Προαιρετικό. Ένα κλειδί API για το Gemini, το ChatGPT ή το Claude· το mod αναγνωρίζει μόνο του ποιο είναι. Αποκτήστε ένα στο https://aistudio.google.com/apikey (Gemini, δωρεάν), στο https://platform.openai.com/api-keys (ChatGPT) ή στο https://platform.claude.com/settings/keys (Claude)"
+  $description:es: "Opcional. Una clave de API de Gemini, ChatGPT o Claude; el mod reconoce por sí solo de cuál se trata. Consigue una en https://aistudio.google.com/apikey (Gemini, gratis), https://platform.openai.com/api-keys (ChatGPT) o https://platform.claude.com/settings/keys (Claude)"
+  $description:fa: "اختیاری. یک کلید API برای Gemini، ChatGPT یا Claude؛ مود خودش تشخیص می\u200cدهد کدام است. یکی را از https://aistudio.google.com/apikey (Gemini، رایگان)، https://platform.openai.com/api-keys (ChatGPT) یا https://platform.claude.com/settings/keys (Claude) بگیرید"
+  $description:fr: "Facultatif. Une clé API Gemini, ChatGPT ou Claude ; le mod reconnaît de lui-même de laquelle il s'agit. Obtenez-en une sur https://aistudio.google.com/apikey (Gemini, gratuite), https://platform.openai.com/api-keys (ChatGPT) ou https://platform.claude.com/settings/keys (Claude)"
+  $description:hi: "वैकल्पिक। Gemini, ChatGPT या Claude की कोई API कुंजी; मॉड खुद पहचान लेता है कि वह किसकी है। कुंजी यहाँ से लें: https://aistudio.google.com/apikey (Gemini, मुफ़्त), https://platform.openai.com/api-keys (ChatGPT) या https://platform.claude.com/settings/keys (Claude)"
+  $description:hr: "Neobavezno. API ključ za Gemini, ChatGPT ili Claude; dodatak sam prepoznaje o kojem je riječ. Nabavi ga na https://aistudio.google.com/apikey (Gemini, besplatno), https://platform.openai.com/api-keys (ChatGPT) ili https://platform.claude.com/settings/keys (Claude)"
+  $description:hu: "Nem kötelező. Egy Gemini-, ChatGPT- vagy Claude-API-kulcs; a mod magától felismeri, melyikről van szó. Itt kérhetsz: https://aistudio.google.com/apikey (Gemini, ingyenes), https://platform.openai.com/api-keys (ChatGPT) vagy https://platform.claude.com/settings/keys (Claude)"
+  $description:id: "Opsional. Kunci API Gemini, ChatGPT, atau Claude; mod mengenali sendiri jenisnya. Dapatkan di https://aistudio.google.com/apikey (Gemini, gratis), https://platform.openai.com/api-keys (ChatGPT), atau https://platform.claude.com/settings/keys (Claude)"
+  $description:it: "Facoltativa. Una chiave API di Gemini, ChatGPT o Claude; la mod riconosce da sola di quale si tratta. Ottienine una su https://aistudio.google.com/apikey (Gemini, gratuita), https://platform.openai.com/api-keys (ChatGPT) o https://platform.claude.com/settings/keys (Claude)"
+  $description:ja: "省略可能。Gemini、ChatGPT、Claude のいずれかの API キー。どれかは Mod が自動で判別します。キーは https://aistudio.google.com/apikey (Gemini、無料)、https://platform.openai.com/api-keys (ChatGPT)、https://platform.claude.com/settings/keys (Claude) で取得できます"
+  $description:ko: "선택 사항입니다. Gemini, ChatGPT 또는 Claude의 API 키를 입력하면 어느 쪽인지 모드가 알아서 인식합니다. 키는 https://aistudio.google.com/apikey (Gemini, 무료), https://platform.openai.com/api-keys (ChatGPT), https://platform.claude.com/settings/keys (Claude)에서 받을 수 있습니다"
+  $description:nb: "Valgfritt. En API-nøkkel for Gemini, ChatGPT eller Claude; modden gjenkjenner selv hvilken det er. Få en på https://aistudio.google.com/apikey (Gemini, gratis), https://platform.openai.com/api-keys (ChatGPT) eller https://platform.claude.com/settings/keys (Claude)"
+  $description:nl: "Optioneel. Een API-sleutel voor Gemini, ChatGPT of Claude; de mod herkent zelf welke het is. Haal er een op via https://aistudio.google.com/apikey (Gemini, gratis), https://platform.openai.com/api-keys (ChatGPT) of https://platform.claude.com/settings/keys (Claude)"
+  $description:pl: "Opcjonalny. Klucz API usługi Gemini, ChatGPT lub Claude; mod sam rozpoznaje, który to klucz. Zdobądź go na https://aistudio.google.com/apikey (Gemini, bezpłatnie), https://platform.openai.com/api-keys (ChatGPT) lub https://platform.claude.com/settings/keys (Claude)"
+  $description:pt-BR: "Opcional. Uma chave de API do Gemini, do ChatGPT ou do Claude; o mod reconhece sozinho qual é. Obtenha uma em https://aistudio.google.com/apikey (Gemini, gratuita), https://platform.openai.com/api-keys (ChatGPT) ou https://platform.claude.com/settings/keys (Claude)"
+  $description:ro: "Opțional. O cheie API pentru Gemini, ChatGPT sau Claude; modul recunoaște singur despre care este vorba. Obține una de la https://aistudio.google.com/apikey (Gemini, gratuită), https://platform.openai.com/api-keys (ChatGPT) sau https://platform.claude.com/settings/keys (Claude)"
+  $description:ru: "Необязательно. Ключ API Gemini, ChatGPT или Claude; модификация сама определяет, чей он. Получить ключ можно здесь: https://aistudio.google.com/apikey (Gemini, бесплатно), https://platform.openai.com/api-keys (ChatGPT) или https://platform.claude.com/settings/keys (Claude)"
+  $description:sv: "Valfritt. En API-nyckel för Gemini, ChatGPT eller Claude; modden känner själv igen vilken det är. Skaffa en på https://aistudio.google.com/apikey (Gemini, gratis), https://platform.openai.com/api-keys (ChatGPT) eller https://platform.claude.com/settings/keys (Claude)"
+  $description:ta: "விருப்பத்திற்குரியது. Gemini, ChatGPT அல்லது Claude-இன் API விசை; அது எதனுடையது என்பதை மாற்றமே அடையாளம் காணும். விசையை இங்கே பெறுங்கள்: https://aistudio.google.com/apikey (Gemini, இலவசம்), https://platform.openai.com/api-keys (ChatGPT) அல்லது https://platform.claude.com/settings/keys (Claude)"
+  $description:th: "ไม่บังคับ คีย์ API ของ Gemini, ChatGPT หรือ Claude ม็อดจะรู้เองว่าเป็นของใคร รับคีย์ได้ที่ https://aistudio.google.com/apikey (Gemini ฟรี), https://platform.openai.com/api-keys (ChatGPT) หรือ https://platform.claude.com/settings/keys (Claude)"
+  $description:tr: "İsteğe bağlı. Gemini, ChatGPT veya Claude için bir API anahtarı; mod hangisi olduğunu kendisi anlar. Anahtarı şuradan alın: https://aistudio.google.com/apikey (Gemini, ücretsiz), https://platform.openai.com/api-keys (ChatGPT) veya https://platform.claude.com/settings/keys (Claude)"
+  $description:uk: "Необов'язково. Ключ API Gemini, ChatGPT або Claude; мод сам визначає, чий він. Отримати ключ можна тут: https://aistudio.google.com/apikey (Gemini, безкоштовно), https://platform.openai.com/api-keys (ChatGPT) або https://platform.claude.com/settings/keys (Claude)"
+  $description:vi: "Không bắt buộc. Khóa API của Gemini, ChatGPT hoặc Claude; mod tự nhận biết đó là khóa nào. Lấy khóa tại https://aistudio.google.com/apikey (Gemini, miễn phí), https://platform.openai.com/api-keys (ChatGPT) hoặc https://platform.claude.com/settings/keys (Claude)"
+  $description:zh-CN: "可选。Gemini、ChatGPT 或 Claude 的 API 密钥，Mod 会自动识别是哪一种。可在 https://aistudio.google.com/apikey（Gemini，免费）、https://platform.openai.com/api-keys（ChatGPT）或 https://platform.claude.com/settings/keys（Claude）获取"
+  $description:zh-TW: "選用。Gemini、ChatGPT 或 Claude 的 API 金鑰，模組會自動辨識是哪一種。可在 https://aistudio.google.com/apikey（Gemini，免費）、https://platform.openai.com/api-keys（ChatGPT）或 https://platform.claude.com/settings/keys（Claude）取得"
+- model: fast
+  $name: Model
   $description: >-
-    The model that answers your questions. Flash-Lite starts answering in a
-    second or two. Flash models think first, so they are smarter but take
-    longer to start, and Pro models need a paid Gemini API plan
+    How the AI answers. Fast starts in a second or two. Balanced and
+    Smartest think longer: better answers, but they start later and cost
+    more. If the chosen model isn't available (busy, or it needs a paid
+    plan), a faster one answers instead
   $options:
-  - gemini-flash-lite-latest: Gemini Flash-Lite (latest) - fastest
-  - gemini-3.5-flash-lite: Gemini 3.5 Flash-Lite - fast
-  - gemini-3.1-flash-lite: Gemini 3.1 Flash-Lite - fast
-  - gemini-3.6-flash: Gemini 3.6 Flash - fast and smarter
-  - gemini-3-flash-preview: Gemini 3 Flash (preview) - balanced
-  - gemini-3.8-flash: Gemini 3.8 Flash - newest, slow to start
-  - gemini-flash-latest: Gemini Flash (latest) - newest Flash, slow to start
-  - gemini-3.1-pro-preview: Gemini 3.1 Pro (preview) - most capable, paid plan
-  - gemini-pro-latest: Gemini Pro (latest) - most capable, paid plan
+  - fast: Fast (recommended)
+  - balanced: Balanced
+  - smart: Smartest
+  $name:ar: "النموذج"
+  $name:bn: "মডেল"
+  $name:cs: "Model"
+  $name:da: "Model"
+  $name:de: "Modell"
+  $name:el: "Μοντέλο"
+  $name:es: "Modelo"
+  $name:fa: "مدل"
+  $name:fr: "Modèle"
+  $name:hi: "मॉडल"
+  $name:hr: "Model"
+  $name:hu: "Modell"
+  $name:id: "Model"
+  $name:it: "Modello"
+  $name:ja: "モデル"
+  $name:ko: "모델"
+  $name:nb: "Modell"
+  $name:nl: "Model"
+  $name:pl: "Model"
+  $name:pt-BR: "Modelo"
+  $name:ro: "Model"
+  $name:ru: "Модель"
+  $name:sv: "Modell"
+  $name:ta: "மாதிரி"
+  $name:th: "โมเดล"
+  $name:tr: "Model"
+  $name:uk: "Модель"
+  $name:vi: "Mô hình"
+  $name:zh-CN: "模型"
+  $name:zh-TW: "模型"
+  $description:ar: "يحدد طريقة إجابة الذكاء الاصطناعي. يبدأ الخيار «سريع» بالإجابة خلال ثانية أو ثانيتين. يفكر الخياران «متوازن» و«الأذكى» لفترة أطول: إجابات أفضل لكنها تبدأ لاحقا وتكلف أكثر. إذا لم يكن النموذج المختار متاحا (مشغولا أو يتطلب خطة مدفوعة)، يجيب نموذج أسرع بدلا منه"
+  $description:bn: "এআই কীভাবে উত্তর দেবে তা ঠিক করে। \"দ্রুত\" এক-দুই সেকেন্ডেই শুরু হয়। \"সুষম\" ও \"সবচেয়ে বুদ্ধিমান\" বেশি সময় ভাবে: উত্তর ভালো হয়, তবে শুরু হতে দেরি হয় ও খরচ বেশি। বেছে নেওয়া মডেলটি পাওয়া না গেলে (ব্যস্ত থাকলে বা পেইড প্ল্যান লাগলে) তার বদলে একটি দ্রুত মডেল উত্তর দেয়"
+  $description:cs: "Jak AI odpovídá. Rychlý začne odpovídat za sekundu nebo dvě. Vyvážený a Nejchytřejší přemýšlejí déle: odpovědi jsou lepší, ale začínají později a stojí více. Pokud vybraný model není dostupný (je vytížený nebo vyžaduje placený plán), odpoví místo něj rychlejší"
+  $description:da: "Hvordan AI svarer. Hurtig begynder at svare efter et sekund eller to. Afbalanceret og Klogest tænker længere: bedre svar, men de starter senere og koster mere. Hvis den valgte model ikke er tilgængelig (optaget eller kræver et betalt abonnement), svarer en hurtigere i stedet"
+  $description:de: "Wie die KI antwortet. Schnell beginnt nach ein bis zwei Sekunden zu antworten. Ausgewogen und Am klügsten denken länger nach: bessere Antworten, aber sie starten später und kosten mehr. Ist das gewählte Modell nicht verfügbar (ausgelastet oder nur mit kostenpflichtigem Tarif), antwortet stattdessen ein schnelleres"
+  $description:el: "Πώς απαντά το AI. Το Γρήγορο αρχίζει να απαντά σε ένα με δύο δευτερόλεπτα. Το Ισορροπημένο και το Εξυπνότερο σκέφτονται περισσότερο: καλύτερες απαντήσεις, αλλά ξεκινούν αργότερα και κοστίζουν περισσότερο. Αν το επιλεγμένο μοντέλο δεν είναι διαθέσιμο (είναι απασχολημένο ή απαιτεί επί πληρωμή πακέτο), απαντά στη θέση του ένα ταχύτερο"
+  $description:es: "Cómo responde la IA. Rápido empieza a responder en uno o dos segundos. Equilibrado y El más inteligente piensan durante más tiempo: mejores respuestas, pero tardan más en empezar y cuestan más. Si el modelo elegido no está disponible (está ocupado o requiere un plan de pago), responde uno más rápido en su lugar"
+  $description:fa: "هوش مصنوعی چگونه پاسخ می\u200cدهد. گزینه «سریع» ظرف یکی دو ثانیه شروع به پاسخ دادن می\u200cکند. گزینه\u200cهای «متعادل» و «باهوش\u200cترین» بیشتر فکر می\u200cکنند: پاسخ\u200cهای بهتر، اما دیرتر شروع می\u200cشوند و هزینه بیشتری دارند. اگر مدل انتخاب\u200cشده در دسترس نباشد (شلوغ باشد یا به طرح پولی نیاز داشته باشد)، یک مدل سریع\u200cتر به جای آن پاسخ می\u200cدهد"
+  $description:fr: "La façon dont l'IA répond. Rapide commence à répondre en une à deux secondes. Équilibré et Le plus intelligent réfléchissent plus longtemps : de meilleures réponses, mais elles démarrent plus tard et coûtent plus cher. Si le modèle choisi n'est pas disponible (occupé ou réservé aux forfaits payants), un modèle plus rapide répond à sa place"
+  $description:hi: "AI कैसे जवाब देता है। \"तेज़\" एक-दो सेकंड में जवाब देना शुरू कर देता है। \"संतुलित\" और \"सबसे समझदार\" ज़्यादा देर सोचते हैं: जवाब बेहतर होते हैं, पर शुरू होने में ज़्यादा समय लगता है और खर्च भी ज़्यादा होता है। अगर चुना हुआ मॉडल उपलब्ध न हो (व्यस्त हो या पेड प्लान माँगता हो), तो उसकी जगह एक तेज़ मॉडल जवाब देता है"
+  $description:hr: "Kako umjetna inteligencija odgovara. Brzo počinje odgovarati za jednu do dvije sekunde. Uravnoteženo i Najpametnije dulje razmišljaju: bolji odgovori, ali počinju kasnije i skuplji su. Ako odabrani model nije dostupan (zauzet je ili zahtijeva plaćeni paket), umjesto njega odgovara brži"
+  $description:hu: "Hogyan válaszol az MI. A Gyors egy-két másodperc alatt elkezd válaszolni. A Kiegyensúlyozott és a Legokosabb tovább gondolkodnak: jobb válaszokat adnak, de később indulnak, és többe kerülnek. Ha a kiválasztott modell nem érhető el (foglalt, vagy fizetős csomag kell hozzá), helyette egy gyorsabb válaszol"
+  $description:id: "Cara AI menjawab. Cepat mulai menjawab dalam satu atau dua detik. Seimbang dan Terpintar berpikir lebih lama: jawaban lebih baik, tetapi mulainya lebih lambat dan biayanya lebih besar. Jika model yang dipilih tidak tersedia (sibuk atau memerlukan paket berbayar), model yang lebih cepat menjawab sebagai gantinya"
+  $description:it: "Come risponde l'IA. Veloce inizia a rispondere in un secondo o due. Bilanciato e Il più intelligente ragionano più a lungo: risposte migliori, ma iniziano più tardi e costano di più. Se il modello scelto non è disponibile (è occupato o richiede un piano a pagamento), risponde invece uno più veloce"
+  $description:ja: "AI の回答方法です。「高速」は 1～2 秒で回答を始めます。「バランス」と「最も賢い」は長く考えるため、回答は良くなりますが、開始が遅く料金も高くなります。選択したモデルが利用できない場合 (混雑中、または有料プランが必要な場合) は、代わりに、より高速なモデルが回答します"
+  $description:ko: "AI가 답변하는 방식입니다. '빠름'은 1~2초 안에 답변을 시작합니다. '균형'과 '가장 똑똑함'은 더 오래 생각하므로 답변이 더 좋지만 시작이 느리고 비용이 더 많이 듭니다. 선택한 모델을 사용할 수 없으면(사용량이 많거나 유료 요금제가 필요한 경우) 대신 더 빠른 모델이 답변합니다"
+  $description:nb: "Hvordan KI-en svarer. Rask begynner å svare etter ett eller to sekunder. Balansert og Smartest tenker lenger: bedre svar, men de starter senere og koster mer. Hvis den valgte modellen ikke er tilgjengelig (opptatt eller krever et betalt abonnement), svarer en raskere i stedet"
+  $description:nl: "Hoe de AI antwoordt. Snel begint na een of twee seconden te antwoorden. Gebalanceerd en Slimst denken langer na: betere antwoorden, maar ze starten later en kosten meer. Als het gekozen model niet beschikbaar is (druk of alleen met een betaald abonnement), antwoordt een sneller model in plaats daarvan"
+  $description:pl: "Jak odpowiada AI. Szybki zaczyna odpowiadać po sekundzie lub dwóch. Zrównoważony i Najmądrzejszy myślą dłużej: odpowiedzi są lepsze, ale zaczynają się później i kosztują więcej. Jeśli wybrany model jest niedostępny (jest zajęty lub wymaga płatnego planu), odpowiada zamiast niego szybszy"
+  $description:pt-BR: "Como a IA responde. Rápido começa a responder em um ou dois segundos. Equilibrado e O mais inteligente pensam por mais tempo: respostas melhores, mas demoram mais para começar e custam mais. Se o modelo escolhido não estiver disponível (ocupado ou exigindo um plano pago), um modelo mais rápido responde no lugar dele"
+  $description:ro: "Cum răspunde inteligența artificială. Rapid începe să răspundă în una-două secunde. Echilibrat și Cel mai inteligent gândesc mai mult: răspunsuri mai bune, dar pornesc mai greu și costă mai mult. Dacă modelul ales nu este disponibil (este ocupat sau necesită un abonament plătit), răspunde în locul lui unul mai rapid"
+  $description:ru: "Как отвечает ИИ. Быстрая начинает отвечать через секунду-две. Сбалансированная и Самая умная думают дольше: ответы лучше, но начинаются позже и стоят дороже. Если выбранная модель недоступна (занята или требует платного тарифа), вместо неё отвечает более быстрая"
+  $description:sv: "Hur AI svarar. Snabb börjar svara efter en eller två sekunder. Balanserad och Smartast tänker längre: bättre svar, men de startar senare och kostar mer. Om den valda modellen inte är tillgänglig (upptagen eller kräver en betald plan) svarar en snabbare i stället"
+  $description:ta: "AI எப்படிப் பதிலளிக்கிறது என்பதைத் தீர்மானிக்கிறது. \"வேகமானது\" ஒன்று இரண்டு வினாடிகளில் பதிலளிக்கத் தொடங்கும். \"சமநிலையானது\", \"மிகச் சிறந்தது\" ஆகியவை நீண்ட நேரம் சிந்திக்கும்: பதில்கள் சிறப்பாக இருக்கும், ஆனால் தொடங்க நேரம் எடுக்கும், கட்டணமும் அதிகம். தேர்ந்தெடுத்த மாதிரி கிடைக்கவில்லை என்றால் (பிஸியாக இருந்தால் அல்லது கட்டணத் திட்டம் தேவைப்பட்டால்), அதற்குப் பதிலாக வேகமான மாதிரி பதிலளிக்கும்"
+  $description:th: "วิธีที่ AI ตอบ \"เร็ว\" จะเริ่มตอบภายในหนึ่งถึงสองวินาที ส่วน \"สมดุล\" และ \"ฉลาดที่สุด\" จะคิดนานกว่า คำตอบดีกว่า แต่เริ่มช้ากว่าและราคาสูงกว่า หากโมเดลที่เลือกใช้ไม่ได้ (กำลังยุ่งหรือต้องใช้แพ็กเกจแบบชำระเงิน) โมเดลที่เร็วกว่าจะตอบแทน"
+  $description:tr: "Yapay zekânın nasıl yanıt vereceği. Hızlı, bir iki saniyede yanıtlamaya başlar. Dengeli ve En akıllı daha uzun düşünür: yanıtlar daha iyidir ama başlaması daha uzun sürer ve daha pahalıdır. Seçilen model kullanılamıyorsa (meşgulse veya ücretli plan gerektiriyorsa) onun yerine daha hızlı bir model yanıt verir"
+  $description:uk: "Як відповідає ШІ. Швидка починає відповідати за секунду-дві. Збалансована і Найрозумніша думають довше: відповіді кращі, але починаються пізніше й коштують дорожче. Якщо вибрана модель недоступна (зайнята або потребує платного тарифу), замість неї відповідає швидша"
+  $description:vi: "Cách AI trả lời. Nhanh bắt đầu trả lời sau một hai giây. Cân bằng và Thông minh nhất suy nghĩ lâu hơn: câu trả lời tốt hơn nhưng bắt đầu muộn hơn và tốn kém hơn. Nếu mô hình đã chọn không khả dụng (đang bận hoặc cần gói trả phí), một mô hình nhanh hơn sẽ trả lời thay"
+  $description:zh-CN: "AI 的回答方式。“快速”会在一两秒内开始回答。“均衡”和“最聪明”思考时间更长：回答更好，但启动较慢、费用更高。如果所选模型不可用（繁忙，或需要付费方案），将改由更快的模型作答"
+  $description:zh-TW: "AI 的回答方式。「快速」會在一兩秒內開始回答。「均衡」和「最聰明」思考時間較長：回答更好，但啟動較慢、費用較高。如果所選模型無法使用（忙碌中，或需要付費方案），將改由較快的模型回答"
+  $options:ar:
+  - fast: "سريع (موصى به)"
+  - balanced: "متوازن"
+  - smart: "الأذكى"
+  $options:bn:
+  - fast: "দ্রুত (প্রস্তাবিত)"
+  - balanced: "সুষম"
+  - smart: "সবচেয়ে বুদ্ধিমান"
+  $options:cs:
+  - fast: "Rychlý (doporučeno)"
+  - balanced: "Vyvážený"
+  - smart: "Nejchytřejší"
+  $options:da:
+  - fast: "Hurtig (anbefalet)"
+  - balanced: "Afbalanceret"
+  - smart: "Klogest"
+  $options:de:
+  - fast: "Schnell (empfohlen)"
+  - balanced: "Ausgewogen"
+  - smart: "Am klügsten"
+  $options:el:
+  - fast: "Γρήγορο (προτείνεται)"
+  - balanced: "Ισορροπημένο"
+  - smart: "Εξυπνότερο"
+  $options:es:
+  - fast: "Rápido (recomendado)"
+  - balanced: "Equilibrado"
+  - smart: "El más inteligente"
+  $options:fa:
+  - fast: "سریع (پیشنهادی)"
+  - balanced: "متعادل"
+  - smart: "باهوش\u200cترین"
+  $options:fr:
+  - fast: "Rapide (recommandé)"
+  - balanced: "Équilibré"
+  - smart: "Le plus intelligent"
+  $options:hi:
+  - fast: "तेज़ (सुझाया गया)"
+  - balanced: "संतुलित"
+  - smart: "सबसे समझदार"
+  $options:hr:
+  - fast: "Brzo (preporučeno)"
+  - balanced: "Uravnoteženo"
+  - smart: "Najpametnije"
+  $options:hu:
+  - fast: "Gyors (ajánlott)"
+  - balanced: "Kiegyensúlyozott"
+  - smart: "Legokosabb"
+  $options:id:
+  - fast: "Cepat (disarankan)"
+  - balanced: "Seimbang"
+  - smart: "Terpintar"
+  $options:it:
+  - fast: "Veloce (consigliato)"
+  - balanced: "Bilanciato"
+  - smart: "Il più intelligente"
+  $options:ja:
+  - fast: "高速 (推奨)"
+  - balanced: "バランス"
+  - smart: "最も賢い"
+  $options:ko:
+  - fast: "빠름(권장)"
+  - balanced: "균형"
+  - smart: "가장 똑똑함"
+  $options:nb:
+  - fast: "Rask (anbefalt)"
+  - balanced: "Balansert"
+  - smart: "Smartest"
+  $options:nl:
+  - fast: "Snel (aanbevolen)"
+  - balanced: "Gebalanceerd"
+  - smart: "Slimst"
+  $options:pl:
+  - fast: "Szybki (zalecany)"
+  - balanced: "Zrównoważony"
+  - smart: "Najmądrzejszy"
+  $options:pt-BR:
+  - fast: "Rápido (recomendado)"
+  - balanced: "Equilibrado"
+  - smart: "O mais inteligente"
+  $options:ro:
+  - fast: "Rapid (recomandat)"
+  - balanced: "Echilibrat"
+  - smart: "Cel mai inteligent"
+  $options:ru:
+  - fast: "Быстрая (рекомендуется)"
+  - balanced: "Сбалансированная"
+  - smart: "Самая умная"
+  $options:sv:
+  - fast: "Snabb (rekommenderas)"
+  - balanced: "Balanserad"
+  - smart: "Smartast"
+  $options:ta:
+  - fast: "வேகமானது (பரிந்துரைக்கப்படுகிறது)"
+  - balanced: "சமநிலையானது"
+  - smart: "மிகச் சிறந்தது"
+  $options:th:
+  - fast: "เร็ว (แนะนำ)"
+  - balanced: "สมดุล"
+  - smart: "ฉลาดที่สุด"
+  $options:tr:
+  - fast: "Hızlı (önerilen)"
+  - balanced: "Dengeli"
+  - smart: "En akıllı"
+  $options:uk:
+  - fast: "Швидка (рекомендовано)"
+  - balanced: "Збалансована"
+  - smart: "Найрозумніша"
+  $options:vi:
+  - fast: "Nhanh (khuyên dùng)"
+  - balanced: "Cân bằng"
+  - smart: "Thông minh nhất"
+  $options:zh-CN:
+  - fast: "快速（推荐）"
+  - balanced: "均衡"
+  - smart: "最聪明"
+  $options:zh-TW:
+  - fast: "快速（建議）"
+  - balanced: "均衡"
+  - smart: "最聰明"
 - suggestions: false
   $name: Smart suggestions
   $description: >-
-    Automatically upload each selection's image and text to Google for up to
-    three suggestions (needs an API key). Off by default
-- suggestionsModel: gemini-flash-lite-latest
-  $name: Suggestions model
-  $description: A fast model works best here; suggestions then show up in about a second
-  $options:
-  - gemini-flash-lite-latest: Gemini Flash-Lite (latest) - fastest
-  - gemini-3.5-flash-lite: Gemini 3.5 Flash-Lite - fast
-  - gemini-3.1-flash-lite: Gemini 3.1 Flash-Lite - fast
-  - gemini-3.6-flash: Gemini 3.6 Flash - fast and smarter
-  - gemini-3-flash-preview: Gemini 3 Flash (preview) - balanced
+    Automatically upload each selection's image and text to your AI provider
+    (Google, OpenAI or Anthropic) for up to three suggestions (needs an API
+    key). Off by default
+  $name:ar: "الاقتراحات الذكية"
+  $name:bn: "স্মার্ট পরামর্শ"
+  $name:cs: "Chytré návrhy"
+  $name:da: "Smarte forslag"
+  $name:de: "Intelligente Vorschläge"
+  $name:el: "Έξυπνες προτάσεις"
+  $name:es: "Sugerencias inteligentes"
+  $name:fa: "پیشنهادهای هوشمند"
+  $name:fr: "Suggestions intelligentes"
+  $name:hi: "स्मार्ट सुझाव"
+  $name:hr: "Pametni prijedlozi"
+  $name:hu: "Intelligens javaslatok"
+  $name:id: "Saran cerdas"
+  $name:it: "Suggerimenti intelligenti"
+  $name:ja: "スマート提案"
+  $name:ko: "스마트 제안"
+  $name:nb: "Smarte forslag"
+  $name:nl: "Slimme suggesties"
+  $name:pl: "Inteligentne sugestie"
+  $name:pt-BR: "Sugestões inteligentes"
+  $name:ro: "Sugestii inteligente"
+  $name:ru: "Умные подсказки"
+  $name:sv: "Smarta förslag"
+  $name:ta: "ஸ்மார்ட் பரிந்துரைகள்"
+  $name:th: "คำแนะนำอัจฉริยะ"
+  $name:tr: "Akıllı öneriler"
+  $name:uk: "Розумні підказки"
+  $name:vi: "Gợi ý thông minh"
+  $name:zh-CN: "智能建议"
+  $name:zh-TW: "智慧建議"
+  $description:ar: "يرفع صورة ونص كل تحديد تلقائيا إلى مزود الذكاء الاصطناعي لديك (Google أو OpenAI أو Anthropic) للحصول على ما يصل إلى ثلاثة اقتراحات (يتطلب مفتاح API). متوقف افتراضيا"
+  $description:bn: "সর্বোচ্চ তিনটি পরামর্শের জন্য প্রতিটি নির্বাচনের ছবি ও টেক্সট নিজে থেকেই আপনার এআই প্রদানকারীর (Google, OpenAI বা Anthropic) কাছে পাঠানো হয় (API কী লাগবে)। ডিফল্টে বন্ধ থাকে"
+  $description:cs: "Automaticky nahraje obrázek a text každého výběru vašemu poskytovateli AI (Google, OpenAI nebo Anthropic) pro až tři návrhy (vyžaduje klíč API). Ve výchozím stavu vypnuto"
+  $description:da: "Uploader automatisk billedet og teksten fra hvert valg til din AI-udbyder (Google, OpenAI eller Anthropic) for op til tre forslag (kræver en API-nøgle). Fra som standard"
+  $description:de: "Lädt Bild und Text jeder Auswahl automatisch zu deinem KI-Anbieter (Google, OpenAI oder Anthropic) hoch, um bis zu drei Vorschläge zu erhalten (erfordert einen API-Schlüssel). Standardmäßig aus"
+  $description:el: "Ανεβάζει αυτόματα την εικόνα και το κείμενο κάθε επιλογής στον πάροχο AI σας (Google, OpenAI ή Anthropic) για έως τρεις προτάσεις (απαιτεί κλειδί API). Απενεργοποιημένο από προεπιλογή"
+  $description:es: "Sube automáticamente a tu proveedor de IA (Google, OpenAI o Anthropic) la imagen y el texto de cada selección para obtener hasta tres sugerencias (requiere una clave de API). Desactivado de forma predeterminada"
+  $description:fa: "تصویر و متن هر انتخاب را برای دریافت حداکثر سه پیشنهاد به\u200cطور خودکار برای ارائه\u200cدهنده هوش مصنوعی شما (Google، OpenAI یا Anthropic) ارسال می\u200cکند (به کلید API نیاز دارد). به\u200cصورت پیش\u200cفرض خاموش است"
+  $description:fr: "Envoie automatiquement à votre fournisseur d'IA (Google, OpenAI ou Anthropic) l'image et le texte de chaque sélection pour obtenir jusqu'à trois suggestions (nécessite une clé API). Désactivé par défaut"
+  $description:hi: "हर चयन की इमेज और टेक्स्ट अपने-आप आपके AI प्रदाता (Google, OpenAI या Anthropic) को भेजकर ज़्यादा से ज़्यादा तीन सुझाव पाएँ (API कुंजी चाहिए)। यह डिफ़ॉल्ट रूप से बंद रहता है"
+  $description:hr: "Automatski učitava sliku i tekst svakog odabira kod tvog pružatelja umjetne inteligencije (Google, OpenAI ili Anthropic) za do tri prijedloga (potreban je API ključ). Prema zadanim postavkama isključeno"
+  $description:hu: "Automatikusan feltölti minden kijelölés képét és szövegét az MI-szolgáltatódnak (Google, OpenAI vagy Anthropic) legfeljebb három javaslatért (API-kulcs szükséges). Alapértelmezés szerint ki van kapcsolva"
+  $description:id: "Secara otomatis mengunggah gambar dan teks setiap pilihan ke penyedia AI Anda (Google, OpenAI, atau Anthropic) untuk maksimal tiga saran (memerlukan kunci API). Nonaktif secara default"
+  $description:it: "Carica automaticamente sul tuo provider di IA (Google, OpenAI o Anthropic) l'immagine e il testo di ogni selezione per ottenere fino a tre suggerimenti (richiede una chiave API). Disattivato per impostazione predefinita"
+  $description:ja: "各選択範囲の画像とテキストを自動的にお使いの AI プロバイダー (Google、OpenAI、Anthropic) にアップロードして、最大 3 件の提案を取得します (API キーが必要です)。既定ではオフです"
+  $description:ko: "각 선택 영역의 이미지와 텍스트를 사용 중인 AI 제공업체(Google, OpenAI 또는 Anthropic)에 자동으로 업로드하여 최대 3개의 제안을 받습니다(API 키 필요). 기본적으로 꺼져 있습니다"
+  $description:nb: "Laster automatisk opp bildet og teksten fra hvert utvalg til din KI-leverandør (Google, OpenAI eller Anthropic) for opptil tre forslag (krever en API-nøkkel). Av som standard"
+  $description:nl: "Uploadt de afbeelding en tekst van elke selectie automatisch naar je AI-aanbieder (Google, OpenAI of Anthropic) voor maximaal drie suggesties (vereist een API-sleutel). Standaard uit"
+  $description:pl: "Automatycznie przesyła do Twojego dostawcy AI (Google, OpenAI lub Anthropic) obraz i tekst każdego zaznaczenia, aby uzyskać do trzech sugestii (wymaga klucza API). Domyślnie wyłączone"
+  $description:pt-BR: "Envia automaticamente ao seu provedor de IA (Google, OpenAI ou Anthropic) a imagem e o texto de cada seleção para obter até três sugestões (requer uma chave de API). Desativado por padrão"
+  $description:ro: "Încarcă automat la furnizorul tău de inteligență artificială (Google, OpenAI sau Anthropic) imaginea și textul fiecărei selecții pentru până la trei sugestii (necesită o cheie API). Dezactivat implicit"
+  $description:ru: "Автоматически отправляет вашему поставщику ИИ (Google, OpenAI или Anthropic) изображение и текст каждого выделения, чтобы получить до трёх подсказок (нужен ключ API). По умолчанию отключено"
+  $description:sv: "Laddar automatiskt upp bilden och texten från varje markering till din AI-leverantör (Google, OpenAI eller Anthropic) för upp till tre förslag (kräver en API-nyckel). Av som standard"
+  $description:ta: "அதிகபட்சம் மூன்று பரிந்துரைகளுக்காக ஒவ்வொரு தேர்வின் படத்தையும் உரையையும் தானாகவே உங்கள் AI வழங்குநருக்கு (Google, OpenAI அல்லது Anthropic) பதிவேற்றும் (API விசை தேவை). இயல்பாக முடக்கப்பட்டுள்ளது"
+  $description:th: "อัปโหลดรูปภาพและข้อความของแต่ละส่วนที่เลือกไปยังผู้ให้บริการ AI ของคุณ (Google, OpenAI หรือ Anthropic) โดยอัตโนมัติเพื่อรับคำแนะนำสูงสุดสามข้อ (ต้องใช้คีย์ API) ปิดไว้ตามค่าเริ่มต้น"
+  $description:tr: "En fazla üç öneri için her seçimin görüntüsünü ve metnini otomatik olarak yapay zekâ sağlayıcınıza (Google, OpenAI veya Anthropic) yükler (API anahtarı gerekir). Varsayılan olarak kapalı"
+  $description:uk: "Автоматично надсилає вашому постачальнику ШІ (Google, OpenAI або Anthropic) зображення й текст кожного виділення, щоб отримати до трьох підказок (потрібен ключ API). За замовчуванням вимкнено"
+  $description:vi: "Tự động tải ảnh và văn bản của mỗi vùng chọn lên nhà cung cấp AI của bạn (Google, OpenAI hoặc Anthropic) để nhận tối đa ba gợi ý (cần khóa API). Mặc định là tắt"
+  $description:zh-CN: "自动将每个选区的图片和文本上传到你的 AI 提供商（Google、OpenAI 或 Anthropic），以获得最多三条建议（需要 API 密钥）。默认关闭"
+  $description:zh-TW: "自動將每個選取範圍的圖片和文字上傳到您的 AI 提供者（Google、OpenAI 或 Anthropic），以取得最多三項建議（需要 API 金鑰）。預設為關閉"
 - translateTo: auto
   $name: Translate to
   $description: >-
-    The language of the Translate button on the card, which is shown when a
-    Gemini API key is set. Gemini reads the text in your selection and
-    translates it into this language
+    The language of the Translate button on the card, which is shown when an
+    API key is set. The AI reads the text in your selection and translates
+    it into this language. Auto uses the Language setting
   $options:
-  - auto: Windows display language
+  - auto: Auto (same as Language)
+  - Arabic: العربية (Arabic)
+  - Bengali: বাংলা (Bengali)
+  - Chinese (Simplified): 简体中文 (Chinese (Simplified))
+  - Chinese (Traditional): 繁體中文 (Chinese (Traditional))
+  - Croatian: Hrvatski (Croatian)
+  - Czech: Čeština (Czech)
+  - Danish: Dansk (Danish)
+  - Dutch: Nederlands (Dutch)
   - English: English
-  - Spanish: Spanish
-  - French: French
-  - German: German
-  - Italian: Italian
-  - Portuguese: Portuguese
-  - Dutch: Dutch
-  - Swedish: Swedish
-  - Norwegian: Norwegian
-  - Danish: Danish
-  - Finnish: Finnish
-  - Polish: Polish
-  - Czech: Czech
-  - Hungarian: Hungarian
-  - Romanian: Romanian
-  - Greek: Greek
-  - Turkish: Turkish
-  - Russian: Russian
-  - Ukrainian: Ukrainian
-  - Arabic: Arabic
-  - Hebrew: Hebrew
-  - Hindi: Hindi
-  - Bengali: Bengali
-  - Thai: Thai
-  - Vietnamese: Vietnamese
-  - Indonesian: Indonesian
-  - Chinese (Simplified): Chinese (Simplified)
-  - Chinese (Traditional): Chinese (Traditional)
-  - Japanese: Japanese
-  - Korean: Korean
+  - Finnish: Suomi (Finnish)
+  - French: Français (French)
+  - German: Deutsch (German)
+  - Greek: Ελληνικά (Greek)
+  - Hebrew: עברית (Hebrew)
+  - Hindi: हिन्दी (Hindi)
+  - Hungarian: Magyar (Hungarian)
+  - Indonesian: Bahasa Indonesia (Indonesian)
+  - Italian: Italiano (Italian)
+  - Japanese: 日本語 (Japanese)
+  - Korean: 한국어 (Korean)
+  - Norwegian: Norsk bokmål (Norwegian)
+  - Persian: فارسی (Persian)
+  - Polish: Polski (Polish)
+  - Portuguese: Português (Portuguese)
+  - Romanian: Română (Romanian)
+  - Russian: Русский (Russian)
+  - Spanish: Español (Spanish)
+  - Swedish: Svenska (Swedish)
+  - Tamil: தமிழ் (Tamil)
+  - Thai: ไทย (Thai)
+  - Turkish: Türkçe (Turkish)
+  - Ukrainian: Українська (Ukrainian)
+  - Vietnamese: Tiếng Việt (Vietnamese)
+  $name:ar: "الترجمة إلى"
+  $name:bn: "অনুবাদের ভাষা"
+  $name:cs: "Přeložit do"
+  $name:da: "Oversæt til"
+  $name:de: "Übersetzen in"
+  $name:el: "Μετάφραση σε"
+  $name:es: "Traducir a"
+  $name:fa: "ترجمه به"
+  $name:fr: "Traduire en"
+  $name:hi: "अनुवाद की भाषा"
+  $name:hr: "Prevedi na"
+  $name:hu: "Fordítás erre"
+  $name:id: "Terjemahkan ke"
+  $name:it: "Traduci in"
+  $name:ja: "翻訳先"
+  $name:ko: "번역 대상"
+  $name:nb: "Oversett til"
+  $name:nl: "Vertalen naar"
+  $name:pl: "Przetłumacz na"
+  $name:pt-BR: "Traduzir para"
+  $name:ro: "Tradu în"
+  $name:ru: "Перевести на"
+  $name:sv: "Översätt till"
+  $name:ta: "இதற்கு மொழிபெயர்"
+  $name:th: "แปลเป็น"
+  $name:tr: "Şu dile çevir"
+  $name:uk: "Перекласти на"
+  $name:vi: "Dịch sang"
+  $name:zh-CN: "翻译为"
+  $name:zh-TW: "翻譯成"
+  $description:ar: "لغة زر الترجمة في البطاقة، الذي يظهر عند ضبط مفتاح API. يقرأ الذكاء الاصطناعي النص في تحديدك ويترجمه إلى هذه اللغة. يستخدم الخيار Auto إعداد اللغة"
+  $description:bn: "কার্ডের অনুবাদ বোতামের ভাষা, যা API কী সেট করা থাকলে দেখা যায়। এআই আপনার নির্বাচনের টেক্সট পড়ে এই ভাষায় অনুবাদ করে। Auto বেছে নিলে ভাষা সেটিং ব্যবহার হয়"
+  $description:cs: "Jazyk tlačítka Přeložit na kartě, které se zobrazí, když je nastaven klíč API. AI přečte text ve vašem výběru a přeloží jej do tohoto jazyka. Auto používá nastavení Jazyk"
+  $description:da: "Sproget for Oversæt-knappen på kortet, som vises, når en API-nøgle er angivet. AI læser teksten i dit valg og oversætter den til dette sprog. Auto bruger indstillingen Sprog"
+  $description:de: "Die Sprache der Schaltfläche „Übersetzen“ auf der Karte, die angezeigt wird, wenn ein API-Schlüssel gesetzt ist. Die KI liest den Text deiner Auswahl und übersetzt ihn in diese Sprache. Auto verwendet die Einstellung Sprache"
+  $description:el: "Η γλώσσα του κουμπιού Μετάφραση στην κάρτα, που εμφανίζεται όταν έχει οριστεί κλειδί API. Το AI διαβάζει το κείμενο της επιλογής σας και το μεταφράζει σε αυτή τη γλώσσα. Το Auto χρησιμοποιεί τη ρύθμιση Γλώσσα"
+  $description:es: "El idioma del botón Traducir de la tarjeta, que se muestra cuando hay una clave de API configurada. La IA lee el texto de tu selección y lo traduce a este idioma. Auto usa el ajuste Idioma"
+  $description:fa: "زبان دکمه ترجمه روی کارت که وقتی کلید API تنظیم شده باشد نمایش داده می\u200cشود. هوش مصنوعی متن انتخاب شما را می\u200cخواند و به این زبان ترجمه می\u200cکند. Auto از تنظیم زبان استفاده می\u200cکند"
+  $description:fr: "La langue du bouton Traduire de la carte, affiché quand une clé API est définie. L'IA lit le texte de votre sélection et le traduit dans cette langue. Auto utilise le paramètre Langue"
+  $description:hi: "कार्ड पर अनुवाद बटन की भाषा, जो API कुंजी सेट होने पर दिखता है। AI आपके चयन का टेक्स्ट पढ़कर इसी भाषा में अनुवाद करता है। Auto चुनने पर भाषा सेटिंग इस्तेमाल होती है"
+  $description:hr: "Jezik gumba Prevedi na kartici, koji se prikazuje kad je postavljen API ključ. Umjetna inteligencija čita tekst u tvom odabiru i prevodi ga na ovaj jezik. Auto koristi postavku Jezik"
+  $description:hu: "A kártyán lévő Fordítás gomb nyelve, amely akkor jelenik meg, ha be van állítva API-kulcs. Az MI elolvassa a kijelölésben lévő szöveget, és erre a nyelvre fordítja. Az Auto a Nyelv beállítást használja"
+  $description:id: "Bahasa tombol Terjemahkan pada kartu, yang ditampilkan saat kunci API diatur. AI membaca teks dalam pilihan Anda dan menerjemahkannya ke bahasa ini. Auto menggunakan pengaturan Bahasa"
+  $description:it: "La lingua del pulsante Traduci sulla scheda, mostrato quando è impostata una chiave API. L'IA legge il testo della selezione e lo traduce in questa lingua. Auto usa l'impostazione Lingua"
+  $description:ja: "API キーが設定されているときにカードに表示される「翻訳」ボタンの言語です。AI は選択範囲内のテキストを読み取り、この言語に翻訳します。Auto は「言語」の設定を使用します"
+  $description:ko: "API 키가 설정되었을 때 카드에 표시되는 번역 단추의 언어입니다. AI가 선택 영역의 텍스트를 읽고 이 언어로 번역합니다. Auto는 언어 설정을 사용합니다"
+  $description:nb: "Språket for Oversett-knappen på kortet, som vises når en API-nøkkel er angitt. KI-en leser teksten i utvalget ditt og oversetter den til dette språket. Auto bruker innstillingen Språk"
+  $description:nl: "De taal van de knop Vertalen op de kaart, die verschijnt wanneer een API-sleutel is ingesteld. De AI leest de tekst in je selectie en vertaalt die naar deze taal. Auto gebruikt de instelling Taal"
+  $description:pl: "Język przycisku Przetłumacz na karcie, który jest wyświetlany, gdy ustawiono klucz API. AI odczytuje tekst w zaznaczeniu i tłumaczy go na ten język. Auto używa ustawienia Język"
+  $description:pt-BR: "O idioma do botão Traduzir no cartão, exibido quando há uma chave de API configurada. A IA lê o texto da sua seleção e o traduz para este idioma. Auto usa a configuração Idioma"
+  $description:ro: "Limba butonului Tradu de pe card, afișat când este setată o cheie API. Inteligența artificială citește textul din selecție și îl traduce în această limbă. Auto folosește setarea Limbă"
+  $description:ru: "Язык кнопки «Перевести» на карточке, которая показывается, когда задан ключ API. ИИ считывает текст в вашем выделении и переводит его на этот язык. Значение Auto использует параметр Язык"
+  $description:sv: "Språket för knappen Översätt på kortet, som visas när en API-nyckel är angiven. AI läser texten i din markering och översätter den till det här språket. Auto använder inställningen Språk"
+  $description:ta: "API விசை அமைக்கப்பட்டிருக்கும்போது அட்டையில் தோன்றும் மொழிபெயர் பொத்தானின் மொழி. AI உங்கள் தேர்வில் உள்ள உரையைப் படித்து இந்த மொழியில் மொழிபெயர்க்கும். Auto என்பது மொழி அமைப்பைப் பயன்படுத்தும்"
+  $description:th: "ภาษาของปุ่มแปลบนการ์ด ซึ่งจะแสดงเมื่อตั้งค่าคีย์ API AI จะอ่านข้อความในส่วนที่คุณเลือกแล้วแปลเป็นภาษานี้ Auto ใช้การตั้งค่าภาษา"
+  $description:tr: "Kartta, bir API anahtarı ayarlandığında gösterilen Çevir düğmesinin dili. Yapay zekâ seçiminizdeki metni okur ve bu dile çevirir. Auto, Dil ayarını kullanır"
+  $description:uk: "Мова кнопки «Перекласти» на картці, яка показується, коли задано ключ API. ШІ зчитує текст у вашому виділенні й перекладає його цією мовою. Значення Auto використовує параметр Мова"
+  $description:vi: "Ngôn ngữ của nút Dịch trên thẻ, được hiển thị khi đã đặt khóa API. AI đọc văn bản trong vùng chọn của bạn và dịch sang ngôn ngữ này. Auto dùng cài đặt Ngôn ngữ"
+  $description:zh-CN: "卡片上“翻译”按钮所用的语言，设置了 API 密钥时显示。AI 会读取你所选内容中的文本并翻译为该语言。Auto 使用“语言”设置"
+  $description:zh-TW: "卡片上「翻譯」按鈕所使用的語言，設定 API 金鑰後才會顯示。AI 會讀取您所選內容中的文字並翻譯成該語言。Auto 會使用「語言」設定"
 */
 // ==/WindhawkModSettings==
 
@@ -358,11 +2513,12 @@ constexpr float kPi = 3.14159265358979f;
 
 constexpr UINT WM_APP_SETTINGS = WM_APP + 1;
 constexpr UINT WM_APP_PICK = WM_APP + 2;
-constexpr UINT WM_APP_GEMINI = WM_APP + 3;
+constexpr UINT WM_APP_AI = WM_APP + 3;
 constexpr UINT WM_APP_OCR = WM_APP + 4;
 constexpr UINT WM_APP_BROWSER = WM_APP + 5;
 constexpr UINT WM_APP_TEMP_FILE = WM_APP + 6;
 constexpr UINT WM_APP_FOREGROUND = WM_APP + 7;
+constexpr UINT WM_APP_RIPPLE = WM_APP + 8;
 
 constexpr int kHotkeyActivate = 1;
 constexpr int kHotkeyEscape = 2;
@@ -716,7 +2872,7 @@ std::string Base64Encode(const uint8_t* data, size_t size) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Minimal JSON reader, enough for Gemini API responses
+// JSON reader
 
 struct Json;
 struct JsonField;
@@ -1011,13 +3167,16 @@ struct Settings {
     bool shake = true;
     int sensitivity = 5;
     std::wstring hotkey;
+    bool typeToAsk = true;
     std::vector<std::wstring> excludedApps;
     bool disableInFullscreen = true;
     std::wstring glowColor;
     bool glass = true;
     bool ripple = true;
     ThemeMode theme = ThemeMode::Auto;
+    std::wstring language;
     int pointerSize = 100;
+    std::wstring customCursor;
     int dim = 50;
     bool hint = true;
     int timeoutSec = 15;
@@ -1028,7 +3187,6 @@ struct Settings {
     std::wstring apiKey;
     std::wstring model;
     bool suggestions = false;
-    std::wstring suggestionsModel;
     std::wstring translateTo;
 };
 
@@ -1039,12 +3197,23 @@ std::wstring GetStringSetting(PCWSTR name) {
     return Trim(result);
 }
 
+std::wstring GetApiKeySetting(PCWSTR name) {
+    std::wstring key;
+    for (wchar_t c : GetStringSetting(name)) {
+        if (c > L' ' && c < 0x7F) {
+            key += c;
+        }
+    }
+    return key;
+}
+
 Settings LoadSettings() {
     Settings s;
     s.shake = Wh_GetIntSetting(L"shake") != 0;
     const int sensitivity = Wh_GetIntSetting(L"sensitivity");
     s.sensitivity = sensitivity <= 0 ? 5 : std::min(sensitivity, 10);
     s.hotkey = GetStringSetting(L"hotkey");
+    s.typeToAsk = Wh_GetIntSetting(L"typeToAsk") != 0;
     for (int i = 0; i < 256; i++) {
         const std::wstring app =
             GetStringSetting((L"excludedApps[" + std::to_wstring(i) + L"]").c_str());
@@ -1062,9 +3231,11 @@ Settings LoadSettings() {
     s.theme = theme == L"light"  ? ThemeMode::Light
               : theme == L"dark" ? ThemeMode::Dark
                                  : ThemeMode::Auto;
+    s.language = GetStringSetting(L"language");
 
     const int pointerSize = Wh_GetIntSetting(L"pointerSize");
     s.pointerSize = pointerSize <= 0 ? 100 : std::clamp(pointerSize, 50, 300);
+    s.customCursor = GetStringSetting(L"customCursor");
     s.dim = std::clamp(Wh_GetIntSetting(L"dim"), 0, 80);
     s.hint = Wh_GetIntSetting(L"hint") != 0;
     s.timeoutSec = std::clamp(Wh_GetIntSetting(L"timeout"), 0, 3600);
@@ -1072,15 +3243,54 @@ Settings LoadSettings() {
     s.ocr = Wh_GetIntSetting(L"ocr") != 0;
     s.browser = GetStringSetting(L"browser");
     s.browserPath = GetStringSetting(L"browserPath");
-    s.apiKey = GetStringSetting(L"apiKey");
+    s.apiKey = GetApiKeySetting(L"apiKey");
     s.model = GetStringSetting(L"model");
     s.suggestions = Wh_GetIntSetting(L"suggestions") != 0;
-    s.suggestionsModel = GetStringSetting(L"suggestionsModel");
     s.translateTo = GetStringSetting(L"translateTo");
     return s;
 }
 
 Settings g_settings;
+
+enum class Provider { Gemini, OpenAi, Anthropic };
+
+PCWSTR ProviderName(Provider provider) {
+    switch (provider) {
+        case Provider::OpenAi:
+            return L"ChatGPT";
+        case Provider::Anthropic:
+            return L"Claude";
+        case Provider::Gemini:
+            break;
+    }
+    return L"Gemini";
+}
+
+Provider ProviderOfKey(const std::wstring& key) {
+    if (_wcsnicmp(key.c_str(), L"sk-ant-", 7) == 0) {
+        return Provider::Anthropic;
+    }
+    if (_wcsnicmp(key.c_str(), L"sk-", 3) == 0) {
+        return Provider::OpenAi;
+    }
+    return Provider::Gemini;
+}
+
+bool ActiveProvider(const Settings& settings, Provider& provider) {
+    if (settings.apiKey.empty()) {
+        return false;
+    }
+    provider = ProviderOfKey(settings.apiKey);
+    return true;
+}
+
+bool HasAiKey() {
+    return !g_settings.apiKey.empty();
+}
+
+std::wstring AssistantName() {
+    return ProviderName(ProviderOfKey(g_settings.apiKey));
+}
 
 bool SystemUsesDarkTheme() {
     DWORD value = 1;
@@ -1105,6 +3315,297 @@ bool UseDarkTheme() {
             break;
     }
     return SystemUsesDarkTheme();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Languages
+
+#define MAGIC_POINTER_TEXTS(X) \
+    X(HintText, L"Select anything to ask {0}") \
+    X(HintTextTyping, L"Select anything or start typing to ask {0}") \
+    X(Close, L"Close") \
+    X(AskInGemini, L"Ask in Gemini") \
+    X(SearchWithLens, L"Search with Google Lens") \
+    X(TranslateTo, L"Translate to {0}") \
+    X(CopyImage, L"Copy image") \
+    X(CopyText, L"Copy text") \
+    X(AddSelection, L"Add another selection") \
+    X(WhatIsThis, L"What is this?") \
+    X(ExplainThis, L"Explain this to me") \
+    X(SummarizeThis, L"Summarize this for me") \
+    X(AskPlaceholder, L"Ask about your selection…") \
+    X(AskAnythingPlaceholder, L"Ask anything…") \
+    X(FollowUpPlaceholder, L"Ask a follow-up…") \
+    X(Thinking, L"Thinking…") \
+    X(Copy, L"Copy") \
+    X(SelectAll, L"Select all") \
+    X(NoApiKeyHint, L"Add a Gemini, ChatGPT or Claude API key in the mod's settings to get answers right here.") \
+    X(ImageCopied, L"Image copied") \
+    X(ImageCopyFailed, L"Couldn't copy the image") \
+    X(ImageCopyRetry, L"Couldn't copy the image. Try again.") \
+    X(ReadingText, L"Still reading the text…") \
+    X(NoTextFound, L"No text found in the selection") \
+    X(TextCopied, L"Text copied") \
+    X(TextCopyFailed, L"Couldn't copy the text") \
+    X(AnswerCopied, L"Answer copied") \
+    X(AnswerCopyFailed, L"Couldn't copy the answer") \
+    X(OpeningLens, L"Opening Google Lens in your browser…") \
+    X(OpeningGeminiOne, L"Opening Gemini and attaching your image…") \
+    X(OpeningGeminiMany, L"Opening Gemini and attaching your images…") \
+    X(OpeningGeminiText, L"Opening Gemini and adding your question…") \
+    X(ClickBoxToAttach, L"Click Gemini's message box, then press Ctrl+V to attach the image.") \
+    X(Stopped, L"Stopped.") \
+    X(StoppedEarly, L"Stopped before the answer finished.") \
+    X(RequestFailed, L"Couldn't start the request.") \
+    X(DraftAddedOne, L"The image was added. Type your question in Gemini.") \
+    X(DraftAddedMany, L"The images were added. Type your question in Gemini.") \
+    X(QuestionInGemini, L"Your question is in Gemini.") \
+    X(DraftPartial, L"Only {0} of {1} images could be confirmed. Check Gemini, and add the rest with Ctrl+V in its message box.") \
+    X(ClipboardChangedOne, L"The clipboard changed before the image could be pasted: use Copy image, then press Ctrl+V in Gemini.") \
+    X(ClipboardChangedMany, L"The clipboard changed before the images could be pasted. Ask in Gemini again to retry.") \
+    X(IfNotAttachedOne, L"If the image isn't attached, click Gemini's message box and press Ctrl+V.") \
+    X(IfNotAttachedMany, L"If the images aren't attached, click Gemini's message box and press Ctrl+V.") \
+    X(ClickBoxOne, L"Click Gemini's message box and press Ctrl+V to attach the image. Your question is kept here.") \
+    X(ClickBoxMany, L"Click Gemini's message box and press Ctrl+V to attach the images. Your question is kept here.") \
+    X(ClickBoxText, L"Click Gemini's message box and type your question. Your question is kept here.") \
+    X(BrowserFailedOne, L"Couldn't open the browser. The image is copied; paste it into Gemini with Ctrl+V.") \
+    X(BrowserFailedMany, L"Couldn't open the browser. The images are copied; paste them into Gemini with Ctrl+V.") \
+    X(BrowserFailedText, L"Couldn't open the browser.") \
+    X(PageUnreadable, L"Magic Pointer couldn't read the page in your browser. If a notice is open over it, close it and click Ask in Gemini again.") \
+    X(ErrKeyInvalid, L"Your {0} API key isn't valid. Check it in the mod's settings.") \
+    X(ErrKeyForbidden, L"This API key can't use {0} (403). Check the key in the mod's settings.") \
+    X(ErrModelMissing, L"The model \"{0}\" isn't available to your key. Pick another model in the mod's settings.") \
+    X(ErrNoFreeQuota, L"Your Gemini plan has no free quota for \"{0}\". Choose the Fast model in the mod's settings, or add billing to your key.") \
+    X(ErrNoCredit, L"Your {0} account has run out of credit. Add credit or a payment method to it, then try again.") \
+    X(ErrTimeout, L"{0} didn't answer in time. Try again in a moment.") \
+    X(ModelBusy, L"Your chosen model isn't available right now. A faster one is answering instead.") \
+    X(ErrRateLimit, L"You've reached {0}'s rate limit for now. Try again in a moment.") \
+    X(ErrServer, L"{0} is having trouble right now ({1}). Try again in a moment.") \
+    X(ErrGeneric, L"{0} returned an error ({1}).") \
+    X(ErrNoConnection, L"Couldn't receive {0}'s answer. Check your internet connection (error {1}). Try asking again.") \
+    X(ErrInterrupted, L"The connection to {0} was interrupted. This answer is incomplete (error {1}). Try asking again.") \
+    X(ErrInterruptedBy, L"{0} interrupted this answer: {1}") \
+    X(ErrUnreadable, L"{0} returned an unreadable response. Try asking again.") \
+    X(ErrOutputLimit, L"{0} reached its output limit. This answer is incomplete. Try asking for a shorter answer.") \
+    X(ErrStoppedBecause, L"{0} stopped this answer ({1}). Try asking another way.") \
+    X(ErrUnconfirmed, L"{0} stopped before confirming that the answer was complete. Try asking again.") \
+    X(ErrNoAnswer, L"{0} didn't return an answer. Try asking another way.") \
+    X(ErrCouldntReach, L"Couldn't reach {0}. Check your internet connection (error {1}).") \
+    X(ErrStreaming, L"{0} returned a streaming error.") \
+    X(LensSearching, L"Searching with Google Lens…") \
+    X(LensUploadFailed, L"Couldn't upload automatically. The image is on your clipboard: paste it at lens.google.com.")
+
+enum class Str : uint16_t {
+#define X(id, text) id,
+    MAGIC_POINTER_TEXTS(X)
+#undef X
+    Count
+};
+
+const PCWSTR kEnglishTexts[] = {
+#define X(id, text) text,
+    MAGIC_POINTER_TEXTS(X)
+#undef X
+};
+
+static_assert(ARRAYSIZE(kEnglishTexts) == static_cast<size_t>(Str::Count));
+
+struct TextEntry {
+    Str id;
+    PCWSTR text;
+};
+
+struct LanguageInfo {
+    PCWSTR code;
+    PCWSTR english;
+    PCWSTR native;
+    bool rtl;
+    bool spaceless;
+    const TextEntry* texts;
+    size_t textCount;
+};
+
+const LanguageInfo* GetLanguages(size_t& count);
+
+struct ActiveLanguage {
+    const LanguageInfo* info;
+    std::vector<PCWSTR> texts;
+};
+
+std::mutex g_languageMutex;
+std::vector<std::unique_ptr<ActiveLanguage>> g_languageCache;
+std::atomic<const ActiveLanguage*> g_language{nullptr};
+std::atomic<bool> g_languageChosen{false};
+
+const LanguageInfo* FindLanguage(const std::wstring& code) {
+    size_t count = 0;
+    const LanguageInfo* languages = GetLanguages(count);
+    for (size_t i = 0; i < count; i++) {
+        if (_wcsicmp(languages[i].code, code.c_str()) == 0) {
+            return &languages[i];
+        }
+    }
+    return nullptr;
+}
+
+const LanguageInfo* FindLanguageByEnglishName(const std::wstring& name) {
+    size_t count = 0;
+    const LanguageInfo* languages = GetLanguages(count);
+    for (size_t i = 0; i < count; i++) {
+        if (_wcsicmp(languages[i].english, name.c_str()) == 0) {
+            return &languages[i];
+        }
+    }
+    return nullptr;
+}
+
+const LanguageInfo* LanguageFromTag(std::wstring tag) {
+    for (wchar_t& c : tag) {
+        c = c >= L'A' && c <= L'Z' ? static_cast<wchar_t>(c + (L'a' - L'A')) : c;
+    }
+    const size_t dash = tag.find(L'-');
+    const std::wstring primary = tag.substr(0, dash);
+    const std::wstring region =
+        dash == std::wstring::npos ? std::wstring() : tag.substr(dash);
+    if (primary == L"zh") {
+        const bool traditional = region.find(L"hant") != std::wstring::npos ||
+                                 region.find(L"-tw") != std::wstring::npos ||
+                                 region.find(L"-hk") != std::wstring::npos ||
+                                 region.find(L"-mo") != std::wstring::npos;
+        return FindLanguage(traditional ? L"zh-TW" : L"zh-CN");
+    }
+    if (primary == L"pt") {
+        return FindLanguage(L"pt-BR");
+    }
+    if (primary == L"no" || primary == L"nn") {
+        return FindLanguage(L"nb");
+    }
+    if (primary == L"iw") {
+        return FindLanguage(L"he");
+    }
+    return FindLanguage(primary);
+}
+
+const LanguageInfo* WindowsLanguage() {
+    ULONG count = 0;
+    ULONG size = 0;
+    if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &count, nullptr, &size) &&
+        size > 0) {
+        std::vector<WCHAR> names(size);
+        if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &count, names.data(),
+                                        &size)) {
+            for (const WCHAR* name = names.data(); *name; name += wcslen(name) + 1) {
+                if (const LanguageInfo* info = LanguageFromTag(name)) {
+                    return info;
+                }
+            }
+        }
+    }
+    WCHAR name[LOCALE_NAME_MAX_LENGTH]{};
+    if (LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT), name,
+                         ARRAYSIZE(name), 0)) {
+        if (const LanguageInfo* info = LanguageFromTag(name)) {
+            return info;
+        }
+    }
+    return FindLanguage(L"en");
+}
+
+const ActiveLanguage* ActivateLanguage(const LanguageInfo* info) {
+    std::lock_guard<std::mutex> lock(g_languageMutex);
+    for (const auto& cached : g_languageCache) {
+        if (cached->info == info) {
+            return cached.get();
+        }
+    }
+    auto language = std::make_unique<ActiveLanguage>();
+    language->info = info;
+    language->texts.assign(static_cast<size_t>(Str::Count), nullptr);
+    for (size_t i = 0; i < info->textCount; i++) {
+        language->texts[static_cast<size_t>(info->texts[i].id)] = info->texts[i].text;
+    }
+    g_languageCache.push_back(std::move(language));
+    return g_languageCache.back().get();
+}
+
+void SetLanguage(const std::wstring& setting) {
+    const LanguageInfo* info = nullptr;
+    if (!setting.empty() && _wcsicmp(setting.c_str(), L"auto") != 0) {
+        info = FindLanguage(setting);
+    }
+    g_languageChosen = info != nullptr;
+    if (!info) {
+        info = WindowsLanguage();
+    }
+    if (info) {
+        g_language.store(ActivateLanguage(info), std::memory_order_release);
+    }
+}
+
+PCWSTR Tr(Str id) {
+    const ActiveLanguage* language = g_language.load(std::memory_order_acquire);
+    const size_t index = static_cast<size_t>(id);
+    if (language && language->texts[index]) {
+        return language->texts[index];
+    }
+    return kEnglishTexts[index];
+}
+
+std::wstring TrFormat(Str id,
+                      const std::wstring& first,
+                      const std::wstring& second = {}) {
+    const std::wstring text = Tr(id);
+    std::wstring result;
+    for (size_t i = 0; i < text.size(); i++) {
+        if (text[i] == L'{' && i + 2 < text.size() && text[i + 2] == L'}' &&
+            (text[i + 1] == L'0' || text[i + 1] == L'1')) {
+            result += text[i + 1] == L'0' ? first : second;
+            i += 2;
+        } else {
+            result += text[i];
+        }
+    }
+    return result;
+}
+
+std::wstring JoinSentences(const std::wstring& first, const std::wstring& second) {
+    const ActiveLanguage* language = g_language.load(std::memory_order_acquire);
+    return language && language->info->spaceless ? first + second
+                                                 : first + L" " + second;
+}
+
+const LanguageInfo* CurrentLanguage() {
+    const ActiveLanguage* language = g_language.load(std::memory_order_acquire);
+    return language ? language->info : nullptr;
+}
+
+bool UiIsRtl() {
+    const LanguageInfo* language = CurrentLanguage();
+    return language && language->rtl;
+}
+
+bool UiIsEnglish() {
+    const LanguageInfo* language = CurrentLanguage();
+    return !language || _wcsicmp(language->code, L"en") == 0;
+}
+
+bool StartsWithRtl(const std::wstring& text) {
+    constexpr size_t kLimit = 64;
+    WORD types[kLimit];
+    const size_t length = std::min(text.size(), kLimit);
+    if (length == 0 ||
+        !GetStringTypeW(CT_CTYPE2, text.c_str(), static_cast<int>(length), types)) {
+        return false;
+    }
+    for (size_t i = 0; i < length; i++) {
+        if (types[i] == C2_LEFTTORIGHT) {
+            return false;
+        }
+        if (types[i] == C2_RIGHTTOLEFT) {
+            return true;
+        }
+    }
+    return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1412,9 +3913,21 @@ class Surface {
         }
     }
 
+    void Swap(Surface& other) {
+        std::swap(dc_, other.dc_);
+        std::swap(bitmap_, other.bitmap_);
+        std::swap(oldBitmap_, other.oldBitmap_);
+        std::swap(bits_, other.bits_);
+        std::swap(width_, other.width_);
+        std::swap(height_, other.height_);
+        std::swap(stride_, other.stride_);
+        std::swap(capacityHeight_, other.capacityHeight_);
+    }
+
     bool Valid() const { return bits_ != nullptr; }
     int Width() const { return width_; }
     int Height() const { return height_; }
+    int Stride() const { return stride_; }
     HDC Dc() const { return dc_; }
     uint32_t* Row(int y) { return bits_ + static_cast<size_t>(y) * stride_; }
     const uint32_t* Row(int y) const {
@@ -2004,7 +4517,7 @@ class TextPainter {
         RECT rc{0, 0, std::max(maxWidth, 1), 0};
         DrawTextW(measureDc_, text.empty() ? L" " : text.c_str(),
                   text.empty() ? 1 : static_cast<int>(text.size()), &rc,
-                  flags | DT_CALCRECT | DT_NOPREFIX);
+                  flags | DT_CALCRECT | DT_NOPREFIX | ReadingOrder(text));
         SelectObject(measureDc_, old);
         return {rc.right - rc.left, rc.bottom - rc.top};
     }
@@ -2100,7 +4613,7 @@ class TextPainter {
         SetBkMode(dc, TRANSPARENT);
         OffsetRect(&layout, -clip.left, -clip.top);
         DrawTextW(dc, text.c_str(), static_cast<int>(text.size()), &layout,
-                  flags | DT_NOPREFIX);
+                  flags | DT_NOPREFIX | ReadingOrder(text));
         SelectObject(dc, old);
         GdiFlush();
 
@@ -2138,6 +4651,10 @@ class TextPainter {
     }
 
   private:
+    static UINT ReadingOrder(const std::wstring& text) {
+        return UiIsRtl() && StartsWithRtl(text) ? DT_RTLREADING : 0;
+    }
+
     void EnsureMeasureDc() {
         if (!measureDc_) {
             measureDc_ = CreateCompatibleDC(nullptr);
@@ -2306,7 +4823,7 @@ class LayeredWindow {
         visible_ = false;
     }
 
-    bool Present(Surface& surface, int x, int y, BYTE alpha) {
+    bool Present(Surface& surface, int x, int y, BYTE alpha, const RECT* dirty = nullptr) {
         if (!hwnd_ || !surface.Valid()) {
             return false;
         }
@@ -2315,8 +4832,13 @@ class LayeredWindow {
         POINT src{0, 0};
         BLENDFUNCTION blend{AC_SRC_OVER, 0, alpha, AC_SRC_ALPHA};
         GdiFlush();  // Finish GDI text/drawing before uploading the DIB pixels.
-        if (!UpdateLayeredWindow(hwnd_, nullptr, &dst, &size, surface.Dc(),
-                                 &src, 0, &blend, ULW_ALPHA)) {
+        const bool partial = dirty && x == x_ && y == y_ && size.cx == width_ &&
+                             size.cy == height_ && alpha == alpha_;
+        UPDATELAYEREDWINDOWINFO info{sizeof(info), nullptr, &dst, &size, surface.Dc(),
+                                     &src, 0, &blend, ULW_ALPHA, dirty};
+        if (!(partial ? UpdateLayeredWindowIndirect(hwnd_, &info)
+                      : UpdateLayeredWindow(hwnd_, nullptr, &dst, &size, surface.Dc(),
+                                            &src, 0, &blend, ULW_ALPHA))) {
             return false;
         }
         x_ = x;
@@ -2373,6 +4895,13 @@ class LayeredWindow {
     void SetPosition(int x, int y) {
         x_ = x;
         y_ = y;
+    }
+    void AdoptPresented(int x, int y, int width, int height, BYTE alpha) {
+        x_ = x;
+        y_ = y;
+        width_ = width;
+        height_ = height;
+        alpha_ = alpha;
     }
 
   private:
@@ -2484,12 +5013,19 @@ void ConfigurePixelWindow(HWND hwnd, const Color* glass) {
     }
 }
 
-uint32_t SampleOpaqueSurface(const Surface& surface, float x, float y) {
-    x = std::clamp(x, 0.0f, static_cast<float>(surface.Width() - 1));
-    y = std::clamp(y, 0.0f, static_cast<float>(surface.Height() - 1));
+struct OpaquePixels {
+    const uint32_t* pixels;
+    int width;
+    int height;
+    int stride;
+};
+
+inline uint32_t SampleOpaquePixels(const OpaquePixels& image, float x, float y) {
+    x = std::clamp(x, 0.0f, static_cast<float>(image.width - 1));
+    y = std::clamp(y, 0.0f, static_cast<float>(image.height - 1));
     const int x0 = static_cast<int>(x), y0 = static_cast<int>(y);
-    const int x1 = std::min(x0 + 1, surface.Width() - 1);
-    const int y1 = std::min(y0 + 1, surface.Height() - 1);
+    const int x1 = std::min(x0 + 1, image.width - 1);
+    const int y1 = std::min(y0 + 1, image.height - 1);
     const uint32_t fx = static_cast<uint32_t>((x - x0) * 256.0f + 0.5f);
     const uint32_t fy = static_cast<uint32_t>((y - y0) * 256.0f + 0.5f);
     auto lerp = [](uint32_t a, uint32_t b, uint32_t weight) {
@@ -2499,8 +5035,9 @@ uint32_t SampleOpaqueSurface(const Surface& surface, float x, float y) {
                              (b & 0x0000FF00) * weight) >> 8) & 0x0000FF00;
         return 0xFF000000 | rb | g;
     };
-    return lerp(lerp(surface.Row(y0)[x0], surface.Row(y0)[x1], fx),
-                lerp(surface.Row(y1)[x0], surface.Row(y1)[x1], fx), fy);
+    const uint32_t* row0 = image.pixels + static_cast<size_t>(y0) * image.stride;
+    const uint32_t* row1 = image.pixels + static_cast<size_t>(y1) * image.stride;
+    return lerp(lerp(row0[x0], row0[x1], fx), lerp(row1[x0], row1[x1], fx), fy);
 }
 
 Color GlassTint(bool dark) {
@@ -2959,11 +5496,542 @@ void RenderPointer(const PointerFrame& f,
     }
 }
 
-HCURSOR CreatePointerCursor(const PointerFrame& frame) {
-    std::vector<uint32_t> pixels;
-    int width, height, hotX, hotY;
-    RenderPointer(frame, pixels, width, height, hotX, hotY);
+std::wstring ExpandVariables(const std::wstring& text);
 
+struct CursorImage {
+    int width = 0;
+    int height = 0;
+    int hotX = 0;
+    int hotY = 0;
+    std::vector<uint32_t> pixels;
+};
+
+struct CursorEntry {
+    int width;
+    int height;
+    int bits;
+    int hotX;
+    int hotY;
+    size_t offset;
+    size_t size;
+};
+
+struct CursorStep {
+    size_t frame;
+    double end;
+};
+
+struct CursorFile {
+    std::vector<uint8_t> bytes;
+    std::vector<std::vector<CursorEntry>> frames;
+    std::vector<CursorStep> steps;
+};
+
+struct PreparedCursor {
+    int width = 0;
+    int height = 0;
+    int hotX = 0;
+    int hotY = 0;
+    std::vector<uint32_t> pixels;
+    std::vector<uint8_t> glow;
+    std::vector<uint8_t> hue;
+    RECT reach = {};
+};
+
+uint32_t ReadLe(const uint8_t* data, int count) {
+    uint32_t value = 0;
+    for (int i = 0; i < count; i++) {
+        value |= static_cast<uint32_t>(data[i]) << (8 * i);
+    }
+    return value;
+}
+
+bool ReadCursorEntries(const std::vector<uint8_t>& bytes,
+                       size_t begin,
+                       size_t end,
+                       std::vector<CursorEntry>& entries) {
+    static const uint8_t kPng[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+    if (end > bytes.size() || begin >= end || end - begin < 6) {
+        return false;
+    }
+    const uint8_t* base = bytes.data() + begin;
+    const size_t length = end - begin;
+    const uint32_t type = ReadLe(base + 2, 2);
+    const size_t count = ReadLe(base + 4, 2);
+    if (ReadLe(base, 2) != 0 || (type != 1 && type != 2) || count == 0 ||
+        count > 64 || 6 + 16 * count > length) {
+        return false;
+    }
+    for (size_t i = 0; i < count; i++) {
+        const uint8_t* record = base + 6 + 16 * i;
+        const size_t size = ReadLe(record + 8, 4);
+        const size_t offset = ReadLe(record + 12, 4);
+        if (size < 26 || offset > length || size > length - offset) {
+            continue;
+        }
+        const uint8_t* data = base + offset;
+        int64_t width;
+        int64_t height;
+        int bits = 32;
+        if (memcmp(data, kPng, sizeof(kPng)) == 0) {
+            width = (static_cast<int64_t>(data[16]) << 24) | (data[17] << 16) |
+                    (data[18] << 8) | data[19];
+            height = (static_cast<int64_t>(data[20]) << 24) | (data[21] << 16) |
+                     (data[22] << 8) | data[23];
+        } else if (ReadLe(data, 4) >= 40 && ReadLe(data, 4) <= 124 && ReadLe(data + 12, 2) == 1 &&
+                   (ReadLe(data + 16, 4) == BI_RGB || ReadLe(data + 16, 4) == BI_BITFIELDS)) {
+            int64_t rows = static_cast<int32_t>(ReadLe(data + 8, 4));
+            width = static_cast<int32_t>(ReadLe(data + 4, 4));
+            height = (rows < 0 ? -rows : rows) / 2;
+            bits = static_cast<int>(ReadLe(data + 14, 2));
+            if (bits != 1 && bits != 4 && bits != 8 && bits != 16 && bits != 24 && bits != 32) {
+                continue;
+            }
+        } else {
+            continue;
+        }
+        if (width < 1 || width > 512 || height < 1 || height > 512) {
+            continue;
+        }
+        const int w = static_cast<int>(width);
+        const int h = static_cast<int>(height);
+        const int hotX = type == 2 ? static_cast<int>(ReadLe(record + 4, 2)) : w / 2;
+        const int hotY = type == 2 ? static_cast<int>(ReadLe(record + 6, 2)) : h / 2;
+        entries.push_back({w, h, bits, std::min(hotX, w - 1), std::min(hotY, h - 1),
+                           begin + offset, size});
+    }
+    return !entries.empty();
+}
+
+bool ReadAnimatedCursor(CursorFile& file) {
+    const std::vector<uint8_t>& bytes = file.bytes;
+    uint32_t defaultRate = 6;
+    std::vector<uint32_t> rates;
+    std::vector<uint32_t> sequence;
+    size_t position = 12;
+    while (position + 8 <= bytes.size()) {
+        const uint8_t* chunk = bytes.data() + position;
+        const size_t body = position + 8;
+        const size_t size = std::min<size_t>(ReadLe(chunk + 4, 4), bytes.size() - body);
+        if (memcmp(chunk, "anih", 4) == 0 && size >= 36) {
+            defaultRate = ReadLe(bytes.data() + body + 28, 4);
+        } else if (memcmp(chunk, "rate", 4) == 0 || memcmp(chunk, "seq ", 4) == 0) {
+            std::vector<uint32_t>& list = chunk[0] == 'r' ? rates : sequence;
+            for (size_t i = 0; i + 4 <= size && list.size() < 4096; i += 4) {
+                list.push_back(ReadLe(bytes.data() + body + i, 4));
+            }
+        } else if (memcmp(chunk, "LIST", 4) == 0 && size >= 4 &&
+                   memcmp(bytes.data() + body, "fram", 4) == 0) {
+            const size_t listEnd = body + size;
+            for (size_t sub = body + 4; sub + 8 <= listEnd && file.frames.size() < 512;) {
+                const size_t subSize =
+                    std::min<size_t>(ReadLe(bytes.data() + sub + 4, 4), listEnd - sub - 8);
+                if (memcmp(bytes.data() + sub, "icon", 4) == 0) {
+                    std::vector<CursorEntry> entries;
+                    ReadCursorEntries(bytes, sub + 8, sub + 8 + subSize, entries);
+                    file.frames.push_back(std::move(entries));
+                }
+                sub += 8 + subSize + (subSize & 1);
+            }
+        }
+        position = body + size + (size & 1);
+    }
+    const size_t count = sequence.empty() ? file.frames.size() : sequence.size();
+    double end = 0;
+    for (size_t i = 0; i < count; i++) {
+        const size_t frame = sequence.empty() ? i : sequence[i];
+        if (frame >= file.frames.size() || file.frames[frame].empty()) {
+            continue;
+        }
+        end += std::clamp<uint32_t>(i < rates.size() ? rates[i] : defaultRate, 1, 600) *
+               (1000.0 / 60.0);
+        file.steps.push_back({frame, end});
+    }
+    return !file.steps.empty();
+}
+
+bool ReadCursorFile(CursorFile& file) {
+    const std::vector<uint8_t>& bytes = file.bytes;
+    if (bytes.size() > 12 && memcmp(bytes.data(), "RIFF", 4) == 0 &&
+        memcmp(bytes.data() + 8, "ACON", 4) == 0) {
+        return ReadAnimatedCursor(file);
+    }
+    std::vector<CursorEntry> entries;
+    if (!ReadCursorEntries(bytes, 0, bytes.size(), entries)) {
+        return false;
+    }
+    file.frames.push_back(std::move(entries));
+    file.steps.push_back({0, 1000.0});
+    return true;
+}
+
+std::shared_ptr<const CursorFile> LoadCustomCursor(const std::wstring& setting) {
+    std::wstring path = Trim(setting);
+    if (path.size() > 1 && path.front() == L'"' && path.back() == L'"') {
+        path = Trim(path.substr(1, path.size() - 2));
+    }
+    if (path.empty()) {
+        return nullptr;
+    }
+    path = ExpandVariables(path);
+    HANDLE handle = CreateFileW(path.c_str(), GENERIC_READ,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+        Wh_Log(L"Couldn't open the custom cursor %s (error %u)", path.c_str(), GetLastError());
+        return nullptr;
+    }
+    auto file = std::make_shared<CursorFile>();
+    LARGE_INTEGER size{};
+    bool loaded = GetFileSizeEx(handle, &size) && size.QuadPart >= 22 &&
+                  size.QuadPart <= 16 * 1024 * 1024;
+    if (loaded) {
+        DWORD read = 0;
+        file->bytes.resize(static_cast<size_t>(size.QuadPart));
+        loaded = ReadFile(handle, file->bytes.data(), static_cast<DWORD>(size.QuadPart), &read,
+                          nullptr) &&
+                 read == size.QuadPart;
+    }
+    CloseHandle(handle);
+    if (!loaded) {
+        Wh_Log(L"Couldn't read the custom cursor %s", path.c_str());
+        return nullptr;
+    }
+    if (!ReadCursorFile(*file)) {
+        Wh_Log(L"%s isn't a cursor file Magic Pointer can use", path.c_str());
+        return nullptr;
+    }
+    Wh_Log(L"Custom cursor %s: %d frame(s), %d step(s)", path.c_str(),
+           static_cast<int>(file->frames.size()), static_cast<int>(file->steps.size()));
+    return file;
+}
+
+bool DecodeCursorEntry(const CursorFile& file, const CursorEntry& entry, CursorImage& image) {
+    HICON icon = CreateIconFromResourceEx(
+        const_cast<PBYTE>(file.bytes.data() + entry.offset), static_cast<DWORD>(entry.size), TRUE,
+        0x00030000, entry.width, entry.height, LR_DEFAULTCOLOR);
+    if (!icon) {
+        return false;
+    }
+    ICONINFO info{};
+    BITMAP bitmap{};
+    bool ok = GetIconInfo(icon, &info) &&
+              GetObjectW(info.hbmColor ? info.hbmColor : info.hbmMask, sizeof(bitmap), &bitmap);
+    const int width = bitmap.bmWidth;
+    const int height = info.hbmColor ? bitmap.bmHeight : bitmap.bmHeight / 2;
+    ok = ok && width > 0 && height > 0 && width <= 1024 && height <= 1024;
+    HDC dc = ok ? GetDC(nullptr) : nullptr;
+    ok = ok && dc;
+    auto read = [&](HBITMAP source, int rows, std::vector<uint32_t>& out) {
+        BITMAPINFO format{};
+        format.bmiHeader.biSize = sizeof(format.bmiHeader);
+        format.bmiHeader.biWidth = width;
+        format.bmiHeader.biHeight = -rows;
+        format.bmiHeader.biPlanes = 1;
+        format.bmiHeader.biBitCount = 32;
+        format.bmiHeader.biCompression = BI_RGB;
+        out.assign(static_cast<size_t>(width) * rows, 0);
+        return GetDIBits(dc, source, 0, rows, out.data(), &format, DIB_RGB_COLORS) == rows;
+    };
+    std::vector<uint32_t> color;
+    std::vector<uint32_t> mask;
+    if (ok) {
+        ok = info.hbmColor ? read(info.hbmColor, height, color) && read(info.hbmMask, height, mask)
+                           : read(info.hbmMask, height * 2, mask);
+    }
+    if (ok) {
+        image.width = width;
+        image.height = height;
+        image.hotX = std::clamp(entry.hotX * width / entry.width, 0, width - 1);
+        image.hotY = std::clamp(entry.hotY * height / entry.height, 0, height - 1);
+        image.pixels.assign(static_cast<size_t>(width) * height, 0);
+        const bool alpha = info.hbmColor && entry.bits == 32 && bitmap.bmBitsPixel == 32 &&
+                           std::any_of(color.begin(), color.end(),
+                                       [](uint32_t pixel) { return (pixel >> 24) != 0; });
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                const size_t i = static_cast<size_t>(y) * width + x;
+                uint32_t pixel;
+                if (!info.hbmColor) {
+                    const bool andBit = (mask[i] & 0xFFFFFF) != 0;
+                    const bool xorBit = (mask[i + static_cast<size_t>(height) * width] & 0xFFFFFF) != 0;
+                    pixel = andBit && !xorBit ? 0 : xorBit ? 0xFFFFFFFFu : 0xFF000000u;
+                } else if (alpha) {
+                    pixel = color[i];
+                } else {
+                    const uint32_t rgb = color[i] & 0xFFFFFF;
+                    pixel = (mask[i] & 0xFFFFFF) && !rgb ? 0 : 0xFF000000u | rgb;
+                }
+                image.pixels[i] = pixel;
+            }
+        }
+    }
+    if (dc) {
+        ReleaseDC(nullptr, dc);
+    }
+    if (info.hbmColor) {
+        DeleteObject(info.hbmColor);
+    }
+    if (info.hbmMask) {
+        DeleteObject(info.hbmMask);
+    }
+    DestroyIcon(icon);
+    return ok;
+}
+
+std::vector<std::vector<std::pair<int, float>>> ResizeTaps(int from, int to) {
+    std::vector<std::vector<std::pair<int, float>>> taps(to);
+    const double ratio = static_cast<double>(from) / to;
+    for (int i = 0; i < to; i++) {
+        if (ratio > 1.0) {
+            const double low = i * ratio;
+            const double high = (i + 1) * ratio;
+            for (int j = static_cast<int>(low); j < from && j < high; j++) {
+                taps[i].push_back(
+                    {j, static_cast<float>(std::min<double>(high, j + 1) - std::max<double>(low, j))});
+            }
+        } else {
+            const double center = (i + 0.5) * ratio - 0.5;
+            const int first = static_cast<int>(floor(center));
+            const float fraction = static_cast<float>(center - first);
+            taps[i].push_back({std::clamp(first, 0, from - 1), 1.0f - fraction});
+            taps[i].push_back({std::clamp(first + 1, 0, from - 1), fraction});
+        }
+    }
+    return taps;
+}
+
+std::vector<uint32_t> ResampleCursorImage(const CursorImage& image, int width, int height) {
+    std::vector<float> source(image.pixels.size() * 4);
+    for (size_t i = 0; i < image.pixels.size(); i++) {
+        const uint32_t pixel = image.pixels[i];
+        const float alpha = static_cast<float>(pixel >> 24);
+        source[i * 4] = ((pixel >> 16) & 255) * alpha / 255.0f;
+        source[i * 4 + 1] = ((pixel >> 8) & 255) * alpha / 255.0f;
+        source[i * 4 + 2] = (pixel & 255) * alpha / 255.0f;
+        source[i * 4 + 3] = alpha;
+    }
+    const auto columns = ResizeTaps(image.width, width);
+    const auto rows = ResizeTaps(image.height, height);
+    std::vector<float> across(static_cast<size_t>(width) * image.height * 4);
+    for (int y = 0; y < image.height; y++) {
+        for (int x = 0; x < width; x++) {
+            float sum[4] = {};
+            float total = 0;
+            for (const auto& tap : columns[x]) {
+                const float* from = &source[(static_cast<size_t>(y) * image.width + tap.first) * 4];
+                for (int c = 0; c < 4; c++) {
+                    sum[c] += from[c] * tap.second;
+                }
+                total += tap.second;
+            }
+            for (int c = 0; c < 4; c++) {
+                across[(static_cast<size_t>(y) * width + x) * 4 + c] = sum[c] / total;
+            }
+        }
+    }
+    std::vector<uint32_t> out(static_cast<size_t>(width) * height);
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            float sum[4] = {};
+            float total = 0;
+            for (const auto& tap : rows[y]) {
+                const float* from = &across[(static_cast<size_t>(tap.first) * width + x) * 4];
+                for (int c = 0; c < 4; c++) {
+                    sum[c] += from[c] * tap.second;
+                }
+                total += tap.second;
+            }
+            const uint32_t alpha = static_cast<uint32_t>(std::clamp(sum[3] / total, 0.0f, 255.0f) + 0.5f);
+            auto channel = [&](int c) {
+                return std::min(alpha, static_cast<uint32_t>(std::clamp(sum[c] / total, 0.0f, 255.0f) + 0.5f));
+            };
+            out[static_cast<size_t>(y) * width + x] =
+                (alpha << 24) | (channel(0) << 16) | (channel(1) << 8) | channel(2);
+        }
+    }
+    return out;
+}
+
+std::vector<float> SquaredDistanceToMask(const std::vector<uint8_t>& inside, int width, int height) {
+    constexpr float kFar = 1e20f;
+    const int longest = std::max(width, height);
+    std::vector<float> squared(static_cast<size_t>(width) * height);
+    std::vector<float> line(longest);
+    std::vector<float> result(longest);
+    std::vector<float> bounds(longest + 1);
+    std::vector<int> vertex(longest);
+    auto transform = [&](int count) {
+        int k = 0;
+        vertex[0] = 0;
+        bounds[0] = -kFar;
+        bounds[1] = kFar;
+        for (int q = 1; q < count; q++) {
+            float cross;
+            for (;;) {
+                const int p = vertex[k];
+                cross = ((line[q] + static_cast<float>(q) * q) - (line[p] + static_cast<float>(p) * p)) /
+                        (2.0f * (q - p));
+                if (k == 0 || cross > bounds[k]) {
+                    break;
+                }
+                k--;
+            }
+            k++;
+            vertex[k] = q;
+            bounds[k] = cross;
+            bounds[k + 1] = kFar;
+        }
+        k = 0;
+        for (int q = 0; q < count; q++) {
+            while (bounds[k + 1] < q) {
+                k++;
+            }
+            result[q] = static_cast<float>(q - vertex[k]) * (q - vertex[k]) + line[vertex[k]];
+        }
+    };
+    for (int x = 0; x < width; x++) {
+        for (int y = 0; y < height; y++) {
+            line[y] = inside[static_cast<size_t>(y) * width + x] ? 0.0f : kFar;
+        }
+        transform(height);
+        for (int y = 0; y < height; y++) {
+            squared[static_cast<size_t>(y) * width + x] = result[y];
+        }
+    }
+    for (int y = 0; y < height; y++) {
+        std::copy_n(&squared[static_cast<size_t>(y) * width], width, line.begin());
+        transform(width);
+        std::copy_n(result.begin(), width, &squared[static_cast<size_t>(y) * width]);
+    }
+    return squared;
+}
+
+bool PrepareCursor(const CursorFile& file, size_t frame, float scale, PreparedCursor& out) {
+    const std::vector<CursorEntry>& entries = file.frames[frame];
+    if (entries.empty()) {
+        return false;
+    }
+    auto longest = [](const CursorEntry& entry) { return std::max(entry.width, entry.height); };
+    const CursorEntry& nominal = *std::min_element(
+        entries.begin(), entries.end(),
+        [&](const CursorEntry& a, const CursorEntry& b) { return longest(a) < longest(b); });
+    const float s = std::min(scale, 221.0f / longest(nominal));
+    const int width = std::max(1, static_cast<int>(lroundf(nominal.width * s)));
+    const int height = std::max(1, static_cast<int>(lroundf(nominal.height * s)));
+    const int wanted = std::max(width, height);
+    std::vector<const CursorEntry*> order;
+    for (const CursorEntry& entry : entries) {
+        order.push_back(&entry);
+    }
+    std::stable_sort(order.begin(), order.end(), [&](const CursorEntry* a, const CursorEntry* b) {
+        const bool aFits = longest(*a) >= wanted;
+        const bool bFits = longest(*b) >= wanted;
+        if (aFits != bFits) {
+            return aFits;
+        }
+        if (longest(*a) != longest(*b)) {
+            return aFits == (longest(*a) < longest(*b));
+        }
+        return a->bits > b->bits;
+    });
+    CursorImage image;
+    bool decoded = false;
+    for (size_t i = 0; i < order.size() && !decoded; i++) {
+        decoded = DecodeCursorEntry(file, *order[i], image);
+    }
+    if (!decoded) {
+        return false;
+    }
+
+    const int fullMargin = static_cast<int>(ceilf(kGlowWide * 3.2f * s));
+    const int margin = std::max(0, std::min(fullMargin, (253 - wanted) / 2));
+    out.width = width + margin * 2;
+    out.height = height + margin * 2;
+    out.hotX = margin + std::clamp(static_cast<int>(lroundf(image.hotX * static_cast<float>(width) / image.width)),
+                                   0, width - 1);
+    out.hotY = margin + std::clamp(static_cast<int>(lroundf(image.hotY * static_cast<float>(height) / image.height)),
+                                   0, height - 1);
+    const std::vector<uint32_t> picture = ResampleCursorImage(image, width, height);
+    const size_t total = static_cast<size_t>(out.width) * out.height;
+    out.pixels.assign(total, 0);
+    for (int y = 0; y < height; y++) {
+        std::copy_n(&picture[static_cast<size_t>(y) * width], width,
+                    &out.pixels[static_cast<size_t>(y + margin) * out.width + margin]);
+    }
+
+    uint32_t strongest = 0;
+    double sumX = 0;
+    double sumY = 0;
+    double sumAlpha = 0;
+    RECT bounds = {out.width, out.height, 0, 0};
+    for (int y = 0; y < out.height; y++) {
+        for (int x = 0; x < out.width; x++) {
+            const uint32_t alpha = out.pixels[static_cast<size_t>(y) * out.width + x] >> 24;
+            strongest = std::max(strongest, alpha);
+            sumAlpha += alpha;
+            sumX += alpha * (x + 0.5);
+            sumY += alpha * (y + 0.5);
+            if (alpha) {
+                bounds = {std::min<LONG>(bounds.left, x), std::min<LONG>(bounds.top, y),
+                          std::max<LONG>(bounds.right, x + 1), std::max<LONG>(bounds.bottom, y + 1)};
+            }
+        }
+    }
+    if (sumAlpha > 0) {
+        out.reach = {std::max(0, out.hotX - static_cast<int>(bounds.left)),
+                     std::max(0, out.hotY - static_cast<int>(bounds.top)),
+                     std::max(0, static_cast<int>(bounds.right) - out.hotX),
+                     std::max(0, static_cast<int>(bounds.bottom) - out.hotY)};
+    }
+    const float centerX = sumAlpha > 0 ? static_cast<float>(sumX / sumAlpha) : out.width * 0.5f;
+    const float centerY = sumAlpha > 0 ? static_cast<float>(sumY / sumAlpha) : out.height * 0.5f;
+    const uint32_t threshold = std::clamp<uint32_t>(strongest / 2, 1, 128);
+    std::vector<uint8_t> inside(total);
+    for (size_t i = 0; i < total; i++) {
+        inside[i] = (out.pixels[i] >> 24) >= threshold;
+    }
+    const std::vector<float> squared = SquaredDistanceToMask(inside, out.width, out.height);
+
+    const float tight = kGlowTight * s;
+    const float wide = kGlowWide * s;
+    const int levels = static_cast<int>(ceilf(wide * 13.6f)) + 2;
+    std::vector<float> falloff(levels);
+    for (int i = 0; i < levels; i++) {
+        const float d = i * 0.25f;
+        falloff[i] =
+            Clamp01(0.38f * expf(-0.5f * d * d / (tight * tight)) + 0.68f * SoftCoverage(d, wide)) * 255.0f;
+    }
+    const float limit = (levels - 1) / 4.0f + 0.5f;
+    out.glow.assign(total, 0);
+    out.hue.assign(total, 0);
+    for (int y = 0; y < out.height; y++) {
+        for (int x = 0; x < out.width; x++) {
+            const size_t i = static_cast<size_t>(y) * out.width + x;
+            if (squared[i] < limit * limit) {
+                const float position = std::max(0.0f, sqrtf(squared[i]) - 0.5f) * 4.0f;
+                const int index = std::min(levels - 2, static_cast<int>(position));
+                float value = falloff[index] + (falloff[index + 1] - falloff[index]) * std::min(1.0f, position - index);
+                if (margin < fullMargin) {
+                    const float edge = std::min(std::min(x + 0.5f, out.width - x - 0.5f),
+                                                std::min(y + 0.5f, out.height - y - 0.5f));
+                    const float u = Clamp01(edge / std::max(margin, 1));
+                    value *= u * u * (3.0f - 2.0f * u);
+                }
+                out.glow[i] = static_cast<uint8_t>(value + 0.5f);
+            }
+            const float turn = FastAtan2(y + 0.5f - centerY, x + 0.5f - centerX) / (2.0f * kPi);
+            out.hue[i] = static_cast<uint8_t>(static_cast<int>((turn + 1.0f) * 256.0f) & 255);
+        }
+    }
+    return true;
+}
+
+HCURSOR CursorFromPixels(const uint32_t* pixels,
+                         int width,
+                         int height,
+                         int hotX,
+                         int hotY) {
     BITMAPINFO info{};
     info.bmiHeader.biSize = sizeof(info.bmiHeader);
     info.bmiHeader.biWidth = width;
@@ -2982,7 +6050,7 @@ HCURSOR CreatePointerCursor(const PointerFrame& frame) {
     }
 
     uint32_t* out = static_cast<uint32_t*>(bits);
-    for (size_t i = 0; i < pixels.size(); i++) {
+    for (size_t i = 0; i < static_cast<size_t>(width) * height; i++) {
         const uint32_t p = pixels[i];
         const uint32_t a = p >> 24;
         if (!a) {
@@ -3020,9 +6088,53 @@ HCURSOR CreatePointerCursor(const PointerFrame& frame) {
     return cursor;
 }
 
+HCURSOR CreatePointerCursor(const PointerFrame& frame) {
+    std::vector<uint32_t> pixels;
+    int width, height, hotX, hotY;
+    RenderPointer(frame, pixels, width, height, hotX, hotY);
+    return CursorFromPixels(pixels.data(), width, height, hotX, hotY);
+}
+
+HCURSOR RenderCustomCursor(const PreparedCursor& frame, float glow, float phase) {
+    uint32_t colors[256];
+    for (int i = 0; i < 256; i++) {
+        colors[i] = PackPremultiplied(g_glow.At(i / 256.0f), 1.0f);
+    }
+    const int shift = static_cast<int>(lroundf(phase * 256.0f));
+    const uint32_t strength = static_cast<uint32_t>(Clamp01(glow) * 256.0f + 0.5f);
+    std::vector<uint32_t> pixels(frame.pixels.size());
+    for (size_t i = 0; i < pixels.size(); i++) {
+        uint32_t pixel = 0;
+        const uint32_t alpha = (frame.glow[i] * strength + 128) >> 8;
+        if (alpha) {
+            pixel = ScalePremultiplied(colors[g_glow.rainbow ? (frame.hue[i] + shift) & 255 : 0], alpha);
+        }
+        BlendOver(pixel, frame.pixels[i]);
+        pixels[i] = pixel;
+    }
+    return CursorFromPixels(pixels.data(), frame.width, frame.height, frame.hotX, frame.hotY);
+}
+
 class PointerCursors {
   public:
     ~PointerCursors() { Clear(); }
+
+    void SetCustom(std::shared_ptr<const CursorFile> file) {
+        Invalidate();
+        custom_ = std::move(file);
+    }
+
+    RECT Reach() const {
+        RECT reach{};
+        for (const auto& frame : prepared_) {
+            if (frame) {
+                reach = {std::max(reach.left, frame->reach.left), std::max(reach.top, frame->reach.top),
+                         std::max(reach.right, frame->reach.right),
+                         std::max(reach.bottom, frame->reach.bottom)};
+            }
+        }
+        return reach;
+    }
 
     void SetScale(float scale) {
         if (fabsf(scale - scale_) < 0.01f) {
@@ -3039,9 +6151,19 @@ class PointerCursors {
                 cursor = nullptr;
             }
         }
+        if (customCursor_) {
+            retired_.push_back(customCursor_);
+            customCursor_ = nullptr;
+        }
+        prepared_.clear();
+        customKey_ = -1;
     }
 
-    void StartPop(double now) { popStart_ = now; }
+    void StartPop(double now) {
+        popStart_ = now;
+        popFrameAt_ = -1e9;
+        animationStart_ = now;
+    }
 
     void ReleaseRetired(HCURSOR onScreen) {
         for (HCURSOR cursor : retired_) {
@@ -3053,14 +6175,25 @@ class PointerCursors {
     }
 
     HCURSOR Current(double now) {
+        if (custom_) {
+            if (HCURSOR cursor = CurrentCustom(now)) {
+                return cursor;
+            }
+        }
         const double loopT = fmod(now, kLoopMs) / kLoopMs;
         const double sincePop = now - popStart_;
         if (sincePop >= 0 && sincePop < kPopMs) {
+            if (transient_ && now - popFrameAt_ < popCostMs_ * 2.0) {
+                return transient_;
+            }
             PointerFrame frame{scale_, static_cast<float>(loopT),
                                static_cast<float>(sincePop / kPopMs),
                                static_cast<float>(EaseOutCubic(sincePop / 260.0)),
                                static_cast<float>(loopT)};
+            const double started = NowMs();
             if (HCURSOR cursor = CreatePointerCursor(frame)) {
+                popCostMs_ = NowMs() - started;
+                popFrameAt_ = now;
                 if (transient_) {
                     retired_.push_back(transient_);
                 }
@@ -3100,6 +6233,12 @@ class PointerCursors {
             DestroyCursor(transient_);
             transient_ = nullptr;
         }
+        if (customCursor_) {
+            DestroyCursor(customCursor_);
+            customCursor_ = nullptr;
+        }
+        prepared_.clear();
+        customKey_ = -1;
         for (HCURSOR cursor : retired_) {
             DestroyCursor(cursor);
         }
@@ -3111,17 +6250,75 @@ class PointerCursors {
     static constexpr double kLoopMs = kGlowPeriodMs;
     static constexpr double kPopMs = 420.0;
 
+    HCURSOR CurrentCustom(double now) {
+        const CursorFile& file = *custom_;
+        const double loopT = fmod(now, kLoopMs) / kLoopMs;
+        const double sincePop = now - popStart_;
+        const bool popping = sincePop >= 0 && sincePop < kPopMs;
+        const int glowIndex = static_cast<int>(loopT * kLoopFrames) % kLoopFrames;
+        const double position = fmod(std::max(0.0, now - animationStart_), file.steps.back().end);
+        const size_t step = std::min<size_t>(
+            std::upper_bound(file.steps.begin(), file.steps.end(), position,
+                             [](double time, const CursorStep& candidate) { return time < candidate.end; }) -
+                file.steps.begin(),
+            file.steps.size() - 1);
+        const int64_t key = ((static_cast<int64_t>(step) * kLoopFrames + glowIndex) << 6) +
+                            (popping ? 1 + static_cast<int>(sincePop / 16.0) : 0);
+        if (customCursor_ && key == customKey_) {
+            return customCursor_;
+        }
+        const size_t frame = file.steps[step].frame;
+        if (prepared_.size() != file.frames.size()) {
+            prepared_.resize(file.frames.size());
+        }
+        if (!prepared_[frame]) {
+            size_t bytes = 0;
+            for (const auto& other : prepared_) {
+                bytes += other ? other->pixels.size() * 6 : 0;
+            }
+            if (bytes > 96 * 1024 * 1024) {
+                prepared_.clear();
+                prepared_.resize(file.frames.size());
+            }
+            auto prepared = std::make_unique<PreparedCursor>();
+            if (!PrepareCursor(file, frame, scale_, *prepared)) {
+                Wh_Log(L"Couldn't prepare the custom cursor");
+                custom_.reset();
+                return nullptr;
+            }
+            prepared_[frame] = std::move(prepared);
+        }
+        const float t = static_cast<float>(glowIndex) / kLoopFrames;
+        const float reveal = popping ? static_cast<float>(EaseOutCubic(sincePop / 260.0)) : 1.0f;
+        HCURSOR cursor = RenderCustomCursor(*prepared_[frame],
+                                            reveal * (0.62f + 0.38f * sinf(2.0f * kPi * t)), t);
+        if (!cursor) {
+            return nullptr;
+        }
+        if (customCursor_) {
+            retired_.push_back(customCursor_);
+        }
+        customCursor_ = cursor;
+        customKey_ = key;
+        return cursor;
+    }
+
     HCURSOR loop_[kLoopFrames] = {};
     HCURSOR transient_ = nullptr;
     std::vector<HCURSOR> retired_;
     float scale_ = 1.0f;
     double popStart_ = -1e9;
+    double popFrameAt_ = -1e9;
+    double popCostMs_ = 0;
+    std::shared_ptr<const CursorFile> custom_;
+    std::vector<std::unique_ptr<PreparedCursor>> prepared_;
+    HCURSOR customCursor_ = nullptr;
+    int64_t customKey_ = -1;
+    double animationStart_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 // The hint next to the pointer
-
-constexpr WCHAR kHintText[] = L"Select anything to ask Gemini";
 
 class HintPill {
   public:
@@ -3143,6 +6340,8 @@ class HintPill {
         panel_.PresentUnderlay(underlay_, margin_, 0);
         panel_.Show(false);
     }
+
+    void SetReach(const RECT& reach) { reach_ = reach; }
 
     void Follow(POINT cursor) {
         if (state_ != State::Hidden) {
@@ -3208,8 +6407,10 @@ class HintPill {
         const float s = scale_;
         const bool dark = panel_.Dark();
         HFONT font = g_fonts.Get(static_cast<int>(lroundf(13.5f * s)), FW_SEMIBOLD);
-        const int textWidth = text_.Width(font, kHintText,
-                                          static_cast<int>(wcslen(kHintText)));
+        const std::wstring hint = TrFormat(
+            g_settings.typeToAsk ? Str::HintTextTyping : Str::HintText, AssistantName());
+        const int textWidth =
+            text_.Width(font, hint.c_str(), static_cast<int>(hint.size()));
         width_ = static_cast<int>(ceilf((10 + 18 + 8 + 14) * s)) + textWidth;
         height_ = static_cast<int>(ceilf(34 * s));
         margin_ = static_cast<int>(ceilf(84 * s));
@@ -3221,7 +6422,7 @@ class HintPill {
         FillSparkleGradient(foreground, (10 + 9) * s, height_ * 0.5f, 7.5f * s,
                             0.0f, 0.05f);
         const RECT textRect{static_cast<LONG>((10 + 18 + 8) * s), 0, width_, height_};
-        text_.Draw(foreground, font, kHintText, textRect,
+        text_.Draw(foreground, font, hint, textRect,
                    DT_SINGLELINE | DT_VCENTER | DT_LEFT,
                    dark ? WithAlpha(kWhite, 0.96f) : WithAlpha(kBlack, 0.88f));
         PaintPanelBase(content_, panel_, s);
@@ -3236,13 +6437,16 @@ class HintPill {
 
     POINT Placement(POINT cursor) const {
         const RECT monitor = MonitorRectAt(cursor, false);
-        int x = cursor.x + static_cast<int>(26 * scale_);
-        int y = cursor.y + static_cast<int>(26 * scale_);
+        const auto clear = [&](int least, LONG reach) {
+            return std::max(static_cast<int>(least * scale_), static_cast<int>(reach + 6 * scale_));
+        };
+        int x = cursor.x + clear(26, reach_.right);
+        int y = cursor.y + clear(26, reach_.bottom);
         if (x + width_ > monitor.right) {
-            x = cursor.x - static_cast<int>(12 * scale_) - width_;
+            x = cursor.x - clear(12, reach_.left) - width_;
         }
         if (y + height_ > monitor.bottom) {
-            y = cursor.y - static_cast<int>(20 * scale_) - height_;
+            y = cursor.y - clear(20, reach_.top) - height_;
         }
         return {x, y};
     }
@@ -3258,6 +6462,7 @@ class HintPill {
     int margin_ = 0;
     double shownAt_ = 0;
     double fadeOutAt_ = 0;
+    RECT reach_{};
     State state_ = State::Hidden;
 };
 
@@ -3716,34 +6921,155 @@ RippleWave EvaluateRippleWave(float distance, float sigma, float strength) {
             0.055f * envelope};
 }
 
+extern std::atomic<bool> g_stopping;
+extern std::atomic<int> g_helperThreads;
+
+float MonitorFrameMs(const RECT& monitor) {
+    const POINT center{(monitor.left + monitor.right) / 2, (monitor.top + monitor.bottom) / 2};
+    MONITORINFOEXW info{};
+    info.cbSize = sizeof(info);
+    DEVMODEW mode{};
+    mode.dmSize = sizeof(mode);
+    if (GetMonitorInfoW(MonitorFromPoint(center, MONITOR_DEFAULTTONEAREST), &info) &&
+        EnumDisplaySettingsW(info.szDevice, ENUM_CURRENT_SETTINGS, &mode) &&
+        mode.dmDisplayFrequency > 1) {
+        return 1000.0f / static_cast<float>(std::clamp<DWORD>(mode.dmDisplayFrequency, 60, 144));
+    }
+    return 1000.0f / 60.0f;
+}
+
+struct RippleCapture {
+    Surface snapshot;
+    Surface canvas;
+    RECT monitor{};
+    int centerY = 0;
+    HWND window = nullptr;
+    HWND notify = nullptr;
+    std::atomic<float> frameMs{1000.0f / 60.0f};
+    std::atomic<bool> canceled{false};
+    std::atomic<bool> warming{false};
+    std::atomic<bool> warmed{false};
+    std::atomic<int> top{0};
+    std::atomic<int> bottom{0};
+};
+
+struct RippleCaptureMessage {
+    std::shared_ptr<RippleCapture> capture;
+    bool first = false;
+    bool complete = false;
+    bool failed = false;
+};
+
+std::vector<std::pair<int, int>> PlanRippleStripes(int width, int height, int centerY) {
+    std::vector<std::pair<int, int>> stripes;
+    const int rows = std::max(64, 2200000 / std::max(width, 1));
+    if (height <= rows) {
+        stripes.push_back({0, height});
+        return stripes;
+    }
+    int top = std::clamp(centerY - rows / 2, 0, height - rows);
+    int bottom = top + rows;
+    stripes.push_back({top, bottom});
+    while (top > 0 || bottom < height) {
+        if (top > 0) {
+            const int count = std::min(rows, top);
+            stripes.push_back({top - count, top});
+            top -= count;
+        }
+        if (bottom < height) {
+            const int count = std::min(rows, height - bottom);
+            stripes.push_back({bottom, bottom + count});
+            bottom += count;
+        }
+    }
+    return stripes;
+}
+
+DWORD WINAPI RippleCaptureThreadProc(LPVOID param) {
+    std::unique_ptr<std::shared_ptr<RippleCapture>> holder(
+        static_cast<std::shared_ptr<RippleCapture>*>(param));
+    const std::shared_ptr<RippleCapture> capture = *holder;
+    const int width = capture->monitor.right - capture->monitor.left;
+    const int height = capture->monitor.bottom - capture->monitor.top;
+    auto stopped = [&] { return capture->canceled.load() || g_stopping.load(); };
+    auto post = [&](bool first, bool complete, bool failed) {
+        auto message = std::make_unique<RippleCaptureMessage>();
+        message->capture = capture;
+        message->first = first;
+        message->complete = complete;
+        message->failed = failed;
+        PostOwned(capture->notify, WM_APP_RIPPLE, std::move(message));
+    };
+
+    capture->frameMs = MonitorFrameMs(capture->monitor);
+    bool ok = capture->snapshot.Resize(width, height) && capture->canvas.Resize(width, height);
+    HDC screen = ok ? GetDC(nullptr) : nullptr;
+    ok = ok && screen;
+    if (ok) {
+        capture->warming = true;
+        if (!stopped()) {
+            POINT destination{capture->monitor.left, capture->monitor.top};
+            SIZE size{width, height};
+            POINT source{0, 0};
+            BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+            capture->warmed = UpdateLayeredWindow(capture->window, nullptr, &destination, &size,
+                                                  capture->canvas.Dc(), &source, 0, &blend,
+                                                  ULW_ALPHA) != FALSE;
+        }
+        capture->warming = false;
+    }
+    const auto stripes = PlanRippleStripes(width, height, capture->centerY);
+    int top = 0;
+    int bottom = 0;
+    for (size_t i = 0; ok && i < stripes.size() && !stopped(); i++) {
+        const int begin = stripes[i].first;
+        const int end = stripes[i].second;
+        if (!BitBlt(capture->snapshot.Dc(), 0, begin, width, end - begin, screen,
+                    capture->monitor.left, capture->monitor.top + begin,
+                    SRCCOPY | CAPTUREBLT)) {
+            ok = false;
+            break;
+        }
+        GdiFlush();
+        if (i == 0) {
+            top = begin;
+            bottom = end;
+        } else if (end == top) {
+            top = begin;
+        } else {
+            bottom = end;
+        }
+        capture->top.store(top, std::memory_order_release);
+        capture->bottom.store(bottom, std::memory_order_release);
+        const bool last = i + 1 == stripes.size();
+        if (i == 0 || last) {
+            post(i == 0, last, false);
+        }
+    }
+    if (screen) {
+        ReleaseDC(nullptr, screen);
+    }
+    if (!ok && !stopped()) {
+        post(false, true, true);
+    }
+    g_helperThreads--;
+    return 0;
+}
+
 class Ripple {
   public:
     static constexpr double kDurationMs = 1650.0;
 
-    void Start(POINT center, float scale, double now) {
+    bool Prepare(POINT center, float scale, HWND notify) {
         Stop();
         if (!window_.Hwnd() && !window_.Create(true, false, kLayerWindowClass, nullptr)) {
-            return;
+            return false;
         }
         monitor_ = MonitorRectAt(center, false);
         const int w = monitor_.right - monitor_.left;
         const int h = monitor_.bottom - monitor_.top;
-        if (w <= 0 || h <= 0 || !surface_.Resize(w, h)) {
-            Stop();
-            return;
-        }
-        if (snapshot_.Resize(w, h)) {
-            HDC screen = GetDC(nullptr);
-            const bool captured = screen && BitBlt(snapshot_.Dc(), 0, 0, w, h,
-                                                   screen, monitor_.left, monitor_.top,
-                                                   SRCCOPY | CAPTUREBLT);
-            GdiFlush();
-            if (screen) {
-                ReleaseDC(nullptr, screen);
-            }
-            if (!captured) {
-                snapshot_.Reset();
-            }
+        if (w <= 0 || h <= 0) {
+            return false;
         }
         center_ = {static_cast<float>(center.x - monitor_.left),
                    static_cast<float>(center.y - monitor_.top)};
@@ -3755,6 +7081,49 @@ class Ripple {
             farthest = std::max(farthest, hypotf(corner.x - center_.x, corner.y - center_.y));
         }
         maxRadius_ = farthest + 100.0f * scale;
+
+        auto capture = std::make_shared<RippleCapture>();
+        capture->monitor = monitor_;
+        capture->centerY = static_cast<int>(center_.y);
+        capture->window = window_.Hwnd();
+        capture->notify = notify;
+        auto* holder = new std::shared_ptr<RippleCapture>(capture);
+        g_helperThreads++;
+        HANDLE thread = CreateThread(nullptr, 0, RippleCaptureThreadProc, holder, 0, nullptr);
+        if (!thread) {
+            g_helperThreads--;
+            delete holder;
+            return false;
+        }
+        CloseHandle(thread);
+        capture_ = std::move(capture);
+        return true;
+    }
+
+    bool Owns(const std::shared_ptr<RippleCapture>& capture) const {
+        return capture_ && capture_ == capture;
+    }
+
+    bool Capturing() const { return capture_ != nullptr; }
+
+    double FrameMs() const { return frameMs_; }
+
+    void Launch(double now, double fastestFrameMs) {
+        if (!capture_ || active_) {
+            return;
+        }
+        frameMs_ = std::max<double>(capture_->frameMs.load(), fastestFrameMs);
+        surface_.Swap(capture_->canvas);
+        if (!surface_.Valid() || !capture_->snapshot.Valid()) {
+            Stop();
+            return;
+        }
+        ResetFrames(surface_.Height());
+        if (capture_->warmed) {
+            window_.AdoptPresented(monitor_.left, monitor_.top, surface_.Width(),
+                                   surface_.Height(), 255);
+            firstFrame_ = false;
+        }
         start_ = std::max(now, NowMs());
         active_ = true;
         Render(start_);
@@ -3770,16 +7139,23 @@ class Ripple {
             return 1e9;
         }
         Render(now);
-        return 1000.0 / 60.0;
+        return frameMs_;
     }
 
     void Stop() {
         workers_.Reset();
         active_ = false;
         window_.Hide();
+        if (capture_) {
+            capture_->canceled = true;
+            for (int i = 0; i < 100 && capture_->warming; i++) {
+                Sleep(1);
+            }
+            capture_.reset();
+        }
         surface_.Reset();
-        snapshot_.Reset();
         wave_.clear();
+        rows_.clear();
     }
 
     bool Active() const { return active_; }
@@ -3790,22 +7166,61 @@ class Ripple {
     }
 
   private:
-    uint32_t SampleDesktop(float x, float y) const {
-        return SampleOpaqueSurface(snapshot_, x, y);
-    }
-
     struct RasterWave {
         float displacement;
         uint32_t opacity;
         uint32_t lightAlpha;
+        uint32_t light;
     };
 
+    struct RowSpans {
+        int begin[2] = {0, 0};
+        int end[2] = {0, 0};
+    };
+
+    void ResetFrames(int height) {
+        rows_.assign(static_cast<size_t>(height), RowSpans{});
+        drawnFirst_ = drawnLast_ = 0;
+        drawnX0_ = drawnX1_ = 0;
+        firstFrame_ = true;
+        step_ = 1;
+        averageMs_ = -1;
+    }
+
+    void ClearRow(int y) {
+        RowSpans& spans = rows_[y];
+        uint32_t* row = surface_.Row(y);
+        for (int i = 0; i < 2; i++) {
+            if (spans.end[i] > spans.begin[i]) {
+                memset(row + spans.begin[i], 0,
+                       static_cast<size_t>(spans.end[i] - spans.begin[i]) * sizeof(uint32_t));
+            }
+        }
+        spans = {};
+    }
+
+    void AdaptQuality(double frameMs) {
+        const double limit = std::clamp(frameMs_ * 1.5, 14.0, 20.0);
+        averageMs_ = averageMs_ < 0 ? frameMs : averageMs_ * 0.5 + frameMs * 0.5;
+        if (step_ < 3 && averageMs_ > limit) {
+            step_++;
+            averageMs_ = -1;
+        } else if (step_ > 1 &&
+                   averageMs_ * step_ * step_ / ((step_ - 1) * (step_ - 1)) * 0.8 < limit * 0.6) {
+            step_--;
+            averageMs_ = -1;
+        }
+    }
+
     void Render(double now) {
+        const double frameStart = NowMs();
         const float t = static_cast<float>(std::clamp((now - start_) / kDurationMs, 0.0, 1.0));
         const float elapsed = static_cast<float>(now - start_);
         const int w = surface_.Width();
         const int h = surface_.Height();
-        surface_.Clear();
+        if (!capture_ || rows_.size() != static_cast<size_t>(h)) {
+            return;
+        }
 
         const float travel = t * t * (3.0f - 2.0f * t);
         const float radius = travel * maxRadius_;
@@ -3817,74 +7232,199 @@ class Ripple {
         const float strength = 14.0f * scale_ * fadeIn * fadeOut;
         const float alpha = fadeIn * fadeOut;
 
-        const float reach = sigma * 3.8f;
-        const int offset = static_cast<int>(ceilf(reach * 4.0f));
-        wave_.resize(static_cast<size_t>(offset) * 2 + 2);
-        for (size_t i = 0; i < wave_.size(); i++) {
-            const RippleWave wave = EvaluateRippleWave((static_cast<int>(i) - offset) / 4.0f,
-                                                        sigma, strength);
-            wave_[i] = {wave.displacement,
-                         static_cast<uint32_t>(wave.opacity * alpha * 255.0f + 0.5f),
-                         static_cast<uint32_t>(wave.light * alpha * 255.0f + 0.5f)};
-        }
-        const float inner = std::max(0.0f, radius - reach);
-        const float outer = radius + reach;
-        const int firstY = std::max(0, static_cast<int>(floorf(center_.y - outer)));
-        const int lastY = std::min(h, static_cast<int>(ceilf(center_.y + outer)));
-        const float edgeWidth = 24.0f * scale_;
         uint32_t colors[64];
         for (int i = 0; i < 64; i++) {
             colors[i] = PackPremultiplied(g_glow.At(i / 64.0f + t * 0.2f), 1.0f);
         }
-        workers_.ForRows(firstY, lastY, [&](int y) {
-            const float dy = y - center_.y;
-            if (fabsf(dy) >= outer) {
-                return;
+
+        const float reach = sigma * 3.8f;
+        const int offset = static_cast<int>(ceilf(reach * 4.0f));
+        wave_.resize(static_cast<size_t>(offset) * 2 + 2);
+        size_t firstWave = wave_.size();
+        size_t lastWave = 0;
+        for (size_t i = 0; i < wave_.size(); i++) {
+            const RippleWave wave = EvaluateRippleWave((static_cast<int>(i) - offset) / 4.0f,
+                                                        sigma, strength);
+            RasterWave& entry = wave_[i];
+            entry.displacement = wave.displacement;
+            entry.opacity = static_cast<uint32_t>(wave.opacity * alpha * 255.0f + 0.5f);
+            entry.lightAlpha = static_cast<uint32_t>(wave.light * alpha * 255.0f + 0.5f);
+            entry.light = g_glow.rainbow ? 0 : ScalePremultiplied(colors[0], entry.lightAlpha);
+            if (entry.lightAlpha > 0 ||
+                (entry.opacity > 1 &&
+                 fabsf(entry.displacement) * entry.opacity >= 0.03f * 255.0f)) {
+                firstWave = std::min(firstWave, i);
+                lastWave = i;
             }
-            const float xo = sqrtf(std::max(0.0f, outer * outer - dy * dy));
-            const float xi = fabsf(dy) < inner
-                                 ? sqrtf(std::max(0.0f, inner * inner - dy * dy)) : 0.0f;
-            const float spans[2][2] = {{center_.x - xo, center_.x - xi},
-                                       {center_.x + xi, center_.x + xo}};
-            uint32_t* row = surface_.Row(y);
-            const float rowEdge = Clamp01(std::min(y, h - 1 - y) / edgeWidth);
-            for (int span = 0; span < 2; span++) {
-                const int x0 = std::max(0, static_cast<int>(ceilf(spans[span][0])));
-                const int x1 = std::min(w, static_cast<int>(ceilf(spans[span][1])));
-                for (int x = x0; x < x1; x++) {
-                    const float dx = x - center_.x;
-                    const float distance = sqrtf(dx * dx + dy * dy);
-                    const int index = static_cast<int>((distance - radius) * 4.0f) + offset;
-                    if (index < 0 || index >= static_cast<int>(wave_.size())) {
-                        continue;
-                    }
-                    const RasterWave& wave = wave_[index];
-                    if (snapshot_.Valid() && wave.opacity > 1) {
-                        float edge = rowEdge;
-                        if (x < edgeWidth || w - 1 - x < edgeWidth) {
-                            edge = std::min(edge, Clamp01(std::min(x, w - 1 - x) / edgeWidth));
-                        }
-                        const float displacement = wave.displacement * edge * edge *
-                            (3.0f - 2.0f * edge) / std::max(distance, 1.0f);
-                        uint32_t sample = SampleDesktop(x + dx * displacement,
-                                                         y + dy * displacement);
-                        row[x] = ScalePremultiplied(sample, wave.opacity);
-                    }
-                    int hue = 0;
-                    if (g_glow.rainbow) {
-                        const float phase = FastAtan2(dy, dx) / (2.0f * kPi);
-                        hue = static_cast<int>((phase - floorf(phase)) * 64.0f) & 63;
-                    }
-                    BlendOver(row[x], ScalePremultiplied(colors[hue], wave.lightAlpha));
+        }
+
+        float inner = 0;
+        float outer = 0;
+        int firstY = 0;
+        int lastY = 0;
+        if (firstWave <= lastWave) {
+            inner = std::max(0.0f, radius + (static_cast<int>(firstWave) - offset) * 0.25f - 1.0f);
+            outer = radius + (static_cast<int>(lastWave) + 1 - offset) * 0.25f + 1.0f;
+            const int capturedTop = capture_->top.load(std::memory_order_acquire);
+            const int capturedBottom = capture_->bottom.load(std::memory_order_acquire);
+            const int margin = static_cast<int>(ceilf(9.0f * scale_)) + 2;
+            firstY = std::max(capturedTop > 0 ? capturedTop + margin : 0,
+                              static_cast<int>(floorf(center_.y - outer)));
+            lastY = std::min(capturedBottom < h ? capturedBottom - margin : h,
+                             static_cast<int>(ceilf(center_.y + outer)));
+        }
+        const bool drawing = firstY < lastY;
+        const float cx = center_.x;
+        const float cy = center_.y;
+        int firstX = 0;
+        int lastX = 0;
+        if (drawing) {
+            firstX = std::max(0, static_cast<int>(floorf(cx - outer)));
+            lastX = std::min(w, static_cast<int>(ceilf(cx + outer)) + 1);
+        }
+
+        const int step = step_;
+        int rowsFirst = firstY;
+        int rowsLast = lastY;
+        int changedX0 = firstX;
+        int changedX1 = lastX;
+        if (drawnFirst_ < drawnLast_) {
+            rowsFirst = drawing ? std::min(rowsFirst, drawnFirst_) : drawnFirst_;
+            rowsLast = drawing ? std::max(rowsLast, drawnLast_) : drawnLast_;
+            changedX0 = drawing ? std::min(changedX0, drawnX0_) : drawnX0_;
+            changedX1 = drawing ? std::max(changedX1, drawnX1_) : drawnX1_;
+        }
+        drawnFirst_ = drawing ? firstY / step * step : 0;
+        drawnLast_ = drawing ? std::min(h, (lastY + step - 1) / step * step) : 0;
+        drawnX0_ = firstX;
+        drawnX1_ = lastX;
+
+        const Surface& snapshotSurface = capture_->snapshot;
+        const OpaquePixels snapshot{snapshotSurface.Valid() ? snapshotSurface.Row(0) : nullptr,
+                                    snapshotSurface.Width(), snapshotSurface.Height(),
+                                    snapshotSurface.Stride()};
+        const RasterWave* waves = wave_.data();
+        const int waveCount = static_cast<int>(wave_.size());
+        const float edgeWidth = 24.0f * scale_;
+        const bool rainbow = g_glow.rainbow;
+
+        auto shade = [&](float x, float y) -> uint32_t {
+            const float dx = x - cx;
+            const float dy = y - cy;
+            const float distance = sqrtf(dx * dx + dy * dy);
+            const int index = static_cast<int>((distance - radius) * 4.0f) + offset;
+            if (index < 0 || index >= waveCount) {
+                return 0;
+            }
+            const RasterWave& wave = waves[index];
+            uint32_t pixel = 0;
+            if (snapshot.pixels && wave.opacity > 1) {
+                float edge = Clamp01(std::min(y, h - 1 - y) / edgeWidth);
+                if (x < edgeWidth || w - 1 - x < edgeWidth) {
+                    edge = std::min(edge, Clamp01(std::min(x, w - 1 - x) / edgeWidth));
+                }
+                const float displacement = wave.displacement * edge * edge *
+                    (3.0f - 2.0f * edge) / std::max(distance, 1.0f);
+                pixel = SampleOpaquePixels(snapshot, x + dx * displacement, y + dy * displacement);
+                if (wave.opacity < 255) {
+                    pixel = ScalePremultiplied(pixel, wave.opacity);
                 }
             }
-        }, static_cast<uint64_t>(w) * h >= 500000);
-        window_.Present(surface_, monitor_.left, monitor_.top, 255);
+            if (wave.lightAlpha) {
+                uint32_t light = wave.light;
+                if (rainbow) {
+                    const float phase = FastAtan2(dy, dx) / (2.0f * kPi);
+                    light = ScalePremultiplied(
+                        colors[static_cast<int>((phase - floorf(phase)) * 64.0f) & 63],
+                        wave.lightAlpha);
+                }
+                BlendOver(pixel, light);
+            }
+            return pixel;
+        };
+
+        auto renderBlock = [&](int block) {
+            const int y0 = block * step;
+            const int y1 = std::min(h, y0 + step);
+            RowSpans spans[4];
+            RowSpans leader;
+            bool any = false;
+            for (int y = y0; y < y1; y++) {
+                ClearRow(y);
+                const float dy = y - cy;
+                if (y < firstY || y >= lastY || fabsf(dy) >= outer) {
+                    continue;
+                }
+                const float xo = sqrtf(std::max(0.0f, outer * outer - dy * dy));
+                const float xi = fabsf(dy) < inner
+                                     ? sqrtf(std::max(0.0f, inner * inner - dy * dy)) : 0.0f;
+                const float edges[2][2] = {{cx - xo, cx - xi}, {cx + xi, cx + xo}};
+                for (int i = 0; i < 2; i++) {
+                    const int begin = std::max(0, static_cast<int>(ceilf(edges[i][0])));
+                    const int end = std::min(w, static_cast<int>(ceilf(edges[i][1])));
+                    if (end <= begin) {
+                        continue;
+                    }
+                    spans[y - y0].begin[i] = begin;
+                    spans[y - y0].end[i] = end;
+                    if (leader.end[i] <= leader.begin[i]) {
+                        leader.begin[i] = begin;
+                        leader.end[i] = end;
+                    } else {
+                        leader.begin[i] = std::min(leader.begin[i], begin);
+                        leader.end[i] = std::max(leader.end[i], end);
+                    }
+                    any = true;
+                }
+            }
+            if (!any) {
+                return;
+            }
+            uint32_t* leaderRow = surface_.Row(y0);
+            const float blockCenter = (step - 1) * 0.5f;
+            for (int i = 0; i < 2; i++) {
+                for (int bx = leader.begin[i] / step * step; bx < leader.end[i]; bx += step) {
+                    const uint32_t pixel = shade(bx + blockCenter, y0 + blockCenter);
+                    if (!pixel) {
+                        continue;
+                    }
+                    const int to = std::min(bx + step, leader.end[i]);
+                    for (int x = std::max(bx, leader.begin[i]); x < to; x++) {
+                        leaderRow[x] = pixel;
+                    }
+                }
+            }
+            for (int y = y0 + 1; y < y1; y++) {
+                uint32_t* row = surface_.Row(y);
+                for (int i = 0; i < 2; i++) {
+                    const int begin = spans[y - y0].begin[i];
+                    const int end = spans[y - y0].end[i];
+                    if (end > begin) {
+                        memcpy(row + begin, leaderRow + begin,
+                               static_cast<size_t>(end - begin) * sizeof(uint32_t));
+                    }
+                }
+                rows_[y] = spans[y - y0];
+            }
+            rows_[y0] = leader;
+        };
+
+        workers_.ForRows(rowsFirst / step, (rowsLast + step - 1) / step, renderBlock,
+                         static_cast<uint64_t>(w) * h >= 500000, std::max(1, 16 / step));
+        const RECT changed{changedX0, rowsFirst / step * step, changedX1,
+                           std::min(h, (rowsLast + step - 1) / step * step)};
+        if (firstFrame_) {
+            window_.Present(surface_, monitor_.left, monitor_.top, 255);
+            firstFrame_ = false;
+        } else if (changed.right > changed.left && changed.bottom > changed.top) {
+            window_.Present(surface_, monitor_.left, monitor_.top, 255, &changed);
+        }
+        AdaptQuality(NowMs() - frameStart);
     }
 
     LayeredWindow window_;
     Surface surface_;
-    Surface snapshot_;
+    std::shared_ptr<RippleCapture> capture_;
     RECT monitor_{};
     Vec2 center_{};
     float scale_ = 1.0f;
@@ -3892,6 +7432,15 @@ class Ripple {
     double start_ = 0;
     bool active_ = false;
     std::vector<RasterWave> wave_;
+    std::vector<RowSpans> rows_;
+    int drawnFirst_ = 0;
+    int drawnLast_ = 0;
+    int drawnX0_ = 0;
+    int drawnX1_ = 0;
+    bool firstFrame_ = true;
+    int step_ = 1;
+    double averageMs_ = -1;
+    double frameMs_ = 1000.0 / 60.0;
     RasterWorkers workers_;
 };
 
@@ -5818,12 +9367,12 @@ BrowserAttachmentSnapshot ReadBrowserAttachments(IUIAutomation* automation, HWND
     return result;
 }
 
-bool HasNewBrowserAttachment(const BrowserAttachmentSnapshot& before,
-                             const BrowserAttachmentSnapshot& after) {
-    if (!before.readable || !after.readable) return false;
-    return std::any_of(after.items.begin(), after.items.end(), [&](const std::wstring& item) {
+size_t CountNewBrowserAttachments(const BrowserAttachmentSnapshot& before,
+                                  const BrowserAttachmentSnapshot& after) {
+    if (!before.readable || !after.readable) return 0;
+    return static_cast<size_t>(std::count_if(after.items.begin(), after.items.end(), [&](const std::wstring& item) {
         return std::find(before.items.begin(), before.items.end(), item) == before.items.end();
-    });
+    }));
 }
 
 std::vector<INPUT> BrowserImagePasteInputs() {
@@ -6068,45 +9617,123 @@ HWND FindNewGeminiWindow(IUIAutomation* automation, const BrowserTarget& browser
 }
 
 std::wstring BrowserDraftStatus(size_t total, size_t added, bool questionTyped, bool clipboardOurs) {
+    if (total == 0) return Tr(questionTyped ? Str::QuestionInGemini : Str::ClickBoxText);
     const bool several = total > 1;
-    const std::wstring images = several ? L"images" : L"image";
-    if (added >= total) return L"The " + images + (several ? L" were" : L" was") + L" added. Type your question in Gemini.";
-    const std::wstring typed = questionTyped ? L"Your question is in Gemini. " : L"";
+    if (added >= total) return Tr(several ? Str::DraftAddedMany : Str::DraftAddedOne);
+    auto typed = [&](const std::wstring& status) {
+        return questionTyped ? JoinSentences(Tr(Str::QuestionInGemini), status) : status;
+    };
     if (added > 0) {
-        return typed + L"Only " + std::to_wstring(added) + L" of " + std::to_wstring(total) +
-               L" images could be confirmed. Check Gemini, and add the rest with Ctrl+V in its message box.";
+        return typed(TrFormat(Str::DraftPartial, std::to_wstring(added), std::to_wstring(total)));
     }
     if (!clipboardOurs) {
-        return typed + (several ? L"The clipboard changed before the images could be pasted. Ask in Gemini again to retry."
-                                : L"The clipboard changed before the image could be pasted: use Copy image, then press Ctrl+V in Gemini.");
+        return typed(Tr(several ? Str::ClipboardChangedMany : Str::ClipboardChangedOne));
     }
     if (questionTyped) {
-        return typed + L"If the " + images + (several ? L" aren't" : L" isn't") +
-               L" attached, click Gemini's message box and press Ctrl+V.";
+        return typed(Tr(several ? Str::IfNotAttachedMany : Str::IfNotAttachedOne));
     }
-    return L"Click Gemini's message box and press Ctrl+V to attach the " + images + L". Your question is kept here.";
+    return Tr(several ? Str::ClickBoxMany : Str::ClickBoxOne);
 }
 
-enum class DraftOutcome { Added, Partial };
+struct BrowserDraftState {
+    std::wstring composer;
+    bool keysSent = false;
+    bool everTyped = false;
+    int attempts = 0;
+    int pastes = 0;
+    RECT editor{};
+    BrowserAttachmentSnapshot baseline;
+};
+
+enum class DraftOutcome { Added, Partial, Retry };
+
+std::vector<INPUT> BrowserSelectAllInputs() {
+    std::vector<INPUT> inputs = BrowserImagePasteInputs();
+    inputs[1].ki.wVk = 'A';
+    inputs[2].ki.wVk = 'A';
+    return inputs;
+}
+
+bool ReadSteadyText(IUIAutomationElement* element, std::wstring& text, HWND browser,
+                    const BrowserHandoffJob& job) {
+    bool readable = ReadElementText(element, text);
+    for (int steady = 0, tries = 0; readable && steady < 2 && tries < 50 && BrowserStillTarget(browser, job); tries++) {
+        Sleep(150);
+        std::wstring again;
+        readable = ReadElementText(element, again);
+        steady = readable && again == text ? steady + 1 : 0;
+        text = std::move(again);
+    }
+    return readable;
+}
 
 DraftOutcome FillBrowserDraft(IUIAutomation* automation, IUIAutomationElement* composer,
-                              HWND browser, BrowserHandoffJob& job, std::wstring& status) {
-    RECT editor{};
-    composer->get_CurrentBoundingRectangle(&editor);
+                              HWND browser, BrowserHandoffJob& job, BrowserDraftState& state,
+                              double deadline, std::wstring& status) {
+    state.attempts++;
+    if (state.pastes == 0) composer->get_CurrentBoundingRectangle(&state.editor);
     const std::wstring question = BrowserDraftText(job.prompt);
+    const size_t total = job.images.size();
+    const bool oneByOne = job.imagePaths.size() > 1 &&
+                          !PastesSeveralFiles(FileNameOf(ProcessPathOfWindow(browser)));
+    const size_t pastes = total == 0 ? 0 : oneByOne ? job.imagePaths.size() : 1;
+    const int maxPastes = static_cast<int>(pastes) + 2;
     bool questionAdded = question.empty();
-    bool keysSent = false;
-    if (!questionAdded) {
-        auto keys = BrowserDraftInputs(question);
-        if (!BrowserComposerStillCurrent(automation, composer, browser, job, false, true)) {
-            status = BrowserDraftStatus(job.images.size(), 0, false,
-                                       GetClipboardSequenceNumber() == job.clipboardSequence);
-            return DraftOutcome::Partial;
+    bool clipboardOurs = true;
+    size_t confirmed = 0;
+    auto attached = [&] {
+        return std::min(CountNewBrowserAttachments(state.baseline,
+                                                   ReadBrowserAttachments(automation, browser, state.editor)),
+                        pastes);
+    };
+    auto imagesAdded = [&] {
+        return confirmed < pastes ? (oneByOne ? confirmed : 0)
+               : oneByOne ? job.imagePaths.size()
+               : job.imagePaths.empty() ? std::min<size_t>(1, total) : total;
+    };
+    auto fail = [&](bool retryable) {
+        status = BrowserDraftStatus(total, imagesAdded(), questionAdded && !question.empty(), clipboardOurs);
+        const bool again = retryable && clipboardOurs && state.attempts < 6 && NowMs() < deadline &&
+                           BrowserStillTarget(browser, job);
+        return again ? DraftOutcome::Retry : DraftOutcome::Partial;
+    };
+    auto focusComposer = [&](bool forPaste) {
+        for (int attempt = 0; attempt < 20 && BrowserStillTarget(browser, job); attempt++) {
+            if (!BrowserKeysAllowed(browser, job)) {
+                Sleep(100);
+                continue;
+            }
+            if (BrowserComposerStillCurrent(automation, composer, browser, job, forPaste, true)) return true;
+            if (!FocusBrowserComposer(automation, composer, browser, job, forPaste)) return false;
         }
+        return false;
+    };
+
+    bool overwrite = false;
+    if (!questionAdded) {
+        std::wstring shown;
+        const bool readable = state.everTyped ? ReadSteadyText(composer, shown, browser, job)
+                                              : ReadElementText(composer, shown);
+        if (readable ? ContainsIgnoringSpacing(shown, question) : state.keysSent) {
+            questionAdded = state.keysSent = true;
+        } else if (readable && state.everTyped) {
+            state.keysSent = false;
+            overwrite = !CollapseSpacing(shown).empty();
+        }
+    }
+    if (!questionAdded && !state.keysSent) {
+        if (!focusComposer(false)) return fail(true);
+        auto keys = BrowserDraftInputs(question);
+        if (overwrite) {
+            const std::vector<INPUT> selectAll = BrowserSelectAllInputs();
+            keys.insert(keys.begin(), selectAll.begin(), selectAll.end());
+        }
+        state.everTyped = true;
         if (SendInput(static_cast<UINT>(keys.size()), keys.data(), sizeof(INPUT)) == keys.size()) {
-            keysSent = true;
+            state.keysSent = true;
             const double typedAt = NowMs();
-            while (!questionAdded && NowMs() - typedAt < 3000 && BrowserStillTarget(browser, job)) {
+            const double typingMs = std::min(15000.0, 3000.0 + 5.0 * static_cast<double>(question.size()));
+            while (!questionAdded && NowMs() - typedAt < typingMs && BrowserStillTarget(browser, job)) {
                 Sleep(50);
                 std::wstring shown;
                 const bool readable = ReadElementText(composer, shown);
@@ -6117,29 +9744,22 @@ DraftOutcome FillBrowserDraft(IUIAutomation* automation, IUIAutomationElement* c
         }
     }
 
-    const size_t total = job.images.size();
-    const bool oneByOne = job.imagePaths.size() > 1 &&
-                          !PastesSeveralFiles(FileNameOf(ProcessPathOfWindow(browser)));
-    const size_t pastes = oneByOne ? job.imagePaths.size() : 1;
-    size_t confirmed = 0;
-    bool clipboardOurs = true;
-    for (size_t paste = 0; paste < pastes && BrowserStillTarget(browser, job); paste++) {
+    while (true) {
+        if (state.pastes > 0 && BrowserComposerStillCurrent(automation, composer, browser, job, false, false)) {
+            confirmed = std::max(confirmed, attached());
+        }
+        if (confirmed >= pastes || state.pastes >= maxPastes || NowMs() >= deadline ||
+            (state.pastes > 0 && !state.baseline.readable) || !BrowserStillTarget(browser, job)) {
+            break;
+        }
         if (!ClipboardStillOurs(job)) {
             clipboardOurs = false;
             break;
         }
-        bool focused = false;
-        for (int attempt = 0; attempt < 20 && !focused && BrowserStillTarget(browser, job); attempt++) {
-            if (!BrowserKeysAllowed(browser, job)) {
-                Sleep(100);
-                continue;
-            }
-            focused = BrowserComposerStillCurrent(automation, composer, browser, job, true, true);
-            break;
-        }
-        if (!focused) break;
+        if (!focusComposer(true)) break;
+        const size_t index = oneByOne ? confirmed : 0;
         if (oneByOne) {
-            const std::vector<std::wstring> next{job.imagePaths[paste]};
+            const std::vector<std::wstring> next{job.imagePaths[index]};
             if (!CopyImageFileToClipboard(job.notify, next, job.clipboardSequence)) {
                 clipboardOurs = false;
                 break;
@@ -6147,11 +9767,13 @@ DraftOutcome FillBrowserDraft(IUIAutomation* automation, IUIAutomationElement* c
             job.clipboardSequence = GetClipboardSequenceNumber();
             job.onClipboard = next;
         }
-        auto before = ReadBrowserAttachments(automation, browser, editor);
-        for (int retry = 0; retry < 3 && !before.readable &&
-             BrowserPasteStillValid(browser, job.clipboardSequence, job); retry++) {
-            Sleep(100);
-            before = ReadBrowserAttachments(automation, browser, editor);
+        if (state.pastes == 0) {
+            state.baseline = ReadBrowserAttachments(automation, browser, state.editor);
+            for (int retry = 0; retry < 3 && !state.baseline.readable &&
+                 BrowserPasteStillValid(browser, job.clipboardSequence, job); retry++) {
+                Sleep(100);
+                state.baseline = ReadBrowserAttachments(automation, browser, state.editor);
+            }
         }
         auto keys = BrowserImagePasteInputs();
         if (!BrowserComposerStillCurrent(automation, composer, browser, job, true, true)) {
@@ -6166,30 +9788,47 @@ DraftOutcome FillBrowserDraft(IUIAutomation* automation, IUIAutomationElement* c
             SendInput(2, release, sizeof(INPUT));
             break;
         }
-        const double deadline = NowMs() + (before.readable ? 12000 : 1500);
-        bool added = false;
-        while (!added && NowMs() < deadline && BrowserStillTarget(browser, job)) {
+        state.pastes++;
+        const size_t wanted = oneByOne ? index + 1 : 1;
+        const double sentAt = NowMs();
+        const double giveUp = std::min(sentAt + 20000, deadline + 5000);
+        double waitUntil = sentAt + (state.baseline.readable ? 5000 : 1500);
+        while (confirmed < wanted && NowMs() < waitUntil && NowMs() < giveUp && BrowserStillTarget(browser, job)) {
             Sleep(150);
-            const auto after = ReadBrowserAttachments(automation, browser, editor);
             if (!BrowserComposerStillCurrent(automation, composer, browser, job, false, true)) break;
-            added = HasNewBrowserAttachment(before, after);
+            confirmed = std::max(confirmed, attached());
+            if (!questionAdded && state.keysSent) {
+                std::wstring shown;
+                if (ReadElementText(composer, shown) && ContainsIgnoringSpacing(shown, question)) {
+                    questionAdded = true;
+                    waitUntil = std::max(waitUntil, NowMs() + 4000);
+                } else {
+                    waitUntil = std::max(waitUntil, NowMs() + 1500);
+                }
+            }
         }
-        if (!added) break;
-        confirmed++;
     }
-    const size_t imagesAdded = confirmed < pastes ? (oneByOne ? confirmed : 0)
-                               : oneByOne ? job.imagePaths.size()
-                               : job.imagePaths.empty() ? std::min<size_t>(1, total) : total;
-    if (keysSent && !questionAdded &&
+    if (confirmed < pastes) {
+        return fail(state.pastes == 0 || (state.baseline.readable && state.pastes < maxPastes));
+    }
+    if (state.keysSent && !questionAdded &&
         BrowserComposerStillCurrent(automation, composer, browser, job, false, true)) {
         std::wstring shown;
         questionAdded = ReadElementText(composer, shown) &&
                         ContainsIgnoringSpacing(shown, question) &&
                         BrowserComposerStillCurrent(automation, composer, browser, job, false, true);
     }
-    if (questionAdded && imagesAdded >= total) return DraftOutcome::Added;
-    status = BrowserDraftStatus(total, imagesAdded, questionAdded && !question.empty(), clipboardOurs);
-    return DraftOutcome::Partial;
+    if (!questionAdded) return fail(true);
+    if (imagesAdded() < total) return fail(false);
+    const double settledAt = NowMs() + 700;
+    while (NowMs() < settledAt && BrowserStillTarget(browser, job)) Sleep(50);
+    std::wstring shown;
+    if (!BrowserComposerStillCurrent(automation, composer, browser, job, false, false) ||
+        (!question.empty() && ReadElementText(composer, shown) && !ContainsIgnoringSpacing(shown, question)) ||
+        attached() < pastes) {
+        return fail(true);
+    }
+    return DraftOutcome::Added;
 }
 
 ComPtr<IUIAutomation> CreateAutomation() {
@@ -6240,13 +9879,15 @@ DWORD WINAPI BrowserHandoffThreadProc(LPVOID param) {
     const bool launched = !job->canceled && !g_stopping && OpenWithBrowser(url, job->browser);
     HWND verifiedBrowser = nullptr;
     SteadyCandidate steady;
+    BrowserDraftState draft;
     double blankSince = -1;  // When the window began to show no page.
     double lastRestart = 0;  // When the UI Automation client last started over.
+    double leftAt = -1;
     bool everSawDocument = false;
     const double launchedAt = NowMs();
     double lastPush = launchedAt;
     int pushes = 0;
-    const double deadline = launchedAt + 20000;
+    const double deadline = launchedAt + 30000;
     auto pushForward = [&] {
         const double now = NowMs();
         if (verifiedBrowser || pushes >= 6 || now - launchedAt < 1200 || now - lastPush < 700) return;
@@ -6257,7 +9898,12 @@ DWORD WINAPI BrowserHandoffThreadProc(LPVOID param) {
     while (launched && automation && !job->canceled && !g_stopping && NowMs() < deadline) {
         const HWND foreground = GetForegroundWindow();
         const bool inBrowser = IsWindowVisible(foreground) && IsTargetBrowserWindow(foreground, job->browser);
-        if (verifiedBrowser && !inBrowser) break;
+        if (verifiedBrowser && !inBrowser) {
+            if (leftAt < 0) leftAt = NowMs();
+            if (NowMs() - leftAt > 1500) break;
+        } else {
+            leftAt = -1;
+        }
         if (!inBrowser) {
             steady.Update(L"", NowMs());
             pushForward();
@@ -6285,23 +9931,32 @@ DWORD WINAPI BrowserHandoffThreadProc(LPVOID param) {
         if (verifiedPage) verifiedBrowser = foreground;
         std::wstring key = composer ? ElementRuntimeKey(composer.Get()) : std::wstring();
         if (std::find(alreadyOpen.begin(), alreadyOpen.end(), key) != alreadyOpen.end()) key.clear();
+        if (!key.empty() && key != draft.composer) {
+            draft.composer = key;
+            draft.keysSent = false;
+            draft.attempts = 0;
+        }
         if (steady.Update(key, NowMs()) &&
             FocusBrowserComposer(automation.Get(), composer.Get(), foreground, *job, false)) {
-            const DraftOutcome outcome = FillBrowserDraft(automation.Get(), composer.Get(),
-                                                         foreground, *job, result->status);
-            result->pasted = outcome == DraftOutcome::Added;
-            break;
+            const DraftOutcome outcome = FillBrowserDraft(automation.Get(), composer.Get(), foreground,
+                                                         *job, draft, deadline, result->status);
+            if (outcome != DraftOutcome::Retry) {
+                result->pasted = outcome == DraftOutcome::Added;
+                break;
+            }
+            steady.Update(L"", NowMs());
         }
         Sleep(100);
     }
     if (!launched) {
-        result->status = job->images.size() > 1 ? L"Couldn't open the browser. The images are copied; paste them into Gemini with Ctrl+V."
-                                                : L"Couldn't open the browser. The image is copied; paste it into Gemini with Ctrl+V.";
+        result->status = Tr(job->images.empty()      ? Str::BrowserFailedText
+                            : job->images.size() > 1 ? Str::BrowserFailedMany
+                                                     : Str::BrowserFailedOne);
     }
     if (!result->pasted && result->status.empty()) {
         result->status = everSawDocument
             ? BrowserDraftStatus(job->images.size(), 0, false, true)
-            : L"Magic Pointer couldn't read the page in your browser. If a notice is open over it, close it and click Ask in Gemini again.";
+            : std::wstring(Tr(Str::PageUnreadable));
     }
     automation.Reset();
     if (SUCCEEDED(coInit)) CoUninitialize();
@@ -6332,6 +9987,14 @@ std::wstring UiLanguage() {
         language.resize(dash);
     }
     return language.empty() ? L"en" : language;
+}
+
+std::wstring GoogleLanguage() {
+    const LanguageInfo* language = CurrentLanguage();
+    if (!g_languageChosen || !language) {
+        return UiLanguage();
+    }
+    return _wcsicmp(language->code, L"nb") == 0 ? L"no" : language->code;
 }
 
 constexpr double kLensPageLifetimeMs = 10.0 * 60 * 1000;
@@ -6407,10 +10070,51 @@ struct LensJob {
     HWND notify = nullptr;
 };
 
+std::string HtmlEscape(const std::wstring& text) {
+    std::string out;
+    for (const char c : ToUtf8(text)) {
+        switch (c) {
+            case '&':
+                out += "&amp;";
+                break;
+            case '<':
+                out += "&lt;";
+                break;
+            case '>':
+                out += "&gt;";
+                break;
+            case '"':
+                out += "&quot;";
+                break;
+            default:
+                out += c;
+        }
+    }
+    return out;
+}
+
+std::string ScriptString(const std::wstring& text) {
+    std::string quoted;
+    AppendJsonString(quoted, ToUtf8(text));
+    std::string out;
+    for (const char c : quoted) {
+        if (c == '<') {
+            out += "\\u003c";
+        } else {
+            out += c;
+        }
+    }
+    return out;
+}
+
 std::string BuildLensPage(const std::vector<uint8_t>& png,
                           const std::wstring& language) {
-    std::string page =
-        "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\">"
+    std::string page = "<!DOCTYPE html>\n<html lang=\"" + HtmlEscape(language) + "\"";
+    if (UiIsRtl()) {
+        page += " dir=\"rtl\"";
+    }
+    page +=
+        "><head><meta charset=\"utf-8\">"
         "<meta name=\"referrer\" content=\"no-referrer\">"
         "<title>Google Lens</title><style>"
         "html,body{height:100%;margin:0;background:#1f1f1f;color:#e3e3e3;"
@@ -6421,8 +10125,12 @@ std::string BuildLensPage(const std::vector<uint8_t>& png,
         "button{font:inherit;padding:9px 20px;border:0;border-radius:20px;"
         "background:#a8c7fa;color:#062e6f;cursor:pointer}"
         "</style></head><body><img id=\"p\" alt=\"\">"
-        "<div id=\"s\">Searching with Google Lens&hellip;</div>"
-        "<button id=\"b\" hidden>Search with Google Lens</button>"
+        "<div id=\"s\">";
+    page += HtmlEscape(Tr(Str::LensSearching));
+    page += "</div><button id=\"b\" hidden>";
+    page += HtmlEscape(Tr(Str::SearchWithLens));
+    page +=
+        "</button>"
         "<form id=\"f\" method=\"POST\" enctype=\"multipart/form-data\" "
         "action=\"https://lens.google.com/v3/upload?hl=";
     page += ToUtf8(language);
@@ -6443,9 +10151,10 @@ std::string BuildLensPage(const std::vector<uint8_t>& png,
         "document.getElementById('i').files=transfer.files;\n"
         "try{sessionStorage.setItem('sent','1');}catch(e){}\n"
         "document.getElementById('f').submit();\n"
-        "}catch(e){document.getElementById('s').textContent="
-        "\"Couldn't upload automatically. The image is on your clipboard: "
-        "paste it at lens.google.com.\";button.hidden=false;}}\n"
+        "}catch(e){document.getElementById('s').textContent=";
+    page += ScriptString(Tr(Str::LensUploadFailed));
+    page +=
+        ";button.hidden=false;}}\n"
         "button.onclick=go;\n"
         "let sent=false;try{sent=sessionStorage.getItem('sent')==='1';}catch(e){}\n"
         "if(sent){document.getElementById('s').textContent='';button.hidden=false;}"
@@ -6492,7 +10201,7 @@ DWORD WINAPI LensThreadProc(LPVOID param) {
 }
 
 void SearchWithLens(std::shared_ptr<const Image> image, const BrowserTarget& browser) {
-    auto* job = new LensJob{std::move(image), UiLanguage(), browser, g_messageWindow};
+    auto* job = new LensJob{std::move(image), GoogleLanguage(), browser, g_messageWindow};
     g_helperThreads++;
     HANDLE thread = CreateThread(nullptr, 0, LensThreadProc, job, 0, nullptr);
     if (thread) {
@@ -6849,7 +10558,7 @@ bool StartOcr(HWND notify,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Gemini API client
+// AI API client
 
 #ifndef WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY
 #define WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY 4
@@ -6864,11 +10573,11 @@ bool StartOcr(HWND notify,
 #define WINHTTP_PROTOCOL_FLAG_HTTP2 0x1
 #endif
 
-enum class GeminiEvent { Chunk, Done, Error, Suggestions };
+enum class AiEvent { Chunk, Done, Error, Suggestions, Note };
 
-struct GeminiMessage {
+struct AiMessage {
     uint32_t requestId = 0;
-    GeminiEvent event = GeminiEvent::Done;
+    AiEvent event = AiEvent::Done;
     bool partial = false;  // More suggestions are on the way.
     std::wstring text;
     std::vector<std::wstring> suggestions;
@@ -6879,14 +10588,16 @@ struct ChatTurn {
     std::string text;  // UTF-8.
 };
 
-struct GeminiJob {
+struct AiJob {
     uint32_t id = 0;
     bool suggestions = false;
+    Provider provider = Provider::Gemini;
     std::wstring apiKey;
     std::wstring model;
-    std::wstring fallbackModel;  // When `model` doesn't exist.
+    std::vector<std::wstring> fallbackModels;  // Tried when `model` isn't available.
     std::vector<std::shared_ptr<const Image>> images;
     std::string context;  // Text of the selection, UTF-8.
+    std::string language;
     std::vector<ChatTurn> history;  // Ends with the new question.
     HWND notify = nullptr;
     std::atomic<bool> canceled{false};
@@ -6900,7 +10611,44 @@ struct GeminiJob {
     }
 };
 
-constexpr WCHAR kDefaultModel[] = L"gemini-flash-lite-latest";
+PCWSTR TierModel(Provider provider, int tier) {
+    static const PCWSTR kModels[3][3] = {
+        {L"gemini-flash-lite-latest", L"gemini-3.6-flash", L"gemini-pro-latest"},
+        {L"gpt-6-luna", L"gpt-6.1-terra", L"gpt-6.1-sol"},
+        {L"claude-haiku-5-5", L"claude-sonnet-5-5", L"claude-opus-5-5"},
+    };
+    const int row = provider == Provider::OpenAi      ? 1
+                    : provider == Provider::Anthropic ? 2
+                                                      : 0;
+    return kModels[row][std::clamp(tier, 0, 2)];
+}
+
+PCWSTR DefaultModel(Provider provider) {
+    return TierModel(provider, 0);
+}
+
+int SelectedTier(const Settings& settings) {
+    return settings.model == L"smart" ? 2 : settings.model == L"balanced" ? 1 : 0;
+}
+
+bool UsesModelId(const Settings& settings, Provider provider) {
+    return provider == Provider::Gemini && settings.model.rfind(L"gemini", 0) == 0;
+}
+
+std::wstring SelectedModel(const Settings& settings, Provider provider) {
+    return UsesModelId(settings, provider)
+               ? settings.model
+               : std::wstring(TierModel(provider, SelectedTier(settings)));
+}
+
+std::vector<std::wstring> FallbackModels(const Settings& settings, Provider provider) {
+    std::vector<std::wstring> models;
+    for (int tier = UsesModelId(settings, provider) ? 0 : SelectedTier(settings) - 1;
+         tier >= 0; tier--) {
+        models.push_back(TierModel(provider, tier));
+    }
+    return models;
+}
 
 std::wstring SanitizeModel(std::wstring model) {
     if (model.rfind(L"models/", 0) == 0) {
@@ -6915,19 +10663,43 @@ std::wstring SanitizeModel(std::wstring model) {
     return result;
 }
 
-enum class Thinking { Minimal, Low, LimitedBudget, Default };
-
 struct ModelQuirks {
     std::wstring model;
     bool suggestions;
-    Thinking thinking;
+    int step;
 };
 
 std::mutex g_quirksMutex;
 std::vector<ModelQuirks> g_quirks;
-std::vector<std::wstring> g_missingModels;
 
-Thinking FirstThinking(const std::wstring& model, bool suggestions) {
+struct UnavailableModel {
+    std::wstring model;
+    double until;
+};
+
+std::vector<UnavailableModel> g_unavailable;
+
+int LastStep(Provider provider) {
+    return provider == Provider::OpenAi ? 2 : 3;
+}
+
+int FirstStep(Provider provider, const std::wstring& model, bool suggestions) {
+    switch (provider) {
+        case Provider::OpenAi:
+            return suggestions &&
+                           (model == L"gpt-6-luna" || model == L"gpt-6.1-terra")
+                       ? 0
+                       : 1;
+        case Provider::Anthropic:
+            if (!suggestions) {
+                return 2;
+            }
+            return model == L"claude-haiku-5-5"    ? 0
+                   : model == L"claude-sonnet-5-5" ? 1
+                                                   : 2;
+        case Provider::Gemini:
+            break;
+    }
     // Gemini 3.8 Flash and Pro reject "minimal". Latest aliases can also
     // move to a model with different thinking support, so prefer "low".
     const bool supportsMinimal =
@@ -6936,66 +10708,81 @@ Thinking FirstThinking(const std::wstring& model, bool suggestions) {
         model == L"gemini-3.1-flash-lite" ||
         model == L"gemini-3.6-flash" ||
         model == L"gemini-3-flash-preview";
-    return suggestions && supportsMinimal ? Thinking::Minimal : Thinking::Low;
+    return suggestions && supportsMinimal ? 0 : 1;
 }
 
-Thinking GetThinking(const std::wstring& model, bool suggestions) {
+int GetStep(Provider provider, const std::wstring& model, bool suggestions) {
     std::lock_guard<std::mutex> lock(g_quirksMutex);
     for (const ModelQuirks& quirks : g_quirks) {
         if (quirks.model == model && quirks.suggestions == suggestions) {
-            return quirks.thinking;
+            return quirks.step;
         }
     }
-    return FirstThinking(model, suggestions);
+    return FirstStep(provider, model, suggestions);
 }
 
-Thinking NextThinking(Thinking thinking) {
-    switch (thinking) {
-        case Thinking::Minimal:
-            return Thinking::Low;
-        case Thinking::Low:
-            return Thinking::LimitedBudget;
-        case Thinking::LimitedBudget:
-        case Thinking::Default:
-            break;
-    }
-    return Thinking::Default;
-}
-
-void SetThinking(const std::wstring& model, bool suggestions, Thinking thinking) {
+void SetStep(const std::wstring& model, bool suggestions, int step) {
     std::lock_guard<std::mutex> lock(g_quirksMutex);
     for (ModelQuirks& quirks : g_quirks) {
         if (quirks.model == model && quirks.suggestions == suggestions) {
-            quirks.thinking = thinking;
+            quirks.step = step;
             return;
         }
     }
-    g_quirks.push_back({model, suggestions, thinking});
+    g_quirks.push_back({model, suggestions, step});
 }
 
-bool IsModelMissing(const std::wstring& model) {
+bool IsModelUnavailable(const std::wstring& model) {
     std::lock_guard<std::mutex> lock(g_quirksMutex);
-    return std::find(g_missingModels.begin(), g_missingModels.end(), model) !=
-           g_missingModels.end();
-}
-
-void SetModelMissing(const std::wstring& model) {
-    std::lock_guard<std::mutex> lock(g_quirksMutex);
-    if (std::find(g_missingModels.begin(), g_missingModels.end(), model) ==
-        g_missingModels.end()) {
-        g_missingModels.push_back(model);
+    const double now = NowMs();
+    for (const UnavailableModel& entry : g_unavailable) {
+        if (entry.model == model && entry.until > now) {
+            return true;
+        }
     }
+    return false;
 }
 
-std::string SystemInstruction(const GeminiJob& job) {
+void SetModelUnavailable(const std::wstring& model, double milliseconds) {
+    if (milliseconds <= 0) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_quirksMutex);
+    for (UnavailableModel& entry : g_unavailable) {
+        if (entry.model == model) {
+            entry.until = NowMs() + milliseconds;
+            return;
+        }
+    }
+    g_unavailable.push_back({model, NowMs() + milliseconds});
+}
+
+void ClearUnavailableModels() {
+    std::lock_guard<std::mutex> lock(g_quirksMutex);
+    g_unavailable.clear();
+}
+
+std::string SystemInstruction(const AiJob& job) {
     std::string text;
     if (job.suggestions) {
         text =
             "You suggest what someone might want to ask or do with a part of "
             "their screen they just selected.";
+    } else if (job.images.empty()) {
+        text =
+            "You are Magic Pointer, the " + ToUtf8(ProviderName(job.provider)) +
+            " assistant built into the "
+            "user's Windows PC. The user opened Magic Pointer and typed a "
+            "question without selecting anything on their screen, so there is "
+            "no image. Answer directly and concisely, in the language they "
+            "write in. Prefer short paragraphs and bullet points, use bold "
+            "sparingly and no tables. When asked to translate, reply with only "
+            "the translation, written in the language they name, keeping its "
+            "line breaks.";
     } else {
         text =
-            "You are Magic Pointer, the Gemini assistant built into the "
+            "You are Magic Pointer, the " + ToUtf8(ProviderName(job.provider)) +
+            " assistant built into the "
             "user's Windows PC. The user pointed at part of their screen and "
             "selected it; the attached image is exactly what they selected. "
             "Answer their request about it directly and concisely, in the "
@@ -7026,9 +10813,17 @@ constexpr char kSuggestionPrompt[] =
     "emojis; nothing that needs other software. Reply with only a JSON array "
     "of three strings.";
 
-std::string BuildRequestBody(const GeminiJob& job,
-                             const std::vector<std::string>& images,
-                             Thinking thinking) {
+std::string SuggestionPrompt(const AiJob& job) {
+    std::string prompt = kSuggestionPrompt;
+    if (!job.language.empty()) {
+        prompt += " Write them in " + job.language + ".";
+    }
+    return prompt;
+}
+
+std::string BuildGeminiBody(const AiJob& job,
+                            const std::vector<std::string>& images,
+                            int step) {
     std::string body = "{\"systemInstruction\":{\"parts\":[{\"text\":";
     AppendJsonString(body, SystemInstruction(job));
     body += "}]},\"contents\":[";
@@ -7045,7 +10840,7 @@ std::string BuildRequestBody(const GeminiJob& job,
         body += "{\"role\":\"user\",\"parts\":[";
         appendImages();
         body += "{\"text\":";
-        AppendJsonString(body, kSuggestionPrompt);
+        AppendJsonString(body, SuggestionPrompt(job));
         body += "}]}";
     } else {
         for (size_t i = 0; i < job.history.size(); i++) {
@@ -7065,19 +10860,19 @@ std::string BuildRequestBody(const GeminiJob& job,
         }
     }
     body += "],\"generationConfig\":{";
-    switch (thinking) {
-        case Thinking::Minimal:
+    switch (step) {
+        case 0:
             body += "\"thinkingConfig\":{\"thinkingLevel\":\"minimal\"},";
             break;
-        case Thinking::Low:
+        case 1:
             body += "\"thinkingConfig\":{\"thinkingLevel\":\"low\"},";
             break;
-        case Thinking::LimitedBudget:
+        case 2:
             // Positive budgets also work with models that cannot turn off
             // thinking; never retry a Gemini 3 request with a zero budget.
             body += "\"thinkingConfig\":{\"thinkingBudget\":1024},";
             break;
-        case Thinking::Default:
+        default:
             break;
     }
     if (job.suggestions) {
@@ -7090,6 +10885,153 @@ std::string BuildRequestBody(const GeminiJob& job,
     }
     body += "}}";
     return body;
+}
+
+std::string BuildOpenAiBody(const AiJob& job,
+                            const std::wstring& model,
+                            const std::vector<std::string>& images,
+                            int step) {
+    std::string body = "{\"model\":";
+    AppendJsonString(body, ToUtf8(model));
+    body += ",\"stream\":true,\"store\":false,\"instructions\":";
+    AppendJsonString(body, SystemInstruction(job));
+    body += ",\"input\":[";
+
+    auto appendImages = [&] {
+        for (const std::string& image : images) {
+            body += "{\"type\":\"input_image\",\"image_url\":\"data:image/jpeg;base64,";
+            body += image;
+            body += "\"},";
+        }
+    };
+
+    if (job.suggestions) {
+        body += "{\"role\":\"user\",\"content\":[";
+        appendImages();
+        body += "{\"type\":\"input_text\",\"text\":";
+        AppendJsonString(body, SuggestionPrompt(job));
+        body += "}]}";
+    } else {
+        for (size_t i = 0; i < job.history.size(); i++) {
+            const ChatTurn& turn = job.history[i];
+            if (i > 0) {
+                body += ',';
+            }
+            const std::string text = turn.text.empty() ? std::string(".") : turn.text;
+            if (turn.fromUser) {
+                body += "{\"role\":\"user\",\"content\":[";
+                if (i == 0) {
+                    appendImages();
+                }
+                body += "{\"type\":\"input_text\",\"text\":";
+                AppendJsonString(body, text);
+                body += "}]}";
+            } else {
+                body += "{\"role\":\"assistant\",\"content\":";
+                AppendJsonString(body, text);
+                body += '}';
+            }
+        }
+    }
+    body += ']';
+    switch (step) {
+        case 0:
+            body += ",\"reasoning\":{\"effort\":\"none\"}";
+            break;
+        case 1:
+            body += ",\"reasoning\":{\"effort\":\"low\"}";
+            break;
+        default:
+            break;
+    }
+    if (job.suggestions) {
+        body += ",\"max_output_tokens\":2048";
+    }
+    body += '}';
+    return body;
+}
+
+std::string BuildAnthropicBody(const AiJob& job,
+                               const std::wstring& model,
+                               const std::vector<std::string>& images,
+                               int step) {
+    std::string body = "{\"model\":";
+    AppendJsonString(body, ToUtf8(model));
+    body += job.suggestions ? ",\"max_tokens\":2048" : ",\"max_tokens\":8192";
+    body += ",\"stream\":true,\"system\":";
+    AppendJsonString(body, SystemInstruction(job));
+    body += ",\"messages\":[";
+
+    auto appendImages = [&] {
+        for (const std::string& image : images) {
+            body += "{\"type\":\"image\",\"source\":{\"type\":\"base64\","
+                    "\"media_type\":\"image/jpeg\",\"data\":\"";
+            body += image;
+            body += "\"}},";
+        }
+    };
+
+    if (job.suggestions) {
+        body += "{\"role\":\"user\",\"content\":[";
+        appendImages();
+        body += "{\"type\":\"text\",\"text\":";
+        AppendJsonString(body, SuggestionPrompt(job));
+        body += "}]}";
+    } else {
+        for (size_t i = 0; i < job.history.size(); i++) {
+            const ChatTurn& turn = job.history[i];
+            if (i > 0) {
+                body += ',';
+            }
+            const std::string text = turn.text.empty() ? std::string(".") : turn.text;
+            if (turn.fromUser) {
+                body += "{\"role\":\"user\",\"content\":[";
+                if (i == 0) {
+                    appendImages();
+                }
+                body += "{\"type\":\"text\",\"text\":";
+                AppendJsonString(body, text);
+                body += "}]}";
+            } else {
+                body += "{\"role\":\"assistant\",\"content\":";
+                AppendJsonString(body, text);
+                body += '}';
+            }
+        }
+    }
+    body += ']';
+    switch (step) {
+        case 0:
+            body += ",\"thinking\":{\"type\":\"disabled\"},"
+                    "\"output_config\":{\"effort\":\"low\"}";
+            break;
+        case 1:
+            body += ",\"thinking\":{\"type\":\"between_tools\"},"
+                    "\"output_config\":{\"effort\":\"low\"}";
+            break;
+        case 2:
+            body += ",\"output_config\":{\"effort\":\"low\"}";
+            break;
+        default:
+            break;
+    }
+    body += '}';
+    return body;
+}
+
+std::string BuildRequestBody(const AiJob& job,
+                             const std::wstring& model,
+                             const std::vector<std::string>& images,
+                             int step) {
+    switch (job.provider) {
+        case Provider::OpenAi:
+            return BuildOpenAiBody(job, model, images, step);
+        case Provider::Anthropic:
+            return BuildAnthropicBody(job, model, images, step);
+        case Provider::Gemini:
+            break;
+    }
+    return BuildGeminiBody(job, images, step);
 }
 
 void ExtractResponseText(const Json& root,
@@ -7141,38 +11083,222 @@ std::string ApiErrorMessage(const std::string& body) {
     return {};
 }
 
-std::wstring FriendlyError(DWORD status,
-                           const std::string& apiMessage,
-                           const std::wstring& model) {
-    if (status == 400 && ContainsNoCase(apiMessage, "API key")) {
-        return L"Your Gemini API key isn't valid. Check it in the mod's "
-               L"settings.";
+std::string ApiErrorCode(const std::string& body) {
+    Json root;
+    if (ParseJson(body, root)) {
+        if (const Json* error = root.Get("error")) {
+            for (const char* key : {"code", "type"}) {
+                if (const Json* value = error->Get(key)) {
+                    if (value->IsString() && !value->string.empty()) {
+                        return value->string;
+                    }
+                }
+            }
+        }
     }
-    if (status == 403) {
-        return L"This API key can't use Gemini (403). Check the key in the "
-               L"mod's settings.";
+    return {};
+}
+
+bool IsBillingError(const std::string& apiMessage, const std::string& apiCode) {
+    return ContainsNoCase(apiCode, "quota") || ContainsNoCase(apiCode, "credit") ||
+           ContainsNoCase(apiCode, "billing") || ContainsNoCase(apiCode, "spend_limit") ||
+           ContainsNoCase(apiMessage, "credit balance") ||
+           ContainsNoCase(apiMessage, "current quota");
+}
+
+bool IsInvalidKey(Provider provider, DWORD status, const std::string& apiMessage) {
+    return provider == Provider::Gemini
+               ? status == 400 && ContainsNoCase(apiMessage, "API key")
+               : status == 401;
+}
+
+struct ModelTrouble {
+    bool tryOther = false;
+    double blockMs = 0;
+};
+
+ModelTrouble DiagnoseModel(Provider provider,
+                           DWORD status,
+                           bool timedOut,
+                           const std::string& apiMessage,
+                           const std::string& apiCode) {
+    constexpr double kMinute = 60000.0;
+    if (status == 0) {
+        return timedOut ? ModelTrouble{true, 2 * kMinute} : ModelTrouble{};
+    }
+    if (IsInvalidKey(provider, status, apiMessage) || status == 401 || status == 402) {
+        return {};
+    }
+    if (provider != Provider::Gemini && (status == 400 || status == 429) &&
+        IsBillingError(apiMessage, apiCode)) {
+        return {};
     }
     if (status == 404) {
-        return L"The model \"" + model + L"\" isn't available to your key. "
-               L"Pick another model in the mod's settings.";
+        return {true, 5 * kMinute};
+    }
+    if (status == 403) {
+        return ContainsNoCase(apiMessage, "model") || ContainsNoCase(apiCode, "model")
+                   ? ModelTrouble{true, 5 * kMinute}
+                   : ModelTrouble{};
     }
     if (status == 429) {
-        if (ContainsNoCase(apiMessage, "limit: 0")) {
-            return L"Your Gemini plan has no free quota for \"" + model +
-                   L"\". Pick a Flash-Lite or Flash model in the mod's "
-                   L"settings, or add billing to your key.";
+        return {true, provider == Provider::Gemini && ContainsNoCase(apiMessage, "limit: 0")
+                          ? 5 * kMinute
+                          : kMinute};
+    }
+    if (status == 400) {
+        return {true, 0};
+    }
+    return status >= 500 ? ModelTrouble{true, 2 * kMinute} : ModelTrouble{};
+}
+
+std::wstring FriendlyError(Provider provider,
+                           DWORD status,
+                           const std::string& apiMessage,
+                           const std::string& apiCode,
+                           const std::wstring& model) {
+    const std::wstring name = ProviderName(provider);
+    if (IsInvalidKey(provider, status, apiMessage)) {
+        return TrFormat(Str::ErrKeyInvalid, name);
+    }
+    if (status == 403) {
+        return TrFormat(Str::ErrKeyForbidden, name);
+    }
+    if (status == 404) {
+        return TrFormat(Str::ErrModelMissing, model);
+    }
+    if (provider != Provider::Gemini &&
+        (status == 402 ||
+         ((status == 400 || status == 429) && IsBillingError(apiMessage, apiCode)))) {
+        return TrFormat(Str::ErrNoCredit, name);
+    }
+    if (status == 429) {
+        if (provider == Provider::Gemini && ContainsNoCase(apiMessage, "limit: 0")) {
+            return TrFormat(Str::ErrNoFreeQuota, model);
         }
-        return L"You've reached Gemini's rate limit for now. Try again in a "
-               L"moment.";
+        return TrFormat(Str::ErrRateLimit, name);
     }
     if (status >= 500) {
-        return L"Gemini is having trouble right now (" +
-               std::to_wstring(status) + L"). Try again in a moment.";
+        return TrFormat(Str::ErrServer, name, std::to_wstring(status));
     }
     if (!apiMessage.empty()) {
         return FromUtf8(apiMessage);
     }
-    return L"Gemini returned an error (" + std::to_wstring(status) + L").";
+    return TrFormat(Str::ErrGeneric, name, std::to_wstring(status));
+}
+
+bool NeedsOtherTuning(Provider provider, DWORD status, const std::string& apiMessage) {
+    if (status != 400) {
+        return false;
+    }
+    switch (provider) {
+        case Provider::OpenAi:
+            return ContainsNoCase(apiMessage, "reasoning") ||
+                   ContainsNoCase(apiMessage, "effort");
+        case Provider::Anthropic:
+            return ContainsNoCase(apiMessage, "thinking") ||
+                   ContainsNoCase(apiMessage, "effort") ||
+                   ContainsNoCase(apiMessage, "output_config");
+        case Provider::Gemini:
+            break;
+    }
+    return ContainsNoCase(apiMessage, "thinking") ||
+           ContainsNoCase(apiMessage, "budget");
+}
+
+const Json* JsonPath(const Json& root, std::initializer_list<const char*> keys) {
+    const Json* value = &root;
+    for (const char* key : keys) {
+        value = value ? value->Get(key) : nullptr;
+    }
+    return value;
+}
+
+std::string JsonText(const Json* value) {
+    return value && value->IsString() ? value->string : std::string();
+}
+
+void ReadOpenAiEvent(const Json& root,
+                     std::string& text,
+                     std::string& finishReason,
+                     std::string& streamError) {
+    const std::string type = JsonText(root.Get("type"));
+    if (type == "response.output_text.delta" || type == "response.refusal.delta") {
+        text += JsonText(root.Get("delta"));
+    } else if (type == "response.completed") {
+        finishReason = "STOP";
+    } else if (type == "response.incomplete") {
+        const std::string reason =
+            JsonText(JsonPath(root, {"response", "incomplete_details", "reason"}));
+        finishReason = reason == "max_output_tokens" ? "MAX_TOKENS"
+                       : reason.empty()              ? "INCOMPLETE"
+                                                     : reason;
+    } else if (type == "response.failed") {
+        streamError = JsonText(JsonPath(root, {"response", "error", "message"}));
+        if (streamError.empty()) {
+            streamError = JsonText(JsonPath(root, {"response", "error", "code"}));
+        }
+        if (streamError.empty()) {
+            streamError = ToUtf8(TrFormat(Str::ErrStreaming, ProviderName(Provider::OpenAi)));
+        }
+    } else if (type == "error") {
+        streamError = JsonText(root.Get("message"));
+        if (streamError.empty()) {
+            streamError = ToUtf8(TrFormat(Str::ErrStreaming, ProviderName(Provider::OpenAi)));
+        }
+    }
+}
+
+void ReadAnthropicEvent(const Json& root,
+                        std::string& text,
+                        std::string& finishReason,
+                        std::string& streamError) {
+    const std::string type = JsonText(root.Get("type"));
+    if (type == "content_block_delta") {
+        const Json* delta = root.Get("delta");
+        if (delta && JsonText(delta->Get("type")) == "text_delta") {
+            text += JsonText(delta->Get("text"));
+        }
+    } else if (type == "message_delta") {
+        const std::string reason = JsonText(JsonPath(root, {"delta", "stop_reason"}));
+        if (!reason.empty()) {
+            finishReason = reason == "end_turn" || reason == "stop_sequence" ? "STOP"
+                           : reason == "max_tokens"                         ? "MAX_TOKENS"
+                                                                            : reason;
+        }
+    } else if (type == "error") {
+        streamError = JsonText(JsonPath(root, {"error", "message"}));
+        if (streamError.empty()) {
+            streamError = ToUtf8(TrFormat(Str::ErrStreaming, ProviderName(Provider::Anthropic)));
+        }
+    }
+}
+
+void ReadStreamEvent(Provider provider,
+                     const Json& root,
+                     std::string& text,
+                     std::string& finishReason,
+                     std::string& streamError) {
+    switch (provider) {
+        case Provider::OpenAi:
+            ReadOpenAiEvent(root, text, finishReason, streamError);
+            return;
+        case Provider::Anthropic:
+            ReadAnthropicEvent(root, text, finishReason, streamError);
+            return;
+        case Provider::Gemini:
+            break;
+    }
+    if (const Json* error = root.Get("error")) {
+        if (const Json* message = error->Get("message")) {
+            streamError = message->string;
+        }
+        if (streamError.empty()) {
+            streamError = ToUtf8(TrFormat(Str::ErrStreaming, ProviderName(provider)));
+        }
+        return;
+    }
+    ExtractResponseText(root, text, finishReason);
 }
 
 class SseParser {
@@ -7242,7 +11368,7 @@ class SseParser {
 std::mutex g_sessionMutex;
 HINTERNET g_session;
 
-HINTERNET GeminiSession() {
+HINTERNET ApiSession() {
     std::lock_guard<std::mutex> lock(g_sessionMutex);
     if (g_session) {
         return g_session;
@@ -7276,7 +11402,7 @@ HINTERNET GeminiSession() {
     return session;
 }
 
-void CloseGeminiSession() {
+void CloseApiSession() {
     std::lock_guard<std::mutex> lock(g_sessionMutex);
     if (g_session) {
         WinHttpCloseHandle(g_session);
@@ -7287,30 +11413,58 @@ void CloseGeminiSession() {
 struct HttpResult {
     DWORD status = 0;
     DWORD error = 0;
+    bool awaitedResponse = false;
     std::string body;  // Only kept for error responses.
 };
 
+struct ApiEndpoint {
+    PCWSTR host;
+    std::wstring path;
+    std::wstring headers;
+};
+
+ApiEndpoint EndpointFor(const AiJob& job, const std::wstring& model) {
+    switch (job.provider) {
+        case Provider::OpenAi:
+            return {L"api.openai.com", L"/v1/responses",
+                    L"Content-Type: application/json\r\n"
+                    L"Authorization: Bearer " +
+                        job.apiKey + L"\r\n"};
+        case Provider::Anthropic:
+            return {L"api.anthropic.com", L"/v1/messages",
+                    L"Content-Type: application/json\r\n"
+                    L"anthropic-version: 2023-06-01\r\n"
+                    L"x-api-key: " +
+                        job.apiKey + L"\r\n"};
+        case Provider::Gemini:
+            break;
+    }
+    return {L"generativelanguage.googleapis.com",
+            L"/v1beta/models/" + model + L":streamGenerateContent?alt=sse",
+            L"Content-Type: application/json\r\n"
+            L"x-goog-api-key: " +
+                job.apiKey + L"\r\n"};
+}
+
 template <typename OnData>
-HttpResult SendToGemini(PCWSTR verb,
-                        const std::wstring& path,
-                        const std::wstring& apiKey,
-                        const std::string& body,
-                        std::atomic<bool>* canceled,
-                        std::atomic<HINTERNET>* requestSlot,
-                        DWORD receiveTimeout,
-                        OnData onData) {
+HttpResult SendToApi(const ApiEndpoint& endpoint,
+                     const std::string& body,
+                     std::atomic<bool>* canceled,
+                     std::atomic<HINTERNET>* requestSlot,
+                     DWORD firstByteTimeout,
+                     DWORD receiveTimeout,
+                     OnData onData) {
     HttpResult result;
-    HINTERNET session = GeminiSession();
+    HINTERNET session = ApiSession();
     if (!session) {
         result.error = GetLastError();
         return result;
     }
     HINTERNET connection = WinHttpConnect(
-        session, L"generativelanguage.googleapis.com",
-        INTERNET_DEFAULT_HTTPS_PORT, 0);
+        session, endpoint.host, INTERNET_DEFAULT_HTTPS_PORT, 0);
     HINTERNET request =
         connection
-            ? WinHttpOpenRequest(connection, verb, path.c_str(), nullptr,
+            ? WinHttpOpenRequest(connection, L"POST", endpoint.path.c_str(), nullptr,
                                  WINHTTP_NO_REFERER,
                                  WINHTTP_DEFAULT_ACCEPT_TYPES,
                                  WINHTTP_FLAG_SECURE)
@@ -7323,7 +11477,7 @@ HttpResult SendToGemini(PCWSTR verb,
         return result;
     }
     WinHttpSetTimeouts(request, 15000, 15000, 30000,
-                       static_cast<int>(receiveTimeout));
+                       static_cast<int>(firstByteTimeout));
 
     if (requestSlot) {
         requestSlot->store(request);
@@ -7334,16 +11488,15 @@ HttpResult SendToGemini(PCWSTR verb,
         }
     }
 
-    const std::wstring headers = L"Content-Type: application/json\r\n"
-                                 L"x-goog-api-key: " +
-                                 apiKey + L"\r\n";
-    bool ok = !(canceled && *canceled) &&
-              WinHttpSendRequest(request, headers.c_str(), static_cast<DWORD>(-1),
-                                 const_cast<char*>(body.data()),
-                                 static_cast<DWORD>(body.size()),
-                                 static_cast<DWORD>(body.size()), 0) &&
-              WinHttpReceiveResponse(request, nullptr);
+    result.awaitedResponse =
+        !(canceled && *canceled) &&
+        WinHttpSendRequest(request, endpoint.headers.c_str(), static_cast<DWORD>(-1),
+                           const_cast<char*>(body.data()), static_cast<DWORD>(body.size()),
+                           static_cast<DWORD>(body.size()), 0);
+    bool ok = result.awaitedResponse && WinHttpReceiveResponse(request, nullptr);
     if (ok) {
+        WinHttpSetTimeouts(request, 15000, 15000, 30000,
+                           static_cast<int>(receiveTimeout));
         DWORD status = 0;
         DWORD size = sizeof(status);
         ok = WinHttpQueryHeaders(
@@ -7393,21 +11546,21 @@ HttpResult SendToGemini(PCWSTR verb,
     return result;
 }
 
-void PostGeminiMessage(GeminiJob& job,
-                       GeminiEvent event,
+void PostAiMessage(AiJob& job,
+                       AiEvent event,
                        std::wstring text,
                        std::vector<std::wstring> suggestions = {},
                        bool partial = false) {
     if (job.canceled) {
         return;
     }
-    auto message = std::make_unique<GeminiMessage>();
+    auto message = std::make_unique<AiMessage>();
     message->requestId = job.id;
     message->event = event;
     message->partial = partial;
     message->text = std::move(text);
     message->suggestions = std::move(suggestions);
-    PostOwned(job.notify, WM_APP_GEMINI, std::move(message));
+    PostOwned(job.notify, WM_APP_AI, std::move(message));
 }
 
 std::wstring CleanSuggestion(std::string item) {
@@ -7506,10 +11659,10 @@ std::vector<std::wstring> ParseSuggestions(const std::string& text) {
 constexpr int kSuggestionImageSize = 768;
 constexpr int kAnswerImageSize = 1536;
 
-DWORD WINAPI GeminiThreadProc(LPVOID param) {
-    std::unique_ptr<std::shared_ptr<GeminiJob>> holder(
-        static_cast<std::shared_ptr<GeminiJob>*>(param));
-    GeminiJob& job = **holder;
+DWORD WINAPI AiThreadProc(LPVOID param) {
+    std::unique_ptr<std::shared_ptr<AiJob>> holder(
+        static_cast<std::shared_ptr<AiJob>*>(param));
+    AiJob& job = **holder;
 
     std::vector<std::string> images;
     const HRESULT coInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
@@ -7526,22 +11679,53 @@ DWORD WINAPI GeminiThreadProc(LPVOID param) {
         CoUninitialize();
     }
 
-    std::wstring model = SanitizeModel(job.model);
-    const std::wstring fallback = SanitizeModel(job.fallbackModel);
-    if ((model.empty() || IsModelMissing(model)) && !fallback.empty()) {
-        model = fallback;
+    const std::wstring name = ProviderName(job.provider);
+    std::vector<std::wstring> models;
+    auto addModel = [&](const std::wstring& candidate) {
+        const std::wstring clean = SanitizeModel(candidate);
+        if (!clean.empty() && std::find(models.begin(), models.end(), clean) == models.end()) {
+            models.push_back(clean);
+        }
+    };
+    addModel(job.model);
+    for (const std::wstring& candidate : job.fallbackModels) {
+        addModel(candidate);
     }
-    if (model.empty()) {
-        model = kDefaultModel;
+    if (models.empty()) {
+        models.push_back(DefaultModel(job.provider));
     }
-    Thinking thinking = GetThinking(model, job.suggestions);
+    auto skipUnavailable = [&](size_t from) {
+        while (from + 1 < models.size() && IsModelUnavailable(models[from])) {
+            from++;
+        }
+        return from;
+    };
+    bool noted = false;
+    auto noteFallback = [&] {
+        if (!noted && !job.suggestions) {
+            noted = true;
+            PostAiMessage(job, AiEvent::Note, Tr(Str::ModelBusy));
+        }
+    };
+    size_t index = skipUnavailable(0);
+    if (index > 0) {
+        noteFallback();
+    }
+    std::wstring model = models[index];
+    int step = GetStep(job.provider, model, job.suggestions);
+    auto switchModel = [&](double blockMs) {
+        SetModelUnavailable(model, blockMs);
+        index = skipUnavailable(index + 1);
+        model = models[index];
+        step = GetStep(job.provider, model, job.suggestions);
+        noteFallback();
+    };
 
-    // At most four thinking settings for each of the two possible models.
-    constexpr int kMaxAttempts = 8;
+    // At most four thinking settings for each of up to three models.
+    constexpr int kMaxAttempts = 12;
     for (int attempt = 0; attempt < kMaxAttempts && !job.canceled; attempt++) {
-        const std::wstring path =
-            L"/v1beta/models/" + model + L":streamGenerateContent?alt=sse";
-        const std::string body = BuildRequestBody(job, images, thinking);
+        const ApiEndpoint endpoint = EndpointFor(job, model);
+        const std::string body = BuildRequestBody(job, model, images, step);
         std::string answer;
         std::string finishReason;
         std::string streamError;
@@ -7551,6 +11735,9 @@ DWORD WINAPI GeminiThreadProc(LPVOID param) {
         double firstText = -1;
         SseParser sse;
         auto onEvent = [&](const std::string& data) {
+            if (data == "[DONE]") {
+                return;
+            }
             Json root;
             if (!ParseJson(data, root) || root.type != Json::Type::Object) {
                 const std::string error = ApiErrorMessage(data);
@@ -7560,17 +11747,8 @@ DWORD WINAPI GeminiThreadProc(LPVOID param) {
                 invalidEvent = true;
                 return;
             }
-            if (const Json* error = root.Get("error")) {
-                if (const Json* message = error->Get("message")) {
-                    streamError = message->string;
-                }
-                if (streamError.empty()) {
-                    streamError = "Gemini returned a streaming error.";
-                }
-                return;
-            }
             std::string text;
-            ExtractResponseText(root, text, finishReason);
+            ReadStreamEvent(job.provider, root, text, finishReason, streamError);
             if (text.empty()) {
                 return;
             }
@@ -7579,104 +11757,107 @@ DWORD WINAPI GeminiThreadProc(LPVOID param) {
             }
             answer += text;
             if (!job.suggestions) {
-                PostGeminiMessage(job, GeminiEvent::Chunk, FromUtf8(text));
+                PostAiMessage(job, AiEvent::Chunk, FromUtf8(text));
                 return;
             }
             std::vector<std::wstring> partial = ParsePartialSuggestions(answer);
             if (partial.size() > shownSuggestions && partial.size() < 3) {
                 shownSuggestions = partial.size();
-                PostGeminiMessage(job, GeminiEvent::Suggestions, L"",
-                                  std::move(partial), true);
+                PostAiMessage(job, AiEvent::Suggestions, L"",
+                              std::move(partial), true);
             }
         };
 
-        HttpResult result = SendToGemini(
-            L"POST", path, job.apiKey, body, &job.canceled, &job.request,
-            job.suggestions ? 20000 : 90000,
+        const DWORD receiveTimeout = job.suggestions ? 20000 : 90000;
+        HttpResult result = SendToApi(
+            endpoint, body, &job.canceled, &job.request,
+            index + 1 < models.size() ? std::min<DWORD>(receiveTimeout, 30000)
+                                      : receiveTimeout,
+            receiveTimeout,
             [&](const char* data, size_t size) { sse.Feed(data, size, onEvent); });
         if (job.canceled) {
             break;
         }
 
         if (result.status == 200) {
-            SetThinking(model, job.suggestions, thinking);
+            SetStep(model, job.suggestions, step);
             sse.Finish(onEvent);
             Wh_Log(L"%s %s: first text after %d ms, done after %d ms",
                    model.c_str(), job.suggestions ? L"suggestions" : L"answer",
                    static_cast<int>(firstText), static_cast<int>(NowMs() - start));
+            if (!job.suggestions && answer.empty() && !streamError.empty() && !result.error &&
+                attempt + 1 < kMaxAttempts && index + 1 < models.size()) {
+                Wh_Log(L"%s failed before answering (%S), trying %s", model.c_str(),
+                       streamError.c_str(), models[index + 1].c_str());
+                switchModel(60000);
+                continue;
+            }
             std::wstring note;
             if (result.error) {
-                note = answer.empty()
-                           ? L"Couldn't receive Gemini's answer. Check your "
-                             L"internet connection (error "
-                           : L"The connection to Gemini was interrupted. This "
-                             L"answer is incomplete (error ";
-                note += std::to_wstring(result.error) + L"). Try asking again.";
+                note = TrFormat(answer.empty() ? Str::ErrNoConnection
+                                               : Str::ErrInterrupted,
+                                name, std::to_wstring(result.error));
             } else if (!streamError.empty()) {
                 note = answer.empty() ? FromUtf8(streamError)
-                                      : L"Gemini interrupted this answer: " +
-                                            FromUtf8(streamError);
+                                      : TrFormat(Str::ErrInterruptedBy, name,
+                                                 FromUtf8(streamError));
             } else if (invalidEvent) {
-                note = L"Gemini returned an unreadable response. Try asking "
-                       L"again.";
+                note = TrFormat(Str::ErrUnreadable, name);
             } else if (finishReason == "MAX_TOKENS") {
-                note = L"Gemini reached its output limit. This answer is "
-                       L"incomplete. Try asking for a shorter answer.";
+                note = TrFormat(Str::ErrOutputLimit, name);
             } else if (!finishReason.empty() && finishReason != "STOP") {
-                note = L"Gemini stopped this answer (" +
-                       FromUtf8(finishReason) + L"). Try asking another way.";
+                note = TrFormat(Str::ErrStoppedBecause, name, FromUtf8(finishReason));
             } else if (finishReason.empty()) {
-                note = L"Gemini stopped before confirming that the answer was "
-                       L"complete. Try asking again.";
+                note = TrFormat(Str::ErrUnconfirmed, name);
             } else if (answer.empty()) {
-                note = L"Gemini didn't return an answer. Try asking another "
-                       L"way.";
+                note = TrFormat(Str::ErrNoAnswer, name);
             }
             if (job.suggestions) {
-                PostGeminiMessage(job, GeminiEvent::Suggestions, note,
-                                  note.empty() ? ParseSuggestions(answer)
-                                               : ParsePartialSuggestions(answer));
+                PostAiMessage(job, AiEvent::Suggestions, note,
+                              note.empty() ? ParseSuggestions(answer)
+                                           : ParsePartialSuggestions(answer));
                 break;
             }
-            PostGeminiMessage(job,
-                              note.empty() ? GeminiEvent::Done : GeminiEvent::Error,
-                              note);
+            PostAiMessage(job,
+                          note.empty() ? AiEvent::Done : AiEvent::Error,
+                          note);
             break;
         }
 
         const std::string apiMessage = ApiErrorMessage(result.body);
-        if (attempt + 1 < kMaxAttempts && result.status == 400 &&
-            thinking != Thinking::Default &&
-            (ContainsNoCase(apiMessage, "thinking") ||
-             ContainsNoCase(apiMessage, "budget"))) {
-            thinking = NextThinking(thinking);
-            Wh_Log(L"%s: trying another thinking setting (%d)", model.c_str(),
-                   static_cast<int>(thinking));
+        const std::string apiCode = ApiErrorCode(result.body);
+        if (attempt + 1 < kMaxAttempts && step < LastStep(job.provider) &&
+            NeedsOtherTuning(job.provider, result.status, apiMessage)) {
+            step++;
+            Wh_Log(L"%s: trying another thinking setting (%d)", model.c_str(), step);
             continue;
         }
-        if (attempt + 1 < kMaxAttempts && result.status == 404 &&
-            !fallback.empty() && model != fallback) {
-            Wh_Log(L"%s doesn't exist, using %s", model.c_str(), fallback.c_str());
-            SetModelMissing(model);
-            model = fallback;
-            thinking = GetThinking(model, job.suggestions);
+        const bool timedOut = result.status == 0 && result.awaitedResponse &&
+                              result.error == ERROR_WINHTTP_TIMEOUT;
+        const ModelTrouble trouble =
+            DiagnoseModel(job.provider, result.status, timedOut, apiMessage, apiCode);
+        if (attempt + 1 < kMaxAttempts && index + 1 < models.size() && trouble.tryOther &&
+            (!job.suggestions || result.status == 404)) {
+            Wh_Log(L"%s isn't available (%u %u), trying %s", model.c_str(), result.status,
+                   result.error, models[index + 1].c_str());
+            switchModel(trouble.blockMs);
             continue;
         }
 
         std::wstring error;
-        if (result.status == 0) {
-            error = L"Couldn't reach Gemini. Check your internet connection "
-                    L"(error " +
-                    std::to_wstring(result.error) + L").";
+        if (timedOut) {
+            error = TrFormat(Str::ErrTimeout, name);
+        } else if (result.status == 0) {
+            error = TrFormat(Str::ErrCouldntReach, name, std::to_wstring(result.error));
         } else {
-            error = FriendlyError(result.status, apiMessage, model);
+            error = FriendlyError(job.provider, result.status, apiMessage, apiCode, model);
         }
-        Wh_Log(L"Gemini request failed: %u %u %S", result.status, result.error,
-               apiMessage.c_str());
-        PostGeminiMessage(job,
-                          job.suggestions ? GeminiEvent::Suggestions
-                                          : GeminiEvent::Error,
-                          error);
+        Wh_Log(L"%s request failed: %u %u %S", name.c_str(), result.status,
+               result.error, apiMessage.c_str());
+        PostAiMessage(job,
+                      job.suggestions ? AiEvent::Suggestions
+                                      : AiEvent::Error,
+                      error);
         break;
     }
 
@@ -7684,10 +11865,10 @@ DWORD WINAPI GeminiThreadProc(LPVOID param) {
     return 0;
 }
 
-std::shared_ptr<GeminiJob> StartGeminiJob(std::shared_ptr<GeminiJob> job) {
-    auto* param = new std::shared_ptr<GeminiJob>(job);
+std::shared_ptr<AiJob> StartAiJob(std::shared_ptr<AiJob> job) {
+    auto* param = new std::shared_ptr<AiJob>(job);
     g_helperThreads++;
-    HANDLE thread = CreateThread(nullptr, 0, GeminiThreadProc, param, 0, nullptr);
+    HANDLE thread = CreateThread(nullptr, 0, AiThreadProc, param, 0, nullptr);
     if (!thread) {
         g_helperThreads--;
         delete param;
@@ -7703,6 +11884,27 @@ std::shared_ptr<GeminiJob> StartGeminiJob(std::shared_ptr<GeminiJob> job) {
 HWND g_messageWindow;
 uint32_t g_lastRequestId;
 uint32_t g_lastAttachmentId;
+
+std::shared_ptr<AiJob> NewAiJob(bool suggestions) {
+    Provider provider;
+    if (!ActiveProvider(g_settings, provider)) {
+        return nullptr;
+    }
+    auto job = std::make_shared<AiJob>();
+    job->id = ++g_lastRequestId;
+    job->suggestions = suggestions;
+    job->provider = provider;
+    job->apiKey = g_settings.apiKey;
+    if (suggestions) {
+        job->model = DefaultModel(provider);
+        job->fallbackModels.push_back(SelectedModel(g_settings, provider));
+    } else {
+        job->model = SelectedModel(g_settings, provider);
+        job->fallbackModels = FallbackModels(g_settings, provider);
+    }
+    job->notify = g_messageWindow;
+    return job;
+}
 
 void BeginAddSelection();
 void OnCardClosed();
@@ -7773,9 +11975,22 @@ std::wstring WindowsLanguageName() {
 }
 
 std::wstring TranslationLanguage() {
-    return g_settings.translateTo.empty() || g_settings.translateTo == L"auto"
-               ? WindowsLanguageName()
-               : g_settings.translateTo;
+    if (!g_settings.translateTo.empty() && g_settings.translateTo != L"auto") {
+        return g_settings.translateTo;
+    }
+    const LanguageInfo* language = CurrentLanguage();
+    return g_languageChosen && language ? std::wstring(language->english)
+                                        : WindowsLanguageName();
+}
+
+std::wstring TranslationLanguageName() {
+    const std::wstring language = TranslationLanguage();
+    if (!UiIsEnglish()) {
+        if (const LanguageInfo* info = FindLanguageByEnglishName(language)) {
+            return info->native;
+        }
+    }
+    return language;
 }
 
 std::wstring TranslatePrompt(const std::wstring& language) {
@@ -7923,10 +12138,10 @@ class AskCard {
         underlay_.Reset();
     }
 
-    void Open(Attachment attachment, const RECT& selection, double now) {
+    bool Begin(const RECT& selection, double now) {
         Close();
         if (!Create()) {
-            return;
+            return false;
         }
         open_ = true;
         suspended_ = false;
@@ -7936,13 +12151,45 @@ class AskCard {
         openTime_ = now;
         scale_ = DpiScaleAt(RectCenter(selection));
         Restyle();
+        return true;
+    }
+
+    void Reveal() {
+        panel_.Show(true);
+        SetForegroundWindow(panel_.Hwnd());
+        SetFocus(panel_.Hwnd());
+    }
+
+    void Open(Attachment attachment, const RECT& selection, double now) {
+        if (!Begin(selection, now)) {
+            return;
+        }
         Attach(std::move(attachment));
         ResetChips();
         StartSuggestions(now);
         Update(now);
-        panel_.Show(true);
-        SetForegroundWindow(panel_.Hwnd());
-        SetFocus(panel_.Hwnd());
+        Reveal();
+    }
+
+    bool OpenTyped(const RECT& anchor, const std::wstring& text, double now) {
+        if (!Begin(anchor, now)) {
+            return false;
+        }
+        ResetChips();
+        InsertText(text);
+        Update(now);
+        Reveal();
+        return GetForegroundWindow() == panel_.Hwnd();
+    }
+
+    void AppendTyped(const std::wstring& text, double now) {
+        if (!open_ || text.empty()) {
+            return;
+        }
+        InsertText(text);
+        caretStart_ = now;
+        caretOn_ = true;
+        Update(now);
     }
 
     void AddAttachment(Attachment attachment, double now) {
@@ -8100,21 +12347,21 @@ class AskCard {
         return next;
     }
 
-    void OnGeminiMessage(std::unique_ptr<GeminiMessage> message, double now) {
+    void OnAiMessage(std::unique_ptr<AiMessage> message, double now) {
         if (!open_) {
             return;
         }
         if (message->requestId == chatId_ && chatId_ && !turns_.empty()) {
             CardTurn& turn = turns_.back();
             switch (message->event) {
-                case GeminiEvent::Chunk:
+                case AiEvent::Chunk:
                     turn.text += message->text;
                     break;
-                case GeminiEvent::Done:
+                case AiEvent::Done:
                     turn.streaming = false;
                     chatJob_.reset();
                     break;
-                case GeminiEvent::Error:
+                case AiEvent::Error:
                     turn.streaming = false;
                     turn.error = true;
                     if (turn.text.empty()) {
@@ -8124,13 +12371,16 @@ class AskCard {
                     }
                     chatJob_.reset();
                     break;
-                case GeminiEvent::Suggestions:
+                case AiEvent::Note:
+                    SetStatus(message->text, now);
+                    break;
+                case AiEvent::Suggestions:
                     break;
             }
             convoDirty_ = true;
             Update(now);
         } else if (message->requestId == suggestionsId_ && suggestionsId_ &&
-                   message->event == GeminiEvent::Suggestions) {
+                   message->event == AiEvent::Suggestions) {
             if (turns_.empty()) {
                 if (!message->suggestions.empty()) {
                     chips_.clear();
@@ -8174,7 +12424,7 @@ class AskCard {
         if (!found || !open_) {
             return;
         }
-        if (turns_.empty() && !chipsLoading_ && g_settings.apiKey.empty()) {
+        if (turns_.empty() && !chipsLoading_ && !HasAiKey()) {
             ResetChips();  // Offers to copy the text.
         }
         Update(now);
@@ -8345,8 +12595,8 @@ class AskCard {
     void CopyImage(double now) {
         if (const Attachment* a = MainAttachment()) {
             SetStatus(CopyImageToClipboard(panel_.Hwnd(), *a->image)
-                          ? L"Image copied"
-                          : L"Couldn't copy the image",
+                          ? Tr(Str::ImageCopied)
+                          : Tr(Str::ImageCopyFailed),
                       now);
         }
     }
@@ -8354,14 +12604,14 @@ class AskCard {
     void CopyText(double now) {
         const std::wstring text = CopyableText();
         if (text.empty()) {
-            SetStatus(HasPendingOcr() ? L"Still reading the text\x2026"
-                                      : L"No text found in the selection",
+            SetStatus(HasPendingOcr() ? Tr(Str::ReadingText)
+                                      : Tr(Str::NoTextFound),
                       now);
             return;
         }
         SetStatus(CopyTextToClipboard(panel_.Hwnd(), text)
-                      ? L"Text copied"
-                      : L"Couldn't copy the text",
+                      ? Tr(Str::TextCopied)
+                      : Tr(Str::TextCopyFailed),
                   now);
     }
 
@@ -8369,7 +12619,7 @@ class AskCard {
         if (const Attachment* a = MainAttachment()) {
             CopyImageToClipboard(panel_.Hwnd(), *a->image);
             SearchWithLens(a->image, SelectedBrowser());
-            SetStatus(L"Opening Google Lens in your browser\x2026", now);
+            SetStatus(Tr(Str::OpeningLens), now);
         }
     }
 
@@ -8387,72 +12637,75 @@ class AskCard {
     }
 
     void AskInBrowser(double now, const std::wstring& prompt) {
-        if (const Attachment* a = MainAttachment()) {
-            if (!CopyImageToClipboard(panel_.Hwnd(), *a->image)) {
-                SetStatus(L"Couldn't copy the image. Try again.", now);
-                return;
-            }
-            if (browserJob_) browserJob_->canceled = true;
-            auto job = std::make_shared<BrowserHandoffJob>();
-            job->id = ++g_lastRequestId;
-            job->notify = g_messageWindow;
-            job->clipboardSequence = GetClipboardSequenceNumber();
-            job->prompt = prompt;
-            for (const Attachment& attachment : attachments_) {
-                job->images.push_back(attachment.image);
-            }
-            job->browser = SelectedBrowser();
-            browserJob_ = job;
-            CancelSuggestions();
-            const bool several = attachments_.size() > 1;
-            if (StartBrowserHandoff(job)) {
-                SetStatus(several ? L"Opening Gemini and attaching your images\x2026"
-                                  : L"Opening Gemini and attaching your image\x2026",
-                          now);
-                Suspend();  // Let the browser receive focus and the paste.
-            } else {
-                browserJob_.reset();
-                OpenInBrowser(L"https://gemini.google.com/app", job->browser);
-                SetStatus(L"Click Gemini's message box, then press Ctrl+V to attach the image.", now);
+        const Attachment* first = MainAttachment();
+        if (first && !CopyImageToClipboard(panel_.Hwnd(), *first->image)) {
+            SetStatus(Tr(Str::ImageCopyRetry), now);
+            return;
+        }
+        if (browserJob_) browserJob_->canceled = true;
+        auto job = std::make_shared<BrowserHandoffJob>();
+        job->id = ++g_lastRequestId;
+        job->notify = g_messageWindow;
+        job->clipboardSequence = GetClipboardSequenceNumber();
+        job->prompt = prompt;
+        for (const Attachment& attachment : attachments_) {
+            job->images.push_back(attachment.image);
+        }
+        job->browser = SelectedBrowser();
+        browserJob_ = job;
+        CancelSuggestions();
+        const bool several = attachments_.size() > 1;
+        if (StartBrowserHandoff(job)) {
+            SetStatus(Tr(!first ? Str::OpeningGeminiText
+                         : several ? Str::OpeningGeminiMany
+                                   : Str::OpeningGeminiOne),
+                      now);
+            Suspend();  // Let the browser receive focus and the paste.
+        } else {
+            browserJob_.reset();
+            OpenInBrowser(L"https://gemini.google.com/app", job->browser);
+            if (first) {
+                SetStatus(Tr(Str::ClickBoxToAttach), now);
             }
         }
     }
 
     void ResetChips() {
         chips_.clear();
-        if (g_settings.apiKey.empty()) {
-            chips_.push_back({L"Ask in Gemini", ChipAction::AskInBrowser});
-            chips_.push_back({L"Search with Google Lens", ChipAction::Lens});
+        if (attachments_.empty()) {
+            return;
+        }
+        if (!HasAiKey()) {
+            chips_.push_back({Tr(Str::AskInGemini), ChipAction::AskInBrowser});
+            chips_.push_back({Tr(Str::SearchWithLens), ChipAction::Lens});
             if (!CopyableText().empty()) {
-                chips_.push_back({L"Copy text", ChipAction::CopyText});
+                chips_.push_back({Tr(Str::CopyText), ChipAction::CopyText});
             }
-            chips_.push_back({L"Copy image", ChipAction::CopyImage});
+            chips_.push_back({Tr(Str::CopyImage), ChipAction::CopyImage});
         } else {
-            chips_.push_back({L"What is this?", ChipAction::Ask});
-            chips_.push_back({L"Explain this to me", ChipAction::Ask});
-            chips_.push_back({L"Summarize this for me", ChipAction::Ask});
+            chips_.push_back({Tr(Str::WhatIsThis), ChipAction::Ask});
+            chips_.push_back({Tr(Str::ExplainThis), ChipAction::Ask});
+            chips_.push_back({Tr(Str::SummarizeThis), ChipAction::Ask});
         }
     }
 
     void StartSuggestions(double now) {
         CancelSuggestions();
-        if (g_settings.apiKey.empty() || !g_settings.suggestions ||
-            attachments_.empty()) {
+        if (!g_settings.suggestions || attachments_.empty()) {
             return;
         }
-        auto job = std::make_shared<GeminiJob>();
-        job->id = ++g_lastRequestId;
-        job->suggestions = true;
-        job->apiKey = g_settings.apiKey;
-        job->model = g_settings.suggestionsModel.empty() ? g_settings.model
-                                                         : g_settings.suggestionsModel;
-        job->fallbackModel = g_settings.model;
+        auto job = NewAiJob(true);
+        if (!job) {
+            return;
+        }
         for (const Attachment& attachment : attachments_) {
             job->images.push_back(attachment.image);
         }
         job->context = ToUtf8(ContextText());
-        job->notify = g_messageWindow;
-        suggestionsJob_ = StartGeminiJob(job);
+        if (!UiIsEnglish()) {
+            job->language = ToUtf8(CurrentLanguage()->english);
+        }
+        suggestionsJob_ = StartAiJob(job);
         if (suggestionsJob_) {
             suggestionsId_ = job->id;
             suggestionsStart_ = now;
@@ -8480,9 +12733,9 @@ class AskCard {
             turns_.back().streaming = false;
             turns_.back().error = true;
             if (turns_.back().text.empty()) {
-                turns_.back().text = L"Stopped.";
+                turns_.back().text = Tr(Str::Stopped);
             } else {
-                turns_.back().errorText = L"Stopped before the answer finished.";
+                turns_.back().errorText = Tr(Str::StoppedEarly);
             }
             convoDirty_ = true;
         }
@@ -8491,13 +12744,14 @@ class AskCard {
     void Submit(std::wstring question, double now, bool keepInput = false,
                 std::wstring prompt = {}) {
         question = Trim(question);
-        if (question.empty() || attachments_.empty()) {
+        if (question.empty() || !open_) {
             return;
         }
         if (prompt.empty()) {
             prompt = question;
         }
-        if (g_settings.apiKey.empty()) {
+        auto job = NewAiJob(false);
+        if (!job) {
             AskInBrowser(now, prompt);
             Update(now);
             return;
@@ -8506,15 +12760,10 @@ class AskCard {
         CancelSuggestions();
         chips_.clear();
 
-        auto job = std::make_shared<GeminiJob>();
-        job->id = ++g_lastRequestId;
-        job->apiKey = g_settings.apiKey;
-        job->model = g_settings.model;
         for (const Attachment& attachment : attachments_) {
             job->images.push_back(attachment.image);
         }
         job->context = ToUtf8(ContextText());
-        job->notify = g_messageWindow;
         for (size_t i = 0; i + 1 < turns_.size(); i += 2) {
             if (turns_[i].fromUser && !turns_[i + 1].error) {
                 job->history.push_back({true, ToUtf8(turns_[i].text)});
@@ -8533,20 +12782,20 @@ class AskCard {
         stickToBottom_ = true;
         convoDirty_ = true;
 
-        chatJob_ = StartGeminiJob(job);
+        chatJob_ = StartAiJob(job);
         if (chatJob_) {
             chatId_ = job->id;
         } else {
             turns_.back().streaming = false;
             turns_.back().error = true;
-            turns_.back().text = L"Couldn't start the request.";
+            turns_.back().text = Tr(Str::RequestFailed);
         }
         Update(now);
     }
 
     void Translate(double now) {
-        const std::wstring language = TranslationLanguage();
-        Submit(L"Translate to " + language, now, true, TranslatePrompt(language));
+        Submit(TrFormat(Str::TranslateTo, TranslationLanguageName()), now, true,
+               TranslatePrompt(TranslationLanguage()));
     }
 
     void Activate(int hit, double now) {
@@ -8554,8 +12803,8 @@ class AskCard {
             const size_t turn = static_cast<size_t>(hit - kHitCopyAnswer);
             if (turn < turns_.size()) {
                 SetStatus(CopyTextToClipboard(panel_.Hwnd(), turns_[turn].text)
-                              ? L"Answer copied"
-                              : L"Couldn't copy the answer",
+                              ? Tr(Str::AnswerCopied)
+                              : Tr(Str::AnswerCopyFailed),
                           now);
             }
         } else if (hit >= kHitChip) {
@@ -8887,7 +13136,7 @@ class AskCard {
         const size_t b = std::max(answerAnchor_, answerCaret_);
         if (a < b && b <= answerText_.size()) {
             SetStatus(CopyTextToClipboard(panel_.Hwnd(), answerText_.substr(a, b - a))
-                          ? L"Text copied" : L"Couldn't copy the text", now);
+                          ? Tr(Str::TextCopied) : Tr(Str::TextCopyFailed), now);
             Update(now);
         }
     }
@@ -8983,7 +13232,7 @@ class AskCard {
             if (turn.streaming && turn.text.empty()) {
                 const RECT rc{textLeft, y - SI(1), width, y + SI(21)};
                 convoItems_.push_back({ConvoItem::Kind::Thinking, rc, rc,
-                                       L"Thinking\x2026", L"", BodyFont(),
+                                       Tr(Str::Thinking), L"", BodyFont(),
                                        palette_.secondary, turnIndex, false});
                 y += SI(20) + SI(14);
                 continue;
@@ -9061,9 +13310,13 @@ class AskCard {
                                        L"", font, palette_.error, turnIndex, false});
                 y += height + SI(8);
             }
+            const std::wstring copyLabel = Tr(Str::Copy);
+            const int copyWidth = std::max(
+                SI(72), SI(32) + text_.Width(SmallFont(), copyLabel.c_str(),
+                                             static_cast<int>(copyLabel.size())) + SI(10));
             convoItems_.push_back({ConvoItem::Kind::CopyButton,
-                                   {textLeft - SI(8), y, textLeft + SI(64), y + SI(28)},
-                                   {}, L"Copy", L"", SmallFont(), palette_.secondary,
+                                   {textLeft - SI(8), y, textLeft - SI(8) + copyWidth, y + SI(28)},
+                                   {}, copyLabel, L"", SmallFont(), palette_.secondary,
                                    turnIndex, false});
             y += SI(28) + SI(14);
         }
@@ -9196,16 +13449,21 @@ class AskCard {
             addRect_ = {x, headerTop, x + thumbSize, headerTop + thumbSize};
             hits_.push_back({addRect_, kHitAdd});
         }
-        const bool hasKey = !g_settings.apiKey.empty();
+        const bool hasKey = HasAiKey();
+        const bool hasImage = !attachments_.empty();
         std::vector<int> buttons{kHitClose};
         if (hasKey) {
             buttons.push_back(kHitGemini);
         }
-        buttons.push_back(kHitLens);
-        if (hasKey) {
+        if (hasImage) {
+            buttons.push_back(kHitLens);
+        }
+        if (hasKey && hasImage) {
             buttons.push_back(kHitTranslate);
         }
-        buttons.push_back(kHitCopy);
+        if (hasImage) {
+            buttons.push_back(kHitCopy);
+        }
         if (!CopyableText().empty()) {
             buttons.push_back(kHitCopyText);
         }
@@ -9225,7 +13483,8 @@ class AskCard {
             hits_.push_back({buttonRects_[id], id});
             bx -= buttonSize + (id == kHitClose ? SI(6) : SI(2));
         }
-        int y = headerTop + thumbSize;
+        const bool emptyHeader = attachments_.empty() && addRect_.right <= addRect_.left;
+        int y = emptyHeader ? by + buttonSize : headerTop + thumbSize;
 
         convoWidth_ = width_ - pad * 2;
         convoRect_ = {};
@@ -9251,10 +13510,8 @@ class AskCard {
 
         statusText_ = status_;
         statusIsHint_ = false;
-        if (statusText_.empty() && g_settings.apiKey.empty() && turns_.empty()) {
-            statusText_ =
-                L"Add a Gemini API key in the mod's settings to get answers "
-                L"right here.";
+        if (statusText_.empty() && !HasAiKey() && turns_.empty()) {
+            statusText_ = Tr(Str::NoApiKeyHint);
             statusIsHint_ = true;
         }
         statusRect_ = {};
@@ -9622,8 +13879,10 @@ class AskCard {
         }
         if (input_.empty()) {
             text_.Draw(surface_, font,
-                       turns_.empty() ? L"Ask about your selection\x2026" : L"Ask a follow-up\x2026",
-                       inputText_, DT_SINGLELINE | DT_VCENTER | DT_LEFT,
+                       !turns_.empty()         ? Tr(Str::FollowUpPlaceholder)
+                       : attachments_.empty() ? Tr(Str::AskAnythingPlaceholder)
+                                              : Tr(Str::AskPlaceholder),
+                       inputText_, DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS,
                        palette_.secondary);
         } else {
             const RECT layout{textX, inputText_.top, textX + 100000, inputText_.bottom};
@@ -9735,25 +13994,25 @@ class AskCard {
         std::wstring tooltip;
         switch (hover_) {
             case kHitClose:
-                tooltip = L"Close";
+                tooltip = Tr(Str::Close);
                 break;
             case kHitGemini:
-                tooltip = L"Ask in Gemini";
+                tooltip = Tr(Str::AskInGemini);
                 break;
             case kHitLens:
-                tooltip = L"Search with Google Lens";
+                tooltip = Tr(Str::SearchWithLens);
                 break;
             case kHitTranslate:
-                tooltip = L"Translate to " + TranslationLanguage();
+                tooltip = TrFormat(Str::TranslateTo, TranslationLanguageName());
                 break;
             case kHitCopy:
-                tooltip = L"Copy image";
+                tooltip = Tr(Str::CopyImage);
                 break;
             case kHitCopyText:
-                tooltip = L"Copy text";
+                tooltip = Tr(Str::CopyText);
                 break;
             case kHitAdd:
-                tooltip = L"Add another selection";
+                tooltip = Tr(Str::AddSelection);
                 break;
         }
         if (tooltip.empty() || !tooltipShown_) {
@@ -9885,10 +14144,13 @@ class AskCard {
                     }
                     HMENU menu = CreatePopupMenu();
                     if (menu) {
-                        AppendMenuW(menu, MF_STRING, 1, L"Copy\tCtrl+C");
-                        AppendMenuW(menu, MF_STRING, 2, L"Select all\tCtrl+A");
+                        AppendMenuW(menu, MF_STRING, 1,
+                                    (std::wstring(Tr(Str::Copy)) + L"\tCtrl+C").c_str());
+                        AppendMenuW(menu, MF_STRING, 2,
+                                    (std::wstring(Tr(Str::SelectAll)) + L"\tCtrl+A").c_str());
                         const UINT action = TrackPopupMenu(menu,
-                            TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON,
+                            TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON |
+                                (UiIsRtl() ? TPM_LAYOUTRTL : 0),
                             screen.x, screen.y, 0, hwnd, nullptr);
                         DestroyMenu(menu);
                         if (action == 1) {
@@ -10133,8 +14395,8 @@ class AskCard {
     std::vector<Chip> chips_;
     bool chipsLoading_ = false;
     double suggestionsStart_ = 0;
-    std::shared_ptr<GeminiJob> chatJob_;
-    std::shared_ptr<GeminiJob> suggestionsJob_;
+    std::shared_ptr<AiJob> chatJob_;
+    std::shared_ptr<AiJob> suggestionsJob_;
     std::shared_ptr<BrowserHandoffJob> browserJob_;
     uint32_t chatId_ = 0;
     uint32_t suggestionsId_ = 0;
@@ -10213,6 +14475,7 @@ ShakeDetector g_shake;
 PointerState g_state = PointerState::Off;
 HCURSOR g_currentCursor;
 bool g_addingToCard;
+bool g_revealPending;
 bool g_releasingCapture;
 bool g_escapeRegistered;
 bool g_hotkeyRegistered;
@@ -10234,6 +14497,9 @@ std::wstring g_windhawkUiDirectory;
 constexpr UINT_PTR kShakePollingTimer = 1;
 
 HANDLE g_timer;
+HANDLE g_rippleTimer;
+bool g_highResolutionTimer;
+bool g_rippleTimerArmed;
 bool g_timerArmed;
 double g_timerDue;
 double g_lastTick = -1e9;
@@ -10284,6 +14550,24 @@ void RequestTick() {
     ArmTimer(due, now);
 }
 
+void ArmRippleTimer(double due, double now) {
+    LARGE_INTEGER dueTime;
+    dueTime.QuadPart = -std::max<LONGLONG>(1, static_cast<LONGLONG>((due - now) * 10000.0));
+    SetWaitableTimer(g_rippleTimer, &dueTime, 0, nullptr, nullptr, FALSE);
+    g_rippleTimerArmed = true;
+}
+
+void RequestRippleTick() {
+    if (!g_rippleTimer) {
+        RequestTick();
+        return;
+    }
+    if (!g_rippleTimerArmed) {
+        const double now = NowMs();
+        ArmRippleTimer(now + g_ripple.FrameMs(), now);
+    }
+}
+
 bool AnythingActive() {
     return g_state != PointerState::Off || g_card.IsOpen() ||
            g_frame.Visible() || g_pill.Visible() || g_overlay.Visible() ||
@@ -10311,14 +14595,98 @@ void ArrangeLayers() {
 
 void ShowHint(POINT pt, double now) {
     if (g_settings.hint) {
+        g_pill.SetReach(g_cursors.Reach());
         g_pill.Show(pt, DpiScaleAt(pt), UseDarkTheme(), now);
+    }
+}
+
+void RevealPointerHelpers(POINT pt, double now) {
+    if (!g_revealPending) {
+        return;
+    }
+    g_revealPending = false;
+    if (g_state != PointerState::Pointing) {
+        return;
+    }
+    ShowHint(pt, now);
+    if (g_settings.highlight && g_picker.Start(g_messageWindow)) {
+        g_picker.Request(pt);
+    }
+}
+
+constexpr int kHotkeyTypeFirst = 64;
+
+std::vector<int> g_typingHotkeys;
+bool g_typingRegistered;
+HKL g_typingLayout;
+
+bool IsTypingKey(UINT vk) {
+    return (vk >= '0' && vk <= '9') || (vk >= 'A' && vk <= 'Z') ||
+           (vk >= VK_NUMPAD0 && vk <= VK_DIVIDE) ||
+           (vk >= VK_OEM_1 && vk <= VK_OEM_3) ||
+           (vk >= VK_OEM_4 && vk <= VK_OEM_8) || vk == VK_OEM_102;
+}
+
+std::wstring TypedText(UINT vk, UINT modifiers, HKL layout, bool capsLock) {
+    BYTE state[256] = {};
+    state[vk] = 0x80;
+    if (modifiers & MOD_SHIFT) {
+        state[VK_SHIFT] = 0x80;
+    }
+    if (capsLock) {
+        state[VK_CAPITAL] = 1;
+    }
+    WCHAR buffer[8] = {};
+    const UINT scan = MapVirtualKeyExW(vk, MAPVK_VK_TO_VSC, layout);
+    const int count =
+        ToUnicodeEx(vk, scan, state, buffer, ARRAYSIZE(buffer), 0x4, layout);
+    std::wstring text;
+    for (int i = 0; i < count; i++) {
+        if (buffer[i] >= 0x20 && buffer[i] != 0x7F) {
+            text += buffer[i];
+        }
+    }
+    return text;
+}
+
+void UnregisterTypingKeys() {
+    for (int id : g_typingHotkeys) {
+        UnregisterHotKey(g_messageWindow, id);
+    }
+    g_typingHotkeys.clear();
+    g_typingRegistered = false;
+}
+
+void RegisterTypingKeys() {
+    g_typingRegistered = true;
+    int id = kHotkeyTypeFirst;
+    for (UINT vk = '0'; vk <= VK_OEM_102; vk++) {
+        if (!IsTypingKey(vk)) {
+            continue;
+        }
+        for (const UINT modifiers : {0u, static_cast<UINT>(MOD_SHIFT)}) {
+            if (RegisterHotKey(g_messageWindow, id, modifiers, vk)) {
+                g_typingHotkeys.push_back(id);
+            }
+            id++;
+        }
+    }
+}
+
+void UpdateTypingCapture() {
+    const bool wanted = g_settings.typeToAsk && g_state == PointerState::Pointing &&
+                        !g_addingToCard && g_messageWindow;
+    if (wanted && !g_typingRegistered) {
+        RegisterTypingKeys();
+    } else if (!wanted && g_typingRegistered) {
+        UnregisterTypingKeys();
     }
 }
 
 void ActivatePointer(POINT pt, double now) {
     if (g_state != PointerState::Off) {
         g_cursors.StartPop(now);
-        if (!g_pill.Visible()) {
+        if (!g_pill.Visible() && !g_revealPending) {
             ShowHint(pt, now);
         }
         g_lastActivity = now;
@@ -10332,9 +14700,8 @@ void ActivatePointer(POINT pt, double now) {
     g_pointerScale = PointerScaleAt(pt);
     g_pointerMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
     g_cursors.SetScale(g_pointerScale);
-    if (g_settings.ripple) {
-        g_ripple.Start(pt, DpiScaleAt(pt), now);
-    }
+    const bool capturing =
+        g_settings.ripple && g_ripple.Prepare(pt, DpiScaleAt(pt), g_messageWindow);
     now = NowMs();
     g_cursors.StartPop(now);
     g_overlay.Show(g_settings.dim);
@@ -10344,10 +14711,14 @@ void ActivatePointer(POINT pt, double now) {
         RegisterHotKey(g_messageWindow, kHotkeyEscape, MOD_NOREPEAT, VK_ESCAPE);
     g_lastActivity = now;
     g_hoverValid = false;
-    ShowHint(pt, now);
-    if (g_settings.highlight && g_picker.Start(g_messageWindow)) {
-        g_picker.Request(pt);
+    g_revealPending = true;
+    if (g_settings.highlight) {
+        g_picker.Start(g_messageWindow);
     }
+    if (!capturing) {
+        RevealPointerHelpers(pt, now);
+    }
+    UpdateTypingCapture();
     RequestTick();
 }
 
@@ -10356,6 +14727,8 @@ void DeactivatePointer(double now, bool keepFrame) {
         return;
     }
     g_state = PointerState::Off;
+    UpdateTypingCapture();
+    g_revealPending = false;
     if (GetCapture() == g_overlay.Hwnd()) {
         g_releasingCapture = true;
         ReleaseCapture();
@@ -10543,6 +14916,30 @@ void OnOverlayMouse(UINT message, POINT pt) {
             }
             break;
     }
+    UpdateTypingCapture();
+}
+
+void OnRippleCapture(std::unique_ptr<RippleCaptureMessage> message) {
+    if (!g_ripple.Owns(message->capture)) {
+        return;
+    }
+    const double now = NowMs();
+    bool reveal = message->complete;
+    if (message->failed && !g_ripple.Active()) {
+        g_ripple.Stop();
+        reveal = true;
+    } else if (message->first && g_state != PointerState::Off) {
+        g_ripple.Launch(now, g_highResolutionTimer ? 0.0 : kFrameMs);
+        reveal = reveal || !g_ripple.Active();
+        RequestRippleTick();
+        RequestTick();
+    }
+    if (reveal) {
+        POINT pt;
+        if (GetCursorPos(&pt)) {
+            RevealPointerHelpers(pt, now);
+        }
+    }
 }
 
 void OnPickResult(std::unique_ptr<PickResult> result) {
@@ -10570,6 +14967,41 @@ void OnPickResult(std::unique_ptr<PickResult> result) {
         g_hoverValid = false;
         g_frame.FadeOut(now);
     }
+}
+
+void OnTypedKey(UINT modifiers, UINT vk, double now) {
+    if (!g_card.IsOpen()) {
+        if (g_state != PointerState::Pointing || !g_settings.typeToAsk) {
+            return;
+        }
+        const HWND foreground = GetForegroundWindow();
+        g_typingLayout = GetKeyboardLayout(
+            foreground ? GetWindowThreadProcessId(foreground, nullptr) : 0);
+    }
+    const std::wstring text =
+        TypedText(vk, modifiers, g_typingLayout, (GetKeyState(VK_CAPITAL) & 1) != 0);
+    if (g_card.IsOpen()) {
+        g_card.AppendTyped(text, now);
+        return;
+    }
+    POINT pt;
+    if (!GetCursorPos(&pt)) {
+        return;
+    }
+    g_frame.HideNow();
+    g_pill.HideNow();
+    g_ripple.Stop();
+    int spaceId = kHotkeyTypeFirst + 256;
+    for (const UINT spaceModifiers : {0u, static_cast<UINT>(MOD_SHIFT)}) {
+        if (RegisterHotKey(g_messageWindow, spaceId, spaceModifiers, VK_SPACE)) {
+            g_typingHotkeys.push_back(spaceId);
+        }
+        spaceId++;
+    }
+    const RECT anchor{pt.x, pt.y, pt.x + 1, pt.y + 1};
+    g_card.OpenTyped(anchor, text, now);
+    DeactivatePointer(now, false);
+    RequestTick();
 }
 
 void OnShake(POINT pt) {
@@ -10612,8 +15044,12 @@ void OnRawMouseInput() {
     }
 }
 
-void OnHotkey(int id) {
+void OnHotkey(int id, LPARAM lParam) {
     const double now = NowMs();
+    if (id >= kHotkeyTypeFirst) {
+        OnTypedKey(LOWORD(lParam), HIWORD(lParam), now);
+        return;
+    }
     if (id == kHotkeyEscape) {
         DeactivatePointer(now, false);
         return;
@@ -10757,9 +15193,12 @@ void ApplySettings(const Settings& settings) {
     DeactivatePointer(now, false);
     g_ripple.Stop();
     g_settings = settings;
+    ClearUnavailableModels();
+    SetLanguage(g_settings.language);
     g_glow = ParseGlowColor(g_settings.glowColor);
     g_styleVersion++;
     g_cursors.Clear();
+    g_cursors.SetCustom(LoadCustomCursor(g_settings.customCursor));
     g_shake.Configure(g_settings.sensitivity);
     ConfigureShakeMonitoring();
     RegisterActivationHotkey();
@@ -10771,6 +15210,10 @@ double TickAll(double now) {
     if (g_state != PointerState::Off) {
         UpdatePointerCursor(now);
         next = std::min(next, g_cursors.NextChange(now));
+        POINT cursorPosition;
+        if (g_revealPending && !g_ripple.Capturing() && GetCursorPos(&cursorPosition)) {
+            RevealPointerHelpers(cursorPosition, now);
+        }
         if (g_pill.Visible() && now - g_pill.ShownAt() >= kHintMs) {
             g_pill.FadeOut(now);
         } else if (g_pill.Visible()) {
@@ -10797,7 +15240,9 @@ double TickAll(double now) {
     }
 
     next = std::min(next, g_overlay.Tick(now));
-    next = std::min(next, g_ripple.Tick(now));
+    if (!g_rippleTimer) {
+        next = std::min(next, g_ripple.Tick(now));
+    }
     next = std::min(next, g_pill.Tick(now));
     next = std::min(next, g_frame.Tick(now));
     next = std::min(next, g_card.Tick(now));
@@ -10813,6 +15258,16 @@ void OnTimer() {
     if (next < 1e8) {
         const double finished = NowMs();
         ArmTimer(std::max(now + std::max(next, kFrameMs), finished), finished);
+    }
+}
+
+void OnRippleTimer() {
+    g_rippleTimerArmed = false;
+    const double now = NowMs();
+    const double next = g_ripple.Tick(now);
+    if (next < 1e8) {
+        const double finished = NowMs();
+        ArmRippleTimer(std::max(now + next, finished), finished);
     }
 }
 
@@ -10833,6 +15288,7 @@ void Shutdown() {
     StopShakeMonitoring();
     const double now = NowMs();
     DeactivatePointer(now, false);
+    UnregisterTypingKeys();
     g_card.Destroy();
     g_frame.Destroy();
     g_ripple.Destroy();
@@ -10859,7 +15315,7 @@ LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
             break;  // DefWindowProc still has to clean up the input.
 
         case WM_HOTKEY:
-            OnHotkey(static_cast<int>(wParam));
+            OnHotkey(static_cast<int>(wParam), lParam);
             return 0;
 
         case WM_TIMER:
@@ -10886,9 +15342,14 @@ LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
             OnPickResult(std::unique_ptr<PickResult>(reinterpret_cast<PickResult*>(lParam)));
             return 0;
 
-        case WM_APP_GEMINI:
-            g_card.OnGeminiMessage(
-                std::unique_ptr<GeminiMessage>(reinterpret_cast<GeminiMessage*>(lParam)),
+        case WM_APP_RIPPLE:
+            OnRippleCapture(std::unique_ptr<RippleCaptureMessage>(
+                reinterpret_cast<RippleCaptureMessage*>(lParam)));
+            return 0;
+
+        case WM_APP_AI:
+            g_card.OnAiMessage(
+                std::unique_ptr<AiMessage>(reinterpret_cast<AiMessage*>(lParam)),
                 NowMs());
             return 0;
 
@@ -10996,12 +15457,16 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     g_timer = CreateWaitableTimerExW(nullptr, nullptr,
                                      CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
                                      TIMER_ALL_ACCESS);
+    g_highResolutionTimer = g_timer != nullptr;
     if (!g_timer) {
         g_timer = CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS);
     }
     if (!g_timer) {
         return fail(L"CreateWaitableTimerExW");
     }
+    g_rippleTimer = CreateWaitableTimerExW(
+        nullptr, nullptr, g_highResolutionTimer ? CREATE_WAITABLE_TIMER_HIGH_RESOLUTION : 0,
+        TIMER_ALL_ACCESS);
 
     RAWINPUTDEVICE device{};
     device.usUsagePage = 0x01;  // HID_USAGE_PAGE_GENERIC
@@ -11011,6 +15476,10 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     if (!RegisterRawInputDevices(&device, 1, sizeof(device))) {
         CloseHandle(g_timer);
         g_timer = nullptr;
+        if (g_rippleTimer) {
+            CloseHandle(g_rippleTimer);
+            g_rippleTimer = nullptr;
+        }
         return fail(L"RegisterRawInputDevices");
     }
 
@@ -11021,18 +15490,28 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     ConfigureShakeMonitoring();
     RegisterActivationHotkey();
     SetEvent(g_workerReadyEvent);
+    g_cursors.SetCustom(LoadCustomCursor(g_settings.customCursor));
 
+    const HANDLE timers[2] = {g_timer, g_rippleTimer};
+    const DWORD timerCount = g_rippleTimer ? 2 : 1;
     bool running = true;
     while (running) {
         const DWORD result = MsgWaitForMultipleObjectsEx(
-            1, &g_timer, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
-        if (result == WAIT_OBJECT_0) {
-            OnTimer();
-            continue;
-        }
-        if (result != WAIT_OBJECT_0 + 1) {
+            timerCount, timers, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        if (result > WAIT_OBJECT_0 + timerCount) {
             Wh_Log(L"MsgWaitForMultipleObjectsEx failed: %u", GetLastError());
             break;
+        }
+        const bool timerDue =
+            result == WAIT_OBJECT_0 || WaitForSingleObject(g_timer, 0) == WAIT_OBJECT_0;
+        const bool rippleDue =
+            g_rippleTimer && (result == WAIT_OBJECT_0 + 1 ||
+                              WaitForSingleObject(g_rippleTimer, 0) == WAIT_OBJECT_0);
+        if (timerDue) {
+            OnTimer();
+        }
+        if (rippleDue) {
+            OnRippleTimer();
         }
         bool tick = false;
         MSG msg;
@@ -11062,6 +15541,10 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     g_fonts.Clear();
     CloseHandle(g_timer);
     g_timer = nullptr;
+    if (g_rippleTimer) {
+        CloseHandle(g_rippleTimer);
+        g_rippleTimer = nullptr;
+    }
     UnregisterWindowClasses();
     if (SUCCEEDED(coInit)) {
         CoUninitialize();
@@ -11073,6 +15556,7 @@ BOOL WhTool_ModInit() {
     Wh_Log(L">");
     g_instance = GetModuleHandleW(nullptr);
     g_settings = LoadSettings();
+    SetLanguage(g_settings.language);
 
     WCHAR storage[MAX_PATH];
     if (Wh_GetModStoragePath(storage, ARRAYSIZE(storage))) {
@@ -11119,7 +15603,7 @@ void WhTool_ModUninit() {
         Sleep(50);
     }
     if (g_helperThreads == 0) {
-        CloseGeminiSession();
+        CloseApiSession();
     }
     DeleteExpiredGeminiFiles(true);
     DeleteOldLensPages(true);
@@ -11288,4 +15772,2480 @@ void Wh_ModUninit() {
 
     WhTool_ModUninit();
     ExitProcess(0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Translations
+
+const TextEntry kTexts_ar[] = {
+    {Str::HintText, L"حدد أي شيء لتسأل {0} عنه"},
+    {Str::HintTextTyping, L"حدد أي شيء أو ابدأ الكتابة لتسأل {0}"},
+    {Str::Close, L"إغلاق"},
+    {Str::AskInGemini, L"اسأل Gemini"},
+    {Str::SearchWithLens, L"البحث باستخدام Google Lens"},
+    {Str::TranslateTo, L"الترجمة إلى: {0}"},
+    {Str::CopyImage, L"نسخ الصورة"},
+    {Str::CopyText, L"نسخ النص"},
+    {Str::AddSelection, L"إضافة تحديد آخر"},
+    {Str::WhatIsThis, L"ما هذا؟"},
+    {Str::ExplainThis, L"اشرح لي هذا"},
+    {Str::SummarizeThis, L"لخص لي هذا"},
+    {Str::AskPlaceholder, L"اسأل عن العنصر المحدد…"},
+    {Str::AskAnythingPlaceholder, L"اسأل أي شيء…"},
+    {Str::FollowUpPlaceholder, L"اطرح سؤالا آخر…"},
+    {Str::Thinking, L"جارٍ التفكير…"},
+    {Str::Copy, L"نسخ"},
+    {Str::SelectAll, L"تحديد الكل"},
+    {Str::NoApiKeyHint, L"أضف مفتاح API لـ Gemini أو ChatGPT أو Claude في إعدادات المود لتظهر الإجابات هنا مباشرة."},
+    {Str::ImageCopied, L"تم نسخ الصورة"},
+    {Str::ImageCopyFailed, L"تعذر نسخ الصورة"},
+    {Str::ImageCopyRetry, L"تعذر نسخ الصورة. حاول مرة أخرى."},
+    {Str::ReadingText, L"جارٍ قراءة النص…"},
+    {Str::NoTextFound, L"لم يتم العثور على نص في التحديد"},
+    {Str::TextCopied, L"تم نسخ النص"},
+    {Str::TextCopyFailed, L"تعذر نسخ النص"},
+    {Str::AnswerCopied, L"تم نسخ الإجابة"},
+    {Str::AnswerCopyFailed, L"تعذر نسخ الإجابة"},
+    {Str::OpeningLens, L"جارٍ فتح Google Lens في المتصفح…"},
+    {Str::OpeningGeminiOne, L"جارٍ فتح Gemini وإرفاق صورتك…"},
+    {Str::OpeningGeminiMany, L"جارٍ فتح Gemini وإرفاق صورك…"},
+    {Str::OpeningGeminiText, L"جارٍ فتح Gemini وإضافة سؤالك…"},
+    {Str::ClickBoxToAttach, L"انقر على حقل الرسالة في Gemini ثم اضغط Ctrl+V لإرفاق الصورة."},
+    {Str::Stopped, L"تم الإيقاف."},
+    {Str::StoppedEarly, L"تم الإيقاف قبل اكتمال الإجابة."},
+    {Str::RequestFailed, L"تعذر بدء الطلب."},
+    {Str::DraftAddedOne, L"تمت إضافة الصورة. اكتب سؤالك في Gemini."},
+    {Str::DraftAddedMany, L"تمت إضافة الصور. اكتب سؤالك في Gemini."},
+    {Str::QuestionInGemini, L"تم إدخال سؤالك في Gemini."},
+    {Str::DraftPartial, L"الصور المؤكدة: {0} من {1}. تحقق من Gemini وأضف الباقي بالضغط على Ctrl+V في حقل الرسالة."},
+    {Str::ClipboardChangedOne, L"تغيرت الحافظة قبل لصق الصورة: استخدم «نسخ الصورة» ثم اضغط Ctrl+V في Gemini."},
+    {Str::ClipboardChangedMany, L"تغيرت الحافظة قبل لصق الصور. اسأل Gemini مرة أخرى لإعادة المحاولة."},
+    {Str::IfNotAttachedOne, L"إذا لم يتم إرفاق الصورة، فانقر على حقل الرسالة في Gemini ثم اضغط Ctrl+V."},
+    {Str::IfNotAttachedMany, L"إذا لم يتم إرفاق الصور، فانقر على حقل الرسالة في Gemini ثم اضغط Ctrl+V."},
+    {Str::ClickBoxOne, L"انقر على حقل الرسالة في Gemini ثم اضغط Ctrl+V لإرفاق الصورة. سيبقى سؤالك هنا."},
+    {Str::ClickBoxMany, L"انقر على حقل الرسالة في Gemini ثم اضغط Ctrl+V لإرفاق الصور. سيبقى سؤالك هنا."},
+    {Str::ClickBoxText, L"انقر على حقل الرسالة في Gemini ثم اكتب سؤالك. سيبقى سؤالك هنا."},
+    {Str::BrowserFailedOne, L"تعذر فتح المتصفح. تم نسخ الصورة؛ الصقها في Gemini بالضغط على Ctrl+V."},
+    {Str::BrowserFailedMany, L"تعذر فتح المتصفح. تم نسخ الصور؛ الصقها في Gemini بالضغط على Ctrl+V."},
+    {Str::BrowserFailedText, L"تعذر فتح المتصفح."},
+    {Str::PageUnreadable, L"لم يتمكن Magic Pointer من قراءة الصفحة في متصفحك. إذا كان هناك إشعار مفتوح فوقها، فأغلقه ثم انقر على «اسأل Gemini» مرة أخرى."},
+    {Str::ErrKeyInvalid, L"مفتاح {0} API غير صالح. تحقق منه في إعدادات المود."},
+    {Str::ErrKeyForbidden, L"لا يمكن لمفتاح API هذا استخدام {0} (403). تحقق من المفتاح في إعدادات المود."},
+    {Str::ErrModelMissing, L"النموذج «{0}» غير متاح لمفتاحك. اختر نموذجا آخر في إعدادات المود."},
+    {Str::ErrNoFreeQuota, L"لا تتضمن خطة Gemini الخاصة بك حصة مجانية للنموذج «{0}». اختر النموذج «سريع» في إعدادات المود، أو أضف الفوترة إلى مفتاحك."},
+    {Str::ErrNoCredit, L"نفد رصيد حسابك في {0}. أضف رصيدا أو طريقة دفع ثم حاول مرة أخرى."},
+    {Str::ErrTimeout, L"لم يرد {0} في الوقت المناسب. حاول مرة أخرى بعد قليل."},
+    {Str::ModelBusy, L"النموذج الذي اخترته غير متاح حاليا. يجيب نموذج أسرع بدلا منه."},
+    {Str::ErrRateLimit, L"وصلت إلى حد طلبات {0} حاليا. حاول مرة أخرى بعد قليل."},
+    {Str::ErrServer, L"يواجه {0} مشكلة حاليا ({1}). حاول مرة أخرى بعد قليل."},
+    {Str::ErrGeneric, L"أعاد {0} خطأ ({1})."},
+    {Str::ErrNoConnection, L"تعذر استلام رد {0}. تحقق من اتصالك بالإنترنت (الخطأ {1}) ثم حاول السؤال مرة أخرى."},
+    {Str::ErrInterrupted, L"انقطع الاتصال بـ {0}، والإجابة غير مكتملة (الخطأ {1}). حاول السؤال مرة أخرى."},
+    {Str::ErrInterruptedBy, L"قاطع {0} هذه الإجابة: {1}"},
+    {Str::ErrUnreadable, L"أعاد {0} ردا غير قابل للقراءة. حاول السؤال مرة أخرى."},
+    {Str::ErrOutputLimit, L"بلغ {0} الحد الأقصى للإجابة، والإجابة غير مكتملة. حاول طلب إجابة أقصر."},
+    {Str::ErrStoppedBecause, L"أوقف {0} هذه الإجابة ({1}). حاول صياغة السؤال بطريقة أخرى."},
+    {Str::ErrUnconfirmed, L"توقف {0} قبل التأكد من اكتمال الإجابة. حاول السؤال مرة أخرى."},
+    {Str::ErrNoAnswer, L"لم يقدم {0} أي إجابة. حاول صياغة السؤال بطريقة أخرى."},
+    {Str::ErrCouldntReach, L"تعذر الاتصال بـ {0}. تحقق من اتصالك بالإنترنت (الخطأ {1})."},
+    {Str::ErrStreaming, L"أعاد {0} خطأ في البث."},
+    {Str::LensSearching, L"جارٍ البحث باستخدام Google Lens…"},
+    {Str::LensUploadFailed, L"تعذر التحميل تلقائيا. الصورة موجودة في الحافظة: الصقها في lens.google.com."},
+};
+
+const TextEntry kTexts_bn[] = {
+    {Str::HintText, L"এআই-কে জিজ্ঞাসা করতে যেকোনো কিছু বেছে নিন ({0})"},
+    {Str::HintTextTyping, L"এআই-কে জিজ্ঞাসা করতে যেকোনো কিছু বেছে নিন বা টাইপ শুরু করুন ({0})"},
+    {Str::Close, L"বন্ধ করুন"},
+    {Str::AskInGemini, L"Gemini-তে জিজ্ঞাসা করুন"},
+    {Str::SearchWithLens, L"Google Lens দিয়ে খুঁজুন"},
+    {Str::TranslateTo, L"অনুবাদের ভাষা: {0}"},
+    {Str::CopyImage, L"ছবি কপি করুন"},
+    {Str::CopyText, L"টেক্সট কপি করুন"},
+    {Str::AddSelection, L"আরেকটি নির্বাচন যোগ করুন"},
+    {Str::WhatIsThis, L"এটা কী?"},
+    {Str::ExplainThis, L"এটা আমাকে বুঝিয়ে দিন"},
+    {Str::SummarizeThis, L"এটার সারসংক্ষেপ দিন"},
+    {Str::AskPlaceholder, L"আপনার নির্বাচিত অংশ সম্পর্কে জিজ্ঞাসা করুন…"},
+    {Str::AskAnythingPlaceholder, L"যেকোনো কিছু জিজ্ঞাসা করুন…"},
+    {Str::FollowUpPlaceholder, L"আরও কিছু জিজ্ঞাসা করুন…"},
+    {Str::Thinking, L"ভাবছি…"},
+    {Str::Copy, L"কপি করুন"},
+    {Str::SelectAll, L"সব নির্বাচন করুন"},
+    {Str::NoApiKeyHint, L"এখানেই উত্তর পেতে মডের সেটিংসে Gemini, ChatGPT বা Claude-এর একটি API কী যোগ করুন।"},
+    {Str::ImageCopied, L"ছবি কপি হয়েছে"},
+    {Str::ImageCopyFailed, L"ছবি কপি করা যায়নি"},
+    {Str::ImageCopyRetry, L"ছবি কপি করা যায়নি। আবার চেষ্টা করুন।"},
+    {Str::ReadingText, L"টেক্সট এখনও পড়া হচ্ছে…"},
+    {Str::NoTextFound, L"নির্বাচিত অংশে কোনো টেক্সট পাওয়া যায়নি"},
+    {Str::TextCopied, L"টেক্সট কপি হয়েছে"},
+    {Str::TextCopyFailed, L"টেক্সট কপি করা যায়নি"},
+    {Str::AnswerCopied, L"উত্তর কপি হয়েছে"},
+    {Str::AnswerCopyFailed, L"উত্তর কপি করা যায়নি"},
+    {Str::OpeningLens, L"আপনার ব্রাউজারে Google Lens খুলছে…"},
+    {Str::OpeningGeminiOne, L"Gemini খুলে ছবিটি অ্যাটাচ করা হচ্ছে…"},
+    {Str::OpeningGeminiMany, L"Gemini খুলে ছবিগুলো অ্যাটাচ করা হচ্ছে…"},
+    {Str::OpeningGeminiText, L"Gemini খুলে আপনার প্রশ্ন যোগ করা হচ্ছে…"},
+    {Str::ClickBoxToAttach, L"Gemini-র মেসেজ বক্সে ক্লিক করুন, তারপর ছবিটি অ্যাটাচ করতে Ctrl+V চাপুন।"},
+    {Str::Stopped, L"থামানো হয়েছে।"},
+    {Str::StoppedEarly, L"উত্তর শেষ হওয়ার আগেই থামানো হয়েছে।"},
+    {Str::RequestFailed, L"অনুরোধ শুরু করা যায়নি।"},
+    {Str::DraftAddedOne, L"ছবি যোগ হয়েছে। এবার Gemini-তে আপনার প্রশ্ন লিখুন।"},
+    {Str::DraftAddedMany, L"ছবিগুলো যোগ হয়েছে। এবার Gemini-তে আপনার প্রশ্ন লিখুন।"},
+    {Str::QuestionInGemini, L"আপনার প্রশ্ন Gemini-তে লেখা হয়ে গেছে।"},
+    {Str::DraftPartial, L"{1}টির মধ্যে {0}টি ছবি নিশ্চিত হয়েছে। Gemini দেখে নিন এবং বাকিগুলো তার মেসেজ বক্সে Ctrl+V দিয়ে পেস্ট করুন।"},
+    {Str::ClipboardChangedOne, L"ছবি পেস্ট করার আগেই ক্লিপবোর্ড বদলে গেছে: \"ছবি কপি করুন\" ব্যবহার করে Gemini-তে Ctrl+V চাপুন।"},
+    {Str::ClipboardChangedMany, L"ছবিগুলো পেস্ট করার আগেই ক্লিপবোর্ড বদলে গেছে। আবার চেষ্টা করতে Gemini-তে নতুন করে জিজ্ঞাসা করুন।"},
+    {Str::IfNotAttachedOne, L"ছবি অ্যাটাচ না হলে Gemini-র মেসেজ বক্সে ক্লিক করে Ctrl+V চাপুন।"},
+    {Str::IfNotAttachedMany, L"ছবিগুলো অ্যাটাচ না হলে Gemini-র মেসেজ বক্সে ক্লিক করে Ctrl+V চাপুন।"},
+    {Str::ClickBoxOne, L"Gemini-র মেসেজ বক্সে ক্লিক করে ছবিটি অ্যাটাচ করতে Ctrl+V চাপুন। আপনার প্রশ্ন এখানেই থাকবে।"},
+    {Str::ClickBoxMany, L"Gemini-র মেসেজ বক্সে ক্লিক করে ছবিগুলো অ্যাটাচ করতে Ctrl+V চাপুন। আপনার প্রশ্ন এখানেই থাকবে।"},
+    {Str::ClickBoxText, L"Gemini-র মেসেজ বক্সে ক্লিক করে আপনার প্রশ্ন টাইপ করুন। আপনার প্রশ্ন এখানেই থাকবে।"},
+    {Str::BrowserFailedOne, L"ব্রাউজার খোলা যায়নি। ছবি কপি করা আছে; Ctrl+V দিয়ে Gemini-তে পেস্ট করুন।"},
+    {Str::BrowserFailedMany, L"ব্রাউজার খোলা যায়নি। ছবিগুলো কপি করা আছে; Ctrl+V দিয়ে Gemini-তে পেস্ট করুন।"},
+    {Str::BrowserFailedText, L"ব্রাউজার খোলা যায়নি।"},
+    {Str::PageUnreadable, L"Magic Pointer আপনার ব্রাউজারের পেজটি পড়তে পারেনি। পেজের ওপর কোনো নোটিফিকেশন খোলা থাকলে সেটি বন্ধ করুন এবং আবার \"Gemini-তে জিজ্ঞাসা করুন\"-এ ক্লিক করুন।"},
+    {Str::ErrKeyInvalid, L"আপনার {0} API কী সঠিক নয়। মডের সেটিংসে গিয়ে এটি দেখে নিন।"},
+    {Str::ErrKeyForbidden, L"এই API কী দিয়ে {0} পরিষেবা ব্যবহার করা যাচ্ছে না (403)। মডের সেটিংসে কী-টি দেখে নিন।"},
+    {Str::ErrModelMissing, L"\"{0}\" মডেলটি আপনার কী দিয়ে ব্যবহার করা যাচ্ছে না। মডের সেটিংসে অন্য একটি মডেল বেছে নিন।"},
+    {Str::ErrNoFreeQuota, L"আপনার Gemini প্ল্যানে \"{0}\"-এর জন্য বিনামূল্যে ব্যবহারের সীমা নেই। মডের সেটিংসে \"দ্রুত\" মডেল বেছে নিন, অথবা কী-তে বিলিং চালু করুন।"},
+    {Str::ErrNoCredit, L"আপনার {0} অ্যাকাউন্টের ক্রেডিট শেষ হয়ে গেছে। ক্রেডিট বা পেমেন্ট পদ্ধতি যোগ করে আবার চেষ্টা করুন।"},
+    {Str::ErrTimeout, L"{0} পরিষেবা সময়মতো সাড়া দেয়নি। কিছুক্ষণ পর আবার চেষ্টা করুন।"},
+    {Str::ModelBusy, L"আপনার বেছে নেওয়া মডেলটি এখন পাওয়া যাচ্ছে না। তার বদলে একটি দ্রুত মডেল উত্তর দিচ্ছে।"},
+    {Str::ErrRateLimit, L"আপাতত {0} পরিষেবার অনুরোধের সীমা শেষ হয়ে গেছে। কিছুক্ষণ পর আবার চেষ্টা করুন।"},
+    {Str::ErrServer, L"{0} পরিষেবায় এখন সমস্যা হচ্ছে ({1})। কিছুক্ষণ পর আবার চেষ্টা করুন।"},
+    {Str::ErrGeneric, L"{0} পরিষেবা একটি ত্রুটি দেখিয়েছে ({1})।"},
+    {Str::ErrNoConnection, L"{0} পরিষেবার উত্তর পাওয়া যায়নি। ইন্টারনেট সংযোগ দেখে নিন (ত্রুটি {1}) এবং আবার জিজ্ঞাসা করুন।"},
+    {Str::ErrInterrupted, L"{0} পরিষেবার সঙ্গে সংযোগ বিচ্ছিন্ন হওয়ায় উত্তরটি অসম্পূর্ণ (ত্রুটি {1})। আবার জিজ্ঞাসা করুন।"},
+    {Str::ErrInterruptedBy, L"{0} পরিষেবা উত্তরটি মাঝপথে থামিয়ে দিয়েছে: {1}"},
+    {Str::ErrUnreadable, L"{0} পরিষেবা এমন উত্তর পাঠিয়েছে যা পড়া যাচ্ছে না। আবার জিজ্ঞাসা করুন।"},
+    {Str::ErrOutputLimit, L"{0} পরিষেবার আউটপুটের সীমা শেষ হওয়ায় উত্তরটি অসম্পূর্ণ। ছোট উত্তর চেয়ে দেখুন।"},
+    {Str::ErrStoppedBecause, L"{0} পরিষেবা উত্তরটি থামিয়ে দিয়েছে ({1})। অন্যভাবে প্রশ্ন করে দেখুন।"},
+    {Str::ErrUnconfirmed, L"উত্তর সম্পূর্ণ হয়েছে কি না নিশ্চিত করার আগেই {0} পরিষেবা থেমে গেছে। আবার জিজ্ঞাসা করুন।"},
+    {Str::ErrNoAnswer, L"{0} পরিষেবা কোনো উত্তর দেয়নি। অন্যভাবে প্রশ্ন করে দেখুন।"},
+    {Str::ErrCouldntReach, L"{0} পরিষেবার সঙ্গে যোগাযোগ করা যায়নি। ইন্টারনেট সংযোগ দেখে নিন (ত্রুটি {1})।"},
+    {Str::ErrStreaming, L"{0} পরিষেবায় স্ট্রিমিং ত্রুটি হয়েছে।"},
+    {Str::LensSearching, L"Google Lens দিয়ে খোঁজা হচ্ছে…"},
+    {Str::LensUploadFailed, L"নিজে থেকে আপলোড করা যায়নি। ছবিটি ক্লিপবোর্ডে আছে: lens.google.com-এ গিয়ে পেস্ট করুন।"},
+};
+
+const TextEntry kTexts_zh_CN[] = {
+    {Str::HintText, L"选择任意内容，向 {0} 提问"},
+    {Str::HintTextTyping, L"选择任意内容或直接开始输入，向 {0} 提问"},
+    {Str::Close, L"关闭"},
+    {Str::AskInGemini, L"在 Gemini 中提问"},
+    {Str::SearchWithLens, L"使用 Google Lens 搜索"},
+    {Str::TranslateTo, L"翻译为：{0}"},
+    {Str::CopyImage, L"复制图片"},
+    {Str::CopyText, L"复制文本"},
+    {Str::AddSelection, L"添加另一个选区"},
+    {Str::WhatIsThis, L"这是什么？"},
+    {Str::ExplainThis, L"帮我解释一下"},
+    {Str::SummarizeThis, L"帮我总结一下"},
+    {Str::AskPlaceholder, L"询问有关所选内容的问题…"},
+    {Str::AskAnythingPlaceholder, L"询问任何问题…"},
+    {Str::FollowUpPlaceholder, L"继续追问…"},
+    {Str::Thinking, L"正在思考…"},
+    {Str::Copy, L"复制"},
+    {Str::SelectAll, L"全选"},
+    {Str::NoApiKeyHint, L"在 Mod 设置中添加 Gemini、ChatGPT 或 Claude 的 API 密钥，即可直接在此处获得回答。"},
+    {Str::ImageCopied, L"图片已复制"},
+    {Str::ImageCopyFailed, L"无法复制图片"},
+    {Str::ImageCopyRetry, L"无法复制图片，请重试。"},
+    {Str::ReadingText, L"仍在识别文本…"},
+    {Str::NoTextFound, L"所选内容中未找到文本"},
+    {Str::TextCopied, L"文本已复制"},
+    {Str::TextCopyFailed, L"无法复制文本"},
+    {Str::AnswerCopied, L"回答已复制"},
+    {Str::AnswerCopyFailed, L"无法复制回答"},
+    {Str::OpeningLens, L"正在浏览器中打开 Google Lens…"},
+    {Str::OpeningGeminiOne, L"正在打开 Gemini 并附加图片…"},
+    {Str::OpeningGeminiMany, L"正在打开 Gemini 并附加所有图片…"},
+    {Str::OpeningGeminiText, L"正在打开 Gemini 并添加你的问题…"},
+    {Str::ClickBoxToAttach, L"请单击 Gemini 的消息框，然后按 Ctrl+V 附加图片。"},
+    {Str::Stopped, L"已停止。"},
+    {Str::StoppedEarly, L"回答未完成就已停止。"},
+    {Str::RequestFailed, L"无法启动请求。"},
+    {Str::DraftAddedOne, L"图片已添加。请在 Gemini 中输入你的问题。"},
+    {Str::DraftAddedMany, L"图片已全部添加。请在 Gemini 中输入你的问题。"},
+    {Str::QuestionInGemini, L"你的问题已在 Gemini 中。"},
+    {Str::DraftPartial, L"已确认图片：{0}/{1}。请检查 Gemini，并在其消息框中按 Ctrl+V 添加其余图片。"},
+    {Str::ClipboardChangedOne, L"在粘贴图片之前剪贴板内容已更改：请使用“复制图片”，然后在 Gemini 中按 Ctrl+V。"},
+    {Str::ClipboardChangedMany, L"在粘贴图片之前剪贴板内容已更改。请在 Gemini 中重新提问以重试。"},
+    {Str::IfNotAttachedOne, L"如果图片未附加，请单击 Gemini 的消息框并按 Ctrl+V。"},
+    {Str::IfNotAttachedMany, L"如果这些图片未附加，请单击 Gemini 的消息框并按 Ctrl+V。"},
+    {Str::ClickBoxOne, L"请单击 Gemini 的消息框并按 Ctrl+V 附加图片。你的问题会保留在这里。"},
+    {Str::ClickBoxMany, L"请单击 Gemini 的消息框并按 Ctrl+V 附加这些图片。你的问题会保留在这里。"},
+    {Str::ClickBoxText, L"请单击 Gemini 的消息框并输入你的问题。你的问题会保留在这里。"},
+    {Str::BrowserFailedOne, L"无法打开浏览器。图片已复制；请用 Ctrl+V 粘贴到 Gemini。"},
+    {Str::BrowserFailedMany, L"无法打开浏览器。图片已复制；请用 Ctrl+V 将它们粘贴到 Gemini。"},
+    {Str::BrowserFailedText, L"无法打开浏览器。"},
+    {Str::PageUnreadable, L"Magic Pointer 无法读取浏览器中的页面。如果其上方打开了通知，请将其关闭，然后再次单击“在 Gemini 中提问”。"},
+    {Str::ErrKeyInvalid, L"你的 {0} API 密钥无效。请在 Mod 设置中检查。"},
+    {Str::ErrKeyForbidden, L"此 API 密钥无法使用 {0}（403）。请在 Mod 设置中检查该密钥。"},
+    {Str::ErrModelMissing, L"模型“{0}”不适用于你的密钥。请在 Mod 设置中选择其他模型。"},
+    {Str::ErrNoFreeQuota, L"你的 Gemini 方案没有“{0}”的免费配额。请在 Mod 设置中选择“快速”模型，或为你的密钥添加结算信息。"},
+    {Str::ErrNoCredit, L"你的 {0} 账户余额已用完。请充值或添加付款方式，然后重试。"},
+    {Str::ErrTimeout, L"{0} 未能及时响应。请稍后再试。"},
+    {Str::ModelBusy, L"你选择的模型目前不可用，已改由更快的模型作答。"},
+    {Str::ErrRateLimit, L"你暂时达到了 {0} 的请求上限。请稍后再试。"},
+    {Str::ErrServer, L"{0} 目前出现问题（{1}）。请稍后再试。"},
+    {Str::ErrGeneric, L"{0} 返回了错误（{1}）。"},
+    {Str::ErrNoConnection, L"无法接收 {0} 的回答。请检查你的网络连接（错误 {1}）。请尝试重新提问。"},
+    {Str::ErrInterrupted, L"与 {0} 的连接已中断。此回答不完整（错误 {1}）。请尝试重新提问。"},
+    {Str::ErrInterruptedBy, L"{0} 中断了此回答：{1}"},
+    {Str::ErrUnreadable, L"{0} 返回了无法读取的响应。请尝试重新提问。"},
+    {Str::ErrOutputLimit, L"{0} 已达到输出上限。此回答不完整。请尝试要求更简短的回答。"},
+    {Str::ErrStoppedBecause, L"{0} 停止了此回答（{1}）。请尝试换一种方式提问。"},
+    {Str::ErrUnconfirmed, L"{0} 在确认回答完整之前就停止了。请尝试重新提问。"},
+    {Str::ErrNoAnswer, L"{0} 没有返回回答。请尝试换一种方式提问。"},
+    {Str::ErrCouldntReach, L"无法连接到 {0}。请检查你的网络连接（错误 {1}）。"},
+    {Str::ErrStreaming, L"{0} 返回了流式传输错误。"},
+    {Str::LensSearching, L"正在使用 Google Lens 搜索…"},
+    {Str::LensUploadFailed, L"无法自动上传。图片已在剪贴板中：请将其粘贴到 lens.google.com。"},
+};
+
+const TextEntry kTexts_zh_TW[] = {
+    {Str::HintText, L"選取任何內容即可詢問 {0}"},
+    {Str::HintTextTyping, L"選取任何內容或直接開始輸入，即可詢問 {0}"},
+    {Str::Close, L"關閉"},
+    {Str::AskInGemini, L"在 Gemini 中詢問"},
+    {Str::SearchWithLens, L"使用 Google Lens 搜尋"},
+    {Str::TranslateTo, L"翻譯成：{0}"},
+    {Str::CopyImage, L"複製圖片"},
+    {Str::CopyText, L"複製文字"},
+    {Str::AddSelection, L"新增另一個選取範圍"},
+    {Str::WhatIsThis, L"這是什麼？"},
+    {Str::ExplainThis, L"請幫我說明"},
+    {Str::SummarizeThis, L"請幫我摘要"},
+    {Str::AskPlaceholder, L"詢問有關所選內容的問題…"},
+    {Str::AskAnythingPlaceholder, L"詢問任何問題…"},
+    {Str::FollowUpPlaceholder, L"繼續追問…"},
+    {Str::Thinking, L"思考中…"},
+    {Str::Copy, L"複製"},
+    {Str::SelectAll, L"全選"},
+    {Str::NoApiKeyHint, L"在模組設定中新增 Gemini、ChatGPT 或 Claude 的 API 金鑰，即可直接在此取得回答。"},
+    {Str::ImageCopied, L"已複製圖片"},
+    {Str::ImageCopyFailed, L"無法複製圖片"},
+    {Str::ImageCopyRetry, L"無法複製圖片，請再試一次。"},
+    {Str::ReadingText, L"仍在辨識文字…"},
+    {Str::NoTextFound, L"在所選內容中找不到文字"},
+    {Str::TextCopied, L"已複製文字"},
+    {Str::TextCopyFailed, L"無法複製文字"},
+    {Str::AnswerCopied, L"已複製回答"},
+    {Str::AnswerCopyFailed, L"無法複製回答"},
+    {Str::OpeningLens, L"正在瀏覽器中開啟 Google Lens…"},
+    {Str::OpeningGeminiOne, L"正在開啟 Gemini 並附加圖片…"},
+    {Str::OpeningGeminiMany, L"正在開啟 Gemini 並附加所有圖片…"},
+    {Str::OpeningGeminiText, L"正在開啟 Gemini 並加入您的問題…"},
+    {Str::ClickBoxToAttach, L"請按一下 Gemini 的訊息方塊，然後按 Ctrl+V 以附加圖片。"},
+    {Str::Stopped, L"已停止。"},
+    {Str::StoppedEarly, L"回答尚未完成就已停止。"},
+    {Str::RequestFailed, L"無法啟動要求。"},
+    {Str::DraftAddedOne, L"已新增圖片。請在 Gemini 中輸入您的問題。"},
+    {Str::DraftAddedMany, L"已新增所有圖片。請在 Gemini 中輸入您的問題。"},
+    {Str::QuestionInGemini, L"您的問題已在 Gemini 中。"},
+    {Str::DraftPartial, L"已確認的圖片：{0}/{1}。請檢查 Gemini，並在其訊息方塊中按 Ctrl+V 新增其餘圖片。"},
+    {Str::ClipboardChangedOne, L"在貼上圖片之前，剪貼簿內容已變更：請使用「複製圖片」，然後在 Gemini 中按 Ctrl+V。"},
+    {Str::ClipboardChangedMany, L"在貼上圖片之前，剪貼簿內容已變更。請在 Gemini 中重新詢問以再試一次。"},
+    {Str::IfNotAttachedOne, L"如果圖片未附加，請按一下 Gemini 的訊息方塊並按 Ctrl+V。"},
+    {Str::IfNotAttachedMany, L"如果這些圖片未附加，請按一下 Gemini 的訊息方塊並按 Ctrl+V。"},
+    {Str::ClickBoxOne, L"請按一下 Gemini 的訊息方塊並按 Ctrl+V 以附加圖片。您的問題會保留在這裡。"},
+    {Str::ClickBoxMany, L"請按一下 Gemini 的訊息方塊並按 Ctrl+V 以附加這些圖片。您的問題會保留在這裡。"},
+    {Str::ClickBoxText, L"請按一下 Gemini 的訊息方塊並輸入您的問題。您的問題會保留在這裡。"},
+    {Str::BrowserFailedOne, L"無法開啟瀏覽器。圖片已複製，請用 Ctrl+V 貼到 Gemini。"},
+    {Str::BrowserFailedMany, L"無法開啟瀏覽器。圖片已複製，請用 Ctrl+V 將它們貼到 Gemini。"},
+    {Str::BrowserFailedText, L"無法開啟瀏覽器。"},
+    {Str::PageUnreadable, L"Magic Pointer 無法讀取瀏覽器中的頁面。如果上方開啟了通知，請將其關閉，然後再次按一下「在 Gemini 中詢問」。"},
+    {Str::ErrKeyInvalid, L"您的 {0} API 金鑰無效。請在模組設定中檢查。"},
+    {Str::ErrKeyForbidden, L"此 API 金鑰無法使用 {0}（403）。請在模組設定中檢查該金鑰。"},
+    {Str::ErrModelMissing, L"模型「{0}」不適用於您的金鑰。請在模組設定中選擇其他模型。"},
+    {Str::ErrNoFreeQuota, L"您的 Gemini 方案沒有「{0}」的免費配額。請在模組設定中選擇「快速」模型，或為您的金鑰新增計費資訊。"},
+    {Str::ErrNoCredit, L"您的 {0} 帳戶餘額已用完。請儲值或新增付款方式，然後再試一次。"},
+    {Str::ErrTimeout, L"{0} 未能及時回應。請稍後再試。"},
+    {Str::ModelBusy, L"您選擇的模型目前無法使用，已改由較快的模型回答。"},
+    {Str::ErrRateLimit, L"您暫時達到了 {0} 的要求上限。請稍後再試。"},
+    {Str::ErrServer, L"{0} 目前發生問題（{1}）。請稍後再試。"},
+    {Str::ErrGeneric, L"{0} 傳回了錯誤（{1}）。"},
+    {Str::ErrNoConnection, L"無法接收 {0} 的回答。請檢查您的網際網路連線（錯誤 {1}）。請嘗試重新詢問。"},
+    {Str::ErrInterrupted, L"與 {0} 的連線已中斷。此回答不完整（錯誤 {1}）。請嘗試重新詢問。"},
+    {Str::ErrInterruptedBy, L"{0} 中斷了此回答：{1}"},
+    {Str::ErrUnreadable, L"{0} 傳回了無法讀取的回應。請嘗試重新詢問。"},
+    {Str::ErrOutputLimit, L"{0} 已達到輸出上限。此回答不完整。請嘗試要求較簡短的回答。"},
+    {Str::ErrStoppedBecause, L"{0} 停止了此回答（{1}）。請嘗試換個方式詢問。"},
+    {Str::ErrUnconfirmed, L"{0} 在確認回答完整之前就停止了。請嘗試重新詢問。"},
+    {Str::ErrNoAnswer, L"{0} 沒有傳回回答。請嘗試換個方式詢問。"},
+    {Str::ErrCouldntReach, L"無法連線到 {0}。請檢查您的網際網路連線（錯誤 {1}）。"},
+    {Str::ErrStreaming, L"{0} 傳回了串流錯誤。"},
+    {Str::LensSearching, L"正在使用 Google Lens 搜尋…"},
+    {Str::LensUploadFailed, L"無法自動上傳。圖片已在剪貼簿中：請將其貼到 lens.google.com。"},
+};
+
+const TextEntry kTexts_hr[] = {
+    {Str::HintText, L"Odaberi bilo što da pitaš {0}"},
+    {Str::HintTextTyping, L"Odaberi bilo što ili počni tipkati da pitaš {0}"},
+    {Str::Close, L"Zatvori"},
+    {Str::AskInGemini, L"Pitaj Gemini"},
+    {Str::SearchWithLens, L"Pretraži s Google Lensom"},
+    {Str::TranslateTo, L"Prevedi na: {0}"},
+    {Str::CopyImage, L"Kopiraj sliku"},
+    {Str::CopyText, L"Kopiraj tekst"},
+    {Str::AddSelection, L"Dodaj još jedan odabir"},
+    {Str::WhatIsThis, L"Što je ovo?"},
+    {Str::ExplainThis, L"Objasni mi ovo"},
+    {Str::SummarizeThis, L"Sažmi mi ovo"},
+    {Str::AskPlaceholder, L"Pitaj nešto o odabiru…"},
+    {Str::AskAnythingPlaceholder, L"Pitaj bilo što…"},
+    {Str::FollowUpPlaceholder, L"Postavi dodatno pitanje…"},
+    {Str::Thinking, L"Razmišljam…"},
+    {Str::Copy, L"Kopiraj"},
+    {Str::SelectAll, L"Odaberi sve"},
+    {Str::NoApiKeyHint, L"Dodaj API ključ za Gemini, ChatGPT ili Claude u postavkama dodatka kako bi odgovore dobivao ovdje."},
+    {Str::ImageCopied, L"Slika je kopirana"},
+    {Str::ImageCopyFailed, L"Slika se nije mogla kopirati"},
+    {Str::ImageCopyRetry, L"Slika se nije mogla kopirati. Pokušaj ponovno."},
+    {Str::ReadingText, L"Tekst se još čita…"},
+    {Str::NoTextFound, L"U odabiru nije pronađen tekst"},
+    {Str::TextCopied, L"Tekst je kopiran"},
+    {Str::TextCopyFailed, L"Tekst se nije mogao kopirati"},
+    {Str::AnswerCopied, L"Odgovor je kopiran"},
+    {Str::AnswerCopyFailed, L"Odgovor se nije mogao kopirati"},
+    {Str::OpeningLens, L"Otvaranje Google Lensa u pregledniku…"},
+    {Str::OpeningGeminiOne, L"Otvaranje Geminija i prilaganje slike…"},
+    {Str::OpeningGeminiMany, L"Otvaranje Geminija i prilaganje slika…"},
+    {Str::OpeningGeminiText, L"Otvaranje Geminija i dodavanje tvog pitanja…"},
+    {Str::ClickBoxToAttach, L"Klikni okvir za poruke u Geminiju i pritisni Ctrl+V da priložiš sliku."},
+    {Str::Stopped, L"Zaustavljeno."},
+    {Str::StoppedEarly, L"Zaustavljeno prije nego što je odgovor završio."},
+    {Str::RequestFailed, L"Zahtjev se nije mogao pokrenuti."},
+    {Str::DraftAddedOne, L"Slika je dodana. Upiši svoje pitanje u Gemini."},
+    {Str::DraftAddedMany, L"Slike su dodane. Upiši svoje pitanje u Gemini."},
+    {Str::QuestionInGemini, L"Tvoje pitanje je već u Geminiju."},
+    {Str::DraftPartial, L"Potvrđene slike: {0} od {1}. Provjeri Gemini i dodaj ostale pomoću Ctrl+V u njegovu okviru za poruke."},
+    {Str::ClipboardChangedOne, L"Međuspremnik se promijenio prije nego što se slika mogla zalijepiti: upotrijebi Kopiraj sliku, a zatim pritisni Ctrl+V u Geminiju."},
+    {Str::ClipboardChangedMany, L"Međuspremnik se promijenio prije nego što su se slike mogle zalijepiti. Pitaj ponovno u Geminiju da pokušaš opet."},
+    {Str::IfNotAttachedOne, L"Ako slika nije priložena, klikni okvir za poruke u Geminiju i pritisni Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Ako slike nisu priložene, klikni okvir za poruke u Geminiju i pritisni Ctrl+V."},
+    {Str::ClickBoxOne, L"Klikni okvir za poruke u Geminiju i pritisni Ctrl+V da priložiš sliku. Tvoje pitanje ostaje ovdje."},
+    {Str::ClickBoxMany, L"Klikni okvir za poruke u Geminiju i pritisni Ctrl+V da priložiš slike. Tvoje pitanje ostaje ovdje."},
+    {Str::ClickBoxText, L"Klikni okvir za poruke u Geminiju i upiši svoje pitanje. Tvoje pitanje ostaje ovdje."},
+    {Str::BrowserFailedOne, L"Preglednik se nije mogao otvoriti. Slika je kopirana; zalijepi je u Gemini pomoću Ctrl+V."},
+    {Str::BrowserFailedMany, L"Preglednik se nije mogao otvoriti. Slike su kopirane; zalijepi ih u Gemini pomoću Ctrl+V."},
+    {Str::BrowserFailedText, L"Preglednik se nije mogao otvoriti."},
+    {Str::PageUnreadable, L"Magic Pointer nije mogao pročitati stranicu u tvom pregledniku. Ako je iznad nje otvorena obavijest, zatvori je i ponovno klikni Pitaj Gemini."},
+    {Str::ErrKeyInvalid, L"Tvoj API ključ za {0} nije valjan. Provjeri ga u postavkama dodatka."},
+    {Str::ErrKeyForbidden, L"Ovaj API ključ ne može koristiti uslugu {0} (403). Provjeri ključ u postavkama dodatka."},
+    {Str::ErrModelMissing, L"Model „{0}” nije dostupan za tvoj ključ. Odaberi drugi model u postavkama dodatka."},
+    {Str::ErrNoFreeQuota, L"Tvoj Gemini paket nema besplatnu kvotu za „{0}”. Odaberi model „Brzo” u postavkama dodatka ili dodaj naplatu svom ključu."},
+    {Str::ErrNoCredit, L"Na tvom računu za uslugu {0} nema više sredstava. Dodaj sredstva ili način plaćanja pa pokušaj ponovno."},
+    {Str::ErrTimeout, L"Usluga {0} nije odgovorila na vrijeme. Pokušaj ponovno za trenutak."},
+    {Str::ModelBusy, L"Model koji si odabrao trenutačno nije dostupan. Umjesto njega odgovara brži model."},
+    {Str::ErrRateLimit, L"Dosegnuto je ograničenje zahtjeva za uslugu {0}. Pokušaj ponovno za trenutak."},
+    {Str::ErrServer, L"Usluga {0} trenutačno ima problema ({1}). Pokušaj ponovno za trenutak."},
+    {Str::ErrGeneric, L"Usluga {0} vratila je pogrešku ({1})."},
+    {Str::ErrNoConnection, L"Odgovor usluge {0} nije se mogao primiti. Provjeri internetsku vezu (pogreška {1}). Pokušaj ponovno postaviti pitanje."},
+    {Str::ErrInterrupted, L"Veza s uslugom {0} prekinuta je. Ovaj je odgovor nepotpun (pogreška {1}). Pokušaj ponovno postaviti pitanje."},
+    {Str::ErrInterruptedBy, L"Usluga {0} prekinula je ovaj odgovor: {1}"},
+    {Str::ErrUnreadable, L"Usluga {0} vratila je nečitljiv odgovor. Pokušaj ponovno postaviti pitanje."},
+    {Str::ErrOutputLimit, L"Usluga {0} dosegnula je ograničenje izlaza. Ovaj je odgovor nepotpun. Pokušaj zatražiti kraći odgovor."},
+    {Str::ErrStoppedBecause, L"Usluga {0} zaustavila je ovaj odgovor ({1}). Pokušaj pitati na drugi način."},
+    {Str::ErrUnconfirmed, L"Usluga {0} zaustavila se prije nego što je potvrdila da je odgovor potpun. Pokušaj ponovno postaviti pitanje."},
+    {Str::ErrNoAnswer, L"Usluga {0} nije vratila odgovor. Pokušaj pitati na drugi način."},
+    {Str::ErrCouldntReach, L"Usluga {0} nije dostupna. Provjeri internetsku vezu (pogreška {1})."},
+    {Str::ErrStreaming, L"Usluga {0} vratila je pogrešku strujanja."},
+    {Str::LensSearching, L"Pretraživanje s Google Lensom…"},
+    {Str::LensUploadFailed, L"Automatsko učitavanje nije uspjelo. Slika je u međuspremniku: zalijepi je na lens.google.com."},
+};
+
+const TextEntry kTexts_cs[] = {
+    {Str::HintText, L"Vyberte cokoli a zeptejte se {0}"},
+    {Str::HintTextTyping, L"Vyberte cokoli nebo začněte psát a zeptejte se {0}"},
+    {Str::Close, L"Zavřít"},
+    {Str::AskInGemini, L"Zeptat se Gemini"},
+    {Str::SearchWithLens, L"Hledat pomocí Google Lens"},
+    {Str::TranslateTo, L"Přeložit do jazyka: {0}"},
+    {Str::CopyImage, L"Kopírovat obrázek"},
+    {Str::CopyText, L"Kopírovat text"},
+    {Str::AddSelection, L"Přidat další výběr"},
+    {Str::WhatIsThis, L"Co je to?"},
+    {Str::ExplainThis, L"Vysvětli mi to"},
+    {Str::SummarizeThis, L"Shrň mi to"},
+    {Str::AskPlaceholder, L"Zeptejte se na svůj výběr…"},
+    {Str::AskAnythingPlaceholder, L"Zeptejte se na cokoli…"},
+    {Str::FollowUpPlaceholder, L"Položte doplňující dotaz…"},
+    {Str::Thinking, L"Přemýšlím…"},
+    {Str::Copy, L"Kopírovat"},
+    {Str::SelectAll, L"Vybrat vše"},
+    {Str::NoApiKeyHint, L"Přidejte do nastavení této úpravy klíč API služby Gemini, ChatGPT nebo Claude, abyste dostávali odpovědi přímo zde."},
+    {Str::ImageCopied, L"Obrázek byl zkopírován"},
+    {Str::ImageCopyFailed, L"Obrázek se nepodařilo zkopírovat"},
+    {Str::ImageCopyRetry, L"Obrázek se nepodařilo zkopírovat. Zkuste to znovu."},
+    {Str::ReadingText, L"Text se stále čte…"},
+    {Str::NoTextFound, L"Ve výběru nebyl nalezen žádný text"},
+    {Str::TextCopied, L"Text byl zkopírován"},
+    {Str::TextCopyFailed, L"Text se nepodařilo zkopírovat"},
+    {Str::AnswerCopied, L"Odpověď byla zkopírována"},
+    {Str::AnswerCopyFailed, L"Odpověď se nepodařilo zkopírovat"},
+    {Str::OpeningLens, L"Otevírá se Google Lens v prohlížeči…"},
+    {Str::OpeningGeminiOne, L"Otevírá se Gemini a připojuje se váš obrázek…"},
+    {Str::OpeningGeminiMany, L"Otevírá se Gemini a připojují se vaše obrázky…"},
+    {Str::OpeningGeminiText, L"Otevírá se Gemini a přidává se vaše otázka…"},
+    {Str::ClickBoxToAttach, L"Klikněte do pole zprávy v Gemini a stisknutím Ctrl+V připojte obrázek."},
+    {Str::Stopped, L"Zastaveno."},
+    {Str::StoppedEarly, L"Zastaveno dříve, než byla odpověď dokončena."},
+    {Str::RequestFailed, L"Požadavek se nepodařilo spustit."},
+    {Str::DraftAddedOne, L"Obrázek byl přidán. Napište svou otázku do Gemini."},
+    {Str::DraftAddedMany, L"Obrázky byly přidány. Napište svou otázku do Gemini."},
+    {Str::QuestionInGemini, L"Vaše otázka už je v Gemini."},
+    {Str::DraftPartial, L"Potvrzené obrázky: {0} z {1}. Zkontrolujte Gemini a zbylé přidejte pomocí Ctrl+V v jeho poli zprávy."},
+    {Str::ClipboardChangedOne, L"Schránka se změnila dříve, než šlo obrázek vložit: použijte Kopírovat obrázek a poté stiskněte Ctrl+V v Gemini."},
+    {Str::ClipboardChangedMany, L"Schránka se změnila dříve, než šlo obrázky vložit. Zeptejte se v Gemini znovu a zkuste to ještě jednou."},
+    {Str::IfNotAttachedOne, L"Pokud obrázek není připojen, klikněte do pole zprávy v Gemini a stiskněte Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Pokud obrázky nejsou připojeny, klikněte do pole zprávy v Gemini a stiskněte Ctrl+V."},
+    {Str::ClickBoxOne, L"Klikněte do pole zprávy v Gemini a stisknutím Ctrl+V připojte obrázek. Vaše otázka zde zůstává."},
+    {Str::ClickBoxMany, L"Klikněte do pole zprávy v Gemini a stisknutím Ctrl+V připojte obrázky. Vaše otázka zde zůstává."},
+    {Str::ClickBoxText, L"Klikněte do pole zprávy v Gemini a napište svou otázku. Vaše otázka zde zůstává."},
+    {Str::BrowserFailedOne, L"Prohlížeč se nepodařilo otevřít. Obrázek je zkopírován; vložte jej do Gemini pomocí Ctrl+V."},
+    {Str::BrowserFailedMany, L"Prohlížeč se nepodařilo otevřít. Obrázky jsou zkopírovány; vložte je do Gemini pomocí Ctrl+V."},
+    {Str::BrowserFailedText, L"Prohlížeč se nepodařilo otevřít."},
+    {Str::PageUnreadable, L"Magic Pointer nemohl přečíst stránku ve vašem prohlížeči. Pokud je nad ní otevřeno oznámení, zavřete je a znovu klikněte na Zeptat se Gemini."},
+    {Str::ErrKeyInvalid, L"Váš klíč API pro {0} není platný. Zkontrolujte jej v nastavení této úpravy."},
+    {Str::ErrKeyForbidden, L"Tento klíč API nemůže používat službu {0} (403). Zkontrolujte klíč v nastavení této úpravy."},
+    {Str::ErrModelMissing, L"Model „{0}“ není pro váš klíč dostupný. Vyberte v nastavení této úpravy jiný model."},
+    {Str::ErrNoFreeQuota, L"Váš plán Gemini nemá bezplatnou kvótu pro „{0}“. Vyberte v nastavení této úpravy model Rychlý, nebo ke svému klíči přidejte fakturaci."},
+    {Str::ErrNoCredit, L"Váš účet u služby {0} nemá žádný zbývající kredit. Dobijte kredit nebo přidejte platební metodu a zkuste to znovu."},
+    {Str::ErrTimeout, L"Služba {0} neodpověděla včas. Zkuste to znovu za chvíli."},
+    {Str::ModelBusy, L"Vybraný model není právě dostupný. Místo něj odpovídá rychlejší."},
+    {Str::ErrRateLimit, L"Dosáhli jste prozatím limitu požadavků služby {0}. Zkuste to znovu za chvíli."},
+    {Str::ErrServer, L"Služba {0} má právě potíže ({1}). Zkuste to znovu za chvíli."},
+    {Str::ErrGeneric, L"Služba {0} vrátila chybu ({1})."},
+    {Str::ErrNoConnection, L"Odpověď služby {0} se nepodařilo přijmout. Zkontrolujte připojení k internetu (chyba {1}). Zkuste se zeptat znovu."},
+    {Str::ErrInterrupted, L"Připojení ke službě {0} bylo přerušeno. Tato odpověď je neúplná (chyba {1}). Zkuste se zeptat znovu."},
+    {Str::ErrInterruptedBy, L"Služba {0} tuto odpověď přerušila: {1}"},
+    {Str::ErrUnreadable, L"Služba {0} vrátila nečitelnou odpověď. Zkuste se zeptat znovu."},
+    {Str::ErrOutputLimit, L"Služba {0} dosáhla limitu výstupu. Tato odpověď je neúplná. Zkuste požádat o kratší odpověď."},
+    {Str::ErrStoppedBecause, L"Služba {0} tuto odpověď zastavila ({1}). Zkuste se zeptat jinak."},
+    {Str::ErrUnconfirmed, L"Služba {0} se zastavila dříve, než potvrdila, že odpověď je úplná. Zkuste se zeptat znovu."},
+    {Str::ErrNoAnswer, L"Služba {0} nevrátila žádnou odpověď. Zkuste se zeptat jinak."},
+    {Str::ErrCouldntReach, L"Službu {0} se nepodařilo kontaktovat. Zkontrolujte připojení k internetu (chyba {1})."},
+    {Str::ErrStreaming, L"Služba {0} vrátila chybu streamování."},
+    {Str::LensSearching, L"Hledání pomocí Google Lens…"},
+    {Str::LensUploadFailed, L"Automatické nahrání se nezdařilo. Obrázek je ve schránce: vložte jej na lens.google.com."},
+};
+
+const TextEntry kTexts_da[] = {
+    {Str::HintText, L"Vælg noget for at spørge {0}"},
+    {Str::HintTextTyping, L"Vælg noget eller begynd at skrive for at spørge {0}"},
+    {Str::Close, L"Luk"},
+    {Str::AskInGemini, L"Spørg Gemini"},
+    {Str::SearchWithLens, L"Søg med Google Lens"},
+    {Str::TranslateTo, L"Oversæt til: {0}"},
+    {Str::CopyImage, L"Kopiér billede"},
+    {Str::CopyText, L"Kopiér tekst"},
+    {Str::AddSelection, L"Tilføj endnu et valg"},
+    {Str::WhatIsThis, L"Hvad er det her?"},
+    {Str::ExplainThis, L"Forklar det her"},
+    {Str::SummarizeThis, L"Opsummér det her"},
+    {Str::AskPlaceholder, L"Spørg om dit valg…"},
+    {Str::AskAnythingPlaceholder, L"Spørg om hvad som helst…"},
+    {Str::FollowUpPlaceholder, L"Stil et opfølgende spørgsmål…"},
+    {Str::Thinking, L"Tænker…"},
+    {Str::Copy, L"Kopiér"},
+    {Str::SelectAll, L"Markér alt"},
+    {Str::NoApiKeyHint, L"Tilføj en API-nøgle til Gemini, ChatGPT eller Claude i indstillingerne for modifikationen for at få svar lige her."},
+    {Str::ImageCopied, L"Billedet er kopieret"},
+    {Str::ImageCopyFailed, L"Billedet kunne ikke kopieres"},
+    {Str::ImageCopyRetry, L"Billedet kunne ikke kopieres. Prøv igen."},
+    {Str::ReadingText, L"Læser stadig teksten…"},
+    {Str::NoTextFound, L"Der blev ikke fundet tekst i det valgte"},
+    {Str::TextCopied, L"Teksten er kopieret"},
+    {Str::TextCopyFailed, L"Teksten kunne ikke kopieres"},
+    {Str::AnswerCopied, L"Svaret er kopieret"},
+    {Str::AnswerCopyFailed, L"Svaret kunne ikke kopieres"},
+    {Str::OpeningLens, L"Åbner Google Lens i din browser…"},
+    {Str::OpeningGeminiOne, L"Åbner Gemini og vedhæfter dit billede…"},
+    {Str::OpeningGeminiMany, L"Åbner Gemini og vedhæfter dine billeder…"},
+    {Str::OpeningGeminiText, L"Åbner Gemini og tilføjer dit spørgsmål…"},
+    {Str::ClickBoxToAttach, L"Klik i Geminis tekstfelt, og tryk på Ctrl+V for at vedhæfte billedet."},
+    {Str::Stopped, L"Stoppet."},
+    {Str::StoppedEarly, L"Stoppet, før svaret var færdigt."},
+    {Str::RequestFailed, L"Anmodningen kunne ikke startes."},
+    {Str::DraftAddedOne, L"Billedet blev tilføjet. Skriv dit spørgsmål i Gemini."},
+    {Str::DraftAddedMany, L"Billederne blev tilføjet. Skriv dit spørgsmål i Gemini."},
+    {Str::QuestionInGemini, L"Dit spørgsmål er skrevet ind i Gemini."},
+    {Str::DraftPartial, L"Bekræftede billeder: {0} af {1}. Tjek Gemini, og tilføj resten med Ctrl+V i dets tekstfelt."},
+    {Str::ClipboardChangedOne, L"Udklipsholderen blev ændret, før billedet kunne indsættes: brug Kopiér billede, og tryk derefter på Ctrl+V i Gemini."},
+    {Str::ClipboardChangedMany, L"Udklipsholderen blev ændret, før billederne kunne indsættes. Spørg igen i Gemini for at prøve igen."},
+    {Str::IfNotAttachedOne, L"Hvis billedet ikke er vedhæftet, skal du klikke i Geminis tekstfelt og trykke på Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Hvis billederne ikke er vedhæftet, skal du klikke i Geminis tekstfelt og trykke på Ctrl+V."},
+    {Str::ClickBoxOne, L"Klik i Geminis tekstfelt, og tryk på Ctrl+V for at vedhæfte billedet. Dit spørgsmål bliver her."},
+    {Str::ClickBoxMany, L"Klik i Geminis tekstfelt, og tryk på Ctrl+V for at vedhæfte billederne. Dit spørgsmål bliver her."},
+    {Str::ClickBoxText, L"Klik i Geminis tekstfelt, og skriv dit spørgsmål. Dit spørgsmål bliver her."},
+    {Str::BrowserFailedOne, L"Browseren kunne ikke åbnes. Billedet er kopieret; indsæt det i Gemini med Ctrl+V."},
+    {Str::BrowserFailedMany, L"Browseren kunne ikke åbnes. Billederne er kopieret; indsæt dem i Gemini med Ctrl+V."},
+    {Str::BrowserFailedText, L"Browseren kunne ikke åbnes."},
+    {Str::PageUnreadable, L"Magic Pointer kunne ikke læse siden i din browser. Hvis en meddelelse er åben oven på den, skal du lukke den og klikke på Spørg Gemini igen."},
+    {Str::ErrKeyInvalid, L"Din {0} API-nøgle er ugyldig. Tjek den i indstillingerne for modifikationen."},
+    {Str::ErrKeyForbidden, L"Denne API-nøgle kan ikke bruge {0} (403). Tjek nøglen i indstillingerne for modifikationen."},
+    {Str::ErrModelMissing, L"Modellen \"{0}\" er ikke tilgængelig for din nøgle. Vælg en anden model i indstillingerne for modifikationen."},
+    {Str::ErrNoFreeQuota, L"Dit Gemini-abonnement har ingen gratis kvote til \"{0}\". Vælg modellen Hurtig i indstillingerne for modifikationen, eller tilføj fakturering til din nøgle."},
+    {Str::ErrNoCredit, L"Din {0}-konto er løbet tør for kredit. Tilføj kredit eller en betalingsmetode, og prøv igen."},
+    {Str::ErrTimeout, L"{0} svarede ikke i tide. Prøv igen om lidt."},
+    {Str::ModelBusy, L"Den model, du valgte, er ikke tilgængelig lige nu. En hurtigere model svarer i stedet."},
+    {Str::ErrRateLimit, L"Du har nået grænsen for anmodninger hos {0} for nu. Prøv igen om lidt."},
+    {Str::ErrServer, L"{0} har problemer lige nu ({1}). Prøv igen om lidt."},
+    {Str::ErrGeneric, L"{0} returnerede en fejl ({1})."},
+    {Str::ErrNoConnection, L"Svaret fra {0} kunne ikke modtages. Tjek din internetforbindelse (fejl {1}), og prøv at spørge igen."},
+    {Str::ErrInterrupted, L"Forbindelsen til {0} blev afbrudt, og svaret er ufuldstændigt (fejl {1}). Prøv at spørge igen."},
+    {Str::ErrInterruptedBy, L"{0} afbrød dette svar: {1}"},
+    {Str::ErrUnreadable, L"{0} returnerede et ulæseligt svar. Prøv at spørge igen."},
+    {Str::ErrOutputLimit, L"{0} nåede sin outputgrænse. Svaret er ufuldstændigt. Prøv at bede om et kortere svar."},
+    {Str::ErrStoppedBecause, L"{0} stoppede dette svar ({1}). Prøv at spørge på en anden måde."},
+    {Str::ErrUnconfirmed, L"{0} stoppede, før det blev bekræftet, at svaret var komplet. Prøv at spørge igen."},
+    {Str::ErrNoAnswer, L"{0} returnerede ikke noget svar. Prøv at spørge på en anden måde."},
+    {Str::ErrCouldntReach, L"{0} kunne ikke nås. Tjek din internetforbindelse (fejl {1})."},
+    {Str::ErrStreaming, L"{0} returnerede en streamingfejl."},
+    {Str::LensSearching, L"Søger med Google Lens…"},
+    {Str::LensUploadFailed, L"Automatisk upload mislykkedes. Billedet ligger i udklipsholderen: indsæt det på lens.google.com."},
+};
+
+const TextEntry kTexts_nl[] = {
+    {Str::HintText, L"Selecteer iets om het aan {0} te vragen"},
+    {Str::HintTextTyping, L"Selecteer iets of begin te typen om {0} iets te vragen"},
+    {Str::Close, L"Sluiten"},
+    {Str::AskInGemini, L"Vraag het aan Gemini"},
+    {Str::SearchWithLens, L"Zoeken met Google Lens"},
+    {Str::TranslateTo, L"Vertalen naar: {0}"},
+    {Str::CopyImage, L"Afbeelding kopiëren"},
+    {Str::CopyText, L"Tekst kopiëren"},
+    {Str::AddSelection, L"Nog een selectie toevoegen"},
+    {Str::WhatIsThis, L"Wat is dit?"},
+    {Str::ExplainThis, L"Leg dit uit"},
+    {Str::SummarizeThis, L"Vat dit samen"},
+    {Str::AskPlaceholder, L"Stel een vraag over je selectie…"},
+    {Str::AskAnythingPlaceholder, L"Stel een vraag…"},
+    {Str::FollowUpPlaceholder, L"Stel een vervolgvraag…"},
+    {Str::Thinking, L"Aan het nadenken…"},
+    {Str::Copy, L"Kopiëren"},
+    {Str::SelectAll, L"Alles selecteren"},
+    {Str::NoApiKeyHint, L"Voeg in de instellingen van de mod een API-sleutel voor Gemini, ChatGPT of Claude toe om hier direct antwoorden te krijgen."},
+    {Str::ImageCopied, L"Afbeelding gekopieerd"},
+    {Str::ImageCopyFailed, L"De afbeelding kon niet worden gekopieerd"},
+    {Str::ImageCopyRetry, L"De afbeelding kon niet worden gekopieerd. Probeer het opnieuw."},
+    {Str::ReadingText, L"De tekst wordt nog gelezen…"},
+    {Str::NoTextFound, L"Geen tekst gevonden in de selectie"},
+    {Str::TextCopied, L"Tekst gekopieerd"},
+    {Str::TextCopyFailed, L"De tekst kon niet worden gekopieerd"},
+    {Str::AnswerCopied, L"Antwoord gekopieerd"},
+    {Str::AnswerCopyFailed, L"Het antwoord kon niet worden gekopieerd"},
+    {Str::OpeningLens, L"Google Lens wordt geopend in je browser…"},
+    {Str::OpeningGeminiOne, L"Gemini wordt geopend en je afbeelding wordt toegevoegd…"},
+    {Str::OpeningGeminiMany, L"Gemini wordt geopend en je afbeeldingen worden toegevoegd…"},
+    {Str::OpeningGeminiText, L"Gemini wordt geopend en je vraag wordt toegevoegd…"},
+    {Str::ClickBoxToAttach, L"Klik in het berichtvak van Gemini en druk op Ctrl+V om de afbeelding toe te voegen."},
+    {Str::Stopped, L"Gestopt."},
+    {Str::StoppedEarly, L"Gestopt voordat het antwoord klaar was."},
+    {Str::RequestFailed, L"De aanvraag kon niet worden gestart."},
+    {Str::DraftAddedOne, L"De afbeelding is toegevoegd. Typ je vraag in Gemini."},
+    {Str::DraftAddedMany, L"De afbeeldingen zijn toegevoegd. Typ je vraag in Gemini."},
+    {Str::QuestionInGemini, L"Je vraag staat al in Gemini."},
+    {Str::DraftPartial, L"Bevestigde afbeeldingen: {0} van {1}. Controleer Gemini en voeg de rest toe met Ctrl+V in het berichtvak."},
+    {Str::ClipboardChangedOne, L"Het klembord is gewijzigd voordat de afbeelding kon worden geplakt: gebruik Afbeelding kopiëren en druk daarna op Ctrl+V in Gemini."},
+    {Str::ClipboardChangedMany, L"Het klembord is gewijzigd voordat de afbeeldingen konden worden geplakt. Vraag het opnieuw in Gemini om het nog eens te proberen."},
+    {Str::IfNotAttachedOne, L"Als de afbeelding niet is toegevoegd, klik je in het berichtvak van Gemini en druk je op Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Als de afbeeldingen niet zijn toegevoegd, klik je in het berichtvak van Gemini en druk je op Ctrl+V."},
+    {Str::ClickBoxOne, L"Klik in het berichtvak van Gemini en druk op Ctrl+V om de afbeelding toe te voegen. Je vraag blijft hier bewaard."},
+    {Str::ClickBoxMany, L"Klik in het berichtvak van Gemini en druk op Ctrl+V om de afbeeldingen toe te voegen. Je vraag blijft hier bewaard."},
+    {Str::ClickBoxText, L"Klik in het berichtvak van Gemini en typ je vraag. Je vraag blijft hier bewaard."},
+    {Str::BrowserFailedOne, L"De browser kon niet worden geopend. De afbeelding is gekopieerd; plak deze in Gemini met Ctrl+V."},
+    {Str::BrowserFailedMany, L"De browser kon niet worden geopend. De afbeeldingen zijn gekopieerd; plak ze in Gemini met Ctrl+V."},
+    {Str::BrowserFailedText, L"De browser kon niet worden geopend."},
+    {Str::PageUnreadable, L"Magic Pointer kon de pagina in je browser niet lezen. Als er een melding overheen open staat, sluit je die en klik je opnieuw op Vraag het aan Gemini."},
+    {Str::ErrKeyInvalid, L"Je {0}-API-sleutel is ongeldig. Controleer hem in de instellingen van de mod."},
+    {Str::ErrKeyForbidden, L"Deze API-sleutel kan {0} niet gebruiken (403). Controleer de sleutel in de instellingen van de mod."},
+    {Str::ErrModelMissing, L"Het model \"{0}\" is niet beschikbaar voor je sleutel. Kies een ander model in de instellingen van de mod."},
+    {Str::ErrNoFreeQuota, L"Je Gemini-abonnement heeft geen gratis quotum voor \"{0}\". Kies het model Snel in de instellingen van de mod of voeg facturering toe aan je sleutel."},
+    {Str::ErrNoCredit, L"Het tegoed van je {0}-account is op. Voeg tegoed of een betaalmethode toe en probeer het opnieuw."},
+    {Str::ErrTimeout, L"{0} antwoordde niet op tijd. Probeer het zo meteen opnieuw."},
+    {Str::ModelBusy, L"Het model dat je koos is nu niet beschikbaar. Een sneller model antwoordt in plaats daarvan."},
+    {Str::ErrRateLimit, L"Je hebt de aanvraaglimiet van {0} voorlopig bereikt. Probeer het zo meteen opnieuw."},
+    {Str::ErrServer, L"{0} heeft op dit moment problemen ({1}). Probeer het zo meteen opnieuw."},
+    {Str::ErrGeneric, L"{0} gaf een fout terug ({1})."},
+    {Str::ErrNoConnection, L"Het antwoord van {0} kon niet worden ontvangen. Controleer je internetverbinding (fout {1}) en stel je vraag opnieuw."},
+    {Str::ErrInterrupted, L"De verbinding met {0} is verbroken en het antwoord is onvolledig (fout {1}). Stel je vraag opnieuw."},
+    {Str::ErrInterruptedBy, L"{0} heeft dit antwoord onderbroken: {1}"},
+    {Str::ErrUnreadable, L"{0} gaf een onleesbaar antwoord. Stel je vraag opnieuw."},
+    {Str::ErrOutputLimit, L"{0} heeft zijn uitvoerlimiet bereikt. Dit antwoord is onvolledig. Vraag om een korter antwoord."},
+    {Str::ErrStoppedBecause, L"{0} heeft dit antwoord gestopt ({1}). Probeer de vraag anders te stellen."},
+    {Str::ErrUnconfirmed, L"{0} stopte voordat het antwoord als volledig was bevestigd. Stel je vraag opnieuw."},
+    {Str::ErrNoAnswer, L"{0} gaf geen antwoord terug. Probeer de vraag anders te stellen."},
+    {Str::ErrCouldntReach, L"{0} kon niet worden bereikt. Controleer je internetverbinding (fout {1})."},
+    {Str::ErrStreaming, L"{0} gaf een streamingfout terug."},
+    {Str::LensSearching, L"Zoeken met Google Lens…"},
+    {Str::LensUploadFailed, L"Automatisch uploaden is mislukt. De afbeelding staat op je klembord: plak hem op lens.google.com."},
+};
+
+const TextEntry kTexts_fi[] = {
+    {Str::HintText, L"Valitse mitä tahansa ja kysy tekoälyltä ({0})"},
+    {Str::HintTextTyping, L"Valitse mitä tahansa tai aloita kirjoittaminen ja kysy tekoälyltä ({0})"},
+    {Str::Close, L"Sulje"},
+    {Str::AskInGemini, L"Kysy Geminiltä"},
+    {Str::SearchWithLens, L"Hae Google Lensillä"},
+    {Str::TranslateTo, L"Käännä kielelle: {0}"},
+    {Str::CopyImage, L"Kopioi kuva"},
+    {Str::CopyText, L"Kopioi teksti"},
+    {Str::AddSelection, L"Lisää toinen valinta"},
+    {Str::WhatIsThis, L"Mikä tämä on?"},
+    {Str::ExplainThis, L"Selitä tämä minulle"},
+    {Str::SummarizeThis, L"Tiivistä tämä minulle"},
+    {Str::AskPlaceholder, L"Kysy valinnastasi…"},
+    {Str::AskAnythingPlaceholder, L"Kysy mitä tahansa…"},
+    {Str::FollowUpPlaceholder, L"Kysy jatkokysymys…"},
+    {Str::Thinking, L"Mietitään…"},
+    {Str::Copy, L"Kopioi"},
+    {Str::SelectAll, L"Valitse kaikki"},
+    {Str::NoApiKeyHint, L"Lisää Gemini-, ChatGPT- tai Claude-API-avain modin asetuksiin, niin saat vastaukset suoraan tähän."},
+    {Str::ImageCopied, L"Kuva kopioitu"},
+    {Str::ImageCopyFailed, L"Kuvaa ei voitu kopioida"},
+    {Str::ImageCopyRetry, L"Kuvaa ei voitu kopioida. Yritä uudelleen."},
+    {Str::ReadingText, L"Tekstiä luetaan vielä…"},
+    {Str::NoTextFound, L"Valinnasta ei löytynyt tekstiä"},
+    {Str::TextCopied, L"Teksti kopioitu"},
+    {Str::TextCopyFailed, L"Tekstiä ei voitu kopioida"},
+    {Str::AnswerCopied, L"Vastaus kopioitu"},
+    {Str::AnswerCopyFailed, L"Vastausta ei voitu kopioida"},
+    {Str::OpeningLens, L"Avataan Google Lens selaimessa…"},
+    {Str::OpeningGeminiOne, L"Avataan Gemini ja liitetään kuva liitteeksi…"},
+    {Str::OpeningGeminiMany, L"Avataan Gemini ja liitetään kuvat liitteiksi…"},
+    {Str::OpeningGeminiText, L"Avataan Gemini ja lisätään kysymyksesi…"},
+    {Str::ClickBoxToAttach, L"Napsauta Geminin viestikenttää ja liitä kuva painamalla Ctrl+V."},
+    {Str::Stopped, L"Pysäytetty."},
+    {Str::StoppedEarly, L"Pysäytetty ennen kuin vastaus valmistui."},
+    {Str::RequestFailed, L"Pyyntöä ei voitu käynnistää."},
+    {Str::DraftAddedOne, L"Kuva lisättiin. Kirjoita kysymyksesi Geminiin."},
+    {Str::DraftAddedMany, L"Kuvat lisättiin. Kirjoita kysymyksesi Geminiin."},
+    {Str::QuestionInGemini, L"Kysymyksesi on Geminissä."},
+    {Str::DraftPartial, L"Vahvistetut kuvat: {0} / {1}. Tarkista Gemini ja lisää loput painamalla Ctrl+V sen viestikentässä."},
+    {Str::ClipboardChangedOne, L"Leikepöytä muuttui ennen kuin kuva ehdittiin liittää: käytä Kopioi kuva -toimintoa ja paina sitten Ctrl+V Geminissä."},
+    {Str::ClipboardChangedMany, L"Leikepöytä muuttui ennen kuin kuvat ehdittiin liittää. Kysy Geminiltä uudelleen yrittääksesi uudestaan."},
+    {Str::IfNotAttachedOne, L"Jos kuvaa ei ole liitetty, napsauta Geminin viestikenttää ja paina Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Jos kuvia ei ole liitetty, napsauta Geminin viestikenttää ja paina Ctrl+V."},
+    {Str::ClickBoxOne, L"Napsauta Geminin viestikenttää ja liitä kuva painamalla Ctrl+V. Kysymyksesi säilyy tässä."},
+    {Str::ClickBoxMany, L"Napsauta Geminin viestikenttää ja liitä kuvat painamalla Ctrl+V. Kysymyksesi säilyy tässä."},
+    {Str::ClickBoxText, L"Napsauta Geminin viestikenttää ja kirjoita kysymyksesi. Kysymyksesi säilyy tässä."},
+    {Str::BrowserFailedOne, L"Selainta ei voitu avata. Kuva on kopioitu; liitä se Geminiin painamalla Ctrl+V."},
+    {Str::BrowserFailedMany, L"Selainta ei voitu avata. Kuvat on kopioitu; liitä ne Geminiin painamalla Ctrl+V."},
+    {Str::BrowserFailedText, L"Selainta ei voitu avata."},
+    {Str::PageUnreadable, L"Magic Pointer ei voinut lukea sivua selaimessasi. Jos sen päällä on avoin ilmoitus, sulje se ja napsauta Kysy Geminiltä uudelleen."},
+    {Str::ErrKeyInvalid, L"{0}-API-avaimesi ei kelpaa. Tarkista se modin asetuksista."},
+    {Str::ErrKeyForbidden, L"Tällä API-avaimella ei voi käyttää {0}-palvelua (403). Tarkista avain modin asetuksista."},
+    {Str::ErrModelMissing, L"Malli \"{0}\" ei ole avaimesi käytettävissä. Valitse toinen malli modin asetuksista."},
+    {Str::ErrNoFreeQuota, L"Gemini-tilauksellasi ei ole ilmaista kiintiötä mallille \"{0}\". Valitse modin asetuksista malli \"Nopea\" tai lisää avaimeesi laskutus."},
+    {Str::ErrNoCredit, L"{0}-tilisi saldo on loppu. Lisää tilille saldoa tai maksutapa ja yritä uudelleen."},
+    {Str::ErrTimeout, L"{0}-palvelu ei vastannut ajoissa. Yritä hetken kuluttua uudelleen."},
+    {Str::ModelBusy, L"Valitsemasi malli ei ole nyt käytettävissä. Sen sijaan vastaa nopeampi malli."},
+    {Str::ErrRateLimit, L"Olet saavuttanut {0}-palvelun pyyntörajan toistaiseksi. Yritä hetken kuluttua uudelleen."},
+    {Str::ErrServer, L"{0}-palvelulla on tällä hetkellä ongelmia ({1}). Yritä hetken kuluttua uudelleen."},
+    {Str::ErrGeneric, L"{0}-palvelu palautti virheen ({1})."},
+    {Str::ErrNoConnection, L"{0}-palvelun vastausta ei voitu vastaanottaa. Tarkista internetyhteytesi (virhe {1}). Yritä kysyä uudelleen."},
+    {Str::ErrInterrupted, L"Yhteys {0}-palveluun katkesi. Tämä vastaus on keskeneräinen (virhe {1}). Yritä kysyä uudelleen."},
+    {Str::ErrInterruptedBy, L"{0}-palvelu keskeytti tämän vastauksen: {1}"},
+    {Str::ErrUnreadable, L"{0}-palvelu palautti lukukelvottoman vastauksen. Yritä kysyä uudelleen."},
+    {Str::ErrOutputLimit, L"{0}-palvelu saavutti tulostusrajansa. Tämä vastaus on keskeneräinen. Yritä pyytää lyhyempää vastausta."},
+    {Str::ErrStoppedBecause, L"{0}-palvelu pysäytti tämän vastauksen ({1}). Yritä kysyä toisella tavalla."},
+    {Str::ErrUnconfirmed, L"{0}-palvelu pysähtyi ennen kuin vahvisti vastauksen olevan valmis. Yritä kysyä uudelleen."},
+    {Str::ErrNoAnswer, L"{0}-palvelu ei palauttanut vastausta. Yritä kysyä toisella tavalla."},
+    {Str::ErrCouldntReach, L"{0}-palveluun ei saatu yhteyttä. Tarkista internetyhteytesi (virhe {1})."},
+    {Str::ErrStreaming, L"{0}-palvelu palautti suoratoistovirheen."},
+    {Str::LensSearching, L"Haetaan Google Lensillä…"},
+    {Str::LensUploadFailed, L"Automaattinen lataus epäonnistui. Kuva on leikepöydällä: liitä se osoitteessa lens.google.com."},
+};
+
+const TextEntry kTexts_fr[] = {
+    {Str::HintText, L"Sélectionnez un élément pour interroger {0}"},
+    {Str::HintTextTyping, L"Sélectionnez un élément ou commencez à écrire pour interroger {0}"},
+    {Str::Close, L"Fermer"},
+    {Str::AskInGemini, L"Demander à Gemini"},
+    {Str::SearchWithLens, L"Rechercher avec Google Lens"},
+    {Str::TranslateTo, L"Traduire en : {0}"},
+    {Str::CopyImage, L"Copier l'image"},
+    {Str::CopyText, L"Copier le texte"},
+    {Str::AddSelection, L"Ajouter une autre sélection"},
+    {Str::WhatIsThis, L"Qu'est-ce que c'est ?"},
+    {Str::ExplainThis, L"Explique-moi ça"},
+    {Str::SummarizeThis, L"Résume-moi ça"},
+    {Str::AskPlaceholder, L"Posez une question sur votre sélection…"},
+    {Str::AskAnythingPlaceholder, L"Posez n'importe quelle question…"},
+    {Str::FollowUpPlaceholder, L"Posez une autre question…"},
+    {Str::Thinking, L"Réflexion en cours…"},
+    {Str::Copy, L"Copier"},
+    {Str::SelectAll, L"Tout sélectionner"},
+    {Str::NoApiKeyHint, L"Ajoutez une clé API Gemini, ChatGPT ou Claude dans les paramètres du mod pour obtenir les réponses directement ici."},
+    {Str::ImageCopied, L"Image copiée"},
+    {Str::ImageCopyFailed, L"Impossible de copier l'image"},
+    {Str::ImageCopyRetry, L"Impossible de copier l'image. Réessayez."},
+    {Str::ReadingText, L"Lecture du texte en cours…"},
+    {Str::NoTextFound, L"Aucun texte trouvé dans la sélection"},
+    {Str::TextCopied, L"Texte copié"},
+    {Str::TextCopyFailed, L"Impossible de copier le texte"},
+    {Str::AnswerCopied, L"Réponse copiée"},
+    {Str::AnswerCopyFailed, L"Impossible de copier la réponse"},
+    {Str::OpeningLens, L"Ouverture de Google Lens dans votre navigateur…"},
+    {Str::OpeningGeminiOne, L"Ouverture de Gemini et ajout de votre image…"},
+    {Str::OpeningGeminiMany, L"Ouverture de Gemini et ajout de vos images…"},
+    {Str::OpeningGeminiText, L"Ouverture de Gemini et ajout de votre question…"},
+    {Str::ClickBoxToAttach, L"Cliquez dans le champ de saisie de Gemini, puis appuyez sur Ctrl+V pour joindre l'image."},
+    {Str::Stopped, L"Arrêté."},
+    {Str::StoppedEarly, L"Arrêté avant la fin de la réponse."},
+    {Str::RequestFailed, L"Impossible de lancer la requête."},
+    {Str::DraftAddedOne, L"L'image a été ajoutée. Saisissez votre question dans Gemini."},
+    {Str::DraftAddedMany, L"Les images ont été ajoutées. Saisissez votre question dans Gemini."},
+    {Str::QuestionInGemini, L"Votre question a été saisie dans Gemini."},
+    {Str::DraftPartial, L"Images confirmées : {0} sur {1}. Vérifiez Gemini et ajoutez les autres avec Ctrl+V dans son champ de saisie."},
+    {Str::ClipboardChangedOne, L"Le presse-papiers a changé avant que l'image puisse être collée : utilisez Copier l'image, puis appuyez sur Ctrl+V dans Gemini."},
+    {Str::ClipboardChangedMany, L"Le presse-papiers a changé avant que les images puissent être collées. Redemandez dans Gemini pour réessayer."},
+    {Str::IfNotAttachedOne, L"Si l'image n'est pas jointe, cliquez dans le champ de saisie de Gemini et appuyez sur Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Si les images ne sont pas jointes, cliquez dans le champ de saisie de Gemini et appuyez sur Ctrl+V."},
+    {Str::ClickBoxOne, L"Cliquez dans le champ de saisie de Gemini et appuyez sur Ctrl+V pour joindre l'image. Votre question est conservée ici."},
+    {Str::ClickBoxMany, L"Cliquez dans le champ de saisie de Gemini et appuyez sur Ctrl+V pour joindre les images. Votre question est conservée ici."},
+    {Str::ClickBoxText, L"Cliquez dans le champ de saisie de Gemini et tapez votre question. Votre question est conservée ici."},
+    {Str::BrowserFailedOne, L"Impossible d'ouvrir le navigateur. L'image est copiée ; collez-la dans Gemini avec Ctrl+V."},
+    {Str::BrowserFailedMany, L"Impossible d'ouvrir le navigateur. Les images sont copiées ; collez-les dans Gemini avec Ctrl+V."},
+    {Str::BrowserFailedText, L"Impossible d'ouvrir le navigateur."},
+    {Str::PageUnreadable, L"Magic Pointer n'a pas pu lire la page dans votre navigateur. Si une notification est ouverte par-dessus, fermez-la et cliquez à nouveau sur Demander à Gemini."},
+    {Str::ErrKeyInvalid, L"Votre clé API {0} n'est pas valide. Vérifiez-la dans les paramètres du mod."},
+    {Str::ErrKeyForbidden, L"Cette clé API ne peut pas utiliser {0} (403). Vérifiez la clé dans les paramètres du mod."},
+    {Str::ErrModelMissing, L"Le modèle « {0} » n'est pas disponible pour votre clé. Choisissez un autre modèle dans les paramètres du mod."},
+    {Str::ErrNoFreeQuota, L"Votre forfait Gemini n'a pas de quota gratuit pour « {0} ». Choisissez le modèle « Rapide » dans les paramètres du mod, ou ajoutez la facturation à votre clé."},
+    {Str::ErrNoCredit, L"Le crédit de votre compte {0} est épuisé. Ajoutez du crédit ou un moyen de paiement, puis réessayez."},
+    {Str::ErrTimeout, L"{0} n'a pas répondu à temps. Réessayez dans quelques instants."},
+    {Str::ModelBusy, L"Le modèle que vous avez choisi n'est pas disponible pour le moment. Un modèle plus rapide répond à sa place."},
+    {Str::ErrRateLimit, L"Vous avez atteint la limite de requêtes de {0} pour le moment. Réessayez dans quelques instants."},
+    {Str::ErrServer, L"{0} rencontre des difficultés en ce moment ({1}). Réessayez dans quelques instants."},
+    {Str::ErrGeneric, L"{0} a renvoyé une erreur ({1})."},
+    {Str::ErrNoConnection, L"Impossible de recevoir la réponse de {0}. Vérifiez votre connexion Internet (erreur {1}), puis réessayez."},
+    {Str::ErrInterrupted, L"La connexion à {0} a été interrompue et la réponse est incomplète (erreur {1}). Réessayez."},
+    {Str::ErrInterruptedBy, L"{0} a interrompu cette réponse : {1}"},
+    {Str::ErrUnreadable, L"{0} a renvoyé une réponse illisible. Réessayez."},
+    {Str::ErrOutputLimit, L"{0} a atteint sa limite de longueur et la réponse est incomplète. Essayez de demander une réponse plus courte."},
+    {Str::ErrStoppedBecause, L"{0} a interrompu la réponse ({1}). Essayez de reformuler votre question."},
+    {Str::ErrUnconfirmed, L"{0} s'est arrêté avant de confirmer que la réponse était complète. Réessayez."},
+    {Str::ErrNoAnswer, L"{0} n'a donné aucune réponse. Essayez de reformuler votre question."},
+    {Str::ErrCouldntReach, L"Impossible de joindre {0}. Vérifiez votre connexion Internet (erreur {1})."},
+    {Str::ErrStreaming, L"{0} a renvoyé une erreur de diffusion."},
+    {Str::LensSearching, L"Recherche avec Google Lens…"},
+    {Str::LensUploadFailed, L"L'envoi automatique a échoué. L'image est dans le presse-papiers : collez-la sur lens.google.com."},
+};
+
+const TextEntry kTexts_de[] = {
+    {Str::HintText, L"Wähle etwas aus, um {0} zu fragen"},
+    {Str::HintTextTyping, L"Wähle etwas aus oder beginne zu tippen, um {0} zu fragen"},
+    {Str::Close, L"Schließen"},
+    {Str::AskInGemini, L"Gemini fragen"},
+    {Str::SearchWithLens, L"Mit Google Lens suchen"},
+    {Str::TranslateTo, L"Übersetzen in: {0}"},
+    {Str::CopyImage, L"Bild kopieren"},
+    {Str::CopyText, L"Text kopieren"},
+    {Str::AddSelection, L"Weitere Auswahl hinzufügen"},
+    {Str::WhatIsThis, L"Was ist das?"},
+    {Str::ExplainThis, L"Erkläre mir das"},
+    {Str::SummarizeThis, L"Fasse das für mich zusammen"},
+    {Str::AskPlaceholder, L"Frag etwas zu deiner Auswahl…"},
+    {Str::AskAnythingPlaceholder, L"Frag, was du willst…"},
+    {Str::FollowUpPlaceholder, L"Stelle eine Folgefrage…"},
+    {Str::Thinking, L"Denke nach…"},
+    {Str::Copy, L"Kopieren"},
+    {Str::SelectAll, L"Alles auswählen"},
+    {Str::NoApiKeyHint, L"Füge in den Einstellungen des Mods einen API-Schlüssel für Gemini, ChatGPT oder Claude hinzu, um Antworten direkt hier zu erhalten."},
+    {Str::ImageCopied, L"Bild kopiert"},
+    {Str::ImageCopyFailed, L"Das Bild konnte nicht kopiert werden"},
+    {Str::ImageCopyRetry, L"Das Bild konnte nicht kopiert werden. Versuche es erneut."},
+    {Str::ReadingText, L"Text wird erkannt…"},
+    {Str::NoTextFound, L"Kein Text in der Auswahl gefunden"},
+    {Str::TextCopied, L"Text kopiert"},
+    {Str::TextCopyFailed, L"Der Text konnte nicht kopiert werden"},
+    {Str::AnswerCopied, L"Antwort kopiert"},
+    {Str::AnswerCopyFailed, L"Die Antwort konnte nicht kopiert werden"},
+    {Str::OpeningLens, L"Google Lens wird in deinem Browser geöffnet…"},
+    {Str::OpeningGeminiOne, L"Gemini wird geöffnet und dein Bild angehängt…"},
+    {Str::OpeningGeminiMany, L"Gemini wird geöffnet und deine Bilder werden angehängt…"},
+    {Str::OpeningGeminiText, L"Gemini wird geöffnet und deine Frage hinzugefügt…"},
+    {Str::ClickBoxToAttach, L"Klicke in das Eingabefeld von Gemini und drücke Strg+V, um das Bild anzuhängen."},
+    {Str::Stopped, L"Angehalten."},
+    {Str::StoppedEarly, L"Angehalten, bevor die Antwort fertig war."},
+    {Str::RequestFailed, L"Die Anfrage konnte nicht gestartet werden."},
+    {Str::DraftAddedOne, L"Das Bild wurde hinzugefügt. Gib deine Frage in Gemini ein."},
+    {Str::DraftAddedMany, L"Die Bilder wurden hinzugefügt. Gib deine Frage in Gemini ein."},
+    {Str::QuestionInGemini, L"Deine Frage wurde in Gemini eingegeben."},
+    {Str::DraftPartial, L"Nur {0} von {1} Bildern konnten bestätigt werden. Prüfe Gemini und füge den Rest mit Strg+V im Eingabefeld hinzu."},
+    {Str::ClipboardChangedOne, L"Die Zwischenablage hat sich geändert, bevor das Bild eingefügt werden konnte: Verwende „Bild kopieren“ und drücke dann in Gemini Strg+V."},
+    {Str::ClipboardChangedMany, L"Die Zwischenablage hat sich geändert, bevor die Bilder eingefügt werden konnten. Frage erneut in Gemini, um es noch einmal zu versuchen."},
+    {Str::IfNotAttachedOne, L"Falls das Bild nicht angehängt ist, klicke in das Eingabefeld von Gemini und drücke Strg+V."},
+    {Str::IfNotAttachedMany, L"Falls die Bilder nicht angehängt sind, klicke in das Eingabefeld von Gemini und drücke Strg+V."},
+    {Str::ClickBoxOne, L"Klicke in das Eingabefeld von Gemini und drücke Strg+V, um das Bild anzuhängen. Deine Frage bleibt hier erhalten."},
+    {Str::ClickBoxMany, L"Klicke in das Eingabefeld von Gemini und drücke Strg+V, um die Bilder anzuhängen. Deine Frage bleibt hier erhalten."},
+    {Str::ClickBoxText, L"Klicke in das Eingabefeld von Gemini und tippe deine Frage ein. Deine Frage bleibt hier erhalten."},
+    {Str::BrowserFailedOne, L"Der Browser konnte nicht geöffnet werden. Das Bild ist kopiert; füge es mit Strg+V in Gemini ein."},
+    {Str::BrowserFailedMany, L"Der Browser konnte nicht geöffnet werden. Die Bilder sind kopiert; füge sie mit Strg+V in Gemini ein."},
+    {Str::BrowserFailedText, L"Der Browser konnte nicht geöffnet werden."},
+    {Str::PageUnreadable, L"Magic Pointer konnte die Seite in deinem Browser nicht lesen. Falls darüber ein Hinweis geöffnet ist, schließe ihn und klicke erneut auf „Gemini fragen“."},
+    {Str::ErrKeyInvalid, L"Dein {0}-API-Schlüssel ist ungültig. Prüfe ihn in den Einstellungen des Mods."},
+    {Str::ErrKeyForbidden, L"Dieser API-Schlüssel kann {0} nicht verwenden (403). Prüfe den Schlüssel in den Einstellungen des Mods."},
+    {Str::ErrModelMissing, L"Das Modell „{0}“ ist für deinen Schlüssel nicht verfügbar. Wähle in den Einstellungen des Mods ein anderes Modell."},
+    {Str::ErrNoFreeQuota, L"Dein Gemini-Tarif hat kein kostenloses Kontingent für „{0}“. Wähle in den Einstellungen des Mods das Modell „Schnell“ oder füge deinem Schlüssel eine Abrechnung hinzu."},
+    {Str::ErrNoCredit, L"Das Guthaben deines {0}-Kontos ist aufgebraucht. Füge Guthaben oder eine Zahlungsmethode hinzu und versuche es dann erneut."},
+    {Str::ErrTimeout, L"{0} hat nicht rechtzeitig geantwortet. Versuche es gleich noch einmal."},
+    {Str::ModelBusy, L"Das gewählte Modell ist gerade nicht verfügbar. Stattdessen antwortet ein schnelleres."},
+    {Str::ErrRateLimit, L"Du hast das Anfragelimit von {0} vorerst erreicht. Versuche es gleich noch einmal."},
+    {Str::ErrServer, L"{0} hat gerade Probleme ({1}). Versuche es gleich noch einmal."},
+    {Str::ErrGeneric, L"{0} hat einen Fehler zurückgegeben ({1})."},
+    {Str::ErrNoConnection, L"Die Antwort von {0} konnte nicht empfangen werden. Prüfe deine Internetverbindung (Fehler {1}) und frage erneut."},
+    {Str::ErrInterrupted, L"Die Verbindung zu {0} wurde unterbrochen, die Antwort ist unvollständig (Fehler {1}). Frage erneut."},
+    {Str::ErrInterruptedBy, L"{0} hat diese Antwort unterbrochen: {1}"},
+    {Str::ErrUnreadable, L"{0} hat eine unlesbare Antwort zurückgegeben. Frage erneut."},
+    {Str::ErrOutputLimit, L"{0} hat sein Längenlimit erreicht, die Antwort ist unvollständig. Bitte um eine kürzere Antwort."},
+    {Str::ErrStoppedBecause, L"{0} hat diese Antwort beendet ({1}). Versuche es mit einer anderen Formulierung."},
+    {Str::ErrUnconfirmed, L"{0} hat angehalten, bevor bestätigt war, dass die Antwort vollständig ist. Frage erneut."},
+    {Str::ErrNoAnswer, L"{0} hat keine Antwort zurückgegeben. Versuche es mit einer anderen Formulierung."},
+    {Str::ErrCouldntReach, L"{0} ist nicht erreichbar. Prüfe deine Internetverbindung (Fehler {1})."},
+    {Str::ErrStreaming, L"{0} hat einen Streaming-Fehler zurückgegeben."},
+    {Str::LensSearching, L"Suche mit Google Lens…"},
+    {Str::LensUploadFailed, L"Das automatische Hochladen ist fehlgeschlagen. Das Bild liegt in der Zwischenablage: Füge es auf lens.google.com ein."},
+};
+
+const TextEntry kTexts_el[] = {
+    {Str::HintText, L"Επιλέξτε οτιδήποτε για να ρωτήσετε την υπηρεσία {0}"},
+    {Str::HintTextTyping, L"Επιλέξτε οτιδήποτε ή ξεκινήστε να πληκτρολογείτε για να ρωτήσετε την υπηρεσία {0}"},
+    {Str::Close, L"Κλείσιμο"},
+    {Str::AskInGemini, L"Ρωτήστε το Gemini"},
+    {Str::SearchWithLens, L"Αναζήτηση με το Google Lens"},
+    {Str::TranslateTo, L"Μετάφραση σε: {0}"},
+    {Str::CopyImage, L"Αντιγραφή εικόνας"},
+    {Str::CopyText, L"Αντιγραφή κειμένου"},
+    {Str::AddSelection, L"Προσθήκη άλλης επιλογής"},
+    {Str::WhatIsThis, L"Τι είναι αυτό;"},
+    {Str::ExplainThis, L"Εξήγησέ μου αυτό"},
+    {Str::SummarizeThis, L"Κάνε μου μια περίληψη αυτού"},
+    {Str::AskPlaceholder, L"Ρωτήστε για την επιλογή σας…"},
+    {Str::AskAnythingPlaceholder, L"Ρωτήστε ό,τι θέλετε…"},
+    {Str::FollowUpPlaceholder, L"Κάντε μια συμπληρωματική ερώτηση…"},
+    {Str::Thinking, L"Σκέφτομαι…"},
+    {Str::Copy, L"Αντιγραφή"},
+    {Str::SelectAll, L"Επιλογή όλων"},
+    {Str::NoApiKeyHint, L"Προσθέστε ένα κλειδί API για το Gemini, το ChatGPT ή το Claude στις ρυθμίσεις του mod για να λαμβάνετε απαντήσεις εδώ."},
+    {Str::ImageCopied, L"Η εικόνα αντιγράφηκε"},
+    {Str::ImageCopyFailed, L"Δεν ήταν δυνατή η αντιγραφή της εικόνας"},
+    {Str::ImageCopyRetry, L"Δεν ήταν δυνατή η αντιγραφή της εικόνας. Δοκιμάστε ξανά."},
+    {Str::ReadingText, L"Το κείμενο διαβάζεται ακόμη…"},
+    {Str::NoTextFound, L"Δεν βρέθηκε κείμενο στην επιλογή"},
+    {Str::TextCopied, L"Το κείμενο αντιγράφηκε"},
+    {Str::TextCopyFailed, L"Δεν ήταν δυνατή η αντιγραφή του κειμένου"},
+    {Str::AnswerCopied, L"Η απάντηση αντιγράφηκε"},
+    {Str::AnswerCopyFailed, L"Δεν ήταν δυνατή η αντιγραφή της απάντησης"},
+    {Str::OpeningLens, L"Άνοιγμα του Google Lens στο πρόγραμμα περιήγησης…"},
+    {Str::OpeningGeminiOne, L"Άνοιγμα του Gemini και επισύναψη της εικόνας σας…"},
+    {Str::OpeningGeminiMany, L"Άνοιγμα του Gemini και επισύναψη των εικόνων σας…"},
+    {Str::OpeningGeminiText, L"Άνοιγμα του Gemini και προσθήκη της ερώτησής σας…"},
+    {Str::ClickBoxToAttach, L"Κάντε κλικ στο πλαίσιο μηνύματος του Gemini και πατήστε Ctrl+V για να επισυνάψετε την εικόνα."},
+    {Str::Stopped, L"Διακόπηκε."},
+    {Str::StoppedEarly, L"Διακόπηκε πριν ολοκληρωθεί η απάντηση."},
+    {Str::RequestFailed, L"Δεν ήταν δυνατή η έναρξη του αιτήματος."},
+    {Str::DraftAddedOne, L"Η εικόνα προστέθηκε. Πληκτρολογήστε την ερώτησή σας στο Gemini."},
+    {Str::DraftAddedMany, L"Οι εικόνες προστέθηκαν. Πληκτρολογήστε την ερώτησή σας στο Gemini."},
+    {Str::QuestionInGemini, L"Η ερώτησή σας έχει ήδη γραφτεί στο Gemini."},
+    {Str::DraftPartial, L"Επιβεβαιωμένες εικόνες: {0} από {1}. Ελέγξτε το Gemini και προσθέστε τις υπόλοιπες με Ctrl+V στο πλαίσιο μηνύματός του."},
+    {Str::ClipboardChangedOne, L"Το πρόχειρο άλλαξε πριν επικολληθεί η εικόνα: χρησιμοποιήστε την Αντιγραφή εικόνας και μετά πατήστε Ctrl+V στο Gemini."},
+    {Str::ClipboardChangedMany, L"Το πρόχειρο άλλαξε πριν επικολληθούν οι εικόνες. Ρωτήστε ξανά στο Gemini για να δοκιμάσετε πάλι."},
+    {Str::IfNotAttachedOne, L"Αν η εικόνα δεν έχει επισυναφθεί, κάντε κλικ στο πλαίσιο μηνύματος του Gemini και πατήστε Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Αν οι εικόνες δεν έχουν επισυναφθεί, κάντε κλικ στο πλαίσιο μηνύματος του Gemini και πατήστε Ctrl+V."},
+    {Str::ClickBoxOne, L"Κάντε κλικ στο πλαίσιο μηνύματος του Gemini και πατήστε Ctrl+V για να επισυνάψετε την εικόνα. Η ερώτησή σας διατηρείται εδώ."},
+    {Str::ClickBoxMany, L"Κάντε κλικ στο πλαίσιο μηνύματος του Gemini και πατήστε Ctrl+V για να επισυνάψετε τις εικόνες. Η ερώτησή σας διατηρείται εδώ."},
+    {Str::ClickBoxText, L"Κάντε κλικ στο πλαίσιο μηνύματος του Gemini και πληκτρολογήστε την ερώτησή σας. Η ερώτησή σας διατηρείται εδώ."},
+    {Str::BrowserFailedOne, L"Δεν ήταν δυνατό το άνοιγμα του προγράμματος περιήγησης. Η εικόνα έχει αντιγραφεί· επικολλήστε την στο Gemini με Ctrl+V."},
+    {Str::BrowserFailedMany, L"Δεν ήταν δυνατό το άνοιγμα του προγράμματος περιήγησης. Οι εικόνες έχουν αντιγραφεί· επικολλήστε τις στο Gemini με Ctrl+V."},
+    {Str::BrowserFailedText, L"Δεν ήταν δυνατό το άνοιγμα του προγράμματος περιήγησης."},
+    {Str::PageUnreadable, L"Το Magic Pointer δεν μπόρεσε να διαβάσει τη σελίδα στο πρόγραμμα περιήγησής σας. Αν υπάρχει ανοιχτή ειδοποίηση πάνω της, κλείστε την και κάντε ξανά κλικ στο «Ρωτήστε το Gemini»."},
+    {Str::ErrKeyInvalid, L"Το κλειδί API για την υπηρεσία {0} δεν είναι έγκυρο. Ελέγξτε το στις ρυθμίσεις του mod."},
+    {Str::ErrKeyForbidden, L"Αυτό το κλειδί API δεν μπορεί να χρησιμοποιήσει την υπηρεσία {0} (403). Ελέγξτε το κλειδί στις ρυθμίσεις του mod."},
+    {Str::ErrModelMissing, L"Το μοντέλο «{0}» δεν είναι διαθέσιμο για το κλειδί σας. Επιλέξτε άλλο μοντέλο στις ρυθμίσεις του mod."},
+    {Str::ErrNoFreeQuota, L"Το πακέτο σας στο Gemini δεν έχει δωρεάν όριο χρήσης για το «{0}». Επιλέξτε το μοντέλο «Γρήγορο» στις ρυθμίσεις του mod ή προσθέστε χρέωση στο κλειδί σας."},
+    {Str::ErrNoCredit, L"Ο λογαριασμός σας στην υπηρεσία {0} δεν έχει πια υπόλοιπο. Προσθέστε υπόλοιπο ή τρόπο πληρωμής και δοκιμάστε ξανά."},
+    {Str::ErrTimeout, L"Η υπηρεσία {0} δεν απάντησε εγκαίρως. Δοκιμάστε ξανά σε λίγο."},
+    {Str::ModelBusy, L"Το μοντέλο που επιλέξατε δεν είναι διαθέσιμο αυτή τη στιγμή. Απαντά ένα ταχύτερο στη θέση του."},
+    {Str::ErrRateLimit, L"Φτάσατε προς το παρόν στο όριο αιτημάτων της υπηρεσίας {0}. Δοκιμάστε ξανά σε λίγο."},
+    {Str::ErrServer, L"Η υπηρεσία {0} αντιμετωπίζει προβλήματα αυτή τη στιγμή ({1}). Δοκιμάστε ξανά σε λίγο."},
+    {Str::ErrGeneric, L"Η υπηρεσία {0} επέστρεψε σφάλμα ({1})."},
+    {Str::ErrNoConnection, L"Δεν ήταν δυνατή η λήψη της απάντησης της υπηρεσίας {0}. Ελέγξτε τη σύνδεσή σας στο διαδίκτυο (σφάλμα {1}). Δοκιμάστε να ρωτήσετε ξανά."},
+    {Str::ErrInterrupted, L"Η σύνδεση με την υπηρεσία {0} διακόπηκε. Αυτή η απάντηση είναι ελλιπής (σφάλμα {1}). Δοκιμάστε να ρωτήσετε ξανά."},
+    {Str::ErrInterruptedBy, L"Η υπηρεσία {0} διέκοψε αυτή την απάντηση: {1}"},
+    {Str::ErrUnreadable, L"Η υπηρεσία {0} επέστρεψε μη αναγνώσιμη απάντηση. Δοκιμάστε να ρωτήσετε ξανά."},
+    {Str::ErrOutputLimit, L"Η υπηρεσία {0} έφτασε στο όριο εξόδου της. Αυτή η απάντηση είναι ελλιπής. Δοκιμάστε να ζητήσετε πιο σύντομη απάντηση."},
+    {Str::ErrStoppedBecause, L"Η υπηρεσία {0} σταμάτησε αυτή την απάντηση ({1}). Δοκιμάστε να ρωτήσετε με άλλον τρόπο."},
+    {Str::ErrUnconfirmed, L"Η υπηρεσία {0} σταμάτησε πριν επιβεβαιώσει ότι η απάντηση ήταν πλήρης. Δοκιμάστε να ρωτήσετε ξανά."},
+    {Str::ErrNoAnswer, L"Η υπηρεσία {0} δεν επέστρεψε απάντηση. Δοκιμάστε να ρωτήσετε με άλλον τρόπο."},
+    {Str::ErrCouldntReach, L"Δεν ήταν δυνατή η σύνδεση με την υπηρεσία {0}. Ελέγξτε τη σύνδεσή σας στο διαδίκτυο (σφάλμα {1})."},
+    {Str::ErrStreaming, L"Η υπηρεσία {0} επέστρεψε σφάλμα ροής."},
+    {Str::LensSearching, L"Αναζήτηση με το Google Lens…"},
+    {Str::LensUploadFailed, L"Η αυτόματη μεταφόρτωση απέτυχε. Η εικόνα βρίσκεται στο πρόχειρο: επικολλήστε την στο lens.google.com."},
+};
+
+const TextEntry kTexts_he[] = {
+    {Str::HintText, L"בחרו כל דבר כדי לשאול את {0}"},
+    {Str::HintTextTyping, L"בחרו כל דבר או התחילו להקליד כדי לשאול את {0}"},
+    {Str::Close, L"סגירה"},
+    {Str::AskInGemini, L"שאלו את Gemini"},
+    {Str::SearchWithLens, L"חיפוש באמצעות Google Lens"},
+    {Str::TranslateTo, L"תרגום לשפה: {0}"},
+    {Str::CopyImage, L"העתקת תמונה"},
+    {Str::CopyText, L"העתקת טקסט"},
+    {Str::AddSelection, L"הוספת בחירה נוספת"},
+    {Str::WhatIsThis, L"מה זה?"},
+    {Str::ExplainThis, L"הסבר לי את זה"},
+    {Str::SummarizeThis, L"סכם לי את זה"},
+    {Str::AskPlaceholder, L"שאלו על הבחירה שלכם…"},
+    {Str::AskAnythingPlaceholder, L"שאלו כל דבר…"},
+    {Str::FollowUpPlaceholder, L"שאלו שאלת המשך…"},
+    {Str::Thinking, L"חושב…"},
+    {Str::Copy, L"העתקה"},
+    {Str::SelectAll, L"בחירת הכול"},
+    {Str::NoApiKeyHint, L"הוסיפו מפתח API של Gemini, ChatGPT או Claude בהגדרות המוד כדי לקבל תשובות ישירות כאן."},
+    {Str::ImageCopied, L"התמונה הועתקה"},
+    {Str::ImageCopyFailed, L"לא ניתן להעתיק את התמונה"},
+    {Str::ImageCopyRetry, L"לא ניתן להעתיק את התמונה. נסו שוב."},
+    {Str::ReadingText, L"הטקסט עדיין נקרא…"},
+    {Str::NoTextFound, L"לא נמצא טקסט בבחירה"},
+    {Str::TextCopied, L"הטקסט הועתק"},
+    {Str::TextCopyFailed, L"לא ניתן להעתיק את הטקסט"},
+    {Str::AnswerCopied, L"התשובה הועתקה"},
+    {Str::AnswerCopyFailed, L"לא ניתן להעתיק את התשובה"},
+    {Str::OpeningLens, L"פותח את Google Lens בדפדפן…"},
+    {Str::OpeningGeminiOne, L"פותח את Gemini ומצרף את התמונה…"},
+    {Str::OpeningGeminiMany, L"פותח את Gemini ומצרף את התמונות…"},
+    {Str::OpeningGeminiText, L"פותח את Gemini ומוסיף את השאלה שלכם…"},
+    {Str::ClickBoxToAttach, L"לחצו על תיבת ההודעה של Gemini ואז הקישו Ctrl+V כדי לצרף את התמונה."},
+    {Str::Stopped, L"נעצר."},
+    {Str::StoppedEarly, L"נעצר לפני שהתשובה הסתיימה."},
+    {Str::RequestFailed, L"לא ניתן היה להתחיל את הבקשה."},
+    {Str::DraftAddedOne, L"התמונה נוספה. הקלידו את השאלה שלכם ב-Gemini."},
+    {Str::DraftAddedMany, L"התמונות נוספו. הקלידו את השאלה שלכם ב-Gemini."},
+    {Str::QuestionInGemini, L"השאלה שלכם נמצאת ב-Gemini."},
+    {Str::DraftPartial, L"תמונות שאושרו: {0} מתוך {1}. בדקו את Gemini והוסיפו את השאר באמצעות Ctrl+V בתיבת ההודעה שלו."},
+    {Str::ClipboardChangedOne, L"הלוח השתנה לפני שניתן היה להדביק את התמונה: השתמשו בהעתקת תמונה ואז הקישו Ctrl+V ב-Gemini."},
+    {Str::ClipboardChangedMany, L"הלוח השתנה לפני שניתן היה להדביק את התמונות. שאלו שוב ב-Gemini כדי לנסות שוב."},
+    {Str::IfNotAttachedOne, L"אם התמונה לא צורפה, לחצו על תיבת ההודעה של Gemini והקישו Ctrl+V."},
+    {Str::IfNotAttachedMany, L"אם התמונות לא צורפו, לחצו על תיבת ההודעה של Gemini והקישו Ctrl+V."},
+    {Str::ClickBoxOne, L"לחצו על תיבת ההודעה של Gemini והקישו Ctrl+V כדי לצרף את התמונה. השאלה שלכם נשמרת כאן."},
+    {Str::ClickBoxMany, L"לחצו על תיבת ההודעה של Gemini והקישו Ctrl+V כדי לצרף את התמונות. השאלה שלכם נשמרת כאן."},
+    {Str::ClickBoxText, L"לחצו על תיבת ההודעה של Gemini והקלידו את השאלה שלכם. השאלה שלכם נשמרת כאן."},
+    {Str::BrowserFailedOne, L"לא ניתן היה לפתוח את הדפדפן. התמונה הועתקה; הדביקו אותה ב-Gemini באמצעות Ctrl+V."},
+    {Str::BrowserFailedMany, L"לא ניתן היה לפתוח את הדפדפן. התמונות הועתקו; הדביקו אותן ב-Gemini באמצעות Ctrl+V."},
+    {Str::BrowserFailedText, L"לא ניתן היה לפתוח את הדפדפן."},
+    {Str::PageUnreadable, L"ה-Magic Pointer לא הצליח לקרוא את הדף בדפדפן שלכם. אם מעליו פתוחה התראה, סגרו אותה ולחצו שוב על 'שאלו את Gemini'."},
+    {Str::ErrKeyInvalid, L"מפתח ה-API של {0} שלכם אינו תקין. בדקו אותו בהגדרות המוד."},
+    {Str::ErrKeyForbidden, L"מפתח API זה אינו יכול להשתמש ב-{0} (403). בדקו את המפתח בהגדרות המוד."},
+    {Str::ErrModelMissing, L"המודל \"{0}\" אינו זמין עבור המפתח שלכם. בחרו מודל אחר בהגדרות המוד."},
+    {Str::ErrNoFreeQuota, L"בתוכנית Gemini שלכם אין מכסה חינמית עבור \"{0}\". בחרו בהגדרות המוד את המודל \"מהיר\", או הוסיפו חיוב למפתח שלכם."},
+    {Str::ErrNoCredit, L"היתרה בחשבון ה-{0} שלכם אזלה. הוסיפו יתרה או אמצעי תשלום ונסו שוב."},
+    {Str::ErrTimeout, L"{0} לא ענה בזמן. נסו שוב בעוד רגע."},
+    {Str::ModelBusy, L"המודל שבחרתם אינו זמין כרגע. מודל מהיר יותר עונה במקומו."},
+    {Str::ErrRateLimit, L"הגעתם זמנית למגבלת הבקשות של {0}. נסו שוב בעוד רגע."},
+    {Str::ErrServer, L"ל-{0} יש כרגע בעיות ({1}). נסו שוב בעוד רגע."},
+    {Str::ErrGeneric, L"שגיאה הוחזרה מ-{0} ({1})."},
+    {Str::ErrNoConnection, L"לא ניתן היה לקבל את התשובה של {0}. בדקו את חיבור האינטרנט שלכם (שגיאה {1}). נסו לשאול שוב."},
+    {Str::ErrInterrupted, L"החיבור ל-{0} נותק. התשובה הזו לא שלמה (שגיאה {1}). נסו לשאול שוב."},
+    {Str::ErrInterruptedBy, L"התשובה הזו נקטעה על ידי {0}: {1}"},
+    {Str::ErrUnreadable, L"התקבלה מ-{0} תגובה שאינה ניתנת לקריאה. נסו לשאול שוב."},
+    {Str::ErrOutputLimit, L"הפלט של {0} הגיע למגבלה. התשובה הזו לא שלמה. נסו לבקש תשובה קצרה יותר."},
+    {Str::ErrStoppedBecause, L"התשובה הזו נעצרה על ידי {0} ({1}). נסו לשאול בדרך אחרת."},
+    {Str::ErrUnconfirmed, L"העצירה של {0} התרחשה לפני שאושר שהתשובה שלמה. נסו לשאול שוב."},
+    {Str::ErrNoAnswer, L"לא התקבלה תשובה מ-{0}. נסו לשאול בדרך אחרת."},
+    {Str::ErrCouldntReach, L"לא ניתן היה להתחבר ל-{0}. בדקו את חיבור האינטרנט שלכם (שגיאה {1})."},
+    {Str::ErrStreaming, L"התקבלה שגיאת הזרמה מ-{0}."},
+    {Str::LensSearching, L"מחפש באמצעות Google Lens…"},
+    {Str::LensUploadFailed, L"ההעלאה האוטומטית נכשלה. התמונה נמצאת בלוח: הדביקו אותה ב-lens.google.com."},
+};
+
+const TextEntry kTexts_hi[] = {
+    {Str::HintText, L"{0} से पूछने के लिए कुछ भी चुनें"},
+    {Str::HintTextTyping, L"{0} से पूछने के लिए कुछ भी चुनें या टाइप करना शुरू करें"},
+    {Str::Close, L"बंद करें"},
+    {Str::AskInGemini, L"Gemini से पूछें"},
+    {Str::SearchWithLens, L"Google Lens से खोजें"},
+    {Str::TranslateTo, L"अनुवाद की भाषा: {0}"},
+    {Str::CopyImage, L"इमेज कॉपी करें"},
+    {Str::CopyText, L"टेक्स्ट कॉपी करें"},
+    {Str::AddSelection, L"एक और चयन जोड़ें"},
+    {Str::WhatIsThis, L"यह क्या है?"},
+    {Str::ExplainThis, L"मुझे इसके बारे में समझाएँ"},
+    {Str::SummarizeThis, L"इसका सारांश दें"},
+    {Str::AskPlaceholder, L"अपने चयन के बारे में पूछें…"},
+    {Str::AskAnythingPlaceholder, L"कुछ भी पूछें…"},
+    {Str::FollowUpPlaceholder, L"आगे कुछ और पूछें…"},
+    {Str::Thinking, L"सोच रहा हूँ…"},
+    {Str::Copy, L"कॉपी करें"},
+    {Str::SelectAll, L"सभी चुनें"},
+    {Str::NoApiKeyHint, L"जवाब यहीं पाने के लिए मॉड की सेटिंग में Gemini, ChatGPT या Claude की API कुंजी जोड़ें।"},
+    {Str::ImageCopied, L"इमेज कॉपी हो गई"},
+    {Str::ImageCopyFailed, L"इमेज कॉपी नहीं हो सकी"},
+    {Str::ImageCopyRetry, L"इमेज कॉपी नहीं हो सकी। फिर से कोशिश करें।"},
+    {Str::ReadingText, L"टेक्स्ट अब भी पढ़ा जा रहा है…"},
+    {Str::NoTextFound, L"चयन में कोई टेक्स्ट नहीं मिला"},
+    {Str::TextCopied, L"टेक्स्ट कॉपी हो गया"},
+    {Str::TextCopyFailed, L"टेक्स्ट कॉपी नहीं हो सका"},
+    {Str::AnswerCopied, L"जवाब कॉपी हो गया"},
+    {Str::AnswerCopyFailed, L"जवाब कॉपी नहीं हो सका"},
+    {Str::OpeningLens, L"आपके ब्राउज़र में Google Lens खोला जा रहा है…"},
+    {Str::OpeningGeminiOne, L"Gemini खोलकर आपकी इमेज अटैच की जा रही है…"},
+    {Str::OpeningGeminiMany, L"Gemini खोलकर आपकी इमेज अटैच की जा रही हैं…"},
+    {Str::OpeningGeminiText, L"Gemini खोलकर आपका सवाल जोड़ा जा रहा है…"},
+    {Str::ClickBoxToAttach, L"Gemini के मैसेज बॉक्स पर क्लिक करें, फिर इमेज अटैच करने के लिए Ctrl+V दबाएँ।"},
+    {Str::Stopped, L"रोक दिया गया।"},
+    {Str::StoppedEarly, L"जवाब पूरा होने से पहले ही रोक दिया गया।"},
+    {Str::RequestFailed, L"अनुरोध शुरू नहीं हो सका।"},
+    {Str::DraftAddedOne, L"इमेज जुड़ गई है। अब Gemini में अपना सवाल लिखें।"},
+    {Str::DraftAddedMany, L"इमेज जुड़ गई हैं। अब Gemini में अपना सवाल लिखें।"},
+    {Str::QuestionInGemini, L"आपका सवाल Gemini में लिख दिया गया है।"},
+    {Str::DraftPartial, L"{1} में से {0} इमेज की पुष्टि हो सकी। Gemini देखें और बाकी इमेज उसके मैसेज बॉक्स में Ctrl+V से पेस्ट करें।"},
+    {Str::ClipboardChangedOne, L"इमेज पेस्ट होने से पहले क्लिपबोर्ड बदल गया: \"इमेज कॉपी करें\" का इस्तेमाल करें, फिर Gemini में Ctrl+V दबाएँ।"},
+    {Str::ClipboardChangedMany, L"इमेज पेस्ट होने से पहले क्लिपबोर्ड बदल गया। दोबारा कोशिश करने के लिए Gemini में फिर से पूछें।"},
+    {Str::IfNotAttachedOne, L"अगर इमेज अटैच नहीं हुई है, तो Gemini के मैसेज बॉक्स पर क्लिक करें और Ctrl+V दबाएँ।"},
+    {Str::IfNotAttachedMany, L"अगर इमेज अटैच नहीं हुई हैं, तो Gemini के मैसेज बॉक्स पर क्लिक करें और Ctrl+V दबाएँ।"},
+    {Str::ClickBoxOne, L"Gemini के मैसेज बॉक्स पर क्लिक करें और इमेज अटैच करने के लिए Ctrl+V दबाएँ। आपका सवाल यहाँ सुरक्षित है।"},
+    {Str::ClickBoxMany, L"Gemini के मैसेज बॉक्स पर क्लिक करें और सभी इमेज अटैच करने के लिए Ctrl+V दबाएँ। आपका सवाल यहाँ सुरक्षित है।"},
+    {Str::ClickBoxText, L"Gemini के मैसेज बॉक्स पर क्लिक करें और अपना सवाल टाइप करें। आपका सवाल यहाँ सुरक्षित है।"},
+    {Str::BrowserFailedOne, L"ब्राउज़र नहीं खुल सका। इमेज कॉपी हो चुकी है; उसे Ctrl+V से Gemini में पेस्ट करें।"},
+    {Str::BrowserFailedMany, L"ब्राउज़र नहीं खुल सका। इमेज कॉपी हो चुकी हैं; उन्हें Ctrl+V से Gemini में पेस्ट करें।"},
+    {Str::BrowserFailedText, L"ब्राउज़र नहीं खुल सका।"},
+    {Str::PageUnreadable, L"Magic Pointer आपके ब्राउज़र का पेज नहीं पढ़ सका। अगर पेज के ऊपर कोई नोटिफ़िकेशन खुला है, तो उसे बंद करें और \"Gemini से पूछें\" पर फिर से क्लिक करें।"},
+    {Str::ErrKeyInvalid, L"आपकी {0} API कुंजी मान्य नहीं है। मॉड की सेटिंग में जाकर इसे जाँचें।"},
+    {Str::ErrKeyForbidden, L"यह API कुंजी {0} का इस्तेमाल नहीं कर सकती (403)। मॉड की सेटिंग में कुंजी जाँचें।"},
+    {Str::ErrModelMissing, L"\"{0}\" मॉडल आपकी कुंजी के लिए उपलब्ध नहीं है। मॉड की सेटिंग में कोई दूसरा मॉडल चुनें।"},
+    {Str::ErrNoFreeQuota, L"आपके Gemini प्लान में \"{0}\" के लिए मुफ़्त कोटा नहीं है। मॉड की सेटिंग में \"तेज़\" मॉडल चुनें, या अपनी कुंजी के लिए बिलिंग चालू करें।"},
+    {Str::ErrNoCredit, L"आपके {0} खाते का क्रेडिट खत्म हो गया है। क्रेडिट या भुगतान का तरीका जोड़ें, फिर दोबारा कोशिश करें।"},
+    {Str::ErrTimeout, L"{0} ने समय पर जवाब नहीं दिया। थोड़ी देर बाद फिर कोशिश करें।"},
+    {Str::ModelBusy, L"आपका चुना हुआ मॉडल अभी उपलब्ध नहीं है। उसकी जगह एक तेज़ मॉडल जवाब दे रहा है।"},
+    {Str::ErrRateLimit, L"फ़िलहाल {0} की अनुरोध सीमा पूरी हो गई है। थोड़ी देर बाद फिर कोशिश करें।"},
+    {Str::ErrServer, L"{0} में अभी कोई समस्या आ रही है ({1})। थोड़ी देर बाद फिर कोशिश करें।"},
+    {Str::ErrGeneric, L"{0} से त्रुटि मिली ({1})।"},
+    {Str::ErrNoConnection, L"{0} का जवाब नहीं मिल सका। अपना इंटरनेट कनेक्शन जाँचें (त्रुटि {1}) और फिर से पूछें।"},
+    {Str::ErrInterrupted, L"{0} से कनेक्शन टूट गया, इसलिए यह जवाब अधूरा है (त्रुटि {1})। फिर से पूछें।"},
+    {Str::ErrInterruptedBy, L"{0} ने यह जवाब बीच में रोक दिया: {1}"},
+    {Str::ErrUnreadable, L"{0} से ऐसा जवाब मिला जिसे पढ़ा नहीं जा सकता। फिर से पूछें।"},
+    {Str::ErrOutputLimit, L"{0} अपनी आउटपुट सीमा तक पहुँच गया, इसलिए यह जवाब अधूरा है। छोटा जवाब माँगकर देखें।"},
+    {Str::ErrStoppedBecause, L"{0} ने यह जवाब रोक दिया ({1})। सवाल को दूसरे तरीके से पूछकर देखें।"},
+    {Str::ErrUnconfirmed, L"जवाब पूरा होने की पुष्टि से पहले ही {0} रुक गया। फिर से पूछें।"},
+    {Str::ErrNoAnswer, L"{0} ने कोई जवाब नहीं दिया। सवाल को दूसरे तरीके से पूछकर देखें।"},
+    {Str::ErrCouldntReach, L"{0} से संपर्क नहीं हो सका। अपना इंटरनेट कनेक्शन जाँचें (त्रुटि {1})।"},
+    {Str::ErrStreaming, L"{0} में स्ट्रीमिंग त्रुटि हुई।"},
+    {Str::LensSearching, L"Google Lens से खोजा जा रहा है…"},
+    {Str::LensUploadFailed, L"अपने-आप अपलोड नहीं हो सका। इमेज आपके क्लिपबोर्ड में है: उसे lens.google.com पर पेस्ट करें।"},
+};
+
+const TextEntry kTexts_hu[] = {
+    {Str::HintText, L"Válassz ki bármit, és kérdezd meg az MI-t ({0})"},
+    {Str::HintTextTyping, L"Válassz ki bármit, vagy kezdj el gépelni, és kérdezd meg az MI-t ({0})"},
+    {Str::Close, L"Bezárás"},
+    {Str::AskInGemini, L"Kérdés a Geminitől"},
+    {Str::SearchWithLens, L"Keresés a Google Lensszel"},
+    {Str::TranslateTo, L"Fordítás erre: {0}"},
+    {Str::CopyImage, L"Kép másolása"},
+    {Str::CopyText, L"Szöveg másolása"},
+    {Str::AddSelection, L"Újabb kijelölés hozzáadása"},
+    {Str::WhatIsThis, L"Mi ez?"},
+    {Str::ExplainThis, L"Magyarázd el ezt"},
+    {Str::SummarizeThis, L"Foglald ezt össze"},
+    {Str::AskPlaceholder, L"Kérdezz a kijelölésről…"},
+    {Str::AskAnythingPlaceholder, L"Kérdezz bármit…"},
+    {Str::FollowUpPlaceholder, L"Tegyél fel egy követő kérdést…"},
+    {Str::Thinking, L"Gondolkodom…"},
+    {Str::Copy, L"Másolás"},
+    {Str::SelectAll, L"Az összes kijelölése"},
+    {Str::NoApiKeyHint, L"Adj hozzá egy Gemini-, ChatGPT- vagy Claude-API-kulcsot a mod beállításaiban, hogy a válaszokat itt kapd meg."},
+    {Str::ImageCopied, L"Kép kimásolva"},
+    {Str::ImageCopyFailed, L"A kép másolása nem sikerült"},
+    {Str::ImageCopyRetry, L"A kép másolása nem sikerült. Próbáld újra."},
+    {Str::ReadingText, L"A szöveg beolvasása még folyamatban van…"},
+    {Str::NoTextFound, L"Nem található szöveg a kijelölésben"},
+    {Str::TextCopied, L"Szöveg kimásolva"},
+    {Str::TextCopyFailed, L"A szöveg másolása nem sikerült"},
+    {Str::AnswerCopied, L"Válasz kimásolva"},
+    {Str::AnswerCopyFailed, L"A válasz másolása nem sikerült"},
+    {Str::OpeningLens, L"A Google Lens megnyitása a böngészőben…"},
+    {Str::OpeningGeminiOne, L"A Gemini megnyitása és a kép csatolása…"},
+    {Str::OpeningGeminiMany, L"A Gemini megnyitása és a képek csatolása…"},
+    {Str::OpeningGeminiText, L"A Gemini megnyitása és a kérdésed hozzáadása…"},
+    {Str::ClickBoxToAttach, L"Kattints a Gemini üzenetmezőjére, majd nyomd meg a Ctrl+V billentyűkombinációt a kép csatolásához."},
+    {Str::Stopped, L"Leállítva."},
+    {Str::StoppedEarly, L"Leállítva, mielőtt a válasz elkészült volna."},
+    {Str::RequestFailed, L"A kérést nem sikerült elindítani."},
+    {Str::DraftAddedOne, L"A kép hozzáadva. Írd be a kérdésedet a Geminibe."},
+    {Str::DraftAddedMany, L"A képek hozzáadva. Írd be a kérdésedet a Geminibe."},
+    {Str::QuestionInGemini, L"A kérdésed már a Geminiben van."},
+    {Str::DraftPartial, L"Megerősített képek: {0} / {1}. Ellenőrizd a Geminit, és add hozzá a többit a Ctrl+V megnyomásával az üzenetmezőben."},
+    {Str::ClipboardChangedOne, L"A vágólap tartalma megváltozott, mielőtt a képet be lehetett volna illeszteni: használd a Kép másolása parancsot, majd nyomd meg a Ctrl+V billentyűkombinációt a Geminiben."},
+    {Str::ClipboardChangedMany, L"A vágólap tartalma megváltozott, mielőtt a képeket be lehetett volna illeszteni. Kérdezz újra a Geminiben az újrapróbálkozáshoz."},
+    {Str::IfNotAttachedOne, L"Ha a kép nincs csatolva, kattints a Gemini üzenetmezőjére, és nyomd meg a Ctrl+V billentyűkombinációt."},
+    {Str::IfNotAttachedMany, L"Ha a képek nincsenek csatolva, kattints a Gemini üzenetmezőjére, és nyomd meg a Ctrl+V billentyűkombinációt."},
+    {Str::ClickBoxOne, L"Kattints a Gemini üzenetmezőjére, majd nyomd meg a Ctrl+V billentyűkombinációt a kép csatolásához. A kérdésed itt megmarad."},
+    {Str::ClickBoxMany, L"Kattints a Gemini üzenetmezőjére, majd nyomd meg a Ctrl+V billentyűkombinációt a képek csatolásához. A kérdésed itt megmarad."},
+    {Str::ClickBoxText, L"Kattints a Gemini üzenetmezőjére, és írd be a kérdésed. A kérdésed itt megmarad."},
+    {Str::BrowserFailedOne, L"A böngészőt nem sikerült megnyitni. A kép ki van másolva; illeszd be a Geminibe a Ctrl+V billentyűkombinációval."},
+    {Str::BrowserFailedMany, L"A böngészőt nem sikerült megnyitni. A képek ki vannak másolva; illeszd be őket a Geminibe a Ctrl+V billentyűkombinációval."},
+    {Str::BrowserFailedText, L"A böngészőt nem sikerült megnyitni."},
+    {Str::PageUnreadable, L"A Magic Pointer nem tudta elolvasni az oldalt a böngészőben. Ha fölötte értesítés van nyitva, zárd be, és kattints újra a Kérdés a Geminitől gombra."},
+    {Str::ErrKeyInvalid, L"A(z) {0} API-kulcsod érvénytelen. Ellenőrizd a mod beállításaiban."},
+    {Str::ErrKeyForbidden, L"Ez az API-kulcs nem használhatja a(z) {0} szolgáltatást (403). Ellenőrizd a kulcsot a mod beállításaiban."},
+    {Str::ErrModelMissing, L"A(z) „{0}” modell nem érhető el a kulcsoddal. Válassz másik modellt a mod beállításaiban."},
+    {Str::ErrNoFreeQuota, L"A Gemini-csomagodban nincs ingyenes kvóta a(z) „{0}” modellhez. Válaszd a „Gyors” modellt a mod beállításaiban, vagy add hozzá a számlázást a kulcsodhoz."},
+    {Str::ErrNoCredit, L"A(z) {0}-fiókodban elfogyott a kredit. Tölts fel kreditet, vagy adj meg fizetési módot, majd próbáld újra."},
+    {Str::ErrTimeout, L"A(z) {0} szolgáltatás nem válaszolt időben. Próbáld újra egy kis idő múlva."},
+    {Str::ModelBusy, L"A kiválasztott modell most nem érhető el. Helyette egy gyorsabb válaszol."},
+    {Str::ErrRateLimit, L"Egyelőre elérted a(z) {0} kérési korlátját. Próbáld újra egy kis idő múlva."},
+    {Str::ErrServer, L"A(z) {0} szolgáltatással jelenleg probléma van ({1}). Próbáld újra egy kis idő múlva."},
+    {Str::ErrGeneric, L"A(z) {0} szolgáltatás hibát adott vissza ({1})."},
+    {Str::ErrNoConnection, L"A(z) {0} válaszát nem sikerült fogadni. Ellenőrizd az internetkapcsolatot (hibakód: {1}). Próbálj újra kérdezni."},
+    {Str::ErrInterrupted, L"A(z) {0} szolgáltatással való kapcsolat megszakadt. Ez a válasz hiányos (hibakód: {1}). Próbálj újra kérdezni."},
+    {Str::ErrInterruptedBy, L"A(z) {0} szolgáltatás megszakította ezt a választ: {1}"},
+    {Str::ErrUnreadable, L"A(z) {0} szolgáltatás olvashatatlan választ adott vissza. Próbálj újra kérdezni."},
+    {Str::ErrOutputLimit, L"A(z) {0} szolgáltatás elérte a kimeneti korlátját. Ez a válasz hiányos. Próbálj rövidebb választ kérni."},
+    {Str::ErrStoppedBecause, L"A(z) {0} szolgáltatás leállította ezt a választ ({1}). Próbáld másképp megfogalmazni a kérdést."},
+    {Str::ErrUnconfirmed, L"A(z) {0} szolgáltatás leállt, mielőtt megerősítette volna, hogy a válasz teljes. Próbálj újra kérdezni."},
+    {Str::ErrNoAnswer, L"A(z) {0} szolgáltatás nem adott vissza választ. Próbáld másképp megfogalmazni a kérdést."},
+    {Str::ErrCouldntReach, L"A(z) {0} szolgáltatás nem érhető el. Ellenőrizd az internetkapcsolatot (hibakód: {1})."},
+    {Str::ErrStreaming, L"A(z) {0} szolgáltatás streamelési hibát adott vissza."},
+    {Str::LensSearching, L"Keresés a Google Lensszel…"},
+    {Str::LensUploadFailed, L"Az automatikus feltöltés nem sikerült. A kép a vágólapon van: illeszd be a lens.google.com oldalon."},
+};
+
+const TextEntry kTexts_id[] = {
+    {Str::HintText, L"Pilih apa saja untuk bertanya kepada {0}"},
+    {Str::HintTextTyping, L"Pilih apa saja atau mulai mengetik untuk bertanya kepada {0}"},
+    {Str::Close, L"Tutup"},
+    {Str::AskInGemini, L"Tanya Gemini"},
+    {Str::SearchWithLens, L"Cari dengan Google Lens"},
+    {Str::TranslateTo, L"Terjemahkan ke: {0}"},
+    {Str::CopyImage, L"Salin gambar"},
+    {Str::CopyText, L"Salin teks"},
+    {Str::AddSelection, L"Tambahkan pilihan lain"},
+    {Str::WhatIsThis, L"Apa ini?"},
+    {Str::ExplainThis, L"Jelaskan ini"},
+    {Str::SummarizeThis, L"Ringkas ini"},
+    {Str::AskPlaceholder, L"Tanyakan tentang pilihan Anda…"},
+    {Str::AskAnythingPlaceholder, L"Tanyakan apa saja…"},
+    {Str::FollowUpPlaceholder, L"Ajukan pertanyaan lanjutan…"},
+    {Str::Thinking, L"Sedang berpikir…"},
+    {Str::Copy, L"Salin"},
+    {Str::SelectAll, L"Pilih semua"},
+    {Str::NoApiKeyHint, L"Tambahkan kunci API Gemini, ChatGPT, atau Claude di pengaturan mod untuk mendapatkan jawaban langsung di sini."},
+    {Str::ImageCopied, L"Gambar disalin"},
+    {Str::ImageCopyFailed, L"Tidak dapat menyalin gambar"},
+    {Str::ImageCopyRetry, L"Tidak dapat menyalin gambar. Coba lagi."},
+    {Str::ReadingText, L"Teks masih dibaca…"},
+    {Str::NoTextFound, L"Tidak ada teks yang ditemukan dalam pilihan"},
+    {Str::TextCopied, L"Teks disalin"},
+    {Str::TextCopyFailed, L"Tidak dapat menyalin teks"},
+    {Str::AnswerCopied, L"Jawaban disalin"},
+    {Str::AnswerCopyFailed, L"Tidak dapat menyalin jawaban"},
+    {Str::OpeningLens, L"Membuka Google Lens di browser Anda…"},
+    {Str::OpeningGeminiOne, L"Membuka Gemini dan melampirkan gambar Anda…"},
+    {Str::OpeningGeminiMany, L"Membuka Gemini dan melampirkan gambar-gambar Anda…"},
+    {Str::OpeningGeminiText, L"Membuka Gemini dan menambahkan pertanyaan Anda…"},
+    {Str::ClickBoxToAttach, L"Klik kotak pesan Gemini, lalu tekan Ctrl+V untuk melampirkan gambar."},
+    {Str::Stopped, L"Dihentikan."},
+    {Str::StoppedEarly, L"Dihentikan sebelum jawaban selesai."},
+    {Str::RequestFailed, L"Tidak dapat memulai permintaan."},
+    {Str::DraftAddedOne, L"Gambar telah ditambahkan. Ketik pertanyaan Anda di Gemini."},
+    {Str::DraftAddedMany, L"Gambar-gambar telah ditambahkan. Ketik pertanyaan Anda di Gemini."},
+    {Str::QuestionInGemini, L"Pertanyaan Anda sudah dimasukkan ke Gemini."},
+    {Str::DraftPartial, L"Gambar yang terkonfirmasi: {0} dari {1}. Periksa Gemini dan tambahkan sisanya dengan Ctrl+V di kotak pesannya."},
+    {Str::ClipboardChangedOne, L"Papan klip berubah sebelum gambar dapat ditempel: gunakan Salin gambar, lalu tekan Ctrl+V di Gemini."},
+    {Str::ClipboardChangedMany, L"Papan klip berubah sebelum gambar-gambar dapat ditempel. Tanya lagi di Gemini untuk mencoba kembali."},
+    {Str::IfNotAttachedOne, L"Jika gambar tidak terlampir, klik kotak pesan Gemini dan tekan Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Jika gambar-gambar tidak terlampir, klik kotak pesan Gemini dan tekan Ctrl+V."},
+    {Str::ClickBoxOne, L"Klik kotak pesan Gemini dan tekan Ctrl+V untuk melampirkan gambar. Pertanyaan Anda tetap tersimpan di sini."},
+    {Str::ClickBoxMany, L"Klik kotak pesan Gemini dan tekan Ctrl+V untuk melampirkan gambar-gambar. Pertanyaan Anda tetap tersimpan di sini."},
+    {Str::ClickBoxText, L"Klik kotak pesan Gemini lalu ketik pertanyaan Anda. Pertanyaan Anda tetap tersimpan di sini."},
+    {Str::BrowserFailedOne, L"Tidak dapat membuka browser. Gambar sudah disalin; tempelkan ke Gemini dengan Ctrl+V."},
+    {Str::BrowserFailedMany, L"Tidak dapat membuka browser. Gambar-gambar sudah disalin; tempelkan ke Gemini dengan Ctrl+V."},
+    {Str::BrowserFailedText, L"Tidak dapat membuka browser."},
+    {Str::PageUnreadable, L"Magic Pointer tidak dapat membaca halaman di browser Anda. Jika ada pemberitahuan terbuka di atasnya, tutup dan klik Tanya Gemini lagi."},
+    {Str::ErrKeyInvalid, L"Kunci API {0} Anda tidak valid. Periksa di pengaturan mod."},
+    {Str::ErrKeyForbidden, L"Kunci API ini tidak dapat menggunakan {0} (403). Periksa kunci di pengaturan mod."},
+    {Str::ErrModelMissing, L"Model \"{0}\" tidak tersedia untuk kunci Anda. Pilih model lain di pengaturan mod."},
+    {Str::ErrNoFreeQuota, L"Paket Gemini Anda tidak memiliki kuota gratis untuk \"{0}\". Pilih model Cepat di pengaturan mod, atau tambahkan penagihan ke kunci Anda."},
+    {Str::ErrNoCredit, L"Kredit akun {0} Anda habis. Tambahkan kredit atau metode pembayaran, lalu coba lagi."},
+    {Str::ErrTimeout, L"{0} tidak menjawab tepat waktu. Coba lagi sebentar lagi."},
+    {Str::ModelBusy, L"Model yang Anda pilih sedang tidak tersedia. Model yang lebih cepat menjawab sebagai gantinya."},
+    {Str::ErrRateLimit, L"Anda telah mencapai batas permintaan {0} untuk saat ini. Coba lagi sebentar lagi."},
+    {Str::ErrServer, L"{0} sedang mengalami masalah ({1}). Coba lagi sebentar lagi."},
+    {Str::ErrGeneric, L"{0} mengembalikan kesalahan ({1})."},
+    {Str::ErrNoConnection, L"Tidak dapat menerima jawaban {0}. Periksa koneksi internet Anda (kesalahan {1}). Coba tanyakan lagi."},
+    {Str::ErrInterrupted, L"Koneksi ke {0} terputus. Jawaban ini tidak lengkap (kesalahan {1}). Coba tanyakan lagi."},
+    {Str::ErrInterruptedBy, L"{0} menghentikan jawaban ini: {1}"},
+    {Str::ErrUnreadable, L"{0} mengembalikan respons yang tidak terbaca. Coba tanyakan lagi."},
+    {Str::ErrOutputLimit, L"{0} mencapai batas keluarannya. Jawaban ini tidak lengkap. Coba minta jawaban yang lebih singkat."},
+    {Str::ErrStoppedBecause, L"{0} menghentikan jawaban ini ({1}). Coba tanyakan dengan cara lain."},
+    {Str::ErrUnconfirmed, L"{0} berhenti sebelum memastikan bahwa jawabannya sudah lengkap. Coba tanyakan lagi."},
+    {Str::ErrNoAnswer, L"{0} tidak mengembalikan jawaban. Coba tanyakan dengan cara lain."},
+    {Str::ErrCouldntReach, L"Tidak dapat menjangkau {0}. Periksa koneksi internet Anda (kesalahan {1})."},
+    {Str::ErrStreaming, L"{0} mengembalikan kesalahan streaming."},
+    {Str::LensSearching, L"Mencari dengan Google Lens…"},
+    {Str::LensUploadFailed, L"Tidak dapat mengunggah secara otomatis. Gambar ada di papan klip: tempelkan di lens.google.com."},
+};
+
+const TextEntry kTexts_it[] = {
+    {Str::HintText, L"Seleziona qualcosa per chiedere a {0}"},
+    {Str::HintTextTyping, L"Seleziona qualcosa o inizia a scrivere per chiedere a {0}"},
+    {Str::Close, L"Chiudi"},
+    {Str::AskInGemini, L"Chiedi a Gemini"},
+    {Str::SearchWithLens, L"Cerca con Google Lens"},
+    {Str::TranslateTo, L"Traduci in: {0}"},
+    {Str::CopyImage, L"Copia immagine"},
+    {Str::CopyText, L"Copia testo"},
+    {Str::AddSelection, L"Aggiungi un'altra selezione"},
+    {Str::WhatIsThis, L"Che cos'è?"},
+    {Str::ExplainThis, L"Spiegamelo"},
+    {Str::SummarizeThis, L"Riassumilo per me"},
+    {Str::AskPlaceholder, L"Fai una domanda sulla selezione…"},
+    {Str::AskAnythingPlaceholder, L"Chiedi qualsiasi cosa…"},
+    {Str::FollowUpPlaceholder, L"Fai un'altra domanda…"},
+    {Str::Thinking, L"Sto pensando…"},
+    {Str::Copy, L"Copia"},
+    {Str::SelectAll, L"Seleziona tutto"},
+    {Str::NoApiKeyHint, L"Aggiungi una chiave API di Gemini, ChatGPT o Claude nelle impostazioni della mod per ricevere le risposte direttamente qui."},
+    {Str::ImageCopied, L"Immagine copiata"},
+    {Str::ImageCopyFailed, L"Impossibile copiare l'immagine"},
+    {Str::ImageCopyRetry, L"Impossibile copiare l'immagine. Riprova."},
+    {Str::ReadingText, L"Lettura del testo in corso…"},
+    {Str::NoTextFound, L"Nessun testo trovato nella selezione"},
+    {Str::TextCopied, L"Testo copiato"},
+    {Str::TextCopyFailed, L"Impossibile copiare il testo"},
+    {Str::AnswerCopied, L"Risposta copiata"},
+    {Str::AnswerCopyFailed, L"Impossibile copiare la risposta"},
+    {Str::OpeningLens, L"Apertura di Google Lens nel browser…"},
+    {Str::OpeningGeminiOne, L"Apro Gemini e allego l'immagine…"},
+    {Str::OpeningGeminiMany, L"Apro Gemini e allego le immagini…"},
+    {Str::OpeningGeminiText, L"Apro Gemini e aggiungo la tua domanda…"},
+    {Str::ClickBoxToAttach, L"Fai clic nel campo di testo di Gemini, poi premi Ctrl+V per allegare l'immagine."},
+    {Str::Stopped, L"Interrotto."},
+    {Str::StoppedEarly, L"Interrotto prima della fine della risposta."},
+    {Str::RequestFailed, L"Impossibile avviare la richiesta."},
+    {Str::DraftAddedOne, L"Immagine aggiunta. Scrivi la tua domanda in Gemini."},
+    {Str::DraftAddedMany, L"Immagini aggiunte. Scrivi la tua domanda in Gemini."},
+    {Str::QuestionInGemini, L"La tua domanda è già in Gemini."},
+    {Str::DraftPartial, L"Immagini confermate: {0} su {1}. Controlla Gemini e aggiungi le altre con Ctrl+V nel campo di testo."},
+    {Str::ClipboardChangedOne, L"Gli appunti sono cambiati prima che l'immagine fosse incollata: usa «Copia immagine», poi premi Ctrl+V in Gemini."},
+    {Str::ClipboardChangedMany, L"Gli appunti sono cambiati prima che le immagini fossero incollate. Chiedi di nuovo in Gemini per riprovare."},
+    {Str::IfNotAttachedOne, L"Se l'immagine non è allegata, fai clic nel campo di testo di Gemini e premi Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Se le immagini non sono allegate, fai clic nel campo di testo di Gemini e premi Ctrl+V."},
+    {Str::ClickBoxOne, L"Fai clic nel campo di testo di Gemini e premi Ctrl+V per allegare l'immagine. La tua domanda resta qui."},
+    {Str::ClickBoxMany, L"Fai clic nel campo di testo di Gemini e premi Ctrl+V per allegare le immagini. La tua domanda resta qui."},
+    {Str::ClickBoxText, L"Fai clic nel campo di testo di Gemini e scrivi la tua domanda. La tua domanda resta qui."},
+    {Str::BrowserFailedOne, L"Impossibile aprire il browser. L'immagine è stata copiata: incollala in Gemini con Ctrl+V."},
+    {Str::BrowserFailedMany, L"Impossibile aprire il browser. Le immagini sono state copiate: incollale in Gemini con Ctrl+V."},
+    {Str::BrowserFailedText, L"Impossibile aprire il browser."},
+    {Str::PageUnreadable, L"Magic Pointer non è riuscito a leggere la pagina nel browser. Se sopra la pagina c'è una notifica aperta, chiudila e fai di nuovo clic su «Chiedi a Gemini»."},
+    {Str::ErrKeyInvalid, L"La chiave API di {0} non è valida. Controllala nelle impostazioni della mod."},
+    {Str::ErrKeyForbidden, L"Questa chiave API non può usare {0} (403). Controllala nelle impostazioni della mod."},
+    {Str::ErrModelMissing, L"Il modello «{0}» non è disponibile con la tua chiave. Scegli un altro modello nelle impostazioni della mod."},
+    {Str::ErrNoFreeQuota, L"Il tuo piano di Gemini non include quota gratuita per «{0}». Scegli il modello «Veloce» nelle impostazioni della mod oppure attiva la fatturazione per la tua chiave."},
+    {Str::ErrNoCredit, L"Il credito del tuo account {0} è esaurito. Aggiungi credito o un metodo di pagamento e riprova."},
+    {Str::ErrTimeout, L"{0} non ha risposto in tempo. Riprova tra poco."},
+    {Str::ModelBusy, L"Il modello scelto non è disponibile al momento. Risponde invece uno più veloce."},
+    {Str::ErrRateLimit, L"Hai raggiunto per ora il limite di richieste di {0}. Riprova tra poco."},
+    {Str::ErrServer, L"{0} ha dei problemi al momento ({1}). Riprova tra poco."},
+    {Str::ErrGeneric, L"{0} ha restituito un errore ({1})."},
+    {Str::ErrNoConnection, L"Impossibile ricevere la risposta di {0}. Controlla la connessione a Internet (errore {1}) e riprova a chiedere."},
+    {Str::ErrInterrupted, L"La connessione a {0} si è interrotta e la risposta è incompleta (errore {1}). Riprova a chiedere."},
+    {Str::ErrInterruptedBy, L"{0} ha interrotto la risposta: {1}"},
+    {Str::ErrUnreadable, L"{0} ha restituito una risposta illeggibile. Riprova a chiedere."},
+    {Str::ErrOutputLimit, L"{0} ha raggiunto il limite di lunghezza e la risposta è incompleta. Prova a chiedere una risposta più breve."},
+    {Str::ErrStoppedBecause, L"{0} ha interrotto la risposta ({1}). Prova a formulare la domanda in un altro modo."},
+    {Str::ErrUnconfirmed, L"{0} si è fermato prima di confermare che la risposta fosse completa. Riprova a chiedere."},
+    {Str::ErrNoAnswer, L"{0} non ha dato alcuna risposta. Prova a formulare la domanda in un altro modo."},
+    {Str::ErrCouldntReach, L"Impossibile contattare {0}. Controlla la connessione a Internet (errore {1})."},
+    {Str::ErrStreaming, L"{0} ha restituito un errore di streaming."},
+    {Str::LensSearching, L"Ricerca con Google Lens…"},
+    {Str::LensUploadFailed, L"Impossibile caricare l'immagine automaticamente. È negli appunti: incollala su lens.google.com."},
+};
+
+const TextEntry kTexts_ja[] = {
+    {Str::HintText, L"何かを選択して {0} に質問"},
+    {Str::HintTextTyping, L"何かを選択するか、入力を始めて {0} に質問"},
+    {Str::Close, L"閉じる"},
+    {Str::AskInGemini, L"Gemini で質問"},
+    {Str::SearchWithLens, L"Google レンズで検索"},
+    {Str::TranslateTo, L"翻訳先: {0}"},
+    {Str::CopyImage, L"画像をコピー"},
+    {Str::CopyText, L"テキストをコピー"},
+    {Str::AddSelection, L"別の選択範囲を追加"},
+    {Str::WhatIsThis, L"これは何ですか？"},
+    {Str::ExplainThis, L"これを説明してください"},
+    {Str::SummarizeThis, L"これを要約してください"},
+    {Str::AskPlaceholder, L"選択範囲について質問…"},
+    {Str::AskAnythingPlaceholder, L"何でも質問…"},
+    {Str::FollowUpPlaceholder, L"追加で質問…"},
+    {Str::Thinking, L"考え中…"},
+    {Str::Copy, L"コピー"},
+    {Str::SelectAll, L"すべて選択"},
+    {Str::NoApiKeyHint, L"ここで直接回答を受け取るには、Mod の設定で Gemini、ChatGPT、または Claude の API キーを追加してください。"},
+    {Str::ImageCopied, L"画像をコピーしました"},
+    {Str::ImageCopyFailed, L"画像をコピーできませんでした"},
+    {Str::ImageCopyRetry, L"画像をコピーできませんでした。もう一度お試しください。"},
+    {Str::ReadingText, L"テキストをまだ読み取っています…"},
+    {Str::NoTextFound, L"選択範囲にテキストが見つかりません"},
+    {Str::TextCopied, L"テキストをコピーしました"},
+    {Str::TextCopyFailed, L"テキストをコピーできませんでした"},
+    {Str::AnswerCopied, L"回答をコピーしました"},
+    {Str::AnswerCopyFailed, L"回答をコピーできませんでした"},
+    {Str::OpeningLens, L"ブラウザーで Google レンズを開いています…"},
+    {Str::OpeningGeminiOne, L"Gemini を開いて画像を添付しています…"},
+    {Str::OpeningGeminiMany, L"Gemini を開いてすべての画像を添付しています…"},
+    {Str::OpeningGeminiText, L"Gemini を開いて質問を追加しています…"},
+    {Str::ClickBoxToAttach, L"Gemini のメッセージ ボックスをクリックし、Ctrl+V キーを押して画像を添付してください。"},
+    {Str::Stopped, L"停止しました。"},
+    {Str::StoppedEarly, L"回答が完了する前に停止しました。"},
+    {Str::RequestFailed, L"リクエストを開始できませんでした。"},
+    {Str::DraftAddedOne, L"画像を追加しました。Gemini に質問を入力してください。"},
+    {Str::DraftAddedMany, L"画像をすべて追加しました。Gemini に質問を入力してください。"},
+    {Str::QuestionInGemini, L"質問は Gemini に入力済みです。"},
+    {Str::DraftPartial, L"確認できた画像: {0}/{1}。Gemini を確認し、残りはメッセージ ボックスで Ctrl+V キーを押して追加してください。"},
+    {Str::ClipboardChangedOne, L"画像を貼り付ける前にクリップボードの内容が変わりました。「画像をコピー」を使ってから、Gemini で Ctrl+V キーを押してください。"},
+    {Str::ClipboardChangedMany, L"画像を貼り付ける前にクリップボードの内容が変わりました。もう一度 Gemini で質問して再試行してください。"},
+    {Str::IfNotAttachedOne, L"画像が添付されていない場合は、Gemini のメッセージ ボックスをクリックして Ctrl+V キーを押してください。"},
+    {Str::IfNotAttachedMany, L"画像が添付されていない場合は、Gemini のメッセージ ボックスをクリックして Ctrl+V キーを押してください。"},
+    {Str::ClickBoxOne, L"Gemini のメッセージ ボックスをクリックし、Ctrl+V キーを押して画像を添付してください。質問はここに保持されています。"},
+    {Str::ClickBoxMany, L"Gemini のメッセージ ボックスをクリックし、Ctrl+V キーを押してすべての画像を添付してください。質問はここに保持されています。"},
+    {Str::ClickBoxText, L"Gemini のメッセージ ボックスをクリックして、質問を入力してください。質問はここに保持されています。"},
+    {Str::BrowserFailedOne, L"ブラウザーを開けませんでした。画像はコピー済みです。Ctrl+V キーで Gemini に貼り付けてください。"},
+    {Str::BrowserFailedMany, L"ブラウザーを開けませんでした。画像はコピー済みです。Ctrl+V キーで Gemini に貼り付けてください。"},
+    {Str::BrowserFailedText, L"ブラウザーを開けませんでした。"},
+    {Str::PageUnreadable, L"Magic Pointer はブラウザー内のページを読み取れませんでした。上に通知が開いている場合は閉じてから、もう一度「Gemini で質問」をクリックしてください。"},
+    {Str::ErrKeyInvalid, L"{0} API キーが無効です。Mod の設定で確認してください。"},
+    {Str::ErrKeyForbidden, L"この API キーでは {0} を使用できません (403)。Mod の設定でキーを確認してください。"},
+    {Str::ErrModelMissing, L"モデル「{0}」はこのキーでは利用できません。Mod の設定で別のモデルを選択してください。"},
+    {Str::ErrNoFreeQuota, L"ご利用の Gemini プランには「{0}」の無料枠がありません。Mod の設定でモデル「高速」を選択するか、キーに課金情報を追加してください。"},
+    {Str::ErrNoCredit, L"{0} アカウントのクレジットがなくなりました。クレジットまたは支払い方法を追加してから、もう一度お試しください。"},
+    {Str::ErrTimeout, L"{0} から時間内に応答がありませんでした。しばらくしてからもう一度お試しください。"},
+    {Str::ModelBusy, L"選択したモデルは現在利用できません。代わりに、より高速なモデルが回答しています。"},
+    {Str::ErrRateLimit, L"{0} のリクエスト上限に一時的に達しました。しばらくしてからもう一度お試しください。"},
+    {Str::ErrServer, L"{0} で現在問題が発生しています ({1})。しばらくしてからもう一度お試しください。"},
+    {Str::ErrGeneric, L"{0} からエラーが返されました ({1})。"},
+    {Str::ErrNoConnection, L"{0} の回答を受信できませんでした。インターネット接続を確認してください (エラー {1})。もう一度質問してみてください。"},
+    {Str::ErrInterrupted, L"{0} との接続が中断されました。この回答は不完全です (エラー {1})。もう一度質問してみてください。"},
+    {Str::ErrInterruptedBy, L"{0} がこの回答を中断しました: {1}"},
+    {Str::ErrUnreadable, L"{0} から読み取れない応答が返されました。もう一度質問してみてください。"},
+    {Str::ErrOutputLimit, L"{0} が出力の上限に達しました。この回答は不完全です。もっと短い回答を求めてみてください。"},
+    {Str::ErrStoppedBecause, L"{0} がこの回答を停止しました ({1})。別の聞き方をお試しください。"},
+    {Str::ErrUnconfirmed, L"{0} は回答が完了したことを確認する前に停止しました。もう一度質問してみてください。"},
+    {Str::ErrNoAnswer, L"{0} から回答が返されませんでした。別の聞き方をお試しください。"},
+    {Str::ErrCouldntReach, L"{0} に接続できませんでした。インターネット接続を確認してください (エラー {1})。"},
+    {Str::ErrStreaming, L"{0} からストリーミング エラーが返されました。"},
+    {Str::LensSearching, L"Google レンズで検索しています…"},
+    {Str::LensUploadFailed, L"自動的にアップロードできませんでした。画像はクリップボードにあります。lens.google.com に貼り付けてください。"},
+};
+
+const TextEntry kTexts_ko[] = {
+    {Str::HintText, L"무엇이든 선택하여 {0}에게 질문하세요"},
+    {Str::HintTextTyping, L"무엇이든 선택하거나 입력을 시작하여 {0}에게 질문하세요"},
+    {Str::Close, L"닫기"},
+    {Str::AskInGemini, L"Gemini에 질문"},
+    {Str::SearchWithLens, L"Google 렌즈로 검색"},
+    {Str::TranslateTo, L"번역 대상: {0}"},
+    {Str::CopyImage, L"이미지 복사"},
+    {Str::CopyText, L"텍스트 복사"},
+    {Str::AddSelection, L"다른 선택 영역 추가"},
+    {Str::WhatIsThis, L"이게 뭐예요?"},
+    {Str::ExplainThis, L"이것을 설명해 주세요"},
+    {Str::SummarizeThis, L"이것을 요약해 주세요"},
+    {Str::AskPlaceholder, L"선택한 내용에 대해 질문하세요…"},
+    {Str::AskAnythingPlaceholder, L"무엇이든 질문하세요…"},
+    {Str::FollowUpPlaceholder, L"추가 질문을 입력하세요…"},
+    {Str::Thinking, L"생각하는 중…"},
+    {Str::Copy, L"복사"},
+    {Str::SelectAll, L"모두 선택"},
+    {Str::NoApiKeyHint, L"여기에서 바로 답변을 받으려면 모드 설정에 Gemini, ChatGPT 또는 Claude API 키를 추가하세요."},
+    {Str::ImageCopied, L"이미지를 복사했습니다"},
+    {Str::ImageCopyFailed, L"이미지를 복사할 수 없습니다"},
+    {Str::ImageCopyRetry, L"이미지를 복사할 수 없습니다. 다시 시도하세요."},
+    {Str::ReadingText, L"텍스트를 아직 읽는 중입니다…"},
+    {Str::NoTextFound, L"선택 영역에서 텍스트를 찾을 수 없습니다"},
+    {Str::TextCopied, L"텍스트를 복사했습니다"},
+    {Str::TextCopyFailed, L"텍스트를 복사할 수 없습니다"},
+    {Str::AnswerCopied, L"답변을 복사했습니다"},
+    {Str::AnswerCopyFailed, L"답변을 복사할 수 없습니다"},
+    {Str::OpeningLens, L"브라우저에서 Google 렌즈를 여는 중…"},
+    {Str::OpeningGeminiOne, L"Gemini를 열고 이미지를 첨부하는 중…"},
+    {Str::OpeningGeminiMany, L"Gemini를 열고 이미지를 모두 첨부하는 중…"},
+    {Str::OpeningGeminiText, L"Gemini를 열고 질문을 추가하는 중…"},
+    {Str::ClickBoxToAttach, L"Gemini의 메시지 상자를 클릭한 다음 Ctrl+V를 눌러 이미지를 첨부하세요."},
+    {Str::Stopped, L"중지되었습니다."},
+    {Str::StoppedEarly, L"답변이 끝나기 전에 중지되었습니다."},
+    {Str::RequestFailed, L"요청을 시작할 수 없습니다."},
+    {Str::DraftAddedOne, L"이미지가 추가되었습니다. Gemini에 질문을 입력하세요."},
+    {Str::DraftAddedMany, L"이미지가 모두 추가되었습니다. Gemini에 질문을 입력하세요."},
+    {Str::QuestionInGemini, L"질문이 Gemini에 입력되어 있습니다."},
+    {Str::DraftPartial, L"확인된 이미지: {0}/{1}. Gemini를 확인하고 나머지는 메시지 상자에서 Ctrl+V를 눌러 추가하세요."},
+    {Str::ClipboardChangedOne, L"이미지를 붙여넣기 전에 클립보드가 변경되었습니다. '이미지 복사'를 사용한 다음 Gemini에서 Ctrl+V를 누르세요."},
+    {Str::ClipboardChangedMany, L"이미지를 붙여넣기 전에 클립보드가 변경되었습니다. 다시 시도하려면 Gemini에서 다시 질문하세요."},
+    {Str::IfNotAttachedOne, L"이미지가 첨부되지 않았다면 Gemini의 메시지 상자를 클릭하고 Ctrl+V를 누르세요."},
+    {Str::IfNotAttachedMany, L"이미지가 첨부되지 않았다면 Gemini의 메시지 상자를 클릭하고 Ctrl+V를 누르세요."},
+    {Str::ClickBoxOne, L"Gemini의 메시지 상자를 클릭하고 Ctrl+V를 눌러 이미지를 첨부하세요. 질문은 여기에 보관됩니다."},
+    {Str::ClickBoxMany, L"Gemini의 메시지 상자를 클릭하고 Ctrl+V를 눌러 이미지를 모두 첨부하세요. 질문은 여기에 보관됩니다."},
+    {Str::ClickBoxText, L"Gemini의 메시지 상자를 클릭하고 질문을 입력하세요. 질문은 여기에 보관됩니다."},
+    {Str::BrowserFailedOne, L"브라우저를 열 수 없습니다. 이미지가 복사되었으니 Ctrl+V로 Gemini에 붙여넣으세요."},
+    {Str::BrowserFailedMany, L"브라우저를 열 수 없습니다. 이미지가 복사되었으니 Ctrl+V로 Gemini에 붙여넣으세요."},
+    {Str::BrowserFailedText, L"브라우저를 열 수 없습니다."},
+    {Str::PageUnreadable, L"Magic Pointer가 브라우저의 페이지를 읽을 수 없습니다. 그 위에 알림이 열려 있으면 닫은 후 'Gemini에 질문'을 다시 클릭하세요."},
+    {Str::ErrKeyInvalid, L"{0} API 키가 올바르지 않습니다. 모드 설정에서 확인하세요."},
+    {Str::ErrKeyForbidden, L"이 API 키로는 {0}를 사용할 수 없습니다(403). 모드 설정에서 키를 확인하세요."},
+    {Str::ErrModelMissing, L"'{0}' 모델은 이 키로 사용할 수 없습니다. 모드 설정에서 다른 모델을 선택하세요."},
+    {Str::ErrNoFreeQuota, L"Gemini 요금제에 '{0}'의 무료 할당량이 없습니다. 모드 설정에서 '빠름' 모델을 선택하거나 키에 결제 정보를 추가하세요."},
+    {Str::ErrNoCredit, L"{0} 계정의 크레딧이 모두 소진되었습니다. 크레딧이나 결제 수단을 추가한 후 다시 시도하세요."},
+    {Str::ErrTimeout, L"{0}에서 제때 응답하지 않았습니다. 잠시 후 다시 시도하세요."},
+    {Str::ModelBusy, L"선택한 모델을 지금은 사용할 수 없습니다. 대신 더 빠른 모델이 답변하고 있습니다."},
+    {Str::ErrRateLimit, L"일시적으로 {0} 요청 한도에 도달했습니다. 잠시 후 다시 시도하세요."},
+    {Str::ErrServer, L"{0}에 현재 문제가 있습니다({1}). 잠시 후 다시 시도하세요."},
+    {Str::ErrGeneric, L"{0}에서 오류를 반환했습니다({1})."},
+    {Str::ErrNoConnection, L"{0}의 답변을 받을 수 없습니다. 인터넷 연결을 확인하세요(오류 {1}). 다시 질문해 보세요."},
+    {Str::ErrInterrupted, L"{0}와의 연결이 끊어졌습니다. 이 답변은 불완전합니다(오류 {1}). 다시 질문해 보세요."},
+    {Str::ErrInterruptedBy, L"{0}가 이 답변을 중단했습니다: {1}"},
+    {Str::ErrUnreadable, L"{0}가 읽을 수 없는 응답을 반환했습니다. 다시 질문해 보세요."},
+    {Str::ErrOutputLimit, L"{0}가 출력 한도에 도달했습니다. 이 답변은 불완전합니다. 더 짧은 답변을 요청해 보세요."},
+    {Str::ErrStoppedBecause, L"{0}가 이 답변을 중지했습니다({1}). 다른 방식으로 질문해 보세요."},
+    {Str::ErrUnconfirmed, L"{0}가 답변이 완료되었음을 확인하기 전에 중지했습니다. 다시 질문해 보세요."},
+    {Str::ErrNoAnswer, L"{0}가 답변을 반환하지 않았습니다. 다른 방식으로 질문해 보세요."},
+    {Str::ErrCouldntReach, L"{0}에 연결할 수 없습니다. 인터넷 연결을 확인하세요(오류 {1})."},
+    {Str::ErrStreaming, L"{0}가 스트리밍 오류를 반환했습니다."},
+    {Str::LensSearching, L"Google 렌즈로 검색하는 중…"},
+    {Str::LensUploadFailed, L"자동으로 업로드할 수 없습니다. 이미지가 클립보드에 있습니다. lens.google.com에 붙여넣으세요."},
+};
+
+const TextEntry kTexts_nb[] = {
+    {Str::HintText, L"Velg noe for å spørre {0}"},
+    {Str::HintTextTyping, L"Velg noe eller begynn å skrive for å spørre {0}"},
+    {Str::Close, L"Lukk"},
+    {Str::AskInGemini, L"Spør Gemini"},
+    {Str::SearchWithLens, L"Søk med Google Lens"},
+    {Str::TranslateTo, L"Oversett til: {0}"},
+    {Str::CopyImage, L"Kopier bilde"},
+    {Str::CopyText, L"Kopier tekst"},
+    {Str::AddSelection, L"Legg til et nytt utvalg"},
+    {Str::WhatIsThis, L"Hva er dette?"},
+    {Str::ExplainThis, L"Forklar dette"},
+    {Str::SummarizeThis, L"Oppsummer dette"},
+    {Str::AskPlaceholder, L"Spør om utvalget ditt…"},
+    {Str::AskAnythingPlaceholder, L"Spør om hva som helst…"},
+    {Str::FollowUpPlaceholder, L"Still et oppfølgingsspørsmål…"},
+    {Str::Thinking, L"Tenker…"},
+    {Str::Copy, L"Kopier"},
+    {Str::SelectAll, L"Merk alt"},
+    {Str::NoApiKeyHint, L"Legg til en API-nøkkel for Gemini, ChatGPT eller Claude i innstillingene for modden for å få svar rett her."},
+    {Str::ImageCopied, L"Bildet er kopiert"},
+    {Str::ImageCopyFailed, L"Kunne ikke kopiere bildet"},
+    {Str::ImageCopyRetry, L"Kunne ikke kopiere bildet. Prøv igjen."},
+    {Str::ReadingText, L"Leser fortsatt teksten…"},
+    {Str::NoTextFound, L"Fant ingen tekst i utvalget"},
+    {Str::TextCopied, L"Teksten er kopiert"},
+    {Str::TextCopyFailed, L"Kunne ikke kopiere teksten"},
+    {Str::AnswerCopied, L"Svaret er kopiert"},
+    {Str::AnswerCopyFailed, L"Kunne ikke kopiere svaret"},
+    {Str::OpeningLens, L"Åpner Google Lens i nettleseren din…"},
+    {Str::OpeningGeminiOne, L"Åpner Gemini og legger ved bildet ditt…"},
+    {Str::OpeningGeminiMany, L"Åpner Gemini og legger ved bildene dine…"},
+    {Str::OpeningGeminiText, L"Åpner Gemini og legger til spørsmålet ditt…"},
+    {Str::ClickBoxToAttach, L"Klikk i tekstfeltet i Gemini og trykk Ctrl+V for å legge ved bildet."},
+    {Str::Stopped, L"Stoppet."},
+    {Str::StoppedEarly, L"Stoppet før svaret var ferdig."},
+    {Str::RequestFailed, L"Kunne ikke starte forespørselen."},
+    {Str::DraftAddedOne, L"Bildet ble lagt til. Skriv spørsmålet ditt i Gemini."},
+    {Str::DraftAddedMany, L"Bildene ble lagt til. Skriv spørsmålet ditt i Gemini."},
+    {Str::QuestionInGemini, L"Spørsmålet ditt er skrevet inn i Gemini."},
+    {Str::DraftPartial, L"Bekreftede bilder: {0} av {1}. Sjekk Gemini og legg til resten med Ctrl+V i tekstfeltet."},
+    {Str::ClipboardChangedOne, L"Utklippstavlen ble endret før bildet kunne limes inn: bruk Kopier bilde og trykk deretter Ctrl+V i Gemini."},
+    {Str::ClipboardChangedMany, L"Utklippstavlen ble endret før bildene kunne limes inn. Spør Gemini på nytt for å prøve igjen."},
+    {Str::IfNotAttachedOne, L"Hvis bildet ikke er lagt ved, klikker du i tekstfeltet i Gemini og trykker Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Hvis bildene ikke er lagt ved, klikker du i tekstfeltet i Gemini og trykker Ctrl+V."},
+    {Str::ClickBoxOne, L"Klikk i tekstfeltet i Gemini og trykk Ctrl+V for å legge ved bildet. Spørsmålet ditt beholdes her."},
+    {Str::ClickBoxMany, L"Klikk i tekstfeltet i Gemini og trykk Ctrl+V for å legge ved bildene. Spørsmålet ditt beholdes her."},
+    {Str::ClickBoxText, L"Klikk i tekstfeltet i Gemini og skriv spørsmålet ditt. Spørsmålet ditt beholdes her."},
+    {Str::BrowserFailedOne, L"Kunne ikke åpne nettleseren. Bildet er kopiert; lim det inn i Gemini med Ctrl+V."},
+    {Str::BrowserFailedMany, L"Kunne ikke åpne nettleseren. Bildene er kopiert; lim dem inn i Gemini med Ctrl+V."},
+    {Str::BrowserFailedText, L"Kunne ikke åpne nettleseren."},
+    {Str::PageUnreadable, L"Magic Pointer kunne ikke lese siden i nettleseren din. Hvis et varsel er åpent over den, lukker du det og klikker på Spør Gemini igjen."},
+    {Str::ErrKeyInvalid, L"{0} API-nøkkelen din er ugyldig. Sjekk den i innstillingene for modden."},
+    {Str::ErrKeyForbidden, L"Denne API-nøkkelen kan ikke bruke {0} (403). Sjekk nøkkelen i innstillingene for modden."},
+    {Str::ErrModelMissing, L"Modellen «{0}» er ikke tilgjengelig for nøkkelen din. Velg en annen modell i innstillingene for modden."},
+    {Str::ErrNoFreeQuota, L"Gemini-abonnementet ditt har ingen gratis kvote for «{0}». Velg modellen «Rask» i innstillingene for modden, eller legg til fakturering for nøkkelen din."},
+    {Str::ErrNoCredit, L"{0}-kontoen din er tom for kreditt. Legg til kreditt eller en betalingsmetode, og prøv igjen."},
+    {Str::ErrTimeout, L"{0} svarte ikke i tide. Prøv igjen om litt."},
+    {Str::ModelBusy, L"Modellen du valgte er ikke tilgjengelig akkurat nå. En raskere modell svarer i stedet."},
+    {Str::ErrRateLimit, L"Du har nådd grensen for forespørsler hos {0} for nå. Prøv igjen om litt."},
+    {Str::ErrServer, L"{0} har problemer akkurat nå ({1}). Prøv igjen om litt."},
+    {Str::ErrGeneric, L"{0} returnerte en feil ({1})."},
+    {Str::ErrNoConnection, L"Kunne ikke motta svaret fra {0}. Sjekk internettforbindelsen din (feil {1}) og prøv å spørre på nytt."},
+    {Str::ErrInterrupted, L"Forbindelsen til {0} ble brutt, og svaret er ufullstendig (feil {1}). Prøv å spørre på nytt."},
+    {Str::ErrInterruptedBy, L"{0} avbrøt dette svaret: {1}"},
+    {Str::ErrUnreadable, L"{0} returnerte et uleselig svar. Prøv å spørre på nytt."},
+    {Str::ErrOutputLimit, L"{0} nådde grensen for utdata. Svaret er ufullstendig. Prøv å be om et kortere svar."},
+    {Str::ErrStoppedBecause, L"{0} stoppet dette svaret ({1}). Prøv å spørre på en annen måte."},
+    {Str::ErrUnconfirmed, L"{0} stoppet før det ble bekreftet at svaret var komplett. Prøv å spørre på nytt."},
+    {Str::ErrNoAnswer, L"{0} returnerte ikke noe svar. Prøv å spørre på en annen måte."},
+    {Str::ErrCouldntReach, L"Kunne ikke nå {0}. Sjekk internettforbindelsen din (feil {1})."},
+    {Str::ErrStreaming, L"{0} returnerte en strømmefeil."},
+    {Str::LensSearching, L"Søker med Google Lens…"},
+    {Str::LensUploadFailed, L"Kunne ikke laste opp automatisk. Bildet ligger på utklippstavlen: lim det inn på lens.google.com."},
+};
+
+const TextEntry kTexts_fa[] = {
+    {Str::HintText, L"هر چیزی را انتخاب کنید تا از {0} بپرسید"},
+    {Str::HintTextTyping, L"هر چیزی را انتخاب کنید یا شروع به تایپ کنید تا از {0} بپرسید"},
+    {Str::Close, L"بستن"},
+    {Str::AskInGemini, L"پرسیدن از Gemini"},
+    {Str::SearchWithLens, L"جستجو با Google Lens"},
+    {Str::TranslateTo, L"ترجمه به: {0}"},
+    {Str::CopyImage, L"کپی تصویر"},
+    {Str::CopyText, L"کپی متن"},
+    {Str::AddSelection, L"افزودن انتخاب دیگر"},
+    {Str::WhatIsThis, L"این چیست؟"},
+    {Str::ExplainThis, L"این را برایم توضیح بده"},
+    {Str::SummarizeThis, L"این را برایم خلاصه کن"},
+    {Str::AskPlaceholder, L"درباره انتخاب خود بپرسید…"},
+    {Str::AskAnythingPlaceholder, L"هر چیزی بپرسید…"},
+    {Str::FollowUpPlaceholder, L"یک سؤال پیگیری بپرسید…"},
+    {Str::Thinking, L"در حال فکر کردن…"},
+    {Str::Copy, L"کپی"},
+    {Str::SelectAll, L"انتخاب همه"},
+    {Str::NoApiKeyHint, L"کلید API مربوط به Gemini، ChatGPT یا Claude را در تنظیمات مود اضافه کنید تا پاسخ\u200cها را همین\u200cجا دریافت کنید."},
+    {Str::ImageCopied, L"تصویر کپی شد"},
+    {Str::ImageCopyFailed, L"تصویر کپی نشد"},
+    {Str::ImageCopyRetry, L"تصویر کپی نشد. دوباره تلاش کنید."},
+    {Str::ReadingText, L"متن هنوز در حال خواندن است…"},
+    {Str::NoTextFound, L"متنی در انتخاب پیدا نشد"},
+    {Str::TextCopied, L"متن کپی شد"},
+    {Str::TextCopyFailed, L"متن کپی نشد"},
+    {Str::AnswerCopied, L"پاسخ کپی شد"},
+    {Str::AnswerCopyFailed, L"پاسخ کپی نشد"},
+    {Str::OpeningLens, L"در حال باز کردن Google Lens در مرورگر…"},
+    {Str::OpeningGeminiOne, L"در حال باز کردن Gemini و پیوست کردن تصویر شما…"},
+    {Str::OpeningGeminiMany, L"در حال باز کردن Gemini و پیوست کردن تصاویر شما…"},
+    {Str::OpeningGeminiText, L"در حال باز کردن Gemini و افزودن سؤال شما…"},
+    {Str::ClickBoxToAttach, L"روی کادر پیام Gemini کلیک کنید و سپس برای پیوست کردن تصویر Ctrl+V را فشار دهید."},
+    {Str::Stopped, L"متوقف شد."},
+    {Str::StoppedEarly, L"پیش از پایان پاسخ متوقف شد."},
+    {Str::RequestFailed, L"درخواست شروع نشد."},
+    {Str::DraftAddedOne, L"تصویر اضافه شد. سؤال خود را در Gemini بنویسید."},
+    {Str::DraftAddedMany, L"تصاویر اضافه شدند. سؤال خود را در Gemini بنویسید."},
+    {Str::QuestionInGemini, L"سؤال شما در Gemini است."},
+    {Str::DraftPartial, L"تصاویر تأیید شده: {0} از {1}. Gemini را بررسی کنید و بقیه را با Ctrl+V در کادر پیام آن اضافه کنید."},
+    {Str::ClipboardChangedOne, L"پیش از چسباندن تصویر، کلیپ\u200cبورد تغییر کرد: از «کپی تصویر» استفاده کنید و سپس در Gemini کلیدهای Ctrl+V را فشار دهید."},
+    {Str::ClipboardChangedMany, L"پیش از چسباندن تصاویر، کلیپ\u200cبورد تغییر کرد. برای تلاش دوباره، در Gemini دوباره بپرسید."},
+    {Str::IfNotAttachedOne, L"اگر تصویر پیوست نشده است، روی کادر پیام Gemini کلیک کنید و Ctrl+V را فشار دهید."},
+    {Str::IfNotAttachedMany, L"اگر تصاویر پیوست نشده\u200cاند، روی کادر پیام Gemini کلیک کنید و Ctrl+V را فشار دهید."},
+    {Str::ClickBoxOne, L"روی کادر پیام Gemini کلیک کنید و برای پیوست کردن تصویر Ctrl+V را فشار دهید. سؤال شما اینجا نگه داشته می\u200cشود."},
+    {Str::ClickBoxMany, L"روی کادر پیام Gemini کلیک کنید و برای پیوست کردن تصاویر Ctrl+V را فشار دهید. سؤال شما اینجا نگه داشته می\u200cشود."},
+    {Str::ClickBoxText, L"روی کادر پیام Gemini کلیک کنید و سؤال خود را تایپ کنید. سؤال شما اینجا نگه داشته می\u200cشود."},
+    {Str::BrowserFailedOne, L"مرورگر باز نشد. تصویر کپی شده است؛ آن را با Ctrl+V در Gemini بچسبانید."},
+    {Str::BrowserFailedMany, L"مرورگر باز نشد. تصاویر کپی شده\u200cاند؛ آن\u200cها را با Ctrl+V در Gemini بچسبانید."},
+    {Str::BrowserFailedText, L"مرورگر باز نشد."},
+    {Str::PageUnreadable, L"مود Magic Pointer نتوانست صفحه را در مرورگر شما بخواند. اگر اعلانی روی آن باز است، آن را ببندید و دوباره روی «پرسیدن از Gemini» کلیک کنید."},
+    {Str::ErrKeyInvalid, L"کلید API {0} شما معتبر نیست. آن را در تنظیمات مود بررسی کنید."},
+    {Str::ErrKeyForbidden, L"این کلید API نمی\u200cتواند از {0} استفاده کند (403). کلید را در تنظیمات مود بررسی کنید."},
+    {Str::ErrModelMissing, L"مدل «{0}» برای کلید شما در دسترس نیست. مدل دیگری را در تنظیمات مود انتخاب کنید."},
+    {Str::ErrNoFreeQuota, L"طرح Gemini شما سهمیه رایگان برای «{0}» ندارد. در تنظیمات مود مدل «سریع» را انتخاب کنید یا برای کلید خود صورت\u200cحساب اضافه کنید."},
+    {Str::ErrNoCredit, L"اعتبار حساب {0} شما تمام شده است. اعتبار یا روش پرداخت اضافه کنید و دوباره تلاش کنید."},
+    {Str::ErrTimeout, L"{0} به موقع پاسخ نداد. کمی بعد دوباره تلاش کنید."},
+    {Str::ModelBusy, L"مدلی که انتخاب کرده\u200cاید اکنون در دسترس نیست. به جای آن یک مدل سریع\u200cتر پاسخ می\u200cدهد."},
+    {Str::ErrRateLimit, L"فعلاً به محدودیت درخواست {0} رسیده\u200cاید. کمی بعد دوباره تلاش کنید."},
+    {Str::ErrServer, L"در حال حاضر {0} مشکل دارد ({1}). کمی بعد دوباره تلاش کنید."},
+    {Str::ErrGeneric, L"خطایی از {0} برگشت ({1})."},
+    {Str::ErrNoConnection, L"دریافت پاسخ {0} ممکن نشد. اتصال اینترنت خود را بررسی کنید (خطای {1}). دوباره بپرسید."},
+    {Str::ErrInterrupted, L"اتصال به {0} قطع شد. این پاسخ ناقص است (خطای {1}). دوباره بپرسید."},
+    {Str::ErrInterruptedBy, L"این پاسخ توسط {0} قطع شد: {1}"},
+    {Str::ErrUnreadable, L"پاسخی ناخوانا از {0} برگشت. دوباره بپرسید."},
+    {Str::ErrOutputLimit, L"حد خروجی {0} تمام شد. این پاسخ ناقص است. پاسخ کوتاه\u200cتری بخواهید."},
+    {Str::ErrStoppedBecause, L"این پاسخ توسط {0} متوقف شد ({1}). به روش دیگری بپرسید."},
+    {Str::ErrUnconfirmed, L"پیش از آنکه {0} کامل بودن پاسخ را تأیید کند، متوقف شد. دوباره بپرسید."},
+    {Str::ErrNoAnswer, L"پاسخی از {0} برنگشت. به روش دیگری بپرسید."},
+    {Str::ErrCouldntReach, L"اتصال به {0} ممکن نشد. اتصال اینترنت خود را بررسی کنید (خطای {1})."},
+    {Str::ErrStreaming, L"خطای پخش جریانی از {0} برگشت."},
+    {Str::LensSearching, L"در حال جستجو با Google Lens…"},
+    {Str::LensUploadFailed, L"بارگذاری خودکار انجام نشد. تصویر در کلیپ\u200cبورد است: آن را در lens.google.com بچسبانید."},
+};
+
+const TextEntry kTexts_pl[] = {
+    {Str::HintText, L"Zaznacz cokolwiek, aby zapytać {0}"},
+    {Str::HintTextTyping, L"Zaznacz cokolwiek lub zacznij pisać, aby zapytać {0}"},
+    {Str::Close, L"Zamknij"},
+    {Str::AskInGemini, L"Zapytaj Gemini"},
+    {Str::SearchWithLens, L"Szukaj w Google Lens"},
+    {Str::TranslateTo, L"Przetłumacz na: {0}"},
+    {Str::CopyImage, L"Kopiuj obraz"},
+    {Str::CopyText, L"Kopiuj tekst"},
+    {Str::AddSelection, L"Dodaj kolejne zaznaczenie"},
+    {Str::WhatIsThis, L"Co to jest?"},
+    {Str::ExplainThis, L"Wyjaśnij mi to"},
+    {Str::SummarizeThis, L"Streść mi to"},
+    {Str::AskPlaceholder, L"Zadaj pytanie o zaznaczenie…"},
+    {Str::AskAnythingPlaceholder, L"Zapytaj o cokolwiek…"},
+    {Str::FollowUpPlaceholder, L"Zadaj pytanie uzupełniające…"},
+    {Str::Thinking, L"Myślę…"},
+    {Str::Copy, L"Kopiuj"},
+    {Str::SelectAll, L"Zaznacz wszystko"},
+    {Str::NoApiKeyHint, L"Dodaj klucz API usługi Gemini, ChatGPT lub Claude w ustawieniach moda, aby otrzymywać odpowiedzi tutaj."},
+    {Str::ImageCopied, L"Skopiowano obraz"},
+    {Str::ImageCopyFailed, L"Nie udało się skopiować obrazu"},
+    {Str::ImageCopyRetry, L"Nie udało się skopiować obrazu. Spróbuj ponownie."},
+    {Str::ReadingText, L"Tekst jest nadal odczytywany…"},
+    {Str::NoTextFound, L"Nie znaleziono tekstu w zaznaczeniu"},
+    {Str::TextCopied, L"Skopiowano tekst"},
+    {Str::TextCopyFailed, L"Nie udało się skopiować tekstu"},
+    {Str::AnswerCopied, L"Skopiowano odpowiedź"},
+    {Str::AnswerCopyFailed, L"Nie udało się skopiować odpowiedzi"},
+    {Str::OpeningLens, L"Otwieranie Google Lens w przeglądarce…"},
+    {Str::OpeningGeminiOne, L"Otwieranie Gemini i dołączanie obrazu…"},
+    {Str::OpeningGeminiMany, L"Otwieranie Gemini i dołączanie obrazów…"},
+    {Str::OpeningGeminiText, L"Otwieranie Gemini i dodawanie pytania…"},
+    {Str::ClickBoxToAttach, L"Kliknij pole wiadomości w Gemini i naciśnij Ctrl+V, aby dołączyć obraz."},
+    {Str::Stopped, L"Zatrzymano."},
+    {Str::StoppedEarly, L"Zatrzymano przed zakończeniem odpowiedzi."},
+    {Str::RequestFailed, L"Nie udało się rozpocząć żądania."},
+    {Str::DraftAddedOne, L"Obraz został dodany. Wpisz pytanie w Gemini."},
+    {Str::DraftAddedMany, L"Obrazy zostały dodane. Wpisz pytanie w Gemini."},
+    {Str::QuestionInGemini, L"Twoje pytanie jest już w Gemini."},
+    {Str::DraftPartial, L"Potwierdzone obrazy: {0} z {1}. Sprawdź Gemini i dodaj pozostałe, naciskając Ctrl+V w jego polu wiadomości."},
+    {Str::ClipboardChangedOne, L"Schowek zmienił się, zanim obraz udało się wkleić: użyj opcji Kopiuj obraz, a następnie naciśnij Ctrl+V w Gemini."},
+    {Str::ClipboardChangedMany, L"Schowek zmienił się, zanim obrazy udało się wkleić. Zapytaj ponownie w Gemini, aby spróbować jeszcze raz."},
+    {Str::IfNotAttachedOne, L"Jeśli obraz nie został dołączony, kliknij pole wiadomości w Gemini i naciśnij Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Jeśli obrazy nie zostały dołączone, kliknij pole wiadomości w Gemini i naciśnij Ctrl+V."},
+    {Str::ClickBoxOne, L"Kliknij pole wiadomości w Gemini i naciśnij Ctrl+V, aby dołączyć obraz. Twoje pytanie pozostaje tutaj."},
+    {Str::ClickBoxMany, L"Kliknij pole wiadomości w Gemini i naciśnij Ctrl+V, aby dołączyć obrazy. Twoje pytanie pozostaje tutaj."},
+    {Str::ClickBoxText, L"Kliknij pole wiadomości w Gemini i wpisz swoje pytanie. Twoje pytanie pozostaje tutaj."},
+    {Str::BrowserFailedOne, L"Nie udało się otworzyć przeglądarki. Obraz jest skopiowany; wklej go do Gemini za pomocą Ctrl+V."},
+    {Str::BrowserFailedMany, L"Nie udało się otworzyć przeglądarki. Obrazy są skopiowane; wklej je do Gemini za pomocą Ctrl+V."},
+    {Str::BrowserFailedText, L"Nie udało się otworzyć przeglądarki."},
+    {Str::PageUnreadable, L"Magic Pointer nie mógł odczytać strony w przeglądarce. Jeśli nad nią jest otwarte powiadomienie, zamknij je i ponownie kliknij Zapytaj Gemini."},
+    {Str::ErrKeyInvalid, L"Twój klucz API usługi {0} jest nieprawidłowy. Sprawdź go w ustawieniach moda."},
+    {Str::ErrKeyForbidden, L"Ten klucz API nie może korzystać z usługi {0} (403). Sprawdź klucz w ustawieniach moda."},
+    {Str::ErrModelMissing, L"Model „{0}” jest niedostępny dla Twojego klucza. Wybierz inny model w ustawieniach moda."},
+    {Str::ErrNoFreeQuota, L"Twój plan Gemini nie ma bezpłatnego limitu dla modelu „{0}”. Wybierz model „Szybki” w ustawieniach moda albo dodaj płatności do swojego klucza."},
+    {Str::ErrNoCredit, L"Na koncie w usłudze {0} skończyły się środki. Doładuj konto lub dodaj metodę płatności, a potem spróbuj ponownie."},
+    {Str::ErrTimeout, L"Usługa {0} nie odpowiedziała na czas. Spróbuj ponownie za chwilę."},
+    {Str::ModelBusy, L"Wybrany model jest teraz niedostępny. Zamiast niego odpowiada szybszy."},
+    {Str::ErrRateLimit, L"Osiągnięto na razie limit żądań usługi {0}. Spróbuj ponownie za chwilę."},
+    {Str::ErrServer, L"Usługa {0} ma w tej chwili problemy ({1}). Spróbuj ponownie za chwilę."},
+    {Str::ErrGeneric, L"Usługa {0} zwróciła błąd ({1})."},
+    {Str::ErrNoConnection, L"Nie udało się odebrać odpowiedzi usługi {0}. Sprawdź połączenie z internetem (błąd {1}) i zadaj pytanie jeszcze raz."},
+    {Str::ErrInterrupted, L"Połączenie z usługą {0} zostało przerwane, a odpowiedź jest niepełna (błąd {1}). Zadaj pytanie jeszcze raz."},
+    {Str::ErrInterruptedBy, L"Usługa {0} przerwała tę odpowiedź: {1}"},
+    {Str::ErrUnreadable, L"Usługa {0} zwróciła nieczytelną odpowiedź. Zadaj pytanie jeszcze raz."},
+    {Str::ErrOutputLimit, L"Usługa {0} osiągnęła limit wyniku. Ta odpowiedź jest niepełna. Spróbuj poprosić o krótszą odpowiedź."},
+    {Str::ErrStoppedBecause, L"Usługa {0} zatrzymała tę odpowiedź ({1}). Spróbuj zapytać w inny sposób."},
+    {Str::ErrUnconfirmed, L"Usługa {0} zatrzymała się, zanim potwierdziła, że odpowiedź jest kompletna. Zadaj pytanie jeszcze raz."},
+    {Str::ErrNoAnswer, L"Usługa {0} nie zwróciła odpowiedzi. Spróbuj zapytać w inny sposób."},
+    {Str::ErrCouldntReach, L"Nie udało się połączyć z usługą {0}. Sprawdź połączenie z internetem (błąd {1})."},
+    {Str::ErrStreaming, L"Usługa {0} zwróciła błąd strumieniowania."},
+    {Str::LensSearching, L"Wyszukiwanie w Google Lens…"},
+    {Str::LensUploadFailed, L"Nie udało się przesłać automatycznie. Obraz jest w schowku: wklej go na lens.google.com."},
+};
+
+const TextEntry kTexts_pt_BR[] = {
+    {Str::HintText, L"Selecione qualquer coisa para perguntar ao {0}"},
+    {Str::HintTextTyping, L"Selecione qualquer coisa ou comece a digitar para perguntar ao {0}"},
+    {Str::Close, L"Fechar"},
+    {Str::AskInGemini, L"Perguntar ao Gemini"},
+    {Str::SearchWithLens, L"Pesquisar com o Google Lens"},
+    {Str::TranslateTo, L"Traduzir para: {0}"},
+    {Str::CopyImage, L"Copiar imagem"},
+    {Str::CopyText, L"Copiar texto"},
+    {Str::AddSelection, L"Adicionar outra seleção"},
+    {Str::WhatIsThis, L"O que é isto?"},
+    {Str::ExplainThis, L"Explique isto"},
+    {Str::SummarizeThis, L"Resuma isto"},
+    {Str::AskPlaceholder, L"Pergunte sobre sua seleção…"},
+    {Str::AskAnythingPlaceholder, L"Pergunte qualquer coisa…"},
+    {Str::FollowUpPlaceholder, L"Faça outra pergunta…"},
+    {Str::Thinking, L"Pensando…"},
+    {Str::Copy, L"Copiar"},
+    {Str::SelectAll, L"Selecionar tudo"},
+    {Str::NoApiKeyHint, L"Adicione uma chave de API do Gemini, do ChatGPT ou do Claude nas configurações do mod para receber respostas aqui mesmo."},
+    {Str::ImageCopied, L"Imagem copiada"},
+    {Str::ImageCopyFailed, L"Não foi possível copiar a imagem"},
+    {Str::ImageCopyRetry, L"Não foi possível copiar a imagem. Tente novamente."},
+    {Str::ReadingText, L"Ainda lendo o texto…"},
+    {Str::NoTextFound, L"Nenhum texto encontrado na seleção"},
+    {Str::TextCopied, L"Texto copiado"},
+    {Str::TextCopyFailed, L"Não foi possível copiar o texto"},
+    {Str::AnswerCopied, L"Resposta copiada"},
+    {Str::AnswerCopyFailed, L"Não foi possível copiar a resposta"},
+    {Str::OpeningLens, L"Abrindo o Google Lens no seu navegador…"},
+    {Str::OpeningGeminiOne, L"Abrindo o Gemini e anexando sua imagem…"},
+    {Str::OpeningGeminiMany, L"Abrindo o Gemini e anexando suas imagens…"},
+    {Str::OpeningGeminiText, L"Abrindo o Gemini e adicionando sua pergunta…"},
+    {Str::ClickBoxToAttach, L"Clique na caixa de mensagem do Gemini e pressione Ctrl+V para anexar a imagem."},
+    {Str::Stopped, L"Interrompido."},
+    {Str::StoppedEarly, L"Interrompido antes de a resposta terminar."},
+    {Str::RequestFailed, L"Não foi possível iniciar a solicitação."},
+    {Str::DraftAddedOne, L"A imagem foi adicionada. Digite sua pergunta no Gemini."},
+    {Str::DraftAddedMany, L"As imagens foram adicionadas. Digite sua pergunta no Gemini."},
+    {Str::QuestionInGemini, L"Sua pergunta já está no Gemini."},
+    {Str::DraftPartial, L"Imagens confirmadas: {0} de {1}. Confira o Gemini e adicione as demais com Ctrl+V na caixa de mensagem dele."},
+    {Str::ClipboardChangedOne, L"A área de transferência mudou antes de a imagem poder ser colada: use Copiar imagem e depois pressione Ctrl+V no Gemini."},
+    {Str::ClipboardChangedMany, L"A área de transferência mudou antes de as imagens poderem ser coladas. Pergunte novamente no Gemini para tentar de novo."},
+    {Str::IfNotAttachedOne, L"Se a imagem não estiver anexada, clique na caixa de mensagem do Gemini e pressione Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Se as imagens não estiverem anexadas, clique na caixa de mensagem do Gemini e pressione Ctrl+V."},
+    {Str::ClickBoxOne, L"Clique na caixa de mensagem do Gemini e pressione Ctrl+V para anexar a imagem. Sua pergunta é mantida aqui."},
+    {Str::ClickBoxMany, L"Clique na caixa de mensagem do Gemini e pressione Ctrl+V para anexar as imagens. Sua pergunta é mantida aqui."},
+    {Str::ClickBoxText, L"Clique na caixa de mensagem do Gemini e digite sua pergunta. Sua pergunta é mantida aqui."},
+    {Str::BrowserFailedOne, L"Não foi possível abrir o navegador. A imagem foi copiada; cole-a no Gemini com Ctrl+V."},
+    {Str::BrowserFailedMany, L"Não foi possível abrir o navegador. As imagens foram copiadas; cole-as no Gemini com Ctrl+V."},
+    {Str::BrowserFailedText, L"Não foi possível abrir o navegador."},
+    {Str::PageUnreadable, L"O Magic Pointer não conseguiu ler a página no seu navegador. Se houver um aviso aberto sobre ela, feche-o e clique em Perguntar ao Gemini novamente."},
+    {Str::ErrKeyInvalid, L"Sua chave de API do {0} não é válida. Verifique-a nas configurações do mod."},
+    {Str::ErrKeyForbidden, L"Esta chave de API não pode usar o {0} (403). Verifique a chave nas configurações do mod."},
+    {Str::ErrModelMissing, L"O modelo \"{0}\" não está disponível para sua chave. Escolha outro modelo nas configurações do mod."},
+    {Str::ErrNoFreeQuota, L"Seu plano do Gemini não tem cota gratuita para \"{0}\". Escolha o modelo Rápido nas configurações do mod ou adicione faturamento à sua chave."},
+    {Str::ErrNoCredit, L"O crédito da sua conta do {0} acabou. Adicione crédito ou uma forma de pagamento e tente novamente."},
+    {Str::ErrTimeout, L"O {0} não respondeu a tempo. Tente novamente daqui a pouco."},
+    {Str::ModelBusy, L"O modelo escolhido não está disponível no momento. Um modelo mais rápido está respondendo no lugar dele."},
+    {Str::ErrRateLimit, L"Você atingiu o limite de solicitações do {0} por enquanto. Tente novamente daqui a pouco."},
+    {Str::ErrServer, L"O {0} está com problemas no momento ({1}). Tente novamente daqui a pouco."},
+    {Str::ErrGeneric, L"O {0} retornou um erro ({1})."},
+    {Str::ErrNoConnection, L"Não foi possível receber a resposta do {0}. Verifique sua conexão com a Internet (erro {1}) e tente novamente."},
+    {Str::ErrInterrupted, L"A conexão com o {0} foi interrompida e a resposta ficou incompleta (erro {1}). Tente novamente."},
+    {Str::ErrInterruptedBy, L"O {0} interrompeu esta resposta: {1}"},
+    {Str::ErrUnreadable, L"O {0} retornou uma resposta ilegível. Tente novamente."},
+    {Str::ErrOutputLimit, L"O {0} atingiu o limite de tamanho e a resposta ficou incompleta. Tente pedir uma resposta mais curta."},
+    {Str::ErrStoppedBecause, L"O {0} interrompeu a resposta ({1}). Tente reformular a pergunta."},
+    {Str::ErrUnconfirmed, L"O {0} parou antes de confirmar que a resposta estava completa. Tente novamente."},
+    {Str::ErrNoAnswer, L"O {0} não retornou nenhuma resposta. Tente reformular a pergunta."},
+    {Str::ErrCouldntReach, L"Não foi possível acessar o {0}. Verifique sua conexão com a Internet (erro {1})."},
+    {Str::ErrStreaming, L"O {0} retornou um erro de streaming."},
+    {Str::LensSearching, L"Pesquisando com o Google Lens…"},
+    {Str::LensUploadFailed, L"Não foi possível enviar automaticamente. A imagem está na área de transferência: cole-a em lens.google.com."},
+};
+
+const TextEntry kTexts_ro[] = {
+    {Str::HintText, L"Selectează orice ca să întrebi {0}"},
+    {Str::HintTextTyping, L"Selectează orice sau începe să scrii ca să întrebi {0}"},
+    {Str::Close, L"Închide"},
+    {Str::AskInGemini, L"Întreabă Gemini"},
+    {Str::SearchWithLens, L"Caută cu Google Lens"},
+    {Str::TranslateTo, L"Tradu în: {0}"},
+    {Str::CopyImage, L"Copiază imaginea"},
+    {Str::CopyText, L"Copiază textul"},
+    {Str::AddSelection, L"Adaugă o altă selecție"},
+    {Str::WhatIsThis, L"Ce este asta?"},
+    {Str::ExplainThis, L"Explică-mi asta"},
+    {Str::SummarizeThis, L"Rezumă-mi asta"},
+    {Str::AskPlaceholder, L"Întreabă despre selecția ta…"},
+    {Str::AskAnythingPlaceholder, L"Întreabă orice…"},
+    {Str::FollowUpPlaceholder, L"Pune o întrebare suplimentară…"},
+    {Str::Thinking, L"Mă gândesc…"},
+    {Str::Copy, L"Copiază"},
+    {Str::SelectAll, L"Selectează tot"},
+    {Str::NoApiKeyHint, L"Adaugă o cheie API pentru Gemini, ChatGPT sau Claude în setările modului pentru a primi răspunsuri chiar aici."},
+    {Str::ImageCopied, L"Imagine copiată"},
+    {Str::ImageCopyFailed, L"Imaginea nu a putut fi copiată"},
+    {Str::ImageCopyRetry, L"Imaginea nu a putut fi copiată. Încearcă din nou."},
+    {Str::ReadingText, L"Textul este încă în curs de citire…"},
+    {Str::NoTextFound, L"Nu s-a găsit text în selecție"},
+    {Str::TextCopied, L"Text copiat"},
+    {Str::TextCopyFailed, L"Textul nu a putut fi copiat"},
+    {Str::AnswerCopied, L"Răspuns copiat"},
+    {Str::AnswerCopyFailed, L"Răspunsul nu a putut fi copiat"},
+    {Str::OpeningLens, L"Se deschide Google Lens în browser…"},
+    {Str::OpeningGeminiOne, L"Se deschide Gemini și se atașează imaginea ta…"},
+    {Str::OpeningGeminiMany, L"Se deschide Gemini și se atașează imaginile tale…"},
+    {Str::OpeningGeminiText, L"Se deschide Gemini și se adaugă întrebarea ta…"},
+    {Str::ClickBoxToAttach, L"Dă clic în caseta de mesaj din Gemini, apoi apasă Ctrl+V pentru a atașa imaginea."},
+    {Str::Stopped, L"Oprit."},
+    {Str::StoppedEarly, L"Oprit înainte ca răspunsul să se termine."},
+    {Str::RequestFailed, L"Cererea nu a putut fi pornită."},
+    {Str::DraftAddedOne, L"Imaginea a fost adăugată. Scrie-ți întrebarea în Gemini."},
+    {Str::DraftAddedMany, L"Imaginile au fost adăugate. Scrie-ți întrebarea în Gemini."},
+    {Str::QuestionInGemini, L"Întrebarea ta este deja în Gemini."},
+    {Str::DraftPartial, L"Imagini confirmate: {0} din {1}. Verifică Gemini și adaugă-le pe celelalte cu Ctrl+V în caseta de mesaj."},
+    {Str::ClipboardChangedOne, L"Clipboardul s-a schimbat înainte ca imaginea să poată fi lipită: folosește Copiază imaginea, apoi apasă Ctrl+V în Gemini."},
+    {Str::ClipboardChangedMany, L"Clipboardul s-a schimbat înainte ca imaginile să poată fi lipite. Întreabă din nou în Gemini pentru a încerca iar."},
+    {Str::IfNotAttachedOne, L"Dacă imaginea nu este atașată, dă clic în caseta de mesaj din Gemini și apasă Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Dacă imaginile nu sunt atașate, dă clic în caseta de mesaj din Gemini și apasă Ctrl+V."},
+    {Str::ClickBoxOne, L"Dă clic în caseta de mesaj din Gemini și apasă Ctrl+V pentru a atașa imaginea. Întrebarea ta rămâne aici."},
+    {Str::ClickBoxMany, L"Dă clic în caseta de mesaj din Gemini și apasă Ctrl+V pentru a atașa imaginile. Întrebarea ta rămâne aici."},
+    {Str::ClickBoxText, L"Dă clic în caseta de mesaj din Gemini și scrie întrebarea ta. Întrebarea ta rămâne aici."},
+    {Str::BrowserFailedOne, L"Browserul nu a putut fi deschis. Imaginea este copiată; lipește-o în Gemini cu Ctrl+V."},
+    {Str::BrowserFailedMany, L"Browserul nu a putut fi deschis. Imaginile sunt copiate; lipește-le în Gemini cu Ctrl+V."},
+    {Str::BrowserFailedText, L"Browserul nu a putut fi deschis."},
+    {Str::PageUnreadable, L"Magic Pointer nu a putut citi pagina din browser. Dacă deasupra ei este deschisă o notificare, închide-o și dă clic din nou pe Întreabă Gemini."},
+    {Str::ErrKeyInvalid, L"Cheia ta API {0} nu este validă. Verifică-o în setările modului."},
+    {Str::ErrKeyForbidden, L"Această cheie API nu poate folosi {0} (403). Verifică cheia în setările modului."},
+    {Str::ErrModelMissing, L"Modelul „{0}” nu este disponibil pentru cheia ta. Alege alt model în setările modului."},
+    {Str::ErrNoFreeQuota, L"Planul tău Gemini nu are cotă gratuită pentru „{0}”. Alege modelul „Rapid” în setările modului sau adaugă facturare la cheia ta."},
+    {Str::ErrNoCredit, L"Creditul contului tău {0} s-a epuizat. Adaugă credit sau o metodă de plată și încearcă din nou."},
+    {Str::ErrTimeout, L"{0} nu a răspuns la timp. Încearcă din nou peste puțin timp."},
+    {Str::ModelBusy, L"Modelul ales nu este disponibil acum. Răspunde în locul lui unul mai rapid."},
+    {Str::ErrRateLimit, L"Ai atins deocamdată limita de solicitări {0}. Încearcă din nou peste puțin timp."},
+    {Str::ErrServer, L"{0} are probleme în acest moment ({1}). Încearcă din nou peste puțin timp."},
+    {Str::ErrGeneric, L"{0} a returnat o eroare ({1})."},
+    {Str::ErrNoConnection, L"Răspunsul {0} nu a putut fi primit. Verifică conexiunea la internet (eroare {1}). Încearcă să întrebi din nou."},
+    {Str::ErrInterrupted, L"Conexiunea la {0} a fost întreruptă. Acest răspuns este incomplet (eroare {1}). Încearcă să întrebi din nou."},
+    {Str::ErrInterruptedBy, L"{0} a întrerupt acest răspuns: {1}"},
+    {Str::ErrUnreadable, L"{0} a returnat un răspuns ilizibil. Încearcă să întrebi din nou."},
+    {Str::ErrOutputLimit, L"{0} a atins limita de ieșire. Acest răspuns este incomplet. Încearcă să ceri un răspuns mai scurt."},
+    {Str::ErrStoppedBecause, L"{0} a oprit acest răspuns ({1}). Încearcă să întrebi altfel."},
+    {Str::ErrUnconfirmed, L"{0} s-a oprit înainte de a confirma că răspunsul era complet. Încearcă să întrebi din nou."},
+    {Str::ErrNoAnswer, L"{0} nu a returnat niciun răspuns. Încearcă să întrebi altfel."},
+    {Str::ErrCouldntReach, L"{0} nu a putut fi contactat. Verifică conexiunea la internet (eroare {1})."},
+    {Str::ErrStreaming, L"{0} a returnat o eroare de streaming."},
+    {Str::LensSearching, L"Se caută cu Google Lens…"},
+    {Str::LensUploadFailed, L"Încărcarea automată a eșuat. Imaginea este în clipboard: lipește-o pe lens.google.com."},
+};
+
+const TextEntry kTexts_ru[] = {
+    {Str::HintText, L"Выберите что угодно, чтобы спросить {0}"},
+    {Str::HintTextTyping, L"Выберите что угодно или начните вводить текст, чтобы спросить {0}"},
+    {Str::Close, L"Закрыть"},
+    {Str::AskInGemini, L"Спросить Gemini"},
+    {Str::SearchWithLens, L"Искать с помощью Google Lens"},
+    {Str::TranslateTo, L"Перевести на: {0}"},
+    {Str::CopyImage, L"Копировать изображение"},
+    {Str::CopyText, L"Копировать текст"},
+    {Str::AddSelection, L"Добавить ещё одно выделение"},
+    {Str::WhatIsThis, L"Что это?"},
+    {Str::ExplainThis, L"Объясни"},
+    {Str::SummarizeThis, L"Кратко перескажи"},
+    {Str::AskPlaceholder, L"Задайте вопрос о выделенном…"},
+    {Str::AskAnythingPlaceholder, L"Спросите что угодно…"},
+    {Str::FollowUpPlaceholder, L"Задайте уточняющий вопрос…"},
+    {Str::Thinking, L"Думаю…"},
+    {Str::Copy, L"Копировать"},
+    {Str::SelectAll, L"Выбрать всё"},
+    {Str::NoApiKeyHint, L"Добавьте ключ API Gemini, ChatGPT или Claude в настройках модификации, чтобы получать ответы прямо здесь."},
+    {Str::ImageCopied, L"Изображение скопировано"},
+    {Str::ImageCopyFailed, L"Не удалось скопировать изображение"},
+    {Str::ImageCopyRetry, L"Не удалось скопировать изображение. Повторите попытку."},
+    {Str::ReadingText, L"Текст ещё распознаётся…"},
+    {Str::NoTextFound, L"В выделенном фрагменте текст не найден"},
+    {Str::TextCopied, L"Текст скопирован"},
+    {Str::TextCopyFailed, L"Не удалось скопировать текст"},
+    {Str::AnswerCopied, L"Ответ скопирован"},
+    {Str::AnswerCopyFailed, L"Не удалось скопировать ответ"},
+    {Str::OpeningLens, L"Открываем Google Lens в браузере…"},
+    {Str::OpeningGeminiOne, L"Открываем Gemini и прикрепляем изображение…"},
+    {Str::OpeningGeminiMany, L"Открываем Gemini и прикрепляем изображения…"},
+    {Str::OpeningGeminiText, L"Открываем Gemini и добавляем ваш вопрос…"},
+    {Str::ClickBoxToAttach, L"Щёлкните поле сообщения в Gemini и нажмите Ctrl+V, чтобы прикрепить изображение."},
+    {Str::Stopped, L"Остановлено."},
+    {Str::StoppedEarly, L"Остановлено до завершения ответа."},
+    {Str::RequestFailed, L"Не удалось выполнить запрос."},
+    {Str::DraftAddedOne, L"Изображение добавлено. Введите вопрос в Gemini."},
+    {Str::DraftAddedMany, L"Изображения добавлены. Введите вопрос в Gemini."},
+    {Str::QuestionInGemini, L"Ваш вопрос уже введён в Gemini."},
+    {Str::DraftPartial, L"Подтверждено изображений: {0} из {1}. Проверьте Gemini и добавьте остальные с помощью Ctrl+V в его поле сообщения."},
+    {Str::ClipboardChangedOne, L"Буфер обмена изменился, прежде чем изображение удалось вставить: используйте «Копировать изображение», а затем нажмите Ctrl+V в Gemini."},
+    {Str::ClipboardChangedMany, L"Буфер обмена изменился, прежде чем изображения удалось вставить. Спросите в Gemini ещё раз, чтобы повторить попытку."},
+    {Str::IfNotAttachedOne, L"Если изображение не прикреплено, щёлкните поле сообщения в Gemini и нажмите Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Если изображения не прикреплены, щёлкните поле сообщения в Gemini и нажмите Ctrl+V."},
+    {Str::ClickBoxOne, L"Щёлкните поле сообщения в Gemini и нажмите Ctrl+V, чтобы прикрепить изображение. Ваш вопрос сохранён здесь."},
+    {Str::ClickBoxMany, L"Щёлкните поле сообщения в Gemini и нажмите Ctrl+V, чтобы прикрепить изображения. Ваш вопрос сохранён здесь."},
+    {Str::ClickBoxText, L"Щёлкните поле сообщения в Gemini и введите свой вопрос. Ваш вопрос сохранён здесь."},
+    {Str::BrowserFailedOne, L"Не удалось открыть браузер. Изображение скопировано — вставьте его в Gemini с помощью Ctrl+V."},
+    {Str::BrowserFailedMany, L"Не удалось открыть браузер. Изображения скопированы — вставьте их в Gemini с помощью Ctrl+V."},
+    {Str::BrowserFailedText, L"Не удалось открыть браузер."},
+    {Str::PageUnreadable, L"Magic Pointer не удалось прочитать страницу в вашем браузере. Если поверх неё открыто уведомление, закройте его и снова нажмите «Спросить Gemini»."},
+    {Str::ErrKeyInvalid, L"Ваш ключ API {0} недействителен. Проверьте его в настройках модификации."},
+    {Str::ErrKeyForbidden, L"Этот ключ API не может использовать {0} (403). Проверьте ключ в настройках модификации."},
+    {Str::ErrModelMissing, L"Модель «{0}» недоступна для вашего ключа. Выберите другую модель в настройках модификации."},
+    {Str::ErrNoFreeQuota, L"В вашем тарифе Gemini нет бесплатной квоты для «{0}». Выберите модель «Быстрая» в настройках модификации либо подключите оплату для своего ключа."},
+    {Str::ErrNoCredit, L"На вашем аккаунте {0} закончились средства. Пополните баланс или добавьте способ оплаты и повторите попытку."},
+    {Str::ErrTimeout, L"{0} не ответил вовремя. Повторите попытку чуть позже."},
+    {Str::ModelBusy, L"Выбранная модель сейчас недоступна. Вместо неё отвечает более быстрая."},
+    {Str::ErrRateLimit, L"Вы временно достигли лимита запросов {0}. Повторите попытку чуть позже."},
+    {Str::ErrServer, L"У {0} сейчас неполадки ({1}). Повторите попытку чуть позже."},
+    {Str::ErrGeneric, L"{0} вернул ошибку ({1})."},
+    {Str::ErrNoConnection, L"Не удалось получить ответ {0}. Проверьте подключение к интернету (ошибка {1}). Попробуйте спросить ещё раз."},
+    {Str::ErrInterrupted, L"Соединение с {0} прервано. Этот ответ неполный (ошибка {1}). Попробуйте спросить ещё раз."},
+    {Str::ErrInterruptedBy, L"{0} прервал этот ответ: {1}"},
+    {Str::ErrUnreadable, L"{0} вернул нечитаемый ответ. Попробуйте спросить ещё раз."},
+    {Str::ErrOutputLimit, L"{0} достиг лимита вывода. Этот ответ неполный. Попробуйте попросить более короткий ответ."},
+    {Str::ErrStoppedBecause, L"{0} остановил этот ответ ({1}). Попробуйте задать вопрос иначе."},
+    {Str::ErrUnconfirmed, L"{0} остановился, не подтвердив, что ответ завершён. Попробуйте спросить ещё раз."},
+    {Str::ErrNoAnswer, L"{0} не вернул ответ. Попробуйте задать вопрос иначе."},
+    {Str::ErrCouldntReach, L"Не удалось связаться с {0}. Проверьте подключение к интернету (ошибка {1})."},
+    {Str::ErrStreaming, L"{0} вернул ошибку потоковой передачи."},
+    {Str::LensSearching, L"Поиск с помощью Google Lens…"},
+    {Str::LensUploadFailed, L"Не удалось загрузить автоматически. Изображение находится в буфере обмена — вставьте его на lens.google.com."},
+};
+
+const TextEntry kTexts_es[] = {
+    {Str::HintText, L"Selecciona algo para preguntarle a {0}"},
+    {Str::HintTextTyping, L"Selecciona algo o empieza a escribir para preguntarle a {0}"},
+    {Str::Close, L"Cerrar"},
+    {Str::AskInGemini, L"Preguntar a Gemini"},
+    {Str::SearchWithLens, L"Buscar con Google Lens"},
+    {Str::TranslateTo, L"Traducir a: {0}"},
+    {Str::CopyImage, L"Copiar imagen"},
+    {Str::CopyText, L"Copiar texto"},
+    {Str::AddSelection, L"Agregar otra selección"},
+    {Str::WhatIsThis, L"¿Qué es esto?"},
+    {Str::ExplainThis, L"Explícamelo"},
+    {Str::SummarizeThis, L"Resúmelo"},
+    {Str::AskPlaceholder, L"Pregunta sobre tu selección…"},
+    {Str::AskAnythingPlaceholder, L"Pregunta lo que quieras…"},
+    {Str::FollowUpPlaceholder, L"Haz otra pregunta…"},
+    {Str::Thinking, L"Pensando…"},
+    {Str::Copy, L"Copiar"},
+    {Str::SelectAll, L"Seleccionar todo"},
+    {Str::NoApiKeyHint, L"Agrega una clave de API de Gemini, ChatGPT o Claude en la configuración del mod para recibir respuestas aquí mismo."},
+    {Str::ImageCopied, L"Imagen copiada"},
+    {Str::ImageCopyFailed, L"No se pudo copiar la imagen"},
+    {Str::ImageCopyRetry, L"No se pudo copiar la imagen. Inténtalo de nuevo."},
+    {Str::ReadingText, L"Leyendo el texto…"},
+    {Str::NoTextFound, L"No se encontró texto en la selección"},
+    {Str::TextCopied, L"Texto copiado"},
+    {Str::TextCopyFailed, L"No se pudo copiar el texto"},
+    {Str::AnswerCopied, L"Respuesta copiada"},
+    {Str::AnswerCopyFailed, L"No se pudo copiar la respuesta"},
+    {Str::OpeningLens, L"Abriendo Google Lens en tu navegador…"},
+    {Str::OpeningGeminiOne, L"Abriendo Gemini y adjuntando tu imagen…"},
+    {Str::OpeningGeminiMany, L"Abriendo Gemini y adjuntando tus imágenes…"},
+    {Str::OpeningGeminiText, L"Abriendo Gemini y agregando tu pregunta…"},
+    {Str::ClickBoxToAttach, L"Haz clic en el cuadro de mensaje de Gemini y presiona Ctrl+V para adjuntar la imagen."},
+    {Str::Stopped, L"Detenido."},
+    {Str::StoppedEarly, L"Se detuvo antes de que terminara la respuesta."},
+    {Str::RequestFailed, L"No se pudo iniciar la solicitud."},
+    {Str::DraftAddedOne, L"Se agregó la imagen. Escribe tu pregunta en Gemini."},
+    {Str::DraftAddedMany, L"Se agregaron las imágenes. Escribe tu pregunta en Gemini."},
+    {Str::QuestionInGemini, L"Tu pregunta ya está en Gemini."},
+    {Str::DraftPartial, L"Imágenes confirmadas: {0} de {1}. Revisa Gemini y agrega el resto con Ctrl+V en su cuadro de mensaje."},
+    {Str::ClipboardChangedOne, L"El portapapeles cambió antes de poder pegar la imagen: usa Copiar imagen y luego presiona Ctrl+V en Gemini."},
+    {Str::ClipboardChangedMany, L"El portapapeles cambió antes de poder pegar las imágenes. Vuelve a preguntar en Gemini para reintentarlo."},
+    {Str::IfNotAttachedOne, L"Si la imagen no está adjunta, haz clic en el cuadro de mensaje de Gemini y presiona Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Si las imágenes no están adjuntas, haz clic en el cuadro de mensaje de Gemini y presiona Ctrl+V."},
+    {Str::ClickBoxOne, L"Haz clic en el cuadro de mensaje de Gemini y presiona Ctrl+V para adjuntar la imagen. Tu pregunta se conserva aquí."},
+    {Str::ClickBoxMany, L"Haz clic en el cuadro de mensaje de Gemini y presiona Ctrl+V para adjuntar las imágenes. Tu pregunta se conserva aquí."},
+    {Str::ClickBoxText, L"Haz clic en el cuadro de mensaje de Gemini y escribe tu pregunta. Tu pregunta se conserva aquí."},
+    {Str::BrowserFailedOne, L"No se pudo abrir el navegador. La imagen está copiada; pégala en Gemini con Ctrl+V."},
+    {Str::BrowserFailedMany, L"No se pudo abrir el navegador. Las imágenes están copiadas; pégalas en Gemini con Ctrl+V."},
+    {Str::BrowserFailedText, L"No se pudo abrir el navegador."},
+    {Str::PageUnreadable, L"Magic Pointer no pudo leer la página en tu navegador. Si hay un aviso abierto sobre ella, ciérralo y vuelve a hacer clic en Preguntar a Gemini."},
+    {Str::ErrKeyInvalid, L"Tu clave de API de {0} no es válida. Revísala en la configuración del mod."},
+    {Str::ErrKeyForbidden, L"Esta clave de API no puede usar {0} (403). Revisa la clave en la configuración del mod."},
+    {Str::ErrModelMissing, L"El modelo \"{0}\" no está disponible para tu clave. Elige otro modelo en la configuración del mod."},
+    {Str::ErrNoFreeQuota, L"Tu plan de Gemini no tiene cuota gratuita para \"{0}\". Elige el modelo Rápido en la configuración del mod, o agrega facturación a tu clave."},
+    {Str::ErrNoCredit, L"Tu cuenta de {0} se ha quedado sin crédito. Agrega crédito o un método de pago y vuelve a intentarlo."},
+    {Str::ErrTimeout, L"{0} no respondió a tiempo. Inténtalo de nuevo en un momento."},
+    {Str::ModelBusy, L"El modelo que elegiste no está disponible en este momento. Uno más rápido responde en su lugar."},
+    {Str::ErrRateLimit, L"Has alcanzado el límite de solicitudes de {0} por ahora. Inténtalo de nuevo en un momento."},
+    {Str::ErrServer, L"{0} tiene problemas en este momento ({1}). Inténtalo de nuevo en un momento."},
+    {Str::ErrGeneric, L"{0} devolvió un error ({1})."},
+    {Str::ErrNoConnection, L"No se pudo recibir la respuesta de {0}. Revisa tu conexión a Internet (error {1}) e inténtalo de nuevo."},
+    {Str::ErrInterrupted, L"Se perdió la conexión con {0} y la respuesta quedó incompleta (error {1}). Inténtalo de nuevo."},
+    {Str::ErrInterruptedBy, L"{0} interrumpió esta respuesta: {1}"},
+    {Str::ErrUnreadable, L"{0} devolvió una respuesta ilegible. Inténtalo de nuevo."},
+    {Str::ErrOutputLimit, L"{0} alcanzó su límite de longitud y la respuesta quedó incompleta. Prueba a pedir una más corta."},
+    {Str::ErrStoppedBecause, L"{0} detuvo la respuesta ({1}). Prueba a formular la pregunta de otra forma."},
+    {Str::ErrUnconfirmed, L"{0} se detuvo antes de confirmar que la respuesta estaba completa. Inténtalo de nuevo."},
+    {Str::ErrNoAnswer, L"{0} no devolvió ninguna respuesta. Prueba a formular la pregunta de otra forma."},
+    {Str::ErrCouldntReach, L"No se pudo conectar con {0}. Revisa tu conexión a Internet (error {1})."},
+    {Str::ErrStreaming, L"{0} devolvió un error de transmisión."},
+    {Str::LensSearching, L"Buscando con Google Lens…"},
+    {Str::LensUploadFailed, L"No se pudo subir la imagen automáticamente. Está en tu portapapeles: pégala en lens.google.com."},
+};
+
+const TextEntry kTexts_sv[] = {
+    {Str::HintText, L"Markera något för att fråga {0}"},
+    {Str::HintTextTyping, L"Markera något eller börja skriva för att fråga {0}"},
+    {Str::Close, L"Stäng"},
+    {Str::AskInGemini, L"Fråga Gemini"},
+    {Str::SearchWithLens, L"Sök med Google Lens"},
+    {Str::TranslateTo, L"Översätt till: {0}"},
+    {Str::CopyImage, L"Kopiera bild"},
+    {Str::CopyText, L"Kopiera text"},
+    {Str::AddSelection, L"Lägg till en markering till"},
+    {Str::WhatIsThis, L"Vad är det här?"},
+    {Str::ExplainThis, L"Förklara det här"},
+    {Str::SummarizeThis, L"Sammanfatta det här"},
+    {Str::AskPlaceholder, L"Fråga om din markering…"},
+    {Str::AskAnythingPlaceholder, L"Fråga vad som helst…"},
+    {Str::FollowUpPlaceholder, L"Ställ en följdfråga…"},
+    {Str::Thinking, L"Tänker…"},
+    {Str::Copy, L"Kopiera"},
+    {Str::SelectAll, L"Markera allt"},
+    {Str::NoApiKeyHint, L"Lägg till en API-nyckel för Gemini, ChatGPT eller Claude i moddens inställningar för att få svar direkt här."},
+    {Str::ImageCopied, L"Bilden kopierades"},
+    {Str::ImageCopyFailed, L"Det gick inte att kopiera bilden"},
+    {Str::ImageCopyRetry, L"Det gick inte att kopiera bilden. Försök igen."},
+    {Str::ReadingText, L"Läser fortfarande texten…"},
+    {Str::NoTextFound, L"Ingen text hittades i markeringen"},
+    {Str::TextCopied, L"Texten kopierades"},
+    {Str::TextCopyFailed, L"Det gick inte att kopiera texten"},
+    {Str::AnswerCopied, L"Svaret kopierades"},
+    {Str::AnswerCopyFailed, L"Det gick inte att kopiera svaret"},
+    {Str::OpeningLens, L"Öppnar Google Lens i webbläsaren…"},
+    {Str::OpeningGeminiOne, L"Öppnar Gemini och bifogar din bild…"},
+    {Str::OpeningGeminiMany, L"Öppnar Gemini och bifogar dina bilder…"},
+    {Str::OpeningGeminiText, L"Öppnar Gemini och lägger till din fråga…"},
+    {Str::ClickBoxToAttach, L"Klicka i Geminis textruta och tryck på Ctrl+V för att bifoga bilden."},
+    {Str::Stopped, L"Stoppad."},
+    {Str::StoppedEarly, L"Stoppades innan svaret var klart."},
+    {Str::RequestFailed, L"Det gick inte att starta förfrågan."},
+    {Str::DraftAddedOne, L"Bilden lades till. Skriv din fråga i Gemini."},
+    {Str::DraftAddedMany, L"Bilderna lades till. Skriv din fråga i Gemini."},
+    {Str::QuestionInGemini, L"Din fråga har skrivits in i Gemini."},
+    {Str::DraftPartial, L"Bekräftade bilder: {0} av {1}. Kontrollera Gemini och lägg till resten med Ctrl+V i dess textruta."},
+    {Str::ClipboardChangedOne, L"Urklippet ändrades innan bilden hann klistras in: använd Kopiera bild och tryck sedan på Ctrl+V i Gemini."},
+    {Str::ClipboardChangedMany, L"Urklippet ändrades innan bilderna hann klistras in. Fråga Gemini igen för att försöka på nytt."},
+    {Str::IfNotAttachedOne, L"Om bilden inte är bifogad klickar du i Geminis textruta och trycker på Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Om bilderna inte är bifogade klickar du i Geminis textruta och trycker på Ctrl+V."},
+    {Str::ClickBoxOne, L"Klicka i Geminis textruta och tryck på Ctrl+V för att bifoga bilden. Din fråga finns kvar här."},
+    {Str::ClickBoxMany, L"Klicka i Geminis textruta och tryck på Ctrl+V för att bifoga bilderna. Din fråga finns kvar här."},
+    {Str::ClickBoxText, L"Klicka i Geminis textruta och skriv din fråga. Din fråga finns kvar här."},
+    {Str::BrowserFailedOne, L"Det gick inte att öppna webbläsaren. Bilden är kopierad; klistra in den i Gemini med Ctrl+V."},
+    {Str::BrowserFailedMany, L"Det gick inte att öppna webbläsaren. Bilderna är kopierade; klistra in dem i Gemini med Ctrl+V."},
+    {Str::BrowserFailedText, L"Det gick inte att öppna webbläsaren."},
+    {Str::PageUnreadable, L"Magic Pointer kunde inte läsa sidan i webbläsaren. Om en avisering är öppen ovanpå den stänger du den och klickar på Fråga Gemini igen."},
+    {Str::ErrKeyInvalid, L"Din {0}-API-nyckel är ogiltig. Kontrollera den i moddens inställningar."},
+    {Str::ErrKeyForbidden, L"Den här API-nyckeln kan inte använda {0} (403). Kontrollera nyckeln i moddens inställningar."},
+    {Str::ErrModelMissing, L"Modellen \"{0}\" är inte tillgänglig för din nyckel. Välj en annan modell i moddens inställningar."},
+    {Str::ErrNoFreeQuota, L"Din Gemini-plan har ingen gratis kvot för \"{0}\". Välj modellen Snabb i moddens inställningar, eller lägg till fakturering för din nyckel."},
+    {Str::ErrNoCredit, L"Krediten på ditt {0}-konto är slut. Lägg till kredit eller en betalningsmetod och försök igen."},
+    {Str::ErrTimeout, L"{0} svarade inte i tid. Försök igen om en stund."},
+    {Str::ModelBusy, L"Modellen du valde är inte tillgänglig just nu. En snabbare modell svarar i stället."},
+    {Str::ErrRateLimit, L"Du har nått gränsen för förfrågningar hos {0} för tillfället. Försök igen om en stund."},
+    {Str::ErrServer, L"{0} har problem just nu ({1}). Försök igen om en stund."},
+    {Str::ErrGeneric, L"{0} returnerade ett fel ({1})."},
+    {Str::ErrNoConnection, L"Det gick inte att ta emot svaret från {0}. Kontrollera din internetanslutning (fel {1}) och fråga igen."},
+    {Str::ErrInterrupted, L"Anslutningen till {0} avbröts och svaret är ofullständigt (fel {1}). Fråga igen."},
+    {Str::ErrInterruptedBy, L"{0} avbröt svaret: {1}"},
+    {Str::ErrUnreadable, L"{0} returnerade ett oläsligt svar. Försök fråga igen."},
+    {Str::ErrOutputLimit, L"{0} nådde sin utdatagräns. Svaret är ofullständigt. Försök be om ett kortare svar."},
+    {Str::ErrStoppedBecause, L"{0} avbröt svaret ({1}). Försök fråga på ett annat sätt."},
+    {Str::ErrUnconfirmed, L"{0} stannade innan det bekräftades att svaret var komplett. Försök fråga igen."},
+    {Str::ErrNoAnswer, L"{0} returnerade inget svar. Försök fråga på ett annat sätt."},
+    {Str::ErrCouldntReach, L"Det gick inte att nå {0}. Kontrollera din internetanslutning (fel {1})."},
+    {Str::ErrStreaming, L"{0} returnerade ett strömningsfel."},
+    {Str::LensSearching, L"Söker med Google Lens…"},
+    {Str::LensUploadFailed, L"Det gick inte att ladda upp automatiskt. Bilden finns i urklipp: klistra in den på lens.google.com."},
+};
+
+const TextEntry kTexts_ta[] = {
+    {Str::HintText, L"AI-யிடம் கேட்க எதையாவது தேர்ந்தெடுக்கவும் ({0})"},
+    {Str::HintTextTyping, L"AI-யிடம் கேட்க எதையாவது தேர்ந்தெடுக்கவும் அல்லது தட்டச்சு செய்யத் தொடங்கவும் ({0})"},
+    {Str::Close, L"மூடு"},
+    {Str::AskInGemini, L"Gemini-யிடம் கேள்"},
+    {Str::SearchWithLens, L"Google Lens மூலம் தேடு"},
+    {Str::TranslateTo, L"மொழிபெயர்க்கும் மொழி: {0}"},
+    {Str::CopyImage, L"படத்தை நகலெடு"},
+    {Str::CopyText, L"உரையை நகலெடு"},
+    {Str::AddSelection, L"மற்றொரு தேர்வைச் சேர்"},
+    {Str::WhatIsThis, L"இது என்ன?"},
+    {Str::ExplainThis, L"இதை விளக்கிச் சொல்"},
+    {Str::SummarizeThis, L"இதைச் சுருக்கிச் சொல்"},
+    {Str::AskPlaceholder, L"தேர்ந்தெடுத்தது பற்றிக் கேளுங்கள்…"},
+    {Str::AskAnythingPlaceholder, L"எதையும் கேளுங்கள்…"},
+    {Str::FollowUpPlaceholder, L"இன்னொரு கேள்வி கேளுங்கள்…"},
+    {Str::Thinking, L"யோசிக்கிறேன்…"},
+    {Str::Copy, L"நகலெடு"},
+    {Str::SelectAll, L"அனைத்தையும் தேர்ந்தெடு"},
+    {Str::NoApiKeyHint, L"பதில்களை இங்கேயே பெற, மாற்றத்தின் அமைப்புகளில் Gemini, ChatGPT அல்லது Claude API விசையைச் சேர்க்கவும்."},
+    {Str::ImageCopied, L"படம் நகலெடுக்கப்பட்டது"},
+    {Str::ImageCopyFailed, L"படத்தை நகலெடுக்க முடியவில்லை"},
+    {Str::ImageCopyRetry, L"படத்தை நகலெடுக்க முடியவில்லை. மீண்டும் முயலவும்."},
+    {Str::ReadingText, L"உரை இன்னும் படிக்கப்படுகிறது…"},
+    {Str::NoTextFound, L"தேர்வில் உரை எதுவும் இல்லை"},
+    {Str::TextCopied, L"உரை நகலெடுக்கப்பட்டது"},
+    {Str::TextCopyFailed, L"உரையை நகலெடுக்க முடியவில்லை"},
+    {Str::AnswerCopied, L"பதில் நகலெடுக்கப்பட்டது"},
+    {Str::AnswerCopyFailed, L"பதிலை நகலெடுக்க முடியவில்லை"},
+    {Str::OpeningLens, L"உங்கள் உலாவியில் Google Lens திறக்கிறது…"},
+    {Str::OpeningGeminiOne, L"Gemini-ஐத் திறந்து உங்கள் படத்தை இணைக்கிறது…"},
+    {Str::OpeningGeminiMany, L"Gemini-ஐத் திறந்து உங்கள் படங்களை இணைக்கிறது…"},
+    {Str::OpeningGeminiText, L"Gemini-ஐத் திறந்து உங்கள் கேள்வியைச் சேர்க்கிறது…"},
+    {Str::ClickBoxToAttach, L"Gemini-யின் செய்திப் பெட்டியைக் கிளிக் செய்து, படத்தை இணைக்க Ctrl+V அழுத்தவும்."},
+    {Str::Stopped, L"நிறுத்தப்பட்டது."},
+    {Str::StoppedEarly, L"பதில் முடிவதற்கு முன்பே நிறுத்தப்பட்டது."},
+    {Str::RequestFailed, L"கோரிக்கையைத் தொடங்க முடியவில்லை."},
+    {Str::DraftAddedOne, L"படம் சேர்க்கப்பட்டது. இப்போது Gemini-யில் உங்கள் கேள்வியைத் தட்டச்சு செய்யுங்கள்."},
+    {Str::DraftAddedMany, L"படங்கள் சேர்க்கப்பட்டன. இப்போது Gemini-யில் உங்கள் கேள்வியைத் தட்டச்சு செய்யுங்கள்."},
+    {Str::QuestionInGemini, L"உங்கள் கேள்வி Gemini-யில் உள்ளிடப்பட்டுள்ளது."},
+    {Str::DraftPartial, L"{1} படங்களில் {0} உறுதிசெய்யப்பட்டன. Gemini-யைப் பார்த்து, மீதமுள்ளவற்றை அதன் செய்திப் பெட்டியில் Ctrl+V மூலம் ஒட்டுங்கள்."},
+    {Str::ClipboardChangedOne, L"படத்தை ஒட்டுவதற்குள் கிளிப்போர்டு மாறிவிட்டது: \"படத்தை நகலெடு\" என்பதைப் பயன்படுத்தி, Gemini-யில் Ctrl+V அழுத்துங்கள்."},
+    {Str::ClipboardChangedMany, L"படங்களை ஒட்டுவதற்குள் கிளிப்போர்டு மாறிவிட்டது. மீண்டும் முயல Gemini-யில் மறுபடி கேளுங்கள்."},
+    {Str::IfNotAttachedOne, L"படம் இணைக்கப்படவில்லை என்றால், Gemini-யின் செய்திப் பெட்டியைக் கிளிக் செய்து Ctrl+V அழுத்துங்கள்."},
+    {Str::IfNotAttachedMany, L"படங்கள் இணைக்கப்படவில்லை என்றால், Gemini-யின் செய்திப் பெட்டியைக் கிளிக் செய்து Ctrl+V அழுத்துங்கள்."},
+    {Str::ClickBoxOne, L"Gemini-யின் செய்திப் பெட்டியைக் கிளிக் செய்து, படத்தை இணைக்க Ctrl+V அழுத்துங்கள். உங்கள் கேள்வி இங்கேயே இருக்கும்."},
+    {Str::ClickBoxMany, L"Gemini-யின் செய்திப் பெட்டியைக் கிளிக் செய்து, படங்களை இணைக்க Ctrl+V அழுத்துங்கள். உங்கள் கேள்வி இங்கேயே இருக்கும்."},
+    {Str::ClickBoxText, L"Gemini-யின் செய்திப் பெட்டியைக் கிளிக் செய்து உங்கள் கேள்வியைத் தட்டச்சு செய்யுங்கள். உங்கள் கேள்வி இங்கேயே இருக்கும்."},
+    {Str::BrowserFailedOne, L"உலாவியைத் திறக்க முடியவில்லை. படம் நகலெடுக்கப்பட்டுள்ளது; Ctrl+V மூலம் Gemini-யில் ஒட்டுங்கள்."},
+    {Str::BrowserFailedMany, L"உலாவியைத் திறக்க முடியவில்லை. படங்கள் நகலெடுக்கப்பட்டுள்ளன; Ctrl+V மூலம் Gemini-யில் ஒட்டுங்கள்."},
+    {Str::BrowserFailedText, L"உலாவியைத் திறக்க முடியவில்லை."},
+    {Str::PageUnreadable, L"உங்கள் உலாவியில் உள்ள பக்கத்தை Magic Pointer-ஆல் படிக்க முடியவில்லை. அதன் மேல் ஏதேனும் அறிவிப்பு திறந்திருந்தால் மூடிவிட்டு, மீண்டும் \"Gemini-யிடம் கேள்\" என்பதைக் கிளிக் செய்யுங்கள்."},
+    {Str::ErrKeyInvalid, L"உங்கள் {0} API விசை செல்லாது. மாற்றத்தின் அமைப்புகளில் அதைச் சரிபாருங்கள்."},
+    {Str::ErrKeyForbidden, L"இந்த API விசையால் {0} சேவையைப் பயன்படுத்த முடியாது (403). மாற்றத்தின் அமைப்புகளில் விசையைச் சரிபாருங்கள்."},
+    {Str::ErrModelMissing, L"\"{0}\" மாதிரி உங்கள் விசையுடன் கிடைக்கவில்லை. மாற்றத்தின் அமைப்புகளில் வேறு மாதிரியைத் தேர்ந்தெடுங்கள்."},
+    {Str::ErrNoFreeQuota, L"உங்கள் Gemini திட்டத்தில் \"{0}\" மாதிரிக்கு இலவச வரம்பு இல்லை. மாற்றத்தின் அமைப்புகளில் \"வேகமானது\" மாதிரியைத் தேர்ந்தெடுங்கள், அல்லது உங்கள் விசைக்குக் கட்டணத்தைச் சேருங்கள்."},
+    {Str::ErrNoCredit, L"உங்கள் {0} கணக்கில் கிரெடிட் தீர்ந்துவிட்டது. கிரெடிட் அல்லது கட்டண முறையைச் சேர்த்து மீண்டும் முயலுங்கள்."},
+    {Str::ErrTimeout, L"{0} சேவை உரிய நேரத்தில் பதிலளிக்கவில்லை. சிறிது நேரம் கழித்து மீண்டும் முயலுங்கள்."},
+    {Str::ModelBusy, L"நீங்கள் தேர்ந்தெடுத்த மாதிரி இப்போது கிடைக்கவில்லை. அதற்குப் பதிலாக வேகமான ஒரு மாதிரி பதிலளிக்கிறது."},
+    {Str::ErrRateLimit, L"{0} சேவையின் கோரிக்கை வரம்பை இப்போதைக்கு எட்டிவிட்டீர்கள். சிறிது நேரம் கழித்து மீண்டும் முயலுங்கள்."},
+    {Str::ErrServer, L"{0} சேவையில் இப்போது சிக்கல் உள்ளது ({1}). சிறிது நேரம் கழித்து மீண்டும் முயலுங்கள்."},
+    {Str::ErrGeneric, L"{0} சேவை பிழையைத் தந்தது ({1})."},
+    {Str::ErrNoConnection, L"{0} சேவையின் பதிலைப் பெற முடியவில்லை. இணைய இணைப்பைச் சரிபார்த்து (பிழை {1}) மீண்டும் கேளுங்கள்."},
+    {Str::ErrInterrupted, L"{0} சேவையுடனான இணைப்பு துண்டிக்கப்பட்டதால் பதில் முழுமையாக இல்லை (பிழை {1}). மீண்டும் கேளுங்கள்."},
+    {Str::ErrInterruptedBy, L"{0} சேவை இந்தப் பதிலை இடையில் நிறுத்தியது: {1}"},
+    {Str::ErrUnreadable, L"{0} சேவை படிக்க முடியாத பதிலைத் தந்தது. மீண்டும் கேளுங்கள்."},
+    {Str::ErrOutputLimit, L"{0} சேவையின் வெளியீட்டு வரம்பு முடிந்ததால் பதில் முழுமையாக இல்லை. சுருக்கமான பதிலைக் கேட்டுப் பாருங்கள்."},
+    {Str::ErrStoppedBecause, L"{0} சேவை இந்தப் பதிலை நிறுத்தியது ({1}). வேறு விதமாகக் கேட்டுப் பாருங்கள்."},
+    {Str::ErrUnconfirmed, L"பதில் முழுமையானது என்று உறுதிசெய்வதற்கு முன்பே {0} சேவை நின்றுவிட்டது. மீண்டும் கேளுங்கள்."},
+    {Str::ErrNoAnswer, L"{0} சேவை எந்தப் பதிலும் தரவில்லை. வேறு விதமாகக் கேட்டுப் பாருங்கள்."},
+    {Str::ErrCouldntReach, L"{0} சேவையைத் தொடர்புகொள்ள முடியவில்லை. இணைய இணைப்பைச் சரிபாருங்கள் (பிழை {1})."},
+    {Str::ErrStreaming, L"{0} சேவையில் ஸ்ட்ரீமிங் பிழை ஏற்பட்டது."},
+    {Str::LensSearching, L"Google Lens மூலம் தேடப்படுகிறது…"},
+    {Str::LensUploadFailed, L"தானாகப் பதிவேற்ற முடியவில்லை. படம் கிளிப்போர்டில் உள்ளது: lens.google.com இல் ஒட்டுங்கள்."},
+};
+
+const TextEntry kTexts_th[] = {
+    {Str::HintText, L"เลือกอะไรก็ได้เพื่อถาม {0}"},
+    {Str::HintTextTyping, L"เลือกอะไรก็ได้หรือเริ่มพิมพ์เพื่อถาม {0}"},
+    {Str::Close, L"ปิด"},
+    {Str::AskInGemini, L"ถามใน Gemini"},
+    {Str::SearchWithLens, L"ค้นหาด้วย Google Lens"},
+    {Str::TranslateTo, L"แปลเป็น: {0}"},
+    {Str::CopyImage, L"คัดลอกรูปภาพ"},
+    {Str::CopyText, L"คัดลอกข้อความ"},
+    {Str::AddSelection, L"เพิ่มส่วนที่เลือกอีกรายการ"},
+    {Str::WhatIsThis, L"นี่คืออะไร"},
+    {Str::ExplainThis, L"อธิบายสิ่งนี้ให้ฉันฟัง"},
+    {Str::SummarizeThis, L"สรุปสิ่งนี้ให้ฉัน"},
+    {Str::AskPlaceholder, L"ถามเกี่ยวกับส่วนที่คุณเลือก…"},
+    {Str::AskAnythingPlaceholder, L"ถามอะไรก็ได้…"},
+    {Str::FollowUpPlaceholder, L"ถามคำถามต่อเนื่อง…"},
+    {Str::Thinking, L"กำลังคิด…"},
+    {Str::Copy, L"คัดลอก"},
+    {Str::SelectAll, L"เลือกทั้งหมด"},
+    {Str::NoApiKeyHint, L"เพิ่มคีย์ API ของ Gemini, ChatGPT หรือ Claude ในการตั้งค่าของม็อดเพื่อรับคำตอบที่นี่โดยตรง"},
+    {Str::ImageCopied, L"คัดลอกรูปภาพแล้ว"},
+    {Str::ImageCopyFailed, L"ไม่สามารถคัดลอกรูปภาพได้"},
+    {Str::ImageCopyRetry, L"ไม่สามารถคัดลอกรูปภาพได้ ลองอีกครั้ง"},
+    {Str::ReadingText, L"ยังคงอ่านข้อความอยู่…"},
+    {Str::NoTextFound, L"ไม่พบข้อความในส่วนที่เลือก"},
+    {Str::TextCopied, L"คัดลอกข้อความแล้ว"},
+    {Str::TextCopyFailed, L"ไม่สามารถคัดลอกข้อความได้"},
+    {Str::AnswerCopied, L"คัดลอกคำตอบแล้ว"},
+    {Str::AnswerCopyFailed, L"ไม่สามารถคัดลอกคำตอบได้"},
+    {Str::OpeningLens, L"กำลังเปิด Google Lens ในเบราว์เซอร์ของคุณ…"},
+    {Str::OpeningGeminiOne, L"กำลังเปิด Gemini และแนบรูปภาพของคุณ…"},
+    {Str::OpeningGeminiMany, L"กำลังเปิด Gemini และแนบรูปภาพทั้งหมดของคุณ…"},
+    {Str::OpeningGeminiText, L"กำลังเปิด Gemini และเพิ่มคำถามของคุณ…"},
+    {Str::ClickBoxToAttach, L"คลิกช่องข้อความของ Gemini แล้วกด Ctrl+V เพื่อแนบรูปภาพ"},
+    {Str::Stopped, L"หยุดแล้ว"},
+    {Str::StoppedEarly, L"หยุดก่อนที่คำตอบจะเสร็จสมบูรณ์"},
+    {Str::RequestFailed, L"ไม่สามารถเริ่มคำขอได้"},
+    {Str::DraftAddedOne, L"เพิ่มรูปภาพแล้ว พิมพ์คำถามของคุณใน Gemini"},
+    {Str::DraftAddedMany, L"เพิ่มรูปภาพทั้งหมดแล้ว พิมพ์คำถามของคุณใน Gemini"},
+    {Str::QuestionInGemini, L"คำถามของคุณอยู่ใน Gemini แล้ว"},
+    {Str::DraftPartial, L"ยืนยันรูปภาพแล้ว {0} จาก {1} รูป ตรวจสอบ Gemini แล้ววางรูปที่เหลือด้วย Ctrl+V ในช่องข้อความ"},
+    {Str::ClipboardChangedOne, L"คลิปบอร์ดเปลี่ยนไปก่อนที่จะวางรูปภาพได้ ให้ใช้ \"คัดลอกรูปภาพ\" แล้วกด Ctrl+V ใน Gemini"},
+    {Str::ClipboardChangedMany, L"คลิปบอร์ดเปลี่ยนไปก่อนที่จะวางรูปภาพได้ ถามใน Gemini อีกครั้งเพื่อลองใหม่"},
+    {Str::IfNotAttachedOne, L"หากรูปภาพไม่ได้แนบ ให้คลิกช่องข้อความของ Gemini แล้วกด Ctrl+V"},
+    {Str::IfNotAttachedMany, L"หากรูปภาพไม่ได้แนบ ให้คลิกช่องข้อความของ Gemini แล้วกด Ctrl+V"},
+    {Str::ClickBoxOne, L"คลิกช่องข้อความของ Gemini แล้วกด Ctrl+V เพื่อแนบรูปภาพ คำถามของคุณจะยังอยู่ที่นี่"},
+    {Str::ClickBoxMany, L"คลิกช่องข้อความของ Gemini แล้วกด Ctrl+V เพื่อแนบรูปภาพทั้งหมด คำถามของคุณจะยังอยู่ที่นี่"},
+    {Str::ClickBoxText, L"คลิกช่องข้อความของ Gemini แล้วพิมพ์คำถามของคุณ คำถามของคุณจะยังอยู่ที่นี่"},
+    {Str::BrowserFailedOne, L"ไม่สามารถเปิดเบราว์เซอร์ได้ คัดลอกรูปภาพแล้ว วางลงใน Gemini ด้วย Ctrl+V"},
+    {Str::BrowserFailedMany, L"ไม่สามารถเปิดเบราว์เซอร์ได้ คัดลอกรูปภาพแล้ว วางลงใน Gemini ด้วย Ctrl+V"},
+    {Str::BrowserFailedText, L"ไม่สามารถเปิดเบราว์เซอร์ได้"},
+    {Str::PageUnreadable, L"Magic Pointer ไม่สามารถอ่านหน้าเว็บในเบราว์เซอร์ของคุณได้ หากมีการแจ้งเตือนเปิดอยู่ด้านบน ให้ปิดแล้วคลิก \"ถามใน Gemini\" อีกครั้ง"},
+    {Str::ErrKeyInvalid, L"คีย์ API ของ {0} ของคุณไม่ถูกต้อง ตรวจสอบในการตั้งค่าของม็อด"},
+    {Str::ErrKeyForbidden, L"คีย์ API นี้ไม่สามารถใช้ {0} ได้ (403) ตรวจสอบคีย์ในการตั้งค่าของม็อด"},
+    {Str::ErrModelMissing, L"โมเดล \"{0}\" ไม่พร้อมใช้งานสำหรับคีย์ของคุณ เลือกโมเดลอื่นในการตั้งค่าของม็อด"},
+    {Str::ErrNoFreeQuota, L"แพ็กเกจ Gemini ของคุณไม่มีโควตาฟรีสำหรับ \"{0}\" เลือกโมเดล \"เร็ว\" ในการตั้งค่าของม็อด หรือเพิ่มการเรียกเก็บเงินให้กับคีย์ของคุณ"},
+    {Str::ErrNoCredit, L"บัญชี {0} ของคุณเครดิตหมดแล้ว เพิ่มเครดิตหรือวิธีการชำระเงิน แล้วลองอีกครั้ง"},
+    {Str::ErrTimeout, L"{0} ไม่ตอบกลับภายในเวลาที่กำหนด ลองอีกครั้งในอีกสักครู่"},
+    {Str::ModelBusy, L"โมเดลที่คุณเลือกไม่พร้อมใช้งานในขณะนี้ โมเดลที่เร็วกว่าจะตอบแทน"},
+    {Str::ErrRateLimit, L"คุณถึงขีดจำกัดคำขอของ {0} ชั่วคราว ลองอีกครั้งในอีกสักครู่"},
+    {Str::ErrServer, L"{0} กำลังมีปัญหาในขณะนี้ ({1}) ลองอีกครั้งในอีกสักครู่"},
+    {Str::ErrGeneric, L"{0} ส่งข้อผิดพลาดกลับมา ({1})"},
+    {Str::ErrNoConnection, L"ไม่สามารถรับคำตอบจาก {0} ได้ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ตของคุณ (ข้อผิดพลาด {1}) ลองถามอีกครั้ง"},
+    {Str::ErrInterrupted, L"การเชื่อมต่อกับ {0} ถูกขัดจังหวะ คำตอบนี้ไม่สมบูรณ์ (ข้อผิดพลาด {1}) ลองถามอีกครั้ง"},
+    {Str::ErrInterruptedBy, L"{0} ขัดจังหวะคำตอบนี้: {1}"},
+    {Str::ErrUnreadable, L"{0} ส่งการตอบกลับที่อ่านไม่ได้กลับมา ลองถามอีกครั้ง"},
+    {Str::ErrOutputLimit, L"{0} ถึงขีดจำกัดเอาต์พุตแล้ว คำตอบนี้ไม่สมบูรณ์ ลองขอคำตอบที่สั้นลง"},
+    {Str::ErrStoppedBecause, L"{0} หยุดคำตอบนี้ ({1}) ลองถามด้วยวิธีอื่น"},
+    {Str::ErrUnconfirmed, L"{0} หยุดก่อนที่จะยืนยันว่าคำตอบสมบูรณ์ ลองถามอีกครั้ง"},
+    {Str::ErrNoAnswer, L"{0} ไม่ได้ส่งคำตอบกลับมา ลองถามด้วยวิธีอื่น"},
+    {Str::ErrCouldntReach, L"ไม่สามารถเชื่อมต่อกับ {0} ได้ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ตของคุณ (ข้อผิดพลาด {1})"},
+    {Str::ErrStreaming, L"{0} ส่งข้อผิดพลาดการสตรีมกลับมา"},
+    {Str::LensSearching, L"กำลังค้นหาด้วย Google Lens…"},
+    {Str::LensUploadFailed, L"ไม่สามารถอัปโหลดอัตโนมัติได้ รูปภาพอยู่ในคลิปบอร์ดของคุณ: วางที่ lens.google.com"},
+};
+
+const TextEntry kTexts_tr[] = {
+    {Str::HintText, L"Yapay zekâya sormak için herhangi bir şey seçin ({0})"},
+    {Str::HintTextTyping, L"Yapay zekâya sormak için herhangi bir şey seçin veya yazmaya başlayın ({0})"},
+    {Str::Close, L"Kapat"},
+    {Str::AskInGemini, L"Gemini'ye sor"},
+    {Str::SearchWithLens, L"Google Lens ile ara"},
+    {Str::TranslateTo, L"Şu dile çevir: {0}"},
+    {Str::CopyImage, L"Görüntüyü kopyala"},
+    {Str::CopyText, L"Metni kopyala"},
+    {Str::AddSelection, L"Başka bir seçim ekle"},
+    {Str::WhatIsThis, L"Bu nedir?"},
+    {Str::ExplainThis, L"Bunu bana açıkla"},
+    {Str::SummarizeThis, L"Bunu benim için özetle"},
+    {Str::AskPlaceholder, L"Seçiminiz hakkında soru sorun…"},
+    {Str::AskAnythingPlaceholder, L"Her şeyi sorun…"},
+    {Str::FollowUpPlaceholder, L"Devam sorusu sorun…"},
+    {Str::Thinking, L"Düşünüyorum…"},
+    {Str::Copy, L"Kopyala"},
+    {Str::SelectAll, L"Tümünü seç"},
+    {Str::NoApiKeyHint, L"Yanıtları doğrudan burada almak için modun ayarlarına bir Gemini, ChatGPT veya Claude API anahtarı ekleyin."},
+    {Str::ImageCopied, L"Görüntü kopyalandı"},
+    {Str::ImageCopyFailed, L"Görüntü kopyalanamadı"},
+    {Str::ImageCopyRetry, L"Görüntü kopyalanamadı. Tekrar deneyin."},
+    {Str::ReadingText, L"Metin hâlâ okunuyor…"},
+    {Str::NoTextFound, L"Seçimde metin bulunamadı"},
+    {Str::TextCopied, L"Metin kopyalandı"},
+    {Str::TextCopyFailed, L"Metin kopyalanamadı"},
+    {Str::AnswerCopied, L"Yanıt kopyalandı"},
+    {Str::AnswerCopyFailed, L"Yanıt kopyalanamadı"},
+    {Str::OpeningLens, L"Google Lens tarayıcınızda açılıyor…"},
+    {Str::OpeningGeminiOne, L"Gemini açılıyor ve görüntünüz ekleniyor…"},
+    {Str::OpeningGeminiMany, L"Gemini açılıyor ve görüntüleriniz ekleniyor…"},
+    {Str::OpeningGeminiText, L"Gemini açılıyor ve sorunuz ekleniyor…"},
+    {Str::ClickBoxToAttach, L"Gemini'nin ileti kutusuna tıklayın, ardından görüntüyü eklemek için Ctrl+V tuşlarına basın."},
+    {Str::Stopped, L"Durduruldu."},
+    {Str::StoppedEarly, L"Yanıt bitmeden durduruldu."},
+    {Str::RequestFailed, L"İstek başlatılamadı."},
+    {Str::DraftAddedOne, L"Görüntü eklendi. Sorunuzu Gemini'ye yazın."},
+    {Str::DraftAddedMany, L"Görüntüler eklendi. Sorunuzu Gemini'ye yazın."},
+    {Str::QuestionInGemini, L"Sorunuz Gemini'ye yazıldı."},
+    {Str::DraftPartial, L"Doğrulanan görüntü sayısı: {0} / {1}. Gemini'yi kontrol edin ve kalanları ileti kutusunda Ctrl+V ile ekleyin."},
+    {Str::ClipboardChangedOne, L"Pano, görüntü yapıştırılamadan önce değişti: Görüntüyü kopyala komutunu kullanın, ardından Gemini'de Ctrl+V tuşlarına basın."},
+    {Str::ClipboardChangedMany, L"Pano, görüntüler yapıştırılamadan önce değişti. Yeniden denemek için Gemini'ye tekrar sorun."},
+    {Str::IfNotAttachedOne, L"Görüntü eklenmediyse Gemini'nin ileti kutusuna tıklayın ve Ctrl+V tuşlarına basın."},
+    {Str::IfNotAttachedMany, L"Görüntüler eklenmediyse Gemini'nin ileti kutusuna tıklayın ve Ctrl+V tuşlarına basın."},
+    {Str::ClickBoxOne, L"Gemini'nin ileti kutusuna tıklayın ve görüntüyü eklemek için Ctrl+V tuşlarına basın. Sorunuz burada saklanır."},
+    {Str::ClickBoxMany, L"Gemini'nin ileti kutusuna tıklayın ve görüntüleri eklemek için Ctrl+V tuşlarına basın. Sorunuz burada saklanır."},
+    {Str::ClickBoxText, L"Gemini'nin ileti kutusuna tıklayın ve sorunuzu yazın. Sorunuz burada saklanır."},
+    {Str::BrowserFailedOne, L"Tarayıcı açılamadı. Görüntü kopyalandı; Ctrl+V ile Gemini'ye yapıştırın."},
+    {Str::BrowserFailedMany, L"Tarayıcı açılamadı. Görüntüler kopyalandı; Ctrl+V ile Gemini'ye yapıştırın."},
+    {Str::BrowserFailedText, L"Tarayıcı açılamadı."},
+    {Str::PageUnreadable, L"Magic Pointer tarayıcınızdaki sayfayı okuyamadı. Üzerinde açık bir bildirim varsa kapatın ve Gemini'ye sor düğmesine yeniden tıklayın."},
+    {Str::ErrKeyInvalid, L"{0} API anahtarınız geçerli değil. Modun ayarlarından kontrol edin."},
+    {Str::ErrKeyForbidden, L"Bu API anahtarı {0} hizmetini kullanamıyor (403). Anahtarı modun ayarlarından kontrol edin."},
+    {Str::ErrModelMissing, L"\"{0}\" modeli anahtarınız için kullanılamıyor. Modun ayarlarından başka bir model seçin."},
+    {Str::ErrNoFreeQuota, L"Gemini planınızın \"{0}\" için ücretsiz kotası yok. Modun ayarlarından \"Hızlı\" modelini seçin ya da anahtarınıza faturalandırma ekleyin."},
+    {Str::ErrNoCredit, L"{0} hesabınızın kredisi tükendi. Hesabınıza kredi ya da ödeme yöntemi ekleyin ve yeniden deneyin."},
+    {Str::ErrTimeout, L"{0} hizmeti zamanında yanıt vermedi. Biraz sonra tekrar deneyin."},
+    {Str::ModelBusy, L"Seçtiğiniz model şu anda kullanılamıyor. Onun yerine daha hızlı bir model yanıt veriyor."},
+    {Str::ErrRateLimit, L"{0} hizmetinin istek sınırına şimdilik ulaştınız. Biraz sonra tekrar deneyin."},
+    {Str::ErrServer, L"{0} hizmeti şu anda sorun yaşıyor ({1}). Biraz sonra tekrar deneyin."},
+    {Str::ErrGeneric, L"{0} hizmeti bir hata döndürdü ({1})."},
+    {Str::ErrNoConnection, L"{0} hizmetinin yanıtı alınamadı. İnternet bağlantınızı kontrol edin (hata {1}). Yeniden sormayı deneyin."},
+    {Str::ErrInterrupted, L"{0} hizmetiyle bağlantı kesildi. Bu yanıt eksik (hata {1}). Yeniden sormayı deneyin."},
+    {Str::ErrInterruptedBy, L"{0} hizmeti bu yanıtı yarıda kesti: {1}"},
+    {Str::ErrUnreadable, L"{0} hizmeti okunamayan bir yanıt döndürdü. Yeniden sormayı deneyin."},
+    {Str::ErrOutputLimit, L"{0} hizmeti çıktı sınırına ulaştı. Bu yanıt eksik. Daha kısa bir yanıt istemeyi deneyin."},
+    {Str::ErrStoppedBecause, L"{0} hizmeti bu yanıtı durdurdu ({1}). Soruyu başka bir şekilde sormayı deneyin."},
+    {Str::ErrUnconfirmed, L"{0} hizmeti, yanıtın tamamlandığını doğrulamadan durdu. Yeniden sormayı deneyin."},
+    {Str::ErrNoAnswer, L"{0} hizmeti yanıt döndürmedi. Soruyu başka bir şekilde sormayı deneyin."},
+    {Str::ErrCouldntReach, L"{0} hizmetine ulaşılamadı. İnternet bağlantınızı kontrol edin (hata {1})."},
+    {Str::ErrStreaming, L"{0} hizmeti bir akış hatası döndürdü."},
+    {Str::LensSearching, L"Google Lens ile aranıyor…"},
+    {Str::LensUploadFailed, L"Otomatik yükleme başarısız oldu. Görüntü panonuzda: lens.google.com adresine yapıştırın."},
+};
+
+const TextEntry kTexts_uk[] = {
+    {Str::HintText, L"Виберіть будь-що, щоб запитати {0}"},
+    {Str::HintTextTyping, L"Виберіть будь-що або почніть вводити текст, щоб запитати {0}"},
+    {Str::Close, L"Закрити"},
+    {Str::AskInGemini, L"Запитати Gemini"},
+    {Str::SearchWithLens, L"Шукати за допомогою Google Lens"},
+    {Str::TranslateTo, L"Перекласти на: {0}"},
+    {Str::CopyImage, L"Копіювати зображення"},
+    {Str::CopyText, L"Копіювати текст"},
+    {Str::AddSelection, L"Додати ще одне виділення"},
+    {Str::WhatIsThis, L"Що це?"},
+    {Str::ExplainThis, L"Поясни"},
+    {Str::SummarizeThis, L"Коротко перекажи"},
+    {Str::AskPlaceholder, L"Поставте запитання про виділене…"},
+    {Str::AskAnythingPlaceholder, L"Запитайте що завгодно…"},
+    {Str::FollowUpPlaceholder, L"Поставте уточнювальне запитання…"},
+    {Str::Thinking, L"Думаю…"},
+    {Str::Copy, L"Копіювати"},
+    {Str::SelectAll, L"Вибрати все"},
+    {Str::NoApiKeyHint, L"Додайте ключ API Gemini, ChatGPT або Claude в налаштуваннях моду, щоб отримувати відповіді прямо тут."},
+    {Str::ImageCopied, L"Зображення скопійовано"},
+    {Str::ImageCopyFailed, L"Не вдалося скопіювати зображення"},
+    {Str::ImageCopyRetry, L"Не вдалося скопіювати зображення. Спробуйте ще раз."},
+    {Str::ReadingText, L"Текст ще розпізнається…"},
+    {Str::NoTextFound, L"У виділеному фрагменті тексту не знайдено"},
+    {Str::TextCopied, L"Текст скопійовано"},
+    {Str::TextCopyFailed, L"Не вдалося скопіювати текст"},
+    {Str::AnswerCopied, L"Відповідь скопійовано"},
+    {Str::AnswerCopyFailed, L"Не вдалося скопіювати відповідь"},
+    {Str::OpeningLens, L"Відкриваємо Google Lens у браузері…"},
+    {Str::OpeningGeminiOne, L"Відкриваємо Gemini і прикріплюємо ваше зображення…"},
+    {Str::OpeningGeminiMany, L"Відкриваємо Gemini і прикріплюємо ваші зображення…"},
+    {Str::OpeningGeminiText, L"Відкриваємо Gemini і додаємо ваше запитання…"},
+    {Str::ClickBoxToAttach, L"Клацніть поле повідомлення в Gemini і натисніть Ctrl+V, щоб прикріпити зображення."},
+    {Str::Stopped, L"Зупинено."},
+    {Str::StoppedEarly, L"Зупинено до завершення відповіді."},
+    {Str::RequestFailed, L"Не вдалося виконати запит."},
+    {Str::DraftAddedOne, L"Зображення додано. Введіть запитання в Gemini."},
+    {Str::DraftAddedMany, L"Усі зображення додано. Введіть запитання в Gemini."},
+    {Str::QuestionInGemini, L"Ваше запитання вже введено в Gemini."},
+    {Str::DraftPartial, L"Підтверджено зображень: {0} із {1}. Перевірте Gemini і додайте решту за допомогою Ctrl+V у його полі повідомлення."},
+    {Str::ClipboardChangedOne, L"Буфер обміну змінився, перш ніж зображення вдалося вставити: скористайтеся командою «Копіювати зображення», а потім натисніть Ctrl+V у Gemini."},
+    {Str::ClipboardChangedMany, L"Буфер обміну змінився, перш ніж зображення вдалося вставити. Запитайте в Gemini ще раз, щоб повторити спробу."},
+    {Str::IfNotAttachedOne, L"Якщо зображення не прикріплено, клацніть поле повідомлення в Gemini і натисніть Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Якщо зображення не прикріплені, клацніть поле повідомлення в Gemini і натисніть Ctrl+V."},
+    {Str::ClickBoxOne, L"Клацніть поле повідомлення в Gemini і натисніть Ctrl+V, щоб прикріпити зображення. Ваше запитання збережено тут."},
+    {Str::ClickBoxMany, L"Клацніть поле повідомлення в Gemini і натисніть Ctrl+V, щоб прикріпити зображення. Ваше запитання збережено тут."},
+    {Str::ClickBoxText, L"Клацніть поле повідомлення в Gemini і введіть своє запитання. Ваше запитання збережено тут."},
+    {Str::BrowserFailedOne, L"Не вдалося відкрити браузер. Зображення скопійовано — вставте його в Gemini за допомогою Ctrl+V."},
+    {Str::BrowserFailedMany, L"Не вдалося відкрити браузер. Зображення скопійовано — вставте їх у Gemini за допомогою Ctrl+V."},
+    {Str::BrowserFailedText, L"Не вдалося відкрити браузер."},
+    {Str::PageUnreadable, L"Magic Pointer не вдалося прочитати сторінку у вашому браузері. Якщо поверх неї відкрито сповіщення, закрийте його й знову натисніть «Запитати Gemini»."},
+    {Str::ErrKeyInvalid, L"Ваш ключ API {0} недійсний. Перевірте його в налаштуваннях моду."},
+    {Str::ErrKeyForbidden, L"Цей ключ API не може використовувати {0} (403). Перевірте ключ у налаштуваннях моду."},
+    {Str::ErrModelMissing, L"Модель «{0}» недоступна для вашого ключа. Виберіть іншу модель у налаштуваннях моду."},
+    {Str::ErrNoFreeQuota, L"У вашому тарифі Gemini немає безкоштовної квоти для «{0}». Виберіть модель «Швидка» у налаштуваннях моду або підключіть оплату для свого ключа."},
+    {Str::ErrNoCredit, L"На вашому акаунті {0} закінчилися кошти. Поповніть баланс або додайте спосіб оплати й повторіть спробу."},
+    {Str::ErrTimeout, L"{0} не відповів вчасно. Спробуйте ще раз трохи пізніше."},
+    {Str::ModelBusy, L"Вибрана модель зараз недоступна. Натомість відповідає швидша."},
+    {Str::ErrRateLimit, L"Ви тимчасово досягли ліміту запитів {0}. Спробуйте ще раз трохи пізніше."},
+    {Str::ErrServer, L"У {0} зараз збої ({1}). Спробуйте ще раз трохи пізніше."},
+    {Str::ErrGeneric, L"{0} повернув помилку ({1})."},
+    {Str::ErrNoConnection, L"Не вдалося отримати відповідь {0}. Перевірте підключення до інтернету (помилка {1}). Спробуйте запитати ще раз."},
+    {Str::ErrInterrupted, L"З'єднання з {0} перервано. Ця відповідь неповна (помилка {1}). Спробуйте запитати ще раз."},
+    {Str::ErrInterruptedBy, L"{0} перервав цю відповідь: {1}"},
+    {Str::ErrUnreadable, L"{0} повернув нечитабельну відповідь. Спробуйте запитати ще раз."},
+    {Str::ErrOutputLimit, L"{0} досяг ліміту виводу. Ця відповідь неповна. Спробуйте попросити коротшу відповідь."},
+    {Str::ErrStoppedBecause, L"{0} зупинив цю відповідь ({1}). Спробуйте сформулювати запитання інакше."},
+    {Str::ErrUnconfirmed, L"{0} зупинився, не підтвердивши, що відповідь завершена. Спробуйте запитати ще раз."},
+    {Str::ErrNoAnswer, L"{0} не повернув відповіді. Спробуйте сформулювати запитання інакше."},
+    {Str::ErrCouldntReach, L"Не вдалося зв'язатися з {0}. Перевірте підключення до інтернету (помилка {1})."},
+    {Str::ErrStreaming, L"{0} повернув помилку потокової передачі."},
+    {Str::LensSearching, L"Пошук за допомогою Google Lens…"},
+    {Str::LensUploadFailed, L"Не вдалося завантажити автоматично. Зображення в буфері обміну — вставте його на lens.google.com."},
+};
+
+const TextEntry kTexts_vi[] = {
+    {Str::HintText, L"Chọn bất kỳ thứ gì để hỏi {0}"},
+    {Str::HintTextTyping, L"Chọn bất kỳ thứ gì hoặc bắt đầu nhập để hỏi {0}"},
+    {Str::Close, L"Đóng"},
+    {Str::AskInGemini, L"Hỏi Gemini"},
+    {Str::SearchWithLens, L"Tìm bằng Google Lens"},
+    {Str::TranslateTo, L"Dịch sang: {0}"},
+    {Str::CopyImage, L"Sao chép ảnh"},
+    {Str::CopyText, L"Sao chép văn bản"},
+    {Str::AddSelection, L"Thêm vùng chọn khác"},
+    {Str::WhatIsThis, L"Đây là gì?"},
+    {Str::ExplainThis, L"Giải thích giúp tôi"},
+    {Str::SummarizeThis, L"Tóm tắt giúp tôi"},
+    {Str::AskPlaceholder, L"Hỏi về vùng chọn của bạn…"},
+    {Str::AskAnythingPlaceholder, L"Hỏi bất cứ điều gì…"},
+    {Str::FollowUpPlaceholder, L"Hỏi thêm câu tiếp theo…"},
+    {Str::Thinking, L"Đang suy nghĩ…"},
+    {Str::Copy, L"Sao chép"},
+    {Str::SelectAll, L"Chọn tất cả"},
+    {Str::NoApiKeyHint, L"Thêm khóa API Gemini, ChatGPT hoặc Claude trong phần cài đặt của mod để nhận câu trả lời ngay tại đây."},
+    {Str::ImageCopied, L"Đã sao chép ảnh"},
+    {Str::ImageCopyFailed, L"Không thể sao chép ảnh"},
+    {Str::ImageCopyRetry, L"Không thể sao chép ảnh. Hãy thử lại."},
+    {Str::ReadingText, L"Vẫn đang đọc văn bản…"},
+    {Str::NoTextFound, L"Không tìm thấy văn bản trong vùng chọn"},
+    {Str::TextCopied, L"Đã sao chép văn bản"},
+    {Str::TextCopyFailed, L"Không thể sao chép văn bản"},
+    {Str::AnswerCopied, L"Đã sao chép câu trả lời"},
+    {Str::AnswerCopyFailed, L"Không thể sao chép câu trả lời"},
+    {Str::OpeningLens, L"Đang mở Google Lens trong trình duyệt của bạn…"},
+    {Str::OpeningGeminiOne, L"Đang mở Gemini và đính kèm ảnh của bạn…"},
+    {Str::OpeningGeminiMany, L"Đang mở Gemini và đính kèm các ảnh của bạn…"},
+    {Str::OpeningGeminiText, L"Đang mở Gemini và thêm câu hỏi của bạn…"},
+    {Str::ClickBoxToAttach, L"Nhấp vào ô tin nhắn của Gemini, rồi nhấn Ctrl+V để đính kèm ảnh."},
+    {Str::Stopped, L"Đã dừng."},
+    {Str::StoppedEarly, L"Đã dừng trước khi câu trả lời hoàn tất."},
+    {Str::RequestFailed, L"Không thể bắt đầu yêu cầu."},
+    {Str::DraftAddedOne, L"Đã thêm ảnh. Hãy nhập câu hỏi của bạn vào Gemini."},
+    {Str::DraftAddedMany, L"Đã thêm các ảnh. Hãy nhập câu hỏi của bạn vào Gemini."},
+    {Str::QuestionInGemini, L"Câu hỏi của bạn đã được nhập vào Gemini."},
+    {Str::DraftPartial, L"Ảnh đã xác nhận: {0}/{1}. Hãy kiểm tra Gemini và thêm phần còn lại bằng Ctrl+V trong ô tin nhắn của nó."},
+    {Str::ClipboardChangedOne, L"Bảng nhớ tạm đã thay đổi trước khi dán được ảnh: hãy dùng Sao chép ảnh, rồi nhấn Ctrl+V trong Gemini."},
+    {Str::ClipboardChangedMany, L"Bảng nhớ tạm đã thay đổi trước khi dán được các ảnh. Hãy hỏi lại trong Gemini để thử lại."},
+    {Str::IfNotAttachedOne, L"Nếu ảnh chưa được đính kèm, hãy nhấp vào ô tin nhắn của Gemini và nhấn Ctrl+V."},
+    {Str::IfNotAttachedMany, L"Nếu các ảnh chưa được đính kèm, hãy nhấp vào ô tin nhắn của Gemini và nhấn Ctrl+V."},
+    {Str::ClickBoxOne, L"Nhấp vào ô tin nhắn của Gemini và nhấn Ctrl+V để đính kèm ảnh. Câu hỏi của bạn vẫn được giữ ở đây."},
+    {Str::ClickBoxMany, L"Nhấp vào ô tin nhắn của Gemini và nhấn Ctrl+V để đính kèm các ảnh. Câu hỏi của bạn vẫn được giữ ở đây."},
+    {Str::ClickBoxText, L"Nhấp vào ô tin nhắn của Gemini và nhập câu hỏi của bạn. Câu hỏi của bạn vẫn được giữ ở đây."},
+    {Str::BrowserFailedOne, L"Không thể mở trình duyệt. Ảnh đã được sao chép; hãy dán vào Gemini bằng Ctrl+V."},
+    {Str::BrowserFailedMany, L"Không thể mở trình duyệt. Các ảnh đã được sao chép; hãy dán vào Gemini bằng Ctrl+V."},
+    {Str::BrowserFailedText, L"Không thể mở trình duyệt."},
+    {Str::PageUnreadable, L"Magic Pointer không đọc được trang trong trình duyệt của bạn. Nếu có thông báo đang mở phía trên, hãy đóng nó rồi nhấp lại vào Hỏi Gemini."},
+    {Str::ErrKeyInvalid, L"Khóa API {0} của bạn không hợp lệ. Hãy kiểm tra trong phần cài đặt của mod."},
+    {Str::ErrKeyForbidden, L"Khóa API này không thể dùng {0} (403). Hãy kiểm tra khóa trong phần cài đặt của mod."},
+    {Str::ErrModelMissing, L"Mô hình \"{0}\" không khả dụng cho khóa của bạn. Hãy chọn mô hình khác trong phần cài đặt của mod."},
+    {Str::ErrNoFreeQuota, L"Gói Gemini của bạn không có hạn mức miễn phí cho \"{0}\". Hãy chọn mô hình \"Nhanh\" trong phần cài đặt của mod, hoặc thêm thanh toán cho khóa của bạn."},
+    {Str::ErrNoCredit, L"Tài khoản {0} của bạn đã hết tín dụng. Hãy thêm tín dụng hoặc phương thức thanh toán rồi thử lại."},
+    {Str::ErrTimeout, L"{0} không phản hồi kịp thời. Hãy thử lại sau giây lát."},
+    {Str::ModelBusy, L"Mô hình bạn chọn hiện không khả dụng. Một mô hình nhanh hơn đang trả lời thay."},
+    {Str::ErrRateLimit, L"Bạn đã đạt giới hạn yêu cầu của {0} tạm thời. Hãy thử lại sau giây lát."},
+    {Str::ErrServer, L"{0} đang gặp sự cố ({1}). Hãy thử lại sau giây lát."},
+    {Str::ErrGeneric, L"{0} đã trả về lỗi ({1})."},
+    {Str::ErrNoConnection, L"Không thể nhận câu trả lời của {0}. Hãy kiểm tra kết nối Internet của bạn (lỗi {1}). Hãy thử hỏi lại."},
+    {Str::ErrInterrupted, L"Kết nối tới {0} đã bị gián đoạn. Câu trả lời này chưa đầy đủ (lỗi {1}). Hãy thử hỏi lại."},
+    {Str::ErrInterruptedBy, L"{0} đã ngắt câu trả lời này: {1}"},
+    {Str::ErrUnreadable, L"{0} đã trả về phản hồi không đọc được. Hãy thử hỏi lại."},
+    {Str::ErrOutputLimit, L"{0} đã đạt giới hạn đầu ra. Câu trả lời này chưa đầy đủ. Hãy thử yêu cầu câu trả lời ngắn hơn."},
+    {Str::ErrStoppedBecause, L"{0} đã dừng câu trả lời này ({1}). Hãy thử hỏi theo cách khác."},
+    {Str::ErrUnconfirmed, L"{0} đã dừng trước khi xác nhận câu trả lời đã hoàn tất. Hãy thử hỏi lại."},
+    {Str::ErrNoAnswer, L"{0} không trả về câu trả lời. Hãy thử hỏi theo cách khác."},
+    {Str::ErrCouldntReach, L"Không thể kết nối tới {0}. Hãy kiểm tra kết nối Internet của bạn (lỗi {1})."},
+    {Str::ErrStreaming, L"{0} đã trả về lỗi phát trực tuyến."},
+    {Str::LensSearching, L"Đang tìm kiếm bằng Google Lens…"},
+    {Str::LensUploadFailed, L"Không thể tải lên tự động. Ảnh đang ở trong bảng nhớ tạm: hãy dán vào lens.google.com."},
+};
+
+const LanguageInfo kLanguageTable[] = {
+    {L"ar", L"Arabic", L"العربية", true, false, kTexts_ar, ARRAYSIZE(kTexts_ar)},
+    {L"bn", L"Bengali", L"বাংলা", false, false, kTexts_bn, ARRAYSIZE(kTexts_bn)},
+    {L"zh-CN", L"Chinese (Simplified)", L"简体中文", false, true, kTexts_zh_CN, ARRAYSIZE(kTexts_zh_CN)},
+    {L"zh-TW", L"Chinese (Traditional)", L"繁體中文", false, true, kTexts_zh_TW, ARRAYSIZE(kTexts_zh_TW)},
+    {L"hr", L"Croatian", L"Hrvatski", false, false, kTexts_hr, ARRAYSIZE(kTexts_hr)},
+    {L"cs", L"Czech", L"Čeština", false, false, kTexts_cs, ARRAYSIZE(kTexts_cs)},
+    {L"da", L"Danish", L"Dansk", false, false, kTexts_da, ARRAYSIZE(kTexts_da)},
+    {L"nl", L"Dutch", L"Nederlands", false, false, kTexts_nl, ARRAYSIZE(kTexts_nl)},
+    {L"en", L"English", L"English", false, false, nullptr, 0},
+    {L"fi", L"Finnish", L"Suomi", false, false, kTexts_fi, ARRAYSIZE(kTexts_fi)},
+    {L"fr", L"French", L"Français", false, false, kTexts_fr, ARRAYSIZE(kTexts_fr)},
+    {L"de", L"German", L"Deutsch", false, false, kTexts_de, ARRAYSIZE(kTexts_de)},
+    {L"el", L"Greek", L"Ελληνικά", false, false, kTexts_el, ARRAYSIZE(kTexts_el)},
+    {L"he", L"Hebrew", L"עברית", true, false, kTexts_he, ARRAYSIZE(kTexts_he)},
+    {L"hi", L"Hindi", L"हिन्दी", false, false, kTexts_hi, ARRAYSIZE(kTexts_hi)},
+    {L"hu", L"Hungarian", L"Magyar", false, false, kTexts_hu, ARRAYSIZE(kTexts_hu)},
+    {L"id", L"Indonesian", L"Bahasa Indonesia", false, false, kTexts_id, ARRAYSIZE(kTexts_id)},
+    {L"it", L"Italian", L"Italiano", false, false, kTexts_it, ARRAYSIZE(kTexts_it)},
+    {L"ja", L"Japanese", L"日本語", false, true, kTexts_ja, ARRAYSIZE(kTexts_ja)},
+    {L"ko", L"Korean", L"한국어", false, false, kTexts_ko, ARRAYSIZE(kTexts_ko)},
+    {L"nb", L"Norwegian", L"Norsk bokmål", false, false, kTexts_nb, ARRAYSIZE(kTexts_nb)},
+    {L"fa", L"Persian", L"فارسی", true, false, kTexts_fa, ARRAYSIZE(kTexts_fa)},
+    {L"pl", L"Polish", L"Polski", false, false, kTexts_pl, ARRAYSIZE(kTexts_pl)},
+    {L"pt-BR", L"Portuguese", L"Português", false, false, kTexts_pt_BR, ARRAYSIZE(kTexts_pt_BR)},
+    {L"ro", L"Romanian", L"Română", false, false, kTexts_ro, ARRAYSIZE(kTexts_ro)},
+    {L"ru", L"Russian", L"Русский", false, false, kTexts_ru, ARRAYSIZE(kTexts_ru)},
+    {L"es", L"Spanish", L"Español", false, false, kTexts_es, ARRAYSIZE(kTexts_es)},
+    {L"sv", L"Swedish", L"Svenska", false, false, kTexts_sv, ARRAYSIZE(kTexts_sv)},
+    {L"ta", L"Tamil", L"தமிழ்", false, false, kTexts_ta, ARRAYSIZE(kTexts_ta)},
+    {L"th", L"Thai", L"ไทย", false, false, kTexts_th, ARRAYSIZE(kTexts_th)},
+    {L"tr", L"Turkish", L"Türkçe", false, false, kTexts_tr, ARRAYSIZE(kTexts_tr)},
+    {L"uk", L"Ukrainian", L"Українська", false, false, kTexts_uk, ARRAYSIZE(kTexts_uk)},
+    {L"vi", L"Vietnamese", L"Tiếng Việt", false, false, kTexts_vi, ARRAYSIZE(kTexts_vi)},
+};
+
+const LanguageInfo* GetLanguages(size_t& count) {
+    count = ARRAYSIZE(kLanguageTable);
+    return kLanguageTable;
 }

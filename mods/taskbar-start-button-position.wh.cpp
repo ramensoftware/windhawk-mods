@@ -2,7 +2,7 @@
 // @id              taskbar-start-button-position
 // @name            Start button always on the left
 // @description     Forces the Start button to be on the left of the taskbar, even when taskbar icons are centered, with an option to also move the search and task view buttons (Windows 11 only)
-// @version         1.3.3
+// @version         1.3.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -120,6 +120,7 @@ std::atomic<bool> g_unloading;
 thread_local bool g_TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride;
 thread_local bool g_inShowStartButtonContextMenu;
 
+// The search menu window moved by the mod, or null.
 HWND g_searchMenuWnd;
 // The search menu's x before it was moved, or y with a vertical taskbar.
 int g_searchMenuOriginalPos;
@@ -304,7 +305,13 @@ SystemButton IdentifySystemButton(FrameworkElement element) {
             return SystemButton::Widgets;
         }
     } else if (className == L"Taskbar.TaskbarExtensionElement") {
-        return SystemButton::Search;
+        // On newer builds, the system tray is an extension element too.
+        auto contentControl = element.try_as<Controls::ContentControl>();
+        auto content = contentControl ? contentControl.Content() : nullptr;
+        if (content && winrt::get_class_name(content) ==
+                           L"SearchUx.SearchUI.SearchButtonControl") {
+            return SystemButton::Search;
+        }
     }
 
     return SystemButton::None;
@@ -543,10 +550,13 @@ bool ApplyStyle(XamlRoot xamlRoot) {
 
     FrameworkElement taskbarFrameRepeater = nullptr;
 
+    // On newer builds, the XAML root content is the taskbar frame itself.
     FrameworkElement child = xamlRootContent;
-    if (child &&
-        (child = FindChildByClassName(child, L"Taskbar.TaskbarFrame")) &&
-        (child = FindChildByName(child, L"RootGrid")) &&
+    if (child && winrt::get_class_name(child) != L"Taskbar.TaskbarFrame") {
+        child = FindChildByClassName(child, L"Taskbar.TaskbarFrame");
+    }
+
+    if (child && (child = FindChildByName(child, L"RootGrid")) &&
         (child = FindChildByName(child, L"TaskbarFrameRepeater"))) {
         taskbarFrameRepeater = child;
     }
@@ -779,8 +789,47 @@ void ApplySettingsFromTaskbarThread() {
 }
 
 void ApplySettings(HWND hTaskbarWnd) {
+    struct ApplySettingsParam {
+        HWND hTaskbarWnd;
+        winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
+    };
+
+    ApplySettingsParam param{
+        .hTaskbarWnd = hTaskbarWnd,
+    };
+
     RunFromWindowThread(
-        hTaskbarWnd, [](void* pParam) { ApplySettingsFromTaskbarThread(); }, 0);
+        hTaskbarWnd,
+        [](void* pParam) {
+            ApplySettingsParam& param = *(ApplySettingsParam*)pParam;
+
+            if (g_unloading) {
+                if (auto xamlRoot = GetTaskbarXamlRoot(param.hTaskbarWnd)) {
+                    if (auto content = xamlRoot.Content()) {
+                        param.dispatcher = content.Dispatcher();
+                    }
+                }
+            }
+
+            ApplySettingsFromTaskbarThread();
+        },
+        &param);
+
+    // The callbacks queued by ScheduleOnTaskbarThread run mod code, and none
+    // are queued while unloading. They run at High priority, so all of them
+    // have run once a Low priority callback runs.
+    if (param.dispatcher) {
+        try {
+            param.dispatcher
+                .TryRunAsync(
+                    winrt::Windows::UI::Core::CoreDispatcherPriority::Low,
+                    [] {})
+                .get();
+        } catch (...) {
+            HRESULT hr = winrt::to_hresult();
+            Wh_Log(L"Error %08X", hr);
+        }
+    }
 }
 
 using IUIElement_Arrange_t =
@@ -948,12 +997,12 @@ HRESULT WINAPI TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook(
         return true;
     }();
 
+    // Arrange can be nested.
+    bool prev = g_TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride;
     g_TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride = true;
-
     HRESULT ret = TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original(
         pThis, context, size, resultSize);
-
-    g_TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride = false;
+    g_TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride = prev;
 
     return ret;
 }
@@ -1023,8 +1072,7 @@ using TaskbarFrame_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,
 TaskbarFrame_get_Alignment_t TaskbarFrame_get_Alignment_Original;
 HRESULT WINAPI TaskbarFrame_get_Alignment_Hook(void* pThis, int* alignment) {
     HRESULT hr = TaskbarFrame_get_Alignment_Original(pThis, alignment);
-    if (SUCCEEDED(hr) && !g_unloading && g_settings.startMenuOnTheLeft &&
-        g_inShowStartButtonContextMenu) {
+    if (SUCCEEDED(hr) && !g_unloading && g_inShowStartButtonContextMenu) {
         *alignment = 0;  // TaskbarAlignment::Left
     }
 
@@ -1361,7 +1409,7 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
             g_searchMenuVertical = vertical;
             g_searchMenuMonitor = monitor;
         } else {
-            if (!g_searchMenuOriginalPos) {
+            if (hwnd != g_searchMenuWnd) {
                 return original();
             }
 
@@ -1370,7 +1418,6 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
             bool monitorMatches = monitor == g_searchMenuMonitor;
 
             g_searchMenuWnd = nullptr;
-            g_searchMenuOriginalPos = 0;
             g_searchMenuMonitor = nullptr;
 
             if (!monitorMatches) {
@@ -1389,9 +1436,17 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
         pos = newPos;
     }
 
-    SetWindowPos(hwnd, nullptr, x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
+    // Move a window that's being shown before uncloaking it, and one that's
+    // being hidden after cloaking it, so that the move isn't visible.
+    if (!cloak) {
+        SetWindowPos(hwnd, nullptr, x, y, cx, cy,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+        return original();
+    }
 
-    return original();
+    HRESULT hr = original();
+    SetWindowPos(hwnd, nullptr, x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
+    return hr;
 }
 
 using SearchBoxOnTaskbarSearchAppPositioner_GetAppRectForSearchBoxOnTaskbar_t =
@@ -1864,7 +1919,7 @@ HRESULT WINAPI RoGetActivationFactory_Hook(HSTRING activatableClassId,
 }  // namespace StartMenuUI
 
 void RestoreMenuPositions() {
-    if (g_searchMenuWnd && g_searchMenuOriginalPos) {
+    if (g_searchMenuWnd) {
         HMONITOR monitor =
             MonitorFromWindow(g_searchMenuWnd, MONITOR_DEFAULTTONEAREST);
 
@@ -1887,7 +1942,6 @@ void RestoreMenuPositions() {
         }
 
         g_searchMenuWnd = nullptr;
-        g_searchMenuOriginalPos = 0;
         g_searchMenuMonitor = nullptr;
     }
 }
