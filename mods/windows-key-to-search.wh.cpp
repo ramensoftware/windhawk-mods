@@ -71,10 +71,14 @@ Search used since version 1.2.
 namespace {
 constexpr ULONG_PTR kInputTag = 0x57485352;
 constexpr UINT kOpenSearchMessage = WM_APP + 1;
+// Posted when a Win key goes down or up, so the hook thread installs the
+// mouse hook only while a Win key is held.
+constexpr UINT kSyncMouseHookMessage = WM_APP + 2;
 // Pressed before a Win release to keep Start from opening. A modifier, so
 // browsers don't treat it as keyboard use and show focus rings (an unassigned
-// key such as 0xE8 does). Right Ctrl avoids PowerToys' Left Ctrl shortcuts.
-constexpr WORD kMenuMaskKey = VK_RCONTROL;
+// key such as 0xE8 does). Shift, because a Ctrl tap triggers "Show location of
+// pointer when I press the CTRL key" and an Alt tap activates menu bars.
+constexpr WORD kMenuMaskKey = VK_RSHIFT;
 HANDLE g_thread;
 HANDLE g_ready;
 DWORD g_threadId;
@@ -128,14 +132,14 @@ bool IsSearchWindow(HWND window) {
     g_lastSearchCandidate = window;
     if (!GetWindowThreadProcessId(window, &pid)) {
         if (logCandidate) {
-            Wh_Log(L"Waiting for Search: no foreground process (error %lu)", GetLastError());
+            Wh_Log(L"Foreground window: no process (error %lu)", GetLastError());
         }
         return false;
     }
     HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (!process) {
         if (logCandidate) {
-            Wh_Log(L"Waiting for Search: HWND=%p, class=%s, PID=%lu; process query denied (error %lu)",
+            Wh_Log(L"Foreground window: HWND=%p, class=%s, PID=%lu; process query denied (error %lu)",
                    window, className, pid, GetLastError());
         }
         return false;
@@ -147,7 +151,7 @@ bool IsSearchWindow(HWND window) {
     CloseHandle(process);
     if (!read) {
         if (logCandidate) {
-            Wh_Log(L"Waiting for Search: HWND=%p, class=%s, PID=%lu; path query failed (error %lu)",
+            Wh_Log(L"Foreground window: HWND=%p, class=%s, PID=%lu; path query failed (error %lu)",
                    window, className, pid, error);
         }
         return false;
@@ -155,12 +159,13 @@ bool IsSearchWindow(HWND window) {
     const WCHAR* name = wcsrchr(path, L'\\');
     name = name ? name + 1 : path;
     if (logCandidate) {
-        Wh_Log(L"Search foreground candidate: HWND=%p, class=%s, PID=%lu, process=%s",
+        Wh_Log(L"Foreground window: HWND=%p, class=%s, PID=%lu, process=%s",
                window, className, pid, name);
     }
     // Newer Windows 11 builds host Search in ShellHost.exe. It also hosts
-    // other shell flyouts, so require its frame class; tracking only runs
-    // briefly after our own Search request, which keeps this from matching others.
+    // other shell flyouts, so require its frame class. This runs on every tap
+    // (to choose between Escape and opening Search) and while tracking the
+    // taskbar after our own Search request.
     if (_wcsicmp(name, L"ShellHost.exe") == 0) {
         return wcscmp(className, L"ShellUXFrameWindowClass") == 0;
     }
@@ -254,6 +259,19 @@ INPUT KeyboardInput(WORD vk, DWORD flags = 0, WORD scan = 0) {
     return input;
 }
 
+// Builds the swallowed Win release. The mask key goes down before it so Start
+// doesn't open. If the mask key is already physically held, only its down is
+// sent (it reads as an autorepeat) and no up, so the held key isn't released.
+UINT MaskedWinRelease(INPUT* out, WORD vk) {
+    UINT count = 0;
+    out[count++] = KeyboardInput(kMenuMaskKey);
+    if (!g_keys[kMenuMaskKey]) {
+        out[count++] = KeyboardInput(kMenuMaskKey, KEYEVENTF_KEYUP);
+    }
+    out[count++] = KeyboardInput(vk, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP);
+    return count;
+}
+
 bool Inject(INPUT* inputs, UINT count) {
     const UINT sent = SendInput(count, inputs, sizeof(INPUT));
     if (sent == count) {
@@ -324,7 +342,10 @@ class SearchClient {
         hr = root->FindFirst(TreeScope_Descendants, condition.Get(), button.ReleaseAndGetAddressOf());
         if (FAILED(hr)) return hr;
         if (!button) return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
-        return button->GetCurrentPatternAs(UIA_TogglePatternId, IID_PPV_ARGS(&toggle));
+        hr = button->GetCurrentPatternAs(UIA_TogglePatternId, IID_PPV_ARGS(&toggle));
+        // A button without Toggle must fail so the SearchCommand fallback runs.
+        if (SUCCEEDED(hr) && !toggle) hr = E_NOINTERFACE;
+        return hr;
     }
 
 public:
@@ -403,16 +424,21 @@ void OpenSearch() {
         return;
     }
     PrepareTaskbarReveal();
-    if (!ReleaseSemaphore(g_searchRequests, 1, nullptr)) {
+    // Auto-reset event: taps made while a UIA call is slow coalesce into one.
+    if (!SetEvent(g_searchRequests)) {
         Wh_Log(L"Could not queue Search (error %lu)", GetLastError());
         EndTaskbarReveal();
     }
 }
 
 void ResetKeyTracking() {
+    const bool winHeld = g_keys[VK_LWIN] || g_keys[VK_RWIN];
     ZeroMemory(g_keys, sizeof(g_keys));
     ZeroMemory(g_tap, sizeof(g_tap));
     ZeroMemory(g_shortcutUsed, sizeof(g_shortcutUsed));
+    if (winHeld) {
+        PostThreadMessageW(g_threadId, kSyncMouseHookMessage, 0, 0);
+    }
 }
 
 LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
@@ -432,6 +458,11 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
         (!g_canRemapForeground || GetForegroundWindow() != g_cachedForeground)) {
         // Inaccessible/elevated foreground windows retain their original input.
         ResetKeyTracking();
+        if (IsWindowsKey(key.vkCode) && down) {
+            // Record the held Win so autorepeats after focus moves to an
+            // accessible window aren't mistaken for a fresh press (and a tap).
+            g_keys[key.vkCode] = true;
+        }
         return CallNextHookEx(nullptr, code, message, param);
     }
     const bool win = IsWindowsKey(key.vkCode);
@@ -472,10 +503,12 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
             g_tap[0] = g_tap[1] = false;
             g_tap[index] = true;
             g_shortcutUsed[index] = false;
+            PostThreadMessageW(g_threadId, kSyncMouseHookMessage, 0, 0);
         } else if (!repeat || !IsModifierKey(key.vkCode)) {
-            // A non-modifier key down or repeat while Win is held always
-            // cancels the tap, even a key held before Win: a missed Search is
-            // safer than Search opening on top of a shortcut.
+            // A fresh key down (a modifier too, which is how Win+Shift gets a
+            // masked release and no Search) or a non-modifier repeat while Win
+            // is held cancels the tap, even a key held before Win: a missed
+            // Search is safer than Search opening on top of a shortcut.
             g_tap[0] = g_tap[1] = false;
             if (!repeat && !IsModifierKey(key.vkCode)) {
                 for (int i = 0; i < 2; ++i) {
@@ -492,11 +525,11 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
             const bool shortcutUsed = g_shortcutUsed[index];
             g_tap[index] = false;
             g_shortcutUsed[index] = false;
+            PostThreadMessageW(g_threadId, kSyncMouseHookMessage, 0, 0);
             if (tap) {
                 // Post to our own thread so input is sent after this hook
                 // returns, rather than during the physical Win-up callback.
-                if (!PostThreadMessageW(g_threadId, kOpenSearchMessage,
-                                        key.vkCode, 0)) {
+                if (!PostThreadMessageW(g_threadId, kOpenSearchMessage, 0, 0)) {
                     Wh_Log(L"Could not queue Search (error %lu)", GetLastError());
                 }
             }
@@ -507,13 +540,10 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
             }
             // Bare taps and modifier-only combos (e.g. Win+Shift) would open
             // Start; swallow the release and send it with a mask key instead.
-            INPUT release[] = {
-                KeyboardInput(kMenuMaskKey),
-                KeyboardInput(kMenuMaskKey, KEYEVENTF_KEYUP),
-                KeyboardInput(static_cast<WORD>(key.vkCode),
-                              KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP),
-            };
-            if (Inject(release, ARRAYSIZE(release))) {
+            INPUT release[3];
+            const UINT releaseCount =
+                MaskedWinRelease(release, static_cast<WORD>(key.vkCode));
+            if (Inject(release, releaseCount)) {
                 return 1;
             }
         }
@@ -539,6 +569,23 @@ LRESULT CALLBACK MouseProc(int code, WPARAM message, LPARAM param) {
         }
     }
     return CallNextHookEx(nullptr, code, message, param);
+}
+
+// Installs the mouse hook while a Win key is held and removes it otherwise,
+// so no global mouse hook runs (and delays input) the rest of the time.
+void SyncMouseHook(HHOOK& mouse, HMODULE module) {
+    const bool winHeld = g_keys[VK_LWIN] || g_keys[VK_RWIN];
+    if (winHeld && !mouse) {
+        // Optional: without it only Win+mouse gestures lose tap cancellation.
+        mouse = SetWindowsHookExW(WH_MOUSE_LL, MouseProc, module, 0);
+        if (!mouse) {
+            Wh_Log(L"Mouse hook failed (error %lu); Win+mouse may open Search",
+                   GetLastError());
+        }
+    } else if (!winHeld && mouse) {
+        UnhookWindowsHookEx(mouse);
+        mouse = nullptr;
+    }
 }
 
 void RefreshForegroundAccess() {
@@ -606,19 +653,20 @@ DWORD WINAPI HookThread(void*) {
     RefreshForegroundAccess();
     HHOOK keyboard = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardProc, module, 0);
     g_hooksInstalled = keyboard && foregroundHook && desktopHook;
-    // Optional: without it only Win+mouse gestures lose tap cancellation.
-    HHOOK mouse = SetWindowsHookExW(WH_MOUSE_LL, MouseProc, module, 0);
-    if (!mouse) {
-        Wh_Log(L"Mouse hook failed (error %lu); Win+mouse may open Search",
-               GetLastError());
-    }
+    // Installed only while a Win key is held (see SyncMouseHook).
+    HHOOK mouse = nullptr;
     SetEvent(g_ready);
 
     if (g_hooksInstalled) {
+        SyncMouseHook(mouse, module);  // A Win key may already be held.
         while (GetMessageW(&message, nullptr, 0, 0) > 0) {
             if (message.message == WM_TIMER && g_taskbarTimer &&
                 message.wParam == g_taskbarTimer) {
                 CheckTaskbarReveal();
+                continue;
+            }
+            if (message.message == kSyncMouseHookMessage) {
+                SyncMouseHook(mouse, module);
                 continue;
             }
             if (message.message == kOpenSearchMessage) {
@@ -652,9 +700,7 @@ DWORD WINAPI HookThread(void*) {
     for (int i = 0; i < 2; ++i) {
         const WORD vk = i == 0 ? VK_LWIN : VK_RWIN;
         if (g_keys[vk]) {
-            releases[count++] = KeyboardInput(kMenuMaskKey);
-            releases[count++] = KeyboardInput(kMenuMaskKey, KEYEVENTF_KEYUP);
-            releases[count++] = KeyboardInput(vk, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP);
+            count += MaskedWinRelease(releases + count, vk);
         }
     }
     if (count) {
@@ -713,7 +759,7 @@ BOOL WhTool_ModInit() {
     g_hasElevatedInputAccess = HasElevatedInputAccess();
     g_searchStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_searchReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_searchRequests = CreateSemaphoreW(nullptr, 0, 64, nullptr);
+    g_searchRequests = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_searchStop || !g_searchReady || !g_searchRequests) {
         Cleanup();
         return FALSE;
