@@ -6812,7 +6812,7 @@
         "ratingUsers": 34,
         "reviews": 1,
         "trendingSorting": 19.32273535162429,
-        "updated": 1794380630000,
+        "updated": 1795197905000,
         "users": 693
       },
       "metadata": {
@@ -6820,7 +6820,7 @@
           "x86-64"
         ],
         "author": "gilnett",
-        "compilerOptions": "-lcomctl32",
+        "compilerOptions": "-lcomctl32 -lshell32",
         "description": "Improves File Explorer navigation latency and eliminates redraw flicker",
         "donateUrl": "https://buymeacoffee.com/gilnett",
         "github": "https://github.com/gilnett",
@@ -6829,7 +6829,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Explorer Fast Navigation",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "explorer-folder-bookmarks-bar": {
@@ -16166,6 +16166,31 @@
         ],
         "name": "StartIsBack++ Tweaker",
         "version": "0.7.1"
+      }
+    },
+    "simple-wallpaper-switcher": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795197899000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795197899000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "HHeitlager",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -lcomctl32 -lshlwapi -luuid -ldwmapi -luxtheme -lgdi32 -lmsimg32 -ld2d1 -lwindowscodecs -lgdiplus -ladvapi32 -lshcore",
+        "description": "Browse your wallpaper folders, preview thumbnails, and switch with smooth transitions.",
+        "github": "https://github.com/hheitlager",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Simple Wallpaper Switcher",
+        "version": "0.1.3"
       }
     },
     "simple-window-switcher": {

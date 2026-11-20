@@ -2,12 +2,69 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-20T18:04:53.000Z</updated>
+    <updated>2026-11-20T18:04:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Simple Wallpaper Switcher 0.1.3]]></title>
+        <id>https://windhawk.net/mods/simple-wallpaper-switcher#05bfdedf882180fc609ad099c2d7ba21d3f56464</id>
+        <link href="https://windhawk.net/mods/simple-wallpaper-switcher"/>
+        <updated>2026-11-20T18:04:59.000Z</updated>
+        <content type="html"><![CDATA[<h1>Simple Wallpaper Switcher</h1>
+<p><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-banner.gif" alt="Simple Wallpaper Switcher showing the picker and wallpaper changes"></p>
+<h2>Screenshots</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Solid</th>
+<th style="text-align:center">Blurred</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center"><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-solid-material.png" alt="Solid"></td>
+<td style="text-align:center"><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-blur-material.png" alt="Blurred"></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Acrylic</th>
+<th style="text-align:center">Quick-menu</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center"><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-acrylic-material.png" alt="Acrylic"></td>
+<td style="text-align:center"><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-taskbar-quick-menu.png" alt="Quick-menu"></td>
+</tr>
+</tbody>
+</table>
+<h3>Your wallpaper collection, ready when you are.</h3>
+<p>Browse your wallpapers in a compact visual picker, choose a new look, and watch it transition onto your desktop.</p>
+<h2>Find your next wallpaper</h2>
+<p>See your collection as a grid of thumbnails. Browse folders with the breadcrumb menu, click a wallpaper to apply it, or use the keyboard to move through your collection.</p>
+<h2>Stay in the flow</h2>
+<p>Choose another wallpaper while a transition is running. The effect retargets to your latest choice, so you can keep browsing without waiting for each change to finish.</p>
+<h2>Make it yours</h2>
+<p>Choose from the shared Emberveil themes and set the picker background to Solid, Blur, or Acrylic. Pick a transition effect, or let Random choose one for you.</p>
+<h2>Wallpaper behavior</h2>
+<p>Applying a wallpaper updates the Windows desktop wallpaper setting. Windows keeps that image after the mod is disabled or removed, and applying an image replaces a Slideshow or Windows Spotlight background. The picker applies the image to the monitor under the pointer.</p>
+<h2>Get started</h2>
+<p>Set your wallpaper folder in the mod settings, then open the picker from its tray icon or keyboard shortcut.</p>
+<p>The tray icon stays available while the mod is enabled. Disable the mod in Windhawk to stop the switcher.</p>
+<p>Click a thumbnail to apply it. Use the arrow keys to move, Enter or Space to apply, and the mouse wheel to change pages. Click the magnifying glass in the breadcrumb, or start typing, to filter filenames in the current folder. Press Escape to clear the search.</p>
+<p>Supported image formats: JPEG, PNG, BMP, and WebP.</p>
+]]></content>
+        <author>
+            <name>HHeitlager</name>
+            <uri>https://github.com/hheitlager</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cursor Scheme Extension 1.0.3]]></title>
         <id>https://windhawk.net/mods/cursor-scheme-extension#427f188871d9503beced8388f8a4a1fdeb1fd4dd</id>
@@ -1428,61 +1485,6 @@ tool without injecting into or hooking any system processes.</li>
         <author>
             <name>Dev-StudioCode</name>
             <uri>https://github.com/Dev-StudioCode</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Core Context Menu Customizer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-core-context-menu-customizer#8ba4a9500fc8e8f1f8152b0ba4c424de2072c417</id>
-        <link href="https://windhawk.net/mods/explorer-core-context-menu-customizer"/>
-        <updated>2026-11-16T21:04:36.000Z</updated>
-        <content type="html"><![CDATA[<h1>Explorer Core Context Menu Customizer</h1>
-<p>Windows does not provide any registry entries or built-in options to customize the icons or labels of core File Explorer context menu commands. This mod was created to fill that gap cleanly and safely.</p>
-<blockquote>
-<p><strong>Windows 11 Note:</strong> This mod customizes the classic File Explorer context menu (accessible via <strong>Show more options</strong> or <code>Shift+F10</code>, or when the classic context menu is enabled).</p>
-</blockquote>
-<h3>Screenshots:</h3>
-<table>
-<thead>
-<tr>
-<th style="text-align:center">Disabled (Default)</th>
-<th style="text-align:center">Enabled (Customized)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:center"><img src="https://i.imgur.com/aoglE8P.png" alt="Disabled"></td>
-<td style="text-align:center"><img src="https://i.imgur.com/norFuuE.png" alt="Enabled"></td>
-</tr>
-</tbody>
-</table>
-<h3>Highlights:</h3>
-<ul>
-<li><strong>Canonical Verb Matching:</strong> Identifies core shell commands via <code>IContextMenu::GetCommandString</code> (<code>GCS_VERBW</code>), working across every Windows display language without touching third-party shell extension items.</li>
-<li><strong>Zero Layout Distortion:</strong> Attaches icons cleanly during <code>IContextMenu::QueryContextMenu</code> so native row height, padding, and bold text remain completely untouched.</li>
-<li><strong>Clear-to-Reset Behavior:</strong> Clearing an icon path removes the icon for Open, Delete, Rename, or Properties, while Run as administrator reverts to the native Windows UAC shield.</li>
-<li><strong>Custom Icon Support:</strong> Easily add your own <code>.ico</code> files or use any built-in Windows icon with <code>dll,index</code> syntax.</li>
-<li><strong>Per-Monitor DPI &amp; Leak-Free Caching:</strong> Caches 32-bpp ARGB bitmaps per monitor DPI in memory with zero GDI handle leaks.</li>
-</ul>
-<h3>Dynamic <code>%file%</code> Placeholder:</h3>
-<p>Include <code>%file%</code> (or <code>%name%</code>) in any custom label field to dynamically display the right-clicked file, folder, or shortcut target name. Names longer than 30 characters are automatically shortened to the first 30 characters followed by <code>...</code>:</p>
-<ul>
-<li><code>Rename: '%file%'</code> -&gt; <strong>Rename: 'Spotify.exe'</strong></li>
-<li><code>Open: %file%</code> -&gt; <strong>Open: New folder (2)</strong></li>
-<li><code>Delete %file%</code> -&gt; <strong>Delete Very_Long_File_Name_Over_Thirt...</strong></li>
-<li><code>%file% Properties</code> -&gt; <strong>report.pdf Properties</strong></li>
-</ul>
-<h3>Supported Context Menu Items:</h3>
-<ol>
-<li><strong>Open</strong> (<code>open</code>) - Top bold default action (default icon: <code>imageres.dll,-185</code>)</li>
-<li><strong>Run as administrator</strong> (<code>runas</code>) - UAC elevation action (keeps native UAC shield and default label unless customized)</li>
-<li><strong>Delete</strong> (<code>delete</code>) - File and folder deletion action (default icon: Full Recycle Bin <code>imageres.dll,-54</code>)</li>
-<li><strong>Rename</strong> (<code>rename</code>) - Inline rename action (default icon: Clipboard <code>shell32.dll,-16763</code>, default label: <code>Rename: '%file%'</code>)</li>
-<li><strong>Properties</strong> (<code>properties</code>) - Bottom item details action (default icon: <code>imageres.dll,-114</code>)</li>
-</ol>
-]]></content>
-        <author>
-            <name>akiyorm</name>
-            <uri>https://github.com/akiyorm</uri>
         </author>
     </entry>
 </feed>

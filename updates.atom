@@ -2,12 +2,88 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-20T18:04:53.000Z</updated>
+    <updated>2026-11-20T18:05:05.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Fast Navigation 1.1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-fast-navigation#814cfdde194e6e74c8f4e97df85af01693fb2284</id>
+        <link href="https://windhawk.net/mods/explorer-fast-navigation"/>
+        <updated>2026-11-20T18:05:05.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Accelerate grouped folder presentation via confined GroupingWork and CDefCollection::_GroupItem hook</li>
+<li>Prevent tab state collisions using bounded TabTable per CShellBrowser and UIItemsView</li>
+<li>Ensure complete deferred task drops in multiple inheritance by tracking canonical IUnknown pointers</li>
+<li>Offload storage metadata probing to NT threadpool work items with direct queue messaging</li>
+<li>Harden unload safety with uninterrupted subclass lifetime guards and fast-path bailout</li>
+<li>Emit factual transition telemetry directly in Wh_Log for DebugView and mod diagnostics</li>
+</ul>
+]]></content>
+        <author>
+            <name>gilnett</name>
+            <uri>https://github.com/gilnett</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Simple Wallpaper Switcher 0.1.3]]></title>
+        <id>https://windhawk.net/mods/simple-wallpaper-switcher#05bfdedf882180fc609ad099c2d7ba21d3f56464</id>
+        <link href="https://windhawk.net/mods/simple-wallpaper-switcher"/>
+        <updated>2026-11-20T18:04:59.000Z</updated>
+        <content type="html"><![CDATA[<h1>Simple Wallpaper Switcher</h1>
+<p><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-banner.gif" alt="Simple Wallpaper Switcher showing the picker and wallpaper changes"></p>
+<h2>Screenshots</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Solid</th>
+<th style="text-align:center">Blurred</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center"><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-solid-material.png" alt="Solid"></td>
+<td style="text-align:center"><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-blur-material.png" alt="Blurred"></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Acrylic</th>
+<th style="text-align:center">Quick-menu</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center"><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-acrylic-material.png" alt="Acrylic"></td>
+<td style="text-align:center"><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-taskbar-quick-menu.png" alt="Quick-menu"></td>
+</tr>
+</tbody>
+</table>
+<h3>Your wallpaper collection, ready when you are.</h3>
+<p>Browse your wallpapers in a compact visual picker, choose a new look, and watch it transition onto your desktop.</p>
+<h2>Find your next wallpaper</h2>
+<p>See your collection as a grid of thumbnails. Browse folders with the breadcrumb menu, click a wallpaper to apply it, or use the keyboard to move through your collection.</p>
+<h2>Stay in the flow</h2>
+<p>Choose another wallpaper while a transition is running. The effect retargets to your latest choice, so you can keep browsing without waiting for each change to finish.</p>
+<h2>Make it yours</h2>
+<p>Choose from the shared Emberveil themes and set the picker background to Solid, Blur, or Acrylic. Pick a transition effect, or let Random choose one for you.</p>
+<h2>Wallpaper behavior</h2>
+<p>Applying a wallpaper updates the Windows desktop wallpaper setting. Windows keeps that image after the mod is disabled or removed, and applying an image replaces a Slideshow or Windows Spotlight background. The picker applies the image to the monitor under the pointer.</p>
+<h2>Get started</h2>
+<p>Set your wallpaper folder in the mod settings, then open the picker from its tray icon or keyboard shortcut.</p>
+<p>The tray icon stays available while the mod is enabled. Disable the mod in Windhawk to stop the switcher.</p>
+<p>Click a thumbnail to apply it. Use the arrow keys to move, Enter or Space to apply, and the mouse wheel to change pages. Click the magnifying glass in the breadcrumb, or start typing, to filter filenames in the current folder. Press Escape to clear the search.</p>
+<p>Supported image formats: JPEG, PNG, BMP, and WebP.</p>
+]]></content>
+        <author>
+            <name>HHeitlager</name>
+            <uri>https://github.com/hheitlager</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cursor Scheme Extension 1.0.3]]></title>
         <id>https://windhawk.net/mods/cursor-scheme-extension#427f188871d9503beced8388f8a4a1fdeb1fd4dd</id>
@@ -630,40 +706,6 @@ you search for the browser itself, but it is still listed when you type its name
         <author>
             <name>ernisn</name>
             <uri>https://github.com/ernisn</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 8/8.1 Charms Bar Recreation 1.1.0]]></title>
-        <id>https://windhawk.net/mods/win8-charms-bar-recreation#8a3d4890dde6afa55a8829047e50ef676f824cfd</id>
-        <link href="https://windhawk.net/mods/win8-charms-bar-recreation"/>
-        <updated>2026-11-19T22:02:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved the context menus</li>
-<li>Applied minor graphic improvements</li>
-<li>Applied minor improvements</li>
-</ul>
-]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide speed 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-speed#117a781f71dc5f3cf24815e2cda3a6773dba286c</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-speed"/>
-        <updated>2026-11-19T05:01:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added animation options that make the auto-hide feel more smooth and natural.</li>
-<li>The animation now syncs to the display refresh rate, making the animation more smooth. It can be disabled in the settings if a custom refresh rate is desired.</li>
-<li>Improved the accuracy of the custom refresh rate timer.</li>
-<li>Fixed the &quot;Customize the old taskbar on Windows 11&quot; option on Windows 11 24H2 builds before 26100.1301, which still include the old taskbar.</li>
-</ul>
-<p>The first two changes were contributed by <a href="https://github.com/eduard-lt">Eduard Olteanu</a>.</p>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
