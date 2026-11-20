@@ -23,9 +23,9 @@ fade out toward the top and bottom of the arc.
 ## Using it
 
 **Mouse**
-- Move above or below the centre band to spin the wheel. The further you go,
-  the faster it spins.
 - Scroll inside the wheel to step one item. Scroll outside it to dismiss.
+- Optional "Tilt to spin": move above or below the centre band to spin the
+  wheel, faster the further you go.
 - Click a label to choose it. A click on empty space inside the wheel
   chooses the highlighted item by default; that can be changed to do
   nothing or to close the wheel. Click outside to dismiss.
@@ -108,9 +108,9 @@ takes the menu, so use one at a time.
 - accent: false
   $name: Use the Windows accent color
   $description: Colors the outline and the highlight with your Windows accent color.
-- tilt: true
+- tilt: false
   $name: Tilt to spin
-  $description: Spin the wheel by moving the mouse above or below the centre band.
+  $description: Spin the wheel by moving the mouse above or below the centre band. Off by default, because the labels then move while you reach for them.
 - tiltSpeed: 18
   $name: Tilt speed
   $description: Items per second at full tilt.
@@ -258,7 +258,7 @@ struct Config {
     float tiltRange = 0.55f;     // fraction of the radius where tilt maxes out
     float wheelHoldPx = 14.0f;   // mouse travel that hands control back to tilt
     float snapRate = 16.0f;      // detent easing; higher = snappier
-    bool tilt = true;
+    bool tilt = false;
     bool wrap = false;           // off: stop at the first and last item
     bool guides = false;         // draw the dead-band lines
 
