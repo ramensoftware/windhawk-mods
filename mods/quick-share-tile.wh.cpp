@@ -34,9 +34,9 @@ Nearby sharing tile a new purpose.
 
 ## Requirements
 
-- Windows 11 x64.
+- Windows 11 x64, build 24H2 or later (Quick Settings hosted by ShellHost.exe).
 - Windhawk.
-- Quick Share installed.
+- [Google's Quick Share for Windows](https://www.android.com/better-together/quick-share-app/) installed (not Samsung's app of the same name).
 - Quick Share shortcut located at:
 
   `C:\ProgramData\Microsoft\Windows\Start Menu\Quick Share.lnk`
@@ -146,6 +146,7 @@ std::atomic<bool> g_stopping{false};
 std::atomic<int> g_controlCenterHookState{0};
 thread_local bool g_inViewGotFocus = false;
 std::mutex g_viewsMutex;
+std::mutex g_hookInstallMutex;
 
 struct IBufferByteAccess : ::IUnknown {
     virtual HRESULT __stdcall Buffer(uint8_t** value) = 0;
@@ -165,15 +166,9 @@ struct Settings {
 
 Settings g_settings;
 
-std::wstring GetStringSetting(PCWSTR name) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result = value ? value : L"";
-    Wh_FreeStringSetting(value);
-    return result;
-}
-
 void LoadSettings() {
-    g_settings.targetTile = GetStringSetting(L"targetTile");
+    g_settings.targetTile =
+        WindhawkUtils::StringSetting::make(L"targetTile").get();
     g_settings.logTree = Wh_GetIntSetting(L"logTree") != 0;
 
     if (g_settings.targetTile.empty()) {
@@ -310,17 +305,6 @@ xaml::FrameworkElement FindElement(xaml::DependencyObject const& root,
         }
     }
     return nullptr;
-}
-
-std::wstring ClassNameOf(winrt::Windows::Foundation::IInspectable const& object) {
-    if (!object) {
-        return L"(null)";
-    }
-    try {
-        return std::wstring(winrt::get_class_name(object).c_str());
-    } catch (...) {
-        return L"(unknown)";
-    }
 }
 
 void LogVisualTree(xaml::DependencyObject const& root, int depth, int maxDepth,
@@ -523,13 +507,15 @@ private:
         });
         if (!toggle) {
             Wh_Log(L"Tile '%s' was not found in Quick Settings", g_settings.targetTile.c_str());
-            auto layout = FindElement(view, [](xaml::FrameworkElement const& element) {
-                return element.Name() == L"L1Grid";
-            });
-            int remaining = 1200;
-            LogTileCandidates(layout ? layout : view, 0, 24, remaining);
-            if (remaining == 0) {
-                Wh_Log(L"Quick Settings tile candidate log reached its 1200-element limit");
+            if (g_settings.logTree) {
+                auto layout = FindElement(view, [](xaml::FrameworkElement const& element) {
+                    return element.Name() == L"L1Grid";
+                });
+                int remaining = 1200;
+                LogTileCandidates(layout ? layout : view, 0, 24, remaining);
+                if (remaining == 0) {
+                    Wh_Log(L"Quick Settings tile candidate log reached its 1200-element limit");
+                }
             }
             return;
         }
@@ -763,6 +749,11 @@ int WINAPI ViewGotFocusHook(void* object, void* args) {
 }
 
 bool HookControlCenter(HMODULE module, bool applyNow) {
+    std::lock_guard installLock(g_hookInstallMutex);
+    if (g_stopping) {
+        return false;
+    }
+
     int expected = 0;
     if (!g_controlCenterHookState.compare_exchange_strong(expected, 1)) {
         return expected == 2;
@@ -844,6 +835,10 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 
 void Wh_ModUninit() {
     g_stopping = true;
+    {
+        // Wait for a symbol installation running on another thread.
+        std::lock_guard installLock(g_hookInstallMutex);
+    }
 
     std::vector<std::unique_ptr<QuickSettingsViewHook>> views;
     {
@@ -855,7 +850,7 @@ void Wh_ModUninit() {
     for (auto& view : views) {
         auto state = view.get();
         if (!DispatchCleanup(view->Dispatcher(), [state] { state->Restore(); })) {
-            Wh_Log(L"Quick Settings UI thread is shutting down; tile restore could not run");
+            Wh_Log(L"Quick Share UI thread is shutting down; tile restore could not run");
         }
     }
 }
