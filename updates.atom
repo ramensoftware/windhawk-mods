@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-20T03:02:06.000Z</updated>
+    <updated>2026-11-20T04:03:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Preserve Taskbar Order 1.1]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-taskbar-order#5ba8c1e52edb9297bf2cdd6dbf4234c6e9bd6d33</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-taskbar-order"/>
+        <updated>2026-11-20T04:03:55.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved support for placement of items that appear in more than one virtual desktop, including pinned items, grouped items with items in several virtual desktops, or windows that are displayed in all virtual desktops.</li>
+<li>Added support for ARM64.</li>
+<li>Added support for Windows 10.</li>
+<li>Added support for the ExplorerPatcher taskbar.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mac Island & Dock 3.3.0]]></title>
         <id>https://windhawk.net/mods/mac-island-dock#96629f718616de86448082e4741cbc253392e46e</id>
@@ -541,34 +558,6 @@ you search for the browser itself, but it is still listed when you type its name
         <author>
             <name>DoYouNatureQ</name>
             <uri>https://github.com/DoYouNatureQ</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Yandex Music Transparency 1.1]]></title>
-        <id>https://windhawk.net/mods/yandex-music-transparency#8f4eaeef62ea9804e81a529e792d7423b45d5c04</id>
-        <link href="https://windhawk.net/mods/yandex-music-transparency"/>
-        <updated>2026-11-19T04:05:06.000Z</updated>
-        <content type="html"><![CDATA[<h1>Yandex Music Transparency</h1>
-<p>Automatically makes the <strong>Yandex Music</strong> (<code>Яндекс Музыка.exe</code>) desktop window transparent on startup and continuously prevents the Electron application from resetting its opacity or removing <code>WS_EX_LAYERED</code>.</p>
-<p>Unlike one-shot rule-based or hotkey-based opacity mods, this mod injects into the process to actively preserve your chosen transparency level across window state changes and redraws.</p>
-<h2>Settings</h2>
-<ul>
-<li><strong>Window Opacity (<code>Alpha</code>)</strong>: Controls the opacity level from <code>50</code> (more transparent) to <code>255</code> (fully opaque). Default is <code>220</code>.</li>
-</ul>
-<h2>Using with other applications</h2>
-<p>Although tailored for Yandex Music by default, you can apply the same persistent transparency to other Chromium/Electron applications by adding their executable names in the mod's <strong>Advanced</strong> tab under <strong>Custom process inclusion list</strong>.</p>
-<h2>Limitations</h2>
-<ul>
-<li>Only affects top-level windows with the <code>Chrome_WidgetWin_1</code> window class.</li>
-<li>Windows that already use color-key transparency (<code>LWA_COLORKEY</code>) are skipped to avoid visual artifacts.</li>
-<li>Disabling or unloading the mod restores the window's original opacity and layered style.</li>
-</ul>
-<h2>Credits</h2>
-<p>Created with assistance from ChatGPT.</p>
-]]></content>
-        <author>
-            <name>NIKTO</name>
-            <uri>https://github.com/NIKTO-2</uri>
         </author>
     </entry>
 </feed>

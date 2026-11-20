@@ -1,3 +1,10 @@
+## 1.1 ([Nov 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5ba8c1e52edb9297bf2cdd6dbf4234c6e9bd6d33/mods/virtual-desktop-taskbar-order.wh.cpp))
+
+* Improved support for placement of items that appear in more than one virtual desktop, including pinned items, grouped items with items in several virtual desktops, or windows that are displayed in all virtual desktops.
+* Added support for ARM64.
+* Added support for Windows 10.
+* Added support for the ExplorerPatcher taskbar.
+
 ## 1.0.5 ([May 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/22ec4510d1db5a2a0734427f8aff7592aa254bda/mods/virtual-desktop-taskbar-order.wh.cpp))
 
 * Fixed compatibility with recent Windows 11 versions.
