@@ -3,12 +3,10 @@
 // @name            Scroll Window Opacity
 // @description     Hold a key combination and scroll the mouse wheel to change the opacity of the window under the cursor, with an optional title bar button
 // @version         1.1.0
-// @author          Sondre Myrmel, JeremyWayne93
+// @author          Sondre Myrmel
 // @github          https://github.com/Sondre234
 // @twitter         https://x.com/ShaolinLoL
 // @include         windhawk.exe
-// @architecture    x86
-// @architecture    x86-64
 // @compilerOptions -ldwmapi -lgdi32
 // ==/WindhawkMod==
 
@@ -68,26 +66,23 @@ Opacity Button mod.
 - Optional modifier + middle-click to reset a window to 100% (off by default).
 - Optional percentage indicator (off by default).
 - Optional list of excluded programs (empty by default).
+- Fixed the modifier key setting, which was not read correctly and always fell
+  back to Ctrl + Alt.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- modifierKey:
-  - value: ctrl+alt
-    $name: Ctrl + Alt
-  - value: ctrl+shift
-    $name: Ctrl + Shift
-  - value: alt+shift
-    $name: Alt + Shift
-  - value: ctrl
-    $name: Ctrl only
-  - value: alt
-    $name: Alt only
-  - value: shift
-    $name: Shift only
+- modifierKey: ctrl+alt
   $name: Modifier Key(s)
   $description: Key(s) to hold while scrolling the mouse wheel to change opacity
+  $options:
+  - ctrl+alt: Ctrl + Alt
+  - ctrl+shift: Ctrl + Shift
+  - alt+shift: Alt + Shift
+  - ctrl: Ctrl only
+  - alt: Alt only
+  - shift: Shift only
 
 - opacityStep: 1
   $name: Opacity Step (%)
