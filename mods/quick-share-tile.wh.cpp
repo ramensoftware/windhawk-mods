@@ -759,12 +759,13 @@ bool HookControlCenter(HMODULE module, bool applyNow) {
         return expected == 2;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK controlCenterDllHooks[] = {
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::ControlCenterView,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnGotFocus(void *))"},
          &g_viewGotFocusOriginal, ViewGotFocusHook},
     };
 
-    bool success = WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    bool success = WindhawkUtils::HookSymbols(
+        module, controlCenterDllHooks, ARRAYSIZE(controlCenterDllHooks));
     if (success && applyNow) {
         success = Wh_ApplyHookOperations();
     }
