@@ -713,13 +713,13 @@ ComputeOverride_t MakeDoubleOverride(double desiredValue) {
 ComputeOverride_t MakeFontWeightOverride(uint16_t desiredWeight) {
     return [desiredWeight](const DependencyObject&,
                            const WinrtInspectable& value) -> WinrtInspectable {
-        if (value) {
-            auto currentWeight =
-                winrt::unbox_value_or<winrt::Windows::UI::Text::FontWeight>(
-                    value, winrt::Windows::UI::Text::FontWeight{});
-            if (currentWeight.Weight == desiredWeight) {
-                return nullptr;
-            }
+        // A null or unexpected value unboxes to weight 0, which never equals a
+        // desired weight (1-999).
+        auto currentWeight =
+            winrt::unbox_value_or<winrt::Windows::UI::Text::FontWeight>(value,
+                                                                         {});
+        if (currentWeight.Weight == desiredWeight) {
+            return nullptr;
         }
 
         return winrt::box_value(
