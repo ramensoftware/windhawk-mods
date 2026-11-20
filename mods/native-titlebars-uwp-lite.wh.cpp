@@ -2,7 +2,7 @@
 // @id              native-titlebars-uwp-lite
 // @name            Remove UWP titlebars
 // @description     Enables native titlebars in UWP apps
-// @version         2.1.0
+// @version         2.1.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         ApplicationFrameHost.exe
@@ -357,6 +357,14 @@ LRESULT CALLBACK SubclassProc(
     // DWM's, not the UWP title bar's. Let DefWindowProc hit-test them and
     // drive hover/press/click; everything else keeps ApplicationFrameHost's
     // own handling.
+    // AFH's window procedure keeps WM_SETICON to itself, so the native frame
+    // (drawn by DefWindowProc) never learns the icon. Store it there too.
+    if (uMsg == WM_SETICON)
+    {
+        DefWindowProcW(hWnd, uMsg, wParam, lParam);
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
     if (uMsg == WM_NCHITTEST)
     {
         LRESULT ht = DefWindowProcW(hWnd, uMsg, wParam, lParam);
@@ -467,8 +475,19 @@ HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(
 // frame with flags 0x10007 / mask 0x1000F. Bit 0x10000 is undocumented and
 // makes DWM drop the min/max/close caption buttons (the UWP title bar draws
 // its own). With the UWP title bar stubbed out, nothing draws them at all,
-// so strip that bit for frame windows.
+// so strip that bit for frame windows. The documented bits 0x7
+// (NODRAWCAPTION | NODRAWICON | NOSYSMENU) are stripped too, otherwise stock
+// DWM draws the native titlebar without title text and icon.
 #define WTNCA_NOCAPTIONBUTTONS_UNDOC 0x10000
+#define WTNCA_STRIP_FLAGS (WTNCA_NOCAPTIONBUTTONS_UNDOC | WTNCA_NODRAWCAPTION | \
+                           WTNCA_NODRAWICON | WTNCA_NOSYSMENU)
+
+// Frames converted by this mod have a redirection bitmap; stock UWP frames
+// (e.g. created before the mod loaded) don't, and are left alone.
+static bool IsConvertedFrame(HWND hWnd)
+{
+    return !(GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_NOREDIRECTIONBITMAP);
+}
 
 static bool IsApplicationFrameWindow(HWND hWnd)
 {
@@ -487,10 +506,10 @@ HRESULT WINAPI SetWindowThemeAttribute_hook(
 {
     if (eAttribute == WTA_NONCLIENT &&
         pvAttribute && cbAttribute >= sizeof(WTA_OPTIONS) &&
-        IsApplicationFrameWindow(hWnd))
+        IsApplicationFrameWindow(hWnd) && IsConvertedFrame(hWnd))
     {
         WTA_OPTIONS opts = *(const WTA_OPTIONS *)pvAttribute;
-        opts.dwFlags &= ~WTNCA_NOCAPTIONBUTTONS_UNDOC;
+        opts.dwFlags &= ~WTNCA_STRIP_FLAGS;
         return SetWindowThemeAttribute_orig(hWnd, eAttribute, &opts, sizeof(opts));
     }
 
@@ -506,9 +525,9 @@ static BOOL CALLBACK RestoreCaptionButtonsEnumProc(HWND hWnd, LPARAM)
     GetWindowThreadProcessId(hWnd, &pid);
     if (pid == GetCurrentProcessId() &&
         IsApplicationFrameWindow(hWnd) &&
-        !(GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_NOREDIRECTIONBITMAP))
+        IsConvertedFrame(hWnd))
     {
-        WTA_OPTIONS opts = {0, WTNCA_NOCAPTIONBUTTONS_UNDOC};
+        WTA_OPTIONS opts = {0, WTNCA_STRIP_FLAGS};
         SetWindowThemeAttribute(hWnd, WTA_NONCLIENT, &opts, sizeof(opts));
         SetWindowPos(hWnd, NULL, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
@@ -532,6 +551,11 @@ constexpr UINT NCF_MAX_VISIBLE   = 0x0200;
 constexpr UINT NCF_CLOSE_VISIBLE = 0x0400;
 constexpr UINT NCF_MIN_ENABLED   = 0x1000;
 constexpr UINT NCF_MAX_ENABLED   = 0x2000;
+// Also skipped for immersive windows: caption icon and system-menu area
+// (set by the non-immersive path unless WTNCA_NODRAWICON / WTNCA_NOSYSMENU,
+// which the AFH part strips for converted frames).
+constexpr UINT NCF_ICON          = 0x10000;
+constexpr UINT NCF_SYSMENU       = 0x0080;
 
 // CWindowData style copy as read by GetCurrentStyle on uDWM 10.0.26100.x.
 // Sanity-checked below, so a wrong offset on another build is a no-op.
@@ -557,6 +581,7 @@ UINT GetCurrentStyle_hook(const void *pWindowData, bool b)
         return flags;
 
     // Same bits the non-immersive path sets.
+    flags |= NCF_ICON | NCF_SYSMENU;
     if (style & WS_MINIMIZEBOX) flags |= NCF_MIN_VISIBLE | NCF_MAX_VISIBLE | NCF_MIN_ENABLED;
     if (style & WS_MAXIMIZEBOX) flags |= NCF_MIN_VISIBLE | NCF_MAX_VISIBLE | NCF_MAX_ENABLED;
     return flags;
