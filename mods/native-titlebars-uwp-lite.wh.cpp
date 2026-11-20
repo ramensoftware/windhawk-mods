@@ -24,6 +24,8 @@ mod gave a native titlebar, so DWM (and OpenGlass) draw all three buttons.
 
 Version 2.1 includes the changes by user o12r (show minimize and maximize buttons when themes are active).
 
+In order for this mod to work when the theme is active, allow hooking into DWM.exe in the Windhawk's settings.
+
 */
 // ==/WindhawkModReadme==
 
@@ -492,7 +494,8 @@ HRESULT WINAPI SetWindowThemeAttribute_hook(
         IsApplicationFrameWindow(hWnd))
     {
         WTA_OPTIONS opts = *(const WTA_OPTIONS *)pvAttribute;
-        opts.dwFlags &= ~WTNCA_NOCAPTIONBUTTONS_UNDOC;
+        opts.dwFlags &= ~(WTNCA_NOCAPTIONBUTTONS_UNDOC |
+                  WTNCA_NODRAWCAPTION | WTNCA_NODRAWICON | WTNCA_NOSYSMENU);
         return SetWindowThemeAttribute_orig(hWnd, eAttribute, &opts, sizeof(opts));
     }
 
@@ -510,7 +513,7 @@ static BOOL CALLBACK RestoreCaptionButtonsEnumProc(HWND hWnd, LPARAM)
         IsApplicationFrameWindow(hWnd) &&
         !(GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_NOREDIRECTIONBITMAP))
     {
-        WTA_OPTIONS opts = {0, WTNCA_NOCAPTIONBUTTONS_UNDOC};
+        WTA_OPTIONS opts = {0, WTNCA_NOCAPTIONBUTTONS_UNDOC | WTNCA_VALIDBITS};
         SetWindowThemeAttribute(hWnd, WTA_NONCLIENT, &opts, sizeof(opts));
         SetWindowPos(hWnd, NULL, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
