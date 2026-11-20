@@ -102,7 +102,8 @@ You can shape the notification in the settings, each part on its own:
 * **What clicking it does**: copy as usual, open the screenshot, show it in File
   Explorer, or keep it without copying. A click never deletes anything.
 * **Which buttons appear**: Delete, Copy and delete, and Keep can each be turned
-  off.
+  off. With none left, Windows hides the notification after about 25 seconds,
+  and if nothing has decided by then the screenshot is copied and kept.
 * **A highlighted choice**: on Windows 11 one button is colored, green for Keep
   and red for a button that deletes.
 
@@ -153,8 +154,11 @@ deleted screenshot goes to the Recycle Bin so it can be restored; if you turn th
 off, deletion is permanent. Deleting a screenshot does not remove copies already
 stored in clipboard history, cloud sync, backups, or other programs. Duplicate
 detection keeps only short-lived hashes, not image data. With the notification
-preview on, a small copy of each screenshot is kept in SnapSentry's own storage
-only while its notification is up, and is deleted when it closes.
+preview on, a small copy of each screenshot is kept in SnapSentry's storage folder
+only while its notification is up, and is deleted when it closes. That folder is in
+Windhawk's data folder, outside your user profile, and is shared by every account
+on the PC. If a copy can't be deleted right away, it goes when the next
+notification appears or SnapSentry next starts.
 
 ## Issues
 
@@ -196,13 +200,13 @@ page](https://github.com/mario0318/SnapSentry/issues).
 # ---- The popup ----
 - showActionPopup: false
   $name: Show a popup with buttons after each screenshot
-  $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if the notification cannot be set up on this machine. If you have turned SnapSentry's notifications off in Windows, it stays quiet instead, still copying but never prompting and never deleting. A multi-page or animated image is copied and kept rather than deleted, since only its first frame can go on the clipboard, and afterwards a short notice says so when the notification is available. While it is on, a temporary registry entry gives the notification its name and buttons. Windows discards it at sign-out, and SnapSentry removes it when you turn this off or disable the mod. Windows may keep SnapSentry listed under Settings > System > Notifications. Left off, SnapSentry copies and leaves nothing behind.
+  $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons (each can be turned off below), or a plain dialog if the notification cannot be set up on this machine. If you have turned SnapSentry's notifications off in Windows, it stays quiet instead, still copying but never prompting and never deleting. A multi-page or animated image is copied and kept rather than deleted, since only its first frame can go on the clipboard, and afterwards a short notice says so when the notification is available. While it is on, a temporary registry entry gives the notification its name and buttons. Windows discards it at sign-out, and SnapSentry removes it when you turn this off or disable the mod. Windows may keep SnapSentry listed under Settings > System > Notifications. Left off, SnapSentry copies and leaves nothing behind.
 - delaySeconds: 5
   $name: Seconds to wait before the automatic action
   $description: The countdown before the automatic action runs. With the popup on, 0 waits for you to click instead, giving up after 10 minutes so it cannot wait forever. With the popup off, 0 acts as soon as the copy is done. A countdown no longer holds up the next screenshot, which is copied straight away. Popups appear one at a time. Maximum 3600.
 - popupPreview: false
   $name: Show a preview in the notification
-  $description: Adds a picture of the screenshot to the notification. A small copy is saved in SnapSentry's own storage while the notification is up and deleted when it closes. The plain dialog never shows a preview.
+  $description: Adds a picture of the screenshot to the notification. A small copy is saved in SnapSentry's storage folder while the notification is up and deleted when it closes. That folder is in Windhawk's data folder, outside your user profile. The plain dialog never shows a preview.
 - popupShowFolder: false
   $name: Show the folder in the popup
   $description: Shows which folder the screenshot is in, under its name, in the notification and the dialog.
@@ -221,7 +225,7 @@ page](https://github.com/mario0318/SnapSentry/issues).
   $name: Copy and delete button in the notification
 - popupKeepButton: true
   $name: Keep button in the notification
-  $description: With every button turned off, the notification just shows the screenshot, and the countdown or a click decides. The plain dialog always shows every button.
+  $description: With every button turned off, the notification just shows the screenshot, and Windows hides it after about 25 seconds like any other notification. If the countdown or a click hasn't decided by then, the screenshot is copied and kept. The plain dialog always shows every button.
 - popupHighlight: none
   $name: Highlighted choice
   $description: Colors one notification button on Windows 11, green for Keep and red for a button that deletes. In the plain dialog it is the choice that Enter picks, so highlighting a button that deletes means Enter deletes there.
@@ -478,6 +482,10 @@ static int g_toastAction = ACTION_AUTO;
 // later dismissal must not overwrite it with Keep.
 static bool g_toastAnswered = false;
 static ULONGLONG g_activeToastId;
+// Whether the toast being waited on has any buttons. Without one Windows drops
+// the reminder scenario and retires the toast like any other, so its time-out
+// is the only answer that will ever come.
+static bool g_activeToastHasButtons = true;
 // The toast currently being waited on. A Dismissed event for an earlier toast can
 // be pumped after we've moved on to the next one, so the handler matches on this
 // pointer before treating a dismissal as the current toast's answer.
@@ -1331,20 +1339,30 @@ public:
         if (sender != g_activeToast.load()) {
             return S_OK;
         }
-        // Only a user dismissal is an answer. TimedOut (the platform retired the
-        // toast despite scenario=reminder) and ApplicationHidden (our own Hide) are
-        // not, so leave the wait running for those rather than cutting it short.
-        ABI::Windows::UI::Notifications::ToastDismissalReason reason =
+        // A user dismissal is an answer. ApplicationHidden (our own Hide) never
+        // is. TimedOut is one only for a toast without buttons: Windows ignores
+        // scenario=reminder there, so the banner leaves after its normal time and
+        // nothing else will ever answer. A toast with buttons that times out
+        // anyway leaves the wait running rather than cutting it short.
+        using ABI::Windows::UI::Notifications::ToastDismissalReason;
+        ToastDismissalReason reason =
             ABI::Windows::UI::Notifications::ToastDismissalReason_UserCanceled;
-        if (args && SUCCEEDED(args->get_Reason(&reason)) &&
-            reason != ABI::Windows::UI::Notifications::ToastDismissalReason_UserCanceled) {
+        if (args && FAILED(args->get_Reason(&reason))) {
+            reason = ABI::Windows::UI::Notifications::ToastDismissalReason_UserCanceled;
+        }
+        const bool timedOut =
+            reason == ABI::Windows::UI::Notifications::ToastDismissalReason_TimedOut;
+        if (reason != ABI::Windows::UI::Notifications::ToastDismissalReason_UserCanceled &&
+            !timedOut) {
             return S_OK;
         }
         EnterCriticalSection(&g_toastLock);
         // Only the toast currently being waited on, and only if a button click
         // hasn't already answered it (clicking one also dismisses the toast).
         // Swiping it away means "off my screen", not "delete", so copy, don't delete.
-        bool mine = g_activeToastId != 0 && !g_toastAnswered;
+        // A buttonless toast timing out is treated the same way.
+        bool mine = g_activeToastId != 0 && !g_toastAnswered &&
+                    (!timedOut || !g_activeToastHasButtons);
         if (mine) {
             g_toastAction = ACTION_COPY_ONLY;
             g_toastAnswered = true;
@@ -1429,21 +1447,15 @@ static std::wstring XmlEscape(const std::wstring& in) {
     return out;
 }
 
-// Builds the notifier and the toast object for a given XML payload: the
-// activation factory, the per-AUMID notifier, the current notification
-// setting, and the constructed toast document. Both toast paths need this
-// exact chain. Returns false if any step fails or notifications are off;
+// Opens the per-AUMID notifier and reads the current notification setting.
+// Returns false if either step fails or notifications are off;
 // settingReadable reports whether get_Setting itself succeeded, so a caller
 // that needs to tell "notifications are off" apart from "couldn't find out"
 // doesn't have to infer it from setting alone.
-static bool BuildToast(const std::wstring& xml,
-                       ABI::Windows::UI::Notifications::NotificationSetting& setting,
-                       bool& settingReadable,
-                       Microsoft::WRL::ComPtr<ABI::Windows::UI::Notifications::IToastNotifier>& notifier,
-                       Microsoft::WRL::ComPtr<ABI::Windows::UI::Notifications::IToastNotification>& toast) {
+static bool OpenNotifier(ABI::Windows::UI::Notifications::NotificationSetting& setting,
+                         bool& settingReadable,
+                         Microsoft::WRL::ComPtr<ABI::Windows::UI::Notifications::IToastNotifier>& notifier) {
     using namespace ABI::Windows::UI::Notifications;
-    using namespace ABI::Windows::Data::Xml::Dom;
-    using namespace ABI::Windows::Foundation;
     using Microsoft::WRL::ComPtr;
     using Microsoft::WRL::Wrappers::HStringReference;
 
@@ -1472,6 +1484,18 @@ static bool BuildToast(const std::wstring& xml,
         (settingReadable && setting != NotificationSetting_Enabled)) {
         return false;
     }
+    return true;
+}
+
+// Turns an XML payload into a toast object. Returns false on any failure.
+static bool CreateToastFromXml(
+    const std::wstring& xml,
+    Microsoft::WRL::ComPtr<ABI::Windows::UI::Notifications::IToastNotification>& toast) {
+    using namespace ABI::Windows::UI::Notifications;
+    using namespace ABI::Windows::Data::Xml::Dom;
+    using namespace ABI::Windows::Foundation;
+    using Microsoft::WRL::ComPtr;
+    using Microsoft::WRL::Wrappers::HStringReference;
 
     ComPtr<IInspectable> docInspectable;
     if (FAILED(RoActivateInstance(
@@ -1494,6 +1518,16 @@ static bool BuildToast(const std::wstring& xml,
         return false;
     }
     return SUCCEEDED(toastFactory->CreateToastNotification(doc.Get(), &toast));
+}
+
+// Both of the above, for a toast that needs nothing prepared in between.
+static bool BuildToast(const std::wstring& xml,
+                       ABI::Windows::UI::Notifications::NotificationSetting& setting,
+                       bool& settingReadable,
+                       Microsoft::WRL::ComPtr<ABI::Windows::UI::Notifications::IToastNotifier>& notifier,
+                       Microsoft::WRL::ComPtr<ABI::Windows::UI::Notifications::IToastNotification>& toast) {
+    return OpenNotifier(setting, settingReadable, notifier) &&
+           CreateToastFromXml(xml, toast);
 }
 
 // Returns the final path segment: what should appear on screen instead of the
@@ -1557,6 +1591,33 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
     if (s.popupKeepButton) {
         actions += button(L"Keep, don't copy", L"keep", false);
     }
+
+    // Show() reports success even when notifications are switched off for us, and
+    // then nothing is ever delivered and no answer can arrive. OpenNotifier asks
+    // first, so we can tell the two failure shapes apart. If we genuinely can't
+    // tell why it failed, fall back to the dialog; but if notifications are
+    // switched off (system-wide, by policy, or for this app), the user has said
+    // "stop popping things up", so don't substitute a modal dialog on every
+    // screenshot. Do the configured clipboard copy and never delete, since the
+    // user was never actually prompted. Asked before the preview is made, so no
+    // picture is prepared for a notification that won't be shown.
+    NotificationSetting setting = NotificationSetting_Enabled;
+    bool settingReadable = false;
+    ComPtr<IToastNotifier> notifier;
+    ComPtr<IToastNotification> toast;
+    if (!OpenNotifier(setting, settingReadable, notifier)) {
+        if (settingReadable && setting != NotificationSetting_Enabled) {
+            Wh_Log(L"Notifications off (setting=%d); copy only, no dialog",
+                   (int)setting);
+            action = ACTION_COPY_ONLY;
+            return true;
+        }
+        // Said every time, so a log shows why the dialog appeared.
+        Wh_Log(L"Notification could not be prepared (setting %s); using the dialog",
+               settingReadable ? L"readable" : L"unreadable");
+        return false;  // Can't tell: fall back to the dialog.
+    }
+
     // Deleted on every way out of this function, including the early returns,
     // so a picture of the screenshot never outlives its notification.
     struct PreviewFile {
@@ -1587,35 +1648,16 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
                          : L"<actions>" + actions + L"</actions>") +
         L"</toast>";
 
-    // Show() reports success even when notifications are switched off for us, and
-    // then nothing is ever delivered and no answer can arrive. BuildToast asks
-    // first, so we can tell the two failure shapes apart. If we genuinely can't
-    // tell why it failed, fall back to the dialog; but if notifications are
-    // switched off (system-wide, by policy, or for this app), the user has said
-    // "stop popping things up", so don't substitute a modal dialog on every
-    // screenshot. Do the configured clipboard copy and never delete, since the
-    // user was never actually prompted.
-    NotificationSetting setting = NotificationSetting_Enabled;
-    bool settingReadable = false;
-    ComPtr<IToastNotifier> notifier;
-    ComPtr<IToastNotification> toast;
-    if (!BuildToast(xml, setting, settingReadable, notifier, toast)) {
-        if (settingReadable && setting != NotificationSetting_Enabled) {
-            Wh_Log(L"Notifications off (setting=%d); copy only, no dialog",
-                   (int)setting);
-            action = ACTION_COPY_ONLY;
-            return true;
-        }
-        // Said every time, so a log shows why the dialog appeared.
-        Wh_Log(L"Notification could not be prepared (setting %s); using the dialog",
-               settingReadable ? L"readable" : L"unreadable");
-        return false;  // Can't tell: fall back to the dialog.
+    if (!CreateToastFromXml(xml, toast)) {
+        Wh_Log(L"Notification could not be prepared (layout); using the dialog");
+        return false;
     }
 
     ResetEvent(g_toastActionEvent);
     ResetEvent(g_settingsEvent);  // Only one prompt is ever up at a time.
     EnterCriticalSection(&g_toastLock);
     g_activeToastId = toastId;
+    g_activeToastHasButtons = !actions.empty();
     g_toastAction = ACTION_AUTO;
     g_toastAnswered = false;
     LeaveCriticalSection(&g_toastLock);
@@ -3158,7 +3200,14 @@ static bool EncodeContactSheet(const std::wstring& path,
 // Popup preview
 // ============================================================================
 
-static constexpr wchar_t kPreviewPrefix[] = L"popup-preview-";
+// Mod storage is shared by every account on the machine, and each signed-in
+// user runs a SnapSentry of their own against it, so preview names carry the
+// Windows session and each process only ever touches its own session's files.
+static std::wstring PreviewPrefix() {
+    DWORD session = 0;
+    ProcessIdToSessionId(GetCurrentProcessId(), &session);
+    return L"popup-preview-s" + std::to_wstring(session) + L"-";
+}
 
 // SnapSentry's own storage folder, created on request. Empty on failure.
 static std::wstring PreviewFolder(bool create) {
@@ -3179,6 +3228,32 @@ static std::wstring PreviewFolder(bool create) {
 // through LockedCapture, so only a plain file directly in the watched folder is
 // read. Returns an empty path on any failure, and the notification is then
 // shown without a picture.
+// WaitStop for the prompt thread: it also runs the tray icon, the session
+// hotkey and the review window, so it keeps handling their messages while it
+// waits instead of freezing them.
+static bool WaitStopPumping(DWORD ms) {
+    const DWORD start = GetTickCount();
+    for (;;) {
+        const DWORD elapsed = GetTickCount() - start;
+        if (elapsed >= ms) return WaitStop(0);
+        const DWORD result = MsgWaitForMultipleObjectsEx(
+            1, &g_stopEvent, ms - elapsed, QS_ALLINPUT,
+            MWMO_INPUTAVAILABLE | MWMO_ALERTABLE);
+        if (result == WAIT_OBJECT_0) return true;
+        if (result == WAIT_OBJECT_0 + 1) {
+            MSG msg;
+            for (unsigned count = 0; count < 32 &&
+                 PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE); ++count) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+            continue;
+        }
+        if (result == WAIT_IO_COMPLETION || result == WAIT_TIMEOUT) continue;
+        return WaitStop(ms - elapsed);  // The wait itself failed: plain wait.
+    }
+}
+
 static std::wstring WritePreviewFile(const std::wstring& path,
                                      const Settings& s, ULONGLONG toastId) {
     if (WaitStop(0)) return {};
@@ -3195,7 +3270,7 @@ static std::wstring WritePreviewFile(const std::wstring& path,
             if (capture.Open(path, s.folder)) break;
             error = GetLastError();
             if ((error != ERROR_SHARING_VIOLATION && error != ERROR_LOCK_VIOLATION) ||
-                attempt >= 30 || WaitStop(100)) {
+                attempt >= 30 || WaitStopPumping(100)) {
                 Wh_Log(L"Preview skipped: the screenshot could not be opened (%lu)",
                        error);
                 return {};
@@ -3212,9 +3287,11 @@ static std::wstring WritePreviewFile(const std::wstring& path,
         Wh_Log(L"Preview skipped: SnapSentry's storage folder is unavailable");
         return {};
     }
+    // Popups come one at a time, so any preview of this session still here is
+    // a leftover whose own delete failed; clear it before making a new one.
+    RemovePreviewFiles();
     const std::wstring target =
-        folder + L"\\" + kPreviewPrefix + std::to_wstring(toastId) + L".png";
-    DeleteFileW(target.c_str());  // A leftover of the same name blocks a new file.
+        folder + L"\\" + PreviewPrefix() + std::to_wstring(toastId) + L".png";
     if (!EncodeContactSheet(target, *image)) {
         Wh_Log(L"Preview skipped: the picture could not be saved (%lu)",
                GetLastError());
@@ -3224,14 +3301,15 @@ static std::wstring WritePreviewFile(const std::wstring& path,
     return target;
 }
 
-// Removes every preview in SnapSentry's storage. Each notification deletes its
-// own on the way out; this catches one an unclean exit or a locked file left.
+// Removes this session's previews from SnapSentry's storage. Each notification
+// deletes its own on the way out; this catches one an unclean exit or a locked
+// file left. Another account's previews are never touched.
 static void RemovePreviewFiles() {
     const std::wstring folder = PreviewFolder(false);
     if (folder.empty()) return;
     WIN32_FIND_DATAW data;
     HANDLE find = FindFirstFileW(
-        (folder + L"\\" + kPreviewPrefix + L"*.png").c_str(), &data);
+        (folder + L"\\" + PreviewPrefix() + L"*.png").c_str(), &data);
     if (find == INVALID_HANDLE_VALUE) return;
     do {
         if (!(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
