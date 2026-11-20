@@ -2,7 +2,7 @@
 // @id              winklok-with-persian
 // @name            WinKlok with Persian
 // @description     A fork of WinKlok, customized for the Persian (Jalali / Solar Hijri) calendar. Adds a Persian tab next to Calendar, with RTL layout, Iranian occasions/holidays, and Vazirmatn font when installed.
-// @version         1.2.6
+// @version         1.2.7
 // @author          Mehrdad Amini
 // @github          https://github.com/pcmehrdad
 // @homepage        https://mehrdad.amini.dev
@@ -28,6 +28,11 @@ This fork keeps that feature set and adds a dedicated **Persian** experience on 
 * Iranian **occasions and official holidays** (solar + lunar), ported from [Khorshid](https://github.com/fr2ad/Khorshid) (MIT)
 * **Vazirmatn / Vazir** UI font when installed (falls back to Segoe UI)
 * Single-file Windhawk mod — no extra DLLs
+
+## Compatibility with upstream WinKlok
+**Do not enable this mod and WinKlok at the same time.** Both take over the taskbar clock and remove each other's injected XAML (`Winklok*` children). Pick one.
+
+This stays a separate mod so the Persian calendar can ship and iterate without waiting on upstream WinKlok releases. The long-term preference is still to contribute the Persian tab upstream when possible.
 
 ## Based on WinKlok
 **A multifunctional notification center replacement mod for Windows 11.**  
@@ -227,15 +232,15 @@ You are free to use, study, share and improve it under the terms of that licence
 // ============================================================================
 
 // ---- product information ---------------------------------------------------
-#define WK_NAME L"WinKlok"
-#define WK_VERSION L"1.2.0"
-#define WK_DEVELOPER L"Shifting Whistler"
-#define WK_COPYRIGHT L"\u00A9 2026 Shifting Whistler"
+#define WK_NAME L"WinKlok with Persian"
+#define WK_VERSION L"1.2.7"
+#define WK_DEVELOPER L"Mehrdad Amini"
+#define WK_COPYRIGHT L"\u00A9 2026 Mehrdad Amini (fork of WinKlok by Shifting Whistler)"
 #define WK_LICENSE L"GPL-3.0-or-later"
-#define WK_TAGLINE L"A calmer, smarter clock mod for Windows 11 taskbar."
-#define WK_WINDHAWK_URL L"https://windhawk.net/mods/winklok"
-#define WK_GITHUB_URL L"https://github.com/shifting-whistler/WinKlok"
-#define WK_ISSUES_URL L"https://github.com/shifting-whistler/WinKlok/issues/new/choose" // bug reports and feature suggestions
+#define WK_TAGLINE L"WinKlok fork with a Persian (Jalali) calendar for Windows 11."
+#define WK_WINDHAWK_URL L"https://windhawk.net/mods/winklok-with-persian"
+#define WK_GITHUB_URL L"https://github.com/pcmehrdad"
+#define WK_ISSUES_URL L"https://github.com/ramensoftware/windhawk-mods/issues/new" // after catalog publish; credit upstream in README
 
 static std::atomic<bool> g_shuttingDown{false}; // mod is being unloaded
 
@@ -266,7 +271,7 @@ namespace td
         L"Sunrise", L"Digital Pulse", L"Music Box", L"Zen Gong"};
 
     // Panel tabs. The ids are stable (settings and code refer to them); the order they are shown in lives in the UI.
-    static const int kTabCount = 8, kSettingsTab = 5, kAllTabsMask = (1 << kTabCount) - 1;
+    static const int kTabCount = 8, kSettingsTab = 5, kPersianTab = 7, kAllTabsMask = (1 << kTabCount) - 1;
 
     static bool SystemUses24h()
     {
@@ -319,8 +324,8 @@ namespace td
             alarmSound = std::min(kSoundCount - 1, std::max(0, Wh_GetIntValue(L"alarmSound", kDefaultAlarmSound)));
             alarmSnooze = std::min(60, std::max(1, Wh_GetIntValue(L"alarmSnooze", 10)));
             notifMode = std::min(1, std::max(0, Wh_GetIntValue(L"notifMode", 0)));
-            // Always keep Settings + Persian visible (bit 7 = TAB_PERSIAN).
-            tabMask = (Wh_GetIntValue(L"tabMask", kAllTabsMask) & kAllTabsMask) | (1 << kSettingsTab) | (1 << 7);
+            // Always keep Settings + Persian visible.
+            tabMask = (Wh_GetIntValue(L"tabMask", kAllTabsMask) & kAllTabsMask) | (1 << kSettingsTab) | (1 << kPersianTab);
             sys24 = SystemUses24h();
         }
         void Save()
@@ -456,21 +461,6 @@ namespace td
     }
 
     // ---- Jalali (Solar Hijri) calendar — pure integer, no locale / ICU --------------------
-    static bool JalaliLeap(int jy)
-    {
-        // Algorithm from «Calendrical Calculations» / common Iranian civil leap cycle.
-        const int r = (jy - (jy > 0 ? 474 : 473)) % 2820;
-        const int y = r + 474;
-        return ((y * 682 - 110) % 2816) < 682;
-    }
-    static int JalaliMonthLength(int jy, int jm)
-    {
-        if (jm <= 6)
-            return 31;
-        if (jm <= 11)
-            return 30;
-        return JalaliLeap(jy) ? 30 : 29;
-    }
     static void CivilToJalali(int gy, int gm, int gd, int &jy, int &jm, int &jd)
     {
         static const int gmd[] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
@@ -521,10 +511,27 @@ namespace td
             days = (days - 1) % 365;
         }
         gd = days + 1;
-        static const int sal_a[] = {0, 31, ((gy % 4 == 0 && gy % 100 != 0) || (gy % 400 == 0)) ? 29 : 28,
-                                    31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+        // Not static: February length depends on `gy` and must be recomputed every call.
+        const int sal_a[] = {0, 31, ((gy % 4 == 0 && gy % 100 != 0) || (gy % 400 == 0)) ? 29 : 28,
+                             31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
         for (gm = 1; gm <= 12 && gd > sal_a[gm]; ++gm)
             gd -= sal_a[gm];
+    }
+    // Leap year derived from the same conversion used by the grid, so they cannot disagree.
+    static bool JalaliLeap(int jy)
+    {
+        int y1 = 0, m1 = 0, d1 = 0, y2 = 0, m2 = 0, d2 = 0;
+        JalaliToCivil(jy, 1, 1, y1, m1, d1);
+        JalaliToCivil(jy + 1, 1, 1, y2, m2, d2);
+        return DaysFromCivil(y2, m2, d2) - DaysFromCivil(y1, m1, d1) == 366;
+    }
+    static int JalaliMonthLength(int jy, int jm)
+    {
+        if (jm <= 6)
+            return 31;
+        if (jm <= 11)
+            return 30;
+        return JalaliLeap(jy) ? 30 : 29;
     }
     static std::wstring PersianDigits(int n)
     {
@@ -11414,9 +11421,9 @@ namespace cal
         }
         const std::wstring objName = std::wstring(path, uc.dwUrlPathLength) + std::wstring(extra, uc.dwExtraInfoLength);
         // 4 = WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY: follows the system's automatic proxy settings (WPAD / PAC script)
-        HINTERNET ses = Reg(WinHttpOpen(L"WinKlok/" WK_VERSION, 4, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
+        HINTERNET ses = Reg(WinHttpOpen(WK_NAME L"/" WK_VERSION, 4, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
         if (!ses) // an older system: the proxy configured for WinHTTP
-            ses = Reg(WinHttpOpen(L"WinKlok/" WK_VERSION, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
+            ses = Reg(WinHttpOpen(WK_NAME L"/" WK_VERSION, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
         if (!ses)
         {
             r.err = "network unavailable";
