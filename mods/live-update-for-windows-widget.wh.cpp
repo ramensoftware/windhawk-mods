@@ -4,9 +4,9 @@
 // @name:vi-VN      Live Update for Windows 11
 // @description     Live taskbar activities: media, Windows Clock, battery, tasks, recording, displays, hotspot, privacy and lunar almanac
 // @description:vi-VN Widget đa năng: Phương tiện, Đồng hồ, Pin, Tiến trình, Quay OBS, Trình chiếu, Quyền riêng tư, Âm lịch & Tử vi
-// @version         2.0.206
-// @author          caotu2k5
-// @github          https://github.com/caotu2k5
+// @version         2.0.207
+// @author          caotu2005
+// @github          https://github.com/caotu2005
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lgdi32 -luser32 -lwindowscodecs -luuid -ladvapi32 -lshell32 -lversion -lsetupapi -lpowrprof

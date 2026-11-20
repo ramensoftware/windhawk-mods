@@ -2,13 +2,13 @@
 // @id              overhaulded-alt-tab
 // @name            OverhauldedWin Alt+Tab
 // @description     Replaces the boring Windows Alt+Tab with a modern and elegant window switcher.
-// @version         1.3.1
+// @version         1.3.2
 // @author          IMiloDev
 // @github          https://github.com/IMiloDev
 // @homepage        https://github.com/IMiloDev/OverhauldedWin
 // @include         windhawk.exe
 // @include         explorer.exe
-// @compilerOptions -lshell32 -lgdi32
+// @compilerOptions -lshell32 -lgdi32 -ladvapi32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -19,8 +19,11 @@ A modern, fluid and highly visual replacement for the native Windows Alt+Tab exp
 Built from scratch in native C++ as a project to explore Windows APIs, graphics, animation systems and desktop customization. You can also see the original [GITHUB REPOSITORY](https://github.com/IMiloDev/OverhauldedWin) to send me issues.
 
 ## Screenshot
+### Carousel
+![OverhauldedWin Task Switcher](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/task-manager.png)
 
-![OverhauldedWin Task Switcher](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/task-manager.jpg)
+### Grid
+![OverhauldedWin Task Switcher](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/grid.png)
 
 ## Features
 
@@ -157,6 +160,19 @@ THANKS FOR EVERYONE.
 // ==WindhawkModSettings==
 /*
 - Appearance:
+    - Layout: "Overhaulded"
+      $name: Layout
+      $description: Choose how open windows are arranged.
+      $options:
+      - "Overhaulded": Overhaulded (default)
+      - "Grid": Grid
+    - Theme: "System"
+      $name: Theme
+      $description: Select the card color theme. System follows the Windows app theme.
+      $options:
+      - "System": System (default)
+      - "Dark": Dark
+      - "Light": Light
     - Scale: "100"
       $name: Scale
       $description: Overall task switcher scale.
@@ -170,10 +186,10 @@ THANKS FOR EVERYONE.
     - Cards:
         - NormalColor: "#050507"
           $name: Cards color
-          $description: Base color of unselected cards.
+          $description: Base color of unselected cards in Dark mode.
         - SelectedColor: "#090A0B"
           $name: Selected card color
-          $description: Base color of the selected card.
+          $description: Base color of the selected card in Dark mode.
         - ExpandSelectedWindow: true
           $name: Expand selected window
           $description: Animate the selected card toward the selected window when confirmed.
@@ -231,7 +247,7 @@ THANKS FOR EVERYONE.
   $name: Behavior
 - Background: "dwm"
   $name: Background
-  $description: Background layer behind the cards.
+  $description: Single transparent surface behind the cards.
   $options:
   - "none": None
   - "dwm": Transparent - DWM
@@ -239,10 +255,10 @@ THANKS FOR EVERYONE.
 - Dwm:
     - BackgroundColor: "#141A22"
       $name: Background color
-      $description: Color of the transparent DWM background behind the cards.
+      $description: Tint of the single transparent surface behind the cards.
     - Opacity: 20
       $name: Opacity
-      $description: DWM background opacity (0-100).
+      $description: Transparency of the background surface (0-100).
   $name: DWM background
 - ExperimentalSettings:
     - GeneralBackground: "none"
@@ -301,6 +317,7 @@ THANKS FOR EVERYONE.
 #include <algorithm>
 #include <cmath>
 #include <utility>
+#include <new>
 #include <cwchar>
 #include <cstring>
 #include <tlhelp32.h>
@@ -316,8 +333,9 @@ static const wchar_t kWindowClassName[] = L"OverhauldedAltTabSelector";
 
 static const int kSelectorWidth = 1220;
 static const int kSelectorHeight = 430;
+static const float kGridIndicatorBand = 30.0f;
 static const int kMaxCarouselSlots = 32;
-static const int kCarouselMaxCards = 5;
+static const int kCarouselMaxCards = 7;
 enum class MonitorFilterMode { All, Cursor, Foreground };
 static MonitorFilterMode g_monitorFilterMode = MonitorFilterMode::All;
 static int g_uiScalePercent = 100;
@@ -393,6 +411,8 @@ static bool IsBackgroundSpotlightAllowed()
 
 static COLORREF g_dwmBackgroundColor = RGB(20, 26, 34);
 static float g_dwmBackgroundOpacity = 0.20f;
+static COLORREF g_dwmConfiguredBackgroundColor = RGB(20, 26, 34);
+static float g_dwmConfiguredBackgroundOpacity = 0.20f;
 
 static const float kSpotlightRadiusDip = 116.0f;
 static ID2D1RadialGradientBrush* g_ambientShadowBrush = nullptr;
@@ -442,11 +462,41 @@ static const int kCounterWidth = 140;
 static const int kCounterHeight = 28;
 static const int kCounterTop = 378;
 static const float kCardSurfaceOpacity = 0.75f;
+enum class LayoutMode { Overhaulded, Grid };
+static LayoutMode g_layoutMode = LayoutMode::Overhaulded;
+static int g_gridScrollRow = 0;
+static float g_gridScrollOffset = 0.0f;
+static float g_gridScrollStartOffset = 0.0f;
+static double g_gridScrollStartTime = 0.0;
+static bool g_gridScrollAnimating = false;
+static bool g_gridIndicatorBandsActive = false;
+static int g_gridPreviousSelected = -1;
+static double g_gridSelectionStart = 0.0;
+static bool g_gridSelectionAnimating = false;
+static const float kGridSelectionDurationMs = 180.0f;
+static const int kGridMaxCards = kMaxCarouselSlots;
+struct GridRowLayout
+{
+    int firstSlot = 0;
+    int slotCount = 0;
+    float widths[4] = {};
+    float totalWidth = 0.0f;
+};
+static std::vector<GridRowLayout> g_gridRows;
+static std::vector<int> g_gridSlotRows;
+static std::vector<int> g_gridSlotColumns;
+static bool g_gridLayoutDirty = true;
+enum class AppearanceTheme { System, Dark, Light };
+static AppearanceTheme g_appearanceTheme = AppearanceTheme::System;
+static bool g_lightThemeActive = false;
+static COLORREF g_cardConfiguredNormalColor = RGB(5, 5, 7);
+static COLORREF g_cardConfiguredSelectedColor = RGB(9, 10, 11);
 static COLORREF g_cardNormalColor = RGB(5, 5, 7);
 static COLORREF g_cardSelectedColor = RGB(9, 10, 11);
 static const UINT_PTR kActivityTimerId = 77;
 static const UINT_PTR kTabRepeatTimerId = 89;
 static const UINT_PTR kSelectorMotionTimerId = 90;
+static const UINT_PTR kWindowListRefreshTimerId = 92;
 static const float kNavigationDuration = 150.0f;
 static const float kBouncyNavigationDuration = 180.0f;
 static const int kDefaultAnimationFps = 120;
@@ -460,6 +510,17 @@ static int g_animationFps = kDefaultAnimationFps;
 
 static int GetCarouselCenterSlot();
 static int GetCarouselSlotCount();
+static bool IsGridMode();
+static int GetGridColumnCount(int row);
+static int GetGridRowCount();
+static int GetGridRowForSlot(int slot);
+static int GetGridColumnForSlot(int slot);
+static int GetGridRowStartSlot(int row);
+static int GetGridRowEndSlot(int row);
+static void EnsureGridSelectionVisible();
+static void SetGridScrollRow(int row);
+static void RequestFrame();
+static void SelectGridByDirection(int dx, int dy);
 static float AnimationDuration(float baseMs)
 {
     return baseMs * 100.0f / static_cast<float>(g_animationSpeedPercent);
@@ -473,6 +534,7 @@ static float CardNavigationDuration()
         100.0f / static_cast<float>(g_cardMotionSpeedPercent);
 }
 static void ApplyVisualStylePalette();
+static bool ReadWindowsAppsLightTheme();
 
 static void LoadTaskSwitcherSettings()
 {
@@ -480,6 +542,23 @@ static void LoadTaskSwitcherSettings()
         auto setting = WindhawkUtils::StringSetting::make(key);
         return std::wstring(setting.get());
     };
+
+    std::wstring layout = read(L"Appearance.Layout");
+    g_layoutMode = layout == L"Grid" ? LayoutMode::Grid : LayoutMode::Overhaulded;
+    g_gridScrollRow = 0;
+    g_gridScrollOffset = 0.0f;
+    g_gridScrollStartOffset = 0.0f;
+    g_gridScrollAnimating = false;
+    g_gridPreviousSelected = -1;
+    g_gridSelectionAnimating = false;
+
+    std::wstring appearanceTheme = read(L"Appearance.Theme");
+    g_appearanceTheme = appearanceTheme == L"Dark" ? AppearanceTheme::Dark
+        : appearanceTheme == L"Light" ? AppearanceTheme::Light
+        : AppearanceTheme::System;
+    g_lightThemeActive = g_appearanceTheme == AppearanceTheme::Light ||
+        (g_appearanceTheme == AppearanceTheme::System &&
+         ReadWindowsAppsLightTheme());
 
     std::wstring monitorFilter = read(L"Behavior.MonitorFilter");
     g_monitorFilterMode = monitorFilter == L"Cursor" ? MonitorFilterMode::Cursor
@@ -563,10 +642,13 @@ static void LoadTaskSwitcherSettings()
         return RGB((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff);
     };
 
-    g_cardNormalColor = parseColor(read(L"Appearance.Cards.NormalColor"), RGB(5, 5, 7));
-    g_cardSelectedColor = parseColor(read(L"Appearance.Cards.SelectedColor"), RGB(9, 10, 11));
-    g_dwmBackgroundColor = parseColor(read(L"Dwm.BackgroundColor"), RGB(20, 26, 34));
-    g_dwmBackgroundOpacity =
+    g_cardConfiguredNormalColor = parseColor(
+        read(L"Appearance.Cards.NormalColor"), RGB(5, 5, 7));
+    g_cardConfiguredSelectedColor = parseColor(
+        read(L"Appearance.Cards.SelectedColor"), RGB(9, 10, 11));
+    g_dwmConfiguredBackgroundColor = parseColor(
+        read(L"Dwm.BackgroundColor"), RGB(20, 26, 34));
+    g_dwmConfiguredBackgroundOpacity =
         static_cast<float>(readNumber(L"Dwm.Opacity", 0, 100)) / 100.0f;
 
     ApplyVisualStylePalette();
@@ -659,7 +741,7 @@ static float ElapsedFraction(double startMs, float durationMs)
 
 static const UINT kTabRepeatInitialDelayMs = 325;
 static const UINT kTabRepeatIntervalMs = 125;
-static const ULONGLONG kSelectorFailsafeMs = 5000;
+static const ULONGLONG kSelectorFailsafeMs = 8000;
 static const float kReferenceScreenWidth = 1366.0f;
 static const float kReferenceScreenHeight = 768.0f;
 static const float kMinimumUiScale = 0.55f;
@@ -699,8 +781,10 @@ static int g_staticPreviousSelected = -1;
 static double g_staticSelectionStartTime = 0.0;
 static bool g_staticSelectionAnimating = false;
 static float g_staticScaleFrom[3] = { 1.0f, 1.0f, 1.0f };
-static float g_staticIndicatorStartX = 0.0f;
-static constexpr float kStaticSelectedScale = 1.075f;
+static constexpr float kSelectedCardSizeBoost = 1.08f;
+static constexpr float kStaticSelectedScale = 1.075f * kSelectedCardSizeBoost;
+// Overhaulded center card: 7% smaller than the shared selected boost.
+static constexpr float kCarouselSelectedScale = kSelectedCardSizeBoost * 0.93f;
 static constexpr float kStaticSelectionDurationMs = 190.0f;
 
 static int ScaleLayoutPx(float value)
@@ -727,7 +811,10 @@ static void UpdateUIScaleForWorkArea(const RECT& work, float dpiScale)
     const float userScale = static_cast<float>(g_uiScalePercent) / 100.0f;
     g_uiScale.value = fit * dpiScale * userScale;
     g_runtimeSelectorWidth = ScaleLayoutPx(static_cast<float>(kSelectorWidth));
-    g_runtimeSelectorHeight = ScaleLayoutPx(static_cast<float>(kSelectorHeight));
+    g_runtimeSelectorHeight = ScaleLayoutPx(
+        static_cast<float>(kSelectorHeight) +
+        (g_gridIndicatorBandsActive ? 2.0f * kGridIndicatorBand : 0.0f));
+    g_gridLayoutDirty = true;
 }
 
 static void GetSceneScale(float& scaleX, float& scaleY)
@@ -798,8 +885,8 @@ struct CardStyleConfig
 {
     bool glowEnabled = true;
     int glowIntensity = 1;
-    COLORREF borderColor = RGB(10, 11, 13);
-    COLORREF selectedBorderColor = RGB(20, 21, 23);
+    COLORREF borderColor = RGB(14, 17, 21);
+    COLORREF selectedBorderColor = RGB(34, 39, 46);
     COLORREF cardBackground = RGB(5, 6, 7);
     COLORREF selectedCardBackground = RGB(10, 10, 11);
     int cornerRadius = 12;
@@ -808,17 +895,48 @@ struct CardStyleConfig
 
 static CardStyleConfig g_cardStyle;
 
+static bool ReadWindowsAppsLightTheme()
+{
+    DWORD value = 0;
+    DWORD size = sizeof(value);
+    const LONG result = RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size);
+    return result == ERROR_SUCCESS && value != 0;
+}
+
 static void ApplyVisualStylePalette()
 {
-    g_textNormalColor = RGB(208, 210, 218);
-    g_textSelectedColor = RGB(246, 247, 250);
-    g_counterTextColor = RGB(186, 188, 196);
+    if (g_lightThemeActive)
+    {
+        g_cardNormalColor = RGB(216, 220, 227);
+        g_cardSelectedColor = RGB(231, 234, 240);
+        g_textNormalColor = RGB(48, 51, 58);
+        g_textSelectedColor = RGB(25, 28, 34);
+        g_cardStyle.borderColor = RGB(190, 196, 205);
+        g_cardStyle.selectedBorderColor = RGB(158, 167, 180);
+        g_dwmBackgroundColor = RGB(92, 104, 120);
+        g_dwmBackgroundOpacity = 0.16f;
+    }
+    else
+    {
+        g_cardNormalColor = g_cardConfiguredNormalColor;
+        g_cardSelectedColor = g_cardConfiguredSelectedColor;
+        g_textNormalColor = RGB(208, 210, 218);
+        g_textSelectedColor = RGB(246, 247, 250);
+        g_cardStyle.borderColor = RGB(14, 17, 21);
+        g_cardStyle.selectedBorderColor = RGB(34, 39, 46);
+        g_dwmBackgroundColor = g_dwmConfiguredBackgroundColor;
+        g_dwmBackgroundOpacity = g_dwmConfiguredBackgroundOpacity;
+    }
+
+    g_counterTextColor = g_lightThemeActive
+        ? RGB(82, 88, 98) : RGB(186, 188, 196);
     g_cardStyle.glowEnabled = true;
     g_cardStyle.glowIntensity = 1;
     g_cardStyle.cardBackground = g_cardNormalColor;
     g_cardStyle.selectedCardBackground = g_cardSelectedColor;
-    g_cardStyle.borderColor = RGB(10, 11, 13);
-    g_cardStyle.selectedBorderColor = RGB(20, 21, 23);
     g_cardStyle.cornerRadius = 12;
     g_cardStyle.selectedCornerRadius = 14;
 }
@@ -1011,6 +1129,7 @@ static bool g_selectorFocusTaken = false;
 static bool g_cardExitActive = false;
 static int g_cardExitSlot = -1;
 static HWND g_cardExitTarget = nullptr;
+static bool g_cardExitShouldCloseTarget = false;
 static float g_cardExitDirection = 1.0f;
 static double g_cardExitStart = 0.0;
 static float g_cardExitProgress = 0.0f;
@@ -1058,6 +1177,9 @@ static RECT g_closeButtonGeometryRect = {};
 static IDWriteFactory* g_dwriteFactory = nullptr;
 static IDWriteTextFormat* g_dwriteSelectedFormat = nullptr;
 static IDWriteTextFormat* g_dwriteNormalFormat = nullptr;
+// Header formats rebuilt at the card's visual scale (index 0 = normal, 1 = selected).
+static IDWriteTextFormat* g_dwriteScaledHeaderFormat[2] = { nullptr, nullptr };
+static int g_dwriteScaledHeaderPx[2] = { 0, 0 };
 static IDWriteTextFormat* g_dwriteCounterFormat = nullptr;
 static IDWriteTextFormat* g_dwriteCloseFormat = nullptr;
 static float g_dwriteFormatsScale = 0.0f;
@@ -1065,9 +1187,23 @@ static float g_gdiFontsScale = 0.0f;
 
 static HFONT g_nameFont = nullptr;
 static HFONT g_selectedNameFont = nullptr;
+// GDI header fonts rebuilt at the card's visual scale (index 0 = normal, 1 = selected).
+static HFONT g_scaledHeaderFont[2] = { nullptr, nullptr };
+static int g_scaledHeaderFontPx[2] = { 0, 0 };
 static HFONT g_secondaryFont = nullptr;
 
 static std::vector<AppGroup> g_groups;
+
+
+struct LayoutTransitionEntry
+{
+    HWND hwnd = nullptr;
+    RECT from = {};
+    double start = 0.0;
+};
+static std::vector<LayoutTransitionEntry> g_layoutTransitions;
+static bool g_layoutTransitionActive = false;
+static const float kLayoutTransitionDurationMs = 280.0f;
 static std::vector<UserWindowInfo> g_userWindows;
 struct PendingCloseWindow
 {
@@ -1082,13 +1218,238 @@ static std::vector<std::pair<DWORD, size_t>> g_groupWindowCursors;
 static int g_selected = 0;
 static SelectorState g_state = SelectorState::Idle;
 
+static bool IsGridMode()
+{
+    return g_layoutMode == LayoutMode::Grid && g_groups.size() >= 4;
+}
+static int GridIndicatorBandPx()
+{
+    return g_gridIndicatorBandsActive ? ScaleLayoutPx(kGridIndicatorBand) : 0;
+}
+static int GridContentHeightPx()
+{
+    return std::max(1, g_runtimeSelectorHeight - 2 * GridIndicatorBandPx());
+}
+static int GridVisibleRows()
+{
+    return std::max(1, static_cast<int>(
+        (GridContentHeightPx() - ScaleLayoutPx(18.0f)) /
+        ScaleLayoutPx(182.0f)));
+}
+static float GetGridCardAspectRatio(int slot)
+{
+    if (slot < 0 || slot >= static_cast<int>(g_groups.size()))
+        return 1.6f;
+
+    HWND hwnd = g_groups[slot].representativeWindow;
+    RECT windowRect = {};
+    if (!hwnd || !IsWindow(hwnd))
+        return 1.6f;
+
+    bool haveWindowRect = false;
+    if (IsIconic(hwnd))
+    {
+        WINDOWPLACEMENT placement = {};
+        placement.length = sizeof(placement);
+        if (GetWindowPlacement(hwnd, &placement) &&
+            placement.rcNormalPosition.right > placement.rcNormalPosition.left &&
+            placement.rcNormalPosition.bottom > placement.rcNormalPosition.top)
+        {
+            windowRect = placement.rcNormalPosition;
+            haveWindowRect = true;
+        }
+    }
+    if (!haveWindowRect && !GetWindowRect(hwnd, &windowRect))
+        return 1.6f;
+
+    const float width = static_cast<float>(windowRect.right - windowRect.left);
+    const float height = static_cast<float>(windowRect.bottom - windowRect.top);
+    if (width < 80.0f || height < 80.0f)
+        return 1.6f;
+
+    return std::max(0.65f, std::min(2.35f, width / height));
+}
+
+static float GetGridCardWidth(int slot)
+{
+    const float cardHeight = static_cast<float>(ScaleLayoutPx(166.0f));
+    const float aspectRatio = GetGridCardAspectRatio(slot);
+    return std::max(static_cast<float>(ScaleLayoutPx(108.0f)),
+                    std::min(static_cast<float>(ScaleLayoutPx(390.0f)),
+                             cardHeight * aspectRatio));
+}
+
+static void EnsureGridLayout()
+{
+    if (!g_gridLayoutDirty)
+        return;
+
+    g_gridLayoutDirty = false;
+    g_gridRows.clear();
+    g_gridSlotRows.clear();
+    g_gridSlotColumns.clear();
+    const int count = std::min(static_cast<int>(g_groups.size()), kGridMaxCards);
+    g_gridSlotRows.assign(count, -1);
+    g_gridSlotColumns.assign(count, -1);
+
+    const float gapX = static_cast<float>(ScaleLayoutPx(32.0f));
+    const float marginX = static_cast<float>(ScaleLayoutPx(32.0f));
+    const float availableWidth = std::max(
+        1.0f, static_cast<float>(g_runtimeSelectorWidth) - marginX * 2.0f);
+
+    int firstSlot = 0;
+    while (firstSlot < count)
+    {
+        const int remaining = count - firstSlot;
+        const bool fixedFourColumnMode = count > 6;
+        int rowCount = std::min(fixedFourColumnMode ? 4 : 3, remaining);
+
+        if (!fixedFourColumnMode && remaining >= 4)
+        {
+            float fourCardWidth = gapX * 3.0f;
+            for (int column = 0; column < 4; ++column)
+                fourCardWidth += GetGridCardWidth(firstSlot + column);
+
+            const int remainingAfterFour = remaining - 4;
+            const int minimumRowsAfterFour = (remainingAfterFour + 2) / 3;
+            // Avoid a lone card at the end when this row takes the fourth slot.
+            const bool balancedTail = remainingAfterFour == 0 ||
+                (minimumRowsAfterFour > 0 &&
+                 remainingAfterFour >= minimumRowsAfterFour * 2);
+            if (fourCardWidth <= availableWidth && balancedTail)
+                rowCount = 4;
+        }
+
+        GridRowLayout row = {};
+        row.firstSlot = firstSlot;
+        row.slotCount = rowCount;
+        row.totalWidth = gapX * std::max(0, rowCount - 1);
+        for (int column = 0; column < rowCount; ++column)
+        {
+            row.widths[column] = GetGridCardWidth(firstSlot + column);
+            row.totalWidth += row.widths[column];
+        }
+
+        if (row.totalWidth > availableWidth && rowCount > 0)
+        {
+            const float gapsWidth = gapX * (rowCount - 1);
+            const float contentWidth = row.totalWidth - gapsWidth;
+            if (contentWidth > 0.0f)
+            {
+                const float scale = std::max(
+                    0.0f, (availableWidth - gapsWidth) / contentWidth);
+                row.totalWidth = gapsWidth;
+                for (int column = 0; column < rowCount; ++column)
+                {
+                    row.widths[column] *= scale;
+                    row.totalWidth += row.widths[column];
+                }
+            }
+        }
+
+        const int rowIndex = static_cast<int>(g_gridRows.size());
+        for (int column = 0; column < rowCount; ++column)
+        {
+            const int slot = firstSlot + column;
+            g_gridSlotRows[slot] = rowIndex;
+            g_gridSlotColumns[slot] = column;
+        }
+        g_gridRows.push_back(row);
+        firstSlot += rowCount;
+    }
+}
+
+static int GetGridColumnCount(int row)
+{
+    EnsureGridLayout();
+    if (row < 0 || row >= static_cast<int>(g_gridRows.size()))
+        return 0;
+    return g_gridRows[row].slotCount;
+}
+
+static int GetGridRowForSlot(int slot)
+{
+    EnsureGridLayout();
+    if (slot < 0 || slot >= static_cast<int>(g_gridSlotRows.size()))
+        return -1;
+    return g_gridSlotRows[slot];
+}
+
+static int GetGridColumnForSlot(int slot)
+{
+    EnsureGridLayout();
+    if (slot < 0 || slot >= static_cast<int>(g_gridSlotColumns.size()))
+        return -1;
+    return g_gridSlotColumns[slot];
+}
+
+static int GetGridRowStartSlot(int row)
+{
+    EnsureGridLayout();
+    if (row < 0 || row >= static_cast<int>(g_gridRows.size()))
+        return -1;
+    return g_gridRows[row].firstSlot;
+}
+
+static int GetGridRowEndSlot(int row)
+{
+    EnsureGridLayout();
+    if (row < 0 || row >= static_cast<int>(g_gridRows.size()))
+        return -1;
+    const GridRowLayout& layout = g_gridRows[row];
+    return layout.firstSlot + layout.slotCount - 1;
+}
+
+static int GetGridRowCount()
+{
+    EnsureGridLayout();
+    return static_cast<int>(g_gridRows.size());
+}
+static void SetGridScrollRow(int row)
+{
+    const int visibleRows = GridVisibleRows();
+    const int maxScroll = std::max(0, GetGridRowCount() - visibleRows);
+    row = std::max(0, std::min(maxScroll, row));
+    if (row == g_gridScrollRow && !g_gridScrollAnimating)
+        return;
+    g_gridScrollRow = row;
+    g_gridScrollStartOffset = g_gridScrollOffset;
+    g_gridScrollStartTime = FrameClockNow();
+    g_gridScrollAnimating = fabsf(g_gridScrollStartOffset - static_cast<float>(row)) > 0.001f;
+    if (!g_gridScrollAnimating)
+        g_gridScrollOffset = static_cast<float>(row);
+    RequestFrame();
+}
+
+static void EnsureGridSelectionVisible()
+{
+    if (!IsGridMode() || g_groups.empty())
+        return;
+    g_selected = std::max(0, std::min(
+        std::min(static_cast<int>(g_groups.size()), kGridMaxCards) - 1, g_selected));
+    const int selectedRow = GetGridRowForSlot(g_selected);
+    if (selectedRow < 0)
+        return;
+    const int visibleRows = std::max(1, static_cast<int>(
+        (GridContentHeightPx() - ScaleLayoutPx(44.0f)) /
+        ScaleLayoutPx(182.0f)));
+    int targetRow = g_gridScrollRow;
+    if (selectedRow < targetRow)
+        targetRow = selectedRow;
+    else if (selectedRow >= targetRow + visibleRows)
+        targetRow = selectedRow - visibleRows + 1;
+    SetGridScrollRow(targetRow);
+}
+
 static bool IsCompactAutomaticMode()
 {
-    return g_groups.size() >= 2 && g_groups.size() <= 3;
+    return !IsGridMode() && g_groups.size() >= 2 && g_groups.size() <= 3;
 }
 
 static int GetCarouselCenterSlot()
 {
+    if (IsGridMode())
+        return g_selected;
     return IsCompactAutomaticMode()
         ? (GetCarouselSlotCount() - 1) / 2
         : GetCarouselSlotCount() / 2;
@@ -1096,23 +1457,27 @@ static int GetCarouselCenterSlot()
 static int GetCarouselSlotCount()
 {
     const int count = static_cast<int>(g_groups.size());
-    return count >= 4 ? kCarouselMaxCards : count;
+    if (IsGridMode())
+        return std::min(count, kGridMaxCards);
+    if (count >= kCarouselMaxCards)
+        return kCarouselMaxCards;
+    return count >= 4 ? 5 : count;
 }
 static int GetSelectedSlot()
 {
-    return IsCompactAutomaticMode() ? g_selected : GetCarouselCenterSlot();
+    return (IsGridMode() || IsCompactAutomaticMode()) ? g_selected : GetCarouselCenterSlot();
 }
 static bool IsSlotSelected(int slot)
 {
-    if (IsCompactAutomaticMode())
+    if (IsGridMode() || IsCompactAutomaticMode())
         return slot == g_selected;
     return fabsf(static_cast<float>(slot - GetCarouselCenterSlot()) + g_animOffset) < 0.5f;
 }
 static float GetSlotSelectionDistance(int slot)
 {
-    return IsCompactAutomaticMode()
-        ? fabsf(static_cast<float>(slot - g_selected))
-        : fabsf(static_cast<float>(slot - GetCarouselCenterSlot()) + g_animOffset);
+    if (IsGridMode() || IsCompactAutomaticMode())
+        return slot == g_selected ? 0.0f : 1.0f;
+    return fabsf(static_cast<float>(slot - GetCarouselCenterSlot()) + g_animOffset);
 }
 static bool IsSingleCardMode()
 {
@@ -1150,6 +1515,7 @@ static void SelectPrevious();
 static void StopCarouselAnimation();
 static void UpdateSelectorControls();
 static void UpdateThumbnailSlots();
+static void RecalculateGridIndicatorBands();
 static void RequestFrame();
 static void InvalidateSelectorForFrame();
 static void ArmFramePump();
@@ -1176,6 +1542,104 @@ static CardSlotGeometry GetCanonicalSlotKeyframe(int slot)
 {
     CardSlotGeometry g = {};
 
+    if (slot <= -1)
+    {
+        g.left = -170.0f;
+        g.top = 160.0f;
+        g.right = -60.0f;
+        g.bottom = 280.0f;
+        g.cornerRadius = 10.0f;
+        g.headerHeight = 24.0f;
+        g.padding = 6.0f;
+    }
+    else if (slot == 0)
+    {
+        // Partial card at the left edge.
+        g.left = -80.0f;
+        g.top = 160.0f;
+        g.right = 45.0f;
+        g.bottom = 280.0f;
+        g.cornerRadius = 10.0f;
+        g.headerHeight = 24.0f;
+        g.padding = 6.0f;
+    }
+    else if (slot == 1)
+    {
+        g.left = 45.0f;
+        g.top = 160.0f;
+        g.right = 155.0f;
+        g.bottom = 280.0f;
+        g.cornerRadius = 12.0f;
+        g.headerHeight = 24.0f;
+        g.padding = 6.0f;
+    }
+    else if (slot == 2)
+    {
+        g.left = 165.0f;
+        g.top = 125.0f;
+        g.right = 405.0f;
+        g.bottom = 315.0f;
+        g.cornerRadius = 12.0f;
+        g.headerHeight = 28.0f;
+        g.padding = 8.0f;
+    }
+    else if (slot == 3)
+    {
+        g.left = 390.0f;
+        g.top = 55.0f;
+        g.right = 830.0f;
+        g.bottom = 355.0f;
+        g.cornerRadius = 14.0f;
+        g.headerHeight = 34.0f;
+        g.padding = 10.0f;
+    }
+    else if (slot == 4)
+    {
+        g.left = 815.0f;
+        g.top = 125.0f;
+        g.right = 1055.0f;
+        g.bottom = 315.0f;
+        g.cornerRadius = 12.0f;
+        g.headerHeight = 28.0f;
+        g.padding = 8.0f;
+    }
+    else if (slot == 5)
+    {
+        g.left = 1065.0f;
+        g.top = 160.0f;
+        g.right = 1175.0f;
+        g.bottom = 280.0f;
+        g.cornerRadius = 12.0f;
+        g.headerHeight = 24.0f;
+        g.padding = 6.0f;
+    }
+    else if (slot == 6)
+    {
+        // Partial card at the right edge.
+        g.left = 1175.0f;
+        g.top = 160.0f;
+        g.right = 1300.0f;
+        g.bottom = 280.0f;
+        g.cornerRadius = 10.0f;
+        g.headerHeight = 24.0f;
+        g.padding = 6.0f;
+    }
+    else
+    {
+        g.left = 1335.0f;
+        g.top = 160.0f;
+        g.right = 1445.0f;
+        g.bottom = 280.0f;
+        g.cornerRadius = 10.0f;
+        g.headerHeight = 24.0f;
+        g.padding = 6.0f;
+    }
+    return g;
+}
+
+static CardSlotGeometry GetFiveCardSlotKeyframe(int slot)
+{
+    CardSlotGeometry g = {};
     if (slot <= -1)
     {
         g.left = -115.0f;
@@ -1252,27 +1716,74 @@ static CardSlotGeometry GetCanonicalSlotKeyframe(int slot)
 static CardSlotGeometry GetSlotKeyframe(int slot)
 {
     CardSlotGeometry g = {};
-    if (GetCarouselSlotCount() == kCarouselMaxCards)
+    if (IsGridMode())
+    {
+        const int rowIndex = GetGridRowForSlot(slot);
+        const int column = GetGridColumnForSlot(slot);
+        if (rowIndex < 0 || column < 0)
+            return g;
+        const int rowCount = GetGridColumnCount(rowIndex);
+        if (column >= rowCount)
+            return g;
+        const GridRowLayout& row = g_gridRows[rowIndex];
+        const float gapX = static_cast<float>(ScaleLayoutPx(32.0f));
+        const float gapY = static_cast<float>(ScaleLayoutPx(16.0f));
+        const float top = static_cast<float>(
+            GridIndicatorBandPx() + ScaleLayoutPx(18.0f));
+        const float cardHeight = static_cast<float>(ScaleLayoutPx(190.0f));
+        const float rowHeight = cardHeight + gapY;
+
+        float x = (static_cast<float>(g_runtimeSelectorWidth) - row.totalWidth) * 0.5f;
+        for (int i = 0; i < column; ++i)
+            x += row.widths[i] + gapX;
+
+        const float cardWidth = row.widths[column];
+        g.left = x;
+        g.top = top + (static_cast<float>(rowIndex) - g_gridScrollOffset) * rowHeight;
+        g.right = g.left + cardWidth;
+        g.bottom = g.top + cardHeight;
+        g.cornerRadius = ScaleLayoutPx(13.0f);
+        g.headerHeight = ScaleLayoutPx(28.0f);
+        g.padding = std::min(static_cast<float>(ScaleLayoutPx(10.0f)),
+            std::max(static_cast<float>(ScaleLayoutPx(0.0f)),
+                     std::min(cardWidth, cardHeight) * 0.075f));
+        return g;
+    }
+    const int carouselSlots = GetCarouselSlotCount();
+    if (carouselSlots == kCarouselMaxCards)
     {
         g = GetCanonicalSlotKeyframe(slot);
+    }
+    else if (carouselSlots == 5)
+    {
+        g = GetFiveCardSlotKeyframe(slot);
     }
     else
     {
         const int relative = slot - GetCarouselCenterSlot();
-        const int canonical = std::max(-1, std::min(1, relative)) + 2;
+        const int canonical = std::max(-3, std::min(3, relative)) + 3;
         g = GetCanonicalSlotKeyframe(canonical);
     }
     return g;
 }
+
+static void ApplyLayoutTransitionToGeometry(float virtualSlot, CardSlotGeometry& geometry);
 
 static inline float LerpFloat(float a, float b, float t)
 {
     return a + (b - a) * t;
 }
 
-
 static CardSlotGeometry GetInterpolatedSlotGeometry(float virtualSlot)
 {
+    if (IsGridMode())
+    {
+        const int slot = std::max(0, std::min(
+            GetCarouselSlotCount() - 1, static_cast<int>(roundf(virtualSlot))));
+        CardSlotGeometry grid = GetSlotKeyframe(slot);
+        ApplyLayoutTransitionToGeometry(virtualSlot, grid);
+        return grid;
+    }
     if (IsCompactAutomaticMode())
     {
         const int slot = std::max(0, std::min(
@@ -1308,6 +1819,7 @@ static CardSlotGeometry GetInterpolatedSlotGeometry(float virtualSlot)
             compact.left += shift;
             compact.right += shift;
         }
+        ApplyLayoutTransitionToGeometry(virtualSlot, compact);
         return compact;
     }
 
@@ -1343,7 +1855,7 @@ static CardSlotGeometry GetInterpolatedSlotGeometry(float virtualSlot)
         res.right += shift;
     }
 
-
+    ApplyLayoutTransitionToGeometry(virtualSlot, res);
     return res;
 }
 
@@ -2052,6 +2564,9 @@ static bool RegisterUserWindow(HWND hwnd, bool activity)
 {
     if (!hwnd || IsWindowPendingClose(hwnd))
         return false;
+    // Cheap rejection before CaptureWindowIdentity opens the process.
+    if (!IsWindowVisible(hwnd))
+        return false;
 
     DWORD processId = 0, threadId = 0;
     FILETIME processCreationTime = {};
@@ -2272,6 +2787,74 @@ static HMONITOR ResolveFilterMonitor(HWND originWindow)
     return nullptr;
 }
 
+// Single predicate for "should this window appear in the switcher", used by
+// both RefreshWindowList and PollSelectorWindowList so the two never disagree
+// about windows that the monitor filter hides.
+static bool ShouldListWindow(HWND hwnd)
+{
+    return IsRealUserApplicationWindow(hwnd, nullptr, nullptr, nullptr) &&
+           (!g_filterMonitor ||
+            GetWindowMonitorForFilter(hwnd) == g_filterMonitor);
+}
+
+#ifndef CHILDID_SELF
+#define CHILDID_SELF 0
+#endif
+
+// Event-driven window list tracking (installed only while the switcher is
+// open). The callback marks the list dirty; PollSelectorWindowList rescans
+// only when the flag is set.
+static HWINEVENTHOOK g_windowListEventHook = nullptr;
+static HWINEVENTHOOK g_windowListCloakHook = nullptr;
+static volatile LONG g_windowListDirty = 1;
+
+static void CALLBACK WindowListWinEventProc(HWINEVENTHOOK, DWORD, HWND hwnd,
+                                            LONG idObject, LONG idChild,
+                                            DWORD, DWORD)
+{
+    if (!hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF)
+        return;
+    InterlockedExchange(&g_windowListDirty, 1);
+}
+
+static void InstallWindowListEventHooks()
+{
+    if (g_windowListEventHook)
+        return;
+    // EVENT_OBJECT_DESTROY..EVENT_OBJECT_HIDE also covers EVENT_OBJECT_SHOW.
+    // The range is contiguous, so one hook is enough for show/hide/destroy;
+    // cloak changes need a second hook.
+    g_windowListEventHook = SetWinEventHook(
+        EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, nullptr,
+        WindowListWinEventProc, 0, 0,
+        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    if (!g_windowListEventHook)
+    {
+        Wh_Log(L"SetWinEventHook (window list) failed: %lu", GetLastError());
+        return;
+    }
+    g_windowListCloakHook = SetWinEventHook(
+        EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED, nullptr,
+        WindowListWinEventProc, 0, 0,
+        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    if (!g_windowListCloakHook)
+        Wh_Log(L"SetWinEventHook (cloak) failed: %lu", GetLastError());
+}
+
+static void RemoveWindowListEventHooks()
+{
+    if (g_windowListEventHook)
+    {
+        UnhookWinEvent(g_windowListEventHook);
+        g_windowListEventHook = nullptr;
+    }
+    if (g_windowListCloakHook)
+    {
+        UnhookWinEvent(g_windowListCloakHook);
+        g_windowListCloakHook = nullptr;
+    }
+}
+
 static void RefreshWindowList(bool fallbackToAllIfEmpty = false)
 {
     ReleaseGroupResources();
@@ -2287,10 +2870,7 @@ static void RefreshWindowList(bool fallbackToAllIfEmpty = false)
         bool anyOnMonitor = false;
         for (size_t i = 0; i < g_userWindows.size() && !anyOnMonitor; ++i)
         {
-            const HWND candidate = g_userWindows[i].hwnd;
-            anyOnMonitor =
-                IsRealUserApplicationWindow(candidate, nullptr, nullptr, nullptr) &&
-                GetWindowMonitorForFilter(candidate) == g_filterMonitor;
+            anyOnMonitor = ShouldListWindow(g_userWindows[i].hwnd);
         }
         if (!anyOnMonitor)
             g_filterMonitor = nullptr;
@@ -2299,9 +2879,7 @@ static void RefreshWindowList(bool fallbackToAllIfEmpty = false)
     for (size_t i = 0; i < g_userWindows.size(); ++i)
     {
         UserWindowInfo& item = g_userWindows[i];
-        if (!IsRealUserApplicationWindow(item.hwnd, nullptr, nullptr, nullptr))
-            continue;
-        if (g_filterMonitor && GetWindowMonitorForFilter(item.hwnd) != g_filterMonitor)
+        if (!ShouldListWindow(item.hwnd))
             continue;
 
         bool duplicate = false;
@@ -2354,7 +2932,15 @@ static void RefreshWindowList(bool fallbackToAllIfEmpty = false)
                          });
     }
 
+    g_gridLayoutDirty = true;
     g_selected = 0;
+    if (g_groups.size() < 4)
+    {
+        g_gridScrollRow = 0;
+        g_gridScrollOffset = 0.0f;
+        g_gridScrollStartOffset = 0.0f;
+        g_gridScrollAnimating = false;
+    }
     for (size_t i = 0; i < g_groups.size(); ++i)
         g_groups[i].mediaAccent = ExtractMediaAccentFromImage(g_groups[i].icon);
 }
@@ -2374,7 +2960,9 @@ static const std::wstring& MakeCounterText()
     static std::wstring cached = L"0 / 0";
     static int cachedSelected = -1;
     static int cachedCount = -1;
-    const int count = static_cast<int>(g_groups.size());
+    const int count = IsGridMode()
+        ? std::min(static_cast<int>(g_groups.size()), kGridMaxCards)
+        : static_cast<int>(g_groups.size());
     if (cachedSelected != g_selected || cachedCount != count)
     {
         cachedSelected = g_selected;
@@ -2408,6 +2996,50 @@ static float GetMonitorDpiScale(HMONITOR monitor)
         dpiX > 0)
         return static_cast<float>(dpiX) / 96.0f;
     return 1.0f;
+}
+
+static void RecalculateGridIndicatorBands()
+{
+    HMONITOR monitor = g_filterMonitor;
+    if (!monitor && g_selector && IsWindow(g_selector))
+        monitor = MonitorFromWindow(g_selector, MONITOR_DEFAULTTONEAREST);
+    if (!monitor && g_selectorOriginWindow && IsWindow(g_selectorOriginWindow))
+        monitor = MonitorFromWindow(g_selectorOriginWindow, MONITOR_DEFAULTTONEAREST);
+    if (!monitor)
+        return;
+
+    MONITORINFO monitorInfo = {};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    if (!GetMonitorInfoW(monitor, &monitorInfo))
+        return;
+
+    g_gridIndicatorBandsActive = false;
+    UpdateUIScaleForWorkArea(monitorInfo.rcWork, GetMonitorDpiScale(monitor));
+    if (IsGridMode())
+    {
+        EnsureGridLayout();
+        if (GetGridRowCount() > GridVisibleRows())
+        {
+            g_gridIndicatorBandsActive = true;
+            UpdateUIScaleForWorkArea(
+                monitorInfo.rcWork, GetMonitorDpiScale(monitor));
+        }
+    }
+
+    // A compact selector must follow the recalculated runtime height. The
+    // fullscreen host already owns the monitor-sized window and is left
+    // untouched here.
+    if (g_selector && IsWindow(g_selector) && !IsFullscreenBackdropActive())
+    {
+        const RECT& work = monitorInfo.rcWork;
+        const int x = work.left +
+            ((work.right - work.left) - g_runtimeSelectorWidth) / 2;
+        const int y = work.top +
+            ((work.bottom - work.top) - g_runtimeSelectorHeight) / 2;
+        SetWindowPos(g_selector, HWND_TOPMOST, x, y,
+                     g_runtimeSelectorWidth, g_runtimeSelectorHeight,
+                     SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSENDCHANGING);
+    }
 }
 
 static void UpdateUIScaleForMonitor(HMONITOR monitor)
@@ -3051,6 +3683,11 @@ static void ReleaseDWriteFormats()
     if (g_dwriteCloseFormat) { g_dwriteCloseFormat->Release(); g_dwriteCloseFormat = nullptr; }
     if (g_dwriteNormalFormat) { g_dwriteNormalFormat->Release(); g_dwriteNormalFormat = nullptr; }
     if (g_dwriteSelectedFormat) { g_dwriteSelectedFormat->Release(); g_dwriteSelectedFormat = nullptr; }
+    for (int i = 0; i < 2; ++i)
+    {
+        if (g_dwriteScaledHeaderFormat[i]) { g_dwriteScaledHeaderFormat[i]->Release(); g_dwriteScaledHeaderFormat[i] = nullptr; }
+        g_dwriteScaledHeaderPx[i] = 0;
+    }
     g_dwriteFormatsScale = 0.0f;
 }
 
@@ -3533,6 +4170,15 @@ static D2D1_COLOR_F AddMediaAccent(const D2D1_COLOR_F& base,
     const float ar = static_cast<float>(GetRValue(accent.color)) / 255.0f;
     const float ag = static_cast<float>(GetGValue(accent.color)) / 255.0f;
     const float ab = static_cast<float>(GetBValue(accent.color)) / 255.0f;
+    if (g_lightThemeActive)
+    {
+        const float amount = std::min(0.34f, influence);
+        return D2D1::ColorF(
+            base.r * (1.0f - amount) + ar * amount,
+            base.g * (1.0f - amount) + ag * amount,
+            base.b * (1.0f - amount) + ab * amount, base.a);
+    }
+
     return D2D1::ColorF(
         std::min(1.0f, base.r + ar * influence),
         std::min(1.0f, base.g + ag * influence),
@@ -3584,6 +4230,13 @@ static void ReleaseUiFontObjects()
         DeleteObject(reinterpret_cast<HGDIOBJ>(g_selectedNameFont));
     if (g_secondaryFont)
         DeleteObject(reinterpret_cast<HGDIOBJ>(g_secondaryFont));
+    for (int i = 0; i < 2; ++i)
+    {
+        if (g_scaledHeaderFont[i])
+            DeleteObject(reinterpret_cast<HGDIOBJ>(g_scaledHeaderFont[i]));
+        g_scaledHeaderFont[i] = nullptr;
+        g_scaledHeaderFontPx[i] = 0;
+    }
     g_nameFont = nullptr;
     g_selectedNameFont = nullptr;
     g_secondaryFont = nullptr;
@@ -3667,8 +4320,21 @@ static RECT ScaleRectAroundPoint(const RECT& rect, float scale,
 
 static float GetSlotVisualScale(int slot)
 {
+    if (IsGridMode())
+    {
+        const float progress = g_gridSelectionAnimating
+            ? EaseSmooth(ElapsedFraction(g_gridSelectionStart, kGridSelectionDurationMs))
+            : 1.0f;
+        const float target = slot == g_selected ? 1.045f : 1.0f;
+        if (!g_gridSelectionAnimating)
+            return target;
+        const float from = slot == g_gridPreviousSelected ? 1.045f :
+                           (slot == g_selected ? 1.0f : target);
+        return LerpFloat(from, target, progress);
+    }
     if (!IsCompactAutomaticMode())
-        return slot == GetCarouselCenterSlot() ? g_cardSnapScale : 1.0f;
+        return slot == GetCarouselCenterSlot()
+            ? g_cardSnapScale * kCarouselSelectedScale : 1.0f;
     const float targetScale = slot == g_selected ? kStaticSelectedScale : 1.0f;
     if (!g_staticSelectionAnimating || slot < 0 || slot >= 3)
         return targetScale;
@@ -3708,12 +4374,27 @@ static RECT GetSlotHeaderRect(int slot)
     header.right = static_cast<int>(roundf(g.right)) - pad;
     header.top = static_cast<int>(roundf(g.top)) + pad;
     header.bottom = header.top + static_cast<int>(roundf(g.headerHeight));
-    const float visualScale = IsCompactAutomaticMode() ? GetSlotVisualScale(slot) : 1.0f;
+
+    // The header follows the exact visual scale of its card in every layout.
+    // GetSlotVisualScale() is 1.0 for non-selected carousel cards, so only the
+    // scaled card gets transformed.
+    const float visualScale = GetSlotVisualScale(slot);
     if (fabsf(visualScale - 1.0f) > 0.0001f)
     {
-        RECT card = GetSlotCardRect(slot);
-        const float pivotX = (static_cast<float>(card.left) + card.right) * 0.5f;
-        const float pivotY = (static_cast<float>(card.top) + card.bottom) * 0.5f;
+        float pivotX, pivotY;
+        if (IsCompactAutomaticMode() || IsGridMode())
+        {
+            RECT card = GetSlotCardRect(slot);
+            pivotX = (static_cast<float>(card.left) + card.right) * 0.5f;
+            pivotY = (static_cast<float>(card.top) + card.bottom) * 0.5f;
+        }
+        else
+        {
+            // Same pivot GetSlotCardRect() uses (center of the unscaled card).
+            // The exit offset is applied once below, never through the pivot.
+            pivotX = (roundf(g.left) + roundf(g.right)) * 0.5f;
+            pivotY = (roundf(g.top) + roundf(g.bottom)) * 0.5f;
+        }
         header = ScaleRectAroundPoint(header, visualScale, pivotX, pivotY);
     }
     if (g_cardExitActive && slot == g_cardExitSlot)
@@ -3723,6 +4404,68 @@ static RECT GetSlotHeaderRect(int slot)
         header.bottom += offset;
     }
     return header;
+}
+
+// Single source of truth for the contents of a slot header. Both the Direct2D
+// and the GDI painters consume this layout, so they always match.
+struct SlotHeaderLayout
+{
+    RECT icon;
+    RECT text;
+    int fontPx; // 0 = use the stock (unscaled) format/font
+};
+
+static SlotHeaderLayout ComputeSlotHeaderLayout(int slot, bool selected, float distFromCenter)
+{
+    const RECT rc = GetSlotHeaderRect(slot);
+    const int iconBase = ScaleLayoutPx(static_cast<float>(selected ? 20 : (distFromCenter < 1.5f ? 18 : 16)));
+    const int paddingBase = ScaleLayoutPx(static_cast<float>(selected ? 10 : (distFromCenter < 1.5f ? 8 : 6)));
+    const int gapBase = ScaleLayoutPx(8.0f);
+
+    SlotHeaderLayout layout = {};
+
+    if (IsGridMode() || IsCompactAutomaticMode())
+    {
+        // Grid / Compact Automatic: unchanged behavior.
+        const int iconX = rc.left + paddingBase;
+        const int iconY = rc.top + (rc.bottom - rc.top - iconBase) / 2;
+        layout.icon = { iconX, iconY, iconX + iconBase, iconY + iconBase };
+        const float iconScale = IsCompactAutomaticMode() ? 1.0f : GetSlotVisualScale(slot);
+        if (fabsf(iconScale - 1.0f) > 0.0001f)
+        {
+            RECT cardRect = GetSlotCardRect(slot);
+            const float pivotX = (static_cast<float>(cardRect.left) + cardRect.right) * 0.5f;
+            const float pivotY = (static_cast<float>(cardRect.top) + cardRect.bottom) * 0.5f;
+            layout.icon = ScaleRectAroundPoint(layout.icon, iconScale, pivotX, pivotY);
+        }
+        layout.text = rc;
+        layout.text.left = iconX + iconBase + gapBase;
+        layout.text.right = rc.right - gapBase;
+        layout.fontPx = 0;
+        return layout;
+    }
+
+    // Carousel: rc is already scaled with the card, so every metric inside it
+    // is multiplied by the same factor exactly once. Nothing is re-scaled
+    // around the card pivot afterwards.
+    const float scale = GetSlotVisualScale(slot);
+    auto scaled = [scale](int value) {
+        return static_cast<int>(roundf(static_cast<float>(value) * scale));
+    };
+    const int iconSize = scaled(iconBase);
+    const int iconX = rc.left + scaled(paddingBase);
+    const int iconY = rc.top + (rc.bottom - rc.top - iconSize) / 2;
+    layout.icon = { iconX, iconY, iconX + iconSize, iconY + iconSize };
+
+    layout.text = rc; // same top/bottom as the icon's reference => shared vertical center
+    layout.text.left = layout.icon.right + scaled(gapBase);
+    layout.text.right = rc.right - scaled(gapBase);
+
+    const int baseFontPx = selected ? std::max(10, ScaleLayoutPx(16.0f))
+                                    : std::max(9, ScaleLayoutPx(13.0f));
+    const int fontPx = std::max(1, scaled(baseFontPx));
+    layout.fontPx = (fontPx == baseFontPx) ? 0 : fontPx;
+    return layout;
 }
 
 static RECT GetSlotPreviewRect(int slot)
@@ -3739,7 +4482,7 @@ static RECT GetSlotPreviewRect(int slot)
     preview.right = static_cast<int>(roundf(g.right)) - pad;
     preview.top = static_cast<int>(roundf(g.top)) + pad + hHeight + gap;
     preview.bottom = static_cast<int>(roundf(g.bottom)) - pad;
-    if (IsCompactAutomaticMode())
+    if (IsCompactAutomaticMode() || IsGridMode())
     {
         const float visualScale = GetSlotVisualScale(slot);
         if (fabsf(visualScale - 1.0f) > 0.0001f)
@@ -3752,7 +4495,7 @@ static RECT GetSlotPreviewRect(int slot)
     }
     else if (slot == GetCarouselCenterSlot())
     {
-        preview = ScaleRectAroundCenter(preview, g_cardSnapScale);
+        preview = ScaleRectAroundCenter(preview, GetSlotVisualScale(slot));
     }
     if (g_cardExitActive && slot == g_cardExitSlot)
     {
@@ -3864,6 +4607,9 @@ static int ResolveGroupIndex(int slot)
     if (count <= 0)
         return -1;
 
+    if (IsGridMode())
+        return slot >= 0 && slot < std::min(count, kGridMaxCards) ? slot : -1;
+
     if (IsCompactAutomaticMode())
         return slot >= 0 && slot < count ? slot : -1;
 
@@ -3879,6 +4625,103 @@ static int ResolveGroupIndex(int slot)
     while (index >= count)
         index -= count;
     return index;
+}
+
+static void ApplyLayoutTransitionToGeometry(float virtualSlot, CardSlotGeometry& geometry)
+{
+    if (!g_layoutTransitionActive || g_animActive ||
+        fabsf(virtualSlot - roundf(virtualSlot)) > 0.001f)
+        return;
+
+    const int slot = static_cast<int>(roundf(virtualSlot));
+    const int groupIndex = ResolveGroupIndex(slot);
+    if (groupIndex < 0 || groupIndex >= static_cast<int>(g_groups.size()))
+        return;
+
+    const HWND hwnd = g_groups[groupIndex].representativeWindow;
+    for (const LayoutTransitionEntry& entry : g_layoutTransitions)
+    {
+        if (entry.hwnd != hwnd)
+            continue;
+
+        const float progress = EaseOutCubic(ElapsedFraction(
+            entry.start, AnimationDuration(kLayoutTransitionDurationMs)));
+        geometry.left = LerpFloat(static_cast<float>(entry.from.left), geometry.left, progress);
+        geometry.top = LerpFloat(static_cast<float>(entry.from.top), geometry.top, progress);
+        geometry.right = LerpFloat(static_cast<float>(entry.from.right), geometry.right, progress);
+        geometry.bottom = LerpFloat(static_cast<float>(entry.from.bottom), geometry.bottom, progress);
+        return;
+    }
+}
+
+struct LayoutSnapshotEntry
+{
+    HWND hwnd = nullptr;
+    RECT rect = {};
+};
+
+static std::vector<LayoutSnapshotEntry> CaptureVisibleLayout()
+{
+    std::vector<LayoutSnapshotEntry> snapshot;
+    if (g_animActive || g_staticSelectionAnimating)
+        return snapshot;
+
+    for (int slot = 0; slot < GetCarouselSlotCount(); ++slot)
+    {
+        const int groupIndex = ResolveGroupIndex(slot);
+        if (groupIndex < 0 || groupIndex >= static_cast<int>(g_groups.size()))
+            continue;
+
+        CardSlotGeometry geometry = GetInterpolatedSlotGeometry(static_cast<float>(slot));
+        LayoutSnapshotEntry entry = {};
+        entry.hwnd = g_groups[groupIndex].representativeWindow;
+        entry.rect.left = static_cast<LONG>(roundf(geometry.left));
+        entry.rect.top = static_cast<LONG>(roundf(geometry.top));
+        entry.rect.right = static_cast<LONG>(roundf(geometry.right));
+        entry.rect.bottom = static_cast<LONG>(roundf(geometry.bottom));
+        snapshot.push_back(entry);
+    }
+    return snapshot;
+}
+
+static void StartLayoutTransition(const std::vector<LayoutSnapshotEntry>& snapshot)
+{
+    g_layoutTransitions.clear();
+    g_layoutTransitionActive = false;
+    if (snapshot.empty() || g_groups.empty())
+        return;
+
+    const double start = FrameClockNow();
+    for (int slot = 0; slot < GetCarouselSlotCount(); ++slot)
+    {
+        const int groupIndex = ResolveGroupIndex(slot);
+        if (groupIndex < 0 || groupIndex >= static_cast<int>(g_groups.size()))
+            continue;
+
+        const HWND hwnd = g_groups[groupIndex].representativeWindow;
+        auto previous = std::find_if(snapshot.begin(), snapshot.end(),
+            [hwnd](const LayoutSnapshotEntry& item) { return item.hwnd == hwnd; });
+        if (previous == snapshot.end())
+            continue;
+
+        const CardSlotGeometry target = GetInterpolatedSlotGeometry(static_cast<float>(slot));
+        RECT targetRect = {
+            static_cast<LONG>(roundf(target.left)),
+            static_cast<LONG>(roundf(target.top)),
+            static_cast<LONG>(roundf(target.right)),
+            static_cast<LONG>(roundf(target.bottom))
+        };
+        if (std::memcmp(&previous->rect, &targetRect, sizeof(RECT)) == 0)
+            continue;
+
+        LayoutTransitionEntry transition = {};
+        transition.hwnd = hwnd;
+        transition.from = previous->rect;
+        transition.start = start;
+        g_layoutTransitions.push_back(transition);
+    }
+
+    g_layoutTransitionActive = !g_layoutTransitions.empty();
 }
 
 static void UpdateHoveredSlot(POINT ptClient)
@@ -3897,8 +4740,20 @@ static void UpdateHoveredSlot(POINT ptClient)
     RequestFrame();
 }
 
+static bool IsPointInsideGridPanel(POINT ptClient)
+{
+    if (!IsGridMode() || !g_gridIndicatorBandsActive)
+        return true;
+    const int band = GridIndicatorBandPx();
+    return ptClient.y >= band &&
+           ptClient.y < g_runtimeSelectorHeight - band;
+}
+
 static int GetSlotAtPoint(POINT ptClient)
 {
+    if (!IsPointInsideGridPanel(ptClient))
+        return -1;
+
     const int selectedSlot = GetSelectedSlot();
     if (selectedSlot >= 0 && selectedSlot < GetCarouselSlotCount())
     {
@@ -3919,18 +4774,9 @@ static int GetSlotAtPoint(POINT ptClient)
     return -1;
 }
 
-static void CloseWindowForSlot(int slot)
+static void StartCardExitForSlot(int slot, HWND target, bool closeTarget)
 {
-    if (!IsSelectorActive())
-        return;
-
-    int groupIndex = ResolveGroupIndex(slot);
-    if (groupIndex < 0 || groupIndex >= static_cast<int>(g_groups.size()))
-        return;
-
-    AppGroup& group = g_groups[groupIndex];
-    HWND target = group.representativeWindow;
-    if (!target || !IsWindow(target))
+    if (!IsSelectorActive() || g_cardExitActive || slot < 0 || !target)
         return;
 
     g_hoveredSlot = -1;
@@ -3938,6 +4784,7 @@ static void CloseWindowForSlot(int slot)
     g_cardExitActive = true;
     g_cardExitSlot = slot;
     g_cardExitTarget = target;
+    g_cardExitShouldCloseTarget = closeTarget;
     g_cardExitStart = FrameClockNow();
     g_cardExitProgress = 0.0f;
     g_cardExitDirection = (static_cast<ULONGLONG>(g_cardExitStart) & 1ULL) ? 1.0f : -1.0f;
@@ -3947,7 +4794,134 @@ static void CloseWindowForSlot(int slot)
     UpdateSelectorControls();
 }
 
-static void DrawCardGlowAndBorderGDI(HDC hdc, const RECT& rect, int radius, bool selected)
+static void CloseWindowForSlot(int slot)
+{
+    if (!IsSelectorActive())
+        return;
+
+    int groupIndex = ResolveGroupIndex(slot);
+    if (groupIndex < 0 || groupIndex >= static_cast<int>(g_groups.size()))
+        return;
+
+    HWND target = g_groups[groupIndex].representativeWindow;
+    if (!target || !IsWindow(target))
+        return;
+
+    StartCardExitForSlot(slot, target, true);
+}
+
+static void PollSelectorWindowList()
+{
+    if (!IsSelectorActive() || g_cleanupInProgress || g_cardExitActive ||
+        g_layoutTransitionActive || g_animActive || g_staticSelectionAnimating ||
+        g_selectorAnimation == SelectorAnimationState::Closing ||
+        g_selectorAnimation == SelectorAnimationState::SelectionExpansion)
+        return;
+
+    // With the event hooks active, rescan only when a window was shown,
+    // hidden, destroyed or (un)cloaked. If the hooks failed to install, fall
+    // back to scanning on every tick.
+    if (g_windowListEventHook)
+    {
+        if (!InterlockedCompareExchange(&g_windowListDirty, 0, 1))
+            return;
+    }
+
+    g_gridLayoutDirty = true;
+    EnumWindows(EnumWindowsProc, 0);
+    PruneUserWindowRegistry();
+
+    for (int groupIndex = 0; groupIndex < static_cast<int>(g_groups.size()); ++groupIndex)
+    {
+        HWND hwnd = g_groups[groupIndex].representativeWindow;
+        if (IsWindow(hwnd) && IsWindowVisible(hwnd) && !IsWindowPendingClose(hwnd))
+            continue;
+
+        // Work is deferred to a later tick; keep the flag set so it isn't lost.
+        if (g_selectorAnimation != SelectorAnimationState::Open)
+        {
+            InterlockedExchange(&g_windowListDirty, 1);
+            return;
+        }
+
+        for (int slot = 0; slot < GetCarouselSlotCount(); ++slot)
+        {
+            if (ResolveGroupIndex(slot) == groupIndex)
+            {
+                StartCardExitForSlot(slot, hwnd, false);
+                InterlockedExchange(&g_windowListDirty, 1);
+                return;
+            }
+        }
+
+        HWND selectedWindow = g_selected >= 0 && g_selected < static_cast<int>(g_groups.size())
+            ? g_groups[g_selected].representativeWindow : nullptr;
+        const std::vector<LayoutSnapshotEntry> layoutSnapshot = CaptureVisibleLayout();
+        RefreshWindowList();
+        RecalculateGridIndicatorBands();
+        for (int i = 0; i < static_cast<int>(g_groups.size()); ++i)
+        {
+            if (g_groups[i].representativeWindow == selectedWindow)
+            {
+                g_selected = i;
+                break;
+            }
+        }
+        EnsureGridSelectionVisible();
+        StartLayoutTransition(layoutSnapshot);
+        UpdateSelectorControls();
+        UpdateThumbnailSlots();
+        RequestFrame();
+        return;
+    }
+
+    bool hasNewWindow = false;
+    for (const UserWindowInfo& item : g_userWindows)
+    {
+        if (!ShouldListWindow(item.hwnd))
+            continue;
+
+        bool listed = false;
+        for (const AppGroup& group : g_groups)
+        {
+            if (group.representativeWindow == item.hwnd)
+            {
+                listed = true;
+                break;
+            }
+        }
+        if (!listed)
+        {
+            hasNewWindow = true;
+            break;
+        }
+    }
+
+    if (!hasNewWindow)
+        return;
+
+    HWND selectedWindow = g_selected >= 0 && g_selected < static_cast<int>(g_groups.size())
+        ? g_groups[g_selected].representativeWindow : nullptr;
+    const std::vector<LayoutSnapshotEntry> layoutSnapshot = CaptureVisibleLayout();
+    RefreshWindowList();
+    RecalculateGridIndicatorBands();
+    for (int i = 0; i < static_cast<int>(g_groups.size()); ++i)
+    {
+        if (g_groups[i].representativeWindow == selectedWindow)
+        {
+            g_selected = i;
+            break;
+        }
+    }
+    EnsureGridSelectionVisible();
+    StartLayoutTransition(layoutSnapshot);
+    UpdateSelectorControls();
+    UpdateThumbnailSlots();
+    RequestFrame();
+}
+
+static void DrawCardGlowAndBorderGDI(HDC hdc, const RECT& rect, int radius,
+                                     bool selected)
 {
     COLORREF bgCol = selected ? g_cardStyle.selectedCardBackground : g_cardStyle.cardBackground;
     COLORREF borderCol = selected ? g_cardStyle.selectedBorderColor : g_cardStyle.borderColor;
@@ -4344,6 +5318,19 @@ static void UpdateThumbnailProperties(int slot, const RECT& area, HWND source)
     if ((g_selectionExpansionActive || IsFullscreenBackdropActive()) &&
         g_selector && IsWindow(g_selector))
         GetClientRect(g_selector, &viewport);
+    if (IsGridMode() && g_gridIndicatorBandsActive &&
+        !g_selectionExpansionActive)
+    {
+        RECT panelScene = {
+            0, GridIndicatorBandPx(), g_runtimeSelectorWidth,
+            g_runtimeSelectorHeight - GridIndicatorBandPx()
+        };
+        const RECT panelViewport = TransformSceneRect(panelScene);
+        viewport.left = std::max(viewport.left, panelViewport.left);
+        viewport.top = std::max(viewport.top, panelViewport.top);
+        viewport.right = std::min(viewport.right, panelViewport.right);
+        viewport.bottom = std::min(viewport.bottom, panelViewport.bottom);
+    }
     RECT clipped = {
         std::max(destination.left, viewport.left),
         std::max(destination.top, viewport.top),
@@ -4454,6 +5441,9 @@ static void UpdateThumbnailSlots()
         }
         UpdateThumbnailProperties(slot, area, source);
     }
+
+    for (int slot = GetCarouselSlotCount(); slot < kMaxCarouselSlots; ++slot)
+        UnregisterThumbnailSlot(slot);
 }
 
 static void StopCarouselAnimation()
@@ -4480,6 +5470,9 @@ static void StopCarouselAnimation()
     g_cardExitActive = false;
     g_cardExitSlot = -1;
     g_cardExitTarget = nullptr;
+    g_cardExitShouldCloseTarget = false;
+    g_layoutTransitions.clear();
+    g_layoutTransitionActive = false;
 }
 
 static void StartSelectorClose(HWND target)
@@ -4490,6 +5483,7 @@ static void StartSelectorClose(HWND target)
     g_cardExitActive = false;
     g_cardExitSlot = -1;
     g_cardExitTarget = nullptr;
+    g_cardExitShouldCloseTarget = false;
     g_pendingActivationTarget = target;
     g_closeStartPresence = g_scenePresence;
     g_selectorAnimation = SelectorAnimationState::Closing;
@@ -4907,7 +5901,42 @@ static void UpdateSelectorMotion()
 {
     if (!g_selector || !IsWindow(g_selector))
         return;
-    if (g_selectorAnimation == SelectorAnimationState::Open && !g_animActive)
+    if (g_gridScrollAnimating)
+    {
+        const float progress = EaseOutCubic(ElapsedFraction(g_gridScrollStartTime, 210.0f));
+        g_gridScrollOffset = LerpFloat(g_gridScrollStartOffset,
+            static_cast<float>(g_gridScrollRow), progress);
+        if (progress >= 1.0f)
+        {
+            g_gridScrollOffset = static_cast<float>(g_gridScrollRow);
+            g_gridScrollAnimating = false;
+        }
+    }
+    if (g_gridSelectionAnimating &&
+        ElapsedFraction(g_gridSelectionStart, kGridSelectionDurationMs) >= 1.0f)
+    {
+        g_gridSelectionAnimating = false;
+        g_gridPreviousSelected = -1;
+    }
+    if (g_layoutTransitionActive)
+    {
+        bool anyActive = false;
+        for (const LayoutTransitionEntry& entry : g_layoutTransitions)
+        {
+            if (ElapsedFraction(entry.start, AnimationDuration(kLayoutTransitionDurationMs)) < 1.0f)
+            {
+                anyActive = true;
+                break;
+            }
+        }
+        if (!anyActive)
+        {
+            g_layoutTransitions.clear();
+            g_layoutTransitionActive = false;
+        }
+    }
+    if (g_selectorAnimation == SelectorAnimationState::Open && !g_animActive &&
+        !g_layoutTransitionActive && !g_gridSelectionAnimating && !g_gridScrollAnimating)
         return;
     if (g_selectorAnimation == SelectorAnimationState::SelectionExpansion)
     {
@@ -4920,12 +5949,14 @@ static void UpdateSelectorMotion()
         if (g_cardExitProgress >= 1.0f)
         {
             HWND target = g_cardExitTarget;
+            const bool closeTarget = g_cardExitShouldCloseTarget;
             g_cardExitActive = false;
             g_cardExitProgress = 0.0f;
             g_cardExitSlot = -1;
             g_cardExitTarget = nullptr;
+            g_cardExitShouldCloseTarget = false;
             g_selectorAnimation = SelectorAnimationState::Open;
-            if (target && IsWindow(target) && PostMessageW(target, WM_CLOSE, 0, 0))
+            if (closeTarget && target && IsWindow(target) && PostMessageW(target, WM_CLOSE, 0, 0))
                 MarkWindowPendingClose(target);
             for (size_t i = 0; i < g_userWindows.size(); ++i)
             {
@@ -4935,7 +5966,9 @@ static void UpdateSelectorMotion()
                     break;
                 }
             }
+            const std::vector<LayoutSnapshotEntry> layoutSnapshot = CaptureVisibleLayout();
             RefreshWindowList();
+            RecalculateGridIndicatorBands();
             if (g_groups.empty())
             {
                 LeaveActiveState(SelectorState::Canceling);
@@ -4944,8 +5977,10 @@ static void UpdateSelectorMotion()
             }
             if (g_selected >= static_cast<int>(g_groups.size()))
                 g_selected = static_cast<int>(g_groups.size()) - 1;
+            EnsureGridSelectionVisible();
             g_hoveredSlot = -1;
             g_hoveredCloseButton = false;
+            StartLayoutTransition(layoutSnapshot);
             UpdateSelectorControls();
             return;
         }
@@ -5120,8 +6155,9 @@ static void ArmFramePump()
         if (SetWaitableTimer(g_frameTimer, &due, 0, nullptr, nullptr, FALSE))
             return;
     }
-    SetTimer(g_selector, kSelectorMotionTimerId,
-             std::max<UINT>(1, static_cast<UINT>(delay)), nullptr);
+    if (!SetTimer(g_selector, kSelectorMotionTimerId,
+                  std::max<UINT>(1, static_cast<UINT>(delay)), nullptr))
+        Wh_Log(L"SetTimer selector motion failed: %lu", GetLastError());
 }
 
 static void DisarmFramePump()
@@ -5145,7 +6181,8 @@ static void RequestFrame()
 
 static bool SceneIsAnimating()
 {
-    return g_animActive || g_staticSelectionAnimating ||
+    return g_animActive || g_staticSelectionAnimating || g_layoutTransitionActive ||
+           g_gridSelectionAnimating || g_gridScrollAnimating ||
            g_selectorAnimation == SelectorAnimationState::Opening ||
            g_selectorAnimation == SelectorAnimationState::SelectionChange ||
            g_selectorAnimation == SelectorAnimationState::CardExit ||
@@ -5286,46 +6323,68 @@ static ID2D1RadialGradientBrush* EnsureCloseAccentBrush()
     return SUCCEEDED(hr) ? g_closeAccentBrush : nullptr;
 }
 
-static void PaintSlotHeaderD2D(int slot, int groupIndex, bool selected, float distFromCenter)
+// Text format for the header at an exact pixel size; falls back to the stock
+// format when fontPx is 0 (unscaled cards, Grid, Compact Automatic).
+static IDWriteTextFormat* GetHeaderTextFormatD2D(bool selected, int fontPx)
 {
-    RECT rc = GetSlotHeaderRect(slot);
-    AppGroup& group = g_groups[groupIndex];
-    const std::wstring& text = MakeSlotDisplayText(group);
+    IDWriteTextFormat* stock = selected ? g_dwriteSelectedFormat : g_dwriteNormalFormat;
+    if (fontPx <= 0 || !g_dwriteFactory)
+        return stock;
+    const int i = selected ? 1 : 0;
+    if (g_dwriteScaledHeaderFormat[i] && g_dwriteScaledHeaderPx[i] == fontPx)
+        return g_dwriteScaledHeaderFormat[i];
 
-    int iconSize = ScaleLayoutPx(static_cast<float>(selected ? 20 : (distFromCenter < 1.5f ? 18 : 16)));
-    int paddingLeft = ScaleLayoutPx(static_cast<float>(selected ? 10 : (distFromCenter < 1.5f ? 8 : 6)));
-    int iconX = rc.left + paddingLeft;
-    int iconY = rc.top + (rc.bottom - rc.top - iconSize) / 2;
-    int textX = iconX + iconSize + ScaleLayoutPx(8.0f);
-    RECT iconRect = { iconX, iconY, iconX + iconSize, iconY + iconSize };
-    const float iconScale = IsCompactAutomaticMode() ? 1.0f : GetSlotVisualScale(slot);
-    if (fabsf(iconScale - 1.0f) > 0.0001f)
+    IDWriteTextFormat* format = nullptr;
+    const HRESULT hr = g_dwriteFactory->CreateTextFormat(
+        L"Segoe UI Variable Text", nullptr,
+        selected ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_MEDIUM,
+        DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+        static_cast<float>(fontPx), L"", &format);
+    if (FAILED(hr) || !format)
+        return stock;
+
+    format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    IDWriteInlineObject* ellipsisSign = nullptr;
+    if (SUCCEEDED(g_dwriteFactory->CreateEllipsisTrimmingSign(format, &ellipsisSign)) &&
+        ellipsisSign)
     {
-        RECT cardRect = GetSlotCardRect(slot);
-        float pivotX = (static_cast<float>(cardRect.left) + cardRect.right) * 0.5f;
-        float pivotY = (static_cast<float>(cardRect.top) + cardRect.bottom) * 0.5f;
-        iconRect = ScaleRectAroundPoint(iconRect, iconScale, pivotX, pivotY);
+        const DWRITE_TRIMMING trimming = { DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0 };
+        format->SetTrimming(&trimming, ellipsisSign);
+        ellipsisSign->Release();
     }
 
+    if (g_dwriteScaledHeaderFormat[i])
+        g_dwriteScaledHeaderFormat[i]->Release();
+    g_dwriteScaledHeaderFormat[i] = format;
+    g_dwriteScaledHeaderPx[i] = fontPx;
+    return format;
+}
+
+static void PaintSlotHeaderD2D(int slot, int groupIndex, bool selected, float distFromCenter)
+{
+    AppGroup& group = g_groups[groupIndex];
+    const std::wstring& text = MakeSlotDisplayText(group);
+    const SlotHeaderLayout layout = ComputeSlotHeaderLayout(slot, selected, distFromCenter);
 
     EnsureIconBitmap(groupIndex);
     if (group.iconBitmap)
     {
         D2D1_RECT_F iconDest = D2D1::RectF(
-            static_cast<float>(iconRect.left),
-            static_cast<float>(iconRect.top),
-            static_cast<float>(iconRect.right),
-            static_cast<float>(iconRect.bottom));
+            static_cast<float>(layout.icon.left),
+            static_cast<float>(layout.icon.top),
+            static_cast<float>(layout.icon.right),
+            static_cast<float>(layout.icon.bottom));
         g_d2dRenderTarget->DrawBitmap(
             group.iconBitmap, &iconDest, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
     }
 
-    IDWriteTextFormat* format = selected ? g_dwriteSelectedFormat : g_dwriteNormalFormat;
+    IDWriteTextFormat* format = GetHeaderTextFormatD2D(selected, layout.fontPx);
     if (format)
     {
         D2D1_RECT_F textRectD2D = D2D1::RectF(
-            static_cast<float>(textX), static_cast<float>(rc.top),
-            static_cast<float>(rc.right - ScaleLayoutPx(8.0f)), static_cast<float>(rc.bottom));
+            static_cast<float>(layout.text.left), static_cast<float>(layout.text.top),
+            static_cast<float>(layout.text.right), static_cast<float>(layout.text.bottom));
         D2D1_COLOR_F textColor = selected
             ? D2D1::ColorF(GetRValue(g_textSelectedColor) / 255.0f,
                            GetGValue(g_textSelectedColor) / 255.0f,
@@ -5339,43 +6398,11 @@ static void PaintSlotHeaderD2D(int slot, int groupIndex, bool selected, float di
     }
 }
 
-static void PaintCompactSelectionIndicatorD2D()
-{
-    if (!IsCompactAutomaticMode() || !g_d2dRenderTarget || !g_d2dBrush)
-        return;
-
-    const int count = GetCarouselSlotCount();
-    if (count < 2 || count > 3 || g_selected < 0 || g_selected >= count)
-        return;
-
-    float centers[3] = {};
-    for (int slot = 0; slot < count; ++slot)
-    {
-        const RECT card = GetSlotCardRect(slot);
-        centers[slot] = (static_cast<float>(card.left) + card.right) * 0.5f;
-    }
-
-    float activeX = centers[g_selected];
-    if (g_staticSelectionAnimating)
-    {
-        const float t = EaseSmooth(ElapsedFraction(
-            g_staticSelectionStartTime, kStaticSelectionDurationMs));
-        activeX = LerpFloat(g_staticIndicatorStartX, centers[g_selected], t);
-    }
-
-    const float y = ScaleLayoutPx(352.0f);
-    const float activeRadius = ScaleLayoutPx(4.0f);
-    const D2D1_ELLIPSE active = D2D1::Ellipse(
-        D2D1::Point2F(activeX, y), activeRadius, activeRadius);
-    const COLORREF accent = g_cardStyle.selectedBorderColor;
-    g_d2dBrush->SetColor(D2D1::ColorF(
-        GetRValue(accent) / 255.0f, GetGValue(accent) / 255.0f,
-        GetBValue(accent) / 255.0f, 0.98f));
-    g_d2dRenderTarget->FillEllipse(&active, g_d2dBrush);
-}
-
 static void PaintCounterD2D()
 {
+    if (IsGridMode())
+        return;
+
     RECT rc = GetCounterRect();
     const std::wstring& text = MakeCounterText();
 
@@ -5394,32 +6421,223 @@ static void PaintCounterD2D()
     }
 }
 
+static bool HasMoreGridRowsBelow()
+{
+    if (!IsGridMode())
+        return false;
+
+    const int rowCount = GetGridRowCount();
+    if (rowCount <= 0)
+        return false;
+
+    const int visibleRows = GridVisibleRows();
+    const int maxScroll = std::max(0, rowCount - visibleRows);
+    return g_gridScrollOffset < static_cast<float>(maxScroll) - 0.01f;
+}
+
+static bool HasMoreGridRowsAbove()
+{
+    return IsGridMode() && g_gridScrollOffset > 0.01f;
+}
+
+static void PaintGridMoreBelowIndicatorD2D()
+{
+    if (!HasMoreGridRowsBelow() || !g_d2dRenderTarget || !g_d2dBrush)
+        return;
+
+    const float centerX = static_cast<float>(g_runtimeSelectorWidth) * 0.5f;
+    const float centerY = static_cast<float>(
+        g_runtimeSelectorHeight - GridIndicatorBandPx() * 0.5f);
+    const float pillWidth = static_cast<float>(ScaleLayoutPx(34.0f));
+    const float pillHeight = static_cast<float>(ScaleLayoutPx(20.0f));
+    const D2D1_ROUNDED_RECT pill = D2D1::RoundedRect(
+        D2D1::RectF(centerX - pillWidth * 0.5f, centerY - pillHeight * 0.5f,
+                    centerX + pillWidth * 0.5f, centerY + pillHeight * 0.5f),
+        pillHeight * 0.5f, pillHeight * 0.5f);
+    g_d2dBrush->SetColor(g_lightThemeActive
+        ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.72f)
+        : D2D1::ColorF(0.035f, 0.04f, 0.05f, 0.72f));
+    g_d2dRenderTarget->FillRoundedRectangle(&pill, g_d2dBrush);
+
+    g_d2dBrush->SetColor(D2D1::ColorF(
+        GetRValue(g_counterTextColor) / 255.0f,
+        GetGValue(g_counterTextColor) / 255.0f,
+        GetBValue(g_counterTextColor) / 255.0f, 1.0f));
+    const float halfArrow = static_cast<float>(ScaleLayoutPx(6.0f));
+    const float arrowTop = centerY - static_cast<float>(ScaleLayoutPx(3.0f));
+    const float arrowTip = centerY + static_cast<float>(ScaleLayoutPx(3.0f));
+    g_d2dRenderTarget->DrawLine(
+        D2D1::Point2F(centerX - halfArrow, arrowTop),
+        D2D1::Point2F(centerX, arrowTip), g_d2dBrush, DpiPx(1.8f));
+    g_d2dRenderTarget->DrawLine(
+        D2D1::Point2F(centerX, arrowTip),
+        D2D1::Point2F(centerX + halfArrow, arrowTop),
+        g_d2dBrush, DpiPx(1.8f));
+}
+
+static void PaintGridMoreAboveIndicatorD2D()
+{
+    if (!HasMoreGridRowsAbove() || !g_d2dRenderTarget || !g_d2dBrush)
+        return;
+
+    const float centerX = static_cast<float>(g_runtimeSelectorWidth) * 0.5f;
+    const float centerY = static_cast<float>(GridIndicatorBandPx()) * 0.5f;
+    const float pillWidth = static_cast<float>(ScaleLayoutPx(34.0f));
+    const float pillHeight = static_cast<float>(ScaleLayoutPx(20.0f));
+    const D2D1_ROUNDED_RECT pill = D2D1::RoundedRect(
+        D2D1::RectF(centerX - pillWidth * 0.5f, centerY - pillHeight * 0.5f,
+                    centerX + pillWidth * 0.5f, centerY + pillHeight * 0.5f),
+        pillHeight * 0.5f, pillHeight * 0.5f);
+    g_d2dBrush->SetColor(g_lightThemeActive
+        ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.72f)
+        : D2D1::ColorF(0.035f, 0.04f, 0.05f, 0.72f));
+    g_d2dRenderTarget->FillRoundedRectangle(&pill, g_d2dBrush);
+    g_d2dBrush->SetColor(D2D1::ColorF(
+        GetRValue(g_counterTextColor) / 255.0f,
+        GetGValue(g_counterTextColor) / 255.0f,
+        GetBValue(g_counterTextColor) / 255.0f, 1.0f));
+    const float halfArrow = static_cast<float>(ScaleLayoutPx(6.0f));
+    const float arrowWing = centerY + static_cast<float>(ScaleLayoutPx(3.0f));
+    const float arrowTip = centerY - static_cast<float>(ScaleLayoutPx(3.0f));
+    g_d2dRenderTarget->DrawLine(
+        D2D1::Point2F(centerX - halfArrow, arrowWing),
+        D2D1::Point2F(centerX, arrowTip), g_d2dBrush, DpiPx(1.8f));
+    g_d2dRenderTarget->DrawLine(
+        D2D1::Point2F(centerX, arrowTip),
+        D2D1::Point2F(centerX + halfArrow, arrowWing),
+        g_d2dBrush, DpiPx(1.8f));
+}
+
+static void PaintGridMoreBelowIndicatorGDI(HDC hdc)
+{
+    if (!HasMoreGridRowsBelow())
+        return;
+
+    const int centerX = g_runtimeSelectorWidth / 2;
+    const int centerY = g_runtimeSelectorHeight - GridIndicatorBandPx() / 2;
+    const int pillWidth = ScaleLayoutPx(34.0f);
+    const int pillHeight = ScaleLayoutPx(20.0f);
+    const int left = centerX - pillWidth / 2;
+    const int top = centerY - pillHeight / 2;
+    const COLORREF backgroundColor = g_lightThemeActive
+        ? RGB(255, 255, 255) : RGB(9, 10, 12);
+    HBRUSH background = CreateSolidBrush(backgroundColor);
+    HPEN border = CreatePen(PS_SOLID, 1, backgroundColor);
+    if (background && border)
+    {
+        HGDIOBJ oldBrush = SelectObject(hdc, background);
+        HGDIOBJ oldPen = SelectObject(hdc, border);
+        RoundRect(hdc, left, top, left + pillWidth, top + pillHeight,
+                  pillHeight, pillHeight);
+        if (oldPen && oldPen != HGDI_ERROR)
+            SelectObject(hdc, oldPen);
+        if (oldBrush && oldBrush != HGDI_ERROR)
+            SelectObject(hdc, oldBrush);
+    }
+    if (background)
+        DeleteObject(background);
+    if (border)
+        DeleteObject(border);
+
+    HPEN arrowPen = CreatePen(PS_SOLID,
+        std::max(1, ScaleLayoutPx(2.0f)), g_counterTextColor);
+    if (arrowPen)
+    {
+        HGDIOBJ oldPen = SelectObject(hdc, arrowPen);
+        if (oldPen && oldPen != HGDI_ERROR)
+        {
+            const int halfArrow = ScaleLayoutPx(6.0f);
+            const int arrowTop = centerY - ScaleLayoutPx(3.0f);
+            const int arrowTip = centerY + ScaleLayoutPx(3.0f);
+            MoveToEx(hdc, centerX - halfArrow, arrowTop, nullptr);
+            LineTo(hdc, centerX, arrowTip);
+            LineTo(hdc, centerX + halfArrow, arrowTop);
+            SelectObject(hdc, oldPen);
+        }
+        DeleteObject(arrowPen);
+    }
+}
+
+static void PaintGridMoreAboveIndicatorGDI(HDC hdc)
+{
+    if (!HasMoreGridRowsAbove())
+        return;
+
+    const int centerX = g_runtimeSelectorWidth / 2;
+    const int centerY = GridIndicatorBandPx() / 2;
+    const int pillWidth = ScaleLayoutPx(34.0f);
+    const int pillHeight = ScaleLayoutPx(20.0f);
+    const int left = centerX - pillWidth / 2;
+    const int top = centerY - pillHeight / 2;
+    const COLORREF backgroundColor = g_lightThemeActive
+        ? RGB(255, 255, 255) : RGB(9, 10, 12);
+    HBRUSH background = CreateSolidBrush(backgroundColor);
+    HPEN border = CreatePen(PS_SOLID, 1, backgroundColor);
+    if (background && border)
+    {
+        HGDIOBJ oldBrush = SelectObject(hdc, background);
+        HGDIOBJ oldPen = SelectObject(hdc, border);
+        RoundRect(hdc, left, top, left + pillWidth, top + pillHeight,
+                  pillHeight, pillHeight);
+        if (oldPen && oldPen != HGDI_ERROR)
+            SelectObject(hdc, oldPen);
+        if (oldBrush && oldBrush != HGDI_ERROR)
+            SelectObject(hdc, oldBrush);
+    }
+    if (background)
+        DeleteObject(background);
+    if (border)
+        DeleteObject(border);
+
+    HPEN arrowPen = CreatePen(PS_SOLID,
+        std::max(1, ScaleLayoutPx(2.0f)), g_counterTextColor);
+    if (!arrowPen)
+        return;
+
+    HGDIOBJ oldPen = SelectObject(hdc, arrowPen);
+    if (oldPen && oldPen != HGDI_ERROR)
+    {
+        const int halfArrow = ScaleLayoutPx(6.0f);
+        const int arrowWing = centerY + ScaleLayoutPx(3.0f);
+        const int arrowTip = centerY - ScaleLayoutPx(3.0f);
+        MoveToEx(hdc, centerX - halfArrow, arrowWing, nullptr);
+        LineTo(hdc, centerX, arrowTip);
+        LineTo(hdc, centerX + halfArrow, arrowWing);
+        SelectObject(hdc, oldPen);
+    }
+    DeleteObject(arrowPen);
+}
+
+// GDI font for the header at an exact pixel size; falls back to the stock font
+// when fontPx is 0 (unscaled cards, Grid, Compact Automatic).
+static HFONT GetHeaderFontGDI(bool selected, int fontPx)
+{
+    HFONT stock = selected ? g_selectedNameFont : g_nameFont;
+    if (fontPx <= 0)
+        return stock;
+    const int i = selected ? 1 : 0;
+    if (g_scaledHeaderFont[i] && g_scaledHeaderFontPx[i] == fontPx)
+        return g_scaledHeaderFont[i];
+
+    HFONT font = CreateModernFont(L"Segoe UI Variable Text", L"Segoe UI",
+                                  -fontPx, selected ? FW_SEMIBOLD : 500);
+    if (!font)
+        return stock;
+    if (g_scaledHeaderFont[i])
+        DeleteObject(reinterpret_cast<HGDIOBJ>(g_scaledHeaderFont[i]));
+    g_scaledHeaderFont[i] = font;
+    g_scaledHeaderFontPx[i] = fontPx;
+    return font;
+}
+
 static void PaintSlotHeaderGDI(HDC hdc, int slot, int groupIndex, bool selected, float distFromCenter)
 {
-    RECT rc = GetSlotHeaderRect(slot);
     AppGroup& group = g_groups[groupIndex];
     const std::wstring& text = MakeSlotDisplayText(group);
+    const SlotHeaderLayout layout = ComputeSlotHeaderLayout(slot, selected, distFromCenter);
 
-    int iconSize = ScaleLayoutPx(static_cast<float>(selected ? 20 : (distFromCenter < 1.5f ? 18 : 16)));
-    int paddingLeft = ScaleLayoutPx(static_cast<float>(selected ? 10 : (distFromCenter < 1.5f ? 8 : 6)));
-    int iconX = rc.left + paddingLeft;
-    int iconY = rc.top + (rc.bottom - rc.top - iconSize) / 2;
-    int textX = iconX + iconSize + ScaleLayoutPx(8.0f);
-    RECT iconRect = { iconX, iconY, iconX + iconSize, iconY + iconSize };
-    const float iconScale = IsCompactAutomaticMode() ? 1.0f : GetSlotVisualScale(slot);
-    if (fabsf(iconScale - 1.0f) > 0.0001f)
-    {
-        RECT cardRect = GetSlotCardRect(slot);
-        float pivotX = (static_cast<float>(cardRect.left) + cardRect.right) * 0.5f;
-        float pivotY = (static_cast<float>(cardRect.top) + cardRect.bottom) * 0.5f;
-        iconRect = ScaleRectAroundPoint(iconRect, iconScale, pivotX, pivotY);
-    }
-
-
-    RECT textRect = rc;
-    textRect.left = textX;
-    textRect.right = rc.right - ScaleLayoutPx(8.0f);
-    HFONT font = selected ? g_selectedNameFont : g_nameFont;
+    RECT textRect = layout.text;
+    HFONT font = GetHeaderFontGDI(selected, layout.fontPx);
     COLORREF textColor = selected ? g_textSelectedColor : g_textNormalColor;
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, textColor);
@@ -5430,59 +6648,17 @@ static void PaintSlotHeaderGDI(HDC hdc, int slot, int groupIndex, bool selected,
 
     if (group.icon)
     {
-        DrawIconEx(hdc, iconRect.left, iconRect.top, group.icon,
-                   iconRect.right - iconRect.left, iconRect.bottom - iconRect.top,
+        DrawIconEx(hdc, layout.icon.left, layout.icon.top, group.icon,
+                   layout.icon.right - layout.icon.left, layout.icon.bottom - layout.icon.top,
                    0, nullptr, DI_NORMAL);
     }
 }
 
-static void PaintCompactSelectionIndicatorGDI(HDC hdc)
-{
-    if (!IsCompactAutomaticMode() || !hdc)
-        return;
-
-    const int count = GetCarouselSlotCount();
-    if (count < 2 || count > 3 || g_selected < 0 || g_selected >= count)
-        return;
-
-    float centers[3] = {};
-    for (int slot = 0; slot < count; ++slot)
-    {
-        const RECT card = GetSlotCardRect(slot);
-        centers[slot] = (static_cast<float>(card.left) + card.right) * 0.5f;
-    }
-    float activeX = centers[g_selected];
-    if (g_staticSelectionAnimating)
-    {
-        const float t = EaseSmooth(ElapsedFraction(
-            g_staticSelectionStartTime, kStaticSelectionDurationMs));
-        activeX = LerpFloat(g_staticIndicatorStartX, centers[g_selected], t);
-    }
-
-    const int y = ScaleLayoutPx(352.0f);
-    const int activeDot = ScaleLayoutPx(8.0f);
-    HGDIOBJ nullPen = GetStockObject(NULL_PEN);
-    HGDIOBJ oldPen = nullPen ? SelectObject(hdc, nullPen) : nullptr;
-    const COLORREF accent = g_cardStyle.selectedBorderColor;
-    HBRUSH activeBrush = CreateSolidBrush(accent);
-    if (activeBrush)
-    {
-        HGDIOBJ previousBrush = SelectObject(hdc, activeBrush);
-        if (previousBrush && previousBrush != HGDI_ERROR)
-        {
-            const int x = static_cast<int>(roundf(activeX));
-            RoundRect(hdc, x - activeDot / 2, y - activeDot / 2,
-                        x + activeDot / 2, y + activeDot / 2, activeDot, activeDot);
-            SelectObject(hdc, previousBrush);
-        }
-        DeleteObject(activeBrush);
-    }
-    if (oldPen && oldPen != HGDI_ERROR)
-        SelectObject(hdc, oldPen);
-}
-
 static void PaintCounterGDI(HDC hdc)
 {
+    if (IsGridMode())
+        return;
+
     RECT rc = GetCounterRect();
     const std::wstring& text = MakeCounterText();
 
@@ -5491,42 +6667,6 @@ static void PaintCounterGDI(HDC hdc)
     HGDIOBJ oldFont = g_secondaryFont ? SelectObject(hdc, g_secondaryFont) : nullptr;
     DrawTextW(hdc, text.c_str(), -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     if (oldFont && oldFont != HGDI_ERROR) SelectObject(hdc, oldFont);
-}
-
-static void PaintCenterAccentMarginD2D(const RECT& cardRect, int groupIndex, float radius)
-{
-    if (!g_d2dRenderTarget || !g_d2dBrush || groupIndex < 0 ||
-        groupIndex >= static_cast<int>(g_groups.size()))
-        return;
-
-    COLORREF accent = g_groups[groupIndex].mediaAccent.valid
-        ? g_groups[groupIndex].mediaAccent.color
-        : RGB(18, 22, 28);
-    float r = GetRValue(accent) / 255.0f;
-    float g = GetGValue(accent) / 255.0f;
-    float b = GetBValue(accent) / 255.0f;
-
-    const float margin = static_cast<float>(ScaleLayoutPx(5.0f));
-    D2D1_ROUNDED_RECT outer = D2D1::RoundedRect(
-        D2D1::RectF(static_cast<float>(cardRect.left) - margin,
-                    static_cast<float>(cardRect.top) - margin,
-                    static_cast<float>(cardRect.right) + margin,
-                    static_cast<float>(cardRect.bottom) + margin),
-        radius + margin, radius + margin);
-
-    g_d2dBrush->SetColor(D2D1::ColorF(r, g, b, 0.34f));
-    g_d2dRenderTarget->DrawRoundedRectangle(&outer, g_d2dBrush,
-                                               static_cast<float>(ScaleLayoutPx(2.0f)));
-
-    D2D1_ROUNDED_RECT inner = D2D1::RoundedRect(
-        D2D1::RectF(static_cast<float>(cardRect.left) - ScaleLayoutPx(2.0f),
-                    static_cast<float>(cardRect.top) - ScaleLayoutPx(2.0f),
-                    static_cast<float>(cardRect.right) + ScaleLayoutPx(2.0f),
-                    static_cast<float>(cardRect.bottom) + ScaleLayoutPx(2.0f)),
-        radius + ScaleLayoutPx(2.0f), radius + ScaleLayoutPx(2.0f));
-    g_d2dBrush->SetColor(D2D1::ColorF(r, g, b, 0.18f));
-    g_d2dRenderTarget->DrawRoundedRectangle(&inner, g_d2dBrush,
-                                               static_cast<float>(ScaleLayoutPx(1.0f)));
 }
 
 static void ResetPatternWaves()
@@ -5786,14 +6926,6 @@ static void DrawPatternWaves(const RECT& clientRect)
     const float contrast = std::max(0.0f, std::min(2.0f, g_patternContrast));
     const float effectOpacity = std::max(0.0f, std::min(1.0f, g_patternOpacity));
 
-    D2D1_RECT_F background = D2D1::RectF(0.0f, 0.0f,
-                                          static_cast<float>(width),
-                                          static_cast<float>(height));
-    g_d2dBrush->SetColor(D2D1::ColorF(0.025f, 0.035f, 0.055f,
-                                      0.08f * effectOpacity));
-    g_d2dRenderTarget->FillRectangle(&background, g_d2dBrush);
-
-
     for (float y = -renderMargin; y < height + renderMargin; y += spacing)
     {
         for (float x = -renderMargin; x < width + renderMargin; x += spacing)
@@ -5878,8 +7010,10 @@ static void DrawPatternWaves(const RECT& clientRect)
             g_patternQualityCooldownUntil = now + 2500;
         }
     }
-    if (qualityChanged && g_selector && IsWindow(g_selector))
-        SetTimer(g_selector, kPatternTimerId, GetPatternTimerInterval(), nullptr);
+    if (qualityChanged && g_selector && IsWindow(g_selector) &&
+        !SetTimer(g_selector, kPatternTimerId,
+                  GetPatternTimerInterval(), nullptr))
+        Wh_Log(L"SetTimer pattern quality failed: %lu", GetLastError());
     g_patternFieldRenderWidth = previousFieldWidth;
     g_patternFieldRenderHeight = previousFieldHeight;
 }
@@ -6155,94 +7289,43 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
             g_d2dRenderTarget->SetTransform(GetSceneTransform());
         }
 
-        D2D1_RECT_F bgRect = D2D1::RectF(
-            static_cast<float>(sceneRect.left),
-            static_cast<float>(sceneRect.top),
-            static_cast<float>(sceneRect.right),
-            static_cast<float>(sceneRect.bottom));
-        if (!fullscreenBackdrop && g_baseBackgroundMode != BaseBackgroundMode::None &&
-            g_dwmGlassEnabled)
+        if (!fullscreenBackdrop && g_baseBackgroundMode != BaseBackgroundMode::None)
         {
+            const float width = static_cast<float>(sceneRect.right);
+            const float height = static_cast<float>(sceneRect.bottom);
+            const float radius = static_cast<float>(ScaleLayoutPx(27.0f));
+            const float gridBand = static_cast<float>(GridIndicatorBandPx());
+            D2D1_ROUNDED_RECT backgroundSurface = D2D1::RoundedRect(
+                D2D1::RectF(DpiPx(0.75f), gridBand,
+                            width - DpiPx(0.75f), height - gridBand),
+                radius, radius);
+
             float r = GetRValue(g_dwmBackgroundColor) / 255.0f;
             float g = GetGValue(g_dwmBackgroundColor) / 255.0f;
             float b = GetBValue(g_dwmBackgroundColor) / 255.0f;
-            g_d2dBrush->SetColor(D2D1::ColorF(r, g, b, g_dwmBackgroundOpacity));
-            g_d2dRenderTarget->FillRectangle(&bgRect, g_d2dBrush);
-        }
-        else if (!fullscreenBackdrop && g_baseBackgroundMode != BaseBackgroundMode::None)
-        {
-            g_d2dBrush->SetColor(D2D1::ColorF(0.70f, 0.74f, 0.82f, 0.18f));
-            g_d2dRenderTarget->FillRectangle(&bgRect, g_d2dBrush);
-        }
-
-        if (!fullscreenBackdrop && IsBackgroundSpotlightAllowed() &&
-            g_dwmGlassEnabled && g_backgroundSpotlightActive)
-        {
-            ID2D1RadialGradientBrush* spotlight = EnsureBackgroundSpotlightBrush();
-            if (spotlight)
-            {
-                float sx = 1.0f, sy = 1.0f;
-                GetSceneScale(sx, sy);
-                float cx = static_cast<float>(g_runtimeSelectorWidth) * 0.5f;
-                float cy = static_cast<float>(g_runtimeSelectorHeight) * 0.5f;
-                float sceneX = cx +
-                    (static_cast<float>(g_backgroundSpotlightPoint.x) - cx) /
-                    std::max(0.001f, sx);
-                float sceneY = cy +
-                    (static_cast<float>(g_backgroundSpotlightPoint.y) - cy) /
-                    std::max(0.001f, sy);
-                spotlight->SetCenter(D2D1::Point2F(sceneX, sceneY));
-                spotlight->SetGradientOriginOffset(D2D1::Point2F(0.0f, 0.0f));
-                spotlight->SetRadiusX(DpiPx(kSpotlightRadiusDip) / std::max(0.001f, sx));
-                spotlight->SetRadiusY(DpiPx(kSpotlightRadiusDip) / std::max(0.001f, sy));
-                g_d2dRenderTarget->FillRectangle(&bgRect, spotlight);
-            }
+            g_d2dBrush->SetColor(D2D1::ColorF(
+                r, g, b, g_dwmBackgroundOpacity));
+            g_d2dRenderTarget->FillRoundedRectangle(
+                &backgroundSurface, g_d2dBrush);
         }
 
         if (!fullscreenBackdrop && IsPatternWavesActive())
         {
-            DrawPatternWaves(sceneRect);
+            RECT patternRect = { 0, 0, sceneRect.right, sceneRect.bottom };
+            DrawPatternWaves(patternRect);
             if (sceneScaleX != 1.0f || sceneScaleY != 1.0f)
-            {
                 g_d2dRenderTarget->SetTransform(GetSceneTransform());
-            }
         }
 
-        const bool hasVisualBackground =
-            !fullscreenBackdrop && g_baseBackgroundMode != BaseBackgroundMode::None;
-        if (hasVisualBackground)
+        const bool gridPanelClip = IsGridMode() && g_gridIndicatorBandsActive;
+        if (gridPanelClip)
         {
-            D2D1_ROUNDED_RECT containerRect = D2D1::RoundedRect(
-                D2D1::RectF(DpiPx(0.75f), DpiPx(0.75f),
-                            static_cast<float>(sceneRect.right) - DpiPx(0.75f),
-                            static_cast<float>(sceneRect.bottom) - DpiPx(0.75f)),
-                static_cast<float>(ScaleLayoutPx(27.0f)),
-                static_cast<float>(ScaleLayoutPx(27.0f)));
-            g_d2dBrush->SetColor(D2D1::ColorF(0.32f, 0.36f, 0.43f, 0.30f));
-            g_d2dRenderTarget->DrawRoundedRectangle(&containerRect,
-                                                       g_d2dBrush, DpiPx(1.0f));
-
-            RECT containerShadow = {
-                ScaleLayoutPx(12.0f),
-                sceneRect.bottom - ScaleLayoutPx(8.0f),
-                sceneRect.right - ScaleLayoutPx(12.0f),
-                sceneRect.bottom
-            };
-            PaintBottomShadowD2D(containerShadow, ScaleLayoutPx(12.0f), 0.34f);
-        }
-
-        if (!fullscreenBackdrop)
-        {
-            if (ID2D1RadialGradientBrush* ambient = EnsureAmbientShadowBrush())
-            {
-                const float w = static_cast<float>(sceneRect.right);
-                const float h = static_cast<float>(sceneRect.bottom);
-                ambient->SetCenter(D2D1::Point2F(w * 0.5f, h * 0.54f));
-                ambient->SetRadiusX(w * 0.55f);
-                ambient->SetRadiusY(h * 0.70f);
-                g_d2dRenderTarget->FillRectangle(
-                    D2D1::RectF(0.0f, 0.0f, w, h), ambient);
-            }
+            g_d2dRenderTarget->PushAxisAlignedClip(
+                D2D1::RectF(0.0f, static_cast<float>(GridIndicatorBandPx()),
+                            static_cast<float>(g_runtimeSelectorWidth),
+                            static_cast<float>(g_runtimeSelectorHeight -
+                                               GridIndicatorBandPx())),
+                D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
         }
 
     for (int slot = 0; slot < GetCarouselSlotCount(); ++slot)
@@ -6288,9 +7371,6 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
             RECT cardRect = GetSlotCardRect(slot);
             float radius = selected ? static_cast<float>(g_cardStyle.selectedCornerRadius) * g_uiScale.value
                                     : static_cast<float>(g_cardStyle.cornerRadius) * g_uiScale.value;
-            if (selected && (IsCompactAutomaticMode() || slot == GetCarouselCenterSlot()))
-                PaintCenterAccentMarginD2D(cardRect, index, radius);
-
             COLORREF cardColor = selected ? g_cardSelectedColor : g_cardNormalColor;
             D2D1_COLOR_F bgCol = D2D1::ColorF(
                 GetRValue(cardColor) / 255.0f,
@@ -6328,16 +7408,20 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
                 selected ? 0.98f : 0.88f);
             g_d2dBrush->SetColor(borderCol);
             g_d2dRenderTarget->DrawRoundedRectangle(&cr, g_d2dBrush,
-                                                      DpiPx(selected ? 1.5f : 1.0f));
+                                                      DpiPx(selected ? 2.0f : 1.25f));
 
             RECT prevRect = GetSlotPreviewRect(slot);
             D2D1_ROUNDED_RECT pr = D2D1::RoundedRect(
                 D2D1::RectF(static_cast<float>(prevRect.left) + 0.5f, static_cast<float>(prevRect.top) + 0.5f,
                             static_cast<float>(prevRect.right) - 0.5f, static_cast<float>(prevRect.bottom) - 0.5f),
                 DpiPx(6.0f), DpiPx(6.0f));
-            D2D1_COLOR_F prevBorder = selected
-                ? D2D1::ColorF(0.080f, 0.085f, 0.095f, 0.60f)
-                : D2D1::ColorF(0.035f, 0.040f, 0.050f, 0.50f);
+            D2D1_COLOR_F prevBorder = g_lightThemeActive
+                ? (selected
+                    ? D2D1::ColorF(0.70f, 0.73f, 0.78f, 0.82f)
+                    : D2D1::ColorF(0.82f, 0.84f, 0.87f, 0.72f))
+                : (selected
+                    ? D2D1::ColorF(0.080f, 0.085f, 0.095f, 0.60f)
+                    : D2D1::ColorF(0.035f, 0.040f, 0.050f, 0.50f));
             g_d2dBrush->SetColor(prevBorder);
             g_d2dRenderTarget->DrawRoundedRectangle(&pr, g_d2dBrush, DpiPx(1.0f));
 
@@ -6375,11 +7459,10 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
                                 static_cast<float>(cardRect.right) + hoverOffset,
                                 static_cast<float>(cardRect.bottom) + hoverOffset),
                     radius + DpiPx(2.0f), radius + DpiPx(2.0f));
-                COLORREF accent = g_groups[index].mediaAccent.valid
-                    ? g_groups[index].mediaAccent.color : RGB(110, 116, 130);
+                const COLORREF hoverColor = RGB(110, 116, 130);
                 g_d2dBrush->SetColor(D2D1::ColorF(
-                    GetRValue(accent) / 255.0f, GetGValue(accent) / 255.0f,
-                    GetBValue(accent) / 255.0f, 0.42f));
+                    GetRValue(hoverColor) / 255.0f, GetGValue(hoverColor) / 255.0f,
+                    GetBValue(hoverColor) / 255.0f, 0.42f));
                 g_d2dRenderTarget->DrawRoundedRectangle(&hoverRect, g_d2dBrush, DpiPx(1.25f));
 
                 if (g_hoveredCloseButton)
@@ -6451,8 +7534,11 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
             }
         }
 
-        PaintCompactSelectionIndicatorD2D();
+        if (gridPanelClip)
+            g_d2dRenderTarget->PopAxisAlignedClip();
 
+        PaintGridMoreAboveIndicatorD2D();
+        PaintGridMoreBelowIndicatorD2D();
         PaintCounterD2D();
         if (sceneOpacityLayer)
         {
@@ -6479,19 +7565,12 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
         return;
     }
 
-    const bool hasVisualBackground =
-        g_baseBackgroundMode != BaseBackgroundMode::None ||
-        IsPatternWavesActive();
-    if (hasVisualBackground)
-    {
-        RECT containerShadow = {
-            ScaleLayoutPx(12.0f),
-            clientRect.bottom - ScaleLayoutPx(8.0f),
-            clientRect.right - ScaleLayoutPx(12.0f),
-            clientRect.bottom
-        };
-        PaintBottomShadowGDI(hdc, containerShadow, ScaleLayoutPx(12.0f));
-    }
+    const int gridClipSave = IsGridMode() && g_gridIndicatorBandsActive
+        ? SaveDC(hdc) : 0;
+    if (gridClipSave)
+        IntersectClipRect(hdc, 0, GridIndicatorBandPx(),
+                          g_runtimeSelectorWidth,
+                          g_runtimeSelectorHeight - GridIndicatorBandPx());
 
     for (int slot = 0; slot < GetCarouselSlotCount(); ++slot)
     {
@@ -6579,7 +7658,10 @@ static void PaintSelectorSceneImpl(HWND hwnd, HDC hdc)
             if (oldFont && oldFont != HGDI_ERROR) SelectObject(hdc, oldFont);
         }
     }
-    PaintCompactSelectionIndicatorGDI(hdc);
+    if (gridClipSave)
+        RestoreDC(hdc, gridClipSave);
+    PaintGridMoreAboveIndicatorGDI(hdc);
+    PaintGridMoreBelowIndicatorGDI(hdc);
     PaintCounterGDI(hdc);
 }
 
@@ -6595,6 +7677,31 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
 
     case WM_SETTINGCHANGE:
     case WM_THEMECHANGED:
+        if (g_appearanceTheme == AppearanceTheme::System)
+        {
+            const bool lightTheme = ReadWindowsAppsLightTheme();
+            if (lightTheme != g_lightThemeActive)
+            {
+                g_lightThemeActive = lightTheme;
+                ApplyVisualStylePalette();
+                g_backgroundSpotlightBrushColor = CLR_INVALID;
+                for (auto& group : g_groups)
+                {
+                    if (group.surfaceBrushNormal)
+                    {
+                        group.surfaceBrushNormal->Release();
+                        group.surfaceBrushNormal = nullptr;
+                    }
+                    if (group.surfaceBrushSelected)
+                    {
+                        group.surfaceBrushSelected->Release();
+                        group.surfaceBrushSelected = nullptr;
+                    }
+                }
+                InvalidateRect(hwnd, nullptr, FALSE);
+                RequestFrame();
+            }
+        }
         return 0;
 
     case WM_KEYDOWN:
@@ -6619,10 +7726,18 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
             }
             return 0;
         case VK_LEFT:
-            SelectPrevious();
+            if (IsGridMode()) SelectGridByDirection(-1, 0);
+            else SelectPrevious();
             return 0;
         case VK_RIGHT:
-            SelectNext();
+            if (IsGridMode()) SelectGridByDirection(1, 0);
+            else SelectNext();
+            return 0;
+        case VK_UP:
+            if (IsGridMode()) SelectGridByDirection(0, -1);
+            return 0;
+        case VK_DOWN:
+            if (IsGridMode()) SelectGridByDirection(0, 1);
             return 0;
         case VK_RETURN:
             ConfirmSelection();
@@ -6674,6 +7789,12 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
             if (shiftDown) SelectPrevious();
             else SelectNext();
             SetTimer(hwnd, kTabRepeatTimerId, kTabRepeatIntervalMs, nullptr);
+            return 0;
+        }
+
+        if (wParam == kWindowListRefreshTimerId)
+        {
+            PollSelectorWindowList();
             return 0;
         }
 
@@ -6747,6 +7868,7 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
     case WM_DESTROY:
         StopCarouselAnimation();
         KillTimer(hwnd, kActivityTimerId);
+        KillTimer(hwnd, kWindowListRefreshTimerId);
         UnregisterAllThumbnails();
         if (g_selector == hwnd)
             g_selector = nullptr;
@@ -6897,7 +8019,18 @@ static bool CreateSelector(bool shiftHeld)
 
     g_pendingCloseWindows.clear();
     g_filterMonitor = ResolveFilterMonitor(g_selectorOriginWindow);
+    InstallWindowListEventHooks();
+    InterlockedExchange(&g_windowListDirty, 0);
     RefreshWindowList(true);
+    // Start without reserving space for indicators. The grid should use the
+    // complete selector surface whenever all of its rows fit. We decide
+    // whether the bands are needed only after the first layout pass below.
+    g_gridIndicatorBandsActive = false;
+    g_gridScrollRow = 0;
+    g_gridScrollOffset = 0.0f;
+    g_gridScrollStartOffset = 0.0f;
+    g_gridScrollStartTime = 0.0;
+    g_gridScrollAnimating = false;
     if (g_groups.empty())
     {
         g_selectorOpening = false;
@@ -6917,6 +8050,7 @@ static bool CreateSelector(bool shiftHeld)
 
     const RECT& work = monitorInfo.rcWork;
     UpdateUIScaleForWorkArea(work, GetMonitorDpiScale(monitor));
+    RecalculateGridIndicatorBands();
     LoadD2DAndDWrite();
     CreateUiFonts();
     int x = work.left + ((work.right - work.left) - g_runtimeSelectorWidth) / 2;
@@ -6983,8 +8117,15 @@ static bool CreateSelector(bool shiftHeld)
     ArmFramePump();
     ResetPatternWaves();
     if (IsPatternWavesActive())
-        SetTimer(g_selector, kPatternTimerId, GetPatternTimerInterval(), nullptr);
-    SetTimer(g_selector, kActivityTimerId, 250, nullptr);
+    {
+        if (!SetTimer(g_selector, kPatternTimerId,
+                      GetPatternTimerInterval(), nullptr))
+            Wh_Log(L"SetTimer pattern failed: %lu", GetLastError());
+    }
+    if (!SetTimer(g_selector, kActivityTimerId, 250, nullptr))
+        Wh_Log(L"SetTimer activity failed: %lu", GetLastError());
+    if (!SetTimer(g_selector, kWindowListRefreshTimerId, 100, nullptr))
+        Wh_Log(L"SetTimer window refresh failed: %lu", GetLastError());
     return true;
 }
 
@@ -6997,6 +8138,10 @@ static void HideSelectorForSession()
     DisarmFramePump();
     KillTimer(g_selector, kPatternTimerId);
     KillTimer(g_selector, kActivityTimerId);
+    KillTimer(g_selector, kWindowListRefreshTimerId);
+    RemoveWindowListEventHooks();
+    g_layoutTransitions.clear();
+    g_layoutTransitionActive = false;
     g_tabRepeatStarted = false;
     g_uiTabDown = false;
     g_backgroundSpotlightActive = false;
@@ -7044,6 +8189,7 @@ static void HideSelectorForSession()
     g_cardExitActive = false;
     g_cardExitSlot = -1;
     g_cardExitTarget = nullptr;
+    g_cardExitShouldCloseTarget = false;
     g_selectionExpansionActive = false;
     g_selectionExpansionFinishPending = false;
     g_selectionActivationRequested = false;
@@ -7076,6 +8222,8 @@ static void ShutdownPersistentSelector()
         DisarmFramePump();
         KillTimer(g_selector, kPatternTimerId);
         KillTimer(g_selector, kActivityTimerId);
+        KillTimer(g_selector, kWindowListRefreshTimerId);
+        RemoveWindowListEventHooks();
         UnregisterAllThumbnails();
         HWND selector = g_selector;
         g_selector = nullptr;
@@ -7088,6 +8236,7 @@ static void ShutdownPersistentSelector()
     UnloadDwmFunctions();
     DestroyUiFonts();
     g_groups.clear();
+    g_gridLayoutDirty = true;
     g_selected = 0;
     g_hoveredSlot = -1;
     g_hoveredCloseButton = false;
@@ -7179,29 +8328,33 @@ static void StartSlide(int steps)
         g_selectorAnimationStart = FrameClockNow();
     }
 
-    int count = static_cast<int>(g_groups.size());
+    int count = IsGridMode()
+        ? std::min(static_cast<int>(g_groups.size()), kGridMaxCards)
+        : static_cast<int>(g_groups.size());
     const int previousSelected = g_selected;
     if (IsCompactAutomaticMode())
     {
-        RECT currentIndicatorCard = GetSlotCardRect(g_selected);
-        g_staticIndicatorStartX =
-            (static_cast<float>(currentIndicatorCard.left) + currentIndicatorCard.right) * 0.5f;
-        if (g_staticSelectionAnimating && g_staticPreviousSelected >= 0 &&
-            g_staticPreviousSelected < count)
-        {
-            RECT previousIndicatorCard = GetSlotCardRect(g_staticPreviousSelected);
-            const float previousX =
-                (static_cast<float>(previousIndicatorCard.left) + previousIndicatorCard.right) * 0.5f;
-            const float progress = EaseSmooth(ElapsedFraction(
-                g_staticSelectionStartTime, kStaticSelectionDurationMs));
-            g_staticIndicatorStartX = LerpFloat(previousX, g_staticIndicatorStartX, progress);
-        }
         for (int slot = 0; slot < count && slot < 3; ++slot)
             g_staticScaleFrom[slot] = GetSlotVisualScale(slot);
     }
     g_selected = (g_selected + steps) % count;
     while (g_selected < 0)
         g_selected += count;
+
+    if (IsGridMode())
+    {
+        g_gridPreviousSelected = previousSelected;
+        g_gridSelectionStart = FrameClockNow();
+        g_gridSelectionAnimating = previousSelected != g_selected;
+        EnsureGridSelectionVisible();
+        g_animActive = false;
+        g_animOffset = 0.0f;
+        g_animStartOffset = 0.0f;
+        g_cardSnapScale = 1.0f;
+        UpdateSelectorControls();
+        RequestFrame();
+        return;
+    }
 
     if (IsCompactAutomaticMode())
     {
@@ -7226,6 +8379,48 @@ static void StartSlide(int steps)
     g_animActive = true;
 
     UpdateSelectorControls();
+}
+
+static void SelectGridByDirection(int dx, int dy)
+{
+    if (!IsGridMode() || g_groups.empty())
+        return;
+    const int count = std::min(static_cast<int>(g_groups.size()), kGridMaxCards);
+    const int row = GetGridRowForSlot(g_selected);
+    const int column = GetGridColumnForSlot(g_selected);
+    if (row < 0 || column < 0)
+        return;
+    int target = g_selected;
+    if (dx < 0 && column > 0)
+        --target;
+    else if (dx > 0 && column + 1 < GetGridColumnCount(row) && target + 1 < count)
+        ++target;
+    else if (dy < 0 && row > 0)
+    {
+        const int targetRow = row - 1;
+        const int targetColumn = std::min(
+            column, GetGridColumnCount(targetRow) - 1);
+        target = GetGridRowStartSlot(targetRow) + targetColumn;
+    }
+    else if (dy > 0 && row + 1 < GetGridRowCount())
+    {
+        const int targetRow = row + 1;
+        const int targetColumn = std::min(
+            column, GetGridColumnCount(targetRow) - 1);
+        target = GetGridRowStartSlot(targetRow) + targetColumn;
+    }
+    if (target == g_selected)
+        return;
+    g_gridPreviousSelected = g_selected;
+    g_selected = target;
+    g_gridSelectionStart = FrameClockNow();
+    g_gridSelectionAnimating = true;
+    EnsureGridSelectionVisible();
+    g_animActive = false;
+    g_animOffset = 0.0f;
+    g_cardSnapScale = 1.0f;
+    UpdateSelectorControls();
+    RequestFrame();
 }
 
 static void SelectNextSmooth(int steps)
@@ -7376,6 +8571,89 @@ static void EndRestoreWithoutDwmTransition(HWND target)
     g_restoreTransitionOverrideActive = false;
 }
 
+static bool GetProcessIntegrityRid(DWORD processId, DWORD* integrityRid)
+{
+    if (!processId || !integrityRid)
+        return false;
+
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+                                 processId);
+    if (!process)
+        return false;
+
+    HANDLE token = nullptr;
+    const BOOL tokenOpened = OpenProcessToken(process, TOKEN_QUERY, &token);
+    CloseHandle(process);
+    if (!tokenOpened)
+        return false;
+
+    DWORD bufferSize = 0;
+    GetTokenInformation(token, TokenIntegrityLevel, nullptr, 0, &bufferSize);
+    if (bufferSize == 0)
+    {
+        CloseHandle(token);
+        return false;
+    }
+
+    std::vector<BYTE> buffer(bufferSize);
+    const BOOL queried = GetTokenInformation(
+        token, TokenIntegrityLevel, buffer.data(), bufferSize, &bufferSize);
+    CloseHandle(token);
+    if (!queried)
+        return false;
+
+    const TOKEN_MANDATORY_LABEL* label =
+        reinterpret_cast<const TOKEN_MANDATORY_LABEL*>(buffer.data());
+    PSID sid = label->Label.Sid;
+    if (!sid || !IsValidSid(sid))
+        return false;
+
+    PUCHAR subAuthorityCount = GetSidSubAuthorityCount(sid);
+    if (!subAuthorityCount || *subAuthorityCount == 0)
+        return false;
+
+    PDWORD rid = GetSidSubAuthority(sid, *subAuthorityCount - 1);
+    if (!rid)
+        return false;
+
+    *integrityRid = *rid;
+    return true;
+}
+
+static const wchar_t* GetIntegrityLevelName(DWORD integrityRid)
+{
+    if (integrityRid < SECURITY_MANDATORY_LOW_RID)
+        return L"Untrusted";
+    if (integrityRid < SECURITY_MANDATORY_MEDIUM_RID)
+        return L"Low";
+    if (integrityRid < SECURITY_MANDATORY_HIGH_RID)
+        return L"Medium";
+    if (integrityRid < SECURITY_MANDATORY_SYSTEM_RID)
+        return L"High";
+    return L"System";
+}
+
+static void LogActivationIntegrity(HWND target)
+{
+    DWORD targetProcessId = 0;
+    GetWindowThreadProcessId(target, &targetProcessId);
+
+    DWORD targetRid = 0;
+    DWORD callerRid = 0;
+    const bool haveTargetRid =
+        GetProcessIntegrityRid(targetProcessId, &targetRid);
+    const DWORD callerProcessId = GetCurrentProcessId();
+    const bool haveCallerRid =
+        GetProcessIntegrityRid(callerProcessId, &callerRid);
+
+    Wh_Log(L"Activation integrity hwnd=%p targetPid=%lu targetIL=%s rid=0x%lx callerPid=%lu callerIL=%s rid=0x%lx",
+           target, targetProcessId,
+           haveTargetRid ? GetIntegrityLevelName(targetRid) : L"unavailable",
+           targetRid, callerProcessId,
+           haveCallerRid ? GetIntegrityLevelName(callerRid) : L"unavailable",
+           callerRid);
+}
+
 static bool TryActivateWindowOnInputThread(HWND target)
 {
     if (!target || !IsWindow(target))
@@ -7387,7 +8665,35 @@ static bool TryActivateWindowOnInputThread(HWND target)
     if (IsIconic(target))
     {
         BeginRestoreWithoutDwmTransition(target);
-        ShowWindowAsync(target, SW_RESTORE);
+        WINDOWPLACEMENT placement = {};
+        placement.length = sizeof(placement);
+        bool restoreRequested = false;
+        if (GetWindowPlacement(target, &placement))
+        {
+            // Async so a hung target app cannot block the input thread
+            // (which also handles the forwarded Alt+Tab hotkey).
+            placement.flags |= WPF_ASYNCWINDOWPLACEMENT;
+            if (placement.flags & WPF_RESTORETOMAXIMIZED)
+            {
+                placement.flags &= ~WPF_RESTORETOMAXIMIZED;
+                placement.showCmd = SW_SHOWMAXIMIZED;
+            }
+            else
+            {
+                placement.showCmd = SW_SHOWNORMAL;
+            }
+            restoreRequested = SetWindowPlacement(target, &placement) != FALSE;
+        }
+
+        // With the async flag the window is still minimized right after the
+        // call, so only fall back when the request itself failed. The retry
+        // timer waits for the restore to complete.
+        if (!restoreRequested)
+        {
+            Wh_Log(L"SetWindowPlacement failed hwnd=%p; using ShowWindowAsync",
+                   target);
+            ShowWindowAsync(target, SW_RESTORE);
+        }
     }
 
     g_inputActivationLastSetForegroundResult = SetForegroundWindow(target);
@@ -7409,6 +8715,9 @@ static bool TryActivateWindowOnInputThread(HWND target)
 
 static void ActivateWindowOnInputThread(HWND control, HWND target)
 {
+    if (target && IsWindow(target))
+        LogActivationIntegrity(target);
+
     if (TryActivateWindowOnInputThread(target))
     {
         g_inputActivationTarget = nullptr;
@@ -7576,6 +8885,10 @@ static void UiHandleMouseMove()
     if (!IsSelectorActive() || !g_selector || !IsWindow(g_selector))
         return;
     ScreenToClient(g_selector, &pt);
+    RECT selectorClientRect = {};
+    const bool pointerInsideSelector =
+        GetClientRect(g_selector, &selectorClientRect) &&
+        PtInRect(&selectorClientRect, pt) != FALSE;
     pt.x -= g_selectorSceneOffset.x;
     pt.y -= g_selectorSceneOffset.y;
     g_backgroundSpotlightPoint = pt;
@@ -7585,7 +8898,7 @@ static void UiHandleMouseMove()
         screenPt.x = static_cast<LONG>(static_cast<ULONG>(static_cast<ULONG64>(packed) & 0xFFFFFFFFULL));
         screenPt.y = static_cast<LONG>(static_cast<ULONG>((static_cast<ULONG64>(packed) >> 32) & 0xFFFFFFFFULL));
         const int dx = screenPt.x - g_mousePressScreenPoint.x;
-        if (g_groups.size() >= 4 && !IsCompactAutomaticMode() &&
+        if (!IsGridMode() && g_groups.size() >= 4 && !IsCompactAutomaticMode() &&
             (g_mouseDragging || std::abs(dx) >= 7))
         {
             g_mouseDragging = true;
@@ -7609,7 +8922,8 @@ static void UiHandleMouseMove()
     UpdateHoveredSlot(pt);
     if (g_backgroundSpotlightActive || IsPatternWavesActive())
         RequestFrame();
-    MarkSelectorActivity();
+    if (pointerInsideSelector)
+        MarkSelectorActivity();
 }
 
 static float GetCarouselDragSlotSpacing()
@@ -7638,6 +8952,22 @@ static float GetCarouselDragSlotSpacing()
 
 static void FinishMouseCarouselDrag()
 {
+    if (IsGridMode())
+    {
+        if (!g_mousePressActive)
+            return;
+        const int pressedSlot = g_mousePressedSlot;
+        g_mousePressActive = false;
+        g_mouseDragging = false;
+        g_mousePressedSlot = -1;
+        if (pressedSlot < 0)
+            return;
+        if (pressedSlot == GetSelectedSlot())
+            ConfirmSelection();
+        else
+            StartSlide(pressedSlot - GetSelectedSlot());
+        return;
+    }
     if (!g_mousePressActive)
         return;
 
@@ -7705,7 +9035,20 @@ static void UiHandleMouseButton(UINT message, POINT screenPt)
         return;
     }
     if (message != WM_LBUTTONDOWN)
+    {
+        // Any other mouse button dismisses the switcher instead of allowing
+        // the click to fall through to the underlying application.
+        CancelSelection();
         return;
+    }
+    if (!IsPointInsideGridPanel(scenePt))
+    {
+        g_mousePressActive = false;
+        g_mouseDragging = false;
+        g_mousePressedSlot = -1;
+        CancelSelection();
+        return;
+    }
 
     int clickedSlot = GetSlotAtPoint(scenePt);
     bool onCloseButton = false;
@@ -7750,6 +9093,8 @@ static void UiHandleMouseButton(UINT message, POINT screenPt)
 static void UiHandleSettingsChanged()
 {
     LoadTaskSwitcherSettings();
+    RecalculateGridIndicatorBands();
+    EnsureGridSelectionVisible();
     for (auto& group : g_groups)
     {
         if (group.surfaceBrushNormal)
@@ -7774,7 +9119,11 @@ static void UiHandleSettingsChanged()
         if (IsPatternWavesActive())
         {
             if (IsSelectorActive())
-                SetTimer(g_selector, kPatternTimerId, GetPatternTimerInterval(), nullptr);
+            {
+                if (!SetTimer(g_selector, kPatternTimerId,
+                              GetPatternTimerInterval(), nullptr))
+                    Wh_Log(L"SetTimer pattern refresh failed: %lu", GetLastError());
+            }
             else
                 KillTimer(g_selector, kPatternTimerId);
         }
@@ -7821,10 +9170,13 @@ static void HandleUiCommand(const MSG& msg)
 
     case WM_UI_MOUSE_BUTTON:
     {
-        POINT pt = {};
-        pt.x = static_cast<short>(LOWORD(msg.lParam));
-        pt.y = static_cast<short>(HIWORD(msg.lParam));
-        UiHandleMouseButton(static_cast<UINT>(msg.wParam), pt);
+        POINT* postedPoint = reinterpret_cast<POINT*>(msg.lParam);
+        if (postedPoint)
+        {
+            const POINT pt = *postedPoint;
+            delete postedPoint;
+            UiHandleMouseButton(static_cast<UINT>(msg.wParam), pt);
+        }
         break;
     }
 
@@ -7834,7 +9186,28 @@ static void HandleUiCommand(const MSG& msg)
             break;
         MarkSelectorActivity();
         short delta = static_cast<short>(LOWORD(msg.wParam));
-        if (delta > 0)
+        if (IsGridMode())
+        {
+            const int visibleRows = GridVisibleRows();
+            SetGridScrollRow(g_gridScrollRow + (delta < 0 ? 1 : -1));
+            const int lastVisibleRow = std::min(
+                GetGridRowCount() - 1, g_gridScrollRow + visibleRows - 1);
+            const int firstVisible = GetGridRowStartSlot(g_gridScrollRow);
+            const int lastVisible = GetGridRowEndSlot(lastVisibleRow);
+            const int previousSelected = g_selected;
+            if (firstVisible >= 0 && g_selected < firstVisible)
+                g_selected = firstVisible;
+            else if (lastVisible >= 0 && g_selected > lastVisible)
+                g_selected = lastVisible;
+            if (previousSelected != g_selected)
+            {
+                g_gridPreviousSelected = previousSelected;
+                g_gridSelectionStart = FrameClockNow();
+                g_gridSelectionAnimating = true;
+            }
+            RequestFrame();
+        }
+        else if (delta > 0)
             SelectNextSmooth(1);
         else if (delta < 0)
             SelectPreviousSmooth(1);
@@ -7983,19 +9356,27 @@ static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam)
         wParam == WM_MBUTTONDOWN || wParam == WM_NCLBUTTONDOWN ||
         wParam == WM_NCRBUTTONDOWN || wParam == WM_NCMBUTTONDOWN)
     {
-        LPARAM packedPt = MAKELPARAM(static_cast<WORD>(static_cast<short>(mouse->pt.x)),
-                                     static_cast<WORD>(static_cast<short>(mouse->pt.y)));
-        if (!PostUiCommand(WM_UI_MOUSE_BUTTON, wParam, packedPt))
+        POINT* point = new (std::nothrow) POINT(mouse->pt);
+        if (!point || !PostUiCommand(
+                WM_UI_MOUSE_BUTTON, wParam,
+                reinterpret_cast<LPARAM>(point)))
+        {
+            delete point;
             return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
+        }
         return 1;
     }
 
     if (wParam == WM_LBUTTONUP)
     {
-        LPARAM packedPt = MAKELPARAM(static_cast<WORD>(static_cast<short>(mouse->pt.x)),
-                                     static_cast<WORD>(static_cast<short>(mouse->pt.y)));
-        if (!PostUiCommand(WM_UI_MOUSE_BUTTON, WM_LBUTTONUP, packedPt))
+        POINT* point = new (std::nothrow) POINT(mouse->pt);
+        if (!point || !PostUiCommand(
+                WM_UI_MOUSE_BUTTON, WM_LBUTTONUP,
+                reinterpret_cast<LPARAM>(point)))
+        {
+            delete point;
             return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
+        }
         return 1;
     }
 
@@ -8260,7 +9641,14 @@ static void ShutdownUiThreadState()
 
     g_userWindows.clear();
     g_groups.clear();
+    g_gridLayoutDirty = true;
     g_selected = 0;
+    g_gridScrollRow = 0;
+    g_gridScrollOffset = 0.0f;
+    g_gridScrollStartOffset = 0.0f;
+    g_gridScrollAnimating = false;
+    g_gridPreviousSelected = -1;
+    g_gridSelectionAnimating = false;
     g_state = SelectorState::Idle;
 
     g_getDpiForMonitor = nullptr;
