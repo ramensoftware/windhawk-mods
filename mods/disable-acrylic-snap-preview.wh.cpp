@@ -1855,41 +1855,53 @@ static const WindhawkUtils::SYMBOL_HOOK uDWMhooks[] {
 	{ { L"public: static double __cdecl CDesktopManager::GetGlobalTime(void)" }, &g_GetGlobalTime, nullptr, true },
 };
 
-bool HasDwminitWarningRecently()
-{
+// Returns true if at least two Dwminit warnings (Level=3) were logged in the
+// Application event log within the last 60 seconds. DWM logs warnings here when
+// it crashes and is restarted by the session manager, so repeated warnings are
+// a strong signal that something in the desktop pipeline is unstable.
+bool HasMultipleDwminitWarningsInLastMinute() {
+    const WCHAR* queryPath = L"Application";
     const WCHAR* query =
         L"*[System[Provider[@Name='Dwminit'] and (Level=3) and "
-        L"TimeCreated[timediff(@SystemTime) <= 10000]]]";
+        L"TimeCreated[timediff(@SystemTime) <= 60000]]]";
 
-    EVT_HANDLE queryHandle = EvtQuery(nullptr, L"Application", query, EvtQueryChannelPath);
-    if (!queryHandle)
-    {
+    EVT_HANDLE queryHandle = EvtQuery(nullptr,    // Local machine
+                                      queryPath,  // Application log
+                                      query, EvtQueryChannelPath);
+    if (!queryHandle) {
         Wh_Log(L"EvtQuery failed with error: %u", GetLastError());
         return false;
     }
 
-    bool found = false;
-    EVT_HANDLE eventHandle = nullptr;
-    DWORD dwReturned = 0;
-
-    if (EvtNext(queryHandle, 1, &eventHandle, 1000, 0, &dwReturned))
-    {
-        found = true;
-        EvtClose(eventHandle);
-    }
-    else if (GetLastError() != ERROR_NO_MORE_ITEMS)
-    {
+    EVT_HANDLE events[2] = {};
+    DWORD returned = 0;
+    constexpr DWORD kTimeout = 1000;
+    BOOL ok =
+        EvtNext(queryHandle, ARRAYSIZE(events), events, kTimeout, 0, &returned);
+    if (!ok && GetLastError() != ERROR_NO_MORE_ITEMS) {
         Wh_Log(L"EvtNext failed with error: %u", GetLastError());
+    }
+    for (DWORD i = 0; i < returned; i++) {
+        EvtClose(events[i]);
     }
 
     EvtClose(queryHandle);
-    return found;
+    return ok && returned >= ARRAYSIZE(events);
 }
 
 BOOL Wh_ModInit() {
-    // Skip the event log query unless the previous init is recent. 
-    if (HasDwminitWarningRecently())
-    {
+    // Skip the event log query unless the previous init is recent.
+    FILETIME nowFt;
+    GetSystemTimeAsFileTime(&nowFt);
+    ULONGLONG now =
+        ((ULONGLONG)nowFt.dwHighDateTime << 32) | nowFt.dwLowDateTime;
+    ULONGLONG lastInitTime = 0;
+    Wh_GetBinaryValue(L"lastInitTime", &lastInitTime, sizeof(lastInitTime));
+    Wh_SetBinaryValue(L"lastInitTime", &now, sizeof(now));
+
+    constexpr ULONGLONG kOneMinute = 60 * 10000000ULL;
+    if (now - lastInitTime <= kOneMinute &&
+        HasMultipleDwminitWarningsInLastMinute()) {
         Wh_Log(L"Refusing to load: multiple recent Dwminit warnings");
         return FALSE;
     }
