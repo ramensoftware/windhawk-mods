@@ -59,12 +59,12 @@ Brightness and contrast set the two pattern tones as *brightness ± contrast / 2
 
 // ==WindhawkModSettings==
 /*
-- configHotkey: Win+Ctrl+Shift+D
+- configHotkey: Win+Ctrl+Alt+D
   $name: Configuration window hotkey
   $description: Opens the live configuration window. Win + Ctrl, Alt, Shift + key, like Win+Ctrl+Alt+D.
 - toggleHotkey: ""
   $name: On/off hotkey
-  $description: Turns the dimming on and off, same format as above (Win+Shift+D).
+  $description: Toggles dimming on and off, same format as above (Win+Alt+D).
 - trayIcon: false
   $name: Tray icon
   $description: Shows an icon in the notification area. Click to toggle dimming on and off, secondary-click to open the configuration window.
