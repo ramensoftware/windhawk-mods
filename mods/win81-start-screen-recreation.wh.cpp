@@ -25,7 +25,7 @@
 
 This mod recreates the Windows 8.1 Start Screen on Windows 10 and Windows 11.
 
-![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/startscreen.png)
+![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/startscreen2.png)
 
 ## About the mod
 The mod replaces the Start experience with a full-screen Start screen modeled after
