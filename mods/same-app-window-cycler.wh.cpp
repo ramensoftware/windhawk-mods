@@ -2,7 +2,7 @@
 // @id              same-app-window-cycler
 // @name            Same-App Window Cycler (Alt+`)
 // @description     macOS-style Cmd+` for Windows: cycle through the windows of the current app with Alt+` (Alt+Shift+` goes backwards)
-// @version         0.1.1
+// @version         0.1.2
 // @author          mdozkanji
 // @github          https://github.com/mdozkanji
 // @include         windhawk.exe
@@ -14,27 +14,33 @@
 /*
 # Same-App Window Cycler
 
-Brings the macOS **Cmd+`** behavior to Windows. While an app has several
-windows open, press **Alt+`** to jump to its next window, or **Alt+Shift+`**
-to go to the previous one.
+Brings the macOS **Cmd+\`** behavior to Windows. While an app has several
+windows open, press **Alt+\`** to jump to its next window, or **Alt+Shift+\`**
+to go to the previous one. Repeated presses walk through all of the app's
+windows, and Alt+Shift+\` walks through them in the opposite order.
 
-The shortcut uses the physical key left of `1`, so it works on non-US keyboard
-layouts too.
+The shortcut uses the physical key left of `1`. The key is mapped when the mod
+starts, so it follows the keyboard layout that is active at that time.
 
 ## How it differs from the existing switcher mods
-Simple Window Switcher and ClassicWindowSwitcher also offer an Alt+` "windows of
-the current app" mode, but both replace the native Alt+Tab and show their own
-switcher UI. This mod leaves Alt+Tab untouched and switches windows directly,
-with no UI. If you already use one of those mods for Alt+`, you don't need this
-one.
+Simple Window Switcher, ClassicWindowSwitcher and Windows 7/8.1 Alt+Tab
+Recreation also offer an Alt+\` "windows of the current app" mode, but all of
+them replace the native Alt+Tab and show their own switcher UI. This mod leaves
+Alt+Tab untouched and switches windows directly, with no UI. If you already use
+one of those mods for Alt+\`, you don't need this one.
 
 ## Conflicts
-Alt+` is registered as a global hotkey, and only one program can own it.
-Simple Window Switcher registers Alt+` by default (`altBacktickBehavior:
-backward`), so if both mods are enabled, whichever registers first gets the key
-and the other one only logs a failure. Set Simple Window Switcher's Alt+`
-behavior to "none", or don't enable both. The same applies to other tools that
-use Alt+`, such as AutoHotkey scripts.
+Alt+\` is registered as a global hotkey, and only one program can own it.
+- Simple Window Switcher registers Alt+\` by default (`altBacktickBehavior:
+  backward`), so if both mods are enabled, whichever registers first gets the
+  key and the other one only logs a failure. Set its Alt+\` behavior to "none",
+  or don't enable both.
+- Windows 7/8.1 Alt+Tab Recreation catches Alt+\` with a low-level keyboard hook
+  and swallows it. With its `onlyThisAppHotkey` option on, that mod gets the key
+  no matter which one registers first, and this mod's hotkey never fires.
+- The same applies to other tools that use Alt+\`, such as AutoHotkey scripts.
+- Apps that have their own Alt+\` or Alt+Shift+\` shortcut stop receiving it
+  while this mod is on.
 
 ## How it works
 The mod runs as a tool mod in a dedicated `windhawk.exe` process and registers a
@@ -47,6 +53,9 @@ virtual desktop, and activates the next one.
   ApplicationFrameHost.exe are all treated as one "app".
 - Windows of elevated (administrator) apps may only flash instead of coming to
   the front.
+- If you switch keyboard layouts and the key left of `1` produces a different
+  virtual key, the hotkey stays on the key it was registered with. Disable and
+  re-enable the mod after changing layouts.
 */
 // ==/WindhawkModReadme==
 
@@ -60,11 +69,13 @@ virtual desktop, and activates the next one.
 
 #include <dwmapi.h>
 
+#include <atomic>
 #include <string>
 #include <vector>
 
 struct {
-    bool includeMinimized;
+    // Written on the Windhawk engine thread, read on the hotkey thread.
+    std::atomic<bool> includeMinimized;
 } settings;
 
 HANDLE g_hotkeyThread = nullptr;
@@ -182,8 +193,23 @@ static void CycleWindows(bool backwards) {
 
     // Z-order is topmost first. Forward: bring the least recently used window
     // of the app to the front, so repeated presses walk through all windows.
-    // Backward: go back to the one that was just behind the current window.
-    HWND target = backwards ? ctx.windows[1] : ctx.windows.back();
+    HWND target = ctx.windows.back();
+
+    if (backwards) {
+        if (ctx.windows[0] == foreground) {
+            // Exact reverse of forward: push the current window below the
+            // app's last window, then activate the one that was behind it.
+            // Without this, backward would only toggle between two windows.
+            SetWindowPos(ctx.windows[0], ctx.windows.back(), 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                             SWP_ASYNCWINDOWPOS);
+            target = ctx.windows[1];
+        } else {
+            // The foreground window isn't one of the listed windows (for
+            // example the desktop), so go to the most recent window.
+            target = ctx.windows[0];
+        }
+    }
 
     Wh_Log(L"Cycling %zu windows of %s", ctx.windows.size(),
            ctx.exePath.c_str());
