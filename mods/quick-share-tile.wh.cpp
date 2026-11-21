@@ -422,7 +422,10 @@ void RestoreTile(AppliedTile& tile) {
     RemoveChild(tile.iconHost.get(), tile.icon.get());
 
     if (auto nativeTitle = tile.nativeTitle.get()) {
-        nativeTitle.Text(tile.nativeTitleText);
+        // A reused container may already show another tile's title.
+        if (nativeTitle.Text() == L"Quick Share") {
+            nativeTitle.Text(tile.nativeTitleText);
+        }
     }
     if (auto nativeIcon = tile.nativeIcon.get()) {
         nativeIcon.Opacity(tile.nativeIconOpacity);
