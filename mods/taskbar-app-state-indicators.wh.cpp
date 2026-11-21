@@ -639,7 +639,10 @@ bool PostToUiThread(winrt::Windows::UI::Core::CoreDispatcher const& dispatcher,
     });
     try {
         dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High,
-                            [fn = std::move(fn), ticket]() {
+                            // The ticket is captured first, so it is destroyed
+                            // last (Clang destroys captures in reverse order):
+                            // fn's destructor runs before the drain is signaled.
+                            [ticket, fn = std::move(fn)]() {
                                 try { fn(); } catch (...) {}
                             });
         return true;
@@ -2439,14 +2442,19 @@ std::shared_ptr<ButtonEntry> FindOrCreateEntry(FrameworkElement const& button, b
 
     // Their host lives in the icon's panel, which usually died with them;
     // retire whatever is left, on its own thread. Without a host, only the
-    // composition objects are left to close.
+    // composition objects and the subscriptions outside the button are left.
     for (auto& orphan : orphans) {
         auto host = orphan->host.get();
         auto dispatcher = host ? host.Dispatcher() : nullptr;
+        // Fully: the debug view-model subscription lives on the view
+        // model, which can outlive the button (a recycled container), and
+        // the unload cleanup no longer reaches a pruned entry. Everything
+        // else RetireEntryPaths revokes lives inside the button and is
+        // skipped once it's gone.
         if (!dispatcher || dispatcher.HasThreadAccess()) {
-            RetireHost(orphan);
+            RetireEntryPaths(orphan, true);
         } else {
-            PostToUiThread(dispatcher, [orphan]() { RetireHost(orphan); });
+            PostToUiThread(dispatcher, [orphan]() { RetireEntryPaths(orphan, true); });
         }
     }
     return result;
@@ -4414,6 +4422,8 @@ void RestoreNativeElements(NativeRestore what) {
 #endif
 
 #define WM_APP_RECONFIGURE_HOOKS (WM_APP + 1)
+#define WM_APP_COLORS_CHANGED (WM_APP + 2)
+#define COLOR_REFRESH_DELAY_MS 150
 #define INDICATOR_REFRESH_DELAY_MS 60
 #define INDICATOR_FOLLOW_UP_DELAY_MS 300
 
@@ -4481,6 +4491,20 @@ void CALLBACK IndicatorRefreshTimerProc(HWND, UINT, UINT_PTR id, DWORD) {
     } else if (id == g_followUpTimer) {
         g_followUpTimer = 0;
         PostRefreshPass();
+    }
+}
+
+// System color changes (see SubscribeColorChangesFromTaskbarThread): one
+// refresh of every button a moment after the first change of a burst, from
+// this thread, which StopEventThread joins at unload.
+bool RefreshAllEntries(bool rebind);
+UINT_PTR g_colorRefreshTimer = 0;  // only touched on the event thread
+
+void CALLBACK ColorRefreshTimerProc(HWND, UINT, UINT_PTR id, DWORD) {
+    KillTimer(nullptr, id);
+    if (id == g_colorRefreshTimer) g_colorRefreshTimer = 0;
+    if (!g_unloading) {
+        try { RefreshAllEntries(false); } catch (...) {}
     }
 }
 
@@ -4597,12 +4621,20 @@ DWORD WINAPI IndicatorEventThreadProc(LPVOID) {
             HookWinEvents();
             continue;
         }
+        if (!msg.hwnd && msg.message == WM_APP_COLORS_CHANGED) {
+            // The first change of a burst arms the timer; the rest join it.
+            if (!g_colorRefreshTimer) {
+                g_colorRefreshTimer = SetTimer(nullptr, 0, COLOR_REFRESH_DELAY_MS, ColorRefreshTimerProc);
+            }
+            continue;
+        }
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
 
     if (g_refreshTimer) { KillTimer(nullptr, g_refreshTimer); g_refreshTimer = 0; }
     if (g_followUpTimer) { KillTimer(nullptr, g_followUpTimer); g_followUpTimer = 0; }
+    if (g_colorRefreshTimer) { KillTimer(nullptr, g_colorRefreshTimer); g_colorRefreshTimer = 0; }
     UnhookWinEvents();
     return 0;
 }
@@ -4622,9 +4654,9 @@ void StartEventThread() {
     }
 }
 
-// Nothing in the event thread blocks for long (its only cross-thread call is
-// a SendMessage to the taskbar thread), so the waits are unbounded: the
-// thread runs code of this DLL and must be gone before it is unmapped.
+// Nothing in the event thread blocks (it posts to the taskbar thread through
+// PostToUiThread and never sends), so the waits are unbounded: the thread
+// runs code of this DLL and must be gone before it is unmapped.
 void StopEventThread() {
     if (!g_eventThread) return;
     WaitForSingleObject(g_eventThreadReady, INFINITE);
@@ -4694,23 +4726,17 @@ bool RefreshAllEntries(bool rebind = true) {
 [[clang::no_destroy]] winrt::Windows::UI::ViewManagement::UISettings g_uiSettings{nullptr};
 winrt::event_token g_colorValuesToken{};
 std::atomic<int> g_colorHandlersInFlight{0};
-// Windows reports one color change several times in a row: the first queues
-// a refresh after a short pause, and the rest of the burst joins it.
-std::atomic<bool> g_colorRefreshQueued{false};
+// Windows reports one color change several times in a row: the handler only
+// tells the event thread, which refreshes once a moment after the first of
+// them (ColorRefreshTimerProc). So the handler itself does almost nothing.
 
 void SubscribeColorChangesFromTaskbarThread() {
     try {
         g_uiSettings = winrt::Windows::UI::ViewManagement::UISettings();
         g_colorValuesToken = g_uiSettings.ColorValuesChanged([](auto const&, auto const&) {
             g_colorHandlersInFlight.fetch_add(1);
-            if (!g_unloading && !g_colorRefreshQueued.exchange(true)) {
-                // Let the burst finish (the handler runs on a thread of its
-                // own; the wait holds nothing else up).
-                Sleep(150);
-                g_colorRefreshQueued = false;
-                if (!g_unloading) {
-                    try { RefreshAllEntries(false); } catch (...) {}
-                }
+            if (!g_unloading) {
+                if (DWORD threadId = g_eventThreadId) PostThreadMessage(threadId, WM_APP_COLORS_CHANGED, 0, 0);
             }
             g_colorHandlersInFlight.fetch_sub(1);
         });
@@ -4732,8 +4758,8 @@ void UnsubscribeColorChanges() {
     if (g_uiSettings) {
         try { g_uiSettings.ColorValuesChanged(g_colorValuesToken); } catch (...) {}
     }
-    // A handler in flight runs this DLL's code (at most a 150 ms pause and a
-    // refresh post): wait for it, without a timeout.
+    // A handler in flight runs this DLL's code (one PostThreadMessage):
+    // wait for it, without a timeout.
     while (g_colorHandlersInFlight.load() > 0) Sleep(10);
     g_uiSettings = nullptr;
 }
@@ -4837,6 +4863,11 @@ void Wh_ModBeforeUninit() {
     if (g_pendingPosts.load() > 0 && g_postsDrained) {
         WaitForSingleObject(g_postsDrained, INFINITE);
     }
+    // The last ticket is released inside the dispatcher's callback, before
+    // C++/WinRT's delegate is torn down. A message sent to the taskbar thread
+    // returns only once that thread has processed it, so by then it has left
+    // the callback.
+    if (hTaskbarWnd) RunFromWindowThread(hTaskbarWnd, [](void*) {}, nullptr);
 
     // The frame paths' geometry sources are objects of this DLL that
     // composition holds for as long as a path lives. The cleanup above
