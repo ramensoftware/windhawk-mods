@@ -297,6 +297,20 @@ struct UiaResult {
     HWND targetWindow = nullptr;
 };
 
+static bool IsUsableUiaResult(const UiaResult& result, POINT cursor,
+                              HWND targetWindow, uint64_t generation,
+                              ULONGLONG nowTick) {
+    if (!result.valid || result.targetWindow != targetWindow ||
+        result.settingsGeneration != generation ||
+        nowTick < result.tick || nowTick < result.requestTick ||
+        nowTick - result.tick > 750 ||
+        nowTick - result.requestTick > 2000) {
+        return false;
+    }
+    return std::abs(result.pt.x - cursor.x) <= 4 &&
+           std::abs(result.pt.y - cursor.y) <= 4;
+}
+
 struct RuntimeState {
     std::atomic<bool> running{false};
     std::atomic<bool> stopRequested{false};
@@ -1486,18 +1500,8 @@ static void TickUpdate() {
         {
             std::lock_guard<std::mutex> lock(g.uiaMutex);
             const UiaResult result = g.uiaResult;
-            const LONG dx = std::abs(result.pt.x - pt.x);
-            const LONG dy = std::abs(result.pt.y - pt.y);
-            const bool fresh = result.valid &&
-                result.targetWindow == targetWindow &&
-                result.settingsGeneration == g.settingsGeneration.load(std::memory_order_relaxed) &&
-                nowTick >= result.tick &&
-                nowTick >= result.requestTick &&
-                nowTick - result.tick <= 750 &&
-                // A COM provider can return late: reject an outdated capture.
-                nowTick - result.requestTick <= 2000 &&
-                dx <= 4 && dy <= 4;
-            if (fresh) {
+            if (IsUsableUiaResult(result, pt, targetWindow,
+                    g.settingsGeneration.load(std::memory_order_relaxed), nowTick)) {
                 text = result.text;
                 haveText = true;
                 g.lastValidTextTick = nowTick;
