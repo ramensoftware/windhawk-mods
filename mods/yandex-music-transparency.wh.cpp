@@ -44,6 +44,10 @@ Adds configurable transparency for the Yandex Music desktop application.
 - Fixed thread safety: timers are created/killed on the window's own thread
   via a registered control message; the control message is never sent while
   holding the mutex, avoiding freeze/deadlock on the engine thread.
+- Fixed "fully opaque on hover" not working when smooth transitions are off
+  (and starting late when they are on): the timer-control message is now
+  always sent after applying the target alpha, so hover polling starts
+  immediately regardless of the SmoothTransitions setting.
 
 ## 1.27
 
@@ -242,7 +246,6 @@ void ApplyTargetAlpha(HWND hwnd) {
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
     }
 
-    bool needTimerUpdate = false;
     {
         std::lock_guard<std::mutex> lock(g_windowsMutex);
         auto it = g_trackedWindows.find(hwnd);
@@ -257,16 +260,16 @@ void ApplyTargetAlpha(HWND hwnd) {
             SetLayeredWindowAttributes_Original(hwnd, 0, target, LWA_ALPHA);
         } else {
             it->second.targetAlpha = target;
-            needTimerUpdate = true;
         }
     }
 
-    // Update the timer on the window's own thread, outside the mutex (UpdateTimer
+    // Always ask the window's own thread to update its timer (start/stop/interval).
+    // This makes hover polling work regardless of SmoothTransitions: UpdateTimer
+    // runs the slow timer while OpaqueOnHover is on, the fast one while
+    // animating, and kills it otherwise. Sent outside the mutex (UpdateTimer
     // takes the mutex, so sending under the lock would deadlock).
-    if (needTimerUpdate) {
-        SendMessageTimeoutW(hwnd, g_timerControlMsg, 0, 0,
-                            SMTO_ABORTIFHUNG, 200, nullptr);
-    }
+    SendMessageTimeoutW(hwnd, g_timerControlMsg, 0, 0,
+                        SMTO_ABORTIFHUNG, 200, nullptr);
 }
 
 // Advances the animated alpha one step for this window.
