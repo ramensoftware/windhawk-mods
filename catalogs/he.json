@@ -20054,7 +20054,7 @@
         "ratingUsers": 224,
         "reviews": 0,
         "trendingSorting": -1.0287979320286762,
-        "updated": 1777228213000,
+        "updated": 1795298057000,
         "users": 11461
       },
       "metadata": {
@@ -20071,7 +20071,7 @@
         ],
         "name": "Disable Taskbar Thumbnails",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.2"
+        "version": "1.2.1"
       }
     },
     "taskbar-top-window-guard": {

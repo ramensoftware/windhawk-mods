@@ -323,6 +323,34 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/395456d8421c6c55b80acf50d1bfe2b40561f220/mods/quick-share-tile.wh.cpp"
       }
     },
+    "rdp-icon-refresh": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795298237606,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795298237606,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Solo_mag",
+        "compilerOptions": "-luser32 -lgdi32 -lshell32 -lwtsapi32 -lcomctl32",
+        "description": "Re-renders tray and taskbar button icons when you return to the local screen after a Remote Desktop session with a different scale, so they don't stay blurry",
+        "github": "https://github.com/Solomag",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Sharp Taskbar Icons After Remote Desktop",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7775",
+      "source": {
+        "sha256": "1e527e4ab4cef7ec3da3ed1f92318fac5b4f2335752c60d8b5b94240ea7b8ac5",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/8efc04e73cf69b1a153c5ff05b6bb0b7423b634f/mods/rdp-icon-refresh.wh.cpp"
+      }
+    },
     "shell-font-changer-plus": {
       "details": {
         "defaultSorting": 0,

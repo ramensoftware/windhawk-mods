@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-21T17:02:39.000Z</updated>
+    <updated>2026-11-21T21:54:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Taskbar Thumbnails 1.2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-thumbnails#1ed0a9ffdfc4864a8845fd64b2c1f19fe0eda373</id>
+        <link href="https://windhawk.net/mods/taskbar-thumbnails"/>
+        <updated>2026-11-21T21:54:17.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with the latest Windows 11 update.</li>
+<li>Fixed the &quot;Customize the old taskbar on Windows 11&quot; option on Windows 11 24H2 builds before 26100.1301, which still include the old taskbar.</li>
+</ul>
+]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Quick Look 1.1.0]]></title>
         <id>https://windhawk.net/mods/quick-look#1be2170523d417ed1db73f2b341e6e52d2de5867</id>
@@ -800,128 +815,6 @@ Explorer is restarted. The mod never restarts Explorer by itself.</li>
         <author>
             <name>HHeitlager</name>
             <uri>https://github.com/hheitlager</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cursor Scheme Extension 1.0.3]]></title>
-        <id>https://windhawk.net/mods/cursor-scheme-extension#427f188871d9503beced8388f8a4a1fdeb1fd4dd</id>
-        <link href="https://windhawk.net/mods/cursor-scheme-extension"/>
-        <updated>2026-11-20T18:04:53.000Z</updated>
-        <content type="html"><![CDATA[<h1>Cursor Scheme Extension</h1>
-<p><strong>English</strong> · <a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/Cursor_Scheme_Extension/README.ru.md">Русский</a></p>
-<p>Cursor Scheme Extension replaces built-in application pointers with pointers from the selected Windows scheme. This includes middle-button autoscroll, the pointing hand, resizing, and text and table selection.</p>
-<p>The mod uses the scheme already selected in Windows and picks up changes to it automatically. Transformed pointers are created and cached in memory.</p>
-<h2>Features</h2>
-<p><img src="https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Cursor_Scheme_Extension/Assets/Previews/Comparison.png" alt="Three pairs of application pointers without and with Cursor Scheme Extension: Windows Aero, W11 Concept, and Vision"></p>
-<p>Cursor artwork: Windows and Office by Microsoft, <a href="https://www.deviantart.com/jepricreations/art/Windows-11-Cursors-Concept-HD-v2-890672103">W11 Concept</a> by jepriCreations, <a href="https://www.deviantart.com/idarques/art/Vision-Cursor-911891424">Vision</a> by IDarques.</p>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Controls</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Hand</td>
-<td>Pointing hand over buttons, links, and other interactive elements</td>
-</tr>
-<tr>
-<td>Resize</td>
-<td>Resizing panels, rows, columns, and objects</td>
-</tr>
-<tr>
-<td>Move</td>
-<td>Dragging cells, ranges, and objects</td>
-</tr>
-<tr>
-<td>Autoscroll activation</td>
-<td>The pointer after a wheel-click, before choosing a scroll direction</td>
-</tr>
-<tr>
-<td>Autoscroll arrows</td>
-<td>All eight scrolling directions</td>
-</tr>
-<tr>
-<td>Selection arrows</td>
-<td>Selecting rows, columns, or an entire table</td>
-</tr>
-<tr>
-<td>Cell selection</td>
-<td>The cross over cells and when selecting ranges</td>
-</tr>
-<tr>
-<td>Margin selection</td>
-<td>Selecting text from the left page margin</td>
-</tr>
-<tr>
-<td>Vertical text input</td>
-<td>The horizontal mouse pointer in areas with vertical text</td>
-</tr>
-</tbody>
-</table>
-<p>At the start of autoscroll, the pointer indicates vertical, horizontal, or both axes. Direction arrows use <strong>Alternate select</strong> (<code>Up</code>) from the Windows scheme, rotated to match the scrolling direction. Selection arrows use the same role. Transforms account for the pointer hotspot, and animated pointers retain their frame order and timing.</p>
-<p>The interface is available in English, Russian, Spanish, German, Brazilian Portuguese, and Simplified Chinese.</p>
-<h3>Limitations</h3>
-<ul>
-<li>Replacement applies to recognized pointers displayed through Windows cursor APIs. The application controls whether autoscroll is available, its speed, and its direction.</li>
-<li>Excel and Firefox draw their stationary autoscroll markers separately. These markers keep their original appearance.</li>
-<li>Monochrome pointers that invert the background retain their original pixel rendering without smoothing.</li>
-<li>Each mod load creates at most 128 replacement instances per process. Returning to a previously used scheme or smoothing setting reuses matching instances. When full, requests that need a new instance use the application's original pointer.</li>
-<li>After disabling, the application restores its pointer at its next cursor update, usually the next mouse move. Replacement cursor handles remain allocated until the process exits so that pointers still used by Windows stay valid.</li>
-</ul>
-<h2>Platforms</h2>
-<p>Requires Windows 11. Runtime checks cover x86 and x64 processes on Windows 11 x64 with Windhawk 1.7.3. ARM64 has been compiled without a runtime check. Microsoft 365 and Qt WebEngine have not been verified.</p>
-<h3>Compatibility</h3>
-<p>Some of this mod's features may overlap with the following mods:</p>
-<ul>
-<li><a href="https://windhawk.net/mods/chromium-cursor-remap">Chromium Cursor Remap</a> — additional cursor replacement in Chromium and Electron.</li>
-<li><a href="https://windhawk.net/mods/cursor-override">Cursor Override</a> — additional cursor replacement using <code>.cur</code> and <code>.ani</code> files.</li>
-</ul>
-<p>Do not use multiple mods to replace the same cursors in the same application: the final cursor appearance may depend on the order in which replacements are applied.</p>
-<h2>Usage</h2>
-<p>Select a pointer scheme in Windows, then open the mod's <strong>Settings</strong>. <strong>Applications and processes</strong> selects the application families, and <strong>Pointer types</strong> selects the shapes to replace. Both must be enabled for a replacement to apply.</p>
-<table>
-<thead>
-<tr>
-<th>Family</th>
-<th>Coverage</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Windows</td>
-<td>Native Windows pointers, standard controls, and Windows Forms</td>
-</tr>
-<tr>
-<td>Office</td>
-<td>Desktop Word, Excel, PowerPoint, and classic Outlook</td>
-</tr>
-<tr>
-<td>Chromium</td>
-<td>Chrome, Edge, Electron, and compatible embedded browsers</td>
-</tr>
-<tr>
-<td>Gecko</td>
-<td>Firefox and compatible apps: cell selection, resizing, and vertical text</td>
-</tr>
-<tr>
-<td>Qt</td>
-<td>Panel splitters in applications with a Qt interface</td>
-</tr>
-</tbody>
-</table>
-<p>Under <strong>Application exclusions</strong>, below the family switches, add one executable name or full path per row. A name matches any installation of that executable; a full path matches one location.</p>
-<p><strong>Smoothing</strong> has separate switches for <strong>Autoscroll activation</strong>, <strong>Autoscroll arrows</strong>, and <strong>Selection arrows</strong>. Autoscroll smoothing covers all eight directions.</p>
-<h2>Links</h2>
-<ul>
-<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/tree/main/Cursor_Scheme_Extension">Cursor Scheme Extension on GitHub</a></li>
-<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/README.md">DSN Windhawk Mods</a></li>
-</ul>
-]]></content>
-        <author>
-            <name>CTravkin</name>
-            <uri>https://github.com/CTravkin</uri>
         </author>
     </entry>
 </feed>
