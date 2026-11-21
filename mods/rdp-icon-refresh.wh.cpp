@@ -21,8 +21,9 @@ already made, so they stay blurry until the program or Explorer is restarted.
 
 This mod remembers the icon each program gives the tray (it watches the `WM_COPYDATA`
 messages that `Shell_NotifyIcon` sends to the taskbar, and Explorer's answers to them).
-When the session returns to the local console, it waits a few seconds for the scale to
-settle and then:
+When the session returns to the local console, it waits until the scale has stayed the
+same for a few seconds (Explorer may pass through an intermediate scale, and turns tray
+requests down while it rebuilds the taskbar) and then:
 
 * asks Explorer to render every tray icon again (`NIM_MODIFY` with the icon Explorer
   itself keeps for that tray button, or the program's own icon handle for icons that
@@ -49,7 +50,10 @@ Made for the Windows 10 taskbar (tested on Windows 10 22H2), and for Windows 11 
 /*
 - delaySeconds: 3
   $name: Delay after returning to the local screen (seconds)
-  $description: Time for the display scale to settle before the icons are refreshed.
+  $description: >-
+    How long the display scale must stay the same before the icons are refreshed. The
+    scale is watched for a minute: if it changes again, or Explorer is still busy and
+    turns the icons down, they are refreshed again.
 - logFile: ""
   $name: Log file
   $description: >-
@@ -434,12 +438,14 @@ BOOL CALLBACK RedrawButton(HWND hwnd, LPARAM param) {
     return TRUE;
 }
 
-void Refresh(const wchar_t* reason) {
+// Returns false if Explorer turned down most tray icons (it is still busy re-creating
+// the taskbar for the new scale), so that the caller tries again.
+bool Refresh(const wchar_t* reason) {
     // Only the explorer.exe that owns the taskbar refreshes; other explorer.exe
     // processes (separate folder windows) would just repeat the work.
     HWND tray = g_tray;
     if (!tray || !IsWindow(tray))
-        return;
+        return true;
     UINT dpi = TaskbarDpi();
 
     // 1. Tray: Explorer renders each icon again from the program's icon.
@@ -461,6 +467,59 @@ void Refresh(const wchar_t* reason) {
     wsprintfW(line, L"refreshed (%s): taskbar DPI %u, remote session DPI %u-%u, tray icons %d of %d, windows %d",
               reason, dpi, g_remoteDpiMin, g_remoteDpiMax, trayIcons, trayTotal, ctx.count);
     Report(line);
+    return trayIcons * 2 >= trayTotal;
+}
+
+// ---- After returning to the local screen (window thread only). ----
+// Explorer re-creates the taskbar for the local scale, sometimes through an
+// intermediate scale, and turns down tray requests while it does. So the scale is
+// watched for a while: the icons are refreshed once it has been the same for
+// delaySeconds, again if it changes later, and again if Explorer turned them down.
+constexpr UINT kSettlePeriodMs = 1000;
+constexpr DWORD kSettleWatchMs = 60000;
+constexpr int kMaxRetries = 5;
+
+UINT g_settleDpi = 0;      // the scale seen on the last tick
+int g_settleTicks = 0;     // ticks it has stayed the same
+UINT g_refreshedDpi = 0;   // the scale the icons were last refreshed for
+int g_retries = 0;
+DWORD g_settleStart = 0;
+
+void StartSettling(HWND hwnd) {
+    g_settleDpi = 0;
+    g_settleTicks = 0;
+    g_refreshedDpi = 0;
+    g_retries = 0;
+    g_settleStart = GetTickCount();
+    SetTimer(hwnd, kRefreshTimer, kSettlePeriodMs, nullptr);
+}
+
+void OnSettleTick(HWND hwnd) {
+    UINT dpi = TaskbarDpi();
+    if (dpi != g_settleDpi) {
+        g_settleDpi = dpi;
+        g_settleTicks = 0;
+    } else {
+        g_settleTicks++;
+    }
+    DWORD elapsed = GetTickCount() - g_settleStart;
+    int wait = g_delaySeconds < 1 ? 1 : (int)g_delaySeconds;
+    if (dpi != g_refreshedDpi && g_settleTicks >= wait) {
+        if (!g_refreshedDpi && g_remoteDpiMax && g_remoteDpiMin == dpi && g_remoteDpiMax == dpi) {
+            WCHAR line[128];
+            wsprintfW(line, L"back to the local screen: same scale as the remote session (DPI %u), nothing to do", dpi);
+            Report(line);
+            g_refreshedDpi = dpi;
+        } else if (Refresh(L"back to the local screen") || ++g_retries > kMaxRetries) {
+            g_refreshedDpi = dpi;
+        } else {
+            g_settleTicks = 0;  // Explorer is still busy: try again later
+        }
+    }
+    if (elapsed >= kSettleWatchMs && (g_refreshedDpi == dpi || elapsed >= 2 * kSettleWatchMs)) {
+        KillTimer(hwnd, kRefreshTimer);
+        g_remoteDpiMin = g_remoteDpiMax = 0;  // this remote session is handled
+    }
 }
 
 bool RegisterSessionNotification(HWND hwnd) {
@@ -480,7 +539,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 KillTimer(hwnd, kRemoteDpiTimer);
             } else if (wParam == WTS_CONSOLE_CONNECT) {
                 KillTimer(hwnd, kRemoteDpiTimer);
-                SetTimer(hwnd, kRefreshTimer, g_delaySeconds * 1000 + 1, nullptr);
+                StartSettling(hwnd);
             }
             return 0;
         case WM_TIMER:
@@ -504,18 +563,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
                 return 0;
             }
-            KillTimer(hwnd, wParam);
             if (wParam == kRefreshTimer) {
-                UINT dpi = TaskbarDpi();
-                if (g_remoteDpiMax && g_remoteDpiMin == dpi && g_remoteDpiMax == dpi) {
-                    WCHAR line[128];
-                    wsprintfW(line, L"back to the local screen: same scale as the remote session (DPI %u), nothing to do", dpi);
-                    Report(line);
-                } else {
-                    Refresh(L"back to the local screen");
-                }
-                g_remoteDpiMin = g_remoteDpiMax = 0;  // this remote session is handled
-            } else if (wParam == kLoadTimer) {
+                OnSettleTick(hwnd);
+                return 0;
+            }
+            KillTimer(hwnd, wParam);
+            if (wParam == kLoadTimer) {
                 Refresh(L"mod loaded");
             }
             return 0;
