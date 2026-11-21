@@ -50,10 +50,9 @@ Yes. But the docked language bar is broken in win10 (unstable, and won't work in
 ## Notes and known limitations
 
 - This mod is separated from the Win 10 fix because the UI technology (XAML vs Win32) is completely different. So they share no common code.
-- No alternative modes. You can adjust width / hide icon using the offcial (m417z) mods "Taskbar height and icon size" and "Taskbar tray system icon tweaks".
+- No alternative modes. You can adjust width / hide icon using the official (m417z) mods "Taskbar height and icon size" and "Taskbar tray system icon tweaks".
 - Source code and reverse engineering credit goes to AI bot (hy4). Heavily guided to follow the framework of the official mods above, with AI-hallucinated overhead (it added a repeating timer) dropped. But not fully revised (don't want to learn XAML 🙂).
-- Verified on Windows 11 24H2 (OS build 26100), where `SystemTrayFrameGrid` is a `Grid` with one Auto column per tray stack. On that template the mod rewrites `Grid.Column`.
-- Some newer Windows 11 builds use a horizontal `StackPanel` named `SystemTrayFrameGrid` instead. Not tested yet.
+- SystemTrayFrameGrid` can be a `Grid` or a `StackPanel`. Verified on Windows 11 24H2 LTSC (`Grid`) and 26H2 (`StackPanel`). Other versions should work as the mechanism is identical and the Windhawk should handle the injection properly, remain untested though.
 
 */
 // ==/WindhawkModReadme==
@@ -408,9 +407,10 @@ void ApplyAll(FrameworkElement grid, bool restoring = false) {
     }
 }
 
-// Copied from taskbar-tray-system-icon-tweaks (m417z), GPLv3. Unlike the
-// official mod this one does not need taskbar.dll symbols to find the taskbar
-// window: Shell_TrayWnd is enough to marshal a call onto the XAML UI thread.
+// Copied from taskbar-tray-system-icon-tweaks.
+// Unlike the official mod this one does not need taskbar.dll symbols to find
+// the taskbar window: Shell_TrayWnd is enough to marshal a call onto the XAML
+// UI thread.
 using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
 
 bool RunFromWindowThread(HWND hWnd,
@@ -481,9 +481,9 @@ HWND GetTaskbarWnd() {
     return result;
 }
 
-// Copied from taskbar-tray-system-icon-tweaks (m417z), GPLv3, and
-// taskbar-notification-icon-spacing. This reaches the XAML root of the tray
-// that already exists, without waiting for a new IconView to be constructed.
+// From taskbar-tray-system-icon-tweaks and taskbar-notification-icon-spacing.
+// This reaches the XAML root of the tray that already exists, without waiting
+// for a new IconView to be constructed.
 // All four addresses come from PDB symbol names. The field offset below is
 // read from the instruction stream of TaskbarHost::FrameHeight, not from a
 // hardcoded RVA, so Windows updates that move code around remain safe.
@@ -527,6 +527,7 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     }
 
     size_t taskbarElementIUnknownOffset = 0x10;
+#if defined(_M_X64)
     {
         // 48:83EC 28 | sub rsp,28
         // 48:83C1 48 | add rcx,48
@@ -539,6 +540,24 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
             Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
         }
     }
+#elif defined(_M_ARM64)
+    {
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+        // fd030091 mov     fp, sp
+        // 080c41f8 ldr     x8, [x0, #0x10]!
+        const DWORD* p =
+            static_cast<const DWORD*>(TaskbarHost_FrameHeight_Original);
+        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#else
+#error "Unsupported architecture"
+#endif
 
     auto* taskbarElementIUnknown = *reinterpret_cast<IUnknown**>(
         static_cast<BYTE*>(taskbarHostSharedPtr[0]) +
@@ -656,9 +675,7 @@ void ApplySettings(bool unloading) {
     }
     ApplySettingsParam param{unloading, taskbar};
     if (!RunFromWindowThread(taskbar, ApplySettingsOnUiThread, &param)) {
-        // Do not fall back to clearing the revokers on this thread. A failed
-        // marshal only leaks XAML subscriptions until explorer rebuilds the
-        // tray; trying to clean them up off-thread is what used to crash.
+        // Do not fall back to clearing the revokers on this thread.
         Wh_Log(L"RunFromWindowThread failed, unloading=%d",
                static_cast<int>(unloading));
     }
@@ -827,10 +844,4 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModUninit() {
     Wh_Log(L">");
-}
-
-void Wh_ModSettingsChanged() {
-    Wh_Log(L">");
-
-    ApplySettings(false);
 }
