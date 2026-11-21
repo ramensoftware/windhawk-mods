@@ -1122,7 +1122,8 @@ bool CaptureMonitor() {
     POINT pt;
     GetCursorPos(&pt);
     HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi{sizeof(mi)};
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
     if (!GetMonitorInfo(monitor, &mi)) return false;
     g.mon = mi.rcMonitor;
     g.W = g.mon.right - g.mon.left;
