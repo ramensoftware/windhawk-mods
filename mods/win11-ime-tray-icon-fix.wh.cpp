@@ -49,11 +49,11 @@ Yes. But the docked language bar is broken in win10 (unstable, and won't work in
 
 ## Notes and known limitations
 
-- This mod is separated from the Win 10 fix because the UI technology (XAML vs Win32) is completely different. So they share no common code.
+- This mod is separated from [the Win 10 fix](https://windhawk.net/mods/win10-ime-tray-icon-fix) because the UI technology (XAML vs Win32) is completely different. So they share no common code.
 - No alternative modes. You can adjust width / hide icon using the official (m417z) mods "Taskbar height and icon size" and "Taskbar tray system icon tweaks".
+- This mod alters the grid columns (indice), which might be changed by other mods too (Styler). The co-existence itself is fine, but recording the correct state (for editing settings / turning on or off  on-the-fly) across multiple mods is techniclaly impossible. It's recommended to use one mod alone, if you need both, create a custom style theme with the icons swapped.
 - Source code and reverse engineering credit goes to AI bot (hy4). Heavily guided to follow the framework of the official mods above, with AI-hallucinated overhead (it added a repeating timer) dropped. But not fully revised (don't want to learn XAML 🙂).
-- SystemTrayFrameGrid` can be a `Grid` or a `StackPanel`. Verified on Windows 11 24H2 LTSC (`Grid`) and 26H2 (`StackPanel`). Other versions should work as the mechanism is identical and the Windhawk should handle the injection properly, remain untested though.
-
+- `SystemTrayFrameGrid` can be a `Grid` or a `StackPanel`. Verified on Windows 11 24H2 LTSC (`Grid`) and 26H2 (`StackPanel`). Other versions should work as the mechanism is identical and the Windhawk should handle the injection properly, remain untested though.
 */
 // ==/WindhawkModReadme==
 
@@ -212,6 +212,42 @@ FrameworkElement FindChildByClassName(FrameworkElement element,
     return nullptr;
 }
 
+// On newer builds, the XAML root content is the taskbar frame, and the tray
+// frame is an item of its repeater.
+FrameworkElement FindSystemTrayFrame(FrameworkElement xamlRootContent) {
+    if (winrt::get_class_name(xamlRootContent) != L"Taskbar.TaskbarFrame") {
+        return FindChildByClassName(xamlRootContent,
+                                    L"SystemTray.SystemTrayFrame");
+    }
+
+    FrameworkElement repeater = FindChildByName(xamlRootContent, L"RootGrid");
+    if (repeater) {
+        repeater = FindChildByName(repeater, L"TaskbarFrameRepeater");
+    }
+    if (!repeater) {
+        return nullptr;
+    }
+
+    int count = ChildCount(repeater);
+    for (int i = 0; i < count; ++i) {
+        FrameworkElement item = ChildAt(repeater, i);
+        if (!item || winrt::get_class_name(item) !=
+                         L"Taskbar.TaskbarExtensionElement") {
+            continue;
+        }
+        auto extensionElement = item.try_as<xamlcontrols::ContentControl>();
+        auto content =
+            extensionElement
+                ? extensionElement.Content().try_as<FrameworkElement>()
+                : nullptr;
+        if (content &&
+            winrt::get_class_name(content) == L"SystemTray.SystemTrayFrame") {
+            return content;
+        }
+    }
+    return nullptr;
+}
+
 // The same walk the official mods do in ApplyStyle, but starting from an
 // arbitrary XamlRoot instead of from an IconView.
 FrameworkElement FrameGridFromXamlRoot(XamlRoot xamlRoot) {
@@ -224,8 +260,7 @@ FrameworkElement FrameGridFromXamlRoot(XamlRoot xamlRoot) {
         if (!content) {
             return nullptr;
         }
-        FrameworkElement frame = FindChildByClassName(
-            content, L"SystemTray.SystemTrayFrame");
+        FrameworkElement frame = FindSystemTrayFrame(content);
         if (!frame) {
             return nullptr;
         }
