@@ -24,11 +24,11 @@ messages that `Shell_NotifyIcon` sends to the taskbar, and Explorer's answers to
 When the session returns to the local console, it waits a few seconds for the scale to
 settle and then:
 
-* asks Explorer to render every tray icon again from the program's own icon
-  (`NIM_MODIFY` with the same icon handle — what happens when the program is
-  restarted, but without restarting anything). Icons whose program has already
-  destroyed the handle it gave the tray can't be rendered again this way and are left
-  as they are;
+* asks Explorer to render every tray icon again (`NIM_MODIFY` with the icon Explorer
+  itself keeps for that tray button, or the program's own icon handle for icons that
+  aren't in the tray toolbars — what happens when the program is restarted, but
+  without restarting anything). Explorer's copy is used because many programs destroy
+  the handle they give the tray right after giving it;
 * asks the taskbar to re-read the icon of every top-level window (`HSHELL_REDRAW`
   through the taskbar's shell hook message);
 * tells the shell that icons changed (`SHChangeNotify(SHCNE_ASSOCCHANGED)`), so pinned
@@ -38,11 +38,8 @@ While the remote session is active, the mod checks the taskbar's scale every few
 seconds. If it never differed from the local screen's scale, nothing is done. The
 Windhawk log shows the scales and how many icons were refreshed.
 
-When the mod is enabled while Explorer is already running, it sends the documented
-`TaskbarCreated` notification once, so running programs register their icons again and
-the mod learns them (Explorer sends it on every start; programs are required to handle
-it). A program that ignores it is learned the next time it updates its tray icon; when
-the mod is loaded together with Explorer, every icon is known from the start.
+Icons that existed before the mod was enabled are handled too: their copies are read
+from the tray at refresh time, so nothing is sent to other programs when the mod loads.
 
 Made for the Windows 10 taskbar (tested on Windows 10 22H2), and for Windows 11 versions\nwhose taskbar still behaves like it; not tested on the newer Windows 11 taskbar.
 */
@@ -262,12 +259,6 @@ LRESULT CALLBACK TraySubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
     return result;
 }
 
-void BroadcastTaskbarCreated() {
-    UINT taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
-    if (taskbarCreated)
-        PostMessageW(HWND_BROADCAST, taskbarCreated, 0, 0);
-}
-
 // Remembers the taskbar of this process and subclasses it to learn the tray icons.
 bool AttachToTray(HWND tray) {
     g_tray = tray;  // the taskbar button refresh works even without the subclass
@@ -311,8 +302,58 @@ bool IconAlive(HICON icon) {
     return true;
 }
 
-// Re-renders every known tray icon from the program's own icon.
-int RerenderTrayIcons() {
+// The start of the data Explorer keeps for each tray button (TBBUTTON::dwData of the
+// notification area toolbars). Explorer's own copy of the icon is in it.
+struct TrayButtonData {
+    HWND hwnd;
+    UINT uID;
+    UINT uCallbackMessage;
+    DWORD reserved[2];
+    HICON hIcon;
+};
+
+struct ExplorerIcon {
+    HWND hwnd;
+    UINT id;
+    HICON icon;
+};
+
+// Explorer's copies of the tray icons, read from the notification area toolbars of this
+// process (the taskbar and the overflow window).
+void CollectExplorerIcons(HWND toolbar, std::vector<ExplorerIcon>& out) {
+    DWORD pid = 0;
+    if (!toolbar || !GetWindowThreadProcessId(toolbar, &pid) || pid != GetCurrentProcessId())
+        return;
+    int count = (int)SendMessageW(toolbar, TB_BUTTONCOUNT, 0, 0);
+    for (int i = 0; i < count; i++) {
+        TBBUTTON button = {};
+        if (!SendMessageW(toolbar, TB_GETBUTTON, i, (LPARAM)&button) || !button.dwData)
+            continue;
+        const auto* data = (const TrayButtonData*)button.dwData;
+        // Checked, in case a Windows version lays this data out differently.
+        if (IsWindow(data->hwnd) && IconAlive(data->hIcon))
+            out.push_back(ExplorerIcon{data->hwnd, data->uID, data->hIcon});
+    }
+}
+
+bool ModifyIcon(HWND hwnd, UINT id, const GUID* guid, HICON icon) {
+    NOTIFYICONDATAW nid = {};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = hwnd;
+    nid.uID = id;
+    nid.uFlags = NIF_ICON;
+    nid.hIcon = icon;
+    if (guid) {
+        nid.uFlags |= NIF_GUID;
+        nid.guidItem = *guid;
+    }
+    return Shell_NotifyIconW(NIM_MODIFY, &nid);
+}
+
+// Re-renders every tray icon. Explorer's own copy of an icon is the reliable source:
+// many programs destroy the handle they give the tray right after giving it. The
+// program's handle is the fallback for icons that aren't in the toolbars.
+int RerenderTrayIcons(int* total) {
     // Forget icons whose window is gone (crashed or restarted programs); for a GUID
     // icon, sending a dead window would also re-point the icon at it.
     AcquireSRWLockExclusive(&g_lock);
@@ -321,21 +362,51 @@ int RerenderTrayIcons() {
     std::vector<TrayIcon> icons = g_icons;
     ReleaseSRWLockExclusive(&g_lock);
 
+    std::vector<ExplorerIcon> copies;
+    HWND tray = g_tray;
+    HWND notify = FindWindowExW(tray, nullptr, L"TrayNotifyWnd", nullptr);
+    HWND pager = FindWindowExW(notify, nullptr, L"SysPager", nullptr);
+    CollectExplorerIcons(FindWindowExW(pager, nullptr, L"ToolbarWindow32", nullptr), copies);
+    HWND overflow = FindWindowW(L"NotifyIconOverflowWindow", nullptr);
+    CollectExplorerIcons(FindWindowExW(overflow, nullptr, L"ToolbarWindow32", nullptr), copies);
+
+    std::vector<bool> handled(icons.size(), false);
     int done = 0;
-    for (const TrayIcon& t : icons) {
-        if (!IconAlive(t.icon))
-            continue;  // the program already replaced or destroyed it
-        NOTIFYICONDATAW nid = {};
-        nid.cbSize = sizeof(nid);
-        nid.hWnd = t.hwnd;
-        nid.uID = t.id;
-        nid.uFlags = NIF_ICON;
-        nid.hIcon = t.icon;
-        if (t.byGuid) {
-            nid.uFlags |= NIF_GUID;
-            nid.guidItem = t.guid;
+    *total = 0;
+    for (const ExplorerIcon& c : copies) {
+        (*total)++;
+        bool ok = ModifyIcon(c.hwnd, c.id, nullptr, c.icon);
+        // An icon registered by GUID is found by its GUID only; use the one the mod
+        // learned for this window, if there is exactly one.
+        const GUID* guid = nullptr;
+        size_t guidIndex = 0;
+        int guidCount = 0;
+        for (size_t i = 0; i < icons.size(); i++) {
+            if (icons[i].hwnd != c.hwnd)
+                continue;
+            if (!icons[i].byGuid && icons[i].id == c.id)
+                handled[i] = true;
+            if (icons[i].byGuid) {
+                guid = &icons[i].guid;
+                guidIndex = i;
+                guidCount++;
+            }
         }
-        if (Shell_NotifyIconW(NIM_MODIFY, &nid))
+        if (!ok && guidCount == 1) {
+            ok = ModifyIcon(c.hwnd, c.id, guid, c.icon);
+            if (ok)
+                handled[guidIndex] = true;
+        }
+        if (ok)
+            done++;
+    }
+
+    for (size_t i = 0; i < icons.size(); i++) {
+        const TrayIcon& t = icons[i];
+        if (handled[i] || !IconAlive(t.icon))
+            continue;  // done above, or the program already replaced or destroyed it
+        (*total)++;
+        if (ModifyIcon(t.hwnd, t.id, t.byGuid ? &t.guid : nullptr, t.icon))
             done++;
     }
     return done;
@@ -372,7 +443,8 @@ void Refresh(const wchar_t* reason) {
     UINT dpi = TaskbarDpi();
 
     // 1. Tray: Explorer renders each icon again from the program's icon.
-    int trayIcons = RerenderTrayIcons();
+    int trayTotal = 0;
+    int trayIcons = RerenderTrayIcons(&trayTotal);
 
     // 2. Taskbar buttons: the taskbar re-reads each window's icon, the same way it
     //    does when a program changes its icon.
@@ -386,8 +458,8 @@ void Refresh(const wchar_t* reason) {
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 
     WCHAR line[256];
-    wsprintfW(line, L"refreshed (%s): taskbar DPI %u, remote session DPI %u-%u, tray icons %d, windows %d",
-              reason, dpi, g_remoteDpiMin, g_remoteDpiMax, trayIcons, ctx.count);
+    wsprintfW(line, L"refreshed (%s): taskbar DPI %u, remote session DPI %u-%u, tray icons %d of %d, windows %d",
+              reason, dpi, g_remoteDpiMin, g_remoteDpiMax, trayIcons, trayTotal, ctx.count);
     Report(line);
 }
 
@@ -518,8 +590,9 @@ void Wh_ModAfterInit() {
     DWORD pid = 0;
     if (!tray || !GetWindowThreadProcessId(tray, &pid) || pid != GetCurrentProcessId())
         return;
-    if (g_tray != tray && AttachToTray(tray))
-        BroadcastTaskbarCreated();  // Explorer was already running: learn its icons
+    // Icons that already exist are taken from Explorer's own copies at refresh time.
+    if (g_tray != tray)
+        AttachToTray(tray);
 }
 
 void Wh_ModSettingsChanged() {
