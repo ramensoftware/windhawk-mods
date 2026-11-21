@@ -140,9 +140,11 @@ def format_annotation(level: str, file: Path, line: int, message: str) -> str:
             .replace(',', '%2C')
         )
 
+    # The line is repeated in the message, since the report of the annotations
+    # doesn't show the line property.
     return (
         f'::{level} file={escape_property(str(file))},'
-        f'line={line}::{escape_data(message)}'
+        f'line={line}::{escape_data(f"Line {line}: {message}")}'
     )
 
 
