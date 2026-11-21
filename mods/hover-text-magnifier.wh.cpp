@@ -293,6 +293,7 @@ struct UiaResult {
     uint64_t seq = 0;
     uint64_t settingsGeneration = 0;
     ULONGLONG tick = 0;
+    ULONGLONG requestTick = 0;
     HWND targetWindow = nullptr;
 };
 
@@ -1128,6 +1129,21 @@ static void PositionBubbleNearCursor(HWND hwnd, POINT pt, int w, int h) {
     UpdateWindow(hwnd);
 }
 
+// Preserve source dimensions when the cursor approaches screen edges, including
+// on monitors positioned left or above the primary display.
+static MAGRECTANGLE ClampedMagnifierSource(POINT pt, int requestedW,
+                                          int requestedH, const RECT& bounds) {
+    const int monitorW = std::max(1L, bounds.right - bounds.left);
+    const int monitorH = std::max(1L, bounds.bottom - bounds.top);
+    const int srcW = std::clamp(requestedW, 1, monitorW);
+    const int srcH = std::clamp(requestedH, 1, monitorH);
+    const int left = std::clamp(pt.x - srcW / 2,
+                                bounds.left, bounds.right - srcW);
+    const int top = std::clamp(pt.y - srcH / 2,
+                               bounds.top, bounds.bottom - srcH);
+    return { left, top, left + srcW, top + srcH };
+}
+
 static void UpdateMagnifierSource(HWND hwndMag, POINT pt, int w, int h) {
     if (!g.magReady || !hwndMag) return;
 
@@ -1141,27 +1157,8 @@ static void UpdateMagnifierSource(HWND hwndMag, POINT pt, int w, int h) {
     MONITORINFO monitorInfo{ sizeof(MONITORINFO) };
     HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
     if (!monitor || !GetMonitorInfoW(monitor, &monitorInfo)) return;
-    RECT bounds = monitorInfo.rcMonitor;
-    LONG workL = bounds.left, workT = bounds.top;
-    LONG workR = bounds.right, workB = bounds.bottom;
-
-    int halfWLow  = srcW / 2;
-    int halfWHigh = (srcW + 1) / 2;
-    int halfHLow  = srcH / 2;
-    int halfHHigh = (srcH + 1) / 2;
-
-    MAGRECTANGLE src = {
-        (LONG)(pt.x - halfWLow),
-        (LONG)(pt.y - halfHLow),
-        (LONG)(pt.x + halfWHigh),
-        (LONG)(pt.y + halfHHigh)
-    };
-
-    src.left   = std::max(workL, src.left);
-    src.top    = std::max(workT, src.top);
-    src.right  = std::min(workR, src.right);
-    src.bottom = std::min(workB, src.bottom);
-
+    MAGRECTANGLE src = ClampedMagnifierSource(pt, srcW, srcH,
+                                               monitorInfo.rcMonitor);
     pfnMagSetWindowSource(hwndMag, src);
 
     float m[9] = { zoom,0,0, 0,zoom,0, 0,0,1 };
@@ -1315,6 +1312,7 @@ static void UiaWorkerThread() {
         UiaResult result{};
         result.pt = request.pt;
         result.targetWindow = request.targetWindow;
+        result.requestTick = request.tick;
         result.text = success ? text : L"";
         result.valid = success;
         result.seq = request.seq;
@@ -1494,7 +1492,10 @@ static void TickUpdate() {
                 result.targetWindow == targetWindow &&
                 result.settingsGeneration == g.settingsGeneration.load(std::memory_order_relaxed) &&
                 nowTick >= result.tick &&
+                nowTick >= result.requestTick &&
                 nowTick - result.tick <= 750 &&
+                // A COM provider can return late: reject an outdated capture.
+                nowTick - result.requestTick <= 2000 &&
                 dx <= 4 && dy <= 4;
             if (fresh) {
                 text = result.text;
@@ -1563,19 +1564,8 @@ static void TickUpdate() {
         }
     }
 
-    // Dynamic Sizing Logic
-    if (showText) {
-        SIZE sz = MeasureContentSize(text, g.effectiveBubbleWidth, g.effectiveBubbleHeight);
-        w = sz.cx;
-        h = sz.cy;
-    }
-
-    if (showText || showMag) {
-        PositionBubbleNearCursor(g.hwndHost, pt, w, h);
-        ApplyRoundedRegion(g.hwndHost, w, h, g.effectiveCornerRadius);
-        EnsureVisibility(true);
-    }
-
+    // Resolve the transition before sizing, positioning, or showing the host.
+    // Otherwise a rejected transition briefly applies the wrong bubble size.
     bool wantModeChange = (showText != g.showingText) || (showMag != g.showingMag);
     if (wantModeChange && (nowTick - g.lastModeChangeTick < 250)) {
         showText = g.showingText;
@@ -1585,6 +1575,22 @@ static void TickUpdate() {
         }
     } else if (wantModeChange) {
         g.lastModeChangeTick = nowTick;
+    }
+
+    if (showText || showMag) {
+        const RECT work = GetWorkAreaForPoint(pt);
+        const int availableW = std::max(1L, work.right - work.left);
+        const int availableH = std::max(1L, work.bottom - work.top);
+        w = std::min(w, availableW);
+        h = std::min(h, availableH);
+        if (showText) {
+            const SIZE measured = MeasureContentSize(text, w, h);
+            w = std::clamp(static_cast<int>(measured.cx), 1, availableW);
+            h = std::clamp(static_cast<int>(measured.cy), 1, availableH);
+        }
+        PositionBubbleNearCursor(g.hwndHost, pt, w, h);
+        ApplyRoundedRegion(g.hwndHost, w, h, g.effectiveCornerRadius);
+        EnsureVisibility(true);
     }
 
     bool modeChanged = (showText != g.showingText) || (showMag != g.showingMag);
