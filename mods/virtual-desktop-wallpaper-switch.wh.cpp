@@ -5,6 +5,7 @@
 // @version         1.0.0
 // @author          Dev-StudioCode
 // @github          https://github.com/Dev-StudioCode
+// @homepage        https://github.com/Dev-StudioCode/FluxDesk
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -luuid -lruntimeobject -lshlwapi -lshell32
@@ -30,6 +31,8 @@ Assigns, preloads, and coordinates distinct background wallpapers across virtual
 ### Compatibility Note
 * Designed specifically for Windows 11 Version 24H2 and newer (Build 26100+).
 * If using **Wallpaper Engine**: Open Wallpaper Engine Settings -> General -> uncheck "Override wallpaper image" so Windows native per-desktop backgrounds remain active.
+
+Source code, issue tracker & roadmap: [GitHub Repository](https://github.com/Dev-StudioCode/FluxDesk)
 */
 // ==/WindhawkModReadme==
 
@@ -281,6 +284,27 @@ std::wstring GetConfiguredWallpaperForDesktop(UINT index) {
     return L"";
 }
 
+std::wstring GetStoredOriginal(PCWSTR guidStr) {
+    std::wstring value(32768, L'\0');
+    size_t len = Wh_GetStringValue(guidStr, value.data(), value.size());
+    value.resize(len);
+    return value;
+}
+
+void RestoreDesktopFromBackup(IVirtualDesktopManagerInternal* pMgr, IVirtualDesktop* pDesktop, PCWSTR guidStr) {
+    std::wstring orig = GetStoredOriginal(guidStr);
+    if (!orig.empty()) {
+        if (orig == SYSTEM_DEFAULT_WALLPAPER_TAG) {
+            ScopedHString hEmpty(L"");
+            pMgr->SetDesktopWallpaper(pDesktop, hEmpty);
+        } else {
+            ScopedHString hOrig(orig);
+            pMgr->SetDesktopWallpaper(pDesktop, hOrig);
+        }
+        Wh_DeleteValue(guidStr);
+    }
+}
+
 void ApplyAllWallpapers(IVirtualDesktopManagerInternal* pMgr) {
     IObjectArray* pDesktops = nullptr;
     if (FAILED(pMgr->GetDesktops(&pDesktops)) || !pDesktops) {
@@ -304,9 +328,8 @@ void ApplyAllWallpapers(IVirtualDesktopManagerInternal* pMgr) {
             if (!targetWallpaper.empty()) {
                 // Ensure initial wallpaper is preserved in Windhawk storage before any override
                 if (guidStr[0] != L'\0') {
-                    WCHAR storedVal[MAX_PATH] = {0};
-                    size_t storedLen = Wh_GetStringValue(guidStr, storedVal, ARRAYSIZE(storedVal));
-                    if (storedLen == 0) {
+                    std::wstring stored = GetStoredOriginal(guidStr);
+                    if (stored.empty()) {
                         Wh_SetStringValue(
                             guidStr,
                             currentWallpaper.empty() ? SYSTEM_DEFAULT_WALLPAPER_TAG : currentWallpaper.c_str());
@@ -321,18 +344,7 @@ void ApplyAllWallpapers(IVirtualDesktopManagerInternal* pMgr) {
             } else {
                 // When an assignment is cleared, restore original background from Windhawk storage
                 if (guidStr[0] != L'\0') {
-                    WCHAR storedVal[MAX_PATH] = {0};
-                    size_t storedLen = Wh_GetStringValue(guidStr, storedVal, ARRAYSIZE(storedVal));
-                    if (storedLen > 0) {
-                        if (wcscmp(storedVal, SYSTEM_DEFAULT_WALLPAPER_TAG) == 0) {
-                            ScopedHString hEmpty(L"");
-                            pMgr->SetDesktopWallpaper(pDesktop, hEmpty);
-                        } else {
-                            ScopedHString hOrig(storedVal);
-                            pMgr->SetDesktopWallpaper(pDesktop, hOrig);
-                        }
-                        Wh_DeleteValue(guidStr);
-                    }
+                    RestoreDesktopFromBackup(pMgr, pDesktop, guidStr);
                 }
             }
             pDesktop->Release();
@@ -343,16 +355,12 @@ void ApplyAllWallpapers(IVirtualDesktopManagerInternal* pMgr) {
 }
 
 void RestoreOriginalWallpapers(IVirtualDesktopManagerInternal* pMgr) {
-    if (!g_settings.restoreOriginalOnUnload) {
-        return;
-    }
-
     IObjectArray* pDesktops = nullptr;
     if (FAILED(pMgr->GetDesktops(&pDesktops)) || !pDesktops) {
         return;
     }
 
-    Wh_Log(L"Restoring original virtual desktop wallpapers from Windhawk storage");
+    Wh_Log(L"Processing virtual desktop wallpapers unload routine");
     UINT count = 0;
     pDesktops->GetCount(&count);
 
@@ -363,16 +371,10 @@ void RestoreOriginalWallpapers(IVirtualDesktopManagerInternal* pMgr) {
             pDesktop->GetId(&id);
             WCHAR guidStr[40] = {0};
             if (StringFromGUID2(id, guidStr, ARRAYSIZE(guidStr)) > 0) {
-                WCHAR storedVal[MAX_PATH] = {0};
-                size_t storedLen = Wh_GetStringValue(guidStr, storedVal, ARRAYSIZE(storedVal));
-                if (storedLen > 0) {
-                    if (wcscmp(storedVal, SYSTEM_DEFAULT_WALLPAPER_TAG) == 0) {
-                        ScopedHString hEmpty(L"");
-                        pMgr->SetDesktopWallpaper(pDesktop, hEmpty);
-                    } else {
-                        ScopedHString hOrig(storedVal);
-                        pMgr->SetDesktopWallpaper(pDesktop, hOrig);
-                    }
+                if (g_settings.restoreOriginalOnUnload) {
+                    RestoreDesktopFromBackup(pMgr, pDesktop, guidStr);
+                } else {
+                    // With restore disabled, clear stored backup so next enable gets a fresh baseline
                     Wh_DeleteValue(guidStr);
                 }
             }
