@@ -4,7 +4,7 @@
 // @name:zh-CN      悬浮任务栏
 // @description     Turns the Windows 11 taskbar into a floating rounded bar with configurable width, height, spacing, corners, colors and gradients. Blank areas click through; tray menus and Quick Settings follow the bar.
 // @description:zh-CN 将 Windows 11 任务栏变为独立的悬浮圆角条，可调整长度、区域高度、悬浮间距、圆角与背景颜色/渐变；空白区域点击穿透，托盘菜单和快速设置面板对齐悬浮条右端。
-// @version         2.1.14
+// @version         2.1.15
 // @author          chaochenzhudian
 // @github          https://github.com/chaochenzhudian
 // @include         explorer.exe
@@ -3696,6 +3696,18 @@ void ApplyToFrameWhenNeeded(void* taskbarFrameThis) {
                              L"Taskbar.TaskbarFrame")) {
             return;
         }
+
+        // [BUGFIX] 资源管理器重启后，Mod 会先于任务栏初始化完成被注入，
+        // TaskbarFrame 的首次 MeasureOverride/OnApplyTemplate 发生在其尚未
+        // 加载进可视树、XamlRoot/任务栏宿主仍在构造的阶段。此时执行
+        // ApplyToFrame（查找宿主窗口、SetWindowPos、修改布局属性）会在
+        // 首次布局过程中重入，导致 explorer.exe 崩溃并反复重启。
+        // 这里在 frame 真正加载完成前跳过应用；加载完成后由 OnLoaded 钩子
+        // 与 600ms 后的布局校准回调完成首次应用，原有逻辑保持不变。
+        if (!frame.IsLoaded() || !frame.XamlRoot()) {
+            return;
+        }
+        // [BUGFIX END]
 
         if (GetTickCount() - g_lastControlCenterFixTick.load() > 400) {
             RepositionControlCenterCached();
