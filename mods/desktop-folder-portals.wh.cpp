@@ -3,12 +3,12 @@
 // @name            Desktop Folder Portals (Windows 11)
 // @description     Interactive desktop folder portals with smooth morphing animations, glass blur, and file grids.
 // @description:ru-RU Интерактивные папки-порталы на рабочем столе с плавной морфинг-анимацией, эффектом стекла и сеткой файлов.
-// @version         1.5.0
+// @version         1.6.0
 // @author          Eswerd2324
 // @github          https://github.com/Eswerd2324
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -luxtheme -ldwmapi -lshlwapi -lgdiplus -lole32 -lshell32 -luuid -lcomctl32 -lgdi32 -luser32
+// @compilerOptions -ldwmapi -lshlwapi -lgdiplus -lole32 -lshell32 -luuid -lcomctl32 -lgdi32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -27,40 +27,42 @@
 *Customize window size and folder grid layout*
 
 ### Folder List
-![Folder Grid](https://raw.githubusercontent.com/Eswerd2324/PREVIEW-Desktop-Folder-Portals-/refs/heads/main/Folder%20List.png)
+![Folder List](https://raw.githubusercontent.com/Eswerd2324/PREVIEW-Desktop-Folder-Portals-/refs/heads/main/Folder%20List.png)
 *Change the file display from grid to list*
 
 ### Hidden Scroll
-![Folder Grid](https://raw.githubusercontent.com/Eswerd2324/PREVIEW-Desktop-Folder-Portals-/refs/heads/main/Hidden%20Scroll.png)
+![Hidden Scroll](https://raw.githubusercontent.com/Eswerd2324/PREVIEW-Desktop-Folder-Portals-/refs/heads/main/Hidden%20Scroll.png)
 *A scrollbar appears when the cursor is hovered over it.*
 
 
-# Desktop Folder Portals (Windows 11)
+## Desktop Folder Portals (Windows 11)
 
 Desktop Folder Portals is a Windows 11 modification that brings interactive, on-hover folder content previews directly to your desktop without opening separate File Explorer windows.
 
 ### Key Features
 
 * **Seamless Hover Previews:** Hovering over any desktop folder smoothly expands an interactive mini-window displaying its contents, collapsing once the cursor moves away.
-* **Classic Shell Context Menu (`IContextMenu`):** Right-clicking an item opens the classic Win32 shell context menu (`TrackPopupMenuEx`) for standard file operations and property inspection, while selecting "Rename" opens the parent folder in File Explorer with the item selected in inline edit mode (`SHOpenFolderAndSelectItems`).
-* **Effortless Drag-and-Drop:** Transfer files straight from the preview portal to the desktop, active folders, or third-party applications via native OLE Drag-and-Drop.
-* **Fluent-Inspired Glass Visuals:** Styled with DWM rounded corners, drop shadows, smooth DWM background blur on levels 1–2, and Acrylic blur (`ACCENT_ENABLE_ACRYLICBLURBEHIND`) on level 3.
-* **Granular Customization:** Configure hover response delays, animation duration, grid columns, and visual styling via the Windhawk settings interface.
+* **Grid & List Views with Auto-Hiding Scrollbar:** Switch between a customizable icon grid (2–5 columns) and a compact vertical list, with mouse wheel scrolling and a subtle scrollbar that appears when hovering over the right edge.
+* **Classic Context Menu:** Right-clicking an item opens the standard Windows context menu for file operations and properties, while selecting "Rename" opens the parent folder in File Explorer with the item selected for renaming.
+* **Effortless Drag-and-Drop:** Drag files straight from the preview portal to the desktop, open folders, or third-party applications.
+* **Fluent-Inspired Glass Visuals:** Styled with rounded corners, soft drop shadows, smooth background blur on levels 1–2, and a deeper frosted glass effect on level 3.
+* **Granular Customization:** Configure hover response delays, animation duration, window dimensions, view mode, grid columns, and glass styling via the Windhawk settings interface.
 * **Smart Item Filtering & Single-Click Launch:** Displays up to 45 items per folder (sorted with folders first), automatically skips hidden and system files, and opens any file or subfolder with a single left click.
 
 ---
 
-# Desktop Folder Portals для Windows 11 (RU)
+## Desktop Folder Portals для Windows 11 (RU)
 
 Desktop Folder Portals — модификация для Windows 11, внедряющая интерактивный предпросмотр содержимого папок прямо на рабочем столе без необходимости их открытия в Проводнике.
 
 ### Ключевые возможности
 
-* **Интерактивные порталы:** Плавное появление компактного всплывающего окна с файлами при наведении курсора на директорию и его исчезновение при отведении мыши.
-* **Классическое контекстное меню оболочки (`IContextMenu`):** Правый клик вызывает классическое системное контекстное меню Win32 (`TrackPopupMenuEx`) для стандартных файловых операций и просмотра свойств, а выбор пункта «Переименовать» открывает родительскую папку в Проводнике с выделением элемента в режиме редактирования имени (`SHOpenFolderAndSelectItems`).
-* **Полноценный Drag-and-Drop:** Удобный перенос файлов из окна предпросмотра на рабочий стол, в открытые папки или сторонние приложения через системный OLE Drag-and-Drop.
-* **Стеклянное оформление в духе Fluent:** Скругленные углы DWM, мягкие тени, гладкое DWM-размытие фона на уровнях 1–2 и эффект Acrylic (`ACCENT_ENABLE_ACRYLICBLURBEHIND`) на 3-м уровне размытия.
-* **Гибкая кастомизация:** Настройка задержки срабатывания, длительности анимации, числа колонок сетки и параметров прозрачности в панели Windhawk.
+* **Интерактивные порталы:** Плавное появление компактного всплывающего окна с файлами при наведении курсора на папку и его исчезновение при отведении мыши.
+* **Режимы сетки и списка со скрытой прокруткой:** Переключайтесь между настраиваемой сеткой иконок (2–5 колонок) и компактным вертикальным списком, используя прокрутку колесом мыши и тонкую полосу прокрутки, появляющуюся при наведении на правый край окна.
+* **Классическое контекстное меню:** Правый клик вызывает стандартное контекстное меню Windows для файловых операций и просмотра свойств, а выбор пункта «Переименовать» открывает родительскую папку в Проводнике с выделением элемента для переименования.
+* **Полноценный Drag-and-Drop:** Удобный перенос файлов из окна предпросмотра на рабочий стол, в открытые папки или сторонние приложения.
+* **Стеклянное оформление в духе Fluent:** Скругленные углы, мягкие тени, гладкое размытие фона на уровнях 1–2 и глубокий эффект матового стекла на 3-м уровне размытия.
+* **Гибкая кастомизация:** Настройка задержки срабатывания, длительности анимации, размеров окна, режима отображения, числа колонок сетки и параметров прозрачности в панели Windhawk.
 * **Умная выборка и запуск в один клик:** Отображает до 45 элементов папки (с приоритетной сортировкой подпапок), автоматически пропускает скрытые и системные файлы и позволяет открывать любые файлы или вложенные папки одиночным левым кликом мыши.
 */
 // ==/WindhawkModReadme==
@@ -80,13 +82,13 @@ Desktop Folder Portals — модификация для Windows 11, внедр�
 - portalWidth: 340
   $name: Portal Window Width (px)
   $name:ru-RU: Ширина окна портала (px)
-  $description: Base width of the popup mini-window in pixels (at 96 DPI).
-  $description:ru-RU: Ширина всплывающего мини-окна в пикселях.
+  $description: Base width of the popup mini-window in pixels at 96 DPI (240-640 px).
+  $description:ru-RU: Ширина всплывающего мини-окна в пикселях при 96 DPI (240-640 px).
 - portalHeight: 280
   $name: Portal Window Height (px)
   $name:ru-RU: Высота окна портала (px)
-  $description: Base height of the popup mini-window in pixels (at 96 DPI).
-  $description:ru-RU: Высота всплывающего мини-окна в пикселях.
+  $description: Base height of the popup mini-window in pixels at 96 DPI (180-560 px).
+  $description:ru-RU: Высота всплывающего мини-окна в пикселях при 96 DPI (180-560 px).
 - bgOpacity: 195
   $name: Window Background Opacity (10-255)
   $name:ru-RU: Непрозрачность фона окна (10-255)
@@ -149,7 +151,6 @@ Desktop Folder Portals — модификация для Windows 11, внедр�
 #include <shellapi.h>
 #include <commoncontrols.h>
 #include <dwmapi.h>
-#include <uxtheme.h>
 #include <gdiplus.h>
 #include <vector>
 #include <string>
@@ -165,6 +166,7 @@ Desktop Folder Portals — модификация для Windows 11, внедр�
 #include <list>
 #include <unordered_map>
 #include <memory>
+#include <optional>
 
 #include <windhawk_utils.h>
 
@@ -229,7 +231,6 @@ struct ModSettings {
     bool listViewMode = false;
 } g_settings;
 
-std::mutex g_stateMutex;
 std::mutex g_subclassMutex;
 std::unordered_set<HWND> g_subclassedWindows;
 std::atomic<bool> g_unloading{false};
@@ -239,7 +240,7 @@ HINSTANCE g_hInstance = nullptr;
 bool g_portalClassRegistered = false;
 pfnSetWindowCompositionAttribute g_pSetWCA = nullptr;
 
-// RAII-сторож для отслеживания активных модальных циклов (контекстное меню, InvokeCommand, Drag-and-Drop)
+// RAII guard tracking active modal loops (context menu, InvokeCommand, Drag-and-Drop)
 struct ScopedModalCallGuard {
     ScopedModalCallGuard() noexcept {
         g_activeModalCallCount.fetch_add(1, std::memory_order_acq_rel);
@@ -251,13 +252,13 @@ struct ScopedModalCallGuard {
     ScopedModalCallGuard& operator=(const ScopedModalCallGuard&) = delete;
 };
 
-// Определение языка интерфейса пользователя для локализации строк внутри портала (кэшировано)
+// Detect user UI language for localizing portal strings (cached)
 bool IsRussianUILanguage() {
     static const bool s_isRu = (PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN);
     return s_isRu;
 }
 
-// Получение реального DPI целевого монитора через GetDpiForMonitor с резервным фоллбэком
+// Query effective DPI for the target monitor via GetDpiForMonitor with DC fallback
 int GetMonitorDpi(HMONITOR hMon) {
     if (hMon) {
         using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
@@ -289,7 +290,7 @@ inline int ScaleByDpi(int val, int dpi) {
     return MulDiv(val, dpi, 96);
 }
 
-// Высокоточный таймер на базе QueryPerformanceCounter (без 15.6 мс квантования GetTickCount64)
+// High-resolution timer based on QueryPerformanceCounter
 inline double GetQpcNowMs() noexcept {
     static const double s_invFreqMs = []() -> double {
         LARGE_INTEGER freq = {};
@@ -301,7 +302,7 @@ inline double GetQpcNowMs() noexcept {
     return static_cast<double>(now.QuadPart) * s_invFreqMs;
 }
 
-// Легковесный VSync-триггер на базе DwmFlush() в спящем потоке (пробуждается только на время Opening/Closing)
+// Lightweight VSync trigger using DwmFlush() on a sleeping thread (active only during Opening/Closing)
 class PortalVsyncAnimator {
     std::mutex m_mutex;
     std::condition_variable m_cv;
@@ -398,21 +399,23 @@ public:
     void AcknowledgeTick() noexcept {
         m_tickPending.store(false, std::memory_order_release);
     }
-} g_vsyncAnimator;
+};
 
-// Точное целочисленное деление на 255 с округлением без аппаратного деления (v in [0..65025])
+[[clang::no_destroy]] std::optional<PortalVsyncAnimator> g_vsyncAnimator;
+
+// Exact integer division by 255 with rounding (v in [0, 65025])
 inline uint32_t FastDiv255(uint32_t v) noexcept {
     const uint32_t t = v + 128u;
     return (t + (t >> 8)) >> 8;
 }
 
-// Запечённая premultiplied 32-bit BGRA поверхность иконки (thread-safe, zero-copy в LRU-кэше)
+// Pre-baked premultiplied 32-bit BGRA icon surface shared across the LRU cache
 struct BakedIcon {
     int size = 0;
     std::vector<uint32_t> pixels;
 };
 
-// Переиспользуемый буфер-скретч для запекания иконок без повторного создания DIB
+// Reusable scratch DIB buffer for baking icons without repeated allocations
 struct IconBakeScratch {
     HDC hdc = nullptr;
     HBITMAP hbm = nullptr;
@@ -530,7 +533,7 @@ std::shared_ptr<BakedIcon> BakeIconToPremultipliedPixels(HICON hIcon, int iconSi
     return baked;
 }
 
-// Контекст и строго типизированная stdcall-процедура хука для совместимости с x86 и x64 компилятором Windhawk
+// Context and stdcall hook procedure for marshaling callbacks onto a window's thread
 struct RunOnWndThreadContext {
     const std::function<void()>* pFunc;
     bool executed;
@@ -551,7 +554,7 @@ LRESULT CALLBACK RunFromWindowThreadHookProc(int nCode, WPARAM wParam, LPARAM lP
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-// Вспомогательная функция для безопасного синхронного выполнения кода в потоке целевого окна
+// Synchronously execute a callback on the target window's thread
 bool RunFromWindowThread(HWND hWnd, const std::function<void()>& func) {
     if (!hWnd || !IsWindow(hWnd)) {
         return false;
@@ -590,7 +593,7 @@ bool RunFromWindowThread(HWND hWnd, const std::function<void()>& func) {
     return ctx.executed;
 }
 
-// Кэшированные ресурсы GDI/GDI+ для мгновенного рендеринга без пересоздания на каждом кадре
+// Cached GDI/GDI+ resources reused across frames
 struct RenderCache {
     HDC hdcMem = nullptr;
     HBITMAP hbmMem = nullptr;
@@ -613,21 +616,18 @@ struct RenderCache {
     int cachedContentScrollY = -1;
     uint64_t cachedContentRevision = 0;
 
-    IconBakeScratch uiIconScratch;
-
     FontFamily* pFamily = nullptr;
     Gdiplus::Font* titleFont = nullptr;
     Gdiplus::Font* countFont = nullptr;
     Gdiplus::Font* itemFont = nullptr;
     Gdiplus::Font* metaFont = nullptr;
 
-    // Кэшированные форматы текста, кисти, перья и пути
+    // Cached text formats, brushes, pens, and paths
     StringFormat* centerFormat = nullptr;
     StringFormat* itemFormat = nullptr;
     StringFormat* leftFormat = nullptr;
     StringFormat* rightFormat = nullptr;
 
-    SolidBrush* bgBrush = nullptr;
     SolidBrush* titleBrush = nullptr;
     SolidBrush* subBrush = nullptr;
     SolidBrush* hoverFillBrush = nullptr;
@@ -670,7 +670,6 @@ struct RenderCache {
         delete leftFormat;   leftFormat = nullptr;
         delete rightFormat;  rightFormat = nullptr;
 
-        delete bgBrush;          bgBrush = nullptr;
         delete titleBrush;       titleBrush = nullptr;
         delete subBrush;         subBrush = nullptr;
         delete hoverFillBrush;   hoverFillBrush = nullptr;
@@ -730,7 +729,6 @@ struct RenderCache {
             rightFormat->SetTrimming(StringTrimmingEllipsisCharacter);
             rightFormat->SetFormatFlags(StringFormatFlagsNoWrap);
 
-            bgBrush          = new SolidBrush(Color(195, 26, 27, 32));
             titleBrush       = new SolidBrush(Color(255, 248, 250, 255));
             subBrush         = new SolidBrush(Color(204, 248, 250, 255));
             hoverFillBrush   = new SolidBrush(Color(50, 255, 255, 255));
@@ -940,14 +938,13 @@ struct RenderCache {
     void ReleaseAll() {
         ReleaseBitmap();
         ReleaseContentBitmap();
-        uiIconScratch.Release();
         ReleasePrimitives();
         ReleaseFonts();
     }
 } g_renderCache;
 
 // ---------------------------------------------------------------------------
-// Минималистичная реализация IDropSource для системного Drag-and-Drop
+// Minimal IDropSource implementation for native Drag-and-Drop
 // ---------------------------------------------------------------------------
 class PortalDropSource final : public IDropSource {
     LONG m_ref = 1;
@@ -979,7 +976,7 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// Структура элемента внутри папки-портала
+// Single file or subfolder entry inside a portal
 // ---------------------------------------------------------------------------
 struct PortalFileItem {
     std::wstring name;
@@ -995,13 +992,13 @@ struct PortalFileItem {
 
 std::atomic<uint64_t> g_portalGenerationId{0};
 
-// Извлечение системной иконки элемента с кэшированием IImageList и учетом DPI (выполняется в фоновом потоке)
+// Extract shell icon using cached IImageList handles for the target size (runs on worker thread)
 HICON ExtractItemIconOnWorker(
     const std::wstring& fullPath,
     const std::wstring& name,
     bool isDirectory,
     int targetIconSize,
-    IImageList* cachedImageLists[3] = nullptr)
+    IImageList* cachedImageLists[3])
 {
     if (fullPath.empty()) return nullptr;
 
@@ -1028,26 +1025,15 @@ HICON ExtractItemIconOnWorker(
     int slot = (targetIconSize > 48) ? 2 : ((targetIconSize > 32) ? 1 : 0);
     int iilSize = (slot == 2) ? SHIL_JUMBO : ((slot == 1) ? SHIL_EXTRALARGE : SHIL_LARGE);
 
-    IImageList* pImgList = nullptr;
-    bool ownsList = false;
-    if (cachedImageLists) {
-        if (!cachedImageLists[slot]) {
-            SHGetImageList(iilSize, __uuidof(IImageList), reinterpret_cast<void**>(&cachedImageLists[slot]));
-        }
-        pImgList = cachedImageLists[slot];
-    } else {
-        if (SUCCEEDED(SHGetImageList(iilSize, __uuidof(IImageList), reinterpret_cast<void**>(&pImgList))) && pImgList) {
-            ownsList = true;
-        }
+    if (!cachedImageLists[slot]) {
+        SHGetImageList(iilSize, __uuidof(IImageList), reinterpret_cast<void**>(&cachedImageLists[slot]));
     }
+    IImageList* pImgList = cachedImageLists[slot];
 
     if (pImgList) {
         HICON hExtracted = nullptr;
         if (SUCCEEDED(pImgList->GetIcon(sfi.iIcon, ILD_TRANSPARENT, &hExtracted)) && hExtracted) {
             hResult = hExtracted;
-        }
-        if (ownsList) {
-            pImgList->Release();
         }
     }
 
@@ -1061,20 +1047,9 @@ HICON ExtractItemIconOnWorker(
     return hResult;
 }
 
-void EnsureItemIconLoaded(PortalFileItem& item, int targetIconSize) {
-    if (item.iconLoaded && item.bakedIcon && item.bakedIcon->size == targetIconSize) return;
-    item.iconLoaded = true;
-    item.iconRequested = true;
-    HICON hIcon = ExtractItemIconOnWorker(item.fullPath, item.name, item.isDirectory, targetIconSize);
-    if (hIcon) {
-        item.bakedIcon = BakeIconToPremultipliedPixels(hIcon, targetIconSize, g_renderCache.uiIconScratch);
-        DestroyIcon(hIcon);
-    }
-}
-
 // ---------------------------------------------------------------------------
-// LRU-кэш директорий (последние 8 папок) с отслеживанием изменений через FindFirstChangeNotificationW
-// и zero-copy разделяемыми запечёнными иконками BakedIcon
+// Directory LRU cache (last 8 folders) invalidated via FindFirstChangeNotificationW
+// with shared pre-baked icon surfaces
 // ---------------------------------------------------------------------------
 std::wstring NormalizeFolderPathKey(const std::wstring& path) {
     std::wstring key = path;
@@ -1094,7 +1069,6 @@ class DirectoryLruCache {
         std::wstring name;
         std::wstring fullPath;
         std::wstring sizeOrTypeText;
-        ULONGLONG rawFileSize = 0;
         std::shared_ptr<BakedIcon> bakedIcon;
         bool isDirectory = false;
         bool iconLoaded = false;
@@ -1102,7 +1076,6 @@ class DirectoryLruCache {
 
     struct CacheEntry {
         std::wstring pathKey;
-        std::wstring folderPath;
         size_t totalItemCount = 0;
         int iconSize = 0;
         HANDLE hChangeNotif = INVALID_HANDLE_VALUE;
@@ -1124,7 +1097,6 @@ class DirectoryLruCache {
                     FindCloseChangeNotification(hChangeNotif);
                 }
                 pathKey = std::move(other.pathKey);
-                folderPath = std::move(other.folderPath);
                 totalItemCount = other.totalItemCount;
                 iconSize = other.iconSize;
                 hChangeNotif = other.hChangeNotif;
@@ -1149,7 +1121,7 @@ public:
         if (mapIt == m_index.end()) return false;
 
         auto listIt = mapIt->second;
-        // Проверяем, не изменилось ли содержимое папки с момента кэширования
+        // Invalidate entry if directory contents changed since caching
         if (listIt->hChangeNotif == INVALID_HANDLE_VALUE ||
             WaitForSingleObject(listIt->hChangeNotif, 0) != WAIT_TIMEOUT) {
             m_index.erase(mapIt);
@@ -1157,7 +1129,7 @@ public:
             return false;
         }
 
-        // Перемещаем запись в начало LRU
+        // Move entry to front of LRU list
         m_lru.splice(m_lru.begin(), m_lru, listIt);
 
         const bool sameIconSize = (listIt->iconSize == targetIconSize);
@@ -1176,7 +1148,6 @@ public:
             pi.name = ci.name;
             pi.fullPath = ci.fullPath;
             pi.sizeOrTypeText = ci.sizeOrTypeText;
-            pi.rawFileSize = ci.rawFileSize;
             pi.isDirectory = ci.isDirectory;
             if (sameIconSize && ci.iconLoaded) {
                 pi.bakedIcon = ci.bakedIcon;
@@ -1208,7 +1179,6 @@ public:
 
         CacheEntry entry;
         entry.pathKey = key;
-        entry.folderPath = folderPath;
         entry.totalItemCount = totalCount;
         entry.iconSize = iconSize;
         entry.hChangeNotif = hNotif;
@@ -1218,7 +1188,6 @@ public:
             ci.name = item.name;
             ci.fullPath = item.fullPath;
             ci.sizeOrTypeText = item.sizeOrTypeText;
-            ci.rawFileSize = item.rawFileSize;
             ci.isDirectory = item.isDirectory;
             ci.iconLoaded = item.iconLoaded;
             ci.bakedIcon = item.bakedIcon;
@@ -1283,7 +1252,7 @@ public:
 } g_dirCache;
 
 // ---------------------------------------------------------------------------
-// Асинхронный рабочий поток чтения директорий и запекания иконок с токеном отмены generationId
+// Asynchronous worker thread for directory enumeration and icon baking
 // ---------------------------------------------------------------------------
 struct AsyncIconRequest {
     size_t itemIndex = 0;
@@ -1306,7 +1275,7 @@ struct AsyncIconLoadResult {
     std::shared_ptr<BakedIcon> bakedIcon;
 };
 
-// Чтение папки с проверкой атомарного токена отмены generationId на каждой итерации
+// Enumerate directory items while checking generationId for cancellation
 bool PopulateDirectoryItemsAsync(
     const std::wstring& folderPath,
     uint64_t generationId,
@@ -1496,10 +1465,10 @@ class PortalAsyncWorker {
                 PopulateDirectoryItemsAsync(task.folderPath, task.generationId, items, totalCount, 45);
                 if (IsStale(task.generationId)) continue;
 
-                // Сохраняем список элементов в LRU-кэш с подпиской на изменения ФС
+                // Store enumerated items in the LRU cache with change notification tracking
                 g_dirCache.Put(task.folderPath, task.iconSize, items, totalCount);
 
-                // Готовим список иконок первого экрана для фонового извлечения сразу после отправки плейсхолдеров
+                // Queue first-screen icon requests immediately after posting placeholders
                 const size_t preloadCount = std::min<size_t>(items.size(), task.firstScreenCount);
                 std::vector<AsyncIconRequest> firstScreenReqs;
                 firstScreenReqs.reserve(preloadCount);
@@ -1610,175 +1579,12 @@ public:
         outDirs.swap(m_completedDirs);
         outIcons.swap(m_completedIcons);
     }
-} g_asyncWorker;
-
-// ---------------------------------------------------------------------------
-// Реализация легковесного интерфейса IShellBrowser (по спецификации п. 3)
-// ---------------------------------------------------------------------------
-class LightweightPortalShellBrowser : public IShellBrowser {
-private:
-    LONG m_refCount = 1;
-    HWND m_hPortalWnd = nullptr;
-
-public:
-    explicit LightweightPortalShellBrowser(HWND hPortal) : m_hPortalWnd(hPortal) {}
-    virtual ~LightweightPortalShellBrowser() = default;
-
-    // IUnknown
-    STDMETHODIMP QueryInterface(REFIID riid, void** ppvObject) override {
-        if (!ppvObject) return E_POINTER;
-        if (IsEqualIID(riid, IID_IUnknown) ||
-            IsEqualIID(riid, IID_IOleWindow) ||
-            IsEqualIID(riid, IID_IShellBrowser)) {
-            *ppvObject = static_cast<IShellBrowser*>(this);
-            AddRef();
-            return S_OK;
-        }
-        *ppvObject = nullptr;
-        return E_NOINTERFACE;
-    }
-
-    STDMETHODIMP_(ULONG) AddRef() override {
-        return InterlockedIncrement(&m_refCount);
-    }
-
-    STDMETHODIMP_(ULONG) Release() override {
-        ULONG count = InterlockedDecrement(&m_refCount);
-        if (count == 0) {
-            delete this;
-        }
-        return count;
-    }
-
-    // IOleWindow
-    STDMETHODIMP GetWindow(HWND* phwnd) override {
-        if (!phwnd) return E_POINTER;
-        *phwnd = m_hPortalWnd;
-        return S_OK;
-    }
-    STDMETHODIMP ContextSensitiveHelp(BOOL) override { return E_NOTIMPL; }
-
-    // IShellBrowser
-    STDMETHODIMP InsertMenusSB(HMENU, LPOLEMENUGROUPWIDTHS) override { return E_NOTIMPL; }
-    STDMETHODIMP SetMenuSB(HMENU, HOLEMENU, HWND) override { return E_NOTIMPL; }
-    STDMETHODIMP RemoveMenusSB(HMENU) override { return E_NOTIMPL; }
-    STDMETHODIMP SetStatusTextSB(LPCWSTR) override { return S_OK; }
-    STDMETHODIMP EnableModelessSB(BOOL) override { return S_OK; }
-    STDMETHODIMP TranslateAcceleratorSB(MSG*, WORD) override { return S_FALSE; }
-
-    STDMETHODIMP BrowseObject(PCUIDLIST_RELATIVE pidl, UINT) override {
-        ScopedModalCallGuard modalGuard;
-        if (pidl) {
-            SHELLEXECUTEINFOW sei = {};
-            sei.cbSize = sizeof(sei);
-            sei.fMask = SEE_MASK_IDLIST;
-            sei.lpIDList = const_cast<PIDLIST_RELATIVE>(pidl);
-            sei.nShow = SW_SHOWNORMAL;
-            ShellExecuteExW(&sei);
-            return S_OK;
-        }
-        return E_FAIL;
-    }
-
-    STDMETHODIMP GetViewStateStream(DWORD, IStream** ppStrm) override {
-        if (ppStrm) *ppStrm = nullptr;
-        return E_NOTIMPL;
-    }
-    STDMETHODIMP GetControlWindow(UINT, HWND* phwnd) override {
-        if (phwnd) *phwnd = nullptr;
-        return E_NOTIMPL;
-    }
-    STDMETHODIMP SendControlMsg(UINT, UINT, WPARAM, LPARAM, LRESULT*) override { return E_NOTIMPL; }
-    STDMETHODIMP QueryActiveShellView(IShellView** ppshv) override {
-        if (ppshv) *ppshv = nullptr;
-        return E_NOTIMPL;
-    }
-    STDMETHODIMP OnViewWindowActive(IShellView*) override { return S_OK; }
-    STDMETHODIMP SetToolbarItems(LPTBBUTTONSB, UINT, UINT) override { return E_NOTIMPL; }
-
-    // Быстрое чтение папки через FindFirstFileExW с подсчетом истинного числа элементов,
-    // частичной сортировкой (std::partial_sort) только топ-45 объектов и форматированием строк только для них
-    bool PopulateItemsFromDirectory(const std::wstring& folderPath, std::vector<PortalFileItem>& outItems, size_t& outTotalCount, size_t maxItems = 45) {
-        outItems.clear();
-        outTotalCount = 0;
-        if (folderPath.empty()) return false;
-
-        std::wstring searchPattern = folderPath;
-        if (searchPattern.back() != L'\\' && searchPattern.back() != L'/') {
-            searchPattern += L'\\';
-        }
-        std::wstring baseDir = searchPattern;
-        searchPattern += L"*";
-
-        WIN32_FIND_DATAW fd = {};
-        HANDLE hFind = FindFirstFileExW(
-            searchPattern.c_str(),
-            FindExInfoBasic,
-            &fd,
-            FindExSearchNameMatch,
-            nullptr,
-            FIND_FIRST_EX_LARGE_FETCH);
-
-        if (hFind == INVALID_HANDLE_VALUE) {
-            return false;
-        }
-
-        outItems.reserve(128);
-        do {
-            if (fd.cFileName[0] == L'.' &&
-                (fd.cFileName[1] == L'\0' || (fd.cFileName[1] == L'.' && fd.cFileName[2] == L'\0'))) {
-                continue;
-            }
-            if (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)) {
-                continue;
-            }
-
-            ++outTotalCount;
-
-            PortalFileItem item;
-            item.name = fd.cFileName;
-            item.isDirectory = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-            item.rawFileSize = (static_cast<ULONGLONG>(fd.nFileSizeHigh) << 32) | fd.nFileSizeLow;
-
-            outItems.push_back(std::move(item));
-        } while (FindNextFileW(hFind, &fd));
-
-        FindClose(hFind);
-
-        // Частичная сортировка O(N log K): отбираем и сортируем только первые maxItems (45) элементов
-        auto cmp = [](const PortalFileItem& a, const PortalFileItem& b) {
-            if (a.isDirectory != b.isDirectory) {
-                return a.isDirectory > b.isDirectory;
-            }
-            return CompareStringOrdinal(a.name.c_str(), -1, b.name.c_str(), -1, TRUE) == CSTR_LESS_THAN;
-        };
-
-        if (outItems.size() > maxItems) {
-            std::partial_sort(outItems.begin(), outItems.begin() + maxItems, outItems.end(), cmp);
-            outItems.resize(maxItems);
-        } else {
-            std::sort(outItems.begin(), outItems.end(), cmp);
-        }
-
-        // Форматируем полный путь и строку размера только для отображаемых элементов (до 45 шт.)
-        const bool isRu = IsRussianUILanguage();
-        for (auto& item : outItems) {
-            item.fullPath = baseDir + item.name;
-            if (item.isDirectory) {
-                item.sizeOrTypeText = isRu ? L"Папка" : L"Folder";
-            } else {
-                wchar_t szBuf[64] = {};
-                StrFormatByteSizeW(static_cast<LONGLONG>(item.rawFileSize), szBuf, ARRAYSIZE(szBuf));
-                item.sizeOrTypeText = szBuf;
-            }
-        }
-
-        return true;
-    }
 };
 
+[[clang::no_destroy]] std::optional<PortalAsyncWorker> g_asyncWorker;
+
 // ---------------------------------------------------------------------------
-// Глобальное состояние активного окна-портала
+// Global state of the active portal window
 // ---------------------------------------------------------------------------
 enum class PortalAnimState {
     Hidden,
@@ -1803,7 +1609,7 @@ struct PortalWindowState {
 
     PortalAnimState animState = PortalAnimState::Hidden;
     double animStartMs = 0.0;
-    float animProgress = 0.0f; // 0.0f (кружок в папке) -> 1.0f (полный прямоугольник)
+    float animProgress = 0.0f; // 0.0f (collapsed circle) -> 1.0f (expanded rectangle)
     float morphProgress = 1.0f;
 
     int hoveredGridIndex = -1;
@@ -1828,7 +1634,6 @@ struct PortalWindowState {
 
     bool renderDirty = false;
     bool frameTimerActive = false;
-    bool isScrolling = false;
     bool isLoadingDirectory = false;
     bool dwmVisualsDirty = true;
     bool dwmBlurActive = false;
@@ -1836,14 +1641,13 @@ struct PortalWindowState {
     uint64_t contentRevision = 1;
     UINT frameIntervalMs = 16;
 
-    LightweightPortalShellBrowser* pShellBrowser = nullptr;
     std::vector<PortalFileItem> items;
 } g_portal;
 
 void RenderAndPresentPortal(HWND hWnd);
 void StartPortalFadeOut();
 
-// Определяем интервал кадра (мс) по частоте обновления экрана через DwmGetCompositionTimingInfo
+// Determine frame interval (ms) from display refresh rate via DwmGetCompositionTimingInfo
 UINT GetPortalFrameIntervalMs() {
     DWM_TIMING_INFO ti = {};
     ti.cbSize = sizeof(ti);
@@ -1859,7 +1663,7 @@ UINT GetPortalFrameIntervalMs() {
     return 16u;
 }
 
-// Коалесценция перерисовок: помечает окно dirty и планирует отрисовку на следующий кадр дисплея
+// Coalesce repaints by marking the window dirty and scheduling a draw on the next frame
 void RequestPortalRepaint(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) return;
     g_portal.renderDirty = true;
@@ -1892,7 +1696,7 @@ void ScheduleIconsLoadForRange(HWND hWnd, uint64_t generationId, size_t startIdx
         }
     }
     if (!requests.empty()) {
-        g_asyncWorker.EnqueueIconsLoad(generationId, hWnd, g_portal.folderPath, iconSize, std::move(requests));
+        g_asyncWorker->EnqueueIconsLoad(generationId, hWnd, g_portal.folderPath, iconSize, std::move(requests));
     }
 }
 
@@ -1912,7 +1716,7 @@ inline int GetPortalIconSize(int dpi) {
     return ScaleByDpi(g_settings.listViewMode ? 22 : 32, dpi);
 }
 
-// Ленивая подгрузка иконок для видимого диапазона после остановки скролла
+// Lazily load icons for the visible item range after scrolling settles
 void ScheduleVisibleIconsLoad(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd) || g_portal.items.empty() || g_portal.isLoadingDirectory) return;
 
@@ -1942,7 +1746,7 @@ void RefreshPortalDirectoryAsync(HWND hPortal) {
     g_dirCache.Invalidate(g_portal.folderPath);
 
     uint64_t genId = g_portalGenerationId.fetch_add(1, std::memory_order_acq_rel) + 1;
-    g_asyncWorker.ClearCompletedResults();
+    g_asyncWorker->ClearCompletedResults();
 
     const int dpi = g_portal.dpi > 0 ? g_portal.dpi : 96;
     const int portalH = std::max<int>(ScaleByDpi(180, dpi), g_portal.targetPortalRect.bottom - g_portal.targetPortalRect.top);
@@ -1956,14 +1760,14 @@ void RefreshPortalDirectoryAsync(HWND hPortal) {
 
     g_portal.isLoadingDirectory = true;
     ++g_portal.contentRevision;
-    g_asyncWorker.EnqueueDirectoryLoad(genId, hPortal, g_portal.folderPath, iconSize, firstScreenCount);
+    g_asyncWorker->EnqueueDirectoryLoad(genId, hPortal, g_portal.folderPath, iconSize, firstScreenCount);
     RequestPortalRepaint(hPortal);
 }
 
 void ProcessAsyncPortalResults(HWND hWnd) {
     std::deque<AsyncDirLoadResult> dirs;
     std::deque<AsyncIconLoadResult> icons;
-    g_asyncWorker.DrainCompletedResults(dirs, icons);
+    g_asyncWorker->DrainCompletedResults(dirs, icons);
 
     const uint64_t currentGen = g_portalGenerationId.load(std::memory_order_acquire);
     bool needsRepaint = false;
@@ -1998,7 +1802,7 @@ void ProcessAsyncPortalResults(HWND hWnd) {
     }
 }
 
-// Вызов оригинального контекстного меню Windows 11 для элемента внутри портала
+// Show the native shell context menu for an item inside the portal
 void ShowNativeShellContextMenu(HWND hPortal, int itemIndex, POINT ptScreen) {
     if (g_unloading.load()) return;
     ScopedModalCallGuard modalGuard;
@@ -2055,7 +1859,7 @@ void ShowNativeShellContextMenu(HWND hPortal, int itemIndex, POINT ptScreen) {
                         }
 
                         if (isRenameVerb) {
-                            // Открываем родительскую папку с выделением файла для штатного переименования
+                            // Open the parent folder with the item selected in inline rename mode
                             SHOpenFolderAndSelectItems(pidlFull, 0, nullptr, OFASI_EDIT);
                         } else {
                             CMINVOKECOMMANDINFOEX ici = {};
@@ -2071,7 +1875,7 @@ void ShowNativeShellContextMenu(HWND hPortal, int itemIndex, POINT ptScreen) {
                             pCtxMenu->InvokeCommand(reinterpret_cast<LPCMINVOKECOMMANDINFO>(&ici));
                         }
 
-                        // Обновляем список файлов на случай удаления/изменения
+                        // Refresh folder contents in case the command modified or deleted items
                         if (!g_unloading.load() && IsWindow(hPortal)) {
                             RefreshPortalDirectoryAsync(hPortal);
                         }
@@ -2088,7 +1892,7 @@ void ShowNativeShellContextMenu(HWND hPortal, int itemIndex, POINT ptScreen) {
     ILFree(pidlFull);
 }
 
-// Запуск системного переноса файла (OLE Drag-and-Drop) на рабочий стол или в Проводник
+// Start native OLE Drag-and-Drop for an item inside the portal
 void StartNativeFileDragAndDrop(HWND hPortal, int itemIndex) {
     if (g_unloading.load()) return;
     ScopedModalCallGuard modalGuard;
@@ -2125,7 +1929,7 @@ void StartNativeFileDragAndDrop(HWND hPortal, int itemIndex) {
             pDropSrc->Release();
             pDataObj->Release();
 
-            // Если файл был перемещен из папки, мгновенно обновляем список в портале
+            // Refresh portal contents in case the item was moved out of the folder
             if (!g_unloading.load() && SUCCEEDED(hrDrag) && IsWindow(hPortal)) {
                 RefreshPortalDirectoryAsync(hPortal);
             }
@@ -2135,7 +1939,7 @@ void StartNativeFileDragAndDrop(HWND hPortal, int itemIndex) {
     ILFree(pidlFull);
 }
 
-// Проверяет, что переданный HWND является SysListView32 рабочего стола
+// Verify that the given HWND is the desktop SysListView32
 bool IsTrueDesktopListView(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) return false;
 
@@ -2159,7 +1963,7 @@ bool IsTrueDesktopListView(HWND hWnd) {
     return (wcscmp(grandParentClass, L"Progman") == 0 || wcscmp(grandParentClass, L"WorkerW") == 0);
 }
 
-// Получает полный файловый путь к элементу рабочего стола по его индексу в SysListView32
+// Resolve the filesystem directory path for a desktop ListView item
 bool GetDesktopItemDirectoryPath(HWND hListView, int itemIndex, std::wstring& outFullPath, std::wstring& outDisplayName) {
     outFullPath.clear();
     outDisplayName.clear();
@@ -2179,7 +1983,7 @@ bool GetDesktopItemDirectoryPath(HWND hListView, int itemIndex, std::wstring& ou
     }
     outDisplayName = itemText;
 
-    // 1. Быстрая проверка на Пользовательском и Общем рабочем столе (с кэшированием базовых путей)
+    // 1. Fast lookup in User and Common Desktop directories (cached base paths)
     static std::wstring s_userDesktopDir;
     static std::wstring s_commonDesktopDir;
     static std::once_flag s_desktopPathsFlag;
@@ -2210,7 +2014,7 @@ bool GetDesktopItemDirectoryPath(HWND hListView, int itemIndex, std::wstring& ou
         }
     }
 
-    // Быстрая отсечка ярлыков (.lnk, .url) без обращения к COM
+    // Fast check to skip desktop shortcuts (.lnk, .url) without COM enumeration
     if (!existsAsFileOnDesktop) {
         static constexpr LPCWSTR kShortcutExts[] = { L".lnk", L".url" };
         for (const std::wstring* pBaseDir : desktopDirs) {
@@ -2229,12 +2033,12 @@ bool GetDesktopItemDirectoryPath(HWND hListView, int itemIndex, std::wstring& ou
         }
     }
 
-    // Если элемент найден на рабочем столе и это обычный файл или ярлык, не запускаем тяжелый перебор IShellFolder
+    // Skip IShellFolder enumeration when the item is already known to be a regular file or shortcut
     if (existsAsFileOnDesktop) {
         return false;
     }
 
-    // Компактный кэш виртуальных/системных значков со сбросом по изменению числа элементов или таймауту 5 сек
+    // Compact cache for virtual/shell items invalidated on item count change or 5s TTL
     struct DesktopVirtualCacheEntry {
         bool isDirectory = false;
         std::wstring fullPath;
@@ -2275,7 +2079,7 @@ bool GetDesktopItemDirectoryPath(HWND hListView, int itemIndex, std::wstring& ou
         }
     }
 
-    // 2. Если имя виртуальное или нестандартное, перебираем элементы IShellFolder рабочего стола
+    // 2. Fallback: enumerate desktop IShellFolder for virtual or non-standard folders
     IShellFolder* pDesktop = nullptr;
     if (SUCCEEDED(SHGetDesktopFolder(&pDesktop)) && pDesktop) {
         IEnumIDList* pEnum = nullptr;
@@ -2327,7 +2131,7 @@ bool GetDesktopItemDirectoryPath(HWND hListView, int itemIndex, std::wstring& ou
     return !outFullPath.empty();
 }
 
-// Включение/отключение системного DWM Blur / Acrylic отдельно от базовых атрибутов окна (для отключения на фазе морфинга)
+// Toggle DWM blur/Acrylic independently of base window attributes (disabled during morph animation)
 void SetPortalBlurEnabled(HWND hPortal, bool enable) {
     if (!IsWindow(hPortal)) return;
 
@@ -2348,18 +2152,18 @@ void SetPortalBlurEnabled(HWND hPortal, bool enable) {
         if (g_pSetWCA) {
             ACCENT_POLICY policy = {};
             if (g_settings.blurStrength == 1) {
-                // Уровень 1: чистое гладкое размытие без зернистости на всю площадь окна
+                // Level 1: smooth glass blur across the window
                 policy.AccentState = ACCENT_ENABLE_BLURBEHIND;
                 policy.AccentFlags = 0;
                 policy.GradientColor = 0;
             } else if (g_settings.blurStrength == 2) {
-                // Уровень 2: усиленное гладкое стекло с плотной заливкой краев
+                // Level 2: stronger glass blur with tinted backdrop
                 policy.AccentState = ACCENT_ENABLE_BLURBEHIND;
                 policy.AccentFlags = 2;
                 DWORD alpha = static_cast<DWORD>( std::clamp<int>(g_settings.bgOpacity / 3, 20, 90) );
                 policy.GradientColor = (alpha << 24) | 0x001E1E22u;
             } else {
-                // Уровень 3: глубокое матовое стекло (равномерное по всей площади)
+                // Level 3: deep frosted Acrylic blur
                 policy.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
                 policy.AccentFlags = 2;
                 DWORD alpha = static_cast<DWORD>( std::clamp<int>(g_settings.bgOpacity / 2, 40, 140) );
@@ -2385,7 +2189,7 @@ void SetPortalBlurEnabled(HWND hPortal, bool enable) {
     }
 }
 
-// Настройка DWM: скругление, тень и гладкое размытие без зернистости во всю площадь окна
+// Configure DWM attributes: dark mode, rounded corners, extended frame, and optional blur
 void ApplyPortalDwmVisuals(HWND hPortal, bool enableBlurEffect = true) {
     if (!IsWindow(hPortal)) return;
 
@@ -2398,7 +2202,7 @@ void ApplyPortalDwmVisuals(HWND hPortal, bool enableBlurEffect = true) {
     MARGINS margins = { -1, -1, -1, -1 };
     DwmExtendFrameIntoClientArea(hPortal, &margins);
 
-    // Отключаем системный шумный Backdrop, чтобы использовать чистое стекло без виньетирования по краям
+    // Disable system backdrop so custom DWM/WCA blur renders consistently
     DWORD backdropNone = 1; // DWMSBT_NONE
     DwmSetWindowAttribute(hPortal, DWMWA_SYSTEMBACKDROP_TYPE, &backdropNone, sizeof(backdropNone));
 
@@ -2418,7 +2222,7 @@ int LerpInt(int a, int b, float t) {
     return static_cast<int>(std::round(static_cast<float>(a) + static_cast<float>(b - a) * t));
 }
 
-// Аналитическая сглаженная маска скругленного прямоугольника/круга с отсечением по квадрату радиуса (без лишних sqrt)
+// Anti-aliased rounded rectangle/circle mask applied directly to the DIB
 void ApplyRoundedRectMaskToDib(BYTE* bits, int stride, int width, int height, float radius) {
     if (!bits || width <= 0 || height <= 0 || radius <= 0.25f) return;
 
@@ -2477,7 +2281,7 @@ void ApplyRoundedRectMaskToDib(BYTE* bits, int stride, int width, int height, fl
     maskRowRange(botStart, height);
 }
 
-// Сверхбыстрый блиттинг запечённой premultiplied BGRA иконки прямо в DIB (ноль вызовов GDI/DrawIconEx/GdiFlush)
+// Alpha-composite a pre-baked premultiplied BGRA icon directly into the DIB
 void BlitBakedIconToDib(
     const BakedIcon& baked,
     BYTE* dstBits,
@@ -2527,8 +2331,8 @@ void BlitBakedIconToDib(
     }
 }
 
-// Быстрый композитинг кэшированного слоя контента поверх подложки с применением contentAlpha
-// При совпадении габаритов — 1:1 проход, при морфинге — быстрое билинейное масштабирование без перерисовки GDI+
+// Composite cached content layer over the backdrop with contentAlpha
+// Uses 1:1 blending at final size and bilinear scaling during morph animation
 void CompositeContentLayerToDib(
     const BYTE* srcBits,
     int srcStride,
@@ -2652,7 +2456,7 @@ void CompositeContentLayerToDib(
     }
 }
 
-// Перестроение кэшированного слоя статичного контента (текст, шапка, плейсхолдеры, иконки при alpha=255)
+// Rebuild the cached static content layer (header, labels, placeholders, and icons at full alpha)
 void RebuildStaticContentLayer(int width, int height, int dpi) {
     if (!g_renderCache.EnsureContentBitmap(width, height)) return;
 
@@ -2825,7 +2629,7 @@ void RebuildStaticContentLayer(int width, int height, int dpi) {
             g.ResetClip();
         }
 
-        // Шапка портала поверх всего (одна тонкая линия на всю ширину окна)
+        // Portal header and divider line
         int titleLeft = ScaleByDpi(16, dpi);
         int titleTop = ScaleByDpi(6, dpi);
         int titleRightMargin = ScaleByDpi(105, dpi);
@@ -2882,7 +2686,7 @@ void RebuildStaticContentLayer(int width, int height, int dpi) {
     g_renderCache.cachedContentRevision = g_portal.contentRevision;
 }
 
-// Отрисовка окна через UpdateLayeredWindow с двухуровневым композитингом (кэшированный контент + динамические слои)
+// Render and present the layered window via UpdateLayeredWindow using two-tier compositing
 void RenderAndPresentPortal(HWND hWnd) {
     if (!IsWindow(hWnd)) return;
 
@@ -2925,7 +2729,7 @@ void RenderAndPresentPortal(HWND hWnd) {
     g_portal.scrollbarTrackHeight = 0;
     g_portal.scrollbarThumbHeight = 0;
 
-    // 1. Быстрая заливка подложки premultiplied BGRA (без накладных расходов GDI+ FillRectangle)
+    // 1. Fill backdrop directly with premultiplied BGRA
     const uint32_t bgB = FastDiv255(32u * bgAlpha);
     const uint32_t bgG = FastDiv255(27u * bgAlpha);
     const uint32_t bgR = FastDiv255(26u * bgAlpha);
@@ -2937,7 +2741,7 @@ void RenderAndPresentPortal(HWND hWnd) {
 
     const bool drawContent = (contentPhase > 0.05f && width > ScaleByDpi(110, dpi) && height > ScaleByDpi(80, dpi));
     if (drawContent) {
-        // 2. Перестраиваем статичный слой контента ОДИН РАЗ в финальных габаритах targetPortalRect
+        // 2. Rebuild cached static content once at targetPortalRect dimensions
         if (g_renderCache.cachedContentW != targetW ||
             g_renderCache.cachedContentH != targetH ||
             g_renderCache.cachedContentDpi != dpi ||
@@ -2946,7 +2750,7 @@ void RenderAndPresentPortal(HWND hWnd) {
             RebuildStaticContentLayer(targetW, targetH, dpi);
         }
 
-        // 3. Подсветка наведённой карточки (рисуется под слоем текста и иконок в открытом состоянии)
+        // 3. Hover highlight drawn behind the content layer when expanded
         if (isFinalSize &&
             g_portal.hoveredGridIndex >= 0 &&
             g_portal.hoveredGridIndex < static_cast<int>(g_portal.items.size())) {
@@ -2975,7 +2779,7 @@ void RenderAndPresentPortal(HWND hWnd) {
             }
         }
 
-        // 4. Композитинг кэшированного контента (1:1 в открытом окне или быстрое масштабирование при морфинге)
+        // 4. Composite cached content layer (1:1 when expanded, scaled during morph)
         if (g_renderCache.pvContentBits) {
             CompositeContentLayerToDib(
                 static_cast<const BYTE*>(g_renderCache.pvContentBits),
@@ -2989,7 +2793,7 @@ void RenderAndPresentPortal(HWND hWnd) {
                 contentAlpha);
         }
 
-        // 5. Тонкий полупрозрачный скроллбар поверх контента при наведении на правый край окна
+        // 5. Translucent scrollbar overlay when hovering or dragging near the right edge
         if (isFinalSize && g_portal.maxScrollY > 0 && (g_portal.scrollbarEdgeHovered || g_portal.isDraggingScrollbar)) {
             int cols = 1;
             int cellHeight = 1;
@@ -3036,10 +2840,10 @@ void RenderAndPresentPortal(HWND hWnd) {
         }
     }
 
-    // 6. Честная маска морфинга формы в DIB-буфере (интерполяция от круга R = width / 2 до R = 8 px)
+    // 6. Apply morphing rounded-rect mask to the DIB
     ApplyRoundedRectMaskToDib(pvBits, stride, width, height, morphRadius);
 
-    // 7. Тонкая светлая рамка строго по текущему радиусу морфинга
+    // 7. Draw outer border following the current morph corner radius
     int brAlpha = static_cast<int>(std::round(static_cast<float>(std::clamp(g_settings.borderBrightness, 0, 255)) * animAlphaFactor));
     if (brAlpha > 0) {
         Graphics gBorder(hdcMem);
@@ -3093,26 +2897,25 @@ void ResetPortalTransientState() {
     g_portal.scrollbarTrackHeight = 0;
     g_portal.scrollbarThumbHeight = 0;
     g_portal.scrollOffsetY = 0;
+    g_portal.maxScrollY = 0;
     g_portal.totalItemCount = 0;
     g_portal.renderDirty = false;
     g_portal.frameTimerActive = false;
-    g_portal.isScrolling = false;
     g_portal.isLoadingDirectory = false;
     g_portal.mouseTrackingActive = false;
     ++g_portal.contentRevision;
     g_portal.items.clear();
-
-    if (g_portal.pShellBrowser) {
-        g_portal.pShellBrowser->Release();
-        g_portal.pShellBrowser = nullptr;
-    }
 }
 
-// Скрытие окна-портала без уничтожения HWND (Window Pooling: ноль задержек CreateWindowExW + DWM при следующем открытии)
+// Hide the portal window without destroying the HWND for fast reuse
 void HidePortalImmediately() {
     g_portalGenerationId.fetch_add(1, std::memory_order_acq_rel);
-    g_asyncWorker.ClearCompletedResults();
-    g_vsyncAnimator.StopAnimation();
+    if (g_asyncWorker) {
+        g_asyncWorker->ClearCompletedResults();
+    }
+    if (g_vsyncAnimator) {
+        g_vsyncAnimator->StopAnimation();
+    }
 
     if (g_portal.hPortalWnd && IsWindow(g_portal.hPortalWnd)) {
         KillTimer(g_portal.hPortalWnd, TIMER_ID_MOUSECHECK);
@@ -3128,8 +2931,12 @@ void HidePortalImmediately() {
 
 void DestroyPortalImmediately() {
     g_portalGenerationId.fetch_add(1, std::memory_order_acq_rel);
-    g_asyncWorker.ClearCompletedResults();
-    g_vsyncAnimator.StopAnimation();
+    if (g_asyncWorker) {
+        g_asyncWorker->ClearCompletedResults();
+    }
+    if (g_vsyncAnimator) {
+        g_vsyncAnimator->StopAnimation();
+    }
 
     if (g_portal.hPortalWnd && IsWindow(g_portal.hPortalWnd)) {
         KillTimer(g_portal.hPortalWnd, TIMER_ID_MOUSECHECK);
@@ -3154,12 +2961,14 @@ void StartPortalFadeOut() {
     if (g_portal.dwmBlurActive) {
         SetPortalBlurEnabled(g_portal.hPortalWnd, false);
     }
+    const double durationMs = static_cast<double>(std::clamp(g_settings.animDurationMs, 60, 1000));
+    const double remainingRatio = static_cast<double>(std::clamp(g_portal.animProgress, 0.0f, 1.0f));
     g_portal.animState = PortalAnimState::Closing;
-    g_portal.animStartMs = GetQpcNowMs();
-    g_vsyncAnimator.StartAnimation(g_portal.hPortalWnd, g_portal.frameIntervalMs);
+    g_portal.animStartMs = GetQpcNowMs() - (1.0 - remainingRatio) * durationMs;
+    g_vsyncAnimator->StartAnimation(g_portal.hPortalWnd, g_portal.frameIntervalMs);
 }
 
-// Математический O(1) hit-test элемента в сетке/списке с точной проверкой boundsRect
+// O(1) grid/list hit-test verified against item boundsRect
 int HitTestPortalItem(POINT pt) {
     if (g_portal.items.empty()) return -1;
     const int dpi = g_portal.dpi > 0 ? g_portal.dpi : 96;
@@ -3201,7 +3010,7 @@ int HitTestPortalItem(POINT pt) {
     return -1;
 }
 
-// Проверяет, находится ли курсор мыши в зоне иконки папки, окна портала или в коридоре между ними
+// Check whether the cursor is over the folder icon, portal window, or the corridor between them
 bool IsCursorInsideSafeZone() {
     if (g_portal.isDraggingOrMenuActive || g_portal.isDraggingScrollbar) return true;
 
@@ -3218,7 +3027,7 @@ bool IsCursorInsideSafeZone() {
     InflateRect(&rcIcon, ScaleByDpi(12, dpi), ScaleByDpi(12, dpi));
     if (PtInRect(&rcIcon, pt)) return true;
 
-    // Соединительный мостик между папкой и всплывшим справа/слева окном портала
+    // Connecting corridor between the folder icon and the expanded portal window
     RECT rcBridge = {};
     rcBridge.left   = std::min<LONG>(rcIcon.left, rcPortal.left);
     rcBridge.right  = std::max<LONG>(rcIcon.right, rcPortal.right);
@@ -3234,10 +3043,10 @@ bool IsCursorInsideSafeZone() {
 }
 
 // ---------------------------------------------------------------------------
-// Оконная процедура окна-портала (Layered Window)
+// Portal layered window procedure
 // ---------------------------------------------------------------------------
 LRESULT CALLBACK PortalWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    // Перенаправляем сообщения отрисовки подменю в активный IContextMenu2/3 (например "Открыть с помощью" / "Отправить")
+    // Forward owner-drawn submenu messages to the active IContextMenu2/3 instance
     if (uMsg == WM_INITMENUPOPUP || uMsg == WM_DRAWITEM || uMsg == WM_MEASUREITEM) {
         if (g_portal.pActiveCtxMenu3) {
             LRESULT lres = 0;
@@ -3266,7 +3075,7 @@ LRESULT CALLBACK PortalWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     }
 
     case WM_APP_PORTAL_VSYNC_TICK: {
-        g_vsyncAnimator.AcknowledgeTick();
+        g_vsyncAnimator->AcknowledgeTick();
         if (g_portal.animState != PortalAnimState::Opening &&
             g_portal.animState != PortalAnimState::Closing) {
             return 0;
@@ -3282,12 +3091,9 @@ LRESULT CALLBACK PortalWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             UpdatePortalMorphGeometry(hWnd, g_portal.animProgress, true);
             if (t >= 1.0f) {
                 g_portal.animState = PortalAnimState::Visible;
-                g_vsyncAnimator.StopAnimation();
+                g_vsyncAnimator->StopAnimation();
                 if (g_settings.enableBlur && !g_portal.dwmBlurActive) {
                     SetPortalBlurEnabled(hWnd, true);
-                }
-                if (g_portal.renderDirty) {
-                    RequestPortalRepaint(hWnd);
                 }
             }
         } else if (g_portal.animState == PortalAnimState::Closing) {
@@ -3295,7 +3101,7 @@ LRESULT CALLBACK PortalWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             g_portal.renderDirty = false;
             UpdatePortalMorphGeometry(hWnd, g_portal.animProgress, false);
             if (t >= 1.0f) {
-                g_vsyncAnimator.StopAnimation();
+                g_vsyncAnimator->StopAnimation();
                 HidePortalImmediately();
             }
         }
@@ -3329,14 +3135,13 @@ LRESULT CALLBACK PortalWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                 g_portal.maxScrollY);
             if (newScroll != g_portal.scrollOffsetY) {
                 g_portal.scrollOffsetY = newScroll;
-                g_portal.isScrolling = true;
                 RequestPortalRepaint(hWnd);
                 SetTimer(hWnd, TIMER_ID_SCROLL_IDLE, 140, nullptr);
             }
             return 0;
         }
 
-        // Если зажата левая кнопка мыши на файле и курсор сдвинулся — начинаем перетаскивание файла (Drag-and-Drop)
+        // Start native Drag-and-Drop once the cursor moves past the drag threshold
         if ((wParam & MK_LBUTTON) && g_portal.pressedGridIndex >= 0 && !g_portal.isDraggingOrMenuActive) {
             int dx = std::abs(pt.x - g_portal.pressStartPt.x);
             int dy = std::abs(pt.y - g_portal.pressStartPt.y);
@@ -3389,7 +3194,6 @@ LRESULT CALLBACK PortalWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             int newScroll = std::clamp(g_portal.scrollOffsetY - step, 0, g_portal.maxScrollY);
             if (newScroll != g_portal.scrollOffsetY) {
                 g_portal.scrollOffsetY = newScroll;
-                g_portal.isScrolling = true;
                 RequestPortalRepaint(hWnd);
                 SetTimer(hWnd, TIMER_ID_SCROLL_IDLE, 140, nullptr);
             }
@@ -3470,8 +3274,13 @@ LRESULT CALLBACK PortalWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                 if (!targetPath.empty() && !g_unloading.load()) {
                     ScopedModalCallGuard modalGuard;
                     PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(targetPath.c_str());
-                    if (pidl && g_portal.pShellBrowser) {
-                        g_portal.pShellBrowser->BrowseObject(pidl, SBSP_DEFBROWSER);
+                    if (pidl) {
+                        SHELLEXECUTEINFOW sei = {};
+                        sei.cbSize = sizeof(sei);
+                        sei.fMask = SEE_MASK_IDLIST;
+                        sei.lpIDList = pidl;
+                        sei.nShow = SW_SHOWNORMAL;
+                        ShellExecuteExW(&sei);
                         ILFree(pidl);
                     } else {
                         ShellExecuteW(nullptr, L"open", targetPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
@@ -3486,6 +3295,7 @@ LRESULT CALLBACK PortalWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     }
 
     case WM_CAPTURECHANGED: {
+        g_portal.pressedGridIndex = -1;
         if (g_portal.isDraggingScrollbar) {
             g_portal.isDraggingScrollbar = false;
             RequestPortalRepaint(hWnd);
@@ -3541,7 +3351,6 @@ LRESULT CALLBACK PortalWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         }
         if (wParam == TIMER_ID_SCROLL_IDLE) {
             KillTimer(hWnd, TIMER_ID_SCROLL_IDLE);
-            g_portal.isScrolling = false;
             ScheduleVisibleIconsLoad(hWnd);
             return 0;
         }
@@ -3556,7 +3365,9 @@ LRESULT CALLBACK PortalWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     }
 
     case WM_DESTROY:
-        g_vsyncAnimator.StopAnimation();
+        if (g_vsyncAnimator) {
+            g_vsyncAnimator->StopAnimation();
+        }
         KillTimer(hWnd, TIMER_ID_MOUSECHECK);
         KillTimer(hWnd, TIMER_ID_FRAME_RENDER);
         KillTimer(hWnd, TIMER_ID_SCROLL_IDLE);
@@ -3611,12 +3422,12 @@ bool ShouldSuppressDesktopTooltip(HWND hListView, int explicitItemIndex = -1) {
 }
 
 // ---------------------------------------------------------------------------
-// Создание и запуск портала для папки на рабочем столе
+// Create and open a portal for a desktop folder
 // ---------------------------------------------------------------------------
 void OpenPortalForDesktopFolder(HWND hListView, int itemIndex, const std::wstring& folderPath, const std::wstring& folderTitle) {
     if (!IsWindow(hListView) || g_unloading.load()) return;
 
-    // Если этот же портал уже открыт или открывается — не перезапускаем
+    // Do not reopen if this folder's portal is already opening or visible
     if (g_portal.hPortalWnd && IsWindow(g_portal.hPortalWnd) &&
         g_portal.activeItemIndex == itemIndex &&
         g_portal.animState != PortalAnimState::Hidden &&
@@ -3626,14 +3437,14 @@ void OpenPortalForDesktopFolder(HWND hListView, int itemIndex, const std::wstrin
 
     DismissDesktopListViewTooltip(hListView);
 
-    // Переиспользуем существующий скрытый HWND портала, если владелец (ListView) не изменился
+    // Reuse the pooled portal HWND when the parent desktop ListView is unchanged
     if (g_portal.hPortalWnd && IsWindow(g_portal.hPortalWnd) && g_portal.hDesktopListView == hListView) {
         HidePortalImmediately();
     } else {
         DestroyPortalImmediately();
     }
 
-    // Вычисляем экранные координаты иконки папки на рабочем столе
+    // Compute screen coordinates of the desktop folder icon
     RECT rcItem = {};
     rcItem.left = LVIR_ICON;
     if (!SendMessageW(hListView, LVM_GETITEMRECT, itemIndex, reinterpret_cast<LPARAM>(&rcItem))) {
@@ -3649,11 +3460,11 @@ void OpenPortalForDesktopFolder(HWND hListView, int itemIndex, const std::wstrin
     int iconCenterX = (iconScreenRect.left + iconScreenRect.right) / 2;
     int iconCenterY = (iconScreenRect.top + iconScreenRect.bottom) / 2;
 
-    // Определяем целевой монитор и его реальный DPI через GetDpiForMonitor
+    // Detect target monitor and its effective DPI
     HMONITOR hMon = MonitorFromPoint({ iconCenterX, iconCenterY }, MONITOR_DEFAULTTONEAREST);
     const int dpi = GetMonitorDpi(hMon);
 
-    // Стартовый кружок (внутри иконки папки) для морфинг-анимации с учетом DPI
+    // Initial circle rect centered on the folder icon for the morph animation
     const int startCircleRadius = ScaleByDpi(18, dpi);
     RECT startCircleRect = {
         iconCenterX - startCircleRadius,
@@ -3662,7 +3473,7 @@ void OpenPortalForDesktopFolder(HWND hListView, int itemIndex, const std::wstrin
         iconCenterY + startCircleRadius
     };
 
-    // Целевой прямоугольник справа от папки (с проверкой границ монитора и учетом масштаба DPI)
+    // Target portal rect positioned beside the folder within the monitor work area
     MONITORINFO mi = {};
     mi.cbSize = sizeof(mi);
     GetMonitorInfoW(hMon, &mi);
@@ -3677,7 +3488,7 @@ void OpenPortalForDesktopFolder(HWND hListView, int itemIndex, const std::wstrin
     int targetLeft = iconScreenRect.right + gapX;
     int targetTop  = iconScreenRect.top - offsetY;
 
-    // Если справа от папки недостаточно места на экране — открываем слева от папки
+    // Flip to the left side of the folder if there is not enough space on the right
     if (targetLeft + portalW > workArea.right - gapX) {
         targetLeft = iconScreenRect.left - portalW - gapX;
     }
@@ -3735,7 +3546,6 @@ void OpenPortalForDesktopFolder(HWND hListView, int itemIndex, const std::wstrin
     g_portal.frameIntervalMs = GetPortalFrameIntervalMs();
     g_portal.renderDirty = false;
     g_portal.frameTimerActive = false;
-    g_portal.isScrolling = false;
     ++g_portal.contentRevision;
 
     const uint64_t genId = g_portalGenerationId.fetch_add(1, std::memory_order_acq_rel) + 1;
@@ -3747,19 +3557,16 @@ void OpenPortalForDesktopFolder(HWND hListView, int itemIndex, const std::wstrin
     const int visibleRows = (portalH / cellHeight) + 1;
     const size_t firstScreenCount = static_cast<size_t>(cols * visibleRows);
 
-    // Инициализируем легковесный экземпляр IShellBrowser
-    g_portal.pShellBrowser = new LightweightPortalShellBrowser(hPortal);
-
-    // Сначала проверяем LRU-кэш директорий (с валидацией через FindFirstChangeNotificationW)
+    // Check directory LRU cache first (validated via FindFirstChangeNotificationW)
     if (g_dirCache.TryGet(folderPath, preloadIconSize, g_portal.items, g_portal.totalItemCount)) {
         g_portal.isLoadingDirectory = false;
         ScheduleIconsLoadForRange(hPortal, genId, 0, firstScreenCount, preloadIconSize);
     } else {
-        // Промах кэша: открываем портал мгновенно с плейсхолдерами и выносим чтение ФС и иконок в рабочий поток
+        // Cache miss: show placeholders immediately and load directory/icons asynchronously
         g_portal.isLoadingDirectory = true;
         g_portal.items.clear();
         g_portal.totalItemCount = 0;
-        g_asyncWorker.EnqueueDirectoryLoad(genId, hPortal, folderPath, preloadIconSize, firstScreenCount);
+        g_asyncWorker->EnqueueDirectoryLoad(genId, hPortal, folderPath, preloadIconSize, firstScreenCount);
     }
 
     if (newlyCreated || g_portal.dwmVisualsDirty) {
@@ -3769,19 +3576,18 @@ void OpenPortalForDesktopFolder(HWND hListView, int itemIndex, const std::wstrin
         SetPortalBlurEnabled(hPortal, false);
     }
 
-    // Запускаем отсчет времени анимации по QPC с VSync-синхронизацией через DwmFlush
+    // Start QPC-based VSync morph animation
     g_portal.animStartMs = GetQpcNowMs();
     g_portal.animProgress = 0.02f;
     UpdatePortalMorphGeometry(hPortal, g_portal.animProgress, true);
     ShowWindow(hPortal, SW_SHOWNOACTIVATE);
 
-    g_vsyncAnimator.StartAnimation(hPortal, g_portal.frameIntervalMs);
+    g_vsyncAnimator->StartAnimation(hPortal, g_portal.frameIntervalMs);
     SetTimer(hPortal, TIMER_ID_MOUSECHECK, 50, nullptr);
 }
 
 // ---------------------------------------------------------------------------
-// Subclass-процедура для SysListView32 рабочего стола
-// (Сигнатура строго совместима с WindhawkUtils::WH_SUBCLASSPROC)
+// Subclass procedure for the desktop SysListView32
 // ---------------------------------------------------------------------------
 LRESULT CALLBACK DesktopListViewSubclassProc(
     HWND hWnd,
@@ -3892,7 +3698,7 @@ LRESULT CALLBACK DesktopListViewSubclassProc(
         int hitIndex = static_cast<int>(SendMessageW(hWnd, LVM_HITTEST, 0, reinterpret_cast<LPARAM>(&ht)));
 
         if (hitIndex >= 0 && (ht.flags & (LVHT_ONITEMICON | LVHT_ONITEMLABEL | LVHT_ONITEM))) {
-            // Если портал для этой же папки уже открыт — не выполняем повторных проверок пути
+            // Skip path resolution if the portal for this item is already open
             if (g_portal.hPortalWnd && IsWindow(g_portal.hPortalWnd) &&
                 g_portal.activeItemIndex == hitIndex &&
                 g_portal.animState != PortalAnimState::Hidden &&
@@ -3939,7 +3745,7 @@ LRESULT CALLBACK DesktopListViewSubclassProc(
             std::lock_guard<std::mutex> lock(g_subclassMutex);
             g_subclassedWindows.erase(hWnd);
         }
-        // WindhawkUtils::SetWindowSubclassFromAnyThread сам снимает свой внутренний сабкласс на WM_NCDESTROY
+        // WindhawkUtils::SetWindowSubclassFromAnyThread automatically removes its subclass on WM_NCDESTROY
         break;
     }
     }
@@ -3948,20 +3754,20 @@ LRESULT CALLBACK DesktopListViewSubclassProc(
 }
 
 // ---------------------------------------------------------------------------
-// Поиск и подключение к SysListView32 рабочего стола + хук CreateWindowExW
+// Desktop SysListView32 discovery and CreateWindowExW hook
 // ---------------------------------------------------------------------------
 void TrySubclassDesktopListView(HWND hWnd) {
     if (g_unloading.load() || !IsTrueDesktopListView(hWnd)) return;
 
     {
-        // Ошибка 2: Захватываем мьютекс исключительно для атомарной проверки и резервирования хэндла
+        // Lock only while checking and reserving the HWND
         std::lock_guard<std::mutex> lock(g_subclassMutex);
         if (!g_subclassedWindows.insert(hWnd).second) {
             return;
         }
     }
 
-    // Вызываем SetWindowSubclassFromAnyThread (использующий синхронный SendMessage) строго вне мьютекса
+    // Call SetWindowSubclassFromAnyThread (which uses SendMessage) outside the lock
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, DesktopListViewSubclassProc, 0)) {
         std::lock_guard<std::mutex> lock(g_subclassMutex);
         g_subclassedWindows.erase(hWnd);
@@ -3969,6 +3775,12 @@ void TrySubclassDesktopListView(HWND hWnd) {
 }
 
 BOOL CALLBACK EnumDesktopWindowsProc(HWND hWnd, LPARAM) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid != GetCurrentProcessId()) {
+        return TRUE;
+    }
+
     HWND hShellDefView = FindWindowExW(hWnd, nullptr, L"SHELLDLL_DefView", nullptr);
     if (hShellDefView) {
         HWND hListView = FindWindowExW(hShellDefView, nullptr, L"SysListView32", nullptr);
@@ -3980,10 +3792,6 @@ BOOL CALLBACK EnumDesktopWindowsProc(HWND hWnd, LPARAM) {
 }
 
 void AttachToExistingDesktopListViews() {
-    HWND hProgman = FindWindowW(L"Progman", nullptr);
-    if (hProgman) {
-        EnumDesktopWindowsProc(hProgman, 0);
-    }
     EnumWindows(EnumDesktopWindowsProc, 0);
 }
 
@@ -4013,7 +3821,6 @@ void DetachAllSubclassedDesktopListViewsAndDestroyPortal() {
                     portalCleanedOnThread = true;
                 });
             }
-            // В WindhawkUtils::RemoveWindowSubclassFromAnyThread ровно 2 аргумента: (hWnd, pfnSubclass)
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(hList, DesktopListViewSubclassProc);
         }
     }
@@ -4067,11 +3874,9 @@ HWND WINAPI Hook_CreateWindowExW(
 }
 
 // ---------------------------------------------------------------------------
-// Загрузка и обновление настроек Windhawk
+// Windhawk settings and mod lifecycle
 // ---------------------------------------------------------------------------
 void LoadSettings() {
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-
     g_settings.hoverDelayMs     = std::clamp(Wh_GetIntSetting(L"hoverDelayMs"), 50, 2000);
     g_settings.animDurationMs   = std::clamp(Wh_GetIntSetting(L"animDurationMs"), 60, 1000);
     g_settings.portalWidth      = std::clamp(Wh_GetIntSetting(L"portalWidth"), 240, 640);
@@ -4082,32 +3887,24 @@ void LoadSettings() {
     g_settings.gridColumns      = std::clamp(Wh_GetIntSetting(L"gridColumns"), 2, 5);
     g_settings.showFileMetadata = Wh_GetIntSetting(L"showFileMetadata") != 0;
 
-    PCWSTR blurStrength = Wh_GetStringSetting(L"blurStrength");
-    if (blurStrength) {
-        if (wcscmp(blurStrength, L"level1") == 0) {
-            g_settings.blurStrength = 1;
-        } else if (wcscmp(blurStrength, L"level3") == 0) {
-            g_settings.blurStrength = 3;
-        } else {
-            g_settings.blurStrength = 2;
-        }
-        Wh_FreeStringSetting(blurStrength);
+    auto blurStrength = WindhawkUtils::StringSetting::make(L"blurStrength");
+    if (wcscmp(blurStrength.get(), L"level1") == 0) {
+        g_settings.blurStrength = 1;
+    } else if (wcscmp(blurStrength.get(), L"level3") == 0) {
+        g_settings.blurStrength = 3;
+    } else {
+        g_settings.blurStrength = 2;
     }
 
-    PCWSTR viewMode = Wh_GetStringSetting(L"viewMode");
-    if (viewMode) {
-        g_settings.listViewMode = (wcscmp(viewMode, L"list") == 0);
-        Wh_FreeStringSetting(viewMode);
-    } else {
-        g_settings.listViewMode = false;
-    }
+    auto viewMode = WindhawkUtils::StringSetting::make(L"viewMode");
+    g_settings.listViewMode = (wcscmp(viewMode.get(), L"list") == 0);
 }
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing Desktop Folder Portals mod...");
     g_unloading.store(false);
 
-    // Получаем HINSTANCE текущего модуля мода (а не explorer.exe) для чистой регистрации класса
+    // Obtain this mod DLL's HINSTANCE for clean window class registration
     if (!GetModuleHandleExW(
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
             reinterpret_cast<LPCWSTR>(&Wh_ModInit),
@@ -4117,14 +3914,14 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    // Инициализируем GDI+ для высококачественной векторной отрисовки портала
+    // Initialize GDI+ for vector rendering
     GdiplusStartupInput gdiplusStartupInput;
     if (GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr) != Ok) {
         Wh_Log(L"Failed to initialize GDI+");
         return FALSE;
     }
 
-    // Регистрируем класс окна портала в модуле самого мода с обязательной проверкой результата
+    // Register the portal window class
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
     wc.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
@@ -4142,14 +3939,16 @@ BOOL Wh_ModInit() {
     }
     g_portalClassRegistered = true;
 
-    g_asyncWorker.Start();
-    g_vsyncAnimator.StartThread();
+    g_asyncWorker.emplace();
+    g_asyncWorker->Start();
+    g_vsyncAnimator.emplace();
+    g_vsyncAnimator->StartThread();
 
-    // Устанавливаем хук на CreateWindowExW для перехвата пересоздания рабочего стола
-    Wh_SetFunctionHook(
-        reinterpret_cast<void*>(CreateWindowExW),
-        reinterpret_cast<void*>(Hook_CreateWindowExW),
-        reinterpret_cast<void**>(&Orig_CreateWindowExW));
+    // Hook CreateWindowExW to catch desktop ListView recreation
+    WindhawkUtils::SetFunctionHook(
+        CreateWindowExW,
+        Hook_CreateWindowExW,
+        &Orig_CreateWindowExW);
 
     return TRUE;
 }
@@ -4159,8 +3958,6 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    LoadSettings();
-
     HWND hTarget = g_portal.hPortalWnd;
     if (!hTarget || !IsWindow(hTarget)) {
         hTarget = g_portal.hDesktopListView;
@@ -4171,9 +3968,14 @@ void Wh_ModSettingsChanged() {
             hTarget = *g_subclassedWindows.begin();
         }
     }
+    if (!hTarget || !IsWindow(hTarget)) {
+        hTarget = FindAnyDesktopWindow();
+    }
 
+    bool updatedOnThread = false;
     if (hTarget && IsWindow(hTarget)) {
-        RunFromWindowThread(hTarget, []() {
+        updatedOnThread = RunFromWindowThread(hTarget, []() {
+            LoadSettings();
             g_portal.dwmVisualsDirty = true;
             ++g_portal.contentRevision;
             if (g_portal.hPortalWnd && IsWindow(g_portal.hPortalWnd) &&
@@ -4185,38 +3987,50 @@ void Wh_ModSettingsChanged() {
             }
         });
     }
+    if (!updatedOnThread) {
+        LoadSettings();
+    }
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing Desktop Folder Portals mod...");
     g_unloading.store(true);
-    g_vsyncAnimator.StopAnimation();
+    if (g_vsyncAnimator) {
+        g_vsyncAnimator->StopAnimation();
+    }
     g_portalGenerationId.fetch_add(1, std::memory_order_acq_rel);
 
-    // Если открыто контекстное меню портала, аккуратно закрываем его перед ожиданием завершения модальных вызовов
+    // Dismiss any active popup menu before waiting for modal calls to exit
     HWND hPortalSnapshot = g_portal.hPortalWnd;
     if (hPortalSnapshot && IsWindow(hPortalSnapshot)) {
         PostMessageW(hPortalSnapshot, WM_CANCELMODE, 0, 0);
     }
 
-    // Ожидаем полного выхода потока рабочего стола из всех модальных циклов (TrackPopupMenuEx, InvokeCommand, SHDoDragDrop)
+    // Wait for the desktop thread to exit all modal loops (context menu, InvokeCommand, Drag-and-Drop)
     while (g_activeModalCallCount.load(std::memory_order_acquire) > 0) {
         Sleep(15);
     }
 
-    // Останавливаем фоновые потоки до уничтожения окна и освобождения кэша
-    g_vsyncAnimator.StopThread();
-    g_asyncWorker.Stop();
+    // Stop worker threads before destroying the portal window and releasing caches
+    if (g_vsyncAnimator) {
+        g_vsyncAnimator->StopThread();
+    }
+    if (g_asyncWorker) {
+        g_asyncWorker->Stop();
+    }
 
-    // Снимаем сабклассы и уничтожаем окно портала строго в потоке окна рабочего стола
+    // Remove subclasses and destroy the portal window on the desktop thread
     DetachAllSubclassedDesktopListViewsAndDestroyPortal();
 
-    // Повторная проверка на случай, если модальный вызов завершался в момент переключения контекста
+    // Re-check in case a modal call was finishing during detach
     while (g_activeModalCallCount.load(std::memory_order_acquire) > 0) {
         Sleep(15);
     }
 
-    // Освобождаем кэш директорий (FindCloseChangeNotification + DestroyIcon) и графические ресурсы
+    // Ensure the desktop thread has unwound from all module stack frames before unload
+    RunFromWindowThread(FindAnyDesktopWindow(), [] {});
+
+    // Release directory cache and cached GDI/GDI+ resources
     g_dirCache.Clear();
     g_renderCache.ReleaseAll();
 
@@ -4229,4 +4043,7 @@ void Wh_ModUninit() {
         GdiplusShutdown(g_gdiplusToken);
         g_gdiplusToken = 0;
     }
+
+    g_vsyncAnimator.reset();
+    g_asyncWorker.reset();
 }
