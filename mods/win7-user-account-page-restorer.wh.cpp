@@ -75,8 +75,8 @@ to the internet and restart `explorer.exe` (or toggle the mod).
 
 ## Settings
 - **Page language**: *Automatic* follows the Windows display language (English, Italian, French, Spanish or Portuguese;
-  English if Windows uses another language). Applies to windows opened after the change, but only if the page has not been opened yet in this session; otherwise
-  restart `explorer.exe` (see *Notes and limitations*).
+  English if Windows uses another language). Applies to windows opened after the change; if the page was already used in this session, restart
+  `explorer.exe`.
 - **Show a generic user name**: off by default. When on, the name of the signed-in user is shown as a generic one
   ("User", "Utente", ...) on this page only; Windows and the account keep the real name. Saving the generic name
   unchanged in "Change the account name" does nothing, so the account is never renamed by mistake.
@@ -88,14 +88,15 @@ to the internet and restart `explorer.exe` (or toggle the mod).
   components that Microsoft can change at any time, so some features may not work, or may stop working after a
   Windows update. The translations of the page (French, Spanish and Portuguese in particular) were also written
   without the original Microsoft files and may differ from the official wording.
-- Windows 10 1607 or later, or Windows 11; 64-bit (x64) are the supported systems.
-- This is the Windows 7 page: it does not know Microsoft accounts as such (they appear as the local accounts they
-  are bound to).
 - **The Guest account is an edge case and is not supported by modern Windows.**
   The Windows 7 page can turn the Guest account on and off, but the Guest account is
   not supported by Windows 10/11, and it has been reported to work correctly only
   with a custom shell such as Explorer7/Windows7ExplorerRestorer (or equivalent software). For normal
   (non-Guest) profiles the page is expected to work.
+- The mod has been created for Windows 10 1607 or later or Windows 11; 64-bit (x64).
+- The mod has been tested on Windows 10 21H2 and Windows 11 24H2. Other versions from Windows 10 1607 on may work, but have not been tested.
+- This is the Windows 7 page: it does not know Microsoft accounts as such (they appear as the local accounts they
+  are bound to).
 - Three links of the Windows 7 page have no target on Windows 10/11 and are left out: "Link online IDs",
   "Manage your fingerprint data" and, unless a Family Safety applet is present, "Parental Controls".
 - "Change your picture" lists the pictures of `ProgramData\Microsoft\User Account Pictures\Default Pictures`,
@@ -108,11 +109,6 @@ to the internet and restart `explorer.exe` (or toggle the mod).
   mod's storage folder) stay loaded in `explorer.exe` until it restarts, but nothing in them points into the mod.
 - If the Windows 7 page cannot be loaded for any reason, the Windows 10/11 User Accounts page is used.
 - After changing a setting, close open User Accounts windows.
-- **Changing the page language needs a restart of `explorer.exe` once the page has been used.** The page is loaded into
-  `explorer.exe` the first time User Accounts is opened and stays loaded until `explorer.exe` restarts (see above), so a
-  new *Page language* only takes effect if the page has not been opened yet in this session. Otherwise the old language
-  stays, and the log says "The page language applies after explorer.exe restarts (the page is in use)". Disabling and
-  enabling the mod is not enough. The language of the generic user name follows the page language, so it is subject to the same limit.
 
 ## Credits
 - **RandomGuy5747** (WinClassic) for pointing out that the Windows 7 page can run on Windows 10 with the Windows 7
@@ -128,8 +124,8 @@ to the internet and restart `explorer.exe` (or toggle the mod).
 - language: auto
   $name: Page language
   $name:it-IT: Lingua della pagina
-  $description: This setting chooses the language of the restored page. "Automatic" follows the Windows display language. If the User Accounts page was already opened in this session, restart explorer.exe for the change to take effect.
-  $description:it-IT: Questa impostazione sceglie la lingua della pagina ripristinata. "Automatica" segue la lingua di visualizzazione di Windows. Se la pagina Account utente è già stata aperta in questa sessione, riavvia explorer.exe perché la modifica abbia effetto.
+  $description: This setting chooses the language of the restored page. "Automatic" follows the Windows display language.
+  $description:it-IT: Questa impostazione sceglie la lingua della pagina ripristinata. "Automatica" segue la lingua di visualizzazione di Windows.
   $options:
     - auto: Automatic (Windows display language)
     - en-US: English
@@ -167,7 +163,6 @@ to the internet and restart `explorer.exe` (or toggle the mod).
 #include <utility>
 #include <vector>
 #include <algorithm>
-#include <windhawk_utils.h>
 
 namespace {
 
@@ -3118,148 +3113,6 @@ HRESULT WINAPI CoCreateInstance_Hook(REFCLSID clsid, LPUNKNOWN outer, DWORD cont
     return CoCreateInstance_Orig(clsid, outer, context, iid, object);
 }
 
-// ---- Search box cue of the restored page -----------------------------------------------------------------------------
-//
-// Explorer composes the cue of the address-bar search box as "<space>Search in <page title>" for every page. For this
-// page, searching leaves the page and searches the whole Control Panel (checked: typing "mouse" navigates to
-// "mouse - Control Panel"), so the cue should be the one Explorer itself uses in the Control Panel. That text is
-// localized and its grammar differs per language ("Cerca nel Pannello di controllo" / "Cerca in X"), so it is never
-// built here: it is learned from Explorer's own call while it is in the Control Panel root and kept (also across
-// restarts, per UI language). Until it has been seen, the cue is left exactly as Explorer set it.
-//
-// The cue is replaced only when ALL of these hold: the calling thread holds live adapters of this mod, exactly one
-// CabinetWClass window exists on the thread, and the cue is "<something>" + the exact title of that window (so a stale
-// or transitional state, e.g. while navigating away, never matches). Nothing is ever called on pThis.
-
-HRESULT (__cdecl *CSearchBox_SetCue_Orig)(void*, LPCWSTR, LPCWSTR) = nullptr;
-
-SRWLOCK g_cueLock = SRWLOCK_INIT;
-std::wstring g_controlPanelCue;       // exactly as Explorer passed it in the Control Panel root (guarded by g_cueLock)
-bool g_cueLoaded = false;             // loaded from storage (guarded by g_cueLock)
-
-std::wstring CueStorageName() {
-    wchar_t name[48];
-    swprintf(name, ARRAYSIZE(name), L"controlPanelCue.%04x", unsigned(GetUserDefaultUILanguage()));
-    return name;
-}
-
-// Localized display names of the Control Panel roots, from the shell (no hard-coded text): the category home (what the
-// window title shows, e.g. "Pannello di controllo") and the "all items" folder.
-std::vector<std::wstring> ControlPanelNames() {
-    std::vector<std::wstring> names;
-    HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
-    if (!shell32) return names;
-    using GetName = HRESULT(WINAPI*)(const void*, DWORD, PWSTR*);
-    using GetIdList = HRESULT(WINAPI*)(REFGUID, DWORD, HANDLE, void**);
-    using Parse = HRESULT(WINAPI*)(PCWSTR, void*, void**, ULONG, ULONG*);
-    auto getName = reinterpret_cast<GetName>(GetProcAddress(shell32, "SHGetNameFromIDList"));
-    if (!getName) return names;
-    auto add = [&](void* pidl) {
-        if (!pidl) return;
-        PWSTR display = nullptr;
-        if (SUCCEEDED(getName(pidl, 0 /*SIGDN_NORMALDISPLAY*/, &display)) && display) {
-            if (*display && std::find(names.begin(), names.end(), std::wstring(display)) == names.end())
-                names.push_back(display);
-            CoTaskMemFree(display);
-        }
-        CoTaskMemFree(pidl);
-    };
-    // Category home: shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}
-    if (auto parse = reinterpret_cast<Parse>(GetProcAddress(shell32, "SHParseDisplayName"))) {
-        void* pidl = nullptr;
-        if (SUCCEEDED(parse(L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}", nullptr, &pidl, 0, nullptr))) add(pidl);
-    }
-    // FOLDERID_ControlPanelFolder {82A74AEB-AEB4-465C-A014-D097EE346D63}
-    if (auto getIdList = reinterpret_cast<GetIdList>(GetProcAddress(shell32, "SHGetKnownFolderIDList"))) {
-        static const GUID kControlPanel = {0x82A74AEB, 0xAEB4, 0x465C, {0xA0, 0x14, 0xD0, 0x97, 0xEE, 0x34, 0x6D, 0x63}};
-        void* pidl = nullptr;
-        if (SUCCEEDED(getIdList(kControlPanel, 0, nullptr, &pidl))) add(pidl);
-    }
-    return names;
-}
-
-bool EndsWith(const std::wstring& s, const std::wstring& tail) {
-    return !tail.empty() && s.size() > tail.size() && s.compare(s.size() - tail.size(), tail.size(), tail) == 0;
-}
-
-HRESULT __cdecl CSearchBox_SetCue_Hook(void* pThis, LPCWSTR cue, LPCWSTR tip) {
-    LPCWSTR useCue = cue;
-    std::wstring replacement;     // must outlive the call below
-    try {
-        if (cue && *cue) {
-            const DWORD tid = GetCurrentThreadId();
-            int adaptersOnThread = 0;
-            {
-                SharedLock lock(g_threadsLock);
-                for (const ThreadCount& t : g_threadCounts)
-                    if (t.tid == tid) adaptersOnThread = int(t.count);
-            }
-            struct Ctx { wchar_t title[128]; int n; } ctx{};
-            EnumThreadWindows(tid, [](HWND h, LPARAM p) -> BOOL {
-                Ctx* c = reinterpret_cast<Ctx*>(p);
-                wchar_t cls[32];
-                if (GetClassNameW(h, cls, ARRAYSIZE(cls)) && !wcscmp(cls, L"CabinetWClass")) {
-                    if (c->n == 0) GetWindowTextW(h, c->title, ARRAYSIZE(c->title));
-                    c->n++;
-                }
-                return TRUE;
-            }, reinterpret_cast<LPARAM>(&ctx));
-
-            if (ctx.n == 1 && ctx.title[0]) {
-                const std::wstring cueText = cue;
-                const std::wstring title = ctx.title;
-                static std::atomic<int> traced{0};
-                const std::vector<std::wstring> cpNames = ControlPanelNames();
-                if (traced.fetch_add(1) < 60)
-                    Wh_Log(L"Cue: trace cue='%s' title='%s' adapters=%d cpNames=%d first='%s'", cue, ctx.title,
-                           adaptersOnThread, int(cpNames.size()), cpNames.empty() ? L"" : cpNames[0].c_str());
-                if (adaptersOnThread == 0) {
-                    // Learn Explorer's own cue while it is in the Control Panel root (title is exactly its name).
-                    if (std::find(cpNames.begin(), cpNames.end(), title) != cpNames.end() && EndsWith(cueText, title)) {
-                        bool changed = false;
-                        {
-                            ExclusiveLock lock(g_cueLock);
-                            if (g_controlPanelCue != cueText) { g_controlPanelCue = cueText; changed = true; }
-                            g_cueLoaded = true;
-                        }
-                        if (changed) {
-                            Wh_SetStringValue(CueStorageName().c_str(), cueText.c_str());
-                            Wh_Log(L"Cue: learned the Control Panel cue '%s'", cueText.c_str());
-                        }
-                    }
-                } else if (EndsWith(cueText, title)) {
-                    std::wstring stored;
-                    {
-                        ExclusiveLock lock(g_cueLock);
-                        if (!g_cueLoaded) {
-                            wchar_t buf[256] = {};
-                            Wh_GetStringValue(CueStorageName().c_str(), buf, ARRAYSIZE(buf));
-                            g_controlPanelCue = buf;
-                            g_cueLoaded = true;
-                        }
-                        stored = g_controlPanelCue;
-                    }
-                    if (stored.empty()) {
-                        static std::atomic<int> missing{0};
-                        if (missing.fetch_add(1) < 10)
-                            Wh_Log(L"Cue: Control Panel cue not learned yet; open the Control Panel once (cue left unchanged)");
-                    }
-                    if (!stored.empty() && stored != cueText) {
-                        replacement = stored;
-                        useCue = replacement.c_str();
-                        static std::atomic<int> logged{0};
-                        if (logged.fetch_add(1) < 20)
-                            Wh_Log(L"Cue: '%s' -> '%s' (page '%s')", cue, useCue, ctx.title);
-                    }
-                }
-            }
-        }
-    } catch (...) {
-        useCue = cue;     // never change anything if the mod's own logic failed
-    }
-    return CSearchBox_SetCue_Orig(pThis, useCue, tip);
-}
-
 // ---- environment ----------------------------------------------------------------------------------------------------
 
 bool IsNativeAmd64() {
@@ -3339,14 +3192,6 @@ BOOL Wh_ModInit() {
     }
     if (!g_stopEvent) g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (g_stopEvent) ResetEvent(g_stopEvent);
-    // Optional: if the symbol is missing, the mod works as before (the cue is simply left as Explorer sets it).
-    if (HMODULE explorerFrame = LoadLibraryExW(L"ExplorerFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32)) {
-        const WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] = {{
-            {L"public: virtual long __cdecl CSearchBox::SetCueAndTooltipText(unsigned short const *,unsigned short const *)"},
-            &CSearchBox_SetCue_Orig, CSearchBox_SetCue_Hook, true}};
-        if (!WindhawkUtils::HookSymbols(explorerFrame, explorerFrameDllHooks, ARRAYSIZE(explorerFrameDllHooks)))
-            Wh_Log(L"CSearchBox::SetCueAndTooltipText not hooked: search box cue left unchanged");
-    }
     // Download, verification and generation happen on a worker thread: Explorer never waits for them. Until they are
     // done (or if they fail) the hooks change nothing.
     StartSetup();
