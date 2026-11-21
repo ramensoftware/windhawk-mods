@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              twinkle-brightness
 // @name            Twinkle Brightness
-// @description     Brightness sliders for every display in the system tray, with hotkeys, an on-screen indicator, time-based schedules, idle dimming and mouse wheel control
+// @description     Brightness sliders for every display in the system tray, with hotkeys, an on-screen indicator, time-based schedules, and idle dimming
 // @version         1.1.0
 // @author          isousluer
 // @github          https://github.com/isousluer
@@ -19,7 +19,7 @@
 # Twinkle Brightness
 
 Control the brightness of **all your displays** - external monitors and laptop
-screens - from a tray icon, the keyboard or the mouse wheel. Inspired by the
+screens - from a tray icon or the keyboard. Inspired by the
 excellent [Twinkle Tray](https://github.com/xanderfrangos/twinkle-tray) app,
 re-imagined as a lightweight Windhawk mod with no Electron runtime.
 
@@ -31,18 +31,17 @@ re-imagined as a lightweight Windhawk mod with no Electron runtime.
   brightness slider for every display. The panel follows the Windows
   light/dark theme and accent color.
 - **Link displays:** the chain button in the panel links the displays. While
-  linked, one slider sets all displays to the same level, and the hotkeys and
-  the mouse wheel change all of them. While unlinked, each display has its own
-  slider, the hotkeys change the display with the active window and the mouse
-  wheel changes the display under the cursor.
+  linked, one slider controls all displays and the hotkeys change all of them.
+  Linked displays are always set to the same level: the first change brings
+  them together. To make displays that differ in brightness look alike at the
+  same level, use the per-display minimum and maximum. While unlinked, each
+  display has its own slider and the hotkeys change the display with the
+  active window.
 - **Hotkeys:** bind any key combination to increase, decrease or set the
   brightness, turn the displays off, or open the panel. A hotkey can also
   target a specific display.
 - **On-screen indicator:** a small overlay shows the new level when you use a
-  hotkey or the mouse wheel, with one row per display when they are at
-  different levels.
-- **Mouse wheel:** scroll over the tray icon (or anywhere on the taskbar) to
-  change the brightness.
+  hotkey, with one row per display when they are at different levels.
 - **Schedule:** change the brightness automatically at given times of the day,
   with a smooth transition.
 - **Idle dimming:** dim the displays after a period of inactivity and restore
@@ -109,7 +108,7 @@ This mod is not affiliated with Twinkle Tray or its author.
   - light: Light
 - showOsd: true
   $name: Show the on-screen indicator
-  $description: Shows the new brightness level when you use a hotkey or the mouse wheel
+  $description: Shows the new brightness level when you use a hotkey
 - hotkeys:
   - - keys: Ctrl+Alt+Up
       $name: Key combination
@@ -133,24 +132,6 @@ This mod is not affiliated with Twinkle Tray or its author.
     - value: 10
     - display: ""
   $name: Hotkeys
-- wheel:
-  - mode: trayIcon
-    $name: Change brightness with the mouse wheel
-    $options:
-    - off: Disabled
-    - trayIcon: Over the tray icon
-    - taskbar: Anywhere on the taskbar
-  - modifier: none
-    $name: Required modifier key
-    $options:
-    - none: None
-    - ctrl: Ctrl
-    - shift: Shift
-    - alt: Alt
-  - step: 2
-    $name: Step per wheel notch (%)
-    $description: The wheel changes all displays while the panel's link button is on, and the display under the mouse cursor while it's off.
-  $name: Mouse wheel
 - schedule:
   - - time: ""
       $name: Time
@@ -230,7 +211,6 @@ constexpr UINT WM_APP_TRAY = WM_APP + 1;
 constexpr UINT WM_APP_SNAPSHOT = WM_APP + 2;  // wParam: 1 = full enumeration
 constexpr UINT WM_APP_SETTINGS = WM_APP + 3;
 constexpr UINT WM_APP_SHUTDOWN = WM_APP + 4;
-constexpr UINT WM_APP_WHEEL = WM_APP + 5;
 
 constexpr UINT_PTR TIMER_REENUM = 1;
 constexpr UINT_PTR TIMER_SCHEDULE = 2;
@@ -258,7 +238,6 @@ enum MenuId : UINT {
 };
 
 enum class HotkeyAction { Increase, Decrease, Set, TurnOff, Panel };
-enum class WheelMode { Off, TrayIcon, Taskbar };
 enum class ThemeMode { Auto, Dark, Light };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -291,9 +270,6 @@ struct Settings {
     ThemeMode theme = ThemeMode::Auto;
     bool showOsd = true;
     std::vector<HotkeyConfig> hotkeys;
-    WheelMode wheelMode = WheelMode::TrayIcon;
-    int wheelModifier = 0;  // VK code, 0 = none
-    int wheelStep = 2;
     std::vector<ScheduleEntry> schedule;
     int transitionSeconds = 30;
     bool applyScheduleOnStartup = true;
@@ -489,17 +465,6 @@ void LoadSettings() {
         hk.display = GetStringSetting(IndexedName(L"hotkeys", i, L"display"));
         s.hotkeys.push_back(std::move(hk));
     }
-
-    std::wstring wheelMode = GetStringSetting(L"wheel.mode");
-    s.wheelMode = wheelMode == L"off"       ? WheelMode::Off
-                  : wheelMode == L"taskbar" ? WheelMode::Taskbar
-                                            : WheelMode::TrayIcon;
-    std::wstring modifier = GetStringSetting(L"wheel.modifier");
-    s.wheelModifier = modifier == L"ctrl"    ? VK_CONTROL
-                      : modifier == L"shift" ? VK_SHIFT
-                      : modifier == L"alt"   ? VK_MENU
-                                             : 0;
-    s.wheelStep = std::clamp(GetIntSetting(L"wheel.step"), 1, 50);
 
     for (int i = 0; i < 32; i++) {
         std::wstring time =
@@ -1245,7 +1210,7 @@ bool g_haveSnapshot;
 std::vector<Fade> g_fades;
 bool g_paused;
 // The panel's link button: when on, all displays share one slider and move
-// together, and hotkeys and the wheel change all of them. Saved in storage.
+// together, and hotkeys change all of them. Saved in storage.
 bool g_linked = true;
 void SetLinked(bool linked);
 bool IsTaskbarWindow(HWND hwnd);
@@ -1255,7 +1220,6 @@ void SaveIdleRestore();
 long long g_lastScheduleCheck;
 bool g_reenumPending;
 bool g_resumeCatchUp;
-int g_wheelAccumulator;
 int g_registeredHotkeys;
 std::wstring g_storagePrefix;
 
@@ -1263,19 +1227,6 @@ UINT g_taskbarCreatedMsg;
 HICON g_trayIcon;
 bool g_trayUseGuid = true;
 bool g_trayAdded;
-
-// The low-level mouse hook runs on its own thread, so that it always answers
-// within LowLevelHooksTimeout even when the UI thread waits for Explorer. It
-// reads this configuration, which the UI thread keeps up to date.
-struct WheelHookConfig {
-    WheelMode mode = WheelMode::Off;
-    int modifier = 0;
-    RECT trayIconRect{};
-};
-std::mutex g_wheelHookMutex;
-WheelHookConfig g_wheelHookConfig;
-HANDLE g_hookThread;
-DWORD g_hookThreadId;
 
 HWND g_hwndPanel;
 HWND g_hwndOsd;
@@ -2227,7 +2178,7 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 row = g_focusRow;
             }
             int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-            AdjustRow(row, (delta > 0 ? 1 : -1) * g_settings.wheelStep);
+            AdjustRow(row, delta > 0 ? 2 : -2);
             return 0;
         }
 
@@ -2294,6 +2245,9 @@ std::vector<OsdItem> BuildOsdItems(const std::vector<UiDisplay*>& targets) {
         std::wstring label;
         if (targets.size() == 1) {
             label = targets[0]->label;
+            if (!targets[0]->Controllable()) {
+                label += L" - not available";
+            }
         } else if (targets.size() == ControllableDisplays().size()) {
             label = L"All displays";
         } else {
@@ -2496,7 +2450,7 @@ LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Hotkeys and mouse wheel
+// Hotkeys
 
 void RegisterHotkeys() {
     for (int i = 1; i <= g_registeredHotkeys; i++) {
@@ -2536,8 +2490,8 @@ HMONITOR ActiveMonitor() {
     return MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
 }
 
-// What a hotkey without a display setting, or the mouse wheel, changes: all
-// displays while they are linked, otherwise the display on the monitor.
+// What a hotkey without a display setting changes: all displays while they
+// are linked, otherwise the display on the monitor.
 std::vector<UiDisplay*> DefaultTargets(HMONITOR monitor) {
     if (g_linked) {
         return ControllableDisplays();
@@ -2609,6 +2563,17 @@ void OnHotkey(int id) {
     }
     HMONITOR monitor = ActiveMonitor();
     std::vector<UiDisplay*> targets = DefaultTargets(monitor);
+    if (targets.empty() && !g_linked) {
+        // The active display can't be controlled: say so instead of doing
+        // nothing silently.
+        for (auto& d : g_displays) {
+            if (d.info.monitor == monitor && !d.hidden) {
+                ShowOsd({&d}, monitor);
+                break;
+            }
+        }
+        return;
+    }
     ChangeDisplays(targets, delta, setValue, g_linked);
     ShowOsd(targets, g_linked ? nullptr : monitor);
 }
@@ -2627,114 +2592,6 @@ bool IsTaskbarWindow(HWND hwnd) {
            wcscmp(className, L"Shell_SecondaryTrayWnd") == 0 ||
            wcscmp(className, L"NotifyIconOverflowWindow") == 0 ||
            wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0;
-}
-
-LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wParam, LPARAM lParam) {
-    if (code == HC_ACTION && wParam == WM_MOUSEWHEEL) {
-        auto* info = (MSLLHOOKSTRUCT*)lParam;
-        WheelHookConfig config;
-        {
-            std::lock_guard<std::mutex> lock(g_wheelHookMutex);
-            config = g_wheelHookConfig;
-        }
-        bool inArea = false;
-        if (config.mode == WheelMode::TrayIcon) {
-            // Also check the window, so that a window covering the icon's
-            // position (e.g. a full-screen video) keeps its wheel events.
-            inArea = PtInRect(&config.trayIconRect, info->pt) &&
-                     IsTaskbarWindow(WindowFromPoint(info->pt));
-        } else if (config.mode == WheelMode::Taskbar) {
-            inArea = IsTaskbarWindow(WindowFromPoint(info->pt));
-        }
-        bool modifierOk = config.modifier == 0 ||
-                          (GetAsyncKeyState(config.modifier) & 0x8000);
-        HWND main = g_hwndMain;
-        if (inArea && modifierOk && main) {
-            PostMessage(main, WM_APP_WHEEL,
-                        (WPARAM)(short)HIWORD(info->mouseData),
-                        MAKELPARAM(info->pt.x, info->pt.y));
-            return 1;
-        }
-    }
-    return CallNextHookEx(nullptr, code, wParam, lParam);
-}
-
-DWORD WINAPI HookThread(LPVOID readyEvent) {
-    // Create the message queue before signaling, so that StopHookThread's
-    // WM_QUIT can't get lost.
-    MSG msg;
-    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
-    HHOOK hook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, g_module, 0);
-    SetEvent((HANDLE)readyEvent);
-    if (!hook) {
-        Wh_Log(L"SetWindowsHookEx failed (error %u)", GetLastError());
-        return 1;
-    }
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        DispatchMessageW(&msg);
-    }
-    UnhookWindowsHookEx(hook);
-    return 0;
-}
-
-void StopHookThread() {
-    if (!g_hookThread) {
-        return;
-    }
-    PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
-    WaitForSingleObject(g_hookThread, 3000);
-    CloseHandle(g_hookThread);
-    g_hookThread = nullptr;
-    g_hookThreadId = 0;
-}
-
-void UpdateTrayIconRectForWheel() {
-    RECT rect{};
-    if (g_settings.wheelMode != WheelMode::TrayIcon ||
-        !GetTrayIconRect(&rect)) {
-        SetRectEmpty(&rect);
-    }
-    std::lock_guard<std::mutex> lock(g_wheelHookMutex);
-    g_wheelHookConfig.trayIconRect = rect;
-}
-
-void OnWheel(int delta, POINT pt) {
-    g_wheelAccumulator += delta;
-    int steps = g_wheelAccumulator / WHEEL_DELTA;
-    g_wheelAccumulator %= WHEEL_DELTA;
-    if (steps == 0) {
-        return;
-    }
-
-    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-    std::vector<UiDisplay*> targets = DefaultTargets(monitor);
-    ChangeDisplays(targets, steps * g_settings.wheelStep, -1, g_linked);
-    ShowOsd(targets, monitor);
-}
-
-void UpdateMouseHook() {
-    {
-        std::lock_guard<std::mutex> lock(g_wheelHookMutex);
-        g_wheelHookConfig.mode = g_settings.wheelMode;
-        g_wheelHookConfig.modifier = g_settings.wheelModifier;
-    }
-    // The tray icon's rect is refreshed from the icon's WM_MOUSEMOVE
-    // notifications, TaskbarCreated and display changes, not by polling.
-    UpdateTrayIconRectForWheel();
-
-    bool wanted = g_settings.wheelMode != WheelMode::Off;
-    if (wanted && !g_hookThread) {
-        HANDLE ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        g_hookThread =
-            CreateThread(nullptr, 0, HookThread, ready, 0, &g_hookThreadId);
-        if (g_hookThread) {
-            HANDLE handles[] = {ready, g_hookThread};
-            WaitForMultipleObjects(2, handles, FALSE, 5000);
-        }
-        CloseHandle(ready);
-    } else if (!wanted) {
-        StopHookThread();
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2915,8 +2772,6 @@ void RestoreSavedIdleLevels() {
     ClearSavedIdleRestore();
 }
 
-// keepBackup: leave the saved levels in storage; the caller clears them once
-// the writes are known to have reached the displays.
 void SetLinked(bool linked) {
     g_linked = linked;
     Wh_SetIntValue(StorageName(L"linked").c_str(), linked ? 1 : 0);
@@ -2927,6 +2782,8 @@ void SetLinked(bool linked) {
     UpdatePanel();
 }
 
+// keepBackup: leave the saved levels in storage; the caller clears them once
+// the writes are known to have reached the displays.
 void RestoreFromIdle(bool immediate, bool keepBackup = false) {
     if (!g_idleDimmed) {
         return;
@@ -3099,7 +2956,6 @@ void ShowTrayMenu(POINT pt) {
 
 void ApplySettings() {
     RegisterHotkeys();
-    UpdateMouseHook();
     if (g_settings.idleEnabled) {
         ArmIdleTimer(1000);
     } else {
@@ -3117,7 +2973,6 @@ void Shutdown() {
     g_fades.clear();
     KillTimer(g_hwndMain, TIMER_FADE);
     UnregisterHotkeys();
-    StopHookThread();
     RemoveTrayIcon();
     if (g_hwndPanel) {
         DestroyWindow(g_hwndPanel);
@@ -3136,7 +2991,6 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg) {
         g_trayAdded = false;
         AddTrayIcon();
-        UpdateMouseHook();
         return 0;
     }
 
@@ -3150,21 +3004,6 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                 case WM_CONTEXTMENU:
                     HidePanel();
                     ShowTrayMenu({GET_X_LPARAM(wParam), GET_Y_LPARAM(wParam)});
-                    break;
-                case WM_MOUSEMOVE:
-                    // The icon may have moved (taskbar resized, icons
-                    // reordered): refresh the rectangle the wheel hook uses.
-                    if (g_settings.wheelMode == WheelMode::TrayIcon) {
-                        POINT pt{GET_X_LPARAM(wParam), GET_Y_LPARAM(wParam)};
-                        RECT rect;
-                        {
-                            std::lock_guard<std::mutex> lock(g_wheelHookMutex);
-                            rect = g_wheelHookConfig.trayIconRect;
-                        }
-                        if (!PtInRect(&rect, pt)) {
-                            UpdateTrayIconRectForWheel();
-                        }
-                    }
                     break;
             }
             return 0;
@@ -3214,11 +3053,6 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             Shutdown();
             return 0;
 
-        case WM_APP_WHEEL:
-            OnWheel((int)(short)wParam,
-                    {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
-            return 0;
-
         case WM_HOTKEY:
             OnHotkey((int)wParam);
             return 0;
@@ -3252,7 +3086,6 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         case WM_DISPLAYCHANGE:
             g_reenumPending = true;
             SetTimer(hwnd, TIMER_REENUM, 2000, nullptr);
-            UpdateTrayIconRectForWheel();
             break;
 
         case WM_POWERBROADCAST:
