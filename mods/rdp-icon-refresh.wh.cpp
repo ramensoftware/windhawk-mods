@@ -19,6 +19,8 @@ scale, and Explorer renders the tray icons for it. When you come back to the loc
 Explorer doesn't render them again from the programs' icons — it rescales the copies it
 already made, so they stay blurry until the program or Explorer is restarted.
 
+![Tray icons after a Remote Desktop session, before and after the refresh](https://raw.githubusercontent.com/Solomag/windhawk-assets/main/rdp-icon-refresh/before-after.png)
+
 This mod asks Explorer to render the icons again. For the tray it uses the copy of each
 icon that Explorer itself keeps for the tray button; as a fallback (for icons it can't
 find there), it remembers the icon each program gives the tray, by watching the
@@ -221,8 +223,10 @@ void CollectAllExplorerIcons(HWND tray, ExplorerIcons& out);
 UINT g_collectMsg = 0;
 // The request the mod's thread is waiting for. Held while the icons are collected, so
 // that a request that timed out can't be written to afterwards.
+// The number tells a stale request apart from a new one at the same address.
 SRWLOCK g_collectLock = SRWLOCK_INIT;
 ExplorerIcons* g_collectTarget = nullptr;
+UINT g_collectId = 0;
 
 // ---- Runs on Explorer's taskbar thread, after Explorer handled the request. ----
 void OnNotifyIcon(const COPYDATASTRUCT* cds, bool accepted) {
@@ -290,7 +294,7 @@ LRESULT CALLBACK TraySubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
         auto* out = (ExplorerIcons*)lParam;
         LRESULT collected = 0;
         AcquireSRWLockExclusive(&g_collectLock);
-        if (out && out == g_collectTarget) {
+        if (out && out == g_collectTarget && wParam == g_collectId) {
             CollectAllExplorerIcons(hWnd, *out);
             collected = 1;
         }
@@ -458,11 +462,12 @@ int RerenderTrayIcons(int* total, bool* toolbarFound, bool* collected) {
     DWORD_PTR answer = 0;
     AcquireSRWLockExclusive(&g_collectLock);
     g_collectTarget = &copies;
+    UINT id = ++g_collectId;
     ReleaseSRWLockExclusive(&g_collectLock);
     // Without the subclass nobody answers, and waiting for an answer wouldn't help.
     *collected = !g_subclassed ||
                  (tray &&
-                  SendMessageTimeoutW(tray, g_collectMsg, 0, (LPARAM)&copies,
+                  SendMessageTimeoutW(tray, g_collectMsg, id, (LPARAM)&copies,
                                       SMTO_ABORTIFHUNG | SMTO_NOTIMEOUTIFNOTHUNG, 5000,
                                       &answer) &&
                   answer);
@@ -649,7 +654,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_WTSSESSION_CHANGE:
             // Only the explorer.exe that owns the taskbar (not separate folder-window
-            // processes) follows the session.
+            // processes) follows the session. The scale sampling started when the mod
+            // loaded stops in any case.
+            if (wParam == WTS_CONSOLE_CONNECT || wParam == WTS_REMOTE_DISCONNECT)
+                KillTimer(hwnd, kRemoteDpiTimer);
             if (!g_tray)
                 return 0;
             if (wParam == WTS_REMOTE_CONNECT) {
@@ -662,10 +670,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_remoteDpiMin = g_remoteDpiMax = 0;
                 KillTimer(hwnd, kRefreshTimer);
                 SetTimer(hwnd, kRemoteDpiTimer, kRemoteDpiPeriodMs, nullptr);
-            } else if (wParam == WTS_REMOTE_DISCONNECT) {
-                KillTimer(hwnd, kRemoteDpiTimer);
             } else if (wParam == WTS_CONSOLE_CONNECT) {
-                KillTimer(hwnd, kRemoteDpiTimer);
                 if (g_awayFromConsole) {
                     g_awayFromConsole = false;
                     StartSettling(hwnd);
@@ -674,6 +679,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         case WM_TIMER:
             if (wParam == kRemoteDpiTimer) {
+                if (!g_tray)
+                    return 0;  // not the taskbar's process, or no taskbar yet
                 UINT dpi = TaskbarDpi();
                 if (!g_remoteDpiMax || dpi < g_remoteDpiMin || dpi > g_remoteDpiMax) {
                     if (!g_remoteDpiMax || dpi < g_remoteDpiMin)
@@ -734,13 +741,19 @@ DWORD WINAPI Worker(LPVOID) {
         // Loaded during a remote session, or while it is disconnected.
         WTS_CONNECTSTATE_CLASS* state = nullptr;
         DWORD bytes = 0;
-        if (GetSystemMetrics(SM_REMOTESESSION))
+        if (GetSystemMetrics(SM_REMOTESESSION)) {
             g_awayFromConsole = true;
-        else if (WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION,
+        } else if (WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION,
                                              WTSConnectState, (LPWSTR*)&state, &bytes)) {
             g_awayFromConsole = bytes >= sizeof(*state) && *state != WTSActive;
             WTSFreeMemory(state);
         }
+        // Sample the scale as after WTS_REMOTE_CONNECT (a disconnected session keeps the
+        // last one's scale). The local scale is unknown (g_localDpi stays 0), so a scale
+        // of the remote session is only taken as final when the watch after the return
+        // ends.
+        if (g_awayFromConsole)
+            SetTimer(g_window, kRemoteDpiTimer, kRemoteDpiPeriodMs, nullptr);
         // Early in a session the service may not be ready yet: keep retrying.
         if (!RegisterSessionNotification(g_window)) {
             Wh_Log(L"WTSRegisterSessionNotification failed: %u, retrying", GetLastError());
