@@ -2315,7 +2315,7 @@ void GetOsdSize(size_t rows, UINT dpi, int* w, int* h) {
         *w = px(280);
         *h = px(60);
     } else {
-        *w = px(340);
+        *w = px(370);
         *h = px(20 + 30 * (int)rows);
     }
 }
@@ -2437,9 +2437,10 @@ void PaintOsd(Gdiplus::Bitmap& canvas,
     if (items.size() == 1) {
         const OsdItem& item = items[0];
         DrawLabel(g, item.label,
-                  Gdiplus::RectF((float)px(54), (float)px(8),
-                                 (float)(w - px(54) - px(64)), (float)px(20)),
-                  (float)px(12), t.secondaryText, Gdiplus::StringAlignmentNear);
+                  Gdiplus::RectF((float)px(54), (float)px(6),
+                                 (float)(w - px(54) - px(64)), (float)px(22)),
+                  (float)px(14), t.text, Gdiplus::StringAlignmentNear, nullptr,
+                  Gdiplus::FontStyleBold);
         DrawOsdBar(g, t, (float)px(54), (float)(w - px(64)), (float)px(38),
                    item.value, scale);
         DrawLabel(g, valueText(item.value),
@@ -2455,10 +2456,11 @@ void PaintOsd(Gdiplus::Bitmap& canvas,
         float top = (float)px(10 + 30 * (int)i);
         float cy = top + px(15);
         DrawLabel(g, items[i].label,
-                  Gdiplus::RectF((float)px(54), top, (float)px(110),
+                  Gdiplus::RectF((float)px(54), top, (float)px(140),
                                  (float)px(30)),
-                  (float)px(12), t.secondaryText, Gdiplus::StringAlignmentNear);
-        DrawOsdBar(g, t, (float)px(170), (float)(w - px(56)), cy,
+                  (float)px(14), t.text, Gdiplus::StringAlignmentNear, nullptr,
+                  Gdiplus::FontStyleBold);
+        DrawOsdBar(g, t, (float)px(200), (float)(w - px(56)), cy,
                    items[i].value, scale);
         DrawLabel(g, valueText(items[i].value),
                   Gdiplus::RectF((float)(w - px(52)), top, (float)px(36),
