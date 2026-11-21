@@ -145,6 +145,8 @@ to the internet and restart `explorer.exe` (or toggle the mod).
 #include <oaidl.h>
 #include <ocidl.h>
 #include <oleauto.h>
+#include <sddl.h>
+#include <wincodec.h>
 
 #include <atomic>
 #include <cstdint>
@@ -1897,9 +1899,19 @@ struct LiveObject {
     LiveObject(const LiveObject&) = delete;
     LiveObject& operator=(const LiveObject&) = delete;
     ~LiveObject() {
-        g_liveObjects.fetch_sub(1);
         if (tracked) RemoveLive(tid);
+        g_liveObjects.fetch_sub(1);      // last: from here on the unload may proceed
     }
+};
+
+// Calls of the three Page_* replacements that are running right now. A call already inside one of them when the imports
+// are restored still returns into the mod's code, so the unload waits for it too (RundownLiveObjects).
+std::atomic<LONG> g_activeCalls{0};
+struct CallGuard {
+    CallGuard() { g_activeCalls.fetch_add(1); }
+    CallGuard(const CallGuard&) = delete;
+    CallGuard& operator=(const CallGuard&) = delete;
+    ~CallGuard() { g_activeCalls.fetch_sub(1); }
 };
 
 struct SavedImport {
@@ -1967,11 +1979,18 @@ std::vector<DWORD> ThreadsWithObjects() {
 // because a window can ignore it (a modal dialog, a pending prompt), and the remaining count is logged every 5 seconds
 // so that a stuck unload can be seen in the log.
 void RundownLiveObjects() {
-    if (g_liveObjects.load() <= 0) return;
-    Wh_Log(L"Unload: closing the User Accounts windows (%ld object(s) alive)", long(g_liveObjects.load()));
+    bool pageLoaded = false;
+    try {
+        SharedLock lock(g_stateLock);
+        pageLoaded = g_pageModule != nullptr;
+    } catch (...) {
+        pageLoaded = true;
+    }
+    if (g_liveObjects.load() > 0)
+        Wh_Log(L"Unload: closing the User Accounts windows (%ld object(s) alive)", long(g_liveObjects.load()));
     const DWORD self = GetCurrentThreadId();
     ULONGLONG lastClose = 0, lastLog = GetTickCount64();
-    while (g_liveObjects.load() > 0) {
+    while (g_liveObjects.load() > 0 || g_activeCalls.load() > 0) {
         const std::vector<DWORD> threads = ThreadsWithObjects();
         const ULONGLONG now = GetTickCount64();
         if (now - lastClose >= 1000 || lastClose == 0) {
@@ -1980,8 +1999,8 @@ void RundownLiveObjects() {
         }
         if (now - lastLog >= 5000) {
             lastLog = now;
-            Wh_Log(L"Unload: still waiting for %ld object(s) held by %lu thread(s)%s", long(g_liveObjects.load()),
-                   static_cast<unsigned long>(threads.size()),
+            Wh_Log(L"Unload: still waiting for %ld object(s) held by %lu thread(s), %ld call(s) in progress%s",
+                   long(g_liveObjects.load()), static_cast<unsigned long>(threads.size()), long(g_activeCalls.load()),
                    threads.empty() ? L" (none of them is on a thread the mod recorded: kept by the page after its window closed?)"
                                    : L"");
         }
@@ -1994,6 +2013,14 @@ void RundownLiveObjects() {
             }
         }
         Sleep(20);
+    }
+    // Both counts are zero, but the last thread may still be leaving Release() or a Page_* function: its decrement is
+    // the last thing it counts, not the last instruction it runs. No ordering removes those final instructions, so the
+    // unload waits a short grace period before the mod's code can be unmapped.
+    if (pageLoaded) {
+        Sleep(300);
+        // A call that began in the meantime (a page still open, an import not yet restored) is waited for again.
+        while (g_liveObjects.load() > 0 || g_activeCalls.load() > 0) Sleep(20);
     }
     Wh_Log(L"Unload: all objects released");
 }
@@ -2346,6 +2373,7 @@ HMODULE LoadVerified(const std::wstring& path, const std::string& sha256) {
 // "Link online IDs" is offered on every workstation; its page was in OnlineIDcpl.dll (Windows 7 only). The page reads
 // the product type for nothing else.
 BOOL WINAPI Page_GetVersionExW(LPOSVERSIONINFOW info) {
+    CallGuard guard;
     const BOOL ok = GetVersionExW(info);
     if (ok && info && info->dwOSVersionInfoSize >= sizeof(OSVERSIONINFOEXW))
         reinterpret_cast<OSVERSIONINFOEXW*>(info)->wProductType = VER_NT_SERVER;
@@ -2356,6 +2384,7 @@ BOOL WINAPI Page_GetVersionExW(LPOSVERSIONINFOW info) {
 // offered here only if a Parental Controls / Family Safety applet is registered in Control Panel (Windows 10/11 have
 // none; a mod that restores it makes the link come back).
 HRESULT WINAPI Page_WPC_InstallState(DWORD* state) {
+    CallGuard guard;
     if (!state) return E_POINTER;
     RegKey key;
     const bool present =
@@ -2370,6 +2399,7 @@ HRESULT WINAPI Page_WPC_InstallState(DWORD* state) {
 // "Manage your fingerprint data" is offered when a fingerprint reader is found through winbio.dll; it starts
 // biocpl.dll, which Windows 10/11 do not have. Without that file the page is not given winbio.dll.
 HMODULE WINAPI Page_LoadLibraryW(LPCWSTR name) {
+    CallGuard guard;
     if (name && _wcsicmp(name, L"winbio.dll") == 0) {
         wchar_t path[MAX_PATH];
         const UINT n = GetSystemDirectoryW(path, ARRAYSIZE(path));
@@ -2592,6 +2622,169 @@ struct AdapterBase : Interface, LiveObject {
     }
 };
 
+// The picture of the signed-in user as Windows 10/11 keep it. When the picture is chosen in Settings the account object
+// answers "" (or a file that is not there) to "Picture", and the real files are listed in the registry, one value per
+// size (Image32 ... Image1080), under AccountPicture\Users\<SID>. The smallest file of at least 192 pixels is used (the
+// page draws it small, but sharp on high DPI); if there is none, the largest one.
+bool CurrentUserSid(std::wstring& out) {
+    HANDLE raw = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &raw)) return false;
+    FileHandle token(raw);
+    DWORD size = 0;
+    GetTokenInformation(token.get(), TokenUser, nullptr, 0, &size);
+    if (!size) return false;
+    std::vector<BYTE> buffer(size);
+    if (!GetTokenInformation(token.get(), TokenUser, buffer.data(), size, &size)) return false;
+    LPWSTR text = nullptr;
+    if (!ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(buffer.data())->User.Sid, &text)) return false;
+    out = text;
+    LocalFree(text);
+    return true;
+}
+
+std::wstring RegistryAccountPicture() {
+    try {
+        std::wstring sid;
+        if (!CurrentUserSid(sid)) return std::wstring();
+        const std::wstring path = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AccountPicture\\Users\\" + sid;
+        RegKey key;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, path.c_str(), 0, KEY_QUERY_VALUE, &key.k) != ERROR_SUCCESS)
+            return std::wstring();
+        std::wstring best;
+        int bestGroup = 2;      // 0: at least 192 px (smaller is better), 1: smaller than 192 px (larger is better)
+        long bestSize = 0;
+        for (DWORD index = 0;; index++) {
+            wchar_t name[64];
+            DWORD nameLength = ARRAYSIZE(name);
+            wchar_t data[MAX_PATH];
+            DWORD dataLength = sizeof(data) - sizeof(wchar_t), type = 0;
+            const LONG result = RegEnumValueW(key.k, index, name, &nameLength, nullptr, &type,
+                                              reinterpret_cast<BYTE*>(data), &dataLength);
+            if (result == ERROR_NO_MORE_ITEMS) break;
+            if (result != ERROR_SUCCESS || type != REG_SZ || _wcsnicmp(name, L"Image", 5) != 0) continue;
+            data[dataLength / sizeof(wchar_t)] = L'\0';
+            const long size = _wtol(name + 5);
+            if (size <= 0 || !data[0] || GetFileAttributesW(data) == INVALID_FILE_ATTRIBUTES) continue;
+            const int group = size >= 192 ? 0 : 1;
+            const bool better = group < bestGroup || (group == bestGroup && (group == 0 ? size < bestSize : size > bestSize));
+            if (better) {
+                best = data;
+                bestGroup = group;
+                bestSize = size;
+            }
+        }
+        return best;
+    } catch (...) {
+        return std::wstring();
+    }
+}
+
+// The Windows 7 page draws its picture frame from a BMP (Windows 7 itself kept "user.bmp" and "<name>.bmp" in
+// ProgramData\Microsoft\User Account Pictures); a JPEG or PNG leaves the frame empty. The pictures that Windows 10/11
+// keep are JPEG or PNG, so the picture is converted to a BMP of the same size, once, in the mod's storage folder.
+// WIC (the Windows Imaging Component) does the conversion; its ids are spelled out so that no extra library is needed.
+constexpr GUID kClsidWicFactory = {0xcacaf262, 0x9370, 0x4615, {0xa1, 0x3b, 0x9f, 0x55, 0x39, 0xda, 0x4c, 0x0a}};
+constexpr GUID kIidWicFactory = {0xec5ec8a9, 0xc395, 0x4314, {0x9c, 0x77, 0x54, 0xd7, 0xa9, 0x35, 0xff, 0x70}};
+constexpr GUID kWicContainerBmp = {0x0af1d87e, 0xfcfe, 0x4188, {0xbd, 0xeb, 0xa7, 0x90, 0x64, 0x71, 0xcb, 0xe3}};
+constexpr GUID kWicPixelFormat24bppBgr = {0x6fddc324, 0x4e03, 0x4bfe, {0xb1, 0x85, 0x3d, 0x77, 0x76, 0x8d, 0xc9, 0x0c}};
+
+// Writes `source` as a 24-bit BMP to `target` (through a temporary file, renamed into place).
+bool ConvertPictureToBmp(const std::wstring& source, const std::wstring& target) {
+    const std::wstring temp = target + L".tmp";
+    bool done = false;
+    {
+        IWICImagingFactory* rawFactory = nullptr;
+        if (FAILED(CoCreateInstance(kClsidWicFactory, nullptr, CLSCTX_INPROC_SERVER, kIidWicFactory,
+                                    reinterpret_cast<void**>(&rawFactory))) || !rawFactory)
+            return false;
+        std::unique_ptr<IWICImagingFactory, ComDeleter> factory(rawFactory);
+
+        IWICBitmapDecoder* rawDecoder = nullptr;
+        if (FAILED(factory->CreateDecoderFromFilename(source.c_str(), nullptr, GENERIC_READ,
+                                                      WICDecodeMetadataCacheOnDemand, &rawDecoder)) || !rawDecoder)
+            return false;
+        std::unique_ptr<IWICBitmapDecoder, ComDeleter> decoder(rawDecoder);
+        IWICBitmapFrameDecode* rawFrame = nullptr;
+        if (FAILED(decoder->GetFrame(0, &rawFrame)) || !rawFrame) return false;
+        std::unique_ptr<IWICBitmapFrameDecode, ComDeleter> frame(rawFrame);
+
+        IWICFormatConverter* rawConverter = nullptr;
+        if (FAILED(factory->CreateFormatConverter(&rawConverter)) || !rawConverter) return false;
+        std::unique_ptr<IWICFormatConverter, ComDeleter> converter(rawConverter);
+        if (FAILED(converter->Initialize(frame.get(), kWicPixelFormat24bppBgr, WICBitmapDitherTypeNone, nullptr, 0.0,
+                                         WICBitmapPaletteTypeCustom)))
+            return false;
+        UINT width = 0, height = 0;
+        if (FAILED(converter->GetSize(&width, &height)) || !width || !height || width > 4096 || height > 4096)
+            return false;
+
+        IWICStream* rawStream = nullptr;
+        if (FAILED(factory->CreateStream(&rawStream)) || !rawStream) return false;
+        std::unique_ptr<IWICStream, ComDeleter> stream(rawStream);
+        if (FAILED(stream->InitializeFromFilename(temp.c_str(), GENERIC_WRITE))) return false;
+        IWICBitmapEncoder* rawEncoder = nullptr;
+        if (FAILED(factory->CreateEncoder(kWicContainerBmp, nullptr, &rawEncoder)) || !rawEncoder) return false;
+        std::unique_ptr<IWICBitmapEncoder, ComDeleter> encoder(rawEncoder);
+        if (FAILED(encoder->Initialize(stream.get(), WICBitmapEncoderNoCache))) return false;
+        IWICBitmapFrameEncode* rawTarget = nullptr;
+        if (FAILED(encoder->CreateNewFrame(&rawTarget, nullptr)) || !rawTarget) return false;
+        std::unique_ptr<IWICBitmapFrameEncode, ComDeleter> out(rawTarget);
+        WICPixelFormatGUID format = kWicPixelFormat24bppBgr;
+        done = SUCCEEDED(out->Initialize(nullptr)) && SUCCEEDED(out->SetSize(width, height)) &&
+               SUCCEEDED(out->SetPixelFormat(&format)) && Same(format, kWicPixelFormat24bppBgr) &&
+               SUCCEEDED(out->WriteSource(converter.get(), nullptr)) && SUCCEEDED(out->Commit()) &&
+               SUCCEEDED(encoder->Commit());
+    }      // every COM object, and with them the temporary file, is released before the rename
+    if (done) done = MoveFileExW(temp.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+    if (!done) DeleteFileW(temp.c_str());
+    return done;
+}
+
+// The BMP to give the page for the picture file `source`: the file itself if it already is a BMP, otherwise a converted
+// copy named after the source (path and time of last write, so a new picture gives a new copy). Empty on failure.
+std::wstring PictureAsBitmap(const std::wstring& source) {
+    try {
+        const size_t dot = source.rfind(L'.');
+        if (dot != std::wstring::npos && _wcsicmp(source.c_str() + dot, L".bmp") == 0) return source;
+        WIN32_FILE_ATTRIBUTE_DATA info{};
+        if (!GetFileAttributesExW(source.c_str(), GetFileExInfoStandard, &info)) return std::wstring();
+        std::wstring storage;
+        {
+            SharedLock lock(g_stateLock);
+            storage = g_storage;
+        }
+        if (storage.empty()) storage = StorageDir();
+        if (storage.empty()) return std::wstring();
+        const std::wstring dir = storage + L"\\pic";
+        Bytes key(reinterpret_cast<const uint8_t*>(source.c_str()),
+                  reinterpret_cast<const uint8_t*>(source.c_str()) + source.size() * sizeof(wchar_t));
+        const uint8_t* time = reinterpret_cast<const uint8_t*>(&info.ftLastWriteTime);
+        key.insert(key.end(), time, time + sizeof(FILETIME));
+        const std::wstring name = [&] {
+            const std::string hex = Sha256Hex(key).substr(0, 24);
+            return std::wstring(hex.begin(), hex.end()) + L".bmp";
+        }();
+        const std::wstring target = dir + L"\\" + name;
+        if (GetFileAttributesW(target.c_str()) != INVALID_FILE_ATTRIBUTES) return target;      // converted earlier
+        EnsureDirs(dir);
+        if (!ConvertPictureToBmp(source, target)) {
+            Wh_Log(L"Could not convert the account picture to a BMP: %s", source.c_str());
+            return std::wstring();
+        }
+        // Copies of earlier pictures are removed (best effort).
+        WIN32_FIND_DATAW fd;
+        FindHandle h(FindFirstFileW((dir + L"\\*.bmp").c_str(), &fd));
+        if (h.valid()) {
+            do {
+                if (_wcsicmp(fd.cFileName, name.c_str()) != 0) DeleteFileW((dir + L"\\" + fd.cFileName).c_str());
+            } while (FindNextFileW(h.get(), &fd));
+        }
+        return target;
+    } catch (...) {
+        return std::wstring();
+    }
+}
+
 struct UserAdapter final : AdapterBase<IUser7, &kIidUser7> {
     IUser10* inner;      // owned
     bool current;        // the account of the signed-in user (the only one whose name can be hidden)
@@ -2620,6 +2813,19 @@ struct UserAdapter final : AdapterBase<IUser7, &kIidUser7> {
         if (SUCCEEDED(hr) && name && value && (_wcsicmp(name, L"Picture") == 0 || _wcsicmp(name, L"PictureSource") == 0)) {
             const bool hasText = value->vt == VT_BSTR && value->bstrVal && value->bstrVal[0];
             if (!hasText || GetFileAttributesW(value->bstrVal) == INVALID_FILE_ATTRIBUTES) {
+                // First the picture the user really has (chosen in Settings); the generic one only if there is none.
+                const std::wstring real = current ? RegistryAccountPicture() : std::wstring();
+                const std::wstring shown = real.empty() ? std::wstring() : PictureAsBitmap(real);
+                if (!shown.empty()) {
+                    if (BSTR text = SysAllocString(shown.c_str())) {
+                        VariantClear(value);
+                        value->vt = VT_BSTR;
+                        value->bstrVal = text;
+                        static std::atomic<int> loggedReal{0};
+                        if (loggedReal.fetch_add(1) < 20) Wh_Log(L"Account picture (%s): %s -> %s", name, real.c_str(), shown.c_str());
+                        return hr;
+                    }
+                }
                 static const wchar_t* const candidates[] = {
                     L"%ProgramData%\\Microsoft\\User Account Pictures\\user.bmp",
                     L"%ProgramData%\\Microsoft\\User Account Pictures\\user.png",
