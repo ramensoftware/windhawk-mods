@@ -62,6 +62,7 @@ Replaces the Windows taskbar with a light dock, one per monitor, with its own St
 
 **Status area**
 * Each item, and the tray, can go to the dock, the control center, a "Status" tab in Start (one, several or all of them), or be turned off (Settings → Status area).
+* Start's Status tab looks like the control center; its parts can be put in any order ("Organize": drag them, or Alt + arrows).
 * Click an item for its panel. Scroll on the volume to change it; middle-click mutes.
 * The keyboard item: a click switches the language, right-click lists them all.
 
@@ -69,7 +70,7 @@ Replaces the Windows taskbar with a light dock, one per monitor, with its own St
 * *Button* (default): one button holds the icons; click it to show or hide them. Middle-click an icon to pin it: pinned icons stay outside the button, always visible. Middle-click again to put it back.
 * *Inline*: every icon is on the dock; pinned ones come first, with a dot.
 * *Grid* / *List*: the button opens a panel with all the icons; middle-click pins one to the front.
-* In Start, the icons show under the status tiles; clicks and the middle button work the same.
+* In Start, the icons show in their own part of the Status tab; clicks and the middle button work the same.
 * Left and right clicks go to the app, like on the Windows taskbar (the menu you see is the app's own). Scroll with the arrows or the mouse wheel. "Icons shown" sets how many fit at once.
 * Drag an icon onto another to change the order (in the dock, the panel or the control center).
 
@@ -1619,19 +1620,6 @@ static void MediaSetOn(bool on);
 static void DevSetOn(bool on);
 static void MediaCmd(int cmd, double arg = 0);
 static int ExtraPlace(int id) { return g_set.extraPlace[id - StDnd]; }
-static const wchar_t* ExtraName(int id) {
-    switch (id) {
-        case StDnd: return L2(L"Não incomodar", L"Do not disturb");
-        case StBt: return L"Bluetooth";
-        case StNight: return L2(L"Luz noturna", L"Night light");
-        case StShort: return L2(L"Atalhos", L"Shortcuts");
-        case StLight: return L2(L"Brilho", L"Brightness");
-        case StPower: return L2(L"Energia", L"Power");
-        case StPlayer: return L"Player";
-        case StDevices: return L2(L"Dispositivos", L"Devices");
-    }
-    return L"";
-}
 static bool BtPresent();
 
 static bool StatOn(int id) {
@@ -4680,7 +4668,8 @@ struct StartItem {
     std::wstring fold, foldExtra;  // search: the name, and the app's id or the settings' words, lower case without accents
 };
 
-enum StartRowKind { RowApp, RowFile, RowTabPinned, RowTabAll, RowPower, RowAction, RowTabRecent, RowTabStatus, RowStatus, RowTray };
+enum StartRowKind { RowApp, RowFile, RowTabPinned, RowTabAll, RowPower, RowAction, RowTabRecent, RowTabStatus, RowStatus, RowTray,
+                    RowFn, RowSlide, RowSec, RowOrg };  // (Status tab: a button, a slider, a part being organized, the Organize button)
 
 // The Start's Status tab shows when any status item, or the tray, goes to Start.
 static bool StartHasStatus() {
@@ -4705,6 +4694,9 @@ struct StartRow {
     StartRowKind kind;
     StartItem* item = nullptr;
     int power = 0;
+    std::function<void()> fn;             // RowFn: what a click does
+    std::function<void(float)> slide;     // RowSlide: set from 0..1
+    float x0 = 0, x1 = 0;                 // RowSlide: the track
 };
 
 struct StartMenu {
@@ -4722,7 +4714,7 @@ struct StartMenu {
     int dibW = 0, dibH = 0;
     ComPtr<ID2D1DCRenderTarget> rt;
     ComPtr<ID2D1DeviceContext> dc;
-    ComPtr<IDWriteTextFormat> font, small, section, glyphs;
+    ComPtr<IDWriteTextFormat> font, small, section, glyphs, big, head;
     std::unordered_map<std::wstring, ComPtr<ID2D1Bitmap>> bmps;
     std::wstring query;
     size_t caret = 0, anchor = 0;  // text cursor and the other end of the selection (equal: no selection)
@@ -4734,6 +4726,15 @@ struct StartMenu {
         int cur = -1;  // the dragged pin's index in g_startPins
         int sx = 0, sy = 0;
     } pinDrag;  // reordering the pinned apps
+    bool org = false;  // Status tab: organizing its parts
+    struct {
+        bool down = false, active = false;
+        int sec = -1;
+        int sx = 0, sy = 0;
+    } secDrag;  // a Status part being dragged
+    bool sliding = false;  // a Status slider held down
+    std::function<void(float)> slideFn;
+    float slideX0 = 0, slideX1 = 1;
     DWORD lastTextClick = 0;
     int tab = 0;  // 0 pinned, 1 all apps, 2 downloads, 3 status (statusPos: iniciar)
     float scroll = 0, maxScroll = 0;
@@ -5632,6 +5633,19 @@ static void RenderStart() {
     if (g_iconsPending && g_start.open) SetTimer(g_start.hwnd, TIMER_START_ICONS, 16, nullptr);
 }
 
+struct StartPaint {
+    ID2D1RenderTarget* rt;
+    ID2D1Brush *text, *sub, *card, *cardHi, *hi, *line;
+    D2D1_COLOR_F tintSolid;
+    float W, pad, top, bottom;
+};
+static void StartStatusTab(const StartPaint& p);
+static void StartOrgButton(const StartPaint& p, float listTop);
+static void SaveStartSecOrder();
+static void StartSecMoveTo(int sec, int target);
+static void StartSecStep(int sec, int dir);
+static void StartStatusRefresh();
+
 static void RenderStartFrame() {
     if (!g_start.open && !g_start.closing) return;
     auto& s = g_start;
@@ -5878,13 +5892,18 @@ static void RenderStartFrame() {
         }
         static std::vector<StartItem> none;
         std::vector<StartItem>& list = s.tab == 0 ? g_startPins : s.tab == 1 ? g_allApps : s.tab == 2 ? g_recent : none;
-        wchar_t count[64];
-        if (s.tab == 3) wcsncpy_s(count, g_stat.time.c_str(), _TRUNCATE);
-        else swprintf_s(count, s.tab == 0 ? Tr(S_CountPinned) : s.tab == 1 ? Tr(S_CountApps) : Tr(S_CountRecent),
-                        (int)list.size());
-        s.small->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
-        rt->DrawTextW(count, (UINT32)wcslen(count), s.small.Get(), D2D1::RectF(W / 2, listTop, W - pad, listTop + SS(36)), sub.Get());
-        s.small->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+        D2D1_COLOR_F tintSolid = T.tint;
+        tintSolid.a = 1;
+        StartPaint sp = {rt, text.Get(), sub.Get(), card.Get(), cardHi.Get(), hi.Get(), line.Get(), tintSolid, W, pad, 0, 0};
+        if (s.tab == 3) {
+            StartOrgButton(sp, listTop);
+        } else {
+            wchar_t count[64];
+            swprintf_s(count, s.tab == 0 ? Tr(S_CountPinned) : s.tab == 1 ? Tr(S_CountApps) : Tr(S_CountRecent), (int)list.size());
+            s.small->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+            rt->DrawTextW(count, (UINT32)wcslen(count), s.small.Get(), D2D1::RectF(W / 2, listTop, W - pad, listTop + SS(36)), sub.Get());
+            s.small->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+        }
 
         float gridTop = listTop + SS(48);
         // Pinned and all apps: two columns. Downloads: one, with when and where under the name.
@@ -5909,126 +5928,9 @@ static void RenderStartFrame() {
             rt->DrawTextW(hint, (UINT32)wcslen(hint), s.small.Get(), D2D1::RectF(pad, gridTop, W - pad, gridTop + SS(40)), sub.Get());
         }
         if (s.tab == 3) {
-            // The status area as tiles; each opens its panel beside the Start.
-            std::vector<int> ids;
-            for (int id : {StVolume, StNetwork, StKeyboard, StBattery, StClock})
-                if (StatOn(id) && (g_set.statPlace[id] & PlStart)) ids.push_back(id);
-            if ((g_set.shelfPlace & PlStart)) ids.push_back(StShelf);
-            if ((g_set.notifPlace & PlStart)) ids.push_back(StNotif);
-            if ((g_set.notesPlace & PlStart)) ids.push_back(StNotes);
-            for (int id : {StPlayer, StDevices, StDnd, StNight, StBt, StShort, StLight, StPower})
-                if ((ExtraPlace(id) & PlStart) && (id != StBt || BtPresent()) && (id != StDevices || !DevicesNow().empty())) ids.push_back(id);
-            float gap = SS(8), colW = (W - pad * 2 - gap) / 2, tileH = SS(80);
-            // Many items in here: the tiles and the tray scroll between the tabs and the footer (never over the power buttons).
-            std::vector<int> trayOrder;
-            if (TrayInStart()) trayOrder = TrayOrder();
-            float cell = SS(46);
-            int trayCols = std::max(1, (int)((W - pad * 2) / cell));
-            float contentH = ids.empty() ? 0 : ((ids.size() + 1) / 2) * (tileH + gap) - gap;
-            if (TrayInStart())
-                contentH += (ids.empty() ? 0 : gap + SS(6)) + SS(28) +
-                            (trayOrder.empty() ? SS(22) : ((trayOrder.size() + trayCols - 1) / trayCols) * cell);
-            s.maxScroll = std::max(0.0f, contentH - (listBottom - gridTop));
-            s.scroll = std::clamp(s.scroll, 0.0f, s.maxScroll);
-            // (like the app list: rows half out of view keep their whole box, so the keyboard can scroll to them;
-            // the tabs and the power buttons come first in the rows, so their clicks stay theirs)
-            rt->PushAxisAlignedClip(D2D1::RectF(0, gridTop, W, listBottom), D2D1_ANTIALIAS_MODE_ALIASED);
-            for (size_t i = 0; i < ids.size(); i++) {
-                int id = ids[i];
-                float x = pad + (i % 2) * (colW + gap), y = gridTop + (i / 2) * (tileH + gap) - s.scroll;
-                if (y + tileH <= gridTop || y >= listBottom) continue;
-                bool wide = i == ids.size() - 1 && i % 2 == 0;  // the last one alone on its row: full width
-                D2D1_RECT_F r = D2D1::RectF(x, y, wide ? W - pad : x + colW, y + tileH);
-                int idx = (int)s.rows.size();
-                s.rows.push_back({r, RowStatus, nullptr, id});
-                bool on = s.hover == idx || FlyoutShowsKind(id);
-                rt->FillRoundedRectangle(D2D1::RoundedRect(r, SS(16), SS(16)), on ? cardHi.Get() : card.Get());
-                float icx = r.left + SS(28), icy = r.top + SS(26);
-                if (id == StPlayer && MediaNow().has) {
-                    MediaInfo m = MediaNow();
-                    float a = tileH - SS(24);
-                    D2D1_RECT_F ar = D2D1::RectF(r.left + SS(12), r.top + SS(12), r.left + SS(12) + a, r.top + SS(12) + a);
-                    if (!DrawPlayerArtOn(rt, &s, ar, SS(10))) {
-                        rt->FillRoundedRectangle(D2D1::RoundedRect(ar, SS(10), SS(10)), cardHi.Get());
-                        DrawLineIcon(rt, StatIcon(StPlayer), (ar.left + ar.right) / 2, (ar.top + ar.bottom) / 2, SS(20), text.Get());
-                    }
-                    float tx = ar.right + SS(12);
-                    rt->DrawTextW(m.title.c_str(), (UINT32)m.title.size(), s.font.Get(), D2D1::RectF(tx, r.top + SS(16), r.right - SS(12), r.top + SS(40)),
-                                  text.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
-                    rt->DrawTextW(m.artist.c_str(), (UINT32)m.artist.size(), s.small.Get(), D2D1::RectF(tx, r.top + SS(42), r.right - SS(12), r.top + SS(62)),
-                                  sub.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
-                    continue;
-                }
-                if (id == StKeyboard)
-                    DrawTextAt(rt, g_stat.cur ? KbShort(g_stat.cur) : L"??", s.small.Get(), icx, icy, text.Get());
-                else if (id == StBattery)
-                    DrawBattery(rt, icx, icy, SS(21), text.Get());
-                else if (id == StClock)
-                    DrawLineIcon(rt, L"M4 6h16v14H4z M4 10h16 M8 3v5 M16 3v5", icx, icy, SS(20), text.Get());
-                else
-                    DrawLineIcon(rt, StatIcon(id), icx, icy, SS(20), text.Get());
-                const wchar_t* title = id == StVolume     ? L"Volume"
-                                       : id == StNetwork  ? L2(L"Rede", L"Network")
-                                       : id == StKeyboard ? L2(L"Teclado", L"Keyboard")
-                                       : id == StBattery  ? L2(L"Bateria", L"Battery")
-                                       : id == StShelf    ? L2(L"Prateleira", L"Shelf")
-                                       : id == StNotif    ? L2(L"Notificações", L"Notifications")
-                                       : id == StNotes    ? L2(L"Notas", L"Notes")
-                                       : IsExtra(id)      ? ExtraName(id)
-                                                          : L2(L"Hoje", L"Today");
-                rt->DrawTextW(title, (UINT32)wcslen(title), s.small.Get(),
-                              D2D1::RectF(r.left + SS(48), r.top + SS(14), r.right - SS(12), r.top + SS(38)), sub.Get());
-                std::wstring value;
-                if (id == StVolume) value = !g_stat.audio ? L"—" : g_stat.muted ? L2(L"Mudo", L"Muted") : std::to_wstring((int)std::lround(g_stat.vol * 100)) + L"%";
-                else if (id == StNetwork) value = g_stat.net == 2 ? g_stat.wifiName : g_stat.net == 1 ? L2(L"Cabo, com internet", L"Cable, connected") : L2(L"Sem conexão", L"Not connected");
-                else if (id == StKeyboard) value = g_stat.cur ? KbOf(g_stat.cur).name : L"";
-                else if (id == StBattery) value = std::to_wstring(g_stat.pct) + L"%";
-                else if (id == StShelf) value = g_shelf.empty() ? L2(L"Vazia", L"Empty") : std::to_wstring(g_shelf.size()) + L2(L" itens", L" items");
-                else if (id == StDnd) value = g_set.notifDnd ? L2(L"Ligado", L"On") : L2(L"Desligado", L"Off");
-                else if (id == StPlayer) {
-                    MediaInfo m = MediaNow();
-                    value = m.has ? m.title : L2(L"Nada tocando", L"Nothing playing");
-                } else if (id == StDevices) {
-                    for (auto& dv : DevicesNow())
-                        if (dv.percent >= 0) value += (value.empty() ? L"" : L" · ") + std::to_wstring(dv.percent) + L"%";
-                }
-                else if (IsExtra(id)) value = L2(L"Abrir", L"Open");
-                else if (id == StNotes) value = std::to_wstring(g_notes.size()) + L2(L" notas · ", L" notes · ") + std::to_wstring(RemPending()) + L2(L" lembretes", L" reminders");
-                else if (id == StNotif) value = g_notifs.empty() ? L2(L"Nada novo", L"Nothing new") : std::to_wstring(g_notifs.size()) + L2(L" avisos", L" notifications");
-                else value = g_stat.dateLong;
-                rt->DrawTextW(value.c_str(), (UINT32)value.size(), s.font.Get(),
-                              D2D1::RectF(r.left + SS(16), r.top + SS(44), r.right - SS(14), r.bottom - SS(10)), text.Get(),
-                              D2D1_DRAW_TEXT_OPTIONS_CLIP);
-            }
-            // The tray: its icons in a grid under the tiles (clicks go to the apps; middle-click pins).
-            if (TrayInStart()) {
-                std::vector<int>& order = trayOrder;
-                float ty = gridTop + ((ids.size() + 1) / 2) * (tileH + gap) + (ids.empty() ? 0 : SS(6)) - s.scroll;
-                const wchar_t* head = L2(L"Em segundo plano", L"In the background");
-                rt->DrawTextW(head, (UINT32)wcslen(head), s.small.Get(), D2D1::RectF(pad + SS(4), ty, W - pad, ty + SS(22)), sub.Get());
-                ty += SS(28);
-                int cols = trayCols;
-                for (size_t k = 0; k < order.size(); k++) {
-                    int ti = order[k];
-                    float x = pad + (k % cols) * cell, y = ty + (k / cols) * cell;
-                    if (y + cell <= gridTop || y >= listBottom) continue;
-                    D2D1_RECT_F r = D2D1::RectF(x + SS(2), y + SS(2), x + cell - SS(2), y + cell - SS(2));
-                    int idx = (int)s.rows.size();
-                    s.rows.push_back({r, RowTray, nullptr, ti});
-                    if (s.hover == idx) rt->FillRoundedRectangle(D2D1::RoundedRect(r, SS(10), SS(10)), cardHi.Get());
-                    ComPtr<ID2D1Bitmap> bmp;
-                    if (g_tray[ti].icon) rt->CreateBitmapFromWicBitmap(g_tray[ti].icon.Get(), nullptr, &bmp);
-                    float cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2, h = SS(11);
-                    if (bmp) rt->DrawBitmap(bmp.Get(), D2D1::RectF(cx - h, cy - h, cx + h, cy + h));
-                    if (TrayIsPinned(g_tray[ti]))
-                        rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(r.right - SS(7), r.top + SS(7)), SS(2.5f), SS(2.5f)), text.Get());
-                }
-                if (order.empty()) {
-                    const wchar_t* none = L2(L"Nenhum programa com ícone agora.", L"No app has an icon now.");
-                    rt->DrawTextW(none, (UINT32)wcslen(none), s.small.Get(), D2D1::RectF(pad + SS(4), ty, W - pad, ty + SS(22)), sub.Get());
-                }
-            }
-            rt->PopAxisAlignedClip();
+            sp.top = gridTop;
+            sp.bottom = listBottom;
+            StartStatusTab(sp);
         }
         if (list.empty() && s.tab == 0) {
             const wchar_t* hint = Tr(S_PinHint);
@@ -6318,13 +6220,19 @@ void ToggleStart(Dock& d) {
     s.font.Reset();
     s.small.Reset();
     s.glyphs.Reset();
+    s.big.Reset();
+    s.head.Reset();
+    g_dw->CreateTextFormat(L"Segoe UI Variable Display", nullptr, DWRITE_FONT_WEIGHT_SEMI_LIGHT, DWRITE_FONT_STYLE_NORMAL,
+                           DWRITE_FONT_STRETCH_NORMAL, SS(34), g_locale, &s.big);
+    g_dw->CreateTextFormat(L"Segoe UI Variable Text", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
+                           DWRITE_FONT_STRETCH_NORMAL, SS(13.5f), g_locale, &s.head);
     g_dw->CreateTextFormat(L"Segoe UI Variable Text", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
                            DWRITE_FONT_STRETCH_NORMAL, SS(14.5f), g_locale, &s.font);
     g_dw->CreateTextFormat(L"Segoe UI Variable Text", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
                            DWRITE_FONT_STRETCH_NORMAL, SS(12.5f), g_locale, &s.small);
     g_dw->CreateTextFormat(L"Segoe Fluent Icons", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
                            DWRITE_FONT_STRETCH_NORMAL, SS(16), g_locale, &s.glyphs);
-    for (auto* f : {s.font.Get(), s.small.Get(), s.glyphs.Get()}) {
+    for (auto* f : {s.font.Get(), s.small.Get(), s.glyphs.Get(), s.big.Get(), s.head.Get()}) {
         if (!f) continue;
         f->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
         f->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -6342,6 +6250,7 @@ void ToggleStart(Dock& d) {
     s.rc = {x, y, x + s.w, y + s.h};
     s.query.clear();
     s.tab = 0;
+    s.org = false;
     s.scroll = 0;
     s.hover = -1;
     s.kbFocus = -1;
@@ -6416,7 +6325,7 @@ static void StartKeepVisible() {
     auto& s = g_start;
     if (s.kbFocus < 0 || s.kbFocus >= (int)s.rows.size()) return;
     const StartRow& row = s.rows[s.kbFocus];
-    if (StartIsTabRow(row.kind) || row.kind == RowPower) return;
+    if (StartIsTabRow(row.kind) || row.kind == RowPower || row.kind == RowOrg) return;
     float top = 0, bottom = 1e9f;
     for (auto& r : s.rows) {
         if (StartIsTabRow(r.kind)) top = std::max(top, r.rc.bottom);
@@ -6435,7 +6344,7 @@ static void StartNav(int dir) {  // 0 left, 1 right, 2 up, 3 down, 4 next, 5 pre
     if (cur < 0) {
         // the first item of the tab's content (not a tab, not the power buttons)
         for (int i = 0; i < n; i++)
-            if (!StartIsTabRow(s.rows[i].kind) && s.rows[i].kind != RowPower) {
+            if (!StartIsTabRow(s.rows[i].kind) && s.rows[i].kind != RowPower && s.rows[i].kind != RowOrg) {
                 cur = i;
                 break;
             }
@@ -6793,8 +6702,28 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_LBUTTONDOWN: {
             int x = GET_X_LPARAM(lp), y = GET_Y_LPARAM(lp);
             if (!InSearchText(x, y)) {
-                // A pinned app: maybe the start of a drag to reorder.
                 int r = StartRowAt(x, y);
+                // Status tab: a slider follows the mouse; a part being organized may be dragged.
+                if (r >= 0 && s.rows[r].kind == RowSlide && s.rows[r].slide) {
+                    s.sliding = true;
+                    s.slideFn = s.rows[r].slide;
+                    s.slideX0 = s.rows[r].x0;
+                    s.slideX1 = s.rows[r].x1;
+                    s.slideFn(std::clamp((x - s.offX - s.slideX0) / std::max(1.0f, s.slideX1 - s.slideX0), 0.0f, 1.0f));
+                    SetCapture(hwnd);
+                    RenderStart();
+                    return 0;
+                }
+                if (r >= 0 && s.rows[r].kind == RowSec) {
+                    s.secDrag.down = true;
+                    s.secDrag.active = false;
+                    s.secDrag.sec = s.rows[r].power;
+                    s.secDrag.sx = x;
+                    s.secDrag.sy = y;
+                    SetCapture(hwnd);
+                    return 0;
+                }
+                // A pinned app: maybe the start of a drag to reorder.
                 if (r >= 0 && s.query.empty() && s.tab == 0 && s.rows[r].kind == RowApp && s.rows[r].item && !g_startPins.empty() &&
                     s.rows[r].item >= &g_startPins.front() && s.rows[r].item <= &g_startPins.back()) {
                     s.pinDrag.down = true;
@@ -6830,6 +6759,11 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_CAPTURECHANGED:
             s.selecting = false;
+            if ((HWND)lp != hwnd) {
+                s.sliding = false;
+                if (s.secDrag.active) SaveStartSecOrder();
+                s.secDrag = {};
+            }
             if ((HWND)lp != hwnd && s.pinDrag.down) {
                 if (s.pinDrag.active) SaveStartPins();
                 s.pinDrag = {};
@@ -6840,6 +6774,25 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (s.selecting) {
                 size_t pos = QueryPosAt(GET_X_LPARAM(lp));
                 if (pos != s.caret) MoveTextCaret(pos, true);
+                return 0;
+            }
+            if (s.sliding && s.slideFn) {
+                s.slideFn(std::clamp((GET_X_LPARAM(lp) - s.offX - s.slideX0) / std::max(1.0f, s.slideX1 - s.slideX0), 0.0f, 1.0f));
+                RenderStart();
+                return 0;
+            }
+            if (s.secDrag.down) {
+                int x = GET_X_LPARAM(lp), y = GET_Y_LPARAM(lp);
+                if (!s.secDrag.active && (abs(x - s.secDrag.sx) > 6 || abs(y - s.secDrag.sy) > 6)) s.secDrag.active = true;
+                if (s.secDrag.active) {
+                    // Over another part: the dragged one takes its place (the others shift), as with the pinned apps.
+                    for (auto& row : s.rows)
+                        if (row.kind == RowSec && row.power != s.secDrag.sec && y >= row.rc.top && y < row.rc.bottom) {
+                            StartSecMoveTo(s.secDrag.sec, row.power);
+                            break;
+                        }
+                    RenderStart();
+                }
                 return 0;
             }
             if (s.pinDrag.down) {
@@ -6891,6 +6844,20 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 ReleaseCapture();
                 return 0;
             }
+            if (s.sliding) {
+                s.sliding = false;
+                ReleaseCapture();
+                RenderStart();
+                return 0;
+            }
+            if (s.secDrag.down) {
+                bool moved = s.secDrag.active;
+                if (moved) SaveStartSecOrder();
+                s.secDrag = {};
+                ReleaseCapture();
+                RenderStart();
+                return 0;
+            }
             if (s.pinDrag.down) {
                 bool moved = s.pinDrag.active;
                 if (moved) SaveStartPins();
@@ -6902,12 +6869,20 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 }
             }
             int r = StartRowAt(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
-            if (r < 0 || s.rows[r].kind != RowStatus) CloseFlyout();
+            if (r < 0 || (s.rows[r].kind != RowStatus && s.rows[r].kind != RowFn)) CloseFlyout();
             if (r < 0) return 0;
             if (StartIsTabRow(s.rows[r].kind)) s.kbFocus = -1;
             StartRow row = s.rows[r];
             if (row.kind == RowStatus) {
                 if (s.dock) StatClick(*s.dock, row.power, false, true);
+                RenderStart();
+            } else if (row.kind == RowFn) {
+                if (row.fn) row.fn();
+                if (g_start.open) RenderStart();
+            } else if (row.kind == RowOrg) {
+                s.org = !s.org;
+                s.secDrag = {};
+                CloseFlyout();
                 RenderStart();
             } else if (row.kind == RowTray) {
                 TrayClick(row.power, 0);
@@ -6915,9 +6890,11 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             } else if (row.kind == RowTabStatus) {
                 s.tab = 3;
                 s.scroll = 0;
+                StartStatusRefresh();
                 RenderStart();
             } else if (row.kind == RowTabPinned || row.kind == RowTabAll || row.kind == RowTabRecent) {
                 s.tab = row.kind == RowTabPinned ? 0 : row.kind == RowTabAll ? 1 : 2;
+                s.org = false;
                 if (s.tab == 2) LoadRecent();
                 s.scroll = 0;
                 RenderStart();
@@ -6979,6 +6956,20 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         }
+        case WM_SYSKEYDOWN:
+            if ((wp == VK_UP || wp == VK_DOWN) && s.org && s.tab == 3 && s.query.empty() && s.kbFocus >= 0 &&
+                s.kbFocus < (int)s.rows.size() && s.rows[s.kbFocus].kind == RowSec) {
+                int sec = s.rows[s.kbFocus].power;
+                StartSecStep(sec, wp == VK_DOWN ? 1 : -1);
+                SaveStartSecOrder();
+                RenderStart();
+                for (int i = 0; i < (int)s.rows.size(); i++)
+                    if (s.rows[i].kind == RowSec && s.rows[i].power == sec) s.kbFocus = i;
+                StartKeepVisible();
+                RenderStart();
+                return 0;
+            }
+            break;
         case WM_KEYDOWN:
             switch (wp) {
                 case VK_ESCAPE:
@@ -9969,9 +9960,30 @@ static std::wstring SoundName(int v) {
     return L"?";
 }
 
+// In a call (Discord, Teams…) Windows turns the other sounds down, by 80% unless the user changed it
+// (Sound › Communications), which left Nimbus' notification sound all but silent. Its sounds play in the
+// process' default audio session, so that session opts out (checked each time: the output may change).
+static void SoundSkipDucking() {
+    HRESULT co = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    {
+        ComPtr<IMMDeviceEnumerator> en;
+        ComPtr<IMMDevice> dev;
+        ComPtr<IAudioSessionManager> mgr;
+        ComPtr<IAudioSessionControl> ctl;
+        ComPtr<IAudioSessionControl2> ctl2;
+        if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&en))) &&
+            SUCCEEDED(en->GetDefaultAudioEndpoint(eRender, eConsole, &dev)) &&
+            SUCCEEDED(dev->Activate(__uuidof(IAudioSessionManager), CLSCTX_ALL, nullptr, (void**)mgr.GetAddressOf())) &&
+            SUCCEEDED(mgr->GetAudioSessionControl(nullptr, 0, &ctl)) && SUCCEEDED(ctl.As(&ctl2)))
+            ctl2->SetDuckingPreference(TRUE);
+    }
+    if (SUCCEEDED(co)) CoUninitialize();
+}
+
 static void PlayNimbusSound(int v) {
     static std::vector<std::vector<BYTE>> cache(kSoundCount);  // (an async sound reads its buffer while it plays)
     if (v <= 0) return;
+    SoundSkipDucking();
     if (v == 1) {
         PlaySoundW(L"Notification.Default", nullptr, SND_ALIAS | SND_ASYNC | SND_NODEFAULT);
         return;
@@ -12530,6 +12542,493 @@ static float SecShort(float y) {
         x += w + 6;
     }
     return y + 36;
+}
+
+// ---- Start, Status tab: the control center's look in parts the user can put in any order ----
+
+enum StartSec { SsClock, SsPlayer, SsRings, SsSound, SsLight, SsTray, SsPower, SsShort, SsRows, SsCount };
+static const wchar_t* const kStartSecKey[SsCount] = {L"clock", L"player", L"rings", L"sound", L"light", L"tray", L"power", L"short", L"rows"};
+static std::vector<int> g_startSecOrder;
+static bool g_startSecLoaded = false;
+
+// The order is saved per account ("start.statusOrder", the parts' names with commas); a part it doesn't name goes last.
+static void LoadStartSecOrder() {
+    g_startSecLoaded = true;
+    g_startSecOrder.clear();
+    wchar_t buf[256] = {};
+    Wh_GetStringValue((UserPrefix() + L"start.statusOrder").c_str(), buf, ARRAYSIZE(buf));
+    std::wstring v = buf;
+    size_t a = 0;
+    while (a < v.size()) {
+        size_t b = v.find(L',', a);
+        if (b == std::wstring::npos) b = v.size();
+        std::wstring w = v.substr(a, b - a);
+        for (int k = 0; k < SsCount; k++)
+            if (w == kStartSecKey[k] && std::find(g_startSecOrder.begin(), g_startSecOrder.end(), k) == g_startSecOrder.end())
+                g_startSecOrder.push_back(k);
+        a = b + 1;
+    }
+    for (int k = 0; k < SsCount; k++)
+        if (std::find(g_startSecOrder.begin(), g_startSecOrder.end(), k) == g_startSecOrder.end()) g_startSecOrder.push_back(k);
+}
+static void SaveStartSecOrder() {
+    std::wstring v;
+    for (int k : g_startSecOrder) v += (v.empty() ? L"" : L",") + std::wstring(kStartSecKey[k]);
+    Wh_SetStringValue((UserPrefix() + L"start.statusOrder").c_str(), v.c_str());
+}
+static void StartSecMoveTo(int sec, int target) {
+    if (!g_startSecLoaded) LoadStartSecOrder();
+    auto& o = g_startSecOrder;
+    auto from = std::find(o.begin(), o.end(), sec), to = std::find(o.begin(), o.end(), target);
+    if (from == o.end() || to == o.end() || from == to) return;
+    if (from < to) std::rotate(from, from + 1, to + 1);
+    else std::rotate(to, from, from + 1);
+}
+static bool StartSecShown(int k);
+// One step up or down among the parts that show.
+static void StartSecStep(int sec, int dir) {
+    if (!g_startSecLoaded) LoadStartSecOrder();
+    std::vector<int> shown;
+    for (int k : g_startSecOrder)
+        if (StartSecShown(k)) shown.push_back(k);
+    auto it = std::find(shown.begin(), shown.end(), sec);
+    if (it == shown.end()) return;
+    int i = (int)(it - shown.begin()) + dir;
+    if (i < 0 || i >= (int)shown.size()) return;
+    StartSecMoveTo(sec, shown[i]);
+}
+
+static bool StartSecShown(int k) {
+    auto inS = [](int id) { return StatOn(id) && (g_set.statPlace[id] & PlStart); };
+    auto exS = [](int id) { return (ExtraPlace(id) & PlStart) != 0; };
+    switch (k) {
+        case SsClock: return inS(StClock);
+        case SsPlayer: return exS(StPlayer);
+        case SsRings:
+            return inS(StNetwork) || inS(StKeyboard) || inS(StBattery) || exS(StDnd) || exS(StNight) || (exS(StBt) && BtPresent());
+        case SsSound: return inS(StVolume);
+        case SsLight: return exS(StLight);
+        case SsTray: return TrayInStart();
+        case SsPower: return exS(StPower);
+        case SsShort: return exS(StShort);
+        case SsRows:
+            return (g_set.notifPlace & PlStart) || (g_set.notesPlace & PlStart) || (g_set.shelfPlace & PlStart) ||
+                   (exS(StDevices) && !DevicesNow().empty());
+    }
+    return false;
+}
+
+// Opening the tab: what its parts show gets read (the monitors' brightness, the media, the clock).
+static void StartStatusRefresh() {
+    if (!g_startSecLoaded) LoadStartSecOrder();
+    UpdateClock();
+    if (StartSecShown(SsLight)) {
+        CcRefresh();
+        BrightScan();
+    }
+    if (StartSecShown(SsPlayer)) MediaKick();
+}
+
+// The Organize / Done button, on the tab row.
+static void StartOrgButton(const StartPaint& p, float listTop) {
+    auto& s = g_start;
+    auto* rt = p.rt;
+    if (!StartHasStatus()) return;
+    const wchar_t* label = s.org ? L2(L"Pronto", L"Done") : L2(L"Organizar", L"Organize");
+    float tw = TextSize(label, s.small.Get()).width;
+    D2D1_RECT_F r = D2D1::RectF(p.W - p.pad - tw - SS(40), listTop + SS(3), p.W - p.pad, listTop + SS(33));
+    int idx = (int)s.rows.size();
+    s.rows.push_back({r, RowOrg});
+    bool hot = s.hover == idx;
+    ComPtr<ID2D1SolidColorBrush> on;
+    rt->CreateSolidColorBrush(p.tintSolid, &on);
+    if (s.org) rt->FillRoundedRectangle(D2D1::RoundedRect(r, SS(15), SS(15)), p.text);
+    else if (hot) rt->FillRoundedRectangle(D2D1::RoundedRect(r, SS(15), SS(15)), p.cardHi);
+    ID2D1Brush* ink = s.org ? (ID2D1Brush*)on.Get() : p.sub;
+    DrawLineIcon(rt, s.org ? L"M5 12l5 5 9-10" : L"M4 7h16 M4 12h16 M4 17h16", r.left + SS(18), (r.top + r.bottom) / 2, SS(14), ink);
+    rt->DrawTextW(label, (UINT32)wcslen(label), s.small.Get(), D2D1::RectF(r.left + SS(32), r.top, r.right - SS(8), r.bottom), ink);
+}
+
+static void StartStatusTab(const StartPaint& p) {
+    auto& s = g_start;
+    auto* rt = p.rt;
+    if (!g_startSecLoaded) LoadStartSecOrder();
+    bool live = !s.org;  // (organizing: the parts move, their buttons rest)
+    float L = p.pad + (s.org ? SS(30) : 0), R = p.W - p.pad, gap = SS(14);
+    ComPtr<ID2D1SolidColorBrush> tint;
+    rt->CreateSolidColorBrush(p.tintSolid, &tint);
+    auto text = [&](const std::wstring& t, IDWriteTextFormat* f, float x, float y, float w, float h, ID2D1Brush* b,
+                    DWRITE_TEXT_ALIGNMENT al = DWRITE_TEXT_ALIGNMENT_LEADING) {
+        if (!f || w <= 0) return;
+        f->SetTextAlignment(al);
+        rt->DrawTextW(t.c_str(), (UINT32)t.size(), f, D2D1::RectF(x, y, x + w, y + h), b, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        if (al != DWRITE_TEXT_ALIGNMENT_LEADING) f->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    };
+    // A clickable spot; returns whether it's under the mouse or the keyboard.
+    auto button = [&](D2D1_RECT_F r, std::function<void()> fn) {
+        if (!live) return false;
+        int idx = (int)s.rows.size();
+        StartRow row{r, RowFn};
+        row.fn = std::move(fn);
+        s.rows.push_back(std::move(row));
+        return s.hover == idx;
+    };
+    auto slider = [&](float x, float y, float w, float v, std::function<void(float)> set) {
+        float cy = y + SS(16);
+        v = std::clamp(v, 0.0f, 1.0f);
+        ComPtr<ID2D1SolidColorBrush> track;
+        D2D1_COLOR_F tc = g_theme.text;
+        tc.a = 0.18f;
+        rt->CreateSolidColorBrush(tc, &track);
+        rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x, cy - SS(2), x + w, cy + SS(2)), SS(2), SS(2)), track.Get());
+        rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x, cy - SS(2), x + w * v, cy + SS(2)), SS(2), SS(2)), p.text);
+        rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + w * v, cy), SS(8), SS(8)), tint.Get());
+        rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + w * v, cy), SS(5.5f), SS(5.5f)), p.text);
+        if (!live) return;
+        StartRow row{D2D1::RectF(x - SS(8), y, x + w + SS(8), y + SS(32)), RowSlide};
+        row.slide = std::move(set);
+        row.x0 = x;
+        row.x1 = x + w;
+        s.rows.push_back(std::move(row));
+    };
+    // A section title with a note and ›, the whole line opening that item's panel.
+    auto head = [&](float& y, const wchar_t* title, const std::wstring& note, int panel) {
+        D2D1_RECT_F r = D2D1::RectF(L - SS(8), y - SS(4), R + SS(8), y + SS(26));
+        bool hot = panel >= 0 && button(r, [panel] {
+            if (g_start.dock) StatClick(*g_start.dock, panel, false, true);
+        });
+        if (hot) rt->FillRoundedRectangle(D2D1::RoundedRect(r, SS(8), SS(8)), p.cardHi);
+        float right = R;
+        if (panel >= 0) {
+            DrawLineIcon(rt, L"M9 6l6 6-6 6", R - SS(6), y + SS(11), SS(13), p.sub);
+            right -= SS(20);
+        }
+        text(title, s.head.Get(), L, y, SS(220), SS(22), p.text);
+        if (!note.empty()) text(note, s.small.Get(), L + SS(200), y, right - L - SS(200), SS(22), p.sub, DWRITE_TEXT_ALIGNMENT_TRAILING);
+        y += SS(32);
+    };
+
+    rt->PushAxisAlignedClip(D2D1::RectF(0, p.top, p.W, p.bottom), D2D1_ANTIALIAS_MODE_ALIASED);
+    float y = p.top - s.scroll;
+    if (s.org) {
+        text(L2(L"Arraste uma parte pela alça pra mudar a ordem (ou Alt + setas).", L"Drag a part by its handle to change the order (or Alt + arrows)."),
+             s.small.Get(), p.pad, y, R - p.pad - SS(130), SS(26), p.sub);
+        const wchar_t* reset = L2(L"Voltar ao padrão", L"Back to default");
+        D2D1_RECT_F rr = D2D1::RectF(R - SS(124), y, R, y + SS(26));
+        int idx = (int)s.rows.size();
+        StartRow row{rr, RowFn};
+        row.fn = [] {
+            Wh_SetStringValue((UserPrefix() + L"start.statusOrder").c_str(), L"");
+            LoadStartSecOrder();
+        };
+        s.rows.push_back(std::move(row));
+        if (s.hover == idx) rt->FillRoundedRectangle(D2D1::RoundedRect(rr, SS(8), SS(8)), p.cardHi);
+        text(reset, s.small.Get(), rr.left, rr.top, rr.right - rr.left - SS(8), SS(26), p.text, DWRITE_TEXT_ALIGNMENT_TRAILING);
+        y += SS(34);
+    }
+    bool first = true;
+    for (int k : g_startSecOrder) {
+        if (!StartSecShown(k)) continue;
+        float top = y;
+        if (!first) {
+            rt->FillRectangle(D2D1::RectF(p.pad, y, R, y + std::max(1.0f, s.scale)), p.line);
+            y += gap;
+        }
+        first = false;
+        float inner = y;
+        switch (k) {
+            case SsClock: {
+                UpdateClock();
+                bool hot = button(D2D1::RectF(L - SS(8), y - SS(4), R + SS(8), y + SS(60)), [] {
+                    if (g_start.dock) StatClick(*g_start.dock, StClock, false, true);
+                });
+                if (hot) rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(L - SS(8), y - SS(4), R + SS(8), y + SS(60)), SS(10), SS(10)), p.cardHi);
+                text(g_stat.time, s.big.Get(), L, y, SS(260), SS(38), p.text);
+                text(g_stat.dateLong, s.small.Get(), L, y + SS(40), SS(320), SS(18), p.sub);
+                text(std::wstring(L2(L"Calendário", L"Calendar")) + L" ›", s.small.Get(), R - SS(140), y + SS(34), SS(140), SS(22), p.sub,
+                     DWRITE_TEXT_ALIGNMENT_TRAILING);
+                y += SS(58);
+                break;
+            }
+            case SsPlayer: {
+                MediaInfo m = MediaNow();
+                D2D1_RECT_F card = D2D1::RectF(L, y, R, y + SS(64));
+                bool hot = button(card, [] {
+                    if (g_start.dock) StatClick(*g_start.dock, StPlayer, false, true);
+                });
+                rt->FillRoundedRectangle(D2D1::RoundedRect(card, SS(14), SS(14)), hot ? p.cardHi : p.card);
+                D2D1_RECT_F ar = D2D1::RectF(card.left + SS(10), y + SS(10), card.left + SS(54), y + SS(54));
+                if (!m.has || !DrawPlayerArtOn(rt, &s, ar, SS(9))) {
+                    rt->FillRoundedRectangle(D2D1::RoundedRect(ar, SS(9), SS(9)), p.cardHi);
+                    DrawLineIcon(rt, StatIcon(StPlayer), (ar.left + ar.right) / 2, (ar.top + ar.bottom) / 2, SS(18), p.text);
+                }
+                float tx = ar.right + SS(12), tw = card.right - SS(96) - tx;
+                text(m.has ? m.title : std::wstring(L2(L"Nada tocando", L"Nothing playing")), s.font.Get(), tx, y + SS(12), tw, SS(22), p.text);
+                if (m.has) text(m.artist, s.small.Get(), tx, y + SS(34), tw, SS(18), p.sub);
+                if (m.has) {
+                    auto mbtn = [&](float cx, const wchar_t* path, int cmd) {
+                        D2D1_RECT_F r = D2D1::RectF(cx - SS(17), y + SS(15), cx + SS(17), y + SS(49));
+                        bool h = button(r, [cmd] { MediaCmd(cmd); });
+                        if (h) rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, y + SS(32)), SS(17), SS(17)), p.cardHi);
+                        DrawLineIcon(rt, path, cx, y + SS(32), SS(16), p.text);
+                    };
+                    mbtn(card.right - SS(70), m.status == 1 ? L"M8 5v14 M16 5v14" : L"M8 5v14l11-7z", 1);
+                    mbtn(card.right - SS(30), L"M6 5v14l9-7z M18 5v14", 2);
+                }
+                y += SS(64);
+                break;
+            }
+            case SsRings: {
+                struct Rg {
+                    const wchar_t* icon;
+                    std::wstring txt, name, state;
+                    bool on;
+                    std::function<void()> fn;
+                };
+                auto inS = [](int id) { return StatOn(id) && (g_set.statPlace[id] & PlStart); };
+                auto exS = [](int id) { return (ExtraPlace(id) & PlStart) != 0; };
+                auto open = [](int id) {
+                    return [id] {
+                        if (g_start.dock) StatClick(*g_start.dock, id, false, true);
+                    };
+                };
+                std::vector<Rg> rings;
+                if (inS(StNetwork))
+                    rings.push_back({StatIcon(StNetwork), L"", L2(L"Rede", L"Network"),
+                                     g_stat.net == 2 ? g_stat.wifiName : g_stat.net == 1 ? std::wstring(L2(L"Cabo", L"Cable")) : std::wstring(L2(L"Sem rede", L"Offline")),
+                                     g_stat.net != 0, open(StNetwork)});
+                if (exS(StBt) && BtPresent()) {
+                    BtView bv = BtNow();
+                    std::wstring st = bv.radio < 0 ? L2(L"Indisponível", L"Unavailable") : bv.radio == 0 ? L2(L"Desligado", L"Off") : L2(L"Ligado", L"On");
+                    for (auto& dv : bv.devs)
+                        if (bv.radio == 1 && dv.connected) {
+                            st = dv.name;
+                            break;
+                        }
+                    rings.push_back({StatIcon(StBt), L"", L"Bluetooth", st, bv.radio == 1, open(StBt)});
+                }
+                if (exS(StDnd))
+                    rings.push_back({StatIcon(StDnd), L"", L2(L"Não incomodar", L"Do not disturb"),
+                                     g_set.notifDnd ? std::wstring(L2(L"Ligado", L"On")) : std::wstring(L2(L"Desligado", L"Off")), g_set.notifDnd,
+                                     [] { SetDnd(!g_set.notifDnd); }});
+                if (exS(StNight)) {
+                    int ns = NightState();
+                    rings.push_back({StatIcon(StNight), L"", L2(L"Luz noturna", L"Night light"),
+                                     ns < 0 ? std::wstring(L2(L"Configurar", L"Set up")) : ns ? std::wstring(L2(L"Ligada", L"On")) : std::wstring(L2(L"Desligada", L"Off")),
+                                     ns == 1, [ns] {
+                                         if (ns < 0 || !NightSet(ns == 0))
+                                             if (g_start.dock) StatClick(*g_start.dock, StNight, false, true);
+                                     }});
+                }
+                if (inS(StKeyboard))
+                    rings.push_back({nullptr, g_stat.cur ? KbShort(g_stat.cur) : L"??", L2(L"Teclado", L"Keyboard"),
+                                     g_stat.cur ? KbOf(g_stat.cur).name : std::wstring(L2(L"escolher", L"choose")), false, open(StKeyboard)});
+                if (inS(StBattery))
+                    rings.push_back({StatIcon(StBattery), L"", L2(L"Bateria", L"Battery"), std::to_wstring(g_stat.pct) + L"%", g_stat.charging, open(StBattery)});
+                float cw = (R - L) / 6;
+                for (size_t i = 0; i < rings.size(); i++) {
+                    if (i && i % 6 == 0) y += SS(92);
+                    auto& rg = rings[i];
+                    float cx = L + (i % 6) * cw + cw / 2;
+                    D2D1_RECT_F r = D2D1::RectF(cx - cw / 2, y, cx + cw / 2, y + SS(88));
+                    bool hot = button(r, rg.fn);
+                    D2D1_COLOR_F rc = g_theme.text;
+                    rc.a = rg.on ? 1.0f : hot ? 0.16f : 0.09f;
+                    ComPtr<ID2D1SolidColorBrush> ring;
+                    rt->CreateSolidColorBrush(rc, &ring);
+                    rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, y + SS(24)), SS(23), SS(23)), ring.Get());
+                    ID2D1Brush* ink = rg.on ? (ID2D1Brush*)tint.Get() : p.text;
+                    if (rg.icon) DrawLineIcon(rt, rg.icon, cx, y + SS(24), SS(19), ink);
+                    else text(rg.txt, s.head.Get(), cx - SS(23), y + SS(1), SS(46), SS(46), ink, DWRITE_TEXT_ALIGNMENT_CENTER);
+                    text(rg.name, s.small.Get(), cx - cw / 2 + SS(2), y + SS(52), cw - SS(4), SS(18), p.text, DWRITE_TEXT_ALIGNMENT_CENTER);
+                    text(rg.state, s.small.Get(), cx - cw / 2 + SS(2), y + SS(69), cw - SS(4), SS(16), p.sub, DWRITE_TEXT_ALIGNMENT_CENTER);
+                }
+                y += SS(88);
+                break;
+            }
+            case SsSound: {
+                head(y, L2(L"Som", L"Sound"), g_stat.device, StVolume);
+                if (!g_stat.audio) {
+                    text(L2(L"Nenhuma saída de som ligada.", L"No sound output is on."), s.small.Get(), L, y, R - L, SS(28), p.sub);
+                    y += SS(28);
+                    break;
+                }
+                D2D1_RECT_F mb = D2D1::RectF(L - SS(4), y, L + SS(28), y + SS(32));
+                if (button(mb, [] { ToggleMute(); })) rt->FillRoundedRectangle(D2D1::RoundedRect(mb, SS(8), SS(8)), p.cardHi);
+                DrawLineIcon(rt, StatIcon(StVolume), (mb.left + mb.right) / 2, y + SS(16), SS(18), p.text);
+                slider(L + SS(42), y, R - SS(52) - (L + SS(42)), g_stat.muted ? 0 : g_stat.vol, [](float v) { SetVolume(v); });
+                text(g_stat.muted ? std::wstring(L2(L"Mudo", L"Muted")) : std::to_wstring((int)std::lround(g_stat.vol * 100)) + L"%", s.small.Get(),
+                     R - SS(46), y, SS(46), SS(32), p.sub, DWRITE_TEXT_ALIGNMENT_TRAILING);
+                y += SS(32);
+                break;
+            }
+            case SsLight: {
+                head(y, L2(L"Brilho", L"Brightness"), L2(L"por monitor", L"each monitor"), StLight);
+                if (!g_brScanned) {
+                    text(L2(L"Procurando os monitores…", L"Looking for the monitors…"), s.small.Get(), L, y, R - L, SS(28), p.sub);
+                    y += SS(28);
+                    break;
+                }
+                for (size_t m = 0; m < g_brView.size(); m++) {
+                    const BrView& v = g_brView[m];
+                    text(v.name.empty() ? std::wstring(L2(L"Monitor", L"Monitor")) : v.name, s.small.Get(), L, y, SS(130), SS(32), p.text);
+                    if (v.ok) {
+                        slider(L + SS(140), y, R - SS(52) - (L + SS(140)), v.pct / 100.0f, [m](float f) { BrightSet(m, (int)std::lround(f * 100)); });
+                        text(std::to_wstring(v.pct) + L"%", s.small.Get(), R - SS(46), y, SS(46), SS(32), p.sub, DWRITE_TEXT_ALIGNMENT_TRAILING);
+                    } else {
+                        text(L2(L"não deixa ajustar (DDC/CI desligado no monitor)", L"can't be set (DDC/CI off on the monitor)"), s.small.Get(), L + SS(140), y,
+                             R - L - SS(140), SS(32), p.sub);
+                    }
+                    y += SS(36);
+                }
+                y -= SS(4);
+                break;
+            }
+            case SsTray: {
+                std::vector<int> order = TrayOrder();
+                head(y, L2(L"Em segundo plano", L"In the background"), std::to_wstring(order.size()), -1);
+                if (order.empty()) {
+                    text(L2(L"Nenhum programa com ícone agora.", L"No app has an icon now."), s.small.Get(), L, y, R - L, SS(24), p.sub);
+                    y += SS(24);
+                    break;
+                }
+                float cell = SS(40);
+                int cols = std::max(1, (int)((R - L + SS(4)) / cell));
+                for (size_t t = 0; t < order.size(); t++) {
+                    int ti = order[t];
+                    float x = L - SS(4) + (t % cols) * cell, ty = y + (t / cols) * cell;
+                    D2D1_RECT_F r = D2D1::RectF(x + SS(2), ty + SS(2), x + cell - SS(2), ty + cell - SS(2));
+                    if (live) {
+                        int idx = (int)s.rows.size();
+                        s.rows.push_back({r, RowTray, nullptr, ti});
+                        if (s.hover == idx) rt->FillRoundedRectangle(D2D1::RoundedRect(r, SS(9), SS(9)), p.cardHi);
+                    }
+                    ComPtr<ID2D1Bitmap> bmp;
+                    if (g_tray[ti].icon) rt->CreateBitmapFromWicBitmap(g_tray[ti].icon.Get(), nullptr, &bmp);
+                    float cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2, h = SS(10);
+                    if (bmp) rt->DrawBitmap(bmp.Get(), D2D1::RectF(cx - h, cy - h, cx + h, cy + h));
+                    if (TrayIsPinned(g_tray[ti])) rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(r.right - SS(6), r.top + SS(6)), SS(2.5f), SS(2.5f)), p.text);
+                }
+                y += ((order.size() + cols - 1) / cols) * cell;
+                break;
+            }
+            case SsPower: {
+                head(y, L2(L"Energia", L"Power"), StatOn(StBattery) && g_stat.battery ? std::wstring(L2(L"Bateria ", L"Battery ")) + std::to_wstring(g_stat.pct) + L"%" : L"", -1);
+                D2D1_RECT_F box = D2D1::RectF(L, y, R, y + SS(36));
+                rt->FillRoundedRectangle(D2D1::RoundedRect(box, SS(10), SS(10)), p.card);
+                const wchar_t* names[3] = {L2(L"Economia", L"Efficiency"), L2(L"Equilibrado", L"Balanced"), L2(L"Desempenho", L"Performance")};
+                int cur = PowerModeCached();
+                float w = (box.right - box.left - SS(6)) / 3;
+                for (int m = 0; m < 3; m++) {
+                    D2D1_RECT_F t = D2D1::RectF(box.left + SS(3) + m * w, box.top + SS(3), box.left + SS(3) + (m + 1) * w, box.bottom - SS(3));
+                    bool hot = button(t, [m] {
+                        SetPowerMode(m);
+                        g_powerA = m;
+                        g_ccClickAt = GetTickCount();
+                    });
+                    if (cur == m) rt->FillRoundedRectangle(D2D1::RoundedRect(t, SS(8), SS(8)), p.hi);
+                    else if (hot) rt->FillRoundedRectangle(D2D1::RoundedRect(t, SS(8), SS(8)), p.cardHi);
+                    text(names[m], s.small.Get(), t.left, t.top, t.right - t.left, t.bottom - t.top, cur == m ? p.text : p.sub, DWRITE_TEXT_ALIGNMENT_CENTER);
+                }
+                y += SS(36);
+                break;
+            }
+            case SsShort: {
+                struct Sc {
+                    const wchar_t* name;
+                    const wchar_t* icon;
+                    int what;
+                };
+                Sc list[4] = {{L2(L"Projetar", L"Project"), L"M3 5h14v10H3z M7 19h6 M10 15v4 M17 9h4v8h-6", 0},
+                              {L2(L"Transmitir", L"Cast"), L"M3 8V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6 M3 12a8 8 0 0 1 8 8 M3 16a4 4 0 0 1 4 4 M3 20h.01", 1},
+                              {L2(L"Legendas", L"Captions"), L"M3 5h18v14H3z M7 13h3 M14 13h3 M7 16h10", 2},
+                              {L2(L"Acessibilidade", L"Accessibility"), L"M12 4a2 2 0 1 1 0 .01 M5 8l7 2 7-2 M12 10v5 M9 21l3-6 3 6", 3}};
+                float x = L;
+                for (auto& sc : list) {
+                    float w = TextSize(sc.name, s.small.Get()).width + SS(42);
+                    if (x + w > R) {
+                        x = L;
+                        y += SS(38);
+                    }
+                    D2D1_RECT_F r = D2D1::RectF(x, y, x + w, y + SS(32));
+                    int what = sc.what;
+                    bool hot = button(r, [what] {
+                        CloseStart(true);
+                        if (what == 0) SendWinKey('P');
+                        else if (what == 1) SendWinKey('K');
+                        else if (what == 2) SendWinCtrlKey('L');
+                        else OpenUri(L"ms-settings:easeofaccess");
+                    });
+                    if (hot) rt->FillRoundedRectangle(D2D1::RoundedRect(r, SS(16), SS(16)), p.cardHi);
+                    rt->DrawRoundedRectangle(D2D1::RoundedRect(r, SS(16), SS(16)), p.line, std::max(1.0f, s.scale));
+                    DrawLineIcon(rt, sc.icon, r.left + SS(18), y + SS(16), SS(15), p.text);
+                    text(sc.name, s.small.Get(), r.left + SS(32), y, w - SS(36), SS(32), p.text);
+                    x += w + SS(6);
+                }
+                y += SS(32);
+                break;
+            }
+            case SsRows: {
+                struct Ln {
+                    int id;
+                    std::wstring name, count;
+                };
+                std::vector<Ln> ls;
+                if ((g_set.notifPlace & PlStart)) ls.push_back({StNotif, L2(L"Notificações", L"Notifications"), std::to_wstring(g_notifs.size())});
+                if ((g_set.notesPlace & PlStart)) ls.push_back({StNotes, L2(L"Notas e lembretes", L"Notes and reminders"), std::to_wstring(RemPending())});
+                if ((g_set.shelfPlace & PlStart)) ls.push_back({StShelf, L2(L"Prateleira", L"Shelf"), std::to_wstring(g_shelf.size())});
+                if ((ExtraPlace(StDevices) & PlStart) && !DevicesNow().empty()) {
+                    std::wstring c;
+                    for (auto& dv : DevicesNow())
+                        if (dv.percent >= 0) c += (c.empty() ? L"" : L" · ") + std::to_wstring(dv.percent) + L"%";
+                    ls.push_back({StDevices, L2(L"Dispositivos", L"Devices"), c});
+                }
+                float cw = (R - L - SS(6)) / 2;
+                for (size_t i = 0; i < ls.size(); i++) {
+                    float x = L + (i % 2) * (cw + SS(6)), ry = y + (i / 2) * SS(48);
+                    D2D1_RECT_F r = D2D1::RectF(x, ry, x + cw, ry + SS(42));
+                    int id = ls[i].id;
+                    bool hot = button(r, [id] {
+                        if (g_start.dock) StatClick(*g_start.dock, id, false, true);
+                    });
+                    rt->FillRoundedRectangle(D2D1::RoundedRect(r, SS(12), SS(12)), hot ? p.cardHi : p.card);
+                    DrawLineIcon(rt, StatIcon(id), r.left + SS(22), ry + SS(21), SS(17), p.text);
+                    float cwid = TextSize(ls[i].count, s.small.Get()).width + SS(4);
+                    text(ls[i].name, s.font.Get(), r.left + SS(42), ry, r.right - r.left - SS(42) - SS(30) - cwid, SS(42), p.text);
+                    text(ls[i].count, s.small.Get(), r.right - SS(30) - cwid, ry, cwid, SS(42), p.sub, DWRITE_TEXT_ALIGNMENT_TRAILING);
+                    DrawLineIcon(rt, L"M9 6l6 6-6 6", r.right - SS(16), ry + SS(21), SS(13), p.sub);
+                }
+                y += ((ls.size() + 1) / 2) * SS(48) - SS(6);
+                break;
+            }
+        }
+        y += gap;
+        if (s.org) {
+            // The part, with its handle (dots on the left), as one row to drag or to move with Alt + arrows.
+            D2D1_RECT_F r = D2D1::RectF(p.pad - SS(6), top + (top == inner ? 0 : SS(2)), R + SS(6), y);
+            int idx = (int)s.rows.size();
+            StartRow row{r, RowSec};
+            row.power = k;
+            s.rows.push_back(std::move(row));
+            bool dragged = s.secDrag.active && s.secDrag.sec == k;
+            if (s.hover == idx || dragged) {
+                ComPtr<ID2D1SolidColorBrush> edge;
+                D2D1_COLOR_F ec = g_theme.text;
+                ec.a = dragged ? 0.7f : 0.25f;
+                rt->CreateSolidColorBrush(ec, &edge);
+                rt->DrawRoundedRectangle(D2D1::RoundedRect(r, SS(12), SS(12)), edge.Get(), std::max(1.0f, s.scale) * (dragged ? 1.5f : 1));
+            }
+            float gx = p.pad + SS(8), gy = (inner + y - gap) / 2;
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = 0; dx <= 1; dx++)
+                    rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(gx + dx * SS(6), gy + dy * SS(6)), SS(1.6f), SS(1.6f)), p.sub);
+        }
+    }
+    rt->PopAxisAlignedClip();
+    // The scroll range, from what was laid out (the next frame uses it).
+    float contentH = y + s.scroll - p.top;
+    s.maxScroll = std::max(0.0f, contentH - (p.bottom - p.top));
+    s.scroll = std::clamp(s.scroll, 0.0f, s.maxScroll);
 }
 
 // A round switch with its name under it (the control center's top row).
@@ -16203,6 +16702,7 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             g_brView = *v;
             g_brScanned = true;
             if (g_fly.open) FlyRender();
+            if (g_start.open) RenderStart();
             return 0;
         }
         case WM_POWERBROADCAST:
@@ -16395,6 +16895,7 @@ DWORD WINAPI UiThread(LPVOID) {
     RegisterClassExW(&wc);
     g_toast.hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE, L"NimbusMenu_Toast", L"Nimbus",
                                    WS_POPUP, 0, 0, 10, 10, nullptr, nullptr, g_module, nullptr);
+    SoundSkipDucking();  // (before any call starts: Windows decides what to turn down when the call begins)
     for (int b = 0; b < 1 + 2 * kBandSteps; b++) {
         g_fly.bands.push_back(CreateBand());
         g_fly.bandRc.push_back(RECT{});
@@ -16463,6 +16964,8 @@ DWORD WINAPI UiThread(LPVOID) {
     g_start.small.Reset();
     g_start.section.Reset();
     g_start.glyphs.Reset();
+    g_start.big.Reset();
+    g_start.head.Reset();
     g_start.dc.Reset();
     g_start.rt.Reset();
     g_prev.font.Reset();
