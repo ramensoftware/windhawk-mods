@@ -499,6 +499,24 @@ private:
                                     }),
                      tiles_.end());
 
+        // Restore tiles whose container now shows a different tile.
+        for (auto it = tiles_.begin(); it != tiles_.end();) {
+            auto trackedToggle = it->toggle.get();
+            if (trackedToggle &&
+                std::wstring(automation::AutomationProperties::GetName(trackedToggle).c_str()) !=
+                    g_settings.targetTile) {
+                try {
+                    RestoreTile(*it);
+                } catch (winrt::hresult_error const& error) {
+                    Wh_Log(L"Restoring a reused tile failed: 0x%08X",
+                           static_cast<unsigned>(error.code()));
+                }
+                it = tiles_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+
         auto toggle = FindElement(view, [](xaml::FrameworkElement const& element) {
             return element.try_as<controls::Control>() &&
                    winrt::get_class_name(element) == kToggleClass &&
@@ -526,6 +544,12 @@ private:
                         : nullptr;
         if (!root) {
             Wh_Log(L"Unexpected layout around tile '%s'; leaving it unchanged",
+                   g_settings.targetTile.c_str());
+            return;
+        }
+
+        if (!FileExists(kQuickShareShortcut)) {
+            Wh_Log(L"Quick Share shortcut not found; leaving tile '%s' unchanged",
                    g_settings.targetTile.c_str());
             return;
         }
@@ -834,13 +858,14 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void Wh_ModBeforeUninit() {
     g_stopping = true;
-    {
-        // Wait for a symbol installation running on another thread.
-        std::lock_guard installLock(g_hookInstallMutex);
-    }
+    // Let a symbol installation on another thread finish while hooks can
+    // still be set. Windhawk removes all hooks after this returns.
+    std::lock_guard installLock(g_hookInstallMutex);
+}
 
+void Wh_ModUninit() {
     std::vector<std::unique_ptr<QuickSettingsViewHook>> views;
     {
         std::lock_guard lock(g_viewsMutex);
