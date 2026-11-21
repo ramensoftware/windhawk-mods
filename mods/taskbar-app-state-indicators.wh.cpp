@@ -3951,7 +3951,8 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
     }
 
     SlotTarget targets[kSlotCount];
-    int pinnedState = localSettings.PinnedEnabled ? ReadButtonPinned(button) : -1;
+    // Read for the pinned-app dot, and for the debug log, which shows it.
+    int pinnedState = localSettings.PinnedEnabled || localSettings.DebugLog ? ReadButtonPinned(button) : -1;
     if (pinnedState < 0) pinnedState = entry->pinnedState;  // recycled: keep the last known
     entry->pinnedState = (int8_t)pinnedState;
     ComputeSlotTargets(targets, r.metrics, localSettings, state, mask, hasBadge, windowCount, isActive,
