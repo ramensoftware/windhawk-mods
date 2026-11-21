@@ -2,7 +2,7 @@
 // @id              ctrl-backspace-fix-for-win32-text-boxes
 // @name            Ctrl+Backspace Fix for Win32 Text Boxes
 // @description     Makes Ctrl+Backspace delete the previous word in Win32 text boxes instead of inserting a control character
-// @version         1.0.2
+// @version         1.1.0
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         *
@@ -18,9 +18,6 @@ deleting the previous word.
 This mod resolves this behavior by adding previous-word deletion functionality
 to those `Edit` controls.
 
-It also supports wrapped `Edit` controls used in .NET WinForms and Delphi VCL
-applications.
-
 | Before |
 | :----- |
 | ![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/ctrl-backspace-fix-for-win32-text-boxes_before.gif) |
@@ -28,6 +25,18 @@ applications.
 | After |
 | :---- |
 | ![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/ctrl-backspace-fix-for-win32-text-boxes_after.gif) |
+
+## Features & behavior
+* Supports wrapped `Edit` controls used in .NET WinForms and Delphi VCL
+  applications.
+* Handles Unicode whitespace, punctuation, and symbols when calculating word
+  boundaries.
+* Groups consecutive Japanese kana (Hiragana & Katakana) by script when deleting
+  words.
+* Steps back one character at a time through Chinese, Japanese, and Korean
+  ideographs.
+* Deletes masked text before the caret as a single block in password fields to
+  avoid leaking word boundaries.
 
 ## Notes & limitations
 * In hotkey text boxes, pressing `Ctrl+Backspace` deletes the text instead of
@@ -64,6 +73,12 @@ CharClass GetCharClass(WCHAR wch)
     if (wch == L'_')
     {
         return CharClass::Alphanumeric;
+    }
+
+    // Treat prolonged sound marks as part of a katakana word
+    if (wch == L'\u30FC' || wch == L'\uFF70')
+    {
+        return CharClass::Katakana;
     }
 
     // Unicode whitespace and punctuation
