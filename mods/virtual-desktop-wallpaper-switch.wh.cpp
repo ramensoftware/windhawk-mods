@@ -100,6 +100,8 @@ constexpr UINT WM_APP_RELOAD_SETTINGS = WM_APP + 101;
 constexpr UINT WM_APP_DESKTOPS_CHANGED = WM_APP + 102;
 constexpr UINT WM_APP_RECONNECT = WM_APP + 103;
 
+constexpr UINT_PTR TIMER_CONNECT = 1001;
+
 constexpr PCWSTR SYSTEM_DEFAULT_WALLPAPER_TAG = L"__SYSTEM_DEFAULT__";
 
 struct IApplicationView : IUnknown {};
@@ -194,11 +196,16 @@ struct Settings {
 
 std::vector<std::wstring> g_folderWallpapers;
 
-HANDLE g_hStopEvent = nullptr;
 HANDLE g_hWorkerThread = nullptr;
 DWORD g_workerThreadId = 0;
 HWND g_hWndMsg = nullptr;
 UINT g_msgTaskbarCreated = 0;
+
+IServiceProvider* g_pServiceProvider = nullptr;
+IVirtualDesktopManagerInternal* g_pDesktopManager = nullptr;
+IVirtualDesktopNotificationService* g_pNotificationService = nullptr;
+class NotificationSink* g_pSink = nullptr;
+DWORD g_dwCookie = 0;
 
 // ---------------------------------------------------------------------------
 // Settings Loader
@@ -316,9 +323,17 @@ void RestoreDesktopFromBackup(IVirtualDesktopManagerInternal* pMgr, IVirtualDesk
     }
 }
 
+void DisconnectShell();
+
 void ApplyAllWallpapers(IVirtualDesktopManagerInternal* pMgr) {
+    if (!pMgr) return;
+
     IObjectArray* pDesktops = nullptr;
-    if (FAILED(pMgr->GetDesktops(&pDesktops)) || !pDesktops) {
+    HRESULT hrDesktops = pMgr->GetDesktops(&pDesktops);
+    if (FAILED(hrDesktops) || !pDesktops) {
+        if (IsDisconnectedHr(hrDesktops) && g_hWndMsg) {
+            PostMessageW(g_hWndMsg, WM_APP_RECONNECT, 0, 0);
+        }
         return;
     }
 
@@ -363,6 +378,8 @@ void ApplyAllWallpapers(IVirtualDesktopManagerInternal* pMgr) {
 }
 
 void RestoreOriginalWallpapers(IVirtualDesktopManagerInternal* pMgr) {
+    if (!pMgr) return;
+
     IObjectArray* pDesktops = nullptr;
     if (FAILED(pMgr->GetDesktops(&pDesktops)) || !pDesktops) {
         return;
@@ -399,10 +416,10 @@ void RestoreOriginalWallpapers(IVirtualDesktopManagerInternal* pMgr) {
 class NotificationSink final : public IVirtualDesktopNotification {
 private:
     std::atomic<ULONG> m_refCount{1};
-    DWORD m_targetThreadId = 0;
+    HWND m_hWndTarget = nullptr;
 
 public:
-    NotificationSink(DWORD targetThreadId) : m_targetThreadId(targetThreadId) {}
+    NotificationSink(HWND hWndTarget) : m_hWndTarget(hWndTarget) {}
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppvObject) override {
         if (!ppvObject) return E_POINTER;
@@ -426,7 +443,7 @@ public:
     }
 
     HRESULT STDMETHODCALLTYPE VirtualDesktopCreated(IVirtualDesktop*) override {
-        PostThreadMessageW(m_targetThreadId, WM_APP_DESKTOPS_CHANGED, 0, 0);
+        if (m_hWndTarget) PostMessageW(m_hWndTarget, WM_APP_DESKTOPS_CHANGED, 0, 0);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE VirtualDesktopDestroyBegin(IVirtualDesktop*, IVirtualDesktop*) override {
@@ -436,7 +453,7 @@ public:
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE VirtualDesktopDestroyed(IVirtualDesktop*, IVirtualDesktop*) override {
-        PostThreadMessageW(m_targetThreadId, WM_APP_DESKTOPS_CHANGED, 0, 0);
+        if (m_hWndTarget) PostMessageW(m_hWndTarget, WM_APP_DESKTOPS_CHANGED, 0, 0);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE VirtualDesktopMoved(IVirtualDesktop*, INT64, INT64) override {
@@ -463,172 +480,183 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// Shell Connection & Worker Loop
+// Shell Connection & Disconnection Management
 // ---------------------------------------------------------------------------
 
-bool ConnectShell(
-    IServiceProvider** ppServiceProvider,
-    IVirtualDesktopManagerInternal** ppDesktopManager,
-    IVirtualDesktopNotificationService** ppNotificationService,
-    NotificationSink** ppSink,
-    DWORD* pdwCookie,
-    DWORD workerThreadId) {
+void DisconnectShell() {
+    if (g_pNotificationService && g_dwCookie) {
+        g_pNotificationService->Unregister(g_dwCookie);
+        g_dwCookie = 0;
+    }
+
+    if (g_pSink) {
+        CoDisconnectObject(static_cast<IUnknown*>(g_pSink), 0);
+        g_pSink->Release();
+        g_pSink = nullptr;
+    }
+
+    if (g_pDesktopManager) {
+        g_pDesktopManager->Release();
+        g_pDesktopManager = nullptr;
+    }
+
+    if (g_pNotificationService) {
+        g_pNotificationService->Release();
+        g_pNotificationService = nullptr;
+    }
+
+    if (g_pServiceProvider) {
+        g_pServiceProvider->Release();
+        g_pServiceProvider = nullptr;
+    }
+}
+
+HRESULT ConnectShell() {
+    DisconnectShell();
 
     HRESULT hr = CoCreateInstance(
         CLSID_ImmersiveShell, nullptr, CLSCTX_LOCAL_SERVER,
-        IID_PPV_ARGS(ppServiceProvider));
+        IID_PPV_ARGS(&g_pServiceProvider));
 
-    if (SUCCEEDED(hr) && *ppServiceProvider) {
-        (*ppServiceProvider)->QueryService(
-            SID_VirtualDesktopManagerInternal,
-            IID_IVirtualDesktopManagerInternal,
-            (void**)ppDesktopManager);
-
-        (*ppServiceProvider)->QueryService(
-            SID_VirtualDesktopNotificationService,
-            IID_IVirtualDesktopNotificationService,
-            (void**)ppNotificationService);
-
-        if (*ppDesktopManager && *ppNotificationService) {
-            *ppSink = new NotificationSink(workerThreadId);
-            HRESULT hrReg = (*ppNotificationService)->Register(*ppSink, pdwCookie);
-            if (FAILED(hrReg)) {
-                Wh_Log(L"Notification register failed: 0x%08X", hrReg);
-            }
-            return true;
-        }
-
-        if (*ppDesktopManager) {
-            (*ppDesktopManager)->Release();
-            *ppDesktopManager = nullptr;
-        }
-        if (*ppNotificationService) {
-            (*ppNotificationService)->Release();
-            *ppNotificationService = nullptr;
-        }
-        (*ppServiceProvider)->Release();
-        *ppServiceProvider = nullptr;
+    if (FAILED(hr) || !g_pServiceProvider) {
+        return hr;
     }
-    return false;
+
+    hr = g_pServiceProvider->QueryService(
+        SID_VirtualDesktopManagerInternal,
+        IID_IVirtualDesktopManagerInternal,
+        (void**)&g_pDesktopManager);
+    if (FAILED(hr) || !g_pDesktopManager) {
+        DisconnectShell();
+        return hr;
+    }
+
+    hr = g_pServiceProvider->QueryService(
+        SID_VirtualDesktopNotificationService,
+        IID_IVirtualDesktopNotificationService,
+        (void**)&g_pNotificationService);
+    if (FAILED(hr) || !g_pNotificationService) {
+        DisconnectShell();
+        return hr;
+    }
+
+    g_pSink = new NotificationSink(g_hWndMsg);
+    HRESULT hrReg = g_pNotificationService->Register(g_pSink, &g_dwCookie);
+    if (FAILED(hrReg)) {
+        Wh_Log(L"Notification register failed: 0x%08X", hrReg);
+    }
+
+    return S_OK;
 }
 
-void DisconnectShell(
-    IServiceProvider** ppServiceProvider,
-    IVirtualDesktopManagerInternal** ppDesktopManager,
-    IVirtualDesktopNotificationService** ppNotificationService,
-    NotificationSink** ppSink,
-    DWORD* pdwCookie) {
-
-    if (*ppNotificationService && *pdwCookie) {
-        (*ppNotificationService)->Unregister(*pdwCookie);
-        *pdwCookie = 0;
-    }
-
-    if (*ppSink) {
-        CoDisconnectObject(static_cast<IUnknown*>(*ppSink), 0);
-        (*ppSink)->Release();
-        *ppSink = nullptr;
-    }
-
-    if (*ppDesktopManager) {
-        RestoreOriginalWallpapers(*ppDesktopManager);
-        (*ppDesktopManager)->Release();
-        *ppDesktopManager = nullptr;
-    }
-
-    if (*ppNotificationService) {
-        (*ppNotificationService)->Release();
-        *ppNotificationService = nullptr;
-    }
-
-    if (*ppServiceProvider) {
-        (*ppServiceProvider)->Release();
-        *ppServiceProvider = nullptr;
-    }
-}
+// ---------------------------------------------------------------------------
+// Message Window Procedure & Event-Driven Message Loop
+// ---------------------------------------------------------------------------
 
 LRESULT CALLBACK MessageWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (uMsg == g_msgTaskbarCreated && g_msgTaskbarCreated != 0) {
-        if (g_workerThreadId) {
-            PostThreadMessageW(g_workerThreadId, WM_APP_RECONNECT, 0, 0);
+        if (g_pDesktopManager) {
+            UINT count = 0;
+            HRESULT hr = g_pDesktopManager->GetCount(&count);
+            if (SUCCEEDED(hr)) {
+                // Connection remains live; re-apply wallpapers without unnecessary restore
+                ApplyAllWallpapers(g_pDesktopManager);
+                return 0;
+            }
         }
+        // Connection died or not established; disconnect and schedule reconnect
+        DisconnectShell();
+        SetTimer(hWnd, TIMER_CONNECT, 500, nullptr);
         return 0;
     }
+
+    switch (uMsg) {
+        case WM_TIMER:
+            if (wParam == TIMER_CONNECT) {
+                KillTimer(hWnd, TIMER_CONNECT);
+                HRESULT hr = ConnectShell();
+                if (SUCCEEDED(hr)) {
+                    ApplyAllWallpapers(g_pDesktopManager);
+                } else if (hr == E_NOINTERFACE) {
+                    Wh_Log(L"Virtual desktop COM interfaces unavailable on this Windows build: 0x%08X", hr);
+                } else {
+                    // Shell not yet ready; retry in 2000ms while keeping message queue active
+                    SetTimer(hWnd, TIMER_CONNECT, 2000, nullptr);
+                }
+                return 0;
+            }
+            break;
+
+        case WM_APP_RELOAD_SETTINGS:
+            LoadSettings();
+            if (g_pDesktopManager) {
+                ApplyAllWallpapers(g_pDesktopManager);
+            }
+            return 0;
+
+        case WM_APP_DESKTOPS_CHANGED:
+            if (g_pDesktopManager) {
+                ApplyAllWallpapers(g_pDesktopManager);
+            }
+            return 0;
+
+        case WM_APP_RECONNECT:
+            DisconnectShell();
+            SetTimer(hWnd, TIMER_CONNECT, 1000, nullptr);
+            return 0;
+
+        case WM_DESTROY:
+            KillTimer(hWnd, TIMER_CONNECT);
+            return 0;
+    }
+
     return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
 
 DWORD WINAPI WorkerThreadProc(LPVOID) {
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-    MSG msgDummy;
-    PeekMessageW(&msgDummy, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
-
     WNDCLASSW wc = {0};
     wc.lpfnWndProc = MessageWindowProc;
     wc.hInstance = GetModuleHandleW(nullptr);
     wc.lpszClassName = L"Windhawk_VDWS_MsgWnd";
-    RegisterClassW(&wc);
+
+    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        Wh_Log(L"RegisterClassW failed: %lu", GetLastError());
+        if (SUCCEEDED(hrCo)) CoUninitialize();
+        return 1;
+    }
 
     g_hWndMsg = CreateWindowExW(
         WS_EX_TOOLWINDOW, wc.lpszClassName, L"", WS_POPUP,
         0, 0, 0, 0, nullptr, nullptr, wc.hInstance, nullptr);
 
-    g_msgTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+    if (!g_hWndMsg) {
+        Wh_Log(L"CreateWindowExW failed: %lu", GetLastError());
+        UnregisterClassW(wc.lpszClassName, wc.hInstance);
+        if (SUCCEEDED(hrCo)) CoUninitialize();
+        return 1;
+    }
 
-    IServiceProvider* pServiceProvider = nullptr;
-    IVirtualDesktopManagerInternal* pDesktopManager = nullptr;
-    IVirtualDesktopNotificationService* pNotificationService = nullptr;
-    NotificationSink* pSink = nullptr;
-    DWORD dwCookie = 0;
+    g_msgTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
     LoadSettings();
 
-    // Initial connection loop with stop event support
-    while (true) {
-        if (WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0) {
-            if (g_hWndMsg) DestroyWindow(g_hWndMsg);
-            UnregisterClassW(wc.lpszClassName, wc.hInstance);
-            if (SUCCEEDED(hrCo)) CoUninitialize();
-            return 0;
-        }
-
-        if (ConnectShell(&pServiceProvider, &pDesktopManager, &pNotificationService, &pSink, &dwCookie, GetCurrentThreadId())) {
-            ApplyAllWallpapers(pDesktopManager);
-            break;
-        }
-
-        if (WaitForSingleObject(g_hStopEvent, 500) == WAIT_OBJECT_0) {
-            if (g_hWndMsg) DestroyWindow(g_hWndMsg);
-            UnregisterClassW(wc.lpszClassName, wc.hInstance);
-            if (SUCCEEDED(hrCo)) CoUninitialize();
-            return 0;
-        }
-    }
+    // Start event-driven connection attempt without blocking message processing
+    SetTimer(g_hWndMsg, TIMER_CONNECT, 50, nullptr);
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (msg.message == WM_APP_RELOAD_SETTINGS) {
-            LoadSettings();
-            if (pDesktopManager) {
-                ApplyAllWallpapers(pDesktopManager);
-            }
-        } else if (msg.message == WM_APP_DESKTOPS_CHANGED) {
-            if (pDesktopManager) {
-                ApplyAllWallpapers(pDesktopManager);
-            }
-        } else if (msg.message == WM_APP_RECONNECT) {
-            DisconnectShell(&pServiceProvider, &pDesktopManager, &pNotificationService, &pSink, &dwCookie);
-            Sleep(500);
-            ConnectShell(&pServiceProvider, &pDesktopManager, &pNotificationService, &pSink, &dwCookie, GetCurrentThreadId());
-            if (pDesktopManager) {
-                ApplyAllWallpapers(pDesktopManager);
-            }
-        }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
 
-    DisconnectShell(&pServiceProvider, &pDesktopManager, &pNotificationService, &pSink, &dwCookie);
+    // Unload path: restore original wallpapers only on shutdown
+    KillTimer(g_hWndMsg, TIMER_CONNECT);
+    if (g_pDesktopManager) {
+        RestoreOriginalWallpapers(g_pDesktopManager);
+    }
+    DisconnectShell();
 
     if (g_hWndMsg) {
         DestroyWindow(g_hWndMsg);
@@ -649,17 +677,9 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
 BOOL WhTool_ModInit() {
     Wh_Log(L"Initializing Virtual Desktop Wallpaper Switch (Dedicated Tool Mod)");
 
-    g_hStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_hStopEvent) {
-        Wh_Log(L"Failed to create stop event");
-        return FALSE;
-    }
-
     g_hWorkerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, &g_workerThreadId);
     if (!g_hWorkerThread) {
         Wh_Log(L"Failed to create worker thread: %lu", GetLastError());
-        CloseHandle(g_hStopEvent);
-        g_hStopEvent = nullptr;
         return FALSE;
     }
 
@@ -667,28 +687,22 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() {
-    if (g_workerThreadId) {
-        PostThreadMessageW(g_workerThreadId, WM_APP_RELOAD_SETTINGS, 0, 0);
+    if (g_hWndMsg) {
+        PostMessageW(g_hWndMsg, WM_APP_RELOAD_SETTINGS, 0, 0);
     }
 }
 
 void WhTool_ModUninit() {
     Wh_Log(L"Uninitializing Virtual Desktop Wallpaper Switch");
 
-    if (g_hWorkerThread && g_workerThreadId) {
-        if (g_hStopEvent) {
-            SetEvent(g_hStopEvent);
+    if (g_hWorkerThread) {
+        if (g_hWndMsg) {
+            PostMessageW(g_hWndMsg, WM_QUIT, 0, 0);
         }
-        PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_hWorkerThread, INFINITE);
+        WaitForSingleObject(g_hWorkerThread, 5000);
         CloseHandle(g_hWorkerThread);
         g_hWorkerThread = nullptr;
         g_workerThreadId = 0;
-    }
-
-    if (g_hStopEvent) {
-        CloseHandle(g_hStopEvent);
-        g_hStopEvent = nullptr;
     }
 }
 
