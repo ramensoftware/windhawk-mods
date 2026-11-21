@@ -1914,6 +1914,8 @@ static float g_imeX = 0;
 static float g_imeTopY = 0;
 static float g_imeBotY = 0;
 static void TsfSetFocus(bool focused);  // defined with the TSF text store, far below
+// Ends an open IME composition before the text it sits in changes under it.
+static void TsfEndComposition();
 static bool g_caretOn = true;
 
 static int g_sel = 0;
@@ -10520,6 +10522,9 @@ static void ScheduleFileSearch();
 static void CancelFileSearch();
 
 static void OnTextChanged() {
+    // A composition belongs to the text it was started on: commit it before the query changes
+    // under it, or the IME would keep editing a range that no longer exists.
+    TsfEndComposition();
     CancelConfirm();  // typing disarms a pending destructive command
     g_form = CustomFormState();  // the form belongs to the text that opened it
     // The calculator is debounced: clear its state now so typing feels instant (app searches
@@ -15446,6 +15451,7 @@ static void EnsureFormFocusVisible() {
 
 static void OpenCustomForm(int idx, const std::wstring& query) {
     if (idx < 0 || idx >= (int)g_cfg.commands.size()) return;
+    TsfEndComposition();  // the form takes over the field the composition was typed in
     const CustomEntry& e = g_cfg.commands[idx];
     CustomFormState st;
     st.active = true;
@@ -15488,6 +15494,7 @@ static void CloseCustomForm() {
 static void MoveFormFocus(int d, bool wrap) {
     const int n = (int)g_form.values.size();
     if (n == 0) return;
+    TsfEndComposition();
     int f = g_form.focus + d;
     if (wrap) {
         f = (f % n + n) % n;
@@ -16230,6 +16237,7 @@ static void CloseManager() {
 }
 
 static void OpenManager() {
+    TsfEndComposition();
     g_mgr = ManagerState();
     g_mgr.active = true;
     g_activator = -1;
@@ -16312,6 +16320,7 @@ static void ManagerFocusField(int f) {
     if (f == g_mgr.field) {
         return;
     }
+    TsfEndComposition();
     g_mgr.field = f;
     std::wstring* v = ManagerFieldText();
     g_mgr.caret = g_mgr.anchor = v ? (int)v->size() : 0;
@@ -16933,6 +16942,7 @@ static void RunConsoleHidden(const wchar_t* exe, const wchar_t* args) {
 // what the mode openers ("Open Windows", "Bookmarks" ...) do on Enter.
 static void EnterActivator(int ai) {
     if (ai < 0 || ai >= kActivatorCount) return;
+    TsfEndComposition();
     g_text = kActivators[ai].trigger;
     g_text += L' ';
     g_caret = g_anchor = (int)g_text.size();
@@ -17068,6 +17078,7 @@ static void StartFileSearch() {
 
 static void FileGoTo(const std::wstring dir, bool record, const std::wstring select) {
     if (dir.empty()) return;
+    TsfEndComposition();  // navigating away clears the query the composition lives in
     if (dir != kPcRoot) {  // the drives view is synthetic; every real folder must exist
         const DWORD at = GetFileAttributesW(dir.c_str());
         if (at == INVALID_FILE_ATTRIBUTES || !(at & FILE_ATTRIBUTE_DIRECTORY)) return;
@@ -17330,6 +17341,7 @@ static std::wstring AbsFromInput(std::wstring in) {
 
 static void BeginPathEdit() {
     if (!g_fileMode || g_fileCur.empty() || InPcRoot()) return;  // nothing to type in the drives view
+    TsfEndComposition();  // the path field takes the focus next
     g_fileMenuOpen = false;
     g_bandEdit = BandEdit::Path;
     g_bandText = g_fileCur;
@@ -17344,6 +17356,7 @@ static void BeginPathEdit() {
 }
 
 static void BeginRename(const FileEntry& t) {
+    TsfEndComposition();  // the rename field takes the focus next
     g_fileMenuOpen = false;
     g_bandEdit = BandEdit::Rename;
     g_bandTarget = t.path;
@@ -18541,6 +18554,7 @@ static void LaunchSelected() {
 // Switches between the app list and the file browser (folder button in the search bar).
 static void ToggleFileMode() {
     if (!g_fileMode && !g_cfg.filesEnabled) return;  // the file browser is turned off
+    TsfEndComposition();  // switching modes clears the query under the composition
     g_fileMode = !g_fileMode;
     // The preview belongs to the file that was open: leaving the browser closes it, or it would come
     // back later showing whatever row is selected then - a folder, which has nothing to preview.
@@ -19720,7 +19734,6 @@ static int HitRow(int mx, int my) {
 // opens the launcher, and (when the user asked for it) an unassigned mask key is injected before
 // the real key-up so Windows cancels the Start menu. IAppVisibility is the fallback for the cases
 // where Start still appears: it reports when the Start menu is shown, and the bar dismisses it.
-static HHOOK g_winKeyHook = nullptr;
 static HANDLE g_winKeyThread = nullptr;
 static DWORD g_winKeyThreadId = 0;
 static IAppVisibility* g_appVisibility = nullptr;
@@ -19810,8 +19823,10 @@ static void UnwatchStart() {
     }
 }
 
-// This runs in the input pipeline: no locks, no disk, no waiting. It only decides whether the
-// press was the Windows key on its own, and posts the launcher message.
+// This runs in the input pipeline: no locks, no disk, no waiting, and it reads only its own state.
+// It decides whether the press was the Windows key on its own and posts the launcher message; the
+// "ignored in fullscreen" rule is applied by the window when it handles WM_HOTKEY, so the hook
+// never reads the configuration or the window state.
 static LRESULT CALLBACK WinKeyHookProc(int nCode, WPARAM wp, LPARAM lp) {
     static bool winDown = false, alone = false;
     static DWORD lastDown = 0;
@@ -19828,9 +19843,7 @@ static LRESULT CALLBACK WinKeyHookProc(int nCode, WPARAM wp, LPARAM lp) {
                     alone = true;
                 }
             } else if (win) {
-                const bool open = winDown && alone &&
-                                  !(g_cfg.disableFullscreen && g_vis == Vis::Hidden &&
-                                    IsForegroundFullscreen());
+                const bool open = winDown && alone;
                 winDown = false;
                 if (open) {
                     // An unassigned mask key between the press and the real Win key-up makes
@@ -19851,17 +19864,23 @@ static LRESULT CALLBACK WinKeyHookProc(int nCode, WPARAM wp, LPARAM lp) {
     return CallNextHookEx(nullptr, nCode, wp, lp);
 }
 
+// The hook belongs to the thread that installed it: it is published here for the caller to read
+// once the ready event is set, and only this thread ever unhooks it. A thread that exits late can
+// therefore never remove a hook installed by a newer one.
+static HHOOK g_winKeyInstalled = nullptr;
+
 static DWORD WINAPI WinKeyThreadProc(LPVOID ready) {
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // create the message queue
-    g_winKeyHook = SetWindowsHookExW(WH_KEYBOARD_LL, WinKeyHookProc, GetModuleHandleW(nullptr), 0);
+    const HHOOK hook =
+        SetWindowsHookExW(WH_KEYBOARD_LL, WinKeyHookProc, GetModuleHandleW(nullptr), 0);
+    g_winKeyInstalled = hook;
     SetEvent((HANDLE)ready);
-    while (g_winKeyHook && GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        DispatchMessageW(&msg);
-    }
-    if (g_winKeyHook) {
-        UnhookWindowsHookEx(g_winKeyHook);
-        g_winKeyHook = nullptr;
+    if (hook) {
+        while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+            DispatchMessageW(&msg);
+        }
+        UnhookWindowsHookEx(hook);
     }
     return 0;
 }
@@ -19870,22 +19889,17 @@ static void UninstallWinKeyHook() {
     UnwatchStart();
     if (!g_winKeyThread) return;
     PostThreadMessageW(g_winKeyThreadId, WM_QUIT, 0, 0);
-    // Bounded on purpose: the hook thread only pumps messages, but its callback can be inside
-    // SendInput waiting on the input pipeline. A stuck thread must never freeze a settings change
-    // or the unload, so after the timeout the hook is removed from here, its handle is left alone
-    // (it still belongs to a running thread) and the thread exits on its own once the callback
-    // returns and the loop finds no hook.
-    if (WaitForSingleObject(g_winKeyThread, 1500) == WAIT_OBJECT_0) {
+    // Bounded so a settings change or the unload can never freeze. Because the hook is owned by the
+    // thread, a thread that overruns cannot affect a newer one; its handle is left open rather than
+    // closing one that may still be in use.
+    if (WaitForSingleObject(g_winKeyThread, 2000) == WAIT_OBJECT_0) {
         CloseHandle(g_winKeyThread);
     } else {
-        OutputDebugStringW(L"Spotlight: Win key hook thread did not stop in time\n");
-    }
-    if (g_winKeyHook) {
-        UnhookWindowsHookEx(g_winKeyHook);
-        g_winKeyHook = nullptr;
+        Wh_Log(L"Win key hook thread did not stop in time");
     }
     g_winKeyThread = nullptr;
     g_winKeyThreadId = 0;
+    g_winKeyInstalled = nullptr;
 }
 
 static bool RegisterLauncherHotkey() {
@@ -19894,15 +19908,16 @@ static bool RegisterLauncherHotkey() {
     if (g_cfg.hotkeyVk == VK_LWIN) {
         HANDLE ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!ready) return false;
+        g_winKeyInstalled = nullptr;
         g_winKeyThread = CreateThread(nullptr, 0, WinKeyThreadProc, ready, 0, &g_winKeyThreadId);
-        // Bounded: the thread signals as soon as the hook is installed. If it does not, the hook
-        // failed to install (or the thread never started), so report the failure instead of
-        // leaving the UI thread waiting for an event that will not arrive.
+        // Bounded: the thread signals as soon as it tried to install the hook, and publishes it in
+        // g_winKeyInstalled. If the event never arrives, report the failure instead of leaving the
+        // UI thread waiting for something that will not come.
         const bool started =
             g_winKeyThread && WaitForSingleObject(ready, 2000) == WAIT_OBJECT_0;
         CloseHandle(ready);
-        if (!started || !g_winKeyHook) {
-            UninstallWinKeyHook();  // release the thread and whatever it managed to install
+        if (!started || !g_winKeyInstalled) {
+            UninstallWinKeyHook();  // let the thread go and release whatever it installed
             return false;
         }
         WatchStart();
@@ -19916,13 +19931,21 @@ static bool RegisterLauncherHotkey() {
 
 static volatile LONG g_hotkeyWarnUp = 0;
 
-static DWORD WINAPI HotkeyWarningThread(LPVOID) {
+static DWORD WINAPI HotkeyWarningThread(LPVOID param) {
+    // param carries whether the failing shortcut is the Windows key: it fails by installing a hook,
+    // not by being taken by another application, so the text has to say something else.
+    const bool winKey = param != nullptr;
     MessageBoxW(nullptr,
-                L"Spotlight Launcher could not register the keyboard shortcut because another "
-                L"application is already using it (for example, Alt + Space is also the system "
-                L"shortcut for a window's menu).\n\n"
-                L"Change the shortcut in the mod settings or free that shortcut in the other "
-                L"application.",
+                winKey
+                    ? L"Spotlight Launcher could not start listening for the Windows key: another "
+                      L"program may be blocking it, or the system refused the keyboard hook.\n\n"
+                      L"Pick a different shortcut in the mod settings, or restart Windhawk and try "
+                      L"again."
+                    : L"Spotlight Launcher could not register the keyboard shortcut because another "
+                      L"application is already using it (for example, Alt + Space is also the system "
+                      L"shortcut for a window's menu).\n\n"
+                      L"Change the shortcut in the mod settings or free that shortcut in the other "
+                      L"application.",
                 L"Spotlight Launcher", MB_OK | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND);
     InterlockedExchange(&g_hotkeyWarnUp, 0);
     return 0;
@@ -19935,7 +19958,9 @@ static void RegisterHotkeyOrWarn() {
         // User-triggered settings changes can call this repeatedly: keep a single warning visible
         // instead of stacking one box per change.
         if (InterlockedCompareExchange(&g_hotkeyWarnUp, 1, 0) == 0) {
-            HANDLE th = CreateThread(nullptr, 0, HotkeyWarningThread, nullptr, 0, nullptr);
+            HANDLE th = CreateThread(nullptr, 0, HotkeyWarningThread,
+                                     (LPVOID)(INT_PTR)(g_cfg.hotkeyVk == VK_LWIN ? 1 : 0), 0,
+                                     nullptr);
             if (th) CloseHandle(th);
         }
     }
@@ -20006,6 +20031,9 @@ public:
         g_imeComposition.clear();
         g_imeCursor = 0;
     }
+
+    // True while the IME has a composition open, even before it contains a character.
+    bool Composing() const { return m_composing; }
 
     void NotifyTextAndSelectionChanged() {
         if (!m_sink || m_inEditSession || m_composing) return;
@@ -20114,8 +20142,11 @@ public:
         if (ulIndex != TF_DEFAULT_SELECTION && ulIndex != 0) return TS_E_NOSELECTION;
         if (ulCount == 0 || !pSelection) return S_OK;
         if (m_composing) {
-            pSelection[0].acpStart = m_selStart;
-            pSelection[0].acpEnd = m_selEnd;
+            // The selection can outlive the text it pointed at; TSF must never see a position past
+            // the end of the document.
+            const LONG len = (LONG)CurrentDoc().size();
+            pSelection[0].acpStart = std::clamp(m_selStart, (LONG)0, len);
+            pSelection[0].acpEnd = std::clamp(m_selEnd, pSelection[0].acpStart, len);
         } else {
             int c = 0, a = 0;
             ActivePlainText(c, a);
@@ -20189,9 +20220,13 @@ public:
                 m_compStart = s;
                 newCompEnd = s + (LONG)cch;
             }
-            m_compEnd = std::min((LONG)doc.size(), newCompEnd);
-            const LONG compLen = std::max((LONG)0, m_compEnd - m_compStart);
-            g_imeComposition = doc.substr((size_t)m_compStart, (size_t)compLen);
+            // The rebuilt document can be shorter than where the composition started (the query was
+            // replaced or cleared without ending it): clamp instead of slicing out of range, which
+            // would throw std::out_of_range out of this COM callback and kill the process.
+            const LONG docLen = (LONG)doc.size();
+            m_compStart = std::clamp(m_compStart, (LONG)0, docLen);
+            m_compEnd = std::clamp(newCompEnd, m_compStart, docLen);
+            g_imeComposition = doc.substr((size_t)m_compStart, (size_t)(m_compEnd - m_compStart));
             m_selStart = m_selEnd = s + (LONG)cch;
             g_imeCursor = std::clamp((int)(m_selEnd - m_compStart), 0, (int)g_imeComposition.size());
             if (pChange) {
@@ -20343,12 +20378,10 @@ public:
                     const std::wstring& base = ActivePlainText(c, a);
                     const std::wstring doc = base.substr(0, (size_t)std::min(c, a)) + g_imeComposition +
                                              base.substr((size_t)std::max(c, a));
-                    if (m_compStart <= (LONG)doc.size()) {
-                        const LONG avail =
-                            std::min(m_compEnd - m_compStart, (LONG)doc.size() - m_compStart);
-                        g_imeComposition =
-                            doc.substr((size_t)m_compStart, (size_t)std::max((LONG)0, avail));
-                    }
+                    // Same defensive clamp as SetText: the range has to stay inside the document.
+                    m_compStart = std::clamp(m_compStart, (LONG)0, (LONG)doc.size());
+                    m_compEnd = std::clamp(m_compEnd, m_compStart, (LONG)doc.size());
+                    g_imeComposition = doc.substr((size_t)m_compStart, (size_t)(m_compEnd - m_compStart));
                 }
                 acp->Release();
             }
@@ -20459,6 +20492,24 @@ static void TsfSetFocus(bool focused) {
         if (g_tsfStore) g_tsfStore->ResetComposition();
         g_tsfMgr->SetFocus(nullptr);
     }
+}
+
+// Ends an open IME composition before the document it belongs to changes under it (the query is
+// cleared, another field takes over, the mouse switches modes...). TerminateComposition makes the
+// IME close its own composition, which fires OnEndComposition and commits the text into the field
+// that was being edited, so nothing is cut from the wrong query. If the composition cannot be
+// terminated, it is dropped: losing a half-typed word beats keeping a range that no longer exists.
+static void TsfEndComposition() {
+    if (!g_tsfContext || !g_tsfStore || !g_tsfStore->Composing()) return;
+    ITfContextOwnerCompositionServices* svc = nullptr;
+    if (SUCCEEDED(g_tsfContext->QueryInterface(__uuidof(ITfContextOwnerCompositionServices),
+                                               (void**)&svc)) &&
+        svc) {
+        svc->TerminateComposition(nullptr);
+        svc->Release();
+        return;
+    }
+    if (g_tsfStore) g_tsfStore->ResetComposition();
 }
 
 static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -20763,7 +20814,14 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             return 0;
         }
 
+        case WM_RBUTTONDOWN:
+            // Mouse clicks are not consumed by the IME, so a click can change the field while a
+            // composition is still open: commit it first, the same as with the left button.
+            TsfEndComposition();
+            break;
+
         case WM_LBUTTONDOWN: {
+            TsfEndComposition();  // the click can move the caret, switch mode or open a menu
             if (g_helpOpen) {
                 float hx = 0, hy = 0;
                 MainOrigin(hx, hy);
