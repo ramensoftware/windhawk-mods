@@ -7,7 +7,7 @@
 // @github          https://github.com/Dev-StudioCode
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -lruntimeobject -lshlwapi -lshell32
+// @compilerOptions -lole32 -luuid -lruntimeobject -lshlwapi -lshell32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -397,7 +397,7 @@ public:
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppvObject) override {
         if (!ppvObject) return E_POINTER;
-        if (riid == IID_IUnknown || riid == IID_IVirtualDesktopNotification) {
+        if (riid == __uuidof(IUnknown) || riid == IID_IVirtualDesktopNotification) {
             *ppvObject = static_cast<IVirtualDesktopNotification*>(this);
             AddRef();
             return S_OK;
@@ -479,8 +479,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
 
         HRESULT hr = CoCreateInstance(
             CLSID_ImmersiveShell, nullptr, CLSCTX_LOCAL_SERVER,
-            IID_IServiceProvider,
-            (void**)&pServiceProvider);
+            IID_PPV_ARGS(&pServiceProvider));
 
         if (SUCCEEDED(hr) && pServiceProvider) {
             pServiceProvider->QueryService(
