@@ -4,7 +4,7 @@
 // @name:vi-VN      Modern Taskbar for Windows 11 (Dynamic Taskbar)
 // @description     Native XAML Optical Liquid Glass Split Taskbars, Media Album Art + Waveform, Task Progress %, <10ms Lock/Clipboard/Alt+F4/Battery Milestones & Interactive Sliders.
 // @description:vi-VN Mặt kính Liquid Glass gắn trực tiếp cây XAML Taskbar, Phát nhạc (Ảnh bìa + Sóng nhạc), Tiến trình %, Phím khóa/Clipboard/Alt+F4/Mốc Pin tức thì <10ms & Kéo chuột Âm lượng/Độ sáng.
-// @version         8.1.0
+// @version         2.0.4.0
 // @author          caotu2005
 // @github          https://github.com/caotu2005
 // @include         explorer.exe
@@ -3105,7 +3105,7 @@ void TryHookTaskbarDllSymbols(HMODULE hMod, bool applyHooks) {
         return;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             { LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})" },
             &g_CTaskBand_ITaskListWndSite_vftable,
@@ -3143,7 +3143,7 @@ void TryHookTaskbarDllSymbols(HMODULE hMod, bool applyHooks) {
         },
     };
 
-    if (WindhawkUtils::HookSymbols(hMod, hooks, ARRAYSIZE(hooks))) {
+    if (WindhawkUtils::HookSymbols(hMod, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
         g_taskbarSymbolsReady.store(true, std::memory_order_relaxed);
         if (applyHooks) {
             Wh_ApplyHookOperations();
@@ -12546,7 +12546,7 @@ static void TaskbarModUninit() {
     }
 }
 
-static BOOL WhTool_ModInit() {
+BOOL WhTool_ModInit() {
     g_unloading.store(false, std::memory_order_relaxed);
     ReadSettingsFromWindhawk(false);
     g_msgOpenSettings   = RegisterWindowMessageW(L"Windhawk_OpenTaskbarSettings_" WH_MOD_ID);
@@ -12566,14 +12566,14 @@ static BOOL WhTool_ModInit() {
     return TRUE;
 }
 
-static void WhTool_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     ReadSettingsFromWindhawk(true);
     if (HWND hSet = g_hWin11SettingsWnd.load(); hSet && IsWindow(hSet) && g_msgReloadSettings != 0) {
         PostMessageW(hSet, g_msgReloadSettings, 1, 0);
     }
 }
 
-static void WhTool_ModUninit() {
+void WhTool_ModUninit() {
     g_unloading.store(true, std::memory_order_relaxed);
     StopSettingsHostCleanly();
 }
