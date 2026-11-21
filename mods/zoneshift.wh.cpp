@@ -5,6 +5,7 @@
 // @version         1.0.0
 // @author          Dev-StudioCode
 // @github          https://github.com/Dev-StudioCode
+// @homepage        https://github.com/Dev-StudioCode/ZoneShift
 // @include         wallpaper32.exe
 // @include         wallpaper64.exe
 // @include         webwallpaper32.exe
@@ -70,6 +71,13 @@ Windows apps query time through multiple Win32, NT, ICU, CRT, and registry APIs.
 - **`NtQuerySystemInformation` (`SystemTimeOfDayInformation`)**: Low-level NT kernel time-of-day bias.
 - **`RegQueryValueExW`**: Intercepts `TimeZoneKeyName` and `ActiveTimeBias` queries.
 - **Windows ICU Integration**: Automatically converts any IANA identifier (e.g. `Europe/Warsaw`, `America/Mexico_City`, `Asia/Tokyo`) to Windows time zones using `icu.dll`.
+
+---
+
+### Source Code & Support
+
+Source code, issue tracker, and documentation:
+[GitHub Repository](https://github.com/Dev-StudioCode/ZoneShift)
 */
 // ==/WindhawkModReadme==
 
@@ -335,14 +343,7 @@ static VOID WINAPI Hook_GetLocalTime(LPSYSTEMTIME lpSystemTime) {
     bSpoofUtc = g_bSpoofUtcTime;
     ReleaseSRWLockShared(&g_tzLock);
 
-    // Convert with dynamic DST rules via SystemTimeToTzSpecificLocalTimeEx
-    if (pfnOrig_SystemTimeToTzSpecificLocalTimeEx) {
-        pfnOrig_SystemTimeToTzSpecificLocalTimeEx(&localDtzi, &stUtc, lpSystemTime);
-    } else {
-        TIME_ZONE_INFORMATION localTzi;
-        memcpy(&localTzi, &localDtzi, sizeof(TIME_ZONE_INFORMATION));
-        pfnOrig_SystemTimeToTzSpecificLocalTime(&localTzi, &stUtc, lpSystemTime);
-    }
+    pfnOrig_SystemTimeToTzSpecificLocalTimeEx(&localDtzi, &stUtc, lpSystemTime);
 
     if (!bSpoofUtc && nShift != 0) {
         ShiftSystemTime(lpSystemTime, nShift);
@@ -470,9 +471,6 @@ static BOOL WINAPI Hook_FileTimeToLocalFileTime(const FILETIME *lpFileTime, LPFI
         return pfnOrig_FileTimeToLocalFileTime(lpFileTime, lpLocalFileTime);
     }
 
-    SYSTEMTIME stUtc, stLocal;
-    if (!FileTimeToSystemTime(lpFileTime, &stUtc)) return FALSE;
-
     DYNAMIC_TIME_ZONE_INFORMATION localDtzi;
     int nShift = 0;
     bool bSpoofUtc = false;
@@ -483,20 +481,18 @@ static BOOL WINAPI Hook_FileTimeToLocalFileTime(const FILETIME *lpFileTime, LPFI
     bSpoofUtc = g_bSpoofUtcTime;
     ReleaseSRWLockShared(&g_tzLock);
 
-    // Apply dynamic DST rules
-    if (pfnOrig_SystemTimeToTzSpecificLocalTimeEx) {
-        pfnOrig_SystemTimeToTzSpecificLocalTimeEx(&localDtzi, &stUtc, &stLocal);
-    } else {
-        TIME_ZONE_INFORMATION localTzi;
-        memcpy(&localTzi, &localDtzi, sizeof(TIME_ZONE_INFORMATION));
-        pfnOrig_SystemTimeToTzSpecificLocalTime(&localTzi, &stUtc, &stLocal);
-    }
+    DWORD state = GetCurrentTimeZoneState(localDtzi);
+    LONG activeBias = localDtzi.Bias + (state == TIME_ZONE_ID_DAYLIGHT ? localDtzi.DaylightBias : localDtzi.StandardBias);
+    LONG totalBiasMinutes = activeBias - (!bSpoofUtc ? nShift : 0);
 
-    if (nShift != 0 && !bSpoofUtc) {
-        ShiftSystemTime(&stLocal, nShift);
-    }
+    ULARGE_INTEGER ul;
+    ul.LowPart = lpFileTime->dwLowDateTime;
+    ul.HighPart = lpFileTime->dwHighDateTime;
+    ul.QuadPart -= (LONGLONG)totalBiasMinutes * 600000000LL;
 
-    return SystemTimeToFileTime(&stLocal, lpLocalFileTime);
+    lpLocalFileTime->dwLowDateTime = ul.LowPart;
+    lpLocalFileTime->dwHighDateTime = ul.HighPart;
+    return TRUE;
 }
 
 static BOOL WINAPI Hook_LocalFileTimeToFileTime(const FILETIME *lpLocalFileTime, LPFILETIME lpFileTime) {
@@ -504,9 +500,6 @@ static BOOL WINAPI Hook_LocalFileTimeToFileTime(const FILETIME *lpLocalFileTime,
         return pfnOrig_LocalFileTimeToFileTime(lpLocalFileTime, lpFileTime);
     }
 
-    SYSTEMTIME stLocal, stUtc;
-    if (!FileTimeToSystemTime(lpLocalFileTime, &stLocal)) return FALSE;
-
     DYNAMIC_TIME_ZONE_INFORMATION localDtzi;
     int nShift = 0;
     bool bSpoofUtc = false;
@@ -517,20 +510,18 @@ static BOOL WINAPI Hook_LocalFileTimeToFileTime(const FILETIME *lpLocalFileTime,
     bSpoofUtc = g_bSpoofUtcTime;
     ReleaseSRWLockShared(&g_tzLock);
 
-    if (nShift != 0 && !bSpoofUtc) {
-        ShiftSystemTime(&stLocal, -nShift);
-    }
+    DWORD state = GetCurrentTimeZoneState(localDtzi);
+    LONG activeBias = localDtzi.Bias + (state == TIME_ZONE_ID_DAYLIGHT ? localDtzi.DaylightBias : localDtzi.StandardBias);
+    LONG totalBiasMinutes = activeBias - (!bSpoofUtc ? nShift : 0);
 
-    // Apply dynamic DST rules
-    if (pfnOrig_TzSpecificLocalTimeToSystemTimeEx) {
-        pfnOrig_TzSpecificLocalTimeToSystemTimeEx(&localDtzi, &stLocal, &stUtc);
-    } else {
-        TIME_ZONE_INFORMATION localTzi;
-        memcpy(&localTzi, &localDtzi, sizeof(TIME_ZONE_INFORMATION));
-        pfnOrig_TzSpecificLocalTimeToSystemTime(&localTzi, &stLocal, &stUtc);
-    }
+    ULARGE_INTEGER ul;
+    ul.LowPart = lpLocalFileTime->dwLowDateTime;
+    ul.HighPart = lpLocalFileTime->dwHighDateTime;
+    ul.QuadPart += (LONGLONG)totalBiasMinutes * 600000000LL;
 
-    return SystemTimeToFileTime(&stUtc, lpFileTime);
+    lpFileTime->dwLowDateTime = ul.LowPart;
+    lpFileTime->dwHighDateTime = ul.HighPart;
+    return TRUE;
 }
 
 // Lock-free high-frequency time hooks
@@ -558,11 +549,7 @@ static VOID WINAPI Hook_GetSystemTimeAsFileTime(LPFILETIME lpSystemTimeAsFileTim
 }
 
 static VOID WINAPI Hook_GetSystemTimePreciseAsFileTime(LPFILETIME lpSystemTimeAsFileTime) {
-    if (pfnOrig_GetSystemTimePreciseAsFileTime) {
-        pfnOrig_GetSystemTimePreciseAsFileTime(lpSystemTimeAsFileTime);
-    } else {
-        pfnOrig_GetSystemTimeAsFileTime(lpSystemTimeAsFileTime);
-    }
+    pfnOrig_GetSystemTimePreciseAsFileTime(lpSystemTimeAsFileTime);
 
     int shift = g_nUtcShiftMinutes.load(std::memory_order_relaxed);
     if (shift != 0 && lpSystemTimeAsFileTime) {
@@ -667,8 +654,8 @@ static LSTATUS WINAPI Hook_RegQueryValueExW(
 // ---------------------------------------------------------------------------
 
 static BOOL LoadSettings() {
-    auto targetTzSetting = WindhawkUtils::StringSetting::make(Wh_GetStringSetting(L"targetTimezone"));
-    auto customKeySetting = WindhawkUtils::StringSetting::make(Wh_GetStringSetting(L"customTimezoneKey"));
+    auto targetTzSetting = WindhawkUtils::StringSetting::make(L"targetTimezone");
+    auto customKeySetting = WindhawkUtils::StringSetting::make(L"customTimezoneKey");
 
     std::wstring tzQuery;
     if (wcscmp(targetTzSetting.get(), L"Custom") == 0) {
@@ -809,12 +796,9 @@ void Wh_ModAfterInit() {
     NotifyProcessWindows();
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+BOOL Wh_ModSettingsChanged(BOOL*) {
     Wh_Log(L"ZoneShift settings changed, updating...");
     if (!LoadSettings()) {
-        if (bReload) {
-            *bReload = TRUE;
-        }
         return FALSE;
     }
     NotifyProcessWindows();
