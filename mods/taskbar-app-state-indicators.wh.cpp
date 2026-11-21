@@ -18,9 +18,11 @@ Marks every task list button of the Windows 11 taskbar according to the
 state of its windows, so open, maximized and minimized buttons can be told
 apart at a glance.
 
+![Demo](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/taskbar-app-state-indicators/demo.gif)
+
 All indicators live on one shared **frame**: a rounded rectangle around the
 button's icon, defined in the General section. Its distance from the icon is
-given as `top, right, bottom, left` and measured to the frame's outer edge:
+given as `left, top, right, bottom` and measured to the frame's outer edge:
 `0, 0, 0, 0` puts the outer edge on the icon's edges, positive values
 expand it outwards and negative values pull it over the icon. The stroke
 thickness grows inwards from that edge, towards the icon, so the frame's
@@ -49,7 +51,8 @@ up with each other:
 - **Multi-window dot** for buttons with two or more windows: a dot centered
   on the frame's left edge, with its own diameter.
 - **Badge dot** for buttons with a badge: the taskbar's own badges —
-  notification counts and the overlay icons apps put on their icon — are
+  notification counts (the small dot with small taskbar icons) and the
+  overlay icons apps put on their icon — are
   hidden, and every button that has one gets a dot centered on the frame's
   right edge instead, in its own color (`#EB5757` by default) and diameter,
   in every window state: open, maximized and minimized alike.
@@ -61,10 +64,11 @@ slide along the bottom edge and around the arcs into the two bottom
 corners (and merge back when it's minimized again); when a window is
 maximized, the top corners start as a circle at the top center and travel
 outwards along the top edge and around the arcs, and the path they draw
-settles into the corner marks (or, connected, into the cap). A launched app's corners split from a dot at the bottom
-center, the multi-window dot rolls in from the bottom-left corner and the
-badge dot from the bottom-right one, and when a button loses
-all its marks they shrink where they are and fade. Active and inactive
+settles into the corner marks (or, connected, into the cap). A launched
+app's corners split from a dot at the bottom center, the multi-window and
+badge dots grow from their centers when they appear and shrink back into
+them when they go, and when a button loses all its marks they shrink where
+they are and fade. Active and inactive
 colors fade into each other. Movements are swift (160 ms by default,
 adjustable), start from wherever an interrupted one had got to, and are
 skipped when Windows animations are turned off.
@@ -79,6 +83,7 @@ running along with them, and settle back where they belong. Both follow
 the native bar's 2-second cycle and its ease-in, ease-out curve; when
 progress stops, a turn under way is finished first. During a minimized
 app's sweep the dots stay where they are, clear of it on the side edges.
+Like the native bar, this runs with Windows animations turned off too.
 
 **Attention.** While an app requests attention (its taskbar button
 flashes), its corner marks or underline take the attention color, from
@@ -148,9 +153,9 @@ refreshes every 10 seconds or so. Leave it off otherwise.
 // ==WindhawkModSettings==
 /*
 - General:
-  - Offsets: '3, 3, 3, 3'
-    $name: Frame distance from the icon (Top, Right, Bottom, Left)
-    $description: Distance between the icon's edges and the outer edge of the frame the indicators are drawn on, in pixels. 0, 0, 0, 0 puts the outer edge on the icon's edges; positive values expand the frame, negative values move it over the icon. The thickness grows inwards from this edge. Accepts 1 value (all sides), 2 (vertical, horizontal), 3 (top, horizontal, bottom) or 4.
+  - Offsets: '5, 5, 5, 5'
+    $name: Frame distance from the icon (Left, Top, Right, Bottom)
+    $description: Distance between the icon's edges and the outer edge of the frame the indicators are drawn on, in pixels. 0, 0, 0, 0 puts the outer edge on the icon's edges; positive values expand the frame, negative values move it over the icon. The thickness grows inwards from this edge. Accepts 1 value (all sides), 2 (horizontal, vertical) or 4 (left, top, right, bottom).
   - CornerRadius: '4'
     $name: Frame corner radius
     $description: One value for all corners, two values for the top and bottom corners, or four values in order top-left, top-right, bottom-right, bottom-left.
@@ -168,7 +173,7 @@ refreshes every 10 seconds or so. Leave it off otherwise.
     $description: Color of every indicator on all other buttons, same format as above. Leave empty to use the system accent color.
   - InactiveOpacity: '1.0, 1.0'
     $name: Inactive opacity (Light, Dark)
-  - AccentShading: false
+  - AccentShading: true
     $name: Theme-shaded accent
     $description: When a color uses the system accent (left empty), use a darker shade of the accent color in the light theme and a lighter shade in the dark theme, instead of the plain accent color in both.
   - GroupRule: any
@@ -197,12 +202,12 @@ refreshes every 10 seconds or so. Leave it off otherwise.
   - DebugLog: false
     $name: Debug logging
     $description: For troubleshooting. Logs one line per taskbar button whenever what it shows changes (app, windows, state, active, badge, attention, progress, animation), the property changes its view model reports, and a summary of what triggered refreshes every 10 seconds or so. Leave off otherwise.
-  - HideNativeIndicator: false
+  - HideNativeIndicator: true
     $name: Hide the native running indicator
     $description: Hides the taskbar's own line under the icons of running apps (the active and inactive window indicator), leaving only this mod's indicators.
   - ProgressAnimation: true
     $name: Animate indeterminate progress
-    $description: While an app shows indeterminate progress (the taskbar's moving bar), a minimized app's underline sweeps from left to right like that bar, and the corner marks of an open or maximized app run clockwise around the frame together with the multi-window and badge dots, with the native bar's timing and easing. Works whether or not the native progress bar is hidden; skipped when Windows animations are turned off.
+    $description: While an app shows indeterminate progress (the taskbar's moving bar), a minimized app's underline sweeps from left to right like that bar, and the corner marks of an open or maximized app run clockwise around the frame together with the multi-window and badge dots, with the native bar's timing and easing. Works whether or not the native progress bar is hidden, and with Windows animations turned off too, like the native bar.
   - ProgressFill: true
     $name: Fill with determinate progress
     $description: While an app shows determinate progress (the taskbar's filling bar), its indicators fill with the progress color from left to right — the underline, the cup or bottom corners, and, maximized, the cap or top corners at the same rate — so the rest keeps the active or inactive color. Works whether or not the native progress bar is hidden.
@@ -215,7 +220,7 @@ refreshes every 10 seconds or so. Leave it off otherwise.
   - ProgressErrorColor: '#C42B1C|#FF99A4'
     $name: Error progress fill color
     $description: Fill color while the progress is in error, same format.
-  - HideNativeProgress: false
+  - HideNativeProgress: true
     $name: Hide the native progress indicators
     $description: Hides the taskbar's own progress bar under the icons of apps reporting progress (downloads, copies, installs), both determinate (a filling bar) and indeterminate (a moving one), including its paused and error colors. A hidden indeterminate bar's animation is paused as well.
   $name: General (Frame and Rules)
@@ -226,13 +231,13 @@ refreshes every 10 seconds or so. Leave it off otherwise.
   - MaximizedEnabled: true
     $name: All four corners for maximized windows
     $description: A button with a window that is shown and maximized gets all four corners (open windows get the two bottom ones).
-  - ConnectCorners: false
+  - ConnectCorners: true
     $name: Connect the corners
     $description: Joins the two bottom corners with a line along the bottom edge, a cup under the icon, and for maximized windows the two top corners along the top edge too, a cap over it.
-  - LegLength: '3'
+  - LegLength: '5'
     $name: Leg length
     $description: Length of the straight part of each mark beyond the corner, in pixels. 0 draws just the corners.
-  - RoundedEnds: false
+  - RoundedEnds: true
     $name: Rounded ends
     $description: Rounds the two ends of each mark into half circles; disabled, the ends are square. The marks keep their length as long as the leg is at least half the thickness.
   - CornerStyle: rounded
@@ -243,7 +248,7 @@ refreshes every 10 seconds or so. Leave it off otherwise.
     - diagonal: Diagonal
   $name: Corner Marks (Open and Maximized Windows)
 - Minimized:
-  - Enabled: false
+  - Enabled: true
     $name: Underline for minimized apps
     $description: Draws a piece of the frame's bottom edge, centered on it, for buttons that have a minimized window and aren't marked as open.
   - Length: '0'
@@ -260,18 +265,18 @@ refreshes every 10 seconds or so. Leave it off otherwise.
     $description: Opacity of that underline, from 0 to 1, applied to its color.
   $name: Minimized Apps
 - Multi:
-  - Enabled: false
+  - Enabled: true
     $name: Dot for apps with several windows
     $description: Draws a dot centered on the frame's left edge for buttons that have two or more windows.
-  - Diameter: '4'
+  - Diameter: '5'
     $name: Diameter
     $description: Diameter of the dot, in pixels.
   $name: Apps With Several Windows
 - Badge:
-  - Enabled: false
+  - Enabled: true
     $name: Dot for apps with a badge
-    $description: Hides the taskbar's own badges (notification counts and overlay icons on the icons) and instead draws a dot centered on the frame's right edge for every button that has one, in every window state (open, maximized, minimized).
-  - Diameter: '4'
+    $description: Hides the taskbar's own badges (notification counts, the dot shown instead with small taskbar icons, and overlay icons on the icons) and instead draws a dot centered on the frame's right edge for every button that has one, in every window state (open, maximized, minimized).
+  - Diameter: '5'
     $name: Diameter
     $description: Diameter of the dot, in pixels.
   - Color: '#EB5757'
@@ -332,7 +337,7 @@ struct Settings {
     // stroke's outer edge from the icon's edges, its corner radii (TL, TR,
     // BR, BL, on the stroke's centerline) and its stroke thickness (inwards
     // from the outer edge).
-    winrt::Windows::UI::Xaml::Thickness FrameOffsets = {3, 3, 3, 3};
+    winrt::Windows::UI::Xaml::Thickness FrameOffsets = {5, 5, 5, 5};
     double FrameRadius[4] = {4.0, 4.0, 4.0, 4.0};
     double FrameThickness = 2.0;
 
@@ -340,7 +345,7 @@ struct Settings {
     bool IndEnabled = true;
     bool IndConnect = false; // bottom corners joined along the bottom edge, top ones along the top
     bool IndMaximized = true;
-    double IndLeg = 3.0;
+    double IndLeg = 5.0;
     bool IndDiagonal = false;
     bool IndRoundedEnds = false;
 
@@ -475,6 +480,7 @@ struct IndicatorSlot {
     bool forceMove = false;
 
     ScalarTween trimStartTween, trimEndTween;
+    ScalarTween thicknessTween;            // the dots' growing and shrinking
     std::vector<ColorTween> colorTweens;   // one per brush color
 };
 
@@ -597,7 +603,8 @@ struct ButtonEntry {
     winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> layoutPanel;
     winrt::event_token layoutToken{};
     bool layoutAttached = false;
-    int layoutChildCount = -1;
+    int layoutChildCount = -1;      // raw, for the cheap check on every pass
+    int layoutForeignCount = -1;    // without the mod's own host
 
     // Debug logging: the button's view model, if it notifies property
     // changes, and the app name last logged for the button.
@@ -724,24 +731,20 @@ double ParseDouble(PCWSTR str, double defaultVal, double minVal = 0.0) {
     }
 }
 
-// Frame offsets in CSS order: "all", "vertical, horizontal",
-// "top, horizontal, bottom" or "top, right, bottom, left". Any other count
-// is invalid and yields zeros (the frame's outer edge on the icon's edges)
-// rather than silently discarding part of the input.
+// Frame offsets in XAML Thickness order: "all", "horizontal, vertical" or
+// "left, top, right, bottom". Any other count is invalid and yields zeros
+// (the frame's outer edge on the icon's edges) rather than silently
+// discarding part of the input.
 void ParseFrameOffsets(PCWSTR str, winrt::Windows::UI::Xaml::Thickness& outThickness) {
     double outL = 0.0, outT = 0.0, outR = 0.0, outB = 0.0;
     auto vals = ParseDoubleList(str);
     if (vals.size() == 1) {
         outL = outT = outR = outB = vals[0];
     } else if (vals.size() == 2) {
-        outT = outB = vals[0];
-        outL = outR = vals[1];
-    } else if (vals.size() == 3) {
-        outT = vals[0];
-        outL = outR = vals[1];
-        outB = vals[2];
+        outL = outR = vals[0];
+        outT = outB = vals[1];
     } else if (vals.size() == 4) {
-        outT = vals[0]; outR = vals[1]; outB = vals[2]; outL = vals[3];
+        outL = vals[0]; outT = vals[1]; outR = vals[2]; outB = vals[3];
     }
     outThickness = winrt::Windows::UI::Xaml::ThicknessHelper::FromLengths(outL, outT, outR, outB);
 }
@@ -819,7 +822,7 @@ void LoadSettings() {
     ParseGradientColorPair(fillErrorStr.get(), g_settings.FillErrorLight, g_settings.FillErrorDark);
     g_settings.BadgeEnabled = Wh_GetIntSetting(L"Badge.Enabled") != 0;
     WindhawkUtils::StringSetting badgeDiaStr(Wh_GetStringSetting(L"Badge.Diameter"));
-    g_settings.BadgeDiameter = std::max(1.0, ParseDouble(badgeDiaStr.get(), 4.0));
+    g_settings.BadgeDiameter = std::max(1.0, ParseDouble(badgeDiaStr.get(), 5.0));
     WindhawkUtils::StringSetting badgeColStr(Wh_GetStringSetting(L"Badge.Color"));
     ParseGradientColorPair(badgeColStr.get(), g_settings.BadgeLight, g_settings.BadgeDark);
 
@@ -834,7 +837,7 @@ void LoadSettings() {
     g_settings.IndConnect = Wh_GetIntSetting(L"Corners.ConnectCorners") != 0;
     g_settings.IndMaximized = Wh_GetIntSetting(L"Corners.MaximizedEnabled") != 0;
     WindhawkUtils::StringSetting indLegStr(Wh_GetStringSetting(L"Corners.LegLength"));
-    g_settings.IndLeg = ParseDouble(indLegStr.get(), 3.0);
+    g_settings.IndLeg = ParseDouble(indLegStr.get(), 5.0);
     WindhawkUtils::StringSetting indStyleStr(Wh_GetStringSetting(L"Corners.CornerStyle"));
     g_settings.IndDiagonal = indStyleStr.get() && wcscmp(indStyleStr.get(), L"diagonal") == 0;
     g_settings.IndRoundedEnds = Wh_GetIntSetting(L"Corners.RoundedEnds") != 0;
@@ -852,7 +855,7 @@ void LoadSettings() {
 
     g_settings.MultiEnabled = Wh_GetIntSetting(L"Multi.Enabled") != 0;
     WindhawkUtils::StringSetting multiDiaStr(Wh_GetStringSetting(L"Multi.Diameter"));
-    g_settings.MultiDiameter = std::max(1.0, ParseDouble(multiDiaStr.get(), 4.0));
+    g_settings.MultiDiameter = std::max(1.0, ParseDouble(multiDiaStr.get(), 5.0));
 
     g_settings.Animations = Wh_GetIntSetting(L"General.Animations") != 0;
     g_settings.DebugLog = Wh_GetIntSetting(L"General.DebugLog") != 0;
@@ -1903,12 +1906,14 @@ void UpdateNativeIndicators(FrameworkElement const& button, std::shared_ptr<Butt
 
 // ---------------------------------------------------------------------------
 // Native badges. The button template shows a notification badge (counts,
-// glyphs) and the window's overlay icon (Image#OverlayIcon) on top of the
-// icon. With badge support on, every such element is found in the icon's
-// panel — by name or class containing "Badge", plus OverlayIcon — and hidden
-// through its handout visual's opacity, like the running indicator. Whether
-// the button "has a badge" is read from the elements' own XAML state, which
-// that opacity doesn't touch: shown, sized and, for an image, with a source.
+// glyphs; with small taskbar icons a dot instead, Taskbar.Beacon#
+// BeaconControl) and the window's overlay icon (Image#OverlayIcon) on top of
+// the icon. With badge support on, every such element is found in the icon's
+// panel — by name or class containing "Badge" or "Beacon", plus OverlayIcon —
+// and hidden through its handout visual's opacity, like the running
+// indicator. Whether the button "has a badge" is read from the elements' own
+// XAML state, which that opacity doesn't touch: shown, sized and, for an
+// image, with a source.
 // Property-changed callbacks on those properties, plus SizeChanged, refresh
 // the button when a badge comes or goes.
 // ---------------------------------------------------------------------------
@@ -1928,8 +1933,11 @@ void CollectBadgeElements(FrameworkElement const& root, std::vector<FrameworkEle
         if (!child) continue;
         auto name = child.Name();
         if (name == kHostName) continue;  // ours
-        if (name == L"OverlayIcon" || ContainsNoCase(name, L"Badge") ||
-            ContainsNoCase(winrt::get_class_name(child), L"Badge")) {
+        // Badge (a count or glyph), Beacon (the dot that replaces it with
+        // small taskbar icons) or the window's overlay icon.
+        auto className = winrt::get_class_name(child);
+        if (name == L"OverlayIcon" || ContainsNoCase(name, L"Badge") || ContainsNoCase(className, L"Badge") ||
+            ContainsNoCase(name, L"Beacon") || ContainsNoCase(className, L"Beacon")) {
             out.push_back(child);
             continue; // the whole badge, not its parts
         }
@@ -2337,6 +2345,42 @@ ProgressInfo UpdateProgressWatch(FrameworkElement const& button, std::shared_ptr
 // layout pass, so it only compares one number) notices a change in its
 // children: it hides a new native badge at once, before the frame is drawn,
 // and queues a refresh for the badge dot.
+// Debug logging: a panel's children in order, each as Name (or class) and
+// its ZIndex, e.g. "Icon BadgeControl ButtonStateIndicatorHost/z1000".
+std::wstring PanelOrderText(FrameworkElement const& panel) {
+    std::wstring text;
+    try {
+        int count = VisualTreeHelper::GetChildrenCount(panel);
+        for (int i = 0; i < count; i++) {
+            auto child = VisualTreeHelper::GetChild(panel, i).try_as<FrameworkElement>();
+            if (!child) continue;
+            std::wstring label(child.Name());
+            if (label.empty()) {
+                label = winrt::get_class_name(child);
+                size_t dot = label.find_last_of(L'.');
+                if (dot != std::wstring::npos) label = label.substr(dot + 1);
+            }
+            int z = Canvas::GetZIndex(child);
+            if (z != 0) label += L"/z" + std::to_wstring(z);
+            if (child.Visibility() != Visibility::Visible) label += L"/collapsed";
+            if (!text.empty()) text += L" ";
+            text += label;
+        }
+    } catch (...) {}
+    return text;
+}
+
+// The panel's children other than the mod's own host: the host coming or
+// going (added on the first pass, removed on unload) is no badge.
+int CountForeignChildren(FrameworkElement const& panel) {
+    int count = VisualTreeHelper::GetChildrenCount(panel), foreign = 0;
+    for (int i = 0; i < count; i++) {
+        auto child = VisualTreeHelper::GetChild(panel, i).try_as<FrameworkElement>();
+        if (!child || child.Name() != kHostName) foreign++;
+    }
+    return foreign;
+}
+
 void UnwatchIconPanel(std::shared_ptr<ButtonEntry> const& e) {
     if (e->layoutAttached) {
         if (auto panel = e->layoutPanel.get()) {
@@ -2346,6 +2390,7 @@ void UnwatchIconPanel(std::shared_ptr<ButtonEntry> const& e) {
     e->layoutAttached = false;
     e->layoutPanel = nullptr;
     e->layoutChildCount = -1;
+    e->layoutForeignCount = -1;
 }
 
 void WatchIconPanel(std::shared_ptr<ButtonEntry> const& entry, FrameworkElement const& iconPanel,
@@ -2359,6 +2404,7 @@ void WatchIconPanel(std::shared_ptr<ButtonEntry> const& entry, FrameworkElement 
 
     entry->layoutPanel = winrt::make_weak(iconPanel);
     entry->layoutChildCount = VisualTreeHelper::GetChildrenCount(iconPanel);
+    entry->layoutForeignCount = CountForeignChildren(iconPanel);
     std::weak_ptr<ButtonEntry> weakEntry = entry;
     entry->layoutToken = iconPanel.LayoutUpdated([weakEntry](auto const&, auto const&) {
         if (g_unloading) return;
@@ -2367,14 +2413,17 @@ void WatchIconPanel(std::shared_ptr<ButtonEntry> const& entry, FrameworkElement 
         auto panel = e->layoutPanel.get();
         if (!panel) return;
         int count = VisualTreeHelper::GetChildrenCount(panel);
-        if (count == e->layoutChildCount) return;
+        if (count == e->layoutChildCount) return;  // the usual case: one number compared
+        e->layoutChildCount = count;
+        int foreign = CountForeignChildren(panel);
+        if (foreign == e->layoutForeignCount) return;  // only the mod's own host came or went
         Settings localSettings;
         { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
         if (localSettings.DebugLog) {
-            Wh_Log(L"[debug] %s icon panel: %d -> %d children", e->debugApp.empty() ? L"?" : e->debugApp.c_str(),
-                   e->layoutChildCount, count);
+            Wh_Log(L"[debug] %s icon panel: %d -> %d children [%s]", e->debugApp.empty() ? L"?" : e->debugApp.c_str(),
+                   e->layoutForeignCount, foreign, PanelOrderText(panel).c_str());
         }
-        e->layoutChildCount = count;
+        e->layoutForeignCount = foreign;
         if (!localSettings.BadgeEnabled) return;
         try { UpdateNativeBadges(e, panel, localSettings); } catch (...) {}
         PostCoalescedRefresh(weakEntry);
@@ -2547,10 +2596,16 @@ FrameworkElement EnsureHost(std::shared_ptr<ButtonEntry> const& entry, Panel con
     host.Visibility(Visibility::Visible);
     // Above everything in the panel — the icon, its badge, the label and
     // whatever a theme adds — whatever ZIndex those carry. (The panel sorts
-    // by ZIndex, then by child order; appending last only wins among
-    // ZIndex-0 siblings.)
+    // by ZIndex, then by child order; the child order alone only decides
+    // among ZIndex-0 siblings.)
     Canvas::SetZIndex(host, 1000);
-    if (!adopted) panel.Children().Append(host);
+    // Inserted first, not appended: the taskbar inserts a badge, the
+    // small-icons dot or an overlay icon at a position counted from the end
+    // of the panel's children, so a host at the end shifted it - in front
+    // of the icon, behind which it then showed once the mod was off. In
+    // front of every native child, the host shifts nothing that is counted
+    // from the end or from a sibling, and its ZIndex still draws it on top.
+    if (!adopted) panel.Children().InsertAt(0, host);
     ElementCompositionPreview::SetIsTranslationEnabled(host, true);
     {
         std::lock_guard<std::mutex> lock(g_entriesMutex);
@@ -2773,6 +2828,7 @@ struct SlotTarget {
     double a = 0.0, b = 0.0;       // its piece of the path while shown
     double hidden = 0.0;           // where it comes from and goes to
     bool collapseInPlace = false;  // goes away where it is instead
+    bool grow = false;             // a dot: grows from its center and shrinks back into it
     bool trail = true;             // a moving piece draws its path (tail follows)
     bool driven = false;           // its ends follow the indeterminate sweep
     wuc::CompositionStrokeCap startCap = wuc::CompositionStrokeCap::Flat;
@@ -2875,16 +2931,16 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], const FrameMetrics& m, c
     }
 
     // The multi-window dot: a near-zero piece with round caps, as thick as
-    // its diameter, so it is a circle sitting on the path. It rolls in from
-    // the bottom-left corner and back.
+    // its diameter, so it is a circle sitting on the path. It grows from its
+    // center when it appears and shrinks back into it when it goes.
     {
         auto& t = targets[kSlotDot];
         constexpr double kDotEpsilon = 0.05;
         t.thickness = localSettings.MultiDiameter;
         t.colors = colors;
         t.startCap = t.endCap = CompositionStrokeCap::Round;
-        t.hidden = m.CornerMid(kSlotBL);
-        t.collapseInPlace = state == 0;
+        t.hidden = m.sLeftMid;
+        t.grow = true;
         t.trail = false;
         t.shown = localSettings.MultiEnabled && windowCount >= 2;
         t.a = m.sLeftMid - kDotEpsilon;
@@ -2892,8 +2948,8 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], const FrameMetrics& m, c
     }
 
     // The badge dot: the multi-window dot's mirror, centered on the right
-    // edge, in its own color. It rolls up from the bottom-right corner and
-    // back, and shows in every window state, even with no window at all.
+    // edge, in its own color. It grows and shrinks like that one, and shows
+    // in every window state, even with no window at all.
     {
         auto& t = targets[kSlotBadge];
         constexpr double kDotEpsilon = 0.05;
@@ -2903,7 +2959,8 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], const FrameMetrics& m, c
             : ResolveThemedColors(localSettings.BadgeLight, localSettings.BadgeDark, 1.0, 1.0, isLight,
                                   localSettings.AccentShading);
         t.startCap = t.endCap = CompositionStrokeCap::Round;
-        t.hidden = m.CornerMid(kSlotBR);
+        t.hidden = m.sRightMid;
+        t.grow = true;
         t.trail = false;
         t.shown = badgeShown;
         t.a = m.sRightMid - kDotEpsilon;
@@ -3106,6 +3163,26 @@ bool EnsureSlotBrush(IndicatorRenderer& r, IndicatorSlot& slot, const std::vecto
 // the piece draws its path like a circle rolling along the frame and then
 // settles to its length. Every movement and fade starts from where the
 // last one is (see ScalarTween), so an interrupted one flows on.
+// A dot's size: its stroke thickness, set or animated from wherever an
+// interrupted change had got to (tracked like the trims, see ScalarTween).
+void SetSlotThickness(IndicatorSlot& slot, double value) {
+    slot.shape.StopAnimation(L"StrokeThickness");
+    slot.shape.StrokeThickness((float)value);
+    slot.thicknessTween = {(float)value, (float)value, 0, 0, 0};
+    slot.thickness = value;
+}
+
+void AnimateSlotThickness(IndicatorRenderer& r, IndicatorSlot& slot, double to, int durationMs) {
+    float from = ScalarTweenNow(slot.thicknessTween);
+    auto animation = r.compositor.CreateScalarKeyFrameAnimation();
+    animation.InsertKeyFrame(0.0f, from);
+    animation.InsertKeyFrame(1.0f, (float)to, r.easing);
+    animation.Duration(std::chrono::milliseconds(std::max(1, durationMs)));
+    slot.shape.StartAnimation(L"StrokeThickness", animation);
+    slot.thicknessTween = {from, (float)to, GetTickCount64(), 0, std::max(1, durationMs)};
+    slot.thickness = to;
+}
+
 void AnimateSlot(IndicatorRenderer& r, IndicatorSlot& slot, const SlotTarget& target, const AnimationContext& ctx) {
     const double P = r.metrics.P;
     auto frac = [&](double s) { return (float)std::clamp(s / P, 0.0, 1.0); };
@@ -3118,17 +3195,44 @@ void AnimateSlot(IndicatorRenderer& r, IndicatorSlot& slot, const SlotTarget& ta
         slot.shape.StrokeEndCap(target.endCap);
         slot.endCap = target.endCap;
     }
-    if (std::abs(slot.thickness - target.thickness) > 0.001) {
-        slot.shape.StrokeThickness((float)target.thickness);
-        slot.thickness = target.thickness;
-    }
     bool brushMade = EnsureSlotBrush(r, slot, target.colors);
     bool appearing = target.shown && !slot.shown;
     bool snapAll = !ctx.animate || !slot.placed;
 
+    // Thickness. A dot's is its size: 0 while hidden, grown to its diameter
+    // when it appears and shrunk back to 0 when it goes, around its center.
+    if (target.grow) {
+        double want = target.shown ? target.thickness : 0.0;
+        if (snapAll) {
+            if (std::abs(slot.thickness - want) > 0.001 || slot.thicknessTween.durationMs > 0) {
+                SetSlotThickness(slot, want);
+            }
+        } else if (std::abs(slot.thickness - want) > 0.001) {
+            AnimateSlotThickness(r, slot, want, ctx.durationMs);
+        }
+    } else if (std::abs(slot.thickness - target.thickness) > 0.001) {
+        slot.shape.StrokeThickness((float)target.thickness);
+        slot.thickness = target.thickness;
+    }
+
     // Ends. The sweep owns a driven slot's ends.
     double a1 = slot.a, b1 = slot.b;
-    if (!target.driven) {
+    if (!target.driven && target.grow) {
+        // A dot stays where it is: placed there at once when it appears (its
+        // size does the animating), moved only if the frame changed under a
+        // shown one.
+        a1 = target.a;
+        b1 = target.b;
+        if (snapAll || appearing || !slot.shown) {
+            if (std::abs(slot.a - a1) > 0.001 || std::abs(slot.b - b1) > 0.001 || !slot.placed || slot.forceMove) {
+                SetTrim(slot, true, frac(a1));
+                SetTrim(slot, false, frac(b1));
+            }
+        } else if (std::abs(a1 - slot.a) > 0.01 || std::abs(b1 - slot.b) > 0.01) {
+            AnimateTrim(r, slot, true, frac(a1), ctx.durationMs, 0);
+            AnimateTrim(r, slot, false, frac(b1), ctx.durationMs, 0);
+        }
+    } else if (!target.driven) {
         double hiddenPoint = target.collapseInPlace && slot.placed ? (slot.a + slot.b) / 2.0 : target.hidden;
         a1 = target.shown ? target.a : hiddenPoint;
         b1 = target.shown ? target.b : hiddenPoint;
@@ -3157,7 +3261,9 @@ void AnimateSlot(IndicatorRenderer& r, IndicatorSlot& slot, const SlotTarget& ta
 
     // Colors.
     bool shownNow = target.driven || target.shown;
-    if (snapAll || brushMade) {
+    if (target.grow && !shownNow && !snapAll && !brushMade) {
+        // A dot shrinking away keeps its color; at size 0 it shows nothing.
+    } else if (snapAll || brushMade) {
         SetSlotColors(slot, target.colors, !shownNow);
     } else if (appearing || (target.driven && !slot.shown)) {
         SetSlotColors(slot, target.colors, false);
@@ -3417,7 +3523,9 @@ void WatchViewModelForDebug(FrameworkElement const& button, std::shared_ptr<Butt
     {
         static std::atomic<int> logged{0};
         if (logged.fetch_add(1) < 2) {
-            Wh_Log(L"[debug] view model %s: INotifyPropertyChanged %s", winrt::get_class_name(item).c_str(),
+            auto className = winrt::get_class_name(item);
+            Wh_Log(L"[debug] view model %s: INotifyPropertyChanged %s",
+                   className.empty() ? L"(no runtime class name)" : className.c_str(),
                    notify ? L"available" : L"not implemented");
         }
     }
@@ -3480,6 +3588,12 @@ void LogButtonSummary(FrameworkElement const& button, std::shared_ptr<ButtonEntr
         (rtl ? L" rtl" : L"") +
         L" bound=" + (entry->hostBound ? L"yes" : L"no") +
         NativeBadgeDetail(entry);
+    // The icon panel's children, back to front, when the button has a badge
+    // element: where the taskbar put it relative to the icon.
+    if (!entry->nativeBadges.empty()) {
+        auto iconPanel = FindChildByName(button, L"IconPanel");
+        if (iconPanel) summary += L" order=[" + PanelOrderText(iconPanel) + L"]";
+    }
     entry->debugApp = app;
     if (summary == entry->debugLast) return;
     entry->debugLast = summary;
@@ -3610,9 +3724,12 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
 
     // Indeterminate progress: a minimized app's underline sweeps (the dots
     // stay, clear of it on the side edges); an open or maximized app's
-    // corners and dots run around the frame together.
+    // corners and dots run around the frame together. It runs with Windows
+    // animations off too: like the native moving bar it stands in for, it
+    // shows information (often the only sign of the progress, with the
+    // native bar hidden), not a transition.
     int progressMode = 0;
-    if (indeterminate && SystemAnimationsEnabled()) {
+    if (indeterminate) {
         if (state == 3 || state == 4) progressMode = 1;
         else if (state == 1 || state == 2) progressMode = 2;
     }
@@ -4343,6 +4460,7 @@ void RemoveHostsFromTaskbarThread() {
         auto iconPanel = FindChildByName(button, L"IconPanel");
         auto panel = iconPanel ? iconPanel.try_as<Panel>() : nullptr;
         if (!panel) return;
+        std::wstring before = g_debugLog ? PanelOrderText(iconPanel) : std::wstring();
         auto children = panel.Children();
         for (int32_t i = (int32_t)children.Size() - 1; i >= 0; i--) {
             auto element = children.GetAt(i).try_as<FrameworkElement>();
@@ -4352,6 +4470,9 @@ void RemoveHostsFromTaskbarThread() {
                 Canvas::SetZIndex(element, 0);
                 children.RemoveAt(i);
             } catch (...) {}
+        }
+        if (g_debugLog) {
+            Wh_Log(L"[debug] unload, icon panel: [%s] -> [%s]", before.c_str(), PanelOrderText(iconPanel).c_str());
         }
     });
 }
@@ -4367,7 +4488,13 @@ struct UnloadCleanup {
 // too and the frame paths release this mod's geometry sources - its
 // subscriptions revoked, the native elements shown again, the hosts
 // removed and the virtual desktop manager released.
+void UnsubscribeColorChanges();  // defined with the system color code
+
 void WINAPI UnloadCleanupOnTaskbarThread(void* param) {
+    // RefreshButton subscribes on this thread: catch a first refresh that
+    // subscribed after the revoke in Wh_ModBeforeUninit. g_unloading is set
+    // by now, so no later refresh subscribes. Safe to call twice.
+    UnsubscribeColorChanges();
     auto& cleanup = *static_cast<UnloadCleanup*>(param);
     for (auto& entry : *cleanup.entries) {
         try {
