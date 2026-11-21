@@ -2,7 +2,7 @@
 // @id              same-app-window-cycler
 // @name            Same-App Window Cycler (Alt+`)
 // @description     macOS-style Cmd+` for Windows: cycle through the windows of the current app with Alt+` (Alt+Shift+` goes backwards)
-// @version         0.1.2
+// @version         0.1.3
 // @author          mdozkanji
 // @github          https://github.com/mdozkanji
 // @include         windhawk.exe
@@ -196,7 +196,10 @@ static void CycleWindows(bool backwards) {
     HWND target = ctx.windows.back();
 
     if (backwards) {
-        if (ctx.windows[0] == foreground) {
+        // The foreground window may be an owned window (a modeless dialog or
+        // tool palette) of the app's front window, which the filter drops.
+        HWND current = GetAncestor(foreground, GA_ROOTOWNER);
+        if (ctx.windows[0] == foreground || ctx.windows[0] == current) {
             // Exact reverse of forward: push the current window below the
             // app's last window, then activate the one that was behind it.
             // Without this, backward would only toggle between two windows.
