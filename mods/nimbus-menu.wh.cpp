@@ -43,14 +43,14 @@ Replaces the Windows taskbar with a light dock, one per monitor, with its own St
 * Bluetooth: turn it on and off, see paired devices with their battery, connect and disconnect headsets and speakers.
 * Notifications: Windows' notifications also show as Nimbus cards (in the corner you choose, paused while the mouse is on them, never over games), with their buttons; a bell with the count opens the list, newest first. Win+N can open it. Its own sounds (14 to pick, or Windows' own), one for notifications and one for reminders.
 * Player: what any app is playing (Spotify, YouTube…): cover, title, time, controls, shuffle and repeat, that app's volume. In the dock as the cover and title, the cover, the title, bars moving with the sound, or an icon.
-* Devices: the battery of wireless headsets, mice and Xbox controllers, with a warning at 20% and 10%. With [BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor) installed (a separate free program), USB receivers too (Logitech, Razer…).
+* Devices: the battery of wireless headsets, mice and Xbox controllers, with a warning at 20% and 10%. USB receivers too (Logitech, Razer…) with [BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor), a separate free program, if you turn it on (see below).
 * Notes and reminders: notes stay until you delete them; a reminder (in 1, 7 or 14 days, a month, or a calendar day, at a time or as soon as Nimbus runs) comes as a Nimbus notification, late too if the PC was off.
 * Shelf: drop files on the dock to keep them for a moment, then drag them anywhere. Ctrl+V turns a copied picture or text into a file you can drag.
 * Its own settings window, with a live dock preview: right-click the dock → Settings, or the Nimbus button at the bottom left of Start. Windhawk's Settings tab is empty on purpose: everything is in that window (what was set there in 1.x carries over).
 * Guided setup: a few questions set everything up (it opens by itself the first time; Settings → Get started brings it back). Everything can be changed later in Settings.
 * Follows Windows' high contrast and "Animation effects" off.
 * Per-monitor settings: format, auto-hide, what shows, only that monitor's windows. Each monitor keeps its own, even when the monitors change order.
-* The dock runs in its own Windhawk process and hides when a game or video is in full screen. Explorer only gets two small hooks: the Windows key, and passing the tray icons on to the dock.
+* The dock runs in its own Windhawk process and hides when a game or video is in full screen. Explorer only gets three small hooks: the Windows key, Win+N, and passing the tray icons on to the dock (it never waits on the dock).
 * The text is in English, or in Portuguese when Windows is in Portuguese.
 
 ### How to use
@@ -81,7 +81,19 @@ Replaces the Windows taskbar with a light dock, one per monitor, with its own St
 
 **Help and suggestions:** [github.com/igoredm/nimbus-menu](https://github.com/igoredm/nimbus-menu) (ask for help, report a bug or suggest an idea).
 
-**What it changes in Windows.** With "Hide the Windows taskbar" on (the default), the whole Windows taskbar is hidden; Nimbus' status area and tray take the place of its clock, quick settings and tray icons. To stop the hidden taskbar from reserving screen space, the mod turns on the taskbar's own "Automatically hide the taskbar" option, which Windows saves in your profile. The mod remembers your original choice and puts it back when it's turned off, also after a crash or a shutdown with the mod on. If the Windows taskbar ever stays hidden, turn the mod off or restart Explorer.
+### What it changes in Windows
+
+Nimbus replaces part of Windows, so a few of its actions are Windows settings. Here is each one, when it happens, and how it comes back:
+
+| What | When | How it comes back |
+|---|---|---|
+| The taskbar's own **"Automatically hide the taskbar"** option (saved by Windows in your profile) | While "Hide the Windows taskbar" is on (the default), so the hidden taskbar doesn't reserve screen space | Your original choice is kept and put back when the mod stops, on sign-out or shutdown, at the next start after a crash, and by the Explorer part when the mod is turned off. |
+| Each app's **"Show notification banners"** switch (Settings › System › Notifications) | Only if you turn on "Hide Windows' own banners" and confirm (off by default) | Every app's original value is saved before anything is switched off (nothing is switched off if that backup can't be saved). Put back when the option goes off, when the mod stops, on sign-out or shutdown, and by the Explorer part when the mod is turned off. |
+| Night light, power plan and mode, each monitor's brightness (DDC/CI), Bluetooth and Wi-Fi on or off, volume, keyboard language | Only when you click them, like in Windows' quick settings | They're your choices, so they stay as you set them (the same as when you change them in Windows). |
+
+**BatteryHub** (optional, off by default): with "Devices › Use BatteryHub" on, Nimbus runs [BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor) (installed separately, version 1.1 or newer) hidden every 5 minutes with `--json`, only to read the batteries of USB receivers; it closes by itself, at most after 20 seconds. Turn it off in the Devices panel or in Settings › Status area.
+
+Nimbus' own data (settings, notes, pins, the shelf's pasted files) stays in the mod's storage. If the Windows taskbar ever stays hidden, turn the mod off or restart Explorer.
 
 ---
 
@@ -102,14 +114,14 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
 * Bluetooth: ligar e desligar, ver os aparelhos pareados com a bateria, conectar e desconectar fones e caixas de som.
 * Notificações: os avisos do Windows também aparecem como cartões do Nimbus (no canto escolhido, pausam com o mouse em cima, nunca sobre jogos), com os botões deles; um sino com o contador abre a lista, da mais nova pra mais antiga. O Win+N pode abrir. Sons próprios (14 pra escolher, ou o do Windows), um pros avisos e outro pros lembretes.
 * Player: o que qualquer app está tocando (Spotify, YouTube…): capa, título, tempo, controles, aleatório e repetir, o volume daquele app. Na dock como capa e título, só a capa, só o título, barras que se mexem com o som ou um ícone.
-* Dispositivos: a bateria de fones, mouses e controles de Xbox sem fio, com aviso em 20% e 10%. Com o [BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor) instalado (um programa à parte e gratuito), receptores USB também (Logitech, Razer…).
+* Dispositivos: a bateria de fones, mouses e controles de Xbox sem fio, com aviso em 20% e 10%. Receptores USB também (Logitech, Razer…) com o [BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor), um programa à parte e gratuito, se você ligar (veja abaixo).
 * Notas e lembretes: as notas ficam até você apagar; um lembrete (em 1, 7 ou 14 dias, 1 mês ou num dia do calendário, num horário ou assim que o Nimbus abrir) chega como notificação do Nimbus, atrasado também se o PC estava desligado.
 * Prateleira: solte arquivos na dock pra guardar por um tempo, depois arraste pra onde quiser. O Ctrl+V transforma uma imagem ou texto copiado num arquivo pra arrastar.
 * Janela de ajustes própria, com prévia da dock ao vivo: botão direito na dock → Ajustes, ou o botão do Nimbus no canto de baixo do Iniciar. A aba Configurações do Windhawk fica vazia de propósito: tudo está nessa janela (o que foi escolhido lá na 1.x é mantido).
 * Modo guiado: umas perguntas rápidas deixam tudo pronto (abre sozinho na primeira vez; Ajustes → Começar traz de volta). Tudo pode ser mudado depois nos Ajustes.
 * Segue o alto contraste do Windows e os "Efeitos de animação" desligados.
 * Ajustes por monitor: formato, esconder sozinha, o que aparece, só as janelas daquele monitor. Cada monitor guarda os seus, mesmo se a ordem dos monitores mudar.
-* A dock roda num processo próprio do Windhawk e some quando um jogo ou vídeo está em tela cheia. No Explorador entram só dois ganchos pequenos: o da tecla Windows e o que passa os ícones da bandeja pra dock.
+* A dock roda num processo próprio do Windhawk e some quando um jogo ou vídeo está em tela cheia. No Explorador entram só três ganchos pequenos: o da tecla Windows, o do Win+N e o que passa os ícones da bandeja pra dock (ele nunca espera a dock).
 * Os textos ficam em inglês, ou em português quando o Windows está em português.
 
 ### Como usar
@@ -140,7 +152,19 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
 
 **Ajuda e sugestões:** [github.com/igoredm/nimbus-menu](https://github.com/igoredm/nimbus-menu) (peça ajuda, avise de um bug ou mande uma ideia).
 
-**O que muda no Windows.** Com "Esconder a barra do Windows" ligado (o padrão), a barra do Windows some inteira; a área de status e a bandeja do Nimbus ficam no lugar do relógio, das configurações rápidas e dos ícones dela. Pra barra escondida não reservar espaço na tela, o mod liga a opção "Ocultar automaticamente a barra de tarefas" do próprio Windows, que fica salva no seu perfil. O mod guarda a sua escolha original e devolve quando é desligado, até depois de um travamento ou de desligar o PC com o mod ligado. Se a barra do Windows ficar escondida, desligue o mod ou reinicie o Explorador.
+### O que muda no Windows
+
+O Nimbus substitui uma parte do Windows, então algumas ações dele são configurações do Windows. Aqui está cada uma, quando acontece e como volta:
+
+| O quê | Quando | Como volta |
+|---|---|---|
+| A opção **"Ocultar automaticamente a barra de tarefas"** do próprio Windows (salva no seu perfil) | Enquanto "Esconder a barra do Windows" estiver ligado (o padrão), pra barra escondida não reservar espaço na tela | A sua escolha original fica guardada e volta quando o mod para, ao sair da conta ou desligar o PC, no próximo início depois de um travamento, e pela parte do Explorador quando o mod é desligado. |
+| O botão **"Mostrar faixas de notificação"** de cada app (Configurações › Sistema › Notificações) | Só se você ligar "Esconder os avisos do Windows" e confirmar (desligado por padrão) | O valor original de cada app é salvo antes de qualquer coisa ser desligada (se o backup não puder ser salvo, nada é desligado). Volta quando a opção é desligada, quando o mod para, ao sair da conta ou desligar o PC, e pela parte do Explorador quando o mod é desligado. |
+| Luz noturna, plano e modo de energia, brilho de cada monitor (DDC/CI), Bluetooth e Wi-Fi ligado ou desligado, volume, idioma do teclado | Só quando você clica, como nas Configurações rápidas do Windows | São escolhas suas, então ficam como você deixou (igual a mudar pelo Windows). |
+
+**BatteryHub** (opcional, desligado por padrão): com "Dispositivos › Usar o BatteryHub" ligado, o Nimbus abre o [BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor) (instalado à parte, versão 1.1 ou mais nova) escondido a cada 5 minutos com `--json`, só pra ler as baterias de receptores USB; ele fecha sozinho, no máximo em 20 segundos. Desligue no painel Dispositivos ou em Ajustes › Área de status.
+
+Os dados do próprio Nimbus (ajustes, notas, fixados, os arquivos colados na prateleira) ficam no armazenamento do mod. Se a barra do Windows ficar escondida, desligue o mod ou reinicie o Explorador.
 */
 // ==/WindhawkModReadme==
 
@@ -197,6 +221,7 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
 
 using Microsoft::WRL::ComPtr;
 static void MediaSetOn(bool on);
+static std::atomic<bool> g_devHubOn{false};  // (the "Use BatteryHub" setting, read by the devices worker)
 static void DevSetOn(bool on);
 
 // ---------------------------------------------------------------------------
@@ -341,7 +366,6 @@ static void BuildTheme() {
 
 static int Clamp(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
-#define Log(...) Wh_Log(__VA_ARGS__)
 
 // ---------------------------------------------------------------------------
 // Text shown by the mod: English, or Portuguese when Windows' display language is Portuguese.
@@ -421,7 +445,7 @@ static const std::pair<const wchar_t*, const wchar_t*> kOwnKeys[] = {
     {L"shelfStyle", L"grade"}, {L"shelfLimit", L"10"}, {L"notifPlace", L"dock"}, {L"notifShow", L"1"},
     {L"notifV", L"baixo"}, {L"notifH", L"direita"}, {L"notifSecs", L"6"}, {L"notifHideWin", L"0"},
     {L"notifSound", L"pingo"}, {L"remSound", L"bolha"},
-    {L"notifWinN", L"0"}, {L"notesPlace", L"dock"}, {L"notifDnd", L"0"}, {L"dndPlace", L"central"}, {L"btPlace", L"central"}, {L"playerPlace", L"dock"}, {L"devPlace", L"dock"}, {L"devAlerts", L"1"}, {L"playerDock", L"ambos"}, {L"playerHide", L"0"},
+    {L"notifWinN", L"0"}, {L"notesPlace", L"dock"}, {L"notifDnd", L"0"}, {L"dndPlace", L"central"}, {L"btPlace", L"central"}, {L"playerPlace", L"dock"}, {L"devPlace", L"dock"}, {L"devAlerts", L"1"}, {L"devHub", L"0"}, {L"playerDock", L"ambos"}, {L"playerHide", L"0"},
     {L"nightPlace", L"central"}, {L"shortPlace", L"central"}, {L"lightPlace", L"central"}, {L"powerPlace", L"central"},
 };
 static const wchar_t* const kMonGroups[] = {L"monPrimary", L"monLeft", L"monRight", L"monOther"};
@@ -441,10 +465,7 @@ static void WriteVal(const std::wstring& name, const std::wstring& v) { Wh_SetSt
 
 static std::wstring WhSetting(const std::wstring& name, bool isInt) {
     if (isInt) return std::to_wstring(Wh_GetIntSetting(name.c_str()));
-    PCWSTR s = Wh_GetStringSetting(name.c_str());
-    std::wstring v = s ? s : L"";
-    if (s) Wh_FreeStringSetting(s);
-    return v;
+    return WindhawkUtils::StringSetting::make(name.c_str()).get();
 }
 
 // Monitors with their own choices, saved by device (see MonitorIdentity): "id1,id2,...".
@@ -473,7 +494,14 @@ static void SyncCfgKey(const std::wstring& name, bool isInt) {
         return;
     }
     v = WhSetting(name, isInt);
-    g_cfg[name] = (isInt ? v != L"0" : !v.empty()) ? v : CfgDefault(name);
+    // Windhawk answers 0 both for "set to 0/off" and for "never set". Every 1.x user has the look stored,
+    // so then a 0 is real. What came from there is written as Nimbus' own once (it no longer depends on
+    // Windhawk keeping the old settings).
+    static int legacy = -1;
+    if (legacy < 0) legacy = !WhSetting(L"style", false).empty() ? 1 : 0;
+    bool real = isInt ? (v != L"0" || legacy == 1) : !v.empty();
+    g_cfg[name] = real ? v : CfgDefault(name);
+    if (real && legacy == 1) WriteVal(UserPrefix() + L"cfg." + name, v);
 }
 
 static void LoadCfg() {
@@ -589,6 +617,7 @@ void LoadSettings() {
         for (int k = 0; k < 8; k++) g_set.extraPlace[k] = PlaceOf(CfgStr(keys[k], k >= 6 ? L"dock" : L"central"), true);
     }
     MediaSetOn(g_set.extraPlace[6] != 0);
+    g_devHubOn = CfgInt(L"devHub") != 0;
     DevSetOn(g_set.extraPlace[7] != 0);
     std::wstring tint = str(L"tintColor", L"");
     g_set.customTint = false;
@@ -735,6 +764,26 @@ static WinInfo GetWinInfo(HWND hwnd) {
     return info;
 }
 
+// Windhawk 1.x runs this process as 32-bit (WOW64): System32 paths would start the 32-bit copies, and
+// %ProgramFiles% would be "Program Files (x86)".
+static bool IsWow64() {
+    static int w = -1;
+    if (w < 0) {
+        BOOL b = FALSE;
+        w = IsWow64Process(GetCurrentProcess(), &b) && b ? 1 : 0;
+    }
+    return w == 1;
+}
+static std::wstring NativePath(const std::wstring& path) {
+    if (!IsWow64()) return path;
+    wchar_t win[MAX_PATH];
+    if (!GetWindowsDirectoryW(win, MAX_PATH)) return path;
+    std::wstring sys = std::wstring(win) + L"\\System32\\";
+    if (path.size() >= sys.size() && _wcsnicmp(path.c_str(), sys.c_str(), sys.size()) == 0)
+        return std::wstring(win) + L"\\Sysnative\\" + path.substr(sys.size());
+    return path;
+}
+
 static void ResolvePin(Pin& p) {
     if (p.resolved) return;
     p.resolved = true;
@@ -746,8 +795,17 @@ static void ResolvePin(Pin& p) {
     if (FAILED(link.As(&pf)) || FAILED(pf->Load(p.value.c_str(), STGM_READ))) return;
     wchar_t buf[MAX_PATH * 2] = {};
     if (SUCCEEDED(link->GetPath(buf, ARRAYSIZE(buf), nullptr, SLGP_RAWPATH))) {
+        std::wstring raw = buf;
+        if (IsWow64()) {  // (the 64-bit folders, like the apps' own windows report)
+            auto swap = [&](const wchar_t* from, const wchar_t* to) {
+                size_t k;
+                while ((k = Lower(raw).find(Lower(from))) != std::wstring::npos) raw.replace(k, wcslen(from), to);
+            };
+            swap(L"%ProgramFiles%", L"%ProgramW6432%");
+            swap(L"%CommonProgramFiles%", L"%CommonProgramW6432%");
+        }
         wchar_t exp[MAX_PATH * 2] = {};
-        ExpandEnvironmentStringsW(buf, exp, ARRAYSIZE(exp));
+        ExpandEnvironmentStringsW(raw.c_str(), exp, ARRAYSIZE(exp));
         p.target = exp;
     }
     wchar_t args[1024] = {};
@@ -787,7 +845,7 @@ static bool IsGenericDir(const std::wstring& dirLower) {
         add(L"LOCALAPPDATA", L"");
         add(L"LOCALAPPDATA", L"programs\\");
         add(L"APPDATA", L"");
-        add(L"SystemDrive", L"\\");
+        add(L"SystemDrive", L"");
     }
     for (auto& g : generic) if (dirLower == g) return true;
     // Shared runtimes (python, node, java) installed per user are also generic.
@@ -927,6 +985,27 @@ struct IconResult {
     HBITMAP hbm = nullptr;
 };
 constexpr UINT WM_APP_ICON = WM_APP + 8;  // lParam = IconResult* (the receiver deletes it)
+
+// Heap pointers handed over in messages: noted when posted, taken only if noted (a stray post with any
+// value from another process is ignored instead of being freed).
+static SRWLOCK g_ptrLock = SRWLOCK_INIT;
+static std::unordered_set<void*> g_ptrs;
+static bool PostPtr(HWND h, UINT msg, void* ptr) {
+    AcquireSRWLockExclusive(&g_ptrLock);
+    g_ptrs.insert(ptr);
+    ReleaseSRWLockExclusive(&g_ptrLock);
+    if (h && PostMessageW(h, msg, 0, (LPARAM)ptr)) return true;
+    AcquireSRWLockExclusive(&g_ptrLock);
+    g_ptrs.erase(ptr);
+    ReleaseSRWLockExclusive(&g_ptrLock);
+    return false;
+}
+static bool TakePtr(void* ptr) {
+    AcquireSRWLockExclusive(&g_ptrLock);
+    bool ok = g_ptrs.erase(ptr) > 0;
+    ReleaseSRWLockExclusive(&g_ptrLock);
+    return ok;
+}
 static SRWLOCK g_iconLock = SRWLOCK_INIT;
 static CONDITION_VARIABLE g_iconWake = CONDITION_VARIABLE_INIT;
 static std::deque<IconJob> g_iconJobs;
@@ -967,7 +1046,7 @@ static DWORD WINAPI IconThread(LPVOID) {
             ComPtr<IShellItemImageFactory> factory;
             if (SUCCEEDED(item.As(&factory))) factory->GetImage(SIZE{job.size, job.size}, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, &r->hbm);
         }
-        if (!g_msgWnd || !PostMessageW(g_msgWnd, WM_APP_ICON, 0, (LPARAM)r)) {
+        if (!PostPtr(g_msgWnd, WM_APP_ICON, r)) {
             if (r->hbm) DeleteObject(r->hbm);
             delete r;
         }
@@ -987,7 +1066,7 @@ static void RequestIcon(const App& a) {
         r->key = a.key;
         r->label = SettingsTitle();
         r->hbm = DrawNimbusIcon(128);
-        if (!PostMessageW(g_msgWnd, WM_APP_ICON, 0, (LPARAM)r)) {
+        if (!PostPtr(g_msgWnd, WM_APP_ICON, r)) {
             if (r->hbm) DeleteObject(r->hbm);
             delete r;
         }
@@ -1105,6 +1184,59 @@ static std::wstring GetStr(const std::wstring& key) {
     wchar_t buf[2048] = {};
     Wh_GetStringValue(key.c_str(), buf, ARRAYSIZE(buf));
     return buf;
+}
+
+// A value of any length (the buffer grows until it fits; Windhawk returns nothing when it doesn't).
+static bool ReadLong(const std::wstring& key, std::wstring& out) {
+    for (size_t n = 2048; n <= (1u << 22); n *= 4) {
+        std::vector<wchar_t> buf(n);
+        size_t got = Wh_GetStringValue(key.c_str(), buf.data(), buf.size());
+        if (got && got < n - 1) {
+            out.assign(buf.data(), got);
+            return true;
+        }
+        if (!got) {
+            // (empty or missing, or too long for this buffer: only a bigger buffer can tell)
+            if (n >= (1u << 22)) return false;
+        }
+    }
+    return false;
+}
+
+// A list kept as "<SID>_<name>.n" and one value per item, "<SID>_<name>.<i>" (no line breaks inside a
+// value: the portable Windhawk keeps them in an INI file). Lists saved before as one string (with a
+// separator) are read once from it and moved over. Returns false when nothing was ever saved.
+static bool StoreItems(const wchar_t* name, const std::vector<std::wstring>& items) {
+    std::wstring base = UserPrefix() + name;
+    int old = Wh_GetIntValue((base + L".n").c_str(), 0);
+    bool ok = true;
+    for (size_t i = 0; i < items.size(); i++) ok = Wh_SetStringValue((base + L"." + std::to_wstring(i)).c_str(), items[i].c_str()) && ok;
+    for (int i = (int)items.size(); i < old; i++) Wh_DeleteValue((base + L"." + std::to_wstring(i)).c_str());
+    ok = Wh_SetIntValue((base + L".n").c_str(), (int)items.size()) && ok;
+    return ok;
+}
+static bool LoadItems(const wchar_t* name, wchar_t legacySep, std::vector<std::wstring>& out) {
+    out.clear();
+    std::wstring base = UserPrefix() + name;
+    int n = Wh_GetIntValue((base + L".n").c_str(), -1);
+    if (n >= 0) {
+        for (int i = 0; i < n; i++) {
+            std::wstring v;
+            if (ReadLong(base + L"." + std::to_wstring(i), v) && !v.empty()) out.push_back(v);
+        }
+        return true;
+    }
+    std::wstring all;
+    if (!ReadLong(base, all)) return false;
+    size_t a = 0;
+    while (a < all.size()) {
+        size_t b = all.find(legacySep, a);
+        if (b == std::wstring::npos) b = all.size();
+        if (b > a) out.push_back(all.substr(a, b - a));
+        a = b + 1;
+    }
+    if (StoreItems(name, out)) Wh_DeleteValue(base.c_str());
+    return true;
 }
 
 // Pairs of strings saved as <SID>_<list>Count, <SID>_<list>%dA, <SID>_<list>%dB.
@@ -1415,6 +1547,7 @@ struct NotifItem {
     std::vector<NotifAction> actions;
     long long arrival = 0;  // FILETIME
     bool silent = false;    // the app asked for no sound
+    bool sticky = false;    // an alarm, a reminder or a call: the card stays until dismissed
     bool reminder = false;  // a Nimbus reminder (its own sound)
 };
 std::vector<NotifItem> g_notifs;  // newest first
@@ -1922,7 +2055,7 @@ static const GUID kPlanSaver = {0xa1841308, 0x3541, 0x4fab, {0xbc, 0x81, 0xf7, 0
 
 static bool ActivePlan(GUID& out) {
     using Fn = DWORD(WINAPI*)(HKEY, GUID**);
-    static Fn get = (Fn)GetProcAddress(LoadLibraryW(L"powrprof.dll"), "PowerGetActiveScheme");
+    static Fn get = (Fn)GetProcAddress(LoadLibraryExW(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32), "PowerGetActiveScheme");
     GUID* g = nullptr;
     if (!get || get(nullptr, &g) != ERROR_SUCCESS || !g) return false;
     out = *g;
@@ -1937,7 +2070,7 @@ static int PowerMode() {
         if (IsEqualGUID(plan, kPlanSaver)) return 0;
     }
     using Fn = DWORD(WINAPI*)(GUID*);
-    static Fn get = (Fn)GetProcAddress(LoadLibraryW(L"powrprof.dll"), "PowerGetEffectiveOverlayScheme");
+    static Fn get = (Fn)GetProcAddress(LoadLibraryExW(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32), "PowerGetEffectiveOverlayScheme");
     GUID g = {};
     if (!get || get(&g) != ERROR_SUCCESS) return 1;
     for (int i = 0; i < 3; i++) if (IsEqualGUID(g, kPowerModes[i])) return i;
@@ -1950,7 +2083,7 @@ static int PowerModeCached();
 // performance"); without it, "Balanced" with the matching mode (what quick settings change).
 static bool SetPlan(const GUID& g) {
     using SetFn = DWORD(WINAPI*)(HKEY, const GUID*);
-    static SetFn setPlan = (SetFn)GetProcAddress(LoadLibraryW(L"powrprof.dll"), "PowerSetActiveScheme");
+    static SetFn setPlan = (SetFn)GetProcAddress(LoadLibraryExW(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32), "PowerSetActiveScheme");
     return setPlan && setPlan(nullptr, &g) == ERROR_SUCCESS;
 }
 static void SetPowerMode(int i) {
@@ -1959,21 +2092,21 @@ static void SetPowerMode(int i) {
     if (i == 2) {
         if (known && (IsEqualGUID(plan, kPlanHigh) || IsEqualGUID(plan, kPlanUltimate))) return;
         if (SetPlan(kPlanHigh) || SetPlan(kPlanUltimate)) {
-            Log(L"power: High performance plan");
+            Wh_Log(L"power: High performance plan");
             return;
         }
     } else if (i == 0) {
         if (known && IsEqualGUID(plan, kPlanSaver)) return;
         if (SetPlan(kPlanSaver)) {
-            Log(L"power: Power saver plan");
+            Wh_Log(L"power: Power saver plan");
             return;
         }
     }
     if (!known || !IsEqualGUID(plan, kPlanBalanced)) SetPlan(kPlanBalanced);
     using Fn = DWORD(WINAPI*)(REFGUID);
-    static Fn set = (Fn)GetProcAddress(LoadLibraryW(L"powrprof.dll"), "PowerSetActiveOverlayScheme");
+    static Fn set = (Fn)GetProcAddress(LoadLibraryExW(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32), "PowerSetActiveOverlayScheme");
     if (set) set(kPowerModes[i]);
-    Log(L"power: Balanced plan, mode %d", i);
+    Wh_Log(L"power: Balanced plan, mode %d", i);
 }
 
 // ---- Keyboard ----
@@ -2089,7 +2222,7 @@ static void SetKeyboard(HKL hkl) {
         hr = g_stat.tsf->ActivateProfile(TF_PROFILETYPE_KEYBOARDLAYOUT, LOWORD((UINT_PTR)hkl), CLSID_NULL, GUID_NULL, hkl,
                                          TF_IPPMF_FORSESSION | TF_IPPMF_DONTCARECURRENTINPUTLANGUAGE);
     if (g_stat.target) PostMessageW(g_stat.target, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)hkl);
-    Log(L"keyboard: switch to %p (tsf hr=0x%08lx, target %p)", hkl, (unsigned long)hr, g_stat.target);
+    Wh_Log(L"keyboard: switch to %p (tsf hr=0x%08lx, target %p)", hkl, (unsigned long)hr, g_stat.target);
     g_stat.cur = hkl;
 }
 
@@ -2250,6 +2383,7 @@ struct TrayRectWire {
     DWORD hwnd;
     UINT uid;
     GUID guid;
+    DWORD which;  // 1 the top-left corner, 2 the bottom-right one (one corner fits any LRESULT)
 };
 #pragma pack(pop)
 
@@ -2442,11 +2576,7 @@ static std::vector<int> TrayFixedList() {
 static int TrayMaxOff() { return std::max(0, (int)TrayStripList().size() - g_set.trayVisible); }
 
 static void SaveTrayPins();
-static void SaveTrayOrder() {
-    std::wstring all;
-    for (auto& k : g_trayOrderKeys) all += (all.empty() ? L"" : L"*") + k;
-    Wh_SetStringValue((UserPrefix() + L"tray.order").c_str(), all.c_str());
-}
+static void SaveTrayOrder() { StoreItems(L"tray.order", g_trayOrderKeys); }
 
 // Dragging an icon onto another: it goes before it (after, past its middle), and joins its group
 // (pinned or not).
@@ -2474,37 +2604,10 @@ static void TrayMove(const std::wstring& drag, const std::wstring& target, bool 
 }
 
 static void LoadTrayPins() {
-    g_trayOrderKeys.clear();
-    {
-        std::vector<wchar_t> ob(16384);
-        if (Wh_GetStringValue((UserPrefix() + L"tray.order").c_str(), ob.data(), ob.size())) {
-            std::wstring all = ob.data();
-            size_t a = 0;
-            while (a < all.size()) {
-                size_t b = all.find(L'*', a);
-                if (b == std::wstring::npos) b = all.size();
-                if (b > a) g_trayOrderKeys.push_back(all.substr(a, b - a));
-                a = b + 1;
-            }
-        }
-    }
-    g_trayPinned.clear();
-    wchar_t buf[4096] = {};
-    if (!Wh_GetStringValue((UserPrefix() + L"tray.pinned").c_str(), buf, ARRAYSIZE(buf))) return;
-    std::wstring all = buf;
-    size_t a = 0;
-    while (a < all.size()) {
-        size_t b = all.find(L'*', a);
-        if (b == std::wstring::npos) b = all.size();
-        if (b > a) g_trayPinned.push_back(all.substr(a, b - a));
-        a = b + 1;
-    }
+    LoadItems(L"tray.order", L'*', g_trayOrderKeys);
+    LoadItems(L"tray.pinned", L'*', g_trayPinned);
 }
-static void SaveTrayPins() {
-    std::wstring all;
-    for (auto& k : g_trayPinned) all += (all.empty() ? L"" : L"*") + k;
-    Wh_SetStringValue((UserPrefix() + L"tray.pinned").c_str(), all.c_str());
-}
+static void SaveTrayPins() { StoreItems(L"tray.pinned", g_trayPinned); }
 static void TrayTogglePin(int i) {
     if (i < 0 || i >= (int)g_tray.size()) return;
     auto it = std::find(g_trayPinned.begin(), g_trayPinned.end(), g_tray[i].key);
@@ -2557,7 +2660,7 @@ static void TrayClick(int i, int button) {
         TraySend(t, WM_LBUTTONUP, pt);
         if (t.version >= 3 && !dbl) TraySend(t, NIN_SELECT, pt);
     }
-    Log(L"tray: %s click on %s (v%u, cb 0x%x)", button == 1 ? L"right" : g_trayUi.lastKey.empty() ? L"double" : L"left",
+    Wh_Log(L"tray: %s click on %s (v%u, cb 0x%x)", button == 1 ? L"right" : g_trayUi.lastKey.empty() ? L"double" : L"left",
         t.key.c_str(), t.version, t.cbMsg);
 }
 
@@ -2686,13 +2789,13 @@ static void LoadTray() {
         g_tray.push_back(std::move(t));
         restored++;
     }
-    Log(L"tray: %d icons kept from the last run", restored);
+    Wh_Log(L"tray: %d icons kept from the last run", restored);
 }
 
 static void TrayChanged() {
     g_trayUi.off = std::min(g_trayUi.off, TrayMaxOff());
     StatusChanged();
-    if (g_msgWnd) SetTimer(g_msgWnd, TIMER_TRAY_SAVE, 3000, nullptr);
+    if (g_msgWnd) SetTimer(g_msgWnd, TIMER_TRAY_SAVE, 30000, nullptr);  // (icon pixels too: not after every change)
 }
 
 // Apps that quit without removing their icon.
@@ -2777,7 +2880,7 @@ static void TrayAskMissing() {
         asked.insert(e);
         names += L" " + e;
     }
-    Log(L"tray: asked %d windows to add their icon again:%s", ctx.posted, names.c_str());
+    Wh_Log(L"tray: asked %d windows to add their icon again:%s", ctx.posted, names.c_str());
 }
 
 static void TrayInit() {
@@ -2976,11 +3079,28 @@ struct PlayerVis {
 };
 static PlayerVis g_vis;
 static std::wstring PlayerLabel(const Dock& d) {
+    // (cut once per title and size, not on every frame)
+    static std::wstring lastTitle, lastLabel;
+    static float lastScale = 0;
+    static const void* lastFont = nullptr;
     std::wstring t = MediaNow().title;
+    if (t == lastTitle && d.scale == lastScale && d.font.Get() == lastFont) return lastLabel;
+    lastTitle = t;
+    lastScale = d.scale;
+    lastFont = d.font.Get();
     float max = 150 * d.scale;
-    if (!d.font || TextSize(t, d.font.Get()).width <= max) return t;
-    while (t.size() > 1 && TextSize(t + L"…", d.font.Get()).width > max) t.pop_back();
-    return t + L"…";
+    if (d.font && TextSize(t, d.font.Get()).width > max) {
+        // (binary search for the longest start that fits)
+        size_t lo = 1, hi = t.size();
+        while (lo < hi) {
+            size_t mid = (lo + hi + 1) / 2;
+            if (TextSize(t.substr(0, mid) + L"…", d.font.Get()).width <= max) lo = mid;
+            else hi = mid - 1;
+        }
+        t = t.substr(0, lo) + L"…";
+    }
+    lastLabel = t;
+    return t;
 }
 
 static float StatWidth(const Dock& d, int id) {
@@ -3119,6 +3239,9 @@ static void DrawTrayIcon(Dock& d, int ti, float cx, float cy, float alpha = 1) {
     if (it != d.bmps.end()) {
         bmp = it->second.Get();
     } else {
+        // (a new picture of this icon: its older ones go, or an animated icon fills the cache)
+        std::wstring prefix = L"#tray:" + t.key + L":";
+        for (auto o = d.bmps.begin(); o != d.bmps.end();) o = o->first.rfind(prefix, 0) == 0 ? d.bmps.erase(o) : std::next(o);
         ComPtr<ID2D1Bitmap> b;
         d.rt->CreateBitmapFromWicBitmap(t.icon.Get(), nullptr, &b);
         if (!b) return;
@@ -3518,6 +3641,7 @@ static bool StepAnim(Dock& d) {
         if (std::fabs(dop) < 0.01f) el.op = el.opT;
         else { el.op += dop * 0.25f; moving = true; }
     }
+    for (auto it = g_launch.begin(); it != g_launch.end();) it = GetTickCount() - it->second > kLaunchBounceMs ? g_launch.erase(it) : std::next(it);
     if (!g_launch.empty() && d.visible) moving = true;
     // The tray strip's scroll: a spring, so it slightly overshoots and settles.
     float tgoal = (float)g_trayUi.off, tdx = tgoal - d.trayPos;
@@ -3923,7 +4047,7 @@ static void Launch(const App& a) {
     std::wstring target;
     if (!a.lnk.empty()) target = a.lnk;
     else if (!a.aumid.empty()) target = L"shell:AppsFolder\\" + a.aumid;
-    else target = a.exe;
+    else target = NativePath(a.exe);
     if (!target.empty()) ShellExecuteW(nullptr, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
@@ -3954,7 +4078,7 @@ static void ClickApp(Dock& d, App& a) {
     if (!front && g_activated && GetTickCount() - g_activatedAt < 1000 && !IsIconic(g_activated) &&
         std::find(wins.begin(), wins.end(), g_activated) != wins.end())
         front = g_activated;
-    Log(L"dock: app click (%d windows, fg=%p front=%p iconic=%d)", (int)wins.size(), fg, front, front ? IsIconic(front) : -1);
+    Wh_Log(L"dock: app click (%d windows, fg=%p front=%p iconic=%d)", (int)wins.size(), fg, front, front ? IsIconic(front) : -1);
     if (front) {
         if (wins.size() == 1) {
             // ShowWindowAsync also reaches windows run as administrator (a posted SC_MINIMIZE doesn't).
@@ -4100,12 +4224,12 @@ static void EndTask(const std::vector<HWND>& wins) {
     for (DWORD pid : pids) {
         HANDLE p = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
         if (!p) {
-            Log(L"End task: can't open process %u (%u)", pid, GetLastError());
+            Wh_Log(L"End task: can't open process %u (%u)", pid, GetLastError());
             failed++;
             continue;
         }
         if (!TerminateProcess(p, 1)) {
-            Log(L"End task: TerminateProcess %u failed (%u)", pid, GetLastError());
+            Wh_Log(L"End task: TerminateProcess %u failed (%u)", pid, GetLastError());
             failed++;
         }
         CloseHandle(p);
@@ -4230,7 +4354,7 @@ static void StartPeek(HWND w) {
     auto fn = GetPeek();
     if (!fn) return;
     HRESULT hr = fn(1, w, g_prev.hwnd, 1, 0);
-    Log(L"peek hwnd=%p hr=0x%08lx", w, (unsigned long)hr);
+    Wh_Log(L"peek hwnd=%p hr=0x%08lx", w, (unsigned long)hr);
     if (SUCCEEDED(hr)) g_prev.peek = w;
 }
 
@@ -4716,7 +4840,7 @@ static void AppsWatchTick() {
         if (h == INVALID_HANDLE_VALUE || !h || WaitForSingleObject(h, 0) != WAIT_OBJECT_0) continue;
         FindNextChangeNotification(h);
         g_allAppsLoaded = false;  // (loaded again when the Start opens or shows All apps)
-        Log(L"start: the Start Menu folders changed, All apps reloads");
+        Wh_Log(L"start: the Start Menu folders changed, All apps reloads");
     }
 }
 static void AppsWatchStop() {
@@ -4808,8 +4932,10 @@ static std::wstring EverythingExe() {
     return L"";
 }
 
+static std::wstring g_evAskedFor;  // (the search the last question to Everything was for)
 static void QueryEverything() {
     g_start.files.clear();
+    g_evAskedFor = g_start.query;
     g_start.ev = EvOk;
     if (g_start.query.size() < 2 || g_set.fileSearch != L"everything") return;
     HWND ev = FindWindowW(L"EVERYTHING_TASKBAR_NOTIFICATION", nullptr);
@@ -4865,7 +4991,7 @@ static void RunStartAction(int action) {
             break;
         case ActOpenSel:
             if (StartItem* it = SelectedResult()) {
-                std::wstring target = it->launch;
+                std::wstring target = NativePath(it->launch);
                 CloseStart(true);
                 ShellExecuteW(nullptr, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             }
@@ -4880,6 +5006,8 @@ static void RunStartAction(int action) {
         case ActPinSel:
             if (StartItem* it = SelectedResult()) {
                 std::wstring id = it->launch.rfind(L"shell:AppsFolder\\", 0) == 0 ? it->launch.substr(17) : L"";
+                std::wstring value = !id.empty() ? id : it->launch;
+                if (std::any_of(g_pins.begin(), g_pins.end(), [&](const Pin& p) { return EqI(p.value, value); })) break;  // (pinned already)
                 if (!id.empty()) g_pins.push_back({L"aumid", id});
                 else if (EqI(PathFindExtensionW(it->launch.c_str()), L".lnk")) g_pins.push_back({L"lnk", it->launch});
                 else g_pins.push_back({L"exe", it->launch});
@@ -4904,6 +5032,7 @@ static bool ReplyString(const COPYDATASTRUCT* cds, DWORD off, std::wstring& out)
 
 static void OnEverythingReply(const COPYDATASTRUCT* cds) {
     if (!g_start.open || !cds->lpData || cds->cbData < sizeof(DWORD) * 7) return;
+    if (g_start.query.size() < 2 || g_start.query != g_evAskedFor) return;  // (an answer to an older search)
     const BYTE* base = (const BYTE*)cds->lpData;
     const DWORD* list = (const DWORD*)base;
     DWORD num = list[5];
@@ -5023,7 +5152,7 @@ static void LoadRecent() {
         if (SendMessageTimeoutW(ev, WM_COPYDATA, (WPARAM)g_start.hwnd, (LPARAM)&cds, SMTO_ABORTIFHUNG, 500, &result) &&
             result)
             return;  // the answer comes as WM_COPYDATA (OnEverythingRecentReply)
-        Log(L"downloads: Everything didn't take the query");
+        Wh_Log(L"downloads: Everything didn't take the query");
     }
     FinishRecent();
 }
@@ -5036,7 +5165,7 @@ static void OnEverythingRecentReply(const COPYDATASTRUCT* cds) {
     const DWORD* list = (const DWORD*)base;
     DWORD num = list[1], flags = list[3];
     if (flags != (0x4 | 0x40 | 0x100)) {
-        Log(L"downloads: unexpected reply flags %X", flags);
+        Wh_Log(L"downloads: unexpected reply flags %X", flags);
         FinishRecent();
         if (g_start.open) RenderStart();
         return;
@@ -5083,7 +5212,7 @@ static void OnEverythingRecentReply(const COPYDATASTRUCT* cds) {
         }
     }
     FinishRecent();
-    Log(L"downloads: %u files from Everything, %d checked, %d marked, %zu shown", num, checked, marked, g_recent.size());
+    Wh_Log(L"downloads: %u files from Everything, %d checked, %d marked, %zu shown", num, checked, marked, g_recent.size());
     if (g_start.open) RenderStart();
 }
 
@@ -5195,17 +5324,11 @@ static bool g_usageLoaded = false;
 static void LoadUsage() {
     if (g_usageLoaded) return;
     g_usageLoaded = true;
-    std::vector<wchar_t> buf(65536);
-    if (!Wh_GetStringValue((UserPrefix() + L"start.usage").c_str(), buf.data(), buf.size())) return;
-    std::wstring all = buf.data();
-    size_t a = 0;
-    while (a < all.size()) {
-        size_t b = all.find(L'\n', a);
-        std::wstring line = all.substr(a, b == std::wstring::npos ? std::wstring::npos : b - a);
+    std::vector<std::wstring> lines;
+    LoadItems(L"start.usage", L'\n', lines);
+    for (auto& line : lines) {
         size_t bar = line.find(L'|');
         if (bar != std::wstring::npos) g_usage[line.substr(bar + 1)] = _wtoi(line.substr(0, bar).c_str());
-        if (b == std::wstring::npos) break;
-        a = b + 1;
     }
 }
 static void NoteUsage(const std::wstring& launch) {
@@ -5216,9 +5339,9 @@ static void NoteUsage(const std::wstring& launch) {
     for (auto& u : g_usage) v.push_back({u.second, u.first});
     std::sort(v.begin(), v.end(), [](auto& x, auto& y) { return x.first > y.first; });
     if (v.size() > 150) v.resize(150);
-    std::wstring all;
-    for (auto& e : v) all += std::to_wstring(e.first) + L"|" + e.second + L"\n";
-    Wh_SetStringValue((UserPrefix() + L"start.usage").c_str(), all.c_str());
+    std::vector<std::wstring> lines;
+    for (auto& e : v) lines.push_back(std::to_wstring(e.first) + L"|" + e.second);
+    StoreItems(L"start.usage", lines);
 }
 
 static int ItemScore(StartItem& it, const std::wstring& q) {
@@ -5280,6 +5403,7 @@ static void UpdateSearch() {
 }
 
 static void FinishCloseStart() {
+    g_start.powerArm = -1;
     KillTimer(g_start.hwnd, TIMER_START_ANIM);
     KillTimer(g_start.hwnd, TIMER_START_WIDE);
     ShowWindow(g_start.hwnd, SW_HIDE);
@@ -5351,7 +5475,7 @@ static void Power(int which) {
             ShellExecuteW(nullptr, L"open", L"shutdown.exe", L"/s /hybrid /t 0", nullptr, SW_HIDE);
             break;
         case 6:
-            if (!ExitWindowsEx(EWX_LOGOFF, SHTDN_REASON_MAJOR_OTHER | SHTDN_REASON_FLAG_PLANNED)) Log(L"sign out failed: %u", GetLastError());
+            if (!ExitWindowsEx(EWX_LOGOFF, SHTDN_REASON_MAJOR_OTHER | SHTDN_REASON_FLAG_PLANNED)) Wh_Log(L"sign out failed: %u", GetLastError());
             break;
         case 7: {
             using Fn = BOOLEAN(WINAPI*)(BOOLEAN, BOOLEAN, BOOLEAN);
@@ -5706,7 +5830,7 @@ static void RenderStartFrame() {
         static std::vector<StartItem> none;
         std::vector<StartItem>& list = s.tab == 0 ? g_startPins : s.tab == 1 ? g_allApps : s.tab == 2 ? g_recent : none;
         wchar_t count[64];
-        if (s.tab == 3) wcscpy_s(count, g_stat.time.c_str());
+        if (s.tab == 3) wcsncpy_s(count, g_stat.time.c_str(), _TRUNCATE);
         else swprintf_s(count, s.tab == 0 ? Tr(S_CountPinned) : s.tab == 1 ? Tr(S_CountApps) : Tr(S_CountRecent),
                         (int)list.size());
         s.small->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
@@ -6015,35 +6139,41 @@ static void ForceForeground(HWND hwnd) {
 
 // While the Iniciar is open: a click anywhere else closes it (also when it never got the foreground).
 constexpr UINT WM_APP_START_OUTSIDE = WM_APP + 7;
-HHOOK g_startMouseHook;
 bool CursorInFlyout(POINT pt);
 
-LRESULT CALLBACK StartMouseProc(int code, WPARAM wp, LPARAM lp) {
-    if (code == HC_ACTION && (wp == WM_LBUTTONDOWN || wp == WM_RBUTTONDOWN || wp == WM_MBUTTONDOWN) &&
-        g_start.open && !g_start.menuOpen) {
-        auto* m = (MSLLHOOKSTRUCT*)lp;
-        HWND under = WindowFromPoint(m->pt);
+// A click outside the Start closes it, also on windows run as administrator (which never take the
+// activation from it in a way it sees). No low-level mouse hook (it would make every mouse move in the
+// system wait for this thread): the buttons are checked every 40 ms while the Start is open.
+constexpr UINT_PTR TIMER_START_WATCH = 28;
+static bool g_startWasDown = false;
+static void StartWatchStep() {
+    bool down = ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON) | GetAsyncKeyState(VK_MBUTTON)) & 0x8000) != 0;
+    if (down && !g_startWasDown && g_start.open && !g_start.menuOpen) {
+        POINT pt;
+        GetCursorPos(&pt);
+        HWND under = WindowFromPoint(pt);
         wchar_t cls[64] = {};
         if (under) GetClassNameW(GetAncestor(under, GA_ROOT), cls, ARRAYSIZE(cls));
         // (The dock handles its own clicks: its Start button toggles, its apps close the Iniciar.)
-        if (!PtInRect(&g_start.rc, m->pt) && wcscmp(cls, L"NimbusMenu_Content") != 0 && !CursorInFlyout(m->pt))
+        if (!PtInRect(&g_start.rc, pt) && wcscmp(cls, L"NimbusMenu_Content") != 0 && wcscmp(cls, L"#32768") != 0 && !CursorInFlyout(pt))
             PostMessageW(g_start.hwnd, WM_APP_START_OUTSIDE, 0, 0);
     }
-    return CallNextHookEx(nullptr, code, wp, lp);
+    g_startWasDown = down;
 }
-
 static void StartMouseHook(bool on) {
-    if (on && !g_startMouseHook) g_startMouseHook = SetWindowsHookExW(WH_MOUSE_LL, StartMouseProc, g_module, 0);
-    if (!on && g_startMouseHook) {
-        UnhookWindowsHookEx(g_startMouseHook);
-        g_startMouseHook = nullptr;
+    if (!g_start.hwnd) return;
+    if (on) {
+        g_startWasDown = true;  // (the click that opened it may still be down)
+        SetTimer(g_start.hwnd, TIMER_START_WATCH, 40, nullptr);
+    } else {
+        KillTimer(g_start.hwnd, TIMER_START_WATCH);
     }
 }
 
 void StartMouseHookOff() { StartMouseHook(false); }
 
 void ToggleStart(Dock& d) {
-    Log(L"start: toggle (open=%d closing=%d same dock=%d)", g_start.open, g_start.closing, g_start.dock == &d);
+    Wh_Log(L"start: toggle (open=%d closing=%d same dock=%d)", g_start.open, g_start.closing, g_start.dock == &d);
     CloseFlyout();
     if (g_start.open) {
         if (g_start.dock == &d) {
@@ -6125,7 +6255,7 @@ void ToggleStart(Dock& d) {
     {
         wchar_t cls[64] = {};
         GetClassNameW(GetForegroundWindow(), cls, ARRAYSIZE(cls));
-        Log(L"start opened: foreground=%s ours=%d mousehook=%p", cls, GetForegroundWindow() == s.hwnd, g_startMouseHook);
+        Wh_Log(L"start opened: foreground=%s ours=%d", cls, GetForegroundWindow() == s.hwnd);
     }
     SetTimer(s.hwnd, TIMER_CARET, 530, nullptr);
     SetTimer(s.hwnd, TIMER_START_ANIM, 15, nullptr);
@@ -6394,7 +6524,7 @@ static void FileItemMenu(StartItem& it, POINT pt) {
     if (cmd == 1 || cmd == 2) {
         CloseStart(true);
         if (cmd == 1) {
-            ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            ShellExecuteW(nullptr, L"open", NativePath(path).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         } else {
             std::wstring args = L"/select,\"" + path + L"\"";
             ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
@@ -6433,7 +6563,7 @@ static void StartItemMenu(StartItem& it, POINT pt) {
         }
         SaveStartPins();
     } else if (cmd == 2) {
-        g_pins.push_back({L"aumid", id});
+        if (std::none_of(g_pins.begin(), g_pins.end(), [&](const Pin& p) { return EqI(p.value, id); })) g_pins.push_back({L"aumid", id});
         SavePins();
         RebuildApps();
         for (auto* d : g_docks) { BuildElems(*d, true); Invalidate(*d); }
@@ -6484,7 +6614,7 @@ static void WinKeyGuardStep() {
         SendInput(2, in, sizeof(INPUT));
         Sleep(20);
         ForceForeground(s.hwnd);
-        Log(L"start: took the keyboard back from Windows' search box (%d, ok=%d)", g_winKeyGuardEsc,
+        Wh_Log(L"start: took the keyboard back from Windows' search box (%d, ok=%d)", g_winKeyGuardEsc,
             GetForegroundWindow() == s.hwnd);
         return;
     }
@@ -6493,7 +6623,7 @@ static void WinKeyGuardStep() {
     if (g_winKeyGuardEsc >= 6) return;
     g_winKeyGuardEsc++;
     ForceForeground(s.hwnd);
-    Log(L"start: took the keyboard back from %s after %ums (%d, ok=%d)", cls, since, g_winKeyGuardEsc,
+    Wh_Log(L"start: took the keyboard back from %s after %ums (%d, ok=%d)", cls, since, g_winKeyGuardEsc,
         GetForegroundWindow() == s.hwnd);
 }
 LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -6511,7 +6641,7 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 wchar_t cls[64] = {};
                 if (other) GetClassNameW(other, cls, ARRAYSIZE(cls));
                 if (!wcscmp(cls, L"Windows.UI.Core.CoreWindow")) g_startClosedBySearchAt = GetTickCount();
-                Log(L"start: lost the focus to %s", cls);
+                Wh_Log(L"start: lost the focus to %s", cls);
                 CloseStart(true);
             }
             return 0;
@@ -6519,7 +6649,7 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_MOUSEACTIVATE:
             return MA_ACTIVATE;
         case WM_APP_START_OUTSIDE:
-            Log(L"start: click outside (open=%d)", s.open);
+            Wh_Log(L"start: click outside (open=%d)", s.open);
             if (s.open && !s.menuOpen && GetTickCount() - s.openedAt > 150) CloseStart(true);
             return 0;
         case WM_TIMER:
@@ -6530,6 +6660,8 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             } else if (wp == TIMER_START_ICONS) {
                 KillTimer(hwnd, TIMER_START_ICONS);
                 RenderStart();
+            } else if (wp == TIMER_START_WATCH) {
+                StartWatchStep();
             } else if (wp == TIMER_START_POWER) {
                 KillTimer(hwnd, TIMER_START_POWER);
                 s.powerArm = -1;
@@ -6696,7 +6828,9 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     CloseStart(true);
                 }
             } else if (row.kind == RowPower) {
-                if ((row.power == 2 || row.power == 3) && !(s.powerArm == row.power && GetTickCount() - s.powerArmAt < 4000)) {
+                DWORD since = GetTickCount() - s.powerArmAt;
+                if ((row.power == 2 || row.power == 3) && s.powerArm == row.power && since < GetDoubleClickTime()) return 0;  // (a double-click isn't two)
+                if ((row.power == 2 || row.power == 3) && !(s.powerArm == row.power && since < 4000)) {
                     s.powerArm = row.power;
                     s.powerArmAt = GetTickCount();
                     SetTimer(hwnd, TIMER_START_POWER, 4100, nullptr);  // (the button goes back by itself)
@@ -6761,6 +6895,7 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     }
                     return 0;
                 case VK_RETURN:
+                    if (lp & (1 << 30)) return 0;  // (held down: only the first press)
                     if (s.query.empty() && s.kbFocus >= 0) {
                         StartActivateFocus(hwnd);
                         return 0;
@@ -6915,8 +7050,10 @@ static void UpdateMoveHooks(bool anyFullscreen) {
     if (need && !g_moveEndHook) {
         g_moveEndHook = SetWinEventHook(EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZEEND, nullptr, OnWindowMoved, 0, 0,
                                         WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-        g_locationHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr, OnWindowMoved,
-                                         0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+        // (not EVENT_OBJECT_LOCATIONCHANGE: it would bring every caret and cursor move in the system here;
+        // a window moved by the keyboard shows at the next periodic check)
+        g_locationHook = SetWinEventHook(EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZEEND, nullptr, OnWindowMoved, 0, 0,
+                                         WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
     } else if (!need && g_moveEndHook) {
         UnhookWinEvent(g_moveEndHook);
         if (g_locationHook) UnhookWinEvent(g_locationHook);
@@ -6930,7 +7067,7 @@ static void RegisterStartHotkey() {
     if (!g_set.nevoaStart || g_set.startHotkey == L"none") return;
     UINT mods = (g_set.startHotkey == L"ctrlSpace" ? MOD_CONTROL : MOD_ALT) | MOD_NOREPEAT;
     if (!RegisterHotKey(g_msgWnd, 1, mods, VK_SPACE))
-        Log(L"Shortcut %s is taken by another program (%lu)", g_set.startHotkey.c_str(), GetLastError());
+        Wh_Log(L"Shortcut %s is taken by another program (%lu)", g_set.startHotkey.c_str(), GetLastError());
 }
 
 // Tell the explorer.exe part whether the Windows key should open our Start.
@@ -7013,7 +7150,6 @@ struct Flyout {
     long long notifOpen = 0;            // the notification under the mouse shows all its text
     int month = 0;  // calendar: months away from today's
     int pick = -1;  // Wi-Fi: the network showing its button
-    HHOOK hook = nullptr;
     bool wasDown = false;
     DWORD openedAt = 0;
     int press = -1;  // the hit pressed (it may become a drag out)
@@ -7224,7 +7360,7 @@ static float PanelClock(float y) {
     FSep(y);
     FLink(y, L2(L"Abrir o calendário do Windows", L"Open Windows' calendar"), [] {
         CloseFlyout();
-        SendWinKey('N');
+        OpenUri(L"ms-actioncenter:");  // (not Win+N: that may be set to open Nimbus' panel)
     });
     return y;
 }
@@ -7445,7 +7581,12 @@ static void TrayPanelHit(D2D1_RECT_F r, const std::wstring& key) {
 
 static void FTrayIcon(int ti, float cx, float cy, float size) {
     TrayIcon& t = g_tray[ti];
-    ID2D1Bitmap* bmp = FBitmap(L"#tray:" + t.key + L":" + std::to_wstring(t.iconVer), t.icon.Get());
+    std::wstring key = L"#tray:" + t.key + L":" + std::to_wstring(t.iconVer);
+    if (FDraw() && !g_fly.bmps.count(key)) {
+        std::wstring prefix = L"#tray:" + t.key + L":";
+        for (auto o = g_fly.bmps.begin(); o != g_fly.bmps.end();) o = o->first.rfind(prefix, 0) == 0 ? g_fly.bmps.erase(o) : std::next(o);
+    }
+    ID2D1Bitmap* bmp = FBitmap(key, t.icon.Get());
     if (!bmp) return;
     D2D1_RECT_F ir = D2D1::RectF(cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2);
     float alpha = g_fly.trayDrag == t.key ? 0.35f : 1.0f;  // (the one being dragged)
@@ -7517,14 +7658,27 @@ ComPtr<ID2D1StrokeStyle> g_dashStroke;
 
 static bool PathExists(const std::wstring& p) { return GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES; }
 
-static std::wstring ShelfDir() {
-    wchar_t t[MAX_PATH];
-    if (!GetTempPathW(MAX_PATH, t)) return L"";
-    std::wstring dir = std::wstring(t) + L"Nimbus";
-    CreateDirectoryW(dir.c_str(), nullptr);
-    dir += L"\\Prateleira";
-    CreateDirectoryW(dir.c_str(), nullptr);
+// Pasted files live in the mod's own storage folder (Windhawk's, per mod), in "Shelf".
+static std::wstring ShelfDirPath() {
+    wchar_t base[MAX_PATH] = {};
+    if (!Wh_GetModStoragePath(base, ARRAYSIZE(base)) || !base[0]) return L"";
+    std::wstring dir = base;
+    if (dir.back() != L'\\') dir += L'\\';
+    return dir + L"Shelf";
+}
+static std::wstring ShelfDir() {  // (made when a file is pasted)
+    std::wstring dir = ShelfDirPath();
+    if (!dir.empty()) SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);
     return dir;
+}
+static bool InShelfDir(const std::wstring& path) {
+    std::wstring dir = ShelfDirPath();
+    if (dir.empty()) return false;
+    wchar_t full[MAX_PATH * 2];
+    if (!GetFullPathNameW(path.c_str(), ARRAYSIZE(full), full, nullptr)) return false;
+    std::wstring f = full;
+    dir += L'\\';
+    return f.size() > dir.size() && _wcsnicmp(f.c_str(), dir.c_str(), dir.size()) == 0 && f.find(L"..") == std::wstring::npos;
 }
 
 static void ShelfFill(ShelfItem& it) {
@@ -7546,25 +7700,21 @@ static void ShelfFill(ShelfItem& it) {
 }
 
 static void SaveShelf() {
-    std::wstring all;
-    for (auto& it : g_shelf) all += (all.empty() ? L"" : L"\n") + std::wstring(it.gen ? L"g|" : L"f|") + it.path;
-    Wh_SetStringValue((UserPrefix() + L"shelf.items").c_str(), all.c_str());
+    std::vector<std::wstring> lines;
+    for (auto& it : g_shelf) lines.push_back(std::wstring(it.gen ? L"g|" : L"f|") + it.path);
+    StoreItems(L"shelf.items", lines);
 }
 
+static bool InShelfDir(const std::wstring& path);
 static void LoadShelf() {
     g_shelf.clear();
-    std::vector<wchar_t> buf(32768);
-    if (!Wh_GetStringValue((UserPrefix() + L"shelf.items").c_str(), buf.data(), buf.size())) return;
-    std::wstring all = buf.data();
-    size_t a = 0;
-    while (a < all.size()) {
-        size_t b = all.find(L'\n', a);
-        if (b == std::wstring::npos) b = all.size();
-        std::wstring line = all.substr(a, b - a);
-        a = b + 1;
+    std::vector<std::wstring> lines;
+    LoadItems(L"shelf.items", L'\n', lines);
+    for (auto& line : lines) {
         if (line.size() < 3 || line[1] != L'|') continue;
         ShelfItem it;
-        it.gen = line[0] == L'g';
+        // (a pasted file is ours only when it's in our own folder: nothing else is ever deleted)
+        it.gen = line[0] == L'g' && InShelfDir(line.substr(2));
         it.path = line.substr(2);
         if (!PathExists(it.path)) continue;
         ShelfFill(it);
@@ -7586,7 +7736,7 @@ static int ShelfFind(const std::wstring& path) {
 // Pasted files are ours: removing them from the shelf deletes them (unless they were dragged out).
 static void ShelfDropItem(int i) {
     if (i < 0 || i >= (int)g_shelf.size()) return;
-    if (g_shelf[i].gen && PathExists(g_shelf[i].path)) DeleteFileW(g_shelf[i].path.c_str());
+    if (g_shelf[i].gen && InShelfDir(g_shelf[i].path) && PathExists(g_shelf[i].path)) DeleteFileW(g_shelf[i].path.c_str());
     g_shelf.erase(g_shelf.begin() + i);
 }
 
@@ -7702,7 +7852,7 @@ static void ShelfPaste() {
         }
     }
     CloseClipboard();
-    Log(L"shelf: pasted %d", added);
+    Wh_Log(L"shelf: pasted %d", added);
     if (added) ShelfChanged();
 }
 
@@ -7731,7 +7881,7 @@ static void ShelfDragOut(const std::wstring& path, bool right) {
     g_shelfUi.draggingOut = true;
     HRESULT hr = SHDoDragDrop(g_fly.hwnd, obj.Get(), nullptr, allowed, &eff);
     g_shelfUi.draggingOut = false;
-    Log(L"shelf: dragged out (hr=0x%08lx effect=%lu)", (unsigned long)hr, eff);
+    Wh_Log(L"shelf: dragged out (hr=0x%08lx effect=%lu)", (unsigned long)hr, eff);
     // A move by Explorer may finish a moment later.
     SetTimer(g_fly.hwnd, TIMER_FLY_SHELF, 1500, nullptr);
     if (ShelfPrune()) ShelfChanged();
@@ -7789,7 +7939,7 @@ static void ShelfUninit() {
     for (int i = (int)g_shelf.size() - 1; i >= 0; i--)
         if (g_shelf[i].gen) ShelfDropItem(i);
     SaveShelf();
-    std::wstring dir = ShelfDir();
+    std::wstring dir = ShelfDirPath();  // (not made here when it isn't there)
     if (!dir.empty()) RemoveDirectoryW(dir.c_str());  // (only when empty)
     g_shelf.clear();
 }
@@ -7882,7 +8032,7 @@ class ShelfDrop final : public IDropTarget {
             }
             ReleaseStgMedium(&sm);
         }
-        Log(L"shelf: %d dropped in", added);
+        Wh_Log(L"shelf: %d dropped in", added);
         if (dock_) ShelfOpenFor(*dock_);
         ShelfChanged();
         return S_OK;
@@ -8063,7 +8213,7 @@ static bool SqlOpen() {
     if (!g_sql.open || !g_sql.prepare || !g_sql.step || !g_sql.colInt64 || !g_sql.colText16 || !g_sql.colBlob ||
         !g_sql.colBytes || !g_sql.bindInt64 || !g_sql.finalize || !g_sql.close) {
         g_sql.failed = true;
-        Log(L"notifications: winsqlite3 not usable");
+        Wh_Log(L"notifications: winsqlite3 not usable");
         return false;
     }
     wchar_t path[MAX_PATH];
@@ -8073,7 +8223,7 @@ static bool SqlOpen() {
     if (g_sql.open(u8, &g_sql.db, 1 /* SQLITE_OPEN_READONLY */, nullptr) != 0) {
         if (g_sql.db) g_sql.close(g_sql.db);
         g_sql.db = nullptr;
-        Log(L"notifications: can't open the database");
+        Wh_Log(L"notifications: can't open the database");
         return false;
     }
     if (g_sql.busy) g_sql.busy(g_sql.db, 200);
@@ -8130,6 +8280,8 @@ static void ParseToast(const std::wstring& x, NotifItem& n) {
         std::wstring tag = x.substr(t, x.find(L'>', t) - t);
         n.launch = XmlAttr(tag, L"launch");
         n.launchType = XmlAttr(tag, L"activationType");
+        std::wstring sc = XmlAttr(tag, L"scenario");
+        n.sticky = sc == L"alarm" || sc == L"reminder" || sc == L"incomingCall" || sc == L"urgent";
     }
     size_t b = x.find(L"<binding"), be = x.find(L"</binding>", b);
     std::vector<std::wstring> texts;
@@ -8234,15 +8386,15 @@ static void NotifAskBanners();
 static void NotifMuteNewApp(const std::wstring& aumid);
 
 // New rows since the last look (and, every 10 s, the ones Windows removed).
-static void NotifPoll(bool first) {
-    if (!SqlOpen()) return;
+static bool NotifPoll(bool first) {
+    if (!SqlOpen()) return false;
     void* st = nullptr;
     const char* q =
         "SELECT n.Id, h.PrimaryId, n.Payload, n.ArrivalTime FROM Notification n JOIN NotificationHandler h ON h.RecordId = "
         "n.HandlerId WHERE n.Type = 'toast' AND n.Id > ?1 ORDER BY n.Id";
     if (g_sql.prepare(g_sql.db, q, -1, &st, nullptr) != 0 || !st) {
         SqlClose();  // (reopened next time)
-        return;
+        return false;
     }
     g_sql.bindInt64(st, 1, g_notifLast);
     bool changed = false;
@@ -8288,6 +8440,7 @@ static void NotifPoll(bool first) {
         }
     }
     if (changed) StatusChanged();
+    return true;
 }
 
 // ---- Windows' own banners (only with the user's ok) ----
@@ -8300,61 +8453,77 @@ static const wchar_t kNotifSettingsKey[] = L"Software\\Microsoft\\Windows\\Curre
 std::vector<std::pair<std::wstring, std::wstring>> g_banners;  // app, what ShowBanner was ("-" = no value)
 bool g_bannersLoaded = false;
 
-static void SaveBanners() {
-    std::wstring all;
-    for (auto& b : g_banners) all += (all.empty() ? L"" : L"\n") + b.second + L"|" + b.first;
-    Wh_SetStringValue((UserPrefix() + L"notif.banners").c_str(), all.c_str());
+static bool SaveBanners() {
+    std::vector<std::wstring> lines;
+    for (auto& b : g_banners) lines.push_back(b.second + L"|" + b.first);
+    return StoreItems(L"notif.banners", lines);
 }
 
 static void LoadBanners() {
     if (g_bannersLoaded) return;
     g_bannersLoaded = true;
     g_banners.clear();
-    std::vector<wchar_t> buf(32768);
-    if (!Wh_GetStringValue((UserPrefix() + L"notif.banners").c_str(), buf.data(), buf.size())) return;
-    std::wstring all = buf.data();
-    size_t a = 0;
-    while (a < all.size()) {
-        size_t b = all.find(L'\n', a);
-        if (b == std::wstring::npos) b = all.size();
-        std::wstring line = all.substr(a, b - a);
-        a = b + 1;
+    std::vector<std::wstring> lines;
+    LoadItems(L"notif.banners", L'\n', lines);
+    for (auto& line : lines) {
         size_t bar = line.find(L'|');
         if (bar != std::wstring::npos) g_banners.push_back({line.substr(bar + 1), line.substr(0, bar)});
     }
 }
 
-static void MuteBanner(const std::wstring& app) {
-    if (app.empty() || app == L"#nimbus") return;
-    for (auto& b : g_banners)
-        if (b.first == app) return;
+// What an app's ShowBanner is now: "-" when there's no value, "" when it's off already (the user's own
+// choice: left alone) or the app has no settings key.
+static std::wstring BannerNow(const std::wstring& app) {
     HKEY k;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, (std::wstring(kNotifSettingsKey) + L"\\" + app).c_str(), 0, KEY_READ | KEY_SET_VALUE, &k) !=
-        ERROR_SUCCESS)
-        return;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, (std::wstring(kNotifSettingsKey) + L"\\" + app).c_str(), 0, KEY_READ, &k) != ERROR_SUCCESS) return L"";
     DWORD v = 0, n = sizeof(v), type = 0;
     bool has = RegQueryValueExW(k, L"ShowBanner", nullptr, &type, (BYTE*)&v, &n) == ERROR_SUCCESS && type == REG_DWORD;
-    if (!has || v != 0) {  // (already off: the user's own choice, left alone)
-        DWORD zero = 0;
-        if (RegSetValueExW(k, L"ShowBanner", 0, REG_DWORD, (const BYTE*)&zero, sizeof(zero)) == ERROR_SUCCESS)
-            g_banners.push_back({app, has ? std::to_wstring(v) : L"-"});
-    }
+    RegCloseKey(k);
+    if (has && v == 0) return L"";
+    return has ? std::to_wstring(v) : L"-";
+}
+static void BannerOff(const std::wstring& app) {
+    HKEY k;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, (std::wstring(kNotifSettingsKey) + L"\\" + app).c_str(), 0, KEY_SET_VALUE, &k) != ERROR_SUCCESS) return;
+    DWORD zero = 0;
+    RegSetValueExW(k, L"ShowBanner", 0, REG_DWORD, (const BYTE*)&zero, sizeof(zero));
     RegCloseKey(k);
 }
+
+// Banners off for these apps: each one's value is written to the backup first; if the backup can't be
+// saved, nothing is switched off.
+static void MuteBannersOf(const std::vector<std::wstring>& apps) {
+    size_t before = g_banners.size();
+    for (auto& app : apps) {
+        if (app.empty() || app == L"#nimbus") continue;
+        if (std::any_of(g_banners.begin(), g_banners.end(), [&](auto& b) { return b.first == app; })) continue;
+        std::wstring was = BannerNow(app);
+        if (!was.empty()) g_banners.push_back({app, was});
+    }
+    if (g_banners.size() == before) return;
+    if (!SaveBanners()) {
+        g_banners.resize(before);
+        Wh_Log(L"notifications: the backup couldn't be saved, Windows' banners left on");
+        return;
+    }
+    for (size_t i = before; i < g_banners.size(); i++) BannerOff(g_banners[i].first);
+}
+static void MuteBanner(const std::wstring& app) { MuteBannersOf({app}); }
 
 static void MuteBanners() {
     LoadBanners();
     HKEY k;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, kNotifSettingsKey, 0, KEY_READ, &k) != ERROR_SUCCESS) return;
+    std::vector<std::wstring> apps;
     wchar_t sub[512];
     for (DWORD i = 0;; i++) {
         DWORD n = ARRAYSIZE(sub);
         if (RegEnumKeyExW(k, i, sub, &n, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS) break;
-        MuteBanner(sub);
+        apps.push_back(sub);
     }
     RegCloseKey(k);
-    SaveBanners();
-    Log(L"notifications: Windows' banners off for %d apps", (int)g_banners.size());
+    MuteBannersOf(apps);
+    Wh_Log(L"notifications: Windows' banners off for %d apps", (int)g_banners.size());
 }
 
 static void RestoreBanners() {
@@ -8372,7 +8541,7 @@ static void RestoreBanners() {
         }
         RegCloseKey(k);
     }
-    if (!g_banners.empty()) Log(L"notifications: Windows' banners back for %d apps", (int)g_banners.size());
+    if (!g_banners.empty()) Wh_Log(L"notifications: Windows' banners back for %d apps", (int)g_banners.size());
     g_banners.clear();
     SaveBanners();
 }
@@ -8387,9 +8556,7 @@ static void SyncBanners() {
 
 static void NotifMuteNewApp(const std::wstring& aumid) {
     if (!g_set.notifHideWin || !g_set.notifShow) return;
-    size_t before = g_banners.size();
     MuteBanner(aumid);
-    if (g_banners.size() != before) SaveBanners();
 }
 
 static long long g_notifSynth = 0;
@@ -8480,19 +8647,29 @@ static void NotifActivate(const NotifItem& n, int action) {
         NotifNimbusAction(args);
         return;
     }
-    AllowSetForegroundWindow(ASFW_ANY);
-    if (type == L"protocol" && !args.empty()) {
+    if (type == L"system") return;  // (snooze, dismiss: the card is gone already)
+    if (type == L"protocol") {
+        // Only a "scheme:" URI, as Windows does: never a path, a UNC share or a file: URL.
+        PARSEDURLW pu = {sizeof(pu)};
+        bool ok = !args.empty() && SUCCEEDED(ParseURLW(args.c_str(), &pu)) && pu.nScheme != URL_SCHEME_FILE && pu.cchProtocol > 1;
+        if (!ok) {
+            Wh_Log(L"notifications: refused a protocol launch that isn't a URI");
+            return;
+        }
+        AllowSetForegroundWindow(ASFW_ANY);
         ShellExecuteW(nullptr, L"open", args.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         return;
     }
+    AllowSetForegroundWindow(ASFW_ANY);
     CLSID clsid;
     if (NotifActivator(n.aumid, clsid)) {
         ComPtr<INotifActivationCallback> cb;
         HRESULT hr = CoCreateInstance(clsid, nullptr, CLSCTX_LOCAL_SERVER, kIID_NotifActivation, (void**)cb.GetAddressOf());
         if (SUCCEEDED(hr) && cb) hr = cb->Activate(n.aumid.c_str(), args.c_str(), nullptr, 0);
-        Log(L"notifications: activator for %s hr=0x%08lx", n.aumid.c_str(), (unsigned long)hr);
+        Wh_Log(L"notifications: activator for %s hr=0x%08lx", n.aumid.c_str(), (unsigned long)hr);
         if (SUCCEEDED(hr)) return;
     }
+    if (type == L"background") return;  // (meant for the app's background task, never a window)
     if (n.aumid.find(L'!') != std::wstring::npos) {
         ComPtr<IApplicationActivationManager> am;
         DWORD pid = 0;
@@ -8516,14 +8693,15 @@ static void NotifInit() {
     SyncBanners();
     if (g_set.notifPlace == 0 && !g_set.notifShow) return;
     LoadNotifCleared();
-    NotifPoll(true);
-    g_notifReady = true;
+    // (only once a poll worked: otherwise the next one would show every stored notification as new)
+    g_notifReady = NotifPoll(true);
 }
 
 static void NotifTick() {
     static DWORD last = 0;
     if (g_set.notifPlace == 0 && !g_set.notifShow) {
         if (g_sql.db) SqlClose();
+        g_notifReady = false;  // (turned on again later: what came meanwhile isn't shown as new)
         return;
     }
     if (GetTickCount() - last < 2000) return;
@@ -9722,7 +9900,7 @@ static void NotifShowCard(const NotifItem& n, bool force) {
     auto& t = g_toast;
     ToastCard c;
     c.id = n.id;
-    c.total = c.left = g_set.notifSecs * 1000;
+    c.total = c.left = n.sticky ? 24 * 3600 * 1000 : g_set.notifSecs * 1000;
     t.cards.insert(t.cards.begin(), c);
     int live = 0;
     for (auto& x : t.cards)
@@ -9819,32 +9997,24 @@ static std::vector<std::wstring> SplitTabs(const std::wstring& line) {
 }
 static std::vector<std::wstring> ReadLines(const wchar_t* key) {
     std::vector<std::wstring> out;
-    std::vector<wchar_t> buf(131072);
-    if (!Wh_GetStringValue((UserPrefix() + key).c_str(), buf.data(), buf.size())) return out;
-    std::wstring all = buf.data();
-    size_t a = 0;
-    while (a < all.size()) {
-        size_t b = all.find(L'\n', a);
-        if (b == std::wstring::npos) b = all.size();
-        if (b > a) out.push_back(all.substr(a, b - a));
-        a = b + 1;
-    }
+    LoadItems(key, L'\n', out);
     return out;
 }
 
+// (each note is one value, its line breaks escaped: no limit for the whole list, none lost on load)
 static void SaveNotes() {
-    std::wstring all;
-    for (auto& n : g_notes) all += std::to_wstring(n.id) + L"\t" + std::to_wstring(n.when) + L"\t" + Esc(n.text) + L"\n";
-    Wh_SetStringValue((UserPrefix() + L"notes.list").c_str(), all.c_str());
+    std::vector<std::wstring> lines;
+    for (auto& n : g_notes) lines.push_back(std::to_wstring(n.id) + L"\t" + std::to_wstring(n.when) + L"\t" + Esc(n.text));
+    StoreItems(L"notes.list", lines);
 }
 static void SaveRems() {
-    std::wstring all;
+    std::vector<std::wstring> lines;
     for (auto& r : g_rems) {
         int fl = (r.onOpen ? 1 : 0) | (r.late ? 2 : 0) | (r.fired ? 4 : 0) | (r.missed ? 8 : 0);
-        all += std::to_wstring(r.id) + L"\t" + std::to_wstring(r.due) + L"\t" + std::to_wstring(fl) + L"\t" + std::to_wstring(r.firedAt) +
-               L"\t" + Esc(r.text) + L"\n";
+        lines.push_back(std::to_wstring(r.id) + L"\t" + std::to_wstring(r.due) + L"\t" + std::to_wstring(fl) + L"\t" + std::to_wstring(r.firedAt) +
+                        L"\t" + Esc(r.text));
     }
-    Wh_SetStringValue((UserPrefix() + L"rems.list").c_str(), all.c_str());
+    StoreItems(L"rems.list", lines);
 }
 static void LoadNotes() {
     g_notes.clear();
@@ -9910,6 +10080,7 @@ static std::wstring DayText(const SYSTEMTIME& st) {
     return buf;
 }
 
+static long long g_remSince = 0;  // when Nimbus started watching reminders (before that: "late")
 static void RemFire(Reminder& r, long long now) {
     SYSTEMTIME due = FtToLocal(r.due);
     std::wstring body = r.text;
@@ -9919,7 +10090,8 @@ static void RemFire(Reminder& r, long long now) {
     r.firedAt = now;
     std::wstring id = std::to_wstring(r.id);
     NotifPush(L2(L"Lembrete", L"Reminder"), body,
-              {{L2(L"Concluir", L"Done"), L"rem-done:" + id, L"nimbus"}, {L2(L"Adiar 1 h", L"Snooze 1 h"), L"rem-snooze:" + id, L"nimbus"}}, false, true);
+              {{L2(L"Concluir", L"Done"), L"rem-done:" + id, L"nimbus"}, {L2(L"Adiar 1 h", L"Snooze 1 h"), L"rem-snooze:" + id, L"nimbus"}},
+              !g_set.notifShow && !g_set.notifDnd /* (a reminder shows even with the cards off) */, true);
 }
 
 // Each second: due reminders become notifications (never over a game: they wait for it to end).
@@ -9928,11 +10100,13 @@ static void RemTick() {
     QUERY_USER_NOTIFICATION_STATE qs = QUNS_ACCEPTS_NOTIFICATIONS;
     if (SUCCEEDED(SHQueryUserNotificationState(&qs)) && qs != QUNS_ACCEPTS_NOTIFICATIONS) return;
     long long now = NowFt();
+    if (!g_remSince) g_remSince = now;
     bool changed = false;
     for (auto& r : g_rems) {
         if (r.fired || r.missed || now < r.due) continue;
-        // Late (the PC or Nimbus was off at that time): tell anyway, unless the user said not to.
-        if (!r.onOpen && !r.late && now - r.due > 2 * kFtMinute) r.missed = true;
+        // Late (the PC or Nimbus was off at that time): tell anyway, unless the user said not to. Held
+        // back by a game or the lock screen while Nimbus ran isn't late: it shows now.
+        if (!r.onOpen && !r.late && r.due < g_remSince - 2 * kFtMinute) r.missed = true;
         else RemFire(r, now);
         changed = true;
     }
@@ -10173,11 +10347,20 @@ struct NotesUi {
     bool late = true;
     bool autoOpened = false;    // (the empty Notes tab opens a new note once)
     std::wstring draft;         // the reminder's text while the form shows
+    DWORD emptyAt = 0;          // "Save" with nothing written: a hint shows for a moment
 } g_notesUi;
 
-static void NotesSave() {
+static void NotesSave(bool closing = false) {
     std::wstring t = NoteEditText(g_ned);
     auto& u = g_notesUi;
+    bool blank = t.find_first_not_of(L" \t\r\n") == std::wstring::npos;
+    if (blank && !closing && ((u.tab == 0 && u.editing >= 0) || (u.tab == 1 && u.creating))) {
+        u.emptyAt = GetTickCount();
+        if (g_ned.edit) SetFocus(g_ned.edit);
+        FlyRender();
+        return;
+    }
+    if (blank) t.clear();
     if (u.tab == 0 && u.editing >= 0) {
         if (!t.empty()) {
             if (u.editing == 0) {
@@ -10337,8 +10520,10 @@ static float PanelNotes(float y) {
             FButton(D2D1::RectF(kFlyW - kFlyPad - 196, y, kFlyW - kFlyPad - 104, y + 34), L2(L"Cancelar", L"Cancel"), [] { NotesCancel(); });
             FButton(D2D1::RectF(kFlyW - kFlyPad - 96, y, kFlyW - kFlyPad, y + 34), L2(L"Salvar", L"Save"), [] { NotesSave(); });
             y += 34 + 4;
-            FText(L2(L"Ctrl+Enter salva · Esc cancela", L"Ctrl+Enter saves · Esc cancels"), g_fly.fSmall.Get(), kFlyPad, y, kFlyW - kFlyPad * 2, 22,
-                  FSub(), DWRITE_TEXT_ALIGNMENT_TRAILING);
+            bool hint = g_notesUi.emptyAt && GetTickCount() - g_notesUi.emptyAt < 3000;
+            FText(hint ? L2(L"Escreva alguma coisa pra salvar a nota.", L"Write something to save the note.")
+                       : L2(L"Ctrl+Enter salva · Esc cancela", L"Ctrl+Enter saves · Esc cancels"),
+                  g_fly.fSmall.Get(), kFlyPad, y, kFlyW - kFlyPad * 2, 22, hint ? D2D1::ColorF(0.95f, 0.45f, 0.4f) : FSub(), DWRITE_TEXT_ALIGNMENT_TRAILING);
             y += 22 + 8;
         } else {
             FLink(y, L2(L"+ Nova nota", L"+ New note"), [] {
@@ -10506,7 +10691,13 @@ static float PanelNotes(float y) {
         FButton(D2D1::RectF(kFlyW - kFlyPad - 236, y, kFlyW - kFlyPad - 144, y + 34), L2(L"Cancelar", L"Cancel"), [] { NotesCancel(); });
         FButton(D2D1::RectF(kFlyW - kFlyPad - 136, y, kFlyW - kFlyPad, y + 34),
                 u.editRem ? L2(L"Salvar", L"Save") : L2(L"Criar lembrete", L"Add reminder"), [] { NotesSave(); });
-        y += 34 + 10;
+        y += 34 + 4;
+        if (u.emptyAt && GetTickCount() - u.emptyAt < 3000) {
+            FText(L2(L"Escreva o lembrete antes de salvar.", L"Write the reminder before saving."), g_fly.fSmall.Get(), kFlyPad, y,
+                  kFlyW - kFlyPad * 2, 22, D2D1::ColorF(0.95f, 0.45f, 0.4f), DWRITE_TEXT_ALIGNMENT_TRAILING);
+            y += 22;
+        }
+        y += 6;
     } else {
         FLink(y, L2(L"+ Novo lembrete", L"+ New reminder"), [] {
             g_notesUi.creating = true;
@@ -10611,6 +10802,7 @@ struct BtState {
     bool scanned = false;
 };
 static BtState g_bts;
+static HANDLE g_btQuit;  // (manual reset: ends the worker's pauses at once)
 static DWORD g_btAskAt = 0;
 constexpr UINT WM_APP_BTREAD = WM_APP + 19;
 
@@ -10626,13 +10818,13 @@ static int BtRadio(int set) {
             if (r.Kind() != RadioKind::Bluetooth) continue;
             if (set >= 0) {
                 RadioAccessStatus st = r.SetStateAsync(set ? RadioState::On : RadioState::Off).get();
-                Log(L"bluetooth: radio %s (%d)", set ? L"on" : L"off", (int)st);
+                Wh_Log(L"bluetooth: radio %s (%d)", set ? L"on" : L"off", (int)st);
                 if (st == RadioAccessStatus::Allowed) return set;
             }
             return r.State() == RadioState::On ? 1 : 0;
         }
     } catch (...) {
-        Log(L"bluetooth: radio call failed");
+        Wh_Log(L"bluetooth: radio call failed");
     }
     return -1;
 }
@@ -10715,7 +10907,7 @@ static bool BtAudioOneShot(const std::wstring& addr, ULONG what) {
         if (DeviceIoControl(h, kIoctlKsProperty, &prop, sizeof(prop), nullptr, 0, &got, nullptr)) ok = true;
         CloseHandle(h);
     }
-    Log(L"bluetooth: %s %s: %s", what ? L"disconnect" : L"connect", addr.c_str(), ok ? L"ok" : L"failed");
+    Wh_Log(L"bluetooth: %s %s: %s", what ? L"disconnect" : L"connect", addr.c_str(), ok ? L"ok" : L"failed");
     return ok;
 }
 
@@ -10763,10 +10955,10 @@ static DWORD WINAPI BtWorker(void*) {
         ReleaseSRWLockExclusive(&g_bts.lock);
 
         int radio = BtRadio(wantRadio);
-        if (wantRadio >= 0) Sleep(600);  // (the devices follow the radio)
+        if (wantRadio >= 0) WaitForSingleObject(g_btQuit, 600);  // (the devices follow the radio)
         if (!con.empty()) BtAudioOneShot(con, 0);
         if (!dis.empty()) BtAudioOneShot(dis, 1);
-        if (!con.empty() || !dis.empty()) Sleep(1500);  // (connecting takes a moment to show)
+        if (!con.empty() || !dis.empty()) WaitForSingleObject(g_btQuit, 1500);  // (connecting takes a moment to show)
         std::vector<BtDevice> devs = radio == 1 ? BtList() : std::vector<BtDevice>{};
         BtDetails(devs);
         std::stable_sort(devs.begin(), devs.end(), [](const BtDevice& a, const BtDevice& b) { return a.connected > b.connected; });
@@ -10786,6 +10978,7 @@ static DWORD WINAPI BtWorker(void*) {
 }
 
 static void BtKick() {
+    if (!g_btQuit) g_btQuit = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_bts.ev) g_bts.ev = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_bts.thread) g_bts.thread = CreateThread(nullptr, 0, BtWorker, nullptr, 0, nullptr);
     SetEvent(g_bts.ev);
@@ -10813,17 +11006,35 @@ static void BtRequest(int radio, const std::wstring& connect, const std::wstring
     BtKick();
 }
 
-static void BtStop() {
+
+// Joins a worker until a shared deadline. A worker that didn't end keeps its handles (it may still use
+// them; the process exits right after).
+static bool JoinWorker(HANDLE& thread, HANDLE& ev, DWORD deadline) {
+    if (!thread) return true;
+    DWORD now = GetTickCount();
+    DWORD left = (LONG)(deadline - now) > 0 ? deadline - now : 0;
+    if (WaitForSingleObject(thread, left) != WAIT_OBJECT_0) return false;
+    CloseHandle(thread);
+    if (ev) CloseHandle(ev);
+    thread = ev = nullptr;
+    return true;
+}
+static void BtSignalStop() {
     if (!g_bts.thread) return;
     AcquireSRWLockExclusive(&g_bts.lock);
     g_bts.stop = true;
     ReleaseSRWLockExclusive(&g_bts.lock);
+    if (g_btQuit) SetEvent(g_btQuit);
     SetEvent(g_bts.ev);
-    WaitForSingleObject(g_bts.thread, 5000);
-    CloseHandle(g_bts.thread);
-    CloseHandle(g_bts.ev);
-    g_bts.thread = g_bts.ev = nullptr;
-    g_bts.stop = false;
+}
+static void BtJoin(DWORD deadline) {
+    if (JoinWorker(g_bts.thread, g_bts.ev, deadline)) {
+        g_bts.stop = false;
+        if (g_btQuit) {
+            CloseHandle(g_btQuit);
+            g_btQuit = nullptr;
+        }
+    }
 }
 
 // What the panel needs (a copy, under the lock).
@@ -10926,10 +11137,16 @@ static int NightRead() {
 // the UI thread made the panel stutter).
 constexpr UINT WM_APP_CCREAD = WM_APP + 18;
 static std::atomic<int> g_nightA{-1}, g_powerA{1};
+static std::atomic<DWORD> g_ccClickAt{0};  // (a click just set a value: reads older than it are dropped)
 static std::atomic<bool> g_ccBusy{false};
 static DWORD g_ccAt = 0;
 static DWORD WINAPI CcWorker(void*) {
+    DWORD began = GetTickCount();
     int night = NightRead(), power = PowerMode();
+    if ((LONG)(g_ccClickAt.load() - began) >= 0 && g_ccClickAt.load()) {  // (a click came during the read: its value stays)
+        g_ccBusy = false;
+        return 0;
+    }
     bool changed = night != g_nightA || power != g_powerA;
     g_nightA = night;
     g_powerA = power;
@@ -10984,8 +11201,11 @@ static bool NightSet(bool on) {
                             (DWORD)d.size()) == ERROR_SUCCESS)
             done = true;
     }
-    if (done) g_nightA = on ? 1 : 0;
-    Log(L"night light: %s (%d records, %s)", on ? L"on" : L"off", (int)recs.size(), done ? L"written" : L"not changed");
+    if (done) {
+        g_nightA = on ? 1 : 0;
+        g_ccClickAt = GetTickCount();
+    }
+    Wh_Log(L"night light: %s (%d records, %s)", on ? L"on" : L"off", (int)recs.size(), done ? L"written" : L"not changed");
     return done;
 }
 
@@ -11098,11 +11318,21 @@ static DWORD WINAPI BrightThread(void*) {
                 views->push_back(v);
                 mons.push_back(std::move(o));
             }
-            if (!g_msgWnd || !PostMessageW(g_msgWnd, WM_APP_BRIGHT, 0, (LPARAM)views)) delete views;
+            if (!PostPtr(g_msgWnd, WM_APP_BRIGHT, views)) delete views;
         }
+        // (many monitors save each value to their memory: a drag writes ~4 times a second, the last
+        // value always arrives)
+        static std::vector<int> written;
+        if (written.size() < mons.size()) written.resize(mons.size(), -1);
+        bool wrote = false;
         for (size_t k = 0; k < want.size() && k < mons.size(); k++)
-            if (want[k] >= 0 && mons[k].ok && setB)
+            if (want[k] >= 0 && want[k] != written[k] && mons[k].ok && setB) {
                 for (auto& ph : mons[k].phys) setB(ph.h, mons[k].mn + (mons[k].mx - mons[k].mn) * (DWORD)want[k] / 100);
+                written[k] = want[k];
+                wrote = true;
+            }
+        if (scan) std::fill(written.begin(), written.end(), -1);
+        if (wrote) Sleep(250);
     }
     release();
     return 0;
@@ -11128,17 +11358,15 @@ static void BrightSet(size_t i, int pct) {
     ReleaseSRWLockExclusive(&g_brs.lock);
     BrightKick();
 }
-static void BrightStop() {
+static void BrightSignalStop() {
     if (!g_brs.thread) return;
     AcquireSRWLockExclusive(&g_brs.lock);
     g_brs.stop = true;
     ReleaseSRWLockExclusive(&g_brs.lock);
     SetEvent(g_brs.ev);
-    WaitForSingleObject(g_brs.thread, 3000);
-    CloseHandle(g_brs.thread);
-    CloseHandle(g_brs.ev);
-    g_brs.thread = g_brs.ev = nullptr;
-    g_brs.stop = false;
+}
+static void BrightJoin(DWORD deadline) {
+    if (JoinWorker(g_brs.thread, g_brs.ev, deadline)) g_brs.stop = false;
 }
 
 // ---- Wireless batteries ----
@@ -11158,24 +11386,37 @@ struct DevState {
 static DevState g_devs;
 constexpr UINT WM_APP_DEVREAD = WM_APP + 21;
 
+// BatteryHub.exe, version 1.1 or newer (the first with "--json"; older versions would just start hidden).
+static bool BatteryHubOk(const std::wstring& path) {
+    if (_wcsicmp(PathFindFileNameW(path.c_str()), L"BatteryHub.exe") != 0) return false;
+    DWORD h = 0, n = GetFileVersionInfoSizeW(path.c_str(), &h);
+    if (!n) return false;
+    std::vector<BYTE> data(n);
+    VS_FIXEDFILEINFO* fi = nullptr;
+    UINT len = 0;
+    if (!GetFileVersionInfoW(path.c_str(), 0, n, data.data()) || !VerQueryValueW(data.data(), L"\\", (void**)&fi, &len) || !fi) return false;
+    WORD major = HIWORD(fi->dwFileVersionMS), minor = LOWORD(fi->dwFileVersionMS);
+    return major > 1 || (major == 1 && minor >= 1);
+}
 static std::wstring BatteryHubExe() {
     wchar_t buf[MAX_PATH];
     std::vector<std::wstring> cands;
-    if (ExpandEnvironmentStringsW(L"%LOCALAPPDATA%\\Programs\\BatteryHub\\BatteryHub.exe", buf, MAX_PATH)) cands.push_back(buf);
-    if (ExpandEnvironmentStringsW(L"%ProgramFiles%\\BatteryHub\\BatteryHub.exe", buf, MAX_PATH)) cands.push_back(buf);
-    if (ExpandEnvironmentStringsW(L"%LOCALAPPDATA%\\Programs\\Wireless Battery\\WirelessBattery.exe", buf, MAX_PATH)) cands.push_back(buf);
     // (its "start with Windows" entry points at wherever it is, the portable one too)
     DWORD size = sizeof(buf);
     if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", L"WirelessBattery", RRF_RT_REG_SZ, nullptr, buf, &size) ==
         ERROR_SUCCESS) {
         std::wstring v = buf;
         if (!v.empty() && v[0] == L'"') v = v.substr(1, v.find(L'"', 1) - 1);
-        cands.insert(cands.begin(), v);
+        cands.push_back(v);
     }
+    if (ExpandEnvironmentStringsW(L"%LOCALAPPDATA%\\Programs\\BatteryHub\\BatteryHub.exe", buf, MAX_PATH)) cands.push_back(buf);
+    if (ExpandEnvironmentStringsW(IsWow64() ? L"%ProgramW6432%\\BatteryHub\\BatteryHub.exe" : L"%ProgramFiles%\\BatteryHub\\BatteryHub.exe", buf, MAX_PATH))
+        cands.push_back(buf);
     for (auto& c : cands)
-        if (GetFileAttributesW(c.c_str()) != INVALID_FILE_ATTRIBUTES) return c;
+        if (GetFileAttributesW(c.c_str()) != INVALID_FILE_ATTRIBUTES && BatteryHubOk(c)) return c;
     return L"";
 }
+
 
 // A small reader for its one-line JSON: an array of flat objects (strings, numbers, booleans).
 static std::vector<DevBattery> ParseHubJson(const std::string& j) {
@@ -11290,12 +11531,20 @@ static std::vector<DevBattery> RunBatteryHub(const std::wstring& exe) {
     CloseHandle(wr);
     if (!ok) {
         CloseHandle(rd);
-        Log(L"batteries: BatteryHub didn't start (%u)", GetLastError());
+        Wh_Log(L"batteries: BatteryHub didn't start (%u)", GetLastError());
         return out;
     }
     std::string text;
     DWORD start = GetTickCount();
     for (;;) {
+        // (checked every turn: a program that never stops writing still ends here)
+        AcquireSRWLockShared(&g_devs.lock);
+        bool stopping = g_devs.stop;
+        ReleaseSRWLockShared(&g_devs.lock);
+        if (stopping || GetTickCount() - start > 20000 || text.size() > 256 * 1024) {
+            TerminateProcess(pi.hProcess, 1);
+            break;
+        }
         DWORD avail = 0;
         if (PeekNamedPipe(rd, nullptr, 0, nullptr, &avail, nullptr) && avail) {
             char buf[4096];
@@ -11306,12 +11555,9 @@ static std::vector<DevBattery> RunBatteryHub(const std::wstring& exe) {
         if (WaitForSingleObject(pi.hProcess, 100) == WAIT_OBJECT_0) {
             DWORD got = 0;
             char buf[4096];
-            while (PeekNamedPipe(rd, nullptr, 0, nullptr, &avail, nullptr) && avail && ReadFile(rd, buf, std::min<DWORD>(avail, sizeof(buf)), &got, nullptr) && got)
+            while (text.size() < 256 * 1024 && PeekNamedPipe(rd, nullptr, 0, nullptr, &avail, nullptr) && avail &&
+                   ReadFile(rd, buf, std::min<DWORD>(avail, sizeof(buf)), &got, nullptr) && got)
                 text.append(buf, got);
-            break;
-        }
-        if (GetTickCount() - start > 20000 || text.size() > 256 * 1024) {
-            TerminateProcess(pi.hProcess, 1);
             break;
         }
     }
@@ -11320,7 +11566,7 @@ static std::vector<DevBattery> RunBatteryHub(const std::wstring& exe) {
     CloseHandle(rd);
     size_t a = text.find('[');
     if (a != std::string::npos) out = ParseHubJson(text.substr(a));
-    Log(L"batteries: BatteryHub gave %d devices", (int)out.size());
+    Wh_Log(L"batteries: BatteryHub gave %d devices", (int)out.size());
     return out;
 }
 
@@ -11379,12 +11625,14 @@ static DWORD WINAPI DevWorker(void*) {
             exe = BatteryHubExe();
             tried = true;
         }
-        if (!exe.empty() && (!hubAt || GetTickCount() - hubAt > 5 * 60 * 1000)) runHub = true;
+        if (g_devHubOn && !exe.empty() && (!hubAt || GetTickCount() - hubAt > 5 * 60 * 1000)) runHub = true;
+        if (!g_devHubOn) hub.clear();
         if (runHub) hub = RunBatteryHub(exe);
         AcquireSRWLockExclusive(&g_devs.lock);
         g_devs.xbox = xbox;
         g_devs.hubTried = tried;
         g_devs.hubExe = exe;
+        if (!g_devHubOn) g_devs.hub.clear();
         if (runHub) {
             g_devs.hub = hub;
             g_devs.hubAt = GetTickCount();
@@ -11414,17 +11662,15 @@ static void DevRefreshHub() {
     if (g_devs.ev) SetEvent(g_devs.ev);
 }
 
-static void DevStop() {
+static void DevSignalStop() {
     if (!g_devs.thread) return;
     AcquireSRWLockExclusive(&g_devs.lock);
     g_devs.stop = true;
     ReleaseSRWLockExclusive(&g_devs.lock);
     SetEvent(g_devs.ev);
-    WaitForSingleObject(g_devs.thread, 25000);
-    CloseHandle(g_devs.thread);
-    CloseHandle(g_devs.ev);
-    g_devs.thread = g_devs.ev = nullptr;
-    g_devs.stop = false;
+}
+static void DevJoin(DWORD deadline) {
+    if (JoinWorker(g_devs.thread, g_devs.ev, deadline)) g_devs.stop = false;
 }
 
 // Everything known now: BatteryHub's first (it knows receivers), then Bluetooth, then Xbox, one per name.
@@ -11518,7 +11764,16 @@ static float PanelDevices(float y) {
     y = FSwitch(y, L2(L"Avisar com bateria fraca (20% e 10%)", L"Warn on low battery (20% and 10%)"), CfgInt(L"devAlerts") != 0,
                 [] { CfgSetQuiet(L"devAlerts", CfgInt(L"devAlerts") ? L"0" : L"1"); }) + 6;
     if (BatteryHubFound()) {
-        FLink(y, L2(L"Ler o BatteryHub agora", L"Read BatteryHub now"), [] { DevRefreshHub(); });
+        y = FSwitch(y, L2(L"Usar o BatteryHub (receptores USB)", L"Use BatteryHub (USB receivers)"), CfgInt(L"devHub") != 0, [] {
+                CfgSetQuiet(L"devHub", CfgInt(L"devHub") ? L"0" : L"1");
+                g_devHubOn = CfgInt(L"devHub") != 0;
+                DevRefreshHub();
+            }) + 2;
+        FText(L2(L"Ligado, o Nimbus abre o BatteryHub escondido a cada 5 minutos só pra ler as baterias (ele fecha sozinho).",
+                 L"On, Nimbus runs BatteryHub hidden every 5 minutes just to read the batteries (it closes by itself)."),
+              g_fly.fSmall.Get(), kFlyPad, y, kFlyW - kFlyPad * 2, 36, FSub());
+        y += 40;
+        if (CfgInt(L"devHub")) FLink(y, L2(L"Ler o BatteryHub agora", L"Read BatteryHub now"), [] { DevRefreshHub(); });
     } else {
         FText(L2(L"Receptores USB (Logitech, Razer…) aparecem aqui com o BatteryHub instalado, um programa à parte e gratuito.",
                  L"USB receivers (Logitech, Razer…) show here with BatteryHub installed, a separate free program."),
@@ -11561,7 +11816,10 @@ static DWORD WINAPI MediaWorker(void*) {
         AcquireSRWLockShared(&g_media.lock);
         bool on = g_media.on;
         ReleaseSRWLockShared(&g_media.lock);
-        WaitForSingleObject(g_media.ev, on ? 1000 : INFINITE);
+        AcquireSRWLockShared(&g_media.lock);
+        bool any = !g_media.info.sessions.empty();
+        ReleaseSRWLockShared(&g_media.lock);
+        WaitForSingleObject(g_media.ev, !on ? INFINITE : any ? 1000 : 4000);
         AcquireSRWLockExclusive(&g_media.lock);
         if (g_media.stop) {
             ReleaseSRWLockExclusive(&g_media.lock);
@@ -11599,7 +11857,7 @@ static DWORD WINAPI MediaWorker(void*) {
                         int r = pb0.AutoRepeatMode() ? (int)pb0.AutoRepeatMode().Value() : 0;
                         cur.TryChangeAutoRepeatModeAsync((winrt::Windows::Media::MediaPlaybackAutoRepeatMode)((r + 1) % 3)).get();
                     } else if (cmd == 6)
-                        cur.TryChangePlaybackPositionAsync((int64_t)(arg * 10000000.0)).get();
+                        cur.TryChangePlaybackPositionAsync((int64_t)((cur.GetTimelineProperties().StartTime().count() / 1e7 + arg) * 10000000.0)).get();
                     Sleep(200);  // (the app takes a moment to say what changed)
                 }
                 auto pb = cur.GetPlaybackInfo();
@@ -11657,6 +11915,7 @@ static DWORD WINAPI MediaWorker(void*) {
         ReleaseSRWLockExclusive(&g_media.lock);
         if (g_msgWnd && (shows || mi.has)) PostMessageW(g_msgWnd, WM_APP_MEDIA, shows ? 1 : 0, 0);
     }
+    mgr = nullptr;  // (an out-of-process proxy: released while the apartment is still there)
     winrt::uninit_apartment();
     return 0;
 }
@@ -11704,17 +11963,15 @@ static void MediaPick(const std::wstring& aumid) {
     MediaKick();
 }
 
-static void MediaStop() {
+static void MediaSignalStop() {
     if (!g_media.thread) return;
     AcquireSRWLockExclusive(&g_media.lock);
     g_media.stop = true;
     ReleaseSRWLockExclusive(&g_media.lock);
     SetEvent(g_media.ev);
-    WaitForSingleObject(g_media.thread, 5000);
-    CloseHandle(g_media.thread);
-    CloseHandle(g_media.ev);
-    g_media.thread = g_media.ev = nullptr;
-    g_media.stop = false;
+}
+static void MediaJoin(DWORD deadline) {
+    if (JoinWorker(g_media.thread, g_media.ev, deadline)) g_media.stop = false;
 }
 
 // The cover, decoded on the UI thread (square, from the middle of a wide one).
@@ -12131,6 +12388,7 @@ static float SecPower(float y, bool head) {
         FHitAdd(t, [k] {
             SetPowerMode(k);
             g_powerA = k;
+            g_ccClickAt = GetTickCount();
         });
     }
     return y + 36 + 4;
@@ -12497,7 +12755,7 @@ static void FlyRender() {
         DWORD t0 = GetTickCount();
         ~SlowFrame() {
             DWORD dt = GetTickCount() - t0;
-            if (dt > 30) Log(L"panel %d: a frame took %lu ms", g_fly.kind, dt);
+            if (dt > 30) Wh_Log(L"panel %d: a frame took %lu ms", g_fly.kind, dt);
         }
     } slow;
     if (!f.rt) {
@@ -12645,21 +12903,6 @@ static void FlyRender() {
     f.tPresent = GetTickCount() - tp0;
 }
 
-LRESULT CALLBACK FlyMouseProc(int code, WPARAM wp, LPARAM lp) {
-    if (code == HC_ACTION && g_fly.open && (wp == WM_LBUTTONDOWN || wp == WM_RBUTTONDOWN || wp == WM_MBUTTONDOWN)) {
-        auto* m = (MSLLHOOKSTRUCT*)lp;
-        if (!PtInRect(&g_fly.rc, m->pt)) {
-            HWND under = WindowFromPoint(m->pt);
-            wchar_t cls[64] = {};
-            if (under) GetClassNameW(GetAncestor(under, GA_ROOT), cls, ARRAYSIZE(cls));
-            // (The dock and the Start handle their own clicks: their status items toggle the panel. A menu
-            // opened from the panel isn't outside it.)
-            if (wcscmp(cls, L"NimbusMenu_Content") && wcscmp(cls, L"NimbusMenu_Start") && wcscmp(cls, L"#32768"))
-                PostMessageW(g_fly.hwnd, WM_APP_FLY_OUTSIDE, 0, 0);
-        }
-    }
-    return CallNextHookEx(nullptr, code, wp, lp);
-}
 
 static void FlyFonts() {
     auto& f = g_fly;
@@ -12712,7 +12955,6 @@ static void OpenFlyout(Dock& d, int kind, bool fromStart) {
     SetWindowPos(f.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
     f.openedAt = GetTickCount();
     if (!fromStart && !f.noFocus) ForceForeground(f.hwnd);
-    if (!f.hook) f.hook = SetWindowsHookExW(WH_MOUSE_LL, FlyMouseProc, g_module, 0);
     SetTimer(f.hwnd, TIMER_FLY_ANIM, 15, nullptr);
     f.wasDown = true;  // (the click that opened it may still be down)
     SetTimer(f.hwnd, TIMER_FLY_WATCH, 40, nullptr);
@@ -12782,14 +13024,11 @@ static void FlyEnter(int kind) {
     FlyRender();
 }
 
+static void NotesSave(bool closing);
 void CloseFlyout() {
     auto& f = g_fly;
     if (!f.open) return;
     f.open = false;
-    if (f.hook) {
-        UnhookWindowsHookEx(f.hook);
-        f.hook = nullptr;
-    }
     KillTimer(f.hwnd, TIMER_FLY_ANIM);
     KillTimer(f.hwnd, TIMER_FLY_PAGE);
     f.page = 1;
@@ -12797,6 +13036,7 @@ void CloseFlyout() {
     KillTimer(f.hwnd, TIMER_FLY_WATCH);
     if (f.dragging || f.press >= 0) ReleaseCapture();
     f.press = -1;
+    if (g_notesUi.tab == 0 && g_notesUi.editing >= 0) NotesSave(true);  // (a note being written isn't lost)
     NoteEditHideAll();
     g_notesUi.editing = -1;
     g_notesUi.autoOpened = false;
@@ -13070,7 +13310,7 @@ static void StatClick(Dock& d, int id, bool right, bool fromStart) {
     if (g_set.statusWinPanels) {
         CloseFlyout();
         if (fromStart) CloseStart(true);
-        if (id == StClock) SendWinKey('N');
+        if (id == StClock) OpenUri(L"ms-actioncenter:");
         else if (id == StKeyboard) SendWinKey(VK_SPACE);
         else SendWinKey('A');
         return;
@@ -13169,13 +13409,23 @@ static void StatusInit() {
 }
 
 static void StatusUninit() {
+    // What Windows keeps goes back first (if a worker below is slow, nothing is left changed).
+    RestoreBanners();
+    BrightSignalStop();
+    BtSignalStop();
+    MediaSignalStop();
+    DevSignalStop();
     CloseFlyout();
     TrayUninit();
     ShelfUninit();
-    BrightStop();
-    BtStop();
-    MediaStop();
-    DevStop();
+    {
+        DWORD deadline = GetTickCount() + 3000;  // (Windhawk gives the whole unload 5 s)
+        BrightJoin(deadline);
+        BtJoin(deadline);
+        MediaJoin(deadline);
+        DevJoin(deadline);
+        while (g_ccBusy && (LONG)(deadline - GetTickCount()) > 0) Sleep(10);
+    }
     if (g_msgWnd) KillTimer(g_msgWnd, TIMER_PLAYER_VIS);
     g_vis.meter.Reset();
     g_dockArt.clear();
@@ -13459,6 +13709,7 @@ LRESULT CALLBACK ContentProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 static void DestroyDock(Dock* d) {
+    g_dockArt.erase(d);
     RemoveAppBar(*d);
     if (d->content) RevokeDragDrop(d->content);
     if (d->content) DestroyWindow(d->content);
@@ -13493,7 +13744,7 @@ void CreateDocks() {
         if (!GetMonitorInfoW(mon, &mi)) return TRUE;
         const wchar_t* group = MonitorGroup(mon, mi.rcMonitor);
         DockCfg cfg = LoadDockCfg(group, MonitorIdentity(mon).id);
-        Log(L"monitor (%d,%d,%d,%d) -> %s enabled=%d fixed=%d autoHide=%d", mi.rcMonitor.left, mi.rcMonitor.top,
+        Wh_Log(L"monitor (%d,%d,%d,%d) -> %s enabled=%d fixed=%d autoHide=%d", mi.rcMonitor.left, mi.rcMonitor.top,
             mi.rcMonitor.right, mi.rcMonitor.bottom, group, cfg.enabled, cfg.fixed, cfg.autoHide);
         if (!cfg.enabled) return TRUE;
         Dock* d = new Dock();
@@ -13533,7 +13784,7 @@ void CreateDocks() {
         d->content = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
                                      L"NimbusMenu_Content", L"Nimbus Menu", WS_POPUP, d->rcMon.left,
                                      d->rcMon.bottom - d->ch, d->cw, d->ch, d->bands[0], nullptr, g_module, nullptr);
-        Log(L"dock mon=(%d,%d,%d,%d) scale=%.2f cw=%d ch=%d content=%p style=%s", d->rcMon.left, d->rcMon.top,
+        Wh_Log(L"dock mon=(%d,%d,%d,%d) scale=%.2f cw=%d ch=%d content=%p style=%s", d->rcMon.left, d->rcMon.top,
             d->rcMon.right, d->rcMon.bottom, d->scale, d->cw, d->ch, d->content, g_set.style.c_str());
         SetWindowLongPtrW(d->content, GWLP_USERDATA, (LONG_PTR)d);
         RegisterShelfDrop(d->content, d);  // files dragged over the dock open the shelf
@@ -14597,7 +14848,8 @@ static void PageGeral(float& y, float x, float w) {
          y, x, w);
     Section(y, x, w, L"Windows");
     Card({RToggle(L2(L"Esconder a barra do Windows", L"Hide the Windows taskbar"),
-                  L2(L"Ela volta como estava quando o Nimbus é desligado.", L"It comes back as it was when Nimbus is turned off."),
+                  L2(L"Pra ela não reservar espaço, o Nimbus liga o \"Ocultar automaticamente a barra de tarefas\" do Windows. Tudo volta como era quando o Nimbus para (também ao sair da conta ou depois de um travamento).",
+                     L"So it doesn't reserve space, Nimbus turns on Windows' \"Automatically hide the taskbar\". Everything goes back when Nimbus stops (also on sign-out or after a crash)."),
                   L"hideWindowsTaskbar")},
          y, x, w);
 }
@@ -14702,9 +14954,13 @@ static void PageStatus(float& y, float x, float w) {
           RPlace(L"Player", L2(L"O que está tocando em qualquer app. Mais opções na aba Player.", L"What any app is playing. More in the Player tab."),
                  L"playerPlace"),
           RPlace(L2(L"Dispositivos (baterias)", L"Devices (batteries)"),
-                 L2(L"Fones, mouses e controles sem fio. Com o BatteryHub instalado, receptores USB também. Só aparece com algum aparelho.",
-                    L"Wireless headsets, mice and controllers. With BatteryHub installed, USB receivers too. Only shows with a device."),
+                 L2(L"Fones, mouses e controles sem fio (Bluetooth e Xbox). Só aparece com algum aparelho.",
+                    L"Wireless headsets, mice and controllers (Bluetooth and Xbox). Only shows with a device."),
                  L"devPlace"),
+          RToggle(L2(L"Dispositivos: usar o BatteryHub", L"Devices: use BatteryHub"),
+                  L2(L"Pra receptores USB (Logitech, Razer…). Desligado por padrão: ligado, o Nimbus abre o BatteryHub (instalado à parte) escondido a cada 5 minutos, só pra ler as baterias; ele fecha sozinho.",
+                     L"For USB receivers (Logitech, Razer…). Off by default: on, Nimbus runs BatteryHub (installed separately) hidden every 5 minutes, just to read the batteries; it closes by itself."),
+                  L"devHub"),
           RPlace(L2(L"Notas e lembretes", L"Notes and reminders"),
                  L2(L"Notas que ficam até você apagar, e lembretes que avisam no dia (mesmo atrasados).",
                     L"Notes that stay until you delete them, and reminders that tell you on the day (late too)."),
@@ -15688,8 +15944,9 @@ static LRESULT TrayRectOf(const TrayRectWire& q) {
             }
         }
         if (l < 0) continue;
-        auto w16 = [](float v) { return (ULONGLONG)(WORD)(SHORT)std::lround(v); };
-        return (LRESULT)(w16(d->rcMon.left + l) | (w16(top) << 16) | (w16(d->rcMon.left + r) << 32) | (w16(bottom) << 48));
+        auto s16 = [](float v) { return (SHORT)std::lround(v); };
+        if (q.which == 2) return (LRESULT)(DWORD)MAKELONG(s16(d->rcMon.left + r), s16(bottom));
+        return (LRESULT)(DWORD)MAKELONG(s16(d->rcMon.left + l), s16(top));
     }
     return 0;
 }
@@ -15832,6 +16089,7 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             StatusChanged();
             return 0;
         case WM_APP_BRIGHT: {
+            if (!TakePtr((void*)lp)) return 0;
             std::unique_ptr<std::vector<BrView>> v((std::vector<BrView>*)lp);
             g_brView = *v;
             g_brScanned = true;
@@ -15864,6 +16122,7 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (wp < PgCount) SwSetPage((int)wp);
             return 0;
         case WM_APP_ICON: {
+            if (!TakePtr((void*)lp)) return 0;
             std::unique_ptr<IconResult> r((IconResult*)lp);
             ComPtr<IWICBitmapSource> icon;
             if (r->hbm) {
@@ -15910,8 +16169,8 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (!g_start.open && GetTickCount() - g_startClosedBySearchAt < 700) {
                 // This press already closed the Start (Windows' search box took the focus).
                 g_startClosedBySearchAt = 0;
-                Log(L"Windows key: Start already closed by this press");
-                return 0;
+                Wh_Log(L"Windows key: Start already closed by this press");
+                return 1;  // (handled: 0 would make the explorer.exe part open Windows' Start)
             }
             g_lastWinAlone = GetTickCount();
             POINT pt;
@@ -15923,7 +16182,7 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (target) ToggleStart(*target);
             // (The explorer.exe part brings the open Start to the front itself.)
             if (g_start.open) StartWinKeyGuard();
-            return g_start.open ? (LRESULT)g_start.hwnd : 0;
+            return g_start.open ? (LRESULT)g_start.hwnd : 1;
         }
         case WM_APP_WINN: {
             // Win+N (from the explorer.exe part): the notifications panel on the monitor with the mouse.
@@ -15948,7 +16207,18 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 if (target) ToggleStart(*target);
             }
             return 0;
+        case WM_ENDSESSION:
+            if (wp) {
+                RestoreBanners();
+                RestoreTaskbarAutoHide();
+            }
+            return 0;
         case WM_APP_QUIT:
+            if (g_dockMenuDepth > 0) {  // (a dock's menu is open: the docks can't go from inside it)
+                EndMenu();
+                PostMessageW(hwnd, WM_APP_QUIT, 0, 0);
+                return 0;
+            }
             UnregisterHotKey(hwnd, 1);
             RemovePropW(hwnd, L"NimbusWinKey");
             RemovePropW(hwnd, L"NimbusWinN");
@@ -15957,11 +16227,13 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             g_moveEndHook = g_locationHook = nullptr;
             KillTimer(hwnd, TIMER_POLL);
             KillTimer(hwnd, TIMER_APPLY);
+            // The Windows taskbar and the banners first: whatever is slow after this, they're back.
+            RestoreTaskbars();
+            RestoreBanners();
             StopIconThread();
             FreeSettingsWin();
             DestroyDocks();
             StatusUninit();
-            RestoreTaskbars();
             DeregisterShellHookWindow(hwnd);
             DestroyWindow(hwnd);
             PostQuitMessage(0);
@@ -16044,8 +16316,8 @@ DWORD WINAPI UiThread(LPVOID) {
 
     LoadPins();
     RebuildApps();
-    Log(L"start: pins=%d apps=%d", (int)g_pins.size(), (int)g_apps.size());
-    for (auto& a : g_apps) Log(L"  app key=%s wins=%d pinned=%d", a.key.c_str(), (int)a.wins.size(), a.pinned);
+    Wh_Log(L"start: pins=%d apps=%d", (int)g_pins.size(), (int)g_apps.size());
+    for (auto& a : g_apps) Wh_Log(L"  app key=%s wins=%d pinned=%d", a.key.c_str(), (int)a.wins.size(), a.pinned);
     if (g_set.hideTaskbar) {
         HideTaskbars();
     } else {
@@ -16069,6 +16341,7 @@ DWORD WINAPI UiThread(LPVOID) {
     // Release every COM/D2D object here, on this thread, before CoUninitialize (not at ExitProcess).
     g_apps.clear();
     g_allApps.clear();
+    g_startIcons.clear();
     g_recent.clear();
     g_startPins.clear();
     g_settingsItems.clear();
@@ -16158,6 +16431,11 @@ long __cdecl ShowStartView_hook(void* self, int method, int flags) {
             if (barPid) AllowSetForegroundWindow(barPid);
             DWORD_PTR opened = 0;
             BOOL sent = SendMessageTimeoutW(bar, WM_APP_WINKEY, 1, 0, SMTO_ABORTIFHUNG, 600, &opened);
+            if (!sent || !opened) {
+                // (hung, busy or closing: Windows' own Start rather than nothing)
+                Wh_Log(L"Windows key: the bar didn't answer, Windows' Start");
+                return ShowStartView_orig(self, method, flags);
+            }
             // Windows' search box (SearchHost, invisible here) took the keyboard when the key went down.
             // An Esc makes it let go.
             HWND fg = GetForegroundWindow();
@@ -16243,12 +16521,22 @@ struct ExTrayIcon {
     TrayWire w{};  // the merged known state
     HICON own = nullptr;
 };
-std::vector<ExTrayIcon> g_exTray;
+std::vector<ExTrayIcon> g_exTray;  // (only touched by the tray window's thread)
 HWND g_exTrayWnd;
 UINT g_exReplayMsg;
 HANDLE g_exTrayStop;
 HANDLE g_exTrayThread;
 bool g_exSubclassed;
+
+// What goes to the bar waits here: Explorer's tray thread only queues (it never waits on the bar's
+// process); ExTrayThread sends. Each item has its own copy of the icon, destroyed once sent.
+struct ExTrayOut {
+    TrayWire w;
+    HICON icon;
+};
+std::vector<ExTrayOut> g_exOut;
+SRWLOCK g_exOutLock = SRWLOCK_INIT;
+HANDLE g_exOutEvent;
 
 static HWND BarWantingTray() {
     HWND bar = FindWindowW(L"NimbusMenu_Msg", nullptr);
@@ -16258,7 +16546,21 @@ static HWND BarWantingTray() {
 static void SendTrayWire(HWND bar, const TrayWire& w) {
     COPYDATASTRUCT cds = {kTrayCopy, sizeof(TrayWire), (void*)&w};
     DWORD_PTR r = 0;
-    SendMessageTimeoutW(bar, WM_COPYDATA, 0, (LPARAM)&cds, SMTO_ABORTIFHUNG, 150, &r);
+    SendMessageTimeoutW(bar, WM_COPYDATA, 0, (LPARAM)&cds, SMTO_ABORTIFHUNG | SMTO_BLOCK, 150, &r);
+}
+
+// Queue one for the bar (icon: a handle of Explorer's own, copied again for the queue).
+static void ExTrayQueue(TrayWire w, HICON icon) {
+    HICON copy = icon ? CopyIcon(icon) : nullptr;
+    w.hicon = (DWORD)(ULONG_PTR)copy;
+    AcquireSRWLockExclusive(&g_exOutLock);
+    if (g_exOut.size() > 2000) {  // (the bar isn't taking them: drop the oldest)
+        if (g_exOut.front().icon) DestroyIcon(g_exOut.front().icon);
+        g_exOut.erase(g_exOut.begin());
+    }
+    g_exOut.push_back({w, copy});
+    ReleaseSRWLockExclusive(&g_exOutLock);
+    if (g_exOutEvent) SetEvent(g_exOutEvent);
 }
 
 static int ExTrayFind(const TrayWire& w) {
@@ -16318,8 +16620,7 @@ static void ExTrayKeep(const TrayWire& w) {
 }
 
 static void ExTrayReplay() {
-    HWND bar = BarWantingTray();
-    if (!bar) return;
+    if (!BarWantingTray()) return;
     for (auto it = g_exTray.begin(); it != g_exTray.end();) {
         if (!IsWindow(WireHwnd(it->w.hwnd))) {
             if (it->own) DestroyIcon(it->own);
@@ -16328,11 +16629,11 @@ static void ExTrayReplay() {
             ++it;
         }
     }
+    // (queued, not sent here: nothing is sent while the list could change under the loop)
     for (auto& e : g_exTray) {
         TrayWire w = e.w;
         w.op = kTrayKnown;
-        w.hicon = (DWORD)(ULONG_PTR)e.own;
-        SendTrayWire(bar, w);
+        ExTrayQueue(w, e.own);
     }
     Wh_Log(L"tray: replayed %d icons", (int)g_exTray.size());
 }
@@ -16375,7 +16676,11 @@ static LRESULT CALLBACK ExTraySubclass(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp
         else w.flags &= ~NIF_GUID;
         if (res || w.op == NIM_ADD) {  // (what Explorer accepted; a repeated add is refused but complete)
             ExTrayKeep(w);
-            if (HWND bar = BarWantingTray()) SendTrayWire(bar, w);
+            if (BarWantingTray()) {
+                // (Explorer's own copy of the icon goes out: the app may destroy its handle any time)
+                int k = ExTrayFind(w);
+                ExTrayQueue(w, (w.flags & NIF_ICON) && k >= 0 ? g_exTray[k].own : nullptr);
+            }
         }
         return res;
     }
@@ -16386,24 +16691,22 @@ static LRESULT CALLBACK ExTraySubclass(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp
         q.hwnd = *(const DWORD*)(raw + 16);
         q.uid = *(const UINT*)(raw + 20);
         memcpy(&q.guid, raw + 24, sizeof(GUID));
-        if (HWND bar = BarWantingTray()) {
+        q.which = which;
+        if (HWND bar = BarWantingTray(); bar && (which == 1 || which == 2)) {
+            // (this one is asked by an app waiting for the answer: a short wait, never on a hung bar)
             COPYDATASTRUCT c = {kTrayRect, sizeof(q), &q};
             DWORD_PTR r = 0;
-            if (SendMessageTimeoutW(bar, WM_COPYDATA, 0, (LPARAM)&c, SMTO_ABORTIFHUNG, 150, &r) && r) {
-                ULONGLONG v = (ULONGLONG)r;
-                SHORT left = (SHORT)(v & 0xFFFF), top = (SHORT)((v >> 16) & 0xFFFF), right = (SHORT)((v >> 32) & 0xFFFF),
-                      bottom = (SHORT)((v >> 48) & 0xFFFF);
-                if (which == 1) return MAKELONG(left, top);
-                if (which == 2) return MAKELONG(right, bottom);
-            }
+            if (SendMessageTimeoutW(bar, WM_COPYDATA, 0, (LPARAM)&c, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, &r) && r) return (LRESULT)(DWORD)r;
         }
     }
     return DefSubclassProc(hWnd, msg, wp, lp);
 }
 
-// The taskbar window may not exist yet when Explorer starts: wait for it here.
+// The taskbar window may not exist yet when Explorer starts: wait for it here. Then this thread sends
+// the queued icons to the bar (the tray thread never waits on it).
 static DWORD WINAPI ExTrayThread(void*) {
-    for (int i = 0; i < 1200; i++) {
+    bool found = false;
+    for (int i = 0; i < 1200 && !found; i++) {
         if (HWND h = FindWindowW(L"Shell_TrayWnd", nullptr)) {
             DWORD pid = 0;
             GetWindowThreadProcessId(h, &pid);
@@ -16411,9 +16714,27 @@ static DWORD WINAPI ExTrayThread(void*) {
             g_exTrayWnd = h;
             g_exSubclassed = WindhawkUtils::SetWindowSubclassFromAnyThread(h, ExTraySubclass, 0);
             Wh_Log(L"tray: %s", g_exSubclassed ? L"listening" : L"subclass failed");
-            return 0;
+            found = true;
+            break;
         }
         if (WaitForSingleObject(g_exTrayStop, 250) == WAIT_OBJECT_0) return 0;
+    }
+    if (!g_exSubclassed) return 0;
+    HANDLE waits[2] = {g_exTrayStop, g_exOutEvent};
+    for (;;) {
+        if (WaitForMultipleObjects(2, waits, FALSE, INFINITE) == WAIT_OBJECT_0) break;
+        for (;;) {
+            AcquireSRWLockExclusive(&g_exOutLock);
+            std::vector<ExTrayOut> batch;
+            batch.swap(g_exOut);
+            ReleaseSRWLockExclusive(&g_exOutLock);
+            if (batch.empty()) break;
+            HWND bar = BarWantingTray();
+            for (auto& o : batch) {
+                if (bar && WaitForSingleObject(g_exTrayStop, 0) != WAIT_OBJECT_0) SendTrayWire(bar, o.w);
+                if (o.icon) DestroyIcon(o.icon);
+            }
+        }
     }
     return 0;
 }
@@ -16421,24 +16742,36 @@ static DWORD WINAPI ExTrayThread(void*) {
 static void ExTrayStart() {
     g_exReplayMsg = RegisterWindowMessageW(L"NimbusMenu_TrayReplay");
     g_exTrayStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_exOutEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_exTrayThread = CreateThread(nullptr, 0, ExTrayThread, nullptr, 0, nullptr);
 }
 
 static void ExTrayStop() {
+    // The subclass goes first (nothing more is queued), then the thread: it only waits on these events,
+    // on SetWindowSubclassFromAnyThread, or on a send of at most 150 ms, so it always ends.
+    if (g_exSubclassed && IsWindow(g_exTrayWnd)) WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_exTrayWnd, ExTraySubclass);
     if (g_exTrayStop) SetEvent(g_exTrayStop);
     if (g_exTrayThread) {
-        WaitForSingleObject(g_exTrayThread, 3000);
+        WaitForSingleObject(g_exTrayThread, INFINITE);
         CloseHandle(g_exTrayThread);
         g_exTrayThread = nullptr;
     }
+    // (the thread may have subclassed the window while stopping)
     if (g_exSubclassed && IsWindow(g_exTrayWnd)) WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_exTrayWnd, ExTraySubclass);
     g_exSubclassed = false;
     for (auto& e : g_exTray)
         if (e.own) DestroyIcon(e.own);
     g_exTray.clear();
+    for (auto& o : g_exOut)
+        if (o.icon) DestroyIcon(o.icon);
+    g_exOut.clear();
     if (g_exTrayStop) {
         CloseHandle(g_exTrayStop);
         g_exTrayStop = nullptr;
+    }
+    if (g_exOutEvent) {
+        CloseHandle(g_exOutEvent);
+        g_exOutEvent = nullptr;
     }
 }
 
@@ -16483,12 +16816,22 @@ static BOOL ExplorerInit() {
 
 // The mod is being turned off (or updated): once the bar's process is gone, make sure the Windows
 // taskbar is back, also when that process crashed or was ended before it could restore it.
+static void RestoreBanners();
 static void ExplorerUninit() {
     ExTrayStop();
-    for (int i = 0; i < 100 && FindWindowW(L"NimbusMenu_Msg", nullptr); i++) Sleep(50);
-    if (FindWindowW(L"NimbusMenu_Msg", nullptr)) return;  // still running: it restores the taskbar itself
+    // The tool process holds its mutex until it exits: wait for that (it restores everything itself),
+    // at most 10 s.
+    bool gone = true;
+    if (HANDLE m = OpenMutexW(SYNCHRONIZE, FALSE, L"windhawk-tool-mod_" WH_MOD_ID)) {
+        DWORD r = WaitForSingleObject(m, 10000);
+        gone = r == WAIT_OBJECT_0 || r == WAIT_ABANDONED;
+        if (gone) ReleaseMutex(m);
+        CloseHandle(m);
+    }
+    if (!gone || FindWindowW(L"NimbusMenu_Msg", nullptr)) return;  // still running: it restores things itself
     RestoreTaskbarAutoHide();
     ShowTaskbarWindows();
+    RestoreBanners();  // (what a crashed or ended bar left off; nothing when it restored them itself)
 }
 
 // ---------------------------------------------------------------------------
@@ -16706,7 +17049,6 @@ void Wh_ModUninit() {
         ExplorerUninit();
         return;
     }
-    for (int i = 0; i < 100 && g_ccBusy; i++) Sleep(20);  // (the control center's reads finish first)
 
     if (g_isToolModProcessLauncher) {
         return;
