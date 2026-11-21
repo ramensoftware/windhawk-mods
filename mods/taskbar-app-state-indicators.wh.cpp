@@ -86,8 +86,10 @@ taskbar's view models and judged with `IsIconic`, `IsZoomed`, DWM cloaking
 and the virtual desktop manager, refreshed on window events. Progress,
 attention and badges are read from the button's own XAML. The marks are
 composition shapes on one Direct2D path around the icon, moved by animating
-their trims along it on the render thread; the taskbar's layout is never
-touched. On builds where the needed symbols can't be resolved, the mod
+their trims along it on the render thread. The only layout change is the
+icon background's right margin, set to 0 while the multi-window dot takes
+the place of the native multi-window mark (restored when it doesn't). On
+builds where the needed symbols can't be resolved, the mod
 stays inactive and the log says so.
 */
 // ==/WindhawkModReadme==
@@ -303,10 +305,10 @@ struct Settings {
     double FrameRadius[4] = {4.0, 4.0, 4.0, 4.0};
     double FrameThickness = 2.0;
 
-    // Corner marks (open / maximized windows).
-    bool IndEnabled = true;
-    bool IndConnect = false; // bottom corners joined along the bottom edge, top ones along the top
-    bool IndMaximized = true;
+    // Corner marks (open / maximized windows; always on, as are the
+    // underline for minimized apps, counting the app in front as open, and
+    // hiding the native running indicator and progress bar).
+    bool IndConnect = true; // bottom corners joined along the bottom edge, top ones along the top
     bool IndMaximizedBottom = true;  // maximized windows keep the bottom corners too
     // The corners an open or maximized app doesn't get, drawn dimmed.
     bool IndDimEnabled = false;
@@ -314,34 +316,25 @@ struct Settings {
     double IndDimOpacityLight = 0.2, IndDimOpacityDark = 0.2;
     double IndLeg = 5.0;
     bool IndDiagonal = false;
-    bool IndRoundedEnds = false;
+    bool IndRoundedEnds = true;
 
     // Window rules.
     bool IndGroupAll = false;
-    bool IndIncludeActive = true;
     bool IndCloakedIsHidden = true;
 
-    // Hides the taskbar's own running indicator (Rectangle#RunningIndicator).
-    bool HideNativeIndicator = false;
-    // Hides the taskbar's own progress bar (ProgressBar#ProgressIndicator),
-    // determinate and indeterminate.
-    bool HideNativeProgress = false;
-    // Animates the indicators while the app shows indeterminate progress.
-    bool ProgressAnimation = true;
-    // Fills the indicators with determinate progress, in these colors.
-    bool ProgressFill = true;
+    // Progress: determinate progress fills the indicators in these colors,
+    // indeterminate progress runs a lap along the frame.
     std::vector<winrt::Windows::UI::Color> FillLight, FillDark;
     std::vector<winrt::Windows::UI::Color> FillPausedLight, FillPausedDark;
     std::vector<winrt::Windows::UI::Color> FillErrorLight, FillErrorDark;
 
     // Apps with a badge: native badges hidden, a dot centered on the
     // frame's right edge instead.
-    bool BadgeEnabled = false;
-    double BadgeDiameter = 4.0;
+    bool BadgeEnabled = true;
+    double BadgeDiameter = 5.0;
     std::vector<winrt::Windows::UI::Color> BadgeLight, BadgeDark;
 
     // Minimized apps: a centered piece of the frame's bottom edge.
-    bool MinEnabled = false;
     double MinLength = 12.0; // 0 = the whole straight part of the bottom edge
     bool MinRounded = true;
     // Running off screen (cloaked, not minimized): a dimmed underline.
@@ -351,15 +344,16 @@ struct Settings {
     bool AttentionEnabled = true;
     std::vector<winrt::Windows::UI::Color> AttentionLight, AttentionDark;
 
-    // Apps with several windows: a dot centered on the frame's left edge.
-    // Pinned apps that aren't running: a dot centered on the frame's bottom
-    // edge (and no cup for anyone, so its place stays free).
+    // Pinned apps, running or not: a dot centered on the frame's top edge.
+    // With the corners connected, a pinned app's top corners stay split so
+    // the dot keeps its place.
     bool PinnedEnabled = false;
     double PinnedDiameter = 5.0;
     std::vector<winrt::Windows::UI::Color> PinnedLight, PinnedDark;
 
-    bool MultiEnabled = false;
-    double MultiDiameter = 4.0;
+    // Apps with several windows: a dot centered on the frame's left edge.
+    bool MultiEnabled = true;
+    double MultiDiameter = 5.0;
     std::vector<winrt::Windows::UI::Color> MultiLight, MultiDark;
 
     // One log line per button whenever its summary changes.
@@ -369,7 +363,6 @@ struct Settings {
     bool Animations = true;
     int AnimationDurationMs = 160;
 
-    bool AnyEnabled() const { return IndEnabled || MinEnabled || MultiEnabled || BadgeEnabled; }
 } g_settings;
 
 std::mutex g_settingsMutex;
@@ -799,14 +792,7 @@ void LoadSettings() {
     ParseDoublePair(inactiveOpStr.get(), g_settings.InactiveOpacityLight, g_settings.InactiveOpacityDark, 1.0, 1.0);
     WindhawkUtils::StringSetting groupRuleStr(Wh_GetStringSetting(L"Rules.GroupRule"));
     g_settings.IndGroupAll = groupRuleStr.get() && wcscmp(groupRuleStr.get(), L"all") == 0;
-    g_settings.IndIncludeActive = true;  // always: the app in front counts as open
     g_settings.IndCloakedIsHidden = Wh_GetIntSetting(L"Rules.CloakedIsHidden") != 0;
-    // Always on: the mod's indicators take the place of the native running
-    // indicator and progress bar, and show progress themselves.
-    g_settings.HideNativeIndicator = true;
-    g_settings.HideNativeProgress = true;
-    g_settings.ProgressAnimation = true;
-    g_settings.ProgressFill = true;
     WindhawkUtils::StringSetting fillColStr(Wh_GetStringSetting(L"Progress.FillColor"));
     ParseGradientColorPair(fillColStr.get(), g_settings.FillLight, g_settings.FillDark);
     WindhawkUtils::StringSetting fillPausedStr(Wh_GetStringSetting(L"Progress.PausedColor"));
@@ -826,10 +812,6 @@ void LoadSettings() {
     WindhawkUtils::StringSetting frameThickStr(Wh_GetStringSetting(L"Frame.Thickness"));
     g_settings.FrameThickness = std::max(0.5, ParseDouble(frameThickStr.get(), 2.0));
 
-    // Always on: corner marks for open windows, all four for maximized ones,
-    // and the underline for minimized apps.
-    g_settings.IndEnabled = true;
-    g_settings.IndMaximized = true;
     g_settings.IndMaximizedBottom = Wh_GetIntSetting(L"Corners.MaximizedBottom") != 0;
     g_settings.IndDimEnabled = Wh_GetIntSetting(L"Corners.DimEnabled") != 0;
     WindhawkUtils::StringSetting dimColStr(Wh_GetStringSetting(L"Corners.DimColor"));
@@ -843,7 +825,6 @@ void LoadSettings() {
     g_settings.IndDiagonal = indStyleStr.get() && wcscmp(indStyleStr.get(), L"diagonal") == 0;
     g_settings.IndRoundedEnds = Wh_GetIntSetting(L"Corners.RoundedEnds") != 0;
 
-    g_settings.MinEnabled = true;
     WindhawkUtils::StringSetting minLenStr(Wh_GetStringSetting(L"Minimized.Length"));
     g_settings.MinLength = ParseDouble(minLenStr.get(), 12.0);
     g_settings.MinRounded = Wh_GetIntSetting(L"Minimized.Rounded") != 0;
@@ -1369,34 +1350,16 @@ bool IsForegroundWindowOf(HWND hwnd, const ForegroundInfo& fg) {
     return fg.window && (hwnd == fg.window || hwnd == fg.root || hwnd == fg.rootOwner);
 }
 
-// Counts the windows that satisfy `qualifies` and applies the rules for
-// buttons with several windows and, unless `includeActive`, for the
-// foreground window, which then can't be the sole reason for a mark.
+// Counts the windows that satisfy `qualifies` and applies the rule for
+// buttons with several windows (any of them, or all with "all").
 bool MatchesWindowRules(const std::vector<HWND>& windows, const Settings& localSettings,
-                        bool (*qualifies)(HWND, const Settings&), bool includeActive) {
-    if (windows.empty()) return false;
-
+                        bool (*qualifies)(HWND, const Settings&)) {
     size_t count = 0;
     for (HWND hwnd : windows) {
         if (qualifies(hwnd, localSettings)) count++;
     }
-
-    bool foregroundCounts = false;
-    if (!includeActive) {
-        ForegroundInfo fg = GetForegroundInfo();
-        for (HWND hwnd : windows) {
-            if (IsForegroundWindowOf(hwnd, fg) && qualifies(hwnd, localSettings)) {
-                foregroundCounts = true;
-                break;
-            }
-        }
-    }
-    size_t besidesForeground = count - (foregroundCounts ? 1 : 0);
-
-    if (localSettings.IndGroupAll) {
-        return count == windows.size() && (includeActive || besidesForeground > 0);
-    }
-    return besidesForeground > 0;
+    if (count == 0) return false;
+    return !localSettings.IndGroupAll || count == windows.size();
 }
 
 // ---------------------------------------------------------------------------
@@ -1658,29 +1621,18 @@ int EvaluateIndicatorState(const FrameworkElement& button, const Settings& local
     if (resolved.state == ButtonWindowsState::kUnrealized) return -1;
     if (!resolvedOk) return 0;
     if (resolved.windows.empty()) return 0;
-    if (!localSettings.IndEnabled && !localSettings.MinEnabled) return 0;
 
-    if (localSettings.IndEnabled) {
-        bool includeActive = localSettings.IndIncludeActive;
-        if (localSettings.IndMaximized &&
-            MatchesWindowRules(resolved.windows, localSettings, IsWindowShownMaximized, includeActive)) {
-            return 2;
-        }
-        if (MatchesWindowRules(resolved.windows, localSettings, IsWindowShown, includeActive)) return 1;
+    if (MatchesWindowRules(resolved.windows, localSettings, IsWindowShownMaximized)) return 2;
+    if (MatchesWindowRules(resolved.windows, localSettings, IsWindowShown)) return 1;
+    // Not counted as open: the underline, if a window is minimized (or, as
+    // an option, running off screen).
+    if (std::any_of(resolved.windows.begin(), resolved.windows.end(),
+                    [&](HWND hwnd) { return IsWindowMinimizedHere(hwnd, localSettings); })) {
+        return 3;
     }
-    // "Open" for the underline always counts the foreground window as shown:
-    // that option only keeps the corner marks off the active button, it
-    // doesn't make its window hidden. Otherwise an app with one window in
-    // the foreground and another minimized would get the underline.
-    if (localSettings.MinEnabled && !MatchesWindowRules(resolved.windows, localSettings, IsWindowShown, true)) {
-        if (std::any_of(resolved.windows.begin(), resolved.windows.end(),
-                        [&](HWND hwnd) { return IsWindowMinimizedHere(hwnd, localSettings); })) {
-            return 3;
-        }
-        if (localSettings.MinHiddenEnabled && localSettings.IndCloakedIsHidden &&
-            std::any_of(resolved.windows.begin(), resolved.windows.end(), IsWindowRunningOffScreen)) {
-            return 4;
-        }
+    if (localSettings.MinHiddenEnabled && localSettings.IndCloakedIsHidden &&
+        std::any_of(resolved.windows.begin(), resolved.windows.end(), IsWindowRunningOffScreen)) {
+        return 4;
     }
     return 0;
 }
@@ -2015,10 +1967,8 @@ void UpdateHiddenNative(FrameworkElement const& button, FrameworkElement const& 
 
 void UpdateNativeIndicators(FrameworkElement const& button, std::shared_ptr<ButtonEntry> const& entry,
                             FrameworkElement const& iconPanel, const Settings& localSettings) {
-    UpdateHiddenNative(button, iconPanel, entry->nativeRunning, localSettings.HideNativeIndicator,
-                       L"RunningIndicator", L"");
-    UpdateHiddenNative(button, iconPanel, entry->nativeProgress, localSettings.HideNativeProgress,
-                       L"ProgressIndicator", L"ProgressBar");
+    UpdateHiddenNative(button, iconPanel, entry->nativeRunning, true, L"RunningIndicator", L"");
+    UpdateHiddenNative(button, iconPanel, entry->nativeProgress, true, L"ProgressIndicator", L"ProgressBar");
     // The taskbar's own mark for a button with several windows
     // (Border#MultiWindowElement) gives way to the multi-window dot.
     UpdateHiddenNative(button, iconPanel, entry->nativeMulti, localSettings.MultiEnabled,
@@ -2316,8 +2266,8 @@ bool UpdateNativeBadges(std::shared_ptr<ButtonEntry> const& entry, FrameworkElem
 }
 
 // ---------------------------------------------------------------------------
-// Indeterminate progress. The taskbar's own progress bar (found like the one
-// hidden by HideNativeProgress) says it: shown (by its XAML state, which the
+// Indeterminate progress. The taskbar's own progress bar (the hidden
+// ProgressBar#ProgressIndicator) says it: shown (by its XAML state, which the
 // hiding doesn't touch), IsIndeterminate, and neither paused nor in error.
 // Property-changed callbacks on those properties refresh the button when it
 // starts or stops.
@@ -2385,10 +2335,6 @@ bool SystemAnimationsEnabled();
 // Keeps the watch on the button's progress bar and returns what it shows.
 ProgressInfo UpdateProgressWatch(FrameworkElement const& button, std::shared_ptr<ButtonEntry> const& entry,
                                  FrameworkElement const& iconPanel, const Settings& localSettings) {
-    if (!localSettings.ProgressAnimation && !localSettings.ProgressFill) {
-        ReleaseProgressWatch(entry);
-        return {};
-    }
     auto found = FindNativeProgress(button, iconPanel);
     if (!found) {
         ReleaseProgressWatch(entry);
@@ -3830,7 +3776,7 @@ void LogButtonSummary(FrameworkElement const& button, std::shared_ptr<ButtonEntr
 
 void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry> const& entry,
                      FrameworkElement const& iconPanel, const Settings& localSettings) {
-    if (!localSettings.AnyEnabled() || !IsViewModelBridgeAvailable()) {
+    if (!IsViewModelBridgeAvailable()) {
         ReleaseNativeBadges(entry);
         RetireHost(entry);
         if (entry->iconSizeAttached) {
@@ -3881,7 +3827,7 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
 
     // Progress, as the native progress bar shows it.
     ProgressInfo progress = UpdateProgressWatch(button, entry, iconPanel, localSettings);
-    bool indeterminate = localSettings.ProgressAnimation && progress.indeterminate;
+    bool indeterminate = progress.indeterminate;
 
     // Follow the icon's size (taskbar size changes, small icons).
     if (!entry->iconSizeAttached) {
@@ -4022,7 +3968,7 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
             }
         }
 
-        bool fillOn = localSettings.ProgressFill && progress.determinate && state >= 1 && state <= 4;
+        bool fillOn = progress.determinate && state >= 1 && state <= 4;
         if (!r.fillBound || r.fillRtl != rtl) {
             BindFillTwins(r, rtl);
             if (r.fillColorSet) BindFillColors(r, r.fillColor);
@@ -4227,10 +4173,6 @@ void HideNativeElementsNow(FrameworkElement const& button) {
     Settings localSettings;
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
-        if (!g_settings.HideNativeIndicator && !g_settings.HideNativeProgress && !g_settings.BadgeEnabled &&
-            !g_settings.MultiEnabled) {
-            return;
-        }
         localSettings = g_settings;
     }
     auto entry = FindOrCreateEntry(button);
@@ -4974,11 +4916,6 @@ void HookWinEvents() {
 
     Settings localSettings;
     { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
-    if (!localSettings.AnyEnabled()) {
-        g_zoomStates.clear();
-        return;
-    }
-
     struct Range { DWORD min, max; };
     std::vector<Range> ranges = {
         {EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND},
@@ -4988,12 +4925,8 @@ void HookWinEvents() {
     // Foreground changes pick the active color (and, with the foreground
     // window not counted as shown, decide "open" too).
     ranges.push_back({EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND});
-    if (localSettings.IndEnabled && localSettings.IndMaximized) {
-        SeedZoomStates();
-        ranges.push_back({EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE});
-    } else {
-        g_zoomStates.clear();
-    }
+    SeedZoomStates();
+    ranges.push_back({EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE});
 
     for (const Range& range : ranges) {
         HWINEVENTHOOK hook = SetWinEventHook(range.min, range.max, nullptr, IndicatorWinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
@@ -5247,8 +5180,7 @@ void Wh_ModBeforeUninit() {
     cleanup.entries = &localEntries;
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
-        cleanup.restore = {g_settings.HideNativeIndicator, g_settings.HideNativeProgress,
-                           g_settings.BadgeEnabled, g_settings.MultiEnabled};
+        cleanup.restore = {true, true, g_settings.BadgeEnabled, g_settings.MultiEnabled};
     }
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!hTaskbarWnd || !RunFromWindowThread(hTaskbarWnd, UnloadCleanupOnTaskbarThread, &cleanup)) {
@@ -5300,8 +5232,7 @@ void Wh_ModSettingsChanged() {
     NativeRestore wasHidden;
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
-        wasHidden = {g_settings.HideNativeIndicator, g_settings.HideNativeProgress, g_settings.BadgeEnabled,
-                     g_settings.MultiEnabled};
+        wasHidden = {false, false, g_settings.BadgeEnabled, g_settings.MultiEnabled};
     }
     LoadSettings();
     ReconfigureWinEvents();
@@ -5312,9 +5243,8 @@ void Wh_ModSettingsChanged() {
         NativeRestore turnedOff;
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
-            turnedOff = {wasHidden.running && !g_settings.HideNativeIndicator,
-                         wasHidden.progress && !g_settings.HideNativeProgress,
-                         wasHidden.badges && !g_settings.BadgeEnabled,
+            // The running indicator and progress bar stay hidden always.
+            turnedOff = {false, false, wasHidden.badges && !g_settings.BadgeEnabled,
                          wasHidden.multi && !g_settings.MultiEnabled};
         }
         RestoreNativeElements(turnedOff);
