@@ -6,9 +6,8 @@
 // @author          Math Shamenson
 // @github          https://github.com/insane66613
 // @license         MIT
-// @architecture    x86
-// @architecture    x86-64
 // @include         windhawk.exe
+// @include         windhawk-mod.exe
 // @include         windhawk-mod-uiaccess.exe
 // @compilerOptions -lgdi32 -luxtheme -lole32 -loleaut32 -luuid -lshell32
 // ==/WindhawkMod==
@@ -108,16 +107,16 @@ applications. Neither host can inspect the secure UAC desktop.
     - large: Large
     - extra_large: Extra Large
 
-- zoomLevel: 250
+- zoomLevel: "250"
   $name: Magnifier Zoom Level
   $options:
-    - 150: 150%
-    - 200: 200%
-    - 250: 250%
-    - 300: 300%
-    - 350: 350%
-    - 400: 400%
-    - 500: 500%
+    - "150": 150%
+    - "200": 200%
+    - "250": 250%
+    - "300": 300%
+    - "350": 350%
+    - "400": 400%
+    - "500": 500%
 
 - textOpacity: 100
   $name: Text Opacity (%)
@@ -686,8 +685,15 @@ static void LoadSettings() {
     }
 
     // --- Zoom Preset ---
-    g.cfg.zoomPercent = ClampInt(Wh_GetIntSetting(L"zoomLevel"), 150, 500);
-    if (g.cfg.zoomPercent == 0) g.cfg.zoomPercent = 250;
+    // Choice values are strings to satisfy Windhawk 2.0 strict settings parsing.
+    StringSetting zoomSetting(L"zoomLevel");
+    wchar_t* zoomEnd = nullptr;
+    long selectedZoom = zoomSetting ? wcstol(zoomSetting.value, &zoomEnd, 10) : 250;
+    if (!zoomSetting || zoomEnd == zoomSetting.value || *zoomEnd != L'\0' ||
+        selectedZoom <= 0) {
+        selectedZoom = 250;
+    }
+    g.cfg.zoomPercent = ClampInt((int)selectedZoom, 150, 500);
 
     // --- Color Theme Presets ---
     StringSetting theme(L"colorTheme");
