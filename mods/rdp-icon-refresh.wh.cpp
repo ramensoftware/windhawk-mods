@@ -23,9 +23,9 @@ This mod asks Explorer to render the icons again. For the tray it uses the copy 
 icon that Explorer itself keeps for the tray button; as a fallback (for icons it can't
 find there), it remembers the icon each program gives the tray, by watching the
 `WM_COPYDATA` messages that `Shell_NotifyIcon` sends to the taskbar and Explorer's
-answers to them. When the session returns to the local console, it waits until the scale has stayed the
-same for a few seconds (Explorer may pass through an intermediate scale, and turns tray
-requests down while it rebuilds the taskbar) and then:
+answers to them. When the session returns to the local console, it waits until the
+scale has stayed the same for a few seconds (Explorer may pass through an intermediate
+scale, and turns tray requests down while it rebuilds the taskbar) and then:
 
 * asks Explorer to render every tray icon again (`NIM_MODIFY` with the icon Explorer
   itself keeps for that tray button, or the program's own icon handle for icons that
@@ -33,19 +33,25 @@ requests down while it rebuilds the taskbar) and then:
   without restarting anything). Explorer's copy is used because many programs destroy
   the handle they give the tray right after giving it;
 * asks the taskbar to re-read the icon of every top-level window (`HSHELL_REDRAW`
-  through the taskbar's shell hook message);
-* tells the shell that icons changed (`SHChangeNotify(SHCNE_ASSOCCHANGED)`), so pinned
-  items and other shell icons are fetched again.
+  through the taskbar's shell hook message). Buttons of pinned programs that aren't
+  running are not refreshed.
+
+If Explorer turns most tray icons down because it is still busy, or the scale changes
+again, the tray is refreshed again (for about a minute after returning).
 
 While the remote session is active, the mod checks the taskbar's scale every few
 seconds. If it never differed from the local screen's scale, nothing is done. The
 Windhawk log shows the scales and how many icons were refreshed.
 
 Icons that existed before the mod was enabled are handled too: their copies are read
-from the tray at refresh time, so nothing is sent to other programs when the mod loads.
+from the tray at refresh time. The exception is an icon a program registered by GUID
+before the mod was loaded: Explorer only accepts it by its GUID, which the mod learns
+when the program registers or updates the icon. Nothing is sent to other programs.
 
 Made for the Windows 10 taskbar (tested on Windows 10 22H2), and for Windows 11 versions
-whose taskbar still behaves like it; not tested on the newer Windows 11 taskbar.
+whose taskbar still behaves like it; not tested on the newer Windows 11 taskbar. The
+newer Windows 11 (XAML) notification area has no tray toolbars, so there only icons
+registered while the mod was running are refreshed.
 */
 // ==/WindhawkModReadme==
 
@@ -57,11 +63,11 @@ whose taskbar still behaves like it; not tested on the newer Windows 11 taskbar.
     How long the display scale must stay the same before the icons are refreshed. The
     scale is watched for a minute: if it changes again, or Explorer is still busy and
     turns the icons down, they are refreshed again.
-- logFile: ""
-  $name: Log file
+- logToFile: false
+  $name: Log refreshes to a file
   $description: >-
-    Optional full path of a text file to append refresh reports to (UTF-8).
-    Environment variables such as %USERPROFILE% are expanded.
+    Also append the refresh reports to refresh.log in the mod's storage folder (its full
+    path is written to the Windhawk log). The reports always go to the Windhawk log.
 - refreshOnLoad: false
   $name: Refresh once when the mod is loaded
   $description: Useful to test the refresh, or to fix icons right after enabling the mod.
@@ -140,11 +146,17 @@ HANDLE g_thread = nullptr;
 HANDLE g_ready = nullptr;
 HWND g_window = nullptr;           // our message window
 std::atomic<HWND> g_tray{nullptr};  // taskbar of this process (subclassed)
+std::atomic<bool> g_subclassed{false};  // the subclass of g_tray is installed
 std::atomic<HICON> g_sendingIcon{nullptr};  // icon of the mod's own NIM_MODIFY in flight
 
-// Scales seen during the remote session (window thread only).
+// Scales seen during the remote session, and the scale when it started (window thread
+// only).
 UINT g_remoteDpiMin = 0;
 UINT g_remoteDpiMax = 0;
+UINT g_localDpi = 0;
+// The session was remote (or disconnected) since the last return to the console; a
+// console connect without that is a local user switch, with nothing to refresh.
+bool g_awayFromConsole = false;
 
 HWND FromHandle32(DWORD h) {
     return (HWND)(LONG_PTR)(LONG)h;  // sign-extended, as WOW64 does
@@ -163,14 +175,14 @@ void LoadSettings() {
     int delay = Wh_GetIntSetting(L"delaySeconds");
     g_delaySeconds = delay < 0 ? 0 : (delay > 60 ? 60 : delay);
     g_refreshOnLoad = Wh_GetIntSetting(L"refreshOnLoad") != 0;
-    PCWSTR s = Wh_GetStringSetting(L"logFile");
+    // The log file lives in the mod's storage folder, which is removed with the mod.
     WCHAR path[MAX_PATH] = L"";
-    if (s && *s) {
-        DWORD n = ExpandEnvironmentStringsW(s, path, MAX_PATH);
-        if (!n || n > MAX_PATH)
-            lstrcpynW(path, s, MAX_PATH);
+    WCHAR dir[MAX_PATH - 16];
+    if (Wh_GetIntSetting(L"logToFile") && Wh_GetModStoragePath(dir, ARRAYSIZE(dir))) {
+        SHCreateDirectoryExW(nullptr, dir, nullptr);  // may not exist yet
+        wsprintfW(path, L"%s\\refresh.log", dir);
+        Wh_Log(L"Logging refreshes to %s", path);
     }
-    Wh_FreeStringSetting(s);
     AcquireSRWLockExclusive(&g_lock);
     lstrcpynW(g_logFile, path, MAX_PATH);
     ReleaseSRWLockExclusive(&g_lock);
@@ -200,6 +212,17 @@ void Report(const WCHAR* line) {
         CloseHandle(f);
     }
 }
+
+// Reading Explorer's copies of the tray icons (below): the mod's thread sends
+// g_collectMsg to the taskbar, so that the toolbars are read on the thread that owns
+// them (their button data can't change or be freed while it is read).
+struct ExplorerIcons;
+void CollectAllExplorerIcons(HWND tray, ExplorerIcons& out);
+UINT g_collectMsg = 0;
+// The request the mod's thread is waiting for. Held while the icons are collected, so
+// that a request that timed out can't be written to afterwards.
+SRWLOCK g_collectLock = SRWLOCK_INIT;
+ExplorerIcons* g_collectTarget = nullptr;
 
 // ---- Runs on Explorer's taskbar thread, after Explorer handled the request. ----
 void OnNotifyIcon(const COPYDATASTRUCT* cds, bool accepted) {
@@ -261,6 +284,19 @@ void OnNotifyIcon(const COPYDATASTRUCT* cds, bool accepted) {
 
 LRESULT CALLBACK TraySubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                               DWORD_PTR) {
+    if (g_collectMsg && uMsg == g_collectMsg) {
+        // Only the request the mod's own thread is waiting for: anyone can send a
+        // registered message, with any lParam.
+        auto* out = (ExplorerIcons*)lParam;
+        LRESULT collected = 0;
+        AcquireSRWLockExclusive(&g_collectLock);
+        if (out && out == g_collectTarget) {
+            CollectAllExplorerIcons(hWnd, *out);
+            collected = 1;
+        }
+        ReleaseSRWLockExclusive(&g_collectLock);
+        return collected;
+    }
     LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
     if (uMsg == WM_COPYDATA) {
         // The result is what Shell_NotifyIcon returns to the program.
@@ -274,11 +310,11 @@ LRESULT CALLBACK TraySubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 // Remembers the taskbar of this process and subclasses it to learn the tray icons.
 bool AttachToTray(HWND tray) {
     g_tray = tray;  // the taskbar button refresh works even without the subclass
-    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(tray, TraySubclass, 0)) {
+    bool subclassed = WindhawkUtils::SetWindowSubclassFromAnyThread(tray, TraySubclass, 0);
+    g_subclassed = subclassed;
+    if (!subclassed)
         Wh_Log(L"Failed to subclass the taskbar");
-        return false;
-    }
-    return true;
+    return subclassed;
 }
 
 // Explorer creating (or re-creating) its taskbar: subclass it right away, before
@@ -348,31 +384,39 @@ struct ExplorerIcon {
     HICON icon;
 };
 
-// Explorer's copies of the tray icons, read from the notification area toolbars of this
-// process (the taskbar and the overflow window).
-void CollectExplorerIcons(HWND toolbar, std::vector<ExplorerIcon>& out) {
+struct ExplorerIcons {
+    std::vector<ExplorerIcon> icons;
+    bool toolbarFound = false;  // the notification area toolbar exists
+};
+
+// Explorer's copies of the tray icons in one notification area toolbar of this process.
+// Runs on the taskbar thread.
+void CollectExplorerIcons(HWND toolbar, ExplorerIcons& out) {
     DWORD pid = 0;
     if (!toolbar || !GetWindowThreadProcessId(toolbar, &pid) || pid != GetCurrentProcessId())
         return;
-    // With a timeout: the taskbar thread may be busy or hung while the scale changes.
-    DWORD_PTR count = 0;
-    if (!SendMessageTimeoutW(toolbar, TB_BUTTONCOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, &count))
-        return;
-    for (int i = 0; i < (int)count; i++) {
+    out.toolbarFound = true;
+    int count = (int)SendMessageW(toolbar, TB_BUTTONCOUNT, 0, 0);
+    for (int i = 0; i < count; i++) {
         TBBUTTON button = {};
-        DWORD_PTR got = 0;
-        if (!SendMessageTimeoutW(toolbar, TB_GETBUTTON, i, (LPARAM)&button, SMTO_ABORTIFHUNG,
-                                 2000, &got) ||
-            !got || !button.dwData)
+        if (!SendMessageW(toolbar, TB_GETBUTTON, i, (LPARAM)&button) || !button.dwData)
             continue;
-        // Checked before and after reading, in case a Windows version lays this data
-        // out differently.
+        // Checked, in case a Windows version lays this data out differently.
         if (!Readable((const void*)button.dwData, sizeof(TrayButtonData)))
             continue;
         const auto* data = (const TrayButtonData*)button.dwData;
         if (IsWindow(data->hwnd) && IconAlive(data->hIcon))
-            out.push_back(ExplorerIcon{data->hwnd, data->uID, data->hIcon});
+            out.icons.push_back(ExplorerIcon{data->hwnd, data->uID, data->hIcon});
     }
+}
+
+// The taskbar's toolbar and the overflow window's toolbar. Runs on the taskbar thread.
+void CollectAllExplorerIcons(HWND tray, ExplorerIcons& out) {
+    HWND notify = FindWindowExW(tray, nullptr, L"TrayNotifyWnd", nullptr);
+    HWND pager = FindWindowExW(notify, nullptr, L"SysPager", nullptr);
+    CollectExplorerIcons(FindWindowExW(pager, nullptr, L"ToolbarWindow32", nullptr), out);
+    HWND overflow = FindWindowW(L"NotifyIconOverflowWindow", nullptr);
+    CollectExplorerIcons(FindWindowExW(overflow, nullptr, L"ToolbarWindow32", nullptr), out);
 }
 
 bool ModifyIcon(HWND hwnd, UINT id, const GUID* guid, HICON icon) {
@@ -397,7 +441,7 @@ bool ModifyIcon(HWND hwnd, UINT id, const GUID* guid, HICON icon) {
 // Re-renders every tray icon. Explorer's own copy of an icon is the reliable source:
 // many programs destroy the handle they give the tray right after giving it. The
 // program's handle is the fallback for icons that aren't in the toolbars.
-int RerenderTrayIcons(int* total) {
+int RerenderTrayIcons(int* total, bool* toolbarFound, bool* collected) {
     // Forget icons whose window is gone (crashed or restarted programs); for a GUID
     // icon, sending a dead window would also re-point the icon at it.
     AcquireSRWLockExclusive(&g_lock);
@@ -406,18 +450,31 @@ int RerenderTrayIcons(int* total) {
     std::vector<TrayIcon> icons = g_icons;
     ReleaseSRWLockExclusive(&g_lock);
 
-    std::vector<ExplorerIcon> copies;
+    // Handled by the subclass on the taskbar thread. Waiting while the taskbar is busy is
+    // fine (this thread has nothing else to do), but not if it stopped responding: the
+    // mod couldn't be unloaded then.
+    ExplorerIcons copies;
     HWND tray = g_tray;
-    HWND notify = FindWindowExW(tray, nullptr, L"TrayNotifyWnd", nullptr);
-    HWND pager = FindWindowExW(notify, nullptr, L"SysPager", nullptr);
-    CollectExplorerIcons(FindWindowExW(pager, nullptr, L"ToolbarWindow32", nullptr), copies);
-    HWND overflow = FindWindowW(L"NotifyIconOverflowWindow", nullptr);
-    CollectExplorerIcons(FindWindowExW(overflow, nullptr, L"ToolbarWindow32", nullptr), copies);
+    DWORD_PTR answer = 0;
+    AcquireSRWLockExclusive(&g_collectLock);
+    g_collectTarget = &copies;
+    ReleaseSRWLockExclusive(&g_collectLock);
+    // Without the subclass nobody answers, and waiting for an answer wouldn't help.
+    *collected = !g_subclassed ||
+                 (tray &&
+                  SendMessageTimeoutW(tray, g_collectMsg, 0, (LPARAM)&copies,
+                                      SMTO_ABORTIFHUNG | SMTO_NOTIMEOUTIFNOTHUNG, 5000,
+                                      &answer) &&
+                  answer);
+    AcquireSRWLockExclusive(&g_collectLock);
+    g_collectTarget = nullptr;
+    ReleaseSRWLockExclusive(&g_collectLock);
+    *toolbarFound = copies.toolbarFound;
 
     std::vector<bool> handled(icons.size(), false);
     int done = 0;
     *total = 0;
-    for (const ExplorerIcon& c : copies) {
+    for (const ExplorerIcon& c : copies.icons) {
         (*total)++;
         bool ok = ModifyIcon(c.hwnd, c.id, nullptr, c.icon);
         // An icon registered by GUID is found by its GUID only; use the one the mod
@@ -425,11 +482,14 @@ int RerenderTrayIcons(int* total) {
         const GUID* guid = nullptr;
         size_t guidIndex = 0;
         int guidCount = 0;
+        bool knownById = false;
         for (size_t i = 0; i < icons.size(); i++) {
             if (icons[i].hwnd != c.hwnd)
                 continue;
-            if (!icons[i].byGuid && icons[i].id == c.id)
+            if (!icons[i].byGuid && icons[i].id == c.id) {
                 handled[i] = true;
+                knownById = true;
+            }
             if (icons[i].byGuid) {
                 guid = &icons[i].guid;
                 guidIndex = i;
@@ -443,6 +503,8 @@ int RerenderTrayIcons(int* total) {
         }
         if (ok)
             done++;
+        else if (guidCount > 1 && !knownById)
+            (*total)--;  // one of this window's GUID icons: counted by the fallback below
     }
 
     for (size_t i = 0; i < icons.size(); i++) {
@@ -479,8 +541,9 @@ BOOL CALLBACK RedrawButton(HWND hwnd, LPARAM param) {
 }
 
 // Returns false if Explorer turned down most tray icons (it is still busy re-creating
-// the taskbar for the new scale), so that the caller tries again.
-bool Refresh(const wchar_t* reason) {
+// the taskbar for the new scale), so that the caller tries again. The taskbar buttons
+// are only redrawn when `buttons` is set (the first attempt for a scale).
+bool Refresh(const wchar_t* reason, bool buttons) {
     // Only the explorer.exe that owns the taskbar refreshes; other explorer.exe
     // processes (separate folder windows) would just repeat the work.
     HWND tray = g_tray;
@@ -488,27 +551,34 @@ bool Refresh(const wchar_t* reason) {
         return true;
     UINT dpi = TaskbarDpi();
 
-    // 1. Tray: Explorer renders each icon again from the program's icon.
+    // 1. Tray: Explorer renders each icon again.
     int trayTotal = 0;
-    int trayIcons = RerenderTrayIcons(&trayTotal);
+    bool toolbarFound = false;
+    bool collected = false;
+    int trayIcons = RerenderTrayIcons(&trayTotal, &toolbarFound, &collected);
 
     // 2. Taskbar buttons: the taskbar re-reads each window's icon, the same way it
     //    does when a program changes its icon.
     RedrawContext ctx{nullptr, RegisterWindowMessageW(L"SHELLHOOK"), 0};
-    HWND rebar = FindWindowExW(tray, nullptr, L"ReBarWindow32", nullptr);
-    ctx.taskSwitch = FindWindowExW(rebar, nullptr, L"MSTaskSwWClass", nullptr);
-    if (ctx.taskSwitch && ctx.shellHookMsg)
-        EnumWindows(RedrawButton, (LPARAM)&ctx);
-
-    // 3. Shell icons (pinned items, jump list icons): drop cached images.
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    if (buttons) {
+        HWND rebar = FindWindowExW(tray, nullptr, L"ReBarWindow32", nullptr);
+        ctx.taskSwitch = FindWindowExW(rebar, nullptr, L"MSTaskSwWClass", nullptr);
+        if (ctx.taskSwitch && ctx.shellHookMsg)
+            EnumWindows(RedrawButton, (LPARAM)&ctx);
+    }
 
     WCHAR line[256];
-    wsprintfW(line, L"refreshed (%s): taskbar DPI %u, remote session DPI %u-%u, tray icons %d of %d, windows %d",
-              reason, dpi, g_remoteDpiMin, g_remoteDpiMax, trayIcons, trayTotal, ctx.count);
+    wsprintfW(line, L"refreshed (%s): taskbar DPI %u, remote session DPI %u-%u, tray icons %d of %d, windows %d%s",
+              reason, dpi, g_remoteDpiMin, g_remoteDpiMax, trayIcons, trayTotal, ctx.count,
+              collected ? L"" : L", the taskbar didn't answer");
     Report(line);
-    // No icons at all usually means the notification area is being re-created.
-    return trayTotal > 0 && trayIcons * 2 >= trayTotal;
+    if (!collected)
+        return false;
+    // An empty notification area toolbar means it is being re-created. Without the
+    // toolbar (a taskbar that keeps the tray elsewhere), retrying wouldn't help.
+    if (trayTotal == 0)
+        return !toolbarFound;
+    return trayIcons * 2 >= trayTotal;
 }
 
 // ---- After returning to the local screen (window thread only). ----
@@ -545,25 +615,27 @@ void OnSettleTick(HWND hwnd) {
         g_settleTicks++;
     }
     DWORD elapsed = GetTickCount() - g_settleStart;
+    bool watchOver = elapsed >= kSettleWatchMs;
     int wait = g_delaySeconds < 1 ? 1 : (int)g_delaySeconds;
-    // Right after returning, the taskbar may still be at the remote scale for a few
-    // seconds: a scale equal to the remote one is only taken as final when the watch
-    // ends without a change.
-    bool sameAsRemote = !g_refreshedDpi && g_remoteDpiMax && g_remoteDpiMin == dpi &&
-                        g_remoteDpiMax == dpi;
-    if (dpi != g_refreshedDpi && !sameAsRemote && g_settleTicks >= wait) {
-        if (Refresh(L"back to the local screen") || ++g_retries > kMaxRetries)
-            g_refreshedDpi = dpi;
-        else
-            g_settleTicks = 0;  // Explorer is still busy: try again later
-    }
-    if (elapsed >= kSettleWatchMs &&
-        (g_refreshedDpi == dpi || sameAsRemote || elapsed >= 2 * kSettleWatchMs)) {
-        if (sameAsRemote) {
+    // Right after returning, the taskbar may stay at a scale of the remote session for a
+    // few seconds. Such a scale is only taken as final if it is the local scale seen
+    // when the session started, or when the watch ends without a change.
+    bool remoteScale = g_remoteDpiMax && dpi >= g_remoteDpiMin && dpi <= g_remoteDpiMax;
+    bool lingering = !watchOver && remoteScale && dpi != g_localDpi;
+    if (dpi != g_refreshedDpi && !lingering && g_settleTicks >= wait) {
+        if (!g_refreshedDpi && g_remoteDpiMin == dpi && g_remoteDpiMax == dpi) {
             WCHAR line[128];
             wsprintfW(line, L"back to the local screen: same scale as the remote session (DPI %u), nothing to do", dpi);
             Report(line);
+            g_refreshedDpi = dpi;
+        } else if (Refresh(L"back to the local screen", g_retries == 0) ||
+                   ++g_retries > kMaxRetries) {
+            g_refreshedDpi = dpi;
+        } else {
+            g_settleTicks = 0;  // Explorer is still busy: try again later
         }
+    }
+    if (watchOver && (g_refreshedDpi == dpi || elapsed >= 2 * kSettleWatchMs)) {
         KillTimer(hwnd, kRefreshTimer);
         g_remoteDpiMin = g_remoteDpiMax = 0;  // this remote session is handled
     }
@@ -576,9 +648,17 @@ bool RegisterSessionNotification(HWND hwnd) {
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_WTSSESSION_CHANGE:
+            // Only the explorer.exe that owns the taskbar (not separate folder-window
+            // processes) follows the session.
+            if (!g_tray)
+                return 0;
             if (wParam == WTS_REMOTE_CONNECT) {
                 // Sampled while the session lasts: the remote scale may be applied
-                // only some time after connecting.
+                // only some time after connecting. When the remote session follows a
+                // local one, the scale now is still the local one.
+                if (!g_remoteDpiMax)
+                    g_localDpi = TaskbarDpi();
+                g_awayFromConsole = true;
                 g_remoteDpiMin = g_remoteDpiMax = 0;
                 KillTimer(hwnd, kRefreshTimer);
                 SetTimer(hwnd, kRemoteDpiTimer, kRemoteDpiPeriodMs, nullptr);
@@ -586,7 +666,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 KillTimer(hwnd, kRemoteDpiTimer);
             } else if (wParam == WTS_CONSOLE_CONNECT) {
                 KillTimer(hwnd, kRemoteDpiTimer);
-                StartSettling(hwnd);
+                if (g_awayFromConsole) {
+                    g_awayFromConsole = false;
+                    StartSettling(hwnd);
+                }
             }
             return 0;
         case WM_TIMER:
@@ -617,7 +700,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (wParam == kLoadTimer) {
                 // Explorer may still be setting up the tray when the mod loads with it.
                 static int loadRetries = 0;
-                if (Refresh(L"mod loaded") || ++loadRetries > kMaxRetries)
+                if (Refresh(L"mod loaded", loadRetries == 0) || ++loadRetries > kMaxRetries)
                     KillTimer(hwnd, kLoadTimer);
                 return 0;
             }
@@ -648,6 +731,16 @@ DWORD WINAPI Worker(LPVOID) {
     SetEvent(g_ready);  // Wh_ModUninit only needs g_window
 
     if (g_window) {
+        // Loaded during a remote session, or while it is disconnected.
+        WTS_CONNECTSTATE_CLASS* state = nullptr;
+        DWORD bytes = 0;
+        if (GetSystemMetrics(SM_REMOTESESSION))
+            g_awayFromConsole = true;
+        else if (WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION,
+                                             WTSConnectState, (LPWSTR*)&state, &bytes)) {
+            g_awayFromConsole = bytes >= sizeof(*state) && *state != WTSActive;
+            WTSFreeMemory(state);
+        }
         // Early in a session the service may not be ready yet: keep retrying.
         if (!RegisterSessionNotification(g_window)) {
             Wh_Log(L"WTSRegisterSessionNotification failed: %u, retrying", GetLastError());
@@ -670,6 +763,9 @@ DWORD WINAPI Worker(LPVOID) {
 
 BOOL Wh_ModInit() {
     LoadSettings();
+    g_collectMsg = RegisterWindowMessageW(L"Windhawk_" WH_MOD_ID L"_collect");
+    if (!g_collectMsg)
+        return FALSE;
     if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
                                         &CreateWindowExW_Original))
         return FALSE;
