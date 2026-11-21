@@ -89,6 +89,7 @@ to the internet and restart `explorer.exe` (or toggle the mod).
   Windows update. The translations of the page (French, Spanish and Portuguese in particular) were also written
   without the original Microsoft files and may differ from the official wording.
 - Windows 10 1607 or later, or Windows 11; 64-bit (x64) only.
+- Tested on Windows 10 21H2 and Windows 11 24H2. Other versions from Windows 10 1607 on may work, but have not been tested.
 - This is the Windows 7 page: it does not know Microsoft accounts as such (they appear as the local accounts they
   are bound to).
 - Three links of the Windows 7 page have no target on Windows 10/11 and are left out: "Link online IDs",
