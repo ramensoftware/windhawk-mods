@@ -2,7 +2,7 @@
 // @id              taskbar-weather
 // @name            Taskbar Weather
 // @description     Current weather on the taskbar with a details card on hover. No Widgets, browser or API key needed
-// @version         1.5.0
+// @version         1.5.1
 // @author          DavidHiFi
 // @github          https://github.com/DavidHiFi
 // @license         MIT
@@ -36,9 +36,14 @@ you hover over it. It works on its own, without Windows Widgets.
 ## How it differs from other weather mods
 
 [Taskbar Clock Customization](https://windhawk.net/mods/taskbar-clock-customization)
-can put weather text inside the clock, and Desktop Live Overlay shows weather
-on the desktop. This mod adds its own icon and label at the left end of the
-taskbar, with a details card on hover, and needs no other mod.
+can put weather text inside the clock, and
+[Micrographics Taskbar Clock](https://windhawk.net/mods/micrographics-taskbar-clock)
+replaces the clock with one that can show a weather line.
+[TopBar for Windows](https://windhawk.net/mods/windhawk-topbar) has a weather
+flyout in its own bar, and Desktop Live Overlay shows weather on the desktop.
+This mod adds its own icon and label at the left end of the stock taskbar,
+keeps the regular clock, shows a details card on hover, and needs no other
+mod.
 
 ## Setup
 
@@ -49,11 +54,13 @@ hover card.
 
 ## Privacy and network use
 
-The mod needs internet access. Your latitude and longitude are sent to
-`api.open-meteo.com` with every request: when the taskbar appears, at each
-update interval, once a minute while requests fail, when you click the label
-and when the PC wakes up. Open-Meteo also sees your IP address. Nothing else
-is sent.
+The mod needs internet access. Your latitude and longitude, rounded to three
+decimals (about 100 m), are sent to `api.open-meteo.com` with every request:
+when the taskbar appears, after every settings change, at each update
+interval, once a minute while requests fail, when you click the label, when
+the PC wakes up and when the clock or time zone changes. Open-Meteo also sees
+your IP address. Nothing else is sent. Nothing is sent until both coordinates
+are filled in; clear them to stop all requests.
 
 ## Notes
 
@@ -63,7 +70,9 @@ is sent.
   taskbar, raise the left offset so the label clears the Start button.
 - Only the main taskbar shows the weather.
 - If a request fails, the last reading stays and the card says when it was
-  fetched. Readings older than 30 minutes are marked as stale.
+  fetched. A reading is marked as stale once it is older than 30 minutes, or
+  twice the update interval if that is longer.
+- Vertical taskbars (left or right on Windows 10) are not supported.
 
 ## Credits
 
@@ -98,12 +107,15 @@ Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0).
   $description: 5 to 60. Open-Meteo refreshes current weather every 15 minutes.
 - leftOffset: 16
   $name: Left offset
+  $description: Pixels from the left edge of the taskbar at 100% scaling, 0 to 1000.
 - width: 220
   $name: Maximum width
+  $description: Pixels at 100% scaling, 120 to 400.
 - fontFamily: Segoe UI
   $name: Font
 - fontSize: 11
   $name: Font size
+  $description: 9 to 22.
 */
 // ==/WindhawkModSettings==
 
@@ -186,8 +198,14 @@ Reading reading;
 // UI thread only.
 HWND cardWindow;
 UINT taskbarCreatedMessage;
-ComPtr<ID2D1Factory> d2dFactory;
-ComPtr<IDWriteFactory> writeFactory;
+// UI thread only. Released at the end of UiWorker, never by a destructor at
+// process exit, when the graphics threads are already gone.
+[[clang::no_destroy]] ComPtr<ID2D1Factory> d2dFactory;
+[[clang::no_destroy]] ComPtr<IDWriteFactory> writeFactory;
+// The request in flight. Wh_ModUninit closes it to cancel a slow request, so
+// whichever side takes it out of here first closes it.
+SRWLOCK requestLock = SRWLOCK_INIT;
+HINTERNET activeRequest = nullptr;
 bool hover = false, lightTaskbar = false;
 BYTE cardAlpha = 0;
 int contentWidth = -1;
@@ -217,7 +235,7 @@ bool ParseCoordinate(std::wstring s, double bound, std::wstring& out) {
         return false;
     }
     wchar_t buffer[32];
-    swprintf(buffer, 32, L"%.4f", v);
+    swprintf(buffer, 32, L"%.3f", v);
     out = buffer;
     return true;
 }
@@ -466,6 +484,16 @@ bool Fetch(Reading& next) {
                                         WINHTTP_DEFAULT_ACCEPT_TYPES,
                                         WINHTTP_FLAG_SECURE)
                    : nullptr;
+    if (request) {
+        AcquireSRWLockExclusive(&requestLock);
+        if (WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) {
+            WinHttpCloseHandle(request);
+            request = nullptr;
+        } else {
+            activeRequest = request;
+        }
+        ReleaseSRWLockExclusive(&requestLock);
+    }
     bool ok = request &&
               WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
                                  WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
@@ -505,7 +533,12 @@ bool Fetch(Reading& next) {
         body.resize(old + read);
     }
     if (request) {
-        WinHttpCloseHandle(request);
+        AcquireSRWLockExclusive(&requestLock);
+        if (activeRequest == request) {
+            WinHttpCloseHandle(request);
+        }
+        activeRequest = nullptr;
+        ReleaseSRWLockExclusive(&requestLock);
     }
     if (connection) {
         WinHttpCloseHandle(connection);
@@ -675,7 +708,9 @@ RowFont ResolveRowFont() {
                     std::abs((int)font->GetWeight() - 600) <= 50;
     if (!semibold && !find(name + L" SemBd", DWRITE_FONT_WEIGHT_NORMAL) &&
         !find(name, DWRITE_FONT_WEIGHT_SEMI_BOLD)) {
-        find(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        if (!find(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_SEMI_BOLD)) {
+            find(L"Segoe UI", DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        }
     }
     if (!font ||
         FAILED(writeFactory->CreateTextFormat(
@@ -975,7 +1010,8 @@ float Card(Graphics* g, const Reading& r) {
             20);
         y += 22;
     }
-    if (r.valid && std::time(nullptr) - r.fetched > 30 * 60) {
+    if (r.valid && std::time(nullptr) - r.fetched >
+                       std::max(30, 2 * settings.interval) * 60) {
         put(L"Stale reading. Connection unavailable.", small, warn, kPad, 20);
         y += 22;
     }
@@ -1332,6 +1368,8 @@ DWORD WINAPI UiWorker(void*) {
     if (controllerClass) {
         UnregisterClassW(kControllerClass, instance);
     }
+    d2dFactory.Reset();
+    writeFactory.Reset();
     return 0;
 }
 
@@ -1417,10 +1455,16 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     SetEvent(stopEvent);
+    // Closing the request handle cancels a request that is still running.
+    AcquireSRWLockExclusive(&requestLock);
+    if (activeRequest) {
+        WinHttpCloseHandle(activeRequest);
+        activeRequest = nullptr;
+    }
+    ReleaseSRWLockExclusive(&requestLock);
     if (HWND controller = controllerWindow) {
         PostMessageW(controller, WM_CLOSE, 0, 0);
     }
-    // A request in flight can hold this for up to its 5 second timeout.
     if (fetchThread) {
         WaitForSingleObject(fetchThread, INFINITE);
         CloseHandle(fetchThread);
@@ -1431,8 +1475,6 @@ void Wh_ModUninit() {
     }
     CloseHandle(stopEvent);
     CloseHandle(refreshEvent);
-    d2dFactory.Reset();
-    writeFactory.Reset();
     GdiplusShutdown(graphicsToken);
 }
 
