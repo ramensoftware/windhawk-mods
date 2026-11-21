@@ -2,7 +2,7 @@
 // @id              system-tray-breaktimer
 // @name            System Tray BreakTimer
 // @description     Count down to windowed breaks in the notification area with a circular break timer and optional wind chimes.
-// @version         0.1.6
+// @version         0.1.7
 // @author          haniobaid
 // @github          https://github.com/haniobaid
 // @include         windhawk.exe
@@ -14,8 +14,10 @@
 /*
 # System Tray BreakTimer
 
-Click **P** in the notification area to start. Each time you enable the mod it
-starts paused. Windows can place new icons in the tray overflow.
+Each time you enable the mod, it starts paused. Click **P** in the notification
+area to start. Windows can place new icons in the tray overflow.
+
+![Break window with a circular countdown and examples of the five tray states](https://raw.githubusercontent.com/haniobaid/windhawk-mods/system-tray-breaktimer-media/system-tray-breaktimer.png)
 
 **S** means Standby until the next whole clock minute. A fresh interval started
 at exactly :00 begins immediately. With the default 15-minute interval, starting
@@ -30,12 +32,18 @@ seconds use bold numerals in your chosen tray colors.
 The borderless break window has a **Skip Break** button and a gauge-colored
 **X** in its upper-right corner. Both end the break silently and start a fresh work interval with the usual
 Standby. The gauge scales to 90% of the shorter usable monitor dimension.
-With multiple windows, one action applies to them all.
+With multiple windows, one action applies to them all. To skip with the
+keyboard, Alt+Tab to the break window marked **B** and press Enter on **Skip Break**.
 
 **Tray commands**
 
-When the tray shows **P**, the menu contains only **Unpause**. Click it or
-left-click the icon to start a fresh work cycle. During **S / Standby** or
+A single left-click toggles pause. Pausing discards the current interval, and
+unpausing starts a fresh one. Turn on **Require a double-click to pause or
+unpause** if you prefer. Keyboard activation still takes one press. Right-click
+the tray icon to open its menu.
+
+When the tray shows **P**, the menu contains only **Unpause**.
+During **S / Standby** or
 **B / On break**, the menu contains only **Pause**. During the work countdown,
 including its final seconds, the menu has three commands.
 
@@ -63,7 +71,9 @@ and is available under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1
 To use your own recording, browse to a local WAV under **Custom sound file (optional)**.
 Choose uncompressed 8- or 16-bit PCM, mono or stereo, at 8–48 kHz, up to
 10 seconds and 2 MiB. An empty field or an unreadable or unsupported file
-uses the bundled chime.
+uses the bundled chime. On Windhawk 1.x, you can paste a quoted path copied
+from Explorer. If you replace the WAV at the same path, switch sound off and
+back on to load it again.
 
 **Settings** — Open the mod's Details, then Settings. Windhawk 2.0 alpha 8
 shows break durations as minute sliders and includes a file browser. Windhawk 1.x
@@ -71,15 +81,25 @@ uses numeric fields for durations and a text field for the WAV path. If
 **Break every** is below twice **Break for**, the timer uses twice the break
 length. For example, a 25-minute break and a 40-minute interval give 50 minutes of work.
 Changes to durations apply on the next fresh interval or break. Appearance
-changes take effect immediately. Windows controls whether the full-screen
+changes take effect immediately. Set **Background opacity** under **Tray icon**
+to 0% for a transparent background or to 100% for a solid color. After an
+update, the saved opacity slider value controls the background.
+Windows controls whether the full-screen
 pause banner appears. The timer pauses independently of banner delivery.
 
 After five continuous idle minutes, an active work schedule pauses. Activity
 starts a fresh interval. A manual pause is retained. Two separate switches
 control full-screen auto-pause and its optional banner. Both switches default
-to off. If full-screen auto-pause is on, leaving full screen automatically
+to off. With auto-pause off, the break window can appear over a full-screen game
+or presentation and may interrupt exclusive full screen. Enable auto-pause to
+hold the timer while a full-screen app is detected. Leaving full screen automatically
 resumes the interrupted timer when other pause reasons have cleared. Choosing
 Unpause overrides the current automatic episode and starts a fresh work cycle.
+
+Locking the PC during a break hides the window and freezes the gauge. After
+unlocking, the window returns with the time that was left once other automatic
+pause conditions clear. Disconnecting the session or suspending the PC also
+holds an active break. Ordinary idle time during a break lets the gauge run.
 
 Inspired by [Stretchly](https://github.com/hovancik/stretchly). Functionality inspiration only. No code was reused.
 */
@@ -105,6 +125,9 @@ Inspired by [Stretchly](https://github.com/hovancik/stretchly). Functionality in
   - idle: true
     $name: Monitor idle time
     $description: After five minutes away during work, start a fresh interval when input resumes.
+  - doubleClick: false
+    $name: Require a double-click to pause or unpause
+    $description: Use two left-clicks on the tray icon. Keyboard activation and the right-click menu work as usual.
   - allMonitors: false
     $name: Show breaks on all monitors
   - fullScreen: false
@@ -136,12 +159,9 @@ Inspired by [Stretchly](https://github.com/hovancik/stretchly). Functionality in
   - background: "#202832"
     $name: Background color
     #! $format: colorRgb
-  - transparent: true
-    $name: Transparent background
-    $description: Keep the background fully transparent at any saved opacity.
   - opacity: 0
     $name: Background opacity
-    $description: Background opacity (0–100%) when Transparent background is off. Set above 0 for a visible background.
+    $description: 0% is fully transparent. Increase the opacity to show the chosen background color.
     #! $min: 0
     #! $max: 100
     #! $format: slider
@@ -166,24 +186,35 @@ Inspired by [Stretchly](https://github.com/hovancik/stretchly). Functionality in
 */
 // ==/WindhawkModSettings==
 
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
 #include <windowsx.h>
+#include <dwmapi.h>
+#include <mmreg.h>
+#include <mmsystem.h>
 #include <shellapi.h>
 #include <wtsapi32.h>
+
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <cmath>
+#include <cstddef>
 #include <cstdint>
-#include <cwchar>
 #include <cstdlib>
+#include <cstring>
+#include <cwchar>
+#include <iterator>
+#include <limits>
+#include <memory>
+#include <new>
 #include <string>
 #include <string_view>
-#include <windhawk_api.h>
+#include <utility>
+
+#include <windhawk_utils.h>
 #if __has_include(<windhawk_tool_mod.h>)
 #include <windhawk_tool_mod.h>
 #endif
+
 // Tick time measures elapsed duration. Wall time supplies the local minute boundary.
 namespace Timing {
 using Millis = std::int64_t;
@@ -278,15 +309,6 @@ struct Schedule {
 };
 }  // namespace Timing
 // Tray artwork uses grayscale area coverage so the same glyph works on any taskbar.
-#include <windows.h>
-#include <algorithm>
-#include <array>
-#include <cmath>
-#include <cstdint>
-#include <cwchar>
-#include <iterator>
-#include <new>
-#include <string_view>
 
 namespace break_art {
 using Glyph = std::array<unsigned char, 7>;
@@ -486,7 +508,7 @@ BITMAPINFOHEADER bitmapHeader(int w, int h, WORD depth) {
 }  // namespace break_art
 
 HICON MakeTrayIcon(std::wstring_view glyph, COLORREF fg, COLORREF bg,
-                   int backgroundOpacity, UINT dpi) {
+                   int backgroundOpacity, UINT dpi, int metric = SM_CXSMICON) {
     using namespace break_art;
     if (glyph.empty() || glyph.size() > 3) return nullptr;
     const bool numeric = std::all_of(glyph.begin(), glyph.end(), [](wchar_t ch) {
@@ -494,7 +516,7 @@ HICON MakeTrayIcon(std::wstring_view glyph, COLORREF fg, COLORREF bg,
     });
     const Glyph* letter = glyph.size() == 1 ? letterFor(glyph[0]) : nullptr;
     if (!numeric && !letter) return nullptr;
-    const int size = std::clamp(GetSystemMetricsForDpi(SM_CXSMICON, dpi ? dpi : 96), 16, 128);
+    const int size = std::clamp(GetSystemMetricsForDpi(metric, dpi ? dpi : 96), 16, 128);
     const size_t count = static_cast<size_t>(size) * size;
     auto* coverage = new(std::nothrow) float[count]();
     if (!coverage) return nullptr;
@@ -564,7 +586,6 @@ HICON MakeTrayIcon(std::wstring_view glyph, COLORREF fg, COLORREF bg,
 }
 
 // All methods run on the controller's UI thread. The parent owns the schedule.
-#include <dwmapi.h>
 
 class BreakWindows {
     struct Frame {
@@ -588,6 +609,7 @@ class BreakWindows {
     static constexpr DWORD exStyle_ = WS_EX_LAYERED | WS_EX_TOPMOST;
     static constexpr double pi_ = 3.14159265358979323846;
     HINSTANCE instance_{};
+    HICON largeIcon_{}, smallIcon_{};
     Frame* first_{};
     HWND controller_{};
     UINT skipMessage_{};
@@ -895,12 +917,19 @@ public:
         WNDCLASSEXW wc{};
         wc.cbSize=sizeof(wc); wc.lpfnWndProc=windowProc; wc.hInstance=mod;
         wc.lpszClassName=className_; wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);
+        // Keep Alt+Tab available for keyboard users without activating a break on arrival.
+        const UINT dpi = GetDpiForSystem();
+        wc.hIcon = largeIcon_ = MakeTrayIcon(L"B", RGB(255,180,84), 0, 0, dpi, SM_CXICON);
+        wc.hIconSm = smallIcon_ = MakeTrayIcon(L"B", RGB(255,180,84), 0, 0, dpi);
         if (!RegisterClassExW(&wc)) return false;
         instance_=mod; return true;
     }
     void shutdown() {
         hide();
         if (instance_) UnregisterClassW(className_,instance_);
+        if (largeIcon_) DestroyIcon(largeIcon_);
+        if (smallIcon_) DestroyIcon(smallIcon_);
+        largeIcon_=smallIcon_=nullptr;
         instance_=nullptr;
     }
     void setVisuals(COLORREF gauge,COLORREF text,COLORREF background,int opacity) {
@@ -973,21 +1002,6 @@ public:
     }
 };
 // Full-screen detection and sound run in the desktop user's dedicated tool host.
-#include <windows.h>
-#include <dwmapi.h>
-#include <mmsystem.h>
-#include <mmreg.h>
-#include <shellapi.h>
-#include <cmath>
-#include <cstddef>
-#include <cstdint>
-#include <cwchar>
-#include <cstring>
-#include <memory>
-#include <new>
-#include <string>
-#include <string_view>
-#include <utility>
 
 namespace BreakEnvironment {
 
@@ -1017,9 +1031,8 @@ static bool IsAppWindow(HWND window) {
 }
 
 // Remember the foreground app's monitor across a click on our tray menu.
-static HMONITOR PreferredMonitor() {
+static HMONITOR PreferredMonitor(HWND window = GetForegroundWindow()) {
     static HMONITOR lastMonitor = nullptr;
-    HWND window = GetForegroundWindow();
     if (IsAppWindow(window)) {
         lastMonitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
     }
@@ -1302,7 +1315,11 @@ static bool PrepareCustomPcm(CustomWave& wave) {
     return true;
 }
 
-static CustomWave LoadCustomWave(const std::wstring& path) {
+static CustomWave LoadCustomWave(std::wstring path) {
+    // Explorer's "Copy as path" supplies one surrounding pair of quotes.
+    if (path.size() >= 2 && path.front() == L'"' && path.back() == L'"') {
+        path = path.substr(1, path.size() - 2);
+    }
     if (path.size() < 7 || !((path[0] >= L'A' && path[0] <= L'Z') ||
                              (path[0] >= L'a' && path[0] <= L'z')) ||
         path[1] != L':' || (path[2] != L'\\' && path[2] != L'/') ||
@@ -1378,6 +1395,7 @@ Time Now() {
 struct Preferences {
     int breakFor = 1, breakEvery = 15;
     bool idle = true, allMonitors = false, fullScreen = false, banner = false, sound = true;
+    bool doubleClick = false;
     COLORREF normal = RGB(255,180,84), finalText = RGB(255,0,0), trayBg = RGB(32,40,50);
     COLORREF gauge = RGB(88,214,141), clock = RGB(255,255,255), bg = RGB(24,32,40);
     int trayOpacity = 0, windowOpacity = 95;
@@ -1391,14 +1409,12 @@ std::wstring Duration(int minutes) {
 }
 
 COLORREF ReadColor(PCWSTR key, COLORREF fallback) {
-    PCWSTR stored = Wh_GetStringSetting(key);
-    if (!stored) return fallback;
-    PCWSTR p = stored + (*stored == L'#');
+    auto stored = WindhawkUtils::StringSetting::make(key);
+    PCWSTR p = stored.get() + (*stored.get() == L'#');
     if (wcslen(p) == 6 && wcsspn(p, L"0123456789abcdefABCDEF") == 6) {
         const auto value = std::wcstoul(p, nullptr, 16);
         fallback = RGB((value >> 16) & 255, (value >> 8) & 255, value & 255);
     }
-    Wh_FreeStringSetting(stored);
     return fallback;
 }
 
@@ -1412,10 +1428,8 @@ Preferences ReadPreferences() {
     p.fullScreen = Wh_GetIntSetting(L"behavior.fullScreen") != 0;
     p.banner = Wh_GetIntSetting(L"behavior.banner") != 0;
     p.sound = Wh_GetIntSetting(L"behavior.sound") != 0;
-    if (PCWSTR path = Wh_GetStringSetting(L"behavior.soundFile")) {
-        p.soundFile = path;
-        Wh_FreeStringSetting(path);
-    }
+    p.soundFile = WindhawkUtils::StringSetting::make(L"behavior.soundFile").get();
+    p.doubleClick = Wh_GetIntSetting(L"behavior.doubleClick") != 0;
     const int countdown = Wh_GetIntSetting(L"tray.countdownSeconds");
     p.countdownSeconds = countdown ? std::clamp(countdown, 5, 60) : 60;
     p.allMonitors = Wh_GetIntSetting(L"behavior.allMonitors") != 0;
@@ -1425,8 +1439,7 @@ Preferences ReadPreferences() {
     p.gauge = ReadColor(L"window.gauge", p.gauge);
     p.clock = ReadColor(L"window.text", p.clock);
     p.bg = ReadColor(L"window.background", p.bg);
-    p.trayOpacity = Wh_GetIntSetting(L"tray.transparent") ? 0 :
-        std::clamp(Wh_GetIntSetting(L"tray.opacity"), 0, 100);
+    p.trayOpacity = std::clamp(Wh_GetIntSetting(L"tray.opacity"), 0, 100);
     p.windowOpacity = std::clamp(Wh_GetIntSetting(L"window.opacity"), 0, 100);
     return p;
 }
@@ -1439,12 +1452,62 @@ enum Command : UINT { TakeBreak = 1, ResetSchedule, Pause, Unpause };
 std::atomic<HWND> g_controller{};
 HANDLE g_stop{}, g_changed{}, g_worker{};
 
+// Explorer can report both the raw button messages and NIN_SELECT for a
+// single gesture. Keyboard activation has a separate notification in v4.
+class TrayActivation {
+    bool buttonDown{}, afterDouble{}, haveRaw{}, haveFirst{};
+    DWORD rawTime{}, firstTime{};
+    POINT firstPoint{};
+
+public:
+    bool accept(UINT event, POINT point, DWORD stamp, bool doubleOnly) {
+        if (event == NIN_KEYSELECT) {
+            *this = {};
+            return true;
+        }
+        if (event == WM_LBUTTONDOWN) {
+            buttonDown = true;
+            afterDouble = false;
+            return false;
+        }
+        if (event == WM_LBUTTONDBLCLK) {
+            buttonDown = true;
+            afterDouble = true;
+            haveFirst = false;
+            return doubleOnly;
+        }
+        if (event == WM_LBUTTONUP) {
+            buttonDown = false;
+            haveRaw = true;
+            rawTime = stamp;
+            if (afterDouble) {
+                afterDouble = false;
+                return false;
+            }
+        } else if (event == NIN_SELECT) {
+            if (buttonDown || (haveRaw && stamp - rawTime <= GetDoubleClickTime())) return false;
+        } else {
+            return false;
+        }
+
+        // Some shell hosts send two ordinary clicks without WM_LBUTTONDBLCLK.
+        const bool pair = haveFirst && stamp - firstTime <= GetDoubleClickTime() &&
+            2 * std::abs(point.x - firstPoint.x) <= GetSystemMetrics(SM_CXDOUBLECLK) &&
+            2 * std::abs(point.y - firstPoint.y) <= GetSystemMetrics(SM_CYDOUBLECLK);
+        haveFirst = !pair;
+        firstTime = stamp;
+        firstPoint = point;
+        return doubleOnly == pair;
+    }
+};
+
 class BreakTimer {
     Preferences prefs;
     enum class MenuState { Closed, Paused, Standby, Work, Break };
     MenuState trackedMenu = MenuState::Closed;
     Timing::Schedule timer;
     BreakWindows windows;
+    TrayActivation activation;
     HWND hwnd{};
     HINSTANCE instance{};
     HMONITOR breakMonitor{};
@@ -1452,8 +1515,11 @@ class BreakTimer {
     bool manual = true, full = false, ignoreFull = false, idle = false;
     bool ignoredIdle = false, locked = false, disconnected = false, sleeping = false;
     bool showing = false, added = false, refreshWindows = false;
-    bool sessionNotifications = false, bannerPending = false;
-    Millis awaySince{}, nextProbe{}, nextTrayAttempt{};
+    bool controllerClassRegistered = false, sessionNotifications = false, bannerPending = false;
+    bool trayVersion4 = false, trackForeground = false;
+    HWINEVENTHOOK foregroundHook{};
+    static constexpr Millis never = std::numeric_limits<Millis>::max();
+    Millis awaySince{}, nextProbe{}, nextIdleProbe{}, nextTrayAttempt{};
     std::wstring lastGlyph, lastTip;
     COLORREF lastFg{};
     UINT lastDpi{};
@@ -1498,18 +1564,27 @@ class BreakTimer {
     }
 
     void publishTray(Time now, const std::wstring& glyph, COLORREF fg, const std::wstring& tip) {
-        if (!added && now.tick < nextTrayAttempt) return;
+        if (now.tick < nextTrayAttempt) return;
         // Explorer owns the primary notification area. Its DPI can differ from the controller's.
-        HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-        const UINT dpi = taskbar ? GetDpiForWindow(taskbar) : GetDpiForSystem();
+        UINT dpi = lastDpi;
+        if (!dpi || !added) {
+            HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+            dpi = taskbar ? GetDpiForWindow(taskbar) : GetDpiForSystem();
+        }
         const bool newIcon = !added || lastGlyph != glyph || lastFg != fg || lastDpi != dpi ||
                              lastOpacity != prefs.trayOpacity || lastBg != prefs.trayBg;
-        if (!newIcon && tip == lastTip) return;
+        if (!newIcon && tip == lastTip) {
+            nextTrayAttempt = 0;
+            return;
+        }
         auto data = trayData();
         HICON icon{};
         if (newIcon) {
             icon = MakeTrayIcon(glyph, fg, prefs.trayBg, prefs.trayOpacity, dpi);
-            if (!icon) return;
+            if (!icon) {
+                nextTrayAttempt = now.tick + 1800;
+                return;
+            }
             data.hIcon = icon;
             data.uFlags |= NIF_ICON;
         }
@@ -1532,36 +1607,75 @@ class BreakTimer {
         }
         if (!added) {
             data.uVersion = NOTIFYICON_VERSION_4;
-            if (!Shell_NotifyIconW(NIM_SETVERSION, &data)) {
-                auto key = trayData();
-                Shell_NotifyIconW(NIM_DELETE, &key);
-                nextTrayAttempt = now.tick + 1800;
-                return;
-            }
+            trayVersion4 = Shell_NotifyIconW(NIM_SETVERSION, &data) != FALSE;
+            activation = {};
             added = true;
         }
+        nextTrayAttempt = 0;
         lastGlyph = glyph; lastFg = fg; lastDpi = dpi;
         lastOpacity = prefs.trayOpacity; lastBg = prefs.trayBg; lastTip = tip;
     }
 
+    static void CALLBACK foregroundChanged(HWINEVENTHOOK, DWORD, HWND window,
+                                           LONG, LONG, DWORD, DWORD) {
+        // An out-of-context hook delivers events to this worker's message loop.
+        BreakEnvironment::PreferredMonitor(window);
+    }
+
+    void setForegroundTracking(bool enabled) {
+        if (enabled == trackForeground) return;
+        trackForeground = enabled;
+        if (enabled) {
+            foregroundHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+                nullptr, foregroundChanged, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+            BreakEnvironment::PreferredMonitor();
+        } else if (foregroundHook) {
+            UnhookWinEvent(foregroundHook);
+            foregroundHook = nullptr;
+        }
+    }
+
     void probe(Time now, bool overrideCurrentEpisode = false) {
+        setForegroundTracking(!manual && !unavailable() && !prefs.allMonitors);
+        nextProbe = never;
+        if (manual || unavailable()) {
+            idle = ignoredIdle = full = ignoreFull = bannerPending = false;
+            nextIdleProbe = 0;
+            applyHold(now);
+            return;
+        }
+        if (trackForeground && !foregroundHook) {
+            BreakEnvironment::PreferredMonitor();
+            nextProbe = now.tick + 5000;
+        }
         const bool previousFull = full;
-        const auto previousIdle = idle;
-        BreakEnvironment::PreferredMonitor();  // Retain the last application monitor across tray interactions.
-        full = prefs.fullScreen && !unavailable() && BreakEnvironment::FullscreenAppVisible();
+        full = prefs.fullScreen && BreakEnvironment::FullscreenAppVisible();
+        // A window can enter full screen without changing foreground windows.
+        if (prefs.fullScreen) nextProbe = std::min(nextProbe, now.tick + 600);
         ignoreFull = full && (ignoreFull || overrideCurrentEpisode);
-        const bool away = prefs.idle && BreakEnvironment::IdleMilliseconds() >= 5 * Timing::minute;
-        ignoredIdle = away && (ignoredIdle || overrideCurrentEpisode);
+        const bool previousIdle = idle;
         const bool working = timer.phase == Phase::Work || timer.phase == Phase::Standby;
-        idle = away && !ignoredIdle && working && !manual;
-        if (previousIdle && !idle && !manual && !unavailable() && !overrideCurrentEpisode)
+        if (prefs.idle && (working || overrideCurrentEpisode || ignoredIdle)) {
+            if (now.tick >= nextIdleProbe || overrideCurrentEpisode) {
+                constexpr Millis threshold = 5 * Timing::minute;
+                const Millis elapsed = BreakEnvironment::IdleMilliseconds();
+                const bool away = elapsed >= threshold;
+                ignoredIdle = away && (ignoredIdle || overrideCurrentEpisode);
+                idle = away && !ignoredIdle && working;
+                nextIdleProbe = now.tick + (away ? 1000 : threshold - elapsed);
+            }
+            nextProbe = std::min(nextProbe, nextIdleProbe);
+        } else {
+            idle = ignoredIdle = false;
+            nextIdleProbe = 0;
+        }
+        if (previousIdle && !idle && !overrideCurrentEpisode)
             timer.startWork(now, workMs());
-        if (full && !ignoreFull && !previousFull && !manual && !unavailable() && prefs.banner && !idle) {
+        if (full && !ignoreFull && !previousFull && prefs.banner && !idle) {
             bannerPending = true;
         }
         if (!full || ignoreFull || !prefs.banner) bannerPending = false;
         applyHold(now);
-        nextProbe = now.tick + (manual ? 1500 : 600);
     }
 
     static std::wstring clockText(unsigned sec) {
@@ -1594,7 +1708,8 @@ class BreakTimer {
         COLORREF fg = prefs.normal;
         if (timer.frozen) {
             glyph = L"P";
-            if (manual) status = L"Paused · Click to start a fresh work interval";
+            if (manual) status = prefs.doubleClick ? L"Paused · Double-click to start a fresh work interval"
+                                                  : L"Paused · Click to start a fresh work interval";
             else if (unavailable()) status = L"Paused · Session unavailable";
             else if (full && !ignoreFull) status = L"Paused · Full-screen app";
             else status = L"Paused · Idle";
@@ -1636,14 +1751,24 @@ class BreakTimer {
     }
 
     void tick(Time now) {
-        if (now.tick >= nextProbe || (!timer.frozen && timer.phase == Phase::Work && now.tick >= timer.due.tick)) probe(now);
+        if (!timer.frozen && timer.phase == Phase::Work && now.tick >= timer.due.tick) {
+            // Recheck both automatic holds before presenting a scheduled break.
+            nextIdleProbe = 0;
+            probe(now);
+        } else if (now.tick >= nextProbe) {
+            probe(now);
+        }
         const auto transition = timer.advance(now, workMs(), breakMs());
         if (prefs.sound && transition != Timing::Transition::None) BreakEnvironment::PlayChime();
+        if (transition != Timing::Transition::None) nextProbe = nextIdleProbe = 0;
         render(now);
     }
 
     DWORD timeout(Time now) const {
-        auto delay = std::max<Millis>(1, nextProbe - now.tick);
+        Millis delay = INFINITE;
+        if (nextProbe != never) delay = std::max<Millis>(1, nextProbe - now.tick);
+        if (!added || nextTrayAttempt)
+            delay = std::min(delay, std::max<Millis>(1, nextTrayAttempt - now.tick));
         if (!timer.frozen) {
             const auto left = timer.remaining(now);
             const bool displayingMinutes = timer.phase == Phase::Work && left > countdownMs();
@@ -1652,18 +1777,19 @@ class BreakTimer {
             if (displayingMinutes) next = std::min(next, left - countdownMs());
             delay = std::min(delay, next);
         }
-        return static_cast<DWORD>(std::clamp<Millis>(delay, 1, 2000));
+        return static_cast<DWORD>(delay);
     }
 
     void wakeSession(Time now, bool wasAway) {
         if (!wasAway && unavailable()) {
             awaySince = now.tick;
+            probe(now);
         } else if (wasAway && !unavailable()) {
             if (prefs.idle && !manual && now.tick - awaySince >= 5 * Timing::minute &&
                 timer.phase != Phase::Break) {
                 timer.startWork(now, workMs());
             }
-            nextProbe = 0;
+            nextIdleProbe = 0;
             probe(now);
         }
         applyHold(now);
@@ -1682,11 +1808,12 @@ class BreakTimer {
         case Pause:
             manual = true;
             timer = Timing::Schedule{};
-            idle = false;
+            probe(now);
             break;
         case ResetSchedule:
             manual = false;
             timer.startWork(now, workMs());
+            nextProbe = nextIdleProbe = 0;
             break;
         case TakeBreak:
             if (timer.phase == Phase::Break && !timer.frozen) return;
@@ -1753,16 +1880,26 @@ class BreakTimer {
             return 0;
         }
         switch (msg) {
-        case kTray:
-            switch (LOWORD(lp)) {
-            case NIN_SELECT: case NIN_KEYSELECT: togglePause(); break;
-            case WM_CONTEXTMENU: menu({GET_X_LPARAM(wp), GET_Y_LPARAM(wp)}); break;
+        case kTray: {
+            const UINT event = LOWORD(lp);
+            POINT point{GET_X_LPARAM(wp), GET_Y_LPARAM(wp)};
+            if (!trayVersion4) {
+                const DWORD pos = GetMessagePos();
+                point = {GET_X_LPARAM(pos), GET_Y_LPARAM(pos)};
+            }
+            if (event == WM_CONTEXTMENU || (!trayVersion4 && event == WM_RBUTTONUP)) {
+                activation = {};
+                menu(trayVersion4 ? POINT{-1, -1} : point);
+            } else if (activation.accept(event, point, static_cast<DWORD>(GetMessageTime()), prefs.doubleClick)) {
+                togglePause();
             }
             return 0;
+        }
         case kSkip:
             if (showing && timer.phase == Phase::Break && !timer.frozen) {
                 const auto now = Now();
                 timer.startWork(now, workMs());
+                nextProbe = nextIdleProbe = 0;
                 applyHold(now);
                 tick(now);
             }
@@ -1782,7 +1919,7 @@ class BreakTimer {
             timer.timeChanged(Now());
             break;
         case WM_DISPLAYCHANGE: case WM_DPICHANGED: case WM_SETTINGCHANGE:
-            refreshWindows = true; nextProbe = 0; break;
+            refreshWindows = true; lastDpi = 0; nextProbe = 0; break;
         case WM_WTSSESSION_CHANGE: {
             const bool wasAway = unavailable();
             if (wp == WTS_SESSION_LOCK) locked = true;
@@ -1815,17 +1952,18 @@ class BreakTimer {
     }
 
     void reload() {
-        const bool soundWasOn = prefs.sound;
-        prefs = ReadPreferences();
-        if (soundWasOn && !prefs.sound) BreakEnvironment::StopChime();
-        if (prefs.sound) BreakEnvironment::ConfigureChime(prefs.soundFile);
+        auto next = ReadPreferences();
+        if (prefs.sound && !next.sound) BreakEnvironment::StopChime();
+        if (next.sound && (!prefs.sound || next.soundFile != prefs.soundFile))
+            BreakEnvironment::ConfigureChime(next.soundFile);
+        if (prefs.doubleClick != next.doubleClick) activation = {};
+        prefs = std::move(next);
         windows.setVisuals(prefs.gauge, prefs.clock, prefs.bg, prefs.windowOpacity);
-        refreshWindows = true; nextProbe = 0;
+        refreshWindows = true; nextProbe = nextIdleProbe = 0;
     }
 
 public:
     bool initialize() {
-        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                 GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                                 kControllerClass, &instance)) return false;
@@ -1834,6 +1972,7 @@ public:
         wc.cbSize = sizeof(wc); wc.hInstance = instance;
         wc.lpfnWndProc = dispatch; wc.lpszClassName = kControllerClass;
         if (!RegisterClassExW(&wc)) return false;
+        controllerClassRegistered = true;
         taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
         hwnd = CreateWindowExW(WS_EX_TOOLWINDOW, kControllerClass, L"System Tray BreakTimer",
                                WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, instance, this);
@@ -1864,20 +2003,29 @@ public:
     }
 
     void shutdown() {
+        setForegroundTracking(false);
         g_controller.store(nullptr);
         if (added) { auto data = trayData(); Shell_NotifyIconW(NIM_DELETE, &data); }
         windows.shutdown();
         BreakEnvironment::StopChime();
         if (sessionNotifications) WTSUnRegisterSessionNotification(hwnd);
         if (hwnd) DestroyWindow(hwnd);
-        if (instance) UnregisterClassW(kControllerClass, instance);
+        if (controllerClassRegistered) UnregisterClassW(kControllerClass, instance);
     }
 };
 
 DWORD WINAPI Worker(void*) {
     BreakTimer app;
-    if (app.initialize()) app.run();
-    else Wh_Log(L"Couldn't initialize timer windows (error %lu)", GetLastError());
+    if (!app.initialize()) {
+        const DWORD error = GetLastError();
+        Wh_Log(L"Couldn't initialize the timer windows (error %lu). Closing the dedicated tool process.", error);
+        app.shutdown();
+        // This worker exists only in our dedicated tool process. The launcher
+        // calls WhTool_ModInit before the process entry point, so avoid waiting
+        // there for a newly created GUI thread to start.
+        ExitProcess(error ? error : ERROR_GEN_FAILURE);
+    }
+    app.run();
     app.shutdown();
     return 0;
 }
@@ -1909,202 +2057,6 @@ void WhTool_ModUninit() {
     CloseHandleIfSet(g_changed);
     CloseHandleIfSet(g_stop);
 }
-// Legacy Windhawk 1.x tool launcher. On 2.0 the SDK supplies these callbacks.
-// The launcher follows the Windhawk project's dedicated-process example:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-// Adapted from the MIT-licensed copy in Simple Wallpaper Switcher:
-// https://github.com/ramensoftware/windhawk-mods/blob/11efbe449849c5cb5773643a522bf4af22b28b90/mods/simple-wallpaper-switcher.wh.cpp
-//
-// Copyright (c) Michael Maltsev and contributors to Simple Wallpaper Switcher.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-#if !__has_include(<windhawk_tool_mod.h>)
-
-static bool g_isToolModProcessLauncher;
-
-static void WINAPI LegacyToolEntryPoint() {
-    Wh_Log(L">");
-    ExitThread(0);
-}
-
-BOOL Wh_ModInit() {
-    DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
-        sessionId == 0) {
-        return FALSE;
-    }
-
-    bool isExcluded = false;
-    bool isToolModProcess = false;
-    bool isCurrentToolModProcess = false;
-    int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
-    if (!argv) {
-        Wh_Log(L"CommandLineToArgvW failed");
-        return FALSE;
-    }
-
-    for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0 ||
-            wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0) {
-            isExcluded = true;
-            break;
-        }
-    }
-
-    for (int i = 1; i < argc - 1; i++) {
-        if (wcscmp(argv[i], L"-tool-mod") == 0) {
-            isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
-                isCurrentToolModProcess = true;
-            }
-            break;
-        }
-    }
-
-    LocalFree(argv);
-
-    if (isExcluded) {
-        return FALSE;
-    }
-
-    if (isCurrentToolModProcess) {
-        // The named mutex is owned until this dedicated process exits.
-        HANDLE toolModMutex =
-            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!toolModMutex) {
-            Wh_Log(L"CreateMutex failed");
-            ExitProcess(1);
-        }
-
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            ExitProcess(1);
-        }
-
-        if (!WhTool_ModInit()) {
-            ExitProcess(1);
-        }
-
-        IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders =
-            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-
-        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
-
-        if (!Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(LegacyToolEntryPoint), nullptr)) {
-            Wh_Log(L"Could not prepare the tool process entry point");
-            WhTool_ModUninit();
-            ExitProcess(1);
-        }
-        return TRUE;
-    }
-
-    if (isToolModProcess) {
-        return FALSE;
-    }
-
-    g_isToolModProcessLauncher = true;
-    return TRUE;
-}
-
-void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, currentProcessPath,
-                              ARRAYSIZE(currentProcessPath))) {
-        case 0:
-        case ARRAYSIZE(currentProcessPath):
-            Wh_Log(L"GetModuleFileName failed");
-            return;
-    }
-
-    WCHAR
-    commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-               WH_MOD_ID);
-
-    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-    if (!kernelModule) {
-        kernelModule = GetModuleHandle(L"kernel32.dll");
-        if (!kernelModule) {
-            Wh_Log(L"No kernelbase.dll/kernel32.dll");
-            return;
-        }
-    }
-
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-        LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo,
-        LPPROCESS_INFORMATION lpProcessInformation,
-        PHANDLE hRestrictedUserToken);
-    CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
-                                                 "CreateProcessInternalW");
-    if (!pCreateProcessInternalW) {
-        Wh_Log(L"No CreateProcessInternalW");
-        return;
-    }
-
-    STARTUPINFO si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION pi{};
-    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                 nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"CreateProcess failed");
-        return;
-    }
-
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-}
-
-void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WhTool_ModSettingsChanged();
-}
-
-void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WhTool_ModUninit();
-    ExitProcess(0);
-}
-
-#endif
 
 // CC0 1.0 audio data. GnoteSoundz, Wind Chime (G-003) +.wav.
 // https://freesound.org/people/GnoteSoundz/sounds/169855/
@@ -4798,3 +4750,184 @@ static std::string_view PackedRecording() {
     return {audio, sizeof(audio) - 1};
 }
 } // namespace BreakEnvironment
+
+#if !__has_include(<windhawk_tool_mod.h>)
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
+#endif
