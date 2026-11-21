@@ -7,7 +7,7 @@
 // @github          https://github.com/isousluer
 // @homepage        https://github.com/isousluer/twinkle-brightness
 // @include         windhawk.exe
-// @compilerOptions -ldxva2 -lgdiplus -ldwmapi -lshcore -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -luuid -ladvapi32
+// @compilerOptions -ldxva2 -lgdiplus -ldwmapi -lshcore -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -ladvapi32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -104,7 +104,7 @@ This mod is not affiliated with Twinkle Tray or its author.
   $name: Show an "All displays" slider
   $description: Shown in the panel when two or more displays can be controlled
 - allDisplaysSliderMode: relative
-  $name: "All displays" slider behavior
+  $name: Behavior of the "All displays" slider
   $options:
   - relative: Move all displays together, keeping their differences
   - absolute: Set all displays to the same level
@@ -213,11 +213,13 @@ This mod is not affiliated with Twinkle Tray or its author.
 #include <physicalmonitorenumerationapi.h>
 #include <shellapi.h>
 #include <shellscalingapi.h>
-#include <shlobj.h>
+#include <sddl.h>
 #include <wbemidl.h>
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <climits>
 #include <cmath>
 #include <condition_variable>
 #include <cwctype>
@@ -240,7 +242,6 @@ constexpr UINT_PTR TIMER_SCHEDULE = 2;
 constexpr UINT_PTR TIMER_IDLE = 3;
 constexpr UINT_PTR TIMER_FADE = 4;
 constexpr UINT_PTR TIMER_TOOLTIP = 5;
-constexpr UINT_PTR TIMER_ICONRECT = 6;
 constexpr UINT_PTR TIMER_MONITOR_OFF = 7;
 
 constexpr UINT_PTR TIMER_OSD_HIDE = 1;
@@ -341,7 +342,7 @@ bool ContainsI(const std::wstring& haystack, const std::wstring& needle) {
 
 std::wstring GetStringSetting(const std::wstring& name) {
     PCWSTR value = Wh_GetStringSetting(name.c_str());
-    std::wstring result = value ? value : L"";
+    std::wstring result = value;
     Wh_FreeStringSetting(value);
     return Trim(result);
 }
@@ -603,6 +604,8 @@ std::condition_variable g_cv;
 bool g_requestEnumerate = false;
 bool g_requestRefresh = false;
 bool g_requestStop = false;
+bool g_busy = false;
+std::condition_variable g_idleCv;
 std::map<std::wstring, int> g_pendingSet;
 std::vector<DisplayInfo> g_snapshot;
 
@@ -1124,10 +1127,18 @@ DWORD WINAPI WorkerThread(LPVOID) {
             sets.swap(g_pendingSet);
             g_requestEnumerate = false;
             g_requestRefresh = false;
+            g_busy = true;
         }
 
         std::map<std::wstring, int> failed = ApplyAll(sets);
-        if (!failed.empty() && !stop) {
+        // A failed write usually means stale handles (after sleep or a display
+        // change), so enumerate again and retry. Rate-limited, so that a
+        // monitor that answers reads but rejects writes doesn't cause an
+        // enumeration for every slider movement.
+        static DWORD lastFailureEnumerate;
+        if (!failed.empty() && !stop &&
+            GetTickCount() - lastFailureEnumerate > 10000) {
+            lastFailureEnumerate = GetTickCount();
             enumerate = true;
         }
 
@@ -1149,6 +1160,12 @@ DWORD WINAPI WorkerThread(LPVOID) {
             ApplyAll(rest);
             break;
         }
+
+        {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            g_busy = false;
+        }
+        g_idleCv.notify_all();
     }
 
     DestroyDisplays();
@@ -1187,6 +1204,16 @@ void RequestStop() {
 std::vector<DisplayInfo> TakeSnapshot() {
     std::lock_guard<std::mutex> lock(g_mutex);
     return g_snapshot;
+}
+
+// Waits until all queued brightness changes were written, e.g. before the
+// session ends.
+bool WaitUntilIdle(DWORD timeoutMs) {
+    std::unique_lock<std::mutex> lock(g_mutex);
+    return g_idleCv.wait_for(lock, std::chrono::milliseconds(timeoutMs), [] {
+        return !g_busy && g_pendingSet.empty() && !g_requestEnumerate &&
+               !g_requestRefresh;
+    });
 }
 
 }  // namespace hw
@@ -1231,17 +1258,31 @@ std::vector<Fade> g_fades;
 bool g_paused;
 bool g_idleDimmed;
 std::map<std::wstring, int> g_idleRestore;
+void SaveIdleRestore();
 long long g_lastScheduleCheck;
 bool g_reenumPending;
+bool g_resumeCatchUp;
 int g_wheelAccumulator;
 int g_registeredHotkeys;
+std::wstring g_storagePrefix;
 
 UINT g_taskbarCreatedMsg;
 HICON g_trayIcon;
 bool g_trayUseGuid = true;
 bool g_trayAdded;
-RECT g_trayIconRect;
-HHOOK g_mouseHook;
+
+// The low-level mouse hook runs on its own thread, so that it always answers
+// within LowLevelHooksTimeout even when the UI thread waits for Explorer. It
+// reads this configuration, which the UI thread keeps up to date.
+struct WheelHookConfig {
+    WheelMode mode = WheelMode::Off;
+    int modifier = 0;
+    RECT trayIconRect{};
+};
+std::mutex g_wheelHookMutex;
+WheelHookConfig g_wheelHookConfig;
+HANDLE g_hookThread;
+DWORD g_hookThreadId;
 
 HWND g_hwndPanel;
 HWND g_hwndOsd;
@@ -2566,6 +2607,7 @@ void OnHotkey(int id) {
     ShowOsd(targets, nullptr);
 }
 
+// The taskbar, or the notification area's overflow flyout.
 bool IsTaskbarWindow(HWND hwnd) {
     HWND root = GetAncestor(hwnd, GA_ROOT);
     if (!root) {
@@ -2576,29 +2618,74 @@ bool IsTaskbarWindow(HWND hwnd) {
         return false;
     }
     return wcscmp(className, L"Shell_TrayWnd") == 0 ||
-           wcscmp(className, L"Shell_SecondaryTrayWnd") == 0;
+           wcscmp(className, L"Shell_SecondaryTrayWnd") == 0 ||
+           wcscmp(className, L"NotifyIconOverflowWindow") == 0 ||
+           wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0;
 }
 
 LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wParam, LPARAM lParam) {
     if (code == HC_ACTION && wParam == WM_MOUSEWHEEL) {
         auto* info = (MSLLHOOKSTRUCT*)lParam;
-        bool modifierOk =
-            g_settings.wheelModifier == 0 ||
-            (GetAsyncKeyState(g_settings.wheelModifier) & 0x8000);
+        WheelHookConfig config;
+        {
+            std::lock_guard<std::mutex> lock(g_wheelHookMutex);
+            config = g_wheelHookConfig;
+        }
         bool inArea = false;
-        if (g_settings.wheelMode == WheelMode::TrayIcon) {
-            inArea = PtInRect(&g_trayIconRect, info->pt);
-        } else if (g_settings.wheelMode == WheelMode::Taskbar) {
+        if (config.mode == WheelMode::TrayIcon) {
+            // Also check the window, so that a window covering the icon's
+            // position (e.g. a full-screen video) keeps its wheel events.
+            inArea = PtInRect(&config.trayIconRect, info->pt) &&
+                     IsTaskbarWindow(WindowFromPoint(info->pt));
+        } else if (config.mode == WheelMode::Taskbar) {
             inArea = IsTaskbarWindow(WindowFromPoint(info->pt));
         }
-        if (modifierOk && inArea) {
-            PostMessage(g_hwndMain, WM_APP_WHEEL,
+        bool modifierOk = config.modifier == 0 ||
+                          (GetAsyncKeyState(config.modifier) & 0x8000);
+        HWND main = g_hwndMain;
+        if (inArea && modifierOk && main) {
+            PostMessage(main, WM_APP_WHEEL,
                         (WPARAM)(short)HIWORD(info->mouseData),
                         MAKELPARAM(info->pt.x, info->pt.y));
             return 1;
         }
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+DWORD WINAPI HookThread(LPVOID) {
+    HHOOK hook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, g_module, 0);
+    if (!hook) {
+        Wh_Log(L"SetWindowsHookEx failed (error %u)", GetLastError());
+        return 1;
+    }
+    MSG msg;
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        DispatchMessageW(&msg);
+    }
+    UnhookWindowsHookEx(hook);
+    return 0;
+}
+
+void StopHookThread() {
+    if (!g_hookThread) {
+        return;
+    }
+    PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+    WaitForSingleObject(g_hookThread, 3000);
+    CloseHandle(g_hookThread);
+    g_hookThread = nullptr;
+    g_hookThreadId = 0;
+}
+
+void UpdateTrayIconRectForWheel() {
+    RECT rect{};
+    if (g_settings.wheelMode != WheelMode::TrayIcon ||
+        !GetTrayIconRect(&rect)) {
+        SetRectEmpty(&rect);
+    }
+    std::lock_guard<std::mutex> lock(g_wheelHookMutex);
+    g_wheelHookConfig.trayIconRect = rect;
 }
 
 void OnWheel(int delta, POINT pt) {
@@ -2629,26 +2716,21 @@ void OnWheel(int delta, POINT pt) {
 }
 
 void UpdateMouseHook() {
-    bool wanted = g_settings.wheelMode != WheelMode::Off;
-    if (wanted && !g_mouseHook) {
-        g_mouseHook =
-            SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, g_module, 0);
-        if (!g_mouseHook) {
-            Wh_Log(L"SetWindowsHookEx failed (error %u)", GetLastError());
-        }
-    } else if (!wanted && g_mouseHook) {
-        UnhookWindowsHookEx(g_mouseHook);
-        g_mouseHook = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_wheelHookMutex);
+        g_wheelHookConfig.mode = g_settings.wheelMode;
+        g_wheelHookConfig.modifier = g_settings.wheelModifier;
     }
+    // The tray icon's rect is refreshed from the icon's WM_MOUSEMOVE
+    // notifications, TaskbarCreated and display changes, not by polling.
+    UpdateTrayIconRectForWheel();
 
-    if (g_settings.wheelMode == WheelMode::TrayIcon) {
-        if (!GetTrayIconRect(&g_trayIconRect)) {
-            SetRectEmpty(&g_trayIconRect);
-        }
-        SetTimer(g_hwndMain, TIMER_ICONRECT, 1000, nullptr);
-    } else {
-        KillTimer(g_hwndMain, TIMER_ICONRECT);
-        SetRectEmpty(&g_trayIconRect);
+    bool wanted = g_settings.wheelMode != WheelMode::Off;
+    if (wanted && !g_hookThread) {
+        g_hookThread =
+            CreateThread(nullptr, 0, HookThread, nullptr, 0, &g_hookThreadId);
+    } else if (!wanted) {
+        StopHookThread();
     }
 }
 
@@ -2672,9 +2754,11 @@ void ApplyScheduledValue(UiDisplay& d, int target, DWORD durationMs) {
         // back instead.
         if (target > g_settings.idleBrightness) {
             g_idleRestore[d.info.key] = target;
+            SaveIdleRestore();
             return;
         }
         g_idleRestore.erase(d.info.key);
+        SaveIdleRestore();
     }
     StartFade(d, target, durationMs);
 }
@@ -2686,8 +2770,11 @@ void CheckSchedule(bool startup) {
 
     long long now = LocalMinutesNow();
     long long dayStart = now - now % 1440;
-    bool catchUp = startup || g_lastScheduleCheck == 0 ||
+    // Startup and resume from sleep are catch-ups: only the latest entry
+    // matters, and only if "apply on startup and after sleep" is on.
+    bool catchUp = startup || g_resumeCatchUp || g_lastScheduleCheck == 0 ||
                    now - g_lastScheduleCheck > 1440;
+    g_resumeCatchUp = false;
     long long last = g_lastScheduleCheck;
     g_lastScheduleCheck = now;
 
@@ -2726,6 +2813,36 @@ void CheckSchedule(bool startup) {
     }
 }
 
+// Arms a one-shot timer for the next schedule entry instead of polling.
+// Re-armed after it fires, on settings changes, time changes and after
+// resume.
+void ArmScheduleTimer() {
+    if (g_settings.schedule.empty() || !g_haveSnapshot) {
+        KillTimer(g_hwndMain, TIMER_SCHEDULE);
+        return;
+    }
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    long long msOfDay =
+        ((st.wHour * 60LL + st.wMinute) * 60 + st.wSecond) * 1000 +
+        st.wMilliseconds;
+    long long next = LLONG_MAX;
+    for (const auto& entry : g_settings.schedule) {
+        long long delta = entry.minuteOfDay * 60000LL - msOfDay;
+        if (delta <= 0) {
+            delta += 24 * 60 * 60000LL;
+        }
+        next = std::min(next, delta);
+    }
+    // Fire just after the minute starts, so that CheckSchedule sees it.
+    SetTimer(g_hwndMain, TIMER_SCHEDULE, (UINT)(next + 500), nullptr);
+}
+
+void RunScheduleCheck(bool startup) {
+    CheckSchedule(startup);
+    ArmScheduleTimer();
+}
+
 bool IsFullscreenAppRunning() {
     QUERY_USER_NOTIFICATION_STATE state;
     if (FAILED(SHQueryUserNotificationState(&state))) {
@@ -2735,11 +2852,66 @@ bool IsFullscreenAppRunning() {
            state == QUNS_PRESENTATION_MODE;
 }
 
+// The levels from before idle dimming are also kept in the mod's storage, so
+// that they can be restored at the next start if the session ends while the
+// displays are dimmed (restart for updates, shutdown, crash). All users'
+// tool processes share the storage, so the value names include the user SID.
+std::wstring StorageName(PCWSTR name, int index = -1) {
+    std::wstring result = g_storagePrefix + name;
+    if (index >= 0) {
+        result += std::to_wstring(index);
+    }
+    return result;
+}
+
+void SaveIdleRestore() {
+    int n = 0;
+    for (const auto& [key, value] : g_idleRestore) {
+        Wh_SetStringValue(StorageName(L"idleRestoreKey", n).c_str(),
+                          key.c_str());
+        Wh_SetIntValue(StorageName(L"idleRestoreValue", n).c_str(), value);
+        n++;
+    }
+    Wh_SetIntValue(StorageName(L"idleRestoreCount").c_str(), n);
+}
+
+void ClearSavedIdleRestore() {
+    int count = Wh_GetIntValue(StorageName(L"idleRestoreCount").c_str(), 0);
+    for (int i = 0; i < count; i++) {
+        Wh_DeleteValue(StorageName(L"idleRestoreKey", i).c_str());
+        Wh_DeleteValue(StorageName(L"idleRestoreValue", i).c_str());
+    }
+    if (count) {
+        Wh_DeleteValue(StorageName(L"idleRestoreCount").c_str());
+    }
+}
+
+// Called after the first enumeration: undoes a dim that outlived the
+// previous session.
+void RestoreSavedIdleLevels() {
+    int count = Wh_GetIntValue(StorageName(L"idleRestoreCount").c_str(), 0);
+    for (int i = 0; i < count && i < 64; i++) {
+        WCHAR key[512];
+        Wh_GetStringValue(StorageName(L"idleRestoreKey", i).c_str(), key,
+                          ARRAYSIZE(key));
+        int value =
+            Wh_GetIntValue(StorageName(L"idleRestoreValue", i).c_str(), -1);
+        UiDisplay* d = FindDisplay(key);
+        if (d && value >= 0) {
+            Wh_Log(L"Restoring %s to %d%% after an interrupted idle dim",
+                   d->label.c_str(), value);
+            SetDisplayValue(*d, value, false);
+        }
+    }
+    ClearSavedIdleRestore();
+}
+
 void RestoreFromIdle(bool immediate) {
     if (!g_idleDimmed) {
         return;
     }
     g_idleDimmed = false;
+    ClearSavedIdleRestore();
     for (const auto& [key, value] : g_idleRestore) {
         if (UiDisplay* d = FindDisplay(key)) {
             if (immediate) {
@@ -2753,30 +2925,52 @@ void RestoreFromIdle(bool immediate) {
     g_idleRestore.clear();
 }
 
+// The idle timer doesn't poll: while the displays aren't dimmed it fires when
+// the idle time could first be reached. Only while dimmed does it check every
+// second for input, to restore quickly.
+void ArmIdleTimer(DWORD delayMs) {
+    SetTimer(g_hwndMain, TIMER_IDLE, std::max<DWORD>(delayMs, 1000), nullptr);
+}
+
 void OnIdleTimer() {
-    if (!g_settings.idleEnabled || g_paused) {
+    if (!g_settings.idleEnabled) {
+        KillTimer(g_hwndMain, TIMER_IDLE);
         RestoreFromIdle(false);
         return;
     }
 
     LASTINPUTINFO lii{sizeof(lii)};
     if (!GetLastInputInfo(&lii)) {
+        ArmIdleTimer(60000);
         return;
     }
     DWORD idleMs = GetTickCount() - lii.dwTime;
+    DWORD thresholdMs = (DWORD)g_settings.idleMinutes * 60000;
 
     if (g_idleDimmed) {
-        if (idleMs < 1500) {
+        if (idleMs < 1500 || g_paused) {
             RestoreFromIdle(false);
+            ArmIdleTimer(thresholdMs);
+        } else {
+            ArmIdleTimer(1000);
         }
         return;
     }
 
-    if (idleMs < (DWORD)g_settings.idleMinutes * 60000 ||
-        (g_settings.idleIgnoreFullscreen && IsFullscreenAppRunning())) {
+    if (g_paused) {
+        ArmIdleTimer(thresholdMs);
+        return;
+    }
+    if (idleMs < thresholdMs) {
+        ArmIdleTimer(thresholdMs - idleMs);
+        return;
+    }
+    if (g_settings.idleIgnoreFullscreen && IsFullscreenAppRunning()) {
+        ArmIdleTimer(30000);
         return;
     }
 
+    ArmIdleTimer(1000);
     g_idleDimmed = true;
     g_idleRestore.clear();
     for (auto* d : ControllableDisplays()) {
@@ -2791,6 +2985,7 @@ void OnIdleTimer() {
             StartFade(*d, g_settings.idleBrightness, 2000);
         }
     }
+    SaveIdleRestore();
     Wh_Log(L"Idle: dimmed %d display(s)", (int)g_idleRestore.size());
 }
 
@@ -2811,7 +3006,13 @@ void CopyDisplayInfo() {
     EmptyClipboard();
     size_t bytes = (text.size() + 1) * sizeof(WCHAR);
     if (HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, bytes)) {
-        memcpy(GlobalLock(mem), text.c_str(), bytes);
+        void* data = GlobalLock(mem);
+        if (!data) {
+            GlobalFree(mem);
+            CloseClipboard();
+            return;
+        }
+        memcpy(data, text.c_str(), bytes);
         GlobalUnlock(mem);
         if (!SetClipboardData(CF_UNICODETEXT, mem)) {
             GlobalFree(mem);
@@ -2871,11 +3072,12 @@ void ApplySettings() {
     RegisterHotkeys();
     UpdateMouseHook();
     if (g_settings.idleEnabled) {
-        SetTimer(g_hwndMain, TIMER_IDLE, 1000, nullptr);
+        ArmIdleTimer(1000);
     } else {
         KillTimer(g_hwndMain, TIMER_IDLE);
         RestoreFromIdle(false);
     }
+    ArmScheduleTimer();
     RebuildDisplays(g_lastSnapshot, false);
     UpdatePanel();
     UpdateTrayTip();
@@ -2886,10 +3088,7 @@ void Shutdown() {
     g_fades.clear();
     KillTimer(g_hwndMain, TIMER_FADE);
     UnregisterHotkeys();
-    if (g_mouseHook) {
-        UnhookWindowsHookEx(g_mouseHook);
-        g_mouseHook = nullptr;
-    }
+    StopHookThread();
     RemoveTrayIcon();
     if (g_hwndPanel) {
         DestroyWindow(g_hwndPanel);
@@ -2923,6 +3122,21 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                     HidePanel();
                     ShowTrayMenu({GET_X_LPARAM(wParam), GET_Y_LPARAM(wParam)});
                     break;
+                case WM_MOUSEMOVE:
+                    // The icon may have moved (taskbar resized, icons
+                    // reordered): refresh the rectangle the wheel hook uses.
+                    if (g_settings.wheelMode == WheelMode::TrayIcon) {
+                        POINT pt{GET_X_LPARAM(wParam), GET_Y_LPARAM(wParam)};
+                        RECT rect;
+                        {
+                            std::lock_guard<std::mutex> lock(g_wheelHookMutex);
+                            rect = g_wheelHookConfig.trayIconRect;
+                        }
+                        if (!PtInRect(&rect, pt)) {
+                            UpdateTrayIconRectForWheel();
+                        }
+                    }
+                    break;
             }
             return 0;
 
@@ -2937,11 +3151,26 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             }
             if (!g_haveSnapshot) {
                 g_haveSnapshot = true;
-                CheckSchedule(true);
-                SetTimer(hwnd, TIMER_SCHEDULE, 15000, nullptr);
+                RestoreSavedIdleLevels();
+                RunScheduleCheck(true);
+            } else if (enumerated) {
+                // Entries skipped while re-enumerating, and the catch-up
+                // after resume.
+                RunScheduleCheck(false);
             }
             return 0;
         }
+
+        case WM_QUERYENDSESSION:
+            // Don't leave the displays dimmed when the user signs out or
+            // shuts down while idle.
+            RestoreFromIdle(true);
+            hw::WaitUntilIdle(3000);
+            return TRUE;
+
+        case WM_TIMECHANGE:
+            RunScheduleCheck(false);
+            return 0;
 
         case WM_APP_SETTINGS:
             LoadSettings();
@@ -2968,7 +3197,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                     hw::RequestEnumerate();
                     break;
                 case TIMER_SCHEDULE:
-                    CheckSchedule(false);
+                    RunScheduleCheck(false);
                     break;
                 case TIMER_IDLE:
                     OnIdleTimer();
@@ -2980,11 +3209,6 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                     KillTimer(hwnd, TIMER_TOOLTIP);
                     UpdateTrayTip();
                     break;
-                case TIMER_ICONRECT:
-                    if (!GetTrayIconRect(&g_trayIconRect)) {
-                        SetRectEmpty(&g_trayIconRect);
-                    }
-                    break;
                 case TIMER_MONITOR_OFF:
                     KillTimer(hwnd, TIMER_MONITOR_OFF);
                     DefWindowProcW(hwnd, WM_SYSCOMMAND, SC_MONITORPOWER, 2);
@@ -2995,12 +3219,14 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         case WM_DISPLAYCHANGE:
             g_reenumPending = true;
             SetTimer(hwnd, TIMER_REENUM, 2000, nullptr);
+            UpdateTrayIconRectForWheel();
             break;
 
         case WM_POWERBROADCAST:
             if (wParam == PBT_APMRESUMEAUTOMATIC ||
                 wParam == PBT_APMRESUMESUSPEND) {
                 g_reenumPending = true;
+                g_resumeCatchUp = true;
                 SetTimer(hwnd, TIMER_REENUM, 3000, nullptr);
             }
             return TRUE;
@@ -3032,8 +3258,28 @@ bool IsWindows11() {
            info.dwBuildNumber >= 22000;
 }
 
+// The prefix for the mod's storage value names: the current user's SID.
+std::wstring GetStoragePrefix() {
+    std::wstring prefix;
+    HANDLE token;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        BYTE buffer[256];
+        DWORD size;
+        if (GetTokenInformation(token, TokenUser, buffer, sizeof(buffer),
+                                &size)) {
+            PWSTR sid;
+            if (ConvertSidToStringSidW(((TOKEN_USER*)buffer)->User.Sid, &sid)) {
+                prefix = std::wstring(sid) + L"_";
+                LocalFree(sid);
+            }
+        }
+        CloseHandle(token);
+    }
+    return prefix;
+}
+
 DWORD WINAPI UiThread(LPVOID) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    g_storagePrefix = GetStoragePrefix();
 
     Gdiplus::GdiplusStartupInput gdiplusInput;
     Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr);
