@@ -28,13 +28,16 @@ re-imagined as a lightweight Windhawk mod with no Electron runtime.
 ## Features
 
 - **Tray panel:** click the sun icon in the notification area to get a
-  brightness slider for every display, plus an optional "All displays" slider
-  that moves all displays together while keeping their differences (or sets
-  them to the same level). The panel follows the Windows light/dark theme and
-  accent color.
+  brightness slider for every display. The panel follows the Windows
+  light/dark theme and accent color.
+- **Link displays:** the chain button in the panel links the displays. While
+  linked, one slider sets all displays to the same level, and the hotkeys and
+  the mouse wheel change all of them. While unlinked, each display has its own
+  slider, the hotkeys change the display with the active window and the mouse
+  wheel changes the display under the cursor.
 - **Hotkeys:** bind any key combination to increase, decrease or set the
-  brightness of one display or all of them, turn the displays off, or open the
-  panel.
+  brightness, turn the displays off, or open the panel. A hotkey can also
+  target a specific display.
 - **On-screen indicator:** a small overlay shows the new level when you use a
   hotkey or the mouse wheel, with one row per display when they are at
   different levels.
@@ -74,7 +77,8 @@ example `Ctrl+Alt+Up`, `Win+Shift+PageDown` or `Ctrl+Alt+F1`. Supported keys:
 Hotkeys, schedule entries and per-display options accept a part of a display's
 **name** (as shown in the panel) or **ID**. Right-click the tray icon and choose
 **Copy display info** to copy the names and IDs of all connected displays.
-Leave the field empty to target all displays.
+Leave the field empty to target all displays (for hotkeys: to follow the
+link button).
 
 ## Troubleshooting
 
@@ -84,7 +88,10 @@ Leave the field empty to target all displays.
 - **A monitor stops responding after sleep:** choose **Refresh displays**, or
   turn the monitor off and on with its power button.
 - **A hotkey does nothing:** another program may already use that combination.
-  Check the Windhawk log for "RegisterHotKey failed".
+  Check the Windhawk log for "RegisterHotKey failed". The default
+  `Ctrl+Alt+Up`/`Ctrl+Alt+Down` are also used by Visual Studio Code (add a
+  cursor) and some Intel graphics drivers (rotate the screen); change them in
+  the settings if you need those shortcuts.
 - **The AMD Radeon software can interfere** with DDC/CI brightness. Disable
   "Custom Colors" there if brightness changes have no effect.
 
@@ -100,14 +107,6 @@ This mod is not affiliated with Twinkle Tray or its author.
   - auto: Follow Windows
   - dark: Dark
   - light: Light
-- showAllDisplaysSlider: true
-  $name: Show an "All displays" slider
-  $description: Shown in the panel when two or more displays can be controlled
-- allDisplaysSliderMode: relative
-  $name: Behavior of the "All displays" slider
-  $options:
-  - relative: Move all displays together, keeping their differences
-  - absolute: Set all displays to the same level
 - showOsd: true
   $name: Show the on-screen indicator
   $description: Shows the new brightness level when you use a hotkey or the mouse wheel
@@ -128,7 +127,7 @@ This mod is not affiliated with Twinkle Tray or its author.
       $description: Step for increase/decrease, or the level for "Set brightness"
     - display: ""
       $name: Display
-      $description: Part of the display's name or ID. Leave empty for all displays.
+      $description: Part of the display's name or ID. Leave empty to follow the panel's link button, which changes all displays when it's on and the display with the active window when it's off.
   - - keys: Ctrl+Alt+Down
     - action: decrease
     - value: 10
@@ -150,11 +149,7 @@ This mod is not affiliated with Twinkle Tray or its author.
     - alt: Alt
   - step: 2
     $name: Step per wheel notch (%)
-  - target: all
-    $name: Displays to change
-    $options:
-    - all: All displays
-    - cursor: The display under the mouse cursor
+    $description: The wheel changes all displays while the panel's link button is on, and the display under the mouse cursor while it's off.
   $name: Mouse wheel
 - schedule:
   - - time: ""
@@ -294,14 +289,11 @@ struct DisplayConfig {
 
 struct Settings {
     ThemeMode theme = ThemeMode::Auto;
-    bool showAllDisplaysSlider = true;
-    bool allDisplaysSliderRelative = true;
     bool showOsd = true;
     std::vector<HotkeyConfig> hotkeys;
     WheelMode wheelMode = WheelMode::TrayIcon;
     int wheelModifier = 0;  // VK code, 0 = none
     int wheelStep = 2;
-    bool wheelTargetCursor = false;
     std::vector<ScheduleEntry> schedule;
     int transitionSeconds = 30;
     bool applyScheduleOnStartup = true;
@@ -473,9 +465,6 @@ void LoadSettings() {
     s.theme = theme == L"dark"    ? ThemeMode::Dark
               : theme == L"light" ? ThemeMode::Light
                                   : ThemeMode::Auto;
-    s.showAllDisplaysSlider = GetIntSetting(L"showAllDisplaysSlider") != 0;
-    s.allDisplaysSliderRelative =
-        GetStringSetting(L"allDisplaysSliderMode") != L"absolute";
     s.showOsd = GetIntSetting(L"showOsd") != 0;
 
     for (int i = 0; i < 32; i++) {
@@ -511,7 +500,6 @@ void LoadSettings() {
                       : modifier == L"alt"   ? VK_MENU
                                              : 0;
     s.wheelStep = std::clamp(GetIntSetting(L"wheel.step"), 1, 50);
-    s.wheelTargetCursor = GetStringSetting(L"wheel.target") == L"cursor";
 
     for (int i = 0; i < 32; i++) {
         std::wstring time =
@@ -1256,6 +1244,11 @@ std::vector<DisplayInfo> g_lastSnapshot;
 bool g_haveSnapshot;
 std::vector<Fade> g_fades;
 bool g_paused;
+// The panel's link button: when on, all displays share one slider and move
+// together, and hotkeys and the wheel change all of them. Saved in storage.
+bool g_linked = true;
+void SetLinked(bool linked);
+bool IsTaskbarWindow(HWND hwnd);
 bool g_idleDimmed;
 std::map<std::wstring, int> g_idleRestore;
 void SaveIdleRestore();
@@ -1791,8 +1784,9 @@ struct PanelRow {
 std::vector<PanelRow> g_rows;
 int g_dragRow = -1;
 int g_focusRow = -1;
-int g_hoverButton = -1;  // 0 = turn off, 1 = refresh
-RECT g_buttons[2];
+int g_hoverButton = -1;  // 0 = turn off, 1 = refresh, 2 = link
+constexpr int PANEL_BUTTONS = 3;
+RECT g_buttons[PANEL_BUTTONS];
 UINT g_panelDpi = 96;
 int g_panelWidth;
 int g_panelHeight;
@@ -1803,9 +1797,8 @@ int S(int dip) {
     return MulDiv(dip, (int)g_panelDpi, 96);
 }
 
-bool ShowAllRow() {
-    return g_settings.showAllDisplaysSlider &&
-           ControllableDisplays().size() >= 2;
+bool CanLink() {
+    return ControllableDisplays().size() >= 2;
 }
 
 void LayoutPanel() {
@@ -1825,13 +1818,13 @@ void LayoutPanel() {
         y += rowHeight;
     };
 
-    if (ShowAllRow()) {
+    if (g_linked && CanLink()) {
         addRow(-1, true);
-        y += S(9);  // Separator
-    }
-    for (size_t i = 0; i < g_displays.size(); i++) {
-        if (!g_displays[i].hidden) {
-            addRow((int)i, g_displays[i].info.method != Method::None);
+    } else {
+        for (size_t i = 0; i < g_displays.size(); i++) {
+            if (!g_displays[i].hidden) {
+                addRow((int)i, g_displays[i].info.method != Method::None);
+            }
         }
     }
     if (g_rows.empty()) {
@@ -1847,25 +1840,20 @@ void LayoutPanel() {
                     g_panelWidth - S(16), top + buttonSize};
     g_buttons[0] = {g_buttons[1].left - S(4) - buttonSize, top,
                     g_buttons[1].left - S(4), top + buttonSize};
+    g_buttons[2] = {g_buttons[0].left - S(4) - buttonSize, top,
+                    g_buttons[0].left - S(4), top + buttonSize};
+    if (!CanLink()) {
+        SetRectEmpty(&g_buttons[2]);
+    }
 
     if (g_focusRow >= (int)g_rows.size()) {
         g_focusRow = -1;
     }
 }
 
-// State of a drag on the "All displays" slider in relative mode: the level of
-// each display when the drag started, so that moving to an edge and back
-// restores the original differences between displays.
-std::map<std::wstring, int> g_allDragBase;
-int g_allDragStart = -1;
-int g_allDragValue = -1;
-
 int RowValue(const PanelRow& row) {
     if (row.display >= 0) {
         return g_displays[row.display].value;
-    }
-    if (g_allDragValue >= 0) {
-        return g_allDragValue;
     }
     int sum = 0, count = 0;
     for (auto* d : ControllableDisplays()) {
@@ -1884,45 +1872,6 @@ void SetRowValue(const PanelRow& row, int value) {
         for (auto* d : ControllableDisplays()) {
             SetDisplayValue(*d, value, true);
         }
-    }
-}
-
-void BeginAllDrag() {
-    g_allDragBase.clear();
-    g_allDragValue = -1;
-    g_allDragStart = -1;
-    if (!g_settings.allDisplaysSliderRelative) {
-        return;
-    }
-    for (auto* d : ControllableDisplays()) {
-        g_allDragBase[d->info.key] = d->value < 0 ? 50 : d->value;
-    }
-    PanelRow all{};
-    all.display = -1;
-    g_allDragStart = RowValue(all);
-    if (g_allDragStart < 0) {
-        g_allDragStart = 50;
-    }
-}
-
-void EndAllDrag() {
-    g_allDragBase.clear();
-    g_allDragStart = -1;
-    g_allDragValue = -1;
-}
-
-// Moves every display by the same amount, keeping their differences.
-void ShiftAllDisplays(int delta, bool fromDragBase) {
-    for (auto* d : ControllableDisplays()) {
-        int base = d->value < 0 ? 50 : d->value;
-        if (fromDragBase) {
-            auto it = g_allDragBase.find(d->info.key);
-            if (it == g_allDragBase.end()) {
-                continue;
-            }
-            base = it->second;
-        }
-        SetDisplayValue(*d, base + delta, true);
     }
 }
 
@@ -1981,13 +1930,6 @@ void PaintPanel(HDC hdc) {
                                     (float)(w - S(20) - row.track.right - S(12)),
                                     (float)S(22)),
                      (float)S(14), t.text, Gdiplus::StringAlignmentFar);
-
-            if (row.display < 0) {
-                Gdiplus::Pen separator(t.border, 1);
-                float sy = (float)row.rect.bottom + S(4);
-                g.DrawLine(&separator, (float)S(20), sy, (float)(w - S(20)),
-                           sy);
-            }
         }
 
         // Footer
@@ -1997,20 +1939,32 @@ void PaintPanel(HDC hdc) {
         g.DrawLine(&footerLine, 0, g_footerTop, w, g_footerTop);
         DrawLabel(g, g_paused ? L"Automatic brightness paused" : L"Brightness",
                  Gdiplus::RectF((float)S(20), (float)g_footerTop,
-                                (float)(g_buttons[0].left - S(28)),
+                                (float)((CanLink() ? g_buttons[2].left
+                                                   : g_buttons[0].left) -
+                                        S(28)),
                                 (float)(h - g_footerTop)),
                  (float)S(12), t.secondaryText, Gdiplus::StringAlignmentNear);
 
-        static const PCWSTR glyphs[2] = {L"\xE7E8", L"\xE72C"};  // Power, Refresh
-        for (int i = 0; i < 2; i++) {
+        // Power, Refresh, Link
+        static const PCWSTR glyphs[PANEL_BUTTONS] = {L"\xE7E8", L"\xE72C",
+                                                     L"\xE71B"};
+        for (int i = 0; i < PANEL_BUTTONS; i++) {
             const RECT& b = g_buttons[i];
+            if (IsRectEmpty(&b)) {
+                continue;
+            }
             Gdiplus::RectF rect((float)b.left, (float)b.top,
                                 (float)(b.right - b.left),
                                 (float)(b.bottom - b.top));
             if (g_hoverButton == i) {
                 FillRoundRect(g, t.hover, rect, (float)S(4));
             }
-            DrawLabel(g, glyphs[i], rect, (float)S(16), t.text,
+            bool on = i == 2 && g_linked;
+            if (on) {
+                // Pressed look, so the state shows even with a gray accent.
+                FillRoundRect(g, t.hover, rect, (float)S(4));
+            }
+            DrawLabel(g, glyphs[i], rect, (float)S(16), on ? t.accent : t.text,
                      Gdiplus::StringAlignmentCenter, L"Segoe MDL2 Assets");
         }
 
@@ -2149,23 +2103,12 @@ void DragTo(int x) {
     int width = std::max(1, (int)(row.track.right - row.track.left));
     int value =
         ClampPercent((int)std::lround((x - row.track.left) * 100.0 / width));
-    if (row.display < 0 && g_allDragStart >= 0) {
-        g_allDragValue = value;
-        ShiftAllDisplays(value - g_allDragStart, true);
-        InvalidateRect(g_hwndPanel, nullptr, FALSE);
-        return;
-    }
     SetRowValue(row, value);
 }
 
 void AdjustRow(int rowIndex, int delta) {
     if (rowIndex < 0 || rowIndex >= (int)g_rows.size() ||
         !g_rows[rowIndex].supported) {
-        return;
-    }
-    if (g_rows[rowIndex].display < 0 &&
-        g_settings.allDisplaysSliderRelative) {
-        ShiftAllDisplays(delta, false);
         return;
     }
     int value = RowValue(g_rows[rowIndex]);
@@ -2219,9 +2162,6 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             if (row >= 0) {
                 g_dragRow = row;
                 g_focusRow = row;
-                if (g_rows[row].display < 0) {
-                    BeginAllDrag();
-                }
                 SetCapture(hwnd);
                 DragTo(pt.x);
                 InvalidateRect(hwnd, nullptr, FALSE);
@@ -2236,7 +2176,7 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 return 0;
             }
             int hover = -1;
-            for (int i = 0; i < 2; i++) {
+            for (int i = 0; i < PANEL_BUTTONS; i++) {
                 if (PtInRect(&g_buttons[i], pt)) {
                     hover = i;
                 }
@@ -2268,13 +2208,14 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 TurnOffDisplays();
             } else if (PtInRect(&g_buttons[1], pt)) {
                 hw::RequestEnumerate();
+            } else if (PtInRect(&g_buttons[2], pt)) {
+                SetLinked(!g_linked);
             }
             return 0;
         }
 
         case WM_CAPTURECHANGED:
             g_dragRow = -1;
-            EndAllDrag();
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
 
@@ -2576,6 +2517,63 @@ void UnregisterHotkeys() {
     g_registeredHotkeys = 0;
 }
 
+// The monitor of the active window, or the one under the cursor when the
+// desktop or the taskbar is active.
+HMONITOR ActiveMonitor() {
+    HWND fg = GetForegroundWindow();
+    WCHAR className[64] = L"";
+    if (fg) {
+        GetClassNameW(fg, className, ARRAYSIZE(className));
+    }
+    if (!fg || wcscmp(className, L"Progman") == 0 ||
+        wcscmp(className, L"WorkerW") == 0 || IsTaskbarWindow(fg)) {
+        POINT pt;
+        GetCursorPos(&pt);
+        return MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    }
+    return MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+}
+
+// What a hotkey without a display setting, or the mouse wheel, changes: all
+// displays while they are linked, otherwise the display on the monitor.
+std::vector<UiDisplay*> DefaultTargets(HMONITOR monitor) {
+    if (g_linked) {
+        return ControllableDisplays();
+    }
+    std::vector<UiDisplay*> result;
+    for (auto* d : ControllableDisplays()) {
+        if (d->info.monitor == monitor) {
+            result.push_back(d);
+        }
+    }
+    return result;
+}
+
+// Changes the displays by delta, or sets them to setValue (>= 0). Linked
+// displays move as one, from their average level, so they end up equal.
+void ChangeDisplays(const std::vector<UiDisplay*>& targets,
+                    int delta,
+                    int setValue,
+                    bool linked) {
+    int linkedBase = 50;
+    if (linked) {
+        int sum = 0, count = 0;
+        for (auto* d : targets) {
+            if (d->value >= 0) {
+                sum += d->value;
+                count++;
+            }
+        }
+        if (count) {
+            linkedBase = (int)std::lround(sum / (double)count);
+        }
+    }
+    for (auto* d : targets) {
+        int current = linked ? linkedBase : (d->value < 0 ? 50 : d->value);
+        SetDisplayValue(*d, setValue >= 0 ? setValue : current + delta, true);
+    }
+}
+
 void OnHotkey(int id) {
     if (id < 1 || id > (int)g_settings.hotkeys.size()) {
         return;
@@ -2596,15 +2594,21 @@ void OnHotkey(int id) {
             break;
     }
 
-    std::vector<UiDisplay*> targets = MatchDisplays(hk.display);
-    for (auto* d : targets) {
-        int current = d->value < 0 ? 50 : d->value;
-        int value = hk.action == HotkeyAction::Increase   ? current + hk.value
-                    : hk.action == HotkeyAction::Decrease ? current - hk.value
-                                                          : hk.value;
-        SetDisplayValue(*d, value, true);
+    int delta = hk.action == HotkeyAction::Increase   ? hk.value
+                : hk.action == HotkeyAction::Decrease ? -hk.value
+                                                      : 0;
+    int setValue = hk.action == HotkeyAction::Set ? hk.value : -1;
+
+    if (!hk.display.empty()) {
+        std::vector<UiDisplay*> targets = MatchDisplays(hk.display);
+        ChangeDisplays(targets, delta, setValue, false);
+        ShowOsd(targets, nullptr);
+        return;
     }
-    ShowOsd(targets, nullptr);
+    HMONITOR monitor = ActiveMonitor();
+    std::vector<UiDisplay*> targets = DefaultTargets(monitor);
+    ChangeDisplays(targets, delta, setValue, g_linked);
+    ShowOsd(targets, g_linked ? nullptr : monitor);
 }
 
 // The taskbar, or the notification area's overflow flyout.
@@ -2653,13 +2657,17 @@ LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
-DWORD WINAPI HookThread(LPVOID) {
+DWORD WINAPI HookThread(LPVOID readyEvent) {
+    // Create the message queue before signaling, so that StopHookThread's
+    // WM_QUIT can't get lost.
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
     HHOOK hook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, g_module, 0);
+    SetEvent((HANDLE)readyEvent);
     if (!hook) {
         Wh_Log(L"SetWindowsHookEx failed (error %u)", GetLastError());
         return 1;
     }
-    MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         DispatchMessageW(&msg);
     }
@@ -2697,21 +2705,8 @@ void OnWheel(int delta, POINT pt) {
     }
 
     HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-    std::vector<UiDisplay*> targets;
-    if (g_settings.wheelTargetCursor) {
-        for (auto* d : ControllableDisplays()) {
-            if (d->info.monitor == monitor) {
-                targets.push_back(d);
-            }
-        }
-    }
-    if (targets.empty()) {
-        targets = ControllableDisplays();
-    }
-    for (auto* d : targets) {
-        int current = d->value < 0 ? 50 : d->value;
-        SetDisplayValue(*d, current + steps * g_settings.wheelStep, true);
-    }
+    std::vector<UiDisplay*> targets = DefaultTargets(monitor);
+    ChangeDisplays(targets, steps * g_settings.wheelStep, -1, g_linked);
     ShowOsd(targets, monitor);
 }
 
@@ -2727,8 +2722,14 @@ void UpdateMouseHook() {
 
     bool wanted = g_settings.wheelMode != WheelMode::Off;
     if (wanted && !g_hookThread) {
+        HANDLE ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         g_hookThread =
-            CreateThread(nullptr, 0, HookThread, nullptr, 0, &g_hookThreadId);
+            CreateThread(nullptr, 0, HookThread, ready, 0, &g_hookThreadId);
+        if (g_hookThread) {
+            HANDLE handles[] = {ready, g_hookThread};
+            WaitForMultipleObjects(2, handles, FALSE, 5000);
+        }
+        CloseHandle(ready);
     } else if (!wanted) {
         StopHookThread();
     }
@@ -2865,6 +2866,8 @@ std::wstring StorageName(PCWSTR name, int index = -1) {
 }
 
 void SaveIdleRestore() {
+    int oldCount =
+        Wh_GetIntValue(StorageName(L"idleRestoreCount").c_str(), 0);
     int n = 0;
     for (const auto& [key, value] : g_idleRestore) {
         Wh_SetStringValue(StorageName(L"idleRestoreKey", n).c_str(),
@@ -2873,6 +2876,10 @@ void SaveIdleRestore() {
         n++;
     }
     Wh_SetIntValue(StorageName(L"idleRestoreCount").c_str(), n);
+    for (int i = n; i < oldCount; i++) {
+        Wh_DeleteValue(StorageName(L"idleRestoreKey", i).c_str());
+        Wh_DeleteValue(StorageName(L"idleRestoreValue", i).c_str());
+    }
 }
 
 void ClearSavedIdleRestore() {
@@ -2906,12 +2913,26 @@ void RestoreSavedIdleLevels() {
     ClearSavedIdleRestore();
 }
 
-void RestoreFromIdle(bool immediate) {
+// keepBackup: leave the saved levels in storage; the caller clears them once
+// the writes are known to have reached the displays.
+void SetLinked(bool linked) {
+    g_linked = linked;
+    Wh_SetIntValue(StorageName(L"linked").c_str(), linked ? 1 : 0);
+    if (linked) {
+        // Bring the displays together, like a click on the shared slider.
+        ChangeDisplays(ControllableDisplays(), 0, -1, true);
+    }
+    UpdatePanel();
+}
+
+void RestoreFromIdle(bool immediate, bool keepBackup = false) {
     if (!g_idleDimmed) {
         return;
     }
     g_idleDimmed = false;
-    ClearSavedIdleRestore();
+    if (!keepBackup) {
+        ClearSavedIdleRestore();
+    }
     for (const auto& [key, value] : g_idleRestore) {
         if (UiDisplay* d = FindDisplay(key)) {
             if (immediate) {
@@ -2936,6 +2957,12 @@ void OnIdleTimer() {
     if (!g_settings.idleEnabled) {
         KillTimer(g_hwndMain, TIMER_IDLE);
         RestoreFromIdle(false);
+        return;
+    }
+    if (!g_haveSnapshot) {
+        // Wait for the first enumeration, so that the levels saved by an
+        // interrupted dim are restored before they could be overwritten.
+        ArmIdleTimer(2000);
         return;
     }
 
@@ -3164,8 +3191,12 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         case WM_QUERYENDSESSION:
             // Don't leave the displays dimmed when the user signs out or
             // shuts down while idle.
-            RestoreFromIdle(true);
-            hw::WaitUntilIdle(3000);
+            if (g_idleDimmed) {
+                RestoreFromIdle(true, true);
+                if (hw::WaitUntilIdle(3000)) {
+                    ClearSavedIdleRestore();
+                }
+            }
             return TRUE;
 
         case WM_TIMECHANGE:
@@ -3280,6 +3311,7 @@ std::wstring GetStoragePrefix() {
 
 DWORD WINAPI UiThread(LPVOID) {
     g_storagePrefix = GetStoragePrefix();
+    g_linked = Wh_GetIntValue(StorageName(L"linked").c_str(), 1) != 0;
 
     Gdiplus::GdiplusStartupInput gdiplusInput;
     Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr);
