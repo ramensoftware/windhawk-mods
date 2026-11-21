@@ -5891,8 +5891,10 @@ static void RenderStartFrame() {
         int cols = s.tab == 2 ? 1 : 2;
         float colW = (W - pad * 2 - SS(6) * (cols - 1)) / cols, rowH = SS(s.tab == 2 ? 50 : 48), gap = SS(6);
         int rowsN = ((int)list.size() + cols - 1) / cols;
-        s.maxScroll = std::max(0.0f, rowsN * (rowH + gap) - gap - (listBottom - gridTop));
-        s.scroll = std::clamp(s.scroll, 0.0f, s.maxScroll);
+        if (s.tab != 3) {
+            s.maxScroll = std::max(0.0f, rowsN * (rowH + gap) - gap - (listBottom - gridTop));
+            s.scroll = std::clamp(s.scroll, 0.0f, s.maxScroll);
+        }
         rt->PushAxisAlignedClip(D2D1::RectF(0, gridTop, W, listBottom), D2D1_ANTIALIAS_MODE_ALIASED);
         for (size_t i = 0; i < list.size(); i++) {
             float x = pad + (i % cols) * (colW + gap);
@@ -5917,9 +5919,24 @@ static void RenderStartFrame() {
             for (int id : {StPlayer, StDevices, StDnd, StNight, StBt, StShort, StLight, StPower})
                 if ((ExtraPlace(id) & PlStart) && (id != StBt || BtPresent()) && (id != StDevices || !DevicesNow().empty())) ids.push_back(id);
             float gap = SS(8), colW = (W - pad * 2 - gap) / 2, tileH = SS(80);
+            // Many items in here: the tiles and the tray scroll between the tabs and the footer (never over the power buttons).
+            std::vector<int> trayOrder;
+            if (TrayInStart()) trayOrder = TrayOrder();
+            float cell = SS(46);
+            int trayCols = std::max(1, (int)((W - pad * 2) / cell));
+            float contentH = ids.empty() ? 0 : ((ids.size() + 1) / 2) * (tileH + gap) - gap;
+            if (TrayInStart())
+                contentH += (ids.empty() ? 0 : gap + SS(6)) + SS(28) +
+                            (trayOrder.empty() ? SS(22) : ((trayOrder.size() + trayCols - 1) / trayCols) * cell);
+            s.maxScroll = std::max(0.0f, contentH - (listBottom - gridTop));
+            s.scroll = std::clamp(s.scroll, 0.0f, s.maxScroll);
+            // (like the app list: rows half out of view keep their whole box, so the keyboard can scroll to them;
+            // the tabs and the power buttons come first in the rows, so their clicks stay theirs)
+            rt->PushAxisAlignedClip(D2D1::RectF(0, gridTop, W, listBottom), D2D1_ANTIALIAS_MODE_ALIASED);
             for (size_t i = 0; i < ids.size(); i++) {
                 int id = ids[i];
-                float x = pad + (i % 2) * (colW + gap), y = gridTop + (i / 2) * (tileH + gap);
+                float x = pad + (i % 2) * (colW + gap), y = gridTop + (i / 2) * (tileH + gap) - s.scroll;
+                if (y + tileH <= gridTop || y >= listBottom) continue;
                 bool wide = i == ids.size() - 1 && i % 2 == 0;  // the last one alone on its row: full width
                 D2D1_RECT_F r = D2D1::RectF(x, y, wide ? W - pad : x + colW, y + tileH);
                 int idx = (int)s.rows.size();
@@ -5985,17 +6002,16 @@ static void RenderStartFrame() {
             }
             // The tray: its icons in a grid under the tiles (clicks go to the apps; middle-click pins).
             if (TrayInStart()) {
-                std::vector<int> order = TrayOrder();
-                float ty = gridTop + ((ids.size() + 1) / 2) * (tileH + gap) + (ids.empty() ? 0 : SS(6));
+                std::vector<int>& order = trayOrder;
+                float ty = gridTop + ((ids.size() + 1) / 2) * (tileH + gap) + (ids.empty() ? 0 : SS(6)) - s.scroll;
                 const wchar_t* head = L2(L"Em segundo plano", L"In the background");
                 rt->DrawTextW(head, (UINT32)wcslen(head), s.small.Get(), D2D1::RectF(pad + SS(4), ty, W - pad, ty + SS(22)), sub.Get());
                 ty += SS(28);
-                float cell = SS(46);
-                int cols = std::max(1, (int)((W - pad * 2) / cell));
+                int cols = trayCols;
                 for (size_t k = 0; k < order.size(); k++) {
                     int ti = order[k];
                     float x = pad + (k % cols) * cell, y = ty + (k / cols) * cell;
-                    if (y + cell > listBottom) break;
+                    if (y + cell <= gridTop || y >= listBottom) continue;
                     D2D1_RECT_F r = D2D1::RectF(x + SS(2), y + SS(2), x + cell - SS(2), y + cell - SS(2));
                     int idx = (int)s.rows.size();
                     s.rows.push_back({r, RowTray, nullptr, ti});
@@ -6012,6 +6028,7 @@ static void RenderStartFrame() {
                     rt->DrawTextW(none, (UINT32)wcslen(none), s.small.Get(), D2D1::RectF(pad + SS(4), ty, W - pad, ty + SS(22)), sub.Get());
                 }
             }
+            rt->PopAxisAlignedClip();
         }
         if (list.empty() && s.tab == 0) {
             const wchar_t* hint = Tr(S_PinHint);
