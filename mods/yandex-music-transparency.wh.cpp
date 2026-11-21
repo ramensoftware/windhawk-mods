@@ -10,32 +10,17 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*
-
-# Yandex Music Transparency
-
-Adds configurable transparency for the Yandex Music desktop application.
-
-## Features
-
-- Custom opacity for active and inactive windows
-- Optional full opacity while the mouse hovers over the window
-- Smooth animated transitions between opacity levels (can be disabled)
-- Automatically enforces transparency even if the app tries to remove `WS_EX_LAYERED`
-
-## Notes
-
-- Only the main application window (class `Chrome_WidgetWin_1`) is modified
-- Auxiliary Electron processes (`--type=*`) are ignored
-- Windows that already use `LWA_COLORKEY` are not modified
-
-*/
+/*...*/
 // ==/WindhawkModReadme==
 
 // ==WindhawkModChangelog==
 /*
 ## 1.2.8
 
+- Documented that the mod is universal and works with any Chromium / Electron
+  application (via the custom process inclusion list).
+- Defaults changed: `Alpha` 180 -> 220, `InactiveAlpha` 0 -> 170,
+  `SmoothTransitions` on, `OpaqueOnHover` off.
 - Performance: the polling timer now runs only while needed, and each tracked
   window manages its own timer. It stops when neither hover polling
   (OpaqueOnHover) nor an opacity animation is active for that window.
@@ -75,22 +60,7 @@ Adds configurable transparency for the Yandex Music desktop application.
 // ==/WindhawkModChangelog==
 
 // ==WindhawkModSettings==
-/*
-
-- Alpha: 180
-  $name: Active window opacity
-  $description: Opacity level of the active window (50-255)
-- InactiveAlpha: 0
-  $name: Inactive window opacity
-  $description: Opacity level of the inactive window. Set to 0 to use the active alpha value (50-255)
-- OpaqueOnHover: false
-  $name: Fully opaque on hover
-  $description: Make the window fully opaque while the mouse hovers over it
-- SmoothTransitions: true
-  $name: Smooth transitions
-  $description: Animate opacity changes instead of applying them instantly.
-
-*/
+/*...*/
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
