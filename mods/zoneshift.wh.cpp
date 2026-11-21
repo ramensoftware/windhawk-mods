@@ -105,16 +105,16 @@ Windows apps query time through multiple Win32, NT, ICU, CRT, and registry APIs.
 */
 // ==/WindhawkModSettings==
 
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00
+#endif
+
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <winternl.h>
+#include <timezoneapi.h>
 #include <cwchar>
 #include <string>
-
-extern "C" DWORD WINAPI EnumDynamicTimeZoneInformation(
-    const DWORD dwIndex,
-    PDYNAMIC_TIME_ZONE_INFORMATION lpTimeZoneInformation
-);
 
 // ---------------------------------------------------------------------------
 // Structs & Prototypes
