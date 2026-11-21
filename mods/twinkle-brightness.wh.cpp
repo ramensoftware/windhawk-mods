@@ -2,7 +2,7 @@
 // @id              twinkle-brightness
 // @name            Twinkle Brightness
 // @description     Brightness sliders for every display in the system tray, with hotkeys, an on-screen indicator, time-based schedules, idle dimming and mouse wheel control
-// @version         1.0.0
+// @version         1.1.0
 // @author          isousluer
 // @github          https://github.com/isousluer
 // @homepage        https://github.com/isousluer/twinkle-brightness
@@ -28,13 +28,16 @@ re-imagined as a lightweight Windhawk mod with no Electron runtime.
 ## Features
 
 - **Tray panel:** click the sun icon in the notification area to get a
-  brightness slider for every display, plus an optional "All displays" slider.
-  The panel follows the Windows light/dark theme and accent color.
+  brightness slider for every display, plus an optional "All displays" slider
+  that moves all displays together while keeping their differences (or sets
+  them to the same level). The panel follows the Windows light/dark theme and
+  accent color.
 - **Hotkeys:** bind any key combination to increase, decrease or set the
   brightness of one display or all of them, turn the displays off, or open the
   panel.
 - **On-screen indicator:** a small overlay shows the new level when you use a
-  hotkey or the mouse wheel.
+  hotkey or the mouse wheel, with one row per display when they are at
+  different levels.
 - **Mouse wheel:** scroll over the tray icon (or anywhere on the taskbar) to
   change the brightness.
 - **Schedule:** change the brightness automatically at given times of the day,
@@ -100,6 +103,11 @@ This mod is not affiliated with Twinkle Tray or its author.
 - showAllDisplaysSlider: true
   $name: Show an "All displays" slider
   $description: Shown in the panel when two or more displays can be controlled
+- allDisplaysSliderMode: relative
+  $name: "All displays" slider behavior
+  $options:
+  - relative: Move all displays together, keeping their differences
+  - absolute: Set all displays to the same level
 - showOsd: true
   $name: Show the on-screen indicator
   $description: Shows the new brightness level when you use a hotkey or the mouse wheel
@@ -286,6 +294,7 @@ struct DisplayConfig {
 struct Settings {
     ThemeMode theme = ThemeMode::Auto;
     bool showAllDisplaysSlider = true;
+    bool allDisplaysSliderRelative = true;
     bool showOsd = true;
     std::vector<HotkeyConfig> hotkeys;
     WheelMode wheelMode = WheelMode::TrayIcon;
@@ -464,6 +473,8 @@ void LoadSettings() {
               : theme == L"light" ? ThemeMode::Light
                                   : ThemeMode::Auto;
     s.showAllDisplaysSlider = GetIntSetting(L"showAllDisplaysSlider") != 0;
+    s.allDisplaysSliderRelative =
+        GetStringSetting(L"allDisplaysSliderMode") != L"absolute";
     s.showOsd = GetIntSetting(L"showOsd") != 0;
 
     for (int i = 0; i < 32; i++) {
@@ -1801,9 +1812,19 @@ void LayoutPanel() {
     }
 }
 
+// State of a drag on the "All displays" slider in relative mode: the level of
+// each display when the drag started, so that moving to an edge and back
+// restores the original differences between displays.
+std::map<std::wstring, int> g_allDragBase;
+int g_allDragStart = -1;
+int g_allDragValue = -1;
+
 int RowValue(const PanelRow& row) {
     if (row.display >= 0) {
         return g_displays[row.display].value;
+    }
+    if (g_allDragValue >= 0) {
+        return g_allDragValue;
     }
     int sum = 0, count = 0;
     for (auto* d : ControllableDisplays()) {
@@ -1822,6 +1843,45 @@ void SetRowValue(const PanelRow& row, int value) {
         for (auto* d : ControllableDisplays()) {
             SetDisplayValue(*d, value, true);
         }
+    }
+}
+
+void BeginAllDrag() {
+    g_allDragBase.clear();
+    g_allDragValue = -1;
+    g_allDragStart = -1;
+    if (!g_settings.allDisplaysSliderRelative) {
+        return;
+    }
+    for (auto* d : ControllableDisplays()) {
+        g_allDragBase[d->info.key] = d->value < 0 ? 50 : d->value;
+    }
+    PanelRow all{};
+    all.display = -1;
+    g_allDragStart = RowValue(all);
+    if (g_allDragStart < 0) {
+        g_allDragStart = 50;
+    }
+}
+
+void EndAllDrag() {
+    g_allDragBase.clear();
+    g_allDragStart = -1;
+    g_allDragValue = -1;
+}
+
+// Moves every display by the same amount, keeping their differences.
+void ShiftAllDisplays(int delta, bool fromDragBase) {
+    for (auto* d : ControllableDisplays()) {
+        int base = d->value < 0 ? 50 : d->value;
+        if (fromDragBase) {
+            auto it = g_allDragBase.find(d->info.key);
+            if (it == g_allDragBase.end()) {
+                continue;
+            }
+            base = it->second;
+        }
+        SetDisplayValue(*d, base + delta, true);
     }
 }
 
@@ -2046,13 +2106,25 @@ void DragTo(int x) {
     }
     const PanelRow& row = g_rows[g_dragRow];
     int width = std::max(1, (int)(row.track.right - row.track.left));
-    int value = (int)std::lround((x - row.track.left) * 100.0 / width);
-    SetRowValue(row, ClampPercent(value));
+    int value =
+        ClampPercent((int)std::lround((x - row.track.left) * 100.0 / width));
+    if (row.display < 0 && g_allDragStart >= 0) {
+        g_allDragValue = value;
+        ShiftAllDisplays(value - g_allDragStart, true);
+        InvalidateRect(g_hwndPanel, nullptr, FALSE);
+        return;
+    }
+    SetRowValue(row, value);
 }
 
 void AdjustRow(int rowIndex, int delta) {
     if (rowIndex < 0 || rowIndex >= (int)g_rows.size() ||
         !g_rows[rowIndex].supported) {
+        return;
+    }
+    if (g_rows[rowIndex].display < 0 &&
+        g_settings.allDisplaysSliderRelative) {
+        ShiftAllDisplays(delta, false);
         return;
     }
     int value = RowValue(g_rows[rowIndex]);
@@ -2106,6 +2178,9 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             if (row >= 0) {
                 g_dragRow = row;
                 g_focusRow = row;
+                if (g_rows[row].display < 0) {
+                    BeginAllDrag();
+                }
                 SetCapture(hwnd);
                 DragTo(pt.x);
                 InvalidateRect(hwnd, nullptr, FALSE);
@@ -2158,6 +2233,7 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
         case WM_CAPTURECHANGED:
             g_dragRow = -1;
+            EndAllDrag();
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
 
@@ -2219,25 +2295,59 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 int g_osdAlpha;
 
+struct OsdItem {
+    std::wstring label;
+    int value;
+};
+
+constexpr size_t OSD_MAX_ROWS = 6;
+
+// When the targets are at different levels, the indicator shows one row per
+// display (up to OSD_MAX_ROWS) instead of a single, misleading value.
+std::vector<OsdItem> BuildOsdItems(const std::vector<UiDisplay*>& targets) {
+    bool sameValue = std::all_of(
+        targets.begin(), targets.end(),
+        [&](const UiDisplay* d) { return d->value == targets[0]->value; });
+    if (targets.size() == 1 || sameValue) {
+        std::wstring label;
+        if (targets.size() == 1) {
+            label = targets[0]->label;
+        } else if (targets.size() == ControllableDisplays().size()) {
+            label = L"All displays";
+        } else {
+            label = std::to_wstring(targets.size()) + L" displays";
+        }
+        return {{label, targets[0]->value}};
+    }
+
+    std::vector<OsdItem> items;
+    for (size_t i = 0; i < targets.size() && i < OSD_MAX_ROWS; i++) {
+        items.push_back({targets[i]->label, targets[i]->value});
+    }
+    return items;
+}
+
+void GetOsdSize(size_t rows, UINT dpi, int* w, int* h) {
+    auto px = [dpi](int dip) { return MulDiv(dip, (int)dpi, 96); };
+    if (rows <= 1) {
+        *w = px(280);
+        *h = px(60);
+    } else {
+        *w = px(340);
+        *h = px(20 + 30 * (int)rows);
+    }
+}
+
 void PaintOsd(Gdiplus::Bitmap& canvas,
               UINT dpi,
-              const std::wstring& label,
-              int value);
+              const std::vector<OsdItem>& items);
 
 void ShowOsd(const std::vector<UiDisplay*>& targets, HMONITOR monitor) {
     if (!g_settings.showOsd || targets.empty() || !g_hwndOsd) {
         return;
     }
 
-    std::wstring label;
-    if (targets.size() == 1) {
-        label = targets[0]->label;
-    } else if (targets.size() == ControllableDisplays().size()) {
-        label = L"All displays";
-    } else {
-        label = std::to_wstring(targets.size()) + L" displays";
-    }
-    int value = targets[0]->value;
+    std::vector<OsdItem> items = BuildOsdItems(targets);
 
     if (!monitor) {
         monitor = targets.size() == 1
@@ -2248,7 +2358,8 @@ void ShowOsd(const std::vector<UiDisplay*>& targets, HMONITOR monitor) {
     UINT dpi = GetMonitorDpi(monitor);
     auto px = [dpi](int dip) { return MulDiv(dip, (int)dpi, 96); };
 
-    int w = px(280), h = px(60);
+    int w, h;
+    GetOsdSize(items.size(), dpi, &w, &h);
     MONITORINFO mi{};
     mi.cbSize = sizeof(mi);
     GetMonitorInfoW(monitor, &mi);
@@ -2277,7 +2388,7 @@ void ShowOsd(const std::vector<UiDisplay*>& targets, HMONITOR monitor) {
 
     {
         Gdiplus::Bitmap canvas(w, h, w * 4, PixelFormat32bppPARGB, (BYTE*)bits);
-        PaintOsd(canvas, dpi, label, value);
+        PaintOsd(canvas, dpi, items);
     }
 
     g_osdAlpha = 255;
@@ -2297,52 +2408,81 @@ void ShowOsd(const std::vector<UiDisplay*>& targets, HMONITOR monitor) {
     SetTimer(g_hwndOsd, TIMER_OSD_HIDE, 1500, nullptr);
 }
 
+void DrawOsdBar(Gdiplus::Graphics& g,
+                const Theme& t,
+                float left,
+                float right,
+                float cy,
+                int value,
+                float scale) {
+    float th = 4 * scale;
+    FillRoundRect(g, t.track, Gdiplus::RectF(left, cy - th / 2, right - left, th),
+                  th / 2);
+    if (value > 0) {
+        FillRoundRect(g, t.accent,
+                      Gdiplus::RectF(left, cy - th / 2,
+                                     (right - left) * value / 100.0f, th),
+                      th / 2);
+    }
+}
+
 void PaintOsd(Gdiplus::Bitmap& canvas,
               UINT dpi,
-              const std::wstring& label,
-              int value) {
+              const std::vector<OsdItem>& items) {
     auto px = [dpi](int dip) { return MulDiv(dip, (int)dpi, 96); };
     float scale = dpi / 96.0f;
     int w = (int)canvas.GetWidth(), h = (int)canvas.GetHeight();
-    {
-        Gdiplus::Graphics g(&canvas);
-        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
-        g.Clear(Gdiplus::Color(0, 0, 0, 0));
-        Theme t = GetTheme();
 
-        Gdiplus::RectF box(0.5f, 0.5f, w - 1.0f, h - 1.0f);
-        FillRoundRect(g, t.background, box, 8 * scale);
-        Gdiplus::GraphicsPath borderPath;
-        RoundRectPath(&borderPath, box, 8 * scale);
-        Gdiplus::Pen borderPen(t.border, 1);
-        g.DrawPath(&borderPen, &borderPath);
+    Gdiplus::Graphics g(&canvas);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+    g.Clear(Gdiplus::Color(0, 0, 0, 0));
+    Theme t = GetTheme();
 
-        DrawSun(g, (float)px(30), h / 2.0f, (float)px(24), t.text);
-        DrawLabel(g, label,
-                 Gdiplus::RectF((float)px(54), (float)px(8),
-                                (float)(w - px(54) - px(64)), (float)px(20)),
-                 (float)px(12), t.secondaryText, Gdiplus::StringAlignmentNear);
+    Gdiplus::RectF box(0.5f, 0.5f, w - 1.0f, h - 1.0f);
+    FillRoundRect(g, t.background, box, 8 * scale);
+    Gdiplus::GraphicsPath borderPath;
+    RoundRectPath(&borderPath, box, 8 * scale);
+    Gdiplus::Pen borderPen(t.border, 1);
+    g.DrawPath(&borderPen, &borderPath);
 
-        RECT track = {px(54), px(38) - px(2), w - px(64), px(38) + px(2)};
-        float cy = (track.top + track.bottom) / 2.0f;
-        float th = 4 * scale;
-        FillRoundRect(g, t.track,
-                      Gdiplus::RectF((float)track.left, cy - th / 2,
-                                     (float)(track.right - track.left), th),
-                      th / 2);
-        if (value > 0) {
-            FillRoundRect(
-                g, t.accent,
-                Gdiplus::RectF((float)track.left, cy - th / 2,
-                               (track.right - track.left) * value / 100.0f, th),
-                th / 2);
-        }
-        DrawLabel(g, value >= 0 ? std::to_wstring(value) : L"-",
-                 Gdiplus::RectF((float)(w - px(60)), 0, (float)px(44),
-                                (float)h),
-                 (float)px(18), t.text, Gdiplus::StringAlignmentFar, nullptr,
-                 Gdiplus::FontStyleBold);
+    DrawSun(g, (float)px(30), h / 2.0f, (float)px(24), t.text);
+
+    auto valueText = [](int value) {
+        return value >= 0 ? std::to_wstring(value) : std::wstring(L"-");
+    };
+
+    if (items.size() == 1) {
+        const OsdItem& item = items[0];
+        DrawLabel(g, item.label,
+                  Gdiplus::RectF((float)px(54), (float)px(8),
+                                 (float)(w - px(54) - px(64)), (float)px(20)),
+                  (float)px(12), t.secondaryText, Gdiplus::StringAlignmentNear);
+        DrawOsdBar(g, t, (float)px(54), (float)(w - px(64)), (float)px(38),
+                   item.value, scale);
+        DrawLabel(g, valueText(item.value),
+                  Gdiplus::RectF((float)(w - px(60)), 0, (float)px(44),
+                                 (float)h),
+                  (float)px(18), t.text, Gdiplus::StringAlignmentFar, nullptr,
+                  Gdiplus::FontStyleBold);
+        return;
+    }
+
+    // One row per display: name, bar, value.
+    for (size_t i = 0; i < items.size(); i++) {
+        float top = (float)px(10 + 30 * (int)i);
+        float cy = top + px(15);
+        DrawLabel(g, items[i].label,
+                  Gdiplus::RectF((float)px(54), top, (float)px(110),
+                                 (float)px(30)),
+                  (float)px(12), t.secondaryText, Gdiplus::StringAlignmentNear);
+        DrawOsdBar(g, t, (float)px(170), (float)(w - px(56)), cy,
+                   items[i].value, scale);
+        DrawLabel(g, valueText(items[i].value),
+                  Gdiplus::RectF((float)(w - px(52)), top, (float)px(36),
+                                 (float)px(30)),
+                  (float)px(14), t.text, Gdiplus::StringAlignmentFar, nullptr,
+                  Gdiplus::FontStyleBold);
     }
 }
 
