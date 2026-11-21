@@ -253,6 +253,22 @@ bool RunFromWindowThread(HWND hWnd,
     return true;
 }
 
+FrameworkElement FindParentByClassName(FrameworkElement element,
+                                       PCWSTR className) {
+    auto parent = element;
+    while (true) {
+        parent = Media::VisualTreeHelper::GetParent(parent)
+                     .try_as<FrameworkElement>();
+        if (!parent) {
+            return nullptr;
+        }
+
+        if (winrt::get_class_name(parent) == className) {
+            return parent;
+        }
+    }
+}
+
 FrameworkElement FindChildByClassName(FrameworkElement element,
                                       PCWSTR className) {
     int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
@@ -777,8 +793,194 @@ ComputeOverride_t MakeVerticalOffsetOverride(double offsetY) {
     };
 }
 
-void TrackLanguageIndicator(FrameworkElement languageTextIconContent) {
+////////////////////////////////////////////////////////////////////////////////
+// Recreated indicators.
+//
+// Some taskbar changes, such as switching the taskbar size between small and
+// default, recreate the language indicator's content inside existing tray
+// icons. Neither the IconView constructor hook nor the icon's Loaded event sees
+// the new content then. Instead, when a tracked indicator element is unloaded,
+// the system tray is watched for a few seconds, and indicators which appear
+// meanwhile are tracked.
+
+constexpr ULONGLONG kRescanWatchDurationMs = 5000;
+
+struct UnloadWatch {
+    winrt::weak_ref<FrameworkElement> element;
+    winrt::event_token unloadedToken{};
+};
+
+// Only accessed from the taskbar UI thread. See the note on no_destroy above.
+[[clang::no_destroy]] std::optional<std::list<UnloadWatch>> g_unloadWatches{
+    std::in_place};
+
+struct RescanWatch {
+    winrt::weak_ref<FrameworkElement> root;
+    winrt::event_token layoutUpdatedToken{};
+    ULONGLONG deadline = 0;
+};
+
+// Active while the system tray is being watched for new indicators.
+[[clang::no_destroy]] std::optional<RescanWatch> g_rescanWatch;
+
+// The SystemTray.SystemTrayFrame which contains the indicators, the root of
+// the watch.
+[[clang::no_destroy]] winrt::weak_ref<FrameworkElement> g_systemTrayFrame;
+
+int TrackLanguageIndicatorsIn(DependencyObject root);
+
+void StopRescanWatch() {
+    if (!g_rescanWatch) {
+        return;
+    }
+
+    if (auto root = g_rescanWatch->root.get()) {
+        try {
+            root.LayoutUpdated(g_rescanWatch->layoutUpdatedToken);
+        } catch (const winrt::hresult_error& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+    }
+
+    g_rescanWatch.reset();
+}
+
+void StartRescanWatch() {
+    if (g_unloading) {
+        return;
+    }
+
+    auto root = g_systemTrayFrame.get();
+    if (!root) {
+        Wh_Log(L"No system tray to watch");
+        return;
+    }
+
+    ULONGLONG deadline = GetTickCount64() + kRescanWatchDurationMs;
+
+    if (g_rescanWatch && g_rescanWatch->root.get() == root) {
+        g_rescanWatch->deadline = deadline;
+        return;
+    }
+
+    StopRescanWatch();
+
+    Wh_Log(L"Watching the system tray for new language indicators");
+
+    g_rescanWatch.emplace();
+    g_rescanWatch->root = winrt::make_weak(root);
+    g_rescanWatch->deadline = deadline;
+
+    // Elements are added to the tree in a layout pass, so a scan after each
+    // pass finds them. LayoutUpdated has no meaningful sender.
+    g_rescanWatch->layoutUpdatedToken = root.LayoutUpdated(
+        [](const WinrtInspectable&, const WinrtInspectable&) {
+            if (g_unloading || !g_rescanWatch) {
+                return;
+            }
+
+            auto root = g_rescanWatch->root.get();
+            if (!root || GetTickCount64() > g_rescanWatch->deadline) {
+                Wh_Log(L"Stopped watching the system tray");
+                StopRescanWatch();
+                return;
+            }
+
+            try {
+                int count = TrackLanguageIndicatorsIn(root);
+                if (count > 0) {
+                    Wh_Log(L"New language indicators: %d", count);
+                }
+            } catch (const winrt::hresult_error& ex) {
+                Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+            }
+        });
+}
+
+bool IsUnloadWatched(const FrameworkElement& element) {
+    if (!g_unloadWatches) {
+        return false;
+    }
+
+    for (const auto& unloadWatch : *g_unloadWatches) {
+        if (unloadWatch.element.get() == element) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void WatchUnload(const FrameworkElement& element) {
+    if (!g_unloadWatches || IsUnloadWatched(element)) {
+        return;
+    }
+
+    // Drop entries of elements which no longer exist.
+    g_unloadWatches->remove_if([](const UnloadWatch& unloadWatch) {
+        return !unloadWatch.element.get();
+    });
+
+    auto& unloadWatch = g_unloadWatches->emplace_back();
+    unloadWatch.element = winrt::make_weak(element);
+    unloadWatch.unloadedToken = element.Unloaded(
+        [](const WinrtInspectable&, const RoutedEventArgs&) {
+            if (g_unloading) {
+                return;
+            }
+
+            Wh_Log(L"Language indicator element unloaded");
+            StartRescanWatch();
+        });
+}
+
+void RemoveAllUnloadWatches() {
+    if (!g_unloadWatches) {
+        return;
+    }
+
+    for (const auto& unloadWatch : *g_unloadWatches) {
+        if (auto element = unloadWatch.element.get()) {
+            try {
+                element.Unloaded(unloadWatch.unloadedToken);
+            } catch (const winrt::hresult_error& ex) {
+                Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+            }
+        }
+    }
+
+    g_unloadWatches->clear();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Tracking an indicator.
+
+// Returns false if the indicator was already tracked.
+bool TrackLanguageIndicator(FrameworkElement languageTextIconContent) {
+    Controls::TextBlock innerTextBlock = nullptr;
+    if (auto adaptiveTextBlock = FindDescendantByName(
+            languageTextIconContent, L"LanguageInnerTextBlock")) {
+        innerTextBlock =
+            FindDescendantByName(adaptiveTextBlock, L"InnerTextBlock")
+                .try_as<Controls::TextBlock>();
+    }
+
+    // Both elements are watched once tracked. A watched content element with a
+    // new TextBlock means its template was applied again, and the new
+    // TextBlock still needs tracking.
+    if (IsUnloadWatched(languageTextIconContent) &&
+        (!innerTextBlock || IsUnloadWatched(innerTextBlock))) {
+        return false;
+    }
+
     Wh_Log(L"Found LanguageTextIconContent");
+
+    if (auto systemTrayFrame = FindParentByClassName(
+            languageTextIconContent, L"SystemTray.SystemTrayFrame")) {
+        g_systemTrayFrame = winrt::make_weak(systemTrayFrame);
+    }
+
+    WatchUnload(languageTextIconContent);
 
     if (g_settings.iconWidth > 0) {
         TrackProperty(languageTextIconContent,
@@ -789,18 +991,12 @@ void TrackLanguageIndicator(FrameworkElement languageTextIconContent) {
                       MakeDoubleOverride(0));
     }
 
-    Controls::TextBlock innerTextBlock = nullptr;
-    if (auto adaptiveTextBlock = FindDescendantByName(
-            languageTextIconContent, L"LanguageInnerTextBlock")) {
-        innerTextBlock =
-            FindDescendantByName(adaptiveTextBlock, L"InnerTextBlock")
-                .try_as<Controls::TextBlock>();
-    }
-
     if (!innerTextBlock) {
         Wh_Log(L"InnerTextBlock not found");
-        return;
+        return true;
     }
+
+    WatchUnload(innerTextBlock);
 
     if (innerTextBlock.GetBindingExpression(
             Controls::TextBlock::TextProperty())) {
@@ -833,12 +1029,28 @@ void TrackLanguageIndicator(FrameworkElement languageTextIconContent) {
         TrackProperty(innerTextBlock, UIElement::RenderTransformProperty(),
                       MakeVerticalOffsetOverride(g_settings.verticalOffset));
     }
+
+    return true;
 }
 
+// Returns the number of newly tracked indicators.
 int TrackLanguageIndicatorsIn(DependencyObject root) {
-    return EnumDescendantsByClassName(root,
-                                      L"SystemTray.LanguageTextIconContent",
-                                      TrackLanguageIndicator);
+    int newCount = 0;
+    EnumDescendantsByClassName(root, L"SystemTray.LanguageTextIconContent",
+                               [&newCount](FrameworkElement element) {
+                                   if (TrackLanguageIndicator(element)) {
+                                       newCount++;
+                                   }
+                               });
+    return newCount;
+}
+
+// Stops tracking everything and restores the taskbar's values. Must be called
+// on the taskbar UI thread.
+void UntrackAllLanguageIndicators() {
+    StopRescanWatch();
+    RemoveAllUnloadWatches();
+    RestoreAllPropertyOverrides();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -882,8 +1094,17 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
             }
 
             try {
+                if (auto systemTrayFrame = FindParentByClassName(
+                        iconView, L"SystemTray.SystemTrayFrame")) {
+                    g_systemTrayFrame = winrt::make_weak(systemTrayFrame);
+                }
+
                 if (TrackLanguageIndicatorsIn(iconView) > 0) {
                     Wh_Log(L"Language indicator loaded");
+                } else if (iconView.Name() == L"SystemTrayIcon") {
+                    // The icon's content might not be created yet. This is
+                    // also the language indicator's icon type.
+                    StartRescanWatch();
                 }
             } catch (const winrt::hresult_error& ex) {
                 Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
@@ -1050,11 +1271,14 @@ void ApplySettings(bool reloadSettings) {
             const auto& param = *(const ApplySettingsParam*)pParam;
             HWND hTaskbarWnd = param.hTaskbarWnd;
 
-            RestoreAllPropertyOverrides();
+            UntrackAllLanguageIndicators();
 
             if (g_unloading) {
                 UnregisterAccentColorChanges();
                 g_autoRevokerList.reset();
+                g_unloadWatches.reset();
+                g_rescanWatch.reset();
+                g_systemTrayFrame = nullptr;
                 g_propertyOverrides.reset();
                 return;
             }
@@ -1084,7 +1308,9 @@ void ApplySettings(bool reloadSettings) {
 
                 FrameworkElement searchRoot = FindChildByClassName(
                     content, L"SystemTray.SystemTrayFrame");
-                if (!searchRoot) {
+                if (searchRoot) {
+                    g_systemTrayFrame = winrt::make_weak(searchRoot);
+                } else {
                     Wh_Log(L"SystemTrayFrame not found, searching everything");
                     searchRoot = content;
                 }
