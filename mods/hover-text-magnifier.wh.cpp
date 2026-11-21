@@ -310,8 +310,9 @@ static bool IsMatchingUiaResult(const UiaResult& result, POINT cursor,
         nowTick - result.requestTick > 2000) {
         return false;
     }
-    return std::abs(result.pt.x - cursor.x) <= 4 &&
-           std::abs(result.pt.y - cursor.y) <= 4;
+    // Any cursor movement can cross an adjacent control, including a password
+    // field. Never reuse UIA text at an unvalidated position.
+    return result.pt.x == cursor.x && result.pt.y == cursor.y;
 }
 
 static bool IsUsableUiaResult(const UiaResult& result, POINT cursor,
@@ -330,8 +331,8 @@ static bool ShouldHoldRecentText(bool showingText, bool freshNegative,
     return showingText && !freshNegative && targetWindow &&
            targetWindow == lastTextWindow && nowTick >= lastTextTick &&
            nowTick - lastTextTick <= 240 &&
-           std::abs(cursor.x - lastTextPoint.x) <= 4 &&
-           std::abs(cursor.y - lastTextPoint.y) <= 4;
+           cursor.x == lastTextPoint.x &&
+           cursor.y == lastTextPoint.y;
 }
 
 struct RuntimeState {
@@ -369,7 +370,8 @@ struct RuntimeState {
 
     // uia is now owned by uiaThread, do not access from worker thread!
     IUIAutomation* uia = nullptr;
-    bool uiaReady = false;
+    bool uiaReady = false; // UIA thread only
+    std::atomic<bool> uiaOperational{false}; // published to display thread
     bool comInitedHere = false;
     bool uiaTimeoutsConfigured = false;
 
@@ -946,7 +948,10 @@ static bool InitUIA() {
         return false;
     }
 
-    hr = CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER, IID_IUIAutomation, (void**)&g.uia);
+    // CUIAutomation8 implements IUIAutomation2; the legacy CUIAutomation
+    // class does not. The timeout interface below is mandatory.
+    hr = CoCreateInstance(CLSID_CUIAutomation8, nullptr, CLSCTX_INPROC_SERVER,
+                          IID_IUIAutomation, (void**)&g.uia);
     if (FAILED(hr) || !g.uia) {
         g.uiaReady = false;
         g.uia = nullptr;
@@ -1055,8 +1060,10 @@ static bool TryExtractTextAtPoint(const UiaRequest& request, std::wstring& outTe
         tp2->Release();
         outText = TrimAndCollapse(outText);
         if (!outText.empty()) {
+            const bool accepted = !shouldStop();
+            if (!accepted) outText.clear();
             el->Release();
-            return true;
+            return accepted;
         }
     }
 
@@ -1076,8 +1083,10 @@ static bool TryExtractTextAtPoint(const UiaRequest& request, std::wstring& outTe
         tp->Release();
         outText = TrimAndCollapse(outText);
         if (!outText.empty()) {
+            const bool accepted = !shouldStop();
+            if (!accepted) outText.clear();
             el->Release();
-            return true;
+            return accepted;
         }
     }
 
@@ -1092,8 +1101,10 @@ static bool TryExtractTextAtPoint(const UiaRequest& request, std::wstring& outTe
         outText = TrimAndCollapse(outText);
         if ((int)outText.size() > maxTextLen) outText.resize(maxTextLen);
         if (!outText.empty()) {
+            const bool accepted = !shouldStop();
+            if (!accepted) outText.clear();
             el->Release();
-            return true;
+            return accepted;
         }
     }
 
@@ -1104,6 +1115,7 @@ static bool TryExtractTextAtPoint(const UiaRequest& request, std::wstring& outTe
     el->Release();
     outText = TrimAndCollapse(outText);
     if ((int)outText.size() > maxTextLen) outText.resize(maxTextLen);
+    if (shouldStop()) outText.clear();
     return !outText.empty();
 }
 
@@ -1391,9 +1403,11 @@ static void UiaWorkerThread() {
     // Wh_Log(L"UiaWorkerThread: Started");
 
     // Separate COM init for this thread
-    if (!InitUIA()) {
-        Wh_Log(L"UiaWorkerThread: InitUIA failed.");
-        // We continue running to process exit signals, but we won't get text.
+    const bool initialized = InitUIA();
+    g.uiaOperational.store(initialized, std::memory_order_release);
+    if (!initialized) {
+        Wh_Log(L"UiaWorkerThread: InitUIA failed; text queries disabled.");
+        // Keep the worker available for shutdown without futile query traffic.
     }
 
     while (!g.stopRequested.load(std::memory_order_acquire)) {
@@ -1415,6 +1429,15 @@ static void UiaWorkerThread() {
         std::wstring text;
         bool protectedTarget = false;
         bool success = TryExtractTextAtPoint(request, text, protectedTarget);
+        const ULONGLONG finishedTick = GetTickCount64();
+        // Final acceptance gate includes all cleanup and COM release costs.
+        // This cannot interrupt blocked COM operations, only discard late data.
+        if (finishedTick < request.tick ||
+            finishedTick - request.tick >= 1800 ||
+            g.stopRequested.load(std::memory_order_acquire)) {
+            success = false;
+            text.clear();
+        }
 
         UiaResult result{};
         result.pt = request.pt;
@@ -1436,6 +1459,7 @@ static void UiaWorkerThread() {
         }
     }
 
+    g.uiaOperational.store(false, std::memory_order_release);
     UninitUIA();
     // Wh_Log(L"UiaWorkerThread: Exited");
 }
@@ -1577,12 +1601,13 @@ static void TickUpdate() {
             std::lock_guard<std::mutex> lock(g.uiaMutex);
             queryPositionChanged =
                 g.uiaRequest.targetWindow != targetWindow ||
-                std::abs(g.uiaRequest.pt.x - pt.x) > 4 ||
-                std::abs(g.uiaRequest.pt.y - pt.y) > 4;
+                g.uiaRequest.pt.x != pt.x ||
+                g.uiaRequest.pt.y != pt.y;
         }
         const ULONGLONG queryIntervalMs = queryPositionChanged ?
             (ULONGLONG)g.cfg.uiaQueryMinIntervalMs : 300;
-        if (nowTick - g.lastUiaQueryTick >= queryIntervalMs) {
+        if (g.uiaOperational.load(std::memory_order_acquire) &&
+            nowTick - g.lastUiaQueryTick >= queryIntervalMs) {
             bool dispatch = false;
             {
                 std::lock_guard<std::mutex> lock(g.uiaMutex);
