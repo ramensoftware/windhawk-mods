@@ -38,6 +38,7 @@ Replaces the Windows taskbar with a light dock, one per monitor, with its own St
 * Right-click menus like Windows': open file location, copy path, and End task on the dock (when it's on in Windows, or always).
 * The Windows key opens Nimbus' Start over any window (administrator ones too) and in games. Ctrl+Esc still opens Windows' Start. An optional shortcut (Alt+Space or Ctrl+Space) can open it too.
 * Status area at either end of the dock (or as a Start tab): clock and calendar, volume per app, network and Wi-Fi, battery, keyboard language. Each opens its own panel, or Windows' own if you prefer.
+* Sound panel, simple or complete (Settings → Status area → Sound; simple by default). Complete: the apps playing on the left and every output on the right; drag an app onto an output to play it there too, from one output to another to move it, × to take it off one; make any output the default, or the one for calls.
 * Tray: the icons of the apps running in the background, beside the status area. Inline with arrows, behind one button (pin the ones you want outside), or in a grid or list panel. Clicks go to the app itself, like on the taskbar; the middle button pins.
 * Control center: one dock button opens do not disturb, Bluetooth, night light, shortcuts (project, cast, captions, accessibility), each monitor's brightness, sound and power, and any other item you put there. Each item opens its full panel inside it, and it scrolls on small screens. Every item can be in the dock, the control center and Start at once, or off.
 * Bluetooth: turn it on and off, see paired devices with their battery, connect and disconnect headsets and speakers.
@@ -91,6 +92,7 @@ Nimbus replaces part of Windows, so a few of its actions are Windows settings. H
 | The taskbar's own **"Automatically hide the taskbar"** option (saved by Windows in your profile) | While "Hide the Windows taskbar" is on (the default), so the hidden taskbar doesn't reserve screen space | Your original choice is kept and put back when the mod stops, on sign-out or shutdown, at the next start after a crash, and by the Explorer part when the mod is turned off. |
 | Each app's **"Show notification banners"** switch (Settings › System › Notifications) | Only if you turn on "Hide Windows' own banners" and confirm (off by default) | Every app's original value is saved before anything is switched off (nothing is switched off if that backup can't be saved). Put back when the option goes off, when the mod stops, on sign-out or shutdown, and by the Explorer part when the mod is turned off. |
 | Night light, power plan and mode, each monitor's brightness (DDC/CI), Bluetooth and Wi-Fi on or off, volume, keyboard language | Only when you click them, like in Windows' quick settings | They're your choices, so they stay as you set them (the same as when you change them in Windows). |
+| The default sound output (and the one for calls), and an app's own output (complete sound panel only, off by default) | Only when you drag an app or click Default or Calls on an output. These use the same parts of Windows its Sound settings use, which Microsoft doesn't document | Windows keeps them, as when set in Settings › Sound › Volume mixer (its "Reset" puts every app back on the default). An app on a second output is a copy Nimbus plays: it stops with ×, when the app closes, or when Nimbus stops. An app that picks its own outputs (TeamSpeak, Discord) is muted on the one you take it off. Going back to the simple panel puts it all back: every app on the default, copies off, those mutes undone. |
 
 **BatteryHub** (optional, off by default): with "Devices › Use BatteryHub" on, Nimbus runs [BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor) (installed separately, version 1.1 or newer) hidden every 5 minutes with `--json`, only to read the batteries of USB receivers; it closes by itself, at most after 20 seconds. Turn it off in the Devices panel or in Settings › Status area.
 
@@ -110,6 +112,7 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
 * Menus do botão direito como os do Windows: abrir o local do arquivo, copiar caminho e Finalizar tarefa na dock (quando está ligado no Windows, ou sempre).
 * A tecla Windows abre o Iniciar do Nimbus em qualquer janela (até de administrador) e em jogos. Ctrl+Esc continua abrindo o Iniciar do Windows. Um atalho opcional (Alt+Espaço ou Ctrl+Espaço) também pode abrir.
 * Área de status numa ponta da dock (ou numa aba do Iniciar): relógio e calendário, volume por app, rede e Wi-Fi, bateria, idioma do teclado. Cada item abre o seu painel, ou o do Windows se preferir.
+* Painel de som simples ou completo (Ajustes → Área de status → Som; simples por padrão). Completo: os apps tocando à esquerda e todas as saídas à direita; arraste um app pra uma saída pra tocar nela também, de uma saída pra outra pra trocar, × pra tirar de uma; qualquer saída vira a padrão, ou a das chamadas.
 * Bandeja: os ícones dos programas em segundo plano, ao lado da área de status. Lado a lado com setas, atrás de um botão (fixe fora os que quiser), ou num painel em grade ou lista. Os cliques vão pro próprio programa, como na barra; o botão do meio fixa.
 * Central de controle: um botão na dock abre não incomodar, Bluetooth, luz noturna, atalhos (projetar, transmitir, legendas, acessibilidade), o brilho de cada monitor, som e energia, e qualquer outro item que você puser lá. Cada item abre o painel completo dentro dela, e ela rola em telas pequenas. Cada item pode ficar na dock, na central e no Iniciar ao mesmo tempo, ou desligado.
 * Bluetooth: ligar e desligar, ver os aparelhos pareados com a bateria, conectar e desconectar fones e caixas de som.
@@ -162,6 +165,7 @@ O Nimbus substitui uma parte do Windows, então algumas ações dele são config
 | A opção **"Ocultar automaticamente a barra de tarefas"** do próprio Windows (salva no seu perfil) | Enquanto "Esconder a barra do Windows" estiver ligado (o padrão), pra barra escondida não reservar espaço na tela | A sua escolha original fica guardada e volta quando o mod para, ao sair da conta ou desligar o PC, no próximo início depois de um travamento, e pela parte do Explorador quando o mod é desligado. |
 | O botão **"Mostrar faixas de notificação"** de cada app (Configurações › Sistema › Notificações) | Só se você ligar "Esconder os avisos do Windows" e confirmar (desligado por padrão) | O valor original de cada app é salvo antes de qualquer coisa ser desligada (se o backup não puder ser salvo, nada é desligado). Volta quando a opção é desligada, quando o mod para, ao sair da conta ou desligar o PC, e pela parte do Explorador quando o mod é desligado. |
 | Luz noturna, plano e modo de energia, brilho de cada monitor (DDC/CI), Bluetooth e Wi-Fi ligado ou desligado, volume, idioma do teclado | Só quando você clica, como nas Configurações rápidas do Windows | São escolhas suas, então ficam como você deixou (igual a mudar pelo Windows). |
+| A saída de som padrão (e a das chamadas), e a saída de cada app (só no painel de som completo, desligado por padrão) | Só quando você arrasta um app ou clica em Padrão ou Chamadas numa saída. Usam as mesmas partes do Windows que as Configurações de som usam, que a Microsoft não documenta | O Windows guarda, como em Configurações › Som › Mixer de volume (o "Redefinir" de lá volta todos os apps pra padrão). Um app numa segunda saída é uma cópia que o Nimbus toca: para no ×, quando o app fecha ou quando o Nimbus para. Um app que escolhe as próprias saídas (TeamSpeak, Discord) fica mudo na saída de onde você tira ele. Voltar pro painel simples desfaz tudo: cada app na padrão, sem cópias e sem esses mudos. |
 
 **BatteryHub** (opcional, desligado por padrão): com "Dispositivos › Usar o BatteryHub" ligado, o Nimbus abre o [BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor) (instalado à parte, versão 1.1 ou mais nova) escondido a cada 5 minutos com `--json`, só pra ler as baterias de receptores USB; ele fecha sozinho, no máximo em 20 segundos. Desligue no painel Dispositivos ou em Ajustes › Área de status.
 
@@ -190,6 +194,7 @@ Os dados do próprio Nimbus (ajustes, notas, fixados, os arquivos colados na pra
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
 #include <audiopolicy.h>
+#include <winstring.h>
 #include <functiondiscoverykeys_devpkey.h>
 #include <wlanapi.h>
 #include <netlistmgr.h>
@@ -448,6 +453,7 @@ static const std::pair<const wchar_t*, const wchar_t*> kOwnKeys[] = {
     {L"notifSound", L"pingo"}, {L"remSound", L"bolha"},
     {L"notifWinN", L"0"}, {L"notesPlace", L"dock"}, {L"notifDnd", L"0"}, {L"dndPlace", L"central"}, {L"btPlace", L"central"}, {L"playerPlace", L"dock"}, {L"devPlace", L"dock"}, {L"devAlerts", L"1"}, {L"devHub", L"0"}, {L"playerDock", L"ambos"}, {L"playerHide", L"0"},
     {L"nightPlace", L"central"}, {L"shortPlace", L"central"}, {L"lightPlace", L"central"}, {L"powerPlace", L"central"},
+    {L"soundPanel", L"simples"},
 };
 static const wchar_t* const kMonGroups[] = {L"monPrimary", L"monLeft", L"monRight", L"monOther"};
 static const CfgKey kMonFields[] = {{L"enabled", true}, {L"format", false}, {L"autoHide", false},
@@ -1862,6 +1868,588 @@ static void LoadAppVolumes() {
 static void SetAppVolume(AppVol& a, float v) {
     a.level = std::clamp(v, 0.0f, 1.0f);
     for (auto& sv : a.vols) sv->SetMasterVolume(a.level, nullptr);
+}
+
+// ---- Sound, the complete panel: every output, the apps on each, and moving them ----
+// (Off by default: Settings › Status area › Sound › "Complete". Choosing an app's output and the default
+// output use the same parts of Windows its Sound settings use, which Microsoft doesn't document; an app
+// on a second output is a copy Nimbus plays itself, while it runs.)
+
+static bool SoundFull() { return CfgStr(L"soundPanel", L"simples") == L"completo"; }
+
+struct SndOut {
+    std::wstring id, name, kind;  // kind: speakers, headset, display
+    float vol = 1;
+    bool muted = false, def = false, comm = false;  // comm: Windows' default for calls
+    ComPtr<IAudioEndpointVolume> ev;
+};
+struct SndApp {
+    AppVol v;
+    int main = -1;               // the output its own sound goes to
+    std::vector<int> outs;       // every output it plays on (its own, then Nimbus' copies)
+    // Its own sessions, by output. An app that picks its outputs itself (TeamSpeak, Discord) can play on
+    // several: taking it off one mutes it there, putting it back unmutes it.
+    std::vector<std::pair<int, ComPtr<ISimpleAudioVolume>>> sess;
+    std::vector<int> mutedOn;
+};
+struct SndCopy {
+    DWORD pid = 0;
+    std::wstring dev;
+    HANDLE thread = nullptr, stop = nullptr;
+};
+struct {
+    std::vector<SndOut> outs;
+    std::vector<SndApp> apps;
+    float scrollL = 0, scrollR = 0, maxL = 0, maxR = 0;  // the two columns scroll on their own
+    D2D1_RECT_F colL{}, colR{};
+    bool dragging = false;
+    int dragApp = -1, dragFrom = -2;  // the app being dragged, and from where (-1: the list)
+    int hot = -1;                     // the output under it
+    std::wstring note;                // a word about what just happened (an app that picks its own outputs)
+} g_snd;
+static std::vector<std::unique_ptr<SndCopy>> g_sndCopies;
+
+static DWORD WinBuild() {
+    static DWORD build = 0;
+    if (!build) {
+        typedef LONG(WINAPI * RtlGetVersionFn)(OSVERSIONINFOW*);
+        OSVERSIONINFOW vi = {sizeof(vi)};
+        auto fn = (RtlGetVersionFn)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion");
+        if (fn && fn(&vi) == 0) build = vi.dwBuildNumber;
+    }
+    return build;
+}
+// A copy of one app's sound needs Windows 10 2004 (its process loopback).
+static bool SndCanCopy() { return WinBuild() >= 19041; }
+
+static bool SndProcessAlive(DWORD pid) {
+    HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, pid);
+    if (!h) return false;
+    bool alive = WaitForSingleObject(h, 0) == WAIT_TIMEOUT;
+    CloseHandle(h);
+    return alive;
+}
+
+// The default output (what apps without their own choice use).
+MIDL_INTERFACE("f8679f50-850a-41cf-9c72-430f290290c8")
+NimbusPolicyConfig : public IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE Unused1() = 0;  // GetMixFormat
+    virtual HRESULT STDMETHODCALLTYPE Unused2() = 0;  // GetDeviceFormat
+    virtual HRESULT STDMETHODCALLTYPE Unused3() = 0;  // ResetDeviceFormat
+    virtual HRESULT STDMETHODCALLTYPE Unused4() = 0;  // SetDeviceFormat
+    virtual HRESULT STDMETHODCALLTYPE Unused5() = 0;  // GetProcessingPeriod
+    virtual HRESULT STDMETHODCALLTYPE Unused6() = 0;  // SetProcessingPeriod
+    virtual HRESULT STDMETHODCALLTYPE Unused7() = 0;  // GetShareMode
+    virtual HRESULT STDMETHODCALLTYPE Unused8() = 0;  // SetShareMode
+    virtual HRESULT STDMETHODCALLTYPE Unused9() = 0;  // GetPropertyValue
+    virtual HRESULT STDMETHODCALLTYPE Unused10() = 0; // SetPropertyValue
+    virtual HRESULT STDMETHODCALLTYPE SetDefaultEndpoint(PCWSTR id, ERole role) = 0;
+    virtual HRESULT STDMETHODCALLTYPE Unused11() = 0; // SetEndpointVisibility
+};
+static void SndSetDefault(const std::wstring& id, bool calls) {
+    static const CLSID clsid = {0x870af99c, 0x171d, 0x4f9e, {0xaf, 0x0d, 0xe6, 0x3d, 0xf4, 0x0c, 0x2b, 0xc9}};
+    static const IID iid = {0xf8679f50, 0x850a, 0x41cf, {0x9c, 0x72, 0x43, 0x0f, 0x29, 0x02, 0x90, 0xc8}};
+    ComPtr<NimbusPolicyConfig> pc;
+    if (FAILED(CoCreateInstance(clsid, nullptr, CLSCTX_ALL, iid, (void**)pc.GetAddressOf()))) {
+        Wh_Log(L"sound: can't change the default output here");
+        return;
+    }
+    if (calls) {
+        pc->SetDefaultEndpoint(id.c_str(), eCommunications);
+    } else {
+        pc->SetDefaultEndpoint(id.c_str(), eConsole);
+        pc->SetDefaultEndpoint(id.c_str(), eMultimedia);
+    }
+}
+
+// One app's own output (Windows keeps it, as in Sound › Volume mixer).
+struct NimbusAudioPolicy : public IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE U1() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U2() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U3() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U4() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U5() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U6() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U7() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U8() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U9() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U10() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U11() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U12() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U13() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U14() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U15() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U16() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U17() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U18() = 0;
+    virtual HRESULT STDMETHODCALLTYPE U19() = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetPersistedDefaultAudioEndpoint(UINT pid, EDataFlow flow, ERole role, HSTRING device) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetPersistedDefaultAudioEndpoint(UINT pid, EDataFlow flow, ERole role, HSTRING* device) = 0;
+    virtual HRESULT STDMETHODCALLTYPE ClearAllPersistedApplicationDefaultEndpoints() = 0;
+};
+static ComPtr<NimbusAudioPolicy> SndPolicy() {
+    static const IID iidNew = {0xab3d4648, 0xe242, 0x459f, {0xb0, 0x2f, 0x54, 0x1c, 0x70, 0x30, 0x63, 0x24}};  // (Windows 10 21H2 and newer)
+    static const IID iidOld = {0x2a59116d, 0x6c4f, 0x45e0, {0xa7, 0x4f, 0x70, 0x7e, 0x3f, 0xef, 0x92, 0x58}};
+    const wchar_t* cls = L"Windows.Media.Internal.AudioPolicyConfig";
+    ComPtr<NimbusAudioPolicy> pol;
+    HSTRING hc = nullptr;
+    if (FAILED(WindowsCreateString(cls, (UINT32)wcslen(cls), &hc))) return pol;
+    if (FAILED(RoGetActivationFactory(hc, iidNew, (void**)pol.GetAddressOf()))) RoGetActivationFactory(hc, iidOld, (void**)pol.GetAddressOf());
+    WindowsDeleteString(hc);
+    return pol;
+}
+// An empty id: the app follows the default again.
+static void SndRoute(DWORD pid, const std::wstring& id) {
+    ComPtr<NimbusAudioPolicy> pol = SndPolicy();
+    if (!pol) {
+        Wh_Log(L"sound: can't choose an app's output here");
+        return;
+    }
+    HSTRING hd = nullptr;
+    if (!id.empty()) {
+        std::wstring full = L"\\\\?\\SWD#MMDEVAPI#" + id + L"#{e6327cad-dcec-4949-ae8a-991e976a79d2}";
+        WindowsCreateString(full.c_str(), (UINT32)full.size(), &hd);
+    }
+    HRESULT a = pol->SetPersistedDefaultAudioEndpoint(pid, eRender, eMultimedia, hd);
+    HRESULT b = pol->SetPersistedDefaultAudioEndpoint(pid, eRender, eConsole, hd);
+    if (hd) WindowsDeleteString(hd);
+    Wh_Log(L"sound: app %lu to %s (%08lx %08lx)", pid, id.empty() ? L"the default" : id.c_str(), (unsigned long)a, (unsigned long)b);
+}
+
+// ---- A copy of one app's sound on another output: its sound (process loopback) played there ----
+struct NimbusLoopbackParams {
+    int type;  // 1: process loopback
+    DWORD pid;
+    int mode;  // 0: the process and its children
+};
+class SndActivated final : public IActivateAudioInterfaceCompletionHandler, public IAgileObject {
+    LONG ref_ = 1;
+
+   public:
+    HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    ~SndActivated() { CloseHandle(done); }
+    STDMETHODIMP QueryInterface(REFIID r, void** p) override {
+        static const IID iidHandler = {0x41d949ab, 0x9862, 0x444a, {0x80, 0xf6, 0xc2, 0x61, 0x33, 0x4d, 0xa5, 0xeb}};
+        static const IID iidAgile = {0x94ea2b94, 0xe9cc, 0x49e0, {0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90}};
+        if (IsEqualIID(r, IID_IUnknown) || IsEqualIID(r, iidHandler)) *p = static_cast<IActivateAudioInterfaceCompletionHandler*>(this);
+        else if (IsEqualIID(r, iidAgile)) *p = static_cast<IAgileObject*>(this);
+        else {
+            *p = nullptr;
+            return E_NOINTERFACE;
+        }
+        AddRef();
+        return S_OK;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&ref_); }
+    STDMETHODIMP_(ULONG) Release() override {
+        LONG r = InterlockedDecrement(&ref_);
+        if (!r) delete this;
+        return r;
+    }
+    STDMETHODIMP ActivateCompleted(IActivateAudioInterfaceAsyncOperation*) override {
+        SetEvent(done);
+        return S_OK;
+    }
+};
+
+static DWORD WINAPI SndCopyThread(void* param) {
+    SndCopy* c = (SndCopy*)param;
+    HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    {
+        typedef HRESULT(WINAPI * ActivateFn)(LPCWSTR, REFIID, PROPVARIANT*, IActivateAudioInterfaceCompletionHandler*,
+                                             IActivateAudioInterfaceAsyncOperation**);
+        HMODULE mm = LoadLibraryW(L"mmdevapi.dll");
+        auto activate = mm ? (ActivateFn)GetProcAddress(mm, "ActivateAudioInterfaceAsync") : nullptr;
+        NimbusLoopbackParams lp = {1, c->pid, 0};
+        PROPVARIANT pv;
+        PropVariantInit(&pv);
+        pv.vt = VT_BLOB;
+        pv.blob.cbSize = sizeof(lp);
+        pv.blob.pBlobData = (BYTE*)&lp;
+        ComPtr<IAudioClient> cap, ren;
+        ComPtr<IAudioCaptureClient> cc;
+        ComPtr<IAudioRenderClient> rc;
+        SndActivated* h = new SndActivated();
+        ComPtr<IActivateAudioInterfaceAsyncOperation> op;
+        if (activate && SUCCEEDED(activate(L"VAD\\Process_Loopback", __uuidof(IAudioClient), &pv, h, &op)) &&
+            WaitForSingleObject(h->done, 5000) == WAIT_OBJECT_0) {
+            HRESULT hr = E_FAIL;
+            ComPtr<IUnknown> unk;
+            if (SUCCEEDED(op->GetActivateResult(&hr, &unk)) && SUCCEEDED(hr) && unk) unk.As(&cap);
+        }
+        h->Release();
+        // (one format both ends convert to)
+        WAVEFORMATEX fmt = {WAVE_FORMAT_PCM, 2, 48000, 48000 * 4, 4, 16, 0};
+        HANDLE capEv = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        UINT32 renFrames = 0;
+        bool ok = cap &&
+                  SUCCEEDED(cap->Initialize(AUDCLNT_SHAREMODE_SHARED,
+                                            AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
+                                            200000, 0, &fmt, nullptr)) &&
+                  SUCCEEDED(cap->SetEventHandle(capEv)) && SUCCEEDED(cap->GetService(IID_PPV_ARGS(&cc)));
+        if (ok) {
+            ComPtr<IMMDeviceEnumerator> en;
+            ComPtr<IMMDevice> dev;
+            ok = SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&en))) &&
+                 SUCCEEDED(en->GetDevice(c->dev.c_str(), &dev)) &&
+                 SUCCEEDED(dev->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)ren.GetAddressOf())) &&
+                 SUCCEEDED(ren->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
+                                           1000000, 0, &fmt, nullptr)) &&
+                 SUCCEEDED(ren->GetBufferSize(&renFrames)) && SUCCEEDED(ren->GetService(IID_PPV_ARGS(&rc)));
+        }
+        Wh_Log(L"sound: copy of app %lu %s", c->pid, ok ? L"started" : L"couldn't start");
+        if (ok && SUCCEEDED(ren->Start()) && SUCCEEDED(cap->Start())) {
+            HANDLE waits[2] = {c->stop, capEv};
+            for (;;) {
+                if (WaitForMultipleObjects(2, waits, FALSE, 500) == WAIT_OBJECT_0) break;
+                UINT32 pkt = 0;
+                while (SUCCEEDED(cc->GetNextPacketSize(&pkt)) && pkt) {
+                    BYTE* data = nullptr;
+                    UINT32 frames = 0;
+                    DWORD flags = 0;
+                    if (FAILED(cc->GetBuffer(&data, &frames, &flags, nullptr, nullptr))) break;
+                    UINT32 pad = 0;
+                    ren->GetCurrentPadding(&pad);
+                    UINT32 n = std::min(frames, renFrames > pad ? renFrames - pad : 0u);  // (no room: that bit is dropped)
+                    BYTE* out = nullptr;
+                    if (n && SUCCEEDED(rc->GetBuffer(n, &out))) {
+                        if (flags & AUDCLNT_BUFFERFLAGS_SILENT) memset(out, 0, n * 4);
+                        else memcpy(out, data, n * 4);
+                        rc->ReleaseBuffer(n, 0);
+                    }
+                    cc->ReleaseBuffer(frames);
+                }
+            }
+            cap->Stop();
+            ren->Stop();
+        }
+        CloseHandle(capEv);
+    }
+    if (SUCCEEDED(co)) CoUninitialize();
+    return 0;
+}
+
+static int SndCopyAt(DWORD pid, const std::wstring& dev) {
+    for (size_t i = 0; i < g_sndCopies.size(); i++)
+        if (g_sndCopies[i]->pid == pid && g_sndCopies[i]->dev == dev) return (int)i;
+    return -1;
+}
+static void SndCopyStart(DWORD pid, const std::wstring& dev) {
+    if (!SndCanCopy() || SndCopyAt(pid, dev) >= 0) return;
+    auto c = std::make_unique<SndCopy>();
+    c->pid = pid;
+    c->dev = dev;
+    c->stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    c->thread = CreateThread(nullptr, 0, SndCopyThread, c.get(), 0, nullptr);
+    if (!c->thread) {
+        CloseHandle(c->stop);
+        return;
+    }
+    g_sndCopies.push_back(std::move(c));
+}
+static void SndCopyEnd(size_t i, DWORD wait) {
+    auto& c = g_sndCopies[i];
+    SetEvent(c->stop);
+    if (WaitForSingleObject(c->thread, wait) == WAIT_OBJECT_0) {
+        CloseHandle(c->thread);
+        CloseHandle(c->stop);
+        g_sndCopies.erase(g_sndCopies.begin() + i);
+    } else {
+        c->pid = 0;  // (still finishing: forgotten as a copy, closed at unload)
+    }
+}
+static void SndCopyStop(DWORD pid, const std::wstring& dev) {
+    int i = SndCopyAt(pid, dev);
+    if (i >= 0) SndCopyEnd((size_t)i, 2000);
+}
+static void SndCopiesStopAll(DWORD deadline) {
+    for (auto& c : g_sndCopies) SetEvent(c->stop);
+    for (auto& c : g_sndCopies) {
+        LONG left = (LONG)(deadline - GetTickCount());
+        if (WaitForSingleObject(c->thread, left > 0 ? (DWORD)left : 0) == WAIT_OBJECT_0) {
+            CloseHandle(c->thread);
+            CloseHandle(c->stop);
+        } else {
+            (void)c.release();  // (still finishing: its data stays for it)
+        }
+    }
+    g_sndCopies.clear();
+}
+
+static const PROPERTYKEY kSndName = {{0xa45c254e, 0xdf1c, 0x4efd, {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}}, 14};  // the friendly name
+static const PROPERTYKEY kSndForm = {{0x1da5d803, 0xd492, 0x4edd, {0x8c, 0x23, 0xe0, 0xc0, 0xff, 0xee, 0x7f, 0x0e}}, 0};   // the form factor
+
+static int SndOutOf(const std::wstring& id) {
+    for (size_t i = 0; i < g_snd.outs.size(); i++)
+        if (g_snd.outs[i].id == id) return (int)i;
+    return -1;
+}
+
+// Every output that's on, and the apps playing on each (a paused app stays where it was last).
+static void SndLoad() {
+    g_snd.outs.clear();
+    g_snd.apps.clear();
+    if (!g_stat.mmde) return;
+    // (copies of apps that closed end here)
+    for (size_t i = g_sndCopies.size(); i-- > 0;)
+        if (g_sndCopies[i]->pid && !SndProcessAlive(g_sndCopies[i]->pid)) SndCopyEnd(i, 500);
+    auto defaultOf = [](ERole role) {
+        std::wstring v;
+        ComPtr<IMMDevice> d;
+        LPWSTR id = nullptr;
+        if (SUCCEEDED(g_stat.mmde->GetDefaultAudioEndpoint(eRender, role, &d)) && SUCCEEDED(d->GetId(&id))) {
+            v = id;
+            CoTaskMemFree(id);
+        }
+        return v;
+    };
+    std::wstring defId = defaultOf(eMultimedia), commId = defaultOf(eCommunications);
+    ComPtr<IMMDeviceCollection> col;
+    if (FAILED(g_stat.mmde->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &col))) return;
+    UINT n = 0;
+    col->GetCount(&n);
+    DWORD self = GetCurrentProcessId();
+    struct Seen {
+        DWORD pid;
+        int out;
+        bool active, muted;
+    };
+    std::vector<Seen> seen;
+    for (UINT i = 0; i < n; i++) {
+        ComPtr<IMMDevice> dev;
+        LPWSTR id = nullptr;
+        if (FAILED(col->Item(i, &dev)) || FAILED(dev->GetId(&id))) continue;
+        SndOut o;
+        o.id = id;
+        CoTaskMemFree(id);
+        o.kind = L"speakers";
+        ComPtr<IPropertyStore> ps;
+        if (SUCCEEDED(dev->OpenPropertyStore(STGM_READ, &ps))) {
+            PROPVARIANT pv;
+            PropVariantInit(&pv);
+            if (SUCCEEDED(ps->GetValue(kSndName, &pv)) && pv.vt == VT_LPWSTR && pv.pwszVal) o.name = pv.pwszVal;
+            PropVariantClear(&pv);
+            if (SUCCEEDED(ps->GetValue(kSndForm, &pv)) && pv.vt == VT_UI4) {
+                if (pv.ulVal == Headphones || pv.ulVal == Headset) o.kind = L"headset";
+                else if (pv.ulVal == DigitalAudioDisplayDevice) o.kind = L"display";
+            }
+            PropVariantClear(&pv);
+        }
+        if (o.name.empty()) o.name = L2(L"Saída de som", L"Sound output");
+        o.def = o.id == defId;
+        o.comm = o.id == commId;
+        if (SUCCEEDED(dev->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)o.ev.GetAddressOf()))) {
+            o.ev->GetMasterVolumeLevelScalar(&o.vol);
+            BOOL m = FALSE;
+            o.ev->GetMute(&m);
+            o.muted = m;
+        }
+        int oi = (int)g_snd.outs.size();
+        g_snd.outs.push_back(o);
+        ComPtr<IAudioSessionManager2> mgr;
+        ComPtr<IAudioSessionEnumerator> en;
+        if (FAILED(dev->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)mgr.GetAddressOf())) ||
+            FAILED(mgr->GetSessionEnumerator(&en)))
+            continue;
+        int sn = 0;
+        en->GetCount(&sn);
+        for (int k = 0; k < sn; k++) {
+            ComPtr<IAudioSessionControl> c;
+            ComPtr<IAudioSessionControl2> c2;
+            ComPtr<ISimpleAudioVolume> sv;
+            if (FAILED(en->GetSession(k, &c)) || FAILED(c.As(&c2)) || FAILED(c.As(&sv))) continue;
+            AudioSessionState st;
+            if (FAILED(c->GetState(&st)) || st == AudioSessionStateExpired || c2->IsSystemSoundsSession() == S_OK) continue;
+            DWORD pid = 0;
+            c2->GetProcessId(&pid);
+            if (!pid || pid == self) continue;  // (Nimbus' own: its sounds and the copies)
+            auto it = std::find_if(g_snd.apps.begin(), g_snd.apps.end(), [&](const SndApp& a) { return a.v.pid == pid; });
+            if (it == g_snd.apps.end()) {
+                SndApp a;
+                a.v.pid = pid;
+                a.v.path = ProcessPath(pid);
+                if (a.v.path.empty()) continue;
+                a.v.name = FileDescription(a.v.path);
+                if (a.v.name.empty()) {
+                    a.v.name = PathFindFileNameW(a.v.path.c_str());
+                    PathRemoveExtensionW(a.v.name.data());
+                    a.v.name.resize(wcslen(a.v.name.c_str()));
+                }
+                sv->GetMasterVolume(&a.v.level);
+                g_snd.apps.push_back(a);
+                it = g_snd.apps.end() - 1;
+            }
+            it->v.vols.push_back(sv);
+            it->sess.push_back({oi, sv});
+            BOOL muted = FALSE;
+            sv->GetMute(&muted);
+            seen.push_back({pid, oi, st == AudioSessionStateActive, muted != FALSE});
+        }
+    }
+    // Where each one plays: where it's playing now; paused, where it played.
+    for (auto& a : g_snd.apps) {
+        // (muted there by the panel: not playing there)
+        for (auto& x : seen)
+            if (x.pid == a.v.pid && x.muted && std::find(a.mutedOn.begin(), a.mutedOn.end(), x.out) == a.mutedOn.end()) a.mutedOn.push_back(x.out);
+        auto on = [&](const Seen& x) { return x.pid == a.v.pid && !x.muted; };
+        bool any = std::any_of(seen.begin(), seen.end(), [&](const Seen& x) { return on(x) && x.active; });
+        for (auto& x : seen)
+            if (on(x) && (x.active || !any) && std::find(a.outs.begin(), a.outs.end(), x.out) == a.outs.end()) a.outs.push_back(x.out);
+        if (!a.outs.empty()) a.main = a.outs[0];
+        for (auto& c : g_sndCopies) {
+            int oi = c->pid == a.v.pid ? SndOutOf(c->dev) : -1;
+            if (oi >= 0 && std::find(a.outs.begin(), a.outs.end(), oi) == a.outs.end()) a.outs.push_back(oi);
+        }
+    }
+    std::stable_sort(g_snd.apps.begin(), g_snd.apps.end(), [](const SndApp& a, const SndApp& b) { return _wcsicmp(a.v.name.c_str(), b.v.name.c_str()) < 0; });
+}
+
+static bool SndIsCopy(const SndApp& a, int oi) { return oi >= 0 && oi < (int)g_snd.outs.size() && SndCopyAt(a.v.pid, g_snd.outs[oi].id) >= 0; }
+// Its own output: to the default means following it.
+static void SndRouteTo(const SndApp& a, int oi) { SndRoute(a.v.pid, g_snd.outs[oi].def ? L"" : g_snd.outs[oi].id); }
+static bool SndHas(const std::vector<int>& v, int x) { return std::find(v.begin(), v.end(), x) != v.end(); }
+static bool SndHasSession(const SndApp& a, int oi) {
+    return std::any_of(a.sess.begin(), a.sess.end(), [&](const auto& x) { return x.first == oi; });
+}
+// Muted by the panel: "app path|output id", one per line (Windows keeps a session's mute, so it's undone by the reset).
+static std::vector<std::wstring> SndMutedList() {
+    std::vector<std::wstring> v;
+    std::wstring all;
+    ReadLong(UserPrefix() + L"sound.muted", all);
+    size_t a = 0;
+    while (a < all.size()) {
+        size_t b = all.find(L'\n', a);
+        if (b == std::wstring::npos) b = all.size();
+        if (b > a) v.push_back(all.substr(a, b - a));
+        a = b + 1;
+    }
+    return v;
+}
+static void SndMutedSave(const std::vector<std::wstring>& v) {
+    std::wstring all;
+    for (auto& x : v) all += x + L"\n";
+    Wh_SetStringValue((UserPrefix() + L"sound.muted").c_str(), all.c_str());
+}
+static void SndMuteOn(const SndApp& a, int oi, bool mute) {
+    for (auto& x : a.sess)
+        if (x.first == oi) x.second->SetMute(mute, nullptr);
+    if (oi < 0 || oi >= (int)g_snd.outs.size()) return;
+    std::wstring key = a.v.path + L"|" + g_snd.outs[oi].id;
+    auto v = SndMutedList();
+    auto it = std::find(v.begin(), v.end(), key);
+    if (mute && it == v.end()) v.push_back(key);
+    else if (!mute && it != v.end()) v.erase(it);
+    SndMutedSave(v);
+}
+
+// Back to the simple panel: everything as Windows had it (copies off, every app on the default, the
+// panel's mutes undone).
+static void SndResetAll() {
+    SndCopiesStopAll(GetTickCount() + 2000);
+    if (ComPtr<NimbusAudioPolicy> pol = SndPolicy()) pol->ClearAllPersistedApplicationDefaultEndpoints();
+    auto muted = SndMutedList();
+    if (!muted.empty() && g_stat.mmde) {
+        ComPtr<IMMDeviceCollection> col;
+        UINT n = 0;
+        if (SUCCEEDED(g_stat.mmde->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &col))) col->GetCount(&n);
+        for (UINT i = 0; i < n; i++) {
+            ComPtr<IMMDevice> dev;
+            LPWSTR id = nullptr;
+            if (FAILED(col->Item(i, &dev)) || FAILED(dev->GetId(&id))) continue;
+            std::wstring devId = id;
+            CoTaskMemFree(id);
+            ComPtr<IAudioSessionManager2> mgr;
+            ComPtr<IAudioSessionEnumerator> en;
+            if (FAILED(dev->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)mgr.GetAddressOf())) ||
+                FAILED(mgr->GetSessionEnumerator(&en)))
+                continue;
+            int sn = 0;
+            en->GetCount(&sn);
+            for (int k = 0; k < sn; k++) {
+                ComPtr<IAudioSessionControl> c;
+                ComPtr<IAudioSessionControl2> c2;
+                ComPtr<ISimpleAudioVolume> sv;
+                if (FAILED(en->GetSession(k, &c)) || FAILED(c.As(&c2)) || FAILED(c.As(&sv))) continue;
+                DWORD pid = 0;
+                c2->GetProcessId(&pid);
+                std::wstring path = pid ? ProcessPath(pid) : L"";
+                if (!path.empty() && std::find(muted.begin(), muted.end(), path + L"|" + devId) != muted.end()) sv->SetMute(FALSE, nullptr);
+            }
+        }
+    }
+    SndMutedSave({});
+    g_snd.note.clear();
+    Wh_Log(L"sound: back to the simple panel, every app on the default output");
+}
+// Its own outputs (not Nimbus' copies).
+static int SndOwnCount(const SndApp& a) {
+    int n = 0;
+    for (int o : a.outs)
+        if (!SndIsCopy(a, o)) n++;
+    return n;
+}
+
+// From the list onto an output: it plays there too.
+static void SndAdd(int ai, int oi) {
+    if (ai < 0 || ai >= (int)g_snd.apps.size() || oi < 0 || oi >= (int)g_snd.outs.size()) return;
+    SndApp& a = g_snd.apps[ai];
+    if (SndHas(a.outs, oi)) return;
+    if (SndHas(a.mutedOn, oi)) SndMuteOn(a, oi, false);  // (taken off there before: back on)
+    else if (a.outs.empty()) SndRouteTo(a, oi);
+    else SndCopyStart(a.v.pid, g_snd.outs[oi].id);
+    Wh_Log(L"sound: %s also on %s", a.v.name.c_str(), g_snd.outs[oi].name.c_str());
+}
+// The × on an output: it stops playing there (never off every output).
+static void SndRemove(int ai, int oi) {
+    if (ai < 0 || ai >= (int)g_snd.apps.size() || oi < 0 || oi >= (int)g_snd.outs.size()) return;
+    SndApp& a = g_snd.apps[ai];
+    if (a.outs.size() < 2 || !SndHas(a.outs, oi)) return;
+    Wh_Log(L"sound: %s off %s", a.v.name.c_str(), g_snd.outs[oi].name.c_str());
+    if (SndIsCopy(a, oi)) {
+        SndCopyStop(a.v.pid, g_snd.outs[oi].id);
+        return;
+    }
+    // Its own output, and it plays on another of its own: muted here.
+    if (SndOwnCount(a) > 1) {
+        SndMuteOn(a, oi, true);
+        g_snd.note = a.v.name + L2(L" escolhe as próprias saídas (nas configurações dele), então o Nimbus deixou ele mudo nesta saída. Pra tirar de vez, mude a saída nas configurações do ",
+                                   L" picks its own outputs (in its settings), so Nimbus muted it on this output. To take it off for good, change the output in ") +
+                     a.v.name + L2(L". Arrastar de volta tira o mudo.", L"'s settings. Dragging it back unmutes it.");
+        return;
+    }
+    // Its only own output: a copy takes its place.
+    for (int o : a.outs)
+        if (o != oi && SndIsCopy(a, o)) {
+            SndCopyStop(a.v.pid, g_snd.outs[o].id);
+            SndRouteTo(a, o);
+            return;
+        }
+}
+// From one output to another: it moves.
+static void SndMove(int ai, int from, int to) {
+    if (ai < 0 || ai >= (int)g_snd.apps.size() || to < 0 || to >= (int)g_snd.outs.size() || from == to) return;
+    SndApp& a = g_snd.apps[ai];
+    Wh_Log(L"sound: %s from %s to %s", a.v.name.c_str(), from >= 0 && from < (int)g_snd.outs.size() ? g_snd.outs[from].name.c_str() : L"?",
+           g_snd.outs[to].name.c_str());
+    if (SndHas(a.outs, to)) {  // (already there too: it just leaves where it came from)
+        SndRemove(ai, from);
+        return;
+    }
+    if (SndIsCopy(a, from)) {
+        SndCopyStop(a.v.pid, g_snd.outs[from].id);
+        SndAdd(ai, to);
+        return;
+    }
+    if (SndHas(a.mutedOn, to) || SndOwnCount(a) > 1) {
+        // An app with sessions of its own on several outputs: on where it goes, muted where it was.
+        SndAdd(ai, to);
+        SndMuteOn(a, from, true);
+        g_snd.note = a.v.name + L2(L" escolhe as próprias saídas (nas configurações dele): o Nimbus ligou ele aqui e deixou mudo onde estava. Arrastar de volta desfaz.",
+                                   L" picks its own outputs (in its settings): Nimbus turned it on here and muted it where it was. Dragging it back undoes it.");
+        return;
+    }
+    SndRouteTo(a, to);
+    if (SndHasSession(a, to)) SndMuteOn(a, to, false);
 }
 
 // ---- Network ----
@@ -6645,7 +7233,12 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             // (Right after a Windows key press, Windows' own Start takes the focus for a moment: we
             // close it and come back, so that doesn't count as clicking away.)
             extern DWORD g_lastWinAlone;
-            if (LOWORD(wp) == WA_INACTIVE && s.open && !s.menuOpen && GetTickCount() - s.openedAt > 150 &&
+            // (A panel opened from the Start, or its text box for a note, taking the focus isn't leaving:
+            // typing a note from the Status tab needs it.)
+            wchar_t toCls[64] = {};
+            if (lp) GetClassNameW(GetAncestor((HWND)lp, GA_ROOT), toCls, ARRAYSIZE(toCls));
+            bool toOurPanel = !wcscmp(toCls, L"NimbusMenu_Flyout") || !wcscmp(toCls, L"NimbusMenu_NoteEdit");
+            if (LOWORD(wp) == WA_INACTIVE && s.open && !s.menuOpen && !toOurPanel && GetTickCount() - s.openedAt > 150 &&
                 GetTickCount() - g_lastWinAlone > 1500 && !TrayClickJustNow()) {
                 // Windows' search box takes the focus as soon as the Windows key goes down: that press
                 // is closing the Start, and the Explorer part must not open it again right after.
@@ -7188,9 +7781,11 @@ constexpr UINT_PTR TIMER_FLY_PAGE = 45;  // going from one panel to another insi
 constexpr UINT_PTR TIMER_FLY_WIFI = 41;
 constexpr UINT_PTR TIMER_FLY_WATCH = 42;
 constexpr UINT_PTR TIMER_FLY_SHELF = 43;
+constexpr UINT_PTR TIMER_FLY_SND = 46;  // the sound panel reads the outputs again after a change
 constexpr UINT_PTR TIMER_FLY_TRAY = 44;  // after a click on a tray icon: close, unless a second click came  // after a drag out: a moved file leaves the shelf
 constexpr UINT WM_APP_FLY_OUTSIDE = WM_APP + 11;
-constexpr float kFlyW = 360, kFlyPad = 18, kFlyR = 16;
+static float kFlyW = 360;  // (the complete sound panel is wider: set each frame by FlyRender)
+constexpr float kFlyPad = 18, kFlyR = 16;
 
 struct FlyHit {
     D2D1_RECT_F r{};
@@ -7200,6 +7795,8 @@ struct FlyHit {
     std::function<void(int)> button;  // right (1) and middle (2) clicks
     std::function<void(bool)> dragOut;  // dragging it out of the panel (true: with the right button)
     std::wstring trayKey;               // a tray icon: dragging it onto another reorders them
+    int sndApp = -1, sndFrom = -2;      // the complete sound panel: an app that can be dragged (from the list: -1, or an output)
+    int sndOut = -1;                    // ... and an output it can be dropped on
 };
 
 struct Flyout {
@@ -7461,7 +8058,290 @@ static float PanelClock(float y) {
 
 static std::wstring PctText(float v) { return std::to_wstring((int)std::lround(v * 100)) + L"%"; }
 
+// The complete sound panel (wherever the sound panel opens, the control center too).
+// The room across the monitor (DIPs): a narrow screen gets a narrower panel, and under 520 the simple one.
+static float SndRoomW() {
+    if (!g_fly.dock || g_fly.scale <= 0) return 0;
+    return (g_fly.dock->rcMon.right - g_fly.dock->rcMon.left) / g_fly.scale - 16;
+}
+static bool SndWide() { return g_fly.kind == StVolume && SoundFull() && SndRoomW() >= 520; }  // (inside the control center too)
+static void SndAfter();
+static void OpenFlyout(Dock& d, int kind, bool fromStart);
+
+// A hit inside a scrolled column: only the part that shows.
+static void SndHit(FlyHit h, const D2D1_RECT_F& view) {
+    if (h.r.bottom <= view.top || h.r.top >= view.bottom) return;
+    h.r.top = std::max(h.r.top, view.top);
+    h.r.bottom = std::min(h.r.bottom, view.bottom);
+    g_fly.hits.push_back(std::move(h));
+}
+static void SndSlider(float x, float top, float w, float v, const D2D1_RECT_F& view, std::function<void(float)> set) {
+    float cy = top + 16;
+    v = std::clamp(v, 0.0f, 1.0f);
+    if (FDraw()) {
+        g_fly.rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x, cy - 2, x + w, cy + 2), 2, 2), FBr(FCol(g_theme.text, 0.18f)));
+        g_fly.rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x, cy - 2, x + w * v, cy + 2), 2, 2), FBr(FInk()));
+        D2D1_POINT_2F k = D2D1::Point2F(x + w * v, cy);
+        g_fly.rt->FillEllipse(D2D1::Ellipse(k, 8, 8), FBr(FSolidTint()));
+        g_fly.rt->FillEllipse(D2D1::Ellipse(k, 5.5f, 5.5f), FBr(FInk()));
+    }
+    FlyHit h;
+    h.r = D2D1::RectF(x - 8, top, x + w + 8, top + 32);
+    h.slide = std::move(set);
+    h.x0 = x;
+    h.x1 = x + w;
+    SndHit(std::move(h), view);
+}
+static const wchar_t* SndKindIcon(const std::wstring& k) {
+    if (k == L"headset") return L"M4 15v-3a8 8 0 0 1 16 0v3 M4 14h3v6H4z M17 14h3v6h-3z";
+    if (k == L"display") return L"M3 5h18v11H3z M8 20h8 M12 16v4";
+    return L"M6 3h12v18H6z M12 11a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 7h.01";
+}
+static const wchar_t* SndKindName(const std::wstring& k) {
+    if (k == L"headset") return L2(L"Fone", L"Headphones");
+    if (k == L"display") return L2(L"Monitor", L"Display");
+    return L2(L"Alto-falantes", L"Speakers");
+}
+
+// Apps on the left, outputs on the right: drag an app onto an output (it plays there too), a pill from one
+// output to another (it moves), and × takes it off one. Each column scrolls by itself.
+static float PanelSoundFull(float y) {
+    auto& f = g_fly;
+    auto& S = g_snd;
+    std::wstring hint = S.dragging ? (S.dragFrom < 0 ? L2(L"solte numa saída pra tocar lá também", L"drop on an output to play there too")
+                                                     : L2(L"solte em outra saída pra trocar", L"drop on another output to move it"))
+                                   : L2(L"arraste os apps pras saídas", L"drag the apps onto the outputs");
+    FHeader(y, L2(L"Som", L"Sound"), hint);
+    if (!S.note.empty()) {
+        // (a word about an app that picks its own outputs; × or any change clears it)
+        D2D1_RECT_F nr = D2D1::RectF(kFlyPad, y, kFlyW - kFlyPad, y + 46);
+        FFill(nr, 10, FCol(g_theme.text, 0.08f));
+        FText(S.note, f.fWrapS ? f.fWrapS.Get() : f.fSmall.Get(), nr.left + 12, nr.top + 4, nr.right - nr.left - 48, 38, FInk());
+        D2D1_RECT_F xr = D2D1::RectF(nr.right - 32, nr.top + 12, nr.right - 10, nr.top + 34);
+        if (FHot(xr)) FFill(xr, 11, FCol(g_theme.text, 0.14f));
+        FIcon(L"M7 7l10 10M17 7L7 17", (xr.left + xr.right) / 2, (xr.top + xr.bottom) / 2, 11, FSub(), 2.2f);
+        FHitAdd(xr, [] { g_snd.note.clear(); });
+        y += 54;
+    }
+    float top = y;
+    float lx0 = kFlyPad, lx1 = kFlyPad + std::min(214.0f, (kFlyW - kFlyPad * 2 - 16) * 0.4f), rx0 = lx1 + 16, rx1 = kFlyW - kFlyPad;
+    const float itemH = 68, gap = 6, pillH = 30;
+    // The pills of one output, laid out in rows (also to know the card's height).
+    auto pillW = [&](const SndApp& a) { return 4 + 22 + 6 + std::min(130.0f, TextSize(a.v.name, f.fSmall.Get()).width) + 4 + 22 + 4; };
+    auto pillRows = [&](int oi) {
+        float x = 0, w = rx1 - rx0 - 24;
+        int rows = 0;
+        for (auto& a : S.apps) {
+            if (std::find(a.outs.begin(), a.outs.end(), oi) == a.outs.end()) continue;
+            float pw = pillW(a);
+            if (!rows || x + pw > w) {
+                rows++;
+                x = 0;
+            }
+            x += pw + 6;
+        }
+        return rows;
+    };
+    auto cardH = [&](int oi) {
+        int rows = pillRows(oi);
+        return 12 + 40 + 30 + 32 + (rows ? rows * (pillH + 6) - 6 : 20) + 12;
+    };
+    float leftH = 22 + (S.apps.empty() ? 40 : S.apps.size() * (itemH + gap) - gap);
+    float rightH = 0;
+    for (size_t oi = 0; oi < S.outs.size(); oi++) rightH += cardH((int)oi) + (oi ? 8 : 0);
+    if (S.outs.empty()) rightH = 40;
+    float room = std::max(180.0f, f.maxH - top - kFlyPad);
+    float colH = std::min(std::max(leftH, rightH), room);
+    S.maxL = std::max(0.0f, leftH - colH);
+    S.maxR = std::max(0.0f, rightH - colH);
+    S.scrollL = std::clamp(S.scrollL, 0.0f, S.maxL);
+    S.scrollR = std::clamp(S.scrollR, 0.0f, S.maxR);
+    S.colL = D2D1::RectF(lx0 - 4, top, lx1 + 4, top + colH);
+    S.colR = D2D1::RectF(rx0 - 4, top, rx1 + 4, top + colH);
+    auto outNames = [&](const SndApp& a) {
+        std::wstring t;
+        for (int o : a.outs) t += (t.empty() ? L"" : L" + ") + S.outs[o].name;
+        return t;
+    };
+    auto scrollbar = [&](const D2D1_RECT_F& col, float scroll, float max) {
+        if (max <= 0 || !FDraw()) return;
+        float h = col.bottom - col.top, th = std::max(28.0f, h * h / (h + max)), ty = col.top + (h - th) * (scroll / max);
+        FFill(D2D1::RectF(col.right - 1, ty, col.right + 2, ty + th), 1.5f, FCol(g_theme.text, 0.22f));
+    };
+
+    // Left: the apps playing.
+    if (FDraw()) f.rt->PushAxisAlignedClip(S.colL, D2D1_ANTIALIAS_MODE_ALIASED);
+    float ly = top - S.scrollL;
+    FText(L2(L"Apps tocando", L"Apps playing"), f.fSmall.Get(), lx0 + 2, ly, 200, 18, FSub());
+    ly += 22;
+    if (S.apps.empty()) FText(L2(L"Nenhum app tocando agora.", L"No app is playing now."), f.fSmall.Get(), lx0 + 2, ly, lx1 - lx0, 32, FSub());
+    for (size_t ai = 0; ai < S.apps.size(); ai++) {
+        SndApp& a = S.apps[ai];
+        D2D1_RECT_F r = D2D1::RectF(lx0, ly, lx1, ly + itemH);
+        bool ghost = S.dragging && S.dragApp == (int)ai && S.dragFrom < 0;
+        FFill(r, 12, FCol(g_theme.hover, (FHot(r) && !S.dragging ? 1.0f : 0.6f) * (ghost ? 0.4f : 1.0f)));
+        FlyHit h;
+        h.r = r;
+        h.sndApp = (int)ai;
+        h.sndFrom = -1;
+        SndHit(std::move(h), S.colL);
+        if (ID2D1Bitmap* bmp = FBitmap(a.v.path, a.v.icon.Get()); bmp && FDraw()) {
+            D2D1_RECT_F ir = D2D1::RectF(lx0 + 10, ly + 8, lx0 + 32, ly + 30);
+            if (f.dc) f.dc->DrawBitmap(bmp, ir, ghost ? 0.4f : 1, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC, nullptr, nullptr);
+            else f.rt->DrawBitmap(bmp, ir);
+        } else {
+            FIcon(L"M4 5h16v14H4z M4 9h16", lx0 + 21, ly + 19, 18, FSub());
+        }
+        FText(a.v.name, f.fSmall.Get(), lx0 + 40, ly + 7, lx1 - lx0 - 48, 20, FInk());
+        FText(outNames(a), f.fSmall.Get(), lx0 + 40, ly + 25, lx1 - lx0 - 48, 16, FSub());
+        SndSlider(lx0 + 40, ly + 36, lx1 - lx0 - 52, a.v.level, S.colL, [ai](float v) {
+            if (ai < g_snd.apps.size()) SetAppVolume(g_snd.apps[ai].v, v);
+        });
+        ly += itemH + gap;
+    }
+    if (FDraw()) f.rt->PopAxisAlignedClip();
+    scrollbar(S.colL, S.scrollL, S.maxL);
+
+    // Right: the outputs, each with the apps on it.
+    if (FDraw()) f.rt->PushAxisAlignedClip(S.colR, D2D1_ANTIALIAS_MODE_ALIASED);
+    float ry = top - S.scrollR;
+    if (S.outs.empty()) FText(L2(L"Nenhuma saída de som ligada.", L"No sound output is on."), f.fSmall.Get(), rx0, ry, rx1 - rx0, 32, FSub());
+    S.hot = -1;
+    for (size_t oi = 0; oi < S.outs.size(); oi++) {
+        SndOut& o = S.outs[oi];
+        float ch = cardH((int)oi);
+        D2D1_RECT_F r = D2D1::RectF(rx0, ry, rx1, ry + ch);
+        bool target = false;
+        if (S.dragging && S.dragApp >= 0 && S.dragApp < (int)S.apps.size()) {
+            auto& outs = S.apps[S.dragApp].outs;
+            target = std::find(outs.begin(), outs.end(), (int)oi) == outs.end();
+        }
+        bool over = target && FIn(r) && f.mouse.y >= S.colR.top && f.mouse.y < S.colR.bottom;
+        if (over) S.hot = (int)oi;
+        FFill(r, 14, FCol(g_theme.hover, o.def ? 0.95f : 0.6f));
+        if ((target || over) && FDraw()) {
+            D2D1_RECT_F b = D2D1::RectF(r.left + 0.75f, r.top + 0.75f, r.right - 0.75f, r.bottom - 0.75f);
+            f.rt->DrawRoundedRectangle(D2D1::RoundedRect(b, 13.5f, 13.5f), FBr(FCol(g_theme.text, over ? 0.9f : 0.35f)), over ? 1.5f : 1);
+        }
+        FlyHit ch2;
+        ch2.r = r;
+        ch2.sndOut = (int)oi;
+        SndHit(std::move(ch2), S.colR);
+        float cy = ry + 12;
+        FIcon(SndKindIcon(o.kind), rx0 + 24, cy + 18, 18, FInk());
+        FText(o.name, f.fText.Get(), rx0 + 44, cy, rx1 - rx0 - 56, 20, FInk());
+        FText(std::wstring(SndKindName(o.kind)), f.fSmall.Get(), rx0 + 44, cy + 20, rx1 - rx0 - 56, 16, FSub());
+        // Default and Calls: filled where it is, a click on the other makes it so.
+        {
+            float bx = rx0 + 44, by = cy + 42;
+            auto chip = [&](const wchar_t* label, bool on, bool calls) {
+                float bw = TextSize(label, f.fSmall.Get()).width + (on ? 34 : 20);
+                D2D1_RECT_F b = D2D1::RectF(bx, by, bx + bw, by + 24);
+                if (on) {
+                    FFill(b, 12, FInk());
+                    FIcon(L"M5 12l5 5 9-10", b.left + 13, by + 12, 11, FSolidTint(), 2.2f);
+                    FText(label, f.fSmall.Get(), b.left + 22, by, bw - 26, 24, FSolidTint());
+                } else {
+                    if (FHot(b)) FFill(b, 12, FHov());
+                    if (FDraw())
+                        f.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(b.left + .5f, b.top + .5f, b.right - .5f, b.bottom - .5f), 11.5f, 11.5f),
+                                                   FBr(FCol(g_theme.text, 0.18f)), 1);
+                    FText(label, f.fSmall.Get(), b.left, by, bw, 24, FCol(g_theme.text, 0.85f), DWRITE_TEXT_ALIGNMENT_CENTER);
+                    FlyHit bh;
+                    bh.r = b;
+                    std::wstring id = o.id;
+                    bh.click = [id, calls] {
+                        SndSetDefault(id, calls);
+                        SndAfter();
+                    };
+                    SndHit(std::move(bh), S.colR);
+                }
+                bx += bw + 6;
+            };
+            chip(L2(L"Padrão", L"Default"), o.def, false);
+            chip(L2(L"Chamadas", L"Calls"), o.comm, true);
+        }
+        cy += 30;
+        cy += 40;
+        SndSlider(rx0 + 14, cy, rx1 - rx0 - 14 - 54, o.muted ? 0 : o.vol, S.colR, [oi](float v) {
+            if (oi >= g_snd.outs.size() || !g_snd.outs[oi].ev) return;
+            g_snd.outs[oi].ev->SetMasterVolumeLevelScalar(v, nullptr);
+            if (v > 0) g_snd.outs[oi].ev->SetMute(FALSE, nullptr);
+            g_snd.outs[oi].vol = v;
+            g_snd.outs[oi].muted = false;
+        });
+        FText(o.muted ? std::wstring(L2(L"Mudo", L"Muted")) : PctText(o.vol), f.fSmall.Get(), rx1 - 52, cy, 40, 32, FSub(), DWRITE_TEXT_ALIGNMENT_TRAILING);
+        cy += 32;
+        // the apps on it
+        float px = rx0 + 12, pw = rx1 - rx0 - 24, x = 0;
+        bool any = false;
+        for (size_t ai = 0; ai < S.apps.size(); ai++) {
+            SndApp& a = S.apps[ai];
+            if (std::find(a.outs.begin(), a.outs.end(), (int)oi) == a.outs.end()) continue;
+            float w = pillW(a);
+            if (any && x + w > pw) {
+                x = 0;
+                cy += pillH + 6;
+            }
+            any = true;
+            D2D1_RECT_F pr = D2D1::RectF(px + x, cy, px + x + w, cy + pillH);
+            bool ghost = S.dragging && S.dragApp == (int)ai && S.dragFrom == (int)oi;
+            FFill(pr, pillH / 2, FCol(g_theme.text, (FHot(pr) && !S.dragging ? 0.16f : 0.09f) * (ghost ? 0.4f : 1.0f)));
+            FlyHit ph;
+            ph.r = pr;
+            ph.sndApp = (int)ai;
+            ph.sndFrom = (int)oi;
+            ph.sndOut = (int)oi;
+            SndHit(std::move(ph), S.colR);
+            if (ID2D1Bitmap* bmp = FBitmap(a.v.path, a.v.icon.Get()); bmp && FDraw()) {
+                D2D1_RECT_F ir = D2D1::RectF(pr.left + 6, cy + 6, pr.left + 24, cy + 24);
+                if (f.dc) f.dc->DrawBitmap(bmp, ir, ghost ? 0.4f : 1, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC, nullptr, nullptr);
+                else f.rt->DrawBitmap(bmp, ir);
+            } else {
+                FIcon(L"M4 5h16v14H4z M4 9h16", pr.left + 15, cy + 15, 15, FSub());
+            }
+            FText(a.v.name, f.fSmall.Get(), pr.left + 32, cy, w - 32 - 28, pillH, FInk());
+            // × : off this output (not when it's the only one)
+            bool canX = a.outs.size() > 1;
+            D2D1_RECT_F xr = D2D1::RectF(pr.right - 26, cy + 4, pr.right - 4, cy + 26);
+            if (canX && FHot(xr)) FFill(xr, 11, FCol(g_theme.text, 0.14f));
+            FIcon(L"M7 7l10 10M17 7L7 17", (xr.left + xr.right) / 2, (xr.top + xr.bottom) / 2, 11, FCol(g_theme.text, canX ? 0.75f : 0.25f), 2.2f);
+            if (canX) {
+                FlyHit xh;
+                xh.r = xr;
+                xh.click = [ai, oi] {
+                    g_snd.note.clear();
+                    SndRemove((int)ai, (int)oi);
+                    SndAfter();
+                };
+                SndHit(std::move(xh), S.colR);
+            }
+            x += w + 6;
+        }
+        if (!any) FText(L2(L"Arraste um app pra cá", L"Drag an app here"), f.fSmall.Get(), px, cy, pw, 20, FCol(g_theme.text, 0.45f));
+        ry += ch + 8;
+    }
+    if (FDraw()) f.rt->PopAxisAlignedClip();
+    scrollbar(S.colR, S.scrollR, S.maxR);
+
+    // The app being dragged, under the mouse.
+    if (S.dragging && S.dragApp >= 0 && S.dragApp < (int)S.apps.size() && FDraw() && f.mouse.x >= 0) {
+        SndApp& a = S.apps[S.dragApp];
+        float w = pillW(a) - 26;
+        D2D1_RECT_F pr = D2D1::RectF(f.mouse.x - 14, f.mouse.y - 15, f.mouse.x - 14 + w, f.mouse.y + 15);
+        FFill(pr, 15, FCol(g_theme.text, 0.22f));
+        if (ID2D1Bitmap* bmp = FBitmap(a.v.path, a.v.icon.Get())) {
+            D2D1_RECT_F ir = D2D1::RectF(pr.left + 6, pr.top + 6, pr.left + 24, pr.top + 24);
+            if (f.dc) f.dc->DrawBitmap(bmp, ir, 1, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC, nullptr, nullptr);
+            else f.rt->DrawBitmap(bmp, ir);
+        }
+        FText(a.v.name, f.fSmall.Get(), pr.left + 32, pr.top, w - 36, 30, FInk());
+    }
+    return top + colH + 4;
+}
+
 static float PanelVolume(float y) {
+    if (SndWide()) return PanelSoundFull(y);
     FHeader(y, L2(L"Som", L"Sound"), g_stat.device);
     if (!g_stat.audio) {
         FText(L2(L"Nenhuma saída de som ligada.", L"No sound output is on."), g_fly.fSmall.Get(), kFlyPad, y, 300, 32, FSub());
@@ -7506,6 +8386,12 @@ static float PanelVolume(float y) {
         }
     }
     FSep(y);
+    if (SoundFull() && g_fly.back && g_fly.dock)
+        FLink(y, L2(L"Saídas e apps (painel completo) ›", L"Outputs and apps (complete panel) ›"), [] {
+            Dock* d = g_fly.dock;
+            bool fs = g_fly.fromStart;
+            OpenFlyout(*d, StVolume, fs);
+        });
     FLink(y, L2(L"Abrir o mixer de volume do Windows", L"Open Windows' volume mixer"), [] {
         CloseFlyout();
         OpenUri(L"ms-settings:apps-volume");
@@ -11821,6 +12707,13 @@ static bool BatteryHubFound() {
     ReleaseSRWLockShared(&g_devs.lock);
     return f;
 }
+// Looked for and not there (or older than 1.1): said in the settings, so turning it on isn't silent.
+static bool BatteryHubMissing() {
+    AcquireSRWLockShared(&g_devs.lock);
+    bool m = g_devs.hubTried && g_devs.hubExe.empty();
+    ReleaseSRWLockShared(&g_devs.lock);
+    return m;
+}
 
 // A notification when one drops to 20% and again at 10% (once each, until it charges).
 static std::unordered_map<std::wstring, int> g_devWarned;
@@ -13351,6 +14244,7 @@ static void FlyPlace(int w, int h) {
 static void FlyRender() {
     auto& f = g_fly;
     if (!f.open || !f.dock) return;
+    kFlyW = SndWide() ? std::min(660.0f, SndRoomW()) : 360.0f;
     // (A slow frame is logged with its panel: they're drawn on every mouse move.)
     struct SlowFrame {
         DWORD t0 = GetTickCount();
@@ -13563,11 +14457,34 @@ static void OpenFlyout(Dock& d, int kind, bool fromStart) {
     if (fromStart) RenderStart();
 }
 
+static int g_sndReloads = 0;  // (after a change: read again twice)
+static void SndIcons() {
+    for (auto& a : g_snd.apps) {
+        if (a.v.path.empty() || a.v.icon) continue;
+        ComPtr<IShellItem> item;
+        if (SUCCEEDED(SHCreateItemFromParsingName(a.v.path.c_str(), nullptr, IID_PPV_ARGS(&item)))) a.v.icon = IconFromItem(item.Get(), 32);
+    }
+}
+// After a change in the complete sound panel: read it again now, and once more when Windows has moved the app.
+static void SndAfter() {
+    SndLoad();
+    SndIcons();
+    ReadVolume();
+    g_sndReloads = 2;
+    if (g_fly.hwnd) SetTimer(g_fly.hwnd, TIMER_FLY_SND, 700, nullptr);
+}
+
 // What a panel reads when it opens.
 static void FlyLoad(int kind) {
     auto& f = g_fly;
     if (kind == StVolume) {
         ReadVolume();
+        if (SoundFull()) {
+            g_snd.scrollL = g_snd.scrollR = 0;
+            g_snd.dragging = false;
+            SndLoad();
+            SndIcons();
+        }
         LoadAppVolumes();
         for (auto& a : g_appVols) {
             if (a.path.empty()) continue;
@@ -13725,7 +14642,12 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 bool right = f.pressRight;
                 f.press = -1;
                 ReleaseCapture();
-                if (i < (int)f.hits.size() && !f.hits[i].trayKey.empty() && !right) {
+                if (i < (int)f.hits.size() && f.hits[i].sndApp >= 0 && !right) {
+                    g_snd.dragApp = f.hits[i].sndApp;
+                    g_snd.dragFrom = f.hits[i].sndFrom;
+                    g_snd.dragging = true;
+                    SetCapture(hwnd);
+                } else if (i < (int)f.hits.size() && !f.hits[i].trayKey.empty() && !right) {
                     f.trayDrag = f.hits[i].trayKey;
                     SetCapture(hwnd);
                 } else if (i < (int)f.hits.size() && f.hits[i].dragOut) {
@@ -13753,7 +14675,7 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 SetCapture(hwnd);
                 FlySlide(f.mouse.x);
                 FlyRender();
-            } else if (i >= 0 && (f.hits[i].dragOut || !f.hits[i].trayKey.empty())) {
+            } else if (i >= 0 && (f.hits[i].dragOut || !f.hits[i].trayKey.empty() || f.hits[i].sndApp >= 0)) {
                 f.press = i;
                 f.pressPt = f.mouse;
                 f.pressRight = false;
@@ -13775,6 +14697,23 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_LBUTTONUP: {
             if (!f.open) return 0;
+            if (g_snd.dragging) {
+                // Dropped on an output: from the list it plays there too; from another output it moves.
+                g_snd.dragging = false;
+                ReleaseCapture();
+                D2D1_POINT_2F pt = D2D1::Point2F(GET_X_LPARAM(lp) / f.scale, GET_Y_LPARAM(lp) / f.scale);
+                int to = -1;
+                for (auto& h : f.hits)
+                    if (h.sndOut >= 0 && pt.x >= h.r.left && pt.x < h.r.right && pt.y >= h.r.top && pt.y < h.r.bottom) to = h.sndOut;
+                if (to >= 0) {
+                    g_snd.note.clear();
+                    if (g_snd.dragFrom < 0) SndAdd(g_snd.dragApp, to);
+                    else SndMove(g_snd.dragApp, g_snd.dragFrom, to);
+                    SndAfter();
+                }
+                FlyRender();
+                return 0;
+            }
             if (!f.trayDrag.empty()) {
                 std::wstring drag = f.trayDrag;
                 f.trayDrag.clear();
@@ -13824,7 +14763,13 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         }
         case WM_MOUSEWHEEL:
-            if (f.open && f.panelMax > 0) {
+            if (f.open && SndWide()) {
+                float d = GET_WHEEL_DELTA_WPARAM(wp) / 120.0f * 64;
+                auto in = [&](const D2D1_RECT_F& r) { return f.mouse.x >= r.left && f.mouse.x < r.right && f.mouse.y >= r.top && f.mouse.y < r.bottom; };
+                if (in(g_snd.colL)) g_snd.scrollL = std::clamp(g_snd.scrollL - d, 0.0f, g_snd.maxL);
+                else if (in(g_snd.colR)) g_snd.scrollR = std::clamp(g_snd.scrollR - d, 0.0f, g_snd.maxR);
+                FlyRender();
+            } else if (f.open && f.panelMax > 0) {
                 f.panelScroll = std::clamp(f.panelScroll - GET_WHEEL_DELTA_WPARAM(wp) / 120.0f * 64, 0.0f, f.panelMax);
                 FlyRender();
             } else if (f.open && f.kind == StVolume) {
@@ -13842,6 +14787,10 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if ((HWND)lp != hwnd) {
                 f.dragging = false;
                 f.press = -1;
+                if (g_snd.dragging) {
+                    g_snd.dragging = false;
+                    FlyRender();
+                }
             }
             return 0;
         case WM_TIMER:
@@ -13857,6 +14806,14 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 KillTimer(hwnd, TIMER_FLY_WIFI);
                 LoadWifiList();
                 FlyRender();
+            } else if (wp == TIMER_FLY_SND) {
+                KillTimer(hwnd, TIMER_FLY_SND);
+                if (f.open && SndWide() && !g_snd.dragging) {
+                    SndLoad();
+                    SndIcons();
+                    FlyRender();
+                }
+                if (--g_sndReloads > 0) SetTimer(hwnd, TIMER_FLY_SND, 1800, nullptr);
             } else if (wp == TIMER_FLY_TRAY) {
                 KillTimer(hwnd, TIMER_FLY_TRAY);
                 if (TrayClickJustNow()) SetTimer(hwnd, TIMER_FLY_TRAY, 150, nullptr);
@@ -14026,6 +14983,7 @@ static void StatusUninit() {
         BtJoin(deadline);
         MediaJoin(deadline);
         DevJoin(deadline);
+        SndCopiesStopAll(deadline);
         while (g_ccBusy && (LONG)(deadline - GetTickCount()) > 0) Sleep(10);
     }
     if (g_msgWnd) KillTimer(g_msgWnd, TIMER_PLAYER_VIS);
@@ -15527,7 +16485,7 @@ static void PageStatus(float& y, float x, float w) {
     {
         SwRow tabs = RSeg(L2(L"Seção", L"Section"), nullptr, L"#statusTab",
                           {{L"0", L2(L"Itens", L"Items")}, {L"1", L2(L"Bandeja", L"Tray")}, {L"2", L2(L"Prateleira", L"Shelf")},
-                           {L"3", L2(L"Notificações", L"Notifications")}, {L"4", L"Player"}});
+                           {L"3", L2(L"Notificações", L"Notifications")}, {L"4", L"Player"}, {L"5", L2(L"Som", L"Sound")}});
         tabs.cur = [] { return std::to_wstring(g_sw.statusTab); };
         tabs.pick = [](const std::wstring& v) {
             g_sw.statusTab = _wtoi(v.c_str());
@@ -15566,8 +16524,11 @@ static void PageStatus(float& y, float x, float w) {
                     L"Wireless headsets, mice and controllers (Bluetooth and Xbox). Only shows with a device."),
                  L"devPlace"),
           RToggle(L2(L"Dispositivos: usar o BatteryHub", L"Devices: use BatteryHub"),
-                  L2(L"Pra receptores USB (Logitech, Razer…). Desligado por padrão: ligado, o Nimbus abre o BatteryHub (instalado à parte) escondido a cada 5 minutos, só pra ler as baterias; ele fecha sozinho.",
-                     L"For USB receivers (Logitech, Razer…). Off by default: on, Nimbus runs BatteryHub (installed separately) hidden every 5 minutes, just to read the batteries; it closes by itself."),
+                  CfgInt(L"devHub") && BatteryHubMissing()
+                      ? L2(L"Ligado, mas o BatteryHub 1.1 ou mais novo não foi encontrado neste PC (o antigo, Wireless Battery 1.0, não serve). Instale pela página dele no GitHub: \"Conhecer o BatteryHub\", no painel Dispositivos.",
+                           L"On, but BatteryHub 1.1 or newer wasn't found on this PC (the old Wireless Battery 1.0 won't do). Install it from its GitHub page: \"About BatteryHub\", in the Devices panel.")
+                      : L2(L"Pra receptores USB (Logitech, Razer…). Desligado por padrão: ligado, o Nimbus abre o BatteryHub (instalado à parte) escondido a cada 5 minutos, só pra ler as baterias; ele fecha sozinho.",
+                           L"For USB receivers (Logitech, Razer…). Off by default: on, Nimbus runs BatteryHub (installed separately) hidden every 5 minutes, just to read the batteries; it closes by itself."),
                   L"devHub"),
           RPlace(L2(L"Notas e lembretes", L"Notes and reminders"),
                  L2(L"Notas que ficam até você apagar, e lembretes que avisam no dia (mesmo atrasados).",
@@ -15643,6 +16604,18 @@ static void PageStatus(float& y, float x, float w) {
                       L"A click opens the player; the middle button plays or pauses; the wheel changes only that app's volume."),
                    {})},
          y, x, w);
+    }
+    if (g_sw.statusTab == 5) {
+    Section(y, x, w, L2(L"Som", L"Sound"));
+    SwRow soundRow = RSeg(L2(L"Painel de som", L"Sound panel"),
+               L2(L"Simples: o volume e o de cada app. Completo: os apps à esquerda e todas as saídas à direita; arraste um app pra uma saída (ele toca nela também), de uma saída pra outra (troca), ou tire com o ×. O completo mexe na saída de som do Windows: a padrão e a de cada app (o Windows guarda essa escolha, como nas Configurações de som), e toca uma cópia do app numa segunda saída enquanto o Nimbus roda. Voltando pro Simples, tudo volta: cada app na saída padrão, sem cópias e sem os mudos do painel.",
+                  L"Simple: the volume and each app's. Complete: apps on the left and every output on the right; drag an app onto an output (it plays there too), from one output to another (it moves), or take it off with ×. Complete changes Windows' sound output: the default one and each app's (Windows keeps that choice, as in the Sound settings), and plays a copy of an app on a second output while Nimbus runs. Back to Simple, it all goes back: every app on the default output, copies off, its mutes undone."),
+               L"soundPanel", {{L"simples", L2(L"Simples", L"Simple")}, {L"completo", L2(L"Completo", L"Complete")}});
+    soundRow.pick = [](const std::wstring& v) {
+        if (v == L"simples" && SoundFull()) SndResetAll();
+        CfgSet(L"soundPanel", v);
+    };
+    Card({soundRow}, y, x, w);
     }
     if (g_sw.statusTab == 3) {
     Section(y, x, w, L2(L"Notificações", L"Notifications"));
