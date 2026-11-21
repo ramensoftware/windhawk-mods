@@ -2,7 +2,7 @@
 // @id              yandex-music-transparency
 // @name            Yandex Music Transparency
 // @description     Automatically applies and enforces custom transparency for Yandex Music
-// @version         1.2.8a
+// @version         1.2.8
 // @author          NIKTO
 // @github          https://github.com/NIKTO-2
 // @include         Яндекс Музыка.exe
@@ -34,7 +34,7 @@ Adds configurable transparency for the Yandex Music desktop application.
 
 // ==WindhawkModChangelog==
 /*
-## 1.2.8a
+## 1.2.8
 
 - Performance: the polling timer now runs only while needed, and each tracked
   window manages its own timer. It stops when neither hover polling
