@@ -7222,10 +7222,14 @@ namespace wb_driver_phonelink {
 // Read-only, no device or network access.
 
 namespace PhoneLink {
-struct Reading { std::wstring name; int percent=-1; bool charging=false; };
+struct Reading {
+    std::wstring name;
+    int percent = -1;
+    bool charging = false;
+};
 namespace Detail {
 struct Value {
-    wchar_t kind=0;
+    wchar_t kind = 0;
     std::wstring text;
     std::map<std::wstring, Value> object;
     std::vector<Value> array;
@@ -7234,47 +7238,140 @@ struct Value {
 // and inspect fields on their owning object rather than searching notification text.
 class Parser {
     const std::wstring& input;
-    size_t at=0, nodes=0;
-    void Space(){while(at<input.size() && (input[at]==L' '||input[at]==L'\r'||input[at]==L'\n'||input[at]==L'\t'))++at;}
-    bool Take(wchar_t c){Space();if(at==input.size()||input[at]!=c)return false;++at;return true;}
-    bool String(std::wstring& out){
-        if(!Take(L'"'))return false;
-        while(at<input.size()){
-            wchar_t c=input[at++];if(c==L'"')return true;if(c<32)return false;
-            if(c!=L'\\'){out+=c;continue;}
-            if(at==input.size())return false;
-            c=input[at++];
-            if(c==L'u'){
-                unsigned v=0;
-                for(int i=0;i<4;++i){if(at==input.size())return false;wchar_t h=input[at++];unsigned n;
-                    if(h>=L'0'&&h<=L'9')n=h-L'0';else if(h>=L'a'&&h<=L'f')n=h-L'a'+10;else if(h>=L'A'&&h<=L'F')n=h-L'A'+10;else return false;v=v*16+n;}
-                out+=static_cast<wchar_t>(v);
-            }else if(c==L'"'||c==L'\\'||c==L'/')out+=c;
-            else if(c==L'n')out+=L'\n';else if(c==L't')out+=L'\t';else if(c==L'r')out+=L'\r';else if(c==L'b')out+=L'\b';else if(c==L'f')out+=L'\f';else return false;
-        }return false;
+    size_t at = 0, nodes = 0;
+
+    void Space() {
+        while (at < input.size() &&
+               (input[at] == L' ' || input[at] == L'\r' || input[at] == L'\n' || input[at] == L'\t'))
+            ++at;
     }
-    bool Read(Value& v,int depth){
-        Space();if(depth>64||++nodes>20000||at==input.size())return false;
-        wchar_t c=input[at];v.kind=c;
-        if(c==L'"')return String(v.text);
-        if(c==L'{'){
-            ++at;if(Take(L'}'))return true;
-            do{std::wstring key;Value child;if(!String(key)||!Take(L':')||!Read(child,depth+1)||v.object.count(key))return false;v.object.emplace(std::move(key),std::move(child));if(Take(L'}'))return true;}while(Take(L','));return false;
-        }
-        if(c==L'['){++at;if(Take(L']'))return true;do{Value child;if(!Read(child,depth+1))return false;v.array.push_back(std::move(child));if(Take(L']'))return true;}while(Take(L','));return false;}
-        for(const wchar_t* literal:{L"true",L"false",L"null"}){size_t n=wcslen(literal);if(input.compare(at,n,literal)==0){at+=n;return true;}}
-        if(c==L'-')++at;
-        if(at==input.size())return false;
-        if(input[at]==L'0')++at;else {if(input[at]<L'1'||input[at]>L'9')return false;while(at<input.size()&&input[at]>=L'0'&&input[at]<=L'9')++at;}
-        if(at<input.size()&&input[at]==L'.'){++at;size_t start=at;while(at<input.size()&&input[at]>=L'0'&&input[at]<=L'9')++at;if(at==start)return false;}
-        if(at<input.size()&&(input[at]==L'e'||input[at]==L'E')){++at;if(at<input.size()&&(input[at]==L'+'||input[at]==L'-'))++at;size_t start=at;while(at<input.size()&&input[at]>=L'0'&&input[at]<=L'9')++at;if(at==start)return false;}
+
+    bool Take(wchar_t c) {
+        Space();
+        if (at == input.size() || input[at] != c) return false;
+        ++at;
         return true;
     }
+
+    // Returns whether at least one digit was skipped.
+    bool SkipDigits() {
+        size_t start = at;
+        while (at < input.size() && input[at] >= L'0' && input[at] <= L'9') ++at;
+        return at != start;
+    }
+
+    bool String(std::wstring& out) {
+        if (!Take(L'"')) return false;
+        while (at < input.size()) {
+            wchar_t c = input[at++];
+            if (c == L'"') return true;
+            if (c < 32) return false;
+            if (c != L'\\') {
+                out += c;
+                continue;
+            }
+            if (at == input.size()) return false;
+            c = input[at++];
+            switch (c) {
+                case L'"':
+                case L'\\':
+                case L'/': out += c; break;
+                case L'b': out += L'\b'; break;
+                case L'f': out += L'\f'; break;
+                case L'n': out += L'\n'; break;
+                case L'r': out += L'\r'; break;
+                case L't': out += L'\t'; break;
+                case L'u': {
+                    unsigned v = 0;
+                    for (int i = 0; i < 4; ++i) {
+                        if (at == input.size()) return false;
+                        wchar_t h = input[at++];
+                        unsigned n;
+                        if (h >= L'0' && h <= L'9') n = h - L'0';
+                        else if (h >= L'a' && h <= L'f') n = h - L'a' + 10;
+                        else if (h >= L'A' && h <= L'F') n = h - L'A' + 10;
+                        else return false;
+                        v = v * 16 + n;
+                    }
+                    out += static_cast<wchar_t>(v);
+                    break;
+                }
+                default: return false;
+            }
+        }
+        return false;
+    }
+
+    bool Read(Value& v, int depth) {
+        Space();
+        if (depth > 64 || ++nodes > 20000 || at == input.size()) return false;
+        wchar_t c = input[at];
+        v.kind = c;
+        if (c == L'"') return String(v.text);
+        if (c == L'{') {
+            ++at;
+            if (Take(L'}')) return true;
+            do {
+                std::wstring key;
+                Value child;
+                if (!String(key) || !Take(L':') || !Read(child, depth + 1) || v.object.count(key)) return false;
+                v.object.emplace(std::move(key), std::move(child));
+                if (Take(L'}')) return true;
+            } while (Take(L','));
+            return false;
+        }
+        if (c == L'[') {
+            ++at;
+            if (Take(L']')) return true;
+            do {
+                Value child;
+                if (!Read(child, depth + 1)) return false;
+                v.array.push_back(std::move(child));
+                if (Take(L']')) return true;
+            } while (Take(L','));
+            return false;
+        }
+        for (const wchar_t* literal : {L"true", L"false", L"null"}) {
+            size_t n = wcslen(literal);
+            if (input.compare(at, n, literal) == 0) {
+                at += n;
+                return true;
+            }
+        }
+        if (c == L'-') ++at;
+        if (at == input.size()) return false;
+        if (input[at] == L'0') {
+            ++at;
+        } else {
+            if (input[at] < L'1' || input[at] > L'9') return false;
+            SkipDigits();
+        }
+        if (at < input.size() && input[at] == L'.') {
+            ++at;
+            if (!SkipDigits()) return false;
+        }
+        if (at < input.size() && (input[at] == L'e' || input[at] == L'E')) {
+            ++at;
+            if (at < input.size() && (input[at] == L'+' || input[at] == L'-')) ++at;
+            if (!SkipDigits()) return false;
+        }
+        return true;
+    }
+
 public:
-    explicit Parser(const std::wstring& s):input(s){}
-    bool Parse(Value& v){if(input.size()>4*1024*1024||!Read(v,0))return false;Space();return at==input.size();}
+    explicit Parser(const std::wstring& s) : input(s) {}
+
+    bool Parse(Value& v) {
+        if (input.size() > 4 * 1024 * 1024 || !Read(v, 0)) return false;
+        Space();
+        return at == input.size();
+    }
 };
-inline const std::wstring* Field(const Value& v,const wchar_t* key){auto i=v.object.find(key);return i!=v.object.end()&&i->second.kind==L'"'?&i->second.text:nullptr;}
+
+inline const std::wstring* Field(const Value& v, const wchar_t* key) {
+    auto i = v.object.find(key);
+    return i != v.object.end() && i->second.kind == L'"' ? &i->second.text : nullptr;
+}
 } // namespace Detail
 
 inline bool ConnectedPhoneName(const std::wstring& speak,
