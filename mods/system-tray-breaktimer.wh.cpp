@@ -2,7 +2,7 @@
 // @id              system-tray-breaktimer
 // @name            System Tray BreakTimer
 // @description     Count down to windowed breaks in the notification area with a circular break timer and optional wind chimes.
-// @version         0.1.7
+// @version         0.1.8
 // @author          haniobaid
 // @github          https://github.com/haniobaid
 // @include         windhawk.exe
@@ -87,19 +87,27 @@ update, the saved opacity slider value controls the background.
 Windows controls whether the full-screen
 pause banner appears. The timer pauses independently of banner delivery.
 
-After five continuous idle minutes, an active work schedule pauses. Activity
-starts a fresh interval. A manual pause is retained. Two separate switches
-control full-screen auto-pause and its optional banner. Both switches default
-to off. With auto-pause off, the break window can appear over a full-screen game
-or presentation and may interrupt exclusive full screen. Enable auto-pause to
-hold the timer while a full-screen app is detected. Leaving full screen automatically
-resumes the interrupted timer when other pause reasons have cleared. Choosing
-Unpause overrides the current automatic episode and starts a fresh work cycle.
+**Automatic pauses**
 
-Locking the PC during a break hides the window and freezes the gauge. After
-unlocking, the window returns with the time that was left once other automatic
-pause conditions clear. Disconnecting the session or suspending the PC also
-holds an active break. Ordinary idle time during a break lets the gauge run.
+After five idle minutes during work or Standby, the icon shows **P**. The timer
+starts a fresh **Break every** interval when you return. Ordinary idle time
+during a break lets the gauge run to zero.
+
+Locking or disconnecting the session, suspending the PC, or entering full screen
+with auto-pause enabled also pauses the timer. If a break is in progress, its
+window closes silently. When the last pause reason clears, the icon shows **S**
+until the next whole minute, then starts the full work interval. At exactly
+:00 it starts immediately. For example, unlocking at 2:04:20 starts the default
+15-minute work interval at 2:05, with the next break at 2:20.
+
+A manual pause lasts until you choose **Unpause**. Choosing **Unpause** also
+overrides a current idle or full-screen pause. An unavailable Windows session
+must reconnect, unlock or wake before a new interval can begin.
+
+Full-screen auto-pause and its optional banner both default to off. With
+auto-pause off, the break window can appear over a game or presentation and
+may interrupt exclusive full screen. Enable **Auto-pause for full-screen apps**
+to pause the timer while a full-screen app is detected.
 
 Inspired by [Stretchly](https://github.com/hovancik/stretchly). Functionality inspiration only. No code was reused.
 */
@@ -132,6 +140,7 @@ Inspired by [Stretchly](https://github.com/hovancik/stretchly). Functionality in
     $name: Show breaks on all monitors
   - fullScreen: false
     $name: Auto-pause for full-screen apps
+    $description: Pause while a full-screen app is detected. When all pauses clear, a fresh work interval starts at the next whole minute, or immediately at :00.
   - banner: false
     $name: Notify on full-screen pause
     $description: Request a quiet Windows banner. Auto-pause works even if Windows suppresses it.
@@ -234,51 +243,27 @@ enum class Transition { None, ScheduledBreakStarted, BreakCompleted };
 
 struct Schedule {
     Phase phase = Phase::Ready;
-    bool frozen = true;
     Time due{};
-    Millis saved = 0;
     Millis workLength = 0;
     Millis breakLength = 0;
 
+    bool paused() const { return phase == Phase::Ready; }
     Millis remaining(Time now) const {
-        return frozen ? saved : std::max<Millis>(0, due.tick - now.tick);
+        return paused() ? 0 : std::max<Millis>(0, due.tick - now.tick);
     }
     void startWork(Time at, Millis length) {
         workLength = length;
         const auto wait = untilMinute(at.wall);
         phase = wait ? Phase::Standby : Phase::Work;
         due = after(at, wait ? wait : length);
-        frozen = false;
     }
     void startBreak(Time at, Millis length) {
         phase = Phase::Break;
         breakLength = length;
         due = after(at, length);
-        frozen = false;
-    }
-    void freeze(Time at) {
-        if (!frozen) {
-            saved = remaining(at);
-            frozen = true;
-        }
-    }
-    void resume(Time at, Millis configuredWork) {
-        if (!frozen) return;
-        switch (phase) {
-            case Phase::Ready: startWork(at, configuredWork); break;
-            case Phase::Standby: startWork(at, workLength); break;
-            case Phase::Work:
-                due = after(at, saved > 0 ? saved + untilMinute(at.wall + saved) : 0);
-                frozen = false;
-                break;
-            case Phase::Break:
-                due = after(at, saved);
-                frozen = false;
-                break;
-        }
     }
     Transition advance(Time now, Millis configuredWork, Millis configuredBreak) {
-        if (frozen || phase == Phase::Ready || now.tick < due.tick) return Transition::None;
+        if (paused() || now.tick < due.tick) return Transition::None;
         if (phase == Phase::Standby) {
             phase = Phase::Work;
             due = after(due, workLength);
@@ -297,7 +282,7 @@ struct Schedule {
         return Transition::None;
     }
     void timeChanged(Time now) {
-        if (frozen || phase == Phase::Ready) return;
+        if (paused()) return;
         if (phase == Phase::Standby) {
             startWork(now, workLength);
         } else {
@@ -1519,7 +1504,7 @@ class BreakTimer {
     bool trayVersion4 = false, trackForeground = false;
     HWINEVENTHOOK foregroundHook{};
     static constexpr Millis never = std::numeric_limits<Millis>::max();
-    Millis awaySince{}, nextProbe{}, nextIdleProbe{}, nextTrayAttempt{};
+    Millis nextProbe{}, nextIdleProbe{}, nextTrayAttempt{};
     std::wstring lastGlyph, lastTip;
     COLORREF lastFg{};
     UINT lastDpi{};
@@ -1533,15 +1518,17 @@ class BreakTimer {
     bool held() const { return manual || unavailable() || (full && !ignoreFull) || idle; }
 
     MenuState menuState() const {
-        if (timer.frozen) return MenuState::Paused;
+        if (timer.paused()) return MenuState::Paused;
         if (timer.phase == Phase::Standby) return MenuState::Standby;
         if (timer.phase == Phase::Break) return MenuState::Break;
         return MenuState::Work;
     }
 
     void applyHold(Time now) {
-        if (held()) timer.freeze(now);
-        else timer.resume(now, workMs());
+        // Every kind of pause discards the interrupted work interval or break.
+        // Start once, when the last applicable pause reason clears.
+        if (held()) timer = {};
+        else if (timer.paused()) timer.startWork(now, workMs());
     }
 
     NOTIFYICONDATAW trayData() const {
@@ -1639,7 +1626,8 @@ class BreakTimer {
         setForegroundTracking(!manual && !unavailable() && !prefs.allMonitors);
         nextProbe = never;
         if (manual || unavailable()) {
-            idle = ignoredIdle = full = ignoreFull = bannerPending = false;
+            if (manual) idle = ignoredIdle = full = ignoreFull = false;
+            bannerPending = false;
             nextIdleProbe = 0;
             applyHold(now);
             return;
@@ -1653,15 +1641,15 @@ class BreakTimer {
         // A window can enter full screen without changing foreground windows.
         if (prefs.fullScreen) nextProbe = std::min(nextProbe, now.tick + 600);
         ignoreFull = full && (ignoreFull || overrideCurrentEpisode);
-        const bool previousIdle = idle;
-        const bool working = timer.phase == Phase::Work || timer.phase == Phase::Standby;
-        if (prefs.idle && (working || overrideCurrentEpisode || ignoredIdle)) {
+        // A normal break runs to completion through ordinary input inactivity.
+        const bool idleCanPause = timer.phase != Phase::Break;
+        if (prefs.idle && (idleCanPause || overrideCurrentEpisode || ignoredIdle)) {
             if (now.tick >= nextIdleProbe || overrideCurrentEpisode) {
                 constexpr Millis threshold = 5 * Timing::minute;
                 const Millis elapsed = BreakEnvironment::IdleMilliseconds();
                 const bool away = elapsed >= threshold;
                 ignoredIdle = away && (ignoredIdle || overrideCurrentEpisode);
-                idle = away && !ignoredIdle && working;
+                idle = away && !ignoredIdle && idleCanPause;
                 nextIdleProbe = now.tick + (away ? 1000 : threshold - elapsed);
             }
             nextProbe = std::min(nextProbe, nextIdleProbe);
@@ -1669,8 +1657,6 @@ class BreakTimer {
             idle = ignoredIdle = false;
             nextIdleProbe = 0;
         }
-        if (previousIdle && !idle && !overrideCurrentEpisode)
-            timer.startWork(now, workMs());
         if (full && !ignoreFull && !previousFull && prefs.banner && !idle) {
             bannerPending = true;
         }
@@ -1687,7 +1673,7 @@ class BreakTimer {
     void render(Time now) {
         // Windows tracks a popup in a nested message loop; its commands are a snapshot.
         if (trackedMenu != MenuState::Closed && trackedMenu != menuState()) EndMenu();
-        const bool onBreak = !timer.frozen && timer.phase == Phase::Break;
+        const bool onBreak = timer.phase == Phase::Break;
         const auto remaining = timer.remaining(now);
         const auto secs = static_cast<unsigned>((remaining + 999) / 1000);
         if (onBreak) {
@@ -1706,7 +1692,7 @@ class BreakTimer {
 
         std::wstring glyph, status;
         COLORREF fg = prefs.normal;
-        if (timer.frozen) {
+        if (timer.paused()) {
             glyph = L"P";
             if (manual) status = prefs.doubleClick ? L"Paused · Double-click to start a fresh work interval"
                                                   : L"Paused · Click to start a fresh work interval";
@@ -1729,7 +1715,7 @@ class BreakTimer {
             status = L"Next break in " + Duration(mins);
         }
         std::wstring tip = L"System Tray BreakTimer\n" + status;
-        if (!timer.frozen && (timer.phase == Phase::Work || timer.phase == Phase::Standby)) {
+        if (timer.phase == Phase::Work || timer.phase == Phase::Standby) {
             ULARGE_INTEGER bits{};
             bits.QuadPart = static_cast<ULONGLONG>(timer.due.wall +
                                (timer.phase == Phase::Standby ? timer.workLength : 0)) * 10000;
@@ -1751,8 +1737,8 @@ class BreakTimer {
     }
 
     void tick(Time now) {
-        if (!timer.frozen && timer.phase == Phase::Work && now.tick >= timer.due.tick) {
-            // Recheck both automatic holds before presenting a scheduled break.
+        if ((timer.phase == Phase::Work || timer.phase == Phase::Break) && now.tick >= timer.due.tick) {
+            // Give a newly detected hold precedence over sounding either chime.
             nextIdleProbe = 0;
             probe(now);
         } else if (now.tick >= nextProbe) {
@@ -1769,7 +1755,7 @@ class BreakTimer {
         if (nextProbe != never) delay = std::max<Millis>(1, nextProbe - now.tick);
         if (!added || nextTrayAttempt)
             delay = std::min(delay, std::max<Millis>(1, nextTrayAttempt - now.tick));
-        if (!timer.frozen) {
+        if (!timer.paused()) {
             const auto left = timer.remaining(now);
             const bool displayingMinutes = timer.phase == Phase::Work && left > countdownMs();
             const auto step = displayingMinutes ? Timing::minute : 1000;
@@ -1781,18 +1767,9 @@ class BreakTimer {
     }
 
     void wakeSession(Time now, bool wasAway) {
-        if (!wasAway && unavailable()) {
-            awaySince = now.tick;
-            probe(now);
-        } else if (wasAway && !unavailable()) {
-            if (prefs.idle && !manual && now.tick - awaySince >= 5 * Timing::minute &&
-                timer.phase != Phase::Break) {
-                timer.startWork(now, workMs());
-            }
-            nextIdleProbe = 0;
-            probe(now);
-        }
-        applyHold(now);
+        if (wasAway == unavailable()) return;
+        nextIdleProbe = 0;
+        probe(now);
         render(now);
     }
 
@@ -1800,14 +1777,12 @@ class BreakTimer {
         const auto now = Now();
         switch (cmd) {
         case Unpause:
-            if (!timer.frozen) return;
+            if (!timer.paused()) return;
             manual = false;
-            timer.startWork(now, workMs());
             probe(now, true);
             break;
         case Pause:
             manual = true;
-            timer = Timing::Schedule{};
             probe(now);
             break;
         case ResetSchedule:
@@ -1816,19 +1791,18 @@ class BreakTimer {
             nextProbe = nextIdleProbe = 0;
             break;
         case TakeBreak:
-            if (timer.phase == Phase::Break && !timer.frozen) return;
+            if (timer.phase == Phase::Break) return;
             manual = false;
             timer.startBreak(now, breakMs());
             probe(now, true);
             break;
         }
-        applyHold(now);
         tick(now);
     }
 
     void togglePause() {
         // Choose the action from the state displayed at the time of the click.
-        execute(timer.frozen ? Unpause : Pause);
+        execute(timer.paused() ? Unpause : Pause);
     }
 
     void appendMenuCommands(HMENU popup) const {
@@ -1844,20 +1818,25 @@ class BreakTimer {
         AppendMenuW(popup, MF_STRING, Pause, L"Pause");
     }
 
-    void menu(POINT point) {
+    void menu() {
         if (trackedMenu != MenuState::Closed) { EndMenu(); return; }
+        POINT point{};
+        const bool haveCursor = GetCursorPos(&point) != FALSE;
+        NOTIFYICONIDENTIFIER id{};
+        id.cbSize = sizeof(id);
+        id.hWnd = hwnd; id.uID = 1; id.guidItem = kTrayGuid;
+        RECT r{};
+        if (SUCCEEDED(Shell_NotifyIconGetRect(&id, &r))) {
+            // WM_CONTEXTMENU has no documented v4 coordinates. Anchor at the icon
+            // for keyboard use, or at the pointer when it is over the icon.
+            if (!haveCursor || !PtInRect(&r, point)) point = {r.left, r.top};
+        } else if (!haveCursor) {
+            return;
+        }
         HMENU popup = CreatePopupMenu();
         if (!popup) return;
         const auto openedState = menuState();
         appendMenuCommands(popup);
-        if (point.x == -1 && point.y == -1) {
-            NOTIFYICONIDENTIFIER id{};
-            id.cbSize = sizeof(id);
-            id.hWnd = hwnd; id.uID = 1; id.guidItem = kTrayGuid;
-            RECT r{};
-            if (SUCCEEDED(Shell_NotifyIconGetRect(&id, &r))) point = {r.left, r.top};
-            else GetCursorPos(&point);
-        }
         // The user explicitly opened this menu. No automatic pause path calls this.
         SetForegroundWindow(hwnd);
         SetTimer(hwnd, 1, 150, nullptr);  // Keep time during the shell menu’s nested message loop.
@@ -1882,25 +1861,25 @@ class BreakTimer {
         switch (msg) {
         case kTray: {
             const UINT event = LOWORD(lp);
-            POINT point{GET_X_LPARAM(wp), GET_Y_LPARAM(wp)};
-            if (!trayVersion4) {
-                const DWORD pos = GetMessagePos();
-                point = {GET_X_LPARAM(pos), GET_Y_LPARAM(pos)};
-            }
             if (event == WM_CONTEXTMENU || (!trayVersion4 && event == WM_RBUTTONUP)) {
                 activation = {};
-                menu(trayVersion4 ? POINT{-1, -1} : point);
-            } else if (activation.accept(event, point, static_cast<DWORD>(GetMessageTime()), prefs.doubleClick)) {
-                togglePause();
+                menu();
+                return 0;
             }
+            POINT point{};
+            if (event == WM_LBUTTONUP || event == NIN_SELECT) {
+                if (trayVersion4) point = {GET_X_LPARAM(wp), GET_Y_LPARAM(wp)};
+                else GetCursorPos(&point);
+            }
+            // Sent callbacks can arrive without dequeuing a new MSG.
+            if (activation.accept(event, point, GetTickCount(), prefs.doubleClick)) togglePause();
             return 0;
         }
         case kSkip:
-            if (showing && timer.phase == Phase::Break && !timer.frozen) {
+            if (showing && timer.phase == Phase::Break) {
                 const auto now = Now();
                 timer.startWork(now, workMs());
                 nextProbe = nextIdleProbe = 0;
-                applyHold(now);
                 tick(now);
             }
             return 0;
