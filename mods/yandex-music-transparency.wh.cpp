@@ -10,39 +10,16 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*
-# Yandex Music Transparency
-
-Adds configurable transparency for the Yandex Music desktop application.
-
-## Features
-
-- Custom opacity for active and inactive windows
-- Optional full opacity while the mouse hovers over the window
-- Smooth animated transitions between opacity levels (can be disabled)
-- Automatically enforces transparency even if the app tries to remove `WS_EX_LAYERED`
-
-## Universal for Chromium apps
-
-This mod is universal: it works with any Chromium / Electron application
-(the main window class is `Chrome_WidgetWin_1`). Although it is tailored for
-Yandex Music by default, you can apply the same persistent transparency to
-other Chromium/Electron apps by adding their executable names in the mod's
-**Advanced** tab under **Custom process inclusion list**.
-
-## Notes
-
-- Only the main application window (class `Chrome_WidgetWin_1`) is modified
-- Auxiliary Electron processes (`--type=*`) are ignored
-- Windows that already use `LWA_COLORKEY` are not modified
-
-*/
+/*...*/
 // ==/WindhawkModReadme==
 
 // ==WindhawkModChangelog==
 /*
 ## 1.2.8
 
+- Added `OpaqueWhenMaximized` option: 100% opacity when the window is
+  maximized or fullscreen, applied immediately (no animation) so it does not
+  conflict with the system resize animation.
 - Documented that the mod is universal and works with any Chromium / Electron
   application (via the custom process inclusion list).
 - Defaults changed: `Alpha` 180 -> 220, `InactiveAlpha` 0 -> 170,
@@ -86,20 +63,7 @@ other Chromium/Electron apps by adding their executable names in the mod's
 // ==/WindhawkModChangelog==
 
 // ==WindhawkModSettings==
-/*
-- Alpha: 220
-  $name: Active window opacity
-  $description: Opacity level of the active window (50-255)
-- InactiveAlpha: 170
-  $name: Inactive window opacity
-  $description: Opacity level of the inactive window. Set to 0 to use the active alpha value (50-255)
-- OpaqueOnHover: false
-  $name: Fully opaque on hover
-  $description: Make the window fully opaque while the mouse hovers over it
-- SmoothTransitions: true
-  $name: Smooth transitions
-  $description: Animate opacity changes instead of applying them instantly.
-*/
+/*...*/
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
@@ -114,6 +78,7 @@ struct Settings {
     int alpha;
     int inactiveAlpha;
     bool opaqueOnHover;
+    bool opaqueWhenMaximized;
     bool smoothTransitions;
 };
 
@@ -123,6 +88,7 @@ struct OriginalWindowState {
     bool hasOriginalAlpha;
     bool isActive;
     bool isHovered;
+    bool wasMaximized;
     BYTE currentAlpha;      // currently applied alpha (0 = not initialized)
     BYTE targetAlpha;       // desired alpha
     bool alphaInitialized;
@@ -154,6 +120,8 @@ void LoadSettings() {
 
     g_settings.opaqueOnHover = Wh_GetIntSetting(L"OpaqueOnHover") != 0;
 
+    g_settings.opaqueWhenMaximized = Wh_GetIntSetting(L"OpaqueWhenMaximized") != 0;
+
     g_settings.smoothTransitions = Wh_GetIntSetting(L"SmoothTransitions") != 0;
 }
 
@@ -182,7 +150,41 @@ bool UsesColorKey(HWND hwnd) {
     return false;
 }
 
-BYTE ComputeTargetAlpha(const OriginalWindowState& state) {
+// [alpha v1.2.8a] Fully opaque when maximized: true when the window is
+// maximized or covers the full work area (fullscreen).
+bool IsMaximizedOrFullscreen(HWND hwnd) {
+    if (IsZoomed(hwnd)) {
+        return true;
+    }
+
+    RECT wndRect;
+    if (!GetWindowRect(hwnd, &wndRect)) {
+        return false;
+    }
+    if (wndRect.right - wndRect.left <= 0 || wndRect.bottom - wndRect.top <= 0) {
+        return false;
+    }
+
+    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (!monitor) {
+        return false;
+    }
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfoW(monitor, &mi)) {
+        return false;
+    }
+
+    return (wndRect.left <= mi.rcMonitor.left &&
+            wndRect.top <= mi.rcMonitor.top &&
+            wndRect.right >= mi.rcMonitor.right &&
+            wndRect.bottom >= mi.rcMonitor.bottom);
+}
+
+BYTE ComputeTargetAlpha(HWND hwnd, const OriginalWindowState& state) {
+    if (g_settings.opaqueWhenMaximized && IsMaximizedOrFullscreen(hwnd)) {
+        return 255;
+    }
     if (g_settings.opaqueOnHover && state.isHovered) {
         return 255;
     }
@@ -209,7 +211,7 @@ BOOL WINAPI SetLayeredWindowAttributes_Hook(HWND hwnd, COLORREF crKey, BYTE bAlp
                     it->second.hasOriginalAlpha = true;
                 }
                 shouldReplace = true;
-                computedAlpha = ComputeTargetAlpha(it->second);
+                computedAlpha = ComputeTargetAlpha(hwnd, it->second);
             }
         }
         if (shouldReplace) {
@@ -260,9 +262,22 @@ void ApplyTargetAlpha(HWND hwnd) {
         auto it = g_trackedWindows.find(hwnd);
         if (it == g_trackedWindows.end()) return;
 
-        BYTE target = ComputeTargetAlpha(it->second);
+        BYTE target = ComputeTargetAlpha(hwnd, it->second);
 
-        if (!it->second.alphaInitialized || !g_settings.smoothTransitions) {
+        // [alpha v1.2.8a] Fully opaque when maximized: apply immediately when
+        // transitioning into or out of the maximized / fullscreen state with
+        // OpaqueWhenMaximized on: animating simultaneously with the system
+        // resize animation looks like overlapping flicker.
+        bool isMaximized = (g_settings.opaqueWhenMaximized &&
+                            IsMaximizedOrFullscreen(hwnd));
+        bool maximizedStateChanged = (it->second.wasMaximized != isMaximized);
+        it->second.wasMaximized = isMaximized;
+
+        bool instant = maximizedStateChanged ||
+                       !it->second.alphaInitialized ||
+                       !g_settings.smoothTransitions;
+
+        if (instant) {
             it->second.currentAlpha = target;
             it->second.targetAlpha = target;
             it->second.alphaInitialized = true;
@@ -388,6 +403,12 @@ LRESULT CALLBACK WindowSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
                 if (changed) {
                     ApplyTargetAlpha(hwnd);
                 }
+            }
+            break;
+        }
+        case WM_WINDOWPOSCHANGED: {
+            if (!g_unloading && g_settings.opaqueWhenMaximized) {
+                ApplyTargetAlpha(hwnd);
             }
             break;
         }
