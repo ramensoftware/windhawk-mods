@@ -281,6 +281,38 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/760b91ecf9f50687cd4b2ed315b32d32ad8372ea/mods/lockscreen-background.wh.cpp"
       }
     },
+    "quick-share-tile": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795294675721,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795294675721,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "ThePsychof",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lruntimeobject -lole32 -loleaut32 -lshell32 -lgdi32 -luuid",
+        "description": "Replaces the Windows 11 Nearby sharing tile with a Quick Share launcher.",
+        "github": "https://github.com/ThePsychof",
+        "include": [
+          "ShellHost.exe"
+        ],
+        "license": "GPL-3.0-only",
+        "name": "Quick Share Tile",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/6980",
+      "source": {
+        "sha256": "e90acf954ebdaedde85066e36d683f3acfba36556bbc99d906edce88f5e227f4",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/395456d8421c6c55b80acf50d1bfe2b40561f220/mods/quick-share-tile.wh.cpp"
+      }
+    },
     "shell-font-changer-plus": {
       "details": {
         "defaultSorting": 0,
@@ -396,6 +428,36 @@
       "source": {
         "sha256": "e376e9096379b889de64c62ba7004a6a80e8bed4791ab7a57812773547f03dde",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/a86034e6042bc1337a5c10f3a596ff06d346027a/mods/taskbar-notification-bell-badge.wh.cpp"
+      }
+    },
+    "taskbar-wireless-battery-widget": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795294675721,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795294675721,
+        "users": 0
+      },
+      "metadata": {
+        "author": "TotallyWireless",
+        "compilerOptions": "-lhid -lsetupapi -lcfgmgr32 -lole32 -loleaut32 -lcomctl32 -lgdi32 -lruntimeobject -lshell32 -ladvapi32",
+        "description": "Show wireless device battery levels as part of the taskbar itself, or as tray icons. Based on BatteryHub's device support.",
+        "github": "https://github.com/TotallyWireless",
+        "include": [
+          "windhawk.exe",
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0-or-later",
+        "name": "Taskbar Wireless Battery Widget",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7789",
+      "source": {
+        "sha256": "e9ec05fa7d3938cbad13c7441e7db94b12f3e610e1f633af315233f51fc37dd0",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/5d03db9cf39a2833f192b71f7c0054ea08863297/mods/taskbar-wireless-battery-widget.wh.cpp"
       }
     },
     "titlebar-opacity-button": {
@@ -517,6 +579,42 @@
       "source": {
         "sha256": "bcb94ae75a1ebdae9968703816380d7eb067fa5934fdd26e8230276c12df0f5f",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/97280142169461b31c4604085dbd4f59112e5e98/mods/windows-hello-auto-ok.wh.cpp"
+      }
+    },
+    "zoneshift": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795294675721,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795294675721,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Dev-StudioCode",
+        "compilerOptions": "-ladvapi32 -luser32",
+        "description": "Spoof timezone and local time for specific apps without altering the Windows system clock.",
+        "github": "https://github.com/Dev-StudioCode",
+        "homepage": "https://github.com/Dev-StudioCode/ZoneShift",
+        "include": [
+          "wallpaper32.exe",
+          "wallpaper64.exe",
+          "webwallpaper32.exe",
+          "webwallpaper64.exe",
+          "edgewallpaper32.exe",
+          "edgewallpaper64.exe",
+          "ui32.exe",
+          "wallpaperui.exe"
+        ],
+        "name": "ZoneShift - Per-App Timezone Spoofer",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7545",
+      "source": {
+        "sha256": "cd866bf04d6f1226376933207eb4864acf8e30a1b056b0ceab3421a7e71cb4e8",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6aa2a5a8829ee08ec59bdfd7e9057922fea422f3/mods/zoneshift.wh.cpp"
       }
     },
     "zoomit": {
