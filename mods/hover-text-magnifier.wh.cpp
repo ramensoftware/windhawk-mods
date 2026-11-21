@@ -40,7 +40,9 @@ Inspired by the macOS feature, it displays a high-contrast, large-text bubble fo
 Windhawk 2.0 selects its UIAccess helper host for this mod, enabling accessibility
 features in elevated application windows without running the mod as administrator.
 Windhawk 1.7.3 retains its normal-user tool host; it cannot inspect elevated
-applications. Neither host can inspect the secure UAC desktop.
+applications. In portable Windhawk 2.0, UIAccess requires the daemon to run
+elevated; otherwise the helper falls back to a normal-user host. Neither host
+can inspect the secure UAC desktop.
 
 */
 // ==/WindhawkModReadme==
@@ -297,10 +299,10 @@ struct UiaResult {
     HWND targetWindow = nullptr;
 };
 
-static bool IsUsableUiaResult(const UiaResult& result, POINT cursor,
-                              HWND targetWindow, uint64_t generation,
-                              ULONGLONG nowTick) {
-    if (!result.valid || result.targetWindow != targetWindow ||
+static bool IsMatchingUiaResult(const UiaResult& result, POINT cursor,
+                                HWND targetWindow, uint64_t generation,
+                                ULONGLONG nowTick) {
+    if (!result.seq || !targetWindow || result.targetWindow != targetWindow ||
         result.settingsGeneration != generation ||
         nowTick < result.tick || nowTick < result.requestTick ||
         nowTick - result.tick > 750 ||
@@ -309,6 +311,26 @@ static bool IsUsableUiaResult(const UiaResult& result, POINT cursor,
     }
     return std::abs(result.pt.x - cursor.x) <= 4 &&
            std::abs(result.pt.y - cursor.y) <= 4;
+}
+
+static bool IsUsableUiaResult(const UiaResult& result, POINT cursor,
+                              HWND targetWindow, uint64_t generation,
+                              ULONGLONG nowTick) {
+    return result.valid && IsMatchingUiaResult(
+        result, cursor, targetWindow, generation, nowTick);
+}
+
+// A very short visual hold avoids flashing placeholders during UIA round trips.
+// Never carry content across top-level windows or long cursor jumps.
+static bool ShouldHoldRecentText(bool showingText, bool freshNegative,
+                                 POINT cursor, HWND targetWindow,
+                                 POINT lastTextPoint, HWND lastTextWindow,
+                                 ULONGLONG lastTextTick, ULONGLONG nowTick) {
+    return showingText && !freshNegative && targetWindow &&
+           targetWindow == lastTextWindow && nowTick >= lastTextTick &&
+           nowTick - lastTextTick <= 240 &&
+           std::abs(cursor.x - lastTextPoint.x) <= 96 &&
+           std::abs(cursor.y - lastTextPoint.y) <= 96;
 }
 
 struct RuntimeState {
@@ -397,7 +419,7 @@ struct RuntimeState {
     AppSettings cfg;
 };
 
-static RuntimeState g;
+[[clang::no_destroy]] static RuntimeState g;
 
 static void UiaWorkerThread();
 
@@ -487,13 +509,16 @@ static bool TryParseColorSetting(PCWSTR source, int& outColor) {
                text.end());
     if (text.empty()) return false;
 
-    if (_wcsnicmp(text.c_str(), L"rgb(", 4) == 0) {
+    const bool wrappedRgb = _wcsnicmp(text.c_str(), L"rgb(", 4) == 0;
+    if (wrappedRgb || text.find(L',') != std::wstring::npos) {
+        if (wrappedRgb && text.back() != L')') return false;
+        const std::wstring values = wrappedRgb ?
+            text.substr(4, text.size() - 5) : text;
         int r = -1, g = -1, b = -1;
         wchar_t extra = 0;
-        if (swscanf_s(text.c_str() + 4, L" %d , %d , %d ) %c",
+        if (swscanf_s(values.c_str(), L" %d , %d , %d %c",
                       &r, &g, &b, &extra, 1) != 3 ||
-            r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255 ||
-            text.back() != L')') {
+            r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
             return false;
         }
         outColor = (r << 16) | (g << 8) | b;
@@ -505,10 +530,6 @@ static bool TryParseColorSetting(PCWSTR source, int& outColor) {
     if (*digits == L'#') { ++digits; base = 16; }
     else if (_wcsnicmp(digits, L"0x", 2) == 0) {
         digits += 2;
-        base = 16;
-    } else if (text.size() == 6 &&
-               std::all_of(text.begin(), text.end(),
-                           [](wchar_t c) { return iswxdigit(c) != 0; })) {
         base = 16;
     }
     if (!*digits) return false;
@@ -700,15 +721,16 @@ static void LoadSettings() {
     }
 
     // --- Zoom Preset ---
-    // Choice values are strings to satisfy Windhawk 2.0 strict settings parsing.
+    // String options are required by Windhawk; migrate saved integer values.
     StringSetting zoomSetting(L"zoomLevel");
     wchar_t* zoomEnd = nullptr;
-    long selectedZoom = zoomSetting ? wcstol(zoomSetting.value, &zoomEnd, 10) : 250;
-    if (!zoomSetting || zoomEnd == zoomSetting.value || *zoomEnd != L'\0' ||
-        selectedZoom <= 0) {
-        selectedZoom = 250;
+    long selectedZoom = wcstol(zoomSetting.value, &zoomEnd, 10);
+    if (zoomEnd == zoomSetting.value || *zoomEnd != L'\0' ||
+        selectedZoom <= 0 || selectedZoom > 500) {
+        selectedZoom = Wh_GetIntSetting(L"zoomLevel");
     }
-    g.cfg.zoomPercent = ClampInt((int)selectedZoom, 150, 500);
+    if (selectedZoom < 150 || selectedZoom > 500) selectedZoom = 250;
+    g.cfg.zoomPercent = static_cast<int>(selectedZoom);
 
     // --- Color Theme Presets ---
     StringSetting theme(L"colorTheme");
@@ -910,6 +932,16 @@ static bool InitUIA() {
             g.comInitedHere = false;
         }
         return false;
+    }
+
+    // Keep a stalled accessibility provider from occupying the single-flight
+    // request slot indefinitely, or blocking a clean tool shutdown.
+    IUIAutomation2* uia2 = nullptr;
+    if (SUCCEEDED(g.uia->QueryInterface(IID_IUIAutomation2,
+                                        (void**)&uia2)) && uia2) {
+        uia2->put_ConnectionTimeout(1000);
+        uia2->put_TransactionTimeout(1000);
+        uia2->Release();
     }
 
     g.uiaReady = true;
@@ -1453,8 +1485,6 @@ static void TickUpdate() {
 
     UpdateEffectiveSizing(pt);
     const HWND targetWindow = GetAncestor(WindowFromPoint(pt), GA_ROOT);
-    const bool cursorMoved = (pt.x != g.lastCursor.x || pt.y != g.lastCursor.y);
-
     int w = g.effectiveBubbleWidth;
     int h = g.effectiveBubbleHeight;
 
@@ -1464,12 +1494,21 @@ static void TickUpdate() {
     const bool wantMag  = (g.cfg.mode == Mode::MagnifierOnly || g.cfg.mode == Mode::Auto);
 
     bool haveText = false;
+    bool freshNegative = false;
     std::wstring text;
 
     if (wantText) {
-        // Single-flight UIA: never invalidate a slow result with a newer request.
-        // Check a stationary cursor less often while retaining responsive movement.
-        const ULONGLONG queryIntervalMs = cursorMoved ?
+        // Compare against the last requested location, not the previous tick.
+        // This promptly queries the final resting position after movement stops.
+        bool queryPositionChanged = false;
+        {
+            std::lock_guard<std::mutex> lock(g.uiaMutex);
+            queryPositionChanged =
+                g.uiaRequest.targetWindow != targetWindow ||
+                std::abs(g.uiaRequest.pt.x - pt.x) > 4 ||
+                std::abs(g.uiaRequest.pt.y - pt.y) > 4;
+        }
+        const ULONGLONG queryIntervalMs = queryPositionChanged ?
             (ULONGLONG)g.cfg.uiaQueryMinIntervalMs : 300;
         if (nowTick - g.lastUiaQueryTick >= queryIntervalMs) {
             bool dispatch = false;
@@ -1500,8 +1539,13 @@ static void TickUpdate() {
         {
             std::lock_guard<std::mutex> lock(g.uiaMutex);
             const UiaResult result = g.uiaResult;
-            if (IsUsableUiaResult(result, pt, targetWindow,
-                    g.settingsGeneration.load(std::memory_order_relaxed), nowTick)) {
+            const bool resultAtCursor = IsMatchingUiaResult(
+                result, pt, targetWindow,
+                g.settingsGeneration.load(std::memory_order_relaxed), nowTick);
+            freshNegative = resultAtCursor && !result.valid &&
+                            result.seq == g.lastUiaRequestSeq &&
+                            !g.uiaRequestInFlight;
+            if (resultAtCursor && result.valid) {
                 text = result.text;
                 haveText = true;
                 g.lastValidTextTick = nowTick;
@@ -1513,11 +1557,12 @@ static void TickUpdate() {
         static bool dbgLoggedNoText = false;
         if (!haveText) {
              // Hysteresis: If we lost text, check if we should debounce
-            if (g.showingText && !g.currentText.empty() &&
-                targetWindow == g.lastValidTextWindow &&
-                std::abs(pt.x - g.lastValidTextPoint.x) <= 2 &&
-                std::abs(pt.y - g.lastValidTextPoint.y) <= 2 &&
-                (nowTick - g.lastValidTextTick < 800)) // same-target grace period
+            if (!g.currentText.empty() &&
+                g.currentText != L"(no text detected)" &&
+                ShouldHoldRecentText(g.showingText, freshNegative,
+                                     pt, targetWindow, g.lastValidTextPoint,
+                                     g.lastValidTextWindow,
+                                     g.lastValidTextTick, nowTick))
             {
                 haveText = true;
                 text = g.currentText;
@@ -1546,7 +1591,7 @@ static void TickUpdate() {
 
     if (g.cfg.mode == Mode::TextOnly) {
         showText = haveText;
-        if (!haveText && !g.cfg.hideWhenNoText) {
+        if (!haveText && freshNegative && !g.cfg.hideWhenNoText) {
             text = L"(no text detected)";
             showText = true;
         }
@@ -1559,7 +1604,7 @@ static void TickUpdate() {
                    (nowTick - g.lastValidTextTick >= 500)) {
             showMag = true;
         } else {
-            if (g.cfg.hideWhenNoText) {
+            if (g.cfg.hideWhenNoText || !freshNegative) {
                 EnsureVisibility(false);
                 return;
             }
