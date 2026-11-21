@@ -2,7 +2,7 @@
 // @id              quick-look
 // @name            Quick Look
 // @description     Preview the file or folder selected in File Explorer with Space, in a panel docked inside the window.
-// @version         1.0.0
+// @version         1.1.0
 // @author          David Ravelo
 // @github          https://github.com/DavidRaveloU
 // @include         explorer.exe
@@ -63,9 +63,10 @@ touches the disk ever blocks Explorer.
 - **Folders, with Explorer's own list.** The preview hosts a real Explorer browser, so icons, columns,
   sorting, grouping and the Details / List / Icons view modes are Explorer's. A view dropdown in the
   header switches between Details, List, Small, Medium, Large and Extra Large icons.
-- **A real filter, at the same level.** Typing in the filter box shows only the matching direct children
-  of the previewed folder, with their original columns, and clearing it brings the folder back. No
-  subfolder is ever searched.
+- **A real filter, at the same level.** In a folder preview, typing in the filter box shows only the
+  matching direct children, with their original columns, and clearing it brings the folder back. No
+  subfolder is ever searched. Archives have no filter: the shell's own archive view cannot be narrowed
+  without a namespace of our own.
 - **Text and code, detected by content.** No extension list: a file is text when its bytes say so, so
   `.ahk`, `.psd1`, `.config`, extensionless files and anything else just work. UTF-8, UTF-16 LE/BE and the
   ANSI code page are decoded, and the footer reports which one was used, the size and the line count.
@@ -85,8 +86,10 @@ touches the disk ever blocks Explorer.
   list. Formats with no shell namespace fall back to the properties view.
 - **A fallback that still helps.** Anything else shows the real file icon plus its type, size, modified
   date and full path.
-- **Colors that follow Windows.** The panel samples Explorer's actual pixels for the background and the
-  text, and takes the accent from Windows itself, so light, dark and custom accents look native.
+- **Colors that follow Windows.** The panel follows the Windows light or dark app mode, and its text
+  color depends only on that mode, so it never changes with what is behind a Mica or blur window. The
+  background is Explorer's own surface, so a glass effect covers the panel like the rest of the
+  window, in dark and in light mode. The accent comes from Windows itself.
 - **Explorer never freezes.** Listing a folder, reading a file, decoding an image, building a thumbnail or
   checking a cloud placeholder all run on worker threads. The panel opens at once with a loading state,
   a new selection cancels the previous load, and a file that is only a cloud placeholder is never
@@ -122,6 +125,8 @@ child of the window instead of a window that follows it.
 | **Click the close button** | Close the preview with the mouse |
 | **Shift + wheel** | Scroll a text preview sideways when word wrap is off |
 | **Mouse wheel / drag the bars** | Scroll the preview |
+| **Double click an image** | Switch between fit and 100% |
+| **Wheel / drag a zoomed image** | Scroll it, or pan it with the mouse (Shift for sideways) |
 
 ## Settings
 
@@ -449,6 +454,18 @@ struct PanelState {
     HBITMAP mediaBitmap = nullptr;
     int mediaWidth = 0;
     int mediaHeight = 0;
+    // Image zoom and pan. 0 means fit to the panel; 1.0 is the real size, so a
+    // screenshot can be read instead of guessed at.
+    double mediaZoom = 0.0;
+    int mediaOffsetX = 0;
+    int mediaOffsetY = 0;
+    RECT mediaRect = {};
+    // The part of the image that is actually painted this frame.
+    RECT mediaVisible = {};
+    bool draggingImage = false;
+    POINT dragStart = {};
+    int dragStartOffsetX = 0;
+    int dragStartOffsetY = 0;
     // Pixel size of the original image; the bitmap may be a downscaled copy.
     int mediaSourceWidth = 0;
     int mediaSourceHeight = 0;
@@ -553,6 +570,18 @@ static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_stopWorkers{false};
 static std::atomic<bool> g_swallowSpaceUp{false};
 static std::atomic<bool> g_reflowColumns{true};
+// Auto follows the Windows app mode; Light and Dark force a fixed palette.
+// The palette in use, so the content text never depends on the sampled background.
+static std::atomic<bool> g_panelDark{false};
+// A glass effect (ExplorerBlurMica, DWMBlurGlass) is applied to Explorer: what
+// is on screen differs from what Explorer paints into its own window. Without
+// one the window is opaque, and the alpha tricks used on glass would turn the
+// panel black.
+static std::atomic<bool> g_glassEffect{false};
+// The light-mode workarounds (see BackgroundToAlpha) are needed only on glass.
+static bool LightOnGlass() {
+    return !g_panelDark.load() && g_glassEffect.load();
+}
 // Text preview toggles. They live for the session, like the panel width.
 static std::atomic<bool> g_textWrap{true};
 static std::atomic<bool> g_textLineNumbers{false};
@@ -678,6 +707,12 @@ static std::wstring LowerText(std::wstring text) {
 }
 
 static std::wstring FormatEntryDate(const FILETIME& fileTime) {
+    // A folder inside an archive has no date of its own: the shell reports none
+    // and the entry keeps a zero file time, which must stay an empty cell
+    // instead of the 1601 epoch.
+    if (fileTime.dwLowDateTime == 0 && fileTime.dwHighDateTime == 0) {
+        return L"";
+    }
     FILETIME localTime = {};
     SYSTEMTIME systemTime = {};
     if (!FileTimeToLocalFileTime(&fileTime, &localTime) ||
@@ -762,6 +797,7 @@ static void EnumerateFolderEntries(
               });
 }
 
+
 static void ApplyFilter(PanelState* state) {
     if (!state) {
         return;
@@ -796,6 +832,8 @@ static void UpdateFilterEditVisibility(PanelState* state) {
         return;
     }
     const RECT& edit = state->searchEditRect;
+    // Archives have no name filter: their contents are the shell's own folder
+    // view and cannot be narrowed without a namespace of our own.
     if ((state->folderPreview || state->textPreview) &&
         !state->archivePreview) {
         if (edit.right > edit.left) {
@@ -2824,11 +2862,10 @@ static void ApplyTextLoadResult(PanelState* state, TextLoadResult* result) {
           (unsigned)state->textLines.size(), result->encoding.c_str());
 }
 
-// The content needs real contrast in both modes: the sampled Explorer text can
-// be a dim gray that disappears on a dark panel, so the content color is derived
-// from the sampled background instead of copied from it.
+// The content needs real contrast in both modes, so it is a fixed tint of the
+// theme's text color over the background, never a color sampled from Explorer.
 static COLORREF ContentTextColor(COLORREF background) {
-    bool dark = ColorLuma(background) < 140;
+    bool dark = g_panelDark.load();
     return dark ? BlendColor(background, RGB(255, 255, 255), 88)
                 : BlendColor(background, RGB(0, 0, 0), 84);
 }
@@ -3309,6 +3346,12 @@ static void ClearMediaPreview(PanelState* state) {
     state->mediaBytes = 0;
     state->mediaHasAlpha = false;
     state->mediaKind.clear();
+    state->mediaZoom = 0.0;
+    state->mediaOffsetX = 0;
+    state->mediaOffsetY = 0;
+    state->mediaRect = {};
+    state->mediaVisible = {};
+    state->draggingImage = false;
 }
 
 // Videos, PDFs and audio only need a still image, and Windows already knows how
@@ -3548,15 +3591,17 @@ static HBITMAP LoadVideoFrameMediaFoundation(const std::wstring& path,
     return result;
 }
 
-// Images are decoded at full resolution through WIC and converted to a
-// premultiplied 32bpp DIB, which AlphaBlend can draw with its corners intact.
-// Images are decoded through WIC into a premultiplied 32bpp DIB, which
-// AlphaBlend can draw with its corners intact. The decoded copy is capped at
-// kMaxSide pixels on its longest edge: a 100 megapixel photo would otherwise need
-// 400 MB of memory inside Explorer, and the panel is never that large anyway.
-// The original size is reported separately for the footer.
+// Images are decoded through WIC into a premultiplied 32bpp DIB. The decoded
+// copy is capped at kMaxSide pixels on its longest edge: a 100 megapixel photo
+// would otherwise need 400 MB of memory inside Explorer, and the panel is never
+// that large anyway. The original size is reported separately for the footer.
+// `hasAlpha` is true only when the image really carries transparency, because
+// the blended path scales with bilinear filtering and would soften a photo or a
+// screenshot that is fully opaque.
 static HBITMAP LoadWicBitmap(const std::wstring& path, int& width, int& height,
-                             int& sourceWidth, int& sourceHeight) {
+                             int& sourceWidth, int& sourceHeight,
+                             bool& hasAlpha) {
+    hasAlpha = false;
     width = 0;
     height = 0;
     sourceWidth = 0;
@@ -3635,6 +3680,18 @@ static HBITMAP LoadWicBitmap(const std::wstring& path, int& width, int& height,
                 } else {
                     width = static_cast<int>(outWidth);
                     height = static_cast<int>(outHeight);
+                    // Transparency decides the drawing path: an opaque image is
+                    // scaled with HALFTONE, which keeps text and edges crisp.
+                    const unsigned char* pixels =
+                        reinterpret_cast<const unsigned char*>(bits);
+                    for (size_t i = 3; i < static_cast<size_t>(outWidth) *
+                                                outHeight * 4;
+                         i += 4) {
+                        if (pixels[i] != 255) {
+                            hasAlpha = true;
+                            break;
+                        }
+                    }
                 }
             } else if (result) {
                 DeleteObject(result);
@@ -3951,7 +4008,9 @@ struct ImageLoadResult {
     int height = 0;
     int sourceWidth = 0;
     int sourceHeight = 0;
-    bool fromWic = false;
+    // True only when the decoded pixels carry transparency; a WIC decode alone
+    // is not enough, because a JPEG arrives fully opaque.
+    bool hasAlpha = false;
     bool ok = false;
 };
 
@@ -3968,8 +4027,8 @@ static DWORD WINAPI ImageLoadThreadProc(void* parameter) {
     if (!cancel()) {
         result->bitmap =
             LoadWicBitmap(result->path, result->width, result->height,
-                          result->sourceWidth, result->sourceHeight);
-        result->fromWic = result->bitmap != nullptr;
+                          result->sourceWidth, result->sourceHeight,
+                          result->hasAlpha);
         if (!result->bitmap && !cancel()) {
             // No WIC codec (or an image too large to decode): the shell may
             // still have a thumbnail. This runs here, never on the UI thread.
@@ -4047,7 +4106,7 @@ static void ApplyImageLoadResult(PanelState* state, ImageLoadResult* result) {
         }
         state->mediaBitmap = result->bitmap;
         result->bitmap = nullptr;
-        state->mediaHasAlpha = result->fromWic;
+        state->mediaHasAlpha = result->hasAlpha;
         state->mediaWidth = result->width;
         state->mediaHeight = result->height;
         state->mediaSourceWidth = result->sourceWidth;
@@ -4131,6 +4190,177 @@ static void DrawLoadingIndicator(HDC dc, PanelState* state, UINT dpi,
                           body.right, labelRect.bottom + Scale(4, dpi)};
 }
 
+// Panel on a glass effect. GDI paints text on a light background
+// with zero alpha, and the effect adds those pixels to the blur, which turns
+// the background solid white and makes the text vanish. This rewrites `area` as
+// premultiplied alpha: the background color becomes fully transparent and every
+// other pixel gets the least alpha that still reproduces it ("color to alpha"),
+// so the blur shows through the background and black text stays black. `keep`
+// (an image) is left opaque.
+static void BackgroundToAlpha(HDC dc, const RECT& area, COLORREF background,
+                              const RECT& keep, bool darkPanel) {
+    int w = area.right - area.left;
+    int h = area.bottom - area.top;
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    BITMAPINFO info = {};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = w;
+    info.bmiHeader.biHeight = -h;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP copy = CreateDIBSection(nullptr, &info, DIB_RGB_COLORS, &bits,
+                                    nullptr, 0);
+    if (copy && bits) {
+        HDC memory = CreateCompatibleDC(dc);
+        if (memory) {
+            HGDIOBJ previous = SelectObject(memory, copy);
+            BitBlt(memory, 0, 0, w, h, dc, area.left, area.top, SRCCOPY);
+            int bgR = std::max(1, static_cast<int>(GetRValue(background)));
+            int bgG = std::max(1, static_cast<int>(GetGValue(background)));
+            int bgB = std::max(1, static_cast<int>(GetBValue(background)));
+            BYTE* pixels = reinterpret_cast<BYTE*>(bits);
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                    BYTE* p = pixels + (static_cast<size_t>(y) * w + x) * 4;
+                    int sx = area.left + x;
+                    int sy = area.top + y;
+                    if (sx >= keep.left && sx < keep.right && sy >= keep.top &&
+                        sy < keep.bottom) {
+                        p[3] = 0xFF;
+                        continue;
+                    }
+                    int b = p[0];
+                    int g = p[1];
+                    int r = p[2];
+                    if (darkPanel) {
+                        // Light ink on a dark background. The color stays as
+                        // GDI drew it (the background tint is kept, so the
+                        // panel looks like the rest of the window); only the
+                        // alpha is set, to how much ink the pixel holds. Text
+                        // is then solid instead of being added to the blur,
+                        // which is what washed it out and fringed its edges.
+                        int dr = r - GetRValue(background);
+                        int dg = g - GetGValue(background);
+                        int db = b - GetBValue(background);
+                        if (dr <= 0 && dg <= 0 && db <= 0) {
+                            p[3] = (dr == 0 && dg == 0 && db == 0) ? 0 : 0xFF;
+                            continue;
+                        }
+                        // How much of each channel is ink (relative to white).
+                        int cr = std::max(0, dr) * 255 /
+                                 std::max(1, 255 - (int)GetRValue(background));
+                        int cg = std::max(0, dg) * 255 /
+                                 std::max(1, 255 - (int)GetGValue(background));
+                        int cb = std::max(0, db) * 255 /
+                                 std::max(1, 255 - (int)GetBValue(background));
+                        int hi = std::max({cr, cg, cb});
+                        int lo = std::min({cr, cg, cb});
+                        if (hi - lo <= 150) {
+                            // ClearType edges differ per channel and show up as
+                            // orange and blue fringes on glass. Averaging the
+                            // channels turns them into plain gray antialiasing.
+                            int c = (cr + cg + cb) / 3;
+                            p[0] = static_cast<BYTE>(
+                                GetBValue(background) +
+                                (255 - GetBValue(background)) * c / 255);
+                            p[1] = static_cast<BYTE>(
+                                GetGValue(background) +
+                                (255 - GetGValue(background)) * c / 255);
+                            p[2] = static_cast<BYTE>(
+                                GetRValue(background) +
+                                (255 - GetRValue(background)) * c / 255);
+                            p[3] = static_cast<BYTE>(std::min(255, c * 2));
+                        } else {
+                            p[3] = static_cast<BYTE>(std::min(255, hi * 2));
+                        }
+                        continue;
+                    }
+                    if (r > bgR || g > bgG || b > bgB) {
+                        p[3] = 0xFF;
+                        continue;
+                    }
+                    int alpha = std::max(
+                        {(bgR - r) * 255 / bgR, (bgG - g) * 255 / bgG,
+                         (bgB - b) * 255 / bgB});
+                    if (alpha <= 0) {
+                        p[0] = p[1] = p[2] = p[3] = 0;
+                        continue;
+                    }
+                    int cr = (bgR - r) * 255 / bgR;
+                    int cg = (bgG - g) * 255 / bgG;
+                    int cb = (bgB - b) * 255 / bgB;
+                    if (alpha - std::min({cr, cg, cb}) <= 150) {
+                        // Plain gray antialiasing instead of ClearType fringes.
+                        p[0] = p[1] = p[2] = 0;
+                        p[3] = static_cast<BYTE>(
+                            std::min(255, (cr + cg + cb) / 3 * 2));
+                        continue;
+                    }
+                    // Gray text would otherwise be mostly see-through and
+                    // wash out against the blur; ink stays solid.
+                    alpha = std::min(255, alpha * 2);
+                    p[0] = static_cast<BYTE>(
+                        std::max(0, b - bgB * (255 - alpha) / 255));
+                    p[1] = static_cast<BYTE>(
+                        std::max(0, g - bgG * (255 - alpha) / 255));
+                    p[2] = static_cast<BYTE>(
+                        std::max(0, r - bgR * (255 - alpha) / 255));
+                    p[3] = static_cast<BYTE>(alpha);
+                }
+            }
+            BitBlt(dc, area.left, area.top, w, h, memory, 0, 0, SRCCOPY);
+            SelectObject(memory, previous);
+            DeleteDC(memory);
+        }
+    }
+    if (copy) {
+        DeleteObject(copy);
+    }
+}
+
+// GDI leaves the alpha of what it draws at zero, and the glass effects of
+// ExplorerBlurMica and DWMBlurGlass read that as "see through". This makes the
+// pixels of `area` opaque, which keeps an image or a light panel and its black
+// text from being added to the blur behind them.
+static void ForceOpaque(HDC dc, const RECT& area) {
+    int w = area.right - area.left;
+    int h = area.bottom - area.top;
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    BITMAPINFO info = {};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = w;
+    info.bmiHeader.biHeight = -h;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP copy = CreateDIBSection(nullptr, &info, DIB_RGB_COLORS, &bits,
+                                    nullptr, 0);
+    if (copy && bits) {
+        HDC memory = CreateCompatibleDC(dc);
+        if (memory) {
+            HGDIOBJ previous = SelectObject(memory, copy);
+            BitBlt(memory, 0, 0, w, h, dc, area.left, area.top, SRCCOPY);
+            BYTE* pixels = reinterpret_cast<BYTE*>(bits);
+            for (size_t i = 3; i < static_cast<size_t>(w) * h * 4; i += 4) {
+                pixels[i] = 0xFF;
+            }
+            BitBlt(dc, area.left, area.top, w, h, memory, 0, 0, SRCCOPY);
+            SelectObject(memory, previous);
+            DeleteDC(memory);
+        }
+    }
+    if (copy) {
+        DeleteObject(copy);
+    }
+}
+
 static void DrawMediaPreview(HDC dc, PanelState* state, UINT dpi,
                              const RECT& body) {
     if (state->mediaHandler) {
@@ -4163,19 +4393,35 @@ static void DrawMediaPreview(HDC dc, PanelState* state, UINT dpi,
         return;
     }
 
-    double scale = std::min(
+    double fit = std::min(
         static_cast<double>(availableWidth) / state->mediaWidth,
         static_cast<double>(availableHeight) / state->mediaHeight);
+    double scale = state->mediaZoom > 0.0 ? state->mediaZoom : fit;
     int width = std::max(1, static_cast<int>(state->mediaWidth * scale));
     int height = std::max(1, static_cast<int>(state->mediaHeight * scale));
-    int x = body.left + (availableWidth - width) / 2;
-    int y = body.top + (availableHeight - height) / 2;
+    // Panning stops at the edge of the image, so a zoomed one can never be
+    // dragged out of view.
+    int maxOffsetX = std::max(0, (width - availableWidth + 1) / 2);
+    int maxOffsetY = std::max(0, (height - availableHeight + 1) / 2);
+    state->mediaOffsetX =
+        std::max(-maxOffsetX, std::min(state->mediaOffsetX, maxOffsetX));
+    state->mediaOffsetY =
+        std::max(-maxOffsetY, std::min(state->mediaOffsetY, maxOffsetY));
+    int x = body.left + (availableWidth - width) / 2 + state->mediaOffsetX;
+    int y = body.top + (availableHeight - height) / 2 + state->mediaOffsetY;
+    state->mediaRect = {x, y, x + width, y + height};
+    state->mediaVisible = {};
 
     HDC memory = CreateCompatibleDC(dc);
     if (!memory) {
         return;
     }
     HGDIOBJ previous = SelectObject(memory, state->mediaBitmap);
+
+    // A zoomed image is bigger than its box; clip so it never paints over the
+    // header or the footer.
+    int saved = SaveDC(dc);
+    IntersectClipRect(dc, body.left, body.top, body.right, body.bottom);
 
     BITMAP info = {};
     GetObjectW(state->mediaBitmap, sizeof(info), &info);
@@ -4190,8 +4436,16 @@ static void DrawMediaPreview(HDC dc, PanelState* state, UINT dpi,
         SetBrushOrgEx(dc, 0, 0, nullptr);
         StretchBlt(dc, x, y, width, height, memory, 0, 0, state->mediaWidth,
                    state->mediaHeight, SRCCOPY);
+
+        RECT visible = {};
+        RECT bodyRect = body;
+        if (IntersectRect(&visible, &state->mediaRect, &bodyRect)) {
+            state->mediaVisible = visible;
+            ForceOpaque(dc, visible);
+        }
     }
 
+    RestoreDC(dc, saved);
     SelectObject(memory, previous);
     DeleteDC(memory);
 }
@@ -4213,6 +4467,72 @@ static bool ShellItemIsFolder(const std::wstring& path) {
     return folder;
 }
 
+// True when a frame holds an image much smaller than itself. The shell pads an
+// icon that has no image as large as the list: the jumbo list answers with a
+// 256x256 frame that carries a 48x48 picture in its corner, and drawing that
+// frame at the panel's icon size leaves a tiny icon at the top-left of its box.
+// Only the frame's alpha tells them apart, because its size looks right.
+static bool IconFrameIsPadded(HICON icon) {
+    if (!icon) {
+        return false;
+    }
+    ICONINFO info = {};
+    if (!GetIconInfo(icon, &info)) {
+        return false;
+    }
+
+    bool padded = false;
+    BITMAP bitmap = {};
+    if (info.hbmColor &&
+        GetObject(info.hbmColor, sizeof(bitmap), &bitmap) && bitmap.bmWidth > 0 &&
+        bitmap.bmHeight > 0) {
+        BITMAPINFO dib = {};
+        dib.bmiHeader.biSize = sizeof(dib.bmiHeader);
+        dib.bmiHeader.biWidth = bitmap.bmWidth;
+        // A top-down DIB, so row 0 is the top row of the icon.
+        dib.bmiHeader.biHeight = -bitmap.bmHeight;
+        dib.bmiHeader.biPlanes = 1;
+        dib.bmiHeader.biBitCount = 32;
+        dib.bmiHeader.biCompression = BI_RGB;
+        std::vector<unsigned char> pixels(
+            static_cast<size_t>(bitmap.bmWidth) * bitmap.bmHeight * 4);
+        HDC dc = CreateCompatibleDC(nullptr);
+        if (dc) {
+            if (GetDIBits(dc, info.hbmColor, 0,
+                          static_cast<UINT>(bitmap.bmHeight), pixels.data(),
+                          &dib, DIB_RGB_COLORS)) {
+                int minX = bitmap.bmWidth;
+                int minY = bitmap.bmHeight;
+                int maxX = -1;
+                int maxY = -1;
+                for (int y = 0; y < bitmap.bmHeight; y++) {
+                    const unsigned char* row =
+                        pixels.data() +
+                        static_cast<size_t>(y) * bitmap.bmWidth * 4;
+                    for (int x = 0; x < bitmap.bmWidth; x++) {
+                        if (row[x * 4 + 3] > 8) {
+                            minX = std::min(minX, x);
+                            maxX = std::max(maxX, x);
+                            minY = std::min(minY, y);
+                            maxY = std::max(maxY, y);
+                        }
+                    }
+                }
+                int largest = std::max(maxX - minX + 1, maxY - minY + 1);
+                padded = maxX >= 0 && largest * 2 < bitmap.bmWidth;
+            }
+            DeleteDC(dc);
+        }
+    }
+    if (info.hbmColor) {
+        DeleteObject(info.hbmColor);
+    }
+    if (info.hbmMask) {
+        DeleteObject(info.hbmMask);
+    }
+    return padded;
+}
+
 // `attributesOnly` asks the shell for the icon by file type alone, so it does not
 // have to open the file (used for cloud placeholders).
 static HICON LoadPropertyIcon(const std::wstring& path,
@@ -4224,30 +4544,43 @@ static HICON LoadPropertyIcon(const std::wstring& path,
         return nullptr;
     }
 
-    HICON icon = nullptr;
-    IImageList* imageList = nullptr;
     // IID_IImageList is not exported by every toolchain, so it is spelled out.
     static const GUID kImageListIid = {
         0x46EB5926, 0x582E, 0x4017,
         {0x9F, 0xDF, 0xE8, 0x99, 0x8D, 0xAA, 0x09, 0x50}};
-    if (SUCCEEDED(SHGetImageList(SHIL_JUMBO, kImageListIid,
-                                 (void**)&imageList)) &&
-        imageList) {
+    // The jumbo frame is the crispest source for an icon that really carries a
+    // 256 px image; the extra-large one is the right source for an icon the
+    // shell had to pad. Both are tried before the plain 32 px fallback.
+    const int sizes[] = {SHIL_JUMBO, SHIL_EXTRALARGE};
+    for (int size : sizes) {
+        IImageList* imageList = nullptr;
+        if (FAILED(SHGetImageList(size, kImageListIid, (void**)&imageList)) ||
+            !imageList) {
+            continue;
+        }
+        HICON icon = nullptr;
         if (FAILED(imageList->GetIcon(info.iIcon, ILD_TRANSPARENT, &icon))) {
             icon = nullptr;
         }
         imageList->Release();
-    }
-    if (!icon) {
-        SHFILEINFOW fallback = {};
-        UINT fallbackFlags = SHGFI_ICON | SHGFI_LARGEICON |
-                             (attributesOnly ? SHGFI_USEFILEATTRIBUTES : 0);
-        if (SHGetFileInfoW(path.c_str(), FILE_ATTRIBUTE_NORMAL, &fallback,
-                           sizeof(fallback), fallbackFlags)) {
-            icon = fallback.hIcon;
+        if (!icon) {
+            continue;
         }
+        if (size == SHIL_JUMBO && IconFrameIsPadded(icon)) {
+            DestroyIcon(icon);
+            continue;
+        }
+        return icon;
     }
-    return icon;
+
+    SHFILEINFOW fallback = {};
+    UINT fallbackFlags = SHGFI_ICON | SHGFI_LARGEICON |
+                         (attributesOnly ? SHGFI_USEFILEATTRIBUTES : 0);
+    if (SHGetFileInfoW(path.c_str(), FILE_ATTRIBUTE_NORMAL, &fallback,
+                       sizeof(fallback), fallbackFlags)) {
+        return fallback.hIcon;
+    }
+    return nullptr;
 }
 
 static std::wstring FormatPropertyDate(const FILETIME& fileTime) {
@@ -5640,76 +5973,6 @@ static IResultsFolder* GetResultsFolder(PanelState* state) {
     return folder;
 }
 
-// Collects the absolute PIDLs of the first `limit` filtered entries. Only direct
-// children of the previewed folder are in state->entries, so the result never
-// reaches into a subfolder.
-static void CollectFilteredPidls(PanelState* state,
-                                 std::vector<PIDLIST_ABSOLUTE>& out,
-                                 size_t limit) {
-    size_t take = std::min(limit, state->filtered.size());
-    out.reserve(take);
-    for (size_t i = 0; i < take; i++) {
-        int index = state->filtered[i];
-        if (index < 0 || index >= static_cast<int>(state->entries.size())) {
-            continue;
-        }
-        PIDLIST_ABSOLUTE pidl = nullptr;
-        if (SUCCEEDED(SHParseDisplayName(state->entries[index].path.c_str(),
-                                         nullptr, &pidl, 0, nullptr)) &&
-            pidl) {
-            out.push_back(pidl);
-        }
-    }
-}
-
-// FillFromObject walks the object it is given (it is built for data objects and
-// namespace walks), so a folder in that list is expanded instead of listed, and
-// a matching folder goes missing from the results. One leaf item is enough to
-// make the browser create its results folder; every product item is added
-// afterwards with IResultsFolder::AddItem, which takes folders as they are.
-static IShellItemArray* SeedItemArray(PanelState* state) {
-    std::vector<PIDLIST_ABSOLUTE> owned;
-
-    // The mod's own file is a local leaf that always exists and never costs a
-    // walk.
-    wchar_t modulePath[MAX_PATH] = {};
-    if (GetModuleFileNameW(g_instance, modulePath, ARRAYSIZE(modulePath))) {
-        PIDLIST_ABSOLUTE pidl = nullptr;
-        if (SUCCEEDED(SHParseDisplayName(modulePath, nullptr, &pidl, 0,
-                                         nullptr)) &&
-            pidl) {
-            owned.push_back(pidl);
-        }
-    }
-    if (owned.empty()) {
-        CollectFilteredPidls(state, owned, 1);
-    }
-    if (owned.empty() && !state->entries.empty()) {
-        PIDLIST_ABSOLUTE pidl = nullptr;
-        if (SUCCEEDED(SHParseDisplayName(state->entries[0].path.c_str(),
-                                         nullptr, &pidl, 0, nullptr)) &&
-            pidl) {
-            owned.push_back(pidl);
-        }
-    }
-
-    std::vector<PCIDLIST_ABSOLUTE> list;
-    list.reserve(owned.size());
-    for (PIDLIST_ABSOLUTE pidl : owned) {
-        list.push_back(pidl);
-    }
-
-    IShellItemArray* items = nullptr;
-    if (!list.empty()) {
-        SHCreateShellItemArrayFromIDLists(static_cast<UINT>(list.size()),
-                                          list.data(), &items);
-    }
-    for (PIDLIST_ABSOLUTE pidl : owned) {
-        ILFree(pidl);
-    }
-    return items;
-}
-
 // A results folder is a brand new shell view: Explorer does not hand it the
 // theme it gives the folder view, so its first cells and its infotips come out
 // in the light palette. The pass runs from our own timer, never from inside a
@@ -5770,6 +6033,12 @@ static void ThemeBrowserView(PanelState* state) {
         return;
     }
 
+    // Re-theming and erasing an already themed view on every keystroke is what
+    // flashes the view's own white background before a glass effect clears it.
+    if (LightOnGlass() && state->browserThemed) {
+        return;
+    }
+
     bool dark = false;
     if (state->background != CLR_INVALID) {
         int luminance = (GetRValue(state->background) * 3 +
@@ -5825,11 +6094,7 @@ static void RecreateBrowser(PanelState* state, bool keepPath) {
 // matches thousands of items, and resolving all of them in one go would freeze
 // Explorer for seconds.
 static void PumpResultsItems(PanelState* state) {
-    if (!state || state->resultsPendingPos >= state->resultsPending.size()) {
-        if (state) {
-            state->resultsPending.clear();
-            state->resultsPendingPos = 0;
-        }
+    if (!state) {
         return;
     }
     IResultsFolder* folder = GetResultsFolder(state);
@@ -5880,26 +6145,22 @@ static void FillResults(PanelState* state) {
     state->resultsPending.clear();
     state->resultsPendingPos = 0;
 
-    IShellItemArray* seed = SeedItemArray(state);
-    if (!seed) {
-        return;
-    }
-
+    // A null object makes the shell create the results folder empty: no item is
+    // seeded, so nothing that is not a match can ever appear in the list. The
+    // old code seeded the folder with the mod's own DLL and then had to remove
+    // it before the shell inserted it, which leaked it into the view.
     // Marked before the call: FillFromObject can complete the navigation
     // synchronously, and the events must not rebuild the browser underneath it.
     state->resultsMode = true;
     state->fillingResults = true;
-    HRESULT hr = state->explorerBrowser->FillFromObject(seed, EBF_NODROPTARGET);
+    HRESULT hr =
+        state->explorerBrowser->FillFromObject(nullptr, EBF_NODROPTARGET);
     state->fillingResults = false;
-    ReleaseCom(seed);
     state->resultsMode = SUCCEEDED(hr);
 
     IResultsFolder* folder = nullptr;
     if (SUCCEEDED(hr)) {
         folder = GetResultsFolder(state);
-        if (folder) {
-            folder->RemoveAll();  // drop the seed item
-        }
     }
     Wh_Log(L"results folder: fill hr=0x%08lX filtered=%u", (unsigned long)hr,
           (unsigned)state->filtered.size());
@@ -5947,6 +6208,8 @@ static void UpdateResultsItems(PanelState* state) {
 }
 
 static void ApplyBrowserFilter(PanelState* state) {
+    // Archives keep the shell's own view: they have no name filter, because a
+    // results folder cannot resolve the name of an item inside an archive.
     if (!state || !state->panel || !IsWindow(state->panel) ||
         !state->folderPreview || state->archivePreview) {
         return;
@@ -6024,9 +6287,7 @@ static void OnBrowserViewCreated(PanelState* state, IShellView* view) {
     }
     EnsureBrowserListSubclass(state);
     RemoveBrowserBorders(state);
-    if (state->resultsMode) {
-        ScheduleThemeBrowserView(state);
-    }
+    ScheduleThemeBrowserView(state);
     ArmBrowserSettle(state);
 }
 
@@ -6161,6 +6422,7 @@ class ExplorerBrowserEvents final : public IExplorerBrowserEvents {
         PCIDLIST_ABSOLUTE) override {
         if (state_) {
             EnsureBrowserListSubclass(state_);
+            ScheduleThemeBrowserView(state_);
             ArmBrowserSettle(state_);
             ApplyBrowserFilter(state_);
         }
@@ -6182,9 +6444,27 @@ class ExplorerBrowserEvents final : public IExplorerBrowserEvents {
 // Browser cover: hides the first, unfinished frame of a new browser
 // ---------------------------------------------------------------------------
 
+// A solid cover would hide the unfinished first frame of the browser, but on a
+// glass effect in light mode it shows as a white box. There the browser itself
+// stays hidden until it is ready, so the panel's own background shows.
+static void HideBrowserWhileCovered(PanelState* state) {
+    if (!state || !state->coverActive || !LightOnGlass()) {
+        return;
+    }
+    HWND browserWindow = GetExplorerBrowserWindow(state);
+    if (browserWindow && IsWindow(browserWindow) &&
+        IsWindowVisible(browserWindow)) {
+        ShowWindow(browserWindow, SW_HIDE);
+    }
+}
+
 static void RepositionBrowserCover(PanelState* state) {
     if (!state || !state->coverActive || !state->coverWnd ||
         !IsWindow(state->coverWnd)) {
+        return;
+    }
+    if (LightOnGlass()) {
+        HideBrowserWhileCovered(state);
         return;
     }
     const RECT& r = state->listRect;
@@ -6237,6 +6517,9 @@ static void EndBrowserCover(PanelState* state) {
     }
     HWND browserWindow = GetExplorerBrowserWindow(state);
     if (browserWindow && IsWindow(browserWindow)) {
+        if (LightOnGlass()) {
+            ShowWindow(browserWindow, SW_SHOWNA);
+        }
         RedrawWindow(browserWindow, nullptr, nullptr,
                      RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
     }
@@ -6261,10 +6544,13 @@ static void TickBrowserCover(PanelState* state) {
         SetWindowPos(state->coverWnd, HWND_TOP, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
+    HideBrowserWhileCovered(state);
 
     bool ready = false;
     if (state->browserViewWnd && IsWindow(state->browserViewWnd)) {
         EnsureBrowserListSubclass(state);
+        // Only a results view is themed by the panel; Explorer themes its own
+        // folder and archive views, so those never wait for it.
         bool themed = !state->resultsMode || state->browserThemed;
         if (themed && state->coverTicks >= 3) {
             if (state->browserListWnd && IsWindow(state->browserListWnd) &&
@@ -6327,6 +6613,7 @@ static bool EnsureExplorerBrowser(PanelState* state) {
         }
 
         state->explorerBrowser = browser;
+        HideBrowserWhileCovered(state);
         RemoveBrowserBorders(state, true);
         Wh_Log(L"browser created: browser=%p", (void*)browser);
     }
@@ -6494,12 +6781,18 @@ static int ColorDistance(COLORREF a, COLORREF b) {
     return std::abs(ColorLuma(a) - ColorLuma(b));
 }
 
-static bool IsNeutralColor(COLORREF color) {
-    int maximum = std::max({GetRValue(color), GetGValue(color),
-                            GetBValue(color)});
-    int minimum = std::min({GetRValue(color), GetGValue(color),
-                            GetBValue(color)});
-    return maximum - minimum <= 30;
+// The Windows app mode, which Auto follows.
+static bool SystemPrefersDark() {
+    DWORD value = 1;
+    DWORD size = sizeof(value);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\"
+                     L"Themes\\Personalize",
+                     L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value,
+                     &size) == ERROR_SUCCESS) {
+        return value == 0;
+    }
+    return false;
 }
 
 static COLORREF FilterBoxFill(const PanelState* state) {
@@ -6520,7 +6813,11 @@ static void RefreshFilterBrush(PanelState* state) {
         DeleteObject(state->filterBrush);
         state->filterBrush = nullptr;
     }
-    state->filterBrush = CreateSolidBrush(FilterBoxFill(state));
+    // Light mode is drawn with alpha (BackgroundToAlpha), so whatever the stock
+    // edit control paints itself must be black: black with zero alpha adds
+    // nothing to the effect, while the box color would flash white on glass.
+    state->filterBrush = CreateSolidBrush(
+        LightOnGlass() ? RGB(0, 0, 0) : FilterBoxFill(state));
     if (state->filterEdit && IsWindow(state->filterEdit)) {
         InvalidateRect(state->filterEdit, nullptr, TRUE);
     }
@@ -6774,6 +7071,10 @@ static LRESULT CALLBACK FilterEditSubclassProc(HWND hwnd, UINT message,
                 }
 
                 SelectObject(memory, oldFont);
+                if (g_glassEffect.load()) {
+                    BackgroundToAlpha(memory, client, background, RECT{},
+                                      g_panelDark.load());
+                }
                 BitBlt(dc, 0, 0, width, height, memory, 0, 0, SRCCOPY);
                 SelectObject(memory, oldBitmap);
                 DeleteObject(bitmap);
@@ -6813,10 +7114,9 @@ static LRESULT CALLBACK FilterEditSubclassProc(HWND hwnd, UINT message,
     return result;
 }
 
-// Samples the visible file view and derives the panel palette from what
-// Explorer is actually drawing. Nothing here is a hardcoded theme color: the
-// background and text come from the real pixels, and the accent is the user's
-// Windows accent color.
+// Picks the panel palette: text and light/dark come from the Windows app mode, the
+// background from Explorer's file view when it fits the mode, and the accent is
+// the user's Windows accent color.
 static void UpdatePanelColors(PanelState* state) {
     // Ask Windows for the accent again: this runs on every open and on every
     // color / setting change.
@@ -6830,6 +7130,9 @@ static void UpdatePanelColors(PanelState* state) {
         rect.bottom <= rect.top) {
         return;
     }
+
+    int fullWidth = rect.right - rect.left;
+    int fullHeight = rect.bottom - rect.top;
 
     // When the panel overlays the view, do not sample the pixels the panel
     // itself covers. The visible part of the view is the real Explorer surface.
@@ -6852,43 +7155,96 @@ static void UpdatePanelColors(PanelState* state) {
     int width = rect.right - rect.left;
     int height = rect.bottom - rect.top;
 
+    bool dark = SystemPrefersDark();
+    bool glass = false;
     if (width > 0 && height > 0) {
         HDC screen = GetDC(nullptr);
         if (screen) {
             HDC memory = CreateCompatibleDC(screen);
             HBITMAP bitmap =
-                CreateCompatibleBitmap(screen, width, height);
+                CreateCompatibleBitmap(screen, fullWidth, fullHeight);
             if (memory && bitmap) {
                 HGDIOBJ oldBitmap = SelectObject(memory, bitmap);
-                BOOL copied =
-                    BitBlt(memory, 0, 0, width, height, screen, rect.left,
-                           rect.top, SRCCOPY | CAPTUREBLT);
+                // What Explorer paints into its own window is the color a
+                // glass effect (ExplorerBlurMica, DWMBlurGlass) tints and
+                // blurs. The panel must be that color: sampling the screen
+                // instead would return the effect already applied, and the
+                // panel would apply it a second time.
+                BOOL copied = PrintWindow(state->view, memory,
+                                          PW_CLIENTONLY | 2 /*FULLCONTENT*/);
+                bool printed = copied != FALSE;
+                if (!copied) {
+                    copied = BitBlt(memory, 0, 0, fullWidth, fullHeight,
+                                    screen, rect.left - 0, rect.top - 0,
+                                    SRCCOPY | CAPTUREBLT);
+                }
+                Wh_Log(L"colors: sampled with %s",
+                      copied ? L"capture" : L"nothing");
                 SelectObject(memory, oldBitmap);
 
                 if (copied) {
                     BITMAPINFO info = {};
                     info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-                    info.bmiHeader.biWidth = width;
-                    info.bmiHeader.biHeight = -height;
+                    info.bmiHeader.biWidth = fullWidth;
+                    info.bmiHeader.biHeight = -fullHeight;
                     info.bmiHeader.biPlanes = 1;
                     info.bmiHeader.biBitCount = 32;
                     info.bmiHeader.biCompression = BI_RGB;
 
                     std::vector<DWORD> pixels(
-                        static_cast<size_t>(width) * height);
-                    int lines = GetDIBits(memory, bitmap, 0, height,
+                        static_cast<size_t>(fullWidth) * fullHeight);
+                    int lines = GetDIBits(memory, bitmap, 0, fullHeight,
                                           pixels.data(), &info,
                                           DIB_RGB_COLORS);
-                    if (lines == height) {
+                    if (lines == fullHeight) {
                         int step = std::max(2, Scale(4, dpi));
                         for (int y = 0; y < height; y += step) {
                             for (int x = 0; x < width; x += step) {
                                 DWORD pixel =
-                                    pixels[static_cast<size_t>(y) * width + x];
+                                    pixels[static_cast<size_t>(y) * fullWidth + x];
                                 COLORREF color =
                                     RGB((pixel >> 16) & 0xFF,
                                         (pixel >> 8) & 0xFF, pixel & 0xFF);
                                 counts[color]++;
+                            }
+                        }
+
+                        // Same spot on screen: a clear difference means a glass
+                        // effect is drawn over what Explorer painted.
+                        if (printed) {
+                            HBITMAP screenBitmap = CreateCompatibleBitmap(
+                                screen, fullWidth, fullHeight);
+                            if (screenBitmap) {
+                                HGDIOBJ previous =
+                                    SelectObject(memory, screenBitmap);
+                                BOOL got = BitBlt(memory, 0, 0, width, height,
+                                                  screen, rect.left, rect.top,
+                                                  SRCCOPY | CAPTUREBLT);
+                                SelectObject(memory, previous);
+                                std::vector<DWORD> onScreen(pixels.size());
+                                if (got &&
+                                    GetDIBits(memory, screenBitmap, 0,
+                                              fullHeight, onScreen.data(),
+                                              &info, DIB_RGB_COLORS) ==
+                                        fullHeight) {
+                                    long long total = 0;
+                                    long long samples = 0;
+                                    for (int y = 0; y < height; y += step) {
+                                        for (int x = 0; x < width; x += step) {
+                                            size_t at =
+                                                static_cast<size_t>(y) *
+                                                    fullWidth + x;
+                                            DWORD a = pixels[at];
+                                            DWORD c = onScreen[at];
+                                            total += abs((int)((a >> 16) & 0xFF) - (int)((c >> 16) & 0xFF)) +
+                                                     abs((int)((a >> 8) & 0xFF) - (int)((c >> 8) & 0xFF)) +
+                                                     abs((int)(a & 0xFF) - (int)(c & 0xFF));
+                                            samples++;
+                                        }
+                                    }
+                                    glass = samples > 0 && total / samples > 18;
+                                }
+                                DeleteObject(screenBitmap);
                             }
                         }
                     }
@@ -6904,39 +7260,21 @@ static void UpdatePanelColors(PanelState* state) {
         }
     }
 
-    if (counts.empty()) {
-        Wh_Log(L"colors: no pixels sampled, falling back to system colors");
-        state->background = GetSysColor(COLOR_WINDOW);
-        state->text = GetSysColor(COLOR_WINDOWTEXT);
-        state->accent = GetUserAccentColor();
-        RefreshFilterBrush(state);
-        return;
-    }
-
-    COLORREF background = counts.begin()->first;
-    int backgroundCount = 0;
+    // The Windows mode alone decides light or dark and the text color, so the text never
+    // changes with what is behind the window (Mica, blur, wallpaper). The sampled
+    // surface is only the background, kept when it has the theme's brightness.
+    COLORREF text = dark ? RGB(255, 255, 255) : RGB(0, 0, 0);
+    COLORREF background = dark ? RGB(32, 32, 32) : RGB(249, 249, 249);
+    COLORREF dominant = CLR_INVALID;
+    int dominantCount = 0;
     for (const auto& entry : counts) {
-        if (entry.second > backgroundCount) {
-            backgroundCount = entry.second;
-            background = entry.first;
+        if (entry.second > dominantCount) {
+            dominantCount = entry.second;
+            dominant = entry.first;
         }
     }
-
-    COLORREF text = CLR_INVALID;
-    int textCount = 0;
-    for (const auto& entry : counts) {
-        if (ColorDistance(entry.first, background) < 60 ||
-            !IsNeutralColor(entry.first)) {
-            continue;
-        }
-        if (entry.second > textCount) {
-            textCount = entry.second;
-            text = entry.first;
-        }
-    }
-    if (textCount < 6 || text == CLR_INVALID ||
-        ColorDistance(text, background) < 50) {
-        text = ColorLuma(background) > 140 ? RGB(0, 0, 0) : RGB(255, 255, 255);
+    if (dominant != CLR_INVALID && (ColorLuma(dominant) < 140) == dark) {
+        background = dominant;
     }
 
     COLORREF accent = GetUserAccentColor();
@@ -6945,16 +7283,16 @@ static void UpdatePanelColors(PanelState* state) {
         accent = BlendColor(background, text, 35);
     }
 
+    g_panelDark = dark;
+    g_glassEffect = glass;
     state->background = background;
     state->text = text;
     state->accent = accent;
     RefreshFilterBrush(state);
 
-    Wh_Log(L"colors: bg=%06X text=%06X accent=%06X sysBg=%06X sysText=%06X points=%u bgCount=%d textCount=%d took=%lu",
+    Wh_Log(L"colors: bg=%06X text=%06X accent=%06X dark=%d glass=%d points=%u took=%lu",
           (unsigned)background, (unsigned)text, (unsigned)accent,
-          (unsigned)GetSysColor(COLOR_WINDOW),
-          (unsigned)GetSysColor(COLOR_WINDOWTEXT),
-          (unsigned)counts.size(), backgroundCount, textCount,
+          dark ? 1 : 0, glass ? 1 : 0, (unsigned)counts.size(),
           (unsigned long)(GetTickCount64() - start));
 }
 
@@ -7501,8 +7839,8 @@ static void DrawFolderContent(HDC dc, PanelState* state, UINT dpi) {
     COLORREF dim = BlendColor(background, text, 55);
 
     if (state->explorerBrowser) {
-        // An archive has no counts to show: its entries are not filesystem
-        // children of the path.
+        // An archive has no counts and no filter to show: its entries are not
+        // file system children of the path.
         if (!state->archivePreview) {
             DrawFooter(dc, state, dpi);
         }
@@ -7884,6 +8222,10 @@ static void DrawPanel(HDC dc, const RECT& client, PanelState* state) {
                                                        : state->mediaHeight;
         if (shownWidth > 0 && shownHeight > 0) {
             info += Fmt(L"   %d x %d", shownWidth, shownHeight);
+        }
+        // How the image is being shown: fitted, or at its real size.
+        if (state->mediaKind == L"Image") {
+            info += Fmt(L"   %s", state->mediaZoom > 0.0 ? L"100%" : L"Fit");
         }
         info += L"   " + FormatEntrySize(state->mediaBytes);
         DrawTextW(dc, info.c_str(), -1, &footer,
@@ -8471,7 +8813,8 @@ static LRESULT CALLBACK ParentSubclassProc(HWND hwnd, UINT message,
 // ---------------------------------------------------------------------------
 
 static int HitTestList(PanelState* state, int x, int y) {
-    if (!state || !state->folderPreview) {
+    // The archive's rows always belong to the shell view.
+    if (!state || !state->folderPreview || state->archivePreview) {
         return -1;
     }
     if (x < state->listRect.left || x >= state->listRect.right ||
@@ -9144,6 +9487,14 @@ static LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT message, WPARAM wParam,
         case WM_CTLCOLOREDIT: {
             HDC editDc = reinterpret_cast<HDC>(wParam);
             if (state) {
+                if (LightOnGlass()) {
+                    SetTextColor(editDc, RGB(0, 0, 0));
+                    SetBkColor(editDc, RGB(0, 0, 0));
+                    return reinterpret_cast<LRESULT>(
+                        state->filterBrush
+                            ? state->filterBrush
+                            : GetStockObject(BLACK_BRUSH));
+                }
                 SetTextColor(editDc,
                              state->text != CLR_INVALID
                                  ? state->text
@@ -9153,6 +9504,27 @@ static LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT message, WPARAM wParam,
                     state->filterBrush
                         ? state->filterBrush
                         : GetSysColorBrush(COLOR_WINDOW));
+            }
+            break;
+        }
+        case WM_LBUTTONDBLCLK: {
+            if (!state) {
+                break;
+            }
+            POINT point = {static_cast<short>(LOWORD(lParam)),
+                           static_cast<short>(HIWORD(lParam))};
+            // Double clicking the image toggles between fit and real size.
+            if (state->mediaPreview && state->mediaKind == L"Image" &&
+                PtInRect(&state->mediaRect, point)) {
+                if (state->draggingImage) {
+                    state->draggingImage = false;
+                    ReleaseCapture();
+                }
+                state->mediaZoom = state->mediaZoom > 0.0 ? 0.0 : 1.0;
+                state->mediaOffsetX = 0;
+                state->mediaOffsetY = 0;
+                InvalidateRect(hwnd, nullptr, TRUE);
+                return 0;
             }
             break;
         }
@@ -9167,6 +9539,17 @@ static LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT message, WPARAM wParam,
             if (state->closeRect.right > state->closeRect.left &&
                 PtInRect(&state->closeRect, point)) {
                 CloseState(state);
+                return 0;
+            }
+
+            // A zoomed image pans with the left button held.
+            if (state->mediaPreview && state->mediaZoom > 0.0 &&
+                PtInRect(&state->mediaRect, point)) {
+                state->draggingImage = true;
+                state->dragStart = point;
+                state->dragStartOffsetX = state->mediaOffsetX;
+                state->dragStartOffsetY = state->mediaOffsetY;
+                SetCapture(hwnd);
                 return 0;
             }
 
@@ -9280,6 +9663,11 @@ static LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT message, WPARAM wParam,
                 ReleaseCapture();
                 return 0;
             }
+            if (state && state->draggingImage) {
+                state->draggingImage = false;
+                ReleaseCapture();
+                return 0;
+            }
             break;
         case WM_CAPTURECHANGED:
             if (state && state->draggingSplitter &&
@@ -9306,6 +9694,21 @@ static LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT message, WPARAM wParam,
                      state->textToolbarHover >= 0);
                 if (overButton) {
                     SetCursor(LoadCursorW(nullptr, IDC_HAND));
+                    return TRUE;
+                }
+                // A zoomed image is grabbable; a fitted one is a toggle target.
+                if (state->mediaPreview && PtInRect(&state->mediaRect, cursor)) {
+                    if (state->mediaZoom > 0.0) {
+                        SetCursor(LoadCursorW(nullptr,
+                                              state->draggingImage ? IDC_SIZEALL
+                                                                   : IDC_HAND));
+                    } else {
+                        SetCursor(LoadCursorW(nullptr, IDC_HAND));
+                    }
+                    return TRUE;
+                }
+                if (state->draggingImage) {
+                    SetCursor(LoadCursorW(nullptr, IDC_SIZEALL));
                     return TRUE;
                 }
             }
@@ -9352,6 +9755,14 @@ static LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT message, WPARAM wParam,
                 }
                 return 0;
             }
+            if (state->draggingImage) {
+                state->mediaOffsetX =
+                    state->dragStartOffsetX + (x - state->dragStart.x);
+                state->mediaOffsetY =
+                    state->dragStartOffsetY + (y - state->dragStart.y);
+                InvalidateRect(hwnd, nullptr, FALSE);
+                return 0;
+            }
             if (state->draggingHScroll) {
                 ScrollFromX(state, x);
                 return 0;
@@ -9380,6 +9791,17 @@ static LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT message, WPARAM wParam,
             }
             return 0;
         case WM_MOUSEWHEEL:
+            if (state && state->mediaPreview && state->mediaZoom > 0.0) {
+                int delta = static_cast<short>(HIWORD(wParam));
+                int step = (delta / WHEEL_DELTA) * Scale(60, GetDpiForWindowSafe(hwnd));
+                if (GetKeyState(VK_SHIFT) & 0x8000) {
+                    state->mediaOffsetX += step;
+                } else {
+                    state->mediaOffsetY += step;
+                }
+                InvalidateRect(hwnd, nullptr, FALSE);
+                return 0;
+            }
             if (state && state->folderPreview) {
                 int delta = static_cast<short>(HIWORD(wParam));
                 state->scrollRow -= (delta / 120) * 3;
@@ -9430,6 +9852,11 @@ static LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT message, WPARAM wParam,
             if (state && EnsureBackBuffer(state, dc, width, height)) {
                 DrawPanel(state->backDc, client, state);
                 DrawSplitter(state->backDc, client, state);
+                if (g_glassEffect.load() && state->background != CLR_INVALID) {
+                    BackgroundToAlpha(state->backDc, paint.rcPaint,
+                                      state->background, state->mediaVisible,
+                                      g_panelDark.load());
+                }
                 // One blit for the dirty rectangle: the window never shows the
                 // intermediate background-then-content of a direct paint.
                 BitBlt(dc, paint.rcPaint.left, paint.rcPaint.top,
@@ -9569,7 +9996,8 @@ static LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT message, WPARAM wParam,
 static bool RegisterPanelClass() {
     WNDCLASSEXW windowClass = {};
     windowClass.cbSize = sizeof(windowClass);
-    windowClass.style = CS_HREDRAW | CS_VREDRAW;
+    // CS_DBLCLKS: a double click on an image toggles its zoom.
+    windowClass.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
     windowClass.lpfnWndProc = PanelWndProc;
     windowClass.hInstance = g_instance;
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);

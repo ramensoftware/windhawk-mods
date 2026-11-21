@@ -98,72 +98,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4b23515094a8a13273ebccf7a9399aec126cbb9c/mods/desktop-weather-overlay.wh.cpp"
       }
     },
-    "disable-acrylic-snap-preview": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795198139947,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795198139947,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "QCQ171-C",
-        "compilerOptions": "-lgdi32 -lwevtapi",
-        "description": "Restore Aero Style Snap Animation on Windows 11",
-        "github": "https://github.com/QCQ171-C",
-        "include": [
-          "dwm.exe"
-        ],
-        "license": "MPL-2.0",
-        "name": "Disable acrylic Snap preview",
-        "version": "1.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7653",
-      "source": {
-        "sha256": "a0edbc68b747a79a3a14cd8f33e46896d157370a518100d6972f5f0f9d0d1b3c",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/db8708f101abb60054e20a02d6a65934ff618f06/mods/disable-acrylic-snap-preview.wh.cpp"
-      }
-    },
-    "explorer-default-folder": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794796718242,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794840456805,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "DanRotaru",
-        "compilerOptions": "-lole32 -loleaut32 -lshell32 -luuid",
-        "description": "Open new File Explorer windows and tabs in a folder of your choice instead of This PC or Home",
-        "donateUrl": "https://buymeacoffee.com/widget/page/danrotaru",
-        "github": "https://github.com/DanRotaru",
-        "homepage": "https://dan13.me/",
-        "include": [
-          "explorer.exe"
-        ],
-        "license": "MIT",
-        "name": "Explorer Default Folder",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7339",
-      "source": {
-        "sha256": "6c7a224521ad24cf68e5727ba14d065ff19b358ad77ef18d89def18a845fe664",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6b19ead230c08403dab28d1d30bcfd28e2abb0e2/mods/explorer-default-folder.wh.cpp"
-      }
-    },
     "explorer-font-size-changer": {
       "details": {
         "defaultSorting": 0,
@@ -465,35 +399,6 @@
       "source": {
         "sha256": "e376e9096379b889de64c62ba7004a6a80e8bed4791ab7a57812773547f03dde",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/a86034e6042bc1337a5c10f3a596ff06d346027a/mods/taskbar-notification-bell-badge.wh.cpp"
-      }
-    },
-    "text-capitalization": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795198139947,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795198139947,
-        "users": 0
-      },
-      "metadata": {
-        "author": "rockinggreninja-bot",
-        "compilerOptions": "-lole32 -loleaut32 -lgdi32 -luser32 -luiautomationcore -lshcore",
-        "description": "Change selected text with five case modes and customizable keyboard shortcuts.",
-        "github": "https://github.com/rockinggreninja-bot",
-        "include": [
-          "windhawk.exe"
-        ],
-        "license": "MIT",
-        "name": "Text Capitalization",
-        "version": "0.3.1"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7657",
-      "source": {
-        "sha256": "6f771ed025acf97b3d0bb37358c937ba605ef2a919221bb4b61cb90b99e878e8",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/77f823706af1031477bcd7caac23a924199bc6fb/mods/text-capitalization.wh.cpp"
       }
     },
     "titlebar-opacity-button": {

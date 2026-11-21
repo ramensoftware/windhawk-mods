@@ -1,0 +1,14 @@
+{
+  "modId": "remove-context-menu-items",
+  "reviews": [
+    {
+      "authorName": "Max",
+      "content": "Very useful to remove useless things like the \"Send to...\" menu that nobody uses anymore after Outlook Express/Windows Live Mail become trash and a way to get rid of BitLocker menu that has no use on personal PC.\n\nAll without altering registry",
+      "id": 141,
+      "modVersion": "1.13.0",
+      "parentId": null,
+      "timestamp": 1795255457,
+      "votes": 0
+    }
+  ]
+}

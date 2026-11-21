@@ -267,7 +267,7 @@
         "rating": 8,
         "ratingBreakdown": [10, 2, 5, 5, 53],
         "ratingUsers": 75,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": -0.4877810893883329,
         "updated": 1758758721000,
         "users": 3967
@@ -5213,6 +5213,34 @@
         "version": "1.8.1"
       }
     },
+    "disable-acrylic-snap-preview": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795280548000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795280548000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "QCQ171-C",
+        "compilerOptions": "-lgdi32 -lwevtapi",
+        "description": "Restore Aero Style Snap Animation on Windows 11",
+        "github": "https://github.com/QCQ171-C",
+        "include": [
+          "dwm.exe"
+        ],
+        "license": "MPL-2.0",
+        "name": "Disable acrylic Snap preview",
+        "version": "1.0"
+      }
+    },
     "disable-audio-limiter": {
       "details": {
         "defaultSorting": 1370,
@@ -5716,7 +5744,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 1, 0, 2, 51],
         "ratingUsers": 54,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": -1.2033433217753298,
         "updated": 1770675526000,
         "users": 3589
@@ -6777,6 +6805,36 @@
         "license": "MIT",
         "name": "Explorer Custom Shortcuts",
         "version": "1.8.0"
+      }
+    },
+    "explorer-default-folder": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795280543000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795280543000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "DanRotaru",
+        "compilerOptions": "-lole32 -loleaut32 -lshell32 -luuid",
+        "description": "Open new File Explorer windows and tabs in a folder of your choice instead of This PC or Home",
+        "donateUrl": "https://buymeacoffee.com/widget/page/danrotaru",
+        "github": "https://github.com/DanRotaru",
+        "homepage": "https://dan13.me/",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer Default Folder",
+        "version": "1.0.0"
       }
     },
     "explorer-details-better-file-sizes": {
@@ -14729,7 +14787,7 @@
         "ratingUsers": 19,
         "reviews": 0,
         "trendingSorting": 11.299106674556606,
-        "updated": 1794470716000,
+        "updated": 1795280559000,
         "users": 299
       },
       "metadata": {
@@ -14745,7 +14803,7 @@
         ],
         "license": "MIT",
         "name": "Quick Look",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "quick-settings-media-progress-bar": {
@@ -15218,7 +15276,7 @@
         "rating": 9,
         "ratingBreakdown": [4, 3, 3, 7, 124],
         "ratingUsers": 141,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": -0.6850015249987015,
         "updated": 1795276831000,
         "users": 5661
@@ -15545,7 +15603,7 @@
         "rating": 9,
         "ratingBreakdown": [1, 1, 0, 0, 20],
         "ratingUsers": 22,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": -0.4991738710899102,
         "updated": 1749402841000,
         "users": 3626
@@ -16409,7 +16467,7 @@
         "rating": 10,
         "ratingBreakdown": [8, 3, 12, 60, 790],
         "ratingUsers": 873,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": -1.5582654438207757,
         "updated": 1727762644000,
         "users": 76811
@@ -20559,6 +20617,31 @@
         "version": "1.0"
       }
     },
+    "text-capitalization": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795280554000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795280554000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "rockinggreninja-bot",
+        "compilerOptions": "-lole32 -loleaut32 -lgdi32 -luser32 -luiautomationcore -lshcore",
+        "description": "Change selected text with five case modes and customizable keyboard shortcuts.",
+        "github": "https://github.com/rockinggreninja-bot",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Text Capitalization",
+        "version": "0.3.1"
+      }
+    },
     "text-replace": {
       "details": {
         "defaultSorting": 8028,
@@ -21058,7 +21141,7 @@
         "rating": 9,
         "ratingBreakdown": [2, 0, 0, 0, 19],
         "ratingUsers": 21,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": -0.5294970638667189,
         "updated": 1723929138000,
         "users": 1393
@@ -22927,7 +23010,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 0, 0, 3],
         "ratingUsers": 3,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 1.2497429007657073,
         "updated": 1789850256000,
         "users": 322
@@ -23282,7 +23365,7 @@
         "rating": 8,
         "ratingBreakdown": [1, 1, 0, 1, 6],
         "ratingUsers": 9,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 0.638635648619814,
         "updated": 1791802875000,
         "users": 577

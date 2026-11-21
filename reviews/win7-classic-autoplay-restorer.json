@@ -1,0 +1,14 @@
+{
+  "modId": "win7-classic-autoplay-restorer",
+  "reviews": [
+    {
+      "authorName": "Max",
+      "content": "Windows 10 AutoPlay is horrible because it never respect the \"always ask\" option. This mod fixes it. \nI can finally use the AutoPlay dialog to choose my desired program to launch my portable drive or disc.\n\nThe only issue is if you restart your PC with this mod on. Empty drives will show up in navigation pane and every disc drive will label as \"CD Drive\".\nIf you manually enable it after logon. This won't happen.",
+      "id": 137,
+      "modVersion": "1.1.0",
+      "parentId": null,
+      "timestamp": 1795254776,
+      "votes": 0
+    }
+  ]
+}
