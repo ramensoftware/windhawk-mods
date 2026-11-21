@@ -64,7 +64,7 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
   $description: Move a program to where it was called from, instead of the center of the screen.
 - centerChildWindows: true
   $name: Always center child windows
-  $description: Move windows that belong to another, whatever their size. If disabled, follow the size limit, like any other.
+  $description: Move windows that have an owner, whatever their size. If disabled, follow the size limit, like any other.
 - revealWhenDrawn: true
   $name: Show windows only after complete UI load
   $description: A centered window stays invisible until its contents finish drawing (half a second at most), avoiding the native flicker. Windows drawn with DirectX (browsers, WPF, WinUI) can't be detected and gain little. May skip opening animations, turn off to keep them.
@@ -109,6 +109,7 @@ wchar_t g_ignoreHotkey[64];
 wchar_t g_listHotkey[64];
 
 wchar_t g_processName[MAX_PATH];  // file name of the current process, for ignore rules
+bool g_isWindowsProgram;          // the current process's executable is in the Windows folder
 
 void CopySetting(const wchar_t* name, wchar_t* dst, size_t dstChars) {
     auto value = WindhawkUtils::StringSetting::make(name);
@@ -603,17 +604,28 @@ POINT ReferencePoint(HWND hwnd) {
     return {(rc.left + rc.right) / 2, (rc.top + rc.bottom) / 2};
 }
 
+/// True for a window that belongs to another: an owned window, or a dialog without an owner from a
+/// Windows program (Run, Sound, system Properties), which belongs to the system.
+bool IsChildWindow(HWND hwnd) {
+    // Only owned windows count from other programs: a new main window of the same program also gets
+    // a parent from FindParent, but it should keep its saved size and position.
+    if (IsValidParent(GetWindow(hwnd, GW_OWNER), hwnd))
+        return true;
+    // Dialogs only: main windows of Windows programs (Explorer folders, Task Manager) keep their size and position.
+    wchar_t cls[16];
+    return g_isWindowsProgram && GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) && IsDialogClass(cls);
+}
+
 /// Top-left that centers a w×h window on c, kept inside the work area of c's monitor. False if the
-/// window is over the size threshold, unless it has an owner window and child windows are always centered.
+/// window is over the size threshold, unless it is a child window (see IsChildWindow) and child windows are
+/// always centered.
 bool PlaceAround(HWND hwnd, POINT c, int w, int h, int* x, int* y) {
     MONITORINFO mi = {};
     mi.cbSize = sizeof(mi);
     GetMonitorInfoW(MonitorFromPoint(c, MONITOR_DEFAULTTONEAREST), &mi);
     const RECT& wa = mi.rcWork;
     long long monitorArea = (long long)(wa.right - wa.left) * (wa.bottom - wa.top);
-    // Only owned windows count: a new main window of the same program also gets a parent from FindParent,
-    // but it should keep its saved size and position.
-    bool alwaysCenter = g_centerChildWindows && IsValidParent(GetWindow(hwnd, GW_OWNER), hwnd);
+    bool alwaysCenter = g_centerChildWindows && IsChildWindow(hwnd);
     if (!alwaysCenter && (long long)w * h * 100 > monitorArea * g_maxAreaPercent)
         return false;
     int nx = c.x - w / 2, ny = c.y - h / 2;
@@ -1913,6 +1925,10 @@ BOOL Wh_ModInit() {
     GetModuleFileNameW(nullptr, path, MAX_PATH);
     const wchar_t* slash = wcsrchr(path, L'\\');
     wcscpy_s(g_processName, slash ? slash + 1 : path);
+    wchar_t windowsDir[MAX_PATH];
+    UINT dirLen = GetWindowsDirectoryW(windowsDir, MAX_PATH);
+    g_isWindowsProgram = dirLen && dirLen < MAX_PATH && _wcsnicmp(path, windowsDir, dirLen) == 0 &&
+                         path[dirLen] == L'\\';
 
     if (_wcsicmp(g_processName, L"windhawk.exe") == 0 || HasToolModArg()) {
         g_inToolModPart = true;
