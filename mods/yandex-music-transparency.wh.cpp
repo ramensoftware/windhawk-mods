@@ -2,7 +2,7 @@
 // @id              yandex-music-transparency
 // @name            Yandex Music Transparency
 // @description     Automatically applies and enforces custom transparency for Yandex Music
-// @version         1.27
+// @version         1.2.8
 // @author          NIKTO
 // @github          https://github.com/NIKTO-2
 // @include         Яндекс Музыка.exe
@@ -34,6 +34,15 @@ Adds configurable transparency for the Yandex Music desktop application.
 
 // ==WindhawkModChangelog==
 /*
+## 1.2.8
+
+- Performance: the polling timer now runs only while needed. It stops when
+  neither hover polling (OpaqueOnHover) nor an opacity animation is active,
+  instead of ticking forever at 25 ms.
+- Fixed thread safety: the timer is now created and killed on the window's
+  own thread via a registered control message, never from the Windhawk
+  engine thread. g_timerOwner is only set after the timer actually started.
+
 ## 1.27
 
 - Fixed transparency being broken: the function that applies the target alpha
@@ -110,8 +119,12 @@ std::unordered_map<HWND, OriginalWindowState> g_trackedWindows;
 bool g_unloading = false;
 
 constexpr UINT_PTR kHoverTimerId = 0x4D545248;  // 'MTRH'
-constexpr UINT kHoverTimerIntervalMs = 25;
-constexpr int kAnimStep = 10;  // alpha units per tick (25 ms)
+constexpr UINT kTimerIntervalFastMs = 25;      // animation tick
+constexpr UINT kTimerIntervalSlowMs = 100;     // hover polling
+constexpr int kAnimStep = 10;                  // alpha units per fast tick
+
+// Registered message used to start/stop the timer on the window's own thread.
+UINT g_timerControlMsg = 0;
 HWND g_timerOwner = nullptr;
 
 void LoadSettings() {
@@ -219,12 +232,19 @@ void ApplyTargetAlpha(HWND hwnd) {
         SetLayeredWindowAttributes_Original(hwnd, 0, target, LWA_ALPHA);
     } else {
         it->second.targetAlpha = target;
+        // Animation just started: switch the timer to the fast interval.
+        if (target != it->second.currentAlpha) {
+            SendMessageTimeoutW(hwnd, g_timerControlMsg, kTimerIntervalFastMs, 0,
+                                SMTO_ABORTIFHUNG, 200, nullptr);
+        }
     }
 }
 
 // Advances the animated alpha toward the target for all tracked windows.
-void AnimateAllWindows() {
+// Returns true if the animation is still running (timer should continue).
+bool AnimateAllWindows() {
     std::vector<HWND> toSet;
+    bool anyRunning = false;
     {
         std::lock_guard<std::mutex> lock(g_windowsMutex);
         for (auto& pair : g_trackedWindows) {
@@ -243,6 +263,9 @@ void AnimateAllWindows() {
                 newAlpha = st.targetAlpha;
             }
             st.currentAlpha = newAlpha;
+            if (newAlpha != st.targetAlpha) {
+                anyRunning = true;
+            }
             toSet.push_back(pair.first);
         }
     }
@@ -257,6 +280,8 @@ void AnimateAllWindows() {
         }
         SetLayeredWindowAttributes_Original(hwnd, 0, alpha, LWA_ALPHA);
     }
+
+    return anyRunning;
 }
 
 void UpdateHoverStateFromCursor() {
@@ -277,8 +302,11 @@ void UpdateHoverStateFromCursor() {
             }
         }
     }
-    for (HWND hwnd : toApply) {
-        ApplyTargetAlpha(hwnd);
+    // The hover state only affects the target when OpaqueOnHover is on.
+    if (g_settings.opaqueOnHover) {
+        for (HWND hwnd : toApply) {
+            ApplyTargetAlpha(hwnd);
+        }
     }
 }
 
@@ -297,6 +325,19 @@ void RestoreWindow(HWND hwnd, const OriginalWindowState& state) {
 }
 
 LRESULT CALLBACK WindowSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
+    // Timer control message: handled on the window's own thread, so SetTimer/
+    // KillTimer are always called on the thread that owns the window.
+    // wParam != 0 -> interval in ms (start), wParam == 0 -> stop.
+    if (uMsg == g_timerControlMsg) {
+        if (wParam) {
+            SetTimer(hwnd, kHoverTimerId, (UINT)wParam, nullptr);
+        } else {
+            KillTimer(hwnd, kHoverTimerId);
+        }
+        // Nonzero return so SendMessageTimeout can distinguish success.
+        return 1;
+    }
+
     switch (uMsg) {
         case WM_STYLECHANGING: {
             if (!g_unloading && wParam == GWL_EXSTYLE) {
@@ -333,28 +374,31 @@ LRESULT CALLBACK WindowSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         }
         case WM_TIMER: {
             if (!g_unloading && wParam == kHoverTimerId && hwnd == g_timerOwner) {
-                UpdateHoverStateFromCursor();
-                AnimateAllWindows();
+                // Hover polling on the slow interval, animation on the fast one.
+                if (g_settings.opaqueOnHover) {
+                    UpdateHoverStateFromCursor();
+                }
+                bool stillAnimating = AnimateAllWindows();
+
+                // Stop the timer when neither hover polling nor animation is
+                // needed anymore.
+                if (!g_settings.opaqueOnHover && !stillAnimating) {
+                    KillTimer(hwnd, kHoverTimerId);
+                } else if (g_settings.opaqueOnHover && !stillAnimating) {
+                    // Hover-only: slow down to the slow interval.
+                    SetTimer(hwnd, kHoverTimerId, kTimerIntervalSlowMs, nullptr);
+                }
                 return 0;
             }
             break;
         }
         case WM_NCDESTROY: {
-            HWND newOwner = nullptr;
             {
                 std::lock_guard<std::mutex> lock(g_windowsMutex);
                 g_trackedWindows.erase(hwnd);
                 if (g_timerOwner == hwnd) {
                     g_timerOwner = nullptr;
-                    for (auto& pair : g_trackedWindows) {
-                        g_timerOwner = pair.first;
-                        newOwner = pair.first;
-                        break;
-                    }
                 }
-            }
-            if (newOwner && IsWindow(newOwner)) {
-                SetTimer(newOwner, kHoverTimerId, kHoverTimerIntervalMs, nullptr);
             }
             break;
         }
@@ -404,17 +448,23 @@ void AttachToWindow(HWND hwnd) {
         return;
     }
 
-    bool needTimer = false;
+    // Start the timer on the window's own thread via the registered control
+    // message, but only when it is actually needed (hover polling requires the
+    // slow timer; animations start the fast timer themselves). Without this,
+    // no timer runs at all.
     {
         std::lock_guard<std::mutex> lock(g_windowsMutex);
-        if (!g_timerOwner) {
-            g_timerOwner = hwnd;
-            needTimer = true;
-        }
-    }
-    if (needTimer) {
-        if (!SetTimer(hwnd, kHoverTimerId, kHoverTimerIntervalMs, nullptr)) {
-            Wh_Log(L"SetTimer failed, error %d", (int)GetLastError());
+        if (!g_timerOwner && g_settings.opaqueOnHover) {
+            LRESULT res = SendMessageTimeoutW(hwnd, g_timerControlMsg,
+                                              kTimerIntervalSlowMs, 0,
+                                              SMTO_ABORTIFHUNG, 200, nullptr);
+            if (res != 0) {
+                // SendMessageTimeout succeeded; SetTimer ran on the window's
+                // thread. Only now claim ownership.
+                g_timerOwner = hwnd;
+            } else {
+                Wh_Log(L"Sending timer start to window failed, error %d", (int)GetLastError());
+            }
         }
     }
 
@@ -461,6 +511,12 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    g_timerControlMsg = RegisterWindowMessageW(L"Windhawk_YandexMusicTransparency_TimerControl");
+    if (g_timerControlMsg == 0) {
+        Wh_Log(L"RegisterWindowMessage failed, error %d", (int)GetLastError());
+        return FALSE;
+    }
+
     LoadSettings();
 
     if (!Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original)) {
@@ -490,6 +546,22 @@ void Wh_ModSettingsChanged() {
         }
     }
 
+    // If hover polling just became needed, make sure a slow timer is running.
+    if (g_settings.opaqueOnHover) {
+        std::lock_guard<std::mutex> lock(g_windowsMutex);
+        if (!g_timerOwner) {
+            for (HWND hwnd : windows) {
+                LRESULT res = SendMessageTimeoutW(hwnd, g_timerControlMsg,
+                                                  kTimerIntervalSlowMs, 0,
+                                                  SMTO_ABORTIFHUNG, 200, nullptr);
+                if (res != 0) {
+                    g_timerOwner = hwnd;
+                    break;
+                }
+            }
+        }
+    }
+
     for (HWND hwnd : windows) {
         ApplyTargetAlpha(hwnd);
     }
@@ -504,8 +576,10 @@ void Wh_ModUninit() {
         timerOwner = g_timerOwner;
         g_timerOwner = nullptr;
     }
+    // Stop the timer on the window's own thread before removing the subclass.
     if (timerOwner && IsWindow(timerOwner)) {
-        KillTimer(timerOwner, kHoverTimerId);
+        SendMessageTimeoutW(timerOwner, g_timerControlMsg, 0, 0,
+                            SMTO_ABORTIFHUNG, 200, nullptr);
     }
 
     std::vector<std::pair<HWND, OriginalWindowState>> windows;
