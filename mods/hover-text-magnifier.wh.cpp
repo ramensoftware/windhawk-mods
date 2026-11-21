@@ -292,6 +292,7 @@ struct UiaResult {
     POINT pt{0, 0};
     std::wstring text;
     bool valid = false;
+    bool protectedTarget = false;
     uint64_t seq = 0;
     uint64_t settingsGeneration = 0;
     ULONGLONG tick = 0;
@@ -329,8 +330,8 @@ static bool ShouldHoldRecentText(bool showingText, bool freshNegative,
     return showingText && !freshNegative && targetWindow &&
            targetWindow == lastTextWindow && nowTick >= lastTextTick &&
            nowTick - lastTextTick <= 240 &&
-           std::abs(cursor.x - lastTextPoint.x) <= 96 &&
-           std::abs(cursor.y - lastTextPoint.y) <= 96;
+           std::abs(cursor.x - lastTextPoint.x) <= 4 &&
+           std::abs(cursor.y - lastTextPoint.y) <= 4;
 }
 
 struct RuntimeState {
@@ -360,6 +361,7 @@ struct RuntimeState {
 
     HWND hwndHost = nullptr;
     HWND hwndMag = nullptr;
+    HMODULE hostClassModule = nullptr;
 
     HMODULE hMagnification = nullptr;
     bool magReady = false;
@@ -369,6 +371,7 @@ struct RuntimeState {
     IUIAutomation* uia = nullptr;
     bool uiaReady = false;
     bool comInitedHere = false;
+    bool uiaTimeoutsConfigured = false;
 
     POINT lastCursor{ -1, -1 };
     ULONGLONG lastUiaQueryTick = 0;
@@ -819,6 +822,17 @@ static void LoadSettings() {
     // Actually, UpdateEffectiveSizing changes sizes, which affects font size.
     // So we should just flag them dirty or update them when sizing changes.
     g.settingsGeneration.fetch_add(1, std::memory_order_relaxed);
+    // Don't carry text, visibility, or debounce state across a settings change.
+    g.currentText.clear();
+    g.showingText = false;
+    g.showingMag = false;
+    g.textStableActive = false;
+    g.lastValidTextWindow = nullptr;
+    g.lastValidTextTick = 0;
+    g.lastModeChangeTick = 0;
+    if (g.hwndHost) ShowWindow(g.hwndHost, SW_HIDE);
+    g.visible = false;
+    g.lastWindowRect = { 0, 0, 0, 0 };
     g.lastFittedTextSource.clear();
     g.cachedFittedText.clear();
     UpdateGraphicsResources();
@@ -911,9 +925,9 @@ static bool InitUIA() {
     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (SUCCEEDED(hr)) {
         g.comInitedHere = true;
-    } else if (hr == RPC_E_CHANGED_MODE) {
-        g.comInitedHere = false;
     } else {
+        // An STA or other incompatible apartment is not a valid UIA worker.
+        Wh_Log(L"UIA MTA initialization failed: 0x%08X", (unsigned)hr);
         g.uiaReady = false;
         g.uia = nullptr;
         if (g.comInitedHere) {
@@ -934,14 +948,31 @@ static bool InitUIA() {
         return false;
     }
 
-    // Keep a stalled accessibility provider from occupying the single-flight
-    // request slot indefinitely, or blocking a clean tool shutdown.
+    // These timeouts bound individual UIA provider operations, NOT the entire
+    // extraction or shutdown. Disable text extraction if unavailable.
     IUIAutomation2* uia2 = nullptr;
-    if (SUCCEEDED(g.uia->QueryInterface(IID_IUIAutomation2,
-                                        (void**)&uia2)) && uia2) {
-        uia2->put_ConnectionTimeout(1000);
-        uia2->put_TransactionTimeout(1000);
+    const HRESULT queryHr = g.uia->QueryInterface(IID_IUIAutomation2,
+                                                  (void**)&uia2);
+    HRESULT connectionHr = E_NOINTERFACE;
+    HRESULT transactionHr = E_NOINTERFACE;
+    if (SUCCEEDED(queryHr) && uia2) {
+        connectionHr = uia2->put_ConnectionTimeout(1000);
+        transactionHr = uia2->put_TransactionTimeout(1000);
         uia2->Release();
+    }
+    g.uiaTimeoutsConfigured = SUCCEEDED(queryHr) &&
+        SUCCEEDED(connectionHr) && SUCCEEDED(transactionHr);
+    if (!g.uiaTimeoutsConfigured) {
+        Wh_Log(L"UIA timeouts unavailable (QI=0x%08X, conn=0x%08X, txn=0x%08X); text disabled",
+               (unsigned)queryHr, (unsigned)connectionHr, (unsigned)transactionHr);
+        g.uia->Release();
+        g.uia = nullptr;
+        if (g.comInitedHere) {
+            CoUninitialize();
+            g.comInitedHere = false;
+        }
+        g.uiaReady = false;
+        return false;
     }
 
     g.uiaReady = true;
@@ -954,6 +985,7 @@ static void UninitUIA() {
         g.uia = nullptr;
     }
     g.uiaReady = false;
+    g.uiaTimeoutsConfigured = false;
 
     if (g.comInitedHere) {
         CoUninitialize();
@@ -961,12 +993,20 @@ static void UninitUIA() {
     }
 }
 
-static bool TryExtractTextAtPoint(const UiaRequest& request, std::wstring& outText) {
+static bool TryExtractTextAtPoint(const UiaRequest& request, std::wstring& outText,
+                                  bool& protectedTarget) {
     outText.clear();
+    protectedTarget = false;
     if (!g.uiaReady || !g.uia) return false;
 
     const POINT pt = request.pt;
     const int maxTextLen = std::max(1, request.maxTextLen);
+    // Cooperative deadline only: it cannot interrupt a blocked COM operation.
+    const auto shouldStop = [&]() {
+        return g.stopRequested.load(std::memory_order_acquire) ||
+               GetTickCount64() - request.tick >= 1800;
+    };
+    if (shouldStop()) return false;
 
     IUIAutomationElement* el = nullptr;
     HRESULT hr = g.uia->ElementFromPoint(pt, &el);
@@ -974,10 +1014,14 @@ static bool TryExtractTextAtPoint(const UiaRequest& request, std::wstring& outTe
 
     // Do not read UIA value, text, or name from password controls.
     BOOL isPassword = FALSE;
-    if (FAILED(el->get_CurrentIsPassword(&isPassword)) || isPassword) {
+    const HRESULT passwordHr = el->get_CurrentIsPassword(&isPassword);
+    if (FAILED(passwordHr) || isPassword) {
+        // Treat an unreadable password property as protected (fail closed).
+        protectedTarget = true;
         el->Release();
         return false;
     }
+    if (shouldStop()) { el->Release(); return false; }
 
     auto pickUnit = [&request]() -> TextUnit {
         switch (request.textUnit) {
@@ -1007,6 +1051,7 @@ static bool TryExtractTextAtPoint(const UiaRequest& request, std::wstring& outTe
         }
     }
 
+    if (shouldStop()) { el->Release(); return false; }
     IUIAutomationTextPattern* tp = nullptr;
     hr = el->GetCurrentPatternAs(UIA_TextPatternId, IID_IUIAutomationTextPattern, (void**)&tp);
     if (SUCCEEDED(hr) && tp) {
@@ -1027,6 +1072,7 @@ static bool TryExtractTextAtPoint(const UiaRequest& request, std::wstring& outTe
         }
     }
 
+    if (shouldStop()) { el->Release(); return false; }
     IUIAutomationValuePattern* vp = nullptr;
     hr = el->GetCurrentPatternAs(UIA_ValuePatternId, IID_IUIAutomationValuePattern, (void**)&vp);
     if (SUCCEEDED(hr) && vp) {
@@ -1042,6 +1088,7 @@ static bool TryExtractTextAtPoint(const UiaRequest& request, std::wstring& outTe
         }
     }
 
+    if (shouldStop()) { el->Release(); return false; }
     BSTR name = nullptr;
     el->get_CurrentName(&name);
     if (name) { outText.assign(name, SysStringLen(name)); SysFreeString(name); }
@@ -1136,10 +1183,15 @@ static void EnsureVisibility(bool show) {
     if (show && !g.visible) {
         ShowWindow(g.hwndHost, SW_SHOWNOACTIVATE);
         g.visible = true;
-    } else if (!show && g.visible) {
-        ShowWindow(g.hwndHost, SW_HIDE);
+    } else if (!show) {
+        if (g.visible) ShowWindow(g.hwndHost, SW_HIDE);
         g.visible = false;
-        // Reset last state so next show forces update
+        g.showingText = false;
+        g.showingMag = false;
+        g.currentText.clear();
+        g.textStableActive = false;
+        g.lastValidTextWindow = nullptr;
+        // Force a repaint when the overlay becomes visible again.
         g.lastWindowRect = { 0, 0, 0, 0 };
     }
 }
@@ -1353,7 +1405,8 @@ static void UiaWorkerThread() {
         }
 
         std::wstring text;
-        bool success = TryExtractTextAtPoint(request, text);
+        bool protectedTarget = false;
+        bool success = TryExtractTextAtPoint(request, text, protectedTarget);
 
         UiaResult result{};
         result.pt = request.pt;
@@ -1361,6 +1414,7 @@ static void UiaWorkerThread() {
         result.requestTick = request.tick;
         result.text = success ? text : L"";
         result.valid = success;
+        result.protectedTarget = protectedTarget;
         result.seq = request.seq;
         result.settingsGeneration = request.settingsGeneration;
         result.tick = GetTickCount64();
@@ -1382,17 +1436,19 @@ static bool CreateWindows() {
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = HostWndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                             GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                             (LPCWSTR)&HostWndProc, &wc.hInstance)) {
+        return false;
+    }
     wc.lpszClassName = kHostClassName;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
 
-    ATOM atom = RegisterClassExW(&wc);
-    if (!atom) {
-        DWORD err = GetLastError();
-        if (err != ERROR_CLASS_ALREADY_EXISTS) {
-            return false;
-        }
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"Host window class registration failed: %u", GetLastError());
+        return false;
     }
+    g.hostClassModule = wc.hInstance;
 
     DWORD ex = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT;
     DWORD style = WS_POPUP;
@@ -1403,7 +1459,11 @@ static bool CreateWindows() {
         0, 0, 10, 10,
         nullptr, nullptr, wc.hInstance, nullptr
     );
-    if (!g.hwndHost) return false;
+    if (!g.hwndHost) {
+        UnregisterClassW(kHostClassName, wc.hInstance);
+        g.hostClassModule = nullptr;
+        return false;
+    }
 
     ApplyOpacityForMode(true, false);
 
@@ -1442,7 +1502,10 @@ static void DestroyWindows() {
         DestroyWindow(g.hwndHost);
         g.hwndHost = nullptr;
     }
-    UnregisterClassW(kHostClassName, GetModuleHandleW(nullptr));
+    if (g.hostClassModule) {
+        UnregisterClassW(kHostClassName, g.hostClassModule);
+        g.hostClassModule = nullptr;
+    }
 }
 
 static void TickUpdate() {
@@ -1495,6 +1558,7 @@ static void TickUpdate() {
 
     bool haveText = false;
     bool freshNegative = false;
+    bool protectedAtCursor = false;
     std::wstring text;
 
     if (wantText) {
@@ -1542,16 +1606,26 @@ static void TickUpdate() {
             const bool resultAtCursor = IsMatchingUiaResult(
                 result, pt, targetWindow,
                 g.settingsGeneration.load(std::memory_order_relaxed), nowTick);
+            protectedAtCursor = resultAtCursor && result.protectedTarget;
             freshNegative = resultAtCursor && !result.valid &&
                             result.seq == g.lastUiaRequestSeq &&
                             !g.uiaRequestInFlight;
-            if (resultAtCursor && result.valid) {
+            if (IsUsableUiaResult(result, pt, targetWindow,
+                    g.settingsGeneration.load(std::memory_order_relaxed), nowTick)) {
                 text = result.text;
                 haveText = true;
                 g.lastValidTextTick = nowTick;
                 g.lastValidTextPoint = pt;
                 g.lastValidTextWindow = targetWindow;
             }
+        }
+
+        // Password and unreadable-password-property targets are hard-stop
+        // states. Never let mode hysteresis resurrect previous content here.
+        if (protectedAtCursor) {
+            EnsureVisibility(false);
+            g.lastValidTextTick = 0;
+            return;
         }
 
         static bool dbgLoggedNoText = false;
@@ -1616,7 +1690,9 @@ static void TickUpdate() {
     // Resolve the transition before sizing, positioning, or showing the host.
     // Otherwise a rejected transition briefly applies the wrong bubble size.
     bool wantModeChange = (showText != g.showingText) || (showMag != g.showingMag);
-    if (wantModeChange && (nowTick - g.lastModeChangeTick < 250)) {
+    if (wantModeChange && (nowTick - g.lastModeChangeTick < 250) &&
+        (!g.showingText || haveText)) {
+        // A missing or stale result must always be allowed to hide text.
         showText = g.showingText;
         showMag = g.showingMag;
         if (showText) {
@@ -1683,14 +1759,23 @@ static void TickUpdate() {
 
 static void WorkerThread() {
     g.workerFinished.store(false, std::memory_order_release);
-    g.stopRequested.store(false, std::memory_order_release);
+    // WhTool_ModInit is the sole lifecycle reset; never erase an uninit request.
     // g.threadId = GetCurrentThreadId();
     // Wh_Log(L"WorkerThread: Started. ThreadId=%u", g.threadId);
 
     MSG msg;
     PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE); // ensure queue exists
+    // Shutdown may have been requested before the worker's queue existed.
+    if (g.stopRequested.load(std::memory_order_acquire)) {
+        g.workerFinished.store(true, std::memory_order_release);
+        return;
+    }
 
     LoadSettings();
+    if (g.stopRequested.load(std::memory_order_acquire)) {
+        g.workerFinished.store(true, std::memory_order_release);
+        return;
+    }
 
     // Use LL Hook if CapsLock needed
     if (g.cfg.triggerKey == TriggerKey::CapsLock) {
@@ -1705,21 +1790,28 @@ static void WorkerThread() {
     if (!InitMagnification()) {
         Wh_Log(L"WorkerThread: InitMagnification failed. Magnifier mode will not work.");
     }
+    if (g.stopRequested.load(std::memory_order_acquire)) {
+        UninstallHooks();
+        UninitMagnification();
+        g.workerFinished.store(true, std::memory_order_release);
+        return;
+    }
 
     if (!CreateWindows()) {
         Wh_Log(L"WorkerThread: CreateWindows failed. Exiting.");
         // g.running = false;
+        UninstallHooks();
         UninitMagnification();
-        // UninitUIA();
         g.workerFinished.store(true, std::memory_order_release);
         return;
     }
     // Wh_Log(L"WorkerThread: Window created. HWNDHost=%p", g.hwndHost);
 
-    g.running = true;
-    
-    // Start separate UIA/Text thread
-    g.uiaThread = std::thread(UiaWorkerThread);
+    if (!g.stopRequested.load(std::memory_order_acquire)) {
+        g.running = true;
+        // Start separate UIA/Text thread only if shutdown wasn't requested.
+        g.uiaThread = std::thread(UiaWorkerThread);
+    }
 
     while (g.running && !g.stopRequested.load(std::memory_order_acquire)) {
         DWORD waitMs = (DWORD)g.cfg.updateIntervalMs;
@@ -1805,9 +1897,10 @@ void WhTool_ModUninit() {
     }
     g.uiaCv.notify_all();
 
-    if (g.threadId != 0) {
-        PostThreadMessage(g.threadId, WM_APP_EXIT_THREAD, 0, 0);
-        PostThreadMessage(g.threadId, WM_QUIT, 0, 0);
+    if (g.threadId != 0 &&
+        !PostThreadMessage(g.threadId, WM_APP_EXIT_THREAD, 0, 0)) {
+        // Queue may not exist yet; the atomic stop flag still guarantees exit.
+        Wh_Log(L"Worker exit message not posted: %u", GetLastError());
     }
 
     if (g.worker.joinable()) {
