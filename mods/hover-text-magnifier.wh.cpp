@@ -388,9 +388,7 @@ struct RuntimeState {
 
     // Debounce for text loss to prevent flicker
     ULONGLONG lastValidTextTick = 0;
-    DWORD lastModeChangeTick = 0;
-    DWORD textStableSinceTick = 0;
-    bool textStableActive = false;
+    ULONGLONG lastModeChangeTick = 0;
 
     float dpiScale = 1.0f;
     int effectiveBubbleWidth = 520;
@@ -422,6 +420,8 @@ struct RuntimeState {
     AppSettings cfg;
 };
 
+// Only safe for this dedicated tool process: Wh_ModUninit exits the process.
+// Prevent destruction of joinable std::threads if a UIA provider never returns.
 [[clang::no_destroy]] static RuntimeState g;
 
 static void UiaWorkerThread();
@@ -513,14 +513,20 @@ static bool TryParseColorSetting(PCWSTR source, int& outColor) {
     if (text.empty()) return false;
 
     const bool wrappedRgb = _wcsnicmp(text.c_str(), L"rgb(", 4) == 0;
-    if (wrappedRgb || text.find(L',') != std::wstring::npos) {
+    if (wrappedRgb || text.find(L',') != std::wstring::npos ||
+        text.find_first_of(L" \t") != std::wstring::npos) {
         if (wrappedRgb && text.back() != L')') return false;
         const std::wstring values = wrappedRgb ?
             text.substr(4, text.size() - 5) : text;
         int r = -1, g = -1, b = -1;
         wchar_t extra = 0;
-        if (swscanf_s(values.c_str(), L" %d , %d , %d %c",
-                      &r, &g, &b, &extra, 1) != 3 ||
+        const bool commas = values.find(L',') != std::wstring::npos;
+        const int count = commas ?
+            swscanf_s(values.c_str(), L" %d , %d , %d %c",
+                      &r, &g, &b, &extra, 1) :
+            swscanf_s(values.c_str(), L" %d %d %d %c",
+                      &r, &g, &b, &extra, 1);
+        if (count != 3 ||
             r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
             return false;
         }
@@ -534,6 +540,10 @@ static bool TryParseColorSetting(PCWSTR source, int& outColor) {
     else if (_wcsnicmp(digits, L"0x", 2) == 0) {
         digits += 2;
         base = 16;
+    } else if (text.find_first_of(L"ABCDEFabcdef") != std::wstring::npos &&
+               std::all_of(text.begin(), text.end(),
+                           [](wchar_t c) { return iswxdigit(c) != 0; })) {
+        base = 16; // Preserve legacy unprefixed hex with A-F letters.
     }
     if (!*digits) return false;
     wchar_t* endPtr = nullptr;
@@ -826,7 +836,6 @@ static void LoadSettings() {
     g.currentText.clear();
     g.showingText = false;
     g.showingMag = false;
-    g.textStableActive = false;
     g.lastValidTextWindow = nullptr;
     g.lastValidTextTick = 0;
     g.lastModeChangeTick = 0;
@@ -1189,8 +1198,7 @@ static void EnsureVisibility(bool show) {
         g.showingText = false;
         g.showingMag = false;
         g.currentText.clear();
-        g.textStableActive = false;
-        g.lastValidTextWindow = nullptr;
+            g.lastValidTextWindow = nullptr;
         // Force a repaint when the overlay becomes visible again.
         g.lastWindowRect = { 0, 0, 0, 0 };
     }
@@ -1607,9 +1615,10 @@ static void TickUpdate() {
                 result, pt, targetWindow,
                 g.settingsGeneration.load(std::memory_order_relaxed), nowTick);
             protectedAtCursor = resultAtCursor && result.protectedTarget;
+            // A matching recent negative remains valid while a refresh is in
+            // flight; otherwise placeholders blink every polling interval.
             freshNegative = resultAtCursor && !result.valid &&
-                            result.seq == g.lastUiaRequestSeq &&
-                            !g.uiaRequestInFlight;
+                            !result.protectedTarget;
             if (IsUsableUiaResult(result, pt, targetWindow,
                     g.settingsGeneration.load(std::memory_order_relaxed), nowTick)) {
                 text = result.text;
@@ -1648,14 +1657,6 @@ static void TickUpdate() {
             dbgLoggedNoText = false;
         }
 
-        if (haveText) {
-            if (!g.textStableActive) {
-                g.textStableActive = true;
-                g.textStableSinceTick = nowTick;
-            }
-        } else {
-            g.textStableActive = false;
-        }
     }
 
     g.lastCursor = pt;
@@ -1672,7 +1673,9 @@ static void TickUpdate() {
     } else if (g.cfg.mode == Mode::MagnifierOnly) {
         showMag = (g.magReady && g.hwndMag != nullptr);
     } else { // Auto
-        if (haveText && g.textStableActive && (nowTick - g.textStableSinceTick >= 120)) {
+        // Show a verified result immediately; the old 120 ms stability delay
+        // made the bubble vanish after UIA had already returned useful text.
+        if (haveText) {
             showText = true;
         } else if (g.cfg.fallbackToMagnifier && wantMag && g.magReady && g.hwndMag &&
                    (nowTick - g.lastValidTextTick >= 500)) {
@@ -1690,7 +1693,8 @@ static void TickUpdate() {
     // Resolve the transition before sizing, positioning, or showing the host.
     // Otherwise a rejected transition briefly applies the wrong bubble size.
     bool wantModeChange = (showText != g.showingText) || (showMag != g.showingMag);
-    if (wantModeChange && (nowTick - g.lastModeChangeTick < 250) &&
+    if (wantModeChange && g.visible && (showText || showMag) &&
+        (nowTick - g.lastModeChangeTick < 250) &&
         (!g.showingText || haveText)) {
         // A missing or stale result must always be allowed to hide text.
         showText = g.showingText;
