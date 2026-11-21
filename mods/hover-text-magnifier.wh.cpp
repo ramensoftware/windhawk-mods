@@ -2,13 +2,14 @@
 // @id              hover-text-magnifier
 // @name            Hover Text Magnifier (macOS-style)
 // @description     On-cursor hover bubble with large text via UI Automation; optional pixel magnifier fallback.
-// @version         1.3.4
+// @version         1.3.5
 // @author          Math Shamenson
 // @github          https://github.com/insane66613
 // @license         MIT
 // @architecture    x86
 // @architecture    x86-64
 // @include         windhawk.exe
+// @include         windhawk-mod-uiaccess.exe
 // @compilerOptions -lgdi32 -luxtheme -lole32 -loleaut32 -luuid -lshell32
 // ==/WindhawkMod==
 
@@ -35,6 +36,13 @@ Inspired by the macOS feature, it displays a high-contrast, large-text bubble fo
 ## Usage
 *   **Default:** Hold **Ctrl** and hover over any text to see it magnified.
 *   **Toggle:** Go to settings and set Trigger Key to **CapsLock**. Tap CapsLock to toggle the magnifier on/off permanently.
+
+## Administrator applications (Windhawk 2.0)
+Windhawk 2.0 selects its UIAccess helper host for this mod, enabling accessibility
+features in elevated application windows without running the mod as administrator.
+Windhawk 1.7.3 retains its normal-user tool host; it cannot inspect elevated
+applications. Neither host can inspect the secure UAC desktop.
+
 */
 // ==/WindhawkModReadme==
 
@@ -276,6 +284,7 @@ struct UiaRequest {
     uint64_t seq = 0;
     uint64_t settingsGeneration = 0;
     ULONGLONG tick = 0;
+    HWND targetWindow = nullptr;
 };
 
 struct UiaResult {
@@ -285,6 +294,7 @@ struct UiaResult {
     uint64_t seq = 0;
     uint64_t settingsGeneration = 0;
     ULONGLONG tick = 0;
+    HWND targetWindow = nullptr;
 };
 
 struct RuntimeState {
@@ -299,6 +309,7 @@ struct RuntimeState {
     std::condition_variable uiaCv;
     bool uiaThreadShouldExit = false;
     bool uiaWorkAvailable = false;
+    bool uiaRequestInFlight = false;
     UiaRequest uiaRequest;
     UiaResult uiaResult;
     uint64_t lastUiaRequestSeq = 0;
@@ -325,6 +336,8 @@ struct RuntimeState {
 
     POINT lastCursor{ -1, -1 };
     ULONGLONG lastUiaQueryTick = 0;
+    POINT lastValidTextPoint{ -1, -1 };
+    HWND lastValidTextWindow = nullptr;
 
     bool visible = false;
     bool showingText = false;
@@ -451,44 +464,48 @@ static void ApplyOpacityForMode(bool showText, bool showMag) {
     SetLayeredWindowAttributes(g.hwndHost, 0, OpacityPercentToByte(percent), LWA_ALPHA);
 }
 
-static bool TryParseColorSetting(PCWSTR value, int& outColor) {
-    if (!value) return false;
+static bool TryParseColorSetting(PCWSTR source, int& outColor) {
+    if (!source) return false;
+    std::wstring text(source);
+    const auto nonSpace = [](wchar_t c) { return !iswspace(c); };
+    text.erase(text.begin(), std::find_if(text.begin(), text.end(), nonSpace));
+    text.erase(std::find_if(text.rbegin(), text.rend(), nonSpace).base(),
+               text.end());
+    if (text.empty()) return false;
 
-    const wchar_t* p = value;
-    while (*p && iswspace(*p)) ++p;
-    if (!*p) return false;
-    if (wcsncmp(p, L"rgb", 3) == 0) {
-        const wchar_t* open = wcschr(p, L'(');
-        const wchar_t* close = wcschr(p, L')');
-        if (open && close && close > open) {
-            p = open + 1;
+    if (_wcsnicmp(text.c_str(), L"rgb(", 4) == 0) {
+        int r = -1, g = -1, b = -1;
+        wchar_t extra = 0;
+        if (swscanf_s(text.c_str() + 4, L" %d , %d , %d ) %c",
+                      &r, &g, &b, &extra, 1) != 3 ||
+            r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255 ||
+            text.back() != L')') {
+            return false;
         }
-    }
-
-    int r = -1, g = -1, b = -1;
-    if (swscanf_s(p, L"%d%*[, ]%d%*[, ]%d", &r, &g, &b) == 3) {
-        r = ClampInt(r, 0, 255);
-        g = ClampInt(g, 0, 255);
-        b = ClampInt(b, 0, 255);
         outColor = (r << 16) | (g << 8) | b;
         return true;
     }
 
-    if (*p == L'#') ++p;
-
-    bool hasHexAlpha = false;
-    for (const wchar_t* t = p; *t; ++t) {
-        if (iswspace(*t)) break;
-        if ((*t >= L'A' && *t <= L'F') || (*t >= L'a' && *t <= L'f')) {
-            hasHexAlpha = true;
-            break;
-        }
+    const wchar_t* digits = text.c_str();
+    int base = 10;
+    if (*digits == L'#') { ++digits; base = 16; }
+    else if (_wcsnicmp(digits, L"0x", 2) == 0) {
+        digits += 2;
+        base = 16;
+    } else if (text.size() == 6 &&
+               std::all_of(text.begin(), text.end(),
+                           [](wchar_t c) { return iswxdigit(c) != 0; })) {
+        base = 16;
     }
-
-    int base = hasHexAlpha ? 16 : 0; // base=0 honors 0x for hex, otherwise decimal
-    unsigned long parsed = wcstoul(p, nullptr, base);
-    if (parsed > 0xFFFFFFUL) parsed &= 0xFFFFFFUL;
-    outColor = (int)parsed;
+    if (!*digits) return false;
+    wchar_t* endPtr = nullptr;
+    unsigned long value = wcstoul(digits, &endPtr, base);
+    if (endPtr == digits || *endPtr != L'\0' || value > 0xFFFFFFUL ||
+        (base == 10 && !std::all_of(text.begin(), text.end(),
+                       [](wchar_t c) { return iswdigit(c) != 0; }))) {
+        return false;
+    }
+    outColor = (int)value;
     return true;
 }
 
@@ -848,7 +865,7 @@ static void UninitMagnification() {
 }
 
 static bool InitUIA() {
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (SUCCEEDED(hr)) {
         g.comInitedHere = true;
     } else if (hr == RPC_E_CHANGED_MODE) {
@@ -902,6 +919,13 @@ static bool TryExtractTextAtPoint(const UiaRequest& request, std::wstring& outTe
     HRESULT hr = g.uia->ElementFromPoint(pt, &el);
     if (FAILED(hr) || !el) return false;
 
+    // Do not read UIA value, text, or name from password controls.
+    BOOL isPassword = FALSE;
+    if (FAILED(el->get_CurrentIsPassword(&isPassword)) || isPassword) {
+        el->Release();
+        return false;
+    }
+
     auto pickUnit = [&request]() -> TextUnit {
         switch (request.textUnit) {
             case HoverTextUnit::Line:      return TextUnit_Line;
@@ -923,9 +947,11 @@ static bool TryExtractTextAtPoint(const UiaRequest& request, std::wstring& outTe
             range->Release();
         }
         tp2->Release();
-        el->Release();
         outText = TrimAndCollapse(outText);
-        return !outText.empty();
+        if (!outText.empty()) {
+            el->Release();
+            return true;
+        }
     }
 
     IUIAutomationTextPattern* tp = nullptr;
@@ -941,9 +967,11 @@ static bool TryExtractTextAtPoint(const UiaRequest& request, std::wstring& outTe
             range->Release();
         }
         tp->Release();
-        el->Release();
         outText = TrimAndCollapse(outText);
-        return !outText.empty();
+        if (!outText.empty()) {
+            el->Release();
+            return true;
+        }
     }
 
     IUIAutomationValuePattern* vp = nullptr;
@@ -953,10 +981,12 @@ static bool TryExtractTextAtPoint(const UiaRequest& request, std::wstring& outTe
         vp->get_CurrentValue(&b);
         if (b) { outText.assign(b, SysStringLen(b)); SysFreeString(b); }
         vp->Release();
-        el->Release();
         outText = TrimAndCollapse(outText);
         if ((int)outText.size() > maxTextLen) outText.resize(maxTextLen);
-        return !outText.empty();
+        if (!outText.empty()) {
+            el->Release();
+            return true;
+        }
     }
 
     BSTR name = nullptr;
@@ -1101,8 +1131,13 @@ static void UpdateMagnifierSource(HWND hwndMag, POINT pt, int w, int h) {
     int srcW = RoundToInt((float)w / zoom);
     int srcH = RoundToInt((float)h / zoom);
 
-    RECT work = GetWorkAreaForPoint(pt);
-    LONG workL = work.left, workT = work.top, workR = work.right, workB = work.bottom;
+    // Capture must include taskbars; work-area bounds are only for placement.
+    MONITORINFO monitorInfo{ sizeof(MONITORINFO) };
+    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    if (!monitor || !GetMonitorInfoW(monitor, &monitorInfo)) return;
+    RECT bounds = monitorInfo.rcMonitor;
+    LONG workL = bounds.left, workT = bounds.top;
+    LONG workR = bounds.right, workB = bounds.bottom;
 
     int halfWLow  = srcW / 2;
     int halfWHigh = (srcW + 1) / 2;
@@ -1273,6 +1308,7 @@ static void UiaWorkerThread() {
 
         UiaResult result{};
         result.pt = request.pt;
+        result.targetWindow = request.targetWindow;
         result.text = success ? text : L"";
         result.valid = success;
         result.seq = request.seq;
@@ -1284,6 +1320,7 @@ static void UiaWorkerThread() {
             if (result.seq >= g.uiaResult.seq) {
                 g.uiaResult = result;
             }
+            g.uiaRequestInFlight = false;
         }
     }
 
@@ -1397,6 +1434,8 @@ static void TickUpdate() {
     }
 
     UpdateEffectiveSizing(pt);
+    const HWND targetWindow = GetAncestor(WindowFromPoint(pt), GA_ROOT);
+    const bool cursorMoved = (pt.x != g.lastCursor.x || pt.y != g.lastCursor.y);
 
     int w = g.effectiveBubbleWidth;
     int h = g.effectiveBubbleHeight;
@@ -1410,26 +1449,35 @@ static void TickUpdate() {
     std::wstring text;
 
     if (wantText) {
-        if (nowTick - g.lastUiaQueryTick >= (ULONGLONG)g.cfg.uiaQueryMinIntervalMs) {
-            g.lastUiaQueryTick = nowTick;
-            
-            // Dispatch work to UIA thread
+        // Single-flight UIA: never invalidate a slow result with a newer request.
+        // Check a stationary cursor less often while retaining responsive movement.
+        const ULONGLONG queryIntervalMs = cursorMoved ?
+            (ULONGLONG)g.cfg.uiaQueryMinIntervalMs : 300;
+        if (nowTick - g.lastUiaQueryTick >= queryIntervalMs) {
+            bool dispatch = false;
             {
                 std::lock_guard<std::mutex> lock(g.uiaMutex);
-                g.lastUiaRequestSeq = g.uiaNextSeq.fetch_add(1, std::memory_order_relaxed) + 1;
-                g.uiaRequest = UiaRequest{
-                    pt,
-                    g.cfg.textUnit,
-                    g.cfg.maxTextLen,
-                    g.lastUiaRequestSeq,
-                    g.settingsGeneration.load(std::memory_order_relaxed),
-                    nowTick
-                };
-                g.uiaWorkAvailable = true;
+                if (!g.uiaRequestInFlight && !g.uiaWorkAvailable) {
+                    g.lastUiaRequestSeq =
+                        g.uiaNextSeq.fetch_add(1, std::memory_order_relaxed) + 1;
+                    g.uiaRequest = UiaRequest{
+                        pt,
+                        g.cfg.textUnit,
+                        g.cfg.maxTextLen,
+                        g.lastUiaRequestSeq,
+                        g.settingsGeneration.load(std::memory_order_relaxed),
+                        nowTick,
+                        targetWindow
+                    };
+                    g.uiaWorkAvailable = true;
+                    g.uiaRequestInFlight = true;
+                    g.lastUiaQueryTick = nowTick;
+                    dispatch = true;
+                }
             }
-            g.uiaCv.notify_one();
+            if (dispatch) g.uiaCv.notify_one();
         }
-        
+
         // Retrieve latest result
         {
             std::lock_guard<std::mutex> lock(g.uiaMutex);
@@ -1437,23 +1485,28 @@ static void TickUpdate() {
             const LONG dx = std::abs(result.pt.x - pt.x);
             const LONG dy = std::abs(result.pt.y - pt.y);
             const bool fresh = result.valid &&
-                result.seq == g.lastUiaRequestSeq &&
+                result.targetWindow == targetWindow &&
                 result.settingsGeneration == g.settingsGeneration.load(std::memory_order_relaxed) &&
                 nowTick >= result.tick &&
-                nowTick - result.tick <= 250 &&
-                dx <= 12 && dy <= 12;
+                nowTick - result.tick <= 750 &&
+                dx <= 4 && dy <= 4;
             if (fresh) {
                 text = result.text;
                 haveText = true;
                 g.lastValidTextTick = nowTick;
+                g.lastValidTextPoint = pt;
+                g.lastValidTextWindow = targetWindow;
             }
         }
 
         static bool dbgLoggedNoText = false;
         if (!haveText) {
              // Hysteresis: If we lost text, check if we should debounce
-            if (g.showingText && !g.currentText.empty() && 
-                (nowTick - g.lastValidTextTick < 800)) // 800ms grace period
+            if (g.showingText && !g.currentText.empty() &&
+                targetWindow == g.lastValidTextWindow &&
+                std::abs(pt.x - g.lastValidTextPoint.x) <= 2 &&
+                std::abs(pt.y - g.lastValidTextPoint.y) <= 2 &&
+                (nowTick - g.lastValidTextTick < 800)) // same-target grace period
             {
                 haveText = true;
                 text = g.currentText;
@@ -1608,9 +1661,19 @@ static void WorkerThread() {
     g.uiaThread = std::thread(UiaWorkerThread);
 
     while (g.running && !g.stopRequested.load(std::memory_order_acquire)) {
+        DWORD waitMs = (DWORD)g.cfg.updateIntervalMs;
+        if (!IsTriggerDown(g.cfg.triggerKey)) {
+            waitMs = 100; // Low-overhead idle mode.
+        } else if (g.showingText) {
+            POINT p{};
+            if (GetCursorPos(&p) && p.x == g.lastCursor.x &&
+                p.y == g.lastCursor.y) {
+                waitMs = 50; // Text display needs no 60-FPS repaint.
+            }
+        }
         MsgWaitForMultipleObjectsEx(
             0, nullptr,
-            (DWORD)g.cfg.updateIntervalMs,
+            waitMs,
             QS_ALLINPUT,
             MWMO_INPUTAVAILABLE
         );
@@ -1665,6 +1728,7 @@ static void WorkerThread() {
 BOOL WhTool_ModInit() {
     g.stopRequested.store(false, std::memory_order_release);
     g.workerFinished.store(false, std::memory_order_release);
+
     g.worker = std::thread(WorkerThread);
     g.threadId = GetThreadId((HANDLE)g.worker.native_handle());
     return TRUE;
