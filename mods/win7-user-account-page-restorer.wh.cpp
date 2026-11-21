@@ -3341,10 +3341,10 @@ BOOL Wh_ModInit() {
     if (g_stopEvent) ResetEvent(g_stopEvent);
     // Optional: if the symbol is missing, the mod works as before (the cue is simply left as Explorer sets it).
     if (HMODULE explorerFrame = LoadLibraryExW(L"ExplorerFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32)) {
-        const WindhawkUtils::SYMBOL_HOOK cueHooks[] = {{
+        const WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] = {{
             {L"public: virtual long __cdecl CSearchBox::SetCueAndTooltipText(unsigned short const *,unsigned short const *)"},
             &CSearchBox_SetCue_Orig, CSearchBox_SetCue_Hook, true}};
-        if (!WindhawkUtils::HookSymbols(explorerFrame, cueHooks, ARRAYSIZE(cueHooks)))
+        if (!WindhawkUtils::HookSymbols(explorerFrame, explorerFrameDllHooks, ARRAYSIZE(explorerFrameDllHooks)))
             Wh_Log(L"CSearchBox::SetCueAndTooltipText not hooked: search box cue left unchanged");
     }
     // Download, verification and generation happen on a worker thread: Explorer never waits for them. Until they are
