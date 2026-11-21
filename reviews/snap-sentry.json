@@ -9,6 +9,15 @@
       "parentId": null,
       "timestamp": 1791311718,
       "votes": 0
+    },
+    {
+      "authorName": "mario0318",
+      "content": "Thanks, your review is what 0.24.0 is built around! \n\nIt will be released in the coming days. It adds a preview, the folder, a choice of what clicking the notification does, which buttons show, and a highlighted button. Each one can be turned on or off. The popup normally follows your dark or light theme. A white dialog means the notification couldn’t be shown and the fallback appeared. Its title bar is now dark, and turning on logging shows why it happened.\n\nhappy to know this mod comes in handy!",
+      "id": 135,
+      "modVersion": "0.23.0",
+      "parentId": 40,
+      "timestamp": 1795225656,
+      "votes": 0
     }
   ]
 }
