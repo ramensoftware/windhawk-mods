@@ -14,275 +14,237 @@
 /*
 # Taskbar App State Indicators
 
-Marks every task list button of the Windows 11 taskbar according to the
-state of its windows, so open, maximized and minimized buttons can be told
-apart at a glance.
+See at a glance which taskbar apps are open, maximized, minimized, busy or
+waiting for you. Small marks are drawn on an invisible rounded frame around
+each icon, and they move along that frame whenever something changes.
 
 ![Demo](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/taskbar-app-state-indicators/demo.gif)
 
-All indicators live on one shared **frame**: a rounded rectangle around the
-button's icon, defined in the General section. Its distance from the icon is
-given as `left, top, right, bottom` and measured to the frame's outer edge:
-`0, 0, 0, 0` puts the outer edge on the icon's edges, positive values
-expand it outwards and negative values pull it over the icon. The stroke
-thickness grows inwards from that edge, towards the icon, so the frame's
-outer size stays put as it gets thicker. Its corner radius is set there
-too. The frame itself is never
-drawn — it's the template the indicators are drawn on, so they always line
-up with each other:
+## What the marks mean
 
-- **Corner marks** for buttons with a window shown on the desktop (not
-  minimized): L-shaped pieces of the frame at its two bottom corners; a
-  window that is shown *and* maximized gets all four corners. With
-  **Connect the corners**, the bottom corners are joined along the bottom
-  edge into a cup under the icon, and a maximized window's top corners
-  along the top edge into a cap over it. Leg length (the straight part beyond the
-  corner; 0 draws just the corners), rounded or square ends, and a corner
-  style — rounded (a quarter arc) or diagonal (the straight chord between
-  the arc's end points) — are configurable.
-- **Minimized underline** for buttons whose windows are minimized: a piece
-  of the frame's bottom edge, centered on it, shown when the button has a
-  minimized window and isn't marked as open (with the "any" group rule,
-  every window is minimized or hidden; with "all", at least one is
-  minimized). Its own length (0 spans the whole straight part of the bottom
-  edge) and rounded or square ends. A **dimmed underline** marks apps
-  running off screen: on other virtual desktops (minimized there or not),
-  or cloaked, like suspended Store apps.
-- **Multi-window dot** for buttons with two or more windows: a dot centered
-  on the frame's left edge, with its own diameter.
-- **Badge dot** for buttons with a badge: the taskbar's own badges —
-  notification counts (the small dot with small taskbar icons) and the
-  overlay icons apps put on their icon — are
-  hidden, and every button that has one gets a dot centered on the frame's
-  right edge instead, in its own color (`#EB5757` by default) and diameter,
-  in every window state: open, maximized and minimized alike.
+- **Open window**: the two bottom corners, joined into a cup under the icon.
+- **Maximized window**: all four corners, with a cap over the icon too, or
+  only the top corners if you prefer. Optionally, the corners an open or
+  maximized app doesn't get are drawn dimmed, so the whole frame shows.
+- **Minimized app**: an underline. It's dimmed when the app's windows are
+  on another virtual desktop, or suspended like some Store apps.
+- **Several windows**: a grey dot on the left edge.
+- **Badge** (unread messages, notifications, overlay icons): a red dot on
+  the right edge, in every window state.
+- **Progress** (downloads, copies, installs): the marks fill from left to
+  right in green, yellow while paused, red on error. When the end isn't
+  known, the marks run around the frame, or the underline sweeps across
+  for a minimized app.
+- **Attention**: the marks turn orange while the app's button flashes.
+- **Colors**: the app in front gets your accent color, every other app
+  grey.
+- **Pinned apps** (optional, off by default): a dot at the top center,
+  whether the app is running, minimized or not running. A pinned app's top
+  corners then stay apart instead of forming a cap, leaving the dot its
+  place.
 
-**Animations.** Every indicator lives on the frame, and every change
-moves along it, like a circle rolling on the path and drawing it: when a
-minimized app is restored, its underline splits into two and the halves
-slide along the bottom edge and around the arcs into the two bottom
-corners (and merge back when it's minimized again); when a window is
-maximized, the top corners start as a circle at the top center and travel
-outwards along the top edge and around the arcs, and the path they draw
-settles into the corner marks (or, connected, into the cap). A launched
-app's corners split from a dot at the bottom center, the multi-window and
-badge dots grow from their centers when they appear and shrink back into
-them when they go, and when a button loses all its marks they shrink where
-they are and fade. Active and inactive
-colors fade into each other. Movements are swift (160 ms by default,
-adjustable), start from wherever an interrupted one had got to, and are
-skipped when Windows animations are turned off.
+The taskbar's own running indicator and progress bar are replaced by these
+marks. Its multi-window mark and badges are replaced too while the
+matching dot is on. Everything comes back when the mod is disabled.
 
-**Indeterminate progress.** While an app shows indeterminate progress (the
-taskbar's moving bar, hidden or not), its indicators take over that
-motion: a minimized app's underline becomes two bars sweeping left to
-right along the bottom edge, each as long as the underline, and an open or
-maximized app's corner marks (or cup and cap) run clockwise around the
-frame, one full turn per cycle, with the multi-window and badge dots
-running along with them, and settle back where they belong. Both follow
-the native bar's 2-second cycle and its ease-in, ease-out curve; when
-progress stops, a turn under way is finished first. During a minimized
-app's sweep the dots stay where they are, clear of it on the side edges.
-Like the native bar, this runs with Windows animations turned off too.
+## Animations
 
-**Attention.** While an app requests attention (its taskbar button
-flashes), its corner marks or underline take the attention color, from
-the taskbar's own flash until it stops; the dots keep theirs.
+A minimized app's underline splits into the corners when it's restored, a
+maximized window's top corners travel up from the top center, and the dots
+grow from their centers. Animations follow the Windows animation setting,
+except progress, which keeps moving like the native progress bar.
 
-**Determinate progress.** While an app shows determinate progress (the
-taskbar's filling bar, hidden or not), its indicators fill with the
-progress color (green by default; the paused and error colors follow the
-native bar's) from left to right, so the part still to go keeps the
-active or inactive color — the accent tells you the app is in front while
-it works. A minimized app's underline fills like the native bar; an open
-app's cup (or its two bottom corners, one after the other) fills along its
-path from the left; a maximized app's cap and cup (or top and bottom
-corners) fill together at the same rate. The fill rides along with every
-movement of the indicators, and fades out when the progress ends. On a
-right-to-left taskbar, progress fills and sweeps from the right, like the
-native bar.
+## Settings
 
-Colors follow the system live: a new accent color applies at once (from
-the system's color-change notification), and in
-a high contrast theme every color gives way to the system's own (the
-highlight color for the active app, the badge and attention, button text
-for the others, the hyperlink color for progress).
+- **Frame**: how far the frame sits from the icon, its corner radius, its
+  line thickness (which grows inwards), and whether the corners join into a
+  cup and a cap.
+- **Colors**: the colors and opacity of the corner marks and the underline,
+  for the app in front and for every other app. Empty means your accent color; `#Light|#Dark` sets a color per
+  theme, and `#FF0000,#00FF00` a gradient.
+- **Open and Maximized Windows**: the marks' shape, whether maximized
+  windows keep their bottom corners, and the dimmed missing corners.
+- **Minimized Apps**: the underline's length and ends, and its dimmed
+  variant for apps running off screen.
+- **Apps With Several Windows**, **Apps With a Badge**, **Pinned Apps**:
+  turn each dot on or off, and set its size and color.
+- **Progress**, **Attention**: their colors.
+- **Animations**: on or off, and how long a movement takes.
+- **Window Rules**: what counts as an open window.
 
-Colors are shared by all indicators and set in the General section: an
-**active color** for the button of the foreground app (the system accent
-color by default) and an **inactive color** for every other button
-(`#878787` in the light theme, `#AEAEAE` in the dark theme by default).
-Both accept Light | Dark separation (`#000000|#FFFFFF`) and multi-color
-horizontal gradients (`#FF0000,#00FF00`), with an opacity multiplier per
-theme; left empty, the system accent color is used — the plain accent in
-both themes, or, with **Theme-shaded accent** on, a darker shade in the
-light theme and a lighter one in the dark theme. The theme is the one each
-button is actually rendered with, so a taskbar switched to the other theme
-by a mod (Top Taskbar Bleed, say) gets that theme's color.
+## Notes
 
-General rules: whether a button with several windows is marked when any or
-only when every window is shown, whether the foreground window counts as
-shown, and whether cloaked windows (other virtual desktops, suspended Store
-apps) count as hidden. The taskbar's own running indicator (the line under
-running apps' icons) can be hidden too, so only this mod's indicators show;
-the taskbar's own progress bar (determinate and indeterminate) can be hidden
-the same way. Both are hidden through their composition visuals, which the
-taskbar's own state animations don't touch, and restored when the option is
-turned off or the mod is disabled. While the native progress bar is hidden,
-its own looping animation is paused too, so a hidden indeterminate bar
-costs nothing. If another mod hides the running indicator too (Taskbar Open
-Window Underline has the same option), turn it on in one of them only: both
-use the same switch, so disabling one mod shows the indicator again until
-the other's next refresh of that button.
+- Colors follow the system live: a new accent color, light and dark
+  themes, high contrast and right-to-left taskbars.
+- Taskbar Open Window Underline can also hide the running indicator. If you
+  use both mods, turn that option off there: both use the same switch.
+- For bug reports, turn on **Debug logging** under Advanced and include the
+  mod's log.
 
 How it works, in short: each button's windows are found through the
 taskbar's view models and judged with `IsIconic`, `IsZoomed`, DWM cloaking
 and the virtual desktop manager, refreshed on window events. Progress,
-attention and badges are read from the button's own XAML. The indicators
-are composition shapes on one Direct2D path around the icon, moved by
-animating their trims along it on the render thread; the taskbar's layout
-is never touched. On builds where the needed symbols can't be resolved, the
-mod stays inactive and the log says so.
-
-**Troubleshooting.** With **Debug logging** on, the log shows a line per
-button whenever what it shows changes, and a summary of what triggered
-refreshes every 10 seconds or so. Leave it off otherwise.
+attention and badges are read from the button's own XAML. The marks are
+composition shapes on one Direct2D path around the icon, moved by animating
+their trims along it on the render thread; the taskbar's layout is never
+touched. On builds where the needed symbols can't be resolved, the mod
+stays inactive and the log says so.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- General:
+- Frame:
   - Offsets: '5, 5, 5, 5'
-    $name: Frame distance from the icon (Left, Top, Right, Bottom)
-    $description: Distance between the icon's edges and the outer edge of the frame the indicators are drawn on, in pixels. 0, 0, 0, 0 puts the outer edge on the icon's edges; positive values expand the frame, negative values move it over the icon. The thickness grows inwards from this edge. Accepts 1 value (all sides), 2 (horizontal, vertical) or 4 (left, top, right, bottom).
+    $name: Distance from the icon (Left, Top, Right, Bottom)
+    $description: How far the frame's outer edge sits from the icon's edges, in pixels. 0 puts it on the icon's edges, positive values move it outwards, negative values over the icon. One value for all sides, two for horizontal and vertical, or four.
   - CornerRadius: '4'
-    $name: Frame corner radius
-    $description: One value for all corners, two values for the top and bottom corners, or four values in order top-left, top-right, bottom-right, bottom-left.
+    $name: Corner radius
+    $description: One value for all corners, two for the top and bottom corners, or four for top-left, top-right, bottom-right and bottom-left.
   - Thickness: '2'
-    $name: Frame thickness
-    $description: Stroke thickness of the corner marks and the minimized underline, in pixels. It grows inwards, towards the icon, from the frame's outer edge (set by the distance above).
-  - ActiveColor: ''
-    $name: Active color
-    $description: Color of every indicator on the button of the foreground app. Hex color code; supports Light | Dark separation (e.g. '#000000|#FFFFFF') and multi-color horizontal gradients (e.g. '#FF0000,#00FF00'). Leave empty to use the system accent color.
-  - ActiveOpacity: '1.0, 1.0'
-    $name: Active opacity (Light, Dark)
-    $description: Multiplier for the active color's opacity in the light and dark themes. A single value applies to both themes.
-  - InactiveColor: '#878787|#AEAEAE'
-    $name: Inactive color
-    $description: Color of every indicator on all other buttons, same format as above. Leave empty to use the system accent color.
-  - InactiveOpacity: '1.0, 1.0'
-    $name: Inactive opacity (Light, Dark)
-  - AccentShading: true
-    $name: Theme-shaded accent
-    $description: When a color uses the system accent (left empty), use a darker shade of the accent color in the light theme and a lighter shade in the dark theme, instead of the plain accent color in both.
-  - GroupRule: any
-    $name: Buttons with several windows
-    $options:
-    - any: Marked if any of the windows is shown
-    - all: Marked only if every window is shown
-  - IncludeActive: true
-    $name: Count the foreground window as shown
-    $description: When disabled, a button whose only shown window is the foreground one gets no corner marks, since it is already told apart by the active color (and the native indicator, unless hidden). It never gets the minimized underline for that reason.
-  - CloakedIsHidden: true
-    $name: Treat cloaked windows as not shown
-    $description: Cloaked windows include windows on other virtual desktops and suspended Store apps.
-  - Animations: true
-    $name: Animations
-    $description: Indicators move along the frame when a button's state changes (a minimized app's underline splits into the bottom corners, new top corners travel up the sides, and so on). Off, or with Windows animations turned off, they change at once.
-  - AnimationDuration: 160
-    $name: Animation duration (ms)
-    $description: Length of one movement, in milliseconds. A moving piece's tail follows 40% of that later.
-  - Attention: true
-    $name: Attention color for apps requesting attention
-    $description: While an app requests attention (its taskbar button flashes), its corner marks or underline take the attention color. The multi-window and badge dots keep theirs.
-  - AttentionColor: '#DA3B01|#F7630C'
-    $name: Attention color
-    $description: Hex color code with Light | Dark separation; one color per theme. Leave empty to use the system accent color.
-  - DebugLog: false
-    $name: Debug logging
-    $description: For troubleshooting. Logs one line per taskbar button whenever what it shows changes (app, windows, state, active, badge, attention, progress, animation), the property changes its view model reports, and a summary of what triggered refreshes every 10 seconds or so. Leave off otherwise.
-  - HideNativeIndicator: true
-    $name: Hide the native running indicator
-    $description: Hides the taskbar's own line under the icons of running apps (the active and inactive window indicator), leaving only this mod's indicators.
-  - ProgressAnimation: true
-    $name: Animate indeterminate progress
-    $description: While an app shows indeterminate progress (the taskbar's moving bar), a minimized app's underline sweeps from left to right like that bar, and the corner marks of an open or maximized app run clockwise around the frame together with the multi-window and badge dots, with the native bar's timing and easing. Works whether or not the native progress bar is hidden, and with Windows animations turned off too, like the native bar.
-  - ProgressFill: true
-    $name: Fill with determinate progress
-    $description: While an app shows determinate progress (the taskbar's filling bar), its indicators fill with the progress color from left to right — the underline, the cup or bottom corners, and, maximized, the cap or top corners at the same rate — so the rest keeps the active or inactive color. Works whether or not the native progress bar is hidden.
-  - ProgressFillColor: '#0F7B0F|#6CCB5F'
-    $name: Progress fill color
-    $description: Hex color code with Light | Dark separation (e.g. '#0F7B0F|#6CCB5F'); one color per theme (a gradient uses its first color). Leave empty to use the system accent color.
-  - ProgressPausedColor: '#9D5D00|#FCE100'
-    $name: Paused progress fill color
-    $description: Fill color while the progress is paused, same format.
-  - ProgressErrorColor: '#C42B1C|#FF99A4'
-    $name: Error progress fill color
-    $description: Fill color while the progress is in error, same format.
-  - HideNativeProgress: true
-    $name: Hide the native progress indicators
-    $description: Hides the taskbar's own progress bar under the icons of apps reporting progress (downloads, copies, installs), both determinate (a filling bar) and indeterminate (a moving one), including its paused and error colors. A hidden indeterminate bar's animation is paused as well.
-  $name: General (Frame and Rules)
-- Corners:
-  - Enabled: true
-    $name: Corner marks for open windows
-    $description: Marks the frame's corners for every button that has a window shown on the desktop (not minimized).
-  - MaximizedEnabled: true
-    $name: All four corners for maximized windows
-    $description: A button with a window that is shown and maximized gets all four corners (open windows get the two bottom ones).
+    $name: Thickness
+    $description: Line thickness of the corner marks and the underline, in pixels. It grows inwards from the frame's outer edge.
   - ConnectCorners: true
     $name: Connect the corners
-    $description: Joins the two bottom corners with a line along the bottom edge, a cup under the icon, and for maximized windows the two top corners along the top edge too, a cap over it.
+    $description: Joins the bottom corners into a cup under the icon and the top corners into a cap over it. A pinned app showing the pinned-app dot keeps its top corners apart.
+  $name: Frame
+  $description: The rounded rectangle around each icon that all indicators are drawn on. The frame itself is never drawn.
+- Colors:
+  - ActiveColor: ''
+    $name: Active app color
+    $description: Color of the indicators on the button of the app in front. Leave empty for the system accent color. Hex color code, e.g. '#0078D4'; a different color per theme as '#Light|#Dark'; a left-to-right gradient as '#FF0000,#00FF00'.
+  - ActiveOpacity: '1.0, 1.0'
+    $name: Active app opacity (Light, Dark)
+    $description: From 0 to 1, for the light and the dark theme. One value applies to both.
+  - InactiveColor: '#878787|#AEAEAE'
+    $name: Other apps color
+    $description: Color of the indicators on every other button, same format. Leave empty for the system accent color.
+  - InactiveOpacity: '1.0, 1.0'
+    $name: Other apps opacity (Light, Dark)
+    $description: From 0 to 1, for the light and the dark theme. One value applies to both.
+  - AccentShading: true
+    $name: Theme-shaded accent
+    $description: Where the system accent color is used, a darker shade of it in the light theme and a lighter one in the dark theme, instead of the plain accent in both.
+  $name: Colors
+  $description: For the corner marks and the underline. The dots, progress and attention have colors of their own. In a high contrast theme, the system's colors are used instead.
+- Corners:
+  - MaximizedBottom: true
+    $name: Bottom corners on maximized windows too
+    $description: On, maximized windows get all four corners. Off, only the two top corners (or the cap), so maximized and open windows are told apart at a glance.
+  - DimEnabled: false
+    $name: Dimmed missing corners
+    $description: Completes the frame with dimmed corners where an app has none - the top corners of open windows, and the bottom ones of maximized windows when those are off above.
+  - DimColor: '#878787|#AEAEAE'
+    $name: Dimmed corners color
+    $description: Hex color code, with '#Light|#Dark' for a color per theme, or a gradient. Leave empty for the system accent color.
+  - DimOpacity: '0.2, 0.2'
+    $name: Dimmed corners opacity (Light, Dark)
+    $description: From 0 to 1, for the light and the dark theme. One value applies to both.
   - LegLength: '5'
     $name: Leg length
-    $description: Length of the straight part of each mark beyond the corner, in pixels. 0 draws just the corners.
+    $description: Length of each mark's straight part beyond the corner, in pixels. 0 draws just the corners.
   - RoundedEnds: true
     $name: Rounded ends
-    $description: Rounds the two ends of each mark into half circles; disabled, the ends are square. The marks keep their length as long as the leg is at least half the thickness.
+    $description: Rounds the ends of each mark; off, they are square.
   - CornerStyle: rounded
     $name: Corner style
-    $description: Rounded corners (a quarter arc), or diagonal corners (the straight chord between the arc's end points).
     $options:
-    - rounded: Rounded
-    - diagonal: Diagonal
-  $name: Corner Marks (Open and Maximized Windows)
+    - rounded: Rounded (a quarter circle)
+    - diagonal: Diagonal (a straight cut)
+  $name: Open and Maximized Windows
+  $description: Open windows get the frame's two bottom corners, maximized windows the two top ones as well.
 - Minimized:
-  - Enabled: true
-    $name: Underline for minimized apps
-    $description: Draws a piece of the frame's bottom edge, centered on it, for buttons that have a minimized window and aren't marked as open.
-  - Length: '0'
-    $name: Length
-    $description: Length of the underline, in pixels. 0 spans the whole straight part of the frame's bottom edge (between the corner arcs); longer values are capped to it.
+  - Length: '12'
+    $name: Underline length
+    $description: In pixels. 0 spans the whole straight part of the bottom edge; longer values are capped to it.
   - Rounded: true
     $name: Rounded ends
-    $description: Rounds the underline's ends into half circles; disabled, the ends are square.
+    $description: Rounds the underline's ends; off, they are square.
   - HiddenEnabled: true
     $name: Dimmed underline for apps running off screen
-    $description: A dimmed underline for buttons whose windows are running off screen — on other virtual desktops (minimized there or not) or cloaked, like suspended Store apps (with "Treat cloaked windows as not shown" on). A window minimized on the current desktop keeps the full underline.
+    $description: A dimmed underline for apps whose windows are on other virtual desktops, or cloaked like suspended Store apps.
   - HiddenOpacity: '0.4'
     $name: Dimmed underline opacity
-    $description: Opacity of that underline, from 0 to 1, applied to its color.
+    $description: From 0 to 1, applied to the underline's color.
   $name: Minimized Apps
+  $description: Minimized apps get a line centered on the frame's bottom edge.
 - Multi:
   - Enabled: true
     $name: Dot for apps with several windows
-    $description: Draws a dot centered on the frame's left edge for buttons that have two or more windows.
+    $description: A dot on the frame's left edge for apps with two or more windows. The taskbar's own multi-window mark is hidden while this is on.
   - Diameter: '5'
-    $name: Diameter
+    $name: Dot size
     $description: Diameter of the dot, in pixels.
+  - Color: '#878787|#AEAEAE'
+    $name: Dot color
+    $description: Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
   $name: Apps With Several Windows
 - Badge:
   - Enabled: true
     $name: Dot for apps with a badge
-    $description: Hides the taskbar's own badges (notification counts, the dot shown instead with small taskbar icons, and overlay icons on the icons) and instead draws a dot centered on the frame's right edge for every button that has one, in every window state (open, maximized, minimized).
+    $description: A dot on the frame's right edge for apps with a notification badge or an overlay icon, in every window state. The taskbar's own badges and overlay icons are hidden while this is on.
   - Diameter: '5'
-    $name: Diameter
+    $name: Dot size
     $description: Diameter of the dot, in pixels.
   - Color: '#EB5757'
-    $name: Color
-    $description: Hex color code; supports Light | Dark separation (e.g. '#000000|#FFFFFF') and multi-color horizontal gradients. Leave empty to use the system accent color.
+    $name: Dot color
+    $description: Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
   $name: Apps With a Badge
+- Pinned:
+  - Enabled: false
+    $name: Dot for pinned apps
+    $description: A dot at the top center of the frame for pinned apps, running or not. The top corners of a pinned app aren't joined into a cap then, leaving the dot its place; other apps keep their cap.
+  - Diameter: '5'
+    $name: Dot size
+    $description: Diameter of the dot, in pixels.
+  - Color: '#878787|#AEAEAE'
+    $name: Dot color
+    $description: Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
+  $name: Pinned Apps
+- Progress:
+  - FillColor: '#0F7B0F|#6CCB5F'
+    $name: Progress color
+    $description: Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
+  - PausedColor: '#9D5D00|#FCE100'
+    $name: Paused progress color
+    $description: Same format.
+  - ErrorColor: '#C42B1C|#FF99A4'
+    $name: Error progress color
+    $description: Same format.
+  $name: Progress
+  $description: Progress is shown on the indicators instead of the taskbar's own progress bar. A download, copy or install fills them from left to right in these colors; a busy app with no known end makes them run around the frame.
+- Attention:
+  - Enabled: true
+    $name: Color apps requesting attention
+    $description: While an app's taskbar button flashes for attention, its corner marks or underline take the attention color.
+  - Color: '#DA3B01|#F7630C'
+    $name: Attention color
+    $description: Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
+  $name: Attention
+- Animations:
+  - Enabled: true
+    $name: Animate changes
+    $description: Indicators move along the frame when an app's state changes. Off, or with Windows animations turned off, they change at once. Progress keeps animating either way.
+  - Duration: 160
+    $name: Duration (ms)
+    $description: Length of one movement, in milliseconds.
+  $name: Animations
+- Rules:
+  - GroupRule: any
+    $name: Apps with several windows count as open
+    $options:
+    - any: When any of their windows is shown
+    - all: Only when every window is shown
+  - CloakedIsHidden: true
+    $name: Count cloaked windows as not shown
+    $description: Cloaked windows include windows on other virtual desktops and suspended Store apps.
+  $name: Window Rules
+  $description: What counts as an open window.
+- Advanced:
+  - DebugLog: false
+    $name: Debug logging
+    $description: For troubleshooting only. Logs what each taskbar button shows whenever it changes, and a summary of what triggered updates. Leave off otherwise.
+  $name: Advanced
 */
 // ==/WindhawkModSettings==
 
@@ -345,6 +307,11 @@ struct Settings {
     bool IndEnabled = true;
     bool IndConnect = false; // bottom corners joined along the bottom edge, top ones along the top
     bool IndMaximized = true;
+    bool IndMaximizedBottom = true;  // maximized windows keep the bottom corners too
+    // The corners an open or maximized app doesn't get, drawn dimmed.
+    bool IndDimEnabled = false;
+    std::vector<winrt::Windows::UI::Color> IndDimLight, IndDimDark;
+    double IndDimOpacityLight = 0.2, IndDimOpacityDark = 0.2;
     double IndLeg = 5.0;
     bool IndDiagonal = false;
     bool IndRoundedEnds = false;
@@ -375,7 +342,7 @@ struct Settings {
 
     // Minimized apps: a centered piece of the frame's bottom edge.
     bool MinEnabled = false;
-    double MinLength = 0.0; // 0 = the whole straight part of the bottom edge
+    double MinLength = 12.0; // 0 = the whole straight part of the bottom edge
     bool MinRounded = true;
     // Running off screen (cloaked, not minimized): a dimmed underline.
     bool MinHiddenEnabled = true;
@@ -385,8 +352,15 @@ struct Settings {
     std::vector<winrt::Windows::UI::Color> AttentionLight, AttentionDark;
 
     // Apps with several windows: a dot centered on the frame's left edge.
+    // Pinned apps that aren't running: a dot centered on the frame's bottom
+    // edge (and no cup for anyone, so its place stays free).
+    bool PinnedEnabled = false;
+    double PinnedDiameter = 5.0;
+    std::vector<winrt::Windows::UI::Color> PinnedLight, PinnedDark;
+
     bool MultiEnabled = false;
     double MultiDiameter = 4.0;
+    std::vector<winrt::Windows::UI::Color> MultiLight, MultiDark;
 
     // One log line per button whenever its summary changes.
     bool DebugLog = false;
@@ -439,8 +413,8 @@ struct FrameMetrics {
 // The indicator shapes, one composition sprite shape each, all stroking the
 // same frame path and trimmed to their piece of it. The underline is the BL
 // and BR shapes parked side by side as its two halves.
-constexpr int kSlotTL = 0, kSlotTR = 1, kSlotBR = 2, kSlotBL = 3, kSlotDot = 4, kSlotBadge = 5;
-constexpr int kSlotCount = 6;
+constexpr int kSlotTL = 0, kSlotTR = 1, kSlotBR = 2, kSlotBL = 3, kSlotDot = 4, kSlotBadge = 5, kSlotPinned = 6;
+constexpr int kSlotCount = 7;
 
 // Where an animation of ours is, worked out from how it was started (see
 // ScalarTweenNow): a restarted animation begins there, explicitly. A
@@ -562,6 +536,23 @@ struct ButtonEntry {
     };
     HiddenNative nativeRunning;
     HiddenNative nativeProgress;
+    HiddenNative nativeMulti;  // Border#MultiWindowElement, with the multi-window dot on
+
+    // Border#BackgroundElement's right margin, 0 while the native
+    // multi-window mark is hidden (see UpdateBackgroundMargin): the margin
+    // it had before (re-read whenever the taskbar changes it), the one set,
+    // and its own local value, put back when the adjustment ends.
+    struct MarginAdjust {
+        winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> element;
+        bool applied = false;
+        winrt::Windows::UI::Xaml::Thickness base{}, value{};
+        bool hadLocal = false;
+        winrt::Windows::Foundation::IInspectable originalLocal{nullptr};
+    };
+    MarginAdjust backgroundMargin;
+
+    // The app's pinned state as last read (-1: unknown), see ReadButtonPinned.
+    int8_t pinnedState = -1;
 
     // The taskbar's own badge elements while badge support hides them: each
     // with the property-changed callbacks that refresh the button when the
@@ -797,28 +788,30 @@ void ParseGradientColorPair(PCWSTR str, std::vector<winrt::Windows::UI::Color>& 
 void LoadSettings() {
     std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
 
-    g_settings.AccentShading = Wh_GetIntSetting(L"General.AccentShading") != 0;
-    WindhawkUtils::StringSetting activeColStr(Wh_GetStringSetting(L"General.ActiveColor"));
+    g_settings.AccentShading = Wh_GetIntSetting(L"Colors.AccentShading") != 0;
+    WindhawkUtils::StringSetting activeColStr(Wh_GetStringSetting(L"Colors.ActiveColor"));
     ParseGradientColorPair(activeColStr.get(), g_settings.ActiveLight, g_settings.ActiveDark);
-    WindhawkUtils::StringSetting activeOpStr(Wh_GetStringSetting(L"General.ActiveOpacity"));
+    WindhawkUtils::StringSetting activeOpStr(Wh_GetStringSetting(L"Colors.ActiveOpacity"));
     ParseDoublePair(activeOpStr.get(), g_settings.ActiveOpacityLight, g_settings.ActiveOpacityDark, 1.0, 1.0);
-    WindhawkUtils::StringSetting inactiveColStr(Wh_GetStringSetting(L"General.InactiveColor"));
+    WindhawkUtils::StringSetting inactiveColStr(Wh_GetStringSetting(L"Colors.InactiveColor"));
     ParseGradientColorPair(inactiveColStr.get(), g_settings.InactiveLight, g_settings.InactiveDark);
-    WindhawkUtils::StringSetting inactiveOpStr(Wh_GetStringSetting(L"General.InactiveOpacity"));
+    WindhawkUtils::StringSetting inactiveOpStr(Wh_GetStringSetting(L"Colors.InactiveOpacity"));
     ParseDoublePair(inactiveOpStr.get(), g_settings.InactiveOpacityLight, g_settings.InactiveOpacityDark, 1.0, 1.0);
-    WindhawkUtils::StringSetting groupRuleStr(Wh_GetStringSetting(L"General.GroupRule"));
+    WindhawkUtils::StringSetting groupRuleStr(Wh_GetStringSetting(L"Rules.GroupRule"));
     g_settings.IndGroupAll = groupRuleStr.get() && wcscmp(groupRuleStr.get(), L"all") == 0;
-    g_settings.IndIncludeActive = Wh_GetIntSetting(L"General.IncludeActive") != 0;
-    g_settings.IndCloakedIsHidden = Wh_GetIntSetting(L"General.CloakedIsHidden") != 0;
-    g_settings.HideNativeIndicator = Wh_GetIntSetting(L"General.HideNativeIndicator") != 0;
-    g_settings.HideNativeProgress = Wh_GetIntSetting(L"General.HideNativeProgress") != 0;
-    g_settings.ProgressAnimation = Wh_GetIntSetting(L"General.ProgressAnimation") != 0;
-    g_settings.ProgressFill = Wh_GetIntSetting(L"General.ProgressFill") != 0;
-    WindhawkUtils::StringSetting fillColStr(Wh_GetStringSetting(L"General.ProgressFillColor"));
+    g_settings.IndIncludeActive = true;  // always: the app in front counts as open
+    g_settings.IndCloakedIsHidden = Wh_GetIntSetting(L"Rules.CloakedIsHidden") != 0;
+    // Always on: the mod's indicators take the place of the native running
+    // indicator and progress bar, and show progress themselves.
+    g_settings.HideNativeIndicator = true;
+    g_settings.HideNativeProgress = true;
+    g_settings.ProgressAnimation = true;
+    g_settings.ProgressFill = true;
+    WindhawkUtils::StringSetting fillColStr(Wh_GetStringSetting(L"Progress.FillColor"));
     ParseGradientColorPair(fillColStr.get(), g_settings.FillLight, g_settings.FillDark);
-    WindhawkUtils::StringSetting fillPausedStr(Wh_GetStringSetting(L"General.ProgressPausedColor"));
+    WindhawkUtils::StringSetting fillPausedStr(Wh_GetStringSetting(L"Progress.PausedColor"));
     ParseGradientColorPair(fillPausedStr.get(), g_settings.FillPausedLight, g_settings.FillPausedDark);
-    WindhawkUtils::StringSetting fillErrorStr(Wh_GetStringSetting(L"General.ProgressErrorColor"));
+    WindhawkUtils::StringSetting fillErrorStr(Wh_GetStringSetting(L"Progress.ErrorColor"));
     ParseGradientColorPair(fillErrorStr.get(), g_settings.FillErrorLight, g_settings.FillErrorDark);
     g_settings.BadgeEnabled = Wh_GetIntSetting(L"Badge.Enabled") != 0;
     WindhawkUtils::StringSetting badgeDiaStr(Wh_GetStringSetting(L"Badge.Diameter"));
@@ -826,43 +819,59 @@ void LoadSettings() {
     WindhawkUtils::StringSetting badgeColStr(Wh_GetStringSetting(L"Badge.Color"));
     ParseGradientColorPair(badgeColStr.get(), g_settings.BadgeLight, g_settings.BadgeDark);
 
-    WindhawkUtils::StringSetting frameOffStr(Wh_GetStringSetting(L"General.Offsets"));
+    WindhawkUtils::StringSetting frameOffStr(Wh_GetStringSetting(L"Frame.Offsets"));
     ParseFrameOffsets(frameOffStr.get(), g_settings.FrameOffsets);
-    WindhawkUtils::StringSetting frameRadStr(Wh_GetStringSetting(L"General.CornerRadius"));
+    WindhawkUtils::StringSetting frameRadStr(Wh_GetStringSetting(L"Frame.CornerRadius"));
     ParseCornerRadius(frameRadStr.get(), g_settings.FrameRadius, 4.0);
-    WindhawkUtils::StringSetting frameThickStr(Wh_GetStringSetting(L"General.Thickness"));
+    WindhawkUtils::StringSetting frameThickStr(Wh_GetStringSetting(L"Frame.Thickness"));
     g_settings.FrameThickness = std::max(0.5, ParseDouble(frameThickStr.get(), 2.0));
 
-    g_settings.IndEnabled = Wh_GetIntSetting(L"Corners.Enabled") != 0;
-    g_settings.IndConnect = Wh_GetIntSetting(L"Corners.ConnectCorners") != 0;
-    g_settings.IndMaximized = Wh_GetIntSetting(L"Corners.MaximizedEnabled") != 0;
+    // Always on: corner marks for open windows, all four for maximized ones,
+    // and the underline for minimized apps.
+    g_settings.IndEnabled = true;
+    g_settings.IndMaximized = true;
+    g_settings.IndMaximizedBottom = Wh_GetIntSetting(L"Corners.MaximizedBottom") != 0;
+    g_settings.IndDimEnabled = Wh_GetIntSetting(L"Corners.DimEnabled") != 0;
+    WindhawkUtils::StringSetting dimColStr(Wh_GetStringSetting(L"Corners.DimColor"));
+    ParseGradientColorPair(dimColStr.get(), g_settings.IndDimLight, g_settings.IndDimDark);
+    WindhawkUtils::StringSetting dimOpStr(Wh_GetStringSetting(L"Corners.DimOpacity"));
+    ParseDoublePair(dimOpStr.get(), g_settings.IndDimOpacityLight, g_settings.IndDimOpacityDark, 0.2, 0.2);
+    g_settings.IndConnect = Wh_GetIntSetting(L"Frame.ConnectCorners") != 0;
     WindhawkUtils::StringSetting indLegStr(Wh_GetStringSetting(L"Corners.LegLength"));
     g_settings.IndLeg = ParseDouble(indLegStr.get(), 5.0);
     WindhawkUtils::StringSetting indStyleStr(Wh_GetStringSetting(L"Corners.CornerStyle"));
     g_settings.IndDiagonal = indStyleStr.get() && wcscmp(indStyleStr.get(), L"diagonal") == 0;
     g_settings.IndRoundedEnds = Wh_GetIntSetting(L"Corners.RoundedEnds") != 0;
 
-    g_settings.MinEnabled = Wh_GetIntSetting(L"Minimized.Enabled") != 0;
+    g_settings.MinEnabled = true;
     WindhawkUtils::StringSetting minLenStr(Wh_GetStringSetting(L"Minimized.Length"));
-    g_settings.MinLength = ParseDouble(minLenStr.get(), 0.0);
+    g_settings.MinLength = ParseDouble(minLenStr.get(), 12.0);
     g_settings.MinRounded = Wh_GetIntSetting(L"Minimized.Rounded") != 0;
     g_settings.MinHiddenEnabled = Wh_GetIntSetting(L"Minimized.HiddenEnabled") != 0;
     WindhawkUtils::StringSetting minHiddenOpStr(Wh_GetStringSetting(L"Minimized.HiddenOpacity"));
     g_settings.MinHiddenOpacity = std::clamp(ParseDouble(minHiddenOpStr.get(), 0.4), 0.0, 1.0);
-    g_settings.AttentionEnabled = Wh_GetIntSetting(L"General.Attention") != 0;
-    WindhawkUtils::StringSetting attentionColStr(Wh_GetStringSetting(L"General.AttentionColor"));
+    g_settings.AttentionEnabled = Wh_GetIntSetting(L"Attention.Enabled") != 0;
+    WindhawkUtils::StringSetting attentionColStr(Wh_GetStringSetting(L"Attention.Color"));
     ParseGradientColorPair(attentionColStr.get(), g_settings.AttentionLight, g_settings.AttentionDark);
+
+    g_settings.PinnedEnabled = Wh_GetIntSetting(L"Pinned.Enabled") != 0;
+    WindhawkUtils::StringSetting pinnedColStr(Wh_GetStringSetting(L"Pinned.Color"));
+    ParseGradientColorPair(pinnedColStr.get(), g_settings.PinnedLight, g_settings.PinnedDark);
+    WindhawkUtils::StringSetting pinnedDiaStr(Wh_GetStringSetting(L"Pinned.Diameter"));
+    g_settings.PinnedDiameter = std::max(1.0, ParseDouble(pinnedDiaStr.get(), 5.0));
 
     g_settings.MultiEnabled = Wh_GetIntSetting(L"Multi.Enabled") != 0;
     WindhawkUtils::StringSetting multiDiaStr(Wh_GetStringSetting(L"Multi.Diameter"));
     g_settings.MultiDiameter = std::max(1.0, ParseDouble(multiDiaStr.get(), 5.0));
+    WindhawkUtils::StringSetting multiColStr(Wh_GetStringSetting(L"Multi.Color"));
+    ParseGradientColorPair(multiColStr.get(), g_settings.MultiLight, g_settings.MultiDark);
 
-    g_settings.Animations = Wh_GetIntSetting(L"General.Animations") != 0;
-    g_settings.DebugLog = Wh_GetIntSetting(L"General.DebugLog") != 0;
+    g_settings.Animations = Wh_GetIntSetting(L"Animations.Enabled") != 0;
+    g_settings.DebugLog = Wh_GetIntSetting(L"Advanced.DebugLog") != 0;
     g_debugLog = g_settings.DebugLog;
     if (!g_settings.DebugLog) g_refreshStats.since = 0;
     {
-        int duration = Wh_GetIntSetting(L"General.AnimationDuration");
+        int duration = Wh_GetIntSetting(L"Animations.Duration");
         g_settings.AnimationDurationMs = std::clamp(duration > 0 ? duration : 160, 30, 2000);
     }
 }
@@ -1442,6 +1451,19 @@ ITaskListWindowViewModel_get_TaskItem_t ITaskListWindowViewModel_get_TaskItem;
 using TaskListGroupViewModel_get_TaskGroup_t = HRESULT(WINAPI*)(void* pThis, void** taskGroup);
 TaskListGroupViewModel_get_TaskGroup_t TaskListGroupViewModel_get_TaskGroup;
 
+// Whether the button's app is pinned, from its view model (optional; the
+// interface that has it is tried for both kinds of view model).
+using ViewModel_get_IsPinned_t = HRESULT(WINAPI*)(void* pThis, bool* value);
+ViewModel_get_IsPinned_t TaskListWindowViewModel_AppItem_get_IsPinned;
+ViewModel_get_IsPinned_t TaskListWindowViewModel_Window_get_IsPinned;
+ViewModel_get_IsPinned_t TaskListGroupViewModel_AppItem_get_IsPinned;
+ViewModel_get_IsPinned_t TaskListGroupViewModel_Group_get_IsPinned;
+
+bool IsPinnedStateAvailable() {
+    return TaskListWindowViewModel_AppItem_get_IsPinned || TaskListWindowViewModel_Window_get_IsPinned ||
+           TaskListGroupViewModel_AppItem_get_IsPinned || TaskListGroupViewModel_Group_get_IsPinned;
+}
+
 bool IsViewModelBridgeAvailable() {
     return TaskListWindowViewModel_ITaskListWindowViewModel_vftable && ITaskListWindowViewModel_get_TaskItem &&
            TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable && TaskListGroupViewModel_get_TaskGroup;
@@ -1862,9 +1884,104 @@ void RestoreNativeElement(ButtonEntry::HiddenNative& native) {
     native.element = nullptr;
 }
 
+std::wstring ThicknessText(winrt::Windows::UI::Xaml::Thickness const& t) {
+    wchar_t buffer[96];
+    swprintf_s(buffer, L"%g,%g,%g,%g", t.Left, t.Top, t.Right, t.Bottom);
+    return buffer;
+}
+
+bool SameThickness(winrt::Windows::UI::Xaml::Thickness const& a, winrt::Windows::UI::Xaml::Thickness const& b) {
+    return std::abs(a.Left - b.Left) < 0.01 && std::abs(a.Top - b.Top) < 0.01 &&
+           std::abs(a.Right - b.Right) < 0.01 && std::abs(a.Bottom - b.Bottom) < 0.01;
+}
+
+// Puts the background's margin back. The taskbar's 5 px for the
+// multi-window mark doesn't come from the element's local value (that one
+// reads 0 while the margin shows 5), so writing the local value back pins
+// the margin at 0. Clearing ours lets the taskbar's own value apply again;
+// only if that doesn't give back the margin the taskbar last showed is the
+// local value it had written back as well.
+void RestoreBackgroundMargin(std::shared_ptr<ButtonEntry> const& e) {
+    auto& m = e->backgroundMargin;
+    if (m.applied) {
+        if (auto element = m.element.get()) {
+            try {
+                auto before = element.Margin();
+                element.ClearValue(FrameworkElement::MarginProperty());
+                bool wroteLocal = false;
+                if (m.hadLocal && !SameThickness(element.Margin(), m.base)) {
+                    element.SetValue(FrameworkElement::MarginProperty(), m.originalLocal);
+                    wroteLocal = true;
+                }
+                if (g_debugLog) {
+                    Wh_Log(L"[debug] background margin restored (%s): %s -> %s (the taskbar's was %s)",
+                           wroteLocal ? L"local value written back" : L"cleared", ThicknessText(before).c_str(),
+                           ThicknessText(element.Margin()).c_str(), ThicknessText(m.base).c_str());
+                }
+            } catch (...) {}
+        }
+    }
+    m = {};
+}
+
+// While the multi-window dot is on, the taskbar's own multi-window mark is
+// hidden. The taskbar makes room for that mark by giving the button's
+// background (Border#BackgroundElement) a right margin, which would leave
+// the background off-center without it: its right margin is set to 0, as
+// on a button with one window. Only on buttons the taskbar shows the mark
+// on (it creates the element for buttons with several windows only). The
+// margin the taskbar gives is re-read whenever it differs from the one set,
+// so a visual state that changes the other sides is followed.
+void UpdateBackgroundMargin(FrameworkElement const& button, std::shared_ptr<ButtonEntry> const& entry,
+                            FrameworkElement const& iconPanel, const Settings& localSettings) {
+    auto& m = entry->backgroundMargin;
+    if (!localSettings.MultiEnabled && !m.applied) return;  // nothing to do, skip the lookups
+
+    auto multi = FindChildByName(iconPanel, L"MultiWindowElement");
+    bool want = localSettings.MultiEnabled && multi && multi.Visibility() == Visibility::Visible;
+    auto background = FindChildByName(iconPanel, L"BackgroundElement");
+    if (m.applied && m.element.get() != background) RestoreBackgroundMargin(entry);  // a new template
+    if (!want || !background) {
+        RestoreBackgroundMargin(entry);
+        return;
+    }
+
+    auto current = background.Margin();
+    if (!m.applied) {
+        auto local = background.ReadLocalValue(FrameworkElement::MarginProperty());
+        m.hadLocal = local != DependencyProperty::UnsetValue();
+        m.originalLocal = m.hadLocal ? local : nullptr;
+        m.base = current;
+        m.element = winrt::make_weak(background);
+        if (g_debugLog) {
+            std::wstring localText = L"no local value";
+            if (m.hadLocal) {
+                if (auto boxed = local.try_as<winrt::Windows::Foundation::IReference<winrt::Windows::UI::Xaml::Thickness>>()) {
+                    localText = L"local value " + ThicknessText(boxed.Value());
+                } else {
+                    localText = L"local value of another kind";
+                }
+            }
+            Wh_Log(L"[debug] background margin: %s (%s)", ThicknessText(current).c_str(), localText.c_str());
+        }
+    } else if (!SameThickness(current, m.value)) {
+        if (g_debugLog) {
+            Wh_Log(L"[debug] background margin changed by the taskbar: %s", ThicknessText(current).c_str());
+        }
+        m.base = current;  // the taskbar changed it since
+    }
+    auto target = m.base;
+    target.Right = 0.0;
+    if (!SameThickness(current, target)) background.Margin(target);
+    m.value = target;
+    m.applied = true;
+}
+
 void RestoreNativeIndicators(std::shared_ptr<ButtonEntry> const& e) {
     RestoreNativeElement(e->nativeRunning);
     RestoreNativeElement(e->nativeProgress);
+    RestoreNativeElement(e->nativeMulti);
+    RestoreBackgroundMargin(e);
 }
 
 // Keeps one native element hidden while `hide` is on, restored otherwise.
@@ -1902,6 +2019,11 @@ void UpdateNativeIndicators(FrameworkElement const& button, std::shared_ptr<Butt
                        L"RunningIndicator", L"");
     UpdateHiddenNative(button, iconPanel, entry->nativeProgress, localSettings.HideNativeProgress,
                        L"ProgressIndicator", L"ProgressBar");
+    // The taskbar's own mark for a button with several windows
+    // (Border#MultiWindowElement) gives way to the multi-window dot.
+    UpdateHiddenNative(button, iconPanel, entry->nativeMulti, localSettings.MultiEnabled,
+                       L"MultiWindowElement", L"");
+    try { UpdateBackgroundMargin(button, entry, iconPanel, localSettings); } catch (...) {}
 }
 
 // ---------------------------------------------------------------------------
@@ -2448,6 +2570,10 @@ void RetireEntryPaths(std::shared_ptr<ButtonEntry> const& e, bool keepNativeHidd
     if (keepNativeHidden) {
         e->nativeRunning = {};
         e->nativeProgress = {};
+        e->nativeMulti = {};
+        // The margin goes back even here: a reused button's new entry would
+        // otherwise read the adjusted margin as the taskbar's.
+        RestoreBackgroundMargin(e);
         ReleaseNativeBadges(e, false);
     } else {
         RestoreNativeIndicators(e);
@@ -2646,7 +2772,9 @@ void FillTrackOf(int k, bool rtl, int& first, int& second, bool& forward) {
 std::wstring FillPortionExpression(int k, int first, int second) {
     const std::wstring len1 = L"(b1.TrimEnd - b1.TrimStart)";
     const std::wstring len2 = L"(b2.TrimEnd - b2.TrimStart)";
-    const std::wstring filled = L"(props.f * (" + len1 + L" + " + len2 + L"))";
+    // Each track fills only while its corners are marks, not dimmed ones.
+    const std::wstring track = (k == kSlotTL || k == kSlotTR) ? L"props.top" : L"props.bottom";
+    const std::wstring filled = L"(props.f * " + track + L" * (" + len1 + L" + " + len2 + L"))";
     return k == first ? L"Clamp(" + filled + L", 0, " + len1 + L")"
                       : L"Clamp(" + filled + L" - " + len1 + L", 0, " + len2 + L")";
 }
@@ -2656,6 +2784,8 @@ void BindFillTwins(IndicatorRenderer& r, bool rtl) {
         r.fillProps = r.compositor.CreatePropertySet();
         r.fillProps.InsertScalar(L"f", 0.0f);
         r.fillProps.InsertScalar(L"alpha", 0.0f);
+        r.fillProps.InsertScalar(L"top", 1.0f);
+        r.fillProps.InsertScalar(L"bottom", 1.0f);
     }
     for (int k = 0; k < 4; k++) {
         int first, second;
@@ -2778,6 +2908,7 @@ bool EnsureRenderer(std::shared_ptr<ButtonEntry> const& entry, FrameworkElement 
     for (auto& twin : r.fills) shapes.Append(twin.shape);
     shapes.Append(r.slots[kSlotDot].shape);
     shapes.Append(r.slots[kSlotBadge].shape);
+    shapes.Append(r.slots[kSlotPinned].shape);
     BindFillTwins(r, false);
     ElementCompositionPreview::SetElementChildVisual(host, r.visual);
     return true;
@@ -2789,7 +2920,8 @@ bool EnsureRenderer(std::shared_ptr<ButtonEntry> const& entry, FrameworkElement 
 bool UpdateFramePath(IndicatorRenderer& r, const FrameBox& box, const Settings& localSettings) {
     FrameMetrics m = ComputeFrameMetrics(box.W, box.H, localSettings.FrameThickness, localSettings.FrameRadius,
                                          localSettings.IndDiagonal);
-    double pad = std::max({localSettings.FrameThickness, localSettings.MultiDiameter, localSettings.BadgeDiameter}) + 2.0;
+    double pad = std::max({localSettings.FrameThickness, localSettings.MultiDiameter, localSettings.BadgeDiameter,
+                           localSettings.PinnedDiameter}) + 2.0;
 
     bool same = r.metrics.valid && std::abs(r.metrics.W - m.W) < 0.01 && std::abs(r.metrics.H - m.H) < 0.01 &&
                 std::abs(r.metrics.t - m.t) < 0.001 && r.metrics.diagonal == m.diagonal;
@@ -2829,6 +2961,7 @@ struct SlotTarget {
     double hidden = 0.0;           // where it comes from and goes to
     bool collapseInPlace = false;  // goes away where it is instead
     bool grow = false;             // a dot: grows from its center and shrinks back into it
+    bool dim = false;              // a dimmed missing corner (no fill, no attention color)
     bool trail = true;             // a moving piece draws its path (tail follows)
     bool driven = false;           // its ends follow the indeterminate sweep
     wuc::CompositionStrokeCap startCap = wuc::CompositionStrokeCap::Flat;
@@ -2849,7 +2982,7 @@ void CornerExtent(const FrameMetrics& m, int k, double leg, bool roundedEnds, do
 
 void ComputeSlotTargets(SlotTarget targets[kSlotCount], const FrameMetrics& m, const Settings& localSettings,
                         int state, uint8_t mask, bool hasBadge, int windowCount, bool isActive, bool isLight,
-                        bool attention) {
+                        bool attention, int pinnedState) {
     using wuc::CompositionStrokeCap;
     auto cap = [](bool round) { return round ? CompositionStrokeCap::Round : CompositionStrokeCap::Flat; };
     auto colors = GetIndicatorColors(localSettings, isLight, isActive);
@@ -2861,6 +2994,9 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], const FrameMetrics& m, c
     // around its arc, and they go back there), the bottom ones the bottom
     // center (the underline's middle, where they also split from). A button
     // left with no mark at all lets every piece shrink where it is.
+    // The pinned-app dot, at the top center: on pinned apps, running or not
+    // (a button with no window at all is a pinned app that isn't running).
+    bool pinnedDot = localSettings.PinnedEnabled && ((state == 0 && windowCount == 0) || pinnedState == 1);
     const double hiddenAt[4] = {m.P, 0.0, m.sBottomMid, m.sBottomMid};
     for (int k = 0; k < 4; k++) {
         auto& t = targets[k];
@@ -2871,6 +3007,29 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], const FrameMetrics& m, c
         t.collapseInPlace = state == 0;
         if ((state == 1 || state == 2) && (mask & (1 << k))) {
             t.shown = true;
+            CornerExtent(m, k, localSettings.IndLeg, localSettings.IndRoundedEnds, t.a, t.b);
+        }
+    }
+
+    // Dimmed missing corners: an open or maximized app's corners that aren't
+    // marked are drawn too, dimmed, so the whole frame shows.
+    if (localSettings.IndDimEnabled && (state == 1 || state == 2)) {
+        auto dimColors = ResolveThemedColors(localSettings.IndDimLight, localSettings.IndDimDark,
+                                             localSettings.IndDimOpacityLight, localSettings.IndDimOpacityDark, isLight,
+                                             localSettings.AccentShading);
+        if (HighContrastOn()) {
+            dimColors = {SystemColor(COLOR_BTNTEXT)};
+            for (auto& c : dimColors) {
+                c.A = (uint8_t)std::lround(c.A * std::clamp(isLight ? localSettings.IndDimOpacityLight
+                                                                    : localSettings.IndDimOpacityDark, 0.0, 1.0));
+            }
+        }
+        for (int k = 0; k < 4; k++) {
+            auto& t = targets[k];
+            if (t.shown) continue;
+            t.shown = true;
+            t.dim = true;
+            t.colors = dimColors;
             CornerExtent(m, k, localSettings.IndLeg, localSettings.IndRoundedEnds, t.a, t.b);
         }
     }
@@ -2889,8 +3048,13 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], const FrameMetrics& m, c
         auto& bl = targets[kSlotBL];
         if (br.shown) { br.b = m.sBottomMid; br.endCap = CompositionStrokeCap::Flat; }
         if (bl.shown) { bl.a = m.sBottomMid; bl.startCap = CompositionStrokeCap::Flat; }
-        if (tr.shown) { tr.a = 0.0; tr.startCap = CompositionStrokeCap::Flat; }
-        if (tl.shown) { tl.b = m.P; tl.endCap = CompositionStrokeCap::Flat; }
+        // On a pinned app with the dot on, the top center is the dot's
+        // place: the top corners stay apart, like the side corners around
+        // the other dots.
+        if (!pinnedDot) {
+            if (tr.shown) { tr.a = 0.0; tr.startCap = CompositionStrokeCap::Flat; }
+            if (tl.shown) { tl.b = m.P; tl.endCap = CompositionStrokeCap::Flat; }
+        }
     }
 
     // The underline: the BL and BR shapes as its two halves, meeting flat at
@@ -2927,17 +3091,23 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], const FrameMetrics& m, c
         if (HighContrastOn()) attentionColors = {SystemColor(COLOR_HIGHLIGHT)};
         else attentionColors = ResolveThemedColors(localSettings.AttentionLight, localSettings.AttentionDark, 1.0, 1.0,
                                                    isLight, localSettings.AccentShading);
-        for (int k = kSlotTL; k <= kSlotBL; k++) targets[k].colors = attentionColors;
+        for (int k = kSlotTL; k <= kSlotBL; k++) {
+            if (!targets[k].dim) targets[k].colors = attentionColors;
+        }
     }
 
     // The multi-window dot: a near-zero piece with round caps, as thick as
-    // its diameter, so it is a circle sitting on the path. It grows from its
-    // center when it appears and shrinks back into it when it goes.
+    // its diameter, so it is a circle sitting on the path, in its own color.
+    // It grows from its center when it appears and shrinks back into it when
+    // it goes.
     {
         auto& t = targets[kSlotDot];
         constexpr double kDotEpsilon = 0.05;
         t.thickness = localSettings.MultiDiameter;
-        t.colors = colors;
+        t.colors = HighContrastOn()
+            ? std::vector<winrt::Windows::UI::Color>{SystemColor(COLOR_BTNTEXT)}
+            : ResolveThemedColors(localSettings.MultiLight, localSettings.MultiDark, 1.0, 1.0, isLight,
+                                  localSettings.AccentShading);
         t.startCap = t.endCap = CompositionStrokeCap::Round;
         t.hidden = m.sLeftMid;
         t.grow = true;
@@ -2965,6 +3135,26 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], const FrameMetrics& m, c
         t.shown = badgeShown;
         t.a = m.sRightMid - kDotEpsilon;
         t.b = m.sRightMid + kDotEpsilon;
+    }
+
+    // The pinned-app dot: centered on the top edge, where the path starts
+    // (s = 0), for pinned apps. It grows and shrinks like the other dots, and
+    // stays clear of the underline, so a minimized pinned app shows both.
+    {
+        auto& t = targets[kSlotPinned];
+        constexpr double kDotEpsilon = 0.05;
+        t.thickness = localSettings.PinnedDiameter;
+        t.colors = HighContrastOn()
+            ? std::vector<winrt::Windows::UI::Color>{SystemColor(COLOR_BTNTEXT)}
+            : ResolveThemedColors(localSettings.PinnedLight, localSettings.PinnedDark, 1.0, 1.0, isLight,
+                                  localSettings.AccentShading);
+        t.startCap = t.endCap = CompositionStrokeCap::Round;
+        t.hidden = 0.0;
+        t.grow = true;
+        t.trail = false;
+        t.shown = pinnedDot;
+        t.a = 0.0;  // just after the path's start, so the piece doesn't wrap
+        t.b = 2.0 * kDotEpsilon;
     }
 }
 
@@ -3503,6 +3693,43 @@ winrt::Windows::Foundation::IInspectable GetButtonItem(FrameworkElement const& b
     }
 }
 
+// Whether the button's app is pinned: 1, 0, or -1 when it can't be told
+// (a recycled button, or no IsPinned symbol on this build).
+int ReadButtonPinned(FrameworkElement const& button) {
+    if (!IsPinnedStateAvailable()) return -1;
+    try {
+        auto item = GetButtonItem(button);
+        if (!item) return -1;
+        void* raw = winrt::get_abi(item);
+        struct Candidate { void* vftable; ViewModel_get_IsPinned_t get; };
+        Candidate candidates[2] = {};
+        switch (GetViewModelKind(raw)) {
+            case ViewModelKind::kWindow:
+                candidates[0] = {TaskListWindowViewModel_ITaskbarAppItemViewModel_vftable,
+                                 TaskListWindowViewModel_AppItem_get_IsPinned};
+                candidates[1] = {TaskListWindowViewModel_ITaskListWindowViewModel_vftable,
+                                 TaskListWindowViewModel_Window_get_IsPinned};
+                break;
+            case ViewModelKind::kGroup:
+                candidates[0] = {TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable,
+                                 TaskListGroupViewModel_AppItem_get_IsPinned};
+                candidates[1] = {TaskListGroupViewModel_ITaskListGroupViewModel_vftable,
+                                 TaskListGroupViewModel_Group_get_IsPinned};
+                break;
+            default:
+                return -1;
+        }
+        for (auto const& c : candidates) {
+            if (!c.vftable || !c.get) continue;
+            void* iface = FindInterfaceByVtable(raw, c.vftable);
+            if (!iface) continue;
+            bool value = false;
+            if (SUCCEEDED(c.get(iface, &value))) return value ? 1 : 0;
+        }
+    } catch (...) {}
+    return -1;
+}
+
 void UnwatchViewModelForDebug(std::shared_ptr<ButtonEntry> const& e) {
     if (e->debugViewModel) {
         try { e->debugViewModel.PropertyChanged(e->debugViewModelToken); } catch (...) {}
@@ -3547,7 +3774,7 @@ void WatchViewModelForDebug(FrameworkElement const& button, std::shared_ptr<Butt
 
 void LogButtonSummary(FrameworkElement const& button, std::shared_ptr<ButtonEntry> const& entry, int state,
                       int windowCount, bool isActive, bool hasBadge, bool attention, const ProgressInfo& progress,
-                      int progressMode, bool fillActive, bool rtl) {
+                      int progressMode, bool fillActive, bool rtl, int pinnedState) {
     // A recycled button (kept hidden by the taskbar for reuse) keeps its
     // last state; say so rather than "no window".
     std::wstring app = L"(no window)";
@@ -3580,6 +3807,7 @@ void LogButtonSummary(FrameworkElement const& button, std::shared_ptr<ButtonEntr
     std::wstring summary = app + L": windows=" + std::to_wstring(windowCount) +
         L" state=" + (state >= 0 && state <= 4 ? kStates[state] : L"?") +
         L" active=" + (isActive ? L"yes" : L"no") +
+        L" pinned=" + (pinnedState == 1 ? L"yes" : pinnedState == 0 ? L"no" : L"?") +
         L" badge=" + (hasBadge ? L"yes" : L"no") +
         L" attention=" + (attention ? L"yes" : L"no") +
         L" progress=" + progressText +
@@ -3672,8 +3900,12 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
         });
     }
 
-    // Open windows: the two bottom corners; maximized: all four.
-    uint8_t mask = state == 2 ? 0x0F : state == 1 ? (uint8_t)((1 << kSlotBR) | (1 << kSlotBL)) : 0;
+    // Open windows: the two bottom corners; maximized: all four, or only the
+    // two top ones with "Bottom corners on maximized windows too" off.
+    constexpr uint8_t kBottom = (uint8_t)((1 << kSlotBR) | (1 << kSlotBL));
+    constexpr uint8_t kTop = (uint8_t)((1 << kSlotTL) | (1 << kSlotTR));
+    uint8_t mask = state == 2 ? (localSettings.IndMaximizedBottom ? (uint8_t)(kTop | kBottom) : kTop)
+                 : state == 1 ? kBottom : 0;
 
     auto host = EnsureHost(entry, panel);
     if (!host) return;
@@ -3719,8 +3951,11 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
     }
 
     SlotTarget targets[kSlotCount];
+    int pinnedState = localSettings.PinnedEnabled ? ReadButtonPinned(button) : -1;
+    if (pinnedState < 0) pinnedState = entry->pinnedState;  // recycled: keep the last known
+    entry->pinnedState = (int8_t)pinnedState;
     ComputeSlotTargets(targets, r.metrics, localSettings, state, mask, hasBadge, windowCount, isActive,
-                       IsElementLightMode(button), attention);
+                       IsElementLightMode(button), attention, pinnedState);
 
     // Indeterminate progress: a minimized app's underline sweeps (the dots
     // stay, clear of it on the side edges); an open or maximized app's
@@ -3791,6 +4026,9 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
             BindFillTwins(r, rtl);
             if (r.fillColorSet) BindFillColors(r, r.fillColor);
         }
+        // Dimmed missing corners don't take the fill.
+        r.fillProps.InsertScalar(L"top", targets[kSlotTL].dim ? 0.0f : 1.0f);
+        r.fillProps.InsertScalar(L"bottom", targets[kSlotBL].dim ? 0.0f : 1.0f);
         bool isLight = IsElementLightMode(button);
         const auto& light = progress.error ? localSettings.FillErrorLight
                           : progress.paused ? localSettings.FillPausedLight : localSettings.FillLight;
@@ -3830,7 +4068,7 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
     if (localSettings.DebugLog) {
         try {
             LogButtonSummary(button, entry, state, windowCount, isActive, hasBadge, attention, progress, progressMode,
-                             r.fillActive, rtl);
+                             r.fillActive, rtl, pinnedState);
         } catch (...) {}
     }
     try { WatchViewModelForDebug(button, entry, localSettings); } catch (...) {}
@@ -3988,7 +4226,10 @@ void HideNativeElementsNow(FrameworkElement const& button) {
     Settings localSettings;
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
-        if (!g_settings.HideNativeIndicator && !g_settings.HideNativeProgress && !g_settings.BadgeEnabled) return;
+        if (!g_settings.HideNativeIndicator && !g_settings.HideNativeProgress && !g_settings.BadgeEnabled &&
+            !g_settings.MultiEnabled) {
+            return;
+        }
         localSettings = g_settings;
     }
     auto entry = FindOrCreateEntry(button);
@@ -4083,6 +4324,32 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             nullptr,
             true,
         },
+        // The pinned state (for the pinned-app dot), on whichever interface
+        // has it. All optional.
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListWindowViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::get_IsPinned(bool *))"},
+            &TaskListWindowViewModel_AppItem_get_IsPinned,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListWindowViewModel,struct winrt::Taskbar::ITaskListWindowViewModel>::get_IsPinned(bool *))"},
+            &TaskListWindowViewModel_Window_get_IsPinned,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListGroupViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::get_IsPinned(bool *))"},
+            &TaskListGroupViewModel_AppItem_get_IsPinned,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListGroupViewModel,struct winrt::Taskbar::ITaskListGroupViewModel>::get_IsPinned(bool *))"},
+            &TaskListGroupViewModel_Group_get_IsPinned,
+            nullptr,
+            true,
+        },
     };
 
     if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
@@ -4092,6 +4359,9 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
     Wh_Log(L"OnApplyTemplate hook: %s", TaskListButton_OnApplyTemplate_Original ? L"available" : L"unavailable");
     Wh_Log(L"View-model bridge: %s",
            IsViewModelBridgeAvailable() ? L"available" : L"unavailable, the mod is inactive");
+    Wh_Log(L"Pinned state: %s", IsPinnedStateAvailable()
+               ? L"available"
+               : L"unavailable (the pinned-app dot shows on pinned apps that aren't running only)");
     return true;
 }
 
@@ -4412,8 +4682,8 @@ void SweepAllTaskbarsFromTaskbarThread() {
 
 // Which kinds of native elements to show again.
 struct NativeRestore {
-    bool running = false, progress = false, badges = false;
-    bool Any() const { return running || progress || badges; }
+    bool running = false, progress = false, badges = false, multi = false;
+    bool Any() const { return running || progress || badges || multi; }
 };
 
 // Shows the native elements of every task list button again, the ones no
@@ -4431,6 +4701,7 @@ void RestoreNativeElementsFromTaskbarThread(NativeRestore const& what) {
         };
         if (what.running) restoreOne(L"RunningIndicator", L"");
         if (what.progress) restoreOne(L"ProgressIndicator", L"ProgressBar");
+        if (what.multi) restoreOne(L"MultiWindowElement", L"");
         if (what.badges) {
             std::vector<FrameworkElement> found;
             CollectBadgeElements(iconPanel, found);
@@ -4976,7 +5247,7 @@ void Wh_ModBeforeUninit() {
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
         cleanup.restore = {g_settings.HideNativeIndicator, g_settings.HideNativeProgress,
-                           g_settings.BadgeEnabled};
+                           g_settings.BadgeEnabled, g_settings.MultiEnabled};
     }
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!hTaskbarWnd || !RunFromWindowThread(hTaskbarWnd, UnloadCleanupOnTaskbarThread, &cleanup)) {
@@ -5028,7 +5299,8 @@ void Wh_ModSettingsChanged() {
     NativeRestore wasHidden;
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
-        wasHidden = {g_settings.HideNativeIndicator, g_settings.HideNativeProgress, g_settings.BadgeEnabled};
+        wasHidden = {g_settings.HideNativeIndicator, g_settings.HideNativeProgress, g_settings.BadgeEnabled,
+                     g_settings.MultiEnabled};
     }
     LoadSettings();
     ReconfigureWinEvents();
@@ -5041,7 +5313,8 @@ void Wh_ModSettingsChanged() {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             turnedOff = {wasHidden.running && !g_settings.HideNativeIndicator,
                          wasHidden.progress && !g_settings.HideNativeProgress,
-                         wasHidden.badges && !g_settings.BadgeEnabled};
+                         wasHidden.badges && !g_settings.BadgeEnabled,
+                         wasHidden.multi && !g_settings.MultiEnabled};
         }
         RestoreNativeElements(turnedOff);
     }
