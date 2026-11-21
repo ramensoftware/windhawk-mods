@@ -2,7 +2,7 @@
 // @id              ctrl-backspace-fix-for-win32-text-boxes
 // @name            Ctrl+Backspace Fix for Win32 Text Boxes
 // @description     Makes Ctrl+Backspace delete the previous word in Win32 text boxes instead of inserting a control character
-// @version         1.0.1
+// @version         1.1.0
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         *
@@ -18,9 +18,6 @@ deleting the previous word.
 This mod resolves this behavior by adding previous-word deletion functionality
 to those `Edit` controls.
 
-It also supports wrapped `Edit` controls used in .NET WinForms and Delphi VCL
-applications.
-
 | Before |
 | :----- |
 | ![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/ctrl-backspace-fix-for-win32-text-boxes_before.gif) |
@@ -29,7 +26,19 @@ applications.
 | :---- |
 | ![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/ctrl-backspace-fix-for-win32-text-boxes_after.gif) |
 
-## Notes
+## Features & behavior
+* Supports wrapped `Edit` controls used in .NET WinForms and Delphi VCL
+  applications.
+* Handles Unicode whitespace, punctuation, and symbols when calculating word
+  boundaries.
+* Groups consecutive Japanese kana (Hiragana & Katakana) by script when deleting
+  words.
+* Steps back one character at a time through Chinese, Japanese, and Korean
+  ideographs.
+* Deletes masked text before the caret as a single block in password fields to
+  avoid leaking word boundaries.
+
+## Notes & limitations
 * In hotkey text boxes, pressing `Ctrl+Backspace` deletes the text instead of
   assigning the hotkey.
 * In masked text boxes, pressing `Ctrl+Backspace` deletes the placeholder
@@ -43,31 +52,69 @@ applications.
 
 #include <windhawk_utils.h>
 #include <windows.h>
-#include <cwctype>
+#include <algorithm>
+#include <cwchar>
 #include <string>
 
 enum class CharClass
 {
     Whitespace,
     Punctuation,
+    Ideograph,
+    Hiragana,
+    Katakana,
     Alphanumeric
 };
 
 // Helper: Determine the character class to calculate word boundaries
 CharClass GetCharClass(WCHAR wch)
 {
-    // Whitespace
-    if (iswspace(wch))
+    // Treat underscores as part of a word
+    if (wch == L'_')
     {
-        return CharClass::Whitespace;
+        return CharClass::Alphanumeric;
     }
 
-    // VS Code's default word separators
-    constexpr const WCHAR* szWordSeparators =
-        L"`~!@#$%^&*()-=+[{]}\\|;:'\",.<>/?";
-    if (wcschr(szWordSeparators, wch) != nullptr)
+    // Treat prolonged sound marks as part of a katakana word
+    if (wch == L'\u30FC' || wch == L'\uFF70')
     {
-        return CharClass::Punctuation;
+        return CharClass::Katakana;
+    }
+
+    // Unicode whitespace and punctuation
+    WORD wCharType1 = 0;
+    if (GetStringTypeW(CT_CTYPE1, &wch, 1, &wCharType1))
+    {
+        if (wCharType1 & C1_SPACE)
+        {
+            return CharClass::Whitespace;
+        }
+        if (wCharType1 & C1_PUNCT)
+        {
+            return CharClass::Punctuation;
+        }
+    }
+
+    // Unicode symbols, CJK ideographs, and Japanese kana
+    WORD wCharType3 = 0;
+    if (GetStringTypeW(CT_CTYPE3, &wch, 1, &wCharType3))
+    {
+        if (wCharType3 & C3_SYMBOL)
+        {
+            return CharClass::Punctuation;
+        }
+        if (wCharType3 & C3_IDEOGRAPH)
+        {
+            return CharClass::Ideograph;
+        }
+        if (wCharType3 & C3_HIRAGANA)
+        {
+            return CharClass::Hiragana;
+        }
+        if (wCharType3 & C3_KATAKANA)
+        {
+            return CharClass::Katakana;
+        }
     }
 
     // Everything else is grouped as a word
@@ -78,54 +125,82 @@ CharClass GetCharClass(WCHAR wch)
 void DeletePreviousWord(HWND hWnd)
 {
     // Retrieve the starting and ending positions of the current text selection
-    DWORD dwSelectionStart, dwSelectionEnd;
-    SendMessageW(hWnd, EM_GETSEL, reinterpret_cast<WPARAM>(&dwSelectionStart),
-        reinterpret_cast<LPARAM>(&dwSelectionEnd));
+    DWORD dwSelStart = 0;
+    DWORD dwSelEnd = 0;
+    SendMessageW(hWnd, EM_GETSEL, reinterpret_cast<WPARAM>(&dwSelStart),
+        reinterpret_cast<LPARAM>(&dwSelEnd));
 
     // Replace any active text selection with an empty string
-    if (dwSelectionStart != dwSelectionEnd)
+    if (dwSelStart != dwSelEnd)
     {
         SendMessageW(hWnd, EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(L""));
         return;
     }
 
-    // Allocate a string buffer and retrieve the text to calculate the boundary
-    int cchTextLen = GetWindowTextLengthW(hWnd);
-    if (cchTextLen == 0 || dwSelectionStart == 0)
+    if (dwSelStart == 0)
     {
         return;
     }
 
-    std::wstring windowText(cchTextLen, L'\0');
-    GetWindowTextW(hWnd, windowText.data(), cchTextLen + 1);
-    int iPos = dwSelectionStart - 1;
+    DWORD dwNewSelStart = 0;
 
-    // Step back through all whitespace characters
-    while (iPos >= 0 && GetCharClass(windowText[iPos]) == CharClass::Whitespace)
+    // Treat masked password text as a single block to avoid leaking word
+    // boundaries
+    if (!SendMessageW(hWnd, EM_GETPASSWORDCHAR, 0, 0))
     {
-        iPos--;
-    }
+        // Allocate a string buffer and retrieve the text to calculate the
+        // boundary
+        int cchTextLen = GetWindowTextLengthW(hWnd);
+        if (cchTextLen <= 0)
+        {
+            return;
+        }
 
-    if (iPos >= 0)
-    {
-        // Identify the character class to delete
-        CharClass targetCharClass = GetCharClass(windowText[iPos]);
+        std::wstring windowText(cchTextLen, L'\0');
+        int cchTextCopied = GetWindowTextW(hWnd, windowText.data(),
+            cchTextLen + 1);
+        if (cchTextCopied <= 0)
+        {
+            return;
+        }
 
-        // Step back through all characters of the same class
-        while (iPos >= 0 && GetCharClass(windowText[iPos]) == targetCharClass)
+        auto dwClampedSelStart =
+            std::min<DWORD>(dwSelStart, static_cast<DWORD>(cchTextCopied));
+        auto iPos = static_cast<int>(dwClampedSelStart) - 1;
+
+        // Step back through all whitespace characters
+        while (iPos >= 0 &&
+            GetCharClass(windowText[iPos]) == CharClass::Whitespace)
         {
             iPos--;
         }
-    }
 
-    // Calculate the final text selection boundary
-    DWORD dwNewSelStart = iPos + 1;
+        if (iPos >= 0)
+        {
+            // Identify the character class to delete
+            CharClass targetCharClass = GetCharClass(windowText[iPos]);
+            iPos--;
+
+            if (targetCharClass != CharClass::Ideograph)
+            {
+                // Step back through all characters of the same class
+                while (iPos >= 0 &&
+                    GetCharClass(windowText[iPos]) == targetCharClass)
+                {
+                    iPos--;
+                }
+            }
+        }
+
+        // Calculate the final text selection boundary
+        dwNewSelStart = static_cast<DWORD>(iPos + 1);
+    }
 
     // Pause re-drawing to hide the text selection flicker
     SendMessageW(hWnd, WM_SETREDRAW, FALSE, 0);
 
     // Select the calculated word bounds and replace with an empty string
-    SendMessageW(hWnd, EM_SETSEL, dwNewSelStart, dwSelectionEnd);
+    SendMessageW(hWnd, EM_SETSEL, dwNewSelStart, dwSelEnd);
     SendMessageW(hWnd, EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(L""));
 
     // Resume re-drawing and force a re-paint to display the updated text
@@ -174,9 +249,9 @@ bool IsCtrlBackspaceOnEditControl(HWND hWnd, UINT uMsg, WPARAM wParam)
         LONG_PTR lStyle = GetWindowLongPtrW(hWnd, GWL_STYLE);
 
         // Ensure it is a valid, writable Edit control
-        return ((lStyle & WS_CHILD) != 0 &&
-            IsEditControl(hWnd) &&
-            (lStyle & ES_READONLY) == 0);
+        return ((lStyle & WS_CHILD) &&
+            !(lStyle & ES_READONLY) &&
+            IsEditControl(hWnd));
     }
     return false;
 }
