@@ -2933,6 +2933,8 @@ struct Dock {
     bool menuOpen = false;
     bool fullscreen = false;
     DWORD outsideSince = 0;
+    DWORD bandsAt = 0;          // the blur bands were last moved (see PlaceDock)
+    bool bandsPending = false;
     D2D1_RECT_F pill{};
     bool appbar = false;  // fixed bar, always shown: reserves its strip so maximized windows stop above it
     ComPtr<IDWriteTextFormat> fontBold;
@@ -3943,9 +3945,7 @@ static void PlaceBands(std::vector<HWND>& bands, std::vector<RECT>& cur, bool on
                 dwp = DeferWindowPos(dwp, bands[i], nullptr, 0, 0, 0, 0,
                                      SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         } else if (!EqualRect(&w, &cur[i]) && dwp) {
-            // (blur only: nothing to copy, nobody to tell. Moved many times a second while the dock zooms:
-            // without these, the ~20 bands took up to 30 ms a frame.)
-            UINT flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOCOPYBITS | SWP_NOSENDCHANGING | SWP_NOOWNERZORDER;
+            UINT flags = SWP_NOACTIVATE | SWP_NOZORDER;
             if (cur[i].right <= cur[i].left) flags |= SWP_SHOWWINDOW;
             dwp = DeferWindowPos(dwp, bands[i], nullptr, w.left, w.top, w.right - w.left, w.bottom - w.top, flags);
         }
@@ -3972,6 +3972,7 @@ static HWND CreateBand() {
     return g;
 }
 
+constexpr UINT_PTR TIMER_DOCK_BANDS = 15;
 void PlaceDock(Dock& d) {
     int slide = (int)std::lround((1 - d.shown) * (PillH(d) + BottomGap(d) + 8 * d.scale));
     int top = d.rcMon.bottom - d.ch + slide;
@@ -3991,8 +3992,20 @@ void PlaceDock(Dock& d) {
     BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
     UpdateLayeredWindow(d.content, nullptr, &dst, &size, d.memDC, &src, 0, &bf, ULW_ALPHA);
 
-    PlaceBands(d.bands, d.bandRc, g_theme.blur, d.rcMon.left + d.pill.left, top + d.pill.top,
-               d.rcMon.left + d.pill.right, top + d.pill.bottom, PillRadius(d));
+    // The blur behind is ~20 small windows: moving them all takes Windows up to 30 ms. While the dock
+    // zooms (a frame every 15 ms) they follow at most every 33 ms; the last position always arrives.
+    DWORD now = GetTickCount();
+    if (d.visible && now - d.bandsAt < 33) {
+        if (!d.bandsPending) {
+            d.bandsPending = true;
+            SetTimer(d.content, TIMER_DOCK_BANDS, 34, nullptr);
+        }
+    } else {
+        PlaceBands(d.bands, d.bandRc, g_theme.blur, d.rcMon.left + d.pill.left, top + d.pill.top,
+                   d.rcMon.left + d.pill.right, top + d.pill.bottom, PillRadius(d));
+        d.bandsAt = now;
+        d.bandsPending = false;
+    }
     if (!d.visible) {
         ShowWindow(d.content, SW_SHOWNOACTIVATE);
         SetWindowPos(d.content, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -13673,6 +13686,12 @@ LRESULT CALLBACK ContentProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         case WM_TIMER:
+            if (d && wp == TIMER_DOCK_BANDS) {
+                KillTimer(hwnd, TIMER_DOCK_BANDS);
+                d->bandsPending = false;
+                PlaceDock(*d);
+                return 0;
+            }
             if (d && wp == TIMER_TRAY_DRAGSCROLL) {
                 // Over an arrow, or near the strip's ends: one more icon that way.
                 auto& g = g_trayDockDrag;
