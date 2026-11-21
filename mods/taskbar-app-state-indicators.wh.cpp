@@ -1606,10 +1606,9 @@ bool IsAnyWindowForeground(const std::vector<HWND>& windows) {
 // The indicator a button should show: -1 leave as is (recycled container),
 // 0 none, 1 open corners, 2 all four (maximized), 3 minimized underline,
 // 4 dimmed underline (running off screen: cloaked, none minimized here).
-// "Open" follows the window rules whether or not the corner marks are on, so
-// the underline means the same thing in both cases: the button has a
-// minimized window and isn't open. Buttons without any window
-// (pinned apps that aren't running) get nothing.
+// The underline means the button has a minimized window and isn't open by
+// the window rules. Buttons without any window (pinned apps that aren't
+// running) get nothing.
 // `isActive` receives whether the button is the foreground app's: -1
 // unknown (recycled container), 0 no, 1 yes.
 int EvaluateIndicatorState(const FrameworkElement& button, const Settings& localSettings, int* windowCount,
@@ -4907,23 +4906,19 @@ void UnhookWinEvents() {
     g_winEventHooks.clear();
 }
 
-// Registers the WinEvent ranges the current settings need: none with the
-// indicators off; otherwise minimize, restore, show, hide, cloaking and
-// foreground changes always (the foreground picks the active color),
-// location changes only when maximized windows are marked.
+// Registers the WinEvent ranges the indicators follow: minimize, restore,
+// show, hide, cloaking, foreground changes (the foreground picks the active
+// color) and location changes (maximized windows).
 void HookWinEvents() {
     UnhookWinEvents();
 
-    Settings localSettings;
-    { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
     struct Range { DWORD min, max; };
     std::vector<Range> ranges = {
         {EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND},
         {EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE},
         {EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED},
     };
-    // Foreground changes pick the active color (and, with the foreground
-    // window not counted as shown, decide "open" too).
+    // Foreground changes pick the active color.
     ranges.push_back({EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND});
     SeedZoomStates();
     ranges.push_back({EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE});
