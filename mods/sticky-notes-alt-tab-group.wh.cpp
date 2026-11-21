@@ -4,13 +4,13 @@
 // @name:ko         스티커 메모 Alt+Tab 하나로 묶기
 // @description     Group Microsoft Sticky Notes into one Alt+Tab entry, bring open notes forward together, and use compact previews.
 // @description:ko  스티커 메모를 Alt+Tab 한 항목으로 묶고, 전환하면 열린 메모를 함께 표시하며 미리보기를 작게 만듭니다.
-// @version         1.1.1
+// @version         1.1.5
 // @author          Choihyunseok1
 // @github          https://github.com/Choihyunseok1
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -ldwmapi -luuid
+// @compilerOptions -lole32 -ldwmapi -luuid -lshell32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -19,6 +19,11 @@
 Keep multiple Microsoft Sticky Notes windows from filling the Alt+Tab switcher.
 
 - Show one representative Sticky Notes window in Alt+Tab.
+  - Keep notes grouped during delayed refreshes for as long as the switcher is
+    open, including refreshes after Show desktop (Win+D). Native window hiding
+    does not change the representative; a destroyed window can be replaced.
+  - Recognize minimized UWP note frames by their AppUserModelID even when
+    Windows detaches the note's content window from the frame after Win+D.
 - Switch to Sticky Notes to bring all its open windows on the current virtual
   desktop forward together.
   - Minimized notes are restored; closed notes are not opened.
@@ -39,6 +44,8 @@ Keep multiple Microsoft Sticky Notes windows from filling the Alt+Tab switcher.
   - Other Windows builds and the newer OneNote-based Sticky Notes experience
     have not been tested.
 - Uses private shell symbols, which may change after Windows updates.
+  - If optional refresh symbols are unavailable, initial grouping, collective
+    activation, and compact previews retain the previous behavior.
 - Tested alongside Alt+Tab per monitor 1.2 with its cursor-monitor filter.
   - That mod's monitor filtering still applies. Notes restored after selection
     can be on any monitor on the current virtual desktop.
@@ -99,6 +106,7 @@ SOFTWARE.
 #include <windhawk_utils.h>
 #include <dwmapi.h>
 #include <shobjidl.h>
+#include <propsys.h>
 #include <atomic>
 #include <vector>
 #include <cwchar>
@@ -106,6 +114,10 @@ SOFTWARE.
 std::atomic<DWORD> buildThread{0}, lastThread{0};
 std::atomic<ULONGLONG> buildTime{0};
 std::atomic<HWND> representative{nullptr};
+thread_local unsigned refreshDepth = 0;
+thread_local void* evaluatingDataView = nullptr;
+SRWLOCK dataViewLock = SRWLOCK_INIT;
+std::vector<void*> altTabDataViews;
 void *win32Vtable, *winrtVtable;
 using NativeWindow = HRESULT(WINAPI*)(void*, HWND*);
 NativeWindow win32Window, winrtWindow;
@@ -113,6 +125,10 @@ using Visible = HRESULT(WINAPI*)(void*, void*, BOOL*);
 Visible originalVisible;
 using Create = HRESULT(WINAPI*)(void*, void*, void*);
 Create originalCreate;
+using EvaluateItem = int(WINAPI*)(void*, void*);
+EvaluateItem originalEvaluateItem;
+using DestroyDataView = void(WINAPI*)(void*);
+DestroyDataView originalDestroyDataView;
 HANDLE stopEvent, worker;
 IVirtualDesktopManager* desktops;
 bool wasNotes;
@@ -124,6 +140,8 @@ SourceSize originalSourceSize;
 SourceBounds sourceBounds;
 
 HRESULT WINAPI SourceSizeHook(void* self, PreviewSize* size);
+bool RefreshHooksAvailable();
+void TrackDataView(void* self);
 
 bool NotesProcess(HWND window) {
     DWORD pid = 0;
@@ -144,6 +162,23 @@ bool Notes(HWND window) {
     if (NotesProcess(window)) return true;
     wchar_t cls[128];
     if (!GetClassNameW(window, cls, ARRAYSIZE(cls)) || wcscmp(cls, L"ApplicationFrameWindow")) return false;
+    // UWP content windows can be detached from ApplicationFrameWindow while
+    // minimized (for example after Win+D). The frame still carries the app ID;
+    // looking only for a Microsoft.Notes.exe child misclassifies every note.
+    constexpr PROPERTYKEY appIdKey = {
+        {0x9F4C2855, 0x9F79, 0x4B39,
+         {0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3}}, 5};
+    IPropertyStore* properties = nullptr;
+    if (SUCCEEDED(SHGetPropertyStoreForWindow(window, IID_PPV_ARGS(&properties)))) {
+        PROPVARIANT value{};
+        bool notes = SUCCEEDED(properties->GetValue(appIdKey, &value)) &&
+            value.vt == VT_LPWSTR && value.pwszVal &&
+            _wcsicmp(value.pwszVal,
+                     L"Microsoft.MicrosoftStickyNotes_8wekyb3d8bbwe!App") == 0;
+        PropVariantClear(&value);
+        properties->Release();
+        if (notes) return true;
+    }
     bool found = false;
     EnumChildWindows(window, [](HWND child, LPARAM data) -> BOOL {
         if (!NotesProcess(child)) return TRUE;
@@ -185,27 +220,97 @@ HRESULT WINAPI SourceSizeHook(void* self, PreviewSize* size) {
 }
 HRESULT WINAPI VisibleHook(void* self, void* view, BOOL* visible) {
     HRESULT hr = originalVisible(self, view, visible);
-    if (FAILED(hr) || !*visible) return hr;
     DWORD thread = GetCurrentThreadId();
-    if (buildThread != thread && (lastThread != thread || GetTickCount64() - buildTime > 250)) return hr;
+    // The initial list can contain no eligible notes after Show desktop. Track
+    // the innermost application-visibility evaluator before eligibility/type
+    // checks, so notes added by a later refresh still receive grouping.
+    if (buildThread == thread && evaluatingDataView && RefreshHooksAvailable()) {
+        TrackDataView(evaluatingDataView);
+    }
+    if (FAILED(hr) || !*visible) return hr;
+    // Late queries are filtered only inside an Alt+Tab data view's evaluation.
+    // Other callers on the same shell thread keep their normal visibility.
+    if (!refreshDepth && buildThread != thread &&
+        (lastThread != thread || GetTickCount64() - buildTime > 250)) return hr;
     HWND window = nullptr;
     void* table = *reinterpret_cast<void**>(view);
-    if (table == win32Vtable) hr = win32Window(view, &window);
-    else if (table == winrtVtable) hr = winrtWindow(view, &window);
-    else return S_OK;
-    if (FAILED(hr) || !Notes(window)) return S_OK;
-    HWND expected = nullptr;
-    representative.compare_exchange_strong(expected, window);
+    HRESULT windowResult;
+    if (table == win32Vtable) windowResult = win32Window(view, &window);
+    else if (table == winrtVtable) windowResult = winrtWindow(view, &window);
+    else return hr;
+    if (FAILED(windowResult) || !Notes(window)) return hr;
+    HWND expected = representative.load();
+    // WS_VISIBLE is not Alt+Tab eligibility. Show desktop/UWP transitions may
+    // hide every native window; re-electing on each hidden candidate lets all
+    // notes through. Keep the live representative stable until it is destroyed.
+    while (!expected || !IsWindow(expected)) {
+        if (representative.compare_exchange_weak(expected, window)) break;
+    }
     if (representative != window) *visible = FALSE;
-    return S_OK;
+    return hr;
 }
 HRESULT WINAPI CreateHook(void* a, void* b, void* c) {
     representative = nullptr;
+    AcquireSRWLockExclusive(&dataViewLock);
+    altTabDataViews.clear();
+    ReleaseSRWLockExclusive(&dataViewLock);
     buildThread = GetCurrentThreadId(); lastThread = GetCurrentThreadId();
     buildTime = GetTickCount64();
     HRESULT hr = originalCreate(a, b, c);
     buildThread = 0;
     return hr;
+}
+bool RefreshHooksAvailable() {
+    return originalEvaluateItem && originalDestroyDataView;
+}
+bool IsAltTabDataView(void* self) {
+    AcquireSRWLockShared(&dataViewLock);
+    bool found = false;
+    for (void* dataView : altTabDataViews) {
+        if (dataView == self) { found = true; break; }
+    }
+    ReleaseSRWLockShared(&dataViewLock);
+    return found;
+}
+void TrackDataView(void* self) {
+    AcquireSRWLockExclusive(&dataViewLock);
+    bool found = false;
+    for (void* dataView : altTabDataViews) {
+        if (dataView == self) { found = true; break; }
+    }
+    if (!found) {
+        altTabDataViews.push_back(self);
+        Wh_Log(L"Enrolled Alt+Tab data view %p, %zu tracked", self, altTabDataViews.size());
+    }
+    ReleaseSRWLockExclusive(&dataViewLock);
+}
+struct EvaluationScope {
+    void* previousView = evaluatingDataView;
+    unsigned previousDepth = refreshDepth;
+    explicit EvaluationScope(void* self) {
+        evaluatingDataView = self;
+        if (RefreshHooksAvailable() && IsAltTabDataView(self)) ++refreshDepth;
+    }
+    ~EvaluationScope() {
+        evaluatingDataView = previousView;
+        refreshDepth = previousDepth;
+    }
+};
+int WINAPI EvaluateItemHook(void* self, void* item) {
+    EvaluationScope scope(self);
+    return originalEvaluateItem(self, item);
+}
+void WINAPI DestroyDataViewHook(void* self) {
+    AcquireSRWLockExclusive(&dataViewLock);
+    for (auto it = altTabDataViews.begin(); it != altTabDataViews.end(); ++it) {
+        if (*it == self) {
+            altTabDataViews.erase(it);
+            Wh_Log(L"Destroyed Alt+Tab data view %p", self);
+            break;
+        }
+    }
+    ReleaseSRWLockExclusive(&dataViewLock);
+    originalDestroyDataView(self);
 }
 void CALLBACK Foreground(HWINEVENTHOOK, DWORD, HWND window, LONG object, LONG, DWORD, DWORD) {
     if (object != OBJID_WINDOW || !window) return;
@@ -258,6 +363,18 @@ BOOL Wh_ModInit() {
         {{LR"(long __cdecl XamlAltTabViewHost_CreateInstance(struct XamlViewHostInitializeArgs const &,struct _GUID const &,void * *))"}, &originalCreate, CreateHook},
     };
     if (!WindhawkUtils::HookSymbols(shell, hooks, ARRAYSIZE(hooks))) return FALSE;
+    HMODULE switcherModel = LoadLibraryExW(L"SwitcherDataModel.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    // SwitcherDataModel.dll
+    WindhawkUtils::SYMBOL_HOOK refreshHooks[] = {
+        {{LR"(private: enum Windows::Internal::ComposableShell::Multitasking::SwitchItemInclusion __cdecl SwitchItemDataViewImpl::InternalEvaluateItem(struct Windows::Internal::ComposableShell::Multitasking::ISwitchItem *))"}, &originalEvaluateItem, EvaluateItemHook, true},
+        {{LR"(private: virtual __cdecl SwitchItemDataViewImpl::~SwitchItemDataViewImpl(void))"}, &originalDestroyDataView, DestroyDataViewHook, true},
+    };
+    if (switcherModel) {
+        WindhawkUtils::HookSymbols(switcherModel, refreshHooks, ARRAYSIZE(refreshHooks));
+    }
+    if (!RefreshHooksAvailable()) {
+        Wh_Log(L"Refresh symbols unavailable; retaining creation-time grouping");
+    }
     HMODULE model = LoadLibraryW(L"DesktopSwitcherDataModel.dll");
     // DesktopSwitcherDataModel.dll
     WindhawkUtils::SYMBOL_HOOK previewHooks[] = {
