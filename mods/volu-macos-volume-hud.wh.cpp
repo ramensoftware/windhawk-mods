@@ -5,6 +5,8 @@
 // @version         1.0.0
 // @author          Kouqqu
 // @github          https://github.com/Kouqqu
+// @homepage        https://github.com/Kouqqu/Volu
+// @donateUrl       https://dalink.to/koukku
 // @include         explorer.exe
 // @compilerOptions -lgdiplus -lgdi32 -lole32 -lwinmm -ldwmapi -lshcore -lcomctl32
 // ==/WindhawkMod==
@@ -13,7 +15,17 @@
 /*
 # Volu - macOS Volume HUD
 
-Authentic macOS-style volume HUD for Windows with audio clicks.
+![Volu - macOS Volume HUD](https://raw.githubusercontent.com/Kouqqu/Volu/main/preview.png)
+
+Authentic macOS-style translucent volume HUD for Windows with classic step click sounds.
+
+### Features
+* **Pixel-perfect design**: Authentic macOS frosted glass HUD overlay with clean 16-step volume bar.
+* **Audio feedback**: Classic wooden and modern tactile volume step clicks. Silent on mute.
+* **Smooth animations**: Smooth fade-out transition with configurable on-screen duration.
+* **Flexible positioning**: Place the HUD at the center, top, bottom, or corners of your screen.
+* **Custom hotkeys**: Global shortcuts (`Ctrl + Alt + Up`, `Ctrl + Alt + Down`, `Ctrl + Alt + V`), can be toggled on/off in settings.
+* **Native suppression**: Intercepts physical media keys (`Volume Up`, `Volume Down`, `Mute`) and suppresses the default Windows flyouts.
 
 ### Shortcuts
 - `Ctrl + Alt + Up` — Volume Up
