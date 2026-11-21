@@ -5198,9 +5198,18 @@ void FreePopupResources() {
 // animations smooth.
 
 // The Direct2D and DirectWrite "factories", which make everything else.
-// Created on first use, and released when the mod unloads.
-ComPtr<ID2D1Factory> g_d2dFactory;
-ComPtr<IDWriteFactory> g_writeFactory;
+// Created on first use, and released when the mod unloads
+// (ReleaseTextFactories, called from Wh_ModUninit).
+//
+// [[clang::no_destroy]]: when Explorer itself exits (a restart, signing out
+// or shutting down), Windhawk doesn't call Wh_ModUninit, and C++ would
+// release these automatically at the very end. By then Windows has already
+// stopped Explorer's other threads, and releasing them could get stuck on a
+// lock one of those threads held, hanging or crashing Explorer as it exits.
+// This tells C++ not to: Windows reclaims everything when Explorer exits
+// anyway.
+[[clang::no_destroy]] ComPtr<ID2D1Factory> g_d2dFactory;
+[[clang::no_destroy]] ComPtr<IDWriteFactory> g_writeFactory;
 std::mutex g_textLock;  // In case two threads draw text at once.
 
 bool EnsureTextFactories() {
