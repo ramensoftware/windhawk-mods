@@ -1188,16 +1188,14 @@ static std::wstring GetStr(const std::wstring& key) {
 
 // A value of any length (the buffer grows until it fits; Windhawk returns nothing when it doesn't).
 static bool ReadLong(const std::wstring& key, std::wstring& out) {
-    for (size_t n = 2048; n <= (1u << 22); n *= 4) {
+    // (empty, missing and too long all read as nothing: grow up to 131072 characters, the most any
+    // value of this mod was ever written with)
+    for (size_t n = 2048; n <= 131072 * 2; n *= 4) {
         std::vector<wchar_t> buf(n);
         size_t got = Wh_GetStringValue(key.c_str(), buf.data(), buf.size());
-        if (got && got < n - 1) {
+        if (got) {
             out.assign(buf.data(), got);
             return true;
-        }
-        if (!got) {
-            // (empty or missing, or too long for this buffer: only a bigger buffer can tell)
-            if (n >= (1u << 22)) return false;
         }
     }
     return false;
@@ -1206,13 +1204,27 @@ static bool ReadLong(const std::wstring& key, std::wstring& out) {
 // A list kept as "<SID>_<name>.n" and one value per item, "<SID>_<name>.<i>" (no line breaks inside a
 // value: the portable Windhawk keeps them in an INI file). Lists saved before as one string (with a
 // separator) are read once from it and moved over. Returns false when nothing was ever saved.
+// What each list was last saved or read as (only the entries that changed are written again: the
+// portable Windhawk rewrites its INI file for every value).
+static std::unordered_map<std::wstring, std::vector<std::wstring>> g_storedItems;
 static bool StoreItems(const wchar_t* name, const std::vector<std::wstring>& items) {
     std::wstring base = UserPrefix() + name;
-    int old = Wh_GetIntValue((base + L".n").c_str(), 0);
+    auto known = g_storedItems.find(name);
+    std::vector<std::wstring> before;
+    int old;
+    if (known != g_storedItems.end()) {
+        before = known->second;
+        old = (int)before.size();
+    } else {
+        old = Wh_GetIntValue((base + L".n").c_str(), 0);
+    }
     bool ok = true;
-    for (size_t i = 0; i < items.size(); i++) ok = Wh_SetStringValue((base + L"." + std::to_wstring(i)).c_str(), items[i].c_str()) && ok;
+    for (size_t i = 0; i < items.size(); i++)
+        if (i >= before.size() || before[i] != items[i]) ok = Wh_SetStringValue((base + L"." + std::to_wstring(i)).c_str(), items[i].c_str()) && ok;
     for (int i = (int)items.size(); i < old; i++) Wh_DeleteValue((base + L"." + std::to_wstring(i)).c_str());
-    ok = Wh_SetIntValue((base + L".n").c_str(), (int)items.size()) && ok;
+    if ((int)items.size() != old || known == g_storedItems.end()) ok = Wh_SetIntValue((base + L".n").c_str(), (int)items.size()) && ok;
+    if (ok) g_storedItems[name] = items;
+    else g_storedItems.erase(name);
     return ok;
 }
 static bool LoadItems(const wchar_t* name, wchar_t legacySep, std::vector<std::wstring>& out) {
@@ -1220,10 +1232,13 @@ static bool LoadItems(const wchar_t* name, wchar_t legacySep, std::vector<std::w
     std::wstring base = UserPrefix() + name;
     int n = Wh_GetIntValue((base + L".n").c_str(), -1);
     if (n >= 0) {
+        bool whole = true;
         for (int i = 0; i < n; i++) {
             std::wstring v;
             if (ReadLong(base + L"." + std::to_wstring(i), v) && !v.empty()) out.push_back(v);
+            else whole = false;
         }
+        if (whole) g_storedItems[name] = out;  // (what's stored now, exactly)
         return true;
     }
     std::wstring all;
@@ -2670,11 +2685,31 @@ static bool TrayClickJustNow() { return GetTickCount() - g_trayUi.lastClick < Ge
 
 // ---- Kept between runs: the icons of apps already running when Nimbus (or the mod) restarts ----
 
+// This user's folder in the mod's storage (that folder is shared by every account on the PC): named
+// by the SID, like the stored values. Made when asked for.
+static std::wstring UserDir(bool create) {
+    wchar_t base[MAX_PATH] = {};
+    if (!Wh_GetModStoragePath(base, ARRAYSIZE(base)) || !base[0]) return L"";
+    std::wstring sid = UserPrefix();
+    if (!sid.empty() && sid.back() == L'_') sid.pop_back();
+    std::wstring dir = base;
+    if (dir.back() != L'\\') dir += L'\\';
+    dir += sid;
+    if (create) SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);
+    return dir;
+}
+
 static std::wstring TrayFile() {
-    wchar_t dir[MAX_PATH] = {};
-    if (!Wh_GetModStoragePath(dir, ARRAYSIZE(dir))) return L"";
-    CreateDirectoryW(dir, nullptr);
-    return std::wstring(dir) + L"\\tray.bin";
+    std::wstring dir = UserDir(true);
+    if (dir.empty()) return L"";
+    std::wstring file = dir + L"\\tray.bin";
+    // (earlier builds kept it in the shared folder: taken over once, by the first user who starts)
+    wchar_t base[MAX_PATH] = {};
+    if (GetFileAttributesW(file.c_str()) == INVALID_FILE_ATTRIBUTES && Wh_GetModStoragePath(base, ARRAYSIZE(base))) {
+        std::wstring old = std::wstring(base) + L"\\tray.bin";
+        MoveFileExW(old.c_str(), file.c_str(), 0);
+    }
+    return file;
 }
 
 static void SaveTray() {
@@ -5461,7 +5496,8 @@ static void CloseStart(bool animate) {
 
 static void LaunchItem(const StartItem& it) {
     if (!it.file) NoteUsage(it.launch);
-    ShellExecuteW(nullptr, L"open", it.launch.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    std::wstring target = it.file ? NativePath(it.launch) : it.launch;
+    ShellExecuteW(nullptr, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
 static void Power(int which) {
@@ -6159,16 +6195,46 @@ bool CursorInFlyout(POINT pt);
 // system wait for this thread): the buttons are checked every 40 ms while the Start is open.
 constexpr UINT_PTR TIMER_START_WATCH = 28;
 static bool g_startWasDown = false;
+static HWND g_startFg = nullptr;  // the window in front when the Start opened (see StartWatchStep)
+static HWINEVENTHOOK g_startFgHook = nullptr;
+// Another window (not Nimbus', not a menu, not Windows' search box) came to the front while the Start
+// is open. (Right after the Windows key, Windows moves the focus around by itself: not counted.)
+static bool StartLostFront(HWND fg, bool changed) {
+    extern DWORD g_lastWinAlone;
+    if (!g_start.open || g_start.menuOpen || GetTickCount() - g_start.openedAt < 200 || GetTickCount() - g_lastWinAlone < 400) return false;
+    // (polling: the window that was already in front isn't a change; told by Windows: it is)
+    if (!fg || fg == g_start.hwnd || (!changed && fg == g_startFg)) return false;
+    wchar_t fcls[64] = {};
+    GetClassNameW(GetAncestor(fg, GA_ROOT), fcls, ARRAYSIZE(fcls));
+    return wcsncmp(fcls, L"NimbusMenu_", 11) != 0 && wcscmp(fcls, L"#32768") != 0 && wcscmp(fcls, L"Windows.UI.Core.CoreWindow") != 0;
+}
+// Told by Windows the moment the window in front changes (a window run as administrator hides its
+// clicks, but not that it came to the front).
+static void CALLBACK StartFgEvent(HWINEVENTHOOK, DWORD, HWND hwnd, LONG, LONG, DWORD, DWORD) {
+    if (StartLostFront(hwnd, true)) PostMessageW(g_start.hwnd, WM_APP_START_OUTSIDE, 0, 0);
+}
 static void StartWatchStep() {
-    bool down = ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON) | GetAsyncKeyState(VK_MBUTTON)) & 0x8000) != 0;
-    if (down && !g_startWasDown && g_start.open && !g_start.menuOpen) {
+    // A window run as administrator hides its clicks from this process (the buttons read as up). It
+    // still comes to the front when clicked: a new window in front that isn't ours closes the Start.
+    if (StartLostFront(GetForegroundWindow(), false)) {
+        PostMessageW(g_start.hwnd, WM_APP_START_OUTSIDE, 0, 0);
+        return;
+    }
+    SHORT l = GetAsyncKeyState(VK_LBUTTON), r = GetAsyncKeyState(VK_RBUTTON), m = GetAsyncKeyState(VK_MBUTTON);
+    bool down = ((l | r | m) & 0x8000) != 0, tapped = ((l | r | m) & 1) != 0;  // (bit 0: pressed since the last check)
+    if ((down || tapped) && !g_startWasDown && g_start.open && !g_start.menuOpen) {
         POINT pt;
         GetCursorPos(&pt);
         HWND under = WindowFromPoint(pt);
         wchar_t cls[64] = {};
         if (under) GetClassNameW(GetAncestor(under, GA_ROOT), cls, ARRAYSIZE(cls));
         // (The dock handles its own clicks: its Start button toggles, its apps close the Iniciar.)
-        if (!PtInRect(&g_start.rc, pt) && wcscmp(cls, L"NimbusMenu_Content") != 0 && wcscmp(cls, L"#32768") != 0 && !CursorInFlyout(pt))
+        // (the panel itself, not the whole window: its clear sides, room for the wide search, let clicks
+        // through to the windows behind)
+        float W = std::min((float)g_start.w, SS(580) + SS(200) * g_start.wide);
+        float L = g_start.rc.left + ((float)g_start.w - W) / 2;
+        RECT panel = {(LONG)L, g_start.rc.top, (LONG)(L + W), g_start.rc.bottom};
+        if (!PtInRect(&panel, pt) && wcscmp(cls, L"NimbusMenu_Content") != 0 && wcscmp(cls, L"#32768") != 0 && !CursorInFlyout(pt))
             PostMessageW(g_start.hwnd, WM_APP_START_OUTSIDE, 0, 0);
     }
     g_startWasDown = down;
@@ -6177,9 +6243,16 @@ static void StartMouseHook(bool on) {
     if (!g_start.hwnd) return;
     if (on) {
         g_startWasDown = true;  // (the click that opened it may still be down)
+        g_startFg = GetForegroundWindow();
+        if (!g_startFgHook)
+            g_startFgHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, StartFgEvent, 0, 0, WINEVENT_OUTOFCONTEXT);
         SetTimer(g_start.hwnd, TIMER_START_WATCH, 40, nullptr);
     } else {
         KillTimer(g_start.hwnd, TIMER_START_WATCH);
+        if (g_startFgHook) {
+            UnhookWinEvent(g_startFgHook);
+            g_startFgHook = nullptr;
+        }
     }
 }
 
@@ -7671,13 +7744,10 @@ ComPtr<ID2D1StrokeStyle> g_dashStroke;
 
 static bool PathExists(const std::wstring& p) { return GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES; }
 
-// Pasted files live in the mod's own storage folder (Windhawk's, per mod), in "Shelf".
+// Pasted files live in this user's folder of the mod's storage, in "Shelf".
 static std::wstring ShelfDirPath() {
-    wchar_t base[MAX_PATH] = {};
-    if (!Wh_GetModStoragePath(base, ARRAYSIZE(base)) || !base[0]) return L"";
-    std::wstring dir = base;
-    if (dir.back() != L'\\') dir += L'\\';
-    return dir + L"Shelf";
+    std::wstring dir = UserDir(false);
+    return dir.empty() ? L"" : dir + L"\\Shelf";
 }
 static std::wstring ShelfDir() {  // (made when a file is pasted)
     std::wstring dir = ShelfDirPath();
@@ -7902,7 +7972,7 @@ static void ShelfDragOut(const std::wstring& path, bool right) {
 
 static void ShelfOpen(const std::wstring& path) {
     CloseFlyout();
-    ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    ShellExecuteW(nullptr, L"open", NativePath(path).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
 static void ShelfMenu(const std::wstring& path) {
@@ -8664,7 +8734,9 @@ static void NotifActivate(const NotifItem& n, int action) {
     if (type == L"protocol") {
         // Only a "scheme:" URI, as Windows does: never a path, a UNC share or a file: URL.
         PARSEDURLW pu = {sizeof(pu)};
-        bool ok = !args.empty() && SUCCEEDED(ParseURLW(args.c_str(), &pu)) && pu.nScheme != URL_SCHEME_FILE && pu.cchProtocol > 1;
+        bool ok = !args.empty() && SUCCEEDED(ParseURLW(args.c_str(), &pu)) && pu.cchProtocol > 1 && pu.nScheme != URL_SCHEME_FILE &&
+                  pu.nScheme != URL_SCHEME_SHELL && pu.nScheme != URL_SCHEME_MSSHELLROOTED && pu.nScheme != URL_SCHEME_MSSHELLIDLIST &&
+                  pu.nScheme != URL_SCHEME_KNOWNFOLDER;  // (shell:, knownfolder: and the like name files: not protocols)
         if (!ok) {
             Wh_Log(L"notifications: refused a protocol launch that isn't a URI");
             return;
@@ -13278,8 +13350,9 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 if (ShelfPrune()) ShelfChanged();
             } else if (wp == TIMER_FLY_WATCH) {
                 // A click on a window run as administrator: the mouse hook never sees it.
-                bool down = ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON) | GetAsyncKeyState(VK_MBUTTON)) & 0x8000) != 0;
-                if (down && !f.wasDown) {
+                SHORT l = GetAsyncKeyState(VK_LBUTTON), r = GetAsyncKeyState(VK_RBUTTON), m = GetAsyncKeyState(VK_MBUTTON);
+                bool down = ((l | r | m) & 0x8000) != 0, tapped = ((l | r | m) & 1) != 0;  // (a quick tap between checks)
+                if ((down || tapped) && !f.wasDown) {
                     POINT pt;
                     GetCursorPos(&pt);
                     if (!PtInRect(&f.rc, pt)) {
@@ -16569,13 +16642,31 @@ static void SendTrayWire(HWND bar, const TrayWire& w) {
 }
 
 // Queue one for the bar (icon: a handle of Explorer's own, copied again for the queue).
+static int ExTrayFind(const TrayWire& w);
 static void ExTrayQueue(TrayWire w, HICON icon) {
+    // One pending entry per icon: a newer one replaces it, as the icon's whole known state (so nothing
+    // an older change carried is lost), or as its removal. The queue never holds more than the tray.
+    bool del = w.op == NIM_DELETE;
+    if (!del) {
+        int k = ExTrayFind(w);
+        if (k >= 0) {
+            TrayWire full = g_exTray[k].w;
+            full.op = kTrayKnown;
+            w = full;
+            icon = g_exTray[k].own;
+        }
+    }
     HICON copy = icon ? CopyIcon(icon) : nullptr;
     w.hicon = (DWORD)(ULONG_PTR)copy;
+    bool byGuid = (w.flags & NIF_GUID) != 0;
     AcquireSRWLockExclusive(&g_exOutLock);
-    if (g_exOut.size() > 2000) {  // (the bar isn't taking them: drop the oldest)
-        if (g_exOut.front().icon) DestroyIcon(g_exOut.front().icon);
-        g_exOut.erase(g_exOut.begin());
+    auto same = [&](const ExTrayOut& o) {
+        return byGuid ? ((o.w.flags & NIF_GUID) && IsEqualGUID(o.w.guid, w.guid)) : (o.w.hwnd == w.hwnd && o.w.uid == w.uid);
+    };
+    auto it = std::find_if(g_exOut.begin(), g_exOut.end(), same);
+    if (it != g_exOut.end()) {
+        if (it->icon) DestroyIcon(it->icon);
+        g_exOut.erase(it);
     }
     g_exOut.push_back({w, copy});
     ReleaseSRWLockExclusive(&g_exOutLock);
