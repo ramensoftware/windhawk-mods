@@ -805,14 +805,21 @@ ComputeOverride_t MakeVerticalOffsetOverride(double offsetY) {
 
 constexpr ULONGLONG kRescanWatchDurationMs = 5000;
 
+// The globals below hold only weak references, event tokens and tick counts, so
+// unlike the XAML-owning globals above they're safe to destroy at process exit.
+// They're still cleared on the taskbar thread on unload, which also removes
+// their event handlers.
+
 struct UnloadWatch {
     winrt::weak_ref<FrameworkElement> element;
+    // The tray the element belongs to. Each taskbar, primary and secondary,
+    // has its own SystemTray.SystemTrayFrame.
+    winrt::weak_ref<FrameworkElement> systemTrayFrame;
     winrt::event_token unloadedToken{};
 };
 
-// Only accessed from the taskbar UI thread. See the note on no_destroy above.
-[[clang::no_destroy]] std::optional<std::list<UnloadWatch>> g_unloadWatches{
-    std::in_place};
+// Only accessed from the taskbar UI thread.
+std::list<UnloadWatch> g_unloadWatches;
 
 struct RescanWatch {
     winrt::weak_ref<FrameworkElement> root;
@@ -820,69 +827,68 @@ struct RescanWatch {
     ULONGLONG deadline = 0;
 };
 
-// Active while the system tray is being watched for new indicators.
-[[clang::no_destroy]] std::optional<RescanWatch> g_rescanWatch;
-
-// The SystemTray.SystemTrayFrame which contains the indicators, the root of
-// the watch.
-[[clang::no_destroy]] winrt::weak_ref<FrameworkElement> g_systemTrayFrame;
+// One per system tray being watched for new indicators, so that a watch on one
+// taskbar doesn't cancel a watch on another. Only accessed from the taskbar UI
+// thread.
+std::list<RescanWatch> g_rescanWatches;
 
 int TrackLanguageIndicatorsIn(DependencyObject root);
 
-void StopRescanWatch() {
-    if (!g_rescanWatch) {
-        return;
-    }
-
-    if (auto root = g_rescanWatch->root.get()) {
+void StopRescanWatch(std::list<RescanWatch>::iterator it) {
+    if (auto root = it->root.get()) {
         try {
-            root.LayoutUpdated(g_rescanWatch->layoutUpdatedToken);
+            root.LayoutUpdated(it->layoutUpdatedToken);
         } catch (const winrt::hresult_error& ex) {
             Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
         }
     }
 
-    g_rescanWatch.reset();
+    g_rescanWatches.erase(it);
 }
 
-void StartRescanWatch() {
-    if (g_unloading) {
-        return;
+void StopAllRescanWatches() {
+    while (!g_rescanWatches.empty()) {
+        StopRescanWatch(g_rescanWatches.begin());
     }
+}
 
-    auto root = g_systemTrayFrame.get();
-    if (!root) {
-        Wh_Log(L"No system tray to watch");
+// Watches the given system tray for a few seconds, or extends an existing watch
+// of it.
+void StartRescanWatch(const FrameworkElement& systemTrayFrame) {
+    if (g_unloading || !systemTrayFrame) {
         return;
     }
 
     ULONGLONG deadline = GetTickCount64() + kRescanWatchDurationMs;
 
-    if (g_rescanWatch && g_rescanWatch->root.get() == root) {
-        g_rescanWatch->deadline = deadline;
-        return;
+    for (auto& rescanWatch : g_rescanWatches) {
+        if (rescanWatch.root.get() == systemTrayFrame) {
+            rescanWatch.deadline = deadline;
+            return;
+        }
     }
-
-    StopRescanWatch();
 
     Wh_Log(L"Watching the system tray for new language indicators");
 
-    g_rescanWatch.emplace();
-    g_rescanWatch->root = winrt::make_weak(root);
-    g_rescanWatch->deadline = deadline;
+    g_rescanWatches.emplace_back();
+    auto it = std::prev(g_rescanWatches.end());
+    it->root = winrt::make_weak(systemTrayFrame);
+    it->deadline = deadline;
 
     // Elements are added to the tree in a layout pass, so a scan after each
-    // pass finds them. LayoutUpdated has no meaningful sender.
-    g_rescanWatch->layoutUpdatedToken = root.LayoutUpdated(
-        [](const WinrtInspectable&, const WinrtInspectable&) {
-            if (g_unloading || !g_rescanWatch) {
+    // pass finds them. LayoutUpdated has no meaningful sender. The handler is
+    // removed before its list entry is erased, so the iterator stays valid
+    // while the handler can run.
+    it->layoutUpdatedToken = systemTrayFrame.LayoutUpdated(
+        [it](const WinrtInspectable&, const WinrtInspectable&) {
+            if (g_unloading) {
                 return;
             }
 
-            auto root = g_rescanWatch->root.get();
-            if (!root || GetTickCount64() > g_rescanWatch->deadline) {
+            auto root = it->root.get();
+            if (!root || GetTickCount64() > it->deadline) {
                 Wh_Log(L"Stopped watching the system tray");
-                StopRescanWatch();
+                StopRescanWatch(it);
                 return;
             }
 
@@ -898,11 +904,7 @@ void StartRescanWatch() {
 }
 
 bool IsUnloadWatched(const FrameworkElement& element) {
-    if (!g_unloadWatches) {
-        return false;
-    }
-
-    for (const auto& unloadWatch : *g_unloadWatches) {
+    for (const auto& unloadWatch : g_unloadWatches) {
         if (unloadWatch.element.get() == element) {
             return true;
         }
@@ -911,35 +913,42 @@ bool IsUnloadWatched(const FrameworkElement& element) {
     return false;
 }
 
-void WatchUnload(const FrameworkElement& element) {
-    if (!g_unloadWatches || IsUnloadWatched(element)) {
+void WatchUnload(const FrameworkElement& element,
+                 const FrameworkElement& systemTrayFrame) {
+    if (IsUnloadWatched(element)) {
         return;
     }
 
     // Drop entries of elements which no longer exist.
-    g_unloadWatches->remove_if([](const UnloadWatch& unloadWatch) {
+    g_unloadWatches.remove_if([](const UnloadWatch& unloadWatch) {
         return !unloadWatch.element.get();
     });
 
-    auto& unloadWatch = g_unloadWatches->emplace_back();
+    auto& unloadWatch = g_unloadWatches.emplace_back();
     unloadWatch.element = winrt::make_weak(element);
+    if (systemTrayFrame) {
+        unloadWatch.systemTrayFrame = winrt::make_weak(systemTrayFrame);
+    }
+
     unloadWatch.unloadedToken = element.Unloaded(
-        [](const WinrtInspectable&, const RoutedEventArgs&) {
+        [systemTrayFrameWeak = unloadWatch.systemTrayFrame](
+            const WinrtInspectable&, const RoutedEventArgs&) {
             if (g_unloading) {
                 return;
             }
 
             Wh_Log(L"Language indicator element unloaded");
-            StartRescanWatch();
+
+            if (auto systemTrayFrame = systemTrayFrameWeak.get()) {
+                StartRescanWatch(systemTrayFrame);
+            } else {
+                Wh_Log(L"No system tray to watch");
+            }
         });
 }
 
 void RemoveAllUnloadWatches() {
-    if (!g_unloadWatches) {
-        return;
-    }
-
-    for (const auto& unloadWatch : *g_unloadWatches) {
+    for (const auto& unloadWatch : g_unloadWatches) {
         if (auto element = unloadWatch.element.get()) {
             try {
                 element.Unloaded(unloadWatch.unloadedToken);
@@ -949,7 +958,7 @@ void RemoveAllUnloadWatches() {
         }
     }
 
-    g_unloadWatches->clear();
+    g_unloadWatches.clear();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -975,12 +984,11 @@ bool TrackLanguageIndicator(FrameworkElement languageTextIconContent) {
 
     Wh_Log(L"Found LanguageTextIconContent");
 
-    if (auto systemTrayFrame = FindParentByClassName(
-            languageTextIconContent, L"SystemTray.SystemTrayFrame")) {
-        g_systemTrayFrame = winrt::make_weak(systemTrayFrame);
-    }
+    // The tray to rescan when the indicator is recreated.
+    auto systemTrayFrame = FindParentByClassName(languageTextIconContent,
+                                                 L"SystemTray.SystemTrayFrame");
 
-    WatchUnload(languageTextIconContent);
+    WatchUnload(languageTextIconContent, systemTrayFrame);
 
     if (g_settings.iconWidth > 0) {
         TrackProperty(languageTextIconContent,
@@ -996,7 +1004,7 @@ bool TrackLanguageIndicator(FrameworkElement languageTextIconContent) {
         return true;
     }
 
-    WatchUnload(innerTextBlock);
+    WatchUnload(innerTextBlock, systemTrayFrame);
 
     if (innerTextBlock.GetBindingExpression(
             Controls::TextBlock::TextProperty())) {
@@ -1048,7 +1056,7 @@ int TrackLanguageIndicatorsIn(DependencyObject root) {
 // Stops tracking everything and restores the taskbar's values. Must be called
 // on the taskbar UI thread.
 void UntrackAllLanguageIndicators() {
-    StopRescanWatch();
+    StopAllRescanWatches();
     RemoveAllUnloadWatches();
     RestoreAllPropertyOverrides();
 }
@@ -1094,17 +1102,14 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
             }
 
             try {
-                if (auto systemTrayFrame = FindParentByClassName(
-                        iconView, L"SystemTray.SystemTrayFrame")) {
-                    g_systemTrayFrame = winrt::make_weak(systemTrayFrame);
-                }
-
                 if (TrackLanguageIndicatorsIn(iconView) > 0) {
                     Wh_Log(L"Language indicator loaded");
                 } else if (iconView.Name() == L"SystemTrayIcon") {
                     // The icon's content might not be created yet. This is
-                    // also the language indicator's icon type.
-                    StartRescanWatch();
+                    // also the language indicator's icon type. Watch the tray
+                    // this icon belongs to.
+                    StartRescanWatch(FindParentByClassName(
+                        iconView, L"SystemTray.SystemTrayFrame"));
                 }
             } catch (const winrt::hresult_error& ex) {
                 Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
@@ -1276,9 +1281,6 @@ void ApplySettings(bool reloadSettings) {
             if (g_unloading) {
                 UnregisterAccentColorChanges();
                 g_autoRevokerList.reset();
-                g_unloadWatches.reset();
-                g_rescanWatch.reset();
-                g_systemTrayFrame = nullptr;
                 g_propertyOverrides.reset();
                 return;
             }
@@ -1308,9 +1310,7 @@ void ApplySettings(bool reloadSettings) {
 
                 FrameworkElement searchRoot = FindChildByClassName(
                     content, L"SystemTray.SystemTrayFrame");
-                if (searchRoot) {
-                    g_systemTrayFrame = winrt::make_weak(searchRoot);
-                } else {
+                if (!searchRoot) {
                     Wh_Log(L"SystemTrayFrame not found, searching everything");
                     searchRoot = content;
                 }
