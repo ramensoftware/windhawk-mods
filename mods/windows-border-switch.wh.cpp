@@ -7,7 +7,7 @@
 // @description:de-DE Blendet die vom System gezeichneten Rahmen von Anwendungsfenstern und Shell-Elementen aus
 // @description:pt-BR Oculta as bordas que o sistema desenha nas janelas de aplicativos e nos elementos do shell
 // @description:zh-CN 隐藏由系统为应用窗口和外壳元素绘制的边框
-// @version         1.2.5
+// @version         1.2.6
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
@@ -22,7 +22,7 @@
 // @architecture    x86-64
 // @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -luuid -ladvapi32
 // ==/WindhawkMod==
-// Build: 54
+// Build: 55
 
 // ==WindhawkModReadme==
 /*
@@ -683,12 +683,6 @@ namespace Xaml = winrt::Windows::UI::Xaml;
 namespace WinUI = winrt::Microsoft::UI::Xaml;
 
 ShellHost g_shellHost;
-
-// Local installations do not get Windhawk's default online symbol cache.
-constexpr WH_HOOK_SYMBOLS_OPTIONS shellSymbolOptions{
-    .optionsSize = sizeof(WH_HOOK_SYMBOLS_OPTIONS),
-    .onlineCacheUrl = L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/windows-border-switch/",
-};
 
 struct Worker {
     HANDLE thread = nullptr;
@@ -1913,8 +1907,7 @@ ControlCenterHookResult HookControlCenter(HMODULE module) {
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::ControlCenterView,struct winrt::Windows::UI::Xaml::Markup::IComponentConnector>::Connect(int,void *))"},
          &connect, nullptr, true},
     };
-    if (!WindhawkUtils::HookSymbols(module, controlCenterDllHooks, ARRAYSIZE(controlCenterDllHooks),
-                                    &shellSymbolOptions)) {
+    if (!WindhawkUtils::HookSymbols(module, controlCenterDllHooks, ARRAYSIZE(controlCenterDllHooks))) {
         return ControlCenterHookResult::Retry;
     }
     if (!focus && !connect) {
@@ -2032,7 +2025,7 @@ TaskbarHookResult HookTaskbarLayout(HMODULE module) {
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
          &measure, nullptr, true},
     };
-    if (!WindhawkUtils::HookSymbols(module, hook, ARRAYSIZE(hook), &shellSymbolOptions)) {
+    if (!WindhawkUtils::HookSymbols(module, hook, ARRAYSIZE(hook))) {
         return TaskbarHookResult::Retry;
     }
     if (!measure) {
