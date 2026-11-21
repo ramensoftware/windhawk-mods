@@ -3697,17 +3697,12 @@ void ApplyToFrameWhenNeeded(void* taskbarFrameThis) {
             return;
         }
 
-        // [BUGFIX] 资源管理器重启后，Mod 会先于任务栏初始化完成被注入，
-        // TaskbarFrame 的首次 MeasureOverride/OnApplyTemplate 发生在其尚未
-        // 加载进可视树、XamlRoot/任务栏宿主仍在构造的阶段。此时执行
-        // ApplyToFrame（查找宿主窗口、SetWindowPos、修改布局属性）会在
-        // 首次布局过程中重入，导致 explorer.exe 崩溃并反复重启。
-        // 这里在 frame 真正加载完成前跳过应用；加载完成后由 OnLoaded 钩子
-        // 与 600ms 后的布局校准回调完成首次应用，原有逻辑保持不变。
+        // Skip frames that aren't in the visual tree yet. Right after Explorer
+        // starts, MeasureOverride and OnApplyTemplate run before the frame is
+        // loaded. OnLoaded and the 600 ms calibration apply the layout later.
         if (!frame.IsLoaded() || !frame.XamlRoot()) {
             return;
         }
-        // [BUGFIX END]
 
         if (GetTickCount() - g_lastControlCenterFixTick.load() > 400) {
             RepositionControlCenterCached();
@@ -4049,7 +4044,8 @@ void ScheduleTaskbarLayoutCalibrationAfterCreate() {
     }
 
     g_layoutCalibrationScheduled = true;
-    if (!CreateTimerQueueTimer(nullptr, g_layoutCalibrationTimerQueue,
+    HANDLE timer = nullptr;
+    if (!CreateTimerQueueTimer(&timer, g_layoutCalibrationTimerQueue,
                                LayoutCalibrationTimerProc, nullptr,
                                kLayoutCalibrationDelayMs, 0,
                                WT_EXECUTEONLYONCE)) {
